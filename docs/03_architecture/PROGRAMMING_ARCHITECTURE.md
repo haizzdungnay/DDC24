@@ -1,417 +1,307 @@
-# Kiến trúc hệ thống Programming MK-DDC-24
+# Kiến trúc hệ thống Product Programming thống nhất
 
 | Thuộc tính | Giá trị |
 |---|---|
-| ID tài liệu | `ARCH-PROG-001` |
-| Phiên bản | 0.9 |
-| Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION** — 6/6 ADR `Accepted` theo `AUTH-PROG-2026-08-11-03`; maturity M4/M5 không dùng làm blocker code |
-| Ngày | 2026-08-13 |
+| ID | `ARCH-PROG-001` |
+| Phiên bản | 1.2 |
+| Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, chưa phải As-Built** |
+| Ngày | 2026-08-24 |
 | Chủ quản | Software/Runtime Architect |
-| Reviewer | Controls/Safety, FE, BE, FW-SOM, FW MCU, HW, Security, Ops, Verification |
-| Approver | Product Owner + System/Runtime Architect |
-| Requirement | `SRS-PROG-001` |
-| Nguồn | Product v2.2; ADR-005/020/021/023; ADR-026..031 (`Accepted`); As-Built source 2026-08-09 |
-| Phạm vi | Target Rev A và khoảng trống chuyển từ graph production sang Program Runtime |
+| Người phê duyệt | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` và `AUTH-PROG-2026-08-24-05` |
+| Requirement | `SRS-PROG-001` v1.2 Active |
+| Detailed Design | `DDD-SW-PROG-UNIFIED-001` v1.3; `DDD-SW-PGM02-WORKSPACE-001` v0.3 M3 |
+| Authority PGM-02 | `AUTH-PROG-2026-08-24-05`: exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; `ADR-053` Accepted; R1/R2/R3 được phép implement theo dependency |
+| As-Built baseline | `49a2ad1`; one-Program path chỉ dùng để migration |
 
-## 0. Đọc nhanh
+## 0. Quyết định kiến trúc
 
-| Câu hỏi | Trả lời |
-|---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **tiến trình nào sở hữu cái gì**: ai giữ dữ liệu có thể thay đổi, ai được ghi ra output vật lý, ai được phép chết mà hệ thống vẫn điều khiển. Mọi tranh cãi “module này gọi thẳng module kia có được không” giải quyết ở đây. |
-| 2. Ai phải đọc file này? | Bắt buộc với System Architect, Core/BE/FE/IO lead, Safety và Ops. Đọc trước khi đọc bất kỳ Detailed Design nào — vì các file đó giả định ranh giới trong file này là đúng. |
-| 3. Hệ thống hiện tại đang có gì? | Bốn tiến trình đã chạy thật; mặc định Local logic vẫn do **graph** sở hữu. P3/P4 source/host đã dựng scheduler cố định, BE operation coordinator, UDS peer-checked và `ProgrammingRuntimeCoordinator`; cutover chỉ đổi owner tại safe boundary, first-output thành công mới nâng LKG, restart đọc checkpoint CRC. Flag vẫn `OFF`. |
-| 4. Thiết kế mới thay đổi điều gì? | Thêm Programming vào `mkddc-web` (authoring, compile, orchestration) và vào `mkddc-core` (nạp artifact, chạy Program). **Không** thêm đường ghi tắt: mọi output Program đi qua priority resolver mức Local logic 5. `mkddc-iobus` và MCU **không đổi ownership** — Commission không được restart iobus. |
-| 5. Team phải sửa module/contract nào? | §14 ánh xạ từng component target về repository. Tóm tắt: BE thêm package Programming trong `mkddc-web`; Core thêm loader + Program executor cạnh ScanLoop; FE thêm `apps/web-ui/src/features/programming/`; iobus/MCU chỉ nhận thêm yêu cầu **không được gián đoạn** (`max_iop_poll_gap <200 ms`). |
-| 6. Điều gì còn bị chặn? | Không còn blocker source P3/P4. Production `Active` vẫn bị chặn bởi feature flag, P5/P6, 32/32 Test Result, target/HIL/electrical/power-cut/IOP timing và residual acceptance. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | §17. Host fault/restart/cutover tests và full CTest 1002/1002 PASS hỗ trợ `VS-PROG-011/015/030`; `VS-PROG-012/014/015/030` phần target/HIL vẫn **chưa chạy**, nên không mở release. |
+Baseline Programming là module trong ba process hiện hữu, không thêm daemon:
 
-Vì sao phải có “một owner duy nhất”: nếu graph và Program cùng đề xuất giá trị
-cho một output ở mức 5, thiết bị sẽ nhận lệnh không xác định — đây là
-`RSK-PROG-001`, mức 15. Nên cutover chỉ có hai trạng thái hợp lệ là `GRAPH_ONLY`
-và `PROGRAM_ONLY`; yêu cầu chạy song song phải bị từ chối, không phải bị hòa giải.
+- `mkddc-web`: Product store, compiler orchestration, REST, RBAC/audit và UI.
+- `mkddc-core`: active package, scheduler, POU instance state, Published Signal,
+  candidate, priority/safety integration, RETAIN, trace và authoritative state.
+- `mkddc-iobus` + STM32: Point/fieldbus/physical I/O; không parse ST/FBD và không
+  biết Project/Revision.
 
-## 1. Mục tiêu kiến trúc
+Product hỗ trợ nhiều Program độc lập; Function/Function Block là reusable POU,
+không phải schedulable application. Mọi output vẫn đi qua một đường an toàn.
+Không còn decision blocker implementation; release vẫn cần target/HIL evidence.
 
-Cho phép controls engineer thiết kế ST/FBD, Check, đưa Revision vào vận hành và
-bảo trì trên Web, trong khi đường control vẫn deterministic, fail closed và độc
-lập với FE/BE. Kiến trúc không thêm core process mới ở Rev A; Programming được
-phân bổ vào ba process đã chốt bởi ADR-005 và source layout ADR-021. Phân bổ này
-thay proposal `mkddc-program-service`/`mkddc-program-core` thành module trong
-`mkddc-web`/`mkddc-core`; muốn thêm daemon phải có ADR mới.
+PGM-02 v2.2 là Target đã được phê duyệt cho implementation: R3 thêm một executable worker
+**ephemeral theo session**, không phải daemon control production và không thuộc
+ba-process control path. Quyết định này nằm ở `ADR-053` trạng thái Accepted theo
+`AUTH-PROG-2026-08-24-05`. R1 EDIT và R2 LIVE vẫn dùng process hiện hữu; LIVE
+hoàn toàn read-only. Quyền implementation không làm Target trở thành As-Built.
 
-## 2. System context và trust boundary
-
-Sơ đồ dưới đây là **Target Design**. As-Built 2026-08-09 vẫn dùng HTTP cổng
-8081, graph runtime mặc định và Programming flag OFF; không được đọc sơ đồ target
-như bằng chứng đã triển khai.
+## 1. Context và trust boundary
 
 ```text
-Trình duyệt
-  │ HTTPS/REST/WS + session/RBAC
+Controls engineer
+  │ HTTPS + RBAC + ETag + idempotency
   ▼
-mkddc-web (Go + React)
-  ├─ Draft/Revision store
-  ├─ Check/Compiler worker ngoài RT
-  ├─ Artifact registry + audit
-  └─ Commission coordinator
-          │ versioned local IPC, peer credential, operation ID
-          ▼
-mkddc-core (C++ RT owner)
-  ├─ verified artifact loader
-  ├─ base control step + one Task Rev A
-  ├─ ST/FBD common IR executor + RETAIN
-  ├─ priority/interlock/safe-state
-  └─ authoritative runtime/monitor/trace
-          │ IO SHM + output command
-          ▼
-mkddc-iobus ── Kinexus-IOP/UART ── STM32 ── ADC/DAC/relay
-  └─ Modbus RTU Bus→Device→Point
+Web UI ── generated client ──► mkddc-web
+                                ├─ Product/Revision/Library/Operation store
+                                ├─ compiler worker sandbox
+                                └─ UDS IPC v2
+                                      ▼
+                                  mkddc-core
+                                ├─ package coordinator/LKG/journal
+                                ├─ Program scheduler + POU instances
+                                ├─ Published Signal snapshot
+                                ├─ output candidate registry
+                                └─ resolver → interlock → safe-state
+                                      ▼
+                                  mkddc-iobus → IOP → STM32 → AO/DO
 ```
 
-Trust boundaries:
+Web/HMI không nằm trong control path. Compiler không chạy RT priority. Core không
+truy cập DB/HTTP trong scan. Iobus/MCU không nhận artifact hay source.
 
-- Browser input, bundle import, ST/FBD source và config là dữ liệu không tin cậy.
-- Compiler output chỉ được tin sau loader verify độc lập tại core.
-- Web success không phải runtime truth; core read-back là authority.
-- MCU là safety/failure boundary độc lập cho mất IOP trong 200 ms.
-
-## 3. Phân bổ trách nhiệm
-
-| Mutable state/quyết định | Owner duy nhất | Consumer |
-|---|---|---|
-| Project, Draft, immutable Revision | `mkddc-web` BE | FE, compiler coordinator |
-| Source ST/FBD, mapping, Task config, library manifest | Revision store | compiler, FE |
-| Check result và change manifest | BE từ canonical Revision | FE, Commission |
-| Artifact bytes + metadata | BE artifact registry; immutable | core loader |
-| Active/LKG/candidate runtime identity | `mkddc-core` | BE/FE read model |
-| Base step, due Task, WCET/overrun | `mkddc-core` | diagnostics |
-| Point Table và priority winner | `mkddc-core` | Program, Web, BACnet |
-| Modbus polling/write lifecycle | `mkddc-iobus` | core Point Table |
-| Physical sampling/actuation/safe-timeout | STM32 | iobus diagnostics |
-| User authorization và audit | `mkddc-web` | mọi mutation |
-| Alarm truth | alarm authority hiện hữu | Programming chỉ link |
-
-## 4. Lifecycle và state machine
+Target R3 thêm nhánh ngoài control path:
 
 ```text
-DRAFT --Check PASS--> CHECKED --build/verify--> READY
-  │                       │                      │
-  └─Save/Error (no RT)    └─FAIL (no RT)         └─Commission operation
-                                                     │
-                                 STAGED --safe boundary--> ACTIVE_PENDING_FIRST_CYCLE
-                                                     │ PASS
-                                                     ▼
-                                                   ACTIVE/LKG
-                                                     │
-                                      Restore Previous (same verify path)
+mkddc-web Simulation supervisor
+  └── spawn per session → mkddc-programming-sim-worker
+        ├── immutable Saved-Draft artifact
+        ├── virtual point/process image + virtual clock
+        └── NO production Core/iobus/SHM/device/output/RETAIN handle
 ```
 
-Bất biến:
+## 2. Ownership
 
-1. Revision bất biến; sửa luôn tạo Draft/Revision identity mới.
-2. Chỉ một Commission/Restore operation được phép trên một controller.
-3. `HTTP 2xx` chỉ xác nhận request được nhận; FE chỉ kết luận khi status core
-   trả đúng `activeRevision` và `operationId`.
-4. Candidate lỗi không thay active/LKG.
-5. LKG chỉ được nâng sau cycle đầu hoàn tất không fault.
-
-## 5. Base control step
-
-```text
-1. Capture một ClockSnapshot + coherent IO/Point snapshot
-2. Cập nhật quality/freshness và Modbus snapshot
-3. Xử lý command manual/BACnet/Schedule
-4. Dispatch đúng Task nếu đến hạn; Program đọc frozen process image
-5. Stage program_value mức 5
-6. Resolve priority → interlock → safe-state
-7. Commit output đúng một lần; tiếp tục IOP poll
-8. Publish snapshot/metrics ngoài phần thiết yếu
-9. Kick watchdog sau khi step hoàn tất
-```
-
-Task period `1/5/30 s` là cadence dispatch, không phải sleep của base step. Base
-step phải đủ ngắn để IOP không có khoảng cách poll `>=200 ms`; mục tiêu có margin
-`<=100 ms`. Compiler, DB, serialization lớn và trace persistence không nằm RT path.
-
-## 6. Cutover graph → Programming
-
-| State | Quyền Local logic | Commission |
-|---|---|---|
-| `GRAPH_ONLY` | `GraphRuntime` | chỉ được tạo/check Draft; Commission Programming bị khóa |
-| `PROGRAM_ONLY` | Program Runtime | graph không execute và không sở hữu scan period |
-| `DUAL_INVALID` | giữ LKG hiện hành | reject `PRG-ERR-CUTOVER-001`, audit security/engineering event |
-
-Cutover lần đầu bắt buộc backup graph, compatibility report, mapping review,
-output/RETAIN impact, manual override inventory, confirmation mạnh và rollback
-plan. Không chạy graph và Program song song để “so sánh” trên output thật.
-
-## 7. Activation, output continuity và arbitration
-
-- Runtime chụp `previous_program_value` cho từng binding trước swap.
-- First cycle của Revision mới phát cùng giá trị mức 5 trong độ phân giải binding.
-- Resolver vẫn quyết định `actual_value`; override mức 1–4 không bị sao chép vào
-  state hoặc integrator của Program.
-- PI/PID back-calculate khi mức 5 thắng nhưng bị limit; freeze khi thua priority.
-- Binding mới/state không tương thích phải có initial/transition policy được
-  Check xác nhận; không dùng zero/actual/safe-default ngầm.
-- Activation không restart iobus và không chặn IOP poll.
-
-## 8. Availability và failure containment
-
-| Lỗi | Hành vi bắt buộc | Quan sát |
-|---|---|---|
-| FE đóng/reload | Active không đổi; Draft lấy lại từ BE | FE reconnect, no replay |
-| BE restart | Core tiếp tục active; operation được reconcile | operation/audit bền vững |
-| Compiler timeout/crash | Check fail; không stage | diagnostic + resource metrics |
-| IPC timeout khi Commission | kết quả `UNKNOWN`, query operation/core | không optimistic retry |
-| Artifact corrupt/wrong target | loader reject; LKG giữ | error code + audit |
-| Task overrun | warning rồi fault Task theo policy | không tự plant safe-state |
-| Core restart | MCU safe-timeout; core chỉ phục hồi artifact/LKG theo policy | boot reason, active/retain status |
-| Iobus/IO freshness loss | SafetyManager quyết định safe-state | reason + affected Point |
-| MCU mất frame hợp lệ 200 ms | AO/DO về safe behavior độc lập | diagnostic/safe counter |
-
-## 9. Security architecture
-
-- `viewer/operator/admin`; server authorize từng endpoint và action.
-- CSRF/session/origin theo baseline Web; internal UDS kiểm peer credential.
-- Mutation có idempotency key, base revision/ETag và correlation ID.
-- Artifact dùng SHA-256/integrity ở Rev A; trusted-origin signing ngoài scope.
-- Bundle import không nhận executable, path tuyệt đối, traversal, symlink hoặc
-  decompression vượt quota.
-- Audit không chứa password/token/private key/full artifact hoặc full source nếu
-  không có policy bảo vệ riêng.
-
-## 10. Deployment topology và dữ liệu
-
-- Không thêm daemon `mkddc-program-*` ở Rev A trừ khi có ADR mới.
-- Compiler worker thuộc Web package nhưng chạy process/sandbox/resource limit
-  riêng, không chạy trong handler và không được có RT priority.
-- Dữ liệu bền vững dưới config/data root hiện hành: DB/Revision, artifact, audit,
-  RETAIN tách namespace; write atomic và backup/restore có manifest/checksum.
-- Upgrade phải hỗ trợ code mới đọc schema cũ hoặc migration atomic có rollback;
-  core cũ phải reject schema/artifact mới rõ ràng.
-
-## 11. Xung đột phải đóng trước Active
-
-Mỗi xung đột nay có **một ADR chủ quản**. System Architect Phạm Đình Chương đã
-`ACCEPT` cả sáu theo `AUTH-PROG-2026-08-10-01`. Trạng thái chờ đồng phê duyệt đã
-được supersede bởi `AUTH-PROG-2026-08-11-03`; cả sáu ADR hiện `Accepted`. Review
-hậu kiểm và evidence vẫn được thực hiện trong task/verification, không chặn code.
-
-| ID | Xung đột | ADR chủ quản | Quyết định cần có | Trạng thái 2026-08-11 |
-|---|---|---|---|---|
-| `ARCH-CONF-PROG-001` | supporting scheduler cho 8 Task/50–60000 ms, Product chỉ một Task/1–5–30 s | [ADR-026](../adr/ADR-026-programming-runtime-profile-va-validator-duy-nhat.md) | runtime profile và validator duy nhất | **Accepted** — `AUTH-PROG-2026-08-11-03`; evidence tạo trong implementation |
-| `ARCH-CONF-PROG-002` | graph bootstrap đang sở hữu period và ST dependency là `nullptr` | [ADR-027](../adr/ADR-027-programming-bootstrap-va-quyen-so-huu-chu-ky-scan.md) | cutover/config/bootstrap contract | **Accepted** — `AUTH-PROG-2026-08-11-03`; evidence tạo trong implementation/release |
-| `ARCH-CONF-PROG-003` | watchdog unit 6 s so với Task 30 s | [ADR-028](../adr/ADR-028-programming-cong-thuc-watchdog-theo-base-step.md) | base-step bound + watchdog formula/target evidence | **Accepted** — `AUTH-PROG-2026-08-11-03`; số đo `SCHED_FIFO` thuộc verification |
-| `ARCH-CONF-PROG-004` | component overrun có `any_force_safe` | [ADR-029](../adr/ADR-029-programming-overrun-la-task-fault.md) | đổi thành task fault; SafetyManager condition độc lập | **Accepted** — `AUTH-PROG-2026-08-11-03` |
-| `ARCH-CONF-PROG-005` | error code `API-E/IR-E/ST-*` hiện hữu so với `PRG-ERR-*` proposal | [ADR-030](../adr/ADR-030-programming-ma-loi-cong-khai-va-detail-code.md) | mapping/deprecation trong IFSPEC | **Accepted** — `AUTH-PROG-2026-08-11-03`; mapping evidence tạo trong implementation |
-| `ARCH-CONF-PROG-006` | signature helper có source nhưng trusted-origin ngoài Rev A | [ADR-031](../adr/ADR-031-programming-integrity-mode-hash-only-rev-a.md) | chỉ integrity hash trong release profile | **Accepted** — `AUTH-PROG-2026-08-11-03`; security evidence tạo trong implementation/release |
-
-## 12. Tiêu chí review kiến trúc
-
-- Mỗi mutable state có đúng một owner và đường read-back.
-- Web/HMI không nằm control path, không bypass priority/safety.
-- Contract producer/consumer/version/failure/migration/rollback đầy đủ.
-- Allocation/resource/WCET/IOP continuity có verification owner.
-- Không requirement nào được đánh PASS chỉ bằng tài liệu hoặc host unit test.
-
-## 13. As-Built có dẫn chứng và gap
-
-| Ranh giới | Source/contract hiện tại | Hành vi đã xác nhận | Gap so với Target |
+| Mutable state | Writer duy nhất | Reader | Persistence |
 |---|---|---|---|
-| Core bootstrap | `apps/core/bootstrap/main.cpp`, `programming_cutover.hpp` tại `10d9ad6` | dựng topology scheduler `main/program-main` trước scan; mode mặc định GRAPH_ONLY; tạo coordinator + endpoint Programming UDS khi runtime được bật | feature flag Web vẫn OFF; chưa deploy/cutover trên target |
-| Base step | `scan_loop.*`, `st_scheduler.*` tại `a831a0d..10d9ad6` | phase-locked dispatch, process-image atomic, exclusive GRAPH/PROGRAM owner và lifecycle hook tại cùng safe boundary | timing/WCET/IOP gap target chưa đo |
-| ST/IR runtime | `apps/core/application/{st,programming}` | profile REV_A, prepare/stage/commit/abort, first-output LKG promotion, journal/checkpoint/rollback/recovery | power-cut eMMC và HIL chưa chạy |
-| Build boundary | `apps/core/CMakeLists.txt` | `st_compiler_lib` tách khỏi `mkddc-core`; CLI compile/validate được build | CLI chưa được packaging/called bởi BE; compiler isolation/timeout chưa có |
-| Internal contract | `contracts/ipc/programming_v1`, `program_ipc_server.*`, `program_ipc_unix.*` | STATUS/OPERATION_STATUS/STAGE/RESTORE/ACTIVATE qua bounded frame, deadline, version và peer credential | target socket ownership/group cần deploy read-back |
-| Core Web IPC | `/run/mkddc/programming-v1.sock` | endpoint riêng Programming mode `0660`, `SO_PEERCRED`, reject peer/frame/version/path sai | target service identity và fault injection liên tiến trình chưa có Test Result |
-| BE | `apps/web-api/internal/programming/{application,store,artifact,coreipc,transport}` | SQLite v5, durable Commission/Restore, lease/reconcile, staging an toàn và terminal record/audit | feature OFF; target migration/restart chưa diễn tập |
-| API contract | `contracts/openapi/openapi.yaml` | 25 operation; Project/Check/bundle và Commission/Restore/status handler có source | FE P5 và target E2E chưa có Test Result |
-| FE | `apps/web-ui/src/features/dashboard/ProgrammingPage.tsx`, `App.tsx`, `NavRail.tsx` | legacy graph demo, route bị gate `LEGACY_GRAPH_DEMO_ENABLED` | không có PGM-01..06, ST/FBD workflow hoặc runtime authority live |
-| FW MCU/IOP | `contracts/iop/iop_protocol.h`, `firmware/stm32/*`, `apps/iobus/*` | sampling/actuation/IOP/safe-timeout substrate | Programming-specific HIL, poll-gap/hold-last/power-loss evidence còn RED |
-| Transport security | `apps/web-api/internal/app/main.go`, `platform/systemd/mkddc-web-pi.service` | As-Built HTTP `:8081`, chưa có TLS termination | Target HTTPS/secure headers/certificate lifecycle bị chặn bởi Security Design |
+| Project Draft/POU/library metadata | `mkddc-web` transaction | FE/compiler | SQLite + backup |
+| Immutable Revision/package manifest | `mkddc-web` | compiler/Core/Ops | content-addressed |
+| Operation journal | `mkddc-web`; Core phase read-back | FE/Ops | SQLite + Core checkpoint |
+| Active/LKG package | Core coordinator | BE/FE/Ops | atomic journal/checkpoint |
+| Enable intent | BE durable store; Core applies idempotently | FE/Ops | SQLite + Core read-back |
+| Program/FB runtime state | Core Program instance | Monitor/trace | volatile + RETAIN policy |
+| Published Signal snapshot | Core publisher commit | Core consumers/Monitor | double-buffer volatile |
+| Output candidate/owner | Core registry | resolver/Monitor | runtime; rebuilt from Active |
+| Physical Point actual/quality | iobus/driver authority | Core/BE/FE | canonical Point image |
+| RETAIN record | Core mailbox/worker | Core/Ops | atomic file + CRC/identity |
+| Simulation session metadata (Target) | `mkddc-web` supervisor | FE/Ops/audit | bounded reconciliation metadata; process image ephemeral |
+| Simulation virtual state (Target) | isolated per-session worker | BE/FE read model | volatile; discarded on stop/expiry/reboot |
 
-## 14. Target component và ánh xạ repository
+Không có shared writable state giữa Program. Published Signal là snapshot typed,
+không là pointer hay Point mới.
 
-| Component target | Owner/process | File/module phải tạo hoặc sửa | Dependency được phép | Dependency bị cấm |
-|---|---|---|---|---|
-| Programming domain/store | `mkddc-web` | tạo `apps/web-api/internal/programming/{domain,store,revision,manifest}.go`; wiring tại `internal/app/programmingapi.go` và `http.go` | `internal/auth`, config root, stdlib/DB package đã phê duyệt | import UI, gọi Core trong transaction lưu Draft |
-| Compiler coordinator | `mkddc-web` child process | tạo `internal/programming/compiler.go`; package `mkddc-st-validate/compile` qua `platform/packaging/install.sh` | argv cố định, file descriptor/temp dir riêng, timeout/quota | shell eval, chạy trong HTTP goroutine không giới hạn, RT priority |
-| Operation coordinator | `mkddc-web` | tạo `internal/programming/operation.go`; durable journal/store | CoreClient, idempotency, audit | optimistic success, auto retry mutation sau timeout |
-| REST/WS adapter | `mkddc-web` | `internal/app/programmingapi.go`, `ws.go`, `contracts/openapi/openapi.yaml` | domain/service methods; generated FE types sau contract freeze | business rule từ message string |
-| Programming UI | React FE | tạo `apps/web-ui/src/features/programming/`; route tại `src/app/App.tsx`; nav tại `shared/components/NavRail.tsx`; API tại `shared/api/programming.ts` | shared auth/i18n/components/API client | `shared/demo/` trong live path, local active truth |
-| Runtime profile/config | `mkddc-core` | profile đã nằm ở `application/st/st_scheduler.*`; tạo `adapters/config/programming_config.*` và sửa `bootstrap/main.cpp` ở Task 306 | generated profile, graph migration reader | parser/compiler/file/DB/network trong scan |
-| Artifact/runtime lifecycle | `mkddc-core` | sửa `st_scheduler.*`, `st_control_api.*`, `st_retain.*`; thêm operation journal adapter nếu approved | bounded loader/executor, monotonic clock | direct IOP/SHM output bypass resolver |
-| Core IPC adapter | `mkddc-core` | sửa `adapters/ipc/web_ipc.*`; schema machine-readable trong `contracts/config/` | versioned UDS + peer credential | unversioned payload, accept unknown fields silently |
-| Cutover | `mkddc-core` | sửa `bootstrap/main.cpp`, `scan_loop.*`, `config_reload.*`, `graph_runtime.*` | `GRAPH_ONLY/PROGRAM_ONLY`, backup manifest | graph + Program cùng đóng góp mức 5 |
-| Packaging/operations | platform | `platform/packaging/{install,rollback}.sh`, `platform/systemd/mkddc-{core,web-pi}.service` | backup/checksum/deploy order | xoá Revision/LKG/RETAIN khi rollback package |
+## 3. Product package
 
-Không tạo process thứ tư cho Programming. `mkddc-hmi` chỉ được đọc summary/health
-nếu sau này có requirement; Rev A không author/check/commission/trace/reset.
+Một Revision đóng thành package bất biến:
 
-## 15. Concurrency, timing và resource boundary
+```text
+Package
+├── profile/capacity/resource budget
+├── POU definitions: PROGRAM / FUNCTION / FUNCTION_BLOCK
+├── library dependency/version/signature
+├── Program topology: period/budget/priority/dependency policy
+├── Published Signal publisher/consumer/freshness/fallback
+├── Point bindings + output owner
+├── RETAIN layout/identity
+└── artifact/source-map/provenance/signature
+```
 
-| Boundary | Quy tắc target | Cách chứng minh |
+Capacity Product: tối đa 32 Program/Revision, 16 Enabled, 256 user POU, 1024 FB
+instance, 512 Published Signal và 512 binding. One-over bị từ chối bằng stable
+error trước stage; không tự cắt bớt.
+
+Draft được phép giữ PROGRAM POU chưa có cấu hình chạy trong `programs[]` để kỹ
+sư tiếp tục soạn. Biên Check/Package phải từ chối toàn bộ bằng public
+`PRG-ERR-CHECK-001`, detail `ST-POU-005`, giữ Active/LKG và không tạo package;
+cấm tự loại POU hoặc tự tổng hợp period `1000 ms`.
+
+## 4. Compiler và POU graph
+
+Compiler giải namespace theo thứ tự deterministic, dựng call/dependency DAG và
+từ chối missing/ambiguous/version drift/direct hoặc indirect recursion.
+
+- Function thuần: không mutable static/RETAIN/I/O/FB stateful call.
+- Function Block definition có layout state; mỗi instance bên trong Program có
+  identity/state/RETAIN namespace riêng.
+- Program sở hữu lifecycle, period, mapping, signals và candidate.
+- ST/FBD lower xuống typed IR chung; source map giữ POU/node/pin/location.
+
+Artifact v2 không chứa parser/compiler. Core loader bounded, validate signature,
+profile, ABI, section length, graph/resource và identity trước mutation.
+
+## 5. Scheduler và execution isolation
+
+Core dùng base control step monotonic. Mỗi Enabled Program có due state riêng;
+creation order không tạo dependency. Scheduler lựa Program due theo deadline/
+stable ID, đưa vào worker lane có budget. Single-core và multicore phải cho cùng
+semantics vì Program không share mutable state.
+
+```text
+base step
+  → capture Point input snapshot
+  → commit previous Published Signal snapshot
+  → build due queue
+  → execute due Program against immutable inputs/signals
+  → validate/commit next signal snapshot
+  → publish/withdraw output candidates
+  → priority/interlock/safe-state
+  → hand off effective output
+```
+
+Fault/overrun một Program chuyển Program đó `FAULTED`, rút candidate theo policy
+và không dừng Program độc lập khác. Dependency chỉ tồn tại qua declared signal
+policy `USE_LAST`, `FALLBACK` hoặc `WAIT`; không serialize ngầm.
+
+## 6. Lifecycle và atomicity
+
+```text
+Draft → Check → Revision/package → Commission package
+      → STAGING → ACTIVATING at safe boundary → VERIFYING first outputs
+      → Active/LKG commit | rollback exact prior package
+
+Per Program: DISABLED ↔ STARTING → RUNNING/WAITING → STOPPING → DISABLED
+                                      └→ FAULTED/UNKNOWN
+```
+
+Commission là atomic ở cấp package. Không active một phần. Enable intent là bền
+vững nhưng không đồng nghĩa runtime `RUNNING`. Mutation có operation ID,
+idempotency, expected active/package hash và authoritative read-back. Timeout là
+`UNKNOWN_RECONCILING`, không optimistic success hay auto replay.
+
+## 7. Output và safety boundary
+
+Mỗi physical output có tối đa một Program owner trong package. Hai binding cùng
+output fail Check. Runtime chỉ xuất candidate:
+
+```text
+Program candidate
+→ owner registry / TTL withdrawal
+→ PriorityResolver
+→ Interlock
+→ SafeState
+→ OutputWriter
+→ iobus/IOP/STM32
+```
+
+Disable/fault/TTL expiry rút candidate tại safe boundary; resolver chọn priority
+tiếp theo/default/safe policy. Không có đường Program→SHM/IOP/MCU trực tiếp.
+Graph và Programming chỉ có `GRAPH_ONLY` hoặc `PROGRAM_ONLY` cho Local logic;
+không dual-write mức 5.
+
+## 8. Failure boundary
+
+| Failure | State/output | Recovery/read-back |
 |---|---|---|
-| Draft mutation | transaction theo `(project_id, draft_revision)`; ETag/base revision; idempotency key unique theo actor/action/target | two-client + retry integration |
-| Commission/Restore | một lease/controller; durable operation ghi trước side effect; Core idempotent theo operation/package hash | kill BE ở từng bước, restart/reconcile |
-| Core activation | request chỉ ghi pending preallocated buffer ngoài step; verify/stage trước; pointer/state swap tại safe boundary | unit/fault injection/no allocation |
-| Base step | cadence độc lập Task; absolute monotonic; không chờ compiler/BE/filesystem; kick watchdog sau step | 10.000 cycle/period trên target |
-| Task | one Task profile `1/5/30 s`; due check O(1); Program order ổn định; budget `<20% period` và còn bị chặn bởi base-step/WCET nhỏ hơn | deterministic replay + WCET/load |
-| IOP | activation không restart iobus; `max_iop_poll_gap <200 ms`, target margin `<=100 ms` | HIL timestamp/waveform |
-| Monitor/trace | publish ngoài output-critical path; 1 Hz/3 kỳ stale, 10k/10 phút `TARGET-PENDING OD-011` | bandwidth/memory soak |
-| Compiler | source 64 KiB/artifact 1 MiB; hard timeout 5 s; CPU/memory/process/file quota `TARGET-PENDING` | worst-case concurrent Check |
+| FE/Web mất | Active Core tiếp tục | reconnect; không replay mutation |
+| Compiler timeout/crash | Check fail; Active/LKG giữ | diagnostic/resource audit |
+| IPC timeout | Operation unknown | query operation + Core state |
+| Artifact/package hỏng | reject trước scheduler mutation | giữ Active/LKG |
+| Program fault/overrun | isolate Program, withdraw candidate | metrics/fault/audit; explicit recover |
+| Signal stale/missing | declared fallback/wait; no torn read | freshness/producer state |
+| Core restart | MCU safe-timeout; restore exact checkpoint policy | boot/active/LKG/intent/RETAIN read-back |
+| RETAIN corrupt/layout drift | cold-init rejected with reason | reset/recommission policy |
+| Iobus/Point stale | safety policy | quality/reason/affected output |
+| MCU mất frame 200 ms | physical safe behavior | safe counter/diagnostic |
 
-Core scan không được giữ mutex chung với BE/compiler/iobus fieldbus worker. Mọi
-buffer cần trong step phải allocate/reserve trước activation; allocation probe
-phải phủ đường Program thật, không chỉ executor riêng lẻ.
+## 9. Security và resource
 
-## 16. Compatibility, deployment và rollback
+- HTTPS/session/origin/CSRF theo Web baseline; server RBAC từng route/action.
+- UDS directory/mode/peer credential, frame/version/field bounds fail closed.
+- Mutation dùng ETag/idempotency/correlation/re-auth/reason/audit.
+- Artifact/library release bắt buộc `SIGNED`; key custody/rotation/rollback ở
+  `T59-602`. `HASH_ONLY` chỉ migration/development, không release.
+- Import source-only; từ chối traversal/symlink/executable/zip bomb/unknown field.
+- Scan/worker memory preallocated; không filesystem/network/DB/blocking shared
+  lock trong output-critical path.
+- Trace 10k mẫu/10 phút bounded; no allocation trong producer path.
 
-Thứ tự deploy target:
+## 10. Deployment và compatibility
 
-1. Backup `/data/config/graph.json`, Programming DB/store, artifact registry,
-   operation journal, LKG/RETAIN và manifest checksum; không dừng control.
-2. Cài Core mới ở chế độ mặc định `GRAPH_ONLY`; Core phải đọc config cũ và từ
-   chối schema mới không hiểu bằng mã ổn định.
-3. Cài compiler CLI và Web/BE mới với Programming mutation feature flag OFF;
-   chạy capability/read-only probe.
-4. Migrate/create store atomically; Check/build candidate; không Commission.
-5. Sau approval/HIL, chuyển `PROGRAM_ONLY` bằng operation có backup/read-back;
-   graph không execute từ safe boundary đó.
-6. Chỉ mở FE mutation khi Core capability/profile khớp contract.
+Migration dùng dual-reader v1/v2 trong một compatibility window:
 
-Rollback package phải làm theo chiều ngược và giữ dữ liệu. Nếu Core cũ không đọc
-artifact/schema mới, rollback control trước về graph backup/LKG tương thích, xác
-nhận output/IOP, rồi mới hạ BE/FE. Trigger rollback: ABI/schema mismatch, không
-reconcile operation, IOP gap vượt ngưỡng, watchdog loop, first-cycle fault hoặc
-read-back active hash/revision không khớp.
+1. backup DB/artifact/Active/LKG/RETAIN/journal + checksum;
+2. deploy Core reader mới ở `GRAPH_ONLY`, đọc v1 và v2;
+3. deploy compiler/Web/FE và route mới; migration DB atomic/idempotent;
+4. tạo v2 package nhưng không tự Commission/Enable;
+5. verify/rehearse rollback; chỉ sau đó mở target cutover;
+6. bỏ v1 writer trước, bỏ v1 reader ở release sau có evidence migration.
 
-Partial deployment fail closed:
+Rollback package không xóa Draft/Revision/audit/LKG/RETAIN. Core cũ phải reject
+artifact mới bằng stable error, không parse một phần.
 
-- FE mới + BE cũ: 404/capability unavailable, không dựng success.
-- BE mới + Core cũ: chỉ Project/Draft/Check nếu compiler tương thích; Commission
-  bị khóa bởi capability/profile mismatch.
-- Core mới + BE cũ: chạy `GRAPH_ONLY`; không tự activate package.
-- mất nguồn giữa swap: boot chọn LKG/graph theo journal committed; trạng thái
-  `UNKNOWN` phải được reconcile trước mutation mới.
+### 10.1 PGM-02 Target đã phê duyệt theo increment
 
-## 17. Verification kiến trúc và acceptance
-
-| Scenario | Requirement/risk | Mức | Expected |
+| Increment | Process/ownership | Data/contract boundary | Failure boundary |
 |---|---|---|---|
-| `ARCH-TC-01` Process ownership inspection | SYS-102/104/105; RSK-001 | static/design | mỗi mutable state có một owner; không direct output path từ Web/Program |
-| `ARCH-TC-02` Core dependency/symbol check | CORE-101/103 | build/static | `mkddc-core` không chứa parser/compiler symbols; runtime không filesystem/HTTP/DB |
-| `ARCH-TC-03` Partial deployment matrix | SYS-103/104 | integration/target | bốn tổ hợp §16 fail closed và control continuity đúng |
-| `ARCH-TC-04` BE/Core restart at lifecycle steps | SYS-103/104; RSK-007/008 | target fault injection | operation reconcile, không double activation, LKG giữ |
-| `ARCH-TC-05` Concurrent worst-case Check | NFR-102/103/108; RSK-003/005 | target/HIL | không missed step/watchdog/iobus gap; Check timeout fail closed |
-| `ARCH-TC-06` Graph/Program cutover | SYS-105; RSK-001 | target/HIL | không cycle nào có hai owner mức 5; rollback khôi phục backup |
-| `ARCH-TC-07` MCU independent safety | MCU-102; HW-102/103 | HIL | mất frame ở 200 ms vào safe envelope, không phụ thuộc Web/Core recovery |
+| R1 EDIT | FE + `mkddc-web` Draft/compiler | typed Draft v1/v2, Library signature, atomic reference/refactor, typed diagnostic; `objectId` selection tách `programId` | parse/analysis/ETag lỗi = zero mutation; Save/Check không đổi Active |
+| R2 LIVE | Core producer → IPC → BE read model → FE | sealed Active document tuple + runtime observation tuple; monotonic sequence; ≤10 Hz UI | mismatch/cutover/gap = clear/rejoin/UNAVAILABLE; LIVE không có mutation route/action |
+| R3 SIMULATE | Web supervisor + isolated ephemeral worker | immutable Saved-Draft snapshot, virtual image/time, server RBAC/audit; viewer/operator/admin read, admin-only mutation | sandbox/quota/timeout/crash/expiry fail closed; không production handle hoặc physical output authority |
 
-Evidence phải ghi commit, binary/package hash, config/profile, target, command,
-raw log/waveform và reviewer. Host tests không đóng `ARCH-TC-04..07`.
+Worker R3 được phép link pure compiler/artifact validation/executor primitives,
+nhưng bị cấm link `OutputWriter`, device driver, production SHM/UDS clients,
+singleton coordinator, RETAIN writer hoặc iobus. Cùng snapshot/input phải cho
+kết quả deterministic ở mọi tốc độ; `STEP_CYCLE` snapshot input, chạy toàn bộ
+Program due theo stable order, commit một lần, tăng virtual time theo GCD rồi
+quay lại PAUSED. Process reboot không phục hồi session cũ.
 
-## 18. Trình tự runtime và ownership dữ liệu đầu-cuối
+Capability của từng increment mặc định false và versioned. Partial deploy hoặc
+version mismatch trả `UNAVAILABLE/UNSUPPORTED`; không để FE fake producer. R3
+chỉ được bật sau Test Result target/HIL chứng minh Active/LKG/runtime counters và
+AO/DO/relay vật lý không đổi qua create/run/step/input/reset/stop/fault/expiry.
 
-### 18.1 Check
+## 11. Source mapping
 
-```text
-FE --save(etag)--> BE Store --immutable revision--> Compiler worker
-FE <--revision---- BE       <--diagnostic/artifact-- Compiler worker
-                         BE --target/capability probe--> Core
-                         BE <--readiness/profile-------- Core
-```
+| Boundary | Source/contract phải sửa | Plan59 |
+|---|---|---|
+| Profile/registry/error | `contracts/programming/`, generators, TS/Go/C++ output | T59-002..004 |
+| Store/OpenAPI/IPC/artifact | `apps/web-api/internal/programming/`, `contracts/openapi/`, `contracts/ipc/programming_v2/` | T59-005/006 |
+| Compiler/POU/artifact | `apps/core/application/st/`, compiler runner | T59-101..106 |
+| Library | BE domain/store/routes + FE `features/programming/library/` | T59-201..205 |
+| Project/check/mapping | BE application/compiler + FE editor/mapping | T59-301..306 |
+| Runtime/lifecycle | Core programming/scheduler/scan + IPC | T59-401..408/501/502 |
+| UI six workspace | FE routes/pages/generated client | T59-503..506 |
+| Trust/package/release | compiler/loader/platform/CI | T59-601..707 |
+| PGM-02 R1 EDIT | FE programs shell/editor/FBD/library + BE Draft/library/reference/check contract | `T59-802=READY`; `T59-803..809=ORDERED` theo dependency |
+| PGM-02 R2 LIVE | Core active/observation pin + IPC/BE join + FE keyed overlay | `T59-810..813=ORDERED`, chỉ chạy sau R1 |
+| PGM-02 R3 SIMULATE | BE supervisor/session + isolated worker + FE simulation surface + sandbox policy | `T59-814..817=ORDERED`, chỉ chạy sau R2; `ADR-053` Accepted |
 
-Check không ghi active pointer, không stage vào active slot và không giữ lock
-Core. Compiler nhận snapshot immutable, output vào temp directory riêng; BE chỉ
-publish Artifact record sau khi hash/manifest/diagnostic được commit cùng Check.
+Dependency cấm: FE làm runtime authority; BE transaction chờ Core; compiler trong
+HTTP handler không giới hạn; Core scan gọi DB/network; Program direct IOP; shared
+mutable cross-Program; manual registry duplicate; action IPC không handler.
 
-### 18.2 Commission/Restore
+## 12. Verification và gate
 
-```text
-FE --idempotency + candidate + acknowledgements--> BE Operation Journal
-BE --verify/stage(operationId, packageHash)-------> Core pending slot
-Core --safe boundary: validate → swap → first cycle → commit--> Active/LKG
-BE <--authoritative operation + active hash/revision----------- Core
-FE <--202 operationId; poll/event; final read-back-------------- BE
-```
+| Gate | Bằng chứng |
+|---|---|
+| Contract | exact generator/golden/route/codec/negative drift |
+| Compiler | POU purity/state/DAG/equivalence/fuzz/loader bounds |
+| Runtime host | 10 Program/3 period, TSan, fault isolation, signal/output/retain/restart |
+| FE↔BE↔Core | real-backend E2E, no Programming `page.route` mock |
+| Target | 10 Program soak 24 h, Web/BE loss, deadline/IOP continuity |
+| HIL | ST+FBD AO/DO, Disable/fault/safe-state/rollback, power-cut RETAIN/LKG |
+| Release | signed provenance, fresh install/upgrade/replacement/rollback, CI and Test Result |
 
-Owner thay đổi theo pha: BE sở hữu intent/journal; Core sở hữu pending/active/LKG;
-iobus sở hữu process-image transport; MCU sở hữu output vật lý. Không process nào
-được ghi trực tiếp state của process khác.
+Host/browser evidence không thay target/HIL. `AUTH-PROG-2026-08-24-05` đặt
+`PLAN_READY[PGM02-V22]=PASS` và `IMPLEMENT_READY[R1|R2|R3]=GO`; task scheduler
+vẫn buộc R1→R2→R3. `RELEASE_READY=NO-GO` tới khi Plan59/VVP có Test Result và
+authority độc lập.
 
-### 18.3 Bảng data flow
+## 13. Risk và sign-off
 
-| Dữ liệu | Producer | Consumer | Persistence/freshness | Failure behavior |
-|---|---|---|---|---|
-| Draft/Revision | BE domain/store | FE, compiler | durable/immutable Revision | ETag conflict; không overwrite |
-| Artifact/manifest | compiler → BE registry | Core loader | content-addressed + bounded | hash/schema/target mismatch reject |
-| Operation | BE journal + Core status | FE/Ops/Audit | durable, reconcile sau restart | UNKNOWN; cấm auto replay |
-| Process image input | iobus | Core step | snapshot mỗi base step | quality/freshness giữ riêng; không zero |
-| Program proposal | Core executor | priority resolver | trong cycle/preallocated | fault bỏ proposal theo policy |
-| Effective output | resolver/safety | iobus → MCU | mỗi base step/IOP frame | hold/safe-timeout theo authority |
-| Online sample/trace | Core publisher | BE/FE | bounded, có sequence/timestamp | gap refetch; stale label |
+Rủi ro chủ đạo: output ownership, signal race, scheduler dependency, POU
+recursion, library supply chain, partial package/power loss, IOP gap và fake HIL.
+Control/owner/scenario nằm ở `RSK-PROG-001` v4.24 và `TRACE-PROG-001` v6.9.
 
-## 19. Resource và deployment unit
+| Vai trò | Disposition |
+|---|---|
+| Product Owner/CTO + System Architect | **ACCEPT — `AUTH-PROG-2026-08-20-04`** |
+| Discipline leads | Review/fix trong task Plan59; không chặn entry implementation |
+| Verification/Release | Chờ evidence W7; residual chưa accept nên production NO-GO |
+| Product Owner/CTO + System Architect — PGM-02 v2.2 và `ADR-053` | **AUTHORIZED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-24-05`; exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`** |
+| Consumer/discipline reviewers | **WAIVED FOR IMPLEMENTATION**; phản hồi hậu kiểm theo task, không phải M4/M5 |
 
-| Unit | CPU/priority | Memory/storage | Startup dependency | Health/readiness |
-|---|---|---|---|---|
-| `mkddc-core` | RT policy hiện hành; Program trong scan | preallocated active/pending/trace; không DB | config + SHM/IOP; Web không bắt buộc | active/LKG/profile/scan/overrun |
-| `mkddc-iobus` | fieldbus/IO worker độc lập | IO SHM/buffer bounded | MCU/serial theo cấu hình | poll gap, quality, link status |
-| `mkddc-web` | non-RT; compiler worker bị quota | DB/store/artifact/audit quota | Core optional cho Draft, bắt buộc Commission | store/compiler/Core capability |
-| React UI | browser | cache chỉ read model/local edit | Web API | không là authority readiness |
-| STM32 | ISR/DMA/superloop/BSP | static buffers | power/clock/peripheral | sequence/CRC/timeout/safe output |
-
-Giá trị RAM, CPU affinity, RT priority, DB quota và trace buffer được duyệt làm
-target baseline theo `AUTH-PROG-2026-08-11-03`; measurement là evidence phải thu
-trong implementation. Không copy số host vào target configuration.
-
-## 20. Blocker, lịch sử và sign-off
-
-| Blocker | Owner | Ảnh hưởng | Điều kiện mở |
-|---|---|---|---|
-| `ARCH-BLK-01` `OD-PROG-004/012` | Product + Runtime + Safety | **RESOLVED FOR IMPLEMENTATION** | decision `DECIDED`; benchmark trong task |
-| `ARCH-BLK-02` `OD-PROG-013/014` | Product + Architect + Ops | **RESOLVED FOR IMPLEMENTATION** | ADR `Accepted`; inventory/rollback trong task |
-| `ARCH-BLK-03` error/signature scope | Security + Interface owner | **RESOLVED FOR IMPLEMENTATION** | `ADR-030/031 Accepted`; contract/test trong task |
-| `ARCH-BLK-04` TLS deployment | Security + Ops | **RESOLVED FOR IMPLEMENTATION** | TLS/cert lifecycle là deliverable security, không chặn code |
+## 14. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
-| 0.1 | 2026-08-09 | Tạo target architecture/ownership/lifecycle/cutover ban đầu |
-| 0.2 | 2026-08-09 | Bổ sung As-Built evidence, repository mapping, concurrency/timing, partial deploy/rollback và architecture tests |
-| 0.3 | 2026-08-09 | Bổ sung sequence Check/Commission, data-flow ownership, deployment unit/resource/health contract; chuyển Detailed Draft chờ architecture review |
-| 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Architecture; ghi rõ xung đột §11 kèm owner/gate/điều kiện mở |
-| 0.5 | 2026-08-10 | Đóng phần kỹ thuật của `ARCH-CONF-PROG-001..006` bằng sáu ADR chủ quản `ADR-026..031` (`Proposed`): profile runtime + validator duy nhất, quyền sở hữu chu kỳ scan, công thức watchdog theo base step, overrun là Task fault, hai lớp mã lỗi, `IntegrityMode=HASH_ONLY`. §11 thành bảng có ADR và trạng thái; **không** tự chuyển xung đột sang đóng vì chữ ký authority còn thiếu |
-| 0.6 | 2026-08-10 | Ghi System Architect Phạm Đình Chương `ACCEPT` theo ủy quyền điện tử `AUTH-PROG-2026-08-10-01`; đồng bộ §11 và sign-off. Giữ M3 và 6 ADR `Proposed` vì còn đồng phê duyệt Safety/Security/Verification/Runtime cùng target evidence |
-| 0.7 | 2026-08-11 | `AUTH-PROG-2026-08-11-03` phê duyệt toàn bộ kiến trúc để implement; chuyển ADR-026..031 sang `Accepted`; review discipline còn thiếu thành hậu kiểm và không chặn `IMPLEMENT_READY[*]` |
-| 0.8 | 2026-08-11 | Đồng bộ As-Built `TASK-PROG-301` tại `a831a0d`: profile Rev A, `on_base_step()`/missed release, capability/schema và watchdog ADR-028; giữ bootstrap/cutover/target evidence còn mở |
-| 0.9 | 2026-08-13 | Đồng bộ P3/P4 As-Built tới `c2f3189` + `10d9ad6`: fixed scheduler topology, SQLite v5 operation coordinator, Programming UDS `SO_PEERCRED`, exclusive safe-boundary cutover, first-output/LKG, rollback và CRC checkpoint recovery. Giữ flag OFF, 0/32 PASS và target/HIL/power-cut/IOP timing chưa chạy. |
-
-| Vai trò | Trạng thái | Điều kiện ký |
-|---|---|---|
-| Product Owner | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11** | `AUTH-PROG-2026-08-11-03` |
-| System/Runtime Architect | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11** | 6/6 ADR `Accepted` |
-| Controls/Safety Reviewer | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm trong task |
-| Security/Ops Reviewer | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm trong task |
-| Verification Lead | **WAIVED FOR IMPLEMENTATION** | evidence trong task, không chặn code |
-
-## 21. Phụ lục — Tự kiểm cổng M3 (loại: Architecture)
-
-Cổng lấy theo [Plan 54 §7](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
-
-| Cổng | Kết quả | Bằng chứng trong file / lý do |
-|---|---|---|
-| Context, component, deployment | PASS | §2 system context; §14 component target; §10 và §19 deployment unit/tài nguyên |
-| Ownership | PASS | §3 phân bổ trách nhiệm; §18.3 bảng data flow ghi chủ sở hữu từng dữ liệu |
-| Trust boundary | PASS | §2 và §9: biên tin cậy Web ↔ Core ↔ iobus ↔ MCU và hướng gọi được phép |
-| Failure boundary | PASS | §8 failure containment; §7 output continuity khi Commission |
-| Hướng interface | PASS | §14 và §18: Core không gọi ngược lên Web; mọi output qua resolver mức 5 |
-| State | PASS | §4 state machine lifecycle; §5 base control step |
-| Capacity và timing | PASS | §15 concurrency/timing/resource boundary; §19 deployment unit; ngưỡng `<200 ms` poll gap |
-| Compatibility và rollback | PASS | §16 compatibility/deployment/rollback gồm thứ tự deploy và dữ liệu phải giữ |
-| Xung đột ADR/kiến trúc | **PASS FOR IMPLEMENTATION** | §11: 6/6 ADR `Accepted`; 17/17 decision `DECIDED`; review discipline được miễn khỏi entry implementation |
-| Verification kiến trúc | PASS | §17 acceptance gắn `VS-PROG-012/014/015`; đều `NOT RUN` và được ghi đúng như vậy |
-| Link nội bộ sạch | PASS | harness: local link missing `0`, anchor missing `0` |
-
-Maturity chưa nâng M4/M5 vì không giả chữ ký/evidence, nhưng đã được
-`WAIVED FOR IMPLEMENTATION`. Không mục nào ở đây tự chứng minh code đã tồn tại.
+| 0.1..0.9 | 2026-08-09..13 | Kiến trúc baseline một Program và source/host operation; superseded về Product Target. |
+| 1.0 | 2026-08-20 | Viết lại kiến trúc thống nhất cho POU/package/multi-Program/signal/enable/scheduler/output/migration/release; loại contradiction phạm vi cũ khỏi nội dung Active. |
+| 1.1-candidate | 2026-08-24 | Thêm boundary PGM-02 R1/R2/R3, coherent LIVE và ephemeral Simulation worker không production handle; đăng `ADR-053` Proposed, giữ Architect exact pin/code/release PENDING/NO-GO. |
+| 1.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` và exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; chấp nhận `ADR-053`, mở ba increment theo R1→R2→R3; chốt Check/Package fail closed `ST-POU-005` cho PROGRAM POU chưa xếp lịch; giữ Target chưa As-Built và release NO-GO. |

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { useState } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
@@ -218,10 +218,102 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     expect(onChange).toHaveBeenCalledWith('A := NEW; B := OLD;')
   })
 
-  it('chỉ đọc (canEdit=false): không có nút Định dạng/Lưu/Replace, textarea readOnly', () => {
+  it('AC-ST-011: chỉ đọc (canEdit=false): không có nút Định dạng/Lưu/Replace, textarea readOnly', () => {
     const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: false })
     expect(textarea).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: /Định dạng|Format/ })).not.toBeInTheDocument()
+  })
+
+  it('T59-506: Ctrl+Z/Y hoàn tác/làm lại đủ 20 edit và giữ cursor của snapshot', () => {
+    const initial = 'PROGRAM P\nEND_PROGRAM\n'
+    const snapshots = [initial]
+    for (let index = 1; index <= 20; index += 1) {
+      snapshots.push(`PROGRAM P\n  X := ${index};\nEND_PROGRAM\n`)
+    }
+
+    function Harness() {
+      const [source, setSource] = useState(initial)
+      return (
+        <SourceEditor
+          program={program(initial)}
+          source={source}
+          canEdit
+          saving={false}
+          diagnostics={[]}
+          focusDiagnostic={null}
+          onChange={setSource}
+          onSave={vi.fn()}
+          pointCatalogStatus="idle"
+          pointCatalogItems={[]}
+          pointCatalogError={null}
+          onEnsurePointCatalogLoaded={vi.fn()}
+        />
+      )
+    }
+
+    render(<I18nProvider><Harness /></I18nProvider>)
+    const textarea = screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement
+    for (const next of snapshots.slice(1)) {
+      fireEvent.change(textarea, { target: { value: next } })
+    }
+    expect(textarea.value).toBe(snapshots[20])
+    expect(screen.getByRole('button', { name: 'Hoàn tác thay đổi ST' })).toBeEnabled()
+
+    fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true })
+    expect(textarea.value).toBe(snapshots[19])
+    expect(textarea.selectionStart).toBe(snapshots[19].length)
+    expect(textarea.selectionEnd).toBe(snapshots[19].length)
+
+    for (let index = 18; index >= 0; index -= 1) {
+      fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true })
+      expect(textarea.value).toBe(snapshots[index])
+    }
+    expect(textarea.selectionStart).toBe(0)
+    expect(screen.getByRole('button', { name: 'Hoàn tác thay đổi ST' })).toBeDisabled()
+
+    for (let index = 1; index <= 20; index += 1) {
+      fireEvent.keyDown(textarea, { key: 'y', ctrlKey: true })
+      expect(textarea.value).toBe(snapshots[index])
+    }
+    expect(textarea.selectionStart).toBe(snapshots[20].length)
+    expect(screen.getByRole('button', { name: 'Làm lại thay đổi ST' })).toBeDisabled()
+  })
+
+  it('T59-506: Định dạng gọi từ Command Palette vẫn là một bước có thể undo', async () => {
+    const initial = 'PROGRAM test VAR Counter:INT; END_VAR Counter:=Counter+1; END_PROGRAM'
+
+    function Harness() {
+      const [source, setSource] = useState(initial)
+      const [nonce, setNonce] = useState(0)
+      return (
+        <>
+          <button type="button" onClick={() => setNonce((value) => value + 1)}>Format request</button>
+          <SourceEditor
+            program={program(initial)}
+            source={source}
+            canEdit
+            saving={false}
+            diagnostics={[]}
+            focusDiagnostic={null}
+            onChange={setSource}
+            onSave={vi.fn()}
+            pointCatalogStatus="idle"
+            pointCatalogItems={[]}
+            pointCatalogError={null}
+            onEnsurePointCatalogLoaded={vi.fn()}
+            formatRequest={nonce > 0 ? { programId: 'program-1', nonce } : undefined}
+          />
+        </>
+      )
+    }
+
+    render(<I18nProvider><Harness /></I18nProvider>)
+    const textarea = screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement
+    fireEvent.click(screen.getByRole('button', { name: 'Format request' }))
+    await waitFor(() => expect(textarea.value).not.toBe(initial))
+
+    fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true })
+    expect(textarea.value).toBe(initial)
   })
 
   describe('FE-ST-008: trạng thái Lưu rõ ràng (Saving/Failed/Chưa lưu) thay vì chỉ disable nút không giải thích', () => {
@@ -315,5 +407,174 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
       expect(saveButton).toBeDisabled()
       expect(saveButton).toHaveAttribute('title', 'Mã nguồn ST không được để trống')
     })
+  })
+})
+
+/* `T59-805` AC: "LIVE and mobile cannot mutate via typing/paste/drop/IME/
+ * commands". `readOnly` của textarea chặn được người dùng thật, nhưng nó là một
+ * THUỘC TÍNH — một lần refactor quên nó là mọi đường mutation mở lại cùng lúc.
+ * Bộ test này khoá GUARD RUNTIME, thứ vẫn đúng kể cả khi thuộc tính biến mất. */
+describe('SourceEditor — chỉ đọc là policy runtime, không chỉ thuộc tính', () => {
+  it('AC-ST-011: không phát onChange cho gõ tay, dán hay thả khi canEdit=false', () => {
+    const { textarea, onChange } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: false })
+    expect(textarea).toHaveAttribute('readonly')
+
+    // Mô phỏng cả ba đường mà trình duyệt dùng để ghi vào textarea: gõ tay,
+    // dán, và thả. Trong jsdom, cả ba đều tới cùng một `change` event.
+    fireEvent.change(textarea, { target: { value: 'PROGRAM HACKED\nEND_PROGRAM\n' } })
+    fireEvent.paste(textarea, { clipboardData: { getData: () => 'X := 1;' } })
+    fireEvent.drop(textarea, { dataTransfer: { getData: () => 'X := 1;' } })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('không có nút Lưu/Hoàn tác/Định dạng nào để chạy lệnh sửa', () => {
+    renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: false })
+    expect(screen.queryByRole('button', { name: /Hoàn tác/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Định dạng/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Lưu' })).not.toBeInTheDocument()
+  })
+
+  it('vẫn phát onChange bình thường khi được phép sửa', () => {
+    const { textarea, onChange } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { canEdit: true })
+    expect(textarea).not.toHaveAttribute('readonly')
+    fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 1;\nEND_PROGRAM\n' } })
+    expect(onChange).toHaveBeenCalledWith('PROGRAM P\nX := 1;\nEND_PROGRAM\n')
+  })
+})
+
+/* `AC-ST-005` — "Diagnostic jump exact; hover/ref absence shows unavailable,
+ * not guessed content". Phần chẩn đoán đã có test từ trước; nhóm này khoá phần
+ * THAM CHIẾU: tới khai báo phải đúng chỗ, và khi không tra được thì phải NÓI là
+ * không tra được thay vì nhảy tới một đích gần đúng. */
+describe('SourceEditor — tham chiếu tại con trỏ (T59-805 / AC-ST-005)', () => {
+  const SOURCE = 'PROGRAM P\nVAR\n  FanCmd : BOOL;\n  FanDelay : TON;\nEND_VAR\nFanDelay(IN := FanCmd, PT := T#5s);\nFanCmd := FALSE;\nEND_PROGRAM\n'
+
+  function focusIdentifier(textarea: HTMLTextAreaElement, needle: string, occurrence = 0) {
+    let at = -1
+    for (let index = 0; index <= occurrence; index += 1) at = textarea.value.indexOf(needle, at + 1)
+    textarea.setSelectionRange(at + 1, at + 1)
+    fireEvent.select(textarea)
+    return at
+  }
+
+  it('hiện kiểu và phân loại của định danh dưới con trỏ', () => {
+    const { textarea } = renderEditor(SOURCE)
+    focusIdentifier(textarea, 'FanDelay(')
+
+    const panel = screen.getByText('Tham chiếu tại con trỏ').parentElement as HTMLElement
+    expect(within(panel).getByText('FanDelay')).toBeInTheDocument()
+    expect(within(panel).getByText('TON')).toBeInTheDocument()
+    expect(within(panel).getByText('instance FB')).toBeInTheDocument()
+  })
+
+  it('F12 nhảy tới đúng khai báo, không phải lần dùng gần nhất', () => {
+    const { textarea } = renderEditor(SOURCE)
+    focusIdentifier(textarea, 'FanCmd :=')
+    fireEvent.keyDown(textarea, { key: 'F12' })
+
+    expect(textarea.selectionStart).toBe(SOURCE.indexOf('FanCmd : BOOL;'))
+    expect(textarea.selectionEnd).toBe(SOURCE.indexOf('FanCmd : BOOL;') + 'FanCmd'.length)
+  })
+
+  it('định danh chưa khai báo: nói KHÔNG XÁC ĐỊNH ĐƯỢC, con trỏ đứng yên', () => {
+    const source = 'PROGRAM P\nGhostVar := 1;\nEND_PROGRAM\n'
+    const { textarea } = renderEditor(source)
+    focusIdentifier(textarea, 'GhostVar')
+    const before = textarea.selectionStart
+
+    expect(screen.getByText(/không xác định được/)).toBeInTheDocument()
+    fireEvent.keyDown(textarea, { key: 'F12' })
+    expect(screen.getByRole('status')).toHaveTextContent('Không tìm thấy khai báo của GhostVar.')
+    expect(textarea.selectionStart).toBe(before)
+  })
+
+  it('đếm đọc/ghi tách nhau: gán tham số trong lời gọi không phải ghi', () => {
+    const { textarea } = renderEditor(SOURCE)
+    focusIdentifier(textarea, 'FanCmd :=')
+
+    const panel = screen.getByText('Tham chiếu tại con trỏ').parentElement as HTMLElement
+    expect(within(panel).getByText('Đọc (1):')).toBeInTheDocument()
+    expect(within(panel).getByText('Ghi (1):')).toBeInTheDocument()
+  })
+
+  it('chỉ đọc vẫn tra được tham chiếu — điều hướng không phải mutation', () => {
+    const { textarea } = renderEditor(SOURCE, { canEdit: false })
+    focusIdentifier(textarea, 'FanDelay(')
+    fireEvent.keyDown(textarea, { key: 'F12' })
+    expect(textarea.selectionStart).toBe(SOURCE.indexOf('FanDelay : TON;'))
+  })
+})
+
+/* `AC-ST-010` — "unsupported compiler construct does not crash editor".
+ *
+ * Editor phải chịu được nguồn mà compiler KHÔNG nhận: cú pháp ngoài subset,
+ * chú thích không đóng, khối VAR thiếu END_VAR, ký tự ngoài ASCII, một dòng
+ * rất dài. Nó không cần hiểu những thứ đó — nó chỉ không được sập, vì sập thì
+ * người dùng mất luôn buffer đang gõ. */
+describe('SourceEditor — nguồn ngoài subset không làm sập editor (AC-ST-010)', () => {
+  const HOSTILE: Array<[string, string]> = [
+    ['chú thích không đóng', 'PROGRAM P\n(* mở mà không đóng\nX := 1;\nEND_PROGRAM\n'],
+    ['VAR thiếu END_VAR', 'PROGRAM P\nVAR\n  A : INT;\nX := 1;\nEND_PROGRAM\n'],
+    ['cú pháp ngoài subset', 'PROGRAM P\nVAR\n  A : ARRAY[1..10] OF INT;\nEND_VAR\nCASE A[1] OF\n1: X := 1;\nEND_CASE;\nEND_PROGRAM\n'],
+    ['toàn dấu ngoặc lệch', 'PROGRAM P\n))((\nX := ((((;\nEND_PROGRAM\n'],
+    ['ngoài ASCII trong định danh', 'PROGRAM P\nVAR\n  Nhiệt_độ : REAL;\nEND_VAR\nNhiệt_độ := 1.0;\nEND_PROGRAM\n'],
+    ['một dòng rất dài', `PROGRAM P\n${'X := X + 1; '.repeat(400)}\nEND_PROGRAM\n`],
+    ['rỗng hoàn toàn', ''],
+    ['chỉ có khoảng trắng', '   \n\t\n'],
+  ]
+
+  it.each(HOSTILE)('%s: editor vẫn dựng được và vẫn nhận thao tác', (_label, source) => {
+    const { textarea } = renderEditor(source)
+    expect(textarea).toBeInTheDocument()
+    // đặt con trỏ khắp nguồn: mọi bước đều đi qua chỉ mục tham chiếu
+    for (const offset of [0, Math.floor(source.length / 2), source.length]) {
+      textarea.setSelectionRange(offset, offset)
+      fireEvent.select(textarea)
+    }
+    fireEvent.keyDown(textarea, { key: 'F12' })
+    expect(screen.getByText('Tham chiếu tại con trỏ')).toBeInTheDocument()
+  })
+})
+
+/* `AC-ST-004` — "Save never changes Active". Ở lớp FE, điều đó có nghĩa: nút
+ * Lưu chỉ phát THAO TÁC DRAFT, không có đường nào từ editor đụng tới Active. */
+describe('SourceEditor — Lưu chỉ chạm Draft (AC-ST-004)', () => {
+  /** Nút Lưu chỉ bật khi buffer khác bản đã cam kết, nên harness phải giữ
+   *  state thật — editor "controlled giả" không bao giờ dirty. */
+  function renderDirtyEditor(initial: string, onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>) {
+    function Harness() {
+      const [source, setSource] = useState(initial)
+      return (
+        <SourceEditor
+          program={program(initial)}
+          source={source}
+          canEdit
+          saving={false}
+          diagnostics={[]}
+          focusDiagnostic={null}
+          onChange={setSource}
+          onSave={onSave}
+          pointCatalogStatus="idle"
+          pointCatalogItems={[]}
+          pointCatalogError={null}
+          onEnsurePointCatalogLoaded={vi.fn()}
+        />
+      )
+    }
+    render(<I18nProvider><Harness /></I18nProvider>)
+    return { textarea: screen.getByLabelText(/Mã nguồn ST/) as HTMLTextAreaElement }
+  }
+
+  it('nút Lưu phát đúng một op replaceProgramSource, không op vòng đời nào khác', async () => {
+    const onSave = vi.fn().mockResolvedValue(true)
+    const { textarea } = renderDirtyEditor('PROGRAM P\nEND_PROGRAM\n', onSave)
+    fireEvent.change(textarea, { target: { value: 'PROGRAM P\nX := 1;\nEND_PROGRAM\n' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const operations = onSave.mock.calls[0][0] as ProgrammingDraftOperation[]
+    expect(operations).toHaveLength(1)
+    expect(operations[0].op).toBe('replaceProgramSource')
+    expect(operations.some((operation) => /commission|activate|enable|restore/i.test(operation.op))).toBe(false)
   })
 })

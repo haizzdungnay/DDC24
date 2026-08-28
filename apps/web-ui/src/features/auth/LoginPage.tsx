@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react'
 import { ChevronDown, Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
+import { LoginError, type LoginErrorKind } from './loginError'
 import { DEVICE_DEFAULTS, IS_DEMO } from '../../shared/config'
 import { useI18n } from '../../shared/i18n'
 import { Button } from '../../shared/components/Button'
@@ -33,21 +34,23 @@ export function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  /* T57-1.10 — giữ CẢ loại lỗi lẫn thông điệp: loại quyết định gợi ý hành động
+     đi kèm, thông điệp là câu người dùng đọc. */
+  const [error, setError] = useState<{ kind: LoginErrorKind | 'local'; message: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const returnTo = safeReturnPath((location.state as { from?: unknown } | null)?.from)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!username.trim()) {
-      setError(pick('Nhập tên đăng nhập', 'Enter a username'))
+      setError({ kind: 'local', message: pick('Nhập tên đăng nhập', 'Enter a username') })
       return
     }
     // TC-L03 (TR-MKDDC24-P1-20260814-01): username có nhưng password rỗng
     // trước đây lọt qua guard này, gửi thẳng lên server và ăn một roundtrip
     // thừa cho một lỗi biết chắc phía client — chặn cùng cách với username.
     if (!password) {
-      setError(pick('Nhập mật khẩu', 'Enter a password'))
+      setError({ kind: 'local', message: pick('Nhập mật khẩu', 'Enter a password') })
       return
     }
     setLoading(true)
@@ -56,7 +59,7 @@ export function LoginPage() {
       await login(password, username.trim())
       navigate(returnTo, { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : pick('Đăng nhập thất bại', 'Sign in failed'))
+      setError(toLoginError(err, pick))
     } finally {
       setLoading(false)
     }
@@ -68,7 +71,7 @@ export function LoginPage() {
       await login('', 'guest')
       navigate(returnTo, { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : pick('Đăng nhập thất bại', 'Sign in failed'))
+      setError(toLoginError(err, pick))
     }
   }
 
@@ -149,7 +152,10 @@ export function LoginPage() {
               phục mật khẩu (đặt lại mật khẩu là việc của admin qua trang Người
               dùng). Giữ hai thứ đó là hứa với người vận hành một lối thoát
               không tồn tại; nguyên tắc §3.1.3 của plan 45: thà gỡ còn hơn lừa. */}
-          {error && <p className="text-sm text-[var(--c-fault-fg)]">{error}</p>}
+          {/* T57-1.10 — mỗi loại lỗi kèm gợi ý hành động RIÊNG. Ba nguyên nhân
+              này cần ba việc khác hẳn nhau từ người dùng, nên một câu "Đăng
+              nhập thất bại" dùng chung là bắt họ đoán. */}
+          {error && <LoginErrorNotice kind={error.kind} message={error.message} />}
           <Button className="w-full" variant="primary" type="submit" loading={loading}>{t('signIn')}</Button>
           {/* Nút Khách chỉ có nghĩa ở bản demo (AUTH_MODE `mock`/`none` cấp phiên
               ngay). Ở bản live nó gọi `/auth/login` với mật khẩu rỗng, luôn hỏng,
@@ -164,5 +170,50 @@ export function LoginPage() {
         </p>
       </section>
     </main>
+  )
+}
+
+/** Chuẩn hoá bất kỳ thứ gì bị ném thành cặp (loại, thông điệp).
+ *
+ *  Lỗi không phải `LoginError` (lỗi lập trình, lỗi thư viện) được xếp `server`
+ *  chứ không phải `credentials`: gợi ý người dùng đi gõ lại mật khẩu cho một
+ *  lỗi không liên quan tới mật khẩu là dẫn họ đi sai hướng. */
+export function toLoginError(
+  err: unknown,
+  pick: (vi: string, en: string) => string
+): { kind: LoginErrorKind | 'local'; message: string } {
+  if (err instanceof LoginError) return { kind: err.kind, message: err.message }
+  return {
+    kind: 'server',
+    message: err instanceof Error ? err.message : pick('Đăng nhập thất bại', 'Sign in failed')
+  }
+}
+
+function LoginErrorNotice({ kind, message }: { kind: LoginErrorKind | 'local'; message: string }) {
+  const { pick } = useI18n()
+  const hint = {
+    credentials: pick(
+      'Kiểm tra phím Caps Lock và bố cục bàn phím. Quên mật khẩu thì cần một quản trị viên đặt lại ở trang Người dùng — thiết bị không có luồng tự khôi phục.',
+      'Check Caps Lock and your keyboard layout. If the password is lost, an administrator must reset it on the Users page — the device has no self-service recovery.'
+    ),
+    unreachable: pick(
+      'Thử mở lại địa chỉ của bộ điều khiển trong một tab mới. Nếu cũng không mở được thì vấn đề nằm ở mạng hoặc ở nguồn của thiết bị, không phải ở tài khoản.',
+      'Try opening the controller address in a new tab. If that also fails, the problem is the network or the device power, not your account.'
+    ),
+    server: pick(
+      'Thử lại sau ít phút. Nếu vẫn vậy, xem nhật ký dịch vụ web trên bộ điều khiển.',
+      'Retry in a few minutes. If it persists, check the web service log on the controller.'
+    ),
+    local: ''
+  }[kind]
+
+  if (kind === 'local') {
+    return <p role="alert" className="text-sm text-[var(--c-fault-fg)]">{message}</p>
+  }
+  return (
+    <div role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] px-3 py-2 text-sm text-[var(--c-fault-fg)]">
+      <p className="font-semibold">{message}</p>
+      {hint && <p className="mt-1 text-xs">{hint}</p>}
+    </div>
   )
 }

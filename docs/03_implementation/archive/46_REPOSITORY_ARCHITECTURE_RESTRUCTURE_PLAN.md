@@ -1,0 +1,765 @@
+# Plan 46: Restructure kiến trúc repository theo bounded modules
+
+> ## 🗄 ĐÃ LƯU TRỮ — 2026-08-19
+>
+> Hồ sơ **đã đóng**, giữ tại `docs/03_implementation/archive/` để truy nguyên.
+> **Không** dùng làm căn cứ mở việc mới hay làm nguồn-chuẩn cho mã hiện hành.
+>
+> **Lý do đóng:** `Closed` — G0..G5 PASS, closure review `RST-205` ngày 2026-08-04. Đối chiếu mã ngày 2026-08-19: `apps/{core,iobus,netcfg,hmi,web-api,web-ui}` tồn tại, `services/` đã biến mất, `CMakeLists.txt` gốc là authority — đúng như plan mô tả.
+>
+> **Đọc thay bằng:** [47_RST202_TARGET_ACCEPTANCE_RUNBOOK](../47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md) (phần nghiệm thu target `RST-202` còn mở) · [RST205_CLOSURE_REVIEW](../../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md)
+
+> **ID:** PLAN-ARCH-RESTRUCT-002
+> **Trạng thái:** **Closed** — G0..G5 PASS; `RST-205` closure review 2026-08-04
+> **Phiên bản:** 1.4
+> **Ngày:** 2026-08-04
+> **Owner đề xuất:** Tech Lead + Dev SOM/Core/Iobus + Dev Web + DevOps/QA
+> **Nguồn kiến trúc:** [System Architecture](../../03_architecture/SYSTEM.md),
+> [Software Design](../../04_design/SOFTWARE.md),
+> [Document Control](../../00_governance/CONTROL.md)
+
+> **Quyết định triển khai:** ADR-025 Accepted ngày 2026-08-03 theo chỉ thị của
+> owner/user. Baseline G0 và path inventory được lưu tại
+> `docs/07_records/evidence/restructure/BASELINE_G0_20260803.json` và
+> `tools/restructure/repository-path-map.json`.
+
+## 1. Mục tiêu
+
+Tái cấu trúc repository theo **process-first + bounded modules** trong khi giữ
+nguyên topology và failure boundary production:
+
+- `mkddc-core` tiếp tục sở hữu graph, scan, priority, interlock và safe-state;
+- `mkddc-iobus` tiếp tục sở hữu IOP, Physical I/O, Modbus và BACnet;
+- `mkddc-web` tiếp tục sở hữu API, auth, config, history và React Web UI;
+- `mkddc-hmi` tiếp tục là presentation service tùy chọn;
+- `mkddc-netcfg` tiếp tục là privileged helper hẹp ngoài control path;
+- STM32 tiếp tục sở hữu sampling, actuation, communication watchdog và
+  independent safe behavior.
+
+Restructure phải làm rõ dependency, giảm file/package quá lớn, tập trung
+contract và chuẩn hóa build/deployment. Restructure không được thay đổi hành vi
+sản phẩm hoặc được dùng làm bằng chứng Programming đã implement.
+
+## 2. Ngoài phạm vi
+
+- Không thêm Program API, ST/FBD Editor, Program lifecycle hoặc production
+  scheduler.
+- Không đổi Product Spec Programming Rev A.
+- Không mở Modbus TCP Point, BACnet/IP Point, LD, SFC, motion hoặc safety PLC.
+- Không đổi thuật toán control, scan period, priority, safe-state hoặc AO
+  engineering-to-electrical conversion.
+- Không đổi public REST/WebSocket semantics, SHM layout, IOP frame hoặc config
+  schema trong các task chỉ di chuyển source.
+- Không tách thêm runtime process hoặc repository con.
+- Không xóa archive, evidence, log hoặc build artifact cục bộ chỉ để làm sạch
+  cây thư mục.
+- Không restructure vật lý toàn bộ `docs/`; chỉ cập nhật link/path do source
+  move tác động. Việc hợp nhất corpus tài liệu cần audit riêng theo
+  `DOC-CTRL-001`.
+
+## 3. Kiến trúc đích
+
+```text
+apps/
+  core/
+    domain/
+    application/
+    ports/
+    adapters/
+    bootstrap/
+  iobus/
+    domain/
+    application/
+    ports/
+    adapters/
+      iop/
+      physical_io/
+      modbus_rtu/
+      bacnet/
+    bootstrap/
+  netcfg/
+  hmi/
+  web-api/
+    cmd/mkddc-web/
+    internal/
+      auth/
+      config/
+      health/
+      historian/
+      hmi/
+      modbusrtu/
+      network/
+      points/
+      router/
+      system/
+  web-ui/
+    src/
+      app/
+      features/
+      shared/
+
+firmware/
+  stm32/
+
+contracts/
+  iop/
+  shm/
+  openapi/
+  config/
+
+platform/
+  cmake/
+  packaging/
+  systemd/
+
+tests/
+  integration/
+  e2e/
+  hil/
+  fixtures/
+
+tools/
+docs/
+```
+
+Tên binary, systemd unit, API prefix, database/config filename và artifact
+release giữ nguyên trong toàn bộ migration.
+
+## 4. Luật dependency bắt buộc
+
+| Vùng | Được phụ thuộc | Không được phụ thuộc |
+|---|---|---|
+| `contracts` | thư viện chuẩn tối thiểu | bất kỳ `apps`, `platform`, UI hoặc database |
+| `firmware/stm32` | `contracts/iop`, code firmware nội bộ | SHM, Web, Core hoặc Linux service |
+| `apps/core` | contract SHM, domain/application/adapter nội bộ | source iobus, web, HMI hoặc firmware |
+| `apps/iobus` | contract IOP/SHM, adapter protocol nội bộ | source core, web hoặc HMI |
+| `apps/web-api` | public contract/API model và adapter IPC/SHM | source implementation core/iobus |
+| `apps/web-ui` | HTTP/WebSocket contract công khai | SHM, IOP, C/C++ source hoặc database trực tiếp |
+| `apps/hmi` | read-only telemetry contract và command IPC đã duyệt | hardware write hoặc core implementation |
+| `platform` | app artifact và deployment metadata | không được trở thành runtime dependency của domain |
+| `tests` | app/contract qua public test surface | production app không được import test implementation |
+
+Quy tắc bổ sung:
+
+1. `main`/bootstrap chỉ compose dependency, parse CLI và quản lý lifecycle.
+2. Domain không gọi filesystem, socket, SHM, database hoặc systemd trực tiếp.
+3. Adapter không sở hữu policy control thuộc Core.
+4. UI feature không import chéo trực tiếp; dùng `shared` hoặc public feature API.
+5. `shared/` cũ chỉ được giữ như compatibility forwarding layer trong thời gian
+   migration, không nhận contract mới.
+6. Mọi ABI mismatch phải fail fast; không ép kiểu hoặc fallback im lặng.
+
+## 5. Chiến lược delivery
+
+- Mỗi task bên dưới là một PR độc lập hoặc một commit group độc lập nếu được
+  Tech Lead phê duyệt trước.
+- PR di chuyển path chỉ dùng rename và cập nhật build/import/link; không refactor
+  logic trong cùng PR.
+- PR refactor module không đồng thời đổi public contract.
+- Mỗi PR phải giữ branch ở trạng thái build/test được; không tạo nhánh migration
+  dài ngày chỉ tích hợp được ở cuối.
+- Compatibility shim chỉ tồn tại có thời hạn và phải có task xóa cụ thể.
+- Rollback mặc định là revert đúng PR gần nhất. Không dùng reset hoặc khôi phục
+  thủ công nhiều phase.
+- Task chỉ được chuyển `DONE` bằng bằng chứng mới trên commit của task đó.
+
+## 6. Task breakdown
+
+### Gate G0 — Quyết định và baseline
+
+#### `RST-001` — Formalize architecture decision
+
+- **Phụ thuộc:** không.
+- **Mục tiêu:** ghi ADR cho process-first + bounded modules, cấu trúc đích,
+  dependency rule, compatibility và rollback.
+- **Chạm dự kiến:** `docs/00_governance/DECISIONS.md` hoặc ADR active theo
+  register hiện hành; architecture/design/traceability nếu quyết định được
+  Accepted.
+- **Không làm:** không di chuyển source.
+- **Gate:** owner xác nhận topology ba process không đổi; HMI/netcfg/STM32
+  boundary được ghi rõ; ADR có trạng thái và người phê duyệt.
+- **Ước lượng:** 0,5 ngày.
+
+#### `RST-002` — Chụp baseline và dependency inventory
+
+- **Phụ thuộc:** `RST-001`.
+- **Mục tiêu:** lập manifest source, target, binary, systemd unit, config,
+  public contract và mọi reference đến path cũ.
+- **Đầu ra:** machine-readable path map dùng cho kiểm tra migration; không tạo
+  report Markdown trùng authority.
+- **Gate:** inventory bao phủ CMake, Go, npm, GitHub Actions, packaging,
+  systemd, tools, docs link và target installer.
+- **Ước lượng:** 1 ngày.
+
+#### `RST-003` — Ghi baseline verification mới
+
+- **Phụ thuộc:** `RST-002`.
+- **Mục tiêu:** đo gate trước restructure để so sánh parity.
+- **Gate tối thiểu:** C++ full option matrix; Go vet/test không cache; FE
+  Vitest/lint/build; Playwright gate liên quan; firmware ARM; release builder
+  và checksum.
+- **Bằng chứng:** commit, toolchain, command, count, duration và artifact path.
+- **Giới hạn:** host/simulator không đóng HIL.
+- **Ước lượng:** 0,5 ngày.
+
+**G0 PASS khi:** ADR được duyệt, inventory đầy đủ và baseline xanh hoặc mọi gate
+đỏ đã có finding/owner. Không mở task di chuyển nếu G0 chưa PASS.
+
+### Gate G1 — Scaffold và build indirection
+
+#### `RST-010` — Tạo skeleton thư mục đích
+
+- **Phụ thuộc:** G0.
+- **Mục tiêu:** tạo `apps`, `firmware`, `contracts`, `platform`, `tests` cùng
+  ownership/dependency README ngắn; chưa chuyển implementation.
+- **Gate:** không đổi target CMake, Go module, npm package hoặc artifact.
+- **Ước lượng:** 0,5 ngày.
+
+#### `RST-011` — Chuẩn hóa entrypoint build
+
+- **Phụ thuộc:** `RST-010`.
+- **Mục tiêu:** root build gọi target qua biến/path trung gian, không hardcode
+  path trong nhiều script.
+- **Chạm dự kiến:** root CMake, CMake helper và build presets/scripts.
+- **Gate:** CMake build/CTest full option vẫn parity với `RST-003`.
+- **Rollback:** revert task; source vẫn ở vị trí cũ.
+- **Ước lượng:** 1 ngày.
+
+#### `RST-012` — Chuẩn hóa verification entrypoint
+
+- **Phụ thuộc:** `RST-011`.
+- **Mục tiêu:** tạo một script/profile kiểm chứng được CI và local dùng chung;
+  mọi build output mặc định nằm dưới root `build/` hoặc thư mục tạm.
+- **Gate:** script chạy đúng command từ manifest hiện tại, trả non-zero khi
+  một gate lỗi và không xóa SHM/build/user data ngoài scope.
+- **Ước lượng:** 1 ngày.
+
+#### `RST-013` — Tách path khỏi CI
+
+- **Phụ thuộc:** `RST-012`.
+- **Mục tiêu:** workflow gọi entrypoint chuẩn thay vì lặp `cd` và path cũ.
+- **Gate:** matrix C++, Go, FE, firmware, fuzz/sanitizer/security tiếp tục chạy;
+  không bỏ hoặc skip job.
+- **Ước lượng:** 1 ngày.
+
+#### `RST-014` — Tách path khỏi release/installer
+
+- **Phụ thuộc:** `RST-011`.
+- **Mục tiêu:** build-release và installer lấy artifact từ mapping tập trung.
+- **Gate:** binary/service/config target không đổi; checksum manifest parity.
+- **Ước lượng:** 1 ngày.
+
+**Có thể song song:** `RST-013` và `RST-014` sau `RST-012`, với owner file tách
+biệt. **G1 PASS khi:** build, CI và packaging không còn phụ thuộc rải rác vào
+path source sắp di chuyển.
+
+### Gate G2 — Contract authority
+
+#### `RST-020` — Di chuyển IOP contract
+
+- **Phụ thuộc:** G1.
+- **Mục tiêu:** chuyển canonical IOP header sang `contracts/iop`; giữ forwarding
+  header tại path cũ trong transition window.
+- **Gate:** static assertion, firmware hostcheck, iobus parser/CRC test và ARM
+  build PASS; wire bytes không đổi.
+- **Ước lượng:** 1 ngày.
+
+#### `RST-021` — Di chuyển SHM contract
+
+- **Phụ thuộc:** `RST-020`.
+- **Mục tiêu:** chuyển canonical SHM/IO config contract sang `contracts/shm` và
+  `contracts/config`; path cũ chỉ forward.
+- **Gate:** magic, version, size, alignment, offset và producer/consumer tests
+  không đổi; mismatch test vẫn fail fast.
+- **Ước lượng:** 1,5 ngày.
+
+#### `RST-022` — Chuyển OpenAPI về contract authority
+
+- **Phụ thuộc:** G1.
+- **Mục tiêu:** đặt OpenAPI machine-readable tại `contracts/openapi`; docs chỉ
+  link/diễn giải, không giữ hai bản authority.
+- **Gate:** parse/lint OpenAPI; Go/TypeScript model mapping; API behavior không
+  đổi.
+- **Ước lượng:** 1 ngày.
+
+#### `RST-023` — Contract compatibility gate
+
+- **Phụ thuộc:** `RST-021`, `RST-022`.
+- **Mục tiêu:** thêm CI guard bắt duplicate authority, stale forwarding header,
+  ABI drift và OpenAPI mapping drift.
+- **Gate:** cố tình tạo mismatch trong test fixture phải làm gate đỏ.
+- **Ước lượng:** 1 ngày.
+
+**Có thể song song:** `RST-022` với `RST-020/021`. **G2 PASS khi:** mỗi contract
+có đúng một authority và mọi consumer cũ vẫn build qua compatibility layer.
+
+### Gate G3 — Di chuyển application theo process
+
+Mỗi task dưới đây chỉ thực hiện path move, build/import wiring và link docs cần
+thiết. Không chia module nội bộ ở Gate G3.
+
+#### `RST-030` — Di chuyển `mkddc-core`
+
+- `services/core` → `apps/core`.
+- Cập nhật CMake, tools và test reference.
+- Gate: full Core unit/integration, watchdog invariant và parser-separation
+  invariant PASS.
+- Ước lượng: 1 ngày.
+
+#### `RST-031` — Di chuyển `mkddc-iobus`
+
+- **Phụ thuộc:** `RST-030` chỉ nếu root CMake yêu cầu; không phụ thuộc logic.
+- `services/iobus` → `apps/iobus`.
+- Gate: IOP, scaling, fieldbus, SHM, fake MCU và Modbus/BACnet matrix PASS.
+- Ước lượng: 1,5 ngày.
+
+#### `RST-032` — Di chuyển `mkddc-netcfg`
+
+- `services/netcfg` → `apps/netcfg`.
+- Gate: netcfg unit/integration, Unix credential boundary và transaction
+  rollback tests PASS.
+- Ước lượng: 1 ngày.
+
+#### `RST-033` — Di chuyển optional HMI
+
+- `services/hmi` → `apps/hmi`.
+- Gate: build OFF không kéo HMI dependency; build ON và HMI tests PASS.
+- Không claim DRM/touch target từ host build.
+- Ước lượng: 1 ngày.
+
+#### `RST-034` — Di chuyển STM32 firmware
+
+- `fw` → `firmware/stm32`.
+- Gate: ARM build, hostcheck, firmware provenance và packaging checksum PASS.
+- Không đổi HAL, UART pin/device hoặc safe timeout.
+- Ước lượng: 1 ngày.
+
+#### `RST-035` — Di chuyển Go Web API
+
+- `web/backend` → `apps/web-api`.
+- Giữ Go module path và binary name trong task này.
+- Gate: `go vet ./...`, `go test ./... -count=1`, race test cho vùng concurrency
+  bị path wiring tác động nếu platform cho phép.
+- Ước lượng: 1 ngày.
+
+#### `RST-036` — Di chuyển React Web UI
+
+- `src/frontend` → `apps/web-ui`.
+- Giữ npm package name, route và build output contract.
+- Gate: Vitest, lint, type/build và Playwright E2E PASS; browser runtime được
+  kiểm tra bằng Chrome DevTools MCP khi tool khả dụng.
+- Ước lượng: 1 ngày.
+
+#### `RST-037` — Phân loại tools và test xuyên hệ thống
+
+- Giữ executable/tool phát triển trong `tools`.
+- Chuyển test integration/E2E/HIL fixture đúng nghĩa sang `tests`.
+- Không di chuyển evidence đã kiểm soát khỏi `docs/07_records`.
+- Gate: không tool/test production nào tham chiếu path cũ; không đổi test
+  semantics.
+- Ước lượng: 1 ngày.
+
+**Song song có điều kiện:** `RST-032`, `RST-033`, `RST-034`, `RST-035` và
+`RST-036` có thể song song sau khi root wiring ổn định, nhưng một owner duy nhất
+phải giữ root CMake/CI/packaging integration. `RST-030` và `RST-031` nên tuần tự
+vì cùng chạm CMake và SHM test setup.
+
+**G3 PASS khi:** source production đã ở cây đích, binary/service/API/ABI không
+đổi, full verification parity và release bundle tạo được.
+
+### Gate G4 — Modular hóa nội bộ theo bounded context
+
+#### Core
+
+| Task | Nội dung | Phụ thuộc | Gate chính | Ước lượng |
+|---|---|---|---|---|
+| `RST-100` | Thu gọn `core/main` thành composition root và lifecycle | G3 | Core full tests; startup/CLI parity | 1 ngày |
+| `RST-101` | Tách domain graph/point/priority/safety khỏi adapter SHM/IPC/config | `RST-100` | không domain include platform adapter; negative/fault tests | 2 ngày |
+| `RST-102` | Định nghĩa port cho snapshot, command, clock và persistence | `RST-101` | fake port + production adapter cùng contract tests | 2 ngày |
+| `RST-103` | Enforce dependency direction bằng CMake target boundaries | `RST-102` | forbidden include/link làm CI đỏ | 1 ngày |
+
+#### Iobus
+
+| Task | Nội dung | Phụ thuộc | Gate chính | Ước lượng |
+|---|---|---|---|---|
+| `RST-110` | Thu gọn `iobus/main` thành composition root | G3 | startup/config/worker parity | 1 ngày |
+| `RST-111` | Tách IOP + Physical I/O adapter khỏi cache/domain | `RST-110` | UART loss, CRC, safe timeout, scaling tests | 2 ngày |
+| `RST-112` | Đóng gói Modbus RTU adapter và scheduler | `RST-110` | register/endian/quality/retry tests; simulator | 2 ngày |
+| `RST-113` | Đóng gói BACnet adapter, giữ feature gate | `RST-110` | BACnet OFF/ON build; hot-rebind tests | 1,5 ngày |
+| `RST-114` | Enforce port/domain/adapter dependency | `RST-111..113` | forbidden include/link làm CI đỏ | 1 ngày |
+
+#### Go Web API
+
+| Task | Nội dung | Phụ thuộc | Gate chính | Ước lượng |
+|---|---|---|---|---|
+| `RST-120` | Tạo `cmd/mkddc-web` và `internal` composition, chưa tách domain | G3 | binary/CLI/config parity | 1 ngày |
+| `RST-121` | Tách `auth` và audit package | `RST-120` | RBAC, token, audit, last-admin tests | 1,5 ngày |
+| `RST-122` | Tách Point Catalog/namespace/config package | `RST-120` | stable ID, unique tag, rename, persistence tests | 2 ngày |
+| `RST-123` | Tách Modbus RTU package | `RST-122` | CRUD, validation, persistence, reload/error tests | 1,5 ngày |
+| `RST-124` | Tách historian package theo store/query/lifecycle | `RST-120` | migration, retention, recovery, concurrency tests | 2 ngày |
+| `RST-125` | Tách system/network/health/HMI broker adapters | `RST-121` | timeout, credential, restart, partial failure tests | 2 ngày |
+| `RST-126` | Router/composition chỉ ghép public handler từ package | `RST-121..125` | route/OpenAPI/RBAC parity | 1 ngày |
+
+#### React Web UI
+
+| Task | Nội dung | Phụ thuộc | Gate chính | Ước lượng |
+|---|---|---|---|---|
+| `RST-130` | Tách app shell/router/provider khỏi feature | G3 | route/auth/navigation parity | 1 ngày |
+| `RST-131` | Tách transport/API client, normalizer và generated/public types | `RST-130` | contract/normalizer/reconnect tests | 2 ngày |
+| `RST-132` | Feature `points` + Local/Virtual I/O | `RST-131` | Point metadata, permission, write/release UI tests | 2 ngày |
+| `RST-133` | Feature `modbus-rtu` | `RST-131` | Device/Point CRUD, validation, error-state tests | 1 ngày |
+| `RST-134` | Feature `network` + system settings | `RST-131` | transaction/recovery E2E | 2 ngày |
+| `RST-135` | Feature historian/alarm/schedule | `RST-131` | trend/alarm/schedule test suites | 2 ngày |
+| `RST-136` | Feature auth/users và shared UI primitives | `RST-131` | role/navigation/accessibility tests | 1,5 ngày |
+| `RST-137` | Enforce FE import boundary | `RST-132..136` | feature cross-import trái phép làm lint đỏ | 1 ngày |
+
+**Song song có điều kiện:** Core, Iobus, Go API và FE có thể chạy song song sau
+G3 vì ownership file tách biệt. Trong một process, các task phải theo dependency
+trong bảng. Contract semantics không được đổi trong G4; nếu phát hiện cần đổi,
+dừng task và mở decision/change riêng.
+
+**G4 PASS khi:** bootstrap chỉ compose, domain không phụ thuộc adapter, Go chỉ
+còn `package main` trong `cmd`, FE có feature boundary được lint và full tests
+parity.
+
+### Gate G5 — Đóng migration và nghiệm thu
+
+#### `RST-200` — Xóa compatibility forwarding layer
+
+- **Phụ thuộc:** G4 và inventory xác nhận không consumer nào dùng path cũ.
+- Xóa forwarding headers/path shim theo từng contract, không xóa đồng loạt.
+- Gate: path guard CI, ABI tests, full build matrix PASS.
+- Ước lượng: 1 ngày.
+
+#### `RST-201` — Cô lập build artifact
+
+- Mọi hướng dẫn/build mặc định dùng root `build/<profile>` hoặc temp directory.
+- Bổ sung guard không tạo build tree trong `apps`, `firmware`, `contracts`.
+- Không tự xóa build/user artifact hiện hữu; việc cleanup là thao tác riêng có
+  target rõ và được người dùng cho phép.
+- Gate: clean clone và dirty local workspace đều build được.
+- Ước lượng: 0,5 ngày.
+
+#### `RST-202` — Release/installer/rollback rehearsal
+
+- Build coordinated bundle, verify checksum/provenance và cài thử trên target.
+- Test service startup order, crash/restart và rollback artifact.
+- Gate: target truy được binary về commit/checksum; core/iobus/web/netcfg/HMI
+  optional đúng unit và path mới.
+- Không dùng host package test thay target evidence.
+- Ước lượng: 1,5 ngày.
+
+#### `RST-203` — Đồng bộ controlled docs
+
+- Cập nhật System, Software, Interfaces, Development & Operations,
+  Verification, Traceability, implementation index và root README theo path
+  As-Built mới.
+- Đánh dấu tài liệu lịch sử/path cũ đúng trạng thái; không rewrite evidence.
+- Gate: internal link, duplicate authority, ID và `git diff --check` PASS.
+- Ước lượng: 1 ngày.
+
+#### `RST-204` — Full regression và architecture conformance
+
+- Chạy full C++ Modbus/BACnet/HMI matrix, sanitizer/fuzz theo CI, Go vet/test
+  không cache, FE Vitest/lint/build/E2E, firmware ARM và release checksum.
+- Test startup order, stale/corrupt SHM, process restart, Web loss, UART loss,
+  config invalid và ABI mismatch ở mức integration phù hợp.
+- Gate: không regression so với `RST-003`; mọi difference có finding/approval.
+- Ước lượng: 1 ngày cộng thời gian CI.
+
+#### `RST-205` — Closure review
+
+- Đối chiếu toàn bộ task, ADR, traceability, changelog, target evidence và
+  rollback.
+- Đóng plan chỉ khi không còn source/path shim ngoài danh sách waiver được
+  phê duyệt.
+- Ghi rõ physical I/O HIL/real RS485 gap còn tồn tại; restructure không tự làm
+  các gate đó xanh.
+- Ước lượng: 0,5 ngày.
+
+**G5 PASS khi:** source tree đích là authority duy nhất, target package chạy
+được, rollback đã diễn tập, full regression xanh và controlled docs khớp
+As-Built.
+
+## 7. Ma trận thứ tự và song song
+
+```text
+RST-001 -> 002 -> 003
+                  |
+                  v
+RST-010 -> 011 -> 012 -> 013
+              \-> 014
+                  |
+                  v
+RST-020 -> 021 -> 023
+RST-022 ---------> 023
+                  |
+                  v
+RST-030 -> RST-031
+RST-032 | RST-033 | RST-034 | RST-035 | RST-036
+                  |
+                  v
+        Core | Iobus | Go API | React UI
+                  |
+                  v
+RST-200 -> 201 -> 202 -> 203 -> 204 -> 205
+```
+
+Không chạy song song hai task cùng sửa root CMake, CI workflow hoặc packaging.
+Tech Lead giữ ownership ba vùng integration này và cấp cửa sổ merge lần lượt.
+
+## 8. Gate kiểm chứng chuẩn cho từng loại task
+
+| Loại thay đổi | Gate bắt buộc |
+|---|---|
+| Docs/ADR/plan | link nội bộ, ID/status/authority, `git diff --check` |
+| CMake/path C++ | configure/build/CTest affected target, sau đó full option matrix |
+| SHM/IOP contract | ABI/static assertion, producer/consumer, malformed/mismatch, firmware host/ARM |
+| Go package move | `gofmt`, `go vet ./...`, `go test ./... -count=1`; race nếu concurrency bị chạm |
+| React feature move | Vitest affected/full, lint, type/build; Playwright cho flow runtime |
+| UI runtime | Chrome DevTools MCP: screenshot/snapshot, Console, Network; không thay test tự động |
+| Packaging/deploy | release builder, checksum, installer/target startup, provenance, rollback |
+| Boundary/failure | IPC/SHM/config fault injection và process restart; HIL nếu physical behavior bị đổi |
+
+Số test và duration phải đo lại tại commit của task. Không đưa số historical
+vào evidence hiện hành.
+
+## 9. Tiêu chí hoàn tất toàn plan
+
+- Cây thư mục đích được áp dụng và không còn implementation production ở path
+  cũ.
+- Binary `mkddc-core`, `mkddc-iobus`, `mkddc-web`, `mkddc-netcfg` và optional
+  `mkddc-hmi` giữ nguyên tên/lifecycle.
+- Core, Iobus, Web, HMI, netcfg và STM32 giữ đúng ownership/failure boundary.
+- `contracts` là authority duy nhất cho IOP, SHM, OpenAPI và config contract đã
+  đưa vào scope.
+- Go `package main` chỉ còn trong `cmd/mkddc-web`.
+- React feature boundary và C++ target dependency được enforce tự động.
+- Không có app phụ thuộc source implementation của app khác.
+- Full regression, release bundle, target smoke và rollback PASS trên commit
+  cuối.
+- Controlled docs, traceability và changelog khớp source As-Built.
+- Không có claim Programming implemented, real RS485 ready hoặc physical HIL
+  ready nếu chưa có bằng chứng tương ứng.
+
+## 10. Điều kiện dừng
+
+Dừng task hiện tại và mở finding/decision riêng nếu phát hiện một trong các
+trường hợp:
+
+- path move bắt buộc đổi ABI/API/config semantics;
+- process ownership hiện tại xung đột Product/Requirement Active;
+- cần thêm runtime process hoặc dynamic plugin trong control path;
+- không thể rollback độc lập task;
+- CI/test bị bỏ qua để hoàn tất migration;
+- target artifact không truy được về commit/checksum;
+- restructure làm Web/HMI trở thành dependency của control continuity.
+
+## 11. Kết luận planning
+
+```text
+RESTRUCTURE_OPTION = PROCESS_FIRST_BOUNDED_MODULES
+PLAN_DECOMPOSED = YES
+IMPLEMENTATION_STARTED = YES
+SOURCE_PATHS_CHANGED = YES
+HOST_SOURCE_MIGRATION = PASS
+HOST_FULL_REGRESSION = PASS
+GO_BOUNDED_CONTEXTS = PASS
+NPM_UNWAIVED_HIGH_ADVISORIES = 0
+CHROME_DEVTOOLS_RUNTIME = PASS_WITH_LOW_ACCESSIBILITY_FINDING
+TARGET_NATIVE_BUILD = PASS
+TARGET_INSTALL = PASS
+TARGET_PROVENANCE = PASS
+TARGET_STARTUP_ORDER = PASS
+TARGET_CRASH_RESTART = PASS
+TARGET_ROLLBACK = PASS
+RST_202 = DONE
+RST_205 = DONE
+OPEN_DEFECTS = 0
+PLAN_CLOSED = YES
+```
+
+## 12. Trạng thái thực thi ngày 2026-08-03
+
+### 12.1. Kết quả theo gate
+
+| Gate | Trạng thái | Kết quả hiện hành |
+|---|---|---|
+| G0 | PASS | ADR-025 `Accepted`, baseline và path inventory đã lưu trước khi di chuyển. |
+| G1 | PASS | Root CMake, path module, verifier thống nhất và CI layout job đã dùng cây đích. |
+| G2 | PASS | `contracts/` là authority duy nhất; contract/dependency negative tests làm gate đỏ khi tạo bản sao hoặc import sai chiều. |
+| G3 | PASS trên host | Core, Iobus, netcfg, HMI, Web API, Web UI, STM32 và packaging đã chuyển vật lý; path cũ không còn tồn tại; binary/service/API/contract semantics giữ nguyên. |
+| G4 | PASS | Core/Iobus có domain/application/ports/adapters/bootstrap và CMake boundary; React có app/features/shared cùng public barrel/lint guard. Go `RST-121..126` đã tách auth/audit, Point Catalog/config, Modbus RTU, historian, system/network/health/HMI và router thành package có test trực tiếp; `internal/app` chỉ giữ handler, middleware và façade composition cần tương thích. |
+| G5 | PASS | Compatibility shim đã bỏ, artifact đã cô lập, host regression, release checksum, npm security disposition và Chrome DevTools runtime đều có evidence. **`RST-202` DONE ngày 2026-08-04**: install, provenance, startup order sau reboot thật, crash/restart và diễn tập rollback đều PASS trên board lab (§12.6). **`RST-205` DONE cùng ngày** — xem §12.7 và [Closure Review](../../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md). |
+
+### 12.2. Kiểm chứng host hiện hành
+
+- Repository layout/contract/dependency guards: PASS, gồm 7 negative/positive
+  test và manifest phase `g4-modularized`.
+- C++ matrix: baseline **709/709**, Modbus **717/717**, BACnet **710/710**,
+  Modbus+BACnet **718/718**, full Modbus+BACnet+HMI **751/751** PASS.
+- ASan và UBSan **709/709** PASS; fuzz smoke parser **917.841** lượt và loader
+  **1.879.361** lượt trong 61 giây mỗi harness, không crash/sanitizer finding.
+- Go `vet`, `test -count=1` và `test -race -count=1`: PASS cho **12 package**
+  gồm composition root, `internal/app` và các bounded context
+  `auth/config/health/historian/hmi/modbusrtu/network/points/router/system`;
+  package test chính chạy race trong **88,494 giây**.
+- React: Vitest **35 file, 299/299 test**, lint 0 warning, production build
+  **2.223 module** PASS; Playwright network **1/1 PASS** trong 23,1 giây.
+- Chrome DevTools MCP: trang Network PASS ở desktop 1440×1000 và mobile
+  390×844; **0 Console error, 0 warning, 87/87 request thành công**. Ghi nhận
+  finding accessibility mức low: 9 form field thiếu `id`/`name`.
+- `npm audit`: từ 4 còn 2 record high cùng một advisory React Router RSC;
+  đã fix `brace-expansion` và `postcss`. Web UI client-only không dùng RSC nên
+  advisory còn lại có waiver hẹp, hạn 2026-10-25; unique unwaived high = **0**.
+  Không claim `npm audit` trả exit 0.
+- Firmware ARM build PASS; coordinated release builder và **5/5 SHA-256**
+  PASS.
+- Bằng chứng chi tiết:
+  `docs/07_records/evidence/restructure/HOST_RESTRUCTURE_GATES_20260803.json`,
+  `CHROME_DEVTOOLS_RUNTIME_20260803.json` và
+  `NPM_AUDIT_DISPOSITION_20260803.json` trong cùng thư mục.
+
+### 12.3. Hạng mục bắt buộc trước khi đóng plan
+
+1. Owner cung cấp target/board, định danh target, quyền cài service và cửa sổ
+   rollback để chạy `RST-202`.
+2. Ghi log startup order, crash/restart, commit/checksum provenance và rollback
+   từ target; host package test không thay bằng chứng này.
+3. Chạy closure review `RST-205` sau khi `RST-202` PASS và giữ các gate
+   physical I/O HIL/real RS485/Programming ở trạng thái hiện hữu.
+
+### 12.4. Khảo sát target ngày 2026-08-04 và chuẩn bị `RST-202`
+
+Board lab `SOM-DDC-24` (`orangepi5b`, aarch64) đã được khảo sát read-only; không
+thay đổi gì trên target. Quy trình thực hiện nằm tại
+[Runbook 47](../47_RST202_TARGET_ACCEPTANCE_RUNBOOK.md).
+
+Bốn dữ kiện quyết định trạng thái `RST-202`:
+
+1. **Target chạy build trước restructure.** `/usr/sbin/mkddc-{core,iobus,netcfg,hmi}`
+   và `/opt/mkddc-web/mkddc-web` mốc 2026-08-01 15:24:05; `mkddc-fake-mcu` mốc
+   2026-07-30 19:38:14. Cây `apps/` chưa từng được cài lên target, đúng với
+   `TARGET_INSTALL_ROLLBACK = NOT_RUN`.
+2. **Gate provenance sẽ trượt nếu chạy ngay.** `/usr/share/mkddc/` chỉ có
+   `avahi/`; thiếu `provenance.json`, `checksums.sha256`, `runtime-build-info.txt`
+   và `runtime-checksums.sha256`. Nguyên nhân không phải lỗi script: logic sinh
+   các file này mới vào repo ở commit `9c6dc9b` ngày 2026-08-03, sau lần cài cuối
+   ngày 2026-08-01. `build-release.sh` và `install.sh` hiện đã đủ để đóng gate
+   này ở lần cài tới.
+3. **Rollback đang là thao tác tay.** `/usr/sbin` chứa 7 bản sao ad-hoc
+   (`.bad-*`, `.bak-*`, `.bak.*`, `.prev-*` từ 2026-07-03 đến 2026-07-18). Đây là
+   thứ `RST-202` phải thay bằng rollback có diễn tập; việc dọn chúng là task
+   riêng, không gộp vào bước install.
+4. **Layout cài đặt không nhất quán.** core/iobus/netcfg ở `/usr/sbin`, web ở
+   `/opt/mkddc-web/`; ngoài ra còn bản chết `/usr/local/bin/mkddc-{core,iobus,fakemcu}`
+   mốc 2026-07-01/02 không unit nào tham chiếu.
+
+### 12.5. Kết quả build và deploy ngày 2026-08-04
+
+Đã chạy build native aarch64 và deploy lên board tại commit `13fdc60`. Bằng
+chứng: [`TARGET_RST202_20260804.json`](../../07_records/evidence/restructure/TARGET_RST202_20260804.json);
+phân tích đầy đủ tại
+[Board Deploy Report](../../07_records/reviews/BOARD_DEPLOY_REPORT_2026-08-04.md).
+
+- `build-release.sh` native trên board: **BUILD_OK**, version 0.2.0,
+  `dirty=false`; 4 binary C++/Go đều `ELF 64-bit ARM aarch64`, 5/5 checksum.
+- `install.sh`: checksum verify PASS; provenance đã có trên target và cả 4
+  binary báo đúng commit `13fdc60`.
+- Runtime xác minh: `iop.state HANDSHAKE -> NORMAL_POLL`, `set_do/set_ao ack=ok`,
+  SHM tạo lại, web API cổng 8081 trả 200 cho client thật.
+- `ctest` native aarch64: **746/751** trong 14,70 s.
+
+`TARGET_INSTALL` và `TARGET_PROVENANCE` PASS. `TARGET_STARTUP_ORDER`,
+`TARGET_CRASH_RESTART` và `TARGET_ROLLBACK` vẫn `NOT_RUN` vì chưa có cửa sổ
+reboot; `RST-202` **chưa đóng**.
+
+Bốn khiếm khuyết phát hiện, mới vá tay trên board và **chưa sửa trong repo**:
+
+| ID | Nội dung |
+|---|---|
+| INSTALL-001 | `install.sh` dùng `systemctl enable --now` nên không restart service đang chạy; sau khi cài "thành công", `readlink /proc/<pid>/exe` trả `(deleted)` và PID không đổi — vẫn chạy code cũ. Đây là false-success. |
+| INSTALL-002 | `install.sh` không cài `fake_mcu`, khiến board lab lệch phiên bản giữa iobus mới và fake MCU cũ dù hai bên nói cùng giao thức IOP. |
+| INSTALL-003 | `install.sh` bật `mkddc-hmi` chỉ vì binary tồn tại, ghi đè trạng thái `disabled` và gây vòng lặp restart trên board không có panel. |
+| TEST-ISO-001 | Test dùng tên SHM cố định nên trùng với service production trên cùng máy; 5 test đỏ vì `shm_open errno=13`. Ảnh hưởng trực tiếp kế hoạch chạy CI runner trên board theo ADR-022. |
+
+Ghi chú ABI: `mkddc_io_shm` đổi 1304 → 1816 byte giữa hai bản, nên iobus và core
+bắt buộc restart đồng bộ.
+
+### 12.6. Nghiệm thu `RST-202` ngày 2026-08-04 — DONE
+
+Bốn khiếm khuyết trên đã được sửa trong repo (`cb1303c`, `43b4cdb`) và bổ sung
+`ROLLBACK-001`: rollback trước đây là thao tác tay không có snapshot tự động,
+nay `install.sh` tự chụp bản đang chạy vào `/var/backups/mkddc/<version>-<ts>/`
+kèm symlink `previous`, và thêm [`platform/packaging/rollback.sh`](../../../platform/packaging/rollback.sh)
+để rollback lặp lại được. Sau khi sửa, chạy lại toàn bộ nghiệm thu tại commit
+`3f4c536`, version `0.2.1`:
+
+| Tiêu chí | Kết quả |
+|---|---|
+| `TARGET_INSTALL` | **PASS** — checksum verify 5/5; PID đổi toàn bộ; không service nào giữ inode `(deleted)`; HMI giữ nguyên `disabled` |
+| `TARGET_PROVENANCE` | **PASS** — `0.2.1`/`3f4c536`/`dirty=false`; `sha256sum --check` runtime khớp 4/4 |
+| `TARGET_STARTUP_ORDER` | **PASS** — `sudo systemctl reboot` thật, board lên lại sau 36 s; thứ tự pty → fakemcu → iobus (13:35:06.226) → core (13:35:06.268) → web (13:35:08.145); 0 unit mkddc failed |
+| `TARGET_CRASH_RESTART` | **PASS** — SIGKILL iobus/core/web, cả ba tự phục hồi, `NRestarts 0 → 1`, IOP `ack=ok` trở lại |
+| `TARGET_ROLLBACK` | **PASS** — `rollback.sh` không tham số tự về `previous`, tự chụp bản hiện tại trước, khôi phục 6 binary, restart đúng thứ tự, `version=0.2.1`, exit 0 |
+
+`ctest` native aarch64 **với service production đang chạy**: **751/751 PASS**
+(trước khi sửa `TEST-ISO-001` là 746/751).
+
+Giới hạn phải ghi rõ: bài rollback dùng hai bộ artifact **cùng commit**, chỉ khác
+nhãn version, nên nó diễn tập **cơ chế** đổi artifact + restart + provenance phản
+ánh đúng bản đang chạy, **không phải** rollback tương thích qua hai commit khác
+nhau. Toàn bộ vẫn là lab evidence trên board fake MCU không panel; không đóng gate
+physical I/O HIL, real RS485 hay bất kỳ gate Programming nào.
+
+Bằng chứng: [`TARGET_RST202_20260804.json`](../../07_records/evidence/restructure/TARGET_RST202_20260804.json).
+
+Về đường build: board là aarch64 nên `build-release.sh` chạy native trực tiếp
+trên target theo ADR-022 — đây là đường dùng cho `RST-202`. Đã bổ sung
+[`platform/cmake/toolchain-aarch64-linux-gnu.cmake`](../../../platform/cmake/toolchain-aarch64-linux-gnu.cmake)
+làm đường phụ cho máy phát triển x86_64; toolchain đã kiểm chứng sinh đúng ELF
+`ARM aarch64`, nhưng build đầy đủ trên máy hiện tại **chưa chạy được** vì thiếu
+thư viện arm64 của bên thứ ba (`ld: cannot find -lmodbus`). Yêu cầu sysroot được
+ghi trong chính toolchain file; việc bật multiarch arm64 cần quyền sudo và chưa
+được thực hiện.
+
+`RST-121..126`, npm security disposition và Chrome DevTools runtime đã hoàn
+tất trong phiên 2026-08-03; không còn là blocker đóng plan. Blocker duy nhất
+trong scope restructure là target install/startup/provenance/rollback được
+owner phê duyệt. Blocker đó đã được gỡ ngày 2026-08-04 — xem §12.6 và §12.7.
+
+### 12.7. `RST-205` closure review ngày 2026-08-04 — Plan đóng
+
+Owner cấp phép reboot ngày 2026-08-04, `RST-202` hoàn tất, closure review đã
+chạy. Hồ sơ đầy đủ:
+[RST-205 Closure Review](../../07_records/reviews/RST205_CLOSURE_REVIEW_2026-08-04.md).
+
+Đối chiếu tại commit `9d90f66`, `scripts/verify-project.sh --component all` exit
+**0**:
+
+| Gate | Kết quả |
+|---|---|
+| C++ full (Modbus + BACnet + HMI) | **751/751 PASS** |
+| Go | **12 package** — 11 package có test đều `ok` |
+| FE Vitest | **35 file, 299/299 PASS**; build **2 223 module** |
+| Playwright E2E network | **1/1 PASS**, 23,1 s |
+| Firmware STM32 ARM | `firmware.elf` PASS, `arm-none-eabi-gcc` 13.2.1 |
+| Repository layout guard | **PASS**, 7 check |
+| `ctest` native aarch64 trên board, service đang chạy | **751/751 PASS** |
+
+Mười tiêu chí §9 đều đạt: không còn `services/`, `web/`, `src/frontend/`, `fw/`,
+`shared/`, `packaging/`; tên binary và failure boundary giữ nguyên; `contracts`
+là authority duy nhất; Go `package main` chỉ còn trong `cmd/mkddc-web`; guard
+enforce dependency direction tự động. **Không có waiver và không còn shim.**
+
+Năm khiếm khuyết do nghiệm thu target làm lộ ra — `INSTALL-001..003`,
+`TEST-ISO-001`, `ROLLBACK-001` — đã sửa hết trong repo (`cb1303c`, `43b4cdb`,
+PR #85); `OPEN_DEFECTS = 0`.
+
+Gap giữ nguyên, không bị plan này làm xanh: physical I/O HIL, real RS485
+(`VR-MBRTU-001/004/011/012` vẫn RED), HMI panel phần cứng, và toàn bộ gate
+Programming Rev A. Bài rollback mới diễn tập cơ chế ở cùng commit, chưa phải
+rollback tương thích cross-commit. Mọi target evidence là lab evidence trên board
+dev Orange Pi 5B, không phải carrier board production.
+
+`PLAN_CLOSED = YES`.

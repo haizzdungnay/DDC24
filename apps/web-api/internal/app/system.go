@@ -93,6 +93,9 @@ func (a *App) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.logger.Printf("WARN os_metrics err=%v", err)
 	}
+	// `T57-3.4`: mẫu cho vòng nhớ 60 phút đi kèm chính lần đọc này — không dựng
+	// thêm một vòng lấy mẫu nền cho cùng một con số.
+	a.systemHistory.Observe(time.Now(), metrics)
 	core, err := a.core.ReadStatus(r.Context())
 	if err != nil {
 		a.logger.Printf("WARN core_status degraded err=%v", err)

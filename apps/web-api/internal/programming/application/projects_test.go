@@ -214,10 +214,20 @@ func TestGetProjectIncludesDraftContentButListDoesNot(t *testing.T) {
 	if err := json.Unmarshal(view.DraftContentJSON, &document); err != nil {
 		t.Fatalf("DraftContentJSON không phải JSON hợp lệ: %v", err)
 	}
-	for _, key := range []string{"schemaVersion", "project", "programs", "variables", "bindings", "task", "library"} {
+	// T59-301: document v2 bỏ `variables` (biến nằm trong `locals` của POU) và bỏ
+	// `task` (DDD §4.1 cấm expose Task order), thêm `objects`/`signals`/`execution`.
+	for _, key := range []string{"schemaVersion", "project", "objects", "programs", "signals", "bindings", "library", "execution"} {
 		if _, ok := document[key]; !ok {
 			t.Fatalf("DraftContentJSON thiếu khoá %q: %+v", key, document)
 		}
+	}
+	for _, removed := range []string{"variables", "task"} {
+		if _, present := document[removed]; present {
+			t.Fatalf("document v2 vẫn còn khoá v1 %q", removed)
+		}
+	}
+	if version, _ := document["schemaVersion"].(float64); int(version) != 2 {
+		t.Fatalf("schemaVersion=%v; want 2", document["schemaVersion"])
 	}
 
 	page, err := service.ListProjects(context.Background(), "", 10)

@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FWSOM-PROG-001` |
-| Phiên bản | 1.0 |
-| Trạng thái | **M3 AS-BUILT — P3/P4 source/host DONE; Task 509 snapshot qua host/target supporting evidence; source chưa merge, HIL còn mở** |
-| Ngày | 2026-08-13 |
+| Phiên bản | 1.1 |
+| Trạng thái | **M3 AS-BUILT CẬP NHẬT — POU nhiều chương trình, Signal Bus và whole-set atomic đang ở cây làm việc; target MCU FAKE/soak/formal VVP chưa chạy** |
+| Ngày | 2026-08-24 |
 | Chủ quản | Core/Runtime Lead |
 | Người review | Controls Lead, Safety Lead, Backend Lead, Verification Lead |
 | Người phê duyệt | Runtime Architect + System Architect |
 | Nguồn | `DDD-LANG-PROG-001`, `IFSPEC-ART-PROG-001`, `DDD-CTRL-PROG-001`, `DDD-LIFE-PROG-001` |
-| Requirement | `SWR-REQ-PROG-CORE-101..110` |
+| Requirement | `SWR-REQ-PROG-CORE-101..116` |
 
 > **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
 > `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
@@ -22,11 +22,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **`mkddc-core` chạy Program như thế nào trên SOM**: phân lớp runtime, base step và scheduler, loader/activation, process image, arbitration, RETAIN, trace, và ngân sách luồng/thời gian. |
 | 2. Ai phải đọc file này? | Core/FW-SOM Lead (chủ quản); Controls đối chiếu với [Control Semantics](PROGRAMMING_CONTROL_SEMANTICS.md); BE đọc §5 để biết bàn giao artifact; QA đọc §11 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | P3/P4 đã đóng source/host và bản 507 chạy PROGRAM_ONLY trên Foxlinx. Task 509 mở rộng point snapshot với program proposal mức 5, effective priority và task metric sau scan; full host gate PASS, target Task/Runtime read-back theo `EV-PROG-P5-510`; source chưa merge. |
-| 4. Thiết kế mới thay đổi điều gì? | Biến các component rời rạc đó thành một runtime thật sự được nối vào: base step tách khỏi chu kỳ Task, loader chạy ngoài RT rồi bàn giao tại biên an toàn, process image đóng băng trong lúc Program chạy, output đi qua arbitration mức 5, RETAIN khôi phục trước lần chạy đầu. |
-| 5. Team phải sửa module/contract nào? | `domain/priority/priority_resolver.*`, `domain/graph/runtime_point_snapshot.*`, `application/runtime/scan_loop.cpp`; P4 source khác giữ nguyên. |
-| 6. Điều gì còn bị chặn? | Task 509 source chưa merge; positive snapshot có Variable Binding target còn mở. Release còn 32/32 Test Result, power/restart/WCET/watchdog/IOP trên HIL và residual acceptance. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host targeted snapshot/resolver/scan `41/41` và full CTest `1004/1004` PASS; `EV-PROG-P5-510` ghi ARM64 deploy, Active/Task/Monitor read-back và rollback. Fixture không binding nên program/actual row target chưa có; không suy `VS-PROG-029/030`/HIL từ evidence này. |
+| 3. Hệ thống hiện tại đang có gì? | Ngoài baseline P3/P4 và Task 509, cây làm việc Plan 59 đã có `StPreparedProgramSet`, POU `PROGRAM/FUNCTION/FUNCTION_BLOCK`, `StSignalBus`, Signal Read/Publish và handoff whole-set tại safe boundary. Gate Core bị ảnh hưởng `90/90` và verifier `10/10` PASS là **engineering evidence trên host**, chưa phải Test Result chính thức hay target. |
+| 4. Thiết kế mới thay đổi điều gì? | Stage dựng toàn bộ program set và signal bank ngoài live path; fsync journal `PREPARED` trước mọi mutation; safe boundary đổi scheduler set rồi signal bank trong cùng transition. Identity/candidate chỉ đổi sau khi cả hai thành công; nếu signal swap lỗi thì scheduler được khôi phục ngay tại cùng boundary. |
+| 5. Team phải sửa module/contract nào? | `application/st/st_{pou_registry,scheduler,signal_bus,runtime_snapshot,loader,package_v2}.*`, `application/programming/programming_runtime_coordinator.*`, `application/runtime/scan_loop.cpp`, Programming IPC và package/compiler CLI. |
+| 6. Điều gì còn bị chặn? | Cần merge đúng commit, triển khai/read-back trên Forlinx với `MCU_MODE=FAKE`, soak liên tục đủ 24 giờ và formal VVP. CI là `SKIPPED_BY_OWNER`; HIL/MCU vật lý là `DEFERRED_NO_HARDWARE`; cả hai không phải PASS. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Gate Core hiện tại: focused FBD/signal `37/37`, affected Core `90/90`, verifier self-test `10/10` PASS. Chỉ được đóng `TARGET_FAKE_MCU_DEPLOY` bằng manifest/checksum/service/API/runtime read-back trên board và đóng `TARGET_FAKE_MCU_SOAK` sau đủ 24 giờ; formal VVP vẫn `NOT_RUN`. |
 
 Điểm dễ hiểu sai nhất: **PROGRAM_ONLY và RETAIN đã chạy happy path trên board lab
 không đồng nghĩa được phép release production**. Cờ Programming đang ON trên
@@ -63,20 +63,23 @@ Core production binary không được parse source hoặc link editor/BE/DB. C�
 dùng compiler binary riêng từ cùng source library, nhưng CI phải chứng minh RT
 binary không có forbidden parser/filesystem/network call path sau activation.
 
-## 3. Runtime profile Rev A
+## 3. Runtime profile Plan 59
 
 | Thuộc tính | Giá trị proposal | Ghi chú |
 |---|---:|---|
-| Task | 1 | override supporting ceiling 8 |
+| Program active | tối đa 16 | một `StPreparedProgramSet` được kiểm đủ trước handoff |
+| Task | tối đa 16 | ba period chuẩn 1000/5000/30000 ms; không đồng nghĩa 16 task mỗi period |
 | Period | 1000/5000/30000 ms | dispatch cadence, không base step sleep |
-| Artifact | <=1 MiB | loader reject one-over |
+| IR đơn | `MKDDCIR1`, schema 1 | compiler provenance `fwsom-st-1.2.0` |
+| Package | `MKDDCIR2`, schema/layout 2, <=16 MiB | tối đa 32 section; offset/length/CRC/SHA được kiểm bounded |
 | Program source | <=64 KiB | chờ OD-PROG-003 |
 | FBD | <=256 block/512 connection | chờ OD-PROG-003/006 |
 | Binding | <=256/Program | Point Catalog/ABI sizing phải review |
 | RETAIN | <=128 biến/FB, <=4096 byte/Program | profile/compiler/loader enforce; target endurance còn phải đo |
 
 Runtime phải đọc profile từ artifact/capability version; không expose generic
-supporting limits làm Product capability.
+supporting limits làm Product capability. Mỗi Program có queue/output staging riêng;
+không dùng một queue chung để một Program lỗi làm mất proposal của Program khác.
 
 ## 4. Base step và scheduler
 
@@ -102,13 +105,21 @@ integer overflow, duplicate section, bad branch/slot/map và hash mismatch.
 
 Activation:
 
-1. Non-RT thread đọc/stage/verify và dựng runtime image preallocated.
-2. Core ghi pending descriptor immutable.
+1. `ProgrammingRuntimeCoordinator::stage_impl()` đọc package, verify toàn bộ
+   POU/library/signal manifest rồi dựng `StPreparedProgramSet` và prepared signal
+   bank ngoài live path; chưa được sửa scheduler, signal bus hay active identity.
+2. Ghi và `fsync` journal `PREPARED` cùng immutable candidate descriptor. Mọi lỗi
+   trước mốc này phải để live topology, signal state, candidate và identity bất biến.
 3. Tại safe boundary, kiểm expected active/cutover/IO freshness/transition plan.
-4. Chụp previous program contribution và state compatibility.
-5. Swap pointer/generation atomic; không restart iobus.
-6. Chạy first cycle; chỉ khi pass mới commit output/LKG/active identity.
-7. Fail thì giữ/khôi phục LKG và trả error + keeps-running truth.
+4. Gọi `StScheduler::swap_prepared_program_set_at_boundary()` để đổi nguyên set,
+   sau đó `StSignalBus::activate_prepared_replacement_at_boundary()` trong cùng
+   transition; scan không được quan sát topology mới với signal bank cũ.
+5. Nếu signal activation lỗi, khôi phục scheduler set cũ ngay tại cùng boundary,
+   giữ active/LKG/identity cũ, journal lỗi và không publish output từng phần.
+6. Chỉ sau khi cả hai swap thành công mới commit candidate/identity/generation;
+   first cycle vẫn publish proposal all-or-nothing qua resolver.
+7. Power/process fault phải phục hồi xác định từ journal; không suy thành PASS
+   cho tới khi có power-cut evidence trên target.
 
 ## 6. Process image và Point binding
 
@@ -116,6 +127,14 @@ Input slot chứa value typed, quality, producer timestamp và Point identity.
 Missing/bad/stale không thành zero; execution dùng quality policy/fallback được
 Check phê duyệt. Output slot chứa `program_value` và binding metadata; bridge
 không ghi thẳng physical.
+
+Signal nội bộ dùng stable identity trong `SIGNAL_DEFS` và reference ở section IR
+`SEC_SIGNAL_REFS=0x0009`. `SIGNAL_READ` (`0x71`) trả typed value kèm validity;
+signal chưa có producer, producer fault hoặc stale phải là invalid/unavailable,
+không được materialize thành `0`. `SIGNAL_PUBLISH` (`0x72`) ghi vào private
+staging bank của Program và chỉ hiện cho consumer ở snapshot/boundary kế tiếp.
+Mỗi base step đóng băng một signal snapshot để kết quả không phụ thuộc execution
+order; duplicate producer/type mismatch/cycle bị Check hoặc loader reject.
 
 Local/VP/MB-RTU adapters đều quy về Point Table owner; RTU identity là
 `{deviceId,pointId}`. Core không truy cập Modbus register/serial và Program không
@@ -188,8 +207,10 @@ operator confirmation và rollback về graph/LKG. Không dual-run trên output 
 
 | Component | API/trách nhiệm | Mutable state/buffer |
 |---|---|---|
-| `ProgrammingRuntimeCoordinator` | `stage`, `request_activate`, `restore`, `status`, `on_safe_boundary` | one candidate, operation state, journal generation |
+| `ProgrammingRuntimeCoordinator` | `stage_impl`, `request_activate`, `restore`, `status`, `on_safe_boundary` | prepared whole-set candidate, operation state, journal generation |
 | `StArtifactLoader` | verify/decode into candidate | non-RT temporary bounded builder |
+| `StPreparedProgramSet` | immutable handoff của toàn bộ Program/Task/POU đã verify | preallocated runtimes, topology và previous set handle để rollback |
+| `StSignalBus` | prepare/activate replacement, frozen snapshot, publish staging | active/prepared signal bank, type/producer table, generation |
 | `ProgramTaskRuntime` | `start/stop/on_base_step/reset_fault` | Task state, next release, base-step/missed-release counters |
 | `ProgramExecutor` | `execute(snapshot, staging, budget)` | preallocated slots/FB state only |
 | `ProgramProcessImage` | input snapshot/output staging/publish | fixed binding arrays + generation |
@@ -207,11 +228,14 @@ format tiếp tục dưới `application/st/`. Không nhét lifecycle/IPC/journa
 ScanLoop::step(now):
   phase_iop_read_and_quality()
   const snapshot = programming.capture_inputs(point_table, now)
-  graph_or_program_owner.apply_pending_transition_at_boundary()
+  graph_or_program_owner.apply_pending_transition_at_safe_boundary()
+    // whole program set then matching signal bank; rollback both-or-none
+  const signal_snapshot = signal_bus.freeze_active_generation()
   if programming.due(now):
-      result = programming.run(snapshot, fixed_budget)
+      result = programming.run(snapshot, signal_snapshot, fixed_budget)
       if result.ok: priority_resolver.publish_batch(result.proposals, generation)
       else: programming.discard_batch_and_update_fault(result)
+  signal_bus.commit_published_generation_at_boundary()
   safety_manager.evaluate_independently()
   iop_write_selected_outputs()
   programming.emit_bounded_health_trace()
@@ -247,6 +271,9 @@ last fault/source map, IOP gap/watchdog. Snapshot versioned/bounded và có obse
 |---|---|
 | corrupt/truncated/oversize artifact | loader reject, candidate freed, active/LKG unchanged |
 | alloc fail at each candidate table | `IR-E-015`, zero RT side effect |
+| lỗi bất kỳ trước journal `PREPARED` | scheduler topology, signal bank, active/LKG/candidate/identity giữ nguyên byte-for-byte |
+| scheduler swap thành công, signal bank swap lỗi | scheduler rollback set cũ ngay cùng boundary; không lộ topology/signal generation hỗn hợp |
+| POU manifest/library lock/signal ref sai | stage reject ổn định; không sửa live registry hoặc signal state |
 | executor div0/budget/non-finite | staging discarded, Task fault, safety/IOP continue |
 | RETAIN CRC/layout/identity/size fail | cold-init explicit; active code vẫn start, không partial restore |
 | RETAIN fsync/rename fail | giữ record cũ; tăng write failure, scan không block |
@@ -258,9 +285,14 @@ last fault/source map, IOP gap/watchdog. Snapshot versioned/bounded và có obse
 
 | File/build target | Change |
 |---|---|
-| `apps/core/CMakeLists.txt` | link executor/loader/lifecycle only; CI assert no parser/compiler symbol in `mkddc-core` |
+| `apps/core/CMakeLists.txt` | link executor/loader/lifecycle/signal bus; post-link assert no parser/compiler symbol in `mkddc-core` |
 | `apps/core/bootstrap/main.cpp` | explicit GRAPH/PROGRAM; fixed scheduler topology, retain service, coordinator và Programming UDS tại `10d9ad6` |
 | `apps/core/application/runtime/scan_loop.*` | phase hook + timing metric; no ownership policy duplication |
+| `apps/core/application/st/st_pou_registry.*` | POU identity, FUNCTION purity/call frame, FUNCTION_BLOCK instance layout |
+| `apps/core/application/st/st_scheduler.*` | prepare và whole-set safe-boundary swap/restore |
+| `apps/core/application/st/st_signal_bus.*` | typed signal definition, snapshot, publish/activate bank |
+| `apps/core/application/st/st_package_v2.*` | `MKDDCIR2` schema/layout 2 và section `0x0001..0x000C` |
+| `apps/core/application/st/st_runtime_snapshot.*` | snapshot/restore state phục vụ rollback atomic |
 | `contracts/ipc/programming_v1` | generated/handwritten bounded schema and compatibility tests |
 | `contracts/config/` | replace/retire standalone base64 control schema by migration |
 | `platform/packaging/` | state/staging/retain/journal dirs, owner/mode, service limits |
@@ -286,6 +318,10 @@ authoritative. Cutover source đã wire; target evidence vẫn mở.
 | `SOM-T-005` | power/restart matrix | one active + valid LKG/journal/RETAIN |
 | `SOM-T-006` | graph/program cutover | no dual owner/partial proposal |
 | `SOM-T-007` | HIL MCU 199/200/201 ms | expected quality/safe entry/continuity |
+| `SOM-T-008` | host atomic fault matrix | mọi lỗi trước `PREPARED` zero-mutation; scheduler/signal rollback both-or-none |
+| `SOM-T-009` | host POU/signal | multi-Program, FUNCTION purity, FB instance state, duplicate/type/stale/unavailable signal |
+| `SOM-T-010` | Forlinx MCU FAKE deploy/read-back | exact artifact/config checksum, service health, runtime/API/FE producer→consumer truth |
+| `SOM-T-011` | Forlinx MCU FAKE soak 24 h | đủ thời lượng, raw sample liên tục, restart/error/IOP-gap counters trong limit |
 
 `SOM-T-002` hiện **PARTIAL HOST PASS** cho allocation/symbol boundary tại
 `4f7e0ac`. `SOM-T-004` có host precheck profile/cadence tại `a831a0d`: Task 30 s
@@ -294,6 +330,12 @@ mọi blocking call, jitter/WCET/watchdog/IOP gap và 10.000 chu kỳ mỗi peri
 `SOM-T-005` có host component PASS cho RETAIN v2/cold-init/atomic/checkpoint tại
 `3ca5d22`, nhưng power-cut/boot trên Forlinx và `VS-PROG-029/030`
 vẫn `NOT RUN`.
+
+Tại cây làm việc 2026-08-24, focused FBD/signal `37/37`, affected Core `90/90`
+và verifier self-test `10/10` PASS. Đây là bằng chứng kỹ thuật cho
+`IMPLEMENTATION_CLOSE`, không thay `SOM-T-010/011`, formal VVP hay target Test
+Result. `SOM-T-010` và `SOM-T-011` đang `NOT_RUN`; HIL/MCU vật lý
+`DEFERRED_NO_HARDWARE`; CI `SKIPPED_BY_OWNER`.
 
 Deploy dark coordinator → read-only capability/status → stage-only → shadow
 execute/no publish → one-controller canary → expand. Rollback via Restore/cutover,
@@ -331,9 +373,10 @@ retain/trace. Exact policy/CPU affinity đo trên target rồi phê duyệt; kh�
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
 | Target semantics/ABI/RETAIN/cutover | Product + Architect + Controls | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03`; acceptance target vẫn độc lập |
-| Coordinator/IPC/cutover target chưa kiểm chứng | Core + BE Lead + QA | Forlinx/HIL integration, peer/service identity và power-fault Test Result |
-| Timing/HIL/power-loss chưa có evidence | Core + MCU + QA | target results approved |
-| Corrective source Task 509 chưa commit/merge | Core + Dev Lead | commit/PR/merge thật; chạy lại Core/full gates và candidate pin |
+| Whole-set POU/signal atomic chỉ có host engineering evidence | Core + BE Lead + QA | merge exact commit; Forlinx MCU FAKE deploy/read-back có checksum và raw output |
+| Soak 24 giờ chưa chạy | Runtime + QA + Ops | liên tục đủ 24 giờ; lưu raw samples/hash, restart/error/IOP-gap và kết luận độc lập |
+| Timing/HIL/power-loss chưa có evidence | Core + MCU + QA | `DEFERRED_NO_HARDWARE`; chạy lại khi có MCU/HIL vật lý, không suy từ MCU FAKE |
+| Formal VVP chưa chạy; CI không có ngân sách | Verification Lead + Owner | VVP `NOT_RUN`; CI `SKIPPED_BY_OWNER` và không được ghi PASS |
 | Positive snapshot target có Variable Binding | Core + BE + QA | fixture read-only an toàn có binding; đối chiếu program/actual/owner/priority/task qua Web API, lưu raw output |
 
 | Phiên bản | Ngày | Nội dung |
@@ -348,12 +391,13 @@ retain/trace. Exact policy/CPU affinity đo trên target rồi phê duyệt; kh�
 | 0.8 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: coordinator/SQLite v5, bounded UDS `SO_PEERCRED`, safe-boundary exclusive cutover, first-output/LKG, rollback và CRC checkpoint recovery. Host fault/restart gates PASS; giữ default GRAPH, flag OFF và target/HIL/power-cut NOT TESTED. |
 | 0.9 | 2026-08-13 | `TASK-PROG-509`: mở rộng `RuntimePointSnapshot`/serializer với program proposal mức 5, effective priority và task metric; `PriorityResolver` thêm accessor read-only; `ScanLoop` publish end-scan truth. Targeted host 41/41 PASS; source mới chưa deploy/read-back Foxlinx và không nâng HIL/Test Result. |
 | 1.0 | 2026-08-13 | `EV-PROG-P5-510`: full CTest 1004/1004; cross-build/deploy Core ARM64 đúng hash, Runtime/Active/Task và Monitor target read-back, rollback rehearsal/tái deploy PASS. Fixture active không binding nên positive program/actual row chưa chạy; source chưa merge, HIL/Test Result không đổi. |
+| 1.1 | 2026-08-24 | Đồng bộ Plan 59 với `StPreparedProgramSet`, POU nhiều chương trình, `StSignalBus`, IR signal opcode `0x71/0x72`, package v2 và invariant zero-mutation/both-or-none; ghi rõ host gates không thay target MCU FAKE, soak 24 giờ, formal VVP hoặc HIL vật lý. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
-| Core Lead | **P3/P4 SOURCE/HOST DONE; Task 509 HOST/TARGET VERIFIED nhưng chưa merge** | commits P3/P4; audit và `EV-PROG-P5-510` cho corrective slice |
+| Core Lead | **PLAN 59 IMPLEMENTATION_CLOSE PENDING** | current-worktree Core `90/90`, verifier `10/10`; còn merge/exact commit và affected full gate |
 | Controls + Safety + BE + QA | **WAIVED FOR IMPLEMENTATION; review/test độc lập còn mở** | `AUTH-PROG-2026-08-11-03` |
-| Runtime Architect + System Architect | **APPROVED FOR IMPLEMENTATION** | `AUTH-PROG-2026-08-11-03`; target/HIL không được suy thành PASS |
+| Runtime Architect + System Architect | **APPROVED FOR IMPLEMENTATION; RELEASE NO-GO** | target MCU FAKE/soak/VVP chưa chạy; HIL vật lý deferred |
 
 Tự kiểm `DD-01..DD-13`:
 
@@ -361,7 +405,7 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; lịch sử và bảng ký §19 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §2 phân lớp runtime; §3 runtime profile Rev A |
-| `DD-03` As-Built | PASS | §1 dẫn `apps/core/application/{st,programming}`, Programming UDS, explicit GRAPH/PROGRAM bootstrap, RETAIN/cutover/recovery wiring và nêu đúng khoảng hở target |
+| `DD-03` As-Built | PASS | §1, §3, §5 và §12 dẫn `apps/core/application/{st,programming}`, whole-set/Signal Bus, Programming UDS, RETAIN/cutover/recovery và nêu đúng khoảng hở target |
 | `DD-04` Target ownership | PASS | §2 phân lớp; §12 class/function/buffer target; §18 lớp giao diện và bàn giao giữa luồng |
 | `DD-05` Data từng field | PASS | §6 process image và Point binding; §8 RETAIN; §12 buffer |
 | `DD-06` Interface | PASS | §5 loader và activation; §18 hợp đồng interface class; hợp đồng liên tiến trình ở `IFSPEC-PROG-001` §8 |
@@ -369,10 +413,11 @@ Tự kiểm `DD-01..DD-13`:
 | `DD-08` Operation flow | N/A tại file này | Không có mặt người dùng; thủ tục vận hành ở `OPS-PROG-001` |
 | `DD-09` Error/safety/security | PASS | §7 arbitration/PID/hold-last; §15 chèn lỗi và khả năng quan sát; §9 trace và chẩn đoán |
 | `DD-10` Repository mapping | PASS | §12 và §16 — file, build, package và config cần sửa |
-| `DD-11` Verification | PASS | §11 và §17 gắn `VS-PROG-009/012/014/027`, yêu cầu chạy **trên board** |
+| `DD-11` Verification | PASS | §11 và §17 tách host engineering, Forlinx MCU FAKE deploy, soak 24 giờ, formal VVP và HIL vật lý |
 | `DD-12` Compatibility/deploy/rollback | PASS | §17 deployment và rollback; §10 cutover/bootstrap/config |
 | `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; release BLOCKED | `AUTH-PROG-2026-08-11-03` đã mở source và P4 source/host đã đóng. Owner target: Runtime/Controls/Safety/Ops/QA; không giảm residual; G6 chỉ mở khi Test Result board/HIL độc lập hoàn tất |
 
-**Host test không tự chứng minh runtime trên board.** Snapshot extension Task 509
-đã có supporting target read-back ở `EV-PROG-P5-510`, nhưng fixture không có
-binding và executor chưa độc lập; không được nâng thành Test Result/HIL PASS.
+**Host test không tự chứng minh runtime trên board.** Gate Plan 59 hiện tại chỉ
+đủ làm input cho `IMPLEMENTATION_CLOSE`; không được nâng thành
+`TARGET_FAKE_MCU_DEPLOY`, `TARGET_FAKE_MCU_SOAK`, formal VVP, HIL hoặc
+`RELEASE_READY` nếu chưa có đúng loại bằng chứng.

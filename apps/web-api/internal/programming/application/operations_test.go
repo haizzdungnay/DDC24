@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
 	"mkddc-web/internal/programming/coreipc"
+	"mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
 )
 
@@ -106,7 +108,7 @@ func newOperationFixture(t *testing.T) operationFixture {
 	runner := &fakeCheckRunner{result: programmingcompiler.Result{OK: true,
 		Artifact: artifactBytes, ArtifactSHA256: digest, Manifest: []byte(`{"manifestVersion":1}`),
 		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1,
-		ProfileID: "revA-1t-1-5-30", LibraryVersion: "rev-a.1", IntegrityMode: "HASH_ONLY",
+		ProfileID: "revA-1t-1-5-30", LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY",
 		TargetABI: 3841}}
 	root := t.TempDir()
 	artifacts, err := programmingartifact.NewStore(filepath.Join(root, "artifacts"))
@@ -114,7 +116,7 @@ func newOperationFixture(t *testing.T) operationFixture {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 8, 11, 10, 0, 0, 0, time.UTC)
-	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner,
+	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: &fakePackager{},
 		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
 		Now: func() time.Time { return now }})
 	if err != nil {
@@ -131,6 +133,18 @@ func newOperationFixture(t *testing.T) operationFixture {
 	}
 	return operationFixture{projects: projects, store: store, artifacts: artifacts,
 		revision: revision, checkID: accepted.CheckID, staging: filepath.Join(root, "staging"), now: now}
+}
+
+func TestOperationStagesSingleProgramUnderSealedProgramID(t *testing.T) {
+	fixture := newOperationFixture(t)
+	service := fixture.service(t, &fakeOperationRuntime{})
+	instanceID, err := service.runtimeInstanceIDForRevision(context.Background(), fixture.revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if instanceID != "55555555-5555-4555-8555-555555555555" {
+		t.Fatalf("instanceID=%q; hard-code program-main sẽ làm intent không chạm Core", instanceID)
+	}
 }
 
 func (f operationFixture) service(t *testing.T, runtime *fakeOperationRuntime) *OperationService {
@@ -224,8 +238,13 @@ func (f operationFixture) commissionCommand(t *testing.T, runtime *fakeOperation
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Ack đúng những nhóm ĐANG `PRESENT`, dựng từ chính impact vừa tính. Viết
+	// cứng một danh sách sẽ làm mọi lần thêm nhóm impact mới phải sửa tay ở đây
+	// — và lần quên sửa đầu tiên sẽ hiện ra dưới dạng "test hỏng" thay vì
+	// "Commission thiếu ack".
 	return OperationCommand{SchemaVersion: "1.0", RevisionID: f.revision, CheckID: f.checkID,
-		ImpactRef: impact.Impact.ImpactRef, Acknowledgements: []string{"cutover"}, Cutover: "PROGRAM_ONLY",
+		ImpactRef: impact.Impact.ImpactRef, Acknowledgements: presentImpactKeys(impact.Impact),
+		Cutover:        "PROGRAM_ONLY",
 		IdempotencyKey: "40000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID}
 }
 
@@ -429,7 +448,7 @@ func TestOperationResetRetainAppliesInSinglePassWhenActiveRevisionMatches(t *tes
 
 	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
 		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: fixture.revision,
-			Reason: "kiểm tra reset RETAIN sau nghiệm thu I/O",
+			Reason:         "kiểm tra reset RETAIN sau nghiệm thu I/O",
 			IdempotencyKey: "40000000-0000-4000-8000-000000000010", CorrelationID: testCorrelationID})
 	if err != nil {
 		t.Fatal(err)
@@ -470,7 +489,7 @@ func TestOperationResetRetainRejectsActiveRevisionMismatchNoHalfReset(t *testing
 	staleExpected := createUnrelatedRevisionFixture(t, fixture.store)
 	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
 		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: staleExpected,
-			Reason: "kiểm tra reject khi Active Revision đổi giữa chừng",
+			Reason:         "kiểm tra reject khi Active Revision đổi giữa chừng",
 			IdempotencyKey: "40000000-0000-4000-8000-000000000011", CorrelationID: testCorrelationID})
 	if err != nil {
 		t.Fatal(err)
@@ -499,7 +518,7 @@ func TestOperationResetRetainTimeoutBecomesUnknownThenRetriesIdempotentlyToSucce
 
 	accepted, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"},
 		OperationCommand{SchemaVersion: "1.0", ExpectedActiveRevisionID: fixture.revision,
-			Reason: "kiểm tra Core TIMED_OUT không phải false success",
+			Reason:         "kiểm tra Core TIMED_OUT không phải false success",
 			IdempotencyKey: "40000000-0000-4000-8000-000000000012", CorrelationID: testCorrelationID})
 	if err != nil {
 		t.Fatal(err)
@@ -552,4 +571,22 @@ func TestOperationResetRetainIdempotencyReplaysSameKeyRejectsDifferentRequest(t 
 	if _, err := service.ResetRetain(context.Background(), Actor{ID: testActorID, Role: "admin"}, conflicting); !errors.Is(err, programmingstore.ErrIdempotencyConflict) {
 		t.Fatalf("idempotency key trùng nhưng request khác phải conflict: err=%v", err)
 	}
+}
+
+// presentImpactKeys trả các khoá acknowledgement mà impact hiện đang yêu cầu.
+func presentImpactKeys(impact RevisionImpact) []string {
+	groups := map[string]RevisionImpactGroup{
+		"retain": impact.Retain, "activeOverrides": impact.ActiveOverrides,
+		"cutover": impact.Cutover, "outputMappingChanges": impact.OutputMappingChanges,
+		"publishedSignals": impact.PublishedSignals, "controlLibrary": impact.ControlLibrary,
+		"programSet": impact.ProgramSet, "enableIntent": impact.EnableIntent,
+	}
+	keys := make([]string, 0, len(groups))
+	for key, group := range groups {
+		if group.Status == "PRESENT" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }

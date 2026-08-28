@@ -9,6 +9,7 @@ import {
   resolveFbdKeyboardCommand,
   translateFbdAnnouncement,
 } from './commands'
+import { canonicalFbdJson } from './model'
 import type { FbdDocument, FbdNetwork, FbdWire } from './model'
 
 function golden(): FbdDocument {
@@ -45,6 +46,34 @@ describe('command reducer FBD', () => {
     state = fbdEditorReducer(state, { type: 'ADD_NETWORK', network: network(2) })
     expect(state.document.networks).toHaveLength(2)
     expect(state.announcement.code).toBe('no-edit-permission')
+  })
+
+  /* `T59-804` AC: "Ambiguous FBD port không auto-connect". Khoá bằng test vì
+   * đây là loại tiện ích rất dễ bị thêm vào sau: thêm node xong tự nối vào cổng
+   * "hợp lý nhất" sẽ tạo ra một dây mà người dùng không hề vẽ, và trong đồ hoạ
+   * điều khiển một dây thừa là một lệnh chạy thật. */
+  it('ADD_NODE không bao giờ tự nối dây, kể cả khi chỉ có đúng một cổng khớp', () => {
+    const document = golden()
+    const wiresBefore = document.networks[0].wires.length
+    let state = createFbdEditorState(document)
+    const node = {
+      id: uuid(0x70000000, 1),
+      kind: 'FUNCTION' as const,
+      typeRef: 'AND',
+      operandType: 'BOOL' as const,
+      executionOrder: 0,
+      parameters: {},
+      ports: [
+        { id: uuid(0x71000000, 1), name: 'IN1', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 0 },
+        { id: uuid(0x71000000, 2), name: 'IN2', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 1 },
+        { id: uuid(0x71000000, 3), name: 'OUT', direction: 'OUTPUT' as const, dataType: 'BOOL' as const, unit: null, order: 2 }
+      ]
+    }
+    state = fbdEditorReducer(state, { type: 'ADD_NODE', networkId: document.networks[0].id, node })
+    const nodes = state.document.networks[0].nodes
+    expect(nodes[nodes.length - 1].typeRef).toBe('AND')
+    expect(state.document.networks[0].wires).toHaveLength(wiresBefore)
+    expect(state.connectionFromPortId).toBeNull()
   })
 
   it('nối output→input tương thích và từ chối input đã có driver', () => {
@@ -273,5 +302,143 @@ describe('translateFbdAnnouncement (BUG-012)', () => {
   it('mã idle hoặc lạ trả về chuỗi rỗng', () => {
     expect(translateFbdAnnouncement(pick, { code: 'idle' })).toBe('')
     expect(translateFbdAnnouncement(pick, { code: 'unknown-code' })).toBe('')
+  })
+})
+
+/* `T59-806` — kéo block chỉ đổi HÌNH HỌC. Bộ test này khoá đúng ranh giới đó:
+ * vị trí đi vào `layout`, và không một trường ngữ nghĩa nào đổi theo. */
+describe('SET_NODE_POSITION (T59-806)', () => {
+  function nodeOf(state: ReturnType<typeof createFbdEditorState>) {
+    return state.document.networks[0].nodes[0]
+  }
+
+  it('ghi toạ độ vào layout và KHÔNG đụng executionOrder', () => {
+    const before = createFbdEditorState(golden(), true)
+    const node = nodeOf(before)
+    const order = node.executionOrder
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 320, y: 140 })
+
+    expect(after.document.layout?.nodes[node.id]).toEqual({ x: 320, y: 140 })
+    expect(after.document.networks[0].nodes[0].executionOrder).toBe(order)
+    expect(after.announcement.code).toBe('block-moved')
+  })
+
+  it('làm tròn về số nguyên — pixel lẻ chỉ làm Draft bẩn thêm', () => {
+    const before = createFbdEditorState(golden(), true)
+    const node = nodeOf(before)
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 100.4, y: 99.6 })
+    expect(after.document.layout?.nodes[node.id]).toEqual({ x: 100, y: 100 })
+  })
+
+  it.each([
+    ['ngoài trần dương', 1e9],
+    ['ngoài trần âm', -1e9],
+    ['NaN', Number.NaN],
+    ['vô hạn', Number.POSITIVE_INFINITY],
+  ])('TỪ CHỐI toạ độ %s thay vì kẹp về biên', (_label, x) => {
+    const before = createFbdEditorState(golden(), true)
+    const node = nodeOf(before)
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x, y: 0 })
+    expect(after.announcement.code).toBe('invalid-position')
+    expect(after.document.layout).toBeUndefined()
+  })
+
+  it('chỉ đọc thì không kéo được', () => {
+    const before = createFbdEditorState(golden(), false)
+    const node = nodeOf(before)
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 10, y: 10 })
+    expect(after.announcement.code).toBe('no-edit-permission')
+    expect(after.document.layout).toBeUndefined()
+  })
+
+  it('node không tồn tại thì từ chối, không tạo entry layout mồ côi', () => {
+    const before = createFbdEditorState(golden(), true)
+    const after = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: 'ffffffff-ffff-4fff-8fff-ffffffffffff', x: 10, y: 10 })
+    expect(after.announcement.code).toBe('node-not-found')
+    expect(after.document.layout).toBeUndefined()
+  })
+
+  it('kéo xong hoàn tác được về đúng vị trí cũ', () => {
+    const before = createFbdEditorState(golden(), true)
+    const node = nodeOf(before)
+    const moved = fbdEditorReducer(before, { type: 'SET_NODE_POSITION', networkId: before.document.networks[0].id, nodeId: node.id, x: 320, y: 140 })
+    const undone = fbdEditorReducer(moved, { type: 'UNDO' })
+    expect(undone.document.layout).toBeUndefined()
+  })
+})
+
+/* `AC-FBD-006` — "invalid typed connection is blocked immediately". Chặn NGAY
+ * lúc nối, không đợi Check: một wire sai kiểu nằm trong Draft là một lần Check
+ * đỏ mà người dùng phải tự lần ngược lại xem mình đã nối nhầm ở đâu. */
+describe('nối sai kiểu bị chặn ngay (AC-FBD-006)', () => {
+  function typedGraph(sourceType: string, targetType: string, sourceUnit: string | null = null, targetUnit: string | null = null): FbdDocument {
+    const document = golden()
+    const network = document.networks[0]
+    network.wires = []
+    const source = network.nodes[0]
+    const target = network.nodes[2]
+    source.ports = [{ id: uuid(0x70000000, 1), name: 'OUT', direction: 'OUTPUT', dataType: sourceType as never, unit: sourceUnit, order: 0 }]
+    target.ports = [{ id: uuid(0x70000000, 2), name: 'IN', direction: 'INPUT', dataType: targetType as never, unit: targetUnit, order: 0 }]
+    return document
+  }
+
+  function attempt(document: FbdDocument) {
+    let state = createFbdEditorState(document, true)
+    state = fbdEditorReducer(state, { type: 'BEGIN_OR_COMMIT_CONNECTION', portId: uuid(0x70000000, 1) })
+    expect(state.connectionFromPortId).toBe(uuid(0x70000000, 1))
+    return fbdEditorReducer(state, {
+      type: 'BEGIN_OR_COMMIT_CONNECTION',
+      portId: uuid(0x70000000, 2),
+      wire: { id: uuid(0x80000000, 1), from: { nodeId: '', portId: uuid(0x70000000, 1) }, to: { nodeId: '', portId: uuid(0x70000000, 2) } },
+    })
+  }
+
+  it('khác kiểu dữ liệu ⇒ từ chối, không tạo wire', () => {
+    const after = attempt(typedGraph('BOOL', 'REAL'))
+    expect(after.announcement.code).toBe('connect-incompatible')
+    expect(after.document.networks[0].wires).toHaveLength(0)
+  })
+
+  it('cùng kiểu nhưng khác đơn vị ⇒ từ chối', () => {
+    const after = attempt(typedGraph('REAL', 'REAL', 'degC', 'kPa'))
+    expect(after.announcement.code).toBe('connect-incompatible')
+    expect(after.document.networks[0].wires).toHaveLength(0)
+  })
+
+  it('nối vào port OUTPUT (sai hướng) ⇒ từ chối', () => {
+    const document = typedGraph('BOOL', 'BOOL')
+    document.networks[0].nodes[2].ports[0].direction = 'OUTPUT'
+    const after = attempt(document)
+    expect(after.announcement.code).toBe('connect-incompatible')
+    expect(after.document.networks[0].wires).toHaveLength(0)
+  })
+})
+
+/* `WP-05` AC: "Save/reload reproduces layout; port `order` unchanged". Hình học
+ * chỉ có ích nếu nó sống qua một vòng lưu–đọc lại; và nó không được phép làm
+ * xê dịch `order` của port, vì `order` là thứ compiler dùng để xếp toán hạng. */
+describe('layout sống qua vòng lưu và đọc lại (T59-806)', () => {
+  it('toạ độ và port order giữ nguyên sau canonical hoá + parse lại', () => {
+    const start = createFbdEditorState(golden(), true)
+    const node = start.document.networks[0].nodes[1]
+    const moved = fbdEditorReducer(start, {
+      type: 'SET_NODE_POSITION',
+      networkId: start.document.networks[0].id,
+      nodeId: node.id,
+      x: 480,
+      y: 260,
+    })
+
+    const saved = canonicalFbdJson(moved.document)
+    const reloaded = createFbdEditorState(JSON.parse(saved) as FbdDocument, true)
+
+    expect(reloaded.document.layout?.nodes[node.id]).toEqual({ x: 480, y: 260 })
+    for (const [index, network] of reloaded.document.networks.entries()) {
+      for (const [nodeIndex, reloadedNode] of network.nodes.entries()) {
+        const original = moved.document.networks[index].nodes[nodeIndex]
+        expect(reloadedNode.ports.map((port) => port.order)).toEqual(original.ports.map((port) => port.order))
+        expect(reloadedNode.executionOrder).toBe(original.executionOrder)
+      }
+    }
   })
 })

@@ -1,134 +1,1395 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.5.0",
+  "catalogVersion": "1.8.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
-    { "symbol": "ErrRequest", "code": "PRG-ERR-REQ-001", "ownerComponent": "api", "statusClass": "REQUEST", "httpStatuses": [400, 413, 422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.request", "allowedArgs": ["actual", "supportedMajor", "maxBytes"] },
-    { "symbol": "ErrNotFound", "code": "PRG-ERR-NOT-FOUND-001", "ownerComponent": "api", "statusClass": "NOT_FOUND", "httpStatuses": [404], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.notFound", "allowedArgs": [] },
-    { "symbol": "ErrConflict", "code": "PRG-ERR-CONFLICT-001", "ownerComponent": "api", "statusClass": "CONFLICT", "httpStatuses": [409, 428], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.conflict", "allowedArgs": ["expected", "actual"] },
-    { "symbol": "ErrScope", "code": "PRG-ERR-SCOPE-001", "ownerComponent": "compiler", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.scope", "allowedArgs": ["profile", "limit"] },
-    { "symbol": "ErrMapIdentity", "code": "PRG-ERR-MAP-003", "ownerComponent": "compiler", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.mappingIdentity", "allowedArgs": ["pointId", "variable", "expected", "actual"] },
-    { "symbol": "ErrMapType", "code": "PRG-ERR-MAP-004", "ownerComponent": "compiler", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.mappingType", "allowedArgs": ["pointId", "variable", "expected", "actual"] },
-    { "symbol": "ErrCheck", "code": "PRG-ERR-CHECK-001", "ownerComponent": "compiler", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.check", "allowedArgs": ["line", "column", "length", "diagnosticCount"] },
-    { "symbol": "ErrArtifact", "code": "PRG-ERR-ARTIFACT-001", "ownerComponent": "artifact-loader", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.artifact", "allowedArgs": ["artifactId", "section"] },
-    { "symbol": "ErrTarget", "code": "PRG-ERR-TARGET-001", "ownerComponent": "artifact-loader", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.target", "allowedArgs": ["expected", "actual"] },
-    { "symbol": "ErrCutover", "code": "PRG-ERR-CUTOVER-001", "ownerComponent": "runtime", "statusClass": "CONFLICT", "httpStatuses": [409], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.cutover", "allowedArgs": ["requested", "activeMode"] },
-    { "symbol": "ErrRetain", "code": "PRG-ERR-RETAIN-001", "ownerComponent": "runtime", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.retain", "allowedArgs": ["layoutVersion"] },
-    { "symbol": "ErrOperation", "code": "PRG-ERR-OP-001", "ownerComponent": "api", "statusClass": "CONFLICT", "httpStatuses": [409], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.operation", "allowedArgs": ["operationId", "state"] },
-    { "symbol": "ErrCommission", "code": "PRG-ERR-COM-001", "ownerComponent": "runtime", "statusClass": "OPERATION", "httpStatuses": [409, 422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.commission", "allowedArgs": ["operationId", "step"] },
-    { "symbol": "ErrRestore", "code": "PRG-ERR-RESTORE-001", "ownerComponent": "runtime", "statusClass": "OPERATION", "httpStatuses": [409, 422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.restore", "allowedArgs": ["operationId", "step"] },
-    { "symbol": "ErrImport", "code": "PRG-ERR-IMPORT-001", "ownerComponent": "api", "statusClass": "VALIDATION", "httpStatuses": [400, 413, 422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.import", "allowedArgs": ["bundleId"] },
-    { "symbol": "ErrAckMissing", "code": "PRG-ERR-ACK-MISSING-001", "ownerComponent": "api", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.acknowledgementMissing", "allowedArgs": ["key", "keys"] },
-    { "symbol": "ErrAckUnexpected", "code": "PRG-ERR-ACK-UNEXPECTED-001", "ownerComponent": "api", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.acknowledgementUnexpected", "allowedArgs": ["key", "keys"] },
-    { "symbol": "ErrImpactUnavailable", "code": "PRG-ERR-IMPACT-UNAVAILABLE-001", "ownerComponent": "api", "statusClass": "VALIDATION", "httpStatuses": [422], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.impactUnavailable", "allowedArgs": ["key"] },
-    { "symbol": "ErrImpactStale", "code": "PRG-ERR-IMPACT-STALE-001", "ownerComponent": "api", "statusClass": "CONFLICT", "httpStatuses": [409], "retryable": false, "keepsRunningRevision": true, "messageKey": "programming.error.impactStale", "allowedArgs": ["expected", "actual"] },
-    { "symbol": "ErrUnavailable", "code": "PRG-ERR-UNAVAILABLE-001", "ownerComponent": "runtime", "statusClass": "UNAVAILABLE", "httpStatuses": [503, 504, 429], "retryable": true, "keepsRunningRevision": false, "messageKey": "programming.error.unavailable", "allowedArgs": ["retryAfterSeconds"] }
+    {
+      "symbol": "ErrRequest",
+      "code": "PRG-ERR-REQ-001",
+      "ownerComponent": "api",
+      "statusClass": "REQUEST",
+      "httpStatuses": [
+        400,
+        413,
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.request",
+      "allowedArgs": [
+        "actual",
+        "supportedMajor",
+        "maxBytes"
+      ]
+    },
+    {
+      "symbol": "ErrNotFound",
+      "code": "PRG-ERR-NOT-FOUND-001",
+      "ownerComponent": "api",
+      "statusClass": "NOT_FOUND",
+      "httpStatuses": [
+        404
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.notFound",
+      "allowedArgs": []
+    },
+    {
+      "symbol": "ErrConflict",
+      "code": "PRG-ERR-CONFLICT-001",
+      "ownerComponent": "api",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409,
+        428
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.conflict",
+      "allowedArgs": [
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrScope",
+      "code": "PRG-ERR-SCOPE-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.scope",
+      "allowedArgs": [
+        "profile",
+        "limit"
+      ]
+    },
+    {
+      "symbol": "ErrMapIdentity",
+      "code": "PRG-ERR-MAP-003",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.mappingIdentity",
+      "allowedArgs": [
+        "pointId",
+        "variable",
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrMapType",
+      "code": "PRG-ERR-MAP-004",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.mappingType",
+      "allowedArgs": [
+        "pointId",
+        "variable",
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrCheck",
+      "code": "PRG-ERR-CHECK-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.check",
+      "allowedArgs": [
+        "line",
+        "column",
+        "length",
+        "diagnosticCount"
+      ]
+    },
+    {
+      "symbol": "ErrArtifact",
+      "code": "PRG-ERR-ARTIFACT-001",
+      "ownerComponent": "artifact-loader",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.artifact",
+      "allowedArgs": [
+        "artifactId",
+        "section"
+      ]
+    },
+    {
+      "symbol": "ErrTarget",
+      "code": "PRG-ERR-TARGET-001",
+      "ownerComponent": "artifact-loader",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.target",
+      "allowedArgs": [
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrCutover",
+      "code": "PRG-ERR-CUTOVER-001",
+      "ownerComponent": "runtime",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.cutover",
+      "allowedArgs": [
+        "requested",
+        "activeMode"
+      ]
+    },
+    {
+      "symbol": "ErrRetain",
+      "code": "PRG-ERR-RETAIN-001",
+      "ownerComponent": "runtime",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.retain",
+      "allowedArgs": [
+        "layoutVersion"
+      ]
+    },
+    {
+      "symbol": "ErrOperation",
+      "code": "PRG-ERR-OP-001",
+      "ownerComponent": "api",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.operation",
+      "allowedArgs": [
+        "operationId",
+        "state"
+      ]
+    },
+    {
+      "symbol": "ErrCommission",
+      "code": "PRG-ERR-COM-001",
+      "ownerComponent": "runtime",
+      "statusClass": "OPERATION",
+      "httpStatuses": [
+        409,
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.commission",
+      "allowedArgs": [
+        "operationId",
+        "step"
+      ]
+    },
+    {
+      "symbol": "ErrRestore",
+      "code": "PRG-ERR-RESTORE-001",
+      "ownerComponent": "runtime",
+      "statusClass": "OPERATION",
+      "httpStatuses": [
+        409,
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.restore",
+      "allowedArgs": [
+        "operationId",
+        "step"
+      ]
+    },
+    {
+      "symbol": "ErrImport",
+      "code": "PRG-ERR-IMPORT-001",
+      "ownerComponent": "api",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        400,
+        413,
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.import",
+      "allowedArgs": [
+        "bundleId"
+      ]
+    },
+    {
+      "symbol": "ErrAckMissing",
+      "code": "PRG-ERR-ACK-MISSING-001",
+      "ownerComponent": "api",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.acknowledgementMissing",
+      "allowedArgs": [
+        "key",
+        "keys"
+      ]
+    },
+    {
+      "symbol": "ErrAckUnexpected",
+      "code": "PRG-ERR-ACK-UNEXPECTED-001",
+      "ownerComponent": "api",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.acknowledgementUnexpected",
+      "allowedArgs": [
+        "key",
+        "keys"
+      ]
+    },
+    {
+      "symbol": "ErrImpactUnavailable",
+      "code": "PRG-ERR-IMPACT-UNAVAILABLE-001",
+      "ownerComponent": "api",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.impactUnavailable",
+      "allowedArgs": [
+        "key"
+      ]
+    },
+    {
+      "symbol": "ErrImpactStale",
+      "code": "PRG-ERR-IMPACT-STALE-001",
+      "ownerComponent": "api",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.impactStale",
+      "allowedArgs": [
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrUnavailable",
+      "code": "PRG-ERR-UNAVAILABLE-001",
+      "ownerComponent": "runtime",
+      "statusClass": "UNAVAILABLE",
+      "httpStatuses": [
+        503,
+        504,
+        429
+      ],
+      "retryable": true,
+      "keepsRunningRevision": false,
+      "messageKey": "programming.error.unavailable",
+      "allowedArgs": [
+        "retryAfterSeconds"
+      ]
+    },
+    {
+      "symbol": "ErrOutputOwner",
+      "code": "PRG-ERR-OUTPUT-OWNER-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.outputOwner",
+      "allowedArgs": [
+        "pointId",
+        "ownerProgramId",
+        "conflictProgramId"
+      ]
+    },
+    {
+      "symbol": "ErrPidReview",
+      "code": "PRG-ERR-PID-REVIEW-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.pidReview",
+      "allowedArgs": [
+        "entryId",
+        "featureState"
+      ]
+    },
+    {
+      "symbol": "ErrPouKind",
+      "code": "PRG-ERR-POU-KIND-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.pouKind",
+      "allowedArgs": [
+        "objectId",
+        "kind",
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrPouRecursion",
+      "code": "PRG-ERR-POU-RECURSION-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.pouRecursion",
+      "allowedArgs": [
+        "objectId",
+        "cycleLength"
+      ]
+    },
+    {
+      "symbol": "ErrLibVersion",
+      "code": "PRG-ERR-LIB-VERSION-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.libVersion",
+      "allowedArgs": [
+        "entryId",
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrProgramLimit",
+      "code": "PRG-ERR-PROGRAM-LIMIT-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.programLimit",
+      "allowedArgs": [
+        "profile",
+        "limit",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrSignalPublisher",
+      "code": "PRG-ERR-SIGNAL-PUBLISHER-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.signalPublisher",
+      "allowedArgs": [
+        "signalId",
+        "ownerProgramId",
+        "conflictProgramId"
+      ]
+    },
+    {
+      "symbol": "ErrSignalFreshness",
+      "code": "PRG-ERR-SIGNAL-FRESHNESS-001",
+      "ownerComponent": "compiler",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.signalFreshness",
+      "allowedArgs": [
+        "signalId",
+        "expected",
+        "actual",
+        "limit"
+      ]
+    },
+    {
+      "symbol": "ErrEnableNotCommissioned",
+      "code": "PRG-ERR-ENABLE-NOT-COMMISSIONED-001",
+      "ownerComponent": "runtime",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.enableNotCommissioned",
+      "allowedArgs": [
+        "programId"
+      ]
+    },
+    {
+      "symbol": "ErrProgramState",
+      "code": "PRG-ERR-PROGRAM-STATE-001",
+      "ownerComponent": "runtime",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.programState",
+      "allowedArgs": [
+        "programId",
+        "state",
+        "limit"
+      ]
+    },
+    {
+      "symbol": "ErrSimUnsupported",
+      "code": "PRG-SIM-UNSUPPORTED",
+      "ownerComponent": "simulation",
+      "statusClass": "UNAVAILABLE",
+      "httpStatuses": [
+        409,
+        503
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simUnsupported",
+      "allowedArgs": [
+        "contractVersion",
+        "workerVersion"
+      ]
+    },
+    {
+      "symbol": "ErrSimSaveRequired",
+      "code": "PRG-SIM-SAVE-REQUIRED",
+      "ownerComponent": "simulation",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simSaveRequired",
+      "allowedArgs": [
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrSimForbidden",
+      "code": "PRG-SIM-FORBIDDEN",
+      "ownerComponent": "simulation",
+      "statusClass": "FORBIDDEN",
+      "httpStatuses": [
+        403
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simForbidden",
+      "allowedArgs": [
+        "requiredRole"
+      ]
+    },
+    {
+      "symbol": "ErrSimInputNotAllowed",
+      "code": "PRG-SIM-INPUT-NOT-ALLOWED",
+      "ownerComponent": "simulation",
+      "statusClass": "VALIDATION",
+      "httpStatuses": [
+        422
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simInputNotAllowed",
+      "allowedArgs": [
+        "observationId",
+        "sourceKind",
+        "expected",
+        "actual",
+        "minimum",
+        "maximum"
+      ]
+    },
+    {
+      "symbol": "ErrSimStaleSession",
+      "code": "PRG-SIM-STALE-SESSION",
+      "ownerComponent": "simulation",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        409,
+        412
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simStaleSession",
+      "allowedArgs": [
+        "expected",
+        "actual"
+      ]
+    },
+    {
+      "symbol": "ErrSimQuota",
+      "code": "PRG-SIM-QUOTA",
+      "ownerComponent": "simulation",
+      "statusClass": "UNAVAILABLE",
+      "httpStatuses": [
+        429
+      ],
+      "retryable": true,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simQuota",
+      "allowedArgs": [
+        "limit",
+        "retryAfterSeconds"
+      ]
+    },
+    {
+      "symbol": "ErrSimWorkerFailed",
+      "code": "PRG-SIM-WORKER-FAILED",
+      "ownerComponent": "simulation",
+      "statusClass": "OPERATION",
+      "httpStatuses": [
+        503
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simWorkerFailed",
+      "allowedArgs": [
+        "phase",
+        "timeoutMs"
+      ]
+    },
+    {
+      "symbol": "ErrSimExpired",
+      "code": "PRG-SIM-EXPIRED",
+      "ownerComponent": "simulation",
+      "statusClass": "CONFLICT",
+      "httpStatuses": [
+        410
+      ],
+      "retryable": false,
+      "keepsRunningRevision": true,
+      "messageKey": "programming.error.simExpired",
+      "allowedArgs": [
+        "limit"
+      ]
+    }
   ],
   "componentDetails": [
-    { "component": "st-control-api", "detailCode": "API-E-001", "publicCode": "PRG-ERR-REQ-001" },
-    { "component": "st-control-api", "detailCode": "API-E-002", "publicCode": "PRG-ERR-REQ-001" },
-    { "component": "st-control-api", "detailCode": "API-E-003", "publicCode": "PRG-ERR-TARGET-001" },
-    { "component": "st-control-api", "detailCode": "API-E-004", "publicCode": "PRG-ERR-OP-001" },
-    { "component": "st-control-api", "detailCode": "API-E-005", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "st-control-api", "detailCode": "API-E-006", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "st-control-api", "detailCode": "API-E-007", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-001", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-002", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-003", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-004", "publicCode": "PRG-ERR-TARGET-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-005", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-006", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-007", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-008", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-009", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-010", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-011", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-012", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-013", "publicCode": "PRG-ERR-TARGET-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-014", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "artifact-loader", "detailCode": "IR-E-015", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "core-ipc", "detailCode": "IPC-CONTRACT-ONLY", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-ACTION-NOT-IMPLEMENTED", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-ACTIVATE-ARM", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-DEADLINE", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-EXPECTED-ACTIVE", "publicCode": "PRG-ERR-CONFLICT-001" },
-    { "component": "core-ipc", "detailCode": "IPC-IMPACT-NOT-READY", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-JOURNAL-FSYNC", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-OPERATION-BUSY", "publicCode": "PRG-ERR-OP-001" },
-    { "component": "core-ipc", "detailCode": "IPC-OPERATION-NOT-FOUND", "publicCode": "PRG-ERR-OP-001" },
-    { "component": "core-ipc", "detailCode": "IPC-PAYLOAD", "publicCode": "PRG-ERR-REQ-001" },
-    { "component": "core-ipc", "detailCode": "IPC-QUEUE-FULL", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-RECOVERY-REQUIRED", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-REQUEST-ID-CONFLICT", "publicCode": "PRG-ERR-OP-001" },
-    { "component": "core-ipc", "detailCode": "IPC-RETAIN-RESET-ARM", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-RETAIN-RESET-INSTANCE", "publicCode": "PRG-ERR-REQ-001" },
-    { "component": "core-ipc", "detailCode": "IPC-RETAIN-RESET-STATE", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-RETAIN-RESET-TIMEOUT", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-RUNTIME-CONFIG", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-RUNTIME-NOT-CONFIGURED", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "core-ipc", "detailCode": "IPC-STAGE-REJECTED", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "core-ipc", "detailCode": "IPC-STAGED-TOKEN", "publicCode": "PRG-ERR-OP-001" },
-    { "component": "core-ipc", "detailCode": "IPC-STAGING-HASH", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "core-ipc", "detailCode": "IPC-STAGING-LOCATOR", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "core-ipc", "detailCode": "IPC-STAGING-OPEN", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "core-ipc", "detailCode": "IPC-STAGING-TYPE-SIZE", "publicCode": "PRG-ERR-ARTIFACT-001" },
-    { "component": "retain", "detailCode": "RT-RETAIN-001", "publicCode": "PRG-ERR-RETAIN-001" },
-    { "component": "retain", "detailCode": "RT-RETAIN-002", "publicCode": "PRG-ERR-RETAIN-001" },
-    { "component": "retain", "detailCode": "RT-RETAIN-003", "publicCode": "PRG-ERR-RETAIN-001" },
-    { "component": "retain", "detailCode": "RT-RETAIN-004", "publicCode": "PRG-ERR-RETAIN-001" },
-    { "component": "compiler", "detailCode": "ST-LEX-001", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-LEX-002", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-LEX-003", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SYN-001", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SYN-002", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-001", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-002", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-003", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-004", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-005", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-006", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-007", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-008", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-009", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-010", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-011", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-012", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-013", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-SEM-014", "publicCode": "PRG-ERR-CHECK-001" },
-    { "component": "compiler", "detailCode": "ST-LIM-001", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-LIM-002", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-LIM-003", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-LIM-004", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-LIM-005", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-LIM-006", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-LIM-007", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-LIM-008", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-IOMAP-001", "publicCode": "PRG-ERR-MAP-003" },
-    { "component": "compiler", "detailCode": "ST-IOMAP-002", "publicCode": "PRG-ERR-MAP-003" },
-    { "component": "compiler", "detailCode": "ST-IOMAP-003", "publicCode": "PRG-ERR-MAP-004" },
-    { "component": "compiler", "detailCode": "ST-IOMAP-004", "publicCode": "PRG-ERR-MAP-003" },
-    { "component": "compiler", "detailCode": "ST-IOMAP-005", "publicCode": "PRG-ERR-MAP-003" },
-    { "component": "compiler", "detailCode": "ST-IOMAP-006", "publicCode": "PRG-ERR-MAP-003" },
-    { "component": "compiler", "detailCode": "ST-IOMAP-007", "publicCode": "PRG-ERR-MAP-003" },
-    { "component": "compiler", "detailCode": "ST-IOMAP-008", "publicCode": "PRG-ERR-MAP-003" },
-    { "component": "compiler", "detailCode": "ST-CLI-ARGS", "publicCode": "PRG-ERR-REQ-001" },
-    { "component": "compiler", "detailCode": "ST-CLI-IO", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "compiler", "detailCode": "ST-CLI-KEY", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "compiler", "detailCode": "ST-CLI-SANDBOX", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "compiler", "detailCode": "ST-WORKER-CRASH", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "compiler", "detailCode": "ST-WORKER-TIMEOUT", "publicCode": "PRG-ERR-UNAVAILABLE-001" },
-    { "component": "compiler", "detailCode": "ST-CLI-LIMIT", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "compiler", "detailCode": "ST-CLI-TOOLARGE", "publicCode": "PRG-ERR-SCOPE-001" },
-    { "component": "runtime", "detailCode": "ST-RT-001", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-002", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-003", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-004", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-005", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-006", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-007", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-008", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-009", "publicCode": "PRG-ERR-COM-001" },
-    { "component": "runtime", "detailCode": "ST-RT-010", "publicCode": "PRG-ERR-COM-001" }
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-001",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-002",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-003",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-004",
+      "publicCode": "PRG-ERR-TARGET-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-005",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-006",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-007",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-008",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-009",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-010",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-011",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-012",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-013",
+      "publicCode": "PRG-ERR-TARGET-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-014",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "artifact-loader",
+      "detailCode": "IR-E-015",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-ARGS",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-IO",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-KEY",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-KEY-EXISTS",
+      "publicCode": "PRG-ERR-CONFLICT-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-KEY-REQUIRED",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-LIMIT",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-LIBRARY-LOCK",
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-POU-MANIFEST",
+      "publicCode": "PRG-ERR-POU-KIND-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-POU-PATH",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-SIGNAL-MANIFEST",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-SANDBOX",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-CLI-TOOLARGE",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-001",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-002",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-003",
+      "publicCode": "PRG-ERR-MAP-004"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-004",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-005",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-006",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-007",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-IOMAP-008",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LEX-001",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LEX-002",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LEX-003",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIB-001",
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIB-002",
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIB-003",
+      "publicCode": "PRG-ERR-POU-RECURSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-001",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-002",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-003",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-004",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-005",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-006",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-007",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-008",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-LIM-009",
+      "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-OWN-001",
+      "publicCode": "PRG-ERR-OUTPUT-OWNER-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-PID-001",
+      "publicCode": "PRG-ERR-PID-REVIEW-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-001",
+      "publicCode": "PRG-ERR-POU-KIND-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-002",
+      "publicCode": "PRG-ERR-POU-KIND-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-003",
+      "publicCode": "PRG-ERR-POU-RECURSION-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-004",
+      "publicCode": "PRG-ERR-PROGRAM-LIMIT-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-POU-005",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-001",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-002",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-003",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-004",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-005",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-006",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-007",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-008",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-009",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-010",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-011",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-012",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-013",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SEM-014",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-001",
+      "publicCode": "PRG-ERR-SIGNAL-PUBLISHER-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-002",
+      "publicCode": "PRG-ERR-MAP-004"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-003",
+      "publicCode": "PRG-ERR-SIGNAL-FRESHNESS-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-004",
+      "publicCode": "PRG-ERR-SIGNAL-PUBLISHER-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SIG-005",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SYN-001",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-SYN-002",
+      "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WORKER-CRASH",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WORKER-TIMEOUT",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-ACTION-NOT-IMPLEMENTED",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-ACTIVATE-ARM",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-CONTRACT-ONLY",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001",
+      "contractOnly": true
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-DEADLINE",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-EXPECTED-ACTIVE",
+      "publicCode": "PRG-ERR-CONFLICT-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-IMPACT-NOT-READY",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-JOURNAL-FSYNC",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-OPERATION-BUSY",
+      "publicCode": "PRG-ERR-OP-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-OPERATION-NOT-FOUND",
+      "publicCode": "PRG-ERR-OP-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-PAYLOAD",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-QUEUE-FULL",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-RECOVERY-REQUIRED",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-REQUEST-ID-CONFLICT",
+      "publicCode": "PRG-ERR-OP-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-RETAIN-RESET-ARM",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-RETAIN-RESET-INSTANCE",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-RETAIN-RESET-STATE",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-RETAIN-RESET-TIMEOUT",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-RUNTIME-CONFIG",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-RUNTIME-NOT-CONFIGURED",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-RUNTIME-STATE",
+      "publicCode": "PRG-ERR-CONFLICT-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-STAGE-REJECTED",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-STAGED-TOKEN",
+      "publicCode": "PRG-ERR-OP-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-STAGING-HASH",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-STAGING-LOCATOR",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-STAGING-OPEN",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-STAGING-TYPE-SIZE",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-TRACE-REJECTED",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-TRACE-UNAVAILABLE",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "core-ipc",
+      "detailCode": "IPC-UNKNOWN-INSTANCE",
+      "publicCode": "PRG-ERR-NOT-FOUND-001"
+    },
+    {
+      "component": "retain",
+      "detailCode": "RT-RETAIN-001",
+      "publicCode": "PRG-ERR-RETAIN-001"
+    },
+    {
+      "component": "retain",
+      "detailCode": "RT-RETAIN-002",
+      "publicCode": "PRG-ERR-RETAIN-001"
+    },
+    {
+      "component": "retain",
+      "detailCode": "RT-RETAIN-003",
+      "publicCode": "PRG-ERR-RETAIN-001"
+    },
+    {
+      "component": "retain",
+      "detailCode": "RT-RETAIN-004",
+      "publicCode": "PRG-ERR-RETAIN-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-001",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-002",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-003",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-004",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-005",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-006",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-007",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-008",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-009",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-010",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-011",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-012",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "runtime",
+      "detailCode": "ST-RT-013",
+      "publicCode": "PRG-ERR-COM-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-001",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-002",
+      "publicCode": "PRG-ERR-REQ-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-003",
+      "publicCode": "PRG-ERR-TARGET-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-004",
+      "publicCode": "PRG-ERR-OP-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-005",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-006",
+      "publicCode": "PRG-ERR-ARTIFACT-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-007",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-008",
+      "publicCode": "PRG-ERR-ENABLE-NOT-COMMISSIONED-001"
+    },
+    {
+      "component": "st-control-api",
+      "detailCode": "API-E-009",
+      "publicCode": "PRG-ERR-PROGRAM-STATE-001"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-001",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-002",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-003",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-004",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-005",
+      "publicCode": "PRG-SIM-INPUT-NOT-ALLOWED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-006",
+      "publicCode": "PRG-SIM-INPUT-NOT-ALLOWED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-007",
+      "publicCode": "PRG-SIM-STALE-SESSION"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-008",
+      "publicCode": "PRG-SIM-QUOTA"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-SPAWN",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-HANDSHAKE",
+      "publicCode": "PRG-SIM-UNSUPPORTED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-TIMEOUT",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-PROTOCOL",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-CRASH",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-QUOTA",
+      "publicCode": "PRG-SIM-QUOTA"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-EXPIRED",
+      "publicCode": "PRG-SIM-EXPIRED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-CAPABILITY",
+      "publicCode": "PRG-SIM-UNSUPPORTED"
+    }
   ]
 }

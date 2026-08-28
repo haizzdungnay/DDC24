@@ -7,12 +7,11 @@ import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
 import { createUuid } from '../../../shared/crypto'
 import type { ProgrammingOperationView } from '../model/types'
-import { operationPollBudget, useOperationPolling } from '../shared/useOperationPolling'
 
 export type CommissionWorkflowState =
   | { phase: 'idle' }
   | { phase: 'submitting' }
-  | { phase: 'polling'; operationId: string }
+  | { phase: 'polling'; operationId: string; operation?: ProgrammingOperationView }
   | { phase: 'unknown'; operationId: string }
   | { phase: 'terminal'; operation: ProgrammingOperationView }
   | { phase: 'error'; message: string }
@@ -31,16 +30,12 @@ interface SubmitArgs {
  * revisionId) theo DDD-FE-PROG-001 §13 — timeout không bao giờ tạo key mới
  * hay POST lại; chỉ `GET /operations/{id}` được gọi lại.
  */
-export function useCommissionWorkflow(taskPeriodsMs?: readonly number[]) {
+export function useCommissionWorkflow() {
   const client = useProgrammingApiClient()
   const { pick } = useI18n()
   const { session, login } = useAuth()
   const [state, setState] = useState<CommissionWorkflowState>({ phase: 'idle' })
-  const submitInFlight = useRef(false)
-  const polling = useOperationPolling({
-    recoveryKey: 'programming.commission.operationId',
-    budgetMs: operationPollBudget(taskPeriodsMs)
-  })
+  const pollTimer = useRef<number | undefined>(undefined)
 
   const idempotencyKeyFor = useCallback((revisionId: string): string => {
     const storageKey = `programming.commission.idempotency.${revisionId}`
@@ -51,14 +46,38 @@ export function useCommissionWorkflow(taskPeriodsMs?: readonly number[]) {
     return created
   }, [])
 
-  // Giữ API state cũ cho caller, còn timer/recovery thuộc helper dùng chung.
-  const operationState = polling.state
+  const pollOperation = useCallback(
+    (operationId: string) => {
+      const poll = () => {
+        client.request<ProgrammingOperationView>('getProgrammingOperation', { path: { operationId } }).then(
+          (operation) => {
+            // `ROLLED_BACK` thay cho `REJECTED` cũ: enum operation state theo
+            // contracts/openapi/openapi.yaml là QUEUED/PREFLIGHT/STAGING/
+            // APPLYING/VERIFYING/SUCCEEDED/FAILED/ROLLED_BACK/UNKNOWN_RECONCILING.
+            if (operation.state === 'SUCCEEDED' || operation.state === 'ROLLED_BACK' || operation.state === 'FAILED') {
+              setState({ phase: 'terminal', operation })
+              return
+            }
+            if (operation.state === 'UNKNOWN_RECONCILING') {
+              setState({ phase: 'unknown', operationId })
+              return
+            }
+            // Giữ read-back trung gian để PGM-05 hiện đúng STAGING /
+            // ACTIVATING / VERIFYING, không suy một spinner chung thành success.
+            setState({ phase: 'polling', operationId, operation })
+            pollTimer.current = window.setTimeout(poll, 1500)
+          },
+          () => setState({ phase: 'unknown', operationId })
+        )
+      }
+      poll()
+    },
+    [client]
+  )
 
   const submit = useCallback(
     async (args: SubmitArgs, reAuthPassword: string) => {
-      if (submitInFlight.current || operationState.phase === 'polling' || operationState.phase === 'unknown') return
-      submitInFlight.current = true
-      polling.invalidate()
+      window.clearTimeout(pollTimer.current)
       setState({ phase: 'submitting' })
       try {
         // Re-auth bắt buộc trước mọi mutation mạnh (DDD-SEC-PROG-001 §4) —
@@ -87,25 +106,25 @@ export function useCommissionWorkflow(taskPeriodsMs?: readonly number[]) {
             correlationId: createUuid()
           }
         )
-        setState({ phase: 'idle' })
-        polling.start(accepted.operationId)
+        setState({ phase: 'polling', operationId: accepted.operationId })
+        pollOperation(accepted.operationId)
       } catch (reason) {
         setState({
           phase: 'error',
           message: reason instanceof ProgrammingApiError ? programmingErrorCopy(pick, reason.envelope.error.code) : pick('Không gửi được lệnh Đưa vào vận hành.', 'Could not submit the commission command.')
         })
-      } finally { submitInFlight.current = false }
+      }
     },
-    [client, idempotencyKeyFor, operationState.phase, pick, polling]
+    [client, idempotencyKeyFor, pollOperation, pick]
   )
 
   const recheckStatus = useCallback(
     (operationId: string) => {
-      polling.start(operationId)
+      setState({ phase: 'polling', operationId })
+      pollOperation(operationId)
     },
-    [polling]
+    [pollOperation]
   )
 
-  const exposedState = state.phase === 'submitting' || state.phase === 'error' ? state : operationState
-  return { state: exposedState, submit, recheckStatus, reset: () => { polling.reset(); setState({ phase: 'idle' }) } }
+  return { state, submit, recheckStatus, reset: () => setState({ phase: 'idle' }) }
 }

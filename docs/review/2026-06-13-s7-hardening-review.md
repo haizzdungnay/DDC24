@@ -384,7 +384,7 @@ PR #13 review chỉ cover **code correctness + design**. Những thứ KHÔNG n�
 - Test coverage % tổng thể (có CI check riêng)
 - Performance benchmark (chưa có board)
 - BACnet/Modbus (S7 #5/#6 — chưa implement)
-- Stateful component / state.snap (S7 #4 — xem [23_GRAPH_STATEFUL_COMPONENTS_PLAN](../03_implementation/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md))
+- Stateful component / state.snap (S7 #4 — xem [23_GRAPH_STATEFUL_COMPONENTS_PLAN](../03_implementation/archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md))
 
 ---
 

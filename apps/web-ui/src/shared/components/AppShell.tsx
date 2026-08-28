@@ -1,6 +1,12 @@
 import { Outlet, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../features/auth'
+import {
+  AlarmTone,
+  alarmSoundKey,
+  readAlarmSoundPreference,
+  shouldAnnunciate
+} from '../alarms/annunciation'
 import { apiClient } from '../api/client'
 import { IS_DEMO } from '../config'
 import { useApi } from '../hooks/useApi'
@@ -31,6 +37,48 @@ export function AppShell() {
     return () => window.removeEventListener('mkddc:alarms-updated', refresh)
   }, [alarms.refetch])
 
+  /* T57-1.5 / `ADR-034` — annunciation hai lớp.
+   *
+   * Lớp NHÌN (`annunciating`) là bắt buộc và luôn chạy được vì nó không phụ
+   * thuộc chính sách autoplay của trình duyệt. Lớp NGHE chỉ kêu khi người dùng
+   * đã bật VÀ ngữ cảnh âm thanh thật sự `running`; `AlarmTone.play()` tự bỏ qua
+   * khi chưa `running` thay vì ném lỗi vào một Promise không ai bắt.
+   *
+   * Kích hoạt theo mức TĂNG của số cảnh báo chưa xác nhận, không theo "đang có
+   * unack > 0": kêu liên tục suốt ca là cách chắc chắn nhất để người trực tắt
+   * tiếng vĩnh viễn, tức là mất hẳn lớp annunciation (ISA-18.2 alarm fatigue).
+   */
+  const unacked = alarms.data?.filter((alarm) => alarm.status === 'unack').length ?? 0
+  const previousUnackedRef = useRef(-1)
+  const toneRef = useRef<AlarmTone | null>(null)
+  const [annunciating, setAnnunciating] = useState(false)
+  const soundKey = alarmSoundKey(health.data?.deviceName ?? '', session?.username ?? '')
+
+  useEffect(() => {
+    const previous = previousUnackedRef.current
+    previousUnackedRef.current = unacked
+    if (!shouldAnnunciate(previous, unacked)) return
+    setAnnunciating(true)
+    if (readAlarmSoundPreference(soundKey)) {
+      if (!toneRef.current) toneRef.current = new AlarmTone()
+      /* `arm()` ở đây KHÔNG nằm trong một cử chỉ người dùng nên thường không
+         mở khoá được — và đó là hành vi đúng: nó chỉ đánh thức lại một ngữ
+         cảnh đã được mở khoá từ trang Hiển thị. Trạng thái thật hiện ở đó. */
+      void toneRef.current.arm().then(() => toneRef.current?.play())
+    }
+    /* Nhấp nháy có điểm dừng: một badge nháy vĩnh viễn trở thành nhiễu nền và
+       bị mắt lọc bỏ sau vài phút. */
+    const timer = window.setTimeout(() => setAnnunciating(false), 12000)
+    return () => window.clearTimeout(timer)
+  }, [unacked, soundKey])
+
+  /* Hết cảnh báo chưa xác nhận thì dừng ngay, không đợi hết 12 giây. */
+  useEffect(() => {
+    if (unacked === 0) setAnnunciating(false)
+  }, [unacked])
+
+  useEffect(() => () => { toneRef.current?.close() }, [])
+
   return (
     <div className="min-h-screen bg-[var(--c-bg)] text-[var(--c-text)]">
       {/* PA3-202 / WCAG 2.2 AA 2.4.1: thanh bên có hơn 20 liên kết. Không có
@@ -48,7 +96,7 @@ export function AppShell() {
         {/* WEB-UX-010: ngăn kéo thay cho thanh bên khi màn hình dưới 1024px. */}
         <NavDrawer open={navOpen} alarmCount={alarmCount} device={health.data} onClose={() => setNavOpen(false)} />
         <div className="min-w-0 flex-1">
-          <TopBar connectionState={connectionState} alarmCount={alarmCount} currentUser={currentUser} onOpenNav={() => setNavOpen(true)} />
+          <TopBar connectionState={connectionState} alarmCount={alarmCount} unackedCount={unacked} annunciating={annunciating} currentUser={currentUser} onOpenNav={() => setNavOpen(true)} />
           {connectionState !== 'connected' && (
             <div data-app-reconnect-banner className="sticky top-16 z-30 border-b border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-5 py-2 text-sm text-[var(--c-warn-fg)]">
               {t('reconnecting')}

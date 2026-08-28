@@ -85,6 +85,9 @@ type ImportProjectParams struct {
 	BundleSHA256         string
 	SourceProjectID      string
 	SourceRevisionID     string
+	LibraryRevisionID    string
+	LibraryVersion       string
+	LibraryEntries       []LibraryEntryImport
 	ActorID              string
 	Role                 string
 	AuditID              string
@@ -126,35 +129,73 @@ type RevisionObjectInput struct {
 	PayloadJSON []byte
 }
 
+// POUObjectInput là phần canonical tối thiểu để seal POU + library usage
+// cùng Revision v2. Mô hình Project đa Program đầy đủ thuộc T59-301;
+// store chỉ bảo đảm snapshot/pin nguyên tử tại đây.
+type POUObjectInput struct {
+	ObjectID      string
+	Kind          string
+	Name          string
+	Language      string
+	InterfaceJSON []byte
+	SourceBlob    []byte
+	Dependencies  []LibraryDependency
+}
+
+// LibraryEntryImport là entry PROJECT Library đến từ bundle NGUỒN. Nó không
+// mang content hash của bên gửi: hash được tính lại từ nội dung canonical ở phía
+// nhận, nên một bundle khai hash sai không thể "hợp thức hoá" nội dung của nó.
+type LibraryEntryImport struct {
+	EntryID       string
+	Kind          string
+	Name          string
+	Language      string
+	FeatureState  string
+	Source        []byte
+	InterfaceJSON []byte
+	Dependencies  []LibraryDependency
+	StateLayout   LibraryStateLayout
+}
+
 type CreateRevisionParams struct {
-	RevisionID           string
-	ProjectID            string
-	DraftID              string
-	ExpectedDraftETag    int64
-	ParentRevisionID     string
-	ManifestJSON         []byte
-	Objects              []RevisionObjectInput
-	ActorID              string
-	Role                 string
-	AuditID              string
-	CorrelationID        string
-	At                   time.Time
-	IdempotencyKeySHA256 [32]byte
-	RequestSHA256        [32]byte
+	RevisionID            string
+	ProjectID             string
+	DraftID               string
+	ExpectedDraftETag     int64
+	ParentRevisionID      string
+	ManifestJSON          []byte
+	Objects               []RevisionObjectInput
+	DocumentSchemaVersion int
+	ProgramCount          int
+	LibraryRevisionID     string
+	// PublishLibraryRevisionID buộc library DRAFT chuyển sang PUBLISHED trong
+	// cùng transaction, trước khi Revision pin nó.
+	PublishLibraryRevisionID string
+	POUObjects               []POUObjectInput
+	ActorID                  string
+	Role                     string
+	AuditID                  string
+	CorrelationID            string
+	At                       time.Time
+	IdempotencyKeySHA256     [32]byte
+	RequestSHA256            [32]byte
 }
 
 type Revision struct {
-	RevisionID       string
-	ProjectID        string
-	ParentRevisionID string
-	Sequence         int64
-	ManifestJSON     []byte
-	ManifestSHA256   [32]byte
-	CreatedBy        string
-	CreatedAtUTCMS   int64
-	DraftETag        int64
-	AuditID          string
-	Replay           bool
+	RevisionID            string
+	ProjectID             string
+	ParentRevisionID      string
+	Sequence              int64
+	DocumentSchemaVersion int
+	ProgramCount          int
+	LibraryRevisionID     string
+	ManifestJSON          []byte
+	ManifestSHA256        [32]byte
+	CreatedBy             string
+	CreatedAtUTCMS        int64
+	DraftETag             int64
+	AuditID               string
+	Replay                bool
 }
 
 type RevisionObject struct {
@@ -164,9 +205,26 @@ type RevisionObject struct {
 	PayloadSHA256 [32]byte
 }
 
+// RevisionPOUObject là ảnh canonical mà compiler/Check phải đọc. Nó tách khỏi
+// RevisionObject vì payload tài liệu còn mang metadata UI/programConfig, trong
+// khi bảng `pou_objects` đã được seal nguyên tử cùng dependency/version của
+// Control Library. Đọc ngược payload tài liệu rồi tự dựng dependency lần nữa sẽ
+// tạo hai nguồn sự thật và làm mất version pin.
+type RevisionPOUObject struct {
+	ObjectID      string
+	Kind          string
+	Name          string
+	Language      string
+	InterfaceJSON []byte
+	SourceBlob    []byte
+	Dependencies  []LibraryDependency
+	ContentSHA256 [32]byte
+}
+
 type RevisionSnapshot struct {
-	Revision Revision
-	Objects  []RevisionObject
+	Revision   Revision
+	Objects    []RevisionObject
+	POUObjects []RevisionPOUObject
 }
 
 type EnqueueCheckParams struct {

@@ -64,7 +64,7 @@
         "bytes": { "type": "integer", "minimum": 128, "maximum": 1048576 },
         "fileSha256": { "$ref": "#/$defs/sha256" },
         "integritySha256": { "$ref": "#/$defs/sha256" },
-        "integrityMode": { "const": "HASH_ONLY" },
+        "integrityMode": { "enum": ["HASH_ONLY", "SIGNED"] },
         "signaturePresent": { "type": "boolean" }
       }
     },

@@ -2,15 +2,29 @@
 
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <new>
 #include <utility>
 
 #include <sodium.h>
 
 #include "st/st_limits.hpp"
+#include "st/st_profile_generated.hpp"
 #include "st/st_public_key.hpp"
 
 namespace core {
+
+/* T59-607 — dịch chuỗi contract sang enum của loader.
+ *
+ * Không có nhánh mặc định "cho qua": một giá trị lạ trong profile là lỗi cấu
+ * hình nghiêm trọng, và đoán bừa `HASH_ONLY` chính là hạ mức bảo vệ mà không ai
+ * thấy. `SIGNATURE_REQUIRED` là lựa chọn an toàn duy nhất khi không đọc được. */
+StIntegrityMode st_profile_integrity_mode()
+{
+    const std::string mode = st_profile_generated::kIntegrityMode;
+    if (mode == "HASH_ONLY") return StIntegrityMode::HASH_ONLY;
+    return StIntegrityMode::SIGNATURE_REQUIRED;
+}
 namespace {
 
 uint16_t rd_u16(const uint8_t* p) { return static_cast<uint16_t>(p[0] | (p[1] << 8)); }
@@ -117,6 +131,7 @@ public:
         if (!step_io_binding()) return false;
         if (!step_retain()) return false;
         if (!step_source_map()) return false;
+        if (!step_signal_refs()) return false;
         if (!step_code()) return false;
         if (!step_profile()) return false;
         if (!step_allocate()) return false;
@@ -135,7 +150,7 @@ private:
     uint32_t total_size_ = 0;
     uint32_t slot_count_ = 0;
     uint32_t var_slot_count_ = 0;
-    SectionRef sec_[9];   /* chỉ số theo SectionType 1..8 */
+    SectionRef sec_[10];   /* chỉ số theo SectionType 1..9 */
 
     bool fail(const char* code, const std::string& msg)
     {
@@ -205,9 +220,28 @@ private:
         if (!signature_nonzero)
             return fail(st_ir_error::kBadSignature,
                         "signed flag is set but signature field is zero");
+        /* Tập khoá tin cậy (T59-602): thử lần lượt, khớp một khoá là đủ. Khoá
+         * cũ còn trong tập chính là thứ giữ cho đường rollback về LKG không bị
+         * chặn bởi chính cơ chế bảo vệ nó. */
+        if (opts_.trusted_key_count > 0) {
+            const std::size_t count = opts_.trusted_key_count < kMaxTrustedKeys
+                                          ? opts_.trusted_key_count
+                                          : kMaxTrustedKeys;
+            for (std::size_t index = 0; index < count; ++index) {
+                const uint8_t* candidate = opts_.trusted_keys[index];
+                if (candidate == nullptr) continue;
+                if (crypto_sign_verify_detached(d_ + 64, digest, 32, candidate) == 0) {
+                    std::memcpy(out_->verified_public_key, candidate, 32);
+                    return true;
+                }
+            }
+            return fail(st_ir_error::kBadSignature,
+                        "Ed25519 signature does not match any trusted key");
+        }
         const uint8_t* pk = opts_.public_key ? opts_.public_key : st_builtin_public_key();
         if (crypto_sign_verify_detached(d_ + 64, digest, 32, pk) != 0)
             return fail(st_ir_error::kBadSignature, "Ed25519 signature verification failed");
+        std::memcpy(out_->verified_public_key, pk, 32);
         return true;
     }
 
@@ -241,7 +275,7 @@ private:
             if (off < prev_end) return fail(st_ir_error::kBadSectionTable, "sections overlap");
             prev_end = off + size;
 
-            if (type >= 1 && type <= 8) {
+            if (type >= 1 && type <= 9) {
                 sec_[type] = SectionRef{type, off, size, items, true};
             } else if (type < 0x8000) {
                 return fail(st_ir_error::kBadSectionTable,
@@ -363,7 +397,12 @@ private:
             StIrFbInstance f;
             f.name = rd_fixed_string(p, 64);
             const uint16_t ft = rd_u16(p + 64);
-            if (ft < 1 || ft > 5) return fail(st_ir_error::kBadTable, "invalid FB type");
+            /* Dải hợp lệ đi theo `StFbType` (`T59-804` thêm TP/CTU/CTD = 6..8).
+             * Giữ NGƯỠNG TRÊN là một hằng đọc được thay vì số trần: loader phải
+             * từ chối một fb_type mà chính binary này chưa biết cách chạy, chứ
+             * không im lặng nhận rồi rơi vào nhánh `default`. */
+            if (ft < 1 || ft > static_cast<uint16_t>(StFbType::HYSTERESIS))
+                return fail(st_ir_error::kBadTable, "invalid FB type");
             f.fb_type = static_cast<StFbType>(ft);
             f.input_slot_base = rd_u16(p + 66);
             f.output_slot_base = rd_u16(p + 68);
@@ -553,6 +592,38 @@ private:
         return true;
     }
 
+    bool step_signal_refs()
+    {
+        const SectionRef& s = sec_[st_ir::SEC_SIGNAL_REFS];
+        if (!s.present) return true;
+        if (!check_stride(s, 72, "SIGNAL_REFS")) return false;
+        if (s.item_count > st_profile_generated::kMaxSignals)
+            return fail(st_ir_error::kResourceLimit,
+                        "Published Signal reference count exceeds limit");
+        for (uint32_t index = 0; index < s.item_count; ++index) {
+            const uint8_t* p = d_ + s.offset + index * 72u;
+            StIrSignalRef ref;
+            ref.name = rd_fixed_string(p, 64);
+            if (ref.name.empty() || !valid_type_raw(p[64]) ||
+                p[65] == 0 || (p[65] & ~3u) != 0)
+                return fail(st_ir_error::kBadTable,
+                            "Published Signal reference is invalid");
+            ref.type = static_cast<StType>(p[64]);
+            ref.read = (p[65] & 1u) != 0;
+            ref.publish = (p[65] & 2u) != 0;
+            for (int pad = 66; pad < 72; ++pad)
+                if (p[pad] != 0)
+                    return fail(st_ir_error::kBadTable,
+                                "Published Signal reference padding must be zero");
+            for (const StIrSignalRef& previous : out_->signal_refs)
+                if (previous.name == ref.name)
+                    return fail(st_ir_error::kBadTable,
+                                "duplicate Published Signal reference");
+            out_->signal_refs.push_back(std::move(ref));
+        }
+        return true;
+    }
+
     /* Bước 17-20: kiểm TOÀN BỘ luồng lệnh. Sau bước này executor không kiểm
      * biên nữa, nên ở đây không được bỏ sót trường hợp nào. */
     bool step_code()
@@ -635,6 +706,8 @@ private:
         case StOp::CVT_R2D: case StOp::CVT_R2U:
                                  *s = mk(1,1,0,0,0,0, VOID); return true;
         case StOp::FB_CALL:      *s = mk(0,0,0,0,1,0, VOID); return true;
+        case StOp::SIGNAL_READ:  *s = mk(1,0,0,0,1,0, ALL); return true;
+        case StOp::SIGNAL_PUBLISH:*s = mk(0,1,0,0,1,0, ALL); return true;
         }
         return false;
     }
@@ -679,8 +752,20 @@ private:
                             "jump target must be forward and within code (pc " +
                                 std::to_string(pc) + " -> " + std::to_string(in.imm) + ")");
         }
-        if (sh.uses_aux && in.aux >= out_->fb_instances.size())
+        if (in.op == StOp::FB_CALL && in.aux >= out_->fb_instances.size())
             return fail(st_ir_error::kBadCode, "FB instance index out of range");
+        if ((in.op == StOp::SIGNAL_READ || in.op == StOp::SIGNAL_PUBLISH) &&
+            in.aux >= out_->signal_refs.size())
+            return fail(st_ir_error::kBadCode,
+                        "Published Signal reference index out of range");
+        if (in.op == StOp::SIGNAL_READ &&
+            (!out_->signal_refs[in.aux].read || out_->signal_refs[in.aux].type != in.type))
+            return fail(st_ir_error::kBadCode,
+                        "SIGNAL_READ permission/type mismatch");
+        if (in.op == StOp::SIGNAL_PUBLISH &&
+            (!out_->signal_refs[in.aux].publish || out_->signal_refs[in.aux].type != in.type))
+            return fail(st_ir_error::kBadCode,
+                        "SIGNAL_PUBLISH permission/type mismatch");
         return true;
     }
 
@@ -717,6 +802,9 @@ private:
     {
         out_->slots.assign(slot_count_, StCell{});
         out_->fb_states.assign(out_->fb_instances.size(), StFbState{});
+        out_->pending_signal_values.assign(out_->signal_refs.size(), StCell{});
+        out_->pending_signal_writes.assign(out_->signal_refs.size(), 0);
+        out_->pending_signal_pc.assign(out_->signal_refs.size(), 0);
         /* Nạp hằng vào vùng chỉ đọc của không gian slot. */
         for (std::size_t i = 0; i < const_values_.size(); i++) {
             const std::size_t slot = var_slot_count_ + i;

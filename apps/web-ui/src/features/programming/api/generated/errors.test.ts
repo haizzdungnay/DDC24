@@ -10,8 +10,8 @@ import {
 } from "./errors";
 
 describe("Programming error catalog sinh tự động", () => {
-  it("khóa đủ 20 mã và hash", () => {
-    expect(Object.keys(PROGRAMMING_ERROR_CATALOG)).toHaveLength(20);
+  it("khóa đủ 38 mã và hash", () => {
+    expect(Object.keys(PROGRAMMING_ERROR_CATALOG)).toHaveLength(38);
     expect(PROGRAMMING_ERROR_CATALOG_SHA256).toMatch(/^[0-9a-f]{64}$/);
   });
 

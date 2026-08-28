@@ -18,6 +18,7 @@
 #define CORE_ST_SEMANTIC_HPP
 
 #include "st/st_diagnostic.hpp"
+#include "st/st_pou_registry.hpp"
 #include "st/st_program.hpp"
 
 namespace core {
@@ -26,6 +27,15 @@ namespace core {
  *         được chốt kiểu thật trong StExpr::literal.
  * false = *diag mô tả lỗi đầu tiên. */
 bool typecheck_st_program(StProgram* prog, StDiagnostic* diag);
+
+/* Registry-aware typecheck cho một tập POU đã phân giải. Khác entry legacy ở
+ * trên, đường này hiểu USER_CALL và instance FUNCTION_BLOCK người dùng; mọi
+ * producer ST/FBD cùng đi qua đúng một bảng chữ ký. */
+bool typecheck_st_pou_set(const std::vector<StPouSource>& sources,
+                          const StPouRegistryResult& registry,
+                          StDiagnostic* diag,
+                          const std::vector<StPublishedSignalContract>& signals = {},
+                          const std::string& program_identity = {});
 
 } // namespace core
 

@@ -245,6 +245,37 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 		}
 		prepared = append(prepared, preparedObject{id: object.ObjectID, kind: object.Kind, payload: payload, digest: sha256.Sum256(payload)})
 	}
+	documentSchemaVersion := params.DocumentSchemaVersion
+	if documentSchemaVersion == 0 {
+		documentSchemaVersion = 1
+	}
+	programCount := params.ProgramCount
+	if programCount == 0 {
+		programCount = 1
+	}
+	if documentSchemaVersion != 1 && documentSchemaVersion != 2 {
+		return Revision{}, fmt.Errorf("documentSchemaVersion phải là 1 hoặc 2")
+	}
+	if programCount < 1 || programCount > 32 {
+		return Revision{}, fmt.Errorf("programCount phải trong khoảng 1..32")
+	}
+	if documentSchemaVersion == 1 && (params.LibraryRevisionID != "" || len(params.POUObjects) != 0 || programCount != 1) {
+		return Revision{}, fmt.Errorf("Revision document v1 không được mang POU/library v2")
+	}
+	if params.LibraryRevisionID != "" {
+		if err := validateUUIDs(params.LibraryRevisionID); err != nil {
+			return Revision{}, err
+		}
+	}
+	preparedPOUs, err := prepareRevisionPOUObjects(params.POUObjects)
+	if err != nil {
+		return Revision{}, err
+	}
+	for _, pou := range preparedPOUs {
+		if _, exists := seen[pou.objectID]; !exists {
+			return Revision{}, fmt.Errorf("POU %s không có Revision object tương ứng", pou.objectID)
+		}
+	}
 	at := params.At.UTC().UnixMilli()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -286,8 +317,18 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 	if err := tx.QueryRowContext(ctx, `SELECT coalesce(max(sequence),0)+1 FROM revisions WHERE project_id=?`, params.ProjectID).Scan(&sequence); err != nil {
 		return Revision{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO revisions(revision_id,project_id,parent_revision_id,sequence,schema_version,target_profile,manifest_json,manifest_sha256,created_by,created_at_utc_ms) VALUES(?,?,?,?,1,'MKDDC24_REVA',?,?,?,?)`,
-		params.RevisionID, params.ProjectID, nullableString(params.ParentRevisionID), sequence, manifest, manifestDigest[:], params.ActorID, at); err != nil {
+	// Publish library CÙNG transaction với việc đóng băng Revision: Revision
+	// pin một library còn DRAFT nghĩa là pin một thứ vẫn sửa được.
+	if params.PublishLibraryRevisionID != "" {
+		if err := publishProjectLibraryTx(ctx, tx, params.PublishLibraryRevisionID); err != nil {
+			return Revision{}, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO revisions(revision_id,project_id,parent_revision_id,sequence,schema_version,target_profile,
+		manifest_json,manifest_sha256,created_by,created_at_utc_ms,document_schema_version,program_count,library_revision_id)
+		VALUES(?,?,?,?,1,'MKDDC24_REVA',?,?,?,?,?,?,?)`,
+		params.RevisionID, params.ProjectID, nullableString(params.ParentRevisionID), sequence, manifest, manifestDigest[:],
+		params.ActorID, at, documentSchemaVersion, programCount, nullableString(params.LibraryRevisionID)); err != nil {
 		return Revision{}, fmt.Errorf("insert Revision: %w", err)
 	}
 	for _, object := range prepared {
@@ -295,6 +336,10 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 			params.RevisionID, object.id, object.kind, object.payload, object.digest[:]); err != nil {
 			return Revision{}, fmt.Errorf("insert Revision object: %w", err)
 		}
+	}
+	if err := insertRevisionLibrarySnapshotTx(ctx, tx, params.RevisionID, params.ProjectID,
+		params.LibraryRevisionID, preparedPOUs); err != nil {
+		return Revision{}, err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE drafts SET base_revision_id=?,etag=etag+1,updated_by=?,updated_at_utc_ms=? WHERE draft_id=? AND etag=?`,
 		params.RevisionID, params.ActorID, at, params.DraftID, params.ExpectedDraftETag)
@@ -311,7 +356,8 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 		return Revision{}, fmt.Errorf("update Project sau khi seal Revision: %w", err)
 	}
 	draftETag := params.ExpectedDraftETag + 1
-	details, _ := json.Marshal(map[string]any{"sequence": sequence, "objectCount": len(prepared), "draftEtag": draftETag})
+	details, _ := json.Marshal(map[string]any{"sequence": sequence, "objectCount": len(prepared),
+		"pouCount": len(preparedPOUs), "libraryUsageCount": countPreparedPOUDependencies(preparedPOUs), "draftEtag": draftETag})
 	if _, err := appendAuditTx(ctx, tx, AuditInput{AuditID: params.AuditID, ActorID: params.ActorID,
 		Role: params.Role, Action: "REVISION_CREATE", TargetType: "REVISION", TargetID: params.RevisionID,
 		RevisionID: params.RevisionID, OccurredAtUTCMS: at, ResultCode: "OK",
@@ -326,7 +372,9 @@ func (s *Store) CreateRevision(ctx context.Context, params CreateRevisionParams)
 		return Revision{}, err
 	}
 	return Revision{RevisionID: params.RevisionID, ProjectID: params.ProjectID,
-		ParentRevisionID: params.ParentRevisionID, Sequence: sequence, ManifestJSON: manifest,
+		ParentRevisionID: params.ParentRevisionID, Sequence: sequence,
+		DocumentSchemaVersion: documentSchemaVersion, ProgramCount: programCount, LibraryRevisionID: params.LibraryRevisionID,
+		ManifestJSON:   manifest,
 		ManifestSHA256: manifestDigest, CreatedBy: params.ActorID, CreatedAtUTCMS: at,
 		DraftETag: draftETag, AuditID: params.AuditID}, nil
 }
@@ -468,6 +516,13 @@ func validateActorAudit(actorID, role, correlationID string, at int64) error {
 func validObjectKind(value string) bool {
 	switch value {
 	case "PROGRAM", "FUNCTION", "FUNCTION_BLOCK", "VARIABLE", "BINDING", "TASK", "METADATA":
+		return true
+	// T59-502: `SIGNAL` bị bỏ sót khỏi danh sách này từ đầu, nên `SealRevision`
+	// từ chối MỌI Revision có Published Signal. Hệ quả: toàn bộ lane signal —
+	// validate ở Check (`T59-304`), đóng gói vào container (`T59-404`), bus ở
+	// runtime — không bao giờ chạm tới một Revision thật. Lỗi này không lộ ra ở
+	// bất kỳ test nào vì chưa test nào seal một Revision có signal.
+	case "SIGNAL":
 		return true
 	default:
 		return false

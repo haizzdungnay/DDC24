@@ -75,7 +75,15 @@ constexpr std::size_t kRecordSize = kHeaderSize + kFieldsSize + 4;
 
 bool valid_phase(uint8_t raw)
 {
-    return raw <= static_cast<uint8_t>(StJournalPhase::COMMITTED);
+    /* T59-702 — trần là phase CAO NHẤT hiện có, không phải `COMMITTED`.
+     *
+     * Viết cứng `COMMITTED` làm mọi phase thêm sau đó bị đọc thành "record
+     * hỏng": journal ghi thành công nhưng lần đọc kế tiếp lại bỏ qua nó và giữ
+     * mốc cũ — một dạng mất dữ liệu im lặng, và nó đã cắn ngay ở bản ghi
+     * `RECOVERY_RESET` đầu tiên. Reader CŨ gặp phase mới vẫn fail-closed đúng
+     * như thiết kế; đó là chuyện của bản cũ, không phải lý do để bản mới tự
+     * làm hỏng bản ghi của chính nó. */
+    return raw <= static_cast<uint8_t>(StJournalPhase::RECOVERY_RESET);
 }
 
 } // namespace
@@ -88,6 +96,7 @@ const char* st_journal_phase_name(StJournalPhase phase)
     case StJournalPhase::ACTIVE_CANDIDATE: return "ACTIVE_CANDIDATE";
     case StJournalPhase::FIRST_CYCLE_OK:   return "FIRST_CYCLE_OK";
     case StJournalPhase::COMMITTED:        return "COMMITTED";
+    case StJournalPhase::RECOVERY_RESET:   return "RECOVERY_RESET";
     }
     return "?";
 }
@@ -220,6 +229,8 @@ StJournalBootAction st_journal_decide_boot_action(const StJournalReadResult& rea
         return StJournalBootAction::VERIFY_ACTIVE_THEN_FINISH_OR_LKG;
     case StJournalPhase::COMMITTED:
         return StJournalBootAction::USE_COMMITTED_ACTIVE;
+    case StJournalPhase::RECOVERY_RESET:
+        return StJournalBootAction::COLD_START_AFTER_RECOVERY_RESET;
     }
     return StJournalBootAction::NO_VALID_RECORD_RAISE_INCIDENT;
 }

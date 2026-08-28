@@ -28,7 +28,15 @@ export function ProgrammingHeader({ onRefresh, refreshing }: { onRefresh: () => 
           </p>
         )}
       </div>
-      <Button variant="secondary" size="sm" icon={<RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />} onClick={onRefresh} disabled={refreshing}>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="disabled:opacity-100"
+        icon={<RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />}
+        onClick={onRefresh}
+        disabled={refreshing}
+        aria-busy={refreshing}
+      >
         {pick('Làm mới', 'Refresh')}
       </Button>
     </header>

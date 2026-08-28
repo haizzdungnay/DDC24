@@ -1,4 +1,6 @@
 export { AuthProvider, useAuth } from './AuthProvider'
+export { LoginError, type LoginErrorKind } from './loginError'
+export { ForcePasswordChangePage } from './ForcePasswordChangePage'
 export { LoginPage, safeReturnPath } from './LoginPage'
 export { UserInfoPage } from './UserInfoPage'
 export { UsersPage } from './UsersPage'

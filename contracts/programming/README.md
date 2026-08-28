@@ -15,14 +15,15 @@ python3 scripts/generate_programming_errors.py
 python3 scripts/generate_programming_errors.py --check
 python3 scripts/verify_programming_fbd_contract.py --self-test
 python3 scripts/verify_programming_artifact_manifest.py --self-test
+python3 scripts/verify_programming_pgm02_contract.py --self-test
 ```
 
 ## Thành phần
 
 | File | Vai trò |
 |---|---|
-| `rev_a_profile_v1.json` | instance normative: Task, chu kỳ, capacity, type/width/wire code, language, Point, Core Library và integrity |
-| `rev_a_profile_v1.schema.json` | schema khóa profile `revA-1t-1-5-30` |
+| `product_profile_v2.json` | instance normative: capacity cấp package (32 Program / 16 Enabled / 256 user POU / 1024 FB instance / 512 signal / 512 binding), trần cấp một Program, chu kỳ, type/width/wire code, language, Point, Core Library và integrity |
+| `product_profile_v2.schema.json` | schema khóa profile v2; giữ token `profileId`/`profileCode`/`targetAbi` của v1 vì đó là discriminator nằm trong artifact/FBD/build manifest, chỉ rotate cùng artifact v2 |
 | `artifact_v1.schema.json` | schema manifest cho artifact nhị phân `MKDDCIR1` |
 | `artifact_build_manifest_v1.schema.json` | schema provenance strict: source/compiler/profile/library/ABI, hash file + digest integrity, build key và source map ST/FBD |
 | `golden/rev_a_ahu_fan_control.mkir` | artifact `HASH_ONLY` bất biến dùng cho byte-exact/golden/loader test |
@@ -32,13 +33,17 @@ python3 scripts/verify_programming_artifact_manifest.py --self-test
 | `golden/rev_a_ahu_fan_enable_fbd.mkir` | artifact FBD canonical mẫu dùng chung loader/runtime |
 | `golden/build_manifest_fbd_v1.json` | manifest production mẫu ánh xạ 2 PC về UUID network/node/port FBD |
 | `negative_artifact_v1.json` | mutation corpus và mã lỗi ổn định mong đợi |
-| `error_catalog_v1.json` | authority 19 mã công khai, HTTP/retry/runtime/message/args và 77 ánh xạ detail |
+| `error_catalog_v1.json` | authority 20 mã công khai, HTTP/retry/runtime/message/args và 104 ánh xạ detail |
 | `error_catalog_v1.schema.json` | schema khóa catalog major 1 |
 | `error_catalog_v1.manifest.json` | SHA-256, số đếm và ba consumer generated Go/C++/TypeScript |
 | `programming_store_v1.manifest.json` | schema version/checksum, đường dẫn, PRAGMA, single-writer, immutable entity và feature flag của SQLite store |
 | `source_bundle_v1.schema.json` | manifest trong ZIP source-only deterministic; importer chỉ nhận path UTF-8 NFC, file regular không executable, metadata ZIP cố định và luôn tạo Project/Draft mới |
-| `g1_contract_join_v1.json` | manifest join G1 khóa hash/major của OpenAPI, IPC, profile, artifact, error, store cùng thứ tự deploy/rollback và flag OFF |
-| `fbd_v1.schema.json` | schema canonical của graph/network/node/port/wire FBD Rev A |
+| `g1_contract_join_v1.json` | manifest join G1 khóa hash/major/số đếm của OpenAPI, IPC, profile, artifact, error, store, source bundle cùng chuỗi migration, thứ tự deploy/rollback và flag OFF |
+| `pou_library_registry_v1.json` | **nguồn duy nhất** của Control Library SYSTEM: 40 entry (15 operator, 20 kFuncs, 5 FB), port/kiểu/nhãn/`featureState`; palette FE và allowlist FBD của Core đều sinh từ đây |
+| `pou_library_registry_v1.schema.json` | schema registry; `dispatch` khai compiler nhận diện entry ở đâu nên entry không có đường dispatch thật bị từ chối |
+| `pgm02_workspace_v1.json` | candidate máy đọc được của `PGM02-V22-WP-00`: khóa route, identity Draft/Active/runtime, typed EDIT/refactor/reference/diagnostic, Quick Library, LIVE read-only, Simulation admin-only không có quyền output và ngân sách NFR; chưa phải baseline đã được Architect pin |
+| `pgm02_workspace_v1.schema.json` | schema fail-closed của candidate PGM-02; cố ý giữ `IMPLEMENT_READY[R1/R2/R3]=NO_GO` tới khi Owner + System Architect pin đúng revision/hash |
+| `fbd_v1.schema.json` | schema canonical của graph/network/node/port/wire FBD |
 | `fbd_keyboard_commands_v1.json` | registry 11 command/shortcut keyboard-first và giới hạn undo/redo |
 | `fbd/golden/ahu_fan_enable.json` | graph mẫu hợp lệ dùng chung cho Core và FE |
 | `fbd/equivalence_v1.json` | 20 cặp operator ST↔FBD cùng vector output chuẩn cho common typed IR |

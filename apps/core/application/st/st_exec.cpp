@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "st/st_diagnostic.hpp"
+#include "st/st_signal_bus.hpp"
 
 namespace core {
 namespace {
@@ -46,10 +48,12 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
 
     uint32_t pc = 0;
     const char* fault_code = nullptr;
+    bool waiting = false;
 
 /* Thoát fault: ghi mã + pc, tra vị trí ST rồi trả false. Dùng macro để không
  * phải nhân bản 20 lần cùng một khối thoát trong vòng thực thi. */
 #define ST_FAULT(codestr)  do { fault_code = (codestr); goto faulted; } while (0)
+#define ST_WAIT(codestr)   do { waiting = true; fault_code = (codestr); goto faulted; } while (0)
 
     while (pc < n) {
         const StInstr& in = code[pc];
@@ -66,6 +70,36 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
         case StOp::MOV:
             /* Sao chép nguyên ô 8 byte: đúng với mọi kiểu, một lệnh. */
             S[in.dst] = S[in.a];
+            pc++;
+            break;
+
+        case StOp::SIGNAL_READ: {
+            const StIrSignalRef& ref = prog->signal_refs[in.aux];
+            if (prog->signal_bus == nullptr || ref.runtime_index < 0)
+                ST_FAULT(st_diag_code::kRtSignalPublish);
+            const StSignalRead read =
+                prog->signal_bus->read(ref.runtime_index, static_cast<uint64_t>(now_ns));
+            if (read.state == StSignalReadState::UNAVAILABLE)
+                ST_WAIT(st_diag_code::kRtSignalWait);
+            if (read.state == StSignalReadState::NOT_DECLARED)
+                ST_FAULT(st_diag_code::kRtSignalContract);
+            /* HOLD_PRIVATE: stale giữ nguyên biến đích. Compiler bảo đảm
+             * SIGNAL_READ chỉ xuất hiện ở RHS trực tiếp và dst chính là biến
+             * người dùng, không phải temp bị MOV tiếp sau đó. */
+            if (read.state != StSignalReadState::STALE_HELD)
+                S[in.dst] = read.value;
+            pc++;
+            break;
+        }
+
+        case StOp::SIGNAL_PUBLISH:
+            if (in.aux >= prog->pending_signal_values.size() ||
+                in.aux >= prog->pending_signal_writes.size() ||
+                in.aux >= prog->pending_signal_pc.size())
+                ST_FAULT(st_diag_code::kRtSignalPublish);
+            prog->pending_signal_values[in.aux] = S[in.a];
+            prog->pending_signal_writes[in.aux] = 1;
+            prog->pending_signal_pc[in.aux] = pc;
             pc++;
             break;
 
@@ -415,6 +449,88 @@ bool execute_st_program(StLoadedProgram* prog, int64_t now_ns, StExecFault* faul
                 st.prev_clk = clk;
                 break;
             }
+            case StFbType::TP: {
+                /* Xung có độ dài BIẾT TRƯỚC (§7A.2): sườn lên khởi động, và
+                 * sườn lên giữa xung bị BỎ QUA — đó là toàn bộ khác biệt so với
+                 * TON. Cho retrigger nghĩa là xung dài ra theo tín hiệu, tức là
+                 * đúng thứ người dùng chọn TP để tránh. */
+                const bool input = ins[0].b;
+                const int64_t pt = ins[1].t;
+                if (!st.timing && input && !st.prev_in) {
+                    st.timing = true;
+                    st.start_ns = now_ns;
+                }
+                if (st.timing) {
+                    int64_t elapsed = now_ns - st.start_ns;
+                    if (elapsed < 0) elapsed = 0;
+                    if (elapsed >= pt) {
+                        st.timing = false;
+                        outs[0].b = false;
+                        /* ET giữ PT chừng nào IN còn TRUE rồi mới về 0: nhảy về
+                         * 0 ngay khi hết xung làm logic đọc ET không phân biệt
+                         * được "chưa chạy" với "vừa chạy xong". */
+                        outs[1].t = input ? pt : 0;
+                    } else {
+                        outs[0].b = true;
+                        outs[1].t = elapsed;
+                    }
+                } else {
+                    outs[0].b = false;
+                    outs[1].t = input ? pt : 0;
+                }
+                st.prev_in = input;
+                st.q = outs[0].b;
+                break;
+            }
+            case StFbType::CTU: {
+                /* §7A.3 — RESET thắng sườn đếm trong cùng cycle, và CV BÃO HOÀ
+                 * chứ không quấn vòng: quấn vòng biến một bộ đếm giờ chạy thành
+                 * số âm sau 32767 lần mà không ai thấy. */
+                const bool clk = ins[0].b;
+                const bool reset = ins[1].b;
+                const int32_t preset = ins[2].i;
+                if (reset) {
+                    st.counter = 0;
+                } else if (clk && !st.prev_clk && st.counter < INT16_MAX) {
+                    st.counter += 1;
+                }
+                st.prev_clk = clk;
+                outs[1].i = st.counter;
+                outs[0].b = st.counter >= preset;
+                st.q = outs[0].b;
+                break;
+            }
+            case StFbType::CTD: {
+                const bool clk = ins[0].b;
+                const bool load = ins[1].b;
+                const int32_t preset = ins[2].i;
+                if (load) {
+                    st.counter = preset;
+                } else if (clk && !st.prev_clk && st.counter > INT16_MIN) {
+                    st.counter -= 1;
+                }
+                st.prev_clk = clk;
+                outs[1].i = st.counter;
+                outs[0].b = st.counter <= 0;
+                st.q = outs[0].b;
+                break;
+            }
+            case StFbType::HYSTERESIS: {
+                /* §7A.7 — trong dải LOW..HIGH thì GIỮ NGUYÊN chu kỳ trước; đó
+                 * là toàn bộ lý do nó là FB chứ không phải hàm thuần. */
+                const float value = ins[0].r;
+                const float high = ins[1].r;
+                const float low = ins[2].r;
+                if (!std::isfinite(value) || !std::isfinite(high) || !std::isfinite(low))
+                    ST_FAULT(st_diag_code::kRtNonFiniteReal);
+                /* Dải trễ đảo ngược không có nghĩa vật lý; đoán ý người khai sẽ
+                 * tạo ra một bộ điều khiển bật/tắt liên tục ở đúng ngưỡng. */
+                if (!(low < high)) ST_FAULT(st_diag_code::kRtLimitMinMax);
+                if (value >= high) st.q = true;
+                else if (value <= low) st.q = false;
+                outs[0].b = st.q;
+                break;
+            }
             case StFbType::PID: {
                 /* DDD-CTRL-PROG-001 §7. ins[]: SP,PV,KP,KI,KD,OUT_MIN,
                  * OUT_MAX,ACTUAL. Không publish (fault huỷ cả cycle) nếu
@@ -482,7 +598,8 @@ done:
 
 faulted:
     if (fault) {
-        fault->faulted = true;
+        fault->faulted = !waiting;
+        fault->waiting = waiting;
         fault->code = fault_code;
         fault->pc = pc;
         prog->source_position(pc, &fault->line, &fault->column);
@@ -490,6 +607,7 @@ faulted:
     return false;
 
 #undef ST_FAULT
+#undef ST_WAIT
 }
 
 } // namespace core

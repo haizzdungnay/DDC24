@@ -56,6 +56,15 @@ constexpr const char* kRtPidInvalidDt    = "ST-RT-009";
 /* TASK-PROG-304: Task overrun ngân sách 3 lần liên tiếp (OD-PROG-012).
  * Chuyển đúng TASK đó FAULT, không phải lỗi của riêng một Program. */
 constexpr const char* kRtTaskOverrun     = "ST-RT-010";
+/* Published Signal WAIT/unavailable là trạng thái có thể phục hồi, không làm
+ * Program FAULTED. Publish bị từ chối sau khi package đã bind là lỗi runtime
+ * contract và phải fail-closed cả chu kỳ. */
+constexpr const char* kRtSignalWait      = "ST-RT-011";
+constexpr const char* kRtSignalPublish   = "ST-RT-012";
+/* Ref đã bind nhưng runtime bank không còn khai báo tương ứng là contract drift,
+ * không phải tình trạng dữ liệu tạm thời. Chờ sẽ tạo vòng WAIT vô hạn nên phải
+ * fault fail-closed để operator thấy lỗi package/runtime. */
+constexpr const char* kRtSignalContract  = "ST-RT-013";
 
 /* Vượt giới hạn tài nguyên (st_limits.hpp). Tách riêng khỏi ST-SYN-* để BE
  * phân biệt được "chương trình sai" với "chương trình quá lớn" — hai hành
@@ -70,6 +79,9 @@ constexpr const char* kIdentifierTooLong  = "ST-LIM-005";
 constexpr const char* kDiagnosticsTruncated = "ST-LIM-006";
 constexpr const char* kTooManyFbInstances   = "ST-LIM-007";
 constexpr const char* kTooManyRetainVars    = "ST-LIM-008";
+/* T59-006: số Program trong package vượt trần profile (32). Tách khỏi
+ * ST-LIM-003/004 vì đây là trần cấp PACKAGE, không phải cấp Program. */
+constexpr const char* kTooManyPrograms      = "ST-LIM-009";
 
 /* IO map validation (st_io_map.hpp) */
 constexpr const char* kIoMapUnknownVar      = "ST-IOMAP-001";
@@ -84,6 +96,43 @@ constexpr const char* kIoMapDuplicateBinding = "ST-IOMAP-007";
  * hiện chỉ LOCAL được hỗ trợ. Tách khỏi ST-IOMAP-004 (identity sai format)
  * vì đây là "đúng nhưng chưa hỗ trợ", không phải "sai cú pháp". */
 constexpr const char* kIoMapUnsupportedCategory = "ST-IOMAP-008";
+
+/* ---- T59-004: họ mã cho POU, Control Library, Published Signal, output owner
+ * và PID review.
+ *
+ * Contract đi trước consumer (Plan 59 §1.2 quy tắc 1): các hằng này là bảng liệt
+ * kê dùng chung, được ghim vào catalog ngay ở W0 để mọi emitter thêm sau ở
+ * W1..W4 không thể xuất hiện mà thiếu ánh xạ public code. Generator kiểm HAI
+ * CHIỀU: mã có trong source mà thiếu trong catalog -> build fail; mã có trong
+ * catalog mà không emitter nào khai -> build fail. */
+
+/* POU: quy tắc kind/purity/recursion/state (DDD §0, §6). */
+constexpr const char* kPouSignatureInvalid   = "ST-POU-001";
+constexpr const char* kPouFunctionNotPure    = "ST-POU-002";
+constexpr const char* kPouRecursion          = "ST-POU-003";
+constexpr const char* kPouInstanceLayout     = "ST-POU-004";
+/* PROGRAM POU tồn tại trong Revision nhưng chưa có programConfig/chu kỳ chạy.
+ * Draft được phép giữ trạng thái này; Check/packager phải fail-closed, không tự
+ * gán chu kỳ 1000 ms hay âm thầm loại POU khỏi package. */
+constexpr const char* kPouScheduleMissing    = "ST-POU-005";
+
+/* Control Library: resolve/version/dependency (DDD §0, §6). */
+constexpr const char* kLibraryEntryMissing   = "ST-LIB-001";
+constexpr const char* kLibraryVersionDrift   = "ST-LIB-002";
+constexpr const char* kLibraryDependencyCycle = "ST-LIB-003";
+
+/* Published Signal: publisher/type/freshness (DDD §4.5, §7.3). */
+constexpr const char* kSignalDuplicatePublisher = "ST-SIG-001";
+constexpr const char* kSignalTypeMismatch       = "ST-SIG-002";
+constexpr const char* kSignalFreshnessRange     = "ST-SIG-003";
+constexpr const char* kSignalConsumerMissing    = "ST-SIG-004";
+constexpr const char* kSignalReadContext        = "ST-SIG-005";
+
+/* Output ownership: một binding output chỉ có một Program owner (DDD §4.6). */
+constexpr const char* kOutputOwnerConflict   = "ST-OWN-001";
+
+/* PID chỉ dùng được khi có approval token Controls/Safety (DDD §9). */
+constexpr const char* kPidApprovalMissing    = "ST-PID-001";
 } // namespace st_diag_code
 
 struct StDiagnostic {

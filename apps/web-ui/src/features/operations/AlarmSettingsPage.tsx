@@ -1,13 +1,16 @@
 import { BellRing, Plus, RefreshCw, Save, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlarmRuleSimulation } from './AlarmRuleSimulation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
+import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Panel } from '../../shared/components/Panel'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
+import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
 import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType, SeverityRule, VirtualPoint } from '../../shared/types'
 import { cn } from '../../shared/utils'
@@ -25,15 +28,43 @@ const severities: SeverityRule['severity'][] = ['critical', 'high', 'medium', 'l
 const severityOps: SeverityRule['op'][] = ['>=', '<=']
 const sourceKinds: AlarmSourceKind[] = ['UI', 'AO', 'DO', 'VP']
 
-const alarmTypeLabels: Record<AlarmType, string> = {
-  0: '0 - Disabled',
-  1: '1 - High/Low input',
-  2: '2 - Setpoint deviation',
-  3: '3 - Runtime hours',
-  4: '4 - Fan state supervision',
-  5: '5 - Digital output supervision',
-  6: '6 - Analog output supervision',
-  7: '7 - PI-sequence supervision'
+/**
+ * Nhãn loại cảnh báo — `T57-2.14`.
+ *
+ * Trước đây bảng này chỉ có tiếng Anh (`1 - High/Low input`) trong khi nhãn
+ * trường xung quanh nó là tiếng Việt. Người vận hành đọc một form nửa Việt nửa
+ * Anh phải dịch nhẩm giữa hai ngôn ngữ ngay lúc đang đặt ngưỡng an toàn — đúng
+ * chỗ không được phép đoán. Giữ SỐ loại vì đó là mã hợp đồng với backend và là
+ * thứ xuất hiện trong log, nhưng phần mô tả đi theo ngôn ngữ đang chọn.
+ */
+function priorityGloss(priority: AlarmPriority, pick: PickText): string {
+  if (priority === 'low') return pick('theo dõi, không cần xử lý ngay', 'monitor only, no immediate action')
+  if (priority === 'medium') return pick('xử lý trong ca', 'handle within the shift')
+  if (priority === 'high') return pick('xử lý ngay', 'act now')
+  if (priority === 'critical') return pick('nguy cấp, dừng việc khác để xử lý', 'critical, drop everything else')
+  return pick('mức tuỳ theo luật bên dưới', 'level decided by the rules below')
+}
+
+function severityGloss(severity: SeverityRule['severity'], pick: PickText): string {
+  if (severity === 'critical') return pick('nguy cấp', 'critical')
+  if (severity === 'high') return pick('cao', 'high')
+  if (severity === 'medium') return pick('trung bình', 'medium')
+  if (severity === 'low') return pick('thấp', 'low')
+  return pick('chỉ để biết', 'informational')
+}
+
+function alarmTypeLabel(type: AlarmType, pick: PickText): string {
+  const names: Record<AlarmType, string> = {
+    0: pick('Tắt', 'Disabled'),
+    1: pick('Ngưỡng cao/thấp của ngõ vào', 'High/low input'),
+    2: pick('Lệch khỏi giá trị đặt', 'Setpoint deviation'),
+    3: pick('Số giờ chạy tích luỹ', 'Runtime hours'),
+    4: pick('Giám sát trạng thái quạt', 'Fan state supervision'),
+    5: pick('Giám sát ngõ ra số', 'Digital output supervision'),
+    6: pick('Giám sát ngõ ra analog', 'Analog output supervision'),
+    7: pick('Giám sát chuỗi PI', 'PI-sequence supervision')
+  }
+  return `${type} - ${names[type]}`
 }
 
 const inputClass = 'h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)] disabled:cursor-not-allowed disabled:opacity-60'
@@ -51,6 +82,10 @@ export function AlarmSettingsPage() {
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [rows, setRows] = useState<AlarmSetting[]>([])
+  /* F-UX-12 (`REV-FE-UIUX-UC-2026-08-18`): bản chụp cấu hình cảnh báo mà backend
+   * đang giữ. Không có mốc này thì không có cách nào biết bảng đang gõ dở khác
+   * bảng đã lưu — và trang mất sạch bản nháp khi bấm một mục menu khác. */
+  const [savedRows, setSavedRows] = useState<AlarmSetting[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -66,7 +101,9 @@ export function AlarmSettingsPage() {
       .then(([items, virtualItems]) => {
         if (!active) return
         setVirtualPoints(virtualItems)
-        setRows(items.map((item) => normalizeLoadedAlarm(item, virtualItems)))
+        const loaded = items.map((item) => normalizeLoadedAlarm(item, virtualItems))
+        setRows(loaded)
+        setSavedRows(loaded)
         setLoadError('')
       })
       .catch((error) => {
@@ -120,6 +157,8 @@ export function AlarmSettingsPage() {
   const selected = rows[selectedIndex]
   const issues = useMemo(() => validateAlarms(rows, pick, virtualPoints), [rows, pick, virtualPoints])
   const selectedIssues = issues.filter((issue) => issue.rowIndex === selectedIndex)
+  const dirty = useMemo(() => JSON.stringify(rows) !== JSON.stringify(savedRows), [rows, savedRows])
+  const dirtyGuard = useDirtyGuard(dirty)
   const enabledCount = rows.filter((row) => row.enabled).length
   const publishedCount = rows.filter((row) => row.enabled && row.publishBacnet).length
   const hasErrors = issues.length > 0
@@ -174,9 +213,11 @@ export function AlarmSettingsPage() {
     try {
       const [items, virtualItems] = await Promise.all([apiClient.getAlarmSettings(), apiClient.getVirtualPoints()])
       setVirtualPoints(virtualItems)
-      setRows(items.map((item) => normalizeLoadedAlarm(item, virtualItems)))
+      const loaded = items.map((item) => normalizeLoadedAlarm(item, virtualItems))
+      setRows(loaded)
+      setSavedRows(loaded)
       setLoadError('')
-      setStatusMessage(pick('Da tai lai tu backend.', 'Reloaded from backend.'))
+      setStatusMessage(pick('Đã tải lại từ backend.', 'Reloaded from backend.'))
     } catch (error) {
       const message = errorMessage(error)
       setLoadError(message)
@@ -186,11 +227,13 @@ export function AlarmSettingsPage() {
     }
   }
 
-  async function saveSettings() {
+  /* Trả `true` chỉ khi backend đã nhận — `DirtyGuardModal` dùng giá trị này để
+   * quyết định có rời trang hay không (F-UX-12). */
+  async function saveSettings(): Promise<boolean> {
     const saveIssues = validateAlarms(rows, pick, virtualPoints)
     if (saveIssues.length > 0) {
       toast.push('error', saveIssues[0].message)
-      return
+      return false
     }
     const payload = rows.map((row) => normalizeForSave(row, virtualPoints))
     setSaving(true)
@@ -198,13 +241,17 @@ export function AlarmSettingsPage() {
       const result = await apiClient.putAlarmSettings(payload)
       const [fresh, virtualItems] = await Promise.all([apiClient.getAlarmSettings(), apiClient.getVirtualPoints()])
       setVirtualPoints(virtualItems)
-      setRows(fresh.map((item) => normalizeLoadedAlarm(item, virtualItems)))
+      const loaded = fresh.map((item) => normalizeLoadedAlarm(item, virtualItems))
+      setRows(loaded)
+      setSavedRows(loaded)
       setStatusMessage(`${t('alarmSettingsSaved')} (${result.reload})`)
       toast.push('success', t('alarmSettingsSaved'))
+      return true
     } catch (error) {
       const message = errorMessage(error)
       setStatusMessage(message)
       toast.push('error', `${t('alarmSettingsSaveError')}: ${message}`)
+      return false
     } finally {
       setSaving(false)
     }
@@ -234,7 +281,7 @@ export function AlarmSettingsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button icon={<RefreshCw className="h-4 w-4" />} loading={loading} onClick={() => void reloadSettings()}>
-            {pick('Tai lai', 'Reload')}
+            {pick('Tải lại', 'Reload')}
           </Button>
           <Button variant="primary" icon={<Save className="h-4 w-4" />} loading={saving} disabled={loading || hasErrors} onClick={() => void saveSettings()}>
             {t('save')}
@@ -263,8 +310,8 @@ export function AlarmSettingsPage() {
               >
                 <BellRing className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold">{row.id || pick('Chua co ID', 'Missing ID')}</span>
-                  <span className="block truncate text-xs">{row.label || alarmTypeLabels[row.alarmType]}</span>
+                  <span className="block truncate font-semibold">{row.id || pick('Chưa có ID', 'Missing ID')}</span>
+                  <span className="block truncate text-xs">{row.label || alarmTypeLabel(row.alarmType, pick)}</span>
                 </span>
                 <StatusBadge state={row.enabled ? 'online' : 'inactive'} label={row.enabled ? 'ON' : 'OFF'} />
               </button>
@@ -275,9 +322,9 @@ export function AlarmSettingsPage() {
         </Panel>
 
         <Panel
-          title={selected ? `${selected.id || 'ALM'} - ${selected.label || alarmTypeLabels[selected.alarmType]}` : t('empty')}
-          subtitle={selected ? alarmTypeLabels[selected.alarmType] : undefined}
-          action={selected && <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={removeSelected}>{pick('Xoa', 'Remove')}</Button>}
+          title={selected ? `${selected.id || 'ALM'} - ${selected.label || alarmTypeLabel(selected.alarmType, pick)}` : t('empty')}
+          subtitle={selected ? alarmTypeLabel(selected.alarmType, pick) : undefined}
+          action={selected && <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={removeSelected}>{pick('Xoá', 'Remove')}</Button>}
         >
           {selected ? (
             <AlarmEditor
@@ -294,17 +341,20 @@ export function AlarmSettingsPage() {
               onSourceRemove={(sourceIndex) => removeSource(selectedIndex, sourceIndex)}
             />
           ) : (
-            <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Them alarm dau tien de cau hinh.', 'Add the first alarm to configure settings.')}</div>
+            <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-4 text-sm text-[var(--c-text-dim)]">{pick('Thêm cảnh báo đầu tiên để cấu hình.', 'Add the first alarm to configure settings.')}</div>
           )}
         </Panel>
       </div>
 
-      <Panel title={pick('Trang thai cau hinh', 'Configuration status')}>
+      <Panel title={pick('Trạng thái cấu hình', 'Configuration status')}>
         <div className="flex flex-wrap gap-3">
-          <StatusBadge state={loadError ? 'fault' : 'online'} label={loadError ? 'LOAD ERROR' : 'API'} />
-          <StatusBadge state={hasErrors ? 'warning' : 'online'} label={hasErrors ? `${issues.length} VALIDATION` : 'VALID'} />
-          <StatusBadge state="online" label={`${enabledCount} ENABLED`} />
-          <StatusBadge state={publishedCount > maxBacnetPublished ? 'critical' : 'online'} label={`${publishedCount}/${maxBacnetPublished} BACNET`} />
+          {/* `T57-2.14`: bốn chip này là câu trả lời cho "cấu hình hiện ra sao",
+              không phải từ vựng trạng thái dùng chung với HMI — nên chúng nói
+              tiếng của người đọc, chỉ giữ nguyên "BACnet" (tên giao thức). */}
+          <StatusBadge state={loadError ? 'fault' : 'online'} label={loadError ? pick('LỖI TẢI', 'LOAD ERROR') : pick('ĐÃ TẢI', 'LOADED')} />
+          <StatusBadge state={hasErrors ? 'warning' : 'online'} label={hasErrors ? pick(`${issues.length} LỖI CẤU HÌNH`, `${issues.length} INVALID`) : pick('HỢP LỆ', 'VALID')} />
+          <StatusBadge state="online" label={pick(`${enabledCount} ĐANG BẬT`, `${enabledCount} ENABLED`)} />
+          <StatusBadge state={publishedCount > maxBacnetPublished ? 'critical' : 'online'} label={`${publishedCount}/${maxBacnetPublished} BACnet`} />
         </div>
         {(statusMessage || issues.length > 0) && (
           <div className="mt-3 space-y-1 text-sm text-[var(--c-text-dim)]">
@@ -313,6 +363,17 @@ export function AlarmSettingsPage() {
           </div>
         )}
       </Panel>
+      <DirtyGuardModal
+        guard={dirtyGuard}
+        saving={saving}
+        title={pick('Cấu hình cảnh báo chưa lưu', 'Unsaved alarm settings')}
+        message={pick(
+          'Bạn có thay đổi cấu hình cảnh báo chưa lưu. Rời trang sẽ mất các thay đổi này trừ khi lưu trước.',
+          'You have unsaved alarm setting changes. Leaving this page will discard them unless you save first.'
+        )}
+        onSave={saveSettings}
+        onDiscard={() => setRows(savedRows)}
+      />
     </div>
   )
 }
@@ -354,33 +415,54 @@ function AlarmEditor({
 
       <section className="grid gap-4 md:grid-cols-2">
         <TextField label="ID" value={row.id} onChange={(id) => onChange({ id })} />
-        <TextField label={pick('Nhan', 'Label')} value={row.label} onChange={(label) => onChange({ label })} />
-        <SelectField label={pick('Loai alarm', 'Alarm type')} value={String(row.alarmType)} onChange={(value) => onTypeChange(Number(value) as AlarmType)}>
-          {activeAlarmTypes.map((type) => <option key={type} value={type}>{alarmTypeLabels[type]}</option>)}
-          <optgroup label={pick('Deferred - chua ho tro enabled', 'Deferred - not enabled yet')}>
-            {deferredAlarmTypes.map((type) => <option key={type} value={type} disabled>{alarmTypeLabels[type]}</option>)}
+        <TextField label={pick('Nhãn', 'Label')} value={row.label} onChange={(label) => onChange({ label })} />
+        <SelectField label={pick('Loại cảnh báo', 'Alarm type')} value={String(row.alarmType)} onChange={(value) => onTypeChange(Number(value) as AlarmType)}>
+          {activeAlarmTypes.map((type) => <option key={type} value={type}>{alarmTypeLabel(type, pick)}</option>)}
+          <optgroup label={pick('Chưa hỗ trợ — không bật được', 'Not supported yet — cannot be enabled')}>
+            {deferredAlarmTypes.map((type) => <option key={type} value={type} disabled>{alarmTypeLabel(type, pick)}</option>)}
           </optgroup>
         </SelectField>
-        <SelectField label={pick('Muc uu tien', 'Priority')} value={row.priority} onChange={(priority) => onChange({ priority: priority as AlarmPriority })}>
-          {priorities.map((priority) => <option key={priority} value={priority}>{priority.toUpperCase()}</option>)}
+        {/* `T57-2.14`: mã trạng thái viết hoa (`HIGH`, `CRITICAL`) là TỪ VỰNG
+            DÙNG CHUNG với nhật ký cảnh báo và với HMI tại tủ — `UX-SYSTEM-001`
+            §1.5 buộc ba bề mặt nói cùng một chữ, nên không dịch. Phần giải
+            nghĩa đi kèm ngay trong cùng dòng để người vận hành không phải học
+            thuộc bảng mã. */}
+        <SelectField label={pick('Mức ưu tiên', 'Priority')} value={row.priority} onChange={(priority) => onChange({ priority: priority as AlarmPriority })}>
+          {priorities.map((priority) => <option key={priority} value={priority}>{`${priority.toUpperCase()} · ${priorityGloss(priority, pick)}`}</option>)}
         </SelectField>
-        <SelectField label={pick('Che do clear', 'Clear mode')} value={getClearMode(row)} onChange={(clearMode) => onChange({ clearMode: clearMode as AlarmClearMode })}>
-          {clearModes.map((mode) => <option key={mode} value={mode}>{mode === 'auto' ? pick('Auto', 'Auto') : pick('Manual', 'Manual')}</option>)}
+        <SelectField
+          label={pick('Cách xoá cảnh báo', 'Clear mode')}
+          value={getClearMode(row)}
+          onChange={(clearMode) => onChange({ clearMode: clearMode as AlarmClearMode })}
+        >
+          {clearModes.map((mode) => (
+            <option key={mode} value={mode}>
+              {mode === 'auto'
+                ? pick('Tự xoá khi điều kiện hết', 'Clears automatically when the condition ends')
+                : pick('Người vận hành phải xác nhận', 'An operator must acknowledge it')}
+            </option>
+          ))}
         </SelectField>
-        <NumberField label="Delay (s)" min={0} value={row.delayS} onChange={(delayS) => onChange({ delayS })} />
+        <NumberField
+          label={pick('Trễ kích hoạt (giây)', 'Activation delay (s)')}
+          hint={pick('Điều kiện phải giữ liên tục đủ số giây này thì cảnh báo mới bật.', 'The condition must hold this long before the alarm raises.')}
+          min={0}
+          value={row.delayS}
+          onChange={(delayS) => onChange({ delayS })}
+        />
         <label className="flex items-end gap-2 pb-3 text-sm font-semibold text-[var(--c-text)]">
           <input className={checkboxClass} type="checkbox" checked={row.enabled} disabled={deferred} onChange={(event) => onChange({ enabled: event.target.checked })} />
-          {pick('Bat alarm', 'Enabled')}
+          {pick('Bật cảnh báo', 'Enabled')}
         </label>
       </section>
 
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Nguon kich hoat', 'Sources')}</h3>
-            <p className="text-xs text-[var(--c-text-dim)]">{pick('Entity OR qua tat ca source; pointId tu suy tu kind/channel.', 'Entity OR across sources; pointId is derived from kind/channel.')}</p>
+            <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Nguồn kích hoạt', 'Sources')}</h3>
+            <p className="text-xs text-[var(--c-text-dim)]">{pick('Cảnh báo bật khi BẤT KỲ nguồn nào thoả điều kiện. Mã điểm được suy ra từ loại nguồn và số kênh.', 'The alarm raises when ANY source meets the condition. The point ID is derived from the source kind and channel.')}</p>
           </div>
-          <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={row.sources.length >= maxSourcesPerAlarm} onClick={onSourceAdd}>{pick('Them source', 'Add source')}</Button>
+          <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={row.sources.length >= maxSourcesPerAlarm} onClick={onSourceAdd}>{pick('Thêm nguồn', 'Add source')}</Button>
         </div>
         <div className="space-y-2">
           {row.sources.map((source, sourceIndex) => (
@@ -392,17 +474,22 @@ function AlarmEditor({
               onRemove={() => onSourceRemove(sourceIndex)}
             />
           ))}
-          {row.sources.length === 0 && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{pick('Chua co source.', 'No sources yet.')}</div>}
+          {row.sources.length === 0 && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{pick('Chưa có nguồn.', 'No sources yet.')}</div>}
         </div>
       </section>
 
       <section className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
         <div className="mb-3 flex items-center gap-2">
           <SlidersHorizontal className="h-4 w-4 text-[var(--c-accent)]" aria-hidden="true" />
-          <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Tham so', 'Parameters')}</h3>
+          <h3 className="text-sm font-semibold text-[var(--c-text)]">{pick('Tham số', 'Parameters')}</h3>
         </div>
         <AlarmParamsEditor row={row} onChange={onParamsChange} />
       </section>
+
+      {/* `T57-2.13`: bốn tham số ngưỡng tương tác với nhau, và kết quả của một
+          tổ hợp chỉ lộ ra khi giá trị thật đi qua ngưỡng — tức là sau khi cấu
+          hình đã ở trên thiết bị. Ô thử này rút vòng lặp đó về vài giây. */}
+      <AlarmRuleSimulation setting={row} />
 
       <section className="grid gap-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4 md:grid-cols-[minmax(0,1fr)_180px]">
         <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]">
@@ -412,15 +499,26 @@ function AlarmEditor({
             checked={Boolean(row.publishBacnet)}
             onChange={(event) => onChange({ publishBacnet: event.target.checked, notificationClass: event.target.checked ? row.notificationClass ?? 1 : undefined })}
           />
-          {pick('Publish BACnet Event Enrollment', 'Publish BACnet Event Enrollment')}
+          {/* Tên đối tượng BACnet giữ nguyên: nó là tên riêng trong chuẩn, dịch
+              ra thì không tra được tài liệu. Chú giải nằm ở dòng dưới. */}
+          {pick('Công bố lên BACnet (Event Enrollment)', 'Publish to BACnet (Event Enrollment)')}
           <StatusBadge state={publishedCount > maxBacnetPublished ? 'critical' : 'online'} label={`${publishedCount}/${maxBacnetPublished}`} />
         </label>
-        <NumberField label={pick('Notification Class', 'Notification Class')} min={1} max={4} integer disabled={!row.publishBacnet} value={row.notificationClass ?? 1} onChange={(notificationClass) => onChange({ notificationClass })} />
+        <NumberField
+          label="Notification Class"
+          hint={pick('Lớp thông báo BACnet (1-4) quyết định thiết bị giám sát nào nhận sự kiện này.', 'The BACnet notification class (1-4) decides which supervisory devices receive this event.')}
+          min={1}
+          max={4}
+          integer
+          disabled={!row.publishBacnet}
+          value={row.notificationClass ?? 1}
+          onChange={(notificationClass) => onChange({ notificationClass })}
+        />
       </section>
 
       {deferred && (
         <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
-          {pick('Type 2/4/5/6/7 dang deferred; UI khong cho bat enabled de backend khong reject.', 'Types 2/4/5/6/7 are deferred; UI keeps them disabled so backend will not reject them.')}
+          {pick('Loại 2/4/5/6/7 chưa được hỗ trợ. Giao diện khoá ô "Bật cảnh báo" để tránh gửi xuống một cấu hình mà backend sẽ từ chối.', 'Types 2/4/5/6/7 are not supported yet. The UI keeps "Enabled" locked so it will not send a configuration the backend would reject.')}
         </div>
       )}
       <div className="text-xs text-[var(--c-text-dim)]">#{rowIndex + 1}</div>
@@ -433,18 +531,18 @@ function SourceRow({ source, virtualPoints, onChange, onRemove }: { source: Alar
   const channels = channelOptions(source.kind, virtualPoints)
   return (
     <div className="grid gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 sm:grid-cols-[120px_120px_minmax(0,1fr)_auto]">
-      <SelectField label="Kind" value={source.kind} onChange={(kind) => onChange(normalizeSource({ kind: kind as AlarmSourceKind, channel: firstChannel(kind as AlarmSourceKind, virtualPoints) }, virtualPoints))}>
+      <SelectField label={pick('Loại nguồn', 'Source kind')} value={source.kind} onChange={(kind) => onChange(normalizeSource({ kind: kind as AlarmSourceKind, channel: firstChannel(kind as AlarmSourceKind, virtualPoints) }, virtualPoints))}>
         {sourceKinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
       </SelectField>
-      <SelectField label={pick('Kenh', 'Channel')} value={String(source.channel)} onChange={(channel) => onChange({ channel: Number(channel) })}>
+      <SelectField label={pick('Kênh', 'Channel')} value={String(source.channel)} onChange={(channel) => onChange({ channel: Number(channel) })}>
         {channels.map((channel) => {
           const virtual = source.kind === 'VP' ? virtualSourceFor('VP', channel, virtualPoints) : undefined
           return <option key={channel} value={channel}>{virtual ? `${channel} - ${virtual.tag}` : channel}</option>
         })}
       </SelectField>
-      <TextField label={source.kind === 'VP' ? 'Tag' : 'Point ID'} value={source.kind === 'VP' ? virtualSourceFor('VP', source.channel, virtualPoints)?.tag ?? source.pointId : source.pointId} disabled onChange={() => undefined} />
+      <TextField label={source.kind === 'VP' ? pick('Tên gọi (tag)', 'Tag') : pick('Mã điểm', 'Point ID')} value={source.kind === 'VP' ? virtualSourceFor('VP', source.channel, virtualPoints)?.tag ?? source.pointId : source.pointId} disabled onChange={() => undefined} />
       <div className="flex items-end">
-        <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={onRemove}>{pick('Xoa', 'Remove')}</Button>
+        <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={onRemove}>{pick('Xoá', 'Remove')}</Button>
       </div>
     </div>
   )
@@ -456,11 +554,20 @@ function AlarmParamsEditor({ row, onChange }: { row: AlarmSetting; onChange: (pa
     return (
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-5">
-          <NumberField label="HH" value={row.params.hh ?? 0} onChange={(hh) => onChange({ hh })} />
-          <NumberField label="H" value={row.params.h ?? 0} onChange={(h) => onChange({ h })} />
-          <NumberField label="L" value={row.params.l ?? 0} onChange={(l) => onChange({ l })} />
-          <NumberField label="LL" value={row.params.ll ?? 0} onChange={(ll) => onChange({ ll })} />
-          <NumberField label={pick('Hysteresis', 'Hysteresis')} min={0} value={row.params.hysteresis ?? 0} onChange={(hysteresis) => onChange({ hysteresis })} />
+          {/* Bốn chữ viết tắt HH/H/L/LL là quy ước ngưỡng dùng chung với
+              firmware và với nhãn hiện trên nhật ký, nên giữ trong ngoặc thay
+              vì thay bằng chữ khác — nhưng nhãn chính phải nói ra nghĩa. */}
+          <NumberField label={pick('Rất cao (HH)', 'Very high (HH)')} value={row.params.hh ?? 0} onChange={(hh) => onChange({ hh })} />
+          <NumberField label={pick('Cao (H)', 'High (H)')} value={row.params.h ?? 0} onChange={(h) => onChange({ h })} />
+          <NumberField label={pick('Thấp (L)', 'Low (L)')} value={row.params.l ?? 0} onChange={(l) => onChange({ l })} />
+          <NumberField label={pick('Rất thấp (LL)', 'Very low (LL)')} value={row.params.ll ?? 0} onChange={(ll) => onChange({ ll })} />
+          <NumberField
+            label={pick('Vùng trễ (hysteresis)', 'Hysteresis')}
+            hint={pick('Giá trị phải quay lại quá ngưỡng đúng khoảng này thì cảnh báo mới tự xoá — chống rung quanh ngưỡng.', 'The value must come back past the threshold by this margin before the alarm clears — it stops chattering.')}
+            min={0}
+            value={row.params.hysteresis ?? 0}
+            onChange={(hysteresis) => onChange({ hysteresis })}
+          />
         </div>
         {isFlexiblePriority(row) && <SeverityRulesEditor rules={getSeverityRules(row.params)} onChange={(severityRules) => onChange({ severityRules })} />}
       </div>
@@ -470,7 +577,14 @@ function AlarmParamsEditor({ row, onChange }: { row: AlarmSetting; onChange: (pa
     return (
       <div className="space-y-4">
         <div className="max-w-xs">
-          <NumberField label={pick('Runtime hours', 'Runtime hours')} min={0.1} step={0.1} value={row.params.runtimeHours ?? 1} onChange={(runtimeHours) => onChange({ runtimeHours })} />
+          <NumberField
+            label={pick('Số giờ chạy tích luỹ', 'Runtime hours')}
+            hint={pick('Cảnh báo bật khi thiết bị đã chạy đủ số giờ này — dùng để nhắc bảo trì.', 'The alarm raises once the device has run this many hours — used for maintenance reminders.')}
+            min={0.1}
+            step={0.1}
+            value={row.params.runtimeHours ?? 1}
+            onChange={(runtimeHours) => onChange({ runtimeHours })}
+          />
         </div>
         {isFlexiblePriority(row) && <SeverityRulesEditor rules={getSeverityRules(row.params)} onChange={(severityRules) => onChange({ severityRules })} />}
       </div>
@@ -478,7 +592,7 @@ function AlarmParamsEditor({ row, onChange }: { row: AlarmSetting; onChange: (pa
   }
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[var(--c-text-dim)]">{pick('Type nay khong co tham so active trong Phase 4.', 'This type has no active parameters in Phase 4.')}</p>
+      <p className="text-sm text-[var(--c-text-dim)]">{pick('Loại cảnh báo này chưa có tham số nào đang hoạt động.', 'This alarm type has no active parameters yet.')}</p>
       {isFlexiblePriority(row) && <SeverityRulesEditor rules={getSeverityRules(row.params)} onChange={(severityRules) => onChange({ severityRules })} />}
     </div>
   )
@@ -490,50 +604,58 @@ function SeverityRulesEditor({ rules, onChange }: { rules: SeverityRule[]; onCha
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Severity rules', 'Severity rules')}</h4>
-        <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => onChange([...rules, defaultSeverityRule()])}>{pick('Them rule', 'Add rule')}</Button>
+        <h4 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Luật chọn mức nghiêm trọng', 'Severity rules')}</h4>
+        <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => onChange([...rules, defaultSeverityRule()])}>{pick('Thêm luật', 'Add rule')}</Button>
       </div>
       <div className="space-y-2">
         {rules.map((rule, index) => (
           <div key={`${rule.severity}-${rule.op}-${index}`} className="grid gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 sm:grid-cols-[minmax(0,1fr)_100px_minmax(120px,1fr)_auto]">
-            <SelectField label={pick('Severity', 'Severity')} value={rule.severity} onChange={(severity) => updateRule(index, { severity: severity as SeverityRule['severity'] })}>
-              {severities.map((severity) => <option key={severity} value={severity}>{severity.toUpperCase()}</option>)}
+            <SelectField label={pick('Mức nghiêm trọng', 'Severity')} value={rule.severity} onChange={(severity) => updateRule(index, { severity: severity as SeverityRule['severity'] })}>
+              {severities.map((severity) => <option key={severity} value={severity}>{`${severity.toUpperCase()} · ${severityGloss(severity, pick)}`}</option>)}
             </SelectField>
-            <SelectField label={pick('Operator', 'Operator')} value={rule.op} onChange={(op) => updateRule(index, { op: op as SeverityRule['op'] })}>
-              {severityOps.map((op) => <option key={op} value={op}>{op}</option>)}
+            <SelectField label={pick('Phép so sánh', 'Operator')} value={rule.op} onChange={(op) => updateRule(index, { op: op as SeverityRule['op'] })}>
+              {severityOps.map((op) => <option key={op} value={op}>{op === '>=' ? pick('≥ (lớn hơn hoặc bằng)', '≥ (at least)') : pick('≤ (nhỏ hơn hoặc bằng)', '≤ (at most)')}</option>)}
             </SelectField>
-            <NumberField label={pick('Value', 'Value')} value={rule.value} onChange={(value) => updateRule(index, { value })} />
+            <NumberField label={pick('Ngưỡng', 'Threshold')} value={rule.value} onChange={(value) => updateRule(index, { value })} />
             <div className="flex items-end">
-              <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => onChange(rules.filter((_, ruleIndex) => ruleIndex !== index))}>{pick('Xoa', 'Remove')}</Button>
+              <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={() => onChange(rules.filter((_, ruleIndex) => ruleIndex !== index))}>{pick('Xoá', 'Remove')}</Button>
             </div>
           </div>
         ))}
-        {rules.length === 0 && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{pick('Can it nhat 1 rule cho priority flexible.', 'At least one rule is required for flexible priority.')}</div>}
+        {rules.length === 0 && <div className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">{pick('Mức ưu tiên FLEXIBLE cần ít nhất một luật.', 'FLEXIBLE priority needs at least one rule.')}</div>}
       </div>
     </div>
   )
 }
 
-function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * `T57-2.14` — `hint` là chỗ giữ THUẬT NGỮ GIAO THỨC mà không làm form nói hai
+ * thứ tiếng. Những chữ như "Event Enrollment" hay "Notification Class" là tên
+ * riêng trong BACnet: dịch chúng ra tiếng Việt sẽ làm người kỹ thuật không tra
+ * được tài liệu chuẩn, còn để trần thì người vận hành không hiểu. Giữ nguyên
+ * tên và giải thích ngay dưới nhãn là cách duy nhất đúng cho cả hai phía.
+ */
+function FieldGroup({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1">
       <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{label}</span>
+      {hint && <span className="block text-[11px] font-normal normal-case text-[var(--c-text-dim)]">{hint}</span>}
       {children}
     </label>
   )
 }
 
-function TextField({ label, value, disabled, onChange }: { label: string; value: string; disabled?: boolean; onChange: (value: string) => void }) {
+function TextField({ label, hint, value, disabled, onChange }: { label: string; hint?: string; value: string; disabled?: boolean; onChange: (value: string) => void }) {
   return (
-    <FieldGroup label={label}>
+    <FieldGroup label={label} hint={hint}>
       <input className={inputClass} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
     </FieldGroup>
   )
 }
 
-function NumberField({ label, value, min, max, step = 1, integer, disabled, onChange }: { label: string; value: number; min?: number; max?: number; step?: number; integer?: boolean; disabled?: boolean; onChange: (value: number) => void }) {
+function NumberField({ label, hint, value, min, max, step = 1, integer, disabled, onChange }: { label: string; hint?: string; value: number; min?: number; max?: number; step?: number; integer?: boolean; disabled?: boolean; onChange: (value: number) => void }) {
   return (
-    <FieldGroup label={label}>
+    <FieldGroup label={label} hint={hint}>
       <input
         className={inputClass}
         type="number"
@@ -548,9 +670,9 @@ function NumberField({ label, value, min, max, step = 1, integer, disabled, onCh
   )
 }
 
-function SelectField({ label, value, children, onChange }: { label: string; value: string; children: React.ReactNode; onChange: (value: string) => void }) {
+function SelectField({ label, hint, value, children, onChange }: { label: string; hint?: string; value: string; children: React.ReactNode; onChange: (value: string) => void }) {
   return (
-    <FieldGroup label={label}>
+    <FieldGroup label={label} hint={hint}>
       <select className={inputClass} value={value} onChange={(event) => onChange(event.target.value)}>
         {children}
       </select>
@@ -718,53 +840,53 @@ function defaultParamsForType(alarmType: AlarmType, params: AlarmSetting['params
 
 function validateAlarms(rows: AlarmSetting[], pick: PickText, virtualPoints: VirtualPoint[] = []): ValidationIssue[] {
   const issues: ValidationIssue[] = []
-  if (rows.length > maxAlarms) issues.push({ message: pick(`Toi da ${maxAlarms} alarm.`, `At most ${maxAlarms} alarms.`) })
+  if (rows.length > maxAlarms) issues.push({ message: pick(`Tối đa ${maxAlarms} cảnh báo.`, `At most ${maxAlarms} alarms.`) })
 
   const seenIds = new Map<string, number>()
   rows.forEach((row, rowIndex) => {
     const prefix = row.id || `#${rowIndex + 1}`
     const id = row.id.trim()
-    if (!id) addIssue(issues, rowIndex, pick('Alarm can co ID.', 'Alarm ID is required.'))
-    else if (!/^ALM-[A-Za-z0-9_-]+$/.test(id)) addIssue(issues, rowIndex, `${prefix}: ${pick('ID phai bat dau bang ALM-.', 'ID must start with ALM-.')}`)
+    if (!id) addIssue(issues, rowIndex, pick('Cảnh báo cần có ID.', 'Alarm ID is required.'))
+    else if (!/^ALM-[A-Za-z0-9_-]+$/.test(id)) addIssue(issues, rowIndex, `${prefix}: ${pick('ID phải bắt đầu bằng ALM-.', 'ID must start with ALM-.')}`)
     else {
       const key = id.toUpperCase()
       const first = seenIds.get(key)
-      if (first !== undefined) addIssue(issues, rowIndex, `${prefix}: ${pick(`Trung ID voi alarm #${first + 1}.`, `Duplicate ID with alarm #${first + 1}.`)}`)
+      if (first !== undefined) addIssue(issues, rowIndex, `${prefix}: ${pick(`Trùng ID với cảnh báo #${first + 1}.`, `Duplicate ID with alarm #${first + 1}.`)}`)
       seenIds.set(key, rowIndex)
     }
 
-    if (!row.label.trim()) addIssue(issues, rowIndex, `${prefix}: ${pick('Label bat buoc.', 'Label is required.')}`)
-    if (!isAlarmType(row.alarmType)) addIssue(issues, rowIndex, `${prefix}: alarmType must be 0..7.`)
-    if (row.enabled && isDeferredType(row.alarmType)) addIssue(issues, rowIndex, `${prefix}: ${pick('Deferred type chua duoc bat enabled.', 'Deferred alarm types cannot be enabled yet.')}`)
-    if (!priorities.includes(row.priority)) addIssue(issues, rowIndex, `${prefix}: ${pick('Priority khong hop le.', 'Invalid priority.')}`)
-    if (!clearModes.includes(getClearMode(row))) addIssue(issues, rowIndex, `${prefix}: clearMode must be auto or manual.`)
-    if (!Number.isFinite(row.delayS) || row.delayS < 0) addIssue(issues, rowIndex, `${prefix}: delayS must be >= 0.`)
+    if (!row.label.trim()) addIssue(issues, rowIndex, `${prefix}: ${pick('Nhãn bắt buộc.', 'Label is required.')}`)
+    if (!isAlarmType(row.alarmType)) addIssue(issues, rowIndex, `${prefix}: ${pick('Loại cảnh báo phải nằm trong 0..7.', 'Alarm type must be 0..7.')}`)
+    if (row.enabled && isDeferredType(row.alarmType)) addIssue(issues, rowIndex, `${prefix}: ${pick('Loại cảnh báo này chưa được hỗ trợ nên không bật được.', 'This alarm type is not supported yet, so it cannot be enabled.')}`)
+    if (!priorities.includes(row.priority)) addIssue(issues, rowIndex, `${prefix}: ${pick('Mức ưu tiên không hợp lệ.', 'Invalid priority.')}`)
+    if (!clearModes.includes(getClearMode(row))) addIssue(issues, rowIndex, `${prefix}: ${pick('Cách xoá cảnh báo phải là tự động hoặc thủ công.', 'Clear mode must be automatic or manual.')}`)
+    if (!Number.isFinite(row.delayS) || row.delayS < 0) addIssue(issues, rowIndex, `${prefix}: ${pick('Trễ kích hoạt không được âm.', 'Activation delay cannot be negative.')}`)
 
-    if (row.sources.length > maxSourcesPerAlarm) addIssue(issues, rowIndex, `${prefix}: ${pick(`Toi da ${maxSourcesPerAlarm} source.`, `At most ${maxSourcesPerAlarm} sources.`)}`)
-    if (row.enabled && row.alarmType !== 0 && row.sources.length === 0) addIssue(issues, rowIndex, `${prefix}: ${pick('Enabled alarm can it nhat 1 source.', 'Enabled alarms need at least one source.')}`)
+    if (row.sources.length > maxSourcesPerAlarm) addIssue(issues, rowIndex, `${prefix}: ${pick(`Tối đa ${maxSourcesPerAlarm} nguồn.`, `At most ${maxSourcesPerAlarm} sources.`)}`)
+    if (row.enabled && row.alarmType !== 0 && row.sources.length === 0) addIssue(issues, rowIndex, `${prefix}: ${pick('Cảnh báo đang bật cần ít nhất 1 nguồn.', 'Enabled alarms need at least one source.')}`)
     const seenSources = new Set<string>()
     row.sources.forEach((source, sourceIndex) => {
       const max = maxChannel(source.kind)
-      if (source.channel < 1 || source.channel > max) addIssue(issues, rowIndex, `${prefix}: ${source.kind} channel must be 1..${max}.`)
+      if (source.channel < 1 || source.channel > max) addIssue(issues, rowIndex, `${prefix}: ${pick(`Kênh ${source.kind} phải nằm trong 1..${max}.`, `${source.kind} channel must be 1..${max}.`)}`)
       if (source.kind === 'VP' && !virtualSourceFor(source.kind, source.channel, virtualPoints)) {
-        addIssue(issues, rowIndex, `${prefix}: VP${source.channel} not found in numeric Virtual Points.`)
+        addIssue(issues, rowIndex, `${prefix}: ${pick(`Không tìm thấy điểm ảo VP${source.channel}.`, `Virtual point VP${source.channel} was not found.`)}`)
       }
       const expected = pointIdFor(source.kind, source.channel, virtualPoints, source.pointId)
-      if (!expected) addIssue(issues, rowIndex, `${prefix}: source ${sourceIndex + 1} pointId is required.`)
-      else if (source.pointId !== expected) addIssue(issues, rowIndex, `${prefix}: source ${sourceIndex + 1} pointId must be ${expected}.`)
+      if (!expected) addIssue(issues, rowIndex, `${prefix}: ${pick(`Nguồn ${sourceIndex + 1} thiếu mã điểm.`, `Source ${sourceIndex + 1} is missing its point ID.`)}`)
+      else if (source.pointId !== expected) addIssue(issues, rowIndex, `${prefix}: ${pick(`Mã điểm của nguồn ${sourceIndex + 1} phải là ${expected}.`, `Source ${sourceIndex + 1} point ID must be ${expected}.`)}`)
       const key = `${source.kind}:${source.channel}`
-      if (seenSources.has(key)) addIssue(issues, rowIndex, `${prefix}: ${pick('Source bi trung.', 'Duplicate source.')} ${source.pointId}`)
+      if (seenSources.has(key)) addIssue(issues, rowIndex, `${prefix}: ${pick('Nguồn bị trùng.', 'Duplicate source.')} ${source.pointId}`)
       seenSources.add(key)
     })
 
     if (row.publishBacnet && row.notificationClass !== undefined && (row.notificationClass < 1 || row.notificationClass > 4)) {
-      addIssue(issues, rowIndex, `${prefix}: notificationClass must be 1..4.`)
+      addIssue(issues, rowIndex, `${prefix}: ${pick('Notification Class phải nằm trong 1..4.', 'Notification Class must be 1..4.')}`)
     }
     validateParams(row, rowIndex, prefix, issues, pick)
   })
 
   const published = rows.filter((row) => row.enabled && row.publishBacnet).length
-  if (published > maxBacnetPublished) issues.push({ message: pick(`Toi da ${maxBacnetPublished} alarm publish BACnet dang enabled.`, `At most ${maxBacnetPublished} enabled BACnet-published alarms.`) })
+  if (published > maxBacnetPublished) issues.push({ message: pick(`Tối đa ${maxBacnetPublished} cảnh báo đang bật được công bố lên BACnet.`, `At most ${maxBacnetPublished} enabled alarms can be published to BACnet.`) })
   return issues
 }
 
@@ -772,23 +894,23 @@ function validateParams(row: AlarmSetting, rowIndex: number, prefix: string, iss
   const params = row.params
   const severityRules = getSeverityRules(params)
   if (isFlexiblePriority(row) && (row.alarmType === 0 || isDeferredType(row.alarmType))) {
-    addIssue(issues, rowIndex, `${prefix}: ${pick('Priority flexible chi ap dung cho active alarm type.', 'Flexible priority applies only to active alarm types.')}`)
+    addIssue(issues, rowIndex, `${prefix}: ${pick('Mức ưu tiên FLEXIBLE chỉ dùng được với loại cảnh báo đang hoạt động.', 'FLEXIBLE priority applies only to supported alarm types.')}`)
   } else if (isFlexiblePriority(row) && severityRules.length === 0) {
-    addIssue(issues, rowIndex, `${prefix}: ${pick('Priority flexible can it nhat 1 severity rule.', 'Flexible priority needs at least one severity rule.')}`)
+    addIssue(issues, rowIndex, `${prefix}: ${pick('Mức ưu tiên FLEXIBLE cần ít nhất một luật chọn mức nghiêm trọng.', 'FLEXIBLE priority needs at least one severity rule.')}`)
   }
   if (row.alarmType === 1) {
     const values = [params.hh, params.h, params.l, params.ll]
     if (values.some((value) => !Number.isFinite(value))) {
-      addIssue(issues, rowIndex, `${prefix}: HH/H/L/LL ${pick('phai la so.', 'must be numbers.')}`)
+      addIssue(issues, rowIndex, `${prefix}: ${pick('Bốn ngưỡng HH/H/L/LL phải là số.', 'The four thresholds HH/H/L/LL must be numbers.')}`)
       return
     }
     if (!(params.hh! >= params.h! && params.h! >= params.l! && params.l! >= params.ll!)) {
-      addIssue(issues, rowIndex, `${prefix}: HH >= H >= L >= LL`)
+      addIssue(issues, rowIndex, `${prefix}: ${pick('Bốn ngưỡng phải giảm dần: HH ≥ H ≥ L ≥ LL.', 'The four thresholds must decrease: HH ≥ H ≥ L ≥ LL.')}`)
     }
-    if (params.hysteresis !== undefined && params.hysteresis < 0) addIssue(issues, rowIndex, `${prefix}: hysteresis must be >= 0.`)
+    if (params.hysteresis !== undefined && params.hysteresis < 0) addIssue(issues, rowIndex, `${prefix}: ${pick('Vùng trễ không được âm.', 'Hysteresis cannot be negative.')}`)
   }
   if (row.alarmType === 3 && (!Number.isFinite(params.runtimeHours) || Number(params.runtimeHours) <= 0)) {
-    addIssue(issues, rowIndex, `${prefix}: runtimeHours must be > 0.`)
+    addIssue(issues, rowIndex, `${prefix}: ${pick('Số giờ chạy tích luỹ phải lớn hơn 0.', 'Runtime hours must be greater than 0.')}`)
   }
 }
 

@@ -96,7 +96,9 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
     usage.bindings = mod.io_bindings.size();
     usage.retain_variables = mod.retain_entries.size() + mod.retained_fb_count();
     usage.retain_bytes = mod.retain_record_size;
-    usage.sections = 6u + (mod.has_retain() ? 1u : 0u) + (!mod.source_map.empty() ? 1u : 0u);
+    usage.sections = 6u + (mod.has_retain() ? 1u : 0u) +
+                     (!mod.source_map.empty() ? 1u : 0u) +
+                     (!mod.signal_refs.empty() ? 1u : 0u);
     st_limits::RevAProfileError profile_error;
     if (!st_limits::ValidateRevAProfile(usage, &profile_error))
         return fail("Rev A profile violation at " + profile_error.field + " (" +
@@ -171,6 +173,15 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
                 previous.point_index == binding.point_index)
                 return fail("two variables bound to the same output point");
         }
+    }
+    for (std::size_t index = 0; index < mod.signal_refs.size(); ++index) {
+        const StIrSignalRef& signal = mod.signal_refs[index];
+        if (signal.name.empty() || signal.name.size() > 64 ||
+            (!signal.read && !signal.publish))
+            return fail("invalid Published Signal reference");
+        for (std::size_t prior = 0; prior < index; ++prior)
+            if (mod.signal_refs[prior].name == signal.name)
+                return fail("duplicate Published Signal reference");
     }
     uint32_t previous_source_pc = 0;
     for (std::size_t i = 0; i < mod.source_map.size(); ++i) {
@@ -300,6 +311,23 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
         secs.push_back(std::move(s));
     }
 
+    /* SIGNAL_REFS — tên/type/quyền được package coordinator resolve một lần
+     * thành index của bank signal đang chuẩn bị. */
+    if (!mod.signal_refs.empty()) {
+        SectionOut s{st_ir::SEC_SIGNAL_REFS,
+                     static_cast<uint32_t>(mod.signal_refs.size()), {}};
+        for (const StIrSignalRef& ref : mod.signal_refs) {
+            put_fixed_string(&s.data, ref.name, 64);
+            s.data.push_back(static_cast<uint8_t>(ref.type));
+            uint8_t flags = 0;
+            if (ref.read) flags |= 1u;
+            if (ref.publish) flags |= 2u;
+            s.data.push_back(flags);
+            for (int pad = 0; pad < 6; ++pad) s.data.push_back(0);
+        }
+        secs.push_back(std::move(s));
+    }
+
     if (secs.size() > st_ir::kMaxSections) return fail("section count exceeds limit");
 
     /* Bố trí file: header 128 + bảng section + payload căn 8 byte. */
@@ -386,6 +414,12 @@ bool sign_st_artifact(std::vector<uint8_t>* artifact, const uint8_t secret_key[6
     if (crypto_sign_detached(sig, nullptr, digest, sizeof(digest), secret_key) != 0) return false;
     std::memcpy(artifact->data() + 64, sig, crypto_sign_BYTES);
     return true;
+}
+
+bool generate_signing_keypair(uint8_t public_key[32], uint8_t secret_key[64])
+{
+    if (sodium_init() < 0) return false;
+    return crypto_sign_keypair(public_key, secret_key) == 0;
 }
 
 bool EncodeArtifactDeterministic(const StIrModule& module, std::vector<uint8_t>* artifact,

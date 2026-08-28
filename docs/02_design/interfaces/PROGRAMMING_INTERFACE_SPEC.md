@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 1.9 |
-| Trạng thái | **M3 AS-BUILT + CORRECTIVE VERIFIED** — OpenAPI v1.20.0 có Monitor/Trace cụ thể; host/target supporting evidence có, source chưa merge |
-| Ngày | 2026-08-13 |
+| Phiên bản | 2.1-candidate |
+| Trạng thái | **Baseline 2.0 M3 AS-BUILT; PGM-02 v2.2 CONTRACT OVERLAY TARGET CANDIDATE — NO EXECUTION AUTHORITY** |
+| Ngày | 2026-08-24 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
-| Nguồn thẩm quyền | `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001` |
-| Phạm vi phiên bản | Target Rev A; 25 OpenAPI operation; v1.20.0 thêm schema runtime controller/task và Monitor/Trace; target evidence `EV-PROG-P5-510` |
-| Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001` |
+| Nguồn thẩm quyền | Baseline: `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001`; Candidate: `CR-PROG-PGM02-V22-001`, `DDD-SW-PGM02-WORKSPACE-001`, `ADR-053` Proposed |
+| Phạm vi phiên bản | Baseline: 33 OpenAPI operation, v1.28.0, Programming IPC v1 + canonical CBOR, SHM magic v5; Candidate: R1 EDIT → R2 LIVE → R3 SIMULATE |
+| Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001`, `DDD-SW-PGM02-WORKSPACE-001` |
 
 ## 0. Đọc nhanh
 
@@ -19,11 +19,11 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | Task 507 đã nối Commission/Restore. Corrective Task 509 nối `GET /runtime/monitor` và ba operation Trace, thay 503 contract-only; OpenAPI v1.20.0/generated FE client đồng bộ. `EV-PROG-P5-510` xác nhận target Monitor `200`, Runtime/Task read-back và Trace validation; source chưa merge. |
-| 4. Thiết kế mới thay đổi điều gì? | Thêm nhóm `/api/v1/programming`, event WebSocket cho runtime/operation, và một giao thức nội bộ có phiên bản cho Commission. Nguyên tắc chi phối: `HTTP 2xx` chỉ nghĩa là **request đã được nhận**; chỉ read-back từ Core mới kết luận được Revision nào đang chạy. |
-| 5. Team phải sửa module/contract nào? | `contracts/openapi/openapi.yaml`, generated FE client, BE monitor/trace application+HTTP, Core point snapshot và FE Watch/Runtime. §3.1/§8 khóa giới hạn và authority. |
-| 6. Điều gì còn bị chặn? | Không có approval hoặc deploy blocker. Source chưa merge; positive Monitor/Trace có Variable Binding target, TLS/HIL/Test Result vẫn là release gate. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | `REV-PROG-FE-UX-2026-08-13` có host tests cho mapping/idempotency/quota/source failure; `EV-PROG-P5-510` ghi deploy/hash/API/Chrome/rollback target. Monitor empty đúng fixture không binding; positive Trace target còn mở. |
+| 3. Hệ thống hiện tại đang có gì? | OpenAPI `1.28.0` và generated FE client có 33 operation, gồm Library search/upsert/delete/deprecate, Program intent/list, Runtime Signals và recovery reset. BE↔Core dùng frame bounded/canonical CBOR; Web đọc SHM qua mmap+seqlock, không dùng `os.ReadFile`. Source Plan 59 chưa có evidence target mới. |
+| 4. Thiết kế mới thay đổi điều gì? | Baseline 2.0: Draft v2, whole-set atomic lifecycle. PGM-02 Candidate: R1 typed Draft/signature/reference/refactor/diagnostic; R2 coherent LIVE tuple; R3 Simulation session qua worker riêng cách ly và admin-only mutation. |
+| 5. Team phải sửa module/contract nào? | `contracts/openapi/openapi.yaml`, generated FE client, BE application/store/HTTP/compiler packager, Core Programming IPC/runtime coordinator, `contracts/shm/mkddc_shm.h` và Web `shm_reader.go`. §3.2/§8/§12 khóa giới hạn và authority. |
+| 6. Điều gì còn bị chặn? | Baseline còn thiếu exact merged/deployed evidence, soak/VVP/HIL. PGM-02 Candidate còn chờ Owner + System Architect exact revision/hash pin; OpenAPI/IPC production chưa được phép đổi; R1/R2/R3 đều `NO-GO`. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Contract/router/generated-client/CBOR/SHM tests chứng minh host; target phải lưu exact OpenAPI/artifact/service checksum, API/IPC/SHM read-back và raw soak. Evidence 2026-08-13 không chứng minh binary Plan 59 mới. |
 
 Vì sao mã lỗi phải tập trung ở đây: nếu mỗi component tự đặt mã, FE sẽ retry sai
 chỗ và che mất lỗi thật — đó là `RSK-PROG-014`. Quy tắc: FE quyết định dựa trên
@@ -83,9 +83,16 @@ buộc hai tập mã bằng nhau; §14 ánh xạ detail nội bộ ra mã công 
 | `GET /revisions/{from}/changes/{to}` | viewer | **As-Built 206** — structured change manifest deterministic do BE tính |
 | `POST /revisions/{revisionId}/checks` | admin | **As-Built 205** — tạo Check job bền vững, không tác động runtime |
 | `GET /checks/{checkId}` | viewer | **As-Built 205** — state/diagnostic/artifact metadata; polling fallback |
+| `GET /libraries` | viewer | SYSTEM registry + mọi PROJECT library revision theo filter/cursor; không lọc mất history |
+| `POST /projects/{projectId}/library/entries` | admin | upsert vào PROJECT Library DRAFT; `If-Match` + idempotency; không publish |
+| `DELETE /projects/{projectId}/library/entries/{entryId}` | admin | chỉ xóa entry DRAFT không còn dependent; không cascade |
+| `POST /projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate` | admin | chỉ `PUBLISHED→DEPRECATED`; receipt/audit/read-back; không làm Active/LKG mất pin |
+| `GET /projects/{projectId}/programs` | viewer | durable desired intent ghép Core live state; Core unavailable vẫn giữ intent và trả live fields null/unknown |
+| `PUT /projects/{projectId}/programs/{programId}/runtime-intent` | admin | idempotent Enable/Disable intent; không đồng nhất desired với actual runtime |
 | `GET /point-catalog` | viewer | canonical Point projection + filter/type/direction |
 | `GET /runtime` | viewer | authoritative active/LKG/core/task/safe-state status |
 | `GET /runtime/monitor` | viewer | bounded current samples, source/quality/freshness/arbitration |
+| `GET /runtime/signals` | viewer | typed published-signal snapshot; missing/stale/unavailable là null + quality, không là zero |
 | `POST /runtime/traces` | admin | tạo bounded trace session read-only |
 | `GET /runtime/traces/{traceId}` | viewer | samples/status/stop reason |
 | `DELETE /runtime/traces/{traceId}` | admin | dừng capture; không xóa audit |
@@ -97,9 +104,10 @@ buộc hai tập mã bằng nhau; §14 ánh xạ detail nội bộ ra mã công 
 | `POST /bundles/export` | admin | **As-Built 206** — trả ZIP source-only deterministic có manifest/hash/audit |
 | `POST /bundles/import` | admin | **As-Built 206** — validate, tạo Project/Draft mới; không Artifact/Check/Commission |
 | `POST /retain/reset` | admin | strong confirmation token + operation/audit |
+| `POST /runtime/recovery-reset` | admin | reset recovery có strong confirmation, safe-boundary và audit; không thay Restore |
 | `GET /audit` | viewer | timeline đã sanitize, phân trang |
 
-### 3.1 Hợp đồng Runtime Monitor và Trace As-Built v1.20.0
+### 3.1 Hợp đồng Runtime Monitor, Signal và Trace As-Built v1.28.0
 
 `GET /runtime` bắt buộc có `controllerId`, `producerState`, Active/LKG,
 `taskState`, `safeState`, `observedAt` và object `task` khi producer READY. Task
@@ -133,7 +141,47 @@ Trace HTTP là **read-only sampling của cùng MonitorService** trong Task 509:
 - process Web restart làm mất session RAM và `GET` trả 404. Đây là As-Built có
   chủ ý; không được mô tả như durable trace. Core `TRACE_START` ở §8 là đường
   target cho trace RT/fault chuyên biệt và **chưa** là producer của HTTP trace
-  v1.20.0.
+  hiện hành.
+
+`GET /runtime/signals` trả identity/type/unit, publisher Program, value nullable,
+quality/freshness, producer timestamp và observed generation. `value=null` là
+không có giá trị hợp lệ; consumer không được thay bằng zero. Generation/snapshot
+phải khớp active runtime generation; response hỗn hợp program set mới và signal
+bank cũ bị cấm.
+
+### 3.2 Draft v2, POU, library lock và signal manifest
+
+Draft `schemaVersion=2` giữ các collection canonical: `objects[]` cho
+`PROGRAM|FUNCTION|FUNCTION_BLOCK`, `programs[]` nối `programId→objectId` và
+period/task, `signals[]` cho typed Published Signal, cùng `libraryLock`. ID là
+UUID ổn định; name identifier ASCII 1..64 không trùng/từ khóa. FUNCTION phải
+pure/no retained instance; FUNCTION_BLOCK state thuộc instance gọi; recursion
+trực tiếp/gián tiếp bị reject.
+
+Seal Revision phải snapshot POU + exact library revision/version/content hash +
+signal definitions trong một transaction. Check sinh ba manifest compiler
+`--pou-manifest`, `--library-lock`, `--signal-manifest`; packager nhận POU table
+và library lock, sau đó verify package read-back. Không có manifest hợp lệ thì
+không tạo Artifact Ready.
+
+### 3.3 PGM-02 v2.2 contract overlay Target Candidate
+
+Overlay này chỉ mô tả contract cần pin trong `PGM02-V22-WP-00`; nó **không**
+sửa hoặc kích hoạt `contracts/openapi/openapi.yaml`. Field, endpoint và private
+protocol đầy đủ nằm tại
+[`DDD-SW-PGM02-WORKSPACE-001` §4–§6](../software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)
+và machine-readable Candidate
+[`pgm02_workspace_v1.json`](../../../contracts/programming/pgm02_workspace_v1.json).
+
+| Increment | Boundary contract Candidate | Bất biến/failure semantics | Gate |
+|---|---|---|---|
+| R1 EDIT | Typed `ProgrammingDraftDocumentV1/V2` và discriminated Draft operation; Library chiếu normalized signature + authority/state; `GET .../draft/references`; semantic rename/remove; diagnostic anchor có stable object/node/port/span identity | `objectId` không suy từ `programId`/name; ETag + baseRevision + idempotency; analysis/signature không xác minh được thì zero mutation/`UNAVAILABLE`; Active không đổi | `IMPLEMENT_READY[PGM02-R1]=NO-GO` |
+| R2 LIVE | Document tuple `{controllerId,projectId,activeRevisionId,objectId,contentSha256,language}` ghép value tuple `{activeRevisionId,runtimeGeneration,observationId,sequence,observedAt,quality,value}` | Chỉ accept khi identity/revision/generation exact; sequence không tăng, stale/offline hoặc revision switch thì clear projection và full rejoin; PGM-02 LIVE read-only mọi role | `IMPLEMENT_READY[PGM02-R2]=NO-GO` |
+| R3 SIMULATE | Session create/read/action/input/observation/trace/stop; private supervisor↔worker protocol có protocol/worker version, session token, command ID, source hash, monotonic sequence và virtual time | Mutation chỉ `admin`; viewer/operator chỉ read theo object scope; worker ephemeral không nhận production SHM/device/socket/output writer/RETAIN handle; timeout thành `UNKNOWN_RECONCILING`, không blind retry | `IMPLEMENT_READY[PGM02-R3]=NO-GO`; `ADR-053` Proposed |
+
+R1 chỉ được pin trước R2; R2 chỉ được pin trước R3. Consumer cũ phải bỏ qua
+field additive lạ; consumer mới gặp server chưa quảng bá capability phải hiển
+thị `UNAVAILABLE`, không dựng dữ liệu hoặc chạy simulator trong browser.
 
 ## 4. Payload mutation Draft
 
@@ -186,7 +234,7 @@ trả Artifact metadata sau `PASSED`; không trả bytes hoặc locator filesyst
 
 ## 6. Commission operation
 
-Request. Trường `acknowledgements` **không** phải danh sách cố định bốn phần tử:
+Request. Trường `acknowledgements` **không** phải danh sách cố định tám phần tử:
 nó phải chứa **đúng** tập khóa của những nhóm impact có `status = "PRESENT"`
 (xem §6.1). Ví dụ dưới đây là trường hợp `retain` và `activeOverrides` là
 `PRESENT`, còn `cutover` và `outputMappingChanges` là `NONE`:
@@ -245,8 +293,11 @@ Trường thiếu, `null` hoặc mảng rỗng không có `status` đều phải
 `UNAVAILABLE`. Đây là quy tắc fail-closed: thà chặn nhầm còn hơn cho Commission
 đi qua một ảnh hưởng chưa được tính.
 
-Bốn nhóm bắt buộc có `status`: `retain`, `activeOverrides`, `cutover`,
-`outputMappingChanges`.
+Tám nhóm bắt buộc có `status`: `retain`, `activeOverrides`, `cutover`,
+`outputMappingChanges`, `publishedSignals`, `controlLibrary`, `programSet` và
+`enableIntent`. Thiếu bất kỳ nhóm nào cũng là `UNAVAILABLE`; bốn nhóm mới bảo
+đảm thay Signal, library pin, tập Program hoặc Program đang Enabled không lọt
+Commission mà không có acknowledgement.
 
 ### 6.1.1 Quy tắc sinh và kiểm `acknowledgements`
 
@@ -262,7 +313,7 @@ acknowledgements = { khóa nhóm | nhóm.status == "PRESENT" }
 | `acknowledgements` **thừa** một khóa `NONE` | `422 PRG-ERR-ACK-UNEXPECTED-001` — dấu hiệu client dùng danh sách cố định cũ |
 | Bất kỳ nhóm nào có `status = "UNAVAILABLE"` | `422 PRG-ERR-IMPACT-UNAVAILABLE-001`, **chặn Commission**, kể cả khi client gửi đủ acknowledgement |
 | Nhóm thiếu field, `null`, hoặc không có `status` | Xử lý **như** `UNAVAILABLE` và chặn — fail-closed |
-| Cả bốn nhóm `NONE`, `acknowledgements = []` | Hợp lệ; vẫn kiểm `re-auth` và vẫn đọc ngược |
+| Cả tám nhóm `NONE`, `acknowledgements = []` | Hợp lệ; vẫn kiểm `re-auth` và vẫn đọc ngược |
 | `impactRef` không khớp impact hiện tại | `409 PRG-ERR-IMPACT-STALE-001` |
 
 Kiểm ở **server** là bắt buộc. FE ẩn ô xác nhận là tiện lợi cho người dùng, không
@@ -299,8 +350,8 @@ hoặc staging file đã checksum, không base64 1 MiB trong RT handler.
 |---|---|---|
 | `capabilities` | request/version | target ABI/profile/limits/cutover state |
 | `status` | none | active/LKG/task/safe-state/retain/arbitration summary |
-| `stage` | operation, revision, artifact locator/hash | verified/rejected + detail |
-| `activate` | operation, expected active, transition plan | accepted-at-safe-boundary |
+| `stage` | operation, revision, package locator/hash, POU/library/signal manifest digest | prepared whole-set verified/rejected + detail; live state chưa đổi |
+| `activate` | operation, expected active, transition plan | accepted-at-safe-boundary; scheduler set + signal bank both-or-none |
 | `operation_status` | operation | state/read-back/fault |
 | `restore` | operation, target LKG, transition plan | accepted/rejected |
 | `trace_start/stop` | bounded selector/limits | trace identity/reason |
@@ -309,6 +360,12 @@ hoặc staging file đã checksum, không base64 1 MiB trong RT handler.
 Bất biến: internal error luôn có `keepsRunningRevision`, `activeRevisionId` nếu
 có, và detail code; core không nhận role từ FE, chỉ nhận request đã authorize
 có actor/correlation để audit đối chiếu.
+
+Payload IPC dùng **canonical CBOR**: map key ordering, definite length, integer
+encoding tối thiểu, không duplicate key, không indefinite item, không NaN/
+Infinity. Request hash tính trên canonical bytes; cùng operation/key nhưng bytes
+canonical khác bị conflict. Decode/re-encode phải giữ cùng SHA-256 trong contract
+test giữa Go và C++.
 
 ## 9. Error code authority
 
@@ -334,6 +391,24 @@ có actor/correlation để audit đối chiếu.
 | `PRG-ERR-IMPACT-UNAVAILABLE-001` | có nhóm impact `UNAVAILABLE`, thiếu field hoặc `null` | 422 fail-closed, **chặn Commission/Restore** |
 | `PRG-ERR-IMPACT-STALE-001` | `impactRef` không khớp impact hiện tại | 409, client đọc lại impact và xác nhận lại |
 | `PRG-ERR-UNAVAILABLE-001` | core/compiler tạm unavailable | 503, retry hint/query |
+| `PRG-ERR-POU-KIND-001` | POU vi phạm quy tắc kind/purity/signature | 422, Active/LKG không đổi |
+| `PRG-ERR-POU-RECURSION-001` | đệ quy POU trực tiếp/gián tiếp, hoặc dependency vòng trong Control Library | 422, Active/LKG không đổi |
+| `PRG-ERR-LIB-VERSION-001` | entry Control Library thiếu hoặc lệch version đã pin | 422, không stage candidate |
+| `PRG-ERR-PROGRAM-LIMIT-001` | vượt trần capacity cấp package (Program, FB instance) | 422, nêu `limit` từ profile |
+| `PRG-ERR-SIGNAL-PUBLISHER-001` | Published Signal trùng publisher hoặc consumer trỏ signal không có publisher | 422, không mutation runtime |
+| `PRG-ERR-SIGNAL-FRESHNESS-001` | `freshnessMs` ngoài khoảng hoặc không tương thích chu kỳ producer | 422, không mutation runtime |
+| `PRG-ERR-OUTPUT-OWNER-001` | một binding output có nhiều hơn một Program owner | 422, Check từ chối trước Commission |
+| `PRG-ERR-ENABLE-NOT-COMMISSIONED-001` | Enable Program chưa Commission hoặc không có trong package Active | 409, intent không đổi |
+| `PRG-ERR-PROGRAM-STATE-001` | Enable/Disable sai trạng thái hiện tại hoặc đã đủ trần 16 Program Enabled | 409, intent không đổi |
+| `PRG-ERR-PID-REVIEW-001` | package dùng PID mà thiếu approval token Controls/Safety | 422, chặn Commission |
+| `PRG-SIM-UNSUPPORTED` | capability/worker/protocol chưa tương thích | 409/503; không spawn worker |
+| `PRG-SIM-SAVE-REQUIRED` | Draft đang hiển thị khác Saved Draft | 409; không tạo record/snapshot/worker |
+| `PRG-SIM-FORBIDDEN` | vai không được mutate phiên | 403; zero side effect, có security audit |
+| `PRG-SIM-INPUT-NOT-ALLOWED` | ngoài allowlist manifest, hoặc sai type/unit/range | 422; giữ nguyên value/sequence trước |
+| `PRG-SIM-STALE-SESSION` | ETag/sequence phiên đã cũ | 409/412; không gửi lệnh nào cho worker |
+| `PRG-SIM-QUOTA` | vượt trần phiên đồng thời/tốc độ action/tài nguyên | 429; không phiên mới, có Retry-After |
+| `PRG-SIM-WORKER-FAILED` | worker crash/timeout/giao thức hỏng | 503; phiên FAILED, kill+reap, Active không đổi |
+| `PRG-SIM-EXPIRED` | hết idle TTL hoặc hard TTL | 410; terminal, phải tạo phiên mới |
 
 Các mã component hiện hữu `API-E-*`, `IR-E-*`, `ST-*`, `RT-RETAIN-*` là detail
 code. BE map chúng sang `PRG-ERR-*` nhưng vẫn giữ `detailCode` để service; không
@@ -355,6 +430,33 @@ nhưng chưa đồng bộ catalog, sửa cùng phiên theo nguyên tắc "làm h
 As-Built `TASK-PROG-404/405`: catalog v1.4.0 có **20 public code / 99 detail
 mapping**, bổ sung detail operation/journal/checkpoint/IPC mới từ cả server và
 coordinator; generator quét cả hai source để không tái diễn drift.
+
+As-Built `T59-006`: catalog v1.7.0 có **30 public code / 120 detail mapping**.
+`T59-004` đã đặt sáu mã gộp tự chọn (`PRG-ERR-POU-001`, `PRG-ERR-LIBRARY-001`,
+`PRG-ERR-SIGNAL-001`, `PRG-ERR-ENABLE-001`) thay vì dùng đúng bộ tên mà
+`DDD-SW-PROG-UNIFIED-001` §5.2 đã khóa. Đó là **chọn lại một quyết định đã chốt**,
+nên `T59-006` thay chúng bằng đúng mười mã DDD nêu; `ST-SIG-002` (type/unit) trỏ
+về `PRG-ERR-MAP-004` sẵn có thay vì mở nhánh công khai thứ hai, và `ST-LIB-003`
+(vòng phụ thuộc) trỏ `PRG-ERR-POU-RECURSION-001` vì vòng phụ thuộc chính là đệ quy.
+
+As-Built `T59-004`: catalog v1.6.0 có **26 public code / 118 detail mapping**.
+Sáu public code mới phủ POU, Control Library, Published Signal, output owner,
+Enable/Disable và PID review; 14 detail mapping mới (`ST-POU-*`, `ST-LIB-*`,
+`ST-SIG-*`, `ST-OWN-001`, `ST-PID-001`, `API-E-008`) được khai trong
+`st_diagnostic.hpp` và `st_control_api.hpp` ngay ở W0 theo nguyên tắc contract đi
+trước consumer, nên emitter thêm sau ở W1..W4 không thể xuất hiện mà thiếu ánh xạ.
+
+Hai khoảng hở của gate được đóng cùng task:
+
+1. `error_catalog_v1.schema.json` trước đây chỉ được **băm** chứ không được thi
+   hành, nên nó đã trôi khỏi catalog thật — `NOT_FOUND` được dùng bởi
+   `PRG-ERR-NOT-FOUND-001` nhưng thiếu trong enum `statusClass` suốt nhiều
+   revision. Generator nay validate catalog theo schema.
+2. Guard detail chỉ kiểm một chiều (source → catalog) và chỉ quét source C++, nên
+   `ST-CLI-LIMIT`, `ST-WORKER-CRASH`, `ST-WORKER-TIMEOUT` do BE Go phát nằm ngoài
+   tầm quét. Nay guard quét thêm `checks.go` và kiểm **hai chiều**: mapping không
+   có emitter nào khai cũng làm build fail, trừ khi đánh dấu `contractOnly` tường
+   minh (`IPC-CONTRACT-ONLY` là sentinel test codec hai phía).
 
 ## 10. Compatibility và contract gate
 
@@ -383,7 +485,12 @@ Core đã đổi trạng thái.
 | `GET /revisions/{from}/changes/{to}` | `200` | không | 2 s | hai Revision cùng Project; change/impactRef sort + hash ổn định; Core impact chưa biết là `UNAVAILABLE` |
 | `POST .../checks` | `202` | key + revision + target | 3 s accept | ghi Check `QUEUED`; compiler chạy ngoài RT; không stage |
 | `GET /checks/{id}` | `200` | không | 2 s | read-only; diagnostics tối đa theo capability |
+| `GET /libraries` | `200` + cursor | không | 2 s | trả revision history; SYSTEM immutable; PROJECT theo projectId/scope |
+| `POST/DELETE .../library/entries` | `200` + ETag | key + `If-Match` | 5 s | chỉ DRAFT; dependency check; transaction+audit, không cascade/publish |
+| `POST .../library/revisions/{id}/deprecate` | `200` + ETag/receipt | key + `If-Match` | 5 s | chỉ `PUBLISHED→DEPRECATED`; exact revision read-back; Active/LKG pin giữ nguyên |
+| `GET/PUT .../programs[/.../runtime-intent]` | `200` | PUT có key | 3 s | desired bền vững tách live; Core unavailable trả live null/unknown |
 | `GET /runtime[/monitor]` | `200` | không | 1 s | đọc snapshot authoritative; không suy trạng thái từ DB |
+| `GET /runtime/signals` | `200` | không | 1 s | cùng active generation; invalid/stale/unavailable là null+quality |
 | `POST /runtime/traces` | `202` | key bắt buộc | 3 s | quota trước khi mở capture; tuyệt đối không đổi output |
 | `DELETE /runtime/traces/{id}` | `204` | lặp lại vẫn `204` | 3 s | dừng capture, giữ metadata/audit |
 | `POST /operations/commission` | `202` | key + expected active | 3 s accept | ghi operation trước IPC; chỉ một mutation runtime/controller |
@@ -392,6 +499,7 @@ Core đã đổi trạng thái.
 | `POST /bundles/export` | `200` + ZIP base64/hash/audit | key + revision set | 3 s | ZIP Store/path sort/timestamp 1980 cố định; path UTF-8 NFC; entry regular không executable/comment/extra metadata; chỉ Revision source/config allowlist, không artifact/IR/native/cache |
 | `POST /bundles/import` | `201` + Project/Draft ETag | key + bundle hash | 5 s | request tối đa 6 MiB, ZIP raw tối đa 4 MiB, entry tối đa 256 KiB; validate count/path NFC/kind/hash/size/manifest/flags/mode/comment/timestamp/extra; chỉ tạo Project/Draft, không Check/Commission/activate |
 | `POST /retain/reset` | `202` | key + one-time confirmation | 3 s accept | operation riêng; Core reset ở safe boundary; audit bắt buộc |
+| `POST /runtime/recovery-reset` | `202` | key + one-time confirmation | 3 s accept | safe-boundary operation; không bypass Restore/LKG |
 | `GET /audit` | `200` + cursor | không | 3 s | sanitize theo role; không trả source/secret ngoài policy |
 
 ### 11.1 Header, cursor và giới hạn request
@@ -465,8 +573,8 @@ gốc đó. Locator nằm ngoài `${STATE_DIR}/programming/staging/` bị reject
 |---|---|---|
 | `CAPABILITIES` | không | ABI/profile, limits, periods, cutover, max frame |
 | `STATUS` | selector bitset | active/LKG/hash/task/fault/retain/producer; ≤16 KiB |
-| `STAGE` | revision, locator, size, SHA-256, target/profile | `STAGED` hoặc reject detail; ≤1 artifact/op |
-| `ACTIVATE` | expected active, staged token, retain plan, cutover plan | `ACCEPTED`; transition chỉ ở safe boundary |
+| `STAGE` | revision, locator, size, SHA-256, target/profile, manifest digests | `PREPARED` hoặc reject detail; ≤1 package/op; fsync journal trước mọi live mutation |
+| `ACTIVATE` | expected active, prepared token, retain/cutover plan | `ACCEPTED`; whole-set scheduler + signal bank chỉ đổi ở safe boundary |
 | `OPERATION_STATUS` | operation ID | state, step, active/read-back, error, timestamps |
 | `RESTORE` | target revision/artifact, expected active, transition | chạy lại verify; không dùng blob đang lỗi |
 | `TRACE_START` | selector ≤64, period, duration, max samples | trace ID/quota; read-only |
@@ -476,6 +584,27 @@ Core phải trả response trước deadline hoặc đóng frame với
 `PRG-ERR-UNAVAILABLE-001`; không block scan loop để chờ client. Buffer IPC cấp
 phát ở non-RT worker, queue tối đa 32 request; đầy queue trả busy, không drop
 request mutation âm thầm.
+
+Atomic lifecycle bắt buộc: lỗi trước journal `PREPARED` không được đổi scheduler,
+signal bus, active/LKG/candidate/identity. Tại safe boundary, Core swap toàn bộ
+prepared Program set rồi matching signal bank trong cùng transition. Nếu bước
+signal lỗi, scheduler phải restore set cũ tại cùng boundary; response giữ
+`keepsRunningRevision=true` chỉ khi read-back xác nhận active cũ còn nguyên.
+
+### 12.1 Web/Iobus shared-memory read-back
+
+`contracts/shm/mkddc_shm.h` là authority: path `/dev/shm/mkddc_io_shm`, magic
+`0x4B584405` (v5), writer iobus và reader Core/Web. Reader Go phải
+`mmap(PROT_READ, MAP_SHARED)`, atomic-load `seq`, bỏ seq lẻ, copy toàn segment,
+đọc lại seq và retry bounded tối đa 5 lần; `os.ReadFile`/`pread` bị cấm vì có thể
+trả snapshot xé. Segment đổi inode sau restart phải detach/attach lại.
+
+Field nối đuôi `max_iop_poll_gap_us` là `uint32` microsecond, writer iobus cập
+nhật từ khoảng cách lớn nhất giữa hai IO response hợp lệ; `0` nghĩa chưa đủ hai
+mẫu, **không** nghĩa gap bằng zero. Web/API đổi sang millisecond nullable chỉ sau
+snapshot seqlock hợp lệ. Missing tail, magic sai, retry hết, IOP fault hoặc stale
+phải trả `UNAVAILABLE`/null và khóa kết luận an toàn; không giữ dữ liệu cũ như
+live và không fabricate số 0.
 
 ## 13. State, ordering và phục hồi
 
@@ -560,6 +689,7 @@ không được báo optimistic success.
 | DB/migration | `apps/web-api/internal/programming/store`, migration package | migration up/down, crash/restart, concurrent writer |
 | FE client/type | `apps/web-ui/src/features/programming/api`, generated types | MSW/contract + stale/timeout/reconcile UI |
 | Core IPC | `apps/core/application/programming`, `contracts/ipc/` | peer credential, fuzz frame, queue/deadline |
+| SHM read-back | `contracts/shm/mkddc_shm.h`, `apps/iobus/domain/io/io_cache.cpp`, `apps/web-api/internal/app/shm_reader.go` | ABI/magic/offset, mmap seqlock retry/inode, missing tail/null và max IOP gap |
 | Check compiler/artifact | `apps/web-api/internal/programming/{compiler,artifact,application,store}`, `apps/core/application/st/st_compile_main.cpp`, packaging | timeout/process group, rlimit/seccomp, manifest/hash/size, traversal/symlink/read-back/power-loss |
 
 | Test ID | Tình huống | Kết quả định lượng/evidence |
@@ -575,6 +705,13 @@ không được báo optimistic success.
 | `IF-T-009` | OpenAPI ↔ Go ↔ TS examples | zero schema mismatch |
 | `IF-T-010` | mixed-version deploy/rollback | minor tương thích; major bị chặn có chỉ dẫn restore |
 | `IF-T-011` | seal → reload Project → seal/check lần hai | response có `baseRevisionId` bằng Revision vừa seal; request kế tiếp `201/202`, không conflict giả |
+| `IF-T-012` | canonical CBOR Go↔C++ | cùng logical payload cho bytes/SHA-256 y hệt; non-canonical/duplicate/indefinite/non-finite reject |
+| `IF-T-013` | lỗi ở mỗi phase stage/activate POU+Signal | trước `PREPARED` zero-mutation; signal-swap fail restore scheduler cùng boundary |
+| `IF-T-014` | Library deprecate same/different key, stale ETag, restart | một transition/receipt/audit; đúng revision read-back; Active/LKG pin vẫn load |
+| `IF-T-015` | SHM concurrent writer/restart/missing tail | không snapshot xé; inode reattach; invalid trả null/UNAVAILABLE; gap `0` không thành 0 ms |
+| `IF-T-016` | PGM-02 R1 typed Draft/signature/reference/refactor/anchor | generated Go/TS/schema cùng discriminator; ETag stale, referenced delete và analyzer unavailable đều zero mutation; read-back exact |
+| `IF-T-017` | PGM-02 R2 LIVE tuple mismatch/stale/revision switch | UI không ghép source/value khác revision/generation, clear value và full rejoin; không hiện zero giả |
+| `IF-T-018` | PGM-02 R3 RBAC/private worker/fault | operator mutation `403` trước worker; replay idempotent; timeout reconcile; sandbox không mở production handle/output |
 
 ## 17. Envelope và ordering mẫu mức triển khai
 
@@ -628,10 +765,14 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | `PROG-OD-001`: `17 DECIDED`, `0 OPEN`, `0 CLOSED` | Product + discipline authority | **APPROVED** | cập nhật OpenAPI/code theo baseline v2.8 |
 | TLS production chưa có | Security + Platform | **READY TO IMPLEMENT** | TLS/session/CSRF test theo Security DoD |
 | Operation worker/lifecycle target | BE + Core + QA | **SUPPORTING TARGET PASS** | `EV-PROG-P5-507` chứng minh happy path; fault/power/restart Test Result độc lập theo Plan 53 P6 |
-| Monitor/Trace v1.20.0 | Core + BE + FE + QA | **SOURCE IMPLEMENTED / SUPPORTING TARGET PASS / MERGE PENDING** | host tests + audit; `EV-PROG-P5-510` target Monitor `200`/Trace validation; positive binding/start-get-stop target còn mở |
+| Plan 59 OpenAPI v1.28/POU/Signal/Library/atomic IPC | Core + BE + FE + QA | **IMPLEMENTATION_CLOSE PENDING** | affected gates + exact merged commit; không kế thừa target evidence cũ |
+| PGM-02 v2.2 contract overlay | Product + Architect + FE/BE/Core/Security/QA | **TARGET CANDIDATE — NO EXECUTION AUTHORITY** | Owner + Architect pin exact revision/hash; sau đó chỉ mở R1 trước |
+| Forlinx MCU FAKE deploy/soak | Ops + Runtime + QA | **DEPLOY NOT_RUN / SOAK NOT_RUN** | manifest/checksum/API/IPC/SHM/browser read-back; raw samples đủ 24 giờ |
+| Formal VVP/CI/HIL vật lý | Verification + Owner + HW | **NOT_RUN / SKIPPED_BY_OWNER / DEFERRED_NO_HARDWARE** | không hạng mục nào được ghi PASS; `RELEASE_READY` NO-GO |
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
+| 2.1-candidate | 2026-08-24 | Thêm contract overlay PGM-02 cho typed EDIT, coherent LIVE và Simulation worker cách ly; bổ sung `IF-T-016..018`; giữ OpenAPI v1.28.0 Active không đổi và R1/R2/R3 `NO-GO` chờ exact pin. | System Architecture + Programming Team |
 | 0.1 | 2026-08-09 | Draft REST/event/internal contract | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung field, timeout, idempotency, state, error map, deploy/rollback và test để đạt M3 | System Engineering |
 | 0.3 | 2026-08-09 | Bổ sung response/event envelope, ordering/freshness, timeout/retry/idempotency table và contract-freeze checklist; chuyển Detailed Draft chờ review | System Engineering |
@@ -651,13 +792,15 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 | 1.7 | 2026-08-13 | Hoàn tất `TASK-PROG-507` tại `0f1526c`: deploy compiler/Core/Web/FE ARM64 và bật cờ FE/BE trên Foxlinx. Sửa tương thích `ao/do:null` cũ theo fail-safe (`null` chỉ về default rỗng; type sai vẫn reject). Hai Check `PASSED`; Commission fixture không output `SUCCEEDED/COMMITTED`; Core đọc-ngược Active/LKG/Task `RUNNING`. `EV-PROG-P5-507` là supporting target evidence, không tự nâng Test Result/HIL. | BE + Core + FE + Ops + QA |
 | 1.8 | 2026-08-13 | `TASK-PROG-509`: OpenAPI v1.20.0 thay schema Monitor/Trace placeholder bằng field/limit cụ thể, runtime thêm `controllerId`+task metric. Nối source Core snapshot→BE MonitorService→HTTP và TraceService bounded/idempotent/audited→FE client. §3.1 ghi rõ HTTP trace lấy mẫu read model trong RAM, không giả là Core durable trace. Host test PASS; target corrective NOT_RUN do SSH. | BE + Core + FE + QA |
 | 1.9 | 2026-08-13 | `EV-PROG-P5-510`: deploy OpenAPI/runtime corrective trên Foxlinx, Monitor authenticated `200`, Task `RUNNING`, Trace selector rỗng `400`, service/hash/rollback rehearsal PASS. Fixture active không binding nên Monitor empty và chưa chạy positive Trace target; source chưa merge, không nâng Test Result. | BE + Core + FE + Ops + QA |
+| 2.0 | 2026-08-24 | Đồng bộ OpenAPI v1.28.0/33 operation, Draft v2 POU/Signal, Library deprecate, tám nhóm impact, canonical CBOR, whole-set atomic IPC và SHM seqlock/max IOP gap; tách implementation/Forlinx MCU FAKE/soak/VVP/HIL/release evidence. | BE + Core + FE + Ops + QA |
 
 | Vai trò | Trạng thái | Ngày / bằng chứng |
 |---|---|---|
 | Backend Lead | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm trong task P1 |
 | Runtime Architect | **WAIVED FOR IMPLEMENTATION** | review hậu kiểm trong task P1–P3 |
 | Security + FE + QA | **WAIVED FOR IMPLEMENTATION** | contract/security test theo DoD; không chặn code |
-| System Architect + Product Owner | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11** | `AUTH-PROG-2026-08-11-03` |
+| System Architect + Product Owner | **ACCEPT FOR IMPLEMENTATION; RELEASE NO-GO** | `AUTH-PROG-2026-08-11-03`; target/soak/VVP còn mở |
+| PGM-02 v2.2 Candidate | **Owner APPROVE SCOPE/WP-00; Architect PENDING EXACT PIN** | `CR-PROG-PGM02-V22-001`; không phê duyệt đổi OpenAPI/IPC production |
 
 ### 19.1 Kết quả checklist vòng chi tiết
 
@@ -667,19 +810,22 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; revision history và bảng ký §19 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 quy tắc chung; §10 ranh giới contract gate |
-| `DD-03` As-Built | PASS | §0 câu 3 và §3/§11/§13.2/§16 dẫn Commission/Restore/status + Core lifecycle tại `c2f3189`/`10d9ad6`; `EV-PROG-P5-507` ghim target cờ `ON`, Check/Commission/read-back |
+| `DD-03` As-Built | PASS | §0, §3.1/3.2, §8, §12/12.1 và §16 dẫn OpenAPI v1.28, BE/Core IPC, POU/Signal/Library và SHM source hiện tại; target mới chưa chạy |
 | `DD-04` Target ownership | PASS | §8 và §12: BE là producer REST/WS, Core là authority của runtime truth; §13 ai giữ trạng thái nào |
-| `DD-05` Data từng field | PASS | §4 payload mutation, §11.1 header/cursor/giới hạn, §11.2 response, §12 hợp đồng BE↔Core mức field |
+| `DD-05` Data từng field | PASS | §3.2 Draft v2, §4 mutation, §11.1 header/giới hạn, §12 IPC và §12.1 SHM field/null semantics |
 | `DD-06` Interface | PASS | §3 resource, §5 Check, §6 Commission, §7 event, §11 ma trận REST, §15 security/tương thích/triển khai, §17 envelope mẫu |
 | `DD-07` State/ordering/timing | PASS | §13.1–§13.3 state và phục hồi cho Draft/Check/Commission; §11.1 timeout/retry/idempotency |
 | `DD-08` Operation flow | N/A tại file này | Luồng người dùng thuộc UI/UX Design; file này chỉ định nghĩa hợp đồng. §13 mô tả đủ thứ tự gọi để FE dựng flow |
 | `DD-09` Error/safety/security | PASS | §2 envelope, §9 **authority mã lỗi** `PRG-ERR-*`, §14 ánh xạ lỗi component → công khai, §15 security |
 | `DD-10` Repository mapping | PASS | §16: handler BE, sinh type FE, và yêu cầu đưa spec vào `contracts/openapi/openapi.yaml` |
-| `DD-11` Verification | PASS | §16 gắn `VS-PROG-019/022/024/026`; §18 checklist đóng băng contract cho consumer |
+| `DD-11` Verification | PASS | §16 `IF-T-001..015`; §18 checklist đóng băng contract; current target/formal results giữ NOT_RUN |
 | `DD-12` Compatibility/deploy/rollback | PASS | §10 contract gate; §15 thứ tự triển khai và tương thích |
-| `DD-13` Trace/risk/decision/sign-off | **PASS FOR IMPLEMENTATION** | 17/17 decision `DECIDED`; Product + Architect `ACCEPT ALL`; BE-Core source đã có. TLS/target/HIL evidence vẫn là blocker release, không phải blocker code |
+| `DD-13` Trace/risk/decision/sign-off | **Baseline PASS FOR IMPLEMENTATION DESIGN; PGM-02 Candidate PENDING; RELEASE NO-GO** | Baseline Plan 59 `IMPLEMENTATION_CLOSE` pending; PGM-02 chờ exact pin/ADR-053; target MCU FAKE/soak/VVP chưa chạy; CI skipped, HIL physical deferred |
 
-Không còn blocker implementation hoặc deploy P5. Commission/Core đã chạy
-end-to-end trên Foxlinx với supporting target evidence. Fault/power/HIL và
-review độc lập vẫn `NOT TESTED`; đó là cổng assurance/release P6, không phải
-chức năng Programming còn tắt hoặc chưa implement.
+Baseline 2.0 không còn blocker thiết kế để tiếp tục implementation theo authority
+đã ký. Nhận định đó không áp dụng cho PGM-02 v2.2 Candidate: exact revision/hash
+pin và `ADR-053` vẫn mở, nên chưa được đổi OpenAPI/IPC production hoặc bắt đầu
+R1/R2/R3. Source Plan 59 cũng chưa có exact merged/deployed commit, Forlinx MCU
+FAKE deploy/soak và formal VVP đều `NOT_RUN`; vì vậy không được dùng supporting
+evidence cũ để kết luận `TARGET_FAKE_MCU_DEPLOY`, `TARGET_FAKE_MCU_SOAK` hay
+`RELEASE_READY`.

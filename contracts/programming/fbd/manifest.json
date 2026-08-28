@@ -1,16 +1,17 @@
 {
   "contractId": "PROGRAMMING-FBD-V1",
   "version": 1,
-  "lowererVersion": "fwsom-fbd-1.0.0",
+  "lowererVersion": "fwsom-fbd-1.1.0",
   "profileId": "revA-1t-1-5-30",
-  "schemaSha256": "4279397cf24e9510232d2ef7f259eaf1b889dc1503eef7888c84cbe2035a356a",
+  "schemaSha256": "775a9069c0ff5115ef6a10e7a405f79f250d17ae3c31dc3f5bcb6cc7a3cb3cab",
   "keyboardSha256": "9bce7f03c3d874790ecad18aa797ef20959090bccd8cc9d0c5f049904e69b64c",
   "goldenSha256": "133798a65bb9bb638d8e1a1103ac892415eb740d33e990715191ba0887f40f51",
-  "equivalenceSha256": "5c9bac79d6c962b23299abe967b566dce739f4340a91231a3c344c617f942c0f",
-  "profileSha256": "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc",
+  "equivalenceSha256": "0e504c8c6b70ec6a9b915ea22d878972dc0bc64810696581871128afb5c3e8b1",
+  "profileSha256": "8623adb865bc6367fcc655f26dfc1d2fd2385971c3bc5738ad7e74c831d83204",
   "goldenNetworkCount": 1,
   "goldenNodeCount": 4,
   "goldenWireCount": 3,
   "keyboardCommandCount": 11,
-  "equivalencePairCount": 20
+  "equivalencePairCount": 37,
+  "equivalenceStateTraceCount": 9
 }

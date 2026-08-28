@@ -85,7 +85,14 @@ func (a *App) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	writeJSON(w, http.StatusOK, UserDTO{Username: principal.Username, Role: principal.Role})
+	// `T57-3.17` / ADR-047: `/me` là một trong hai endpoint mà phiên "phải đổi
+	// mật khẩu" còn gọi được, nên nó phải nói ra chính tình trạng đó — nếu
+	// không, giao diện chỉ thấy một chuỗi 403 mà không biết vì sao.
+	writeJSON(w, http.StatusOK, UserDTO{
+		Username:           principal.Username,
+		Role:               principal.Role,
+		MustChangePassword: a.auth.MustChangePassword(principal.Username),
+	})
 }
 
 func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {

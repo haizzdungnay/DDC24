@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 
 const realtimeState = vi.hoisted(() => ({ allPoints: [], lastPointEventAt: null }))
 const fetchMock = vi.hoisted(() => vi.fn<typeof fetch>())
@@ -73,13 +74,13 @@ describe('TrendsPage — series còn trong prefs nhưng không còn trong /point
   })
 
   it('không nói "chưa chọn điểm" khi vẫn còn id đang được vẽ', async () => {
-    render(<TrendsPage />)
+    render(<MemoryRouter><TrendsPage /></MemoryRouter>)
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     expect(screen.queryByText('No trend points selected.')).not.toBeInTheDocument()
   })
 
   it('hiện thẻ riêng cho id không resolve được, kèm lý do', async () => {
-    render(<TrendsPage />)
+    render(<MemoryRouter><TrendsPage /></MemoryRouter>)
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     // 'DO-01' còn xuất hiện ở nhãn series của biểu đồ và bảng thống kê.
     expect(screen.getAllByText('DO-01').length).toBeGreaterThan(0)
@@ -89,7 +90,7 @@ describe('TrendsPage — series còn trong prefs nhưng không còn trong /point
 
   it('vẫn gỡ được id mồ côi để thoát khỏi trạng thái kẹt', async () => {
     const user = userEvent.setup()
-    render(<TrendsPage />)
+    render(<MemoryRouter><TrendsPage /></MemoryRouter>)
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
 
     await user.click(screen.getByRole('button', { name: 'Remove' }))
@@ -100,7 +101,7 @@ describe('TrendsPage — series còn trong prefs nhưng không còn trong /point
   /* FE-TR-02: ô chọn nhận giờ địa phương còn bảng/biểu đồ hiển thị UTC. Chênh
    * lệch phải được nói ra ngay tại chỗ nhập, không để người dùng tự đoán. */
   it('nói rõ ô chọn dùng giờ địa phương còn phần hiển thị dùng UTC', async () => {
-    render(<TrendsPage />)
+    render(<MemoryRouter><TrendsPage /></MemoryRouter>)
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     expect(screen.getByText(/pickers take local time .* the chart and table below are shown in UTC/)).toBeInTheDocument()
   })

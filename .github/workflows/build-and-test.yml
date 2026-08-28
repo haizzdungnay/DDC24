@@ -32,6 +32,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Layout gate chạy generator registry C++/Go/TS và dùng gofmt để byte Go
+      # sinh ra ổn định. Không dựa vào Go ambient của runner.
+      - name: Setup Go cho generator contract
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/web-api/go.mod
+          cache: false
+
       - name: Kiểm authority, dependency và build artifact
         run: scripts/verify-project.sh --component layout
 
@@ -158,21 +166,59 @@ jobs:
       - name: Test, lint và build React Web UI
         run: scripts/verify-project.sh --component frontend
 
-      # F-07: bộ e2e `apps/web-ui/e2e/` trước đây KHÔNG workflow nào chạy —
-      # `npm test` chỉ quét src/, còn e2e/ nằm ngoài — nên suite mục dần mà không
-      # ai biết. `network-qa.spec.ts` đã được sửa và gắn vào gate ở đây.
-      #
-      # CỐ Ý chỉ chạy spec mạng: `point-names.spec.ts` còn 14 test hỏng SẴN, thuộc
-      # tính năng đặt tên điểm (không liên quan trang mạng). Đã kiểm chứng bằng
-      # cách stash toàn bộ thay đổi FE của bản 2026-07-31 — lỗi giữ nguyên. Sửa
-      # nhóm đó là việc riêng; mở rộng gate sang cả thư mục e2e/ chỉ sau khi xong,
-      # chứ không thêm một job biết chắc đỏ.
+      # F-07: `npm test` chỉ quét src/, nên E2E cần cổng Playwright riêng. Cổng
+      # mock hiện chạy động 8 spec/61 test; chỉ cách ly point-names đang đỏ sẵn
+      # và programming-real do lane backend/Core thật sở hữu riêng.
       - name: Install Playwright browser
         working-directory: apps/web-ui
         run: npx playwright install --with-deps chrome
 
-      - name: E2E network page
+      - name: E2E mock — 8 spec / 61 test
         run: scripts/verify-project.sh --component e2e
+
+  programming-real-e2e:
+    name: Programming E2E backend/Core thật (host)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cài toolchain C++ cho Core simulator và compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libsodium-dev \
+            pkg-config
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/web-api/go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: apps/web-ui/package-lock.json
+
+      - name: Cài phụ thuộc Web UI và Chrome
+        working-directory: apps/web-ui
+        run: |
+          npm ci
+          npx playwright install --with-deps chrome
+
+      - name: Chặn mock lọt vào lane real-backend
+        run: |
+          if grep -nE '(page|context|browserContext)\.(route|routeFromHAR|routeWebSocket)\(' apps/web-ui/e2e/programming-real.spec.ts; then
+            echo 'LỖI: Programming real-backend E2E không được dùng route/mock ở page hoặc browser context'
+            exit 1
+          fi
+
+      - name: Project đến Restore qua backend, compiler và Core simulator thật
+        run: scripts/verify-project.sh --component e2e-real
 
   mcu-firmware:
     name: MCU Firmware
@@ -212,7 +258,7 @@ jobs:
           ctest --test-dir build/ubsan --output-on-failure --parallel 4
 
   fuzz-smoke:
-    name: Fuzz smoke (parser + loader)
+    name: Fuzz smoke (parser + loader + FBD)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -223,13 +269,19 @@ jobs:
           CXX=clang++ CC=clang cmake -S . -B build/fuzz -DCMAKE_BUILD_TYPE=Debug \
             -DMKDDC_BUILD_FUZZ=ON -DMKDDC_SANITIZE=address \
             -DCORE_BUILD_TESTS=OFF -DIOBUS_BUILD_TESTS=OFF
-          cmake --build build/fuzz --target fuzz_st_parser fuzz_st_loader --parallel $(nproc)
+          cmake --build build/fuzz --target fuzz_st_parser fuzz_st_loader fuzz_st_fbd_model --parallel $(nproc)
       - name: Fuzz smoke 60s mỗi harness
         run: |
           # PR chạy smoke ngắn để bắt hồi quy rõ ràng; chiến dịch fuzz dài chạy
           # nightly. Corpus seed lấy từ sample thật để bắt đầu từ input hợp lệ.
-          mkdir -p /tmp/cp /tmp/cl
+          #
+          # T59-601: harness FBD trước đây có trong repo nhưng KHÔNG job nào chạy —
+          # đồ thị FBD là input thù địch đến từ BE/FE y hệt source ST và artifact,
+          # nên bỏ nó ngoài CI là bỏ trống đúng một trong ba cửa vào.
+          mkdir -p /tmp/cp /tmp/cl /tmp/cf
           cp apps/core/application/st/samples/*.st /tmp/cp/ || true
           cp apps/core/application/st/samples/*.mkir /tmp/cl/ || true
+          cp contracts/programming/fbd/golden/*.json /tmp/cf/ || true
           ./build/fuzz/core/fuzz_st_parser /tmp/cp -max_total_time=60 -rss_limit_mb=2048
           ./build/fuzz/core/fuzz_st_loader /tmp/cl -max_total_time=60 -rss_limit_mb=2048
+          ./build/fuzz/core/fuzz_st_fbd_model /tmp/cf -max_total_time=60 -rss_limit_mb=2048

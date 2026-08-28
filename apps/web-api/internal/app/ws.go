@@ -287,7 +287,7 @@ func (a *App) handleMonitorWSMessage(ctx context.Context, conn *websocket.Conn, 
 
 // handleMonitorForce chuyển lệnh ép tay qua WebSocket xuống Core.
 //
-// PA3-107 — VÌ SAO KHÔNG CÒN HẸN GIỜ Ở ĐÂY
+// # PA3-107 — VÌ SAO KHÔNG CÒN HẸN GIỜ Ở ĐÂY
 //
 // Bản trước giữ `expirations map[string]time.Time` gắn với MỘT kết nối
 // WebSocket rồi tự gửi lệnh release khi tới hạn. Nghĩa là thời hạn an toàn của

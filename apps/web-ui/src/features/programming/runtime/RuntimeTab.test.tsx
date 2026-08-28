@@ -17,7 +17,7 @@ const runtime: ProgrammingRuntime = {
   observedAt: '2026-08-19T00:00:00Z'
 }
 
-function renderTab(value: ProgrammingRuntime, status: 'loading' | 'ready' | 'error' = 'ready') {
+function renderTab(value: ProgrammingRuntime | null, status: 'loading' | 'ready' | 'error' = 'ready') {
   return render(
     <I18nProvider>
       <RuntimeTab runtime={value} status={status} />
@@ -25,69 +25,47 @@ function renderTab(value: ProgrammingRuntime, status: 'loading' | 'ready' | 'err
   )
 }
 
-function currentRuntimePanel(): HTMLElement {
-  return screen.getByRole('heading', { name: 'Runtime hiện tại' }).closest('section')!
-}
-
 beforeEach(() => localStorage.setItem('mkddc-lang', 'vi'))
 afterEach(cleanup)
 
-describe('RuntimeTab truth-state', () => {
-  it('chỉ hiển thị FAULT live khi producer READY', () => {
+describe('RuntimeTab', () => {
+  it('hiển thị thông tin Active, LKG và trạng thái kết nối Core', () => {
     renderTab(runtime)
-    expect(screen.getAllByText('FAULT')).toHaveLength(1)
-    expect(screen.queryByText('DEGRADED · FAULT')).not.toBeInTheDocument()
+    expect(screen.getByText('revision-active')).toBeInTheDocument()
+    expect(screen.getByText('revision-lkg')).toBeInTheDocument()
+    expect(screen.getByText('Core đang chạy')).toBeInTheDocument()
+    expect(screen.getByText('FAULT')).toBeInTheDocument()
   })
 
-  it('đưa bằng chứng runtime live lên đầu: task, chu kỳ, số lần chạy, safe-state và Active', () => {
+  it('hiển thị metric task khi có thông tin task trong runtime', () => {
     renderTab({
       ...runtime,
       taskState: 'RUNNING',
-      safeState: false,
       task: {
         taskId: 'main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 42,
         missedReleaseCount: 0, lastExecNs: 1_500_000, maxExecNs: 2_000_000,
         overrunCount: 0, consecutiveOverruns: 0
       }
     })
-    const currentRuntime = currentRuntimePanel()
-    expect(within(currentRuntime).getByText('RUNNING')).toBeInTheDocument()
-    expect(within(currentRuntime).getByText('1000 ms')).toBeInTheDocument()
-    expect(within(currentRuntime).getByText('42')).toBeInTheDocument()
-    expect(within(currentRuntime).getByText('Bình thường')).toBeInTheDocument()
-    expect(screen.getByText('revision-active')).toBeInTheDocument()
+    expect(screen.getByText('RUNNING')).toBeInTheDocument()
+    expect(screen.getByText('1.50 ms')).toBeInTheDocument()
+    expect(screen.getByText('2.00 ms')).toBeInTheDocument()
+    expect(screen.getByText(/Chu kỳ: 1000 ms · Ngân sách: 200 ms · Lỡ nhịp: 0/)).toBeInTheDocument()
   })
 
-  it('không hiển thị Active hay metric task như dữ liệu live khi runtime chưa xác nhận', () => {
-    renderTab({
-      ...runtime,
-      producerState: 'DEGRADED',
-      task: {
-        taskId: 'main', periodMs: 1000, budgetMs: 200, state: 'FAULT', runCount: 42,
-        missedReleaseCount: 0, lastExecNs: 1, maxExecNs: 1, overrunCount: 0, consecutiveOverruns: 0
-      }
-    })
-    const currentRuntime = currentRuntimePanel()
-    expect(within(currentRuntime).getByText('DEGRADED · FAULT')).toBeInTheDocument()
-    expect(within(currentRuntime).queryByText('revision-active')).not.toBeInTheDocument()
-    expect(within(currentRuntime).queryByText('1000 ms')).not.toBeInTheDocument()
-  })
-
-  it('không biến task FAULT trong producer DEGRADED thành lỗi live', () => {
+  it('hiển thị Core suy giảm khi producerState là DEGRADED', () => {
     renderTab({ ...runtime, producerState: 'DEGRADED' })
-    expect(screen.getAllByText('DEGRADED · FAULT')).toHaveLength(1)
     expect(screen.getByText('Core suy giảm')).toBeInTheDocument()
+    expect(screen.getByText(/Giá trị runtime mang nhãn dữ liệu cũ/)).toBeInTheDocument()
   })
 
-  it('gắn STALE cho task state lấy từ snapshot sau lỗi đọc', () => {
+  it('hiển thị Không kết nối được Core khi status là error', () => {
     renderTab(runtime, 'error')
-    expect(screen.getAllByText('STALE · FAULT')).toHaveLength(1)
-    expect(screen.getByText('Snapshot Core cũ')).toBeInTheDocument()
+    expect(screen.getByText('Không kết nối được Core')).toBeInTheDocument()
   })
 
-  it('enum producer lạ fail-closed, không lộ FAULT như trạng thái live', () => {
-    renderTab({ ...runtime, producerState: 'FUTURE_STATE' } as unknown as ProgrammingRuntime)
-    expect(screen.getAllByText('UNKNOWN')).toHaveLength(1)
-    expect(screen.queryByText('FAULT')).not.toBeInTheDocument()
+  it('safe-state có cảnh báo PRG-SAFE-ACTIVE khi safeState=true', () => {
+    renderTab({ ...runtime, safeState: true, safeStateNoControllerOnly: false })
+    expect(screen.getByText(/PRG-SAFE-ACTIVE — Safe-state đang tác động do lỗi/)).toBeInTheDocument()
   })
 })

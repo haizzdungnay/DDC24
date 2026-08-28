@@ -52,6 +52,11 @@ export function ExceptionTab({
 
   return (
     <div className="space-y-3">
+      {/* N-08: tab nằm trong `ScheduleEditorPage` vốn đã giữ `<h1>`, nên đây là
+          `<h2>` — và `sr-only` vì tên tab đã hiện trên thanh tab, lặp lại bằng
+          mắt là nhiễu. Cây heading vẫn phải liền mạch cho trình đọc màn hình
+          (WCAG 2.2 §2.4.6). */}
+      <h2 className="sr-only">Ngoại lệ</h2>
       <div className="flex items-center justify-between">
         <p className="text-sm text-[var(--c-text-dim)]">
           Ngoại lệ ghi đè lịch tuần khi ngày khớp. Thứ tự tính: ngoại lệ → lịch tuần → giá trị mặc định.

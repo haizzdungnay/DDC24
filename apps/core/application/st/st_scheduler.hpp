@@ -24,6 +24,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "graph/point_table.hpp"
@@ -31,6 +32,7 @@
 #include "st/st_limits.hpp"
 #include "st/st_retain.hpp"
 #include "st/st_runtime.hpp"
+#include "st/st_signal_bus.hpp"
 #include "st/st_trace.hpp"
 
 namespace core {
@@ -52,9 +54,31 @@ enum class StProgramState : uint8_t {
     FAULTED,
     ROLLED_BACK,
     REJECTED,
+    /* Published Signal BLOCK_PROGRAM/WAIT: trạng thái phục hồi được, vẫn
+     * được release lại ở chu kỳ kế nhưng không được publish candidate. Đặt ở
+     * cuối để không đổi wire/checkpoint value của các trạng thái đã có. */
+    WAITING,
 };
 
 const char* st_program_state_name(StProgramState s);
+
+/* Ý ĐỊNH Enable/Disable đang chờ RT tiêu thụ. Không mang trạng thái, chỉ mang
+ * điều người vận hành yêu cầu — trạng thái thật vẫn chỉ do RT ghi. */
+enum class StEnableRequest : uint8_t {
+    NONE = 0,
+    ENABLE,
+    DISABLE,
+};
+
+/* Kết quả RT trả lại cho lượt Enable/Disable vừa tiêu thụ ở safe boundary. */
+enum class StEnableAckResult : uint8_t {
+    NONE = 0,
+    APPLIED,
+    /* Trạng thái nguồn không cho phép bật (FAULTED chưa reset, EMPTY...). */
+    REJECTED_STATE,
+    /* Vượt trần Program chạy đồng thời của profile (Rev A: 16). */
+    REJECTED_LIMIT,
+};
 
 /* Giới hạn theo SPEC §2. */
 namespace st_sched_limits {
@@ -75,8 +99,64 @@ namespace st_base_step {
 constexpr uint32_t kDefaultMs = 1000;
 constexpr uint32_t kMinMs = 500;
 constexpr uint32_t kMaxMs = 2000;
-constexpr uint32_t kMaxTaskBudgetPercent = 20;
+/* Trần budget là quyết định profile, không phải hằng riêng của base step:
+ * giữ hai bản sao thì mỗi lần profile đổi lại có một phía nói số cũ. */
+constexpr uint32_t kMaxTaskBudgetPercent = st_profile_generated::kMaxTaskBudgetPercent;
 } // namespace st_base_step
+
+/* Hold-last TTL — ADR-051, DDD-CTRL-PROG-001 §6/§15.
+ *
+ * Con số này trả lời đúng một câu: thiết bị được phép giữ lệnh cuối cùng của
+ * một Program đã ngừng publish trong bao lâu trước khi nhả quyền cho mức ưu
+ * tiên tiếp theo/default. Trước ADR-051 nó là `0` — nghĩa là GIỮ VÔ HẠN: một
+ * van có thể đứng ở 73% mãi mãi vì chương trình chết chứ không vì ai ra lệnh.
+ *
+ * 60 s được chọn theo ba ràng buộc, không phải theo cảm tính:
+ *  1. `>= 2x` chu kỳ Task chậm nhất của profile (30 s). Tuổi của lệnh cuối tại
+ *     lúc Program chết đã có thể bằng trọn một chu kỳ, nên TTL nhỏ hơn 2x chu
+ *     kỳ làm thời gian giữ thực tế dao động tới tận 0 — không hứa được gì.
+ *     Ràng buộc này được `static_assert` bên dưới canh, không phải ghi chú.
+ *  2. Nằm trong dải fail-safe/watchdog quen thuộc của thiết bị BAS (10..60 s),
+ *     nên hành vi không gây bất ngờ cho người vận hành đã quen gear khác.
+ *  3. Ngắn hơn hằng số thời gian nhiệt của tải (phút tới hàng chục phút), nên
+ *     cụm thiết bị không chạy mù đủ lâu để lệch trạng thái.
+ *
+ * TTL KHÔNG chờ người vận hành reset: FAULTED là trạng thái chốt, hồi phục cần
+ * thao tác người. Giữ vô hạn để "đợi người" chính là lỗi mà ADR-051 đóng.
+ */
+namespace st_hold_ttl {
+/* Giá trị đã ký. Wall-clock, KHÔNG phải số base step: base step cấu hình được
+ * 500..2000 ms, ghim theo base step thì cùng một quyết định lại cho ra ba thời
+ * gian giữ khác nhau tuỳ site. */
+constexpr uint32_t kSignedTtlMs = 60000;
+
+/* Trần cho override tại field. Vượt trần này thì "giữ tạm" đã thành "giữ vô
+ * hạn" dưới một cái tên khác. */
+constexpr uint32_t kMaxConfigurableMs = 600000;
+
+constexpr uint32_t max_allowed_period_ms()
+{
+    uint32_t worst = 0;
+    for (const uint32_t period : st_profile_generated::kAllowedPeriodMs)
+        if (period > worst) worst = period;
+    return worst;
+}
+
+/* Profile mọc thêm một lớp chu kỳ chậm hơn thì tiền đề của ADR-051 gãy — bắt
+ * gãy ở lúc build, không phải lúc một van đứng im ngoài hiện trường. */
+static_assert(kSignedTtlMs >= 2u * max_allowed_period_ms(),
+              "hold TTL phải >= 2x chu kỳ Task chậm nhất của profile (ADR-051)");
+static_assert(kSignedTtlMs <= kMaxConfigurableMs, "TTL đã ký không được vượt trần field");
+
+constexpr uint64_t ns_from_ms(uint32_t ms) { return static_cast<uint64_t>(ms) * 1000000ull; }
+
+/* TTL đo bằng ĐỒNG HỒ, không bằng số vòng quét. Đếm vòng quét chỉ xấp xỉ thời
+ * gian khi vòng quét được nhịp đúng base step; mọi đường chạy nhanh hơn nhịp
+ * thật (soak, replay, catch-up sau khi trễ) sẽ làm "60 s" co lại thành mili
+ * giây mà không có gì báo. Một hẹn giờ an toàn không được phụ thuộc vào việc
+ * vòng lặp có đang chạy đúng tốc độ hay không. */
+constexpr uint64_t kSignedTtlNs = ns_from_ms(kSignedTtlMs);
+} // namespace st_hold_ttl
 
 enum class StSchedulerProfile : uint8_t {
     SUPPORTING_AS_BUILT = 0,
@@ -103,6 +183,56 @@ struct StProgramInstance {
     std::string instance_id;
     uint16_t    order = 0;
     bool        enabled = true;
+
+    /* T59-402 — chu kỳ RIÊNG của từng Program (DDD §7.1: mỗi Program tự release
+     * theo deadline của nó, Task không còn là đơn vị chạy chung).
+     *
+     * `0` nghĩa là "theo chu kỳ Task", giữ nguyên hành vi cho mọi Program chưa
+     * khai chu kỳ — đổi mặc định sẽ làm mọi cấu hình cũ chạy khác đi mà không ai
+     * yêu cầu. */
+    uint32_t period_ms = 0;
+    /* Mốc release LÝ THUYẾT kế tiếp. Bù trôi theo mốc lý thuyết chứ không theo
+     * thời điểm chạy thật — nếu bám thời điểm thật, một tick trễ sẽ đẩy mọi
+     * deadline sau đó trôi theo và Program 1 s không còn chạy 1 lần/giây. */
+    uint64_t next_release_ns = 0;
+    bool     release_started = false;
+    /* Metrics theo Program. Task-level không thay được: với chu kỳ khác nhau,
+     * một con số gộp không trả lời được "Program nào lỡ deadline". */
+    uint32_t missed_release_count = 0;
+    /* T60-002 — số chu kỳ lỡ LIÊN TIẾP tính tới lần release gần nhất; reset về
+     * 0 ngay khi có một lần release đúng hạn.
+     *
+     * Vì sao cần thêm bên cạnh `missed_release_count`: bộ đếm tích luỹ không
+     * bao giờ giảm, nên dùng nó để kết luận "sức khoẻ hiện tại" sẽ ghim Program
+     * ở DEGRADED vĩnh viễn chỉ vì một lần lỡ nhịp cách đây một giờ. Đây là cùng
+     * khuôn `total`/`consecutive` mà OverrunMonitor đã dùng cho Task. */
+    uint32_t consecutive_missed_release = 0;
+    /* THỜI LƯỢNG của lần chạy gần nhất (không phải mốc thời gian). */
+    uint64_t last_exec_ns = 0;
+    uint64_t max_exec_ns = 0;
+    /* T60-002 — MỐC THỜI GIAN của lần chạy gần nhất, theo đúng đồng hồ `now_ns`
+     * mà caller chụp một lần cho cả tick (cùng họ với
+     * `RuntimePointSnapshot::captured_monotonic_ns`, nên "tuổi" của số đo tính
+     * được bằng một phép trừ trong cùng một snapshot).
+     *
+     * KHÔNG tái dùng `last_successful_now_ns`: trường đó là mốc của lần chạy
+     * THÀNH CÔNG gần nhất và đang là dấu thời gian nghiệp vụ của ảnh RETAIN
+     * (`st_process_image.cpp`, `st_publish_retain_snapshot`). Ghép thêm nghĩa
+     * "cột Last Exec của UI" vào nó sẽ trói hai thứ không liên quan vào một
+     * biến, và với Program vừa FAULTED nó trả về mốc của lần chạy TỐT trước đó
+     * — tức là báo sai thời điểm Program chết. Trường này ghi ở MỌI lần thân
+     * chương trình được thực thi, kể cả lần kết thúc bằng fault. */
+    uint64_t last_run_mono_ns = 0;
+
+    /* T59-403 — lane là đơn vị SONG SONG. Program cùng lane chạy tuần tự theo
+     * `order`; lane khác nhau độc lập nên có thể chạy đồng thời mà không đổi
+     * kết quả. Mặc định 0: mọi Program một lane = hành vi tuần tự cũ.
+     *
+     * Lane KHÔNG được mang dữ liệu dùng chung. Trao đổi giữa Program đi qua
+     * Published Signal có chính sách freshness/fallback khai báo (`T59-404`),
+     * không qua biến chung — chia sẻ ngầm giữa hai lane là thứ làm kết quả phụ
+     * thuộc vào việc lane nào chạy trước. */
+    uint8_t     lane = 0;
 
     StProgramState   state = StProgramState::EMPTY;
     StProgramRuntime runtime;
@@ -135,6 +265,13 @@ struct StProgramInstance {
     uint64_t    input_snapshot_generation = 0;
     bool        input_snapshot_valid = true;
     uint64_t    last_successful_base_step = 0;
+    /* T59-501 — đã publish output thành công ÍT NHẤT MỘT LẦN kể từ lần activate
+     * gần nhất. Khác `output_commit_generation == base_step_count()` (chỉ đúng ở
+     * đúng base step vừa commit): với gói trộn ba lớp chu kỳ, Program 30 s chỉ
+     * commit mỗi 30 base step, nên đòi mọi Program cùng commit ở CÙNG một base
+     * step là đòi một điều không bao giờ xảy ra. Đây là thứ barrier chu kỳ đầu
+     * mức GÓI và phép thăng cấp LKG dùng để biết "đã đủ tư cách" hay chưa. */
+    bool        committed_since_activation = false;
     uint64_t    output_commit_generation = 0;
     /* TASK-PROG-401, DDD-CTRL-PROG-001 §6: true sau khi proposal mức
      * PRIO_LOCAL_LOGIC của instance đã được rút (release_ao/release_do) —
@@ -154,6 +291,10 @@ struct StProgramInstance {
     const char* pending_retain_reject_code = nullptr;
     uint64_t pending_retain_generation = 0;
     uint64_t last_successful_now_ns = 0;
+    /* ADR-051: mốc ĐỒNG HỒ của lần commit output gần nhất, đi kèm
+     * `output_commit_generation` (mốc base step). TTL hold-last đọc mốc này chứ
+     * không đọc số base step, xem `st_hold_ttl`. */
+    uint64_t output_commit_now_ns = 0;
 
     /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3). Mẫu giống
      * `has_pending`/`pending_commit_requested`: non-RT set `true` (release),
@@ -165,7 +306,46 @@ struct StProgramInstance {
      * yêu cầu, không suy đoán theo thời gian chờ. */
     std::atomic<bool> pending_retain_reset{false};
     std::atomic<uint64_t> retain_reset_ack_generation{0};
+
+    /* F-P59-ENABLE-BOUNDARY-001 — Enable/Disable đi CÙNG một con đường với
+     * RETAIN reset: non-RT chỉ ARM một yêu cầu, RT áp dụng tại safe boundary.
+     *
+     * Vì sao không cho non-RT sửa thẳng `state`/`enabled` như bản trước: trên
+     * bo thật `SET_PROGRAM_ENABLED` chạy trên IPC worker thread trong khi scan
+     * loop RT đang tick cùng scheduler, nên `StScheduler::start/stop/enable/
+     * disable` gọi từ đó ghi đè `state` ngay giữa lúc RT đang đọc để quyết
+     * định dispatch và đang ghi khi Program fault. Đo bằng
+     * `-fsanitize=thread` trên `EnableIntentAppliesAtSafeBoundaryWhileScanRuns`
+     * ra ba data race: `stop`↔`run_task`, `disable`↔`run_task`,
+     * `start`(vòng đếm trần 16)↔`run_program`. Hậu quả không phải chỉ là cảnh
+     * báo công cụ: một lệnh Disable rơi đúng giữa tick có thể bị chính RT ghi
+     * đè trạng thái ngay sau đó, và Program đã bị người vận hành tắt vẫn chạy
+     * tiếp một chu kỳ với quyền ghi đầu ra.
+     *
+     * `enable_ack_result`/`enable_ack_state` ghi TRƯỚC, `enable_ack_generation`
+     * tăng SAU bằng release — non-RT thấy generation tăng thì chắc chắn thấy
+     * đúng kết quả của chính lượt đó. */
+    std::atomic<uint8_t> pending_enable_request{
+        static_cast<uint8_t>(StEnableRequest::NONE)};
+    std::atomic<uint8_t> enable_ack_result{static_cast<uint8_t>(StEnableAckResult::NONE)};
+    /* Trạng thái tại thời điểm RT từ chối, để non-RT nói được LÝ DO thật cho
+     * người vận hành mà không phải đọc `state` (chính là thứ đang chạy đua). */
+    std::atomic<uint8_t> enable_ack_state{static_cast<uint8_t>(StProgramState::EMPTY)};
+    std::atomic<uint64_t> enable_ack_generation{0};
 };
+
+/* Ảnh topology/IR của cả package được dựng ngoài scheduler sống. Safe boundary
+ * chỉ activate các handle đã chuẩn bị rồi swap vector ownership O(1); vì vậy
+ * STAGE không đổi period/state/membership của Revision đang chạy. */
+struct StProgramSetEntry {
+    std::string instance_id;
+    std::vector<uint8_t> artifact;
+    uint16_t order = 0;
+    uint32_t period_ms = 0;
+    bool enabled = false;
+};
+
+using StPreparedProgramSet = std::vector<std::unique_ptr<StProgramInstance>>;
 
 struct StTaskConfig {
     std::string id;
@@ -175,6 +355,11 @@ struct StTaskConfig {
     bool        enabled = true;
     uint32_t    overrun_threshold = 3;
 };
+
+/* T59-402 — release theo Program. Đặt ở đây (không ẩn trong .cpp) để test khoá
+ * được luật deadline mà không phải dựng cả một scan loop. */
+bool st_program_due(const StProgramInstance& program, uint32_t task_period_ms, uint64_t now_ns);
+void st_program_mark_released(StProgramInstance* program, uint64_t now_ns);
 
 struct StTaskStats {
     uint32_t run_count = 0;
@@ -220,6 +405,20 @@ private:
     friend class StScheduler;
 };
 
+/* Chế độ chạy lane. Hai chế độ phải cho ĐÚNG cùng kết quả quan sát được: nếu
+ * khác, thì một trong hai đang chạy một chương trình khác với thứ người dùng
+ * cấu hình, và không có cách nào biết là chế độ nào. */
+enum class StLaneMode : uint8_t {
+    /* Mặc định. Mọi lane chạy tuần tự theo số hiệu lane. */
+    SEQUENTIAL = 0,
+    /* Mỗi lane một worker đã tạo sẵn. Không cấp phát, không khoá trong chu kỳ. */
+    PARALLEL,
+};
+
+/* Trần lane: bằng trần Program mỗi Task, để cấu hình "mỗi Program một lane" vẫn
+ * hợp lệ. Cấp phát tĩnh theo trần này nên không có heap trong scan. */
+constexpr std::size_t kMaxLanes = st_sched_limits::kMaxProgramsPerTask;
+
 struct StSchedulerTickResult {
     uint64_t base_step_sequence = 0;
     uint32_t tasks_run = 0;
@@ -235,9 +434,21 @@ public:
      * sẽ là điểm bootstrap duy nhất làm việc đó. */
     explicit StScheduler(StSchedulerProfile profile = StSchedulerProfile::SUPPORTING_AS_BUILT)
         : profile_(profile) {}
+    /* Worker phải dừng TRƯỚC khi mọi thứ chúng đọc bị huỷ. Để mặc định huỷ là
+     * để lại một luồng đang đọc bộ nhớ vừa được giải phóng. */
+    ~StScheduler();
+    StScheduler(const StScheduler&) = delete;
+    StScheduler& operator=(const StScheduler&) = delete;
 
     StSchedulerProfile profile() const { return profile_; }
     uint64_t base_step_count() const { return base_step_count_; }
+
+    /* Đồng hồ của tick gần nhất (ns), đúng giá trị caller truyền vào
+     * `on_base_step()`. Chính sách tính theo THỜI GIAN (hold TTL ADR-051) đọc ở
+     * đây thay vì tự gọi đồng hồ: cả hệ đã thống nhất một đồng hồ chụp một lần
+     * cho cả tick, thêm một nguồn thời gian thứ hai là thêm một cách để hai câu
+     * trả lời lệch nhau. */
+    uint64_t last_tick_now_ns() const { return last_tick_now_ns_; }
 
     /* Đồng hồ RIÊNG cho đo WCET/overrun (PROGRAM_TASK_SCHEDULER_SPEC §5:
      * `task_start`/`exec_ns`) — KHÁC với `now_ns` của on_base_step(), vốn
@@ -253,8 +464,34 @@ public:
      * quyết định đó (phần đó cần selector/session riêng, còn mở — xem
      * DDD-CTRL-PROG-001 As-Built). nullptr = không log (mặc định), scheduler
      * không tự cấp phát trace log để giữ chủ quyền bounded-capacity ở caller. */
+    /* T59-404 — bus Published Signal của package đang chạy. Scheduler chỉ chịu
+     * trách nhiệm COMMIT ở boundary; khai báo và publish thuộc lớp nạp package
+     * và thân chương trình. nullptr = package không có signal nào.
+     *
+     * Vì sao commit ở đây chứ không để mỗi Program tự đổi bản: trong cùng một
+     * chu kỳ, mọi consumer phải thấy CÙNG một ảnh signal. Cho consumer thấy giá
+     * trị ngay khi publisher ghi sẽ làm kết quả phụ thuộc vào lane nào chạy
+     * trước — đúng thứ mà "single/multicore cùng ngữ nghĩa" cấm. */
+    void set_signal_bus(StSignalBus* bus) { signal_bus_ = bus; }
+    StSignalBus* signal_bus() const { return signal_bus_; }
+
     void set_trace_log(StSchedulerTrace* trace) { trace_ = trace; }
     const StSchedulerTrace* trace_log() const { return trace_; }
+
+    /* T59-403 — chọn chế độ chạy lane. Đổi chế độ tạo/huỷ worker NGOÀI chu kỳ
+     * quét; gọi giữa chừng một tick là lỗi lập trình, không phải trường hợp cần
+     * hỗ trợ. Mặc định SEQUENTIAL: bật song song phải là quyết định tường minh
+     * của người dựng hệ, không phải mặc định ai đó thừa hưởng. */
+    void set_lane_mode(StLaneMode mode);
+    StLaneMode lane_mode() const { return lane_mode_; }
+
+    /* Gán lane cho một Program. Trả false nếu không tìm thấy instance hoặc lane
+     * vượt trần. */
+    bool set_program_lane(const std::string& instance_id, uint8_t lane, std::string* error);
+
+    /* Trần Program chạy đồng thời của profile đang dùng (Rev A: 16). Hằng
+     * số thuần tuý, không đọc trạng thái nên gọi được từ mọi luồng. */
+    std::size_t max_enabled_programs() const noexcept;
 
     /* Trả false + *error nếu cấu hình vi phạm ràng buộc SPEC §3. Fail-fast:
      * cấu hình sai không được chạy với "phần hợp lệ", vì như vậy hệ chạy khác
@@ -284,7 +521,27 @@ public:
                                   std::string* error);
     bool abort_staged_activation(const std::string& instance_id, std::string* error);
 
-    /* Lệnh vòng đời (SPEC §7.3). Trả false nếu chuyển trạng thái không hợp lệ. */
+    /* Package-atomic lifecycle. `prepare_program_set` làm toàn bộ loader/RETAIN/
+     * heap ở non-RT trên một topology shadow. `arm` kiểm trước toàn bộ rồi mới
+     * đặt cờ, không thể để nửa package armed. Safe boundary activate shadow và
+     * swap cả vector; `*prepared` nhận lại nguyên topology cũ để rollback. */
+    bool prepare_program_set(const std::string& task_id,
+                             const std::vector<StProgramSetEntry>& entries,
+                             StPreparedProgramSet* prepared, std::string* error);
+    bool arm_prepared_program_set(StPreparedProgramSet* prepared, bool rollback,
+                                  std::string* error);
+    bool swap_prepared_program_set_at_boundary(const std::string& task_id,
+                                               StPreparedProgramSet* prepared) noexcept;
+    bool restore_program_set_at_boundary(const std::string& task_id,
+                                         StPreparedProgramSet* previous) noexcept;
+
+    /* Lệnh vòng đời (SPEC §7.3). Trả false nếu chuyển trạng thái không hợp lệ.
+     *
+     * CHỈ gọi khi KHÔNG có luồng scan nào đang tick scheduler này: bootstrap
+     * trước khi scan chạy, hoặc test đơn luồng. Bốn hàm này ghi thẳng
+     * `state`/`enabled` mà RT đang đọc mỗi tick. Đường lệnh của người vận
+     * hành lúc hệ ĐANG CHẠY phải đi qua `request_program_enabled()` +
+     * `apply_pending_enable_requests_at_boundary()` (F-P59-ENABLE-BOUNDARY-001). */
     bool start(const std::string& instance_id, std::string* error);
     bool stop(const std::string& instance_id, std::string* error);
     bool enable(const std::string& instance_id, std::string* error);
@@ -301,6 +558,24 @@ public:
      * này để có mốc so sánh xác nhận đã áp dụng. */
     bool request_retain_reset(const std::string& instance_id, std::string* error);
 
+    /* F-P59-ENABLE-BOUNDARY-001. Non-RT ARM ý định Enable/Disable; RT áp dụng
+     * tại safe boundary kế tiếp (`apply_pending_enable_requests_at_boundary`).
+     * KHÔNG gọi `start/stop/enable/disable` từ luồng non-RT khi scan đang
+     * chạy — đó là đường ghi thẳng vào `state` mà RT đang đọc/ghi.
+     *
+     * `*instance` trả lại chính con trỏ vừa tra để caller poll
+     * `enable_ack_generation` mà không phải tra lại; `*ack_baseline` đọc
+     * TRƯỚC khi arm nên "generation tăng" luôn có nghĩa là đã qua đúng một
+     * boundary kể từ yêu cầu này. */
+    enum class StEnableRequestOutcome : uint8_t {
+        ARMED = 0,
+        UNKNOWN_INSTANCE,
+        ALREADY_PENDING,
+    };
+    StEnableRequestOutcome request_program_enabled(const std::string& instance_id, bool enabled,
+                                                   StProgramInstance** instance,
+                                                   uint64_t* ack_baseline, std::string* error);
+
     /* Safe-boundary phase tách riêng để process image chụp input của candidate
      * vừa activate, không chụp artifact cũ rồi execute artifact mới. Gọi lặp
      * lại trong cùng boundary là no-op. */
@@ -312,6 +587,12 @@ public:
      * `ProgrammingRuntimeCoordinator::on_safe_boundary()`). Tách riêng khỏi
      * activation để không trộn hai luồng nghiệp vụ khác nhau vào một hàm. */
     void apply_pending_retain_resets_at_boundary();
+
+    /* F-P59-ENABLE-BOUNDARY-001: áp dụng ý định Enable/Disable đang chờ cho
+     * mọi instance, tại CÙNG safe boundary với activation/retain reset. Không
+     * cấp phát, không throw, không lock. Gọi ở đúng chỗ caller gọi hai hàm
+     * boundary kia (`ProgrammingRuntimeCoordinator::on_safe_boundary()`). */
+    void apply_pending_enable_requests_at_boundary();
 
     /* Một base step. `now_ns` chụp MỘT LẦN bởi caller và dùng chung cho mọi
      * Task. Task period chỉ quyết định có dispatch hay không; tuyệt đối không
@@ -344,17 +625,76 @@ public:
 private:
     StSchedulerProfile profile_ = StSchedulerProfile::SUPPORTING_AS_BUILT;
     uint64_t base_step_count_ = 0;
+    uint64_t last_tick_now_ns_ = 0;
     std::vector<std::unique_ptr<StTask>> tasks_;
     StLoaderOptions loader_opts_;
     std::function<uint64_t()> wall_clock_ = default_monotonic_wall_clock_ns;
     StSchedulerTrace* trace_ = nullptr;
+    StSignalBus* signal_bus_ = nullptr;
     StRetainService* retain_service_ = nullptr;
 
+    /* Kết quả MỘT lane trong MỘT lần chạy Task. Lane không được đụng vào
+     * `StSchedulerTickResult` hay trace chung: hai lane ghi cùng lúc là một
+     * data race, và thứ tự ghi sẽ phụ thuộc lane nào chạy nhanh hơn. Gom riêng
+     * rồi trộn lại theo SỐ HIỆU LANE sau khi mọi lane xong — trộn theo thứ tự
+     * hoàn thành sẽ làm kết quả khác nhau giữa hai lần chạy. */
+    struct LaneOutcome {
+        uint32_t ran = 0;
+        uint32_t faults = 0;
+        bool     dispatch_failed = false;
+        /* Trace của lane, phát lại vào trace chung theo thứ tự lane. Bounded và
+         * cấp phát tĩnh nên không có heap trong chu kỳ. */
+        std::array<StRuntimeTraceEvent, st_sched_limits::kMaxProgramsPerTask> events{};
+        std::size_t event_count = 0;
+    };
+
+    /* Một lane đang chờ chạy: dải chỉ số Program trong `task.programs()`.
+     * Không giữ con trỏ Program để tránh mọi nghi vấn về tuổi thọ khi worker
+     * chạy song song. */
+    struct LaneWork {
+        std::array<uint16_t, st_sched_limits::kMaxProgramsPerTask> program_index{};
+        std::size_t program_count = 0;
+    };
+
     void run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out);
+    /* Chạy đúng một Program. Trả về false nếu Program fault — caller quyết định
+     * cô lập hay dừng, hàm này không biết chính sách đó. */
+    bool run_program(StTask& task, StProgramInstance& program, uint64_t now_ns,
+                     LaneOutcome* outcome);
+    void run_lane(StTask& task, const LaneWork& work, uint64_t now_ns, LaneOutcome* outcome);
+    void start_workers(std::size_t count);
+    void stop_workers();
     void apply_pending_activations(StTask& task);
+    bool stage_activation(StProgramInstance* program, const std::vector<uint8_t>& artifact,
+                          std::string* error, bool is_rollback);
     void apply_pending_retain_resets(StTask& task);
+    void apply_pending_enable_requests(StTask& task) noexcept;
+    /* Số Program đang chiếm suất chạy (RUNNING/WAITING) trên TOÀN scheduler —
+     * trần 16 là trần của thiết bị, không phải của một Task. Chỉ gọi từ RT
+     * (boundary/lệnh bootstrap): vòng lặp này đọc `state` của mọi instance. */
+    std::size_t running_program_count() const noexcept;
     void log_trace(StTraceEventKind kind, uint64_t now_ns, bool ok, const char* task_id,
                    const char* instance_id, const char* code);
+
+    StLaneMode lane_mode_ = StLaneMode::SEQUENTIAL;
+    /* Bộ đệm lane cấp phát MỘT LẦN, dùng lại mỗi tick: cấp phát trong chu kỳ
+     * quét là thứ làm WCET không còn giới hạn trên. */
+    std::array<LaneWork, kMaxLanes> lane_work_{};
+    std::array<LaneOutcome, kMaxLanes> lane_outcome_{};
+
+    /* Worker đã tạo sẵn cho chế độ PARALLEL. Tạo/huỷ chỉ xảy ra ở
+     * `set_lane_mode`, ngoài chu kỳ quét. */
+    struct Worker {
+        StScheduler* owner = nullptr;
+        std::thread thread;
+        std::atomic<bool> has_work{false};
+        std::atomic<bool> stop{false};
+        StTask* task = nullptr;
+        const LaneWork* work = nullptr;
+        LaneOutcome* outcome = nullptr;
+        uint64_t now_ns = 0;
+    };
+    std::vector<std::unique_ptr<Worker>> workers_;
 };
 
 } // namespace core

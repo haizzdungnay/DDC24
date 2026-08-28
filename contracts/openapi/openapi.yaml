@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.20.0"
+  version: "1.30.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-08-13"
-  note: "v1.20.0 hiện thực monitor/trace bounded và task metrics authoritative; giữ tương thích schema major 1."
+  date: "2026-08-27"
+  note: "v1.30.0 (T59-819) mở rộng ADDITIVE change manifest bằng stHunks[]/fbdChanges[] tất định, có bounded payload + truncated + cursor; diff không đi vào impactRef nên mọi acknowledgement Commission đã cấp vẫn còn hiệu lực."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -257,6 +257,22 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /virtual-points/{id}/usage:
+    get:
+      summary: Nơi một Virtual Point đang được tham chiếu (viewer+)
+      description: >
+        `incomplete=true` nghĩa là có nguồn không quét được; danh sách khi đó là
+        CHƯA ĐỦ và không được dùng để kết luận "không ai dùng điểm này".
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualPointUsage" }
+        "404": { $ref: "#/components/responses/Error" }
   /health:
     get:
       summary: Health baseline công khai cho installer/systemd
@@ -429,11 +445,47 @@ paths:
                     device_id: { type: string }
                     message: { type: string }
                     level: { type: string, enum: [info, warning] }
+  /modbus/frames:
+    get:
+      summary: Vòng nhớ khung Modbus RTU gần nhất (viewer+)
+      description: >
+        `T57-3.9` (`ADR-046` bản sửa 2026-08-19). Đây là BẢN GHI GIAO DỊCH, không
+        phải byte thô: `rawBytes=false` luôn đúng ở Rev A. `volatile=true` nhắc
+        rằng vòng nhớ nằm trong tiến trình iobus và mất khi restart. Mảng rỗng
+        nghĩa là "chưa có khung", khác hẳn với lỗi đọc — lỗi đọc trả 5xx.
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: bus, in: query, schema: { type: integer }, description: "Bus 1..N; mặc định 1" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModbusFrames" }
+        "503": { $ref: "#/components/responses/Error" }
   /modbus/mapping:
     get:
       summary: Bảng ánh xạ Point → register kèm lỗi validate (viewer+)
       responses:
         "200": { description: OK }
+  /modbus/templates:
+    get:
+      summary: Mẫu thiết bị Modbus RTU dựng sẵn (viewer+)
+      description: >
+        Chỉ đọc. `origin` phân biệt mẫu đóng gói theo firmware với mẫu do người
+        dùng nạp thêm; `source` là đường dẫn hồ sơ gốc để truy nguyên.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  templates:
+                    type: array
+                    items: { $ref: "#/components/schemas/ModbusTemplate" }
   /modbus/config/state:
     get:
       summary: Trạng thái vòng đời cấu hình (viewer+)
@@ -537,12 +589,19 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusProbeResult" } } } }
         "429": { description: "Vượt giới hạn tần suất." }
         "503": { $ref: "#/components/responses/Error" }
-  # SRC-F-02 (2026-08-09): endpoint này ĐÃ hiện thực trong
-  # apps/web-api/internal/app/modbus_rtu.go (handleModbusWriteTest) nhưng trước
-  # nay không có trong spec — chiều ngược lại của bảy path khai mà chưa làm.
-  # Ghi thử là thao tác ghi thật xuống thiết bị hiện trường đang chạy, nên bỏ
-  # sót nó khỏi contract nghĩa là kiểm soát RBAC và rate limit của nó không xuất
-  # hiện ở bất kỳ bản rà soát an ninh nào dựa trên spec.
+  # 2026-08-20 — Quyết định sản phẩm: bảy path /ota/*, /logs/download,
+  # /bacnet/objects, /graph/* ĐÃ ĐƯỢC GỠ khỏi contract Rev A.
+  #
+  # Trước đây (SRC-F-02, 2026-08-09) chúng được giữ lại và dán nhãn
+  # `x-implementation-status: not-implemented`. Nhãn đó không đủ: spec này tự
+  # nhận là "nguồn-chuẩn cho endpoint (D-4)", nên chỉ cần có mặt trong `paths`
+  # là generator vẫn sinh client, phép đếm độ phủ vẫn sai, và FE vẫn viết được
+  # lời gọi vào hư không — đúng thứ đã xảy ra với `client.validateGraph()`.
+  #
+  # Nguyên tắc áp dụng: contract Rev A CHỈ mô tả thứ runtime Rev A thực thi.
+  # OTA và BACnet exposure thuộc Rev B; /graph/* và /logs/download nằm trong
+  # backlog và phải implement TRƯỚC rồi mới khai lại ở đây.
+  # `TestRouteTableMatchesOpenAPI` giữ cho chúng không lặng lẽ quay lại.
   /modbus/write-test:
     post:
       summary: Ghi thử một register phục vụ commissioning (CHỈ admin)
@@ -589,6 +648,21 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SystemStatus" }
+  /system/history:
+    get:
+      summary: Lịch sử 60 phút CPU/RAM/nhiệt độ (viewer+)
+      description: >
+        `T57-3.4`. Vòng nhớ trong tiến trình `mkddc-web`, mất khi service khởi
+        động lại — `sinceRestart` cho biết mốc bắt đầu thật của dữ liệu.
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: windowS, in: query, schema: { type: integer }, description: Cửa sổ giây, mặc định 3600 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemHistory" }
   /network:
     get:
       summary: Dá»¯ liá»‡u trang Network (viewer+)
@@ -670,6 +744,20 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /network/connectivity-check:
+    post:
+      summary: Kiểm tra kết nối mạng thực tế (operator+)
+      description: >
+        Thực hiện phép thử tới gateway/DNS/upstream và trả trạng thái từng đích.
+        KHÔNG thay đổi cấu hình, không tạo transaction.
+      x-rbac: [operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkCheck" }
+        "503": { $ref: "#/components/responses/Error" }
   /commissioning/points/{id}/test:
     post:
       summary: Test commissioning má»™t point (role operator+)
@@ -703,6 +791,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SystemConfig" }
+    put:
+      summary: Ghi gộp toàn bộ cấu hình — KHÔNG hỗ trợ, luôn trả 405
+      description: >
+        Tồn tại để trả lời dứt khoát thay vì rơi xuống static handler và trả về
+        trang HTML cho một lời gọi API. Ghi cấu hình phải đi qua từng nhóm
+        `/system/config/<group>` để mỗi nhóm được validate riêng.
+      x-rbac: [admin]
+      responses:
+        "405": { $ref: "#/components/responses/Error" }
   /system/config/device:
     get:
       summary: Äá»c cáº¥u hÃ¬nh device (admin)
@@ -1031,6 +1128,21 @@ paths:
         "200": { description: OK }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /users/access:
+    get:
+      summary: Bảng truy cập người dùng và phiên đang mở (admin)
+      description: >
+        `lastLoginAt` là `null` khi KHÔNG tìm thấy vết trong kho Activity — có
+        thể vì chưa từng đăng nhập, cũng có thể vì vết đã bị đẩy khỏi vòng nhớ.
+        Giao diện phải nói "không rõ", không được nói "chưa đăng nhập bao giờ".
+        Danh sách phiên nằm trong bộ nhớ tiến trình nên mất khi `mkddc-web` restart.
+      x-rbac: [admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserAccess" }
   /me:
     get:
       summary: Láº¥y thÃ´ng tin user Ä‘ang Ä‘Äƒng nháº­p (role viewer+)
@@ -1059,6 +1171,31 @@ paths:
         "200": { description: OK }
         "400": { $ref: "#/components/responses/Error" }
         "401": { description: "Máº­t kháº©u cÅ© khÃ´ng Ä‘Ãºng" }
+  /me/preferences:
+    get:
+      summary: Đọc tuỳ chọn giao diện của chính người dùng (viewer+)
+      description: >
+        Thân bài là một object JSON tuỳ ý do FE định nghĩa; BE lưu nguyên văn
+        theo từng username và KHÔNG diễn giải nội dung.
+      x-rbac: [viewer, operator, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+    put:
+      summary: Ghi tuỳ chọn giao diện của chính người dùng (viewer+)
+      x-rbac: [viewer, operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "204": { description: Đã lưu }
+        "400": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
   /history:
     get:
       summary: Unified historian query by point and explicit UTC range (viewer+)
@@ -1445,6 +1582,24 @@ paths:
                 items: { $ref: "#/components/schemas/ScheduleAuditEntry" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /schedules/effective:
+    get:
+      summary: Giá trị lịch có hiệu lực theo thời gian cho một điểm (viewer+)
+      description: >
+        `scheduleId` rỗng trong một đoạn nghĩa là KHÔNG lịch nào ghi vào đoạn đó
+        — đây là câu trả lời hợp lệ và phải phân biệt được với "chưa tính được".
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: pointId, in: query, required: true, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScheduleEffective" }
+        "400": { $ref: "#/components/responses/Error" }
   /alarm-settings:
     get:
       summary: Read alarm entity settings (viewer+)
@@ -1495,53 +1650,45 @@ paths:
   # phần khai báo vì đây là phạm vi roadmap đã chốt, nhưng đánh dấu tường minh
   # bằng `x-implementation-status` để người và tool đều phân biệt được
   # "đã có" với "sẽ có".
-  /ota/upload:
+  /alarm-settings/simulate:
     post:
-      summary: Upload gói firmware (admin) — CHƯA HIỆN THỰC
-      x-implementation-status: not-implemented
+      summary: Mô phỏng luật cảnh báo trên chuỗi mẫu cho trước (viewer+)
+      description: >
+        `T57-2.13` (`ADR-048`). Là VỎ gọi `mkddc-alarm-sim`; không chạm cấu hình
+        đang lưu nên `viewer` là đủ. `engine` cho biết bản engine đã chạy.
+      x-rbac: [viewer, operator, admin]
       requestBody:
+        required: true
         content:
-          application/octet-stream:
-            schema: { type: string, format: binary }
-      responses: { "202": { description: Accepted } }
-  /ota/apply:
-    post:
-      summary: Kích hoạt OTA + reboot (admin) — CHƯA HIỆN THỰC
-      x-implementation-status: not-implemented
-      responses: { "202": { description: Accepted } }
-  /ota/status:
-    get:
-      summary: Trạng thái + tiến độ OTA — CHƯA HIỆN THỰC
-      x-implementation-status: not-implemented
+          application/json:
+            schema: { $ref: "#/components/schemas/AlarmSimulateRequest" }
       responses:
         "200":
           description: OK
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  state: { type: string, enum: [idle, downloading, verifying, applying, rebooting, success, failed, rolledback] }
-                  progress: { type: integer, minimum: 0, maximum: 100 }
-  /logs/download:
-    get:
-      summary: Tải log (gzip, admin) — CHƯA HIỆN THỰC
-      x-implementation-status: not-implemented
+              schema: { $ref: "#/components/schemas/AlarmSimulateResult" }
+        "400": { $ref: "#/components/responses/Error" }
+  /alarm-settings/estimate:
+    post:
+      summary: Ước lượng tần suất cảnh báo từ lịch sử thật của điểm (viewer+)
+      description: >
+        `T57-3.13`. Cùng engine với `/alarm-settings/simulate` nhưng lấy mẫu từ
+        historian. `downsampled=true` nghĩa là chuỗi đã bị thưa hoá; khi đó
+        `underestimateBelowS` cho biết ngưỡng thời lượng mà kết quả ĐẾM THIẾU.
+      x-rbac: [viewer, operator, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlarmEstimateRequest" }
       responses:
         "200":
           description: OK
           content:
-            application/gzip:
-              schema: { type: string, format: binary }
-  /bacnet/objects:
-    get:
-      summary: Danh sách object BACnet — CHƯA HIỆN THỰC
-      description: >
-        Bảng object BACnet có thật trong runtime (apps/core/adapters/bacnet/
-        bacnet_objtable.cpp + apps/iobus/adapters/bacnet/bacnet_objects.cpp)
-        nhưng KHÔNG được phơi qua REST; web-api không có handler nào đọc nó.
-      x-implementation-status: not-implemented
-      responses: { "200": { description: OK } }
+            application/json:
+              schema: { $ref: "#/components/schemas/AlarmEstimateResponse" }
+        "400": { $ref: "#/components/responses/Error" }
   /alarms:
     get:
       summary: Runtime alarm list
@@ -1656,6 +1803,20 @@ paths:
   # file nói nó "được tham chiếu bằng x-websocket" trong khi toàn spec không có
   # khoá x-websocket nào. Khai báo tường minh ở đây để đường ghi điểm qua WS —
   # có cả force và override — không nằm ngoài tầm rà soát dựa trên contract.
+  /alarms/metrics:
+    get:
+      summary: Chỉ số cảnh báo theo cửa sổ trượt (viewer+)
+      description: >
+        Tần suất, cờ flooding, nhóm lặp nhiều nhất và danh sách shelve sắp hết hạn.
+      x-rbac: [viewer, operator, admin]
+      parameters:
+        - { name: windowS, in: query, schema: { type: integer }, description: Cửa sổ giây, mặc định 600 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlarmMetrics" }
   /ws/monitor:
     get:
       summary: Kênh WebSocket giám sát điểm thời gian thực
@@ -1671,59 +1832,6 @@ paths:
       responses:
         "101": { description: Switching Protocols }
         "401": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
-  /graph/validate:
-    post:
-      summary: Validate graph.json (role operator+) — CHƯA HIỆN THỰC
-      description: >
-        SRC-F-02: web-api không có handler cho path này. Hệ quả trực tiếp là
-        trang Lập trình của FE chỉ validate cục bộ trong trình duyệt
-        (apps/web-ui/src/shared/demo/simulator.ts) và bị khoá sau cờ
-        LEGACY_GRAPH_DEMO_ENABLED, vốn chỉ bật ở chế độ demo. Ở bản live không
-        có đường nào từ giao diện tới graph.json mà mkddc-core thực thi.
-        Thiết kế dự kiến: chạy validator theo GRAPH_SCHEMA; không deploy; trả
-        pass=false kèm errors nếu fail.
-      x-implementation-status: not-implemented
-      x-rbac: [operator, admin]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/Graph" }
-      responses:
-        "200":
-          description: Káº¿t quáº£ validate, schema khá»›p GraphValidationResult cá»§a FE
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/GraphValidationResult" }
-        "400": { $ref: "#/components/responses/Error" }
-        "403": { $ref: "#/components/responses/Error" }
-  /graph/deploy:
-    post:
-      summary: Validate rồi deploy graph.json (role admin) — CHƯA HIỆN THỰC
-      description: >
-        SRC-F-02: web-api không có handler cho path này, và graph.json cũng
-        không nằm trong 8 nhóm cấu hình mà BE quản lý
-        (apps/web-api/internal/app/configapi.go). Hiện chỉ nạp được chương
-        trình điều khiển bằng cách sửa tay /data/config/graph.json trên thiết
-        bị rồi SIGHUP mkddc-core — không qua RBAC, không audit, không rollback.
-        Thiết kế dự kiến: validate graph.json, gửi core build plan và áp dụng
-        atomically nếu pass; nếu validate/build fail thì giữ graph cũ và trả
-        pass=false/deployed=false kèm errors.
-      x-implementation-status: not-implemented
-      x-rbac: [admin]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/Graph" }
-      responses:
-        "200":
-          description: Káº¿t quáº£ deploy hoáº·c lá»—i validate/build
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/GraphDeployResult" }
-        "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
   /programming/capabilities:
     get:
@@ -1903,6 +2011,14 @@ paths:
       summary: Đọc change manifest giữa hai Revision
       x-rbac: [viewer, operator, admin]
       x-implementation-status: task-prog-206
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: >
+            Vị trí đọc tiếp trong danh sách diff tất định, lấy từ `nextCursor`
+            của phản hồi trước. Bỏ trống để đọc từ đầu.
+          schema: { type: string, minLength: 1, maxLength: 64 }
       responses:
         "200":
           description: Change manifest có impactRef ổn định
@@ -1962,6 +2078,202 @@ paths:
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "404": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/libraries:
+    get:
+      operationId: searchProgrammingLibraries
+      summary: Tìm entry Control Library SYSTEM và PROJECT
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+        - name: projectId
+          in: query
+          description: Bắt buộc khi cần entry PROJECT; thiếu nó thì chỉ SYSTEM được trả.
+          schema: { type: string, format: uuid }
+        - name: scope
+          in: query
+          schema: { type: string, enum: [SYSTEM, PROJECT] }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [FUNCTION, FUNCTION_BLOCK, CONVERSION] }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Trang entry Control Library đã trộn SYSTEM và PROJECT theo thứ tự ổn định
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingLibraryPage" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/library/entries:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    post:
+      operationId: upsertProgrammingLibraryEntry
+      summary: Tạo hoặc sửa Function/FB người dùng trong PROJECT Library Draft
+      x-rbac: [admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingLibraryEntryRequest" }
+      responses:
+        "200":
+          description: Entry đã ghi vào Draft library; ETag Draft của Project tăng
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/library/entries/{entryId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+      - { $ref: "#/components/parameters/ProgrammingLibraryEntryId" }
+    delete:
+      operationId: deleteProgrammingLibraryEntry
+      summary: Xoá entry Control Library; từ chối khi còn tham chiếu
+      x-rbac: [admin]
+      x-implementation-status: t59-202
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      responses:
+        "200":
+          description: Entry đã xoá khỏi Draft library; không có cascade ngầm
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+      - { $ref: "#/components/parameters/ProgrammingLibraryRevisionId" }
+    post:
+      operationId: deprecateProgrammingLibraryRevision
+      summary: Đánh dấu một PROJECT Library revision PUBLISHED là DEPRECATED
+      description: >-
+        Chỉ mở chuyển tiếp PUBLISHED sang DEPRECATED. Endpoint này không publish
+        library; publish vẫn nằm trong cùng transaction với Seal Revision để
+        không tiêu version mà chưa có Revision bất biến pin tới.
+      x-rbac: [admin]
+      x-implementation-status: f-p59-ui-001
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingLibraryRevisionDeprecateRequest" }
+      responses:
+        "200":
+          description: Library revision đã chuyển PUBLISHED sang DEPRECATED; ETag Draft của Project tăng
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "413": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/programs:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    get:
+      operationId: listProgrammingProgramIntents
+      summary: Đọc ý định Enable/Disable ghép read-back sống của từng Program
+      description: >-
+        `desiredEnabled` là điều người vận hành muốn; `runtimeState` là điều
+        thiết bị đang làm. Hai trường riêng biệt có chủ ý — gộp chúng sẽ làm một
+        Program đã bật nhưng đang FAULTED trông y hệt một Program chưa ai bật.
+
+
+        T60-013/T60-014: phản hồi ghép HAI nguồn khác bản chất và không bao giờ
+        trộn chúng — ý định bền vững (`program_runtime_intents`, sống qua mất
+        điện) và read-back sống (`point_snapshot` của Core, chỉ có giá trị ngay
+        lúc này). `runtimeStateSource` nói dòng đó đến từ nguồn nào; thiếu nó thì
+        một `RUNNING` đọc từ DB một giờ trước trông y hệt một `RUNNING` vừa đọc
+        từ Core. Core im ⇒ `UNAVAILABLE` + `runtimeState = UNKNOWN` + mọi số đo
+        `null`, tuyệt đối không trả giá trị cũ như thể đang sống.
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t60-013
+      responses:
+        "200":
+          description: >-
+            Bảng Program của Project, sắp theo programId. Luôn 200 kể cả khi Core
+            im: trạng thái Core là NỘI DUNG của câu trả lời, không phải lỗi của
+            request — trả 503 ở đây sẽ xoá luôn phần ý định bền vững, thứ vẫn đọc
+            được và vẫn đúng.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingProgramsPage" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/programs/{programId}/runtime-intent:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+      - { $ref: "#/components/parameters/ProgrammingProgramId" }
+    put:
+      operationId: setProgrammingProgramIntent
+      summary: Đặt ý định Enable/Disable cho một Program
+      description: >-
+        `PUT` chứ không phải hai route `enable`/`disable`: intent là một TRẠNG
+        THÁI mong muốn, và hai động từ riêng sẽ làm việc đặt lại đúng thứ đang có
+        trở thành hai request khác nhau tuỳ giá trị hiện tại. Intent bền vững kể
+        cả khi Core chưa sẵn sàng; `runtimeState` khi đó là `UNKNOWN` chứ không
+        phải trạng thái mong muốn.
+      x-rbac: [admin]
+      x-implementation-status: t59-405
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingProgramIntentRequest" }
+      responses:
+        "200":
+          description: Intent đã ghi; resource mang trạng thái read-back mới nhất
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingMutationResponse" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/point-catalog:
     get:
       operationId: getProgrammingPointCatalog
@@ -2007,6 +2319,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProgrammingMonitorPage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime/signals:
+    get:
+      operationId: getProgrammingRuntimeSignals
+      summary: Đọc Published Signal từ cùng snapshot authoritative của Core
+      description: >-
+        Ghép định danh đã seal trong Revision với value, quality và freshness
+        do Core chụp từ StSignalBus. Signal invalid luôn có value=null;
+        CORE_ONLY, REVISION_ONLY hoặc MISMATCH phải hiển fail-closed.
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-504
+      responses:
+        "200":
+          description: Snapshot Published Signal hiện hành
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRuntimeSignalPage" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
@@ -2255,6 +2586,40 @@ paths:
         "413": { $ref: "#/components/responses/ProgrammingError" }
         "422": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/runtime/recovery-reset:
+    post:
+      operationId: resetProgrammingRecovery
+      summary: Gỡ khoá Core khỏi RECOVERY_REQUIRED (T59-702)
+      description: >-
+        `RECOVERY_REQUIRED` là ngõ cụt có chủ ý — Core không đoán gói nào còn
+        dùng được. Endpoint này là LỐI RA tường minh duy nhất: nó ghi thêm một
+        bản ghi journal (không xoá gì), đưa Core về `IDLE` KHÔNG có Active và
+        giữ safe-state. Phải Commission lại sau đó; không gói nào tự sống lại.
+        Gọi khi Core không ở `RECOVERY_REQUIRED` trả `409`.
+      x-rbac: [admin]
+      x-implementation-status: implemented
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetRequest" }
+      responses:
+        "200":
+          description: Core đã rời RECOVERY_REQUIRED
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetResult" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "409":
+          description: Core không ở RECOVERY_REQUIRED — không có gì để gỡ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingRecoveryResetResult" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/audit:
     get:
       operationId: listProgrammingAudit
@@ -2272,6 +2637,201 @@ paths:
               schema: { $ref: "#/components/schemas/ProgrammingResourcePage" }
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  # T59-814 / ADR-053 — Simulation R3.
+  #
+  # `SET_INPUT` và `STOP` là hành động sản phẩm nhưng được materialize thành
+  # resource riêng (PUT input, DELETE session) để có identity và idempotency rõ
+  # ràng; endpoint `actions` vì vậy KHÔNG nhận hai hành động đó.
+  /programming/simulation/sessions:
+    post:
+      operationId: createProgrammingSimulationSession
+      summary: Mở phiên Simulation từ Revision đã Check
+      x-rbac: [admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingSimulationCreateRequest" }
+      responses:
+        "201":
+          description: Phiên đã seal và worker đã sẵn sàng
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "429": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getProgrammingSimulationSession
+      summary: Đọc trạng thái phiên Simulation
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-814
+      responses:
+        "200":
+          description: Trạng thái phiên
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+    delete:
+      operationId: stopProgrammingSimulationSession
+      summary: Dừng phiên Simulation (materialize của hành động STOP)
+      x-rbac: [admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      responses:
+        "200":
+          description: Phiên đã ở trạng thái terminal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "412": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}/actions:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: actProgrammingSimulationSession
+      summary: RUN/PAUSE/STEP_CYCLE/RESET/SET_SPEED trên phiên
+      x-rbac: [admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingSimulationActionRequest" }
+      responses:
+        "200":
+          description: Phiên sau đúng một lần chuyển trạng thái
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "410": { $ref: "#/components/responses/ProgrammingError" }
+        "412": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "429": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}/inputs/{observationId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: observationId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    put:
+      operationId: setProgrammingSimulationInput
+      summary: Ghi một virtual input trong allowlist của manifest
+      x-rbac: [admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingSimulationInputRequest" }
+      responses:
+        "200":
+          description: Phiên sau khi input được commit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationSession" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "410": { $ref: "#/components/responses/ProgrammingError" }
+        "412": { $ref: "#/components/responses/ProgrammingError" }
+        "422": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "429": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}/observations:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listProgrammingSimulationObservations
+      summary: Đọc ảnh chụp observation của phiên
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-814
+      responses:
+        "200":
+          description: Ảnh chụp typed của phiên
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationFrame" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/simulation/sessions/{sessionId}/trace:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listProgrammingSimulationTrace
+      summary: Đọc trang mẫu trace có biên của phiên
+      x-rbac: [viewer, operator, admin]
+      x-implementation-status: t59-814
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingCursor" }
+        - { $ref: "#/components/parameters/ProgrammingLimit" }
+      responses:
+        "200":
+          description: Trang mẫu trace
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSimulationTracePage" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
 components:
   securitySchemes:
@@ -2298,6 +2858,21 @@ components:
         example: "VP1"
     ProgrammingProjectId:
       name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProgrammingProgramId:
+      name: programId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 64 }
+    ProgrammingLibraryEntryId:
+      name: entryId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProgrammingLibraryRevisionId:
+      name: libraryRevisionId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -2412,6 +2987,24 @@ components:
             - PRG-ERR-IMPACT-UNAVAILABLE-001
             - PRG-ERR-IMPACT-STALE-001
             - PRG-ERR-UNAVAILABLE-001
+            - PRG-ERR-POU-KIND-001
+            - PRG-ERR-POU-RECURSION-001
+            - PRG-ERR-LIB-VERSION-001
+            - PRG-ERR-PROGRAM-LIMIT-001
+            - PRG-ERR-SIGNAL-PUBLISHER-001
+            - PRG-ERR-SIGNAL-FRESHNESS-001
+            - PRG-ERR-OUTPUT-OWNER-001
+            - PRG-ERR-ENABLE-NOT-COMMISSIONED-001
+            - PRG-ERR-PROGRAM-STATE-001
+            - PRG-SIM-UNSUPPORTED
+            - PRG-SIM-SAVE-REQUIRED
+            - PRG-SIM-FORBIDDEN
+            - PRG-SIM-INPUT-NOT-ALLOWED
+            - PRG-SIM-STALE-SESSION
+            - PRG-SIM-QUOTA
+            - PRG-SIM-WORKER-FAILED
+            - PRG-SIM-EXPIRED
+            - PRG-ERR-PID-REVIEW-001
         messageKey:
           type: string
           pattern: "^programming\\.[A-Za-z0-9_.-]+$"
@@ -2430,6 +3023,9 @@ components:
       type: object
       additionalProperties: false
       required: [schemaVersion, profile, targetState, limits, languages, types, taskPeriodsMs]
+      # `workspaceModes` là bổ sung ADDITIVE của PGM-02 (DDD §5.5) và cố ý
+      # KHÔNG required: server đời cũ không có nó, và client mới phải coi mọi
+      # mode là UNAVAILABLE khi thiếu — không được đoán.
       properties:
         schemaVersion: { type: string, const: "1.0" }
         profile: { type: string, const: "MK-DDC-24-REV-A" }
@@ -2446,6 +3042,52 @@ components:
           type: array
           items: { type: integer, enum: [1000, 5000, 30000] }
           uniqueItems: true
+        workspaceModes:
+          type: object
+          additionalProperties: false
+          required: [contractVersion, edit, live, simulation]
+          properties:
+            contractVersion: { type: string, const: "PGM02-WORKSPACE-V1" }
+            edit:
+              type: object
+              additionalProperties: false
+              required: [supported]
+              properties:
+                supported: { type: boolean }
+            live:
+              type: object
+              additionalProperties: false
+              required: [supported]
+              properties:
+                supported: { type: boolean }
+            simulation:
+              type: object
+              additionalProperties: false
+              required: [supported, workerVersion, mutationRoles, limits]
+              properties:
+                supported: { type: boolean }
+                workerVersion: { type: string, nullable: true, maxLength: 32 }
+                # v1 PHẢI là [admin]. Server là authority của quyền; FE chỉ đọc.
+                mutationRoles:
+                  type: array
+                  items: { type: string, enum: [viewer, operator, admin] }
+                  uniqueItems: true
+                limits:
+                  type: object
+                  additionalProperties: false
+                  required: [maxConcurrentSessionsPerController, idleTtlSeconds, hardTtlSeconds,
+                             maxRssMiB, maxCpuPercentOneCore, maxActionsPerSecond, maxTraceSamples,
+                             maxVirtualInputs, workerCommandTimeoutMs]
+                  properties:
+                    maxConcurrentSessionsPerController: { type: integer, minimum: 1 }
+                    idleTtlSeconds: { type: integer, minimum: 1 }
+                    hardTtlSeconds: { type: integer, minimum: 1 }
+                    maxRssMiB: { type: integer, minimum: 1 }
+                    maxCpuPercentOneCore: { type: integer, minimum: 1, maximum: 100 }
+                    maxActionsPerSecond: { type: integer, minimum: 1 }
+                    maxTraceSamples: { type: integer, minimum: 1 }
+                    maxVirtualInputs: { type: integer, minimum: 1 }
+                    workerCommandTimeoutMs: { type: integer, minimum: 1 }
         limits:
           type: object
           additionalProperties: false
@@ -2463,7 +3105,9 @@ components:
     ProgrammingProject:
       type: object
       additionalProperties: false
-      required: [projectId, name, etag, activeRevisionId, draftRevisionId, baseRevisionId, updatedAt]
+      required:
+        [projectId, name, etag, activeRevisionId, draftRevisionId, baseRevisionId,
+         updatedAt, dirty, draftSequence, activeSequence]
       properties:
         projectId: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 120 }
@@ -2496,6 +3140,31 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/ProgrammingProjectLatestCheck" }
             - { type: "null" }
+        # --- T60-015 (Plan 60 §3.1 nhóm B, D-05) ---
+        # Ba trường dưới đây BẮT BUỘC CÓ MẶT, kể cả khi giá trị là `null`: server
+        # cố ý không dùng `omitempty` vì `null` tường minh nói "server đã xét và
+        # chưa biết", còn trường vắng mặt lẫn với "server đời cũ chưa có trường
+        # này". FE render `null` thành `—`, tuyệt đối không thành `0` hay "sạch".
+        dirty:
+          description: >
+            `true` khi `drafts.content_sha256` KHÁC `draftContentSha256` của
+            manifest base Revision (còn việc chưa phát hành); `false` khi trùng
+            byte-for-byte; `null` khi manifest base không mang
+            `draftContentSha256` — khẳng định "sạch" khi chưa biết là giấu việc.
+          type: [boolean, "null"]
+        draftSequence:
+          description: >
+            Số thứ tự Revision nền hiện hành của Draft, dùng cho nhãn `Draft #14`
+            thay cho UUID thô (AC-PGM01-01). `null` khi chưa phân giải được.
+          type: [integer, "null"]
+          minimum: 1
+        activeSequence:
+          description: >
+            Số thứ tự Revision mà Core ĐANG chạy, và CHỈ khi Revision đó thuộc
+            đúng Project này. Core im, hoặc Core chạy một Revision mà DB Web
+            không biết ⇒ `null`; không lấy bản Commission gần nhất thế chỗ.
+          type: [integer, "null"]
+          minimum: 1
     ProgrammingProjectLatestCheck:
       type: object
       additionalProperties: false
@@ -2562,18 +3231,37 @@ components:
     ProgrammingRevision:
       type: object
       additionalProperties: false
-      required: [revisionId, projectId, state, contentHash, createdAt]
+      # `snapshot` nằm trong `required` vì `GET /revisions/{id}` LUÔN gửi khoá
+      # này: `GetRevision` dựng `{manifest, objects}` trên đường thành công, còn
+      # đường thất bại đã trả 404 từ trước. Khai optional là nói contract lỏng
+      # hơn thứ server thực sự bảo đảm, và client sẽ phải viết một nhánh "thiếu
+      # snapshot" không bao giờ chạy tới.
+      required: [revisionId, projectId, state, sequence, contentHash, createdAt, snapshot]
       properties:
         revisionId: { type: string, format: uuid }
         projectId: { type: string, format: uuid }
         state: { type: string, enum: [DRAFT, IMMUTABLE, ACTIVE, LKG, SUPERSEDED] }
+        # T60-015 + D-05 — số thứ tự Revision trong Project, LUÔN >= 1 nên không
+        # nullable: hàng `revisions` không tồn tại thì request đã trả 404 từ
+        # trước đó. Đây là thứ cho phép hiện `Active #12` thay cho UUID thô.
+        sequence: { type: integer, minimum: 1 }
         contentHash: { type: string, pattern: "^[a-f0-9]{64}$" }
         createdAt: { type: string, format: date-time }
         snapshot: { $ref: "#/components/schemas/ProgrammingResource" }
     ProgrammingRevisionChanges:
       type: object
       additionalProperties: false
-      required: [fromRevisionId, toRevisionId, impact, changes]
+      # T59-819 — `stHunks`/`fbdChanges`/`truncated` nằm trong `required` vì
+      # server LUÔN gửi khoá: mảng rỗng nghĩa là "đã so và không có gì", khác
+      # hẳn khoá vắng mặt nghĩa là "server đời cũ chưa biết so". Khai optional
+      # sẽ làm hai câu đó trông giống nhau ở phía dùng — đúng chỗ một UI sẽ vẽ
+      # "không có thay đổi" cho một Revision chưa hề được so.
+      # `nextCursor` cũng nằm trong `required` và nullable: máy chủ LUÔN gửi
+      # khoá, `null` nghĩa là "đã đọc hết". Khai optional sẽ làm "hết trang"
+      # trông giống "server đời cũ không biết phân trang".
+      required:
+        [fromRevisionId, toRevisionId, impact, changes, stHunks, fbdChanges,
+         truncated, nextCursor]
       properties:
         fromRevisionId:
           oneOf:
@@ -2585,15 +3273,75 @@ components:
           type: array
           maxItems: 1024
           items: { $ref: "#/components/schemas/ProgrammingRevisionChange" }
+        stHunks:
+          type: array
+          maxItems: 200
+          items: { $ref: "#/components/schemas/ProgrammingStHunk" }
+        fbdChanges:
+          type: array
+          maxItems: 200
+          items: { $ref: "#/components/schemas/ProgrammingFbdChange" }
+        # Danh sách chạm trần payload. Một danh sách bị cắt IM LẶNG trông y hệt
+        # một danh sách đầy đủ, nên cờ này bắt buộc phải có mặt.
+        truncated: { type: boolean }
+        nextCursor:
+          oneOf:
+            - { type: string, minLength: 1, maxLength: 64 }
+            - { type: "null" }
+    ProgrammingStHunk:
+      type: object
+      additionalProperties: false
+      required:
+        [objectId, changeType, beforeStartLine, beforeLineCount, afterStartLine,
+         afterLineCount, beforeText, afterText, truncated, coarse]
+      properties:
+        objectId: { type: string, format: uuid }
+        changeType: { type: string, enum: [ADDED, REMOVED, REPLACED] }
+        # Dòng bắt đầu đếm từ 1 để khớp thứ người dùng thấy trong editor. Hunk
+        # thuần thêm/xoá có `*LineCount = 0` ở phía không tồn tại.
+        beforeStartLine: { type: integer, minimum: 1 }
+        beforeLineCount: { type: integer, minimum: 0 }
+        afterStartLine: { type: integer, minimum: 1 }
+        afterLineCount: { type: integer, minimum: 0 }
+        beforeText:
+          type: array
+          maxItems: 40
+          items: { type: string, maxLength: 4096 }
+        afterText:
+          type: array
+          maxItems: 40
+          items: { type: string, maxLength: 4096 }
+        # Thân hunk bị cắt so với thực tế: `*LineCount` vẫn là số dòng THẬT.
+        truncated: { type: boolean }
+        # Tài liệu vượt trần thuật toán nên cả tệp bị hạ thành một hunk REPLACED.
+        # Kết luận thô, không phải diff chi tiết — người đọc phải phân biệt được.
+        coarse: { type: boolean }
+    ProgrammingFbdChange:
+      type: object
+      additionalProperties: false
+      required: [objectId, element, elementId, changeType, detail]
+      properties:
+        objectId: { type: string, format: uuid }
+        element: { type: string, enum: [NETWORK, NODE, PORT, WIRE] }
+        # Rỗng chỉ với thay đổi ở cấp tài liệu (vd GEOMETRY_ONLY của layout).
+        elementId: { type: string, maxLength: 128 }
+        # ORDER_ONLY và GEOMETRY_ONLY tách riêng khỏi UPDATED: kéo một khối trên
+        # canvas không đổi hành vi chương trình, gộp chung sẽ làm người đọc mất
+        # khả năng phân biệt thứ cần soi kỹ với thứ chỉ cần liếc.
+        changeType: { type: string, enum: [ADDED, REMOVED, UPDATED, ORDER_ONLY, GEOMETRY_ONLY] }
+        detail: { type: string, maxLength: 64 }
     ProgrammingRevisionChange:
       type: object
       additionalProperties: false
       required: [objectId, kind, changeType, category, beforeSha256, afterSha256]
       properties:
         objectId: { type: string, format: uuid }
-        kind: { type: string, enum: [METADATA, PROGRAM, FUNCTION, FUNCTION_BLOCK, VARIABLE, BINDING, TASK] }
+        # Phải bằng whitelist revision_objects/validObjectKind; thiếu SIGNAL ở
+        # đây khiến client sinh từ contract không giải mã được diff của chính
+        # Revision Published Signal mà store v11 vừa cho phép seal.
+        kind: { type: string, enum: [METADATA, PROGRAM, FUNCTION, FUNCTION_BLOCK, VARIABLE, BINDING, TASK, SIGNAL] }
         changeType: { type: string, enum: [ADDED, REMOVED, MODIFIED] }
-        category: { type: string, enum: [SOURCE, MAPPING, OUTPUT_MAPPING, TASK, LIBRARY, RETAIN] }
+        category: { type: string, enum: [SOURCE, MAPPING, OUTPUT_MAPPING, TASK, LIBRARY, RETAIN, PUBLISHED_SIGNAL, PROGRAM_SET] }
         beforeSha256:
           oneOf:
             - { type: string, pattern: "^[a-f0-9]{64}$" }
@@ -2607,7 +3355,13 @@ components:
       enum: [NONE, PRESENT, UNAVAILABLE]
     ProgrammingImpactKey:
       type: string
-      enum: [retain, activeOverrides, cutover, outputMappingChanges]
+      # T59-502 bổ sung bốn nhóm cho mô hình đa Program. Bốn nhóm cũ chỉ phủ
+      # Rev A một Program, nên một Revision đổi Published Signal, đổi Control
+      # Library, thêm/bớt Program, hay chạm đúng Program đang Enabled đều đi qua
+      # Commission mà KHÔNG hỏi acknowledgement nào.
+      enum:
+        [retain, activeOverrides, cutover, outputMappingChanges,
+         publishedSignals, controlLibrary, programSet, enableIntent]
     ProgrammingImpactGroup:
       type: object
       additionalProperties: false
@@ -2620,13 +3374,26 @@ components:
     ProgrammingImpact:
       type: object
       additionalProperties: false
-      required: [impactRef, retain, activeOverrides, cutover, outputMappingChanges]
+      required:
+        [impactRef, retain, activeOverrides, cutover, outputMappingChanges,
+         publishedSignals, controlLibrary, programSet, enableIntent]
       properties:
         impactRef: { type: string, minLength: 8, maxLength: 128 }
         retain: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         activeOverrides: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         cutover: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
         outputMappingChanges: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Đổi freshness/chính sách stale/publisher của một Published Signal đổi
+        # hành vi của MỌI consumer khi mất dữ liệu — thứ không nhìn thấy được
+        # trong diff mã nguồn.
+        publishedSignals: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Đổi Control Library đổi thân của mọi POU tham chiếu nó.
+        controlLibrary: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Thêm/bớt Program đổi TẬP chương trình đang chạy trên thiết bị.
+        programSet: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Program đang Enabled mà Revision này chạm tới: người vận hành phải biết
+        # thứ đang chạy sắp bị thay, không phải phát hiện sau khi nó đã thay.
+        enableIntent: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
     ProgrammingCheckRequest:
       type: object
       additionalProperties: false
@@ -2751,10 +3518,11 @@ components:
     ProgrammingMonitorPage:
       type: object
       additionalProperties: false
-      required: [schemaVersion, activeRevisionId, safeState, task, items]
+      required: [schemaVersion, activeRevisionId, safeState, task, items, producer]
       properties:
         schemaVersion: { type: string, const: "1.0" }
         activeRevisionId: { type: [string, "null"], format: uuid }
+        producer: { $ref: "#/components/schemas/ProgrammingProducerStamp" }
         safeState: { type: boolean }
         task:
           oneOf:
@@ -2764,6 +3532,162 @@ components:
           type: array
           maxItems: 256
           items: { $ref: "#/components/schemas/ProgrammingMonitorSample" }
+    ProgrammingProducerStamp:
+      description: >-
+        `T59-810` — dấu của NGƯỜI SẢN XUẤT số liệu (Core), đi kèm mọi snapshot
+        runtime. `activeRevisionId` một mình không đủ để giữ mạch: hai snapshot
+        CÙNG một Revision vẫn có thể tới sai thứ tự (poll chồng nhau, retry), và
+        khi đó giá trị đi lùi mà không ai biết. `capturedMonotonicNs` là mốc
+        monotonic lúc Core chụp — tăng nghiêm ngặt trong một lần chạy, và GIẢM
+        khi Core khởi động lại, nên nó phân biệt được "cũ hơn" với "producer đã
+        restart".
+      type: object
+      additionalProperties: false
+      required: [capturedMonotonicNs]
+      properties:
+        capturedMonotonicNs:
+          description: >-
+            Chuỗi thập phân, KHÔNG phải number. Nanosecond kể từ boot vượt
+            `Number.MAX_SAFE_INTEGER` sau ~104 ngày uptime; truyền dạng số sẽ
+            làm client JavaScript làm tròn im lặng đúng lúc thiết bị chạy lâu
+            nhất — tức đúng lúc dấu này cần thiết nhất.
+          type: string
+          pattern: "^[0-9]{1,20}$"
+    # T59-814 / ADR-053 — Simulation R3.
+    #
+    # Mọi số đếm đi bằng CHUỖI thập phân (`sessionSequence`, `virtualTimeMs`,
+    # `observationSequence`, `resetEpoch`): chúng là uint64 và JSON number của
+    # JavaScript mất chính xác từ 2^53. Một sequence bị làm tròn sẽ làm mọi phép
+    # so `If-Match` sai theo cách không ai nhìn thấy.
+    ProgrammingSimulationCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, controllerId, projectId, sourceDraftRevisionId, sourceContentSha256]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        controllerId: { type: string, minLength: 1, maxLength: 128 }
+        projectId: { type: string, format: uuid }
+        sourceDraftRevisionId: { type: string, format: uuid }
+        sourceContentSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+    ProgrammingSimulationActionRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, action]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        # `SET_INPUT` và `STOP` cố ý KHÔNG có ở đây: chúng có resource riêng.
+        action: { type: string, enum: [RUN, PAUSE, STEP_CYCLE, RESET, SET_SPEED] }
+        speed: { type: integer, enum: [1, 10, 60] }
+    ProgrammingSimulationInputRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, dataType, value]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        # Kiểu ĐI KÈM giá trị và phải khớp manifest. Suy kiểu từ hình dạng JSON
+        # sẽ biến biên kiểm kiểu thành biên kiểm định dạng.
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        value: { nullable: false }
+    ProgrammingSimulationInput:
+      type: object
+      additionalProperties: false
+      required: [observationId, programId, variable, sourceKind, dataType, unit, min, max, simulationWritable]
+      properties:
+        observationId: { type: string, minLength: 1, maxLength: 128 }
+        programId: { type: string }
+        variable: { type: string }
+        # Chỉ hai nguồn này được ghi. OUTPUT/IN_OUT/RETAIN/INTERNAL/COMMAND/
+        # OVERRIDE/PRODUCTION_WRITER không bao giờ xuất hiện trong allowlist.
+        sourceKind: { type: string, enum: [VAR_INPUT, READ_BINDING] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        unit: { type: string, nullable: true, maxLength: 32 }
+        min: { type: number, nullable: true }
+        max: { type: number, nullable: true }
+        simulationWritable: { type: boolean }
+    ProgrammingSimulationObservation:
+      type: object
+      additionalProperties: false
+      required: [observationId, programId, variable, kind, dataType, quality, value]
+      properties:
+        observationId: { type: string, minLength: 1, maxLength: 128 }
+        programId: { type: string }
+        variable: { type: string }
+        kind: { type: string, enum: [INPUT, OUTPUT] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        # UNAVAILABLE khi Program chưa từng đến hạn. Không có "0 mặc định": một
+        # số 0 không phân biệt được với số 0 thật là đúng loại lỗi phải tránh.
+        quality: { type: string, enum: [GOOD, UNCERTAIN, BAD, UNAVAILABLE] }
+        value: { nullable: true }
+    ProgrammingSimulationFrame:
+      type: object
+      additionalProperties: false
+      required: [virtualTimeMs, snapshotSequence, resetEpoch, observations]
+      properties:
+        virtualTimeMs: { type: integer, format: int64, minimum: 0 }
+        snapshotSequence: { type: integer, format: int64, minimum: 0 }
+        resetEpoch: { type: integer, format: int64, minimum: 0 }
+        observations:
+          type: array
+          maxItems: 4096
+          items: { $ref: "#/components/schemas/ProgrammingSimulationObservation" }
+    ProgrammingSimulationTraceSample:
+      type: object
+      additionalProperties: false
+      required: [virtualTimeMs, snapshotSequence, values]
+      properties:
+        virtualTimeMs: { type: integer, format: int64, minimum: 0 }
+        snapshotSequence: { type: integer, format: int64, minimum: 0 }
+        values:
+          type: array
+          maxItems: 4096
+          items: { nullable: true }
+    ProgrammingSimulationTracePage:
+      type: object
+      additionalProperties: false
+      required: [samples, nextCursor, total, dropped]
+      properties:
+        samples:
+          type: array
+          maxItems: 1024
+          items: { $ref: "#/components/schemas/ProgrammingSimulationTraceSample" }
+        nextCursor: { type: integer, format: int64, minimum: 0 }
+        total: { type: integer, format: int64, minimum: 0 }
+        # `dropped` > 0 nghĩa là trace đã đầy và DỪNG ghi. Nói ra thay vì cuộn
+        # vòng im lặng: một trace bị cuộn trông y hệt một trace đầy đủ.
+        dropped: { type: integer, format: int64, minimum: 0 }
+    ProgrammingSimulationSession:
+      type: object
+      additionalProperties: false
+      required: [sessionId, controllerId, projectId, sourceDraftRevisionId, sourceContentSha256,
+                 state, sessionSequence, etag, baseTickMs, virtualTimeMs, speed,
+                 observationSequence, resetEpoch, createdAt, lastActivityAt, idleExpiresAt,
+                 hardExpiresAt, failureCode, workerVersion]
+      properties:
+        sessionId: { type: string, format: uuid }
+        controllerId: { type: string, minLength: 1, maxLength: 128 }
+        projectId: { type: string, format: uuid }
+        sourceDraftRevisionId: { type: string, format: uuid }
+        sourceContentSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        state: { type: string, enum: [PREPARING, PAUSED, RUNNING, COMPLETED, FAILED, EXPIRED, STOPPED] }
+        sessionSequence: { type: string, pattern: "^[0-9]{1,20}$" }
+        etag: { type: string, minLength: 1, maxLength: 128 }
+        baseTickMs: { type: integer, nullable: true, minimum: 1 }
+        virtualTimeMs: { type: string, pattern: "^[0-9]{1,20}$" }
+        speed: { type: integer, enum: [1, 10, 60] }
+        observationSequence: { type: string, pattern: "^[0-9]{1,20}$" }
+        resetEpoch: { type: string, pattern: "^[0-9]{1,20}$" }
+        createdAt: { type: string, format: date-time }
+        lastActivityAt: { type: string, format: date-time }
+        idleExpiresAt: { type: string, format: date-time }
+        hardExpiresAt: { type: string, format: date-time }
+        # Mã ổn định, không phải văn bản tự do. Null nghĩa là "chưa hỏng".
+        failureCode: { type: string, nullable: true, maxLength: 64 }
+        workerVersion: { type: string, nullable: true, maxLength: 32 }
+        simulationInputs:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ProgrammingSimulationInput" }
+        auditId: { type: string, format: uuid }
     ProgrammingTraceAccepted:
       type: object
       additionalProperties: false
@@ -2802,10 +3726,11 @@ components:
     ProgrammingTrace:
       type: object
       additionalProperties: false
-      required: [traceId, state, variableIds, durationMs, samplePeriodMs, startedAt, updatedAt, stopReason, droppedSamples, samples]
+      required: [traceId, state, variableIds, durationMs, samplePeriodMs, startedAt, updatedAt, stopReason, droppedSamples, samples, pin]
       properties:
         traceId: { type: string, format: uuid }
         state: { type: string, enum: [RUNNING, COMPLETED, STOPPED, FAILED] }
+        pin: { $ref: "#/components/schemas/ProgrammingTracePin" }
         variableIds:
           type: array
           minItems: 1
@@ -2822,6 +3747,19 @@ components:
           type: array
           maxItems: 10000
           items: { $ref: "#/components/schemas/ProgrammingTraceSample" }
+    ProgrammingTracePin:
+      description: >-
+        `T59-810` — tuple Active mà phiên Trace được NEO vào lúc tạo. Một phiên
+        Trace kéo dài qua một lần cutover sẽ ghép mẫu của hai chương trình khác
+        nhau vào cùng một đồ thị; người đọc không có cách nào nhìn ra chỗ nối.
+        Neo tuple lúc tạo và dừng phiên khi tuple trôi là cách duy nhất để dãy
+        mẫu chỉ thuộc về đúng một Revision.
+      type: object
+      additionalProperties: false
+      required: [revisionId, producer]
+      properties:
+        revisionId: { type: [string, "null"], format: uuid }
+        producer: { $ref: "#/components/schemas/ProgrammingProducerStamp" }
     ProgrammingCommissionRequest:
       type: object
       additionalProperties: false
@@ -2834,7 +3772,7 @@ components:
         impactRef: { type: string, minLength: 8, maxLength: 128 }
         acknowledgements:
           type: array
-          maxItems: 4
+          maxItems: 8
           uniqueItems: true
           items: { $ref: "#/components/schemas/ProgrammingImpactKey" }
         cutover:
@@ -2901,6 +3839,25 @@ components:
           contentEncoding: base64
         auditId: { type: string, format: uuid }
         correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingRecoveryResetRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, reason]
+      properties:
+        schemaVersion: { type: string, enum: ["1.0"] }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Lý do gỡ khoá — đi thẳng vào audit, kể cả khi Core từ chối.
+    ProgrammingRecoveryResetResult:
+      type: object
+      additionalProperties: false
+      required: [applied, auditId]
+      properties:
+        applied: { type: boolean }
+        detailCode: { type: string, maxLength: 64 }
+        auditId: { type: string, format: uuid }
     ProgrammingRetainResetRequest:
       type: object
       additionalProperties: false
@@ -2960,9 +3917,283 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/ProgrammingTaskMetrics" }
             - { type: "null" }
+    ProgrammingRuntimeSignal:
+      type: object
+      additionalProperties: false
+      required: [signalId, name, producerProgramId, dataType, unit, value, valid, quality, freshness, stalePolicy, freshnessMs, publishedAtMonoNs, generation, definitionState]
+      properties:
+        signalId: { type: [string, "null"], format: uuid }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        producerProgramId: { type: string, minLength: 1, maxLength: 64 }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        unit: { type: [string, "null"], maxLength: 32 }
+        value:
+          description: null khi valid=false; không bao giờ thay null bằng 0/false.
+          type: [boolean, integer, number, "null"]
+        valid: { type: boolean }
+        quality: { type: string, enum: [GOOD, UNCERTAIN, BAD] }
+        freshness: { type: string, enum: [FRESH, STALE_HELD, STALE_FALLBACK, UNAVAILABLE, NOT_DECLARED] }
+        stalePolicy: { type: string, enum: [WAIT, HOLD_LAST, USE_FALLBACK, SAFE_STATE] }
+        freshnessMs: { type: integer, minimum: 1000, maximum: 90000 }
+        # uint64 đi qua JSON dưới dạng chuỗi để không mất bit trong JavaScript.
+        publishedAtMonoNs: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$" }
+        generation: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$" }
+        definitionState: { type: string, enum: [MATCHED, MISMATCH, CORE_ONLY, REVISION_ONLY] }
+    ProgrammingRuntimeSignalPage:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, producerState, activeRevisionId, observedAt, items]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        producerState: { type: string, enum: [READY, DEGRADED, UNAVAILABLE] }
+        activeRevisionId: { type: [string, "null"], format: uuid }
+        observedAt: { type: string, format: date-time }
+        items:
+          type: array
+          maxItems: 512
+          items: { $ref: "#/components/schemas/ProgrammingRuntimeSignal" }
     ProgrammingResource:
       type: object
       additionalProperties: true
+    ProgrammingLibraryDependency:
+      type: object
+      additionalProperties: false
+      required: [entryId, version]
+      properties:
+        entryId: { type: string, format: uuid }
+        version: { type: string, minLength: 1, maxLength: 64 }
+    ProgrammingLibraryEntry:
+      type: object
+      additionalProperties: false
+      required: [scope, libraryRevisionId, libraryVersion, libraryState, entryId, kind, name, featureState, contentSha256, dependencies, stateLayoutKnown, stateSizeBytes]
+      properties:
+        scope: { type: string, enum: [SYSTEM, PROJECT] }
+        libraryRevisionId: { type: string, minLength: 1, maxLength: 128 }
+        libraryVersion: { type: string, minLength: 1, maxLength: 64 }
+        libraryState: { type: string, enum: [DRAFT, PUBLISHED, DEPRECATED] }
+        entryId: { type: string, minLength: 1, maxLength: 128 }
+        kind: { type: string, enum: [FUNCTION, FUNCTION_BLOCK, CONVERSION] }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        language: { type: string, enum: [ST, FBD] }
+        featureState: { type: string, enum: [AVAILABLE, REVIEW_REQUIRED] }
+        contentSha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        # `interface` giữ nguyên chữ ký THÔ như nơi lưu: PROJECT entry do người
+        # dùng nạp và backend chỉ kiểm "JSON hợp lệ + hash khớp", nên siết kiểu
+        # ở đây sẽ từ chối những entry đang chạy được.
+        interface: { type: object }
+        # `signature` là chữ ký ĐÃ PHÂN GIẢI, chỉ có mặt khi chữ ký thô khớp
+        # hình dạng canonical. Vắng field này nghĩa là "chưa đọc được chữ ký" —
+        # một câu trả lời rõ ràng, khác hẳn việc mỗi client tự parse rồi mỗi nơi
+        # kết luận một kiểu (T59-804 / PGM02-V22-WP-03).
+        signature: { $ref: "#/components/schemas/ProgrammingLibrarySignature" }
+        dependencies:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/ProgrammingLibraryDependency" }
+        # `stateLayoutKnown=false` nghĩa là layout CHƯA BIẾT, không phải bằng 0.
+        # Consumer không được coi `stateSizeBytes=0` là sự thật khi cờ này false.
+        stateLayoutKnown: { type: boolean }
+        stateSizeBytes: { type: integer, minimum: 0, maximum: 1048576 }
+    ProgrammingLibrarySignaturePort:
+      type: object
+      additionalProperties: false
+      required: [name, direction, dataType]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        direction: { type: string, enum: [INPUT, OUTPUT] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+    ProgrammingLibrarySignature:
+      type: object
+      additionalProperties: false
+      required: [category, dispatch, polymorphic, allowedTypes, typedPortNames, ports]
+      properties:
+        category: { type: string, minLength: 1, maxLength: 32 }
+        labelVi: { type: string, maxLength: 128 }
+        labelEn: { type: string, maxLength: 128 }
+        # `dispatch` nói compiler hiện thực entry bằng cách nào: toán tử, bảng
+        # hàm, FB có state, hay KHAI TRIỂN thành chuỗi lệnh đã có (§7A.6).
+        dispatch: { type: string, enum: [OPERATOR, FUNC_TABLE, FB_TYPE, EXPANSION] }
+        polymorphic: { type: boolean }
+        allowedTypes:
+          type: array
+          maxItems: 8
+          items: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        defaultType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        typedPortNames:
+          type: array
+          maxItems: 16
+          items: { type: string, minLength: 1, maxLength: 64 }
+        ports:
+          type: array
+          maxItems: 16
+          items: { $ref: "#/components/schemas/ProgrammingLibrarySignaturePort" }
+    ProgrammingLibraryPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ProgrammingLibraryEntry" }
+        nextCursor: { type: [string, "null"] }
+    ProgrammingLibraryStateLayout:
+      type: object
+      additionalProperties: false
+      required: [version, stateSizeBytes, sha256]
+      properties:
+        version: { type: integer, minimum: 1, maximum: 4294967295 }
+        stateSizeBytes: { type: integer, minimum: 0, maximum: 1048576 }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+    ProgrammingLibraryEntryRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, entryId, kind, name, language, source, interface]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        entryId: { type: string, format: uuid }
+        kind: { type: string, enum: [FUNCTION, FUNCTION_BLOCK] }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        language: { type: string, enum: [ST, FBD] }
+        # featureState chỉ nhận AVAILABLE. REVIEW_REQUIRED là cờ Controls/Safety
+        # của registry SYSTEM, không phải nhãn client tự dán cho POU của mình.
+        featureState: { type: string, enum: [AVAILABLE] }
+        source: { type: string, minLength: 1, maxLength: 65536 }
+        interface: { type: object }
+        dependencies:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/ProgrammingLibraryDependency" }
+        # Vắng mặt nghĩa là layout chưa biết. FUNCTION không được mang khối này.
+        stateLayout: { $ref: "#/components/schemas/ProgrammingLibraryStateLayout" }
+    ProgrammingLibraryRevisionDeprecateRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+    ProgrammingProgramIntentRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, desiredEnabled]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        # BẮT BUỘC có mặt. Thiếu `desiredEnabled` KHÁC `desiredEnabled=false`:
+        # mặc định về false sẽ biến một payload hỏng thành lệnh TẮT chương trình.
+        desiredEnabled: { type: boolean }
+    ProgrammingProgramRuntimeState:
+      description: >
+        Trạng thái vận hành của một Program theo hợp đồng D-07 (Plan 60 §4.1).
+        `STARTING`/`STOPPING` CỐ Ý không có mặt: `start()`/`stop()`/`disable()`
+        của scheduler đổi trạng thái ĐỒNG BỘ, TỨC THÌ — không có pha trung gian
+        nào để hiển thị. Khai hai giá trị đó vào enum là mời chúng quay lại và
+        làm UI kẹt vĩnh viễn ở một chuyển tiếp không hề tồn tại.
+        `ACTIVE`/`STOPPED`/`ROLLED_BACK` của Core cùng chiếu về `WAITING`; phần
+        bị mất khi chiếu được nói lại bằng `coreState` và `health`.
+      type: string
+      enum: [RUNNING, WAITING, DISABLED, FAULTED, UNKNOWN]
+    ProgrammingProgramRuntimeStateSource:
+      description: >
+        Nguồn của số đo trên chính dòng đó. `CORE_LIVE` = đọc được từ snapshot
+        này của Core. `LAST_KNOWN` = Core sống nhưng không kể tên Program này;
+        giá trị hiển thị là read-back bền vững lần cuối, kèm mốc của chính nó.
+        `UNAVAILABLE` = không đọc được gì, bắt buộc đi kèm
+        `runtimeState = UNKNOWN` và mọi số đo `null`.
+        Không có trường này thì `RUNNING` đọc từ DB (ghi lúc đẩy intent, có thể
+        từ một giờ trước) trông y hệt `RUNNING` vừa đọc từ Core — và đó chính là
+        lúc người vận hành cần phân biệt nhất.
+      type: string
+      enum: [CORE_LIVE, LAST_KNOWN, UNAVAILABLE]
+    ProgrammingProgramHealth:
+      description: >
+        Nhãn sức khoẻ do SERVER tính theo D-04 (Plan 60 §4.2, thứ tự xét
+        1 → 2 → 6 → 3 → 4 → 5 → 7). Nullable ở nơi dùng: Program `DISABLED`/
+        `WAITING` không mang nhãn sức khoẻ nào, và `null` là câu trả lời hợp lệ
+        chứ không phải một giá trị enum bịa thêm cho gọn. FE hiện `null` thành
+        `—`, không bao giờ thành `HEALTHY`.
+      type: string
+      enum: [HEALTHY, DEGRADED, FAULT, UNKNOWN]
+    ProgrammingProgramListItem:
+      type: object
+      additionalProperties: false
+      # MỌI trường đều BẮT BUỘC CÓ MẶT, kể cả khi giá trị là `null` — server Go
+      # cố ý không dùng `omitempty`. `null` tường minh nói "server đã xét và chưa
+      # biết", còn trường VẮNG MẶT lẫn với "server đời cũ chưa có trường này".
+      # Client không được suy `null` thành `0`/`false`.
+      required:
+        [programId, desiredEnabled, generation, updatedBy, updatedAtUtcMs,
+         runtimeState, runtimeStateSource, coreState, enabled, observedAt,
+         periodMs, lastExecNs, maxExecNs, missedReleaseCount,
+         consecutiveMissedRelease, lastRunAtUtc, lastRunAgeMs, lane, health]
+      properties:
+        programId: { type: string, minLength: 1, maxLength: 64 }
+        # --- Ý định bền vững (`program_runtime_intents`) ---
+        # `null` = Project này CHƯA TỪNG ghi intent cho Program đó (Program chỉ
+        # Core biết). KHÁC HẲN `false`, vốn nghĩa là đã có người tắt nó.
+        desiredEnabled: { type: [boolean, "null"] }
+        # Chỉ tăng, không bao giờ lùi: Core dùng nó để biết intent nào mới hơn mà
+        # KHÔNG phải tin đồng hồ tường của hai máy khác nhau.
+        generation: { type: [integer, "null"], minimum: 1 }
+        updatedBy: { type: [string, "null"], minLength: 1, maxLength: 128 }
+        updatedAtUtcMs: { type: [integer, "null"], minimum: 0 }
+        # --- Read-back (`point_snapshot` của Core) ---
+        runtimeState: { $ref: "#/components/schemas/ProgrammingProgramRuntimeState" }
+        runtimeStateSource: { $ref: "#/components/schemas/ProgrammingProgramRuntimeStateSource" }
+        # NGUYÊN VĂN `StProgramState` của Core. Giữ lại vì `runtimeState` là phép
+        # chiếu CÓ MẤT MÁT: `ACTIVE`, `STOPPED` và `ROLLED_BACK` cùng ra
+        # `WAITING`, nhưng chỉ `ROLLED_BACK` mới kéo `health` xuống `DEGRADED`.
+        coreState: { type: [string, "null"], minLength: 1, maxLength: 32 }
+        # Cờ enable THẬT trong Core, không phải ý định. Lệch với `desiredEnabled`
+        # là một sự kiện vận hành, không phải một lỗi hiển thị.
+        enabled: { type: [boolean, "null"] }
+        observedAt: { type: [string, "null"], format: date-time }
+        # `null` (KHÔNG phải `0`) khi Core không phân giải được chu kỳ hiệu lực.
+        # `0` ở cột Cycle là một số bịa, và nó bịa đúng chỗ người vận hành tin nhất.
+        periodMs: { type: [integer, "null"], minimum: 1 }
+        # THỜI LƯỢNG một lần chạy, KHÔNG phải mốc thời gian — mốc là `lastRunAtUtc`.
+        lastExecNs: { type: [integer, "null"], minimum: 0 }
+        maxExecNs: { type: [integer, "null"], minimum: 0 }
+        # Bộ đếm TÍCH LUỸ từ lúc start. Không dùng nó cho `health`: một lần lỡ
+        # nhịp cách đây một giờ sẽ ghim Program ở DEGRADED vĩnh viễn.
+        missedReleaseCount: { type: [integer, "null"], minimum: 0 }
+        # Bộ đếm LIÊN TIẾP, reset về 0 mỗi lần release đúng hạn — đây mới là thứ
+        # điều 4 của công thức `health` dùng.
+        consecutiveMissedRelease: { type: [integer, "null"], minimum: 0 }
+        # MỐC lần chạy gần nhất — đúng thứ cột `Last Exec` cần. KHÔNG suy ra từ
+        # `lastExecNs`; mốc dựng từ `lastRunMonoNs` trừ trong cùng snapshot rồi
+        # quy về đồng hồ tường.
+        lastRunAtUtc: { type: [string, "null"], format: date-time }
+        lastRunAgeMs: { type: [integer, "null"], minimum: 0 }
+        lane: { type: [integer, "null"], minimum: 0 }
+        health:
+          oneOf:
+            - { $ref: "#/components/schemas/ProgrammingProgramHealth" }
+            - { type: "null" }
+    ProgrammingProgramsPage:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, projectId, runtimeStateSource, observedAt, programsTruncated, items]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        projectId: { type: string, format: uuid }
+        # Mức TRANG: `CORE_LIVE` khi đọc được bảng Program của Core trong lần gọi
+        # này, `UNAVAILABLE` khi không. Mức dòng vẫn có thể hạ xuống
+        # `LAST_KNOWN`/`UNAVAILABLE` riêng.
+        runtimeStateSource: { $ref: "#/components/schemas/ProgrammingProgramRuntimeStateSource" }
+        # Mốc Core chụp snapshot. `null` khi không đọc được — KHÔNG điền đồng hồ
+        # của web-api vào đây, đó là mốc của một quan sát chưa xảy ra.
+        observedAt: { type: [string, "null"], format: date-time }
+        # `null` khi không có bảng nào để nói tới; `true` khi Core đã cắt ở trần
+        # `kMaxProgramsTotal` (32) ⇒ danh sách KHÔNG đầy đủ.
+        programsTruncated: { type: [boolean, "null"] }
+        items:
+          type: array
+          # Trần 64 = hợp của HAI nguồn: tối đa 32 Program có intent trong DB
+          # (`maxProgramsTotal` của profile) cộng tối đa 32 Program mà Core kể
+          # tên nhưng Project chưa từng ghi intent. Đặt 32 ở đây sẽ khai hẹp hơn
+          # thứ backend có thể trả.
+          maxItems: 64
+          items: { $ref: "#/components/schemas/ProgrammingProgramListItem" }
     ProgrammingResourcePage:
       type: object
       additionalProperties: false
@@ -3276,6 +4507,9 @@ components:
             timeouts: { type: integer }
             seq_errors: { type: integer }
             last_io_resp_ms: { type: integer }
+            max_poll_gap_ms:
+              type: number
+              description: Khoảng cách lớn nhất giữa hai IO_RESP hợp lệ do iobus đo; vắng nếu producer cũ chưa hỗ trợ
         scan:
           type: object
           description: Nguá»“n = mkddc-core (Ä‘á»c tá»« kx_plc_shm)
@@ -4896,3 +6130,278 @@ components:
       properties:
         username: { type: string }
         role: { type: string, enum: [admin, operator, viewer] }
+    # ---- 2026-08-20: schema cho 13 endpoint bổ sung ở phần `paths` ----
+    # Tên trường lấy trực tiếp từ struct Go đang phục vụ request, không phải từ
+    # thiết kế mong muốn. Sai lệch giữa hai thứ đó chính là lớp lỗi mà
+    # `TestRouteTableMatchesOpenAPI` và `contract_sync_test.go` cùng canh.
+    SystemHistorySample:
+      type: object
+      required: [at, cpuPercent, ramPercent, tempC]
+      description: "Ba trường số là nullable: `null` = KHÔNG đo được ở mốc đó, khác 0."
+      properties:
+        at: { type: string, format: date-time }
+        cpuPercent: { type: [number, "null"] }
+        ramPercent: { type: [number, "null"] }
+        tempC: { type: [number, "null"] }
+    SystemHistory:
+      type: object
+      required: [schemaVersion, generatedAt, windowS, intervalS, sinceRestart, samples]
+      properties:
+        schemaVersion: { type: integer }
+        generatedAt: { type: string, format: date-time }
+        windowS: { type: integer }
+        intervalS: { type: integer }
+        sinceRestart: { type: string, format: date-time }
+        samples:
+          type: array
+          items: { $ref: "#/components/schemas/SystemHistorySample" }
+    AlarmTopRepeating:
+      type: object
+      required: [alarmId, count]
+      properties:
+        alarmId: { type: string }
+        name: { type: string }
+        count: { type: integer }
+    AlarmShelvedExpiring:
+      type: object
+      required: [alarmId, shelvedAt]
+      properties:
+        alarmId: { type: string }
+        name: { type: string }
+        shelvedAt: { type: string, format: date-time }
+    AlarmMetrics:
+      type: object
+      required: [schemaVersion, generatedAt, window, windowS, rate10m, ratePerHour, totalRaised, flooding, topRepeating, shelved]
+      properties:
+        schemaVersion: { type: integer }
+        generatedAt: { type: string, format: date-time }
+        window: { type: string }
+        windowS: { type: integer }
+        rate10m: { type: integer }
+        ratePerHour: { type: number }
+        totalRaised: { type: integer }
+        flooding: { type: boolean }
+        topRepeating:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmTopRepeating" }
+        shelved:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmShelvedExpiring" }
+    UserAccessEntry:
+      type: object
+      required: [username, role, mustChangePassword, lastLoginAt, lastLoginRemote, lastFailedLoginAt, activeSessions]
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [admin, operator, viewer] }
+        mustChangePassword: { type: boolean }
+        lastLoginAt: { type: [string, "null"], format: date-time }
+        lastLoginRemote: { type: [string, "null"] }
+        lastFailedLoginAt: { type: [string, "null"], format: date-time }
+        activeSessions: { type: integer }
+    UserSession:
+      type: object
+      required: [username, role, issuedAt, lastSeenAt]
+      properties:
+        username: { type: string }
+        role: { type: string, enum: [admin, operator, viewer] }
+        issuedAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        remote: { type: string }
+    UserAccess:
+      type: object
+      required: [schemaVersion, generatedAt, users, sessions, sessionsSince, activityWindow]
+      properties:
+        schemaVersion: { type: integer }
+        generatedAt: { type: string, format: date-time }
+        users:
+          type: array
+          items: { $ref: "#/components/schemas/UserAccessEntry" }
+        sessions:
+          type: array
+          items: { $ref: "#/components/schemas/UserSession" }
+        sessionsSince: { type: string, format: date-time }
+        activityWindow: { type: integer }
+    VirtualPointReference:
+      type: object
+      required: [kind, id]
+      properties:
+        kind: { type: string }
+        id: { type: string }
+        name: { type: string }
+        detail: { type: string }
+    VirtualPointUsage:
+      type: object
+      required: [schemaVersion, pointId, references, scanned, incomplete]
+      properties:
+        schemaVersion: { type: integer }
+        pointId: { type: string }
+        tag: { type: string }
+        references:
+          type: array
+          items: { $ref: "#/components/schemas/VirtualPointReference" }
+        scanned: { type: array, items: { type: string } }
+        incomplete: { type: boolean }
+        errors: { type: array, items: { type: string } }
+    ModbusFrameRecord:
+      type: object
+      required: [at, bus, slave, fc, addr, count, ok, reason, elapsedUs, attempt]
+      properties:
+        at: { type: integer, format: int64, description: epoch ms }
+        bus: { type: integer }
+        slave: { type: integer }
+        fc: { type: integer }
+        addr: { type: integer }
+        count: { type: integer }
+        ok: { type: boolean }
+        reason: { type: string }
+        elapsedUs: { type: integer }
+        attempt: { type: integer }
+    ModbusFrames:
+      type: object
+      required: [schemaVersion, bus, frames, volatile, rawBytes]
+      properties:
+        schemaVersion: { type: integer }
+        bus: { type: integer }
+        frames:
+          type: array
+          items: { $ref: "#/components/schemas/ModbusFrameRecord" }
+        volatile: { type: boolean, description: Vòng nhớ trong tiến trình iobus; mất khi restart }
+        rawBytes: { type: boolean, description: "Rev A luôn `false` — đây là bản ghi giao dịch, không phải byte thô" }
+    ModbusTemplatePoint:
+      type: object
+      required: [name, fc, addr, count, type]
+      properties:
+        name: { type: string }
+        fc: { type: integer }
+        addr: { type: integer }
+        count: { type: integer }
+        type: { type: string }
+        byte_order: { type: string }
+        scale: { type: number }
+        offset: { type: number }
+        unit: { type: string }
+        writable: { type: boolean }
+    ModbusTemplate:
+      type: object
+      required: [id, name, source, origin, points]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        manufacturer: { type: string }
+        description: { type: string }
+        source: { type: string }
+        origin: { type: string }
+        points:
+          type: array
+          items: { $ref: "#/components/schemas/ModbusTemplatePoint" }
+    NetworkCheckTarget:
+      type: object
+      required: [kind, host, state]
+      properties:
+        kind: { type: string }
+        host: { type: string }
+        state: { type: string }
+        detail: { type: string }
+        rttMs: { type: integer }
+    NetworkCheck:
+      type: object
+      required: [schemaVersion, checkedAt, targets, summary]
+      properties:
+        schemaVersion: { type: integer }
+        checkedAt: { type: string, format: date-time }
+        targets:
+          type: array
+          items: { $ref: "#/components/schemas/NetworkCheckTarget" }
+        summary: { type: string }
+    ScheduleEffectiveSegment:
+      type: object
+      required: [from, to, value]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        value: { description: "`null` = không lịch nào ghi trong đoạn" }
+        scheduleId: { type: string, description: Rỗng = đoạn KHÔNG có lịch nào }
+        scheduleName: { type: string }
+        priority: { type: integer }
+        reason: { type: string }
+    ScheduleEffectiveConflict:
+      type: object
+      required: [at, scheduleIds, winnerId]
+      properties:
+        at: { type: string, format: date-time }
+        scheduleIds: { type: array, items: { type: string } }
+        winnerId: { type: string }
+        detail: { type: string }
+    ScheduleEffective:
+      type: object
+      required: [schemaVersion, pointId, from, to, segments, conflicts, engine]
+      properties:
+        schemaVersion: { type: integer }
+        pointId: { type: string }
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        segments:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleEffectiveSegment" }
+        conflicts:
+          type: array
+          items: { $ref: "#/components/schemas/ScheduleEffectiveConflict" }
+        engine: { type: string }
+    AlarmSimSample:
+      type: object
+      required: [t, value]
+      properties:
+        t: { type: string, format: date-time }
+        value: { type: number }
+    AlarmSimEvent:
+      type: object
+      required: [at, event, value]
+      properties:
+        at: { type: string, format: date-time }
+        event: { type: string }
+        severity: { type: string }
+        value: { type: number }
+        reason: { type: string }
+    AlarmSimulateRequest:
+      type: object
+      required: [setting, samples]
+      properties:
+        setting: { $ref: "#/components/schemas/AlarmSetting" }
+        samples:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSimSample" }
+    AlarmSimulateResult:
+      type: object
+      required: [schemaVersion, events, engine]
+      properties:
+        schemaVersion: { type: integer }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSimEvent" }
+        engine: { type: string }
+    AlarmEstimateRequest:
+      type: object
+      required: [setting, pointId, days]
+      properties:
+        setting: { $ref: "#/components/schemas/AlarmSetting" }
+        pointId: { type: string }
+        days: { type: integer }
+    AlarmEstimateResponse:
+      type: object
+      required: [schemaVersion, pointId, days, samplesAvailable, samplesUsed, stepS, raises, raisesPerDay, events, engine, downsampled, underestimateBelowS, historySource]
+      properties:
+        schemaVersion: { type: integer }
+        pointId: { type: string }
+        days: { type: integer }
+        samplesAvailable: { type: integer }
+        samplesUsed: { type: integer }
+        stepS: { type: integer }
+        raises: { type: integer }
+        raisesPerDay: { type: number }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/AlarmSimEvent" }
+        engine: { type: string }
+        downsampled: { type: boolean }
+        underestimateBelowS: { type: integer, description: Khi downsampled, kết quả ĐẾM THIẾU với thời lượng dưới ngưỡng này }
+        historySource: { type: string }

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	programmingstore "mkddc-web/internal/programming/store"
@@ -19,20 +20,69 @@ func applyDraftOperations(content []byte, operations []json.RawMessage) ([]byte,
 	if err := json.Unmarshal(content, &document); err != nil {
 		return nil, fmt.Errorf("decode Draft: %w", err)
 	}
-	for _, raw := range operations {
+	// Draft cũ được nâng lên v2 NGAY ở lần ghi đầu tiên, không phải khi seal.
+	// Migrate muộn nghĩa là mọi thao tác trung gian vẫn chạy trên hai đời model
+	// cùng lúc — đúng lối để hai bộ luật trôi khỏi nhau.
+	if err := migrateDraftToV2(document); err != nil {
+		return nil, err
+	}
+	for index, raw := range operations {
 		var header operationHeader
 		if err := json.Unmarshal(raw, &header); err != nil || header.Op == "" {
-			return nil, ErrInvalidRequest
+			return nil, &DraftOperationError{Index: index, Err: ErrInvalidRequest}
+		}
+		handled, err := applyDraftOperationV2(document, header.Op, raw)
+		if err != nil {
+			return nil, &DraftOperationError{Index: index, Op: header.Op, Err: err}
+		}
+		if handled {
+			continue
 		}
 		if err := applyDraftOperation(document, header.Op, raw); err != nil {
-			return nil, err
+			return nil, &DraftOperationError{Index: index, Op: header.Op, Err: err}
 		}
 	}
-	if err := validateDraftDocument(document); err != nil {
+	if err := validateDraftDocumentV2(document); err != nil {
 		return nil, err
 	}
 	return json.Marshal(document)
 }
+
+// DraftOperationError nói RÕ thao tác nào trong batch bị từ chối.
+//
+// Vì sao cần: `PATCH .../draft` nhận một mảng operation và trả đúng một mã
+// `PRG-ERR-REQ-001` cho cả batch. Khi FE gửi 4–5 thao tác trong một lần Xoá
+// Program, người vận hành (và cả người debug) không có cách nào biết thao tác
+// nào sai — đúng tình huống của `F-P59-DELETE-PROGRAM-001`, nơi một
+// `setTask.programOrder` sai làm cả lệnh Xoá thất bại trong im lặng. Lớp HTTP
+// đặt chỉ số + tên op vào `field` của lỗi công khai; nội dung message vẫn không
+// rò ra ngoài.
+type DraftOperationError struct {
+	Index int
+	Op    string
+	Err   error
+}
+
+func (e *DraftOperationError) Error() string {
+	if e.Op == "" {
+		return fmt.Sprintf("operations[%d]: %v", e.Index, e.Err)
+	}
+	return fmt.Sprintf("operations[%d] (%s): %v", e.Index, e.Op, e.Err)
+}
+
+func (e *DraftOperationError) Unwrap() error { return e.Err }
+
+// Field trả tên trường theo hợp đồng lỗi công khai. Tên op đến từ client nên
+// chỉ nhận chữ/số đã biết; ký tự lạ bị bỏ để field không thành kênh phản chiếu
+// dữ liệu người gọi.
+func (e *DraftOperationError) Field() string {
+	if e.Op == "" || !operationNamePattern.MatchString(e.Op) {
+		return fmt.Sprintf("operations[%d]", e.Index)
+	}
+	return fmt.Sprintf("operations[%d].%s", e.Index, e.Op)
+}
+
+var operationNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]{0,63}$`)
 
 func applyDraftOperation(document map[string]any, operation string, raw []byte) error {
 	switch operation {
@@ -74,34 +124,15 @@ func applyDraftOperation(document map[string]any, operation string, raw []byte) 
 		if err := decodeStrict(raw, &value); err != nil || !isUUID(value.ProgramID) || (value.Language != "ST" && value.Language != "FBD") || len(value.Source) > 65536 {
 			return ErrInvalidRequest
 		}
-		program, found := objectByID(document, "programs", "programId", value.ProgramID)
+		// v2: nguồn nằm ở POU (`objects`), không nằm ở cấu hình Program. Tham số
+		// vẫn tên `programId` để client cũ không phải đổi, nhưng nó phân giải
+		// theo `objectId` — cùng một identity sau migration.
+		object, found := objectByID(document, "objects", "objectId", value.ProgramID)
 		if !found {
 			return ErrInvalidRequest
 		}
-		program["language"] = value.Language
-		program["document"] = value.Source
-		return nil
-	case "upsertProgram":
-		return upsertObjectOperation(document, "programs", "programId", "program", raw, 64)
-	case "removeProgram":
-		return removeObjectOperation(document, "programs", "programId", raw)
-	case "upsertVariable":
-		return upsertObjectOperation(document, "variables", "variableId", "variable", raw, 512)
-	case "removeVariable":
-		return removeObjectOperation(document, "variables", "variableId", raw)
-	case "upsertBinding":
-		return upsertObjectOperation(document, "bindings", "bindingId", "binding", raw, 256)
-	case "removeBinding":
-		return removeObjectOperation(document, "bindings", "bindingId", raw)
-	case "setTask":
-		var value struct {
-			Op   string         `json:"op"`
-			Task map[string]any `json:"task"`
-		}
-		if err := decodeStrict(raw, &value); err != nil || value.Task == nil {
-			return ErrInvalidRequest
-		}
-		document["task"] = value.Task
+		object["language"] = value.Language
+		object["source"] = value.Source
 		return nil
 	default:
 		return fmt.Errorf("%w: operation %q", ErrInvalidRequest, operation)
@@ -310,13 +341,23 @@ func objectByID(document map[string]any, collection, idField, id string) (map[st
 	return nil, false
 }
 
-func revisionPayload(content []byte, projectID, label, comment string) ([]programmingstore.RevisionObjectInput, []byte, error) {
+// revisionPayload dựng object + manifest cho Revision v2. POU đi CẢ HAI đường:
+// `RevisionObjectInput` (ảnh chụp tài liệu, giữ tương thích bundle/diff) và
+// `POUObjectInput` (bảng POU chuẩn hoá mà T59-201 seal cùng library usage).
+// Không phải nhân bản thừa: đường thứ nhất là tài liệu người dùng, đường thứ hai
+// là dữ liệu compiler/Check đọc — trộn chúng lại sẽ buộc một bên đọc định dạng
+// của bên kia.
+func revisionPayload(content []byte, projectID, label, comment, projectLibraryVersion string) ([]programmingstore.RevisionObjectInput,
+	[]programmingstore.POUObjectInput, []byte, error) {
 	var document map[string]any
 	if err := json.Unmarshal(content, &document); err != nil {
-		return nil, nil, ErrInvalidRequest
+		return nil, nil, nil, ErrInvalidRequest
 	}
-	if err := validateDraftDocument(document); err != nil {
-		return nil, nil, err
+	if err := migrateDraftToV2(document); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := validateDraftDocumentV2(document); err != nil {
+		return nil, nil, nil, err
 	}
 	type objectDescriptor struct {
 		ObjectID string `json:"objectId"`
@@ -335,34 +376,100 @@ func revisionPayload(content []byte, projectID, label, comment string) ([]progra
 		descriptors = append(descriptors, objectDescriptor{ObjectID: id, Kind: kind, SHA256: hex.EncodeToString(digest[:])})
 		return nil
 	}
-	metadata := map[string]any{"project": document["project"], "library": document["library"]}
+	metadata := map[string]any{"project": document["project"], "library": document["library"],
+		"execution": document["execution"]}
 	if err := appendObject(projectID, "METADATA", metadata); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	for _, definition := range []struct {
-		field, id, kind string
-	}{{"programs", "programId", "PROGRAM"}, {"variables", "variableId", "VARIABLE"}, {"bindings", "bindingId", "BINDING"}} {
-		items, _ := document[definition.field].([]any)
-		for _, item := range items {
-			object := item.(map[string]any)
-			kind := definition.kind
-			if definition.field == "programs" {
-				if declared, ok := object["kind"].(string); ok && (declared == "PROGRAM" || declared == "FUNCTION" || declared == "FUNCTION_BLOCK") {
-					kind = declared
-				}
+
+	// Cấu hình Program đi CÙNG payload của POU kind PROGRAM thay vì thành một
+	// Revision object riêng: `revision_objects` khoá theo `object_id` duy nhất,
+	// và Program là quan hệ 1:1 với đúng một PROGRAM POU (validate đã ép). Tách
+	// thành hai object sẽ buộc phải bịa một UUID thứ hai cho cùng một thứ.
+	configByObject := make(map[string]map[string]any, len(collectionOf(document, "programs")))
+	for _, program := range collectionOf(document, "programs") {
+		objectID, _ := program["objectId"].(string)
+		configByObject[objectID] = program
+	}
+	pous := make([]programmingstore.POUObjectInput, 0, len(collectionOf(document, "objects")))
+	for _, object := range collectionOf(document, "objects") {
+		objectID, _ := object["objectId"].(string)
+		kind, _ := object["kind"].(string)
+		name, _ := object["name"].(string)
+		language, _ := object["language"].(string)
+		source, _ := object["source"].(string)
+		payload := object
+		if config, ok := configByObject[objectID]; ok {
+			payload = make(map[string]any, len(object)+1)
+			for key, value := range object {
+				payload[key] = value
 			}
-			if err := appendObject(object[definition.id].(string), kind, object); err != nil {
-				return nil, nil, err
+			payload["programConfig"] = config
+		}
+		if err := appendObject(objectID, kind, payload); err != nil {
+			return nil, nil, nil, err
+		}
+		interfaceJSON := []byte(`{"ports":[]}`)
+		if declared, ok := object["interface"]; ok {
+			encoded, err := json.Marshal(declared)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			interfaceJSON = encoded
+		}
+		// POU rỗng không seal được: bảng `pou_objects` bắt source 1..65536 byte.
+		// Một dòng chú thích là ít nhất có thật, còn chuỗi rỗng thì không.
+		if source == "" {
+			source = "(* " + name + " *)\n"
+		}
+		dependencies := make([]programmingstore.LibraryDependency, 0)
+		if declared, ok := object["dependencies"].([]any); ok {
+			for _, item := range declared {
+				id, ok := item.(string)
+				if !ok {
+					return nil, nil, nil, ErrInvalidRequest
+				}
+				// Version không do browser tự chọn. Revision library đã được service
+				// resolve trước Seal và là nguồn duy nhất để pin toàn bộ usage.
+				dependencies = append(dependencies, programmingstore.LibraryDependency{
+					EntryID: id, Version: projectLibraryVersion,
+				})
+			}
+		}
+		pous = append(pous, programmingstore.POUObjectInput{
+			ObjectID: objectID, Kind: kind, Name: name, Language: language,
+			InterfaceJSON: interfaceJSON, SourceBlob: []byte(source), Dependencies: dependencies,
+		})
+	}
+	for _, field := range []struct{ collection, id, kind string }{
+		{"signals", "signalId", "SIGNAL"},
+		{"bindings", "bindingId", "BINDING"},
+	} {
+		for _, item := range collectionOf(document, field.collection) {
+			id, _ := item[field.id].(string)
+			if err := appendObject(id, field.kind, item); err != nil {
+				return nil, nil, nil, err
 			}
 		}
 	}
-	task := document["task"].(map[string]any)
-	if err := appendObject(task["taskId"].(string), "TASK", task); err != nil {
-		return nil, nil, err
-	}
+
 	documentDigest := sha256.Sum256(content)
 	manifest := map[string]any{"schemaVersion": 1, "targetProfile": targetProfile, "projectId": projectID,
 		"label": label, "comment": comment, "draftContentSha256": hex.EncodeToString(documentDigest[:]), "objects": descriptors}
 	manifestJSON, err := json.Marshal(manifest)
-	return objects, manifestJSON, err
+	return objects, pous, manifestJSON, err
+}
+
+// sealProgramCount đọc số Program cấu hình trong Draft. Trả 0 khi tài liệu chưa
+// migrate được hoặc chưa có Program nào — caller giữ giá trị mặc định thay vì
+// đoán.
+func sealProgramCount(content []byte) int {
+	var document map[string]any
+	if err := json.Unmarshal(content, &document); err != nil {
+		return 0
+	}
+	if err := migrateDraftToV2(document); err != nil {
+		return 0
+	}
+	return len(collectionOf(document, "programs"))
 }

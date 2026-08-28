@@ -485,6 +485,35 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
                 static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
             metrics.record_bus_transaction(bus_.id, elapsed_us, rc >= 0);
 
+            /* `T57-3.9` (`ADR-046` bản sửa 2026-08-19): ghi lại giao dịch VỪA
+               XONG. Đây là lượt phát mà chu kỳ poll bình thường đã thực hiện —
+               không có byte nào phát thêm vì mục đích quan sát. */
+            {
+                FrameRecord frame;
+                /* Đồng hồ tường, KHÔNG phải `now_ms` của vòng quét: `now_ms`
+                   là uptime (`CLOCK_MONOTONIC`) nên giao diện sẽ hiện giờ năm
+                   1970 — xem chú thích ở `frame_ring.hpp`. */
+                frame.at_ms = frame_wall_clock_ms();
+                frame.bus = bus_.id;
+                frame.slave = sc.addr;
+                frame.fc = block.fc;
+                frame.addr = block.addr;
+                frame.count = block.count;
+                frame.elapsed_us = elapsed_us;
+                frame.attempt = static_cast<uint8_t>(attempt);
+                frame.ok = rc >= 0;
+                const char* reason = "ok";
+                if (rc < 0) {
+                    if (saved_errno == ETIMEDOUT) reason = "timeout";
+#ifdef EMBBADCRC
+                    else if (saved_errno == EMBBADCRC) reason = "crc";
+#endif
+                    else reason = "error";
+                }
+                std::snprintf(frame.reason, sizeof(frame.reason), "%s", reason);
+                metrics.frames().record(frame);
+            }
+
             if (rc >= 0) break;
 
             /* Đếm lỗi giao thức theo TỪNG lần phát: một lượt poll timeout 3 lần
@@ -611,6 +640,15 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
 #endif
 }
 
+void BusWorker::note_dropped_write_slot(uint16_t ext_idx)
+{
+    std::lock_guard<std::mutex> lock(queue_mu_);
+    /* Trùng lặp vô hại nhưng tốn bộ nhớ nếu một slot hỏng liên tục; chặn ngay. */
+    for (uint16_t existing : dropped_write_slots_)
+        if (existing == ext_idx) return;
+    dropped_write_slots_.push_back(ext_idx);
+}
+
 void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics)
 {
 #ifndef MKDDC_ENABLE_MODBUS
@@ -650,6 +688,7 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
                          static_cast<unsigned long long>(now_ms - w.enqueued_ms));
             metrics.record_write_dropped(binding.global_idx);
             emit_result(w.request_id, "timeout", "deadline_exceeded", 0);
+            note_dropped_write_slot(w.ext_idx);
             w.submitted = true;
             continue;
         }
@@ -674,6 +713,7 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
                              static_cast<double>(w.value));
                 metrics.record_write_dropped(binding.global_idx);
                 emit_result(w.request_id, "rejected", "value_not_encodable", 0);
+                note_dropped_write_slot(w.ext_idx);
                 w.submitted = true;
                 continue;
             }
@@ -702,6 +742,7 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
                 emit_result(w.request_id,
                             (saved_errno == ETIMEDOUT) ? "timeout" : "rejected",
                             "write_failed_after_max_attempts", exc);
+                note_dropped_write_slot(w.ext_idx);
                 w.submitted = true;
             } else {
                 std::fprintf(stderr, "WARN  modbus.write_fail bus=%u slave=%s fc=%u addr=%u"

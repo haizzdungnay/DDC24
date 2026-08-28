@@ -140,4 +140,4 @@ traceable record that DOC-REV-001 requires.
   `mkddc-program-core` (runtime) for artifact validation double-checking — to be resolved
   in C0.
 - Whether the IR schema versioning scheme is shared with, or independent from, the
-  existing SHM/IOP ABI versioning conventions (`ADR-014`) — to be resolved in C0.
+  existing SHM/IOP ABI versioning conventions (`ADR-041`, phát hành nhầm là `ADR-011`/`ADR-014` trước 2026-08-19) — to be resolved in C0.

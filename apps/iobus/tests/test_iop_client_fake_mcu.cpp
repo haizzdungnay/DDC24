@@ -194,6 +194,8 @@ TEST(IopClientFakeMcu, HandshakeAndPoll)
     EXPECT_EQ(io.adc1_stat, IOP_ADC_STAT_DRDY_OK);
     EXPECT_GE(metrics.rx_count.load(), 21u);
     EXPECT_EQ(metrics.crc_error_count.load(), 0u);
+    EXPECT_GT(metrics.max_iop_poll_gap_us(), 0u)
+        << "metric phải được nuôi bởi hai IO_RESP hợp lệ, không phải HTTP sampler";
 }
 
 TEST(IopClientFakeMcu, SetDoRoundTripWithFeedback)

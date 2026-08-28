@@ -1,6 +1,13 @@
 # docs/adr/ — Architectural Decision Records
 
-> **Recovery status (2026-07-22): Historical/In Review.** Các ADR rời được giữ để bảo toàn context. [Decision Log](../00_governance/DECISIONS.md) là register hiện hành và đã chuẩn hóa các ID trùng ADR-010/ADR-011.
+> **Recovery status (2026-07-22): Historical/In Review.** Các ADR rời được giữ để bảo toàn context. [Decision Log](../00_governance/DECISIONS.md) là register hiện hành.
+
+> **Đổi số 2026-08-19 — hết trùng ID.** Hai cặp trùng `ADR-010`/`ADR-011` đã xử lý theo bằng chứng mã nguồn:
+> `ADR-010` thuộc **IOP v2** (viện dẫn ở `contracts/shm/mkddc_shm.h`, `firmware/stm32/src/iop/iop_link.h` và 17 chỗ khác),
+> `ADR-011` thuộc **BACnet Reliability** (viện dẫn ở `contracts/shm/mkddc_shm.h` và 13 chỗ trong `apps/`).
+> Hai hồ sơ còn lại nhận số mới: EasySet parity → **`ADR-040`**, UI raw live data → **`ADR-041`**.
+> Bản chuẩn hoá 2026-07-22 từng gán chúng vào `ADR-013`/`ADR-014`, nhưng hai số đó đã bị hai ADR alarm ở
+> [`docs/02_design/adr/`](../02_design/adr/) chiếm từ 2026-07-02 và đang được `contracts/openapi/openapi.yaml` viện dẫn.
 
 > **Owner:** Tech Lead / Architect | **Last Updated:** 2026-08-11
 
@@ -22,6 +29,8 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 | [ADR-010](ADR-010-iop-v2-poll-capability-map.md) | IOP v2.0: Poll + Capability Map | Accepted |
 | [ADR-011](ADR-011-bacnet-reliability-quality-mapping.md) | BACnet Reliability/Quality Mapping | Accepted |
 | [ADR-012](ADR-012-ao-channel-config-model.md) | AO Channel Config Model | Accepted |
+| [ADR-013](../02_design/adr/ADR-013-alarm-entity-model.md) | Alarm Entity Model | Accepted — hồ sơ ở `docs/02_design/adr/` |
+| [ADR-014](../02_design/adr/ADR-014-alarm-ack-lifecycle.md) | Alarm Acknowledge Lifecycle | Accepted — hồ sơ ở `docs/02_design/adr/` |
 | [ADR-015](../00_governance/DECISIONS.md) | Privileged System Config Apply | Accepted — chỉ có trong Decision Log, không có file ADR rời |
 | [ADR-016](../00_governance/DECISIONS.md) | Time Authority Model | Accepted — chỉ có trong Decision Log, không có file ADR rời |
 | [ADR-017](ADR-017-settings-network-tabs-and-state-contract.md) | Settings/Network Tabs and State Contract | Accepted |
@@ -40,3 +49,6 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 
 **Lưu ý:** ADR-001/002/003/005 thiếu section `Consequences` — cần bổ sung. Khi register này và
 [Decision Log](../00_governance/DECISIONS.md) khác nhau, Decision Log là register điều hành.
+| [ADR-040](ADR-040-easyset-parity-config-surfaces.md) | EasySet Parity Config Surfaces (trước đây phát hành nhầm là `ADR-010`) | Accepted |
+| [ADR-041](ADR-041-ui-raw-live-data-shm.md) | UI Raw Live Data In Shared Memory (trước đây phát hành nhầm là `ADR-011`) | Accepted |
+| [ADR-051](ADR-051-programming-ttl-hold-last-60s.md) | TTL hold-last Program = 60 s đồng hồ (đóng blocker `DDD-CTRL-PROG-001` §15) | Accepted |

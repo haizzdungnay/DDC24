@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-BE-PROG-001` |
-| Phiên bản | 1.6 |
-| Trạng thái | **M3 AS-BUILT + CORRECTIVE VERIFIED** — Monitor/Trace 509 đã implement, qua host/target supporting evidence; source chưa merge |
-| Ngày | 2026-08-13 |
+| Phiên bản | 1.7 |
+| Trạng thái | **M3 — corrective POU/library/signal/package source đang tích hợp; chưa merge/target evidence mới** |
+| Ngày | 2026-08-24 |
 | Chủ quản | Backend Lead |
 | Người review | Core Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | Backend Lead + System Architect |
 | Nguồn | `DM-PROG-001`, `IFSPEC-PROG-001`, `DDD-LIFE-PROG-001`, `DDD-SEC-PROG-001` |
-| Requirement | `SWR-REQ-PROG-BE-101..110` |
+| Requirement | `SWR-REQ-PROG-BE-101..115` |
 
 > **APPROVED FOR IMPLEMENTATION — `AUTH-PROG-2026-08-11-03`.** Mọi ô
 > `PENDING/BLOCKED` về chữ ký trong hồ sơ này được `WAIVED FOR IMPLEMENTATION`;
@@ -22,10 +22,10 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **backend Go tổ chức ra sao**: chia package, lưu trữ, chạy compiler job, điều phối Commission, phân quyền, audit và migration. Đây là nơi biến hợp đồng API thành code chạy được. |
 | 2. Ai phải đọc file này? | BE Lead và lập trình viên Go (chủ quản); Core đọc §4 (điều phối Commission) và §6 (read model); Security đọc §7; Ops đọc §9; QA đọc §10 và §17. |
-| 3. Hệ thống hiện tại đang có gì? | Lifecycle Task 507 đã chạy trên Foxlinx. Task 509 thêm `ProgrammingMonitorService`, `TraceService` và bốn handler runtime/trace thật, thay 503 contract-only; mapping bảo vệ namespace LOCAL và chuẩn hóa quality. `EV-PROG-P5-510` xác nhận target Monitor `200`, Task/readiness và Trace validation; source chưa merge. |
-| 4. Thiết kế mới thay đổi điều gì? | Bounded module giữ các lớp `domain`, `store`, `application`, `compiler`, `artifact`, `coreipc`, `transport`; operation worker chạy ngoài transaction và không replay mutation mù. Core authoritative read-back quyết định terminal state; DB/HTTP ack không tự biến thành Active. |
-| 5. Team phải sửa module/contract nào? | `application/{monitor,trace,runtime}.go`, `transport/http/runtime.go`, app Core adapter/DTO/wiring và OpenAPI v1.20.0; lifecycle/operation cũ giữ nguyên. |
-| 6. Điều gì còn bị chặn? | Source corrective chưa merge; positive Monitor/Trace có Variable Binding target, fault/power/HIL, TLS và Test Result độc lập vẫn là P6/release. |
+| 3. Hệ thống hiện tại đang có gì? | Baseline store/library/lifecycle/Monitor/Trace đã có. Current worktree bổ sung canonical POU/library/signal manifests, package Check fail-closed, runtime signal refs, Library deprecate receipt và IOP max-gap read model; focused Go gates đang tích hợp, chưa merge/target evidence mới. |
+| 4. Thiết kế mới thay đổi điều gì? | Immutable Revision là nguồn POU table/library lock/signal defs+refs/topology/budget. BE sinh manifest/argv, không tin metadata FE; Core authoritative read-back quyết định lifecycle/signal validity. Library deprecate là mutation ETag/idempotency/audit cùng transaction. |
+| 5. Team phải sửa module/contract nào? | `application/checks_{manifest,signal_refs}.go`, `compiler/{runner,packager}.go`, store migration `0012`, library service/handler, app Core client/SHM reader và OpenAPI/generated FE consumer. |
+| 6. Điều gì còn bị chặn? | Corrective source chưa merge/full gate; target MCU FAKE deploy/24 h soak, positive read-back và formal Test Result vẫn mở. Physical MCU/HIL được defer do chưa có phần cứng, không coi PASS. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Host test khóa monitor mapping, local/external identity, lowercase quality, trace idempotency/quota/retention/stop/source-failure. `EV-PROG-P5-510` ghi full Go gate và target deploy/API/rollback; Monitor empty đúng fixture không binding, positive Trace target còn mở. |
 
 Hai điều BE **không** được làm: tin vai trò do FE gửi trong payload, và báo
@@ -126,6 +126,25 @@ deadline và verify compiler/profile/ABI/build key/source ID/manifest/hash trư�
 khi trả bytes. CLI mở input/output trước rồi áp `NO_NEW_PRIVS`, rlimit và seccomp;
 network/socket, mở path mới, fork/clone/exec, mount và ptrace đều bị chặn.
 
+### 3.1 Corrective Check/package contract cho POU, Library và Published Signal
+
+Input của `CheckService` được dựng lại từ immutable Revision và phải chứa:
+
+| Manifest | Producer BE | Consumer | Fail-closed invariant |
+|---|---|---|---|
+| POU manifest/table | canonical `revision_objects` kind + interface/signature | `mkddc-st-compile`/`mkddc-st-package` | kind/name/signature/arity unique; call graph acyclic; FUNCTION pure |
+| Library lock | SYSTEM registry version+SHA, PROJECT library Revision+entries | compiler/package/loader | dependency DAG, version/hash/status exact; deprecated entry đang được Revision pin vẫn đọc được nhưng không cho dùng mới |
+| Signal manifest | signal defs + publisher + type/unit/freshness/stale policy | compiler | single publisher; fallback chỉ với `USE_FALLBACK`; name/type/unit exact |
+| Signal refs | consumer Program + read/publish opcode refs từ output compiler | Check/package | mọi read có publisher; publisher khớp owner; không shared writable state |
+| Topology/budget | Program identity/period/enabled intent/resource totals | package/Core | tối đa 32 total/16 Enabled; 1/5/30 s; owner output duy nhất; one-over reject |
+
+`ProcessRunner` gọi compiler bằng argv cố định với `--pou-manifest`,
+`--library-lock`, `--signal-manifest`; `Packager` gọi package CLI với `--pou-table`
+và `--library-lock`. Tất cả file tạm mode `0600`, hash vào build key và xóa khi
+success/fail/cancel. Output compiler/package được parse/verify lại; metadata FE
+không được chép thẳng vào artifact. Lỗi bất kỳ manifest/ref tạo Check `FAILED`,
+không Artifact và không stage/Commission.
+
 ## 4. Commission coordinator
 
 Preflight trong một transaction/consistent snapshot:
@@ -223,14 +242,12 @@ side effect; BE không tự nói active cũ đang chạy khi chưa xác minh.
 
 ## 11. As-Built integration points
 
-`apps/web-api` là Go process duy nhất theo ADR-005/007. As-Built hiện có
-`internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}`:
-25 route, IPC v1, catalog lỗi và SQLite store v5. Source `c2f3189` construct/close
-store, artifact root, Check worker và OperationService trong lifecycle; inject
-Project/Check/Operation service và nối 11 route nền cùng ba route
-Commission/Restore/Get operation. Các route runtime/audit còn lại tiếp tục
-fail-closed. Target tiếp tục bounded module này,
-không tạo service thứ tư.
+`apps/web-api` là Go process duy nhất theo ADR-005/007. Bounded module vẫn là
+`internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}`.
+Current worktree có OpenAPI `1.28.0`/33 operation, store migration tới `0012`,
+Library deprecate, Check POU/library/signal manifest và Core/SHM read model; các
+giá trị này chưa là baseline merge/target evidence. Target tiếp tục module này,
+không tạo service thứ tư hoặc đường mutation ngoài application service.
 
 | Integration | Target change | Không được làm |
 |---|---|---|
@@ -247,8 +264,10 @@ không tạo service thứ tư.
 | `application.ProjectService` As-Built | `CreateProject`, `ListProjects`, `GetProject`, `SaveDraft`, `SealRevision`, `GetRevision`, `GetRevisionChanges`, `ExportBundle`, `ImportBundle` | store transaction/read + audit; no Core; import chỉ Project/Draft |
 | `application.CheckService` As-Built | `RequestCheck`, `GetCheck`, `ProcessNext` | idempotency + lease queue; compiler/artifact ngoài DB tx; terminal commit atomic |
 | `application.OperationService` As-Built | `Commission`, `Restore`, `GetOperation`, `ProcessNext`, `Recover` | durable op before IPC; controller single-flight; timeout UNKNOWN; status-only reconcile |
+| `application.LibraryService` corrective | `SearchLibraries`, `UpsertEntry`, `DeleteEntry`, `DeprecateRevision` | ETag/idempotency/receipt/audit cùng transaction; SYSTEM immutable; deprecated giữ cho Active/LKG pin cũ |
 | `store.Store` As-Built | Project/Draft/Revision/Check/bundle + `BeginOperation`, `ClaimOperation`, transition CAS, `RecordCoreResult`, terminal CommissionRecord/audit | một writer; immutable/receipt/lease/generation; không gọi Core trong transaction |
-| `compiler.ProcessRunner` As-Built | `Compile(ctx, BuildInput)` | child process bounded/sandboxed; verify output; không ghi DB |
+| `compiler.ProcessRunner` corrective | `Compile(ctx, BuildInput)` + POU/library/signal manifest | child process bounded/sandboxed; verify output/provenance; không ghi DB |
+| `compiler.Packager` corrective | package POU table/library lock/topology/signal/resource | gọi production package writer; parse/read-back package trước publish |
 | `artifact.Store` As-Built | `Put`, `Verify`, `Stage`, exact `CleanupStaged` | content-address publish/read-back; hard-link verified bytes; `openat/O_NOFOLLOW/unlinkat`; không ghi DB |
 | `runtime.Client` As-Built | `Status`, `Stage`, `Restore`, `Activate`, `OperationStatus` | UDS deadline/version/hash/peer; mutation chỉ theo state machine |
 | `transport.Handler` | decode/auth/map HTTP | no business mutation ngoài service |
@@ -300,6 +319,23 @@ compression, encrypted entry, directory/link, absolute/`..`/backslash/control,
 duplicate path/key, target/profile/kind/file set/hash/size/Revision manifest lệch.
 `mutation_receipts` v4 thêm `BUNDLE_EXPORT/BUNDLE_IMPORT`; cùng key khác semantic
 request conflict, replay qua restart giữ Project/Draft/ETag/audit và safety fields.
+
+### 12.4 Contract corrective của Control Library deprecate
+
+`POST /projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate`
+yêu cầu admin, `If-Match`, `X-Idempotency-Key` và body strict
+`{"schemaVersion":"1"}`. Application gọi `LibraryService.DeprecateRevision`;
+store đổi duy nhất Revision `PUBLISHED→DEPRECATED`, ghi mutation receipt + audit
+trong cùng transaction và trả ETag/read-back mới. Replay cùng actor/action/target/
+key/request trả cùng result; key trùng payload khác trả conflict. SYSTEM library,
+Draft/Revision sai Project, state khác PUBLISHED hoặc Revision đang được thao tác
+không hợp lệ đều fail closed, không partial mutation. Deprecated Revision còn
+được loader đọc cho Active/LKG đã pin; UI không cho chọn nó cho Revision mới.
+
+Migration `0012_library_revision_deprecate_receipt.sql` chỉ mở enum receipt/action
+cần thiết, có checksum trong manifest và backup trước apply. Rollback binary
+không down-migrate/xóa audit; client cũ bỏ qua action mới nhưng không được phép
+đổi state bằng route cũ.
 
 ## 13. Transaction, locking và worker algorithm
 
@@ -423,6 +459,21 @@ Readiness Programming tách khỏi process liveness: Web vẫn phục vụ phầ
 compiler/Core unavailable, nhưng capability mutation phải OFF và endpoint health
 nêu đúng dependency nào lỗi.
 
+### 19.1 Acceptance corrective Plan59
+
+| Case | Expected |
+|---|---|
+| POU/library/signal manifest canonical chạy hai lần | argv/input/package byte và SHA-256 giống nhau |
+| recursion, FUNCTION side effect, library DAG/hash/version, duplicate/missing signal publisher | Check `FAILED` đúng stable code; không Artifact/operation/Active mutation |
+| compiler/package output bỏ hoặc sửa một manifest ref | BE verifier reject trước artifact publish |
+| deprecate Library replay/restart/two-client | một state transition, một receipt/audit; ETag cũ 409; read-back `DEPRECATED` |
+| Core/SHM signal `valid=false`, stale/offline/unknown hoặc layout mismatch | API trả unavailable/null + quality; không dựng numeric zero |
+| Web/BE restart trong active Program | runtime intent/read-back giữ; không replay Commission/Enable/Deprecate |
+
+Focused Go `canonical CBOR + signal null/unavailable` hiện có 17/17 PASS theo
+current-worktree engineering gate; Library route/UI còn trong lượt tích hợp.
+Các số này không thay full Go gate, target MCU FAKE deploy/soak hoặc formal VVP.
+
 ## 20. Deploy, rollback, blocker và ký
 
 Deploy: migration compatible/backup → module feature OFF → read-only/capabilities
@@ -436,11 +487,12 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 |---|---|---|
 | Target fault/power/restart chưa thành Test Result | Backend Lead + Ops + Verification | chạy fault/power matrix P6 với executor/reviewer độc lập; happy path đã có `EV-PROG-P5-507` |
 | TLS/HIL assurance chưa hoàn tất | Platform + Verification | integration/security/HIL PASS và Test Result được review |
-| Corrective source chưa commit/merge | Backend Lead + Dev Lead | commit/PR/merge thật, chạy lại gate và candidate pin trước khi đổi trục `I` |
+| Corrective POU/library/signal/package source chưa commit/merge | Backend Lead + Dev Lead | full Go/contract/E2E gate, commit/PR/merge thật và candidate pin trước khi đổi trục `I` |
 | Positive Monitor/Trace target có Variable Binding | Backend Lead + Core + QA | fixture read-only an toàn có binding; đối chiếu row truth và start/get/stop, lưu raw output |
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.7 | 2026-08-24 | Đồng bộ BE-111..115: immutable POU/library/signal manifests, compiler/package argv+read-back, Library deprecate ETag/idempotency/audit/migration 0012, OpenAPI 1.28.0/33 operation và SHM signal fail-closed. Ghi focused 17/17 là engineering evidence current-worktree; merge/full gate/target/formal VVP còn mở. |
 | 0.1 | 2026-08-09 | Module/store/compiler/operation/error/test baseline |
 | 0.2 | 2026-08-09 | Bổ sung As-Built wiring, function/transaction/worker/file/security/deploy/test M3 |
 | 0.3 | 2026-08-09 | Bổ sung handler/service/store boundary, transaction/side-effect authority, worker lease/concurrency/health; chuyển Detailed Draft chờ review |
@@ -469,20 +521,19 @@ Tự kiểm `DD-01..DD-13`:
 |---|---|---|
 | `DD-01` Metadata | PASS | Bảng đầu file; lịch sử và bảng ký §20 |
 | `DD-02` Mục tiêu/phạm vi | PASS | §0 và §1 ranh giới module, gồm quy tắc phân lớp handler/store/runtime |
-| `DD-03` As-Built | PASS | §0/§11–12.3 dẫn `internal/programming/{application,artifact,compiler,domain,coreipc,store,transport}` tại `c2f3189`; `EV-PROG-P5-507` chứng minh store/compiler/operation/Core UDS chạy trên target |
+| `DD-03` As-Built | PASS | §0/§3.1/§11–12.4 tách baseline target cũ khỏi corrective current-worktree OpenAPI 1.28/store 0012/POU-library-signal chưa merge |
 | `DD-04` Target ownership | PASS | §1 bảy package con; §18 hợp đồng handler → service → store |
 | `DD-05` Data từng field | PASS | §2 persistence; §14 vòng đời dữ liệu/tệp và hạn ngạch; schema chi tiết ở `DM-PROG-001` |
 | `DD-06` Interface | PASS | §8 ánh xạ lỗi; §18 hợp đồng ba lớp; §6 read model runtime |
 | `DD-07` State/transaction/worker | PASS | §13 giao dịch, khóa và thuật toán worker; §19 worker nền và hợp đồng health |
 | `DD-08` Operation flow | PASS | §4 điều phối Commission; §5 Restore và replacement |
 | `DD-09` Error/safety/security | PASS | §7 RBAC/audit/security; §16 ma trận security/error/audit; RBAC ở cả handler lẫn service |
-| `DD-10` Repository mapping | PASS | §11, §12 và §12.1–12.3 — package, function và 11 HTTP operation cụ thể trong `apps/web-api/internal/programming/` |
+| `DD-10` Repository mapping | PASS | §11, §12 và §12.1–12.4 chỉ rõ application/store/compiler/packager/transport/migration corrective |
 | `DD-11` Verification | PASS | §10 test bắt buộc; §17 acceptance; gắn `VS-PROG-001/019/022/024` |
 | `DD-12` Compatibility/deploy/rollback | PASS | §9 migration và rollback, gồm thứ tự triển khai |
-| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; merge/release BLOCKED | 17 decision `DECIDED`; Task 509 có host/target supporting evidence. Source chưa merge; positive binding target, HIL/fault/power, `0/32` Test Result và residual risk vẫn mở. |
+| `DD-13` Trace/risk/decision/sign-off | PASS cho implementation; closure/release còn mở | Trace 82/82; corrective source chưa merge; MCU FAKE target/soak, physical HIL, formal VVP 0/44 PASS và residual risk vẫn mở. |
 
-Không còn blocker deploy/read-back cho Monitor/Trace corrective: target evidence
-được ghi riêng ở `EV-PROG-P5-510`. Do fixture active không có Variable Binding,
-positive row/start-get-stop Trace target vẫn chưa chạy và không được suy diễn từ
-host test. Source chưa merge; fault/power/HIL và review độc lập vẫn `NOT TESTED`
-theo P6.
+Evidence `EV-PROG-P5-510` chỉ thuộc baseline target cũ. Corrective POU/library/
+signal/package/OpenAPI 1.28 phải có deploy/read-back record mới trên đúng commit
+MCU FAKE; 24 h soak và formal Test Result vẫn `NOT_RUN`, physical HIL là
+`DEFERRED_NO_HARDWARE`.

@@ -7,7 +7,7 @@ Chạy:
     python3 scripts/docs_iso_harness.py --expect   # bật cả kiểm ngưỡng, dùng cho CI
 
 Bảy phép kiểm:
-  1. 22/22 file baseline tồn tại tại đúng đường dẫn chuẩn
+  1. Toàn bộ authority baseline thống nhất tồn tại tại đúng đường dẫn chuẩn
   2. Liên kết Markdown nội bộ và anchor phải phân giải được
   3. Trailing whitespace = 0
   4. Code fence cân bằng
@@ -15,7 +15,7 @@ Bảy phép kiểm:
   6. Đếm ID theo họ: requirement / VS-PROG / RSK / UC / UJ / UX-REQ / OD
   7. Bất biến ma trận trace: không có `P=Y khi T=N`, không có `R=Y khi P=N`
   Cộng: đường dẫn `docs/**` viết trong code span phải tồn tại; các record P0 và
-  template Test Result ngoài mẫu số 22 cũng được quét link/ID/format.
+  template Test Result và manifest ngoài baseline cũng được quét link/ID/format.
 
 Phạm vi cố ý **không** kiểm `apps/**`, `firmware/**`, `contracts/**` trong code
 span: đó là *Source Target sẽ tạo*, chưa tồn tại là đúng theo quy tắc ở
@@ -37,56 +37,49 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Ngưỡng kỳ vọng hiện hành. Cập nhật cùng lúc với hồ sơ, không cập nhật sau.
 EXPECT = {
-    "baseline_files": 22,
-    "support_files": 6,
+    "baseline_files": 17,
+    "support_files": 5,
     "link_missing": 0,
     "anchor_missing": 0,
     "trailing_ws": 0,
     "fence_bad": 0,
     "duplicate_doc_id": 0,
     "span_missing": 0,
-    "srs_requirements": 60,
-    "trace_rows": 60,
+    "srs_requirements": 89,
+    "trace_rows": 89,
     "trace_violations": 0,
-    "vs_prog": 32,
-    "rsk_prog": 16,
-    "od_prog": 17,
+    "vs_prog": 47,
+    "rsk_prog": 23,
+    "od_prog": 15,
     "uc_prog": 17,
     "uj_prog": 8,
-    "ux_req": 24,
-    "svg_assets": 7,
+    "ux_req": 27,
+    "svg_assets": 14,
 }
 
 BASELINE = [
+    "docs/00_governance/CONTROL.md",
+    "docs/00_governance/DECISIONS.md",
+    "docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md",
+    "docs/00_governance/PROGRAMMING_DOCUMENT_READINESS_MATRIX.md",
+    "docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md",
     "docs/02_design/PROGRAMMING_DESIGN_INDEX.md",
     "docs/02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md",
-    "docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md",
     "docs/03_architecture/PROGRAMMING_ARCHITECTURE.md",
-    "docs/02_design/software/PROGRAMMING_DATA_MODEL.md",
-    "docs/02_design/interfaces/PROGRAMMING_INTERFACE_SPEC.md",
+    "docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md",
+    "docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md",
     "docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md",
-    "docs/02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md",
-    "docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md",
-    "docs/02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md",
-    "docs/02_design/software/PROGRAMMING_SECURITY_DESIGN.md",
     "docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md",
-    "docs/02_design/software/PROGRAMMING_FE_DESIGN.md",
-    "docs/02_design/software/PROGRAMMING_BE_DESIGN.md",
-    "docs/02_design/software/PROGRAMMING_FW_SOM_DESIGN.md",
-    "docs/02_design/firmware/PROGRAMMING_FW_MCU_DESIGN.md",
-    "docs/04_design/hardware/PROGRAMMING_HW_DESIGN.md",
     "docs/05_verification/PROGRAMMING_VERIFICATION_PLAN.md",
-    "docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md",
     "docs/07_records/PROGRAMMING_RISK_REGISTER.md",
     "docs/07_records/PROGRAMMING_TRACEABILITY_MATRIX.md",
-    "docs/03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md",
+    "docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md",
+    "docs/03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md",
 ]
-ROADMAP = "docs/03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md"
 EXTRA = [
-    ROADMAP,
-    "docs/07_records/reviews/PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md",
-    "docs/07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md",
-    "docs/07_records/reviews/PROGRAMMING_P0_ENVIRONMENT_READINESS_2026-08-10.md",
+    "docs/06_operations/PROGRAMMING_OPERATIONS_RUNBOOK.md",
+    "docs/07_records/reviews/PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md",
+    "docs/07_records/reviews/README.md",
     "docs/07_records/test-results/programming/README.md",
     "docs/07_records/test-results/programming/RESULT_TEMPLATE.md",
 ]
@@ -239,7 +232,7 @@ def main():
     srs_ids = sorted(set(req_re.findall(srs_txt)))
     print(f"SRS requirement ID (canonical, unique): {len(srs_ids)}")
 
-    vs_re = re.compile(r"`?(VS-PROG-\d{3})`?")
+    vs_re = re.compile(r"`?(VS-PROG-(?:\d{3}|U\d{2}))`?")
     vs_vvp = sorted(set(vs_re.findall(vvp_txt)))
     print(f"VS-PROG trong VVP: {len(vs_vvp)}")
 
@@ -266,10 +259,10 @@ def main():
     uxr = sorted(set(uxr_re.findall(ux_txt)))
     print(f"UX-REQ trong UI/UX: {len(uxr)}")
 
-    od_re = re.compile(r"`?(OD-PROG-\d{3})`?")
+    od_re = re.compile(r"`?(UD-PROG-\d{3})`?")
     od_txt = read(os.path.join(REPO, "docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md"))
     od = sorted(set(od_re.findall(od_txt)))
-    print(f"OD-PROG trong Open Decisions: {len(od)}")
+    print(f"UD-PROG trong Decision Register: {len(od)}")
 
     # trace rows
     print("\n=== 5. Trace D/I/T/P/R ===")
@@ -351,7 +344,7 @@ def main():
     if actual["baseline_files"] != EXPECT["baseline_files"]:
         hard.append("thiếu file baseline")
     if actual["support_files"] != EXPECT["support_files"]:
-        hard.append("thiếu file hỗ trợ P0")
+        hard.append("thiếu file hỗ trợ Programming")
     for k in ("link_missing", "anchor_missing", "trailing_ws", "fence_bad",
               "duplicate_doc_id", "span_missing", "trace_violations"):
         if actual[k] != 0:

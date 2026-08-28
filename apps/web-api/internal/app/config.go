@@ -50,16 +50,29 @@ type Config struct {
 	// ProgrammingRevA mở các route contract Programming Rev A. Mặc định tắt để
 	// binary có thể được triển khai trước contract consumer mà không lộ endpoint
 	// mutation chưa nối với Core.
-	ProgrammingRevA            bool
-	ProgrammingDBPath          string
-	ProgrammingBackupDir       string
-	ProgrammingStateDir        string
-	ProgrammingArtifactDir     string
-	ProgrammingStagingDir      string
-	ProgrammingScratchDir      string
-	ProgrammingSocket          string
-	ProgrammingCoreUID         uint32
-	ProgrammingCompilerPath    string
+	ProgrammingRevA         bool
+	ProgrammingDBPath       string
+	ProgrammingBackupDir    string
+	ProgrammingStateDir     string
+	ProgrammingArtifactDir  string
+	ProgrammingStagingDir   string
+	ProgrammingScratchDir   string
+	ProgrammingSocket       string
+	ProgrammingCoreUID      uint32
+	ProgrammingCompilerPath string
+	ProgrammingPackagerPath string
+	// ProgrammingSimWorkerPath — worker mô phỏng ephemeral (ADR-053). Rỗng hoặc
+	// thiếu file nghĩa là capability SIMULATE TẮT: không có trạng thái "bật một
+	// nửa", và FE hiển thị UNAVAILABLE thay vì tự dựng một simulator thay thế.
+	ProgrammingSimWorkerPath string
+	// ProgrammingSimTrustedKey — khoá công khai worker mô phỏng được phép tin.
+	// Mặc định suy từ khoá ký thiết bị (`device.key` → `device.pub`) vì đó đúng
+	// là khoá Core đang tin: hai bên tin hai tập khác nhau nghĩa là mô phỏng từ
+	// chối chính artifact mà thiết bị vừa Commission được.
+	ProgrammingSimTrustedKey string
+	// ProgrammingSigningKeyPath — khoá riêng của chính bo (ADR-052). Compiler
+	// worker ký artifact bằng khoá này; Core tin nó qua `--st-trusted-key`.
+	ProgrammingSigningKeyPath  string
 	ProgrammingTargetID        string
 	ProgrammingCompilerTimeout time.Duration
 	WebVersion                 string
@@ -116,6 +129,10 @@ func LoadConfig() (Config, error) {
 		ProgrammingSocket:          getenv("PROGRAMMING_SOCKET", "/run/mkddc/programming-v1.sock"),
 		ProgrammingCoreUID:         uint32(os.Getuid()),
 		ProgrammingCompilerPath:    getenv("PROGRAMMING_COMPILER", "/usr/sbin/mkddc-st-compile"),
+		ProgrammingPackagerPath:    getenv("PROGRAMMING_PACKAGER", "/usr/sbin/mkddc-st-package"),
+		ProgrammingSimWorkerPath:   os.Getenv("PROGRAMMING_SIM_WORKER"),
+		ProgrammingSimTrustedKey:   os.Getenv("PROGRAMMING_SIM_TRUSTED_KEY"),
+		ProgrammingSigningKeyPath:  getenv("PROGRAMMING_SIGNING_KEY", "/data/mkddc/keys/device.key"),
 		ProgrammingTargetID:        getenv("PROGRAMMING_TARGET_ID", "controller-local"),
 		ProgrammingCompilerTimeout: 10 * time.Second,
 		WebVersion:                 getenv("WEB_VERSION", buildVersion),
@@ -129,6 +146,13 @@ func LoadConfig() (Config, error) {
 }
 
 func (c *Config) deriveProgrammingPaths() {
+	// Khoá tin cậy của worker mô phỏng đi CẶP với khoá ký: compiler ký bằng
+	// `device.key`, Core tin `device.pub`. Suy mặc định ở đây thay vì bắt người
+	// triển khai nhớ đặt thêm một biến nữa — quên biến đó thì mọi phiên mô phỏng
+	// hỏng ở bước nạp artifact, và thông điệp không nói ra thiếu khoá.
+	if c.ProgrammingSimTrustedKey == "" && c.ProgrammingSigningKeyPath != "" {
+		c.ProgrammingSimTrustedKey = strings.TrimSuffix(c.ProgrammingSigningKeyPath, ".key") + ".pub"
+	}
 	if c.ConfigDir == "" {
 		return
 	}
@@ -150,6 +174,9 @@ func (c *Config) deriveProgrammingPaths() {
 	}
 	if c.ProgrammingScratchDir == "" {
 		c.ProgrammingScratchDir = filepath.Join(c.ProgrammingStateDir, "scratch")
+	}
+	if c.ProgrammingPackagerPath == "" {
+		c.ProgrammingPackagerPath = "/usr/sbin/mkddc-st-package"
 	}
 	if c.ProgrammingCompilerPath == "" {
 		c.ProgrammingCompilerPath = "/usr/sbin/mkddc-st-compile"

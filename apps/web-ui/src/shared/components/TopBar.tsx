@@ -1,13 +1,14 @@
 import { Bell, ChevronDown, CircleHelp, LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
+import { prefersReducedMotion } from '../alarms/annunciation'
 import { IS_DEMO } from '../config'
 import { useI18n } from '../i18n'
 import { useOptionalOverview } from '../overview/OverviewProvider'
 import { useTheme } from '../theme/ThemeProvider'
 import type { ConnectionState, CurrentUser } from '../types'
-import { formatDataAge } from '../utils'
+import { cn, formatDataAge } from '../utils'
 import { Button } from './Button'
 import { StatusBadge } from './StatusBadge'
 import { HealthChip, SeverityBadge, healthReasonLabel } from './pa3/StateAtoms'
@@ -20,12 +21,16 @@ import { HealthChip, SeverityBadge, healthReasonLabel } from './pa3/StateAtoms'
  *
  * KHÔNG đặt badge CPU/RAM/process ở đây (§2.2 nói thẳng). Chúng ở Diagnostics.
  */
-export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: { connectionState: ConnectionState; alarmCount: number; currentUser: CurrentUser | null; onOpenNav?: () => void }) {
+export function TopBar({ connectionState, alarmCount, unackedCount = 0, annunciating = false, currentUser, onOpenNav }: { connectionState: ConnectionState; alarmCount: number; unackedCount?: number; annunciating?: boolean; currentUser: CurrentUser | null; onOpenNav?: () => void }) {
   const [now, setNow] = useState(new Date())
+  const location = useLocation()
   const { logout } = useAuth()
   const { lang, locale, setLang, t, pick } = useI18n()
   const { theme, toggleTheme } = useTheme()
   const overview = useOptionalOverview()
+  /* Đọc một lần khi mount: người dùng đổi tuỳ chọn hệ điều hành giữa chừng là
+     trường hợp hiếm, còn gọi `matchMedia` mỗi lần render thì tốn vô ích. */
+  const [reducedMotion] = useState(prefersReducedMotion)
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000)
@@ -95,11 +100,37 @@ export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: 
           <div className="mono text-sm font-semibold">{now.toLocaleTimeString(locale, { hour12: false })}</div>
           <div className="text-xs text-[var(--c-text-dim)]">{now.toLocaleDateString(locale)}</div>
         </div>
-        <Link to="/alarms" className="relative grid h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)]" aria-label={pick("Cảnh báo", "Alarms")}>
+        {/* T57-1.5 / `ADR-034` — lớp NHÌN của annunciation.
+            `annunciating` bật khi số cảnh báo chưa xác nhận vừa TĂNG. Hai thứ
+            đi kèm và không thể thiếu cái nào:
+             1. `prefers-reduced-motion` ⇒ KHÔNG nhấp nháy, nhưng vẫn phải nổi
+                bật: viền đậm + nhãn chữ. Tắt hẳn annunciation cho nhóm người
+                dùng này là biến một tuỳ chọn tiếp cận thành sự cố an toàn.
+             2. `role="status"` + `aria-live` để trình đọc màn hình nói ra —
+                một tín hiệu chỉ nhìn thấy được không tới được người khiếm thị. */}
+        <Link
+          to="/alarms"
+          className={cn(
+            'relative grid h-10 w-10 place-items-center rounded-full border bg-[var(--c-surface)]',
+            annunciating ? 'border-2 border-[var(--c-fault)]' : 'border-[var(--c-border)]',
+            annunciating && !reducedMotion && 'annunciate'
+          )}
+          aria-label={annunciating
+            ? pick(`Cảnh báo — ${unackedCount} chưa xác nhận, có cảnh báo mới`, `Alarms — ${unackedCount} unacknowledged, new alarm`)
+            : pick('Cảnh báo', 'Alarms')}
+        >
           <Bell className="h-5 w-5" aria-hidden="true" />
           {alarmCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[var(--c-fault)] px-1 text-[10px] font-bold text-[var(--c-on-fault)]">{alarmCount}</span>}
         </Link>
-        <Link to="/help" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></Link>
+        {annunciating && (
+          <span role="status" aria-live="assertive" className="hidden rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] px-2 py-1 text-[11px] font-bold uppercase text-[var(--c-fault-fg)] sm:inline">
+            {pick(`${unackedCount} chưa xác nhận`, `${unackedCount} unacknowledged`)}
+          </span>
+        )}
+        {/* `T57-2.17` — mang theo trang hiện tại để Trợ giúp mở thẳng mục liên
+            quan. Trợ giúp không theo ngữ cảnh gần như không được dùng: người
+            đang kẹt ở một trang sẽ không đọc hết mục lục để tìm đoạn của mình. */}
+        <Link to={`/help?topic=${encodeURIComponent(location.pathname)}`} className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Trợ giúp", "Help")}><CircleHelp className="h-5 w-5" /></Link>
         <Link to="/me" className="hidden h-10 w-10 place-items-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] sm:grid" aria-label={pick("Người dùng", "User")}><UserRound className="h-5 w-5" /></Link>
         <div className="hidden min-w-[132px] xl:block">
           <div className="text-sm font-semibold">{currentUser?.username ?? 'N/A'}</div>
@@ -119,7 +150,15 @@ export function TopBar({ connectionState, alarmCount, currentUser, onOpenNav }: 
         <button className="flex h-10 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-semibold sm:px-3" onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')} aria-label={pick("Đổi ngôn ngữ", "Toggle language")}>
           {lang.toUpperCase()} <ChevronDown className="h-4 w-4" />
         </button>
-        <Button variant="ghost" size="sm" icon={<LogOut className="h-4 w-4" />} onClick={logout}><span className="hidden sm:inline">{t('logout')}</span></Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<LogOut className="h-4 w-4" aria-hidden="true" />}
+          aria-label={t('logout')}
+          onClick={logout}
+        >
+          <span className="hidden sm:inline">{t('logout')}</span>
+        </Button>
       </div>
     </header>
   )

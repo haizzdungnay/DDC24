@@ -18,7 +18,7 @@ from jsonschema import Draft202012Validator
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "contracts/programming"
 SCHEMA_PATH = BASE / "artifact_build_manifest_v1.schema.json"
-PROFILE_PATH = BASE / "rev_a_profile_v1.json"
+PROFILE_PATH = BASE / "product_profile_v2.json"
 ST_SOURCE_PATH = ROOT / "apps/core/application/st/samples/ahu_fan_control.st"
 FBD_SOURCE_PATH = BASE / "fbd/golden/ahu_fan_enable.json"
 CASES = {

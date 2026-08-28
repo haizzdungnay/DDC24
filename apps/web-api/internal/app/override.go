@@ -9,7 +9,7 @@ import (
 
 // OverrideRegistry theo dõi các lệnh Local Manual đang có TTL.
 //
-// VÌ SAO CẦN — PA3-F05
+// # VÌ SAO CẦN — PA3-F05
 //
 // Trước PA3, thời hạn override sống ở HAI chỗ sai:
 //

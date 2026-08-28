@@ -10,6 +10,13 @@
  *        Bất biến: MỌI lỗi đều trả JSON có `errorCode` ổn định và cờ
  *        `keepsRunningPackage`. BE không bao giờ phải đoán xem chương trình
  *        đang chạy có bị ảnh hưởng không.
+ *
+ *        LUỒNG: hiện chưa có transport production nào gọi hàm này (chỉ test).
+ *        Nếu nối nó vào một luồng phục vụ request trong lúc scan loop đang
+ *        chạy thì `program_start/stop/enable/disable` PHẢI chuyển sang
+ *        `StScheduler::request_program_enabled()` + safe boundary
+ *        (F-P59-ENABLE-BOUNDARY-001): gọi thẳng `start/stop/enable/disable`
+ *        từ luồng non-RT là ghi vào `state` mà RT đang đọc mỗi tick.
  */
 #ifndef CORE_ST_CONTROL_API_HPP
 #define CORE_ST_CONTROL_API_HPP
@@ -31,6 +38,13 @@ constexpr const char* kBadTransition    = "API-E-004";  /* lệnh không hợp l
 constexpr const char* kBadArtifact      = "API-E-005";  /* base64 hỏng hoặc quá lớn */
 constexpr const char* kActivationFailed = "API-E-006";  /* loader từ chối; kèm mã IR-E-* */
 constexpr const char* kInternal         = "API-E-007";
+/* T59-004: Enable/Disable bị từ chối vì precondition hoặc trần 16 Program
+ * Enabled. Tách khỏi API-E-004 vì đây là quyết định capacity/lifecycle của
+ * sản phẩm, không phải transition sai của một instance. */
+constexpr const char* kEnableNotCommissioned = "API-E-008";
+/* T59-006: DDD §5.2 tách "chưa Commission" khỏi "sai trạng thái/đủ trần
+ * Enabled" thành hai mã public riêng, nên detail cũng phải tách. */
+constexpr const char* kProgramStateRejected  = "API-E-009";
 } // namespace st_api_error
 
 constexpr int kStApiVersion = 1;

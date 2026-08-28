@@ -1,0 +1,25 @@
+{
+  "$schema": "./package_dual_reader_policy_v1.schema.json",
+  "policyId": "PROGRAMMING-PACKAGE-DUAL-READER-V1",
+  "schemaVersion": 1,
+  "description": "Chính sách đọc song song artifact v1 và v2 trong một release chuyển tiếp (DDD-SW-PROG-UNIFIED-001 §12.1). Đây là contract, không phải mô tả: verifier ép writer/loader và tài liệu không thể tự chọn khác nhau.",
+  "readableSchemaVersions": [1, 2],
+  "writableSchemaVersions": [2],
+  "activePackageCount": 1,
+  "unknownSchemaVersion": "REJECT_NO_MUTATION",
+  "unknownMagic": "REJECT_NO_MUTATION",
+  "downgradeActive": "FORBIDDEN",
+  "rules": [
+    "Loader phải nạp được cả v1 và v2 trong cùng một release chuyển tiếp; LKG v1 hiện hữu không được mất hiệu lực.",
+    "Chỉ writer v2 tạo package mới; không có đường ghi v1 trong release này.",
+    "Không tồn tại package Active hỗn hợp: đúng một package Active tại một thời điểm.",
+    "schemaVersion hoặc magic lạ bị từ chối và KHÔNG được mutation Active/LKG/RETAIN.",
+    "Rollback binary giữ loader dual-reader; không tự hạ cấp package Active đang chạy.",
+    "Bỏ writer v1 chỉ sau khi cửa sổ rollback đóng, ở release sau."
+  ],
+  "owners": {
+    "schema": "T59-006",
+    "writerLoader": "T59-106",
+    "rollbackRehearsal": "T59-705"
+  }
+}

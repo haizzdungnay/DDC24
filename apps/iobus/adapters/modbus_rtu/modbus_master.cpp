@@ -227,6 +227,24 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
     std::lock_guard<std::mutex> lock(workers_mu_);
     if (!shm || workers_.empty()) return;
 
+    /* OD-MBRTU-005: lệnh ghi có vòng đời HỮU HẠN — 30 s TTL hoặc 3 lần phát,
+     * điều kiện nào tới trước thì kết thúc. Khi nó kết thúc mà KHÔNG áp được,
+     * dấu vết chống-phát-trùng phải bị xoá, nếu không lệnh mới mang đúng giá trị
+     * cũ sẽ bị coi là trùng và không bao giờ xuống dây.
+     *
+     * Kịch bản thật: kỹ thuật viên đặt setpoint 50.0 lúc thiết bị mất điện ⇒
+     * lệnh bị bỏ sau TTL. Thiết bị có điện lại, họ đặt LẠI 50.0 — và trước bản
+     * sửa này, `last_written_` vẫn giữ 50.0 nên lệnh thứ hai bị nuốt im lặng.
+     * Người vận hành thấy UI nhận lệnh, thiết bị thì không bao giờ nhận.
+     *
+     * Lưu ý ranh giới: TTL là tuổi thọ của LỆNH ĐANG CHỜ, không phải hẹn giờ
+     * hoàn tác. Slave đã ACK ⇒ lệnh hoàn tất, giá trị nằm lại trên thiết bị. */
+    for (auto& worker : workers_) {
+        for (uint16_t ext_idx : worker->take_dropped_write_slots()) {
+            if (ext_idx < KX_N_EXT) has_last_written_[ext_idx] = false;
+        }
+    }
+
     kx_plc_shm_t snapshot{};
     bool stable = false;
     for (int attempt = 0; attempt < 5; ++attempt) {

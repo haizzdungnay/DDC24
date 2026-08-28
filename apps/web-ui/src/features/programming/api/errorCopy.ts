@@ -51,6 +51,44 @@ export function programmingErrorCopy(
       return pick('Ảnh hưởng đã đổi kể từ lúc đọc; hãy tải lại và xác nhận lại.', 'Impact changed since it was last read; reload and re-confirm.')
     case 'PRG-ERR-UNAVAILABLE-001':
       return pick('Tính năng tạm thời chưa sẵn sàng.', 'This capability is temporarily unavailable.')
+    case 'PRG-ERR-POU-KIND-001':
+      return pick('Khối chương trình vi phạm quy tắc loại khối, tính thuần hoặc chữ ký.', 'The program organisation unit breaks a kind, purity or signature rule.')
+    case 'PRG-ERR-POU-RECURSION-001':
+      return pick('Có gọi vòng giữa các khối hoặc phụ thuộc vòng trong thư viện.', 'There is a call cycle between blocks, or a circular library dependency.')
+    case 'PRG-ERR-LIB-VERSION-001':
+      return pick('Thư viện điều khiển: thiếu khối hoặc lệch phiên bản đã ghim.', 'Control library: missing entry or version mismatch against the pinned version.')
+    case 'PRG-ERR-PROGRAM-LIMIT-001':
+      return pick('Vượt giới hạn dung lượng của gói (số chương trình hoặc số khối chức năng).', 'The package capacity limit was exceeded (program or function block count).')
+    case 'PRG-ERR-SIGNAL-PUBLISHER-001':
+      return pick('Tín hiệu công bố phải có đúng một chương trình phát; hãy sửa nguồn phát.', 'A published signal must have exactly one producing program; fix the publisher.')
+    case 'PRG-ERR-SIGNAL-FRESHNESS-001':
+      return pick('Độ tươi của tín hiệu ngoài khoảng cho phép hoặc không hợp với chu kỳ chương trình phát.', 'Signal freshness is out of range or incompatible with the producing program cycle.')
+    case 'PRG-ERR-OUTPUT-OWNER-001':
+      return pick('Một đầu ra đang bị nhiều chương trình cùng ghi; mỗi đầu ra chỉ có một chủ sở hữu.', 'One output is written by more than one program; each output has exactly one owner.')
+    case 'PRG-ERR-ENABLE-NOT-COMMISSIONED-001':
+      return pick('Chương trình chưa được đưa vào vận hành nên chưa thể bật.', 'The program has not been commissioned yet, so it cannot be enabled.')
+    case 'PRG-ERR-PROGRAM-STATE-001':
+      return pick('Không đổi được trạng thái chương trình: sai trạng thái hiện tại hoặc đã đủ số chương trình được bật.', 'The program state could not be changed: wrong current state, or the enabled-program limit is already reached.')
+    case 'PRG-ERR-PID-REVIEW-001':
+      return pick('Khối PID chưa được Controls và An toàn phê duyệt; không thể đưa vào vận hành.', 'The PID block is not approved by Controls and Safety; it cannot be commissioned.')
+    // T59-814 — Simulation R3. Mỗi câu nói ra ĐIỀU NGƯỜI DÙNG PHẢI LÀM tiếp,
+    // vì đó là thứ phân biệt một thông báo hữu ích với một mã lỗi được dịch.
+    case 'PRG-SIM-UNSUPPORTED':
+      return pick('Thiết bị này chưa hỗ trợ Mô phỏng; cần bản cài đặt có worker mô phỏng tương thích.', 'This controller does not support Simulation; install a build with a compatible simulation worker.')
+    case 'PRG-SIM-SAVE-REQUIRED':
+      return pick('Hãy lưu và chạy Kiểm tra cho bản nháp trước khi mô phỏng — mô phỏng luôn chạy trên bản đã lưu.', 'Save the draft and run Check before simulating — simulation always runs the saved version.')
+    case 'PRG-SIM-FORBIDDEN':
+      return pick('Chỉ vai Quản trị mới điều khiển được phiên mô phỏng.', 'Only the admin role can control a simulation session.')
+    case 'PRG-SIM-INPUT-NOT-ALLOWED':
+      return pick('Biến này không nằm trong danh sách được phép ghi, hoặc giá trị sai kiểu/đơn vị/miền. Giá trị trước đó được giữ nguyên.', 'This variable is not writable in simulation, or the value has the wrong type/unit/range. The previous value is unchanged.')
+    case 'PRG-SIM-STALE-SESSION':
+      return pick('Phiên mô phỏng đã thay đổi ở nơi khác; hãy tải lại trạng thái phiên rồi thử lại.', 'The simulation session changed elsewhere; reload the session state and retry.')
+    case 'PRG-SIM-QUOTA':
+      return pick('Đã đạt giới hạn mô phỏng của thiết bị; hãy dừng phiên đang chạy hoặc chờ một lát.', 'The controller simulation limit is reached; stop the running session or wait a moment.')
+    case 'PRG-SIM-WORKER-FAILED':
+      return pick('Phiên mô phỏng đã dừng do lỗi; chương trình đang chạy trên thiết bị không bị ảnh hưởng.', 'The simulation session failed; the program running on the controller is unaffected.')
+    case 'PRG-SIM-EXPIRED':
+      return pick('Phiên mô phỏng đã hết hạn; hãy mở phiên mới.', 'The simulation session expired; start a new one.')
     default:
       return pick(`Không thực hiện được thao tác (${code ?? 'không rõ mã lỗi'}).`, `The action could not be completed (${code ?? 'unknown error code'}).`)
   }

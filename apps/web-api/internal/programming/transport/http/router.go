@@ -39,9 +39,15 @@ var routeDefinitions = []routeDefinition{
 	{method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", role: auth.RoleViewer},
 	{method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/checks/{checkId}", role: auth.RoleViewer},
+	{method: "GET", path: "/api/v1/programming/libraries", role: auth.RoleViewer},
+	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", role: auth.RoleAdmin, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "GET", path: "/api/v1/programming/point-catalog", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/runtime", role: auth.RoleViewer},
 	{method: "GET", path: "/api/v1/programming/runtime/monitor", role: auth.RoleViewer},
+	{method: "GET", path: "/api/v1/programming/runtime/signals", role: auth.RoleViewer},
 	{method: "POST", path: "/api/v1/programming/runtime/traces", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", role: auth.RoleViewer},
 	{method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", role: auth.RoleAdmin},
@@ -53,17 +59,53 @@ var routeDefinitions = []routeDefinition{
 	{method: "POST", path: "/api/v1/programming/bundles/export", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "POST", path: "/api/v1/programming/bundles/import", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, maxBodyBytes: maxBundleMutationBodyBytes},
 	{method: "POST", path: "/api/v1/programming/retain/reset", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+	// T59-405 — intent Enable/Disable. `PUT` chứ không phải hai route
+	// `enable`/`disable`: intent là một TRẠNG THÁI mong muốn, và hai động từ
+	// riêng sẽ làm việc "đặt lại đúng thứ đang có" trở thành hai request khác
+	// nhau tuỳ giá trị hiện tại.
+	{method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", role: auth.RoleViewer},
+	{method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/audit", role: auth.RoleViewer},
+	// T59-702 — lối ra tường minh khỏi `RECOVERY_REQUIRED`. Admin, có
+	// idempotency key và body bắt buộc: một lệnh gỡ khoá vận hành phải nêu lý do.
+	{method: "POST", path: "/api/v1/programming/runtime/recovery-reset",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+
+	// T59-814 / ADR-053 — Simulation R3.
+	//
+	// Mọi route mutation khai `RoleAdmin` ở ĐÂY, không chỉ ở lớp application:
+	// bất biến của repo (xem `security_matrix_test.go`) là handler KHÔNG được
+	// chạy khi thiếu quyền. Nhờ vậy một vai không đủ quyền không tạo ra side
+	// effect nào, kể cả một lần đọc làm lộ sự tồn tại của phiên.
+	//
+	// `SET_INPUT` đi bằng PUT trên resource input và `STOP` đi bằng DELETE trên
+	// resource session: chúng là hành động sản phẩm nhưng cần identity và
+	// idempotency riêng (`DDD-SW-PGM02-WORKSPACE-001` §5.4).
+	{method: "POST", path: "/api/v1/programming/simulation/sessions",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", role: auth.RoleViewer},
+	{method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}",
+		role: auth.RoleAdmin, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}",
+		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", role: auth.RoleViewer},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", role: auth.RoleViewer},
 }
 
 // RegisterProgrammingRoutes chỉ mount contract khi flag bật. Khi flag tắt,
 // fallback API hiện hữu trả 404, nên deploy binary trước không làm lộ capability
 // giả hoặc mutation chưa nối Core.
 type Services struct {
+	Library    *programmingapplication.LibraryService
 	Projects   *programmingapplication.ProjectService
 	Checks     *programmingapplication.CheckService
 	Operations *programmingapplication.OperationService
 	Runtime    *programmingapplication.RuntimeService
+	Intents    *programmingapplication.RuntimeIntentService
+	Simulation *programmingapplication.SimulationService
 }
 
 func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, provided ...Services) {
@@ -94,7 +136,19 @@ func handleProgrammingRequest(w http.ResponseWriter, r *http.Request, definition
 		WriteProgrammingError(w, status, *public, correlationID)
 		return
 	}
+	if services.Library != nil && handleLibraryRequest(w, r, correlationID, services.Library) {
+		return
+	}
 	if services.Runtime != nil && handleRuntimeRequest(w, r, correlationID, services.Runtime) {
+		return
+	}
+	if services.Simulation != nil && handleSimulationRequest(w, r, correlationID, services.Simulation) {
+		return
+	}
+	if services.Intents != nil && handleRecoveryResetRequest(w, r, correlationID, services.Intents) {
+		return
+	}
+	if services.Intents != nil && handleProgramIntentRequest(w, r, correlationID, services.Intents) {
 		return
 	}
 	if services.Projects != nil && handleProjectRequest(w, r, correlationID, services.Projects) {

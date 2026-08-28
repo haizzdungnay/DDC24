@@ -1,6 +1,7 @@
 #include "programming/program_ipc_server.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <utility>
@@ -31,6 +32,10 @@ std::string action_name(ProgramAction action)
     case ProgramAction::Restore: return "RESTORE";
     case ProgramAction::TraceStart: return "TRACE_START";
     case ProgramAction::RetainReset: return "RETAIN_RESET";
+    case ProgramAction::RecoveryReset: return "RECOVERY_RESET";
+    case ProgramAction::SetProgramEnabled: return "SET_PROGRAM_ENABLED";
+    case ProgramAction::TraceStop: return "TRACE_STOP";
+    case ProgramAction::TraceRead: return "TRACE_READ";
     }
     return {};
 }
@@ -45,6 +50,10 @@ bool parse_action(const std::string& value, ProgramAction* action)
     else if (value == "RESTORE") *action = ProgramAction::Restore;
     else if (value == "TRACE_START") *action = ProgramAction::TraceStart;
     else if (value == "RETAIN_RESET") *action = ProgramAction::RetainReset;
+    else if (value == "RECOVERY_RESET") *action = ProgramAction::RecoveryReset;
+    else if (value == "SET_PROGRAM_ENABLED") *action = ProgramAction::SetProgramEnabled;
+    else if (value == "TRACE_STOP") *action = ProgramAction::TraceStop;
+    else if (value == "TRACE_READ") *action = ProgramAction::TraceRead;
     else return false;
     return true;
 }
@@ -118,18 +127,230 @@ bool mutation_action(ProgramAction action)
 {
     return action == ProgramAction::Stage || action == ProgramAction::Activate ||
            action == ProgramAction::Restore || action == ProgramAction::TraceStart ||
-           action == ProgramAction::RetainReset;
+           action == ProgramAction::RetainReset ||
+           action == ProgramAction::RecoveryReset ||
+           action == ProgramAction::SetProgramEnabled ||
+           action == ProgramAction::TraceStop;
+}
+
+uint16_t float_to_half_rounded(float value)
+{
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    const uint16_t sign = static_cast<uint16_t>((bits >> 16) & 0x8000u);
+    const uint32_t exponent = (bits >> 23) & 0xffu;
+    uint32_t mantissa = bits & 0x7fffffu;
+    if (exponent == 0xffu)
+        return static_cast<uint16_t>(sign | 0x7c00u | (mantissa != 0 ? 0x0200u : 0u));
+
+    int half_exponent = static_cast<int>(exponent) - 127 + 15;
+    if (half_exponent >= 31) return static_cast<uint16_t>(sign | 0x7c00u);
+    if (half_exponent <= 0) {
+        if (half_exponent < -10) return sign;
+        mantissa |= 0x800000u;
+        const int shift = 14 - half_exponent;
+        uint32_t rounded = mantissa >> shift;
+        const uint32_t remainder = mantissa & ((uint32_t{1} << shift) - 1u);
+        const uint32_t halfway = uint32_t{1} << (shift - 1);
+        if (remainder > halfway || (remainder == halfway && (rounded & 1u) != 0)) ++rounded;
+        return static_cast<uint16_t>(sign | rounded);
+    }
+
+    uint32_t rounded = mantissa >> 13;
+    const uint32_t remainder = mantissa & 0x1fffu;
+    if (remainder > 0x1000u || (remainder == 0x1000u && (rounded & 1u) != 0)) {
+        ++rounded;
+        if (rounded == 0x400u) {
+            rounded = 0;
+            ++half_exponent;
+            if (half_exponent >= 31) return static_cast<uint16_t>(sign | 0x7c00u);
+        }
+    }
+    return static_cast<uint16_t>(sign | (static_cast<uint16_t>(half_exponent) << 10) |
+                                 static_cast<uint16_t>(rounded));
+}
+
+uint32_t half_to_float_bits(uint16_t half)
+{
+    const uint32_t sign = static_cast<uint32_t>(half & 0x8000u) << 16;
+    uint32_t exponent = (half >> 10) & 0x1fu;
+    uint32_t mantissa = half & 0x03ffu;
+    if (exponent == 0) {
+        if (mantissa == 0) return sign;
+        int unbiased = -14;
+        while ((mantissa & 0x0400u) == 0) {
+            mantissa <<= 1;
+            --unbiased;
+        }
+        mantissa &= 0x03ffu;
+        return sign | (static_cast<uint32_t>(unbiased + 127) << 23) | (mantissa << 13);
+    }
+    if (exponent == 0x1fu) return sign | 0x7f800000u | (mantissa << 13);
+    return sign | ((exponent - 15u + 127u) << 23) | (mantissa << 13);
+}
+
+bool exact_half(float value, uint16_t* half)
+{
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    const uint16_t candidate = float_to_half_rounded(value);
+    if (half_to_float_bits(candidate) != bits) return false;
+    if (half != nullptr) *half = candidate;
+    return true;
+}
+
+bool read_cbor_argument(const std::vector<uint8_t>& payload, std::size_t* cursor,
+                        uint8_t additional, uint64_t* value)
+{
+    if (additional < 24u) {
+        *value = additional;
+        return true;
+    }
+    std::size_t bytes = 0;
+    uint64_t minimum = 0;
+    switch (additional) {
+    case 24: bytes = 1; minimum = 24; break;
+    case 25: bytes = 2; minimum = 256; break;
+    case 26: bytes = 4; minimum = 65536; break;
+    case 27: bytes = 8; minimum = uint64_t{1} << 32; break;
+    default: return false; /* indefinite/reserved */
+    }
+    if (*cursor + bytes > payload.size()) return false;
+    uint64_t decoded = 0;
+    for (std::size_t index = 0; index < bytes; ++index)
+        decoded = (decoded << 8) | payload[(*cursor)++];
+    if (decoded < minimum) return false;
+    *value = decoded;
+    return true;
+}
+
+bool canonical_cbor_item(const std::vector<uint8_t>& payload, std::size_t* cursor,
+                         unsigned depth)
+{
+    if (*cursor >= payload.size() || depth > 8) return false;
+    const uint8_t initial = payload[(*cursor)++];
+    const uint8_t major = initial >> 5;
+    const uint8_t additional = initial & 0x1fu;
+    if (major <= 1) {
+        uint64_t ignored = 0;
+        return read_cbor_argument(payload, cursor, additional, &ignored);
+    }
+    if (major == 2 || major == 3) {
+        uint64_t length = 0;
+        if (!read_cbor_argument(payload, cursor, additional, &length) ||
+            length > payload.size() - *cursor)
+            return false;
+        *cursor += static_cast<std::size_t>(length);
+        return true;
+    }
+    if (major == 4) {
+        uint64_t count = 0;
+        if (!read_cbor_argument(payload, cursor, additional, &count) || count > 256)
+            return false;
+        for (uint64_t index = 0; index < count; ++index)
+            if (!canonical_cbor_item(payload, cursor, depth + 1)) return false;
+        return true;
+    }
+    if (major == 5 || major == 6) return false; /* contract chỉ dùng array, không tag/map */
+    if (additional == 20u || additional == 21u || additional == 22u) return true;
+    if (additional == 25u) {
+        if (*cursor + 2 > payload.size()) return false;
+        const uint16_t half = static_cast<uint16_t>(payload[*cursor] << 8) |
+                              payload[*cursor + 1];
+        *cursor += 2;
+        /* NaN canonical duy nhất là quiet NaN 0x7e00. */
+        return ((half & 0x7c00u) != 0x7c00u || (half & 0x03ffu) == 0u || half == 0x7e00u);
+    }
+    if (additional == 26u) {
+        if (*cursor + 4 > payload.size()) return false;
+        uint32_t bits = 0;
+        for (int index = 0; index < 4; ++index) bits = (bits << 8) | payload[(*cursor)++];
+        float value = 0.0f;
+        std::memcpy(&value, &bits, sizeof(value));
+        uint16_t half = 0;
+        return std::isfinite(value) && !exact_half(value, &half);
+    }
+    /* Payload hiện chỉ có giá trị REAL float32; float64/simple lạ không thuộc
+     * schema minor 4 và phải bị từ chối thay vì nới parser im lặng. */
+    return false;
 }
 
 bool canonical_cbor(const std::vector<uint8_t>& payload)
 {
     if (payload.empty()) return false;
     try {
-        const json value = json::from_cbor(payload, true, true);
-        return json::to_cbor(value) == payload;
+        std::size_t cursor = 0;
+        if (!canonical_cbor_item(payload, &cursor, 0) || cursor != payload.size()) return false;
+        [[maybe_unused]] const json decoded =
+            json::from_cbor(payload, true, true); /* UTF-8 và type syntax */
+        return true;
     } catch (const json::exception&) {
         return false;
     }
+}
+
+void append_cbor_head(std::vector<uint8_t>* out, uint8_t major, uint64_t value)
+{
+    if (value < 24u) {
+        out->push_back(static_cast<uint8_t>((major << 5) | value));
+        return;
+    }
+    std::size_t bytes = 1;
+    uint8_t additional = 24;
+    if (value > 0xffu) { bytes = 2; additional = 25; }
+    if (value > 0xffffu) { bytes = 4; additional = 26; }
+    if (value > 0xffffffffu) { bytes = 8; additional = 27; }
+    out->push_back(static_cast<uint8_t>((major << 5) | additional));
+    for (std::size_t index = bytes; index > 0; --index)
+        out->push_back(static_cast<uint8_t>(value >> ((index - 1) * 8)));
+}
+
+void append_cbor_array(std::vector<uint8_t>* out, std::size_t count)
+{
+    append_cbor_head(out, 4, count);
+}
+
+void append_cbor_text(std::vector<uint8_t>* out, const std::string& value)
+{
+    append_cbor_head(out, 3, value.size());
+    out->insert(out->end(), value.begin(), value.end());
+}
+
+void append_cbor_uint(std::vector<uint8_t>* out, uint64_t value)
+{
+    append_cbor_head(out, 0, value);
+}
+
+void append_cbor_int(std::vector<uint8_t>* out, int64_t value)
+{
+    if (value >= 0) append_cbor_uint(out, static_cast<uint64_t>(value));
+    else append_cbor_head(out, 1, static_cast<uint64_t>(-(value + 1)));
+}
+
+void append_cbor_bool(std::vector<uint8_t>* out, bool value)
+{
+    out->push_back(value ? 0xf5u : 0xf4u);
+}
+
+void append_cbor_null(std::vector<uint8_t>* out)
+{
+    out->push_back(0xf6u);
+}
+
+void append_cbor_float(std::vector<uint8_t>* out, float value)
+{
+    uint16_t half = 0;
+    if (exact_half(value, &half)) {
+        out->push_back(0xf9u);
+        out->push_back(static_cast<uint8_t>(half >> 8));
+        out->push_back(static_cast<uint8_t>(half));
+        return;
+    }
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    out->push_back(0xfau);
+    for (int shift = 24; shift >= 0; shift -= 8)
+        out->push_back(static_cast<uint8_t>(bits >> shift));
 }
 
 bool request_valid(const ProgramRequest& request, ProgramCodecError* error)
@@ -292,6 +513,88 @@ bool parse_retain_reset_payload(const ProgramRequest& request, RetainResetComman
     }
 }
 
+/* T59-702. Payload 1 phần tử: `[actor_id (string)]`. `operation_id` lấy từ
+ * envelope chung. Actor bắt buộc — một quyết định bỏ giao dịch mà không có chủ
+ * thì không truy được về sau. */
+bool parse_recovery_reset_payload(const ProgramRequest& request, RecoveryResetCommand* output)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 1 || !value[0].is_string()) return false;
+        output->operation_id = uuid_text(request.operation_id);
+        output->actor_id = value[0].get<std::string>();
+        return !output->actor_id.empty();
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+/* T59-405. Payload 2 phần tử: `[instance_id (string), enabled (bool)]`.
+ * `operation_id` lấy từ envelope chung như mọi mutation khác. */
+bool parse_set_enabled_payload(const ProgramRequest& request, ProgramEnableCommand* output)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 2 || !value[0].is_string() ||
+            !value[1].is_boolean()) return false;
+        output->operation_id = uuid_text(request.operation_id);
+        output->instance_id = value[0].get<std::string>();
+        output->enabled = value[1].get<bool>();
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+/* T59-408 — payload `TRACE_START`:
+ * `[sessionId, samplePeriodMs, durationMs, [[instanceId, slot], ...]]`.
+ * Biến khai bằng (instanceId, variableName). Số slot là kết quả của một lần
+ * biên dịch cụ thể và không tồn tại ở bất kỳ nơi nào BE nhìn thấy — Revision chỉ
+ * có tên biến. Core đã có bảng tên→slot trong chương trình đang nạp, nên phân
+ * giải ở đây là phân giải ở nơi dữ liệu sống. */
+bool parse_trace_start_payload(const ProgramRequest& request, std::string* session_id,
+                               uint32_t* period_ms, uint32_t* duration_ms,
+                               std::vector<StTraceVariable>* variables)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 4 || !value[0].is_string() ||
+            !value[1].is_number_unsigned() || !value[2].is_number_unsigned() ||
+            !value[3].is_array())
+            return false;
+        *session_id = value[0].get<std::string>();
+        *period_ms = value[1].get<uint32_t>();
+        *duration_ms = value[2].get<uint32_t>();
+        variables->clear();
+        for (const json& item : value[3]) {
+            if (!item.is_array() || item.size() != 2 || !item[0].is_string() ||
+                !item[1].is_string())
+                return false;
+            StTraceVariable variable;
+            variable.instance_id = item[0].get<std::string>();
+            variable.variable_name = item[1].get<std::string>();
+            if (variable.instance_id.empty() || variable.variable_name.empty()) return false;
+            variables->push_back(std::move(variable));
+        }
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+/* Payload `TRACE_STOP` và `TRACE_READ`: `[sessionId]`. */
+bool parse_trace_session_payload(const ProgramRequest& request, std::string* session_id)
+{
+    try {
+        const json value = json::from_cbor(request.payload, true, true);
+        if (!value.is_array() || value.size() != 1 || !value[0].is_string()) return false;
+        *session_id = value[0].get<std::string>();
+        return true;
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
 ProgramResult result_for_state(LifecycleState state)
 {
     switch (state) {
@@ -309,16 +612,93 @@ ProgramResult result_for_state(LifecycleState state)
     return ProgramResult::Unavailable;
 }
 
-std::vector<uint8_t> status_payload(const RuntimeOperationSnapshot& snapshot)
+void append_signal_cell(std::vector<uint8_t>* payload,
+                        const StSignalDefinition& definition,
+                        const StSignalRead& read, bool* valid)
 {
-    const json active = snapshot.active_revision_id.empty()
-        ? json(nullptr) : json(snapshot.active_revision_id);
-    const json lkg = snapshot.lkg_revision_id.empty()
-        ? json(nullptr) : json(snapshot.lkg_revision_id);
-    return json::to_cbor(json::array({
-        snapshot.producer_mode == CutoverMode::PROGRAM_ONLY ? "PROGRAM_ONLY" : "GRAPH_ONLY",
-        active, lkg, snapshot.active_override_ids,
-    }));
+    *valid = read.has_value &&
+             read.state != StSignalReadState::UNAVAILABLE &&
+             read.state != StSignalReadState::NOT_DECLARED;
+    if (*valid && definition.type == StType::REAL && !std::isfinite(read.value.r))
+        *valid = false;
+    if (!*valid) {
+        append_cbor_null(payload);
+        return;
+    }
+    switch (definition.type) {
+    case StType::BOOL: append_cbor_bool(payload, read.value.b); return;
+    case StType::INT:
+    case StType::DINT: append_cbor_int(payload, read.value.i); return;
+    case StType::UINT:
+        append_cbor_uint(payload, static_cast<uint32_t>(read.value.i));
+        return;
+    case StType::REAL: append_cbor_float(payload, read.value.r); return;
+    case StType::TIME: append_cbor_int(payload, read.value.t); return;
+    }
+    *valid = false;
+    append_cbor_null(payload);
+}
+
+const char* signal_read_state_name(StSignalReadState state)
+{
+    switch (state) {
+    case StSignalReadState::FRESH: return "FRESH";
+    case StSignalReadState::STALE_HELD: return "STALE_HELD";
+    case StSignalReadState::STALE_FALLBACK: return "STALE_FALLBACK";
+    case StSignalReadState::UNAVAILABLE: return "UNAVAILABLE";
+    case StSignalReadState::NOT_DECLARED: return "NOT_DECLARED";
+    }
+    return "UNAVAILABLE";
+}
+
+std::vector<uint8_t> status_payload(const RuntimeOperationSnapshot& snapshot,
+                                    const StScheduler* scheduler, uint64_t now_mono_ns)
+{
+    std::vector<StSignalDiagnosticSnapshot> signals;
+    if (scheduler != nullptr && scheduler->signal_bus() != nullptr) {
+        signals = scheduler->signal_bus()->inspect_all(now_mono_ns);
+    }
+
+    std::vector<uint8_t> payload;
+    payload.reserve(128 + signals.size() * 96);
+    append_cbor_array(&payload, 5);
+    append_cbor_text(&payload, snapshot.producer_mode == CutoverMode::PROGRAM_ONLY
+                                   ? "PROGRAM_ONLY" : "GRAPH_ONLY");
+    if (snapshot.active_revision_id.empty()) append_cbor_null(&payload);
+    else append_cbor_text(&payload, snapshot.active_revision_id);
+    if (snapshot.lkg_revision_id.empty()) append_cbor_null(&payload);
+    else append_cbor_text(&payload, snapshot.lkg_revision_id);
+    append_cbor_array(&payload, snapshot.active_override_ids.size());
+    for (const std::string& id : snapshot.active_override_ids) append_cbor_text(&payload, id);
+    append_cbor_array(&payload, signals.size());
+    for (const StSignalDiagnosticSnapshot& signal : signals) {
+        const StSignalDefinition& definition = signal.definition;
+        const StSignalRead& read = signal.read;
+        append_cbor_array(&payload, 11);
+        append_cbor_text(&payload, definition.name);
+        append_cbor_text(&payload, definition.publisher_program);
+        append_cbor_text(&payload, st_type_name(definition.type));
+        bool valid = false;
+        append_signal_cell(&payload, definition, read, &valid);
+        append_cbor_bool(&payload, valid);
+        /* HOLD_PRIVATE dùng STALE_HELD để executor giữ biến đích, kể cả trước
+         * lần publish đầu. Ở contract diagnostics, chưa có value vẫn phải là
+         * UNAVAILABLE/null; không để consumer API hiểu một ô zero nội bộ là
+         * last-known-value. */
+        const StSignalReadState reported_state =
+            !read.has_value && read.state != StSignalReadState::NOT_DECLARED
+                ? StSignalReadState::UNAVAILABLE
+                : read.state;
+        const bool stale = reported_state == StSignalReadState::STALE_HELD ||
+                           reported_state == StSignalReadState::STALE_FALLBACK;
+        append_cbor_text(&payload, valid ? (stale ? "UNCERTAIN" : "GOOD") : "BAD");
+        append_cbor_text(&payload, signal_read_state_name(reported_state));
+        append_cbor_text(&payload, st_stale_policy_name(definition.stale_policy));
+        append_cbor_uint(&payload, definition.freshness_ms);
+        append_cbor_uint(&payload, read.published_at_ns);
+        append_cbor_uint(&payload, read.generation);
+    }
+    return payload;
 }
 
 } // namespace
@@ -551,6 +931,62 @@ PeerCredentials ReadPeerCredentials(int socket_fd)
     return output;
 }
 
+ProgramResponse ProgramIpcServer::handle_trace(const ProgramRequest& request,
+                                               uint64_t now_mono_ns) const
+{
+    if (value_trace_ == nullptr || trace_scheduler_ == nullptr) {
+        /* Một `TRACE_START` "thành công" mà không có nơi lấy mẫu là lời hứa
+         * suông: BE sẽ chờ dữ liệu không bao giờ tới. */
+        return make_response(request, ProgramResult::Unavailable, "IPC-TRACE-UNAVAILABLE");
+    }
+    std::string session_id;
+    std::string error;
+    if (request.action == ProgramAction::TraceStart) {
+        uint32_t period_ms = 0;
+        uint32_t duration_ms = 0;
+        std::vector<StTraceVariable> variables;
+        if (!parse_trace_start_payload(request, &session_id, &period_ms, &duration_ms, &variables))
+            return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");
+        /* Mốc bắt đầu là THỜI ĐIỂM HIỆN TẠI, không phải `deadline_mono_ns` —
+         * deadline là mốc tương lai của request, và dùng nó sẽ đẩy mẫu đầu tiên
+         * ra sau thời điểm người dùng bấm nút. */
+        if (!value_trace_->start(session_id, *trace_scheduler_, variables.data(), variables.size(),
+                                 period_ms, duration_ms, now_mono_ns, &error))
+            return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
+        return make_response(request, ProgramResult::Accepted, nullptr);
+    }
+    if (!parse_trace_session_payload(request, &session_id))
+        return make_response(request, ProgramResult::Rejected, "IPC-PAYLOAD");
+    if (request.action == ProgramAction::TraceStop) {
+        if (!value_trace_->stop(session_id, &error))
+            return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
+        return make_response(request, ProgramResult::Ok, nullptr);
+    }
+
+    /* TRACE_READ: `[state, droppedCount, [[timestampNs, [[valid, bits], ...]], ...]]`.
+     * Trả trọn nội dung ring; bounded theo trần Ô nên kích thước có giới hạn
+     * trên biết trước. */
+    const StTraceStatus status = value_trace_->status();
+    if (status.session_id != session_id)
+        return make_response(request, ProgramResult::Rejected, "IPC-TRACE-REJECTED");
+    json samples = json::array();
+    for (std::size_t index = 0; index < value_trace_->sample_count(); ++index) {
+        const StTraceSample sample = value_trace_->sample(index);
+        json values = json::array();
+        for (std::size_t variable = 0; variable < value_trace_->variable_count(); ++variable) {
+            uint64_t bits = 0;
+            std::memcpy(&bits, &sample.values[variable], sizeof(bits));
+            /* Gửi BIT thô của ô, không gửi số đã diễn giải: kiểu của ô là dữ
+             * liệu của package, và diễn giải hai lần ở hai bên là hai chỗ để
+             * lệch nhau. */
+            values.push_back(json::array({sample.valid[variable], bits}));
+        }
+        samples.push_back(json::array({sample.timestamp_ns, values}));
+    }
+    const json body = json::array({st_trace_state_name(status.state), status.dropped_count, samples});
+    return make_response(request, ProgramResult::Ok, nullptr, json::to_cbor(body));
+}
+
 ProgramResponse ProgramIpcServer::make_response(const ProgramRequest& request,
                                                 ProgramResult result,
                                                 const char* detail_code,
@@ -612,6 +1048,14 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
         if (request.action == ProgramAction::Capabilities) {
             response = make_response(request, ProgramResult::Ok, nullptr,
                                      capabilities_payload());
+        } else if (request.action == ProgramAction::TraceStart ||
+                   request.action == ProgramAction::TraceStop ||
+                   request.action == ProgramAction::TraceRead) {
+            /* Trace KHÔNG cần coordinator: nó đọc trạng thái Program đang chạy,
+             * không đụng vòng đời gói. Bắt nó chờ coordinator sẽ làm chẩn đoán
+             * không dùng được đúng lúc cần nhất — khi chưa có gói nào commission
+             * thành công. */
+            response = handle_trace(request, now_mono_ns);
         } else if (coordinator_ == nullptr) {
             response = make_response(request, ProgramResult::Unavailable,
                                      "IPC-RUNTIME-NOT-CONFIGURED");
@@ -623,7 +1067,8 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
             } else if (request.action == ProgramAction::Status) {
                 const RuntimeOperationSnapshot snapshot = coordinator_->snapshot();
                 response = snapshot.impact_snapshot_valid
-                    ? make_response(request, ProgramResult::Ok, nullptr, status_payload(snapshot))
+                    ? make_response(request, ProgramResult::Ok, nullptr,
+                                    status_payload(snapshot, trace_scheduler_, now_mono_ns))
                     : make_response(request, ProgramResult::Unavailable,
                                     "IPC-IMPACT-NOT-READY");
                 if (!snapshot.active_revision_id.empty()) {
@@ -643,7 +1088,7 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
                     response = make_response(request, result_for_state(snapshot.state),
                                              snapshot.detail_code.empty()
                                                  ? nullptr : snapshot.detail_code.c_str(),
-                                             status_payload(snapshot));
+                                             status_payload(snapshot, trace_scheduler_, now_mono_ns));
                     response.keeps_running = snapshot.keeps_running;
                     if (!snapshot.active_revision_id.empty()) {
                         response.has_active_revision = true;
@@ -688,6 +1133,43 @@ std::vector<uint8_t> ProgramIpcServer::HandleFrame(const std::vector<uint8_t>& f
                     case RetainResetOutcome::APPLIED: result = ProgramResult::Ok; break;
                     case RetainResetOutcome::REJECTED: result = ProgramResult::Rejected; break;
                     case RetainResetOutcome::TIMED_OUT: result = ProgramResult::Busy; break;
+                    }
+                } else {
+                    detail = "IPC-PAYLOAD";
+                }
+                response = make_response(request, result,
+                                         result == ProgramResult::Ok ? nullptr
+                                             : (detail.empty() ? "IPC-PAYLOAD" : detail.c_str()));
+            } else if (request.action == ProgramAction::RecoveryReset) {
+                RecoveryResetCommand command;
+                std::string detail;
+                std::string error;
+                ProgramResult result = ProgramResult::Rejected;
+                if (parse_recovery_reset_payload(request, &command)) {
+                    switch (coordinator_->recovery_reset(command, &detail, &error)) {
+                    case RecoveryResetOutcome::APPLIED: result = ProgramResult::Ok; break;
+                    case RecoveryResetOutcome::NOT_IN_RECOVERY:
+                    case RecoveryResetOutcome::REJECTED: result = ProgramResult::Rejected; break;
+                    }
+                } else {
+                    detail = "IPC-PAYLOAD";
+                }
+                response = make_response(request, result,
+                                         result == ProgramResult::Ok ? nullptr
+                                             : (detail.empty() ? "IPC-PAYLOAD" : detail.c_str()));
+            } else if (request.action == ProgramAction::SetProgramEnabled) {
+                ProgramEnableCommand command;
+                std::string detail;
+                std::string error;
+                ProgramResult result = ProgramResult::Rejected;
+                if (parse_set_enabled_payload(request, &command)) {
+                    switch (coordinator_->set_program_enabled(command, &detail, &error)) {
+                    case ProgramEnableOutcome::APPLIED: result = ProgramResult::Ok; break;
+                    case ProgramEnableOutcome::REJECTED: result = ProgramResult::Rejected; break;
+                    /* Chưa qua safe boundary trong hạn — `Busy` chứ không phải
+                     * `Rejected`: BE gọi lại được (lệnh idempotent), còn báo
+                     * "đã từ chối" cho một lệnh có thể vẫn sắp áp dụng là nói sai. */
+                    case ProgramEnableOutcome::TIMED_OUT: result = ProgramResult::Busy; break;
                     }
                 } else {
                     detail = "IPC-PAYLOAD";

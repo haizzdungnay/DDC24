@@ -3,7 +3,7 @@
 > **ID:** TRACE-WEB-PA3-001
 > **Ngày:** 2026-08-08
 > **Requirement:** [UX_REQ_PA3_WEB.md](../02_requirements/UX_REQ_PA3_WEB.md)
-> **Plan:** [52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md](../03_implementation/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md)
+> **Plan:** [52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md](../03_implementation/archive/52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN.md)
 > **Bằng chứng runtime:** [EV-WEB-PA3-001](../07_records/test-evidence/fw-som/2026-08-08-web-pa3-dashboard.md)
 
 Một hàng chỉ được ghi `ĐẠT` khi có **cả bốn cột** đầy đủ. Requirement chỉ có
@@ -101,8 +101,73 @@ source mà không có test là requirement chưa nghiệm thu, dù mã đã merg
 | REQ-PA3-01-4 (phần backend) | PLC SHM chưa mang mốc lấy mẫu; cần đổi `contracts/shm/mkddc_shm.h` và deploy lại Core | PA3-N01 |
 | Nghiệm thu vai trò ở E2E | `VITE_AUTH_MODE=mock` luôn cấp `admin` | PA3-N04 |
 
-## 5. Revision History
+## 5. Plan 57 — UC/UI/UX Rev A (2026-08-19)
+
+[Plan 57](../03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md) bổ sung năng lực
+mới cho cùng họ trang PA3. Ghi ở đây theo `DOC_GOVERNANCE` §7 bước 3: hồ sơ này
+là nơi duy nhất nối **requirement → source → test** cho web, nên một plan đóng mà
+không sync vào đây sẽ để lại một mảng năng lực không có đường truy vết.
+
+Quy ước cột **Bằng chứng** giữ nguyên §1: `—` nghĩa là *chưa có bằng chứng
+runtime riêng*, không phải *chưa kiểm*; cột Test mới là điều kiện `ĐẠT`.
+
+| Năng lực (task) | Source | Test | Bằng chứng | Trạng thái |
+|---|---|---|---|---|
+| Thẻ thiết bị + lọc `?equip=` (`T57-3.1`) | `internal/app/equipmenttag.go` · `features/points/MonitorPage.tsx` | `equipmenttag_test.go` · `MonitorPage.equipment.test.tsx` | — | ĐẠT |
+| Tuỳ chọn theo tài khoản (`T57-3.2`) | `internal/app/useraccess.go` · `shared/hooks/useSavedViews.ts` | `useraccess_test.go` | — | ĐẠT |
+| Chỉ số hệ cảnh báo ISA-18.2 (`T57-3.3`) | `internal/app/alarmmetrics.go` · `features/operations/AlarmMetricsPanel.tsx` | `alarmmetrics_test.go` (8) | UX §3 `OPS-03` | ĐẠT |
+| Lịch sử tài nguyên hệ thống (`T57-3.4`) | `internal/app/systemhistory.go` | `wave3_diagnostics_test.go` | — | ĐẠT |
+| Hiệu lực thực tế + xung đột lịch (`T57-3.5`/`3.6`/`3.7`) | `internal/app/scheduleeffective.go` · `features/scheduler/tabs/EffectiveTab.tsx` | `coresim_shell_test.go` | UX §8b `SCH-EFF-01` | ĐẠT |
+| Xem khung truyền Modbus (`T57-3.9`) | `iobus/adapters/modbus_rtu/frame_ring.hpp` · `internal/app/modbusframes.go` · `features/modbus-rtu/components/FrameMonitor.tsx` | `test_frame_ring.cpp` (8) · `BusWorkerFrames` · `modbusframes_test.go` (6) · `FrameMonitor.test.tsx` (6) | EV 2026-08-19 (board: op `frames` trả `ok`, route trả 401 ≠ 404) | ĐẠT |
+| Mẫu thiết bị Modbus (`T57-3.11`) | `internal/app/modbustemplates.go` | `modbustemplates_test.go` (4) | — | ĐẠT |
+| Cảnh báo điểm ảo đang được dùng (`T57-3.12`) | `internal/app/virtualpoint_usage.go` | `wave3_diagnostics_test.go` · `VirtualPointUsageNotice.test.tsx` (6) | — | ĐẠT |
+| Mô phỏng + ước lượng luật cảnh báo (`T57-2.13`/`T57-3.13`) | `core/application/alarm/alarm_sim_main.cpp` · `internal/app/alarmsimulate.go` · `internal/app/alarmestimate.go` | ctest `alarm_sim_behaviour` (13) · `alarmestimate_test.go` (5) | EV 2026-08-19 (board: engine chạy đúng dưới user `mkddc`) | ĐẠT |
+| Diff cấu hình trong nhật ký (`T57-3.14`) | `internal/app/configdiff.go` | `wave3_diagnostics_test.go` | — | ĐẠT |
+| Đồng bộ giờ + cảnh báo lệch (`T57-3.15`) | `internal/app/systemhistory.go` | `wave3_diagnostics_test.go` | — | ĐẠT |
+| Nhật ký truy cập người dùng (`T57-3.16`) | `internal/app/useraccess.go` | `useraccess_test.go` | — | ĐẠT |
+| Cưỡng chế đổi mật khẩu (`T57-3.17`) | `internal/app/useraccess.go` · `features/auth/ForcePasswordChangePage.tsx` | `useraccess_test.go` · `ForcePasswordChangePage.test.tsx` (6) | — | ĐẠT |
+| Kiểm kết nối mạng khi đổi cấu hình (`T57-3.18`) | `internal/app/networkcheck.go` | `networkcheck_test.go` (6) | — | ĐẠT |
+| Đếm ngược TTL ép tay trên HMI (`T57-3.19`) | `hmi/screens/screen_control.cpp` | `test_override_countdown.cpp` (5) | — | ĐẠT |
+| Chỉ báo số phiên web trên HMI (`T57-3.20`) | `hmi/screens/screen_control.cpp` | như trên | — | ĐẠT |
+| Tách chunk theo lô nghiệp vụ (`T57-4.2`) | `web-ui/src/App.tsx` | đo trên board thật | Plan 57 §13b (12 cặp mẫu, FCP −236 ms trung vị) | ĐẠT |
+
+### 5.1 Hợp đồng API mới của Plan 57
+
+| Endpoint | Vai trò tối thiểu | Hiện thực | Test |
+|---|---|---|---|
+| `GET /api/v1/alarms/metrics` | viewer | `internal/app/alarmmetrics.go` | `alarmmetrics_test.go` |
+| `GET /api/v1/schedules/effective` | viewer | `internal/app/scheduleeffective.go` | `coresim_shell_test.go` |
+| `GET /api/v1/modbus/frames` | viewer | `internal/app/modbusframes.go` | `modbusframes_test.go` |
+| `GET /api/v1/modbus/templates` | viewer | `internal/app/modbustemplates.go` | `modbustemplates_test.go` |
+| `POST /api/v1/alarm-settings/simulate` | operator | `internal/app/alarmsimulate.go` | `coresim_shell_test.go` |
+| `POST /api/v1/alarm-settings/estimate` | operator | `internal/app/alarmestimate.go` | `alarmestimate_test.go` |
+| `GET/PUT /api/v1/me/preferences` | viewer | `internal/app/useraccess.go` | `useraccess_test.go` |
+| `GET /api/v1/users/access` | admin | `internal/app/useraccess.go` | `useraccess_test.go` |
+| `GET /api/v1/system/history` | viewer | `internal/app/systemhistory.go` | `wave3_diagnostics_test.go` |
+| `POST /api/v1/network/connectivity-check` | admin | `internal/app/networkcheck.go` | `networkcheck_test.go` |
+| `GET /api/v1/virtual-points/{id}/usage` | viewer | `internal/app/virtualpoint_usage.go` | `wave3_diagnostics_test.go` |
+
+### 5.2 Gate và số đo Plan 57 (2026-08-19)
+
+| Gate | Lệnh | Kết quả |
+|---|---|---|
+| C++ | `ctest --test-dir build/fw` (MODBUS+BACNET+HMI ON) | **1049/1049** |
+| Go | `go vet ./...` + `go test ./... -count=1` | sạch, 18 gói |
+| FE unit | `npx vitest --run --environment jsdom src` | **1056/1056** (110 file) |
+| FE lint | `npm run lint` | sạch |
+| FE build | `npm run build:foxlinx` | PASS |
+| Tài liệu | `python3 scripts/docs_iso_harness.py --expect` | PASS |
+
+### 5.3 Hai năng lực Plan 57 KHÔNG có trong ma trận trên
+
+| Mục | Vì sao vắng mặt |
+|---|---|
+| `T57-3.8` — quét bus Modbus | **Hoãn sang Rev B.** Quét là ghi ra RS-485 thật; `IMPLEMENT_READY` giữ `BLOCKED` theo `AUTH-WEBUX-2026-08-19-02` quyết định 1 |
+| Chặn Back/Forward trong `useDirtyGuard` | Khoảng hở đã biết, cần `useBlocker` của data router trong khi app dùng `<BrowserRouter>`. Rời trang bằng liên kết trong ứng dụng **đã** được chặn; chỉ nút Back/Forward của trình duyệt là chưa |
+
+## 6. Revision History
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-08 | Lập ma trận cho 56 requirement PA3, hợp đồng API và số đo gate |
+| 1.1 | 2026-08-19 | Thêm §5 — ma trận truy vết cho **Plan 57 Rev A** (17 năng lực mới, 11 endpoint mới, số đo gate 2026-08-19), và §5.3 ghi hai mục cố ý vắng mặt kèm lý do. Sync theo `DOC_GOVERNANCE` §7 bước 3 khi đóng Plan 57 |

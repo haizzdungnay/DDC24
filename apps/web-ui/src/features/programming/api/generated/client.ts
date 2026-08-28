@@ -8,12 +8,73 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.20.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.30.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type ProgrammingImpactStatus = "NONE" | "PRESENT" | "UNAVAILABLE";
-export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges";
+export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges" | "publishedSignals" | "controlLibrary" | "programSet" | "enableIntent";
+
+// --- Bảng Programs của PGM-01 (T60-013/T60-014), sinh thẳng từ schema OpenAPI.
+// Trường nullable là `| null` chứ KHÔNG phải optional: server luôn gửi khoá, và
+// `null` nghĩa là "đã xét, chưa biết" — không được suy thành `0`/`false`.
+export type ProgrammingProgramRuntimeState = "RUNNING" | "WAITING" | "DISABLED" | "FAULTED" | "UNKNOWN";
+
+export type ProgrammingProgramRuntimeStateSource = "CORE_LIVE" | "LAST_KNOWN" | "UNAVAILABLE";
+
+export type ProgrammingProgramHealth = "HEALTHY" | "DEGRADED" | "FAULT" | "UNKNOWN";
+
+export interface ProgrammingProgramListItem {
+  programId: string;
+  desiredEnabled: boolean | null;
+  generation: number | null;
+  updatedBy: string | null;
+  updatedAtUtcMs: number | null;
+  runtimeState: ProgrammingProgramRuntimeState;
+  runtimeStateSource: ProgrammingProgramRuntimeStateSource;
+  coreState: string | null;
+  enabled: boolean | null;
+  observedAt: string | null;
+  periodMs: number | null;
+  lastExecNs: number | null;
+  maxExecNs: number | null;
+  missedReleaseCount: number | null;
+  consecutiveMissedRelease: number | null;
+  lastRunAtUtc: string | null;
+  lastRunAgeMs: number | null;
+  lane: number | null;
+  health: ProgrammingProgramHealth | null;
+}
+
+export interface ProgrammingProgramsPage {
+  schemaVersion: "1.0";
+  projectId: string;
+  runtimeStateSource: ProgrammingProgramRuntimeStateSource;
+  observedAt: string | null;
+  programsTruncated: boolean | null;
+  items: ProgrammingProgramListItem[];
+}
+
+export interface ProgrammingStHunk {
+  objectId: string;
+  changeType: "ADDED" | "REMOVED" | "REPLACED";
+  beforeStartLine: number;
+  beforeLineCount: number;
+  afterStartLine: number;
+  afterLineCount: number;
+  beforeText: string[];
+  afterText: string[];
+  truncated: boolean;
+  coarse: boolean;
+}
+
+export interface ProgrammingFbdChange {
+  objectId: string;
+  element: "NETWORK" | "NODE" | "PORT" | "WIRE";
+  elementId: string;
+  changeType: "ADDED" | "REMOVED" | "UPDATED" | "ORDER_ONLY" | "GEOMETRY_ONLY";
+  detail: string;
+}
 
 export interface ProgrammingPublicError {
   code: ProgrammingErrorCode;
@@ -88,6 +149,10 @@ export interface ProgrammingImpact {
   activeOverrides: ProgrammingImpactGroup;
   cutover: ProgrammingImpactGroup;
   outputMappingChanges: ProgrammingImpactGroup;
+  publishedSignals: ProgrammingImpactGroup;
+  controlLibrary: ProgrammingImpactGroup;
+  programSet: ProgrammingImpactGroup;
+  enableIntent: ProgrammingImpactGroup;
 }
 
 export interface ProgrammingCommissionRequest {
@@ -113,12 +178,16 @@ export interface ProgrammingOperationAccepted {
 }
 
 export const PROGRAMMING_ENDPOINTS = {
+  "actProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions", roles: ["admin"] },
   "commissionProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/commission", roles: ["admin"] },
   "compareProgrammingRevisions": { method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", roles: ["viewer","operator","admin"] },
   "createProgrammingCheck": { method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", roles: ["admin"] },
   "createProgrammingProject": { method: "POST", path: "/api/v1/programming/projects", roles: ["admin"] },
   "createProgrammingRevision": { method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", roles: ["admin"] },
+  "createProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions", roles: ["admin"] },
   "createProgrammingTrace": { method: "POST", path: "/api/v1/programming/runtime/traces", roles: ["admin"] },
+  "deleteProgrammingLibraryEntry": { method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", roles: ["admin"] },
+  "deprecateProgrammingLibraryRevision": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate", roles: ["admin"] },
   "exportProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/export", roles: ["admin"] },
   "getProgrammingCapabilities": { method: "GET", path: "/api/v1/programming/capabilities", roles: ["viewer","operator","admin"] },
   "getProgrammingCheck": { method: "GET", path: "/api/v1/programming/checks/{checkId}", roles: ["viewer","operator","admin"] },
@@ -128,16 +197,27 @@ export const PROGRAMMING_ENDPOINTS = {
   "getProgrammingRevision": { method: "GET", path: "/api/v1/programming/revisions/{revisionId}", roles: ["viewer","operator","admin"] },
   "getProgrammingRuntime": { method: "GET", path: "/api/v1/programming/runtime", roles: ["viewer","operator","admin"] },
   "getProgrammingRuntimeMonitor": { method: "GET", path: "/api/v1/programming/runtime/monitor", roles: ["viewer","operator","admin"] },
+  "getProgrammingRuntimeSignals": { method: "GET", path: "/api/v1/programming/runtime/signals", roles: ["viewer","operator","admin"] },
+  "getProgrammingSimulationSession": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["viewer","operator","admin"] },
   "getProgrammingTrace": { method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["viewer","operator","admin"] },
   "importProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/import", roles: ["admin"] },
   "listProgrammingAudit": { method: "GET", path: "/api/v1/programming/audit", roles: ["viewer","operator","admin"] },
   "listProgrammingOperations": { method: "GET", path: "/api/v1/programming/operations", roles: ["viewer","operator","admin"] },
   "listProgrammingOverrides": { method: "GET", path: "/api/v1/programming/overrides", roles: ["viewer","operator","admin"] },
+  "listProgrammingProgramIntents": { method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", roles: ["viewer","operator","admin"] },
   "listProgrammingProjects": { method: "GET", path: "/api/v1/programming/projects", roles: ["viewer","operator","admin"] },
+  "listProgrammingSimulationObservations": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", roles: ["viewer","operator","admin"] },
+  "listProgrammingSimulationTrace": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", roles: ["viewer","operator","admin"] },
+  "resetProgrammingRecovery": { method: "POST", path: "/api/v1/programming/runtime/recovery-reset", roles: ["admin"] },
   "resetProgrammingRetain": { method: "POST", path: "/api/v1/programming/retain/reset", roles: ["admin"] },
   "restoreProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/restore", roles: ["admin"] },
+  "searchProgrammingLibraries": { method: "GET", path: "/api/v1/programming/libraries", roles: ["viewer","operator","admin"] },
+  "setProgrammingProgramIntent": { method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent", roles: ["admin"] },
+  "setProgrammingSimulationInput": { method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}", roles: ["admin"] },
+  "stopProgrammingSimulationSession": { method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["admin"] },
   "stopProgrammingTrace": { method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["admin"] },
   "updateProgrammingDraft": { method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", roles: ["admin"] },
+  "upsertProgrammingLibraryEntry": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", roles: ["admin"] },
 } as const satisfies Record<string, {
   method: ProgrammingHttpMethod;
   path: string;

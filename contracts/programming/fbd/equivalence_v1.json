@@ -3,25 +3,1650 @@
   "version": 1,
   "profileId": "revA-1t-1-5-30",
   "pairs": [
-    { "id": "EQ-001", "typeRef": "AND", "inputs": [{"name":"A","type":"BOOL"},{"name":"B","type":"BOOL"}], "outputType":"BOOL", "stExpression":"A AND B", "vector":{"values":[true,false],"expected":false} },
-    { "id": "EQ-002", "typeRef": "OR", "inputs": [{"name":"A","type":"BOOL"},{"name":"B","type":"BOOL"}], "outputType":"BOOL", "stExpression":"A OR B", "vector":{"values":[true,false],"expected":true} },
-    { "id": "EQ-003", "typeRef": "XOR", "inputs": [{"name":"A","type":"BOOL"},{"name":"B","type":"BOOL"}], "outputType":"BOOL", "stExpression":"A XOR B", "vector":{"values":[true,false],"expected":true} },
-    { "id": "EQ-004", "typeRef": "NOT", "inputs": [{"name":"A","type":"BOOL"}], "outputType":"BOOL", "stExpression":"NOT A", "vector":{"values":[true],"expected":false} },
-    { "id": "EQ-005", "typeRef": "EQ", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A = B", "vector":{"values":[7,7],"expected":true} },
-    { "id": "EQ-006", "typeRef": "NE", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A <> B", "vector":{"values":[7,8],"expected":true} },
-    { "id": "EQ-007", "typeRef": "LT", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A < B", "vector":{"values":[7,8],"expected":true} },
-    { "id": "EQ-008", "typeRef": "LE", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A <= B", "vector":{"values":[8,8],"expected":true} },
-    { "id": "EQ-009", "typeRef": "GT", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A > B", "vector":{"values":[9,8],"expected":true} },
-    { "id": "EQ-010", "typeRef": "GE", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"BOOL", "stExpression":"A >= B", "vector":{"values":[8,8],"expected":true} },
-    { "id": "EQ-011", "typeRef": "ADD", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A + B", "vector":{"values":[7,5],"expected":12} },
-    { "id": "EQ-012", "typeRef": "SUB", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A - B", "vector":{"values":[7,5],"expected":2} },
-    { "id": "EQ-013", "typeRef": "MUL", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A * B", "vector":{"values":[7,5],"expected":35} },
-    { "id": "EQ-014", "typeRef": "DIV", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A / B", "vector":{"values":[17,5],"expected":3} },
-    { "id": "EQ-015", "typeRef": "MOD", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"A MOD B", "vector":{"values":[17,5],"expected":2} },
-    { "id": "EQ-016", "typeRef": "ABS", "inputs": [{"name":"A","type":"INT"}], "outputType":"INT", "stExpression":"ABS(A)", "vector":{"values":[-7],"expected":7} },
-    { "id": "EQ-017", "typeRef": "MIN", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"MIN(A, B)", "vector":{"values":[7,5],"expected":5} },
-    { "id": "EQ-018", "typeRef": "MAX", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"MAX(A, B)", "vector":{"values":[7,5],"expected":7} },
-    { "id": "EQ-019", "typeRef": "LIMIT", "inputs": [{"name":"A","type":"INT"},{"name":"B","type":"INT"},{"name":"C","type":"INT"}], "outputType":"INT", "stExpression":"LIMIT(A, B, C)", "vector":{"values":[0,15,10],"expected":10} },
-    { "id": "EQ-020", "typeRef": "SEL", "inputs": [{"name":"S","type":"BOOL"},{"name":"A","type":"INT"},{"name":"B","type":"INT"}], "outputType":"INT", "stExpression":"SEL(S, A, B)", "vector":{"values":[true,5,9],"expected":9} }
+    {
+      "id": "EQ-001",
+      "typeRef": "AND",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "BOOL"
+        },
+        {
+          "name": "B",
+          "type": "BOOL"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A AND B",
+      "vector": {
+        "values": [
+          true,
+          false
+        ],
+        "expected": false
+      }
+    },
+    {
+      "id": "EQ-002",
+      "typeRef": "OR",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "BOOL"
+        },
+        {
+          "name": "B",
+          "type": "BOOL"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A OR B",
+      "vector": {
+        "values": [
+          true,
+          false
+        ],
+        "expected": true
+      }
+    },
+    {
+      "id": "EQ-003",
+      "typeRef": "XOR",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "BOOL"
+        },
+        {
+          "name": "B",
+          "type": "BOOL"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A XOR B",
+      "vector": {
+        "values": [
+          true,
+          false
+        ],
+        "expected": true
+      }
+    },
+    {
+      "id": "EQ-004",
+      "typeRef": "NOT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "BOOL"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "NOT A",
+      "vector": {
+        "values": [
+          true
+        ],
+        "expected": false
+      }
+    },
+    {
+      "id": "EQ-005",
+      "typeRef": "EQ",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A = B",
+      "vector": {
+        "values": [
+          7,
+          7
+        ],
+        "expected": true
+      }
+    },
+    {
+      "id": "EQ-006",
+      "typeRef": "NE",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A <> B",
+      "vector": {
+        "values": [
+          7,
+          8
+        ],
+        "expected": true
+      }
+    },
+    {
+      "id": "EQ-007",
+      "typeRef": "LT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A < B",
+      "vector": {
+        "values": [
+          7,
+          8
+        ],
+        "expected": true
+      }
+    },
+    {
+      "id": "EQ-008",
+      "typeRef": "LE",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A <= B",
+      "vector": {
+        "values": [
+          8,
+          8
+        ],
+        "expected": true
+      }
+    },
+    {
+      "id": "EQ-009",
+      "typeRef": "GT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A > B",
+      "vector": {
+        "values": [
+          9,
+          8
+        ],
+        "expected": true
+      }
+    },
+    {
+      "id": "EQ-010",
+      "typeRef": "GE",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "BOOL",
+      "stExpression": "A >= B",
+      "vector": {
+        "values": [
+          8,
+          8
+        ],
+        "expected": true
+      }
+    },
+    {
+      "id": "EQ-011",
+      "typeRef": "ADD",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "A + B",
+      "vector": {
+        "values": [
+          7,
+          5
+        ],
+        "expected": 12
+      }
+    },
+    {
+      "id": "EQ-012",
+      "typeRef": "SUB",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "A - B",
+      "vector": {
+        "values": [
+          7,
+          5
+        ],
+        "expected": 2
+      }
+    },
+    {
+      "id": "EQ-013",
+      "typeRef": "MUL",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "A * B",
+      "vector": {
+        "values": [
+          7,
+          5
+        ],
+        "expected": 35
+      }
+    },
+    {
+      "id": "EQ-014",
+      "typeRef": "DIV",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "A / B",
+      "vector": {
+        "values": [
+          17,
+          5
+        ],
+        "expected": 3
+      }
+    },
+    {
+      "id": "EQ-015",
+      "typeRef": "MOD",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "A MOD B",
+      "vector": {
+        "values": [
+          17,
+          5
+        ],
+        "expected": 2
+      }
+    },
+    {
+      "id": "EQ-016",
+      "typeRef": "ABS",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "ABS(A)",
+      "vector": {
+        "values": [
+          -7
+        ],
+        "expected": 7
+      }
+    },
+    {
+      "id": "EQ-017",
+      "typeRef": "MIN",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "MIN(A, B)",
+      "vector": {
+        "values": [
+          7,
+          5
+        ],
+        "expected": 5
+      }
+    },
+    {
+      "id": "EQ-018",
+      "typeRef": "MAX",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "MAX(A, B)",
+      "vector": {
+        "values": [
+          7,
+          5
+        ],
+        "expected": 7
+      }
+    },
+    {
+      "id": "EQ-019",
+      "typeRef": "LIMIT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        },
+        {
+          "name": "C",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "LIMIT(A, B, C)",
+      "vector": {
+        "values": [
+          0,
+          15,
+          10
+        ],
+        "expected": 10
+      }
+    },
+    {
+      "id": "EQ-020",
+      "typeRef": "SEL",
+      "inputs": [
+        {
+          "name": "S",
+          "type": "BOOL"
+        },
+        {
+          "name": "A",
+          "type": "INT"
+        },
+        {
+          "name": "B",
+          "type": "INT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "SEL(S, A, B)",
+      "vector": {
+        "values": [
+          true,
+          5,
+          9
+        ],
+        "expected": 9
+      }
+    },
+    {
+      "id": "EQ-021",
+      "typeRef": "SQRT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "SQRT(A)",
+      "vector": {
+        "values": [
+          9.0
+        ],
+        "expected": 3.0
+      }
+    },
+    {
+      "id": "EQ-022",
+      "typeRef": "INT_TO_REAL",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "INT_TO_REAL(A)",
+      "vector": {
+        "values": [
+          7
+        ],
+        "expected": 7.0
+      }
+    },
+    {
+      "id": "EQ-023",
+      "typeRef": "REAL_TO_INT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "REAL_TO_INT(A)",
+      "vector": {
+        "values": [
+          2.5
+        ],
+        "expected": 3
+      }
+    },
+    {
+      "id": "EQ-024",
+      "typeRef": "TIME_TO_REAL",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "TIME"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "TIME_TO_REAL(A)",
+      "vector": {
+        "values": [
+          1500000000
+        ],
+        "expected": 1.5
+      }
+    },
+    {
+      "id": "EQ-025",
+      "typeRef": "REAL_TO_TIME",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "TIME",
+      "stExpression": "REAL_TO_TIME(A)",
+      "vector": {
+        "values": [
+          0.25
+        ],
+        "expected": 250000000
+      }
+    },
+    {
+      "id": "EQ-026",
+      "typeRef": "INT_TO_DINT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        }
+      ],
+      "outputType": "DINT",
+      "stExpression": "INT_TO_DINT(A)",
+      "vector": {
+        "values": [
+          -32768
+        ],
+        "expected": -32768
+      }
+    },
+    {
+      "id": "EQ-027",
+      "typeRef": "INT_TO_UINT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "INT"
+        }
+      ],
+      "outputType": "UINT",
+      "stExpression": "INT_TO_UINT(A)",
+      "vector": {
+        "values": [
+          40
+        ],
+        "expected": 40
+      }
+    },
+    {
+      "id": "EQ-028",
+      "typeRef": "DINT_TO_INT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "DINT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "DINT_TO_INT(A)",
+      "vector": {
+        "values": [
+          32767
+        ],
+        "expected": 32767
+      }
+    },
+    {
+      "id": "EQ-029",
+      "typeRef": "DINT_TO_UINT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "DINT"
+        }
+      ],
+      "outputType": "UINT",
+      "stExpression": "DINT_TO_UINT(A)",
+      "vector": {
+        "values": [
+          65535
+        ],
+        "expected": 65535
+      }
+    },
+    {
+      "id": "EQ-030",
+      "typeRef": "UINT_TO_INT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "UINT"
+        }
+      ],
+      "outputType": "INT",
+      "stExpression": "UINT_TO_INT(A)",
+      "vector": {
+        "values": [
+          32767
+        ],
+        "expected": 32767
+      }
+    },
+    {
+      "id": "EQ-031",
+      "typeRef": "UINT_TO_DINT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "UINT"
+        }
+      ],
+      "outputType": "DINT",
+      "stExpression": "UINT_TO_DINT(A)",
+      "vector": {
+        "values": [
+          65535
+        ],
+        "expected": 65535
+      }
+    },
+    {
+      "id": "EQ-032",
+      "typeRef": "DINT_TO_REAL",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "DINT"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "DINT_TO_REAL(A)",
+      "vector": {
+        "values": [
+          1000000
+        ],
+        "expected": 1000000.0
+      }
+    },
+    {
+      "id": "EQ-033",
+      "typeRef": "UINT_TO_REAL",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "UINT"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "UINT_TO_REAL(A)",
+      "vector": {
+        "values": [
+          65535
+        ],
+        "expected": 65535.0
+      }
+    },
+    {
+      "id": "EQ-034",
+      "typeRef": "REAL_TO_DINT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "DINT",
+      "stExpression": "REAL_TO_DINT(A)",
+      "vector": {
+        "values": [
+          -2.5
+        ],
+        "expected": -3
+      }
+    },
+    {
+      "id": "EQ-035",
+      "typeRef": "REAL_TO_UINT",
+      "inputs": [
+        {
+          "name": "A",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "UINT",
+      "stExpression": "REAL_TO_UINT(A)",
+      "vector": {
+        "values": [
+          65534.6
+        ],
+        "expected": 65535
+      }
+    },
+    {
+      "id": "EQ-036",
+      "typeRef": "SCALE",
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "REAL"
+        },
+        {
+          "name": "IN_MIN",
+          "type": "REAL"
+        },
+        {
+          "name": "IN_MAX",
+          "type": "REAL"
+        },
+        {
+          "name": "OUT_MIN",
+          "type": "REAL"
+        },
+        {
+          "name": "OUT_MAX",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "SCALE(IN, IN_MIN, IN_MAX, OUT_MIN, OUT_MAX)",
+      "vector": {
+        "values": [
+          2.5,
+          0.0,
+          10.0,
+          0.0,
+          100.0
+        ],
+        "expected": 25.0
+      }
+    },
+    {
+      "id": "EQ-037",
+      "typeRef": "DEADBAND",
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "REAL"
+        },
+        {
+          "name": "DB",
+          "type": "REAL"
+        },
+        {
+          "name": "REF",
+          "type": "REAL"
+        }
+      ],
+      "outputType": "REAL",
+      "stExpression": "DEADBAND(IN, DB, REF)",
+      "vector": {
+        "values": [
+          20.4,
+          0.5,
+          20.0
+        ],
+        "expected": 20.0
+      }
+    }
+  ],
+  "stateTraces": [
+    {
+      "id": "FB-001",
+      "typeRef": "TON",
+      "instance": "TIMER",
+      "inputs": [
+        {
+          "port": "IN",
+          "variable": "ENABLE",
+          "type": "BOOL"
+        },
+        {
+          "port": "PT",
+          "variable": "PRESET",
+          "type": "TIME"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "OUT",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [
+        {
+          "port": "ET",
+          "type": "TIME"
+        }
+      ],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "ENABLE": true,
+            "PRESET": 1000000000
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 500000000,
+          "values": {
+            "ENABLE": true,
+            "PRESET": 1000000000
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "ENABLE": true,
+            "PRESET": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 1200000000,
+          "values": {
+            "ENABLE": false,
+            "PRESET": 1000000000
+          },
+          "expected": {
+            "OUT": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-002",
+      "typeRef": "TOF",
+      "instance": "HOLD",
+      "inputs": [
+        {
+          "port": "IN",
+          "variable": "ENABLE",
+          "type": "BOOL"
+        },
+        {
+          "port": "PT",
+          "variable": "PRESET",
+          "type": "TIME"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "OUT",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [
+        {
+          "port": "ET",
+          "type": "TIME"
+        }
+      ],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "ENABLE": true,
+            "PRESET": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 500000000,
+          "values": {
+            "ENABLE": false,
+            "PRESET": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 1400000000,
+          "values": {
+            "ENABLE": false,
+            "PRESET": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 1600000000,
+          "values": {
+            "ENABLE": false,
+            "PRESET": 1000000000
+          },
+          "expected": {
+            "OUT": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-003",
+      "typeRef": "R_TRIG",
+      "instance": "RISING",
+      "inputs": [
+        {
+          "port": "CLK",
+          "variable": "CLOCK",
+          "type": "BOOL"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "OUT",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "CLOCK": false
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "CLOCK": true
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "CLOCK": true
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "CLOCK": false
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "CLOCK": true
+          },
+          "expected": {
+            "OUT": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-004",
+      "typeRef": "F_TRIG",
+      "instance": "FALLING",
+      "inputs": [
+        {
+          "port": "CLK",
+          "variable": "CLOCK",
+          "type": "BOOL"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "OUT",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "CLOCK": true
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "CLOCK": false
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "CLOCK": false
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "CLOCK": true
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "CLOCK": false
+          },
+          "expected": {
+            "OUT": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-005",
+      "typeRef": "PID",
+      "instance": "LOOP",
+      "inputs": [
+        {
+          "port": "SP",
+          "variable": "SETPOINT",
+          "type": "REAL"
+        },
+        {
+          "port": "PV",
+          "variable": "PROCESS",
+          "type": "REAL"
+        },
+        {
+          "port": "KP",
+          "variable": "GAIN_P",
+          "type": "REAL"
+        },
+        {
+          "port": "KI",
+          "variable": "GAIN_I",
+          "type": "REAL"
+        },
+        {
+          "port": "KD",
+          "variable": "GAIN_D",
+          "type": "REAL"
+        },
+        {
+          "port": "OUT_MIN",
+          "variable": "LIMIT_LO",
+          "type": "REAL"
+        },
+        {
+          "port": "OUT_MAX",
+          "variable": "LIMIT_HI",
+          "type": "REAL"
+        },
+        {
+          "port": "ACTUAL",
+          "variable": "READBACK",
+          "type": "REAL"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "OUT",
+          "variable": "OUT",
+          "type": "REAL"
+        },
+        {
+          "port": "TRACKING",
+          "variable": "TRACK",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "SETPOINT": 10.0,
+            "PROCESS": 0.0,
+            "GAIN_P": 1.0,
+            "GAIN_I": 1.0,
+            "GAIN_D": 0.0,
+            "LIMIT_LO": 0.0,
+            "LIMIT_HI": 100.0,
+            "READBACK": 0.0
+          },
+          "expected": {
+            "OUT": 10.0,
+            "TRACK": false
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "SETPOINT": 10.0,
+            "PROCESS": 0.0,
+            "GAIN_P": 1.0,
+            "GAIN_I": 1.0,
+            "GAIN_D": 0.0,
+            "LIMIT_LO": 0.0,
+            "LIMIT_HI": 100.0,
+            "READBACK": 10.0
+          },
+          "expected": {
+            "OUT": 20.0,
+            "TRACK": false
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "SETPOINT": 10.0,
+            "PROCESS": 0.0,
+            "GAIN_P": 1.0,
+            "GAIN_I": 1.0,
+            "GAIN_D": 0.0,
+            "LIMIT_LO": 0.0,
+            "LIMIT_HI": 100.0,
+            "READBACK": 20.0
+          },
+          "expected": {
+            "OUT": 30.0,
+            "TRACK": false
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "SETPOINT": 10.0,
+            "PROCESS": 0.0,
+            "GAIN_P": 1.0,
+            "GAIN_I": 1.0,
+            "GAIN_D": 0.0,
+            "LIMIT_LO": 0.0,
+            "LIMIT_HI": 100.0,
+            "READBACK": 0.0
+          },
+          "expected": {
+            "OUT": 40.0,
+            "TRACK": true
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "SETPOINT": 10.0,
+            "PROCESS": 0.0,
+            "GAIN_P": 1.0,
+            "GAIN_I": 1.0,
+            "GAIN_D": 0.0,
+            "LIMIT_LO": 0.0,
+            "LIMIT_HI": 100.0,
+            "READBACK": 40.0
+          },
+          "expected": {
+            "OUT": 40.0,
+            "TRACK": false
+          }
+        }
+      ],
+      "tolerance": 0.0001
+    },
+    {
+      "id": "FB-006",
+      "typeRef": "TP",
+      "instance": "PULSE",
+      "inputs": [
+        {
+          "port": "IN",
+          "variable": "TRIGGER",
+          "type": "BOOL"
+        },
+        {
+          "port": "PT",
+          "variable": "WIDTH",
+          "type": "TIME"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "OUT",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [
+        {
+          "port": "ET",
+          "type": "TIME"
+        }
+      ],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "TRIGGER": true,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 300000000,
+          "values": {
+            "TRIGGER": false,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 600000000,
+          "values": {
+            "TRIGGER": true,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "TRIGGER": true,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 1200000000,
+          "values": {
+            "TRIGGER": false,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": false
+          }
+        },
+        {
+          "nowNs": 1400000000,
+          "values": {
+            "TRIGGER": true,
+            "WIDTH": 1000000000
+          },
+          "expected": {
+            "OUT": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-007",
+      "typeRef": "CTU",
+      "instance": "COUNTER",
+      "inputs": [
+        {
+          "port": "CU",
+          "variable": "CLK",
+          "type": "BOOL"
+        },
+        {
+          "port": "RESET",
+          "variable": "CLEAR",
+          "type": "BOOL"
+        },
+        {
+          "port": "PV",
+          "variable": "PRESET",
+          "type": "INT"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "DONE",
+          "type": "BOOL"
+        },
+        {
+          "port": "CV",
+          "variable": "COUNT",
+          "type": "INT"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "CLK": false,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 0
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "CLK": true,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "CLK": true,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "CLK": false,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "CLK": true,
+            "CLEAR": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": true,
+            "COUNT": 2
+          }
+        },
+        {
+          "nowNs": 5000000000,
+          "values": {
+            "CLK": false,
+            "CLEAR": true,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 0
+          }
+        },
+        {
+          "nowNs": 6000000000,
+          "values": {
+            "CLK": true,
+            "CLEAR": true,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-008",
+      "typeRef": "CTD",
+      "instance": "COUNTER",
+      "inputs": [
+        {
+          "port": "CD",
+          "variable": "CLK",
+          "type": "BOOL"
+        },
+        {
+          "port": "LOAD",
+          "variable": "PRESET_LOAD",
+          "type": "BOOL"
+        },
+        {
+          "port": "PV",
+          "variable": "PRESET",
+          "type": "INT"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "DONE",
+          "type": "BOOL"
+        },
+        {
+          "port": "CV",
+          "variable": "COUNT",
+          "type": "INT"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "CLK": false,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": true,
+            "COUNT": 0
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "CLK": false,
+            "PRESET_LOAD": true,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 2
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "CLK": true,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "CLK": true,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "CLK": false,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 1
+          }
+        },
+        {
+          "nowNs": 5000000000,
+          "values": {
+            "CLK": true,
+            "PRESET_LOAD": false,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": true,
+            "COUNT": 0
+          }
+        },
+        {
+          "nowNs": 6000000000,
+          "values": {
+            "CLK": true,
+            "PRESET_LOAD": true,
+            "PRESET": 2
+          },
+          "expected": {
+            "DONE": false,
+            "COUNT": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "FB-009",
+      "typeRef": "HYSTERESIS",
+      "instance": "BAND",
+      "inputs": [
+        {
+          "port": "IN",
+          "variable": "TEMP",
+          "type": "REAL"
+        },
+        {
+          "port": "HIGH",
+          "variable": "UPPER",
+          "type": "REAL"
+        },
+        {
+          "port": "LOW",
+          "variable": "LOWER",
+          "type": "REAL"
+        }
+      ],
+      "outputs": [
+        {
+          "port": "Q",
+          "variable": "ACTIVE",
+          "type": "BOOL"
+        }
+      ],
+      "unusedOutputPorts": [],
+      "cycles": [
+        {
+          "nowNs": 0,
+          "values": {
+            "TEMP": 25.0,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": false
+          }
+        },
+        {
+          "nowNs": 1000000000,
+          "values": {
+            "TEMP": 30.0,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": true
+          }
+        },
+        {
+          "nowNs": 2000000000,
+          "values": {
+            "TEMP": 25.0,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": true
+          }
+        },
+        {
+          "nowNs": 3000000000,
+          "values": {
+            "TEMP": 20.0,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": false
+          }
+        },
+        {
+          "nowNs": 4000000000,
+          "values": {
+            "TEMP": 29.9,
+            "UPPER": 30.0,
+            "LOWER": 20.0
+          },
+          "expected": {
+            "ACTIVE": false
+          }
+        }
+      ]
+    }
   ]
 }

@@ -4,6 +4,7 @@ import type React from 'react'
 import { apiClient } from '../../shared/api/client'
 import { displayPointName, focusPointField, normalizePointName, pointFieldFocusPath, pointFieldLocation, pointNameConflicts, pointTagFieldErrors, validatePointName, validatePointTag } from '../../shared/api/pointTags'
 import { Button } from '../../shared/components/Button'
+import { DirtyGuardModal } from '../../shared/components/DirtyGuardModal'
 import { Modal } from '../../shared/components/Modal'
 import { Panel } from '../../shared/components/Panel'
 import { PointNameConflictNotice } from '../../shared/components/PointNameConflictNotice'
@@ -12,6 +13,7 @@ import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { TrendChart } from '../../shared/components/TrendChart'
 import { useApi } from '../../shared/hooks/useApi'
+import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
 import type { AoConfig, AoEngineeringUnit, AoSignalMode, DoConfig, DoSafeState, OutputsConfig, Point, TrendSample } from '../../shared/types'
 import { cn, formatTime, formatValue, pointNumber } from '../../shared/utils'
@@ -31,6 +33,11 @@ export function OutputsPage() {
   const { t, pick } = useI18n()
   const toast = useToast()
   const [config, setConfig] = useState<OutputsConfig>(emptyOutputs)
+  /* F-UX-12 (`REV-FE-UIUX-UC-2026-08-18`): bản chụp lần cuối đã tải/đã lưu,
+   * dùng làm mốc so sánh "có thay đổi chưa lưu". KHÔNG suy ra từ `config` một
+   * mình vì `config` chính là bản đang gõ dở. Cùng khuôn với `savedConfigs` của
+   * `InputsPage`. */
+  const [savedConfig, setSavedConfig] = useState<OutputsConfig>(emptyOutputs)
   const [selectedId, setSelectedId] = useState('AO-01')
   const [tab, setTab] = useState<OutputTab>('summary')
   const [wizardIndex, setWizardIndex] = useState(0)
@@ -57,6 +64,11 @@ export function OutputsPage() {
     ...outputsEntries(config).map((output) => ({ id: output.id, name: output.label, kind: output.kind }))
   ], [config, pointsState.data, virtualPointsState.data])
   const nameConflicts = useMemo(() => pointNameConflicts(namespaceEntries), [namespaceEntries])
+  /* F-UX-12: so sánh nguyên khối bằng JSON là đủ và rẻ ở đây — cấu hình ngõ ra
+   * có 8 AO + 8 DO, không phải danh sách nghìn dòng — và nó bắt được mọi field
+   * mà không phải liệt kê tay (liệt kê tay là chỗ dirty-guard hay bỏ sót nhất). */
+  const dirty = useMemo(() => JSON.stringify(config) !== JSON.stringify(savedConfig), [config, savedConfig])
+  const dirtyGuard = useDirtyGuard(dirty)
 
   // Nạp cấu hình output. `selectedId` KHÔNG được nằm trong deps.
   //
@@ -76,6 +88,7 @@ export function OutputsPage() {
       .then((items) => {
         if (!active) return
         setConfig(items)
+        setSavedConfig(items)
         const current = selectedIdRef.current
         if (!items.ao.some((item) => item.id === current) && !items.do.some((item) => item.id === current)) {
           setSelectedId(items.ao[0]?.id ?? items.do[0]?.id ?? 'AO-01')
@@ -121,7 +134,11 @@ export function OutputsPage() {
     }))
   }
 
-  async function saveOutputs(next = config, closeConfirm = false) {
+  /* Trả về `true` chỉ khi cấu hình ĐÃ nằm trên backend. `DirtyGuardModal` dựa
+   * vào giá trị này để quyết định có rời trang hay không — lưu hỏng mà vẫn rời
+   * trang là cách chắc chắn nhất để mất bản nháp đúng lúc người dùng tin là đã
+   * giữ được nó (F-UX-12). */
+  async function saveOutputs(next = config, closeConfirm = false): Promise<boolean> {
     const recovery = outputsEntries(next).find((output) => output.id === selectedId)
     const recoveringName = Boolean(recovery && persistedNameConflicts.has(recovery.id))
     if (recoveringName && recovery) {
@@ -129,13 +146,13 @@ export function OutputsPage() {
       const errors = nameError ? { [`${recovery.kind.toLowerCase()}[${(recovery.kind === 'AO' ? next.ao : next.do).findIndex((item) => item.id === recovery.id)}].name`]: nameError } : {}
       setTagErrors(errors)
       setErrorFocusPath(Object.keys(errors)[0])
-      if (nameError) return
+      if (nameError) return false
     }
     const errors = outputTagErrors(next)
     if (!recoveringName) {
       setTagErrors(errors)
       setErrorFocusPath(Object.keys(errors)[0])
-      if (Object.keys(errors).length > 0) return
+      if (Object.keys(errors).length > 0) return false
     }
     const normalized = normalizeOutputs(next)
     setSaving(true)
@@ -143,14 +160,17 @@ export function OutputsPage() {
       if (recoveringName && recovery) {
         const name = normalizePointName(recovery.label)
         await apiClient.updatePointName(recovery.id, name)
-        setConfig({
+        const renamed: OutputsConfig = {
           ao: next.ao.map((item) => item.id === recovery.id ? { ...item, label: name } : item),
           do: next.do.map((item) => item.id === recovery.id ? { ...item, label: name } : item)
-        })
+        }
+        setConfig(renamed)
+        setSavedConfig(renamed)
         void pointsState.refetch()
       } else {
         await apiClient.putOutputs(normalized)
         setConfig(normalized)
+        setSavedConfig(normalized)
       }
       setTagErrors({})
       setErrorFocusPath(undefined)
@@ -159,11 +179,13 @@ export function OutputsPage() {
         setConfirmOpen(false)
         setTab('advanced')
       }
+      return true
     } catch (error) {
       const fieldErrors = pointTagFieldErrors(error)
       setTagErrors(fieldErrors)
       setErrorFocusPath(pointFieldFocusPath(error, recovery?.id ?? selectedId, ['ao', 'do']) ?? Object.keys(fieldErrors)[0])
       toast.push('error', `${t('outputsSaveError')}: ${error instanceof Error ? error.message : String(error)}`)
+      return false
     } finally {
       setSaving(false)
     }
@@ -298,6 +320,21 @@ export function OutputsPage() {
         }}
         onClose={() => setOverviewOpen(false)}
       />
+      <DirtyGuardModal
+        guard={dirtyGuard}
+        saving={saving}
+        title={pick('Cấu hình ngõ ra chưa lưu', 'Unsaved output configuration')}
+        message={pick(
+          'Bạn có thay đổi cấu hình ngõ ra chưa lưu. Rời trang sẽ mất các thay đổi này trừ khi lưu trước.',
+          'You have unsaved output configuration changes. Leaving this page will discard them unless you save first.'
+        )}
+        onSave={() => saveOutputs(config)}
+        onDiscard={() => {
+          setConfig(savedConfig)
+          setTagErrors({})
+          setErrorFocusPath(undefined)
+        }}
+      />
     </div>
   )
 }
@@ -322,7 +359,7 @@ function OutputsOverviewModal({ open, outputs, livePoints, onEdit, onClose }: { 
           <tbody>
             {outputs.map((output) => {
               const live = findOutputPoint(livePoints, output)
-              const unit = live?.unit ?? (output.kind === 'AO' ? engineeringUnitLabel(output.units) : '')
+              const display = outputLiveDisplay(output, live)
               return (
                 <tr key={output.id} className="border-t border-[var(--c-border)] hover:bg-[var(--c-surface-2)]">
                   <td className="px-3 py-2 font-mono text-xs">{output.kind === 'AO' ? 16 + output.channel : 20 + output.channel}</td>
@@ -333,7 +370,7 @@ function OutputsOverviewModal({ open, outputs, livePoints, onEdit, onClose }: { 
                   <td className="px-3 py-2 font-mono text-xs">{output.kind}</td>
                   <td className="px-3 py-2 text-xs">{output.kind === 'AO' ? output.mode : 'Digital'}</td>
                   <td className="px-3 py-2">
-                    <span className="font-mono font-semibold">{live ? formatValue(live.value, unit) : '--'}</span>
+                    <span className="font-mono font-semibold">{live ? formatValue(display.value, display.unit) : '--'}</span>
                     <span className="ml-2 text-xs text-[var(--c-text-dim)]">{live?.quality ?? '--'}</span>
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">
@@ -437,14 +474,30 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
 }) {
   const { t, pick } = useI18n()
   const point = findOutputPoint(points, output)
-  const { data, reset } = useOutputTrend(output.id, point)
+  const { data: signalData, reset } = useOutputTrend(output.id, point)
+  const display = outputLiveDisplay(output, point)
+  // Mẫu do Core gửi về luôn là TÍN HIỆU thô (V/mA). Quy đổi cả chuỗi sang dải
+  // kỹ thuật để Min/Max/Avg và đồ thị cùng một đơn vị với "Giá trị hiện tại"
+  // (F-OUT-002) — trước đây ba chỗ này là số volt nhưng mang nhãn `units`.
+  // `__raw` trong mẫu vẫn là volt/mA nguyên bản cho ai đối chiếu đồng hồ đo.
+  const data = useMemo(() => {
+    // Cùng quy tắc với `outputLiveDisplay`: đơn vị kỹ thuật trùng đơn vị tín
+    // hiệu thì không quy đổi, nếu không Min/Max/Avg sẽ lệch đơn vị với ô
+    // "Giá trị hiện tại" ngay bên cạnh.
+    if (output.kind !== 'AO') return signalData
+    if (engineeringUnitLabel(output.units) === aoSafeUnit(output.mode)) return signalData
+    return signalData.map((sample) => {
+      const engineering = aoSignalToEngineering(output, sample.raw)
+      return engineering === null ? sample : { ...sample, raw: engineering, [output.id]: engineering }
+    })
+  }, [signalData, output])
   const values = data.map((sample) => sample.raw)
   const stats = values.length ? {
     min: Math.min(...values),
     max: Math.max(...values),
     avg: values.reduce((sum, value) => sum + value, 0) / values.length
   } : null
-  const unit = point?.unit ?? (output.kind === 'AO' ? engineeringUnitLabel(output.units) : '')
+  const unit = display.unit
   const modeRawUnit = output.kind === 'AO' ? aoSafeUnit(output.mode) : undefined
   const rawOutput = output.kind === 'AO' && typeof point?.raw === 'number'
     ? { value: point.raw, unit: point.rawUnit ?? modeRawUnit ?? '' }
@@ -469,7 +522,7 @@ function OutputSummary({ output, points, saving, onChange, onForce, onRelease }:
             <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={reset}>{pick('Đặt lại', 'Reset')}</Button>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <LiveDataItem label={t('currentvalue')} value={point ? formatValue(point.value, unit) : '--'} />
+            <LiveDataItem label={t('currentvalue')} value={point ? formatValue(display.value, unit) : '--'} />
             {output.kind === 'AO' && <LiveDataItem label={pick('% mở', '% open')} value={openPercent !== undefined ? formatStat(openPercent, '%') : '--'} />}
             {output.kind === 'AO' && <LiveDataItem label="Raw output" value={rawOutput ? formatStat(rawOutput.value, rawOutput.unit) : '--'} />}
             <LiveDataItem label={pick('Nhỏ nhất', 'Min')} value={stats ? formatStat(stats.min, unit) : '--'} />
@@ -576,6 +629,63 @@ function AdvancedPanel({ output, onChange }: { output: OutputConfig; onChange: (
           </span>
         </div>
       ))}
+      {output.kind === 'AO' && <AoCurvePreview config={output} />}
+    </div>
+  )
+}
+
+/**
+ * Xem trước đường cong kỹ thuật → tín hiệu ra — `T57-2.12`.
+ *
+ * Cùng mẫu với xem trước quy đổi ở trang Inputs (`BB-7`), nhưng ở đây hậu quả
+ * nặng hơn một bậc: số sai không chỉ hiển thị sai mà **ra tới van hoặc biến
+ * tần**. Bảng ba mốc (đầu dải, giữa, cuối dải) đủ để thấy ngay chiều và biên
+ * của đường cong mà không cần vẽ đồ thị.
+ *
+ * Không gọi API, không ghi gì — tính trên cấu hình đang soạn.
+ */
+function AoCurvePreview({ config }: { config: AoConfig }) {
+  const { pick } = useI18n()
+  const range = aoSignalRange(config.mode)
+  const invalid = config.maxPv === config.minPv
+  const midPv = (config.minPv + config.maxPv) / 2
+  const rows = invalid ? [] : [config.minPv, midPv, config.maxPv].map((pv) => ({ pv, signal: previewAoSignal(config, pv) }))
+
+  return (
+    <div className="border-t border-[var(--c-border)] px-3 py-3">
+      <span className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+        {pick('Xem trước tín hiệu ra', 'Output signal preview')}
+      </span>
+      {invalid ? (
+        <p className="mt-2 text-xs text-[var(--c-fault-fg)]">
+          {pick(
+            'Dải kỹ thuật suy biến (đầu dải bằng cuối dải) — không quy đổi được. Đây là cấu hình chưa hợp lệ, không phải thiếu dữ liệu.',
+            'Degenerate engineering range (low equals high) — conversion is undefined. This is an invalid configuration, not missing data.'
+          )}
+        </p>
+      ) : (
+        <>
+          <table className="mt-2 w-full max-w-md text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase text-[var(--c-text-dim)]">
+                <th className="py-1">{pick('Giá trị kỹ thuật', 'Engineering')} ({engineeringUnitLabel(config.units)})</th>
+                <th className="py-1">{pick('Tín hiệu ra', 'Output signal')} ({range.unit})</th>
+              </tr>
+            </thead>
+            <tbody className="mono">
+              {rows.map((row) => (
+                <tr key={row.pv} className="border-t border-[var(--c-border)]">
+                  <td className="py-1">{row.pv.toFixed(2)}</td>
+                  <td className="py-1 font-semibold text-[var(--c-accent)]">{row.signal === null ? '—' : row.signal.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-[var(--c-text-dim)]">
+            {pick('Tính theo cấu hình đang soạn, chưa lưu. Không gửi gì xuống thiết bị.', 'Computed from the draft configuration, not saved. Nothing is sent to the device.')}
+          </p>
+        </>
+      )}
     </div>
   )
 }
@@ -591,12 +701,27 @@ function renderOutputField(output: OutputConfig, key: keyof AoConfig | keyof DoC
     if (key === 'units') return <SelectField label={label} value={ao.units} options={aoEngineeringUnits.map((unit) => [unit, engineeringUnitLabel(unit)])} onChange={(units) => onChange({ units: units as AoEngineeringUnit })} wired large={large} />
     if (key === 'minPv') return <NumberField label={`${label} (${engineeringUnitLabel(ao.units)})`} value={ao.minPv} min={-999999} max={ao.maxPv - 0.001} step={0.1} onChange={(minPv) => onChange({ minPv })} wired large={large} />
     if (key === 'maxPv') return <NumberField label={`${label} (${engineeringUnitLabel(ao.units)})`} value={ao.maxPv} min={ao.minPv + 0.001} max={999999} step={0.1} onChange={(maxPv) => onChange({ maxPv })} wired large={large} />
-    if (key === 'safeValue') return <NumberField label={`${label} (${aoSafeUnit(ao.mode)})`} value={ao.safeValue} min={0} max={aoSafeMax(ao.mode)} step={0.1} onChange={(safeValue) => onChange({ safeValue })} wired large={large} />
+    if (key === 'safeValue') return (
+      <SafeConsequence text={aoSafeConsequence(ao, label)}>
+        <NumberField label={`${label} (${aoSafeUnit(ao.mode)})`} value={ao.safeValue} min={0} max={aoSafeMax(ao.mode)} step={0.1} onChange={(safeValue) => onChange({ safeValue })} wired large={large} />
+      </SafeConsequence>
+    )
     if (key === 'manualValue') return <NumberField label={label} value={ao.manualValue} min={0} max={100} step={1} integer onChange={(manualValue) => onChange({ manualValue })} wired large={large} />
     return null
   }
   const digital = output
-  if (key === 'safeState') return <SelectField label={label} value={digital.safeState} options={[['open', 'open'], ['closed', 'closed']]} onChange={(safeState) => onChange({ safeState: safeState as DoSafeState })} wired large={large} />
+  if (key === 'safeState') return (
+    <SafeConsequence text={doSafeConsequence(digital.safeState)}>
+      <SelectField
+        label={label}
+        value={digital.safeState}
+        options={[['open', 'open — tiếp điểm HỞ, tải MẤT điện'], ['closed', 'closed — tiếp điểm ĐÓNG, tải CÓ điện']]}
+        onChange={(safeState) => onChange({ safeState: safeState as DoSafeState })}
+        wired
+        large={large}
+      />
+    </SafeConsequence>
+  )
   if (key === 'manualValue') return <SelectField label={label} value={digital.manualValue ? '1' : '0'} options={[['0', 'OFF'], ['1', 'ON']]} onChange={(manualValue) => onChange({ manualValue: manualValue === '1' })} wired large={large} />
   return null
 }
@@ -735,6 +860,84 @@ function aoSafeMax(mode: AoSignalMode): number {
   return mode === '4-20mA' ? 20 : 10
 }
 
+/** Dải tín hiệu ra của một chế độ AO. */
+export function aoSignalRange(mode: AoSignalMode): { low: number; high: number; unit: string } {
+  return mode === '4-20mA' ? { low: 4, high: 20, unit: 'mA' } : { low: 0, high: 10, unit: 'V' }
+}
+
+/**
+ * Quy đổi giá trị kỹ thuật → tín hiệu ra theo cấu hình ĐANG SOẠN — `T57-2.12`.
+ *
+ * Cùng lý do với xem trước quy đổi ở trang Inputs: đặt nhầm `minPv`/`maxPv`
+ * chỉ lộ ra khi cơ cấu đã chạy sai một quãng. Khác một điểm quan trọng — ở đây
+ * số sai không chỉ hiển thị sai, nó **ra tới van hoặc biến tần**.
+ *
+ * `null` khi dải kỹ thuật suy biến (`minPv === maxPv`): chia cho 0 không phải
+ * lỗi của người dùng cần một con số, mà là một cấu hình chưa hợp lệ cần nói ra.
+ */
+export function previewAoSignal(config: AoConfig, engineeringValue: number): number | null {
+  if (!Number.isFinite(engineeringValue)) return null
+  const span = config.maxPv - config.minPv
+  if (span === 0) return null
+  const range = aoSignalRange(config.mode)
+  const ratio = (engineeringValue - config.minPv) / span
+  return range.low + ratio * (range.high - range.low)
+}
+
+/**
+ * Nghịch đảo của `previewAoSignal`: tín hiệu ra thô (V/mA) → giá trị kỹ thuật.
+ *
+ * Core chỉ lưu/đọc AO theo volt/mA thô (xem ghi chú "% mở" ở `OutputDetail`),
+ * còn `units` trong cấu hình là ĐƠN VỊ KỸ THUẬT của kênh. Trước bản vá này
+ * trang Outputs lấy thẳng số volt của Core rồi dán nhãn `units` lên, nên mọi
+ * kênh có đơn vị kỹ thuật khác đơn vị tín hiệu đều hiện sai số: AO-03
+ * "Chilled Water Valve" trên board (0-10V, `units: percent`, dải 0-100) đang
+ * ra 4,5 V = 45 % nhưng trang hiện "4,5 %" — sai 10 lần trên lệnh mở van
+ * (F-OUT-002, 2026-08-19).
+ *
+ * Trả `null` khi dải kỹ thuật suy biến (minPv = maxPv) — không quy đổi được,
+ * caller phải hiện lại số thô kèm đơn vị tín hiệu thay vì bịa một con số.
+ */
+export function aoSignalToEngineering(config: AoConfig, signal: number): number | null {
+  if (!Number.isFinite(signal)) return null
+  const span = config.maxPv - config.minPv
+  if (span === 0) return null
+  const range = aoSignalRange(config.mode)
+  const ratio = (signal - range.low) / (range.high - range.low)
+  return config.minPv + ratio * span
+}
+
+/**
+ * Số + đơn vị để HIỆN cho một kênh output đang chạy — một chỗ duy nhất cho cả
+ * bảng tổng quan lẫn khối Live data, để hai nơi không lệch nhau.
+ *
+ * Với AO: quy đổi tín hiệu Core về dải kỹ thuật rồi mới gắn nhãn `units`
+ * (F-OUT-002). KHÔNG dùng `point.unit` (`display_unit`, nhãn tự do sửa được ở
+ * trang Monitor) cho AO nữa: con số nay mang nghĩa theo `units`/`minPv`/`maxPv`
+ * cấu hình ngay trên trang này, để một nhãn ở trang khác đè lên là quay lại
+ * đúng lỗi số-một-đằng-nhãn-một-nẻo vừa sửa.
+ */
+function outputLiveDisplay(output: OutputConfig, point?: Point): { value: Point['value']; unit: string } {
+  if (output.kind !== 'AO') return { value: point?.value, unit: point?.unit ?? '' }
+  const signalUnit = point?.rawUnit ?? aoSafeUnit(output.mode)
+  const engineeringUnit = engineeringUnitLabel(output.units)
+  // Đơn vị kỹ thuật TRÙNG đơn vị tín hiệu (units=volt trên 0-10V, milliampere
+  // trên 4-20mA) thì giá trị kỹ thuật CHÍNH LÀ điện áp/dòng trên đầu cực —
+  // không quy đổi qua `minPv`/`maxPv`. Nếu vẫn quy đổi thì cấu hình thật trên
+  // board (AO-01 `units: volt` nhưng `max_pv: 100`, tức "0..100 volt" trên một
+  // ngõ ra 0-10V — cấu hình tự mâu thuẫn) sẽ hiện "60,7 V" cho một ngõ ra
+  // 6,07 V: đúng theo đường cong đã khai, nhưng vô nghĩa về vật lý. Quy tắc
+  // này đảm bảo con số không bao giờ chửi nhau với chính nhãn của nó.
+  if (engineeringUnit === signalUnit) return { value: point?.value, unit: signalUnit }
+  const signal = point ? pointNumber(point) : null
+  const engineering = signal === null ? null : aoSignalToEngineering(output, signal)
+  if (engineering === null) {
+    // Dải suy biến hoặc chưa có số đo: giữ nguyên số thô kèm đơn vị tín hiệu.
+    return { value: point?.value, unit: signalUnit }
+  }
+  return { value: engineering, unit: engineeringUnit }
+}
+
 // aoPercentToRaw/aoRawToPercent — cùng công thức Core đã dùng cho node
 // AO_OUTPUT trong graph runtime (`apps/core/domain/graph/graph_runtime.cpp`,
 // `pct/100*10` cho 0-10V, `4+pct/100*16` cho 4-20mA). Trước bản vá này,
@@ -810,4 +1013,61 @@ function engineeringUnitLabel(unit: AoEngineeringUnit): string {
 
 function controlClass(): string {
   return 'h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]'
+}
+
+/**
+ * Diễn giải hậu quả VẬT LÝ của `safeState`/`safeValue` — `T57-1.7`, đề xuất §6.10-P1b.
+ *
+ * TRIỆU CHỨNG: giao diện chỉ hỏi một giá trị (`open`/`closed`, hoặc một con số
+ * volt/mA) và dùng chính tên trường làm nhãn. Nhưng "Safe state = OFF" trên một
+ * van sưởi giữa mùa đông và trên một quạt hút khói là **hai quyết định an toàn
+ * hoàn toàn khác nhau**, và màn hình không nói ra sự khác nhau đó.
+ *
+ * NGUYÊN NHÂN GỐC: trường được render bằng bộ render dùng chung theo *kiểu dữ
+ * liệu* (`SelectField`/`NumberField`), nên không chỗ nào mang ngữ nghĩa vận
+ * hành của riêng trường này.
+ *
+ * CÁCH SỬA: bọc riêng hai trường an toàn bằng một câu mô tả điều gì xảy ra trên
+ * dây khi bộ điều khiển mất quyền điều khiển. Câu này suy từ chính giá trị đang
+ * chọn, nên nó đổi theo lựa chọn thay vì là một dòng trợ giúp tĩnh.
+ *
+ * Giới hạn được ghi rõ: hệ thống **không biết** kênh này nối tới thiết bị gì
+ * (chưa có trường "thuộc thiết bị" — đó là `T57-3.1`/`BB-3`). Nên câu mô tả chỉ
+ * nói tới **tín hiệu điện**, và nhắc người cấu hình tự đối chiếu với cơ cấu
+ * thật. Viết "van sẽ đóng" khi không biết đó có phải van hay không, và không
+ * biết van thuộc loại thường-đóng hay thường-mở, chính là bịa.
+ */
+function SafeConsequence({ text, children }: { text: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      {children}
+      <p className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-2 py-1 text-[11px] leading-snug text-[var(--c-warn-fg)]">
+        {text}
+      </p>
+    </div>
+  )
+}
+
+export function doSafeConsequence(safeState: DoSafeState): string {
+  const signal = safeState === 'closed'
+    ? 'tiếp điểm relay ĐÓNG — tải nối vào kênh này sẽ CÓ điện'
+    : 'tiếp điểm relay HỞ — tải nối vào kênh này sẽ MẤT điện'
+  return `Khi bộ điều khiển mất quyền điều khiển (mất liên lạc, khởi động lại, hoặc vào trạng thái an toàn): ${signal}. `
+    + 'Đối chiếu với cơ cấu thật trước khi lưu: cùng một lựa chọn có nghĩa ngược nhau giữa một quạt hút khói và một van sưởi.'
+}
+
+export function aoSafeConsequence(ao: AoConfig, label: string): string {
+  const unit = aoSafeUnit(ao.mode)
+  const min = ao.mode === '4-20mA' ? 4 : 0
+  const max = aoSafeMax(ao.mode)
+  const at = `${ao.safeValue} ${unit}`
+  let position: string
+  if (ao.safeValue <= min) position = 'ĐẦU THẤP của dải tín hiệu'
+  else if (ao.safeValue >= max) position = 'ĐẦU CAO của dải tín hiệu'
+  else position = 'giữa dải tín hiệu'
+  const extra = ao.mode === '4-20mA' && ao.safeValue < 4
+    ? ' Lưu ý: dưới 4 mA nằm NGOÀI dải hợp lệ của vòng 4-20 mA và thường được cơ cấu hiểu là ĐỨT DÂY, không phải là một lệnh.'
+    : ''
+  return `Khi bộ điều khiển mất quyền điều khiển: kênh này giữ ${at} (${position}).${extra} `
+    + `"${label}" là tín hiệu ĐIỆN, không phải phần trăm hành trình — đối chiếu với dải vào của cơ cấu trước khi lưu.`
 }

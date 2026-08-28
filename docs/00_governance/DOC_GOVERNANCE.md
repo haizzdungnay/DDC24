@@ -7,7 +7,7 @@
 | Trạng thái | **Active** |
 | Ngày | 2026-08-11 |
 | Chủ quản | Document Control + System Engineering |
-| Phạm vi | Mọi hồ sơ kỹ thuật trong `docs/`; bắt buộc với bộ Programming Rev A |
+| Phạm vi | Mọi hồ sơ kỹ thuật trong `docs/`; bắt buộc với Product Programming thống nhất |
 
 ## 0. Đọc nhanh
 
@@ -122,7 +122,7 @@ Tách “được lập kế hoạch” khỏi “được viết code” để 
 | `IMPLEMENT_READY` | Nhánh feature, code production, đổi contract, feature flag ở lab | `PLAN_READY` đóng **và** decision đầu vào của **đúng lát cắt đó** đã ký **và** contract của lát cắt đã machine-readable |
 | `RELEASE_READY` | Bật ở site thật, tuyên bố hoàn tất | Toàn bộ scenario có Test Result được review; residual risk được chấp nhận; GO của Product + Release + QA |
 
-Chi tiết áp dụng cho Programming Rev A nằm ở
+Chi tiết áp dụng cho Product Programming nằm ở
 [Plan 53 §4.2–§4.3 và §5.2](../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md).
 
 ### 4.1 Chỉ thị triển khai của cấp điều hành

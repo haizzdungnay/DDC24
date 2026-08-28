@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.local/contracts/programming/artifact_v2.schema.json",
+  "title": "Manifest artifact package Programming MKDDCIR2 schema 2",
+  "description": "Contract định dạng package v2 theo DDD-SW-PROG-UNIFIED-001 §5.3. Writer là T59-106; T59-006 chỉ khóa hình dạng và chính sách dual-reader để loader và writer không thể tự chọn khác nhau. Golden byte-exact thuộc T59-106 vì golden cần một writer thật sinh ra nó — khai golden trước khi có writer là bằng chứng giả.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "magic", "schemaVersion", "compilerProfile", "targetAbi", "headerBytes",
+    "artifactBytes", "sections", "flags", "sha256", "integrityMode",
+    "signatureReservedZero", "libraryLock", "layoutVersion", "capacity"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "magic": { "const": "MKDDCIR2" },
+    "schemaVersion": { "const": 2 },
+    "compilerProfile": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "targetAbi": { "type": "integer", "minimum": 1 },
+    "headerBytes": { "const": 128 },
+    "artifactBytes": { "type": "integer", "minimum": 128, "maximum": 16777216 },
+    "sections": {
+      "description": "Bảng section theo thứ tự canonical. Loader phải kiểm offset/count/overflow trước khi cấp phát prepared image (DDD §5.3).",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/section" }
+    },
+    "flags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["HAS_SOURCE_MAP", "HAS_RETAIN", "HAS_SIGNALS", "HAS_LIBRARY_LOCK", "HAS_MULTI_PROGRAM"]
+      }
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "integrityMode": { "enum": ["HASH_ONLY", "SIGNED"] },
+    "signatureReservedZero": { "type": "boolean" },
+    "libraryLock": {
+      "description": "Khóa đúng revision Control Library đã dùng lúc compile; loader từ chối nếu runtime không có đúng revision đó.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["systemVersion", "systemSha256", "projectRevisionId"],
+      "properties": {
+        "systemVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "systemSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "projectRevisionId": { "type": ["string", "null"], "maxLength": 64 }
+      }
+    },
+    "layoutVersion": { "const": 2 },
+    "capacity": {
+      "description": "Số đếm thật trong package. Mọi giá trị phải <= trần profile; loader kiểm exact profile trước khi cấp phát.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["programCount", "pouCount", "fbInstanceCount", "signalCount", "bindingCount"],
+      "properties": {
+        "programCount": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "pouCount": { "type": "integer", "minimum": 1, "maximum": 1312 },
+        "fbInstanceCount": { "type": "integer", "minimum": 0, "maximum": 1024 },
+        "signalCount": { "type": "integer", "minimum": 0, "maximum": 512 },
+        "bindingCount": { "type": "integer", "minimum": 0, "maximum": 512 }
+      }
+    }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "offset", "bytes", "itemCount"],
+      "properties": {
+        "type": {
+          "description": "Mười ba loại section của DDD §5.3, theo đúng thứ tự canonical.",
+          "enum": [
+            "POU_TABLE", "PROGRAM_TABLE", "TYPE_SIGNATURE_TABLE", "CODE_IR",
+            "CONSTANTS", "FB_LAYOUT", "SIGNAL_DEFS", "BINDING_MANIFEST",
+            "SOURCE_MAP", "LIBRARY_LOCK", "RETAIN_LAYOUT", "RESOURCE_BUDGET"
+          ]
+        },
+        "offset": { "type": "integer", "minimum": 128 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "itemCount": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

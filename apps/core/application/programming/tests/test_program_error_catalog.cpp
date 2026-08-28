@@ -7,7 +7,16 @@ namespace {
 
 TEST(ProgramErrorCatalog, PublicCodesAndMetadataAreStable)
 {
-    static_assert(kProgramErrorMetadata.size() == 20);
+    /* T59-006: 26 -> 30 public code. T59-004 đặt sáu mã gộp tự chọn; DDD §5.2 đã
+     * khóa đúng mười mã, nên chúng được thay bằng bộ tên chuẩn. Con số là ảnh chụp có chủ ý để thay đổi catalog luôn đi qua
+     * mắt người review.
+     *
+     * T59-814 (ADR-053): 30 -> 38, thêm tám mã `PRG-SIM-*` của Simulation R3.
+     * Core KHÔNG phát các mã đó — worker mô phỏng và supervisor phát — nhưng
+     * catalog là MỘT nguồn cho cả ba ngôn ngữ, nên bảng sinh ra ở đây cũng lớn
+     * lên. Đó là điều đúng: một bảng mã bị cắt theo ngôn ngữ sẽ làm hai phía
+     * hiểu khác nhau về cùng một mã. */
+    static_assert(kProgramErrorMetadata.size() == 38);
     static_assert(kProgramErrorCatalogSha256.size() == 64);
     EXPECT_EQ(ProgramErrorMetadataFor(ProgramPublicError::Artifact).public_code,
               "PRG-ERR-ARTIFACT-001");
@@ -33,6 +42,33 @@ TEST(ProgramErrorCatalog, ComponentDetailsMapExactlyAndUnknownFailsSafe)
               ProgramPublicError::Unavailable);
     EXPECT_EQ(MapComponentError("unknown-component", "IR-E-001"),
               ProgramPublicError::Unavailable);
+}
+
+TEST(ProgramErrorCatalog, NewDomainDetailCodesMapToTheirOwnPublicCode)
+{
+    /* Sáu miền mới không được gộp vào một mã chung: người vận hành phải phân biệt
+     * được "sai quy tắc POU" với "thiếu thư viện" hay "trùng chủ sở hữu đầu ra". */
+    EXPECT_EQ(MapComponentError("compiler", "ST-POU-002"), ProgramPublicError::PouKind);
+    EXPECT_EQ(MapComponentError("compiler", "ST-POU-003"), ProgramPublicError::PouRecursion);
+    EXPECT_EQ(MapComponentError("compiler", "ST-POU-005"), ProgramPublicError::Check);
+    /* Vòng phụ thuộc thư viện CHÍNH LÀ đệ quy, nên nó không có mã version riêng. */
+    EXPECT_EQ(MapComponentError("compiler", "ST-LIB-003"), ProgramPublicError::PouRecursion);
+    EXPECT_EQ(MapComponentError("compiler", "ST-LIB-002"), ProgramPublicError::LibVersion);
+    EXPECT_EQ(MapComponentError("compiler", "ST-SIG-001"), ProgramPublicError::SignalPublisher);
+    EXPECT_EQ(MapComponentError("compiler", "ST-SIG-003"), ProgramPublicError::SignalFreshness);
+    /* Type/unit dùng lại mã sẵn có thay vì mở nhánh công khai thứ hai. */
+    EXPECT_EQ(MapComponentError("compiler", "ST-SIG-002"), ProgramPublicError::MapType);
+    EXPECT_EQ(MapComponentError("compiler", "ST-LIM-009"), ProgramPublicError::ProgramLimit);
+    EXPECT_EQ(MapComponentError("compiler", "ST-OWN-001"), ProgramPublicError::OutputOwner);
+    EXPECT_EQ(MapComponentError("compiler", "ST-PID-001"), ProgramPublicError::PidReview);
+    EXPECT_EQ(MapComponentError("st-control-api", "API-E-008"),
+              ProgramPublicError::EnableNotCommissioned);
+    EXPECT_EQ(MapComponentError("st-control-api", "API-E-009"),
+              ProgramPublicError::ProgramState);
+
+    /* Mã cùng họ nhưng chưa khai vẫn phải fail-safe, không đoán sang miền khác. */
+    EXPECT_EQ(MapComponentError("compiler", "ST-POU-099"), ProgramPublicError::Unavailable);
+    EXPECT_EQ(MapComponentError("st-control-api", "API-E-099"), ProgramPublicError::Unavailable);
 }
 
 } // namespace

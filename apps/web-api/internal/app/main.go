@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"log"
 	webModbus "mkddc-web/internal/modbusrtu"
 	programmingapplication "mkddc-web/internal/programming/application"
@@ -73,9 +74,16 @@ type App struct {
 	commissionLimit       commissionLimiter
 	programmingStore      *programmingstore.Store
 	programmingProjects   *programmingapplication.ProjectService
+	programmingLibrary    *programmingapplication.LibraryService
 	programmingChecks     *programmingapplication.CheckService
 	programmingOperations *programmingapplication.OperationService
 	programmingRuntime    *programmingapplication.RuntimeService
+	programmingIntents    *programmingapplication.RuntimeIntentService
+	programmingSimulation *programmingapplication.SimulationService
+	// Plan 57 Wave 3
+	preferences   *UserPreferenceStore
+	systemHistory *SystemHistoryRing
+	startedAt     time.Time
 }
 
 func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSReader) (*App, error) {
@@ -112,7 +120,10 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		}
 		checks, checkErr := programmingapplication.NewCheckService(programmingapplication.CheckServiceOptions{
 			Store: store, Artifacts: artifacts, TargetID: cfg.ProgrammingTargetID, LeaseDuration: 30 * time.Second,
-			Runner: programmingcompiler.ProcessRunner{BinaryPath: cfg.ProgrammingCompilerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout},
+			Runner: programmingcompiler.ProcessRunner{BinaryPath: cfg.ProgrammingCompilerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout, SigningKeyPath: cfg.ProgrammingSigningKeyPath},
+			// T59-302: container package v2 do CHÍNH writer production ghi; BE
+			// chỉ điều phối, không cài lại định dạng.
+			Packager: programmingcompiler.ProcessPackager{BinaryPath: cfg.ProgrammingPackagerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout},
 		})
 		if checkErr != nil {
 			_ = store.Close()
@@ -128,6 +139,25 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Operation service: %w", operationErr)
 		}
+		// T59-814 / ADR-053: supervisor Simulation phải có TRƯỚC RuntimeService,
+		// vì `GET /capabilities` công bố capability SIMULATE lấy từ đây. Công bố
+		// một capability do FE tự đoán là đúng thứ `DDD §5.5` cấm.
+		simulation := programmingapplication.NewSimulationService(programmingapplication.SimulationOptions{
+			Store: store, Artifacts: artifacts, WorkerBinary: cfg.ProgrammingSimWorkerPath,
+			TrustedKeyPaths: trustedSimulationKeys(cfg.ProgrammingSimTrustedKey),
+			ControllerID:    cfg.ProgrammingTargetID, NewID: uuid.NewString,
+		})
+		// Đối chiếu NGAY lúc khởi động: mọi phiên chưa terminal còn sót là phiên
+		// không còn worker nào chứng minh được token/protocol, nên phải đóng chứ
+		// không attach lại theo PID.
+		if _, reconcileErr := simulation.ReconcileOnStart(context.Background()); reconcileErr != nil {
+			operations.Close()
+			checks.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("đối chiếu phiên Simulation còn sót: %w", reconcileErr)
+		}
+		app.programmingSimulation = simulation
+
 		runtimeService, runtimeErr := programmingapplication.NewRuntimeService(programmingapplication.RuntimeServiceOptions{
 			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
 			Store:        store,
@@ -136,18 +166,49 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			Overrides:    app.programmingPointCatalog(),
 			ControllerID: cfg.ProgrammingTargetID,
 			CursorSecret: []byte(cfg.JWTSecret),
+			WorkspaceModes: func() programmingapplication.WorkspaceModesView {
+				return programmingapplication.WorkspaceModesView{
+					ContractVersion: "PGM02-WORKSPACE-V1",
+					Edit:            programmingapplication.WorkspaceModeSupport{Supported: true},
+					Live:            programmingapplication.WorkspaceModeSupport{Supported: true},
+					Simulation:      simulation.Capability(),
+				}
+			},
 		})
 		if runtimeErr != nil {
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Runtime service: %w", runtimeErr)
 		}
+		library, libraryErr := programmingapplication.NewLibraryService(store, []byte(cfg.JWTSecret))
+		if libraryErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Library service: %w", libraryErr)
+		}
+		intents, intentErr := programmingapplication.NewRuntimeIntentService(
+			programmingapplication.RuntimeIntentServiceOptions{
+				Store:        store,
+				Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
+				ControllerID: cfg.ProgrammingTargetID,
+			})
+		if intentErr != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi tạo Programming Runtime Intent service: %w", intentErr)
+		}
+		app.programmingIntents = intents
 		app.programmingStore = store
+		app.programmingLibrary = library
 		app.programmingProjects = projects
 		app.programmingChecks = checks
 		app.programmingOperations = operations
 		app.programmingRuntime = runtimeService
 		checks.Start(context.Background())
 		operations.Start(context.Background())
+		if reconcileErr := intents.Start(context.Background()); reconcileErr != nil {
+			operations.Close()
+			checks.Close()
+			_ = store.Close()
+			return nil, fmt.Errorf("khởi động đối chiếu Programming intent: %w", reconcileErr)
+		}
 	}
 	app.pointNamespaceWriter = writeConfigFileAtomic
 	app.overrides = NewOverrideRegistry()
@@ -156,8 +217,19 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	// nhưng lại vắng mặt trên Landing.
 	app.activity = NewActivityStore(app.activityPath())
 	audit.SetSink(app.activity)
+	// `T57-3.2` / `ADR-043`: tuỳ chọn người dùng nằm cạnh cấu hình, tệp riêng —
+	// không trộn vào `users.conf` vốn chứa hash mật khẩu và bị ghi lại toàn bộ
+	// mỗi lần đổi tài khoản.
+	app.preferences = NewUserPreferenceStore(app.userPreferencesPath())
+	// `T57-3.16`: sổ phiên nằm trong bộ nhớ nên chỉ nói được về khoảng thời gian
+	// từ lúc tiến trình khởi động. Ghi lại mốc đó để giao diện nói ra giới hạn.
+	app.startedAt = time.Now().UTC()
+	// `T57-3.4`: vòng nhớ 60 phút cho CPU/RAM/nhiệt độ, lấy mẫu ngay trên đường
+	// `/system/status` mà trang Chẩn đoán đã poll.
+	app.systemHistory = NewSystemHistoryRing(app.startedAt)
 	if err := app.migrateLegacyPointConfig(); err != nil {
 		if app.programmingStore != nil {
+			app.programmingIntents.Close()
 			app.programmingOperations.Close()
 			app.programmingChecks.Close()
 			_ = app.programmingStore.Close()
@@ -176,6 +248,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	historian, err := OpenHistorianPolicyService(filepath.Join(cfg.ConfigDir, "historian.conf"), time.Now, func() (uint64, error) { return filesystemFreeBytes(cfg.ConfigDir) })
 	if err != nil {
 		if app.programmingStore != nil {
+			app.programmingIntents.Close()
 			app.programmingOperations.Close()
 			app.programmingChecks.Close()
 			_ = app.programmingStore.Close()
@@ -440,6 +513,10 @@ func (a *App) StartSampler(ctx context.Context) {
 			}()
 		}
 		a.StartAlarmHistory(ctx)
+		// `ADR-036` điều kiện tiên quyết: `alarm_history.jsonl` trước đây không
+		// có xoay vòng và không có retention. Bật cắt định kỳ TRƯỚC khi mở màn
+		// hình chỉ số `T57-3.3`, vì chính màn hình đó quét tệp này.
+		a.StartAlarmHistoryPrune(ctx)
 	}
 }
 
@@ -464,6 +541,9 @@ func (a *App) Close() error {
 		historianErr = a.historianV2.Close()
 	}
 	if a.programmingStore != nil {
+		if a.programmingIntents != nil {
+			a.programmingIntents.Close()
+		}
 		if a.programmingOperations != nil {
 			a.programmingOperations.Close()
 		}
@@ -473,4 +553,20 @@ func (a *App) Close() error {
 		programmingErr = a.programmingStore.Close()
 	}
 	return errors.Join(trendErr, historianErr, programmingErr)
+}
+
+// trustedSimulationKeys trả tập khoá worker mô phỏng được phép tin.
+//
+// Bỏ qua đường dẫn không tồn tại thay vì báo lỗi khởi động: một bo chưa sinh
+// khoá thiết bị vẫn phải chạy được phần còn lại của hệ thống, và hệ quả duy
+// nhất là capability SIMULATE không dùng được — đúng trạng thái fail-closed mà
+// `ADR-053` §7 mô tả.
+func trustedSimulationKeys(path string) []string {
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		return nil
+	}
+	return []string{path}
 }

@@ -1,0 +1,340 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.local/contracts/programming/product_profile_v2.schema.json",
+  "title": "Product profile Programming v2",
+  "description": "Profile sản phẩm thống nhất theo DDD-SW-PROG-UNIFIED-001 §0/§4.1. `profileId`, `profileCode` và `targetAbi` là token phân biệt định dạng nằm trong artifact/FBD document/build manifest; chúng chỉ đổi cùng artifact v2 (T59-006/T59-106) theo dual-reader ở DDD §12.1, nên v2 giữ nguyên giá trị v1 và chỉ nâng `version.major`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profileId",
+    "profileCode",
+    "targetAbi",
+    "version",
+    "capacity",
+    "scheduler",
+    "resources",
+    "languages",
+    "types",
+    "pointKinds",
+    "coreLibrary",
+    "integrityMode",
+    "reviewGatedFeatures"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "profileId": {
+      "const": "revA-1t-1-5-30"
+    },
+    "profileCode": {
+      "const": 1
+    },
+    "targetAbi": {
+      "const": 3841
+    },
+    "version": {
+      "$ref": "#/$defs/version"
+    },
+    "capacity": {
+      "description": "Trần cấp package/Revision theo DDD §0 và §4.1. Khác với `resources` vốn là trần cấp một Program/artifact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxObjects",
+        "maxProgramsTotal",
+        "maxProgramsEnabled",
+        "maxUserPou",
+        "maxFunctionBlockInstances",
+        "maxSignals",
+        "maxBindings"
+      ],
+      "properties": {
+        "maxObjects": {
+          "const": 1312
+        },
+        "maxProgramsTotal": {
+          "const": 32
+        },
+        "maxProgramsEnabled": {
+          "const": 16
+        },
+        "maxUserPou": {
+          "const": 256
+        },
+        "maxFunctionBlockInstances": {
+          "const": 1024
+        },
+        "maxSignals": {
+          "const": 512
+        },
+        "maxBindings": {
+          "const": 512
+        }
+      }
+    },
+    "scheduler": {
+      "description": "Trần release cadence. `maxTasks` là số lớp chu kỳ (mỗi giá trị trong `allowedPeriodMs` một lớp), không phải nhóm do người dùng đặt: DDD §4.1 cấm expose Task order và §7.1 quy định mỗi Program tự release theo deadline riêng.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxTasks",
+        "maxProgramsPerTask",
+        "maxProgramsTotal",
+        "allowedPeriodMs",
+        "maxTaskBudgetPercent"
+      ],
+      "properties": {
+        "maxTasks": {
+          "const": 3
+        },
+        "maxProgramsPerTask": {
+          "const": 32
+        },
+        "maxProgramsTotal": {
+          "const": 32
+        },
+        "allowedPeriodMs": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": 1000
+            },
+            {
+              "const": 5000
+            },
+            {
+              "const": 30000
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "maxTaskBudgetPercent": {
+          "const": 20
+        }
+      }
+    },
+    "resources": {
+      "description": "Trần cấp một Program/artifact. Package vẫn bị `capacity` chặn thêm ở mức tổng, nên tích `resources × maxProgramsTotal` không phải capability sản phẩm.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxSourceBytes",
+        "maxVariables",
+        "maxStatements",
+        "maxFbdBlocks",
+        "maxFbdConnections",
+        "maxArtifactBytes",
+        "maxInstructions",
+        "maxSlots",
+        "maxWritableSlots",
+        "maxConstants",
+        "maxFunctionBlocks",
+        "maxBindings",
+        "maxRetainVariables",
+        "maxRetainBytes",
+        "maxSections"
+      ],
+      "properties": {
+        "maxSourceBytes": {
+          "const": 65536
+        },
+        "maxVariables": {
+          "const": 512
+        },
+        "maxStatements": {
+          "const": 4096
+        },
+        "maxFbdBlocks": {
+          "const": 256
+        },
+        "maxFbdConnections": {
+          "const": 512
+        },
+        "maxArtifactBytes": {
+          "const": 1048576
+        },
+        "maxInstructions": {
+          "const": 4096
+        },
+        "maxSlots": {
+          "const": 1024
+        },
+        "maxWritableSlots": {
+          "const": 512
+        },
+        "maxConstants": {
+          "const": 512
+        },
+        "maxFunctionBlocks": {
+          "const": 64
+        },
+        "maxBindings": {
+          "const": 256
+        },
+        "maxRetainVariables": {
+          "const": 128
+        },
+        "maxRetainBytes": {
+          "const": 4096
+        },
+        "maxSections": {
+          "const": 16
+        }
+      }
+    },
+    "languages": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": "ST"
+        },
+        {
+          "const": "FBD"
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "types": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/$defs/typeDescriptor"
+      }
+    },
+    "pointKinds": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": "LOCAL"
+        },
+        {
+          "const": "VP"
+        },
+        {
+          "const": "MB_RTU"
+        }
+      ],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "coreLibrary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "const": "rev-a.3"
+        }
+      },
+      "description": "Chỉ giữ version. Danh sách entry Control Library SYSTEM nằm ở `pou_library_registry_v1.json` — giữ bản sao ở đây từng khiến profile khai SCALE/DEADBAND/CTU/PI vốn không tồn tại trong compiler."
+    },
+    "integrityMode": {
+      "description": "Chính sách toàn vẹn mà loader áp cho MỌI artifact. `SIGNATURE_REQUIRED` là giá trị của bản phát hành (T59-607): artifact không có chữ ký Ed25519 khớp một khoá trong tập tin cậy bị từ chối fail-closed. `HASH_ONLY` giữ lại làm ĐƯỜNG LÙI có kiểm soát — đổi giá trị này là một thay đổi contract phải re-pin G1 và có diễn tập, không phải một cờ chạy được lúc khởi động.",
+      "enum": ["HASH_ONLY", "SIGNATURE_REQUIRED"]
+    },
+    "reviewGatedFeatures": {
+      "description": "Feature giữ nhãn REVIEW_REQUIRED trong registry POU/Control Library (DDD §9). Check CHẶN mọi Program dùng chúng cho tới khi có approval token Controls/Safety. Token KHÔNG đến từ payload FE hay checkbox UI: nó được suy ra từ chính contract này (`featureId` + `coreLibrary.version` + `approvalEvidenceRef`) và generator từ chối mọi token không suy ra đúng, nên không thể bịa một token hợp lệ ở lớp ngoài.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "featureId",
+          "registryEntryId",
+          "policy",
+          "approvalEvidenceRef",
+          "approvalToken"
+        ],
+        "properties": {
+          "featureId": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
+          },
+          "registryEntryId": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,31}$"
+          },
+          "policy": {
+            "const": "BLOCK_CHECK"
+          },
+          "approvalEvidenceRef": {
+            "type": ["string", "null"],
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "approvalToken": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "major",
+        "minor"
+      ],
+      "properties": {
+        "major": {
+          "const": 2
+        },
+        "minor": {
+          "const": 1
+        }
+      }
+    },
+    "typeDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "widthBits",
+        "wireCode",
+        "conversion"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "BOOL",
+            "INT",
+            "DINT",
+            "UINT",
+            "REAL",
+            "TIME"
+          ]
+        },
+        "widthBits": {
+          "enum": [
+            1,
+            16,
+            32,
+            64
+          ]
+        },
+        "wireCode": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "conversion": {
+          "const": "EXPLICIT_FAIL_CLOSED"
+        }
+      }
+    }
+  }
+}

@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+
+	"mkddc-web/internal/programming/domain"
 )
 
 func (s *Store) GetProject(ctx context.Context, projectID string) (ProjectSnapshot, error) {
@@ -83,32 +86,53 @@ func scanProjectSnapshot(row rowScanner) (ProjectSnapshot, error) {
 	return snapshot, nil
 }
 
-func (s *Store) GetRevision(ctx context.Context, revisionID string) (RevisionSnapshot, error) {
+// GetRevisionHeader đọc phần định danh của một Revision mà KHÔNG nạp
+// `revision_objects`. Tách ra vì đường Overview chỉ cần `sequence` và
+// `manifest_json`, còn `GetRevision` phải kéo về toàn bộ object của Revision
+// (mỗi object tới 256 KiB) — nạp cả bộ cho MỖI item của `GET /projects` là
+// đắt vô ích.
+func (s *Store) GetRevisionHeader(ctx context.Context, revisionID string) (Revision, error) {
 	if err := validateUUIDs(revisionID); err != nil {
-		return RevisionSnapshot{}, err
+		return Revision{}, err
 	}
-	var snapshot RevisionSnapshot
+	var revision Revision
 	var parent sql.NullString
+	var libraryRevision sql.NullString
 	var manifestDigest []byte
-	err := s.db.QueryRowContext(ctx, `SELECT revision_id,project_id,parent_revision_id,sequence,manifest_json,manifest_sha256,created_by,created_at_utc_ms FROM revisions WHERE revision_id=?`, revisionID).
-		Scan(&snapshot.Revision.RevisionID, &snapshot.Revision.ProjectID, &parent, &snapshot.Revision.Sequence,
-			&snapshot.Revision.ManifestJSON, &manifestDigest, &snapshot.Revision.CreatedBy, &snapshot.Revision.CreatedAtUTCMS)
+	err := s.db.QueryRowContext(ctx, `SELECT revision_id,project_id,parent_revision_id,sequence,
+		document_schema_version,program_count,library_revision_id,
+		manifest_json,manifest_sha256,created_by,created_at_utc_ms FROM revisions WHERE revision_id=?`, revisionID).
+		Scan(&revision.RevisionID, &revision.ProjectID, &parent, &revision.Sequence,
+			&revision.DocumentSchemaVersion, &revision.ProgramCount, &libraryRevision,
+			&revision.ManifestJSON, &manifestDigest, &revision.CreatedBy, &revision.CreatedAtUTCMS)
 	if errors.Is(err, sql.ErrNoRows) {
-		return RevisionSnapshot{}, ErrNotFound
+		return Revision{}, ErrNotFound
 	}
 	if err != nil {
-		return RevisionSnapshot{}, fmt.Errorf("đọc Revision: %w", err)
+		return Revision{}, fmt.Errorf("đọc Revision: %w", err)
 	}
 	if parent.Valid {
-		snapshot.Revision.ParentRevisionID = parent.String
+		revision.ParentRevisionID = parent.String
+	}
+	if libraryRevision.Valid {
+		revision.LibraryRevisionID = libraryRevision.String
 	}
 	if len(manifestDigest) != sha256.Size {
-		return RevisionSnapshot{}, fmt.Errorf("Revision manifest checksum hỏng")
+		return Revision{}, fmt.Errorf("Revision manifest checksum hỏng")
 	}
-	copy(snapshot.Revision.ManifestSHA256[:], manifestDigest)
-	if got := sha256.Sum256(snapshot.Revision.ManifestJSON); got != snapshot.Revision.ManifestSHA256 {
-		return RevisionSnapshot{}, fmt.Errorf("Revision manifest checksum mismatch")
+	copy(revision.ManifestSHA256[:], manifestDigest)
+	if got := sha256.Sum256(revision.ManifestJSON); got != revision.ManifestSHA256 {
+		return Revision{}, fmt.Errorf("Revision manifest checksum mismatch")
 	}
+	return revision, nil
+}
+
+func (s *Store) GetRevision(ctx context.Context, revisionID string) (RevisionSnapshot, error) {
+	header, err := s.GetRevisionHeader(ctx, revisionID)
+	if err != nil {
+		return RevisionSnapshot{}, err
+	}
+	snapshot := RevisionSnapshot{Revision: header}
 	rows, err := s.db.QueryContext(ctx, `SELECT object_id,kind,payload_json,payload_sha256 FROM revision_objects WHERE revision_id=? ORDER BY kind,object_id`, revisionID)
 	if err != nil {
 		return RevisionSnapshot{}, fmt.Errorf("đọc Revision objects: %w", err)
@@ -130,6 +154,46 @@ func (s *Store) GetRevision(ctx context.Context, revisionID string) (RevisionSna
 		snapshot.Objects = append(snapshot.Objects, object)
 	}
 	if err := rows.Err(); err != nil {
+		return RevisionSnapshot{}, err
+	}
+	// Compiler đọc bảng POU canonical đã seal, không đọc lại hình dạng payload
+	// UI. Revision v1 hợp lệ không có hàng nào; caller giữ đường tương thích đó.
+	pouRows, err := s.db.QueryContext(ctx, `SELECT object_id,kind,name,language,interface_json,
+		source_blob,dependencies_json,content_sha256 FROM pou_objects
+		WHERE revision_id=? ORDER BY name_folded,object_id`, revisionID)
+	if err != nil {
+		return RevisionSnapshot{}, fmt.Errorf("đọc Revision POU objects: %w", err)
+	}
+	defer pouRows.Close()
+	for pouRows.Next() {
+		var object RevisionPOUObject
+		var dependenciesJSON, digest []byte
+		if err := pouRows.Scan(&object.ObjectID, &object.Kind, &object.Name, &object.Language,
+			&object.InterfaceJSON, &object.SourceBlob, &dependenciesJSON, &digest); err != nil {
+			return RevisionSnapshot{}, err
+		}
+		if len(digest) != sha256.Size ||
+			json.Unmarshal(dependenciesJSON, &object.Dependencies) != nil || object.Dependencies == nil {
+			return RevisionSnapshot{}, fmt.Errorf("Revision POU object canonical data hỏng")
+		}
+		copy(object.ContentSHA256[:], digest)
+		domainDependencies := make([]domain.LibraryDependency, len(object.Dependencies))
+		for index, dependency := range object.Dependencies {
+			domainDependencies[index] = domain.LibraryDependency{EntryID: dependency.EntryID, Version: dependency.Version}
+		}
+		expected, digestErr := domain.ProjectLibraryEntryContentSHA256(domain.LibraryEntry{
+			LibraryRevisionID: "revision-snapshot", EntryID: object.ObjectID,
+			Kind: domain.LibraryEntryKind(object.Kind), Name: object.Name,
+			FeatureState: domain.LibraryFeatureAvailable, Language: domain.LibraryLanguage(object.Language),
+			SourceBlob: object.SourceBlob, InterfaceJSON: object.InterfaceJSON,
+			Dependencies: domainDependencies,
+		})
+		if digestErr != nil || expected != object.ContentSHA256 {
+			return RevisionSnapshot{}, fmt.Errorf("Revision POU object checksum mismatch")
+		}
+		snapshot.POUObjects = append(snapshot.POUObjects, object)
+	}
+	if err := pouRows.Err(); err != nil {
 		return RevisionSnapshot{}, err
 	}
 	return snapshot, nil

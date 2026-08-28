@@ -33,7 +33,7 @@ namespace st_ir {
 constexpr char        kMagic[8]        = {'M','K','D','D','C','I','R','1'};
 constexpr uint16_t    kSchemaVersion   = 1;
 constexpr uint16_t    kCompilerProfile = st_profile_generated::kProfileCode;
-constexpr uint32_t    kTargetAbi       = 0x00000F01u;
+constexpr uint32_t    kTargetAbi       = st_profile_generated::kTargetAbi;
 constexpr uint32_t    kHeaderSize      = 128;
 constexpr uint32_t    kMaxArtifactSize = st_profile_generated::kMaxArtifactBytes;
 constexpr uint32_t    kInstructionSize = 16;
@@ -54,6 +54,7 @@ enum SectionType : uint16_t {
     SEC_FB_INSTANCES    = 0x0006,
     SEC_RETAIN_LAYOUT   = 0x0007,
     SEC_DEBUG_SOURCEMAP = 0x0008,
+    SEC_SIGNAL_REFS     = 0x0009,
 };
 
 /* Giới hạn tài nguyên artifact (SPEC §7) */
@@ -114,6 +115,8 @@ enum class StOp : uint8_t {
     CVT_R2D      = 0x6C,
     CVT_R2U      = 0x6D,
     FB_CALL      = 0x70,
+    SIGNAL_READ  = 0x71,
+    SIGNAL_PUBLISH = 0x72,
 };
 
 /* Lệnh, cố định 16 byte. Trường không dùng bởi opcode PHẢI bằng 0 — loader
@@ -250,6 +253,17 @@ struct StIrSourceMap {
     uint16_t column = 0;
 };
 
+/* Tham chiếu signal nằm trong artifact theo TÊN/type/quyền. Coordinator đối
+ * chiếu với SIGNAL_DEFS của package rồi điền `runtime_index` một lần trước
+ * PREPARED; executor không tra chuỗi. */
+struct StIrSignalRef {
+    std::string name;
+    StType type = StType::REAL;
+    bool read = false;
+    bool publish = false;
+    int16_t runtime_index = -1;
+};
+
 /* IR đầy đủ trong bộ nhớ. Đây là dạng compiler sinh ra và loader dựng lại. */
 struct StIrModule {
     std::string program_name;
@@ -269,6 +283,7 @@ struct StIrModule {
     uint32_t                     retain_layout_hash = 0;
     uint32_t                     retain_record_size = 0;
     std::vector<StIrSourceMap>   source_map;
+    std::vector<StIrSignalRef>   signal_refs;
 
     std::size_t retained_fb_count() const
     {
@@ -290,6 +305,17 @@ bool serialize_st_ir(const StIrModule& mod, std::vector<uint8_t>* out, std::stri
 /* Ký artifact đã serialize bằng khoá riêng Ed25519 64 byte: ghi chữ ký vào
  * offset 64 và bật cờ kSigned. Trả false nếu buffer không hợp lệ. */
 bool sign_st_artifact(std::vector<uint8_t>* artifact, const uint8_t secret_key[64]);
+
+/* ADR-052 — sinh cặp khoá ký cho MỘT thiết bị.
+ *
+ * Khoá thiết bị là thứ duy nhất cho phép bật `SIGNATURE_REQUIRED` mà vẫn giữ
+ * được cam kết "biên dịch ngay trên bo": artifact do bo tự sinh phải được ký
+ * bởi một khoá mà bo có, và khoá hãng thì theo định nghĩa không bao giờ nằm
+ * trên bo. Khoá này sinh MỘT LẦN lúc provisioning; sinh lại đồng nghĩa vô hiệu
+ * hoá mọi artifact đang chạy, kể cả LKG — tức phá đúng đường lùi.
+ *
+ * Trả false nếu libsodium chưa khởi tạo được. */
+bool generate_signing_keypair(uint8_t public_key[32], uint8_t secret_key[64]);
 
 /* SHA-256 của artifact theo quy tắc §3.1 (vùng hash và chữ ký coi như 0). */
 bool compute_artifact_sha256(const uint8_t* data, std::size_t size, uint8_t out[32]);

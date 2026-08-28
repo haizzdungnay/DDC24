@@ -171,13 +171,20 @@ func TestSourceBundleDeterministicRoundTripCreatesDraftOnly(t *testing.T) {
 			ProjectID string `json:"projectId"`
 			Name      string `json:"name"`
 		} `json:"project"`
-		Programs  []any `json:"programs"`
-		Variables []any `json:"variables"`
-		Bindings  []any `json:"bindings"`
+		// T59-301: biến nằm trong `locals` của POU, không còn là collection riêng.
+		Objects []struct {
+			ObjectID string `json:"objectId"`
+			Locals   []any  `json:"locals"`
+		} `json:"objects"`
+		Programs []any `json:"programs"`
+		Bindings []any `json:"bindings"`
 	}
 	if err := json.Unmarshal(project.Draft.ContentJSON, &document); err != nil || document.Project.ProjectID != importedProjectID ||
-		document.Project.Name != "AHU nhập" || len(document.Programs) != 1 || len(document.Variables) != 1 || len(document.Bindings) != 1 {
+		document.Project.Name != "AHU nhập" || len(document.Objects) != 1 || len(document.Programs) != 1 || len(document.Bindings) != 1 {
 		t.Fatalf("Draft round-trip=%+v err=%v", document, err)
+	}
+	if len(document.Objects[0].Locals) != 1 {
+		t.Fatalf("biến của POU không đi qua bundle: %+v", document.Objects[0])
 	}
 	replay, err := service.ImportBundle(context.Background(), actor, command)
 	if err != nil || !replay.Replay || replay.Resource["projectId"] != importedProjectID || replay.AuditID != imported.AuditID ||
@@ -206,5 +213,99 @@ func TestSourceBundleRejectsHashMismatchWithoutMutation(t *testing.T) {
 		IdempotencyKey: "60000000-0000-4000-8000-000000000010", CorrelationID: testCorrelationID})
 	if !errors.Is(err, ErrInvalidBundle) {
 		t.Fatalf("hash mismatch err=%v", err)
+	}
+}
+
+// T59-502 — bốn nhóm impact của mô hình đa Program.
+//
+// Trước bản vá, `SIGNAL` rơi vào nhánh mặc định `SOURCE`: đổi chính sách stale
+// của một Published Signal hiện ra như một thay đổi mã nguồn bình thường và
+// Commission KHÔNG hỏi acknowledgement nào — trong khi đó là thứ đổi hành vi của
+// mọi consumer khi mất dữ liệu, và không nhìn thấy được trong diff mã nguồn.
+func TestRevisionImpactCoversSignalLibraryAndProgramSet(t *testing.T) {
+	service, _ := openBundleService(t)
+	ctx := context.Background()
+	actor := Actor{ID: testActorID, Role: "admin"}
+	created, err := service.CreateProject(ctx, actor, CreateProjectCommand{SchemaVersion: "1.0",
+		Name: "AHU impact", Description: "Fixture impact T59-502",
+		IdempotencyKey: "61000000-0000-4000-8000-000000000001", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+	programID := "65555555-5555-4555-8555-555555555551"
+	signalID := "65555555-5555-4555-8555-555555555552"
+	program, _ := json.Marshal(map[string]any{"op": "upsertProgram", "program": map[string]any{
+		"programId": programID, "name": "AHU", "kind": "PROGRAM", "language": "ST",
+		"document": "PROGRAM AHU\nVAR_OUTPUT Fan : BOOL; END_VAR\nFan := TRUE;\nEND_PROGRAM\n"}})
+	signal, _ := json.Marshal(map[string]any{"op": "upsertSignal", "signal": map[string]any{
+		"signalId": signalID, "name": "SupplyTemp", "type": "REAL",
+		"publisherProgramId": programID, "freshnessMs": 5000, "stalePolicy": "HOLD_LAST"}})
+	saved, err := service.SaveDraft(ctx, actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0",
+		BaseRevisionID: draftID, Operations: []json.RawMessage{program, signal}, IfMatch: created.ETag,
+		IdempotencyKey: "61000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealedOne, err := service.SealRevision(ctx, actor, SealRevisionCommand{ProjectID: projectID,
+		SchemaVersion: "1.0", BaseRevisionID: draftID, Label: "R1", IfMatch: saved.ETag,
+		IdempotencyKey: "61000000-0000-4000-8000-000000000003", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisionOne := sealedOne.Resource["revisionId"].(string)
+
+	// Revision đầu tiên tạo Program mới => `programSet` phải PRESENT: người vận
+	// hành đang thêm một chương trình vào thiết bị, không phải sửa một chương
+	// trình đã có.
+	initial, err := service.GetRevisionChanges(ctx, "none", revisionOne)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initial.Impact.ProgramSet.Status != "PRESENT" {
+		t.Fatalf("thêm Program không sinh impact programSet: %+v", initial.Impact.ProgramSet)
+	}
+	if initial.Impact.PublishedSignals.Status != "PRESENT" {
+		t.Fatalf("thêm Published Signal không sinh impact: %+v", initial.Impact.PublishedSignals)
+	}
+
+	// Revision hai CHỈ đổi chính sách stale của signal. Không đụng mã nguồn nào.
+	changedSignal, _ := json.Marshal(map[string]any{"op": "upsertSignal", "signal": map[string]any{
+		"signalId": signalID, "name": "SupplyTemp", "type": "REAL",
+		"publisherProgramId": programID, "freshnessMs": 5000, "stalePolicy": "WAIT"}})
+	savedTwo, err := service.SaveDraft(ctx, actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0",
+		BaseRevisionID: revisionOne, Operations: []json.RawMessage{changedSignal}, IfMatch: sealedOne.ETag,
+		IdempotencyKey: "61000000-0000-4000-8000-000000000004", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealedTwo, err := service.SealRevision(ctx, actor, SealRevisionCommand{ProjectID: projectID,
+		SchemaVersion: "1.0", BaseRevisionID: revisionOne, Label: "R2", IfMatch: savedTwo.ETag,
+		IdempotencyKey: "61000000-0000-4000-8000-000000000005", CorrelationID: testCorrelationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff, err := service.GetRevisionChanges(ctx, revisionOne, sealedTwo.Resource["revisionId"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff.Impact.PublishedSignals.Status != "PRESENT" ||
+		len(diff.Impact.PublishedSignals.Items) != 1 || diff.Impact.PublishedSignals.Items[0] != signalID {
+		t.Fatalf("đổi chính sách stale không sinh impact signal: %+v", diff.Impact.PublishedSignals)
+	}
+	// Không đụng Program nào => programSet phải NONE, không phải PRESENT vì lây.
+	if diff.Impact.ProgramSet.Status != "NONE" {
+		t.Fatalf("programSet lây khi chỉ đổi signal: %+v", diff.Impact.ProgramSet)
+	}
+	// Không Program nào đang Enabled => enableIntent NONE, không phải UNAVAILABLE:
+	// không có gì đang chạy thì thật sự không có gì để cảnh báo.
+	if diff.Impact.EnableIntent.Status != "NONE" {
+		t.Fatalf("enableIntent=%+v", diff.Impact.EnableIntent)
+	}
+	// `impactRef` phải đổi khi nội dung nhóm đổi — nếu không, một ack cũ vẫn
+	// được nhận cho một impact khác.
+	if diff.Impact.ImpactRef == initial.Impact.ImpactRef {
+		t.Fatal("impactRef không đổi khi impact đổi — ack cũ sẽ được nhận nhầm")
 	}
 }

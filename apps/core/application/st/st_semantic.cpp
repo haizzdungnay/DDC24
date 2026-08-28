@@ -43,13 +43,44 @@ struct Symbol {
 };
 
 struct FbSymbol {
-    StFbType type;
-    bool     retained;
+    StFbType        type;
+    bool            retained;
+    const StProgram* user_type = nullptr;
 };
+
+std::string fold_pou_name(const std::string& value)
+{
+    std::string folded;
+    folded.reserve(value.size());
+    for (char ch : value)
+        folded.push_back(static_cast<char>(
+            ch >= 'a' && ch <= 'z' ? ch - ('a' - 'A') : ch));
+    return folded;
+}
 
 class Checker {
 public:
-    Checker(StProgram* prog, StDiagnostic* diag) : prog_(prog), diag_(diag) {}
+    Checker(StProgram* prog, StDiagnostic* diag,
+            const std::vector<StPouSource>* sources = nullptr,
+            const StPouRegistryResult* registry = nullptr,
+            const std::vector<StPublishedSignalContract>* signals = nullptr,
+            std::string program_identity = {})
+        : prog_(prog), diag_(diag), program_identity_(std::move(program_identity))
+    {
+        if (sources != nullptr) {
+            for (const StPouSource& source : *sources)
+                if (source.pou != nullptr)
+                    pou_defs_[fold_pou_name(source.pou->name)] = source.pou;
+        }
+        if (registry != nullptr) {
+            for (const StPouSignature& signature : registry->signatures)
+                signatures_[fold_pou_name(signature.name)] = &signature;
+        }
+        if (signals != nullptr) {
+            for (const StPublishedSignalContract& signal : *signals)
+                signals_[fold_pou_name(signal.name)] = &signal;
+        }
+    }
 
     bool run()
     {
@@ -62,6 +93,10 @@ private:
     StDiagnostic* diag_;
     std::unordered_map<std::string, Symbol>   vars_;
     std::unordered_map<std::string, FbSymbol> fbs_;
+    std::unordered_map<std::string, const StProgram*> pou_defs_;
+    std::unordered_map<std::string, const StPouSignature*> signatures_;
+    std::unordered_map<std::string, const StPublishedSignalContract*> signals_;
+    std::string program_identity_;
     /* Instance FB đã gọi trong chu kỳ. SPEC §5.3: gọi hai lần làm ngữ nghĩa
      * timer mất ý nghĩa (một lần gọi = một lần cập nhật trạng thái), nên đây
      * là lỗi chứ không phải cảnh báo. */
@@ -78,6 +113,11 @@ private:
     bool build_symbols()
     {
         std::size_t retain_count = 0;
+        if (prog_->kind == StPouKind::FUNCTION) {
+            /* IEC dùng chính tên FUNCTION làm ô trả về có thể gán. Ô này chỉ
+             * tồn tại trong scope lời gọi, không phải state của FUNCTION. */
+            vars_[prog_->name] = Symbol{prog_->return_type, StStorage::VAR_LOCAL};
+        }
         for (const StVarDecl& v : prog_->vars) {
             if (vars_.count(v.name) || fbs_.count(v.name))
                 return fail(st_diag_code::kDuplicateVar,
@@ -101,7 +141,23 @@ private:
                             "RETAIN variable count exceeds limit of " +
                                 std::to_string(st_limits::kMaxRetainVars),
                             f.line, f.column, f.length);
-            fbs_[f.name] = FbSymbol{f.fb_type, f.retained};
+            const StProgram* user_type = nullptr;
+            if (f.is_user_type) {
+                const auto found = pou_defs_.find(fold_pou_name(f.user_type_name));
+                if (found == pou_defs_.end())
+                    return fail(st_diag_code::kLibraryEntryMissing,
+                                "function block type '" + f.user_type_name +
+                                    "' has no linked implementation",
+                                f.line, f.column, f.length);
+                user_type = found->second;
+                if (user_type->kind != StPouKind::FUNCTION_BLOCK)
+                    return fail(st_diag_code::kPouSignatureInvalid,
+                                "'" + f.user_type_name + "' is a " +
+                                    st_pou_kind_name(user_type->kind) +
+                                    " and cannot be instantiated as a function block",
+                                f.line, f.column, f.length);
+            }
+            fbs_[f.name] = FbSymbol{f.fb_type, f.retained, user_type};
         }
         return true;
     }
@@ -121,7 +177,33 @@ private:
         case StStmt::Kind::ASSIGN:  return check_assign(s);
         case StStmt::Kind::IF:      return check_if(s);
         case StStmt::Kind::FB_CALL: return check_fb_call(s);
+        case StStmt::Kind::SIGNAL_PUBLISH: return check_signal_publish(s);
         }
+        return true;
+    }
+
+    bool check_signal_publish(StStmt& s)
+    {
+        const auto found = signals_.find(fold_pou_name(s.signal_name));
+        if (found == signals_.end())
+            return fail(st_diag_code::kSignalConsumerMissing,
+                        "Published Signal '" + s.signal_name + "' is not declared",
+                        s.signal_line, s.signal_column, s.signal_length);
+        const StPublishedSignalContract& signal = *found->second;
+        if (signal.producer_program != program_identity_)
+            return fail(st_diag_code::kSignalDuplicatePublisher,
+                        "Program is not the declared publisher of '" + signal.name + "'",
+                        s.signal_line, s.signal_column, s.signal_length);
+        TypeInfo value;
+        const StType want = signal.type;
+        if (!check_expr(*s.signal_value, &value, &want)) return false;
+        if (!coerce(*s.signal_value, &value, want)) return false;
+        if (value.type != want)
+            return fail(st_diag_code::kSignalTypeMismatch,
+                        "Published Signal '" + signal.name + "' expects " +
+                            st_type_name(want) + ", got " + st_type_name(value.type),
+                        s.signal_line, s.signal_column, s.signal_length);
+        s.signal_name = signal.name;
         return true;
     }
 
@@ -143,7 +225,9 @@ private:
 
         const StType want = it->second.type;
         TypeInfo got;
-        if (!check_expr(*s.assign_expr, &got, &want)) return false;
+        const bool direct_signal_read =
+            s.assign_expr->kind == StExpr::Kind::SIGNAL_READ;
+        if (!check_expr(*s.assign_expr, &got, &want, direct_signal_read)) return false;
         if (!coerce(*s.assign_expr, &got, want)) return false;
         if (got.type != want)
             return fail(st_diag_code::kTypeMismatch,
@@ -201,29 +285,46 @@ private:
                         s.fb_line, s.fb_column, s.fb_length);
 
         const StFbType fb = it->second.type;
+        const StProgram* user_fb = it->second.user_type;
         std::unordered_set<std::string> seen;
         for (StFbArg& arg : s.fb_args) {
             int idx = -1;
-            for (int i = 0; i < st_fb_input_count(fb); i++) {
-                const char* n = st_fb_input_name(fb, i);
-                if (n && arg.name == n) { idx = i; break; }
+            StType want = StType::REAL;
+            std::string type_name;
+            if (user_fb != nullptr) {
+                const std::vector<const StVarDecl*> inputs =
+                    user_fb->by_storage(StStorage::VAR_INPUT);
+                for (std::size_t i = 0; i < inputs.size(); ++i) {
+                    if (fold_pou_name(inputs[i]->name) == fold_pou_name(arg.name)) {
+                        idx = static_cast<int>(i);
+                        want = inputs[i]->type;
+                        break;
+                    }
+                }
+                type_name = user_fb->name;
+            } else {
+                for (int i = 0; i < st_fb_input_count(fb); i++) {
+                    const char* n = st_fb_input_name(fb, i);
+                    if (n && arg.name == n) { idx = i; break; }
+                }
+                if (idx >= 0) want = st_fb_input_type(fb, idx);
+                type_name = st_fb_type_name(fb);
             }
             if (idx < 0)
                 return fail(st_diag_code::kBadFbParam,
-                            "'" + arg.name + "' is not an input of " + st_fb_type_name(fb),
+                            "'" + arg.name + "' is not an input of " + type_name,
                             arg.line, arg.column, arg.length);
             if (!seen.insert(arg.name).second)
                 return fail(st_diag_code::kBadFbParam,
                             "duplicate argument '" + arg.name + "'", arg.line, arg.column,
                             arg.length);
 
-            const StType want = st_fb_input_type(fb, idx);
             TypeInfo got;
             if (!check_expr(*arg.value, &got, &want)) return false;
             if (!coerce(*arg.value, &got, want)) return false;
             if (got.type != want)
                 return fail(st_diag_code::kTypeMismatch,
-                            std::string("argument '") + arg.name + "' of " + st_fb_type_name(fb) +
+                            std::string("argument '") + arg.name + "' of " + type_name +
                                 " expects " + st_type_name(want) + ", got " +
                                 st_type_name(got.type),
                             arg.line, arg.column, arg.length);
@@ -288,9 +389,68 @@ private:
 
     static bool is_numeric(StType t) { return st_type_is_integer(t) || t == StType::REAL; }
 
-    bool check_expr(StExpr& e, TypeInfo* out, const StType* expected = nullptr)
+    bool check_expr(StExpr& e, TypeInfo* out, const StType* expected = nullptr,
+                    bool allow_direct_signal_read = false)
     {
         switch (e.kind) {
+        case StExpr::Kind::SIGNAL_READ: {
+            /* HOLD_PRIVATE phải để nguyên chính biến đích khi signal stale.
+             * Nếu SIGNAL_READ nằm trong biểu thức trung gian (toán tử, IF,
+             * tham số hàm/FB...) thì không còn một destination duy nhất để
+             * giữ nguyên một cách deterministic. Rev A vì vậy chỉ cho phép
+             * cú pháp trực tiếp `variable := SIGNAL_READ(name);`. */
+            if (!allow_direct_signal_read)
+                return fail(st_diag_code::kSignalReadContext,
+                            "SIGNAL_READ must be the complete right-hand side of "
+                            "a variable assignment",
+                            e.line, e.column, e.length);
+            const auto found = signals_.find(fold_pou_name(e.signal_name));
+            if (found == signals_.end())
+                return fail(st_diag_code::kSignalConsumerMissing,
+                            "Published Signal '" + e.signal_name + "' is not declared",
+                            e.line, e.column, e.length);
+            e.signal_name = found->second->name;
+            e.result_type = found->second->type;
+            *out = TypeInfo::make(e.result_type);
+            return true;
+        }
+        case StExpr::Kind::USER_CALL: {
+            const auto found = signatures_.find(fold_pou_name(e.user_call_name));
+            if (found == signatures_.end())
+                return fail(st_diag_code::kLibraryEntryMissing,
+                            "call to '" + e.user_call_name +
+                                "' has no resolved POU signature",
+                            e.line, e.column, e.length);
+            const StPouSignature& signature = *found->second;
+            if (signature.kind != StPouKind::FUNCTION || !signature.has_return_type)
+                return fail(st_diag_code::kPouSignatureInvalid,
+                            "'" + signature.name +
+                                "' is not a FUNCTION usable in an expression",
+                            e.line, e.column, e.length);
+            if (e.args.size() != signature.input_types.size())
+                return fail(st_diag_code::kPouSignatureInvalid,
+                            "call to '" + signature.name + "' passes " +
+                                std::to_string(e.args.size()) + " argument(s), expected " +
+                                std::to_string(signature.input_types.size()),
+                            e.line, e.column, e.length);
+            for (std::size_t index = 0; index < e.args.size(); ++index) {
+                const StType want = signature.input_types[index];
+                TypeInfo got;
+                if (!check_expr(*e.args[index], &got, &want)) return false;
+                if (!coerce(*e.args[index], &got, want)) return false;
+                if (got.type != want)
+                    return fail(st_diag_code::kPouSignatureInvalid,
+                                "argument " + std::to_string(index + 1) + " of '" +
+                                    signature.name + "' expects " + st_type_name(want) +
+                                    ", got " + st_type_name(got.type),
+                                e.args[index]->line, e.args[index]->column,
+                                e.args[index]->length);
+            }
+            e.result_type = signature.return_type;
+            *out = TypeInfo::make(signature.return_type);
+            return true;
+        }
+
         case StExpr::Kind::LITERAL:
             if (e.literal_polymorphic) {
                 *out = TypeInfo::make_poly();
@@ -327,6 +487,20 @@ private:
                             "undeclared function block instance '" + e.member_object + "'",
                             e.line, e.column, e.length);
             const StFbType fb = it->second.type;
+            if (it->second.user_type != nullptr) {
+                for (const StVarDecl* output :
+                     it->second.user_type->by_storage(StStorage::VAR_OUTPUT)) {
+                    if (fold_pou_name(e.member_field) == fold_pou_name(output->name)) {
+                        e.result_type = output->type;
+                        *out = TypeInfo::make(e.result_type);
+                        return true;
+                    }
+                }
+                return fail(st_diag_code::kBadFbParam,
+                            "'" + e.member_field + "' is not an output of " +
+                                it->second.user_type->name,
+                            e.line, e.column, e.length);
+            }
             for (int i = 0; i < st_fb_output_count(fb); i++) {
                 const char* n = st_fb_output_name(fb, i);
                 if (n && e.member_field == n) {
@@ -516,6 +690,15 @@ private:
             break;
         }
 
+        case StFunc::SCALE:
+        case StFunc::DEADBAND:
+            /* Cả hai làm việc trên dải analog nên khoá REAL: cho INT đi qua sẽ
+             * sinh một phép chia nguyên âm thầm ở giữa công thức quy đổi. */
+            for (std::size_t i = 0; i < ts.size(); i++)
+                if (!require(i, StType::REAL)) return false;
+            e.result_type = StType::REAL;
+            break;
+
         case StFunc::SEL:
             if (!require(0, StType::BOOL)) return false;
             if (!unify(*e.args[1], &ts[1], *e.args[2], &ts[2])) return false;
@@ -600,6 +783,30 @@ bool typecheck_st_program(StProgram* prog, StDiagnostic* diag)
     StDiagnostic local;
     Checker c(prog, diag ? diag : &local);
     return c.run();
+}
+
+bool typecheck_st_pou_set(const std::vector<StPouSource>& sources,
+                          const StPouRegistryResult& registry,
+                          StDiagnostic* diag,
+                          const std::vector<StPublishedSignalContract>& signals,
+                          const std::string& program_identity)
+{
+    StDiagnostic local;
+    StDiagnostic* target = diag ? diag : &local;
+    for (const StPouSource& source : sources) {
+        if (source.pou == nullptr) {
+            set_diag(target, st_diag_code::kPouSignatureInvalid,
+                     "POU rỗng trong tập typecheck", 0, 0, 1);
+            return false;
+        }
+        /* Registry nhận con trỏ const vì nó không sửa AST; semantic chốt kiểu
+         * literal/result_type trên chính AST đã parse trước khi lowering. */
+        auto* pou = const_cast<StProgram*>(source.pou);
+        Checker checker(pou, target, &sources, &registry, &signals,
+                        pou->kind == StPouKind::PROGRAM ? program_identity : std::string{});
+        if (!checker.run()) return false;
+    }
+    return true;
 }
 
 } // namespace core

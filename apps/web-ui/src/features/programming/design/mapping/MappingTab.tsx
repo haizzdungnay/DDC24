@@ -6,6 +6,8 @@ import { AssignedMappingsTable } from './AssignedMappingsTable'
 import { MappingInspector } from './MappingInspector'
 import { MappingToolbar } from './MappingToolbar'
 import { PointCatalogPane } from './PointCatalogPane'
+import { PublishedSignalsPanel } from './PublishedSignalsPanel'
+import { useI18n } from '../../../../shared/i18n'
 import { VariableWorklist } from './VariableWorklist'
 import { buildMappingVariableRows, buildPointRows, rankPointRows, type CatalogTruthState } from './mappingViewModel'
 
@@ -15,18 +17,21 @@ type DirectionFilter = 'ALL' | 'INPUT' | 'OUTPUT' | 'INOUT'
 /** PGM-03 Phase 1A: read-only workbench. Map/Remove remain disabled until
  * capability, quality, replay and pagination gates are closed. */
 export function MappingTab(props: {
+  draft?: ProgrammingDraftDocument
   document: ProgrammingDraftDocument
   saving: boolean
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   projectId?: string
   saveError?: string | null
   active?: boolean
+  forceReadOnly?: boolean
   onOpenSource?: (programId: string) => void
 }) {
-  const { document, saving, projectId, saveError, active = true, onOpenSource } = props
+  const { draft, document, saving, onSave, projectId, saveError, active = true, forceReadOnly = false, onOpenSource } = props
+  const { pick } = useI18n()
   const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin')
-  const catalog = useProgrammingPointCatalog(active)
+  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
+  const catalog = useProgrammingPointCatalog()
   const [query, setQuery] = useState('')
   const [programFilter, setProgramFilter] = useState('ALL')
   const [category, setCategory] = useState<PointCategoryFilter>('ALL')
@@ -95,8 +100,13 @@ export function MappingTab(props: {
 
   if (!active) return null
 
-  return <div className="space-y-3">
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border-l-4 border-l-[var(--c-accent)] bg-[var(--c-surface-2)] px-4 py-3">
+  return (
+    <div className="space-y-3">
+      <h3 className="sr-only">{pick('Ánh xạ Biến ↔ Điểm', 'Variable ↔ point mapping')}</h3>
+      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
+        <PublishedSignalsPanel draft={draft ?? document} saving={saving} onSave={onSave} forceReadOnly={forceReadOnly} />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border-l-4 border-l-[var(--c-accent)] bg-[var(--c-surface-2)] px-4 py-3">
       <div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--c-accent)]">PGM-03 · Mapping Workbench</p><p className="mt-1 text-sm font-semibold text-[var(--c-text)]">Variable ↔ Point authority view</p><p className="mt-1 text-xs text-[var(--c-text-dim)]">Phase 1A chỉ đọc · Map/Remove chờ capability, quality, replay và pagination gates.</p></div>
       <div className="text-right text-xs text-[var(--c-text-dim)]"><span className="block font-mono text-[var(--c-text)]">{document.library.profile} / {document.library.version}</span><span>{saving ? 'Workspace đang lưu ở tab khác' : canEdit ? 'Admin · mutation đang khóa' : 'Viewer · read-only'}</span></div>
     </div>
@@ -108,4 +118,5 @@ export function MappingTab(props: {
     </div>
     <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]"><AssignedMappingsTable rows={visibleVariables} onSelect={setSelectedVariableId} /><MappingInspector row={selectedVariable} /></div>
   </div>
+  )
 }

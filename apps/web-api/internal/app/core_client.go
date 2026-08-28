@@ -93,11 +93,12 @@ type VersionStatus struct {
 }
 
 type IOPStatus struct {
-	Status       string  `json:"status"`
-	CRCErrors    uint32  `json:"crc_errors"`
-	Timeouts     uint32  `json:"timeouts"`
-	SeqErrors    uint32  `json:"seq_errors"`
-	LastIORespMS *uint32 `json:"last_io_resp_ms,omitempty"`
+	Status       string   `json:"status"`
+	CRCErrors    uint32   `json:"crc_errors"`
+	Timeouts     uint32   `json:"timeouts"`
+	SeqErrors    uint32   `json:"seq_errors"`
+	LastIORespMS *uint32  `json:"last_io_resp_ms,omitempty"`
+	MaxPollGapMS *float64 `json:"max_poll_gap_ms,omitempty"`
 }
 
 type ScanStatus struct {
@@ -126,8 +127,16 @@ type webIPCResponse struct {
 	// đúng điều Commission sẽ giải quyết.
 	SafeStateNoControllerOnly bool                 `json:"safeStateNoControllerOnly,omitempty"`
 	Task                      *RuntimeTaskSnapshot `json:"task,omitempty"`
-	Points                    []RuntimePoint       `json:"points,omitempty"`
-	Schedules                 []coreScheduleState  `json:"schedules,omitempty"`
+	// T60-011 — `programs` KHÔNG có `omitempty` và không được thêm vào: struct
+	// này chỉ dùng để DECODE, và điều cần giữ là sự khác nhau giữa "khoá vắng"
+	// (nil ⇒ Core đời cũ ⇒ UNAVAILABLE) và "mảng rỗng" ([] ⇒ Core sống, hệ
+	// không có Program nào). `encoding/json` giữ đúng sự phân biệt đó khi
+	// unmarshal vào `[]T`; đặt `omitempty` ở đây chỉ làm người đọc sau này
+	// tưởng hai thứ ấy là một.
+	Programs          []RuntimeProgramSnapshot `json:"programs"`
+	ProgramsTruncated bool                     `json:"programsTruncated"`
+	Points            []RuntimePoint           `json:"points,omitempty"`
+	Schedules         []coreScheduleState      `json:"schedules,omitempty"`
 }
 
 // coreScheduleState là trạng thái runtime lịch do controller trả về
@@ -294,7 +303,12 @@ func (c *CoreClient) readPointSnapshotOnce(ctx context.Context) (RuntimePointSna
 		SafeState:                 resp.SafeState,
 		SafeStateNoControllerOnly: resp.SafeStateNoControllerOnly,
 		Task:                      resp.Task,
-		Points:                    resp.Points,
+		// Gán thẳng, KHÔNG `append(make(...), ...)`: một lần "chuẩn hoá" như
+		// vậy sẽ biến nil thành slice rỗng và xoá mất đúng thông tin phân biệt
+		// Core-đời-cũ với Core-không-có-Program.
+		Programs:          resp.Programs,
+		ProgramsTruncated: resp.ProgramsTruncated,
+		Points:            resp.Points,
 	}, nil
 }
 
@@ -473,12 +487,17 @@ func (c *CoreClient) readIOStatus() (IOPStatus, error) {
 		// và "fault" là mặc định an toàn (khớp KX_IOP_FAULT ở phía HMI).
 		return IOPStatus{Status: "fault"}, err
 	}
-	return IOPStatus{
+	status := IOPStatus{
 		Status:    mapIOPStatus(data[offIOPStatus]),
 		CRCErrors: binary.LittleEndian.Uint32(data[offIOCRCErrors : offIOCRCErrors+4]),
 		Timeouts:  binary.LittleEndian.Uint32(data[offIOTimeouts : offIOTimeouts+4]),
 		SeqErrors: binary.LittleEndian.Uint32(data[offIOSeqErrors : offIOSeqErrors+4]),
-	}, nil
+	}
+	if len(data) >= kxIOShmIOPGapLen {
+		gap := float64(binary.LittleEndian.Uint32(data[offIOMaxPollGapUS:offIOMaxPollGapUS+4])) / 1000.0
+		status.MaxPollGapMS = &gap
+	}
+	return status, nil
 }
 
 // SlaveTelemetry là số đo THẬT của một slave Modbus, do iobus đếm và publish.
@@ -902,6 +921,8 @@ const (
 	offBusDevice        = 64
 	offBusState         = 96
 	kxIOShmBusLen       = offIOFbBus + kxNFbBus*kxBusStride // 3568
+	offIOMaxPollGapUS   = kxIOShmBusLen
+	kxIOShmIOPGapLen    = offIOMaxPollGapUS + 4 // 3572; struct có padding tới 3576
 
 	kxIOShmMinLen = 528
 )

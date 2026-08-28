@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type Point, type VirtualPoint } from '../../shared/types'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
+import { MemoryRouter } from 'react-router-dom'
 import { VirtualPointsPage, normalizeVirtualPoint } from './VirtualIoPage'
 
 const api = vi.hoisted(() => ({
@@ -14,6 +15,8 @@ const api = vi.hoisted(() => ({
   updateVirtualPoint: vi.fn(),
   createVirtualPoint: vi.fn(),
   deleteVirtualPoint: vi.fn(),
+  // `T57-3.12`: hộp thoại xoá tra cứu nơi đang dùng điểm trước khi xoá.
+  getVirtualPointUsage: vi.fn(),
   forcePoint: vi.fn()
 }))
 const hookState = vi.hoisted(() => ({ points: [] as Point[] }))
@@ -45,18 +48,23 @@ function virtualPoint(overrides: Partial<VirtualPoint> = {}): VirtualPoint {
   }
 }
 
+/* Trang này nay dùng `useDirtyGuard` (F-UX-12) nên cần Router — đúng thực tế
+ * ứng dụng: `VirtualPointsPage` luôn nằm dưới `<Routes>` của `App.tsx`. */
 function renderPage() {
   return render(
-    <I18nProvider>
-      <ToastProvider>
-        <VirtualPointsPage />
-      </ToastProvider>
-    </I18nProvider>
+    <MemoryRouter>
+      <I18nProvider>
+        <ToastProvider>
+          <VirtualPointsPage />
+        </ToastProvider>
+      </I18nProvider>
+    </MemoryRouter>
   )
 }
 
 describe('VirtualPointsPage tag and label layout', () => {
   beforeEach(() => {
+  api.getVirtualPointUsage.mockResolvedValue({ pointId: 'VP1', references: [], scanned: ['alarm-settings', 'schedules'], incomplete: false })
     localStorage.setItem('mkddc-lang', 'en')
     api.getVirtualPoints.mockResolvedValue([virtualPoint()])
     api.updatePointName.mockResolvedValue({ id: 'VP1', name: 'Blocked Name' })

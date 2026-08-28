@@ -89,7 +89,7 @@ cmake --build build/fw-aarch64 --parallel $(nproc)
 
 ```bash
 cd apps/web-api
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../build/fw-aarch64/web-api ./cmd/server
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ../../build/fw-aarch64/mkddc-web ./cmd/mkddc-web
 ```
 
 ### 3.3 Frontend (web-ui) — Build trên máy dev, copy static

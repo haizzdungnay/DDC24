@@ -377,6 +377,9 @@ int main(int argc, char** argv)
     fieldbus::ControlChannel fieldbus_control;
     if (control_channel_wanted) {
         fieldbus::ControlHandlers handlers;
+        handlers.frames_json = [&](uint8_t bus_filter, int limit) {
+            return fieldbus_metrics.frames().to_json(bus_filter, limit);
+        };
         handlers.status_fields = [&]() {
             char buf[512];
             std::string buses;

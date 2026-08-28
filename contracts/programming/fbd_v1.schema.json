@@ -16,9 +16,34 @@
       "minItems": 1,
       "maxItems": 256,
       "items": { "$ref": "#/$defs/network" }
-    }
+    },
+    "layout": { "$ref": "#/$defs/layout" }
   },
   "$defs": {
+    "layout": {
+      "description": "Hình học TRÌNH BÀY của đồ thị. Tuỳ chọn, có phiên bản riêng, và compiler BỎ QUA hoàn toàn khi sinh IR: cùng một topology với hình học khác nhau phải cho cùng một IR. Đặt ở gốc thay vì trong từng node để bất biến đó là bất biến CẤU TRÚC, không phải một lời hứa.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "nodes"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "nodes": {
+          "type": "object",
+          "maxProperties": 4096,
+          "propertyNames": { "$ref": "#/$defs/uuid" },
+          "additionalProperties": { "$ref": "#/$defs/point" }
+        }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number", "minimum": -100000, "maximum": 100000 },
+        "y": { "type": "number", "minimum": -100000, "maximum": 100000 }
+      }
+    },
     "uuid": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -62,7 +87,7 @@
       "required": ["id", "kind", "typeRef", "executionOrder", "parameters", "ports"],
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
-        "kind": { "enum": ["INPUT", "OUTPUT", "CONSTANT", "FUNCTION", "FUNCTION_BLOCK", "CONVERSION"] },
+        "kind": { "enum": ["INPUT", "OUTPUT", "CONSTANT", "FUNCTION", "FUNCTION_BLOCK", "CONVERSION", "SIGNAL_READ", "SIGNAL_PUBLISH"] },
         "typeRef": { "$ref": "#/$defs/identifier" },
         "executionOrder": { "type": "integer", "minimum": 0, "maximum": 255 },
         "parameters": {
@@ -77,7 +102,71 @@
           "maxItems": 16,
           "items": { "$ref": "#/$defs/port" }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "SIGNAL_READ" } }, "required": ["kind"] },
+          "then": {
+            "properties": {
+              "typeRef": { "const": "SIGNAL_READ" },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["signal"],
+                "properties": { "signal": { "$ref": "#/$defs/identifier" } }
+              },
+              "ports": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "allOf": [
+                    { "$ref": "#/$defs/port" },
+                    {
+                      "properties": {
+                        "name": { "const": "OUT" },
+                        "direction": { "const": "OUTPUT" },
+                        "order": { "const": 0 }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "SIGNAL_PUBLISH" } }, "required": ["kind"] },
+          "then": {
+            "properties": {
+              "typeRef": { "const": "SIGNAL_PUBLISH" },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["signal"],
+                "properties": { "signal": { "$ref": "#/$defs/identifier" } }
+              },
+              "ports": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "allOf": [
+                    { "$ref": "#/$defs/port" },
+                    {
+                      "properties": {
+                        "name": { "const": "IN" },
+                        "direction": { "const": "INPUT" },
+                        "order": { "const": 0 }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "endpoint": {
       "type": "object",

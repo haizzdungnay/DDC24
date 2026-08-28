@@ -7,55 +7,71 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "0941b7f11014394699f9fdaf7a0987c9839caffff9a7ceb84a73add4b8328ac3",
+      "sha256": "51cc85cf32421678e3e646c51ece7514988a6436392fd52b9a4960158b74bae6",
       "major": 1,
-      "version": "1.19.0",
-      "operationCount": 25
+      "version": "1.30.0",
+      "operationCount": 40
     },
     {
       "name": "ipc",
       "path": "contracts/ipc/programming_v1/schema.json",
-      "sha256": "d18702bc1f699b9fc90d05f41ae0dd4dee4444a1025dcb45c9f559cfb6409342",
+      "sha256": "2284771450c531485b1acd5fedbaf85c9640b2795dbe9b7fc106302f17f48917",
       "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
-      "goldenManifestSha256": "9c1b6a826f2f4b735d317f073a9a2f6e94f21ea3b276941e1c026b05c7aebae5",
+      "goldenManifestSha256": "7cc43bf518c224fb5b42e72825fb94e99463f4a695289d819141601b0b5fd2cb",
       "major": 1,
-      "minor": 0,
+      "minor": 4,
       "version": "1.0"
     },
     {
       "name": "profile",
-      "path": "contracts/programming/rev_a_profile_v1.json",
-      "sha256": "94c58ffa552f33cbcef530c82cd0203d492a5308f8312040e569f4354a1f3bdc",
+      "path": "contracts/programming/product_profile_v2.json",
+      "sha256": "8623adb865bc6367fcc655f26dfc1d2fd2385971c3bc5738ad7e74c831d83204",
       "major": 1,
       "minor": 0,
-      "profileCode": 1
+      "profileCode": 1,
+      "schemaPath": "contracts/programming/product_profile_v2.schema.json",
+      "schemaSha256": "d7ebc6f6c777bbefb40250ee55b4b70f80fafde4c808de4b454a4bf54db139d3",
+      "targetAbi": 3841,
+      "integrityMode": "SIGNATURE_REQUIRED",
+      "documentMajor": 2,
+      "documentMinor": 1,
+      "maxProgramsTotal": 32,
+      "maxProgramsEnabled": 16,
+      "reviewGatedFeatures": [
+        "PID"
+      ],
+      "approvedReviewGatedFeatures": []
     },
     {
       "name": "artifact",
       "path": "contracts/programming/artifact_v1.schema.json",
       "sha256": "f39ede1fce04d5f13e657268635cc909194d3f1c32c086f5bc2551942e50a417",
       "goldenManifestPath": "contracts/programming/golden/manifest.json",
-      "goldenManifestSha256": "eade4e7cc7b7f3b4cb05da1ff2272b5861bf1fc7802373398143dcb28aa52a5a",
+      "goldenManifestSha256": "2d57473f42de7a4638c581faa04d6e97ae5bdc72c1fc7273dab788bc51aaf681",
       "major": 1,
-      "compilerProfile": 1
+      "compilerProfile": 1,
+      "schemaVersion": 1
     },
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "9b6337a0ed180c7a493774eaf1ad105c9a2b2a52e26abaf50120e1f8459e663e",
+      "sha256": "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "3d7e8bf7a668f8b66e4db259221f7229abd5ac994952587d87e0e61a92da250b",
+      "manifestSha256": "80cc40ccaf3641e83442b0b46cae4994c285e5d92eebbeff38997e1c0c127756",
       "major": 1,
-      "publicErrorCount": 20,
-      "componentDetailCount": 80
+      "version": "1.8.0",
+      "publicErrorCount": 38,
+      "componentDetailCount": 151
     },
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "9eeb7cc0e39e2fac7f341639c14361a4c9ed6a96a44423edfd9610d97127ac81",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0004_bundle_receipts.sql",
-      "migrationSha256": "430a1ea77912e90f8f8972e5656178d405e7e29425d85534ac6484dbf42fb49e",
-      "major": 1
+      "sha256": "a94025999df5ec8495eb4f7a3f3f2c356b192b9ffd547941f6434b0f26b5ec4c",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0013_programming_simulation_sessions.sql",
+      "migrationSha256": "cfff5cf1bde68f855e73137287ccd9074efe5580cf6ee265b812d81de2ee0174",
+      "major": 1,
+      "schemaVersion": 13,
+      "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {
       "name": "source-bundle",
@@ -64,6 +80,64 @@
       "major": 1,
       "schemaVersion": "1.0",
       "maximumArchiveBytes": 4194304
+    },
+    {
+      "name": "library-registry",
+      "path": "contracts/programming/pou_library_registry_v1.json",
+      "sha256": "a59c6db561f6550ab010f3a84118363b76f8e3d4103dd759cbb8200c26dd4660",
+      "schemaPath": "contracts/programming/pou_library_registry_v1.schema.json",
+      "schemaSha256": "0d30142d07aa968f4058d91fff97c3dd5a7b8f7fe7c16e9e7df46887a4c05d11",
+      "major": 1,
+      "schemaVersion": 1,
+      "libraryVersion": "rev-a.3",
+      "versionHistory": [
+        {
+          "libraryVersion": "rev-a.1",
+          "sha256": "55c152d6a1456faf130a05a68788c9e15be918be359d9e642c8c215068540885"
+        },
+        {
+          "libraryVersion": "rev-a.2",
+          "sha256": "9e7536157e4ac0d2aaa04da2e82b13fd280f49179f6cd209bb9c73017440d7fc"
+        },
+        {
+          "libraryVersion": "rev-a.3",
+          "sha256": "a59c6db561f6550ab010f3a84118363b76f8e3d4103dd759cbb8200c26dd4660"
+        }
+      ],
+      "entryCount": 46,
+      "operatorCount": 15,
+      "funcTableCount": 20,
+      "fbTypeCount": 9,
+      "reviewRequired": [
+        "PID"
+      ],
+      "expansionCount": 2
+    },
+    {
+      "name": "artifact-v2",
+      "path": "contracts/programming/artifact_v2.schema.json",
+      "sha256": "7d6a7272883220fa2dda4030f745a217d059977acc270740a347e2cf7a4c91b5",
+      "major": 1,
+      "schemaVersion": 2,
+      "magic": "MKDDCIR2",
+      "goldenPath": "contracts/programming/golden/package_v2_ahu.mkpkg",
+      "goldenSha256": "ca85490164e5f297467d743b6444839a7fee192e4eddc0e9a884701b6dcd4173",
+      "goldenManifestPath": "contracts/programming/golden/package_v2_manifest.json",
+      "goldenManifestSha256": "2a7f8e65a4c51b052fc4d8a7c10e07196251b03e887a50518800bd25dd5fde88",
+      "goldenArtifactBytes": 717,
+      "goldenProgramCount": 2
+    },
+    {
+      "name": "dual-reader",
+      "path": "contracts/programming/package_dual_reader_policy_v1.json",
+      "sha256": "a595b9344a584aa10b22f1b42cb7e6b47caa97f8273dab3cc9361b4755db3384",
+      "schemaPath": "contracts/programming/package_dual_reader_policy_v1.schema.json",
+      "schemaSha256": "bd40332e693e9e77c17f1fa6768b5c77eaec180f3146febaa8d4e5e519d82e64",
+      "major": 1,
+      "readableSchemaVersions": [
+        1,
+        2
+      ]
     }
   ],
   "compatibility": {
@@ -108,5 +182,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106"
 }

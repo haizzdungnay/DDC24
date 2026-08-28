@@ -1,12 +1,55 @@
 /**
  * DTO chiếu 1-1 theo `contracts/openapi/openapi.yaml` nhóm `/programming/*`
  * (schema `ProgrammingCapabilities`, `ProgrammingRuntime`, `ProgrammingProject`
- * …). Generator `scripts/generate-programming-client.mjs` chỉ sinh type cho
- * nhóm Commission (`api/generated/client.ts`); các schema đọc còn lại được
- * khai tay ở đây và PHẢI khớp field/kiểu với OpenAPI — không tự thêm field.
+ * …). Generator `scripts/generate-programming-client.mjs` sinh type cho nhóm
+ * Commission **và** cho bảng Programs của PGM-01 (`api/generated/client.ts`);
+ * các schema đọc còn lại được khai tay ở đây và PHẢI khớp field/kiểu với
+ * OpenAPI — không tự thêm field.
+ *
+ * LUẬT BẤT DI BẤT DỊCH: type nào generator đã sinh thì KHÔNG khai tay lại ở
+ * file này. Hai bản khai cùng tên sẽ trôi xa nhau trong im lặng — đúng thứ đã
+ * xảy ra với `ProgrammingProgramIntent`/`ProgrammingProgramIntentList`/
+ * `ProgrammingProgramRuntimeState` (xem khối re-export ngay dưới).
  */
 
-import type { ProgrammingImpact } from '../api/generated/client'
+import type { ProgrammingFbdChange, ProgrammingImpact, ProgrammingStHunk } from '../api/generated/client'
+
+/**
+ * `GET /projects/{projectId}/programs` — re-export NGUYÊN VẸN từ client sinh
+ * tự động, không có bản khai tay song song.
+ *
+ * TRIỆU CHỨNG (phát hiện khi thi hành `T60-016`)
+ * ----------------------------------------------
+ * File này từng khai tay ba type `ProgrammingProgramIntent`,
+ * `ProgrammingProgramIntentList` và `ProgrammingProgramRuntimeState` theo hợp
+ * đồng TRƯỚC `T60-013`. Sau `T60-013`/`T60-014` chúng nói dối ba chỗ:
+ *
+ * 1. Thiếu 13 trường read-back sống (`runtimeStateSource`, `coreState`,
+ *    `enabled`, `observedAt`, `periodMs`, `lastExecNs`, `maxExecNs`,
+ *    `missedReleaseCount`, `consecutiveMissedRelease`, `lastRunAtUtc`,
+ *    `lastRunAgeMs`, `lane`, `health`) và toàn bộ phần bao trang
+ *    (`schemaVersion`, `projectId`, `runtimeStateSource`, `observedAt`,
+ *    `programsTruncated`).
+ * 2. Khai `desiredEnabled: boolean` trong khi server nay gửi được `null`
+ *    (nghĩa là "Project chưa từng ghi intent cho Program này" — KHÁC HẲN
+ *    `false`, vốn nghĩa là đã có người tắt nó).
+ * 3. Còn giữ `STARTING`/`STOPPING`, hai giá trị mà D-07 đã loại và server
+ *    không bao giờ gửi.
+ *
+ * Ba type đó lại TRÙNG TÊN với type sinh ra ở `api/generated/client.ts`, nên
+ * chỗ nào import nhầm nguồn thì trình biên dịch vẫn xanh trong khi kiểu đang
+ * mô tả một hợp đồng không còn tồn tại. Cách chữa duy nhất đúng là xoá bản
+ * khai tay và trỏ về đúng một nguồn.
+ */
+export type {
+  ProgrammingFbdChange,
+  ProgrammingProgramHealth,
+  ProgrammingProgramListItem,
+  ProgrammingProgramRuntimeState,
+  ProgrammingProgramRuntimeStateSource,
+  ProgrammingProgramsPage,
+  ProgrammingStHunk
+} from '../api/generated/client'
 
 export type ProgrammingTargetState = 'READY' | 'DEGRADED' | 'UNAVAILABLE'
 
@@ -27,6 +70,40 @@ export interface ProgrammingCapabilities {
     fbdConnections: number
     artifactBytes: number
     bindings: number
+  }
+  /**
+   * `T59-814` / `DDD-SW-PGM02-WORKSPACE-001` §5.5 — bổ sung ADDITIVE.
+   *
+   * Optional có chủ ý: server đời cũ không có trường này, và khi thiếu thì FE
+   * phải coi mọi mode mới là UNAVAILABLE. Không suy ra "chắc là có" từ việc
+   * bản build FE này biết về SIMULATE — đó chính là cách một giao diện hiện
+   * nút cho một khả năng thiết bị không có.
+   */
+  workspaceModes?: ProgrammingWorkspaceModes
+}
+
+export interface ProgrammingWorkspaceModes {
+  contractVersion: string
+  edit: { supported: boolean }
+  live: { supported: boolean }
+  simulation: ProgrammingSimulationCapability
+}
+
+export interface ProgrammingSimulationCapability {
+  supported: boolean
+  workerVersion: string | null
+  /** Server là authority của quyền; FE chỉ đọc. v1 phải là `['admin']`. */
+  mutationRoles: Array<'viewer' | 'operator' | 'admin'>
+  limits: {
+    maxConcurrentSessionsPerController: number
+    idleTtlSeconds: number
+    hardTtlSeconds: number
+    maxRssMiB: number
+    maxCpuPercentOneCore: number
+    maxActionsPerSecond: number
+    maxTraceSamples: number
+    maxVirtualInputs: number
+    workerCommandTimeoutMs: number
   }
 }
 
@@ -80,12 +157,59 @@ export interface ProgrammingMonitorSample {
   freshness: 'LIVE' | 'STALE' | 'UNAVAILABLE'
 }
 
+/**
+ * `T59-810` — dấu của NGƯỜI SẢN XUẤT số liệu (Core), đi kèm mọi snapshot runtime.
+ *
+ * `activeRevisionId` một mình không đủ để giữ mạch: hai snapshot CÙNG một
+ * Revision vẫn có thể tới sai thứ tự (poll chồng nhau, retry), và khi đó giá trị
+ * đi lùi mà không ai biết. `capturedMonotonicNs` tăng nghiêm ngặt trong một lần
+ * chạy của Core và GIẢM khi Core khởi động lại, nên nó phân biệt được "snapshot
+ * cũ hơn" với "producer đã restart" — hai thứ cần hai cách xử lý khác nhau.
+ *
+ * Là CHUỖI thập phân chứ không phải number: nanosecond kể từ boot vượt
+ * `Number.MAX_SAFE_INTEGER` sau ~104 ngày uptime, nên kiểu số sẽ làm tròn im
+ * lặng đúng lúc thiết bị chạy lâu nhất.
+ */
+export interface ProgrammingProducerStamp {
+  capturedMonotonicNs: string
+}
+
 export interface ProgrammingMonitorPage {
   schemaVersion: string
   activeRevisionId: string | null
+  producer?: ProgrammingProducerStamp
   safeState: boolean
   task: ProgrammingTaskMetrics | null
   items: ProgrammingMonitorSample[]
+}
+
+/** T59-504 — Published Signal runtime là snapshot riêng của `StSignalBus`,
+ * không được suy ra từ Binding/Point monitor. `valid=false` bắt buộc đi cùng
+ * `value=null`; UI vẫn fail-closed nếu payload ngoài contract vi phạm cặp này. */
+export interface ProgrammingRuntimeSignal {
+  signalId: string | null
+  name: string
+  producerProgramId: string
+  dataType: 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME'
+  unit: string | null
+  value: boolean | number | null
+  valid: boolean
+  quality: 'GOOD' | 'UNCERTAIN' | 'BAD'
+  freshness: 'FRESH' | 'STALE_HELD' | 'STALE_FALLBACK' | 'UNAVAILABLE' | 'NOT_DECLARED'
+  stalePolicy: 'WAIT' | 'HOLD_LAST' | 'USE_FALLBACK' | 'SAFE_STATE'
+  freshnessMs: number
+  /** uint64 truyền dưới dạng chuỗi thập phân để không mất bit trong JavaScript. */
+  publishedAtMonoNs: string
+  generation: string
+  definitionState: 'MATCHED' | 'MISMATCH' | 'CORE_ONLY' | 'REVISION_ONLY'
+}
+
+export interface ProgrammingRuntimeSignalPage {
+  schemaVersion: '1.0'
+  producerState: ProgrammingTargetState
+  activeRevisionId: string | null
+  observedAt: string
+  items: ProgrammingRuntimeSignal[]
 }
 
 export interface ProgrammingTraceRequest {
@@ -114,9 +238,23 @@ export interface ProgrammingTraceValue {
   freshness: ProgrammingMonitorSample['freshness']
 }
 
+/**
+ * `T59-810` — tuple Active mà phiên Trace được NEO vào lúc tạo.
+ *
+ * Một phiên Trace kéo dài qua một lần cutover sẽ ghép mẫu của hai chương trình
+ * khác nhau vào cùng một đồ thị, và người đọc không có cách nào nhìn ra chỗ
+ * nối. BE dừng phiên khi tuple trôi; `pin` là thứ cho phép UI nói ĐÚNG vì sao
+ * phiên dừng, thay vì chỉ hiện `SOURCE_UNAVAILABLE` chung chung.
+ */
+export interface ProgrammingTracePin {
+  revisionId: string | null
+  producer: ProgrammingProducerStamp
+}
+
 export interface ProgrammingTrace {
   traceId: string
   state: 'RUNNING' | 'COMPLETED' | 'STOPPED' | 'FAILED'
+  pin?: ProgrammingTracePin
   variableIds: string[]
   durationMs: number
   samplePeriodMs: number
@@ -132,12 +270,92 @@ export interface ProgrammingTrace {
  * khi `language==='FBD'`. */
 export interface ProgrammingProgram {
   programId: string
+  /** Draft v2 — `objectId` của POU trong `objects[]`. Với POU do FE tạo, nó
+   *  trùng `programId`, nhưng hai trục định danh này KHÁC nhau về nghĩa
+   *  (`objectId` sở hữu mã nguồn, `programId` là identity runtime — DDD §4.2/§4.3)
+   *  và có thể khác giá trị. Xoá một POU phải nhắm đúng `objectId`. */
+  objectId?: string
+  /** Draft v2 — POU này CÓ một mục trong `programs[]` (cấu hình chạy) hay không.
+   *
+   *  Kind không trả lời được câu đó: một POU kind `PROGRAM` hoàn toàn có thể
+   *  KHÔNG có cấu hình chạy — hoặc vì mới được `upsertObject` tạo mà chưa xếp
+   *  lịch, hoặc vì là di chứng của lỗi xoá cũ (gỡ cấu hình nhưng để lại POU).
+   *  Gửi `removeProgram` cho một POU như vậy làm backend trả
+   *  `operations[i].removeProgram` — đúng lỗi người dùng gặp khi cố xoá một
+   *  chương trình "ma". `undefined` = document v1 đi qua nguyên trạng. */
+  hasRuntimeConfig?: boolean
   name: string
   kind: 'PROGRAM' | 'FUNCTION' | 'FUNCTION_BLOCK'
   language: 'ST' | 'FBD'
   document: unknown
+  /** Draft v2 — chu kỳ chạy riêng của POU này, lấy từ đúng mục `programs[]` của
+   *  nó. `undefined` = POU chưa xếp lịch (hoặc document v1, nơi chu kỳ là của
+   *  Task chung). KHÔNG suy từ `task.periodMs`: trong Project nhiều chu kỳ,
+   *  giá trị đó chỉ là chu kỳ của Program ĐẦU TIÊN. */
+  periodMs?: number
+  /** Draft v2 — `objectId` của các POU mà POU này gọi. Dùng cho preflight xoá:
+   *  xoá một FUNCTION còn người gọi sẽ hỏng Check chứ không hỏng ở đây. */
+  dependencies?: readonly string[]
   executionOrder?: number
   functionalTags?: string[]
+}
+
+/**
+ * Payload ghi cho operation tương thích `upsertProgram` của Draft v2.
+ *
+ * `ProgrammingProgram` ở trên là view model nên còn mang các field lịch sử
+ * như `executionOrder`/`functionalTags`. Decoder backend cố ý strict và Draft
+ * v2 không có hai field đó; dùng một type hẹp tại biên ghi để không thể vô tình
+ * serialize cả view model rồi nhận 400.
+ */
+/** Payload typed của `upsertObject` (Draft v2 `objects[]`). */
+export interface ProgrammingPouObjectDraftInput {
+  objectId: string
+  kind: ProgrammingProgram['kind']
+  name: string
+  language: ProgrammingProgram['language']
+  source: string
+  interface?: unknown
+  locals?: unknown[]
+  dependencies?: string[]
+}
+
+export interface ProgrammingProgramDraftInput {
+  programId: string
+  name: string
+  kind: ProgrammingProgram['kind']
+  language: ProgrammingProgram['language']
+  document: unknown
+}
+
+/**
+ * Hình dạng hẹp của metadata interface nằm trong `objects[]` của Draft v2.
+ * Đây là authority để sinh pin POU ở FBD; source ST/FBD không được parse lại ở
+ * FE để đoán cùng một chữ ký lần thứ hai.
+ *
+ * `type` vẫn là chuỗi tại biên API. Adapter FBD phải đối chiếu nó với registry
+ * type sinh từ profile trước khi đổi thành `FbdDataType`.
+ */
+export interface ProgrammingPouInterfacePort {
+  name: string
+  type: string
+}
+
+export interface ProgrammingPouInterface {
+  inputs: ProgrammingPouInterfacePort[]
+  outputs?: ProgrammingPouInterfacePort[]
+  returnType?: string
+}
+
+export interface ProgrammingDraftObjectV2 {
+  objectId: string
+  kind: ProgrammingProgram['kind']
+  name: string
+  language: ProgrammingProgram['language']
+  source: unknown
+  interface?: ProgrammingPouInterface
+  locals?: unknown[]
+  dependencies?: string[]
 }
 
 /** Data Model §3.4. */
@@ -242,6 +460,16 @@ export interface ProgrammingProject {
   draft?: ProgrammingDraftDocument
   /** `null`/`undefined` khi Draft chưa từng niêm phong hoặc chưa từng Check. */
   latestCheck?: ProgrammingProjectLatestCheck | null
+  /**
+   * `T60-015` — ba trường dưới đây server LUÔN gửi khoá, kể cả khi giá trị là
+   * `null`. `null` nghĩa là "đã xét và chưa biết", không phải `0`/`false`:
+   * khẳng định Draft "sạch" khi chưa biết là giấu việc chưa phát hành.
+   */
+  dirty: boolean | null
+  /** Số thứ tự Revision nền của Draft — nguồn của nhãn `Draft #14` (D-05). */
+  draftSequence: number | null
+  /** Số thứ tự Revision Core ĐANG chạy, chỉ khi nó thuộc đúng Project này. */
+  activeSequence: number | null
 }
 
 /** Payload của từng phần tử `operations[]` trong `PATCH .../draft`
@@ -250,13 +478,32 @@ export interface ProgrammingProject {
 export type ProgrammingDraftOperation =
   | { op: 'setFunctionalTags'; tags: string[] }
   | { op: 'replaceProgramSource'; programId: string; language: 'ST' | 'FBD'; source: string }
-  | { op: 'upsertProgram'; program: ProgrammingProgram }
+  | { op: 'upsertProgram'; program: ProgrammingProgramDraftInput }
+  /** Draft v2 typed — tạo/ghi đè chính POU trong `objects[]`. Khác
+   *  `upsertProgram` ở chỗ nó KHÔNG đụng tới `programs[]`: xếp lịch là một
+   *  quyết định riêng, và FUNCTION/FUNCTION_BLOCK không bao giờ có mục ở đó. */
+  | { op: 'upsertObject'; object: ProgrammingPouObjectDraftInput }
+  /** Đổi tên tại chỗ, giữ nguyên `objectId` và mã nguồn. Không dùng
+   *  `upsertObject` để đổi tên: gửi lại cả `source` sẽ ghi đè nội dung mà người
+   *  dùng vừa sửa ở buffer khác. */
+  | { op: 'renameObject'; objectId: string; name: string }
+  /** Nhân bản nội dung với identity MỚI do client cấp — retry cùng request phải
+   *  cho cùng một `newObjectId`, nếu không idempotency mất nghĩa. */
+  | { op: 'duplicateObject'; objectId: string; newObjectId: string; name: string }
   | { op: 'removeProgram'; programId: string }
+  /** Draft v2 — xoá chính POU khỏi `objects[]`. `removeProgram` chỉ gỡ CẤU HÌNH
+   *  CHẠY; thiếu thao tác này thì mã nguồn POU vẫn nằm trong Draft, vẫn hiện
+   *  trên giao diện (danh sách dựng từ `objects`) và vẫn có thể đi vào package ở
+   *  lần Commission sau. Backend từ chối `removeObject` khi còn Program tham
+   *  chiếu, nên thứ tự bắt buộc là `removeProgram` rồi mới `removeObject`. */
+  | { op: 'removeObject'; objectId: string }
   | { op: 'upsertVariable'; variable: ProgrammingVariable }
   | { op: 'removeVariable'; variableId: string }
   | { op: 'upsertBinding'; binding: ProgrammingBinding }
   | { op: 'removeBinding'; bindingId: string }
   | { op: 'setTask'; task: ProgrammingTaskConfig }
+  | { op: 'upsertSignal'; signal: ProgrammingSignalDraftInput }
+  | { op: 'removeSignal'; signalId: string }
 
 export interface ProgrammingDiagnostic {
   code: string
@@ -302,6 +549,21 @@ export interface ProgrammingRevisionChanges {
   toRevisionId: string
   impact: ProgrammingImpact
   changes: ProgrammingRevisionChange[]
+  /**
+   * `T59-819` — diff typed do MÁY CHỦ tính. Hai mảng này sinh thẳng từ schema
+   * OpenAPI (`ProgrammingStHunk`/`ProgrammingFbdChange`) chứ không khai tay:
+   * enum `changeType` của chúng quyết định UI vẽ "đổi logic" hay chỉ "đổi chỗ
+   * đứng trên canvas", và một bản khai tay lệch sẽ lệch im lặng.
+   *
+   * Optional ở đây là để đọc được phản hồi của server đời cũ — và FE PHẢI phân
+   * biệt `undefined` ("server chưa biết so") với `[]` ("đã so, không có gì").
+   */
+  stHunks?: ProgrammingStHunk[]
+  fbdChanges?: ProgrammingFbdChange[]
+  /** Danh sách chạm trần payload. Một danh sách bị cắt im lặng trông y hệt một
+   * danh sách đầy đủ, nên cờ này phải được đọc và nói ra. */
+  truncated?: boolean
+  nextCursor?: string | null
 }
 
 /** `GET /operations/{operationId}` — DM-PROG-001 §3.9 state machine. */
@@ -392,7 +654,7 @@ export interface ProgrammingAuditPage {
 /**
  * Mô hình state hợp nhất theo `DDD-FE-PROG-001` §3 — KHÔNG dùng một boolean
  * `isRunning`. Đây là phần "editing/check/commission/core/runtime" dùng
- * xuyên suốt bốn workspace; mỗi slice thêm field khi cần, không tạo state
+ * xuyên suốt sáu workspace; mỗi slice thêm field khi cần, không tạo state
  * machine song song.
  */
 export interface ProgrammingEditingState {
@@ -431,4 +693,118 @@ export interface RemoteState<T> {
    * Giữ riêng với `data` để UI phân biệt snapshot đang giữ lại với dữ liệu
    * vừa đọc; không phải authority runtime mới. */
   lastSuccessAt?: number | null
+}
+
+/** T59-202/203 — entry Control Library. `scope` phân biệt SYSTEM (registry chỉ
+ * đọc) với PROJECT (do người dùng định nghĩa). */
+export interface ProgrammingLibrarySignaturePort {
+  name: string
+  direction: 'INPUT' | 'OUTPUT'
+  dataType: string
+}
+
+export interface ProgrammingLibrarySignature {
+  category: string
+  labelVi?: string
+  labelEn?: string
+  dispatch: 'OPERATOR' | 'FUNC_TABLE' | 'FB_TYPE' | 'EXPANSION'
+  polymorphic: boolean
+  allowedTypes: string[]
+  defaultType?: string
+  typedPortNames: string[]
+  ports: ProgrammingLibrarySignaturePort[]
+}
+
+export interface ProgrammingLibraryEntry {
+  scope: 'SYSTEM' | 'PROJECT'
+  libraryRevisionId: string
+  libraryVersion: string
+  libraryState: 'DRAFT' | 'PUBLISHED' | 'DEPRECATED'
+  entryId: string
+  kind: 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
+  name: string
+  language?: 'ST' | 'FBD'
+  featureState: 'AVAILABLE' | 'REVIEW_REQUIRED'
+  contentSha256: string
+  interface?: unknown
+  /** `T59-804` — chữ ký ĐÃ PHÂN GIẢI do backend công bố. Vắng field nghĩa là
+   *  backend không đọc được chữ ký thô; FE không được coi đó là "không có port"
+   *  mà phải nói ra. Backend cũ chưa có field này, nên FE vẫn parse `interface`
+   *  làm đường lùi trong một chu kỳ nâng cấp. */
+  signature?: ProgrammingLibrarySignature
+  dependencies: { entryId: string; version: string }[]
+  /** `false` nghĩa là layout CHƯA BIẾT, không phải bằng 0. */
+  stateLayoutKnown: boolean
+  stateSizeBytes: number
+}
+
+export interface ProgrammingLibraryPage {
+  items: ProgrammingLibraryEntry[]
+  nextCursor?: string | null
+}
+
+/**
+ * T59-203 — Published Signal của tài liệu Draft v2 (`signals[]`).
+ *
+ * Đây là hình dạng ĐÚNG NHƯ backend lưu và trả lại
+ * (`application/draft_v2.go: upsertSignalDefinition`), không phải một view model
+ * làm đẹp. Ba điểm dễ sai nếu khai lại theo trí nhớ:
+ *
+ * 1. `stalePolicy` đi trên dây bằng **tên runtime** (`HOLD_LAST`/`WAIT`), còn
+ *    DDD §7.3 gọi chúng là `HOLD_PRIVATE`/`BLOCK_PROGRAM`. Hai bảng tên tồn tại
+ *    song song và bản đồ 1-1 nằm ở `PLAN59-CONTRACT-LOCK-2026-08-24` §2.3 —
+ *    giao diện hiển thị tên DDD, đường ghi gửi tên runtime.
+ * 2. `fallbackValue` là **số**, kể cả cho `BOOL` (0/1) và `TIME` (mili giây):
+ *    backend khai `*float64`. Gửi `true` hay `"5s"` là 400.
+ * 3. `fallbackValue` bắt buộc CÓ khi `stalePolicy==='USE_FALLBACK'` và bắt buộc
+ *    VẮNG với ba chính sách còn lại — backend từ chối cả hai chiều lệch.
+ */
+export type ProgrammingSignalType = 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME'
+
+/** Giá trị `stalePolicy` đi trên dây. `FAIL_CLOSED` backend còn nhận nhưng DDD
+ *  §7.3 không đặt tên cho nó, nên giao diện chỉ ĐỌC được, không tạo mới. */
+export type ProgrammingSignalStalePolicyWire = 'USE_FALLBACK' | 'HOLD_LAST' | 'WAIT' | 'FAIL_CLOSED'
+
+/** Tên chính sách theo DDD §7.3 — thứ người dùng nhìn thấy. */
+export type ProgrammingSignalStalePolicy = 'USE_FALLBACK' | 'HOLD_PRIVATE' | 'BLOCK_PROGRAM'
+
+export interface ProgrammingPublishedSignal {
+  signalId: string
+  name: string
+  type: ProgrammingSignalType
+  unit?: string
+  publisherProgramId: string
+  freshnessMs: number
+  stalePolicy: ProgrammingSignalStalePolicyWire
+  fallbackValue?: number
+}
+
+/** Payload ghi của op `upsertSignal`. Hẹp hơn view model: decoder backend là
+ *  strict nên một field thừa làm cả batch hỏng. */
+export interface ProgrammingSignalDraftInput {
+  signalId: string
+  name: string
+  type: ProgrammingSignalType
+  unit?: string
+  publisherProgramId: string
+  freshnessMs: number
+  stalePolicy: ProgrammingSignalStalePolicyWire
+  fallbackValue?: number
+}
+
+/** Cấu hình chạy của một Program trong Draft v2 (`programs[]`). Tách khỏi POU
+ *  (`objects[]`): đổi chu kỳ và sửa mã là hai việc khác nhau. */
+export interface ProgrammingDraftProgramConfigV2 {
+  programId: string
+  objectId: string
+  periodMs: number
+  taskId?: string
+}
+
+/** Khoá version thư viện của Draft v2 (`library`). `projectLibraryRevisionId`
+ *  `null` nghĩa là Project chưa từng có PROJECT library — KHÁC "chưa đọc được". */
+export interface ProgrammingDraftLibraryLock {
+  systemProfile: string
+  systemVersion: string
+  projectLibraryRevisionId: string | null
 }

@@ -23,6 +23,8 @@
 
 namespace core {
 
+class StSignalBus;
+
 /* Mã lỗi trả cho BE (SPEC §8). Mọi lỗi đều GIỮ NGUYÊN package đang chạy. */
 namespace st_ir_error {
 constexpr const char* kBadHeader        = "IR-E-001";
@@ -64,6 +66,13 @@ struct StFbState {
     int64_t start_ns = 0;
     bool    q = false;
 
+    /* `T59-804` (§7A) — `TP` cần sườn riêng của IN (không dùng chung `prev_clk`
+     * để người đọc không phải suy xem trường nào đang mang nghĩa gì), còn
+     * `CTU`/`CTD` giữ giá trị đếm. `counter` là i32 trong bộ nhớ nhưng bão hoà
+     * theo dải INT khi ghi ra cổng `CV`. */
+    bool    prev_in = false;
+    int32_t counter = 0;
+
     /* PID (TASK-PROG-303, DDD-CTRL-PROG-001 §7). TASK-PROG-402 lưu state
      * bằng codec wire canonical; pid_prev_call_ns được rebase khi restore vì
      * timestamp monotonic không có nghĩa qua process restart. */
@@ -80,6 +89,11 @@ struct StLoadedProgram {
     std::string program_name;
     uint64_t    source_hash = 0;
     uint8_t     sha256[32] = {0};
+    /* T59-602 — khoá công khai ĐÃ verify được chữ ký của artifact này (toàn 0
+     * nếu artifact không ký). Audit cần biết artifact được tin bằng khoá NÀO:
+     * trong cửa sổ overlap có nhiều hơn một khoá hợp lệ, và "verify PASS" không
+     * trả lời được câu hỏi "còn bao nhiêu artifact đang sống nhờ khoá cũ". */
+    uint8_t     verified_public_key[32] = {0};
 
     std::vector<StCell>          slots;
     uint32_t                     var_slot_count = 0;
@@ -97,6 +111,19 @@ struct StLoadedProgram {
      * CRC32 và không phải hash tên trong đường scan. */
     uint8_t                      retain_layout_sha256[32] = {0};
     std::vector<StIrSourceMap>   source_map;
+    /* Published Signal đã được compiler hạ thành chỉ số cố định. Coordinator
+     * bind `runtime_index` vào đúng contract của package trước PREPARED fsync;
+     * executor vì vậy không tra tên hay cấp phát trong chu kỳ quét. */
+    std::vector<StIrSignalRef>   signal_refs;
+    StSignalBus*                 signal_bus = nullptr;
+    std::string                  runtime_instance_id;
+    /* Mọi publish chỉ ghi vào vùng nháp per-Program. Runtime gửi cả batch sang
+     * Signal Bus sau HALT thành công; fault/WAIT xoá nháp nên không thể rò một
+     * phần side effect của chu kỳ lỗi. Các vector được cấp đúng một lần lúc
+     * load, không cấp phát trong scan. */
+    std::vector<StCell>          pending_signal_values;
+    std::vector<uint8_t>         pending_signal_writes;
+    std::vector<uint32_t>        pending_signal_pc;
 
     bool has_retain() const
     {
@@ -128,12 +155,41 @@ enum class StIntegrityMode : uint8_t {
     SIGNATURE_OPTIONAL = 2,
 };
 
+/* Trần khoá tin cậy đồng thời. Rev A cần đúng hai (khoá đang dùng + khoá vừa
+ * bị thay) nhưng để 4 để một lần rotate lỡ dở không phải sửa lại cấu trúc. */
+constexpr std::size_t kMaxTrustedKeys = 4;
+
+/* T59-607 — chính sách toàn vẹn mặc định LẤY TỪ PROFILE CONTRACT, không viết
+ * cứng ở đây.
+ *
+ * Viết cứng là cách cũ, và nó có một hệ quả im lặng: contract đổi sang
+ * `SIGNATURE_REQUIRED` mà mọi chỗ tạo `StLoaderOptions` không truyền gì thì
+ * loader vẫn chạy ở `HASH_ONLY`. Khi đó hồ sơ nói "artifact phải có chữ ký" còn
+ * thiết bị thì không đòi — đúng loại sai lệch mà `DOC-CTRL-001` gọi là As-Built
+ * không khớp baseline. Hằng dưới đây được dịch từ `st_profile_generated.hpp`,
+ * nên đổi profile là đổi hành vi thật, không cần nhớ sửa thêm chỗ nào. */
+StIntegrityMode st_profile_integrity_mode();
+
 struct StLoaderOptions {
-    /* Rev A khóa ở HASH_ONLY: SHA-256 luôn bắt buộc. SIGNATURE_OPTIONAL bị
-     * từ chối fail-closed, không phải một cách viết khác của HASH_ONLY. */
-    StIntegrityMode integrity_mode = StIntegrityMode::HASH_ONLY;
+    /* SHA-256 luôn bắt buộc ở mọi chế độ. `SIGNATURE_OPTIONAL` bị từ chối
+     * fail-closed, không phải một cách viết khác của `HASH_ONLY`. */
+    StIntegrityMode integrity_mode = st_profile_integrity_mode();
     /* Khoá công khai Ed25519 32 byte. nullptr = dùng khoá nhúng trong build. */
     const uint8_t* public_key = nullptr;
+
+    /* T59-602 — TẬP khoá tin cậy cho cửa sổ overlap khi rotate
+     * (`DDD-ARTIFACT-TRUST-PROG-001` §4/§5).
+     *
+     * Vì sao không phải một khoá: đổi khoá tức thời làm MỌI artifact ký bằng
+     * khoá cũ bị từ chối ngay lúc đổi — kể cả bản LKG đang là đường lùi duy
+     * nhất. Cơ chế bảo vệ khi đó tự chặn chính đường rollback mà nó tồn tại để
+     * bảo vệ. Trong cửa sổ overlap, khoá cũ vẫn verify được; hết cửa sổ thì gỡ
+     * khỏi tập và audit ghi mốc gỡ.
+     *
+     * Thứ tự = ưu tiên thử. `trusted_key_count == 0` giữ nguyên hành vi cũ
+     * (dùng `public_key`, hoặc khoá nhúng trong build). */
+    const uint8_t* trusted_keys[kMaxTrustedKeys] = {nullptr, nullptr, nullptr, nullptr};
+    std::size_t    trusted_key_count = 0;
 };
 
 struct StArtifactSummary {
@@ -163,6 +219,12 @@ inline bool load_st_artifact(const uint8_t* data, std::size_t size,
 
 /* Khoá công khai đang được build nhúng — dùng cho test và cho lệnh chẩn đoán. */
 const uint8_t* st_builtin_public_key();
+
+/* Vân tay 8 byte đầu của khoá công khai, viết hex vào `out` (>= 17 byte). Dùng
+ * cho log khởi động, audit verify và gate đóng gói: một chuỗi ngắn đọc được cho
+ * phép người vận hành so khoá đang chạy với khoá đã phát hành mà không phải in
+ * cả khoá ra log. */
+void st_public_key_fingerprint(const uint8_t* key, char* out, std::size_t out_size);
 
 } // namespace core
 

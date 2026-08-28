@@ -38,6 +38,12 @@ struct StIoMapEntry {
      * để source dùng aggregate initializer 8 field vẫn tương thích. */
     std::string category = "LOCAL"; /* "LOCAL" | "VP" | "MB_RTU" */
     std::string device_id;          /* bắt buộc chỉ với MB_RTU */
+    /* T59-303: slot EXT 1..KX_N_EXT do Point Catalog phân giải, CHỈ dùng cho
+     * MB_RTU. Compiler KHÔNG tự suy nó từ `point_id`: ánh xạ điểm Modbus sang
+     * slot là việc của hệ Modbus RTU (địa chỉ register, function code, endian,
+     * chu kỳ poll). Tự suy ở đây nghĩa là định nghĩa lại giao thức ở lớp không
+     * sở hữu nó, và hai định nghĩa sẽ trôi khỏi nhau. */
+    uint16_t ext_index = 0;
     bool        writable = true;    /* snapshot metadata từ Point Catalog */
 
     StIoMapEntry() = default;
@@ -45,12 +51,13 @@ struct StIoMapEntry {
                  std::string point_id_in, StType type_in, std::string unit_in,
                  bool has_range_in, float range_min_in, float range_max_in,
                  std::string category_in = "LOCAL", std::string device_id_in = {},
+                 uint16_t ext_index_in = 0,
                  bool writable_in = true)
         : variable(std::move(variable_in)), direction(std::move(direction_in)),
           point_id(std::move(point_id_in)), type(type_in), unit(std::move(unit_in)),
           has_range(has_range_in), range_min(range_min_in), range_max(range_max_in),
           category(std::move(category_in)), device_id(std::move(device_id_in)),
-          writable(writable_in)
+          ext_index(ext_index_in), writable(writable_in)
     {
     }
 };
@@ -88,9 +95,10 @@ bool validate_io_map(const StProgram& prog, const std::vector<StIoMapEntry>& ent
  * `category == "LOCAL"` được hỗ trợ — "VP" hiện KHÔNG có đường dẫn runtime
  * thật tới Core (VP chỉ là overlay cấu hình phía Web API, không ghi được vào
  * SHM AV/BV mà Core đọc — phát hiện phụ khi điều tra F-013, xem
- * `F-PROG-ASBUILT-014`), "MB_RTU" chưa được kiểm chứng target nên cũng bị từ
- * chối tường minh trong bản này — không đoán/silently-wrong, trả diagnostic
- * rõ ràng thay vì âm thầm ghi sai chỗ.
+ * `F-PROG-ASBUILT-014`), "MB_RTU" (T59-303) được resolve qua `ext_index` mà Point
+ * Catalog cấp — compiler KHÔNG tự suy slot từ `point_id`, vì ánh xạ điểm Modbus
+ * sang slot (register, function code, endian, chu kỳ poll) thuộc hệ Modbus RTU
+ * chứ không thuộc compiler.
  *
  * true  = mọi entry (nếu có) hợp lệ; `module->io_bindings` được thay bằng
  *         danh sách đã resolve (biến không có entry thì không có trong đó,

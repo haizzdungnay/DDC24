@@ -22,6 +22,10 @@ const (
 	ImpactActiveOverrides      ImpactKey = "activeOverrides"
 	ImpactCutover              ImpactKey = "cutover"
 	ImpactOutputMappingChanges ImpactKey = "outputMappingChanges"
+	ImpactPublishedSignals     ImpactKey = "publishedSignals"
+	ImpactControlLibrary       ImpactKey = "controlLibrary"
+	ImpactProgramSet           ImpactKey = "programSet"
+	ImpactEnableIntent         ImpactKey = "enableIntent"
 )
 
 var allImpactKeys = []ImpactKey{
@@ -29,6 +33,10 @@ var allImpactKeys = []ImpactKey{
 	ImpactActiveOverrides,
 	ImpactCutover,
 	ImpactOutputMappingChanges,
+	ImpactPublishedSignals,
+	ImpactControlLibrary,
+	ImpactProgramSet,
+	ImpactEnableIntent,
 }
 
 type ImpactGroup struct {
@@ -43,6 +51,10 @@ type Impact struct {
 	ActiveOverrides      ImpactGroup `json:"activeOverrides"`
 	Cutover              ImpactGroup `json:"cutover"`
 	OutputMappingChanges ImpactGroup `json:"outputMappingChanges"`
+	PublishedSignals     ImpactGroup `json:"publishedSignals"`
+	ControlLibrary       ImpactGroup `json:"controlLibrary"`
+	ProgramSet           ImpactGroup `json:"programSet"`
+	EnableIntent         ImpactGroup `json:"enableIntent"`
 }
 
 type CommissionRequest struct {
@@ -82,6 +94,10 @@ func (i Impact) groups() map[ImpactKey]ImpactGroup {
 		ImpactActiveOverrides:      i.ActiveOverrides,
 		ImpactCutover:              i.Cutover,
 		ImpactOutputMappingChanges: i.OutputMappingChanges,
+		ImpactPublishedSignals:     i.PublishedSignals,
+		ImpactControlLibrary:       i.ControlLibrary,
+		ImpactProgramSet:           i.ProgramSet,
+		ImpactEnableIntent:         i.EnableIntent,
 	}
 }
 

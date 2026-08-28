@@ -70,6 +70,11 @@ export function TargetTab({
 
   return (
     <div className="space-y-3">
+      {/* N-08: tab nằm trong `ScheduleEditorPage` vốn đã giữ `<h1>`, nên đây là
+          `<h2>` — và `sr-only` vì tên tab đã hiện trên thanh tab, lặp lại bằng
+          mắt là nhiễu. Cây heading vẫn phải liền mạch cho trình đọc màn hình
+          (WCAG 2.2 §2.4.6). */}
+      <h2 className="sr-only">Điểm đích</h2>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-[var(--c-text-dim)]">
           Chỉ điểm ghi được và tương thích <strong>{draft.value_type}</strong> mới hiện trong danh sách:{' '}

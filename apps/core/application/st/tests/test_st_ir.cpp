@@ -22,6 +22,7 @@
 #include "st/st_artifact.hpp"
 #include "st/st_compile.hpp"
 #include "st/st_ir.hpp"
+#include "st/st_profile_generated.hpp"
 #include "st/st_loader.hpp"
 #include <sodium.h>
 
@@ -62,10 +63,16 @@ std::vector<uint8_t> build_hash_only(const char* src = kSimple)
     return bytes;
 }
 
+/* T59-607 — các test dùng helper này kiểm LAYOUT/section/source-map, không kiểm
+ * chính sách toàn vẹn, nên chúng khai `HASH_ONLY` TƯỜNG MINH. Để chúng đi theo
+ * mặc định của profile sẽ trộn hai chuyện: một thay đổi chính sách ký sẽ làm đỏ
+ * hai chục test không liên quan và chôn mất tín hiệu thật. Mặc định của profile
+ * được khoá riêng ở `SignatureRequiredIsTheReleaseDefault`. */
 bool try_load(const std::vector<uint8_t>& a, StLoadError* err)
 {
     StLoadedProgram p;
     StLoaderOptions o;
+    o.integrity_mode = StIntegrityMode::HASH_ONLY;
     return load_st_artifact(a.data(), a.size(), o, &p, err);
 }
 
@@ -157,6 +164,7 @@ TEST(StIr, LoadedProgramHasExpectedShape)
     const std::vector<uint8_t> a = build_signed();
     StLoadedProgram p;
     StLoaderOptions o;
+    o.integrity_mode = StIntegrityMode::HASH_ONLY;
     StLoadError err;
     ASSERT_TRUE(load_st_artifact(a.data(), a.size(), o, &p, &err)) << err.code;
     EXPECT_EQ(p.program_name, "t");
@@ -191,6 +199,7 @@ TEST(StIr, SourceMapRoundTripsWithStrictlyIncreasingProgramCounters)
     const std::vector<uint8_t> artifact = build_hash_only();
     StLoadedProgram loaded;
     StLoaderOptions options;
+    options.integrity_mode = StIntegrityMode::HASH_ONLY;
     StLoadError error;
     ASSERT_TRUE(load_st_artifact(artifact.data(), artifact.size(), options, &loaded, &error))
         << error.code << ": " << error.message;
@@ -222,6 +231,7 @@ END_PROGRAM
     ASSERT_TRUE(serialize_st_ir(module, &artifact, &encode_error)) << encode_error;
     StLoadedProgram loaded;
     StLoaderOptions options;
+    options.integrity_mode = StIntegrityMode::HASH_ONLY;
     StLoadError load_error;
     ASSERT_TRUE(load_st_artifact(artifact.data(), artifact.size(), options, &loaded,
                                  &load_error))
@@ -249,6 +259,7 @@ TEST(StIr, ModbusRtuExtBindingRoundTripsWithoutChangingLegacyPointKinds)
     ASSERT_TRUE(serialize_st_ir(module, &artifact, &encode_error)) << encode_error;
     StLoadedProgram loaded;
     StLoaderOptions options;
+    options.integrity_mode = StIntegrityMode::HASH_ONLY;
     StLoadError load_error;
     ASSERT_TRUE(load_st_artifact(artifact.data(), artifact.size(), options, &loaded,
                                  &load_error))
@@ -435,7 +446,38 @@ TEST(StIr, RejectBadSignature)
     EXPECT_EQ(err.code, st_ir_error::kBadSignature);
 }
 
-TEST(StIr, HashOnlyIsTheRevADefault)
+/* T59-607 — MẶC ĐỊNH của loader phải đi theo profile contract.
+ *
+ * Trước đây mặc định viết cứng `HASH_ONLY`, nên contract có đổi sang
+ * `SIGNATURE_REQUIRED` thì mọi chỗ tạo `StLoaderOptions` mà không truyền gì vẫn
+ * chạy ở chế độ cũ: hồ sơ nói một đằng, thiết bị làm một nẻo. Test này khoá
+ * đúng mối nối đó — nó phải đỏ nếu ai đó gỡ `st_profile_integrity_mode()` khỏi
+ * giá trị mặc định. */
+TEST(StIr, SignatureRequiredIsTheReleaseDefault)
+{
+    EXPECT_STREQ(st_profile_generated::kIntegrityMode, "SIGNATURE_REQUIRED");
+    EXPECT_EQ(st_profile_integrity_mode(), StIntegrityMode::SIGNATURE_REQUIRED);
+
+    StIrModule mod;
+    StDiagnostic d;
+    ASSERT_TRUE(compile_st_source(kSimple, &mod, &d));
+    std::vector<uint8_t> a;
+    std::string err_s;
+    ASSERT_TRUE(serialize_st_ir(mod, &a, &err_s));
+
+    /* Options MẶC ĐỊNH — không đặt integrity_mode. Artifact không ký phải bị
+     * từ chối, và mã lỗi phải nói đúng lý do. */
+    StLoadedProgram p;
+    StLoaderOptions o;
+    StLoadError err;
+    EXPECT_FALSE(load_st_artifact(a.data(), a.size(), o, &p, &err));
+    EXPECT_EQ(err.code, st_ir_error::kMissingSignature) << err.code << ": " << err.message;
+}
+
+/* Đường lùi `HASH_ONLY` vẫn phải dùng được — nó là thứ giữ cho một bo đang chạy
+ * artifact chưa ký không bị khoá ngoài trong lúc migration (xem runbook
+ * `T59-607`). Khai tường minh, không phải mặc định. */
+TEST(StIr, HashOnlyRemainsAvailableAsExplicitFallback)
 {
     StIrModule mod;
     StDiagnostic d;
@@ -443,7 +485,6 @@ TEST(StIr, HashOnlyIsTheRevADefault)
     std::vector<uint8_t> a;
     std::string err_s;
     ASSERT_TRUE(serialize_st_ir(mod, &a, &err_s));
-    /* Không ký nhưng SHA-256 bắt buộc và hợp lệ. */
     StLoadError err;
     EXPECT_TRUE(try_load(a, &err)) << err.code << ": " << err.message;
 }
@@ -484,6 +525,7 @@ TEST(StIr, FailedLoadDoesNotMutateCallerOutput)
     active.program_name = "active-before-failure";
     active.var_slot_count = 77;
     StLoaderOptions o;
+    o.integrity_mode = StIntegrityMode::HASH_ONLY;
     StLoadError err;
     EXPECT_FALSE(LoadArtifact(a.data(), a.size(), o, &active, &err));
     EXPECT_EQ(active.program_name, "active-before-failure");
@@ -495,6 +537,7 @@ TEST(StIr, VerifyArtifactReturnsBoundedSummary)
     const std::vector<uint8_t> a = build_hash_only();
     StArtifactSummary summary;
     StLoaderOptions o;
+    o.integrity_mode = StIntegrityMode::HASH_ONLY;
     StLoadError err;
     ASSERT_TRUE(VerifyArtifact(a.data(), a.size(), o, &summary, &err)) << err.code;
     EXPECT_EQ(summary.schema_version, st_ir::kSchemaVersion);
@@ -527,6 +570,7 @@ TEST(StIr, GoldenArtifactIsByteExactAndLoadable)
 
     StArtifactSummary summary;
     StLoaderOptions options;
+    options.integrity_mode = StIntegrityMode::HASH_ONLY;
     StLoadError load_error;
     EXPECT_TRUE(VerifyArtifact(golden.data(), golden.size(), options, &summary, &load_error))
         << load_error.code << ": " << load_error.message;
@@ -553,6 +597,7 @@ TEST(StIr, MachineReadableNegativeCorpusIsRejectedWithStableCode)
 
         StLoadedProgram output;
         StLoaderOptions options;
+        options.integrity_mode = StIntegrityMode::HASH_ONLY;
         StLoadError error;
         EXPECT_FALSE(LoadArtifact(artifact.data(), artifact.size(), options, &output, &error))
             << item.at("id");
@@ -594,6 +639,7 @@ TEST(StIr, TruncationAtEveryOffsetRejectedNoCrash)
         StLoadError err;
         StLoadedProgram p;
         StLoaderOptions o;
+        o.integrity_mode = StIntegrityMode::HASH_ONLY;
         const bool ok = load_st_artifact(cut.empty() ? full.data() : cut.data(), cut.size(), o,
                                          &p, &err);
         ASSERT_FALSE(ok) << "artifact cắt tại " << n << " byte vẫn được nạp";
@@ -698,6 +744,7 @@ TEST(StIrSecurity, ExplicitPublicKeyOptionIsHonoured)
     /* Nhưng truyền đúng public key thì phải chấp nhận. */
     StLoadedProgram p;
     StLoaderOptions o;
+    o.integrity_mode = StIntegrityMode::HASH_ONLY;
     o.public_key = pk;
     StLoadError err2;
     EXPECT_TRUE(load_st_artifact(a.data(), a.size(), o, &p, &err2)) << err2.code;
@@ -725,6 +772,7 @@ TEST(StIrSecurity, HashOnlyDoesNotBypassHashCheck)
 
     StLoadedProgram p;
     StLoaderOptions o;
+    o.integrity_mode = StIntegrityMode::HASH_ONLY;
     StLoadError err;
     EXPECT_FALSE(load_st_artifact(a.data(), a.size(), o, &p, &err));
     EXPECT_EQ(err.code, st_ir_error::kBadHash);

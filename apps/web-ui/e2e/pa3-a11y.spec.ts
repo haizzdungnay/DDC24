@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { login } from './helpers/session'
 
 /**
  * Kiểm accessibility PA3 — PA3-603 / WCAG 2.2 AA.
@@ -14,14 +15,6 @@ import { expect, test, type Page } from '@playwright/test'
  * bằng ảnh chụp trình duyệt vừa chậm vừa dễ vỡ vì antialiasing, trong khi token
  * mới là nguồn thật của bảng màu.
  */
-
-async function login(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
-}
 
 async function navigate(page: Page, path: string) {
   await page.evaluate((target) => {
@@ -142,6 +135,12 @@ test.describe('Accessibility PA3', () => {
   /* WCAG 2.4.1 — bỏ qua khối lặp lại. Thanh bên có hơn 20 liên kết. */
   test('skip link đưa tiêu điểm tới nội dung chính', async ({ page }) => {
     await navigate(page, '/')
+    /* `keyboard.press` gửi phím tới TRANG ĐANG HOẠT ĐỘNG. Khi cả bộ e2e chạy
+     * tuần tự trong một worker, trang vừa mở đôi khi chưa giành được tiêu điểm
+     * ở mức cửa sổ, và `toBeFocused()` nhận `inactive` dù skip link vẫn đúng.
+     * Đây là flake của hạ tầng test, không phải lỗi sản phẩm — nó chỉ lộ ra sau
+     * 2026-08-20 khi bộ này lần đầu được đưa vào cổng CI cùng 7 bộ khác. */
+    await page.bringToFront()
     await page.keyboard.press('Tab')
     const skip = page.getByRole('link', { name: /Bỏ qua điều hướng|Skip navigation/ })
     await expect(skip).toBeFocused()
@@ -153,6 +152,7 @@ test.describe('Accessibility PA3', () => {
      thật sự có outline hoặc ring, chứ không bị `outline: none` triệt tiêu. */
   test('phần tử đang nhận tiêu điểm có dấu hiệu nhìn thấy được', async ({ page }) => {
     await navigate(page, '/')
+    await page.bringToFront()
     await page.keyboard.press('Tab')
     await page.keyboard.press('Tab')
     const visible = await page.evaluate(() => {

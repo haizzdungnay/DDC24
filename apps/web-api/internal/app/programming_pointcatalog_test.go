@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,11 +10,19 @@ import (
 
 type programmingMonitorCore struct {
 	*pointsCore
-	snapshot RuntimePointSnapshot
+	snapshot  RuntimePointSnapshot
+	pointsErr error
 }
 
 func (core *programmingMonitorCore) ReadPointSnapshot(context.Context) (RuntimePointSnapshot, error) {
 	return core.snapshot, nil
+}
+
+func (core *programmingMonitorCore) ReadPoints(ctx context.Context) ([]PointDTO, error) {
+	if core.pointsErr != nil {
+		return nil, core.pointsErr
+	}
+	return core.pointsCore.ReadPoints(ctx)
 }
 
 func TestPointCatalogCategoryFromRealProducerKind(t *testing.T) {
@@ -167,6 +176,62 @@ func TestProgrammingMonitorUsesEndScanTruthOnlyForLocalPoints(t *testing.T) {
 	external := truth.Points[1]
 	if external.Category != "MB_RTU" || external.ActualValue != 99.0 || external.ProgramValue != nil || external.ObservedAt != "2026-08-13T00:00:01Z" || external.Quality != "STALE" {
 		t.Fatalf("MB_RTU bị overlay nhầm theo ID vật lý: %+v", external)
+	}
+}
+
+func TestProgrammingMonitorKeepsProgramTruthWhenPhysicalShmUnavailable(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	app.core = &programmingMonitorCore{
+		pointsCore: &pointsCore{},
+		pointsErr:  errors.New("PLC SHM chưa tồn tại"),
+		snapshot: RuntimePointSnapshot{
+			SnapshotObservedAtUTC: "2026-08-24T00:00:00Z",
+			Programs: []RuntimeProgramSnapshot{{
+				InstanceID: "P_cons", State: "WAITING", Enabled: true, PeriodMS: 1000,
+			}},
+		},
+	}
+
+	truth, err := app.programmingPointCatalog().ReadProgrammingMonitorSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("snapshot IPC sống không được hỏng theo SHM: %v", err)
+	}
+	if len(truth.Programs) != 1 || truth.Programs[0].InstanceID != "P_cons" ||
+		truth.Programs[0].State != "WAITING" {
+		t.Fatalf("Program truth bị làm mất theo lỗi SHM: %+v", truth)
+	}
+	if truth.Points == nil || len(truth.Points) != 0 {
+		t.Fatalf("Point truth phải là danh sách rỗng fail-closed, nhận %#v", truth.Points)
+	}
+}
+
+func TestProgrammingMonitorUsesCoreSnapshotPointWhenPhysicalShmUnavailable(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	programValue := 21.5
+	app.core = &programmingMonitorCore{
+		pointsCore: &pointsCore{},
+		pointsErr:  errors.New("PLC SHM chưa tồn tại"),
+		snapshot: RuntimePointSnapshot{
+			SnapshotObservedAtUTC: "2026-08-24T00:00:00Z",
+			Points: []RuntimePoint{{
+				ID: "UI-01", Kind: "UI", Value: 21.5, ProgramValue: &programValue,
+				Quality: "GOOD", Source: "io", Unit: "degC",
+			}},
+		},
+	}
+
+	truth, err := app.programmingPointCatalog().ReadProgrammingMonitorSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("snapshot IPC sống không được hỏng theo SHM: %v", err)
+	}
+	if len(truth.Points) != 1 {
+		t.Fatalf("points=%+v, want 1 point từ snapshot Core", truth.Points)
+	}
+	point := truth.Points[0]
+	if point.Category != "LOCAL" || point.PointID != "UI-01" ||
+		point.ActualValue != 21.5 || point.ProgramValue == nil || *point.ProgramValue != 21.5 ||
+		point.Quality != "GOOD" || point.ObservedAt != "2026-08-24T00:00:00Z" {
+		t.Fatalf("point snapshot bị mất/biến đổi: %+v", point)
 	}
 }
 

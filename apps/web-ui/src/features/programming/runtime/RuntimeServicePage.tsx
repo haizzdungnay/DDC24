@@ -26,7 +26,7 @@ const TAB_LABEL: Record<RuntimeTabKey, [string, string]> = {
  */
 export function RuntimeServicePage() {
   const { pick } = useI18n()
-  const { capabilities, runtime } = useProgrammingRuntimeContext()
+  const { runtime } = useProgrammingRuntimeContext()
   const [searchParams, setSearchParams] = useSearchParams()
   const requested = searchParams.get('tab')
   const tab: RuntimeTabKey = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as RuntimeTabKey) : 'runtime'
@@ -45,12 +45,13 @@ export function RuntimeServicePage() {
 
   return (
     <div className="space-y-4">
-      <header className="rounded-[var(--radius)] border border-[var(--c-border)] border-l-4 border-l-[var(--c-accent)] bg-[var(--c-surface)] px-5 py-4 shadow-sm sm:px-6">
-        <p className="text-[10px] font-bold tracking-[0.16em] text-[var(--c-accent)]">PROGRAMMING / PGM-04</p>
-        <h2 className="mt-1 text-xl font-bold tracking-tight text-[var(--c-text)]">{pick('Runtime & Bảo trì', 'Runtime & Service')}</h2>
-        <p className="mt-1 text-sm text-[var(--c-text-dim)]">{pick('Chỉ đọc trạng thái đang có thẩm quyền; thao tác nguy hiểm nằm trong tab bảo trì.', 'Read authoritative runtime state; dangerous actions stay in the service tab.')}</p>
-      </header>
-      <div role="tablist" aria-label={pick('Tab Runtime & Bảo trì', 'Runtime & Service tabs')} className="flex gap-1 overflow-x-auto border-b border-[var(--c-border)]">
+      {/* F-UX-15 (`REV-FE-UIUX-UC-2026-08-18` §7.1): mỗi màn/tab phải có mốc
+          tiêu đề riêng trong cây heading. `<h1>` của route Programming nằm ở
+          `ProgrammingLayout` (một và chỉ một), nên ở đây là `<h2>`/`<h3>`.
+          Ẩn thị giác vì thanh tab đã hiện tên — thứ còn thiếu là mốc điều
+          hướng cho trình đọc màn hình, không phải thêm chữ lên màn hình. */}
+      <h2 className="sr-only">{pick('Runtime & Bảo trì', 'Runtime & Service')}</h2>
+      <div role="tablist" aria-label={pick('Tab Runtime & Bảo trì', 'Runtime & Service tabs')} className="flex gap-1 border-b border-[var(--c-border)]">
         {VALID_TABS.map((candidate) => (
           <button
             key={candidate}
@@ -81,7 +82,7 @@ export function RuntimeServicePage() {
       {tab === 'service' && (
         <>
           <VersionsTab runtime={runtime.data} />
-          <DangerZone runtime={runtime.data} runtimeStatus={runtime.status} taskPeriodsMs={capabilities.data?.taskPeriodsMs} />
+          <DangerZone runtime={runtime.data} runtimeStatus={runtime.status} />
         </>
       )}
     </div>

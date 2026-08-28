@@ -84,6 +84,17 @@ type hmiResponse struct {
 	Alarms     []AlarmDTO       `json:"alarms,omitempty"`
 	CoreStatus *CoreStatus      `json:"coreStatus,omitempty"`
 	Network    *NetcfgResponse  `json:"network,omitempty"`
+	// WebSessions — `T57-3.20` (§6.19-P3): số phiên WEB đang mở.
+	//
+	// Người đứng trước tủ cần biết có ai đang thao tác từ xa trước khi tự ra
+	// lệnh: hai người cùng ép một điểm sẽ ghi đè nhau mà không ai thấy người
+	// kia. Sổ phiên web nằm trong `AuthService`, tách hẳn khỏi phiên HMI
+	// (phiên HMI đi qua socket UNIX, không có JWT), nên con số này chỉ đếm web.
+	//
+	// Đi kèm MỌI phản hồi đã xác thực chứ không riêng `status`: màn Control poll
+	// `query`, và bắt nó gọi thêm một action nữa chỉ để lấy một con số là thêm
+	// một vòng I/O trên đường mà người dùng đang chờ.
+	WebSessions int `json:"webSessions"`
 }
 
 type hmiSession struct {
@@ -359,6 +370,10 @@ func (b *HMIBroker) handleFrame(ctx context.Context, raw []byte, uid uint32) []b
 
 func (b *HMIBroker) authorizedAction(ctx context.Context, req hmiRequest, session hmiSession, base hmiResponse) hmiResponse {
 	user := "hmi:" + session.username
+	// `T57-3.20`: gắn số phiên web vào mọi phản hồi đã xác thực.
+	if b.auth != nil {
+		base.WebSessions = len(b.auth.Sessions())
+	}
 	switch req.Action {
 	case "policy":
 		base.Result, base.ReasonCode, base.Policy = "accepted", "OK", hmiPolicy(session.role)

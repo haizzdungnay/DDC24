@@ -348,6 +348,91 @@ TEST(ProgrammingRuntimeCoordinator, RecoveryMatrixNeverPublishesAmbiguousCandida
     }
 }
 
+/* T59-702 — `RECOVERY_REQUIRED` phải có LỐI RA tường minh.
+ *
+ * Trước bản này nó là ngõ cụt: mọi mutation trả `IPC-RECOVERY-REQUIRED`, nên bo
+ * chỉ thoát được bằng cách xoá journal bằng tay — tức là xoá sổ vận hành để
+ * thoát một trạng thái vận hành. Lần đầu gặp thật là trên bo Foxlinx
+ * 2026-08-23: journal `COMMITTED` còn đó nhưng artifact đã bị dọn, Commission
+ * mới bị Core từ chối và không có lệnh nào gỡ được.
+ */
+TEST(ProgrammingRuntimeCoordinator, RecoveryResetMoNutThatNutVaGiuLichSu)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    const std::string path = tree.path + "/journal.bin";
+    StJournalRecord record;
+    record.phase = StJournalPhase::COMMITTED;
+    record.timestamp_ns = 1;
+    record.operation_id = kOp1;
+    record.old_active_hash = "old";
+    record.candidate_hash = "candidate";
+    record.plan_hash = "plan";
+    ASSERT_TRUE(StJournal(path).append(record));
+
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_runtime_topology(&scheduler);
+    ProgrammingCutover cutover(CutoverMode::PROGRAM_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, path, tree.path + "/staging");
+    std::string error;
+    EXPECT_FALSE(coordinator.recover(&error));
+    ASSERT_EQ(coordinator.snapshot().state, LifecycleState::RECOVERY_REQUIRED);
+
+    /* Thiếu actor: từ chối. Một quyết định bỏ giao dịch không có chủ thì không
+     * truy được về sau. */
+    RecoveryResetCommand nameless;
+    nameless.operation_id = kOp2;
+    std::string detail;
+    EXPECT_EQ(coordinator.recovery_reset(nameless, &detail, &error),
+              RecoveryResetOutcome::REJECTED);
+    EXPECT_EQ(detail, "RECOVERY_RESET_ACTOR_REQUIRED");
+    EXPECT_EQ(coordinator.snapshot().state, LifecycleState::RECOVERY_REQUIRED);
+
+    RecoveryResetCommand command;
+    command.operation_id = kOp2;
+    command.actor_id = "operator-qa";
+    EXPECT_EQ(coordinator.recovery_reset(command, &detail, &error), RecoveryResetOutcome::APPLIED);
+    EXPECT_EQ(detail, "RECOVERY_RESET_APPLIED");
+    EXPECT_EQ(coordinator.snapshot().state, LifecycleState::IDLE);
+    EXPECT_EQ(cutover.current(), CutoverMode::GRAPH_ONLY);
+
+    /* Journal GIỮ NGUYÊN bản ghi cũ và có thêm bản ghi reset — không xoá gì. */
+    const StJournalReadResult read = StJournal(path).read_last();
+    EXPECT_EQ(read.status, StJournalReadStatus::OK);
+    EXPECT_EQ(read.valid_record_count, 2u);
+    EXPECT_EQ(read.record.phase, StJournalPhase::RECOVERY_RESET);
+    EXPECT_EQ(read.record.old_active_hash, "operator-qa");
+
+    /* Sau reset, Commission mới đi được. */
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    const StageCommand candidate = write_candidate(tree, kOp2, kRevision2, 2);
+    EXPECT_TRUE(coordinator.stage(candidate, &detail, &error)) << detail << " " << error;
+}
+
+/* Reset ngoài ngữ cảnh `RECOVERY_REQUIRED` phải bị từ chối: nếu không, nó thành
+ * một cách bỏ Active đang chạy mà không đi qua Disable/Restore. */
+TEST(ProgrammingRuntimeCoordinator, RecoveryResetTuChoiKhiKhongOTrangThaiRecovery)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    ProgrammingCutover cutover(CutoverMode::PROGRAM_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                                tree.path + "/staging");
+    std::string error;
+    ASSERT_TRUE(coordinator.recover(&error));
+    ASSERT_EQ(coordinator.snapshot().state, LifecycleState::IDLE);
+
+    RecoveryResetCommand command;
+    command.operation_id = kOp1;
+    command.actor_id = "operator-qa";
+    std::string detail;
+    EXPECT_EQ(coordinator.recovery_reset(command, &detail, &error),
+              RecoveryResetOutcome::NOT_IN_RECOVERY);
+    EXPECT_EQ(detail, "RECOVERY_RESET_NOT_IN_RECOVERY");
+    EXPECT_EQ(coordinator.snapshot().state, LifecycleState::IDLE);
+}
+
 TEST(ProgrammingRuntimeCoordinator, CorruptJournalKeepsGraphAndBlocksMutation)
 {
     TempTree tree;
@@ -377,7 +462,7 @@ TEST(ProgrammingRuntimeCoordinator, CorruptJournalKeepsGraphAndBlocksMutation)
     EXPECT_EQ(detail, "IPC-RECOVERY-REQUIRED");
 }
 
-TEST(ProgrammingRuntimeCoordinator, CommittedCheckpointRestoresExactRuntimeAcrossCoreRestart)
+TEST(ProgrammingRuntimeCoordinator, CommittedCheckpointRestoresPackageFailClosedAcrossCoreRestart)
 {
     TempTree tree;
     ASSERT_FALSE(tree.path.empty());
@@ -416,7 +501,9 @@ TEST(ProgrammingRuntimeCoordinator, CommittedCheckpointRestoresExactRuntimeAcros
     EXPECT_EQ(restarted_cutover.current(), CutoverMode::PROGRAM_ONLY);
     const StProgramInstance* program = restarted_scheduler.find_program("program-main");
     ASSERT_NE(program, nullptr);
-    EXPECT_EQ(program->state, StProgramState::RUNNING);
+    EXPECT_EQ(program->state, StProgramState::DISABLED)
+        << "checkpoint không mang desiredEnabled nhưng Core đã tự start";
+    EXPECT_FALSE(program->enabled);
     EXPECT_FALSE(program->last_known_good.empty());
 }
 
@@ -465,7 +552,9 @@ TEST(ProgrammingRuntimeCoordinator, RestartDuringActiveCandidateRestoresPriorLkg
     EXPECT_EQ(cutover.current(), CutoverMode::PROGRAM_ONLY);
     const StProgramInstance* program = scheduler.find_program("program-main");
     ASSERT_NE(program, nullptr);
-    EXPECT_EQ(program->state, StProgramState::RUNNING);
+    EXPECT_EQ(program->state, StProgramState::DISABLED)
+        << "khôi phục LKG không được tự suy ra enable intent";
+    EXPECT_FALSE(program->enabled);
 }
 
 TEST(ProgrammingRuntimeCoordinator, PriorityImpactIsUnavailableUntilScanSnapshotAndThenExact)

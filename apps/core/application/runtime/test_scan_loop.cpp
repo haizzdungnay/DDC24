@@ -6,12 +6,26 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <string>
+#include <string_view>
 #include <thread>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include "ipc/iobus_reader.hpp"
 #include "ipc/output_writer.hpp"
 #include "runtime/scan_loop.hpp"
+#include "st/st_compile.hpp"
+#include "st/st_diagnostic.hpp"
+#include "st/st_ir.hpp"
+#include "st/st_scheduler.hpp"
+#include "st/st_test_key.hpp"
 
 using namespace core;
 
@@ -506,4 +520,339 @@ TEST(PointTable, ModbusExtSnapshotIsAvailableWithRuntimeSourceAndQuality)
     EXPECT_GT(first.ts_ns, 0u);
     EXPECT_EQ(second.quality, KX_Q_UNCERTAIN);
     EXPECT_EQ(table.get({PointKind::EXT, 2}).quality, KX_Q_BAD);
+}
+
+/* ===================================================================
+ * T60-004 — bảng Program TOÀN HỆ THỐNG trong point_snapshot (Plan 60 §6 P0-A).
+ *
+ * Khối `task` của snapshot chỉ mô tả `tasks().front()`. Từ `T59-402/403` mỗi
+ * Program tự release theo chu kỳ riêng, nên một Task không còn đại diện được
+ * cho hệ. Bộ test dưới đây khoá phần ĐIỀN mảng: đủ mọi Task, đúng chu kỳ hiệu
+ * lực, giữ nguyên Program `DISABLED`, và chạm đúng trần
+ * `st_sched_limits::kMaxProgramsTotal`.
+ * =================================================================== */
+
+namespace {
+
+/* Chương trình ST tối thiểu. Đi đúng đường compile + ký như production để số đo
+ * trong dump là số THẬT, không phải struct nhồi tay. Biên dịch một lần rồi dùng
+ * lại: 32 lần compile trong một test là phí thời gian chứ không thêm bằng chứng. */
+const std::vector<uint8_t>& counter_artifact()
+{
+    static const std::vector<uint8_t> artifact = [] {
+        StIrModule module;
+        StDiagnostic diagnostic;
+        EXPECT_TRUE(compile_st_source(R"ST(
+PROGRAM counter
+VAR_OUTPUT n : INT; END_VAR
+    n := n + 1;
+END_PROGRAM
+)ST",
+                                      &module, &diagnostic))
+            << diagnostic.code << ": " << diagnostic.message;
+        std::vector<uint8_t> bytes;
+        std::string error;
+        EXPECT_TRUE(serialize_st_ir(module, &bytes, &error)) << error;
+        EXPECT_TRUE(sign_st_artifact(&bytes, st_test_secret_key()));
+        return bytes;
+    }();
+    return artifact;
+}
+
+const RuntimeProgramSnapshot* find_program_row(const RuntimePointSnapshot& snapshot,
+                                               std::string_view instance_id)
+{
+    for (std::size_t index = 0; index < snapshot.program_count; ++index)
+        if (std::string_view(snapshot.programs[index].instance_id.data()) == instance_id)
+            return &snapshot.programs[index];
+    return nullptr;
+}
+
+/* Fixture CÓ Program Runtime thật. Fixture dùng chung ở đầu file cố ý không có
+ * scheduler (nó khoá đường I/O trần trụi); thêm ở đây thay vì sửa nó để không
+ * đổi điều kiện của các test T1/T3 đã có. */
+struct ProgramFixture {
+    kx_io_shm_t shm;
+    IobusReader reader;
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    PriorityResolver resolver;
+    SafeState safe{quality};
+    OutputWriter writer{reader};
+    BacnetObjTable bacnet;
+    CoreMetrics metrics;
+    /* Profile supporting: 8 Task × 16 Program/Task, trần TOÀN HỆ THỐNG 32. */
+    StScheduler scheduler;
+    ScanLoop loop;
+
+    ProgramFixture()
+        : loop({&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer,
+                &bacnet, &metrics, -1, nullptr, nullptr, &scheduler})
+    {
+        std::memset(&shm, 0, sizeof(shm));
+        shm.magic = KX_SHM_MAGIC;
+        shm.iop_status = KX_IOP_NORMAL;
+        shm.ts_ns = 1;
+        reader.attach_external(&shm);
+    }
+
+    void tick_iobus() { shm.ts_ns += 1000000; }
+
+    void add_task(const char* id, uint8_t priority, uint32_t period_ms)
+    {
+        StTaskConfig config;
+        config.id = id;
+        config.priority = priority;
+        config.period_ms = period_ms;
+        config.budget_ms = period_ms;
+        std::string error;
+        ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
+    }
+
+    /* `program_period_ms == 0` = "theo chu kỳ Task" (T59-402). `add_program`
+     * không nhận chu kỳ riêng nên đặt thẳng trường — đúng thứ mà đường nạp
+     * package (`StProgramSetEntry::period_ms`) làm. */
+    void add_program(const char* task_id, const char* instance_id, uint16_t order,
+                     uint32_t program_period_ms)
+    {
+        std::string error;
+        ASSERT_TRUE(scheduler.add_program(task_id, instance_id, order, &error)) << error;
+        scheduler.find_program(instance_id)->period_ms = program_period_ms;
+    }
+
+    void stage(const char* instance_id)
+    {
+        std::string error;
+        ASSERT_TRUE(scheduler.request_activation(instance_id, counter_artifact(), &error))
+            << error;
+    }
+
+    void start(const char* instance_id)
+    {
+        std::string error;
+        ASSERT_TRUE(scheduler.start(instance_id, &error)) << error;
+    }
+
+    void step()
+    {
+        tick_iobus();
+        loop.step();
+    }
+};
+
+} // namespace
+
+/* Hồi quy chính của `T60-002`: trước đó chỉ `tasks().front()` được báo cáo, nên
+ * mọi Program thuộc Task thứ hai trở đi KHÔNG hề xuất hiện trong snapshot. Test
+ * này cũng khoá luật phân giải chu kỳ: `period_ms == 0` phải ra chu kỳ Task,
+ * tuyệt đối không phát `0` ra ngoài (`0 ms` ở cột Cycle là số bịa). */
+TEST(ScanLoop, PublishesEveryProgramOfEveryTaskWithItsEffectiveCycle)
+{
+    ProgramFixture f;
+    f.add_task("FAST", 0, 100);
+    f.add_task("SLOW", 1, 1000);
+    f.add_program("FAST", "P_ahu", 0, 0);       /* thừa kế chu kỳ Task = 100 ms */
+    f.add_program("SLOW", "P_boiler", 0, 5000); /* chu kỳ RIÊNG của Program */
+    f.add_program("SLOW", "P_chiller", 1, 0);   /* thừa kế chu kỳ Task = 1000 ms */
+
+    f.step();
+
+    /* Bản SAO, không phải tham chiếu: `snapshot_for_test()` trả về chính cache
+     * sống của WebIpc, nên giữ tham chiếu rồi quét tiếp sẽ so một giá trị với
+     * chính nó. */
+    const RuntimePointSnapshot snapshot = f.web.snapshot_for_test();
+    ASSERT_EQ(snapshot.program_count, 3u)
+        << "Program của Task thứ hai trở đi phải có mặt, không chỉ tasks().front()";
+    EXPECT_FALSE(snapshot.programs_truncated);
+
+    /* Thứ tự tất định: Task theo priority, Program theo `order`. */
+    EXPECT_EQ(std::string_view(snapshot.programs[0].instance_id.data()), "P_ahu");
+    EXPECT_EQ(std::string_view(snapshot.programs[1].instance_id.data()), "P_boiler");
+    EXPECT_EQ(std::string_view(snapshot.programs[2].instance_id.data()), "P_chiller");
+
+    ASSERT_NE(find_program_row(snapshot, "P_ahu"), nullptr);
+    ASSERT_NE(find_program_row(snapshot, "P_boiler"), nullptr);
+    ASSERT_NE(find_program_row(snapshot, "P_chiller"), nullptr);
+    EXPECT_EQ(find_program_row(snapshot, "P_ahu")->period_ms, 100u);
+    EXPECT_EQ(find_program_row(snapshot, "P_boiler")->period_ms, 5000u)
+        << "chu kỳ riêng của Program không được thay bằng chu kỳ Task";
+    EXPECT_EQ(find_program_row(snapshot, "P_chiller")->period_ms, 1000u);
+    for (std::size_t index = 0; index < snapshot.program_count; ++index)
+        EXPECT_NE(snapshot.programs[index].period_ms, 0u)
+            << "`0 ms` ở cột Cycle là số bịa — phải phân giải về chu kỳ Task";
+
+    /* Nhiều chu kỳ quét liên tiếp: bảng phải giữ nguyên thành phần, không rơi
+     * rụng và không nhân đôi. */
+    for (int cycle = 0; cycle < 5; ++cycle) f.step();
+    const RuntimePointSnapshot later = f.web.snapshot_for_test();
+    EXPECT_EQ(later.snapshot_id, snapshot.snapshot_id + 5);
+    ASSERT_EQ(later.program_count, 3u);
+    EXPECT_EQ(std::string_view(later.programs[2].instance_id.data()), "P_chiller");
+}
+
+/* Trần mảng snapshot phải bằng ĐÚNG trần Program toàn hệ thống của scheduler.
+ * `scan_loop.cpp` đã có `static_assert` cho ràng buộc đó; test này chứng minh
+ * cấu hình chạm trần thật sự đi trọn vẹn qua đường xuất, và 32 KHÔNG bị báo
+ * nhầm là tràn (lỗi off-by-one điển hình ở chỗ cắt). */
+TEST(ScanLoop, FillsProgramTableUpToTheSystemWideCeilingOfThirtyTwo)
+{
+    static_assert(KX_POINT_SNAPSHOT_MAX_PROGRAMS == st_sched_limits::kMaxProgramsTotal,
+                  "trần mảng snapshot phải bằng đúng trần Program toàn hệ thống");
+    ASSERT_EQ(st_sched_limits::kMaxProgramsTotal, 32u);
+
+    ProgramFixture f;
+    f.add_task("T0", 0, 100);
+    f.add_task("T1", 1, 100);
+    f.add_task("T2", 2, 100);
+    for (std::size_t index = 0; index < st_sched_limits::kMaxProgramsTotal; ++index) {
+        const std::string instance = "P_" + std::to_string(index);
+        const char* task = index < st_sched_limits::kMaxProgramsPerTask ? "T0" : "T1";
+        f.add_program(task, instance.c_str(),
+                      static_cast<uint16_t>(index % st_sched_limits::kMaxProgramsPerTask),
+                      0);
+    }
+
+    /* Program thứ 33 bị CHÍNH scheduler từ chối ở tầng tổng — đây là bằng chứng
+     * 32 là trần thật, không phải một con số test tự đặt. */
+    std::string error;
+    EXPECT_FALSE(f.scheduler.add_program("T2", "P_overflow", 0, &error));
+    EXPECT_NE(error.find("too many program instances in resource"), std::string::npos)
+        << error;
+
+    f.step();
+
+    const RuntimePointSnapshot snapshot = f.web.snapshot_for_test();
+    EXPECT_EQ(snapshot.program_count, st_sched_limits::kMaxProgramsTotal);
+    EXPECT_FALSE(snapshot.programs_truncated)
+        << "đúng 32 là chạm trần, không phải tràn";
+    for (std::size_t index = 0; index < st_sched_limits::kMaxProgramsTotal; ++index)
+        EXPECT_NE(find_program_row(snapshot, "P_" + std::to_string(index)), nullptr)
+            << "thiếu P_" << index;
+
+    const auto json = nlohmann::json::parse(f.web.snapshot_payload_for_test());
+    EXPECT_EQ(json.at("programs").size(), 32u);
+    EXPECT_FALSE(json.at("programsTruncated").get<bool>());
+}
+
+/* Program `DISABLED` phải NẰM TRONG bảng với trạng thái thật của nó. Lọc nó ra
+ * khỏi danh sách sẽ làm UI hiển thị "không có Program đó" — khác hẳn với "có,
+ * và đang bị tắt có chủ đích" (Plan 60 §4.1). */
+TEST(ScanLoop, KeepsDisabledProgramInTheTableWithItsRealState)
+{
+    ProgramFixture f;
+    f.add_task("MAIN", 0, 50);
+    f.add_program("MAIN", "P_running", 0, 0);
+    f.add_program("MAIN", "P_disabled", 1, 0);
+    f.stage("P_running");
+    f.stage("P_disabled");
+    f.step(); /* boundary áp dụng activation */
+    f.start("P_running");
+    f.start("P_disabled");
+    f.step();
+
+    std::string error;
+    ASSERT_TRUE(f.scheduler.disable("P_disabled", &error)) << error;
+    f.step();
+
+    const RuntimePointSnapshot snapshot = f.web.snapshot_for_test();
+    ASSERT_EQ(snapshot.program_count, 2u) << "DISABLED không được biến mất khỏi bảng";
+    const RuntimeProgramSnapshot* running = find_program_row(snapshot, "P_running");
+    const RuntimeProgramSnapshot* disabled = find_program_row(snapshot, "P_disabled");
+    ASSERT_NE(running, nullptr);
+    ASSERT_NE(disabled, nullptr);
+    EXPECT_EQ(std::string_view(running->state.data()), "RUNNING");
+    EXPECT_TRUE(running->enabled);
+    EXPECT_EQ(std::string_view(disabled->state.data()), "DISABLED");
+    EXPECT_FALSE(disabled->enabled);
+    EXPECT_EQ(disabled->period_ms, 50u) << "chu kỳ khai báo vẫn đúng khi bị tắt";
+
+    const auto json = nlohmann::json::parse(f.web.snapshot_payload_for_test());
+    ASSERT_EQ(json.at("programs").size(), 2u);
+    bool saw_disabled = false;
+    for (const auto& row : json.at("programs")) {
+        if (row.at("instanceId") != "P_disabled") continue;
+        saw_disabled = true;
+        EXPECT_EQ(row.at("state"), "DISABLED");
+        EXPECT_FALSE(row.at("enabled").get<bool>());
+    }
+    EXPECT_TRUE(saw_disabled);
+}
+
+/* Ranh giới mà phía Go dựa vào (`T60-011`, Plan 60 §4.2 điều 1): mảng RỖNG =
+ * "Core sống, hệ không có Program nào"; THIẾU KHOÁ = "Core đời cũ" ⇒ phải ra
+ * `UNAVAILABLE`. Test khẳng định KHOÁ CÓ MẶT ở cả hai cấu hình không-Program:
+ * có scheduler nhưng chưa có Task, và không nối scheduler nào cả. */
+TEST(ScanLoop, EmptySchedulerPublishesPresentButEmptyProgramArray)
+{
+    ProgramFixture with_scheduler; /* có StScheduler, chưa có Task nào */
+    with_scheduler.step();
+
+    EXPECT_EQ(with_scheduler.web.snapshot_for_test().program_count, 0u);
+    EXPECT_FALSE(with_scheduler.web.snapshot_for_test().programs_truncated);
+    const std::string with_payload{with_scheduler.web.snapshot_payload_for_test()};
+    EXPECT_NE(with_payload.find("\"programs\":[]"), std::string::npos);
+    const auto with_json = nlohmann::json::parse(with_payload);
+    ASSERT_TRUE(with_json.contains("programs"));
+    EXPECT_TRUE(with_json.at("programs").is_array());
+    EXPECT_TRUE(with_json.at("programs").empty());
+    ASSERT_TRUE(with_json.contains("programsTruncated"));
+    EXPECT_FALSE(with_json.at("programsTruncated").get<bool>());
+
+    Fixture without_scheduler; /* `st_sched == nullptr` */
+    without_scheduler.tick_iobus();
+    without_scheduler.loop.step();
+
+    const auto without_json =
+        nlohmann::json::parse(without_scheduler.web.snapshot_payload_for_test());
+    ASSERT_TRUE(without_json.contains("programs"))
+        << "không có Program Runtime vẫn phải phát khoá — vắng khoá nghĩa là Core đời cũ";
+    EXPECT_TRUE(without_json.at("programs").empty());
+    EXPECT_FALSE(without_json.at("programsTruncated").get<bool>());
+}
+
+/* MỐC BÀN GIAO M1 — bản dump `point_snapshot` THẬT, sinh từ ScanLoop chạy với
+ * hai Program khác chu kỳ và artifact ST đã ký. In ra stdout để `T60-011/012`
+ * có hình dạng wire thật để decode, thay vì một mẫu viết tay. */
+TEST(ScanLoop, DumpsRealProgramSnapshotJsonForBackendHandoff)
+{
+    ProgramFixture f;
+    f.add_task("MAIN", 0, 50);
+    f.add_program("MAIN", "P_ahu_supply_fan", 0, 0);  /* thừa kế Task = 50 ms */
+    f.add_program("MAIN", "P_boiler_stage", 1, 200);  /* chu kỳ riêng 200 ms */
+    f.stage("P_ahu_supply_fan");
+    f.stage("P_boiler_stage");
+    f.step();
+    f.start("P_ahu_supply_fan");
+    f.start("P_boiler_stage");
+
+    /* Chạy đủ lâu để CẢ HAI lớp chu kỳ release ít nhất một lần thật. */
+    for (int cycle = 0; cycle < 60; ++cycle) {
+        f.step();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    const std::string payload{f.web.snapshot_payload_for_test()};
+    ASSERT_FALSE(payload.empty());
+    const auto json = nlohmann::json::parse(payload);
+    ASSERT_EQ(json.at("programs").size(), 2u);
+    EXPECT_EQ(json.at("programs").at(0).at("instanceId"), "P_ahu_supply_fan");
+    EXPECT_EQ(json.at("programs").at(0).at("periodMs").get<uint32_t>(), 50u);
+    EXPECT_EQ(json.at("programs").at(0).at("state"), "RUNNING");
+    EXPECT_GT(json.at("programs").at(0).at("lastRunMonoNs").get<uint64_t>(), 0u)
+        << "Program 50 ms phải đã chạy thật";
+    EXPECT_EQ(json.at("programs").at(1).at("instanceId"), "P_boiler_stage");
+    EXPECT_EQ(json.at("programs").at(1).at("periodMs").get<uint32_t>(), 200u);
+    EXPECT_EQ(json.at("programs").at(1).at("state"), "RUNNING");
+    EXPECT_GT(json.at("programs").at(1).at("lastRunMonoNs").get<uint64_t>(), 0u)
+        << "Program 200 ms phải đã chạy thật";
+    EXPECT_LE(json.at("programs").at(1).at("lastRunMonoNs").get<uint64_t>(),
+              json.at("capturedMonotonicNs").get<uint64_t>())
+        << "mốc chạy phải cùng họ đồng hồ với capturedMonotonicNs";
+
+    std::printf("\n===== T60-004 M1 POINT_SNAPSHOT DUMP BEGIN =====\n%s\n"
+                "===== T60-004 M1 POINT_SNAPSHOT DUMP END =====\n",
+                payload.c_str());
+    std::fflush(stdout);
 }

@@ -1,11 +1,27 @@
-import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { Area, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import type { TrendSample } from '../types'
+
+/** Dấu sự kiện vẽ trên trục thời gian — `T57-2.6`. Biểu đồ chỉ VẼ; việc quyết
+ *  định sự kiện nào đáng đánh dấu thuộc về `features/operations/trendMarkers`. */
+export interface TrendChartMarker {
+  ts: number
+  kind: 'override' | 'alarm'
+  label: string
+  pointId: string
+  actor?: string
+}
 
 export interface TrendSeries {
   key: string
   label: string
   color: string
   unit?: string
+  /** `T57-2.5` — gán chuỗi sang trục phụ bên phải.
+   *
+   *  Vẽ nhiệt độ (°C) chung trục với độ mở van (%) làm cả hai đường dẹt lại:
+   *  thang 0-100 nuốt hết biến thiên của thang 18-26. Tối đa hai trục — thêm
+   *  nữa thì người đọc không còn biết đường nào thuộc thang nào. */
+  axis?: 'left' | 'right'
   kind?: 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'VP' | 'modbus_rtu'
   pointId?: string
   generation?: number
@@ -21,6 +37,14 @@ interface TrendChartProps {
   showTable?: boolean
   /** Vẽ dải min–max của mẫu aggregate (PA3-502 / UX-DES §13). */
   showBand?: boolean
+  /** Dấu sự kiện (`T57-2.6`). Rỗng ⇒ không vẽ gì thêm. */
+  markers?: TrendChartMarker[]
+  /** Vẽ chấm cho từng mẫu. Cần cho khối xem nhanh trên Landing: ở đó mỗi chuỗi
+   *  có nhịp lấy mẫu riêng nên một mẫu đơn lẻ không có hàng xóm để nối thành
+   *  đoạn thẳng — với `dot={false}` nó BIẾN MẤT hoàn toàn thay vì hiện ra như
+   *  một điểm dữ liệu đứt quãng (N-02). Trang Trends đầy đủ giữ mặc định tắt vì
+   *  ở đó mật độ mẫu cao, chấm chỉ làm rối. */
+  showDots?: boolean
 }
 
 /** Hậu tố khoá của dải min–max trong `TrendSample`. Một chỗ duy nhất định
@@ -69,22 +93,71 @@ function formatRaw(value: unknown, unit: string): string {
 
 function HistoryTooltip({ active, payload, label, series, rawUnit, timeZone }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: string | number | null; payload?: TrendSample }>; label?: string | number; series: TrendSeries[]; rawUnit?: string; timeZone: 'UTC' | 'local' }) {
   if (!active || !payload?.length) return null
+  /* `T57-2.4` — CON TRỎ ĐỌC GIÁ TRỊ: duyệt theo `series`, không theo `payload`.
+   *
+   * `payload` của recharts chỉ chứa những chuỗi CÓ giá trị ở đúng hàng đang
+   * hover. Với dữ liệu thưa (mỗi điểm một nhịp lấy mẫu riêng), chuỗi thiếu mẫu
+   * ở hàng đó biến mất khỏi tooltip — người dùng không phân biệt được "chuỗi
+   * này không có dữ liệu tại đây" với "chuỗi này không được chọn".
+   *
+   * So sánh setpoint với giá trị thực tại đúng thời điểm sự cố là thao tác chẩn
+   * đoán cơ bản nhất; nó chỉ làm được khi mọi chuỗi cùng xuất hiện tại một mốc.
+   * Chuỗi không có mẫu hiện `—` — đúng luật "thiếu dữ liệu thì nói ra". */
+  const row: TrendSample = payload[0]?.payload ?? { time: String(label ?? '') }
   return (
     <div className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] p-2 text-xs shadow-lg">
       <div className="mb-1 font-semibold">{formatTrendTime(label ?? '', timeZone)}</div>
-      {payload.map((entry) => {
-        const item = series.find((line) => line.key === entry.dataKey)
-        const row: TrendSample = entry.payload ?? { time: String(label ?? '') }
-        return <div key={entry.dataKey}><span>{item?.label ?? entry.dataKey}: {displayValue(entry.value, item?.kind, item?.stepped)}{item?.unit ? ` ${item.unit}` : ''}</span><div className="text-[var(--c-text-dim)]">Quality {row[`${entry.dataKey}:quality`] ?? '—'} · Source {row[`${entry.dataKey}:source`] ?? '—'} · Tier {row[`${entry.dataKey}:tier`] ?? '—'}</div></div>
+      {series.map((item) => {
+        const raw = row[item.key]
+        const missing = raw === undefined || raw === null
+        return (
+          <div key={item.key}>
+            <span style={{ color: item.color }}>■</span>{' '}
+            <span>{item.label}: {missing ? '—' : displayValue(raw as number, item.kind, item.stepped)}{!missing && item.unit ? ` ${item.unit}` : ''}</span>
+            {!missing && <div className="text-[var(--c-text-dim)]">Quality {row[`${item.key}:quality`] ?? '—'} · Source {row[`${item.key}:source`] ?? '—'} · Tier {row[`${item.key}:tier`] ?? '—'}</div>}
+          </div>
+        )
       })}
       {rawUnit && payload[0]?.payload?.['__raw'] != null && <div className="mt-1 text-[var(--c-text-dim)]">Raw: {formatRaw(payload[0].payload['__raw'], rawUnit)}</div>}
     </div>
   )
 }
 
-export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false }: TrendChartProps) {
+/**
+ * Gán trục Y phụ theo ĐƠN VỊ — `T57-2.5`.
+ *
+ * VÌ SAO TỰ ĐỘNG, KHÔNG BẮT NGƯỜI DÙNG CHỌN
+ *
+ * Lý do cần trục thứ hai luôn là "hai chuỗi khác đơn vị", và đơn vị thì đã có
+ * sẵn trong dữ liệu. Bắt người dùng tự gán là bắt họ làm lại một phép suy mà
+ * máy làm được, ngay giữa lúc đang chẩn đoán.
+ *
+ * LUẬT: đơn vị PHỔ BIẾN NHẤT giữ trục trái; đơn vị khác nhiều thứ hai sang trục
+ * phải. Từ đơn vị thứ ba trở đi vẫn ở trục trái — thêm trục nữa thì người đọc
+ * không còn biết đường nào thuộc thang nào, và một biểu đồ không đọc được thì
+ * tệ hơn hai đường dẹt.
+ */
+export function assignSecondAxis(series: Array<{ unit?: string; axis?: 'left' | 'right' }>): void {
+  const counts = new Map<string, number>()
+  for (const item of series) {
+    const unit = item.unit?.trim()
+    if (!unit) continue
+    counts.set(unit, (counts.get(unit) ?? 0) + 1)
+  }
+  if (counts.size < 2) return
+  const ranked = [...counts.entries()].sort((left, right) =>
+    right[1] - left[1] || left[0].localeCompare(right[0]))
+  const rightUnit = ranked[1][0]
+  for (const item of series) {
+    if (item.unit?.trim() === rightUnit) item.axis = 'right'
+  }
+}
+
+export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'local', showTable = true, showBand = false, showDots = false, markers = [] }: TrendChartProps) {
   const hasTimeAxis = data.every((sample) => typeof sample.__ts === 'number' && Number.isFinite(sample.__ts))
   const bandVisible = showBand && hasMinMaxBand(data, series)
+  const hasRightAxis = series.some((item) => item.axis === 'right')
+  const rightAxisUnit = series.find((item) => item.axis === 'right')?.unit
   const formatAxisTime = (value: number) => new Date(value).toLocaleTimeString('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
@@ -99,7 +172,10 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
           <ComposedChart data={data} margin={{ top: 8, right: 20, left: -18, bottom: 0 }}>
             <CartesianGrid stroke="rgba(91,96,102,0.34)" vertical={false} />
             <XAxis dataKey={hasTimeAxis ? '__ts' : 'time'} type={hasTimeAxis ? 'number' : 'category'} domain={hasTimeAxis ? ['dataMin', 'dataMax'] : undefined} tickFormatter={hasTimeAxis ? (value) => formatAxisTime(Number(value)) : undefined} stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis yAxisId="left" stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+            {hasRightAxis && (
+              <YAxis yAxisId="right" orientation="right" stroke="var(--c-text-dim)" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} label={rightAxisUnit ? { value: rightAxisUnit, position: 'insideTopRight', fontSize: 11, fill: 'var(--c-text-dim)' } : undefined} />
+            )}
             <Tooltip content={<HistoryTooltip series={series} rawUnit={rawUnit} timeZone={timeZone} />} />
             {/* Dải min–max vẽ TRƯỚC đường chính để nằm dưới nó. `connectNulls`
                 vẫn false: khoảng trống dữ liệu phải đứt cả dải lẫn đường, không
@@ -108,6 +184,7 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
               <Area
                 key={`${item.key}-band`}
                 type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'}
+                yAxisId={item.axis === 'right' ? 'right' : 'left'}
                 dataKey={trendBandKey(item.key)}
                 name={`${item.key}-band`}
                 stroke="none"
@@ -118,10 +195,52 @@ export function TrendChart({ data, series, height = 260, rawUnit, timeZone = 'lo
                 connectNulls={false}
               />
             ))}
-            {series.map((item) => <Line key={item.key} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls={false} />)}
+            {/* `T57-2.6` — vạch đứng cho sự kiện, vẽ SAU các đường để nằm trên
+                chúng. Chỉ vẽ khi trục X là thời gian thật: trên trục hạng mục
+                (`category`) không có toạ độ nào để đặt vạch cho đúng chỗ, và
+                đặt sai chỗ thì tệ hơn không vẽ. */}
+            {hasTimeAxis && markers.map((marker) => (
+              <ReferenceLine
+                key={`${marker.kind}-${marker.pointId}-${marker.ts}`}
+                yAxisId="left"
+                x={marker.ts}
+                stroke={marker.kind === 'alarm' ? 'var(--c-fault-fg)' : 'var(--c-force)'}
+                strokeDasharray="4 3"
+                strokeWidth={1.5}
+                label={{
+                  value: marker.kind === 'alarm' ? '!' : '⌾',
+                  position: 'top',
+                  fontSize: 11,
+                  fill: marker.kind === 'alarm' ? 'var(--c-fault-fg)' : 'var(--c-force)'
+                }}
+              />
+            ))}
+            {series.map((item) => <Line key={item.key} yAxisId={item.axis === 'right' ? 'right' : 'left'} type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} dataKey={item.key} name={item.key} stroke={item.color} strokeWidth={2.5} dot={showDots ? { r: 2 } : false} activeDot={{ r: 4 }} connectNulls={false} />)}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {/* Vạch trên biểu đồ nói CÓ sự kiện; bảng này nói sự kiện GÌ và AI làm.
+          Nó cũng là đường duy nhất để người dùng bàn phím hoặc trình đọc màn
+          hình tiếp cận được thông tin đó — biểu đồ SVG bên trên `aria-hidden`. */}
+      {markers.length > 0 && (
+        <ul aria-label="Trend event markers" className="flex flex-wrap gap-2 text-[11px] text-[var(--c-text-dim)]">
+          {markers.map((marker) => (
+            <li
+              key={`${marker.kind}-${marker.pointId}-${marker.ts}`}
+              className="inline-flex items-center gap-1 rounded-[var(--radius)] border px-2 py-0.5"
+              style={{
+                borderColor: marker.kind === 'alarm' ? 'var(--c-fault)' : 'var(--c-force)',
+                color: marker.kind === 'alarm' ? 'var(--c-fault-fg)' : 'var(--c-force)'
+              }}
+              title={`${marker.pointId} · ${marker.label}${marker.actor ? ` · ${marker.actor}` : ''}`}
+            >
+              <span className="mono">{formatTrendTime(marker.ts, timeZone)}</span>
+              <span>{marker.pointId} · {marker.label}</span>
+              {marker.actor && <span>· {marker.actor}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="sr-only" aria-hidden="true">
         {series.map((item) => <span key={item.key} data-testid={`trend-line-${item.key}`} data-connect-nulls="false" data-line-type={item.stepped || item.kind === 'DO' || item.kind === 'DI' ? 'stepAfter' : 'linear'} />)}
         {bandVisible && series.map((item) => <span key={`${item.key}-band`} data-testid={`trend-band-${item.key}`} data-connect-nulls="false" />)}

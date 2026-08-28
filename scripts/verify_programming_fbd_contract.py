@@ -24,17 +24,27 @@ BASE = ROOT / "contracts/programming"
 SCHEMA_PATH = BASE / "fbd_v1.schema.json"
 GOLDEN_PATH = BASE / "fbd/golden/ahu_fan_enable.json"
 KEYBOARD_PATH = BASE / "fbd_keyboard_commands_v1.json"
-PROFILE_PATH = BASE / "rev_a_profile_v1.json"
+PROFILE_PATH = BASE / "product_profile_v2.json"
 MANIFEST_PATH = BASE / "fbd/manifest.json"
 EQUIVALENCE_PATH = BASE / "fbd/equivalence_v1.json"
+REGISTRY_PATH = BASE / "pou_library_registry_v1.json"
 
 SCALAR_TYPES = {"BOOL", "INT", "DINT", "UINT", "REAL", "TIME"}
 PURE_FUNCTIONS = {
     "AND", "OR", "XOR", "NOT", "EQ", "NE", "LT", "LE", "GT", "GE",
     "ADD", "SUB", "MUL", "DIV", "MOD", "ABS", "MIN", "MAX", "LIMIT",
-    "SEL", "SCALE", "DEADBAND",
+    "SEL", "SQRT", "SCALE", "DEADBAND",
 }
-STATEFUL_FUNCTIONS = {"TON", "TOF", "R_TRIG", "F_TRIG", "CTU", "PI", "PID"}
+# `T59-804` thêm TP/CTU/CTD (`DDD-CTRL-PROG-001` §7A). `PI` giữ lại vì đây là
+# danh sách "kiểu nào ĐƯỢC PHÉP có state", không phải danh sách entry đang có.
+STATEFUL_FUNCTIONS = {"TON", "TOF", "TP", "R_TRIG", "F_TRIG", "CTU", "CTD",
+                      "HYSTERESIS", "PI", "PID"}
+EXPLICIT_CONVERSIONS = {
+    "INT_TO_REAL", "REAL_TO_INT", "TIME_TO_REAL", "REAL_TO_TIME",
+    "INT_TO_DINT", "INT_TO_UINT", "DINT_TO_INT", "DINT_TO_UINT",
+    "UINT_TO_INT", "UINT_TO_DINT", "DINT_TO_REAL", "UINT_TO_REAL",
+    "REAL_TO_DINT", "REAL_TO_UINT",
+}
 CONVERSIONS = {
     "INT_TO_DINT", "INT_TO_UINT", "DINT_TO_INT", "DINT_TO_UINT",
     "UINT_TO_INT", "UINT_TO_DINT", "DINT_TO_REAL", "UINT_TO_REAL",
@@ -125,6 +135,8 @@ def validate_graph(
                 SCALAR_TYPES if kind in {"INPUT", "OUTPUT", "CONSTANT"}
                 else PURE_FUNCTIONS if kind == "FUNCTION"
                 else STATEFUL_FUNCTIONS if kind == "FUNCTION_BLOCK"
+                else {"SIGNAL_READ"} if kind == "SIGNAL_READ"
+                else {"SIGNAL_PUBLISH"} if kind == "SIGNAL_PUBLISH"
                 else CONVERSIONS
             )
             if type_ref not in allowed:
@@ -138,6 +150,10 @@ def validate_graph(
             if kind in {"FUNCTION", "FUNCTION_BLOCK", "CONVERSION"} and (
                 not input_count or not output_count
             ):
+                errors.append(f"port shape không hợp lệ: {node['id']}")
+            if kind == "SIGNAL_READ" and (input_count or output_count != 1):
+                errors.append(f"port shape không hợp lệ: {node['id']}")
+            if kind == "SIGNAL_PUBLISH" and (input_count != 1 or output_count):
                 errors.append(f"port shape không hợp lệ: {node['id']}")
             port_orders: set[int] = set()
             port_names: set[str] = set()
@@ -203,6 +219,18 @@ def validate_keyboard(registry: dict[str, Any]) -> list[str]:
     return errors
 
 
+def registry_entry_names() -> set[str]:
+    """Tên entry Control Library, đọc từ chính registry machine-readable.
+
+    T59-601: trước đây hàm kiểm equivalence ghim con số 20. Ghim một con số làm
+    corpus KHÔNG lớn theo registry: thêm entry mới vào thư viện không làm cổng
+    nào đỏ, entry đó chỉ đơn giản không có vector nào chạy. Số đúng để so là số
+    entry của registry, và nó phải được đọc chứ không được chép.
+    """
+    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    return {entry["id"] for entry in registry["entries"]}
+
+
 def validate_equivalence(equivalence: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if equivalence.get("contractId") != "PROGRAMMING-FBD-EQUIVALENCE-V1":
@@ -210,21 +238,28 @@ def validate_equivalence(equivalence: dict[str, Any]) -> list[str]:
     if equivalence.get("version") != 1 or equivalence.get("profileId") != "revA-1t-1-5-30":
         errors.append("equivalence version/profile sai")
     pairs = equivalence.get("pairs")
-    if not isinstance(pairs, list) or len(pairs) != 20:
-        return errors + ["equivalence phải có đúng 20 cặp"]
+    traces = equivalence.get("stateTraces")
+    if not isinstance(pairs, list) or not pairs:
+        return errors + ["equivalence thiếu pairs"]
+    if not isinstance(traces, list) or not traces:
+        return errors + ["equivalence thiếu stateTraces"]
+
     ids = [item.get("id") for item in pairs if isinstance(item, dict)]
     type_refs = [item.get("typeRef") for item in pairs if isinstance(item, dict)]
-    if ids != [f"EQ-{index:03d}" for index in range(1, 21)]:
+    if ids != [f"EQ-{index:03d}" for index in range(1, len(pairs) + 1)]:
         errors.append("equivalence id/order drift")
-    if len(set(type_refs)) != 20:
-        errors.append("equivalence typeRef phải unique 20/20")
+    if len(set(type_refs)) != len(pairs):
+        errors.append("equivalence typeRef phải unique")
     for item in pairs:
         if not isinstance(item, dict) or set(item) != {
             "id", "typeRef", "inputs", "outputType", "stExpression", "vector"
         }:
             errors.append("equivalence pair field drift")
             continue
-        if item["typeRef"] not in PURE_FUNCTIONS - {"SCALE", "DEADBAND"}:
+        # `SCALE`/`DEADBAND` từng bị loại vì chúng CHƯA TỒN TẠI trong compiler;
+        # `T59-804` cho chúng compiler thật (khai triển, `DDD-CTRL-PROG-001`
+        # §7A.6) nên chúng phải nằm trong mẫu số phủ như mọi hàm thuần khác.
+        if item["typeRef"] not in PURE_FUNCTIONS | EXPLICIT_CONVERSIONS:
             errors.append(f"equivalence typeRef không thuộc common IR: {item['typeRef']}")
         if not isinstance(item["inputs"], list) or not item["inputs"]:
             errors.append(f"equivalence inputs rỗng: {item['id']}")
@@ -233,6 +268,40 @@ def validate_equivalence(equivalence: dict[str, Any]) -> list[str]:
         vector = item.get("vector")
         if not isinstance(vector, dict) or set(vector) != {"values", "expected"}:
             errors.append(f"equivalence vector sai: {item['id']}")
+
+    trace_ids = [item.get("id") for item in traces if isinstance(item, dict)]
+    if trace_ids != [f"FB-{index:03d}" for index in range(1, len(traces) + 1)]:
+        errors.append("stateTrace id/order drift")
+    for item in traces:
+        if not isinstance(item, dict):
+            errors.append("stateTrace không phải object")
+            continue
+        required = {"id", "typeRef", "instance", "inputs", "outputs",
+                    "unusedOutputPorts", "cycles"}
+        if not required <= set(item) or not set(item) <= required | {"tolerance"}:
+            errors.append(f"stateTrace field drift: {item.get('id')}")
+            continue
+        if item["typeRef"] not in STATEFUL_FUNCTIONS:
+            errors.append(f"stateTrace typeRef không stateful: {item['typeRef']}")
+        # Một chu kỳ duy nhất không kiểm được state — cái sai điển hình của FB có
+        # state là chuyển state giữa các chu kỳ, không phải công thức trong một
+        # chu kỳ.
+        if not isinstance(item["cycles"], list) or len(item["cycles"]) < 2:
+            errors.append(f"stateTrace phải có >= 2 chu kỳ: {item['id']}")
+            continue
+        for cycle in item["cycles"]:
+            if set(cycle) != {"nowNs", "values", "expected"}:
+                errors.append(f"stateTrace cycle field drift: {item['id']}")
+
+    covered = {item.get("typeRef") for item in pairs}
+    covered |= {item.get("typeRef") for item in traces}
+    entries = registry_entry_names()
+    missing = sorted(entries - covered)
+    extra = sorted(covered - entries)
+    if missing:
+        errors.append(f"entry registry KHÔNG có vector: {missing}")
+    if extra:
+        errors.append(f"vector trỏ tới entry ngoài registry: {extra}")
     return errors
 
 
@@ -243,7 +312,7 @@ def validate_manifest(
     expected = {
         "contractId": "PROGRAMMING-FBD-V1",
         "version": 1,
-        "lowererVersion": "fwsom-fbd-1.0.0",
+        "lowererVersion": "fwsom-fbd-1.1.0",
         "profileId": "revA-1t-1-5-30",
         "schemaSha256": digest(SCHEMA_PATH),
         "keyboardSha256": digest(KEYBOARD_PATH),
@@ -255,6 +324,7 @@ def validate_manifest(
         "goldenWireCount": sum(len(item["wires"]) for item in graph["networks"]),
         "keyboardCommandCount": len(keyboard["commands"]),
         "equivalencePairCount": len(equivalence["pairs"]),
+        "equivalenceStateTraceCount": len(equivalence["stateTraces"]),
     }
     return [] if manifest == expected else ["manifest/hash/count drift"]
 

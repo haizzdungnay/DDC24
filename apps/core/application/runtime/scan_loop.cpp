@@ -1,10 +1,9 @@
 #include "runtime/scan_loop.hpp"
 
 #include "graph/point_writer.hpp"
+#include "st/st_runtime_snapshot.hpp"
 
-#include <algorithm>
 #include <cstdio>
-#include <cstring>
 #include <ctime>
 
 namespace core {
@@ -29,20 +28,6 @@ static const char* point_source_name(PointSource source)
     case PointSource::DEFAULT: return "default";
     }
     return "unknown";
-}
-
-static const char* runtime_task_state(const StTask& task, bool program_owner)
-{
-    if (!program_owner || !task.enabled()) return "STOPPED";
-    if (task.monitor().should_force_safe()) return "FAULT";
-
-    bool any_running = false;
-    for (const auto& program : task.programs()) {
-        if (!program->enabled) continue;
-        if (program->state == StProgramState::FAULTED) return "FAULT";
-        if (program->state == StProgramState::RUNNING) any_running = true;
-    }
-    return any_running ? "RUNNING" : "STOPPED";
 }
 
 void ScanLoop::step()
@@ -77,6 +62,13 @@ void ScanLoop::step()
      * Từ đây trở xuống AO luôn là giá trị vật lý V/mA, không phải phần trăm. */
     d_.resolver->set_ao_modes(last_io_.ao_mode);
     d_.graph->set_ao_modes(last_io_.ao_mode);
+
+    /* Mở một chu kỳ trọng tài mới TRƯỚC mọi nguồn ghi của scan này (lệnh web/
+     * BACnet ở bước 4, schedule, graph bước 5, ST bước 5b). Nhờ vậy cảnh báo
+     * `priority.conflict` chỉ nổ khi hai nguồn cùng mức ghi trong CÙNG scan,
+     * thay vì nổ mỗi scan chỉ vì một chương trình ghi giá trị biến thiên
+     * (F-PRIO-001). */
+    d_.resolver->begin_cycle();
 
     /* 3. Read Modbus ext snapshot từ fieldbus.sock (MOD-009).
      * SOCK_DGRAM MSG_DONTWAIT — nếu không có datagram: dùng ext[] cũ (stale theo ts_ns). */
@@ -209,6 +201,19 @@ void ScanLoop::step()
                               &st_io_stats_);
         st_tick_ = d_.st_sched->on_base_step(clock.monotonic_ns);
         PointWriter program_writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
+        /* Đăng ký quyền sở hữu TRƯỚC khi publish: hai Program cùng giữ một
+         * output vật lý là hai nguồn sự thật cho cùng một van, và phát hiện điều
+         * đó SAU khi đã ghi ra thì đã muộn. */
+        if (d_.candidate_registry != nullptr) {
+            const uint64_t generation = d_.st_sched->base_step_count();
+            for (const auto& task : d_.st_sched->tasks())
+                for (const auto& program : task->programs()) {
+                    if (program->state != StProgramState::RUNNING) continue;
+                    std::string claim_error;
+                    (void)st_register_instance_candidates(*program, d_.candidate_registry,
+                                                          generation, &claim_error);
+                }
+        }
         const bool outputs_committed =
             st_apply_all_outputs(d_.st_sched, d_.resolver, &program_writer, &st_io_stats_);
         if (d_.programming_coordinator)
@@ -217,8 +222,13 @@ void ScanLoop::step()
          * (ngay) hoặc FAULTED quá holdTtl (nếu đã cấu hình) — SAU khi outputs
          * vừa publish thành công đã reset outputs_withdrawn ở trên, nên
          * instance vẫn đang chạy tốt không bị rút nhầm. */
-        st_withdraw_stale_outputs(d_.st_sched, d_.resolver, d_.program_hold_ttl_base_steps,
-                                  &st_io_stats_);
+        st_withdraw_stale_outputs(d_.st_sched, d_.resolver, d_.program_hold_ttl_ns,
+                                  d_.candidate_registry, &st_io_stats_);
+        /* Lấy mẫu SAU khi Program đã chạy và output đã publish trong chu kỳ này:
+         * mẫu phải là trạng thái đã ổn định của chu kỳ, không phải trạng thái
+         * giữa chừng. */
+        if (d_.value_trace != nullptr)
+            d_.value_trace->on_boundary(*d_.st_sched, clock.monotonic_ns);
     }
 
     if (d_.alarms)
@@ -232,8 +242,7 @@ void ScanLoop::step()
     OutputCmd out = d_.resolver->resolve();
 
     /* 7. Safe-state có thể ghi đè */
-    d_.safe->apply(last_io_, *d_.table, &out,
-                   active_mode != CutoverMode::PROGRAM_ONLY);
+    d_.safe->apply(last_io_, *d_.table, &out);
 
     /* Physical output is realtime-critical. Publish/serialization is nonessential. */
     d_.writer->write(out);
@@ -249,25 +258,9 @@ void ScanLoop::step()
     RuntimePointSnapshot runtime_snapshot = snapshot_publisher_.build(
         next_snapshot_id_++, static_cast<uint64_t>(clock.utc_epoch_ms), clock.monotonic_ns, *d_.table,
         last_io_, out, *d_.resolver, d_.safe->active(), safe_state_no_controller_only);
-    if (d_.st_sched && !d_.st_sched->tasks().empty()) {
-        const StTask& task = *d_.st_sched->tasks().front();
-        RuntimeTaskSnapshot& target = runtime_snapshot.task;
-        target.present = true;
-        const std::string& task_id = task.config().id;
-        std::memcpy(target.id.data(), task_id.data(),
-                    std::min(task_id.size(), target.id.size() - 1));
-        target.period_ms = task.config().period_ms;
-        target.budget_ms = task.config().budget_ms;
-        const char* state = runtime_task_state(task, program_owner);
-        std::memcpy(target.state.data(), state,
-                    std::min(std::strlen(state), target.state.size() - 1));
-        target.run_count = task.stats().run_count;
-        target.missed_release_count = task.stats().missed_release_count;
-        target.last_exec_ns = task.stats().last_exec_ns;
-        target.max_exec_ns = task.stats().max_exec_ns;
-        target.overrun_count = task.monitor().stats().total;
-        target.consecutive_overruns = task.monitor().stats().consecutive;
-    }
+    /* Task/Program read-back dùng cùng một helper với simulator E2E để đường
+     * debug browser không thể trôi khỏi contract chạy thật trên board. */
+    st_populate_runtime_snapshot(d_.st_sched, program_owner, &runtime_snapshot);
     d_.web->publish_point_snapshot(runtime_snapshot);
 
     for (const WebCommand& cmd : pending_alarm_) {

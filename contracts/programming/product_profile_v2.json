@@ -1,0 +1,107 @@
+{
+  "$schema": "./product_profile_v2.schema.json",
+  "profileId": "revA-1t-1-5-30",
+  "profileCode": 1,
+  "targetAbi": 3841,
+  "version": {
+    "major": 2,
+    "minor": 1
+  },
+  "capacity": {
+    "maxObjects": 1312,
+    "maxProgramsTotal": 32,
+    "maxProgramsEnabled": 16,
+    "maxUserPou": 256,
+    "maxFunctionBlockInstances": 1024,
+    "maxSignals": 512,
+    "maxBindings": 512
+  },
+  "scheduler": {
+    "maxTasks": 3,
+    "maxProgramsPerTask": 32,
+    "maxProgramsTotal": 32,
+    "allowedPeriodMs": [
+      1000,
+      5000,
+      30000
+    ],
+    "maxTaskBudgetPercent": 20
+  },
+  "resources": {
+    "maxSourceBytes": 65536,
+    "maxVariables": 512,
+    "maxStatements": 4096,
+    "maxFbdBlocks": 256,
+    "maxFbdConnections": 512,
+    "maxArtifactBytes": 1048576,
+    "maxInstructions": 4096,
+    "maxSlots": 1024,
+    "maxWritableSlots": 512,
+    "maxConstants": 512,
+    "maxFunctionBlocks": 64,
+    "maxBindings": 256,
+    "maxRetainVariables": 128,
+    "maxRetainBytes": 4096,
+    "maxSections": 16
+  },
+  "languages": [
+    "ST",
+    "FBD"
+  ],
+  "types": [
+    {
+      "name": "BOOL",
+      "widthBits": 1,
+      "wireCode": 1,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "INT",
+      "widthBits": 16,
+      "wireCode": 5,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "DINT",
+      "widthBits": 32,
+      "wireCode": 2,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "UINT",
+      "widthBits": 16,
+      "wireCode": 6,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "REAL",
+      "widthBits": 32,
+      "wireCode": 3,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    },
+    {
+      "name": "TIME",
+      "widthBits": 64,
+      "wireCode": 4,
+      "conversion": "EXPLICIT_FAIL_CLOSED"
+    }
+  ],
+  "pointKinds": [
+    "LOCAL",
+    "VP",
+    "MB_RTU"
+  ],
+  "coreLibrary": {
+    "version": "rev-a.3"
+  },
+  "integrityMode": "SIGNATURE_REQUIRED",
+  "reviewGatedFeatures": [
+    {
+      "featureId": "PID",
+      "registryEntryId": "PID",
+      "policy": "BLOCK_CHECK",
+      "approvalEvidenceRef": null,
+      "approvalToken": null
+    }
+  ]
+}

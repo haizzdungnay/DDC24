@@ -86,6 +86,12 @@ enum class StFbType : uint16_t {
      * DDD-CTRL-PROG-001 §7. Giá trị wire mới 5, artifact cũ (1..4) vẫn
      * byte-compatible. */
     PID    = 5,
+    /* `T59-804`/`DDD-CTRL-PROG-001` §7A. Bốn block thêm sau PID; giá trị 1..5
+     * giữ nguyên nên artifact cũ vẫn byte-compatible. */
+    TP     = 6,
+    CTU    = 7,
+    CTD    = 8,
+    HYSTERESIS = 9,
 };
 
 StFbType st_fb_type_from_name(const std::string& name);
@@ -120,6 +126,12 @@ struct StVarDecl {
 struct StFbDecl {
     std::string name;
     StFbType    fb_type = StFbType::NONE;
+    /* T59-104: instance của FUNCTION_BLOCK do người dùng hoặc Control Library
+     * định nghĩa. Cùng lý do với `USER_CALL`: parser không biết tập POU nên nó
+     * chỉ GHI LẠI tên kiểu; registry mới phân giải. `fb_type` giữ `NONE` cho
+     * trường hợp này để không có đường nào nhầm nó với FB dựng sẵn. */
+    bool        is_user_type = false;
+    std::string user_type_name;
     bool        retained = false;
     int         line = 0;
     int         column = 0;
@@ -140,6 +152,10 @@ enum class StUnOp : uint8_t { NEG, NOT };
  * semantic và codegen không lệch nhau khi đổi tên hiển thị. */
 enum class StFunc : uint8_t {
     ABS, MIN, MAX, LIMIT, SEL, SQRT,
+    /* `T59-804`/`DDD-CTRL-PROG-001` §7A.6 — hai hàm KHAI TRIỂN: compiler dựng
+     * chúng bằng chuỗi lệnh đã có, không có opcode IR riêng (một lệnh IR mang
+     * tối đa ba toán hạng nguồn, còn SCALE cần năm). */
+    SCALE, DEADBAND,
     INT_TO_REAL, REAL_TO_INT, TIME_TO_REAL, REAL_TO_TIME,
     INT_TO_DINT, INT_TO_UINT, DINT_TO_INT, DINT_TO_UINT,
     UINT_TO_INT, UINT_TO_DINT, DINT_TO_REAL, UINT_TO_REAL,
@@ -160,6 +176,16 @@ struct StExpr {
         BINOP,
         UNOP,
         CALL,         /* hàm chuẩn */
+        /* T59-102: gọi FUNCTION do người dùng hoặc Control Library định nghĩa.
+         * Parser KHÔNG tự phán tên nào hợp lệ — nó chỉ ghi lại tên; việc phân
+         * giải là của `st_pou_registry`, nơi biết cả tập POU của Project lẫn
+         * library đã pin. Tách hai việc này là điều kiện để có được thông điệp
+         * "thiếu entry" khác với "sai version" khác với "đệ quy". */
+        USER_CALL,
+        /* T59-404/F-P59-SIGNAL-001: đọc Published Signal bằng contract đã
+         * pin ở Check. Tên được giữ trong artifact để coordinator resolve một
+         * lần; executor chỉ dùng index, không tra chuỗi trong scan. */
+        SIGNAL_READ,
     };
 
     Kind kind = Kind::LITERAL;
@@ -182,6 +208,8 @@ struct StExpr {
     std::unique_ptr<StExpr> operand;
 
     StFunc      func = StFunc::ABS;
+    std::string user_call_name;          /* USER_CALL: tên POU/entry được gọi */
+    std::string signal_name;             /* SIGNAL_READ */
     std::vector<std::unique_ptr<StExpr>> args;
 
     StType      result_type = StType::REAL;   /* điền bởi st_semantic */
@@ -208,7 +236,7 @@ struct StIfBranch {
 };
 
 struct StStmt {
-    enum class Kind : uint8_t { ASSIGN, IF, FB_CALL };
+    enum class Kind : uint8_t { ASSIGN, IF, FB_CALL, SIGNAL_PUBLISH };
 
     Kind kind = Kind::ASSIGN;
 
@@ -229,12 +257,57 @@ struct StStmt {
     int                   fb_line = 0;
     int                   fb_column = 0;
     int                   fb_length = 1;
+
+    /* SIGNAL_PUBLISH(name, value); — side effect duy nhất được phép ở source.
+     * Runtime chỉ flush bản ghi sau khi toàn bộ cycle thành công. */
+    std::string             signal_name;
+    std::unique_ptr<StExpr> signal_value;
+    int                     signal_line = 0;
+    int                     signal_column = 0;
+    int                     signal_length = 1;
+};
+
+/* Contract compiler nhận từ Revision/package manifest. `producer_program`
+ * là runtime Program ID, không phải objectId/sourceId. */
+struct StPublishedSignalContract {
+    std::string name;
+    StType type = StType::REAL;
+    std::string producer_program;
 };
 
 /* ---- Chương trình ---- */
 
+/* ---- T59-101: ba loại POU (DDD-SW-PROG-UNIFIED-001 §0, §4.2) ----
+ *
+ * Ba loại dùng CHUNG một AST vì thân chúng là cùng một ngôn ngữ; khác biệt nằm ở
+ * chữ ký và ở quyền hạn. Tách thành ba struct riêng sẽ nhân bản toàn bộ parser,
+ * semantic và lowering — đúng thứ đã sinh ra drift ở registry library. */
+enum class StPouKind : uint8_t {
+    PROGRAM        = 0,
+    FUNCTION       = 1,
+    FUNCTION_BLOCK = 2,
+};
+
+const char* st_pou_kind_name(StPouKind kind);
+bool st_pou_kind_from_keyword(const std::string& upper, StPouKind* out);
+
+/* Độ dài tên POU theo DDD §4.2 (IEC identifier 1..64). */
+constexpr std::size_t kMaxPouNameLength = 64;
+
 struct StProgram {
+    /* Mặc định PROGRAM để mọi call site cũ giữ nguyên nghĩa. */
+    StPouKind   kind = StPouKind::PROGRAM;
     std::string name;
+
+    /* Chỉ FUNCTION có kiểu trả về; hai loại còn lại phải để `has_return_type`
+     * bằng false. Bất biến này do parser ép, không phải quy ước ngầm. */
+    bool        has_return_type = false;
+    StType      return_type = StType::REAL;
+
+    int line = 0;      /* vị trí của tên POU, cho source map */
+    int column = 0;
+    int length = 1;
+
     std::vector<StVarDecl> vars;      /* mọi khối VAR_*, phân biệt bằng storage */
     std::vector<StFbDecl>  fbs;
     std::vector<StStmt>    body;

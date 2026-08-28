@@ -121,6 +121,7 @@ if(HMI_BUILD_TESTS)
         tests/test_hmi_api_client.cpp
         tests/test_locale.cpp
         tests/test_nav.cpp
+        tests/test_override_countdown.cpp
         )
     target_link_libraries(hmi_tests PRIVATE hmi_lib)
     target_compile_options(hmi_tests PRIVATE -Wno-error=unused-parameter)

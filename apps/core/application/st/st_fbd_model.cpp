@@ -12,10 +12,12 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <string_view>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include "st/st_library_registry_generated.hpp"
 #include "st/st_limits.hpp"
 #include "st/st_profile_generated.hpp"
 
@@ -25,6 +27,10 @@ namespace {
 using json = nlohmann::json;
 
 constexpr std::size_t kMaxNetworks = 256;
+/* Trần hình học: đủ cho mọi node hợp lệ của một tài liệu (256 network ×
+ * 16 node) mà vẫn chặn được một map phình vô hạn gửi từ client. */
+constexpr std::size_t kMaxLayoutNodes = 4096;
+constexpr double      kMaxLayoutCoordinate = 100000.0;
 constexpr std::size_t kMaxPortsPerNode = 16;
 
 void add_issue(FbdValidationResult* result, const char* code, std::string path)
@@ -81,6 +87,40 @@ bool has_unsigned_in_range(const json& object, const char* key, uint64_t maximum
            object[key].get<uint64_t>() <= maximum;
 }
 
+/* `T59-806` — hình học TRÌNH BÀY của đồ thị.
+ *
+ * Compiler kiểm nó rồi VỨT ĐI: không một trường nào của `layout` đi vào
+ * `FbdDocument`, nên "cùng topology, khác hình học ⇒ cùng IR" là bất biến CẤU
+ * TRÚC chứ không phải một lời hứa ai đó phải nhớ giữ. Vẫn phải kiểm vì tài
+ * liệu là dữ liệu người dùng gửi lên: toạ độ vô hạn/NaN hay khoá rác vẫn là
+ * thứ phải từ chối ở biên, không phải thứ để im lặng bỏ qua. */
+bool is_valid_layout(const json& layout)
+{
+    if (!layout.is_object()) return false;
+    if (!has_only_keys(layout, {"schemaVersion", "nodes"})) return false;
+    if (!layout.contains("schemaVersion") || !layout["schemaVersion"].is_number_unsigned() ||
+        layout["schemaVersion"].get<uint64_t>() != 1) {
+        return false;
+    }
+    if (!layout.contains("nodes") || !layout["nodes"].is_object()) return false;
+    const auto& nodes = layout["nodes"];
+    if (nodes.size() > kMaxLayoutNodes) return false;
+    for (auto item = nodes.cbegin(); item != nodes.cend(); ++item) {
+        if (!is_canonical_uuid(item.key())) return false;
+        const auto& point = item.value();
+        if (!point.is_object() || !has_only_keys(point, {"x", "y"})) return false;
+        for (const char* axis : {"x", "y"}) {
+            if (!point.contains(axis) || !point[axis].is_number()) return false;
+            const double value = point[axis].get<double>();
+            if (!std::isfinite(value) || value < -kMaxLayoutCoordinate ||
+                value > kMaxLayoutCoordinate) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool parse_type(const std::string& value, StType* out)
 {
     static const std::array<std::pair<const char*, StType>, 6> types{{
@@ -98,11 +138,13 @@ bool parse_type(const std::string& value, StType* out)
 
 bool parse_kind(const std::string& value, FbdNodeKind* out)
 {
-    static const std::array<std::pair<const char*, FbdNodeKind>, 6> kinds{{
+    static const std::array<std::pair<const char*, FbdNodeKind>, 8> kinds{{
         {"INPUT", FbdNodeKind::INPUT}, {"OUTPUT", FbdNodeKind::OUTPUT},
         {"CONSTANT", FbdNodeKind::CONSTANT}, {"FUNCTION", FbdNodeKind::FUNCTION},
         {"FUNCTION_BLOCK", FbdNodeKind::FUNCTION_BLOCK},
         {"CONVERSION", FbdNodeKind::CONVERSION},
+        {"SIGNAL_READ", FbdNodeKind::SIGNAL_READ},
+        {"SIGNAL_PUBLISH", FbdNodeKind::SIGNAL_PUBLISH},
     }};
     for (const auto& item : kinds) {
         if (value == item.first) {
@@ -121,47 +163,86 @@ const std::unordered_set<std::string>& scalar_types()
     return values;
 }
 
+/* Ba allowlist dưới đây từng được chép tay và đã trôi khỏi compiler thật:
+ * `SCALE`/`DEADBAND`/`CTU`/`PI` được cho phép dù compiler không có, trong khi
+ * `SQRT` và bốn conversion INT_TO_REAL/REAL_TO_INT/TIME_TO_REAL/REAL_TO_TIME bị
+ * từ chối dù FE vẫn chào người dùng. Nay chúng sinh từ registry machine-readable
+ * và có test chứng minh mọi entry giải được ở compiler. */
+template <std::size_t N>
+std::unordered_set<std::string> to_set(const std::array<std::string_view, N>& generated)
+{
+    std::unordered_set<std::string> values;
+    values.reserve(N);
+    for (std::string_view item : generated) values.emplace(item);
+    return values;
+}
+
 const std::unordered_set<std::string>& pure_functions()
 {
-    static const std::unordered_set<std::string> values{
-        "AND", "OR", "XOR", "NOT", "EQ", "NE", "LT", "LE", "GT", "GE",
-        "ADD", "SUB", "MUL", "DIV", "MOD", "ABS", "MIN", "MAX", "LIMIT",
-        "SEL", "SCALE", "DEADBAND",
-    };
+    static const std::unordered_set<std::string> values =
+        to_set(st_library_registry_generated::kPureFunctions);
     return values;
 }
 
 const std::unordered_set<std::string>& stateful_functions()
 {
-    static const std::unordered_set<std::string> values{
-        "TON", "TOF", "R_TRIG", "F_TRIG", "CTU", "PI", "PID",
-    };
+    static const std::unordered_set<std::string> values =
+        to_set(st_library_registry_generated::kFbTypes);
     return values;
 }
 
 const std::unordered_set<std::string>& explicit_conversions()
 {
-    static const std::unordered_set<std::string> values{
-        "INT_TO_DINT", "INT_TO_UINT", "DINT_TO_INT", "DINT_TO_UINT",
-        "UINT_TO_INT", "UINT_TO_DINT", "DINT_TO_REAL", "UINT_TO_REAL",
-        "REAL_TO_DINT", "REAL_TO_UINT",
-    };
+    static const std::unordered_set<std::string> values =
+        to_set(st_library_registry_generated::kExplicitConversions);
     return values;
 }
 
-bool node_type_ref_matches_kind(const FbdNode& node)
+/* Tên có mặt ở BẤT KỲ bảng registry nào. Dùng để phân biệt "sai kind" với "POU
+ * người dùng": hai thứ này có hai cách sửa khác nhau. */
+bool known_to_registry(const std::string& type_ref)
 {
-    switch (node.kind) {
+    return scalar_types().count(type_ref) != 0 || pure_functions().count(type_ref) != 0 ||
+           stateful_functions().count(type_ref) != 0 ||
+           explicit_conversions().count(type_ref) != 0 || type_ref == "SIGNAL_READ" ||
+           type_ref == "SIGNAL_PUBLISH";
+}
+
+/* Trả false nếu `type_ref` chắc chắn sai. Với FUNCTION/FUNCTION_BLOCK, một
+ * identifier không thuộc registry dựng sẵn CHƯA chắc sai — nó có thể là POU của
+ * Project hoặc Control Library. Lớp model không biết tập POU nên nó đánh dấu
+ * `user_type_ref` và để lớp compile phân giải; ở đó mã lỗi mới nói được "chưa có
+ * POU" khác "sai kind" khác "vòng gọi".
+ *
+ * Đánh đổi được ghi rõ: một typo như `ADDD` nay lọt qua lớp model và chết ở lớp
+ * compile. Đó là cùng đánh đổi đã chọn cho `USER_CALL` ở ST, và nó đúng vì lớp
+ * model KHÔNG có dữ liệu để phán — báo sai lý do còn tệ hơn báo muộn một lớp. */
+bool node_type_ref_matches_kind(FbdNode* node)
+{
+    switch (node->kind) {
     case FbdNodeKind::INPUT:
     case FbdNodeKind::OUTPUT:
     case FbdNodeKind::CONSTANT:
-        return scalar_types().count(node.type_ref) != 0;
+        return scalar_types().count(node->type_ref) != 0;
     case FbdNodeKind::FUNCTION:
-        return pure_functions().count(node.type_ref) != 0;
+        if (pure_functions().count(node->type_ref) != 0) return true;
+        /* Tên CÓ trong registry nhưng thuộc kind khác là SAI KIND, không phải POU
+         * người dùng — `TON` trên node FUNCTION phải chết ngay ở lớp model. Chỉ
+         * tên registry hoàn toàn không biết mới được coi là POU người dùng. */
+        if (known_to_registry(node->type_ref)) return false;
+        node->user_type_ref = true;
+        return true;
     case FbdNodeKind::FUNCTION_BLOCK:
-        return stateful_functions().count(node.type_ref) != 0;
+        if (stateful_functions().count(node->type_ref) != 0) return true;
+        if (known_to_registry(node->type_ref)) return false;
+        node->user_type_ref = true;
+        return true;
     case FbdNodeKind::CONVERSION:
-        return explicit_conversions().count(node.type_ref) != 0;
+        return explicit_conversions().count(node->type_ref) != 0;
+    case FbdNodeKind::SIGNAL_READ:
+        return node->type_ref == "SIGNAL_READ";
+    case FbdNodeKind::SIGNAL_PUBLISH:
+        return node->type_ref == "SIGNAL_PUBLISH";
     }
     return false;
 }
@@ -184,6 +265,12 @@ bool node_port_shape_matches_kind(const FbdNode& node)
     case FbdNodeKind::FUNCTION_BLOCK:
     case FbdNodeKind::CONVERSION:
         return input_count > 0 && output_count > 0;
+    case FbdNodeKind::SIGNAL_READ:
+        return node.ports.size() == 1 && input_count == 0 && output_count == 1 &&
+               node.ports[0].name == "OUT" && node.ports[0].order == 0;
+    case FbdNodeKind::SIGNAL_PUBLISH:
+        return node.ports.size() == 1 && input_count == 1 && output_count == 0 &&
+               node.ports[0].name == "IN" && node.ports[0].order == 0;
     }
     return false;
 }
@@ -191,6 +278,18 @@ bool node_port_shape_matches_kind(const FbdNode& node)
 bool is_stateful(const FbdNode& node)
 {
     return node.kind == FbdNodeKind::FUNCTION_BLOCK;
+}
+
+bool signal_parameters_match_kind(const FbdNode& node)
+{
+    if (node.kind != FbdNodeKind::SIGNAL_READ &&
+        node.kind != FbdNodeKind::SIGNAL_PUBLISH)
+        return true;
+    if (node.parameters.size() != 1) return false;
+    const auto found = node.parameters.find("signal");
+    if (found == node.parameters.end()) return false;
+    const auto* signal = std::get_if<std::string>(&found->second);
+    return signal != nullptr && is_identifier(*signal);
 }
 
 bool parameters_are_bounded(const json& value)
@@ -331,10 +430,10 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
         add_issue(&result, "FBD-SCHEMA-JSON-DUP-001", "$");
         return result;
     }
-    if (!has_only_keys(root, {"$schema", "schemaVersion", "profileId", "graphId", "name", "networks"}) ||
+    if (!has_only_keys(root, {"$schema", "schemaVersion", "profileId", "graphId", "name", "networks", "layout"}) ||
         !has_string(root, "$schema") || !has_unsigned_in_range(root, "schemaVersion", 1) ||
         root["schemaVersion"].get<uint64_t>() != 1 || !has_string(root, "profileId") ||
-        root["profileId"] != "revA-1t-1-5-30" || !has_string(root, "graphId") ||
+        root["profileId"] != st_profile_generated::kProfileId || !has_string(root, "graphId") ||
         !has_string(root, "name") || !root.contains("networks") || !root["networks"].is_array()) {
         add_issue(&result, "FBD-SCHEMA-ROOT-001", "$");
         return result;
@@ -343,6 +442,10 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
         !is_canonical_uuid(root["graphId"].get<std::string>()) ||
         !is_identifier(root["name"].get<std::string>())) {
         add_issue(&result, "FBD-SCHEMA-ROOT-001", "$");
+    }
+
+    if (root.contains("layout") && !is_valid_layout(root["layout"])) {
+        add_issue(&result, "FBD-SCHEMA-LAYOUT-001", "$.layout");
     }
 
     const auto& networks_json = root["networks"];
@@ -410,7 +513,7 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
                 !is_identifier(node.type_ref) || !execution_orders.emplace(node.execution_order).second) {
                 add_issue(&result, "FBD-SEM-NODE-001", node_path);
             }
-            if (!node_type_ref_matches_kind(node)) {
+            if (!node_type_ref_matches_kind(&node)) {
                 add_issue(&result, "FBD-SEM-TYPE-REF-001", node_path + ".typeRef");
             }
             for (const auto& parameter : node_json["parameters"].items()) {
@@ -464,6 +567,9 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
             }
             if (!node_port_shape_matches_kind(node)) {
                 add_issue(&result, "FBD-SEM-PORT-SHAPE-001", node_path + ".ports");
+            }
+            if (!signal_parameters_match_kind(node)) {
+                add_issue(&result, "FBD-SEM-PARAM-001", node_path + ".parameters");
             }
             network.nodes.push_back(std::move(node));
         }
@@ -519,6 +625,14 @@ FbdValidationResult validate_and_canonicalize_fbd(std::string_view source)
     }
 
     if (!result.issues.empty()) return result;
+    /* `T59-806` — hình học KHÔNG được vào dạng canonical.
+     *
+     * `canonical_json` là thứ đi vào hash artifact và pin bản dựng. Nếu
+     * `layout` còn nằm trong đó thì kéo một block sang phải 10 px sẽ đổi hash
+     * của một chương trình có ngữ nghĩa y hệt — commission lại, ký lại, mất
+     * luôn ý nghĩa của "cùng topology ⇒ cùng IR". Vứt nó ở đây, sau khi đã
+     * kiểm, là chỗ duy nhất đúng: kiểm ở biên, quên trước khi canonical hoá. */
+    root.erase("layout");
     sort_canonical(&root);
     sort_document(&document);
     result.canonical_json = root.dump();

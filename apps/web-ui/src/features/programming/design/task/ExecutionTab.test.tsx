@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { UserRole } from '../../../../shared/types'
-import type { ProgrammingCapabilities, ProgrammingDraftDocument, RemoteState } from '../../model/types'
+import type { ProgrammingDraftDocument } from '../../model/types'
 import { ExecutionTab } from './ExecutionTab'
 
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
@@ -30,41 +30,23 @@ function documentFixture(): ProgrammingDraftDocument {
   }
 }
 
-function capabilities(overrides: Partial<RemoteState<ProgrammingCapabilities>> = {}): RemoteState<ProgrammingCapabilities> {
-  return {
-    status: 'ready',
-    data: {
-      schemaVersion: '1.0',
-      profile: 'MK-DDC-24-REV-A',
-      targetState: 'READY',
-      languages: ['ST', 'FBD'],
-      types: ['BOOL', 'REAL'],
-      taskPeriodsMs: [1000, 5000],
-      limits: { projectsPerController: 1, tasks: 1, stSourceBytes: 65536, variables: 512, statements: 4096, fbdBlocks: 256, fbdConnections: 512, artifactBytes: 1048576, bindings: 256 },
-    },
-    error: null,
-    refresh: vi.fn(),
-    ...overrides,
-  }
-}
-
 beforeEach(() => {
   auth.role = 'admin'
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(cleanup)
 
-describe('ExecutionTab capability-driven', () => {
-  it('chỉ hiện chu kỳ Core công bố và lưu cùng thứ tự Program mới', async () => {
+describe('ExecutionTab', () => {
+  it('hiển thị chu kỳ 1s/5s/30s và lưu cùng thứ tự Program mới', async () => {
     const onSave = vi.fn().mockResolvedValue(true)
     const onPending = vi.fn()
     render(
       <I18nProvider>
-        <ExecutionTab document={documentFixture()} saving={false} onSave={onSave} onPendingOperationsChange={onPending} discardVersion={0} capabilities={capabilities()} />
+        <ExecutionTab document={documentFixture()} saving={false} onSave={onSave} onPendingOperationsChange={onPending} discardVersion={0} />
       </I18nProvider>
     )
     const period = screen.getByLabelText('Chu kỳ')
-    expect(within(period).getAllByRole('option').map((option) => option.textContent)).toEqual(['1 s', '5 s'])
+    expect(within(period).getAllByRole('option').map((option) => option.textContent?.trim())).toEqual(['1 s', '5 s', '30 s'])
     fireEvent.change(period, { target: { value: '5000' } })
     fireEvent.click(screen.getAllByRole('button', { name: /Xuống/ })[0])
     await waitFor(() => expect(onPending).toHaveBeenLastCalledWith([
@@ -74,35 +56,17 @@ describe('ExecutionTab capability-driven', () => {
     expect(onSave).toHaveBeenCalledWith([{ op: 'setTask', task: { taskId: 'main', periodMs: 5000, programOrder: ['b', 'a'] } }])
   })
 
-  it('khóa thay đổi và cho đọc lại khi capability lỗi', () => {
-    const refresh = vi.fn()
+  it('viewer bị khóa quyền sửa và không thấy nút Lưu', () => {
+    auth.role = 'viewer'
+    const onSave = vi.fn()
+    const onPending = vi.fn()
     render(
       <I18nProvider>
-        <ExecutionTab
-          document={documentFixture()}
-          saving={false}
-          onSave={vi.fn().mockResolvedValue(true)}
-          onPendingOperationsChange={vi.fn()}
-          discardVersion={0}
-          capabilities={capabilities({ status: 'error', error: '503', refresh })}
-        />
+        <ExecutionTab document={documentFixture()} saving={false} onSave={onSave} onPendingOperationsChange={onPending} discardVersion={0} />
       </I18nProvider>
     )
-    expect(screen.getByText('Không xác minh được capability chu kỳ.')).toBeInTheDocument()
     expect(screen.getByLabelText('Chu kỳ')).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
-    expect(refresh).toHaveBeenCalledOnce()
-  })
-
-  it('fail-closed khi Core không công bố chu kỳ hợp lệ', () => {
-    const state = capabilities()
-    state.data = { ...state.data!, taskPeriodsMs: [] }
-    render(
-      <I18nProvider>
-        <ExecutionTab document={documentFixture()} saving={false} onSave={vi.fn().mockResolvedValue(true)} onPendingOperationsChange={vi.fn()} discardVersion={0} capabilities={state} />
-      </I18nProvider>
-    )
-    expect(screen.getByText('Core không công bố chu kỳ Task hợp lệ.')).toBeInTheDocument()
-    expect(screen.getByLabelText('Chu kỳ')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Lưu' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Xuống/ })).not.toBeInTheDocument()
   })
 })

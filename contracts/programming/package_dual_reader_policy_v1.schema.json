@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong-hcm.local/contracts/programming/package_dual_reader_policy_v1.schema.json",
+  "title": "Chính sách dual-reader package Programming v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "policyId", "schemaVersion", "description", "readableSchemaVersions",
+    "writableSchemaVersions", "activePackageCount", "unknownSchemaVersion",
+    "unknownMagic", "downgradeActive", "rules", "owners"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "policyId": { "const": "PROGRAMMING-PACKAGE-DUAL-READER-V1" },
+    "schemaVersion": { "const": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "readableSchemaVersions": {
+      "description": "Phải chứa mọi version writer từng tạo ra và vẫn có thể là LKG.",
+      "type": "array", "minItems": 2, "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1 }
+    },
+    "writableSchemaVersions": {
+      "description": "Đúng MỘT version ghi được: hai writer song song sinh package Active hỗn hợp.",
+      "type": "array", "minItems": 1, "maxItems": 1, "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1 }
+    },
+    "activePackageCount": { "const": 1 },
+    "unknownSchemaVersion": { "const": "REJECT_NO_MUTATION" },
+    "unknownMagic": { "const": "REJECT_NO_MUTATION" },
+    "downgradeActive": { "const": "FORBIDDEN" },
+    "rules": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "owners": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "writerLoader", "rollbackRehearsal"],
+      "properties": {
+        "schema": { "type": "string", "pattern": "^T59-[0-9]{3}$" },
+        "writerLoader": { "type": "string", "pattern": "^T59-[0-9]{3}$" },
+        "rollbackRehearsal": { "type": "string", "pattern": "^T59-[0-9]{3}$" }
+      }
+    }
+  }
+}

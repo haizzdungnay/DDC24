@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -15,6 +16,8 @@ type fakeRuntimeStatusReader struct {
 	producerMode string
 	active       *string
 	lkg          *string
+	signals      []runtimeSignalPayload
+	protocolMinor uint16
 }
 
 func (f *fakeRuntimeStatusReader) Call(_ context.Context, request coreipc.Request) (coreipc.Response, error) {
@@ -22,13 +25,104 @@ func (f *fakeRuntimeStatusReader) Call(_ context.Context, request coreipc.Reques
 		return coreipc.Response{}, errors.New("core unavailable trong test")
 	}
 	payload, err := coreipc.EncodePayload(runtimeImpactPayload{
-		ProducerMode: f.producerMode, ActiveRevisionID: f.active, LKGRevisionID: f.lkg, ActiveOverrideIDs: []string{},
+		ProducerMode: f.producerMode, ActiveRevisionID: f.active, LKGRevisionID: f.lkg,
+		ActiveOverrideIDs: []string{}, Signals: f.signals,
 	})
 	if err != nil {
 		return coreipc.Response{}, err
 	}
 	response := coreipc.ResponseFor(request, coreipc.ResultOK, "", "core.programming.ipc", payload)
+	if f.protocolMinor != 0 {
+		response.ProtocolMinor = f.protocolMinor
+	}
 	return response, nil
+}
+
+func TestRuntimeServiceGetSignalsMarksLegacyCoreDegraded(t *testing.T) {
+	service := newRuntimeService(t, &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", protocolMinor: 2})
+	page, err := service.GetSignals(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.ProducerState != "DEGRADED" || len(page.Items) != 0 {
+		t.Fatalf("Core minor 2 không được bị coi là signal READY: %+v", page)
+	}
+}
+
+// T59-504: Published Signal phải ghép identity của Revision với value
+// authoritative của Core. `valid=false` luôn giữ value=null; mismatch
+// contract phải fail-closed, không vẽ thành số 0 hợp lệ.
+func TestRuntimeServiceGetSignalsJoinsRevisionAndFailsClosed(t *testing.T) {
+	projects, store := openProjectService(t)
+	actor := Actor{ID: testActorID, Role: "admin"}
+	created, err := projects.CreateProject(context.Background(), actor, CreateProjectCommand{
+		SchemaVersion: "1.0", Name: "Signal runtime", IdempotencyKey: "91000000-0000-4000-8000-000000000001",
+		CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+	programID := "91111111-1111-4111-8111-111111111111"
+	signalID := "92222222-2222-4222-8222-222222222222"
+	operations := []json.RawMessage{
+		pouOp(programID, "AHU", "PROGRAM"),
+		programOp(programID, programID, 1000),
+		op(map[string]any{"op": "upsertSignal", "signal": map[string]any{
+			"signalId": signalID, "name": "SUPPLY_TEMP", "type": "REAL", "unit": "degC",
+			"publisherProgramId": programID, "freshnessMs": 5000, "stalePolicy": "HOLD_LAST",
+		}}),
+	}
+	saved, err := projects.SaveDraft(context.Background(), actor, SaveDraftCommand{
+		ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID, Operations: operations,
+		IfMatch: created.ETag, IdempotencyKey: "91000000-0000-4000-8000-000000000002",
+		CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := projects.SealRevision(context.Background(), actor, SealRevisionCommand{
+		ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID, Label: "R signal",
+		IfMatch: saved.ETag, IdempotencyKey: "91000000-0000-4000-8000-000000000003",
+		CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisionID := sealed.Resource["revisionId"].(string)
+	reader := &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: &revisionID,
+		signals: []runtimeSignalPayload{
+			{Name: "SUPPLY_TEMP", ProducerProgramID: programID, DataType: "REAL", Value: float64(0),
+				Valid: false, Quality: "BAD", Freshness: "UNAVAILABLE", StalePolicy: "HOLD_LAST",
+				FreshnessMS: 5000, PublishedAtMonoNS: 44, Generation: 2},
+			{Name: "CORE_EXTRA", ProducerProgramID: programID, DataType: "BOOL", Value: true,
+				Valid: true, Quality: "GOOD", Freshness: "FRESH", StalePolicy: "HOLD_LAST",
+				FreshnessMS: 5000, PublishedAtMonoNS: 45, Generation: 3},
+		}}
+	service, err := NewRuntimeService(RuntimeServiceOptions{Runtime: reader, Store: store,
+		ControllerID: "controller-local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := service.GetSignals(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.ProducerState != "READY" || page.ActiveRevisionID == nil || *page.ActiveRevisionID != revisionID {
+		t.Fatalf("page=%+v", page)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("items=%+v", page.Items)
+	}
+	matched := page.Items[1] // sắp xếp theo name: CORE_EXTRA, SUPPLY_TEMP
+	if matched.Name != "SUPPLY_TEMP" || matched.SignalID == nil || *matched.SignalID != signalID ||
+		matched.DefinitionState != "MATCHED" || matched.Valid || matched.Value != nil {
+		t.Fatalf("signal invalid không fail-closed: %+v", matched)
+	}
+	if page.Items[0].Name != "CORE_EXTRA" || page.Items[0].DefinitionState != "CORE_ONLY" {
+		t.Fatalf("signal thừa Core bị che: %+v", page.Items[0])
+	}
 }
 
 func newRuntimeService(t *testing.T, reader RuntimeStatusReader) *RuntimeService {

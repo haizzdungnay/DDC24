@@ -1,0 +1,81 @@
+{
+  "$schema": "../artifact_v2.schema.json",
+  "magic": "MKDDCIR2",
+  "schemaVersion": 2,
+  "compilerProfile": 1,
+  "targetAbi": 3841,
+  "headerBytes": 128,
+  "artifactBytes": 717,
+  "sections": [
+    {
+      "type": "POU_TABLE",
+      "offset": 256,
+      "bytes": 35,
+      "itemCount": 3
+    },
+    {
+      "type": "PROGRAM_TABLE",
+      "offset": 291,
+      "bytes": 33,
+      "itemCount": 2
+    },
+    {
+      "type": "CODE_IR",
+      "offset": 324,
+      "bytes": 168,
+      "itemCount": 2
+    },
+    {
+      "type": "FB_LAYOUT",
+      "offset": 492,
+      "bytes": 34,
+      "itemCount": 1
+    },
+    {
+      "type": "SIGNAL_DEFS",
+      "offset": 526,
+      "bytes": 74,
+      "itemCount": 2
+    },
+    {
+      "type": "BINDING_MANIFEST",
+      "offset": 600,
+      "bytes": 50,
+      "itemCount": 3
+    },
+    {
+      "type": "LIBRARY_LOCK",
+      "offset": 650,
+      "bytes": 43,
+      "itemCount": 1
+    },
+    {
+      "type": "RESOURCE_BUDGET",
+      "offset": 693,
+      "bytes": 24,
+      "itemCount": 1
+    }
+  ],
+  "flags": [
+    "HAS_SIGNALS",
+    "HAS_LIBRARY_LOCK",
+    "HAS_MULTI_PROGRAM",
+    "HAS_RETAIN"
+  ],
+  "sha256": "642ced0183d570a0a31baa7fe793923078ff53cce9cabaddbda464f1079dde97",
+  "integrityMode": "HASH_ONLY",
+  "signatureReservedZero": true,
+  "libraryLock": {
+    "systemVersion": "rev-a.1",
+    "systemSha256": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "projectRevisionId": null
+  },
+  "layoutVersion": 2,
+  "capacity": {
+    "programCount": 2,
+    "pouCount": 3,
+    "fbInstanceCount": 1,
+    "signalCount": 2,
+    "bindingCount": 3
+  }
+}

@@ -424,8 +424,8 @@ type modbusBusInfo struct {
 	TotalDevices   int  `json:"total_devices"`
 	OnlineDevices  int  `json:"online_devices"`
 	// Con trỏ: nil = iobus chưa đo được. FE hiện "—" thay vì 0.
-	PollLatencyP50 *int     `json:"poll_latency_p50_ms"`
-	PollLatencyP95 *int     `json:"poll_latency_p95_ms"`
+	PollLatencyP50 *int `json:"poll_latency_p50_ms"`
+	PollLatencyP95 *int `json:"poll_latency_p95_ms"`
 	// Timeout/CRC gộp từ số đo THEO SLAVE. `TotalErrors` là tổng của cả dây do
 	// BusWorker đếm, gồm cả lỗi chưa quy được về slave nào — hai con số này
 	// không được cộng vào nhau (REV-BE-10).

@@ -5,15 +5,30 @@ import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_f
 import { I18nProvider } from '../../../shared/i18n'
 import { StructuredFbdEditor } from './StructuredFbdEditor'
 import type { FbdDocument } from './model'
+import type { UserPouInterface } from './userPou'
 
 function golden(): FbdDocument {
   return JSON.parse(JSON.stringify(goldenJson)) as FbdDocument
 }
 
-function renderEditor(document: FbdDocument, canEdit = true, onChange = vi.fn()) {
+function renderEditor(
+  document: FbdDocument,
+  canEdit = true,
+  onChange = vi.fn(),
+  userPouInterfaces: readonly UserPouInterface[] = [],
+) {
   return {
     onChange,
-    ...render(<I18nProvider><StructuredFbdEditor document={document} canEdit={canEdit} onChange={onChange} /></I18nProvider>),
+    ...render(
+      <I18nProvider>
+        <StructuredFbdEditor
+          document={document}
+          canEdit={canEdit}
+          onChange={onChange}
+          userPouInterfaces={userPouInterfaces}
+        />
+      </I18nProvider>,
+    ),
   }
 }
 
@@ -29,7 +44,7 @@ describe('StructuredFbdEditor', () => {
     expect(screen.getAllByRole('button', { name: /OUTPUT OUT BOOL/ })).toHaveLength(3)
   })
 
-  it('hoàn tất một wire chỉ bằng Arrow và Enter', async () => {
+  it('AC-FBD-004: hoàn tất một wire chỉ bằng Arrow và Enter — mỗi nối đều do người dùng xác nhận', async () => {
     const document = golden()
     document.networks[0].wires = document.networks[0].wires.slice(1)
     const { onChange } = renderEditor(document)
@@ -54,7 +69,7 @@ describe('StructuredFbdEditor', () => {
     expect(changed.networks[0].wires).toHaveLength(0)
   })
 
-  it('chế độ chỉ đọc chặn cả toolbar và shortcut mutation', () => {
+  it('AC-PGM02-010 / AC-FBD-009: chế độ chỉ đọc chặn cả toolbar và shortcut mutation', () => {
     const { onChange } = renderEditor(golden(), false)
     expect(screen.getByText(/Read only|Chỉ đọc/)).toBeTruthy()
     fireEvent.keyDown(screen.getByRole('region', { name: /Structured FBD editor|Bộ dựng FBD/ }), { key: 'Insert' })
@@ -71,7 +86,7 @@ describe('StructuredFbdEditor', () => {
 })
 
 describe('StructuredFbdEditor — Palette (WP-05)', () => {
-  it('thêm block từ palette (không chỉ AND) và Inspector cho phép đổi kiểu toán hạng', async () => {
+  it('AC-FBD-003 / AC-FBD-005: thêm block từ palette (không chỉ AND) và Inspector cho phép đổi kiểu toán hạng', async () => {
     const { onChange } = renderEditor(golden())
     fireEvent.change(screen.getByLabelText(/^Block$|^Khối$/), { target: { value: 'OR' } })
     fireEvent.click(screen.getByRole('button', { name: /Add block|Thêm khối/ }))
@@ -158,5 +173,70 @@ describe('StructuredFbdEditor — Palette (WP-05)', () => {
     const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
     const fb = changed.networks[0].nodes.find((node) => node.typeRef === 'TON')
     expect(fb?.parameters).toEqual({ instance: 'FanDelay', retained: true })
+  })
+})
+
+describe('StructuredFbdEditor — POU và keyboard/a11y (T59-506)', () => {
+  const blend: UserPouInterface = {
+    name: 'Blend',
+    kind: 'FUNCTION',
+    inputs: [
+      { name: 'A', dataType: 'REAL' },
+      { name: 'B', dataType: 'REAL' },
+    ],
+    returnType: 'REAL',
+  }
+
+  it('AC-FBD-003: đưa POU typed vào palette và Insert thêm đúng POU đang chọn bằng bàn phím', async () => {
+    const onChange = vi.fn()
+    renderEditor(golden(), true, onChange, [blend])
+    const palette = screen.getByLabelText(/^Block$|^Khối$/)
+    expect(screen.getByRole('option', { name: /Blend · FUNCTION/ })).toBeTruthy()
+    fireEvent.change(palette, { target: { value: 'Blend' } })
+
+    const editor = screen.getByRole('region', { name: /Structured FBD editor|Bộ dựng FBD/ })
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    const node = changed.networks[0].nodes.find((candidate) => candidate.typeRef === 'Blend')
+    expect(node?.kind).toBe('FUNCTION')
+    expect(node?.ports.map((port) => `${port.direction}:${port.name}:${port.dataType}`)).toEqual([
+      'INPUT:A:REAL', 'INPUT:B:REAL', 'OUTPUT:OUT:REAL',
+    ])
+  })
+
+  it('Insert vẫn thêm block khi focus đang ở toolbar sau khi Tab tới editor', async () => {
+    const onChange = vi.fn()
+    renderEditor(golden(), true, onChange)
+    const networkButton = screen.getByRole('button', { name: /^Network$/ })
+    networkButton.focus()
+
+    fireEvent.keyDown(networkButton, { key: 'Insert' })
+
+    expect(document.activeElement).toBe(screen.getByRole('region', { name: /Structured FBD editor|Bộ dựng FBD/ }))
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    expect(changed.networks[0].nodes).toHaveLength(golden().networks[0].nodes.length + 1)
+  })
+
+  it('AC-ST-010: interface POU lỗi không làm crash editor và được báo rõ thay vì sinh pin đoán', () => {
+    renderEditor(golden(), true, vi.fn(), [{ ...blend, name: '1 bad POU' }])
+    expect(screen.getByRole('status').textContent).toMatch(/POU không thể đưa vào palette|POUs are unavailable/)
+    expect(screen.queryByRole('option', { name: /1 bad POU/ })).toBeNull()
+  })
+
+  it('Arrow/Delete/Ctrl+Z trong ô nhập giữ hành vi native, không biến thành lệnh sửa graph', () => {
+    const onChange = vi.fn()
+    renderEditor(golden(), true, onChange)
+    fireEvent.click(screen.getByRole('button', { name: /^Input$/ }))
+    const variableInput = screen.getByLabelText(/Variable name|Tên biến/) as HTMLInputElement
+    variableInput.focus()
+
+    fireEvent.keyDown(variableInput, { key: 'ArrowDown' })
+    fireEvent.keyDown(variableInput, { key: 'Delete' })
+    fireEvent.keyDown(variableInput, { key: 'z', ctrlKey: true })
+
+    expect(document.activeElement).toBe(variableInput)
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

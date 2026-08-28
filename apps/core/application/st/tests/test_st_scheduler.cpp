@@ -12,6 +12,7 @@
 #include "st/st_diagnostic.hpp"
 #include "st/st_ir.hpp"
 #include "st/st_process_image.hpp"
+#include "st/st_profile_generated.hpp"
 #include "st/st_scheduler.hpp"
 #include "st/st_test_key.hpp"
 #include "priority/priority_resolver.hpp"
@@ -156,17 +157,36 @@ TEST(StSchedulerRevA, AcceptsOnlyProfilePeriodsAndBudgetBelowTwentyPercent)
     EXPECT_TRUE(below_limit.add_task(task_cfg("Control_Main", 0, 1000, 199), &err)) << err;
 }
 
-TEST(StSchedulerRevA, RejectsSecondTaskAndSecondProgram)
+TEST(StSchedulerProduct, AcceptsProfileCapacityAndRejectsOneOver)
 {
+    /* Product v2 cho phép nhiều Program (32 tổng, 16 Enabled). Test cũ khoá
+     * "một task, một program" nên nó chứng minh giới hạn As-Built chứ không phải
+     * giới hạn sản phẩm; nay kiểm đúng trần profile và một-trên-trần. */
     StScheduler s(StSchedulerProfile::REV_A);
     std::string err;
-    ASSERT_TRUE(s.add_task(task_cfg("Control_Main", 0, 1000, 100), &err)) << err;
-    EXPECT_FALSE(s.add_task(task_cfg("Other", 1, 5000, 100), &err));
-    EXPECT_NE(err.find("limit 1"), std::string::npos);
 
-    ASSERT_TRUE(s.add_program("Control_Main", "program-main", 0, &err)) << err;
-    EXPECT_FALSE(s.add_program("Control_Main", "program-second", 1, &err));
-    EXPECT_NE(err.find("too many programs"), std::string::npos);
+    const std::size_t max_tasks = st_profile_generated::kMaxTasks;
+    ASSERT_EQ(max_tasks, st_profile_generated::kAllowedPeriodMs.size());
+    for (std::size_t index = 0; index < max_tasks; ++index) {
+        const std::string id = "Task_" + std::to_string(index);
+        ASSERT_TRUE(s.add_task(task_cfg(id.c_str(), static_cast<uint8_t>(index),
+                                        st_profile_generated::kAllowedPeriodMs[index], 100),
+                               &err))
+            << err;
+    }
+    EXPECT_FALSE(
+        s.add_task(task_cfg("Task_over", static_cast<uint8_t>(max_tasks), 1000, 100), &err));
+    EXPECT_NE(err.find("limit " + std::to_string(max_tasks)), std::string::npos) << err;
+
+    const std::size_t max_total = st_profile_generated::kMaxProgramsTotal;
+    for (std::size_t index = 0; index < max_total; ++index) {
+        const std::string instance = "program-" + std::to_string(index);
+        ASSERT_TRUE(s.add_program("Task_0", instance, static_cast<uint16_t>(index), &err))
+            << instance << ": " << err;
+    }
+    EXPECT_FALSE(
+        s.add_program("Task_0", "program-over", static_cast<uint16_t>(max_total), &err));
+    EXPECT_NE(err.find("too many program"), std::string::npos) << err;
 }
 
 TEST(StSchedulerRevA, BaseStepContinuesWhileThirtySecondTaskWaitsForRelease)
@@ -330,11 +350,17 @@ TEST(StScheduler, MultipleProgramsInOneTaskAllRun)
     EXPECT_EQ(counter_of(s, "p1"), 1);
 }
 
-TEST(StScheduler, ProgramFaultStopsRestOfTask)
+TEST(StScheduler, ProgramFaultIsIsolatedFromRestOfTask)
 {
-    /* Program 0 lỗi -> Program 1 KHÔNG chạy trong tick đó. Các Program trong
-     * một Task thường phối hợp, chạy tiếp sẽ đẩy đầu ra vào tổ hợp chưa từng
-     * được thiết kế. */
+    /* T59-403 ĐẢO CHIỀU hành vi cũ. Trước đây Program 0 lỗi làm Program 1 không
+     * chạy, với lý do "các Program trong một Task thường phối hợp". Lý do đó
+     * thuộc về thời Task chỉ có một Program và mọi trao đổi là ngầm.
+     *
+     * Trong mô hình đa Program, kiến trúc §8 quy định "isolate Program", và trao
+     * đổi giữa Program đi qua Published Signal có chính sách fallback KHAI BÁO
+     * cho đúng tình huống producer chết. Dừng cả Task nghĩa là một Program hỏng
+     * làm mọi Program khác — kể cả Program không liên quan gì tới nó — ngừng tác
+     * động lên đầu ra, mà không có mục nào trong hồ sơ nói vì sao. */
     StScheduler s;
     std::string err;
     ASSERT_TRUE(s.add_task(task_cfg("T", 0, 100), &err));
@@ -347,7 +373,11 @@ TEST(StScheduler, ProgramFaultStopsRestOfTask)
     const StSchedulerTickResult r = s.tick(100 * kMs);
     EXPECT_EQ(r.faults, 1u);
     EXPECT_EQ(s.find_program("bad")->state, StProgramState::FAULTED);
-    EXPECT_EQ(counter_of(s, "good"), 0) << "Program sau Program lỗi KHÔNG được chạy";
+    EXPECT_EQ(s.find_program("good")->state, StProgramState::RUNNING)
+        << "Program lành không được lây trạng thái fault";
+    EXPECT_EQ(counter_of(s, "good"), 1) << "Program lành phải vẫn chạy trong đúng tick đó";
+    EXPECT_FALSE(s.find_task("T")->last_dispatch_succeeded())
+        << "Task vẫn phải báo dispatch không sạch — cô lập không có nghĩa là im lặng";
 }
 
 TEST(StScheduler, FaultedProgramDoesNotCommitPartialState)

@@ -10,13 +10,7 @@ import (
 func TestValidateImpactAcknowledgements(t *testing.T) {
 	none := ImpactGroup{Status: ImpactNone}
 	present := func(item string) ImpactGroup { return ImpactGroup{Status: ImpactPresent, Items: []string{item}} }
-	base := Impact{
-		ImpactRef:            "impact-v1",
-		Retain:               none,
-		ActiveOverrides:      none,
-		Cutover:              none,
-		OutputMappingChanges: none,
-	}
+	base := impactWithEveryGroup("impact-v1", none)
 
 	tests := []struct {
 		name    string
@@ -25,13 +19,13 @@ func TestValidateImpactAcknowledgements(t *testing.T) {
 		code    domain.ErrorCode
 	}{
 		{name: "không có impact thì mảng rỗng hợp lệ", impact: base, request: CommissionRequest{ImpactRef: "impact-v1"}},
-		{name: "đúng tập PRESENT", impact: withGroups(base, present("retain-layout"), present("AO-01")), request: CommissionRequest{ImpactRef: "impact-v1", Acknowledgements: []ImpactKey{ImpactRetain, ImpactActiveOverrides}}},
-		{name: "thiếu acknowledgement", impact: withGroups(base, present("retain-layout"), none), request: CommissionRequest{ImpactRef: "impact-v1"}, code: domain.ErrAckMissing},
+		{name: "đúng tập PRESENT", impact: withImpactGroups(base, map[ImpactKey]ImpactGroup{ImpactRetain: present("retain-layout"), ImpactActiveOverrides: present("AO-01")}), request: CommissionRequest{ImpactRef: "impact-v1", Acknowledgements: []ImpactKey{ImpactRetain, ImpactActiveOverrides}}},
+		{name: "thiếu acknowledgement", impact: withImpactGroups(base, map[ImpactKey]ImpactGroup{ImpactRetain: present("retain-layout")}), request: CommissionRequest{ImpactRef: "impact-v1"}, code: domain.ErrAckMissing},
 		{name: "thừa acknowledgement", impact: base, request: CommissionRequest{ImpactRef: "impact-v1", Acknowledgements: []ImpactKey{ImpactRetain}}, code: domain.ErrAckUnexpected},
-		{name: "acknowledgement trùng", impact: withGroups(base, present("x"), none), request: CommissionRequest{ImpactRef: "impact-v1", Acknowledgements: []ImpactKey{ImpactRetain, ImpactRetain}}, code: domain.ErrAckUnexpected},
-		{name: "impact unavailable", impact: withGroups(base, ImpactGroup{Status: ImpactUnavailable, Reason: "core offline"}, none), request: CommissionRequest{ImpactRef: "impact-v1"}, code: domain.ErrImpactUnavailable},
-		{name: "status thiếu fail closed", impact: withGroups(base, ImpactGroup{}, none), request: CommissionRequest{ImpactRef: "impact-v1"}, code: domain.ErrImpactUnavailable},
-		{name: "present không có item fail closed", impact: withGroups(base, ImpactGroup{Status: ImpactPresent}, none), request: CommissionRequest{ImpactRef: "impact-v1", Acknowledgements: []ImpactKey{ImpactRetain}}, code: domain.ErrImpactUnavailable},
+		{name: "acknowledgement trùng", impact: withImpactGroups(base, map[ImpactKey]ImpactGroup{ImpactRetain: present("x")}), request: CommissionRequest{ImpactRef: "impact-v1", Acknowledgements: []ImpactKey{ImpactRetain, ImpactRetain}}, code: domain.ErrAckUnexpected},
+		{name: "impact unavailable", impact: withImpactGroups(base, map[ImpactKey]ImpactGroup{ImpactRetain: {Status: ImpactUnavailable, Reason: "core offline"}}), request: CommissionRequest{ImpactRef: "impact-v1"}, code: domain.ErrImpactUnavailable},
+		{name: "status thiếu fail closed", impact: withImpactGroups(base, map[ImpactKey]ImpactGroup{ImpactRetain: {}}), request: CommissionRequest{ImpactRef: "impact-v1"}, code: domain.ErrImpactUnavailable},
+		{name: "present không có item fail closed", impact: withImpactGroups(base, map[ImpactKey]ImpactGroup{ImpactRetain: {Status: ImpactPresent}}), request: CommissionRequest{ImpactRef: "impact-v1", Acknowledgements: []ImpactKey{ImpactRetain}}, code: domain.ErrImpactUnavailable},
 		{name: "impactRef stale", impact: base, request: CommissionRequest{ImpactRef: "impact-old"}, code: domain.ErrImpactStale},
 		{name: "khóa không biết bị chặn", impact: base, request: CommissionRequest{ImpactRef: "impact-v1", Acknowledgements: []ImpactKey{"unknown"}}, code: domain.ErrAckUnexpected},
 	}
@@ -55,14 +49,55 @@ func TestValidateImpactAcknowledgements(t *testing.T) {
 	}
 }
 
-func TestMissingAcknowledgementsAreSorted(t *testing.T) {
-	impact := Impact{
-		ImpactRef:            "impact-v1",
-		Retain:               ImpactGroup{Status: ImpactPresent, Items: []string{"retain"}},
-		ActiveOverrides:      ImpactGroup{Status: ImpactPresent, Items: []string{"override"}},
-		Cutover:              ImpactGroup{Status: ImpactNone},
-		OutputMappingChanges: ImpactGroup{Status: ImpactNone},
+func TestAllEightPresentImpactGroupsRequireAndAcceptExactAckSet(t *testing.T) {
+	impact := impactWithEveryGroup("impact-v1", ImpactGroup{Status: ImpactNone})
+	acknowledgements := make([]ImpactKey, 0, len(allImpactKeys))
+	for _, key := range allImpactKeys {
+		impact = withImpactGroups(impact, map[ImpactKey]ImpactGroup{
+			key: {Status: ImpactPresent, Items: []string{"item-" + string(key)}},
+		})
+		acknowledgements = append(acknowledgements, key)
 	}
+	if got := len(acknowledgements); got != 8 {
+		t.Fatalf("số nhóm impact = %d; want 8", got)
+	}
+	if public := ValidateImpactAcknowledgements(impact, CommissionRequest{
+		ImpactRef: impact.ImpactRef, Acknowledgements: acknowledgements,
+	}); public != nil {
+		t.Fatalf("đúng tám acknowledgement bị từ chối: %+v", public)
+	}
+
+	missingLast := append([]ImpactKey(nil), acknowledgements[:len(acknowledgements)-1]...)
+	public := ValidateImpactAcknowledgements(impact, CommissionRequest{
+		ImpactRef: impact.ImpactRef, Acknowledgements: missingLast,
+	})
+	if public == nil || public.Code != domain.ErrAckMissing {
+		t.Fatalf("thiếu nhóm thứ tám không bị chặn: %+v", public)
+	}
+}
+
+func TestEveryMissingImpactGroupFailsClosed(t *testing.T) {
+	for _, key := range allImpactKeys {
+		t.Run(string(key), func(t *testing.T) {
+			impact := impactWithEveryGroup("impact-v1", ImpactGroup{Status: ImpactNone})
+			impact = withImpactGroups(impact, map[ImpactKey]ImpactGroup{key: {}})
+			public := ValidateImpactAcknowledgements(impact, CommissionRequest{ImpactRef: impact.ImpactRef})
+			if public == nil || public.Code != domain.ErrImpactUnavailable {
+				t.Fatalf("nhóm thiếu status không fail-closed: %+v", public)
+			}
+			if got, want := public.Field, "impact."+string(key); got != want {
+				t.Fatalf("field = %q; want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestMissingAcknowledgementsAreSorted(t *testing.T) {
+	impact := impactWithEveryGroup("impact-v1", ImpactGroup{Status: ImpactNone})
+	impact = withImpactGroups(impact, map[ImpactKey]ImpactGroup{
+		ImpactRetain:          {Status: ImpactPresent, Items: []string{"retain"}},
+		ImpactActiveOverrides: {Status: ImpactPresent, Items: []string{"override"}},
+	})
 	err := ValidateImpactAcknowledgements(impact, CommissionRequest{ImpactRef: "impact-v1"})
 	if err == nil {
 		t.Fatal("missing acknowledgements accepted")
@@ -72,8 +107,40 @@ func TestMissingAcknowledgementsAreSorted(t *testing.T) {
 	}
 }
 
-func withGroups(base Impact, retain, overrides ImpactGroup) Impact {
-	base.Retain = retain
-	base.ActiveOverrides = overrides
+func impactWithEveryGroup(impactRef string, group ImpactGroup) Impact {
+	return Impact{
+		ImpactRef:            impactRef,
+		Retain:               group,
+		ActiveOverrides:      group,
+		Cutover:              group,
+		OutputMappingChanges: group,
+		PublishedSignals:     group,
+		ControlLibrary:       group,
+		ProgramSet:           group,
+		EnableIntent:         group,
+	}
+}
+
+func withImpactGroups(base Impact, groups map[ImpactKey]ImpactGroup) Impact {
+	for key, group := range groups {
+		switch key {
+		case ImpactRetain:
+			base.Retain = group
+		case ImpactActiveOverrides:
+			base.ActiveOverrides = group
+		case ImpactCutover:
+			base.Cutover = group
+		case ImpactOutputMappingChanges:
+			base.OutputMappingChanges = group
+		case ImpactPublishedSignals:
+			base.PublishedSignals = group
+		case ImpactControlLibrary:
+			base.ControlLibrary = group
+		case ImpactProgramSet:
+			base.ProgramSet = group
+		case ImpactEnableIntent:
+			base.EnableIntent = group
+		}
+	}
 	return base
 }

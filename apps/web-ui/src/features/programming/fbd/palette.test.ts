@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import {
+  PROGRAMMING_LIBRARY_CATEGORY_ORDER,
+  PROGRAMMING_LIBRARY_ENTRIES,
+} from '../api/generated/library_registry'
 import { FBD_DATA_TYPES } from './model'
 import {
   FBD_PALETTE,
@@ -7,6 +11,7 @@ import {
   defaultConstantLiteral,
   fbdPaletteEntry,
   isValidConstantLiteral,
+  paletteEntriesCompatibleWith,
 } from './palette'
 
 /* Đối chiếu trực tiếp apps/core/application/st/st_program.cpp (kFuncs[]) và
@@ -20,6 +25,62 @@ const KFUNCS_ARITY: Record<string, number> = {
   REAL_TO_DINT: 1, REAL_TO_UINT: 1,
 }
 const BINOP_TYPE_REFS = ['AND', 'OR', 'XOR', 'EQ', 'NE', 'LT', 'LE', 'GT', 'GE', 'ADD', 'SUB', 'MUL', 'DIV', 'MOD']
+
+describe('Palette sinh từ registry POU/Control Library (T59-003)', () => {
+  it('không còn entry ma PI', () => {
+    // Bốn entry từng nằm trong allowlist FBD của Core mà compiler không hề có.
+    // `CTU`, rồi `SCALE`/`DEADBAND` lần lượt RỜI danh sách ở `T59-804` — mỗi
+    // tên chỉ rời khi đã có compiler/runtime thật và vector conformance chạy ở
+    // cả ST lẫn FBD, không phải vì ai đó muốn thấy nó trên palette. `PI` vẫn là
+    // ma và registry là nguồn duy nhất nên nó không thể quay lại một phía.
+    for (const ghost of ['PI']) {
+      expect(FBD_PALETTE.some((entry) => entry.id === ghost)).toBe(false)
+      expect(PROGRAMMING_LIBRARY_ENTRIES.some((entry) => entry.id === ghost)).toBe(false)
+    }
+  })
+
+  it('chào đúng những entry Core từng từ chối: SQRT và 4 conversion', () => {
+    for (const id of ['SQRT', 'INT_TO_REAL', 'REAL_TO_INT', 'TIME_TO_REAL', 'REAL_TO_TIME']) {
+      expect(fbdPaletteEntry(id)).toBeDefined()
+    }
+  })
+
+  it('palette bằng đúng registry, không thêm bớt', () => {
+    expect(FBD_PALETTE.map((entry) => entry.id)).toEqual(
+      PROGRAMMING_LIBRARY_ENTRIES.map((entry) => entry.id),
+    )
+    expect(FBD_PALETTE_CATEGORY_ORDER).toEqual(PROGRAMMING_LIBRARY_CATEGORY_ORDER)
+  })
+
+  it('buildPorts chỉ đổi kiểu cho port nằm trong typedPortNames', () => {
+    for (const entry of FBD_PALETTE) {
+      const source = PROGRAMMING_LIBRARY_ENTRIES.find((item) => item.id === entry.id)
+      expect(source).toBeDefined()
+      const probe = entry.polymorphic
+        ? entry.allowedTypes.find((type) => type !== entry.defaultType)
+        : entry.defaultType
+      const ports = entry.buildPorts(probe ?? entry.defaultType)
+      expect(ports.map((port) => port.name)).toEqual(source!.ports.map((port) => port.name))
+      for (const [index, port] of ports.entries()) {
+        const declared = source!.ports[index]
+        if (entry.typedPortNames.includes(port.name)) {
+          expect(port.dataType).toBe(probe ?? entry.defaultType)
+        } else {
+          expect(port.dataType).toBe(declared.dataType)
+        }
+      }
+    }
+  })
+
+  it('PID giữ trạng thái REVIEW_REQUIRED kèm cảnh báo song ngữ', () => {
+    const review = PROGRAMMING_LIBRARY_ENTRIES.filter(
+      (entry) => entry.featureState === 'REVIEW_REQUIRED',
+    )
+    expect(review.map((entry) => entry.id)).toEqual(['PID'])
+    expect(fbdPaletteEntry('PID')?.warning?.vi).toBeTruthy()
+    expect(fbdPaletteEntry('PID')?.warning?.en).toBeTruthy()
+  })
+})
 
 describe('FBD_PALETTE (FBD_EDITOR_DESIGN.md §1)', () => {
   it('mọi typeRef duy nhất và khớp entry.id', () => {
@@ -118,5 +179,32 @@ describe('isValidConstantLiteral / defaultConstantLiteral', () => {
     expect(isValidConstantLiteral('REAL', Number.NaN)).toBe(false)
     expect(isValidConstantLiteral('TIME', 'not-a-time')).toBe(false)
     expect(isValidConstantLiteral('TIME', 'T#1m30s')).toBe(true)
+  })
+})
+
+describe('T59-804 — lọc palette theo cổng đang chọn', () => {
+  it('không có cổng nào đang chọn thì KHÔNG lọc', () => {
+    expect(paletteEntriesCompatibleWith(FBD_PALETTE, null)).toHaveLength(FBD_PALETTE.length)
+  })
+
+  it('giữ block đa hình nhận kiểu đó và block có cổng kiểu cố định đó', () => {
+    const forTime = paletteEntriesCompatibleWith(FBD_PALETTE, 'TIME').map((entry) => entry.id)
+    // TON/TOF có cổng `PT:TIME` cố định — phải còn lại dù không đa hình.
+    expect(forTime).toContain('TON')
+    expect(forTime).toContain('TOF')
+    // AND chỉ có cổng BOOL: không khớp cổng TIME.
+    expect(forTime).not.toContain('AND')
+  })
+
+  it('so sánh vẫn khớp cổng BOOL nhờ OUT:BOOL cố định', () => {
+    const forBool = paletteEntriesCompatibleWith(FBD_PALETTE, 'BOOL').map((entry) => entry.id)
+    expect(forBool).toContain('GT')
+    expect(forBool).toContain('AND')
+  })
+
+  it('lọc không bao giờ rỗng hoá palette một cách im lặng — kiểu lạ trả rỗng có thể quan sát', () => {
+    const filtered = paletteEntriesCompatibleWith(FBD_PALETTE, 'REAL')
+    expect(filtered.length).toBeGreaterThan(0)
+    expect(filtered.length).toBeLessThan(FBD_PALETTE.length)
   })
 })

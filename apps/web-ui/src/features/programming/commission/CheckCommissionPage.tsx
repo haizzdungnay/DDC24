@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, CheckCircle2, ClipboardCheck, GitCompareArrows, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, ClipboardCheck, ShieldCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
 import { Panel } from '../../../shared/components/Panel'
@@ -9,181 +9,47 @@ import { Modal } from '../../../shared/components/Modal'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
+import { programsWorkspacePath } from '../shared/programsRoute'
 import { useProgrammingCheck, useProgrammingOverrides, useProgrammingRevisionChanges } from '../api/queries'
 import { useDraftWorkspace, useCheckWorkflow } from '../design/useDraftWorkspace'
-import { useCommissionWorkflow } from './useCommissionWorkflow'
-import type { ProgrammingImpactGroup, ProgrammingImpactKey } from '../api/generated/client'
-import type { ProgrammingOverrideEntry } from '../model/types'
+import { useCommissionWorkflow, type CommissionWorkflowState } from './useCommissionWorkflow'
+import type { ProgrammingImpactKey } from '../api/generated/client'
+import type { ProgrammingCheck } from '../model/types'
 import { ProblemsDrawer } from '../shared/ProblemsDrawer'
 
-const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = ['retain', 'activeOverrides', 'cutover', 'outputMappingChanges']
+// T59-502: thứ tự đi từ thứ tác động MẠNH NHẤT lên thiết bị đang chạy xuống
+// thứ nhẹ hơn. Người vận hành đọc từ trên xuống, nên thứ có thể làm hỏng quá
+// trình phải nằm trên.
+const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = [
+  'enableIntent', 'programSet', 'retain', 'activeOverrides',
+  'cutover', 'outputMappingChanges', 'publishedSignals', 'controlLibrary'
+]
 const IMPACT_GROUP_LABEL: Record<ProgrammingImpactKey, [string, string]> = {
   retain: ['Trạng thái lưu (RETAIN) sẽ khởi tạo lại', 'RETAIN state will be re-initialised'],
   activeOverrides: ['Override thủ công đang giữ đầu ra', 'Manual overrides currently holding outputs'],
   cutover: ['Chuyển quyền điều khiển graph → program', 'Cutover from graph to program control'],
-  outputMappingChanges: ['Thay đổi ánh xạ Điểm ảnh hưởng đầu ra vật lý', 'Point mapping changes affecting physical outputs']
+  outputMappingChanges: ['Thay đổi ánh xạ Điểm ảnh hưởng đầu ra vật lý', 'Point mapping changes affecting physical outputs'],
+  enableIntent: ['Chương trình ĐANG CHẠY sẽ bị thay', 'Programs currently running will be replaced'],
+  programSet: ['Thêm hoặc bớt chương trình trên thiết bị', 'Programs added to or removed from the controller'],
+  publishedSignals: ['Đổi tín hiệu công bố: freshness / chính sách khi mất dữ liệu', 'Published signal changes: freshness / stale policy'],
+  controlLibrary: ['Đổi Control Library dùng chung', 'Shared Control Library changes']
 }
 
-function CommissionHeader({
-  pick,
-  coreReady,
-}: {
-  pick: (vi: string, en: string) => string
-  coreReady: boolean
-}) {
-  return (
-    <header className="rounded-[var(--radius)] border border-[var(--c-border)] border-l-4 border-l-[var(--c-accent)] bg-[var(--c-surface)] px-5 py-4 shadow-sm sm:px-6">
-      <p className="text-[10px] font-bold tracking-[0.16em] text-[var(--c-accent)]">PROGRAMMING / PGM-03</p>
-      <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-[var(--c-text)]">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
-          <p className="mt-1 text-sm text-[var(--c-text-dim)]">{pick('Niêm phong Draft, kiểm tra chẩn đoán rồi xác nhận thay đổi runtime.', 'Seal the Draft, inspect diagnostics, then confirm the runtime change.')}</p>
-        </div>
-        <StatusBadge state={coreReady ? 'connected' : 'unknown'} label={coreReady ? pick('Core đã xác minh', 'Core verified') : pick('Core chưa xác minh', 'Core unverified')} />
-      </div>
-    </header>
-  )
-}
+type RevisionLifecycleState =
+  | 'DRAFT'
+  | 'CHECKING'
+  | 'READY'
+  | 'STAGING'
+  | 'ACTIVATING'
+  | 'VERIFYING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'UNKNOWN_RECONCILING'
 
-function RevisionTransferStrip({
-  pick,
-  candidateRevisionId,
-  activeRevisionId,
-  coreReady,
-  commissionReady,
-}: {
-  pick: (vi: string, en: string) => string
-  candidateRevisionId: string
-  activeRevisionId: string | null
-  coreReady: boolean
-  commissionReady: boolean
-}) {
-  return (
-    <section
-      aria-label={pick('Đích đưa vào vận hành', 'Commission target')}
-      className="grid gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] md:items-center"
-    >
-      <div className="rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] px-3 py-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--c-accent)]">{pick('Bản ứng viên đã niêm phong', 'Sealed candidate')}</p>
-        <p className="mt-1 break-all font-mono text-xs font-semibold text-[var(--c-text)]">{candidateRevisionId}</p>
-      </div>
-      <ArrowRight className="mx-auto hidden h-5 w-5 text-[var(--c-text-dim)] md:block" aria-hidden="true" />
-      <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--c-text-dim)]">Active Revision</p>
-        <p className="mt-1 break-all font-mono text-xs font-semibold text-[var(--c-text)]">{activeRevisionId ?? pick('Chưa có bản Active', 'No active revision')}</p>
-      </div>
-      <div className="flex flex-wrap gap-2 md:max-w-48 md:justify-end">
-        <StatusBadge state={coreReady ? 'connected' : 'unknown'} label={coreReady ? pick('Core sẵn sàng', 'Core ready') : pick('Core bị chặn', 'Core blocked')} />
-        <StatusBadge state={commissionReady ? 'online' : 'warning'} label={commissionReady ? pick('Có thể vận hành', 'Ready to commission') : pick('Chưa đủ điều kiện', 'Not ready')} />
-      </div>
-    </section>
-  )
-}
-
-function ReadinessItem({ label, ready, detail }: { label: string; ready: boolean; detail: string }) {
-  return (
-    <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2">
-      <div className="flex items-center gap-2">
-        {ready ? <CheckCircle2 className="h-4 w-4 text-[var(--c-good)]" aria-hidden="true" /> : <AlertTriangle className="h-4 w-4 text-[var(--c-warn)]" aria-hidden="true" />}
-        <p className="text-xs font-semibold text-[var(--c-text)]">{label}</p>
-      </div>
-      <p className="mt-1 text-[11px] text-[var(--c-text-dim)]">{detail}</p>
-    </div>
-  )
-}
-
-function ImpactEvidenceCard({
-  pick,
-  impactKey,
-  group,
-  overrides,
-}: {
-  pick: (vi: string, en: string) => string
-  impactKey: ProgrammingImpactKey
-  group: ProgrammingImpactGroup
-  overrides: ProgrammingOverrideEntry[]
-}) {
-  const present = group.status === 'PRESENT'
-  const unavailable = group.status === 'UNAVAILABLE'
-  const stateClass = present
-    ? 'border-[var(--c-warn)] bg-[var(--c-warn-bg)]'
-    : unavailable
-      ? 'border-[var(--c-fault)] bg-[var(--c-fault-bg)]'
-      : 'border-[var(--c-border)] bg-[var(--c-surface-2)]'
-
-  return (
-    <li className={`rounded-[var(--radius)] border p-3 ${stateClass}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold text-[var(--c-text)]">{pick(...IMPACT_GROUP_LABEL[impactKey])}</p>
-          <p className="mt-1 text-[11px] text-[var(--c-text-dim)]">
-            {present
-              ? pick(`${group.items.length} bằng chứng do máy chủ trả về`, `${group.items.length} server-provided evidence item(s)`)
-              : unavailable
-                ? pick('Không đọc được bằng chứng; lệnh bị khóa.', 'Evidence is unavailable; the command is locked.')
-                : pick('Không có ảnh hưởng trong nhóm này.', 'No impact in this group.')}
-          </p>
-        </div>
-        <StatusBadge
-          state={present ? 'warning' : unavailable ? 'fault' : 'online'}
-          label={present ? pick('Cần xác nhận', 'Acknowledge') : unavailable ? pick('Chưa xác định', 'Unknown') : pick('Không có', 'None')}
-        />
-      </div>
-      {present && group.items.length > 0 && (
-        <>
-        <div className="mt-3 hidden overflow-x-auto border-t border-[var(--c-border)] pt-2 md:block" tabIndex={0} role="region" aria-label={pick('Bằng chứng ảnh hưởng dạng bảng', 'Impact evidence table')}>
-          <table className="w-full min-w-[34rem] text-left text-[11px]">
-            <thead className="text-[var(--c-text-dim)]"><tr><th className="py-1 pr-2">{pick('Bằng chứng', 'Evidence')}</th><th className="py-1 pr-2">{pick('Hiện tại', 'Current')}</th><th className="py-1 pr-2">{pick('Đề xuất', 'Proposed')}</th><th className="py-1 pr-2">{pick('Bên giữ', 'Owner')}</th><th className="py-1">{pick('Ưu tiên', 'Priority')}</th></tr></thead>
-            <tbody>{group.items.map((item) => {
-              const override = overrides.find((entry) => entry.pointId === item)
-              return <tr key={item} className="border-t border-[var(--c-border)]"><td className="break-all py-1 pr-2 font-mono">{item}</td><td className="py-1 pr-2">{override ? String(override.value) : '—'}</td><td className="py-1 pr-2">—</td><td className="py-1 pr-2">{override ? (override.actorId || pick('Override thủ công', 'Manual override')) : pick('Chưa xác minh', 'Unknown')}</td><td className="py-1">{override?.effectivePriority ?? '—'}</td></tr>
-            })}</tbody>
-          </table>
-        </div>
-        <div className="mt-3 space-y-2 border-t border-[var(--c-border)] pt-2 md:hidden">
-          {group.items.map((item) => {
-            const override = overrides.find((entry) => entry.pointId === item)
-            return <dl key={item} className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-[11px]"><div className="col-span-2 min-w-0"><dt className="text-[var(--c-text-dim)]">{pick('Bằng chứng', 'Evidence')}</dt><dd className="break-all font-mono">{item}</dd></div><div><dt className="text-[var(--c-text-dim)]">{pick('Hiện tại', 'Current')}</dt><dd>{override ? String(override.value) : '—'}</dd></div><div><dt className="text-[var(--c-text-dim)]">{pick('Đề xuất', 'Proposed')}</dt><dd>—</dd></div><div><dt className="text-[var(--c-text-dim)]">{pick('Bên giữ', 'Owner')}</dt><dd className="break-words">{override ? (override.actorId || pick('Override thủ công', 'Manual override')) : pick('Chưa xác minh', 'Unknown')}</dd></div><div><dt className="text-[var(--c-text-dim)]">{pick('Ưu tiên', 'Priority')}</dt><dd>{override?.effectivePriority ?? '—'}</dd></div></dl>
-          })}
-        </div>
-        </>
-      )}
-    </li>
-  )
-}
-
-function formatObservedTime(value: string | undefined): string {
-  if (!value) return '—'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'medium' }).format(parsed)
-}
-
-function CommissionSteps({
-  pick,
-  checkReady,
-  commissionReady,
-}: {
-  pick: (vi: string, en: string) => string
-  checkReady: boolean
-  commissionReady: boolean
-}) {
-  const steps = [
-    [pick('1. Draft đã lưu', '1. Draft saved'), true],
-    [pick('2. Niêm phong & Kiểm tra', '2. Seal & Check'), checkReady],
-    [pick('3. Xem chẩn đoán', '3. Review diagnostics'), checkReady],
-    [pick('4. Đưa vào vận hành', '4. Commission'), commissionReady],
-  ] as const
-  return (
-    <ol aria-label={pick('Chuỗi công việc Đưa vào vận hành', 'Commission workflow')} className="grid gap-px overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-border)] sm:grid-cols-2 xl:grid-cols-4">
-      {steps.map(([label, complete]) => (
-        <li key={label} className={`bg-[var(--c-surface)] px-3 py-2 text-xs font-semibold ${complete ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-text-dim)]'}`}>
-          <span aria-hidden="true">{complete ? '✓' : '○'}</span> {label}
-        </li>
-      ))}
-    </ol>
-  )
-}
+const REVISION_LIFECYCLE: RevisionLifecycleState[] = [
+  'DRAFT', 'CHECKING', 'READY', 'STAGING', 'ACTIVATING', 'VERIFYING',
+  'SUCCEEDED', 'FAILED', 'UNKNOWN_RECONCILING'
+]
 
 interface NavState {
   revisionId?: string
@@ -191,7 +57,7 @@ interface NavState {
 }
 
 /**
- * PGM-03 Kiểm tra & Đưa vào vận hành — `UJ-PROG-05/06` (TASK-PROG-504). Trang
+ * PGM-05 Kiểm tra & Đưa vào vận hành — `UJ-PROG-06` (`T59-503`). Trang
  * nhận `revisionId/checkId` từ query canonical và dùng `location.state` làm
  * tương thích điều hướng trong phiên. Deep-link/reload không suy đoán Check
  * "mới nhất": chỉ đọc đúng hai định danh bất biến đã có trong URL.
@@ -209,15 +75,7 @@ export function CheckCommissionPage() {
     revisionId: searchParams.get('revisionId') ?? locationState?.revisionId,
     checkId: searchParams.get('checkId') ?? locationState?.checkId
   }
-  const { capabilities, runtime, setEditingContext } = useProgrammingRuntimeContext()
-  // Giữ Active làm baseline của pre-flight; sau Commission runtime sẽ đổi sang
-  // Candidate nhưng màn hình vẫn phải giữ được bằng chứng so sánh ban đầu.
-  const [comparisonFromRevisionId, setComparisonFromRevisionId] = useState<string | null | undefined>(undefined)
-
-  useEffect(() => {
-    if (comparisonFromRevisionId !== undefined || !runtime.data) return
-    setComparisonFromRevisionId(runtime.data.activeRevisionId === navState.revisionId ? null : runtime.data.activeRevisionId)
-  }, [comparisonFromRevisionId, navState.revisionId, runtime.data])
+  const { runtime, setEditingContext } = useProgrammingRuntimeContext()
 
   /* D-01: PGM-03 sở hữu toàn bộ seal/run/poll Check — trước bản vá này chỉ
    * PGM-02 gọi được `useCheckWorkflow`, nên mở PGM-03 trực tiếp (không đến từ
@@ -226,9 +84,25 @@ export function CheckCommissionPage() {
   const workspace = useDraftWorkspace(projectId)
   const checkWorkflow = useCheckWorkflow(projectId)
   const check = useProgrammingCheck(navState?.checkId)
-  const changes = useProgrammingRevisionChanges(comparisonFromRevisionId ?? 'none', navState?.revisionId)
+  /* Revision đang xét CHÍNH LÀ bản đang chạy ⇒ không có gì để đối chiếu.
+   *
+   * Trước lát này trang gọi thẳng dịch vụ so sánh với `from === to`, mà hợp
+   * đồng cấm đúng cặp đó (`application/changes.go`), nên nó trả 400 và trang
+   * hiện "Không tải được thay đổi" — một thông báo LỖI cho một tình huống hoàn
+   * toàn bình thường. Bắt được trên bo Foxlinx 2026-08-27:
+   * `GET /revisions/2d1c9831…/changes/2d1c9831…` → 400.
+   *
+   * "Không có gì để so vì nó đang chạy" KHÁC HẲN "không đọc được thay đổi", và
+   * hai câu đó phải trông khác nhau. */
+  const alreadyActive = Boolean(
+    navState?.revisionId && runtime.data?.activeRevisionId === navState.revisionId,
+  )
+  const changes = useProgrammingRevisionChanges(
+    alreadyActive ? undefined : (runtime.data?.activeRevisionId ?? 'none'),
+    alreadyActive ? undefined : navState?.revisionId,
+  )
   const overrides = useProgrammingOverrides()
-  const commission = useCommissionWorkflow(capabilities.data?.taskPeriodsMs)
+  const commission = useCommissionWorkflow()
 
   useEffect(() => {
     if (checkWorkflow.state.phase !== 'done' || !projectId) return
@@ -241,18 +115,17 @@ export function CheckCommissionPage() {
   const [acknowledged, setAcknowledged] = useState<Set<ProgrammingImpactKey>>(new Set())
   const [password, setPassword] = useState('')
 
-  useEffect(() => {
-    if (!dialogOpen) return
-    if (commission.state.phase !== 'terminal' && commission.state.phase !== 'unknown' && commission.state.phase !== 'error') return
-    // Operation result belongs on the decision rail, not hidden behind the
-    // still-open confirmation layer. The password is never retained.
-    setDialogOpen(false)
-    setPassword('')
-  }, [commission.state.phase, dialogOpen])
-
   const impact = changes.data?.impact
-  const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => impact?.[key].status === 'PRESENT'), [impact])
-  const hasUnavailable = useMemo(() => IMPACT_GROUP_ORDER.some((key) => !impact || impact[key].status !== 'NONE' && impact[key].status !== 'PRESENT'), [impact])
+  // Nhóm impact VẮNG MẶT là `UNAVAILABLE`, không phải `NONE`. Một BE cũ hơn (hoặc
+  // một nhóm mới chưa được nối) gửi thiếu nhóm thì Commission phải fail-closed —
+  // coi "không thấy" là "không có" đúng là cách để một tác động thật đi qua mà
+  // không ai xác nhận. Đọc phòng thủ cũng giữ trang sống thay vì trắng màn hình.
+  const groupStatus = (key: ProgrammingImpactKey) => impact?.[key]?.status ?? 'UNAVAILABLE'
+  const presentKeys = useMemo(() => IMPACT_GROUP_ORDER.filter((key) => groupStatus(key) === 'PRESENT'), [impact])
+  const hasUnavailable = useMemo(
+    () => IMPACT_GROUP_ORDER.some((key) => groupStatus(key) !== 'NONE' && groupStatus(key) !== 'PRESENT'),
+    [impact]
+  )
   const checkPassed = check.data?.state === 'PASSED'
   /* `safeState=true` một mình không chặn Commission: nếu lý do DUY NHẤT là
    * `safeStateNoControllerOnly` (Core trigger T7 — chưa Program nào đang
@@ -264,16 +137,9 @@ export function CheckCommissionPage() {
     runtime.status === 'ready' &&
     runtime.data?.producerState === 'READY' &&
     (runtime.data.safeState === false || runtime.data.safeStateNoControllerOnly === true)
-  const terminalOperation = commission.state.phase === 'terminal' ? commission.state.operation : null
-  const readBackVerified = terminalOperation?.state === 'SUCCEEDED' && terminalOperation.actualActiveRevisionId === navState.revisionId
-  const displayedActiveRevisionId = readBackVerified ? terminalOperation.actualActiveRevisionId : runtime.data?.activeRevisionId
-  const candidateAlreadyActive = displayedActiveRevisionId === navState.revisionId
-  const readyToCommission = checkPassed && changes.status === 'ready' && overrides.status === 'ready' && !hasUnavailable && coreReady && !candidateAlreadyActive && !!projectId
-
-  useEffect(() => {
-    if (!terminalOperation) return
-    runtime.refresh()
-  }, [runtime.refresh, terminalOperation?.operationId, terminalOperation?.updatedAt])
+  /* Đang chạy sẵn thì KHÔNG Commission lại: không có gì để nạp, mà một lần
+   * nạp "cho chắc" vẫn là một lần cutover thật trên thiết bị đang điều khiển. */
+  const readyToCommission = checkPassed && !alreadyActive && changes.status === 'ready' && overrides.status === 'ready' && !hasUnavailable && coreReady && !!projectId
 
   useEffect(() => {
     if (!projectId) return
@@ -288,13 +154,11 @@ export function CheckCommissionPage() {
           ? (checkWorkflow.state.check.state === 'PASSED' ? 'passed' : 'failed')
           : workflowPhase === 'error'
             ? 'unknown'
-            : !navState.revisionId || !navState.checkId
-              ? 'idle'
-              : check.status !== 'ready' || !check.data
-                ? 'checking'
-                : check.data.state === 'PASSED'
-                  ? 'passed'
-                  : check.data.state === 'FAILED' || check.data.state === 'TIMED_OUT' ? 'failed' : 'checking'
+            : check.status !== 'ready' || !check.data
+              ? 'checking'
+              : check.data.state === 'PASSED'
+                ? 'passed'
+                : check.data.state === 'FAILED' || check.data.state === 'TIMED_OUT' ? 'failed' : 'checking'
     setEditingContext({ projectId, projectName: '', draftRevisionId: '', dirty: false, checkState })
     return () => setEditingContext(null)
   }, [checkWorkflow.state, check.data, check.status, projectId, setEditingContext])
@@ -304,8 +168,12 @@ export function CheckCommissionPage() {
     const running = phase === 'sealing' || phase === 'checking'
     return (
       <div className="space-y-3">
-        <CommissionHeader pick={pick} coreReady={coreReady} />
-        <CommissionSteps pick={pick} checkReady={false} commissionReady={false} />
+        {/* F-UX-15: mọi NHÁNH TRẢ VỀ của màn hình đều phải giữ tiêu đề, kể cả
+          nhánh trạng thái rỗng/lỗi — đó chính là chỗ finding gốc chỉ ra ở
+          `SchedulerGridPage`. `<h1>` của route nằm ở `ProgrammingLayout`. */}
+        <h2 className="sr-only">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
+        <RevisionLifecycle current={phase === 'sealing' || phase === 'checking' ? 'CHECKING' : phase === 'error' ? 'FAILED' : 'DRAFT'} />
+        {!canEdit ? <ReadOnlyCommissionNotice /> : null}
         {phase === 'error' ? (
           <StateBlock state="error" title={checkWorkflow.state.message} onRetry={checkWorkflow.reset} />
         ) : (
@@ -339,8 +207,8 @@ export function CheckCommissionPage() {
         )}
         {projectId && (
           <div>
-            <Link className="text-sm font-medium text-[var(--c-accent)] underline" to={`/eng/programming/projects/${projectId}/design`}>
-              {pick('Về workspace Thiết kế', 'Back to the Design workspace')}
+            <Link className="text-sm font-medium text-[var(--c-accent)] underline" to={programsWorkspacePath(projectId)}>
+              {pick('Về workspace Chương trình', 'Back to the Programs workspace')}
             </Link>
           </div>
         )}
@@ -375,18 +243,9 @@ export function CheckCommissionPage() {
 
   return (
     <div className="space-y-4">
-      <CommissionHeader pick={pick} coreReady={coreReady} />
-      <CommissionSteps pick={pick} checkReady={checkPassed} commissionReady={readyToCommission} />
-      <RevisionTransferStrip
-        pick={pick}
-        candidateRevisionId={navState.revisionId}
-        activeRevisionId={displayedActiveRevisionId ?? null}
-        coreReady={coreReady}
-        commissionReady={readyToCommission}
-      />
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(19rem,0.72fr)]">
-        <div className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-2">
+      <h2 className="sr-only">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
+      <RevisionLifecycle current={commissionLifecycleState(check.status, check.data, commission.state)} />
+      {!canEdit ? <ReadOnlyCommissionNotice /> : null}
       <Panel title={pick('Kết quả Kiểm tra', 'Check result')}>
         {check.status === 'loading' ? (
           <StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} />
@@ -412,7 +271,7 @@ export function CheckCommissionPage() {
                   if (typeof diagnostic.location.line === 'number') params.set('line', String(diagnostic.location.line))
                   if (typeof diagnostic.location.column === 'number') params.set('column', String(diagnostic.location.column))
                   if (typeof diagnostic.location.length === 'number') params.set('length', String(diagnostic.location.length))
-                  navigate(`/eng/programming/projects/${projectId}/design?${params.toString()}`)
+                  navigate(programsWorkspacePath(projectId, { pou: diagnostic.location.programId, search: params }))
                 }}
               />
             )}
@@ -421,8 +280,13 @@ export function CheckCommissionPage() {
         )}
       </Panel>
 
-      <Panel title={pick('Thay đổi so với bản đang chạy', 'Changes vs. the running version')} subtitle={pick('Đọc từ Revision bất biến; không tự suy diễn thay đổi.', 'Read from the immutable Revision; no client-side inference.') }>
-        {changes.status === 'loading' ? (
+      <Panel title={pick('Thay đổi so với bản đang chạy', 'Changes vs. the running version')}>
+        {alreadyActive ? (
+          <p className="text-sm text-[var(--c-text-dim)]">
+            {pick('Revision này chính là bản đang chạy trên thiết bị — không có gì để đối chiếu.',
+                  'This revision is the one already running on the device — there is nothing to compare.')}
+          </p>
+        ) : changes.status === 'loading' ? (
           <StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} />
         ) : changes.status === 'error' || !changes.data ? (
           <StateBlock state="error" title={pick('Không tải được thay đổi.', 'Could not load changes.')} onRetry={changes.refresh} />
@@ -441,16 +305,29 @@ export function CheckCommissionPage() {
           </ul>
         )}
       </Panel>
-          </div>
 
-      <Panel title={pick('Ảnh hưởng khi áp dụng', 'Impact when applied')} subtitle={pick('Mỗi nhóm phải được xác nhận riêng nếu đang có ảnh hưởng.', 'Each present group requires its own acknowledgement.') }>
-        {changes.status !== 'ready' || !impact ? (
+      <Panel title={pick('Ảnh hưởng khi áp dụng', 'Impact when applied')}>
+        {alreadyActive ? (
+          <p className="text-sm text-[var(--c-text-dim)]">
+            {pick('Không có ảnh hưởng để tính: Revision này đang chạy sẵn.',
+                  'There is no impact to compute: this revision is already running.')}
+          </p>
+        ) : changes.status !== 'ready' || !impact ? (
           <StateBlock state={changes.status === 'error' ? 'error' : 'loading'} title={pick('Đang tính ảnh hưởng…', 'Computing impact…')} />
         ) : (
-          <ul className="grid gap-3 md:grid-cols-2">
-            {IMPACT_GROUP_ORDER.map((key) => (
-              <ImpactEvidenceCard key={key} pick={pick} impactKey={key} group={impact[key]} overrides={overrides.data?.items ?? []} />
-            ))}
+          <ul className="space-y-2 text-sm">
+            {IMPACT_GROUP_ORDER.map((key) => {
+              const group = impact[key] ?? { status: 'UNAVAILABLE' as const, items: [] }
+              return (
+                <li key={key} className="flex items-start justify-between gap-3">
+                  <span className="text-[var(--c-text)]">{pick(...IMPACT_GROUP_LABEL[key])}</span>
+                  <StatusBadge
+                    state={group.status === 'PRESENT' ? 'warning' : group.status === 'UNAVAILABLE' ? 'fault' : 'online'}
+                    label={group.status === 'NONE' ? pick('Không có', 'None') : group.status === 'PRESENT' ? pick(`${group.items.length} mục`, `${group.items.length} item(s)`) : pick('Chưa tính được', 'Unavailable')}
+                  />
+                </li>
+              )
+            })}
           </ul>
         )}
         {hasUnavailable && (
@@ -468,74 +345,30 @@ export function CheckCommissionPage() {
         ) : overrides.data.items.length === 0 ? (
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Không có override nào đang giữ đầu ra.', 'No override is currently holding an output.')}</p>
         ) : (
-          <>
-          <div className="hidden overflow-x-auto md:block">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-xs uppercase text-[var(--c-text-dim)]">
-                <th className="py-1 pr-3">Point</th>
-                <th className="py-1 pr-3">{pick('Giá trị', 'Value')}</th>
-                <th className="py-1 pr-3">{pick('Người thực hiện', 'Actor')}</th>
-                <th className="py-1">{pick('Còn lại', 'Remaining')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {overrides.data.items.map((entry) => (
-                <tr key={`${entry.category}-${entry.pointId}`}>
-                  <td className="py-1 pr-3 font-mono text-xs">{entry.pointId}</td>
-                  <td className="py-1 pr-3">{String(entry.value)}</td>
-                  <td className="py-1 pr-3">{entry.actorId || '—'}</td>
-                  <td className="py-1">{entry.remainingS !== null ? `${entry.remainingS}s` : '—'}</td>
+          <div className="overflow-x-auto">
+            <table className="min-w-[520px] w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase text-[var(--c-text-dim)]">
+                  <th className="py-1 pr-3">Point</th>
+                  <th className="py-1 pr-3">{pick('Giá trị', 'Value')}</th>
+                  <th className="py-1 pr-3">{pick('Người thực hiện', 'Actor')}</th>
+                  <th className="py-1">{pick('Còn lại', 'Remaining')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {overrides.data.items.map((entry) => (
+                  <tr key={`${entry.category}-${entry.pointId}`}>
+                    <td className="py-1 pr-3 font-mono text-xs">{entry.pointId}</td>
+                    <td className="py-1 pr-3">{String(entry.value)}</td>
+                    <td className="py-1 pr-3">{entry.actorId || '—'}</td>
+                    <td className="py-1">{entry.remainingS !== null ? `${entry.remainingS}s` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="space-y-2 md:hidden">
-            {overrides.data.items.map((entry) => (
-              <article key={`${entry.category}-${entry.pointId}`} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm">
-                <p className="font-mono text-xs font-semibold text-[var(--c-text)]">{entry.pointId}</p>
-                <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                  <div><dt className="text-[var(--c-text-dim)]">{pick('Giá trị', 'Value')}</dt><dd>{String(entry.value)}</dd></div>
-                  <div><dt className="text-[var(--c-text-dim)]">{pick('Còn lại', 'Remaining')}</dt><dd>{entry.remainingS !== null ? `${entry.remainingS}s` : '—'}</dd></div>
-                  <div className="col-span-2"><dt className="text-[var(--c-text-dim)]">{pick('Người thực hiện', 'Actor')}</dt><dd>{entry.actorId || '—'}</dd></div>
-                </dl>
-              </article>
-            ))}
-          </div>
-          </>
         )}
       </Panel>
-        </div>
-
-        <aside className="space-y-3 xl:sticky xl:top-3" aria-label={pick('Cổng quyết định đưa vào vận hành', 'Commission decision gate')}>
-          <Panel
-            title={pick('Cổng quyết định', 'Decision gate')}
-            subtitle={pick('Chỉ mở lệnh khi bốn bằng chứng đều đọc được.', 'The command unlocks only when all four evidence sources are readable.')}
-            action={<GitCompareArrows className="h-5 w-5 text-[var(--c-accent)]" aria-hidden="true" />}
-          >
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-              <ReadinessItem
-                ready={checkPassed}
-                label={pick('Kiểm tra Revision', 'Revision check')}
-                detail={check.data ? `${check.data.state} · ${formatObservedTime(check.data.completedAt ?? check.data.createdAt)}` : pick('Chưa đọc được kết quả', 'Result unavailable')}
-              />
-              <ReadinessItem
-                ready={changes.status === 'ready' && !hasUnavailable}
-                label={pick('Impact từ máy chủ', 'Server impact')}
-                detail={changes.status === 'ready' && impact ? `${presentKeys.length} ${pick('nhóm cần xác nhận', 'group(s) require acknowledgement')}` : pick('Chưa tính đủ impact', 'Impact incomplete')}
-              />
-              <ReadinessItem
-                ready={overrides.status === 'ready'}
-                label={pick('Override hiện hành', 'Active overrides')}
-                detail={overrides.status === 'ready' && overrides.data ? `${overrides.data.items.length} ${pick('override đang giữ đầu ra', 'override(s) holding outputs')}` : pick('Không xác minh được', 'Could not verify')}
-              />
-              <ReadinessItem
-                ready={coreReady}
-                label={pick('Core và safe-state', 'Core and safe state')}
-                detail={coreReady ? pick('READY · cho phép pre-flight', 'READY · pre-flight allowed') : pick('Không đủ bằng chứng để ghi', 'Insufficient write evidence')}
-              />
-            </div>
 
       {coreReady && runtime.data?.safeState === true && runtime.data.safeStateNoControllerOnly === true && (
         <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
@@ -557,12 +390,7 @@ export function CheckCommissionPage() {
       )}
 
       {canEdit && (
-        <div className="border-t border-[var(--c-border)] pt-3">
-          <p className="mb-3 text-xs text-[var(--c-text-dim)]">
-            {readyToCommission
-              ? pick('Lệnh sẽ yêu cầu xác nhận từng impact và nhập lại mật khẩu.', 'The command requires per-impact acknowledgement and password re-entry.')
-              : pick('Lệnh đang khóa; xử lý các cổng cảnh báo trước khi tiếp tục.', 'The command is locked; resolve the warning gates before continuing.')}
-          </p>
+        <div className="flex justify-end">
           <Button icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} disabled={!readyToCommission} onClick={openConfirmDialog}>
             {pick('Đưa vào vận hành…', 'Commission…')}
           </Button>
@@ -579,17 +407,13 @@ export function CheckCommissionPage() {
       )}
       {commission.state.phase === 'terminal' && (
         <div
-          role={readBackVerified ? 'status' : 'alert'}
+          role="status"
           className={`rounded-[var(--radius)] border p-3 text-sm ${
-            readBackVerified ? 'border-[var(--c-good)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]' : 'border-[var(--c-fault)] bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]'
+            commission.state.operation.state === 'SUCCEEDED' ? 'border-[var(--c-good)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]' : 'border-[var(--c-fault)] bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]'
           }`}
         >
-          {readBackVerified ? (
+          {commission.state.operation.state === 'SUCCEEDED' ? (
             <p>{pick(`Đưa vào vận hành thành công. Bản đang chạy: ${commission.state.operation.actualActiveRevisionId ?? '—'}.`, `Commission succeeded. Running version: ${commission.state.operation.actualActiveRevisionId ?? '—'}.`)}</p>
-          ) : commission.state.operation.state === 'SUCCEEDED' ? (
-            <p>{pick(`Core báo SUCCEEDED nhưng Active read-back không khớp bản ứng viên. Đang chạy: ${commission.state.operation.actualActiveRevisionId ?? 'chưa xác định'}.`, `Core reported SUCCEEDED but Active read-back does not match the candidate. Running: ${commission.state.operation.actualActiveRevisionId ?? 'unknown'}.`)}</p>
-          ) : commission.state.operation.state === 'ROLLED_BACK' ? (
-            <p>{pick(`Đưa vào vận hành đã được Core quay lui. Bản đang chạy sau read-back: ${commission.state.operation.actualActiveRevisionId ?? 'chưa xác định'}.`, `Commission was rolled back by Core. Running revision after read-back: ${commission.state.operation.actualActiveRevisionId ?? 'unknown'}.`)}</p>
           ) : (
             <p>
               {pick('Đưa vào vận hành thất bại.', 'Commission failed.')}{' '}
@@ -603,52 +427,20 @@ export function CheckCommissionPage() {
           {commission.state.message}
         </div>
       )}
-          </Panel>
-        </aside>
-      </div>
 
       <Modal
         open={dialogOpen}
         title={pick('Xác nhận Đưa vào vận hành', 'Confirm Commission')}
-        descriptionId="programming-commission-safety-warning programming-commission-readback-contract"
-        confirmLabel={pick(`Xác nhận ${navState.revisionId.slice(0, 8)}`, `Confirm ${navState.revisionId.slice(0, 8)}`)}
+        confirmLabel={pick('Gửi lệnh', 'Submit')}
         confirmLoading={submitting}
         confirmDisabled={submitting || presentKeys.some((key) => !acknowledged.has(key)) || password.length === 0 || !readyToCommission}
-        danger
-        size="lg"
-        mobileFullscreen
         onConfirm={submitCommission}
         onClose={() => {
           if (submitting) return
           setDialogOpen(false)
         }}
       >
-        <div className="space-y-3 pr-1">
-          <div id="programming-commission-safety-warning" role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm font-semibold text-[var(--c-fault-fg)]">
-            {pick('Hành động thay đổi chương trình đang điều khiển thiết bị. Active hiện tại được giữ cho tới khi Core đọc ngược thành công.', 'This action changes the program controlling the device. The current Active revision remains until Core read-back succeeds.')}
-          </div>
-          <div className="grid gap-px overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-border)] sm:grid-cols-2">
-            <div className="bg-[var(--c-surface-2)] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em]">{pick('Ứng viên', 'Candidate')}</p>
-              <p className="mt-1 break-all font-mono text-xs text-[var(--c-text)]">{navState.revisionId}</p>
-            </div>
-            <div className="bg-[var(--c-surface-2)] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em]">Active Revision</p>
-              <p className="mt-1 break-all font-mono text-xs text-[var(--c-text)]">{displayedActiveRevisionId ?? '—'}</p>
-            </div>
-            <div className="bg-[var(--c-surface-2)] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em]">Last-known-good</p>
-              <p className="mt-1 break-all font-mono text-xs text-[var(--c-text)]">{runtime.data?.lkgRevisionId ?? '—'}</p>
-            </div>
-            <div className="bg-[var(--c-surface-2)] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em]">{pick('Hồ sơ đích', 'Target profile')}</p>
-              <p className="mt-1 break-all font-mono text-xs text-[var(--c-text)]">{capabilities.data?.profile ?? pick('Chưa xác định', 'Unknown')}</p>
-            </div>
-            <div className="bg-[var(--c-surface-2)] p-3 sm:col-span-2">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em]">{pick('Bộ điều khiển đích', 'Target controller')}</p>
-              <p className="mt-1 break-all font-mono text-xs text-[var(--c-text)]">{runtime.data?.controllerId ?? pick('Chưa xác định', 'Unknown')}</p>
-            </div>
-          </div>
+        <div className="space-y-3">
           {changes.status === 'loading' && <p>{pick('Đang tải lại ảnh hưởng mới nhất…', 'Reloading the latest impact…')}</p>}
           {presentKeys.length === 0 ? (
             <p>{pick('Không có ảnh hưởng nào cần xác nhận. Vẫn cần xác thực lại.', 'No impact needs acknowledgement. Re-authentication is still required.')}</p>
@@ -703,23 +495,89 @@ export function CheckCommissionPage() {
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
           />
-          <div id="programming-commission-readback-contract" role="note" className="rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3 text-xs text-[var(--c-text)]">
-            <p className="font-semibold">{pick('Hợp đồng xác nhận và đọc ngược', 'Acceptance and read-back contract')}</p>
-            <p className="mt-1">
-              {pick(
-                'HTTP 202 chỉ xác nhận máy chủ đã nhận lệnh; Active Revision chỉ đổi sau GET đọc ngược từ Core.',
-                'HTTP 202 only confirms that the server accepted the command; Active Revision changes only after a GET read-back from Core.'
-              )}
-            </p>
-            <p className="mt-1">
-              {pick(
-                'Nếu mất phản hồi, hệ thống giữ operationId và chỉ kiểm tra lại trạng thái; không tự gửi POST lần hai.',
-                'If the response is lost, the system keeps the operationId and only re-checks status; it never automatically sends a second POST.'
-              )}
-            </p>
-          </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function commissionLifecycleState(
+  checkStatus: 'loading' | 'ready' | 'error',
+  check: ProgrammingCheck | null,
+  commission: CommissionWorkflowState
+): RevisionLifecycleState {
+  if (commission.phase === 'unknown') return 'UNKNOWN_RECONCILING'
+  if (commission.phase === 'terminal') return commission.operation.state === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED'
+  if (commission.phase === 'error') return 'FAILED'
+  if (commission.phase === 'submitting') return 'STAGING'
+  if (commission.phase === 'polling') {
+    if (commission.operation?.state === 'APPLYING') return 'ACTIVATING'
+    if (commission.operation?.state === 'VERIFYING') return 'VERIFYING'
+    return 'STAGING'
+  }
+  if (checkStatus === 'loading') return 'CHECKING'
+  if (checkStatus === 'error' || !check) return 'FAILED'
+  if (check.state === 'QUEUED' || check.state === 'RUNNING') return 'CHECKING'
+  if (check.state === 'PASSED') return 'READY'
+  return 'FAILED'
+}
+
+function RevisionLifecycle({ current }: { current: RevisionLifecycleState }) {
+  const { pick } = useI18n()
+  const labels: Record<RevisionLifecycleState, string> = {
+    DRAFT: 'DRAFT',
+    CHECKING: 'CHECKING',
+    READY: 'READY',
+    STAGING: 'STAGING',
+    ACTIVATING: 'ACTIVATING',
+    VERIFYING: 'VERIFYING',
+    SUCCEEDED: 'SUCCEEDED',
+    FAILED: 'FAILED',
+    UNKNOWN_RECONCILING: 'UNKNOWN / RECONCILING'
+  }
+
+  return (
+    <Panel
+      title={pick('Vòng đời Revision', 'Revision lifecycle')}
+      subtitle={pick('Trạng thái lấy từ Check và operation read-back; timeout không được xem là thành công.', 'State comes from Check and operation read-back; a timeout is never treated as success.')}
+    >
+      <ol
+        aria-label={pick('Tiến trình Kiểm tra và Đưa vào vận hành', 'Check and Commission progress')}
+        tabIndex={0}
+        className="flex gap-2 overflow-x-auto pb-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--c-accent)]"
+      >
+        {REVISION_LIFECYCLE.map((state) => {
+          const active = state === current
+          return (
+            <li
+              key={state}
+              aria-current={active ? 'step' : undefined}
+              className={`min-h-11 shrink-0 rounded-[var(--radius)] border px-3 py-2 font-mono text-xs ${
+                active
+                  ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)] font-bold text-[var(--c-accent)]'
+                  : 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'
+              }`}
+            >
+              {labels[state]}
+            </li>
+          )
+        })}
+      </ol>
+      <p role="status" aria-live="polite" className="mt-2 text-xs text-[var(--c-text-dim)]">
+        {pick('Trạng thái hiện tại', 'Current state')}: <strong className="font-mono text-[var(--c-text)]">{labels[current]}</strong>
+      </p>
+    </Panel>
+  )
+}
+
+function ReadOnlyCommissionNotice() {
+  const { pick } = useI18n()
+  return (
+    <div role="status" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
+      <strong className="text-[var(--c-text)]">{pick('Bạn không có quyền thực hiện thao tác này', 'You do not have permission to perform this action')}</strong>
+      <span className="mt-1 block">
+        {pick('Kết quả Check, impact và read-back vẫn hiển thị ở chế độ chỉ đọc.', 'Check results, impact, and read-back remain visible in read-only mode.')}
+      </span>
     </div>
   )
 }

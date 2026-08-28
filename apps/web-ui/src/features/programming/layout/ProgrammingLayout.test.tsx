@@ -1,46 +1,40 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
-import type { ProgrammingProjectPage, RemoteState } from '../model/types'
 import { ProgrammingLayout } from './ProgrammingLayout'
 
-vi.mock('../../auth', () => ({ useAuth: () => ({ session: { role: 'admin' } }) }))
+vi.mock('../../auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../auth')>()
+  return {
+    ...actual,
+    useAuth: () => ({
+      session: { username: 'admin', role: 'admin', loginAt: '2026-08-21T00:00:00Z' },
+      login: vi.fn(),
+      logout: vi.fn(),
+      isAuthenticated: true,
+      getAuthHeader: () => ({})
+    })
+  }
+})
 
-const queryState = vi.hoisted(() => ({
-  projects: null as RemoteState<ProgrammingProjectPage> | null
-}))
+const client = vi.hoisted(() => ({ request: vi.fn() }))
+vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
 
-vi.mock('../api/queries', () => ({
-  useProgrammingCapabilities: () => ({ status: 'ready', data: { schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: ['ST'], types: ['REAL'], taskPeriodsMs: [], limits: {} }, error: null, refresh: vi.fn(), lastSuccessAt: Date.now() }),
-  useProgrammingRevision: () => ({ status: 'ready', data: { revisionId: 'active-1', projectId: 'project-1', baseRevisionId: 'base-1', createdAt: '2026-08-20T00:00:00Z', sourceHash: 'hash', manifestHash: 'manifest' }, error: null, refresh: vi.fn(), lastSuccessAt: Date.now() }),
-  useProgrammingRuntime: () => ({
-    status: 'ready',
-    data: {
-      schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY',
-      activeRevisionId: 'active-1', lkgRevisionId: null, taskState: 'RUNNING', safeState: false,
-      safeStateNoControllerOnly: false, observedAt: '2026-08-19T00:00:00Z'
-    },
-    error: null,
-    refresh: vi.fn(),
-    lastSuccessAt: Date.now()
-  }),
-  useProgrammingProjects: () => queryState.projects
-}))
-
-function projectState(items: ProgrammingProjectPage['items']): RemoteState<ProgrammingProjectPage> {
-  return { status: 'ready', data: { items }, error: null, refresh: vi.fn(), lastSuccessAt: Date.now() }
+function RouteSwitch() {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate('/eng/programming/projects/project-2/programs')}>Project 2</button>
 }
 
-function renderPath(path: string) {
+function renderLayout(entry = '/eng/programming/projects/project-1/programs') {
   return render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route element={<ProgrammingLayout />}>
-            <Route path="/eng/programming" element={<div>Overview child</div>} />
-            <Route path="/eng/programming/projects/:projectId/design" element={<button type="button">Mutation child</button>} />
+            <Route path="/eng/programming/projects/:projectId/programs" element={<RouteSwitch />} />
+            <Route path="/eng/programming/programs" element={<div data-testid="canonical-outlet" />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -48,42 +42,107 @@ function renderPath(path: string) {
   )
 }
 
+/** Shell dùng chung: capabilities/runtime/projects luôn trả lời được. */
+function shellRequest(operationId: string) {
+  if (operationId === 'getProgrammingCapabilities') {
+    return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+  }
+  if (operationId === 'getProgrammingRuntime') {
+    return Promise.resolve({
+      schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY',
+      activeRevisionId: 'active-1', lkgRevisionId: 'active-1', taskState: 'RUNNING',
+      safeState: false, safeStateNoControllerOnly: false, observedAt: '2026-08-21T00:00:00Z'
+    })
+  }
+  if (operationId === 'listProgrammingProjects') {
+    return Promise.resolve({ items: [
+      { projectId: 'project-1', name: 'Project One', draftRevisionId: 'draft-1' },
+      { projectId: 'project-2', name: 'Project Two', draftRevisionId: 'draft-2' }
+    ] })
+  }
+  return null
+}
+
 beforeEach(() => {
   localStorage.setItem('mkddc-lang', 'vi')
-  queryState.projects = projectState([{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: 'draft-1' } as ProgrammingProjectPage['items'][number]])
+  client.request.mockReset()
 })
 afterEach(cleanup)
 
-describe('ProgrammingLayout project route guard', () => {
-  it('route không có projectId giữ flow Overview và dùng project đầu cho điều hướng', async () => {
-    renderPath('/eng/programming')
-    expect(await screen.findByText('Overview child')).toBeInTheDocument()
-    expect(screen.getAllByText('AHU-01').length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: 'Thiết kế' })).toHaveLength(2)
-    expect(screen.getAllByRole('link', { name: 'Thiết kế' })[0]).toHaveAttribute('href', '/eng/programming/projects/project-1/design')
+describe('ProgrammingLayout — context sáu workspace', () => {
+  it('không trộn snapshot intent của Project cũ trong lúc chuyển route Project', async () => {
+    let resolveProject2!: (value: unknown) => void
+    const project2 = new Promise((resolve) => { resolveProject2 = resolve })
+    client.request.mockImplementation((operationId: string, options?: { path?: { projectId?: string } }) => {
+      if (operationId === 'getProgrammingCapabilities') {
+        return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+      }
+      if (operationId === 'getProgrammingRuntime') {
+        return Promise.resolve({
+          schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY',
+          activeRevisionId: 'active-1', lkgRevisionId: 'active-1', taskState: 'RUNNING',
+          safeState: false, safeStateNoControllerOnly: false, observedAt: '2026-08-21T00:00:00Z'
+        })
+      }
+      if (operationId === 'listProgrammingProjects') {
+        return Promise.resolve({ items: [
+          { projectId: 'project-1', name: 'Project One', draftRevisionId: 'draft-1' },
+          { projectId: 'project-2', name: 'Project Two', draftRevisionId: 'draft-2' }
+        ] })
+      }
+      if (operationId === 'listProgrammingProgramIntents' && options?.path?.projectId === 'project-1') {
+        return Promise.resolve({ items: [
+          { programId: 'program-1', desiredEnabled: true, generation: 1, runtimeState: 'RUNNING', updatedBy: 'admin', updatedAtUtcMs: 1 }
+        ] })
+      }
+      if (operationId === 'listProgrammingProgramIntents' && options?.path?.projectId === 'project-2') return project2
+      return Promise.reject(new Error(`unexpected operation ${operationId}`))
+    })
+
+    renderLayout()
+    expect(await screen.findByText('1/1 muốn bật')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Project 2' }))
+
+    expect(await screen.findByText('Project Two')).toBeInTheDocument()
+    expect(screen.queryByText('1/1 muốn bật')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Đang tải…').length).toBeGreaterThan(0)
+
+    resolveProject2({ items: [
+      { programId: 'program-2', desiredEnabled: false, generation: 1, runtimeState: 'DISABLED', updatedBy: 'admin', updatedAtUtcMs: 2 }
+    ] })
+    await waitFor(() => expect(screen.getByText('0/1 muốn bật')).toBeInTheDocument())
   })
 
-  it('ID hợp lệ dựng đúng workspace và context', async () => {
-    renderPath('/eng/programming/projects/project-1/design')
-    expect(await screen.findByRole('button', { name: 'Mutation child' })).toBeInTheDocument()
-    expect(screen.getAllByText('AHU-01').length).toBeGreaterThan(0)
+  /* `T59-802`: canonical route mang Project trong query. Khi id đó KHÔNG có
+   * trong danh sách đã `ready`, resolver trả not-found — shell không được vẫn
+   * gọi read-model của nó. Trước khi siết, mỗi lần mở một deep-link hỏng đều
+   * để lại một dòng 503 trong Console của người dùng. */
+  it('không gọi read-model cho Project không tồn tại trong danh sách đã ready', async () => {
+    client.request.mockImplementation((operationId: string) => shellRequest(operationId)
+      ?? Promise.reject(new Error(`unexpected operation ${operationId}`)))
+
+    renderLayout('/eng/programming/programs?project=project-missing&mode=EDIT')
+    expect(await screen.findByTestId('canonical-outlet')).toBeInTheDocument()
+    await waitFor(() => expect(client.request).toHaveBeenCalledWith('listProgrammingProjects', expect.anything()))
+
+    const intentCalls = client.request.mock.calls.filter(([operationId]) => operationId === 'listProgrammingProgramIntents')
+    expect(intentCalls).toEqual([])
   })
 
-  it('ID không tồn tại giữ URL nhưng không mount mutation surface hay fallback project đầu', async () => {
-    renderPath('/eng/programming/projects/project-khong-ton-tai/design')
-    expect(await screen.findByText('Project không tồn tại.')).toBeInTheDocument()
-    expect(screen.getAllByText(/project-khong-ton-tai/).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: 'Mutation child' })).not.toBeInTheDocument()
-    expect(screen.queryByText('AHU-01')).not.toBeInTheDocument()
-  })
+  it('vẫn gọi read-model đúng Project khi query trỏ tới Project có thật', async () => {
+    client.request.mockImplementation((operationId: string, options?: { path?: { projectId?: string } }) => {
+      const shell = shellRequest(operationId)
+      if (shell) return shell
+      if (operationId === 'listProgrammingProgramIntents' && options?.path?.projectId === 'project-2') {
+        return Promise.resolve({ items: [] })
+      }
+      return Promise.reject(new Error(`unexpected operation ${operationId}`))
+    })
 
-  it('lỗi danh sách Project fail-closed và cho GET retry', async () => {
-    const refresh = vi.fn()
-    queryState.projects = { status: 'error', data: null, error: '503 unavailable', refresh, lastSuccessAt: null }
-    renderPath('/eng/programming/projects/project-1/design')
-    expect(await screen.findByText('Không xác minh được Project.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Mutation child' })).not.toBeInTheDocument()
-    screen.getByRole('button', { name: 'Thử lại' }).click()
-    expect(refresh).toHaveBeenCalledOnce()
+    renderLayout('/eng/programming/programs?project=project-2&mode=EDIT')
+    await waitFor(() => expect(client.request).toHaveBeenCalledWith(
+      'listProgrammingProgramIntents',
+      expect.objectContaining({ path: { projectId: 'project-2' } })
+    ))
   })
 })

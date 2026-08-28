@@ -26,7 +26,13 @@ std::vector<uint8_t> build(const std::string& src)
 {
     StIrModule mod;
     StDiagnostic diag;
-    EXPECT_TRUE(compile_st_source(src, &mod, &diag))
+    /* T59-205: harness conformance của ngôn ngữ và runtime, gồm cả PID — nơi
+     * dựng evidence Controls/Safety mà review gate đang chờ. Bật gate ở đây sẽ
+     * khoá luôn thứ mở khoá nó. Đường production giữ mặc định BẬT và có test
+     * riêng ở test_st_review_gate.cpp. */
+    StCompileOptions options;
+    options.enforce_review_gate = false;
+    EXPECT_TRUE(compile_st_source(src, &mod, &diag, options))
         << diag.code << ": " << diag.message << " @" << diag.line << ":" << diag.column;
     std::vector<uint8_t> bytes;
     std::string err;
@@ -790,6 +796,197 @@ END_PROGRAM
     ASSERT_TRUE(rt.execute(33 * kSec).ok);
     EXPECT_FALSE(get_bool(rt, "FanEnable"));
     EXPECT_FLOAT_EQ(get_real(rt, "FanSpeed"), 0.0f) << "kẹp dưới về 0";
+}
+
+
+/* ---- CASE (IEC 61131-3 §7.3.3.2) ----------------------------------------
+ *
+ * `CASE` được khử đường về `IF/ELSIF` ở parser, nên điều đáng kiểm KHÔNG phải
+ * "có parse được không" mà là "chạy ra đúng nhánh nào". Một phép khử đường sai
+ * vẫn dịch trót lọt và vẫn Check PASS — nó chỉ sai lúc thiết bị đang chạy. Vì
+ * vậy toàn bộ ca dưới đây THỰC THI chương trình rồi đọc đầu ra.
+ */
+
+TEST(StExecCase, SelectsMatchingBranchAndSkipsOthers)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  sel : INT; END_VAR
+VAR_OUTPUT out : INT; END_VAR
+    out := -1;
+    CASE sel OF
+      0: out := 100;
+      1: out := 200;
+      2: out := 300;
+    END_CASE;
+END_PROGRAM
+)ST", &rt));
+    for (const auto& item : {std::pair<int32_t, int32_t>{0, 100}, {1, 200}, {2, 300}}) {
+        rt.set_variable("sel", StValue::make_int(static_cast<int16_t>(item.first)));
+        ASSERT_TRUE(rt.execute(0).ok);
+        EXPECT_EQ(get_int(rt, "out"), item.second) << "sel=" << item.first;
+    }
+    /* Không nhãn nào khớp và KHÔNG có ELSE ⇒ giữ nguyên giá trị trước đó. */
+    rt.set_variable("sel", StValue::make_int(9));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), -1);
+}
+
+TEST(StExecCase, ElseBranchCatchesEveryUnlistedValue)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  sel : INT; END_VAR
+VAR_OUTPUT out : INT; END_VAR
+    CASE sel OF
+      5: out := 50;
+    ELSE
+      out := 999;
+    END_CASE;
+END_PROGRAM
+)ST", &rt));
+    rt.set_variable("sel", StValue::make_int(5));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 50);
+    rt.set_variable("sel", StValue::make_int(4));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 999);
+}
+
+TEST(StExecCase, CommaSeparatedLabelsShareOneBranch)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  sel : INT; END_VAR
+VAR_OUTPUT out : INT; END_VAR
+    out := 0;
+    CASE sel OF
+      1, 3, 7: out := 42;
+    END_CASE;
+END_PROGRAM
+)ST", &rt));
+    for (int32_t hit : {1, 3, 7}) {
+        rt.set_variable("out", StValue::make_int(0));
+        rt.set_variable("sel", StValue::make_int(static_cast<int16_t>(hit)));
+        ASSERT_TRUE(rt.execute(0).ok);
+        EXPECT_EQ(get_int(rt, "out"), 42) << "sel=" << hit;
+    }
+    rt.set_variable("sel", StValue::make_int(2));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 0);
+}
+
+TEST(StExecCase, RangeLabelCoversBothBoundsInclusive)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  sel : INT; END_VAR
+VAR_OUTPUT out : INT; END_VAR
+    out := 0;
+    CASE sel OF
+      10..20: out := 1;
+    END_CASE;
+END_PROGRAM
+)ST", &rt));
+    /* Biên phải NẰM TRONG dải: `10..20` gồm cả 10 lẫn 20. Sai một đơn vị ở đây
+     * là loại lỗi chỉ lộ ra đúng ở giá trị biên, tức lúc vận hành thật. */
+    for (const auto& item : {std::pair<int32_t, int32_t>{9, 0}, {10, 1}, {15, 1}, {20, 1}, {21, 0}}) {
+        rt.set_variable("out", StValue::make_int(0));
+        rt.set_variable("sel", StValue::make_int(static_cast<int16_t>(item.first)));
+        ASSERT_TRUE(rt.execute(0).ok);
+        EXPECT_EQ(get_int(rt, "out"), item.second) << "sel=" << item.first;
+    }
+}
+
+TEST(StExecCase, NegativeLabelsWork)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  sel : INT; END_VAR
+VAR_OUTPUT out : INT; END_VAR
+    out := 0;
+    CASE sel OF
+      -5: out := 1;
+      -2..-1: out := 2;
+    END_CASE;
+END_PROGRAM
+)ST", &rt));
+    for (const auto& item : {std::pair<int32_t, int32_t>{-5, 1}, {-2, 2}, {-1, 2}, {0, 0}}) {
+        rt.set_variable("out", StValue::make_int(0));
+        rt.set_variable("sel", StValue::make_int(static_cast<int16_t>(item.first)));
+        ASSERT_TRUE(rt.execute(0).ok);
+        EXPECT_EQ(get_int(rt, "out"), item.second) << "sel=" << item.first;
+    }
+}
+
+TEST(StExecCase, SelectorIsAnExpressionNotJustAVariable)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  a : INT; b : INT; END_VAR
+VAR_OUTPUT out : INT; END_VAR
+    out := 0;
+    CASE a + b OF
+      3: out := 1;
+    END_CASE;
+END_PROGRAM
+)ST", &rt));
+    /* Biểu thức chọn được nhân bản cho từng nhánh khi khử đường. Trong subset
+     * này biểu thức thuần nên kết quả phải y hệt như đánh giá một lần. */
+    rt.set_variable("a", StValue::make_int(1));
+    rt.set_variable("b", StValue::make_int(2));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 1);
+    rt.set_variable("b", StValue::make_int(5));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 0);
+}
+
+TEST(StExecCase, NestedInsideIfAndNestedCaseBothRun)
+{
+    StProgramRuntime rt;
+    ASSERT_TRUE(make_runtime(R"ST(
+PROGRAM t
+VAR_INPUT  gate : BOOL; sel : INT; sub : INT; END_VAR
+VAR_OUTPUT out : INT; END_VAR
+    out := 0;
+    IF gate THEN
+      CASE sel OF
+        1:
+          CASE sub OF
+            7: out := 77;
+          ELSE
+            out := 70;
+          END_CASE;
+      ELSE
+        out := 9;
+      END_CASE;
+    END_IF;
+END_PROGRAM
+)ST", &rt));
+    rt.set_variable("gate", StValue::make_bool(true));
+    rt.set_variable("sel", StValue::make_int(1));
+    rt.set_variable("sub", StValue::make_int(7));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 77);
+
+    rt.set_variable("sub", StValue::make_int(1));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 70);
+
+    rt.set_variable("sel", StValue::make_int(2));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 9);
+
+    rt.set_variable("gate", StValue::make_bool(false));
+    ASSERT_TRUE(rt.execute(0).ok);
+    EXPECT_EQ(get_int(rt, "out"), 0);
 }
 
 } // namespace core

@@ -1,7 +1,13 @@
-# Programming Implementation Tracker
+# Programming Implementation Tracker — lịch sử Plan 56
 
-**Companion của:** [Plan 56 — Programming Implementation Master Plan 2026 Q3](56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md)
-**Cập nhật lần cuối:** 2026-08-15 (phiên tạo — cập nhật sau mỗi iteration theo §XI.F Lệnh CTO/Owner)
+**Trạng thái:** **Superseded 2026-08-20.** Bảng dưới đây là snapshot WP cũ, không
+phải tracker hiện hành. Task và tiến độ mới chỉ cập nhật tại
+[`PLAN-PROG-059` §3](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md#3-bảng-nhiệm-vụ-master).
+
+**Companion tiến độ WP:** [Plan 56 — Programming Implementation Master Plan 2026 Q3](56_PROGRAMMING_IMPLEMENTATION_MASTER_PLAN_2026Q3.md)
+
+**Authority thay thế:** [Plan 59 — Programming thống nhất đến Release](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) (`Active`)
+**Cập nhật lần cuối:** 2026-08-20 (đóng tracker WP; giữ truy nguyên)
 
 Trạng thái chuẩn: `NOT_STARTED` · `DOC_REQUIRED` · `DESIGN` · `READY_TO_IMPLEMENT` ·
 `IMPLEMENTING` · `CODE_REVIEW` · `TESTING` · `EVIDENCE_REQUIRED` · `DONE` · `BLOCKED`.

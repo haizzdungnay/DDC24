@@ -7,6 +7,7 @@ import { Panel } from '../../shared/components/Panel'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { useI18n } from '../../shared/i18n'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import type { ScheduleObject, ScheduleStatus } from '../../shared/types'
 import { cn } from '../../shared/utils'
 import { useAuth, roleAtLeast } from '../auth'
@@ -26,6 +27,24 @@ import {
  * Cột `Hiện tại`/`Kế tiếp` đến từ khối `runtime` của controller. Chưa publish
  * thì hiện gạch ngang — KHÔNG tính giá trị ở trình duyệt (nguyên tắc S2/S3).
  */
+/** Tiêu đề trang — dùng chung cho cả trạng thái bình thường lẫn hai nhánh lỗi,
+ *  để `<h1>` không biến mất khi trang không dựng được nội dung (`T57-0.4`). */
+function SchedulerHeading() {
+  const { pick } = useI18n()
+  return (
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--c-text)]">{pick('Lịch vận hành', 'Scheduler')}</h1>
+        <p className="mt-1 text-sm text-[var(--c-text-dim)]">
+          {pick('Lịch tuần · ngoại lệ · publish có kiểm chứng', 'Weekly schedule · exceptions · verified publish')}
+        </p>
+      </div>
+    </header>
+  )
+}
+
+const SCHEDULER_FILTER_DEFAULTS = { q: '', status: 'all', outOfSync: '' }
+
 export function SchedulerGridPage() {
   const { pick } = useI18n()
   const { schedules, loading, error, legacyFormat, reload, upsert } = useScheduler()
@@ -35,9 +54,13 @@ export function SchedulerGridPage() {
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | ScheduleStatus>('all')
-  const [onlyOutOfSync, setOnlyOutOfSync] = useState(false)
+  /* `T57-2.2` — bộ lọc vào URL, cùng lý do với trang Cảnh báo: grid 64 lịch mà
+     không chia sẻ được "đang xem cái nào" thì mọi trao đổi giữa hai người trực
+     phải mô tả bằng lời cách bấm lại. */
+  const filters = useUrlFilters(SCHEDULER_FILTER_DEFAULTS)
+  const query = filters.values.q
+  const statusFilter = filters.values.status as 'all' | ScheduleStatus
+  const onlyOutOfSync = filters.values.outOfSync === '1'
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
 
@@ -57,9 +80,18 @@ export function SchedulerGridPage() {
     })
   }, [schedules, query, statusFilter, onlyOutOfSync])
 
+  /* Hai nhánh trả về sớm dưới đây GIỮ tiêu đề trang — `T57-0.4` (`F-UX-15`).
+   *
+   * Trả về một `StateBlock` trần làm trang mất `<h1>`: người dùng trình đọc màn
+   * hình nghe thấy một thông báo lỗi mà không biết mình đang ở màn hình nào,
+   * và cây heading của tài liệu rỗng (WCAG 2.2 §2.4.6). `MonitorPage` và
+   * `AlarmsPage` đã sửa đúng lỗi này từ PA3-603; trang Lịch vận hành bị bỏ sót
+   * vì nhánh lỗi của nó nằm TRƯỚC chỗ dựng tiêu đề, không phải sau. */
   // Tệp còn định dạng cũ là một bước quản trị chưa chạy, không phải hỏng hóc.
   if (legacyFormat) {
     return (
+      <div className="space-y-4">
+      <SchedulerHeading />
       <StateBlock
         state="error"
         title={pick('Cấu hình lịch còn ở định dạng cũ', 'Schedule config is still in the legacy format')}
@@ -73,16 +105,20 @@ export function SchedulerGridPage() {
         )}
         onRetry={() => { void reload() }}
       />
+      </div>
     )
   }
   if (error && schedules.length === 0) {
     return (
-      <StateBlock
-        state="error"
-        title={pick('Không tải được danh sách lịch', 'Could not load the schedule list')}
-        detail={error.message}
-        onRetry={() => { void reload() }}
-      />
+      <div className="space-y-4">
+        <SchedulerHeading />
+        <StateBlock
+          state="error"
+          title={pick('Không tải được danh sách lịch', 'Could not load the schedule list')}
+          detail={error.message}
+          onRetry={() => { void reload() }}
+        />
+      </div>
     )
   }
 
@@ -211,13 +247,13 @@ export function SchedulerGridPage() {
           className="h-9 w-56 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
           placeholder={pick('Tìm theo mã hoặc tên…', 'Search by ID or name…')}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => filters.set('q', e.target.value)}
           aria-label={pick('Tìm lịch', 'Search schedules')}
         />
         <select
           className="h-9 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)]"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as 'all' | ScheduleStatus)}
+          onChange={(e) => filters.set('status', e.target.value)}
           aria-label={pick('Lọc theo trạng thái', 'Filter by status')}
         >
           <option value="all">{pick('Mọi trạng thái', 'All statuses')}</option>
@@ -230,7 +266,7 @@ export function SchedulerGridPage() {
             type="checkbox"
             className="h-4 w-4 accent-[var(--c-accent)]"
             checked={onlyOutOfSync}
-            onChange={(e) => setOnlyOutOfSync(e.target.checked)}
+            onChange={(e) => filters.set('outOfSync', e.target.checked ? '1' : '')}
           />
           {pick('Chỉ lịch lệch revision', 'Only out-of-sync revisions')}
         </label>

@@ -36,8 +36,11 @@ for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
 }
 
 endpoints.sort((left, right) => left.operationId.localeCompare(right.operationId));
-if (endpoints.length !== 25) {
-  throw new Error(`Programming OpenAPI phải có 25 operation, thực tế ${endpoints.length}`);
+// 33 operation Rev A/R1-R2 + 7 operation Simulation R3 (T59-814). Con số là
+// contract: thêm endpoint mà quên sinh lại client sẽ đỏ ở đây thay vì lộ ra
+// dưới dạng một hàm thiếu trong FE.
+if (endpoints.length !== 40) {
+  throw new Error(`Programming OpenAPI phải có 40 operation, thực tế ${endpoints.length}`);
 }
 if (new Set(endpoints.map(({ operationId }) => operationId)).size !== endpoints.length) {
   throw new Error("Programming OpenAPI có operationId trùng");
@@ -64,6 +67,102 @@ if (
 }
 
 const quotedUnion = (items) => items.map((item) => JSON.stringify(item)).join(" | ");
+
+// --- Sinh type TypeScript thẳng từ schema OpenAPI ---------------------------
+//
+// Trước T60-016 script này chỉ sinh bảng endpoint, nên mọi schema đọc phải khai
+// TAY ở `model/types.ts` và không có gì bắt chúng khớp contract. Hệ quả đã thấy
+// thật: enum `runtimeState` khai tay còn mang `STARTING`/`STOPPING` — hai giá
+// trị mà D-07 nói rõ không bao giờ được bày ra. Type khai tay không lệch ồn ào;
+// nó lệch im lặng cho tới khi có người đọc một trường không tồn tại.
+//
+// Danh sách dưới đây CÓ THỨ TỰ: một schema chỉ được `$ref` tới schema đứng
+// TRƯỚC nó, và thứ tự này cũng là thứ tự khai báo trong tệp sinh ra. Ràng buộc
+// đó cố ý chặt — nó biến một vòng tham chiếu thành lỗi lúc sinh, thay vì thành
+// một type `any` ngầm ở phía dùng.
+const generatedTypeSchemas = [
+  "ProgrammingProgramRuntimeState",
+  "ProgrammingProgramRuntimeStateSource",
+  "ProgrammingProgramHealth",
+  "ProgrammingProgramListItem",
+  "ProgrammingProgramsPage",
+  // T59-819 — typed diff của Compare. Hai schema này KHÔNG khai tay: enum
+  // `changeType` của chúng là thứ quyết định UI vẽ "đổi logic" hay chỉ "đổi
+  // chỗ đứng trên canvas", và một bản khai tay lệch sẽ lệch im lặng.
+  "ProgrammingStHunk",
+  "ProgrammingFbdChange",
+];
+
+const scalarTypeNames = {
+  string: "string",
+  integer: "number",
+  number: "number",
+  boolean: "boolean",
+  null: "null",
+};
+
+// typeExpression dịch MỘT schema con sang biểu thức kiểu. Mọi nhánh không hiểu
+// được đều NÉM lỗi thay vì trả `unknown`: một `unknown` lặng lẽ ở đây sẽ tắt
+// đúng phần kiểm kiểu mà tệp sinh sinh ra để có.
+function typeExpression(schema, owner, emitted) {
+  if (!schema || typeof schema !== "object") {
+    throw new Error(`${owner}: schema rỗng, không sinh được type`);
+  }
+  if (typeof schema.$ref === "string") {
+    const name = schema.$ref.replace("#/components/schemas/", "");
+    if (!emitted.has(name)) {
+      throw new Error(`${owner}: $ref tới ${name} chưa sinh — thêm nó vào generatedTypeSchemas TRƯỚC schema này`);
+    }
+    return name;
+  }
+  if (Array.isArray(schema.oneOf)) {
+    return schema.oneOf.map((member, index) => typeExpression(member, `${owner}.oneOf[${index}]`, emitted)).join(" | ");
+  }
+  if (schema.const !== undefined) return JSON.stringify(schema.const);
+  if (Array.isArray(schema.enum)) return quotedUnion(schema.enum);
+  const kinds = Array.isArray(schema.type) ? schema.type : [schema.type];
+  return kinds
+    .map((kind) => {
+      if (kind === "array") return `${typeExpression(schema.items, `${owner}[]`, emitted)}[]`;
+      const scalar = scalarTypeNames[kind];
+      if (!scalar) throw new Error(`${owner}: kiểu ${JSON.stringify(kind)} chưa hỗ trợ`);
+      return scalar;
+    })
+    .join(" | ");
+}
+
+// generateSchemaType sinh khai báo cấp cao nhất cho một schema.
+//
+// Trường KHÔNG nằm trong `required` sinh ra `?`. Với nhóm schema này gần như mọi
+// trường đều `required` dù nullable — đó chính là điều contract muốn nói: trường
+// LUÔN CÓ MẶT, `null` là "server đã xét và chưa biết", còn vắng mặt là "server
+// đời cũ chưa có trường này". Hai thứ đó không được phép trông giống nhau ở
+// phía dùng.
+function generateSchemaType(name, schema, emitted) {
+  if (schema.type === "string" && Array.isArray(schema.enum)) {
+    return `export type ${name} = ${quotedUnion(schema.enum)};`;
+  }
+  if (schema.type === "object" && schema.properties) {
+    const required = new Set(schema.required ?? []);
+    const fields = Object.entries(schema.properties)
+      .map(([field, sub]) => `  ${field}${required.has(field) ? "" : "?"}: ${typeExpression(sub, `${name}.${field}`, emitted)};`)
+      .join("\n");
+    return `export interface ${name} {\n${fields}\n}`;
+  }
+  throw new Error(`Không sinh được type cho schema ${name}: chỉ hỗ trợ enum chuỗi và object có properties`);
+}
+
+const emittedSchemaTypes = new Set();
+const schemaTypeBlocks = [];
+for (const name of generatedTypeSchemas) {
+  const schema = schemas[name];
+  if (!schema) {
+    throw new Error(`OpenAPI thiếu schema ${name}; client Programming không sinh được type đọc`);
+  }
+  schemaTypeBlocks.push(generateSchemaType(name, schema, emittedSchemaTypes));
+  emittedSchemaTypes.add(name);
+}
+const schemaTypes = schemaTypeBlocks.join("\n\n");
 const endpointLines = endpoints
   .map(
     ({ operationId, method, path, roles }) =>
@@ -87,6 +186,11 @@ export type ProgrammingRole = "viewer" | "operator" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type ProgrammingImpactStatus = ${quotedUnion(impactStatuses)};
 export type ProgrammingImpactKey = ${quotedUnion(impactKeys)};
+
+// --- Bảng Programs của PGM-01 (T60-013/T60-014), sinh thẳng từ schema OpenAPI.
+// Trường nullable là \`| null\` chứ KHÔNG phải optional: server luôn gửi khoá, và
+// \`null\` nghĩa là "đã xét, chưa biết" — không được suy thành \`0\`/\`false\`.
+${schemaTypes}
 
 export interface ProgrammingPublicError {
   code: ProgrammingErrorCode;
@@ -157,10 +261,7 @@ export interface ProgrammingImpactGroup {
 
 export interface ProgrammingImpact {
   impactRef: string;
-  retain: ProgrammingImpactGroup;
-  activeOverrides: ProgrammingImpactGroup;
-  cutover: ProgrammingImpactGroup;
-  outputMappingChanges: ProgrammingImpactGroup;
+${impactKeys.map((key) => `  ${key}: ProgrammingImpactGroup;`).join('\n')}
 }
 
 export interface ProgrammingCommissionRequest {

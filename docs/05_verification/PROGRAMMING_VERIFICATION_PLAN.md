@@ -3,26 +3,26 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `VVP-PROG-001` |
-| Phiên bản | 1.9 |
-| Trạng thái | **APPROVED FOR IMPLEMENTATION** — 32/32 kịch bản là baseline DoD; hiện có 2/32 record `BLOCKED`, 0/32 PASS |
-| Ngày | 2026-08-13 |
+| Phiên bản | 2.2 |
+| Trạng thái | **Kế hoạch Active: 32 legacy + 12 unified + 3 PGM-02; 47 total, U13–U15 `NOT_RUN`, 0/47 PASS** |
+| Ngày | 2026-08-24 |
 | Chủ quản | Verification Lead |
 | Người review | Product, System Architect, FE/BE/Core/FW/HW/Ops Leads |
 | Người phê duyệt | Verification Lead + Product Owner |
-| Nguồn | `SRS-PROG-001`, bộ thiết kế Programming ở mức M3, Risk/Traceability |
+| Nguồn | Product v3.2; `SRS-PROG-001` v1.2; ADR-050/053; `AUTH-PROG-2026-08-24-05`; exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; Unified/PGM-02 DDD; Risk/Traceability |
 | Requirement | `SRS-PROG-001` |
 
 ## 0. Đọc nhanh
 
 | Câu hỏi | Trả lời |
 |---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Chốt **cách chứng minh hệ thống làm đúng**: 32 kịch bản `VS-PROG-001..032`, mỗi kịch bản có đồ gá, điều kiện trước, các bước, kết quả kỳ vọng định lượng, môi trường và ai được ký. Cũng chốt cái gì **không** được tính là bằng chứng. |
+| 1. File này dùng để quyết định hoặc triển khai việc gì? | Giữ 32 scenario legacy + 12 unified baseline và kích hoạt kế hoạch ba scenario PGM-02 `VS-PROG-U13..U15` cho R1 EDIT, R2 LIVE, R3 SIMULATE. |
 | 2. Ai phải đọc file này? | Verification Lead (chủ quản) và mọi discipline lead — vì mỗi người sở hữu một phần trong cột “execute/review”. Release authority đọc §5 để biết gate nào đang mở. |
-| 3. Hệ thống hiện tại đang có gì? | `VS-PROG-001/019` có record `BLOCKED`; 30 scenario còn lại `NOT_RUN`, 0/32 PASS. Corrective 508..510 đã qua full host gate, deploy/read-back/rollback Foxlinx và browser/axe target theo `EV-PROG-P5-510`; vòng audit live HTTP cuối còn chứng minh UUID/hash fallback, auth deep-link, ST save/restore, export, import fault `422`, fail-closed và responsive. Source chưa merge và positive Monitor/Trace có binding target chưa chạy. |
-| 4. Thiết kế mới thay đổi điều gì? | Chuyển từ “có test” sang **bằng chứng có thẩm quyền**: mỗi lần chạy phải ghim commit, image, config và hash; Test Result là bất biến; chạy lại sinh ID mới. Trạng thái chỉ được là một trong `NOT_RUN/RUNNING/PASS/FAIL/BLOCKED/INVALIDATED`. |
+| 3. Hệ thống hiện tại đang có gì? | Catalog legacy có 2 record `BLOCKED`, 30 `NOT_RUN`, 0/32 PASS; 12 unified và 3 PGM-02 Candidate đều `NOT_RUN`. Supporting host/target evidence cũ không tự kế thừa. |
+| 4. Thiết kế mới thay đổi điều gì? | Target đã pin bổ sung acceptance typed EDIT/Quick Library, coherent LIVE và isolated Simulation admin-only/zero-output theo ba increment độc lập. |
 | 5. Team phải sửa module/contract nào? | Không sửa code. Cần dựng thư mục bằng chứng `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS`, cùng các đồ gá `H/B/T/L` ở §9. |
-| 6. Điều gì còn bị chặn? | Không còn approval hoặc SSH/deploy blocker. Corrective source cần merge; positive Monitor/Trace có binding target, reviewer accessibility độc lập, usability, HIL và Test Result độc lập vẫn mở. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Chính file này định nghĩa. Với bản thân hồ sơ: 32/32 kịch bản có đặc tả đủ năm trục ở §9. Evidence host G2/G3/P4 chỉ hỗ trợ, không nâng verdict. Hiện có **2/32 record, 0/32 PASS, 2/32 BLOCKED**. |
+| 6. Điều gì còn bị chặn? | Không còn blocker authority để viết code; `T59-802=READY`, task sau `ORDERED` theo dependency. U13 cần R1 source/browser evidence, U14 cần producer-chain/target fault, U15 cần target/HIL/physical-output evidence. |
+| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | File định nghĩa 47/47 scenario. Hiện **2/47 record, 0/47 PASS**; 45 scenario `NOT_RUN` hoặc chưa có record PASS. Không cộng supporting evidence thành verdict. |
 
 Ba loại bằng chứng **không** đủ để đóng một requirement: file tài liệu tồn tại;
 unit test trên máy host thay cho đo trên target/HIL; và ảnh chụp màn hình mock
@@ -46,11 +46,18 @@ thay ADC/DAC/relay/UART/RS485 thật. Không dùng từ `PASS` cho check chưa c
 | L2 Component | compiler worker, Core runtime, BE store/API, FE component | từng team |
 | L3 Contract/integration | OpenAPI Go↔TS, BE↔Core IPC, Point/IOP/SHM | BE/Core/QA |
 | L4 Host E2E/simulator | ST/FBD→Check→Commission flow không phần cứng | QA |
-| L5 Browser E2E | bốn workspace và tám journey, RBAC, errors, a11y, responsive | FE/QA |
+| L5 Browser E2E | sáu workspace và tám journey, RBAC, errors, a11y, responsive | FE/QA |
 | L6 Target/HIL | timing, output, watchdog, power/restart, MCU/IOP | Core/FW/HW/QA |
 | L7 Release/operations | install/upgrade/backup/restore/rollback/provenance | Ops/QA |
 
-## 3. Catalog scenario duy nhất
+## 3. Catalog scenario
+
+### 3.0 Regression migration v1
+
+`VS-PROG-001..032` giữ acceptance của baseline cũ để kiểm dual-reader/redirect/
+rollback. Chúng không giới hạn Product Target. Khi câu “một Task/bốn workspace”
+xuất hiện, expected chỉ áp dụng cho compatibility fixture v1; fixture v2 phải
+theo `VS-PROG-U01..U15`.
 
 | ID | Scenario/acceptance chính | Cấp | Requirement chính | Evidence bắt buộc |
 |---|---|---|---|---|
@@ -87,6 +94,38 @@ thay ADC/DAC/relay/UART/RS485 thật. Không dùng từ `PASS` cho check chưa c
 | `VS-PROG-031` | Usability test có người dùng thật trên tám journey `UJ-PROG-01..08`; sáu ngưỡng `UX-A-01..06` | L5 usability | NFR-109; FE-101/113/114/115 | hồ sơ người tham gia, bản ghi thời gian, kết quả từng tiêu chí |
 | `VS-PROG-032` | Chuyển hướng route cũ sang bốn workspace giữ đúng `projectId` và tab; đổi tab không mất nội dung đang gõ | L5 | FE-101 | E2E redirect + trạng thái editor |
 
+### 3.1 Scenario Product thống nhất
+
+| ID | Scenario/fixture | Cấp | Kết quả định lượng / evidence |
+|---|---|---|---|
+| `VS-PROG-U01` | ST/FBD user FUNCTION | L1/L4 | Pure equivalence; state/I/O/RETAIN/recursion reject; artifact/source-map. |
+| `VS-PROG-U02` | 100/1024 FB instance | L1/L4 | Private state/RETAIN owner độc lập, layout stable, corrupt cold-init. |
+| `VS-PROG-U03` | SYSTEM/PROJECT Control Library | L2/L3/L5 | CRUD/version/usage/DAG/import hostile/RBAC/audit; system immutable. |
+| `VS-PROG-U04` | Boundary 32 Program/16 Enabled | L1/L3 | 32/16 pass; Program 33/Enabled 17 reject, Active/LKG unchanged. |
+| `VS-PROG-U05` | 10 Program/3 period target | L6 | 24 h; no 3 consecutive deadline miss; no creation-order dependency; fault isolation. |
+| `VS-PROG-U06` | Published Signal snapshot/freshness | L1/L3/L6 | No torn read; fallback/hold/wait; producer fault/disable/recovery đúng. |
+| `VS-PROG-U07` | Enable/Disable FE→BE→Core | L3/L5/L6 | RBAC/idempotency/audit/read-back/restart intent; candidate withdrawal. |
+| `VS-PROG-U08` | Package Commission/LKG/power matrix | L3/L6 | No partial active; Program mới Disabled; restart/rollback exact ở mọi journal phase. |
+| `VS-PROG-U09` | ST và FBD physical output HIL | L6 | AO/DO instrument đo full safety path; Disable/rollback physical đúng. |
+| `VS-PROG-U10` | Six-workspace real-backend E2E | L5 | Không Programming API mock; POU/library/mapping/check/commission/enable/runtime. |
+| `VS-PROG-U11` | Trace/load/soak | L2/L6/L7 | Core ring 10k/10 phút, 24 h, no leak/deadlock, `max_iop_poll_gap <200 ms`. |
+| `VS-PROG-U12` | PID Controls/Safety | L1/L6 | Saturation/anti-windup/override/release; approval token; label READY. |
+| `VS-PROG-U13` | PGM-02 R1 EDIT — route/identity/typed Draft/Quick Library/refactor/reference/diagnostic | L0/L2/L3/L5 | `SYS-116`, `FE-119`, `BE-112/116`, `NFR-112`: 0/1/nhiều/invalid Project; 15 op v1/v2 typed round-trip; exact objectId/anchors; insert một Undo; conflict/ambiguity/parser failure zero mutation; PROGRAM POU thiếu `programs[]` lưu Draft được nhưng Check/Package trả `PRG-ERR-CHECK-001` + `ST-POU-005`, zero package mutation và không synthesize 1000 ms; real-BE desktop/mobile `<768` read-only; budget PASS. |
+| `VS-PROG-U14` | PGM-02 R2 LIVE — immutable Active source/value coherence | L2/L3/L5/L6 | `SYS-116`, `FE-119`, `BE-116`, `CORE-117`, `NFR-112`: producer→IPC→BE→FE/read-back tuple exact; cutover/gap/mismatch clear overlay trong ≤1 render cycle; Trace không splice revision; LIVE 0 mutation; stale/offline/missing không thành zero. |
+| `VS-PROG-U15` | PGM-02 R3 SIMULATE — isolated deterministic worker/admin-only/zero output | L0/L2/L3/L5/L6 | `SYS-116`, `FE-119`, `BE-117`, `CORE-118`, `NFR-112`: 14/14 viewer/operator mutations 403; replay 100/100 hash equal ở 1×/10×/60×; allowlist/quota/TTL/fault cleanup; production handle denied; Active/LKG/counters và physical AO/DO/relay không đổi. |
+
+### Trạng thái `VS-PROG-U13..U15` (cập nhật 2026-08-27)
+
+| Scenario | Trạng thái | Ghi chú |
+|---|---|---|
+| `VS-PROG-U13` | **PASS (R1 / HOST-LOCAL)** | Record: [`EV-PGM02-R1-CLOSEOUT-001`](../07_records/test-evidence/programming/2026-08-26-pgm02-t59-809-r1-closeout.md) tại commit `d32e560`. PASS này **chỉ** ở lớp HOST/LOCAL: không tuyên bố target, HIL hay release, và không nâng `I/T/P/R` của requirement nào. |
+| `VS-PROG-U14` | **PASS (R2 / HOST + TARGET-BROWSER)** | Record: [`EV-PGM02-R2-CLOSEOUT-001`](../07_records/test-evidence/programming/2026-08-27-pgm02-t59-813-r2-closeout.md), base `c52c91a`. Bằng chứng target là browser + read-back đúng hash trên Foxlinx SOM-DDC-24 (`T59-810`/`T59-811` online, Core offline, diễn tập rollback). PASS này **không** phải Test Result chính thức: chưa có chữ ký operator/reviewer, chưa đo *Active cutover* ở lớp target, và không tuyên bố HIL hay I/O vật lý. |
+| `VS-PROG-U15` | `NOT_RUN` | R3 SIMULATE chưa có implementation (`T59-814..817`). |
+
+Mọi scenario unified bắt đầu `NOT_RUN`; task implementation có thể tạo unit/
+integration evidence, nhưng `U05/U08/U09/U11/U12/U14/U15` chỉ PASS bằng target/HIL record
+có commit/image/config/hash/instrument/operator/reviewer.
+
 ## 4. Test data và coverage
 
 - Golden Projects: minimal ST, minimal FBD, PID+AO, RTU mapping, RETAIN,
@@ -105,7 +144,8 @@ Mỗi requirement Must có ít nhất positive + negative/fault path tương ứ
 ### G0 — Requirements/Design approval
 
 SRS/Architecture/Data/Interface/FE/BE/FW-SOM/FW-MCU/HW/UX/V&V/Operations/Risk,
-Open Decisions và Traceability được review/ký. Hiện `RED`.
+Decision Register và Traceability đã khóa theo ADR-050. `PASS` cho implementation;
+không dùng G0 để claim release.
 
 ### G1 — Contract/compiler
 
@@ -114,7 +154,7 @@ unit/property/fuzz đạt. Chưa đủ release.
 
 ### G2 — BE/FE engineering workflow
 
-Project/Draft/Revision/Check/manifest/RBAC/audit/import và UI bốn workspace đạt L1–L5,
+Project/Draft/Revision/Check/manifest/RBAC/audit/import và UI sáu workspace đạt L1–L5,
 nhưng Commission mutation vẫn feature-gated nếu Core/HIL chưa đạt.
 
 ### G3 — Core deterministic runtime
@@ -178,6 +218,10 @@ Trạng thái hiện hành: `VS-PROG-001` và `VS-PROG-019` có record `BLOCKED`
 `0/32 PASS`, `0/32 FAIL`, `2/32 BLOCKED`. Record G1 ghim đúng commit/contract và
 raw checksum, nhưng chưa có service/Check/API/UI E2E và independent QA review;
 do đó không được dùng mở release gate hoặc nâng trace `P/R`.
+
+`VS-PROG-U01..U12` và ba scenario PGM-02 Candidate `U13..U15` đều `NOT_RUN`,
+chưa có Test Result. Tổng toàn catalog là **2/47 record, 0/47 PASS**. Việc tạo
+contract/DDD/asset Candidate chỉ là L0 inspection input, không đổi verdict.
 
 ## 9. Test specification cho từng scenario
 
@@ -464,6 +508,10 @@ thuộc mặc định profile mới là tiếng Việt.
 
 | Blocker | Owner | Điều kiện mở |
 |---|---|---|
+| Exact Candidate PGM-02 | Product + System Architect + Document Control | **Đã đóng authority:** `AUTH-PROG-2026-08-24-05`, exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; không dùng pin làm Test Result |
+| ~~`VS-PROG-U13` chưa có implementation/evidence R1~~ **ĐÓNG 2026-08-26** | FE + BE + Compiler + QA | `T59-802..809` DONE ở lớp HOST/LOCAL; record `EV-PGM02-R1-CLOSEOUT-001`. Còn mở ở lớp target/HIL, không phải ở lớp R1 |
+| `VS-PROG-U14` chưa có coherent producer chain | Core + BE + FE + QA | **Đóng phần producer→UI→read-back** 2026-08-27 (`T59-810..813 DONE`; target fault + read-back đúng Active tuple, `EV-PGM02-R2-CLOSEOUT-001`). Còn mở: *Active cutover* ở lớp target và chữ ký operator/reviewer cho Test Result chính thức |
+| `VS-PROG-U15` chưa có worker/isolation/HIL fixture | Runtime + Security + BE + FE + HW/QA | `ADR-053` Accepted; `T59-814..817=ORDERED` sau R2; isolated worker + calibrated zero-output target/HIL Test Result |
 | Requirement/design: `17 DECIDED/0 OPEN/0 CLOSED`, baseline approved | Product + Architect + discipline authority | **Đã mở implementation** theo `AUTH-PROG-2026-08-11-03` |
 | P5 đã deploy đầy đủ và happy path target PASS | Core + HW + Ops + QA | chạy fault/power/restart/HIL P6 với executor/reviewer độc lập để cấp Test Result |
 | BSP/HW fixture/limits/HIL chưa có | FW/HW/Safety | controlled setup + calibrated instruments |
@@ -492,18 +540,25 @@ thuộc mặc định profile mới là tiếng Việt.
 | 1.7 | 2026-08-13 | Đăng ký `EV-PROG-P5-508-510` cho audit/corrective slice: định nghĩa test context/dirty/ST/deep-link/readiness, Monitor/Trace bounded và Chrome desktop/mobile; ghi rõ host evidence không kế thừa target 507. Source 508/509 đang VERIFYING; Task 510 target BLOCKED do SSH Foxlinx. Giữ 2/32 BLOCKED, 0/32 PASS. |
 | 1.8 | 2026-08-13 | Ghi `EV-PROG-P5-510`: full host gate, deploy/read-back/rollback rehearsal/tái deploy Foxlinx, Chrome desktop/mobile và axe 8/8 scan PASS. Đóng blocker SSH/tool scan; giữ source chưa merge, positive Monitor/Trace có binding, reviewer/usability/HIL/Test Result độc lập. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
 | 1.9 | 2026-08-13 | Bổ sung audit live HTTP cho `EV-PROG-P5-510` rev 1.1: UUID/SHA fallback không cần secure context, deep-link qua auth, ST save rồi phục hồi byte gốc, export `200`, import fault `422`, Restore/RETAIN fail-closed, mobile nav/no-overflow và axe 6/6 scan sạch. Ghim hash artifact/index/rollback; ghi rõ một deploy trung gian thiếu build flag đã bị thay. Giữ 2/32 BLOCKED, 0/32 PASS và mọi `T/P/R=N`. |
+| 2.0 | 2026-08-20 | ADR-050: giữ 32 scenario migration và thêm `VS-PROG-U01..U12` cho POU/library/multi-Program/signal/enable/package/output/soak/PID; 44 scenario total, 12 unified đều NOT_RUN. |
+| 2.2 | 2026-08-26 | `VS-PROG-U13` chuyển **PASS ở phạm vi R1/HOST-LOCAL** kèm record `EV-PGM02-R1-CLOSEOUT-001` tại commit `d32e560`; ghi rõ PASS này không tuyên bố target/HIL/release và không nâng `I/T/P/R`. `U14`/`U15` giữ `NOT_RUN`. |
+| 2.1-candidate | 2026-08-24 | Thêm `VS-PROG-U13..U15` cho PGM-02 R1 EDIT/R2 LIVE/R3 SIMULATE và ánh xạ closeout `T59-809/813/817`; tổng 47 scenario, ba scenario mới NOT_RUN; Architect exact pin và mọi card code/release giữ PENDING/NO-GO. |
+| 2.2 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` và mở implementation theo R1→R2→R3; bổ sung ca âm `ST-POU-005` vào U13; giữ U13–U15 NOT_RUN, 0/47 PASS và release NO-GO. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
 | Verification + discipline leads | **WAIVED FOR IMPLEMENTATION** | review/test theo task; không chặn code |
 | Product Owner | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11** | `AUTH-PROG-2026-08-11-03` |
 | Verification Lead | **WAIVED FOR IMPLEMENTATION** | giữ độc lập khi ký Test Result; không phải entry condition |
+| Product Owner/CTO + System Architect | **ACCEPT — 2026-08-20** | `AUTH-PROG-2026-08-20-04`; scope unified và evidence boundary |
+| Product Owner/CTO + System Architect — PGM-02 v2.2 | **AUTHORIZED FOR IMPLEMENTATION — 2026-08-24** | `AUTH-PROG-2026-08-24-05`; exact Candidate pin; không phải Test Result approval |
+| Verification Lead + discipline reviewers — PGM-02 | **WAIVED FOR IMPLEMENTATION; EVIDENCE PENDING** | U13–U15 giữ NOT_RUN; review/authority ký PASS vẫn độc lập |
 
 ## 13. Phụ lục — Tự kiểm cổng M3 (loại: V&V)
 
 | Cổng | Kết quả | Bằng chứng trong file / lý do |
 |---|---|---|
-| Trace tới requirement và risk | PASS | §3 cột “Requirement chính” cho 32 kịch bản; đối chiếu ngược ở `TRACE-PROG-001` §6 |
+| Trace tới requirement và risk | PASS ở lớp Candidate | §3 phủ 32 migration + 12 unified + 3 PGM-02; đối chiếu ngược ở `TRACE-PROG-001` |
 | Cấp kiểm chứng | PASS | §2 định nghĩa `L0..L7`; §3 gán cấp cho từng kịch bản |
 | Đồ gá | PASS | §9 quy ước `H` host CI, `B` trình duyệt thật, `T` board target, `L` HIL lab |
 | Điều kiện trước | PASS | §9 cột đầu; §10 entry: build tái lập được, đồ gá đã hiệu chuẩn, giới hạn kỳ vọng **ký trước khi chạy** |
@@ -513,8 +568,8 @@ thuộc mặc định profile mới là tiếng Việt.
 | Môi trường và target | PASS | §9 cột cuối ghi rõ chạy ở đâu; §5 gate theo discipline |
 | Evidence | PASS | §7 mẫu Test Result; §10 đường dẫn `docs/07_records/test-results/programming/<TR-ID>/` gồm `result.md`, tệp thô và `SHA256SUMS` |
 | Thẩm quyền ký PASS | PASS | §9 cột cuối tách “execute” và “review”; §11 quy trình review |
-| Trạng thái trung thực | PASS | §8 ghi đúng 2 record `BLOCKED`, 30 `NOT_RUN`, 0 PASS; §10 cấm kế thừa PASS cũ và bắt chuyển `INVALIDATED` khi contract đổi |
-| Quyền implementation | **PASS** | Giới hạn đã `DECIDED`; HIL chưa tồn tại là deliverable P6 và không chặn P1–P5; mọi `IMPLEMENT_READY[*] PASS` |
+| Trạng thái trung thực | PASS | Legacy: 2 `BLOCKED`, 30 `NOT_RUN`, 0 PASS; unified baseline: 12 `NOT_RUN`; PGM-02 Candidate: 3 `NOT_RUN`; §10 cấm kế thừa PASS cũ |
+| Quyền implementation | PASS toàn PGM-02 | `AUTH-PROG-2026-08-24-05` mở ba `IMPLEMENT_READY`; U13–U15 vẫn NOT_RUN và không mở release |
 
-Số Test Result hiện tại: **2/32 record, 0/32 PASS, 2/32 BLOCKED**. Hồ sơ này và
-record G1 không chứng minh workflow E2E hoặc target/HIL đã đạt.
+Số Test Result hiện tại: **2/47 record, 0/47 PASS**; hai record legacy `BLOCKED`,
+45 scenario chưa có record PASS. Hồ sơ này không chứng minh target/HIL đã đạt.

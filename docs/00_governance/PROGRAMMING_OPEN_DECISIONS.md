@@ -1,254 +1,333 @@
-# Programming Open Decisions — DDC-24 Rev A
+# Programming Decision Register
 
-**ID:** PROG-OD-001
-**Phiên bản:** 0.9
-**Trạng thái:** **17 DECIDED, 0 OPEN, 0 CLOSED — APPROVED FOR IMPLEMENTATION** theo `AUTH-PROG-2026-08-11-03`; downstream sync là công việc triển khai, không còn là điều kiện cấp quyền code
-**Chủ quản:** Product / System Engineering
-**Reviewer:** Runtime Architect, Controls/Safety, Security, UX, I/O, Ops, QA
-**Approver:** Product Owner/CTO theo phạm vi quyết định
-**Cập nhật:** 2026-08-11
-**Product Spec:** [PROD-PROG-001](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md)
-
-## 0. Đọc nhanh
-
-| Câu hỏi | Trả lời |
+| Thuộc tính | Giá trị |
 |---|---|
-| 1. File này dùng để quyết định hoặc triển khai việc gì? | Quản lý 17 quyết định Product/System, phương án, thẩm quyền, hậu quả và việc đồng bộ downstream. Đây là file quyết định, không phải file thiết kế. |
-| 2. Ai phải đọc file này? | Mọi owner triển khai đọc decision của lát cắt mình. Runtime/Controls/Safety, Security, UX, I/O, Ops và Verification cung cấp review hậu kiểm; không còn là điều kiện trước khi viết code. |
-| 3. Hệ thống hiện tại đang có gì? | Phần Modbus của `OD-PROG-007/008` có contract `Active`. Product Owner/CTO + System Architect Phạm Đình Chương đã phê duyệt toàn bộ phương án target `OD-PROG-001..017` theo `AUTH-PROG-2026-08-11-03`. As-Built vẫn dùng `INT=int32`; target IEC-aligned chỉ thành As-Built sau khi code/migration/test hoàn tất. |
-| 4. Thiết kế mới thay đổi điều gì? | File ghi lại quyết định có thẩm quyền, nhưng **không tự biến Target thành As-Built**. `DECIDED` chỉ khóa hướng thiết kế; source, contract, migration và test vẫn phải triển khai theo Plan 53. |
-| 5. Team phải sửa module/contract nào? | Không có. Nhưng cột “Hồ sơ downstream” cho biết **file nào phải sửa ngay sau khi một quyết định được ký**; owner downstream phải xác nhận đã cập nhật trước khi chuyển `DECIDED → CLOSED`. |
-| 6. Điều gì còn bị chặn? | **Không còn decision/sign-off nào chặn implementation.** `17 DECIDED`, `0 OPEN`; `PLAN_READY` và mọi `IMPLEMENT_READY[*]` là `PASS` theo `AUTH-PROG-2026-08-11-03`. Evidence sản phẩm vẫn được tạo trong lúc implement và chỉ tác động `RELEASE_READY`. |
-| 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Không phải test — là **record**. Mỗi mục đóng khi có decision record/ADR đủ trường theo mục “Nội dung bắt buộc của decision record”, cộng bằng chứng mở khóa ở cột cuối bảng Decision package (ví dụ `OD-PROG-008` cần HIL RS485 thật). |
+| ID | `DEC-PROG-REGISTER-001` |
+| Phiên bản | 1.7 |
+| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED; increment R1 và R2 ĐÓNG (`T59-801..813` DONE), R3 mở với `T59-814` READY. **Một quyết định ĐANG MỞ: `UD-PROG-014` (tab đa POU)**; `UD-PROG-013` còn phần dư cần disposition. Status authority của từng task là Plan 59, không phải hồ sơ này** |
+| Ngày | 2026-08-25 |
+| Chủ quản | Product + System Architecture |
+| Authority | `ADR-050`; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
 
-Ba trạng thái và ý nghĩa: `OPEN` = chưa ai có thẩm quyền quyết; `DECIDED` = đã
-quyết và có ADR/approval, nhưng tài liệu phụ thuộc chưa sửa xong; `CLOSED` =
-quyết định, requirement, verification và traceability đã đồng bộ hết.
+## 0. Kết luận
 
-## Quy tắc sử dụng
+Mười hai quyết định unified theo ADR-050 vẫn `CLOSED` và tiếp tục làm authority
+cho baseline hiện hành. Theo chỉ thị điện tử hiện hành,
+`AUTH-PROG-2026-08-24-05` ghi nhận Phạm Đình Chương trong hai vai trò **Product
+Owner/CTO + System Architect** đã review và pin exact Candidate commit
+`413a043748dce3b44d2c5076412de761760ba17a`. Vì vậy `PLAN_READY[PGM02-V22]=PASS`,
+ba gate `IMPLEMENT_READY[PGM02-R1|R2|R3]=GO`, `T59-801=DONE` và mười sáu task
+`T59-802..817` trở thành task có authority. Scheduler vẫn bắt buộc đúng chuỗi
+`R1 EDIT → R2 LIVE → R3 SIMULATE`; gate GO không cho phép bỏ qua predecessor.
 
-Tài liệu này ghi vòng đời quyết định từ `OPEN` tới `DECIDED/CLOSED`. Nó không
-phải Design và không phải Implementation Plan. Một mục chỉ được đóng khi có owner,
-quyết định, lý do, ảnh hưởng requirement/verification và liên kết ADR hoặc hồ
-sơ phê duyệt. Không được tự lấy hành vi của prototype hoặc host unit test làm
-quyết định sản phẩm.
+`F-P59-GHOST-POU-001` đã `RESOLVED` bằng policy fail-closed và `ADR-053` đã
+`Accepted` dưới cùng AUTH. Hai disposition này khóa thiết kế để implementation
+tiếp tục; chúng không phải bằng chứng source/test/CI/target/HIL đã PASS. Riêng
+`F-P59-GHOST-POU-001` nay đã có cả **implementation**: corrective 2026-08-25 đưa
+catalog/checker/packager/writer về đúng semantics fail-closed và đạt affected
+gate HOST. Điều đó đóng finding, **không** mở `IMPLEMENTATION_CLOSE` cho PGM-02
+v2.2 và không suy ra bất kỳ evidence target/HIL nào.
 
-## Danh mục quyết định
+Các review Compiler/Core/BE/FE/Controls/Security/QA của baseline ADR-050 tiếp tục
+được thực hiện như hậu kiểm trong từng task. Riêng phạm vi PGM-02 v2.2 phải chạy
+theo dependency và scoped acceptance ở `PROG-DRM-001`; finding hậu kiểm thuộc
+task phải được sửa trước merge task đó.
 
-| ID | Vấn đề cần quyết định | Ảnh hưởng trước Programming Design | Owner đề xuất | Trạng thái |
-|---|---|---|---|---|
-| OD-PROG-001 | Role nào được xem, sửa Project, tạo Revision, Deployment, Activation và Rollback; cách ánh xạ vào baseline `viewer/operator/admin` hiện hành. | Chặn ma trận quyền và acceptance security. | Product + Security | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-002 | Tập data type chính thức cho Variable/Point ST và FBD, quy tắc conversion, overflow và giá trị khởi tạo. | Chặn type system và I/O Mapping contract. | Product + Runtime | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-003 | Capacity sản phẩm: số Project, Program, Revision, Point, Variable và kích thước logic tối đa. | Chặn sizing, persistence và performance acceptance. | Product | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-004 | Một Project được có bao nhiêu Program active; cycle time áp dụng theo Program hay task; thứ tự chạy khi có nhiều Program cùng cycle. | Chặn scheduling requirement chi tiết. | Product + Runtime | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-005 | Thư viện function/function block tối thiểu của ST và FBD, semantics dùng chung và chính sách versioning. | Chặn phạm vi ngôn ngữ có thể kiểm thử. | Product + Controls | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-006 | Trải nghiệm authoring FBD, quy tắc kết nối block và format trao đổi Project/Program. | Chặn interaction và persistence Design; không thay đổi việc FBD thuộc Product Spec. | Product + UX | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-007 | Thuộc tính bắt buộc của Local Physical I/O, Virtual Point và Modbus RTU Point: type, unit, quality, timestamp, direction và quyền ghi. Modbus slice đã Active theo approval 2026-08-05; Local/VP/unified mapping chưa khóa. | Chặn schema/contract I/O Mapping toàn Programming. | Product + I/O | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-008 | Chi tiết Modbus RTU Point: function code, endian/word order, polling, timeout, stale quality, retry và xử lý lỗi thiết bị. `DDD-SW-MBRTU-POINT-001` đã Active; physical HIL còn mở. | Chặn negative/HIL gate, không chặn reuse contract Active trong design. | Product + Fieldbus | **DECIDED** — reuse contract Active; HIL là evidence release |
-| OD-PROG-009 | Chính sách RETAIN cho warm restart, cold restart, power cycle, Revision change, kiểu dữ liệu không tương thích và giới hạn ghi bền vững. | Chặn persistence/recovery Design và acceptance. | Product + Runtime | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-010 | Số Revision được giữ, điều kiện compatibility, quyền và điều kiện cho Deployment/Activation/Rollback, kể cả power loss giữa giao dịch. | Chặn lifecycle state machine và recovery acceptance. | Product + System | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-011 | Online Monitor refresh rate, độ sâu trace, retention, timestamp/quality và chính sách write/force tách biệt. | Chặn monitor contract; Online Monitor mặc định chỉ quan sát. | Product + UX | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-012 | Budget thực thi/WCET/overrun cho ba cycle time và hành vi khi Program lỗi, treo hoặc vượt budget. | Chặn performance/fault acceptance; không biến DDC-24 thành safety PLC. | Product + Runtime | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-013 | Quan hệ migration của component graph 28-node As-Built với Project/Program Rev A, gồm các node Modbus TCP/BACnet ngoài scope. | Chặn compatibility strategy; các node cũ không tự trở thành Product Capability. | Product + Architecture | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-014 | Quy tắc đồng tồn tại và chuyển đổi với dữ liệu/config cũ trên thiết bị đã triển khai. | Chặn upgrade/rollback compatibility. | Product + Operations | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-015 | Hồ sơ Product approval và tiêu chí đóng readiness gate sau khi source foundation được sửa và target evidence có sẵn. | Chặn tuyên bố sẵn sàng bước Programming Design theo workflow đã duyệt. | Product + QA | **DECIDED — baseline approved for implementation** theo `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-016 | Có chấp thuận Amendment A1 của Product Spec không: rút sáu trang thành **bốn workspace** `PGM-01..04` và thay 17 use case bằng **tám user journey** `UJ-PROG-01..08`. | Chặn IA, route, FE/BE contract và toàn bộ trace của bộ thiết kế. Nếu từ chối, downstream phải quay lại IA sáu trang. | Product + UX | **DECIDED** — `AUTH-PROG-2026-08-11-03` |
-| OD-PROG-017 | Có đưa **thư viện mẫu BMS** (AHU, pump, fan, valve, PID vòng đơn) vào Rev A hay để Roadmap; nếu có thì mẫu là template sinh code trong Draft hay function block trong Core Library. | Chặn phạm vi Core Library, hệ thống versioning thư viện và điểm cạnh tranh “Editor và tái sử dụng”. Không chặn bốn workspace. | Product + Controls | **DECIDED** — hoãn mẫu BMS theo `AUTH-PROG-2026-08-11-03` |
+Việc chưa có target/HIL/physical I/O/soak không phải Open Decision và không chặn
+viết code; đó là **evidence bắt buộc để mở `RELEASE_READY`**.
 
-### Ánh xạ decision request của Modbus RTU Point proposal
+## 1. Decision package hiện hành
 
-Không tạo decision list song song. Các request `DR-MBRTU-*` trong
-`DDD-SW-MBRTU-POINT-001` được quản lý bởi open decision hiện hữu như sau. Approval
-2026-08-05 đã cho phép dùng Modbus contract Active; các mục chỉ đóng toàn bộ khi
-Local/VP mapping, Programming integration và HIL được đồng bộ:
-
-| Decision request | Open decision chủ quản |
-|---|---|
-| DR-MBRTU-001..007 | OD-PROG-007, OD-PROG-008 và OD-PROG-014; riêng xung đột hai production RS485 path còn là evidence/readiness của OD-PROG-015 |
-| DR-MBRTU-008 | OD-PROG-003 và OD-PROG-008 |
-| DR-MBRTU-009 | OD-PROG-001 |
-
-## Decision package dùng cho review
-
-Bảng này ghi phương án target đã được phê duyệt để team triển khai. Deadline/gate
-giữ làm trace lịch sử; không còn là approval condition.
-
-| ID | Phương án target cần phê duyệt | Hồ sơ downstream | Deadline/gate | Bằng chứng để mở khóa |
-|---|---|---|---|---|
-| `OD-PROG-001` | `viewer/operator` read-only Programming; `admin` edit/check/commission/restore/reset RETAIN; server là authority | SRS, Security, Interface, FE, BE, V&V | Trước `DOC-G2` | permission matrix ký + 403 negative test design |
-| `OD-PROG-002` | Phê duyệt exact name/width cho signed/unsigned integer và bounded `ENUM/uINT`: As-Built đang dùng `INT=int32`, trong khi phương án IEC-aligned là `INT=int16`, `DINT=int32`, `UINT=uint16`; cùng `BOOL/REAL/TIME`. Explicit conversion, overflow/div-zero/non-finite fail; ARRAY/STRUCT/String OUT nếu chưa duyệt | Language, Data, Mapping, Artifact | Trước `DOC-G2` | type-name/bit-width/Point/IR encoding matrix, migration/profile và one-over cases |
-| `OD-PROG-003` | 1 active Project package/controller; một Task; ST 64 KiB/512 variable/4096 statement; FBD 256 block/512 connection; artifact 1 MiB; binding 256 | SRS, Data, Language, Artifact, BE | Trước `DOC-G2` | sizing RAM/storage/latency analysis + Product acceptance |
-| `OD-PROG-004` | Một Task Rev A, period `1/5/30 s`; Program Instance chạy theo order ổn định trong Task | Control, Runtime, FW-SOM | Trước `DOC-G2` | scheduler profile + base-step/watchdog review |
-| `OD-PROG-005` | Core Library: logic/compare/math/select/limit/timer/edge/counter/scaling/deadband/PI/PID; version nằm trong artifact | Language, Control, UX | Trước `DOC-G2` | semantics/pin/state/version + equivalence test design |
-| `OD-PROG-006` | FBD structured tree/list/inspector, typed pins/wires, explicit order/conversion, keyboard-complete; không free-form wiresheet | Language, Data, UX, FE | Trước `DOC-G2` | canonical schema, command model, source-map và a11y review |
-| `OD-PROG-007` | Canonical discriminated identity `LOCAL/VP/MB-RTU`, type/direction/writable/unit/quality/timestamp/freshness; missing không thành zero | Data, Interface, FE, BE, FW-SOM | Trước `DOC-G2` | Point Catalog + Active Modbus contract cross-review |
-| `OD-PROG-008` | Reuse toàn bộ Active Modbus Bus/Device/Point contract; Programming chỉ bind `{device_id,point_id}`, không tái định nghĩa endian/polling | Data, Interface, FW-SOM, V&V | Trước `DOC-G3`; HIL trước release | contract link sạch + real RS485 HIL record |
-| `OD-PROG-009` | RETAIN theo stable variable identity/layout hash/version/CRC; mismatch/corrupt cold-init có diagnostic; atomic save tối thiểu cách 60 s; reset chỉ admin | Data, Runtime, Security, Ops | Trước `DOC-G2` | warm/cold/revision/power matrix + endurance review |
-| `OD-PROG-010` | Giữ immutable Revision + active/LKG; retention count/quota do sizing chốt; stage/swap/LKG atomic; power-loss luôn phục hồi LKG hoặc no-active rõ | Data, Runtime, BE, Ops | Trước `DOC-G2` | persistence transaction + fault-at-each-step design |
-| `OD-PROG-011` | Monitor 1 Hz, stale sau 3 kỳ; trace tối đa 10.000 sample/10 phút; read-only; write/force là capability khác | Interface, UX, FE, FW-SOM | Trước `DOC-G3` | memory/bandwidth/retention analysis + UX review |
-| `OD-PROG-012` | Budget nhỏ hơn `20% period` và base-step/watchdog margin; 3 overrun liên tiếp fault đúng Task, không tự plant safe-state | Control, FW-SOM, V&V | Trước `DOC-G2` | WCET formula + Safety review + target benchmark plan |
-| `OD-PROG-013` | Config mode `GRAPH_ONLY/PROGRAM_ONLY`; dual-run invalid; graph là migration source, không relabel FBD | Architecture, Runtime, Ops | Trước `DOC-G2` | inventory graph, cutover ADR, output/mapping compatibility report |
-| `OD-PROG-014` | Backup trước migration; schema/version explicit; partial deploy fail closed; code/schema/artifact deploy order; rollback không xóa dữ liệu | Architecture, Data, Ops, Plan 53 | Trước `DOC-G4` | device inventory + migration/rollback rehearsal plan |
-| `OD-PROG-015` | Phê duyệt Product v2.2 + SRS/design set sau review; không dùng host component làm readiness evidence | toàn bộ baseline 22 | `DOC-G4` | **DECIDED / APPROVED FOR IMPLEMENTATION** theo `AUTH-PROG-2026-08-11-03`; QA signature waived khỏi entry |
-| `OD-PROG-016` | Chấp thuận bốn workspace + tám journey; giữ nguyên toàn bộ hành vi an toàn Commission/Restore/RETAIN; giữ `UC-PROG-*` làm lớp scenario có trạng thái `MERGED/SCENARIO/ROADMAP` | Product Spec §8–§9, UX, FE, BE, IFSPEC, SRS, VVP, Trace, Plan 53 | Trước `DOC-G3` | bảng điểm heuristic ≥85, ma trận migration 17 UC không mồ côi, visual asset bốn workspace, và biên bản UX/Product review |
-| `OD-PROG-017` | Hoãn thư viện mẫu BMS sang Roadmap sau Rev A; Rev A chỉ giữ Core Library và User FB cục bộ trong Project | Product Spec §8.5–§8.6, Language/Compiler, UX, Plan 53 | Trước `DOC-G3` | phân tích chi phí compiler/test/tài liệu cho mẫu, và quyết định Product về việc mẫu là template hay function block |
-
-## Biên bản ủy quyền quyết định ngày 2026-08-10
-
-- **Record:** `AUTH-PROG-2026-08-10-01`
-- **Người ủy quyền:** **Phạm Đình Chương**
-- **Vai trò do người dùng xác nhận:** **Product Owner/CTO + System Architect**
-- **Cách ghi nhận:** người dùng chọn các phương án dưới đây và yêu cầu Codex “ký
-thay tôi”. Codex chỉ ghi lại **ủy quyền điện tử** với vai trò thư ký hồ sơ; không
-giả chữ ký viết tay, không cấp chứng thư số và không ký thay QA, Safety, Security
-hoặc discipline authority khác.
-- **Ngày hiệu lực:** 2026-08-10 đối với phạm vi quyền Product/Architect.
-- **Candidate:** bộ 22 SHA-256 phát hành lại tại
-[`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](../07_records/reviews/PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md)
-v2.5 sau khi ghi biên bản này.
-- **Rollback:** nếu người ủy quyền rút/chỉnh quyết định, tạo record mới dẫn record
-này, chuyển mục bị ảnh hưởng về `OPEN`, vô hiệu candidate liên quan và không xóa
-lịch sử.
-
-| ID / phạm vi | Quyết định được ủy quyền ghi nhận | Kết quả quyền hạn hiện tại |
-|---|---|---|
-| P0-01 | `ACCEPT` candidate sau khi chỉ thực hiện đúng các thay đổi ghi quyết định trong record này; target/HIL vẫn là gate sau | Product + Architect `ACCEPT`; Verification và consumer signatures còn thiếu |
-| F-CR-02 | Gốc staging artifact là `${STATE_DIR}/programming/staging/` | System Architect `ACCEPT`; finding authority **DONE** |
-| `OD-PROG-001` | `viewer/operator` chỉ đọc; `admin` edit/check/commission/restore/reset RETAIN; server là authority | Product `ACCEPT`; chờ Security |
-| `OD-PROG-002` | IEC-aligned: `INT=int16`, `DINT=int32`, `UINT=uint16`, cùng `BOOL/REAL/TIME`; conversion tường minh; overflow/div-zero/non-finite fail | Product `ACCEPT`; chờ Runtime |
-| `OD-PROG-003` | 1 active Project/controller; 1 Task; ST 64 KiB, 512 variable, 4096 statement; FBD 256 block/512 connection; artifact 1 MiB; 256 binding | **DECIDED** bởi Product; chờ downstream sync |
-| `OD-PROG-004` | Một Task Rev A, period `1/5/30 s`; Program Instance chạy theo thứ tự ổn định | Product + Architect `ACCEPT`; chờ Runtime |
-| `OD-PROG-005` | Core Library gồm logic/compare/math/select/limit/timer/edge/counter/scaling/deadband/PI/PID; version nằm trong artifact | Product `ACCEPT`; chờ Controls |
-| `OD-PROG-006` | FBD structured tree/list/inspector, typed pin/wire, explicit order/conversion, keyboard-complete; không free-form wiresheet | Product `ACCEPT`; chờ UX |
-| `OD-PROG-007` | Canonical identity `LOCAL/VP/MB-RTU`; có type/direction/writable/unit/quality/timestamp/freshness; missing không thành zero | Product `ACCEPT`; chờ I/O |
-| `OD-PROG-009` | Stable variable identity + layout hash/version/CRC; mismatch/corrupt cold-init kèm diagnostic; atomic save tối thiểu 60 giây; reset chỉ admin | Product + Architect `ACCEPT`; chờ Runtime |
-| `OD-PROG-010` | Revision immutable; giữ Active + LKG; stage/swap atomic; power loss phục hồi LKG hoặc trạng thái no-active rõ ràng | **DECIDED** bởi Product + System; chờ downstream sync |
-| `OD-PROG-012` | Budget `<20% period`; ba overrun liên tiếp làm đúng Task chuyển `FAULT`, output mức 5 hold-last; chỉ SafetyManager được đưa toàn trạm vào safe-state | Product + Architect `ACCEPT`; chờ Runtime + Safety |
-| `OD-PROG-013` | Chỉ `GRAPH_ONLY` hoặc `PROGRAM_ONLY`; dual-run invalid; graph cũ là nguồn migration, không relabel thành FBD | **DECIDED** bởi Product + Architect; chờ downstream sync |
-| `OD-PROG-014` | Backup trước migration; schema/version explicit; mixed/partial deploy fail-closed; rollback không xóa DB/Revision/Artifact/audit | Product + Architect `ACCEPT`; chờ Operations |
-| `OD-PROG-015` | Chấp thuận Product v2.2, SRS và design set làm baseline implement; host test không thay target/HIL | Product + Architect `ACCEPT`; chờ QA/Verification trước khi đóng |
-| `OD-PROG-016` | Bốn workspace `PGM-01..04` và tám journey | Product `ACCEPT`; chờ UX |
-| `OD-PROG-017` | Hoãn template AHU/pump/fan/valve sang Roadmap; Rev A giữ Core Library và User FB | Product `ACCEPT`; chờ Controls |
-| `ADR-030` | Hai lớp mã: `PRG-ERR-*` công khai, mã nội bộ trong `detailCode`; mapping thiếu làm build fail | System Architect `ACCEPT`; chờ Verification |
-| `ADR-031` | Rev A `HASH_ONLY`, SHA-256 bắt buộc, compiler/staging thuộc trusted local boundary; giữ layout chữ ký cho phase sau | System Architect `ACCEPT`; chờ Security |
-
-**Rationale.** Các phương án giữ Rev A bounded, giảm độ phức tạp UI/operation,
-tái sử dụng contract hiện hữu, fail-closed ở ranh giới dữ liệu/deploy và tách lỗi
-Task khỏi safe-state toàn trạm. Đây là lựa chọn phù hợp nguồn lực hãng nhỏ nhưng
-không loại bỏ gate an toàn, target/HIL hay kiểm chứng độc lập.
-
-**Hệ quả lịch sử của record 01.** `OD-PROG-003/010/013` được chuyển `DECIDED`;
-các mục khác từng giữ `OPEN`. Phần “chờ discipline đồng phê duyệt trước khi code”
-được `AUTH-PROG-2026-08-11-03` supersede; không xóa lịch sử quyết định.
-
-## Chỉ thị phê duyệt toàn bộ ngày 2026-08-11
-
-- **Record:** `AUTH-PROG-2026-08-11-03`.
-- **Người ủy quyền:** **Phạm Đình Chương**.
-- **Vai trò:** **Product Owner/CTO + System Architect**.
-- **Chỉ thị:** review và phê duyệt toàn bộ bộ Programming Rev A để team được
-  implement, không chờ thêm chữ ký consumer/discipline/Verification, CI/CD,
-  target hoặc HIL.
-- **Quyết định:** chấp thuận nguyên trạng phương án target của
-  `OD-PROG-001..017` trong bảng Decision package; chuyển toàn bộ sang `DECIDED`.
-  Downstream sync được thực hiện trong task code tương ứng và không còn là điều
-  kiện cấp quyền bắt đầu/tiếp tục implementation.
-- **Gate:** `PLAN_READY = PASS`; mọi `IMPLEMENT_READY[*] = PASS`. Team được tạo
-  nhánh, viết và merge code production, tạo/đổi contract và bật feature flag ở
-  lab theo Plan 53 mà không cần một approval record bổ sung.
-- **Review còn thiếu:** ghi `WAIVED FOR IMPLEMENTATION`, không giả chữ ký. Mọi
-  comment về sau là finding hậu kiểm và được xử lý như lỗi trong phạm vi task,
-  không hồi tố đóng quyền implementation đã cấp.
-- **Release:** record này không đổi Test Result và không tuyên bố sản phẩm/site
-  đã release; `RELEASE_READY` được đánh giá từ evidence sau implementation.
-
-## So sánh phương án và hậu quả nếu trì hoãn
-
-| Nhóm OD | Phương án đề xuất | Phương án thay thế cần đánh giá | Hậu quả nếu chưa quyết định |
+| ID | Quyết định | Trạng thái | Authority |
 |---|---|---|---|
-| `001` RBAC | viewer/operator đọc; admin mutation | tách commissioning role hoặc operator Commission | FE/BE không thể khóa action/403 test; Commission bị chặn |
-| `002/003` type/capacity | profile bounded theo §Decision package | giữ As-Built INT32 hoặc thu nhỏ capacity theo target | schema/IR/Point mapping và sizing không được freeze |
-| `004/012` Task/timing | một Task 1/5/30 s, budget <20% | period tùy ý hoặc multi-Task | scheduler/WCET/watchdog/HIL không có acceptance ổn định |
-| `005/006` library/FBD | library versioned + structured typed FBD | ST-only Rev A hoặc free-form canvas | compiler/FE/source-map không thể đồng triển khai |
-| `007/008` Point | canonical identity, reuse Modbus contract | adapter riêng trong Programming | tạo hai truth và nguy cơ sai quality/endian/writable |
-| `009/010` RETAIN/LKG | identity/hash/CRC + atomic journal | không RETAIN Rev A hoặc reset mọi activation | không thể chốt recovery/endurance/rollback behavior |
-| `011` monitor/trace | 1 Hz, stale 3 kỳ, bounded 10k/10 phút | on-demand sampling hoặc capacity thấp hơn | FE/Core không chốt buffer/bandwidth/freshness |
-| `013/014` cutover/migration | exclusive mode + backup/rollback | tiếp tục graph-only hoặc dual-run shadow không output | production cutover và package rollback bị chặn |
-| `015` baseline | review rồi phê duyệt bộ 22 hồ sơ | thu hẹp Rev A và sửa lại SRS | không file nào được phép thành implementation baseline |
-| `016` IA/journey | bốn workspace + tám journey | giữ sáu trang + 17 UC như hiện tại | FE không khóa được route/component; trace tồn tại hai lớp UC và UJ song song; điểm heuristic giữ `76/100` |
-| `017` thư viện mẫu | hoãn sang Roadmap | đưa mẫu AHU/pump/valve vào Rev A | nếu hoãn: tiêu chí “Editor và tái sử dụng” giữ `3,5/5`. Nếu làm ngay: tăng phạm vi compiler/test/tài liệu và có nguy cơ trượt Rev A |
+| `UD-PROG-001` | Một Product Programming, không chia Rev A/Rev B. | CLOSED | ADR-050.1 |
+| `UD-PROG-002` | Multi-Program: 32/Revision, tối đa 16 Enabled, period 1/5/30 s. | CLOSED | ADR-050.3 |
+| `UD-PROG-003` | PROGRAM/FUNCTION/FUNCTION_BLOCK và rule state/I/O/lifecycle. | CLOSED | ADR-050.2/4 |
+| `UD-PROG-004` | SYSTEM/PROJECT Control Library versioned, DAG acyclic. | CLOSED | ADR-050.2/4 |
+| `UD-PROG-005` | Published Signal là typed runtime primitive, committed snapshot, không Point type mới. | CLOSED | ADR-050.5 |
+| `UD-PROG-006` | Single output owner; Disable rút candidate tại safe boundary. | CLOSED | ADR-050.6 |
+| `UD-PROG-007` | Independent scheduling/fault isolation; multicore giữ cùng semantics. | CLOSED | ADR-050.7 |
+| `UD-PROG-008` | Sáu workspace `PGM-01..06`. | CLOSED | ADR-050.8 |
+| `UD-PROG-009` | Core trace ring buffer; không action ma. | CLOSED | ADR-050.9 |
+| `UD-PROG-010` | PID chỉ quảng bá ready sau Controls/Safety evidence. | CLOSED | ADR-050.9 |
+| `UD-PROG-011` | Artifact/store/API/IPC versioned; dual-reader v1/v2 trong migration. | CLOSED | ADR-050 hệ quả |
+| `UD-PROG-012` | Implementation review được waive khỏi entry; release evidence không waive. | CLOSED | ADR-050.10 |
+| `UD-PROG-013` | Editor ST của PGM-02 **giữ bề mặt hiện tại cho R1**; không thêm CodeMirror 6 vào `apps/web-ui`. | CLOSED | Product Owner/CTO + System Architect, 2026-08-26 — [`GATE-PROG-ST-EDITOR-DEP-001`](PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) §4.1/§5 |
+| `UD-PROG-014` | PGM-02 mở **nhiều tab POU** song song (phương án B). | **CLOSED** | Chủ sở hữu cấp ba ảnh render PGM-02 ngày 2026-08-27 kèm chỉ thị thi hành; cả ST lẫn FBD đều thể hiện tab bar |
+| `UD-PROG-016` | Chỉ mục ký hiệu **do compiler sinh** cho hover ST — nửa BE của `PGM02-V22-WP-04`. Hover đã giao ở `T59-820` bằng chỉ mục dựng từ nguồn; nguồn thẩm quyền compiler thì chưa có đường nào tới. | **OPEN — chờ Owner** | Đo 2026-08-27: web-api KHÔNG có đường tới compiler ST (nó nằm ở `apps/core/application/st`, chỉ có IPC vòng đời) |
+| `UD-PROG-015` | Ba trường Inspector trong ảnh (`Access`, `Description`, `Cycle (in Task)` dạng tên Task) **chưa có nguồn dữ liệu** trong Draft v2. | **OPEN — chờ Owner** | Đo tại `ed6fb21`: `upsertProgramConfig` chỉ có `programId`/`objectId`/`periodMs` |
 
-Mỗi reviewer phải ghi `ACCEPT`, `REJECT` hoặc `REQUEST CHANGE` cùng rationale.
-Không dùng im lặng, merge code hoặc test PASS để suy ra một quyết định đã được
-chấp thuận.
+### 1.2 `UD-PROG-013` — bề mặt editor ST cho R1
 
-## Ma trận trách nhiệm ra quyết định
+| Thuộc tính | Giá trị |
+|---|---|
+| Quyết định | **Lựa chọn A** — giữ editor hiện tại cho R1; **không** thêm CodeMirror 6 |
+| Ngày | 2026-08-26 |
+| Authority | Product Owner/CTO + System Architect |
+| Hồ sơ cổng | [`GATE-PROG-ST-EDITOR-DEP-001`](PROGRAMMING_ST_EDITOR_DEPENDENCY_GATE.md) |
 
-| Nhóm | R — chuẩn bị | A — quyết định | C — bắt buộc | Tài liệu ghi quyết định |
-|---|---|---|---|---|
-| Product scope/capacity/RBAC | Product + System | Product Owner/CTO | Security, Runtime, UX, QA | approval record/ADR + file này |
-| Language/FBD/library | Compiler + Controls | Product + Runtime Architect | UX/FE, QA | ADR hoặc design approval record |
-| Runtime/safety/RETAIN | Core + Controls | Runtime Architect + Safety Reviewer | Ops, HW/FW, QA | ADR + review record |
-| Point/Modbus | I/O + Fieldbus | Product + I/O Architect | FE/BE/Core, QA | Active Modbus docs + Programming approval |
-| Migration/release | Architect + Ops | Product/Release Owner | Security, QA, all consumers | ADR/runbook approval |
+Số đo quyết định (spike §4.1, đo thật ngoài repo để không đụng lockfile trước
+khi duyệt):
 
-## Nội dung bắt buộc của decision record
+| Mốc | Giá trị |
+|---|---:|
+| Bộ CodeMirror 6 tối thiểu + mode ST | **110,07 KiB gzip** |
+| Chunk Programming hiện tại | 110,78 KiB gzip |
+| Tổng nếu nhúng thẳng | ≈220,85 KiB gzip |
+| Ngân sách R1 / R3 | 125 / 165 KiB gzip |
 
-Khi quyết định, record/ADR liên kết phải có: ID, ngày/authority, context, options,
-decision, rationale, consequence tích cực/tiêu cực, requirement/design/API bị
-ảnh hưởng, migration/rollback, verification update và thời điểm hiệu lực. Owner
-downstream xác nhận đã cập nhật trước khi chuyển `DECIDED → CLOSED`.
+Nhúng thẳng vượt ngân sách R1 khoảng 77% và vượt luôn ngân sách R3, nên lựa
+chọn C sẽ phải nâng trần vượt cả R3 — bỏ hẳn cơ chế ngân sách chứ không phải nới
+nó. Lựa chọn B (nạp trễ) còn nợ ba phép đo chỉ thực hiện được trên bo.
 
-## Điều kiện chuyển trạng thái
+**Hệ quả trực tiếp:** các AC của `WP-04` không đòi CodeMirror — chúng đòi hành
+vi, và hành vi đó đã có test đầy đủ ở `T59-805`. Cổng đóng, `T59-805` đóng theo,
+`T59-807` mở.
 
-- `OPEN`: chưa có quyết định đủ thẩm quyền.
-- `DECIDED`: đã có quyết định và liên kết ADR/approval, nhưng tài liệu phụ thuộc
-  chưa đồng bộ.
-- `CLOSED`: decision, requirement, verification và traceability đã đồng bộ.
+**Mở lại khi nào:** R2 trở đi, nếu người dùng thật sự cần hover chuột /
+go-to-definition mức CodeMirror. Mở lại phải chạy nốt ba phép đo trên bo
+(`openPouP95Ms`, `typingResponseP95Ms`, `steadyJsHeapMiB`) và kiểm build
+offline/air-gapped.
 
-Tại thời điểm 2026-08-11 sau `AUTH-PROG-2026-08-11-03`, có **`17 DECIDED`,
-`0 OPEN`, `0 CLOSED`**. `CLOSED` vẫn chờ source/contract/test được đồng bộ thật;
-trạng thái đó không còn là điều kiện cấp quyền implementation.
+> **Phần dư chưa xử lý — ghi nhận 2026-08-27.** Điều khoản "mở lại từ R2" ở trên
+> đã **hết hạn mà không ai thực hiện**: R2 (`T59-810..813`) đóng ngày 2026-08-27
+> và không task nào trong đó nhận hover chuột hoặc **chỉ mục ký hiệu do compiler
+> sinh** (bullet BE của `PGM02-V22-WP-04`). Handoff `PGM-02A §4` liệt
+> `hover symbol/type/signature` là **Required**, nên đây là phần dư của hợp đồng,
+> không phải tính năng tuỳ chọn.
+>
+> `T59-820` nay nhận phần dư này với hai đường ra hợp lệ và **chỉ hai**: giao ở
+> R3, hoặc Owner ký hoãn tường minh **có thời hạn**. Không chấp nhận để trạng
+> thái trôi thêm một increment nữa.
+>
+> **Xử lý 2026-08-27 (`T59-820`).** Phần dư tách làm hai nửa và có kết cục khác
+> nhau:
+>
+> - **Hover symbol/type/signature — ĐÃ GIAO.** Lý do hoãn ở R1 là ngân sách của
+>   CodeMirror 6 (110,07 KiB gzip). Nhưng `PGM-02A §4` đòi **hành vi**, không
+>   đòi thư viện: ba lớp gutter/overlay/textarea của editor đã dùng chung một
+>   lưới đơn khoảng cố định, nên toạ độ → offset là số học thuần. Chi phí thật
+>   đo được là **1,30 KiB** gzip (127,67 → 128,97 KiB, ngân sách R3 165 KiB),
+>   tức **nhỏ hơn 85 lần** con số từng dùng để hoãn. Ngân sách chưa bao giờ là
+>   rào cản cho chính hover — nó là rào cản cho một editor engine thứ hai.
+> - **Chỉ mục do compiler sinh — chuyển thành [`UD-PROG-016`](#15-ud-prog-016-—-chỉ-mục-ký-hiệu-do-compiler-sinh-đang-mở).**
+>   Đây là nửa BE và nó không có đường đi nào ở kiến trúc hiện tại; xem đo đạc ở
+>   mục đó.
+>
+> Nguồn: [`REC-PGM02-AUD-ADJ-001`](../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) `F-PGM02-AUD-003`.
 
-## Lịch sử sửa đổi và sign-off
+### 1.3 `UD-PROG-014` — nhiều tab POU (ĐÃ CHỐT: phương án B)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Quyết định | **Phương án B** — workspace PGM-02 mở nhiều tab POU song song |
+| Trạng thái | **CLOSED** |
+| Ngày | 2026-08-27 |
+| Authority | Chủ sở hữu cấp ba ảnh render PGM-02 (`PGM-02A_ST_editor_reference.png`, `PGM-02B_FBD_editor_reference.png`, ảnh chú giải) kèm chỉ thị "implement bám theo thiết kế và plan" |
+| Hồ sơ | `handoff_manifest.json` 2.3; `DDD-SW-PGM02-WORKSPACE-001` 0.5 §7.2/§7.3/§10.2 |
+
+Ảnh ST hiện hai tab `AHU_Main.Main [ST]` và `AHU_Main.PID_Loop [ST]` kèm nút `+`;
+ảnh FBD hiện `AHU_Main.FBD (FBD)` và `AHU_Main.Main (ST)` — tức tab **bắc qua cả
+hai ngôn ngữ** trong cùng một workspace. Đó là câu trả lời cho câu hỏi mở của
+`REC-PGM02-AUD-ADJ-001` `F-PGM02-AUD-004b`.
+
+**Điều gói handoff v2.2 vẫn KHÔNG nói, và team phải chốt khi implement** (ghi vào
+`TC-PGM02-TAB-01`, không tự ý mỗi người một kiểu):
+
+1. số tab tối đa và hành vi khi vượt;
+2. đóng tab có Draft bẩn — phải xác nhận, cấm mất buffer im lặng;
+3. đổi mode `EDIT→LIVE/SIMULATE` áp cho **toàn workspace**, không phải từng tab;
+4. tab có sống qua reload không, và nếu có thì khôi phục từ đâu;
+5. tab trỏ tới POU đã bị xoá/đổi tên ở phiên khác.
+
+Bất biến không được vi phạm: `objectId` là trục định danh của tab, **không** phải
+tên POU (`UD-PROG-003`, DDD §3.5). Hai tab không bao giờ được chia chung một
+buffer soạn thảo.
+
+### 1.5 `UD-PROG-016` — chỉ mục ký hiệu do compiler sinh (ĐANG MỞ)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Trạng thái | **OPEN — chờ Product Owner/CTO + System Architect** |
+| Ngày mở | 2026-08-27 |
+| Hạn ký | **2026-09-10** (kết thúc R3). Đây là hạn TƯỜNG MINH thay cho lời hứa "mở lại từ R2" đã trôi một increment |
+| Chặn | Không chặn gì đang chạy. Hover đã hoạt động bằng chỉ mục dựng từ nguồn |
+
+**Đã giao rồi thì còn thiếu gì.** `T59-820` giao hover đọc chỉ mục dựng từ
+**nguồn đang gõ** (`stReferenceIndex.ts`), dùng chung đúng một đường phân giải
+với `ContextInspector`. Chỉ mục đó tự khai giới hạn thẩm quyền ngay trong
+tooltip: nó phục vụ điều hướng, không phán nguồn đúng hay sai. Thứ còn thiếu là
+chỉ mục do **compiler** sinh — nguồn duy nhất biết chắc kiểu sau khi phân giải.
+
+**Đo tại `main` 2026-08-27 — vì sao nó không phải một lát nhỏ:**
+
+| Mắt xích | Hiện trạng |
+|---|---|
+| Compiler ST | Có thật, `apps/core/application/st/st_parser.hpp` + `st_compile.hpp`; AST mang `StVarDecl{name,type}` và `StFbDecl{name,fb_type,user_type_name}` — tức chỉ mục **dẫn xuất được** |
+| IPC Core ↔ web-api | 12 action, toàn bộ là **vòng đời** (`STAGE`/`ACTIVATE`/`STATUS`/`TRACE_*`…). **Không có** action nào nhận mã nguồn |
+| web-api → compiler | **Không tồn tại**. `grep exec.Command` trong `internal/programming` trả 0; `checks.go` chạy invariant ở Go, không parse ST |
+| OpenAPI | **Không có** operation nào nhận ST source; `createProgrammingCheck` chạy trên Revision đã niêm phong |
+
+Giao nó nghĩa là một lát dọc bốn tầng: action IPC mới + bump `protocolMinor`,
+service Go, operation OpenAPI mới, rồi FE.
+
+**Và một câu hỏi thiết kế mà plan chưa trả lời — đây mới là lý do thật phải hỏi
+Owner, không phải khối lượng.** Chỉ mục compiler mô tả **ảnh chụp nào**:
+
+- **Theo buffer đang gõ:** đúng thứ người dùng đang nhìn, nhưng là một vòng IPC
+  cho mỗi lần gõ phím, trên một thiết bị nhúng đang chạy chương trình điều
+  khiển thật.
+- **Theo Revision đã niêm phong:** rẻ và chạy được ngay, nhưng chỉ mục **lạc
+  hậu** so với buffer. Hover khi đó sẽ nói kiểu của một dòng mã người dùng vừa
+  sửa xong — và nó nói bằng giọng thẩm quyền của compiler. Điều đó **tệ hơn**
+  chỉ mục dựng từ nguồn hiện tại, vốn luôn khớp thứ đang hiển thị và tự khai là
+  không có thẩm quyền.
+
+Ba lựa chọn: **(A)** giữ nguyên hiện trạng, đóng `WP-04` với hover từ chỉ mục
+nguồn và ghi rõ giới hạn thẩm quyền trong hợp đồng; **(B)** làm lát dọc theo
+buffer, kèm ngân sách độ trễ đo trên bo và cơ chế gộp/huỷ request; **(C)** làm
+theo Revision niêm phong, và khi đó **bắt buộc** nhãn "chỉ mục thuộc bản đã niêm
+phong, không phải bản đang gõ" ngay trong tooltip.
+
+**Khuyến nghị kỹ thuật (không phải quyết định):** A. Chỉ mục nguồn đã trả lời
+đúng câu người dùng hỏi khi rê chuột, và nó không bao giờ nói dối về thẩm quyền
+của mình. B chỉ đáng làm khi có nhu cầu thật về type-checking trong lúc gõ, và
+lúc đó nó là một hạng mục có kế hoạch riêng chứ không phải phần đuôi của một
+task hover. **Tuyệt đối không** chọn C mà bỏ nhãn — một chỉ mục lạc hậu đeo phù
+hiệu compiler là cách nhanh nhất để người vận hành tin sai.
+
+### 1.4 `UD-PROG-015` — ba trường Inspector chưa có nguồn dữ liệu (ĐANG MỞ)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Trạng thái | **OPEN — chờ Product Owner/CTO + System Architect** |
+| Ngày mở | 2026-08-27 |
+| Chặn | Ba trường tương ứng của `T59-818`; **không** chặn phần còn lại |
+
+Ảnh Inspector (ngữ cảnh Program) hiện bảy trường. Đo tại `ed6fb21`, Draft v2 chỉ
+có `programId`, `objectId`, `periodMs` (`application/draft_v2.go:349-377`) cộng
+`name`/`kind` ở `objects[]`. Đối chiếu:
+
+| Trường trong ảnh | Nguồn thật | Kết luận |
+|---|---|---|
+| `Name` | `objects[].name` | có |
+| `Language` | suy từ `replaceProgramSource.language` | có |
+| `Type` | `objects[].kind` | có |
+| `Cycle (in Task)` phần chu kỳ `1 s` | `programs[].periodMs` | có |
+| `Access: Public` | — | **không có** |
+| `Description` | — | **không có** |
+| `Cycle (in Task)` phần tên Task `Control_Main` | — | **không có** — `UD-PROG-002` xếp lịch theo period 1/5/30 s cho từng Program, không có thực thể Task có tên |
+
+Ba lựa chọn cho Owner: **(A)** bỏ ba trường khỏi Inspector cho tới khi có nhu cầu
+thật; **(B)** thêm `description` (và `access`) vào Draft v2 bằng thay đổi additive
+có migration, giữ nguyên quyết định không tạo thực thể Task; **(C)** dựng thực thể
+Task có tên — việc này chạm `UD-PROG-002` và `PROGRAM_TASK_SCHEDULER_SPEC`, tức
+phải sửa cả runtime.
+
+**Khuyến nghị kỹ thuật (không phải quyết định):** A cho R3, B nếu Owner muốn giữ
+đúng ảnh. **Tuyệt đối không** hiện `Public` hoặc một tên Task cứng ở FE để cho
+giống ảnh — đó là bịa dữ liệu, vi phạm nguyên tắc số 1 của gói handoff.
+
+### 1.1 `CR-PROG-PGM02-V22-001` — exact baseline được phê duyệt
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Nguồn đề xuất | [`REC-PGM02-ST-FBD-REDESIGN-REVIEW-001`](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/reviews/PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md) và [`PLAN-PGM02-ST-FBD-REDESIGN-PROPOSAL-001`](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/reviews/PGM02_ST_FBD_IMPLEMENTATION_PLAN.md) |
+| Owner disposition | **APPROVED — Phạm Đình Chương, Product Owner/CTO, chỉ thị điện tử 2026-08-24** |
+| System Architect disposition | **APPROVED EXACT REVISION — Phạm Đình Chương, System Architect, chỉ thị điện tử 2026-08-24** |
+| Candidate review input | Git commit `413a043748dce3b44d2c5076412de761760ba17a`; khóa bytes trước authorization của contract/schema/ADR/handoff/SVG và manifest Candidate v1.48 |
+| Exact authority revision | Manifest v1.49 khóa 17 hồ sơ Markdown hiện hành; contract/schema/Accepted ADR/handoff/SVG ngoài manifest khóa bằng SHA-256 tại §1.2. Không dùng riêng commit Candidate để tuyên bố nó chứa bytes post-authorization. |
+| Phạm vi được mở | Toàn bộ `PGM02-V22-WP-00..13` theo scheduler bắt buộc `R1 EDIT → R2 LIVE → R3 SIMULATE`; không nhảy predecessor |
+| Baseline được duyệt để implement | Formal `DDD-SW-PGM02-WORKSPACE-001`; `PGM02-WORKSPACE-V1`; `ADR-053` Accepted; 89 requirement/47 scenario; 17-file Markdown pin set; `T59-802..817` được promote thành READY/ORDERED |
+| Phạm vi chưa được mở | `RELEASE_READY`; mọi claim M4/M5, Test Result, CI, target, HIL, physical I/O hoặc release chưa có evidence hiện hành |
+
+Owner đã chốt ba đầu vào sản phẩm sau:
+
+1. **Đóng `PGM02-V22-WP-00` và mở execution tuần tự.** Candidate exact commit
+   nêu trên là đầu vào được duyệt cho implementation; mọi sửa đổi sau pin phải
+   đi qua change control, manifest/hash và affected gate tương ứng.
+2. **Thứ tự increment:** `R1 EDIT → R2 LIVE → R3 SIMULATE`. Mỗi increment có
+   gate/capability state riêng; hoàn tất R1/R2 không được hiển thị hoặc tuyên bố
+   R3 đã có.
+3. **Simulation v1 admin-only cho mutation.** `viewer`/`operator`/`admin` được
+   đọc session và snapshot theo object scope; chỉ `admin` được create/run/pause/
+   step/reset/stop/set-input. Enforcement nằm server-side, có audit và negative
+   RBAC test; FE permission chỉ là affordance, không phải authority.
+
+Scoped gate hiện hành:
+
+| Gate | Trạng thái | Điều kiện mở tiếp |
+|---|---|---|
+| `CHANGE_REQUEST[PGM02-V22]` | **APPROVED — `AUTH-PROG-2026-08-24-05`** | exact Candidate pin giữ nguyên hoặc thay đổi qua change control |
+| `PGM02-V22-WP-00` | **DONE qua `T59-801`** | Candidate commit `413a043748dce3b44d2c5076412de761760ba17a` đã được Owner + Architect pin |
+| `PLAN_READY[PGM02-V22]` | **PASS** | exact Candidate pin + formal DDD/contract/ADR/trace/VVP/task split đã được duyệt |
+| `IMPLEMENT_READY[PGM02-R1]` | **GO** | `T59-802` READY; `T59-803..809` ORDERED theo predecessor |
+| `IMPLEMENT_READY[PGM02-R2]` | **GO** | task có authority nhưng `T59-810` chỉ tự chuyển READY sau `T59-809 DONE` |
+| `IMPLEMENT_READY[PGM02-R3]` | **GO** | `T59-813 DONE` 2026-08-27 nên `T59-814` đã tự chuyển READY; `ADR-053` Accepted |
+| `RELEASE_READY` | **NO-GO** | VVP/Test Result/risk/target/HIL/release authority hiện hành |
+
+Canonical ID của work package là `PGM02-V22-WP-00..13`. Tên ngắn `WP-00..13`
+trong hai proposal chỉ là alias nội bộ, không trùng hoặc supersede WP lịch sử của
+Plan56.
+
+### 1.2 `AUTH-PROG-2026-08-24-05` — record uỷ quyền implementation
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Nguồn | Chỉ thị điện tử ngày 2026-08-24: CTO tự triển khai toàn bộ plan, tự động và bám plan/yêu cầu thiết kế |
+| Người quyết định | Phạm Đình Chương — Product Owner/CTO + System Architect |
+| Exact pin | `413a043748dce3b44d2c5076412de761760ba17a` |
+| SHA-256 ngoài manifest | `pgm02_workspace_v1.json=2c2900661d75c97b2432c2c60e4b37cd48ee1b4272a64f2eb04eb2fed128fa63`; schema=`83236187e537f37884d16773cb45b377ef088116979dd676b8eca5f4469d5beb`; Accepted `ADR-053=d6f88c64e1e8db52c08e3f54255d658021d106ffe715c7508e1ecd96b72c4930` |
+| SHA-256 handoff/visual | `PGM-02_PROGRAMS=4b1271797ec3a3a6d5d745d822ab4dec86209bcba9b5b222e2b921034541819b`; `QL_SIM_LIVE=aad49ad6e5d27360e02ed9a74eef1d2c9259f68db575c8b6a056951544fbda41`; ST SVG=`2e14de417e398e2267acdb1351e0baeb958d81d61e4137e9c638ca653dacbec6`; FBD SVG=`050750ba036675636ada9f695d919db0cb189fda6a1d43a1ad442d8a5aade4df`; combined SVG=`0a2d1291c0e718e0e01fe0b70d76c9e482e4f623c378e32d1283f9d9676f18c4` |
+| Quyền mở | `PLAN_READY[PGM02-V22]=PASS`; `IMPLEMENT_READY[R1|R2|R3]=GO`; task scheduler tuần tự theo Plan59 |
+| Review disposition | Consumer/discipline/Verification/Document Control: **WAIVED FOR IMPLEMENTATION**; finding vẫn sửa trong task và review/evidence bắt buộc cho release không bị waive |
+| Maturity/evidence | Không giả chữ ký tay/chứng thư; không nâng Candidate design thành M4/M5; không suy Test Result, CI, target, HIL, physical I/O hoặc release PASS |
+| Release | `RELEASE_READY=NO-GO` tới khi VVP/risk/target/HIL/release authority thật đạt |
+
+### 1.3 `F-P59-GHOST-POU-001` — đã chốt semantics và đã sửa source/test
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Câu hỏi | POU kind `PROGRAM` không có entry trong `programs[]` phải có semantics Draft→Check→package nào? |
+| Trạng thái | **CLOSED — quyết định `AUTH-PROG-2026-08-24-05`; implementation 2026-08-25** |
+| Quyết định | Draft được phép giữ PROGRAM POU chưa schedule; Check và Package phải fail-closed bằng public `PRG-ERR-CHECK-001`, detail `ST-POU-005` |
+| Bất biến | Tuyệt đối không âm thầm loại khỏi package/runtime và không synthesize chu kỳ 1000 ms |
+| Ảnh hưởng | Đồng bộ SRS/DDD/contract/compiler-packager/test của `T59-301/302/305` và corrective task liên quan |
+| Gate | Finding đã đóng; `IMPLEMENTATION_CLOSE` của PGM-02 v2.2 vẫn **PENDING** vì R1 mới đóng `T59-802` |
+| Điều kiện đóng implementation | ĐÃ ĐẠT: catalog `1.7.2` map `ST-POU-005 → PRG-ERR-CHECK-001`; `packageTopology` phân nhánh theo `documentSchemaVersion` (v1 đọc chu kỳ TASK lịch sử, v2 giữ 0 để chặn); `packageArtifact` chặn ở biên và chỉ passthrough artifact v1 cho schema v1; writer Go/C++ từ chối `periodMs == 0` còn reader v2 vẫn đọc được package legacy; `TestCheckNeverTouchesActiveState` giữ zero Active/LKG mutation |
+| Số đo (HOST, 2026-08-25) | `ctest` **1297/1297**; `go vet` + `go test ./... -count=1` PASS; pytest catalog **9/9**; `verify_programming_g1_contracts.py` **10/10** |
+
+Resolution đóng câu hỏi thiết kế; corrective 2026-08-25 đóng nốt phần
+implementation. Cả hai không phải bằng chứng target/HIL và không mở release.
+
+## 2. Quyết định lịch sử bị supersede
+
+`OD-PROG-001..017` và `AUTH-PROG-2026-08-11-03` vẫn có giá trị truy nguyên trong
+Git, nhưng mọi phần sau đây không còn authority: một Task/một Program, bốn
+workspace, thư viện/Enable/Published Signal để Roadmap sau, `HASH_ONLY` như đích
+release hoặc chia scope theo Rev. Các phần không xung đột—RBAC server-side,
+atomic Commission/LKG, RETAIN integrity, graph/program exclusivity, bounded
+resource, audit và target/HIL truthfulness—được giữ trong Product v3.0/DDD mới.
+
+## 3. Trách nhiệm hậu kiểm
+
+| Reviewer | Phạm vi | Thời điểm | Tác động |
+|---|---|---|---|
+| Compiler/Controls | Function/FB/library/PID semantics | Trong task Wave 1–2 | Finding sửa trong task; PID label không ready khi evidence thiếu. |
+| Runtime/Safety | scheduler/signal/output/disable/LKG | Trong task Wave 3–5 | Finding safety P0 chặn merge task liên quan, không chặn task độc lập. |
+| Security | RBAC/artifact/library supply chain/audit | Trong mỗi contract task | Negative test bắt buộc. |
+| Verification/Ops | fixture/evidence/deploy/rollback | Wave 6–7 | Chặn release nếu evidence thiếu; không giả verdict. |
+
+## 4. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
-| 0.1 | 2026-08-03 | Tạo 15 Open Decision Programming |
-| 0.2 | 2026-08-09 | Thêm decision package, downstream/gate/unlock evidence; đồng bộ approval Modbus 2026-08-05 |
-| 0.3 | 2026-08-09 | Bổ sung option/trade-off, hậu quả trì hoãn và schema decision record; giữ 15 mục OPEN chờ authority |
-| 0.4 | 2026-08-09 | Thêm mục Đọc nhanh và phụ lục tự kiểm cổng M3 loại Open Decisions; giữ 15 mục OPEN |
-| 0.5 | 2026-08-09 | Thêm `OD-PROG-016` (bốn workspace + tám journey) và `OD-PROG-017` (thư viện mẫu BMS) kèm option/trade-off/gate/bằng chứng mở khóa; tổng 17 mục OPEN |
-| 0.6 | 2026-08-10 | Sửa mô tả hiện trạng: chỉ hai phần Modbus của `007/008` đã quyết định, còn 15 mục khác chưa ký; bổ sung đúng phạm vi ký Product tới `017`; không đổi trạng thái 17/17 `OPEN` |
-| 0.7 | 2026-08-10 | Ghi rõ `OD-PROG-015` đã đạt **2/3** điều kiện mở khóa (review record + `9/9` finding closure); điều kiện duy nhất còn thiếu là sign-off Product/Architect/QA. Trạng thái **không đổi**: 17/17 vẫn `OPEN` |
-| 0.8 | 2026-08-10 | Ghi `AUTH-PROG-2026-08-10-01`: Phạm Đình Chương ủy quyền điện tử với vai trò Product Owner/CTO + System Architect; chuyển `OD-PROG-003/010/013` sang `DECIDED`, ghi partial `ACCEPT` cho các mục đã chọn; giữ `14 OPEN`, `0 CLOSED` và mọi gate bị chặn cho tới khi đủ đồng phê duyệt/downstream sync |
-| 0.9 | 2026-08-11 | Ghi `AUTH-PROG-2026-08-11-03`: Product Owner/CTO + System Architect phê duyệt toàn bộ target `OD-PROG-001..017`; chuyển thành `17 DECIDED/0 OPEN/0 CLOSED`; mở `PLAN_READY` và mọi `IMPLEMENT_READY[*]` không điều kiện, review còn thiếu thành hậu kiểm |
-
-| Vai trò | Trạng thái | Phạm vi ký |
-|---|---|---|
-| Product Owner/CTO | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11; `AUTH-PROG-2026-08-11-03`** | `OD-PROG-001..017`; cấp quyền implement toàn bộ Programming Rev A |
-| System Architect | **ACCEPT ALL — Phạm Đình Chương, 2026-08-11; `AUTH-PROG-2026-08-11-03`** | Toàn bộ ownership/contract/ADR và lát cắt implementation |
-| Runtime/Controls/Safety | **WAIVED FOR IMPLEMENTATION** | Review hậu kiểm; không chặn code |
-| Security/UX/I/O/Ops | **WAIVED FOR IMPLEMENTATION** | Review hậu kiểm; không chặn code |
-| Verification Lead | **WAIVED FOR IMPLEMENTATION** | Evidence vẫn được tạo/đánh giá trong task và release gate |
-
-## Phụ lục — Tự kiểm cổng M3 (loại: Open Decisions)
-
-Cổng lấy theo [Plan 54 §7](../03_implementation/54_PROGRAMMING_DOCUMENTATION_ROADMAP.md).
-
-| Cổng | Kết quả | Bằng chứng trong file / lý do |
-|---|---|---|
-| Context của từng quyết định | PASS | Bảng “Quyết định đang mở” cột “Vấn đề cần quyết định” + cột ảnh hưởng |
-| Options và trade-off | PASS | Bảng “So sánh phương án và hậu quả nếu trì hoãn” có phương án đề xuất, phương án thay thế và hậu quả cho cả 17 mục |
-| Decision authority | PASS | Cột “Owner đề xuất” + “Ma trận trách nhiệm ra quyết định” tách R/A/C |
-| Deadline/gate | PASS | Bảng Decision package cột “Deadline/gate” gắn `DOC-G2/G3/G4`, không dùng ngày lịch giả định |
-| Quyết định | **PASS FOR IMPLEMENTATION** | `17 DECIDED`, `0 OPEN`, `0 CLOSED` theo `AUTH-PROG-2026-08-11-03`; downstream sync là DoD của task, không phải entry gate |
-| Rationale | PASS cho record đã quyết; N/A cho mục chưa đủ quyền | §“Biên bản ủy quyền” ghi rationale chung; decision package giữ trade-off riêng từng nhóm |
-| Consequences | PASS | Cột “Hậu quả nếu chưa quyết định” cho 11 nhóm phủ đủ 17 mục |
-| Tài liệu phụ thuộc phải đồng bộ | PASS | Bảng Decision package cột “Hồ sơ downstream”; điều kiện `DECIDED → CLOSED` yêu cầu owner downstream xác nhận |
-| Bằng chứng mở khóa | PASS | Cột “Bằng chứng để mở khóa” cụ thể theo từng mục (ví dụ `OD-PROG-008` cần record HIL RS485 thật) |
-| Link nội bộ sạch | PASS | harness: local link missing `0`, anchor missing `0` |
-
-File giữ M3 theo thang maturity vì chữ ký discipline được waive, không giả thành
-M4/M5. Điều này **không chặn implementation**: `PLAN_READY` và mọi
-`IMPLEMENT_READY[*]` đã `PASS` theo chỉ thị cấp điều hành.
+| 1.5 | 2026-08-25 | Đóng `F-P59-GHOST-POU-001` ở lớp implementation: catalog `1.7.2`, checker/packager/writer fail-closed theo `documentSchemaVersion`, reader giữ tương thích package legacy; affected gate HOST PASS. Ghi `T59-802 DONE (HOST/LOCAL)` và `T59-803 READY`. Không đổi 12 quyết định unified; `RELEASE_READY` giữ NO-GO. |
+| 1.6 | 2026-08-27 | Đồng bộ trạng thái sau khi increment R2 đóng (`T59-813 DONE`): header không còn dừng ở `T59-802`, và `IMPLEMENT_READY[PGM02-R3]` ghi đúng việc `T59-814` đã READY. Không mở hay đóng quyết định nào. |
+| 1.5 | 2026-08-26 | Ghi `UD-PROG-013`: Owner/Architect chọn **lựa chọn A** ở `GATE-PROG-ST-EDITOR-DEP-001` — giữ bề mặt editor ST hiện tại cho R1, không thêm CodeMirror 6. Quyết bằng số đo thật (bộ tối thiểu 110,07 KiB gzip ⇒ nhúng thẳng ≈220,85 KiB, vượt cả ngân sách R3). Cổng CLOSED; `T59-805` đủ điều kiện đóng và `T59-807` mở. |
+| 1.4 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: Product Owner/CTO + System Architect pin exact Candidate commit `413a043748dce3b44d2c5076412de761760ba17a`, mở PLAN_READY và ba IMPLEMENT_READY nhưng giữ scheduler R1→R2→R3, review ngoài owner/architect `WAIVED FOR IMPLEMENTATION` và RELEASE_READY NO-GO. Chuyển T59-801 DONE, T59-802 READY, T59-803..817 ORDERED. Chốt ghost PROGRAM fail-closed bằng `PRG-ERR-CHECK-001`/`ST-POU-005`; implementation closure vẫn PENDING tới khi source/test đạt. |
+| 1.3-candidate | 2026-08-24 | Làm rõ exact pin hai lớp: manifest ghim 17 hồ sơ Markdown authority; record Owner + Architect phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/SVG. Pin check 17/17 một mình không mở `PLAN_READY` hoặc code. |
+| 1.2-candidate | 2026-08-24 | Ghi output `T59-801`: formal DDD/contract/ADR-053/89 requirement/47 scenario/17-file Candidate pin và 16 card `T59-802..817`; chuyển WP-00 sang REVIEW, giữ Architect exact pin và mọi execution R1/R2/R3 NO-GO. |
+| 1.1 | 2026-08-24 | Ghi `CR-PROG-PGM02-V22-001`: Owner mở duy nhất `T59-801`, khóa thứ tự R1 EDIT → R2 LIVE → R3 SIMULATE và Simulation v1 admin-only; System Architect/baseline pin giữ PENDING, code downstream NO-GO. Đăng ký riêng `F-P59-GHOST-POU-001` OPEN thay cho tuyên bố sai 0 Open Decision. |
+| 0.1..0.9 | 2026-08-03..11 | Decision package `OD-PROG-001..017` cho baseline cũ; phục hồi qua Git. |
+| 1.0 | 2026-08-20 | `ADR-050` supersede phạm vi xung đột; đóng 12 quyết định unified; 0 Open Decision/implementation blocker. |

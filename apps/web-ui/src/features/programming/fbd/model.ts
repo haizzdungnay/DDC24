@@ -1,13 +1,29 @@
+import {
+  PROGRAMMING_PROFILE_ID,
+  PROGRAMMING_RESOURCES,
+  PROGRAMMING_TYPES,
+} from '../api/generated/profile'
+
 export const FBD_SCHEMA_VERSION = 1 as const
-export const FBD_PROFILE_ID = 'revA-1t-1-5-30' as const
-export const FBD_MAX_NETWORKS = 256
-export const FBD_MAX_BLOCKS = 256
-export const FBD_MAX_WIRES = 512
+// Định danh profile và trần FBD là contract, không phải hằng của riêng FE.
+// Chép tay các giá trị này từng làm FE và compiler trôi khỏi nhau trong im lặng.
+export const FBD_PROFILE_ID = PROGRAMMING_PROFILE_ID
+export const FBD_MAX_NETWORKS = PROGRAMMING_RESOURCES.maxFbdBlocks
+export const FBD_MAX_BLOCKS = PROGRAMMING_RESOURCES.maxFbdBlocks
+export const FBD_MAX_WIRES = PROGRAMMING_RESOURCES.maxFbdConnections
 export const FBD_MAX_PORTS_PER_NODE = 16
 
-export const FBD_DATA_TYPES = ['BOOL', 'INT', 'DINT', 'UINT', 'REAL', 'TIME'] as const
-export type FbdDataType = (typeof FBD_DATA_TYPES)[number]
-export type FbdNodeKind = 'INPUT' | 'OUTPUT' | 'CONSTANT' | 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
+export type FbdDataType = (typeof PROGRAMMING_TYPES)[number]['name']
+export const FBD_DATA_TYPES: readonly FbdDataType[] = PROGRAMMING_TYPES.map((item) => item.name)
+export type FbdNodeKind =
+  | 'INPUT'
+  | 'OUTPUT'
+  | 'CONSTANT'
+  | 'FUNCTION'
+  | 'FUNCTION_BLOCK'
+  | 'CONVERSION'
+  | 'SIGNAL_READ'
+  | 'SIGNAL_PUBLISH'
 export type FbdPortDirection = 'INPUT' | 'OUTPUT'
 export type FbdParameterValue = boolean | number | string
 
@@ -48,6 +64,24 @@ export interface FbdNetwork {
   wires: FbdWire[]
 }
 
+export interface FbdPoint {
+  x: number
+  y: number
+}
+
+/**
+ * `T59-806` — hình học TRÌNH BÀY của đồ thị.
+ *
+ * Đặt ở gốc tài liệu và có phiên bản riêng, KHÔNG nằm trong từng node: nhờ vậy
+ * "cùng topology, khác hình học ⇒ cùng IR" là bất biến cấu trúc. Compiler
+ * (`st_fbd_model.cpp`) kiểm rồi `erase("layout")` trước khi canonical hoá, nên
+ * kéo một block sang phải 10 px không đổi hash artifact.
+ */
+export interface FbdLayout {
+  schemaVersion: 1
+  nodes: Record<string, FbdPoint>
+}
+
 export interface FbdDocument {
   $schema: '../../fbd_v1.schema.json'
   schemaVersion: typeof FBD_SCHEMA_VERSION
@@ -55,11 +89,31 @@ export interface FbdDocument {
   graphId: string
   name: string
   networks: FbdNetwork[]
+  /** Tuỳ chọn: tài liệu cũ chưa có hình học vẫn hợp lệ. */
+  layout?: FbdLayout
 }
+
+export const FBD_MAX_LAYOUT_NODES = 4096
+export const FBD_MAX_LAYOUT_COORDINATE = 100_000
 
 export interface FbdIssue {
   code: string
   path: string
+}
+
+/** Phần contract Published Signal mà validator FBD cần. Kiểu cấu trúc này cố
+ * ý không phụ thuộc view model của editor để có thể đối soát trực tiếp payload
+ * Draft v2 mà API trả về. */
+export interface FbdSignalDefinition {
+  name: string
+  type: FbdDataType
+  unit?: string
+  publisherProgramId: string
+}
+
+export interface FbdValidationContext {
+  programId: string
+  signals: readonly FbdSignalDefinition[]
 }
 
 /* WP-03 (D-06, REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15 §8.4): registry này
@@ -85,6 +139,14 @@ const conversions = new Set([
   'REAL_TO_DINT', 'REAL_TO_UINT',
 ])
 const scalarTypes = new Set<string>(FBD_DATA_TYPES)
+const knownRegistryTypeRefs = new Set<string>([
+  ...scalarTypes,
+  ...pureFunctions,
+  ...statefulFunctions,
+  ...conversions,
+  'SIGNAL_READ',
+  'SIGNAL_PUBLISH',
+])
 const canonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const identifier = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
 
@@ -94,6 +156,30 @@ function clone<T>(value: T): T {
 
 export function cloneFbdDocument(document: FbdDocument): FbdDocument {
   return clone(document)
+}
+
+export function isValidFbdLayout(layout: unknown): layout is FbdLayout {
+  if (typeof layout !== 'object' || layout === null || Array.isArray(layout)) return false
+  const keys = Object.keys(layout)
+  if (keys.some((key) => key !== 'schemaVersion' && key !== 'nodes')) return false
+  const candidate = layout as Partial<FbdLayout>
+  if (candidate.schemaVersion !== 1) return false
+  const nodes = candidate.nodes
+  if (typeof nodes !== 'object' || nodes === null || Array.isArray(nodes)) return false
+  const nodeIds = Object.keys(nodes)
+  if (nodeIds.length > FBD_MAX_LAYOUT_NODES) return false
+  return nodeIds.every((nodeId) => {
+    if (!canonicalUuid.test(nodeId)) return false
+    const point = (nodes as Record<string, unknown>)[nodeId]
+    if (typeof point !== 'object' || point === null || Array.isArray(point)) return false
+    const pointKeys = Object.keys(point)
+    if (pointKeys.length !== 2 || !pointKeys.includes('x') || !pointKeys.includes('y')) return false
+    return (['x', 'y'] as const).every((axis) => {
+      const value = (point as Record<string, unknown>)[axis]
+      return typeof value === 'number' && Number.isFinite(value) &&
+        value >= -FBD_MAX_LAYOUT_COORDINATE && value <= FBD_MAX_LAYOUT_COORDINATE
+    })
+  })
 }
 
 export function isCanonicalFbdUuid(value: string): boolean {
@@ -106,6 +192,23 @@ export function isFbdIdentifier(value: string): boolean {
 
 export function canonicalizeFbdDocument(document: FbdDocument): FbdDocument {
   const result = cloneFbdDocument(document)
+  /* Khoá của `layout.nodes` là map nên thứ tự chèn quyết định byte đầu ra —
+   * sắp lại để hai tài liệu giống hệt nhau không sinh hai chuỗi khác nhau chỉ
+   * vì thứ tự người dùng kéo block.
+   *
+   * Hàm này chạy TRƯỚC cả validate (kiểm kích thước gọi `canonicalFbdJson`),
+   * nên nó phải chịu được tài liệu chưa hợp lệ: hình học rác bị BỎ khỏi dạng
+   * canonical thay vì làm cả hàm ném lỗi — issue `FBD-SCHEMA-LAYOUT-001` mới
+   * là chỗ báo cho người dùng. */
+  if (result.layout !== undefined) {
+    if (isValidFbdLayout(result.layout)) {
+      const sorted: Record<string, FbdPoint> = {}
+      for (const key of Object.keys(result.layout.nodes).sort()) sorted[key] = result.layout.nodes[key]
+      result.layout = { schemaVersion: result.layout.schemaVersion, nodes: sorted }
+    } else {
+      delete result.layout
+    }
+  }
   result.networks.sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
   for (const network of result.networks) {
     network.nodes.sort((left, right) => left.executionOrder - right.executionOrder || left.id.localeCompare(right.id))
@@ -145,9 +248,14 @@ export function collectFbdInterfaceVariables(document: FbdDocument): FbdInterfac
 
 function typeRefMatchesKind(node: FbdNode): boolean {
   if (node.kind === 'INPUT' || node.kind === 'OUTPUT' || node.kind === 'CONSTANT') return scalarTypes.has(node.typeRef)
-  if (node.kind === 'FUNCTION') return pureFunctions.has(node.typeRef)
-  if (node.kind === 'FUNCTION_BLOCK') return statefulFunctions.has(node.typeRef)
-  return conversions.has(node.typeRef)
+  if (node.kind === 'FUNCTION') {
+    return pureFunctions.has(node.typeRef) || !knownRegistryTypeRefs.has(node.typeRef)
+  }
+  if (node.kind === 'FUNCTION_BLOCK') {
+    return statefulFunctions.has(node.typeRef) || !knownRegistryTypeRefs.has(node.typeRef)
+  }
+  if (node.kind === 'CONVERSION') return conversions.has(node.typeRef)
+  return node.typeRef === node.kind
 }
 
 function portShapeMatchesKind(node: FbdNode): boolean {
@@ -155,14 +263,49 @@ function portShapeMatchesKind(node: FbdNode): boolean {
   const outputs = node.ports.length - inputs
   if (node.kind === 'INPUT' || node.kind === 'CONSTANT') return inputs === 0 && outputs > 0
   if (node.kind === 'OUTPUT') return inputs > 0 && outputs === 0
+  if (node.kind === 'SIGNAL_READ') {
+    const port = node.ports[0]
+    return node.ports.length === 1 && inputs === 0 && outputs === 1 &&
+      port?.name === 'OUT' && port.order === 0
+  }
+  if (node.kind === 'SIGNAL_PUBLISH') {
+    const port = node.ports[0]
+    return node.ports.length === 1 && inputs === 1 && outputs === 0 &&
+      port?.name === 'IN' && port.order === 0
+  }
   return inputs > 0 && outputs > 0
 }
 
-export function validateFbdDocument(document: FbdDocument): FbdIssue[] {
+function isSignalNode(node: FbdNode): node is FbdNode & { kind: 'SIGNAL_READ' | 'SIGNAL_PUBLISH' } {
+  return node.kind === 'SIGNAL_READ' || node.kind === 'SIGNAL_PUBLISH'
+}
+
+export function validateFbdDocument(document: FbdDocument, context?: FbdValidationContext): FbdIssue[] {
   const issues: FbdIssue[] = []
   const add = (code: string, path: string) => {
     if (issues.length < 64) issues.push({ code, path })
   }
+  const signalByName = new Map<string, FbdSignalDefinition>()
+  const ambiguousSignalNames = new Set<string>()
+  context?.signals.forEach((signal, index) => {
+    const path = `$signals[${index}]`
+    const foldedName = signal.name.toLocaleUpperCase('en-US')
+    const valid = identifier.test(signal.name) && FBD_DATA_TYPES.includes(signal.type) &&
+      signal.publisherProgramId.length > 0 &&
+      (signal.unit === undefined || (signal.unit.length > 0 && signal.unit.length <= 32))
+    if (!valid) {
+      add('FBD-SEM-SIGNAL-MODEL-001', path)
+      return
+    }
+    if (ambiguousSignalNames.has(foldedName) || signalByName.has(foldedName)) {
+      ambiguousSignalNames.add(foldedName)
+      signalByName.delete(foldedName)
+      add('FBD-SEM-SIGNAL-MODEL-001', `${path}.name`)
+      return
+    }
+    signalByName.set(foldedName, signal)
+  })
+  const publishedSignals = new Set<string>()
   if (document.$schema !== '../../fbd_v1.schema.json' || document.schemaVersion !== 1 ||
       document.profileId !== FBD_PROFILE_ID || !canonicalUuid.test(document.graphId) ||
       !identifier.test(document.name)) {
@@ -170,6 +313,12 @@ export function validateFbdDocument(document: FbdDocument): FbdIssue[] {
   }
   if (document.networks.length < 1 || document.networks.length > FBD_MAX_NETWORKS) {
     add('FBD-LIMIT-NETWORK-001', '$.networks')
+  }
+  /* Parity với `is_valid_layout()` ở compiler: hình học sai bị TỪ CHỐI ở biên
+   * chứ không bị im lặng bỏ qua — một toạ độ NaN gửi lên rồi mới hỏng ở Core
+   * là lỗi khó lần hơn nhiều so với một issue ngay tại editor. */
+  if (document.layout !== undefined) {
+    if (!isValidFbdLayout(document.layout)) add('FBD-SCHEMA-LAYOUT-001', '$.layout')
   }
   const ids = new Set([document.graphId])
   const networkOrders = new Set<number>()
@@ -203,6 +352,14 @@ export function validateFbdDocument(document: FbdDocument): FbdIssue[] {
         (typeof value === 'number' && (!Number.isFinite(value) ||
           (Number.isInteger(value) && (value < -2_147_483_648 || value > 2_147_483_647))))
       )) add('FBD-SEM-PARAMETER-001', `${nodePath}.parameters`)
+      const signalName = isSignalNode(node) && parameters.length === 1 &&
+        parameters[0]?.[0] === 'signal' && typeof parameters[0][1] === 'string' &&
+        identifier.test(parameters[0][1])
+        ? parameters[0][1]
+        : null
+      if (isSignalNode(node) && signalName === null) {
+        add('FBD-SEM-PARAM-001', `${nodePath}.parameters`)
+      }
       if (node.ports.length < 1 || node.ports.length > FBD_MAX_PORTS_PER_NODE) {
         add('FBD-LIMIT-PORT-001', `${nodePath}.ports`)
       }
@@ -221,6 +378,27 @@ export function validateFbdDocument(document: FbdDocument): FbdIssue[] {
         ports.set(port.id, { node, port })
       })
       if (!portShapeMatchesKind(node)) add('FBD-SEM-PORT-SHAPE-001', `${nodePath}.ports`)
+      if (context && isSignalNode(node) && signalName !== null) {
+        const foldedName = signalName.toLocaleUpperCase('en-US')
+        const definition = signalByName.get(foldedName)
+        if (!definition || definition.name !== signalName) {
+          add('FBD-SEM-SIGNAL-REF-001', `${nodePath}.parameters.signal`)
+        } else {
+          const port = node.ports[0]
+          if (!port || port.dataType !== definition.type || port.unit !== (definition.unit ?? null)) {
+            add('FBD-SEM-SIGNAL-PORT-001', `${nodePath}.ports`)
+          }
+          if (node.kind === 'SIGNAL_PUBLISH') {
+            if (definition.publisherProgramId !== context.programId) {
+              add('FBD-SEM-SIGNAL-PUBLISHER-001', `${nodePath}.parameters.signal`)
+            }
+            if (publishedSignals.has(foldedName)) {
+              add('FBD-SEM-SIGNAL-PUBLISH-COUNT-001', `${nodePath}.parameters.signal`)
+            }
+            publishedSignals.add(foldedName)
+          }
+        }
+      }
     })
     if (network.nodes.length < 1 || network.nodes.length > FBD_MAX_BLOCKS) {
       add('FBD-LIMIT-BLOCK-001', `${networkPath}.nodes`)

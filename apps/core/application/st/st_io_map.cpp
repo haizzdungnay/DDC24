@@ -105,8 +105,11 @@ bool validate_point_contract(const StIoMapEntry& entry, bool expect_output,
                          (prefix == "MSV" && entry.type == StType::UINT);
         }
     } else if (entry.category == "MB_RTU") {
+        /* Slot EXT phải do Point Catalog cấp và nằm trong dải SHM. Suy nó từ
+         * `point_id` ở đây là định nghĩa lại ánh xạ Modbus ở lớp không sở hữu nó. */
         identity_valid = valid_device_id(entry.device_id) &&
-                         valid_ascii_identity(entry.point_id);
+                         valid_ascii_identity(entry.point_id) &&
+                         entry.ext_index >= 1 && entry.ext_index <= KX_N_EXT;
         type_valid = entry.type != StType::TIME;
     } else {
         push_diag(diagnostics, st_diag_code::kIoMapBadPointId,
@@ -157,13 +160,22 @@ bool local_prefix_to_point_kind(const std::string& prefix, StPointKind* out)
     return false;
 }
 
-/* VP prefix -> StPointKind IR (F-PROG-ASBUILT-014). Chỉ dùng cho chiều READ
- * (VAR_INPUT) — Web API đồng bộ giá trị Virtual Point đã "bound" vào
- * av_[]/bv_[]/msv_[] của Core qua WebIpc `write` (nguồn PointSource::WEB,
- * xem `apps/web-api/internal/app/virtualpoint.go`); chưa có đường đồng bộ
- * NGƯỢC Core->Web API nên VAR_OUTPUT bind VP bị chặn tường minh ở
- * resolve_io_bindings() thay vì âm thầm ghi Core mà Web API/UI không bao
- * giờ thấy lại — xem F-PROG-ASBUILT-016 (theo dõi phần WRITE). */
+/* VP prefix -> StPointKind IR (F-PROG-ASBUILT-014).
+ *
+ * `F-PROG-ASBUILT-016` từng chặn tường minh chiều WRITE, với lý do ĐÚNG ở thời
+ * điểm đó: `overlayVirtualPoints` ở web-api vứt bỏ slot AV/BV/MSV thô của Core
+ * và thay bằng giá trị trong `virtual_points.conf`, nên một giá trị do chương
+ * trình ghi sẽ KHÔNG BAO GIỜ hiện ra ở API hay UI.
+ *
+ * Chặn được gỡ cùng lúc với việc mở đường đọc ngược, không phải trước: VP mang
+ * `source = "PROGRAM"` nay lấy value/quality/source THẲNG từ slot Core. Mở
+ * chiều ghi mà không mở đường đọc là để người vận hành nhìn một con số đứng yên
+ * cho một đại lượng đang thay đổi.
+ *
+ * Thứ CÒN LẠI cần canh không phải khả năng đọc mà là QUYỀN SỞ HỮU: nếu Web API
+ * vẫn đẩy giá trị cấu hình vào cùng slot, hai bên sẽ ghi đè nhau mỗi chu kỳ.
+ * Ranh giới đó do `virtualPoint.source` ở web-api giữ (`PROGRAM` ⇒ web-api
+ * không đồng bộ nữa), không phải do compiler cấm cả chiều ghi. */
 bool vp_prefix_to_point_kind(const std::string& prefix, StPointKind* out)
 {
     if (prefix == "AV")  { *out = StPointKind::AV;  return true; }
@@ -232,21 +244,12 @@ bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& en
             return false;
         }
 
-        if (e.category != "LOCAL" && e.category != "VP") {
+        if (e.category != "LOCAL" && e.category != "VP" && e.category != "MB_RTU") {
             push_diag(diagnostics, st_diag_code::kIoMapUnsupportedCategory,
                      "io_map entry for '" + e.variable + "' targets category '" + e.category +
-                         "' — chỉ 'LOCAL'/'VP' được resolve_io_bindings() hỗ trợ trong bản này "
-                         "(xem F-PROG-ASBUILT-013/014/016)");
+                         "' (allowlist: LOCAL, VP, MB_RTU)");
             return false;
         }
-        if (e.category == "VP" && expect_output) {
-            push_diag(diagnostics, st_diag_code::kIoMapUnsupportedCategory,
-                     "io_map entry for '" + e.variable + "' — category 'VP' hiện chỉ hỗ trợ chiều "
-                         "READ (VAR_INPUT); chưa có đường đồng bộ ngược Core->Web API cho "
-                         "VAR_OUTPUT (xem F-PROG-ASBUILT-016)");
-            return false;
-        }
-
         std::vector<StDiagnostic> contract_diags;
         if (!validate_point_contract(e, expect_output, &contract_diags)) {
             for (StDiagnostic& d : contract_diags) diagnostics->push_back(std::move(d));
@@ -256,7 +259,14 @@ bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& en
         std::string prefix;
         StPointKind kind{};
         uint16_t index_1based = 0;
-        {
+        if (e.category == "MB_RTU") {
+            /* MB_RTU không dùng cú pháp `PREFIX-NN`: identity của nó là
+             * (deviceId, pointId) do hệ Modbus RTU đặt, còn vị trí trong SHM là
+             * `ext_index` mà Point Catalog phân giải. `validate_point_contract`
+             * đã ép dải 1..KX_N_EXT ở trên. */
+            kind = StPointKind::EXT;
+            index_1based = e.ext_index;
+        } else {
             std::string parsed_prefix;
             split_numbered_id(e.point_id, &parsed_prefix);
             const bool mapped = (e.category == "LOCAL")

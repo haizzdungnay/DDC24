@@ -1,17 +1,18 @@
 import { createContext, useContext, useMemo, useState } from 'react'
-import { Outlet, useParams } from 'react-router-dom'
-import { useProgrammingCapabilities, useProgrammingProjects, useProgrammingRevision, useProgrammingRuntime } from '../api/queries'
-import type { ProgrammingCapabilities, ProgrammingRevision, ProgrammingRuntime, RemoteState } from '../model/types'
+import { Outlet, useLocation, useParams } from 'react-router-dom'
+import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
+import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
+import { roleAtLeast, useAuth } from '../../auth'
 import { ProgrammingHeader } from './ProgrammingHeader'
-import { ProgrammingContextBar } from './ProgrammingContextBar'
-import { ProgrammingDesktopNav } from './ProgrammingDesktopNav'
+import { ProgrammingContextStrip } from './ProgrammingContextStrip'
+import { ProgrammingFeatureRail } from './ProgrammingFeatureRail'
 import { ProgrammingMobileNav } from './ProgrammingMobileNav'
-import { ProjectRouteGuard, resolveProgrammingProjectRoute } from './ProjectRouteGuard'
 
 interface ProgrammingRuntimeContextValue {
   capabilities: RemoteState<ProgrammingCapabilities>
   runtime: RemoteState<ProgrammingRuntime>
-  activeRevision: RemoteState<ProgrammingRevision | null>
+  projects: RemoteState<ProgrammingProjectPage>
+  programIntents: RemoteState<ProgrammingProgramsPage>
   setEditingContext: (context: ProgrammingEditingContext | null) => void
 }
 
@@ -25,8 +26,8 @@ export interface ProgrammingEditingContext {
 
 const ProgrammingRuntimeContext = createContext<ProgrammingRuntimeContextValue | null>(null)
 
-/** Bốn workspace dùng chung một `GET /capabilities` + `GET /runtime` — tránh
- * poll trùng lặp và giữ đúng một nguồn cho `ProgrammingContextBar`. */
+/** Sáu workspace dùng chung các read-model ở tầng layout — tránh poll trùng
+ * lặp và giữ đúng một nguồn cho `ProgrammingContextStrip`. */
 export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
   const ctx = useContext(ProgrammingRuntimeContext)
   if (!ctx) throw new Error('useProgrammingRuntimeContext phải nằm trong ProgrammingLayout')
@@ -34,29 +35,47 @@ export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
 }
 
 /**
- * `ProgrammingLayout` — TASK-PROG-500. Bọc cả bốn workspace bên trong
- * `AppShell` (đã có `<main>`, skip-link và `RouteErrorBoundary` riêng —
- * KHÔNG mở thêm `<main>`/boundary ở đây, cùng lý do đã ghi ở
- * `ModbusRtuLayout`). Có đúng một `<h1>` (trong `ProgrammingHeader`).
+ * `ProgrammingLayout` — TASK-PROG-500/T59-503, dựng lại bố cục theo Plan 60 §5.
+ *
+ * Bọc cả sáu workspace bên trong `AppShell` (đã có `<main>`, skip-link và
+ * `RouteErrorBoundary` riêng — KHÔNG mở thêm `<main>`/boundary ở đây, cùng lý
+ * do đã ghi ở `ModbusRtuLayout`). Có đúng một `<h1>` (trong `ProgrammingHeader`).
+ *
+ * BỐ CỤC (README §3 — Feature Rail 220 | Context Strip | workspace):
+ *
+ * ```text
+ * ProgrammingFeatureRail 220px │ ProgrammingContextStrip 38px, sticky
+ *                              │ ProgrammingHeader (<h1> + Làm mới)
+ *                              │ <Outlet/>
+ * ```
+ *
+ * `T60-101` thay `ProgrammingDesktopNav` (dải tab ngang) bằng rail dọc, và
+ * `T60-102` thay `ProgrammingContextBar` (panel `<dl>` sáu ô, cuộn theo trang)
+ * bằng strip một hàng dính. Cả hai là ĐỔI BỐ CỤC: mọi luật fail-closed và mọi
+ * đích điều hướng được mang sang nguyên vẹn, không mục nào và không nhánh
+ * trạng thái nào bị bỏ.
  */
 export function ProgrammingLayout() {
+  const { session } = useAuth()
   const capabilities = useProgrammingCapabilities()
   const runtime = useProgrammingRuntime()
-  const activeRevision = useProgrammingRevision(runtime.data?.activeRevisionId)
   const projects = useProgrammingProjects()
   const [editingContext, setEditingContext] = useState<ProgrammingEditingContext | null>(null)
-  const { projectId } = useParams<{ projectId?: string }>()
-  const refreshing = capabilities.status === 'loading' || runtime.status === 'loading' || projects.status === 'loading' || activeRevision.status === 'loading'
+  const { projectId: pathProjectId } = useParams<{ projectId?: string }>()
+  const location = useLocation()
+  const canonicalProgramsRoute = location.pathname === '/eng/programming/programs'
+  const queryProjectId = canonicalProgramsRoute ? new URLSearchParams(location.search).get('project') ?? undefined : undefined
+  const projectId = pathProjectId ?? queryProjectId
 
-  const projectRoute = useMemo(() => {
-    return resolveProgrammingProjectRoute(projectId, projects)
-  }, [projectId, projects.data, projects.status])
-  const listedProject = projectRoute.project
-  const routeEditingContext =
-    editingContext &&
-    (projectRoute.state === 'missing' || (projectRoute.state === 'valid' && editingContext.projectId === projectId))
-      ? editingContext
-      : null
+  const listedProject = useMemo(() => {
+    if (projects.status !== 'ready' || !projects.data) return null
+    if (projectId) return projects.data.items.find((item) => item.projectId === projectId) ?? null
+    // Resolver PGM-02 v2 tự xử lý 0/1/nhiều Project. Shell không được chọn
+    // item đầu tiên trước resolver vì context strip/rail sẽ nói sai Project.
+    if (canonicalProgramsRoute) return null
+    return projects.data.items[0] ?? null
+  }, [canonicalProgramsRoute, projectId, projects.data, projects.status])
+  const routeEditingContext = editingContext && (!projectId || editingContext.projectId === projectId) ? editingContext : null
   const visibleEditingContext = listedProject
     ? {
         projectId: listedProject.projectId,
@@ -66,37 +85,91 @@ export function ProgrammingLayout() {
         checkState: routeEditingContext?.checkState ?? ('idle' as const)
       }
     : routeEditingContext
+  // Khi API Project tạm lỗi, vẫn giữ nguyên định danh từ URL để điều hướng giữa
+  // PGM-02..05 và thử read-model intent của đúng Project; không thay bằng
+  // Project đầu tiên hoặc tự dựng định danh mới.
+  //
+  // Ngoại lệ DUY NHẤT: danh sách Project đã `ready` mà id trong URL không nằm
+  // trong đó — đây là not-found chắc chắn, không phải lỗi tạm. Vẫn probe
+  // read-model của nó chỉ đổi được một dòng 503 trong Console của người dùng,
+  // trong khi resolver đã trả not-found. Danh sách đang loading/lỗi thì giữ
+  // nguyên hành vi cũ.
+  const projectKnownMissing =
+    projects.status === 'ready' && Boolean(projectId) && !listedProject && !routeEditingContext
+  // Trên route canonical, DDD §3.4 bắt resolver phân giải Project TRƯỚC khi mở
+  // workspace. Đọc read-model trong lúc danh sách còn đang bay là đi trước
+  // chính cái quyết định đó: nếu id sai, request đã bay đi rồi mới biết. Chờ
+  // list `ready` chỉ tốn đúng một nhịp của cùng shell.
+  const projectUnconfirmed = canonicalProgramsRoute && projects.status !== 'ready'
+  const scopedProjectId = projectKnownMissing || projectUnconfirmed
+    ? undefined
+    : (visibleEditingContext?.projectId ?? projectId)
+  const programIntents = useProgrammingProgramIntents(scopedProjectId)
+  const refreshing =
+    capabilities.status === 'loading' ||
+    runtime.status === 'loading' ||
+    projects.status === 'loading' ||
+    programIntents.status === 'loading'
 
   return (
-    <ProgrammingRuntimeContext.Provider value={{ capabilities, runtime, activeRevision, setEditingContext }}>
-      <div className="space-y-2 pb-16 md:pb-0">
-        <ProgrammingHeader
-          refreshing={refreshing}
-          onRefresh={() => {
-            capabilities.refresh()
-            runtime.refresh()
-            activeRevision.refresh()
-            projects.refresh()
-          }}
-        />
-        <ProgrammingDesktopNav projectId={visibleEditingContext?.projectId ?? null} />
-        <ProgrammingContextBar
-          runtime={runtime}
-          capabilities={capabilities}
-          editing={visibleEditingContext}
-          projectRouteState={projectRoute.state}
-          requestedProjectId={projectId}
-        />
-        <ProjectRouteGuard
-          state={projectRoute.state}
-          projectId={projectId}
-          error={projects.error}
-          onRetry={projects.refresh}
-        >
+    <ProgrammingRuntimeContext.Provider value={{ capabilities, runtime, projects, programIntents, setEditingContext }}>
+      <div className="flex gap-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+        <ProgrammingFeatureRail projectId={scopedProjectId ?? null} />
+        {/* `min-w-0` là bắt buộc: một flex item mặc định `min-width:auto` sẽ
+            KHÔNG co lại dưới kích thước nội dung, nên một bảng rộng trong
+            workspace sẽ đẩy cả trang tràn ngang thay vì tự cuộn trong ô của nó. */}
+        <div className="min-w-0 flex-1 space-y-4">
+          <ProgrammingContextStrip
+            projectStatus={projects.status}
+            runtimeStatus={runtime.status}
+            runtime={runtime.data}
+            intentStatus={programIntents.status}
+            intents={programIntents.data}
+            intentError={programIntents.error}
+            editing={visibleEditingContext}
+            canMutate={roleAtLeast(session?.role, 'admin')}
+            details={{
+              draftRevisionId: visibleEditingContext?.draftRevisionId ?? null,
+              activeRevisionId: runtime.data?.activeRevisionId ?? null,
+              lkgRevisionId: runtime.data?.lkgRevisionId ?? null,
+              controllerId: runtime.data?.controllerId ?? null,
+              observedAt: runtime.data?.observedAt ?? null,
+              /* `contentHash` nằm trong thân Revision (`GET /revisions/{id}`),
+                 mà shell KHÔNG tải — và không được tự gọi HTTP ở đây (README
+                 §5.1/§5.2: chỉ `api/queries.ts` biết về mạng). Truyền `null`
+                 để popover nói thẳng "chưa đọc được ở màn này" thay vì bịa
+                 một chuỗi hash. Khi `T60-203` mở đường đọc Revision, nối vào
+                 đúng hai dòng này là xong. */
+              draftContentHash: null,
+              activeContentHash: null,
+              /* Ba tình trạng, KHÔNG phải một cờ nhị phân. `loading` phải
+                 tách riêng: `useProgrammingResource` chỉ để `status =
+                 'loading'` ở lần đọc đầu (refresh giữ nguyên `ready`), nên gộp
+                 nó vào "không đọc được" sẽ dán một cảnh báo mất kết nối giả
+                 lên mỗi lần vào trang. Ba nguồn "Core im" thì phải gộp: HTTP
+                 lỗi, chưa có thân phản hồi, và `producerState = UNAVAILABLE` —
+                 thiếu nhánh nào thì popover nói "chưa Commission" trong khi sự
+                 thật là không ai biết, đúng kiểu suy diễn README §5.4 cấm. */
+              coreStatus: runtime.status === 'loading'
+                ? 'loading'
+                : runtime.status === 'error' || !runtime.data || runtime.data.producerState === 'UNAVAILABLE'
+                  ? 'unreadable'
+                  : 'readable'
+            }}
+          />
+          <ProgrammingHeader
+            refreshing={refreshing}
+            onRefresh={() => {
+              capabilities.refresh()
+              runtime.refresh()
+              projects.refresh()
+              programIntents.refresh()
+            }}
+          />
           <Outlet />
-        </ProjectRouteGuard>
+        </div>
       </div>
-      <ProgrammingMobileNav projectId={visibleEditingContext?.projectId ?? null} />
+      <ProgrammingMobileNav projectId={scopedProjectId ?? null} />
     </ProgrammingRuntimeContext.Provider>
   )
 }

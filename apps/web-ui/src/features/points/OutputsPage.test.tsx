@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
 import type { AoConfig, DoConfig, OutputsConfig, Point, VirtualPoint } from '../../shared/types'
+import { MemoryRouter } from 'react-router-dom'
 import { OutputsPage } from './OutputsPage'
 
 const api = vi.hoisted(() => ({
@@ -37,8 +38,10 @@ const outputConfig: OutputsConfig = {
   do: [{ id: 'DO-01', channel: 1, kind: 'DO', tag: 'DO-01', label: 'Other Output', safeState: 'open', manualValue: false } as DoConfig]
 }
 
+/* Trang này nay dùng `useDirtyGuard` (F-UX-12) nên cần Router — đúng thực tế
+ * ứng dụng: `OutputsPage` luôn nằm dưới `<Routes>` của `App.tsx`. */
 function renderPage() {
-  return render(<I18nProvider><ToastProvider><OutputsPage /></ToastProvider></I18nProvider>)
+  return render(<MemoryRouter><I18nProvider><ToastProvider><OutputsPage /></ToastProvider></I18nProvider></MemoryRouter>)
 }
 
 describe('OutputsPage point metadata recovery', () => {
@@ -196,5 +199,159 @@ describe('OutputsPage manual output (%) — quy đổi sang raw trước khi For
     expect(screen.getByText('% open')).toBeInTheDocument()
     expect(screen.getByText('65.0 %')).toBeInTheDocument()
     expect(screen.getByText('Raw output')).toBeInTheDocument()
+  })
+})
+
+/* F-OUT-002 (2026-08-19): Core chỉ lưu/đọc AO theo volt/mA thô, còn `units`
+ * trong cấu hình là ĐƠN VỊ KỸ THUẬT của kênh. Trang Outputs trước đây lấy
+ * thẳng số volt rồi dán nhãn `units` lên, nên kênh AO-03 "Chilled Water Valve"
+ * trên board (0-10V, units=percent, dải 0-100) ra 4,5 V = 45 % lại hiện
+ * "4.5 %" — sai 10 lần trên lệnh mở van. Khoá lại: "Current value" phải là giá
+ * trị kỹ thuật đã quy đổi, còn "Raw output" vẫn giữ volt/mA để đối chiếu đồng
+ * hồ đo. */
+describe('OutputsPage live value — quy đổi tín hiệu về đơn vị kỹ thuật (F-OUT-002)', () => {
+  const aoPercent: AoConfig = { ...ao, id: 'AO-01', mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100 }
+
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    api.getPoints.mockResolvedValue([])
+    api.getVirtualPoints.mockResolvedValue([])
+    api.forceOutput.mockResolvedValue(undefined)
+    hookState.virtualPoints = []
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  /* Ô "Current value" của khối Live data — đọc theo NHÃN, vì "% open" cạnh nó
+   * cũng ra "45.0 %" (tính theo MODE, không theo dải kỹ thuật) nên tìm theo
+   * chuỗi trần sẽ khớp nhầm ô bên cạnh. */
+  function currentValueText(): string {
+    return (screen.getByText('Current Value').nextElementSibling as HTMLElement).textContent ?? ''
+  }
+
+  it('kênh cấu hình % hiện 45.0 % cho 4.5 V, và vẫn hiện 4.5 V ở Raw output', async () => {
+    api.getOutputs.mockResolvedValue({ ao: [aoPercent], do: [] })
+    hookState.points = [{
+      id: 'AO-01', tag: 'AO-01', name: 'Chilled Water Valve', kind: 'AO', value: 4.5, raw: 4.5,
+      rawUnit: 'V', quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+
+    renderPage()
+    await screen.findByText('Manual Output')
+    // Số volt thô KHÔNG được đội lốt phần trăm nữa.
+    expect(currentValueText()).toBe('45.0 %')
+    const rawOutput = screen.getByText('Raw output').nextElementSibling as HTMLElement
+    expect(rawOutput.textContent).toBe('4.5 V')
+  })
+
+  it('Min/Max/Avg cùng đơn vị với Current value, không còn là số volt dán nhãn %', async () => {
+    api.getOutputs.mockResolvedValue({ ao: [aoPercent], do: [] })
+    hookState.points = [{
+      id: 'AO-01', tag: 'AO-01', name: 'Chilled Water Valve', kind: 'AO', value: 4.5, raw: 4.5,
+      rawUnit: 'V', quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+
+    renderPage()
+    await screen.findByText('Manual Output')
+    for (const label of ['Min', 'Max', 'Avg']) {
+      expect((screen.getByText(label).nextElementSibling as HTMLElement).textContent).toBe('45.0 %')
+    }
+  })
+
+  it('nhãn `display_unit` từ trang Monitor không đè được đơn vị kỹ thuật của kênh', async () => {
+    api.getOutputs.mockResolvedValue({ ao: [aoPercent], do: [] })
+    hookState.points = [{
+      id: 'AO-01', tag: 'AO-01', name: 'Chilled Water Valve', kind: 'AO', value: 4.5, raw: 4.5,
+      unit: 'V', rawUnit: 'V', quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+
+    renderPage()
+    await screen.findByText('Manual Output')
+    expect(currentValueText()).toBe('45.0 %')
+  })
+
+  it('dải kỹ thuật suy biến (minPv = maxPv) hiện lại số thô kèm đơn vị tín hiệu, không bịa số', async () => {
+    api.getOutputs.mockResolvedValue({ ao: [{ ...aoPercent, minPv: 50, maxPv: 50 }], do: [] })
+    hookState.points = [{
+      id: 'AO-01', tag: 'AO-01', name: 'Chilled Water Valve', kind: 'AO', value: 4.5, raw: 4.5,
+      rawUnit: 'V', quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+
+    renderPage()
+    await screen.findByText('Manual Output')
+    expect(currentValueText()).toBe('4.5 V')
+  })
+})
+
+/* Cấu hình THẬT trên board Foxlinx (đọc qua `/api/v1/system/config/io-bundle`,
+ * 2026-08-19): AO-01 "Supply Fan Speed" khai `units: volt` nhưng `max_pv: 100`
+ * — tức "0..100 volt" trên một ngõ ra 0-10V, cấu hình tự mâu thuẫn. Nếu quy
+ * đổi máy móc theo `minPv`/`maxPv` thì ngõ ra 6,07 V sẽ hiện "60.7 V". Khoá
+ * lại: đơn vị kỹ thuật trùng đơn vị tín hiệu thì hiện thẳng điện áp/dòng trên
+ * đầu cực, không quy đổi. */
+describe('OutputsPage live value — đơn vị kỹ thuật trùng đơn vị tín hiệu (F-OUT-002)', () => {
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    api.getPoints.mockResolvedValue([])
+    api.getVirtualPoints.mockResolvedValue([])
+    api.forceOutput.mockResolvedValue(undefined)
+    hookState.virtualPoints = []
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  function currentValueText(): string {
+    return (screen.getByText('Current Value').nextElementSibling as HTMLElement).textContent ?? ''
+  }
+
+  it('AO-01 như trên board (units=volt, maxPv=100, 0-10V) hiện 6.1 V chứ không phải 60.7 V', async () => {
+    api.getOutputs.mockResolvedValue({
+      ao: [{ ...ao, id: 'AO-01', mode: '0-10V', units: 'volt', minPv: 0, maxPv: 100 }],
+      do: []
+    })
+    hookState.points = [{
+      id: 'AO-01', tag: 'AO-01', name: 'Supply Fan Speed', kind: 'AO', value: 6.0665064, raw: 6.0653315,
+      rawUnit: 'V', quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+
+    renderPage()
+    await screen.findByText('Manual Output')
+    expect(currentValueText()).toBe('6.1 V')
+  })
+
+  it('kênh 4-20mA khai units=milliampere hiện thẳng mA, không quy đổi qua dải 0-100', async () => {
+    api.getOutputs.mockResolvedValue({
+      ao: [{ ...ao, id: 'AO-01', mode: '4-20mA', units: 'milliampere', minPv: 0, maxPv: 100 }],
+      do: []
+    })
+    hookState.points = [{
+      id: 'AO-01', tag: 'AO-01', name: 'Damper', kind: 'AO', value: 12, raw: 12,
+      rawUnit: 'mA', quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+
+    renderPage()
+    await screen.findByText('Manual Output')
+    expect(currentValueText()).toBe('12.0 mA')
+  })
+
+  it('đơn vị kỹ thuật KHÁC đơn vị tín hiệu (Pa) vẫn quy đổi: 5 V trên dải 0-50 là 25.0 Pa', async () => {
+    api.getOutputs.mockResolvedValue({
+      ao: [{ ...ao, id: 'AO-01', mode: '0-10V', units: 'Pa', minPv: 0, maxPv: 50 }],
+      do: []
+    })
+    hookState.points = [{
+      id: 'AO-01', tag: 'AO-01', name: 'Static Pressure', kind: 'AO', value: 5, raw: 5,
+      rawUnit: 'V', quality: 'good', source: 'core', updatedAt: new Date().toISOString()
+    }]
+
+    renderPage()
+    await screen.findByText('Manual Output')
+    expect(currentValueText()).toBe('25.0 Pa')
   })
 })

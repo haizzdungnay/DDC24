@@ -17,6 +17,15 @@ thật**: dev đọc vào biết bắt đầu từ file nào, viết module nào
 Nếu bạn chỉ có 5 phút: đọc §1 → §5 → §6 → §7 của file này, rồi mở
 [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md) cho phần việc của bạn.
 
+### Entry point riêng cho Programming
+
+Programming dùng một Product thống nhất, không chia phạm vi A/B. Trước khi sửa
+Programming, đọc theo thứ tự: [Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md)
+→ [Unified Detailed Design](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md)
+→ [Plan59](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) →
+[Prompt thi hành](PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md). Plan53/54/56 và WP
+tracker chỉ còn giá trị truy nguyên, không được dùng để chọn task mới.
+
 ---
 
 ## 1. Dự án đang ở giai đoạn nào
@@ -54,10 +63,10 @@ Nếu bạn chỉ có 5 phút: đọc §1 → §5 → §6 → §7 của file nà
 | Phần | Chạy ở | Ngôn ngữ | Thư mục code | Vai trò 1 dòng |
 |------|--------|----------|--------------|----------------|
 | **FW_MCU** | STM32G0B1RBT6 / FreeRTOS | C11 | `fw/` | Đọc/ghi IO vật lý real-time, slave IOP |
-| **mkddc-iobus** | SOM Debian | C++17 / C | `services/iobus/` | **Master UART/IOP** tới MCU + Modbus/BACnet network |
-| **mkddc-core** | SOM Debian (SCHED_FIFO) | C++17 | `services/core/` | Point table + scan loop + graph + priority/safe-state |
+| **mkddc-iobus** | SOM Debian | C++17 / C | `apps/iobus/` | **Master UART/IOP** tới MCU + Modbus/BACnet network |
+| **mkddc-core** | SOM Debian (SCHED_FIFO) | C++17 | `apps/core/` | Point table + scan loop + graph + priority/safe-state |
 | **mkddc-web** | SOM Debian | Go + React | `web/` | REST API + Web UI + config + validator + commissioning |
-| **mkddc-hmi** *(feature-gated)* | SOM Debian | C++17 + LVGL | `services/hmi/` | Local five-surface limited-operator client; read SHM, mutation qua broker/core |
+| **mkddc-hmi** *(feature-gated)* | SOM Debian | C++17 + LVGL | `apps/hmi/` | Local five-surface limited-operator client; read SHM, mutation qua broker/core |
 
 Nguồn-chuẩn kiến trúc service: [ADR-005](../adr/ADR-005-three-process-architecture.md) ·
 [PRODUCT_DEFINITION §6](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md).
@@ -69,7 +78,7 @@ Nguồn-chuẩn kiến trúc service: [ADR-005](../adr/ADR-005-three-process-arc
 > `mkddc-iobus` (ADR-005 ghi rõ "core gộp io-driver + engine" ở mức service, nhưng cổng
 > UART vật lý do iobus quản để cô lập I/O chậm/lỗi khỏi vòng real-time của core). Hợp đồng
 > seqlock/SHM **giữ nguyên**. Rename `kinexus_shm.h → mkddc_shm.h` **đã thực hiện 2026-06-11**
-> (struct/magic giữ nguyên — phạm vi rename chốt tại [16_CONTRACT_FREEZE §6](16_CONTRACT_FREEZE.md)).
+> (struct/magic giữ nguyên — phạm vi rename chốt tại [16_CONTRACT_FREEZE §6](archive/16_CONTRACT_FREEZE.md)).
 
 ---
 
@@ -78,7 +87,7 @@ Nguồn-chuẩn kiến trúc service: [ADR-005](../adr/ADR-005-three-process-arc
 | Nhóm | Người | Sở hữu | Tài liệu chính |
 |------|-------|--------|----------------|
 | **Dev 1 — FW_MCU** | Dev firmware | `fw/` | [04_FW_MCU](04_FW_MCU_IMPLEMENTATION_GUIDE.md), [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
-| **Dev 2 — SOM/Core/Iobus/HMI** | Dev SOM | `services/iobus/`, `services/core/`, `services/hmi/`, `shared/` | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md), [08_HMI](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md), [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
+| **Dev 2 — SOM/Core/Iobus/HMI** | Dev SOM | `apps/iobus/`, `apps/core/`, `apps/hmi/`, `contracts/` | [06_IOBUS](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md), [07_CORE](07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md), [08_HMI](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md), [05_IOP_UART](05_IOP_UART_IMPLEMENTATION_GUIDE.md) |
 | **Dev 3 — Web/BE** | Dev web | `web/` và local HMI auth/audit broker | [09_WEB](09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md), [08_HMI](08_MKDDC_HMI_IMPLEMENTATION_GUIDE.md) |
 
 Phân việc chi tiết: [02_TEAM_WORK_SPLIT](02_TEAM_WORK_SPLIT.md).
@@ -184,17 +193,17 @@ và tiếp tục read-only; không queue/replay lệnh mù.
 | 13 | [DEFINITION_OF_DONE](13_DEFINITION_OF_DONE.md) | tất cả | biết khi nào xong |
 | 14 | [BRINGUP_GUIDE](14_BRINGUP_GUIDE.md) | KS bring-up | dựng board lần đầu |
 | 15 | [RELEASE_HANDOVER_CHECKLIST](15_RELEASE_HANDOVER_CHECKLIST.md) | PM/Lead | trước bàn giao |
-| 16 | [CONTRACT_FREEZE](16_CONTRACT_FREEZE.md) | tất cả | **trước khi code** — bản chốt hợp đồng, hết tranh cãi |
+| 16 | [CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md) | — | 🗄 **đã lưu trữ** — freeze IOP v1.1, thay bằng `contracts/iop/iop_protocol.h` v2.0 + ADR-010 |
 | 17 | [QUICK_START_SOM_DEV](17_QUICK_START_SOM_DEV.md) | Dev 2 (mới) | ngày đầu tiên vào dự án |
-| 18 | [WEEK1_SOM_BRINGUP_CHECKLIST](18_WEEK1_SOM_BRINGUP_CHECKLIST.md) | Dev 2 | tuần đầu trên SOM |
+| 18 | [WEEK1_SOM_BRINGUP_CHECKLIST](archive/18_WEEK1_SOM_BRINGUP_CHECKLIST.md) | — | 🗄 **đã lưu trữ** — mốc tuần đầu đã qua, lệnh build trỏ `services/` đã xoá; dùng [14](14_BRINGUP_GUIDE.md) + [27](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) |
 | 19–20 | Audit/checklist tài liệu ngày 2026-06-11 đã loại; phục hồi tại `b69fdf1` | Lead/PM | Historical — dùng cây source cũ, không còn authority |
 | 21 | [VIRTUAL_COM_DECISION](21_VIRTUAL_COM_DECISION.md) | Dev 2 + Tester | khi chưa có board, cần bridge serial ảo đúng chuẩn |
 | 22 | [SOM_SRC_IMPLEMENTATION_PLAN](22_SOM_SRC_IMPLEMENTATION_PLAN.md) | Dev 2 + Lead | khi cần plan cực chi tiết để dựng source SOM từ cây trống |
-| 23 | [GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | Dev 2 + Lead | S7 #4: stateful graph + persist counter |
+| 23 | [GRAPH_STATEFUL_COMPONENTS_PLAN](archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) | — | 🗄 **đã lưu trữ** — `COR-009`/`COR-010` xong 2026-06-13, 97/97 test pass |
 | [A] | [CODE_REVIEW_S7_HARDENING](../review/2026-06-13-s7-hardening-review.md) | Lead/Reviewer | [archived] review cụm S7 #1/#2/#3 |
-| 24 | [SOM_FW_STATUS_REPORT_ISO](24_SOM_FW_STATUS_REPORT_ISO.md) | PM/Lead | FW status report ISO format |
+| 24 | [SOM_FW_STATUS_REPORT_ISO](archive/24_SOM_FW_STATUS_REPORT_ISO.md) | — | 🗄 **đã lưu trữ** — báo cáo chụp trạng thái 2026-06-13 trên cây `services/` đã xoá |
 | 25 | [BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #5: BACnet/IP full path + BTL pretest |
-| 26 | [MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md) | Dev 2 + Protocol Lead | S7 #6: Modbus RTU master + ext cache |
+| 26 | [MODBUS_IMPLEMENTATION_PLAN](archive/26_MODBUS_IMPLEMENTATION_PLAN.md) | — | 🗄 **đã lưu trữ** — As-Built v1; target hiện hành là [49](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) |
 | 27 | [SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK](27_SOM_BOARD_DEPLOY_NO_MCU_RUNBOOK.md) | Dev 2 + DevOps + QA | build/deploy lên SOM khi chưa có MCU |
 
 ---
@@ -202,9 +211,9 @@ và tiếp tục read-only; không queue/replay lệnh mù.
 ## 9. Nguồn-chuẩn (khi mâu thuẫn theo thứ tự này)
 
 > ⚠️ **Rule số 1 (Contract Freeze):** với mọi GIÁ TRỊ thực thi — opcode, payload, enum, FAULT
-> bit, RESET reason, CRC, hằng số, SHM layout/path/ownership — **header trong `shared/` là
+> bit, RESET reason, CRC, hằng số, SHM layout/path/ownership — **header trong `contracts/` là
 > chuẩn CUỐI CÙNG**. Docs (kể cả spec 01_specs) chỉ là diễn giải: docs lệch header → header
-> thắng → sửa docs. Chi tiết + quy trình đổi hợp đồng: [16_CONTRACT_FREEZE](16_CONTRACT_FREEZE.md).
+> thắng → sửa docs. Chi tiết + quy trình đổi hợp đồng: [16_CONTRACT_FREEZE](archive/16_CONTRACT_FREEZE.md).
 
 | Chủ đề | Nguồn-chuẩn |
 |--------|-------------|
@@ -216,9 +225,9 @@ và tiếp tục read-only; không queue/replay lệnh mù.
 | Chân MCU | [FW_PINOUT_MASTER](../02_design/firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) |
 | SHM/IPC SOM (diễn giải, ownership chi tiết) | [06_IOBUS §5](06_MKDDC_IOBUS_IMPLEMENTATION_GUIDE.md) + [SW_ARCH_SPEC §2](../01_specs/SW_ARCH_SPEC_MK-DDC-24_VI.md) |
 | Graph/Config/REST | [GRAPH_SCHEMA](../02_design/interfaces/GRAPH_SCHEMA_MK-DDC-24_VI.md) · [CONFIG_SCHEMA](../02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) · [REST_API_OPENAPI](../02_design/interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) |
-| Stateful graph Rev A.1 | [23_GRAPH_STATEFUL_COMPONENTS_PLAN](23_GRAPH_STATEFUL_COMPONENTS_PLAN.md) + [SW_RUNTIME_EXECUTION_MODEL §6](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) |
+| Stateful graph Rev A.1 | [SW_RUNTIME_EXECUTION_MODEL §6](../02_design/software/SW_RUNTIME_EXECUTION_MODEL_MK-DDC-24_VI.md) + mã `apps/core/domain/graph/` (plan gốc đã lưu trữ: [23](archive/23_GRAPH_STATEFUL_COMPONENTS_PLAN.md)) |
 | BACnet/IP implementation | [25_BACNET_IMPLEMENTATION_PLAN](25_BACNET_IMPLEMENTATION_PLAN.md) + [BACNET_PICS_EPICS](../02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) |
-| Modbus RTU master implementation | [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md) + [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) |
+| Modbus RTU master implementation | [49_MODBUS_RTU_IMPLEMENTATION_PLAN](49_MODBUS_RTU_IMPLEMENTATION_PLAN.md) + [ICD-IF-MBRTU-001](../02_design/interfaces/MODBUS_RTU_INTERFACE_SPEC.md) + [MODBUS_REGISTER_MAP](../02_design/interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) (plan As-Built v1 đã lưu trữ: [26](archive/26_MODBUS_IMPLEMENTATION_PLAN.md)) |
 
 ---
 **Rev** 1.3 | 2026-06-13 (thêm doc 26 SOM no-MCU deploy runbook) ·

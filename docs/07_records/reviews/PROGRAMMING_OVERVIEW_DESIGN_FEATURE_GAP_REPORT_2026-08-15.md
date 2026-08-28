@@ -38,7 +38,7 @@
 
 Đọc trực tiếp, không suy đoán, các lớp sau tại thời điểm viết:
 
-- **FE**: `apps/web-ui/src/features/programming/overview/OverviewPage.tsx`, `design/DesignWorkspacePage.tsx`, `design/useDraftWorkspace.ts`, `design/editor/ProgramsTab.tsx`, `fbd/StructuredFbdEditor.tsx`, `fbd/model.ts`, `fbd/commands.ts`, `model/types.ts`, `api/queries.ts`, `layout/ProgrammingContextBar.tsx`, `ProgrammingRoutes.tsx`.
+- **FE**: `apps/web-ui/src/features/programming/overview/OverviewPage.tsx`, `design/DesignWorkspacePage.tsx`, `design/useDraftWorkspace.ts`, `design/editor/ProgramsTab.tsx`, `fbd/StructuredFbdEditor.tsx`, `fbd/model.ts`, `fbd/commands.ts`, `model/types.ts`, `api/queries.ts`, `layout/ProgrammingContextStrip.tsx`, `ProgrammingRoutes.tsx`.
 - **BE (Go)**: `apps/web-api/internal/programming/application/{projects,checks,operations,runtime,monitor,trace}.go`, `apps/web-api/internal/programming/compiler/runner.go`, `apps/web-api/internal/programming/transport/http/router.go`, `apps/web-api/internal/programming/store/audit.go`.
 - **FW-SOM/Core (C++)**: `apps/core/application/st/{st_parser,st_semantic,st_compile,st_fbd_compile,st_io_map,st_artifact_manifest,st_exec,st_process_image,st_retain}.cpp`, `apps/core/application/runtime/scan_loop.cpp`, sinh mã `st_profile_generated.hpp`.
 - **Tài liệu đối chiếu**: `docs/04_uiux/PROGRAMMING_UI_UX_DESIGN.md` (`UX-WEB-PROG-001`), `docs/02_design/software/PROGRAMMING_FE_DESIGN.md` (`DDD-FE-PROG-001`), `docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md`, `docs/02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md`.

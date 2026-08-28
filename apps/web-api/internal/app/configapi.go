@@ -362,6 +362,11 @@ func handleGetConfig[T any](a *App, w http.ResponseWriter, group configAPIGroup,
 }
 
 func (a *App) writeConfigGroup(r *http.Request, group configAPIGroup, cfg any) (ConfigPutResult, error) {
+	/* `T57-3.14`: chụp bản ĐANG lưu trước khi ghi đè, để vết audit nói được
+	 *sửa cái gì* chứ không chỉ *đã sửa*. Đọc hỏng thì bỏ phần tóm tắt —
+	 không được để một tiện ích nhật ký chặn đường ghi cấu hình. */
+	previous := a.readConfigGroupRaw(group)
+
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return ConfigPutResult{}, fmt.Errorf("encode config: %w", err)
@@ -383,8 +388,21 @@ func (a *App) writeConfigGroup(r *http.Request, group configAPIGroup, cfg any) (
 	if principal := principalFromContext(r.Context()); principal != nil {
 		user = principal.Username
 	}
-	a.audit.Change(user, "config."+group.key, group.file, result, r.RemoteAddr)
+	a.audit.ChangeWithDetail(user, "config."+group.key, group.file, result, r.RemoteAddr, summarizeConfigDiff(previous, cfg))
 	return ConfigPutResult{Result: result, Applied: applied, Reload: group.reload, Warnings: warnings}, nil
+}
+
+// readConfigGroupRaw đọc tệp cấu hình hiện hành ở dạng chung, chỉ để so khác biệt.
+func (a *App) readConfigGroupRaw(group configAPIGroup) map[string]any {
+	data, err := os.ReadFile(a.configPath(group.file))
+	if err != nil {
+		return nil
+	}
+	var generic map[string]any
+	if err := json.Unmarshal(data, &generic); err != nil {
+		return nil
+	}
+	return generic
 }
 
 func handlePutConfig[T any](a *App, w http.ResponseWriter, r *http.Request, group configAPIGroup, validate func(T) []configValidationError) {

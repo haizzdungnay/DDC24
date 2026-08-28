@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { login } from './helpers/session'
 
 /**
  * Nghiệm thu PA3 trên trình duyệt thật — PA3-602.
@@ -11,14 +12,6 @@ import { expect, test, type Page } from '@playwright/test'
  * Các đường có dữ liệu thật được phủ bằng `page.route()` để nạp một snapshot
  * `/overview` cố định, nên khẳng định về bố cục không phụ thuộc vào bo.
  */
-
-async function login(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin')
-  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 })
-}
 
 async function navigate(page: Page, path: string) {
   await page.evaluate((target) => {
@@ -184,7 +177,20 @@ test.describe('Inputs — live mobile không dựng dữ liệu', () => {
 
   test('không mượn điểm demo và không cuộn ngang ở 390 px', async ({ page }) => {
     await navigate(page, '/eng/inputs')
-    await expect(page.getByRole('heading', { name: /Dữ liệu trực tiếp|Live Data/ })).toBeVisible()
+
+    /* Khối biểu đồ live nằm trong tab "Chẩn đoán", KHÔNG phải tab mặc định
+     * (`activeTab` khởi tạo bằng `'electrical'` — `InputsPage.tsx`). Bản cũ của
+     * bài test khẳng định thẳng vào nó ngay sau `navigate()` nên nó tìm một
+     * heading chưa từng được render; heading đó lại còn mang tên sai
+     * ("Dữ liệu trực tiếp"/"Live Data" trong khi trang ghi "Biểu đồ trực
+     * tiếp"/"Live Chart"). Hai lỗi cộng lại làm bài test đỏ vĩnh viễn, và không
+     * cổng CI nào chạy bộ này nên không ai thấy.
+     *
+     * Điều CẦN chứng minh vẫn nguyên vẹn: ở live, kênh không có telemetry phải
+     * NÓI RA là chưa có dữ liệu, tuyệt đối không mượn số của simulator. */
+    await page.getByRole('button', { name: /^Chẩn đoán$|^Diagnostics$/ }).click()
+
+    await expect(page.getByRole('heading', { name: /Biểu đồ trực tiếp|Live Chart/ })).toBeVisible()
     await expect(page.getByText(/Chưa có dữ liệu live cho kênh này\.|No live data for this channel yet\./)).toBeVisible()
     await expect(page.getByText('23.7 C')).toHaveCount(0)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)

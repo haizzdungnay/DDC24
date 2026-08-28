@@ -17,6 +17,17 @@
 | `/dev/ttyS2` | (chia sẻ) | Bluetooth HCI transport | `rtk_hciattach -n -s 115200 /dev/ttyS2 rtk_h5` | BT dùng chung ttyS2 |
 | `/dev/ttyS5` | `okay` | **RS485 #1 — Modbus RTU Master** | `mkddc-modbus-rtu` (khi chạy) | Cổng RS485 duy nhất hiện tại |
 
+> [!NOTE]
+> **Đã đo xác nhận 2026-08-18** (`EVID-MBRTU-FOXLINX-P16-2026-08-18`): `uart5` được
+> mux đúng ra **Header P16 chân 8 (TX) và chân 10 (RX)** — `pin 134 (gpio4-6)` và
+> `pin 135 (gpio4-7)`, nhóm `uart5m0-xfer-pins`. Chân 8 đã đo thấy **dao động đúng
+> 50%** khi truyền mẫu `0x55`, tức uart5 thật sự lái được chân trên header.
+> Không cần sửa device tree gì thêm cho cổng RS-485 #1.
+>
+> Điều **chưa** chứng minh được từ phía SoC là đường **RX**: chân 10 có
+> `input bias pull up` nội, nên lúc thả nổi nó đọc ra mức cao y hệt lúc có
+> transceiver giữ idle. Chỉ loopback hoặc một slave thật mới tách được — xem §4.4.
+
 ### 1.2 Cổng UART disabled (6 cổng)
 
 Tất cả đều có thể bật bằng cách sửa Device Tree. Xem chi tiết tại [FOXLINX_PINOUT_MAP.md §2](FOXLINX_PINOUT_MAP.md#2-bảng-uart-mux-tổng-hợp).
@@ -203,6 +214,49 @@ write(gpio_fd, "0", 1);  // DE low = receive
 
 ---
 
+### 4.4 Kiểm chứng cổng bằng `rs485_check.sh`
+
+Script `tools/rs485/rs485_check.sh` (đưa lên board tại `/usr/local/bin/rs485_check.sh`)
+gói lại ba phép kiểm hay dùng. Lý do có script riêng: **trạng thái "RS-485 dùng được
+chưa" không đọc được từ device tree** — DT chỉ nói UART đã enable và chân đã mux, nó
+không nói dây RX có nối vào transceiver hay không.
+
+```bash
+# Xem cổng trỏ đi đâu, mux ra chân nào, có tiến trình nào đang giữ không
+rs485_check.sh info /dev/rs485-1
+
+# Kiểm đường TX+RX của SoC — cần nối tắt P16 chân 8 ↔ chân 10 trước
+rs485_check.sh loopback /dev/rs485-1 9600
+
+# Kiểm end-to-end tới thiết bị thật trên bus A/B (bằng chứng mạnh nhất)
+rs485_check.sh scan /dev/rs485-1 9600 1 247
+```
+
+`scan` gửi khung Modbus `0x03` cho từng slave và coi **bất kỳ** khung trả lời nào —
+kể cả exception — là bằng chứng cả TX lẫn RX đều thông.
+
+> [!CAUTION]
+> `scan` mở và ghi lên cổng. Nếu `mkddc-iobus` đang chạy Modbus RTU thật trên bus đó
+> thì dừng nó trước, nếu không hai bên sẽ tranh nhau đường truyền và cả hai cùng lỗi.
+> Chạy `rs485_check.sh info` để biết cổng có đang bị giữ không.
+
+### 4.5 Bảng đấu dây RS-485 #1 trên Header P16
+
+| Chân module RS-485 | Nối vào P16 | Tín hiệu SoC |
+|---|:---:|---|
+| TXD (vào module) | **8** | `GPIO4_A6` — UART5_TX_M0 |
+| RXD (ra module) | **10** | `GPIO4_A7` — UART5_RX_M0 |
+| GND | 6 (hoặc 14/20/25/30/34/39) | — |
+| VCC | 1 / 17 (3V3), hoặc 2 / 4 (5V) | theo yêu cầu module |
+| DE/RE | **không nối** | transceiver auto-direction; kernel không lái DE/RE |
+
+> [!WARNING]
+> **Chân 7 không phải chân UART.** `GPIO0_C7` ở chân 7 là GPIO thường và đang
+> `MUX UNCLAIMED`. Nối RXD của module vào chân 7 thì cổng sẽ gửi được nhưng không
+> bao giờ nhận được byte nào — triệu chứng giống hệt "slave không trả lời".
+
+---
+
 ## 5. Phương án Link cứng Device Node (Symlinks cho 2 Cổng RS485)
 
 Để đảm bảo phần mềm `mkddc-iobus` và `mkddc-web-api` truy cập ổn định, độc lập với chỉ số bus phần cứng của Linux kernel, dự án áp dụng **Phương án Link Cứng (Symbolic Links Canonical)**:
@@ -381,3 +435,4 @@ echo "TEST RS485 BUS 2" > /dev/rs485-2
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-05 | Phiên bản đầu tiên — đề xuất ttyS1 M1 cho RS485 #2, quy trình bật DT, direction control |
+| 1.1 | 2026-08-18 | Ghi nhận kết quả đo trên board: uart5 mux đúng ra P16 chân 8/10 và TX lái được chân thật; thêm §4.4 công cụ `rs485_check.sh` và §4.5 bảng đấu dây; cảnh báo chân 7 không phải chân UART |

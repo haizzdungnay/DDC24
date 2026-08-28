@@ -13,9 +13,10 @@ import (
 )
 
 type Options struct {
-	Path      string
-	BackupDir string
-	Now       func() time.Time
+	Path                  string
+	BackupDir             string
+	Now                   func() time.Time
+	SystemLibraryProvider SystemLibraryProvider
 }
 
 type Store struct {
@@ -23,6 +24,7 @@ type Store struct {
 	path      string
 	backupDir string
 	now       func() time.Time
+	system    *SystemLibrarySnapshot
 }
 
 func OpenProgrammingStore(ctx context.Context, options Options) (*Store, error) {
@@ -104,7 +106,24 @@ func OpenProgrammingStore(ctx context.Context, options Options) (*Store, error) 
 		_ = db.Close()
 		return nil, err
 	}
-	return &Store{db: db, path: absPath, backupDir: backupDir, now: now}, nil
+	store := &Store{db: db, path: absPath, backupDir: backupDir, now: now}
+	provider := options.SystemLibraryProvider
+	if provider == nil {
+		provider = generatedSystemLibraryProvider{}
+	}
+	if provider != nil {
+		snapshot, err := provider.LoadSystemLibrary(ctx)
+		if err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("nạp SYSTEM Control Library: %w", err)
+		}
+		if err := validateSystemLibrarySnapshot(snapshot); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("SYSTEM Control Library không hợp lệ: %w", err)
+		}
+		store.system = cloneSystemLibrarySnapshot(&snapshot)
+	}
+	return store, nil
 }
 
 func (s *Store) Close() error {

@@ -10,6 +10,7 @@ import (
 
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
+	"mkddc-web/internal/programming/domain"
 )
 
 type fakeCheckRunner struct {
@@ -55,12 +56,14 @@ func TestCheckServiceCompilesImmutableRevisionAndPersistsArtifact(t *testing.T) 
 	artifactBytes := []byte("verified-artifact")
 	digest := sha256.Sum256(artifactBytes)
 	runner := &fakeCheckRunner{result: programmingcompiler.Result{OK: true, Artifact: artifactBytes, ArtifactSHA256: digest, Manifest: json.RawMessage(`{"manifestVersion":1}`),
-		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30", LibraryVersion: "rev-a.1", IntegrityMode: "HASH_ONLY", TargetABI: 3841}}
+		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30", LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY", TargetABI: 3841}}
 	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
+	packager := &fakePackager{}
+	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: packager,
+		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
 		Now: func() time.Time { return time.Date(2026, 8, 11, 10, 0, 0, 0, time.UTC) }})
 	if err != nil {
 		t.Fatal(err)
@@ -76,8 +79,14 @@ func TestCheckServiceCompilesImmutableRevisionAndPersistsArtifact(t *testing.T) 
 		t.Fatalf("processed=%v err=%v", processed, err)
 	}
 	view, err := checks.GetCheck(context.Background(), accepted.CheckID)
-	if err != nil || view.State != "PASSED" || view.Artifact == nil || view.Artifact.SHA256 != jsonHashHex(digest) || len(view.Diagnostics) != 0 {
+	if err != nil || view.State != "PASSED" || view.Artifact == nil || len(view.Diagnostics) != 0 {
 		t.Fatalf("view=%+v err=%v", view, err)
+	}
+	stored, err := store.GetCheck(context.Background(), accepted.CheckID)
+	if err != nil || stored.Artifact == nil || stored.Artifact.SchemaVersion != 2 || packager.calls != 1 ||
+		len(packager.programs) != 1 || packager.programs[0].PeriodMs != 1000 {
+		t.Fatalf("Revision v2 không đóng gói chu kỳ vào container: stored=%+v packager=%+v err=%v",
+			stored.Artifact, packager.programs, err)
 	}
 	if runner.input.SourceID != "55555555-5555-4555-8555-555555555555" || runner.input.Language != "ST" {
 		t.Fatalf("compiler input=%+v", runner.input)
@@ -135,12 +144,13 @@ func TestCheckServiceResolvesIoMapFromVariablesAndBindings(t *testing.T) {
 	artifactBytes := []byte("verified-artifact")
 	digest := sha256.Sum256(artifactBytes)
 	runner := &fakeCheckRunner{result: programmingcompiler.Result{OK: true, Artifact: artifactBytes, ArtifactSHA256: digest, Manifest: json.RawMessage(`{"manifestVersion":1}`),
-		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30", LibraryVersion: "rev-a.1", IntegrityMode: "HASH_ONLY", TargetABI: 3841}}
+		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30", LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY", TargetABI: 3841}}
 	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
+	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: &fakePackager{},
+		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
 		Now: func() time.Time { return time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC) }})
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +227,8 @@ func TestCheckServiceFailsClosedWhenBindingReferencesNonIoVariableClass(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
+	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: &fakePackager{},
+		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
 		Now: func() time.Time { return time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC) }})
 	if err != nil {
 		t.Fatal(err)

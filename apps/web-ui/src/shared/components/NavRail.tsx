@@ -1,6 +1,6 @@
 import { Bell, CalendarDays, Activity, Cable, ChevronDown, ChevronRight, Clock3, Gauge, Home, LineChart, Network, PanelLeft, PanelLeftClose, Settings, ShieldCheck, ScrollText, SlidersHorizontal, Stethoscope, TestTube2, Users, X, Zap } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
 import { ROUTE_MIN_ROLE, roleAtLeast } from '../../features/auth'
 import { useI18n } from '../i18n'
@@ -10,14 +10,27 @@ import type { HealthResponse, UserRole } from '../types'
 import { cn } from '../utils'
 
 /**
- * Bốn nhóm điều hướng theo UX-DES §3 và IA của UX-REQ §6.
+ * Bốn nhóm điều hướng — `ADR-032` (Accepted 2026-08-18) là quyết định canonical.
  *
  * Thay đổi so với bản trước: `Cài đặt` (trộn hiển thị, người dùng, mạng, thời
  * gian, thiết bị) tách thành `Vận hành` và `Hệ thống`, và `Chẩn đoán` xuất hiện
  * như một mục THẬT trong nhóm Kỹ thuật. Trước đây không có mục nào dẫn tới
  * trang chẩn đoán vì trang đó không tồn tại — nó chính là Dashboard (PA3-F13).
+ *
+ * BẢNG NÀY LÀ HỢP ĐỒNG, KHÔNG PHẢI DANH SÁCH TIỆN TAY. `route-menu-contract.test.ts`
+ * đối chiếu nó với bảng route trong `app/App.tsx` theo cả hai chiều, nên:
+ *
+ * - thêm một route mới mà quên xếp nhóm ⇒ test đỏ, không im lặng thành trang
+ *   chỉ tới được bằng cách gõ URL (finding `F-UX-17`);
+ * - để một mục trỏ tới route không tồn tại ⇒ cũng test đỏ.
+ *
+ * Hai route CỐ Ý không có trong bảng này, theo `ADR-033`: `/eng/user-parameters`
+ * và `/eng/aux`. Chúng bị cách ly chứ không phải bị bỏ quên — lý do đầy đủ nằm
+ * trong `ADR-033` và trong danh sách `QUARANTINED_ROUTES` của chính test trên.
+ * Đưa một trong hai vào menu là đảo ngược một quyết định, nên phải sửa `ADR-033`
+ * trước; test sẽ chặn nếu chỉ sửa mã.
  */
-const groups = [
+export const NAV_GROUPS = [
   {
     id: 'overview',
     titleKey: 'overview',
@@ -63,7 +76,33 @@ const groups = [
   }
 ] as const
 
-type GroupId = typeof groups[number]['id']
+type GroupId = typeof NAV_GROUPS[number]['id']
+
+/** Tiền tố route của workspace Lập trình — nguồn duy nhất cho luật focus mode. */
+export const PROGRAMMING_WORKSPACE_PREFIX = '/eng/programming'
+
+/**
+ * `D-01` của Plan 60 — **focus mode**.
+ *
+ * Trong `/eng/programming`, `ProgrammingFeatureRail` 220 px THAY rail toàn cục
+ * này. Lý do là ngân sách ngang, không phải thẩm mỹ: rail toàn cục rộng 232 px,
+ * để cả hai thì ở 1280 px workspace chỉ còn 828 px và PGM-02 (cây POU 220 +
+ * editor + inspector 280) chỉ còn ~328 px cho editor.
+ *
+ * ĐÂY LÀ CHẶN **RENDER**, KHÔNG PHẢI XOÁ MỤC. `NAV_GROUPS` giữ nguyên từng
+ * dòng, nên hợp đồng route↔menu của `ADR-032` (`route-menu-contract.test.ts`)
+ * không bị động tới, và mục `programming` vẫn hiện ở mọi trang khác.
+ *
+ * `enabled` (cờ `PROGRAMMING_REV_A_ENABLED`) là điều kiện BẮT BUỘC thứ hai:
+ * khi cờ tắt, `/eng/programming` render `UnavailableFeaturePage` chứ không phải
+ * `ProgrammingLayout`, nên KHÔNG có rail nào thay thế. Ẩn rail toàn cục khi đó
+ * sẽ để người dùng ≥1024 px không còn điều hướng nào — nút mở ngăn kéo của
+ * `TopBar` là `lg:hidden`.
+ */
+export function isProgrammingFocusRoute(pathname: string, enabled: boolean = PROGRAMMING_REV_A_ENABLED): boolean {
+  if (!enabled) return false
+  return pathname === PROGRAMMING_WORKSPACE_PREFIX || pathname.startsWith(`${PROGRAMMING_WORKSPACE_PREFIX}/`)
+}
 
 /**
  * Lọc mục menu theo vai trò — WEB-UX-009.
@@ -101,7 +140,7 @@ function NavGroups({ alarmCount, collapsed, role, onNavigate }: {
 
   return (
     <>
-      {groups.map((group) => {
+      {NAV_GROUPS.map((group) => {
         const isOpen = collapsed || openGroups[group.id]
         const Chevron = isOpen ? ChevronDown : ChevronRight
         const items = group.items.filter((item) =>
@@ -187,10 +226,15 @@ function DeviceCard({ firmware }: { firmware: string }) {
 export function NavRail({ alarmCount, device }: { alarmCount: number; device: HealthResponse | null }) {
   const { t } = useI18n()
   const { session } = useAuth()
+  const { pathname } = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const deviceTitle = device?.deviceName ?? PRODUCT_INFO.name
   const firmware = device?.firmware ?? PRODUCT_INFO.firmware
   const ToggleIcon = collapsed ? PanelLeft : PanelLeftClose
+
+  // D-01 focus mode. Đặt SAU toàn bộ hook để thứ tự hook không đổi giữa hai
+  // nhánh — trả về sớm trước một `useState` là lỗi runtime của React.
+  if (isProgrammingFocusRoute(pathname)) return null
 
   return (
     <aside className={cn(

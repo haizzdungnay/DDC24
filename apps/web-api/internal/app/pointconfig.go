@@ -60,9 +60,20 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
 		return
 	}
-	if patch.Tag == nil && patch.Name == nil && patch.Unit == nil && patch.TrendEnabled == nil {
-		writeValidationErrors(w, []configValidationError{{Path: "$", Message: "tag, name, unit hoặc trendEnabled là bắt buộc"}})
+	if patch.Tag == nil && patch.Name == nil && patch.Unit == nil && patch.TrendEnabled == nil && patch.Equipment == nil {
+		writeValidationErrors(w, []configValidationError{{Path: "$", Message: "tag, name, unit, trendEnabled hoặc equipment là bắt buộc"}})
 		return
+	}
+	// `ADR-042`: chuẩn hoá và giới hạn ngay tại cửa. Thẻ dài vô hạn sẽ phá bố
+	// cục nhóm trên Monitor, và khoảng trắng thừa sẽ đẻ ra hai nhóm cho cùng
+	// một thiết bị.
+	if patch.Equipment != nil {
+		normalized := normalizeEquipmentTag(*patch.Equipment)
+		if len([]byte(normalized)) > equipmentTagMaxBytes {
+			writeValidationErrors(w, []configValidationError{{Path: "equipment", Message: fmt.Sprintf("tối đa %d byte", equipmentTagMaxBytes)}})
+			return
+		}
+		patch.Equipment = &normalized
 	}
 	if patch.Tag != nil && !strings.HasPrefix(id, "VP") {
 		writePointTagErrors(w, []configValidationError{{Path: "tag", Message: "physical point tag is fixed", Reason: "physical_point_tag_fixed", PointID: id, Tag: *patch.Tag}})
@@ -94,6 +105,9 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if patch.TrendEnabled != nil {
 			vpCfg.Items[index].LogEnabled = *patch.TrendEnabled
+		}
+		if patch.Equipment != nil {
+			vpCfg.Items[index].Equipment = *patch.Equipment
 		}
 		if errs := append(validateConfigVirtualPoints(vpCfg), validateVirtualPointMetadata(vpCfg)...); len(errs) > 0 {
 			a.auditPointMetadataPatch(r, id, oldTag, oldName, patch, "rejected")
@@ -153,6 +167,13 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if patch.TrendEnabled != nil {
 		next["trend_enabled"] = *patch.TrendEnabled
+	}
+	if patch.Equipment != nil {
+		if *patch.Equipment == "" {
+			delete(next, "equipment")
+		} else {
+			next["equipment"] = *patch.Equipment
+		}
 	}
 	rows[index] = next
 	switch prefix {
@@ -235,4 +256,19 @@ func (a *App) readPhysicalPointForConfig(ctx context.Context, id string) PointDT
 	}
 	globalChannel, _ := globalPointChannel(id)
 	return PointDTO{ID: id, Channel: globalChannel, Kind: prefix, Value: value, Quality: "good", Source: "config", UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano), Tag: id, Name: id, Priority: fmt.Sprintf("%s-%02d", prefix, channel)}
+}
+
+// ── Thẻ thiết bị công nghệ — `T57-3.1` (`ADR-042`) ─────────────────────────
+
+// equipmentTagMaxBytes theo `ADR-042`: đủ cho "AHU-1 tầng 3", ngắn để nhãn nhóm
+// trên Monitor còn đọc được ở một dòng.
+const equipmentTagMaxBytes = 48
+
+// normalizeEquipmentTag gom khoảng trắng và cắt hai đầu.
+//
+// Chuẩn hoá là điều kiện để NHÓM đúng: `AHU-1 ` và `AHU-1` phải rơi vào cùng
+// một nhóm, nếu không màn hình sẽ có hai khối cùng tên và người đọc không có
+// cách nào biết vì sao.
+func normalizeEquipmentTag(raw string) string {
+	return strings.Join(strings.Fields(raw), " ")
 }

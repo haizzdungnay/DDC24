@@ -1,0 +1,317 @@
+"""Diễn tập CÀI MỚI → NÂNG CẤP → ROLLBACK trên cây giả (T59-606).
+
+Vì sao phải có file này: ba thao tác cuối cùng của một bản phát hành — cài lên
+bo trắng, nâng cấp bo đang chạy, và lùi lại khi bản mới hỏng — trước đây chỉ
+được kiểm bằng cách ĐỌC `install.sh`/`rollback.sh` rồi tin. Mọi lỗi ở lớp này
+đều thuộc loại chỉ lộ ra trên bo thật, đúng vào lúc không có đường lùi:
+`T59-605` đã bắt được `mkddc-st-package` build-mà-không-cài theo đúng kiểu đó.
+
+`MKDDC_INSTALL_ROOT=DIR` cho phép hai script ghi vào một cây giả và bỏ các thao
+tác cần quyền hệ thống (user/group, systemctl). Nhờ vậy ba kịch bản chạy được
+trong test, trên máy thường, không sudo, không chạm hệ thống thật.
+
+Điều kiện chạy: cần `build/release` đã dựng (`platform/packaging/build-release.sh`).
+Thiếu thì test SKIP — cổng release riêng đã canh việc dựng gói.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+INSTALL = ROOT / "platform/packaging/install.sh"
+ROLLBACK = ROOT / "platform/packaging/rollback.sh"
+RELEASE = ROOT / "build/release"
+
+# Binary bắt buộc có mặt sau khi cài. Danh sách này là hợp đồng của gói: một
+# binary được build mà không có ở đây thì không ai phát hiện lúc nó bị bỏ quên.
+INSTALLED_BINARIES = [
+    "usr/sbin/mkddc-core",
+    "usr/sbin/mkddc-iobus",
+    "usr/sbin/mkddc-netcfg",
+    "usr/sbin/mkddc-st-compile",
+    "usr/sbin/mkddc-st-package",
+    "opt/mkddc-web/mkddc-web",
+    "opt/mkddc-web/mkddc-schedule-sim",
+]
+
+# Binary phải được ROLLBACK khôi phục. Thiếu một dòng ở đây nghĩa là sau khi lùi,
+# bo chạy lẫn hai phiên bản của cùng một tính năng.
+ROLLED_BACK_BINARIES = INSTALLED_BINARIES
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def release_ready() -> bool:
+    return (RELEASE / "checksums.sha256").is_file() and (
+        RELEASE / "cpp/core/mkddc-core"
+    ).is_file()
+
+
+@unittest.skipUnless(release_ready(), "chưa dựng build/release (chạy build-release.sh)")
+class ReleaseDryRunTest(unittest.TestCase):
+    """Ba kịch bản chạy TUẦN TỰ trên cùng một cây giả, đúng thứ tự đời thật."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.mkdtemp(prefix="mkddc-dryrun-")
+        cls.root = Path(cls._tmp) / "target"
+        cls.root.mkdir(parents=True)
+        cls.fresh_log = cls._install()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls._tmp, ignore_errors=True)
+
+    @classmethod
+    def _run(cls, script: Path, *args: str) -> str:
+        env = dict(os.environ, MKDDC_INSTALL_ROOT=str(cls.root))
+        done = subprocess.run(
+            ["bash", str(script), *args],
+            cwd=ROOT, env=env, capture_output=True, text=True,
+        )
+        if done.returncode != 0:
+            raise AssertionError(
+                f"{script.name} thoát {done.returncode}\n"
+                f"--- stdout ---\n{done.stdout}\n--- stderr ---\n{done.stderr}"
+            )
+        return done.stdout + done.stderr
+
+    @classmethod
+    def _install(cls) -> str:
+        return cls._run(INSTALL, "--no-enable")
+
+    # ---- 1. Cài mới lên bo trắng ------------------------------------------
+
+    def test_1_cai_moi_dat_du_binary_va_metadata(self) -> None:
+        for rel in INSTALLED_BINARIES:
+            self.assertTrue((self.root / rel).is_file(), f"cài mới thiếu {rel}")
+        self.assertTrue((self.root / "opt/mkddc-web/dist/index.html").is_file(),
+                        "cài mới thiếu FE dist")
+        for rel in ("usr/share/mkddc/provenance.json",
+                    "usr/share/mkddc/checksums.sha256",
+                    "usr/share/mkddc/runtime-checksums.sha256"):
+            self.assertTrue((self.root / rel).is_file(), f"cài mới thiếu {rel}")
+
+    def test_1_cai_moi_bat_programming_ca_hai_nua(self) -> None:
+        env = (self.root / "etc/mkddc-web.env").read_text(encoding="utf-8")
+        self.assertIn("PROGRAMMING_REV_A=1", env,
+                      "BE không được bật Programming: bo sẽ hiện workspace mà endpoint trả 404")
+        self.assertIn("JWT_SECRET=", env)
+
+    def test_1_runtime_checksums_khop_file_that(self) -> None:
+        """Hồ sơ checksum phải nói đúng về chính các file vừa cài."""
+        recorded = (self.root / "usr/share/mkddc/runtime-checksums.sha256").read_text(
+            encoding="utf-8"
+        )
+        for line in recorded.strip().splitlines():
+            digest, path = line.split()
+            actual = sha256(Path(path))
+            self.assertEqual(digest, actual, f"checksum sai cho {path}")
+
+    def test_1_khong_tao_snapshot_khi_chua_co_ban_truoc(self) -> None:
+        backups = self.root / "var/backups/mkddc"
+        self.assertFalse(backups.exists() and any(backups.iterdir()),
+                         "cài mới không được sinh snapshot rollback")
+
+    def test_1_provisioning_sinh_khoa_thiet_bi_dung_quyen(self) -> None:
+        """ADR-052: bo phải có khoá ký của chính nó sau khi cài."""
+        secret = self.root / "data/mkddc/keys/device.key"
+        public = self.root / "data/mkddc/keys/device.pub"
+        self.assertTrue(secret.is_file(), "cài xong mà bo không có khoá ký thiết bị")
+        self.assertTrue(public.is_file(), "thiếu khoá công khai để Core nạp vào tập tin cậy")
+        self.assertEqual(oct(secret.stat().st_mode & 0o777), "0o600",
+                         "khoá riêng phải 0600 — quyền file là lớp bảo vệ duy nhất ở bản này")
+        self.assertEqual(len(public.read_text(encoding="utf-8").strip()), 64,
+                         "khoá công khai phải là 64 ký tự hex")
+
+    def test_1_core_service_tin_khoa_cua_chinh_bo(self) -> None:
+        """Sinh khoá mà không ai nạp thì cũng chỉ là một file nằm đó."""
+        unit = (self.root / "etc/systemd/system/mkddc-core.service").read_text(encoding="utf-8")
+        self.assertIn("--st-trusted-key /data/mkddc/keys/device.pub", unit,
+                      "unit Core không nạp khoá thiết bị vào tập khoá tin cậy")
+
+    def test_1_duong_ky_noi_lien_tu_provisioning_toi_compiler(self) -> None:
+        """T59-607 — khoá sinh ra phải là ĐÚNG khoá backend đem đi ký.
+
+        Ba mảnh này nằm ở ba file khác nhau (`install.sh` sinh khoá, `config.go`
+        chọn đường dẫn mặc định, unit Core nạp khoá công khai). Chúng từng khớp
+        nhau chỉ nhờ trùng hợp; một lần đổi thư mục ở bất kỳ mảnh nào sẽ làm
+        compiler ký bằng khoá mà Core không tin — và triệu chứng chỉ lộ ra ở lần
+        Commission kế tiếp, dưới dạng "artifact bị từ chối" chẳng chỉ vào đâu.
+        """
+        install = INSTALL.read_text(encoding="utf-8")
+        self.assertIn("/mkddc/keys", install, "install.sh không còn provisioning khoá thiết bị")
+
+        config = (ROOT / "apps/web-api/internal/app/config.go").read_text(encoding="utf-8")
+        self.assertIn('getenv("PROGRAMMING_SIGNING_KEY", "/data/mkddc/keys/device.key")', config,
+                      "backend không lấy khoá ký ở đúng chỗ install.sh sinh ra")
+
+        unit = (self.root / "etc/systemd/system/mkddc-core.service").read_text(encoding="utf-8")
+        self.assertIn("/data/mkddc/keys/device.pub", unit,
+                      "Core tin một khoá khác với khoá backend dùng để ký")
+
+    def test_1_profile_phat_hanh_doi_chu_ky(self) -> None:
+        """T59-607 — bản phát hành phải đóng đường `HASH_ONLY`.
+
+        Kiểm ở mức contract chứ không mức binary: `integrityMode` của profile là
+        thứ sinh ra hằng cho cả Core, backend lẫn FE, nên nó là một chỗ duy nhất
+        để khoá chính sách."""
+        profile = json.loads((ROOT / "contracts/programming/product_profile_v2.json").read_text(encoding="utf-8"))
+        self.assertEqual(profile["integrityMode"], "SIGNATURE_REQUIRED",
+                         "bản phát hành không được đi ra với artifact chưa ký")
+        go_const = (ROOT / "apps/web-api/internal/programming/domain/profile_generated.go").read_text(encoding="utf-8")
+        self.assertIn('ProfileIntegrityMode  = "SIGNATURE_REQUIRED"', go_const,
+                      "hằng Go lệch khỏi profile — generator chưa chạy?")
+        cpp_const = (ROOT / "apps/core/application/st/st_profile_generated.hpp").read_text(encoding="utf-8")
+        self.assertIn('kIntegrityMode = "SIGNATURE_REQUIRED"', cpp_const,
+                      "hằng C++ lệch khỏi profile — generator chưa chạy?")
+
+    # ---- 2. Nâng cấp bo đang chạy -----------------------------------------
+
+    def test_2_nang_cap_giu_du_lieu_va_chup_snapshot(self) -> None:
+        root = self.root
+        # Dấu vết của một bo đang vận hành: cấu hình đã sửa, dữ liệu đã sinh,
+        # bí mật đã cấp. Nâng cấp không được chạm bất kỳ thứ nào.
+        io_conf = root / "data/config/io_config.conf"
+        io_conf.write_text("# nguoi van hanh da sua\nAI0=CUSTOM\n", encoding="utf-8")
+        artifact = root / "data/mkddc/programming/artifacts/keep.bin"
+        artifact.write_bytes(b"artifact cua khach")
+        # F-P59-ROLLBACK-DB-001: store Programming của bản ĐANG CHẠY. BE tự chạy
+        # migration khi khởi động và từ chối chạy nếu schema mới hơn binary, nên
+        # snapshot thiếu file này là rollback không có đường về (đo thật trên bo
+        # Foxlinx 2026-08-24: mkddc-web crash-loop sau khi hạ binary).
+        programming_db = root / "data/config/programming/programming-v1.sqlite"
+        programming_db.parent.mkdir(parents=True, exist_ok=True)
+        programming_db.write_bytes(b"SQLite format 3\x00schema-11-ban-cu")
+        env_path = root / "etc/mkddc-web.env"
+        secret_before = [l for l in env_path.read_text(encoding="utf-8").splitlines()
+                         if l.startswith("JWT_SECRET=")][0]
+        key_before = (root / "data/mkddc/keys/device.key").read_bytes()
+
+        # Đánh dấu "bản đang chạy" để phân biệt với bản sắp cài đè: chỉ có cách
+        # này mới kiểm được rollback có thực sự khôi phục ĐÚNG file cũ hay không.
+        for rel in ROLLED_BACK_BINARIES:
+            path = root / rel
+            path.write_bytes(path.read_bytes() + b"\n# BAN-CU\n")
+        old_digests = {rel: sha256(root / rel) for rel in ROLLED_BACK_BINARIES}
+        type(self).old_digests = old_digests
+
+        self._install()
+
+        snapshot = root / "var/backups/mkddc/previous"
+        self.assertTrue(snapshot.is_dir(), "nâng cấp không chụp snapshot bản đang chạy")
+        for rel in ROLLED_BACK_BINARIES:
+            name = Path(rel).name
+            self.assertTrue((snapshot / name).is_file(), f"snapshot thiếu {name}")
+            self.assertEqual(sha256(snapshot / name), old_digests[rel],
+                             f"snapshot {name} không phải bản đang chạy")
+
+        self.assertTrue((snapshot / "programming-v1.sqlite").is_file(),
+                        "snapshot thiếu store Programming — rollback sau một bản có "
+                        "migration sẽ để mkddc-web từ chối khởi động")
+        self.assertEqual((snapshot / "programming-v1.sqlite").read_bytes(),
+                         b"SQLite format 3\x00schema-11-ban-cu",
+                         "snapshot store Programming không phải bản đang chạy")
+
+        self.assertEqual(io_conf.read_text(encoding="utf-8"),
+                         "# nguoi van hanh da sua\nAI0=CUSTOM\n",
+                         "nâng cấp ghi đè cấu hình người vận hành")
+        self.assertEqual(artifact.read_bytes(), b"artifact cua khach",
+                         "nâng cấp làm mất artifact đã commission")
+        # ADR-052: nâng cấp KHÔNG được sinh lại khoá thiết bị — sinh lại làm mọi
+        # artifact đang chạy mất hiệu lực cùng lúc, gồm cả LKG.
+        self.assertEqual((root / "data/mkddc/keys/device.key").read_bytes(), key_before,
+                         "nâng cấp sinh lại khoá thiết bị — vô hiệu hoá cả LKG, phá đường lùi")
+
+        env_after = env_path.read_text(encoding="utf-8")
+        self.assertIn(secret_before, env_after, "nâng cấp cấp lại JWT_SECRET — mọi phiên đăng nhập chết")
+        self.assertEqual(env_after.count("PROGRAMMING_REV_A="), 1,
+                         "nâng cấp nhân đôi dòng cờ trong file env")
+        # Bản mới thật sự được ghi đè lên bản đánh dấu.
+        for rel in ROLLED_BACK_BINARIES:
+            self.assertNotEqual(sha256(root / rel), old_digests[rel],
+                                f"nâng cấp không thay {rel}")
+
+    # ---- 2b. Diễn tập không được có tác dụng phụ ---------------------------
+
+    def test_2_dien_tap_khong_goi_systemctl_that(self) -> None:
+        """Bất biến sống còn: một diễn tập KHÔNG được chạm hệ thống thật.
+
+        Đây là hồi quy có thật, không phải giả định. Bản đầu của chế độ diễn tập
+        chuyển `systemctl` sang wrapper CHỈ ở đầu dòng, nên bốn lời gọi nằm sau
+        `&&` vẫn chạy thật; và wrapper trả `0` cho `is-enabled`, nên chính những
+        nhánh `&&` đó được kích hoạt. Chạy trên bo Foxlinx ngày 2026-08-22, nó
+        restart `mkddc-pty` thật — PTY biến mất và `mkddc-iobus` tự thoát theo.
+        Một dịch vụ điều khiển dừng vì một bài diễn tập là kết cục không được
+        phép lặp lại, nên nó được khoá ở đây bằng cách đọc chính mã nguồn.
+        """
+        for name in ("install.sh", "rollback.sh"):
+            text = (ROOT / "platform/packaging" / name).read_text(encoding="utf-8")
+            body = [l for l in text.splitlines()
+                    if "systemctl" in l
+                    and not l.strip().startswith("#")
+                    and "dry-run-systemctl.log" not in l
+                    and 'systemctl "$@"' not in l
+                    and "echo" not in l]
+            self.assertEqual(body, [], f"{name} còn lời gọi systemctl không đi qua wrapper: {body}")
+
+            self.assertIn("is-enabled|is-active|is-failed) return 1", text,
+                          f"{name}: wrapper diễn tập phải trả KHÔNG cho truy vấn trạng thái, "
+                          "nếu không mọi nhánh '... && <lệnh thật>' sẽ chạy thật")
+
+        # Wrapper không được tự gọi chính nó: ở chế độ THẬT đó là đệ quy vô hạn.
+        rollback = (ROOT / "platform/packaging/rollback.sh").read_text(encoding="utf-8")
+        self.assertNotIn("    sysctl_do \"$@\"", rollback,
+                         "sysctl_do gọi chính nó — rollback thật sẽ đệ quy vô hạn")
+
+    def test_2_dien_tap_ghi_lai_y_dinh_systemctl(self) -> None:
+        """Bỏ qua systemctl không có nghĩa là giấu nó: ý định phải đọc lại được."""
+        log = self.root / "dry-run-systemctl.log"
+        self.assertTrue(log.is_file(), "diễn tập không ghi lại ý định systemctl nào")
+        self.assertIn("daemon-reload", log.read_text(encoding="utf-8"))
+
+    # ---- 3. Lùi về bản trước ----------------------------------------------
+
+    def test_3_rollback_khoi_phuc_du_binary_va_giu_du_lieu(self) -> None:
+        root = self.root
+        self.test_2_nang_cap_giu_du_lieu_va_chup_snapshot()  # bảo đảm đã có snapshot
+        old = type(self).old_digests
+
+        self._run(ROLLBACK)
+
+        for rel in ROLLED_BACK_BINARIES:
+            self.assertEqual(
+                sha256(root / rel), old[rel],
+                f"rollback KHÔNG khôi phục {rel} — bo lùi nửa vời, hai phiên bản chạy lẫn nhau",
+            )
+        self.assertEqual((root / "data/config/io_config.conf").read_text(encoding="utf-8"),
+                         "# nguoi van hanh da sua\nAI0=CUSTOM\n",
+                         "rollback làm mất cấu hình")
+        self.assertEqual((root / "data/mkddc/programming/artifacts/keep.bin").read_bytes(),
+                         b"artifact cua khach", "rollback làm mất artifact")
+        pre = list((root / "var/backups/mkddc").glob("pre-rollback-*"))
+        self.assertTrue(pre, "rollback không chụp lại bản hiện tại — lùi xong hết đường tiến")
+
+        # F-P59-ROLLBACK-DB-001: store Programming phải quay về ĐÚNG bản đi cùng
+        # binary được khôi phục, và bản đang chạy phải được giữ lại trong
+        # `pre-rollback-*` — mất nó là mất toàn bộ Project/Revision mới.
+        programming_db = root / "data/config/programming/programming-v1.sqlite"
+        self.assertEqual(programming_db.read_bytes(), b"SQLite format 3\x00schema-11-ban-cu",
+                         "rollback không khôi phục store Programming — mkddc-web sẽ từ chối "
+                         "khởi động vì schema mới hơn binary")
+        self.assertTrue((pre[0] / "programming-v1.sqlite.pre-rollback").is_file(),
+                        "rollback không giữ lại store đang chạy trước khi ghi đè")
+
+
+if __name__ == "__main__":
+    unittest.main()

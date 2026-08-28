@@ -2,14 +2,16 @@ import { CheckCircle2, Database, Network, RotateCcw, Save, Server, ShieldCheck, 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { apiClient } from '../../shared/api/client'
 import { Button } from '../../shared/components/Button'
+import { DraftDiffTable, type DraftDiffRow } from '../../shared/components/DraftDiffTable'
 import { Panel } from '../../shared/components/Panel'
+import { QrCode } from '../../shared/components/QrCode'
 import { StateBlock } from '../../shared/components/StateBlock'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useToast } from '../../shared/components/Toast'
 import { useApi } from '../../shared/hooks/useApi'
 import { useAuth } from '../auth'
 import { useI18n } from '../../shared/i18n'
-import type { ModbusSlave, NetcfgActive, NetcfgCandidate, NetcfgResponse, NetcfgTransactionAction, NetworkConfig, PollState } from '../../shared/types'
+import type { ModbusSlave, NetcfgActive, NetcfgCandidate, NetcfgResponse, NetcfgTransactionAction, NetworkCheckResponse, NetworkConfig, PollState } from '../../shared/types'
 
 const inputClass = 'mt-2 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm outline-none transition focus:border-[var(--c-accent)] disabled:cursor-not-allowed disabled:opacity-50'
 
@@ -53,6 +55,12 @@ export function NetworkPage() {
   const [config, setConfig] = useState<NetworkConfig | null>(null)
   const [candidate, setCandidate] = useState<NetcfgCandidate | null>(null)
   const [transaction, setTransaction] = useState<NetcfgResponse | null>(null)
+  /* `T57-3.18`: kết quả kiểm kết nối trong cửa sổ đếm ngược. Ba trạng thái được
+     giữ nguyên tới tận giao diện — gộp "chưa kiểm được" vào "không thông" sẽ đẩy
+     người dùng rollback một cấu hình đúng. */
+  const [connectivity, setConnectivity] = useState<NetworkCheckResponse | null>(null)
+  const [connectivityBusy, setConnectivityBusy] = useState(false)
+  const [connectivityError, setConnectivityError] = useState<string | null>(null)
   const [transactionBusy, setTransactionBusy] = useState<NetcfgTransactionAction | null>(null)
   const [confirmSave, setConfirmSave] = useState(false)
   const [savingConfig, setSavingConfig] = useState(false)
@@ -240,6 +248,19 @@ export function NetworkPage() {
     } finally {
       setSavingNetwork(false)
       await transactionState.refetch()
+    }
+  }
+
+  async function runConnectivityCheck() {
+    setConnectivityBusy(true)
+    setConnectivityError(null)
+    try {
+      setConnectivity(await apiClient.checkNetworkConnectivity())
+    } catch (err) {
+      setConnectivity(null)
+      setConnectivityError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setConnectivityBusy(false)
     }
   }
 
@@ -540,14 +561,72 @@ export function NetworkPage() {
           {transaction.pending?.ipv4 && transaction.pending.ipv4 !== transaction.active?.ipv4 && (
             <div className="mt-4 rounded-[var(--radius)] border border-[var(--c-accent)] bg-[var(--c-accent-bg)] p-3 text-sm">
               <div className="font-semibold text-[var(--c-accent)]">{pick('Địa chỉ truy cập sau khi giữ thay đổi', 'Address to use after keeping the change')}</div>
-              <div className="mono mt-1 break-all text-[var(--c-text)]">
-                {`${window.location.protocol}//${transaction.pending.ipv4}${window.location.port ? `:${window.location.port}` : ''}`}
-              </div>
-              <div className="mt-1 text-xs text-[var(--c-text-dim)]">
-                {pick('Mở địa chỉ này ở tab mới TRƯỚC khi bấm Giữ thay đổi để chắc chắn còn đường vào.', 'Open this address in a new tab BEFORE keeping the change, to be sure you still have a way in.')}
+              <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="mono break-all text-[var(--c-text)]">{nextAccessUrl(transaction.pending.ipv4)}</div>
+                  <div className="mt-1 text-xs text-[var(--c-text-dim)]">
+                    {pick('Mở địa chỉ này ở tab mới TRƯỚC khi bấm Giữ thay đổi để chắc chắn còn đường vào.', 'Open this address in a new tab BEFORE keeping the change, to be sure you still have a way in.')}
+                  </div>
+                </div>
+                {/* `T57-2.22` — người đứng cạnh tủ thường có điện thoại trong
+                    tay chứ không có bàn phím. Gõ tay một địa chỉ IP là nguồn sai
+                    sót ngay lúc đồng hồ rollback đang đếm ngược; quét mã thì
+                    không gõ nhầm được. Mã sinh tại chỗ, bo không cần Internet. */}
+                <figure className="shrink-0 text-center">
+                  <QrCode
+                    text={nextAccessUrl(transaction.pending.ipv4)}
+                    size={132}
+                    label={pick(`Mã QR địa chỉ truy cập mới ${transaction.pending.ipv4}`, `QR code for the new address ${transaction.pending.ipv4}`)}
+                  />
+                  <figcaption className="mt-1 text-[11px] text-[var(--c-text-dim)]">{pick('Quét bằng điện thoại', 'Scan with a phone')}</figcaption>
+                </figure>
               </div>
             </div>
           )}
+          {/* `T57-3.18` — hỏi chính thiết bị xem cấu hình mới có thông không,
+              thay vì bắt người dùng mở tab khác rồi đoán. */}
+          <div className="mt-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold">{pick('Kiểm kết nối từ thiết bị', 'Check connectivity from the device')}</span>
+              <Button size="sm" loading={connectivityBusy} onClick={() => { void runConnectivityCheck() }}>
+                {pick('Kiểm ngay', 'Check now')}
+              </Button>
+            </div>
+            {connectivityError && (
+              <p role="alert" className="mt-2 text-xs text-[var(--c-warn-fg)]">{connectivityError}</p>
+            )}
+            {connectivity && (
+              <div className="mt-2 space-y-1 text-xs">
+                {connectivity.targets.map((target) => (
+                  <div key={`${target.kind}-${target.host}`} className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-semibold">{connectivityLabel(target.kind, pick)}</span>
+                    <span className="mono text-[var(--c-text-dim)]">{target.host}</span>
+                    <span
+                      className="font-bold"
+                      style={{ color: target.state === 'ok' ? 'var(--c-good-fg)' : target.state === 'unreachable' ? 'var(--c-fault-fg)' : 'var(--c-text-dim)' }}
+                    >
+                      {target.state === 'ok'
+                        ? pick('THÔNG', 'REACHABLE')
+                        : target.state === 'unreachable'
+                          ? pick('KHÔNG THÔNG', 'UNREACHABLE')
+                          : pick('CHƯA KIỂM ĐƯỢC', 'NOT TESTED')}
+                    </span>
+                    {target.rttMs !== undefined && <span className="text-[var(--c-text-dim)]">{target.rttMs} ms</span>}
+                    {target.detail && <span className="text-[var(--c-text-dim)]">— {target.detail}</span>}
+                  </div>
+                ))}
+                {connectivity.summary === 'unknown' && (
+                  <p className="text-[var(--c-warn-fg)]">
+                    {pick(
+                      'Không kiểm được đích nào. Đây KHÔNG phải bằng chứng cấu hình hỏng — hãy tự mở địa chỉ mới ở tab khác trước khi quyết định.',
+                      'Nothing could be tested. This is NOT evidence the configuration is broken — open the new address in another tab before deciding.'
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           <p className="mt-4 text-sm font-semibold">{pick('Bạn vẫn xem được trang này?', 'Can you still see this page?')}</p>
           <p className="mt-1 text-sm text-[var(--c-text-dim)]" aria-live="polite">
             {pick('Nếu mất kết nối, thiết bị tự quay lại cấu hình cũ sau ', 'If you lose connection, the device rolls back automatically in ')}
@@ -579,6 +658,21 @@ export function NetworkPage() {
 /** Đổi prefix length của kernel (`/24`) sang subnet mask mà form dùng
  *  (`255.255.255.0`). Trả `''` khi prefix nằm ngoài dải hợp lệ — thà không so
  *  sánh còn hơn báo một khác biệt do chính phép quy đổi bịa ra. */
+/** Địa chỉ mà trình duyệt sẽ phải dùng sau khi đổi IP: giữ nguyên giao thức và
+ *  cổng của phiên hiện tại, chỉ thay phần host. Đoán sai cổng là dẫn người dùng
+ *  tới một trang không mở được đúng lúc họ không còn đường vào nào khác. */
+function connectivityLabel(kind: string, pick: (vi: string, en: string) => string): string {
+  if (kind === 'gateway') return pick('Cổng ra (gateway)', 'Gateway')
+  if (kind === 'dns') return pick('Máy chủ DNS', 'DNS server')
+  if (kind === 'dns_resolve') return pick('Phân giải tên', 'Name resolution')
+  return kind
+}
+
+function nextAccessUrl(ipv4: string): string {
+  const port = window.location.port ? `:${window.location.port}` : ''
+  return `${window.location.protocol}//${ipv4}${port}/`
+}
+
 function prefixLengthToNetmask(prefix: number | undefined): string {
   if (typeof prefix !== 'number' || prefix < 0 || prefix > 32) return ''
   const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
@@ -587,10 +681,10 @@ function prefixLengthToNetmask(prefix: number | undefined): string {
 
 /** Bảng khác biệt giữa cấu hình đang chạy và bản nháp — PA3-506.
  *
- *  Không có khác biệt thì KHÔNG hiện gì: một bảng trống với toàn dấu "=" chỉ
- *  làm loãng màn hình. Có khác biệt thì nêu từng trường, giá trị cũ và giá trị
- *  mới — đủ để người vận hành đọc lại trước khi bấm, không phải so bằng mắt
- *  giữa hai vùng cách nhau nửa trang.
+ *  Phần dựng bảng nay nằm ở `DraftDiffTable` dùng chung (`BB-8` / `T57-2.10`);
+ *  ở đây chỉ còn phần RIÊNG của trang mạng: biết trường nào đáng so, và so
+ *  chúng theo đúng ngữ nghĩa của netcfg (prefix length ↔ subnet mask, DHCP thì
+ *  địa chỉ do máy chủ cấp nên không so từng octet).
  */
 function NetworkCandidateDiff({ active, candidate, pick }: {
   active: NetcfgActive | null | undefined
@@ -598,7 +692,7 @@ function NetworkCandidateDiff({ active, candidate, pick }: {
   pick: (vi: string, en: string) => string
 }) {
   if (!active) return null
-  const rows: Array<{ label: string; from: string; to: string }> = []
+  const rows: DraftDiffRow[] = []
   const add = (label: string, from: unknown, to: unknown) => {
     const fromText = from === undefined || from === null || from === '' ? '—' : String(from)
     const toText = to === undefined || to === null || to === '' ? '—' : String(to)
@@ -616,38 +710,12 @@ function NetworkCandidateDiff({ active, candidate, pick }: {
   }
   add('DNS', active.dnsServers?.join(', '), candidate.dns?.mode === 'manual' ? candidate.dns.servers.join(', ') : candidate.dns?.mode)
 
-  if (rows.length === 0) {
-    return (
-      <p className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2 text-xs text-[var(--c-text-dim)]">
-        {pick('Bản nháp trùng với cấu hình đang chạy — không có gì để lưu.', 'The draft matches the running configuration — nothing to save.')}
-      </p>
-    )
-  }
-
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3">
-      <div className="mb-2 text-xs font-bold uppercase text-[var(--c-warn-fg)]">
-        {pick(`${rows.length} thay đổi chưa lưu`, `${rows.length} unsaved change(s)`)}
-      </div>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-left text-[10px] uppercase text-[var(--c-text-dim)]">
-            <th className="py-1 pr-3">{pick('Trường', 'Field')}</th>
-            <th className="py-1 pr-3">{pick('Đang chạy', 'Running')}</th>
-            <th className="py-1">{pick('Sẽ đổi thành', 'Will become')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.label} className="border-t border-[var(--c-warn)]">
-              <td className="py-1 pr-3 font-semibold">{row.label}</td>
-              <td className="mono py-1 pr-3 text-[var(--c-text-dim)]">{row.from}</td>
-              <td className="mono py-1 font-semibold text-[var(--c-warn-fg)]">{row.to}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DraftDiffTable
+      rows={rows}
+      fromHeader={pick('Đang chạy', 'Running')}
+      emptyText={pick('Bản nháp trùng với cấu hình đang chạy — không có gì để lưu.', 'The draft matches the running configuration — nothing to save.')}
+    />
   )
 }
 

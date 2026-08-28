@@ -135,7 +135,7 @@ Mục tiêu đầu tiên: **đọc được giá trị I/O từ shared memory** 
 |-----------|--------------|------------|
 | Thêm/sửa lệnh giao tiếp MCU↔SOM | [SWFW_INTERFACE_SPEC](../01_specs/SWFW_INTERFACE_SPEC_MK-DDC-24_VI.md) | iop_comm (FW) + `mkddc-iobus` (SW) |
 | Đổi chân cảm biến/relay | [D-1 Pinout](firmware/FW_PINOUT_MASTER_MK-DDC-24_VI.md) | CubeMX + gpio_drv |
-| Thêm thiết bị phụ Modbus RTU (mở rộng I/O) | [D-2 RTU Master/Expansion](interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) + [Implementation 25](../03_implementation/26_MODBUS_IMPLEMENTATION_PLAN.md) | `mkddc-iobus` |
+| Thêm thiết bị phụ Modbus RTU (mở rộng I/O) | [D-2 RTU Master/Expansion](interfaces/MODBUS_REGISTER_MAP_MK-DDC-24_VI.md) + [Implementation 25](../03_implementation/archive/26_MODBUS_IMPLEMENTATION_PLAN.md) | `mkddc-iobus` |
 | Thêm object BACnet | [D-3 PICS](interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md) + [Implementation 24](../03_implementation/25_BACNET_IMPLEMENTATION_PLAN.md) | `mkddc-iobus` + object table trong `mkddc-core` |
 | Thêm API REST | [D-4 OpenAPI](interfaces/REST_API_OPENAPI_MK-DDC-24_VI.md) | `mkddc-web` (Go) |
 | Thêm tham số cấu hình | [D-5 Config Schema](interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md) | `mkddc-web` (form/JSON) + service đọc config |

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { Suspense, lazy, type ReactNode } from 'react'
 import {
+  ForcePasswordChangePage,
   LoginPage,
   ROUTE_MIN_ROLE,
   UserInfoPage,
@@ -18,10 +19,54 @@ import {
   SystemDiagnosticsPage,
   UnavailableFeaturePage
 } from '../features/dashboard'
-import { DevicesPage, DiagnosticsPage, MappingPage, ModbusRtuLayout, OverviewPage, PointsPage, PortsPage } from '../features/modbus-rtu'
+/* `T57-4.2` (`ADR-049`) — bốn lô nghiệp vụ NẶNG và ÍT MỞ tách khỏi chunk chính.
+ *
+ * Bốn màn hình mở đầu mỗi ca (Landing, Giám sát, Cảnh báo, Chẩn đoán) cố ý ở
+ * lại chunk chính: chia chúng ra chỉ biến một lần tải thành hai lần chờ.
+ *
+ * Số đo nghiệm thu là THỜI GIAN MỞ TRANG ĐẦU TRÊN BOARD THẬT, không phải kích
+ * thước tệp — `F-DOC-10` đã cho thấy so kích thước giữa hai lệnh build khác
+ * nhau dẫn tới kết luận sai. */
+const ModbusRtuLayout = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.ModbusRtuLayout })))
+const ModbusDevicesPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.DevicesPage })))
+const ModbusDiagnosticsPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.DiagnosticsPage })))
+const ModbusMappingPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.MappingPage })))
+const ModbusOverviewPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.OverviewPage })))
+const ModbusPointsPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.PointsPage })))
+const ModbusPortsPage = lazy(() => import('../features/modbus-rtu').then((module) => ({ default: module.PortsPage })))
+// Modbus RTU không có import tĩnh nào ở đây nên barrel dùng được.
 import { DisplaySettingsPage, NetworkPage, SettingsPage, TimeSettingsPage } from '../features/network'
-import { AlarmHistoryPage, AlarmSettingsPage, AlarmsPage, TrendsPage } from '../features/operations'
-import { ScheduleEditorPage, SchedulerGridPage, SchedulerLayout, SchedulerRuntimePage } from '../features/scheduler'
+/* QUY TẮC MỘT CHIỀU CHO MỖI FEATURE: hoặc TOÀN BỘ tĩnh, hoặc TOÀN BỘ động —
+   không trộn trên cùng một barrel.
+ *
+ * Trước 2026-08-20, ba trang Cảnh báo được import TĨNH thẳng vào tệp nguồn còn
+ * Xu hướng import ĐỘNG, với lý do ghi ngay tại đây: chạm barrel bằng import tĩnh
+ * sẽ kéo `TrendsPage` (và thư viện biểu đồ) vào chunk chính và làm `lazy` mất
+ * tác dụng — rollup báo đúng điều đó bằng `INEFFECTIVE_DYNAMIC_IMPORT`.
+ *
+ * Cách né đó đúng về bundling nhưng phá ranh giới feature, và
+ * `verify_repository.py` bắt được: 8 trong 10 vi phạm dependency boundary trên
+ * `main` sinh ra từ chính chỗ này. Hai bất biến xung đột thật, và bất biến kiến
+ * trúc là bên thua trong im lặng.
+ *
+ * Lời giải không phải chọn một bên mà là bỏ điều kiện gây xung đột: khi feature
+ * KHÔNG còn import tĩnh nào ở đây, barrel chỉ được chạm qua `import()` động nên
+ * rollup giữ nguyên chunk riêng — `lazy` hoạt động VÀ ranh giới được tôn trọng.
+ * Đây đúng là mô hình Modbus RTU ở trên đã dùng từ trước.
+ *
+ * Hệ quả có chủ ý: ba trang Cảnh báo chuyển từ eager sang lazy. Chúng nằm trong
+ * `<Suspense fallback={<RouteLoading />}>` bên dưới nên hành vi điều hướng không
+ * đổi, và chunk chính nhẹ đi vì cả feature rời khỏi đồ thị khởi động. */
+const AlarmsPage = lazy(() => import('../features/operations').then((module) => ({ default: module.AlarmsPage })))
+const AlarmHistoryPage = lazy(() => import('../features/operations').then((module) => ({ default: module.AlarmHistoryPage })))
+const AlarmSettingsPage = lazy(() => import('../features/operations').then((module) => ({ default: module.AlarmSettingsPage })))
+/* Xu hướng kéo theo cả thư viện biểu đồ (407 kB) — lô nặng nhất, và không phải
+   màn hình mở đầu ca. */
+const TrendsPage = lazy(() => import('../features/operations').then((module) => ({ default: module.TrendsPage })))
+const SchedulerLayout = lazy(() => import('../features/scheduler').then((module) => ({ default: module.SchedulerLayout })))
+const SchedulerGridPage = lazy(() => import('../features/scheduler').then((module) => ({ default: module.SchedulerGridPage })))
+const ScheduleEditorPage = lazy(() => import('../features/scheduler').then((module) => ({ default: module.ScheduleEditorPage })))
+const SchedulerRuntimePage = lazy(() => import('../features/scheduler').then((module) => ({ default: module.SchedulerRuntimePage })))
 import { CommissioningPage, InputsPage, MonitorPage, OutputsPage, UserParametersPage, VirtualPointsPage } from '../features/points'
 import { AppShell } from '../shared/components/AppShell'
 import { RequireRole } from '../shared/components/RequireRole'
@@ -29,22 +74,32 @@ import { useI18n } from '../shared/i18n'
 import { OverviewProvider } from '../shared/overview/OverviewProvider'
 import { RealtimeProvider } from '../shared/realtime'
 import { LEGACY_GRAPH_DEMO_ENABLED, PROGRAMMING_REV_A_ENABLED } from '../shared/config'
-import { ProgrammingRoutes } from '../features/programming/ProgrammingRoutes'
+const ProgrammingRoutes = lazy(() => import('../features/programming').then((module) => ({ default: module.ProgrammingRoutes })))
 
 function ProtectedShell() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, session } = useAuth()
   const location = useLocation()
   if (!isAuthenticated) {
     const returnTo = `${location.pathname}${location.search}${location.hash}`
     return <Navigate to="/login" replace state={{ from: returnTo }} />
   }
+  /* `T57-3.17` (`ADR-047`): backend đã chặn mọi endpoint của phiên này, nên
+     dựng shell đầy đủ chỉ tạo ra một màn hình toàn lỗi 403. Đưa thẳng tới việc
+     cần làm. Đây là dẫn đường, KHÔNG phải lớp bảo vệ — lớp bảo vệ ở backend. */
+  if (session?.mustChangePassword) return <ForcePasswordChangePage />
   /* PA3-205: `OverviewProvider` bọc NGOÀI shell vì cả TopBar lẫn Landing đều
      đọc cùng một snapshot. Đặt nó bên trong Dashboard sẽ đưa ta về đúng lỗi
      PA3-F12: hai vùng của một màn hình poll riêng và nói hai điều khác nhau. */
   return (
     <RealtimeProvider>
       <OverviewProvider>
-        <AppShell />
+        {/* `ADR-049` điều 2: mỗi ranh giới `lazy` phải có trạng thái tải THẬT.
+            Màn hình trắng trong lúc tải là một kiểu hỏng, không phải một trạng
+            thái tải — trên bo nhúng qua Wi-Fi yếu nó kéo dài đủ để người dùng
+            tưởng thiết bị treo. */}
+        <Suspense fallback={<RouteLoading />}>
+          <AppShell />
+        </Suspense>
       </OverviewProvider>
     </RealtimeProvider>
   )
@@ -85,6 +140,15 @@ export function LoginRoute() {
   const location = useLocation()
   if (!isAuthenticated) return <LoginPage />
   return <Navigate to={safeReturnPath((location.state as { from?: unknown } | null)?.from)} replace />
+}
+
+/** Trạng thái tải cho ranh giới `lazy` — `ADR-049` điều 2. */
+function RouteLoading() {
+  return (
+    <div className="grid min-h-[40vh] place-items-center p-6">
+      <div role="status" className="text-sm text-[var(--c-text-dim)]">Đang tải màn hình…</div>
+    </div>
+  )
 }
 
 export function App() {
@@ -163,13 +227,13 @@ export function App() {
             nên ba tab hiển thị y hệt nhau và tiêu đề H1 lặp hai lần — xem
             `docs/07_records/reviews/FE_PAGES_ERROR_REVIEW_2026-08-05.md` FE-MB-01. */}
         <Route path="eng/modbus-rtu" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/modbus-rtu']}><ModbusRtuLayout /></RequireRole>}>
-          <Route index element={<OverviewPage />} />
-          <Route path="overview" element={<OverviewPage />} />
-          <Route path="ports" element={<PortsPage />} />
-          <Route path="devices" element={<DevicesPage />} />
-          <Route path="points" element={<PointsPage />} />
-          <Route path="mapping" element={<MappingPage />} />
-          <Route path="diagnostics" element={<DiagnosticsPage />} />
+          <Route index element={<ModbusOverviewPage />} />
+          <Route path="overview" element={<ModbusOverviewPage />} />
+          <Route path="ports" element={<ModbusPortsPage />} />
+          <Route path="devices" element={<ModbusDevicesPage />} />
+          <Route path="points" element={<ModbusPointsPage />} />
+          <Route path="mapping" element={<ModbusMappingPage />} />
+          <Route path="diagnostics" element={<ModbusDiagnosticsPage />} />
         </Route>
         <Route path="eng/virtual-io" element={<Navigate to="/eng/virtual-points" replace />} />
         <Route path="eng/user-parameters" element={<RequireRole role={ROUTE_MIN_ROLE['/eng/user-parameters']}><UserParametersPage /></RequireRole>} />

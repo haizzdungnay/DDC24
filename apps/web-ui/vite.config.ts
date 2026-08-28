@@ -36,7 +36,12 @@ export default defineConfig(({ mode }) => {
     server: {
       host: '0.0.0.0',
       port: 5173,
-      proxy: developmentProxy(target)
+      proxy: developmentProxy(target),
+      // Dev server phục vụ E2E KHÔNG cần theo dõi file: Playwright không sửa
+      // nguồn giữa lúc chạy, nên watcher chỉ đem lại hai thứ — hàng chục nghìn
+      // inotify watch, và nguy cơ Vite rebuild giữa một assertion. Tắt hẳn cho
+      // đường E2E; đường dev thường giữ nguyên HMR.
+      watch: env.VITE_E2E_NO_WATCH === '1' ? null : undefined
     },
     build: {
       outDir: '../../build/web-ui/dist',
@@ -57,7 +62,12 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
-    preview: { host: '0.0.0.0', port: 4173 },
+    // E2E phục vụ bằng `vite preview` (bản đã build) chứ không phải dev server:
+    // dev server biên dịch route theo yêu cầu ở lần chạm đầu, và khoản biên dịch
+    // đó nằm trong ngân sách thời gian của test — nguồn gốc thật của chuỗi đỏ
+    // ngắt quãng T59-604. Preview phải proxy y hệt dev, nếu không cùng một spec
+    // lại gặp hai hành vi mạng khác nhau tuỳ đường phục vụ.
+    preview: { host: '0.0.0.0', port: 4173, proxy: developmentProxy(target) },
     // F-23: môi trường test phải đi theo PROJECT, không theo lệnh gọi.
     //
     // Trước đây `environment: 'jsdom'` chỉ tồn tại dưới dạng cờ dòng lệnh trong

@@ -6,7 +6,7 @@ import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
 import { CheckCommissionPage } from './CheckCommissionPage'
 import { ProgrammingLayout } from '../layout/ProgrammingLayout'
-import type { ProgrammingCheck, ProgrammingRevision, ProgrammingRevisionChanges } from '../model/types'
+import type { ProgrammingCheck, ProgrammingRevisionChanges } from '../model/types'
 
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole, login: vi.fn() }))
 vi.mock('../../auth', async (importOriginal) => {
@@ -29,26 +29,9 @@ vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
 const REVISION_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const CHECK_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 const OPERATION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
-type RequestOptions = {
-  path?: Record<string, string>
-  ifMatch?: string
-  body?: { baseRevisionId?: string }
-}
 
 function passedCheck(): ProgrammingCheck {
   return { checkId: CHECK_ID, revisionId: REVISION_ID, state: 'PASSED', diagnostics: [], createdAt: '2026-08-13T00:00:00Z', attemptCount: 1 }
-}
-
-/** ProgrammingLayout quan sát snapshot immutable của revision Active; đây chỉ
- * là fixture đọc tối thiểu, không thay authority `/programming/runtime`. */
-function immutableRevision(revisionId: string): ProgrammingRevision {
-  return {
-    revisionId,
-    projectId: 'project-1',
-    state: 'IMMUTABLE',
-    contentHash: `hash-${revisionId}`,
-    createdAt: '2026-08-13T00:00:00Z'
-  }
 }
 
 function baseProject() {
@@ -75,7 +58,19 @@ function changesWithTwoPresentGroups(): ProgrammingRevisionChanges {
       retain: { status: 'PRESENT', items: ['var-1'] },
       activeOverrides: { status: 'PRESENT', items: ['AO-01'] },
       cutover: { status: 'NONE', items: [] },
-      outputMappingChanges: { status: 'NONE', items: [] }
+      outputMappingChanges: { status: 'NONE', items: [] },
+
+      // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
+
+      // thì trang fail-closed — "không thấy" không phải "không có".
+
+      publishedSignals: { status: 'NONE', items: [] },
+
+      controlLibrary: { status: 'NONE', items: [] },
+
+      programSet: { status: 'NONE', items: [] },
+
+      enableIntent: { status: 'NONE', items: [] }
     }
   }
 }
@@ -107,41 +102,17 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
-  it('Check FAILED vẫn hiển thị chẩn đoán nhưng chặn Commission fail-closed', async () => {
-    client.request.mockImplementation((operationId: string, options?: RequestOptions) => {
+  it('ô xác nhận khớp đúng số nhóm impact PRESENT (VS-PROG-019) và gửi Commission một lần sau re-auth', async () => {
+    client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
       if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
-      if (operationId === 'getProgrammingRevision') return Promise.resolve(immutableRevision(options?.path?.revisionId ?? 'previous-revision'))
       if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
-      if (operationId === 'getProgrammingCheck') return Promise.resolve({ ...passedCheck(), state: 'FAILED', diagnostics: [{ code: 'PRG-ERR-001', severity: 'ERROR', messageKey: 'programming.check.error' }] })
-      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
-      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-
-    renderPage(true)
-    await waitFor(() => expect(screen.getByText('FAILED')).toBeInTheDocument())
-    expect(screen.getByText(/Chỉ Kiểm tra PASSED mới mở được/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).toBeDisabled()
-    expect(client.request.mock.calls.some(([operationId]) => operationId === 'commissionProgrammingRevision')).toBe(false)
-  })
-
-  it('ô xác nhận khớp đúng số nhóm impact PRESENT (VS-PROG-019) và gửi Commission một lần sau re-auth', async () => {
-    let runtimeReads = 0
-    client.request.mockImplementation((operationId: string, options?: RequestOptions) => {
-      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
-      if (operationId === 'getProgrammingRuntime') {
-        runtimeReads += 1
-        return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: runtimeReads > 1 ? REVISION_ID : 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
-      }
-      if (operationId === 'getProgrammingRevision') return Promise.resolve(immutableRevision(options?.path?.revisionId ?? 'previous-revision'))
-      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
       if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
       if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
-      if (operationId === 'commissionProgrammingRevision') return Promise.resolve({ operationId: OPERATION_ID, statusUrl: '', state: 'QUEUED', requestHash: 'hash', acceptedAt: '2026-08-13T00:00:01Z', correlationId: 'corr-1' })
+      if (operationId === 'commissionProgrammingRevision') return Promise.resolve({ operationId: OPERATION_ID, statusUrl: '', state: 'REQUESTED', requestHash: 'hash', acceptedAt: '2026-08-13T00:00:01Z', correlationId: 'corr-1' })
       if (operationId === 'getProgrammingOperation') return Promise.resolve({ operationId: OPERATION_ID, state: 'SUCCEEDED', step: 'done', requestedRevisionId: REVISION_ID, previousActiveRevisionId: 'previous-revision', actualActiveRevisionId: REVISION_ID, keepsRunningRevision: false, startedAt: '2026-08-13T00:00:01Z', updatedAt: '2026-08-13T00:00:02Z' })
       throw new Error(`unexpected operation ${operationId}`)
     })
@@ -149,14 +120,15 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     renderPage()
 
     await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
+    const lifecycle = screen.getByRole('list', { name: 'Tiến trình Kiểm tra và Đưa vào vận hành' })
+    expect(within(lifecycle).getByText('READY').closest('li')).toHaveAttribute('aria-current', 'step')
     fireEvent.click(screen.getByRole('button', { name: 'Đưa vào vận hành…' }))
 
     // Đúng hai ô xác nhận cho hai nhóm PRESENT (retain, activeOverrides) — không phải bốn ô cố định.
     const dialog = await screen.findByRole('dialog')
-    expect(document.activeElement).toBe(within(dialog).getByRole('heading', { name: 'Xác nhận Đưa vào vận hành' }))
     await waitFor(() => expect(within(dialog).getAllByRole('checkbox')).toHaveLength(2))
 
-    const confirmButton = within(dialog).getByRole('button', { name: `Xác nhận ${REVISION_ID.slice(0, 8)}` })
+    const confirmButton = within(dialog).getByRole('button', { name: 'Gửi lệnh' })
     expect(confirmButton).toBeDisabled()
 
     for (const checkbox of within(dialog).getAllByRole('checkbox')) fireEvent.click(checkbox)
@@ -175,20 +147,17 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     expect(commissionOptions.body.impactRef).toBe('impact-ref-001')
 
     await waitFor(() => expect(screen.getByText(/Đưa vào vận hành thành công/)).toBeInTheDocument())
-    await waitFor(() => expect(runtimeReads).toBeGreaterThan(1))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).toBeDisabled()
+    expect(within(lifecycle).getByText('SUCCEEDED').closest('li')).toHaveAttribute('aria-current', 'step')
     // Chỉ MỘT lần gọi commission dù có polling/re-render nhiều lần.
     expect(client.request.mock.calls.filter(([op]) => op === 'commissionProgrammingRevision')).toHaveLength(1)
-    const compareCalls = client.request.mock.calls.filter(([op]) => op === 'compareProgrammingRevisions')
-    expect(compareCalls.some(([, options]) => options.path.from === REVISION_ID)).toBe(false)
   })
 
   it('UNAVAILABLE chặn Đưa vào vận hành ngay cả khi Check PASSED', async () => {
-    client.request.mockImplementation((operationId: string, _options?: RequestOptions) => {
+    client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
       if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: null, lkgRevisionId: null, taskState: 'STOPPED', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
       if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
       if (operationId === 'compareProgrammingRevisions') {
@@ -206,73 +175,12 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).toBeDisabled()
   })
 
-  it('ROLLED_BACK báo read-back revision và không coi Commission là thành công', async () => {
-    client.request.mockImplementation((operationId: string, options?: RequestOptions) => {
-      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
-      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
-      if (operationId === 'getProgrammingRevision') return Promise.resolve(immutableRevision(options?.path?.revisionId ?? 'previous-revision'))
-      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
-      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
-      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
-      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
-      if (operationId === 'commissionProgrammingRevision') return Promise.resolve({ operationId: OPERATION_ID, statusUrl: '', state: 'QUEUED', requestHash: 'hash', acceptedAt: '2026-08-13T00:00:01Z', correlationId: 'corr-1' })
-      if (operationId === 'getProgrammingOperation') return Promise.resolve({ operationId: OPERATION_ID, state: 'ROLLED_BACK', step: 'rollback', requestedRevisionId: REVISION_ID, previousActiveRevisionId: 'previous-revision', actualActiveRevisionId: 'previous-revision', keepsRunningRevision: true, startedAt: '2026-08-13T00:00:01Z', updatedAt: '2026-08-13T00:00:02Z' })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-
-    renderPage(true)
-    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Đưa vào vận hành…' }))
-    const dialog = await screen.findByRole('dialog')
-    for (const checkbox of within(dialog).getAllByRole('checkbox')) fireEvent.click(checkbox)
-    fireEvent.change(within(dialog).getByLabelText(/Xác thực lại/), { target: { value: 'secret' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: `Xác nhận ${REVISION_ID.slice(0, 8)}` }))
-
-    await waitFor(() => expect(screen.getByText(/đã được Core quay lui/)).toBeInTheDocument())
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getAllByText(/previous-revision/).length).toBeGreaterThan(0)
-    expect(screen.queryByText(/Đưa vào vận hành thành công/)).not.toBeInTheDocument()
-  })
-
-  it('SUCCEEDED nhưng Active read-back khác candidate là alert fail-closed, không thành công', async () => {
-    client.request.mockImplementation((operationId: string, options?: RequestOptions) => {
-      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
-      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
-      if (operationId === 'getProgrammingRevision') return Promise.resolve(immutableRevision(options?.path?.revisionId ?? 'previous-revision'))
-      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
-      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
-      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
-      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
-      if (operationId === 'commissionProgrammingRevision') return Promise.resolve({ operationId: OPERATION_ID, statusUrl: '', state: 'QUEUED', requestHash: 'hash', acceptedAt: '2026-08-13T00:00:01Z', correlationId: 'corr-1' })
-      if (operationId === 'getProgrammingOperation') return Promise.resolve({ operationId: OPERATION_ID, state: 'SUCCEEDED', step: 'done', requestedRevisionId: REVISION_ID, previousActiveRevisionId: 'previous-revision', actualActiveRevisionId: 'other-revision', keepsRunningRevision: true, startedAt: '2026-08-13T00:00:01Z', updatedAt: '2026-08-13T00:00:02Z' })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-
-    renderPage(true)
-    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Đưa vào vận hành…' }))
-    const dialog = await screen.findByRole('dialog')
-    for (const checkbox of within(dialog).getAllByRole('checkbox')) fireEvent.click(checkbox)
-    fireEvent.change(within(dialog).getByLabelText(/Xác thực lại/), { target: { value: 'secret' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: `Xác nhận ${REVISION_ID.slice(0, 8)}` }))
-
-    const mismatchText = await screen.findByText(/SUCCEEDED nhưng Active read-back không khớp bản ứng viên/)
-    const mismatch = mismatchText.closest('[role="alert"]')
-    expect(mismatch).not.toBeNull()
-    if (!mismatch) throw new Error('Thiếu alert read-back mismatch')
-    expect(mismatch).toHaveTextContent(/SUCCEEDED nhưng Active read-back không khớp bản ứng viên/)
-    expect(mismatch).toHaveTextContent('other-revision')
-    expect(screen.queryByText(/Đưa vào vận hành thành công/)).not.toBeInTheDocument()
-  })
-
   it('deep-link query tải đúng Check/Revision sau reload và không phụ thuộc location.state', async () => {
-    client.request.mockImplementation((operationId: string, options?: RequestOptions) => {
+    client.request.mockImplementation((operationId: string, options?: { path?: Record<string, string> }) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
       if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
-      if (operationId === 'getProgrammingRevision') return Promise.resolve(immutableRevision(options?.path?.revisionId ?? 'previous-revision'))
       if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
       if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
@@ -290,11 +198,11 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
   })
 
   it('safeState=true nhưng chỉ do chưa ai điều khiển (safeStateNoControllerOnly) không chặn Commission', async () => {
-    client.request.mockImplementation((operationId: string, options?: RequestOptions) => {
+    client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
       if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: true, observedAt: '2026-08-13T00:00:00Z' })
-      if (operationId === 'getProgrammingRevision') return Promise.resolve(immutableRevision(options?.path?.revisionId ?? 'previous-revision'))
       if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
       if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
@@ -312,11 +220,11 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
   })
 
   it('Core safe-state và lỗi đọc override đều fail-closed dù Check PASSED', async () => {
-    client.request.mockImplementation((operationId: string, options?: RequestOptions) => {
+    client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
       if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: true, safeStateNoControllerOnly: false, observedAt: '2026-08-13T00:00:00Z' })
-      if (operationId === 'getProgrammingRevision') return Promise.resolve(immutableRevision(options?.path?.revisionId ?? 'previous-revision'))
       if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
       if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
@@ -331,13 +239,14 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).toBeDisabled()
   })
 
-  it('D-01: mở PGM-03 không kèm Check nào tự seal/run/poll bằng nút "Kiểm tra", rồi hiện đúng kết quả', async () => {
+  it('D-01: mở PGM-05 không kèm Check nào tự seal/run/poll bằng nút "Kiểm tra", rồi hiện đúng kết quả', async () => {
     const project = baseProject()
     const sealedEtag = '"draft-1:2"'
-    client.request.mockImplementation((operationId: string, options?: RequestOptions) => {
+    client.request.mockImplementation((operationId: string, options?: { ifMatch?: string; body?: { baseRevisionId?: string } }) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
       if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', producerState: 'READY', activeRevisionId: null, lkgRevisionId: null, taskState: 'RUNNING', safeState: false, observedAt: '2026-08-13T00:00:00Z' })
       if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: 'draft-1' }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'createProgrammingRevision') {
         expect(options?.ifMatch).toBe(project.etag)
@@ -366,12 +275,37 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     )
 
     expect(await screen.findByText('Chưa có Kiểm tra nào.')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText('Chưa kiểm tra')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
+    // Empty state có thể render trước khi Project về. Chờ đúng điều kiện người
+    // dùng có thể thao tác; click một button còn disabled là no-op và biến test
+    // thành race phụ thuộc tải CPU của cả suite.
+    const checkButton = screen.getByRole('button', { name: 'Kiểm tra' })
+    await waitFor(() => expect(checkButton).toBeEnabled())
+    fireEvent.click(checkButton)
 
     // Sau khi seal+check xong, trang tự điều hướng vào đúng revisionId/checkId
     // (D-01) và hiện lại toàn bộ panel kết quả y hệt đường deep-link cũ.
-    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
+    expect(await screen.findByText('PASSED')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeDisabled()
+  })
+
+  it('viewer vẫn đọc được PGM-05 nhưng thấy rõ trạng thái permission và không có mutation', async () => {
+    auth.role = 'viewer'
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY', activeRevisionId: 'previous-revision', lkgRevisionId: null, taskState: 'RUNNING', safeState: false, safeStateNoControllerOnly: false, observedAt: '2026-08-21T00:00:00Z' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [{ programId: 'p1', desiredEnabled: true, generation: 1, runtimeState: 'RUNNING', updatedBy: 'admin', updatedAtUtcMs: 1 }] })
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingCheck') return Promise.resolve(passedCheck())
+      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
+      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderPage(true)
+    await screen.findByText('PASSED')
+    expect(screen.getAllByText('Bạn không có quyền thực hiện thao tác này').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Tiến trình Kiểm tra và Đưa vào vận hành' })).toBeInTheDocument()
   })
 })

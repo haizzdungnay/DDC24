@@ -13,6 +13,69 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "tools/restructure/repository-path-map.json"
 
 
+CONTRACT_REFERENCE_PATTERN = re.compile(
+    r"(?:contracts/(?:iop|shm)|(?:mkddc|kinexus)_shm\.h|iop_protocol\.h)"
+)
+
+
+def strip_ts_comments(source: str) -> str:
+    """Bỏ comment TS/TSX, GIỮ NGUYÊN chuỗi ký tự.
+
+    Vì sao cần: luật "Web UI không chạm contract C/SHM/IOP" trước đây quét thẳng
+    toàn văn tệp, nên nó không phân biệt được một phụ thuộc thật với một dòng
+    chú thích truy vết. `features/scheduler/shared.ts` chỉ ghi
+    `khớp contracts/shm/mkddc_shm.h` để người đọc biết hằng số lấy từ đâu — đúng
+    thứ `DOC_GOVERNANCE` khuyến khích — và bị tính là vi phạm.
+
+    Hệ quả là gate `repository-layout` đỏ suốt một thời gian vì một lý do sai,
+    và ai cũng học được rằng cách "sửa" là xoá chú thích. Đó là phần thưởng
+    ngược: nó làm mã khó truy vết hơn mà không hề an toàn hơn.
+
+    Bỏ comment TRƯỚC khi so khiến luật đo đúng thứ nó tuyên bố đo — phụ thuộc
+    trong CODE. Chuỗi ký tự được giữ lại có chủ ý: một đường dẫn contract nằm
+    trong string (import động, fetch, worker URL) VẪN là phụ thuộc thật và vẫn
+    phải bị bắt.
+    """
+
+    out: list[str] = []
+    index = 0
+    length = len(source)
+    while index < length:
+        char = source[index]
+        if char in "'\"`":
+            quote = char
+            out.append(char)
+            index += 1
+            while index < length:
+                current = source[index]
+                if current == "\\" and index + 1 < length:
+                    out.append(source[index : index + 2])
+                    index += 2
+                    continue
+                out.append(current)
+                index += 1
+                if current == quote:
+                    break
+            continue
+        if char == "/" and index + 1 < length:
+            following = source[index + 1]
+            if following == "/":
+                while index < length and source[index] != "\n":
+                    index += 1
+                continue
+            if following == "*":
+                index += 2
+                while index + 1 < length and not (
+                    source[index] == "*" and source[index + 1] == "/"
+                ):
+                    index += 1
+                index += 2
+                continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
 def fail(message: str) -> None:
     print(f"LỖI: {message}", file=sys.stderr)
     raise SystemExit(1)
@@ -152,7 +215,9 @@ def validate_dependency_boundaries(root: Path = ROOT) -> None:
     ui_source = root / "apps/web-ui/src"
     for path in source_files(ui_source, {".ts", ".tsx"}):
         content = path.read_text(encoding="utf-8", errors="replace")
-        if re.search(r"(?:contracts/(?:iop|shm)|(?:mkddc|kinexus)_shm\.h|iop_protocol\.h)", content):
+        # So trên CODE đã bỏ comment: chú thích truy vết không phải phụ thuộc.
+        # Chuỗi ký tự vẫn được giữ, nên import động/fetch tới contract vẫn bị bắt.
+        if CONTRACT_REFERENCE_PATTERN.search(strip_ts_comments(content)):
             violations.append(
                 f"{path.relative_to(root)}: Web UI chạm contract C/SHM/IOP"
             )

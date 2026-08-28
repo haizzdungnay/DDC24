@@ -45,6 +45,7 @@ const char* st_program_state_name(StProgramState s)
     case StProgramState::FAULTED:     return "FAULTED";
     case StProgramState::ROLLED_BACK: return "ROLLED_BACK";
     case StProgramState::REJECTED:    return "REJECTED";
+    case StProgramState::WAITING:     return "WAITING";
     }
     return "?";
 }
@@ -78,6 +79,61 @@ bool StTask::due(uint64_t now_ns) const
     if (!started_) return true;   /* lần đầu: chạy ngay tick đầu tiên */
     const uint64_t period_ns = static_cast<uint64_t>(cfg_.period_ms) * 1000000ull;
     return now_ns >= last_run_ns_ + period_ns;
+}
+
+/* T59-402 — release theo Program. `period_ms == 0` nghĩa là "theo chu kỳ Task":
+ * giữ nguyên hành vi cho mọi cấu hình chưa khai chu kỳ riêng. */
+bool st_program_due(const StProgramInstance& program, uint32_t task_period_ms, uint64_t now_ns)
+{
+    if (program.period_ms == 0) return true; /* Task đã quyết định thời điểm. */
+    (void)task_period_ms;
+    if (!program.release_started) return true;
+    return now_ns >= program.next_release_ns;
+}
+
+void st_program_mark_released(StProgramInstance* program, uint64_t now_ns)
+{
+    if (program->period_ms == 0) return;
+    const uint64_t period_ns = static_cast<uint64_t>(program->period_ms) * 1000000ull;
+    if (!program->release_started) {
+        program->release_started = true;
+        program->next_release_ns = now_ns + period_ns;
+        program->consecutive_missed_release = 0;
+        return;
+    }
+    /* Bù trôi theo mốc LÝ THUYẾT. Bám thời điểm chạy thật sẽ làm một tick trễ
+     * đẩy mọi deadline sau đó trôi theo, và Program 1 s không còn chạy đúng
+     * một lần mỗi giây. */
+    if (now_ns >= program->next_release_ns) {
+        const uint64_t late = now_ns - program->next_release_ns;
+        const uint64_t missed = late / period_ns;
+        if (missed > 0) {
+            const uint64_t room = UINT32_MAX - program->missed_release_count;
+            program->missed_release_count +=
+                static_cast<uint32_t>(std::min(missed, room));
+            /* T60-002 — cùng sự kiện, hai bộ đếm khác họ: `missed_release_count`
+             * trả lời "từ đầu tới giờ lỡ bao nhiêu", còn bộ đếm liên tiếp trả
+             * lời "ngay lúc này có đang lỡ nhịp không". Công thức `health` của
+             * Plan 60 §4.2 chỉ được đọc cái thứ hai. */
+            const uint64_t consecutive_room =
+                UINT32_MAX - program->consecutive_missed_release;
+            program->consecutive_missed_release +=
+                static_cast<uint32_t>(std::min(missed, consecutive_room));
+        } else {
+            /* Release đúng hạn (trễ chưa tới trọn một chu kỳ = jitter, đúng
+             * cùng ngưỡng mà `missed_release_count` đang dùng) ⇒ chuỗi lỡ nhịp
+             * kết thúc tại đây. */
+            program->consecutive_missed_release = 0;
+        }
+        program->next_release_ns += period_ns * (missed + 1);
+        /* Lỡ quá nhiều thì BỎ, không chạy bù: chạy bù làm timer nhảy và làm
+         * tình trạng quá tải nặng thêm (SPEC §4). */
+        if (program->next_release_ns <= now_ns) program->next_release_ns = now_ns + period_ns;
+    } else {
+        /* Gọi trước hạn (không xảy ra qua `st_program_due`, nhưng hàm này là
+         * API công khai): sớm hơn hạn thì chắc chắn không lỡ nhịp. */
+        program->consecutive_missed_release = 0;
+    }
 }
 
 void StTask::mark_ran(uint64_t now_ns)
@@ -196,9 +252,19 @@ bool StScheduler::add_program(const std::string& task_id, const std::string& ins
             return fail("cannot register RETAIN identity for instance '" + instance_id + "'");
     }
     task->programs().push_back(std::move(inst));
+    /* `order` vẫn phải DUY NHẤT trong Task (giữ nguyên bất biến có sẵn): nó là
+     * thứ quyết định thứ tự chạy, và cho phép trùng sẽ biến thứ tự thành thứ
+     * cần tie-break — tức là thành thứ có thể đổi khi ai đó sửa tie-break.
+     *
+     * Sắp theo `order`, rồi theo `instance_id` khi trùng. Không bám thứ tự
+     * THÊM VÀO: hai controller nạp cùng một package theo thứ tự khác nhau phải
+     * chạy Program theo cùng một dãy, nếu không kết quả không tái lập được. */
     std::sort(task->programs().begin(), task->programs().end(),
               [](const std::unique_ptr<StProgramInstance>& a,
-                 const std::unique_ptr<StProgramInstance>& b) { return a->order < b->order; });
+                 const std::unique_ptr<StProgramInstance>& b) {
+                  if (a->order != b->order) return a->order < b->order;
+                  return a->instance_id < b->instance_id;
+              });
     return true;
 }
 
@@ -233,8 +299,16 @@ bool StScheduler::stage_activation(const std::string& instance_id,
 {
     StProgramInstance* p = find_program(instance_id);
     if (!p) { if (error) *error = "unknown instance '" + instance_id + "'"; return false; }
+    return stage_activation(p, artifact, error, is_rollback);
+}
+
+bool StScheduler::stage_activation(StProgramInstance* p,
+                                   const std::vector<uint8_t>& artifact, std::string* error,
+                                   bool is_rollback)
+{
+    if (!p) { if (error) *error = "null program instance"; return false; }
     if (p->has_pending) {
-        if (error) *error = "an activation is already pending for '" + instance_id + "'";
+        if (error) *error = "an activation is already pending for '" + p->instance_id + "'";
         return false;
     }
 
@@ -270,7 +344,7 @@ bool StScheduler::stage_activation(const std::string& instance_id,
     StRetainResult retain_result;
     if (prepared->program.has_retain()) {
         if (retain_service_ && p->retain_mailbox) {
-            retain_result = retain_service_->restore(instance_id, &prepared->program,
+            retain_result = retain_service_->restore(p->instance_id, &prepared->program,
                                                       wall_clock_());
         } else {
             retain_result.state = StRetainRestoreState::COLD_INIT_MISSING;
@@ -295,6 +369,171 @@ bool StScheduler::stage_activation(const std::string& instance_id,
     p->pending_is_rollback = false;
     if (p->pending_changed_state) p->state = StProgramState::STAGED;
     p->has_pending.store(true, std::memory_order_release);
+    return true;
+}
+
+bool StScheduler::prepare_program_set(const std::string& task_id,
+                                      const std::vector<StProgramSetEntry>& entries,
+                                      StPreparedProgramSet* prepared, std::string* error)
+{
+    auto fail = [&](const std::string& message) {
+        if (error) *error = message;
+        return false;
+    };
+    if (prepared == nullptr) return fail("null prepared program set");
+    StTask* task = find_task(task_id);
+    if (task == nullptr) return fail("unknown task '" + task_id + "'");
+    if (entries.empty()) return fail("package has no program instance");
+
+    const std::size_t max_per_task = profile_ == StSchedulerProfile::REV_A
+                                         ? st_profile_generated::kMaxProgramsPerTask
+                                         : st_sched_limits::kMaxProgramsPerTask;
+    const std::size_t max_total = profile_ == StSchedulerProfile::REV_A
+                                      ? st_profile_generated::kMaxProgramsTotal
+                                      : st_sched_limits::kMaxProgramsTotal;
+    if (entries.size() > max_per_task)
+        return fail("too many program instances in prepared package");
+    std::size_t other_task_programs = 0;
+    for (const auto& other : tasks_)
+        if (other.get() != task) other_task_programs += other->programs().size();
+    if (entries.size() + other_task_programs > max_total)
+        return fail("too many program instances in resource");
+
+    std::size_t enabled_count = 0;
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        const StProgramSetEntry& entry = entries[index];
+        if (entry.instance_id.empty() || entry.instance_id.size() > 64)
+            return fail("instance id must be 1..64 characters");
+        if (profile_ == StSchedulerProfile::REV_A && entry.period_ms != 0 &&
+            !st_limits::RevAAllowsPeriod(entry.period_ms))
+            return fail("program period_ms is not allowed by Rev A profile");
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            if (entries[prior].instance_id == entry.instance_id)
+                return fail("duplicate instance id '" + entry.instance_id + "'");
+            if (entries[prior].order == entry.order)
+                return fail("duplicate order " + std::to_string(entry.order) +
+                            " in task '" + task_id + "'");
+        }
+        if (entry.enabled) ++enabled_count;
+    }
+    const std::size_t max_enabled = profile_ == StSchedulerProfile::REV_A
+                                        ? st_profile_generated::kMaxProgramsEnabled
+                                        : st_sched_limits::kMaxProgramsTotal;
+    if (enabled_count > max_enabled)
+        return fail("too many enabled programs in prepared package");
+
+    StPreparedProgramSet shadow;
+    try {
+        shadow.reserve(entries.size());
+        for (const StProgramSetEntry& entry : entries) {
+            auto program = std::make_unique<StProgramInstance>();
+            program->instance_id = entry.instance_id;
+            program->order = entry.order;
+            program->period_ms = entry.period_ms;
+            program->enabled = entry.enabled;
+            if (retain_service_) {
+                program->retain_mailbox = retain_service_->register_instance(entry.instance_id);
+                if (!program->retain_mailbox)
+                    return fail("cannot register RETAIN identity for instance '" +
+                                entry.instance_id + "'");
+            }
+            if (!stage_activation(program.get(), entry.artifact, error, false)) return false;
+            shadow.push_back(std::move(program));
+        }
+    } catch (const std::bad_alloc&) {
+        return fail("program set staging allocation failed");
+    }
+    prepared->swap(shadow);
+    return true;
+}
+
+bool StScheduler::arm_prepared_program_set(StPreparedProgramSet* prepared, bool rollback,
+                                           std::string* error)
+{
+    if (prepared == nullptr || prepared->empty()) {
+        if (error) *error = "prepared program set is empty";
+        return false;
+    }
+    std::size_t enabled_count = 0;
+    for (const auto& program : *prepared) {
+        if (!program || !program->has_pending.load(std::memory_order_acquire) ||
+            program->pending_commit_requested.load(std::memory_order_acquire) ||
+            !program->pending_program) {
+            if (error) *error = "prepared program set is incomplete";
+            return false;
+        }
+        if (program->enabled) ++enabled_count;
+    }
+    const std::size_t max_enabled = profile_ == StSchedulerProfile::REV_A
+                                        ? st_profile_generated::kMaxProgramsEnabled
+                                        : st_sched_limits::kMaxProgramsTotal;
+    if (enabled_count > max_enabled) {
+        if (error) *error = "too many enabled programs in prepared package";
+        return false;
+    }
+    /* Chỉ ghi sau khi MỌI phần tử đã qua preflight: không có prefix armed. */
+    for (auto& program : *prepared) {
+        program->pending_is_rollback = rollback;
+        program->pending_commit_requested.store(true, std::memory_order_release);
+    }
+    return true;
+}
+
+bool StScheduler::swap_prepared_program_set_at_boundary(
+    const std::string& task_id, StPreparedProgramSet* prepared) noexcept
+{
+    StTask* task = find_task(task_id);
+    if (task == nullptr || prepared == nullptr || prepared->empty()) return false;
+    for (const auto& program : *prepared) {
+        if (!program || !program->has_pending.load(std::memory_order_acquire) ||
+            !program->pending_commit_requested.load(std::memory_order_acquire) ||
+            !program->pending_program || program->runtime.has_retired())
+            return false;
+    }
+
+    /* Mọi mutation dưới đây chỉ chạm topology shadow. Nếu một handle bất ngờ bị
+     * từ chối, topology live vẫn chưa swap và caller có thể discard cả shadow. */
+    for (auto& program : *prepared) {
+        if (!program->runtime.activate_prepared(std::move(program->pending_program))) return false;
+        program->process_input_count = 0;
+        program->input_snapshot_generation = 0;
+        program->input_snapshot_valid = true;
+        program->last_successful_base_step = 0;
+        program->output_commit_generation = 0;
+        program->output_commit_now_ns = 0;
+        /* Program Disabled không có output cycle để chờ; nó đã qua loader và
+         * không thể publish, nên đủ điều kiện package barrier ngay. */
+        program->committed_since_activation = !program->enabled;
+        program->outputs_withdrawn = false;
+        program->retain_restore_state = program->pending_retain_restore_state;
+        program->retain_reject_code = program->pending_retain_reject_code;
+        program->retain_generation = program->pending_retain_generation;
+        program->last_successful_now_ns = 0;
+        /* T60-002: gói mới chưa chạy lần nào, nên không được thừa kế mốc chạy
+         * lẫn chuỗi lỡ nhịp của gói cũ — cả hai đều mô tả một artifact khác. */
+        program->last_run_mono_ns = 0;
+        program->consecutive_missed_release = 0;
+        program->activated_artifact.swap(program->pending_artifact);
+        program->state = program->enabled ? StProgramState::RUNNING
+                                          : StProgramState::DISABLED;
+        program->pending_is_rollback = false;
+        program->pending_changed_state = false;
+        program->pending_retain_restore_state = StRetainRestoreState::NOT_APPLICABLE;
+        program->pending_retain_reject_code = nullptr;
+        program->pending_retain_generation = 0;
+        program->pending_commit_requested.store(false, std::memory_order_relaxed);
+        program->has_pending.store(false, std::memory_order_release);
+    }
+    task->programs().swap(*prepared);
+    return true;
+}
+
+bool StScheduler::restore_program_set_at_boundary(
+    const std::string& task_id, StPreparedProgramSet* previous) noexcept
+{
+    StTask* task = find_task(task_id);
+    if (task == nullptr || previous == nullptr) return false;
+    task->programs().swap(*previous);
     return true;
 }
 
@@ -343,6 +582,18 @@ bool StScheduler::start(const std::string& instance_id, std::string* error)
                             st_program_state_name(p->state);
         return false;
     }
+    /* T59-402 — trần 16 Program chạy đồng thời (DDD §0/§4.1). Trần này phải ép
+     * ở đây, nơi một Program thực sự BẮT ĐẦU tác động lên đầu ra; ép ở lớp cấu
+     * hình chỉ chặn được ý định, không chặn được trạng thái. Program đã RUNNING
+     * không tính lại vì `start` trên nó là no-op idempotent. */
+    if (p->state != StProgramState::RUNNING && p->state != StProgramState::WAITING) {
+        const std::size_t max_enabled = max_enabled_programs();
+        if (running_program_count() >= max_enabled) {
+            if (error)
+                *error = "too many running programs (limit " + std::to_string(max_enabled) + ")";
+            return false;
+        }
+    }
     p->state = StProgramState::RUNNING;
     p->enabled = true;
     return true;
@@ -352,7 +603,7 @@ bool StScheduler::stop(const std::string& instance_id, std::string* error)
 {
     StProgramInstance* p = find_program(instance_id);
     if (!p) { if (error) *error = "unknown instance"; return false; }
-    if (p->state != StProgramState::RUNNING) {
+    if (p->state != StProgramState::RUNNING && p->state != StProgramState::WAITING) {
         if (error) *error = std::string("cannot stop from state ") +
                             st_program_state_name(p->state);
         return false;
@@ -416,6 +667,111 @@ bool StScheduler::request_retain_reset(const std::string& instance_id, std::stri
     return true;
 }
 
+std::size_t StScheduler::running_program_count() const noexcept
+{
+    std::size_t running = 0;
+    for (const auto& task : tasks_)
+        for (const auto& program : task->programs())
+            if (program->state == StProgramState::RUNNING ||
+                program->state == StProgramState::WAITING) ++running;
+    return running;
+}
+
+std::size_t StScheduler::max_enabled_programs() const noexcept
+{
+    return profile_ == StSchedulerProfile::REV_A ? st_profile_generated::kMaxProgramsEnabled
+                                                 : st_sched_limits::kMaxProgramsTotal;
+}
+
+StScheduler::StEnableRequestOutcome StScheduler::request_program_enabled(
+    const std::string& instance_id, bool enabled, StProgramInstance** instance,
+    uint64_t* ack_baseline, std::string* error)
+{
+    StProgramInstance* p = find_program(instance_id);
+    if (!p) {
+        /* Không tự tạo instance: bật một Program không có trong package đang
+         * chạy nghĩa là người gọi và thiết bị đang nói về hai gói khác nhau. */
+        if (error) *error = "instance '" + instance_id + "' not in active package";
+        return StEnableRequestOutcome::UNKNOWN_INSTANCE;
+    }
+    /* Đọc mốc ack TRƯỚC khi arm. Đọc sau sẽ có cửa sổ mà boundary đã áp dụng
+     * xong ngay giữa hai lệnh và caller chờ mãi một lần tăng không bao giờ tới. */
+    const uint64_t baseline = p->enable_ack_generation.load(std::memory_order_acquire);
+    uint8_t expected = static_cast<uint8_t>(StEnableRequest::NONE);
+    const uint8_t desired = static_cast<uint8_t>(enabled ? StEnableRequest::ENABLE
+                                                         : StEnableRequest::DISABLE);
+    if (!p->pending_enable_request.compare_exchange_strong(
+            expected, desired, std::memory_order_acq_rel, std::memory_order_acquire)) {
+        /* Một yêu cầu khác đang chờ boundary. Ghi đè nó sẽ làm lệnh trước biến
+         * mất trong im lặng — người vận hành thấy "OK" cho một lệnh chưa từng
+         * được áp dụng. */
+        if (error)
+            *error = "an enable/disable request is already pending for '" + instance_id + "'";
+        return StEnableRequestOutcome::ALREADY_PENDING;
+    }
+    if (instance) *instance = p;
+    if (ack_baseline) *ack_baseline = baseline;
+    return StEnableRequestOutcome::ARMED;
+}
+
+void StScheduler::apply_pending_enable_requests(StTask& task) noexcept
+{
+    for (auto& p : task.programs()) {
+        const uint8_t request = p->pending_enable_request.load(std::memory_order_acquire);
+        if (request == static_cast<uint8_t>(StEnableRequest::NONE)) continue;
+
+        StEnableAckResult result = StEnableAckResult::APPLIED;
+        const StProgramState state_at_request = p->state;
+        if (request == static_cast<uint8_t>(StEnableRequest::ENABLE)) {
+            if (p->state == StProgramState::RUNNING || p->state == StProgramState::WAITING) {
+                /* Idempotent: lệnh Enable lặp lại trên Program đang chạy là
+                 * câu trả lời "đúng rồi", không phải lỗi. */
+                p->enabled = true;
+            } else if (p->state != StProgramState::DISABLED &&
+                       p->state != StProgramState::ACTIVE &&
+                       p->state != StProgramState::STOPPED &&
+                       p->state != StProgramState::ROLLED_BACK) {
+                /* FAULTED chưa reset, EMPTY, REJECTED... — từ chối là câu trả
+                 * lời đúng cho người vận hành, không phải lỗi cần che. */
+                result = StEnableAckResult::REJECTED_STATE;
+            } else if (running_program_count() >= max_enabled_programs()) {
+                /* T59-402 — trần Program chạy đồng thời của profile. Kiểm TRƯỚC
+                 * khi chạm bất kỳ trường nào: bản trước enable xong mới thấy vượt
+                 * trần và để lại Program ở STOPPED/`enabled=true`, tức một lệnh
+                 * bị từ chối vẫn kịp đổi trạng thái nửa vời. */
+                result = StEnableAckResult::REJECTED_LIMIT;
+            } else {
+                /* DISABLED -> RUNNING đi thẳng: bước STOPPED trung gian của
+                 * đường cũ không quan sát được từ ngoài boundary, và tách hai
+                 * bước ra mới là thứ tạo ra trạng thái nửa vời khi bước sau hỏng. */
+                p->enabled = true;
+                p->state = StProgramState::RUNNING;
+            }
+        } else {
+            /* Disable phải KẾT THÚC ở DISABLED, không chỉ STOPPED: dừng mà vẫn
+             * `enabled=true` làm runtime tiếp tục công bố Program đang bật
+             * trong khi người vận hành tin là đã tắt. Áp dụng được từ mọi
+             * trạng thái, kể cả FAULTED. */
+            p->enabled = false;
+            p->state = StProgramState::DISABLED;
+        }
+
+        p->enable_ack_state.store(static_cast<uint8_t>(state_at_request),
+                                  std::memory_order_relaxed);
+        p->enable_ack_result.store(static_cast<uint8_t>(result), std::memory_order_relaxed);
+        p->pending_enable_request.store(static_cast<uint8_t>(StEnableRequest::NONE),
+                                        std::memory_order_relaxed);
+        /* release: non-RT thấy generation tăng thì chắc chắn thấy kết quả và
+         * trạng thái đã ghi ở trên. Tăng CUỐI CÙNG, không sớm hơn. */
+        p->enable_ack_generation.fetch_add(1, std::memory_order_release);
+    }
+}
+
+void StScheduler::apply_pending_enable_requests_at_boundary()
+{
+    for (auto& task : tasks_) apply_pending_enable_requests(*task);
+}
+
 bool StScheduler::rollback(const std::string& instance_id, std::string* error)
 {
     StProgramInstance* p = find_program(instance_id);
@@ -456,11 +812,17 @@ void StScheduler::apply_pending_activations(StTask& task)
             p->input_snapshot_valid = true;
             p->last_successful_base_step = 0;
             p->output_commit_generation = 0;
+            p->output_commit_now_ns = 0;
+            /* Gói mới chưa chạy lần nào: tư cách của gói CŨ không được thừa kế. */
+            p->committed_since_activation = false;
             p->outputs_withdrawn = false;
             p->retain_restore_state = p->pending_retain_restore_state;
             p->retain_reject_code = p->pending_retain_reject_code;
             p->retain_generation = p->pending_retain_generation;
             p->last_successful_now_ns = 0;
+            /* T60-002: mốc chạy và chuỗi lỡ nhịp thuộc về artifact CŨ. */
+            p->last_run_mono_ns = 0;
+            p->consecutive_missed_release = 0;
             /* Giữ lại bytes để promote thành last-known-good SAU KHI chạy được
              * >= 1 tick không fault — package chưa chạy lần nào không đủ tư
              * cách làm mốc rollback. */
@@ -511,6 +873,26 @@ void StScheduler::apply_pending_retain_resets(StTask& task)
     for (auto& p : task.programs()) {
         if (!p->pending_retain_reset.load(std::memory_order_acquire)) continue;
         p->runtime.reset_retained_state();
+        /* T59-407 — công bố ngay ảnh ĐÃ RESET, không chờ chu kỳ chạy kế tiếp.
+         *
+         * Triệu chứng nếu thiếu: reset xong, RAM sạch, nhưng file bền vững vẫn
+         * giữ giá trị cũ — khởi động lại là giá trị cũ quay về. Đúng nghĩa "reset
+         * nửa vời" mà `T59-407` cấm.
+         *
+         * Nguyên nhân: `publish_committed_retain_snapshots()` chỉ công bố cho
+         * Program vừa CHẠY và vừa COMMIT output trong base step này. Mà Program
+         * hay bị reset nhất lại là Program đang STOPPED hoặc FAULTED — đúng
+         * những Program không bao giờ thoả điều kiện đó. Force-flush sau đó chỉ
+         * ghi lại ảnh CŨ, hoặc không ghi gì.
+         *
+         * Công bố ở đây không phụ thuộc trạng thái chạy: reset là một sự kiện
+         * của DỮ LIỆU, không phải của việc chạy. */
+        if (p->retain_mailbox != nullptr && p->runtime.loaded()) {
+            const StLoadedProgram* loaded = p->runtime.program();
+            if (loaded != nullptr && loaded->has_retain())
+                (void)st_publish_retain_snapshot(p->retain_mailbox, *loaded,
+                                                 p->last_successful_now_ns);
+        }
         p->pending_retain_reset.store(false, std::memory_order_relaxed);
         /* release: non-RT polling generation này phải thấy đúng slots đã
          * ghi ở dòng trên trước khi thấy generation tăng. */
@@ -523,6 +905,98 @@ void StScheduler::apply_pending_retain_resets_at_boundary()
     for (auto& task : tasks_) apply_pending_retain_resets(*task);
 }
 
+bool StScheduler::run_program(StTask& task, StProgramInstance& program, uint64_t now_ns,
+                             LaneOutcome* outcome)
+{
+    const uint64_t program_start = wall_clock_();
+
+    bool has_input_binding = false;
+    for (const StIrIoBinding& binding : program.runtime.program()->io_bindings) {
+        if (!binding.is_output) {
+            has_input_binding = true;
+            break;
+        }
+    }
+    auto record_fault = [&](const char* code, uint32_t pc, int line) {
+        program.fault_count++;
+        program.last_fault_code = code;
+        program.last_fault_pc = pc;
+        program.last_fault_line = line;
+        program.state = StProgramState::FAULTED;
+        program.last_successful_base_step = 0;
+        outcome->faults++;
+        outcome->dispatch_failed = true;
+        if (outcome->event_count < outcome->events.size()) {
+            StRuntimeTraceEvent& event = outcome->events[outcome->event_count++];
+            event.kind = StTraceEventKind::RUNTIME_FAULT;
+            event.timestamp_ns = now_ns;
+            event.ok = false;
+            event.task_id = task.config().id.c_str();
+            event.instance_id = program.instance_id.c_str();
+            event.code = code;
+        }
+    };
+
+    if (has_input_binding &&
+        (program.input_snapshot_generation != base_step_count_ || !program.input_snapshot_valid)) {
+        /* Required input không GOOD/mapped/coercible thì Program này KHÔNG
+         * execute — chạy bằng slot cũ sẽ trình bày dữ liệu stale như dữ liệu
+         * live và vẫn publish output mới. */
+        record_fault(st_diag_code::kRtNonFiniteInput, 0, 0);
+        return false;
+    }
+
+    const StExecResult result = program.runtime.execute(static_cast<int64_t>(now_ns));
+    program.run_count++;
+    /* T60-002 — MỐC THỜI GIAN của lần chạy, ghi ngay sau khi thân chương trình
+     * đã thực thi và TRƯỚC nhánh fault: một Program chết lúc 10:03 phải báo
+     * 10:03, không phải mốc của lần chạy tốt cuối cùng trước đó. Chỉ RUNNING
+     * mới được dispatch, nên sau khi fault chuyển sang FAULTED thì mốc này đứng
+     * yên đúng tại thời điểm chết. Dùng `now_ns` (đồng hồ chụp một lần cho cả
+     * tick) chứ không gọi `wall_clock_()`: cột này được so với
+     * `captured_monotonic_ns` của cùng snapshot, hai đồng hồ khác nhau thì phép
+     * trừ đó vô nghĩa. */
+    program.last_run_mono_ns = now_ns;
+    if (result.waiting) {
+        /* WAIT do freshness là backpressure có chủ đích. Runtime đã rollback
+         * toàn bộ slot/FB và không publish signal/output. Công bố WAITING để
+         * read-back không nói sai là RUNNING; dispatcher vẫn release WAITING
+         * ở chu kỳ kế để tự hồi phục khi producer có dữ liệu. */
+        program.state = StProgramState::WAITING;
+        program.last_successful_base_step = 0;
+        return true;
+    }
+    if (!result.ok) {
+        record_fault(result.fault_code, result.fault_pc, result.fault_line);
+        return false;
+    }
+    program.last_successful_base_step = base_step_count_;
+    program.state = StProgramState::RUNNING;
+    program.last_successful_now_ns = now_ns;
+    /* Đo WCET theo TỪNG Program: với ba lớp chu kỳ trong một Task, một con số
+     * gộp ở Task không trả lời được "Program nào ăn hết ngân sách". */
+    program.last_exec_ns = wall_clock_() - program_start;
+    if (program.last_exec_ns > program.max_exec_ns) program.max_exec_ns = program.last_exec_ns;
+    outcome->ran++;
+    return true;
+}
+
+void StScheduler::run_lane(StTask& task, const LaneWork& work, uint64_t now_ns,
+                           LaneOutcome* outcome)
+{
+    for (std::size_t slot = 0; slot < work.program_count; ++slot) {
+        StProgramInstance& program = *task.programs()[work.program_index[slot]];
+        /* Cô lập lỗi (kiến trúc §8 "isolate Program"): fault của MỘT Program
+         * không dừng những Program còn lại. Trước T59-403 một fault dừng cả
+         * Task, nên một Program hỏng làm mọi Program khác — kể cả Program không
+         * liên quan gì tới nó — ngừng tác động lên đầu ra mà không có mục nào
+         * trong hồ sơ nói vì sao. Trao đổi dữ liệu giữa Program đi qua Published
+         * Signal, nơi consumer có chính sách fallback khai báo cho đúng tình
+         * huống producer chết. */
+        (void)run_program(task, program, now_ns, outcome);
+    }
+}
+
 void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult* out)
 {
     /* task_start là đồng hồ RIÊNG cho WCET (SPEC §5) — KHÁC now_ns (mốc
@@ -531,68 +1005,75 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
      * chậm tới đâu; đây là lỗi đã có trước TASK-PROG-304, không phải hành vi
      * định trước. */
     const uint64_t task_start = wall_clock_();
-    uint32_t ran = 0;
     task.last_dispatch_base_step_ = base_step_count_;
     task.last_dispatch_succeeded_ = true;
 
-    for (auto& p : task.programs()) {
-        if (!p->enabled) continue;
+    /* Phân lane. Dùng bộ đệm cấp phát sẵn của scheduler: cấp phát trong chu kỳ
+     * quét là thứ làm WCET không còn giới hạn trên. */
+    std::size_t lane_count = 0;
+    for (LaneWork& lane : lane_work_) lane.program_count = 0;
+    for (LaneOutcome& outcome : lane_outcome_) outcome = LaneOutcome{};
+
+    for (std::size_t index = 0; index < task.programs().size(); ++index) {
+        StProgramInstance& program = *task.programs()[index];
+        if (!program.enabled) continue;
         /* CHỈ RUNNING mới được thực thi. ACTIVE nghĩa là "đã là package hiện
          * hành" chứ chưa phải "đang được chạy mỗi chu kỳ" — chuyển sang RUNNING
          * là việc của lệnh `start`. Gộp hai trạng thái sẽ làm `start` trở nên
          * vô nghĩa và người vận hành mất quyền quyết định khi nào chương trình
          * bắt đầu tác động lên đầu ra (SPEC §7.1, §7.3). */
-        if (p->state != StProgramState::RUNNING) continue;
-        if (!p->runtime.loaded()) continue;
+        if (program.state != StProgramState::RUNNING &&
+            program.state != StProgramState::WAITING) continue;
+        if (!program.runtime.loaded()) continue;
+        /* Deadline RIÊNG của Program: một package 3 lớp chu kỳ chạy trong cùng
+         * một Task, nên Task đến hạn KHÔNG có nghĩa mọi Program đến hạn. */
+        if (!st_program_due(program, task.config().period_ms, now_ns)) continue;
+        st_program_mark_released(&program, now_ns);
 
-        bool has_input_binding = false;
-        for (const StIrIoBinding& binding : p->runtime.program()->io_bindings) {
-            if (!binding.is_output) {
-                has_input_binding = true;
-                break;
-            }
-        }
-        if (has_input_binding &&
-            (p->input_snapshot_generation != base_step_count_ ||
-             !p->input_snapshot_valid)) {
-            p->fault_count++;
-            p->last_fault_code = st_diag_code::kRtNonFiniteInput;
-            p->last_fault_pc = 0;
-            p->last_fault_line = 0;
-            p->state = StProgramState::FAULTED;
-            p->last_successful_base_step = 0;
-            task.last_dispatch_succeeded_ = false;
-            out->faults++;
-            log_trace(StTraceEventKind::RUNTIME_FAULT, now_ns, false, task.config().id.c_str(),
-                     p->instance_id.c_str(), p->last_fault_code);
-            /* Required input không GOOD/mapped/coercible làm hủy cả cycle.
-             * Không execute bằng slot cũ vì như vậy stale/bad sẽ bị trình bày
-             * như dữ liệu live và output mới vẫn có thể được publish. */
-            break;
-        }
+        const std::size_t lane = program.lane < kMaxLanes ? program.lane : 0;
+        LaneWork& work = lane_work_[lane];
+        if (work.program_count < work.program_index.size())
+            work.program_index[work.program_count++] = static_cast<uint16_t>(index);
+        if (lane + 1 > lane_count) lane_count = lane + 1;
+    }
 
-        const StExecResult r = p->runtime.execute(static_cast<int64_t>(now_ns));
-        p->run_count++;
-        if (!r.ok) {
-            p->fault_count++;
-            p->last_fault_code = r.fault_code;
-            p->last_fault_pc = r.fault_pc;
-            p->last_fault_line = r.fault_line;
-            p->state = StProgramState::FAULTED;
-            p->last_successful_base_step = 0;
-            task.last_dispatch_succeeded_ = false;
-            out->faults++;
-            log_trace(StTraceEventKind::RUNTIME_FAULT, now_ns, false, task.config().id.c_str(),
-                     p->instance_id.c_str(), p->last_fault_code);
-            /* Fault của MỘT Program dừng cả Task: các Program trong một Task
-             * thường phối hợp (Program 0 tính setpoint, Program 1 dùng nó), nên
-             * chạy tiếp sẽ đẩy đầu ra vào tổ hợp chưa từng được thiết kế
-             * (SPEC §5). Staging của từng Program đã được StProgramRuntime huỷ. */
-            break;
+    if (lane_mode_ == StLaneMode::PARALLEL && lane_count > 1 && !workers_.empty()) {
+        /* Lane 0 chạy trên chính luồng gọi: một luồng đã có sẵn thì giao nó cho
+         * worker rồi ngồi chờ là lãng phí thuần tuý. */
+        const std::size_t dispatched = std::min(lane_count - 1, workers_.size());
+        for (std::size_t lane = 1; lane <= dispatched; ++lane) {
+            Worker& worker = *workers_[lane - 1];
+            worker.task = &task;
+            worker.work = &lane_work_[lane];
+            worker.outcome = &lane_outcome_[lane];
+            worker.now_ns = now_ns;
+            worker.has_work.store(true, std::memory_order_release);
         }
-        p->last_successful_base_step = base_step_count_;
-        p->last_successful_now_ns = now_ns;
-        ran++;
+        run_lane(task, lane_work_[0], now_ns, &lane_outcome_[0]);
+        /* Lane vượt số worker chạy nốt trên luồng gọi — thiếu worker phải làm
+         * chậm đi, không được làm BỎ SÓT. */
+        for (std::size_t lane = dispatched + 1; lane < lane_count; ++lane)
+            run_lane(task, lane_work_[lane], now_ns, &lane_outcome_[lane]);
+        for (std::size_t lane = 1; lane <= dispatched; ++lane) {
+            Worker& worker = *workers_[lane - 1];
+            while (worker.has_work.load(std::memory_order_acquire)) std::this_thread::yield();
+        }
+    } else {
+        for (std::size_t lane = 0; lane < lane_count; ++lane)
+            run_lane(task, lane_work_[lane], now_ns, &lane_outcome_[lane]);
+    }
+
+    /* Trộn theo SỐ HIỆU LANE, không theo thứ tự hoàn thành: trộn theo thứ tự
+     * hoàn thành sẽ làm trace và số đếm khác nhau giữa hai lần chạy cùng một
+     * cấu hình, và "single/multicore cùng ngữ nghĩa" mất nghĩa. */
+    uint32_t ran = 0;
+    for (std::size_t lane = 0; lane < lane_count; ++lane) {
+        const LaneOutcome& outcome = lane_outcome_[lane];
+        ran += outcome.ran;
+        out->faults += outcome.faults;
+        if (outcome.dispatch_failed) task.last_dispatch_succeeded_ = false;
+        for (std::size_t index = 0; index < outcome.event_count; ++index)
+            if (trace_ != nullptr) trace_->push(outcome.events[index]);
     }
 
     const uint64_t exec_ns = wall_clock_() - task_start;
@@ -611,7 +1092,8 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
         log_trace(StTraceEventKind::OVERRUN, wall_clock_(), false, task.config().id.c_str(),
                  nullptr, st_diag_code::kRtTaskOverrun);
         for (auto& p : task.programs()) {
-            if (p->state != StProgramState::RUNNING) continue;
+            if (p->state != StProgramState::RUNNING &&
+                p->state != StProgramState::WAITING) continue;
             p->fault_count++;
             p->last_fault_code = st_diag_code::kRtTaskOverrun;
             p->last_fault_pc = 0;
@@ -627,10 +1109,79 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
     out->tasks_run++;
 }
 
+StScheduler::~StScheduler() { stop_workers(); }
+
+void StScheduler::start_workers(std::size_t count)
+{
+    stop_workers();
+    workers_.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        auto worker = std::make_unique<Worker>();
+        Worker* raw = worker.get();
+        raw->owner = this;
+        /* Spin + yield thay vì condition variable: đường quét không được đi vào
+         * kernel để chờ. Worker chỉ tồn tại khi PARALLEL được bật tường minh,
+         * nên chi phí spin là chi phí người dựng hệ đã chọn. */
+        raw->thread = std::thread([raw]() {
+            while (!raw->stop.load(std::memory_order_acquire)) {
+                if (!raw->has_work.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                    continue;
+                }
+                raw->owner->run_lane(*raw->task, *raw->work, raw->now_ns, raw->outcome);
+                raw->has_work.store(false, std::memory_order_release);
+            }
+        });
+        workers_.push_back(std::move(worker));
+    }
+}
+
+void StScheduler::stop_workers()
+{
+    for (auto& worker : workers_) {
+        worker->stop.store(true, std::memory_order_release);
+        if (worker->thread.joinable()) worker->thread.join();
+    }
+    workers_.clear();
+}
+
+void StScheduler::set_lane_mode(StLaneMode mode)
+{
+    if (mode == lane_mode_) return;
+    lane_mode_ = mode;
+    if (mode == StLaneMode::PARALLEL) {
+        const unsigned hardware = std::thread::hardware_concurrency();
+        /* Một luồng đã là luồng gọi, nên chỉ cần thêm `hardware - 1`. Trần
+         * `kMaxLanes - 1` vì không bao giờ có nhiều lane hơn thế. */
+        const std::size_t count =
+            std::min<std::size_t>(kMaxLanes - 1, hardware > 1 ? hardware - 1 : 1);
+        start_workers(count);
+    } else {
+        stop_workers();
+    }
+}
+
+bool StScheduler::set_program_lane(const std::string& instance_id, uint8_t lane,
+                                   std::string* error)
+{
+    if (lane >= kMaxLanes) {
+        if (error) *error = "lane vượt trần " + std::to_string(kMaxLanes);
+        return false;
+    }
+    StProgramInstance* program = find_program(instance_id);
+    if (program == nullptr) {
+        if (error) *error = "không có instance '" + instance_id + "'";
+        return false;
+    }
+    program->lane = lane;
+    return true;
+}
+
 StSchedulerTickResult StScheduler::on_base_step(uint64_t now_ns)
 {
     StSchedulerTickResult result;
     result.base_step_sequence = ++base_step_count_;
+    last_tick_now_ns_ = now_ns;
 
     /* tasks_ đã sắp theo ưu tiên tăng dần từ lúc add_task. Non-preemptive:
      * task ưu tiên cao chạy TRỌN VẸN rồi mới tới task kế. */
@@ -640,6 +1191,12 @@ StSchedulerTickResult StScheduler::on_base_step(uint64_t now_ns)
      * BE đã báo "đã activate". Áp ở đây cũng bảo đảm không bao giờ swap package
      * giữa lúc execute() đang chạy. */
     apply_pending_activations_at_boundary();
+
+    /* Đổi bản signal TRƯỚC khi bất kỳ Program nào chạy. Consumer trong chu kỳ
+     * này đọc thứ publisher đã ghi ở chu kỳ TRƯỚC — độ trễ một chu kỳ là cái giá
+     * của việc mọi consumer thấy cùng một ảnh, và nó là cái giá rẻ hơn nhiều so
+     * với kết quả phụ thuộc thứ tự chạy. */
+    if (signal_bus_ != nullptr) signal_bus_->commit_at_boundary();
 
     for (auto& t : tasks_) {
         if (!t->enabled()) { t->stats_.skip_count++; continue; }
@@ -688,12 +1245,31 @@ void StScheduler::publish_committed_retain_snapshots() noexcept
 
 void StScheduler::promote_output_committed_artifacts() noexcept
 {
+    /* T59-501 — thăng cấp LKG là thao tác của cả GÓI, all-or-nothing.
+     *
+     * Bản trước thăng cấp từng Program độc lập. Với gói trộn ba lớp chu kỳ,
+     * Program 1 s đủ tư cách ngay base step đầu còn Program 30 s phải chờ 30
+     * base step — nên tập LKG trở thành NỬA GÓI MỚI NỬA GÓI CŨ. Rollback từ một
+     * tập như vậy khôi phục một tổ hợp chưa từng được Check, và "old LKG exact"
+     * mất nghĩa.
+     *
+     * Điều kiện là "đã commit ÍT NHẤT MỘT LẦN kể từ activate", không phải "cùng
+     * commit ở một base step" — đòi điều thứ hai là đòi một thứ không bao giờ
+     * xảy ra với gói nhiều chu kỳ. */
+    bool package_qualified = true;
+    bool has_candidate = false;
+    for (const auto& task : tasks_) {
+        for (const auto& program : task->programs()) {
+            if (program->activated_artifact.empty()) continue;
+            has_candidate = true;
+            if (!program->committed_since_activation) package_qualified = false;
+        }
+    }
+    if (!has_candidate || !package_qualified) return;
+
     for (auto& task : tasks_) {
         for (auto& program : task->programs()) {
-            if (program->activated_artifact.empty() ||
-                program->last_successful_base_step != base_step_count_ ||
-                program->output_commit_generation != base_step_count_)
-                continue;
+            if (program->activated_artifact.empty()) continue;
             program->retired_artifact.swap(program->last_known_good);
             program->last_known_good.swap(program->activated_artifact);
         }

@@ -3,8 +3,10 @@ import type React from 'react'
 import { API_ORIGIN, AUTH_MODE, IS_DEMO } from '../../shared/config'
 import { setAuthHeaderProvider } from '../../shared/api/client'
 import { setHistoryAuthHeaderProvider } from '../../shared/api/history'
+import { setSavedViewAccount } from '../../shared/savedViews'
 import { useI18n } from '../../shared/i18n'
 import type { UserRole } from '../../shared/types'
+import { LoginError } from './loginError'
 
 interface Session {
   username: string
@@ -12,6 +14,10 @@ interface Session {
   /** ISO thời điểm phiên này được cấp. Xem WEB-UX-003. */
   loginAt: string
   token?: string
+  /** `T57-3.17` (`ADR-047`) — phiên chỉ gọi được `/me` và `/me/change-password`
+   *  cho tới khi đổi mật khẩu. Backend mới là nơi cưỡng chế; cờ này để giao
+   *  diện dẫn người dùng tới đúng việc cần làm. */
+  mustChangePassword?: boolean
 }
 
 interface AuthContextValue {
@@ -20,6 +26,8 @@ interface AuthContextValue {
   login: (password: string, username?: string) => Promise<void>
   logout: () => void
   getAuthHeader: () => Record<string, string>
+  /** Gọi sau khi đổi mật khẩu thành công để gỡ trạng thái chặn. */
+  clearPasswordChangeRequirement: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -40,6 +48,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setHistoryAuthHeaderProvider(getAuthHeader)
   }, [getAuthHeader])
 
+  /* `T57-2.3`: khung nhìn đặt tên gắn theo tài khoản. Đẩy tên qua biến module
+     thay vì bắt mỗi trang gọi `useAuth` — Trends nằm ngoài cây `AuthProvider`
+     trong test, và thêm một phụ thuộc context chỉ để lấy một chuỗi là đổi lấy
+     sai thứ. */
+  useEffect(() => {
+    setSavedViewAccount(session?.username ?? null)
+  }, [session?.username])
+
   useEffect(() => {
     const handler = () => {
       setAuthHeaderProvider(() => ({}))
@@ -48,6 +64,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener('mkddc:auth-expired', handler)
     return () => window.removeEventListener('mkddc:auth-expired', handler)
+  }, [])
+
+  /* `T57-3.17`: backend là nơi cưỡng chế (403 `password_change_required`), nên
+     giao diện học được tình trạng này từ chính phản hồi bị chặn — kể cả khi
+     phiên được khôi phục từ một tab khác và chưa qua màn đăng nhập. */
+  useEffect(() => {
+    const handler = () => setSession((current) => current && !current.mustChangePassword
+      ? { ...current, mustChangePassword: true }
+      : current)
+    window.addEventListener('mkddc:password-change-required', handler)
+    return () => window.removeEventListener('mkddc:password-change-required', handler)
   }, [])
 
   const login = useCallback(async (password: string, username = 'admin') => {
@@ -70,17 +97,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Chế độ đăng nhập apikey chưa được backend hỗ trợ; dùng VITE_AUTH_MODE=jwt')
     }
 
-    const response = await fetch(`${base}/auth/login`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    })
-    // TC-L02/TC-L03 (TR-MKDDC24-P1-20260814-01): trước đây hard-code tiếng
-    // Việt, nên phiên English vẫn nhận "Đăng nhập thất bại" — dịch theo locale
-    // đang chọn thay vì luôn tiếng Việt.
-    if (!response.ok) throw new Error(pick('Đăng nhập thất bại', 'Sign in failed'))
-    const body = await response.json() as { token?: string; role?: UserRole }
+    /* T57-1.10 (§6.18-P2a) — ba nguyên nhân hỏng cần ba hành động khác nhau,
+       nên phải phân biệt được ở giao diện.
+    
+       `fetch` CHỈ ném khi không tới được máy chủ (DNS hỏng, dây rút, proxy
+       chết). Mọi phản hồi HTTP — kể cả 401 và 500 — đều resolve. Đó chính là
+       ranh giới dùng để tách "sai mật khẩu" khỏi "không tới được thiết bị". */
+    let response: Response
+    try {
+      response = await fetch(`${base}/auth/login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+    } catch {
+      throw new LoginError('unreachable', pick(
+        'Không kết nối được tới thiết bị. Kiểm tra dây mạng, địa chỉ IP và nguồn của bộ điều khiển.',
+        'Cannot reach the device. Check the network cable, the IP address and the controller power.'
+      ))
+    }
+    if (!response.ok) {
+      /* KHÔNG phân biệt "sai tên đăng nhập" với "sai mật khẩu". Backend cố ý
+         trả cùng một `401 invalid credentials` cho cả hai (`AuthService.
+         Authenticate`), và đó là hành vi ĐÚNG chống dò tài khoản. FE không được
+         suy diễn thêm.
+    
+         Cũng KHÔNG có thông điệp "tài khoản bị khoá": backend không hiện thực
+         khoá tài khoản sau N lần sai (`ADR-037` điều 4). Hiện một trạng thái
+         không tồn tại là bịa — cùng lớp lỗi với bốn badge `online` giả từng nằm
+         trên chính trang này (WEB-UX-002). */
+      if (response.status === 401 || response.status === 403) {
+        throw new LoginError('credentials', pick(
+          'Tên đăng nhập hoặc mật khẩu không đúng.',
+          'Incorrect username or password.'
+        ))
+      }
+      throw new LoginError('server', pick(
+        `Thiết bị trả lỗi máy chủ (HTTP ${response.status}). Đăng nhập không phải nguyên nhân; kiểm tra dịch vụ web trên bộ điều khiển.`,
+        `The device returned a server error (HTTP ${response.status}). This is not a credential problem; check the web service on the controller.`
+      ))
+    }
+    const body = await response.json() as { token?: string; role?: UserRole; mustChangePassword?: boolean }
     if (body.token) {
       const provider = () => ({ Authorization: `Bearer ${body.token}` })
       setAuthHeaderProvider(provider)
@@ -94,8 +152,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!body.role) {
       console.warn('mkddc: response login thiếu field "role"; mặc định về quyền viewer')
     }
-    setSession({ username, role: body.role ?? 'viewer', token: body.token, loginAt: new Date().toISOString() })
+    setSession({
+      username, role: body.role ?? 'viewer', token: body.token,
+      loginAt: new Date().toISOString(),
+      mustChangePassword: Boolean(body.mustChangePassword)
+    })
   }, [pick])
+
+  const clearPasswordChangeRequirement = useCallback(() => {
+    setSession((current) => current ? { ...current, mustChangePassword: false } : current)
+  }, [])
 
   const logout = useCallback(() => {
     const revokeToken = session?.token
@@ -131,8 +197,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: Boolean(session),
     login,
     logout,
+    clearPasswordChangeRequirement,
     getAuthHeader
-  }), [getAuthHeader, login, logout, session])
+  }), [clearPasswordChangeRequirement, getAuthHeader, login, logout, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

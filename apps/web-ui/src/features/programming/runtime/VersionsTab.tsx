@@ -20,6 +20,10 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
 
   return (
     <div className="space-y-4">
+      {/* F-UX-15: tab con phải có mốc tiêu đề riêng trong cây heading. `<h1>`
+          thuộc layout của feature, `<h2>` thuộc màn hình cha, nên tab là
+          `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
+      <h3 className="sr-only">{pick('Phiên bản & Bảo trì', 'Versions & Service')}</h3>
       <Panel title={pick('Bản đang vận hành và LKG', 'Active and last-known-good')}>
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div>

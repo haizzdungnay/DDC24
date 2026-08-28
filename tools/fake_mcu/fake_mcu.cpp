@@ -44,6 +44,9 @@ struct McuState {
     uint64_t boot_ns = 0;
     uint64_t last_rx_ns = 0;          /* cho MCU safe timeout 200ms (lớp 1) */
     double   do1_on_since_t = -1.0;   /* giây kể từ boot lúc DO-01 (Fan Enable) bật gần nhất; -1 = đang tắt */
+    double   last_tick_t = 0.0;       /* giây (kể từ boot) lần build_io_resp_payload gần nhất, để tính dt */
+    double   filter_dirt_accum_s = 0.0;    /* tổng giây quạt đã chạy kể từ lần "thay lọc" gần nhất */
+    double   filter_tripped_since_t = -1.0; /* giây lúc Filter DP bắt đầu báo bẩn; -1 = đang sạch */
 };
 
 struct Inject {
@@ -87,6 +90,16 @@ constexpr double SIM_NTC_T0_K = 298.15;
 constexpr double SIM_NTC_R0_OHM = 10000.0;
 /* Trễ khởi động quạt trước khi tiếp điểm Proof-of-Flow (UI-12) báo "đang chạy". */
 constexpr double SIM_FAN_SPINUP_S = 2.0;
+/* "Thời tiết" mô phỏng: nén một ngày/một đợt thời tiết vào vài phút thật để
+ * kỹ sư automation thấy dữ liệu sống động trong một phiên làm việc, thay vì
+ * phải chờ hàng giờ. Không nhằm mô phỏng khí hậu chính xác. */
+constexpr double SIM_PI = 3.14159265358979323846;
+constexpr double SIM_DAY_PERIOD_S = 600.0;              /* 10 phút thật = 1 "ngày" mô phỏng */
+constexpr double SIM_WEATHER_PERIOD_S = SIM_DAY_PERIOD_S * 5.0; /* ~50 phút = 1 đợt nóng/mát */
+/* Filter DP Switch: bẩn dần theo tổng giờ quạt chạy, tự "thay lọc" sau khi
+ * giữ trạng thái báo bẩn một khoảng đủ để kỹ sư thấy alarm rồi thấy nó hết. */
+constexpr double SIM_FILTER_DIRTY_THRESHOLD_S = 90.0;
+constexpr double SIM_FILTER_RESET_HOLD_S = 20.0;
 
 int32_t clamp_s24(double raw)
 {
@@ -161,9 +174,38 @@ double ao_frac(const McuState& st, int k)
     return static_cast<double>(st.ao_raw[k]) / 65535.0;
 }
 
-double sim_oat_c(double t) { return 30.0 + 2.0 * std::sin(0.003 * t + 2.0); }   /* Outside Air Temp */
-double sim_rat_c(double t) { return 24.0 + 0.5 * std::sin(0.008 * t + 1.0); }   /* Return Air Temp */
-double sim_sat_c(double t) { return 14.0 + 0.5 * std::sin(0.010 * t); }         /* Supply Air Temp */
+/* Pha "ngày"/"đợt thời tiết" hiện tại, radian [0, 2π). day=0 quy ước nửa đêm. */
+double sim_day_phase(double t) { return 2.0 * SIM_PI * std::fmod(t, SIM_DAY_PERIOD_S) / SIM_DAY_PERIOD_S; }
+double sim_weather_phase(double t) { return 2.0 * SIM_PI * std::fmod(t, SIM_WEATHER_PERIOD_S) / SIM_WEATHER_PERIOD_S; }
+
+/* Outside Air Temp — "thời tiết" thật: đợt nóng/mát nhiều "ngày" (weather) +
+ * chu kỳ ngày/đêm (diurnal, đỉnh gần "trưa") + nhiễu loạn lưu nhanh (turbulence,
+ * chu kỳ vài giây) để số liệu luôn thấy chuyển động, không riêng xu hướng chậm. */
+double sim_oat_c(double t)
+{
+    const double mean = 30.0 + 4.0 * std::sin(sim_weather_phase(t) - SIM_PI / 2.0);
+    const double diurnal = 6.0 * std::sin(sim_day_phase(t) - SIM_PI / 2.0);
+    const double turbulence = 0.4 * std::sin(0.5 * t + 3.1) + 0.15 * std::sin(1.7 * t);
+    return mean + diurnal + turbulence;
+}
+
+/* Hệ số "đang có người" 0..1 — cao giữa "ngày" mô phỏng, 0 lúc "đêm"; dùng
+ * chung cho tải nhiệt nội (RAT) và CO2 (UI-07) để cả hai cùng kể một câu
+ * chuyện vận hành nhất quán, không phải hai con số ngẫu nhiên độc lập. */
+double sim_occupancy_frac(double t)
+{
+    return std::max(0.0, std::sin(sim_day_phase(t)));
+}
+
+/* Return Air Temp — bám nhẹ theo độ lệch OAT (khối nhiệt tòa nhà làm chậm/lọc
+ * bớt dao động ngoài trời) cộng tải nhiệt nội theo giờ có người + nhiễu nhanh. */
+double sim_rat_c(double t)
+{
+    const double oat_swing = sim_oat_c(t) - 30.0;
+    const double occ = sim_occupancy_frac(t);
+    const double turbulence = 0.15 * std::sin(0.7 * t + 1.0);
+    return 24.0 + 0.15 * oat_swing + 1.2 * occ + turbulence;
+}
 
 /* Mixed Air Temp = trộn OAT/RAT theo tỉ lệ damper (AO-02) đang lệnh — mô
  * phỏng vật lý economizer thật, dùng chung cho UI-04 và điều kiện Freeze Stat. */
@@ -173,9 +215,49 @@ double sim_mat_c(double t, const McuState& st)
     return sim_oat_c(t) * damper_frac + sim_rat_c(t) * (1.0 - damper_frac);
 }
 
+/* Supply Air Temp = khí sau coil lạnh: nhiệt độ khí trộn (MAT) trừ hiệu ứng
+ * làm lạnh theo độ mở van nước lạnh AO-03. Chưa có Program điều khiển van
+ * (valve=0) => SAT ~ MAT, tức "chưa được điều khiển" — đúng thực tế AHU chưa
+ * có logic vận hành, kỹ sư sẽ THẤY rõ vì sao cần viết Program. Kẹp sàn 7 độ C
+ * (giới hạn vật lý coil, tránh xuống vùng bão hòa ADC của NTC, xem ghi chú ở
+ * raw_from_ntc10k_temp()). */
+double sim_sat_c(double t, const McuState& st)
+{
+    const double mat_c = sim_mat_c(t, st);
+    const double cooling_c = ao_frac(st, 2) * 14.0;
+    const double turbulence = 0.1 * std::sin(0.9 * t + 2.0);
+    return std::max(7.0, mat_c - cooling_c + turbulence);
+}
+
+/* Phân số 0..1 của Duct Static Pressure — thuần phản ứng theo lệnh quạt AO-01
+ * (fan law bậc 2), dùng chung cho UI-05 (giá trị) và UI-13 (ngưỡng trip). */
+double sim_dsp_frac(const McuState& st)
+{
+    const double fan_frac = ao_frac(st, 0);
+    return fan_frac * fan_frac;
+}
+
 bool fan_status_active(const McuState& st, double t)
 {
     return st.do1_on_since_t >= 0.0 && (t - st.do1_on_since_t) > SIM_FAN_SPINUP_S;
+}
+
+/* Tích lũy giờ quạt chạy (Filter DP bẩn dần) + tự "thay lọc" sau khi giữ
+ * trạng thái bẩn đủ lâu — trạng thái mutate duy nhất ngoài do1_on_since_t,
+ * gọi một lần mỗi GET_IO trước khi sinh 16 kênh (không phải trong self-test,
+ * vì tiếp điểm khô không nằm trong phạm vi kiểm biên an toàn của self-test). */
+void mcu_tick(McuState& st, double t)
+{
+    const double dt = (st.last_tick_t > 0.0) ? std::max(0.0, std::min(1.0, t - st.last_tick_t)) : 0.0;
+    st.last_tick_t = t;
+    if (st.do_state & 0x01) st.filter_dirt_accum_s += dt;
+    if (st.filter_tripped_since_t < 0.0 && st.filter_dirt_accum_s > SIM_FILTER_DIRTY_THRESHOLD_S) {
+        st.filter_tripped_since_t = t;
+    }
+    if (st.filter_tripped_since_t >= 0.0 && (t - st.filter_tripped_since_t) > SIM_FILTER_RESET_HOLD_S) {
+        st.filter_tripped_since_t = -1.0;
+        st.filter_dirt_accum_s = 0.0;
+    }
 }
 
 /* 16 kênh UI mô phỏng field device của một AHU thật (xem
@@ -187,51 +269,54 @@ bool fan_status_active(const McuState& st, double t)
 int32_t simulated_ui_raw(int i, double t, const McuState& st)
 {
     switch (i) {
-    case 0: /* UI-01 Supply Air Temperature (SAT) — NTC10K */
-        return raw_from_ntc10k_temp(sim_sat_c(t));
-    case 1: /* UI-02 Return Air Temperature (RAT) — NTC10K */
+    case 0: /* UI-01 Supply Air Temperature (SAT) — NTC10K, theo MAT + van lạnh AO-03 */
+        return raw_from_ntc10k_temp(sim_sat_c(t, st));
+    case 1: /* UI-02 Return Air Temperature (RAT) — NTC10K, "thời tiết" + tải nội */
         return raw_from_ntc10k_temp(sim_rat_c(t));
-    case 2: /* UI-03 Outside Air Temperature (OAT) — NTC10K */
+    case 2: /* UI-03 Outside Air Temperature (OAT) — NTC10K, mô phỏng thời tiết */
         return raw_from_ntc10k_temp(sim_oat_c(t));
     case 3: /* UI-04 Mixed Air Temperature (MAT) — NTC10K, theo damper AO-02 */
         return raw_from_ntc10k_temp(sim_mat_c(t, st));
-    case 4: { /* UI-05 Duct Static Pressure — 4-20mA, theo tốc độ quạt AO-01 (fan law bậc 2) */
-        const double fan_frac = ao_frac(st, 0);
-        const double dsp_frac = fan_frac * fan_frac;
-        return raw_from_milliamps(4.0 + dsp_frac * 15.0);
+    case 4: { /* UI-05 Duct Static Pressure — 4-20mA, theo tốc độ quạt AO-01 + nhiễu cảm biến */
+        const double dsp_frac = sim_dsp_frac(st);
+        const double noise = 0.03 * std::sin(3.0 * t + 0.2);
+        return raw_from_milliamps(std::max(4.0, 4.0 + dsp_frac * 15.0 + noise));
     }
-    case 5: { /* UI-06 Supply Air Humidity — 0-10V, 0-100 %RH */
-        const double rh_pct = 55.0 + 8.0 * std::sin(0.009 * t + 0.5);
-        return raw_from_field_volts((rh_pct / 100.0) * 10.0);
+    case 5: { /* UI-06 Supply Air Humidity — 0-10V, 0-100 %RH, nghịch với nhiệt độ ngoài trời */
+        const double rh_pct = 60.0 - 8.0 * std::sin(sim_day_phase(t) - SIM_PI / 2.0) +
+                               3.0 * std::sin(0.6 * t + 0.5);
+        return raw_from_field_volts(std::clamp(rh_pct, 0.0, 100.0) / 100.0 * 10.0);
     }
-    case 6: { /* UI-07 Return Air CO2 — 0-10V, Core scale sang ppm */
-        const double volts = 5.0 + 1.5 * std::sin(0.011 * t + 0.4);
-        return raw_from_field_volts(volts);
+    case 6: { /* UI-07 Return Air CO2 — 0-10V (Core scale 0-2000ppm), theo giờ có người */
+        const double volts = 2.0 + sim_occupancy_frac(t) * 5.0 + 0.3 * std::sin(0.8 * t + 0.4);
+        return raw_from_field_volts(std::clamp(volts, 0.0, 10.0));
     }
     case 7: { /* UI-08 Economizer Damper Position Feedback — 0-10V, echo AO-02 */
-        const double frac = std::clamp(ao_frac(st, 1) + 0.01 * std::sin(2.0 * t), 0.0, 1.0);
+        const double frac = std::clamp(ao_frac(st, 1) + 0.02 * std::sin(2.0 * t), 0.0, 1.0);
         return raw_from_field_volts(frac * 10.0);
     }
-    case 8: /* UI-09 Filter Differential Pressure Switch — dry contact, mặc định sạch */
-        return raw_dry_contact(false);
+    case 8: /* UI-09 Filter Differential Pressure Switch — dry contact, bẩn dần theo giờ quạt chạy (mcu_tick) */
+        return raw_dry_contact(st.filter_tripped_since_t >= 0.0);
     case 9: /* UI-10 Freeze Stat (SAFETY) — dry contact, trip khi MAT < 3 độ C */
         return raw_dry_contact(sim_mat_c(t, st) < 3.0);
-    case 10: /* UI-11 Duct Smoke Detector (SAFETY) — dry contact, mặc định không cháy */
-        return raw_dry_contact(false);
+    case 10: { /* UI-11 Duct Smoke Detector (SAFETY) — dry contact, xung tự-kiểm-tra định kỳ (không phải cháy thật) */
+        const bool self_test_pulse = std::fmod(t, 90.0) < 3.0;
+        return raw_dry_contact(self_test_pulse);
+    }
     case 11: /* UI-12 Supply Fan Status/Proof of Flow — dry contact, theo DO-01 + trễ khởi động */
         return raw_dry_contact(fan_status_active(st, t));
-    case 12: /* UI-13 High Duct Static Pressure Switch (SAFETY) — dry contact, mặc định không trip */
-        return raw_dry_contact(false);
+    case 12: /* UI-13 High Duct Static Pressure Switch (SAFETY) — dry contact, trip khi lệnh quạt gần kịch trần */
+        return raw_dry_contact(sim_dsp_frac(st) > 0.92);
     case 13: { /* UI-14 Chilled Water Coil Leaving Temp — NTC10K, theo van AO-03 */
-        const double leaving_c = 7.0 + ao_frac(st, 2) * 6.0 + 0.2 * std::sin(0.02 * t);
+        const double leaving_c = 7.0 + ao_frac(st, 2) * 6.0 + 0.15 * std::sin(0.6 * t);
         return raw_from_ntc10k_temp(leaving_c);
     }
     case 14: { /* UI-15 Heating Valve Position Feedback — 0-10V, echo AO-04 */
-        const double frac = std::clamp(ao_frac(st, 3) + 0.01 * std::sin(2.0 * t + 1.0), 0.0, 1.0);
+        const double frac = std::clamp(ao_frac(st, 3) + 0.02 * std::sin(2.0 * t + 1.0), 0.0, 1.0);
         return raw_from_field_volts(frac * 10.0);
     }
     case 15: { /* UI-16 VFD Fan Speed Feedback — 0-10V, echo AO-01 */
-        const double frac = std::clamp(ao_frac(st, 0) + 0.01 * std::sin(2.0 * t + 2.0), 0.0, 1.0);
+        const double frac = std::clamp(ao_frac(st, 0) + 0.02 * std::sin(2.0 * t + 2.0), 0.0, 1.0);
         return raw_from_field_volts(frac * 10.0);
     }
     default:
@@ -315,6 +400,7 @@ void build_io_resp_payload(McuState& st, const Inject& inj, uint8_t* p)
 {
     /* IO_RESP v2 — 74 bytes (ADR-010) */
     const double t = static_cast<double>(now_ns() - st.boot_ns) / 1e9;
+    mcu_tick(st, t);   /* cập nhật trạng thái mutate (Filter DP bẩn dần) trước khi sinh 16 kênh */
     /* [0..63] UI_RAW[16] — 16 × int32 BE signed, mô phỏng field device AHU
      * (SAT/RAT/OAT/MAT/DSP/SAH/CO2/DamperFB/FilterDP/FreezeStat/Smoke/
      * FanStatus/HighStatic/CHW/HeatValveFB/VFDSpeedFB) — chi tiết từng kênh

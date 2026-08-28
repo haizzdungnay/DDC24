@@ -552,6 +552,24 @@ func TestReadIOStatusUsesV4IOPStatusOffset(t *testing.T) {
 	}
 }
 
+func TestReadIOStatusExposesProducerMeasuredMaxPollGapOnlyWhenPresent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mkddc_io_shm")
+	data := make([]byte, kxIOShmIOPGapLen)
+	binary.LittleEndian.PutUint32(data[0:4], kxShmMagic)
+	data[offIOPStatus] = 0
+	binary.LittleEndian.PutUint32(data[offIOMaxPollGapUS:offIOMaxPollGapUS+4], 42_375)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status, err := (&CoreClient{IOShm: path}).readIOStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.MaxPollGapMS == nil || *status.MaxPollGapMS != 42.375 {
+		t.Fatalf("max poll gap = %v, want 42.375 ms", status.MaxPollGapMS)
+	}
+}
+
 func setPoint(data []byte, offset int, value float32, quality uint8) {
 	binary.LittleEndian.PutUint32(data[offset+0:offset+4], float32bits(value))
 	data[offset+72] = quality

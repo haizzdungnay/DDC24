@@ -8,6 +8,6703 @@
 
 ## [Unreleased]
 
+### VP — mở chiều GHI cho ST Program kèm quyền sở hữu slot (`F-PROG-ASBUILT-016`) (2026-08-28)
+
+- **Changed — `VAR_OUTPUT` bind category `VP` nay được chấp nhận.**
+  `resolve_io_bindings()` từng chặn tường minh mọi chiều ghi vào Virtual Point.
+  Lý do cũ **đúng ở thời điểm đó**: `overlayVirtualPoints` ở web-api vứt bỏ slot
+  `AV/BV/MSV` thô của Core và thay bằng giá trị trong `virtual_points.conf`, nên
+  một giá trị do chương trình ghi sẽ **không bao giờ** hiện ra ở API hay UI.
+
+  Chặn được gỡ **cùng lúc** với đường đọc ngược, không phải trước. Mở chiều ghi
+  mà không mở đường đọc là để người vận hành nhìn một con số đứng yên cho một
+  đại lượng đang thay đổi.
+
+- **Added — `virtualPoint.source` quyết định ai sở hữu slot.** `""`/`"WEB"` giữ
+  nguyên hành vi cũ (web-api đồng bộ giá trị cấu hình xuống Core); `"PROGRAM"`
+  nghĩa là ST Program ghi slot đó và web-api **không** đồng bộ nữa. Không có
+  ranh giới này thì hai bên cùng ghi một ô điểm — chương trình đặt giá trị mỗi
+  chu kỳ, web-api đẩy lại hằng số cấu hình mỗi lần khởi động hoặc mỗi lần ai đó
+  sửa VP — và ô điểm nhấp nháy giữa hai nguồn mà không dấu hiệu nào chỉ ra vì
+  sao. Chuỗi lạ ở trường này bị **từ chối** thay vì rơi êm về nhánh "web-api sở
+  hữu"; `PROGRAM` mà chưa `boundPointId` cũng bị từ chối.
+
+- **Added — đường đọc ngược Core → API cho slot do chương trình sở hữu.**
+  `overlayVirtualPoints` nay lấy `value`/`quality`/`source` **thẳng từ slot
+  Core** cho VP mang `source = "PROGRAM"`. Không tra được slot ⇒ trả `null` +
+  `quality = unknown`, **không** rơi về giá trị cấu hình: hiện một hằng số cho
+  một điểm chưa đọc được là bịa số.
+
+- **Verification** (2026-08-28): `ctest --test-dir build/fw` **1332/1332 PASS**
+  (4 ca mới `StIoMapVpOutput` + 2 ca `StResolveIoBindings` đảo chiều khẳng định
+  + 1 ca CLI); `go vet ./...` và `go test ./... -count=1` PASS (6 ca mới
+  `TestVirtualPointSourceValidation`). Cross-build aarch64 và deploy cả
+  `mkddc-st-compile` lẫn `mkddc-web` lên Foxlinx.
+
+  Trên bo: tạo `VP_AHU_STATE_OUT` (`AV-13`, `source=PROGRAM`), thêm ngõ ra
+  `AhuStateOut := INT_TO_REAL(AhuState)` — **Check PASSED** (trước lát này bị từ
+  chối thẳng), **Commission SUCCEEDED**, chương trình **RUNNING**.
+
+- **Còn lại — chưa đọc được giá trị ngược.** Slot `AV-13` không xuất hiện trong
+  `ReadPoints()` của Core trên bo, nên đường đọc mới trả đúng `quality =
+  unknown` thay vì một con số bịa. Ba mắt xích đã kiểm: `PointWriter::can_write`
+  cho phép AV; `parsePointID("AV13")` chuẩn hoá đúng về `AV-13`;
+  `decodePoints()` có vòng lặp phát 32 slot AV. Chưa xác định được vì sao chúng
+  không tới `overlayVirtualPoints`. **Ghi rõ để không ai đọc nhầm là đã xong.**
+
+### ST — bổ sung câu lệnh `CASE` theo IEC 61131-3 §7.3.3.2 (2026-08-28)
+
+- **Added — `CASE` là câu lệnh CHUẨN của ST và compiler thiết bị chưa có nó.**
+  `st_parser.cpp` ghi `CASE`/`END_CASE` vào bảng từ khoá nhưng `parse_stmt` chỉ
+  dựng được `IF`, phép gán và lời gọi FB — nên mọi nguồn dùng `CASE` bị từ chối
+  ở đúng từ khoá đó (`'CASE' is a keyword and cannot start a statement`). Phát
+  hiện khi nạp một chuỗi điều khiển AHU có máy trạng thái viết bằng `CASE`.
+
+  Nay hỗ trợ đầy đủ: nhãn đơn, danh sách nhãn (`1, 3, 7:`), dải (`10..20:`),
+  nhãn âm, `ELSE`, và bộ chọn là biểu thức bất kỳ. `OF` được thêm vào bảng từ
+  khoá — thiếu nó thì `OF` lọt vào chỗ định danh.
+
+- **Changed — `CASE` được KHỬ ĐƯỜNG về cây `IF/ELSIF` sẵn có, không thêm
+  `StStmt::Kind` mới.** Lý do là an toàn vận hành chứ không phải tiện tay:
+  `Kind::IF` đang được đọc ở **năm** nơi (semantic, codegen, hai lượt duyệt POU
+  registry, bộ đếm giới hạn). Thêm một Kind mới bắt cả năm chỗ phải cùng được
+  cập nhật, và chỗ nào quên sẽ **im lặng bỏ qua thân CASE** — một máy trạng
+  thái không chạy nhưng vẫn Check PASS, trên thiết bị đang điều khiển thiết bị
+  thật. Khử đường thì mọi tầng phía sau dùng lại đúng đường đã kiểm chứng.
+
+  Phép biến đổi giữ nguyên ngữ nghĩa vì biểu thức trong subset này không có tác
+  dụng phụ (`SIGNAL_PUBLISH` là câu lệnh, hàm đều thuần), nên nhân bản biểu thức
+  chọn cho từng nhánh cho đúng kết quả như đánh giá một lần.
+
+- **Added — từ chối đúng thứ phải từ chối.** Nhãn trùng (kể cả trùng nằm trong
+  một dải), dải ngược chiều (`5..1`), nhãn không phải hằng, thiếu `OF`, thiếu
+  `END_CASE`, và bộ chọn kiểu BOOL đều bị bắt kèm vị trí. Nhãn trùng là lỗi
+  logic **im lặng** — chương trình vẫn chạy, chỉ có một nhánh không bao giờ tới
+  được — nên nó phải là lỗi, không phải cảnh báo.
+
+- **Verification** (2026-08-28): `ctest --test-dir build/fw` **1327/1327 PASS**
+  (cả 3 option MODBUS/BACNET/HMI bật). 15 ca mới: 7 ca **thực thi thật** rồi đọc
+  đầu ra (`StExecCase`) — vì một phép khử đường sai vẫn dịch trót lọt và vẫn
+  Check PASS, nó chỉ sai lúc thiết bị đang chạy — và 8 ca cú pháp/ngữ nghĩa
+  (`StLangCase`). Cross-build aarch64 (`-static-libstdc++`, libsodium lấy từ
+  chính bo) và deploy `/usr/sbin/mkddc-st-compile` lên Foxlinx: chương trình AHU
+  dùng `CASE` **hết lỗi cú pháp** (lỗi còn lại là ánh xạ I/O, không phải ST).
+
+### PGM-02 — Bộ chọn Point ẩn ứng viên mà không nói lý do (2026-08-28)
+
+- **Fixed — danh sách còn vài mục trông y hệt một danh sách đầy đủ.** Người dùng
+  thấy chỉ 2 trong 7 VP xuất hiện khi ánh xạ biến `Occupied` và hỏi *"trang map
+  đang thiếu VP à?"*.
+
+  **Bộ lọc không sai.** `isCompatiblePoint` loại Point khác kiểu hoặc sai hướng,
+  và nó tồn tại vì một lý do nghiêm túc: Core gom output cả chương trình vào một
+  batch, nên **một** binding không ghi được làm `preflight_outputs()` từ chối
+  **toàn bộ** batch — những output đúng cũng không bao giờ commit theo. `Occupied`
+  là `BOOL`, nên chỉ VP kiểu `BOOL` ghép được.
+
+  Lỗi là nó **ẩn im lặng**. Khi danh sách rỗng thì đã có thông báo giải thích;
+  nhưng khi còn vài mục thì không gì cả — và đó mới là ca nguy hiểm hơn, vì
+  người đọc không có dấu hiệu nào để nghi ngờ mình đang xem một danh sách đã bị
+  lọc. Người dùng kết luận dữ liệu bị thiếu, chứ không phải bị lọc.
+
+  Cách sửa: tách hai tầng lọc — bộ lọc **thủ công** (Loại/Hướng/"Chỉ ghi được")
+  khác hẳn ràng buộc **tự động** theo biến đã chọn — rồi nêu số Point bị ẩn kèm
+  lý do, tách riêng "khác kiểu" với "sai hướng". Không đụng vào chính bộ lọc.
+
+- **Verification** (2026-08-28): vitest **171 file / 1939 test PASS** (3 ca mới
+  cho ghi chú); lint PASS; build PASS; e2e **54 passed / 11 skipped**. Kiểm trên
+  bo bằng trình duyệt sau khi deploy: bộ chọn hiện
+  *"Hidden 20 point(s) that cannot bind to Occupied: 20 of a different type than
+  BOOL."*
+
+### PGM-04/PGM-02 — Toàn bộ 46 khối thư viện SYSTEM mất chữ ký và category (2026-08-28)
+
+- **Fixed — Thư viện nhanh báo "Thiếu chữ ký từ thiết bị" cho MỌI mục.** Người
+  dùng thấy cả 46 khối SYSTEM đều không chèn được, và tab nhóm chỉ còn
+  `Tất cả | other`.
+
+  Câu "thiếu chữ ký từ thiết bị" **đúng về dữ liệu FE nhận được nhưng sai về
+  thiết bị**: chữ ký vẫn nằm nguyên trong binary. `domain.SystemLibraryEntries()`
+  đặt nó vào `SignatureJSON` và để `InterfaceJSON` **rỗng** (đúng thiết kế:
+  `interface` là chữ ký THÔ của PROJECT entry do người dùng nạp). Nhưng
+  `libraryEntryView` ở lớp application **chỉ chép `InterfaceJSON`**, nên chữ ký
+  rơi mất đúng ở giữa — trong khi cả hai đầu đã sẵn sàng: lớp HTTP có
+  `parseLibrarySignature` và trường `signature` (`T59-804`), và OpenAPI đã khai
+  `ProgrammingLibrarySignature` với `category`/`ports`/nhãn.
+
+  Hệ quả dây chuyền: không `ports` ⇒ FE xếp mọi mục vào `SIGNATURE_UNAVAILABLE`
+  và chặn chèn; không `category` ⇒ mọi mục dồn vào nhóm `other`, làm
+  `categoryOrder` của registry (10 nhóm có nhãn Việt/Anh) thành vô dụng. Cùng
+  một lỗ hổng cũng làm trường `Chữ ký` của Inspector và tooltip hover rỗng cho
+  mọi khối.
+
+  Cách sửa: mang `SignatureJSON` qua `LibraryEntryView`, và lớp HTTP phân giải
+  `signature` từ nó khi `InterfaceJSON` rỗng. `interface` **cố ý không** được
+  suy từ chữ ký SYSTEM — trộn hai khái niệm làm client mất khả năng phân biệt
+  nguồn tự khai với nguồn máy chủ bảo chứng. **Không đổi hợp đồng**: đây thuần
+  là đứt dây nội bộ.
+
+- **Verification** (2026-08-28): `go vet ./...` + `go test ./... -count=1` PASS;
+  test mới `TestSystemLibraryEntriesCarrySignatureToClients` đi qua **cả chuỗi
+  thật** registry → domain → response và xác nhận **46/46** entry có
+  `signature` với `category` và `ports` khác rỗng (dựng entry giả sẽ vẫn xanh
+  kể cả khi registry thật rỗng, nên test cố ý không làm vậy).
+  Sau khi deploy binary lên bo: API trả **46/46 có `signature`**, phân bố nhóm
+  thật `math 12 · conversion 14 · compare 6 · logic 5 · timer 3 · counter 2 ·
+  trigger 2 · control 2`. Kiểm giao diện bằng trình duyệt trên bo: **0** mục còn
+  báo "Thiếu chữ ký từ thiết bị".
+
+### PGM-02 — Không xoá được POU đang công bố tín hiệu (2026-08-28)
+
+- **Fixed — hộp thoại Xoá POU hứa một việc nó không làm được.** Người dùng báo
+  không xoá được `SOAK_01`. Tái hiện trên bo cho **đúng** phản hồi họ thấy:
+  `HTTP 400`, `content-length 217`, `field: "operations[0].removeProgram"`.
+
+  Nguyên nhân **không nằm ở backend**. Backend giữ đúng một bất biến cần thiết:
+  xoá một Program đang publish sẽ để lại một tín hiệu không ai ghi, nên nó từ
+  chối (`draft_v2.go`: *"Signal mất publisher là signal không ai ghi"*).
+  `SOAK_01` là publisher của `SOAK_CONSUMED`.
+
+  Lỗi nằm ở FE: `PouExplorer` chỉ tính blocker là các POU **đang gọi** POU kia,
+  không hề biết luật tín hiệu. Nên nó bật nút `Xóa`, hiện lời hứa "sẽ xóa cả mã
+  nguồn, biến và ánh xạ liên quan", rồi trả về một mã lỗi không nói cho người
+  dùng biết phải làm gì — bấm lại lần nữa cũng chỉ ra kết quả đó.
+
+  Cách sửa: `pouPublishedSignalBlockers` chặn ngay ở hộp thoại và **nói đúng
+  việc phải làm** — "nó đang công bố N tín hiệu (…). Xóa tín hiệu đó, hoặc
+  chuyển sang POU khác ở tab Điểm & Ánh xạ, rồi quay lại". Phép so theo
+  `runtimeProgramId` chứ không theo `objectId`: `publisherProgramId` là identity
+  runtime, và so nhầm trục sẽ vừa bỏ sót vừa chặn oan.
+
+  `signals[]` không đi qua `toWorkspaceDocument`, nên Explorer nhận chúng từ
+  draft thô qua prop `publishedSignals`.
+
+- **Verification** (2026-08-28): vitest **171 file / 1936 test PASS**; lint
+  PASS; build PASS; e2e `programming.spec.ts` **54 passed / 11 skipped**. Kiểm
+  trên bo bằng trình duyệt thật sau khi deploy: hộp thoại hiện đúng lý do và tên
+  tín hiệu, nút `Xóa` **disabled**, **không** còn request lỗi nào.
+
+### PGM-02 — Vá hai đường sinh 400 phát hiện trên bo thật (2026-08-28)
+
+Người dùng báo `PATCH /programming/projects/{id}/draft` trả **400** trên bo
+Foxlinx. Truy theo log thiết bị tìm được **hai nguyên nhân độc lập**, cả hai đều
+là FE gọi một thứ mà hợp đồng cấm.
+
+- **Fixed — `PATCH /draft` với `operations: []`.** Triệu chứng: 400
+  `PRG-ERR-REQ-001` xen kẽ giữa những lần lưu thành công. Nguyên nhân:
+  `useDraftWorkspace.save()` gửi thẳng mảng operations nhận được kể cả khi RỖNG,
+  trong khi hợp đồng đòi ít nhất một operation — nên một PATCH rỗng **không bao
+  giờ thành công được**, nó chỉ tốn một vòng mạng rồi trả lỗi cho một thao tác
+  người dùng không hề làm sai. `save` được truyền cho nhiều component (cây POU,
+  thẻ Project, tab Ánh xạ, tab Thực thi) nên chỉ cần một trong số đó tính ra
+  danh sách rỗng là đủ. Đo trên bo: cùng `baseRevisionId` và cùng ETag,
+  `operations:[]` → **400**; một operation thật → 409 (ETag đã dịch vì có người
+  sửa song song), tức thân request hợp lệ và đúng mảng rỗng bị từ chối. Cách
+  sửa: batch rỗng là không-việc-gì-cả — chặn ngay ở hook, trả `true` vì đúng là
+  không còn gì chưa lưu.
+
+- **Fixed — so sánh Revision với chính nó.** Log bo có
+  `GET /revisions/2d1c9831…/changes/2d1c9831…` → **400**, và PGM-03 hiện "Không
+  tải được thay đổi". Nguyên nhân: `CheckCommissionPage` gọi dịch vụ so sánh mà
+  không kiểm `from` có trùng `to` không; khi Revision đang xét chính là bản đang
+  chạy thì hai id bằng nhau — đúng cặp hợp đồng cấm. `OverviewPage` vốn đã có
+  guard này, PGM-03 thì không. Cách sửa: không phát request, và hiện "Revision
+  này chính là bản đang chạy — không có gì để đối chiếu". Kèm theo
+  `readyToCommission` phải `false`: không có gì để nạp, mà một lần nạp "cho
+  chắc" vẫn là một lần cutover thật trên thiết bị đang điều khiển.
+
+- **Verification** (2026-08-28): vitest **171 file / 1932 test PASS**; lint
+  PASS; build PASS; `npx playwright test e2e/programming.spec.ts` **54 passed /
+  11 skipped**. Sau khi deploy bản vá lên bo, log thiết bị chuyển sang **toàn bộ
+  200** cho cả `PATCH /draft` lẫn `GET …/changes/…`.
+
+### PGM-02 — Deploy bo Foxlinx và đóng 16/16 WP (`T59-818..822`) (2026-08-28)
+
+- **Deploy bo thật, CẢ backend chứ không chỉ `dist`.** `T59-819` là thay đổi
+  backend (`stHunks[]`/`fbdChanges[]` do máy chủ tính). Chỉ đẩy `dist` sẽ cho
+  một kết quả trông như thành công — khay So sánh mở được — nhưng nó hiện "máy
+  chủ chưa trả bảng khác biệt chi tiết" cho đúng thiết bị mà ta vừa tuyên bố là
+  đã có tính năng đó. Đo trước khi deploy backend xác nhận điều này:
+  `grep -c stHunks` trên phản hồi bo trả **0**.
+
+- **Fixed — bản build đầu thiếu cờ workspace.** `npm run build:release` chỉ đặt
+  `VITE_PROGRAMMING_REV_A=1`; workspace PGM-02 còn cần
+  `VITE_PROGRAMS_WORKSPACE_V2=1`, mặc định TẮT theo `DDD-SW-PGM02-WORKSPACE-001
+  §11`. Phát hiện bằng cách grep route canonical trong chính bundle sinh ra —
+  không tin vào lệnh đã gõ. Đây là lần thứ tư cờ build-time của Programming gây
+  hỏng deploy.
+
+- **Verification TRÊN BO** (2026-08-27, `SOM-DDC-24-foxlinx`, aarch64):
+  `mkddc-web-pi.service` **active**, `version 0.1.0-be-b6c` (binary mới);
+  `/api/v1/health` **ok** cả sáu check; core/iobus **active**;
+  `GET /` trả đúng `index-B9rT6_gb.js` vừa build; chunk `programming` **200**,
+  535 502 byte; SPA `/eng/programming/programs` **200**; đăng nhập + danh sách
+  Project OK; **change manifest có đủ `stHunks`/`fbdChanges`/`truncated`/
+  `nextCursor`** với số THẬT từ Revision trên bo; cursor rác **400**, cursor âm
+  **400**, `cursor=0` **200** — fail-closed đúng thiết kế.
+  Binary cross-build `CGO_ENABLED=0 GOARCH=arm64` **statically linked**, không
+  dính glibc/GLIBCXX của bo. Hồ sơ:
+  `docs/07_records/test-evidence/programming/2026-08-27-pgm02-foxlinx-deploy-t59-818-822.md`.
+
+- **Changed — 16/16 WP của `PGM02_ST_FBD_IMPLEMENTATION_PLAN` nay DONE.** Bốn
+  finding của phán quyết audit 2026-08-27 đã đóng hết: `WP-09` (Compare),
+  `WP-04` R3 (hover), `WP-14` (Inspector), `WP-15` (editor chrome), cộng truy
+  nguyên 33/33 AC.
+
+- **KHÔNG đóng increment R3, và nói rõ vì sao.** `T59-816` (hardening
+  Simulation) và `T59-817` (`VS-PROG-U15`, target/HIL, closeout) vẫn mở — chúng
+  nằm ngoài phạm vi lát corrective này. Deploy lên bo **không phải** nghiệm thu
+  target: chưa chạy E2E trên bo, `mkddc-fakemcu` vẫn đang chạy, chưa nghiệm thu
+  I/O vật lý. `RELEASE_READY` giữ **NO-GO**.
+
+### PGM-02 — Truy nguyên 33 AC và phép đo 1280×750 cho workspace (`T59-822`) (2026-08-27)
+
+- **Added — bảng truy nguyên `AC → task → file test` được SINH RA, không chép
+  tay.** `scripts/programming_ac_traceability.py` đọc định danh AC thẳng từ ba
+  tệp handoff và tra tham chiếu bằng `grep` trên cây làm việc. Một bảng chép tay
+  chỉ chứng minh người viết đã tin điều gì tại thời điểm viết; nó vẫn xanh sau
+  khi file test bị xoá.
+
+- **Fixed — 16/33 AC không có tham chiếu nào ngoài chính tệp handoff**
+  (`F-PGM02-AUD-005`). Phần lớn **đã có test thật** nhưng không mang định danh,
+  nên không ai kiểm chứng độc lập được — muốn biết một AC có được phủ hay không
+  phải đọc hết test rồi suy luận bằng văn xuôi. Cách sửa: **gắn định danh vào
+  tên/chú thích test đã có**, không viết lại test. Viết test mới cho thứ đã được
+  phủ là nhân đôi chi phí bảo trì để mua một con số đẹp. Nay **33/33**.
+
+- **Added — phép đo `AC-PGM02-002` cho chính workspace PGM-02.** Trước lát này
+  phép đo 1280×750 **chỉ chạy cho PGM-01 Tổng quan**; suy kết quả của một trang
+  khác sang workspace ba cột không phải là đo.
+
+- **Fixed — cây POU là dải ngang thay vì cột trái.** Triệu chứng: lần chạy đầu
+  của phép đo mới FAIL với mép trên trình soạn thảo ở **y=849** trên viewport
+  750 — người dùng phải cuộn trang mới thấy chỗ mình gõ. Nguyên nhân:
+  `PouExplorer` render thành một dải ngang cao **337 px** phía trên lưới, dù
+  `UX §16.2` quy định `Cây 280px ┬ Editor ┬ Inspector 308px`. Cách sửa: đưa nó
+  vào đúng cột trái qua `explorerSlot` của `ProgramsTab`, với điều kiện loại trừ
+  nhau để `AC-PGM02-001` ("đúng MỘT cây POU") vẫn đúng.
+
+- **Fixed — chiều cao trình soạn thảo cố định không vừa màn 750 px.** Sau khi
+  sửa trên, mép trên còn `y=500` nhưng mép dưới ở **884 px**. Nguyên nhân: khung
+  cố định 24rem cộng ~500 px chrome phía trên. Cách sửa:
+  `h-[clamp(14rem,calc(100vh-32rem),24rem)]` — màn từ 1080 px trở lên giữ nguyên
+  24rem, chỉ màn thấp co lại; sàn 14rem để nó không thành một khe hai dòng.
+
+- **Changed — phép đo tự sửa cho khớp câu của AC.** Bản nháp đầu còn đòi cả
+  trang gói gọn trong 750 px, chặt hơn câu *"main editor/canvas visible without
+  page scroll"* — trang còn Inspector và khay workbench nằm dưới một cách chính
+  đáng. Test phải khoá đúng câu hợp đồng, không khoá một câu nghiêm hơn do mình
+  nghĩ ra: một test như thế sẽ đỏ vì lý do không ai đồng ý rồi bị tắt đi.
+
+- **Verification** (2026-08-27): `programming_ac_traceability.py --check` PASS
+  **33/33**; `npx vitest --run --environment jsdom src` **170 file / 1930 test
+  PASS**; `npm run lint` PASS;
+  `npx playwright test e2e/programming.spec.ts` **54 passed / 11 skipped**
+  (thêm ca `AC-PGM02-002`); `docs_iso_harness.py` PASS.
+
+### PGM-02 — Editor chrome đầy đủ: tab đa POU, toolbar, status bar, Code Map (`T59-821`, `PGM02-V22-WP-15`) (2026-08-27)
+
+- **Added — tab đa POU bắc qua ST↔FBD (`UD-PROG-014` phương án B).** Trục định
+  danh là `objectId`, **không** phải tên POU: đổi tên chỉ đổi nhãn chứ không
+  sinh tab thứ hai, và hai POU trùng tên là hai tab riêng. Buffer vẫn sống theo
+  POU nên hai tab không thể chia chung một buffer.
+
+  `UD-PROG-014` để ngỏ năm điều và bắt team chốt khi implement. Chốt và **ghi
+  vào test** (`pouTabs.test.ts`, 16 ca) chứ không chỉ ghi vào văn xuôi — một
+  luật tab chỉ nằm ở docs sẽ trôi ngay lần refactor đầu, và thứ trôi ở đây là
+  buffer chưa lưu của người dùng:
+  1. trần **8** tab; vượt thì đóng tab **sạch** ít dùng nhất. Mọi tab đều bẩn ⇒
+     **từ chối mở** kèm lý do đọc được. Đóng một tab bẩn để lấy chỗ là vứt công
+     việc của người ta để phục vụ một con số;
+  2. đóng tab bẩn **phải xác nhận**;
+  3. đổi mode áp cho **toàn workspace** — state tab không mang mode nào;
+  4. tab **không** sống qua reload, có chủ ý: mọi nơi lưu đều sinh cùng một lớp
+     lỗi là tab khôi phục trỏ tới POU đã bị xoá ở phiên khác;
+  5. tab trỏ tới POU đã bị xoá **ở lại** và tự khai. Tự đóng sẽ che đi chính sự
+     kiện người dùng cần biết.
+
+- **Added — toolbar EDIT có `Kiểm tra`/`So sánh`/`Khác` (`PGM-02A §3`).**
+  `Kiểm tra` điều hướng sang PGM-03, nơi sở hữu trọn vòng seal/run/poll/result
+  (D-01) — không dựng luồng thứ hai. `SIMULATE`/`LIVE` **không** nhân bản thành
+  nút toolbar: chúng là mode switch ở `ProgramsModeSwitcher`, và hai đường đổi
+  mode sẽ lệch nhau đúng lúc một trong hai bị quên cập nhật.
+
+- **Fixed — hai nút cho cùng một hành động.** `Kiểm tra`/`So sánh` từng nằm ở
+  header workspace; thêm chúng vào toolbar sẽ thành hai nút mà người dùng phải
+  đoán có khác nhau không, và một lần sửa điều kiện khoá chỉ áp cho một trong
+  hai. Nay đúng **một** bản mỗi thời điểm. Vì hai hành động này có phạm vi
+  **gói** chứ không phải POU, trạng thái "chưa chọn POU" vẫn giữ lối vào riêng
+  — khoá chúng lại chỉ vì chưa ai bấm vào một POU là bắt người dùng chọn bừa
+  một POU để làm việc không liên quan tới POU nào.
+
+- **Added — thanh SIMULATE và LIVE.** SIMULATE thêm `Theo dõi`/`Vết`; LIVE có
+  `Tạm dừng làm mới`/`Theo dõi`/`Vết`/`Về bản nháp`. Nút chưa nối vẫn **hiện** và
+  **khoá kèm lý do đọc được** — ẩn im lặng làm người dùng tưởng tính năng không
+  tồn tại thay vì biết nó chưa được nối. `Về bản nháp` gọi chính hàm đổi mode
+  của workspace, không tự navigate.
+
+- **Added — status bar, và điều quan trọng nhất là thứ nó KHÔNG điền.**
+  `UTF-8`/`LF` đúng trong đa số trường hợp nên một giá trị mặc định sẽ **không
+  bao giờ trông sai** — đó chính là lý do cấm: nó vẫn hiện `UTF-8` cho đúng cái
+  tệp đang làm hỏng ký tự tiếng Việt của người dùng. Trình duyệt đã giải mã tệp
+  trước khi FE thấy nó, nên bảng mã hiện `—`. `EOL` thì khác: nó **đọc được** từ
+  chính buffer, kể cả `MIXED` — một câu trả lời thật, thường là dấu vết tệp đi
+  qua hai hệ điều hành. FBD thêm zoom%/ngôn ngữ/kết nối, cũng `—` khi chưa đọc
+  được: báo `Mất kết nối` cho một thiết bị đang khoẻ là gọi người trực đêm dậy
+  vì một giá trị FE tự bịa.
+
+- **Added — Code Map cho ST.** Ngưỡng hiển thị (`CODE_MAP_MIN_LINES = 80`) định
+  nghĩa **một lần** dùng chung: `AC-FBD-012` nói minimap xuất hiện với sơ đồ
+  vượt "một ngưỡng cấu hình", nhưng ngưỡng đó chưa từng tồn tại ở đâu trong repo
+  (`grep -i minimap` trên `src` trả 0). Điều hướng **không đổi một byte tài
+  liệu** — bất biến ép bằng chính hình dạng props: component chỉ nhận `source`
+  và `onNavigate`, không có đường nào ghi ngược.
+
+- **Fixed — `role="tablist"` là lời hứa markup không giữ.** Triệu chứng: e2e đỏ
+  với `aria-required-children` trên canvas FBD. Nguyên nhân: `tablist` đòi con
+  mang role `tab`, mỗi `tab` phải `aria-controls` một `tabpanel`, và bàn phím
+  phải đi bằng phím mũi tên — ở đây không có `tabpanel` nào và mỗi tab còn mang
+  một nút Đóng lồng bên trong. Cách sửa: danh sách + `aria-current`, mô tả đúng
+  thứ đang có là một dãy nút điều hướng.
+
+- **Fixed — lớp bọc mới nuốt mọi cú bấm vào editor.** Triệu chứng: 2 ca e2e
+  timeout với `intercepts pointer events`. Nguyên nhân: textarea là
+  `absolute inset-0` của khung soạn thảo, nên bọc khung đó trong một tầng flex
+  để đặt Code Map bên cạnh làm hộp của textarea lệch. Cách sửa: Code Map nằm
+  dưới khung, không bọc khung.
+
+- **Verification** (2026-08-27): `npx vitest --run --environment jsdom src`
+  **170 file / 1930 test PASS**; `npm run lint` PASS; `npm run build` PASS
+  (chunk `programming` **132,88 KiB** gzip, dư **32,12 KiB**);
+  `npx playwright test e2e/programming.spec.ts` **53 passed / 11 skipped**.
+
+### PGM-02 — Hover ký hiệu cho editor ST (`T59-820`, `PGM02-V22-WP-04`) (2026-08-27)
+
+- **Added — `PGM-02A §4` liệt `hover symbol/type/signature` là Required và nó
+  chưa từng tồn tại.** `UD-PROG-013` hoãn nó ở R1 rồi hẹn "mở lại từ R2"; R2
+  đóng ngày 2026-08-27 mà không task nào nhận. Nay rê chuột lên một định danh
+  hiện tên, kiểu, chữ ký khối và số nơi tham chiếu.
+
+- **Fixed — lý do hoãn không áp cho chính thứ bị hoãn.** Con số dùng để hoãn là
+  110,07 KiB gzip của CodeMirror 6. Nhưng AC đòi **hành vi**, không đòi thư
+  viện: ba lớp gutter/overlay/textarea của editor vốn đã dùng chung một lưới
+  đơn khoảng cố định, nên toạ độ chuột → offset ký tự là số học thuần. Chi phí
+  thật đo được là **1,30 KiB** gzip (127,67 → 128,97 KiB / ngân sách R3 165
+  KiB) — nhỏ hơn **85 lần** con số từng dùng để hoãn.
+
+- **Fixed — trường `Chữ ký` của Inspector luôn rỗng vì không ai truyền catalog.**
+  Triệu chứng: `ContextInspector` (giao ở `T59-818`) hiện "không xác định được"
+  ở trường `Chữ ký` cho mọi instance khối. Nguyên nhân: `InspectorInput.catalog`
+  không bao giờ được truyền — catalog thư viện chỉ được nạp bên trong
+  `QuickLibraryHost` khi người dùng mở bảng Thư viện nhanh. Khay vì thế nói
+  "thư viện không công bố chữ ký" trong khi sự thật là **chưa ai hỏi thư viện**.
+  Cách sửa: `useLazyProgrammingLibraryCatalog` nạp trễ ở `ProgramsTab` (cùng
+  luật với `pointCatalog`), dùng chung cho cả Inspector lẫn hover.
+
+- **Added — hover và Inspector không thể nói khác nhau.** Tooltip dựng nội dung
+  bằng **đúng** `stSymbolContextFor` mà Inspector dùng, không phải một đường
+  phân giải thứ hai. Hai đường sẽ lệch nhau đúng lúc khó thấy nhất — một định
+  danh mà thư viện không công bố chữ ký.
+
+- **Added — không đo được thì không hover.** Bề rộng ký tự phải đo THẬT từ DOM;
+  chưa layout hoặc font chưa tải ⇒ không hiện tooltip. Một bề rộng đoán sẽ làm
+  tooltip chỉ vào ký hiệu KHÁC thứ chuột đang trỏ, và người đọc không có cách
+  nào biết mình đang bị chỉ sai. Cùng lý do đó: điểm nằm sau ký tự cuối dòng
+  trả `null` thay vì kẹp về định danh gần nhất, và dấu câu ngay sau một tên
+  không kế thừa tooltip của tên đó.
+
+- **Changed — `UD-PROG-013` phần dư được xử lý, không để trôi tiếp.** Nửa hover
+  đã giao. Nửa còn lại — **chỉ mục ký hiệu do compiler sinh** — chuyển thành
+  `UD-PROG-016` OPEN với **hạn ký 2026-09-10**, kèm đo đạc: compiler ST có thật
+  ở `apps/core/application/st` và AST đủ để dẫn xuất chỉ mục, nhưng web-api
+  **không có đường nào** tới nó (12 action IPC đều là vòng đời, không action
+  nào nhận mã nguồn; `grep exec.Command` trả 0). Kèm câu hỏi thiết kế mà plan
+  chưa trả lời: chỉ mục compiler mô tả buffer đang gõ (một vòng IPC mỗi phím
+  trên thiết bị nhúng) hay Revision đã niêm phong (lạc hậu so với thứ đang hiện,
+  nhưng nói bằng giọng thẩm quyền của compiler — tệ hơn chỉ mục nguồn hiện tại).
+
+- **Verification** (2026-08-27): `npx vitest --run --environment jsdom src`
+  **165 file / 1882 test PASS** (16 test hình học/phân giải thuần + 7 test
+  component); `npm run lint` PASS; `npm run build` PASS (chunk `programming`
+  **128,97 KiB** gzip, dư **36,03 KiB**);
+  `npx playwright test e2e/programming.spec.ts` **53 passed / 11 skipped**;
+  `docs_iso_harness.py` PASS.
+
+### PGM-02 — Compare Draft↔Active bằng typed diff (`T59-819`, `PGM02-V22-WP-09`) (2026-08-27)
+
+- **Added — hash trước/sau nói "có gì đó đổi", không nói "đổi cái gì".**
+  `GetRevisionChanges` trước lát này chỉ trả danh sách object kèm hash. Đó là
+  một sự kiện, không phải một lời giải thích, nên câu duy nhất người vận hành
+  hỏi trước khi Commission vẫn không có chỗ trả lời.
+
+  Nay `GetRevisionChangesDetail` trả thêm `stHunks[]` (LCS theo dòng) và
+  `fbdChanges[]` (so đồ thị canonical theo ID), tất định, có trần payload,
+  `truncated` và `nextCursor`. Đường Commission vẫn gọi bản KHÔNG diff: nó chỉ
+  cần `impact`/`impactRef`, và tính LCS toàn bộ mã nguồn cho mỗi lệnh là công
+  vô ích trên thiết bị nhúng.
+
+  Diff **không** đi vào `impactRef`: dấu niêm phong là của thứ người vận hành
+  phải xác nhận, không phải của thứ họ được xem. Trộn vào sẽ làm mọi
+  acknowledgement đã cấp thành stale ngay khi đổi cách trình bày một hunk.
+
+- **Added — `ORDER_ONLY` và `GEOMETRY_ONLY` tách khỏi `UPDATED`.** Kéo một khối
+  sang chỗ khác trên canvas không đổi hành vi chương trình; gộp nó chung với
+  một thay đổi `typeRef` làm người đọc mất khả năng phân biệt thứ cần soi kỹ
+  với thứ chỉ cần liếc.
+
+- **Fixed — lỗi đọc intent Enabled bị nuốt thành "không có Program nào bật".**
+  Triệu chứng: `enabledProgramsTouched` gộp `err != nil` với `len(intents) == 0`
+  và cùng trả mảng rỗng. Nguyên nhân: một lỗi hạ tầng bị đọc thành một lời
+  khẳng định an toàn, nên `enableIntent` thành `NONE` và Commission đi tiếp
+  không hỏi acknowledgement nào — fail-OPEN ở đúng chỗ nguy hiểm nhất là thay
+  chương trình đang chạy trên thiết bị. Cách sửa: tách hai câu đó; store lỗi ⇒
+  `UNAVAILABLE` và Commission fail-closed.
+
+- **Fixed — `nextCursor` luôn có trên dây nhưng contract khai optional.** Phát
+  hiện bởi cổng đồng bộ hợp đồng mới (dưới). Go không dùng `omitempty` nên khoá
+  luôn được gửi, `null` nghĩa là "đã đọc hết"; khai optional làm "hết trang"
+  trông giống "server đời cũ không biết phân trang". Nay `required` + nullable,
+  đúng quy ước đã áp cho `dirty`/`draftSequence`.
+
+- **Added — cổng đồng bộ hợp đồng cho phía Go.** Phía TS có generator sinh type
+  từ OpenAPI nên quên sinh lại sẽ đỏ ở `client.test.ts`; phía Go **không có
+  generator**, struct viết tay, và không phép kiểm nào thì `stHunks` có thể mất
+  `json` tag hay mọc thêm `omitempty` mà mọi test khác vẫn xanh — rồi khay So
+  sánh đọc `undefined` và vẽ "máy chủ chưa biết so" cho một máy chủ đã so.
+  `TestRevisionChangesDiffOpenAPIMatchesGoResponse` khoá properties/required và
+  đọc enum **thẳng từ hằng** của lớp application (`StHunkChangeTypes`,
+  `FbdChangeTypes`, `FbdElements`) thay vì chép chuỗi vào test.
+
+- **Fixed — `loadMore` có guard làm chính đường thử lại của nó không chạy được.**
+  Triệu chứng: trang tiếp lỗi một lần thì phần còn lại của danh sách khoá vĩnh
+  viễn. Nguyên nhân: handler lỗi xoá cursor khỏi `consumedCursors` để cho retry,
+  nhưng guard đầu hàm đòi `status === 'ready'` — mà lần lỗi vừa rồi đã đặt
+  `status = 'error'`. Kèm theo đó lỗi phân trang bị gộp vào `error` chung, nên
+  khay xoá sạch danh sách đã tải và mang theo luôn nút thử lại. Cách sửa: tách
+  `loadMoreError` khỏi `error`, giữ nguyên phần đã tải, và cho đọc tiếp khi
+  `status !== 'loading'`.
+
+- **Fixed — cursor quay vòng làm mất trang vừa nhận.** Nhánh chống lặp trả sớm
+  trước khi ghép, tức vứt một trang hợp lệ (nó về từ cursor chưa từng tiêu thụ).
+  Nay trang được ghép, chỉ `nextCursor` bị bỏ để không mời thử lại một đường đã
+  chứng minh là quay vòng, còn `truncated` giữ bật để danh sách tự khai là chưa
+  đầy đủ.
+
+- **Changed — luật cổng So sánh.** Draft là bản ghi sống, nên chỉ so hai
+  Revision **bất biến**: dirty ⇒ đòi Lưu, đã lưu mà chưa niêm phong ⇒ đòi Niêm
+  phong. Không có Active ⇒ trạng thái rỗng **có lý do**, khác hẳn "không có
+  khác biệt". Server không gửi khoá diff ⇒ "chưa so", cũng khác hẳn `[]` là "đã
+  so và không có gì". Bấm một hunk chỉ mở nó ở phía chỉ-đọc trong khay; nhảy
+  sang editor phải qua nút có nhãn, vì nhảy ngầm sẽ vứt mất chỗ đang gõ dở.
+
+- **Verification** (2026-08-27, chạy thật trên nhánh `feat/t59-819-compare`):
+  `npx vitest --run --environment jsdom src` **163 file / 1859 test PASS**;
+  `npm run lint` PASS; `npm run build` PASS (chunk `programming` **127.67 KiB**
+  gzip / ngân sách R3 165 KiB, dư 37.33 KiB);
+  `npx playwright test e2e/programming.spec.ts` **53 passed / 11 skipped**;
+  `go vet ./...` + `go test ./... -count=1` PASS (19 gói);
+  `docs_iso_harness.py`, `candidate_pin_check.py` (17/17),
+  `verify_programming_pgm02_contract.py`, `verify_programming_g1_contracts.py`
+  (10/10) PASS. OpenAPI lên **1.30.0**, re-pin `openapiSha256` ở
+  `pgm02_workspace_v1.json` và `g1_contract_join_v1.json`.
+
+### PGM-02 — Inspector năm ngữ cảnh dùng chung ST↔FBD (`T59-818`) (2026-08-27)
+
+- **Fixed — khay "Thuộc tính" chiếm chỗ mà không nói được gì.** Handoff §9 cấm
+  thẳng: *"Inspector SHALL NOT permanently consume 300 px for two fields"*. Khay
+  cũ nằm trong `ProgramsTab.tsx` và có đúng hai trường — `Tên` và `Loại` — tức
+  rơi trúng điều bị cấm, và bốn ngữ cảnh còn lại (Variable, ký hiệu ST, khối
+  FBD, kết nối) chưa từng tồn tại.
+
+  Nguyên nhân gốc là quản trị chứ không phải giao diện: Inspector có trong hợp
+  đồng nhưng không được chuyển tiếp vào DDD (`grep -i inspector` trả 0 kết quả),
+  nên không `WP` nào nhận việc — đúng loại "scope mồ côi" mà
+  `F-PGM02-AUD-001` chỉ ra.
+
+  Nay là `ContextInspector` dùng chung, thu gọn khi không có ngữ cảnh đáng đọc
+  và nở theo thứ người dùng vừa chạm.
+
+- **Added — "không xác định được" là một KẾT QUẢ, không phải ô trống.** Mọi
+  trường đi qua kiểu `InspectorField`: hoặc `known` kèm giá trị, hoặc không.
+  Không có `''`, không có `0`, không có giá trị mặc định. Hệ quả cụ thể:
+  analyzer không tra được ký hiệu ⇒ `Definition`/`Type`/`Signature` đều nói
+  thẳng là không chắc; thư viện trả `SIGNATURE_UNAVAILABLE` ⇒ FE **không** dựng
+  chữ ký từ tên port; `retained` của khối FBD là `unknown` vì model canonical
+  chưa mang cờ đó — `false` là một câu khác hẳn và nó ảnh hưởng tới cách người
+  ta hiểu chương trình sau khi mất điện.
+
+- **Added — lựa chọn được NÂNG lên workspace.** `StructuredFbdEditor` phát
+  `onSelectionChange`, `SourceEditor` phát `onCursorSymbolChange`. Inspector là
+  component dùng chung nên nó không được đọc state nội bộ của từng editor: nếu
+  đọc thì có hai nơi cùng tính "đang chọn cái gì", và chúng sẽ lệch nhau đúng
+  lúc con trỏ nằm ở ranh giới một định danh.
+
+- **Changed — `UD-PROG-015` được tôn trọng ở tầng KIỂU DỮ LIỆU.** `Access`,
+  `Description` và tên Task không có nguồn trong Draft v2, nên chúng không tồn
+  tại trong kiểu ngữ cảnh — không chỉ là "không render". Nhờ vậy không có đường
+  nào cho một bản sửa sau này điền `"Public"` cho giống ảnh render.
+
+- **Fixed — hồi quy E2E do `T59-815` để lại.** Ba case mock còn khẳng định câu
+  cũ "SIMULATE chưa khả dụng"; `T59-815` đã đổi nguồn sự thật sang capability
+  của server nhưng lát đó không chạy bộ mock nên hồi quy lọt qua. Nay khẳng định
+  đúng câu mới, và thêm một khẳng định rằng deep-link `?mode=SIMULATE` KHÔNG rơi
+  về editor Draft.
+
+- **Changed — cổng ngân sách chuyển sang R3.** `npm run build` nay gọi
+  `--increment r3`: chunk Programming **122,28 KiB / 165 KiB**, dư **42,72 KiB**.
+
+- **Verification.** FE **161 file / 1823 test PASS**; lint PASS; build PASS;
+  Playwright mock **53 PASS / 11 skip**; `go vet` + `go test -count=1` PASS;
+  `docs_iso_harness.py` PASS; `candidate_pin_check.py` PASS.
+
+### PGM-02 R3 — bề mặt SIMULATE và hai lỗi của hạ tầng nó dựng lên (`T59-815`) (2026-08-27)
+
+- **Fixed — `F-P59-RUN-NOOP-001`: nút Chạy nói dối.** `T59-814` cài `RUN` thành
+  một lần đổi chuỗi trạng thái trong DB. Không tick nào chạy: đồng hồ ảo đứng
+  yên trong khi mọi thứ đọc được đều nói "đang chạy". Không test nào đỏ, vì tất
+  cả đều kiểm chuyển trạng thái chứ không kiểm thời gian có trôi. Supervisor nay
+  có vòng chạy thật, và hai chi tiết trong đó là điều kiện để nút Dừng còn dùng
+  được: tick tự động **không** tăng `session_sequence` (nếu tăng thì client đang
+  RUN không bao giờ giữ được ETag còn hạn, và chính lệnh PAUSE của họ sẽ luôn
+  trượt 409), và tick tới **sau** khi đã PAUSE bị bỏ ở tầng store (vòng lặp dừng
+  ở ranh giới giữa hai tick nên vẫn có thể còn một tick đang bay).
+
+- **Fixed — `F-P59-SIM-TRUSTED-KEY-001`: worker không tin nổi artifact của chính
+  thiết bị.** Worker chỉ tin khoá nhúng lúc build, trong khi compiler ký artifact
+  bằng khoá THIẾT BỊ và Core tin khoá đó qua `--st-trusted-key`. Hệ quả: trên bo
+  thật, **mọi** phiên mô phỏng hỏng ở bước nạp artifact với `SIM-E-002`, và thông
+  điệp không hề nói ra thiếu khoá. Lỗi không lộ ở lát trước vì cổng hành vi tự
+  dựng gói bằng khoá test — đúng tập khoá worker nhúng sẵn. Nay worker nhận
+  `--st-trusted-key`, đọc khoá **trước** hàng rào (sau seccomp thì không mở được
+  file nào nữa), và supervisor suy mặc định từ chính khoá ký thiết bị.
+
+- **Added — bề mặt SIMULATE.** Điều khiển phiên (RUN/PAUSE/STEP/RESET/tốc độ/
+  dừng), khay ngõ vào ảo theo manifest của artifact đã seal, lớp quan sát, và
+  danh tính đầy đủ của thứ đang chạy (phiên, Revision nguồn, hash nội dung, hạn
+  dùng). Băng **KHÔNG CÓ NGÕ RA THẬT** hiện ở mọi trạng thái.
+
+- **Added — ba luật được đẩy vào một mô-đun THUẦN để kiểm được mà không dựng cây
+  component.** (1) Mọi trạng thái đến từ read-back — không nhánh lạc quan nào;
+  bấm Chạy chỉ khoá nút, chữ "đang chạy" chỉ xuất hiện sau khi server xác nhận.
+  (2) Bỏ phản hồi của phiên khác, sequence cũ và epoch cũ — sau `RESET`, mẫu của
+  epoch trước mang đúng hình dạng hợp lệ nhưng nói về một dòng thời gian đã bị
+  xoá. (3) Nguồn `SIMULATION` nằm trong KIỂU dữ liệu chứ không phải một chú
+  thích, nên không có đường nào một giá trị mô phỏng đi vào chỗ đọc gói đang
+  chạy. Sequence so sánh theo CHUỖI vì là uint64 — `Number` mất chính xác từ
+  2^53 và một sequence làm tròn làm `If-Match` sai không ai thấy.
+
+- **Changed — quyền đọc từ capability của server, không từ nhãn vai.** viewer/
+  operator thấy **đủ** thanh điều khiển ở dạng chỉ đọc kèm lý do; ẩn đi làm
+  người trực ca tưởng thiết bị không có khả năng đó. Ô nhập ngõ vào ảo cũng
+  khoá — bàn phím không được là đường vòng. Server vẫn là chốt cuối: viewer nhận
+  403 cho cả create lẫn action.
+
+- **Changed — Draft bẩn không có đường mô phỏng.** Còn thay đổi chưa lưu thì
+  không có nút mở phiên; hash lệch thì server trả `PRG-SIM-SAVE-REQUIRED` và
+  không tạo phiên. Phiên chỉ mở trên Revision đã Kiểm tra đạt, vì worker chỉ
+  nhận artifact bất biến do chính pipeline Check sinh ra.
+
+- **Changed — resolver không còn tự chặn `?mode=SIMULATE`.** Câu trả lời "thiết
+  bị có mô phỏng được không" thuộc capability của server; để hai nơi cùng trả
+  lời sẽ có ngày chúng trả lời khác nhau.
+
+- **Verification.** `ctest` **1312/1312** (build `rc=0`); `go vet` + `go test
+  -count=1` PASS; FE **159 file / 1800 test PASS**, lint PASS, build PASS với
+  chunk Programming **123,80 KiB / 145 KiB (R2)**, dư **25,03 KiB**; real-backend
+  E2E **6/6 PASS** — trong đó case mới chạy worker THẬT và đo: `SET_INPUT` 4,5 →
+  `STEP` cho đầu ra 9 sau đúng một base tick, `RUN` tiến đồng hồ ảo, `PAUSE` dừng
+  thật, `RESET` về 0 kèm epoch mới, viewer bị chặn 403, `STOP` idempotent; cổng
+  `sim_worker_behaviour`/`symbol_boundary` và `verify-project.sh --component
+  layout` PASS.
+
+  Giới hạn: vẫn là lớp **HOST/LOCAL**. `VS-PROG-U15` vẫn **NOT_RUN** — verdict
+  thuộc `T59-817`.
+
+### PGM-02 — ba ảnh thiết kế của chủ sở hữu, prompt thi hành và vá cổng tài liệu (2026-08-27)
+
+- **Added — prompt thi hành `PROMPT-PGM02-EDITOR-CHROME`**
+  (`docs/03_implementation/PROMPT_PGM02_EDITOR_CHROME_EXECUTION.md`): bốn làn
+  song song `T59-818/819/820/821` + đóng `T59-822`, kèm ma trận ánh xạ
+  ảnh→task→luật và bộ lệnh kiểm chứng bắt buộc.
+
+- **Added — ba ảnh render PGM-02 vào hồ sơ được kiểm soát.** Đăng ký vào
+  `handoff_manifest.json` **2.3** dưới `renderedReference` (PGM-02A/PGM-02B) và
+  `annotatedOverview` (PGM-02).
+
+- **Fixed — 17 liên kết chết sau khi ba SVG tham chiếu bị thay bằng PNG.**
+  `7e6a330` xoá `PGM-02A_ST_editor_reference.svg`,
+  `PGM-02B_FBD_editor_reference.svg`, `PGM-02_ST_FBD_combined_reference.svg`
+  nhưng 12 tài liệu vẫn trỏ vào chúng, làm `docs_iso_harness.py` **FAIL**
+  (`link_missing=6` trong tập hồ sơ ghim). Đã trỏ lại toàn bộ sang ba PNG.
+
+- **Changed — đổi tên ba asset về quy ước repo.** Tên có dấu cách
+  (`ST editor program.png`, `FBD editor program.png`, `ChatGPT Image 09_56_53 24
+  thg 8, 2026.png`) không đi qua được bộ quét liên kết của harness. `git mv`
+  sang `PGM-02A_ST_editor_reference.png`, `PGM-02B_FBD_editor_reference.png`,
+  `PGM-02_ST_FBD_annotated_reference.png`.
+
+- **Fixed — tham chiếu `ProgrammingContextBar.tsx` đã đổi tên.** Hai liên kết
+  trong `KX-DDC24-UIUX-WEB-PROGRAMMING-REDESIGN-PROPOSAL-001_VI.md` trỏ vào
+  component không còn tồn tại; nay trỏ `ProgrammingContextStrip.tsx`.
+
+- **Changed — `UD-PROG-014` CLOSED, phương án B (nhiều tab POU).** Cả hai ảnh
+  đều hiện tab bar, ảnh FBD còn hiện tab bắc qua hai ngôn ngữ. Register ghi năm
+  câu hỏi hành vi tab mà handoff v2.2 vẫn chưa trả lời, để team chốt trong
+  `TC-PGM02-TAB-01` thay vì mỗi người một kiểu.
+
+- **Added — `UD-PROG-015` (ĐANG MỞ): ba trường Inspector chưa có nguồn dữ liệu.**
+  Ảnh hiện `Access`, `Description` và tên Task `Control_Main`; Draft v2 chỉ có
+  `programId`/`objectId`/`periodMs` (`draft_v2.go:349-377`). Ba lựa chọn A/B/C
+  ghi trong register; khuyến nghị A cho R3. Cấm hard-code `Public` hay tên Task
+  ở FE.
+
+- **Changed — DDD PGM-02 lên 0.5, ĐẢO NGƯỢC kết luận status bar của bản 0.4.**
+  Bản 0.4 ghi status bar "ngoài phạm vi" vì handoff văn bản không nhắc; cả hai
+  ảnh đều có status bar, nên nó vào phạm vi và do `PGM02-V22-WP-15` sở hữu. §7.2
+  thêm `EditorTabBar`, `NavigatorMap`, `WorkspaceStatusBar`; §7.3 thêm ba dòng
+  ánh xạ; §10.2 thêm `TC-PGM02-TAB-01`/`SB-01`/`NAV-01`.
+
+- **Ghi nhận — ba nhóm nội dung trong ảnh KHÔNG có nguồn dữ liệu**, viết thành
+  luật cứng trong prompt để team không "làm cho giống ảnh":
+  (a) Quick Library FBD hiện category `HVAC` và block `P`/`PI`/`PID_AutoTune`/
+  `Ramp` — registry `rev-a.3` không có category đó và không có bốn block đó;
+  (b) `PID` là `featureState: REVIEW_REQUIRED`, Check phải tiếp tục chặn Program
+  dùng nó (`UD-PROG-010`);
+  (c) ba trường Inspector ở `UD-PROG-015`.
+
+- **Changed — `T59-821` mở rộng thành "editor chrome" và lên `READY` đủ.** Sau
+  khi `UD-PROG-014` CLOSED, phần tab hết bị chặn nên task không còn `READY (một
+  phần)`. Phạm vi nay gồm bốn phần cùng một cây component: toolbar ba mode + tab
+  đa POU + status bar + Code Map cho ST. `PGM02-V22-WP-15` đổi tiêu đề tương ứng
+  (plan PGM-02 lên **1.18**). Ghi rõ xung đột file: `T59-818` và `T59-821` cùng
+  chạm `ProgramsTab.tsx` nên phải nối tiếp hoặc tách `ProgramInspector` trước.
+
+- **Changed — hồ sơ phán quyết lên 1.1, thêm §8 ghi phần tự đảo ngược.** §4 bản
+  1.0 bác status bar vì "không có trong handoff v2.2" — đúng với bằng chứng lúc
+  đó nhưng sai kết luận, do coi phần văn bản của gói handoff là toàn bộ hợp đồng
+  trong khi visual reference cũng là hợp đồng. §8 ghi lại việc đảo ngược, cái ba
+  ảnh xác nhận, và cái ba ảnh **không** chứng minh.
+
+- **Verification.** `docs_iso_harness.py` **PASS** (`link_missing` 6 → **0**;
+  `UD-PROG` 14 → **15**). `candidate_pin_check.py` **PASS** sau khi re-pin hồ sơ
+  trong `PROGRAMMING_UNIFIED_BASELINE_MANIFEST_2026-08-20.md`. Soát chéo trạng
+  thái `T59-818..822` giữa Plan 59 và prompt: **5/5 khớp**. `git diff --check`
+  sạch. Phiên này **không sửa code sản phẩm**.
+
+### PGM-02 R3 — hạ tầng Simulation cách ly (`T59-814`) (2026-08-27)
+
+- **Added — `mkddc-programming-sim-worker`, tiến trình mô phỏng EPHEMERAL.**
+  Không phải service: không unit systemd, không auto-restart, sống đúng bằng
+  vòng đời một phiên. Nó dùng **đúng** loader/executor production
+  (`UnpackPackageV2` + `StProgramRuntime`) — hai bộ ngữ nghĩa cho một chương
+  trình là hai bộ để trôi khỏi nhau — nhưng scheduler, đồng hồ và ảnh vào/ra là
+  riêng của phiên. Đồng hồ ảo là **tham số** của `execute()`, nên tất định là
+  tính chất có sẵn chứ không phải thứ phải mô phỏng thêm.
+
+- **Added — ba lớp cắt cạnh tới đường điều khiển, không lớp nào một mình đủ.**
+  (1) Link list hẹp: worker **không** link `core_domain`
+  (PointTable/PointWriter/PriorityResolver) và cố ý không dùng `StScheduler`
+  production — scheduler đó nhận chính đường ghi ra thiết bị. (2) Hàng rào
+  worker tự dựng: đóng FD thừa kế, `RLIMIT_FSIZE=0` (không tạo được file),
+  `NO_NEW_PRIVS`, `RLIMIT_AS`, seccomp-BPF trả `EACCES` cho nhóm syscall thoát
+  sandbox. (3) Supervisor Go: quota, TTL, audit, kill **kèm** reap.
+
+- **Added — hai cổng nhị phân, cả hai đọc binary sau link.**
+  `programming_sim_worker_symbol_boundary` kiểm symbol thật; nó được xác nhận là
+  bắt được bằng cách chạy trên `mkddc-core` — và đỏ ở đó.
+  `programming_sim_worker_behaviour` chạy binary thật: hàng rào chặn **9/9**
+  đường production (`/dev/shm/mkddc_*`, `/dev/mem`, `/dev/ttyS0`, RETAIN,
+  journal, socket Core, `/etc/shadow`, `AF_UNIX`) bằng `EACCES`; bắt tay
+  fail-closed với token/version sai; và hai tiến trình worker độc lập cùng gói
+  cùng input cho chuỗi quan sát **giống hệt nhau**.
+
+- **Added — API R3, bảy route.** `POST /simulation/sessions`, `GET|DELETE
+  /sessions/{id}`, `POST /sessions/{id}/actions`, `PUT
+  /sessions/{id}/inputs/{observationId}`, `GET /sessions/{id}/observations`,
+  `GET /sessions/{id}/trace`. `SET_INPUT` và `STOP` là hành động sản phẩm nhưng
+  được materialize thành resource riêng để có identity và idempotency rõ ràng;
+  endpoint `actions` từ chối hai hành động đó.
+
+- **Added — ba bất biến đẩy xuống SQL, không để trong Go.** Một phiên sống trên
+  mỗi controller (UNIQUE index có điều kiện), phiên terminal không bao giờ sống
+  lại (trigger), sequence không đi lùi (trigger). Kiểm ở Go thôi thì cửa sổ giữa
+  "đếm" và "ghi" đủ rộng cho hai worker cùng sống, và một handler mới quên gọi
+  phép kiểm sẽ phá được bất biến mà không có gì đỏ. Migration
+  `0013_programming_simulation_sessions.sql` chỉ lưu metadata reconciliation —
+  không process image, không RETAIN, không source plaintext.
+
+- **Added — tám mã public `PRG-SIM-*` là họ mã MỚI.** Người vận hành phải phân
+  biệt "input bị từ chối" với "worker chết" với "phiên hết hạn"; gộp chúng vào
+  miền cũ sẽ xoá đúng sự phân biệt đó. Catalog lên **1.8.0** (30→38 public,
+  135→151 detail) và sinh đồng thời cho Go, C++, TypeScript.
+
+- **Changed — RBAC hai lớp, và hệ quả được nói rõ.** Route khai `RoleAdmin` nên
+  middleware chặn trước và handler **không chạy** — bất biến này đã được
+  `security_matrix_test.go` canh cho toàn bộ Programming. Lớp application kiểm
+  lại và trả `PRG-SIM-FORBIDDEN` kèm audit từ chối. Vì vậy vai không đủ quyền
+  gọi HTTP nhận 403 với **thân lỗi chung của middleware**, không phải thân
+  `PRG-SIM-FORBIDDEN`; đổi thứ tự để lấy thân lỗi đẹp hơn sẽ phải cho handler
+  chạy — đánh đổi một bất biến an toàn lấy một chuỗi hiển thị.
+
+- **Changed — SIMULATE trong FE nay đọc capability của SERVER.** Trước đây FE tự
+  khai "chưa có ở increment này"; nay nó đọc
+  `capabilities.workspaceModes.simulation.supported`. Một thiết bị thiếu worker
+  mô phỏng không còn bị hứa hẹn một chế độ nó không có, và server đời cũ (thiếu
+  `workspaceModes`) ⇒ UNAVAILABLE chứ không đoán.
+
+- **Changed — đóng gói.** Worker được cài **cạnh** `mkddc-web`
+  (`/opt/mkddc-web/`), không vào `/usr/sbin`: service chạy `User=mkddc` với PATH
+  systemd mặc định. Unit trỏ `PROGRAMMING_SIM_WORKER` tới đúng nơi đó; thiếu
+  file ⇒ capability SIMULATE tự TẮT, không có trạng thái "bật một nửa". Guard
+  đóng gói khoá cả ba điều đó, kể cả "KHÔNG được có unit systemd riêng".
+
+- **Verification.** `ctest` **1312/1312 PASS** (build `rc=0` — số đo lấy sau khi
+  build thành công, không lấy từ lần chạy có binary cũ); `go vet` + `go test
+  ./... -count=1` PASS; FE **157 file / 1769 test PASS**, lint PASS, `npm run
+  build` PASS với chunk Programming **115,39 KiB / 145 KiB (R2)**, dư **29,61
+  KiB**; `verify-project.sh --component layout` PASS sau khi re-pin lattice
+  (OpenAPI 1.29.0 / 40 operation, catalog 1.8.0, store schema 13).
+
+  Giới hạn: đây là lớp **HOST/LOCAL**. Chưa chạy trên target, chưa có HIL, chưa
+  quan sát I/O vật lý. `VS-PROG-U15` vẫn **NOT_RUN** — verdict thuộc `T59-817`,
+  và `G-PGM02-04 SIM_SAFE` mới đạt phần host.
+
+### PGM-02 — phán quyết gap analysis của auditor và vá bốn scope mồ côi trong plan (2026-08-27)
+
+- **Fixed — `F-PGM02-AUD-002`: `PGM02-V22-WP-09` mang cờ `DONE (R2)` trong khi
+  một nửa scope chưa hề được giao.** Thân `WP-09` sở hữu tường minh nhánh
+  **Compare Draft↔Active typed diff** (`stHunks[]`/`fbdChanges[]` trong
+  `GetRevisionChanges`, Compare drawer có anchor jump, luật seal-before-compare,
+  hai điều kiện acceptance, bộ golden test), nhưng task đóng nó — `T59-810` —
+  có scope chỉ gồm producer stamp và Trace pin. Đo tại `ed6fb21`:
+  `grep -rn "stHunks\|fbdChanges" contracts/ apps/web-api/ apps/web-ui/src` trả
+  về **0 kết quả**. Trạng thái `WP-09` hạ về `DONE (R2, MỘT PHẦN)` đúng nghĩa
+  `PARTIAL` của Plan 59 §0.1; phần Compare tách sang `T59-819`. Không mở lại
+  increment R2 — R2 đóng đúng phạm vi các task R2 đã tuyên.
+
+- **Fixed — `F-PGM02-AUD-001`: Inspector biến mất giữa hợp đồng và thiết kế.**
+  Handoff cha §1 xếp Inspector vào shell dùng chung và §9 định nghĩa năm ngữ
+  cảnh, nhưng `grep -i inspector` trên `DDD-SW-PGM02-WORKSPACE-001` bản 0.1–0.3
+  trả về **0 kết quả**, nên không WP nào nhận và code chỉ có panel hai trường
+  `Tên`+`Loại` (`ProgramsTab.tsx:1516-1558`) — đúng thứ handoff §9 cấm. DDD lên
+  0.4 khôi phục `ContextInspector` vào cây component §7.2, thêm dòng ánh xạ
+  §7.3 và ba ca kiểm `TC-PGM02-INS-01..03` ở §10.2; mở `PGM02-V22-WP-14` /
+  `T59-818`.
+
+- **Fixed — `F-PGM02-AUD-003`: phần dư `WP-04` hết hạn mà không ai thực hiện.**
+  `UD-PROG-013` hoãn hover chuột và chỉ mục ký hiệu do compiler sinh với cam kết
+  "mở lại từ R2"; R2 đóng 2026-08-27 mà không task nào nhận và không có bản ghi
+  hoãn tiếp, trong khi `PGM-02A §4` liệt hover là **Required**. `T59-820` nhận
+  phần dư với đúng hai đường ra: giao ở R3, hoặc Owner ký hoãn **có thời hạn**.
+
+- **Fixed — `F-PGM02-AUD-004`: toolbar và tab editor không được chuyển tiếp vào
+  DDD.** `PGM-02A §2/§3` quy định `tabs + editor toolbar` và tập nút theo từng
+  mode; DDD 0.1–0.3 không nhắc cả hai khái niệm. Thanh EDIT thực tế đã có bảy
+  nút (`FE-ST-009`) nhưng thiếu `Check`/`Compare`/`More`, chưa có thanh riêng
+  cho SIMULATE/LIVE. DDD 0.4 thêm `EditorToolbar` mode-aware + `TC-PGM02-TB-01`;
+  mở `PGM02-V22-WP-15` / `T59-821`. Việc `SIMULATE`/`LIVE` sống ở
+  `ProgramsModeSwitcher` nay được ghi nhận chính thức thay vì lệch âm thầm.
+
+- **Added — `UD-PROG-014` (ĐANG MỞ): một POU mỗi lần hay nhiều tab POU.** Không
+  tự chốt vì gói handoff v2.2 vẽ tab nhưng không đặc tả hành vi tab (số tab tối
+  đa, dirty Draft ở tab ẩn, đổi mode, sống qua reload) — đó là câu hỏi state
+  model/dirty-guard, chạm `DD-07`. Khuyến nghị kỹ thuật ghi trong register là
+  giữ một POU mỗi lần cho R3.
+
+- **Added — `F-PGM02-AUD-005` / `T59-822`: khôi phục truy nguyên AC.** Đo trên
+  toàn repo: `AC-PGM02-001..007/009/010` có **0** tham chiếu ngoài chính file
+  handoff. Phần lớn đã có test thật nhưng không mang định danh AC (ví dụ
+  `AC-ST-011` có test dán tại `SourceEditor.test.tsx:413-425`, `AC-ST-009` tại
+  `StRuntimeValueOverlay.test.tsx:46`), nên người kiểm chứng độc lập phải suy
+  luận bằng văn xuôi. Soi kỹ thì đúng một mục hoá ra là gap thật:
+  `AC-PGM02-002` (1280×750 không cuộn trang) mới chỉ được đo cho PGM-01 Overview
+  (`e2e/programming.spec.ts:920`), chưa đo cho workspace PGM-02.
+
+- **Changed — bác bỏ tường minh phần sai của gap analysis đầu vào.**
+  `gap_analysis_programming_page.md` đối chiếu nhầm cây mã nguồn (mọi đường dẫn
+  trỏ `…/ddc24-main/src/frontend/src/`, tức trang legacy graph demo sau cờ
+  `LEGACY_GRAPH_DEMO_ENABLED`), nên "62 Critical", "~90% chưa implement",
+  "46–71 tuần" và ba phương án A/B/C đều bị bác — POU tree, Quick Library,
+  workbench 5 tab, gutter số dòng, autocomplete, F12, FBD canvas node-edge và
+  LIVE overlay đều đã tồn tại. Status bar `Ln/Col/INS/LF/UTF-8` bị bác vì không
+  có trong hợp đồng đã duyệt, và được ghi ngoài phạm vi tại DDD §1.4. File đầu
+  vào giữ nguyên trạng, gắn banner phán quyết.
+
+- **Added — hồ sơ phán quyết** `REC-PGM02-AUD-ADJ-001`
+  (`docs/07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md`):
+  đối chiếu từng vùng ①–⑫ với file:line thật, bảng chuyển finding→task, và mục
+  ghi rõ việc chưa làm kèm lý do.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` **PASS** (duplicate doc
+  ID 0; code-span `docs/**` không tồn tại 0; `UD-PROG` trong Decision Register
+  13 → **14**). Kiểm liên kết `.md` trên sáu file đã sửa: **0 hỏng**. Phiên này
+  **không sửa code** — bốn finding đều thuộc R3 và thứ tự `R1→R2→R3` do
+  `AUTH-PROG-2026-08-24-05` khoá. `RELEASE_READY` vẫn **NO-GO**.
+
+### PGM-02 R2 — bằng chứng target, diễn tập rollback và closeout increment (`T59-813`) (2026-08-27)
+
+- **Added — lane browser chạy trên chính controller.**
+  `playwright.programming-target.config.ts` bắt buộc khai
+  `PROGRAMMING_TARGET_BASE_URL` (không có mặc định localhost), không dựng
+  `webServer`, và khóa cứng tập case ở `grep`. Bundle triển khai lên Foxlinx
+  SOM-DDC-24 đọc lại trùng **14/14 hash** với build host, kể cả khi đọc qua
+  HTTP. Kết quả: `T59-810`/`T59-811` **3 PASS** online.
+
+- **Added — hai cửa sổ có kiểm soát trên target.** Cửa sổ dừng `mkddc-core`:
+  monitor trả **503**, thân phản hồi không chứa `programValue: 0`, FE bỏ hẳn
+  nguồn Active thay vì rơi về Draft, gỡ lớp giá trị runtime và không để lại
+  `Lưu`/`Hoàn tác`. Cửa sổ rollback: triển khai thật bundle **không** có cờ
+  `VITE_PROGRAMS_WORKSPACE_V2`, xác nhận route canonical R2 biến mất, lối vào
+  cũ mount lại workspace R1, và Draft/Active đọc nguyên vẹn qua đúng API bản cũ
+  dùng — rollback FE không kéo theo migration.
+
+- **Fixed — `F-P59-IDEMPOTENCY-REPLAY-001`: đồ gá e2e sinh idempotency key lặp
+  lại giữa các lần chạy.** `nextUUID` dùng bộ đếm reset theo tiến trình, nên mọi
+  lần chạy gửi lại đúng tập `x-idempotency-key` cũ và backend replay bản ghi cũ
+  — đúng hợp đồng idempotency. Lane host dựng store mới mỗi lần nên không lộ;
+  trên store sống lâu của controller thì `T59-810` đỏ vì phiên Trace "vừa tạo"
+  mang pin cũ hơn snapshot đọc trước đó **611 s**. Nguy hiểm hơn màu đỏ: cùng cơ
+  chế cho **xanh giả** ở mọi case assert rằng một mutation đã chạy. Nay muối UUID
+  theo từng lần chạy — 3/3 lần PASS liên tiếp, so với 3/3 FAIL trước khi sửa.
+
+- **Fixed — `F-P59-TARGET-SCOPE-001`: lane target có thể chạm dữ liệu thật ngoài
+  phạm vi.** `testMatch` chọn file chứ không chọn case, nên các case tự tạo
+  Project và Commission gói mới có thể chạy lên controller — đổi chính Active
+  đang điều khiển để lấy bằng chứng về Active. Phạm vi nay khóa trong config.
+
+- **Fixed — `F-P59-VIEWER-RESIDUE-001`: mỗi lần đo để lại một tài khoản viewer
+  thật.** Case tạo viewer qua API thật nhưng không dọn; nay xóa trong `finally`
+  để vẫn chạy khi assert phía trên đỏ.
+
+- **Fixed — `F-P59-OPENAPI-PIN-001`: lattice hợp đồng ghim revision OpenAPI
+  không còn tồn tại.** R2 đổi `contracts/openapi/openapi.yaml` ở `5c99bc5`
+  (dấu producer) và `4d8cfd3` (Trace pin) nhưng không re-pin, làm
+  `verify-project.sh --component layout` và `verify_programming_g1_contracts.py`
+  **đỏ sẵn trên `main` sạch** từ `T59-810`. Re-pin `openapiSha256` trong
+  `pgm02_workspace_v1.json` và `g1_contract_join_v1.json`; cả hai cổng về PASS.
+
+- **Changed — closeout R2 và đồng bộ hồ sơ.** Thêm record
+  `EV-PGM02-R2-CLOSEOUT-001`; `VS-PROG-U14` chuyển từ `NOT_RUN` sang **PASS ở
+  phạm vi R2 (HOST + TARGET-BROWSER)** kèm đúng giới hạn: chưa có chữ ký
+  operator/reviewer, chưa đo *Active cutover* ở lớp target, không tuyên bố HIL
+  hay I/O vật lý. Plan 59 lên 2.23 (`T59-813 DONE`, R2 đóng, `T59-814 READY`);
+  review plan PGM-02 đóng `WP-12`/`WP-13` phạm vi R2; `PROGRAMMING_OPEN_DECISIONS`
+  hết dừng ở `T59-802`; manifest baseline lên **1.53** để `candidate_pin_check`
+  về 17/17.
+
+- **Verification.** `ctest` **1299/1299 PASS** (configure/build `rc=0`,
+  MODBUS/BACNET/HMI ON); `go vet` + `go test -count=1` PASS; FE **157 file /
+  1768 test PASS**; lint PASS; `npm run build` PASS với chunk Programming
+  **114,33 KiB / 145 KiB (R2)**, dư **30,67 KiB**; mock E2E **53 PASS / 11
+  skip**; real-backend host **5/5 PASS**; lane target **3 PASS online + fault
+  PASS + rollback PASS**, chạy lại sau khi phục hồi Core vẫn **3 PASS**;
+  `verify-project.sh --component layout`, `candidate_pin_check.py` và
+  `docs_iso_harness.py --expect` PASS. Bản đo trên bo là **bản đánh giá R2** có
+  bật cờ cut-over tường minh, **không** phải bản phát hành mặc định.
+
+### PGM-02 R2 — ngân sách, vòng đời subscription và hardening LIVE (`T59-812`) (2026-08-27)
+
+- **Fixed — LIVE trước đây chỉ khóa editor chính, chưa khóa toàn workspace.**
+  Admin vẫn có thể tạo/đổi tên/xóa POU ở Explorer, sửa Mapping/Execution hoặc
+  bấm Check trong khi màn hình ghi LIVE. Quyền sửa nay phụ thuộc đồng thời vai,
+  viewport **và `mode=EDIT`**; LIVE không còn control mutation ở bất kỳ tab nào.
+
+- **Fixed — monitor poll sống cả ở EDIT và có thể chồng request.** Subscription
+  nay chỉ bật trong LIVE, rời LIVE/unmount hủy interval, sample chờ và response
+  đang bay; refresh/poll xen nhau được gộp để luôn có tối đa một request đang
+  chạy. Render value dùng trailing-latest tối đa **10 Hz**, lỗi/mất nguồn vẫn
+  fail-closed ngay và không giữ số cũ.
+
+- **Changed — topology FBD tách khỏi value refresh.** Nguồn Active chỉ parse lại
+  khi nội dung đổi; `LiveFbdView` được memo hóa nên sample runtime không commit
+  lại canvas/topology. Bổ sung test render-count khóa bất biến này.
+
+- **Fixed — finding axe ở rail 768–1023 px.** Mục “Cài đặt Project” vô hiệu hóa
+  dùng `aria-label`/`aria-disabled` trên `span` không có role; thêm semantic
+  `role=link` bị vô hiệu hóa, axe serious/critical về 0 ở đủ bốn khổ màn.
+
+- **Changed — cổng bundle chuyển đúng sang R2.** `npm run build` nay gọi
+  `--increment r2`: chunk Programming **114,32 KiB / 145 KiB**, dư **30,68
+  KiB**; không còn báo dư địa theo ngân sách R1 125 KiB.
+
+- **Verification.** FE **157 file / 1768 test PASS**; focused **47/47 PASS**;
+  lint/typecheck/build PASS; Playwright hardening LIVE **9 PASS / 1 skip**
+  (desktop-only unsubscribe), bốn viewport 1280/1024/768/390 không tràn ngang,
+  axe serious/critical 0; toàn bộ Programming mock **53 PASS / 11 skip** và
+  backend thật **5/5 PASS**; docs ISO harness `--expect` PASS sau khi đồng bộ số
+  quyết định `UD-PROG` đã tăng có chủ đích từ 12 lên 13 ở lát trước. Chrome
+  DevTools MCP có cấu hình nhưng tool chưa được nạp vào phiên Codex này, nên
+  không nhận vơ bằng chứng DevTools.
+
+### Governance — đóng `T59-811`, mở `T59-812` (2026-08-27)
+
+- **Changed — `T59-811` `DONE (HOST/LOCAL)`.** LIVE đủ cả ST và FBD, Watch trong
+  workbench chiếu snapshot chung, và "mọi role read-only" kiểm bằng phiên viewer
+  thật. Ghi chú §3.9 giữ lại **hai lỗi do chính phiên này tạo ra** — poll monitor
+  trùng và flake dev-server — vì cả hai đều là loại sẽ tái diễn.
+
+- **`T59-812` chuyển `READY`** — budget 10 Hz, unsubscribe/leak, a11y/responsive/
+  security/fault hardening cho LIVE.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
+### PGM-02 R2 — sơ đồ FBD của gói đang chạy (`T59-811` / `AC-FBD-009..011`) (2026-08-27)
+
+- **Added — LIVE vẽ SƠ ĐỒ, không phải JSON thô.** POU ngôn ngữ FBD ở chế độ LIVE
+  trước đó đổ nguyên tài liệu JSON vào ô văn bản — đúng về dữ liệu, vô dụng với
+  người đọc.
+
+- **Vẽ CHỈ canvas, không mount cả `StructuredFbdEditor`.** Editor mang theo
+  palette, toolbar và bộ lệnh sửa; tắt từng thứ một là một danh sách phải nhớ
+  giữ đúng mãi mãi, còn **không mount** chúng thì không có gì để quên. Test khoá
+  cả hai: không có `toolbar` và không có `Palette FBD` trong DOM.
+
+- **`AC-FBD-011` là bất biến CẤU TRÚC ở đây.** Tài liệu là **prop**; thứ duy
+  nhất khay này tự giữ là lựa chọn đang xem. Giá trị runtime làm mới không có
+  đường nào chạm topology. `dispatch` chỉ nhận `SELECT` và **bỏ qua** mọi hành
+  động khác có chủ đích — canvas dùng chung với chế độ EDIT, nên chặn ở đúng một
+  chỗ dễ đọc hơn là tin rằng `canEdit={false}` đã bịt hết mọi đường.
+
+- **Tài liệu FBD hỏng NÓI RA, không vẽ một sơ đồ trống.** Một canvas trống đọc
+  như "chương trình không có gì" — khác hẳn "không đọc được".
+
+- **Verification.** FE **156 file / 1762 test PASS**; E2E mock **44 PASS / 10
+  skip**; real-backend **5/5 PASS**; build PASS — chunk **113,87 KiB / 125 KiB**.
+
+
+### PGM-02 R2 — viewer thật ĐỌC được LIVE, và gỡ một flake của chính lane (2026-08-27)
+
+- **Added — "mọi role read-only" kiểm bằng phiên viewer THẬT.** Vế đáng kiểm
+  không phải "viewer cũng không sửa được" — điều đó hiển nhiên — mà là **viewer
+  vẫn đọc được**: chặn ghi mà làm mù luôn thì người trực ca không xem được thứ
+  đang chạy trên tủ họ đang đứng cạnh. Case dùng một browser context **riêng**
+  thay vì đăng xuất rồi đăng nhập lại trên cùng trang: đổi phiên tại chỗ để lại
+  state của phiên cũ và làm test đỏ vì lý do không liên quan.
+
+- **Fixed — flake của lane real-backend, gặp hai lần ở đúng một chỗ.** Lane
+  phục vụ bằng **vite dev server**, tức mỗi module biên dịch theo yêu cầu ở lần
+  chạm đầu. Khi nhiều test cùng nạp trang, một lần transform hụt làm trình duyệt
+  nhận `Failed to fetch dynamically imported module`, React dựng
+  `RouteErrorBoundary`, và **mọi locator sau đó treo tới hết timeout** — 2 phút
+  cho một lỗi không liên quan gì tới thứ đang kiểm. `openWorkspaceRoute` nạp lại
+  **một** lần (lần thứ hai trúng cache vite) rồi khẳng định error boundary đã
+  biến mất; vẫn hỏng thì đó là lỗi thật và test phải đỏ.
+
+- **Verification.** Real-backend **5/5 PASS, chạy hai lượt liên tiếp** để chứng
+  minh hết flake; `users.conf` không bị ghi thêm.
+
+
+### PGM-02 R2 — Watch trong workbench ở LIVE, và gỡ một bộ poll trùng (`T59-811`) (2026-08-27)
+
+- **Fixed — hai bộ poll monitor cùng chạy, do chính lát trước tạo ra.**
+  `LiveProgramView` gọi `useProgrammingRuntimeMonitor()` trong khi trang cha đã
+  poll cùng endpoint ở nhịp 1 Hz: gấp đôi tải cho Core, **hai dãy
+  `capturedMonotonicNs` độc lập**, và hai câu trả lời có thể lệch nhau về cùng
+  một thời điểm. Đúng thứ AC "không duplicate concurrent poll" tồn tại để chặn.
+  Nay snapshot **truyền xuống** như prop; component không tự mở nguồn thứ hai.
+
+- **Added — tab Watch có nội dung thật ở LIVE.** Chiếu từ **chính** snapshot
+  trang cha đã poll, và **không tự diễn giải lại giá trị**:
+  `presentStRuntimeValue` là nơi duy nhất biết luật "null/BAD/OFFLINE không bao
+  giờ thành 0", workbench chỉ nhận `display`/`state` đã tính sẵn. Ô không hợp lệ
+  hiện `—` **không kèm đơn vị** — gắn đơn vị vào đó làm nó trông như một số đo.
+
+- **Phân biệt hai câu rất khác nhau.** "Chế độ này không có nguồn giá trị" (EDIT)
+  khác hẳn "POU đang mở không có biến runtime nào được ánh xạ" (LIVE, nguồn có
+  nhưng rỗng). Gộp chúng lại làm người đọc đi tìm sai chỗ.
+
+- **Changed — Trace thuộc về đúng một nơi, ở MỌI chế độ.** Nó sở hữu một phiên
+  có quota, stop reason và ring của Core; mở phiên thứ hai từ workbench là đúng
+  thứ AC "không duplicate concurrent trace session" cấm. Workbench **trỏ tới**
+  PGM-06 thay vì tự mở.
+
+- **Fixed — mock e2e thiếu stub `GET /revisions/{id}`.** Trước lát này LIVE bị
+  chặn ở resolver nên không route nào cần stub; nay nó mount thật, và thiếu stub
+  khiến backend giả trả 503 — chính phép kiểm `console.error` của bộ test bắt
+  được.
+
+- **Verification.** FE **155 file / 1759 test PASS**; E2E mock **44 PASS / 10
+  skip** (+2 case LIVE trong trình duyệt); real-backend **4/4 PASS**;
+  `users.conf` không bị ghi thêm sau khi chạy; build PASS — chunk **113,57 KiB /
+  125 KiB**.
+
+
+### Governance — ghi tiến độ `T59-811` và hai bài học về lane real-backend (2026-08-27)
+
+- **`T59-811` `PARTIAL`.** Đã giao: LIVE là component riêng đọc nguồn Active
+  fail-closed, chỉ đọc theo **chế độ** chứ không theo vai, capability + route mở
+  ở R2, và case real-backend đối chiếu ba nguồn độc lập. Chưa giao: Watch/Trace
+  **trong workbench** ở chế độ LIVE, overlay LIVE cho FBD, và kiểm "mọi role
+  read-only" bằng phiên **viewer thật** trên trình duyệt.
+
+- **Hai bài học về lane real-backend ghi vào §3.9**, vì cả hai đều tốn thời gian
+  và đều sẽ tái diễn: (1) **không tự Commission trong test** — lane dùng chung
+  một Core cho cả file, nên một test commission thêm Revision sẽ đỏ tuỳ thứ tự
+  chạy; (2) lane từng **ghi tài khoản vào file config trong repo**.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
+### Security — lane E2E thật ghi tài khoản vào file config được commit (2026-08-27)
+
+- **Fixed — chín tài khoản `viewer*` do test tạo đã lọt vào
+  `apps/web-api/config/users.conf`.** `run_programming_real_e2e_stack.sh` trỏ
+  `USERS_CONF` thẳng vào file **trong repo**, trong khi mọi biến khác dùng
+  `runtime_root` tạm. Backend ghi user mới ra đúng đường dẫn đó, nên mỗi lần
+  case RBAC của `T59-807` tạo một viewer là một tài khoản **thật** rơi vào file
+  được commit — kèm bcrypt hash của mật khẩu `viewer123` mà chính spec ghi rõ.
+
+- **Sửa cả hai vế.** User store của lane nay là **bản sao** trong runtime tạm
+  (`cp` trước khi khởi động backend), và chín tài khoản đã lọt vào repo bị xoá.
+  Chạy lại lane sau khi sửa: `git status` sạch — file không còn bị ghi thêm.
+
+- **Verification.** `npm run test:e2e:programming-real` **4/4 PASS**;
+  `apps/web-api/config/users.conf` chỉ còn `admin`; `bash -n` trên script PASS.
+
+
+### PGM-02 R2 — LIVE là cửa sổ đọc gói đang chạy (`T59-811`) (2026-08-27)
+
+- **Added — `LiveProgramView`, một component RIÊNG chứ không phải editor tắt
+  sửa.** LIVE là một **tài liệu khác**: nguồn của gói đang chạy, không phải
+  Draft đang sửa. Hai thứ ấy trông giống hệt nhau trên màn hình — cùng cửa sổ,
+  cùng tên POU, cùng thứ tiếng ST — nên dùng lại đúng component editor rồi tắt
+  nút Lưu là cách chắc chắn nhất để một hôm nào đó Draft rò vào chỗ đáng lẽ phải
+  là Active, mà **không có dấu hiệu bên ngoài nào cả**.
+
+- **Added — `activeProgramSource`: bộ đọc nguồn Active, fail-closed.** Dùng lại
+  **đúng** chuỗi kiểm của `activeProgramSet`, kể cả `REVISION_MISMATCH` — chốt
+  chặn thật sự chống mượn Draft. Bảy nhánh không chứng minh được đều trả
+  `source: null` kèm lý do **riêng của nhánh đó**: chưa Commission, đang đọc,
+  đọc hỏng, lệch Revision, snapshot không đọc được, thân POU không đọc được, POU
+  chưa có trong gói đang chạy. Mỗi lý do dẫn tới một hành động khác nhau của
+  người đọc nên chúng không được gộp thành "không có dữ liệu".
+
+- **Phân biệt được giữ: chương trình RỖNG khác hẳn thân không đọc được.** Một
+  chương trình rỗng vẫn có `source: ""` và vẫn hiện ra; `source` không phải chuỗi
+  là `SOURCE_UNREADABLE`.
+
+- **Changed — chỉ đọc ở LIVE là thuộc tính của CHẾ ĐỘ, không phải của vai.** Kể
+  cả admin cũng không sửa được gói đang chạy; sửa đi qua Draft rồi Commission.
+
+- **Changed — LIVE mở ở R2.** `programsModeCapabilities` và route resolver cùng
+  đọc một câu trả lời; SIMULATE vẫn đóng tới R3 và vẫn **nói ra lý do** thay vì
+  âm thầm hiện dữ liệu chế độ khác.
+
+- **Added — case real-backend đối chiếu BA nguồn độc lập.** Nguồn LIVE trên màn
+  hình, thân Revision đang chạy đọc qua API, và Draft hiện tại của cùng Project.
+  Case cố ý **không tự Commission**: lane real-backend dùng chung một Core cho cả
+  file, nên commission thêm một Revision vừa làm hỏng giả định của test khác vừa
+  khiến chính nó phụ thuộc thứ tự chạy — nó đọc trạng thái thật của controller
+  thay vì dựng ra một trạng thái mới.
+
+- **Verification.** FE **154 file / 1755 test PASS**; `go vet`+`go test` PASS;
+  E2E mock **42 PASS / 8 skip**; real-backend **4/4 PASS**; build PASS — chunk
+  **113,04 KiB / 125 KiB** (dư 11,96 KiB).
+
+
+### Governance — đóng `T59-810`, mở `T59-811` (2026-08-26)
+
+- **Changed — `T59-810` `DONE (HOST/LOCAL)`.** Cả hai vế acceptance có bằng
+  chứng: *generation/freshness* (dấu producer đi hết ba tầng, luật thứ tự tách
+  ba trạng thái, snapshot không có nguồn gốc không được vẽ) và *Trace pin*
+  (phiên neo tuple, kiểm trước khi lấy mẫu, ba dạng trôi fail closed). Case
+  real-backend khoá **quan hệ** monitor↔Trace↔Revision chứ không khoá sự tồn tại
+  của trường.
+
+- **`T59-811` chuyển `READY`** — LIVE read-only controller/overlay/Watch/Trace
+  trong FE.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS.
+
+
+### PGM-02 R2 — Trace pin: dãy mẫu chỉ thuộc về đúng một Revision (`T59-810`) (2026-08-26)
+
+- **Fixed — một phiên Trace có thể ghép mẫu của hai chương trình khác nhau.**
+  `ProgrammingTrace` không mang bất kỳ dấu vết nào về Revision hay producer, nên
+  một phiên kéo dài qua một lần cutover vẫn tiếp tục lấy mẫu — và đồ thị vẫn
+  liền mạch **về hình**, chỉ có điều các điểm cuối thuộc một chương trình khác
+  các điểm đầu. Người đọc không có cách nào nhìn ra chỗ nối.
+
+- **Added — `trace.pin` neo tuple Active lúc tạo phiên.** Neo bằng **chính**
+  snapshot đã dùng để xác thực danh sách biến, không đọc lại: đọc lại là mở một
+  khe cho cutover chen vào giữa hai lần đọc, và phiên sẽ neo vào một tuple khác
+  tuple đã kiểm.
+
+- **Added — kiểm tuple TRƯỚC khi lấy mẫu, ở cả hai đường lấy mẫu.** Đặt phép
+  kiểm sau khi lấy mẫu nghĩa là mẫu đầu tiên của Revision mới **đã lọt vào dãy**
+  rồi mới bị phát hiện — một điểm lạ trong đồ thị còn khó lần hơn là không có
+  điểm nào. Chi phí là một lần đọc monitor mỗi chu kỳ; `CoreClient` đã coalesce
+  nên nó không thêm một scan-cycle nào của Core.
+
+- **Hai dạng trôi, và dấu hỏng cũng là trôi.** Đổi Revision ⇒ mẫu sau thuộc
+  chương trình khác. Producer lùi mốc ⇒ Core đã restart, bộ đếm và trạng thái FB
+  đã khác. Dấu không đọc được ⇒ không chứng minh được vẫn cùng tuple, nên fail
+  closed. So bằng `strconv.ParseUint`, không qua `float64` — một vòng qua float
+  sẽ gộp hai giá trị liền kề ở dải vượt 2^53 và phép so "mốc lùi" im lặng sai.
+
+- **Dừng vì tuple trôi KHÔNG phải là mẫu bị rơi.** `droppedSamples` giữ nguyên;
+  gộp hai tình huống làm con số đó mất nghĩa. Có test khoá cả hai chiều.
+
+- **Added — UI nói đúng vế.** `SOURCE_UNAVAILABLE` gộp "mất nguồn" với "nguồn
+  đổi thành chương trình khác"; với phiên có pin, khay Trace nói rõ vế thứ hai
+  kèm Revision đã neo — nếu không người đọc sẽ đi tìm một sự cố kết nối không hề
+  tồn tại.
+
+- **Added — case real-backend chứng minh tuple end-to-end.** Dấu producer có mặt
+  và là chuỗi; mốc không đi lùi giữa hai lần đọc; phiên Trace neo đúng
+  `activeRevisionId` của snapshot đã xác thực nó, với mốc không cũ hơn mốc đọc
+  trước khi tạo phiên.
+
+- **Verification.** Go `vet`+`test` PASS (10 case bảng + 1 test tích hợp mới);
+  FE **153 file / 1737 test PASS**; E2E mock **42 PASS / 8 skip**; real-backend
+  **3/3 PASS**; build PASS — chunk **111,89 KiB / 125 KiB**.
+
+
+### PGM-02 R2 — dấu producer cho snapshot runtime (`T59-810`) (2026-08-26)
+
+- **Added — `producer.capturedMonotonicNs` trong `ProgrammingMonitorPage`.**
+  `activeRevisionId` chỉ trả lời "snapshot này thuộc Revision nào"; nó **không**
+  trả lời "snapshot này mới hơn hay cũ hơn cái vừa vẽ". Hai poll chồng nhau hoặc
+  một lần retry là đủ để một snapshot cũ tới sau — và người vận hành thấy giá
+  trị **đi lùi** mà không có gì báo.
+
+- **Truyền dạng CHUỖI thập phân, không phải number — có chủ đích.** Nanosecond
+  kể từ boot vượt `Number.MAX_SAFE_INTEGER` sau **~104 ngày uptime**, nên kiểu
+  số sẽ khiến client JavaScript làm tròn im lặng đúng lúc thiết bị chạy lâu nhất
+  — tức đúng lúc dấu này cần thiết nhất. Test Go khoá kiểu truyền bằng fixture
+  200 ngày uptime; test FE so sánh bằng **BigInt** và khoá đúng cặp giá trị mà
+  `Number` sẽ gộp làm một.
+
+- **Ba trạng thái, ba cách xử lý — gộp lại là sai.** *Cũ hơn* ⇒ bỏ qua, giữ
+  nguyên thứ đang hiện (vẽ lại số cũ làm khay giá trị nhấp nháy như vừa có dữ
+  liệu mới). *Mốc lùi* ⇒ **Core đã restart**, mạch đứt: giá trị trước và sau một
+  lần restart không cùng một mạch vì bộ đếm, trạng thái FB và LKG đều có thể đã
+  khác. *Không đọc được dấu* ⇒ fail-closed.
+
+- **Added — snapshot không có dấu đọc được thì KHÔNG được vẽ.**
+  `runtimeOverlayByProgramId` xếp nó vào cùng nhánh fail-closed với lệch
+  Revision. Một snapshot không biết mình từ đâu tới mà vẫn tô lên topology đang
+  hiện là đúng thứ `AC-ST-007`/`AC-FBD-010` tồn tại để cấm.
+
+- **Mất kết nối rồi nối lại thì quên mốc cũ** — có thể là một Core khác, nên so
+  tiếp với mốc của mạch đã đứt sẽ kết luận sai cả "restart" lẫn "stale".
+
+- **Added — và người vận hành THẤY được điều đó.** Khay giá trị runtime nói
+  thẳng "Core đã khởi động lại — giá trị bên dưới bắt đầu một mạch mới, không
+  nối tiếp số liệu trước đó", đồng thời **vẫn hiện** số liệu mới: mạch mới là số
+  liệu thật của mạch mới, giấu đi cũng sai. Một tín hiệu được tính mà không hiện
+  ra thì không bảo vệ được ai.
+
+- **Verification.** FE **153 file / 1736 test PASS**; `go vet`+`go test` PASS
+  (2 test Go mới); E2E mock **42 PASS / 8 skip**; real-backend **2/2 PASS**;
+  build PASS — chunk **111,72 KiB / 125 KiB**.
+
+
+### PGM-02 — ĐÓNG increment R1 (`T59-809`) (2026-08-26)
+
+- **Added — record closeout `EV-PGM02-R1-CLOSEOUT-001`**, đo lại toàn bộ tại
+  commit `d32e560`: ctest **1299/1299**, `go vet`+`go test` PASS, FE **152 file
+  / 1718 test**, E2E mock **42 PASS / 8 skip**, **real-backend 2/2**, hợp đồng
+  FBD self-test **10/10 mutation bị reject**, `docs_iso_harness` PASS, chunk
+  Programming **111,32 KiB / 125 KiB**. Từng mệnh đề của `VS-PROG-U13` được ánh
+  xạ tới task và bằng chứng cụ thể của nó.
+
+- **Changed — `VS-PROG-U13` = PASS *kèm phạm vi*, không phải PASS trống.**
+  "PASS ở phạm vi R1/HOST-LOCAL". `U14`/`U15` giữ `NOT_RUN` — chưa chạy nghĩa là
+  chưa chạy.
+
+- **Ba chỗ cố ý KHÔNG nhận vơ.** (1) Không nâng `I/T/P/R` của requirement nào:
+  ma trận truy nguyên join theo requirement của cả Product, còn bằng chứng ở đây
+  là host cho **một** increment. (2) `RELEASE_READY` không đổi — đóng một
+  increment không phải đóng một release, đúng bài học đã ghi từ Plan 57. (3)
+  Không tuyên bố gì về target/HIL.
+
+- **Rollback kiểm ở mức thiết kế, kèm một cảnh báo chỉ lộ lúc cần rút lui gấp.**
+  Đòn bẩy là cờ build `VITE_PROGRAMS_WORKSPACE_V2` **mặc định TẮT**, nên bản
+  phát hành không tự cut-over và rút lui chỉ là build lại không cờ; không cần
+  migration vì `layout` là trường tuỳ chọn và compiler `erase` nó trước khi
+  canonical hoá. **Nhưng**: rollback FE mà giữ Core mới thì an toàn, còn rollback
+  **Core** xuống trước lát hợp đồng hình học sẽ khiến mọi tài liệu FBD do R1 lưu
+  bị từ chối bằng `FBD-SCHEMA-ROOT-001` — khi đó phải xoá `layout` khỏi tài liệu
+  đã lưu trước.
+
+- **`T59-810` mở increment R2 (LIVE).**
+
+
+### Governance — đóng `T59-808`, mở `T59-809` (2026-08-26)
+
+- **Changed — `T59-808` `DONE (HOST/LOCAL)`.** Cả năm mục acceptance có bằng
+  chứng: ngân sách chunk thành cổng chặn được chạy trong chính `npm run build`;
+  bốn khổ màn đã pin đều có case tràn ngang (và case 1024 px **bắt được lỗi
+  thật**); focus ring đo bằng `getComputedStyle` theo số đã pin; bàn phím đi hết
+  mode switcher và workbench; RBAC negative ở **cả hai tầng** backend và giao
+  diện; hostile source phủ cả nguồn ngoài subset lẫn HTML injection.
+
+- **`T59-809` chuyển `READY`** — task cuối của R1: chạy/record `VS-PROG-U13`,
+  trace/risk/manifest/rollback và closeout increment.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS.
+
+
+### PGM-02 R1 — hardening EDIT: tràn ngang, focus, bàn phím, RBAC (`T59-808`) (2026-08-26)
+
+- **Fixed — lỗi thật do chính cổng mới bắt: tràn ngang 15 px ở 1024 px.** Ô lưới
+  mặc định `min-width: auto`, nên một con rộng bên trong (canvas FBD, thanh công
+  cụ ST, khay workbench) **kéo track `1fr` phình ra** thay vì tự cuộn — document
+  1039 px trên viewport 1024 px. Tràn ngang trên tủ điều khiển không chỉ xấu: nó
+  đẩy nút thao tác ra ngoài vùng chạm, mà người vận hành **không có chuột để
+  cuộn ngang**. Sửa bằng `min-w-0` ở cột giữa và cột Thuộc tính.
+
+- **Added — bốn khổ màn đã pin đều có phép kiểm.** `nfr.viewport` khai 1280 /
+  1024 / 768 / <768 nhưng trước lát này không phép kiểm nào đọc chúng, nên chúng
+  là số trang trí. Nay mỗi khổ có một case tràn ngang riêng.
+
+- **Added — focus ring và bàn phím đo theo hợp đồng.** `focusRingMinPx = 2`
+  kiểm bằng `getComputedStyle().outlineWidth` thật; bộ chuyển chế độ và
+  workbench đi hết bằng bàn phím, gồm cả tay kéo đổi chiều cao (`aria-valuenow`
+  đổi theo phím mũi tên). Bấm LIVE bằng `Enter` phải **giữ nguyên `mode=EDIT`
+  trên URL** và nói lý do — không tự hạ cấp.
+
+- **Added — RBAC negative ở tầng giao diện.** 403 của backend là nửa sau của câu
+  chuyện; nửa trước là giao diện. `viewer` và `operator` **đọc được nguồn**
+  nhưng không thấy nút Lưu/Hoàn tác/Định dạng và textarea là `readonly` — bấm
+  rồi mới biết mình không có quyền là bắt người dùng học luật bằng cách va vào
+  nó, còn chặn ghi mà làm mù luôn thì lại là một lỗi khác.
+
+- **Added — hostile source ở tầng hiển thị.** Tên POU và mã nguồn là dữ liệu
+  người dùng nhập, và chúng được hiện lại ở cây POU, khay Vấn đề, khay tham
+  chiếu và thanh ngữ cảnh. React thoát HTML mặc định — nhưng "mặc định an toàn"
+  chỉ đúng tới lần đầu ai đó thêm một `dangerouslySetInnerHTML` cho tiện. Test
+  khoá: tên chứa `<img onerror>` và nguồn chứa `<script>` hiện thành **chữ**,
+  không tạo phần tử nào và không chạy gì.
+
+- **Verification.** FE **152 file / 1718 test PASS**; mock E2E **42 PASS / 8
+  skip** (+11 case hardening); real-backend E2E **2/2 PASS**; `npm run build`
+  PASS kèm cổng ngân sách (**111,32 KiB / 125 KiB**, dư 13,68 KiB).
+
+
+### PGM-02 R1 — ngân sách bundle thành cổng chặn được, và một bẫy đơn vị (`T59-808`) (2026-08-26)
+
+- **Added — `verify_programming_bundle_budget.py`: con số trong hợp đồng nay
+  chặn được hồi quy.** Ngân sách chunk đã pin trong `pgm02_workspace_v1.json`
+  §`nfr.frontend` từ `T59-801` nhưng **không có gì thi hành nó**. Một con số
+  không ai kiểm là một con số sẽ bị vượt trong im lặng — và vượt ngân sách trên
+  thiết bị nhúng không hiện ra như test đỏ, nó hiện ra như một trang tải chậm mà
+  không ai biết đổ lỗi cho commit nào. Cổng chạy **ngay trong `npm run build`**
+  nên luôn đo đúng bản vừa tạo.
+
+- **Fixed — bẫy đơn vị: log vite in kB (1000), hợp đồng pin KiB (1024).** Mọi
+  con số chunk chép từ log build trước hôm nay đọc kB thành KiB, **thổi phồng
+  mức dùng ~2,4%**. May là lệch về phía an toàn, nhưng vẫn là con số nói sai.
+  Số đúng sau khi đóng `T59-807`: **111,31 KiB gzip**, dư địa R1 còn **≈13,7
+  KiB** (không phải ≈10 KiB như đã ghi). Cổng in **cả hai đơn vị** để không ai
+  đọc nhầm lần nữa. Kết luận của `UD-PROG-013` không đổi: CodeMirror vẫn vượt
+  cả ngân sách R3.
+
+- **Đo ở mức nén mặc định của zlib (6), không phải 9.** Mức 9 là trường hợp
+  **tốt nhất** một máy chủ có thể làm; máy chủ tĩnh thật nén ở mặc định. Gate
+  phải đo cái thực tế phục vụ, không phải cái đẹp nhất có thể.
+
+- **Hai nhánh thất bại được kiểm thật:** chunk vượt ngân sách → exit 1 kèm số
+  vượt và nhắc rằng nâng ngân sách là **quyết định sản phẩm** ghi ở
+  `PROGRAMMING_OPEN_DECISIONS.md`, không phải sửa nhanh trong một PR; thiếu
+  chunk hoặc thiếu thư mục build → exit 2. Nhiều bản băm cùng tên trong `assets`
+  cũng bị chặn — đo nhầm bản cũ cho một con số "đạt" không thuộc bản đang xét.
+
+- **Verification.** `npm run build` PASS kèm cổng ngân sách (111,31 KiB / 125
+  KiB); hai nhánh FAIL kiểm bằng `--chunk index` (148,66 KiB → exit 1) và
+  `--chunk khong-ton-tai` (exit 2); `docs_iso_harness.py` PASS.
+
+
+### Governance — đóng `T59-807`, mở `T59-808` (2026-08-26)
+
+- **Changed — `T59-807` `DONE (HOST/LOCAL)`.** Ba phần acceptance đều có bằng
+  chứng: workbench dùng chung với mỗi tab khai nguồn và tab chưa có capability
+  giải thích thay vì hiện rỗng; máy trạng thái mode kèm dirty guard và luật
+  không-tự-hạ-cấp; và bốn lớp lỗi chạy **trên backend thật** (2/2 PASS) với
+  zero-mutation kiểm bằng cách so lại **toàn bộ** Draft sau mỗi lần từ chối.
+  Phần `WP-01` còn nợ (grid slot thu gọn, context strip theo mode, state
+  machine) đóng cùng lát vì cùng chạm một cây component.
+
+- **Ghi trước rủi ro ngân sách cho `T59-808`.** Chunk Programming đang
+  **114,88 KiB gzip**; dư địa tới ngân sách R1 (125 KiB) còn **≈10 KiB**. Ghi
+  vào ghi chú thực thi để lát hardening biết trần của mình trước khi viết dòng
+  đầu tiên, thay vì phát hiện lúc build đỏ.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
+### PGM-02 R1 — bốn lớp lỗi của `T59-807` chạy trên backend THẬT (2026-08-26)
+
+- **Added — ma trận fail-closed real-backend.** Acceptance của `T59-807` đòi E2E
+  real-backend cho ETag cũ, refactor hỏng, quyền và mất mạng. Nay có, chạy qua
+  đúng HTTP + compiler/packager + Programming IPC production, **không mock
+  authority**: cắt mạng bằng `context.setOffline` là bơm lỗi thật ở tầng trình
+  duyệt, không phải chế câu trả lời của backend.
+
+  | Lớp lỗi | Kỳ vọng |
+  |---|---|
+  | ETag cũ (hai phiên cùng sửa) | 409/412 và Draft **y nguyên** |
+  | Lô thao tác có op hỏng | ≥400 và Draft **y nguyên** — không mang một nửa |
+  | Viewer thật do backend cấp | 403 khi ghi, **200 khi đọc** |
+  | Mất mạng giữa lúc gõ | "Lưu thất bại — thử lại.", **buffer còn nguyên**, nối lại mạng thì lưu được và read-back khớp |
+
+- **Điều bộ test thật sự khoá là zero mutation.** Mỗi lần từ chối đều so lại
+  toàn bộ Draft với ảnh chụp trước đó. Một thao tác bị chặn nhưng kịp ghi một
+  nửa là lớp lỗi tệ nhất của lane này: người dùng thấy lỗi, tưởng không có gì
+  xảy ra, và mang theo một Draft đã lệch.
+
+- **Fixed — một phép so zero-mutation suýt luôn xanh.** `GET /projects/{id}` trả
+  thẳng `ProgrammingProject`, **không** bọc `resource` như các endpoint mutation.
+  Đọc nhầm lớp bọc khiến phép so "Draft không đổi" thành so `undefined` với
+  `undefined`. Nay có assert rằng đọc được Draft trước khi so.
+
+- **Verification.** Real-backend Playwright **2/2 PASS**; mock E2E **31 PASS /
+  5 skip**; FE **152 file / 1714 test PASS**.
+
+
+### PGM-02 R1 — máy trạng thái mode và slot lưới thu gọn được (`T59-807`) (2026-08-26)
+
+- **Added — bộ chuyển chế độ, vì trước đó `?mode=` chỉ đổi được bằng cách GÕ TAY
+  vào URL.** Giao diện không hề nói workspace đang ở chế độ nào, cũng không nói
+  hai chế độ kia tồn tại. Nay có nút EDIT/LIVE/SIMULATE; hai chế độ chưa khả
+  dụng **vẫn hiện và vẫn bấm được** để trả lời câu hỏi "vì sao chưa có" — ẩn đi
+  khiến người dùng tưởng thiết bị không làm được, trong khi sự thật là increment
+  R2 (LIVE) và R3 (SIMULATE) chưa tới.
+
+- **Added — ba luật của máy trạng thái, viết ở MỘT chỗ (`programsMode.ts`).**
+  (1) Không tự hạ cấp: yêu cầu một mode không khả dụng **không** âm thầm rơi về
+  `EDIT`, vì người dùng sẽ tưởng mình đang xem LIVE. (2) Rời `EDIT` khi Draft
+  còn thay đổi chưa lưu phải **hỏi** — buffer soạn thảo sống trong bộ nhớ
+  editor, đổi mode là đổi nguồn tài liệu nên buffer không đi theo.
+  (3) `UNAVAILABLE` **thắng** `CONFIRM_DISCARD`: hỏi "bỏ thay đổi chưa lưu?" rồi
+  mới báo "chế độ đó chưa dùng được" là bắt người dùng cân nhắc một đánh đổi vô
+  nghĩa.
+
+- **Added — hai cột biên thu gọn được, nhớ theo trình duyệt.** Ở 1280 px, ba cột
+  `280px + 1fr + 308px` chỉ chừa ~690 px cho chính chỗ người dùng gõ; thu gọn
+  một biên trả lại ~280 px cho editor. Lớp lưới là **chuỗi nguyên văn** trong
+  source vì Tailwind quét tĩnh — một lớp ghép bằng template string sẽ không có
+  trong CSS build ra và cột sẽ im lặng rơi về mặc định.
+
+- **Verification.** FE **152 file / 1714 test PASS** (+18); E2E Playwright
+  **31 PASS / 5 skip**; `tsc`/`eslint`/`check:ui-strings` PASS; `vite build`
+  PASS — chunk Programming **114,88 KiB gzip** (ngân sách R1 125 KiB, dư ≈10 KiB).
+
+
+### PGM-02 R1 — một workbench dùng chung cho cả Project (`T59-807`) (2026-08-26)
+
+- **Added — `ProgrammingWorkbench`: MỘT chỗ để hỏi "Draft này đang có vấn đề
+  gì".** Trước lát này mỗi loại thông tin sống ở một chỗ và theo một luật khác
+  nhau: lỗi Draft FBD nằm trong editor FBD, tham chiếu ST nằm trong editor ST,
+  tìm kiếm nằm trong thanh công cụ ST. Nay có khay đáy dùng chung, thu gọn và
+  đổi chiều cao được (bằng **cả chuột lẫn bàn phím**), với các tab Vấn đề / Tìm
+  kiếm / Tham chiếu / Watch / Trace.
+
+- **Added — hai luật chống-nói-dối của workbench.** (1) Mỗi tab **khai nguồn**
+  (`EDIT · Draft · <POU>`): một khay dữ liệu không nói nguồn là khay có thể đang
+  hiện số của Active trong khi người dùng sửa Draft. (2) Tab chưa có capability
+  thì **giải thích**, không hiện danh sách rỗng — "không có gì" và "chưa đo
+  được" dẫn tới hai hành động khác nhau. Watch/Trace ở EDIT nói rõ chúng cần
+  nguồn giá trị runtime.
+
+- **Added — Vấn đề nhìn cả Project, không chỉ POU đang mở.** Khay lỗi trong
+  editor FBD chỉ thấy tài liệu nó đang vẽ, nên một POU khác hỏng vẫn im lặng
+  cho tới lúc Check đỏ. Khay mới quét mọi POU FBD của Draft và nhảy tới đúng POU
+  — chính xác tới mức trang này biết, không giả vờ biết hơn. Nó cũng **nói đích
+  danh** rằng kết quả Kiểm tra thuộc PGM-03 (D-01), thay vì để người đọc tưởng
+  khay này là toàn bộ sự thật.
+
+- **Fixed — lỗi a11y thật do chính gate bắt được.** Tay kéo đổi chiều cao là
+  `role="separator"` **nhận tiêu điểm**, tức là window splitter theo ARIA và bắt
+  buộc có `aria-valuenow`/`valuemin`/`valuemax`. Thiếu chúng thì screen reader
+  đọc được cái tay kéo nhưng không đọc được nó đang ở đâu. Quét axe của dự án
+  báo `aria-required-attr` ngay lần chạy đầu.
+
+- **Fixed — vi phạm luật hook khi Draft tải xong.** `useMemo` dựng dữ liệu
+  workbench ban đầu nằm **sau** early return `loading`/`error` của trang, nên
+  React ném "Rendered more hooks than during the previous render" ngay lần render
+  thứ hai. Tách thành `DesignWorkbench` — component con render sau mọi guard nên
+  có vòng đời hook của riêng nó.
+
+- **Verification.** FE **150 file / 1696 test PASS** (+12); E2E Playwright
+  **31 PASS / 5 skip** (gồm quét axe WCAG A/AA trên chính trang có workbench);
+  `tsc`/`eslint`/`check:ui-strings` PASS; `vite build` PASS — chunk Programming
+  **113,46 KiB gzip** (ngân sách R1 125 KiB).
+
+
+### Governance — `UD-PROG-013`: editor ST giữ bề mặt hiện tại cho R1 (2026-08-26)
+
+- **Decided — Product Owner/CTO + System Architect chọn lựa chọn A.** Cổng
+  `GATE-PROG-ST-EDITOR-DEP-001` **CLOSED**. Không thêm CodeMirror 6 vào
+  `apps/web-ui` trong R1. Quyết bằng số đo của spike §4.1 chứ không bằng ước
+  lượng: bộ CodeMirror tối thiểu **110,07 KiB gzip** ⇒ nhúng thẳng
+  **≈220,85 KiB**, vượt ngân sách R1 ~77% và **vượt luôn ngân sách R3** — nên
+  lựa chọn C sẽ phải nâng trần vượt cả R3, tức bỏ hẳn cơ chế ngân sách chứ không
+  phải nới nó.
+
+- **Changed — `T59-805` đóng `DONE (HOST/LOCAL)`; `T59-807` chuyển `READY`.**
+  Trước đó task giữ `PARTIAL` **không phải vì thiếu việc** mà vì đóng nó lúc
+  cổng còn mở là ngầm chọn A — quyết định của Owner/Architect, không phải của
+  người thi hành. Nay quyết định đã có văn bản, `T59-801..806` DONE và chuỗi R1
+  chạy tiếp.
+
+- **Ghi rõ phạm vi bị hoãn, không phải nợ.** Hover chuột mức CodeMirror và chỉ
+  mục ký hiệu **do compiler sinh** nằm ngoài R1 theo đúng quyết định này, mở lại
+  từ R2 — và khi mở lại phải chạy nốt ba phép đo chỉ làm được trên bo
+  (`openPouP95Ms`, `typingResponseP95Ms`, `steadyJsHeapMiB`) cùng kiểm build
+  offline/air-gapped.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
+### Governance — chạy spike của cổng editor ST, thay ước lượng bằng số đo (2026-08-26)
+
+- **Added — `GATE-PROG-ST-EDITOR-DEP-001` §4.1: hai trong năm phép đo bắt buộc
+  đã có kết quả thật.** Spike chạy **ngoài repo** (dự án tạm trong scratchpad)
+  đúng để không đụng `package.json`/lockfile trước khi cổng được duyệt.
+
+  | Phép đo | Kết quả |
+  |---|---:|
+  | Bộ CodeMirror 6 tối thiểu + mode ST, gzip | **110,07 KiB** (341,34 KiB thô) |
+  | Chunk Programming hiện tại | 110,78 KiB gzip |
+  | Tổng nếu nhúng thẳng | **≈220,85 KiB gzip** |
+  | Ngân sách R1 / R3 | 125 / 165 KiB gzip |
+
+  Nhúng thẳng **vượt ngân sách R1 ~77%** và vượt luôn ngân sách R3 — đúng như
+  §2 dự đoán, nay bằng số đo. License: **12/12 package MIT, 0 non-MIT** — mục
+  này **không** chặn.
+
+- **Còn phải đo, cần phần cứng:** `openPouP95Ms`/`typingResponseP95Ms` và
+  `steadyJsHeapMiB` phải chạy **trên bo Forlinx**; khả năng build
+  offline/air-gapped phải kiểm trên quy trình đóng gói thật.
+
+- **Ghi rõ vì sao `T59-805` còn `PARTIAL`.** Acceptance của task đã đạt hết.
+  Nhưng đóng task lúc cổng còn mở nghĩa là **ngầm chọn lựa chọn A** — quyết định
+  của Owner/Architect, không phải của người thi hành. Vì `T59-807` yêu cầu
+  `T59-802..806 DONE`, cổng này hiện là thứ **duy nhất** giữ chuỗi R1 lại.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only;
+  không thêm dependency nào vào repo.
+
+
+### PGM-02 R1 — đóng `T59-806`, và một mục acceptance suýt bị nhận vơ (2026-08-26)
+
+- **Fixed — canvas FBD chưa từng lần nào bị bộ quét a11y soi thật.** Acceptance
+  của `T59-806` có dòng "accessibility PASS", và dự án **có** bộ quét axe. Nhưng
+  bộ quét chạy trên workspace mặc định, mà workspace mặc định mở chương trình
+  **ST** — nên FBD editor nằm ngoài mọi lần quét từ trước tới nay. Nay quét chạy
+  đúng lúc canvas đang mở (`wcag2a/2aa/21a/21aa/22aa`): **0 vi phạm**. Không có
+  bước này thì "accessibility PASS" chỉ là một dòng chữ.
+
+- **Changed — `T59-806` đóng `DONE (HOST/LOCAL)` cho R1.** Cả ba điều kiện
+  acceptance đều có bằng chứng thật: canonical/port `order` giữ nguyên (2 test
+  C++ + round-trip FE), ST↔FBD equivalence PASS (`verify_programming_fbd_
+  contract.py` + self-test 10/10 mutation bị reject), accessibility PASS như
+  trên. `AC-FBD-008` thuộc R3 và `AC-FBD-009..011` thuộc R2 — ngoài phạm vi card
+  R1, không phải việc bỏ dở.
+
+- **Verification.** E2E Playwright **31 PASS / 5 skip** (gồm lần quét axe mới);
+  `python3 scripts/docs_iso_harness.py` PASS.
+
+
+### PGM-02 R1 — khoá `AC-FBD-006` và vòng lưu–đọc lại của hình học (2026-08-26)
+
+- **Added — nối sai kiểu bị chặn NGAY, có test (`AC-FBD-006`).** Luật đã có
+  trong reducer nhưng chưa test nào khoá. Nay ba dạng sai đều bị từ chối và
+  **không** tạo wire: khác kiểu dữ liệu, cùng kiểu khác đơn vị, và nối vào port
+  sai hướng. Chặn ngay lúc nối chứ không đợi Check — một wire sai kiểu nằm
+  trong Draft là một lần Check đỏ mà người dùng phải tự lần ngược xem đã nối
+  nhầm ở đâu.
+
+- **Added — hình học sống qua vòng lưu và đọc lại.** Toạ độ giữ nguyên sau
+  `canonicalFbdJson` → `JSON.parse`, và **`order` của mọi port không xê dịch** —
+  `order` là thứ compiler dùng để xếp toán hạng, nên một thay đổi trình bày làm
+  lệch nó sẽ đổi ngữ nghĩa chương trình.
+
+- **Changed — hồ sơ ghi đúng tiến độ `T59-806`.** Plan 59 §3 + ghi chú thực thi
+  §3.9 mới, roadmap proposal PGM-02 §0: ba lát đã giao, mọi AC áp dụng cho R1
+  (`AC-FBD-001..007`, `012`) có test, và phần còn lại nêu đích danh là thuộc
+  increment khác (`AC-FBD-008` → R3, `AC-FBD-009..011` → R2) chứ không phải
+  việc bỏ dở.
+
+- **Verification.** FE **149 file / 1684 test PASS** (+4); `tsc`/`eslint`/
+  `check:ui-strings` PASS; `python3 scripts/docs_iso_harness.py` PASS.
+
+
+### PGM-02 R1 — Vấn đề FBD nhảy tới đúng block, và minimap theo ngưỡng (2026-08-26)
+
+- **Fixed — người dùng có toạ độ lỗi trong tay mà vẫn phải tự đi tìm
+  (`AC-FBD-007`).** Validator luôn trả về vị trí chính xác dưới dạng đường dẫn
+  JSON (`$.networks[0].nodes[2].typeRef`), nhưng UI chỉ hiện một con số
+  "3 lỗi Draft". Nay có khay **Vấn đề**: mỗi lỗi neo được là một nút nhảy thẳng
+  tới đúng block hoặc đúng dây, và canvas tô sáng phần tử đó.
+
+- **Added — lỗi không neo được thì nói thẳng.** `fbdIssueTarget` trả `null` cho
+  đường dẫn không phân giải được (lỗi mức tài liệu, chỉ số ngoài phạm vi, đường
+  dẫn lạ) và khay hiện "không neo vào block nào" kèm đường dẫn gốc. Đưa người
+  dùng tới nhầm block tốn thời gian hơn là nói thẳng không biết.
+
+- **Added — minimap trên ngưỡng kích thước (`AC-FBD-012`).** Trên 24 block, sơ
+  đồ bắt đầu vượt khung nhìn nên có minimap: nhấp vào đó cuộn khung chính tới
+  đúng vùng. Minimap dùng **chung `viewBox`** với canvas chính — nó chỉ vẽ lại
+  cùng một hệ toạ độ, không phải một phép xếp thứ hai có thể nói khác.
+
+- **Added — fixture lớn nhất hợp đồng cho phép.** 256 block / 255 wire dựng
+  xong hình học **dưới 250 ms** và không có hai block nào trùng vị trí. Nếu
+  `buildFbdNetworkGeometry` là O(n²) thì canvas sẽ đứng đúng lúc sơ đồ trở nên
+  đáng vẽ nhất.
+
+- **Verification.** FE **149 file / 1680 test PASS** (+15); E2E Playwright
+  **31 PASS / 5 skip**; `tsc`/`eslint`/`check:ui-strings` và các check hợp đồng
+  Programming PASS; `vite build` PASS — chunk Programming **110,78 KiB gzip**
+  (ngân sách R1 125 KiB).
+
+
+### PGM-02 R1 — FBD thành canvas node–edge thật (`T59-806` / `AC-FBD-001`) (2026-08-26)
+
+- **Fixed — dây bị giấu.** Bản trước vẽ block thành các thẻ xếp lưới và liệt kê
+  dây thành một hàng nút `abcd1234 → ef567890`. Nghĩa là thứ **duy nhất** một sơ
+  đồ FBD tồn tại để nói — cái gì nối vào cái gì — lại là thứ người dùng phải tự
+  ghép bằng cách đối chiếu tám ký tự đầu của UUID. Nay mỗi dây là một đường
+  bezier vẽ ra giữa đúng hai chấm port.
+
+- **Added — canvas SVG thuần, KHÔNG thêm thư viện.** Ngân sách chunk R1 chỉ còn
+  ~17 KiB gzip (`GATE-PROG-ST-EDITOR-DEP-001`), mà một thư viện canvas cần chừng
+  đó hoặc hơn — và chính `WP-05` đã đặt sẵn đường lùi "SVG fallback nếu spike
+  gate đỏ". Kết quả đo: canvas tốn **2,2 KiB gzip**, chunk lên 110,11 KiB.
+
+- **Added — sơ đồ mở lần đầu đã đọc được.** Node chưa có toạ độ được xếp **tất
+  định**: INPUT cột trái, OUTPUT cột phải, còn lại ở giữa theo `executionOrder`
+  — trái sang phải đúng chiều dữ liệu chảy. Tất định là điều kiện để hai lần mở
+  cùng một tài liệu cho cùng một hình.
+
+- **Added — kéo block, một thao tác = MỘT bước hoàn tác.** `SET_NODE_POSITION`
+  chỉ ghi vào `layout`, **không** đụng `executionOrder`: suy thứ tự thực thi từ
+  x/y nghĩa là kéo một block sang trái sẽ âm thầm đổi chương trình đang chạy.
+  Trong lúc kéo, hình học dịch tại chỗ chứ không dispatch từng frame — mỗi
+  dispatch là một mục lịch sử, nên kéo một block sẽ nuốt sạch undo stack.
+  Toạ độ được làm tròn về số nguyên (pixel lẻ chỉ làm Draft bẩn thêm) và toạ độ
+  ngoài trần bị **từ chối** chứ không kẹp về biên — kẹp âm thầm sẽ đặt block
+  vào chỗ người dùng không hề chọn.
+
+- **Changed — bàn phím vẫn đi trước.** Mỗi block, mỗi port và mỗi dây là một
+  phần tử SVG nhận tiêu điểm với `role="button"` và nhãn đọc được, nên toàn bộ
+  luồng chọn/nối/xoá/hoàn tác bằng bàn phím chạy y nguyên trên canvas mới —
+  journey Playwright `UJ-PROG-02` không sửa một dòng nào.
+
+- **Verification.** FE **148 file / 1665 test PASS** (+27); E2E Playwright
+  **31 PASS / 5 skip** (không đổi so với trước); `tsc`/`eslint`/
+  `check:ui-strings`/`check:programming-api,fbd,errors` PASS; `vite build` PASS
+  — chunk Programming **110,11 KiB gzip** (ngân sách R1 125 KiB, dư địa ≈15 KiB).
+
+
+### PGM-02 R1 — hình học FBD là dữ liệu trình bày, không phải ngữ nghĩa (`T59-806`) (2026-08-26)
+
+- **Added — `layout` có phiên bản riêng ở gốc tài liệu FBD.** `WP-05` cần một
+  canvas node–edge thật, mà canvas thì cần toạ độ; mô hình FBD trước đây **không
+  có chỗ nào** cho hình học (`additionalProperties: false` ở mọi tầng, và
+  compiler `has_only_keys()` từ chối khoá lạ ở gốc). Nay có `layout` tuỳ chọn:
+  `{ schemaVersion, nodes: { <uuid>: { x, y } } }`. Đặt ở **gốc** chứ không
+  trong từng node là có chủ đích — nhờ vậy "cùng topology, khác hình học ⇒ cùng
+  IR" là bất biến **cấu trúc**, không phải một lời hứa ai đó phải nhớ giữ.
+
+- **Fixed — lỗi thật do chính test mới bắt được: hình học rò vào hash artifact.**
+  `canonical_json` của compiler được dựng bằng cách sắp lại **JSON gốc**, không
+  phải từ `FbdDocument`. Nên khi vừa cho phép `layout`, kéo một block sang phải
+  10 px đổi luôn canonical bytes → đổi hash artifact → commission lại và ký lại
+  một chương trình có ngữ nghĩa y hệt. Sửa bằng `root.erase("layout")` ngay
+  trước khi canonical hoá: **kiểm ở biên, quên trước khi canonical hoá**.
+
+- **Fixed — hình học rác làm sập hàm canonical hoá ở FE.**
+  `canonicalizeFbdDocument` chạy **trước** cả validate (phép kiểm kích thước gọi
+  nó), nên một `layout` thiếu `nodes` ném `TypeError` và mất cả tab thay vì sinh
+  issue. Nay nó chịu được tài liệu chưa hợp lệ: hình học rác bị bỏ khỏi dạng
+  canonical, còn `FBD-SCHEMA-LAYOUT-001` mới là chỗ báo cho người dùng.
+
+- **Added — từ chối hình học sai ở cả hai phía, cùng một luật.** Compiler
+  (`is_valid_layout()`) và FE (`isValidFbdLayout()`) cùng chặn: phiên bản lạ,
+  thiếu `nodes`, khoá lạ, khoá node không phải UUID canonical, toạ độ NaN/vô
+  hạn/ngoài trần ±100000, điểm thiếu trục hoặc có khoá thừa. Toạ độ NaN gửi lên
+  rồi mới hỏng ở Core là lỗi khó lần hơn nhiều so với một issue ngay tại editor.
+
+- **Verification.** `ctest` **1299/1299 PASS** (build lại `--fresh` với đủ ba
+  option MODBUS/BACNET/HMI); FE **146 file / 1638 test PASS** (+34);
+  `go vet ./...` và `go test ./... -count=1` PASS; `tsc`/`eslint`/
+  `check:ui-strings` PASS; `verify_programming_fbd_contract.py` PASS + self-test
+  **10/10 mutation bị reject**.
+
+
+### Governance — ghi bốn lát của `T59-805` và hai mục còn lại (2026-08-26)
+
+- **Changed — hồ sơ nói đúng chỗ `WP-04` đang đứng.** Plan 59 §3/§3.9, roadmap
+  proposal PGM-02 §0 và `GATE-PROG-ST-EDITOR-DEP-001` §6 cùng ghi bốn lát đã
+  giao và **mọi AC áp dụng cho R1** (`AC-ST-001..005`, `010`, `011`) đều có
+  test. Hai mục còn lại được nêu đích danh thay vì gộp thành "còn lại": đổi
+  surface editor (chờ Owner/Architect chọn A/B/C) và chỉ mục ký hiệu **do
+  compiler sinh** — lát cắt qua bốn boundary (compiler worker → `runner.Compile`
+  → OpenAPI → FE), không phải phần thừa của một lát FE.
+
+- **Changed — đo lại dư địa ngân sách.** Chunk Programming **107,90 KiB gzip**
+  sau bốn lát; dư địa tới ngân sách R1 còn **≈17 KiB** (lúc lập cổng là ≈20
+  KiB). Con số nhỏ đi làm §2 và khuyến nghị §5 của hồ sơ cổng **đúng hơn**, nên
+  đã ghi thẳng vào đó thay vì để người đọc tự đối chiếu.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` PASS. Docs-only.
+
+
+### PGM-02 R1 — khoá `AC-ST-004` và `AC-ST-010` bằng test thật (2026-08-26)
+
+- **Added — nguồn ngoài subset không được làm sập editor (`AC-ST-010`).** Tám
+  nguồn thù địch chạy qua đúng đường người dùng: chú thích không đóng, khối
+  `VAR` thiếu `END_VAR`, `ARRAY`/`CASE` ngoài subset, ngoặc lệch hoàn toàn,
+  định danh có dấu tiếng Việt, một dòng 400 câu lệnh, nguồn rỗng, nguồn toàn
+  khoảng trắng. Mỗi nguồn còn bị rê con trỏ qua đầu/giữa/cuối và bấm F12 —
+  tức đi qua cả chỉ mục tham chiếu. Editor không cần **hiểu** những thứ đó; nó
+  chỉ không được sập, vì sập là mất buffer người dùng đang gõ.
+
+- **Added — cùng bộ nguồn đó chạy ở lớp module thuần.** `buildStReferenceIndex`
+  và `planLibraryInsertion` phải trả offset nằm trong nguồn và **không xoá ký
+  tự nào** — bất biến kiểm bằng phép dãy con, không phải bằng `toContain` (chèn
+  giữa nguồn làm đứt đoạn liên tục).
+
+- **Added — Lưu chỉ chạm Draft (`AC-ST-004`).** Nút Lưu phát đúng một
+  `replaceProgramSource` và không thao tác vòng đời nào khác. Đây là điều kiện
+  FE của "Save never changes Active": không có đường nào từ editor đụng Active.
+
+- **Verification.** FE **146 file / 1626 test PASS** (+22 test);
+  `tsc --noEmit`, `eslint --max-warnings=0`, `check:ui-strings`,
+  `check:programming-api/fbd/errors` và `vite build` PASS; chunk Programming
+  **107,90 KiB gzip** (không đổi — chỉ thêm test).
+
+
+### PGM-02 R1 — luồng tham chiếu của editor ST (`T59-805` / `AC-ST-005`) (2026-08-26)
+
+- **Added — `stReferenceIndex`: một chỉ mục, khai đúng thẩm quyền của mình.**
+  Chỉ mục dựng từ nguồn đang gõ, phục vụ **điều hướng** (khai báo ở đâu, bị đọc
+  và bị ghi ở đâu) chứ không phán nguồn đúng hay sai — việc đó vẫn của Check ở
+  Core. Nó phân biệt biến thường với instance FUNCTION_BLOCK, bỏ qua khai báo
+  nằm trong chú thích, và **không tính gán tham số là ghi**: trong
+  `FanDelay(IN := FanCmd)` thì `IN` là tên tham số của lời gọi, còn `FanCmd` là
+  một lần đọc — phân biệt bằng độ sâu ngoặc.
+
+- **Added — tới khai báo bằng F12 và Ctrl+Click, dùng được cả khi chỉ đọc.**
+  Điều hướng không phải mutation, nên guard read-only của `T59-805` không chặn
+  nó. Không tra được thì **nói ra**: "Không tìm thấy khai báo của X." và con trỏ
+  đứng yên — thay vì nhảy tới một đích gần đúng, thứ tốn thời gian hơn là không
+  có đích nào.
+
+- **Added — khay "Tham chiếu tại con trỏ".** Hiện tên, kiểu, phân loại
+  (biến / instance FB), nút tới khai báo, và danh sách nơi đọc / nơi ghi nhảy
+  được từng chỗ. Định danh không tra được hiện **"không xác định được"** kèm lý
+  do, đúng `AC-ST-005` ("absence shows unavailable, not guessed content").
+
+- **Fixed — instance FUNCTION_BLOCK trước đây KHÔNG tồn tại với editor.**
+  `collectStSymbols` chỉ nhận sáu kiểu cơ bản, nên sau khi chèn `TON_1 : TON;`
+  thì gõ `TON_` không được gợi ý và khay ký hiệu không thấy nó. Nay hàm này đọc
+  thẳng từ `stReferenceIndex` — một nguồn duy nhất cho cả điều hướng, gợi ý và
+  bảng lệnh, không còn chỗ cho hai câu trả lời khác nhau về cùng một nguồn. Số
+  `tham chiếu` cũng đúng hơn: đếm nơi DÙNG (không tính dòng khai báo) và phân
+  biệt hoa thường đúng như grammar §10, thay vì con số cũ luôn dư ít nhất một.
+
+- **Chưa làm, nói rõ:** hover thật bằng chuột trên từng định danh cần bề mặt
+  editor có hit-test theo ký tự — thuộc quyết định đang chờ ở
+  `GATE-PROG-ST-EDITOR-DEP-001`. Chỉ mục do compiler sinh (phần BE của `WP-04`)
+  cũng chưa có; khi có, nó là nguồn thẩm quyền và chỉ mục này lùi về vai trò dự
+  phòng.
+
+- **Verification.** FE **146 file / 1604 test PASS** (+1 file, +14 test);
+  `tsc --noEmit`, `eslint --max-warnings=0`, `check:ui-strings`,
+  `check:programming-api/fbd/errors` và `vite build` PASS; chunk Programming
+  **107,90 KiB gzip** (ngân sách R1 125 KiB).
+
+
+### PGM-02 R1 — chèn FB có trạng thái đặt khai báo đúng chỗ (`T59-805` / `AC-ST-002`) (2026-08-26)
+
+- **Fixed — Quick Library từng sinh mã ST không compile được.** Chèn một
+  FUNCTION_BLOCK có trạng thái (TON/TOF/CTU…) trước đây đặt nguyên một khối
+  `VAR ... END_VAR` **ngay tại con trỏ**, tức giữa thân chương trình. Grammar ST
+  §10 là `PROGRAM identifier { var_block } statement_list END_PROGRAM`, và
+  parser thật (`st_parser.cpp`, `parse_pou()`) đọc **hết** var block rồi mới đọc
+  danh sách câu lệnh — nên mọi lần chèn như vậy là một lần Check chắc chắn đỏ.
+  UI chào một khả năng compiler không nhận, đúng lớp lỗi mà invariant "không
+  expose capability backend không hỗ trợ" tồn tại để chặn.
+
+- **Added — `planLibraryInsertion` đặt hai nửa của thao tác về đúng chỗ.** Khai
+  báo instance đi vào khối `VAR`/`VAR RETAIN` (parser chỉ nhận instance FB ở hai
+  khối đó), lời gọi đi vào thân. Chưa có khối nào nhận được thì dựng một khối
+  `VAR` mới ngay sau vùng khai báo; khối viết gọn trên một dòng thì giữ nguyên
+  kiểu viết một dòng thay vì bẻ nguồn của người khác. Con trỏ đang nằm trong
+  vùng khai báo thì lời gọi được dời xuống đầu thân — và **nói ra** điều đó,
+  vì thay đổi nằm ngoài tầm nhìn của con trỏ.
+
+- **Added — chọn hoặc tạo instance, không đoán hộ (`AC-ST-002`).** Nguồn đã có
+  instance cùng kiểu thì hiện một câu hỏi: dùng lại instance nào, hay tạo mới.
+  Tự dùng lại là sai (hai lời gọi chia nhau cùng một timer là lỗi điều khiển
+  thật); tự tạo mới cũng sai khi người dùng đang muốn gọi lại đúng instance đó.
+  Chưa có instance nào thì không hỏi — giữ đúng "≤2 thao tác" của `AC-ST-001`.
+  Tên sinh ra (`TON_1`, `TON_2`…) tránh mọi định danh đang có, so **không phân
+  biệt hoa thường**: chặt hơn grammar, vì `TON_1` cạnh `ton_1` là bẫy đọc.
+
+- **Changed — cả khai báo lẫn lời gọi vẫn là MỘT bước hoàn tác** (`AC-ST-003`):
+  hai phần đi qua đúng một `applyEditRange`. `stInsertionSnippet` bị xoá khỏi
+  `libraryCatalog.ts`, thay bằng `stCallStatement` chỉ sinh **lời gọi** — chỗ
+  đặt khai báo không còn là việc của một hàm sinh chuỗi.
+
+- **Verification.** FE **145 file / 1590 test PASS** (+2 file, +16 test);
+  `tsc --noEmit`, `eslint --max-warnings=0`, `check:ui-strings` và `vite build`
+  PASS; chunk Programming **106,37 KiB gzip** (ngân sách R1 125 KiB, dư địa còn
+  ≈18,6 KiB).
+
+
+### Governance — đồng bộ tracker Plan 59 với thực tế thi hành W8 (2026-08-26)
+
+- **Fixed — tracker nói `READY` trong khi task đã chạy được một nửa.** Plan 59 tự
+  khai là "tracker/scheduler duy nhất", nhưng sau ba lát đóng liên tiếp
+  (`T59-802`/`803`/`804`) vẫn còn sáu chỗ ghi trạng thái cũ: header, chuỗi
+  authority `AUTH-PROG-2026-08-24-05`, bảng Wave W8, đoạn mở đầu §3.9, crosswalk
+  work package và DoR §5.1 — chỗ thì `T59-802 READY`, chỗ thì `T59-804 READY`.
+  Ai đọc tracker để biết đang ở đâu sẽ nhận câu trả lời sai. Nay `T59-805` mang
+  đúng trạng thái **`PARTIAL`**: guard read-only runtime đã giao, phần đổi surface
+  editor dừng ở `GATE-PROG-ST-EDITOR-DEP-001`, phần reference index/hover phía BE
+  chưa giao — không phải `DONE`, cũng không phải `BLOCKED`.
+
+- **Fixed — ghi chú thực thi `T59-803` nằm sai chương.** Các dòng task trỏ người
+  đọc tới "Chi tiết §3.9", nhưng khối ghi chú lại nằm giữa §5.1 DoR, cắt đôi danh
+  sách bullet và đoạn kết của chính mục đó. Đã chuyển về cuối §3.9 và thêm ghi
+  chú thực thi cho `T59-805` tại cùng chỗ.
+
+- **Fixed — lịch sử phiên bản nhảy 2.7 → 2.11.** Ba lần bump (2.8 tại `60326c9`,
+  2.9 tại `ffdf324`, 2.10 tại `b87ad93`) không để lại dòng nào trong bảng lịch sử,
+  nên không truy được phiên bản nào chứa lát nào. Đã bổ sung đủ ba dòng theo đúng
+  commit, cộng dòng 2.11 cho lần đồng bộ này. Proposal PGM-02 cũng có drift tương
+  tự (header `1.5` nhưng lịch sử dừng ở `1.4`, và header vẫn ghi `WP-04 READY`
+  trong khi §0 đã ghi `IN PROGRESS`) — đã sửa và bổ sung dòng 1.5/1.6.
+
+- **Verification.** `python3 scripts/docs_iso_harness.py` **PASS** (0 đường dẫn
+  docs hỏng, 0 vi phạm D/I/T/P/R). Thay đổi chỉ chạm tài liệu, không chạm source.
+
+
+### PGM-02 R1 — guard read-only runtime cho editor ST và cổng phụ thuộc `WP-04` (2026-08-26)
+
+- **Fixed — chỉ đọc là policy runtime, không chỉ một thuộc tính.** AC của
+  `WP-04` đòi "LIVE và mobile không sửa được qua gõ/dán/thả/IME/lệnh".
+  `readOnly` của textarea chặn được người dùng thật, nhưng nó là một THUỘC
+  TÍNH — một lần refactor quên nó là mọi đường mutation mở lại cùng lúc. Nay có
+  guard ở đúng hai chốt: `applyEditRange` (chèn, định dạng, tìm-thay,
+  autocomplete, auto-indent) và handler `onChange` của textarea (gõ tay, dán,
+  thả). Ba test khoá cả hai chiều.
+
+- **Added — cổng phụ thuộc/license cho editor ST (`GATE-PROG-ST-EDITOR-DEP-001`).**
+  Plan đặt CodeMirror 6 làm surface mới **sau** một cổng dependency/license; hồ
+  sơ này là cổng đó và **không tự phê duyệt**. Số đo quyết định: chunk
+  Programming đang **104,77 KiB gzip**, ngân sách R1 pin trong hợp đồng là **125
+  KiB**, dư địa còn **≈20 KiB** cho cả năm work package R1 còn lại — trong khi
+  một bộ CodeMirror tối thiểu ước lượng **90–150 KiB gzip**, tức vượt ngân sách
+  R1 gấp 4–7 lần và một mình cũng vượt luôn ngân sách R3. Hồ sơ nêu ba lựa chọn
+  (giữ editor hiện tại / nạp trễ thành chunk riêng / nâng ngân sách), năm phép
+  đo bắt buộc trước khi quyết (delta gzip thật, `openPouP95Ms` và
+  `typingResponseP95Ms` TRÊN BO, heap sau 30 phút, license + dependency bắc cầu,
+  khả năng build offline) và khuyến nghị giữ editor hiện tại cho R1. Quyết định
+  thuộc Owner/Architect.
+
+- **Verification.** FE **143 file / 1574 test PASS**, lint và build PASS.
+
+
+### PGM-02 R1 — dock Quick Library dùng chung ST↔FBD, đóng `WP-03` (2026-08-26)
+
+- **Changed — một dock, hai bề mặt.** `QuickLibraryPanel` nay nhận **mục
+  catalog** chứ không nhận đoạn mã, và KHÔNG biết cách chèn: ST dựng đoạn mã tại
+  con trỏ, FBD dispatch `ADD_NODE`. Nhờ đi qua đúng lệnh mà palette dùng, chèn
+  từ dock trên canvas vẫn là **một bước hoàn tác** và **không tự nối dây**.
+
+- **Added — bề mặt tự nói mục nào nó chưa nhận được.** Một mục dùng được ở ST
+  vẫn có thể chưa vẽ được trên canvas FBD (PROJECT entry chưa có entry palette).
+  Panel hỏi bề mặt qua `canInsert` và hiện lý do CỦA BỀ MẶT ĐÓ tại chỗ, thay vì
+  ẩn mục đi và để người dùng đi tìm nó. Lý do của catalog
+  (`REVIEW_REQUIRED`/`SIGNATURE_UNAVAILABLE`) vẫn thắng khi cả hai cùng chặn.
+
+- **Changed — roadmap: `WP-03` ĐÓNG.** Sáu block, catalog dùng chung có parity
+  đo trên backend thật, Recent/Favorites, lọc theo cổng, typed metadata và dock
+  dùng chung đều đã giao. `G-PGM02-01 EDIT_FOUNDATION` đủ ba điều kiện ở lớp
+  HOST/LOCAL; `WP-04` (`T59-805`) là task READY tiếp theo.
+
+- **Verification.** FE **143 file / 1571 test PASS**, lint/build PASS (chunk
+  Programming **104,77 KiB gzip**); E2E mock **31 PASS / 5 skip**; E2E
+  real-backend **1/1 PASS**; `verify-project.sh --component layout` PASS.
+
+
+### PGM-02 R1 — chữ ký thư viện thành typed metadata công khai (2026-08-26)
+
+- **Added — `signature` đã PHÂN GIẢI trong `GET /programming/libraries`.**
+  Trước đây `interface` là `type: object` generic, nên MỖI client phải tự parse
+  chữ ký và mỗi nơi có thể kết luận một kiểu về cùng một entry. Nay backend công
+  bố chữ ký typed (category/dispatch/polymorphic/allowedTypes/ports…) và
+  `dispatch` khai đủ bốn cách hiện thực, gồm `EXPANSION`.
+
+- **Changed — vắng `signature` là một câu trả lời, không phải thiếu dữ liệu.**
+  PROJECT entry do người dùng nạp và backend chỉ kiểm "JSON hợp lệ + hash khớp",
+  nên chữ ký của chúng có thể khác hình dạng canonical. Khi parse thất bại,
+  backend **không bịa** một chữ ký rỗng trông như thật mà bỏ hẳn field; giao
+  diện hiển thị `SIGNATURE_UNAVAILABLE` kèm lý do. `interface` thô vẫn đi kèm
+  nên consumer cũ không hỏng vì backend thêm field mới. FE ưu tiên `signature`
+  và chỉ tự parse khi backend chưa có field đó (rolling upgrade).
+
+- **Verification.** FE **143 file / 1569 test PASS**, lint/build PASS; Go
+  vet/test PASS (test mới phủ 7 hình dạng chữ ký hỏng — tất cả phải trả `nil`);
+  E2E real-backend **1/1 PASS**; bốn script hợp đồng và
+  `verify-project.sh --component layout` PASS sau khi re-pin `openapiSha256`.
+
+
+### PGM-02 R1 — đóng danh sách block: `SCALE`/`DEADBAND`/`HYSTERESIS` (2026-08-26)
+
+- **Added — `SCALE` và `DEADBAND` biên dịch bằng KHAI TRIỂN, không thêm opcode.**
+  Một lệnh IR mang tối đa ba toán hạng nguồn còn `SCALE` cần năm; nới định dạng
+  artifact để nhét vừa một phép tuyến tính là đổi thứ đắt nhất lấy thứ rẻ nhất.
+  Compiler dựng chúng bằng chuỗi lệnh đã có, và `dispatch` trong registry mang
+  giá trị mới `EXPANSION` để nói đúng điều đang xảy ra thay vì khai `FUNC_TABLE`
+  rồi để người đọc IR đi tìm một opcode không tồn tại. `SCALE` **không tự kẹp
+  dải ra** (kẹp ngầm biến cảm biến ngoài dải thành giá trị biên trông hợp lệ —
+  cần kẹp thì gọi `LIMIT`); `IN_MAX == IN_MIN` rơi vào `ST-RT-002` đã có.
+
+- **Added — `HYSTERESIS` là FB thật (wire 9).** Trong dải `LOW..HIGH` nó GIỮ
+  trạng thái chu kỳ trước — đó là trạng thái, nên nó không thể là hàm thuần.
+  `HIGH <= LOW` là fault `ST-RT-006`: dải trễ đảo ngược không có nghĩa vật lý.
+  `Q` RETAIN được, nên sau mất điện một quạt đang chạy trong vùng trễ trở lại
+  đúng trạng thái nó đang có thay vì nhảy theo ngưỡng gần nhất.
+
+- **Changed — chỉ `HYSTERESIS` thành từ khoá, `SCALE`/`DEADBAND` thì không.**
+  Bản đầu reserve cả ba và hai bộ test của chính dự án đỏ ngay: một
+  FUNCTION_BLOCK người dùng tên `Hysteresis`, một FUNCTION người dùng tên
+  `Scale`. Đó là dữ liệu chứ không phải phiền toái —
+  `TON`/`TOF`/`TP`/`CTU`/`CTD`/`R_TRIG`/`F_TRIG`/`PID` là định danh CHUẨN IEC
+  nên reserve là điều người dùng đã kỳ vọng, còn `SCALE`/`DEADBAND` là phần mở
+  rộng của chúng ta và là từ tiếng Anh thông dụng. Tiền lệ trong chính compiler:
+  `ABS`/`MIN`/`MAX`/`LIMIT`/`SEL`/`SQRT` chưa bao giờ là từ khoá.
+
+- **Changed — mẫu số phủ conformance gồm cả hàm khai triển.** `kExpansionFunctions`
+  được sinh ra và đưa vào phép kiểm hai chiều registry↔compiler; bỏ qua chúng sẽ
+  làm "100% phủ" nói dối đúng bằng số entry bị bỏ qua. Registry lên **rev-a.3**
+  (46 entry) qua đúng đường bump có kiểm soát.
+
+- **Verification (đo mới).** CTest **1297/1297**; conformance **37 pair + 9
+  stateTrace** phủ 46/46 entry; `go vet` + `go test ./... -count=1` PASS; FE
+  **143 file / 1568 test**, lint và build PASS (chunk Programming **104,12 KiB
+  gzip**); E2E mock **31 PASS / 5 skip**; E2E real-backend **1/1 PASS** với
+  parity catalog khớp ở 46 entry; bốn script hợp đồng và
+  `verify-project.sh --component layout` PASS. Chi tiết:
+  [`2026-08-26-pgm02-t59-804-scale-deadband-hysteresis.md`](docs/07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-scale-deadband-hysteresis.md).
+
+
+### PGM-02 R1 — ba block chuẩn `TP`/`CTU`/`CTD` (2026-08-26)
+
+- **Added — `TP`, `CTU`, `CTD` chạy thật từ compiler tới runtime.** Ngữ nghĩa
+  được pin ở `DDD-CTRL-PROG-001` §7A **trước khi code**: chữ ký, giá trị wire
+  (6/7/8 — 1..5 giữ nguyên nên artifact cũ vẫn byte-compatible), layout RETAIN,
+  và ba quyết định dễ sai — `TP` KHÔNG retrigger giữa xung (đó là toàn bộ khác
+  biệt với `TON`); `RESET`/`LOAD` thắng sườn đếm trong cùng cycle; `CV` **bão
+  hoà** chứ không quấn vòng (quấn vòng biến một bộ đếm giờ chạy thành số âm sau
+  32767 lần mà không ai thấy). Mỗi block có vector conformance chạy
+  cycle-by-cycle ở **cả ST lẫn FBD**, đúng điều kiện để một tên rời khỏi danh
+  sách "entry ma".
+
+- **Fixed — loader từ chối artifact hợp lệ mang FB mới.** `fb_type > 5` bị chặn
+  cứng bằng số trần; nay ngưỡng đi theo chính enum, giữ nguyên nguyên tắc loader
+  phải từ chối fb_type mà binary này chưa biết cách chạy.
+
+- **Fixed — cursor thư viện chấp nhận token đã bị sửa.** base64 raw **không
+  strict** decode một ký tự cuối đã đổi về đúng 32 byte cũ, nên HMAC vẫn khớp và
+  cursor giả mạo vẫn dùng được; test chống giả mạo xanh chỉ vì may. Nay decode
+  bằng `Strict()` và có thêm ca kiểm "đổi bit thừa ở ký tự cuối".
+
+- **Fixed — self-test `versionHistory` mất tác dụng khi lịch sử nhiều hàng.** Nó
+  sửa hàng `[0]`, vốn chỉ trùng version hiện hành khi lịch sử có đúng một hàng.
+  Nay sửa hàng cuối, thêm ràng buộc **append-only** (version đang dùng phải là
+  hàng cuối) và ca self-test đảo thứ tự lịch sử.
+
+- **Changed — union `LibraryCategory` của TS sinh TỪ hợp đồng.** Trước đây nó
+  được chép tay trong template generator, nên thêm một nhóm mới (`counter`) làm
+  TypeScript đỏ ở một file sinh tự động — đúng loại lỗi mà file sinh tự động
+  sinh ra để tránh.
+
+- **Compatibility — điều SẼ hỏng.** `TP`/`CTU`/`CTD` nay là **từ khoá**: Draft
+  đang dùng ba tên đó làm tên biến sẽ báo lỗi Check sau khi nâng cấp. Lựa chọn
+  có chủ ý — một token mang hai nghĩa là nguồn lỗi tệ hơn một lần đổi tên biến.
+  Artifact cũ không hỏng. `libraryVersion` lên **rev-a.2** với lịch sử
+  version→hash append-only.
+
+- **Verification (đo mới).** CTest **1297/1297**; conformance ST↔FBD **8/8
+  stateTrace**; `go vet` + `go test ./... -count=1` PASS; FE **143 file / 1568
+  test**, lint và build PASS (chunk Programming **103,93 KiB gzip**); E2E mock
+  **31 PASS / 5 skip**; E2E real-backend **1/1 PASS** với parity catalog
+  BE↔registry khớp ở 43 entry; G1 self-test **36/36**; ba script hợp đồng còn
+  lại và `verify-project.sh --component layout` PASS. Chi tiết:
+  [`2026-08-26-pgm02-t59-804-timer-counter-blocks.md`](docs/07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-timer-counter-blocks.md).
+
+
+### PGM-02 R1 — catalog dùng chung và Quick Library `T59-804` phần 1 (2026-08-26)
+
+- **Added — Quick Library cho ST đọc ĐÚNG catalog của PGM-04 (`WP-03`).** Panel
+  mới trong editor ST lấy toàn bộ mục từ `GET /programming/libraries` — cùng
+  authority mà Control Library dùng — chứ không có danh sách block riêng. Có tìm
+  kiếm, lọc theo nhóm, Yêu thích và Gần đây. Catalog được giữ **lazy**: mở tab
+  Chương trình không tạo request nào, chỉ khi mở panel mới fetch.
+
+- **Added — parity catalog đo được giữa hai bề mặt.** `catalogParity` so tập
+  `entryId` SYSTEM của backend với registry sinh sẵn ở FE; lane real-backend
+  khẳng định `onlyInBackend=[]`, `onlyInGenerated=[]`, `matched=40`. Đây là phép
+  kiểm liên tục cho đúng lớp lỗi đã từng xảy ra: palette FBD chào
+  SCALE/DEADBAND/CTU/PI mà compiler không hề hỗ trợ.
+
+- **Added — mục chưa dùng được nói thật thay vì biến mất.** `REVIEW_REQUIRED`
+  (PID) và `SIGNATURE_UNAVAILABLE` (backend trả mục nhưng chữ ký không đọc
+  được — không đoán port) đều hiện ra kèm lý do, nút chèn bị vô hiệu. Giấu
+  chúng đi sẽ biến "chưa hỗ trợ" thành "không tồn tại".
+
+- **Fixed — bấm một ngôi sao trong thư viện có thể xoá khung nhìn đã lưu.** Túi
+  `/me/preferences` dùng chung: `pushSavedViews` của Monitor/Trends `PUT` cả
+  túi. Quick Library vì vậy đọc túi hiện có rồi **merge** đúng namespace
+  `programmingLibrary` (trần 24 Yêu thích / 12 Gần đây, chỉ lưu `entryId`,
+  không chép chữ ký). Recent chỉ ghi SAU khi chèn thành công.
+
+- **Added — lọc palette FBD theo cổng đang chọn.** `paletteEntriesCompatibleWith`
+  hỏi chính bộ cổng mà entry dựng ra ở kiểu mặc định, không chỉ `allowedTypes`:
+  block không đa hình vẫn khớp qua cổng kiểu cố định (`PT:TIME` của TON,
+  `OUT:BOOL` của phép so sánh). Bộ lọc là lựa chọn bật/tắt và nói rõ còn lại bao
+  nhiêu mục. Kèm test khoá AC "ambiguous port không auto-connect": `ADD_NODE`
+  không bao giờ tự nối dây, kể cả khi chỉ có đúng một cổng khớp.
+
+- **Changed — roadmap proposal.** `WP-03` ghi **PARTIAL** kèm bốn phần chưa
+  giao: chèn vào canvas FBD từ dock dùng chung, compatible filter theo port đang
+  chọn, typed metadata public trong OpenAPI, và bổ sung block
+  `TP`/`CTU`/`CTD`/`SCALE`/`Deadband`/`Hysteresis` — compiler hiện chỉ có
+  `TON`/`TOF`/`R_TRIG`/`F_TRIG`/`PID` và plan cấm publish capability trước khi
+  có compiler/runtime equivalence tests.
+
+- **Verification (đo mới).** FE **143 file / 1563 test PASS**, lint và build
+  PASS, chunk Programming **103,54 KiB gzip**. E2E mock **31 PASS / 5 skip / 0
+  fail**; E2E real-backend **1/1 PASS** với `HTTP>=500=0`, `requestfailed=0`,
+  `console.error=0`. Chi tiết:
+  [`2026-08-26-pgm02-t59-804-quick-library.md`](docs/07_records/test-evidence/programming/2026-08-26-pgm02-t59-804-quick-library.md).
+
+
+### PGM-02 R1 — một POU Explorer và mô hình định danh `T59-803` (2026-08-25)
+
+- **Changed — chỉ còn MỘT cây POU trong DOM (`WP-02`).** Trước lát này có hai
+  navigation cùng lúc: "Cây POU" đọc `objects[]` (ba kind, chỉ đọc) và "Cây ứng
+  dụng" trong tab Chương trình đọc `programs[]` (chỉ PROGRAM, có tạo/xoá). Hai
+  cây đọc hai nguồn nên có thể nói khác nhau về cùng một Project, và người dùng
+  bàn phím phải đi qua cả hai để tới cùng một POU. Nay là `PouExplorer` dựng từ
+  một view model (`pouItems`), có tìm kiếm, gom ba nhóm, và là nơi duy nhất phát
+  ra thao tác vòng đời POU.
+
+- **Added — mô hình định danh tách hai trục (DDD §3.5).** `objectId` sở hữu tài
+  liệu (chọn, deep-link, đổi tên, xoá); `programId` chỉ tồn tại khi POU thật sự
+  có cấu hình chạy. `runtimeProgramIdOf`/`objectIdOfRuntimeProgram` từ chối tra
+  nhầm trục thay vì trả POU gần đúng, và POU chưa xếp lịch KHÔNG mượn `objectId`
+  làm `programId` — Core không có identity runtime nào như vậy.
+
+- **Added — vòng đời POU typed cho đủ ba kind.** Tạo/đổi tên/nhân bản/xoá đi qua
+  đúng hợp đồng đã có ở BE (`upsertObject`, `renameObject`, `duplicateObject`,
+  `removeObject`), **không thêm endpoint nào**. FUNCTION/FUNCTION_BLOCK chỉ sinh
+  `upsertObject`: cấp cho chúng một mục trong `programs[]` chính là dựng ra thứ
+  mà `ST-POU-005` phải chặn ở Check. Nhân bản một Program đang chạy không mang
+  theo cấu hình chạy. Xoá có preflight người gọi: POU còn POU khác gọi thì nút
+  Xóa bị vô hiệu kèm tên người gọi, thay vì để Check hỏng ở lần sau.
+
+- **Fixed — deep-link chẩn đoán ngừng hoạt động sau cut-over `T59-802`.**
+  `selectedPouId` chỉ đọc `?pou=` một lần lúc mount. Điều đó còn chạy được khi
+  mỗi Project có route riêng (đi tới đó là remount), nhưng sau cut-over một cú
+  nhảy từ PGM-03 chỉ đổi QUERY trên cùng route nên workspace giữ nguyên POU cũ:
+  người dùng bấm vào lỗi mà không có gì mở ra. Nay URL là nguồn chân lý của POU
+  đang mở, chọn POU ghi ngược `?pou=` bằng `replace` nên reload giữ đúng POU.
+
+- **Changed — hồ sơ.** Plan59 v2.9 (`T59-803 DONE (HOST/LOCAL)`, `T59-804
+  READY`) kèm ghi chú thực thi; proposal PGM-02 v1.5 có **§0 Roadmap** cập nhật
+  theo từng lát. Ghi rõ phần `WP-02` chưa làm: capability-gate POU kind/ngôn ngữ
+  (`GET /capabilities` chưa khai `pouKinds`) và LIVE tree đọc sealed Active
+  objects (thuộc `WP-09`/R2). `RELEASE_READY` vẫn **NO-GO**.
+
+- **Verification (đo mới trong cùng phiên).** FE **141 file / 1551 test PASS**,
+  lint và build PASS, chunk Programming **101,14 KiB gzip**. E2E mock nhánh
+  cut-over **30 PASS / 4 skip / 0 fail**; E2E real-backend **1/1 PASS** với
+  `HTTP>=500=0`, `requestfailed=0`, `console.error=0`. `go vet` + `go test
+  ./... -count=1` PASS; CTest **1297/1297**. Chi tiết:
+  [`2026-08-25-pgm02-t59-803-pou-explorer.md`](docs/07_records/test-evidence/programming/2026-08-25-pgm02-t59-803-pou-explorer.md).
+
+
+### PGM-02 R1 — vỏ/route canonical `T59-802` và corrective ghost POU (2026-08-25)
+
+- **Added — vỏ chung và route canonical PGM-02 (`T59-802`).** Workspace Chương
+  trình có một địa chỉ duy nhất `/eng/programming/programs?project&pou&mode`
+  (DDD `§3.4`) sau cờ rollback build-time `VITE_PROGRAMS_WORKSPACE_V2`, **mặc
+  định TẮT**: `npm run build` không nhận biến này nên sản phẩm vẫn chạy route cũ
+  cho tới khi có authority cut-over riêng. Resolver fail-closed cho đủ sáu tình
+  huống — 0 Project (empty/CTA theo quyền), đúng 1 (canonicalize bằng
+  `replace`), nhiều (bắt chọn tường minh), Project không tồn tại (not-found,
+  **không** mượn Project khác), `mode` lạ (báo lỗi, không âm thầm hạ về EDIT) và
+  `mode=LIVE/SIMULATE` (nói rõ chưa khả dụng ở R1, không fallback về Draft).
+  Chọn POU trên URL dùng `objectId`; `program` cũ chỉ là alias khi `pou` VẮNG
+  hẳn, `pou=` rỗng vẫn đi tiếp tới resolver để fail closed. Dưới **768 px**,
+  read-only là policy runtime chứ không phải CSS: `canEdit=false` truyền tới
+  editor/reducer/shortcut nên textarea `readonly` thật và không có mutation nào
+  rời trình duyệt.
+
+- **Fixed — ba lỗi thật do chính cổng của lát này phát hiện.** (a) Bản đầu cho
+  cả `/design` vào redirect Programs nên `?tab=mapping` bị nuốt sang workspace
+  Chương trình; nay `LegacyDesignRedirect` phân nhánh theo `?tab=` TRƯỚC, chỉ
+  nhánh `programs` mới hỏi cờ cut-over. (b) Trên route canonical, tab Ánh xạ
+  điều hướng sang `/projects/:id/mapping` làm unmount workspace và **mất nội
+  dung ST đang gõ**; nay khi cut-over BẬT cả ba tab ở lại canonical và chỉ đổi
+  query, `tab` được giữ qua redirect như tham số quá độ của R1. (c) Shell vẫn
+  gọi read-model `listProgrammingProgramIntents` cho `?project=` không tồn tại,
+  để lại 503 trong Console dù resolver đã trả not-found; nay chờ danh sách
+  Project `ready` trên route canonical và bỏ probe khi id chắc chắn không có.
+
+- **Fixed — `F-P59-GHOST-POU-001`: ghost PROGRAM không còn được tự đặt chu kỳ.**
+  Triệu chứng: một POU kind `PROGRAM` chưa xếp lịch vẫn vào package như Program
+  thật, Check báo `PASSED` và `impact.programSet` đếm dư. Nguyên nhân gốc:
+  `packageTopology` gặp `period == 0` thì gán `AllowedPeriodMs[0]` (1000 ms) —
+  hệ tự bịa một lớp lập lịch không ai khai. Cách sửa fail-closed đủ bốn lớp:
+  catalog `error_catalog_v1` **1.7.2** đăng ký `ST-POU-005 → PRG-ERR-CHECK-001`
+  (135 component detail, G1 join re-pin cùng lượt); `packageTopology` phân nhánh
+  theo `documentSchemaVersion` đã seal (schema v1 đọc chu kỳ TASK lịch sử,
+  schema v2 đọc `programConfig` và giữ `0` để diagnostic chặn);
+  `packageArtifact` chặn ngay tại biên cho caller nội bộ bỏ qua Check, đồng thời
+  chỉ passthrough artifact v1 cho Revision schema v1 — schema v2 một Program
+  trước đây **rơi chu kỳ 5 s/30 s** khi trả artifact v1; `ProcessPackager.
+  Package` và `WritePackageV2` từ chối `periodMs == 0` ở writer, còn reader v2
+  vẫn đọc được package legacy để không tự làm hỏng gói đã nằm trên bo. Draft
+  tiếp tục được phép giữ PROGRAM chưa xếp lịch, đúng policy đã chốt.
+
+- **Fixed — vùng cuộn ngang của Mapping không có lối vào bàn phím.** Bảng
+  Published Signal và bảng ánh xạ nằm trong `div.overflow-x-auto` không nhận
+  được tiêu điểm (`scrollable-region-focusable`, impact `serious`). Lỗi chỉ lộ ở
+  lane real-backend vì lane mock có Point Catalog rỗng nên bảng không tràn —
+  cổng xanh vì thiếu dữ liệu chứ không vì đúng. Nay cả hai vùng có
+  `tabIndex={0}` + `role="group"` + nhãn + focus ring.
+
+- **Changed — lane E2E và điều kiện tiên quyết.** Hai config Playwright build
+  với `VITE_PROGRAMS_WORKSPACE_V2=1` để kiểm đúng nhánh cut-over; bảng redirect
+  `VS-PROG-032` đi theo đích canonical; journey soạn thảo skip ở project
+  `mobile-chrome` (412 px) vì DDD `§7.5` khoá read-only dưới 768 px, và có case
+  mobile read-only riêng thay thế. Quan sát Console/Network được thu về ĐÚNG bề
+  mặt Programming (kèm URL trong log) thay vì đếm cả 502/503 của các endpoint vỏ
+  ứng dụng mà lane này không dựng backend. `scripts/run_programming_real_e2e_
+  stack.sh` cảnh báo khi thiếu `/dev/shm/mkddc_plc_shm`: Point Catalog đọc PLC
+  SHM do `mkddc-core` thật ghi, thiếu nó thì `GET /point-catalog` trả **503 tất
+  định** (đo trực tiếp 10/10 request, `dur_ms=0`) và spec đỏ ở một khẳng định xa
+  nguyên nhân.
+
+- **Changed — hồ sơ authority.** Plan59 v2.8 (`T59-802 DONE (HOST/LOCAL)`,
+  `T59-803 READY`), Decision Register v1.5 (`F-P59-GHOST-POU-001` CLOSED cả
+  quyết định lẫn implementation), Risk v4.25 (`RSK-PROG-011` ghi corrective, còn
+  chờ đo trên bo), Trace v6.10 và Readiness v2.6. **Không** nâng `I/T/P/R` của
+  `SYS-REQ-PROG-116`/`SWR-REQ-PROG-FE-119` vì requirement còn phủ POU Explorer/
+  editor/LIVE/Simulation chưa làm; `VS-PROG-U13..U15` vẫn NOT_RUN,
+  `IMPLEMENTATION_CLOSE` PENDING và `RELEASE_READY` **NO-GO**.
+
+- **Verification (đo mới trong cùng phiên).** CMake Release bật Modbus/BACnet/
+  HMI: configure + build exit 0, CTest **1297/1297 PASS**. `go vet ./...` +
+  `go test ./... -count=1` PASS. FE **139 file / 1531 test PASS**, lint và build
+  PASS, chunk Programming **99,79 KiB gzip**. E2E mock nhánh cut-over **29 PASS
+  / 3 skip / 0 fail**; E2E real-backend **1/1 PASS** với `HTTP>=500=0`,
+  `requestfailed=0`, `console.error=0`. Hợp đồng: G1 **10/10**, PGM-02 pin,
+  artifact manifest và FBD đều PASS; pytest catalog **9/9**. Chi tiết:
+  [`2026-08-25-pgm02-t59-802-shell-route.md`](docs/07_records/test-evidence/programming/2026-08-25-pgm02-t59-802-shell-route.md).
+  Đây là bằng chứng HOST/LOCAL, không phải Test Result và không phải target/HIL.
+
+
+### Review và implementation plan PGM-02 ST/FBD redesign (2026-08-24)
+
+- **Added — leadership review PGM-02 ST/FBD.** Đối chiếu handoff v2.2 với
+  Product/SRS/Architecture/DDD/UX và mã nguồn FE/BE/Core/runtime tại
+  `3d2db5d8`; phân loại `KEEP/REFACTOR/REDESIGN/NEW/BLOCKED`, lập 17 gap và
+  tách rõ review ready khỏi implementation/release NO-GO. Finding P0 gồm Active
+  value có thể đứng cạnh Draft khác revision, runtime snapshot có thể lai trong
+  Commission transition, Core Trace có data race/chưa pin revision và BE còn
+  truth defect ở UNKNOWN/impact/Trace. Browser HOST với real local stack kiểm ở
+  1920/1440/1280/1024/390: đúng hai cây POU, FBD card list, 1280 chỉ còn 382 px
+  cho editor và mobile vẫn edit; REST tested path trả 2xx và console error bằng
+  0. Bổ sung ma trận source-backed đủ 21 capability BE (5 implemented/12
+  partial/4 missing) và 19 capability runtime/FW-SOM theo boundary A/B/C/D,
+  trả lời 15 câu hỏi FE và review UC-01..UC-08. Core targeted test **119/119**
+  và các gate BE/source liên quan PASS; không chạy lại toàn bộ FE unit/build
+  trong lượt review. Đây không phải target/HIL evidence.
+
+- **Added — kế hoạch 14 work package `WP-00..WP-13`.** Khóa dependency và lane
+  song song cho shared shell, one POU Explorer, Quick Library, ST, FBD canvas,
+  workbench, coherent LIVE, isolated Simulation, performance, responsive,
+  E2E/V&V và docs closeout. Mỗi WP có scope/files/FE/BE/FW-SOM/dependency/
+  acceptance/tests/risk/complexity; đề xuất ba increment `EDIT -> LIVE ->
+  SIMULATE`. Plan khóa project context/query/legacy redirect, Compare typed
+  Draft↔Active trong WP-09, Simulation RBAC + compiler allowlist, multi-task
+  Step semantics và thứ tự approval WP-00/WP-13. Plan59 vẫn là execution tracker
+  duy nhất; hai hồ sơ mới ở trạng thái `READY FOR OWNER REVIEW`, không tự cho
+  phép implementation.
+
+- **Changed — chỉ mục UI/UX và handoff FE.** `docs/04_uiux/README.md` đăng ký
+  Programming authority/handoff; `README_FE_HANDOFF.md` liên kết review và plan,
+  đồng thời ghi rõ chúng không thay authority Plan59 hay `RELEASE_READY`.
+  Verification tài liệu: docs harness/link/diff checks được ghi lại trong cùng
+  phiên sau khi hoàn tất nội dung.
+
+- **Changed — ghi nhận quyết định Owner mở WP-00.** Product Owner/CTO chấp thuận
+  target/change request, thứ tự `R1 EDIT → R2 LIVE → R3 SIMULATE` và Simulation
+  v1 admin-only. Hồ sơ không giả chữ ký Architect: code redesign vẫn khóa tới
+  khi baseline reconciled được Owner + System Architect review/pin và ánh xạ vào
+  Plan59. Gate trước commit đo mới: CMake Release đủ Modbus/BACnet/HMI và CTest
+  **1293/1293 PASS**; `go vet` + `go test ./... -count=1` PASS; FE **136 file /
+  1496 test PASS**, lint/build PASS; docs harness, candidate pin 16/16 và
+  `git diff --check` PASS. Lần FE đầu có một timeout tranh tài nguyên ở test
+  PGM-01 khi chạy đồng thời full C++; chạy riêng 25/25 và chạy lại full 1496/1496
+  đều PASS, không sửa acceptance để che lỗi.
+
+- **Changed — đưa quyền mở WP-00 vào authority thực thi.** Đăng ký
+  `CR-PROG-PGM02-V22-001` với Owner `APPROVED`, System Architect `PENDING`; mở
+  duy nhất `T59-801`/`PGM02-V22-WP-00` trong Plan59 v2.5 (53 task/9 Wave) để
+  reconcile baseline, không mở production code. Tách riêng
+  `F-P59-GHOST-POU-001` còn `OPEN`; chuẩn hóa namespace
+  `PGM02-V22-WP-00..13`; thêm `RSK-PROG-023` nhưng giữ 23/23 risk Open; Trace
+  giữ 82 requirement/44 scenario và không nâng `D/I/T/P/R`. Manifest v1.45
+  re-pin 8 hồ sơ authority; R1/R2/R3 và `RELEASE_READY` tiếp tục `NO-GO` tới
+  khi Owner + Architect pin đúng revision/hash reconciled. Verification lát
+  tài liệu: docs harness, trace join, candidate pin và `git diff --check` PASS.
+  Fresh full gate: CMake Release bật Modbus/BACnet/HMI và CTest **1293/1293
+  PASS**; `go vet` + `go test ./... -count=1` PASS; FE **136 file/1496 test**,
+  lint/build PASS, chunk Programming **97,13 KiB gzip**. Lượt Go đầu chạy đồng
+  thời `cmake --fresh` gặp đúng race tool build đang bị thay; chạy lại sau C++
+  hoàn tất PASS, không sửa test hoặc contract để che lỗi.
+
+- **Added — hoàn tất gói Candidate để Owner + System Architect review/pin
+  chính xác output WP-00.** Bổ sung Detailed Design PGM-02 đủ `DD-01..DD-13`,
+  `ADR-053` Proposed về Simulation worker cách ly, hợp đồng máy đọc được kèm
+  schema/verifier, Quick Library spec và ba SVG desktop/mobile render được.
+  Đồng bộ Candidate overlay qua Product/SRS/Architecture/Unified DDD/FE Design/
+  Interface/UI-UX/VVP/Trace/Risk/Plan59/governance: tổng **89 requirement / 47
+  scenario**, 23/23 risk vẫn Open, manifest v1.48 **17/17** file và 16 card
+  `T59-802..817` đều **NO EXECUTION AUTHORITY**. `T59-801` chuyển sang `REVIEW`;
+  R1/R2/R3 tiếp tục `NO-GO` tới khi Owner + Architect pin đúng revision/hash.
+  Quy tắc exact pin nay tách hai lớp: manifest ghim 17 hồ sơ Markdown; record
+  duyệt phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/
+  SVG — riêng kết quả 17/17 không mở `PLAN_READY`.
+  Gate Candidate đo tại change-set: contract self-test **16/16 mutation bị từ
+  chối đúng**, wave-gate self-test **10/10**, docs ISO harness, bidirectional
+  trace, candidate pin và `git diff --check` đều PASS. Không đổi source runtime
+  hoặc OpenAPI Active; SVG đã render/kiểm tra trực quan tại 1800×1100 và
+  1680×1080. Full gate đo mới: CMake Release bật Modbus/BACnet/HMI, build và
+  CTest **1293/1293 PASS**; Go vet/test không cache tại `apps/web-api` PASS; FE
+  **136 file/1496 test**, lint và build PASS, chunk Programming **97,13 KiB
+  gzip**; `verify-project --component layout` PASS. Sửa luôn hướng dẫn Go trong
+  `AGENTS.md`: lệnh cũ chạy ở repo root thất bại vì không có root Go module,
+  lệnh authority nay chạy trong `apps/web-api`. Không chạy Chrome DevTools vì
+  change-set chỉ gồm tài liệu, contract, script gate và asset tham chiếu, không
+  đổi hành vi React/Vite.
+
+- **Changed — ban hành `AUTH-PROG-2026-08-24-05` và mở triển khai PGM-02 v2.2.**
+  Ghi nhận chỉ thị điện tử của Phạm Đình Chương trong hai vai trò Product
+  Owner/CTO + System Architect; exact-pin Candidate
+  `413a043748dce3b44d2c5076412de761760ba17a`, hoàn tất `T59-801`, chuyển
+  `T59-802` READY và `T59-803..817` ORDERED theo predecessor. Cả ba
+  `IMPLEMENT_READY[R1 EDIT|R2 LIVE|R3 SIMULATE]` được mở, nhưng Plan59 vẫn bắt
+  buộc chạy tuần tự. `ADR-053` chuyển Accepted cho implementation; Detailed
+  Design giữ `M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, không giả
+  M4/M5, Test Result, CI, target hoặc HIL. Chốt `F-P59-GHOST-POU-001`: Draft
+  được giữ PROGRAM POU chưa schedule, còn Check/Package phải fail-closed bằng
+  `PRG-ERR-CHECK-001`/`ST-POU-005`, cấm tự loại hoặc synthesize 1000 ms;
+  corrective source/test và `IMPLEMENTATION_CLOSE` vẫn PENDING. Trước commit,
+  reconcile thêm năm lệch P0 giữa DDD và machine contract: tách feature/signature
+  state, phủ identity POU/library/signal, khóa ST-string/FBD-object và runtime
+  enable intent riêng, tách HTTP 400/422, cùng full typed idempotent replay qua
+  migration `0013`. Manifest v1.49 re-pin **17/17**; contract v1.1 self-test
+  **23/23**, docs harness, trace
+  **89/89 requirement + 47/47 scenario**, wave self-test **10/10** và diff-check
+  PASS. Fresh host gate: CMake Release bật Modbus/BACnet/HMI, build + CTest
+  **1293/1293**; Go vet/test `-count=1`; FE **136 file/1496 test**, lint/build
+  PASS, chunk Programming **97,13 KiB gzip**. `RELEASE_READY` tiếp tục `NO-GO`.
+
+### Sửa lỗi xóa Program/POU trả `PRG-ERR-REQ-001` (2026-08-24)
+
+- **Fixed — FE: không xóa được "chương trình ma".** *Triệu chứng:* sau vòng sửa
+  đầu, một số Program vẫn trả `400` với `field: "operations[0].removeProgram"`.
+  *Nguyên nhân gốc:* quyết định gửi `removeProgram` dựa trên **kind**, trong khi
+  một POU kind `PROGRAM` hoàn toàn có thể KHÔNG có mục trong `programs[]` — hoặc
+  vì mới tạo bằng `upsertObject` mà chưa xếp lịch, hoặc vì là **di chứng của
+  chính lỗi xóa cũ** (gỡ cấu hình chạy nhưng để lại POU). Với những POU đó,
+  `removeProgram` không tìm thấy id và cả batch bị từ chối — người dùng không bao
+  giờ xóa được đúng cái POU cần xóa. *Đo thật trên bo Foxlinx 2026-08-24:* ba
+  Project đang mang POU kiểu này (`SOAK_04`, `SOAK_00`, `AHU_MasterSequence`).
+  *Cách sửa:* adapter công bố `hasRuntimeConfig` (POU có mục trong `programs[]`
+  hay không) và batch xóa chỉ gửi `removeProgram` khi cờ đó bật; POU không có
+  cấu hình chạy chỉ cần `removeObject`. 3 test mới, đã kiểm chứng bằng cách gỡ
+  bản vá.
+
+- **Fixed — FE `F-P59-DELETE-PROGRAM-001`.** *Triệu chứng:* bấm "Xóa" một
+  Program (hoặc một user FUNCTION/FUNCTION_BLOCK) trả `400 PRG-ERR-REQ-001`
+  không kèm lý do; giao diện không xóa được gì. *Nguyên nhân gốc:* ba lỗi chồng
+  nhau ở đường ghi của FE.
+  1. Adapter `draftV2.ts` dựng `task.programOrder` từ **toàn bộ** `objects[]`,
+     gồm cả FUNCTION/FUNCTION_BLOCK — những POU không có cấu hình chạy. Backend
+     `setTaskCompat` từ chối cả batch vì "programOrder trỏ tới Program không tồn
+     tại" (ràng buộc đúng, fail-closed). Hệ quả: **mọi** Project có user POU đều
+     hỏng ở Xóa Program, Thêm Program và đổi chu kỳ ở tab Thực thi. Đo bằng
+     `toWorkspaceDocument`: `programOrder` chứa id của `SCALE_LIN`.
+  2. Batch xóa luôn gửi `removeProgram` kể cả cho FUNCTION/FUNCTION_BLOCK, mà
+     backend trả lỗi vì id không nằm trong `programs[]` → **xóa một user FUNCTION
+     chưa bao giờ thành công**.
+  3. Batch xóa gửi kèm `setTask`. Draft v2 không còn object `task` (chu kỳ nằm
+     theo từng Program và `upsertProgram` đã gán), nên thao tác này vừa thừa vừa
+     có hại: `setTaskCompat` ghi đè chu kỳ của **mọi** Program trong danh sách,
+     tức xóa Program A trong Project nhiều chu kỳ âm thầm đổi chu kỳ của B.
+  *Cách sửa:* `programOrder` chỉ gồm POU **có** cấu hình chạy; view model mang
+  thêm `objectId`; batch xóa nay là `removeBinding* → removeVariable* →
+  removeProgram (chỉ khi kind=PROGRAM) → removeObject`, bỏ hẳn `setTask`. Thêm
+  `removeObject` cũng vá một lỗi thứ hai: thiếu nó thì mã nguồn POU vẫn ở lại
+  Draft — người dùng nhận 200 mà POU vẫn hiện nguyên trên danh sách và vẫn có
+  thể đi vào package ở lần Commission sau.
+  *Kiểm chứng:* 3 test FE mới (adapter + xóa PROGRAM + xóa FUNCTION) và 2 test Go
+  đi qua `SaveDraft` thật; cả 5 đã kiểm chứng bằng cách gỡ bản vá (đỏ đúng chỗ).
+
+- **Added — BE Go: lỗi batch Draft nói rõ thao tác nào hỏng.** `PATCH .../draft`
+  nhận một mảng operation nhưng chỉ trả một mã cho cả batch, nên một lần bấm Xóa
+  gồm 4–5 thao tác không có gì để lần. `DraftOperationError` mang chỉ số + tên op
+  và lớp HTTP đặt nó vào `field` (`operations[1].removeProgram`). Tên op đến từ
+  client nên chỉ nhận `[A-Za-z][A-Za-z0-9]{0,63}`, không phản chiếu dữ liệu lạ.
+
+### Plan 59 corrective — Enable/Disable qua safe boundary và read-back signal (2026-08-24)
+
+- **Fixed — Core C++ `F-P59-ENABLE-BOUNDARY-001`** (`T59-402/405/406`).
+  *Triệu chứng:* không có triệu chứng nhìn thấy trên host — mọi test của W4 chạy
+  đơn luồng nên đường này luôn xanh; lỗi chỉ lộ ra khi dựng lại đúng mô hình
+  luồng của bo (scan `SCHED_FIFO 80` + IPC worker thread) và chạy dưới
+  `-fsanitize=thread`. *Nguyên nhân gốc:*
+  `ProgrammingRuntimeCoordinator::set_program_enabled()` gọi thẳng
+  `StScheduler::start/stop/enable/disable` từ luồng non-RT, tức ghi
+  `StProgramInstance::state`/`enabled` ngay khi RT đang đọc để quyết định
+  dispatch và đang ghi khi Program fault — TSan đo ra **3 data race**
+  (`stop`↔`run_task`, `disable`↔`run_task`, vòng đếm trần 16 của `start`↔
+  `run_program`). Hệ quả thật: một lệnh Disable rơi đúng giữa tick có thể bị RT
+  ghi đè trạng thái ngay sau đó, và Program người vận hành vừa tắt còn chạy thêm
+  một chu kỳ **với quyền ghi đầu ra**. *Cách sửa:* Enable/Disable đi đúng con
+  đường đã dùng cho RETAIN reset — non-RT chỉ ARM
+  (`StScheduler::request_program_enabled`), RT áp dụng tại safe boundary
+  (`apply_pending_enable_requests_at_boundary`, gọi trong `on_safe_boundary()`)
+  rồi ack qua `enable_ack_generation`/`enable_ack_result`/`enable_ack_state`;
+  coordinator chờ có giới hạn 1500 ms và trả `APPLIED`/`REJECTED`/`TIMED_OUT`,
+  với `TIMED_OUT` map sang `Busy` chứ không phải `Rejected` (lệnh vẫn có thể áp
+  dụng ở boundary kế; báo "đã từ chối" là nói sai với người vận hành). Sửa kèm:
+  **trần 16 Program kiểm TRƯỚC khi chạm bất kỳ trường nào** — đường cũ enable
+  xong mới phát hiện vượt trần, để lại Program ở `STOPPED`/`enabled=true`.
+  *Kiểm chứng:* `ProgrammingStageAtomicity.EnableIntentAppliesAtSafeBoundaryWhileScanRuns`
+  (3 race trước khi sửa → 0 sau khi sửa); `ctest` **1293/1293**.
+  Refs: `docs/07_records/test-evidence/programming/2026-08-24-tsan-enable-boundary.md`.
+
+- **Fixed — Core C++ `F-P59-SIGNAL-READBACK-001`** (`T59-404/504`).
+  *Triệu chứng:* Runtime Monitor có thể trả `value` của chu kỳ N ghép với
+  `published_at_ns` của chu kỳ N+1 — một số đo "tươi" theo mốc thời gian không
+  thuộc về nó. *Nguyên nhân gốc:* double-buffer chỉ bảo đảm "trọn bản cũ hoặc
+  trọn bản mới" cho reader chạy TRONG cùng chu kỳ với publisher, nhưng
+  `program_ipc_server.cpp` gọi `signal_bus()->inspect_all()` trên IPC worker
+  thread: reader non-RT có thể còn đang chép bản `live` khi scan commit — bản đó
+  thành nháp và `publish()` chu kỳ kế ghi đè lên chính nó. *Cách sửa:*
+  `StSignalBus::snapshot_slot()` kiểm `generation` trước/sau khi chép, chép lại
+  khi khác (trần 5 lần thử) — đúng khuôn seqlock đã dùng cho SHM
+  `IobusReader::read_from`, không phát minh biến thể thứ hai; RT trả thêm đúng
+  một atomic load và không bao giờ retry vì scan là bên duy nhất commit.
+  *Kiểm chứng:* test mới
+  `StSignalBus.ConcurrentInspectNeverPairsValueWithForeignTimestamp` (đỏ 1/3 lần
+  chạy trên bản chưa sửa, xanh sau khi sửa; bộ bắt lỗi tất định là TSan).
+
+- **Added — hạ tầng TSan** (`platform/tsan/suppressions.txt`). Chỉ hai mẫu
+  seqlock CỐ Ý (`IobusReader::read_from`, `StSignalBus::publish`), mỗi mẫu có
+  test hành vi riêng; mọi cảnh báo ngoài danh sách phải coi là lỗi thật. Kèm
+  cách chạy: cần `setarch -R` vì kernel máy dev cấp entropy `mmap` lớn hơn vùng
+  shadow TSan chịu được. *Số đo:* TSan toàn core **0 cảnh báo / 897 pass**; hai
+  test `StCompileCli` không chạy được dưới TSan vì `RLIMIT_AS 256 MB` của sandbox
+  compiler — **không** hạ trần sandbox để làm xanh sanitizer.
+
+- **Fixed — gate Go/layout lạc hậu.** `startTestHMIBroker` chờ socket 2 s: đủ khi
+  chạy riêng gói, không đủ khi `go test ./...` chạy 17 gói trên máy đang build
+  thứ khác (đo thật 2026-08-24: đỏ trong lần chạy đầy đủ, xanh khi chạy một
+  mình) → nâng lên 20 s và báo đúng lỗi khi `Serve()` thoát sớm thay vì đợi hết
+  hạn. `test_programming_error_catalog` còn ghim `126` detail trong khi catalog
+  đã là `134` → cập nhật cùng change-set kèm lý do từng mã mới.
+
+- **Fixed — BE Go `F-P59-MONITOR-VARS-001`.** *Triệu chứng:* màn "Theo dõi" của
+  Runtime & Bảo trì luôn hiện "Revision đang chạy chưa có biến ánh xạ" dù Program
+  đang chạy với Binding hợp lệ; lane E2E thật che lỗi này bằng một kỳ vọng
+  "Monitor đang ngoại tuyến" và một ngoại lệ `503` được coi là hợp lệ.
+  *Nguyên nhân gốc:* hai lỗi chồng nhau. (1) `ReadProgrammingMonitorSnapshot`
+  để lỗi đọc PLC SHM nuốt luôn `snapshot.Points` mà Core phát qua Web IPC, nên
+  Core báo `UI-01=21.5` còn Monitor trả mảng rỗng; (2) `GetMonitor` chỉ tra biến
+  ở Revision object `VARIABLE` (hình dạng v1), trong khi `SealRevision` của Draft
+  v2 seal biến vào `locals` của POU — bảng `variables` luôn rỗng nên **mọi**
+  Binding bị `continue` bỏ qua với **mọi** Revision. Không test nào bắt được vì
+  fixture monitor duy nhất dựng Revision kiểu v1. *Cách sửa:* Monitor đọc cả hai
+  nguồn như `checks_invariants.go` (locals v2 + object `VARIABLE` v1) và chuẩn
+  hoá `objectId`→`programId` runtime; giữ nguyên đường Point Catalog/SHM cho CRUD.
+  *Kiểm chứng:* test mới `TestGetMonitorResolvesVariablesFromDraftV2Locals` (đỏ
+  đúng dòng khi gỡ bản vá); lane E2E thật nay **1 passed** với `HTTP>=500=0`,
+  `requestfailed=0`, `console.error=0` — thay cho ngoại lệ 503 trước đây.
+
+- **Fixed — E2E `programming-real` hai khẳng định không kiểm gì.** Khẳng định
+  `getByText(/· PUBLISHED$/)` toàn trang khớp 42 phần tử (41 khối SYSTEM trong
+  danh sách + entry PROJECT) nên vừa fail strict mode vừa sẽ xanh kể cả khi entry
+  PROJECT không được chọn → soi trong đúng panel "Chi tiết". Hai khẳng định
+  "Monitor đang ngoại tuyến" được thay bằng đọc thật hàng `SupplyTemp` → `UI-01`
+  → `21.5` → `GOOD`, và ngân sách 5xx/console hạ về **0**.
+
+- **Fixed — deploy/rollback `F-P59-ROLLBACK-DB-001`.** *Triệu chứng:* diễn tập
+  rollback tầng web trên bo Foxlinx làm `mkddc-web` crash-loop 7 lần rồi bỏ cuộc;
+  `/api/v1/health` từ chối kết nối. *Nguyên nhân gốc:* BE tự chạy migration khi
+  khởi động (bản này thêm `0012`) và **từ chối chạy** khi schema mới hơn binary
+  — đúng fail-closed. Nhưng `install.sh` chỉ chụp binary và `rollback.sh` chỉ
+  khôi phục binary, nên rollback sau **bất kỳ** bản nào có migration đều để web
+  tier chết mà quy trình không hề nói tới. *Cách sửa:* `install.sh` chụp thêm
+  `programming-v1.sqlite` (+ `-wal`/`-shm`) vào cùng snapshot với binary;
+  `rollback.sh` khôi phục nó, giữ DB đang chạy ở `pre-rollback-*` (mất nó là mất
+  toàn bộ Project/Revision mới) và in cảnh báo chỉ thẳng tới
+  `programming-backups` khi snapshot không có DB. *Kiểm chứng:*
+  `tests/integration/test_release_dryrun.py` khoá cả hai chiều — gỡ bản vá thì
+  đỏ đúng hai chỗ (snapshot thiếu DB, rollback không khôi phục DB).
+
+- **Changed — hồ sơ authority.** Risk Register 4.20 (§5.55), Traceability 6.6,
+  Plan 59 §3.5 "Sửa kèm W4" + hai hàng finding ở bảng corrective closure,
+  manifest baseline **1.42** re-pin dòng 1/4/6/10/13/14/15 kèm đánh giá impact.
+  Sau khi deploy: `IMPLEMENTATION_CLOSE` **PASS**, `TARGET_FAKE_MCU_DEPLOY`
+  **PARTIAL** (thiếu diễn tập rollback binary+DB trên bo), evidence target ở
+  `docs/07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan59-corrective-deploy.md`.
+  `RELEASE_READY` giữ **NO-GO**; 22/22 risk giữ Open.
+
+### Plan 60 Batch 1 — mở đường dữ liệu Program và nền FE (2026-08-23)
+
+- **Added — Core C++ `T60-001..003`** (`ad28a51`). *Triệu chứng:* PGM-01 cần
+  bảng Programs sáu cột nhưng Core không phát trạng thái theo từng Program;
+  khối `task` chỉ mô tả `tasks().front()` và báo cáo nó như thể là Task duy
+  nhất. *Nguyên nhân gốc:* từ `T59-402/403` mỗi Program tự release theo chu kỳ
+  riêng nên Task không còn đại diện cho hệ — Program của Task thứ hai trở đi
+  biến mất khỏi snapshot; đồng thời `last_exec_ns` là THỜI LƯỢNG chứ không phải
+  mốc thời gian, và `missed_release_count` tích luỹ nên dùng cho `health` sẽ
+  ghim Program ở DEGRADED vĩnh viễn. *Cách sửa:* `RuntimeProgramSnapshot` +
+  `std::array<…, 32>` bounded (trần `kMaxProgramsTotal`, **không** phải
+  `kMaxProgramsPerTask`=16); duyệt đủ Program của mọi Task với `static_assert`
+  nối hai trần; phân giải `period_ms == 0` về chu kỳ Task thay vì phát `0`;
+  thêm `last_run_mono_ns` (ghi ở mọi lần chạy, kể cả lần kết thúc bằng fault)
+  và `consecutive_missed_release` (reset về 0 khi release đúng hạn); serialize
+  `"programs":[…]` với khoá LUÔN có mặt kể cả khi rỗng — mảng rỗng và thiếu
+  khoá là hai câu trả lời khác nhau. *Verification (HOST):* configure exit `0`,
+  build exit `0`, **ctest 1230/1230 pass** exit `0`.
+- **Added — `apps/web-api` `T60-015`** (`550449f`). *Triệu chứng:* Overview cần
+  nhãn `Draft #14`/`Active #12` và cờ Draft-có-việc-chưa-phát-hành, nhưng
+  `GET /projects` không trả cả hai. *Nguyên nhân gốc:* hai cột đã tồn tại từ
+  `0001_programming_v1.sql` mà chưa được đưa lên tầng application/transport —
+  lỗ hổng **lộ** dữ liệu, không phải thiếu dữ liệu, nên không cần migration.
+  *Cách sửa:* `dirty` so thật `drafts.content_sha256` với
+  `manifest.draftContentSha256` của base Revision, trả `nil` khi không so được
+  chứ tuyệt đối không `false`; `draftSequence`/`activeSequence` trả `nil` khi
+  Core im hoặc Revision không thuộc Project, không lấy bản Commission gần nhất
+  thế chỗ; JSON cố ý bỏ `omitempty` để `null` phân biệt được với trường vắng;
+  tách `GetRevisionHeader` khỏi `GetRevision` vì đường Overview không cần kéo
+  toàn bộ `revision_objects` (mỗi object tới 256 KiB) cho mỗi item.
+  *Verification (HOST):* `go vet ./...` exit `0`; `go test ./... -count=1`
+  exit `0`, 18 package `ok`.
+- **Added — `apps/web-ui` `T60-104`** (`984ebdd`). *Triệu chứng:* Handoff v2.1
+  §3 quy định bảy trạng thái ngữ nghĩa dùng chung, nhưng `StatusBadge` mang một
+  tập khác sinh ra từ nhu cầu trang Point/Alarm. *Nguyên nhân gốc:* tập đó
+  thiếu `reconciling` (không có nó thì mutation hết giờ chỉ còn rơi vào "lỗi"
+  hoặc "xong" — cả hai đều sai, và README §5.5 cấm suy timeout thành thành
+  công) và `disabled` (tắt có chủ đích không phải lỗi, gộp vào `unknown`/
+  `fault` là dạy người vận hành thông tin sai). *Cách sửa:* module
+  `shared/semanticState.ts` ánh xạ bảy trạng thái lên tập badge sẵn có thay vì
+  mở rộng `StatusBadge`, giữ bảng màu là một nguồn duy nhất; mỗi trạng thái bắt
+  buộc có **icon + chữ** và test ép điều đó. *Verification (HOST):*
+  `npx vitest --run --environment jsdom src` — 125 file / 1180 test, 1179 pass.
+  Một fail **ngoài phạm vi Plan 60**: `api/generated/client.test.ts` chờ 31
+  operation trong khi `client.ts` đã lên 32 do `resetProgrammingRecovery`
+  (`T59-702`) đang nằm chưa commit trong cây làm việc — không sửa vì thuộc
+  luồng khác.
+- **Added — Core C++ test `T60-004`** (`ea18a38`). 13 test mới phủ bảy nhóm case
+  của §6 P0-A. Hai chỗ được chứng minh chứ không chỉ được khẳng định:
+  `"programs":[]` kiểm trên **chuỗi thô trước khi parse** — chỉ hỏi parser thì
+  "khoá vắng" và "mảng rỗng" cho cùng một câu trả lời, mà đó đúng là ranh giới
+  `CORE_LIVE` ↔ `UNAVAILABLE`; nhánh tràn đòi `*length == 0` ở bốn sức chứa
+  thiếu khác nhau, vì nguy hiểm thật không phải tràn mà là chuỗi cụt đứt đúng
+  chỗ hợp lệ rồi vẫn parse được ở đầu kia. Trần 32 để **chính scheduler** từ
+  chối Program thứ 33 thay vì test tự đặt con số. *Verification (HOST):*
+  configure/build exit `0`; **ctest 1243/1243 pass** exit `0` (nền 1230), CTIO
+  chạy lại độc lập cùng con số. Hai số đo mới thay ước lượng: payload 32 Program
+  xấu nhất **15 339 B / trần 65 536 B**; nhánh `programs_truncated=true` **không
+  tới được qua scheduler** (`add_program` chặn ở đúng 32) nên chỉ là phòng vệ
+  của lớp serialize. **Mốc M1 ĐẠT** — dump `point_snapshot` thật, 2 Program chu
+  kỳ 50 ms / 200 ms, sinh từ `ScanLoop` + artifact ST đã ký.
+- **Added — `apps/web-ui` `T60-101` + `T60-102`** (`c849510`). *Triệu chứng:*
+  workspace mang hai lớp điều hướng (rail toàn cục 232 px + tab ngang), và ngữ
+  cảnh là panel `<dl>` ~76 px cuộn mất, in thẳng UUID 36 ký tự. *Nguyên nhân
+  gốc:* ngân sách ngang — giữ cả hai lớp thì ở 1280 px workspace còn 828 px và
+  PGM-02 chỉ còn ~328 px cho editor; còn ngữ cảnh thì bị đặt làm khối **nội
+  dung** thay vì thanh trạng thái, lấy định danh kỹ thuật trả lời một câu hỏi
+  nhị phân. *Cách sửa:* `ProgrammingFeatureRail` 220 px theo focus mode `D-01`
+  với mục `← Thoát Lập trình` bắt buộc ở đầu (ở ≥1024 px nút ngăn kéo TopBar là
+  `lg:hidden` nên đây là đường duy nhất rời workspace bằng chuột); chặn render
+  đặt ở `NavRail.isProgrammingFocusRoute` — **chặn render, không xoá mục**,
+  `NAV_GROUPS` nguyên vẹn nên `ADR-032` không bị động tới.
+  `ProgrammingContextStrip` một hàng 38 px `sticky top-16`, bỏ mọi UUID khỏi
+  mặt trước, giữ nguyên từng dòng luật fail-closed. **Không case test nào bị
+  xoá**: 8 case ContextBar + 3 case DesktopNav chuyển sang test mới, hai case cũ
+  khẳng định UUID *hiện* ở mặt trước bị đảo chiều theo `AC-PGM01-01` và nay
+  kiểm chặt hơn bằng regex UUID trên toàn DOM.
+- **Fixed — hai lỗi phát hiện trong cùng phiên** (`c849510`). Strip đặt
+  `sticky top-0` trong khi TopBar là `sticky top-0 z-40 h-16` ⇒ strip trượt
+  xuống dưới TopBar và biến mất đúng lúc cuộn; sửa thành `top-16 z-20`. Chặn
+  render `NavRail` phải phụ thuộc **cả** cờ `PROGRAMMING_REV_A_ENABLED`: cờ tắt
+  thì `/eng/programming` render `UnavailableFeaturePage` nên không có rail thay
+  thế — ẩn rail toàn cục lúc đó để người dùng ≥1024 px mất sạch điều hướng.
+- **Added — `apps/web-ui` `T60-017`** (`c718d65`). Hàm thuần `activeProgramSet()`
+  đọc `snapshot.objects[kind='PROGRAM']` của Active Revision; không tự gọi API
+  (tầng `api/queries` là đường HTTP duy nhất, trộn fetch vào đây sẽ tạo đường
+  đọc thứ hai không đi qua client sinh từ contract). Ba luật fail-closed: không
+  mượn Draft (`NO_ACTIVE_REVISION`, và `REVISION_MISMATCH` khi thân phản hồi
+  thuộc Revision khác); không chế số (`null` ⇒ `—`, không bao giờ `0`); rỗng
+  luôn kèm lý do. *Verification (HOST):* vitest **126 file / 1228 test, 1227
+  pass**, CTIO chạy lại độc lập cùng con số; `npm run lint` exit `0`;
+  `npm run build` exit `0`; `verify-project.sh --component layout` exit `0`.
+- **Added — `apps/web-api` `T60-011`/`T60-012`** (`0c953e1`). Core đã phát
+  `programs[]` từ `ad28a51` nhưng web-api chưa khai field nên `encoding/json` bỏ
+  qua toàn bộ khoá — mọi Program vô hình với BE. Giữ `[]T` để `nil` (Core đời cũ
+  ⇒ `UNAVAILABLE`) khác `[]` (Core sống, hệ không có Program nào) đi suốt ba
+  lớp; khai `omitempty` hay chuẩn hoá nil thành `[]` sẽ trộn hai tình huống đó
+  làm một và báo một bo không đọc được là "không có Program nào". Ánh xạ đặt
+  đúng chỗ đang dựng `Task` nên vẫn dùng chung **một** `point_snapshot` đã
+  coalesce — thêm round-trip riêng sẽ dựng lại đúng cuộc đụng độ đã sinh 503
+  ngắt quãng hồi 2026-08-14.
+- **Added — `apps/web-api` `T60-013`/`T60-014`** (`415dd45`).
+  `GET /projects/{id}/programs` ghép ý định bền vững với read-back sống, thêm
+  `runtimeStateSource ∈ {CORE_LIVE, LAST_KNOWN, UNAVAILABLE}`, `observedAt`,
+  `coreState`, `periodMs`, `lastExecNs`, `maxExecNs`, `missedReleaseCount`,
+  `consecutiveMissedRelease`, `lastRunAtUtc`, `lastRunAgeMs`, `lane`. Đường đọc
+  **không ghi** bảng intent — một read-back không phải một ý định, để nó ghi đè
+  sẽ biến Program đang `FAULTED` thành "người vận hành đã tắt". Core im ⇒
+  `UNKNOWN` + `UNAVAILABLE` với **mọi** số đo `null`, kể cả khi store còn nhớ
+  trạng thái cũ. Cột `Last Exec` lấy **mốc** từ `lastRunMonoNs`, không lấy
+  `lastExecNs` (thời lượng). `health` do server tính (D-04), nullable, dùng
+  `consecutiveMissedRelease` chứ không dùng bộ đếm tích luỹ.
+- **Fixed — `STARTING`/`STOPPING` rò ra hợp đồng qua đường `LAST_KNOWN`**
+  (`415dd45`). CHECK constraint của
+  `program_runtime_intents.last_known_runtime_state` vẫn cho phép hai giá trị
+  đó, nên một dòng DB cũ sẽ đẩy UI kẹt vĩnh viễn ở một chuyển tiếp **không tồn
+  tại** — `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức
+  thì (D-07 cấm hai giá trị này). Nay lọc về `UNKNOWN`/`UNAVAILABLE`.
+- **Fixed — đính chính thứ tự công thức `health` (Plan 60 §4.2)** (`415dd45`).
+  Điều 6 (`ROLLED_BACK ⇒ DEGRADED`) xếp **sau** điều 3 (`WAITING ⇒ null`) trong
+  khi §4.1 ánh xạ `ROLLED_BACK → WAITING`, nên điều 6 là **chữ chết** — mâu
+  thuẫn với chính §4.1 và phần lời D-07. Thứ tự đúng: 1 → 2 → 6 → 3 → 4 → 5 → 7.
+  Bổ sung điều kiện tiên quyết chưa ghi cho điều 5: bỏ qua khi `periodMs = 0`,
+  vì so với ngưỡng `0,8 × 0` sẽ dán `DEGRADED` cho mọi Program từng chạy dù chỉ
+  một nano-giây.
+- **Changed — `desiredEnabled` trở thành nullable** (`415dd45`). Program đang
+  chạy trong Core mà Project chưa từng ghi intent ra `null` thay vì `false` —
+  điền `false` sẽ đọc thành "có người đã tắt nó". Type FE cần `| null` khi làm
+  `T60-016`.
+- **Added — `apps/web-ui` `T60-103`** (`c9539ef`). *Triệu chứng:* sau `T60-102`,
+  nút `Chi tiết` chỉ là một seam — mọi UUID đã bị gỡ khỏi mặt trước theo
+  `AC-PGM01-01` nhưng chưa có bề mặt nào đọc lại `revisionId`/`controllerId`,
+  nên gỡ đi mà không dựng lối đọc thay thế là **xoá dữ liệu** chứ không phải làm
+  gọn. *Cách sửa:* `ContextDetailsPopover` — dialog **không modal** neo dưới nút
+  (lớp phủ toàn màn hình sẽ che chính cái strip mà nó đang giải thích), bảy dòng
+  dữ kiện, mỗi dòng một nút `Copy` có `aria-label` riêng; `Esc` đóng và **trả
+  tiêu điểm về đúng nút đã mở**; bấm ra ngoài đóng nhưng không giật tiêu điểm.
+  Luật ô trống tách sang hàm thuần `contextDetails.ts`: `value` rỗng ⇔ bắt buộc
+  có `missingReason`, chuỗi rỗng/khoảng trắng bị coi là thiếu (nếu không, `Copy`
+  đặt chuỗi rỗng vào clipboard người dùng). `copyToClipboard` nuốt gọn cả hai
+  nhánh hỏng của `navigator.clipboard` nên không promise reject nào làm hỏng
+  strip. *Verification (HOST):* vitest **128 file / 1262 test, 1261 pass**;
+  lint/build exit `0`. 34 test mới; `ProgrammingContextStrip.test.tsx` +45/−0.
+- **Fixed — cảnh báo mất kết nối giả trong popover** (`c9539ef`). Bản đầu dùng
+  cờ nhị phân `coreReadable`, nên trong lần đọc đầu (`status === 'loading'`,
+  `data` còn `null`) popover nói **"Không đọc được từ Core"** — dán một cảnh báo
+  sai lên mỗi lần vào trang. Đổi thành `coreStatus` ba giá trị
+  (`loading`/`readable`/`unreadable`) với thứ tự thắng *đang đọc → Core im → lý
+  do nghiệp vụ*, để "đang đọc lần đầu" không bị nói thành "không đọc được" và
+  "Core im" không bị nói thành "chưa Commission" (README §5.4).
+- **Added — `T59-702` đóng gói hộ, KHÔNG thuộc Plan 60** (`261557c`). Toàn bộ
+  công việc của luồng T59-702 nằm chưa commit trong cây từ 2026-08-23 11:00–11:37
+  (`POST /runtime/recovery-reset` admin-only, Core `program_ipc_server` +
+  `programming_runtime_coordinator` + `st_journal`, schema/golden IPC,
+  `draft_v2.programOrder`, client sinh lại 31 → 32 operation,
+  `scripts/target_soak_10program.py`). Tách thành **commit riêng** để lịch sử
+  không trộn hai luồng. Lý do đóng gói lúc này: `client.ts` được **sinh tự động**
+  từ `openapi.yaml`, mà file đó đã mang endpoint của luồng này, nên `T60-016`
+  không thể chạm tới OpenAPI mà không kéo theo — không tách được bằng thủ thuật
+  hunk vì bản sinh phải khớp bản OpenAPI đã commit thì `check:programming-api`
+  mới xanh. Phần duy nhất do Plan 60 viết trong commit đó là cập nhật
+  `client.test.ts` 31 → 32 kèm khẳng định RBAC admin-only — hoàn tất nốt việc
+  đang dở khiến **gate FE đỏ suốt từ 11:37 hôm trước**.
+- **Changed — Plan 60 §6**: thêm `T60-103` chuyển `DONE` (**14/27**). §8:
+  `AC-PGM01-01` nay đóng **cả hai chiều** — mặt trước sạch UUID, mở `Details`
+  lộ đủ, `Esc` thì UUID biến mất khỏi DOM chứ không nằm ẩn.
+- **Added — `T60-016`: OpenAPI `1.26.0` → `1.27.0`, sinh type FE từ contract**
+  (`b981e54`). *Triệu chứng:* `T60-013/014/015` đã đổi hình dạng phản hồi thật
+  nhưng contract vẫn khai `ProgrammingProgramIntentList` với đúng hai trường —
+  FE muốn dựng bảng Programs thì phải viết tay type theo trí nhớ hoặc đi đọc code
+  Go. *Nguyên nhân gốc:* script sinh client chỉ sinh **bảng endpoint**, không
+  sinh type từ schema, nên mọi schema đọc buộc phải khai tay và không cổng nào
+  bắt chúng khớp OpenAPI. Type khai tay không lệch ồn ào — nó lệch **im lặng**;
+  bằng chứng còn trong repo: enum `runtimeState` khai tay vẫn mang
+  `STARTING`/`STOPPING`, hai giá trị D-07 đã loại. *Cách sửa:*
+  `ProgrammingProgramsPage` + `ProgrammingProgramListItem` (6 + 19 trường), mọi
+  trường `required` kể cả khi nullable; ba enum tách riêng với
+  `ProgrammingProgramRuntimeState` **đúng năm giá trị**; `health` nullable ở
+  **chỗ dùng** chứ không nhét `null` vào enum. Hai schema intent cũ **xoá hẳn** —
+  giữ lại nghĩa là contract đồng thời khẳng định `desiredEnabled` bắt buộc
+  `boolean` và `runtimeState` có thể `STARTING`, nằm ngay cạnh schema nói ngược
+  lại. Generator nay sinh type thẳng từ schema và **ném lỗi** ở mọi nhánh không
+  hiểu thay vì trả `unknown` (một `unknown` lặng lẽ sẽ tắt đúng phần kiểm kiểu
+  mà tệp sinh sinh ra để có). Số operation giữ **32** — đổi hình dạng phản hồi,
+  không thêm route.
+- **Fixed — `ProgrammingRevision.snapshot` khai optional trong khi server luôn
+  gửi** (`b981e54`). Do chính test mới của `contract_sync_test.go` tìm ra.
+  Contract lỏng hơn thứ server bảo đảm sẽ buộc client viết một nhánh "thiếu
+  snapshot" không bao giờ chạy tới. Test mới đọc trường JSON thật bằng `reflect`
+  trên struct handler serialize và khoá bất biến `omitempty` ⇔ `required`; đã ép
+  đỏ bằng đột biến (`lane` → `laneX`) để chứng minh không phải cổng giả.
+- **Changed — re-pin G1 `openapi` theo `1.27.0`** (`dfc8e48`). Hash CTIO tự tính
+  lại bằng `sha256sum` trên chính file đã commit, không lấy theo lời khai của
+  lane. `operationCount` giữ 32. Tách commit riêng nhưng **đi cùng PR** với thay
+  đổi contract sinh ra nó (bài học `TASK-PROG-G1-CONTRACT-REPIN-001`).
+- **Changed — `docs/02_design/PROGRAMMING_DESIGN_INDEX.md` lên `v4.2`**: đồng bộ
+  `OpenAPI v1.26.0` → `v1.27.0` ở hai dòng trạng thái hiện hành. Dòng revision
+  history giữ nguyên `1.26.0` vì đó là lịch sử, không phải trạng thái.
+- **Changed — Plan 60 §6**: `T60-016` chuyển `DONE` (**15/27**). **Mốc M3 ĐẠT** —
+  type đã sinh (không dòng nào viết tay), `contract_sync_test.go` xanh,
+  `check:programming-api` xanh (32 operation đồng bộ).
+- **Added — PGM-01 `T60-201` + `T60-205`** (`9733a37`). `resolvePrimaryCta.ts` +
+  `overviewViewModel.ts` là **hàm thuần có test riêng**, hiện thực đúng bảng năm
+  trạng thái của handoff §3. Quan trọng nhất là **nhánh thứ sáu**: thiếu dữ kiện
+  thì KHÔNG đoán CTA nào cả — khi chưa đọc được trạng thái, câu trả lời đúng là
+  im lặng chứ không phải rơi bừa vào một hành động; một nút Commission hiện ra
+  nhầm lúc là một nút nguy hiểm. `ProgramsSummaryTable` sáu cột theo D-02, **không
+  cột Task** (từ T59-402 mỗi Program tự release theo chu kỳ riêng nên Task không
+  còn là đơn vị chạy) và không cột CPU/core. Cột `Last Exec` lấy **mốc**
+  (`lastRunAtUtc`), không bao giờ lấy `lastExecNs` là **thời lượng**.
+- **Fixed — hai lỗi trong test do lượt trước để lại** (`9733a37`): một assertion
+  chết (`getByText(...).length ?? 1` luôn truthy vì `getByText` trả HTMLElement
+  không có `.length`) và một hằng khai thừa. Không xoá case nào.
+- **Added — PGM-01 `T60-202` + `T60-206`** (`7a2cd4c`). `SystemHealthHero` hợp
+  nhất bốn dữ kiện và **giữ nguyên phân biệt sống còn** giữa
+  `safeStateNoControllerOnly` (cảnh báo nhẹ, Commission là cách giải quyết, không
+  khoá Commission) và safe-state do lỗi thật (nghiêm trọng, giữ Commission khoá)
+  — khác nhau ở mức nghiêm trọng, **câu chữ** và **hệ quả vận hành**, không chỉ ở
+  màu. Kết luận tổng xếp `unknown` **trên** `good` nên màn hình không bao giờ nói
+  "ổn định" khi còn dữ kiện chưa đọc được. `QuickActions` full-width, không nút
+  nào là primary; RBAC vô hiệu hoá **kèm lý do**, dùng `aria-disabled` chứ không
+  dùng `disabled` — `disabled` gỡ nút khỏi thứ tự tab nên người dùng bàn phím sẽ
+  không bao giờ tới được chính lời giải thích viết cho họ.
+- **Added — PGM-01 `T60-203` + `T60-204`** (`2da8258`). Thẻ so sánh dùng nhãn
+  `Draft #14`/`Active #12` (D-05), không lộ UUID kể cả trong drawer; `dirty=null`
+  **không** được đọc thành "sạch" nên không thu gọn thẻ. Số thay đổi **chỉ** đến
+  từ `changes[]` của server — FE không tự diff, và ba nhánh chưa-có-số không
+  render chữ số nào.
+- **Fixed — mục cần chú ý không còn deep-link về một đích cứng** (`2da8258`).
+  Mọi mục trước đây đều nhảy về `/eng/programming/runtime`: bấm một cảnh báo về
+  ánh xạ Điểm rồi bị ném sang trang Runtime, nơi không có gì liên quan. Nay mỗi
+  mục mang một **trang chủ quản** và đích dựng từ đó; `PRG-SAFE-ACTIVE` biến thể
+  "chưa ai điều khiển" dẫn sang **Điểm & Ánh xạ** vì chỗ sửa nằm ở đó, không
+  phải Runtime. `BUG-016` trước đây chỉ sửa được phần "mục bấm được", không sửa
+  phần "bấm tới đâu".
+- **Fixed — `ProgrammingImpact` import mà không re-export** (`2da8258`), lộ ra ở
+  `npm run build` (TS2459) trong khi vitest vẫn xanh — đúng bẫy "vitest không
+  typecheck".
+- **Changed — Plan 60 §6**: `T60-201/202/203/204/206` chuyển `DONE` (**21/27**).
+- **Added — PGM-01 ráp trang + responsive `T60-205`/`T60-207`/`T60-208`**
+  (`62a9d0d`). Sáu khối đã viết xong nhưng KHÔNG khối nào được render — trang vẫn
+  là năm panel cũ. Nay ráp đủ, ma trận sáu nhánh §6 có case riêng từng nhánh.
+  Dưới 768 px bảng Programs đổi sang **thẻ gọn**: `overflow-x-auto` đã đủ để bảng
+  không đẩy cả trang tràn ngang, nhưng nó vẫn bắt người dùng 390 px cuộn ngang
+  trong một ô lồng giữa trang cuộn dọc — thao tác dễ trượt nhất trên cảm ứng.
+  Trong thẻ, tên Program **không** là nút riêng: cả thẻ đã là vùng bấm, hai điều
+  khiển chồng nhau làm cùng một việc khiến trình đọc màn hình đọc ra hai đích cho
+  một mục. **R60-02 giữ nguyên**: `OverviewPage.test.tsx` đi từ 8 lên 25 case,
+  không dòng test nào bị xoá.
+- **Added — kiểm chứng `T60-301`/`T60-302`/`T60-304`** (`6aada96`, `5372207`).
+  E2E thêm bốn case (một primary CTA, quét regex UUID toàn trang, deep-link đúng
+  trang chủ quản, Core im vẫn cho sửa nhưng khoá Commission) và **đo thật**
+  1280×750 + 390 px bằng `boundingBox()`/`scrollWidth` thay vì khẳng định bằng
+  lời. Ma trận RBAC ghi rõ ở mức **HOST/component** chứ không dựng case E2E giả:
+  mock đăng nhập trả `role: admin` cứng, một case "viewer" trên phiên admin sẽ
+  xanh mà không chứng minh gì.
+- **Fixed — hai hồi quy E2E do Plan 60 đổi shell** (`6aada96`). `e2e/programming.
+  spec.ts` đỏ 4/10 sau khi rail thay tab ngang và bottom nav rút còn 4 đích. Cả
+  hai chỗ vỡ đều là hệ quả **có chủ đích**: một case khẳng định UUID *hiện* ở mặt
+  trước (AC-PGM01-01 cố ý đảo), một case duyệt sáu nhãn trong bottom nav. Sửa
+  bằng cách giữ nguyên KHẲNG ĐỊNH, chỉ đổi chỗ kiểm.
+- **Deployed — Foxlinx, đủ bốn tầng** (2026-08-24). FE + BE Go + FW SOM (Core
+  C++) + Fake MCU (kèm iobus, netcfg) lên `SOM-DDC-24-foxlinx`. Năm service
+  `active`; `health` trả `core/io_shm/iobus/mcu_connection/plc_shm` đều `ok`.
+  FE đúng bản (`index-DPr3piBt.js` trên bo trùng hash bản dựng cục bộ, dựng bằng
+  `npm run build:release` vì cờ Programming là **build-time**). `GLIBCXX` cao
+  nhất của các binary là **3.4.29**, dưới trần 3.4.30 của bo.
+  **Bằng chứng mức TARGET**: `T60-015` trả `activeSequence: null` (không phải
+  `0`); `T60-013` trả `runtimeStateSource: UNAVAILABLE` với **mọi** số đo `null`
+  — đúng nhánh (b) của mốc M2, không giá trị cũ nào được trình bày như đang sống.
+  Chi tiết + rollback: `docs/07_records/test-evidence/fw-som/2026-08-24-foxlinx-plan60-deploy.md`.
+- **Changed — Plan 60 §6**: **26/27 `DONE`**. Còn `T60-303` (E2E real-backend)
+  ở `NOT_RUN` — Commission trên bo dừng fail-closed vì `impact.activeOverrides`
+  và `impact.cutover` đều `UNAVAILABLE` khi Core ở `targetState: UNAVAILABLE`.
+  **Không phải hồi quy do Plan 60**: log Core trước lần deploy này có **0 dòng**
+  `programming_mode=st` và mọi Project trên bo đều `activeRevisionId: null`.
+  Runbook mở khoá đã ghi trong hồ sơ evidence.
+- **Changed — gate FE xanh hoàn toàn lần đầu**: `npx vitest --run --environment
+  jsdom src` → **128 file / 1262 test, TẤT CẢ PASS, exit `0`**.
+
+
+
+
+### Plan 60 Batch 0 — dựng baseline thi hành (2026-08-23)
+
+- **Changed — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
+  (Plan 60 v1.1 → **v1.2**). Nhánh thi hành `feat/plan60-pgm01` tách từ `main`;
+  re-pin `Baseline source` `a35f578` → **`aa08ac5`** và ghi **bảng baseline đo
+  thật** vào §1 (mức HOST): ctest **1227/1227**, Go 19 package `ok`, FE unit
+  **124 file / 1161 test**, E2E mock **10/10**, contract 31 operation, cổng
+  `verify-project.sh --component layout` và `docs_iso_harness.py --expect` đều
+  PASS — exit code đọc rời cho **cả** configure lẫn build.
+- **Fixed — đính chính trần mảng `programs[]` trong bảng §6** (`T60-001..004`).
+  *Triệu chứng:* plan chỉ định `std::array<RuntimeProgramSnapshot,
+  st_sched_limits::kMaxProgramsPerTask>` (=16). *Nguyên nhân gốc:* `programs[]`
+  là danh sách **toàn hệ thống** (duyệt mọi Task theo `T60-002`), nhưng plan lại
+  lấy trần **per-task**. *Cách sửa:* đổi sang `kMaxProgramsTotal` (**=32**;
+  `st_scheduler.hpp:68`), khớp cả Rev A (`st_profile_generated.hpp:34` = 32).
+  Giữ 16 sẽ cắt im lặng một nửa cấu hình 32 Program hợp lệ — đúng điều `T60-002`
+  cấm. Ngân sách payload cập nhật ~13 KiB trên trần 64 KiB.
+- **Added — Plan 60 §6.1**: `contracts/programming/g1_contract_join_v1.json` vào
+  nhóm file **chỉ CTIO sửa**, vì pin `openapi` (`T60-016` bump `1.26.0 → 1.27.0`)
+  và pin `ipc` nằm cùng file.
+- **Verification:** mọi số dòng §1/§2/§3 mà plan trích dẫn đã đối chiếu lại tại
+  `aa08ac5` và còn đúng (`st_scheduler.cpp:829` `last_exec_ns` là **thời lượng**;
+  `scan_loop.cpp:264` còn khuyết tật `tasks().front()`; `runtime_intent.go:199`;
+  `runtime.go:136` `taskPeriodsMs`; `NavRail.tsx:210` `w-[232px]`; OpenAPI
+  `1.26.0`). Baseline được đo trên **bản xuất sạch của `aa08ac5`** để không lẫn
+  thay đổi chưa commit của phiên khác đang sửa `apps/core/**`.
+- **Housekeeping:** thu hồi ~5 GB đĩa bằng cách xoá 12 thư mục build tái tạo
+  được, không được tham chiếu ở `scripts/`/CI — trong đó 6 thư mục có
+  `CMAKE_HOME_DIRECTORY` trỏ `services/` đã xoá (`PLAN-ARCH-RESTRUCT-002`), tức
+  nguồn của bẫy "configure hỏng nhưng ctest vẫn báo pass". `build/fw` giữ nguyên.
+
+### Prompt thi hành Plan 60 bằng đội multi-agent (2026-08-23)
+
+- **Added — `docs/03_implementation/PROMPT_PLAN60_CTIO_MULTIAGENT_EXECUTION.md`**
+  (`PROMPT-PLAN60-CTIO-MULTIAGENT` v1.0). Prompt cấp quyền CTIO điều phối đội
+  multi-agent thi hành trọn 27 task của `PLAN-FE-PGM-060`: chia **5 lane**
+  (Core C++ / BE Go / FE shell / FE overview / kiểm chứng) kèm **ma trận sở hữu
+  file** một-chủ-một-file, **giao thức git một-người-commit** (chỉ CTIO chạy
+  `git add`/`commit`, cấm `git add -A` và `reset --hard`) để chặn lại đúng lỗi
+  các phiên song song cuốn commit của nhau, lịch **5 batch** suy từ đồ thị phụ
+  thuộc Plan 60 §7, **3 mốc bàn giao** (`T60-003`/`T60-013`/`T60-016`) có tiêu
+  chí chứng cứ thay vì lời khai, 7 bẫy đã dính trước đây, ma trận gate theo
+  lane và mẫu prompt con để spawn lane agent.
+  Ràng buộc tài nguyên đo thật tại `aa08ac5`: đĩa còn ~14 GB (95% đầy) và
+  `build/` đã 18 GB ⇒ **không** dùng worktree-per-lane, cách ly bằng ma trận sở
+  hữu file; `build/fw` độc quyền Lane A; Playwright chỉ một tiến trình; trần
+  **ba** lane chạy song song. Prompt cũng ghim baseline Plan 60 (`a35f578`) đã
+  cũ so với `main` hiện tại nên Batch 0 phải dựng lại baseline và đo lại số
+  trước khi giao việc.
+
+### Dọn tracker cuối Plan 59 (2026-08-23)
+
+- **Changed:** `T59-602` chuyển **PARTIAL → DONE** — phần còn lại của nó (bật
+  `SIGNATURE_REQUIRED` mặc định) chính là `T59-607`, nay đã đóng ở cả HOST và
+  TARGET. Plan 59 §6 thêm bảng đối chiếu **từng dòng** gate release với verdict
+  đã ký, để `RELEASE_READY=NO-GO` đọc được lý do ngay tại chỗ thay vì phải suy
+  từ bảng task. Manifest baseline **1.43**.
+
+### W7 — cài đè thật trên bo, V&V unified và verdict `NO-GO` (2026-08-23)
+
+- **Added — `docs/07_records/PROGRAMMING_RELEASE_RECORD_2026-08-23.md`**
+  (`PROG-RELEASE-RECORD-2026-08-23`, `T59-707`). Tổng hợp 14 cổng W7
+  (**10 PASS / 0 FAIL / 4 NOT_RUN**), 12 scenario `VS-PROG-U01..U12` (7 PASS ở
+  mức HOST, 2 PASS một phần, 3 NOT_RUN) và bảng Must. **Verdict: `NO-GO`** —
+  ba Must chưa có evidence và không được waive: physical AO/DO cho cả ST và FBD
+  (`T59-703`), soak 24 h trên target (`T59-702`), power-cut/RETAIN/LKG
+  (`T59-704`). Bảy điều kiện mở `GO` ghi trong record, gồm cả việc thay khoá
+  LAB bằng khoá hãng giữ trong HSM.
+- **Added — `docs/07_records/test-evidence/fw-som/2026-08-23-foxlinx-t59705-install-signed.md`**
+  (mức **TARGET**). Cài đè **thật** `main@29c59ec` lên bo Foxlinx: `sha256sum
+  --check` 7/7 OK, `install.sh` chạy trọn trên Buildroot, bốn dịch vụ trở lại
+  `active`, `/data/config/users.conf` không bị ghi đè. Binary cross-build
+  `-static-libstdc++` chạy được trên `GLIBCXX_3.4.30` của bo. Đường ký ADR-052
+  chạy trên phần cứng thật: compile **có** khoá thiết bị → `"integrityMode":
+  "SIGNED"`, `"signaturePresent":true`; compile **không** khoá → exit 2,
+  `ST-CLI-KEY-REQUIRED`. Core log `st_public_key=RELEASE
+  fingerprint=fdb9a30eea28b026` và `st_trusted_key_count=1`.
+- **Changed:** Plan 59 lên **v2.3** (`T59-705` PARTIAL cập nhật, `T59-707`
+  DONE với verdict NO-GO, bảng chặn W7 ghi lại điều kiện kỹ thuật của từng
+  lane); `CONTROL.md` thêm release record vào register.
+- **Ranh giới:** `T59-702` nay chặn bởi một điều kiện kỹ thuật cụ thể — chưa có
+  mật khẩu tài khoản `admin` của bo, mà đường đặt lại mật khẩu
+  (`POST /api/v1/users/{username}/reset-password`) lại **đã cần** một phiên
+  admin. Không có mật khẩu thì không Commission được 10-Program qua API, nên
+  soak không khởi động được bằng đường sản phẩm.
+
+### T59-607 — bật `SIGNATURE_REQUIRED` cho artifact Programming (2026-08-23)
+
+- **Changed — contract:** `product_profile_v2.json` **2.0→2.1**, `integrityMode`
+  `HASH_ONLY` → **`SIGNATURE_REQUIRED`**; schema đổi `const` thành enum hai giá
+  trị để đường lùi vẫn là một thay đổi contract có kiểm soát. Hằng C++/Go/TS
+  sinh lại từ cùng generator; G1 re-pin trong **cùng** change-set.
+- **Fixed — chính sách chưa từng nối tới hành vi.** `StLoaderOptions.integrity_mode`
+  viết cứng `HASH_ONLY`, nên đổi contract sẽ không đổi hành vi thiết bị. Nay mặc
+  định đọc `st_profile_integrity_mode()` từ profile sinh máy, không có nhánh
+  "cho qua" khi gặp giá trị lạ.
+- **Fixed — worker sandbox không ký được.** Ràng buộc `ST-CLI-SANDBOX` "sandbox
+  worker does not accept signing keys" có từ thời Rev A; với `ADR-052` (bo tự ký
+  artifact do bo biên dịch) nó khiến **không đường nào** sinh được artifact hợp
+  lệ. Bỏ ràng buộc, giữ nguyên thứ tự đọc khoá trước `apply_worker_sandbox()`.
+  Thiếu khoá nay báo `ST-CLI-KEY-REQUIRED` ở biên thay vì `IR-E-007` ở bước dựng
+  manifest.
+- **Fixed — `integrityMode` viết cứng ở ba nơi** (output CLI, manifest artifact,
+  kiểm envelope backend): manifest của artifact **đã ký** vẫn tự khai `HASH_ONLY`.
+  Cả ba nay lấy từ profile; manifest phản ánh đúng artifact cụ thể.
+- **Added — backend ký artifact.** `ProcessRunner.SigningKeyPath` +
+  `PROGRAMMING_SIGNING_KEY` (mặc định `/data/mkddc/keys/device.key`, đúng chỗ
+  `install.sh` provisioning). Fail-closed khi profile đòi ký mà worker không có
+  khoá; kiểm chữ ký **hai chiều**.
+- **Changed — validator G1 tách chính sách khỏi fixture.** Phép kiểm cũ buộc
+  `profile == golden_manifest == pin`; ba thứ này không cùng loại. Nay hai phép
+  kiểm riêng, cộng một bất biến mới: golden khai `HASH_ONLY` thì vùng chữ ký
+  phải còn nguyên zero (giữ fixture dual-reader của DDD §12).
+- **Fixed — `F-607-01`: trộn tên chính sách với tên trạng thái artifact.** Cột
+  `integrity_mode` của store có `CHECK constraint IN ('HASH_ONLY','SIGNED')` vì
+  nó mô tả **một artifact**; `SIGNATURE_REQUIRED` là tên **chính sách** ở
+  profile. Ghi tên chính sách vào manifest/output làm `INSERT` hỏng ở tầng DB và
+  Check kẹt `RUNNING` tới hết lease. Nay artifact khai `SIGNED`/`HASH_ONLY`,
+  backend suy giá trị mong đợi bằng `expectedArtifactIntegrityMode()`.
+- **Fixed — `F-607-02`: worker Check nuốt lỗi.** `CheckService.run` bỏ lỗi của
+  `ProcessNext` bằng `_`, nên một Check hỏng giữa chừng nằm im tới hết lease mà
+  không dòng log nào nói lý do — chẩn đoán phải dump goroutine. Nay có
+  `WARN programming_check_worker err=...`.
+- **Verification (HOST):** `ctest` **1227/1227**; `go vet` + `go test ./... -count=1`
+  PASS; `--component layout` PASS; `--component frontend` PASS;
+  `python3 -m unittest tests.integration.test_release_dryrun` **12/12 OK**
+  (thêm 2 ca: đường khoá nối liền provisioning→compiler→Core, và profile phát
+  hành đòi chữ ký).
+- **Migration:** artifact chưa ký **không nạp được nữa**, kể cả Active và LKG —
+  đường đi là **re-commission tường minh** (5 bước, bảng trong Plan 59 §3.7),
+  đường lùi là profile về `HASH_ONLY` + `rollback.sh`. Chưa chạy trên bo thật;
+  phần đó thuộc `T59-705`.
+
+### Hợp nhất W5 + W6 và mở đường khoá phát hành thật (2026-08-23)
+
+- **Fixed — `F-W6-MERGE-01`: đường dựng bản RELEASE chưa bao giờ tồn tại.**
+  `st_public_key.hpp` yêu cầu build phát hành truyền
+  `-DMKDDC_ST_PUBLIC_KEY_HEX=<64 hex>`, nhưng **không file CMake nào** biến biến
+  đó thành compile definition — `#ifdef MKDDC_ST_PUBLIC_KEY_HEX` chưa bao giờ
+  đúng, nên mọi binary từng dựng (kể cả bản đã deploy lên bo) đều nhúng **khoá
+  test** cam kết trong repo. CMake chỉ in `Manually-specified variables were not
+  used by the project`. Hệ quả: gate chặn khoá test của `T59-602` chặn đúng,
+  nhưng vì không có đường tạo bản `RELEASE`, cách duy nhất để cổng `release`
+  xanh là `MKDDC_ALLOW_TEST_KEY=1` — tự tắt cái gác đang canh. Sửa:
+  `apps/core/CMakeLists.txt` nối biến thành `target_compile_definitions` kèm
+  kiểm 64 ký tự hex ngay tại configure; `platform/packaging/build-release.sh`
+  đọc khoá công khai ngoài cây nguồn (`MKDDC_RELEASE_KEY_DIR`, mặc định
+  `~/.config/mkddc/release-signing/release.pub`). `provenance.json` nay ghi
+  `"st_public_key_mode": "RELEASE"` + fingerprint.
+- **Fixed — `F-W6-MERGE-02`:** guard "một helper đăng nhập duy nhất" của
+  `T59-604` bắt nhầm `programming-real.spec.ts`, vốn đăng nhập backend Go thật
+  bằng JWT thật. Guard nay loại trừ đúng `MKDDC_E2E_REAL_SPEC`.
+- **Fixed — `F-W6-MERGE-03`:** helper dùng chung `e2e/helpers/session.ts` được
+  ghép thêm lớp chống `net::ERR_NETWORK_CHANGED` của W5 — nạp lại đúng một lần
+  và chỉ khi đã ghi nhận abort tầng mạng của tài nguyên tĩnh.
+- **Changed:** hợp nhất `feat/t59-w6-hardening` (18 commit: `T59-601..606`,
+  `ADR-052`, `T59-705` diễn tập trên bo) vào `main` đã có W5; sáu chỗ va nhau
+  được hoà giải theo hướng **giữ cả hai** ở `verify-project.sh` (cách ly rỗng +
+  guard tự hết hạn của W6, `MKDDC_E2E_REAL_SPEC` của W5) và ở
+  `bootstrap/main.cpp` (`StSignalBus` của W5 + tập khoá tin cậy ADR-052).
+- **Security:** khoá ký đang dùng là **khoá LAB** (Ed25519, khoá riêng `0600`
+  ngoài repo). Bản thương mại phải dùng khoá hãng giữ trong HSM; fingerprint
+  nằm trong `provenance.json` nên hai thứ không lẫn được.
+- **Verification (HOST):** `--component release` PASS (10 test đóng gói OK,
+  `sha256sum --check` OK, `st_public_key_mode=RELEASE`
+  fingerprint `fdb9a30eea28b026`); `--component e2e` PASS **79/79** trong 30,0 s.
+
+### Số đo cổng W6 sau đợt 2026-08-22
+
+`MKDDC_ALLOW_TEST_KEY=1 python3 scripts/verify_wave_gates.py --wave W6` →
+**9 PASS / 0 FAIL / 0 NOT_RUN trên 9 cổng**, exit `0`:
+`layout` 3,0s · `cpp` 16,1s · `go` 40,9s · `frontend` 52,0s · `e2e` 29,4s ·
+`firmware` 0,1s · `release-package` 33,1s · `docs` 0,1s · `candidate-pin` 0,0s.
+`ctest` full **1223/1223**. Mọi dòng là **HOST/LOCAL** — không phải GitHub CI,
+không phải target, không phải HIL.
+
+Hai cổng đỏ trên đường tới số đo này, cả hai đều đúng ý đồ và được sửa chứ không
+được nới: guard đóng gói `T59-605` bắt `install.sh` sau khi đường dẫn bị tham số
+hoá (dạy guard đọc cả hai dạng, giữ nguyên bất biến), và G1 contract join bắt mã
+lỗi mới chưa phát hành lại bản ghim (re-pin, không đổi validator).
+
+### T59-604 — Flake e2e là spec đua với redirect, không phải đói CPU (2026-08-22)
+
+- **Đính chính chẩn đoán ngày 2026-08-21.** Kết luận "đói CPU" là **sai**, và bản
+  vá theo nó có hai lỗ: (1) phép chờ `toBeEditable` 60 s nằm trong test có ngân
+  sách 30 s nên không bao giờ chạy hết hạn của chính nó; (2) helper đăng nhập
+  được chép tay ở **bảy** spec, bản vá chỉ áp cho một — lần chạy kế tiếp chỉ đổi
+  chỗ đỏ sang `pa3-a11y.spec.ts`.
+- **Fixed — nguyên nhân thật, đọc từ trace.** Sau cú bấm "Tiếp tục chỉnh sửa",
+  URL thật là `/eng/programming/projects/{id}/programs`, còn spec chờ `.../design`
+  — mà `design` là **lối vào cũ W5 đã đổi thành redirect sang `programs`**. Spec
+  chờ một trạng thái TRUNG GIAN của redirect: máy chậm thì kịp thấy và xanh, máy
+  nhanh thì treo tới hết giờ. Sửa: chờ đích cuối (`programming.spec.ts`).
+- **Changed — một helper đăng nhập duy nhất.** `apps/web-ui/e2e/helpers/session.ts`
+  thay bảy bản sao; cổng `e2e` tự kiểm và ĐỎ nếu spec nào định nghĩa lại
+  `async function login` (`scripts/verify-project.sh`).
+- **Changed — e2e phục vụ bản ĐÃ BUILD** (`vite preview` + script `build:e2e`)
+  thay vì dev server: bỏ hẳn lớp biên dịch-theo-yêu-cầu vốn tính vào ngân sách
+  thời gian của test chạm route đầu tiên. `preview` được cấp cùng proxy với dev
+  để hai đường phục vụ không cho ra hai hành vi mạng khác nhau (`vite.config.ts`).
+  Ngân sách một test nâng 30 → 60 s; `retries` giữ `0`.
+- **Verification (đo trong phiên, không dẫn số cũ):** cổng `scripts/verify-project.sh
+  --component e2e` chạy **5 lần LIÊN TIẾP** → `79/79 passed`, exit `0`, 28–29 s mỗi
+  lần. Trước bản sửa: 64 / 79 / 79 / 78+1F / 78+1F, 78–88 s.
+
+### T59-705 — Diễn tập trên bo thật, và một sự cố do chính bài diễn tập (2026-08-22)
+
+- **Added — bằng chứng TARGET DRY-RUN** tại
+  `docs/07_records/test-evidence/fw-som/2026-08-22-foxlinx-t59705-rehearsal.md`:
+  cross-build aarch64, chạy trọn cài mới → nâng cấp → rollback trên chính bo
+  Foxlinx với `MKDDC_INSTALL_ROOT`. Trả lời câu mà diễn tập trên host không trả
+  lời được: script chạy đúng trên Buildroot (BusyBox `adduser`/`addgroup`, không
+  có `getent`/`useradd`).
+- **Sự cố, ghi đầy đủ:** lần chạy ĐẦU làm **dừng `mkddc-iobus` trên bo thật** ~50
+  giây. Wrapper `systemctl` của chế độ diễn tập bỏ sót các lời gọi nằm sau `&&`,
+  và trả `0` cho `is-enabled`, nên `... && systemctl restart mkddc-pty` chạy
+  THẬT; PTY biến mất và iobus thoát theo. Dịch vụ được bật lại ngay khi phát
+  hiện.
+- **Fixed — hai lỗi cùng nguồn gốc.** (1) Mọi lời gọi nay đi qua wrapper, và
+  wrapper trả **1** cho truy vấn trạng thái (`is-enabled`/`is-active`/
+  `is-failed`) để không nhánh phụ nào được kích hoạt — nhưng giữ **0** cho `show`
+  vì dưới `set -e`, phép gán `pid="$(... show ...)"` trả khác 0 sẽ giết chính
+  script. (2) Thân wrapper trong `rollback.sh` đã bị phép thay tự động biến thành
+  `sysctl_do "$@"` — **hàm gọi chính nó**, tức rollback THẬT trên bo sẽ đệ quy vô
+  hạn. Lỗi này chưa bao giờ chạy vì mọi lần trước đều ở chế độ diễn tập.
+- **Added — 2 test** đọc thẳng mã nguồn khoá cả ba điều kiện (không còn
+  `systemctl` ngoài wrapper; truy vấn trả "không"; wrapper không tự gọi).
+- **Verification:** chạy lại trọn ba kịch bản trên bo — mốc
+  `ExecMainStartTimestamp` của `mkddc-iobus`/`mkddc-core`/`mkddc-pty` **không
+  đổi**, ba dịch vụ `active`; `test_release_dryrun` **10/10 OK**.
+
+### T59-606 — Diễn tập cài/nâng cấp/rollback, và một đường lùi nửa vời (2026-08-22)
+
+- **Added — `MKDDC_INSTALL_ROOT`** cho `install.sh` + `rollback.sh`: ghi vào cây
+  giả, bỏ thao tác cần quyền hệ thống (user/group, systemctl). Ba thao tác cuối
+  của một bản phát hành — cài lên bo trắng, nâng cấp bo đang chạy, lùi khi bản mới
+  hỏng — từ nay kiểm được **bằng máy**, không phải bằng cách đọc script rồi tin.
+- **Fixed — `rollback.sh` không khôi phục `mkddc-st-package`.** Sau khi lùi, bo
+  giữ **writer artifact của bản MỚI** trong khi compiler/loader/Core đã về bản cũ;
+  hai nửa của cùng một định dạng gói lệch phiên bản, và chỗ hỏng chỉ lộ ra ở lần
+  Commission kế tiếp. Cùng lớp lỗi mà `T59-605` vừa vá cho `install.sh`, lần này
+  nằm ở đường lùi — đúng nơi không còn đường lùi nào khác.
+- **Added — `tests/integration/test_release_dryrun.py`** (6 test): cài mới đủ
+  binary/metadata/cờ Programming và `runtime-checksums` khớp file thật; nâng cấp
+  giữ `JWT_SECRET`, cấu hình người vận hành đã sửa và artifact đã commission, đồng
+  thời chụp snapshot đúng bản đang chạy; rollback khôi phục **đủ 7 binary** và
+  không mất dữ liệu. Nối vào cổng `release`.
+- **Verification:** `python3 -m unittest tests/integration/test_release_dryrun.py`
+  → **6/6 OK**. **Kiểm chứng test bằng cách gỡ bản vá**: đỏ đúng dòng
+  `rollback KHÔNG khôi phục usr/sbin/mkddc-st-package`, khôi phục vá → xanh lại.
+  Gói dựng bằng `verify-project.sh --component release` (exit 0, cần
+  `MKDDC_ALLOW_TEST_KEY=1` cho bản lab — cổng khoá TEST của `T59-602` chặn đúng).
+
+### T59-602 — Ký artifact bằng khoá của chính bo: quyết định + hiện thực (2026-08-22)
+
+- **Added — `docs/adr/ADR-052-programming-ky-artifact-bang-khoa-thiet-bi.md`**
+  (Accepted). Đóng câu hỏi mở §2/§3 của `DDD-ARTIFACT-TRUST-PROG-001`: artifact do
+  hãng phát hành ký bằng **khoá hãng** lúc build; artifact do **bo tự biên dịch**
+  ký bằng **khoá thiết bị** sinh tại chỗ lúc provisioning, ngay sau khi Check
+  PASSED. Core tin một TẬP khoá gồm khoá hãng (có cửa sổ overlap) + khoá công khai
+  của chính bo đó.
+- **Vì sao không chọn hai phương án cũ:** (a) ký lúc release giả định Program tồn
+  tại trước khi phát hành — sai với sản phẩm cho khách tự viết chương trình; (b)
+  service ký từ xa đặt phụ thuộc mạng vào giữa đường Commission, và buộc phải chọn
+  giữa "mất mạng thì chặn điều khiển" hay "mất mạng thì tự hạ mức bảo vệ".
+- **Ranh giới ghi thẳng trong ADR:** khoá riêng thiết bị bảo vệ bằng quyền file
+  `0600` vì bo chưa có secure element — nâng chi phí tấn công từ "ghi được một
+  file" lên "chiếm được quyền service", **không** chống được kẻ đã có root.
+- **Added — provisioning khoá thiết bị.** `mkddc-st-compile --gen-device-key <dir>`
+  sinh cặp Ed25519, ghi `device.key` bằng `O_EXCL` + mode `0600` ngay từ lúc tạo
+  (ghi rồi `chmod` sau để lại một khe thời gian khoá đọc được bởi mọi tiến trình),
+  và **từ chối ghi đè** khi đã có khoá — sinh lại làm mọi artifact đang chạy mất
+  hiệu lực cùng lúc, gồm cả LKG. `install.sh` provisioning một lần, nhánh nâng cấp
+  giữ nguyên khoá cũ.
+- **Added — Core tin khoá của chính bo.** `mkddc-core --st-trusted-key FILE` (tối
+  đa 4) nạp khoá vào tập tin cậy bên cạnh khoá hãng nhúng trong build; khoá
+  thiếu/sai định dạng là **lỗi cấu hình dừng hẳn**, không lặng lẽ chạy với ít khoá
+  hơn — đó là cách một bo tự hạ mức bảo vệ mà không ai biết. Unit
+  `mkddc-core.service` nạp sẵn `/data/mkddc/keys/device.pub`.
+- **Added — 3 test** khoá hai bất biến của mô hình: artifact ký bằng khoá **bo
+  khác** KHÔNG được nạp (nếu không, "khoá thiết bị" chỉ là khoá dùng chung đổi
+  tên), và khoá hãng + khoá thiết bị **cùng sống trong một tập tin cậy** (nếu
+  không, bật SIGNED sẽ chặn đúng một trong hai nguồn artifact hợp lệ).
+- **Added — mã lỗi `ST-CLI-KEY-EXISTS`** → `PRG-ERR-CONFLICT-001` (đã tồn tại, không
+  phải hạ tầng hỏng); catalog 125 detail code.
+- **Verification:** `core_tests --gtest_filter=StArtifactTrust.*` → **10/10 PASS**;
+  `--gen-device-key` chạy thật: `device.key` mode `0600`, lần chạy thứ hai thoát `2`
+  với `ST-CLI-KEY-EXISTS`.
+- **Còn lại, có tên và có chủ (`T59-607`):** bật `SIGNATURE_REQUIRED` mặc định đổi
+  `integrityMode` trong **profile contract** (v2.0→v2.1), kéo theo re-pin G1 +
+  golden manifest và migration cho artifact đang chạy. Đó là một task riêng có kế
+  hoạch lùi, không phải một dòng sửa cuối phiên.
+
+### T59-604 — Flake e2e không phải lỗi spec, là đói CPU (2026-08-21)
+
+- **Phạm vi:** `apps/web-ui/e2e/point-names.spec.ts`, Plan 59 §3.
+- **Root cause:** mọi lần đỏ đều rơi vào `point-names.spec.ts`, chết ở
+  `locator.fill` sau 30 s. Đối chiếu thời điểm: các lần đỏ **trùng đúng lúc một
+  build song song chiếm hết lõi CPU** — vite biên dịch theo yêu cầu lâu hơn
+  timeout của cả test. Bốn lần chạy khi máy rảnh: 79/79 mỗi lần.
+- **Fixed:** helper đăng nhập chờ ĐIỀU KIỆN (`toBeEditable`, 60 s) thay vì đua
+  với dev server. Hết hạn ở đó nay nói "trang chưa sẵn sàng", không nói "điền
+  không được" — hai nguyên nhân khác nhau, hai cách sửa khác nhau.
+- **Kiểm chứng:** spec 18/18 hai lần liên tiếp **khi máy đang tải nặng** (load
+  ~10). Chuỗi 5 lần chạy sạch liên tiếp vẫn cần máy không chia sẻ nên `T59-604`
+  giữ `PARTIAL` — đo trên máy có phiên khác build là đo nhiễu, không đo hệ.
+
+### T59-606 / T59-604 — Binary không dựng lại được; cách ly e2e đã cũ (2026-08-21)
+
+- **Phạm vi:** `CMakeLists.txt`, `scripts/verify_release_reproducible.py` (mới),
+  `scripts/generate_release_sbom.py` (mới), `platform/packaging/build-release.sh`,
+  `scripts/verify-project.sh`, `tests/integration/test_release_packaging_guard.py`,
+  Plan 59 §3/§3.7.
+- **Fixed — `mkddc-iobus` không tái lập:** build hai lần từ cùng mã nguồn vào hai
+  thư mục cho ra hai file khác nhau; nguyên nhân là đường dẫn tuyệt đối của mã
+  `bacnet-stack` (FetchContent) nhúng vào binary qua `__FILE__`. Hệ quả nặng hơn
+  hash lệch: gói phát hành mang đường dẫn máy người đóng gói và bên thứ ba không
+  dựng lại được để đối chiếu. Vá bằng `-ffile-prefix-map`; **thứ tự nguồn trước,
+  build sau** vì build dir lồng trong source dir (bản vá đầu đặt ngược nên vẫn
+  lệch). Kết quả: **7/7 artifact tái lập**.
+- **Added:** `verify_release_reproducible.py` (build hai lần, so SHA-256, in
+  variance kèm nguồn gây khác biệt) và SBOM 92 component sinh cùng gói phát hành,
+  mỗi dòng ghi `resolvedFrom` để không nói dối về thư viện hệ thống của board.
+- **Fixed — cách ly e2e đã cũ:** `point-names.spec.ts` bị giữ ngoài cổng vì từng
+  hỏng; chạy lại **18/18 PASS**. Cách ly cũ giấu luôn một spec đã lành khỏi cổng,
+  nên mọi hồi quy sau đó trong file ấy không ai bắt. Danh sách nay rỗng và cổng
+  **tự kiểm**: spec còn trong cách ly mà PASS thì cổng đỏ kèm yêu cầu gỡ.
+- **Chưa đạt:** 5 lần chạy e2e liên tiếp cho 64/79/79/78+1F/78+1F — có flake
+  thật, chưa khoanh được nguyên nhân; `T59-604` giữ `PARTIAL` và `retries` vẫn
+  `0` (bật retry sẽ biến chính flake này thành xanh). Dry-run cài mới/nâng cấp/
+  rollback cần `install.sh` nhận DESTDIR — chưa làm.
+
+### T59-603 — Ma trận security sinh từ bảng route; audit chain lần đầu bị thử thật (2026-08-21)
+
+- **Phạm vi:** `apps/web-api/internal/programming/transport/http/security_matrix_test.go` (mới),
+  `apps/web-api/internal/programming/store/audit_chain_test.go` (mới), Plan 59 §3/§3.7.
+- **Added — RBAC ma trận sinh từ `routeDefinitions`:** 30/30 route kiểm
+  chưa-xác-thực → 401 với handler **không được gọi**; 14/14 route mutation kiểm
+  viewer → 403; route đọc không được đòi hơn viewer. Chép tay danh sách case
+  nghĩa là route mới không có ai phủ — cùng lý do đã dùng cho corpus ở T59-601.
+- **Added — audit chain bị thử bằng chuỗi HỎNG:** `VerifyAuditChain` trước đây
+  chỉ từng chạy trên chuỗi lành (một hàm luôn trả `nil` cũng qua). Nay tách hai
+  lớp: trigger DB chặn UPDATE/DELETE; và khi gỡ trigger (kẻ có file DB) thì sửa
+  actor hoặc xoá bản ghi giữa chuỗi phải làm chuỗi gãy.
+- **Added — đồng thời:** 8 goroutine cùng idempotency key → đúng 1 Project, 1
+  dòng audit, chuỗi không gãy.
+- **Kiểm chứng:** `go vet ./...` + `go test ./... -count=1` PASS; mutation check
+  hạ một route mutation xuống viewer làm test đỏ đúng dòng.
+
+### T59-605 — Gói phát hành thiếu `mkddc-st-package`; Programming bật đủ hai nửa (2026-08-21)
+
+- **Phạm vi:** `platform/packaging/{install.sh,build-release.sh}`,
+  `tests/integration/test_release_packaging_guard.py`, Plan 59 §3/§3.7,
+  `docs/07_records/test-evidence/fw-som/2026-08-21-foxlinx-w6-deploy.md` (mới).
+- **Fixed — binary sinh artifact không được cài:** BE gọi
+  `/usr/sbin/mkddc-st-package` ở bước Commission; binary được build và có test
+  riêng nhưng `install.sh` chưa bao giờ cài, `checksums.sha256` cũng không phủ.
+  Kiểm trên board Foxlinx: đường dẫn **không tồn tại** — một bo cài từ gói phát
+  hành đi trọn Draft → Check rồi hỏng ở Commission. Nay cài + đưa vào cả
+  `checksums.sha256` lẫn `runtime-checksums.sha256` + `--version` sanity.
+- **Fixed — Programming chỉ bật một nửa:** FE bật lúc build, BE bật bằng
+  `PROGRAMMING_REV_A`. Gói cũ chỉ có nửa FE, nên bo hiện đủ bốn workspace mà mọi
+  endpoint trả 404. `install.sh` nay ghi cờ, **kèm nhánh riêng cho bo nâng cấp**
+  (file env đã tồn tại nên khối khởi tạo lần đầu không chạy).
+- **Added:** 3 guard đóng gói mới (packager được cài + có trong checksums; cờ
+  Programming ở cả hai nhánh; cổng khoá TEST thực sự `exit 1`). 6/6 PASS.
+- **Kiểm chứng target:** deploy thật lên `SOM-DDC-24-foxlinx` — cross-build
+  aarch64 (`-static-libstdc++`, không dính GLIBCXX), snapshot rollback trước khi
+  ghi đè, ba service `active`, log core hiện `program_hold_ttl_ms=60000` (ADR-051)
+  và `CRITICAL st_public_key=TEST` (T59-602), `/api/v1/programming/projects` trả
+  **401** thay vì 404 (route có, cờ ON).
+
+### T59-602 — Tin cậy artifact: cổng khoá TEST và rotation có overlap (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/{st_loader.hpp,st_loader.cpp,st_public_key.hpp,st_public_key.cpp}`,
+  `apps/core/bootstrap/main.cpp`, `platform/packaging/build-release.sh`,
+  `apps/core/application/st/tests/test_st_artifact_trust.cpp` (mới), Plan 59 §3/§3.7.
+- **Fixed — nguyên tắc không có cổng nào đọc:** `st_public_key_is_test_key()` tồn
+  tại từ lâu nhưng **không call site nào** gọi, nên "build release phải truyền
+  `-DMKDDC_ST_PUBLIC_KEY_HEX`" chỉ là một câu trong tài liệu. Khoá TEST được cam
+  kết vào repo có chủ ý (ai cũng có khoá riêng tương ứng) nên nó có thể lặng lẽ
+  ra hiện trường, và khi đó "artifact có chữ ký" không chứng minh được gì. Nay:
+  `mkddc-core --st-key-info` in fingerprint + mode; bootstrap log **CRITICAL** khi
+  chạy khoá TEST; `build-release.sh` **chặn** đóng gói, lab mở bằng
+  `MKDDC_ALLOW_TEST_KEY=1` và cờ đó được ghi vào `provenance.json`.
+- **Fixed — rotate khoá sẽ tự chặn đường lùi:** loader chỉ nhận một khoá, nên đổi
+  khoá tức thời từ chối mọi artifact ký bằng khoá cũ — kể cả **LKG**, bản duy
+  nhất để lùi khi bản mới hỏng. Nay `StLoaderOptions` nhận **tập** khoá tin cậy
+  (trần 4) cho cửa sổ overlap; `StLoadedProgram.verified_public_key` ghi khoá đã
+  tin bản đó để audit trả lời được "còn bao nhiêu artifact sống nhờ khoá cũ".
+- **Added:** 7 test đi trọn vòng đời tin cậy — ký hợp lệ, artifact không ký bị từ
+  chối ở `SIGNATURE_REQUIRED`, sửa byte (`kBadHash`), **ký lại bằng khoá lạ sau
+  khi tính lại hash** (`kBadSignature` — đúng mối đe doạ mà `HASH_ONLY` không
+  chặn), rotation overlap giữ cả cũ lẫn mới, rollback về LKG ký khoá cũ, đóng cửa
+  sổ thì khoá cũ hết hiệu lực.
+- **Còn chặn (không phải thiếu mã):** bật `SIGNATURE_REQUIRED` ở production cần
+  Security + Product chốt **ký ở đâu** và **khoá riêng nằm ở đâu** —
+  `DDD-ARTIFACT-TRUST-PROG-001` §2/§3 cố ý để mở vì câu trả lời đổi trực tiếp UX
+  "biên dịch ngay trên board".
+- **Kiểm chứng (host/local):** `ctest` **1220/1220**; cổng đóng gói chặn đúng khi
+  binary nhúng khoá TEST.
+
+### T59-601 — Corpus ST↔FBD phủ 100% Control Library; fuzz FBD vào CI (2026-08-21)
+
+- **Phạm vi:** `contracts/programming/fbd/{equivalence_v1.json,manifest.json}`,
+  `apps/core/application/st/tests/test_st_library_conformance.cpp` (mới),
+  `apps/core/application/st/tests/test_st_fbd_compile.cpp`,
+  `apps/core/application/st/st_fbd_compile.{hpp,cpp}`,
+  `scripts/verify_programming_fbd_contract.py`, `.github/workflows/build-and-test.yml`,
+  Plan 59 §3/§3.7.
+- **Added:** corpus phủ **40/40 entry** registry — 35 cặp stateless (thêm `SQRT`
+  + 14 entry chuyển kiểu) và 5 trace nhiều chu kỳ cho `TON`/`TOF`/`R_TRIG`/
+  `F_TRIG`/`PID`. Phép kiểm phủ tính **từ registry machine-readable** và soát hai
+  chiều, nên entry mới không có vector sẽ đỏ thay vì im lặng không được chạy.
+- **Fixed — PID chưa từng chạy qua đường FBD:** `compile_fbd_source` thiếu
+  affordance `enforce_review_gate` mà đường ST đã có, nên bộ conformance không
+  dựng nổi PID bằng FBD — chính bộ conformance là thứ dựng evidence để mở gate
+  đó. Thêm overload nhận `StCompileOptions`; production giữ gate BẬT và có test
+  khoá (`ProductionFbdEntryPointStillBlocksReviewGatedEntries`).
+- **Fixed — verifier hợp đồng FBD thiếu `SQRT`** trong danh sách `PURE_FUNCTIONS`
+  chép tay (cùng loại drift mà `st_fbd_model.cpp` đã sửa bằng cách sinh từ registry).
+- **Fixed — harness fuzz FBD không job CI nào chạy:** `fuzz_st_fbd_model` có sẵn
+  nhưng job `fuzz-smoke` chỉ build parser + loader. Đồ thị FBD là input thù địch
+  y hệt source ST/artifact; nay chạy đủ ba harness, seed từ golden thật.
+- **Changed:** bỏ ghim "đúng 20 cặp" ở test và ở verifier — ghim con số làm corpus
+  không lớn theo registry. Manifest FBD thêm `equivalenceStateTraceCount`.
+- **Kiểm chứng (host/local):** `ctest` **1213/1213**;
+  `verify_programming_fbd_contract.py` PASS; `verify-project.sh --component layout`
+  PASS; `docs_iso_harness.py --expect` PASS.
+### Đóng sổ Plan 59 W5 — hai finding chặn cổng, tám cổng HOST xanh (2026-08-23)
+
+- **Fixed — `apps/core/application/st/st_scheduler.cpp` không biên dịch được
+  (`F-W5-CLOSE-01`).** `stage_activation` đã tách thành hai overload nhưng thân
+  hàm của overload nhận `StProgramInstance*` vẫn đọc `instance_id` — biến chỉ có
+  ở overload nhận `const std::string&`. `g++` báo
+  `error: 'instance_id' was not declared in this scope` tại dòng `292` và `328`.
+  Hai cổng đỏ theo: `cpp` FAIL sau 6,1 s và `e2e-real` FAIL sau 3,1 s (webServer
+  của lane real-backend dựng `mkddc-programming-core-sim` từ cùng source). Sửa
+  bằng `p->instance_id`. Đây là bằng chứng số đo `ctest 1211/1211` ghi ở
+  `T59-504` chưa được đo lại sau lần sửa scheduler cuối.
+- **Fixed — cổng `e2e` đỏ vì helper đăng nhập coi sự kiện `load` là "ứng dụng đã
+  mount" (`F-W5-CLOSE-02`).** `pa3-dashboard.spec.ts:238` timeout 30 s tại
+  `locator.fill`. Trace lần đỏ: sáu request module bị `net::ERR_NETWORK_CHANGED`
+  trong 65 ms sau `page.goto('/login')` nên React không mount, nhưng
+  `goto(waitUntil:'load')` vẫn trả về bình thường. Repro tất định bằng
+  `route.abort` đúng một module. Helper nay chờ điều kiện mount thật và **chỉ**
+  điều hướng lại khi đã ghi nhận abort tầng mạng của tài nguyên tĩnh; abort dai
+  dẳng hoặc app hỏng vẫn FAIL (21,0 s / 10,3 s) nên acceptance không bị nới.
+  Bảy spec anh em còn dùng helper cũ — gom helper dùng chung thuộc `T59-604`.
+- **Changed — hồ sơ:** Plan 59 lên **v2.2** (mục §3.6 "Đóng sổ W5" + bảng số đo
+  tám cổng), `CONTROL.md` lên **1.1**, manifest baseline lên **1.37** (re-pin
+  dòng 1/4/6/13/14/15 kèm đánh giá impact — 22/22 risk giữ Open, `D/I/T/P/R` của
+  Trace không đổi).
+- **Verification (mức HOST, một lượt `scripts/verify-project.sh --wave W5`):**
+  `layout` PASS 3,2 s · `cpp` PASS 17,0 s (**ctest 1211/1211**) · `go` PASS
+  37,7 s · `frontend` PASS 54,4 s · `e2e` PASS 53,0 s (**61/61**, 8 spec) ·
+  `e2e-real` PASS 15,5 s (**1/1**) · `docs` PASS 0,1 s · `candidate-pin` PASS
+  sau khi phát hành manifest 1.37 (16/16 khớp). Tổng **8/8 PASS**. Đây là
+  HOST/LOCAL, không phải GitHub CI, target hay HIL; `RELEASE_READY` giữ `NO-GO`.
+
+### Plan 60 v1.1 — chốt 7/7 quyết định (2026-08-23)
+
+- **Changed — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
+  lên v1.1, trạng thái `Draft` → **`PLAN_READY`**. Bảy quyết định D-01..D-07 đã chốt,
+  mọi task rời trạng thái `DECISION`; 27 task ≈ 34,5 người-ngày.
+- **Hai phát hiện khi review làm ĐỔI quyết định so với bản nháp:**
+  1. `StScheduler::start()/stop()/disable()` đổi trạng thái **đồng bộ, tức thì**
+     (`apps/core/application/st/st_scheduler.cpp:575,593,615`) — không có pha trung
+     gian; và BE đã ghi rõ điều này từ trước: *"Giữ STARTING/STOPPING sau OK sẽ làm
+     UI kẹt vĩnh viễn ở một chuyển tiếp không hề tồn tại"*
+     (`apps/web-api/internal/programming/application/runtime_intent.go:199-201`).
+     ⇒ **Loại** ánh xạ `ACTIVE → STARTING` của bản nháp Plan 60 v1.0.
+  2. `last_exec_ns` của Core là **THỜI LƯỢNG** một lần chạy
+     (`wall_clock_() - program_start`, `st_scheduler.cpp:829`), **không phải mốc thời
+     gian**. Cột `Last Exec` của thiết kế là mốc thời gian ⇒ `T60-001/002` phải thêm
+     trường `last_run_mono_ns` riêng, BE quy đổi sang UTC bằng mốc neo
+     monotonic/UTC sẵn có của historian.
+- **D-01 chốt `focus mode`** (rail Programming 220 px **thay** `NavRail` toàn cục
+  trong `/eng/programming`, bắt buộc mục `← Thoát Lập trình`). Lý do quyết định là
+  ngân sách ngang đo thật: `NavRail` rộng `232 px` (`NavRail.tsx:209-211`), để hai
+  rail thì ở 1280 px chỉ còn 828 px, và PGM-02 (cây POU 220 + inspector 280) sẽ chỉ
+  còn ~328 px cho editor — không dùng được. `NAV_GROUPS` không đổi nên `ADR-032` và
+  hợp đồng route↔menu không bị động tới.
+- **D-07 chốt bảng ánh xạ 11 → 7 trạng thái** (§4.1): `STOPPED`/`ACTIVE`/`ROLLED_BACK`
+  → `WAITING` (cả ba đều được `start()` chấp nhận nên là trạng thái **nghỉ**, không
+  phải lỗi); `REJECTED` → `FAULTED` (activate thất bại và không có gói cũ,
+  `st_scheduler.cpp:705`); `EMPTY/STAGED/VALIDATED/READY` → `UNKNOWN`; giá trị ngoài
+  bảng → `UNKNOWN` fail-closed. `STARTING`/`STOPPING` **không bao giờ được sinh ra**.
+- **D-04 chốt công thức `health`** 7 điều kiện xét theo thứ tự (§4.2), `health` để
+  **nullable** cho Program không chạy thay vì bịa thêm giá trị enum. Không dùng
+  `missedReleaseCount` tuyệt đối (bộ đếm tích luỹ sẽ ghim Program ở `DEGRADED` vĩnh
+  viễn sau một lần lỡ nhịp) ⇒ thêm `consecutive_missed_release`, **phép đo mới duy
+  nhất** của Plan này, đặt cùng chỗ đang cộng `missed_release_count`
+  (`st_scheduler.cpp:105-118`).
+- **Verification:** `python3 scripts/docs_iso_harness.py --expect` exit **0**; kiểm
+  27 ID task không có tham chiếu chết.
+
+### Plan 60 — FE theo gói Handoff v2.1: shell dùng chung + PGM-01 Overview (2026-08-23)
+
+- **Added — `docs/03_implementation/60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md`**
+  (`PLAN-FE-PGM-060` v1.0, Draft — chờ duyệt). Lập plan triển khai FE theo gói
+  `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/` (README shell contract +
+  `PGM-01_OVERVIEW_FE_HANDOFF.md` + mockup `assets/PGM-01_overview.png`). Phạm vi:
+  shell dùng chung và **PGM-01 Overview trọn vẹn**; PGM-02..06 ngoài phạm vi.
+  Plan **bổ sung** Plan 59 chứ không thay thế — packaging/provenance/target/HIL và
+  `RELEASE_READY` vẫn thuộc Plan 59 W6/W7.
+- **Đối chiếu As-Built tại `a35f578`:** shell hiện dùng tab ngang (handoff yêu cầu
+  rail dọc 220 px), thanh context cao ~76 px không sticky (yêu cầu 36–40 px sticky)
+  và **hiện thẳng revision UUID** — vi phạm `AC-PGM01-01`; Overview thiếu bốn khối
+  (`SystemHealthHero`, `DraftActiveCompareCard`, `ProgramsSummaryTable`,
+  `QuickActions`), đang có **hai** nút primary cùng lúc — vi phạm `AC-PGM01-05`;
+  mọi mục "cần chú ý" deep-link về cùng một đích `/runtime`; bottom nav mobile 6
+  đích thay vì tối đa 4.
+- **Lỗ hổng dữ liệu chặn bảng Programs của mockup, phân bốn nhóm** (đọc từ code,
+  ghi ở §3/§3.1 của plan). **Nhóm A — đã có, chỉ cần nối FE:** tên/`language`/chu kỳ
+  khai báo của Program đang chạy lấy được từ `GET /revisions/{activeRevisionId}` →
+  `snapshot.objects[kind='PROGRAM']`
+  (`apps/web-api/internal/programming/application/projects.go:415-426`,
+  `application/draft_v2.go:120,376,794`). **Nhóm B — có trong DB, chưa lộ qua API:**
+  cờ `dirty` (so `drafts.content_sha256` với `content_hash` của base revision) và
+  `revisions.sequence` cho nhãn ngắn `Draft #14`. **Nhóm C — Core đã tính nhưng
+  không có đường xuất:** trạng thái sống theo Program, `last_exec_ns`, `max_exec_ns`,
+  `missed_release_count` được scheduler cập nhật thật
+  (`apps/core/application/st/st_scheduler.cpp:829-830,109-110`) nhưng payload
+  `STATUS` chỉ gồm 5 phần tử không có Program
+  (`apps/core/application/programming/program_ipc_server.cpp:453-457`) và
+  `point_snapshot` chỉ mang **một** khối `task` lấy từ `tasks().front()`
+  (`apps/core/application/runtime/scan_loop.cpp:262-263`); kèm theo, `runtimeState`
+  của `GET /projects/{id}/programs` **không phải giá trị sống** — người ghi duy nhất
+  là đường mutation intent
+  (`apps/web-api/internal/programming/application/runtime_intent.go:178`), không có
+  vòng đối soát nào. **Nhóm D — chưa tồn tại ở bất kỳ tầng nào:** `health`. Vì vậy
+  plan mở **pha P0** trước pha FE, nhưng phạm vi P0 hẹp: **mở đường truyền**, không
+  phải cài lại phép đo — điều kiện cần để không vi phạm `AC-PGM01-04` ("không render
+  thiếu-dữ-liệu thành `0`").
+- **Nội dung plan:** 27 task ≈ 33,5 người-ngày, chia P0-A (FW SOM 4 task), P0-B
+  (BE Go 6 task), P0-C (nối FE 1 task), P1 shell (4), P2 Overview (8), P3 kiểm
+  chứng (4). **P0-A không cài thêm phép đo nào** — scheduler đã đo đủ; bốn task chỉ
+  mở đường xuất qua `point_snapshot` (kênh JSON, tương thích ngược, **không** phải
+  bump `PROGRAM_IPC_PROTOCOL_MINOR` như đường CBOR `STATUS`), kèm ngân sách payload
+  thật: ~5 KiB hiện tại + ~3 KiB cho 16 Program trên trần
+  `KX_POINT_SNAPSHOT_MAX_PAYLOAD` = 64 KiB. `T60-002` sửa luôn khuyết tật
+  `scan_loop.cpp` đang lấy `tasks().front()` và báo cáo như thể là Task duy nhất —
+  sai từ khi `T59-402/403` cho Program chu kỳ và lane riêng. Đường găng:
+  `T60-001 → … → T60-016 → T60-205`. 7 quyết định chờ chốt (D-01 rail thứ cấp thay vì
+  đổi `NavRail` toàn cục của `ADR-032`; D-02 bỏ cột `Task` theo tài liệu; D-03
+  **không** chép con số 10 ms/100 ms trong ảnh vì profile Rev A chỉ có
+  1000/5000/30000 ms; D-04 `health` do server tính; D-05 lộ `sequence`; D-06 dùng
+  `useI18n().pick` thay vì in song ngữ cứng; **D-07 ánh xạ 11 trạng thái
+  `StProgramState` của Core sang 7 trạng thái hợp đồng API — không 1:1, mọi giá trị
+  ngoài bảng phải ra `UNKNOWN` fail-closed, vì ánh xạ sai sẽ làm Program đã chết
+  hiện `RUNNING`**); ma trận truy nguyên `AC-PGM01-01..06`
+  → task → bằng chứng; sáu rủi ro, trong đó `R60-02` ghim yêu cầu **không được
+  xoá** case test hiện có của `OverviewPage` khi viết lại bố cục (`BUG-016`,
+  `BUG-018`, `safeStateNoControllerOnly`, bốn nhánh Check của `WP-01`).
+- **Changed:** thêm dòng index cho Plan 60 ở `docs/03_implementation/README.md`.
+- **Verification:** thay đổi ở phiên này **chỉ là tài liệu** (2 file `.md`), không
+  chạm code nên không chạy gate C++/Go/FE. `python3 scripts/docs_iso_harness.py
+  --expect` exit **0**.
+
+### Prompt CTO thi hành phần còn lại Plan 59 — W6 + W7 (2026-08-23)
+
+- **Added — `docs/03_implementation/PROMPT_PLAN59_CTO_W6_W7_EXECUTION.md`**
+  (`PROMPT-PLAN59-CTO-W6W7` v1.0). Rà lại bảng nhiệm vụ Plan 59 §3 trên cây làm
+  việc: `W0..W5` đã **DONE** (38/38 task, mức HOST/LOCAL), còn **13 task chưa
+  bắt đầu** — W6 `T59-601..606` (ORDERED) và W7 `T59-701..707`
+  (EVIDENCE_QUEUE/ORDERED) — nên Plan 59 **chưa triển khai xong** và
+  `RELEASE_READY` vẫn `NO-GO`.
+- **Nội dung prompt:** cấp cho vai CTO/Release Owner **13 quyền quyết định**
+  (chuyển ORDERED→READY, chọn hệ chữ ký và custody khóa cho `T59-602`, cấu hình
+  packaging `T59-605`, công cụ SBOM/provenance và chấp nhận variance giải thích
+  được ở `T59-606`, chính sách quarantine/retry `T59-604`, ngưỡng tài nguyên
+  `T59-603`, chọn đường evidence thay thế, chấp nhận residual risk P2/P3, ký
+  GO/NO-GO `T59-707`, tự commit/PR/merge, tự sửa finding trong phạm vi) kèm
+  **8 giới hạn quyền** (cấm hạ acceptance, cấm waive Must physical AO/DO ST+FBD
+  / soak 24 h / power-cut-RETAIN-LKG / install-upgrade-rollback / SIGNED /
+  provenance, cấm gọi HOST là CI/TARGET/HIL, cấm phát hành `HASH_ONLY`, cấm xoá
+  dữ liệu-Active-LKG-audit, cấm đụng production thật, cấm đổi semantics đã khóa
+  trong Unified DDD, cấm dùng trạng thái BLOCKED cho task code).
+- **Việc 0 trong prompt:** đóng sổ W5 trước khi mở W6 — cây làm việc còn **83
+  file `M` + 13 file `??`** thuộc `T59-503/504/505/506` chưa commit, và
+  `candidate_pin_check.py` đang **FAIL** vì 6 hồ sơ authority (`CONTROL.md`,
+  `PROGRAMMING_DOCUMENT_READINESS_MATRIX.md`, `PROGRAMMING_DESIGN_INDEX.md`,
+  `PROGRAMMING_RISK_REGISTER.md`, `PROGRAMMING_TRACEABILITY_MATRIX.md`, Plan 59)
+  đã đổi so với manifest đã ghim; tại `HEAD` cả sáu vẫn khớp, nên việc phát hành
+  manifest mới thuộc bước đóng sổ W5.
+- **Changed:** thêm dòng index cho prompt mới ở
+  `docs/03_implementation/README.md` và `docs/00_governance/CONTROL.md`.
+- **Verification:** `python3 scripts/docs_iso_harness.py --expect` exit **0**
+  (`PASS — mọi phép kiểm bắt buộc đạt`, `EXPECT: khớp toàn bộ ngưỡng`);
+  `python3 scripts/candidate_pin_check.py` exit **1** — drift có từ trước phiên
+  này (thay đổi W5 chưa commit), phiên này chỉ thêm một dòng index vào
+  `CONTROL.md` vốn đã drift.
+
+### Chẩn đoán "lỗi FE toàn bộ các page /eng/programming" trên bo Foxlinx + deploy lại FE (2026-08-22)
+
+- **Phạm vi:** `http://mekong-fac.ddns.net:8082/eng/programming` (`PGM-01..06`);
+  chỉ deploy **frontend**, không đụng `mkddc-web` và `mkddc-core` trên bo.
+- **Xác định chính xác bản đang chạy trên bo:** dựng lại FE tại đúng `a35f578`
+  rồi so `sha256` với artifact bo đang phục vụ — `programming-D1ziPj1t.js` và
+  `index-CO6r8sP2.js` **trùng tuyệt đối**. Backend cũng là `a35f578`: bản
+  `arm64 -ldflags="-s -w"` dựng lại có kích thước **14 287 010 byte** khớp từng
+  byte với `/opt/mkddc-web/mkddc-web`, và `/api/v1/programming/runtime/signals`
+  trả **404** (endpoint `T59-504` chưa có trên bo).
+- **Fixed — nguyên nhân gốc: mọi thao tác Lưu ở workspace Thiết kế đều bị chặn.**
+  Triệu chứng trên bo: `PATCH /api/v1/programming/projects/{id}/draft` trả
+  **400 `PRG-ERR-REQ-001`** (nhật ký `mkddc-web-pi`, `2026-08-22T06:52:02Z`,
+  phiên `admin`). Nguyên nhân gốc: `ProgramsTab.tsx` bản `a35f578` dựng payload
+  `upsertProgram` bằng cách **spread nguyên đối tượng Program**
+  (`{ ...program, name, kind, functionalTags }`), kéo theo `executionOrder` và
+  `functionalTags`; decoder Go `upsertProgramCompat` dùng `decodeStrict`
+  (`DisallowUnknownFields`) và chỉ nhận đúng năm field
+  `programId/name/kind/language/document`, nên **mọi** lần Lưu đều bị từ chối
+  trước khi chạm store. Cách sửa (đã có sẵn trong cây làm việc, nay được build
+  và deploy): hàm `programDraftInput()` thu payload về đúng năm field.
+- **Kiểm chứng nguyên nhân gốc bằng tái hiện đối chứng** (backend Go +
+  compiler/packager + Core simulator production, không mock): cùng một draft,
+  cùng `If-Match`/`baseRevisionId` —
+  payload kiểu bản đang chạy trên bo → **HTTP 400 `PRG-ERR-REQ-001`**;
+  payload năm field sau bản vá → **HTTP 200**.
+- **Fixed — cột "Chất lượng" ở Điểm & Ánh xạ không bao giờ đổi màu.** Kiểm trên
+  chính CSS bo đang phục vụ (`index-BN4Kz8Vb.css`): `--c-online-fg`,
+  `--c-stale-fg`, `--c-unknown-fg` xuất hiện **0 lần**. Bảng tra tĩnh
+  `QUALITY_CLASS` nay chỉ dùng token có thật; CSS mới trên bo
+  (`index-YBWy74z0.css`) có đủ `--c-good-fg`/`--c-warn-fg`/`--c-fault-fg`.
+- **Fixed — chữ lỗi ở Thư viện điều khiển không mang màu lỗi** (`--c-danger`
+  không tồn tại → đổi sang `--c-fault-fg`).
+- **Ghi nhận — không tái hiện được lỗi render trang.** Quét sáu trang bằng
+  Chrome thật trên đúng bundle `a35f578` với dữ liệu dựng theo hình dạng dữ
+  liệu bo (không có object `SIGNAL`, `published_signal_defs`/`library_entries`/
+  `program_runtime_intents` đều rỗng, POU `PROGRAM` không nằm trong `programs`)
+  và 7 biến thể payload `runtime` (Core khoẻ, overrun, thiếu field, null,
+  enum lạ, safe-state, thiếu `observedAt`) — **42/42 tổ hợp không có
+  pageerror, không có error boundary**. Lỗi người dùng gặp vì vậy được quy về
+  nhóm "thao tác bị chặn + phản hồi màu sai", không phải crash render.
+- **Deploy:** sao lưu `dist` cũ thành `/opt/mkddc-web/dist.prev-20260822T145245`,
+  copy bằng `scp` (bo Buildroot không có `rsync`), đổi chỗ nguyên thư mục.
+  Guard cờ Programming: `grep -c REVA_SCOPE_ROADMAP` = **0** (cờ BẬT).
+  Đối chiếu `sha256` qua HTTP sau deploy: `index-DJxVm5TB.js`,
+  `programming-gytcRu-U.js`, `index-YBWy74z0.css` **khớp** bản dựng cục bộ.
+- **Verification (đo lại trong phiên):** `npx vitest --run --environment jsdom src`
+  → **1161/1161 pass** (124 file); `npm run lint` → sạch (kể cả
+  `check_ui_strings`); `npm run build:release` → thành công; quét sáu trang
+  Chrome thật trên bundle mới với backend `a35f578` → **6/6 trang sạch**, panel
+  Published Signal của tab Theo dõi fail-closed đúng thiết kế khi endpoint
+  `runtime/signals` trả 404. Đây **không** phải bằng chứng target/HIL, không
+  phải I/O vật lý, không phải Test Result phát hành.
+- **Chưa sửa, nằm ngoài phạm vi FE được giao:** `apps/core/application/st/st_scheduler.cpp`
+  trong cây làm việc **không biên dịch được** — overload mới
+  `stage_activation(StProgramInstance*, …)` tham chiếu `instance_id` không còn
+  trong scope (dòng 292 và 328; đúng ra là `p->instance_id`). Đây là phần việc
+  C++ đang dở của một phiên khác; sửa vào đó có nguy cơ ghi đè chỉnh sửa chưa
+  lưu của phiên đó, nên phiên này không đụng tới. Hệ quả: mọi cổng C++ và mọi
+  bản dựng `mkddc-core`/`mkddc-programming-core-sim` từ cây làm việc đang hỏng.
+
+
+### Review UI/UX họ trang Programming + hai bản vá màu (2026-08-21)
+
+- **Phạm vi:** sáu trang `PGM-01..06` tại `/eng/programming/*`; theo yêu cầu
+  Owner *"thiết kế này không hiện đại và không thân thiện người dùng"*.
+- **Added — tài liệu:**
+  `docs/04_uiux/KX-DDC24-UIUX-WEB-PROGRAMMING-REDESIGN-PROPOSAL-001_VI.md`
+  (DRAFT 0.1, chưa được phép code). Ghi 19 phát hiện có địa chỉ `file:dòng` và
+  ảnh chụp Chrome thật, phương án thiết kế lại (rail feature thay tab, thanh
+  trạng thái một dòng thay thanh context sáu cột, editor toàn chiều cao, canvas
+  FBD), lộ trình 5 đợt và 5 điểm cần Owner chốt.
+- **Fixed — cột "Chất lượng" ở Điểm & Ánh xạ chưa bao giờ đổi màu**
+  (`MappingTab.tsx`). Triệu chứng: GOOD không xanh, OFFLINE không đỏ, mọi giá
+  trị đều xám. Nguyên nhân gốc **kép**: (1) class được ghép bằng nội suy chuỗi
+  `text-[var(--c-${...}-fg,…)]`, mà Tailwind quét class theo **văn bản nguồn**
+  nên không utility nào được sinh — kiểm chứng trên chính CSS đang chạy ở board
+  `mekong-fac.ddns.net:8082`: `--c-online-fg` xuất hiện **0 lần**; (2) các biến
+  `--c-online-fg`/`--c-stale-fg`/`--c-unknown-fg` cũng không có trong
+  `TOKEN_NAMES` của `shared/theme/tokens.ts`. Cách sửa: bảng tra **tĩnh**
+  `QUALITY_CLASS` viết đủ tên class, chỉ dùng token có thật.
+- **Fixed — thông báo lỗi ở Thư viện điều khiển không hiện màu lỗi**
+  (`LibraryPage.tsx`). `text-[var(--c-danger)]` trỏ vào token không tồn tại và
+  là chỗ **duy nhất** trong repo dùng biến này mà không có fallback `,#c00`,
+  nên chữ lỗi thừa hưởng màu chữ thường. Đổi sang `--c-fault-fg`.
+- **Verification (đo lại trong phiên, không dẫn số cũ):**
+  `npx vitest --run --environment jsdom src` → **1161/1161 pass** (124 file);
+  `npm run lint` → sạch, `check_ui_strings` OK;
+  `npx playwright test e2e/programming.spec.ts --project=desktop-chrome -g "UJ-PROG-01"`
+  → **1 passed** (12,6 s), 11 ảnh chụp dùng làm bằng chứng review.
+
+
+### Plan 59 W5 — hoàn tất luồng sản phẩm sáu workspace trên HOST/LOCAL (2026-08-21)
+
+- **Phạm vi:** `T59-503..506`; Core/IPC Published Signal, API runtime Go,
+  sáu workspace React, Monitor ba category, ST/FBD editor, Playwright
+  real-backend, ma trận cổng W5 và hồ sơ Plan/Risk/Trace.
+- **T59-503 — sáu workspace và lifecycle:** desktop/mobile có đủ PGM-01..06;
+  deep-link không âm thầm đổi Project; thanh context tách Draft, Active,
+  desired Enable intent và runtime read-back; loading/empty/error/permission/
+  stale/offline/unknown đều fail-closed.
+- **T59-504 — Monitor không bịa dữ liệu:** Point `LOCAL`/`VP`/`MB_RTU` tách
+  candidate, actual, source, priority, quality và freshness. Published Signal
+  đọc từ snapshot Core riêng; `valid=false`, mismatch hoặc unavailable hiện
+  `—`, không thành `0`; trace công bố số mẫu rơi. IPC minor **2→3**, OpenAPI
+  **1.25.0→1.26.0**; store giữ **v11**.
+- **T59-505 — E2E không mock Programming:** thêm lane dựng backend Go,
+  compiler/packager và Core simulator dùng scheduler/coordinator/process-image/
+  Programming IPC production. Journey đi Project→Draft có Library/Signal/
+  Mapping→Seal→Check→Commission→Enable→Runtime→Disable→Revision mới→Restore;
+  spec bị guard cấm `page`/`context`/`browserContext.route*` và tách khỏi suite
+  mock. Cổng C++ dùng `cmake --fresh` để không tái sử dụng cache build.
+- **T59-506 — editor:** ST giữ history bounded 50 snapshot, kiểm 20 bước
+  undo/redo cả cursor/selection; runtime overlay chỉ ghép đúng Active Revision
+  và không biến invalid thành zero. FBD lấy interface POU typed từ Draft v2,
+  không tự parse ST hoặc đoán pin.
+- **Fixed — ST+ gửi payload Draft v2 sai:** FE trước đây gửi thêm
+  `executionOrder`/`functionalTags` vào `upsertProgram` dù backend strict chỉ
+  nhận `programId/name/kind/language/document`; tên mặc định có khoảng trắng
+  cũng vi phạm grammar POU. Nay transport được thu hẹp đúng năm field, tên mặc
+  định là `NewProgram`/`NewFbdProgram`, validation client khớp backend và
+  read-back API khóa bằng E2E thật. Inspector bỏ metadata Program không tồn tại
+  trong contract Draft v2 và bổ sung liên kết nhãn form cho accessibility.
+- **Kiểm chứng HOST/LOCAL trước cổng tổng:** CTest Release **1211/1211** và Debug
+  **1211/1211**; Go `vet` + test sạch; FE **124 file / 1161 test**, lint/build
+  sạch; E2E mock **61/61**; E2E real-backend **1/1**; Chrome DevTools thật kiểm
+  PATCH ST+ `200` với đúng năm field, desktop 1440×900 và mobile 390×844 không
+  tràn ngang, không Console warning/error/issue. Đây không phải CI, target, HIL,
+  I/O vật lý, soak, Test Result hay bằng chứng phát hành.
+- **Refs:** `PLAN-PROG-059` §3.6 `T59-503..506`, `RSK-PROG-001` v4.19,
+  `TRACE-PROG-001` v6.4, `RELEASE_READY=NO-GO`.
+
+### T59-502 — Impact/ack cho mô hình đa Program (2026-08-21)
+
+- **Phạm vi:** `apps/web-api/internal/programming/store/{commands.go,schema.go}`,
+  `migrations/0011_revision_signal_objects.sql` (mới),
+  `apps/web-api/internal/programming/application/{changes.go,operations.go}`,
+  `apps/web-ui/src/features/programming/commission/CheckCommissionPage.tsx`,
+  `apps/web-ui/scripts/generate-programming-client.mjs`,
+  `contracts/openapi/openapi.yaml`, `contracts/programming/*`,
+  Plan 59 §3/§3.6, Risk Register v4.15, Traceability v6.3, manifest v1.36.
+- **Lỗi thật — Published Signal chưa từng seal được.** `revisionPayload` sinh
+  object kind `SIGNAL`, nhưng `SIGNAL` **không nằm trong** whitelist kind của
+  `revision_objects` (danh sách viết từ migration v1, trước khi Published Signal
+  tồn tại). `SealRevision` từ chối **mọi** Revision có signal với "CHECK
+  constraint failed". Toàn bộ lane signal — validate ở Check (`T59-304`), đóng
+  gói (`T59-404`), bus runtime — **chưa từng chạm một Revision thật**. Không test
+  nào bắt được vì chưa test nào seal một Revision có signal. Migration **v11** mở
+  whitelist và khôi phục đúng hai trigger bất biến của bảng.
+- **Bốn nhóm impact mới:** `publishedSignals`, `controlLibrary`, `programSet`,
+  `enableIntent`. Trước bản vá cả bốn đi qua Commission mà **không hỏi
+  acknowledgement nào** — đáng kể nhất là đổi chính sách stale, thứ đổi hành vi
+  của mọi consumer khi mất dữ liệu và **không nhìn thấy được** trong diff mã
+  nguồn.
+- **`enableIntent` đọc intent bền vững ở store**, không suy từ diff: "đang chạy"
+  là trạng thái của **thiết bị**, không phải thuộc tính của một Revision.
+- **Nhóm vắng mặt = `UNAVAILABLE`, không phải `NONE`.** Coi "không thấy" là
+  "không có" đúng là cách để một tác động thật đi qua mà không ai xác nhận. FE
+  đọc phòng thủ nên trang vẫn sống thay vì trắng màn hình.
+- **Khoá ack là enum đóng ở một chỗ** (trước là bốn phép so `!=` nối nhau), và
+  kiểu TS `ProgrammingImpact` nay **sinh từ enum contract** thay vì viết cứng bốn
+  trường trong generator — viết cứng làm thêm nhóm ở contract mà quên sửa
+  generator cho một kiểu im lặng thiếu trường.
+- **Kiểm chứng (HOST/LOCAL):** `scripts/verify-project.sh --wave W5` **7/7 PASS**;
+  test mới khoá impact signal/programSet/enableIntent và `impactRef` đổi khi nội
+  dung nhóm đổi; `verify_programming_g1_contracts.py` 10/10;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.6 `T59-502`, `RSK-PROG-008/012/014`, DDD §4.5/§10.
+
+### FIX DEBUG — đường đọc trace của Core chưa nối tới người dùng (2026-08-21)
+
+- **Phạm vi:** `apps/web-api/internal/programming/application/trace.go`,
+  `apps/web-api/internal/programming/application/monitor_trace_test.go`,
+  Plan 59 §3.5/§3.6, Risk Register v4.14, Traceability v6.2,
+  baseline manifest v1.35.
+- **Triệu chứng:** `TRACE_READ` **chưa từng được gọi ở bất kỳ đâu**. Core lấy mẫu
+  tại ranh giới quét rồi ghi vào một ring **không ai đọc**, còn người dùng vẫn
+  xem dãy mẫu poll theo nhịp riêng của BE. Toàn bộ lý do tồn tại của `T59-408` —
+  "mọi biến trong một mẫu đến từ đúng một chu kỳ" — không tới được người dùng.
+- **Nguyên nhân gốc:** `T59-408` nối `TRACE_START`/`TRACE_STOP` nhưng để đường
+  **đọc** lại cho lane sản phẩm. Kết quả là một tính năng có mã chạy đủ nhưng đầu
+  ra không ai thấy — cùng lớp lỗi với ba hồi quy FE của W3 (tab bấm không ăn):
+  đường đi tồn tại, đầu cuối không nối.
+- **Cách sửa:** `runTrace` rút mẫu từ ring qua `TRACE_READ`; poll monitor chỉ còn
+  là **đường dự phòng** khi Core không nhận phiên.
+  - **Không trộn hai nguồn trong một dãy:** Core nhận phiên thì mẫu đầu không lấy
+    bằng poll nữa — trộn vào tạo một đồ thị mà điểm đầu tiên đến từ nơi khác các
+    điểm còn lại, và không có gì nói ra điều đó.
+  - **`valid=false` không vẽ thành 0:** ô không đọc được trả giá trị rỗng kèm
+    `quality=BAD`/`freshness=UNAVAILABLE`.
+  - **Số mẫu rơi của Core hiện ra**, không giấu sau một dãy trông liền mạch.
+  - **Thay chứ không nối thêm:** ring bounded và có thể đã ghi đè mẫu cũ nhất;
+    nối thêm tạo ra một dãy vừa trùng lặp vừa thiếu.
+  - Bit thô diễn giải theo kiểu đã khai trong package; kiểu không nhận ra trả
+    `nil` thay vì đoán — một số sai kiểu trên đồ thị chẩn đoán tệ hơn ô trống.
+- **Sửa kèm — test đua.** Bản test đầu chờ `readCalls > 0` rồi đọc mẫu, trong khi
+  lệnh đọc tới Core **trước** lúc mẫu được ghi vào phiên; cổng `go` bắt được ở
+  lần chạy thứ hai. Điều kiện chờ nay là **cả hai**; chạy lặp 5 lần đều xanh.
+- **Kiểm chứng (HOST/LOCAL):** test chống hồi quy đã kiểm chứng bằng cách **gỡ
+  đường `TRACE_READ`** — đỏ đúng dòng "ring của Core không ai đọc". Build
+  **Debug** (`CMAKE_BUILD_TYPE=Debug`) sạch và `ctest` **1209/1209**;
+  `scripts/verify-project.sh --wave W5` **7/7 PASS**.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-408` / §3.6, `RSK-PROG-021`, OD-PROG-011.
+
+### T59-501 — Commission/Restore atomic ở mức GÓI (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/{st_scheduler.hpp,st_scheduler.cpp,st_process_image.cpp}`,
+  `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}`,
+  `apps/core/application/programming/tests/test_programming_package_lifecycle.cpp` (mới),
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/e2e/programming.spec.ts`, `apps/web-ui/{vite,playwright}.config.ts`,
+  `apps/web-ui/src/features/programming/api/generated/client.test.ts`,
+  Plan 59 §3/§3.6, Risk Register v4.13, Traceability v6.1, baseline manifest v1.34.
+- **Triệu chứng:** với gói nhiều Program, một Program hỏng chu kỳ đầu vẫn để gói
+  được tuyên bố `FIRST_CYCLE_OK`; và khi rollback thì chỉ Program chính quay về,
+  để lại gói **nửa cũ nửa mới**.
+- **Nguyên nhân gốc:** `on_output_commit` đọc đúng `instance_id_`. Bất biến
+  "Commission atomic ở cấp package" (DDD §6) chưa từng được ép ở mã.
+- **Cách sửa:** `package_first_cycle_verdict()` xét **mọi** instance đang chạy;
+  `rollback_package()` kiểm TRƯỚC áp SAU nên không kẹt giữa chừng.
+  `promote_output_committed_artifacts()` thăng cấp LKG **all-or-nothing** — thăng
+  cấp riêng lẻ tạo ra tập LKG ghép từ hai gói, một tổ hợp **chưa từng được
+  Check**. Điều kiện là "đã commit ít nhất một lần kể từ activate"
+  (`committed_since_activation`), không phải "cùng commit ở một base step" — đòi
+  điều thứ hai là đòi một thứ không bao giờ xảy ra với gói nhiều chu kỳ.
+- **Test chống hồi quy đã kiểm chứng:** gỡ từng bản vá ra, cả hai test đỏ đúng ở
+  dòng lý do.
+- **Sửa kèm — ba hồi quy FE/E2E của W3.** Ma trận cổng W2–W4 **không có**
+  `frontend`/`e2e`; W5 là wave đầu tiên gọi chúng:
+  1. Thanh tab Thiết kế **bấm không ăn** trên `/programs` và `/mapping` —
+     `route` ghi đè query, mà nút tab chỉ ghi `?tab=`. Nay nút **điều hướng**.
+  2. Tab `execution` **mất chỗ hiển thị** — nó chỉ có địa chỉ `?tab=execution`,
+     đúng dạng bị `route` ghi đè. Nay là ngoại lệ tường minh.
+  3. E2E `VS-PROG-032` còn ghi IA cũ (`/design` là đích), trong khi `T59-306` đã
+     đảo chiều. Spec viết lại theo chiều mới, phủ thêm `/design?tab=mapping`.
+- **Sửa kèm — dev server E2E không cần watcher.** Playwright không sửa nguồn giữa
+  lúc chạy; watcher chỉ đem lại hàng chục nghìn inotify watch (đủ `ENOSPC` trên
+  máy đang mở editor) và nguy cơ Vite rebuild giữa một assertion.
+  `VITE_E2E_NO_WATCH=1` tắt hẳn cho đường E2E, đường dev giữ nguyên HMR.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1209/1209** pass (4 test mới);
+  `scripts/verify-project.sh --wave W5` **7/7 PASS** — lần đầu `frontend`
+  (118 file / 1102 test) và `e2e` (61 test) chạy trong Plan 59;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.6 `T59-501`, `RSK-PROG-014/022`, DDD §6.
+
+### ADR-051 — TTL hold-last của Program = 60 giây đồng hồ (2026-08-21)
+
+- **Phạm vi:** `docs/adr/ADR-051-programming-ttl-hold-last-60s.md` (mới),
+  `docs/adr/README.md`, `docs/00_governance/DECISIONS.md`,
+  `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` (1.0→1.1),
+  `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md` (1.0→1.1),
+  `apps/core/application/st/{st_scheduler.hpp,st_scheduler.cpp,st_process_image.hpp,st_process_image.cpp}`,
+  `apps/core/application/runtime/scan_loop.{hpp,cpp}`, `apps/core/bootstrap/main.cpp`,
+  `apps/core/application/st/tests/test_st_integration.cpp`, Plan 59 §3/§3.5,
+  Risk Register v4.12, Traceability v6.0, baseline manifest v1.33.
+- **Quyết định:** TTL hold-last = **60 s**, đồng nhất mọi Program và mọi Point
+  class. Trước đó là `0` — trông như "chưa quyết định" nhưng thực chất là quyết
+  định **giữ đầu ra vô hạn** khi chương trình chết: van đứng ở vị trí cũ không vì
+  ai ra lệnh, và `FAULTED` là trạng thái chốt nên không có đường tự hồi phục.
+- **Cơ sở con số:** chặn dưới `2x` chu kỳ Task chậm nhất (2×30 s) — lúc Program
+  chết, lệnh cuối đã có thể già trọn một chu kỳ, TTL nhỏ hơn làm thời gian giữ
+  THỰC TẾ trôi xuống tận 0; chặn trên là dải fail-safe quen thuộc của thiết bị BAS
+  (10..60 s) và hằng số thời gian nhiệt của tải. Ràng buộc `2x` nằm ở
+  `static_assert` đọc `allowedPeriodMs` của profile, không nằm ở ghi chú.
+- **Changed — đo bằng ĐỒNG HỒ, không đếm base step:** thêm `output_commit_now_ns`
+  và `StScheduler::last_tick_now_ns()`; `st_withdraw_stale_outputs()` nhận
+  `hold_ttl_ns`. Số base step chỉ xấp xỉ thời gian khi vòng quét chạy đúng nhịp —
+  soak test của chính repo quay 10.000 vòng trong 90 ms và làm "60 s" co lại thành
+  mili giây, không có gì báo.
+- **Fixed — TTL đo tuổi của LỆNH, không đo trạng thái:** điều kiện cũ ràng vào
+  riêng `FAULTED` nên để lọt hai đường im lặng — Task bị disable trong khi Program
+  vẫn `RUNNING`, và instance đứng ở `ROLLED_BACK`. Cả hai ngừng publish mà không
+  bao giờ mang trạng thái `FAULTED`, tức là giữ lệnh cũ vĩnh viễn **kể cả sau khi
+  TTL được ký**. Instance chưa từng publish không bị rút và không vào sổ candidate.
+- **Fixed — mặc định `ScanDeps` là giá trị đã ký, không phải `0`:** `0` nghĩa
+  "giữ vô hạn", nên mọi đường nối dây quên set field đều âm thầm quay lại đúng
+  hành vi vừa đóng, và không test hành vi nào bắt được vì "không rút" trông y hệt
+  "chưa tới hạn".
+- **Fixed — soak test đo sai nhịp:** `TenThousandCycleSoak...` đẩy đồng hồ 1 ms
+  mỗi scan step trong khi Task là 1 s, nên "10.000 chu kỳ" là 10.000 vòng lặp chứ
+  không phải 10.000 chu kỳ chương trình. Nay mỗi step đẩy đúng một base step.
+- **Bootstrap:** cờ `--program-hold-ttl-ms` (1..600000) cho commissioning/HIL; `0`
+  bị **từ chối** — muốn tắt TTL thì phải supersede ADR, không phải truyền một cờ.
+- **Đóng:** hàng "Hold TTL … chưa ký" ở `DDD-CTRL-PROG-001` §15 và mục treo cuối
+  cùng của `T59-406`. "Khoá TTL theo Point class" đóng là **KHÔNG làm**, lý do ở
+  ADR. Hàng "Safety interaction chưa có HIL evidence" KHÔNG đổi.
+- **Kiểm chứng (host/local, 2026-08-21):** `cmake --fresh` + build exit 0;
+  `ctest` **1205/1205 PASS**; `verify_wave_gates.py --wave W4` **5/5 PASS**
+  (layout/cpp/go/docs/candidate-pin); `candidate_pin_check.py` 16/16 khớp.
+  Mutation check: gỡ nhánh tuổi-lệnh thì
+  `T59_406_HoldTtlWithdrawsProgramThatStoppedPublishingWithoutFaultState` đỏ đúng
+  chỗ. **Target/HIL chưa đo** — chưa có số thời gian rút thật trên board.
+
+### T59-408 — Trace giá trị lấy tại ranh giới quét; action ma = 0 (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_value_trace.{hpp,cpp}` (mới),
+  `apps/core/application/st/tests/test_st_value_trace.cpp` (mới),
+  `apps/core/application/programming/program_ipc_server.{hpp,cpp}`,
+  `apps/core/application/runtime/scan_loop.{hpp,cpp}`, `apps/core/bootstrap/main.cpp`,
+  `apps/web-api/internal/programming/{coreipc/codec.go,application/trace.go}`,
+  `contracts/ipc/programming_v1/*`, `contracts/programming/error_catalog_v1.json`,
+  `scripts/verify_programming_ipc_actions.py`, Plan 59 §3/§3.5,
+  Risk Register v4.11, Traceability v5.9, baseline manifest v1.32.
+- **Thêm:** `StValueTrace` — historian giá trị bounded (10.000 Ô / 10 phút), lấy
+  mẫu tại **ranh giới quét**. BE poll ở nhịp riêng của nó nên hai biến trong cùng
+  một mẫu có thể đến từ **hai chu kỳ khác nhau**; đồ thị trông hợp lý nhưng quan
+  hệ nhân quả giữa hai biến bị xáo. Lấy tại boundary thì mọi biến trong một mẫu
+  đến từ **đúng một** chu kỳ.
+- **Kho theo Ô, không theo struct mẫu:** lưu 10.000 struct mẫu tốn ~3 MB tĩnh cho
+  một tính năng chẩn đoán. Lưu theo ô cho ngân sách **cố định ~170 KB** không phụ
+  thuộc số biến. Số mẫu **rơi** được đếm — giấu nó sẽ làm người đọc đồ thị tưởng
+  mình thấy toàn bộ.
+- **Biến khai bằng TÊN, không bằng slot:** số slot là kết quả của một lần biên
+  dịch cụ thể và không tồn tại ở nơi nào BE nhìn thấy. Core đã có bảng tên→slot
+  trong chương trình đang nạp. Biến không phân giải được vẫn nhận nhưng mọi mẫu
+  mang `valid=false` — từ chối cả phiên vì một biến gõ sai sẽ làm mất luôn dữ
+  liệu của những biến còn lại.
+- **Ba action IPC thật:** `TRACE_START`/`TRACE_STOP` (mutation) và `TRACE_READ`
+  (chỉ đọc — xếp nó vào nhóm mutation sẽ buộc nó mang `operationId` và đi qua
+  kiểm idempotency mà nó không cần). `protocolMinor` 1→2, `schemaVersion` trên
+  dây giữ nguyên "1.0". BE gọi **thật** xuống Core khi phiên bắt đầu và kết thúc.
+- **Action ma = 0:** bảng handler IPC không còn `NOT_IMPLEMENTED` nào, khoá bằng
+  hai phép kiểm độc lập ở hai lớp.
+- **Sửa kèm 1 — self-test của chính verifier đã mục ruỗng.** Hai mutation dùng
+  `TRACE_START` làm ví dụ "action chưa hiện thực"; ngay khi task này hiện thực
+  nó, hai mutation thành **no-op** và self-test xanh mà không kiểm gì — đúng lớp
+  lỗi mà self-test sinh ra để chặn. Nay mutation tự tiêm action giả, và ca "khai
+  IMPLEMENTED nhưng không có nhánh" được dựng bằng cách tiêm nội dung nguồn Core
+  đã bỏ nhánh.
+- **Sửa kèm 2 — một luật thoát khỏi phép kiểm.** Luật "`NOT_IMPLEMENTED` phải ghi
+  task sẽ hiện thực" nằm sau phép tra enum C++, nên một action chưa có enum thoát
+  khỏi luật này. Nay luật thuần schema được kiểm trước.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1200/1200** pass (10 test mới);
+  `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `verify_programming_ipc_actions.py --self-test` 5/5 mutation, 11 action /
+  0 NOT_IMPLEMENTED; `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-408`, `RSK-PROG-014/021`, OD-PROG-011.
+
+### T59-407 — RETAIN theo Program: cô lập và bịt lỗ "reset nửa vời" (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_scheduler.cpp`,
+  `apps/core/application/st/tests/test_st_retain.cpp`, Plan 59 §3/§3.5,
+  Risk Register v4.10, Traceability v5.8, baseline manifest v1.31.
+- **Triệu chứng:** reset RETAIN trên Program đang `STOPPED`/`FAULTED` làm sạch
+  RAM, nhưng file bền vững vẫn giữ giá trị cũ — lần khởi động sau giá trị trước
+  reset quay về. Người vận hành thấy "reset thành công" rồi thấy nó tự đảo ngược
+  sau lần mất điện đầu tiên.
+- **Nguyên nhân gốc:** `publish_committed_retain_snapshots()` chỉ công bố ảnh
+  RETAIN cho Program vừa **chạy** và vừa **commit output** trong base step đó. Mà
+  Program hay bị reset nhất lại là Program đang dừng — đúng những Program không
+  bao giờ thoả điều kiện đó. `flush(true)` sau reset chỉ ghi lại ảnh **cũ**.
+- **Cách sửa:** `apply_pending_retain_resets()` công bố ảnh **đã reset** ngay tại
+  safe boundary, không phụ thuộc trạng thái chạy. Reset là một sự kiện của **dữ
+  liệu**, không phải của việc chạy.
+- **Test chống hồi quy đã kiểm chứng:** gỡ bản vá ra và chạy lại,
+  `T59_407_ResetOnStoppedProgramIsPersistedNotHalfDone` đỏ đúng ở dòng "giá trị
+  trước reset quay về sau khởi động lại". Một test xanh cả khi có lẫn khi không
+  có bản vá thì không chứng minh gì.
+- **Thêm:** hai test cô lập giữa Program — reset instance-1 không chạm
+  instance-2; làm hỏng file RETAIN của một Program chỉ làm **một** Program
+  cold-init, Program còn lại warm-restart bình thường. Nếu hai Program dùng chung
+  một file thì một lần hỏng là mất trạng thái của cả hai.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1191/1191** pass;
+  `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-407`, `RSK-PROG-009/022`,
+  `DDD-RETAIN-RESET-PROG-001`.
+
+### T59-406 — Sổ candidate output, rút theo lý do và đường rơi về (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/programming/program_candidate_registry.{hpp,cpp}` (mới),
+  `apps/core/application/programming/tests/test_program_candidate_registry.cpp` (mới),
+  `apps/core/application/st/st_process_image.{hpp,cpp}`,
+  `apps/core/application/runtime/scan_loop.{hpp,cpp}`,
+  `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}`,
+  `apps/core/CMakeLists.txt`, Plan 59 §3/§3.5, Risk Register v4.9,
+  Traceability v5.7, baseline manifest v1.30.
+- **Thêm:** `ProgramCandidateRegistry` — mắt xích `owner registry` của kiến trúc
+  §7. `PriorityResolver` chỉ biết "mức 5 đang active", không biết mức 5 đó là
+  **của Program nào**; với 32 Program thì "ai đang giữ AO-3" là câu hỏi không có
+  nơi nào trả lời — và đó là câu hỏi đầu tiên khi một van không nghe lệnh.
+- **Rút mang LÝ DO, enum đóng:** `OPERATOR_DISABLE` / `FAULT_TTL_EXPIRED` /
+  `PACKAGE_REPLACED`. "Đã rút" mà không nói vì sao buộc người vận hành đoán giữa
+  một lệnh chủ ý và một sự cố. Bản ghi **không** bị xoá khi rút: câu hỏi "vì sao
+  van này về default" phải còn câu trả lời.
+- **Một output, một owner — ép LẠI ở runtime.** Check đã ép ở `T59-304`, nhưng
+  gói có thể tới từ bundle import hoặc writer khác phiên bản. Đăng ký chạy
+  **trước** khi publish: phát hiện xung đột sau khi đã ghi ra van thì đã muộn.
+  Chiếm chỗ đã rút vẫn bị từ chối — quyền sở hữu thuộc package, không thuộc thứ
+  tự tới trước.
+- **Đường rơi về:** test đầu-cuối chạy Program thật, publish qua resolver, rồi
+  `stop()` và kiểm AO về `0.0`. Rút mà đầu ra kẹt ở giá trị cuối của Program đã
+  chết thì rút chỉ là một dòng log.
+- **"Không có đường Program→IOP trực tiếp" kiểm bằng ĐỌC MÃ NGUỒN.** Một test
+  hành vi chỉ chứng minh đường hợp lệ chạy đúng, không chứng minh **không có**
+  đường thứ hai. Test đọc `st_process_image.cpp`, khẳng định không có
+  `plc_shm`/`iop_write`/`shm_write`, và khẳng định đường hợp lệ thực sự có mặt —
+  nếu không, phép kiểm trên chỉ đang xác nhận một file rỗng.
+- **Còn mở có chủ ý:** TTL hold-last vẫn `0` (giữ vô hạn khi Program FAULTED).
+  Cơ chế đã có và đã có test; con số là quyết định Product+Controls
+  (`DDD-CTRL-PROG-001` §15) **chưa được ký**. Tự chọn một con số ở đây là chọn
+  thay họ xem thiết bị giữ đầu ra bao lâu sau khi chương trình chết.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1187/1187** pass (9 test mới);
+  `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-406`, `RSK-PROG-002/006/021`,
+  `PROGRAMMING_ARCHITECTURE.md` §7.
+
+### T59-405 — Enable/Disable Program đi trọn store → API → IPC → Core → read-back (2026-08-21)
+
+- **Phạm vi:** `apps/web-api/internal/programming/store/{runtime_intent.go,idempotency.go,schema.go}`,
+  `migrations/0010_runtime_intent_receipts.sql` (mới),
+  `apps/web-api/internal/programming/application/runtime_intent.go` (mới),
+  `apps/web-api/internal/programming/transport/http/{runtime_intent.go,router.go,projects.go}`,
+  `apps/web-api/internal/programming/coreipc/codec.go`, `apps/web-api/internal/app/`,
+  `apps/core/application/programming/{program_ipc_server,programming_runtime_coordinator}.{hpp,cpp}`,
+  `contracts/ipc/programming_v1/*`, `contracts/openapi/openapi.yaml`,
+  `contracts/programming/{error_catalog_v1.json,programming_store_v1.manifest.json,g1_contract_join_v1.json}`,
+  `apps/web-ui/src/features/programming/api/generated/client.ts`, Plan 59 §3/§3.5,
+  Risk Register v4.8, Traceability v5.6, baseline manifest v1.29.
+- **Thêm:** đường intent đầy đủ. Store (`program_runtime_intents`) ghi intent +
+  audit + biên nhận idempotency trong **cùng một transaction**; API
+  `PUT /projects/{id}/programs/{programId}/runtime-intent` (admin) và
+  `GET /projects/{id}/programs` (viewer); IPC action mới `SET_PROGRAM_ENABLED`;
+  Core `set_program_enabled` áp lên **đúng một** instance.
+- **Ý định KHÁC trạng thái.** `desiredEnabled` là điều người vận hành muốn,
+  `runtimeState` là điều thiết bị đang làm. Gộp thành một trường sẽ làm một
+  Program bật-nhưng-FAULTED trông y hệt một Program chưa ai bật. Core từ chối →
+  `FAULTED`; Core không liên lạc được → `UNKNOWN`; **không** trường hợp nào xoá
+  intent. Core nhận lệnh → ghi trạng thái **chuyển tiếp** `STARTING`/`STOPPING`,
+  không ghi thẳng đích.
+- **Enable/Disable là hai action riêng ở lớp biên nhận.** Biên nhận khoá theo
+  `(actor, action, target, key)`; gộp hai chiều sẽ làm một lần "bật" và một lần
+  "tắt" cùng idempotency key trở thành cùng một ô, và lần thứ hai replay kết quả
+  của lần thứ nhất thay vì đổi trạng thái.
+- **IPC `protocolMinor` 0→1, `schemaVersion` trên dây GIỮ NGUYÊN "1.0".** Thêm
+  action là thay đổi tương thích ngược. Đổi `schemaVersion` sẽ làm mọi Core
+  phiên bản cũ từ chối **mọi** request — hỏng toàn diện thay vì thiếu một tính
+  năng.
+- **Sửa kèm 1 — trigger `generation` siết quá tay.** Trigger v6 đòi generation
+  tăng ở **mọi** UPDATE, nên read-back của Core không ghi được. Migration v10
+  tách thành hai luật: đổi intent bắt buộc tăng generation; generation không bao
+  giờ lùi.
+- **Sửa kèm 2 — biên nhận idempotency đòi ETag cho mọi mutation.** Phép kiểm giả
+  định mọi mutation thuộc một Draft; intent tác động lên Project đang chạy nên sẽ
+  phải bịa một số phiên bản Draft. Nay ETag chỉ bắt buộc khi biên nhận mang
+  `DraftID`.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1180/1180** pass; 8 test Go + 2 test IPC
+  mới; `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `verify_programming_g1_contracts.py --self-test` 35/35 mutation;
+  `generate_programming_errors.py --check` 30 public / 122 detail;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-405`, `RSK-PROG-005/007/008/014`,
+  DDD §4.3/§7.2.
+
+### T59-404 — Published Signal ở runtime: double-buffer, freshness, ba chính sách (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_signal_bus.{hpp,cpp}` (mới),
+  `apps/core/application/st/tests/test_st_signal_bus.cpp` (mới),
+  `apps/core/application/st/st_scheduler.{hpp,cpp}`,
+  `apps/core/application/st/st_package_v2.{hpp,cpp}`,
+  `apps/core/application/st/st_package_main.cpp`,
+  `apps/core/application/st/st_package_golden_main.cpp`,
+  `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}`,
+  `apps/web-api/internal/programming/compiler/packager.go`,
+  `apps/web-api/internal/programming/application/checks{,_invariants}.go`,
+  `contracts/programming/golden/*`, `contracts/programming/g1_contract_join_v1.json`,
+  Plan 59 §3/§3.5, Risk Register v4.7, Traceability v5.5, baseline manifest v1.28.
+- **Thêm:** `StSignalBus` double-buffer. Publisher ghi vào bản nháp; đổi bản là
+  **một** lần ghi atomic ở boundary nên consumer hoặc thấy trọn bản cũ hoặc trọn
+  bản mới. Một ô nhớ chung sẽ cho consumer đọc nửa giá trị mới và nửa giá trị cũ —
+  với `StCell` 8 byte trên bus 32 bit, đó là một số **chưa Program nào từng ghi**.
+  Khoá thì đưa đường quét vào chờ, thứ mà `T59-403` vừa loại bỏ.
+- **Ba chính sách khác nhau thật:** `HOLD_LAST` giữ giá trị cuối, `USE_FALLBACK`
+  dùng giá trị **khai báo**, `WAIT` trả `UNAVAILABLE`. "Chưa ai publish" khác
+  "quá hạn": chỉ `USE_FALLBACK` có câu trả lời khai báo cho trường hợp đầu.
+  Producer dừng làm giá trị **quá hạn theo freshness** chứ không biến mất tức thì —
+  xoá ngay sẽ biến một sự cố có thời hạn thành sự cố tức thì.
+- **Sửa kèm 1 — signal chưa từng đi vào container.** `mkddc-st-package` không có
+  đường nhận signal và `ProcessPackager` không truyền, nên mọi khai báo Published
+  Signal đã qua validate ở `T59-304` **không tới được thiết bị**: bus runtime luôn
+  rỗng bất kể người dùng cấu hình gì. Nay `SIGNAL_DEFS` mang thêm
+  `stalePolicy`/`fallbackBits`, CLI nhận `--signals <file JSON>` (file chứ không
+  phải argv vì tên signal là chuỗi người dùng đặt), giá trị dự phòng đi xuống dưới
+  dạng **bit** của `StCell` để không có lần làm tròn nào.
+- **Sửa kèm 2 — `stalePolicy` không phải enum đóng.** Check chỉ kiểm cặp
+  policy↔fallback nên `"MAGIC"`, chuỗi rỗng hay `"HOLD_LAST "` đều lọt và buộc
+  runtime phải đoán. Nay đóng ở ba lớp độc lập: Check (Go), writer + loader
+  package (C++), và `StSignalBus::declare`.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1179/1179** pass (11 test bus + 2 test
+  coordinator mới); **0 lần đọc rách** qua 20.000 vòng publisher/consumer song
+  song; 2 test Go mới; `scripts/verify-project.sh --wave W4` **5/5 PASS**;
+  `verify_programming_g1_contracts.py` 10/10; `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-404`, `RSK-PROG-012/017/020`, DDD §4.5/§10.
+
+### T59-403 — Worker lane, cô lập lỗi Program và ràng buộc không cấp phát (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_scheduler.{hpp,cpp}`,
+  `apps/core/application/st/tests/test_st_program_lanes.cpp` (mới),
+  `apps/core/application/st/tests/test_st_scheduler.cpp`, `apps/core/CMakeLists.txt`,
+  `scripts/run_core_tsan.sh` (mới), Plan 59 §3/§3.5, Risk Register v4.6,
+  Traceability v5.4, baseline manifest v1.27.
+- **Đổi hành vi có chủ ý:** fault của **một** Program không còn dừng cả Task.
+  Lý do cũ ghi trong code ("các Program trong một Task thường phối hợp") thuộc về
+  thời Task chỉ có một Program và mọi trao đổi là ngầm. Kiến trúc §8 quy định
+  `isolate Program`, và trao đổi giữa Program đi qua Published Signal có chính
+  sách fallback **khai báo**. Giữ hành vi cũ nghĩa là một Program hỏng làm mọi
+  Program khác — kể cả Program không liên quan gì tới nó — ngừng tác động lên đầu
+  ra mà không có mục nào trong hồ sơ nói vì sao. `last_dispatch_succeeded()` vẫn
+  `false`: cô lập không có nghĩa là im lặng. Test `ProgramFaultStopsRestOfTask`
+  được thay bằng `ProgramFaultIsIsolatedFromRestOfTask`.
+- **Thêm:** lane là đơn vị song song (`StLaneMode::SEQUENTIAL|PARALLEL`). Program
+  cùng lane chạy tuần tự theo `order`; lane khác nhau độc lập. Kết quả và trace
+  của mỗi lane gom riêng rồi trộn theo **số hiệu lane** — trộn theo thứ tự hoàn
+  thành sẽ làm kết quả khác nhau giữa hai lần chạy cùng cấu hình.
+- **Ràng buộc RT:** worker tạo sẵn ngoài chu kỳ quét, spin+yield không vào kernel;
+  bộ đệm lane cấp phát một lần. `allocation_probe` đo **0 cấp phát** ở cả hai chế
+  độ. Lane vượt số worker chạy nốt trên luồng gọi — thiếu worker làm chậm, không
+  làm bỏ sót.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1166/1166** pass;
+  `scripts/verify-project.sh --wave W4` **5/5 PASS**; `scripts/run_core_tsan.sh`
+  54 test lập lịch, **0 cảnh báo ThreadSanitizer**; `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5 `T59-403`, `RSK-PROG-006/018/021`,
+  `PROGRAMMING_ARCHITECTURE.md` §8.
+
+### T59-402 — Lập lịch theo từng Program: chu kỳ, deadline, trần 16 (2026-08-21)
+
+- **Phạm vi:** `apps/core/application/st/st_scheduler.{hpp,cpp}`,
+  `apps/core/application/st/st_package_v2.{hpp,cpp}`,
+  `apps/core/application/st/st_package_main.cpp`,
+  `apps/core/application/st/st_package_golden_main.cpp`,
+  `apps/core/application/programming/programming_runtime_coordinator.{hpp,cpp}`,
+  `apps/web-api/internal/programming/compiler/packager.go`,
+  `apps/web-api/internal/programming/application/checks.go`,
+  `contracts/programming/golden/*`, `contracts/programming/g1_contract_join_v1.json`,
+  `scripts/verify_programming_g1_contracts.py`, Plan 59 §3/§3.5, Risk Register v4.5,
+  Traceability v5.3, baseline manifest v1.26.
+- **Triệu chứng:** `run_task` chạy **mọi** Program mỗi lần Task tới hạn, nên một
+  Program cấu hình 30 s thực chất chạy 30 lần nhiều hơn thiết kế — kết quả khác
+  với thứ người dùng cấu hình, không chỉ là chạy nhanh hơn.
+- **Nguyên nhân gốc:** Task là đơn vị chạy duy nhất; `StProgramInstance` không có
+  chu kỳ riêng, và package v2 không mang chu kỳ nên runtime không có gì để theo.
+- **Cách sửa:** `st_program_due()`/`st_program_mark_released()` quyết định release
+  theo từng Program, bù trôi theo mốc **lý thuyết** (một tick trễ không đẩy mọi
+  deadline sau đó), lỡ chu kỳ thì **đếm và bỏ** chứ không chạy bù. `PROGRAM_TABLE`
+  của package mang `periodMs`/`budgetUs`; writer **và** loader cùng từ chối chu kỳ
+  ngoài ba lớp profile. Trần **16 Program chạy đồng thời** ép ở `start()`.
+  `add_program` chèn theo `order` nên thứ tự chạy độc lập thứ tự tạo.
+- **Sửa kèm 1 — package v2 không sống sót reboot.** `load_active_checkpoint` nạp
+  nguyên khối container vào một instance như thể artifact v1; loader IR v1 từ chối
+  magic `MKDDCIR2` và thiết bị tỉnh dậy **không có Program nào**. Nay đường khôi
+  phục đi qua đúng `split_package` + `ensure_topology` như đường stage.
+- **Sửa kèm 2 — bảng section golden không được canh.** Verifier G1 ghim hash và
+  `artifactBytes` nhưng không đối chiếu bảng section trong manifest với bảng thật
+  trong file, nên manifest có thể mô tả một file không còn tồn tại. Thêm
+  `golden_sections()` + self-test 25 ca sai lệch.
+- **Kiểm chứng (HOST/LOCAL):** `ctest` **1159/1159** pass;
+  `scripts/verify-project.sh --wave W4` **5/5 PASS** (layout, cpp, go, docs,
+  candidate-pin); `verify_programming_g1_contracts.py --self-test` 34/34 mutation +
+  25/25 sai lệch bảng section + 6/6 chuỗi migration + 5/5 dry-run;
+  `candidate_pin_check.py` 16/16.
+- **Refs:** `PLAN-PROG-059` §3.5, `RSK-PROG-001/005/018/022`, DDD §7.1.
+
+### Added — `T59-401` Coordinator nạp package v2, bỏ hardcode `program-main` (2026-08-21)
+
+**Một parser, không hai.** `UnpackPackageV2` giữ lại blob IR nhưng dùng **đúng
+cùng** hàm parse với `LoadPackageV2` — chỉ khác một tham số. Parser thứ hai để
+"chỉ lấy blob" sẽ tạo hai bộ ngữ nghĩa cho một định dạng. Parser cũng ép **mỗi
+Program đúng một blob IR**: lệch số nghĩa là gói thiếu thân chương trình, và nạp
+nó cho một instance không chạy được mà không ai báo.
+
+**Tên Program là dữ liệu của PACKAGE.** Trước đây coordinator đòi
+`instance_id == "program-main"` và đòi bootstrap khai sẵn instance đó — mỗi lần
+đổi tên Program phải sửa tiến trình khởi động, và chỉ nạp được đúng một Program
+mãi mãi. Nay topology được dựng theo **chính package**. Bỏ hardcode **không** có
+nghĩa nhận mọi chuỗi: `valid_instance_id` ép ASCII in được, không dấu phân cách
+đường dẫn, 1..64 ký tự.
+
+**Vòng đời chạy trên TOÀN BỘ tập instance** — stage, arm, rollback, start. Chỉ xử
+lý instance chính sẽ để package ở trạng thái **nửa cũ nửa mới** ngay tại boundary
+kế tiếp.
+
+**Gói hỏng để lại 0 mutation:** một Program stage lỗi thì mọi Program đã stage
+trước đó bị huỷ. Nạp nửa gói là nạp một cấu hình **chưa từng được Check**.
+
+**Dual-reader còn sống:** artifact v1 một Program vẫn nạp được, có test khoá —
+mất đường này là mất bản LKG cuối cùng sau một lần nâng cấp (DDD §12.1).
+
+**Ranh giới CMake:** `st_package_v2.cpp` (+ `st_pou_registry`,
+`st_fb_instance_layout`) chuyển sang `core_application` và bị **gỡ khỏi**
+`st_compiler_lib` (lib đó link `core_lib`, biên dịch lại sẽ tạo ký hiệu trùng).
+Không link cả `st_compiler_lib` vào `mkddc-core` — compiler không có việc gì trên
+bộ điều khiển đang chạy.
+
+**Kiểm chứng (host/local):** `ctest` **1149/1149**; `go test ./... -count=1` 18/18;
+`verify-project.sh --wave W4` **5/5 PASS**.
+
+**Ranh giới:** lập lịch từng Program theo chu kỳ riêng, hàng đợi due và ngân sách
+thuộc `T59-402`.
+
+### Changed — `T59-306` IA sáu trang: `programs`/`mapping` là route đích (đóng Wave W3) (2026-08-21)
+
+**Đảo chiều `design` ↔ `programs`/`mapping`.** DDD §8 khoá sáu route, trong đó
+`projects/{id}/programs` (PGM-02) và `.../mapping` (PGM-03) là **route đích**.
+Trước đây chúng chỉ redirect **tới** `/design`; nay ngược lại. Để route đích làm
+redirect nghĩa là địa chỉ thật của trang không bao giờ xuất hiện trên thanh URL —
+mọi link chia sẻ, bookmark và báo lỗi đều trỏ vào lối vào cũ.
+
+**Route thắng query:** nếu query thắng thì `/mapping?tab=programs` sẽ hiện một
+trang **không khớp địa chỉ của chính nó**. Lối vào cũ `/design` giữ nguyên
+`program/line/column` — mất chúng là mất luôn vị trí lỗi trong link báo lỗi cũ.
+
+**Cây POU (PGM-02)** gom ba nhóm `Programs`/`Functions`/`Function Blocks` với số
+đếm, đọc document v2 **trực tiếp** (không qua adapter tương thích).
+
+**Inspector ẨN trường không có nghĩa, không hiện rồi xám.** Một FUNCTION không có
+chu kỳ và không có trạng thái bật — nó không phải đơn vị lập lịch. Một ô "chu kỳ"
+bị xám vẫn nói rằng khái niệm đó tồn tại ở đây, và người dùng sẽ đi tìm cách bật
+nó. Program hiện `Tắt (mặc định cho Program mới)`, khớp `desiredEnabled=false` mà
+`T59-305` ghi vào topology.
+
+**Kiểm chứng (host/local):** FE **118 file / 1102 test**; `tsc --noEmit` sạch;
+`verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** E2E real-backend Draft save/reload thuộc `T59-505`; hiển thị
+diagnostic conflict trên trang Mapping gắn với `T59-503` — luật conflict đã được
+ép ở BE (`T59-304`).
+
+### Added — `T59-305` Topology và budget cấp package (2026-08-21)
+
+**Thứ tự tạo là dữ liệu của quá khứ, không phải của package.** Topology sắp theo
+`programId`, không theo thứ tự xuất hiện trong tài liệu. Nếu manifest bám thứ tự
+tạo thì hai Project **cùng nội dung** dựng theo thứ tự khác nhau sẽ cho hai
+package khác nhau — và mọi so sánh provenance giữa hai controller mất nghĩa.
+
+**Program mới LUÔN `desiredEnabled=false`.** Package không được tự bật thứ vừa
+được nạp: bật là quyết định vận hành riêng, có audit riêng, và người vận hành
+phải thấy nó trước khi nó chạy. Phép kiểm giữ cả khi không có đường đặt cờ true —
+một package tự bật Program là một package tự triển khai chính nó.
+
+**Trần 32 được ép LẠI ở Check.** `T59-301` đã ép ở Draft, nhưng Revision có thể
+tới từ **bundle import** hoặc từ Draft cũ hơn; Check là biên cuối trước khi
+package thành artifact nên nó không tin lớp trước. Chu kỳ ngoài ba lớp profile bị
+từ chối — một chu kỳ lạ là một lớp lập lịch không tồn tại.
+
+**Budget đếm theo từng lớp chu kỳ** — dữ liệu mà scheduler (`T59-402`) dùng để
+phân bổ, nên đếm sai ở đây là phân bổ sai ở đó. Trần `32/16/20%` lấy từ profile
+sinh, không phải hằng viết trong code.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; `verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** trần **16 Enabled** được *ghi* vào manifest nhưng chưa được *thi
+hành* — nó chỉ có nghĩa khi có intent enable thật (`T59-405`). Ngân sách thời gian
+thực thuộc `T59-402`.
+
+### Added — `T59-304` Bất biến cấp package kiểm ở Check, không chỉ ở loader (2026-08-21)
+
+**Vì sao kiểm lại thứ loader đã kiểm.** Loader v2 kiểm "một output owner" và "một
+publisher" vì artifact có thể tới từ nơi khác. Nhưng loader chạy lúc
+**Commission** — báo lỗi ở đó là báo ở chỗ **xa nguyên nhân nhất**, sau khi người
+dùng đã đi qua toàn bộ Check và bấm triển khai. Kiểm ở Check là thứ duy nhất cho
+người dùng biết **phải sửa gì**, và nó chạy **trước khi biên dịch**: package có
+hai Program cùng ghi một output là package sai bất kể từng Program compile sạch
+hay không.
+
+**Nhận diện theo ĐIỂM VẬT LÝ, không theo tên.** Với MB_RTU, hai binding cùng
+`(deviceId, extIndex)` là **cùng một thanh ghi** kể cả khi tên điểm viết khác
+nhau — và đó là trường hợp dễ xảy ra nhất khi hai kỹ sư đặt tên khác nhau cho
+cùng một điểm.
+
+**Bốn luật Published Signal:** đúng một publisher (so **case-folded**); publisher
+phải là Program có thật (signal mất publisher là signal không ai ghi, consumer
+chờ vĩnh viễn); freshness `1000..90000` khớp chính xác dải store/runtime;
+`USE_FALLBACK` ghép cứng với giá trị dự phòng.
+
+**Chiều khẳng định được khoá:** hai Program **đọc chung** một điểm là hợp lệ, mỗi
+Program ghi điểm riêng là hợp lệ. Mọi vi phạm được **gộp** trong một lần Check.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; `verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** đây là kiểm **định nghĩa**. Double-buffer/freshness/fallback lúc
+chạy thuộc `T59-404`; trọng tài output và candidate withdrawal thuộc `T59-406`.
+
+### Added — `T59-303` Binding MB_RTU qua Point contract canonical (2026-08-21)
+
+**Ranh giới quyết định toàn bộ thiết kế:** compiler **không biết** register,
+function code, endian hay chu kỳ poll — và không được biết. Ánh xạ một điểm
+Modbus sang vị trí SHM là việc của hệ Modbus RTU. Contract Point vì vậy thêm đúng
+một trường: `extIndex` — slot EXT `1..256` do **Point Catalog** phân giải;
+`resolve_io_bindings` map thẳng nó sang `StPointKind::EXT`.
+
+**Không suy `extIndex` từ `pointId`:** suy nó ở đây là định nghĩa lại ánh xạ
+Modbus ở lớp không sở hữu nó, và hai định nghĩa sẽ trôi khỏi nhau. Thiếu
+`extIndex` là **thiếu dữ liệu** — từ chối, không đoán.
+
+**IR không đổi:** `StPointKind::EXT` và `StPointCategory::MB_RTU` đã có sẵn với
+`st_point_kind_limit(EXT) = KX_N_EXT`; thứ thiếu duy nhất là `resolve_io_bindings`
+chặn category này. Artifact vì thế byte-compatible với bản cũ.
+
+**Fail-closed đầy đủ:** thiếu `extIndex`, thiếu `deviceId` (mất tính duy nhất của
+identity `(deviceId, pointId)`), vượt trần 256, ghi vào điểm read-only, bind
+`VAR_INPUT` với `direction=output`, và kiểu `TIME` (không có biểu diễn trên dây).
+
+**Guard hai chiều ở BE:** MB_RTU thiếu slot bị chặn, và category khác **mang**
+slot cũng bị chặn — bỏ chiều thứ hai là mở một trường vô nghĩa mà lớp sau phải
+đoán có nên tin hay không.
+
+**Kiểm chứng (host/local):** `ctest` **1145/1145**; `go test ./... -count=1` 18/18
+package ok; `verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** Point Catalog phía BE chưa phát `extIndex` cho Mapping tab — đường
+đó cùng UI chọn điểm MB_RTU thuộc `T59-306`; nghiệm thu I/O Modbus thật thuộc
+`T59-703`.
+
+### Added — `T59-302` Check cấp package: mọi Program, gộp diagnostic, container v2 thật (2026-08-21)
+
+**Bỏ trần pipeline "một Program mỗi lần chạy"** mà `T59-002` đã ghi là giới hạn
+giai đoạn. `compilerInputs` dựng input cho **mọi** Program, sắp theo `objectId` để
+thứ tự biên dịch — và do đó thứ tự diagnostic — không phụ thuộc thứ tự đọc DB.
+
+**Gộp diagnostic thay vì dừng ở Program đầu tiên hỏng.** Dừng sớm bắt người dùng
+sửa từng lỗi rồi chạy lại; với 32 Program đó là 32 vòng. Mỗi diagnostic mang
+`programId` của chính nó — compiler một-nguồn luôn trả chuỗi rỗng, và một mã lỗi
+không kèm Program là mã lỗi không dùng được.
+
+**`mkddc-st-package`** lắp container v2 bằng **chính** `WritePackageV2()` mà
+golden và fuzz của `T59-106` đang canh, rồi **đọc lại bằng chính loader** trước
+khi ghi ra đĩa. Cài lại định dạng bằng Go sẽ tạo bản thứ hai cho cùng một format,
+và bản thứ hai luôn là bản quên cập nhật. CLI không biên dịch lại gì.
+
+**Vì sao packager làm ngay ở đây:** store ép bất biến "PASSED ⇒ có Artifact", và
+bất biến đó đúng — một Check báo *sẵn sàng* trong khi không có gì nạp được là một
+Check nói dối. Thiếu packager thì Check **fail-closed** và nêu đúng thứ còn thiếu.
+
+**Hai con số hash cho hai câu hỏi khác nhau:** `contentSha256` (dãy
+`programId`+`artifactSha256`, tất định theo nội dung) và `containerSha256` (hash
+của chính package đã ghi).
+
+**Migration `0009`** mở `artifacts.schema_version ∈ {1,2}`. Rebuild giữ **nguyên**
+hình dạng migration v3 đã chốt: không UNIQUE trên content hash, giữ index và hai
+trigger bất biến.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; `ctest` 1138/1138; FE 116 file / 1091 test; G1 10/10;
+`verify-project.sh --wave W3` **6/6 PASS**.
+
+**Ranh giới:** bảng POU signature trong container hiện chỉ khai `PROGRAM`; signal
+defs, binding manifest, resource budget và `desiredEnabled=false` thuộc `T59-305`.
+
+### Fixed — `T59-302` migration 0009 bản đầu tái tạo lỗi đã sửa ở v3 (2026-08-21)
+
+Bản đầu đưa lại `UNIQUE(sha256, profile, target_abi)` trên `artifacts` và làm rơi
+`artifacts_content_idx` cùng hai trigger bất biến — đúng lỗi mà migration v3 đã
+sửa có chủ ý (hai Check có byte deterministic giống nhau là chuyện bình thường).
+`TestCheckLeaseIdempotencyAtomicArtifactAndDeterministicDedup` bắt được ngay khi
+chạy toàn bộ bộ test.
+
+### Changed — `T59-301` Project Draft lên document v2: POU, 32 Program, Published Signal (2026-08-21)
+
+**Ba khác biệt bản chất so với v1**, mỗi cái sửa một lỗi mô hình thật:
+
+1. **POU tách khỏi cấu hình Program.** `objects` giữ mã nguồn và interface;
+   `programs` chỉ giữ chu kỳ và trỏ tới một object kind `PROGRAM`. Trộn hai thứ
+   như v1 làm "đổi chu kỳ" và "sửa mã" đụng cùng một bản ghi — mọi diff, impact
+   và hash đều không phân biệt được hai loại thay đổi đó.
+2. **Bỏ `task.programOrder`.** DDD §4.1 cấm expose Task order và §7.1 quy định
+   mỗi Program tự release theo deadline riêng; giữ mảng thứ tự là hứa một ngữ
+   nghĩa mà runtime không thực hiện.
+3. **`signals` là công dân hạng nhất** với publisher/freshness/policy/fallback
+   ngay ở Draft.
+
+**Migration v1→v2 không sinh identity mới**, tất định và idempotent: chạy hai lần
+cho đúng cùng byte, chạy lại trên kết quả v2 là no-op. Đổi identity khi migrate
+sẽ làm mọi Revision đã seal trỏ vào hư không.
+
+**Lớp tương thích op v1 là bắt buộc.** FE đang chạy và mọi bundle/test hiện có
+nói ngôn ngữ v1; đổi cả model lẫn toàn bộ consumer trong một bước là cách chắc
+chắn để một consumer bị bỏ quên rồi hỏng lặng lẽ. Op v1 giữ nguyên tên, phân biệt
+v1/v2 theo **hình dạng payload**. Binding v1 giữ hình dạng **mở** vì Mapping tab
+ghi thêm `point`/`dataType`/`unit`/`writable`.
+
+**Trần 32 là trần cứng ở Draft:** Program thứ 33 bị từ chối và POU đi kèm cũng
+không được ghi. **Không cascade ngầm:** xoá POU đang có Program, hoặc xoá Program
+đang publish signal, đều báo lỗi thay vì xoá kèm.
+
+**Ba consumer sửa theo mà không nhân bản dữ liệu:** `ioMapFromRevision` đọc
+`locals` của POU; phân loại `RETAIN` đọc tập biến `retain=true` của POU (bỏ nhánh
+này thì impact RETAIN im lặng biến mất và Commission không còn hỏi
+acknowledgement); `compilerInput` đọc **cả hai** đời tên nên Revision seal trước
+khi nâng model vẫn Check lại được.
+
+**FE:** một adapter `toWorkspaceDocument` chiếu v2 về view model của bốn tab
+Design; đường ghi vẫn là op v1. Chuyển tab sang v2 nguyên bản thuộc `T59-306`.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; FE **116 file / 1091 test**; `ctest` 1138/1138;
+`verify-project.sh --wave W3` **6/6 PASS**.
+
+### Added — `T59-203` FE PGM-04 Control Library (đóng Wave W2) (2026-08-20)
+
+Route `eng/programming/projects/{id}/library` + mục nav desktop; trang tìm kiếm,
+lọc, xem chi tiết, tạo và xoá khối PROJECT.
+
+**Trang chỉ HIỂN THỊ review-gate, không có ô tick duyệt.** PID mang nhãn "chờ
+review Controls/Safety" ở cả danh sách lẫn chi tiết, kèm câu nói thẳng rằng Check
+sẽ từ chối mọi Program dùng nó. Token phê duyệt suy ra từ contract profile và chỉ
+generator dựng được (`T59-205`); một ô tick ở UI sẽ đúng là thứ DDD §9 cấm. Có
+test khẳng định trang **không tồn tại** `role="checkbox"`.
+
+**`stateLayoutKnown=false` hiển thị "chưa biết", không phải `0 B`** — đây là chỗ
+dễ nhất để làm hỏng ý nghĩa mà `T59-201` bỏ công tách; hiện `0 B` sẽ làm người
+dùng tin một con số chưa ai tính.
+
+**Đổi bộ lọc là tải lại từ server**, không lọc phía client trên một trang đã bị
+cắt ở 100 item — lọc cục bộ cho kết quả *đúng một phần* mà không có gì báo thiếu.
+
+**ETag Draft mới được dùng lại ngay** cho thao tác kế tiếp; giữ ETag cũ làm lần
+bấm thứ hai bị 409 vô cớ.
+
+**Permission tách khỏi lỗi:** viewer/operator đọc được nhưng không thấy form tạo
+khối và trang nói rõ lý do, thay vì để nút chết hoặc báo lỗi sau khi bấm.
+
+**Kiểm chứng (host/local):** FE **115 file / 1088 test**; `npm run build`
+(`tsc --noEmit`) sạch; `verify-project.sh --wave W2` **6/6 PASS**.
+
+**Ranh giới:** E2E real-backend cho vòng đời library thuộc `T59-505`. Evidence ở
+đây là vitest + jsdom, **không** phải trình duyệt thật.
+
+### Added — `T59-204` Control Library trong bundle nguồn: hostile corpus và version compatibility (2026-08-20)
+
+**Không thêm route export/import library.** DDD §5.1 khoá đúng ba route library,
+và `/programming/bundles/export|import` đã là kênh trao đổi **nguồn**. Control
+Library *là* nguồn của Project nên nó đi trong bundle đó; dựng kênh thứ hai sẽ
+tạo hai định dạng, hai bộ kiểm và hai cách hỏng.
+
+**Bundle mang gì, không mang gì.** Mỗi entry có source/interface/dependency, và
+chỉ FUNCTION_BLOCK có layout authoritative mới mang `stateLayout`. Bundle **không**
+mang `contentSha256` của bên gửi — hash tính lại từ nội dung canonical ở phía
+nhận, nên bundle không tự hợp thức hoá nội dung của mình. Export tất định: hai
+lần cùng nội dung cho đúng cùng byte.
+
+**Version compatibility có mã lỗi RIÊNG.** `systemLibraryVersion` phải khớp chính
+xác registry của controller. Bundle không hỏng — nó chỉ được xuất trên registry
+khác — nên gộp vào lỗi "bundle hỏng" sẽ bảo người vận hành đi tìm file hỏng thay
+vì xuất lại.
+
+**Import cấp identity MỚI, trạng thái `DRAFT`.** Giữ identity của bên gửi sẽ làm
+hai controller có hai nội dung khác nhau dưới cùng một identity. Bundle là nguồn,
+không phải bằng chứng đã publish.
+
+**Corpus thù địch 10 biến thể** — path traversal, đường dẫn tuyệt đối, file thực
+thi, entry ngoài manifest, sửa nội dung giữ hash cũ, tự dán `REVIEW_REQUIRED`,
+FUNCTION mang `stateLayout`, `entryCount` lệch, manifest giấu library, dependency
+lệch version — đều bị từ chối và để lại **0 mutation**.
+
+**Ranh giới:** "signature" vẫn là `HASH_ONLY`. Bundle có manifest hash đầy đủ và
+được xác minh, nhưng **chưa ký**; SIGNED + key custody thuộc `T59-602`.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18;
+`verify-project.sh --wave W2` **6/6 PASS**.
+
+### Fixed — `T59-204` Seal Revision không đóng băng Control Library (2026-08-20)
+
+**Triệu chứng.** Revision đã niêm phong vẫn pin một PROJECT Library ở trạng thái
+`DRAFT`.
+
+**Nguyên nhân gốc.** `SealRevision` chưa bao giờ chạm tới library, nên POU
+dependency của một Revision "đã đóng băng" trỏ vào tập entry **vẫn sửa được**.
+
+**Cách sửa.** Seal tìm Draft library của Project, publish và pin nó **trong cùng
+transaction** với việc đóng băng Revision (`publishProjectLibraryTx` tách riêng
+cho đúng mục đích đó). Publish ở transaction riêng cho phép một lần crash để lại
+library đã publish mà không Revision nào trỏ tới — version bị tiêu mà không ai
+dùng, và người vận hành không hiểu vì sao số nhảy.
+
+### Fixed — `T59-204` phép đếm descriptor bundle lệch khi có file library (2026-08-20)
+
+`validateRevisionManifests` đếm mọi descriptor mang `revisionId` của Revision.
+File library cũng mang `revisionId` của Revision được chọn, nên phép đếm luôn
+lệch ngay khi bundle có library và mọi import đều bị từ chối. Nay chỉ đếm object
+thật của Revision.
+
+### Added — `T59-205` review gate PID: token từ contract, không từ checkbox (2026-08-20)
+
+`product_profile_v2.json` thêm `reviewGatedFeatures`; `st_review_gate.{hpp,cpp}`
+ép chính sách ở biên Check.
+
+**Ba mệnh đề của DDD §9 thành ba quyết định.** Token nằm trong profile contract;
+token phải **suy ra được** từ `featureId` + `libraryVersion` + `approvalEvidenceRef`
+(generator từ chối token bịa); và không có trường request, header hay cờ CLI nào
+đặt được nó. `libraryVersion` nằm trong miền băm có chủ ý — đổi semantics của
+entry mà giữ nguyên tên sẽ làm token cũ mất hiệu lực thay vì âm thầm áp phê duyệt
+của bản cũ cho bản mới.
+
+**Gate KHÔNG nằm trong typecheck.** Bản đầu đặt nó ở đó và làm 12 test đỏ: toàn
+bộ bộ conformance của **chính PID** không compile được nữa — mà đó là nơi dựng
+evidence Controls/Safety (`VS-PROG-U12`), thứ duy nhất mở khoá được gate. Đặt gate
+ở typecheck là khoá luôn cái chìa. Gate vì vậy là chính sách sản phẩm ở biên
+Check, được gọi ở **cả ba** đường: `compile_st_source` (mặc định BẬT), validate
+CLI và `compile_fbd_source`. Gate chỉ hai đường thì vẽ PID bằng FBD là đường vòng
+hợp lệ.
+
+**Guard hai chiều giữa profile và registry:** entry `REVIEW_REQUIRED` phải được
+khai, và feature đã khai phải thật sự `REVIEW_REQUIRED`.
+
+**G1 ghim cả trạng thái đã duyệt** (`approvedReviewGatedFeatures: []`). Mở PID là
+quyết định Controls/Safety, không phải một dòng sửa contract lặng lẽ.
+
+**Golden sinh lại bằng compiler thật:** profile đổi nên `profile.sha256` và
+`buildKeySha256` của hai build manifest đổi theo; byte `.mkir` **không đổi**
+(`cmp` khớp cả hai), xác nhận profile hash không nằm trong artifact.
+
+**Kiểm chứng (host/local):** `ctest` **1138/1138**; `go vet ./...` sạch;
+`go test ./... -count=1` 18/18 package ok; FE 114 file / 1080 test; generator
+`--self-test` 7/7 + 1 chiều khẳng định; G1 10/10 + self-test **34/34**;
+`verify-project.sh --wave W2` **6/6 PASS**.
+
+**Ranh giới:** đây là **cổng**, không phải phê duyệt. PID vẫn `REVIEW_REQUIRED`;
+mở nhãn thuộc `T59-706`.
+
+### Added — `T59-202` REST Control Library: RBAC, idempotency và audit (2026-08-20)
+
+Ba route đúng bằng `DDD-SW-PROG-UNIFIED-001` §5.1: `GET /programming/libraries`,
+`POST /programming/projects/{id}/library/entries`,
+`DELETE .../entries/{entryId}`. **Không** thêm route "tạo library" hay "publish
+library" — DDD khoá đúng ba dòng đó, tự thêm route thứ tư là tự chế contract.
+
+**Entry đầu tiên tự mở Draft library.** Chưa có PROJECT Library thì mở `1.0.0`;
+đã có bản publish thì mở **minor kế tiếp** clone từ bản mới nhất. Bắt người dùng
+"tạo library" trước khi thêm entry là dựng một bước không tồn tại trong luồng
+nào. Chỉ tăng MINOR: một Draft vừa mở là tập thay đổi chưa biết, đoán PATCH sẽ
+nói sai mức tương thích ngay khi chưa có thay đổi nào.
+
+**Mutation library đi chung lane concurrency với tài liệu Draft** — `If-Match` là
+ETag Draft của Project và mutation library tăng ETag đó. Hai lane riêng sẽ cho
+phép một lần lưu tài liệu và một lần sửa library xen kẽ nhau mà không bên nào
+thấy.
+
+**Idempotency + audit nằm CÙNG transaction với thay đổi**; migration `0008` mở
+enum `mutation_receipts.action`. Enum đó đóng có chủ ý nên thêm action mới bắt
+buộc là migration, không phải sửa hằng ở lớp Go.
+
+**`featureState=REVIEW_REQUIRED` không nhận từ payload** — đó là cờ
+Controls/Safety của registry SYSTEM, không phải nhãn client tự dán cho POU của
+mình.
+
+**Contract ba chiều:** OpenAPI lên `1.23.0` với **28 operation**; route Go và
+client TS sinh lại; cả ba bị khoá bằng test exact, G1 re-pin `openapi` + `store`.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; FE 114 file / 1079 test; G1 10/10 + self-test 32/32;
+`verify-project.sh --wave W2` **6/6 PASS**.
+
+### Fixed — `T59-202` handler Control Library nuốt route Project khác (2026-08-20)
+
+**Triệu chứng.** `POST /programming/projects/{id}/draft/revisions` trả
+`PRG-ERR-REQ-001` thay vì niêm phong Revision.
+
+**Nguyên nhân gốc.** Handler library nhận diện route bằng sự có mặt của
+`PathValue("projectId")`. Nhiều route Project khác cũng mang biến đó, nên chúng
+rơi vào handler library. `TestProgrammingProjectDraftRevisionHTTPAndRestart` ở
+`internal/app` bắt được ngay trong lần chạy full.
+
+**Cách sửa.** Khớp đường dẫn tường minh (`/library/entries`), kèm test hồi quy
+riêng khoá đúng việc seal Revision vẫn đi đúng handler của nó.
+
+### Fixed — `T59-202` mutation thiếu principal trả `503 retryable` (2026-08-20)
+
+**Triệu chứng.** Khi middleware auth chưa gắn principal, mutation Control Library
+trả `PRG-ERR-UNAVAILABLE-001` với `retryable=true`.
+
+**Nguyên nhân gốc.** Actor rỗng làm store từ chối bằng một lỗi không có sentinel;
+`writeMappedError` mặc định về UNAVAILABLE. Client được bảo thử lại một thứ không
+bao giờ thành công.
+
+**Cách sửa.** `LibraryService` từ chối actor rỗng bằng lỗi REQUEST. Các service
+Project/Check/Operation có cùng khoảng hở; nó thuộc ma trận RBAC/security đầy đủ
+của `T59-603` và đã được ghi vào Plan 59 §3.3 để không rơi mất.
+
+### Added — `T59-201` Control Library: domain, store schema v7 và SYSTEM virtual (2026-08-20)
+
+`apps/web-api/internal/programming/domain/library.go`,
+`apps/web-api/internal/programming/store/library.go` và migration
+`0007_control_library_domain.sql`. **Mở Wave W2 của Plan 59.**
+
+**SYSTEM Library không nằm trong SQLite.** Nó là snapshot chỉ đọc sinh từ
+`pou_library_registry_v1.json`. Seed nó vào DB sẽ tạo ngay một đường đặc quyền để
+ghi thêm entry SYSTEM sau khi DB đã mở, và khi đã có đường đó thì "SYSTEM
+read-only" chỉ còn là quy ước ở lớp application. Hai trigger
+`library_revisions_no_system_insert/update` chặn cả SQL trực tiếp. Snapshot hỏng
+hoặc provider lỗi thì `OpenProgrammingStore` **fail-closed** — mở store rồi phân
+giải tên bằng dữ liệu không ai kiểm là cách hỏng im lặng nhất.
+
+**PROJECT Library có version thật.** `CreateProjectLibraryVersion` clone snapshot
+parent đã publish và **re-pin dependency nội revision sang version mới**; parent
+không bị chạm. Publish dựng manifest canonical từ chính entries **trong cùng
+transaction** (caller không truyền manifest vào), nên không thể ký một manifest
+khác với tập entry thực sự bị đóng băng. Published/Deprecated bất biến ở **hai
+lớp**: store và trigger DB.
+
+**`0 byte authoritative` khác `chưa biết`.** FUNCTION/CONVERSION có
+`state_size=0` authoritative; FUNCTION_BLOCK được ở Draft khi chưa biết layout
+nhưng **không publish được** nếu thiếu version/size/hash. Đoán một con số ở đây
+làm lệch mọi offset RETAIN phía sau.
+
+**Migration v6→v7 dừng trước `ALTER`** khi DB còn hàng `library_entries` đời v6:
+hàng v6 không mang source/interface/layout nên nâng cấp nó là bịa dữ liệu.
+Migration thất bại giữ `user_version=6`, không để lại cột/trigger v7 nào.
+
+**Contract:** `programming_store_v1.manifest.json` lên `schemaVersion` 7;
+G1 re-pin `store`. `immutableEntities` bỏ `library_entries` và thêm
+`draftMutableEntities` — sau v7 entry chỉ bất biến khi revision cha đã rời
+`DRAFT`, khai bất biến vô điều kiện là khai sai.
+
+**Kiểm chứng (host/local):** `go vet ./...` sạch; `go test ./... -count=1` 18/18
+package ok; G1 10/10 contract + `--self-test` 32/32 mutation; `candidate_pin_check`
+16/16; `verify-project.sh --wave W2` **6/6 PASS**.
+
+### Fixed — `T59-201` entry Control Library không có dependency ghi `null` thay vì `[]` (2026-08-20)
+
+**Triệu chứng.** Mọi PROJECT library entry không khai dependency đều bị SQLite từ
+chối với `invalid PROJECT library entry`.
+
+**Nguyên nhân gốc.** `normalizeLibraryDependencies` trả `nil` cho input rỗng, nên
+`json.Marshal` ghi `null` xuống `dependencies_json`, trong khi hash canonical của
+entry đã canonicalize thành mảng rỗng `[]` và schema bắt
+`json_type(dependencies_json) = 'array'`. Đường phổ biến nhất của tính năng không
+chạy được, và không test nào chạm tới nó cho tới khi bộ test store được viết.
+
+**Cách sửa.** Chuẩn hoá tại đúng một điểm để cả `library_entries` lẫn
+`pou_objects` cùng ghi `[]`. Content hash **không đổi** vì nó vốn đã dùng mảng
+rỗng, nên không có golden/pin nào phải sinh lại.
+
+### Added — `T59-106` container package v2: writer, loader và dual-reader (2026-08-20)
+
+`apps/core/application/st/st_package_v2.{hpp,cpp}` cùng công cụ
+`mkddc-st-package-golden`. **Đóng Wave W1 (6/6 task).**
+
+**Vì sao container riêng thay vì mở rộng v1:** artifact v1 mô tả **một** Program.
+Package v2 phải mang nhiều Program cùng bảng POU, khóa thư viện, định nghĩa
+signal, manifest binding và ngân sách tài nguyên. Nhồi chúng vào v1 sẽ làm **mọi
+loader v1 hiện có đọc sai một cách im lặng**.
+
+**Không viết lại codegen:** section `CODE_IR` chứa **đúng** các blob v1 do
+`serialize_st_ir` sinh ra. Viết lại codegen chỉ để đổi vỏ chứa là cách chắc chắn
+nhất để hai bộ ngữ nghĩa trôi khỏi nhau.
+
+Loader là ranh giới tin cậy cuối trước khi mã lạ vào bộ điều khiển đang chạy; mọi
+trường độ dài/offset/số đếm là dữ liệu bên ngoài kiểm soát, nên test tấn công đúng
+chỗ đó:
+
+- **Tràn số 32 bit** ở `offset + size` — cộng trên 64 bit rồi mới so.
+- Bảng section phải **tăng dần theo type**; lộn xộn là dấu hiệu artifact ghép tay.
+- **Section lạ không bỏ qua im lặng** — bỏ qua nghĩa là chạy thiếu một phần gói.
+- **Fuzz lật từng byte**: 1314 biến thể, **0 lần chấp nhận nhầm**, không crash.
+- Sai profile/ABI, hash không khớp, vùng chữ ký reserved khác 0: đều fail-closed.
+
+**Hai bất biến cấp package kiểm ở loader, không chỉ ở writer** — một output
+binding có đúng một Program owner, một signal có đúng một publisher — vì artifact
+có thể tới từ nơi khác chứ không chỉ từ writer trong repo này.
+
+**Golden do chính writer production sinh:** `mkddc-st-package-golden` gọi đúng
+`WritePackageV2()` và **đọc lại bằng chính loader** trước khi ghi ra đĩa. Byte-
+stable qua hai lần sinh; G1 ghim hash + kích thước + số Program kèm 3 mutation
+self-test. Đây là golden v2 mà `T59-006` cố ý chưa tạo vì lúc đó chưa có writer.
+
+**Dual-reader theo DDD §12.1:** `ProbePackageFormat()` nhận cả v1 lẫn v2 — nếu
+probe từ chối v1 thì một lần nâng cấp là mất bản chạy được cuối cùng.
+
+**Ranh giới trung thực:** đây là **container** — nó mang và kiểm khung. Lắp nội
+dung (chọn Program nào, từ Revision nào) thuộc `T59-305`; nạp vào prepared image
+và kích hoạt thuộc `T59-401`. Blob IR trong golden là dữ liệu tất định do công cụ
+sinh, **không phải** mã biên dịch từ nguồn thật — nó kiểm vỏ chứa, và điều đó được
+ghi rõ trong cả công cụ lẫn test.
+
+**Kiểm chứng fresh trong phiên (host/local):** 14 test mới. C++ Release
+MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1131/1131 PASS** (từ 1117).
+G1 **10/10** contract, `--self-test` **31/31** mutation.
+`verify-project.sh --wave W1` **5/5 PASS**.
+
+### Added — `T59-105` FBD gọi user POU, bằng chứng dùng chung typed IR (2026-08-20)
+
+**"Dùng chung typed IR" được cho một nghĩa kiểm được:** cùng một logic viết bằng
+ST và vẽ bằng FBD sinh ra **đúng cùng một nút AST** — `USER_CALL`, cùng tên, cùng
+thứ tự đối số — và test so **trực tiếp** hai nút đó. Hai đường lowering riêng sẽ
+tạo hai bộ ngữ nghĩa để trôi khỏi nhau.
+
+- Thêm seam `lower_fbd_source_to_program()` dừng **trước** typecheck/codegen. Cần
+  nó vì lowering đã đúng nhưng codegen chưa liên kết được lời gọi POU (`T59-106`).
+  Có seam thì chứng minh được bất biến mà **không phải giả vờ** codegen đã chạy;
+  test `CodegenStillRefusesUnlinkedUserCall` khoá việc nó fail-closed.
+- Lớp model FBD chấp nhận typeRef lạ cho `FUNCTION`/`FUNCTION_BLOCK` và đánh dấu
+  `user_type_ref` — cùng lối đã dùng cho `USER_CALL` ở ST. **Sai kind vẫn bị
+  chặn**: tên có trong registry nhưng thuộc kind khác (ví dụ `TON` trên node
+  `FUNCTION`) vẫn là `FBD-SEM-TYPE-REF-001`.
+- Thứ tự đối số theo `order` của **cổng**, không theo thứ tự **dây**; có test đảo
+  dây và đòi đối số giữ nguyên.
+- FB người dùng: `validate_fb_ports` không có bảng dựng sẵn để đối chiếu, nên đối
+  số `FB_CALL` đi theo **tên cổng** để `st_pou_registry` — lớp giữ interface —
+  kiểm với `VAR_INPUT` thật. Chuyển đúng trách nhiệm, không bỏ kiểm.
+- FE `fbd/userPou.ts`: sinh pin và entry palette từ `UserPouInterface` (gương của
+  `StPouSignature` phía Core). Interface mâu thuẫn bị **từ chối** thay vì sinh pin
+  sai — FUNCTION thiếu kiểu trả về, FB thừa kiểu trả về, trùng tên cổng, dùng
+  `OUT` cho cổng vào.
+
+**Sửa trong chính task:** bản đầu coi **mọi** typeRef lạ là POU người dùng, làm
+`TON` trên node `FUNCTION` lọt qua lớp model. Một test có sẵn bắt được ngay và đã
+sửa để phân biệt "sai kind" với "POU người dùng".
+
+**Ranh giới trung thực:** đây là **bộ sinh pin**; UI duyệt/chọn POU trong cây
+Project thuộc `T59-306`. Test FE đi qua **reducer thật** nên kết nối, undo/redo,
+chặn chỉ-đọc và announcement cho trình đọc màn hình đều là hành vi thật.
+
+**Kiểm chứng fresh trong phiên (host/local):** 7 test C++ + 6 test FE.
+`ctest` **1117/1117 PASS** (từ 1110). FE `vitest` **114 file / 1079 test PASS**,
+lint exit 0, build exit 0 (`✓ built`). `verify-project.sh --wave W2` **6/6 PASS**.
+
+### Added — `T59-104` layout instance FB, quyền sở hữu RETAIN và identity ổn định (2026-08-20)
+
+`apps/core/application/st/st_fb_instance_layout.{hpp,cpp}` hoạch định state cho
+toàn bộ instance FUNCTION_BLOCK của các PROGRAM, kèm identity ổn định.
+
+**Bất biến đắt giá nhất: ổn định khi sắp xếp lại nguồn.** Nếu đổi thứ tự khai báo
+làm đổi offset hay identity thì **mỗi lần chỉnh sửa vô hại sẽ gây RETAIN mismatch
+và cold-init toàn bộ state đang chạy**. Cách bảo đảm: layout đi theo **thứ tự tên
+canonical**, không theo thứ tự xuất hiện trong nguồn.
+
+- Mọi state thuộc **đúng một Program owner** (DDD §4.4); identity tính từ đường
+  dẫn canonical `Program.instance.sub`, nên hai Program dùng trùng tên instance
+  vẫn là hai identity khác nhau.
+- Đổi tên một instance chỉ đổi identity của chính nó, nhưng `layout_identity`
+  tổng **phải đổi** để runtime cold-init đúng phần đã đổi.
+- Vòng **chứa** khác vòng **gọi**: `T59-102` bắt vòng gọi; FB chứa chính mình
+  (trực tiếp hoặc `Ping→Pong→Ping`) cần bộ nhớ vô hạn nên chết ở đây. Cây hợp lệ
+  nhưng quá sâu cũng bị chặn.
+- Trần **package** khác trần **Program**: từng PROGRAM dưới trần 64 mà tổng vẫn có
+  thể vượt 1024; có test dựng 17 Program × 64 instance.
+- Kiểu lạ trong `VAR`/`VAR RETAIN` ở chế độ POU thành instance FB người dùng —
+  parser chỉ ghi tên, registry phân giải, cùng lý do với `USER_CALL`.
+
+**Không đoán số cho state library:** instance của FB từ Control Library được chấp
+nhận với `state_size = 0` và cờ `is_library_type`; kích thước thật đến cùng
+artifact library (`T59-204`). Đoán một con số ở đây sẽ làm **lệch mọi offset phía
+sau** — sai lệch im lặng, tệ hơn là chưa biết.
+
+**Ranh giới trung thực:** đây là **bộ hoạch định layout**, chưa phải runtime cấp
+phát. Nối vào prepared image và cold-init thật thuộc `T59-106`/`T59-401`/`T59-407`.
+
+**Kiểm chứng fresh trong phiên (host/local):** 13 test mới, gồm 100 instance trải
+2 Program không chồng vùng và identity duy nhất. C++ Release MODBUS+BACNET+HMI
+`ON`: build PASS, `ctest` **1110/1110 PASS** (từ 1097).
+`verify-project.sh --wave W1` **5/5 PASS**.
+
+### Added — `T59-103` FUNCTION thuần: state, side-effect và chữ ký (2026-08-20)
+
+Purity của `FUNCTION` được ép ở `st_pou_registry` — **điểm hội tụ của mọi
+producer** — chứ không chỉ ở parser. Parser chỉ thấy nguồn ST; AST còn đến từ
+lowering FBD (`T59-105`), và một producer mới không được phép bỏ qua quy tắc chỉ
+vì nó không đi qua parser. 10 test mới dựng AST **thẳng tay, không qua parser**,
+rồi đòi registry vẫn chặn — đó là bằng chứng cho việc này không phải kiểm trùng lặp.
+
+**Cùng một lời gọi sai, người gọi khác nhau thì mã khác nhau:**
+
+- `FUNCTION` gọi `FUNCTION_BLOCK` → `ST-POU-002` "không thuần"; cách sửa là bỏ FB đi.
+- `PROGRAM`/`FUNCTION_BLOCK` gọi `FUNCTION_BLOCK` → `ST-POU-001` kèm chữ
+  "instance"; cách sửa là khai instance rồi gọi qua instance.
+
+Dùng chung một mã sẽ nói sai việc cần làm.
+
+- Gọi `PROGRAM` **luôn** bị từ chối: PROGRAM là đơn vị lập lịch, không phải hàm.
+- Registry công bố bảng `signatures` (tên, kind, kiểu từng input, kiểu trả về) sắp
+  xếp ổn định để lớp lowering **dùng lại** — hai bảng ký hiệu song song là cách
+  drift bắt đầu.
+- Chiều khẳng định cũng khoá: `FUNCTION_BLOCK` **vẫn được** giữ `VAR RETAIN`, FB
+  instance và gọi FUNCTION thuần; nếu guard purity lan sang FB thì FB mất đúng khả
+  năng làm nên nó.
+
+**Ranh giới trung thực về "type":** registry kiểm **số đối số** và "callee có kiểu
+trả về hay không" — hai thứ suy được thẳng từ chữ ký. Kiểu của **từng biểu thức
+đối số** cần suy kiểu biểu thức; việc đó thuộc `T59-105` và sẽ dùng đúng bảng
+`signatures` này thay vì dựng bộ suy kiểu thứ hai.
+
+**Kiểm chứng fresh trong phiên (host/local):** C++ Release MODBUS+BACNET+HMI `ON`:
+build PASS, `ctest` **1097/1097 PASS** (từ 1087). Corpus tương đương ST↔FBD
+(`verify_programming_fbd_contract.py`) PASS. `verify-project.sh --wave W1`
+**5/5 PASS**.
+
+### Added — `T59-102` registry POU: call graph, library resolver và guard DAG (2026-08-20)
+
+`apps/core/application/st/st_pou_registry.{hpp,cpp}` dựng bảng ký hiệu, call graph,
+phân giải Control Library và kiểm DAG cho tập POU của một Project.
+
+**Vì sao parser không tự phán.** Parser chỉ ghi `USER_CALL` kèm tên; nó không biết
+tập POU của Project hay library đã pin. Tách hai việc này là điều kiện để phân
+biệt ba tình huống có ba cách sửa hoàn toàn khác nhau: thêm entry (`ST-LIB-001`),
+đổi pin version (`ST-LIB-002`), phá vòng gọi (`ST-POU-003`). Gộp chúng vào một mã
+là bỏ rơi người vận hành ở đúng chỗ họ cần biết phải làm gì.
+
+- **Xác định**: bảng ký hiệu sắp theo tên case-folded, cạnh sắp theo
+  `(caller, callee, line, column)`, Kahn duyệt theo `std::set` có thứ tự. Test nạp
+  cùng tập POU theo **hai thứ tự ngược nhau** và đòi kết quả **giống hệt**.
+- **Guard DAG phân biệt chia sẻ với đệ quy**: sơ đồ kim cương phải được chấp nhận
+  (nếu không thì mọi thư viện dùng chung đều bị chặn); chu trình dài 2/3/4 đều bị chặn.
+- **Đệ quy trực tiếp** báo ngay tại **dòng gọi**, không để Kahn báo chu trình dài.
+- **Không bỏ sót nhánh**: lời gọi trong `IF`/`ELSE` và trong đối số FB đều vào đồ thị.
+- **Tên mơ hồ**: POU Project trùng tên entry SYSTEM library bị từ chối — "ưu tiên
+  bên nào" là loại quy ước ngầm gây sai lệch điều khiển im lặng.
+
+**Ranh giới giữ nguyên:** `parse_st_program()` vẫn **tắt** `USER_CALL` nên hành vi
+compile không đổi. Hai `switch` ở `st_semantic.cpp`/`st_compile.cpp` nhận nhánh
+`USER_CALL` **từ chối tường minh** — `-Wswitch` buộc chúng phải xử lý, và từ chối
+rõ ràng tốt hơn `default` im lặng. Lowering thật thuộc `T59-103`.
+
+**Kiểm chứng fresh trong phiên (host/local):** 10 test mới. C++ Release
+MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1087/1087 PASS** (từ 1077).
+`verify-project.sh --wave W1` **5/5 PASS**.
+
+### Added — `T59-101` parser/AST cho FUNCTION và FUNCTION_BLOCK (2026-08-20)
+
+Mở Wave W1. `parse_st_pou()` nhận cả ba loại POU; `StProgram` thêm `kind`,
+`has_return_type`, `return_type` và vị trí tên cho source map.
+
+Ba loại dùng **chung** một AST vì thân của chúng là cùng một ngôn ngữ — chỉ chữ ký
+và quyền hạn khác nhau. Tách ba struct riêng sẽ nhân bản toàn bộ statement/
+expression grammar, đúng thứ đã sinh ra drift ở registry library.
+
+Quy tắc chữ ký được ép ở parser, không phải quy ước ngầm:
+
+- `FUNCTION` **bắt buộc** có kiểu trả về; `PROGRAM`/`FUNCTION_BLOCK` **không được**
+  có. Cả hai chiều đều là `ST-POU-001` (→ `PRG-ERR-POU-KIND-001`).
+- `FUNCTION` không được khai `VAR_OUTPUT`, `VAR RETAIN` hay FB instance. Kiểm
+  **sau** khi đọc hết khối VAR để lỗi trỏ đúng khai báo vi phạm.
+- Kiểu trả về lạ dùng `ST-SEM-005`, không gộp vào mã kind — hai lỗi này dẫn tới
+  hai hành động sửa khác nhau.
+- Từ khóa kết thúc phải khớp loại đã mở.
+
+`parse_st_program()` **giữ nguyên hợp đồng cũ** (chỉ nhận `PROGRAM`), nên
+`st_compile.cpp` và `st_validate_main.cpp` không đổi hành vi;
+`FUNCTION`/`FUNCTION_BLOCK` **chưa** compile được — đó là `T59-102..104`.
+
+**Finding trong chính task:** bản đầu có nhánh kiểm độ dài tên POU trong parser.
+Nó là **code chết** — lexer đã chặn identifier dài hơn `kMaxIdentifierLength` bằng
+`ST-LIM-005`, và trần đó bằng đúng trần tên POU của DDD §4.2. Đã gỡ nhánh, thay
+bằng `static_assert` giữ hai con số dính nhau; test khoá hành vi thật.
+
+**Kiểm chứng fresh trong phiên (host/local):** 12 test mới (4 positive + 8
+negative) khoá kind/name/signature kèm **mã lỗi và vị trí**. C++ Release
+MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1077/1077 PASS** (từ 1065).
+`verify-project.sh --wave W1` **5/5 PASS**.
+
+### Added — `T59-007` wrapper cổng cục bộ và ma trận theo Wave (2026-08-20)
+
+`scripts/verify-project.sh --wave W0..W7` chạy đúng bộ cổng bắt buộc của một Wave
+bằng **một lệnh** và in bảng tổng kết. Ba vấn đề đã cắn thật được đóng:
+
+1. `verify-project.sh` dùng `set -e`, nên cổng đầu tiên hỏng làm các cổng sau
+   **không bao giờ chạy** — chính vì thế `test_programming_error_catalog.py` từng
+   đếm sai 19/77 rất lâu mà không ai thấy. Runner mới chạy **hết** mọi cổng rồi
+   mới kết luận.
+2. Không có nơi nào ghi Wave nào cần cổng nào. Nay
+   `contracts/ci/wave_gate_matrix_v1.json` + schema là contract: mỗi cổng khai
+   `evidenceLevel`, và cổng ngoài HOST bắt buộc có `requiresResource`, `runbook`,
+   `owner`. Schema chặn hai chiều — cổng HOST không được có `requiresResource`,
+   cổng CI/TARGET/HIL không được có `command`.
+3. Kết quả cục bộ dễ bị chép vào báo cáo như thể là GitHub CI. Runner **không có
+   đường nào** báo PASS cho cổng ngoài HOST: chúng luôn `NOT_RUN` kèm runbook và
+   chủ sở hữu, và mỗi lần chạy đều in cảnh báo mức bằng chứng.
+
+`--repeat N` soi cổng chập chờn; PASS chỉ tính khi **mọi** lần đều PASS. Mỗi cổng
+ghi toàn bộ stdout/stderr vào `build/wave-gates/<gate>.log`, đường dẫn in kèm khi FAIL.
+
+**Quan sát cần ghi lại, chưa kết luận:** lần chạy `--wave W7` đầu tiên, cổng `cpp`
+đỏ **một lần** (`Errors while running CTest`) rồi **không tái hiện** — chạy lại
+đơn lẻ PASS, xoá `build/verify/cpp-full` dựng lại từ đầu PASS **1065/1065**, và 6
+lần `ctest` liên tiếp đều 100%. Không đủ cơ sở kết luận cổng hỏng, cũng không
+được kết luận nó ổn định. Điều sửa được ngay là khả năng điều tra: bản đầu của
+runner vứt output đi nên không có gì để lần.
+
+**Kiểm chứng fresh trong phiên (host/local):** `verify_wave_gates.py --self-test`
+**8/8**; `--wave W0` **4/4 PASS**; `--wave W0 --repeat 2` PASS;
+`--wave W7` **8 PASS / 1 FAIL(flake nêu trên) / 4 NOT_RUN** trên 13 cổng;
+`verify-project.sh --component layout` **exit 0**;
+`verify-project.sh --component cpp --profile full` từ build dir sạch **1065/1065**.
+
+### Changed — `T59-006` contract v2, dual-reader và guard action ma (2026-08-20)
+
+**Đính chính quyết định của `T59-004`.** `DDD-SW-PROG-UNIFIED-001` §5.2 đã khóa
+**mười** mã public tối thiểu, nhưng `T59-004` tự đặt sáu mã gộp
+(`PRG-ERR-POU-001`, `PRG-ERR-LIBRARY-001`, `PRG-ERR-SIGNAL-001`,
+`PRG-ERR-ENABLE-001`) — tức chọn lại một quyết định đã chốt. `T59-006` thay chúng
+bằng đúng bộ tên DDD nêu; catalog lên **v1.7.0 (30 public / 120 detail)**, OpenAPI
+lên `1.22.0`, `checks.go` báo vượt trần package bằng `PRG-ERR-PROGRAM-LIMIT-001` +
+`ST-LIM-009` thay vì gộp vào `PRG-ERR-SCOPE-001`. Hai lựa chọn ánh xạ ghi rõ:
+`ST-SIG-002` (type/unit) dùng lại `PRG-ERR-MAP-004`, `ST-LIB-003` (vòng phụ thuộc)
+dùng `PRG-ERR-POU-RECURSION-001` vì vòng phụ thuộc chính là đệ quy.
+
+**Action ma của IPC biến thành thứ đo được.** `TRACE_START` nằm trong enum wire,
+trong codec C++ **và** codec Go, nhưng Core không có nhánh dispatch — nó rơi vào
+`else` và trả `IPC-ACTION-NOT-IMPLEMENTED`, không gate nào phát hiện.
+
+- Schema IPC thêm `x-mkddc-actions` khai `handlerStatus` từng action; action chưa
+  có handler phải ghi `implementedBy`. Enum wire giữ nguyên vì gỡ giá trị enum là
+  breaking change cho cả hai codec.
+- `scripts/verify_programming_ipc_actions.py` kiểm **hai chiều**: `IMPLEMENTED`
+  phải có nhánh dispatch thật, `NOT_IMPLEMENTED` **không được** có nhánh. Guard
+  chạy trong gate `layout`; self-test **4/4**.
+- `ProgramIpcServer.NotImplementedActionFailsClosedWithStableDetail` khoá hành vi:
+  không bao giờ trả `Ok`, detail ổn định, lặp cùng `requestId` cho đúng byte cũ.
+
+**Contract package v2.** `artifact_v2.schema.json` (magic `MKDDCIR2`, 12 loại
+section theo DDD §5.3, `libraryLock`, khối `capacity` chặn theo profile) và
+`package_dual_reader_policy_v1.json` biến chính sách DDD §12.1 thành contract máy
+đọc được: đọc `{1,2}`, ghi `{2}`, đúng một package Active, version/magic lạ
+`REJECT_NO_MUTATION`, cấm hạ cấp Active. G1 ép **mọi version từng ghi được vẫn
+phải đọc được** — nếu không, LKG cũ mất hiệu lực ngay khi nâng cấp. G1 nay ghim
+**10** contract.
+
+**Có chủ ý chưa làm, đã ghi chủ sở hữu:** chưa có golden artifact v2 (golden cần
+writer thật, thuộc `T59-106`) và chưa thêm tám route OpenAPI ở DDD §5.1 (chưa có
+handler — khai bây giờ sẽ tạo đúng lớp lỗi task này đang đóng; thuộc
+`T59-202`/`T59-301`/`T59-405`).
+
+**Sửa kèm:** guard IFSPEC §9 quét toàn bộ văn xuôi §9, nên một câu nhắc tên mã đã
+gỡ cũng làm gate đỏ, và ngược lại một mã chỉ nhắc trong văn xuôi vẫn "thỏa" gate
+mà không có dòng authority nào. Nay chỉ đọc dòng bảng.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `generate_programming_errors.py --check` **30 public / 120 detail**
+exact; `verify_programming_ipc_actions.py --self-test` **4/4**. C++ Release
+MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1065/1065 PASS**. `go vet ./...`
+sạch, `go test ./... -count=1` **18/18 package ok**. FE `vitest` **113 file /
+1073 test PASS**, lint exit 0, build exit 0 (`✓ built`).
+`verify-project.sh --component layout` **exit 0**; G1 **10/10** contract,
+`--self-test` **28/28** mutation. `test_programming_error_catalog.py` 9 test OK.
+
+### Added — `T59-005` store schema v2: migration v5→v6 cho Product model (2026-08-20)
+
+`0006_product_model_v2.sql` tạo năm bảng theo `DDD-SW-PROG-UNIFIED-001` §4.7 —
+`pou_objects`, `library_revisions`, `library_entries`, `published_signal_defs`,
+`program_runtime_intents` — và thêm ba cột cho `revisions`
+(`document_schema_version`, `program_count`, `library_revision_id`).
+
+Bất biến được đặt vào **chính schema**, không để lớp application tự giữ:
+
+- `published_signal_defs`: `UNIQUE(revision_id, name_folded)` khoá **một
+  publisher** cho mỗi signal; `CHECK` buộc `USE_FALLBACK` phải có giá trị dự phòng
+  và ba chính sách còn lại **không** được mang fallback — chặn đúng lối "im lặng
+  thay bằng 0" mà DDD §10 cấm; `freshness_ms` giới hạn `1000..90000`.
+- `program_runtime_intents`: `desired_enabled` mặc định **0** vì Program mới sau
+  Commission luôn Disabled (DDD §0); trigger buộc `generation` chỉ tăng nên intent
+  cũ tới muộn không ghi đè intent mới.
+- `library_revisions`: `SYSTEM` không thuộc Project nào, `PROJECT` bắt buộc có
+  `project_id`; revision đã rời `DRAFT` là bất biến.
+
+Dùng `ALTER TABLE ADD COLUMN` thay vì rebuild `revisions` vì bảng này được sáu
+bảng khác tham chiếu và `RENAME` sẽ viết lại các FK đó sang tên tạm. Cột mới có
+`DEFAULT` giữ nguyên nghĩa hàng cũ, binary v5 bỏ qua cột nó không biết.
+
+**Sửa kèm:** `TestMigrationFaultChecksumPartialAndCorruptFailClosed/user-version`
+viết cứng `PRAGMA user_version=6` để mô phỏng "schema tương lai"; ngay khi schema
+lên đúng 6 thì test đó thành **no-op** và không còn kiểm gì. Đã đổi sang
+`CurrentSchemaVersion+1`.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `schema_v2_test.go` — **atomic 3/3** điểm lỗi (`before_apply`,
+`after_sql`, `before_commit`): mỗi lần `user_version` giữ 5, không sót bảng mới,
+chạy lại vẫn lên head; **idempotent 3 vòng** mở lại DB, `Applied` rỗng và danh
+sách bảng không đổi; **0 hàng** ở `operations`/`commission_records`/
+`program_runtime_intents`/bốn bảng mới sau migration; dữ liệu v1 nguyên vẹn và
+`DEFAULT` cột mới đúng `1/1`; **5 nhóm bất biến** bảng mới đều fail-closed.
+`go vet ./...` sạch, `go test ./... -count=1` **18/18 package ok**.
+`verify-project.sh --component layout` **exit 0**; G1 **8/8** contract,
+`--self-test` **25/25** mutation + **6/6** chuỗi migration.
+
+Migration **chưa** chạy trên board thật — điều đó thuộc `T59-705`.
+
+### Added — `T59-004` error catalog v1.6.0 cho sáu miền mới, guard hai chiều (2026-08-20)
+
+**Đính chính (xem `T59-006` phía trên):** sáu mã dưới đây tự đặt sai bộ tên mà
+`DDD` §5.2 đã khóa và đã được thay bằng đúng mười mã DDD ở `T59-006`.
+
+Catalog lên **26 public code / 118 detail mapping**. Sáu mã mới phủ POU
+(`PRG-ERR-POU-001`), Control Library (`PRG-ERR-LIBRARY-001`), Published Signal
+(`PRG-ERR-SIGNAL-001`), output owner (`PRG-ERR-OUTPUT-OWNER-001`), Enable/Disable
+(`PRG-ERR-ENABLE-001`) và PID review (`PRG-ERR-PID-REVIEW-001`); 14 detail mapping
+mới khai trong `st_diagnostic.hpp` và `st_control_api.hpp`. Emitter nằm ở W1..W4 —
+khai contract trước consumer đúng Plan 59 §1.2 quy tắc 1, và guard hai chiều bảo
+đảm không emitter nào xuất hiện sau này mà thiếu ánh xạ.
+
+**Hai khoảng hở của gate được phát hiện và đóng trong task:**
+
+1. `error_catalog_v1.schema.json` trước đây chỉ được **băm** chứ chưa bao giờ
+   được thi hành, nên nó đã drift thật: `statusClass = "NOT_FOUND"` được
+   `PRG-ERR-NOT-FOUND-001` dùng nhưng thiếu trong enum của schema qua nhiều
+   revision. Generator nay validate catalog theo schema; enum được bổ sung.
+2. Guard detail chỉ kiểm **một chiều** (source → catalog) và chỉ quét source C++,
+   nên `ST-CLI-LIMIT`, `ST-WORKER-CRASH`, `ST-WORKER-TIMEOUT` do BE Go phát nằm
+   ngoài tầm quét. Nay guard quét thêm `checks.go` và kiểm **hai chiều**: mapping
+   không có emitter nào khai cũng làm build fail, trừ khi đánh dấu `contractOnly`
+   tường minh (`IPC-CONTRACT-ONLY` là sentinel test codec hai phía).
+
+**Sửa kèm:** `programmingErrorCopy` không có test phủ nên mã public mới sẽ rơi vào
+nhánh `default` và hiển thị mã thô cho người dùng — đúng lớp lỗi `RSK-PROG-014`.
+Đã thêm copy VI/EN cho cả sáu mã và `errorCopy.test.ts` bắt buộc **mọi** mã trong
+catalog có copy riêng ở cả hai ngôn ngữ.
+
+**Consumer cùng boundary:** OpenAPI lên `1.21.0` (enum lỗi + client TS sinh lại);
+G1 re-pin `openapi`/`errors`; test đếm ở Go, C++ và TS cập nhật cùng commit.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `generate_programming_errors.py --check` **26 public / 118 detail**
+exact. C++ Release MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1064/1064 PASS**.
+`go vet ./...` sạch, `go test ./... -count=1` **18/18 package ok**. FE `vitest`
+**113 file / 1073 test PASS**, `lint` exit 0, `build` exit 0 (`✓ built`).
+`verify-project.sh --component layout` **exit 0**; G1 `--self-test` 25/25.
+`tests/integration/test_programming_error_catalog.py` **9 test OK**, gồm negative
+mới cho mapping ma và cho catalog vi phạm chính schema của nó.
+
+### Fixed — `T59-003` registry POU/Control Library single-source, gỡ entry ma (2026-08-20)
+
+Danh sách entry Control Library tồn tại **ba** bản chép tay: allowlist FBD của
+Core (`st_fbd_model.cpp`), palette FE (`palette.ts`) và `coreLibrary.functions`
+trong profile. Không có phép kiểm nào ràng buộc ba bản lại với nhau, nên chúng đã
+trôi khỏi compiler theo **cả hai chiều**:
+
+1. Core cho phép `SCALE`, `DEADBAND`, `CTU`, `PI` — compiler **không có** cả bốn.
+   `CTU` lọt qua lớp model rồi mới chết ở lớp semantic; ba entry còn lại chưa có
+   test nào chạm tới.
+2. Core **từ chối** `SQRT` và bốn conversion `INT_TO_REAL`, `REAL_TO_INT`,
+   `TIME_TO_REAL`, `REAL_TO_TIME` trong khi palette FE vẫn chào người dùng — đúng
+   class lỗi "hợp lệ ở FE, chết ở Core".
+
+- Thêm `contracts/programming/pou_library_registry_v1.json` + schema làm **nguồn
+  duy nhất**: 40 entry (15 `OPERATOR`, 20 `FUNC_TABLE`, 5 `FB_TYPE`) với
+  port/kiểu/nhãn/`featureState`. Trường `dispatch` khai compiler nhận diện entry
+  ở đâu, nên entry không có đường dispatch thật bị chặn ngay ở schema/verifier.
+- `scripts/generate_programming_library_registry.py` sinh allowlist C++ và palette
+  TS; `--check` exact, thêm vào gate `layout`.
+- `st_fbd_model.cpp` dùng allowlist sinh và so `profileId` bằng hằng sinh thay vì
+  literal; `palette.ts` dựng `FBD_PALETTE` từ registry; profile **bỏ hẳn**
+  `coreLibrary.functions`, chỉ còn `version`.
+- G1 ghim contract thứ 8 `library-registry` (số đếm theo `dispatch`,
+  `libraryVersion`, danh sách `REVIEW_REQUIRED`, chặn entry ma quay lại) và thêm
+  5 mutation self-test.
+- `test_st_library_registry.cpp` (7 test) chống tái phát **hai chiều**: mọi entry
+  registry giải được ở compiler, và mọi symbol compiler có trong registry, kể cả
+  vector một-trên-trần. PID giữ `REVIEW_REQUIRED`.
+
+**Sửa kèm — lỗi do `T59-002` để lại trên `main`:** `npm run build` của FE chạy
+`tsc --noEmit`, và bản merge `T59-002` làm bước đó **đỏ** vì
+`api/generated/profile.test.ts` import `node:crypto`/`node:fs` trong khi tsconfig
+FE chỉ khai lib DOM và repo cố ý không cài `@types/node`. Số đo "FE build PASS"
+ghi trong mục `T59-002` ở trên là **sai** — lỗi đọc exit code khi chạy nền. Đã sửa
+bằng cách đọc contract qua import JSON (`resolveJsonModule`); phép bằng nhau chính
+xác của SHA-256 vẫn được ép ở `generate_programming_profile.py --check` (gate
+`layout`) và ở `TestProfileGeneratedMatchesContract` phía Go, nên không mất coverage.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `generate_programming_library_registry.py --check` 40 entry / 2 tệp
+sinh. C++ Release MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1063/1063 PASS**.
+`go vet ./...` sạch, `go test ./... -count=1` **18/18 package ok**. FE `vitest`
+**112 file / 1071 test PASS**, `npm run lint` **exit 0**, `npm run build`
+**exit 0** (đã đọc đúng exit code, có dòng `✓ built`). `verify-project.sh
+--component layout` **exit 0**; G1 `--self-test` **25/25** mutation + 6/6 manifest
+chain + 5/5 deploy order. Golden ST/FBD sinh lại bằng compiler thật, byte `.mkir`
+**không đổi**.
+
+### Changed — `T59-002` Product profile v2: capacity 32/16 và generator C++/Go/TS (2026-08-20)
+
+Capacity sản phẩm bị khoá ở **một** Program tại mọi lớp: C++ `kMaxProgramsTotal=1`,
+Go `len(programs) != 1`, diagnostic `"limit": 1`, FE/Go chép tay `profileId`,
+`profileSha256` và trần FBD. Nguyên nhân gốc: profile machine-readable chỉ sinh
+**một** consumer (C++); Go và TS đọc cùng contract nhưng bằng literal chép tay,
+nên ba lớp không có phép kiểm nào ràng buộc lại với nhau — và JSON Schema khoá
+thẳng `maxTasks/maxProgramsPerTask/maxProgramsTotal` thành `const 1`.
+
+- Thay `rev_a_profile_v1.*` bằng `contracts/programming/product_profile_v2.*`:
+  khối `capacity` cấp package `32 Program / 16 Enabled / 256 user POU / 1024 FB
+  instance / 512 signal / 512 binding`, khối `scheduler`, khối `resources` giữ
+  trần cấp **một** Program, thêm `targetAbi`.
+- `scripts/generate_programming_profile.py` sinh **C++ + Go + TS** từ một nguồn,
+  validate JSON Schema, kiểm bất biến ngoài schema (Enabled ≤ Total,
+  `maxTasks` = số lớp chu kỳ, binding Program ≤ binding package, chu kỳ tăng dần)
+  và chạy `gofmt` để `--check` không bao giờ đối đầu với `gofmt -l`.
+- Bỏ literal ở consumer: `st_limits.cpp` (`range=1..1`, `enum=…`, `exact=3841`),
+  `st_ir.hpp`/`st_limits.hpp` (`0x00000F01`), `st_scheduler.hpp` (budget percent),
+  `runner.go` (`profileId`/`profileSha256`/`libraryVersion`/`integrityMode`/ABI/
+  `MaxArtifactBytes`), `checks.go` (`limit: 1`, `65536`), FE `fbd/model.ts`
+  (`profileId`, trần FBD, danh sách type).
+- G1 join ghim profile v2 + hash schema + `documentMajor/Minor` +
+  `maxProgramsTotal/Enabled` + `targetAbi` + `integrityMode`; validator bỏ nốt
+  `len(contracts) == 7`, `version == 1.0`, `profileCode == 1` và
+  `integrityMode == "HASH_ONLY"`, chuyển sang bộ tên contract bắt buộc.
+- Golden ST/FBD build manifest được **sinh lại bằng `mkddc-st-compile` thật**,
+  không sửa tay: chỉ `profile.sha256` và `buildKeySha256` đổi, byte `.mkir` giữ
+  nguyên — xác nhận profile hash không nằm trong artifact, nên LKG cũ vẫn nạp được.
+
+**Ranh giới có chủ ý:** `profileId`, `profileCode` và `targetAbi` **giữ giá trị v1**
+vì là discriminator nằm trong artifact/FBD document/build manifest; xoay chúng ở
+W0 sẽ vô hiệu hóa mọi golden và phá dual-reader v1/v2 mà DDD §12.1 yêu cầu. Việc
+rotate thuộc `T59-006`/`T59-106`.
+
+**Giới hạn giai đoạn nêu rõ, không giấu:** pipeline compiler hiện dựng được một
+Program mỗi lần chạy. Quá 32 Program bị từ chối bằng **trần sản phẩm 32**; 2..32
+Program bị từ chối bằng **trần pipeline 1** ở nhánh riêng ghi rõ chủ sở hữu
+`T59-302`/`T59-305`. Test khoá đúng sự phân biệt này.
+
+**Sửa kèm:** `PRG-ERR-SCOPE-001` từng gắn arg `limit` cho cả những từ chối **không**
+do trần (payload sai dạng), tức bịa một con số giới hạn cho người đọc lỗi. Nay
+`limit` chỉ xuất hiện khi thật sự có trần bị vượt.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `generate_programming_profile.py --check` exact **3/3** tệp sinh.
+C++ Release MODBUS+BACNET+HMI `ON`: build PASS, `ctest` **1055/1055 PASS** (thêm
+3 test one-over/capacity). `go vet ./...` sạch, `go test ./... -count=1` **18/18
+package ok** (thêm 9 test capacity/one-over). FE `vitest` **112 file / 1066 test
+PASS** (thêm 5 test contract profile) và `lint` PASS. **`build` KHÔNG PASS** —
+xem mục `T59-003` phía trên: `tsc --noEmit` trong `npm run build` đỏ vì test mới
+import Node API; đã sửa và đo lại ở `T59-003`.
+`verify-project.sh --component layout` **exit 0**; G1 `--self-test` **20/20**
+mutation + **6/6** manifest chain + **5/5** deploy order, tất cả reject đúng lý do;
+artifact manifest self-test **7/7**; FBD contract PASS. `git diff --check` sạch.
+
+### Fixed — `T59-001` mở gate G1: re-pin join contract và bỏ hardcode schema version (2026-08-20)
+
+`scripts/verify_programming_g1_contracts.py` báo 10 FAIL và giữ gate `layout` đỏ
+dù mọi contract bị tố "drift" đều là bản hợp lệ đã merge. Nguyên nhân gồm hai lớp:
+pin trong `contracts/programming/g1_contract_join_v1.json` lạc hậu (OpenAPI
+`1.19.0`, error catalog 80 componentDetail, store head migration `0004`, golden
+manifest artifact cũ), và validator nhân bản chính các giá trị đó thành literal
+(`schemaVersion == 4`, `publicErrorCount == 20`, `componentDetailCount == 80`,
+`operationCount == 25`), khiến mọi thay đổi contract hợp lệ đều làm gate đỏ và
+buộc sửa code kiểm thay vì sửa dữ liệu ghim.
+
+- Re-pin đủ 7 contract G1; thêm `schemaVersion` + `migrationDir` cho contract
+  `store` để số schema là **dữ liệu ghim có review**, không phải hằng trong code.
+- Validator lấy mọi số đếm/version từ pin; error count đối chiếu ba chiều
+  catalog ↔ manifest ↔ pin nên không thể sửa một phía mà vẫn xanh.
+- Thêm `validate_migration_chain()`: chuỗi migration liên tục `1..N`, mọi file khai
+  báo tồn tại đúng SHA-256, head trùng cả pin lẫn `migrationFile`, thư mục không
+  chứa `.sql` ngoài manifest, và đường dẫn đi qua guard chống path traversal.
+- Self-test siết từ "có bị reject không" thành "bị reject **đúng lý do**", thêm 7
+  mutation phủ đúng các giá trị vừa bỏ hardcode.
+- Sửa cùng lớp lỗi ở `TestProgrammingStoreContractManifest`
+  (`apps/web-api/internal/programming/store/store_test.go`): bỏ literal tên head
+  migration, suy ra head từ `embeddedMigrations()`, và bổ sung so sánh
+  `manifest.schemaVersion == CurrentSchemaVersion` cùng đối chiếu từng entry
+  manifest với checksum embed — trước đó contract manifest và code Go có thể trôi
+  khỏi nhau mà test vẫn xanh.
+
+**Kiểm chứng fresh trong phiên (host/local, không phải GitHub CI, không phải
+target/HIL):** `verify_programming_g1_contracts.py` exit 0; `--self-test` **12/12**
+mutation join + **6/6** manifest chain + **5/5** thứ tự deploy lỗi, tất cả reject
+đúng lý do. `scripts/verify-project.sh --component layout` **exit 0** (trước đó
+exit 1 với 10 FAIL). `go vet ./...` sạch; `go test ./... -count=1` **18/18 package
+ok**. Kiểm chứng negative thật: sửa tạm `schemaVersion` 5 → 4 trong contract
+manifest thì Go báo `schema version lệch: manifest=4 code=5` và Python báo
+`store schema version drift: manifest=4 pin=5`; đã khôi phục nguyên trạng.
+
+Không đổi schema DB, không thêm migration, không chạm Active/LKG; rollback bằng
+revert commit.
+
+### Added — Product Programming thống nhất, Unified DDD và Plan59 (2026-08-20)
+
+Hợp nhất Product Programming thành **một** authority, không chia phạm vi A/B:
+đa Program, `PROGRAM`/`FUNCTION`/`FUNCTION_BLOCK`, Control Library, Published
+Signal, Enable/Disable, independent scheduling, output safety, RETAIN, monitor,
+rollback và sáu workspace. `PROD-PROG-001` v3.0, `ADR-050`, SRS 82 requirement,
+Unified Detailed Design `DD-01..DD-13`, VVP 44 scenario, Trace và Risk được đồng
+bộ thành một chuỗi Product → Design → Code → Evidence.
+
+Thêm Plan59 v2.0 làm execution/tracker authority duy nhất với **51 task / 8
+Wave**, cùng prompt tự động chọn task Ready/Ordered, chạy test, cập nhật hồ sơ,
+commit/PR. Mọi quyết định thiết kế cần cho implementation đã khóa; tài nguyên CI,
+board, credential và HIL được quản bằng `EVIDENCE_QUEUE`, không làm dừng code
+khác nhưng vẫn giữ `RELEASE_READY=NO-GO` khi thiếu bằng chứng.
+
+Thêm bảy asset UX cho POU tree, Mapping/Signal, Control Library, Commission và
+Runtime; cập nhật harness cho baseline thống nhất, 82 requirement, 44 scenario,
+22 risk, 12 quyết định và 14 SVG. Plan53/54/56/tracker được đánh dấu Superseded. Candidate Product Hybrid,
+audit chưa kiểm soát và task G1 rời được loại; nội dung còn đúng đã hợp nhất vào
+authority mới, `T59-001` sở hữu G1 re-pin.
+
+**Kiểm chứng fresh trong phiên:** pin baseline **16/16 PASS**; harness tài liệu
+**PASS** (82 requirement, 44 scenario, 22 risk, 12 quyết định, 14 SVG, 0 link/
+anchor/ID/trace violation); `git diff --check` và `py_compile` PASS. C++ Release
+bật Modbus + BACnet + HMI build PASS, `ctest` **1052/1052 PASS**. Go `vet` PASS,
+`go test ./... -count=1` **18/18 package PASS**. FE **111 file / 1061 test PASS**,
+lint và production build PASS; Programming contract checks PASS. Không chạy
+Chrome/Playwright vì change-set chỉ sửa tài liệu, SVG đặc tả và script kiểm hồ
+sơ, không đổi hành vi FE runtime. Gate `layout` vẫn fail đúng 10 drift G1 có sẵn;
+đây là acceptance đầu tiên của `T59-001`, không bị che hoặc gọi là PASS.
+
+
+### Changed — Đóng task dependency boundary; tách G1 contract thành task riêng (2026-08-20)
+
+Quyết định Owner: **không giữ một task đã hoàn thành 100 % phạm vi kỹ thuật ở
+trạng thái OPEN chỉ vì pipeline phía sau nó vừa lộ thêm một lỗi độc lập** — làm
+vậy là trộn hai phạm vi khác nhau.
+
+`REPOSITORY_LAYOUT_BOUNDARY_FIX` → **`CLOSED — VERIFIED`**: 10→0 violation, 8→0
+illegal deep import, 1→0 vi phạm ở `scheduler/shared.ts`, `verify_repository.py`
+PASS, boundary guard 9/9, `tsc`/build/1061 unit/61 e2e đều PASS, không sinh
+circular mới, lazy-loading giữ đúng.
+
+**Bản sửa scanner comment được GIỮ NGUYÊN.** Luật cũ quét comment như code và sinh
+false positive; bản sửa vẫn bắt import tĩnh/động và chuỗi ký tự (fetch, worker
+URL), có test âm khoá hành vi — kể cả ca "chú thích hợp lệ + import thật trong
+cùng tệp vẫn phải đỏ". Đây là làm luật đo đúng thứ nó tuyên bố đo.
+
+Phần gate còn đỏ (`verify_programming_g1_contracts.py`, 10 FAIL) **chuyển giao**
+sang `T59-001` trong [`PLAN-PROG-059`](docs/03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md)
+— cùng hạng mục mang mã `PRG-CON-001`/`GAP-C-01`/`F-LAYOUT-01` ở các tài liệu
+khác. ADR-050 và Unified DDD đã khóa compatibility/dual-reader; `T59-001` vì vậy
+`READY`, không còn chờ authority ký.
+
+Re-pin artifact và đổi validator **bắt buộc nằm cùng một change-set**; negative
+self-test tiếp tục chứng minh cổng bắt drift thật.
+
+`F-LAYOUT-03` (circular dependency có sẵn) tiếp tục backlog riêng, không kéo vào
+task G1.
+
+
+### Fixed — Dependency boundary `apps/web-ui`: 10 vi phạm → 0 (2026-08-20)
+
+Gate `repository-layout` đỏ sẵn trên `main`. Hai nguyên nhân độc lập.
+
+**1) Xung đột thật giữa hai bất biến (8/10 vi phạm).** Luật kiến trúc buộc import
+chéo feature đi qua barrel; nhưng cùng một barrel vừa import tĩnh vừa import động
+sẽ bị rollup gộp chunk và `lazy()` mất tác dụng (`INEFFECTIVE_DYNAMIC_IMPORT`).
+Tác giả trước né bằng deep-import và **đã ghi rõ lý do trong `App.tsx`** — cách né
+đúng về bundling nhưng phá ranh giới, và bất biến kiến trúc là bên thua trong im
+lặng.
+
+*Cách sửa:* không chọn bên, mà bỏ điều kiện gây xung đột — **mỗi feature ở ranh
+giới `app/` phải toàn bộ tĩnh hoặc toàn bộ động**. Khi không còn import tĩnh,
+barrel chỉ có đường động nên chunk riêng được giữ: `lazy()` chạy VÀ ranh giới
+được tôn trọng. Đây đúng mô hình `modbus-rtu` đã dùng từ trước. Ba trang Cảnh báo
+chuyển eager→lazy (có sẵn `<Suspense>`), bundle chính **giảm 573.22 → 567.21 kB**.
+
+**2) Luật đo sai thứ nó tuyên bố đo (1/10).** Luật "Web UI không chạm contract
+C/SHM/IOP" quét toàn văn tệp nên bắt cả **chú thích truy vết**:
+`scheduler/shared.ts` chỉ ghi `khớp contracts/shm/mkddc_shm.h` — thứ
+`DOC_GOVERNANCE` khuyến khích. Phần thưởng ngược: cách "sửa" duy nhất là xoá chú
+thích.
+
+*Cách sửa:* bỏ comment TRƯỚC khi so khớp (`strip_ts_comments`). **Không phải nới
+lỏng** — chuỗi ký tự vẫn giữ nên import động/fetch/worker URL tới contract vẫn bị
+bắt. 4 test âm khoá cả hai chiều, gồm ca "chú thích hợp lệ + import thật" vẫn phải
+đỏ.
+
+Vi phạm thứ 10: `route-menu-contract.test.ts` deep-import `../features/auth/roles`
+trong khi barrel đã export — bỏ sót thuần tuý.
+
+Thêm `features/programming/index.ts` (public API duy nhất còn thiếu), chỉ export
+`ProgrammingRoutes`; cố ý không dùng `export *` để barrel là ranh giới thật.
+
+**Kiểm chứng:** dependency boundary 10→0; `tsc` exit 0; vitest **1061/1061**;
+lint/build exit 0, **0 cảnh báo `INEFFECTIVE_DYNAMIC_IMPORT`**; e2e **8 spec /
+61 passed**; guard boundary **9/9**; madge: 1 circular **có sẵn**, không mới;
+không chunk feature nào bị preload (lazy còn nguyên).
+
+**Gate `repository-layout` VẪN ĐỎ** vì một chặn thứ hai, độc lập, có sẵn — xem
+`F-LAYOUT-01` trong
+[REPOSITORY_LAYOUT_BOUNDARY_FIX_CLOSEOUT](docs/07_records/reviews/REPOSITORY_LAYOUT_BOUNDARY_FIX_CLOSEOUT.md):
+`g1_contract_join_v1.json` ghim ngày 2026-08-11 nhưng bốn commit 13–15/08 đổi
+contract mà không re-pin. Đã kiểm chứng cho **y hệt 10 dòng FAIL** trên worktree
+tại `1abbff6`. Không sửa vì muốn gate xanh phải đổi hằng số `schemaVersion == 4`
+nằm trong **chính script kiểm** — đúng thứ "sửa rule để hợp thức hoá" bị cấm; nó
+cần một vòng G1 contract review có người ký.
+
+Kèm theo: sửa `test_programming_error_catalog.py` ghim `19/77` trong khi thực tế
+`20/104` (catalog lớn lên hợp lệ qua `37a9d41`/`d118f7a`). Lỗi này chỉ lộ ra sau
+khi sửa xong boundary — trước đó `set -e` cắt mất.
+
+
+### Changed — Thi hành 8 quyết định phạm vi sau đợt rà toàn ứng dụng (2026-08-20)
+
+Đợt rà đối chiếu **mã nguồn thật** với tài liệu gate và hợp đồng API. Kết quả
+chia làm ba nhóm: bề mặt được quảng cáo mà không có runtime, cổng kiểm không
+chạy, và tài liệu nói sai hiện trạng. Tám quyết định sản phẩm được ký ngày
+2026-08-20 (`DECISIONS.md`) và thi hành trọn trong đợt này.
+
+**Nguyên tắc xuyên suốt:** hợp đồng Rev A chỉ mô tả thứ runtime Rev A thực thi.
+Một bề mặt khai mà không có handler còn tệ hơn không khai — nó sinh client gọi
+vào hư không và làm mọi phép đếm độ phủ API sai.
+
+#### 1. Gói phát hành ship sai biến thể FE — `P0`
+
+*Triệu chứng:* mọi gói phát hành thiếu hẳn bốn workspace Programming, không kèm
+lỗi build nào; chỉ lộ ra khi mở giao diện trên board. Đã tái diễn hai lần
+(2026-08-14, 2026-08-17).
+
+*Nguyên nhân gốc:* `build-release.sh` gọi `npm run build` trần ⇒
+`VITE_PROGRAMMING_REV_A` rỗng ⇒ `PROGRAMMING_REV_A_ENABLED = false` ⇒ route và
+NavRail ẩn toàn bộ nhóm Programming. Công thức đúng chỉ tồn tại dưới cái tên
+board-specific `build:foxlinx`, nên script phát hành chung không ai nghĩ tới nó.
+
+*Cách sửa:* thêm `npm run build:release` làm công thức phát hành chuẩn
+(`build:foxlinx` giữ làm alias để không vỡ thói quen cũ); `build-release.sh` gọi
+nó. Khoá bằng `tests/integration/test_release_packaging_guard.py`, chạy **đầu
+tiên** trong gate `layout`.
+
+#### 2. Không có cổng nào canh route ↔ OpenAPI — `P0`
+
+*Triệu chứng:* 7 path khai trong spec mà **không có handler nào**
+(`/ota/*`, `/graph/validate`, `/graph/deploy`, `/bacnet/objects`,
+`/logs/download`), và 13 endpoint **đang chạy** mà không hề có trong spec
+(`/modbus/frames`, `/modbus/templates`, `/alarms/metrics`, `/me/preferences`,
+`/system/history`, `/users/access`, `/schedules/effective`,
+`/virtual-points/{id}/usage`, `/alarm-settings/simulate|estimate`,
+`/network/connectivity-check`, `PUT /system/config`).
+
+*Nguyên nhân gốc:* `contract_sync_test.go` canh **tên field của schema** nhưng
+không canh **danh sách path**. Khoảng trống đó câm ở cả build lẫn runtime.
+Hệ quả thật: `client.validateGraph()` gọi `POST /graph/validate` — một lời gọi
+chỉ có thể trả 404; nó không nổ vì tình cờ không ai gọi hàm đó.
+
+*Cách sửa:* `apps/web-api/internal/app/http.go` tách `routeTable()` khỏi
+`Router()` để test liệt kê được bề mặt thật mà không phải chép lại danh sách.
+Thêm `TestRouteTableMatchesOpenAPI` (đối chiếu hai chiều, kèm allowlist đúng một
+alias `GET /health`) và `TestRevBSurfacesStayOutOfRevAContract`. Bổ sung 13
+endpoint + 24 schema vào `openapi.yaml`, tên trường lấy trực tiếp từ struct Go
+đang phục vụ request.
+
+#### 3. 9/10 bộ Playwright chưa bao giờ vào CI
+
+*Nguyên nhân gốc:* `verify-project.sh` hard-code đúng `e2e/network-qa.spec.ts`
+(1 test). Khoảng 59 test còn lại mục dần đúng theo kịch bản `F-07` mà chính
+comment trong workflow cảnh báo — và đúng như dự đoán, **3 test đã đỏ sẵn**:
+
+| Test | Nguyên nhân |
+|---|---|
+| `fe-pages-health` × 2 | Khẳng định chuỗi tiếng Anh, trong khi config khai `locale: 'vi-VN'` từ bản sửa `BUG-001` ⇒ giao diện render tiếng Việt |
+| `pa3-dashboard` × 1 | Khẳng định heading `Dữ liệu trực tiếp`/`Live Data` không tồn tại (trang ghi `Biểu đồ trực tiếp`/`Live Chart`), và khối đó nằm trong tab `Chẩn đoán` chứ không phải tab mặc định |
+
+Cả ba đã kiểm chứng là **đỏ độc lập với đợt thay đổi này** (stash toàn bộ, lỗi
+giữ nguyên). Sản phẩm không sai — bài test sai.
+
+*Cách sửa:* liệt kê spec **động** (spec mới tự vào cổng), `point-names.spec.ts`
+tiếp tục cách ly qua `MKDDC_E2E_QUARANTINE`. Sửa ba test: khớp song ngữ bằng
+regex thay vì ghim một ngôn ngữ (bền hơn khi đổi `locale`), và mở đúng tab trước
+khi khẳng định. Thêm `page.bringToFront()` cho hai test bàn phím của `pa3-a11y` —
+chúng flake khi chạy tuần tự cả bộ vì trang chưa giành được tiêu điểm cửa sổ.
+
+#### 4. Tài liệu gate nói sai hiện trạng
+
+`VERIFICATION.md` và `MODBUS_RTU_OPEN_DECISIONS.md` ghi `RED`/`OPEN` cho những
+việc **đã làm xong**, khiến dự án trông tụt hậu hơn thực tế và có nguy cơ khiến
+ai đó làm lại việc đã có:
+
+| Mục | Tài liệu ghi | Thực tế trong mã |
+|---|---|---|
+| `VR-MBRTU-002` | "capacity còn 64" | `KX_N_EXT = 256` — Đ-07 đã thi hành |
+| `VR-MBRTU-002/013` | "chưa có import/export", "không có endpoint commissioning" | `/modbus/import|export`, `test-connection`, `read-test`, `write-test` đều có |
+| `VR-MBRTU-005` | "contract thiếu bốn trạng thái/timestamp producer" | `kx_ext_quality_t` 5 mức + 10 mã reason + `sample_utc_ms`/`sample_mono_ns` |
+| `OD-MBRTU-019` | "đứt end-to-end" | Thông suốt Go → `fieldbus.conf` → iobus, có test |
+| `OD-MBRTU-016` | "có thêm `CONFIG_ERROR` không?" | `KX_EXTQ_CONFIG_ERROR = 4` đã tồn tại |
+
+Gate được sửa **lý do** cho đúng và hạ từ `RED` xuống `PARTIAL`; phần còn thiếu
+thật (evidence trên target) giữ nguyên — không tự ý chuyển sang `PASS`.
+
+#### 5. Gỡ `firmware.elf` khỏi provenance phát hành
+
+STM32 BSP **hoãn** cho tới khi có phần cứng. Nhưng release không được phát hành
+checksum cho một artifact chưa tồn tại thật: ELF hiện tại có entry `0x811d`,
+`.text` ở `0x800c` (layout mặc định newlib nosys, không phải flash base
+`0x08000000` của STM32G0), **không có `Reset_Handler` và không có bảng vector** —
+nó không boot được trên STM32G0B1RBT6. Gỡ khỏi `checksums.sha256`, thêm
+`"mcu_firmware": "not-included"` vào `provenance.json`. Compile check giữ nguyên
+ở CI job `mcu-firmware`.
+
+#### 6. OTA → Rev B
+
+Gỡ toàn bộ `/ota/*` khỏi `openapi.yaml`. Cùng nguyên tắc, gỡ luôn `/graph/*`,
+`/bacnet/objects`, `/logs/download` — không path nào có handler. Gỡ mã chết
+`client.validateGraph()` ở FE (hai nhánh của nó đều trỏ tới endpoint không tồn
+tại; nếu từng có ai gọi, nó sẽ nuốt một 404 rồi thử tiếp một 404 thứ hai).
+Mitigation cũ `x-implementation-status: not-implemented` bị bác: nhãn không ngăn
+generator sinh client. `TestOpenAPISeparatesRuntimeRoutesFromRoadmap` được **đảo
+chiều** — nay khẳng định bảy path đó VẮNG MẶT.
+
+#### 7. Gỡ `expose_bacnet` khỏi đường Rev A
+
+`ProfilePoint` bỏ ba trường `expose_bacnet`/`bacnet_object_type`/
+`bacnet_instance`. Chúng chưa từng có consumer runtime nào trong `apps/`, và BE
+cũng chưa bao giờ sinh ra chúng — một tính năng chỉ tồn tại ở lớp parser: nhận
+cấu hình, báo lỗi khi thiếu type, rồi không làm gì cả. `parse_point()` vẫn ĐỌC
+khoá cũ để cảnh báo `profile.expose_bacnet_deprecated`, phục vụ migration; cấu
+hình cũ vẫn nạp được và Point vẫn hoạt động. Hai test khoá cả hai chiều (có
+cảnh báo khi còn khoá cũ, im lặng khi không có).
+
+#### 8. Vòng đời lệnh ghi Modbus RTU — chốt và khoá `OD-MBRTU-005`
+
+**TTL 30 s hoặc tối đa 3 lần phát**, điều kiện nào tới trước thì lệnh kết thúc.
+FW đã có sẵn đúng hai giá trị này; nay khoá bằng
+`WriteLifecycleConstantsMatchProductDecision` để đổi chúng phải đi kèm quyết định
+sản phẩm.
+
+**Ranh giới ghi rõ trong spec:** TTL là tuổi thọ của **lệnh đang chờ/retry**,
+KHÔNG phải hẹn giờ hoàn tác giá trị register — slave đã ACK là lệnh hoàn tất.
+Force/override tạm thời rồi tự trả về là cơ chế khác, có lease/expiry riêng.
+
+### Fixed — Lệnh ghi mới cùng giá trị bị nuốt sau khi lệnh cũ bị bỏ (2026-08-20)
+
+*Triệu chứng:* kỹ thuật viên đặt setpoint 50.0 trong lúc biến tần mất điện ⇒ lệnh
+bị bỏ theo TTL. Biến tần có điện lại, họ đặt **lại** 50.0 — UI báo đã nhận, thiết
+bị không bao giờ nhận. Không log, không lỗi.
+
+*Nguyên nhân gốc:* `ModbusMaster` chống phát trùng bằng `last_written_`, đặt ngay
+lúc **enqueue** chứ không phải khi ghi thành công. Lệnh bị bỏ vẫn để lại dấu vết
+đó, nên lệnh mới mang đúng giá trị cũ bị coi là trùng và không bao giờ xuống dây.
+Đây đúng là lớp lỗi false-success mà thiết kế cấm, và nó vô hiệu hoá quy tắc
+"muốn ghi lại phải phát sinh command mới" của `OD-MBRTU-005`.
+
+*Cách sửa:* `BusWorker` ghi nhận ext slot của mọi lệnh kết thúc mà không áp được
+(quá hạn TTL, hết lượt thử, giá trị không encode được) và cho `ModbusMaster` lấy
+qua `take_dropped_write_slots()`; master xoá `has_last_written_` tương ứng ở đầu
+`drain_ext_writes()`. Khoá bằng `DroppedWriteAllowsResendOfSameValue` — đã kiểm
+chứng test này FAIL khi tắt bản sửa (`write_dropped` đứng ở 1 thay vì 2).
+
+**Kiểm chứng (đo lại trong phiên, không dẫn số cũ):**
+
+| Bộ | Lệnh | Kết quả |
+|---|---|---|
+| C++ | `cmake --fresh` + build + `ctest` (MODBUS+BACNET+HMI ON) | configure/build/ctest **exit 0**, **1052/1052 pass** |
+| Go | `go vet ./...` + `go test ./... -count=1` | vet sạch, **0 FAIL** |
+| FE unit | `npx vitest --run --environment jsdom src` | **1061/1061 pass**, 111 file |
+| FE lint/build | `npm run lint`, `npm run build` | exit 0 / exit 0 |
+| E2E | `verify-project.sh --component e2e` | **8 spec, 61 passed**, exit 0 |
+| Guard đóng gói | `test_release_packaging_guard.py` | 3/3 pass; đã kiểm chứng FAIL khi cố tình hồi quy |
+
+**Còn mở, KHÔNG thuộc phạm vi đợt này:** gate `layout` đang đỏ sẵn trên `main`
+với 10 vi phạm dependency boundary (`App.tsx` import sâu vào `features/*`,
+`scheduler/shared.ts` chạm contract C/SHM/IOP). Đã kiểm chứng là đỏ trên cây sạch
+trước mọi thay đổi của đợt này. Guard đóng gói mới được đặt **trước** các kiểm đó
+trong `run_layout` để `set -e` không che mất nó.
+
+
+### Added — Đóng Plan 57: ba hồ sơ UI/UX còn thiếu + 6 asset, và test hành vi `F-UX-13` (2026-08-19)
+
+Rà `§9.1` của Plan 57 **trước khi** tuyên bố đóng, và tìm ra ba gate tài liệu
+chưa thi hành. Chúng không phải task nên không hiện trong mẫu số 70 — nhưng chính
+plan tuyên bố chúng **chặn** ba task đã giao, nên đóng plan mà bỏ qua là đóng
+trên giấy.
+
+| Gate | Chặn task | Đã phát hành |
+|---|---|---|
+| Hồ sơ + asset **Alarm KPI** | `T57-3.3` | `KX-DDC24-UX-WEB-OPERATIONS-001` v1.1 §3 — `OPS-03` |
+| Hồ sơ + asset **Modbus frame monitor** | `T57-3.9` | `MODBUS_RTU_UI_UX_DESIGN` v0.3 §6.5 — `MBR-FRM-01` |
+| Hồ sơ + asset **Scheduler effective preview** | `T57-3.5`/`3.6` | `KX-DDC24-UX-WEB-SCHEDULER-001` v1.1 §8b — `SCH-EFF-01` |
+
+**Sáu asset SVG** (desktop 1440 + mobile 390 cho mỗi màn hình), mỗi asset dựng đủ
+các trạng thái mà màn hình thật có — **gồm cả trạng thái không đọc được**, vì đó
+là trạng thái hay bị vẽ thiếu nhất và cũng là trạng thái nguy hiểm nhất khi vẽ
+sai. Dữ liệu trong hình ghi rõ là **minh hoạ** theo `DOC_GOVERNANCE` §2.2.
+
+Ba mục đặc tả viết **sau khi đọc mã đã chạy**, không viết theo trí nhớ: đây là hồ
+sơ mô tả thứ đang tồn tại, nên một chi tiết sai ở đây sẽ thành một chi tiết sai
+trong đầu người bảo trì sau này.
+
+**Đồng bộ ma trận kiểm chứng** (`DOC_GOVERNANCE` §7 bước 3):
+`docs/05_verification/UX_PA3_TRACEABILITY.md` v1.1 thêm §5 — 17 năng lực Plan 57,
+11 endpoint mới, số đo gate, và §5.3 ghi hai mục **cố ý** vắng mặt kèm lý do.
+
+**`F-UX-13` đóng bằng test hành vi.** `SeverityBadge.test.tsx` (5 test) khoá thứ
+mà `contrast.test.ts` không khoá được: năm mức ra năm nhãn khác nhau, không mức
+nào mượn tông "an toàn" của IEC 60073, và mỗi chip luôn có icon + nhãn chữ để
+người không phân biệt được màu vẫn đọc ra mức.
+
+### Changed — Plan 57 chuyển trạng thái ĐÓNG (2026-08-19)
+
+Task Rev A **70/70**, gate tài liệu đủ, ma trận kiểm chứng đã đồng bộ, đã deploy
+và đo trên board thật. Thêm §14 bàn giao **Rev B** cho ba mục ra khỏi Rev A **có
+chủ đích**: `T57-3.8` (quét bus — phát byte ra RS-485 thật), `T57-4.1` (ISA-101
+Level 2), và khoảng hở Back/Forward của `useDirtyGuard` (cần chuyển sang data
+router — đổi kiến trúc điều hướng, không làm ở bước đóng plan).
+
+Ghi **tách bạch** trong plan: đóng plan **không** đồng nghĩa `RELEASE_READY`.
+Cổng đó là việc riêng theo `DOC_GOVERNANCE` §4 và cần người — chữ ký cho
+`ADR-033`…`ADR-049` (waive hết hiệu lực đúng tại cổng, không có lần hai), GO của
+Product + Release + QA, và một quyết định về CI đang chặn vì billing tổ chức.
+
+### Verification (2026-08-19, đợt 5)
+
+| Bộ | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **111 file / 1061 test PASS** |
+| `npm run lint` | PASS |
+| `python3 scripts/docs_iso_harness.py --expect` | PASS |
+| SVG mới | 6/6 parse được bằng `xml.dom.minidom` |
+
+### Added — `T57-3.9` xem khung truyền Modbus RTU, và `mkddc-alarm-sim` (2026-08-19)
+
+Đóng nốt phần task của Rev A Plan 57 (**70/70**) cùng hai khoảng hở đóng gói ghi
+ở mục dưới.
+
+**1. `T57-3.9` — bảng khung truyền, sau khi sửa `ADR-046` chứ không phải trước.**
+
+`ADR-046` bản ban hành hứa "byte thô hiện dạng hex". Không làm được: libmodbus
+không lộ bộ đệm wire, muốn có byte thô phải thay lớp transport của chính thư viện
+đang điều khiển bus RS-485 thật — rủi ro không tương xứng với một tính năng chẩn
+đoán. ADR được sửa trước (điều cũ đánh dấu `SUPERSEDED`, thêm mục "Sửa đổi
+2026-08-19 — Rev A ghi bản ghi giao dịch, không có byte thô"), rồi mới viết mã.
+
+| Lớp | Thay đổi |
+|---|---|
+| iobus | `adapters/modbus_rtu/frame_ring.hpp` — vòng nhớ 200 giao dịch, mutex, không cấp phát trong đường ghi |
+| iobus | `bus_worker.cpp` ghi lại mỗi lượt `modbus_read_*`, **kể cả lượt hỏng**, kèm phân loại `timeout`/`crc`/`error` và số lần phát |
+| iobus | Op `frames` trên control socket (`control_channel.*`, `bootstrap/main.cpp`) |
+| Go | `GET /api/v1/modbus/frames` (`RoleViewer`), kẹp `limit` về 200; iobus trả `unsupported` ⇒ **503 kèm nguyên văn lý do** |
+| FE | `FrameMonitor.tsx` trên trang chẩn đoán Modbus RTU |
+
+Nguyên tắc xuyên suốt các lớp: **"không đọc được" không bao giờ được rơi thành
+mảng rỗng**. Mảng rỗng đọc thành "bus im lặng", và hai tình trạng đó dẫn tới hai
+kết luận trái ngược khi người kỹ thuật đang đứng trước tủ.
+
+Giao diện in thẳng hai giới hạn thay vì để trong tài liệu: vòng nhớ **mất khi
+iobus khởi động lại**, và Rev A **không có byte thô**.
+
+**2. `mkddc-alarm-sim` — engine `ADR-035`/`ADR-048` đặc tả nhưng chưa từng tồn tại.**
+
+`apps/core/application/alarm/alarm_sim_main.cpp` + target build. Binary là một vỏ
+mỏng quanh `AlarmRuntime`: nạp luật bằng **chính** `parse_alarm_config_json` của
+controller (tách khỏi `load_alarm_config` trong cùng đợt), bơm mẫu vào
+`PointTable`, gọi `evaluate` từng bước, ghi lại các lần chuyển trạng thái. Không
+một dòng ngữ nghĩa cảnh báo nào được viết lại — một bản cài lại trong Go sẽ đúng
+cho tới ngày nó lệch khỏi bản C++, và ngày đó không ai biết.
+
+Kiểm ở **mức binary** (`scripts/verify_alarm_sim.py`, ctest `alarm_sim_behaviour`,
+13 trường hợp), vì thứ cần khoá là đúng cái binary backend gọi — kể cả hợp đồng
+stdin/stdout.
+
+**3. Cả hai engine đã cài lên board** ở `/usr/sbin` **và** cạnh binary web tại
+`/opt/mkddc-web/`: `exec.LookPath` phụ thuộc PATH của unit systemd, đường "cạnh
+chính mình" thì không.
+
+### Fixed — Hai lỗi bắt được trong chính đợt này (2026-08-19)
+
+1. **Mốc thời gian khung dùng nhầm `CLOCK_MONOTONIC`.** `bus_worker` lấy `now_ms`
+   của vòng quét, vốn là uptime. Giao diện đọc trường đó bằng `new Date(at)` nên
+   cột thời gian sẽ hiện **giờ năm 1970** — và cột thời gian là thứ người kỹ thuật
+   dùng để đối chiếu khung với thao tác vừa làm ở tủ, nên sai còn tệ hơn không có.
+   Sửa bằng `frame_wall_clock_ms()` (`CLOCK_REALTIME`); test `BusWorkerFrames` nay
+   khoá ràng buộc "mốc nằm trong 60 s gần đây theo đồng hồ tường".
+2. **`mkddc-alarm-sim` gắn động chết trên board.** Buildroot chỉ có tới
+   `GLIBCXX_3.4.30`, toolchain cross sinh tham chiếu `GLIBCXX_3.4.32`. Triệu
+   chứng phía người dùng là một endpoint 503 khó lần, **không** phải lỗi build.
+   Sửa bằng `-static-libstdc++ -static-libgcc` cho riêng binary này.
+
+### Verification (2026-08-19)
+
+| Bộ | Kết quả |
+|---|---|
+| `ctest --test-dir build/fw` (MODBUS+BACNET+HMI ON, `--fresh`) | **1049/1049 PASS** |
+| `go vet ./...` + `go test ./... -count=1` | PASS |
+| `npx vitest --run --environment jsdom src` | **110 file / 1056 test PASS** |
+| `npm run lint` + `npm run build:foxlinx` | PASS |
+| Board Foxlinx | `mkddc-core`/`mkddc-iobus`/`mkddc-web-pi` `active`; op `frames` trả `{"result":"ok","frames":[]}`; route `/api/v1/modbus/frames` trả `401` (đối chiếu `404` cho route không tồn tại); `mkddc-alarm-sim` chạy đúng dưới user `mkddc` |
+
+**Vòng nhớ rỗng trên board là trạng thái đúng, không phải lỗi:** board không có
+`fieldbus.json` nên không slave Modbus RTU nào được poll. Cấu hình thêm một thiết
+bị chỉ để sinh khung sẽ **phát byte ra bus RS-485 thật** — đúng điều `ADR-046`
+cấm. Đường ghi được phủ bằng test pty (`BusWorkerFrames`) thay vì bằng một lượt
+phát thật.
+
+### Changed — Deploy bản vá `T57-3.13` lên board và hai khoảng hở engine mô phỏng lộ ra (2026-08-19)
+
+**Deploy.** Cross-build `mkddc-web` cho aarch64, sao lưu binary cũ
+(`mkddc-web.bak-20260819-pre-estimate-fix`), cài và restart `mkddc-web-pi` —
+service `active`. FE trên board đã trùng hash với bản build hiện tại
+(`index-Ccy01LAI.js`) nên không cần deploy lại.
+
+**Bản vá kho lịch sử đã có tác dụng, xác nhận bằng cách gọi thật trên board:**
+
+| Trước vá | Sau vá |
+|---|---|
+| `503 "không có mẫu lịch sử"` cho cả 28 điểm — dừng ở bước đọc lịch sử | `503 "không tìm thấy mkddc-alarm-sim"` — đã qua bước đọc lịch sử |
+
+**Hai khoảng hở mới lộ ra, nghiêm trọng hơn lỗi vừa vá:**
+
+1. **`mkddc-alarm-sim` chưa từng được viết.** `ADR-035`/`ADR-048` đặc tả nó làm
+   engine cho `T57-2.13` và `T57-3.13`, nhưng không có target build nào trong
+   repo — khác `mkddc-schedule-sim` (có target tại `apps/core/CMakeLists.txt:137`).
+   Hai task đó **đã giao đúng vỏ và đúng hợp đồng 503**, nhưng tính năng chưa
+   dùng được ngoài hiện trường.
+2. **`mkddc-schedule-sim` không có trong gói cài trên board**, nên
+   `T57-3.5`/`3.6`/`3.7` cũng sẽ 503 trên thiết bị thật dù mã Go và FE đã đúng.
+
+Cả hai là khoảng hở **đóng gói và phạm vi**, không phải lỗi mã, và chỉ lộ ra khi
+gọi thật trên board.
+
+**Cứu việc của các phiên bị ngắt.** Ba commit trước gói này đưa vào lịch sử phần
+việc đã hoàn chỉnh nhưng chưa kịp commit của các phiên agent bị dừng vì hết hạn
+mức API: `F-PRIO-001` (core), `F-OUT-002` (web-ui) và hồ sơ kiểm chứng AO-01/UI-16.
+
+**Kiểm chứng.** `ctest` 1039/1039 · FE 109 file / 1050 test · `go test ./... -count=1`
+PASS · `docs_iso_harness --expect` PASS.
+
+### Fixed — `T57-3.13` hỏi nhầm kho lịch sử: mọi điểm trả 503 trên board dù dữ liệu vẫn được ghi (2026-08-19)
+
+**Triệu chứng (phát hiện trên board thật, không phải trên máy dev).** Ước lượng
+tần suất cảnh báo trả `503 "không có mẫu lịch sử"` cho **cả 28 điểm**, trong khi
+historian vẫn đang được ghi đều đặn.
+
+**Nguyên nhân gốc — hỏi nhầm kho, không phải lệch khoá điểm.** Bản đầu gọi thẳng
+`a.trends.Query(...)`, tức kho trend **legacy**. Số đo trên board:
+
+| Kho | Kích thước | Sửa lần cuối |
+|---|---:|---|
+| `/data/config/historian-v2.sqlite` | 6,5 MB | **2026-08-19 12:05** |
+| `/data/mkddc/trend.sqlite` | 160 kB | **2026-08-04 10:53** |
+
+Historian v2 đã là kho authoritative từ 15 ngày trước; kho legacy chết từ đó.
+Endpoint không sai cú pháp, không crash, test trên host vẫn xanh — nó chỉ hỏi
+nhầm chỗ, và **kiểu hỏng đó chỉ lộ ra trên thiết bị thật**.
+
+**Cách sửa.** `readPointHistoryForEstimate` đi cùng đường với `/api/v1/history`:
+engine hợp nhất (historian v2) trước, vòng nhớ điểm ảo cho VP, kho legacy chỉ là
+đường lùi khi v2 chưa sẵn sàng.
+
+Phản hồi thêm trường `historySource` và thông điệp 503 nêu **tên kho đã hỏi**.
+Thiếu điều này thì một kết quả rỗng không phân biệt được "điểm im lặng" với "hỏi
+nhầm kho" — đúng chỗ đã mất một phiên để truy ra.
+
+**Kiểm chứng.** `alarmestimate_test.go` thêm 2 test hồi quy: mọi đường 503 phải
+nêu tên kho, và đường lùi legacy nhận việc khi v2 không sẵn sàng thay vì ném lỗi
+ra ngoài. `go build`/`go vet`/`go test ./... -count=1` PASS.
+
+Refs: Plan 57 T57-3.13
+
+### Added — Plan 57 Wave 3 đợt 2: Rev A đạt 69/70, còn đúng `T57-3.9` (2026-08-19)
+
+Năm task còn lại của Wave 3 cộng phần dở của Wave 0, giao sau
+`AUTH-WEBUX-2026-08-19-02` (ba task C++ do chủ sở hữu giao cho agent).
+
+| Task | Nội dung |
+|---|---|
+| `T57-3.13` | `POST /alarm-settings/estimate` — ước lượng số lần cảnh báo bật/ngày từ lịch sử THẬT của điểm, qua chính `mkddc-alarm-sim` |
+| `T57-3.18` | `POST /network/connectivity-check` — ping gateway/DNS + phân giải tên trong cửa sổ đếm ngược rollback |
+| `T57-3.11` | `GET /modbus/templates` — mẫu thiết bị Modbus, **bắt buộc có nguồn** |
+| `T57-3.19` | HMI: đếm ngược `mm:ss` TTL lệnh ép tay trên màn Control |
+| `T57-3.20` | HMI: chỉ báo `WEB n` — số phiên web đang mở |
+| `T57-0.7` | Test hành vi `F-UX-03` cho `/trends?points=` — đóng nốt Wave 0 |
+
+**Ba quyết định trung thực xuyên suốt đợt này.** Cả ba đều là cùng một luật:
+*không nói điều mình không biết*.
+
+1. `T57-3.13` — không có lịch sử ⇒ **503 từ chối ước lượng**, cấm trả "0
+   lần/ngày". Số 0 ở đó sẽ được đọc thành "ngưỡng này an toàn". Hạ tần là bắt
+   buộc (engine nhận tối đa 1000 mẫu) và nó làm mất đợt vượt ngưỡng ngắn hơn
+   bước lấy mẫu, nên kết quả **thiên về thấp** — câu đó hiện ngay cạnh con số.
+2. `T57-3.18` — giữ **ba** trạng thái chứ không hai: `unknown` (thiếu `ping`,
+   hết giờ) tách hẳn khỏi `unreachable`. Gộp lại sẽ khiến người vận hành
+   rollback một cấu hình hoàn toàn đúng chỉ vì thiết bị thiếu một binary chẩn
+   đoán — và mất luôn cửa sổ 120 giây.
+3. `T57-3.19` — đồng hồ đếm ngược **ngừng chạy** khi mất liên lạc hoặc số liệu
+   quá 10 giây tuổi, hiện `--:--`. Một đồng hồ vẫn chạy sau khi kết nối chết nói
+   với người đứng trước tủ rằng "lệnh còn 4 phút nữa tự nhả", trong khi ta không
+   còn biết gì về lệnh đó.
+
+**`T57-3.11` không bịa thông số.** Danh sách dựng sẵn cố ý chỉ có **một** mẫu
+(`mtr-1`), đọc từ chính profile đang chạy trên board lab ngày 2026-08-19. Mẫu
+thiếu trường `source` bị backend loại khỏi danh sách — có test khoá. Một bảng
+thanh ghi đoán nguy hiểm hơn không có mẫu nào, vì người dùng tin mẫu hơn tin
+tài liệu.
+
+**Phát hiện chặn `T57-3.9` — cần sửa `ADR-046` trước khi code.** Điểm chèn vòng
+nhớ trong `bus_worker.cpp` đã rõ, nhưng `ADR-046` hứa "byte thô hiện dạng hex"
+và **libmodbus không lộ bộ đệm wire** nếu không thay lớp transport. Khuyến nghị:
+ghi **bản ghi giao dịch** (hướng, slave, mã hàm, địa chỉ, kết quả, phân loại
+timeout/CRC, thời lượng) — trả lời đủ ba câu hỏi hiện trường mà ADR nêu — kèm
+sửa ADR nói rõ Rev A không có byte thô. Chưa thi hành: đổi điều một ADR đã ban
+hành là việc phải ghi TRƯỚC khi code.
+
+**Kiểm chứng (đo lại 2026-08-19).**
+
+| Phép đo | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **109 file / 1047 test PASS** (chạy 3 lần liên tiếp) |
+| `ctest --test-dir build/fw` (Modbus+BACnet+HMI ON) | **1036/1036 PASS** (trước đợt: 1031) |
+| `go build ./...` · `go vet ./...` · `go test ./... -count=1` | PASS |
+| `npm run lint` · `tsc --noEmit` | PASS |
+| `python3 scripts/docs_iso_harness.py --expect` | PASS |
+
+**Một lần chạy đỏ đã điều tra, không giấu.** Lần chạy toàn bộ đầu tiên có 3 test
+của `OutputsPage.test.tsx` đỏ; chạy lại ba lần đều xanh. `OutputsPage.tsx` và
+`OutputsPage.test.tsx` đang được một phiên khác sửa dở ngay lúc chạy — file đổi
+giữa chừng là lời giải thích khớp nhất. Ghi lại để nếu tái diễn thì có đầu mối.
+
+**Trạng thái Plan 57: Rev A 69/70 (~98,6%).** Còn đúng `T57-3.9`. Hai việc ngoài
+mẫu số nhưng chặn `RELEASE_READY`: chữ ký người cho `ADR-033`…`ADR-049`, và một
+lượt deploy đợt 2 lên board.
+
+### Fixed — AO hiện số volt nhưng dán nhãn đơn vị kỹ thuật (`F-OUT-002`, 2026-08-19)
+
+**Triệu chứng.** Trang Outputs hiện "Current Value" của kênh AO bằng con số Core
+gửi về kèm nhãn lấy từ `units` trong cấu hình kênh. Kênh AO-03 "Chilled Water
+Valve" trên board Foxlinx (`0-10V`, `units: percent`, dải 0-100) đang ra 4,5 V
+= 45 % nhưng màn hình hiện **"4,5 %"** — sai 10 lần trên một lệnh mở van. Min /
+Max / Trung bình và đồ thị xu hướng cùng lỗi. Trang Monitor thì dán cứng nhãn
+`V` cho mọi kênh AO, nên kênh cấu hình `4-20mA` bị gọi là volt.
+
+**Nguyên nhân gốc.** Core chỉ lưu/đọc AO theo **tín hiệu thô volt/mA** (không tự
+quy đổi engineering unit như chiều UI qua `io_scaling.cpp`), còn `units` trong
+`io_config.conf` là **đơn vị kỹ thuật** của kênh. `OutputsPage` ghép thẳng hai
+thứ đó: số của Core + nhãn của cấu hình, không có bước quy đổi ở giữa. Bản vá
+`F-OUT-001` (2026-08-17) đã thêm ô "% mở" tính riêng theo MODE nhưng để nguyên
+ô "Current Value" sai nhãn.
+
+**Cách sửa.**
+- `apps/web-ui/src/features/points/OutputsPage.tsx`: thêm `aoSignalToEngineering()`
+  — nghịch đảo của `previewAoSignal()`, cùng đường cong đã hiện ở bảng "Xem
+  trước tín hiệu ra" — và `outputLiveDisplay()` dùng chung cho bảng tổng quan lẫn
+  khối Live data. Quy đổi cả chuỗi mẫu xu hướng nên Min/Max/Avg và đồ thị cùng
+  đơn vị với Current Value; `__raw` và ô "Raw output" giữ nguyên volt/mA để đối
+  chiếu đồng hồ đo. Dải kỹ thuật suy biến (`minPv = maxPv`) thì hiện lại số thô
+  kèm đơn vị tín hiệu thay vì bịa một con số.
+- **Chặn quy đổi khi đơn vị kỹ thuật TRÙNG đơn vị tín hiệu** (`units: volt` trên
+  `0-10V`, `milliampere` trên `4-20mA`): khi đó giá trị kỹ thuật chính là điện
+  áp/dòng trên đầu cực, không đi qua `minPv`/`maxPv`. Không có luật này thì cấu
+  hình thật trên board — AO-01 khai `units: volt` nhưng `max_pv: 100`, tức
+  "0..100 volt" trên một ngõ ra 0-10V, tự mâu thuẫn — sẽ hiện "60,7 V" cho một
+  ngõ ra 6,06 V: đúng theo đường cong đã khai nhưng vô nghĩa về vật lý. Luật này
+  bảo đảm con số không bao giờ chửi nhau với chính nhãn của nó.
+- `apps/web-ui/src/features/points/MonitorPage.tsx`: nhãn AO lấy `rawUnit` của
+  điểm (V hay mA theo MODE thật) thay cho chuỗi `'V'` đóng cứng.
+
+**Kiểm chứng.** `npx vitest --run --environment jsdom src` → **109 file / 1050
+test pass** (thêm `OutputsPage.engineeringUnit.test.ts` 7 test và 7 test khoá
+hành vi trong `OutputsPage.test.tsx`, trong đó có case cấu hình thật của AO-01);
+`npm run lint` sạch; `npm run build` OK. Trên board, đọc qua API bằng tài khoản
+`admin`, hiển thị trước/sau trên số liệu sống:
+
+| Kênh | `units` | Giá trị Core | Trước | Sau |
+|---|---|---|---|---|
+| AO-01 Supply Fan Speed | `volt` | 6,059 V | `6.1 V` | `6.1 V` (giữ nguyên) |
+| AO-02 Economizer Damper | `volt` | 1,500 V | `1.5 V` | `1.5 V` (giữ nguyên) |
+| AO-03 Chilled Water Valve | `percent` | 2,517 V | `2.5 %` | **`25.2 %`** |
+| AO-04 Hot Water Valve | `volt` | 0,000 V | `0.0 V` | `0.0 V` (giữ nguyên) |
+
+### Fixed — `priority.conflict` báo xung đột giả mỗi scan (`F-PRIO-001`, 2026-08-19)
+
+**Triệu chứng.** Core trên board Foxlinx đổ **97.410 dòng** `WARN
+priority.conflict` trong ~11,5 giờ (~2,3 dòng/giây), phân bố `ao ch=0` 42.235 /
+`ao ch=2` 42.235 / `ao ch=1` 12.235 / `do ch=1` 768 — số đếm bằng nhau y hệt
+giữa các kênh, dấu hiệu "mỗi scan một dòng" chứ không phải tranh chấp thật.
+
+**Nguyên nhân gốc.** `PriorityResolver::set_ao()`/`set_do()` cảnh báo khi
+`s.active && s.value != v`. Nhưng slot giữ `active` qua nhiều scan — đúng thiết
+kế, nguồn phải `release` mới nhả — nên **một** nguồn duy nhất ghi giá trị BIẾN
+THIÊN mỗi scan (chương trình AHU lái AO-01/02/03) cũng bị coi là xung đột mỗi
+scan. Hậu quả: nhiễu log lấp mất xung đột thật (đúng thứ log này sinh ra để phát
+hiện), và mỗi dòng là một lần ghi `stderr` đồng bộ ngay trong vòng quét realtime.
+
+**Cách sửa.** `apps/core/domain/priority/priority_resolver.{hpp,cpp}`: thêm
+`begin_cycle()` và dấu chu kỳ trên từng slot; chỉ cảnh báo khi hai lần ghi rơi
+vào **cùng một chu kỳ** trọng tài — đúng nghĩa "hai nguồn cùng mức tranh nhau".
+`apps/core/application/runtime/scan_loop.cpp` gọi `begin_cycle()` đúng một lần
+mỗi scan, ngay sau `set_ao_modes()` và trước mọi nguồn ghi (lệnh web/BACnet,
+schedule, graph, ST). Caller không gọi `begin_cycle()` giữ nguyên hành vi cũ.
+
+**Kiểm chứng.** `cmake --fresh` + build + `ctest --test-dir build/fw` với
+MODBUS/BACNET/HMI=ON → **1039/1039 pass** (thêm 3 test khoá hành vi trong
+`test_priority_resolver.cpp`). Trên board sau khi deploy bản vá: **0 dòng
+`priority.conflict` / 5 phút** (trước ~140 dòng/phút), log thường vẫn 643
+dòng/5 phút — không phải im lặng do chết service.
+
+### Changed — Deploy board Foxlinx bản vá `F-OUT-002` + `F-PRIO-001` (2026-08-19)
+
+`mkddc-core` (aarch64, `RelWithDebInfo`, đã strip) và `dist` web-ui build bằng
+`npm run build:foxlinx` đã cài lên board, service `mkddc-core` và
+`mkddc-web-pi` restart, `active`. Board phục vụ `assets/index-Ccy01LAI.js`,
+sha256 **khớp từng byte** với bản build local
+(`5578d873…3d0926c`). Bản cũ giữ lại để lùi:
+`/usr/sbin/mkddc-core.bak-20260819-preF-PRIO-001` và
+`/opt/mkddc-web/dist.prev-fprio-20260819`.
+
+### Added — Hồ sơ kiểm chứng báo cáo AO-01/UI-16 từ công cụ ngoài (2026-08-19)
+
+`docs/07_records/reviews/AO01_UI16_FEEDBACK_CLAIM_VERIFICATION_2026-08-19.md`:
+đối chiếu hai cáo buộc "lỗi source code" trong một báo cáo do công cụ ngoài lập
+với mã thật của repo và với board đang chạy. Cả hai **không đứng vững** (đọc
+nhầm ảnh chụp mã cũ trước `7be9bca`/`259d160`), nhưng đường truy vết dẫn tới
+`F-OUT-002` và `F-PRIO-001` ở trên — hai lỗi thật, khác nguyên nhân với lỗi
+được nêu. Kèm số đo trước/sau và ba bài học truy vết.
+
+### Changed — Bốn quyết định người đóng cổng còn treo của Plan 57 (2026-08-19)
+
+Ghi bằng `AUTH-WEBUX-2026-08-19-02` trong `docs/00_governance/DECISIONS.md`.
+Bốn mục này agent **không được tự quyết** — cấp phép an toàn cho việc phát khung
+lên bus RS-485 đang vận hành, chỉ định người thật, cấp quyền truy cập thiết bị, và
+chữ ký baseline mà `DOC_GOVERNANCE` §6 quy tắc 4 cấm agent tự ký. Record **không
+cấp ADR mới**; số trống kế tiếp giữ nguyên `ADR-050`.
+
+1. **`T57-3.8` (quét bus Modbus) hoãn sang Rev B.** Ra khỏi phạm vi Rev A, mẫu số
+   Rev A 71 → 70. `ADR-039` **không** bị `SUPERSEDED` — 11 ràng buộc giữ nguyên
+   làm đầu vào Rev B. Lý do giữ chặn thay vì cấp phép: cấp phép khi Fieldbus Lead
+   và QA/HIL Lead còn trống sẽ tự mâu thuẫn với điều kiện Track B đang có hiệu lực
+   từ phê duyệt PM/CTO 2026-08-04. Web UI Rev A vì vậy **không có** chức năng dò
+   thiết bị trên bus.
+2. **Ba task C++ có chủ sở hữu và mốc bắt đầu:** `T57-3.9` (`apps/iobus`, 4,0
+   người-ngày), `T57-3.19` + `T57-3.20` (`apps/hmi`, 1,5 mỗi task) — agent nhận,
+   bắt đầu 2026-08-19. Ràng buộc kế thừa: `T57-3.9` là vòng nhớ **CHỈ-ĐỌC**,
+   không một byte nào được phát thêm ra bus (`ADR-046` điều 1); việc `T57-3.8` bị
+   hoãn không biến `T57-3.9` thành đường vòng để có chức năng quét.
+3. **Uỷ quyền agent truy cập board Foxlinx** — xem mục Fixed bên dưới.
+4. **Waive chữ ký có mốc hết hiệu lực.** `ADR-033`…`ADR-049` giữ
+   `WAIVED FOR IMPLEMENTATION` nhưng chỉ tới **cổng `RELEASE_READY` Rev A**; sau
+   mốc đó phải có chữ ký người thật, không có waive lần hai. Đã gắn mốc vào 15 mục
+   ADR nội tuyến và một ghi chú chung sau bảng tổng hợp.
+
+**CI GitHub Actions: chưa có quyết định.** Chủ sở hữu không chọn phương án nào.
+Nguyên nhân vẫn là lỗi thanh toán của tổ chức từ 2026-08-17 (check fail sau 2–3
+giây, **không phải lỗi mã**); owner là chủ sở hữu sản phẩm vì cần quyền billing;
+**chưa đặt mốc**. Merge bằng bằng chứng test local được ghi đúng là **ngoại lệ
+chưa có ngày đáo hạn**, không phải trạng thái bình thường.
+
+### Fixed — Board Foxlinx kết nối lại, deploy Wave 0–3, và nghiệm thu `T57-4.2` (2026-08-19)
+
+Board **không còn mất kết nối**. Hai đính chính với trạng thái ghi trước đó: bản
+đang chạy trên board là mốc **2026-08-18 12:43Z** chứ không phải 03:15Z, và
+Web/API chạy dưới tên unit **`mkddc-web-pi`** (`:8081`) — `mkddc-web` không tồn
+tại trên board này.
+
+Deploy: sao lưu bản cũ sang `dist.bak-20260819`, build bằng `npm run
+build:foxlinx` (**không** phải `npm run build` trần — cờ Programming của Foxlinx
+là cờ build-time), đẩy bằng `scp` vì board Buildroot không có `rsync`. Wave 0–3
+đã lên board; năm service lõi `active` sau deploy.
+
+**Nghiệm thu `T57-4.2` theo `ADR-049` điều 3** — trình duyệt thật, cache rỗng mỗi
+lượt, **12 cặp mẫu xen kẽ** bản mới ↔ bản cũ trên cùng board cùng phiên:
+
+| Chỉ số | Bản cũ (`63f841d`) | Bản mới | Chênh |
+|---|---:|---:|---:|
+| Byte đường tới hạn | 1591,5 kB | 1255,7 kB | **−335,8 kB (−21,1%)** |
+| First Contentful Paint (trung vị) | 1216 ms | 1092 ms | −124 ms |
+| FCP — trung vị chênh theo cặp | — | — | **−236 ms**, 8/12 cặp |
+
+**Kết luận: ĐẠT ở đúng mức `ADR-049` yêu cầu** — đã đo trên board thật, không hồi
+quy. Hai giới hạn ghi kèm: `ADR-049` **không đặt ngưỡng đạt**, nên nghiệm thu chỉ
+khẳng định được "đã đo và không hồi quy"; và phép đo phải đi qua tunnel SSH ra WAN
+nên nhiễu từng lượt cùng cỡ hiệu ứng (kiểm định dấu `p ≈ 0,19`) — **không** được
+trích thành một con số cải thiện chính xác. Phần byte thì tất định.
+
+Tài liệu cập nhật: `docs/00_governance/DECISIONS.md` (record mới, `ADR-039` chuyển
+"thi hành hoãn Rev B", `ADR-049` thêm mục nghiệm thu), Plan 57 §0 (bảng cổng +
+callout) và §13b (bốn quyết định, deploy/nghiệm thu, việc còn lại, điều kiện đóng
+plan), Plan 57 §14 lên **v1.4**.
+
+### Added — Plan 57 Wave 3 (đợt 1) + Wave 4: 14/21 task Wave 3, thẻ thiết bị, và code-splitting (2026-08-19)
+
+Mở bằng `AUTH-WEBUX-2026-08-19-01` — chủ sở hữu chốt hai điều: **mở Wave 3 trừ
+`T57-3.8`** (quét bus Modbus là ghi ra RS-485 thật, giữ chặn chờ quyết định người
+riêng) và **Wave 4 đi đường tối thiểu** (`T57-4.1` nhóm điểm theo thiết bị,
+ISA-101 Level 2 hoãn Rev B; `T57-4.2` code-splitting làm ngay). Tám ADR theo từng
+task: `ADR-042`…`ADR-049`.
+
+Plan 57 nay **63,5/71 task (~89%)**.
+
+**Vùng tài khoản.** `T57-3.17` cưỡng chế đổi mật khẩu tạm Ở BACKEND — phiên có cờ
+chỉ gọi được `/me` và `/me/change-password`, mọi endpoint khác trả `403
+password_change_required`; ẩn màn hình ở FE thì `curl` vẫn đi thẳng. `T57-3.16`
+gộp lần đăng nhập gần nhất (đọc từ kho Activity, không ghi thêm vào `users.conf`
+để khỏi mòn flash), lần sai gần nhất và phiên đang mở, kèm **hai giới hạn tự khai
+báo**: sổ phiên chỉ có từ lần khởi động dịch vụ, vết đăng nhập nằm trong vòng nhớ
+2000 sự kiện. `T57-3.2` đưa tuỳ chọn người dùng lên thiết bị (túi JSON ≤ 16 KB,
+backend không hiểu nội dung), gỡ giới hạn "chỉ trên trình duyệt này" của `T57-2.3`.
+
+**Vùng chẩn đoán.** `T57-3.4` vòng nhớ 60 phút CPU/RAM/nhiệt độ, lấy mẫu ngay
+trên đường `/system/status` sẵn có thay vì dựng goroutine riêng. `T57-3.12` trả
+lời "ai đang dùng điểm ảo này" TRƯỚC khi xoá, kèm phạm vi đã quét — "không có
+tham chiếu" chỉ có nghĩa khi biết đã quét những gì. `T57-3.14` gắn tóm tắt diff
+vào vết sửa cấu hình, che trường nhạy cảm nhưng vẫn cho thấy LÀ CÓ ĐỔI.
+`T57-3.15` điền `lastSyncUtc` (trước nay luôn `null`) từ `chronyc tracking` và
+cảnh báo khi lệch quá 1000 ms.
+
+**Vùng cảnh báo và lịch.** `T57-3.3` chỉ số ISA-18.2 §16 kèm cờ flood, cộng xoay
+vòng + retention 90 ngày cho `alarm_history.jsonl` — điều kiện tiên quyết mà
+`ADR-036` đặt ra. `T57-2.13` và `T57-3.5`/`T57-3.6`/`T57-3.7` là **hai cái vỏ**
+gọi engine của Core (`mkddc-alarm-sim`, `mkddc-schedule-sim --point`); thiếu
+binary ⇒ 503 nêu tên binary còn thiếu, tuyệt đối không có đường rơi về bản tính
+xấp xỉ trong Go hay FE.
+
+**Khoảng hở sản phẩm lớn nhất.** `T57-3.1` thêm thẻ thiết bị công nghệ vào cấu
+hình điểm — TRƯỜNG TRÌNH BÀY, không phải thực thể mới: không bảng thiết bị,
+không khoá ngoại, Core không đọc. Điểm không có thẻ vào nhóm "Chưa gán"; **cấm
+đoán từ tên điểm**. Bộ lọc `?equip=` ở Giám sát là đường tối thiểu đã chốt cho
+`T57-4.1`, và là đường di trú sẵn có khi Rev B làm mô hình thiết bị thật.
+
+**`T57-4.2` code-splitting.** Bốn lô nặng và ít mở tách khỏi chunk chính; bốn màn
+hình mở đầu ca ở lại. Lần chia đầu vô hiệu vì cùng một barrel vừa được import
+tĩnh vừa import động — rollup báo `INEFFECTIVE_DYNAMIC_IMPORT`; sửa bằng cách trỏ
+thẳng vào tệp nguồn.
+
+**Kiểm chứng (đo lại 2026-08-19).**
+
+| Phép đo | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **107 file / 1032 test PASS** |
+| `go build ./...` · `go vet ./...` · `go test ./... -count=1` | PASS |
+| `npm run lint` · `tsc --noEmit` | PASS |
+| `npm run build:foxlinx` chunk `index` | 989,94 kB → **558,49 kB** (gzip 257,54 → 149,20) |
+| Chunk tách riêng | `ProgrammingRoutes` 200,97 · `modbus-rtu` 89,91 · `ScheduleEditorPage` 62,88 · `TrendsPage` 27,58 kB |
+| `python3 scripts/docs_iso_harness.py --expect` | PASS |
+
+**Còn lại 7 task Wave 3, ghi rõ điều kiện mở khoá từng mục ở Plan 57 §13b:** `T57-3.8`
+(chặn bởi quyết định người về ghi ra bus RS-485), `T57-3.9`/`T57-3.19`/`T57-3.20`
+(cần sửa C++ ở `apps/iobus` và `apps/hmi`), `T57-3.11`/`T57-3.13` (không bị chặn),
+`T57-3.18` (cần sửa `mkddc-netcfg`). `T57-4.2` đã giao code nhưng **chưa nghiệm
+thu** — `ADR-049` đòi số đo thời gian mở trang trên board thật, mà board Foxlinx
+đang mất kết nối.
+
+`T57-3.10` (nhập/xuất CSV bảng ánh xạ điểm Modbus) **đã có sẵn** từ đợt Modbus RTU
+trước; đợt này chỉ xác nhận và ghi lại, không làm lại.
+
+### Added — Plan 57 Wave 2 (đợt cuối): khung nhìn đặt tên, dấu sự kiện trên xu hướng, diff trước khi lưu, form cảnh báo hết trộn ngôn ngữ, và mã QR địa chỉ mới (2026-08-19)
+
+Năm task khép lại Wave 2 (`T57-2.3`, `T57-2.6`, `T57-2.10`, `T57-2.14`, `T57-2.22`).
+Wave 2 nay **xong 21/21**; Plan 57 đạt **47,5/71 task**. Phần còn lại là Wave 3
+(cần 9 ADR theo từng task + chữ ký Tech Lead) và Wave 4 (cần quyết định sản phẩm).
+
+**`T57-2.3` — khung nhìn đặt tên.** `T57-2.1` đã làm bộ lọc *gửi được* qua URL;
+thứ còn thiếu là *đặt tên được*. Bộ lọc dựng lại mỗi sáng ("các điểm Modbus chất
+lượng xấu", "6 điểm của AHU-1 trong 6 giờ") vẫn phải bấm lại từng ô, và thứ không
+đặt tên được thì không bàn giao ca được.
+
+- `shared/savedViews.ts`: lưu theo **tài khoản** đang đăng nhập (`AuthProvider`
+  đẩy tên qua `setSavedViewAccount`, không bắt mỗi trang gọi `useAuth` — trang Xu
+  hướng nằm ngoài cây `AuthProvider` trong test). Trùng tên là **cập nhật**, không
+  đẻ mục thứ hai cùng tên; dữ liệu hỏng trong `localStorage` trả danh sách rỗng
+  thay vì làm chết trang.
+- `?view=<tên>` **nở thành chính bộ lọc** rồi tự rời khỏi thanh địa chỉ. Giữ tên
+  khung nhìn trên URL sẽ tạo ra đường dẫn chỉ chạy trên máy người gửi.
+- **Giới hạn đã biết, nói thẳng trên giao diện:** khung nhìn nằm trong trình duyệt
+  đó. Đi theo người dùng sang máy khác cần `T57-3.2` (Wave 3, chưa mở cổng).
+
+**`T57-2.6` — dấu sự kiện trên trục thời gian.** Đường xu hướng nói *cái gì đã xảy
+ra*, không nói *vì sao*. Câu hỏi thật khi thấy gãy khúc lúc 14:03 là "lúc đó có ai
+ép tay không, hay cảnh báo nào vừa bật?" — trước đây phải mở hai trang khác rồi so
+mốc bằng mắt.
+
+Nguồn là kho Activity và nhật ký cảnh báo **thật**; không suy diễn nguyên nhân từ
+chính hình dạng đường dữ liệu. Lệnh bị **từ chối không được đánh dấu** — nó chưa
+từng tới thiết bị nên không giải thích được gãy khúc nào; đánh dấu nó là mời người
+đọc kết luận sai về nguyên nhân sự cố. Quá 24 dấu thì cắt bớt **và nói ra đã cắt
+bao nhiêu**, thay vì vẽ dày đặc tới mức không đọc được.
+
+**`T57-2.10` — diff "đang lưu ↔ bản nháp" cho Ngõ vào (`BB-8`).** Hộp thoại lưu
+trước đây chỉ hỏi "Bạn có muốn lưu thay đổi không?" — với 16 kênh và `T57-2.11`
+(sao chép sang nhiều kênh) có thể ghi đè hàng chục trường trong một cú bấm, câu
+hỏi đó không trả lời được câu duy nhất cần trả lời trước khi cấu hình xuống thiết
+bị: **cái gì sắp đổi?** Diff nói bằng ngôn ngữ người ("Trung bình (Avg) → Lớn nhất
+(Max)"), không phải mã số của firmware.
+
+`NetworkCandidateDiff` (PA3-506) được rút thành `shared/components/DraftDiffTable`
+dùng chung, thay vì chép mẫu lần thứ hai — đúng cơ chế sinh lỗi số 3 mà review
+`REV-FE-UIUX-UC-2026-08-18` §7.3 mô tả.
+
+**`T57-2.14` — trang Cấu hình cảnh báo hết trộn Việt–Anh.** "Chế độ clear",
+"Delay (s)", "Severity rules", "Runtime hours" nằm giữa các nhãn tiếng Việt. Đây là
+màn hình đặt **ngưỡng an toàn**: đọc nhầm một trường là đặt sai một ngưỡng, và cái
+giá không nằm ở giao diện mà ở thiết bị.
+
+Hai nhóm giữ nguyên chữ **và** được chú giải, không để trần:
+- **Tên riêng trong chuẩn giao thức** (`BACnet`, `Notification Class`,
+  `Event Enrollment`) — dịch ra thì không tra được tài liệu ASHRAE.
+- **Mã trạng thái viết hoa** (`HIGH`, `CRITICAL`, `HH/H/L/LL`) —
+  `KX-DDC24-UX-SYSTEM-001` §1.5 buộc Web, nhật ký và HMI tại tủ nói cùng một chữ.
+
+**`T57-2.22` — mã QR địa chỉ truy cập mới.** Người vận hành đứng cạnh tủ với điện
+thoại trong tay, đồng hồ rollback đang đếm ngược, và đường vào giao diện sắp đổi
+địa chỉ. Gõ tay một địa chỉ IP đúng lúc đó là nguồn sai sót.
+
+`shared/qr.ts` sinh mã **tại chỗ** (byte mode, mức M, phiên bản 1–6): bo không có
+đường ra Internet nên mọi dịch vụ trực tuyến bị loại từ đầu, còn thêm một
+dependency npm là đổi lấy vài chục KB cho một bài toán có thuật toán đóng. Chuỗi
+quá dài thì **báo lỗi**, không cắt bớt âm thầm — một mã QR cụt dẫn tới địa chỉ sai
+còn tệ hơn không có mã.
+
+Không thể "nhìn thấy" một mã QR sai, nên test kiểm ba tầng: đối chiếu vector mẫu
+`HELLO WORLD` 1-Q của tài liệu chuẩn cho bước Reed–Solomon, tính chất chia hết cho
+đa thức sinh (đúng với mọi dữ liệu, không chỉ một vector), bảng thông tin định
+dạng, và **giải mã ngược** ma trận đúng theo cách máy quét đọc — bộ giải mã trong
+test viết riêng, không dùng lại hàm nội bộ, để một lỗi trong bảng đặt bit không tự
+triệt tiêu.
+
+**Kiểm chứng (đo lại 2026-08-19, không dẫn số cũ).**
+
+| Phép đo | Kết quả |
+|---|---|
+| `npx vitest --run --environment jsdom src` | **104 file / 1016 test PASS** (trước đợt: 97 / 954) |
+| `npm run lint` (gồm `check_ui_strings.py`) | PASS |
+| `npm run build:foxlinx` | PASS — chunk `index` **989,94 kB** (gzip 257,54 kB) |
+| Bundle so với `63f841d` (dựng lại trên worktree sạch) | 967,67 kB → 989,94 kB, **+22,27 kB** cho cả năm task |
+
+Refs: Plan 57 §13b · `T57-2.3` `T57-2.6` `T57-2.10` `T57-2.14` `T57-2.22` ·
+`REV-FE-UIUX-UC-2026-08-18` §6.2-P2a/§6.4-P2b/§6.4-P2c/§6.9-P2a/§6.13-P2b/§6.15-P3
+
+### Fixed — Hết trùng số ADR: `ADR-010`/`ADR-011` chốt theo mã nguồn, EasySet và raw SHM nhận `ADR-040`/`ADR-041` (2026-08-19)
+
+**Triệu chứng.** `docs/adr/` có hai file mang số `ADR-010` và hai file mang số `ADR-011`.
+Trích dẫn `ADR-010` trong mã do đó không phân giải được về một hồ sơ duy nhất.
+
+**Chốt theo mã nguồn, không theo cảm tính.** Đếm nơi mã thật viện dẫn:
+
+| Số | Hồ sơ giữ số | Bằng chứng | Hồ sơ nhường số |
+|---|---|---|---|
+| `ADR-010` | IOP V2 Poll + Capability Map | 19 chỗ, gồm `contracts/shm/mkddc_shm.h:67` (`KX_N_UI 16`) và `firmware/stm32/src/iop/iop_link.h:23` | EasySet Parity Config Surfaces — **0 chỗ** |
+| `ADR-011` | BACnet Reliability/Quality Mapping | 15 chỗ, gồm `contracts/shm/mkddc_shm.h:301` và `apps/iobus/adapters/bacnet/bacnet_reliability.hpp` | UI Raw Live Data In SHM — **0 chỗ** |
+
+**Nguyên nhân gốc và chỗ sổ đăng ký sai.** `DECISIONS.md` bản 2026-07-22 đã chuẩn hoá
+hai hồ sơ nhường số thành `ADR-013`/`ADR-014` — nhưng **hai số đó đã bị chiếm** từ
+2026-07-02 bởi `docs/02_design/adr/ADR-013-alarm-entity-model.md` và
+`ADR-014-alarm-ack-lifecycle.md`, một nhánh ADR chưa từng được đăng ký vào log. Mã
+nguồn theo nhánh alarm chứ không theo log: `ADR-013`/`ADR-014` xuất hiện 7 lần trong
+**hợp đồng canonical** `contracts/openapi/openapi.yaml` cùng `apps/web-api/internal/app/dto.go`
+và `apps/web-ui/src/shared/i18n.tsx`, còn nghĩa EasySet/raw SHM thì **không có một dòng
+mã nào**. Lần chuẩn hoá đó chỉ đổi được chữ trong log, không đổi được thực tế.
+
+**Cách sửa.** Áp đúng quy tắc dự án — *hợp đồng thắng tài liệu* — và luật cấp số ghi
+ngay trong log (*"lấy số cao nhất đã cấp phát rồi cộng một"*, cao nhất là `ADR-039`):
+
+- `ADR-010-easyset-parity-config-surfaces.md` → **`ADR-040`**;
+  `ADR-011-ui-raw-live-data-shm.md` → **`ADR-041`**. Mỗi file gắn banner `⚠ ĐỔI SỐ`
+  ghi lại cả hai lần cấp số sai để tra ngược được từ trích dẫn cũ.
+- `DECISIONS.md`: sửa câu chuẩn hoá ở phần mở đầu; **đăng ký chính thức** `ADR-013`
+  (alarm entity model) và `ADR-014` (alarm ack lifecycle) đang bị bỏ ngoài sổ; thêm
+  hai dòng `ADR-040`/`ADR-041`; nâng "số cao nhất đã cấp phát" `ADR-039` → `ADR-041`;
+  ba chỗ viện dẫn `ADR-013` theo nghĩa EasySet đổi sang `ADR-040`.
+- `docs/adr/README.md`: bổ sung `ADR-013`/`ADR-014` (trỏ sang `docs/02_design/adr/`),
+  `ADR-040`, `ADR-041`, và ghi rõ căn cứ chọn số là mã nguồn.
+- Sửa hai trích dẫn còn lại: `ADR-020 §C0` (`ADR-014` → `ADR-041`) và
+  `FE_UIUX_UC_REVIEW_2026-08-18` (`ADR-013` → `ADR-040`).
+
+**Kiểm chứng.** `ls docs/adr docs/02_design/adr | grep -o '^ADR-[0-9]\{3\}' | uniq -d`
+trả về **rỗng** — không còn số ADR nào bị trùng. Liên kết Markdown **0 hỏng / 347 file**;
+`scripts/docs_iso_harness.py` **PASS**.
+
+
+### Changed — Dọn `docs/03_implementation`: lưu trữ 9 hồ sơ đã đóng và đồng bộ đường dẫn nguồn với mã (2026-08-19)
+
+**Triệu chứng.** Thư mục `docs/03_implementation` gộp chung hồ sơ đang sống và hồ sơ
+đã đóng, nên bảng Index không còn cho biết việc nào thật sự còn mở: hai plan đã hoàn
+tất (`50` Scheduler v3.1 và `52` Web PA3) vẫn hiển thị **"DRAFT — chờ phê duyệt"**,
+trong khi hai hồ sơ tự ghi `SUPERSEDED` (`16`, `32`) vẫn nằm ở vị trí nguồn-chuẩn.
+Nặng hơn: nhiều tài liệu **đang hoạt động** vẫn hướng dẫn build theo cây `services/`
+— thư mục đã bị `PLAN-ARCH-RESTRUCT-002` xoá. Chạy nguyên văn `cmake -S services/iobus
+-B build/iobus` hôm nay là hỏng ngay, còn `17_QUICK_START_SOM_DEV` §4 thì bảo dev mới
+`mkdir` lại cây nguồn đã tồn tại.
+
+**Nguyên nhân gốc.** Hai đợt restructure (ADR-021 Phase A rồi ADR-025/`PLAN-ARCH-RESTRUCT-002`)
+chỉ đổi mã và tài liệu kiến trúc, không quét lại bộ hướng dẫn triển khai; và không có
+quy ước lưu trữ nên hồ sơ đóng cứ tồn tại song song với hồ sơ sống.
+
+**Cách sửa — lưu trữ.** Thêm `docs/03_implementation/archive/` kèm `README.md` nêu rõ ba
+điều kiện được chuyển vào (đóng · bị thay thế · chụp trạng thái lịch sử) và bắt buộc
+kiểm chứng lại bằng mã nguồn chứ không tin lời tự khai của tài liệu. Chín hồ sơ đã
+chuyển, mỗi hồ sơ gắn banner `🗄 ĐÃ LƯU TRỮ` ghi **lý do đóng** và **đọc thay bằng gì**:
+
+| Hồ sơ | Lý do | Bằng chứng mã đã đối chiếu |
+|---|---|---|
+| `16_CONTRACT_FREEZE` | SUPERSEDED — freeze IOP v1.1 | `contracts/iop/iop_protocol.h` `IOP_VER_MAJOR=2` |
+| `18_WEEK1_SOM_BRINGUP_CHECKLIST` | mốc tuần đầu đã qua, lệnh build hỏng | `services/` không còn |
+| `23_GRAPH_STATEFUL_COMPONENTS_PLAN` | `COR-009/010` xong, 97/97 test | `apps/core/domain/graph/graph_runtime.hpp` |
+| `24_SOM_FW_STATUS_REPORT_ISO` | báo cáo chụp 2026-06-13 | cây `services/` đã xoá |
+| `26_MODBUS_IMPLEMENTATION_PLAN` | SUPERSEDED, As-Built v1 | `apps/iobus/adapters/modbus_rtu/` |
+| `32_DEV_TEAM_NEXT_ACTION` | SUPERSEDED Rev 2.0 | 3 task chặn đã xử lý |
+| `46_REPOSITORY_ARCHITECTURE_RESTRUCTURE_PLAN` | Closed, G0..G5 PASS | `apps/*` + root `CMakeLists.txt` |
+| `50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN` | 96/96 task đóng | `apps/core/application/schedule/`, `bacnet_schedule.*` |
+| `52_WEB_PA3_DASHBOARD_UX_IMPLEMENTATION_PLAN` | 50/50 task, G0–G6 | `apps/web-ui/src/features/*` |
+
+Trước khi chuyển đã kiểm phần còn treo **không bị mất dấu**: `EXT_PHYSICAL_VERIFIED` /
+`PHYSICAL_IO_VERIFIED` của plan 50 thuộc `ADR-023` và mở khoá bởi plan 49 `G-C`/`G-D`;
+`PA3-N01/N02/N04` của plan 52 nằm ở `EV-WEB-PA3-001` và `UX_PA3_TRACEABILITY`; phần
+nghiệm thu target của plan 46 nằm ở runbook 47 — cả bốn hồ sơ nhận đều đang sống.
+
+**Cách sửa — đường dẫn.** Đồng bộ tài liệu còn hiệu lực với cây nguồn thật, đo lại
+ngày 2026-08-19 (không chép từ tài liệu cũ):
+
+- `17_QUICK_START_SOM_DEV` §4/§5: bỏ bước scaffold `mkdir services/...`; thay bằng
+  configure gốc `cmake --fresh -S . -B build/fw` và binary `build/fw/{iobus,core}/...`.
+- `06 §2` và `07 §1`: viết lại cây thư mục theo tầng hexagonal thật
+  (`domain/` ← `application/` ← `adapters/` ← `bootstrap/`, `ports/` giữ interface).
+- `05 §…`: bản đồ file IOP hai phía — SOM `apps/iobus/adapters/iop/*`, MCU
+  `firmware/stm32/src/iop/iop_link.{c,h}`; ghi rõ **không còn** `iop_protocol.hpp`.
+- `08` (HMI): `services/hmi/*` → `apps/hmi/*`, ba đường dẫn core về đúng tầng, và bảng
+  ánh xạ `web/backend/*.go` → `apps/web-api/internal/{app,hmi}/` kèm ghi chú file Go
+  chưa tồn tại thì đặt ở package nào.
+- `25`, `33` (BACnet): `apps/iobus/adapters/bacnet/`, `apps/core/adapters/bacnet/`.
+- `27` §4/§5: verify `apps/` thay vì `services/`, build gốc `--fresh -S . -B build/fw`;
+  số "141/141 PASS 2,67 s trên Orange Pi 5B" nay ghi rõ là **số lịch sử**, không phải
+  kỳ vọng hiện hành.
+- `00`, `01`, `02`, `12`, `15`: bảng sở hữu/sơ đồ/checklist đổi sang `apps/*`,
+  `firmware/`, `contracts/`; sửa `IOP_VER 1.1` → `2.0` theo header thật.
+- `11` và `22`: **không** viết lại 90 dòng lịch sử; gắn bảng ánh xạ đường dẫn ở đầu
+  tài liệu và bắt buộc task mở mới dùng `apps/`.
+- `00` §9 và bảng nguồn-chuẩn: gỡ hai mục trỏ hồ sơ đã đóng làm authority (Modbus →
+  plan 49 + `ICD-IF-MBRTU-001`; stateful graph → `SW_RUNTIME_EXECUTION_MODEL` + mã);
+  sửa "header trong `shared/`" → `contracts/` (thư mục `shared/` không còn tồn tại).
+
+**Sửa thêm trong lúc rà.** `07 §12.5` liệt kê `ext_cache_reader.hpp` là file phải tạo;
+đối chiếu mã thì file **chưa từng được tạo** — logic lookup nằm trong `graph_runtime`.
+Bảng đã đổi thành đối chiếu "kế hoạch ↔ hiện trạng" thay vì để nguyên một dòng sai.
+`README.md` của thư mục bổ sung ba dòng Index còn thiếu (`51`, `57`,
+`PROGRAMMING_IMPLEMENTATION_TRACKER`) và sửa trạng thái cũ của `50`/`52`.
+
+**Kiểm chứng (đo thật 2026-08-19).**
+
+| Phép kiểm | Kết quả |
+|---|---|
+| `cmake --fresh -S . -B build/fw` + `--parallel` (MODBUS/BACNET/HMI = ON) | configure exit 0, build exit 0 |
+| `ctest --test-dir build/fw --output-on-failure` | **1031/1031 PASS**, 16,45 s |
+| Liên kết Markdown tương đối toàn `docs/` + md gốc | **0 hỏng / 347 file** (trước khi dọn: 0/346) |
+| `python3 scripts/docs_iso_harness.py` | **PASS**, `code-span docs/** không tồn tại: 0` |
+
+**Không đụng tới.** Các dòng lịch sử trong `CHANGELOG.md` vẫn trỏ đường dẫn cũ của 9 hồ
+sơ đã chuyển — đó là hồ sơ của trạng thái tại thời điểm ghi, sửa lại sẽ làm sai lịch sử.
+Version-history và tiêu chí thoát phase đã đóng trong `03_PHASE_PLAN` cũng giữ nguyên.
+
+
+### Added — Plan 57 Wave 2 (đợt 5): trợ giúp theo ngữ cảnh và gói xuất chẩn đoán có lọc an toàn (2026-08-18)
+
+**`T57-2.17` — trợ giúp theo ngữ cảnh.** Trợ giúp không theo ngữ cảnh gần như
+không được dùng trên thiết bị nhúng: người đang kẹt ở một trang cụ thể sẽ không
+đọc hết ba thẻ tổng quát để tìm đoạn liên quan. Nút Trợ giúp trên TopBar nay mang
+theo trang hiện tại (`?topic=<pathname>`), và trang Trợ giúp mở thẳng mục của
+trang đó. Bảy mục ngữ cảnh, mỗi mục nói đúng thứ dễ hiểu nhầm ở trang tương ứng —
+ví dụ Modbus: *"chưa từng được poll" khác "mất liên lạc"*; Trends: *số từ tầng
+aggregate đã bị gộp nên đỉnh thật có thể cao hơn đỉnh nhìn thấy*.
+Khoá `topic` cố ý trùng đường dẫn route để không phải bảo trì hai bảng tên.
+
+**`T57-2.21` — xuất ảnh chụp trạng thái và gói chẩn đoán.** Điều tra từ xa hiện
+phải hướng dẫn người tại chỗ chụp năm màn hình rồi gửi qua tin nhắn: ảnh mất khả
+năng tìm kiếm, mất số chính xác, và không mang theo phiên bản phần mềm hay mốc
+thời gian. Nay Landing xuất `status-snapshot`, Chẩn đoán xuất `diagnostic-bundle`
+(health + overview + mạng + trạng thái realtime), cả hai là JSON có mốc thời gian
+và phiên bản web.
+
+**Luật an toàn của gói xuất, có test khoá.** Tệp này sẽ được gửi qua email hoặc
+dán vào ticket — nơi nó **thoát khỏi mọi lớp kiểm soát truy cập của sản phẩm**, và
+một trường nhạy cảm lọt vào đó không có cách nào thu hồi. `redactSensitive()` loại
+**đệ quy** mọi khoá chứa `token`/`password`/`secret`/`apiKey`/`cookie`… thay vì
+chỉ lọc tầng đầu: payload `health`/`overview` là dữ liệu lồng nhau do backend định
+hình, và một trường mới thêm ở tầng sâu sẽ lọt qua bộ lọc nông mà không ai nhận ra
+cho tới khi tệp đã gửi đi. Có xử lý cấu trúc vòng. Kiểm ngược bằng mutant: hạ
+xuống lọc nông ⇒ 3 test đỏ.
+
+Hai test cũ được cập nhật theo hợp đồng mới của liên kết Trợ giúp — assert phần
+đường dẫn và sự tồn tại của `?topic=`, **không** assert nguyên văn href, để mỗi
+trang thêm vào bảng ngữ cảnh không làm test đỏ mà chẳng có gì hỏng.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **954 pass / 954, 97 file** ·
+`npm run build:foxlinx` thành công.
+
+
+### Added — Plan 57 Wave 2 (đợt 4): quyền hiệu lực, nhân bản VP, chớp ô giá trị, và một thông báo thành công giả bị gỡ (2026-08-18)
+
+**`T57-2.18` — `/me` nói ra người dùng LÀM ĐƯỢC GÌ.** "operator" tự nó không nói
+lên điều gì với người dùng mới; họ phải thử từng trang mới biết ranh giới ở đâu.
+Câu tóm tắt vai trò trước đây là văn xuôi **chép tay**, nên sẽ lệch ngay lần đầu
+ai đó siết quyền một route — và lệch theo hướng nguy hiểm nhất: hứa nhiều hơn
+thực tế. Nay danh sách sinh từ chính `ROUTE_MIN_ROLE` mà `RequireRole` và
+`NavRail` đang dùng, nên ba nơi không bao giờ nói ba điều khác nhau. Hiện **cả
+hai vế** — làm được và cần vai trò cao hơn — vì chỉ liệt kê vế đầu thì khi va vào
+giới hạn người dùng vẫn không biết cần vai trò nào để vượt qua.
+
+**`T57-2.20` — nhân bản Virtual Point.** Điền sẵn mọi trường **trừ `tag`**: tag là
+danh tính, điền sẵn một tag đã tồn tại chỉ để người dùng phải xoá đi là thêm một
+bước thừa cộng một cơ hội tạo trùng.
+
+**`T57-2.16` — chớp ô khi giá trị vừa đổi.** `KX-DDC24-UX-SYSTEM-001` §5 đã đặc tả
+`DataTable` có "realtime cell flash", và `.value-flash` đã nằm sẵn trong
+`styles.css` — nhưng **không nơi nào dùng nó**. Trên bảng 30 điểm cùng cập nhật,
+người trực phải nhớ con số cũ trong đầu mới biết ô nào vừa đổi.
+Hai luật, cả hai đều có test và đã kiểm ngược bằng mutant: **không chớp ở lần
+render đầu** (mở trang mà cả bảng chớp cùng lúc là nhiễu, và nó dạy người dùng bỏ
+qua hiệu ứng đúng lúc cần chú ý), và **giá trị lặp lại không chớp** (poll mỗi giây
+trả cùng con số mà ô vẫn chớp thì cả bảng nhấp nháy vô nghĩa). Tắt hẳn khi người
+dùng khai `prefers-reduced-motion` — mất nó không mất thông tin nào.
+
+**`T57-2.19` — gỡ một thông báo thành công giả.** Trang Hiển thị báo "Đã lưu cấu
+hình hiển thị (demo)" cho cả ngôn ngữ lẫn mật độ, trong khi ngôn ngữ áp thật
+(`setLang` ghi `localStorage`) còn **mật độ không được lưu ở đâu cả**. Một thông
+báo thành công cho việc không xảy ra là cùng họ với lỗi WEB-UX-003 ở trang đổi mật
+khẩu: người dùng đóng màn hình với niềm tin sai. Nay chỉ báo thành công cho thứ
+thật sự áp được, và mật độ nói rõ là chưa nối. Thà thiếu tính năng còn hơn có một
+tính năng giả.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **947 pass / 947, 96 file** ·
+`npm run build:foxlinx` thành công.
+
+
+### Fixed — Giao diện Modbus phân biệt "chưa từng được poll" với "mất liên lạc", và đính chính hồ sơ bàn giao RS-485 (2026-08-18)
+
+**ĐÍNH CHÍNH MỘT KẾT LUẬN SAI TRONG TÀI LIỆU.** `RS485_BANGIAO_TEAM_SW.md` §5
+bản 1.0 mô tả `find_profile_path` tra profile theo **hai** ứng viên
+(`/data/config/profiles/<id>.json`, `/usr/share/kinexus/...`) và gọi profile
+thiếu là "bẫy nguy hiểm nhất". Đọc code thật (`device_profile.cpp:299`) thì có
+**ba** ứng viên, và ứng viên ĐẦU là dùng nguyên `profile` như một đường dẫn —
+đúng nhánh mà backend Go dùng: `persistence.go:272` ghi `profile` là đường dẫn
+tuyệt đối và `BuildProfile()` sinh sẵn file đó trong cùng thao tác apply.
+
+Nghĩa là **thiết bị tạo qua API/UI không dính bẫy này**; bẫy chỉ áp dụng cho
+slave khai bằng tay trong `fieldbus.conf`. Đọc bản 1.0 rất dễ kết luận nhầm rằng
+mọi thiết bị tạo qua UI đều hỏng, và đi sửa một thứ không hỏng. Hồ sơ lên **v1.1**.
+
+**LỖ HỔNG THẬT TRONG GIAO DIỆN, ĐÃ VÁ.** Giao diện Modbus RTU không có tham
+chiếu nào tới `E302`/`slave_config_error`, và không cảnh báo khi một bus đang bật
+mà cổng vật lý không tồn tại. Triệu chứng của cả hai bẫy trên màn hình chỉ là một
+số `0` trong cột "Poll / lỗi" — trông y hệt một thiết bị vừa được thêm và chưa
+tới lượt, giữa một bảng đầy số khác.
+
+Thêm cảnh báo phân biệt **"đã cấu hình nhưng CHƯA TỪNG được poll"** với **"mất
+liên lạc"**. Đây là hai kết luận khác hẳn nhau về nguyên nhân: chưa từng poll là
+lỗi **cấu hình** (profile không giải được ⇒ bus vẫn mở, service vẫn `active`,
+nhưng slave được cấp `ext=[0..0)` và `tx` không bao giờ tăng; hoặc bus bật mà
+cổng vật lý không có), còn mất liên lạc là lỗi **dây/thiết bị**. Trộn chúng vào
+cùng một chỗ hiển thị là buộc người đi hiện trường dò dây cho một lỗi nằm trong
+file JSON.
+
+Điều kiện dùng `total_polls === 0`, **không** dùng `online === false`: thiết bị
+chưa từng được poll thì cũng `online === false`, nhưng chiều ngược lại không đúng.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **943 pass / 943, 95 file** ·
+`npm run build:foxlinx` thành công · `docs_iso_harness --expect` PASS.
+
+**Chưa làm được, cần người:** `#5` của hồ sơ bàn giao (đặt `buses[1].enabled=false`
+cho bus 2 chưa có phần cứng) **bị chặn ở xác thực** — API trả `401` và board chỉ
+có bcrypt hash cho `admin`/`CHUONG`. Hồ sơ cấm sửa tay `fieldbus.conf` vì Go tính
+checksum canonical và quản lý `revision`; đã tôn trọng ràng buộc đó thay vì lách.
+`#3`/`#4` (thêm profile thiết bị, khai slave) bị chặn vì chưa biết thiết bị nào
+sẽ đấu vào bus.
+
+
+### Added — Plan 57 Wave 2 (đợt 3): xem trước quy đổi trước khi cấu hình ra tới thiết bị (2026-08-18)
+
+Ba task của khối `BB-7`, cùng một ý: **bắt lỗi cấu hình ngay lúc soạn, không đợi
+tới lúc cơ cấu đã chạy sai một quãng.**
+
+**`T57-2.9` — xem trước quy đổi ngõ vào.** Đặt nhầm `displayMin`/`displayMax` chỉ
+lộ ra khi cảm biến đã đấu và người ta đọc được một con số vô lý. Nay nhập giá trị
+thô ⇒ hiện ngay giá trị kỹ thuật theo **cấu hình đang soạn** (không phải cấu hình
+đã lưu), kèm cảnh báo khi giá trị nằm ngoài dải vì kết quả khi đó là ngoại suy còn
+thiết bị thật có thể kẹp về biên.
+Chỉ ba loại tín hiệu có dải thô tuyến tính cố định do phần cứng quy định (0-10 V,
+2-10 V, 4-20 mA). Nhiệt trở đi theo đường cong phi tuyến phụ thuộc Sensor Profile;
+biến trở/ánh sáng/xung phụ thuộc thiết bị đấu vào. Với những loại đó giao diện
+**nói ra là không xem trước được** thay vì đưa một con số đoán — người dùng sẽ tin nó.
+
+**`T57-2.12` — xem trước tín hiệu ra AO.** Cùng mẫu, nhưng hậu quả nặng hơn một
+bậc: số sai không chỉ hiển thị sai mà **ra tới van hoặc biến tần**. Bảng ba mốc
+(đầu dải / giữa / cuối dải) đủ thấy ngay chiều và biên của đường cong. Dải kỹ
+thuật suy biến (`minPv === maxPv`) trả `—` và nói rõ đó là **cấu hình chưa hợp
+lệ**, không phải thiếu dữ liệu.
+
+**`T57-2.11` — sao chép cấu hình sang nhiều kênh.** 16 kênh cùng loại cảm biến
+phải cấu hình 16 lần là nguồn sai sót lớn nhất của trang Inputs. Chép loại tín
+hiệu, dải quy đổi, đơn vị, lọc và hàm toán; **không** chép `tag`/`label`/`note` vì
+đó là danh tính riêng của từng kênh — chép chúng sẽ chủ động sinh ra đúng lỗi mà
+`pointNameConflicts` tồn tại để phát hiện. Xem trước danh sách **sẽ bị ghi đè**
+trước khi áp, và không tự Save: dirty-guard cùng hộp thoại xác nhận hiện có vẫn là
+lớp chặn cuối.
+
+Chín test mới, đã **kiểm ngược bằng mutant** (đổi gốc dải 4-20 mA về 0 ⇒ đỏ). Một
+lỗi trong chính test bị bắt trong lúc kiểm: helper `ao()` quên spread `overrides`
+nên ba test chạy trên cấu hình mặc định thay vì cấu hình chúng khai báo.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **939 pass / 939, 94 file** ·
+`npm run build:foxlinx` thành công.
+
+
+### Added — Bật Modbus RTU master trên board và bàn giao cổng RS-485 #1 cho team SW (2026-08-18)
+
+**TRIỆU CHỨNG.** Phần cứng đã đấu module RS-485 đúng cặp chân 8/10 và cần bàn giao
+cho team SW để phát triển cấu hình ứng dụng. Nhưng trên board không có một dòng log
+Modbus nào, `/run/mkddc/modbus-control.sock` không tồn tại, và không tiến trình nào
+mở `/dev/rs485-1`.
+
+**NGUYÊN NHÂN GỐC.** `mkddc-iobus` có sẵn cả `ModbusMaster` lẫn `ControlChannel`,
+nhưng **cả unit gốc lẫn drop-in `nomcu.conf` đều không truyền `--fieldbus-config`**.
+Không có cờ đó thì `ModbusMaster` không bao giờ khởi động. Cổng RS-485 đã kiểm chứng
+xong ở lớp điện (uart5 mux đúng ra P16 chân 8/10, TX lái được chân thật) nhưng lớp
+ứng dụng chưa hề được nối vào — tức phần cứng "sẵn sàng" mà phần mềm không có đường
+chạm tới.
+
+**CÁCH SỬA.**
+- Drop-in `/etc/systemd/system/mkddc-iobus.service.d/nomcu.conf`: giữ nguyên
+  `--uart /tmp/mkddc-iop-a` (fake MCU) và bổ sung `--fieldbus-config`,
+  `--fieldbus-sock`, `--fieldbus-control-sock`. Bản cũ sao lưu tại
+  `/root/nomcu.conf.bak-20260818T120015Z`.
+- `docs/08_hardware/foxlinx-som-ddc24/RS485_BANGIAO_TEAM_SW.md` (mới) —
+  `HW-FOXLINX-RS485-HANDOVER-001`: spec bàn giao, gồm schema slave đọc thẳng từ
+  `parse_slave`, thông số cổng, phân chia việc còn lại giữa phần cứng và team SW.
+- **Cố ý KHÔNG hand-edit `/data/config/fieldbus.conf`.** Backend Go tính checksum
+  canonical (`MBR-B206`, `canonical.go`) và quản lý `revision`; sửa tay sẽ làm
+  checksum lệch nội dung. Việc tắt bus 2 giao cho team SW làm qua API/UI.
+
+**VERIFICATION (đo thật trên board, có backup và đã hoàn tác cấu hình thử).**
+
+| Hạng mục | Kết quả |
+|---|---|
+| `mkddc-iobus` sau khi bật fieldbus | `ActiveState=active`, `NRestarts=0`, **0 dòng ERROR/30 s** |
+| Fieldbus nạp cấu hình | `fieldbus_config.loaded buses=2 slaves=0 revision=35` |
+| Kênh điều khiển | `control_channel.listening path=/run/mkddc/modbus-control.sock` |
+| Cổng có mở khi có slave không | **CÓ** — `bus_worker.open bus=1 device=/dev/rs485-1 9600N81 slaves=1`, `mkddc-iobus` giữ `ttyS5`, cờ cổng đổi thành `RTS\|DTR` |
+| Điều khiển hướng | `bus_worker.rs485_direction bus=1 mode=auto driver_enabled=0 rts_on_send=0` — đúng transceiver auto-direction |
+| Toàn bộ service | `mkddc-iobus/core/web-pi/netcfg/fakemcu` đều `active` |
+
+**HAI BẪY ĐÃ GHI LẠI CHO TEAM SW.**
+1. **`profile` thiếu ⇒ slave im lặng mà mọi thứ vẫn "xanh".** Thử với
+   `profile=generic` (không tồn tại): `bus_worker.open` **vẫn** chạy, worker vẫn
+   khởi động, service vẫn `active`, nhưng `ext=[0..0)` và `tx` không hề tăng. Chỉ
+   có `ERROR bus_worker.profile_not_found` + `ALARM E302` là dấu hiệu. Board hiện
+   chỉ có đúng một profile `mtr-1`; `/usr/share/kinexus/profiles/` chưa tồn tại.
+2. **Bus 2 `enabled=true` nhưng `/dev/rs485-2` không có.** Ngay khi có slave đầu
+   tiên, worker bus 2 spam `connect_fail` ~5 dòng/phút với backoff. Hiện chưa spam
+   *chỉ vì* chưa có slave nào (`rtu_configured` cần `!slaves.empty()`).
+
+**CÒN CHẶN.** Chưa có slave nào đấu vào bus A/B, nên `rx:0` hiện là kết quả **đúng**
+chứ không phải lỗi, và phép thử end-to-end cuối cùng chưa chạy được. Cần người tại
+chỗ: đấu slave thật (kèm nguồn + mass cho module) rồi chạy `rs485_check.sh scan`,
+hoặc nối tắt chân 8 ↔ chân 10 chạy `rs485_check.sh loopback` để chốt riêng phần SoC.
+
+### Added — Plan 57 Wave 2 (đợt 2): con trỏ đọc mọi chuỗi, trục Y thứ hai, và nói ra tầng dữ liệu đang dùng (2026-08-18)
+
+**`T57-2.4` — con trỏ đọc giá trị.** Tooltip trước đây duyệt theo `payload` của
+recharts, vốn chỉ chứa những chuỗi CÓ giá trị ở đúng hàng đang hover. Với dữ liệu
+thưa (mỗi điểm một nhịp lấy mẫu riêng), chuỗi thiếu mẫu ở hàng đó **biến mất khỏi
+tooltip** — người dùng không phân biệt được "chuỗi này không có dữ liệu tại đây"
+với "chuỗi này không được chọn". So sánh setpoint với giá trị thực tại đúng thời
+điểm sự cố là thao tác chẩn đoán cơ bản nhất, và nó chỉ làm được khi mọi chuỗi
+cùng xuất hiện tại một mốc. Nay duyệt theo `series`; chuỗi không có mẫu hiện `—`.
+
+**`T57-2.5` — trục Y thứ hai.** Vẽ nhiệt độ (°C) chung trục với độ mở van (%) làm
+cả hai đường dẹt lại: thang 0-100 nuốt hết biến thiên của thang 18-26. `TrendSeries`
+thêm `axis`, và `assignSecondAxis()` gán **tự động theo đơn vị** — lý do cần trục
+thứ hai luôn là "hai chuỗi khác đơn vị", mà đơn vị đã có sẵn trong dữ liệu; bắt
+người dùng tự gán là bắt họ làm lại một phép suy máy làm được, ngay giữa lúc đang
+chẩn đoán. Đơn vị phổ biến nhất giữ trục trái, đơn vị nhiều thứ hai sang phải; từ
+đơn vị thứ ba trở đi vẫn ở trục trái vì ba thang thì người đọc không còn biết
+đường nào thuộc thang nào.
+
+**`T57-2.7` — tầng dữ liệu đang dùng.** Lấy từ `tiersUsed` của response, **không**
+suy theo preset: cùng một preset có thể ra tầng khác nhau tuỳ lượng dữ liệu còn
+lưu. Đây là thứ quyết định cách đọc đỉnh/đáy — số từ tầng aggregate đã bị gộp nên
+đỉnh thật có thể cao hơn đỉnh nhìn thấy.
+
+**Hai lần tự sửa mình trong đợt này**, ghi lại vì cả hai đều là lỗi đã từng mắc:
+- Nối tầng dữ liệu vào **tiêu đề** panel làm 3 test cũ đỏ. Tiêu đề là thứ người
+  dùng và test cùng dựa vào để nhận ra khối; nối chuỗi động vào đó làm nó mất tính
+  ổn định. Chuyển sang `subtitle`.
+- Test "kết quả ổn định" so hai lần chạy cùng đầu vào — **vô nghĩa**, vì `Map` giữ
+  thứ tự chèn nên cùng đầu vào luôn cho cùng đầu ra kể cả khi bỏ tiebreaker. Tự
+  chạy mutant mới lộ ra. Viết lại để khoá đúng hành vi cần khoá: hoà số lượng thì
+  phá hoà theo **tên đơn vị**, không theo thứ tự backend trả series về.
+- ESLint bắt `shared/` deep-import từ `features/` — ranh giới đúng, và
+  `assignSecondAxis` vốn thuộc về `TrendChart`. Đã chuyển sang `shared/`.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **930 pass / 930, 93 file** ·
+`npm run build:foxlinx` thành công. 5 test mới đã kiểm ngược bằng mutant.
+
+
+### Added / Fixed — Kiểm chứng RS-485 #1 trên Header P16 và đính chính hồ sơ bật RS-485 #2 (2026-08-18)
+
+**TRIỆU CHỨNG.** Phần cứng đấu module RS-485 vào Header P16 và hỏi "dùng được
+chưa, có cần setup link tới UART không". Không có cách nào trả lời từ tài liệu:
+`FOXLINX_UART_RS485_GUIDE.md` mô tả thiết kế mong muốn chứ không phải trạng thái
+đo được, còn `/dev/ttyS5` trên board có `tx:0 rx:0` — tức **chưa từng có byte nào
+đi qua cổng RS-485 #1** kể từ khi bo chạy.
+
+**NGUYÊN NHÂN GỐC.** Câu hỏi "RS-485 dùng được chưa" **không đọc được từ device
+tree**. DT chỉ khẳng định UART đã enable và chân đã mux; nó không nói gì về việc
+dây RX có thật sự nối vào transceiver hay không. Tệ hơn, chân RX (`gpio4-7`) có
+`input bias pull up` nội, nên khi thả nổi nó đọc ra mức cao **y hệt** khi có
+transceiver giữ đường idle ở mức mark — mọi phép đo tĩnh đều cho cùng kết quả và
+không phân biệt được hai trạng thái. Thiếu công cụ tách hai khả năng này chính là
+lý do trạng thái cổng bị mơ hồ suốt từ 2026-08-04.
+
+**CÁCH SỬA.**
+- `tools/rs485/rs485_check.sh` (mới, đã đưa lên board tại `/usr/local/bin/`): ba
+  chế độ `info` / `loopback` / `scan`. `scan` tự tính CRC-16/MODBUS bằng shell
+  thuần (board Buildroot không có `python3`, `socat`, `mbpoll`) và coi bất kỳ
+  khung trả lời nào — kể cả exception — là bằng chứng cả TX lẫn RX đều thông.
+- Hồ sơ đo `docs/07_records/test-evidence/fw-som/2026-08-18-foxlinx-rs485-p16-verification.md`
+  (`EVID-MBRTU-FOXLINX-P16-2026-08-18`).
+- **Đính chính `ENABLE_TTYS1_RS485_2.md` §2** — lỗi tài liệu có hậu quả thật. Bản
+  1.0 khẳng định bật RS-485 #2 "không cần thêm hay sửa pin mux", chỉ cần đổi
+  `status` thành `okay`. Đọc `pinctrl-0` thật của `serial@21160000` thì thấy nó
+  trỏ `uart1m0-xfer/ctsn/rtsn` (phandle `0xb2/0xb3/0xb4`), tức nhóm **M0** =
+  `GPIO0_C4`/`GPIO0_C5` — **hai chân này không ra Header P16**. Làm theo hướng dẫn
+  cũ sẽ ra một bo có `/dev/ttyS1`, udev tạo `/dev/rs485-2`, `BusWorker` mở cổng
+  thành công, `tx:` vẫn tăng đều — mọi thứ tầng phần mềm đều "xanh" nhưng chân
+  26/36 hoàn toàn không có tín hiệu. Bản vá DT phải đổi **cả** `pinctrl-0` sang
+  `<&uart1m1_xfer>` lẫn `status`. Đã đồng bộ §1, §4.1, §4.2 và câu hỏi mở §5.
+- `FOXLINX_PINOUT_MAP.md` v1.1 và `FOXLINX_UART_RS485_GUIDE.md` v1.1: ghi số đo
+  thay cho suy luận, thêm bảng đấu dây và cảnh báo chân 7.
+
+**VERIFICATION (đo thật trên board `SOM-DDC-24-foxlinx`, không sửa DT/config,
+không restart service nào).**
+
+| Hạng mục | Kết quả |
+|---|---|
+| `uart5`/`ttyS5` pin mux | `pin 134 (gpio4-6)` + `pin 135 (gpio4-7)` do `211a0000.serial` chiếm, nhóm `uart5m0-xfer-pins` |
+| Chân 8 là TX (đo `GPIO_EXT_PORT` lúc truyền `0x55`) | dao động **20/40 mẫu** ⇒ uart5 lái được chân thật trên header |
+| Chân 10 là RX | **40/40 mẫu mức cao** — không kết luận được, do có pull-up nội |
+| Bộ đếm `ttyS5` | `tx: 0 → 684`, `rx: 0` |
+| Quét Modbus slave 1..32 @ 9600 | không slave nào trả lời (`tx` +256 byte = đúng 32 khung × 8 byte) |
+| `/dev/rs485-1 → ttyS5` | **đã có sẵn và bền qua reboot** — do udev rule `99-mkddc-rs485.rules`, không phải `ln -s` thủ công |
+| Cổng có bị tranh chấp không | không tiến trình nào mở `ttyS5`; `mkddc-iobus` đang chạy drop-in `--uart /tmp/mkddc-iop-a` (fake MCU) |
+
+**CÒN CHẶN.** Đường **RX vật lý** của RS-485 #1 chưa chứng minh được, và không thể
+chứng minh từ xa. Hardware owner đã xác nhận kèm sơ đồ mạch P16 rằng module nối
+đúng cặp **chân 8 (TXD) + chân 10 (RXD)**, nên giả thuyết "nối nhầm chân" bị loại.
+Đo lại sau đó vẫn `rx:0`: chân 10 không dao động trong lúc truyền (module không
+echo), nghe thụ động 3 giây không byte nào, quét slave 1..16 ở **cả 9600 lẫn
+19200** đều im. Còn lại ba khả năng chưa tách được từ xa vì cả ba cho cùng một
+quan sát: **module chưa được cấp nguồn** (chân 8/10 chỉ là tín hiệu, transceiver
+vẫn cần VCC + GND riêng — khả dĩ nhất), **bus A/B chưa có slave** (khi đó `rx:0`
+là đúng chứ không phải lỗi), hoặc **sai baud/parity**. Cần người tại chỗ: (a) nối
+tắt P16 chân 8 ↔ chân 10, bỏ module ra khỏi phương trình, chạy
+`rs485_check.sh loopback` để chốt phần SoC; hoặc (b) cấp nguồn module + đấu slave
+thật rồi chạy `rs485_check.sh scan`. RS-485 #2 vẫn chặn ở device tree như cũ, nay
+biết thêm là cần hai thay đổi chứ không phải một.
+
+### Added — Plan 57 Wave 2 (đợt 1): bộ lọc chia sẻ được, lọc thời gian và xuất CSV cho nhật ký, hai đường tới bằng chứng từ cảnh báo (2026-08-18)
+
+**TRIỆU CHỨNG.** `MonitorPage` đưa bộ lọc vào URL từ PA3-402 và nhờ đó gửi được
+cho đồng nghiệp đường dẫn tới "các point Modbus đang offline". Bốn trang còn lại
+— Cảnh báo, Lịch vận hành, Nhật ký hoạt động, Xu hướng — vẫn giữ bộ lọc trong
+`useState`: F5 hay Back là mất sạch ngữ cảnh, và không gửi được cho ca sau đường
+dẫn tới "các cảnh báo High chưa ack trong 24 h". Nhật ký hoạt động chỉ lọc theo
+`kind`/`objectId`/`action` cộng phân trang cursor, nên muốn tới "quanh 14:05 hôm
+qua" phải bấm "tải thêm" cho tới khi chạm mốc đó. Chẩn đoán "vì sao cảnh báo này
+bật" là ba lần điều hướng thủ công.
+
+**NGUYÊN NHÂN GỐC.** Với công việc vận hành nhiều người cùng ca, bộ lọc không
+nằm trong URL không phải bất tiện nhỏ mà là **mất khả năng phối hợp**: mọi trao
+đổi phải mô tả bằng lời cách bấm lại bộ lọc.
+
+**CÁCH SỬA.**
+- `BB-1` `shared/hooks/useUrlFilters.ts` (`T57-2.1`) với ba luật, cả ba đều có
+  test khoá: giá trị bằng mặc định **không** ghi vào URL (thanh địa chỉ đầy
+  `?status=all&q=` thì không đọc được); luôn `replace: true` (gõ tìm kiếm không
+  được sinh một mục lịch sử cho mỗi ký tự, nếu không nút Back thành vô dụng);
+  `clear()` chỉ xoá khoá của chính bộ lọc, **giữ** tham số của nơi khác — xoá
+  sạch query sẽ nuốt luôn deep link `?alarm=` từ Landing.
+  Cố ý **chưa** chuyển `MonitorPage` sang hook này để không trộn hai loại thay
+  đổi trong một lần sửa.
+- `T57-2.2`: áp cho Cảnh báo (`?status=&q=`) và Lịch vận hành
+  (`?q=&status=&outOfSync=`); Nhật ký hoạt động thêm lọc khoảng thời gian
+  `?from=&to=` — lọc ở **backend** chứ không cắt sau khi tải, vì cắt ở FE chỉ
+  giấu bớt dòng chứ không đưa người dùng tới đúng thời điểm cần xem.
+- `T57-2.15`: xuất CSV nhật ký theo **đúng bộ lọc đang xem**, RFC 4180, kèm BOM
+  cho Excel tiếng Việt. Chỉ ghi các trường đã hiển thị trên màn hình — không
+  thêm trường nào từ payload thô, giữ `REQ-PA3-X-1` (vết audit không chứa secret).
+- `T57-2.8`: mỗi hàng cảnh báo có hai đường tới bằng chứng — điểm nguồn và xu
+  hướng quanh thời điểm bật. `source` là chuỗi do producer đặt nên id điểm được
+  suy bằng khuôn đã biết; **không khớp thì không dựng liên kết**, vì một liên
+  kết dẫn tới trang rỗng còn tệ hơn không có liên kết.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **925 pass / 925, 92 file** ·
+`npm run build:foxlinx` thành công. Bốn test của `BB-1` đã **kiểm ngược bằng
+mutant**: phá luật 1 và luật 3 đều làm test đỏ.
+
+
+### Added — Plan 57 Wave 1 (an toàn vận hành) + đóng cả 6 câu hỏi chặn bằng `ADR-034`…`ADR-039` (2026-08-18)
+
+**Quyết định trước, code sau.** Sáu câu hỏi từng chặn `IMPLEMENT_READY` nay đã có
+quyết định có căn cứ, mỗi câu một ADR:
+
+| Câu | Quyết định | ADR |
+|---|---|---|
+| Q2 | Annunciation **hai lớp**; lớp nghe được phải **tự khai báo trạng thái thật** (trình duyệt chặn autoplay nên không được vờ như đã bật) | `ADR-034` |
+| Q4 | Ngữ nghĩa luật cảnh báo **thuộc Core**; mô phỏng phải gọi lại chính Core — **cấm cài lại ở FE hoặc Go**. Hệ quả: `T57-2.13` chuyển từ Wave 2 sang Wave 3 | `ADR-035` |
+| Q5 | Chỉ số ISA-18.2 §16 **dẫn xuất** từ `alarm_history.jsonl`, **không lập kho thứ hai**; nêu rõ file này chưa có xoay vòng/retention nên phải xử lý trước khi mở màn hình KPI | `ADR-036` |
+| Q6 | Ghi ra **luật thật hôm nay**: `validNewPassword` = `len >= 6` byte, không có lớp ký tự — thay vì mô tả một chính sách không tồn tại | `ADR-037` |
+| Q7 | "Hiệu lực thực tế" của lịch tính ở **Core**, mở rộng `mkddc-schedule-sim`, không cài lại trong Go | `ADR-038` |
+| Q8 | Đặc tả điều kiện quét bus Modbus. **ADR này KHÔNG cấp phép ghi ra bus RS-485**; `T57-3.8` giữ nguyên `IMPLEMENT_READY BLOCKED` | `ADR-039` |
+
+Hai quyết định đáng chú ý vì chúng **thu hẹp** phạm vi thay vì mở rộng: `ADR-035`
+đẩy `T57-2.13` sang Wave 3 vì chép ngữ nghĩa luật cảnh báo sang FE là tạo hai
+nguồn chân lý cho một quyết định an toàn; `ADR-037` từ chối mô tả một chính sách
+mật khẩu đẹp đẽ mà backend không thi hành.
+
+**Asset trực quan — điều kiện cứng của `DOC_GOVERNANCE` §2.2.** Phát hành hồ sơ
+`KX-DDC24-UX-WEB-OPERATIONS-001` kèm **4 SVG** (`OPS-01` khối "Ai đang giữ quyền
+điều khiển" và `OPS-02` hộp thoại ép tay hàng loạt, mỗi cái đủ desktop + mobile).
+Wireframe ASCII không đủ qua cổng Detailed Design; đây là hạng mục dễ bị bỏ sót
+nhất khi lên lịch, nên nó được làm **trước** khi viết dòng code nào của hai màn hình.
+
+**Wave 1 — 12/12 task.** Khối hạ tầng `BB-4` (`shared/overview/overrides.ts`) làm
+nguồn dữ liệu chung cho "ai đang giữ quyền điều khiển"; `shared/bulk/sequential.ts`
++ `features/points/bulkOverride.ts` cho ép tay hàng loạt có xác nhận chung;
+`shared/alarms/annunciation.ts` cho lớp thu hút chú ý; `features/auth/passwordPolicy.ts`
+và `loginError.ts` cho hai đề xuất P1 của trang đăng nhập/người dùng;
+`shared/components/OverrideRemaining.tsx` cho đếm ngược TTL trên bảng Monitor.
+
+Kiểm chứng (đo lại trong phiên): `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **921 pass / 921, 91 file**
+(mốc trước Wave 1: 775/80 — thêm 146 test, 11 file) · `docs_iso_harness --expect` PASS.
+
+**Trạng thái plan: 27/71 task (~38%).** Cả 8 câu hỏi §12 đã đóng, nên không còn
+quyết định nào chặn việc lập kế hoạch tiếp. Còn **44 task** ở Wave 2–4: Wave 2
+(22 task) cổng đã `PASS` cho phần FE thuần và **sẵn sàng triển khai**; Wave 3
+cần 9 ADR theo từng task + chữ ký Tech Lead; Wave 4 cần quyết định sản phẩm
+Rev A/Rev B. Chi tiết ở Plan 57 §13b.
+
+
+### Fixed — Đóng nốt nhóm "còn mở" của hai kiểm tra viên: toàn vẹn dữ liệu biểu đồ, lớp chặn thứ ba, cây heading (2026-08-18)
+
+Nhóm `N-01`, `N-02`, `N-06`, `N-07`, `N-08` và `G-04` mà đợt trước ghi là "còn mở"
+nay đã đóng. Ba trong số đó là **lỗi toàn vẹn dữ liệu**, tức đụng thẳng luật nền
+của sản phẩm.
+
+**`N-01` — đóng dấu mốc của điểm này lên số đo của điểm khác.** `TrendPreview` gộp
+mọi điểm vừa đổi vào MỘT hàng rồi lấy `newestStamp` của cả nhóm làm nhãn thời gian
+cho tất cả: số đo của điểm A tại t1 bị vẽ dưới nhãn t2 của điểm B. Đây đúng lớp lỗi
+mà chú thích ngay bên trên nó cấm ("tuyệt đối không đóng dấu giờ máy trạm lên số
+đo") — chỉ khác ở chỗ đóng dấu đồng hồ của producer khác thay vì của trình duyệt.
+Sửa: **một hàng cho mỗi mốc thời gian**, gộp theo `stampMs` rồi sắp xếp.
+
+**`N-02` — chuỗi thưa BIẾN MẤT thay vì đứt đường.** Hàng chỉ mang khoá của các điểm
+vừa đổi, mà `TrendChart` vẽ `dot={false}`: một chuỗi không có mẫu ở hàng liền kề thì
+không nối được đoạn thẳng và cũng không có chấm ⇒ vô hình. Chọn một điểm 1 s cùng
+một điểm Modbus 5 s thì điểm Modbus biến mất, không phải "đường đứt" như AC yêu cầu.
+Thêm nữa trục X là `category` trên chuỗi `HH:MM:SS` nên khoảng thời gian không đều
+vẫn được vẽ đều — buffer đã trung thực nhưng hình vẽ thì chưa. Sửa: đặt `__ts` để
+bật trục thời gian **số** đã có sẵn trong `TrendChart`, và thêm prop `showDots` cho
+riêng khối xem nhanh (trang Trends giữ mặc định tắt vì mật độ mẫu cao, chấm chỉ rối).
+
+**`G-04`** — `lastSampledAtRef` được ghi TRƯỚC khi kiểm `value === null`, nên một
+mốc kèm giá trị hỏng "đốt" luôn mốc đó; nếu sau này đọc được giá trị dưới cùng mốc
+thì nó không bao giờ vào biểu đồ. Sửa: chỉ ghi ref sau khi đã có giá trị dùng được.
+
+**`N-07` — "lớp chặn thứ ba" là mã chết.** `requestNavigation` được docstring và
+CHANGELOG trình bày như một trong ba lớp đang bảo vệ, nhưng `grep` toàn `src` cho
+thấy **không nơi nào gọi**. Cùng lúc `CommandPalette` gọi thẳng `navigate(to)` —
+tức Ctrl/⌘+K là đường điều hướng duy nhất trong ứng dụng không đi qua `<a href>`,
+và nó lách được cả ba lớp. Không chọn cách rẻ là xoá mã chết rồi sửa docstring; nối
+nó vào đúng chỗ đang lách: guard đăng ký ở cấp module khi dirty (một ô nhớ là đủ vì
+tối đa một trang dirty tại một thời điểm — không cần thêm provider), `CommandPalette`
+gọi `requestGuardedNavigation(to)` trước khi điều hướng.
+
+**`N-06` — docstring hứa nhiều hơn mã làm.** Nó liệt kê "bấm Back" là triệu chứng
+được sửa, nhưng Back/Forward không đi qua `<a href>` và không bắn `beforeunload` cho
+điều hướng SPA. Chặn đúng cách cần `useBlocker` của data router, mà ứng dụng đang
+dùng `<BrowserRouter>` + `<Routes>`. Đã ghi thẳng vào docstring là **khoảng hở đã
+biết**, không phải điều đã xử lý.
+
+**`N-08` — AC của `T57-0.4` đòi test tự động, đợt đầu chỉ đối chiếu bằng tay.** Thêm
+5 test vào `route-menu-contract.test.ts` (tổng 48): layout sở hữu `<h1>` phải có đúng
+một; 15 trang con của ba layout **không** được tự thêm; 21 trang tự đứng phải có; và
+ba trang có nhánh trả về sớm phải dùng component tiêu đề DÙNG CHUNG ở cả hai nhánh.
+Trong lúc viết, `countH1` mắc lại đúng dương tính giả đã làm hỏng phép đo `F-UX-15`
+lần đầu — đếm cả `<h1>` **trong chú thích**, mà repo này trích dẫn thẻ đó rất nhiều
+để giải thích ai sở hữu tiêu đề; đã bỏ chú thích trước khi đếm. **Kiểm ngược:** trả
+nhánh lỗi của `SchedulerGridPage` về `StateBlock` trần ⇒ test đỏ đúng thông điệp.
+Bổ sung `<h2 className="sr-only">` cho 4 tab Lịch vận hành (Lịch tuần / Ngoại lệ /
+Điểm đích / Mô phỏng) — `sr-only` vì tên tab đã hiện trên thanh tab, lặp lại bằng
+mắt là nhiễu, nhưng cây heading vẫn phải liền mạch.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **775 pass / 775, 80 file** ·
+`npm run build:foxlinx` thành công.
+
+**Vẫn còn mở:** `F-UX-03` và `F-UX-13` chưa có test hành vi riêng (đang được phủ
+gián tiếp qua gate hợp đồng và bộ test alarm hiện có).
+
+
+> [!WARNING]
+> **CHƯA DEPLOY LÊN BOARD.** Toàn bộ thay đổi Wave 0 (46 tệp) mới chỉ được kiểm
+> bằng typecheck/lint/unit test và build trên máy dev. Board Foxlinx
+> `SOM-DDC-24-foxlinx` **tạm mất kết nối** ngày 2026-08-18, nên bước deploy bị
+> chặn và **cố ý để lại**. Bản đang chạy trên board vẫn là bản deploy lúc
+> 03:15Z (chỉ gồm 11 bản sửa của phiên review, KHÔNG gồm Wave 0).
+> Khi board có lại kết nối: `npm run build:foxlinx` (không dùng `npm run build`
+> trần), kiểm `grep -c REVA_SCOPE_ROADMAP` = 0, backup `dist` → `dist.prev`,
+> `scp` (board Buildroot không có `rsync`), `systemctl restart mkddc-web-pi`.
+
+### Fixed — Đóng phát hiện của kiểm tra viên #1: hai lỗi CHẶN, gate chủ lực từng vô dụng (2026-08-18)
+
+Kiểm tra viên độc lập **tự tay áp mutant** vào mã thay vì đọc lời khai, và chứng
+minh hai tuyên bố của phiên trước là sai.
+
+**B-01 — gate hợp đồng deep link KHÔNG bắt được chính lỗi nó sinh ra để bắt.**
+Bản đầu chỉ hỏi `source.includes("'group'")`, tức "tên tham số có xuất hiện đâu đó
+trong tệp không". Kiểm tra viên xoá `searchParams.get('group')` khỏi `MonitorPage`
+mà vẫn để literal `'group'` trong union type ⇒ **14/14 xanh**, trang thì hết lọc.
+Một thành viên union hay một `value=` tình cờ đủ giữ nó xanh. Sửa: đòi đúng biểu
+thức `searchParams.get('<param>')`. **Kiểm ngược bằng chính mutant đó**: nay đỏ,
+dù tệp còn 2 literal `'group'`.
+
+**B-02 — "test khoá 11 bản sửa" là sai.** Ba hồi quy thật đi lọt cả 729 test:
+(a) trả lại `onClick` ẩn trên ô sparkline; (b) `defaultForceValue` về
+`String(pointNumber(point))` ⇒ chuỗi `"null"` quay lại; (c) `saveTrend` về `?? true`.
+Thêm nữa `F-UX-03` và `F-UX-13` không có test nào, và `it` mang tên "ô Trend không
+còn là vùng bấm" **không assert gì về ô sparkline**.
+Đã thêm 6 test. Trong lúc tự chạy mutant phát hiện thêm **hai test của chính phiên
+này vô nghĩa**: (i) assert `getAttribute('onclick')` luôn `null` vì React gắn
+handler qua synthetic event — viết lại thành bấm thật rồi assert không có dialog;
+(ii) đường "bấm Lưu mà KHÔNG chạm nút gạt" chưa được phủ, nên mutant `?? true` sống
+sót — thêm test assert `updatePointConfig` nhận `trendEnabled: false`.
+**Cả ba mutant nay đều bị bắt.**
+
+**N-05 — bản vá F-UX-06 tạo ra mâu thuẫn mới.** Nút hành động trên bảng chỉ phụ
+thuộc `onForce`, không phụ thuộc `canForcePoint`, nên VP `writable: false` vẫn được
+bày nút "Ghi" trong khi khung chi tiết của **cùng điểm đó** từ chối. Trước F-UX-06
+đây là vùng bấm ẩn nên không ai thấy; bản sửa biến nó thành **lời hứa có nhãn** —
+tệ hơn bẫy cũ trên một HMI vận hành. Đã thêm `canForcePoint(point)` vào điều kiện.
+
+**N-04 — lệch cột do đưa nút ra ngoài grid.** Header và hàng dùng cùng template
+nhưng hàng bọc thêm lớp `flex` chứa nút, nên cột `1fr` nuốt phần chênh và mọi cột
+phía sau lệch ~65-70 px — và chỉ lệch ở AO/VP (có nút), không lệch ở UI (không
+nút), tức bảng lệch không đều trong cùng một trang. Sửa bằng cấu trúc gương: header
+và hàng cùng `flex` + grid 7 cột + ô hành động rộng cố định (76 px cho AO/VP,
+60 px cho DO). **Không dùng `grid-cols-subgrid`** dù ngắn gọn hơn: nó hỏng nặng
+trên trình duyệt cũ, mà hỏng nặng tệ hơn lệch nhẹ.
+
+**N-03 — gate mù với template literal, và chỗ mù đó CÓ lỗi thật.** `CALL_PATTERN`
+chỉ khớp `pick('…')`/`pick("…")`, bỏ qua ~6,6 % lời gọi dùng backtick. Thêm nhánh
+template (bỏ `${…}` trước khi chấm điểm) ⇒ lập tức lộ **4 chuỗi không dấu còn sót**
+trong `AlarmSettingsPage.tsx` mà đợt sửa `F-UX-01` bỏ qua: "Toi da ${…} alarm.",
+"Trung ID voi alarm #${…}.", "Toi da ${…} source.", "Toi da ${…} alarm publish
+BACnet dang enabled." Đã phục hồi dấu cả 4.
+
+**G-01** — ba từ nằm ở cả hai tầng từ điển, tầng 1 luôn thắng nên luật "cần hai từ"
+của tầng 2 âm thầm không áp dụng; đã ghi chú cấm lặp.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch ·
+`npx vitest --run --environment jsdom src` → **735 pass / 735, 80 file** ·
+`npm run build:foxlinx` thành công.
+
+**Còn mở, kiểm tra viên chỉ ra và CHƯA đóng** — ghi thẳng thay vì bỏ qua:
+`N-01` `TrendPreview` gộp nhiều điểm vào một hàng và đóng dấu mốc mới nhất của
+nhóm lên số đo của điểm khác · `N-02` chuỗi có mẫu không ở hàng liền kề bị **biến
+mất** thay vì đứt đường (`dot={false}`), và trục X vẫn là `category` nên khoảng
+thời gian không đều được vẽ đều · `N-06`/`N-07` docstring `useDirtyGuard` kể ba lớp
+chặn nhưng `requestNavigation` **không có nơi gọi nào** và Back trình duyệt không
+được chặn · `N-08` chưa có test duyệt bảng route assert đúng một `<h1>`, và 5 tab
+Lịch vận hành vẫn không có heading · `F-UX-03`/`F-UX-13` vẫn chưa có test hành vi.
+
+
+### Fixed — Đóng phát hiện của kiểm tra viên độc lập cho Wave 0 (2026-08-18)
+
+Hai agent kiểm chéo độc lập soi lại toàn bộ Wave 0. Kết quả không phải "đã tốt" —
+họ tìm ra một **lỗi trợ năng mới do chính bản vá chống mất dữ liệu tạo ra**, và
+một finding bị khai "ĐÃ SỬA" khi chưa sửa hết.
+
+**MỚI — skip link bị `useDirtyGuard` nuốt (WCAG 2.2 §2.4.1 Bypass Blocks).**
+`interceptInternalLink` so đích bằng `url.href`, nên `<a href="#main-content">`
+của `AppShell` (điểm dừng Tab đầu tiên, đúng cơ chế Bypass Blocks) bị coi là rời
+trang: `/eng/outputs#main-content` ≠ `/eng/outputs`. Hậu quả trên 4 trang cấu hình
+khi đang dirty: người dùng bàn phím **không nhảy được tới nội dung**, và nếu chọn
+"Bỏ thay đổi, rời đi" thì app điều hướng về **chính trang đang đứng** rồi xoá bản
+nháp — một bẫy mất dữ liệu do đúng bản vá chống mất dữ liệu gây ra. Sửa: so bằng
+`pathname + search`, vì đổi hash là di chuyển TRONG trang, không có gì để mất.
+
+**`F-UX-01` chưa đóng thật, và gate mới mù đúng chỗ đó.** Biên bản ghi finding này
+"ĐÃ SỬA / 78 chuỗi", nhưng `shared/i18n.tsx` vẫn còn **4 khoá không dấu**, trong đó
+`alarmSettingsTitle: 'Cau hinh canh bao'` chính là `<h1>` của trang Cấu hình cảnh
+báo ở chế độ tiếng Việt, kèm hai toast lưu/lỗi. `check_ui_strings.py` không thấy vì
+chỉ quét `pick(...)`, không quét từ điển `t()`. Sửa cả hai: phục hồi dấu cho 4 khoá,
+và mở rộng gate sang khối `vi:` của `i18n.tsx`. **Kiểm ngược:** chạy gate mới lên
+bản `HEAD` của `i18n.tsx` ⇒ bắt đúng 4 khoá nó từng bỏ sót. Trong lúc mở rộng, gate
+báo nhầm "Xem theo thanh ghi (u0-u7)" — "thanh ghi" và "theo" là tiếng Việt đúng
+chính tả không dấu — nên gỡ hai từ đó khỏi từ điển; đo lại vẫn **68/81**, dương tính
+giả **0**.
+
+**Ba đính chính tài liệu — tuyên bố cũ nói quá so với mã:**
+- §3.3/§5.2 biên bản viết "mỗi mức một icon hình dạng khác nhau" cho cả hai thang.
+  Đúng với `quality` (5 hình), **nói quá** với `severity`: 5 mức dùng **3** hình
+  (`AlertOctagon` · `AlertTriangle`×2 · `Info`×2). WCAG 1.4.1 vẫn đạt nhờ nhãn chữ.
+- §5.4 ghi "19 trang/tab không có `<h1>`" — phần lớn là **dương tính giả do đếm
+  theo file**. Đối chiếu lại toàn bộ 28 route: mỗi route đúng một `<h1>`.
+- Attribution "CTO quyết định" trong `ADR-033`, `UX-SYSTEM-001` v1.9 và biên bản §10
+  **không có gốc**: không có chữ ký người nào cho vai trò đó. Đổi sang chuẩn trung
+  thực đã dùng ở v1.8 (`WAIVED FOR IMPLEMENTATION`), và thêm **§9b** vào biên bản ghi
+  rõ: hai ADR đủ tư cách làm đầu vào implementation, **chưa đủ tư cách baseline
+  `M5 — APPROVED`**; `RELEASE_READY` vẫn là cổng độc lập.
+
+Đồng bộ `F-UX-12..15` trong §7.1 sang **ĐÃ ĐÓNG**, và §5.2/§5.3/§5.4 sang trạng
+thái sau `T57-0.2`/`T57-0.4`.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npm run lint` sạch (gate mở rộng) ·
+`npx vitest --run --environment jsdom src` → **729 pass / 729, 80 file** ·
+`python3 scripts/docs_iso_harness.py --expect` → PASS, khớp toàn bộ ngưỡng.
+
+**Còn mở, do kiểm tra viên chỉ ra và chưa đóng:** chưa có test tự động duyệt bảng
+route assert đúng một `<h1>` (đúng AC của `T57-0.4`); chưa có test cho `F-UX-09`,
+`F-UX-10`, `F-UX-03`, `F-UX-14`; `useDirtyGuard` chưa chặn nút Back trình duyệt
+(`popstate`) và chưa nối `CommandPalette` vào `requestNavigation`.
+
+
+### Changed — `ADR-033`: cách ly hai route chạy trên dữ liệu mock khỏi điều hướng, và test hợp đồng route↔menu (2026-08-18)
+
+Xử lý 6 phát hiện bổ sung `F-UX-17`, `F-DOC-06..10` (biên bản review §7.2b), do
+vai trò CTO quyết định và thực thi.
+
+**Quyết định đáng kể nhất — và nó NGƯỢC với gợi ý ban đầu trong biên bản review.**
+`F-UX-17` ghi nhận `/eng/user-parameters` và `/eng/aux` là "route thật nhưng không
+có lối vào điều hướng", và gợi ý xếp chúng vào một nhóm của `NavRail`. Kiểm chứng
+lại cho thấy **giả định "route thật" là sai**: `apiClient.getUserParams()` trả
+thẳng `getDemoUserParams()` **bất kể cờ `IS_DEMO`** (kèm chú thích trong chính mã
+nguồn: "Mock demo-only: EasySet User Parameters has no backend/core hook yet"),
+`putUserParams()` chỉ ghi vào một biến module, và `grep` toàn `apps/web-api` cho
+`user-param` trả về **0**. Trên board thật, trang này hiển thị 38 tham số MCU **bịa**
+và trả toast "đã lưu" cho một lệnh không bao giờ tới thiết bị. `AuxFunctionsPage`
+sinh cụm graph 28-node — legacy theo ADR-020/023, không có đường nạp xuống thiết bị.
+
+Thêm hai trang đó vào menu sẽ **nhân một lỗi bịa dữ liệu** từ phạm vi "chỉ người
+gõ tay URL mới gặp" lên "mọi admin đều thấy và tin" — trái luật nền của sản phẩm
+và trái `ADR-013` ("chỉ field có consumer mới được công bố"). Nên quyết định là
+**cách ly có chủ đích**, không phải thêm vào menu.
+
+Chọn cách ly thay vì xoá hẳn vì hai lý do: xoá sẽ huỷ `useDirtyGuard` vừa gắn vào
+`UserParametersPage` ở `T57-0.1`, và là quyết định phạm vi Rev A không hoàn tác
+được bằng một lệnh; cách ly rollback bằng đúng một dòng. **Rủi ro còn lại được ghi
+rõ, không giấu:** gõ tay URL vẫn tới được hai trang này.
+
+`ADR-033` ghi đầy đủ bối cảnh, ba phương án bị loại, bảng thi hành, rủi ro còn lại
+và cách rollback. **Cần Product quyết tiếp** (đã ghi vào §9 biên bản review): nối
+thật hai trang này vào backend, hay gỡ hẳn. Tới lúc đó **không** được mô tả
+`/eng/user-parameters` là chức năng đã có trong bất kỳ demo hay biên bản nghiệm thu nào.
+
+**Gate mới `route-menu-contract.test.ts`** (8 assert) — cùng họ với gate deep link
+hai chiều ở `T57-0.8`, đóng đúng cơ chế sinh lỗi §7.3 mục 1: chụp nguyên văn bảng
+`path=` của `App.tsx`; menu không được trỏ đường chết; tập route nhóm `nav` phải
+trùng tập mục menu; hai route cách ly phải nằm ngoài menu; mọi khoá `ROUTE_MIN_ROLE`
+phải là route thật; bốn nhóm `NavRail` phải khớp bảng `ADR-032`. **Đã kiểm ngược:**
+thêm tạm một route `eng/orphan-probe` vào `App.tsx` ⇒ test đỏ đúng thông điệp thiết
+kế; khôi phục xong `git diff` trên tệp đó rỗng.
+
+**Bốn finding tài liệu còn lại:**
+- `F-DOC-06` `UX-SYSTEM-001` §3 viết lại theo cơ chế thật (utility class Tailwind +
+  `.mono`), thay vì thêm 4 biến CSS `--fs-*` chỉ để khớp giấy — thêm một tầng trung
+  gian mà không test nào đi qua là làm tài liệu đúng bằng cách làm mã xấu đi.
+- `F-DOC-07` §5 sửa 6 → **14** biến thể `StatusBadge` (khớp `BADGE_VARIANTS` và
+  `contrast.test.ts`), thêm §5.2 tách rõ 14 biến thể với 27 khoá bí danh trong `labelMap`.
+- `F-DOC-08` `styles.css` sửa đường dẫn `src/theme/tokens.ts` → `src/shared/theme/tokens.ts`.
+- `F-DOC-09` `09_MKDDC_WEB_IMPLEMENTATION_GUIDE.md` §1 dựng lại cây trang theo hiện
+  trạng (4 nhóm `ADR-032`, bổ sung 6 route thiếu, thêm mục CÁCH LY); §1.4 **giữ
+  nguyên** và được đánh dấu là ghi chép lịch sử — `DOC_GOVERNANCE` §6 cấm xoá lịch sử.
+- `F-DOC-10` **đo lại thật** thay vì kết luận từ suy đoán: cùng cây làm việc,
+  `vite build` trần = **715,18 kB**, `VITE_PROGRAMMING_REV_A=1` = **898,84 kB**,
+  chênh **183,66 kB**; chunk `charts` giống hệt nhau ở 407,31 kB. Xác nhận hai hồ sơ
+  không mâu thuẫn, chỉ thiếu chú thích — đã thêm vào `F-UX-16` §7.1, review §8.5 và
+  Plan 57 §8.
+
+Kiểm chứng: `npx tsc --noEmit` sạch · `npx eslint src --max-warnings=0` sạch ·
+`npx vitest --run --environment jsdom src` → **729 pass / 729, 80 file** ·
+`python3 scripts/docs_iso_harness.py --expect` → PASS, khớp toàn bộ ngưỡng.
+
+
+### Added — Plan 57 Wave 0: đóng nợ UI/UX và dựng ba gate chặn tái diễn (2026-08-18)
+
+Triển khai theo chỉ thị `AUTH-WEBUX-2026-08-18-01` (`docs/00_governance/DECISIONS.md`),
+mở đúng Wave 0 của Plan 57; Wave 1–4 vẫn `IMPLEMENT_READY BLOCKED`.
+
+**Track A — bốn finding còn mở:**
+- `T57-0.1` (`F-UX-12`) Hook mới `shared/hooks/useDirtyGuard.ts` + `DirtyGuardModal`,
+  áp cho `OutputsPage`, `AlarmSettingsPage`, `VirtualIoPage`, `UserParametersPage`.
+  Ba lớp chặn: `beforeunload`, bắt `click` ở pha capture cho mọi `<a href>` nội bộ
+  (React Router 7 không cho chặn `<Link>` bằng API công khai ổn định), và
+  `requestNavigation()` cho nút gọi `navigate()` trực tiếp. Luật không được phá:
+  **không dirty thì không chặn gì** — một guard bật thường trực sẽ dạy người dùng
+  bấm "rời đi" theo phản xạ, và khi nó chặn thật thì không ai đọc nữa.
+- `T57-0.2` (`F-UX-13`) `AlarmsPage.HistoryRow` bỏ ánh xạ severity→3 trạng thái viết
+  tại chỗ, dùng `SeverityBadge` (đã có đủ 5 mức). `low`/`info` không còn hiện xanh lá
+  — xanh lá theo IEC 60073 nghĩa là "bình thường đã xác nhận", không phải "cảnh báo mức thấp".
+- `T57-0.3` (`F-UX-14`) `DashboardPage.TrendPreview` chỉ ghi mẫu khi `updatedAt` của
+  producer ĐỔI, thay vì `setInterval` 1 s theo đồng hồ trình duyệt. Điểm cập nhật
+  5 s/lần nay cho 1 mẫu/5 s thay vì 5 — bản cũ tạo mật độ dữ liệu giả. Điểm ngừng
+  cập nhật ⇒ đứt đường (quyết định Q3 trong AUTH record, theo tiền lệ `REQ-PA3-06-2`).
+- `T57-0.4` (`F-UX-15`) Bọc hai nhánh trả về sớm của `SchedulerGridPage`
+  (`legacyFormat`, `error`) bằng `SchedulerHeading` dùng chung, để `<h1>` không biến
+  mất khi trang không dựng được nội dung (WCAG 2.2 §2.4.6). Bổ sung `<h2>` cho các
+  màn Programming vốn không có tiêu đề riêng nào.
+
+  **Đính chính finding `F-UX-15`:** phần lớn là dương tính giả. Review gốc đếm theo
+  FILE, nhưng `ModbusRtuLayout`, `ProgrammingHeader` và `ScheduleEditorPage` đều đã
+  giữ đúng một `<h1>` cho route của chúng, và các page/tab con cố ý không có — đúng
+  thiết kế, có ghi trong chú thích của chính các layout đó. Chỉ hai nhánh lỗi của
+  `SchedulerGridPage` là khiếm khuyết thật.
+
+**Track B — test khoá 11 bản sửa của phiên review** (`T57-0.5/0.6/0.7`):
+`MonitorPage.regressionLocks.test.tsx` (8 test) và `AlarmsPage.deepLink.test.tsx`
+(4 test). Trước đó không test nào trong 692 test hiện có thất bại nếu ai hoàn nguyên
+các bản vá — ba trong số các finding (nút gạt không dùng được bằng bàn phím, vùng bấm
+ẩn mở lệnh ép tay, sparkline vẽ số 0 giả) đã sống nhiều tháng mà không bộ test nào thấy.
+
+**Track C — ba gate chặn cơ chế sinh lỗi** (§7.3 của review):
+- `T57-0.8` `shared/overview/drilldown.contract.test.ts` (14 test) — hợp đồng deep link
+  **hai chiều**: đối chiếu tham số resolver PHÁT RA với tham số trang đích THỰC SỰ ĐỌC,
+  và soát mọi nhánh `case` cùng mọi `subsystemRoutes` đã có trang đích khai báo.
+  **Đã kiểm chứng gate thật sự đỏ được**: thêm thử một `targetType` mới mà quên nối
+  trang đích ⇒ test đỏ với đúng thông điệp chỉ ra chỗ thiếu.
+- `T57-0.9` `scripts/check_ui_strings.py`, nối vào `npm run lint` qua
+  `check:ui-strings`. Từ điển **hai tầng** vì tiếng Việt có nhiều từ đúng chính tả mà
+  không dấu ("Ghi", "an", "cho", "khi"): tầng 1 một từ là đủ kết luận, tầng 2 cần hai
+  từ trở lên. **Hiệu lực đã ĐO ngược trên bản `HEAD` của ba tệp từng mắc lỗi**
+  (81 chuỗi không dấu thật): bắt **68/81**, dương tính giả trên cây đã sửa **0**.
+  13 chuỗi còn lại gồm 12 thuật ngữ tiếng Anh hợp lệ (gate đúng khi không bắt) và
+  1 chuỗi thật sự lọt ("da ack") — chấp nhận đổi lấy việc không báo nhầm, vì một gate
+  hay báo nhầm sẽ bị tắt đi và khi đó nó bắt được 0.
+- `T57-0.10` `shared/i18n.hmiVocabulary.test.ts` (3 test) — kiểm chéo từ vựng chất
+  lượng điểm giữa HMI (C++/LVGL) và Web (TS), thi hành `UX-SYSTEM-001` §1.5 vốn chưa
+  có gì khoá. Phát hiện và **ghi nhận có ý thức** một khoảng hở thật: HMI không có
+  `OFFLINE` (mất liên lạc thể hiện bằng dải "I/O FAULT" toàn màn hình, không phải nhãn
+  từng điểm). Test khoá danh sách này để nó không âm thầm dài thêm.
+
+Thêm `src/node-builtins.d.ts` khai báo kiểu tối thiểu cho `node:fs`/`node:url`/`node:path`
+mà chỉ hai test hợp đồng dùng: dự án cố ý không cài `@types/node`, và `?raw` của Vite
+không đọc được `apps/hmi` (ngoài root, trả `Denied ID`) — nới `server.fs.allow` chỉ để
+phục vụ test là đánh đổi sai.
+
+Kiểm chứng (đo lại trong phiên): `npx tsc --noEmit` sạch ·
+`npm run lint` sạch (eslint + gate chuỗi mới) ·
+`npx vitest --run --environment jsdom src` → **729 pass / 729, 80 file**
+(mốc đầu Wave 0: 692/75 — thêm 37 test, 5 file) · `npm run build:foxlinx` thành công.
+Chưa deploy bản này lên board; chưa chạy e2e Playwright.
+
+
+### Changed — Plan 57 Wave 0 Track D: đồng bộ tài liệu authority UI/UX với mã (2026-08-18)
+
+Đóng cả **5 finding tài liệu** `F-DOC-01..05` của `REV-FE-UIUX-UC-2026-08-18`
+theo `AUTH-WEBUX-2026-08-18-01`. Cả năm đều là **trường hợp mã đúng, tài liệu
+sai** — nguy hiểm y như chiều ngược lại, vì tài liệu mới là thứ người mới đọc.
+Không có dòng mã nào bị sửa trong đợt này.
+
+**`T57-0.11` (`F-DOC-01`) — `docs/04_uiux/KX-DDC24-UX-SYSTEM-001_VI.md` §2 → v1.8.**
+Triệu chứng: bảng token của hồ sơ "nguồn-chuẩn hình ảnh" lệch **hoàn toàn** khỏi
+`apps/web-ui/src/shared/theme/tokens.ts` — khác cả tên biến (`--good` vs
+`--c-good`) lẫn giá trị (`#2FA45A` vs `#227742`, `#E8B500` vs `#826500`,
+`#9AA0A6` vs `#636970`). Nguyên nhân gốc: plan 45 (`WEB-UX-008`/`WEB-UX-012`)
+siết token để đạt WCAG AA nhưng không cập nhật ngược vào tài liệu, nên một FE dev
+mới làm theo tài liệu sẽ dựng lại đúng bộ màu **trượt AA** đã bỏ công sửa. Cách
+sửa: thay bằng bảng **30 token cho cả hai theme** `light`/`dark`, khớp 1-1 với mã,
+kèm cột "nhóm kiểm" nói rõ ngưỡng nào áp cho token nào; thêm §2.2 (6 luật mà
+`contrast.test.ts` kiểm tự động) và §2.3 (ánh xạ tên `--x` → `--c-x` + **số đo
+tương phản thật** giải thích từng giá trị bị siết: `--border` 1,64:1 → 3,44:1,
+`--warn` 1,18:1 → 3,41:1, `--warn-fg` 4,49:1 → 5,02:1…). Ghi rõ một điểm dễ hiểu
+nhầm: nhiều giá trị cũ **vẫn còn trong mã** nhưng ở **theme tối**; bảng cũ chỉ có
+một cột nên đã đem độ bão hoà hợp lệ của theme tối áp vào theme sáng.
+
+**`T57-0.12` (`F-DOC-02`) — cùng hồ sơ, §9 "Handoff cho FE".** Triệu chứng: hứa
+export `tokens.json` / `theme.css`, **không tệp nào tồn tại** trong repo. Nguyên
+nhân: mục viết theo quy trình design-tool truyền thống, không theo kịp quyết định
+để token trong TypeScript. Cách sửa: mô tả cơ chế thật — token ở `tokens.ts` để
+test tương phản chạy trên *token thật* và để hai theme cùng một hình dạng kiểu
+(thiếu token là lỗi biên dịch); `applyTheme()` ghi 30 biến lên `:root`;
+`styles.css` chỉ giữ giá trị không phụ thuộc theme. Kèm bảng "việc cần làm → nơi
+làm → kiểm bằng gì".
+
+**`T57-0.13` (`F-DOC-04`) — `ADR-032` mới + §6 hồ sơ trên.** Triệu chứng: tài liệu
+canonical và `ADR-009` chốt **3 nhóm** điều hướng, mã `NavRail.tsx` dựng **4
+nhóm**. Nguyên nhân: thay đổi được làm trong mã kèm lý do tốt nhưng **không có
+ADR** ghi việc rời khỏi ADR-009. Cách sửa: ban hành `ADR-032` trong
+`docs/00_governance/DECISIONS.md` (file này là authority cấp phát số ADR), nêu rõ
+`supersedes` **Decision #2** của ADR-009 và **chỉ** phần đó — triết lý màu Level B
+hybrid vẫn còn hiệu lực; đánh dấu `SUPERSEDED` tại đúng chỗ trong
+`docs/adr/ADR-009-isa101-hmi-and-nav-restructure.md` theo `DOC_GOVERNANCE.md` §6
+quy tắc 6, và cảnh báo rằng bảng hex trong ADR-009 không còn là giá trị đang chạy.
+Đồng bộ §6 của design system với `NavRail.tsx`: 4 nhóm, 19 route, 3 luật đi kèm
+(cờ build-time Programming, dùng chung `ROUTE_MIN_ROLE`, `/settings/network` mở
+cho mọi vai trò theo ADR-017 §2.7).
+
+**`T57-0.14` (`F-DOC-05`) — §4.1 mới.** Triệu chứng: tài liệu ghi "≥1280 desktop,
+≥768 tablet", mã dùng `lg` = **1024 px** làm ngưỡng thanh bên ↔ ngăn kéo và
+`UX_REQ_PA3_WEB` §3.2 yêu cầu hỗ trợ 390×844 — ba nguồn, không nguồn nào là trọng
+tài. Cách sửa: chốt **một** bộ số theo mặc định Tailwind v4 (không có
+`tailwind.config.*`, không có `@theme` đè `--breakpoint-*`), nêu rõ `lg` = 1024 px
+là **ngưỡng hành vi duy nhất** và cả ba khai báo (`NavRail` `lg:flex`, `NavDrawer`
+`lg:hidden`, nút ☰ `lg:hidden`) phải đổi cùng lúc — lệch nhau sẽ tạo một dải chiều
+rộng không có điều hướng nào. Ghi hai viewport tham chiếu 1440×900 và 390×844 đúng
+bộ mà e2e đo.
+
+**`T57-0.15` (`F-DOC-03`) — `docs/02_requirements/UX_REQ_PA3_WEB.md` §1.1 → v1.1.**
+Triệu chứng: bảng định nghĩa 5 giá trị `quality` (**không** có `unknown`) nhưng câu
+luật ngay dưới nói "bốn trạng thái `bad`/`stale`/`offline`/`unknown`"; type
+`PointQuality` cũng không có `unknown`. Nguyên nhân: câu luật được viết cho thang
+`health.state` rồi đặt nhầm vào mục của thang `quality`. Cách sửa theo quyết định
+**Q1** của `AUTH-WEBUX-2026-08-18-01` — **chỉ sửa tài liệu**: chuyển câu luật về
+đúng §1.2, §1.1 nói rõ `quality` có đúng năm giá trị và `QualityBadge` lùi về
+`uncertain` khi gặp giá trị lạ. **Không** thêm `unknown` vào `PointQuality` (đổi
+contract, vượt phạm vi Wave 0).
+
+Đánh dấu 5 dòng `F-DOC-01..05` trong `docs/07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md`
+§7.2 là **ĐÃ ĐÓNG** kèm task và hồ sơ đích, và cập nhật dòng "cần uỷ quyền" ở §9.
+
+Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` → **PASS**, `EXPECT`
+khớp toàn bộ ngưỡng, không `DRIFT` (22/22 baseline, 6/6 support, link/anchor/
+trailing-ws/fence/duplicate-ID/span đều 0, 60 SRS ID, 60 trace row, 0 vi phạm
+trace). Thay đổi không đụng họ ID nào đang được đếm nên khối `EXPECT` giữ nguyên.
+
+### Added — Plan 57: nâng cấp UC/UI/UX Web HMI + đóng finding `REV-FE-UIUX-UC-2026-08-18` (2026-08-18)
+
+Thêm `docs/03_implementation/57_WEB_UIUX_UC_UPGRADE_PLAN.md` —
+**DRAFT, chờ duyệt. `PLAN_READY` CHƯA đóng, `IMPLEMENT_READY` CHƯA mở**; không
+viết code production trước khi có phê duyệt (`DOC_GOVERNANCE.md` §4 + quy tắc
+"DOC TRƯỚC CODE SAU").
+
+Phạm vi: **67 đề xuất UC/UI/UX** ở §6 của review (19 nhóm PAGE) + **10 finding
+còn mở** (`F-UX-12..16`, `F-DOC-01..05`) + hạ tầng khoá lại 11 finding đã sửa.
+**Loại §6.8 `/eng/commissioning`** (3 đề xuất) theo chỉ thị user cùng ngày — ghi
+rõ trong plan để không bị coi là bỏ sót. Bốn đề xuất Programming §6.14 dẫn chiếu
+Plan 53/56 thay vì lập lại.
+
+Cấu trúc: 8 khối hạ tầng dùng chung (`BB-1..BB-8`) rút ra từ chỗ nhiều trang cần
+cùng một thứ — làm khối trước, trang sau, tránh viết lại 3–4 lần. Chia 5 Wave:
+Wave 0 đóng nợ + **ba gate chống tái diễn** (test hợp đồng deep link hai chiều,
+lint chuỗi tiếng Việt mất dấu, kiểm chéo từ vựng HMI ↔ Web) ·
+Wave 1 an toàn vận hành (FE thuần) · Wave 2 hiệu quả chẩn đoán ·
+Wave 3 cần contract/backend mới (**9 ADR** phải ký trước) ·
+Wave 4 quyết định sản phẩm (ISA-101 Level 2 process graphic, code-splitting).
+
+Ước lượng Wave 0–3: **~102,5 người-ngày** dev (chưa tính review/QA/e2e). Đề xuất
+cắt phạm vi nếu cần giao nhanh: Wave 0 + Wave 1 (~28,5 người-ngày) đã đóng toàn
+bộ nợ kỹ thuật và mọi đề xuất P1 ảnh hưởng an toàn.
+
+Plan có **ma trận truy vết 1-1** cho cả 67 đề xuất (không mục nào biến mất im
+lặng), ma trận tài liệu phải cập nhật trước/sau khi code, và **8 câu hỏi chặn
+`IMPLEMENT_READY`** cần PM/CTO/UX Lead/Tech Lead trả lời — trong đó Q8 là câu
+hỏi an toàn: quét bus Modbus là **ghi ra bus thật**, có thể nhiễu thiết bị đang
+chạy.
+
+Ghi nhận rủi ro đáng chú ý: 6 màn hình mới đều chứa quyết định an toàn nên
+**bắt buộc** có asset trực quan render được theo `DOC_GOVERNANCE.md` §2.2
+(wireframe ASCII không đủ) — hạng mục dễ bị bỏ sót nhất khi lên lịch.
+
+Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` → **PASS, khớp toàn
+bộ ngưỡng** (không đổi số đếm ID/asset nên `EXPECT` giữ nguyên).
+
+### Added — Review UI/UX/UC toàn bộ web-ui và tài liệu thiết kế (2026-08-18)
+
+Thêm `docs/07_records/reviews/FE_UIUX_UC_REVIEW_2026-08-18.md`
+(`REV-FE-UIUX-UC-2026-08-18`): review hiện trạng UI/UX/UC toàn bộ
+`apps/web-ui` (23 route, 36.310 dòng TS/TSX) và bộ tài liệu thiết kế
+(`docs/04_uiux`, `UX_REQ_PA3_WEB.md`, `docs/01_product`), đối chiếu ISA-101,
+ISA-18.2, IEC 60073, WCAG 2.2 AA và ISO 9241-110.
+
+Nội dung: điểm mạnh/điểm yếu có dẫn `file:line`, bảng đối chiếu 5 tiêu chuẩn,
+đề xuất bổ sung UC/UI/UX cho **19 nhóm PAGE** kèm lý do, và bảng 21 finding
+(16 lỗi code + 5 lỗi tài liệu) kèm nguyên nhân gốc. Ba cơ chế sinh lỗi được
+rút ra: hợp đồng nội bộ chỉ có test một chiều; quyết định kỹ thuật đúng nhưng
+không cập nhật ngược vào tài liệu authority; bản vá đặt ở một tầng bị tầng bên
+cạnh vô hiệu hoá.
+
+Phán quyết: **PASS có điều kiện**. Khoảng hở lớn nhất về sản phẩm là **thiếu
+tầng hiển thị Level 2 của ISA-101** (process graphic theo thiết bị công nghệ
+AHU/FCU/chiller) — ghi nhận là quyết định phạm vi Rev A, không phải lỗi.
+
+### Fixed — 11 lỗi UI/UX trên Monitor, Alarms, Trends phát hiện trong review `REV-FE-UIUX-UC-2026-08-18` (2026-08-18)
+
+Tất cả nằm trong phạm vi review nên được sửa cùng phiên thay vì chỉ ghi finding.
+
+**Deep link hỏng im lặng (`F-UX-02/03/04`)** — `drilldown.ts` phát ra
+`/alarms?alarm=`, `/monitor?group=` và `MonitorPage` phát ra `/trends?points=`,
+nhưng cả ba trang đích chưa từng đọc tham số đó: liên kết mở đúng trang mà
+không lọc gì. Triệu chứng nặng nhất ở `F-UX-02`: bấm "Xem chi tiết" trên một
+cảnh báo Critical ở khối CẦN XỬ LÝ của Landing mở ra danh sách đầy đủ, người
+trực phải tự dò lại đúng cảnh báo giữa lúc đang có sự cố. Nguyên nhân gốc:
+`drilldown.test.ts` chỉ kiểm **chiều sinh URL**, không có gì kiểm trang đích
+tiêu thụ tham số — hợp đồng nội bộ một chiều.
+Sửa: `AlarmsPage` đọc `?alarm=` + dải trạng thái có nút thoát lọc và thông báo
+riêng khi cảnh báo đã hết; `TrendsPage` đọc `?points=` rồi **gỡ tham số khỏi
+URL sau khi tiêu thụ** (giữ lại sẽ làm mọi thay đổi bộ chọn sau đó bị hoàn
+nguyên ở lần tải lại kế tiếp); `MonitorPage` thêm bộ lọc `group`
+(`local`/`virtual`/`modbus`) đọc từ URL **và** có bộ chọn thật trên giao diện.
+
+**Bàn phím và HTML không hợp lệ (`F-UX-05`, `F-UX-10`, WCAG 2.2 §2.1.1 + §4.1.2)** —
+nút gạt ĐÓNG/MỞ contactor ở hàng DO là `<span role="switch" tabIndex={0}>`
+**lồng trong `<button>`** và không có `onKeyDown`: người dùng bàn phím focus
+được nhưng Space/Enter không làm gì, còn trình đọc màn hình gặp phần tử tương
+tác lồng phần tử tương tác. Nút gạt "Hiển thị trend" còn tệ hơn — thiếu cả
+`tabIndex` nên bàn phím không tới được.
+Sửa: hàng DO thành `<div>` chứa một `<button>` chọn hàng và một
+`<button role="switch">` riêng có `aria-label` nêu rõ điểm bị tác động.
+
+**Vùng bấm nguy hiểm không có affordance (`F-UX-06`)** — ô biểu đồ ở cột
+"Trend" của mỗi hàng AO/Virtual là `<span onClick>` mở thẳng hộp thoại ép tay
+ra cơ cấu chấp hành: không nhãn, không viền, không con trỏ, không tên cho
+trình đọc màn hình. Người bấm nhầm mới biết nó có; người cần nó thì không có
+cách nào biết. Sửa: gỡ handler ẩn, thêm nút có nhãn "Ép tay"/"Ghi" ở cuối hàng.
+
+**Trộn hai thang từ vựng (`F-UX-08`)** — `quality = uncertain` in ra màn hình
+là `"Lỗi - HIGH"`, trộn thang chất lượng điểm (`UX_REQ_PA3_WEB` §1.1) với thang
+severity ISA-18.2 (§1.3) và bịa ra một mức ưu tiên xử lý không producer nào
+phát ra. Sửa: dùng đúng từ vựng viết hoa của `QualityBadge` (`UNCERTAIN`).
+
+**Bịa số đo còn sót (`F-UX-07`, `F-UX-09`, `F-UX-11`)** —
+(a) `sparklineFallback` cố ý trả mảng rỗng cho điểm chưa có số đo (đúng theo
+REV-FE-04) nhưng `Sparkline` lại tự bù `[0, 0]` và vẽ một đường nằm ngang ở
+mức 0: bản vá ở tầng gọi bị tầng vẽ vô hiệu hoá;
+(b) `defaultForceValue` trả `String(pointNumber(point))` nên điểm chưa có số đo
+điền sẵn chuỗi `"null"` vào ô "Giá trị mới" của hộp thoại ép tay;
+(c) thẻ đếm "Điểm ON" đếm mọi điểm có `value` truthy — một cảm biến 23.5 °C
+được tính là "ON" còn chính nó ở 0 °C thì không.
+Sửa: không có mẫu ⇒ hiện `—`; không có số đo ⇒ ô giá trị để trống; "Điểm ON"
+chỉ đếm điểm nhị phân với mẫu số là số điểm nhị phân.
+
+**Nút gạt không ghi gì (`F-UX-10`)** — nút gạt "Hiển thị trend" hiện ở chế độ
+xem, gạt xong không ghi xuống backend; phải bấm thêm biểu tượng bút chì rồi
+Lưu mà không có dấu hiệu nào nói vậy. Thêm nữa mặc định lúc lưu là `true`
+trong khi mặc định lúc hiển thị là `point.trend != null`, nên bấm Lưu mà không
+chạm nút gạt sẽ **bật** trend cho một point vốn đang tắt; và "Hủy" không hoàn
+nguyên. Sửa: nút gạt chỉ hiện khi đang sửa và luôn đi kèm Lưu/Hủy; chế độ xem
+chỉ đọc trạng thái; hai mặc định khớp nhau; "Hủy" hoàn nguyên.
+
+**78 chuỗi tiếng Việt mất dấu (`F-UX-01`)** — `AlarmsPage` (24),
+`AlarmSettingsPage` (34), `VirtualIoPage` (20): "Dang tai alarm",
+"Trang thai cau hinh", "Chua co VP nao"… Nặng nhất ở `AlarmsPage` — màn hình
+quan trọng nhất khi có sự cố. Nguyên nhân: không có gate nào kiểm nội dung
+chuỗi UI (`check:programming-*` chỉ kiểm hợp đồng của Programming).
+
+Test: `TrendsPage.requests.test.tsx` và `TrendsPage.orphanSeries.test.tsx`
+render `TrendsPage` ngoài Router nên `useSearchParams` mới thêm làm 8 test đổ;
+đã bọc `MemoryRouter` cho khớp thực tế (trang này luôn nằm trong Router).
+
+Kiểm chứng (đo lại trong phiên, không dẫn số cũ):
+`npx tsc --noEmit` sạch · `npx eslint src --max-warnings=0` sạch ·
+`npx vitest --run --environment jsdom src` → **692 pass / 692, 75 file** ·
+`npm run build:foxlinx` thành công.
+Chưa chạy e2e Playwright (cần Playwright browsers) — ghi ở §9 của báo cáo review.
+
+**Deploy board Foxlinx `SOM-DDC-24-foxlinx` lúc 2026-08-18T03:15Z**:
+- Build bằng `npm run build:foxlinx` (**không** phải `npm run build` trần — cờ
+  `VITE_PROGRAMMING_REV_A` là build-time và board này bật vĩnh viễn từ
+  `TASK-PROG-507`; quên là mất route `/eng/programming`). Kiểm trước khi copy:
+  `grep -c REVA_SCOPE_ROADMAP build/web-ui/dist/assets/index-*.js` = **0**.
+- Backup `/opt/mkddc-web/dist` → `/opt/mkddc-web/dist.prev` để rollback một lệnh.
+- Copy bằng `scp` (board Buildroot **không có** `rsync`), thay `dist`,
+  `chown 1001:1001`, `systemctl restart mkddc-web-pi`.
+- Xác minh **trên bundle đang chạy trên board**, không phải trên bản local:
+  4 chuỗi mất dấu = 0 lần xuất hiện; 4 chuỗi có dấu = 1; bộ lọc "Nguồn - Tất cả"
+  = 1; "I/O tại chỗ" = 1; nhãn cũ "Lỗi - HIGH" = **0**; "Điểm nhị phân đang ON"
+  = 1; "Xem tất cả cảnh báo" = 1.
+- Sau restart: `mkddc-web-pi` + `mkddc-core` `active`; `/api/v1/health` trả
+  `status=ok` với cả 6 check (`core`/`io_shm`/`iobus`/`mcu_connection`/
+  `plc_shm`/`web`) đều `ok`. Một trình duyệt thật (`101.99.36.34`) đã nạp bản
+  mới và gọi thành công `/api/v1/overview`, `/api/v1/alarms`,
+  `/api/v1/programming/{capabilities,point-catalog,runtime}` — tất cả 200.
+
 ### Added — chạy local full-stack mô phỏng no-board không cần SSH board (2026-08-28)
 
 - Thêm `run-local.sh`: dựng `mkddc-web` trong WSL Ubuntu-24.04, trỏ runtime path

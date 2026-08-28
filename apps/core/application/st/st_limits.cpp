@@ -1,6 +1,7 @@
 #include "st/st_limits.hpp"
 
 #include <algorithm>
+#include <string>
 
 namespace core::st_limits {
 namespace {
@@ -22,6 +23,32 @@ bool max_ok(std::size_t actual, std::size_t limit, const char* field,
     return actual <= limit || reject(error, field, actual, "max=" + std::to_string(limit));
 }
 
+/* Constraint text phải suy từ profile machine-readable. Trước đây các chuỗi
+ * "range=1..1" và "enum=1000,5000,30000" được viết cứng, nên khi profile nâng
+ * capacity thì thông điệp lỗi vẫn nói giới hạn cũ và người đọc log bị dẫn sai. */
+std::string range_text(std::size_t limit)
+{
+    return "range=1.." + std::to_string(limit);
+}
+
+std::string allowed_period_text()
+{
+    std::string out = "enum=";
+    bool first = true;
+    for (uint32_t period : st_profile_generated::kAllowedPeriodMs) {
+        if (!first) out += ",";
+        out += std::to_string(period);
+        first = false;
+    }
+    return out;
+}
+
+bool range_ok(std::size_t actual, std::size_t limit, const char* field,
+              RevAProfileError* error)
+{
+    return (actual != 0 && actual <= limit) || reject(error, field, actual, range_text(limit));
+}
+
 } // namespace
 
 bool RevAAllowsPeriod(uint32_t period_ms)
@@ -36,17 +63,19 @@ bool ValidateRevAProfile(const RevAProfileUsage& u, RevAProfileError* error)
     if (u.profile_code != st_profile_generated::kProfileCode)
         return reject(error, "profileCode", u.profile_code,
                       "exact=" + std::to_string(st_profile_generated::kProfileCode));
-    if (u.target_abi != 0x00000F01u)
-        return reject(error, "targetAbi", u.target_abi, "exact=3841");
-    if (u.task_count == 0 || u.task_count > st_profile_generated::kMaxTasks)
-        return reject(error, "taskCount", u.task_count, "range=1..1");
+    if (u.target_abi != st_profile_generated::kTargetAbi)
+        return reject(error, "targetAbi", u.target_abi,
+                      "exact=" + std::to_string(st_profile_generated::kTargetAbi));
+    if (!range_ok(u.task_count, st_profile_generated::kMaxTasks, "taskCount", error))
+        return false;
     if (!RevAAllowsPeriod(u.task_period_ms))
-        return reject(error, "taskPeriodMs", u.task_period_ms, "enum=1000,5000,30000");
-    if (u.programs_per_task == 0 ||
-        u.programs_per_task > st_profile_generated::kMaxProgramsPerTask)
-        return reject(error, "programsPerTask", u.programs_per_task, "range=1..1");
-    if (u.programs_total == 0 || u.programs_total > st_profile_generated::kMaxProgramsTotal)
-        return reject(error, "programsTotal", u.programs_total, "range=1..1");
+        return reject(error, "taskPeriodMs", u.task_period_ms, allowed_period_text());
+    if (!range_ok(u.programs_per_task, st_profile_generated::kMaxProgramsPerTask,
+                  "programsPerTask", error))
+        return false;
+    if (!range_ok(u.programs_total, st_profile_generated::kMaxProgramsTotal,
+                  "programsTotal", error))
+        return false;
 
     return max_ok(u.source_bytes, st_profile_generated::kMaxSourceBytes, "sourceBytes", error) &&
            max_ok(u.variables, st_profile_generated::kMaxVariables, "variables", error) &&

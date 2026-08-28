@@ -437,24 +437,77 @@ bool tokenize(const std::string& src, std::vector<Token>* out, StDiagnostic* dia
 
 /* ============================ Parser ============================ */
 
+/* Trần tên POU (DDD §4.2) phải được lexer bao trọn — xem `parse_pou`. */
+static_assert(st_limits::kMaxIdentifierLength <= kMaxPouNameLength,
+              "trần identifier của lexer vượt trần tên POU: tên quá dài sẽ lọt");
+
 class Parser {
 public:
-    explicit Parser(std::vector<Token> tokens) : tok_(std::move(tokens)) {}
+    explicit Parser(std::vector<Token> tokens, bool allow_user_calls = false)
+        : tok_(std::move(tokens)) { allow_user_calls_ = allow_user_calls; }
 
-    bool parse_program(StProgram* out, StDiagnostic* diag)
+    /* T59-101: một entry cho cả ba loại POU. Thân của chúng là cùng một ngôn
+     * ngữ; chỉ chữ ký và quyền hạn khác nhau, nên tách ba parser sẽ nhân bản
+     * toàn bộ statement/expression grammar. */
+    bool parse_pou(StProgram* out, StDiagnostic* diag)
     {
-        if (!expect_kw("PROGRAM", diag)) return false;
-        if (!at_ident()) return fail("expected program name", diag);
-        if (is_keyword(peek().upper)) return fail("program name cannot be a keyword", diag);
+        StPouKind kind = StPouKind::PROGRAM;
+        if (!at_ident() || !st_pou_kind_from_keyword(peek().upper, &kind))
+            return fail("expected PROGRAM, FUNCTION or FUNCTION_BLOCK", diag);
+        advance();
+        out->kind = kind;
+
+        if (!at_ident()) return pou_signature_fail("expected POU name", diag);
+        if (is_keyword(peek().upper))
+            return pou_signature_fail("POU name cannot be a keyword", diag);
+        /* Không kiểm lại độ dài ở đây: lexer đã chặn mọi identifier dài hơn
+         * `kMaxIdentifierLength` bằng `ST-LIM-005`, và giới hạn đó bằng đúng
+         * trần tên POU của DDD §4.2. Thêm một nhánh nữa sẽ là code chết — thứ
+         * không test nào chạm tới được và sẽ mục dần. `static_assert` dưới đây
+         * giữ hai con số dính nhau: nếu ai nâng trần lexer lên trên trần tên POU
+         * thì build đỏ ngay, chứ không âm thầm cho qua tên quá dài. */
+        const Token name_tok = peek();
         out->name = advance().text;
+        out->line = name_tok.line;
+        out->column = name_tok.column;
+        out->length = name_tok.length;
+
+        /* Chữ ký: đúng FUNCTION mới có kiểu trả về, và nó BẮT BUỘC có. Hai loại
+         * còn lại mang `: TYPE` là sai kind chứ không phải sai cú pháp chung. */
+        if (at(Token::Kind::Colon)) {
+            if (kind != StPouKind::FUNCTION)
+                return pou_signature_fail(
+                    std::string(st_pou_kind_name(kind)) + " must not declare a return type", diag);
+            advance();
+            if (!at_ident()) return pou_signature_fail("expected return type name", diag);
+            const Token type_tok = advance();
+            StType return_type = StType::REAL;
+            if (!scalar_type_from_name(type_tok.upper, &return_type)) {
+                set_diag(diag, st_diag_code::kUnknownType,
+                         "unknown return type '" + type_tok.text + "'",
+                         type_tok.line, type_tok.column, type_tok.length);
+                return false;
+            }
+            out->has_return_type = true;
+            out->return_type = return_type;
+        } else if (kind == StPouKind::FUNCTION) {
+            return pou_signature_fail("FUNCTION must declare a return type", diag);
+        }
 
         while (at_var_block_start()) {
             if (!parse_var_block(out, diag)) return false;
         }
 
-        if (!parse_stmt_list({"END_PROGRAM"}, &out->body, diag)) return false;
-        if (!expect_kw("END_PROGRAM", diag)) return false;
-        if (!at_end()) return fail("unexpected token after END_PROGRAM", diag);
+        /* Ràng buộc kind trên khối VAR — kiểm SAU khi đọc hết để thông điệp nói
+         * đúng khối vi phạm chứ không phải khối đầu tiên gặp phải. */
+        if (!check_var_blocks_for_kind(*out, diag)) return false;
+
+        const std::string terminator = std::string("END_") +
+            (kind == StPouKind::FUNCTION_BLOCK ? "FUNCTION_BLOCK"
+                                               : st_pou_kind_name(kind));
+        if (!parse_stmt_list({terminator.c_str()}, &out->body, diag)) return false;
+        if (!expect_kw(terminator.c_str(), diag)) return false;
+        if (!at_end()) return fail("unexpected token after " + terminator, diag);
         return true;
     }
 
@@ -462,6 +515,9 @@ private:
     std::vector<Token> tok_;
     std::size_t pos_ = 0;
 
+    /* Mặc định TẮT: `parse_st_program()` giữ đúng hành vi cũ là từ chối hàm lạ
+     * ngay tại parser. Chỉ đường POU mới bật, nên không có cửa nửa vời. */
+    bool        allow_user_calls_ = false;
     int         expr_depth_ = 0;
     int         stmt_depth_ = 0;
     std::size_t stmt_count_ = 0;
@@ -483,11 +539,13 @@ private:
     {
         static const char* kKeywords[] = {
             "PROGRAM", "END_PROGRAM", "VAR", "VAR_INPUT", "VAR_OUTPUT", "END_VAR",
+            "FUNCTION", "END_FUNCTION", "FUNCTION_BLOCK", "END_FUNCTION_BLOCK",
             "RETAIN", "IF", "THEN", "ELSIF", "ELSE", "END_IF",
             "AND", "OR", "XOR", "NOT", "MOD", "TRUE", "FALSE",
             "BOOL", "INT", "DINT", "UINT", "REAL", "TIME",
-            "TON", "TOF", "R_TRIG", "F_TRIG", "PID",
-            "CASE", "END_CASE", "FOR", "END_FOR", "WHILE", "END_WHILE",
+            "TON", "TOF", "R_TRIG", "F_TRIG", "PID", "TP", "CTU", "CTD",
+            "HYSTERESIS",
+            "CASE", "OF", "END_CASE", "FOR", "END_FOR", "WHILE", "END_WHILE",
             "REPEAT", "UNTIL", "END_REPEAT", "EXIT", "CONTINUE", "RETURN", "GOTO",
             "VAR_GLOBAL", "VAR_EXTERNAL", "NATIVE", "POINTER", "REFERENCE", "AT",
             "ARRAY", "STRUCT", "STRING", "WSTRING",
@@ -505,6 +563,7 @@ private:
     }
     Token advance() { return tok_[pos_ + 1 < tok_.size() ? pos_++ : pos_]; }
     bool at_ident() const { return peek().kind == Token::Kind::Ident; }
+    bool at(Token::Kind kind) const { return peek().kind == kind; }
     bool at_kw(const char* up) const { return at_ident() && peek().upper == up; }
     bool at_end() const { return peek().kind == Token::Kind::End; }
 
@@ -513,6 +572,63 @@ private:
         set_diag(diag, st_diag_code::kSyntaxUnexpected, msg, peek().line, peek().column,
                  peek().length);
         return false;
+    }
+
+    /* Vi phạm kind/chữ ký POU có mã riêng `ST-POU-001` (DDD §5.2 ->
+     * PRG-ERR-POU-KIND-001), tách khỏi `ST-SYN-001` để BE và FE phân biệt được
+     * "viết sai cú pháp" với "khai sai loại khối". */
+    bool pou_signature_fail(const std::string& msg, StDiagnostic* diag)
+    {
+        set_diag(diag, st_diag_code::kPouSignatureInvalid, msg, peek().line, peek().column,
+                 peek().length);
+        return false;
+    }
+
+    static bool scalar_type_name(const std::string& up)
+    {
+        StType ignored = StType::REAL;
+        return scalar_type_from_name(up, &ignored);
+    }
+
+    static bool scalar_type_from_name(const std::string& up, StType* out)
+    {
+        if (up == "BOOL")      { *out = StType::BOOL; return true; }
+        if (up == "INT")       { *out = StType::INT;  return true; }
+        if (up == "DINT")      { *out = StType::DINT; return true; }
+        if (up == "UINT")      { *out = StType::UINT; return true; }
+        if (up == "REAL")      { *out = StType::REAL; return true; }
+        if (up == "TIME")      { *out = StType::TIME; return true; }
+        return false;
+    }
+
+    bool check_var_blocks_for_kind(const StProgram& pou, StDiagnostic* diag)
+    {
+        if (pou.kind != StPouKind::FUNCTION) return true;
+        /* FUNCTION thuần: một giá trị trả về, không state. VAR_OUTPUT và
+         * VAR RETAIN đều là state hoặc kênh ra thứ hai (DDD §0). Kiểm tại parser
+         * để lỗi có vị trí chính xác của khai báo vi phạm. */
+        for (const StVarDecl& decl : pou.vars) {
+            if (decl.storage == StStorage::VAR_OUTPUT) {
+                set_diag(diag, st_diag_code::kPouSignatureInvalid,
+                         "FUNCTION must not declare VAR_OUTPUT; it returns exactly one value",
+                         decl.line, decl.column, decl.length);
+                return false;
+            }
+            if (decl.storage == StStorage::VAR_RETAIN) {
+                set_diag(diag, st_diag_code::kPouSignatureInvalid,
+                         "FUNCTION must not declare VAR RETAIN; a pure function keeps no state",
+                         decl.line, decl.column, decl.length);
+                return false;
+            }
+        }
+        if (!pou.fbs.empty()) {
+            const StFbDecl& first = pou.fbs.front();
+            set_diag(diag, st_diag_code::kPouSignatureInvalid,
+                     "FUNCTION must not declare function block instances; they carry state",
+                     first.line, first.column, first.length);
+            return false;
+        }
+        return true;
     }
 
     bool fail_depth(const char* what, int limit, StDiagnostic* diag)
@@ -597,6 +713,29 @@ private:
                     return false;
                 }
                 out->fbs.push_back(std::move(d));
+            } else if (allow_user_calls_ && !scalar_type_name(type_tok.upper) &&
+                       (storage == StStorage::VAR_LOCAL || storage == StStorage::VAR_RETAIN)) {
+                /* Kiểu lạ trong VAR/VAR RETAIN ở chế độ POU = instance của một
+                 * FUNCTION_BLOCK người dùng. Parser chỉ ghi tên kiểu; registry
+                 * phân giải và mới biết được "chưa có type" khác "type là
+                 * FUNCTION" khác "vòng chứa" — ba mã, ba cách sửa. */
+                StFbDecl d;
+                d.name = name_tok.text;
+                d.fb_type = StFbType::NONE;
+                d.is_user_type = true;
+                d.user_type_name = type_tok.text;
+                d.retained = (storage == StStorage::VAR_RETAIN);
+                d.line = name_tok.line;
+                d.column = name_tok.column;
+                d.length = name_tok.length;
+                if (out->fbs.size() >= st_limits::kMaxFbInstances) {
+                    set_diag(diag, st_diag_code::kTooManyFbInstances,
+                             "function block instance count exceeds limit of " +
+                                 std::to_string(st_limits::kMaxFbInstances),
+                             d.line, d.column, d.length);
+                    return false;
+                }
+                out->fbs.push_back(std::move(d));
             } else {
                 StVarDecl d;
                 d.name = name_tok.text;
@@ -640,14 +779,23 @@ private:
         return false;
     }
 
+    /* Nhãn CASE đứng ở vị trí câu lệnh nhưng KHÔNG phải câu lệnh: một literal
+     * nguyên (có thể mang dấu âm) không bao giờ mở đầu được một câu lệnh hợp lệ
+     * trong subset này, nên nhận diện nó là không nhập nhằng. */
+    bool at_case_label() const
+    {
+        if (peek().kind == Token::Kind::IntLit) return true;
+        return peek().kind == Token::Kind::Minus && peek_at(1).kind == Token::Kind::IntLit;
+    }
+
     bool parse_stmt_list(const std::vector<std::string>& stop, std::vector<StStmt>* out,
-                         StDiagnostic* diag)
+                         StDiagnostic* diag, bool stop_at_case_label = false)
     {
         if (stmt_depth_ >= st_limits::kMaxStmtDepth)
             return fail_depth("statement", st_limits::kMaxStmtDepth, diag);
         DepthGuard guard(&stmt_depth_);
 
-        while (!at_stop(stop)) {
+        while (!at_stop(stop) && !(stop_at_case_label && at_case_label())) {
             if (at_end()) return fail("unexpected end of source in statement list", diag);
             if (++stmt_count_ > st_limits::kMaxStatements) {
                 set_diag(diag, st_diag_code::kTooManyStatements,
@@ -666,6 +814,7 @@ private:
     bool parse_stmt(StStmt* out, StDiagnostic* diag)
     {
         if (at_kw("IF")) return parse_if(out, diag);
+        if (at_kw("CASE")) return parse_case(out, diag);
 
         if (!at_ident()) return fail("expected identifier or IF at start of statement", diag);
         if (is_keyword(peek().upper))
@@ -676,8 +825,28 @@ private:
          *   ident ':=' -> phép gán
          * Lời gọi HÀM chuẩn không bao giờ đứng ở vị trí câu lệnh vì hàm không
          * có tác dụng phụ; nếu người dùng viết vậy, semantic báo ST-SEM-012. */
+        if (peek().upper == "SIGNAL_PUBLISH" &&
+            peek_at(1).kind == Token::Kind::LParen)
+            return parse_signal_publish(out, diag);
         if (peek_at(1).kind == Token::Kind::LParen) return parse_fb_call(out, diag);
         return parse_assign(out, diag);
+    }
+
+    bool parse_signal_publish(StStmt* out, StDiagnostic* diag)
+    {
+        const Token call = advance();
+        out->kind = StStmt::Kind::SIGNAL_PUBLISH;
+        out->signal_line = call.line;
+        out->signal_column = call.column;
+        out->signal_length = call.length;
+        if (!expect(Token::Kind::LParen, "'(' in SIGNAL_PUBLISH", diag)) return false;
+        if (!at_ident() || is_keyword(peek().upper))
+            return fail("expected Published Signal identifier", diag);
+        out->signal_name = advance().text;
+        if (!expect(Token::Kind::Comma, "',' after Published Signal name", diag)) return false;
+        if (!parse_expr(&out->signal_value, diag)) return false;
+        if (!expect(Token::Kind::RParen, "')' to close SIGNAL_PUBLISH", diag)) return false;
+        return expect(Token::Kind::Semicolon, "';' after SIGNAL_PUBLISH", diag);
     }
 
     bool parse_if(StStmt* out, StDiagnostic* diag)
@@ -704,6 +873,196 @@ private:
 
         if (!expect_kw("END_IF", diag)) return false;
         return expect(Token::Kind::Semicolon, "';' after END_IF", diag);
+    }
+
+    /* ---- CASE (IEC 61131-3 §7.3.3.2) ----------------------------------
+     *
+     * `CASE` được KHỬ ĐƯỜNG về đúng cây `IF/ELSIF/ELSE` sẵn có thay vì thêm một
+     * `StStmt::Kind` mới.
+     *
+     * Lý do là an toàn vận hành, không phải tiện tay: `Kind::IF` đang được đọc
+     * ở năm nơi (semantic, codegen, hai lượt duyệt của POU registry, và bộ đếm
+     * giới hạn). Thêm một Kind mới nghĩa là năm chỗ đó phải cùng được cập nhật,
+     * và chỗ nào quên sẽ IM LẶNG bỏ qua thân CASE — một máy trạng thái không
+     * chạy nhưng vẫn Check PASS, trên thiết bị đang điều khiển thiết bị thật.
+     * Khử đường thì mọi tầng phía sau dùng lại đúng đường đã được kiểm chứng.
+     *
+     * Phép biến đổi giữ nguyên ngữ nghĩa vì biểu thức trong subset này KHÔNG có
+     * tác dụng phụ: `SIGNAL_PUBLISH` là câu lệnh chứ không phải biểu thức, và
+     * hàm chuẩn/hàm người dùng đều thuần. Vì vậy nhân bản biểu thức chọn cho
+     * từng nhánh cho ra đúng kết quả như đánh giá một lần.
+     *
+     *   CASE sel OF
+     *     1, 3:   A;
+     *     10..20: B;
+     *   ELSE      C;
+     *   END_CASE;
+     *
+     *   ⇒ IF (sel=1) OR (sel=3) THEN A;
+     *     ELSIF (sel>=10) AND (sel<=20) THEN B;
+     *     ELSE C; END_IF;
+     */
+    static std::unique_ptr<StExpr> clone_expr(const StExpr& src)
+    {
+        auto copy = std::make_unique<StExpr>();
+        copy->kind = src.kind;
+        copy->literal = src.literal;
+        copy->literal_polymorphic = src.literal_polymorphic;
+        copy->literal_int_value = src.literal_int_value;
+        copy->var_name = src.var_name;
+        copy->member_object = src.member_object;
+        copy->member_field = src.member_field;
+        copy->bin_op = src.bin_op;
+        copy->un_op = src.un_op;
+        copy->func = src.func;
+        copy->user_call_name = src.user_call_name;
+        copy->signal_name = src.signal_name;
+        copy->result_type = src.result_type;
+        copy->line = src.line;
+        copy->column = src.column;
+        copy->length = src.length;
+        if (src.lhs) copy->lhs = clone_expr(*src.lhs);
+        if (src.rhs) copy->rhs = clone_expr(*src.rhs);
+        if (src.operand) copy->operand = clone_expr(*src.operand);
+        copy->args.reserve(src.args.size());
+        for (const auto& arg : src.args)
+            copy->args.push_back(arg ? clone_expr(*arg) : nullptr);
+        return copy;
+    }
+
+    static std::unique_ptr<StExpr> make_int_literal(int64_t value, const Token& at)
+    {
+        auto node = std::make_unique<StExpr>();
+        node->kind = StExpr::Kind::LITERAL;
+        /* Đa hình đúng như literal nguyên viết tay: kiểu thật do semantic chọn
+         * theo ngữ cảnh, nên nhãn CASE so được với INT lẫn DINT/UINT. */
+        node->literal_polymorphic = true;
+        node->literal_int_value = value;
+        node->literal = StValue::make_dint(static_cast<int32_t>(value));
+        node->line = at.line;
+        node->column = at.column;
+        node->length = at.length;
+        return node;
+    }
+
+    static std::unique_ptr<StExpr> make_binop(StBinOp op, std::unique_ptr<StExpr> lhs,
+                                              std::unique_ptr<StExpr> rhs)
+    {
+        auto node = std::make_unique<StExpr>();
+        node->kind = StExpr::Kind::BINOP;
+        node->bin_op = op;
+        node->line = lhs->line;
+        node->column = lhs->column;
+        node->length = lhs->length;
+        node->lhs = std::move(lhs);
+        node->rhs = std::move(rhs);
+        return node;
+    }
+
+    /* Một nhãn CASE phải là HẰNG nguyên. IEC cho phép dấu âm; biểu thức chạy
+     * lúc thực thi thì không, vì nhãn phải xác định được lúc dịch. */
+    bool parse_case_label_value(int64_t* out, StDiagnostic* diag)
+    {
+        bool negative = false;
+        if (peek().kind == Token::Kind::Minus) { advance(); negative = true; }
+        if (peek().kind != Token::Kind::IntLit)
+            return fail("CASE label must be an integer constant", diag);
+        const Token literal = advance();
+        *out = negative ? -literal.int_val : literal.int_val;
+        return true;
+    }
+
+    bool parse_case(StStmt* out, StDiagnostic* diag)
+    {
+        advance();   /* CASE */
+        out->kind = StStmt::Kind::IF;
+
+        std::unique_ptr<StExpr> selector;
+        if (!parse_expr(&selector, diag)) return false;
+        if (!expect_kw("OF", diag)) return false;
+
+        /* IEC đòi nhãn KHÔNG trùng nhau. Trùng nhãn nghĩa là một nhánh không
+         * bao giờ chạy được — im lặng bỏ qua nó là giấu một lỗi logic. */
+        std::vector<int64_t> seen;
+        bool has_branch = false;
+
+        while (!at_kw("ELSE") && !at_kw("END_CASE")) {
+            if (at_end()) return fail("unexpected end of source in CASE", diag);
+
+            std::unique_ptr<StExpr> cond;
+            for (;;) {
+                const Token label_at = peek();
+                int64_t lo = 0;
+                if (!parse_case_label_value(&lo, diag)) return false;
+
+                int64_t hi = lo;
+                if (peek().kind == Token::Kind::Dot && peek_at(1).kind == Token::Kind::Dot) {
+                    advance();
+                    advance();
+                    if (!parse_case_label_value(&hi, diag)) return false;
+                    if (hi < lo) {
+                        set_diag(diag, st_diag_code::kSyntaxUnexpected,
+                                 "CASE range is empty: upper bound is below the lower bound",
+                                 label_at.line, label_at.column, label_at.length);
+                        return false;
+                    }
+                }
+
+                /* Dải quá rộng bị chặn ở đây: nó nở ra thành so sánh biên nên
+                 * không tốn bộ nhớ, nhưng một dải khổng lồ gần như luôn là lỗi
+                 * gõ nhầm, và bắt sớm rẻ hơn nhiều so với debug trên bo. */
+                for (int64_t value = lo; value <= hi; ++value) {
+                    if (std::find(seen.begin(), seen.end(), value) != seen.end()) {
+                        set_diag(diag, st_diag_code::kSyntaxUnexpected,
+                                 "duplicate CASE label " + std::to_string(value),
+                                 label_at.line, label_at.column, label_at.length);
+                        return false;
+                    }
+                    seen.push_back(value);
+                    if (seen.size() > st_limits::kMaxStatements)
+                        return fail("CASE label set is too large", diag);
+                }
+
+                std::unique_ptr<StExpr> term;
+                if (hi == lo) {
+                    term = make_binop(StBinOp::EQ, clone_expr(*selector),
+                                      make_int_literal(lo, label_at));
+                } else {
+                    term = make_binop(
+                        StBinOp::AND,
+                        make_binop(StBinOp::GE, clone_expr(*selector),
+                                   make_int_literal(lo, label_at)),
+                        make_binop(StBinOp::LE, clone_expr(*selector),
+                                   make_int_literal(hi, label_at)));
+                }
+                cond = cond ? make_binop(StBinOp::OR, std::move(cond), std::move(term))
+                            : std::move(term);
+
+                if (peek().kind == Token::Kind::Comma) { advance(); continue; }
+                break;
+            }
+
+            if (!expect(Token::Kind::Colon, "':' after CASE label", diag)) return false;
+
+            StIfBranch branch;
+            branch.cond = std::move(cond);
+            if (!parse_stmt_list({"ELSE", "END_CASE"}, &branch.body, diag, true)) return false;
+            out->branches.push_back(std::move(branch));
+            has_branch = true;
+        }
+
+        if (at_kw("ELSE")) {
+            advance();
+            StIfBranch els;   /* cond == nullptr đánh dấu nhánh ELSE */
+            if (!parse_stmt_list({"END_CASE"}, &els.body, diag)) return false;
+            out->branches.push_back(std::move(els));
+        }
+
+        if (!has_branch && out->branches.empty())
+            return fail("CASE has no branch", diag);
+
+        if (!expect_kw("END_CASE", diag)) return false;
+        return expect(Token::Kind::Semicolon, "';' after END_CASE", diag);
     }
 
     bool parse_assign(StStmt* out, StDiagnostic* diag)
@@ -1029,15 +1388,37 @@ private:
             /* Gọi hàm chuẩn */
             if (peek().kind == Token::Kind::LParen) {
                 advance();
+                if (t.upper == "SIGNAL_READ") {
+                    if (!at_ident() || is_keyword(peek().upper))
+                        return fail("expected Published Signal identifier", diag);
+                    const Token signal = advance();
+                    if (!expect(Token::Kind::RParen,
+                                "')' to close SIGNAL_READ", diag)) return false;
+                    auto n = std::make_unique<StExpr>();
+                    n->kind = StExpr::Kind::SIGNAL_READ;
+                    n->signal_name = signal.text;
+                    n->line = t.line; n->column = t.column;
+                    n->length = t.length;
+                    *out = std::move(n);
+                    return true;
+                }
                 StFunc f;
-                if (!st_func_from_name(t.upper, &f)) {
+                auto n = std::make_unique<StExpr>();
+                if (st_func_from_name(t.upper, &f)) {
+                    n->kind = StExpr::Kind::CALL;
+                    n->func = f;
+                } else if (allow_user_calls_) {
+                    /* Chỉ GHI LẠI tên. Parser không biết tập POU của Project hay
+                     * library đã pin, nên nó không thể phân biệt "chưa tồn tại"
+                     * với "sai version" với "đệ quy" — ba thứ có ba mã lỗi và ba
+                     * cách sửa khác nhau. Việc phân giải thuộc st_pou_registry. */
+                    n->kind = StExpr::Kind::USER_CALL;
+                    n->user_call_name = t.text;
+                } else {
                     set_diag(diag, st_diag_code::kUnknownFunction,
                              "unknown function '" + t.text + "'", t.line, t.column, t.length);
                     return false;
                 }
-                auto n = std::make_unique<StExpr>();
-                n->kind = StExpr::Kind::CALL;
-                n->func = f;
                 n->line = t.line; n->column = t.column;
                 n->length = t.length;
                 if (peek().kind != Token::Kind::RParen) {
@@ -1069,13 +1450,34 @@ private:
 
 } // namespace
 
-bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag)
+bool parse_st_pou(const std::string& source, StProgram* out, StDiagnostic* diag)
 {
     std::vector<Token> tokens;
     if (!tokenize(source, &tokens, diag)) return false;
-    Parser parser(std::move(tokens));
+    Parser parser(std::move(tokens), /*allow_user_calls=*/true);
     *out = StProgram{};
-    return parser.parse_program(out, diag);
+    return parser.parse_pou(out, diag);
+}
+
+bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag)
+{
+    /* Giữ nguyên hợp đồng cũ cho mọi call site hiện có: entry này CHỈ nhận
+     * PROGRAM. Nếu nguồn là FUNCTION/FUNCTION_BLOCK thì nó parse được nhưng bị
+     * từ chối ở đây bằng mã kind — thông tin hữu ích hơn "expected PROGRAM". */
+    std::vector<Token> tokens;
+    if (!tokenize(source, &tokens, diag)) return false;
+    Parser parser(std::move(tokens), /*allow_user_calls=*/false);
+    *out = StProgram{};
+    if (!parser.parse_pou(out, diag)) return false;
+    if (out->kind != StPouKind::PROGRAM) {
+        set_diag(diag, st_diag_code::kPouSignatureInvalid,
+                 std::string("expected PROGRAM but source declares ") +
+                     st_pou_kind_name(out->kind),
+                 out->line, out->column, out->length);
+        *out = StProgram{};
+        return false;
+    }
+    return true;
 }
 
 } // namespace core

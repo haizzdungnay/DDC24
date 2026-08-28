@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/google/uuid"
 
 	programmingartifact "mkddc-web/internal/programming/artifact"
@@ -137,6 +138,58 @@ type runtimeImpactPayload struct {
 	ActiveRevisionID  *string
 	LKGRevisionID     *string
 	ActiveOverrideIDs []string
+	Signals           []runtimeSignalPayload
+}
+
+// runtimeSignalPayload là ảnh chỉ-đọc do Core chụp từ StSignalBus. `Valid`
+// tách khỏi `Value`: null/0/false đều là giá trị hợp lệ tuỳ type; chỉ `Valid`
+// mới trả lời được có phép đo hay không.
+type runtimeSignalPayload struct {
+	_                 struct{} `cbor:",toarray"`
+	Name              string
+	ProducerProgramID string
+	DataType          string
+	Value             any
+	Valid             bool
+	Quality           string
+	Freshness         string
+	StalePolicy       string
+	FreshnessMS       uint32
+	PublishedAtMonoNS uint64
+	Generation        uint64
+}
+
+// UnmarshalCBOR nhận cả STATUS minor 2 (4 phần tử, chưa có signal) và minor 3
+// (5 phần tử). Nâng minor phải tương thích ngược trong cửa sổ partial deploy;
+// ép đúng 5 phần tử sẽ làm BE mới coi Core cũ là payload hỏng dù bốn field nền
+// vẫn hoàn toàn dùng được.
+func (p *runtimeImpactPayload) UnmarshalCBOR(data []byte) error {
+	var fields []cbor.RawMessage
+	if err := cbor.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if len(fields) != 4 && len(fields) != 5 {
+		return fmt.Errorf("STATUS payload cần 4 hoặc 5 phần tử, nhận %d", len(fields))
+	}
+	if err := cbor.Unmarshal(fields[0], &p.ProducerMode); err != nil {
+		return err
+	}
+	if err := cbor.Unmarshal(fields[1], &p.ActiveRevisionID); err != nil {
+		return err
+	}
+	if err := cbor.Unmarshal(fields[2], &p.LKGRevisionID); err != nil {
+		return err
+	}
+	if err := cbor.Unmarshal(fields[3], &p.ActiveOverrideIDs); err != nil {
+		return err
+	}
+	p.Signals = []runtimeSignalPayload{}
+	if len(fields) == 5 {
+		if err := cbor.Unmarshal(fields[4], &p.Signals); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // retainResetPayload là CBOR array 2 phần tử khớp `parse_retain_reset_payload`
@@ -442,8 +495,12 @@ func (s *OperationService) execute(ctx context.Context, operation programmingsto
 	if operation.ExpectedActiveRevisionID != responseRevision(status) {
 		return s.fail(operation, "EXPECTED_ACTIVE_MISMATCH", "Core active revision đã đổi")
 	}
+	instanceID, err := s.runtimeInstanceIDForRevision(ctx, operation.RequestedRevisionID)
+	if err != nil {
+		return s.fail(operation, "RUNTIME_INSTANCE", err.Error())
+	}
 	stage, err := coreipc.EncodePayload(stagePayload{RevisionID: operation.RequestedRevisionID,
-		InstanceID: "program-main", Locator: contextValue.ArtifactLocator,
+		InstanceID: instanceID, Locator: contextValue.ArtifactLocator,
 		ByteSize: uint64(contextValue.ArtifactBytes), SHA256: mustDecodeHex(contextValue.ArtifactSHA256),
 		PlanHash: operationPlanHash(operation.ContextJSON)})
 	if err != nil {
@@ -473,6 +530,23 @@ func (s *OperationService) execute(ctx context.Context, operation programmingsto
 		return nil
 	}
 	return s.activateStaged(ctx, operation, contextValue, responseRevision(status), stageResponse)
+}
+
+// runtimeInstanceIDForRevision cấp fallback identity cho artifact v1. Package
+// v2 mang identity trong PROGRAM_TABLE nên Core bỏ qua field này, nhưng dù
+// ở shape nào identity nhìn từ API intent vẫn phải là Program ID đã
+// seal. Hard-code `program-main` làm Enable/Disable không thể chạm Program.
+func (s *OperationService) runtimeInstanceIDForRevision(ctx context.Context, revisionID string) (string, error) {
+	revision, err := s.store.GetRevision(ctx, revisionID)
+	if err != nil {
+		return "", err
+	}
+	for _, object := range revision.Objects {
+		if object.Kind == "PROGRAM" && isUUID(object.ObjectID) {
+			return object.ObjectID, nil
+		}
+	}
+	return "", fmt.Errorf("Revision không có Program runtime hợp lệ")
 }
 
 func (s *OperationService) activateStaged(ctx context.Context, operation programmingstore.Operation,
@@ -817,6 +891,14 @@ func decodeOperationContext(raw []byte) (operationContext, error) {
 	return value, nil
 }
 
+// impactAckKeys là enum ĐÓNG của khoá acknowledgement. Giữ ở một chỗ để thêm
+// nhóm impact không thể quên cập nhật phép kiểm — bản trước liệt kê bốn khoá
+// bằng bốn phép so `!=` nối nhau, đúng dạng dễ thêm nhóm mà quên sửa.
+var impactAckKeys = map[string]bool{
+	"retain": true, "activeOverrides": true, "cutover": true, "outputMappingChanges": true,
+	"publishedSignals": true, "controlLibrary": true, "programSet": true, "enableIntent": true,
+}
+
 func validateApplicationImpact(current RevisionImpact, ref string, acknowledgements []string) *domain.PublicError {
 	if current.ImpactRef == "" || current.ImpactRef != ref {
 		value := domain.NewPublicError(domain.ErrImpactStale)
@@ -825,7 +907,7 @@ func validateApplicationImpact(current RevisionImpact, ref string, acknowledgeme
 	}
 	provided := make(map[string]bool, len(acknowledgements))
 	for _, key := range acknowledgements {
-		if provided[key] || (key != "retain" && key != "activeOverrides" && key != "cutover" && key != "outputMappingChanges") {
+		if provided[key] || !impactAckKeys[key] {
 			value := domain.NewPublicError(domain.ErrAckUnexpected)
 			value.Args = map[string]any{"key": key}
 			return &value
@@ -833,7 +915,9 @@ func validateApplicationImpact(current RevisionImpact, ref string, acknowledgeme
 		provided[key] = true
 	}
 	groups := map[string]RevisionImpactGroup{"retain": current.Retain, "activeOverrides": current.ActiveOverrides,
-		"cutover": current.Cutover, "outputMappingChanges": current.OutputMappingChanges}
+		"cutover": current.Cutover, "outputMappingChanges": current.OutputMappingChanges,
+		"publishedSignals": current.PublishedSignals, "controlLibrary": current.ControlLibrary,
+		"programSet": current.ProgramSet, "enableIntent": current.EnableIntent}
 	missing, unexpected := make([]string, 0), make([]string, 0)
 	for key, group := range groups {
 		switch group.Status {

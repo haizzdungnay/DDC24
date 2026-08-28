@@ -91,6 +91,18 @@ func (s *Store) Put(expected [32]byte, value []byte) (string, error) {
 	return filepath.ToSlash(relative), nil
 }
 
+// Read trả về NỘI DUNG artifact sau khi đã xác minh hash và kích thước.
+//
+// Không có đường đọc nào bỏ qua Verify: một artifact đọc ra mà chưa đối chiếu
+// hash là một chuỗi byte không rõ nguồn gốc, và người gọi tiếp theo sẽ đưa nó
+// thẳng cho một tiến trình thực thi.
+func (s *Store) Read(relative string, expected [32]byte, byteSize int64) ([]byte, error) {
+	if err := s.Verify(relative, expected, byteSize); err != nil {
+		return nil, err
+	}
+	return readRegular(filepath.Join(s.root, filepath.FromSlash(relative)), byteSize)
+}
+
 func (s *Store) Verify(relative string, expected [32]byte, byteSize int64) error {
 	if s == nil || relative == "" || filepath.IsAbs(relative) || filepath.Clean(relative) != relative || expected == ([32]byte{}) {
 		return fmt.Errorf("artifact locator không hợp lệ")

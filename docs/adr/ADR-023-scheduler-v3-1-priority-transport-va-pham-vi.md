@@ -4,7 +4,7 @@
 - Owner: PM + CTO (phê duyệt), Nhóm Phần mềm MK-DDC-24 (đề xuất)
 - Status: **Accepted** — PM/CTO duyệt 6 quyết định gốc ngày 2026-08-07; **bổ sung QĐ-7/8/9 cùng ngày** sau review P1 (xem §Bổ sung)
 - Related: [Tờ trình phê duyệt](../07_records/reviews/SCHEDULER_V3_1_APPROVAL_REQUEST_2026-08-07.md) ·
-  [Plan 50](../03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) ·
+  [Plan 50](../03_implementation/archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md) ·
   [Proposal UI/UX/UC](../04_uiux/KX-DDC24-UIUX-UC-WEB-SCHEDULER-PROPOSAL-001_VI.md) ·
   [Đặc tả v3.1](../CHUONG_YEU_CAU/scheduler.md) ·
   [ADR-021](ADR-021-restructure-core-and-backend-by-domain.md) (3 vai trò người dùng)
@@ -303,7 +303,7 @@ kiểm trên môi trường thật, không sửa cấu hình đang chạy: cấu
 khôi phục sau, đối chiếu khớp sha256.
 
 Bài kiểm tìm ra 2 lỗi CHẶN (MIG-01: di trú không ai gọi; MIG-02 = E-1 ở trên). Chi tiết ở
-`docs/03_implementation/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md` §0.4 và
+`docs/03_implementation/archive/50_SCHEDULER_V3_1_IMPLEMENTATION_PLAN.md` §0.4 và
 `docs/07_records/test-evidence/fw-som/2026-08-07-foxlinx-deploy-scheduler-v31.md` §6e.
 
 ## Ba nguyên tắc PM/CTO yêu cầu giữ đúng

@@ -54,6 +54,14 @@ type projectResponse struct {
 	// LatestCheck — WP-01 (Overview state model). `nil` khi Draft chưa từng
 	// niêm phong hoặc chưa từng Check.
 	LatestCheck *projectLatestCheckResponse `json:"latestCheck,omitempty"`
+	// Dirty/DraftSequence/ActiveSequence — T60-015 (Plan 60 §3.1 nhóm B, D-05).
+	// CỐ Ý không dùng `omitempty`: `null` tường minh nói "server đã xét và
+	// chưa biết", còn trường vắng mặt thì lẫn với "server đời cũ chưa có
+	// trường này". FE phải render `null` thành `—`, tuyệt đối không thành `0`
+	// hay "sạch".
+	Dirty          *bool  `json:"dirty"`
+	DraftSequence  *int64 `json:"draftSequence"`
+	ActiveSequence *int64 `json:"activeSequence"`
 }
 
 type projectLatestCheckResponse struct {
@@ -92,7 +100,19 @@ func handleProjectRequest(w http.ResponseWriter, r *http.Request, correlationID 
 }
 
 func handleGetRevisionChanges(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) {
-	changes, err := service.GetRevisionChanges(r.Context(), r.PathValue("from"), r.PathValue("to"))
+	// `cursor` rác bị TỪ CHỐI chứ không âm thầm coi là 0: đọc lại từ đầu khi
+	// client tưởng mình đang đọc trang hai là cách một danh sách trông đầy đủ
+	// trong khi thiếu mất phần giữa.
+	cursor := 0
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed < 0 {
+			writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+			return
+		}
+		cursor = parsed
+	}
+	changes, err := service.GetRevisionChangesDetail(r.Context(), r.PathValue("from"), r.PathValue("to"), cursor)
 	if err != nil {
 		writeMappedError(w, err, correlationID)
 		return
@@ -198,8 +218,16 @@ func handleGetRevision(w http.ResponseWriter, r *http.Request, correlationID str
 		writeMappedError(w, err, correlationID)
 		return
 	}
-	writeJSON(w, http.StatusOK, correlationID, map[string]any{"revisionId": revision.RevisionID, "projectId": revision.ProjectID,
-		"state": revision.State, "contentHash": revision.ContentHash, "createdAt": revision.CreatedAt, "snapshot": revision.Snapshot})
+	writeJSON(w, http.StatusOK, correlationID, toRevisionResponse(revision))
+}
+
+// toRevisionResponse — `sequence` là số thứ tự Revision trong Project
+// (T60-015 + D-05), luôn >= 1 nên không cần nullable: hàng `revisions` không
+// tồn tại thì request đã trả 404 từ trước đó.
+func toRevisionResponse(revision programmingapplication.RevisionView) map[string]any {
+	return map[string]any{"revisionId": revision.RevisionID, "projectId": revision.ProjectID,
+		"state": revision.State, "sequence": revision.Sequence, "contentHash": revision.ContentHash,
+		"createdAt": revision.CreatedAt, "snapshot": revision.Snapshot}
 }
 
 func requestActor(r *http.Request) programmingapplication.Actor {
@@ -242,6 +270,21 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 	status := http.StatusServiceUnavailable
 	public := domain.NewPublicError(domain.ErrUnavailable)
 	var operationError *programmingapplication.OperationPublicError
+	// Lỗi Control Library giữ ba nguyên nhân riêng (thiếu entry / lệch version /
+	// vòng phụ thuộc) tới tận lớp HTTP. Gộp chúng vào CONFLICT chung sẽ xoá đúng
+	// thông tin mà người vận hành cần để biết phải sửa gì.
+	if libraryPublic, mapped := programmingapplication.LibraryPublicError(err); mapped {
+		WriteProgrammingError(w, domain.DefaultHTTPStatus(libraryPublic.Code), libraryPublic, correlationID)
+		return
+	}
+	// Trần Program giữ mã riêng tới tận HTTP: người vận hành cần biết CON SỐ
+	// trần, không chỉ biết là request sai.
+	var programLimit *programmingapplication.ProgramLimitError
+	if errors.As(err, &programLimit) {
+		WriteProgrammingError(w, http.StatusConflict,
+			domain.NewPublicError(domain.ErrProgramLimit), correlationID)
+		return
+	}
 	switch {
 	case errors.As(err, &operationError):
 		public = operationError.Public
@@ -264,13 +307,22 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 	if operationError == nil {
 		public.KeepsRunningRevision = true
 	}
+	// Batch `PATCH .../draft` trả đúng một mã cho cả mảng operation. Không nói
+	// thao tác nào hỏng thì người vận hành chỉ thấy "request sai" cho một lần
+	// bấm Xoá gồm 4–5 thao tác (`F-P59-DELETE-PROGRAM-001`). `field` là chỗ hợp
+	// đồng đã dành sẵn cho đúng việc này.
+	var draftOperation *programmingapplication.DraftOperationError
+	if errors.As(err, &draftOperation) && public.Field == "" {
+		public.Field = draftOperation.Field()
+	}
 	WriteProgrammingError(w, status, public, correlationID)
 }
 
 func toProjectResponse(project programmingapplication.ProjectView) projectResponse {
 	response := projectResponse{ProjectID: project.ProjectID, Name: project.Name, ETag: project.ETag,
 		ActiveRevisionID: project.ActiveRevisionID, DraftRevisionID: project.DraftRevisionID,
-		BaseRevisionID: project.BaseRevisionID, UpdatedAt: project.UpdatedAt}
+		BaseRevisionID: project.BaseRevisionID, UpdatedAt: project.UpdatedAt,
+		Dirty: project.Dirty, DraftSequence: project.DraftSequence, ActiveSequence: project.ActiveSequence}
 	if len(project.DraftContentJSON) > 0 {
 		response.Draft = json.RawMessage(project.DraftContentJSON)
 	}

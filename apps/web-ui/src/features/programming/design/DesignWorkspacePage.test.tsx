@@ -7,6 +7,8 @@ import type { UserRole } from '../../../shared/types'
 import { DesignWorkspacePage } from './DesignWorkspacePage'
 import { ProgrammingApiError } from '../api/generated/client'
 import type { ProgrammingDraftDocument, ProgrammingProject } from '../model/types'
+import type { ProgrammingRuntimeMonitorState } from '../api/queries'
+import { slotKey } from './editor/ProgramsTab'
 
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
 vi.mock('../../auth', async (importOriginal) => {
@@ -25,23 +27,22 @@ vi.mock('../../auth', async (importOriginal) => {
 
 const client = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
+const runtimeMonitor = vi.hoisted(() => ({
+  state: null as unknown as ProgrammingRuntimeMonitorState,
+  enabled: vi.fn(),
+}))
+vi.mock('../api/queries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/queries')>()
+  return {
+    ...actual,
+    useProgrammingRuntimeMonitor: (enabled = true) => {
+      runtimeMonitor.enabled(enabled)
+      return runtimeMonitor.state
+    },
+  }
+})
 vi.mock('../layout/ProgrammingLayout', () => ({
-  useProgrammingRuntimeContext: () => ({
-    setEditingContext: vi.fn(),
-    capabilities: {
-      status: 'ready',
-      data: { schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: ['ST', 'FBD'], types: ['BOOL', 'REAL'], taskPeriodsMs: [1000, 5000, 30000], limits: {} },
-      error: null,
-      refresh: vi.fn()
-    },
-    runtime: {
-      status: 'ready',
-      data: { producerState: 'READY', taskState: 'RUNNING', activeRevisionId: null, task: { taskId: 'task-1', periodMs: 1000, runCount: 0 } },
-      error: null,
-      refresh: vi.fn()
-    },
-    activeRevision: { status: 'ready', data: null, error: null, refresh: vi.fn() }
-  })
+  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn() })
 }))
 
 function baseDocument(): ProgrammingDraftDocument {
@@ -60,6 +61,8 @@ function baseProject(): ProgrammingProject {
   return {
     projectId: 'project-1', name: 'AHU-01', etag: '"draft-1:1"',
     activeRevisionId: null, draftRevisionId: 'draft-1', baseRevisionId: 'draft-1', updatedAt: '2026-08-13T00:00:00Z',
+    // `T60-015`: server luôn gửi ba khoá này, kể cả khi giá trị là `null`.
+    dirty: false, draftSequence: 1, activeSequence: null,
     draft: baseDocument()
   }
 }
@@ -77,9 +80,30 @@ function renderWorkspace(initialPath = '/eng/programming/projects/project-1/desi
   )
 }
 
+function stubMobileViewport() {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({
+    matches: true,
+    media: '(max-width: 767px)',
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn()
+  })))
+}
+
 beforeEach(() => {
   auth.role = 'admin'
   client.request.mockReset()
+  runtimeMonitor.state = {
+    status: 'ready',
+    data: { schemaVersion: '1.0', activeRevisionId: null, safeState: false, task: null, items: [] },
+    error: null,
+    failure: null, producerRestarted: false,
+    refresh: vi.fn()
+  }
+  runtimeMonitor.enabled.mockClear()
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(() => {
@@ -88,225 +112,51 @@ afterEach(() => {
 })
 
 describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
-  it('mobile Explorer drawer traps focus, locks scroll, closes with Escape, and restores trigger focus', async () => {
-    vi.stubGlobal('innerWidth', 390)
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-    renderWorkspace()
-    const trigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
-    fireEvent.click(trigger)
-    const drawer = screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })
-    const close = within(drawer).getByRole('button', { name: /Đóng cây ứng dụng|Close explorer/ })
-    expect(screen.getByRole('button', { name: /Đóng ngăn kéo|Close drawer/ })).toHaveClass('min-[1280px]:hidden')
-    expect(close).toHaveClass('min-[1024px]:hidden')
-    expect(document.body.style.overflow).toBe('hidden')
-    expect(close).toHaveFocus()
-    fireEvent.keyDown(drawer, { key: 'Tab', shiftKey: true })
-    expect(within(drawer).getByRole('button', { name: /Application.*AHU-01/ })).toHaveFocus()
-    fireEvent.keyDown(drawer, { key: 'Tab' })
-    expect(close).toHaveFocus()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument()
-    expect(document.body.style.overflow).toBe('')
-    expect(trigger).toHaveFocus()
-  })
-
-  it('click backdrop của Inspector trả focus về trigger', async () => {
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-    renderWorkspace()
-    const trigger = await screen.findByRole('button', { name: /Thuộc tính|Inspector/ })
-    fireEvent.click(trigger)
-    const backdrop = screen.getByRole('button', { name: /Đóng ngăn kéo|Close drawer/ })
-    fireEvent.click(backdrop)
-    expect(screen.queryByRole('dialog', { name: /Thuộc tính|Inspector/ })).not.toBeInTheDocument()
-    expect(trigger).toHaveFocus()
-  })
-
-  it('mobile Inspector drawer traps focus, locks scroll, closes with Escape, and restores trigger focus', async () => {
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-    renderWorkspace()
-    const trigger = await screen.findByRole('button', { name: /Thuộc tính|Inspector/ })
-    fireEvent.click(trigger)
-    const drawer = screen.getByRole('dialog', { name: /Thuộc tính|Inspector/ })
-    const close = within(drawer).getByRole('button', { name: /Đóng thuộc tính|Close inspector/ })
-    expect(screen.getByRole('button', { name: /Đóng ngăn kéo|Close drawer/ })).toHaveClass('min-[1280px]:hidden')
-    expect(close).toHaveClass('min-[1280px]:hidden')
-    expect(document.body.style.overflow).toBe('hidden')
-    expect(close).toHaveFocus()
-    // Empty Inspector only has the close control, so both directions must remain trapped there.
-    fireEvent.keyDown(drawer, { key: 'Tab' })
-    expect(close).toHaveFocus()
-    fireEvent.keyDown(drawer, { key: 'Tab', shiftKey: true })
-    expect(close).toHaveFocus()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('dialog', { name: /Thuộc tính|Inspector/ })).not.toBeInTheDocument()
-    expect(document.body.style.overflow).toBe('')
-    expect(trigger).toHaveFocus()
-  })
-
-  it('Explorer/Inspector triggers expose matching ARIA controls and selecting a mobile ST program closes Explorer and focuses the editor', async () => {
+  it('mount Published Signals trên route Mapping bằng raw Draft v2, không qua adapter làm mất signals[]', async () => {
     const project = baseProject()
-    project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-    renderWorkspace()
-    const explorerTrigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
-    const inspectorTrigger = screen.getByRole('button', { name: /Thuộc tính|Inspector/ })
-    expect(explorerTrigger).toHaveAttribute('aria-controls', 'programming-explorer-pane')
-    expect(inspectorTrigger).toHaveAttribute('aria-controls', 'programming-inspector-pane')
-    fireEvent.click(explorerTrigger)
-    expect(explorerTrigger).toHaveAttribute('aria-expanded', 'true')
-    fireEvent.click(within(screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).getByRole('treeitem', { name: /^Chương trình A/ }))
-    await waitFor(() => expect(explorerTrigger).toHaveAttribute('aria-expanded', 'false'))
-    await waitFor(() => expect(screen.getByLabelText(/Mã nguồn ST/)).toHaveFocus())
-  })
-
-  it('Giai đoạn 1: Explorer nhóm Program theo functional tag thật, có collapse và breadcrumb khớp Program được chọn', async () => {
-    const project = baseProject()
-    project.draft!.project.functionalTags = ['AHU', 'Bơm', 'Chiller']
-    project.draft!.programs.push(
-      { programId: 'fan', name: 'Quạt cấp', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM Fan\nEND_PROGRAM\n', functionalTags: ['AHU', 'sample', 'local-io'] },
-      { programId: 'pump', name: 'Bơm tuần hoàn', kind: 'PROGRAM', language: 'FBD', document: '{}', functionalTags: ['Bơm'] },
-      { programId: 'other', name: 'Chưa gắn nhóm', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM Other\nEND_PROGRAM\n', functionalTags: [] },
-    )
-    project.draft!.task.programOrder = ['fan', 'pump', 'other']
+    project.draft = {
+      schemaVersion: 2,
+      project: { projectId: 'project-1', name: 'AHU-01', functionalTags: [] },
+      objects: [{
+        objectId: '22222222-2222-4222-8222-222222222222',
+        kind: 'PROGRAM',
+        name: 'AirHandler',
+        language: 'ST',
+        source: 'PROGRAM AirHandler\nEND_PROGRAM',
+        interface: { inputs: [], outputs: [] },
+        locals: [],
+        dependencies: []
+      }],
+      programs: [{
+        programId: '11111111-1111-4111-8111-111111111111',
+        objectId: '22222222-2222-4222-8222-222222222222',
+        periodMs: 1000
+      }],
+      signals: [{
+        signalId: '44444444-4444-4444-8444-444444444444',
+        name: 'SupplyTemp',
+        type: 'REAL',
+        unit: 'degC',
+        publisherProgramId: '11111111-1111-4111-8111-111111111111',
+        freshnessMs: 5000,
+        stalePolicy: 'HOLD_LAST'
+      }],
+      bindings: [],
+      library: { systemProfile: 'CORE_REVA', systemVersion: '1', projectLibraryRevisionId: null },
+      execution: {}
+    } as unknown as ProgrammingDraftDocument
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
     })
 
-    renderWorkspace()
-    const tree = await screen.findByRole('tree', { name: 'Cây chương trình theo nhóm chức năng' })
-    const ahu = within(tree).getByRole('treeitem', { name: 'AHU, 1 chương trình' })
-    const pump = within(tree).getByRole('treeitem', { name: 'Bơm, 1 chương trình' })
-    const unassigned = within(tree).getByRole('treeitem', { name: 'Chưa phân nhóm, 1 chương trình' })
-    expect(ahu).toHaveAttribute('aria-level', '2')
-    expect(pump).toHaveAttribute('aria-expanded', 'true')
-    expect(unassigned).toHaveAttribute('aria-expanded', 'true')
-    expect(within(tree).getByRole('treeitem', { name: /Quạt cấp/ })).toHaveAttribute('aria-current', 'true')
-    expect(within(tree).getAllByRole('treeitem').filter((item) => item.getAttribute('aria-level') === '3')).toHaveLength(project.draft!.programs.length)
-    expect(within(tree).queryByRole('treeitem', { name: /sample|local-io/i })).not.toBeInTheDocument()
-    expect(within(tree).queryByRole('treeitem', { name: /Chiller/ })).not.toBeInTheDocument()
-    expect(within(tree).getByTitle('Tag phụ: sample, local-io')).toHaveTextContent('+2 tag')
+    renderWorkspace('/eng/programming/projects/project-1/design?tab=mapping')
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Đường dẫn chương trình' })
-    expect(breadcrumb).toHaveTextContent(/AHU-01\s*\/\s*AHU\s*\/\s*Quạt cấp/)
-    expect(breadcrumb.parentElement).toHaveTextContent('PROGRAM · ST')
-    expect(breadcrumb.parentElement).not.toHaveTextContent('LIVE')
-
-    fireEvent.click(ahu)
-    expect(ahu).toHaveAttribute('aria-expanded', 'false')
-    expect(within(tree).queryByRole('treeitem', { name: /Quạt cấp/ })).not.toBeInTheDocument()
-  })
-
-  it('tri-pane dùng từ 1280px; Explorer vẫn là cột ở tablet ngang 1024px', async () => {
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-    renderWorkspace()
-    await screen.findByRole('button', { name: /Cây|Explorer/ })
-    const grid = screen.getByText('Chưa có chương trình. Bấm + để tạo.').closest('div.grid')
-    expect(grid?.className).toContain('min-[1280px]:grid-cols-[260px_1fr_300px]')
-    expect(grid?.className).toContain('min-[1024px]:grid-cols-[260px_1fr]')
-    expect(grid?.className).not.toContain('xl:grid-cols')
-  })
-
-  it('mobile hiển thị trạng thái Check cạnh hành động chính mà không cần cuộn tới Problems', async () => {
-    const project = baseProject()
-    project.latestCheck = {
-      checkId: 'check-1', revisionId: 'draft-1', state: 'PASSED',
-      createdAt: '2026-08-20T00:00:00Z', completedAt: '2026-08-20T00:00:01Z'
-    }
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-
-    renderWorkspace()
-    const status = await screen.findByLabelText('Trạng thái Check: Đạt')
-    expect(status).toHaveTextContent('Check · Đạt')
-    expect(status).toHaveClass('min-[1024px]:hidden')
-  })
-
-  it('đóng pane khi resize lên desktop và Ctrl+P trả focus trước khi mở palette', async () => {
-    const project = baseProject()
-    project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
-    renderWorkspace()
-    const trigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
-    fireEvent.click(trigger)
-    expect(screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).toBeInTheDocument()
-    fireEvent.keyDown(screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ }), { key: 'p', ctrlKey: true })
-    await waitFor(() => expect(trigger).toHaveFocus())
-    await waitFor(() => expect(screen.getByRole('dialog', { name: /Bảng lệnh nhanh|Command palette/ })).toBeInTheDocument())
-    expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument()
-
-    fireEvent.keyDown(document, { key: 'Escape' })
-    fireEvent.click(trigger)
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 })
-    fireEvent(window, new Event('resize'))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument())
-    expect(document.body.style.overflow).toBe('')
-  })
-
-  it('đóng drawer khi chuyển sang desktop để trả lại ARIA và body scroll', async () => {
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-    vi.stubGlobal('innerWidth', 1024)
-    renderWorkspace()
-    const trigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
-    fireEvent.click(trigger)
-    expect(screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).toBeInTheDocument()
-    vi.stubGlobal('innerWidth', 1280)
-    fireEvent(window, new Event('resize'))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument())
-    expect(document.body.style.overflow).toBe('')
-  })
-
-  it('mở Command Palette sẽ đóng drawer đang mở', async () => {
-    const project = baseProject()
-    project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
-    client.request.mockImplementation((operationId: string) => {
-      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
-      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
-      throw new Error(`unexpected operation ${operationId}`)
-    })
-    renderWorkspace()
-    const explorerTrigger = await screen.findByRole('button', { name: /Cây|Explorer/ })
-    fireEvent.click(explorerTrigger)
-    const drawer = screen.getByRole('dialog', { name: /Cây ứng dụng|Application tree/ })
-    fireEvent.click(within(drawer).getByTitle(/Bảng lệnh nhanh|Command palette/))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Cây ứng dụng|Application tree/ })).not.toBeInTheDocument())
-    await screen.findByRole('dialog', { name: /Bảng lệnh nhanh|Command palette/ })
-    fireEvent.keyDown(document, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Bảng lệnh nhanh|Command palette/ })).not.toBeInTheDocument())
-    expect(document.body.style.overflow).toBe('')
+    expect(await screen.findByRole('tab', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('aria-selected', 'true')
+    const table = await screen.findByRole('table', { name: 'Bảng Published Signal của bản nháp' })
+    expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('AirHandler')
+    expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('5000 ms')
   })
 
   it('nạp Draft thật và cho phép thêm chương trình ST qua PATCH batch upsertProgram+setTask', async () => {
@@ -322,7 +172,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
         const document = baseDocument()
-        document.programs.push({ programId: 'program-1', name: 'New program', kind: 'PROGRAM', language: 'ST', document: '' })
+        document.programs.push({ programId: 'program-1', name: 'NewProgram', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM NewProgram\nEND_PROGRAM\n' })
         document.task.programOrder = ['program-1']
         return Promise.resolve({ resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: document }, etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1' })
       }
@@ -341,12 +191,68 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
     expect(options.ifMatch).toBe('"draft-1:1"')
     const [upsertOp, setTaskOp] = options.body.operations
-    expect(upsertOp.op).toBe('upsertProgram')
-    expect(upsertOp.program.language).toBe('ST')
+    expect(upsertOp).toEqual({
+      op: 'upsertProgram',
+      program: {
+        programId: expect.any(String),
+        name: 'NewProgram',
+        kind: 'PROGRAM',
+        language: 'ST',
+        document: 'PROGRAM NewProgram\nEND_PROGRAM\n',
+      },
+    })
+    expect(upsertOp.program).not.toHaveProperty('executionOrder')
+    expect(upsertOp.program).not.toHaveProperty('functionalTags')
     expect(setTaskOp.op).toBe('setTask')
     expect(setTaskOp.task.programOrder).toEqual([upsertOp.program.programId])
 
-    await waitFor(() => expect(screen.getByRole('treeitem', { name: /^New program/ })).toBeInTheDocument())
+    // `getAllBy` vì mỗi POU nay có thêm nút Đổi tên/Nhân bản/Xóa mang chính
+    // tên POU trong nhãn — chọn đúng nút MỞ POU thay vì khẳng định "duy nhất".
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /NewProgram/ }).length).toBeGreaterThan(0))
+  })
+
+  it('ghi thuộc tính Program bằng payload v2 hẹp và chặn tên POU backend sẽ từ chối', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-1', name: 'ValidName', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM ValidName\nEND_PROGRAM\n', executionOrder: 0, functionalTags: ['legacy-view-only']
+    })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: project.draft },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    fireEvent.click(await screen.findByText('ValidName'))
+    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    expect(within(inspector).queryByText('Tag chức năng')).not.toBeInTheDocument()
+
+    const nameInput = within(inspector).getByLabelText('Tên')
+    fireEvent.change(nameInput, { target: { value: 'New program' } })
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true')
+    expect(within(inspector).getByText(/Tên phải bắt đầu bằng chữ/)).toBeInTheDocument()
+    expect(within(inspector).getByRole('button', { name: 'Lưu thuộc tính' })).toBeDisabled()
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+
+    fireEvent.change(nameInput, { target: { value: 'New_Name' } })
+    fireEvent.click(within(inspector).getByRole('button', { name: 'Lưu thuộc tính' }))
+    await waitFor(() => expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(true))
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([{
+      op: 'upsertProgram',
+      program: {
+        programId: 'program-1', name: 'New_Name', kind: 'PROGRAM', language: 'ST',
+        document: 'PROGRAM ValidName\nEND_PROGRAM\n'
+      }
+    }])
   })
 
   it('WP-11: bố cục 3 cột (Cây/Editor/Inspector) theo UX §16.2 — Inspector là cột riêng, không nằm dưới editor', async () => {
@@ -362,9 +268,12 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
 
-    // Draft có chương trình sẽ tự mở chương trình đầu tiên để người vận hành
-    // không rơi vào màn hình trống; Inspector vì vậy hiển thị metadata ngay.
-    const tree = screen.getByRole('navigation', { name: 'Cây ứng dụng' })
+    // Chưa chọn chương trình nào: cột Inspector vẫn tồn tại, hiện trạng thái trống.
+    const tree = screen.getByRole('navigation', { name: 'Cây POU' })
+    const inspectorEmpty = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    expect(within(inspectorEmpty).getByText('Chọn một chương trình để xem thuộc tính.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Chương trình A'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     // Sau khi chọn: cây, editor và Inspector cùng có mặt đồng thời (3 cột),
@@ -372,7 +281,6 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(tree).toBeInTheDocument()
     expect(screen.getByLabelText(/Mã nguồn ST/)).toBeInTheDocument()
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
-    fireEvent.click(within(inspector).getByRole('tab', { name: 'Thuộc tính' }))
     expect(within(inspector).getByLabelText('Tên')).toHaveValue('Chương trình A')
     expect(within(inspector).getByLabelText('Loại')).toHaveValue('PROGRAM')
   })
@@ -389,11 +297,10 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^Chương trình A/ }))
+    fireEvent.click(screen.getByText('Chương trình A'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
-    fireEvent.click(within(inspector).getByRole('tab', { name: 'Thuộc tính' }))
     const kindSelect = within(inspector).getByLabelText('Loại') as HTMLSelectElement
     const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
     expect(options).toEqual(['PROGRAM'])
@@ -415,11 +322,10 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('FB cũ từ bundle')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^FB cũ từ bundle/ }))
+    fireEvent.click(screen.getByText('FB cũ từ bundle'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
-    fireEvent.click(within(inspector).getByRole('tab', { name: 'Thuộc tính' }))
     // Accessible name của <select> nuốt luôn text cảnh báo trong cùng <label>
     // khi kind khác PROGRAM (span warning render bên trong label bao ngoài) —
     // dùng regex bắt đầu bằng "Loại" thay vì so khớp tuyệt đối.
@@ -430,7 +336,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     // được backend hỗ trợ.
     expect(options.sort()).toEqual(['FUNCTION_BLOCK', 'PROGRAM'].sort())
     expect(kindSelect).toHaveValue('FUNCTION_BLOCK')
-    expect(within(inspector).getByText(/Loại này chưa được Check hỗ trợ biên dịch/)).toBeInTheDocument()
+    expect(within(inspector).getByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).toBeInTheDocument()
   })
 
   it('409 giữ nguyên buffer đang gõ và hiện banner reload/merge (UX §9)', async () => {
@@ -453,7 +359,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^Chương trình A/ }))
+    fireEvent.click(screen.getByText('Chương trình A'))
 
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
     fireEvent.change(textarea, { target: { value: 'X := 2; (* chưa lưu *)' } })
@@ -465,13 +371,13 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   })
 
   it('thêm chương trình FBD mount StructuredFbdEditor thật, không placeholder (TASK-PROG-502)', async () => {
-    client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; program?: { programId: string; document: unknown } }> } }) => {
+    client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; program?: { programId: string; name: string; document: unknown } }> } }) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
         const upsertOp = options?.body?.operations.find((op) => op.op === 'upsertProgram')
         const document = baseDocument()
-        document.programs.push({ programId: upsertOp!.program!.programId, name: 'FBD mới', kind: 'PROGRAM', language: 'FBD', document: upsertOp!.program!.document })
+        document.programs.push({ programId: upsertOp!.program!.programId, name: upsertOp!.program!.name, kind: 'PROGRAM', language: 'FBD', document: upsertOp!.program!.document })
         document.task.programOrder = [upsertOp!.program!.programId]
         return Promise.resolve({ resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: document }, etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1' })
       }
@@ -487,7 +393,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Lệnh FBD' })).toBeInTheDocument())
   })
 
-  it('nút Kiểm tra điều hướng sang PGM-03 (Check & Commission), không tự seal/check (D-01)', async () => {
+  it('AC-PGM02-009 / AC-ST-004: nút Kiểm tra điều hướng sang PGM-03, không tự seal/check nên Active không đổi (D-01)', async () => {
     const project = baseProject()
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
@@ -557,7 +463,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(options.body.operations).toEqual([{ op: 'replaceProgramSource', programId: 'program-1', language: 'ST', source: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;' }])
   })
 
-  it('xóa Program hỏi xác nhận rồi gửi batch removeBinding+removeVariable+removeProgram+setTask', async () => {
+  it('xóa Program hỏi xác nhận rồi gửi batch removeBinding+removeVariable+removeProgram+removeObject', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
     project.draft!.variables.push({ variableId: 'var-1', programId: 'program-1', name: 'X', type: 'REAL', class: 'LOCAL', initialValue: 0, retain: false })
@@ -583,8 +489,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
     expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument()
 
-    fireEvent.click(within(screen.getByRole('navigation', { name: 'Cây ứng dụng' })).getByTitle(/^Xóa chương trình/))
-    const dialog = screen.getByRole('dialog', { name: 'Xóa chương trình?' })
+    fireEvent.click(screen.getByTitle(/^Xóa /))
+    const dialog = screen.getByRole('dialog', { name: 'Xóa POU?' })
     expect(within(dialog).getByText(/Điều khiển AHU/)).toHaveTextContent('Không thể hoàn tác sau khi lưu.')
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
@@ -594,13 +500,87 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
       expect(call).toBeTruthy()
     })
     const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    // `F-P59-DELETE-PROGRAM-001`: batch KHÔNG còn `setTask` (Draft v2 giữ chu kỳ
+    // theo từng Program, và `setTaskCompat` sẽ ghi đè chu kỳ của mọi Program
+    // trong danh sách), và PHẢI có `removeObject` — thiếu nó thì POU vẫn nằm
+    // trong Draft và vẫn hiện trên danh sách sau khi "xóa" thành công.
     expect(options.body.operations).toEqual([
       { op: 'removeBinding', bindingId: 'bind-1' },
       { op: 'removeVariable', variableId: 'var-1' },
       { op: 'removeProgram', programId: 'program-1' },
-      { op: 'setTask', task: { taskId: 'task-1', periodMs: 1000, programOrder: [] } }
+      { op: 'removeObject', objectId: 'program-1' }
     ])
     await waitFor(() => expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument())
+  })
+
+  /** `F-P59-DELETE-PROGRAM-001` — user FUNCTION/FUNCTION_BLOCK KHÔNG có cấu hình
+   *  chạy trong `programs[]`. Bản trước vẫn gửi `removeProgram` cho chúng, và
+   *  backend trả `PRG-ERR-REQ-001` vì không tìm thấy id — nghĩa là xóa một
+   *  FUNCTION do người dùng tạo chưa bao giờ thành công. */
+  it('xóa user FUNCTION chỉ gửi removeObject, không gửi removeProgram', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({ programId: 'fn-1', objectId: 'fn-1', name: 'SCALE_LIN', kind: 'FUNCTION', language: 'ST', document: 'FUNCTION SCALE_LIN : REAL\nEND_FUNCTION\n' })
+    project.draft!.task.programOrder = []
+
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: baseDocument() },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('SCALE_LIN')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle(/^Xóa /))
+    const dialog = screen.getByRole('dialog', { name: 'Xóa POU?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
+
+    await waitFor(() => {
+      expect(client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')).toBeTruthy()
+    })
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([{ op: 'removeObject', objectId: 'fn-1' }])
+  })
+
+  /** Chương trình "ma": POU kind PROGRAM còn trong `objects[]` nhưng đã mất mục
+   *  trong `programs[]` — di chứng của lỗi xoá cũ, đo thật trên bo Foxlinx
+   *  2026-08-24. Gửi `removeProgram` cho nó trả `operations[0].removeProgram`,
+   *  nghĩa là người dùng KHÔNG bao giờ xoá được nó: vòng lặp chết. */
+  it('xóa PROGRAM không có cấu hình chạy chỉ gửi removeObject', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'ghost-1', objectId: 'ghost-1', hasRuntimeConfig: false,
+      name: 'AHU_MasterSequence', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM P\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = []
+
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: baseDocument() },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('AHU_MasterSequence')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle(/^Xóa /))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Xóa POU?' })).getByRole('button', { name: 'Xóa' }))
+
+    await waitFor(() => {
+      expect(client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')).toBeTruthy()
+    })
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([{ op: 'removeObject', objectId: 'ghost-1' }])
   })
 })
 
@@ -617,7 +597,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
 
     fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
@@ -646,7 +626,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Program A')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^Program A/ }))
+    fireEvent.click(screen.getByText('Program A'))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
     expect(textarea).toHaveValue(sourceA)
 
@@ -675,7 +655,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
 
     fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
@@ -700,7 +680,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
 
     const start = source.indexOf('X := 1;')
@@ -726,7 +706,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
 
     const start = source.indexOf('X := 1;')
@@ -761,7 +741,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
 
     renderWorkspace()
     await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('treeitem', { name: /^Điều khiển AHU/ }))
+    fireEvent.click(screen.getByText('Điều khiển AHU'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const countCatalogCalls = () => client.request.mock.calls.filter(([operationId]) => operationId === 'getProgrammingPointCatalog').length
@@ -781,5 +761,292 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     fireEvent.click(screen.getByText('AO-01'))
     expect(textarea.value).toContain('AO-01')
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+})
+
+describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
+  it('EDIT không subscribe/chiếu Active overlay lên Draft dù monitor có dữ liệu', async () => {
+    const project = baseProject()
+    project.activeRevisionId = 'revision-active'
+    project.draft!.programs.push({
+      programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM AHU\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    runtimeMonitor.state = {
+      status: 'ready', error: null, failure: null, producerRestarted: false, refresh: vi.fn(),
+      data: {
+        schemaVersion: '1.0', activeRevisionId: 'revision-active', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null,
+        items: [
+          {
+            variableId: 'variable-zero', variableName: 'OutputZero', programId: 'program-1',
+            point: { category: 'LOCAL', pointId: 'AO-01' }, direction: 'WRITE', dataType: 'REAL', unit: '%',
+            programValue: 0, actualValue: 0, overriddenBy: null, effectivePriority: 5,
+            overrideActor: null, overrideRemainingS: null, quality: 'GOOD',
+            observedAt: '2026-08-21T00:00:00Z', freshness: 'LIVE'
+          },
+          {
+            variableId: 'variable-missing', variableName: 'OutputMissing', programId: 'program-1',
+            point: { category: 'LOCAL', pointId: 'AO-02' }, direction: 'WRITE', dataType: 'REAL', unit: '%',
+            programValue: null, actualValue: null, overriddenBy: null, effectivePriority: null,
+            overrideActor: null, overrideRemainingS: null, quality: 'BAD', observedAt: '', freshness: 'UNAVAILABLE'
+          }
+        ]
+      }
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    fireEvent.click(await screen.findByText('Điều khiển AHU'))
+    expect(screen.queryByRole('region', { name: 'Lớp giá trị runtime ST' })).not.toBeInTheDocument()
+    expect(runtimeMonitor.enabled).toHaveBeenCalledWith(false)
+  })
+
+  it('LIVE khóa mutation ở toàn workspace, không chỉ khóa textarea chính', async () => {
+    const project = baseProject()
+    project.activeRevisionId = 'revision-active'
+    project.draft!.programs.push({
+      programId: 'program-1', objectId: 'object-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'DRAFT KHÔNG ĐƯỢC HIỆN'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    runtimeMonitor.state = {
+      status: 'ready', error: null, failure: null, producerRestarted: false, refresh: vi.fn(),
+      data: { schemaVersion: '1.0', activeRevisionId: 'revision-active', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null, items: [] }
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'getProgrammingRevision') return Promise.resolve({
+        revisionId: 'revision-active',
+        snapshot: { objects: [{
+          objectId: 'object-1', kind: 'PROGRAM',
+          payload: { objectId: 'object-1', kind: 'PROGRAM', name: 'Điều khiển AHU', language: 'ST', source: 'PROGRAM ACTIVE\nEND_PROGRAM\n' },
+        }] },
+      })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=LIVE')
+    const source = await screen.findByLabelText<HTMLTextAreaElement>('Mã nguồn đang chạy')
+    expect(source).toHaveValue('PROGRAM ACTIVE\nEND_PROGRAM\n')
+    expect(source).toHaveAttribute('readonly')
+    expect(runtimeMonitor.enabled).toHaveBeenCalledWith(true)
+
+    /* Những control này nằm NGOÀI LiveProgramView; trước T59-812 admin vẫn
+     * sửa Draft từ chúng dù màn hình tự nhận là LIVE. */
+    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Thêm chương trình FBD')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kiểm tra' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Lưu$/ })).not.toBeInTheDocument()
+    fireEvent.keyDown(source, { key: 's', ctrlKey: true })
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+
+  it('nối interface Draft v2 vào palette FBD và lọc chính POU đang mở', async () => {
+    const fbdSource = JSON.stringify({
+      $schema: '../../fbd_v1.schema.json', schemaVersion: 1, profileId: 'revA-1t-1-5-30',
+      graphId: '10000000-0000-4000-8000-000000000001', name: 'SelfBlock',
+      networks: [{
+        id: '20000000-0000-4000-8000-000000000001', name: 'Main', order: 0, nodes: [], wires: []
+      }]
+    })
+    const project = baseProject()
+    project.draft = {
+      schemaVersion: 2,
+      project: { projectId: 'project-1', name: 'AHU-01', functionalTags: [] },
+      objects: [
+        {
+          objectId: 'fb-self', kind: 'FUNCTION_BLOCK', name: 'SelfBlock', language: 'FBD', source: fbdSource,
+          interface: { inputs: [{ name: 'In', type: 'REAL' }], outputs: [{ name: 'Out', type: 'REAL' }] },
+          locals: []
+        },
+        {
+          objectId: 'function-other', kind: 'FUNCTION', name: 'OtherFn', language: 'ST',
+          source: 'FUNCTION OtherFn : REAL\nEND_FUNCTION',
+          interface: { inputs: [{ name: 'X', type: 'REAL' }], returnType: 'REAL' }, locals: []
+        }
+      ],
+      programs: [], signals: [], bindings: [], library: {}, execution: {}
+    } as unknown as ProgrammingDraftDocument
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?program=fb-self')
+    await screen.findByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    expect(screen.getByRole('option', { name: /OtherFn · FUNCTION/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /SelfBlock · FUNCTION_BLOCK/ })).not.toBeInTheDocument()
+  })
+
+  it('T59-802: dưới 768 px admin vẫn chỉ đọc ST, không có control/shortcut ghi', async () => {
+    stubMobileViewport()
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-1', objectId: 'object-1', name: 'MobileST', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM MobileST\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1')
+
+    const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    expect(screen.getByTestId('programming-mobile-read-only')).toBeInTheDocument()
+    expect(textarea).toHaveAttribute('readonly')
+    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Thêm chương trình FBD')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kiểm tra' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Lưu' })).not.toBeInTheDocument()
+
+    fireEvent.keyDown(textarea, { key: 's', ctrlKey: true })
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+
+    fireEvent.click(screen.getByTitle('Bảng lệnh nhanh (Ctrl+P)'))
+    const palette = screen.getByRole('dialog', { name: 'Bảng lệnh nhanh' })
+    expect(within(palette).queryByRole('option', { name: /Lưu/ })).not.toBeInTheDocument()
+    expect(within(palette).queryByRole('option', { name: /Kiểm tra/ })).not.toBeInTheDocument()
+    expect(within(palette).queryByRole('option', { name: /Định dạng/ })).not.toBeInTheDocument()
+  })
+
+  it('T59-802: dưới 768 px FBD nhận canEdit=false và Insert không đổi graph', async () => {
+    stubMobileViewport()
+    const fbd = JSON.stringify({
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: 1,
+      profileId: 'revA-1t-1-5-30',
+      graphId: '10000000-0000-4000-8000-000000000001',
+      name: 'MobileFbd',
+      networks: [{ id: '20000000-0000-4000-8000-000000000001', name: 'Main', order: 0, nodes: [], wires: [] }]
+    })
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-fbd', objectId: 'object-fbd', name: 'MobileFbd', kind: 'PROGRAM', language: 'FBD', document: fbd
+    })
+    project.draft!.task.programOrder = ['program-fbd']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-fbd')
+
+    const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
+    expect(within(editor).getByText('Chỉ đọc')).toBeInTheDocument()
+    expect(within(editor).getByRole('button', { name: 'Thêm khối' })).toBeDisabled()
+    expect(within(editor).getByText('0/256 block')).toBeInTheDocument()
+
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(within(editor).getByText('0/256 block')).toBeInTheDocument()
+    expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
+  })
+})
+
+/* `T59-808` — RBAC negative ở TẦNG GIAO DIỆN.
+ *
+ * 403 của backend là nửa sau của câu chuyện; nửa trước là giao diện. Một viewer
+ * không được thấy nút dẫn tới thao tác chắc chắn bị từ chối — bấm rồi mới biết
+ * mình không có quyền là bắt người dùng học luật bằng cách va vào nó. Nhưng
+ * chặn ghi KHÔNG có nghĩa là làm mù: nguồn vẫn phải đọc được. */
+describe('PGM-02 — viewer/operator không sửa được nguồn (T59-808)', () => {
+  function stubProject() {
+    const project = baseProject()
+    project.draft = {
+      ...baseDocument(),
+      programs: [{
+        programId: 'program-a', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST',
+        document: 'PROGRAM A\nEND_PROGRAM\n'
+      }]
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+  }
+
+  it.each(['viewer', 'operator'] as const)('%s: nguồn đọc được nhưng không có đường sửa', async (role) => {
+    auth.role = role
+    stubProject()
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Chương trình A'))
+
+    const source = await screen.findByLabelText(/Mã nguồn ST/)
+    expect((source as HTMLTextAreaElement).value).toContain('PROGRAM')
+    expect(source).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: 'Lưu' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Hoàn tác/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Định dạng/ })).toBeNull()
+  })
+
+  it('admin thì ngược lại — có đủ đường sửa', async () => {
+    auth.role = 'admin'
+    stubProject()
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Chương trình A'))
+    const source = await screen.findByLabelText(/Mã nguồn ST/)
+    expect(source).not.toHaveAttribute('readonly')
+  })
+})
+
+/* `T59-807` / `WP-01` (phần đi cùng `WP-06`) — hai cột biên thu gọn được.
+ *
+ * Ở 1280 px, ba cột `280px + 1fr + 308px` chỉ chừa ~690 px cho chính chỗ người
+ * dùng gõ. Thu gọn một biên trả lại ~280 px cho editor. */
+describe('PGM-02 — slot lưới thu gọn được (T59-807)', () => {
+  it('slotKey chọn đúng lớp lưới cho bốn tổ hợp', () => {
+    expect(slotKey({ left: true, inspector: true })).toBe('both-open')
+    expect(slotKey({ left: false, inspector: true })).toBe('left-closed')
+    expect(slotKey({ left: true, inspector: false })).toBe('inspector-closed')
+    expect(slotKey({ left: false, inspector: false })).toBe('both-closed')
+  })
+})
+
+/* `T59-808` — security hardening: nguồn thù địch.
+ *
+ * Tên POU và mã nguồn là dữ liệu do người dùng nhập, và chúng được hiện lại ở
+ * cây POU, khay Vấn đề, khay tham chiếu và thanh ngữ cảnh. React thoát HTML
+ * mặc định, nhưng "mặc định an toàn" chỉ đúng tới lần đầu ai đó thêm một
+ * `dangerouslySetInnerHTML` cho tiện. Bộ test này khoá điều đó lại. */
+describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không thành mã (T59-808)', () => {
+  const HOSTILE_NAME = '<img src=x onerror="window.__pwned=1">'
+  const HOSTILE_SOURCE = 'PROGRAM P\n(* <script>window.__pwned=1</script> *)\nX := 1;\nEND_PROGRAM\n'
+
+  it('tên POU chứa thẻ HTML không tạo phần tử nào và không chạy script', async () => {
+    const project = baseProject()
+    project.draft = {
+      ...baseDocument(),
+      programs: [{ programId: 'program-a', name: HOSTILE_NAME, kind: 'PROGRAM', language: 'ST', document: HOSTILE_SOURCE }]
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    await waitFor(() => expect(screen.getByText(HOSTILE_NAME)).toBeInTheDocument())
+
+    // Tên hiện ra ĐÚNG NGUYÊN VĂN, và không có `<img>` nào được tạo từ nó.
+    expect(globalThis.document.querySelector('img[src="x"]')).toBeNull()
+    expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined()
+
+    fireEvent.click(screen.getByText(HOSTILE_NAME))
+    const source = await screen.findByLabelText(/Mã nguồn ST/)
+    expect((source as HTMLTextAreaElement).value).toBe(HOSTILE_SOURCE)
+    expect(globalThis.document.querySelector('script')).toBeNull()
+    expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined()
   })
 })

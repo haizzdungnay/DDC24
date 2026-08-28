@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -14,6 +15,8 @@
 #include <unistd.h>
 
 #include "st/st_ir.hpp"
+#include "st/st_package_v2.hpp"
+#include "st/st_profile_generated.hpp"
 
 namespace core::programming {
 namespace {
@@ -119,6 +122,60 @@ std::string hex_digest(const uint8_t* data, std::size_t size)
     return output;
 }
 
+bool bind_program_signal_refs(StPreparedProgram* prepared,
+                              const std::string& instance_id,
+                              const std::vector<StPackageSignal>& signals,
+                              StSignalBus* bus, std::string* error)
+{
+    if (prepared == nullptr) {
+        if (error) *error = "ảnh Program chuẩn bị không tồn tại";
+        return false;
+    }
+    StLoadedProgram& program = prepared->program;
+    if (!program.signal_refs.empty() && bus == nullptr) {
+        if (error) *error = "artifact tham chiếu Published Signal nhưng runtime không có signal bus";
+        return false;
+    }
+    for (StIrSignalRef& ref : program.signal_refs) {
+        std::size_t matched = signals.size();
+        for (std::size_t index = 0; index < signals.size(); ++index) {
+            if (signals[index].name.size() == ref.name.size() &&
+                std::equal(signals[index].name.begin(), signals[index].name.end(),
+                           ref.name.begin(), [](char left, char right) {
+                               return std::toupper(static_cast<unsigned char>(left)) ==
+                                      std::toupper(static_cast<unsigned char>(right));
+                           })) {
+                matched = index;
+                break;
+            }
+        }
+        if (matched == signals.size()) {
+            if (error) *error = "artifact tham chiếu signal không có trong package: '" +
+                                ref.name + "'";
+            return false;
+        }
+        const StPackageSignal& contract = signals[matched];
+        if (static_cast<StType>(contract.data_type) != ref.type) {
+            if (error) *error = "kiểu signal trong artifact không khớp package: '" +
+                                ref.name + "'";
+            return false;
+        }
+        if (ref.publish && contract.producer_program != instance_id) {
+            if (error) *error = "Program '" + instance_id +
+                                "' không phải publisher của signal '" + ref.name + "'";
+            return false;
+        }
+        /* Semantic IEC không phân biệt hoa thường. Runtime dùng canonical name
+         * của package để publish_batch phòng thủ bằng exact identity mà không
+         * từ chối source viết khác case. */
+        ref.name = contract.name;
+        ref.runtime_index = static_cast<int16_t>(matched);
+    }
+    program.signal_bus = bus;
+    program.runtime_instance_id = instance_id;
+    return true;
+}
+
 bool path_within(const std::string& root, const std::string& candidate)
 {
     if (root.empty() || candidate.size() <= root.size() || candidate.compare(0, root.size(), root) != 0)
@@ -173,6 +230,21 @@ bool canonical_uuid(const std::string& value)
     return true;
 }
 
+/* Instance id đi vào scheduler và vào journal, nên nó phải là identity ổn định:
+ * ASCII in được, không dấu phân cách đường dẫn, không rỗng. Không ép nó phải là
+ * một tên cố định — tên Program là dữ liệu của package (T59-401). */
+bool valid_instance_id(const std::string& value)
+{
+    if (value.empty() || value.size() > 64) return false;
+    for (const char character : value) {
+        const bool alphanumeric = (character >= '0' && character <= '9') ||
+                                  (character >= 'A' && character <= 'Z') ||
+                                  (character >= 'a' && character <= 'z');
+        if (!alphanumeric && character != '_' && character != '-' && character != '.') return false;
+    }
+    return true;
+}
+
 bool lowercase_hex_64(const std::string& value)
 {
     if (value.size() != 64) return false;
@@ -214,7 +286,12 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
     const StJournalBootAction action = st_journal_decide_boot_action(read);
     ActiveCheckpoint checkpoint;
     std::string checkpoint_error;
+    std::string load_error;
     const bool has_checkpoint = read_active_checkpoint(&checkpoint, &checkpoint_error);
+    const auto load_checkpoint = [&]() {
+        load_error.clear();
+        return load_active_checkpoint(checkpoint, &load_error);
+    };
     if (read.status == StJournalReadStatus::OK) {
         operation_id_ = read.record.operation_id;
         previous_artifact_hash_ = read.record.old_active_hash;
@@ -225,7 +302,7 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
     case StJournalBootAction::KEEP_OLD_ACTIVE_DISCARD_CANDIDATE:
         if (read.status == StJournalReadStatus::OK && !read.record.old_active_hash.empty() &&
             has_checkpoint && checkpoint.artifact_sha256 == read.record.old_active_hash)
-            (void)load_active_checkpoint(checkpoint, error);
+            (void)load_checkpoint();
         state_.store(LifecycleState::IDLE, std::memory_order_release);
         if (previous_revision_id_.empty()) {
             cutover_->request(CutoverMode::GRAPH_ONLY);
@@ -235,7 +312,7 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
     case StJournalBootAction::KEEP_OLD_ACTIVE_MARK_OPERATION_FAILED:
         if (!read.record.old_active_hash.empty() && has_checkpoint &&
             checkpoint.artifact_sha256 == read.record.old_active_hash)
-            (void)load_active_checkpoint(checkpoint, error);
+            (void)load_checkpoint();
         detail_code_ = "JOURNAL_COMMIT_INTENT_RECOVERED";
         state_.store(LifecycleState::FAILED, std::memory_order_release);
         if (previous_revision_id_.empty()) {
@@ -246,7 +323,7 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
     case StJournalBootAction::USE_LKG_CANDIDATE_NOT_AUTO_PUBLISHED:
         if (!read.record.old_active_hash.empty() && has_checkpoint &&
             checkpoint.artifact_sha256 == read.record.old_active_hash &&
-            load_active_checkpoint(checkpoint, error)) {
+            load_checkpoint()) {
             detail_code_ = "JOURNAL_ACTIVE_CANDIDATE_ROLLED_BACK";
             state_.store(LifecycleState::ROLLED_BACK, std::memory_order_release);
         } else {
@@ -254,7 +331,8 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
             state_.store(LifecycleState::RECOVERY_REQUIRED, std::memory_order_release);
             cutover_->request(CutoverMode::GRAPH_ONLY);
             (void)cutover_->apply_pending_at_boundary();
-            if (error) *error = "active candidate has no valid prior LKG checkpoint";
+            if (error) *error = load_error.empty()
+                ? "active candidate has no valid prior LKG checkpoint" : load_error;
             return false;
         }
         return true;
@@ -262,7 +340,7 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
         if (has_checkpoint && checkpoint.operation_id == read.record.operation_id &&
             checkpoint.artifact_sha256 == read.record.candidate_hash &&
             checkpoint.plan_hash == read.record.plan_hash &&
-            load_active_checkpoint(checkpoint, error)) {
+            load_checkpoint()) {
             detail_code_.clear();
             state_.store(LifecycleState::COMMITTED, std::memory_order_release);
             previous_artifact_hash_ = read.record.old_active_hash;
@@ -270,7 +348,7 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
             previous_artifact_hash_ = artifact_hash_;
         } else if (!read.record.old_active_hash.empty() && has_checkpoint &&
                    checkpoint.artifact_sha256 == read.record.old_active_hash &&
-                   load_active_checkpoint(checkpoint, error)) {
+                   load_checkpoint()) {
             detail_code_ = "JOURNAL_FIRST_CYCLE_ROLLED_BACK";
             state_.store(LifecycleState::ROLLED_BACK, std::memory_order_release);
         } else {
@@ -278,7 +356,8 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
             state_.store(LifecycleState::RECOVERY_REQUIRED, std::memory_order_release);
             cutover_->request(CutoverMode::GRAPH_ONLY);
             (void)cutover_->apply_pending_at_boundary();
-            if (error) *error = "first-cycle journal cannot be matched to active/LKG checkpoint";
+            if (error) *error = load_error.empty()
+                ? "first-cycle journal cannot be matched to active/LKG checkpoint" : load_error;
             return false;
         }
         return true;
@@ -286,7 +365,7 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
         if (has_checkpoint && checkpoint.operation_id == read.record.operation_id &&
             checkpoint.artifact_sha256 == read.record.candidate_hash &&
             checkpoint.plan_hash == read.record.plan_hash &&
-            load_active_checkpoint(checkpoint, error)) {
+            load_checkpoint()) {
             detail_code_.clear();
             state_.store(LifecycleState::COMMITTED, std::memory_order_release);
         } else {
@@ -294,10 +373,19 @@ bool ProgrammingRuntimeCoordinator::recover(std::string* error)
             state_.store(LifecycleState::RECOVERY_REQUIRED, std::memory_order_release);
             cutover_->request(CutoverMode::GRAPH_ONLY);
             (void)cutover_->apply_pending_at_boundary();
-            if (error) *error = checkpoint_error.empty()
-                ? "committed journal has no matching active checkpoint" : checkpoint_error;
+            if (error) *error = !load_error.empty() ? load_error :
+                (checkpoint_error.empty()
+                    ? "committed journal has no matching active checkpoint" : checkpoint_error);
             return false;
         }
+        return true;
+    case StJournalBootAction::COLD_START_AFTER_RECOVERY_RESET:
+        /* Operator đã bỏ giao dịch cũ. Boot sạch: không Active, không candidate,
+         * graph giữ quyền output cho tới khi có Commission mới. */
+        detail_code_ = "JOURNAL_RECOVERY_RESET";
+        state_.store(LifecycleState::IDLE, std::memory_order_release);
+        cutover_->request(CutoverMode::GRAPH_ONLY);
+        (void)cutover_->apply_pending_at_boundary();
         return true;
     case StJournalBootAction::NO_VALID_RECORD_RAISE_INCIDENT:
         detail_code_ = "JOURNAL_CORRUPT";
@@ -421,15 +509,71 @@ bool ProgrammingRuntimeCoordinator::load_active_checkpoint(
     if (!decode_hex_digest(checkpoint.artifact_sha256, &command.sha256)) return false;
     std::vector<uint8_t> bytes;
     std::string detail;
-    if (!read_staged_artifact(command, &bytes, &detail, error) || !ensure_instance(error) ||
-        !scheduler_->stage_activation(instance_id_, bytes, error) ||
-        !scheduler_->commit_staged_activation(instance_id_, false, error))
+    if (!read_staged_artifact(command, &bytes, &detail, error)) return false;
+
+    /* Khôi phục phải đi qua ĐÚNG đường tách gói như lúc stage. Nạp nguyên khối
+     * `bytes` vào một instance chỉ đúng với artifact v1; với package v2 nó đưa cả
+     * container cho loader IR v1 và thiết bị tỉnh dậy KHÔNG có Program nào —
+     * hỏng đúng vào lúc không ai đang nhìn. */
+    std::vector<PackageProgramSlice> programs;
+    std::vector<StPackageSignal> signals;
+    if (!split_package(bytes, instance_id_, &programs, &signals, &detail, error)) return false;
+    if (!rebuild_signal_bus(signals, &detail, error)) return false;
+    for (const PackageProgramSlice& program : programs)
+        if (!valid_instance_id(program.instance_id)) {
+            if (error) *error = "checkpoint package program name is not a valid instance id";
+            return false;
+        }
+    std::vector<StProgramSetEntry> entries;
+    entries.reserve(programs.size());
+    for (std::size_t index = 0; index < programs.size(); ++index) {
+        StProgramSetEntry entry;
+        entry.instance_id = programs[index].instance_id;
+        entry.artifact = programs[index].ir_blob;
+        entry.order = static_cast<uint16_t>(index);
+        entry.period_ms = programs[index].period_ms;
+        entry.enabled = false; /* boot luôn fail-closed, BE replay intent sau */
+        entries.push_back(std::move(entry));
+    }
+    StPreparedProgramSet boot_prepared;
+    if (!scheduler_->prepare_program_set(kTaskId, entries, &boot_prepared, error)) {
+        if (StSignalBus* bus = scheduler_->signal_bus()) bus->clear();
         return false;
-    scheduler_->apply_pending_activations_at_boundary();
-    StProgramInstance* instance = scheduler_->find_program(instance_id_);
-    if (!instance || instance->state != StProgramState::ACTIVE ||
-        !scheduler_->start(instance_id_, error)) return false;
-    instance->last_known_good.swap(instance->activated_artifact);
+    }
+    for (const auto& program : boot_prepared) {
+        if (program == nullptr ||
+            !bind_program_signal_refs(program->pending_program.get(), program->instance_id,
+                                      signals, scheduler_->signal_bus(), error)) {
+            boot_prepared.clear();
+            if (StSignalBus* bus = scheduler_->signal_bus()) bus->clear();
+            return false;
+        }
+    }
+    if (!scheduler_->arm_prepared_program_set(&boot_prepared, false, error) ||
+        !scheduler_->swap_prepared_program_set_at_boundary(kTaskId, &boot_prepared)) {
+        boot_prepared.clear();
+        if (StSignalBus* bus = scheduler_->signal_bus()) bus->clear();
+        return false;
+    }
+    /* `boot_prepared` đang giữ topology bootstrap cũ sau swap; thu hồi ngoài
+     * đường scan trước khi công bố checkpoint đã khôi phục. */
+    boot_prepared.clear();
+    for (const PackageProgramSlice& program : programs) {
+        StProgramInstance* restored = scheduler_->find_program(program.instance_id);
+        if (!restored || restored->state != StProgramState::DISABLED || restored->enabled) {
+            if (error) *error = "checkpoint topology không ở trạng thái Disabled fail-closed";
+            return false;
+        }
+        /* Checkpoint chỉ chứng minh package/artifact đã COMMITTED; nó không
+         * chứa `desiredEnabled`. Vì vậy boot chỉ khôi phục topology rồi giữ
+         * fail-closed ở Disabled. Intent bền vững phải được BE replay bằng
+         * PROGRAM_ENABLE tường minh và đọc lại, Core tuyệt đối không tự start. */
+        restored->last_known_good.swap(restored->activated_artifact);
+    }
+    instance_ids_.clear();
+    for (const PackageProgramSlice& program : programs)
+        instance_ids_.push_back(program.instance_id);
+    instance_id_ = instance_ids_.front();
     revision_id_ = checkpoint.revision_id;
     previous_revision_id_ = checkpoint.revision_id;
     lkg_revision_id_ = checkpoint.revision_id;
@@ -444,9 +588,221 @@ bool ProgrammingRuntimeCoordinator::load_active_checkpoint(
 
 bool ProgrammingRuntimeCoordinator::ensure_instance(std::string* error)
 {
-    if (scheduler_->find_task(kTaskId) && scheduler_->find_program(instance_id_)) return true;
-    if (error) *error = "Programming topology main/program-main was not prepared at bootstrap";
-    return false;
+    /* Đường chưa có package trong tay: chỉ bảo đảm instance tồn tại và GIỮ
+     * NGUYÊN chu kỳ đang chạy. Đặt 0 ở đây sẽ âm thầm hạ mọi Program về chu kỳ
+     * của Task. */
+    std::vector<PackageProgramSlice> slices;
+    slices.reserve(instance_ids_.size());
+    for (const std::string& id : instance_ids_) {
+        PackageProgramSlice slice;
+        slice.instance_id = id;
+        const StProgramInstance* existing = scheduler_->find_program(id);
+        slice.period_ms = existing != nullptr ? existing->period_ms : 0u;
+        slices.push_back(std::move(slice));
+    }
+    return ensure_topology(slices, error);
+}
+
+std::vector<std::string> ProgrammingRuntimeCoordinator::instance_ids() const
+{
+    return instance_ids_;
+}
+
+bool ProgrammingRuntimeCoordinator::ensure_topology(
+    const std::vector<PackageProgramSlice>& slices, std::string* error)
+{
+    if (!scheduler_->find_task(kTaskId)) {
+        if (error) *error = "Programming task was not prepared at bootstrap";
+        return false;
+    }
+    if (slices.empty()) {
+        if (error) *error = "package has no program instance";
+        return false;
+    }
+    /* Thêm instance còn thiếu thay vì đòi bootstrap biết trước tên Program.
+     * Tên Program là dữ liệu của PACKAGE; bắt bootstrap khai trước nghĩa là mỗi
+     * lần đổi tên Program phải sửa cả tiến trình khởi động. */
+    uint16_t order = 0;
+    for (const PackageProgramSlice& slice : slices) {
+        if (scheduler_->find_program(slice.instance_id) == nullptr &&
+            !scheduler_->add_program(kTaskId, slice.instance_id, order, error))
+            return false;
+        /* Chu kỳ lấy từ PACKAGE, không phải từ mặc định của Task. Đặt lại mỗi
+         * lần dựng topology chứ không chỉ lúc tạo mới: một package mới có thể
+         * đổi chu kỳ của Program đã tồn tại, và bỏ qua nó nghĩa là thiết bị chạy
+         * theo chu kỳ của gói CŨ. */
+        if (StProgramInstance* program = scheduler_->find_program(slice.instance_id))
+            program->period_ms = slice.period_ms;
+        ++order;
+    }
+    return true;
+}
+
+bool ProgrammingRuntimeCoordinator::prepare_signal_replacement(
+    const std::vector<StPackageSignal>& signals, bool* prepared, std::string* detail_code,
+    std::string* error)
+{
+    if (prepared != nullptr) *prepared = false;
+    StSignalBus* bus = scheduler_->signal_bus();
+    if (bus == nullptr) {
+        /* Không có bus mà package khai signal nghĩa là consumer sẽ đọc vào hư
+         * không. Không có bus và cũng không có signal thì đúng là không có gì
+         * phải làm. */
+        if (signals.empty()) return true;
+        if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+        if (error) *error = "package declares signals but runtime has no signal bus";
+        return false;
+    }
+
+    std::vector<StSignalDefinition> definitions;
+    definitions.reserve(signals.size());
+    for (const StPackageSignal& signal : signals) {
+        StSignalDefinition definition;
+        if (!signal_definition_from_package(signal, &definition, detail_code, error)) return false;
+        definitions.push_back(std::move(definition));
+    }
+    if (!bus->prepare_replacement(definitions, error)) {
+        if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+        return false;
+    }
+    if (prepared != nullptr) *prepared = true;
+    return true;
+}
+
+ProgrammingRuntimeCoordinator::CoordinatorIdentity
+ProgrammingRuntimeCoordinator::capture_identity() const
+{
+    CoordinatorIdentity identity;
+    identity.instance_id = instance_id_;
+    identity.instance_ids = instance_ids_;
+    identity.operation_id = operation_id_;
+    identity.revision_id = revision_id_;
+    identity.artifact_hash = artifact_hash_;
+    identity.plan_hash = plan_hash_;
+    identity.detail_code = detail_code_;
+    identity.artifact_byte_size = artifact_byte_size_;
+    identity.staged_restore = staged_restore_;
+    return identity;
+}
+
+void ProgrammingRuntimeCoordinator::swap_live_identity(CoordinatorIdentity* identity) noexcept
+{
+    if (identity == nullptr) return;
+    instance_id_.swap(identity->instance_id);
+    instance_ids_.swap(identity->instance_ids);
+    operation_id_.swap(identity->operation_id);
+    revision_id_.swap(identity->revision_id);
+    artifact_hash_.swap(identity->artifact_hash);
+    plan_hash_.swap(identity->plan_hash);
+    detail_code_.swap(identity->detail_code);
+    std::swap(artifact_byte_size_, identity->artifact_byte_size);
+    std::swap(staged_restore_, identity->staged_restore);
+}
+
+bool ProgrammingRuntimeCoordinator::split_package(
+    const std::vector<uint8_t>& bytes, const std::string& fallback_instance,
+    std::vector<PackageProgramSlice>* out, std::vector<StPackageSignal>* signals_out,
+    std::string* detail_code, std::string* error) const
+{
+    out->clear();
+    if (signals_out != nullptr) signals_out->clear();
+    bool is_v2 = false;
+    const char* probe_error = nullptr;
+    if (!ProbePackageFormat(bytes.data(), bytes.size(), &is_v2, &probe_error)) {
+        if (detail_code) *detail_code = probe_error != nullptr ? probe_error : "PKG-E-001";
+        if (error) *error = "artifact format is neither v1 nor package v2";
+        return false;
+    }
+    if (!is_v2) {
+        /* Artifact v1 mô tả ĐÚNG một Program; dual-reader DDD §12.1 buộc đường
+         * này còn sống, nếu không một lần nâng cấp là mất bản LKG cuối cùng. */
+        PackageProgramSlice slice;
+        slice.instance_id = fallback_instance;
+        slice.ir_blob = bytes;
+        out->push_back(std::move(slice));
+        return true;
+    }
+    StPackageContents contents;
+    const char* load_error = nullptr;
+    if (!UnpackPackageV2(bytes.data(), bytes.size(), st_profile_generated::kProfileCode,
+                         st_profile_generated::kTargetAbi, &contents, &load_error)) {
+        if (detail_code) *detail_code = load_error != nullptr ? load_error : "PKG-E-001";
+        if (error) *error = "package v2 rejected by loader";
+        return false;
+    }
+    if (signals_out != nullptr) signals_out->assign(contents.signals.begin(), contents.signals.end());
+    for (std::size_t index = 0; index < contents.view.program_names.size(); ++index) {
+        PackageProgramSlice slice;
+        slice.instance_id = contents.view.program_names[index];
+        slice.ir_blob = contents.program_ir[index];
+        slice.period_ms = contents.view.program_periods_ms[index];
+        out->push_back(std::move(slice));
+    }
+    return true;
+}
+
+bool ProgrammingRuntimeCoordinator::signal_definition_from_package(
+    const StPackageSignal& signal, StSignalDefinition* out, std::string* detail_code,
+    std::string* error)
+{
+    StSignalDefinition definition;
+    definition.name = signal.name;
+    definition.publisher_program = signal.producer_program;
+    definition.type = static_cast<StType>(signal.data_type);
+    definition.freshness_ms = signal.freshness_ms;
+    switch (signal.stale_policy) {
+    case 0: definition.stale_policy = StStalePolicy::HOLD_LAST; break;
+    case 1: definition.stale_policy = StStalePolicy::USE_FALLBACK; break;
+    case 2: definition.stale_policy = StStalePolicy::WAIT; break;
+    default:
+        if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+        if (error) *error = "signal '" + signal.name + "' có chính sách stale không hợp lệ";
+        return false;
+    }
+    definition.has_fallback = signal.has_fallback;
+    if (signal.has_fallback)
+        std::memcpy(&definition.fallback, &signal.fallback_bits, sizeof(definition.fallback));
+    *out = std::move(definition);
+    return true;
+}
+
+/* CHỈ dùng ở đường boot/recovery (`load_active_checkpoint`), nơi chưa có Program
+ * nào chạy nên không có live state để bảo vệ. Đường Commission đi qua
+ * `prepare_signal_replacement()` — xem F-P59-ATOMIC-001. */
+bool ProgrammingRuntimeCoordinator::rebuild_signal_bus(
+    const std::vector<StPackageSignal>& signals, std::string* detail_code, std::string* error)
+{
+    StSignalBus* bus = scheduler_->signal_bus();
+    if (bus == nullptr) {
+        /* Không có bus mà package khai signal nghĩa là consumer sẽ đọc vào hư
+         * không. Không có bus và cũng không có signal thì đúng là không có gì
+         * phải làm. */
+        if (signals.empty()) return true;
+        if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+        if (error) *error = "package declares signals but runtime has no signal bus";
+        return false;
+    }
+    /* Dựng LẠI từ đầu: giữ khai báo của gói cũ nghĩa là chạy gói mới với hợp
+     * đồng gói cũ, và sai lệch đó không lộ ra cho tới khi ai đó đọc một signal
+     * đã bị gói mới bỏ đi. */
+    bus->clear();
+    for (const StPackageSignal& signal : signals) {
+        StSignalDefinition definition;
+        if (!signal_definition_from_package(signal, &definition, detail_code, error)) {
+            bus->clear();
+            return false;
+        }
+        std::string declare_error;
+        if (!bus->declare(definition, &declare_error)) {
+            if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+            if (error) *error = declare_error;
+            /* Gói hỏng để lại 0 mutation, kể cả ở bus: một bus dựng dở là một
+             * tập hợp đồng chưa từng được Check. */
+            bus->clear();
+            return false;
+        }
+    }
+    return true;
 }
 
 bool ProgrammingRuntimeCoordinator::read_staged_artifact(
@@ -509,40 +865,120 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
         if (error) *error = "another lifecycle operation is active";
         return false;
     }
+    /* T59-401: `instance_id` không còn bị khoá ở "program-main". Tên instance là
+     * dữ liệu của package; khoá cứng một tên nghĩa là chỉ nạp được đúng một
+     * Program mãi mãi. Vẫn ép định dạng để tên rác không đi vào scheduler. */
     if (!canonical_uuid(command.operation_id) || !canonical_uuid(command.revision_id) ||
-        command.instance_id != "program-main" || !lowercase_hex_64(command.plan_hash)) {
+        !valid_instance_id(command.instance_id) || !lowercase_hex_64(command.plan_hash)) {
         if (detail_code) *detail_code = "IPC-PAYLOAD";
         if (error) *error = "operation/revision/instance/plan identity invalid";
         return false;
     }
     std::vector<uint8_t> bytes;
     if (!read_staged_artifact(command, &bytes, detail_code, error)) return false;
-    instance_id_ = command.instance_id.empty() ? "program-main" : command.instance_id;
-    if (!ensure_instance(error)) {
-        if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+
+    std::vector<PackageProgramSlice> programs;
+    std::vector<StPackageSignal> signals;
+    if (!split_package(bytes, command.instance_id, &programs, &signals, detail_code, error))
         return false;
+
+    /* Mỗi giao dịch trước đã ở một state ổn định. Thu hồi shadow/ảnh
+     * rollback của nó ở luồng non-RT trước khi dựng giao dịch kế tiếp;
+     * không phần tử nào trong hai vector này còn thuộc topology live. */
+    prepared_program_set_.clear();
+    previous_program_set_.clear();
+    previous_program_set_valid_ = false;
+    prepared_identity_valid_ = false;
+    prepared_identity_ = CoordinatorIdentity{};
+    transaction_identity_ = CoordinatorIdentity{};
+    previous_identity_ = CoordinatorIdentity{};
+    signal_replacement_prepared_ = false;
+    signal_replacement_active_ = false;
+    if (StSignalBus* bus = scheduler_->signal_bus()) bus->discard_prepared_replacement();
+
+    std::vector<StProgramSetEntry> entries;
+    entries.reserve(programs.size());
+    CoordinatorIdentity candidate;
+    candidate.instance_ids.reserve(programs.size());
+    for (std::size_t index = 0; index < programs.size(); ++index) {
+        const PackageProgramSlice& program = programs[index];
+        if (!valid_instance_id(program.instance_id)) {
+            if (detail_code) *detail_code = "IPC-PAYLOAD";
+            if (error) *error = "package program name is not a valid instance id";
+            return false;
+        }
+        StProgramSetEntry entry;
+        entry.instance_id = program.instance_id;
+        entry.artifact = program.ir_blob;
+        entry.order = static_cast<uint16_t>(index);
+        entry.period_ms = program.period_ms;
+        /* Giữ enable intent của Program cùng identity qua Revision. Program
+         * mới luôn fail-closed ở Disabled: package v2 hiện chưa mang
+         * `desiredEnabled`, nên tự bật nó vừa trái T59-305/405 vừa làm một gói
+         * 32 Program mới tự đụng trần 16 Enabled trước khi operator ra lệnh
+         * PROGRAM_ENABLE. */
+        const StProgramInstance* live = scheduler_->find_program(program.instance_id);
+        entry.enabled = live != nullptr && live->enabled;
+        entries.push_back(std::move(entry));
+        candidate.instance_ids.push_back(program.instance_id);
     }
-    if (!scheduler_->stage_activation(instance_id_, bytes, error)) {
+
+    /* `prepare_program_set` dựng TOÀN BỘ topology/IR/RETAIN trong shadow.
+     * Nó không tra `find_program` để nạp đè instance live, do đó package có
+     * thể thêm, bớt và đổi thứ tự mà `stage()` vẫn zero-mutation. */
+    if (!scheduler_->prepare_program_set(kTaskId, entries, &prepared_program_set_, error)) {
         if (detail_code) *detail_code = "IPC-STAGE-REJECTED";
         return false;
     }
-    operation_id_ = command.operation_id;
-    revision_id_ = command.revision_id;
-    artifact_hash_ = hex_digest(command.sha256.data(), command.sha256.size());
-    artifact_byte_size_ = command.byte_size;
-    plan_hash_ = command.plan_hash;
-    staged_restore_ = restore;
-    detail_code_.clear();
+    bool signal_prepared = false;
+    if (!prepare_signal_replacement(signals, &signal_prepared, detail_code, error)) {
+        prepared_program_set_.clear();
+        return false;
+    }
+    for (const auto& program : prepared_program_set_) {
+        if (program == nullptr ||
+            !bind_program_signal_refs(program->pending_program.get(),
+                                      program->instance_id, signals,
+                                      scheduler_->signal_bus(), error)) {
+            prepared_program_set_.clear();
+            if (signal_prepared && scheduler_->signal_bus() != nullptr)
+                scheduler_->signal_bus()->discard_prepared_replacement();
+            if (detail_code) *detail_code = "IPC-RUNTIME-CONFIG";
+            return false;
+        }
+    }
+
+    previous_identity_ = capture_identity();
+    candidate.instance_id = candidate.instance_ids.front();
+    candidate.operation_id = command.operation_id;
+    candidate.revision_id = command.revision_id;
+    candidate.artifact_hash = hex_digest(command.sha256.data(), command.sha256.size());
+    candidate.plan_hash = command.plan_hash;
+    candidate.artifact_byte_size = command.byte_size;
+    candidate.staged_restore = restore;
+    /* Một bản giữ nguyên transaction để STATUS báo đúng candidate sau rollback;
+     * bản còn lại là carrier được swap O(1) với identity live ở boundary. Cả
+     * hai bản được dựng ở luồng IPC/non-RT. */
+    transaction_identity_ = candidate;
+    prepared_identity_ = std::move(candidate);
+    prepared_identity_valid_ = true;
+    signal_replacement_prepared_ = signal_prepared;
+
+    /* PREPARED là điểm bền vững đầu tiên. Tới khi append+fsync thành
+     * công, danh tính live, topology, signal và candidate registry vẫn nguyên. */
+    if (!append_phase(StJournalPhase::PREPARED, transaction_identity_, error)) {
+        prepared_program_set_.clear();
+        if (signal_replacement_prepared_ && scheduler_->signal_bus() != nullptr)
+            scheduler_->signal_bus()->discard_prepared_replacement();
+        signal_replacement_prepared_ = false;
+        prepared_identity_valid_ = false;
+        if (detail_code) *detail_code = "IPC-JOURNAL-FSYNC";
+        return false;
+    }
     boundary_applied_.store(false, std::memory_order_relaxed);
     first_output_committed_.store(false, std::memory_order_relaxed);
     boundary_journaled_.store(false, std::memory_order_relaxed);
     first_cycle_journaled_.store(false, std::memory_order_relaxed);
-    if (!append_phase(StJournalPhase::PREPARED, error)) {
-        std::string ignored;
-        (void)scheduler_->abort_staged_activation(instance_id_, &ignored);
-        if (detail_code) *detail_code = "IPC-JOURNAL-FSYNC";
-        return false;
-    }
     state_.store(LifecycleState::STAGED, std::memory_order_release);
     return true;
 }
@@ -571,8 +1007,10 @@ bool ProgrammingRuntimeCoordinator::activate(const ActivateCommand& command,
         return false;
     }
     if (state_.load(std::memory_order_acquire) != LifecycleState::STAGED ||
-        command.operation_id != operation_id_ || command.staged_token != operation_id_ ||
-        command.plan_hash != plan_hash_) {
+        !prepared_identity_valid_ ||
+        command.operation_id != transaction_identity_.operation_id ||
+        command.staged_token != transaction_identity_.operation_id ||
+        command.plan_hash != transaction_identity_.plan_hash) {
         if (detail_code) *detail_code = "IPC-STAGED-TOKEN";
         if (error) *error = "staged operation/token/plan does not match";
         return false;
@@ -582,17 +1020,103 @@ bool ProgrammingRuntimeCoordinator::activate(const ActivateCommand& command,
         if (error) *error = "expected active revision mismatch";
         return false;
     }
-    if (!append_phase(StJournalPhase::COMMIT_INTENT, error)) {
+    if (!append_phase(StJournalPhase::COMMIT_INTENT, transaction_identity_, error)) {
         if (detail_code) *detail_code = "IPC-JOURNAL-FSYNC";
         return false;
     }
-    if (!scheduler_->commit_staged_activation(instance_id_, staged_restore_, error)) {
+    /* Arm là thao tác cấp GÓI và chỉ xảy ra SAU COMMIT_INTENT bền
+     * vững. API preflight toàn bộ shadow trước khi đặt bất kỳ cờ nào,
+     * nên không có prefix package đã arm. */
+    if (!scheduler_->arm_prepared_program_set(&prepared_program_set_,
+                                               transaction_identity_.staged_restore, error)) {
+        if (signal_replacement_prepared_ && scheduler_->signal_bus() != nullptr)
+            scheduler_->signal_bus()->discard_prepared_replacement();
+        signal_replacement_prepared_ = false;
+        prepared_program_set_.clear();
+        state_.store(LifecycleState::FAILED, std::memory_order_release);
         if (detail_code) *detail_code = "IPC-ACTIVATE-ARM";
         return false;
     }
     cutover_->request(command.cutover);
     state_.store(LifecycleState::COMMIT_INTENT, std::memory_order_release);
     return true;
+}
+
+ProgramEnableOutcome ProgrammingRuntimeCoordinator::set_program_enabled(
+    const ProgramEnableCommand& command, std::string* detail_code, std::string* error)
+{
+    if (!canonical_uuid(command.operation_id) || !valid_instance_id(command.instance_id)) {
+        if (detail_code) *detail_code = "IPC-PAYLOAD";
+        if (error) *error = "operation/instance identity invalid";
+        return ProgramEnableOutcome::REJECTED;
+    }
+    /* F-P59-ENABLE-BOUNDARY-001 — KHÔNG gọi `scheduler_->start/stop/enable/
+     * disable` ở đây. Hàm này chạy trên IPC worker thread trong khi scan loop
+     * RT đang tick cùng scheduler; bản trước ghi thẳng `state`/`enabled` từ
+     * luồng này và `-fsanitize=thread` đo ra ba data race thật
+     * (`stop`/`disable` ↔ `run_task`, vòng đếm trần 16 của `start` ↔
+     * `run_program`). Chỉ ARM ý định; RT áp dụng tại safe boundary. */
+    StProgramInstance* program = nullptr;
+    uint64_t ack_baseline = 0;
+    switch (scheduler_->request_program_enabled(command.instance_id, command.enabled, &program,
+                                                &ack_baseline, error)) {
+    case StScheduler::StEnableRequestOutcome::UNKNOWN_INSTANCE:
+        if (detail_code) *detail_code = "IPC-UNKNOWN-INSTANCE";
+        return ProgramEnableOutcome::REJECTED;
+    case StScheduler::StEnableRequestOutcome::ALREADY_PENDING:
+        /* Lượt trước chưa qua boundary. Idempotency của BE cho phép gọi lại;
+         * trả BUSY để không ghi đè một lệnh đang chờ. */
+        if (detail_code) *detail_code = "IPC-OPERATION-BUSY";
+        return ProgramEnableOutcome::TIMED_OUT;
+    case StScheduler::StEnableRequestOutcome::ARMED:
+        break;
+    }
+
+    /* Bounded poll trên IPC WORKER thread (non-RT), không chặn RT. Cùng đánh
+     * đổi và cùng mốc thời gian với `reset_retain()`: endpoint IPC là một
+     * `poll()` loop ĐƠN LUỒNG nên chờ ở đây chiếm dụng cả endpoint, và mốc
+     * 1500 ms là "một base step 1 s của Rev A + biên", không phải số tuỳ ý.
+     * Enable/Disable là hành động vận hành hiếm, chấp nhận được; nếu về sau
+     * base step dài hơn nhiều hoặc endpoint thành đa luồng thì nâng lên async
+     * reconcile như Stage/Activate thay vì kéo dài mốc này. */
+    constexpr int kPollIntervalMs = 20;
+    constexpr int kMaxWaitMs = 1500;
+    int waited_ms = 0;
+    while (program->enable_ack_generation.load(std::memory_order_acquire) == ack_baseline) {
+        if (waited_ms >= kMaxWaitMs) {
+            /* KHÔNG rút lại cờ pending: RT có thể đang ở giữa lượt tiêu thụ.
+             * Yêu cầu sẽ áp dụng ở boundary kế tiếp và BE đối chiếu lại bằng
+             * lần đọc trạng thái sau — đoán rằng lệnh đã hỏng mới là thứ làm
+             * người vận hành tin sai. */
+            if (detail_code) *detail_code = "IPC-OPERATION-BUSY";
+            if (error) *error = "timed out waiting for safe boundary to apply enable intent";
+            return ProgramEnableOutcome::TIMED_OUT;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(kPollIntervalMs));
+        waited_ms += kPollIntervalMs;
+    }
+
+    const auto result =
+        static_cast<StEnableAckResult>(program->enable_ack_result.load(std::memory_order_relaxed));
+    const auto state_at_request =
+        static_cast<StProgramState>(program->enable_ack_state.load(std::memory_order_relaxed));
+    switch (result) {
+    case StEnableAckResult::APPLIED:
+        return ProgramEnableOutcome::APPLIED;
+    case StEnableAckResult::REJECTED_LIMIT:
+        if (detail_code) *detail_code = "IPC-RUNTIME-STATE";
+        if (error)
+            *error = "too many running programs (limit " +
+                     std::to_string(scheduler_->max_enabled_programs()) + ")";
+        return ProgramEnableOutcome::REJECTED;
+    case StEnableAckResult::REJECTED_STATE:
+    case StEnableAckResult::NONE:
+        break;
+    }
+    if (detail_code) *detail_code = "IPC-RUNTIME-STATE";
+    if (error)
+        *error = std::string("cannot enable from state ") + st_program_state_name(state_at_request);
+    return ProgramEnableOutcome::REJECTED;
 }
 
 RetainResetOutcome ProgrammingRuntimeCoordinator::reset_retain(
@@ -698,15 +1222,40 @@ void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
      * trong lúc đang commission. Vô hại khi không có yêu cầu đang chờ (no-op
      * per-instance, xem `StScheduler::apply_pending_retain_resets`). */
     scheduler_->apply_pending_retain_resets_at_boundary();
+    /* F-P59-ENABLE-BOUNDARY-001: ý định Enable/Disable của người vận hành áp
+     * dụng ở CÙNG boundary, trước khi tick kế tiếp dispatch — một Program vừa
+     * bị Disable không được chạy thêm chu kỳ nào với quyền ghi đầu ra. Cũng
+     * KHÔNG gated theo LifecycleState: Enable/Disable là lệnh vận hành ở trạng
+     * thái ổn định, không phải một pha của Commission. */
+    scheduler_->apply_pending_enable_requests_at_boundary();
 
     const LifecycleState current = state_.load(std::memory_order_acquire);
     if (current == LifecycleState::ROLLING_BACK) {
-        scheduler_->apply_pending_activations_at_boundary();
+        const bool topology_restored = previous_program_set_valid_ &&
+            scheduler_->restore_program_set_at_boundary(kTaskId, &previous_program_set_);
+        bool signal_restored = !signal_replacement_active_;
+        if (signal_replacement_active_) {
+            if (StSignalBus* bus = scheduler_->signal_bus())
+                signal_restored = bus->rollback_replacement_at_boundary();
+            else
+                signal_restored = false;
+        }
+        signal_replacement_active_ = !signal_restored;
+        /* Chỉ khi CẢ topology và signal đã trở về mới được công bố
+         * graph owner. Hai swap nằm trong cùng safe boundary; không Program
+         * hay consumer nào chạy xen giữa. */
+        cutover_->request(CutoverMode::GRAPH_ONLY);
         (void)cutover_->apply_pending_at_boundary();
-        StProgramInstance* instance = scheduler_->find_program(instance_id_);
-        std::string ignored;
-        if (instance && instance->state == StProgramState::ROLLED_BACK &&
-            scheduler_->start(instance_id_, &ignored)) {
+        if (topology_restored && signal_restored) {
+            if (candidates_ != nullptr) {
+                for (const std::string& id : instance_ids_)
+                    candidates_->withdraw_instance(id,
+                                                   CandidateWithdrawReason::PACKAGE_REPLACED,
+                                                   scheduler_->base_step_count());
+                candidates_->clear();
+            }
+            swap_live_identity(&previous_identity_);
+            previous_program_set_valid_ = false;
             state_.store(LifecycleState::ROLLED_BACK, std::memory_order_release);
         } else {
             state_.store(LifecycleState::FAILED, std::memory_order_release);
@@ -719,61 +1268,189 @@ void ProgrammingRuntimeCoordinator::on_safe_boundary() noexcept
         return;
     }
     if (current != LifecycleState::COMMIT_INTENT) return;
-    scheduler_->apply_pending_activations_at_boundary();
+    if (!prepared_identity_valid_ ||
+        !scheduler_->swap_prepared_program_set_at_boundary(kTaskId,
+                                                            &prepared_program_set_)) {
+        if (signal_replacement_prepared_ && scheduler_->signal_bus() != nullptr)
+            scheduler_->signal_bus()->discard_prepared_replacement();
+        signal_replacement_prepared_ = false;
+        cutover_->request(CutoverMode::GRAPH_ONLY);
+        (void)cutover_->apply_pending_at_boundary();
+        state_.store(LifecycleState::FAILED, std::memory_order_release);
+        return;
+    }
+    /* Sau swap, `prepared_program_set_` chứa topology cũ. Chuyển ownership
+     * sang slot rollback bằng vector swap O(1), không huỷ object trong RT. */
+    previous_program_set_.swap(prepared_program_set_);
+    previous_program_set_valid_ = true;
+
+    bool signal_swapped = !signal_replacement_prepared_;
+    if (signal_replacement_prepared_) {
+        if (StSignalBus* bus = scheduler_->signal_bus())
+            signal_swapped = bus->activate_prepared_replacement_at_boundary();
+        signal_replacement_prepared_ = false;
+    }
+    if (!signal_swapped) {
+        /* Trường hợp phòng thủ: topology đã swap nhưng signal không thể
+         * swap. Trả topology ngay trong CÙNG boundary trước khi consumer chạy. */
+        (void)scheduler_->restore_program_set_at_boundary(kTaskId, &previous_program_set_);
+        previous_program_set_valid_ = false;
+        cutover_->request(CutoverMode::GRAPH_ONLY);
+        (void)cutover_->apply_pending_at_boundary();
+        state_.store(LifecycleState::FAILED, std::memory_order_release);
+        return;
+    }
+    signal_replacement_active_ = scheduler_->signal_bus() != nullptr;
+
+    /* Danh tính và sổ candidate chỉ đổi sau khi CẢ topology lẫn
+     * signal đã handoff. Stage/PREPARED/arm không động tới chúng. */
+    swap_live_identity(&prepared_identity_);
+    if (candidates_ != nullptr) {
+        for (const std::string& id : previous_identity_.instance_ids)
+            candidates_->withdraw_instance(id, CandidateWithdrawReason::PACKAGE_REPLACED,
+                                           scheduler_->base_step_count());
+        candidates_->clear();
+    }
     (void)cutover_->apply_pending_at_boundary();
-    StProgramInstance* instance = scheduler_->find_program(instance_id_);
-    if (!instance || (instance->state != StProgramState::ACTIVE &&
-                      instance->state != StProgramState::ROLLED_BACK)) {
-        cutover_->request(CutoverMode::GRAPH_ONLY);
-        (void)cutover_->apply_pending_at_boundary();
-        state_.store(LifecycleState::FAILED, std::memory_order_release);
-        return;
-    }
-    std::string ignored;
-    if (!scheduler_->start(instance_id_, &ignored)) {
-        cutover_->request(CutoverMode::GRAPH_ONLY);
-        (void)cutover_->apply_pending_at_boundary();
-        state_.store(LifecycleState::FAILED, std::memory_order_release);
-        return;
-    }
     boundary_applied_.store(true, std::memory_order_release);
     state_.store(LifecycleState::ACTIVE_CANDIDATE, std::memory_order_release);
+}
+
+ProgrammingRuntimeCoordinator::PackageCycleVerdict
+ProgrammingRuntimeCoordinator::package_first_cycle_verdict(bool committed) const
+{
+    bool all_committed = true;
+    bool saw_instance = false;
+    for (const std::string& id : instance_ids_) {
+        const StProgramInstance* instance = scheduler_->find_program(id);
+        if (instance == nullptr) return PackageCycleVerdict::FAILED;
+        saw_instance = true;
+        /* Program không chạy KHÔNG tham gia barrier: nó không sinh output, nên
+         * đòi nó "chạy sạch một chu kỳ" là đòi một điều không thể xảy ra và sẽ
+         * treo barrier vĩnh viễn. Nhưng FAULTED thì có tham gia — đó là hỏng,
+         * không phải vắng mặt. */
+        if (instance->state == StProgramState::FAULTED) return PackageCycleVerdict::FAILED;
+        if (instance->state == StProgramState::DISABLED) continue;
+        if (instance->state == StProgramState::WAITING) {
+            all_committed = false;
+            continue;
+        }
+        if (instance->state != StProgramState::RUNNING) return PackageCycleVerdict::FAILED;
+        if (!instance->committed_since_activation) all_committed = false;
+    }
+    if (!saw_instance) return PackageCycleVerdict::FAILED;
+    /* `committed == false` nghĩa là batch output của base step này bị từ chối.
+     * Đó là hỏng ngay, không phải "chưa tới lượt". */
+    if (!committed) return PackageCycleVerdict::FAILED;
+    return all_committed ? PackageCycleVerdict::PASSED : PackageCycleVerdict::PENDING;
+}
+
+bool ProgrammingRuntimeCoordinator::rollback_package(std::string* error)
+{
+    /* Topology cũ được giữ nguyên bằng ownership, kể cả tập instance rỗng
+     * hợp lệ ở lần Commission đầu. Không nạp LKG theo từng Program:
+     * package add/shrink/reorder không có ánh xạ 1-1 để rollback kiểu đó. */
+    if (!previous_program_set_valid_) {
+        if (error) *error = "không có topology package trước để rollback";
+        return false;
+    }
+    return true;
 }
 
 void ProgrammingRuntimeCoordinator::on_output_commit(bool committed) noexcept
 {
     if (state_.load(std::memory_order_acquire) != LifecycleState::ACTIVE_CANDIDATE) return;
-    StProgramInstance* instance = scheduler_->find_program(instance_id_);
-    if (instance && instance->last_successful_base_step != scheduler_->base_step_count() &&
-        instance->state == StProgramState::RUNNING)
-        return; /* Task chu kỳ dài chưa đến hạn: chưa phải first-cycle failure. */
-    if (!committed || !instance || instance->state != StProgramState::RUNNING ||
-        instance->output_commit_generation != scheduler_->base_step_count()) {
+    /* T59-501 — barrier chu kỳ đầu là barrier của cả GÓI.
+     *
+     * Bản trước chỉ xét `instance_id_`. Với gói nhiều Program, một Program hỏng
+     * chu kỳ đầu trong khi Program chính chạy sạch sẽ được tuyên bố
+     * FIRST_CYCLE_OK — và gói đi tiếp với một Program đã chết. Ngược lại,
+     * rollback cũng chỉ quay Program chính về, để lại gói NỬA CŨ NỬA MỚI. */
+    switch (package_first_cycle_verdict(committed)) {
+    case PackageCycleVerdict::PENDING:
+        /* Gói trộn chu kỳ: Program 30 s chưa tới lượt. Chưa kết luận được —
+         * tuyên bố thành công lúc này là tuyên bố thay cho một Program chưa
+         * chạy lần nào. */
+        return;
+    case PackageCycleVerdict::FAILED: {
         std::string ignored;
-        if (instance && !instance->last_known_good.empty()) {
-            if (scheduler_->rollback(instance_id_, &ignored))
-                state_.store(LifecycleState::ROLLING_BACK, std::memory_order_release);
-            else
-                state_.store(LifecycleState::FAILED, std::memory_order_release);
-        } else {
+        if (rollback_package(&ignored))
+            state_.store(LifecycleState::ROLLING_BACK, std::memory_order_release);
+        else
             state_.store(LifecycleState::FAILED, std::memory_order_release);
-        }
         cutover_->request(CutoverMode::GRAPH_ONLY);
         return;
+    }
+    case PackageCycleVerdict::PASSED:
+        break;
     }
     first_output_committed_.store(true, std::memory_order_release);
     state_.store(LifecycleState::FIRST_CYCLE_OK, std::memory_order_release);
 }
 
+RecoveryResetOutcome ProgrammingRuntimeCoordinator::recovery_reset(
+    const RecoveryResetCommand& command, std::string* detail_code, std::string* error)
+{
+    if (command.actor_id.empty() || command.actor_id.size() > kStJournalFieldMax) {
+        if (detail_code) *detail_code = "RECOVERY_RESET_ACTOR_REQUIRED";
+        if (error) *error = "recovery reset cần actorId";
+        return RecoveryResetOutcome::REJECTED;
+    }
+    if (state_.load(std::memory_order_acquire) != LifecycleState::RECOVERY_REQUIRED) {
+        if (detail_code) *detail_code = "RECOVERY_RESET_NOT_IN_RECOVERY";
+        if (error) *error = "chỉ reset được khi đang RECOVERY_REQUIRED";
+        return RecoveryResetOutcome::NOT_IN_RECOVERY;
+    }
+
+    /* Ghi TRƯỚC khi đổi state: nếu mất điện giữa chừng thì lần boot sau đọc được
+     * quyết định đã ghi, chứ không thấy một Core "đã IDLE" mà journal vẫn nói
+     * đang dở giao dịch. */
+    StJournalRecord record;
+    record.phase = StJournalPhase::RECOVERY_RESET;
+    record.timestamp_ns = default_monotonic_wall_clock_ns();
+    record.operation_id = command.operation_id;
+    record.old_active_hash = command.actor_id;
+    record.candidate_hash.clear();
+    record.plan_hash.clear();
+    if (!journal_.append(record)) {
+        if (detail_code) *detail_code = "RECOVERY_RESET_JOURNAL_WRITE_FAILED";
+        if (error) *error = "cannot append/fsync Programming journal";
+        return RecoveryResetOutcome::REJECTED;
+    }
+
+    /* Không nạp gói nào, không đụng LKG, không đụng RETAIN. Chỉ mở khoá cho một
+     * Commission tường minh sau đó. */
+    operation_id_.clear();
+    artifact_hash_.clear();
+    plan_hash_.clear();
+    previous_artifact_hash_.clear();
+    previous_revision_id_.clear();
+    boundary_applied_.store(false, std::memory_order_release);
+    boundary_journaled_.store(false, std::memory_order_release);
+    detail_code_ = "JOURNAL_RECOVERY_RESET";
+    state_.store(LifecycleState::IDLE, std::memory_order_release);
+    cutover_->request(CutoverMode::GRAPH_ONLY);
+    (void)cutover_->apply_pending_at_boundary();
+    if (detail_code) *detail_code = "RECOVERY_RESET_APPLIED";
+    return RecoveryResetOutcome::APPLIED;
+}
+
 bool ProgrammingRuntimeCoordinator::append_phase(StJournalPhase phase, std::string* error)
+{
+    return append_phase(phase, capture_identity(), error);
+}
+
+bool ProgrammingRuntimeCoordinator::append_phase(StJournalPhase phase,
+                                                  const CoordinatorIdentity& identity,
+                                                  std::string* error)
 {
     StJournalRecord record;
     record.phase = phase;
     record.timestamp_ns = default_monotonic_wall_clock_ns();
-    record.operation_id = operation_id_;
+    record.operation_id = identity.operation_id;
     record.old_active_hash = previous_artifact_hash_;
-    record.candidate_hash = artifact_hash_;
-    record.plan_hash = plan_hash_;
+    record.candidate_hash = identity.artifact_hash;
+    record.plan_hash = identity.plan_hash;
     if (!journal_.append(record)) {
         if (error) *error = "cannot append/fsync Programming journal";
         return false;
@@ -803,11 +1480,26 @@ bool ProgrammingRuntimeCoordinator::flush_progress(std::string* error)
         }
         if (!write_active_checkpoint(error)) return false;
         if (!append_phase(StJournalPhase::COMMITTED, error)) return false;
+        /* Hợp đồng signal của gói mới đã qua chu kỳ đầu: thả bank cũ. Không thả
+         * thì lần Commission thứ ba sẽ không còn bank rảnh và bị từ chối vì một
+         * lý do không liên quan gì tới gói của nó. */
+        if (signal_replacement_active_) {
+            if (StSignalBus* bus = scheduler_->signal_bus()) bus->commit_replacement();
+            signal_replacement_active_ = false;
+        }
         previous_revision_id_ = revision_id_;
         /* Scheduler vừa promote chính artifact này thành LKG sau output commit;
          * read-back revision phải phản ánh đúng cùng authority đó. */
         lkg_revision_id_ = revision_id_;
         previous_artifact_hash_ = artifact_hash_;
+        /* COMMITTED đã bền: topology cũ không còn là đích rollback.
+         * Thu hồi ở luồng non-RT, không huỷ runtime image trong boundary. */
+        previous_program_set_.clear();
+        previous_program_set_valid_ = false;
+        prepared_identity_valid_ = false;
+        prepared_identity_ = CoordinatorIdentity{};
+        transaction_identity_ = CoordinatorIdentity{};
+        previous_identity_ = CoordinatorIdentity{};
         state_.store(LifecycleState::COMMITTED, std::memory_order_release);
     }
     return true;
@@ -817,12 +1509,20 @@ RuntimeOperationSnapshot ProgrammingRuntimeCoordinator::snapshot() const
 {
     RuntimeOperationSnapshot output;
     output.state = state_.load(std::memory_order_acquire);
-    output.operation_id = operation_id_;
-    output.requested_revision_id = revision_id_;
+    const bool report_transaction = prepared_identity_valid_ &&
+        (output.state == LifecycleState::STAGED ||
+         output.state == LifecycleState::COMMIT_INTENT ||
+         output.state == LifecycleState::FAILED ||
+         output.state == LifecycleState::ROLLING_BACK ||
+         output.state == LifecycleState::ROLLED_BACK);
+    const CoordinatorIdentity identity = report_transaction ? transaction_identity_
+                                                            : capture_identity();
+    output.operation_id = identity.operation_id;
+    output.requested_revision_id = identity.revision_id;
     output.active_revision_id = previous_revision_id_;
     output.lkg_revision_id = lkg_revision_id_;
-    output.artifact_sha256 = artifact_hash_;
-    output.detail_code = detail_code_;
+    output.artifact_sha256 = identity.artifact_hash;
+    output.detail_code = identity.detail_code;
     /* detail_code_ chỉ được IPC worker gán ở các nhánh lỗi TRƯỚC safe
      * boundary (stage/activate payload/token) — mọi lỗi PHÁT SINH TRONG scan
      * RT (input quality, fault thực thi ST, output preflight/commit) chỉ

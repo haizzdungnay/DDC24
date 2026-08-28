@@ -11,8 +11,26 @@ import (
 )
 
 func TestErrorCatalogGeneratedSurface(t *testing.T) {
-	if len(errorMetadataByCode) != 20 {
-		t.Fatalf("public error count = %d; want 20", len(errorMetadataByCode))
+	// T59-004: 20 -> 26 public code (POU/library/signal/output owner/enable/
+	// PID review). T59-814: +8 mã `PRG-SIM-*` của Simulation R3. Con số là ảnh
+	// chụp có chủ ý để catalog không lớn lên lặng lẽ.
+	if len(errorMetadataByCode) != 38 {
+		t.Fatalf("public error count = %d; want 38", len(errorMetadataByCode))
+	}
+	// Mã chi tiết của worker và supervisor phải về ĐÚNG public code của mình,
+	// không gộp vào một mã chung: người vận hành phân biệt "input bị từ chối"
+	// với "worker chết" bằng chính hai mã này.
+	if got := MapComponentError("sim-worker", "SIM-E-005"); got != ErrSimInputNotAllowed {
+		t.Fatalf("SIM-E-005 = %s; want %s", got, ErrSimInputNotAllowed)
+	}
+	if got := MapComponentError("sim-worker", "SIM-E-002"); got != ErrSimWorkerFailed {
+		t.Fatalf("SIM-E-002 = %s; want %s", got, ErrSimWorkerFailed)
+	}
+	if got := MapComponentError("sim-supervisor", "SIM-SUP-EXPIRED"); got != ErrSimExpired {
+		t.Fatalf("SIM-SUP-EXPIRED = %s; want %s", got, ErrSimExpired)
+	}
+	if got := MapComponentError("sim-supervisor", "SIM-SUP-CAPABILITY"); got != ErrSimUnsupported {
+		t.Fatalf("SIM-SUP-CAPABILITY = %s; want %s", got, ErrSimUnsupported)
 	}
 	if got := MapComponentError("artifact-loader", "IR-E-004"); got != ErrTarget {
 		t.Fatalf("IR-E-004 = %s; want %s", got, ErrTarget)
@@ -28,6 +46,42 @@ func TestErrorCatalogGeneratedSurface(t *testing.T) {
 	}
 	if !IsRetryable(ErrUnavailable) || IsRetryable(ErrCommission) {
 		t.Fatal("retryable metadata mismatch")
+	}
+}
+
+// Sáu miền mới phải ánh xạ về đúng mã riêng, không gộp vào một mã chung.
+func TestNewDomainDetailCodesMapToOwnPublicCode(t *testing.T) {
+	cases := map[string]struct {
+		component string
+		detail    string
+		want      ErrorCode
+	}{
+		"pou-kind":        {"compiler", "ST-POU-002", ErrPouKind},
+		"pou-recursion":   {"compiler", "ST-POU-003", ErrPouRecursion},
+		"pou-unscheduled": {"compiler", "ST-POU-005", ErrCheck},
+		// Vòng phụ thuộc thư viện CHÍNH LÀ đệ quy, không phải chuyện version.
+		"library-cycle": {"compiler", "ST-LIB-003", ErrPouRecursion},
+		"library-drift": {"compiler", "ST-LIB-002", ErrLibVersion},
+		"program-limit": {"compiler", "ST-LIM-009", ErrProgramLimit},
+		"signal-dup":    {"compiler", "ST-SIG-001", ErrSignalPublisher},
+		"signal-fresh":  {"compiler", "ST-SIG-003", ErrSignalFreshness},
+		// Type/unit dùng lại mã sẵn có thay vì mở nhánh công khai thứ hai.
+		"signal-type":     {"compiler", "ST-SIG-002", ErrMapType},
+		"output-owner":    {"compiler", "ST-OWN-001", ErrOutputOwner},
+		"pid-review":      {"compiler", "ST-PID-001", ErrPidReview},
+		"enable-not-comm": {"st-control-api", "API-E-008", ErrEnableNotCommissioned},
+		"program-state":   {"st-control-api", "API-E-009", ErrProgramState},
+	}
+	for name, item := range cases {
+		if got := MapComponentError(item.component, item.detail); got != item.want {
+			t.Fatalf("%s: %s/%s = %s; want %s", name, item.component, item.detail, got, item.want)
+		}
+	}
+	// Mã cùng họ nhưng chưa khai vẫn fail-safe, không đoán sang miền khác.
+	for _, detail := range []string{"ST-POU-099", "ST-LIB-099", "ST-SIG-099"} {
+		if got := MapComponentError("compiler", detail); got != ErrUnavailable {
+			t.Fatalf("%s = %s; want fail-safe %s", detail, got, ErrUnavailable)
+		}
 	}
 }
 

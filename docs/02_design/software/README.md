@@ -7,6 +7,8 @@ Tài liệu chi tiết được phục hồi nguyên văn. [Software Baseline](.
 
 ## Runtime và service design
 
+- [Programming Unified Product Detailed Design](PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) — baseline v1.1 **Active 2026-08-20**; v1.2-candidate overlay PGM-02 không thay authority trước exact pin
+- [PGM-02 Workspace ST/FBD Detailed Design](PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) — **M2 Target Candidate 2026-08-24**; route/identity/typed EDIT/coherent LIVE/Simulation worker cách ly/NFR/test/rollback, code NO-GO
 - [Modbus RTU Point detailed design](DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) — **In Review 2026-08-03**; proposal production trước Programming, supersede các mô tả RTU Point recovered nếu được phê duyệt
 - [Modbus RTU data model](MODBUS_RTU_DATA_MODEL.md) — **In Review 2026-08-04**; mô hình canonical Bus/Device/Point, là nguồn chân lý duy nhất cho FE/BE/FW-SOM
 - [Modbus RTU FE design](MODBUS_RTU_FE_DESIGN.md) — **In Review 2026-08-04**

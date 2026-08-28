@@ -38,8 +38,9 @@ Test ID: TC-0-01
 Mục tiêu: 4 phần build sạch (x86_64 + aarch64 cross)
 Thiết bị: máy CI
 Điều kiện ban đầu: repo clone mới
-Các bước: build fw/, services/iobus, services/core, web/ — cả native và aarch64
-Kết quả mong đợi: 4 artifact, 0 error, 240/240 unit test pass
+Các bước: `cmake --fresh -S . -B build/fw` (gốc repo là entrypoint duy nhất) cho `apps/iobus` ·
+`apps/core` · `apps/netcfg`, cộng `firmware/` và `apps/web-api`+`apps/web-ui` — cả native và aarch64
+Kết quả mong đợi: 0 error; số test đọc từ lần chạy thật (mốc host 2026-08-19: `ctest` 1031/1031 PASS)
 Pass/Fail: tất cả build + test xanh
 Log: CI log
 ```
@@ -449,7 +450,7 @@ Kết quả: B-ASC smoke pass; log lưu evidence.
 
 ## Test group 10 — Modbus RTU Master
 
-> Chi tiết task: [26_MODBUS_IMPLEMENTATION_PLAN](26_MODBUS_IMPLEMENTATION_PLAN.md).
+> Chi tiết task: [26_MODBUS_IMPLEMENTATION_PLAN](archive/26_MODBUS_IMPLEMENTATION_PLAN.md).
 
 ```
 TC-10-01  Profile parser

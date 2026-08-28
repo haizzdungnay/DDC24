@@ -12,10 +12,10 @@
 
 ```
 [ ] Build clean từ repo CLONE MỚI (không dùng workspace cũ) — cả 4 phần:
-      fw/ · services/iobus · services/core · web/
+      firmware/ · apps/iobus · apps/core · apps/web-api + apps/web-ui
 [ ] Firmware version rõ (DIAG_RESP FW_VERSION khớp tag git).
 [ ] SOM service version rõ (mkddc-core/iobus/netcfg/web --version khớp tag).
-[ ] IOP version đúng (IOP_VER_MAJOR.MINOR = 1.1) khớp 2 phía.
+[ ] IOP version đúng (IOP_VER_MAJOR.MINOR = 2.0 theo `contracts/iop/iop_protocol.h`) khớp 2 phía.
 [ ] shared/iop_protocol.h + mkddc_shm.h không bị fork (1 nguồn).
 ```
 

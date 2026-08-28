@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "st/st_compile.hpp"
+#include "st/st_review_gate.hpp"
 #include "st/st_semantic.hpp"
 
 namespace core {
@@ -316,11 +317,15 @@ private:
             for (const auto& node : network.nodes) {
                 if (node.kind != FbdNodeKind::FUNCTION_BLOCK) continue;
                 const StFbType type = st_fb_type_from_name(node.type_ref);
-                if (type == StFbType::NONE) {
+                if (type == StFbType::NONE && !node.user_type_ref) {
                     return fail("FBD-SEM-LIBRARY-UNSUPPORTED-001",
                                 node_path(network, node) + ".typeRef");
                 }
-                if (!validate_fb_ports(network, node, type)) return false;
+                /* Với FB người dùng, chữ ký nằm ở POU chứ không ở bảng dựng sẵn,
+                 * nên `validate_fb_ports` không có gì để đối chiếu. Việc kiểm
+                 * cổng thuộc `st_pou_registry` — lớp duy nhất giữ interface. Bỏ
+                 * qua ở đây là chuyển đúng trách nhiệm, không phải bỏ kiểm. */
+                if (!node.user_type_ref && !validate_fb_ports(network, node, type)) return false;
                 if (node.parameters.size() > 2) {
                     return fail("FBD-SEM-PARAM-001", node_path(network, node) + ".parameters");
                 }
@@ -370,8 +375,19 @@ private:
                     location_port ? anchor_for_port(*location_port) : nullptr;
                 if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
                 fb_instance_.emplace(node.id, instance);
-                program_->fbs.push_back(
-                    {instance, type, retained, anchor->line, anchor->column, 1});
+                /* Khởi tạo theo tên trường: `StFbDecl` có thêm hai trường cho
+                 * instance FB người dùng (T59-104), và initializer theo vị trí sẽ
+                 * âm thầm gán sai khi struct đổi. */
+                StFbDecl decl;
+                decl.name = instance;
+                decl.fb_type = type;
+                decl.is_user_type = node.user_type_ref;
+                if (node.user_type_ref) decl.user_type_name = node.type_ref;
+                decl.retained = retained;
+                decl.line = anchor->line;
+                decl.column = anchor->column;
+                decl.length = 1;
+                program_->fbs.push_back(std::move(decl));
             }
         }
         return true;
@@ -442,6 +458,18 @@ private:
             return expression;
         }
 
+        if (node.user_type_ref) {
+            /* T59-105: node FBD gọi FUNCTION người dùng lower thành ĐÚNG cùng một
+             * nút IR mà ST sinh ra (`USER_CALL`). Đây chính là nghĩa cụ thể của
+             * "ST và FBD dùng chung typed IR": không có hai đường lowering, nên
+             * không có hai bộ ngữ nghĩa để trôi khỏi nhau. Số đối số và kiểu do
+             * `st_pou_registry` kiểm, vì chỉ nó biết chữ ký POU. */
+            auto expression = std::make_unique<StExpr>();
+            expression->kind = StExpr::Kind::USER_CALL;
+            expression->user_call_name = node.type_ref;
+            expression->args = std::move(arguments);
+            return expression;
+        }
         StFunc function;
         if (!st_func_from_name(node.type_ref, &function)) {
             fail("FBD-SEM-LIBRARY-UNSUPPORTED-001", node_path(network, node) + ".typeRef");
@@ -483,6 +511,25 @@ private:
         return expression;
     }
 
+    std::unique_ptr<StExpr> signal_read_expression(const FbdNetwork& network,
+                                                   const FbdNode& node,
+                                                   const FbdPort& output)
+    {
+        const std::string* signal = string_parameter(node, "signal");
+        const auto inputs = ports_with_direction(node, FbdPortDirection::INPUT);
+        const auto outputs = ports_with_direction(node, FbdPortDirection::OUTPUT);
+        if (!signal || node.parameters.size() != 1 || !inputs.empty() ||
+            outputs.size() != 1 || outputs[0]->id != output.id ||
+            output.name != "OUT" || output.order != 0) {
+            fail("FBD-SEM-PORT-SPEC-001", node_path(network, node));
+            return nullptr;
+        }
+        auto expression = std::make_unique<StExpr>();
+        expression->kind = StExpr::Kind::SIGNAL_READ;
+        expression->signal_name = *signal;
+        return expression;
+    }
+
     std::unique_ptr<StExpr> expression_for_output(const FbdNetwork& network,
                                                   const FbdNode& node,
                                                   const FbdPort& output)
@@ -521,6 +568,12 @@ private:
             break;
         case FbdNodeKind::CONVERSION:
             result = conversion_expression(network, node, output);
+            break;
+        case FbdNodeKind::SIGNAL_READ:
+            result = signal_read_expression(network, node, output);
+            break;
+        case FbdNodeKind::SIGNAL_PUBLISH:
+            fail("FBD-SEM-PORT-SPEC-001", node_path(network, node) + ".ports");
             break;
         case FbdNodeKind::FUNCTION_BLOCK: {
             const auto found = fb_instance_.find(node.id);
@@ -571,6 +624,30 @@ private:
         return true;
     }
 
+    bool emit_signal_publish(const FbdNetwork& network, const FbdNode& node)
+    {
+        const std::string* signal = string_parameter(node, "signal");
+        const auto inputs = ports_with_direction(node, FbdPortDirection::INPUT);
+        const auto outputs = ports_with_direction(node, FbdPortDirection::OUTPUT);
+        if (!signal || node.parameters.size() != 1 || inputs.size() != 1 ||
+            !outputs.empty() || inputs[0]->name != "IN" || inputs[0]->order != 0) {
+            return fail("FBD-SEM-PORT-SPEC-001", node_path(network, node));
+        }
+        auto value = source_for_input(network, node, *inputs[0]);
+        if (!value) return false;
+        const FbdSourceAnchor* anchor = anchor_for_port(*inputs[0]);
+        if (!anchor) return fail("FBD-LIMIT-SOURCEMAP-001", node_path(network, node));
+        StStmt statement;
+        statement.kind = StStmt::Kind::SIGNAL_PUBLISH;
+        statement.signal_name = *signal;
+        statement.signal_value = std::move(value);
+        statement.signal_line = anchor->line;
+        statement.signal_column = anchor->column;
+        statement.signal_length = 1;
+        program_->body.push_back(std::move(statement));
+        return true;
+    }
+
     bool emit_output_assignment(const FbdNetwork& network, const FbdNode& node)
     {
         const std::string* variable = string_parameter(node, "variable");
@@ -601,6 +678,8 @@ private:
                     if (!emit_fb_call(network, node)) return false;
                 } else if (node.kind == FbdNodeKind::OUTPUT) {
                     if (!emit_output_assignment(network, node)) return false;
+                } else if (node.kind == FbdNodeKind::SIGNAL_PUBLISH) {
+                    if (!emit_signal_publish(network, node)) return false;
                 }
             }
         }
@@ -624,7 +703,31 @@ private:
 
 } // namespace
 
+FbdLowerResult lower_fbd_source_to_program(std::string_view source)
+{
+    FbdLowerResult result;
+    const FbdValidationResult validated = validate_and_canonicalize_fbd(source);
+    if (!validated.ok) {
+        result.issues = validated.issues;
+        return result;
+    }
+    Lowerer lowerer(validated.document);
+    if (!lowerer.run(&result.program)) {
+        result.issues = lowerer.issues();
+        return result;
+    }
+    result.canonical_source = validated.canonical_json;
+    result.source_anchors = lowerer.source_anchors();
+    result.ok = true;
+    return result;
+}
+
 FbdCompileResult compile_fbd_source(std::string_view source)
+{
+    return compile_fbd_source(source, StCompileOptions{});
+}
+
+FbdCompileResult compile_fbd_source(std::string_view source, const StCompileOptions& options)
 {
     FbdCompileResult result;
     const FbdValidationResult validated = validate_and_canonicalize_fbd(source);
@@ -641,13 +744,36 @@ FbdCompileResult compile_fbd_source(std::string_view source)
     }
 
     StDiagnostic diagnostic;
-    if (!typecheck_st_program(&program, &diagnostic)) {
+    const bool signal_aware = !options.published_signals.empty() ||
+                              !options.program_identity.empty();
+    std::vector<StPouSource> sources{{&program, {}}};
+    StPouRegistryResult registry;
+    const bool typed = signal_aware
+                           ? st_build_pou_registry(sources, {}, &registry, &diagnostic) &&
+                                 typecheck_st_pou_set(sources, registry, &diagnostic,
+                                                      options.published_signals,
+                                                      options.program_identity)
+                           : typecheck_st_program(&program, &diagnostic);
+    if (!typed) {
         add_issue(&result.issues, "FBD-SEM-LOWER-001", "$.lowering." + diagnostic.code);
         return result;
     }
 
+    /* FBD đi cùng một chính sách Check với ST. Nếu chỉ ST bị gate thì vẽ PID
+     * bằng FBD trở thành đường vòng hợp lệ. */
+    if (options.enforce_review_gate && !st_review_gate_check(program, &diagnostic)) {
+        add_issue(&result.issues, diagnostic.code.c_str(), "$.reviewGate");
+        return result;
+    }
+
     StIrModule candidate;
-    if (!compile_st_to_ir(program, validated.canonical_json, &candidate, &diagnostic)) {
+    const bool compiled = signal_aware
+                              ? compile_st_to_ir_linked(program, validated.canonical_json,
+                                                        sources, registry, &candidate, nullptr,
+                                                        &diagnostic, options)
+                              : compile_st_to_ir(program, validated.canonical_json,
+                                                 &candidate, &diagnostic);
+    if (!compiled) {
         add_issue(&result.issues, "FBD-LIMIT-IR-001", "$.lowering." + diagnostic.code);
         return result;
     }

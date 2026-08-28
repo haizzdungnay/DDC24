@@ -188,6 +188,10 @@ export function normalizePoint(raw: Record<string, unknown>): Point {
     ...(updatedAt !== undefined ? { updatedAt } : {}),
     fault: Boolean(raw.fault ?? false),
     forced: Boolean(raw.forced ?? false),
+    /* `T57-3.1`: thẻ thiết bị chỉ có khi backend gửi. Không suy từ tên điểm —
+       `ADR-042` điều 1 cấm đoán, vì đoán sai sẽ gom nhầm hai hệ thống vào một
+       khối và người đọc không có cách nào biết. */
+    ...(typeof raw.equipment === 'string' && raw.equipment.trim() ? { equipment: raw.equipment.trim() } : {}),
     ...(overrideExpiresInS !== undefined && overrideExpiresInS > 0 ? { overrideExpiresInS } : {}),
     ...(qualityReason ? { qualityReason: String(qualityReason) } : {}),
     ...(busId !== undefined ? { busId } : {}),

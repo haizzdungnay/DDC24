@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "a2fc10a8d1e8e286057301df27774ce93c495fc16803e2c0e4edd0c72634ce01";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.5.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.8.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -31,6 +31,24 @@ enum class ProgramPublicError : uint8_t {
     ImpactUnavailable,
     ImpactStale,
     Unavailable,
+    OutputOwner,
+    PidReview,
+    PouKind,
+    PouRecursion,
+    LibVersion,
+    ProgramLimit,
+    SignalPublisher,
+    SignalFreshness,
+    EnableNotCommissioned,
+    ProgramState,
+    SimUnsupported,
+    SimSaveRequired,
+    SimForbidden,
+    SimInputNotAllowed,
+    SimStaleSession,
+    SimQuota,
+    SimWorkerFailed,
+    SimExpired,
 };
 
 struct ProgramErrorMetadata {
@@ -44,7 +62,7 @@ struct ProgramErrorMetadata {
     std::string_view message_key;
 };
 
-inline constexpr std::array<ProgramErrorMetadata, 20> kProgramErrorMetadata = {{
+inline constexpr std::array<ProgramErrorMetadata, 38> kProgramErrorMetadata = {{
     {ProgramPublicError::Request, "PRG-ERR-REQ-001", "api", "REQUEST", 400, false, true, "programming.error.request" },
     {ProgramPublicError::NotFound, "PRG-ERR-NOT-FOUND-001", "api", "NOT_FOUND", 404, false, true, "programming.error.notFound" },
     {ProgramPublicError::Conflict, "PRG-ERR-CONFLICT-001", "api", "CONFLICT", 409, false, true, "programming.error.conflict" },
@@ -65,6 +83,24 @@ inline constexpr std::array<ProgramErrorMetadata, 20> kProgramErrorMetadata = {{
     {ProgramPublicError::ImpactUnavailable, "PRG-ERR-IMPACT-UNAVAILABLE-001", "api", "VALIDATION", 422, false, true, "programming.error.impactUnavailable" },
     {ProgramPublicError::ImpactStale, "PRG-ERR-IMPACT-STALE-001", "api", "CONFLICT", 409, false, true, "programming.error.impactStale" },
     {ProgramPublicError::Unavailable, "PRG-ERR-UNAVAILABLE-001", "runtime", "UNAVAILABLE", 503, true, false, "programming.error.unavailable" },
+    {ProgramPublicError::OutputOwner, "PRG-ERR-OUTPUT-OWNER-001", "compiler", "VALIDATION", 422, false, true, "programming.error.outputOwner" },
+    {ProgramPublicError::PidReview, "PRG-ERR-PID-REVIEW-001", "compiler", "VALIDATION", 422, false, true, "programming.error.pidReview" },
+    {ProgramPublicError::PouKind, "PRG-ERR-POU-KIND-001", "compiler", "VALIDATION", 422, false, true, "programming.error.pouKind" },
+    {ProgramPublicError::PouRecursion, "PRG-ERR-POU-RECURSION-001", "compiler", "VALIDATION", 422, false, true, "programming.error.pouRecursion" },
+    {ProgramPublicError::LibVersion, "PRG-ERR-LIB-VERSION-001", "compiler", "VALIDATION", 422, false, true, "programming.error.libVersion" },
+    {ProgramPublicError::ProgramLimit, "PRG-ERR-PROGRAM-LIMIT-001", "compiler", "VALIDATION", 422, false, true, "programming.error.programLimit" },
+    {ProgramPublicError::SignalPublisher, "PRG-ERR-SIGNAL-PUBLISHER-001", "compiler", "VALIDATION", 422, false, true, "programming.error.signalPublisher" },
+    {ProgramPublicError::SignalFreshness, "PRG-ERR-SIGNAL-FRESHNESS-001", "compiler", "VALIDATION", 422, false, true, "programming.error.signalFreshness" },
+    {ProgramPublicError::EnableNotCommissioned, "PRG-ERR-ENABLE-NOT-COMMISSIONED-001", "runtime", "CONFLICT", 409, false, true, "programming.error.enableNotCommissioned" },
+    {ProgramPublicError::ProgramState, "PRG-ERR-PROGRAM-STATE-001", "runtime", "CONFLICT", 409, false, true, "programming.error.programState" },
+    {ProgramPublicError::SimUnsupported, "PRG-SIM-UNSUPPORTED", "simulation", "UNAVAILABLE", 409, false, true, "programming.error.simUnsupported" },
+    {ProgramPublicError::SimSaveRequired, "PRG-SIM-SAVE-REQUIRED", "simulation", "CONFLICT", 409, false, true, "programming.error.simSaveRequired" },
+    {ProgramPublicError::SimForbidden, "PRG-SIM-FORBIDDEN", "simulation", "FORBIDDEN", 403, false, true, "programming.error.simForbidden" },
+    {ProgramPublicError::SimInputNotAllowed, "PRG-SIM-INPUT-NOT-ALLOWED", "simulation", "VALIDATION", 422, false, true, "programming.error.simInputNotAllowed" },
+    {ProgramPublicError::SimStaleSession, "PRG-SIM-STALE-SESSION", "simulation", "CONFLICT", 409, false, true, "programming.error.simStaleSession" },
+    {ProgramPublicError::SimQuota, "PRG-SIM-QUOTA", "simulation", "UNAVAILABLE", 429, true, true, "programming.error.simQuota" },
+    {ProgramPublicError::SimWorkerFailed, "PRG-SIM-WORKER-FAILED", "simulation", "OPERATION", 503, false, true, "programming.error.simWorkerFailed" },
+    {ProgramPublicError::SimExpired, "PRG-SIM-EXPIRED", "simulation", "CONFLICT", 410, false, true, "programming.error.simExpired" },
 }};
 
 struct ComponentErrorMapping {
@@ -73,7 +109,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 151> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -92,8 +128,14 @@ inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings 
     {"compiler", "ST-CLI-ARGS", ProgramPublicError::Request },
     {"compiler", "ST-CLI-IO", ProgramPublicError::Unavailable },
     {"compiler", "ST-CLI-KEY", ProgramPublicError::Unavailable },
+    {"compiler", "ST-CLI-KEY-EXISTS", ProgramPublicError::Conflict },
+    {"compiler", "ST-CLI-KEY-REQUIRED", ProgramPublicError::Unavailable },
+    {"compiler", "ST-CLI-LIBRARY-LOCK", ProgramPublicError::LibVersion },
     {"compiler", "ST-CLI-LIMIT", ProgramPublicError::Scope },
+    {"compiler", "ST-CLI-POU-MANIFEST", ProgramPublicError::PouKind },
+    {"compiler", "ST-CLI-POU-PATH", ProgramPublicError::Request },
     {"compiler", "ST-CLI-SANDBOX", ProgramPublicError::Unavailable },
+    {"compiler", "ST-CLI-SIGNAL-MANIFEST", ProgramPublicError::Check },
     {"compiler", "ST-CLI-TOOLARGE", ProgramPublicError::Scope },
     {"compiler", "ST-IOMAP-001", ProgramPublicError::MapIdentity },
     {"compiler", "ST-IOMAP-002", ProgramPublicError::MapIdentity },
@@ -106,6 +148,9 @@ inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings 
     {"compiler", "ST-LEX-001", ProgramPublicError::Check },
     {"compiler", "ST-LEX-002", ProgramPublicError::Check },
     {"compiler", "ST-LEX-003", ProgramPublicError::Check },
+    {"compiler", "ST-LIB-001", ProgramPublicError::LibVersion },
+    {"compiler", "ST-LIB-002", ProgramPublicError::LibVersion },
+    {"compiler", "ST-LIB-003", ProgramPublicError::PouRecursion },
     {"compiler", "ST-LIM-001", ProgramPublicError::Scope },
     {"compiler", "ST-LIM-002", ProgramPublicError::Scope },
     {"compiler", "ST-LIM-003", ProgramPublicError::Scope },
@@ -114,6 +159,14 @@ inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings 
     {"compiler", "ST-LIM-006", ProgramPublicError::Scope },
     {"compiler", "ST-LIM-007", ProgramPublicError::Scope },
     {"compiler", "ST-LIM-008", ProgramPublicError::Scope },
+    {"compiler", "ST-LIM-009", ProgramPublicError::ProgramLimit },
+    {"compiler", "ST-OWN-001", ProgramPublicError::OutputOwner },
+    {"compiler", "ST-PID-001", ProgramPublicError::PidReview },
+    {"compiler", "ST-POU-001", ProgramPublicError::PouKind },
+    {"compiler", "ST-POU-002", ProgramPublicError::PouKind },
+    {"compiler", "ST-POU-003", ProgramPublicError::PouRecursion },
+    {"compiler", "ST-POU-004", ProgramPublicError::ProgramLimit },
+    {"compiler", "ST-POU-005", ProgramPublicError::Check },
     {"compiler", "ST-SEM-001", ProgramPublicError::Check },
     {"compiler", "ST-SEM-002", ProgramPublicError::Check },
     {"compiler", "ST-SEM-003", ProgramPublicError::Check },
@@ -128,6 +181,11 @@ inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings 
     {"compiler", "ST-SEM-012", ProgramPublicError::Check },
     {"compiler", "ST-SEM-013", ProgramPublicError::Check },
     {"compiler", "ST-SEM-014", ProgramPublicError::Check },
+    {"compiler", "ST-SIG-001", ProgramPublicError::SignalPublisher },
+    {"compiler", "ST-SIG-002", ProgramPublicError::MapType },
+    {"compiler", "ST-SIG-003", ProgramPublicError::SignalFreshness },
+    {"compiler", "ST-SIG-004", ProgramPublicError::SignalPublisher },
+    {"compiler", "ST-SIG-005", ProgramPublicError::Check },
     {"compiler", "ST-SYN-001", ProgramPublicError::Check },
     {"compiler", "ST-SYN-002", ProgramPublicError::Scope },
     {"compiler", "ST-WORKER-CRASH", ProgramPublicError::Unavailable },
@@ -151,12 +209,16 @@ inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings 
     {"core-ipc", "IPC-RETAIN-RESET-TIMEOUT", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-RUNTIME-CONFIG", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-RUNTIME-NOT-CONFIGURED", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-RUNTIME-STATE", ProgramPublicError::Conflict },
     {"core-ipc", "IPC-STAGE-REJECTED", ProgramPublicError::Artifact },
     {"core-ipc", "IPC-STAGED-TOKEN", ProgramPublicError::Operation },
     {"core-ipc", "IPC-STAGING-HASH", ProgramPublicError::Artifact },
     {"core-ipc", "IPC-STAGING-LOCATOR", ProgramPublicError::Artifact },
     {"core-ipc", "IPC-STAGING-OPEN", ProgramPublicError::Artifact },
     {"core-ipc", "IPC-STAGING-TYPE-SIZE", ProgramPublicError::Artifact },
+    {"core-ipc", "IPC-TRACE-REJECTED", ProgramPublicError::Request },
+    {"core-ipc", "IPC-TRACE-UNAVAILABLE", ProgramPublicError::Unavailable },
+    {"core-ipc", "IPC-UNKNOWN-INSTANCE", ProgramPublicError::NotFound },
     {"retain", "RT-RETAIN-001", ProgramPublicError::Retain },
     {"retain", "RT-RETAIN-002", ProgramPublicError::Retain },
     {"retain", "RT-RETAIN-003", ProgramPublicError::Retain },
@@ -171,6 +233,25 @@ inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings 
     {"runtime", "ST-RT-008", ProgramPublicError::Commission },
     {"runtime", "ST-RT-009", ProgramPublicError::Commission },
     {"runtime", "ST-RT-010", ProgramPublicError::Commission },
+    {"runtime", "ST-RT-011", ProgramPublicError::Unavailable },
+    {"runtime", "ST-RT-012", ProgramPublicError::Commission },
+    {"runtime", "ST-RT-013", ProgramPublicError::Commission },
+    {"sim-supervisor", "SIM-SUP-CAPABILITY", ProgramPublicError::SimUnsupported },
+    {"sim-supervisor", "SIM-SUP-CRASH", ProgramPublicError::SimWorkerFailed },
+    {"sim-supervisor", "SIM-SUP-EXPIRED", ProgramPublicError::SimExpired },
+    {"sim-supervisor", "SIM-SUP-HANDSHAKE", ProgramPublicError::SimUnsupported },
+    {"sim-supervisor", "SIM-SUP-PROTOCOL", ProgramPublicError::SimWorkerFailed },
+    {"sim-supervisor", "SIM-SUP-QUOTA", ProgramPublicError::SimQuota },
+    {"sim-supervisor", "SIM-SUP-SPAWN", ProgramPublicError::SimWorkerFailed },
+    {"sim-supervisor", "SIM-SUP-TIMEOUT", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-001", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-002", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-003", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-004", ProgramPublicError::SimWorkerFailed },
+    {"sim-worker", "SIM-E-005", ProgramPublicError::SimInputNotAllowed },
+    {"sim-worker", "SIM-E-006", ProgramPublicError::SimInputNotAllowed },
+    {"sim-worker", "SIM-E-007", ProgramPublicError::SimStaleSession },
+    {"sim-worker", "SIM-E-008", ProgramPublicError::SimQuota },
     {"st-control-api", "API-E-001", ProgramPublicError::Request },
     {"st-control-api", "API-E-002", ProgramPublicError::Request },
     {"st-control-api", "API-E-003", ProgramPublicError::Target },
@@ -178,6 +259,8 @@ inline constexpr std::array<ComponentErrorMapping, 104> kComponentErrorMappings 
     {"st-control-api", "API-E-005", ProgramPublicError::Artifact },
     {"st-control-api", "API-E-006", ProgramPublicError::Artifact },
     {"st-control-api", "API-E-007", ProgramPublicError::Unavailable },
+    {"st-control-api", "API-E-008", ProgramPublicError::EnableNotCommissioned },
+    {"st-control-api", "API-E-009", ProgramPublicError::ProgramState },
 }};
 
 constexpr ProgramPublicError MapComponentError(std::string_view component,

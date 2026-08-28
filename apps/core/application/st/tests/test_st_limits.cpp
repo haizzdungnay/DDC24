@@ -64,15 +64,18 @@ std::string sha256_hex(const std::string& value)
 
 TEST(StProfile, MachineReadableContractMatchesGeneratedConstants)
 {
-    const std::string raw = read_contract("rev_a_profile_v1.json");
+    const std::string raw = read_contract("product_profile_v2.json");
     ASSERT_FALSE(raw.empty());
     const nlohmann::json profile = nlohmann::json::parse(raw);
     EXPECT_EQ(profile.at("profileId"), st_profile_generated::kProfileId);
     EXPECT_EQ(profile.at("profileCode"), st_profile_generated::kProfileCode);
+    EXPECT_EQ(profile.at("targetAbi"), st_profile_generated::kTargetAbi);
+    EXPECT_EQ(profile.at("version").at("major"), st_profile_generated::kProfileMajor);
+    EXPECT_EQ(profile.at("version").at("minor"), st_profile_generated::kProfileMinor);
     EXPECT_EQ(profile.at("coreLibrary").at("version"),
               st_profile_generated::kLibraryVersion);
-    EXPECT_EQ(profile.at("integrityMode"), "HASH_ONLY");
-    EXPECT_STREQ(st_profile_generated::kIntegrityMode, "HASH_ONLY");
+    EXPECT_EQ(profile.at("integrityMode"), "SIGNATURE_REQUIRED");
+    EXPECT_STREQ(st_profile_generated::kIntegrityMode, "SIGNATURE_REQUIRED");
     EXPECT_EQ(sha256_hex(raw), st_profile_generated::kProfileSha256);
 
     struct TypeLock { const char* name; uint8_t code; uint8_t bits; };
@@ -95,10 +98,45 @@ TEST(StProfile, MachineReadableContractMatchesGeneratedConstants)
         EXPECT_EQ(match->at("conversion"), "EXPLICIT_FAIL_CLOSED");
     }
 
-    const auto periods = profile.at("task").at("allowedPeriodMs");
+    const auto& scheduler = profile.at("scheduler");
+    const auto periods = scheduler.at("allowedPeriodMs");
     ASSERT_EQ(periods.size(), st_profile_generated::kAllowedPeriodMs.size());
     for (std::size_t i = 0; i < periods.size(); ++i)
         EXPECT_EQ(periods.at(i), st_profile_generated::kAllowedPeriodMs[i]);
+    EXPECT_EQ(scheduler.at("maxTasks"), st_profile_generated::kMaxTasks);
+    EXPECT_EQ(scheduler.at("maxProgramsPerTask"), st_profile_generated::kMaxProgramsPerTask);
+    EXPECT_EQ(scheduler.at("maxProgramsTotal"), st_profile_generated::kMaxProgramsTotal);
+    EXPECT_EQ(scheduler.at("maxTaskBudgetPercent"),
+              st_profile_generated::kMaxTaskBudgetPercent);
+
+    /* Capacity cấp package: đây là phần Product v2 nâng từ một Program lên 32/16.
+     * Kiểm ở đây để contract và hằng sinh không thể trôi khỏi nhau. */
+    const auto& capacity = profile.at("capacity");
+    EXPECT_EQ(capacity.at("maxObjects"), st_profile_generated::kMaxObjects);
+    EXPECT_EQ(capacity.at("maxProgramsTotal"), st_profile_generated::kMaxProgramsTotal);
+    EXPECT_EQ(capacity.at("maxProgramsEnabled"), st_profile_generated::kMaxProgramsEnabled);
+    EXPECT_EQ(capacity.at("maxUserPou"), st_profile_generated::kMaxUserPou);
+    EXPECT_EQ(capacity.at("maxFunctionBlockInstances"),
+              st_profile_generated::kMaxFunctionBlockInstances);
+    EXPECT_EQ(capacity.at("maxSignals"), st_profile_generated::kMaxSignals);
+    EXPECT_EQ(capacity.at("maxBindings"), st_profile_generated::kMaxPackageBindings);
+}
+
+TEST(StProfile, ProductCapacityIsThirtyTwoProgramsAndSixteenEnabled)
+{
+    /* Khoá đúng con số Product v2 (`DDD-SW-PROG-UNIFIED-001` §0). Nếu ai đó hạ
+     * capacity xuống một Program như As-Built cũ thì test này đỏ, chứ không
+     * lặng lẽ thu hẹp sản phẩm. */
+    EXPECT_EQ(st_profile_generated::kMaxProgramsTotal, 32u);
+    EXPECT_EQ(st_profile_generated::kMaxProgramsEnabled, 16u);
+    EXPECT_EQ(st_profile_generated::kMaxUserPou, 256u);
+    EXPECT_EQ(st_profile_generated::kMaxFunctionBlockInstances, 1024u);
+    EXPECT_EQ(st_profile_generated::kMaxSignals, 512u);
+    EXPECT_EQ(st_profile_generated::kMaxPackageBindings, 512u);
+    EXPECT_LE(st_profile_generated::kMaxProgramsEnabled,
+              st_profile_generated::kMaxProgramsTotal);
+    EXPECT_LE(st_profile_generated::kMaxBindings,
+              st_profile_generated::kMaxPackageBindings);
 }
 
 TEST(StProfile, EveryResourceAcceptsLimitMinusOneAndLimitAndRejectsLimitPlusOne)
@@ -154,7 +192,7 @@ TEST(StProfile, EveryResourceAcceptsLimitMinusOneAndLimitAndRejectsLimitPlusOne)
     }
 }
 
-TEST(StProfile, TaskAndPeriodAreLockedToRevA)
+TEST(StProfile, TaskAndPeriodAreLockedToProductProfile)
 {
     for (uint32_t period : st_profile_generated::kAllowedPeriodMs) {
         st_limits::RevAProfileUsage usage;
@@ -168,12 +206,59 @@ TEST(StProfile, TaskAndPeriodAreLockedToRevA)
         st_limits::RevAProfileError error;
         EXPECT_FALSE(st_limits::ValidateRevAProfile(usage, &error)) << period;
         EXPECT_EQ(error.field, "taskPeriodMs");
+        /* Constraint text phải kể đúng enum của profile, không phải chuỗi cũ. */
+        EXPECT_NE(error.constraint.find("1000"), std::string::npos);
+        EXPECT_NE(error.constraint.find("30000"), std::string::npos);
     }
+}
+
+TEST(StProfile, ProgramAndTaskCountsAcceptLimitAndRejectOneOver)
+{
+    struct Boundary {
+        const char* name;
+        std::size_t st_limits::RevAProfileUsage::*field;
+        std::size_t limit;
+    };
+    const Boundary boundaries[] = {
+        {"taskCount", &st_limits::RevAProfileUsage::task_count,
+         st_profile_generated::kMaxTasks},
+        {"programsPerTask", &st_limits::RevAProfileUsage::programs_per_task,
+         st_profile_generated::kMaxProgramsPerTask},
+        {"programsTotal", &st_limits::RevAProfileUsage::programs_total,
+         st_profile_generated::kMaxProgramsTotal},
+    };
+    for (const Boundary& boundary : boundaries) {
+        st_limits::RevAProfileUsage usage;
+        st_limits::RevAProfileError error;
+
+        usage.*(boundary.field) = boundary.limit;
+        EXPECT_TRUE(st_limits::ValidateRevAProfile(usage, &error))
+            << boundary.name << " tại đúng trần";
+
+        usage.*(boundary.field) = boundary.limit + 1;
+        EXPECT_FALSE(st_limits::ValidateRevAProfile(usage, &error))
+            << boundary.name << " một-trên-trần";
+        EXPECT_EQ(error.field, boundary.name);
+        EXPECT_EQ(error.constraint, "range=1.." + std::to_string(boundary.limit));
+
+        /* Zero cũng phải bị từ chối: 0 Program không phải package hợp lệ. */
+        usage.*(boundary.field) = 0;
+        EXPECT_FALSE(st_limits::ValidateRevAProfile(usage, &error)) << boundary.name;
+        EXPECT_EQ(error.field, boundary.name);
+    }
+}
+
+TEST(StProfile, TargetAbiComesFromContractNotLiteral)
+{
     st_limits::RevAProfileUsage usage;
-    usage.task_count = 2;
     st_limits::RevAProfileError error;
+    EXPECT_TRUE(st_limits::ValidateRevAProfile(usage, &error));
+
+    usage.target_abi = st_profile_generated::kTargetAbi + 1u;
     EXPECT_FALSE(st_limits::ValidateRevAProfile(usage, &error));
-    EXPECT_EQ(error.field, "taskCount");
+    EXPECT_EQ(error.field, "targetAbi");
+    EXPECT_EQ(error.constraint,
+              "exact=" + std::to_string(st_profile_generated::kTargetAbi));
 }
 
 /* ---- Độ sâu biểu thức: chính là kịch bản repro của F-01 ---- */

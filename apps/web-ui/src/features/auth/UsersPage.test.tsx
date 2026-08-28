@@ -4,11 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
-import type { UserAccount } from '../../shared/types'
+import type { UserAccessResponse } from '../../shared/types'
 import { UsersPage } from './UsersPage'
 
 const mocks = vi.hoisted(() => ({
   listUsers: vi.fn(),
+  getUserAccess: vi.fn(),
   createUser: vi.fn(),
   setUserRole: vi.fn(),
   resetUserPassword: vi.fn(),
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../shared/api/client', () => ({
   apiClient: {
     listUsers: mocks.listUsers,
+    getUserAccess: mocks.getUserAccess,
     createUser: mocks.createUser,
     setUserRole: mocks.setUserRole,
     resetUserPassword: mocks.resetUserPassword,
@@ -30,7 +32,7 @@ vi.mock('./AuthProvider', () => ({
   useAuth: () => ({ session: { username: 'admin', role: 'admin', loginAt: '2026-08-01T00:00:00Z' }, login: vi.fn(), logout: vi.fn(), isAuthenticated: true, getAuthHeader: () => ({}) })
 }))
 
-let apiState: { data: UserAccount[] | null; loading: boolean; error: Error | null }
+let apiState: { data: UserAccessResponse | null; loading: boolean; error: Error | null }
 
 vi.mock('../../shared/hooks/useApi', () => ({
   useApi: () => ({ ...apiState, refetch: mocks.refetch })
@@ -39,13 +41,22 @@ vi.mock('../../shared/hooks/useApi', () => ({
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem('mkddc-lang', 'en')
+  /* `T57-3.16`: trang nay đọc một nguồn duy nhất gồm cả dấu vết truy cập, nên
+     fixture đi theo hình dạng đó. */
   apiState = {
-    data: [
-      { username: 'admin', role: 'admin' },
-      { username: 'admin2', role: 'admin' },
-      { username: 'op1', role: 'operator' },
-      { username: 'view1', role: 'viewer' }
-    ],
+    data: {
+      users: [
+        { username: 'admin', role: 'admin', lastLoginAt: '2026-08-19T03:00:00Z', lastLoginRemote: '10.0.0.9', lastFailedLoginAt: null, activeSessions: 1 },
+        { username: 'admin2', role: 'admin', lastLoginAt: null, lastLoginRemote: null, lastFailedLoginAt: null, activeSessions: 0 },
+        { username: 'op1', role: 'operator', lastLoginAt: '2026-08-18T22:10:00Z', lastLoginRemote: null, lastFailedLoginAt: '2026-08-19T02:59:00Z', activeSessions: 0, mustChangePassword: true },
+        { username: 'view1', role: 'viewer', lastLoginAt: null, lastLoginRemote: null, lastFailedLoginAt: null, activeSessions: 0 }
+      ],
+      sessions: [
+        { username: 'admin', role: 'admin', issuedAt: '2026-08-19T03:00:00Z', lastSeenAt: '2026-08-19T03:05:00Z', remote: '10.0.0.9' }
+      ],
+      sessionsSince: '2026-08-19T02:00:00Z',
+      activityWindow: 2000
+    },
     loading: false,
     error: null
   }
@@ -56,6 +67,17 @@ beforeEach(() => {
   mocks.deleteUser.mockResolvedValue(undefined)
 })
 afterEach(cleanup)
+
+/** Bọc danh sách tài khoản thành đúng hình dạng `getUserAccess` trả về. */
+function accessFixture(users: Array<{ username: string; role: 'admin' | 'operator' | 'viewer' }>): UserAccessResponse {
+  return {
+    users: users.map((user) => ({ ...user, lastLoginAt: null, lastLoginRemote: null, lastFailedLoginAt: null, activeSessions: 0 })),
+    sessions: [],
+    sessionsSince: '2026-08-19T02:00:00Z',
+    activityWindow: 2000
+  }
+}
+
 
 function renderPage() {
   return render(<I18nProvider><ToastProvider><UsersPage /></ToastProvider></I18nProvider>)
@@ -122,7 +144,14 @@ describe('UsersPage create', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
 
     expect(mocks.createUser).not.toHaveBeenCalled()
-    expect(await screen.findByText(/at least 6 characters/)).toBeInTheDocument()
+    /* Khớp TOÀN VĂN chuỗi của toast, không dùng regex bộ phận.
+     *
+     * Từ `T57-1.9`, luật thiết bị được công bố thường trực ngay dưới ô nhập
+     * ("Rule enforced by the device: at least 6 characters…"), nên một regex
+     * `/at least 6 characters/` khớp CẢ hai phần tử và test hỏng vì mơ hồ —
+     * tệ hơn: nó có thể xanh nhờ đoạn văn tĩnh ngay cả khi guard bị gỡ mất.
+     * Khớp toàn văn chỉ trúng đúng thông báo từ chối. */
+    expect(await screen.findByText('Password must be at least 6 characters')).toBeInTheDocument()
   })
 
   it('reports a rejected creation rather than claiming success', async () => {
@@ -155,7 +184,10 @@ describe('UsersPage role changes', () => {
    * huống mất hẳn đường quản trị rồi mới biết.
    */
   it('locks the role selector when only one admin is left', () => {
-    apiState = { data: [{ username: 'admin', role: 'admin' }, { username: 'op1', role: 'operator' }], loading: false, error: null }
+    apiState = { data: accessFixture([
+      { username: 'admin', role: 'admin' },
+      { username: 'op1', role: 'operator' }
+    ]), loading: false, error: null }
     renderPage()
 
     expect(screen.getByLabelText('Role for admin')).toBeDisabled()
@@ -197,7 +229,10 @@ describe('UsersPage reset password and delete', () => {
   })
 
   it('refuses to delete the last admin or the signed-in account', () => {
-    apiState = { data: [{ username: 'admin', role: 'admin' }, { username: 'op1', role: 'operator' }], loading: false, error: null }
+    apiState = { data: accessFixture([
+      { username: 'admin', role: 'admin' },
+      { username: 'op1', role: 'operator' }
+    ]), loading: false, error: null }
     renderPage()
 
     expect(screen.getByRole('button', { name: 'Delete admin' })).toBeDisabled()

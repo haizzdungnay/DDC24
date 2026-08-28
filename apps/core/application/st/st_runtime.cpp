@@ -1,10 +1,13 @@
 #include "st/st_runtime.hpp"
 
 #include <cmath>
+#include <algorithm>
 #include <cstring>
 #include <new>
 
 #include "st/st_retain.hpp"
+#include "st/st_diagnostic.hpp"
+#include "st/st_signal_bus.hpp"
 
 namespace core {
 
@@ -83,6 +86,8 @@ StExecResult StProgramRuntime::execute(int64_t now_ns)
 
     /* Chụp trạng thái đầu chu kỳ. memcpy trên bộ đệm đã cấp — không cấp phát. */
     StLoadedProgram& program = active_->program;
+    std::fill(program.pending_signal_writes.begin(),
+              program.pending_signal_writes.end(), 0);
     std::memcpy(active_->shadow_slots.data(), program.slots.data(),
                 program.slots.size() * sizeof(StCell));
     if (!active_->shadow_fb.empty())
@@ -98,8 +103,9 @@ StExecResult StProgramRuntime::execute(int64_t now_ns)
         if (!active_->shadow_fb.empty())
             std::memcpy(program.fb_states.data(), active_->shadow_fb.data(),
                         program.fb_states.size() * sizeof(StFbState));
-        fault_count_++;
+        if (!fault.waiting) fault_count_++;
         cycle_count_++;
+        r.waiting = fault.waiting;
         r.fault_code = fault.code;
         r.fault_pc = fault.pc;
         r.fault_line = fault.line;
@@ -107,6 +113,39 @@ StExecResult StProgramRuntime::execute(int64_t now_ns)
         r.error = fault.code ? fault.code : "runtime_fault";
         return r;
     }
+
+    const bool has_signal_publish = std::any_of(
+        program.pending_signal_writes.begin(), program.pending_signal_writes.end(),
+        [](uint8_t value) { return value != 0; });
+    if (has_signal_publish &&
+        (program.signal_bus == nullptr ||
+         !program.signal_bus->publish_batch(
+             program.signal_refs.data(), program.pending_signal_values.data(),
+             program.pending_signal_writes.data(), program.signal_refs.size(),
+             static_cast<uint64_t>(now_ns), program.runtime_instance_id.c_str()))) {
+        std::memcpy(program.slots.data(), active_->shadow_slots.data(),
+                    program.slots.size() * sizeof(StCell));
+        if (!active_->shadow_fb.empty())
+            std::memcpy(program.fb_states.data(), active_->shadow_fb.data(),
+                        program.fb_states.size() * sizeof(StFbState));
+        uint32_t signal_pc = 0;
+        for (std::size_t index = 0; index < program.pending_signal_writes.size(); ++index)
+            if (program.pending_signal_writes[index] != 0) {
+                signal_pc = program.pending_signal_pc[index];
+                break;
+            }
+        std::fill(program.pending_signal_writes.begin(),
+                  program.pending_signal_writes.end(), 0);
+        fault_count_++;
+        cycle_count_++;
+        r.fault_code = st_diag_code::kRtSignalPublish;
+        r.fault_pc = signal_pc;
+        program.source_position(signal_pc, &r.fault_line, &r.fault_column);
+        r.error = st_diag_code::kRtSignalPublish;
+        return r;
+    }
+    std::fill(program.pending_signal_writes.begin(),
+              program.pending_signal_writes.end(), 0);
 
     cycle_count_++;
     r.ok = true;
