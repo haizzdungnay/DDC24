@@ -59,18 +59,31 @@ của trang.
 | `DEV-PROG-017` | P3 | Xong | Regex + danh sách chỗ dùng |
 | `DEV-PROG-018` | P3 | Xong | LCS theo dòng, tô thêm/bớt, cờ thô >400 dòng |
 
-## 4. Cần chủ sở hữu ký lại — hợp đồng `PGM02-WORKSPACE-V1` lên 1.2
+## 4. Hợp đồng `PGM02-WORKSPACE-V1` lên 1.2 — ĐÃ ĐƯỢC CHỦ SỞ HỮU DUYỆT
 
 `DEV-PROG-004` đòi ba trường (`Access`, `Description`, tên Task) mà `UD-PROG-015`
 đã chốt là **không có nguồn** trong Draft v2. Cấp nguồn cho chúng cần một
 operation mới (`annotateObject`), tức **sửa hợp đồng**: `edit.draft.operations`
 đi từ 15 lên 16 mục và `version.minor` 1 → 2.
 
-Hồ sơ hợp đồng đang mang `ownerDisposition: APPROVED_FULL_PLAN` và pin
-`approvedCandidateCommit`. Thay đổi đã thi hành và verifier
-(`scripts/verify_programming_pgm02_contract.py`) PASS, nhưng **chữ ký của chủ sở
-hữu cho bản 1.2 là thứ còn thiếu** — đây là cổng quản trị, không phải cổng kỹ
-thuật.
+**Chủ sở hữu duyệt 2026-08-28.** Chữ ký được ghi vào chính hợp đồng dưới khối
+`amendments`, không phải chỉ trong một tài liệu bên cạnh:
+
+| Trường | Giá trị |
+|---|---|
+| `version` | `1.2` |
+| `authorization` | `AUTH-PROG-2026-08-28-DEVPROG-004` |
+| `ownerDisposition` | `APPROVED_MINOR_AMENDMENT` |
+| `compatibility` | `BACKWARD_COMPATIBLE_ADDITIVE` (chỉ THÊM operation, không đổi operation nào đang có) |
+
+Pin gốc (`authorization: AUTH-PROG-2026-08-24-05`, `approvedCandidateCommit`)
+giữ NGUYÊN: bản 1.2 là một phụ lục của hồ sơ đó, không phải một hồ sơ mới.
+
+Kèm một **cổng mới** trong `scripts/verify_programming_pgm02_contract.py`: nâng
+`version.minor` mà không có mục `amendments` ký cho đúng bản đó ⇒ verifier ĐỎ.
+Không có ràng buộc này thì lần sau một con số bị sửa lặng lẽ vẫn qua cổng, và hồ
+sơ mất dấu vết ai đã duyệt. Đã kiểm bằng cách đổi bản ký thành `1.9`: verifier
+trả exit 1, khôi phục thì PASS.
 
 ## 5. Ba chỗ cố ý làm khác đề bài
 
@@ -173,3 +186,76 @@ rm -rf /opt/mkddc-web/dist && mv /opt/mkddc-web/dist.bak-devprog-20260828T055630
 install -o mkddc -g mkddc -m 0755 /opt/mkddc-web/mkddc-web.bak-devprog-20260828T055630Z /opt/mkddc-web/mkddc-web
 systemctl restart mkddc-web-pi
 ```
+
+## 11. `DEV-PROG-019` — nút Định dạng viết lại theo AST
+
+Yêu cầu bổ sung của chủ sở hữu (2026-08-28): nút **Định dạng** phải hoạt động
+như một formatter chuyên nghiệp — *chỉ đổi cách trình bày, tuyệt đối không đổi
+logic*.
+
+### Bản cũ phá dữ liệu người dùng — đo được
+
+`formatStSource` làm bằng regex: `.replace(/;/g, ';\n')` cộng một regex tách từ
+khoá. Cả hai **không biết mình đang ở trong chú thích**:
+
+```text
+vào : (* chú thích có dấu ; và chữ IF bên trong *)
+ra  : (* chú thích có dấu ;\n và chữ \nIF\n bên trong *)
+```
+
+Một chú thích tiếng Việt có chữ "IF" hoặc một dấu `;` là đủ để nó xé chú thích
+thành ba dòng rác. Với ST thật — `IF` lồng, `CASE`, chuỗi, chú thích khối — nó
+phá được cả mã, và người dùng chỉ phát hiện ở lần Kiểm tra sau đó.
+
+### Bản mới: `src/features/programming/design/editor/stFormat/`
+
+```text
+Nguồn ST → lexer.ts → parser.ts → AST (ast.ts) → printer.ts → Nguồn đã format
+                                                       ↓
+                                                 parse lần hai
+                                                       ↓
+                                        AST trước == AST sau ? + dãy chú thích trùng ?
+                                          ├─ ĐÚNG → thay buffer
+                                          └─ SAI  → KHÔNG format, báo lý do
+```
+
+Ngoài phép so cây, còn một phép so thứ hai: **dãy chú thích theo đúng thứ tự**.
+Cây có thể trùng khớp trong khi một dòng chú thích bị đánh rơi — và chú thích là
+thứ duy nhất trong tệp mà không phép kiểm ngữ nghĩa nào bảo vệ.
+
+Fail-closed ở mọi tầng: chú thích chưa đóng, cú pháp ngoài subset, thiếu
+`END_PROGRAM`, hoặc bản in ra không đọc lại được ⇒ **không đổi một byte nào** và
+nói ra lý do kèm số dòng.
+
+### Style đã chốt
+
+| Hạng mục | Giá trị |
+|---|---|
+| Thụt lề | 4 dấu cách, không Tab |
+| Dòng tối đa | 120 |
+| Từ khoá | UPPERCASE |
+| Định danh | GIỮ NGUYÊN hoa/thường |
+| `END_IF;` / `END_CASE;` | luôn cùng một dòng |
+| Tham số FB dài | mỗi tham số một dòng, `:=` căn cột |
+| Luận lý dài | mỗi điều kiện một dòng |
+| Gán dài | xuống dòng sau `:=` |
+| Dòng trống | chuẩn hoá còn tối đa 1 |
+| Ngữ nghĩa | KHÔNG BAO GIỜ đổi |
+
+Bốn điều formatter **không được làm** đều có test riêng: không thêm/bớt ngoặc,
+không đảo câu lệnh, không đảo khai báo, không đổi literal/tên/chú thích. `IF A OR
+B AND C THEN` giữ nguyên — cảnh báo nhập nhằng là việc của Kiểm tra.
+
+Hai chỗ cố ý làm khác đề bài, cả hai đều theo đúng cảnh báo của chính đề bài:
+
+1. **Không tự thêm chú thích `(* OFF *)`/`(* STARTING *)`** cho nhánh CASE —
+   formatter không sáng tác nội dung.
+2. **Không dời chú thích từ dòng dưới lên cùng dòng khai báo** — việc đó thuộc
+   "Organize Declarations" sau này, không phải pure formatting.
+
+Nút có hai mức (`Định dạng tài liệu` — `Ctrl+Shift+F` — và `Định dạng vùng
+chọn`), và **không tự Lưu / không tự Kiểm tra / không tự Commission**.
+
+Kiểm chứng: 26 ca cho chính formatter + 6 ca cho nút trong trình soạn thảo;
+chạy được trên **nguồn AHU thật lấy từ bo** (127 dòng, có `CASE`, `LIMIT`, chú
+thích khối) và **idempotent** — format hai lần cho cùng một kết quả.

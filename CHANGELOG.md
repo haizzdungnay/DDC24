@@ -42,8 +42,12 @@
   một buffer cũ trong trình duyệt sẽ ghi đè mã nguồn của phiên khác.
 
 - **Changed — hợp đồng `PGM02-WORKSPACE-V1` lên 1.2** (15 → 16 operation) để
-  khai `annotateObject`. **Cần chủ sở hữu ký lại**: hồ sơ này đang pin
-  `approvedCandidateCommit` và `ownerDisposition: APPROVED_FULL_PLAN`.
+  khai `annotateObject`. **Chủ sở hữu đã duyệt 2026-08-28**; chữ ký ghi vào chính
+  hợp đồng ở khối `amendments` (`AUTH-PROG-2026-08-28-DEVPROG-004`,
+  `APPROVED_MINOR_AMENDMENT`, `BACKWARD_COMPATIBLE_ADDITIVE`), pin gốc giữ
+  nguyên. Kèm **cổng mới** trong verifier: nâng `version.minor` mà không có mục
+  `amendments` ký cho đúng bản đó ⇒ ĐỎ — đã kiểm bằng đột biến (đổi bản ký thành
+  `1.9` ⇒ exit 1).
 
 - **Changed — `DEV-PROG-005`: trần tab POU 8 → 10** và nút `+` của thanh tab nay
   mở Bảng lệnh nhanh (bộ chọn POU đã có, cùng đường mở/lấy-lại-tiêu-điểm tab).
@@ -115,8 +119,36 @@
   gộp về một bản (hai bản đã lệch, làm Inspector nói `Ký hiệu ST` cho một POU
   kind `FUNCTION`).
 
+### Programming — nút Định dạng ST viết lại theo AST (`DEV-PROG-019`) (2026-08-28)
+
+- **Fixed — formatter cũ PHÁ chú thích của người dùng.** `formatStSource` làm
+  bằng regex (`.replace(/;/g, ';\n')` + một regex tách từ khoá), cả hai không
+  biết mình đang ở trong chú thích. Đo được: `(* chú thích có dấu ; và chữ IF bên
+  trong *)` bị xé thành ba dòng rác. Một chú thích tiếng Việt có chữ "IF" hoặc
+  một dấu `;` là đủ; với ST thật (IF lồng, CASE, chuỗi, chú thích khối) nó phá
+  được cả mã, và người dùng chỉ phát hiện ở lần Kiểm tra sau đó.
+
+- **Added — `stFormat/`: lexer → parser → AST → printer → parse lần hai → so
+  cây.** Khác cây ⇒ **không đổi một byte nào** và nói ra lý do. Ngoài phép so
+  cây còn một phép so thứ hai — **dãy chú thích theo đúng thứ tự** — vì cây có
+  thể trùng khớp trong khi một dòng chú thích bị đánh rơi.
+
+- **Added — style DDC-24 đã chốt**: thụt lề 4 dấu cách (không Tab), dòng tối đa
+  120, từ khoá UPPERCASE, định danh giữ nguyên hoa/thường, `END_IF;`/`END_CASE;`
+  luôn cùng một dòng, tham số FB dài xuống dòng và căn cột `:=`, luận lý dài mỗi
+  điều kiện một dòng, gán dài xuống dòng sau `:=`, dòng trống thu về tối đa 1.
+  Bốn điều formatter KHÔNG được làm (thêm/bớt ngoặc, đảo câu lệnh, đảo khai báo,
+  đổi literal/tên/chú thích) đều có test riêng.
+
+- **Added — hai mức**: `Định dạng tài liệu` (`Ctrl+Shift+F`) và `Định dạng vùng
+  chọn`. Nút **không tự Lưu, không tự Kiểm tra, không tự Commission**. Từ chối
+  format thì NÓI RA kèm số dòng — im lặng khiến người dùng tưởng nút hỏng.
+
+- **Verification**: 26 ca cho formatter + 6 ca cho nút; chạy trên nguồn AHU THẬT
+  lấy từ bo (127 dòng, có `CASE`/`LIMIT`/chú thích khối) và **idempotent**.
+
 - **Verification** (2026-08-28): `npx vitest --run --environment jsdom src`
-  **173 file / 1982 test PASS**;
+  **174 file / 2006 test PASS**;
   `npx playwright test e2e/programming.spec.ts` **55 PASS / 13 skipped / 0 fail**;
   `npm run lint` PASS; `npx tsc --noEmit` PASS; `go vet ./...` +
   `go test ./... -count=1` PASS (ca mới
