@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### Programming PGM-02 — bố cục workspace + Inspector đầy đủ (`DEV-PROG-001`, `DEV-PROG-004`, `DEV-PROG-005`) (2026-08-28)
+
+- **Fixed — `DEV-PROG-001`: dải tab workbench không còn bị đẩy ra khỏi màn hình.**
+  Triệu chứng báo về là "tab bị sidebar che". Đo trên bo Foxlinx (Chrome thật,
+  đăng nhập `admin`, POU `AHU_MasterSequence` 128 dòng, viewport 1280×800): rail
+  nằm ở `x=21..241` còn workbench bắt đầu ở `x=257` — **không hề chồng lấn**.
+  Nguyên nhân thật là chiều cao: tài liệu cao **2861 px** và dải tab nằm ở
+  `y=2675`, tức phải cuộn ~1900 px mới tới; rail thì `sticky` nên vẫn đứng đó
+  suốt lúc cuộn, và ảnh chụp trông y như bị che.
+
+  Gốc là workspace EDIT xếp dọc không giới hạn: khung soạn thảo bị chốt 288 px
+  trong khi danh sách `Ký hiệu & kiểu` (36 ký hiệu của POU thật, ~900 px) và các
+  khay phụ phía dưới đẩy chiều cao của cả trang. Nay editor + workbench nằm
+  trong một cột cao theo viewport; ba cột của `ProgramsTab` tự cuộn trong lòng
+  chúng; khung soạn thảo co giãn theo chỗ còn lại; khay phụ có vùng cuộn riêng
+  và thanh trạng thái được ghim ở đáy cột. Đo lại cùng kịch bản: tài liệu
+  **852 px**, dải tab ở `y=570`, cả 5 tab `hit-test` trúng chính nó ở 1280 /
+  1440 / 1920 px.
+
+- **Added — `DEV-PROG-004`: Inspector có đủ trường, và `UD-PROG-015` đóng.**
+  Ba trường `Access`, `Description`, TÊN Task trước nay cố ý vắng mặt vì Draft
+  v2 **không có nguồn** cho chúng. Nay có nguồn thật: operation mới
+  `annotateObject` ghi `objects[].description` (nhiều dòng, ≤2048 ký tự) và
+  `objects[].access` (một dòng, ≤120 ký tự); tên Task đọc từ `task.name`.
+  Inspector thêm `Tham số` (cổng VAR_INPUT/VAR_OUTPUT phân tích từ chính buffer
+  đang mở) và `Thuộc tính khác` (cặp khoá/giá trị CÓ THẬT của POU), cả hai gập
+  được bằng `<details>`. Chưa ghi gì thì hiện "chưa ghi mô tả"/"không xác định
+  được" — không có giá trị mẫu kiểu `"Public"`.
+
+  `annotateObject` **vá tại chỗ** thay vì đi qua `upsertObject`: `upsertObject`
+  thay toàn bộ object nên sửa một dòng mô tả sẽ buộc client gửi kèm `source`, và
+  một buffer cũ trong trình duyệt sẽ ghi đè mã nguồn của phiên khác.
+
+- **Changed — hợp đồng `PGM02-WORKSPACE-V1` lên 1.2** (15 → 16 operation) để
+  khai `annotateObject`. **Cần chủ sở hữu ký lại**: hồ sơ này đang pin
+  `approvedCandidateCommit` và `ownerDisposition: APPROVED_FULL_PLAN`.
+
+- **Changed — `DEV-PROG-005`: trần tab POU 8 → 10** và nút `+` của thanh tab nay
+  mở Bảng lệnh nhanh (bộ chọn POU đã có, cùng đường mở/lấy-lại-tiêu-điểm tab).
+  Thanh tab hiện cả khi chưa có tab nào, nếu không nút `+` chỉ tồn tại sau khi
+  người dùng đã mở được một POU bằng đường khác.
+
+- **Verification** (2026-08-28): `npx vitest --run --environment jsdom src`
+  **76 file / 1058 test PASS** (phạm vi `src/features/programming`);
+  `npm run lint` PASS; `npx tsc --noEmit` PASS; `go vet ./...` +
+  `go test ./... -count=1` PASS (ca mới
+  `TestAnnotateObjectVaTaiChoVaChoPhepXuongDong`);
+  `python3 scripts/verify_programming_pgm02_contract.py` PASS.
+
 ### VP — mở chiều GHI cho ST Program kèm quyền sở hữu slot (`F-PROG-ASBUILT-016`) (2026-08-28)
 
 - **Changed — `VAR_OUTPUT` bind category `VP` nay được chấp nhận.**
