@@ -16,10 +16,12 @@ import type { ProgrammingProgram } from '../../model/types'
  * Vì vậy mọi trường đi qua `InspectorField`: hoặc `known` kèm giá trị, hoặc
  * `unknown` — không có `''`, không có `0`, không có giá trị mặc định.
  *
- * `UD-PROG-015` (ĐANG MỞ) chặn đúng ba trường có trong ảnh render nhưng không
- * có nguồn trong Draft v2: `Access`, `Description`, và TÊN Task. Chúng cố ý
- * KHÔNG xuất hiện trong kiểu dữ liệu này — thêm chúng vào rồi để trống vẫn là
- * mở đường cho một bản sửa sau này điền `"Public"` cho giống ảnh.
+ * `UD-PROG-015` ĐÃ ĐÓNG bằng `DEV-PROG-004`: ba trường `Access`, `Description`
+ * và TÊN Task nay CÓ nguồn thật — hai trường đầu là chú thích do người dùng ghi
+ * (`objects[].description`/`objects[].access`, operation `annotateObject`), tên
+ * Task đọc từ `task.name` của Draft. Chúng vẫn đi qua `InspectorField` như mọi
+ * trường khác: không có nguồn thì `unknown`, không bao giờ là `"Public"` hay
+ * một chuỗi rỗng trông như đã điền.
  */
 
 export type InspectorField<T> = { known: true; value: T } | { known: false }
@@ -44,6 +46,24 @@ export interface InspectorProgramContext {
   /** Chu kỳ chiếu từ `programs[].periodMs`; KHÔNG nhân bản bảng Thực thi. */
   cycleMs: InspectorField<number>
   enabled: InspectorField<boolean>
+  /** `DEV-PROG-004` — ghi chú truy cập một dòng do người dùng viết. */
+  access: InspectorField<string>
+  /** `DEV-PROG-004` — mô tả nhiều dòng do người dùng viết. */
+  description: InspectorField<string>
+  /** `DEV-PROG-004` — TÊN Task chứa Program, để "Chu kỳ" đọc được thành
+   *  "Control_Main (1 s)". Task không đặt tên ⇒ `unknown`, không tự đặt. */
+  taskName: InspectorField<string>
+  /** `DEV-PROG-004` — cổng giao diện của POU (VAR_INPUT/VAR_OUTPUT). Rỗng là
+   *  một câu trả lời THẬT ("POU không khai cổng nào"), khác `unknown`. */
+  parameters: InspectorField<readonly InspectorPouParameter[]>
+  /** `DEV-PROG-004` — cặp khoá/giá trị metadata có thật của POU. */
+  attributes: readonly { key: string; value: string }[]
+}
+
+export interface InspectorPouParameter {
+  name: string
+  direction: 'INPUT' | 'OUTPUT' | 'IN_OUT'
+  dataType: string
 }
 
 export interface InspectorVariableContext {
@@ -111,6 +131,10 @@ export interface InspectorInput {
   program?: ProgrammingProgram | null
   /** Chu kỳ của Program đang chọn, đọc từ bảng Thực thi/Draft. */
   cycleMs?: number | null
+  /** Tên Task chứa Program (`task.name` của Draft). */
+  taskName?: string | null
+  /** Cổng giao diện của POU đang mở; `undefined` = chưa phân tích. */
+  parameters?: readonly InspectorPouParameter[]
   enabled?: boolean | null
   /** Ký hiệu dưới con trỏ ST; `entry === null` nghĩa là analyzer không tra được. */
   cursorSymbol?: StCursorSymbol | null
@@ -134,19 +158,55 @@ export function inspectorContextFor(input: InspectorInput): InspectorContext {
   if (symbolContext) return symbolContext
 
   if (input.program) {
+    const program = input.program
     return {
       kind: 'PROGRAM',
-      name: input.program.name ? known(input.program.name) : unknownField,
-      language: input.program.language ? known(input.program.language) : unknownField,
-      pouKind: input.program.kind ? known(input.program.kind) : unknownField,
+      name: program.name ? known(program.name) : unknownField,
+      language: program.language ? known(program.language) : unknownField,
+      pouKind: program.kind ? known(program.kind) : unknownField,
       /* `periodMs` không có ⇒ `unknown`. KHÔNG mặc định 1000 ms: một chu kỳ
        * đoán làm người đọc tin rằng lịch chạy đã được cấu hình. */
       cycleMs: typeof input.cycleMs === 'number' && input.cycleMs > 0
         ? known(input.cycleMs) : unknownField,
       enabled: typeof input.enabled === 'boolean' ? known(input.enabled) : unknownField,
+      access: program.access ? known(program.access) : unknownField,
+      description: program.description ? known(program.description) : unknownField,
+      taskName: input.taskName ? known(input.taskName) : unknownField,
+      /* `undefined` (chưa ai phân tích giao diện) khác `[]` (đã phân tích và
+       * POU không khai cổng nào). Gộp hai thứ đó lại là biến "chưa đọc" thành
+       * "không có". */
+      parameters: input.parameters === undefined ? unknownField : known(input.parameters),
+      attributes: pouAttributes(program),
     }
   }
   return { kind: 'EMPTY' }
+}
+
+/**
+ * Metadata cặp khoá/giá trị CÓ THẬT của POU.
+ *
+ * Chỉ liệt kê thứ Draft nói ra. `hasRuntimeConfig` là dữ kiện quan trọng nhất ở
+ * đây và cũng là thứ hay bị hiểu nhầm nhất: một POU kind `PROGRAM` hoàn toàn có
+ * thể chưa được xếp lịch chạy, và khi đó Check sẽ fail-closed thay vì tự đặt
+ * chu kỳ.
+ */
+function pouAttributes(program: ProgrammingProgram): { key: string; value: string }[] {
+  const rows: { key: string; value: string }[] = []
+  if (program.objectId) rows.push({ key: 'objectId', value: program.objectId })
+  rows.push({ key: 'programId', value: program.programId })
+  if (typeof program.hasRuntimeConfig === 'boolean') {
+    rows.push({ key: 'hasRuntimeConfig', value: String(program.hasRuntimeConfig) })
+  }
+  if (typeof program.executionOrder === 'number') {
+    rows.push({ key: 'executionOrder', value: String(program.executionOrder) })
+  }
+  if (program.functionalTags && program.functionalTags.length > 0) {
+    rows.push({ key: 'functionalTags', value: program.functionalTags.join(', ') })
+  }
+  if (program.dependencies && program.dependencies.length > 0) {
+    rows.push({ key: 'dependencies', value: String(program.dependencies.length) })
+  }
+  return rows
 }
 
 function runtimeFor(runtime: StRuntimeOverlayState | null | undefined, name: string): InspectorRuntimeValue {
@@ -293,6 +353,7 @@ export function inspectorHasUsefulContext(context: InspectorContext): boolean {
     // Chỉ có tên và loại thì chưa đáng một khay riêng — đó đúng là hiện trạng
     // mà `F-PGM02-AUD-001` chỉ ra.
     return context.cycleMs.known || context.enabled.known || context.language.known
+      || context.description.known || context.access.known
   }
   return true
 }

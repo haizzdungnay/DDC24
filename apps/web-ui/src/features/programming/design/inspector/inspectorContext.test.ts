@@ -287,16 +287,41 @@ describe('TC-PGM02-INS-03 — giá trị LIVE/SIM trong Inspector', () => {
   })
 })
 
-describe('UD-PROG-015 — ba trường trong ảnh KHÔNG có nguồn dữ liệu', () => {
-  it('kiểu dữ liệu của Inspector không hề có Access/Description/tên Task', () => {
+describe('DEV-PROG-004 — Access/Description/tên Task đã có nguồn, nhưng vẫn cấm bịa', () => {
+  // `UD-PROG-015` từng chốt: ba trường này KHÔNG được tồn tại trong kiểu, vì
+  // Draft v2 không có nguồn cho chúng và một ô trống sẽ mời người sau điền
+  // `"Public"` cho giống ảnh render. `DEV-PROG-004` đóng gap đó bằng nguồn
+  // THẬT (`objects[].description`/`objects[].access`, `task.name`), nên điều
+  // cần khẳng định đổi: trường có mặt, và khi Draft chưa ghi gì thì nó phải là
+  // `unknown` — không bao giờ là một giá trị mặc định trông hợp lý.
+  it('Draft chưa ghi chú thích ⇒ unknown, không phải chuỗi rỗng hay giá trị mẫu', () => {
     const context = contextFor({ program, cycleMs: 1000, enabled: true })
-    const keys = Object.keys(context)
-    // Không chỉ là "không render": chúng không tồn tại trong kiểu, nên không có
-    // đường nào một bản sửa sau này điền `"Public"` cho giống ảnh.
-    expect(keys).not.toContain('access')
-    expect(keys).not.toContain('description')
-    expect(keys).not.toContain('taskName')
+    if (context.kind !== 'PROGRAM') throw new Error('sai ngữ cảnh')
+    expect(context.access.known).toBe(false)
+    expect(context.description.known).toBe(false)
+    expect(context.taskName.known).toBe(false)
     expect(JSON.stringify(context)).not.toContain('Public')
     expect(JSON.stringify(context)).not.toContain('Control_Main')
+  })
+
+  it('Draft CÓ chú thích ⇒ đi qua nguyên văn, không cắt và không chuẩn hoá thêm', () => {
+    const context = contextFor({
+      program: { ...program, description: 'Dòng một.\nDòng hai.', access: 'Kỹ sư vận hành' },
+      cycleMs: 1000,
+      taskName: 'Control_Main',
+    })
+    if (context.kind !== 'PROGRAM') throw new Error('sai ngữ cảnh')
+    expect(context.description).toEqual({ known: true, value: 'Dòng một.\nDòng hai.' })
+    expect(context.access).toEqual({ known: true, value: 'Kỹ sư vận hành' })
+    expect(context.taskName).toEqual({ known: true, value: 'Control_Main' })
+  })
+
+  it('"chưa phân tích cổng" khác "POU không có cổng nào"', () => {
+    // Gộp hai câu này là biến một phép đo chưa chạy thành một kết luận.
+    const notAnalysed = contextFor({ program, cycleMs: 1000 })
+    const analysedEmpty = contextFor({ program, cycleMs: 1000, parameters: [] })
+    if (notAnalysed.kind !== 'PROGRAM' || analysedEmpty.kind !== 'PROGRAM') throw new Error('sai ngữ cảnh')
+    expect(notAnalysed.parameters.known).toBe(false)
+    expect(analysedEmpty).toMatchObject({ parameters: { known: true, value: [] } })
   })
 })

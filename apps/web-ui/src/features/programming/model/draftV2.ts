@@ -41,7 +41,12 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
       language: (object.language as ProgrammingProgram['language']) ?? 'ST',
       document: typeof object.source === 'string' ? object.source : '',
       ...(periodMs === undefined || Number.isNaN(periodMs) ? {} : { periodMs }),
-      ...(dependencies === undefined ? {} : { dependencies })
+      ...(dependencies === undefined ? {} : { dependencies }),
+      /* `DEV-PROG-004` — chú thích chỉ đi qua khi Draft THẬT SỰ có khoá đó.
+         Không có ⇒ trường vắng mặt, để Inspector nói "chưa ghi" thay vì hiện
+         một ô rỗng trông như đã ghi rồi xoá. */
+      ...(typeof object.description === 'string' ? { description: object.description } : {}),
+      ...(typeof object.access === 'string' ? { access: object.access } : {})
     })
     for (const local of (Array.isArray(object.locals) ? object.locals : []) as Record<string, unknown>[]) {
       variables.push({ ...(local as unknown as ProgrammingVariable), programId: String(local.programId ?? objectId) })
