@@ -110,8 +110,31 @@ với nhóm nào trong catalog là một nhãn rỗng.
 | Dựng FE | `npm run build` | PASS; chunk `programming` **140,64 KiB** gzip / ngân sách R3 165 KiB |
 | Go | `go vet ./...`, `go test ./... -count=1` | PASS |
 | Hợp đồng | `python3 scripts/verify_programming_pgm02_contract.py` | PASS |
-| E2E | `npx playwright test e2e/programming.spec.ts --project=desktop-chrome` | xem §8 |
+| E2E | `npx playwright test e2e/programming.spec.ts` (cả hai project) | **55 PASS / 13 skipped / 0 fail** |
 
-## 8. Kết quả E2E
+## 8. Bốn hồi quy do chính lát này gây ra, phát hiện bằng E2E
 
-Ghi ngay sau khi chạy — xem `CHANGELOG.md` mục `[Unreleased]` cùng ngày.
+E2E bắt được bốn thứ mà 1982 test đơn vị không bắt được. Ghi lại vì cả bốn đều
+là cùng một loại sai: *"thêm một bề mặt thứ hai cho một thứ đã có"*.
+
+| # | Triệu chứng E2E | Nguyên nhân | Cách sửa |
+|---|---|---|---|
+| 1 | `LIVE ... không lộ mutation` đỏ: có nút `Lưu` | `DEV-PROG-009` đăng ký hành động ở MỌI chế độ, chỉ vô hiệu hoá khi không sửa được | Không đăng ký gì khi `canEdit` sai. Vô hiệu hoá trả lời "chưa lưu được LÚC NÀY"; vắng mặt trả lời "chế độ này không sửa" |
+| 2 | `strict mode violation` trên `Lưu`/`Kiểm tra` | Hai nút cùng hành động, cùng tên truy cập | Nút ở header mang tên đầy đủ (`Lưu bản nháp`, `Kiểm tra gói`) — vẫn CHỨA nhãn nhìn thấy, đúng WCAG 2.5.3 |
+| 3 | axe `aria-valid-attr-value` | `aria-controls` của nút gập nhóm POU trỏ tới `id` chỉ tồn tại khi nhóm KHÔNG rỗng | Thân nhóm luôn có mặt và luôn mang `id` |
+| 4 | Inspector nói `Ký hiệu ST` cho một POU FUNCTION | Hai bản danh sách "không phải ký hiệu" đã lệch; chỉ mục dùng bản HẸP (thiếu `FUNCTION`) | Gộp về MỘT bản ở `stReferenceIndex`; `stHover.isStKeyword` đọc lại chính nó |
+
+## 9. Sửa vị trí sau phản hồi trực tiếp của người dùng
+
+Người dùng chỉ ra ba card phụ *"nằm không đúng vị trí"*. Chúng đang xếp chồng
+DƯỚI chỗ gõ trong cột giữa — người dùng phải cuộn qua chính thứ mình đang làm để
+tới ba thứ dùng để đi và để tra.
+
+| Card | Trước | Sau | Vì sao |
+|---|---|---|---|
+| `Ký hiệu & kiểu` | cột giữa, dưới editor | **bỏ hẳn** | Khay `Tham chiếu` của workbench đã liệt kê cùng tập ký hiệu kèm kiểu, số đọc/ghi và từng chỗ dùng |
+| `Bản đồ mã` | cột giữa, dưới editor | **cột trái**, dưới cây POU | Điều hướng giữa các POU và trong một POU là cùng một loại việc |
+| `Tham chiếu tại con trỏ` | cột giữa, dưới editor | **cột phải**, dưới Inspector | Nó mô tả ký hiệu ĐANG CHỌN — đúng thứ cột Thuộc tính sở hữu |
+
+Sau khi cột giữa trống ra, chiều cao mặc định workbench hạ 200 → 150 px: hai
+vùng chia cùng một ngân sách, và khay Vấn đề của một Draft sạch chỉ có hai dòng.

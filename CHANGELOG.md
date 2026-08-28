@@ -103,8 +103,21 @@
   Task và thứ tự Program. Lý do đầy đủ và điều kiện xét lại ghi trong
   `ExecutionTab.tsx`.
 
+- **Fixed — ba card phụ về đúng cột chức năng** (phản hồi trực tiếp của người
+  dùng). `Ký hiệu & kiểu` bỏ hẳn (khay `Tham chiếu` của workbench đã nói cùng
+  điều, đầy đủ hơn); `Bản đồ mã` sang cột trái dưới cây POU; `Tham chiếu tại con
+  trỏ` sang cột phải dưới Inspector. Chiều cao mặc định workbench 200 → 150 px.
+
+- **Fixed — bốn hồi quy do chính lát này gây ra, E2E bắt được:** LIVE không còn
+  hiện nút `Lưu`/`Kiểm tra` (không đăng ký hành động khi không sửa được, thay vì
+  hiện nút bị khoá); hai nút cùng hành động nay khác TÊN TRUY CẬP; `aria-controls`
+  của nút gập nhóm POU trỏ tới `id` luôn tồn tại; danh sách "không phải ký hiệu"
+  gộp về một bản (hai bản đã lệch, làm Inspector nói `Ký hiệu ST` cho một POU
+  kind `FUNCTION`).
+
 - **Verification** (2026-08-28): `npx vitest --run --environment jsdom src`
   **173 file / 1982 test PASS**;
+  `npx playwright test e2e/programming.spec.ts` **55 PASS / 13 skipped / 0 fail**;
   `npm run lint` PASS; `npx tsc --noEmit` PASS; `go vet ./...` +
   `go test ./... -count=1` PASS (ca mới
   `TestAnnotateObjectVaTaiChoVaChoPhepXuongDong`);
