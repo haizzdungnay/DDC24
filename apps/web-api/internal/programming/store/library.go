@@ -122,6 +122,17 @@ type LibraryEntry struct {
 	Dependencies      []LibraryDependency
 	StateLayout       LibraryStateLayout
 	ContentSHA256     [sha256.Size]byte
+	/*
+	   `T61-103` — metadata TRÌNH BÀY. Nằm ngoài `ContentSHA256` một cách có
+	   chủ ý: sửa mô tả không được đổi danh tính thực thi, nếu không mọi
+	   artifact và pin đã ký thành lỗi thời chỉ vì một lần sửa chính tả.
+
+	   `nil` nghĩa là "chưa ai điền", KHÁC chuỗi rỗng nghĩa là "đã điền rỗng có
+	   chủ đích". Phân biệt này đi thẳng ra tới màn hình: `nil` render `—`.
+	*/
+	Category           *string
+	Description        *string
+	PresentationSHA256 []byte
 }
 
 type LibraryUsage struct {
@@ -169,6 +180,11 @@ type UpsertProjectLibraryEntryParams struct {
 	InterfaceJSON     []byte
 	Dependencies      []LibraryDependency
 	StateLayout       LibraryStateLayout
+	/* `T61-103` — metadata trình bày. `nil` = không đổi trường đó; con trỏ tới
+	   chuỗi rỗng = xoá nội dung có chủ đích. Hai thứ khác nhau, và gộp chúng
+	   lại sẽ làm người dùng không xoá được một mô tả đã viết. */
+	Category    *string
+	Description *string
 	// NewLibraryRevisionID chỉ dùng khi LibraryRevisionID rỗng và Project chưa
 	// có Draft library nào. Store KHÔNG tự sinh UUID: sinh ID bên trong
 	// transaction làm cùng một request retry ra hai identity khác nhau.
@@ -213,8 +229,12 @@ type LibrarySearchParams struct {
 	Query     string
 	Kind      string
 	Scope     string
-	Limit     int
-	After     *LibrarySearchKey
+	/* `T61-103` — lọc theo phân loại nghiệp vụ. So CHÍNH XÁC, không mờ: đây là
+	   một tập giá trị đóng (`categoryOrder` của registry), nên khớp mờ chỉ tạo
+	   ra kết quả không giải thích được. */
+	Category string
+	Limit    int
+	After    *LibrarySearchKey
 }
 
 // LibrarySearchKey là khoá keyset của danh sách Control Library. Thứ tự phải
@@ -523,15 +543,18 @@ func (s *Store) UpsertProjectLibraryEntry(ctx context.Context, params UpsertProj
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO library_entries(
 		library_revision_id,entry_id,kind,name,name_folded,feature_state,signature_json,content_sha256,
-		language,source_blob,interface_json,dependencies_json,state_layout_version,state_size_bytes,state_layout_sha256)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		language,source_blob,interface_json,dependencies_json,state_layout_version,state_size_bytes,state_layout_sha256,
+		category,description,presentation_sha256)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(library_revision_id,entry_id) DO UPDATE SET
 		kind=excluded.kind,name=excluded.name,name_folded=excluded.name_folded,
 		feature_state=excluded.feature_state,signature_json=excluded.signature_json,
 		content_sha256=excluded.content_sha256,language=excluded.language,source_blob=excluded.source_blob,
 		interface_json=excluded.interface_json,dependencies_json=excluded.dependencies_json,
 		state_layout_version=excluded.state_layout_version,state_size_bytes=excluded.state_size_bytes,
-		state_layout_sha256=excluded.state_layout_sha256`, libraryEntrySQLArgs(entry)...); err != nil {
+		state_layout_sha256=excluded.state_layout_sha256,
+		category=excluded.category,description=excluded.description,
+		presentation_sha256=excluded.presentation_sha256`, libraryEntrySQLArgs(entry)...); err != nil {
 		if strings.Contains(err.Error(), "library_entries_name_idx") || strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return LibraryEntryMutation{}, ErrAlreadyExists
 		}
@@ -944,18 +967,23 @@ func (s *Store) SearchLibraryEntries(ctx context.Context, params LibrarySearchPa
 	if s.system != nil && (params.Scope == "" || params.Scope == LibraryScopeSystem) {
 		for _, entry := range s.system.Entries {
 			if (params.Kind == "" || entry.Kind == params.Kind) &&
-				(query == "" || strings.Contains(strings.ToUpper(entry.Name), query) || strings.Contains(strings.ToUpper(entry.EntryID), query)) &&
+				(params.Category == "" || (entry.Category != nil && *entry.Category == params.Category)) &&
+				(query == "" || libraryEntryMatchesQuery(entry, query)) &&
 				(params.After == nil || compareLibraryEntryWithKey(entry, *params.After) > 0) {
 				result = append(result, cloneLibraryEntry(entry))
 			}
 		}
 	}
 	if params.Scope != LibraryScopeSystem && params.ProjectID != "" {
-		arguments := []any{params.ProjectID, params.Kind, params.Kind, query, query, query}
+		arguments := []any{params.ProjectID, params.Kind, params.Kind,
+			params.Category, params.Category,
+			query, query, query, query}
 		arguments = append(arguments, librarySearchAfterSQLArgs(params.After, params.Limit)...)
 		rows, err := s.db.QueryContext(ctx, libraryEntrySelect+` JOIN library_revisions r USING(library_revision_id)
 			WHERE r.scope='PROJECT' AND r.project_id=? AND (?='' OR e.kind=?)
-			AND (?='' OR instr(e.name_folded,?)>0 OR instr(upper(e.entry_id),?)>0)
+			AND (?='' OR e.category=?)
+			AND (?='' OR instr(e.name_folded,?)>0 OR instr(upper(e.entry_id),?)>0
+				OR instr(upper(coalesce(e.description,'')),?)>0)
 			AND (?='' OR e.name_folded>? OR
 				(e.name_folded=? AND e.entry_id>?) OR
 				(e.name_folded=? AND e.entry_id=? AND e.library_revision_id>?))
@@ -1180,7 +1208,8 @@ func (s *Store) ListLibraryUsages(ctx context.Context, libraryRevisionID, entryI
 }
 
 const libraryEntrySelect = `SELECT e.library_revision_id,e.entry_id,e.kind,e.name,e.language,e.feature_state,
-	e.source_blob,e.interface_json,e.signature_json,e.dependencies_json,e.state_layout_version,e.state_size_bytes,e.state_layout_sha256,e.content_sha256
+	e.source_blob,e.interface_json,e.signature_json,e.dependencies_json,e.state_layout_version,e.state_size_bytes,e.state_layout_sha256,e.content_sha256,
+	e.category,e.description,e.presentation_sha256
 	FROM library_entries e`
 
 func prepareProjectLibraryEntry(params UpsertProjectLibraryEntryParams, publishing bool) (LibraryEntry, error) {
@@ -1224,8 +1253,47 @@ func prepareProjectLibraryEntry(params UpsertProjectLibraryEntryParams, publishi
 		Kind: params.Kind, Name: params.Name, Language: params.Language, FeatureState: params.FeatureState,
 		Source: source, InterfaceJSON: interfaceJSON, SignatureJSON: append([]byte(nil), projectLibraryLegacySignature...),
 		Dependencies: dependencies, StateLayout: params.StateLayout}
+	/* `T61-103` — metadata TRÌNH BÀY được gán SAU khi tính `ContentSHA256`.
+	   Thứ tự này là bản thân bất biến `D61-09`: danh tính thực thi không được
+	   phụ thuộc vào mô tả. Đảo thứ tự ở đây sẽ làm mỗi lần sửa chính tả sinh ra
+	   một `contentSha256` mới, và mọi artifact đã ký thành lỗi thời. */
 	entry.ContentSHA256, err = libraryEntryDigest(entry)
-	return entry, err
+	if err != nil {
+		return entry, err
+	}
+	if params.Category != nil {
+		if len(*params.Category) > 32 {
+			return LibraryEntry{}, fmt.Errorf("library entry category vượt 32 ký tự")
+		}
+		value := *params.Category
+		entry.Category = &value
+	}
+	if params.Description != nil {
+		if len(*params.Description) > 512 {
+			return LibraryEntry{}, fmt.Errorf("library entry description vượt 512 ký tự")
+		}
+		value := *params.Description
+		entry.Description = &value
+	}
+	entry.PresentationSHA256 = libraryPresentationDigest(entry.Category, entry.Description)
+	return entry, nil
+}
+
+/*
+libraryPresentationDigest băm RIÊNG phần trình bày.
+
+Nó cho client biết mô tả có đổi hay không mà không phải so từng trường, và quan
+trọng hơn: nó tồn tại để KHÔNG ai bị cám dỗ nhét mô tả vào `contentSha256`. Khi
+cả hai đều rỗng thì trả `nil` — "chưa ai điền" phải phân biệt được với "đã điền
+rồi và nội dung rỗng".
+*/
+func libraryPresentationDigest(category, description *string) []byte {
+	if category == nil && description == nil {
+		return nil
+	}
+	payload, _ := json.Marshal(map[string]any{"category": category, "description": description})
+	digest := sha256.Sum256(payload)
+	return digest[:]
 }
 
 func validLibraryKind(kind string) bool {
@@ -1310,8 +1378,9 @@ func requireMutableProjectLibraryOfProjectTx(ctx context.Context, tx *sql.Tx, re
 func insertLibraryEntryTx(ctx context.Context, tx *sql.Tx, entry LibraryEntry) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO library_entries(
 		library_revision_id,entry_id,kind,name,name_folded,feature_state,signature_json,content_sha256,
-		language,source_blob,interface_json,dependencies_json,state_layout_version,state_size_bytes,state_layout_sha256)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, libraryEntrySQLArgs(entry)...)
+		language,source_blob,interface_json,dependencies_json,state_layout_version,state_size_bytes,state_layout_sha256,
+		category,description,presentation_sha256)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, libraryEntrySQLArgs(entry)...)
 	return err
 }
 
@@ -1344,9 +1413,20 @@ func libraryEntrySQLArgs(entry LibraryEntry) []any {
 		layoutSize = int64(entry.StateLayout.StateSizeBytes)
 		layoutHash = entry.StateLayout.SHA256[:]
 	}
+	var category, description, presentation any
+	if entry.Category != nil {
+		category = *entry.Category
+	}
+	if entry.Description != nil {
+		description = *entry.Description
+	}
+	if len(entry.PresentationSHA256) > 0 {
+		presentation = entry.PresentationSHA256
+	}
 	return []any{entry.LibraryRevisionID, entry.EntryID, entry.Kind, entry.Name, strings.ToUpper(entry.Name),
 		entry.FeatureState, projectLibraryLegacySignature, entry.ContentSHA256[:], entry.Language, entry.Source,
-		entry.InterfaceJSON, dependencies, layoutVersion, layoutSize, layoutHash}
+		entry.InterfaceJSON, dependencies, layoutVersion, layoutSize, layoutHash,
+		category, description, presentation}
 }
 
 func refreshLibraryManifestTx(ctx context.Context, tx *sql.Tx, libraryRevisionID string) error {
@@ -1448,6 +1528,7 @@ func fromDomainLibraryEntry(input domain.LibraryEntry) LibraryEntry {
 		Language: string(input.Language), Source: append([]byte(nil), input.SourceBlob...),
 		InterfaceJSON: append([]byte(nil), input.InterfaceJSON...), SignatureJSON: append([]byte(nil), input.SignatureJSON...),
 		ContentSHA256: input.ContentSHA256,
+		Category:      optionalString(input.Category),
 		StateLayout: LibraryStateLayout{Authoritative: input.StateLayout.Authoritative,
 			Version: input.StateLayout.Version, StateSizeBytes: input.StateLayout.StateSizeBytes, SHA256: input.StateLayout.SHA256},
 		Dependencies: dependencies,
@@ -1517,10 +1598,24 @@ func scanLibraryEntry(row rowScanner) (LibraryEntry, error) {
 	var source, interfaceJSON, signatureJSON []byte
 	var layoutVersion, layoutSize sql.NullInt64
 	var layoutHash []byte
+	var category, description sql.NullString
+	var presentationHash []byte
 	if err := row.Scan(&entry.LibraryRevisionID, &entry.EntryID, &entry.Kind, &entry.Name, &language,
 		&entry.FeatureState, &source, &interfaceJSON, &signatureJSON, &dependenciesJSON,
-		&layoutVersion, &layoutSize, &layoutHash, &digest); err != nil {
+		&layoutVersion, &layoutSize, &layoutHash, &digest,
+		&category, &description, &presentationHash); err != nil {
 		return LibraryEntry{}, err
+	}
+	if category.Valid {
+		value := category.String
+		entry.Category = &value
+	}
+	if description.Valid {
+		value := description.String
+		entry.Description = &value
+	}
+	if len(presentationHash) > 0 {
+		entry.PresentationSHA256 = append([]byte(nil), presentationHash...)
 	}
 	if !language.Valid || len(source) == 0 || len(interfaceJSON) == 0 {
 		return LibraryEntry{}, fmt.Errorf("PROJECT library entry v6 thiếu source/interface authoritative")
@@ -1629,4 +1724,105 @@ func (s *Store) FindProjectLibraryDraft(ctx context.Context, projectID string) (
 		return LibraryRevision{}, err
 	}
 	return s.GetLibraryRevision(ctx, libraryRevisionID)
+}
+
+/*
+libraryEntryMatchesQuery — phép so `q` cho nhánh SYSTEM (giữ trong bộ nhớ).
+
+Phủ `name`, `entryId` và `description`. **Không** phủ chữ ký: chữ ký nằm trong
+`signature_json`, và quét chuỗi trong một khối JSON sẽ khớp cả tên kiểu, tên
+tham số lẫn giá trị mặc định — gõ `REAL` sẽ trả về gần như mọi khối. Một phép
+tìm cho kết quả không giải thích được thì tệ hơn một phép tìm hẹp mà đúng
+(`LOCK-PGM04-CONTRACT-001` §3).
+
+Nhánh PROJECT làm cùng phép so bằng SQL; hai nhánh phải phủ CÙNG một tập trường,
+nếu không cùng một từ khoá sẽ cho hai kết quả khác nhau tuỳ scope người dùng
+đang xem.
+*/
+func libraryEntryMatchesQuery(entry LibraryEntry, upperQuery string) bool {
+	if strings.Contains(strings.ToUpper(entry.Name), upperQuery) {
+		return true
+	}
+	if strings.Contains(strings.ToUpper(entry.EntryID), upperQuery) {
+		return true
+	}
+	return entry.Description != nil && strings.Contains(strings.ToUpper(*entry.Description), upperQuery)
+}
+
+
+/* Chuỗi rỗng của registry nghĩa là "không phân loại"; ở store nó là `nil` để
+   phân biệt với một phân loại đã đặt thành chuỗi rỗng. */
+func optionalString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+// LibraryUsageRow là một mục Used-In đã ghép đủ ngữ cảnh để hiển thị.
+//
+// Khác `LibraryUsage` (bản thô của bảng) ở chỗ nó mang tên Project và tên POU:
+// một danh sách toàn UUID không trả lời được câu người dùng hỏi ("chương trình
+// nào đang dùng khối này"), và `AC-PGM01-01` cấm UUID ở mặt trước.
+type LibraryUsageRow struct {
+	ProjectID       string
+	ProjectName     string
+	RevisionID      string
+	ObjectID        string
+	ObjectName      string
+	RequiredVersion string
+	UsageKind       string
+	// IsActive = Revision này đang là gói vận hành của Project.
+	IsActive bool
+}
+
+/*
+ListLibraryUsageRows — Used-In trên các Revision ĐÃ NIÊM PHONG.
+
+Bảng `library_usages` được ghi trong chính đường Seal Revision, nên nó chỉ biết
+những gì đã seal. Draft đang sửa KHÔNG có ở đây (chưa có `pou_objects`), và
+usage của entry SYSTEM cũng không — migration `0007` cố ý không tạo FK giả tới
+một row DB không tồn tại. Cả hai khoảng trống ấy được lớp application nói ra
+bằng `availability`, chứ không được lấp bằng số 0.
+
+Một mục là MỘT CẶP (Revision, POU), không phải một lần gọi: câu hỏi là "chương
+trình nào dùng khối này", không phải "khối này bị gọi bao nhiêu lần". `usage_kind`
+đi kèm vì `INSTANCE` mang trạng thái còn `CALL` thì không — hai loại có hệ quả
+khác nhau khi đổi version.
+*/
+func (s *Store) ListLibraryUsageRows(ctx context.Context, libraryRevisionID, entryID string,
+	limit int) ([]LibraryUsageRow, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("Programming store chưa mở")
+	}
+	if limit < 1 || limit > 200 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT p.project_id,p.name,u.revision_id,u.object_id,
+		coalesce(o.name,''),u.required_version,u.usage_kind,
+		CASE WHEN c.new_revision_id IS NOT NULL THEN 1 ELSE 0 END
+		FROM library_usages u
+		JOIN revisions rev ON rev.revision_id=u.revision_id
+		JOIN projects p ON p.project_id=rev.project_id
+		LEFT JOIN pou_objects o ON o.revision_id=u.revision_id AND o.object_id=u.object_id
+		LEFT JOIN commission_records c ON c.new_revision_id=u.revision_id AND c.result='SUCCEEDED'
+		WHERE u.library_revision_id=? AND (?='' OR u.entry_id=?)
+		ORDER BY p.name,u.revision_id,u.object_id,u.usage_kind
+		LIMIT ?`, libraryRevisionID, entryID, entryID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	usages := make([]LibraryUsageRow, 0, limit)
+	for rows.Next() {
+		var row LibraryUsageRow
+		var active int
+		if err := rows.Scan(&row.ProjectID, &row.ProjectName, &row.RevisionID, &row.ObjectID,
+			&row.ObjectName, &row.RequiredVersion, &row.UsageKind, &active); err != nil {
+			return nil, err
+		}
+		row.IsActive = active == 1
+		usages = append(usages, row)
+	}
+	return usages, rows.Err()
 }

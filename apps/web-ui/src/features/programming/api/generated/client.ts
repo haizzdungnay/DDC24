@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.30.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.31.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -202,6 +202,7 @@ export const PROGRAMMING_ENDPOINTS = {
   "getProgrammingTrace": { method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["viewer","operator","engineer","admin"] },
   "importProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/import", roles: ["engineer","admin"] },
   "listProgrammingAudit": { method: "GET", path: "/api/v1/programming/audit", roles: ["viewer","operator","engineer","admin"] },
+  "listProgrammingLibraryUsages": { method: "GET", path: "/api/v1/programming/library-usages", roles: ["viewer","operator","engineer","admin"] },
   "listProgrammingOperations": { method: "GET", path: "/api/v1/programming/operations", roles: ["viewer","operator","engineer","admin"] },
   "listProgrammingOverrides": { method: "GET", path: "/api/v1/programming/overrides", roles: ["viewer","operator","engineer","admin"] },
   "listProgrammingProgramIntents": { method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", roles: ["viewer","operator","engineer","admin"] },

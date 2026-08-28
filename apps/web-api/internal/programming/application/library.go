@@ -51,6 +51,12 @@ type LibraryEntryView struct {
 	Dependencies     []LibraryDependencyView
 	StateLayoutKnown bool
 	StateSizeBytes   uint32
+	/* `T61-101` — metadata trình bày. Con trỏ chứ không phải chuỗi: `nil` là
+	   "chưa ai điền" và phải tới FE dưới dạng field VẮNG, để màn hình render
+	   `—` thay vì một ô trống trông như đã điền rỗng. */
+	Category           *string
+	Description        *string
+	PresentationSHA256 string
 }
 
 type LibraryDependencyView struct {
@@ -67,9 +73,12 @@ type SearchLibrariesCommand struct {
 	ProjectID string
 	Scope     string
 	Kind      string
-	Query     string
-	Cursor    string
-	Limit     int
+	/* `T61-101` — lọc theo phân loại. So chính xác: đây là tập giá trị đóng của
+	   `categoryOrder`, khớp mờ chỉ tạo ra kết quả không giải thích được. */
+	Category string
+	Query    string
+	Cursor   string
+	Limit    int
 }
 
 type UpsertLibraryEntryCommand struct {
@@ -160,7 +169,8 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 			return LibraryPage{}, err
 		}
 		if cursor.Scope != command.Scope || cursor.Kind != command.Kind ||
-			cursor.Query != command.Query || cursor.ProjectID != command.ProjectID {
+			cursor.Query != command.Query || cursor.ProjectID != command.ProjectID ||
+			cursor.Category != command.Category {
 			return LibraryPage{}, ErrInvalidCursor
 		}
 		after = &programmingstore.LibrarySearchKey{
@@ -171,7 +181,8 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 	// theo số trang như OFFSET hoặc tải lại toàn bộ prefix từ đầu.
 	entries, err := s.store.SearchLibraryEntries(ctx, programmingstore.LibrarySearchParams{
 		ProjectID: command.ProjectID, Query: command.Query, Kind: command.Kind,
-		Scope: command.Scope, Limit: command.Limit + 1, After: after,
+		Category: command.Category,
+		Scope:    command.Scope, Limit: command.Limit + 1, After: after,
 	})
 	if err != nil {
 		return LibraryPage{}, err
@@ -194,7 +205,7 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 		encoded, err := s.encodeLibraryCursor(libraryCursor{
 			NameFolded: strings.ToUpper(last.Name), EntryID: last.EntryID, LibraryRevisionID: last.LibraryRevisionID,
 			Scope: command.Scope, Kind: command.Kind,
-			Query: command.Query, ProjectID: command.ProjectID,
+			Query: command.Query, Category: command.Category, ProjectID: command.ProjectID,
 			ExpiresAtUTCMS: s.now().UTC().Add(15 * time.Minute).UnixMilli(),
 		})
 		if err != nil {
@@ -395,6 +406,10 @@ func libraryEntryView(entry programmingstore.LibraryEntry, revision programmings
 		Language: entry.Language, FeatureState: entry.FeatureState,
 		ContentSHA256: hex.EncodeToString(entry.ContentSHA256[:]), Dependencies: dependencies,
 		StateLayoutKnown: entry.StateLayout.Authoritative, StateSizeBytes: entry.StateLayout.StateSizeBytes,
+		Category: entry.Category, Description: entry.Description,
+	}
+	if len(entry.PresentationSHA256) > 0 {
+		view.PresentationSHA256 = hex.EncodeToString(entry.PresentationSHA256)
 	}
 	if len(entry.InterfaceJSON) > 0 {
 		view.InterfaceJSON = append([]byte(nil), entry.InterfaceJSON...)
@@ -412,7 +427,11 @@ type libraryCursor struct {
 	Scope             string `json:"scope"`
 	Kind              string `json:"kind"`
 	Query             string `json:"query"`
-	ProjectID         string `json:"projectId"`
+	/* `T61-101` — cursor phải mang CẢ bộ lọc. Thiếu `category` ở đây thì trang
+	   thứ hai của một bộ lọc trả về dữ liệu của bộ lọc khác, và người dùng
+	   không có cách nào biết. */
+	Category  string `json:"category"`
+	ProjectID string `json:"projectId"`
 	ExpiresAtUTCMS    int64  `json:"expiresAtUtcMs"`
 }
 
@@ -484,4 +503,113 @@ func LibraryPublicError(err error) (domain.PublicError, bool) {
 		return public, true
 	}
 	return domain.PublicError{}, false
+}
+
+/* ------------------------------------------------------------------ *
+ * `T61-104` — Used-In                                                 *
+ * ------------------------------------------------------------------ */
+
+// LibraryUsageItem là một mục Used-In: MỘT CẶP (Revision, POU).
+type LibraryUsageItem struct {
+	ProjectID       string `json:"projectId"`
+	ProjectName     string `json:"projectName"`
+	RevisionID      string `json:"revisionId"`
+	ObjectID        string `json:"objectId"`
+	ObjectName      string `json:"objectName"`
+	RequiredVersion string `json:"requiredVersion"`
+	UsageKind       string `json:"usageKind"`
+	IsActive        bool   `json:"isActive"`
+}
+
+// LibraryUsageScope là một phạm vi đếm. `Count` chỉ có nghĩa khi phạm vi này
+// thật sự đo được — xem `LibraryUsageView.Availability`.
+type LibraryUsageScope struct {
+	Count     int                `json:"count"`
+	Truncated bool               `json:"truncated"`
+	Items     []LibraryUsageItem `json:"items"`
+}
+
+/*
+LibraryUsageView — Used-In với `Availability` là trường BẮT BUỘC.
+
+Đây là chỗ quan trọng nhất của lát này, và nó không phải chuyện trình bày.
+
+`Count: 0` nghĩa là "không chương trình nào đang dùng khối này" — một câu mời
+người ta xoá hoặc deprecate nó. `Availability: "UNAVAILABLE"` nghĩa là "chưa đo
+được". Trả `0` khi đang không đo được là cách một khối bị gỡ **trong khi nó đang
+điều khiển tủ**.
+
+Ba giá trị:
+
+  - `COMPLETE`     — cả Draft lẫn sealed đều đo được.
+  - `SEALED_ONLY`  — chỉ đo được phần đã niêm phong; Draft chưa tính.
+  - `UNAVAILABLE`  — không đo được phạm vi nào (entry SYSTEM: usage của chúng
+    phân giải từ registry/profile lock chứ không nằm trong `library_usages`).
+*/
+type LibraryUsageView struct {
+	Sealed       LibraryUsageScope `json:"sealed"`
+	Draft        LibraryUsageScope `json:"draft"`
+	Availability string            `json:"availability"`
+}
+
+const (
+	LibraryUsageComplete    = "COMPLETE"
+	LibraryUsageSealedOnly  = "SEALED_ONLY"
+	LibraryUsageUnavailable = "UNAVAILABLE"
+	libraryUsageMaxItems    = 200
+)
+
+type LibraryUsageCommand struct {
+	LibraryRevisionID string
+	EntryID           string
+	Scope             string
+}
+
+/*
+Usage đọc Used-In cho một entry.
+
+Cho phép hiện tên Project khác: `ListProjects` không lọc theo chủ sở hữu và
+`read` là quyền mọi vai đã đăng nhập đều có, nên sản phẩm không có phân vùng
+theo Project và danh sách chéo Project không lộ thêm gì
+(`LOCK-PGM04-CONTRACT-001` §1.3).
+*/
+func (s *LibraryService) Usage(ctx context.Context, command LibraryUsageCommand) (LibraryUsageView, error) {
+	view := LibraryUsageView{
+		Sealed: LibraryUsageScope{Items: []LibraryUsageItem{}},
+		Draft:  LibraryUsageScope{Items: []LibraryUsageItem{}},
+	}
+	if command.LibraryRevisionID == "" {
+		return view, fmt.Errorf("libraryRevisionId là bắt buộc")
+	}
+	if command.Scope == programmingstore.LibraryScopeSystem {
+		/* Entry SYSTEM: `library_usages` cố ý không giữ usage của chúng
+		   (migration `0007` — không tạo FK giả tới một row DB không có). Nói ra
+		   là "chưa đo được", KHÔNG trả 0. */
+		view.Availability = LibraryUsageUnavailable
+		return view, nil
+	}
+
+	rows, err := s.store.ListLibraryUsageRows(ctx, command.LibraryRevisionID, command.EntryID,
+		libraryUsageMaxItems+1)
+	if err != nil {
+		return LibraryUsageView{}, err
+	}
+	if len(rows) > libraryUsageMaxItems {
+		rows = rows[:libraryUsageMaxItems]
+		view.Sealed.Truncated = true
+	}
+	for _, row := range rows {
+		view.Sealed.Items = append(view.Sealed.Items, LibraryUsageItem{
+			ProjectID: row.ProjectID, ProjectName: row.ProjectName,
+			RevisionID: row.RevisionID, ObjectID: row.ObjectID, ObjectName: row.ObjectName,
+			RequiredVersion: row.RequiredVersion, UsageKind: row.UsageKind, IsActive: row.IsActive,
+		})
+	}
+	view.Sealed.Count = len(view.Sealed.Items)
+
+	/* Draft chưa Seal thì chưa có `pou_objects`, nên phạm vi Draft chưa đo được
+	   ở lát này. Nói `SEALED_ONLY` thay vì để `draft.count = 0` — số 0 ở đó sẽ
+	   đọc như "không Draft nào dùng khối này", một câu chưa ai kiểm chứng. */
+	view.Availability = LibraryUsageSealedOnly
+	return view, nil
 }

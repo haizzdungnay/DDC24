@@ -57,6 +57,10 @@ var routeDefinitions = []routeDefinition{
 	{method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/checks/{checkId}", permission: auth.PermissionRead},
 	{method: "GET", path: "/api/v1/programming/libraries", permission: auth.PermissionRead},
+	/* `T61-105` — Used-In là đường ĐỌC. Người ta cần biết khối nào đang được
+	   dùng TRƯỚC khi quyết định có sửa hay không; chặn nó lại làm người vận
+	   hành phải đoán. */
+	{method: "GET", path: "/api/v1/programming/library-usages", permission: auth.PermissionRead},
 	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", permission: auth.PermissionProgramEdit, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",

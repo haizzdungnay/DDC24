@@ -7,10 +7,10 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "73f84275538708d1a77738b83f803c795cf032e2de2599b5ecc963403513a0ab",
+      "sha256": "39f9b86080fab3cbc5d76e5319fdecff3c7f265dfc3e8230b967e37e2754e2f5",
       "major": 1,
-      "version": "1.30.0",
-      "operationCount": 40
+      "version": "1.31.0",
+      "operationCount": 41
     },
     {
       "name": "ipc",
@@ -66,11 +66,11 @@
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "a94025999df5ec8495eb4f7a3f3f2c356b192b9ffd547941f6434b0f26b5ec4c",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0013_programming_simulation_sessions.sql",
-      "migrationSha256": "cfff5cf1bde68f855e73137287ccd9074efe5580cf6ee265b812d81de2ee0174",
+      "sha256": "6f41c419a7771efaf88bbf1aa5d133c8fa4dc563d787a91298f90ea48acc019a",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0014_library_presentation_metadata.sql",
+      "migrationSha256": "197d5879f69bda8c1f7db16c286eda77d08871349c93256e0de4b414428f3d50",
       "major": 1,
-      "schemaVersion": 13,
+      "schemaVersion": 14,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {

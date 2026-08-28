@@ -122,7 +122,11 @@ type LibraryEntry struct {
 	// thích, không dùng nó làm nguồn hash thứ hai.
 	SignatureJSON []byte
 	ContentSHA256 [sha256.Size]byte
-	StateLayout   LibraryStateLayout
+	/* `T61-102` — phân loại nghiệp vụ. Với SYSTEM nó sinh từ registry; với
+	   PROJECT nó do người dùng đặt và store giữ. Rỗng = chưa phân loại, và
+	   PGM-04 render nó thành `—` chứ không thành một nhóm "khác" tự nghĩ ra. */
+	Category    string
+	StateLayout LibraryStateLayout
 	Dependencies  []LibraryDependency
 }
 
@@ -140,10 +144,20 @@ type LibraryUsage struct {
 // feature state), KHÔNG phải hash executable implementation hay artifact đã
 // biên dịch. Hàm materialize vẫn xác minh hash trước khi dùng.
 type LibraryEntryDefinition struct {
-	EntryID                string
-	Name                   string
-	Kind                   LibraryEntryKind
-	FeatureState           LibraryFeatureState
+	EntryID      string
+	Name         string
+	Kind         LibraryEntryKind
+	FeatureState LibraryFeatureState
+	/*
+	   `T61-102` — phân loại nghiệp vụ, sinh từ `pou_library_registry_v1.json`.
+
+	   Trường này đã có sẵn trong registry từ đầu nhưng chưa bao giờ đi ra tới
+	   API, nên PGM-04 không lọc theo nó được. Nó KHÔNG suy được từ `Kind`:
+	   `Kind` là hình dạng gọi (FUNCTION/FUNCTION_BLOCK), còn `Category` là
+	   nhóm nghiệp vụ (logic/math/timer/control…). Suy từ `Kind` cho ra ba rổ
+	   vô nghĩa với người vận hành — và tệ hơn, chúng TRÔNG như phân loại thật.
+	*/
+	Category               string
 	SignatureJSON          string
 	ContentSHA256Hex       string
 	StateSizeBytes         uint32
@@ -674,6 +688,7 @@ func SystemLibraryEntries() ([]LibraryEntry, error) {
 			FeatureState:      definition.FeatureState,
 			SignatureJSON:     []byte(definition.SignatureJSON),
 			ContentSHA256:     digest,
+			Category:          definition.Category,
 			StateLayout: LibraryStateLayout{
 				Authoritative:  definition.StateSizeAuthoritative,
 				StateSizeBytes: definition.StateSizeBytes,

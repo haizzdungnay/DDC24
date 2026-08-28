@@ -321,6 +321,9 @@ def render_go(registry: dict[str, Any], registry_hash: str, raw: bytes) -> str:
             f"EntryID: {q(entry['id'])}, Name: {q(entry['id'])}, "
             f"Kind: LibraryEntryKind({q(entry['kind'])}), "
             f"FeatureState: LibraryFeatureState({q(entry['featureState'])}), "
+            # `T61-102` — `category` đã có trong registry từ đầu; trước lát này
+            # nó không được sinh ra Go nên không endpoint nào trả được nó.
+            f"Category: {q(entry['category'])}, "
             f"SignatureJSON: {q(signature_json)}, "
             f"ContentSHA256Hex: {q(content_hash)}, "
             "StateSizeBytes: 0, "

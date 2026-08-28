@@ -29,6 +29,13 @@ type libraryEntryResponse struct {
 	Dependencies     []libraryDependencyResponse `json:"dependencies"`
 	StateLayoutKnown bool                        `json:"stateLayoutKnown"`
 	StateSizeBytes   uint32                      `json:"stateSizeBytes"`
+	/* `T61-101` — metadata TRÌNH BÀY, tất cả `omitempty` vì hợp đồng là
+	   ADDITIVE: client cũ bỏ qua field lạ và vẫn chạy. Con trỏ chứ không phải
+	   chuỗi để `nil` ("chưa ai điền") tới FE dưới dạng field VẮNG, và màn hình
+	   render `—` thay vì một ô trống trông như đã điền rỗng. */
+	Category           *string `json:"category,omitempty"`
+	Description        *string `json:"description,omitempty"`
+	PresentationSHA256 string  `json:"presentationSha256,omitempty"`
 }
 
 type librarySignaturePortResponse struct {
@@ -168,6 +175,8 @@ func handleLibraryRequest(w http.ResponseWriter, r *http.Request, correlationID 
 	switch {
 	case r.Method == http.MethodGet && path == "/api/v1/programming/libraries":
 		handleSearchLibraries(w, r, correlationID, service)
+	case r.Method == http.MethodGet && path == "/api/v1/programming/library-usages":
+		handleLibraryUsage(w, r, correlationID, service)
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/library/entries") && r.PathValue("projectId") != "":
 		handleUpsertLibraryEntry(w, r, correlationID, service)
 	case r.Method == http.MethodDelete && strings.Contains(path, "/library/entries/") &&
@@ -195,7 +204,8 @@ func handleSearchLibraries(w http.ResponseWriter, r *http.Request, correlationID
 	page, err := service.SearchLibraries(r.Context(), programmingapplication.SearchLibrariesCommand{
 		ProjectID: r.URL.Query().Get("projectId"), Scope: r.URL.Query().Get("scope"),
 		Kind: r.URL.Query().Get("kind"), Query: r.URL.Query().Get("q"),
-		Cursor: r.URL.Query().Get("cursor"), Limit: limit,
+		Category: r.URL.Query().Get("category"),
+		Cursor:   r.URL.Query().Get("cursor"), Limit: limit,
 	})
 	if err != nil {
 		writeMappedError(w, err, correlationID)
@@ -271,6 +281,7 @@ func toLibraryEntryResponse(item programmingapplication.LibraryEntryView) librar
 		LibraryState: item.LibraryState, EntryID: item.EntryID, Kind: item.Kind, Name: item.Name,
 		Language: item.Language, FeatureState: item.FeatureState, ContentSHA256: item.ContentSHA256,
 		Dependencies: dependencies, StateLayoutKnown: item.StateLayoutKnown, StateSizeBytes: item.StateSizeBytes,
+		Category: item.Category, Description: item.Description, PresentationSHA256: item.PresentationSHA256,
 	}
 	if len(item.InterfaceJSON) > 0 {
 		response.Interface = json.RawMessage(item.InterfaceJSON)
@@ -290,4 +301,31 @@ func toLibraryEntryResponse(item programmingapplication.LibraryEntryView) librar
 		response.Signature = parseLibrarySignature(item.SignatureJSON)
 	}
 	return response
+}
+
+/*
+`T61-105` — `GET /api/v1/programming/library-usages`.
+
+Đường dẫn phẳng với `libraryRevisionId` ở query chứ không ở path: định danh
+revision của SYSTEM là một chuỗi có dấu hai chấm
+(`PROGRAMMING-POU-LIBRARY-REGISTRY-V1:rev-a.3:<hash>`), và nhét nó vào path
+segment sẽ đẻ ra một lớp lỗi encoding không cần thiết.
+
+Route này là ĐỌC: quyền `read`, mọi vai đã đăng nhập đều gọi được. Used-In là
+thứ người ta cần trước khi quyết định có sửa hay không — chặn nó lại làm người
+vận hành phải đoán.
+*/
+func handleLibraryUsage(w http.ResponseWriter, r *http.Request, correlationID string,
+	service *programmingapplication.LibraryService) {
+
+	view, err := service.Usage(r.Context(), programmingapplication.LibraryUsageCommand{
+		LibraryRevisionID: r.URL.Query().Get("libraryRevisionId"),
+		EntryID:           r.URL.Query().Get("entryId"),
+		Scope:             r.URL.Query().Get("scope"),
+	})
+	if err != nil {
+		writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+		return
+	}
+	writeJSON(w, http.StatusOK, correlationID, view)
 }
