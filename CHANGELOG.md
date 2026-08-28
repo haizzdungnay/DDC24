@@ -8,7 +8,7 @@
 
 ## [Unreleased]
 
-### Programming PGM-02 — bố cục workspace + Inspector đầy đủ (`DEV-PROG-001`, `DEV-PROG-004`, `DEV-PROG-005`) (2026-08-28)
+### Programming PGM-02 — 18 mục `DEV-PROG-001..018` từ review giao diện (2026-08-28)
 
 - **Fixed — `DEV-PROG-001`: dải tab workbench không còn bị đẩy ra khỏi màn hình.**
   Triệu chứng báo về là "tab bị sidebar che". Đo trên bo Foxlinx (Chrome thật,
@@ -50,12 +50,67 @@
   Thanh tab hiện cả khi chưa có tab nào, nếu không nút `+` chỉ tồn tại sau khi
   người dùng đã mở được một POU bằng đường khác.
 
+- **Added — `DEV-PROG-002`: Thư viện nhanh cắm cố định ở cột phải, có sơ đồ chân.**
+  Bản trước là panel NỔI phủ lên chính mã nguồn, và mỗi mục chỉ là một dòng chữ
+  mang tên khối. Nay mỗi mục là một thẻ vẽ chân vào/ra từ `signature.ports` mà
+  backend đã công bố sẵn; mục không đọc được chữ ký thì NÓI RA thay vì vẽ một
+  hộp trống trông như khối không có đầu vào. Menu `⋯` mở kind/nhóm/phiên bản/12
+  ký tự đầu `contentSha256`/danh sách chân. "Xem thêm khối…" trỏ sang Control
+  Library và chỉ hiện khi có Project thật.
+
+  Panel đặt ở CỘT PHẢI chứ không cạnh khung soạn thảo: đo ở 1440 px, cắm cạnh
+  editor làm vùng gõ còn **188 px**; đặt ở cột phải giữ nguyên **484 px**.
+
+- **Added — `DEV-PROG-003`: khay `Watch (Trực tiếp)` đủ cột.** Thêm Kiểu, Chất
+  lượng, Mốc đọc và đường xu hướng, cạnh Biến/Giá trị đã có. Hai cột cũ không
+  trả lời được ba câu người chỉnh định thật sự hỏi — số này có tin được không,
+  nó cũ tới mức nào, nó đang đi lên hay xuống — nên một giá trị đóng băng vì mất
+  kết nối trông y hệt một giá trị ổn định. Xu hướng chỉ vẽ mẫu ĐÃ THẤY từ lúc mở
+  khay và nói ra điều đó; giá trị không đọc được không bao giờ thành một điểm.
+  Nháy đúp một ký hiệu trong trình soạn thảo đưa biến vào khay.
+
+- **Changed — `DEV-PROG-006/011`: thanh bên chỉ còn cây POU.** Khay "Thuộc tính
+  POU" và ô nhãn chức năng Project chuyển sang cột phải. Cây có nhóm gập được
+  (đang lọc thì luôn mở), chấm chỉ POU đang mở, và menu chuột phải Mở/Đổi
+  tên/Nhân bản/Xóa. "Đặt làm Active" KHÔNG có trong menu và menu nói ra nơi thực
+  hiện nó: ý định bật/tắt Program sống ở API runtime-intent, không ở Draft.
+
+- **Changed — `DEV-PROG-007/008/009/013/014`: vùng chrome trên cùng gọn lại.**
+  Bộ chọn Project (chỉ khi >1 Project); nhãn revision `r{N}` cho Nháp/Đang vận
+  hành (`null` ⇒ bỏ hẳn, không in `r0`); `Lưu`/`Kiểm tra` lên header qua hành
+  động do workspace ĐĂNG KÝ (header không tự dựng batch operation); tóm tắt
+  trạng thái Program còn trạng thái nặng nhất kèm `+N`, bản đầy đủ ở `title`;
+  thanh trên cùng gộp tên và trạng thái thiết bị thành một badge.
+
+- **Changed — `DEV-PROG-010`: rail Lập trình nền tối.** Bốn token mới
+  (`--c-rail-*`) thay vì hằng số màu trong markup, kèm ba ca WCAG mới đo chữ
+  chính/chữ mờ/mục đang chọn ở cả hai theme. Lối thoát gộp vào thương hiệu ở đầu
+  rail — `R60-03` không đổi.
+
+- **Added — `DEV-PROG-012`: bấm ô `Dòng:Cột` mở hộp "Tới dòng"** (kèm `Ctrl+G`).
+  Số ngoài phạm vi KẸP về dòng cuối; số không hợp lệ không di chuyển con trỏ.
+
+- **Added — `DEV-PROG-016/017/018`.** Kéo-thả khối từ Thư viện vào trình soạn
+  thảo (kiểu dữ liệu riêng, không phải `text/plain`, để không bỏ qua đường dựng
+  khai báo instance và lịch sử Undo); tìm bằng biểu thức chính quy với lỗi được
+  NÓI RA thay vì âm thầm rơi về tìm chữ thường; khay Tham chiếu liệt kê TỪNG chỗ
+  dùng; khay So sánh tô dòng thêm/bớt (LCS theo dòng, trên 400 dòng mỗi phía thì
+  kết luận thô có cờ).
+
+- **Decision — `DEV-PROG-015`: GIỮ tab "Thực thi".** Gộp vào Runtime & Bảo trì
+  là sai ranh giới — nó sửa DRAFT, chỉ có hiệu lực sau Commission, còn trang
+  Runtime có mọi thứ hiệu lực tức thì. Ẩn đi là mất lối vào duy nhất tới chu kỳ
+  Task và thứ tự Program. Lý do đầy đủ và điều kiện xét lại ghi trong
+  `ExecutionTab.tsx`.
+
 - **Verification** (2026-08-28): `npx vitest --run --environment jsdom src`
-  **76 file / 1058 test PASS** (phạm vi `src/features/programming`);
+  **173 file / 1982 test PASS**;
   `npm run lint` PASS; `npx tsc --noEmit` PASS; `go vet ./...` +
   `go test ./... -count=1` PASS (ca mới
   `TestAnnotateObjectVaTaiChoVaChoPhepXuongDong`);
-  `python3 scripts/verify_programming_pgm02_contract.py` PASS.
+  `python3 scripts/verify_programming_pgm02_contract.py` PASS;
+  `npm run build` PASS — chunk `programming` **140,64 KiB** gzip / ngân sách R3
+  165 KiB (dư 24,36 KiB).
 
 ### VP — mở chiều GHI cho ST Program kèm quyền sở hữu slot (`F-PROG-ASBUILT-016`) (2026-08-28)
 

@@ -1148,6 +1148,62 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await page.screenshot({ path: testInfo.outputPath('pgm02-1280x750.png'), fullPage: false })
   })
 
+  test('DEV-PROG-001: workbench thấy và bấm được mà KHÔNG cuộn trang', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'Phép đo này thuộc khổ desktop')
+    /* Triệu chứng người dùng báo: dải tab của workbench (Vấn đề / Tìm kiếm /
+     * Tham chiếu / Watch / Trace) "bị sidebar che".
+     *
+     * Đo trên bo thật (Chrome, 1280×800, POU 128 dòng): rail nằm `x=21..241`,
+     * workbench bắt đầu `x=257` — KHÔNG chồng lấn. Thứ sai là chiều cao: tài
+     * liệu cao 2861 px và dải tab rơi xuống `y=2675`, tức phải cuộn ~1900 px
+     * mới tới. Rail thì `sticky` nên suốt lúc cuộn nó vẫn đứng cạnh vùng trống.
+     *
+     * Test này khoá cả hai vế, vì sửa một vế mà bỏ vế kia thì triệu chứng cũ
+     * quay lại dưới một hình dạng khác:
+     *   1. dải tab nằm TRỌN trong màn hình đầu;
+     *   2. mỗi tab hit-test trúng CHÍNH NÓ (không phần tử nào phủ lên). */
+    const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
+    await page.getByRole('button', { name: /^Mở / }).first().click()
+    await expect(page.getByLabel(/Mã nguồn ST/)).toBeVisible()
+
+    const tablist = page.getByRole('tablist', { name: 'Khay bàn làm việc' })
+    await expect(tablist).toBeVisible()
+    const box = await tablist.boundingBox()
+    expect(box, 'dải tab workbench phải có hộp bao').not.toBeNull()
+    expect(box!.y, `dải tab workbench bị đẩy xuống dưới màn hình đầu (y=${Math.round(box!.y)})`).toBeLessThan(800)
+    expect(
+      box!.y + box!.height,
+      `mép dưới dải tab vượt màn hình đầu (${Math.round(box!.y + box!.height)}px > 800px)`,
+    ).toBeLessThanOrEqual(800)
+
+    const tabs = tablist.getByRole('tab')
+    const count = await tabs.count()
+    expect(count, 'workbench phải có đủ năm khay').toBe(5)
+    for (let index = 0; index < count; index += 1) {
+      const tab = tabs.nth(index)
+      const name = (await tab.textContent())?.trim() ?? ''
+      const rect = await tab.boundingBox()
+      expect(rect, `tab "${name}" phải có hộp bao`).not.toBeNull()
+      const hit = await page.evaluate(
+        ([x, y]) => {
+          const top = document.elementFromPoint(x, y)
+          const tabElement = top?.closest('[role="tab"]')
+          return tabElement ? (tabElement.textContent ?? '').trim() : `KHÔNG PHẢI TAB: ${top?.tagName ?? 'none'}`
+        },
+        [rect!.x + rect!.width / 2, rect!.y + rect!.height / 2],
+      )
+      expect(hit, `tab "${name}" bị phần tử khác phủ lên`).toBe(name)
+    }
+
+    const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflowX, `trang tràn ngang ${overflowX}px`).toBeLessThanOrEqual(0)
+    await page.screenshot({ path: testInfo.outputPath('dev-prog-001-workbench.png'), fullPage: false })
+  })
+
   test('AC-PGM02-001: MỘT cây POU: ba kind, deep-link theo objectId và reload giữ đúng POU', async ({ page }, testInfo) => {
     test.skip(
       (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
