@@ -637,3 +637,64 @@ describe('DEV-PROG-012 — Tới dòng từ thanh trạng thái', () => {
     expect(screen.getByTestId('editor-go-to-line')).toBeInTheDocument()
   })
 })
+
+describe('DEV-PROG-019 — nút Định dạng trong trình soạn thảo', () => {
+  const MESSY = 'PROGRAM t\nIF A THEN\nX:=1;\nEND_IF\n;\nEND_PROGRAM\n'
+
+  it('bấm Định dạng đưa buffer về đúng style, KHÔNG tự Lưu', () => {
+    const onSave = vi.fn().mockResolvedValue(true)
+    const { textarea } = renderEditor(MESSY, { onSave })
+    fireEvent.click(screen.getByRole('button', { name: 'Định dạng' }))
+    expect(textarea.value).toBe([
+      'PROGRAM t',
+      '    IF A THEN',
+      '        X := 1;',
+      '    END_IF;',
+      'END_PROGRAM',
+      '',
+    ].join('\n'))
+    // Định dạng chỉ đổi buffer; Kiểm tra/Lưu/Commission vẫn do người dùng chủ động.
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('Ctrl+Shift+F làm đúng việc của nút', () => {
+    const { textarea } = renderEditor(MESSY)
+    fireEvent.keyDown(textarea, { key: 'F', ctrlKey: true, shiftKey: true })
+    expect(textarea.value).toContain('    END_IF;')
+  })
+
+  it('nguồn không phân tích được ⇒ KHÔNG đổi buffer và NÓI RA lý do', () => {
+    // Im lặng khi từ chối là để người dùng bấm nút, không thấy gì xảy ra, và
+    // tưởng nút hỏng.
+    const broken = 'PROGRAM t\n(* chú thích chưa đóng\nX := 1;\nEND_PROGRAM\n'
+    const { textarea } = renderEditor(broken)
+    fireEvent.click(screen.getByRole('button', { name: 'Định dạng' }))
+    expect(textarea.value).toBe(broken)
+    expect(screen.getByRole('alert')).toHaveTextContent(/Không định dạng được/)
+    expect(screen.getByRole('alert')).toHaveTextContent(/không được đóng/)
+  })
+
+  it('nguồn đã đúng style ⇒ nói "đã đúng định dạng", không báo lỗi', () => {
+    const tidy = 'PROGRAM t\n    X := 1;\nEND_PROGRAM\n'
+    renderEditor(tidy)
+    fireEvent.click(screen.getByRole('button', { name: 'Định dạng' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Mã nguồn đã đúng định dạng.')
+  })
+
+  it('menu ▾ có hai mức: tài liệu và vùng chọn', () => {
+    renderEditor(MESSY)
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn định dạng' }))
+    const menu = screen.getByRole('menu', { name: 'Tuỳ chọn định dạng' })
+    expect(within(menu).getByRole('menuitem', { name: /Định dạng tài liệu/ })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Định dạng vùng chọn' })).toBeInTheDocument()
+  })
+
+  it('Định dạng vùng chọn khi chưa chọn gì ⇒ nói ra, không âm thầm format cả tệp', () => {
+    const { textarea } = renderEditor(MESSY)
+    textarea.setSelectionRange(0, 0)
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn định dạng' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Định dạng vùng chọn' }))
+    expect(textarea.value).toBe(MESSY)
+    expect(screen.getByRole('alert')).toHaveTextContent('Chưa chọn vùng nào để định dạng.')
+  })
+})

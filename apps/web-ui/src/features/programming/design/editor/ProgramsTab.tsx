@@ -42,6 +42,7 @@ import { catalogEntries, type CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
 import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
+import { formatStDocument, formatStRange } from './stFormat'
 import { stDropOffsetAtPoint, stHoverSymbolAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
 import { PouTabBar } from './PouTabBar'
 import {
@@ -1336,12 +1337,53 @@ export function SourceEditor({
    *  không phải trong `useLayoutEffect` dùng chung cho MỌI đường sửa nội
    *  dung: gọi `focus()` ở đó ảnh hưởng cả đường gõ phím thường, không cần
    *  thiết và từng gây lệch `cursor` React state trong môi trường test). */
-  function handleFormat() {
+  /**
+   * `DEV-PROG-019` — nút Định dạng.
+   *
+   * Đường đi: `Parse → AST → in lại → parse lần hai → so cây`. Không đọc lại
+   * được hoặc cây khác đi ⇒ **KHÔNG đổi buffer** và nói ra lý do. Bản trước làm
+   * bằng regex và nó phá chú thích thật (`;` và chữ `IF` nằm trong chú thích bị
+   * xé làm ba dòng) — người dùng chỉ phát hiện ở lần Kiểm tra sau đó.
+   *
+   * Định dạng KHÔNG tự Lưu, KHÔNG tự Kiểm tra, KHÔNG tự Commission: nó chỉ đổi
+   * buffer, và người dùng vẫn chủ động `Kiểm tra → Lưu → Đưa vào vận hành`.
+   */
+  function handleFormat(scope: 'document' | 'selection' = 'document') {
     const textarea = textareaRef.current
     const rawStart = textarea?.selectionStart ?? 0
     const rawEnd = textarea?.selectionEnd ?? 0
-    const next = formatStSource(source)
-    applyEditRange(next, mapOffsetByNonWhitespaceCount(source, next, rawStart), mapOffsetByNonWhitespaceCount(source, next, rawEnd))
+    setFormatNote(null)
+
+    if (scope === 'selection' && rawStart === rawEnd) {
+      setFormatNote(pick('Chưa chọn vùng nào để định dạng.', 'No selection to format.'))
+      return
+    }
+
+    const outcome = scope === 'document'
+      ? { result: formatStDocument(source), selectionStart: rawStart, selectionEnd: rawEnd }
+      : formatStRange(source, rawStart, rawEnd)
+
+    if (!outcome.result.ok) {
+      const where = outcome.result.line === null ? '' : pick(` (dòng ${outcome.result.line})`, ` (line ${outcome.result.line})`)
+      setFormatNote(pick(
+        `Không định dạng được — mã nguồn giữ nguyên. ${outcome.result.reason}${where}`,
+        `Could not format — the source is unchanged. ${outcome.result.reason}${where}`,
+      ))
+      textarea?.focus()
+      return
+    }
+    if (!outcome.result.changed) {
+      setFormatNote(pick('Mã nguồn đã đúng định dạng.', 'The source already matches the style.'))
+      textarea?.focus()
+      return
+    }
+
+    const next = outcome.result.text
+    applyEditRange(
+      next,
+      scope === 'selection' ? outcome.selectionStart : mapOffsetByNonWhitespaceCount(source, next, rawStart),
+      scope === 'selection' ? outcome.selectionEnd : mapOffsetByNonWhitespaceCount(source, next, rawEnd),
+    )
     textarea?.focus()
   }
 
@@ -1351,6 +1393,10 @@ export function SourceEditor({
   const [pendingLibraryEntry, setPendingLibraryEntry] = useState<CatalogEntry | null>(null)
   const [libraryInsertionNote, setLibraryInsertionNote] = useState<string | null>(null)
   const [referenceNote, setReferenceNote] = useState<string | null>(null)
+  /** Kết quả lần Định dạng gần nhất — kể cả khi nó TỪ CHỐI. Im lặng khi từ chối
+   *  là để người dùng bấm nút rồi không thấy gì xảy ra và tưởng nút hỏng. */
+  const [formatNote, setFormatNote] = useState<string | null>(null)
+  const [formatMenuOpen, setFormatMenuOpen] = useState(false)
 
   const consumedFormatRequestRef = useRef<string | null>(null)
   useEffect(() => {
@@ -1600,15 +1646,55 @@ export function SourceEditor({
               >
                 {pick('Thư viện', 'Library')}
               </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<AlignLeft className="h-4 w-4" aria-hidden="true" />}
-                title={pick('Định dạng lại thụt lề', 'Reformat indentation')}
-                onClick={handleFormat}
-              >
-                {pick('Định dạng', 'Format')}
-              </Button>
+              {/* `DEV-PROG-019` — hai mức, không phải 20 tuỳ chọn. Bấm thẳng
+                  vào nút = Định dạng tài liệu (việc chiếm ~95% số lần dùng);
+                  mũi tên mở thêm Định dạng vùng chọn. */}
+              <span className="relative inline-flex">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<AlignLeft className="h-4 w-4" aria-hidden="true" />}
+                  title={pick('Định dạng tài liệu (Ctrl+Shift+F)', 'Format document (Ctrl+Shift+F)')}
+                  onClick={() => { setFormatMenuOpen(false); handleFormat('document') }}
+                >
+                  {pick('Định dạng', 'Format')}
+                </Button>
+                <button
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={formatMenuOpen}
+                  aria-label={pick('Tuỳ chọn định dạng', 'Formatting options')}
+                  className="ml-0.5 rounded border border-[var(--c-border)] px-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                  onClick={() => setFormatMenuOpen((open) => !open)}
+                >
+                  ▾
+                </button>
+                {formatMenuOpen && (
+                  <div
+                    role="menu"
+                    aria-label={pick('Tuỳ chọn định dạng', 'Formatting options')}
+                    className="panel-shadow absolute right-0 top-full z-30 mt-1 min-w-56 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] py-1"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="block w-full px-3 py-1.5 text-left text-sm text-[var(--c-text)] hover:bg-[var(--c-surface-2)]"
+                      onClick={() => { setFormatMenuOpen(false); handleFormat('document') }}
+                    >
+                      {pick('Định dạng tài liệu', 'Format document')}
+                      <span className="ml-2 text-xs text-[var(--c-text-dim)]">Ctrl+Shift+F</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="block w-full px-3 py-1.5 text-left text-sm text-[var(--c-text)] hover:bg-[var(--c-surface-2)]"
+                      onClick={() => { setFormatMenuOpen(false); handleFormat('selection') }}
+                    >
+                      {pick('Định dạng vùng chọn', 'Format selection')}
+                    </button>
+                  </div>
+                )}
+              </span>
               <Button
                 size="sm"
                 icon={<Save className="h-4 w-4" aria-hidden="true" />}
@@ -1888,6 +1974,12 @@ export function SourceEditor({
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && canEdit) {
                 event.preventDefault(); applyHistorySnapshot('redo'); return
               }
+              /* `Ctrl+Shift+F` phải xét TRƯỚC `Ctrl+F`: `Ctrl+Shift+F` cũng
+                 thoả điều kiện của `Ctrl+F`, nên đặt sau thì nó không bao giờ
+                 chạy — người dùng bấm Định dạng và nhận ô Tìm kiếm. */
+              if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'f' && canEdit) {
+                event.preventDefault(); handleFormat('document'); return
+              }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
                 event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0); return
               }
@@ -2069,6 +2161,12 @@ export function SourceEditor({
       <div className="min-h-0 space-y-2 overflow-y-auto lg:max-h-[15rem]">
       {libraryInsertionNote && (
         <p role="status" className="text-xs text-[var(--c-text-dim)]">{libraryInsertionNote}</p>
+      )}
+      {/* `DEV-PROG-019` — kết quả Định dạng, kể cả khi nó TỪ CHỐI. `alert` chứ
+          không `status`: từ chối format là thứ người dùng phải biết ngay, vì
+          buffer của họ KHÔNG đổi và họ đang chờ nó đổi. */}
+      {formatNote && (
+        <p role="alert" className="text-xs text-[var(--c-warn-fg)]">{formatNote}</p>
       )}
       {/* Ghi chú của "Tới khai báo (F12)" ở LẠI cạnh trình soạn thảo: nó nói về
           cú bấm vừa xảy ra trong editor, không phải về ký hiệu dưới con trỏ. */}
@@ -2604,70 +2702,18 @@ export function mapOffsetAcrossReplaceAll(before: string, searchText: string, re
   }
   return Math.max(0, offset + delta)
 }
-const ST_BLOCK_KEYWORDS = [
-  'END_PROGRAM', 'PROGRAM', 'END_FUNCTION_BLOCK', 'FUNCTION_BLOCK', 'END_FUNCTION', 'FUNCTION',
-  'END_VAR', 'VAR_IN_OUT', 'VAR_TEMP', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR',
-  'END_IF', 'ELSIF', 'ELSE', 'IF', 'END_WHILE', 'WHILE', 'END_FOR', 'FOR', 'END_CASE', 'CASE', 'END_REPEAT', 'REPEAT'
-]
-const ST_KEYWORD_SPLIT = new RegExp(`\\b(${ST_BLOCK_KEYWORDS.join('|')})\\b`, 'g')
-const ST_OPEN_LINE = /^(PROGRAM|FUNCTION_BLOCK|FUNCTION|VAR|VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT|VAR_TEMP|IF|WHILE|FOR|CASE|REPEAT)\b/
-const ST_CLOSE_LINE = /^(END_PROGRAM|END_FUNCTION_BLOCK|END_FUNCTION|END_VAR|END_IF|END_WHILE|END_FOR|END_CASE|END_REPEAT)\b/
-const ST_MID_LINE = /^(ELSIF|ELSE)\b/
-/** PROGRAM/FUNCTION_BLOCK/FUNCTION giữ tên định danh trên cùng dòng (`PROGRAM
- *  test`) — mọi từ khoá khối khác xuống dòng cả trước lẫn sau. */
-const ST_NAMED_BLOCK_OPENERS = new Set(['PROGRAM', 'FUNCTION_BLOCK', 'FUNCTION'])
-
-/** Từ khoá PHẢI giữ cùng dòng với "vế đính kèm" bắt buộc theo văn phạm EBNF
- *  (`ST_SUBSET_SPEC_MK-DDC-24_VI.md` §10: `var_block = ... "VAR" "RETAIN"`;
- *  IF/ELSIF luôn đóng bằng THEN cùng mệnh đề) — báo lỗi trực tiếp kèm ảnh
- *  chụp 2026-08-17 cho thấy bấm "Định dạng" tách rời `VAR`/`RETAIN` và
- *  `IF`/`<điều kiện> THEN` thành hai dòng lệch thụt lề, dù cả hai đều PHẢI ở
- *  chung một dòng. `ST_KEYWORD_SPLIT` phía trên tách vô điều kiện quanh MỌI
- *  từ khoá khối nên xé đôi các cặp này; bù lại bằng bước ghép ở dưới thay vì
- *  làm `ST_KEYWORD_SPLIT` phức tạp hơn (regex một từ khoá đơn giản, dễ kiểm
- *  chứng hơn logic "biết trước cặp nào đi với cặp nào" ngay trong regex). */
-const ST_TRAILING_CLAUSE_TERMINATOR: Record<string, RegExp> = {
-  VAR: /^RETAIN$/,
-  IF: /\bTHEN$/,
-  ELSIF: /\bTHEN$/,
-}
-
 /**
- * BUG-013 — bản cũ chỉ thêm indent cho dòng đã có sẵn `\n`, nên code dán một
- * dòng (`PROGRAM test VAR ... END_PROGRAM`) không đổi gì. Nay tách mỗi từ
- * khoá khối và mỗi câu lệnh (`;`) ra dòng riêng trước, rồi mới thụt lề theo
- * độ sâu khối — vừa sửa Format, vừa khiến `collectStSymbols` nhận ra VAR
- * ngay cả khi người dùng chưa bấm Format.
+ * `DEV-PROG-019` — `formatStSource` (formatter bằng regex) ĐÃ BỊ GỠ.
+ *
+ * Nó tách dòng bằng `.replace(/;/g, ';\n')` và một regex từ khoá, cả hai đều
+ * không biết mình đang ở trong chú thích hay chuỗi. Đo được:
+ *
+ * ```text
+ * vào : (* chú thích có dấu ; và chữ IF bên trong *)
+ * ra  : (* chú thích có dấu ;\n và chữ \nIF\n bên trong *)
+ * ```
+ *
+ * Tức nó phá chú thích của người dùng, và với ST thật (IF lồng, CASE, chuỗi,
+ * chú thích khối) nó phá được cả mã. Bản thay thế nằm ở `./stFormat`: lexer →
+ * parser → AST → in lại → parse lần hai → so cây; khác cây thì KHÔNG format.
  */
-export function formatStSource(source: string): string {
-  const withBreaks = source
-    .replace(/\r\n?/g, '\n')
-    .replace(ST_KEYWORD_SPLIT, (keyword) => ST_NAMED_BLOCK_OPENERS.has(keyword) ? `\n${keyword}` : `\n${keyword}\n`)
-    .replace(/;/g, ';\n')
-  const rawLines = withBreaks.split('\n').map((line) => line.trim()).filter((line) => line.length > 0)
-
-  // Ghép lại các cặp bị ST_KEYWORD_SPLIT xé đôi phía trên (`VAR`+`RETAIN`,
-  // `IF`/`ELSIF`+`<điều kiện> THEN`) — hai vế PHẢI cùng một dòng theo EBNF.
-  const mergedLines: string[] = []
-  for (let index = 0; index < rawLines.length; index += 1) {
-    const line = rawLines[index]
-    const terminator = ST_TRAILING_CLAUSE_TERMINATOR[line]
-    const next = rawLines[index + 1]
-    if (terminator && next !== undefined && terminator.test(next)) {
-      mergedLines.push(`${line} ${next}`)
-      index += 1
-    } else {
-      mergedLines.push(line)
-    }
-  }
-
-  let depth = 0
-  const indented: string[] = []
-  for (const line of mergedLines) {
-    const closing = ST_CLOSE_LINE.test(line) || ST_MID_LINE.test(line)
-    if (closing) depth = Math.max(0, depth - 1)
-    indented.push(`${'  '.repeat(depth)}${line}`)
-    if (ST_OPEN_LINE.test(line) || ST_MID_LINE.test(line)) depth += 1
-  }
-  return indented.length === 0 ? '' : `${indented.join('\n')}\n`
-}
