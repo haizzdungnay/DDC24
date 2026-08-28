@@ -278,3 +278,60 @@ Bundle `index-DAfKdxEx.js` (build có `VITE_PROGRAMS_WORKSPACE_V2=1`), sao lưu
 
 Điểm cuối là phép kiểm quan trọng nhất của lát này: Định dạng chỉ đổi buffer,
 và người dùng vẫn chủ động `Kiểm tra → Lưu → Đưa vào vận hành`.
+
+## 12. Hợp nhất PR #311 và deploy bản gộp lên bo
+
+### Xung đột và bốn lỗi lộ ra
+
+Xung đột DUY NHẤT là `ProgrammingHeader.tsx`; giải bằng ROUTE (chỉ Tổng quan mang
+eyebrow + tiêu đề lớn + phụ đề — nó không có trình soạn thảo tranh chỗ). Bốn lỗi
+lộ ra sau hợp nhất, đã sửa hết:
+
+| # | Triệu chứng | Nguyên nhân gốc |
+|---|---|---|
+| 1 | 2 ca `StIntegration` ĐỎ: `stop` một Program hoặc instance `FAULTED` mà read-back vẫn `RUNNING` | `task.state` suy từ hai dữ kiện mức TASK, bỏ qua trạng thái từng Program |
+| 2 | axe `target-size`/`target-offset` trên cây POU | PR #311 chuyển reset form vào `@layer base` ⇒ `text-xs` mới thật sự áp lên nút ⇒ tụt dưới 24 px |
+| 3 | 20 ca vitest ĐỎ `found multiple elements` | Tab Ánh xạ luôn mounted có `<select>` liệt kê Program ⇒ tên POU xuất hiện hai lần |
+| 4 | 1 ca e2e ĐỎ | Câu trạng thái rỗng của Ánh xạ đổi thành "…trong Draft." |
+
+Lỗi #1 là lỗi **sản phẩm**, không phải lỗi test.
+
+### Deploy
+
+| Thành phần | Bản | Sao lưu |
+|---|---|---|
+| FE `dist` | `index-B0gZUi2P.js` | `dist.bak-merge-20260828T082640Z` |
+| BE `mkddc-web` | Go aarch64 tĩnh, health `0.1.0-be-b6c` | `mkddc-web.bak-merge-20260828T082640Z` |
+| Core `mkddc-core` | cross-build aarch64, `-static-libstdc++` | `mkddc-core.bak-merge-20260828T082640Z` |
+
+Cross-build Core: glibc bo là **2.41**, binary cần ≤ **2.38** ⇒ đạt;
+`-static-libstdc++` nên không phụ thuộc `GLIBCXX` của bo (bẫy đã cắn ở các lát
+trước). Chạy thử `--help` TRÊN BO trước khi cài: exit 0, `ldd` không thiếu thư
+viện nào.
+
+### Một phát hiện phải ghi lại: `producerState=DEGRADED` KHÔNG do lát này
+
+Sau khi cài Core mới, `/programming/runtime` trả `producerState: DEGRADED`,
+`task: null`. Để không đổ lỗi nhầm, đã **rollback về đúng binary cũ và đo lại**:
+vẫn `DEGRADED`, vẫn `task: null`, và vẫn có dòng
+`CRITICAL core.st_public_key=TEST … build này KHÔNG dùng được cho phát hành`.
+
+Kết luận: cả hai đều **có sẵn trên bo từ trước**, không phải hồi quy của lát này.
+Binary có bản vá được cài lại sau phép đo đó.
+
+Hai việc còn mở, thuộc phạm vi khác:
+1. `ReadProgrammingMonitorSnapshot` lỗi ⇒ `producerState=DEGRADED` và
+   `taskState` rơi về suy-từ-mode thay vì đọc-lại-thật.
+2. Bo đang chạy Core ký bằng **khoá TEST**; đúng theo `T59-602` thì bản này
+   không dùng được cho phát hành.
+
+### Đo lại trên bo sau deploy
+
+| Phép đo (1280 / 1440 × 800) | Kết quả |
+|---|---|
+| Tài liệu / khung nhìn | 812 / 800 px, tràn ngang 0 |
+| 5 tab workbench | hit-test **trúng chính nó** cả 5 |
+| Nút Định dạng tài liệu | có |
+| Vùng chạm nhỏ nhất trong cây POU | **28 px** (≥ 24 px của WCAG 2.2) |
+| Bề rộng vùng gõ | 340 / 500 px |
+| Lỗi runtime trình duyệt | không có |
