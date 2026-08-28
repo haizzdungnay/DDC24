@@ -1,4 +1,9 @@
+import { ST_KEYWORDS } from './stEditorSupport'
 import { maskStComments } from './stInstanceInsertion'
+
+/** Từ khoá ST, tra hoa/thường-độc-lập. Dùng lại đúng danh sách của
+ *  `stEditorSupport` — khai lần hai là dựng một grammar thứ hai để lệch. */
+const KEYWORD_SET = new Set<string>(ST_KEYWORDS)
 
 /**
  * `T59-805` / `AC-ST-005` — chỉ mục tham chiếu cho editor ST.
@@ -158,6 +163,15 @@ export function stSymbolAt(source: string, offset: number, index?: StReferenceIn
   while (end < source.length && isIdentChar(source[end])) end += 1
   const identifier = source.slice(start, end)
   if (identifier.length === 0 || /^[0-9]/.test(identifier)) return null
+  /* `DEV-PROG-004` — TỪ KHOÁ ST không phải ký hiệu.
+   *
+   * Trước lát này, con trỏ đặt ở đầu tệp (ngay trên chữ `PROGRAM`) làm
+   * Inspector chuyển sang ngữ cảnh "Ký hiệu ST" với bốn dòng "không xác định
+   * được", che mất thuộc tính của chính POU đang mở. Trung thực về hình thức
+   * nhưng vô dụng: `PROGRAM` không phải một biến chưa tra được, nó là một từ
+   * khoá — và câu trả lời đúng cho nó là "đây không phải ký hiệu", không phải
+   * "chưa biết kiểu". Cùng lý do, hover một từ khoá không được mở thẻ ký hiệu. */
+  if (KEYWORD_SET.has(identifier.toUpperCase())) return null
 
   const resolved = index ?? buildStReferenceIndex(source)
   return { identifier, start, end, entry: resolved.byName.get(identifier) ?? null }

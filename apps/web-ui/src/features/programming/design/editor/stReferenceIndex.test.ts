@@ -110,3 +110,18 @@ describe('stReferenceIndex — nguồn ngoài subset không ném lỗi', () => {
     }
   })
 })
+
+describe('DEV-PROG-004 — từ khoá ST không phải ký hiệu', () => {
+  it('con trỏ trên PROGRAM/VAR/IF trả null, không trả một "ký hiệu chưa tra được"', () => {
+    // Con trỏ đặt ở đầu tệp (mặc định khi vừa mở POU) từng làm Inspector chuyển
+    // sang ngữ cảnh "Ký hiệu ST" với bốn dòng "không xác định được", che mất
+    // thuộc tính của chính POU đang mở. `PROGRAM` không phải một biến chưa tra
+    // được — nó là một từ khoá.
+    const source = 'PROGRAM P\nVAR\n  Fan : BOOL;\nEND_VAR\nIF Fan THEN\nEND_IF\nEND_PROGRAM\n'
+    expect(stSymbolAt(source, 0)).toBeNull()
+    expect(stSymbolAt(source, source.indexOf('VAR'))).toBeNull()
+    expect(stSymbolAt(source, source.indexOf('IF Fan'))).toBeNull()
+    // Ký hiệu thật vẫn tra được như cũ.
+    expect(stSymbolAt(source, source.indexOf('Fan : BOOL'))?.identifier).toBe('Fan')
+  })
+})

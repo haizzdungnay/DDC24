@@ -343,6 +343,18 @@ export function ProgramsTab({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [slots, setSlots] = useCollapsibleSlots()
   const [formatRequest, setFormatRequest] = useState<StFormatRequest | null>(null)
+  /* `DEV-PROG-002` — Thư viện nhanh sống ở CỘT PHẢI, không phải trong trình
+   * soạn thảo.
+   *
+   * Đã thử cắm nó vào hàng ngang cạnh khung soạn thảo và đo lại trên bo: ở
+   * 1440 px, ba cột `280 + 1fr + 308` cộng thêm panel 288 px làm bề rộng vùng
+   * gõ còn **188 px** — hẹp hơn cả một dòng khai báo. Cột phải đã là chỗ của
+   * các khay phụ trợ, nên panel về đó và trình soạn thảo giữ nguyên bề ngang.
+   *
+   * Chèn đi bằng YÊU CẦU có `nonce` (cùng khuôn `formatRequest`): panel không
+   * biết cách chèn, và sửa buffer từ ngoài sẽ làm mất lịch sử Undo. */
+  const [libraryDockOpen, setLibraryDockOpen] = useState(false)
+  const [libraryInsertRequest, setLibraryInsertRequest] = useState<{ entry: CatalogEntry; nonce: number } | null>(null)
   /* Điều hướng chéo Program khi chọn một biến ở Bảng lệnh nhanh: đổi
    * `selectedProgramId` rồi TÁI DÙNG đúng cơ chế `focusDiagnostic` đã có
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
@@ -647,6 +659,9 @@ export function ProgramsTab({
             saving={saving}
             onCursorSymbolChange={setCursorSymbol}
             onWatchVariable={onWatchVariable}
+            libraryOpen={libraryDockOpen}
+            onToggleLibrary={() => setLibraryDockOpen((open) => !open)}
+            libraryInsertRequest={libraryInsertRequest}
             libraryEntries={libraryEntries}
             onEnsureLibraryLoaded={libraryCatalog.ensureLoaded}
             onRunCheck={onRunCheck}
@@ -667,7 +682,6 @@ export function ProgramsTab({
             onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
             runtimeOverlay={runtimeOverlayByProgramId?.[selected.programId]}
             formatRequest={formatRequest?.programId === selected.programId ? formatRequest : undefined}
-            projectId={document.project.projectId}
           />
         ) : (
           <FbdEditorPane
@@ -702,6 +716,34 @@ export function ProgramsTab({
           </button>
         </div>
         <div id="programs-slot-inspector" hidden={!slots.inspector}>
+        {/* `DEV-PROG-002` — Thư viện nhanh đứng TRÊN Inspector trong cùng cột
+            phải: cả hai đều là khay phụ trợ của bề mặt đang soạn, và gộp chúng
+            vào một cột giữ nguyên ngân sách bề ngang cho chỗ người ta gõ. */}
+        {selected && selected.language === 'ST' && canEdit && (
+          libraryDockOpen ? (
+            <div className="mb-2">
+              <QuickLibraryHost
+                variant="docked"
+                projectId={document.project.projectId}
+                language="ST"
+                onInsert={(entry) => {
+                  setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
+                  return true
+                }}
+                onClose={() => setLibraryDockOpen(false)}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="mb-2 w-full rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              aria-expanded={false}
+              onClick={() => setLibraryDockOpen(true)}
+            >
+              {pick('Mở Thư viện nhanh', 'Open quick library')}
+            </button>
+          )
+        )}
         {selected ? (
           /* `T59-818` — khay này TỪNG có đúng hai trường (`Tên`, `Loại`), tức
              rơi trúng điều handoff §9 cấm: chiếm 300px cho hai trường. Nay nó
@@ -856,9 +898,11 @@ export function SourceEditor({
   onEnsurePointCatalogLoaded,
   runtimeOverlay,
   formatRequest,
-  projectId,
   onCursorSymbolChange,
   onWatchVariable,
+  libraryOpen = false,
+  onToggleLibrary,
+  libraryInsertRequest,
   libraryEntries,
   onEnsureLibraryLoaded,
   onRunCheck,
@@ -874,9 +918,6 @@ export function SourceEditor({
   focusDiagnostic: ProgrammingDiagnostic | null
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
-  /** `T59-804`: Quick Library đọc catalog theo Project để thấy cả PROJECT entry,
-   *  không chỉ SYSTEM. `undefined` vẫn hợp lệ — khi đó chỉ có SYSTEM. */
-  projectId?: string
   /** ST Editor Quick Control đề xuất #3 (Panel chèn nhanh Point/Variable) —
    *  trạng thái/cache của `useLazyProgrammingPointCatalog`, sống ở
    *  `ProgramsTab` (cha) để không refetch khi đổi Program đang mở. */
@@ -897,6 +938,16 @@ export function SourceEditor({
   onCursorSymbolChange?: (symbol: StCursorSymbol | null) => void
   /** `DEV-PROG-003` — người dùng nháy đúp một ký hiệu và muốn theo dõi nó. */
   onWatchVariable?: (name: string) => void
+  /** `DEV-PROG-002` — Thư viện nhanh (cột phải) đang mở hay không. */
+  libraryOpen?: boolean
+  onToggleLibrary?: () => void
+  /**
+   * `DEV-PROG-002` — yêu cầu chèn một mục thư viện, phát từ panel ở cột phải.
+   * Cùng khuôn với `formatRequest`: panel KHÔNG biết cách chèn (ST dựng đoạn mã
+   * tại con trỏ, FBD thêm node), nên nó gửi yêu cầu và bề mặt tự xử theo đúng
+   * pipeline history/cursor của mình. Sửa buffer từ ngoài sẽ làm mất Undo.
+   */
+  libraryInsertRequest?: { entry: CatalogEntry; nonce: number } | null
   /** `T59-820` — catalog thư viện đã nạp, dùng CHUNG với Inspector. */
   libraryEntries?: readonly CatalogEntry[]
   onEnsureLibraryLoaded?: () => void
@@ -937,7 +988,11 @@ export function SourceEditor({
    * hiện tại — `null` khi con trỏ chỉ là một điểm (không hiện thanh lệnh). */
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null)
   const [insertPanelOpen, setInsertPanelOpen] = useState(false)
-  const [libraryPanelOpen, setLibraryPanelOpen] = useState(false)
+  /* `DEV-PROG-002` — trạng thái mở/đóng của Thư viện nhanh nay do `ProgramsTab`
+   * sở hữu, vì panel đã ra khỏi trình soạn thảo và nằm ở cột phải. Nút trên
+   * thanh công cụ vẫn là chỗ bật/tắt, nhưng nó chỉ báo lên chứ không tự giữ
+   * trạng thái — hai bản trạng thái cho cùng một panel sẽ lệch nhau ngay lần
+   * đầu người dùng đóng panel bằng nút `Thu gọn` của chính nó. */
   /* T59-506: một lịch sử riêng cho MỖI POU đang mount. Ref cho phép mọi đường
    * edit (gõ thường/autocomplete/Format/Replace/quick action) ghi snapshot trước
    * khi callback cha echo lại prop `source`; state rỗng chỉ dùng để render lại
@@ -1182,6 +1237,25 @@ export function SourceEditor({
     handleFormat()
   }, [formatRequest, program.programId])
 
+  /* `DEV-PROG-002` — yêu cầu chèn từ Thư viện nhanh ở cột phải, cùng khuôn
+   * `nonce` với `formatRequest`: chèn HAI LẦN cùng một khối là một yêu cầu hợp
+   * lệ, nên so sánh theo nội dung sẽ nuốt lần thứ hai. */
+  const consumedLibraryRequestRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!libraryInsertRequest || !canEdit) return
+    if (consumedLibraryRequestRef.current === libraryInsertRequest.nonce) return
+    consumedLibraryRequestRef.current = libraryInsertRequest.nonce
+    const entry = libraryInsertRequest.entry
+    /* Đã có instance cùng kiểu thì HỎI: dùng lại hay tạo mới. Tự dùng lại là
+     * sai (hai lời gọi chung một timer là lỗi điều khiển thật), mà tự tạo mới
+     * cũng sai khi người dùng đang muốn gọi lại đúng instance đó. */
+    if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
+      setPendingLibraryEntry(entry)
+      return
+    }
+    applyLibraryInsertion(entry)
+  }, [libraryInsertRequest, canEdit])
+
   /** FE-ST-008: một hàm lưu DUY NHẤT cho cả nút Lưu và `Ctrl+S` — ghi lại kết
    *  quả (`saved`/`failed`) neo vào đúng buffer vừa thử, để trạng thái hiển
    *  thị không nói dối khi người dùng gõ tiếp sau một lần lưu thất bại. */
@@ -1396,9 +1470,9 @@ export function SourceEditor({
                 size="sm"
                 variant="ghost"
                 icon={<Library className="h-4 w-4" aria-hidden="true" />}
-                aria-pressed={libraryPanelOpen}
+                aria-pressed={libraryOpen}
                 title={pick('Thư viện nhanh — cùng catalog với PGM-04', 'Quick library — same catalog as PGM-04')}
-                onClick={() => setLibraryPanelOpen((open) => !open)}
+                onClick={onToggleLibrary}
               >
                 {pick('Thư viện', 'Library')}
               </Button>
@@ -1515,12 +1589,6 @@ export function SourceEditor({
       <label className="sr-only" htmlFor={`programming-st-source-${program.programId}`}>
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
-      {/* `DEV-PROG-002` — hàng ngang: khung soạn thảo + Thư viện nhanh CẮM cố
-          định bên phải. Bản trước là một panel nổi `absolute` phủ lên chính mã
-          nguồn, nên vừa chọn khối vừa nhìn chỗ sắp chèn là không thể. Cắm vào
-          hàng thì panel ĐẨY chỗ thay vì che, và nút `Thư viện` trên thanh công
-          cụ trở thành nút thu gọn/mở của nó. */}
-      <div className="flex min-h-0 flex-1 gap-2">
       <div className={`relative grid ${EDITOR_FRAME_CLASS} grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
         {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15 và
          * 2026-08-17 — ảnh chụp cho thấy lưới kẻ cắt xuyên chữ, không phải
@@ -1831,27 +1899,6 @@ export function SourceEditor({
             onEnsureLoaded={onEnsurePointCatalogLoaded}
             onInsert={handleInsertAtCursor}
             onClose={() => setInsertPanelOpen(false)}
-          />
-        )}
-      </div>
-        {libraryPanelOpen && canEdit && (
-          <QuickLibraryHost
-            variant="docked"
-            projectId={projectId}
-            language="ST"
-            onInsert={(entry) => {
-              /* Đã có instance cùng kiểu thì hỏi: dùng lại hay tạo mới. Tự
-               * dùng lại là sai (hai lời gọi chung một timer là lỗi điều
-               * khiển thật), mà tự tạo mới cũng sai khi người dùng đang muốn
-               * gọi lại đúng instance đó. */
-              if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
-                setPendingLibraryEntry(entry)
-                return true
-              }
-              applyLibraryInsertion(entry)
-              return true
-            }}
-            onClose={() => setLibraryPanelOpen(false)}
           />
         )}
       </div>
