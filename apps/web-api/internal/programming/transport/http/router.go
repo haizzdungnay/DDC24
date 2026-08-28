@@ -19,9 +19,26 @@ const maxMutationBodyBytes int64 = 1 << 20
 const maxBundleMutationBodyBytes int64 = 6 << 20
 
 type routeDefinition struct {
-	method              string
-	path                string
-	role                auth.Role
+	method string
+	path   string
+	/*
+	   `WEB-RBAC-001` — route khai QUYỀN, không khai ngưỡng vai.
+
+	   Trước lát này mọi mutation của Programming đòi `RoleAdmin`, nên không thể
+	   cho một kỹ sư vận hành sửa Draft mà không đồng thời trao cho họ quyền tạo
+	   tài khoản. Nay chia làm hai mức:
+
+	     - `program.edit`     sửa Draft, thư viện, phiên mô phỏng, trace —
+	                          chưa chạm tới thiết bị đang chạy;
+	     - `program.activate` Commission / Restore / reset RETAIN / recovery
+	                          reset / intent Enable / import bundle — đây là lúc
+	                          chương trình BẮT ĐẦU điều khiển thiết bị thật.
+
+	   Bất biến của `security_matrix_test.go` giữ nguyên: handler KHÔNG được
+	   chạy khi thiếu quyền, nên một vai không đủ quyền không tạo ra side effect
+	   nào — kể cả một lần đọc làm lộ sự tồn tại của phiên.
+	*/
+	permission          auth.Permission
 	bodyRequired        bool
 	idempotencyRequired bool
 	ifMatchRequired     bool
@@ -29,48 +46,48 @@ type routeDefinition struct {
 }
 
 var routeDefinitions = []routeDefinition{
-	{method: "GET", path: "/api/v1/programming/capabilities", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/projects", role: auth.RoleViewer},
-	{method: "POST", path: "/api/v1/programming/projects", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/projects/{projectId}", role: auth.RoleViewer},
-	{method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "GET", path: "/api/v1/programming/revisions/{revisionId}", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", role: auth.RoleViewer},
-	{method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/checks/{checkId}", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/libraries", role: auth.RoleViewer},
-	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", role: auth.RoleAdmin, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "GET", path: "/api/v1/programming/capabilities", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/projects", permission: auth.PermissionRead},
+	{method: "POST", path: "/api/v1/programming/projects", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{method: "GET", path: "/api/v1/programming/projects/{projectId}", permission: auth.PermissionRead},
+	{method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "GET", path: "/api/v1/programming/revisions/{revisionId}", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", permission: auth.PermissionRead},
+	{method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{method: "GET", path: "/api/v1/programming/checks/{checkId}", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/libraries", permission: auth.PermissionRead},
+	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", permission: auth.PermissionProgramEdit, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
-		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "GET", path: "/api/v1/programming/point-catalog", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/runtime", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/runtime/monitor", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/runtime/signals", role: auth.RoleViewer},
-	{method: "POST", path: "/api/v1/programming/runtime/traces", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", role: auth.RoleViewer},
-	{method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", role: auth.RoleAdmin},
-	{method: "POST", path: "/api/v1/programming/operations/commission", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "POST", path: "/api/v1/programming/operations/restore", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/operations/{operationId}", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/operations", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/overrides", role: auth.RoleViewer},
-	{method: "POST", path: "/api/v1/programming/bundles/export", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "POST", path: "/api/v1/programming/bundles/import", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, maxBodyBytes: maxBundleMutationBodyBytes},
-	{method: "POST", path: "/api/v1/programming/retain/reset", role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "GET", path: "/api/v1/programming/point-catalog", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/runtime", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/runtime/monitor", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/runtime/signals", permission: auth.PermissionRead},
+	{method: "POST", path: "/api/v1/programming/runtime/traces", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", permission: auth.PermissionRead},
+	{method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", permission: auth.PermissionProgramEdit},
+	{method: "POST", path: "/api/v1/programming/operations/commission", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
+	{method: "POST", path: "/api/v1/programming/operations/restore", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
+	{method: "GET", path: "/api/v1/programming/operations/{operationId}", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/operations", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/overrides", permission: auth.PermissionRead},
+	{method: "POST", path: "/api/v1/programming/bundles/export", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{method: "POST", path: "/api/v1/programming/bundles/import", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true, maxBodyBytes: maxBundleMutationBodyBytes},
+	{method: "POST", path: "/api/v1/programming/retain/reset", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
 	// T59-405 — intent Enable/Disable. `PUT` chứ không phải hai route
 	// `enable`/`disable`: intent là một TRẠNG THÁI mong muốn, và hai động từ
 	// riêng sẽ làm việc "đặt lại đúng thứ đang có" trở thành hai request khác
 	// nhau tuỳ giá trị hiện tại.
-	{method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", role: auth.RoleViewer},
+	{method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", permission: auth.PermissionRead},
 	{method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
-		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/audit", role: auth.RoleViewer},
+		permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
+	{method: "GET", path: "/api/v1/programming/audit", permission: auth.PermissionRead},
 	// T59-702 — lối ra tường minh khỏi `RECOVERY_REQUIRED`. Admin, có
 	// idempotency key và body bắt buộc: một lệnh gỡ khoá vận hành phải nêu lý do.
 	{method: "POST", path: "/api/v1/programming/runtime/recovery-reset",
-		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
+		permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
 
 	// T59-814 / ADR-053 — Simulation R3.
 	//
@@ -83,16 +100,16 @@ var routeDefinitions = []routeDefinition{
 	// resource session: chúng là hành động sản phẩm nhưng cần identity và
 	// idempotency riêng (`DDD-SW-PGM02-WORKSPACE-001` §5.4).
 	{method: "POST", path: "/api/v1/programming/simulation/sessions",
-		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", role: auth.RoleViewer},
+		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", permission: auth.PermissionRead},
 	{method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}",
-		role: auth.RoleAdmin, idempotencyRequired: true, ifMatchRequired: true},
+		permission: auth.PermissionProgramEdit, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions",
-		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}",
-		role: auth.RoleAdmin, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", role: auth.RoleViewer},
-	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", role: auth.RoleViewer},
+		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", permission: auth.PermissionRead},
+	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", permission: auth.PermissionRead},
 }
 
 // RegisterProgrammingRoutes chỉ mount contract khi flag bật. Khi flag tắt,
@@ -122,7 +139,7 @@ func RegisterProgrammingRoutes(routes *[]webrouter.Route, enabled bool, provided
 		handler := func(w http.ResponseWriter, r *http.Request) {
 			handleProgrammingRequest(w, r, definition, services)
 		}
-		*routes = append(*routes, webrouter.Protected(pattern, definition.role, handler))
+		*routes = append(*routes, webrouter.ProtectedPermission(pattern, definition.permission, handler))
 	}
 }
 

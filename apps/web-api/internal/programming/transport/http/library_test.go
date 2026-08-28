@@ -48,6 +48,25 @@ func (a *roleRecordingAuthorizer) Require(role auth.Role, next http.HandlerFunc)
 	})
 }
 
+/* Bản quyền-theo-năng-lực của stub trên: cùng luật từ chối, chỉ khác nó hỏi
+ * "vai này có làm được việc đó không" thay vì "vai này có đủ lớn không". */
+func (a *roleRecordingAuthorizer) RequirePermission(permission auth.Permission, next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !auth.RoleHasPermission(a.actual, permission) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":"PRG-ERR-REQ-001"}}`))
+			return
+		}
+		if !a.withPrincipal {
+			next(w, r)
+			return
+		}
+		principal := &auth.Principal{Username: "admin-operator", Role: a.actual}
+		next(w, r.WithContext(auth.ContextWithPrincipal(r.Context(), principal)))
+	})
+}
+
 // Actor rỗng (middleware auth chưa chạy) phải cho lỗi REQUEST, không phải 503
 // "retryable" — bảo client thử lại một thứ không bao giờ thành công.
 func TestLibraryMutationWithoutPrincipalIsRequestError(t *testing.T) {

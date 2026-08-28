@@ -14,11 +14,26 @@ type Principal = webAuth.Principal
 type AuthService = webAuth.AuthService
 type AuditLogger = webAuth.AuditLogger
 type UserDTO = webAuth.UserDTO
+type Permission = webAuth.Permission
 
 const (
 	RoleViewer   = webAuth.RoleViewer
 	RoleOperator = webAuth.RoleOperator
+	RoleEngineer = webAuth.RoleEngineer
 	RoleAdmin    = webAuth.RoleAdmin
+)
+
+/* `WEB-RBAC-001` — quyền theo năng lực; xem ma trận ở `auth.RoleHasPermission`. */
+const (
+	PermissionRead            = webAuth.PermissionRead
+	PermissionSelfManage      = webAuth.PermissionSelfManage
+	PermissionOperate         = webAuth.PermissionOperate
+	PermissionProgramEdit     = webAuth.PermissionProgramEdit
+	PermissionProgramActivate = webAuth.PermissionProgramActivate
+	PermissionSettingsManage  = webAuth.PermissionSettingsManage
+	PermissionDatabaseManage  = webAuth.PermissionDatabaseManage
+	PermissionUsersManage     = webAuth.PermissionUsersManage
+	PermissionSystemRelease   = webAuth.PermissionSystemRelease
 )
 
 var (

@@ -174,7 +174,7 @@ paths:
       description: >
         Phase A accepts canonical point IDs only; tags are never path aliases. Validates
         the final controller-local UI/AO/DO/VP tag namespace before atomic file replace.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
         required: true
@@ -197,7 +197,7 @@ paths:
       description: >
         Returns created backend-owned VP points only. Raw/uncreated AV/BV/MSV
         core slots are hidden from /points, Monitoring, Trends, and history.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -210,7 +210,7 @@ paths:
     post:
       summary: Create Virtual Point (admin)
       description: Missing id is allocated as the first free VP1..VP464.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -228,7 +228,7 @@ paths:
   /virtual-points/{id}:
     put:
       summary: Update Virtual Point (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
       requestBody:
         required: true
@@ -247,7 +247,7 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
     delete:
       summary: Delete Virtual Point (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
       responses:
         "200":
@@ -263,7 +263,7 @@ paths:
       description: >
         `incomplete=true` nghĩa là có nguồn không quét được; danh sách khi đó là
         CHƯA ĐỦ và không được dùng để kết luận "không ai dùng điểm này".
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       responses:
@@ -292,7 +292,7 @@ paths:
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUDevice" } } } }
     post:
       summary: Tạo Modbus RTU Device và apply có rollback (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUDevice" } } }
@@ -303,7 +303,7 @@ paths:
   /modbus/devices/{id}:
     put:
       summary: Cập nhật Device; device_id không được đổi (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
       requestBody:
         required: true
@@ -314,7 +314,7 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
     delete:
       summary: Xoá Device không còn Point tham chiếu (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
@@ -329,7 +329,7 @@ paths:
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModbusRTUPoint" } } } }
     post:
       summary: Tạo Modbus RTU Point với Point ID ổn định và tag unique (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/ModbusRTUPoint" } } }
@@ -340,7 +340,7 @@ paths:
   /modbus/points/{id}:
     put:
       summary: Cập nhật Point; point_id không đổi khi rename (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
       requestBody:
         required: true
@@ -351,7 +351,7 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
     delete:
       summary: Xoá Modbus RTU Point (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusMutationResult" } } } }
@@ -453,7 +453,7 @@ paths:
         phải byte thô: `rawBytes=false` luôn đúng ở Rev A. `volatile=true` nhắc
         rằng vòng nhớ nằm trong tiến trình iobus và mất khi restart. Mảng rỗng
         nghĩa là "chưa có khung", khác hẳn với lỗi đọc — lỗi đọc trả 5xx.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       parameters:
         - { name: bus, in: query, schema: { type: integer }, description: "Bus 1..N; mặc định 1" }
       responses:
@@ -474,7 +474,7 @@ paths:
       description: >
         Chỉ đọc. `origin` phân biệt mẫu đóng gói theo firmware với mẫu do người
         dùng nạp thêm; `source` là đường dẫn hồ sơ gốc để truy nguyên.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -498,7 +498,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusCandidate" } } } }
     put:
       summary: Lưu bản nháp — KHÔNG chạm tới thiết bị (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters:
         - name: If-Match
           in: header
@@ -523,7 +523,7 @@ paths:
         "412": { $ref: "#/components/responses/Error" }
     delete:
       summary: Bỏ bản nháp (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200": { description: OK }
   /modbus/config/diff:
@@ -534,7 +534,7 @@ paths:
   /modbus/config/apply:
     post:
       summary: Áp bản nháp qua transaction stage→journal→ACK→commit (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: false
         content:
@@ -559,7 +559,7 @@ paths:
   /modbus/import:
     post:
       summary: Nạp cấu hình vào BẢN NHÁP, all-or-nothing (admin) — Đ-06
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { name: format, in: query, schema: { type: string, enum: [csv, json] } } ]
       responses:
         "200": { description: Đã nạp vào bản nháp }
@@ -567,7 +567,7 @@ paths:
   /modbus/devices/{id}/enabled:
     put:
       summary: Bật/tắt thiết bị qua bản nháp (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
       responses:
         "200": { description: OK }
@@ -575,7 +575,7 @@ paths:
   /modbus/devices/{id}/test-connection:
     post:
       summary: Kiểm tra thiết bị có trả lời không (operator+) — MBR-B208
-      x-rbac: [operator, admin]
+      x-rbac: [operator, engineer, admin]
       parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusProbeResult" } } } }
@@ -584,7 +584,7 @@ paths:
   /modbus/read-test:
     post:
       summary: Đọc thử một register phục vụ commissioning (operator+)
-      x-rbac: [operator, admin]
+      x-rbac: [operator, engineer, admin]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ModbusProbeResult" } } } }
         "429": { description: "Vượt giới hạn tần suất." }
@@ -609,7 +609,7 @@ paths:
         Ghi giá trị thật xuống register của thiết bị Modbus RTU. Điểm đích phải
         có read_write = "read_write". Giới hạn 2 lệnh/phút cho mỗi người dùng
         theo OD-MBRTU-007.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -654,7 +654,7 @@ paths:
       description: >
         `T57-3.4`. Vòng nhớ trong tiến trình `mkddc-web`, mất khi service khởi
         động lại — `sinceRestart` cho biết mốc bắt đầu thật của dữ liệu.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       parameters:
         - { name: windowS, in: query, schema: { type: integer }, description: Cửa sổ giây, mặc định 3600 }
       responses:
@@ -667,7 +667,7 @@ paths:
     get:
       summary: Dá»¯ liá»‡u trang Network (viewer+)
       description: Gá»™p network/device/bacnet/fieldbus config vÃ  tráº¡ng thÃ¡i poll tá»•ng tá»« core/iobus; khÃ´ng sinh slave demo.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -678,7 +678,7 @@ paths:
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh northbound trang Network (admin)
       description: Chỉ ghi BACnet và Wi-Fi bằng replace nguyên tử trên từng file; Ethernet/DNS và compatibility service hostname là shadow chỉ đọc do authority/cấu hình hiện hữu sở hữu, endpoint này không đổi hostname quản trị của hệ điều hành.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-ethernet-authority: mkddc-netcfg
       requestBody:
         required: true
@@ -702,7 +702,7 @@ paths:
         của giao dịch đang chờ. `reasonCode` cấp response mô tả kết quả request/giao dịch;
         `active.reasonCode` độc lập và mô tả sức khỏe interface. `capabilities` công bố feature
         protocol v1; `management` trả stable hostname/mDNS read-only.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: Trạng thái authoritative hiện tại
@@ -722,7 +722,7 @@ paths:
          `dns` và chỉ accepted khi response validate/stage vẫn công bố capability, echo đúng pending
          DNS/candidate tương ứng; mỗi POST sau authorization ghi đúng một audit event không chứa
          candidate, DNS hoặc token, kể cả request sai shape/action.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       parameters:
         - name: action
           in: path
@@ -750,7 +750,7 @@ paths:
       description: >
         Thực hiện phép thử tới gateway/DNS/upstream và trả trạng thái từng đích.
         KHÔNG thay đổi cấu hình, không tạo transaction.
-      x-rbac: [operator, admin]
+      x-rbac: [operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -764,7 +764,7 @@ paths:
       description: >
         Gá»­i lá»‡nh test DO/AO qua mkddc-core, vÃ o nguá»“n Local manual má»©c 2 nhÆ° PUT /points/{id}.
         DÃ¹ng cho mÃ n Commissioning; má»i lá»‡nh pháº£i audit log.
-      x-rbac: [operator, admin]
+      x-rbac: [operator, engineer, admin]
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
         required: true
@@ -784,7 +784,7 @@ paths:
     get:
       summary: Äá»c toÃ n bá»™ cáº¥u hÃ¬nh hiá»‡n táº¡i (gá»™p) (admin)
       description: Tráº£ vá» object gá»™p cÃ¡c nhÃ³m (device, network, io, safe_state, virtual_points, bacnet, fieldbus, time).
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -797,13 +797,13 @@ paths:
         Tồn tại để trả lời dứt khoát thay vì rơi xuống static handler và trả về
         trang HTML cho một lời gọi API. Ghi cấu hình phải đi qua từng nhóm
         `/system/config/<group>` để mỗi nhóm được validate riêng.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "405": { $ref: "#/components/responses/Error" }
   /system/config/device:
     get:
       summary: Äá»c cáº¥u hÃ¬nh device (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -812,7 +812,7 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigDevice" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh device (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -828,7 +828,7 @@ paths:
   /system/config/network:
     get:
       summary: Äá»c cáº¥u hÃ¬nh network (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -838,7 +838,7 @@ paths:
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh network (admin)
       description: Ethernet fields are read-only compatibility data; use `/network/transaction/{action}` for mutations.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-ethernet-authority: mkddc-netcfg
       requestBody:
         required: true
@@ -855,7 +855,7 @@ paths:
   /system/config/io:
     get:
       summary: Äá»c cáº¥u hÃ¬nh IO (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -864,7 +864,7 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigIO" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -881,7 +881,7 @@ paths:
   /system/config/safe-state:
     get:
       summary: Äá»c cáº¥u hÃ¬nh IO safe-state (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -890,7 +890,7 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigSafeState" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh IO safe-state (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -906,12 +906,12 @@ paths:
   /system/config/io-bundle:
     get:
       summary: Đọc I/O config + safe-state cùng revision/checksum (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ConfigIOBundle" } } } }
     put:
       summary: Validate và apply I/O config + safe-state nguyên tử (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/ConfigIOBundle" } } }
@@ -922,7 +922,7 @@ paths:
   /system/config/virtual-points:
     get:
       summary: Read Virtual Points config (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -932,7 +932,7 @@ paths:
     put:
       summary: Replace Virtual Points config (admin)
       description: Persists virtual_points.conf without expanding core SHM/BACnet object counts.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -949,7 +949,7 @@ paths:
   /system/config/bacnet:
     get:
       summary: Äá»c cáº¥u hÃ¬nh BACnet/IP (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -958,7 +958,7 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigBacnet" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh BACnet/IP (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -974,7 +974,7 @@ paths:
   /system/config/fieldbus:
     get:
       summary: Äá»c cáº¥u hÃ¬nh Fieldbus (Modbus RTU master) (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -983,7 +983,7 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigFieldbus" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh Fieldbus (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -999,7 +999,7 @@ paths:
   /system/config/time:
     get:
       summary: Äá»c cáº¥u hÃ¬nh Time (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: OK
@@ -1008,7 +1008,7 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigTime" }
     put:
       summary: Cáº­p nháº­t cáº¥u hÃ¬nh Time (admin)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -1025,7 +1025,7 @@ paths:
   /system/time/status:
     get:
       summary: Read controller clock, NTP and RTC status
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: Current controller time status
@@ -1146,7 +1146,7 @@ paths:
   /me:
     get:
       summary: Láº¥y thÃ´ng tin user Ä‘ang Ä‘Äƒng nháº­p (role viewer+)
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1156,7 +1156,7 @@ paths:
   /me/change-password:
     post:
       summary: Äá»•i máº­t kháº©u cÃ¡ nhÃ¢n (role viewer+)
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       requestBody:
         required: true
         content:
@@ -1177,7 +1177,7 @@ paths:
       description: >
         Thân bài là một object JSON tuỳ ý do FE định nghĩa; BE lưu nguyên văn
         theo từng username và KHÔNG diễn giải nội dung.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1186,7 +1186,7 @@ paths:
               schema: { type: object, additionalProperties: true }
     put:
       summary: Ghi tuỳ chọn giao diện của chính người dùng (viewer+)
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       requestBody:
         required: true
         content:
@@ -1204,7 +1204,7 @@ paths:
         [from,to); frontend never merges tiers. Trends presets explicitly request the bounded
         24-hour RAM presentation cache, while Custom explicitly requests SQLite/archive database
         history. Omitting source preserves the unified compatibility query. Point IDs are canonical only.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       parameters:
         - name: point
           in: query
@@ -1248,7 +1248,7 @@ paths:
   /history/export.csv:
     get:
       summary: Stream CSV from the same merged historian iterator (viewer+)
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       parameters:
         - { name: point, in: query, required: true, schema: { type: string } }
         - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
@@ -1273,7 +1273,7 @@ paths:
   /trends/config:
     get:
       summary: Read per-point historian policy, state, capacity and server time (viewer+)
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1288,7 +1288,7 @@ paths:
         interval, selected retentionDays (1..the interval maximum), future start, capacity and
         free-space. Failure leaves the prior revision active. Invalid retention returns the
         structured `historian_retention_invalid` error code.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -1311,7 +1311,7 @@ paths:
         Scheduler Engine v3.1 (ADR-023). Each item is a Schedule Object holding weekly schedule,
         exception schedule, schedule default, effective period and target list. The `runtime` block
         is read-only controller truth and is never accepted on write.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1325,7 +1325,7 @@ paths:
     post:
       summary: Create a Schedule Object (admin)
       description: Created in `DRAFT`. `revision` starts at 1. Does not reach the controller until published.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -1345,7 +1345,7 @@ paths:
       - $ref: "#/components/parameters/ScheduleId"
     get:
       summary: Read one Schedule Object (viewer+)
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1360,7 +1360,7 @@ paths:
         Optimistic locking on `revision`. A stale `revision` is rejected with `SCH-VERSION-001`
         instead of silently overwriting a newer edit. Changing `priority_for_writing` additionally
         requires the `schedule.priority` permission.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -1382,7 +1382,7 @@ paths:
         Spec §9.3 order is mandatory: relinquish every target, confirm no command is still held at
         the schedule priority, store the final revision in the audit log, and only then remove the
         object. Requires the `schedule.delete` permission.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-permission: schedule.delete
       responses:
         "204": { description: Deleted and the controller reloaded. }
@@ -1409,7 +1409,7 @@ paths:
       description: >
         Returns every finding with a spec §11 error code and a JSON path, so the UI can jump
         straight to the offending field. On success the status moves `DRAFT` to `VALIDATED`.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       responses:
         "200":
           description: Validation result
@@ -1427,7 +1427,7 @@ paths:
         Runs the CONTROLLER evaluation engine, not a reimplementation. Reimplementing the algorithm
         in the backend would be correct only until the two copies drift, and nobody would notice
         the day they did.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       requestBody:
         required: true
         content:
@@ -1453,7 +1453,7 @@ paths:
         A failed publish leaves the running revision untouched (spec §13.2).
         MQTT is out of scope for Rev A (ADR-023 QD-2); the same semantics run over the internal
         transport, so this contract does not change when MQTT is added.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-permission: schedule.publish
       requestBody:
         required: true
@@ -1480,7 +1480,7 @@ paths:
       - $ref: "#/components/parameters/ScheduleId"
     post:
       summary: Enable the schedule (operator+)
-      x-rbac: [operator, admin]
+      x-rbac: [operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1498,7 +1498,7 @@ paths:
         Disabling is not merely "stop evaluating". Spec §9.2 requires the runtime to relinquish at
         the priority in use and to NOT hold the last commanded value. The response reports the
         relinquish outcome per target.
-      x-rbac: [operator, admin]
+      x-rbac: [operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1513,7 +1513,7 @@ paths:
     get:
       summary: List revisions (viewer+)
       description: At least the 10 most recent revisions are retained (spec §13.3).
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1532,7 +1532,7 @@ paths:
       description: >
         A rollback creates a NEW revision; it never rewrites history. A reason is mandatory and is
         recorded in the audit log.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-permission: schedule.rollback
       requestBody:
         required: true
@@ -1556,7 +1556,7 @@ paths:
       description: >
         Controller truth only. Any field the controller has not reported is `null`, and the UI must
         render it as an em dash rather than substituting `0` or `OK`.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1571,7 +1571,7 @@ paths:
     get:
       summary: Read the audit trail (viewer+)
       description: Append-only. No role may edit or delete audit entries (spec §20).
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1588,7 +1588,7 @@ paths:
       description: >
         `scheduleId` rỗng trong một đoạn nghĩa là KHÔNG lịch nào ghi vào đoạn đó
         — đây là câu trả lời hợp lệ và phải phân biệt được với "chưa tính được".
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       parameters:
         - { name: pointId, in: query, required: true, schema: { type: string } }
         - { name: from, in: query, schema: { type: string, format: date-time } }
@@ -1606,7 +1606,7 @@ paths:
       description: >
         Returns `alarm_settings.conf` as the ADR-013 entity-list model. Legacy per-point rows are
         migrated by the Phase 2 backend before being returned.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "200":
           description: OK
@@ -1625,7 +1625,7 @@ paths:
         per-source evaluation before this contract becomes runtime-active. At most 64 internal
         alarm entities are accepted, and at most 8 enabled entities may set `publishBacnet=true`
         because BACnet Event Enrollment capacity is 8.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       requestBody:
         required: true
         content:
@@ -1656,7 +1656,7 @@ paths:
       description: >
         `T57-2.13` (`ADR-048`). Là VỎ gọi `mkddc-alarm-sim`; không chạm cấu hình
         đang lưu nên `viewer` là đủ. `engine` cho biết bản engine đã chạy.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       requestBody:
         required: true
         content:
@@ -1676,7 +1676,7 @@ paths:
         `T57-3.13`. Cùng engine với `/alarm-settings/simulate` nhưng lấy mẫu từ
         historian. `downsampled=true` nghĩa là chuỗi đã bị thưa hoá; khi đó
         `underestimateBelowS` cho biết ngưỡng thời lượng mà kết quả ĐẾM THIẾU.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       requestBody:
         required: true
         content:
@@ -1808,7 +1808,7 @@ paths:
       summary: Chỉ số cảnh báo theo cửa sổ trượt (viewer+)
       description: >
         Tần suất, cờ flooding, nhóm lặp nhiều nhất và danh sách shelve sắp hết hạn.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       parameters:
         - { name: windowS, in: query, schema: { type: integer }, description: Cửa sổ giây, mặc định 600 }
       responses:
@@ -1828,7 +1828,7 @@ paths:
         định kỳ; thao tác force/override điểm yêu cầu vai trò operator trở lên
         và đều được ghi audit.
       x-websocket: true
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       responses:
         "101": { description: Switching Protocols }
         "401": { $ref: "#/components/responses/Error" }
@@ -1837,7 +1837,7 @@ paths:
     get:
       operationId: getProgrammingCapabilities
       summary: Đọc profile và giới hạn Programming Rev A
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-500
       responses:
         "200":
@@ -1852,7 +1852,7 @@ paths:
     get:
       operationId: listProgrammingProjects
       summary: Liệt kê Project Programming
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-204
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -1869,7 +1869,7 @@ paths:
     post:
       operationId: createProgrammingProject
       summary: Tạo Project và Draft đầu tiên trong một transaction
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-204
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -1898,7 +1898,7 @@ paths:
     get:
       operationId: getProgrammingProject
       summary: Đọc Project, Draft và Revision đang active
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-204
       responses:
         "200":
@@ -1918,7 +1918,7 @@ paths:
     patch:
       operationId: updateProgrammingDraft
       summary: Áp dụng lô mutation Draft theo nguyên tắc all-or-nothing
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-204
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -1950,7 +1950,7 @@ paths:
     post:
       operationId: createProgrammingRevision
       summary: Đóng Draft thành Revision bất biến
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-204
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -1980,7 +1980,7 @@ paths:
     get:
       operationId: getProgrammingRevision
       summary: Đọc metadata và snapshot Revision
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-204
       responses:
         "200":
@@ -2009,7 +2009,7 @@ paths:
     get:
       operationId: compareProgrammingRevisions
       summary: Đọc change manifest giữa hai Revision
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-206
       parameters:
         - name: cursor
@@ -2035,7 +2035,7 @@ paths:
     post:
       operationId: createProgrammingCheck
       summary: Tạo Check job không tác động runtime
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-205
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2066,7 +2066,7 @@ paths:
     get:
       operationId: getProgrammingCheck
       summary: Đọc trạng thái và diagnostic của Check
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-205
       responses:
         "200":
@@ -2082,7 +2082,7 @@ paths:
     get:
       operationId: searchProgrammingLibraries
       summary: Tìm entry Control Library SYSTEM và PROJECT
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: t59-202
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2116,7 +2116,7 @@ paths:
     post:
       operationId: upsertProgrammingLibraryEntry
       summary: Tạo hoặc sửa Function/FB người dùng trong PROJECT Library Draft
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: t59-202
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2149,7 +2149,7 @@ paths:
     delete:
       operationId: deleteProgrammingLibraryEntry
       summary: Xoá entry Control Library; từ chối khi còn tham chiếu
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: t59-202
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2179,7 +2179,7 @@ paths:
         Chỉ mở chuyển tiếp PUBLISHED sang DEPRECATED. Endpoint này không publish
         library; publish vẫn nằm trong cùng transaction với Seal Revision để
         không tiêu version mà chưa có Revision bất biến pin tới.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: f-p59-ui-001
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2223,7 +2223,7 @@ paths:
         một `RUNNING` đọc từ DB một giờ trước trông y hệt một `RUNNING` vừa đọc
         từ Core. Core im ⇒ `UNAVAILABLE` + `runtimeState = UNKNOWN` + mọi số đo
         `null`, tuyệt đối không trả giá trị cũ như thể đang sống.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: t60-013
       responses:
         "200":
@@ -2253,7 +2253,7 @@ paths:
         trở thành hai request khác nhau tuỳ giá trị hiện tại. Intent bền vững kể
         cả khi Core chưa sẵn sàng; `runtimeState` khi đó là `UNKNOWN` chứ không
         phải trạng thái mong muốn.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: t59-405
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2278,7 +2278,7 @@ paths:
     get:
       operationId: getProgrammingPointCatalog
       summary: Đọc projection Point canonical phục vụ binding
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-503
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2296,7 +2296,7 @@ paths:
     get:
       operationId: getProgrammingRuntime
       summary: Đọc Revision active/LKG và trạng thái Core authoritative
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-500
       responses:
         "200":
@@ -2311,7 +2311,7 @@ paths:
     get:
       operationId: getProgrammingRuntimeMonitor
       summary: Đọc mẫu runtime bounded kèm quality và freshness
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-509
       responses:
         "200":
@@ -2330,7 +2330,7 @@ paths:
         Ghép định danh đã seal trong Revision với value, quality và freshness
         do Core chụp từ StSignalBus. Signal invalid luôn có value=null;
         CORE_ONLY, REVISION_ONLY hoặc MISMATCH phải hiển fail-closed.
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: t59-504
       responses:
         "200":
@@ -2345,7 +2345,7 @@ paths:
     post:
       operationId: createProgrammingTrace
       summary: Tạo trace session read-only có quota
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-509
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2376,7 +2376,7 @@ paths:
     get:
       operationId: getProgrammingTrace
       summary: Đọc mẫu và stop reason của trace session
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-509
       responses:
         "200":
@@ -2391,7 +2391,7 @@ paths:
     delete:
       operationId: stopProgrammingTrace
       summary: Dừng capture nhưng giữ metadata và audit
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-509
       responses:
         "204": { description: Trace đã dừng hoặc đã ở trạng thái kết thúc }
@@ -2403,7 +2403,7 @@ paths:
     post:
       operationId: commissionProgrammingRevision
       summary: Tạo transaction Commission có impact acknowledgement
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-403
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2429,7 +2429,7 @@ paths:
     post:
       operationId: restoreProgrammingRevision
       summary: Restore Revision/LKG qua cùng verify path với Commission
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-403
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2457,7 +2457,7 @@ paths:
     get:
       operationId: getProgrammingOperation
       summary: Đọc tiến trình và read-back authoritative của Operation
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-403
       responses:
         "200":
@@ -2473,7 +2473,7 @@ paths:
     get:
       operationId: listProgrammingOperations
       summary: Liệt kê lịch sử Operation
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-505
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2491,7 +2491,7 @@ paths:
     get:
       operationId: listProgrammingOverrides
       summary: Đọc inventory override và authority hiện hành
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-504
       parameters:
         - name: activeOnly
@@ -2512,7 +2512,7 @@ paths:
     post:
       operationId: exportProgrammingBundle
       summary: Tạo bundle source-only có manifest và hash
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-206
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2538,7 +2538,7 @@ paths:
     post:
       operationId: importProgrammingBundle
       summary: Kiểm bundle inline trước khi tạo Project/Draft mới
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: task-prog-206
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2564,7 +2564,7 @@ paths:
     post:
       operationId: resetProgrammingRetain
       summary: Tạo operation reset RETAIN với strong confirmation
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: contract-only
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2596,7 +2596,7 @@ paths:
         bản ghi journal (không xoá gì), đưa Core về `IDLE` KHÔNG có Active và
         giữ safe-state. Phải Commission lại sau đó; không gói nào tự sống lại.
         Gọi khi Core không ở `RECOVERY_REQUIRED` trả `409`.
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: implemented
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2624,7 +2624,7 @@ paths:
     get:
       operationId: listProgrammingAudit
       summary: Đọc timeline Programming đã sanitize theo role
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: task-prog-500
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2647,7 +2647,7 @@ paths:
     post:
       operationId: createProgrammingSimulationSession
       summary: Mở phiên Simulation từ Revision đã Check
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2679,7 +2679,7 @@ paths:
     get:
       operationId: getProgrammingSimulationSession
       summary: Đọc trạng thái phiên Simulation
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: t59-814
       responses:
         "200":
@@ -2695,7 +2695,7 @@ paths:
     delete:
       operationId: stopProgrammingSimulationSession
       summary: Dừng phiên Simulation (materialize của hành động STOP)
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2722,7 +2722,7 @@ paths:
     post:
       operationId: actProgrammingSimulationSession
       summary: RUN/PAUSE/STEP_CYCLE/RESET/SET_SPEED trên phiên
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2761,7 +2761,7 @@ paths:
     put:
       operationId: setProgrammingSimulationInput
       summary: Ghi một virtual input trong allowlist của manifest
-      x-rbac: [admin]
+      x-rbac: [engineer, admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2797,7 +2797,7 @@ paths:
     get:
       operationId: listProgrammingSimulationObservations
       summary: Đọc ảnh chụp observation của phiên
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: t59-814
       responses:
         "200":
@@ -2818,7 +2818,7 @@ paths:
     get:
       operationId: listProgrammingSimulationTrace
       summary: Đọc trang mẫu trace có biên của phiên
-      x-rbac: [viewer, operator, admin]
+      x-rbac: [viewer, operator, engineer, admin]
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }

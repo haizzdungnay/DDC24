@@ -17,6 +17,10 @@ type allowAllAuthorizer struct{}
 
 func (allowAllAuthorizer) Require(_ auth.Role, next http.HandlerFunc) http.Handler { return next }
 
+func (allowAllAuthorizer) RequirePermission(_ auth.Permission, next http.HandlerFunc) http.Handler {
+	return next
+}
+
 func TestRegisterProgrammingRoutesHonorsFeatureFlag(t *testing.T) {
 	routes := []webrouter.Route{}
 	RegisterProgrammingRoutes(&routes, false)
