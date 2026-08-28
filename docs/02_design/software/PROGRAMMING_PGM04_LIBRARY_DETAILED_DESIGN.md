@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-SW-PGM04-LIBRARY-001` |
-| Phiên bản | 0.1 |
-| Trạng thái | **`M2 — DRAFT CONTENT`; chưa `M3`, chưa trao quyền code** |
+| Phiên bản | 0.2 |
+| Trạng thái | **`M3 — REVIEW READY`** (từ `0.2`); trao quyền code theo `T61-004`, không sớm hơn |
 | Ngày | 2026-08-29 |
 | Chủ quản đề xuất | FE Lead + Web API Lead + System Architect |
 | Người phê duyệt | Product Owner/CTO + System Architect |
 | Authority work package | `PLAN-FE-PGM-061` / `T61-003` (WP-00) |
 | Disposition authority | [`AUTH-PROG-2026-08-29-PGM04-001`](../../07_records/reviews/AUTH-PROG-2026-08-29-PGM04-001.md) |
-| Đầu vào | [`REC-PGM04-AUTHORITY-001`](../../07_records/reviews/PGM04_AUTHORITY_RECONCILIATION_2026-08-29.md), [`SPEC-PGM04-VISUAL-001`](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-04_VISUAL_SPEC_v1.md) |
+| Đầu vào | [`REC-PGM04-AUTHORITY-001`](../../07_records/reviews/PGM04_AUTHORITY_RECONCILIATION_2026-08-29.md), [`SPEC-PGM04-VISUAL-001`](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-04_VISUAL_SPEC_v1.md), [`LOCK-PGM04-CONTRACT-001`](../../07_records/reviews/PGM04_CONTRACT_LOCK_2026-08-29.md) |
 | Baseline As-Built | `main@0453891` |
 | Evidence class | Thiết kế M2 + source inspection. **Không** phải bằng chứng runtime/target/HIL |
 | Gate | `PLAN_READY[PGM04]=NO-GO`; `IMPLEMENT_READY[PGM04]` **chưa mở** |
@@ -23,8 +23,8 @@
 | Câu hỏi | Trả lời |
 |---|---|
 | Thiết kế này khoá cái gì? | Ánh xạ `field → API → state → action → RBAC → test` cho PGM-04, và đường rollback |
-| Cái gì CHƯA khoá? | Ba trường không có nguồn (`category`, Used-In, search mở rộng) — chờ `T61-005` |
-| Vì sao chưa `M3`? | Một Target thiếu ba trường thì chưa phải Target. Nâng `M3` bây giờ là ký cho một bản thiết kế có lỗ |
+| Cái gì CHƯA khoá? | Không còn. `T61-005` đã khoá metadata/search/Used-In/compatibility |
+| Vì sao `M3` chứ chưa `M4`? | `M3` là "đọc được và trao quyền code được". `M4` đòi bằng chứng thi hành, mà WP-01/WP-02 chưa chạy |
 
 ## 1. As-Built — đo từ source, không chép từ tài liệu
 
@@ -55,7 +55,7 @@ route usage, không có route metadata.
 | **`category`** | — | ❌ **KHÔNG CÓ NGUỒN** | Bắt buộc theo handoff §2. `T61-102`/`T61-103` |
 | **`description`** | — | ❌ **KHÔNG CÓ NGUỒN** | Search phải phủ (§7 handoff) |
 | **`tags`** | — | ❌ **KHÔNG CÓ NGUỒN** | |
-| **Used-In** | — | ❌ **KHÔNG CÓ API** | `AC-PGM04-02`. `T61-104` |
+| **Used-In** | `library_usages` (đã có, ghi lúc Seal) | ⚠️ **có dữ liệu, thiếu API** | Chỉ phủ PROJECT + Revision đã niêm phong. Draft và SYSTEM chưa có. Xem `LOCK-PGM04-CONTRACT-001` §0 |
 | compatibility | pin `libraryRevisionId` ở Revision | ⚠️ một nửa | "Không âm thầm nâng" đã đảm bảo; "hiện trạng thái tương thích" thì chưa |
 
 Bốn ô ❌ là lý do hồ sơ này dừng ở `M2`. Vẽ giao diện cho một field không có
@@ -119,12 +119,13 @@ một lần sửa mô tả sẽ làm mọi artifact đã ký thành lỗi thời
 
 | Mã | Blocker | Mở bằng |
 |---|---|---|
-| `B-PGM04-01` | `category`/`description`/`tags` không có nguồn | `T61-005` chốt hợp đồng, `T61-102`/`T61-103` cấp nguồn |
-| `B-PGM04-02` | Used-In không có API | `T61-005` chốt ngữ nghĩa hai phạm vi, `T61-104` giao |
-| `B-PGM04-03` | Hồ sơ này ở `M2` | Cả hai trên đóng, rồi `T61-004` ký |
+| `B-PGM04-01` | `category`/`description`/`tags` không có nguồn | **ĐÃ MỞ** — `LOCK-PGM04-CONTRACT-001` §2 khoá hợp đồng; giao ở `T61-102`/`T61-103` |
+| `B-PGM04-02` | Used-In không có API | **ĐÃ MỞ** — `LOCK-PGM04-CONTRACT-001` §1 khoá hợp đồng; dữ liệu sealed đã có sẵn |
+| `B-PGM04-03` | Hồ sơ này ở `M2` | **ĐÃ MỞ** ở `0.2` |
 
 ## 8. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.2 | 2026-08-29 | Nâng `M2 → M3` sau `LOCK-PGM04-CONTRACT-001`. **Đính chính một khẳng định của `0.1`:** Used-In được ghi là "không có nguồn", trong khi bảng `library_usages` đã tồn tại từ migration `0007` và đã được ghi trong chính đường Seal — thứ thiếu là route HTTP, không phải dữ liệu. Nửa sai ấy làm ước lượng chi phí đội lên nhiều lần. |
 | 0.1 | 2026-08-29 | Bản đầu cho `T61-003`. Ánh xạ field/action/RBAC/state/test/rollback đo từ source `main@0453891`; ghi bốn field không có nguồn và giữ `M2`. |
