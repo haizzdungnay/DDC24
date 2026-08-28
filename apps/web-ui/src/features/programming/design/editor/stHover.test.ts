@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildStReferenceIndex } from './stReferenceIndex'
-import { isStKeyword, stHoverSymbolAtPoint, stOffsetAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
+import { isStKeyword, stDropOffsetAtPoint, stHoverSymbolAtPoint, stOffsetAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
 
 /**
  * `T59-820` / `TC-PGM02-HOV-01` — hover ký hiệu ST.
@@ -147,5 +147,34 @@ describe('stVisualPositionAt — neo tooltip vào ký hiệu, không vào con ch
   it('offset ngoài phạm vi bị kẹp thay vì trả vị trí âm', () => {
     expect(stVisualPositionAt('AB', -5, 2)).toEqual({ row: 0, column: 0 })
     expect(stVisualPositionAt('AB', 99, 2)).toEqual({ row: 0, column: 2 })
+  })
+})
+
+describe('DEV-PROG-016 — offset cho thao tác THẢ có kẹp', () => {
+  const source = 'AAA\nBB\nCCCC\n'
+  const metrics = { rowHeightPx: 20, padTopPx: 4, padLeftPx: 6, charWidthPx: 10, tabSize: 2 }
+
+  it('thả đúng trên một ký tự cho ra chính offset đó', () => {
+    const offset = stDropOffsetAtPoint(source, { x: 6 + 15, y: 4 + 25, scrollLeft: 0, scrollTop: 0 }, metrics)
+    expect(offset).toBe(source.indexOf('BB') + 1)
+  })
+
+  it('thả vào khoảng trắng SAU ký tự cuối dòng ⇒ cuối dòng đó, không phải null', () => {
+    // `stOffsetAtPoint` trả `null` ở đây (đúng cho hover), nhưng thả vào đó là
+    // một thao tác rõ nghĩa: "chèn ở cuối dòng này".
+    expect(stOffsetAtPoint(source, { x: 6 + 500, y: 4 + 25, scrollLeft: 0, scrollTop: 0 }, metrics)).toBeNull()
+    expect(stDropOffsetAtPoint(source, { x: 6 + 500, y: 4 + 25, scrollLeft: 0, scrollTop: 0 }, metrics))
+      .toBe(source.indexOf('BB') + 2)
+  })
+
+  it('thả bên TRÁI lề ⇒ đầu dòng, không phải cuối dòng', () => {
+    expect(stDropOffsetAtPoint(source, { x: 0, y: 4 + 25, scrollLeft: 0, scrollTop: 0 }, metrics))
+      .toBe(source.indexOf('BB'))
+  })
+
+  it('thả dưới dòng cuối ⇒ kẹp về dòng cuối, không vượt ra ngoài tài liệu', () => {
+    const offset = stDropOffsetAtPoint(source, { x: 6 + 500, y: 4 + 400, scrollLeft: 0, scrollTop: 0 }, metrics)
+    expect(offset).toBeLessThanOrEqual(source.length)
+    expect(offset).toBeGreaterThanOrEqual(source.indexOf('CCCC'))
   })
 })

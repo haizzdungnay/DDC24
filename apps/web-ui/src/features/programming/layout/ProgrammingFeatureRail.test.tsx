@@ -67,13 +67,17 @@ beforeEach(() => localStorage.setItem('mkddc-lang', 'vi'))
 afterEach(cleanup)
 
 describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
-  it('R60-03 — mục Thoát Lập trình đứng đầu rail và luôn là link thật về ngoài workspace', () => {
+  it('R60-03 — lối thoát đứng đầu rail và luôn là link thật về ngoài workspace', () => {
     renderRail('project-1')
-    const exit = screen.getByRole('link', { name: 'Thoát Lập trình' })
+    /* `DEV-PROG-010` — lối thoát nay CHÍNH LÀ thương hiệu ở đầu rail, không còn
+       là một mục riêng bên dưới nó. `R60-03` không đổi: rail toàn cục bị ẩn ở
+       chế độ focus, nên ở ≥1024 px đây vẫn là đường DUY NHẤT rời workspace bằng
+       chuột, nó vẫn là link thật và không bao giờ bị vô hiệu hoá. */
+    const exit = screen.getByRole('link', { name: 'Thoát Lập trình — về Bảng điều khiển' })
     expect(exit).toHaveAttribute('href', '/')
     expect(exit).not.toHaveAttribute('aria-disabled')
-    // Chuỗi có mũi tên là nhãn NHÌN THẤY theo D-01; tên truy cập giữ sạch mũi tên.
-    expect(within(rail()).getByText('← Thoát Lập trình')).toBeInTheDocument()
+    // Nhãn nhìn thấy mang tên khu vực, để người dùng biết mình đang ở đâu.
+    expect(within(exit).getByText(/Lập trình/)).toBeInTheDocument()
     // Đứng đầu: là liên kết đầu tiên theo thứ tự DOM, không nằm lẫn giữa 6 đích.
     expect(rail().querySelectorAll('a')[0]).toBe(exit)
   })
@@ -100,7 +104,7 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     expect(screen.getByRole('link', { name: 'Kiểm tra & Vận hành' })).toHaveAttribute('href', '/eng/programming/projects/project-1/commission')
     expect(screen.getByRole('link', { name: 'Tổng quan' })).toHaveAttribute('href', '/eng/programming')
     expect(screen.getByRole('link', { name: 'Runtime & Bảo trì' })).toHaveAttribute('href', '/eng/programming/runtime')
-    // Sáu đích + lối thoát; `Project Settings` KHÔNG phải link (chưa có route).
+    // Sáu đích + lối thoát (thương hiệu); `Project Settings` KHÔNG phải link.
     expect(rail().querySelectorAll('a')).toHaveLength(7)
   })
 

@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { ProgrammingLibraryPage, ProgrammingProgram } from '../../model/types'
 import { SourceEditor } from './ProgramsTab'
+import { QuickLibraryHost } from '../library/QuickLibraryPanel'
+import type { CatalogEntry } from '../library/libraryCatalog'
 
 const preferences = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 vi.mock('../../../../shared/api/client', () => ({
@@ -43,25 +45,49 @@ function program(document: string): ProgrammingProgram {
 }
 
 /** Editor có state thật để `source` đi theo `onChange` — chèn thư viện đổi
- *  toàn bộ buffer, nên một editor "controlled giả" sẽ không phản ánh gì. */
+ *  toàn bộ buffer, nên một editor "controlled giả" sẽ không phản ánh gì.
+ *
+ *  `DEV-PROG-002` — Thư viện nhanh nay sống ở CỘT PHẢI (`ProgramsTab`), không
+ *  trong trình soạn thảo, và chèn đi bằng yêu cầu có `nonce`. Harness dựng lại
+ *  ĐÚNG cách nối đó thay vì gọi thẳng hàm chèn: bộ test này tồn tại để khoá
+ *  đường đi thật từ lúc bấm một khối tới lúc buffer đổi, nên tắt đoạn giữa sẽ
+ *  bỏ qua chính chỗ dễ hỏng. */
 function renderEditor(initial: string) {
   function Harness() {
     const [source, setSource] = useState(initial)
+    const [libraryOpen, setLibraryOpen] = useState(false)
+    const [request, setRequest] = useState<{ entry: CatalogEntry; nonce: number } | null>(null)
     return (
-      <SourceEditor
-        program={program(initial)}
-        source={source}
-        canEdit
-        saving={false}
-        diagnostics={[]}
-        focusDiagnostic={null}
-        onChange={setSource}
-        onSave={vi.fn().mockResolvedValue(true)}
-        pointCatalogStatus="idle"
-        pointCatalogItems={[]}
-        pointCatalogError={null}
-        onEnsurePointCatalogLoaded={vi.fn()}
-      />
+      <>
+        <SourceEditor
+          program={program(initial)}
+          source={source}
+          canEdit
+          saving={false}
+          diagnostics={[]}
+          focusDiagnostic={null}
+          onChange={setSource}
+          onSave={vi.fn().mockResolvedValue(true)}
+          pointCatalogStatus="idle"
+          pointCatalogItems={[]}
+          pointCatalogError={null}
+          onEnsurePointCatalogLoaded={vi.fn()}
+          libraryOpen={libraryOpen}
+          onToggleLibrary={() => setLibraryOpen((open) => !open)}
+          libraryInsertRequest={request}
+        />
+        {libraryOpen && (
+          <QuickLibraryHost
+            variant="docked"
+            language="ST"
+            onInsert={(entry) => {
+              setRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
+              return true
+            }}
+            onClose={() => setLibraryOpen(false)}
+          />
+        )}
+      </>
     )
   }
   render(<I18nProvider><Harness /></I18nProvider>)
@@ -70,7 +96,11 @@ function renderEditor(initial: string) {
 
 async function openLibrary() {
   fireEvent.click(screen.getByRole('button', { name: /Thư viện/ }))
-  return waitFor(() => screen.getByRole('dialog', { name: 'Thư viện nhanh' }))
+  // `DEV-PROG-002` — Thư viện nhanh trong trình soạn thảo ST nay là panel CẮM
+  // (`role="region"`), không còn là hộp thoại nổi phủ lên mã nguồn. Khai
+  // `dialog` cho một vùng không chặn phần còn lại là nói sai với trình đọc màn
+  // hình, nên vai trò đổi theo bố cục.
+  return waitFor(() => screen.getByRole('region', { name: 'Thư viện nhanh' }))
 }
 
 beforeEach(() => {

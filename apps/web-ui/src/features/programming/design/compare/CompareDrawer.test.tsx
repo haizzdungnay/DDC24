@@ -233,3 +233,30 @@ describe('CompareDrawer — lỗi đọc trang tiếp không được vứt ph�
     expect(screen.queryByTestId('compare-load-more-error')).toBeNull()
   })
 })
+
+describe('DEV-PROG-018 — tô dòng khác biệt trong khay So sánh', () => {
+  it('mỗi phía chỉ vẽ dòng thuộc về nó, và dòng đổi có dấu + / − chứ không chỉ màu', () => {
+    /* Vẽ dòng của phía kia sang phía này làm số dòng hiển thị lệch số dòng thật
+       của tệp — mà số dòng thật mới là thứ người dùng dùng để mở đúng chỗ trong
+       trình soạn thảo. Dấu `+`/`−` vì màu không bao giờ là tín hiệu duy nhất. */
+    renderDrawer({
+      changes: changesView({
+        stHunks: [{
+          objectId: 'obj-1', changeType: 'REPLACED',
+          beforeStartLine: 10, beforeLineCount: 2, beforeText: ['A := 1;', 'CU := 2;'],
+          afterStartLine: 10, afterLineCount: 2, afterText: ['A := 1;', 'MOI := 3;'],
+          truncated: false, coarse: false,
+        }],
+      }),
+    })
+    fireEvent.click(screen.getByTestId('compare-entry'))
+
+    const before = within(screen.getByTestId('compare-detail-before'))
+    const after = within(screen.getByTestId('compare-detail-after'))
+    expect(before.getByText(/CU := 2;/)).toBeInTheDocument()
+    expect(before.queryByText(/MOI := 3;/)).toBeNull()
+    expect(after.getByText(/MOI := 3;/)).toBeInTheDocument()
+    expect(after.queryByText(/CU := 2;/)).toBeNull()
+    expect(screen.getByText(/\+1 dòng thêm · −1 dòng bớt/)).toBeInTheDocument()
+  })
+})

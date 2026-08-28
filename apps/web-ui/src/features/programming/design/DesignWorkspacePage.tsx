@@ -184,6 +184,14 @@ export function DesignWorkspacePage({
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
   const [savingBeforeNavigation, setSavingBeforeNavigation] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
+  /* `DEV-PROG-003` — yêu cầu theo dõi một biến, phát từ nháy đúp trong trình
+   * soạn thảo và tiêu thụ ở workbench. `nonce` là bắt buộc: nháy đúp hai lần
+   * vào CÙNG một biến vẫn phải mở lại khay Watch, mà so theo tên thì lần thứ
+   * hai không có gì đổi để `useEffect` bên kia nhận ra. */
+  const [watchAddRequest, setWatchAddRequest] = useState<{ name: string; nonce: number } | null>(null)
+  const watchVariable = useCallback((name: string) => {
+    setWatchAddRequest((current) => ({ name, nonce: (current?.nonce ?? 0) + 1 }))
+  }, [])
   const compareTriggerRef = useRef<HTMLButtonElement>(null)
   const [compareFbdFocus, setCompareFbdFocus] = useState<{ programId: string; selection: FbdSelection } | null>(null)
 
@@ -311,10 +319,33 @@ export function DesignWorkspacePage({
       projectName: workspace.project.name,
       draftRevisionId: workspace.project.draftRevisionId,
       dirty: draftDirty,
-      checkState: 'idle'
+      checkState: 'idle',
+      /* `DEV-PROG-009` — workspace ĐĂNG KÝ hai hành động của nó để header ở
+         trên cùng gọi lại. Header không tự dựng batch operation: luật dirty,
+         danh sách operation và đường sang PGM-03 đều thuộc về đây, và hai nơi
+         cùng dựng một lệnh là hai nơi để luật khoá lệch nhau.
+
+         KHÔNG đăng ký gì khi không được sửa (LIVE, SIMULATE, dưới 768 px, vai
+         không đủ quyền). Một nút Lưu bị vô hiệu hoá vẫn là một nút Lưu có mặt
+         trên màn hình — và `AC-PGM02-006`/`T59-812` đòi bề mặt LIVE **không lộ
+         mutation**, tức đếm bằng 0, chứ không phải "có nhưng bấm không được".
+         Vô hiệu hoá là câu trả lời cho "chưa lưu được lúc này"; vắng mặt là câu
+         trả lời cho "chế độ này không sửa". */
+      ...(canEdit ? {
+        actions: {
+          onSave: () => { void workspace.save(pendingOperations) },
+          saving: workspace.saving,
+          saveDisabledReason: draftDirty ? null : pick('Không có thay đổi nào để lưu.', 'There is nothing to save.'),
+          onCheck: goToCommission,
+          checkDisabledReason: draftDirty
+            ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
+                   'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
+            : null
+        }
+      } : {})
     })
     return () => setEditingContext(null)
-  }, [draftDirty, setEditingContext, workspace.project, workspace.status])
+  }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.save, workspace.saving, workspace.status])
 
   useEffect(() => {
     if (!draftDirty) return undefined
@@ -607,6 +638,21 @@ export function DesignWorkspacePage({
             tài liệu khác: nguồn của gói ĐANG CHẠY. Dùng lại đúng component
             editor rồi tắt sửa là cách chắc chắn nhất để một hôm nào đó Draft rò
             vào chỗ đáng lẽ phải là Active, mà không có dấu hiệu bên ngoài nào. */}
+        {/* `DEV-PROG-001` — bề mặt soạn thảo và workbench nằm trong MỘT cột cao
+            theo viewport. Trước lát này cả hai chỉ xếp nối nhau trong dòng chảy
+            của trang: đo trên bo Foxlinx (1280×800, POU AHU_MasterSequence 128
+            dòng) tài liệu cao 2861 px và dải tab workbench ở `y=2675` — người
+            dùng phải cuộn gần 1900 px mới tới được Vấn đề/Tìm kiếm/Watch.
+
+            `18rem` là chrome phía trên ĐO ĐƯỢC trên Chrome thật, không phải
+            một con số đoán: sau khi `DEV-PROG-009/013/014` rút gọn tiêu đề, mép
+            trên của vùng này nằm ở `y=252` trên viewport 900, và trừ thêm lề đáy của
+            trang ra 18rem (17rem đo lại cho tài liệu cao 912 px — tràn 12 px). Con số cũ (20rem) để thừa 68 px trống dưới đáy
+            trang — 68 px đó thuộc về chỗ người ta gõ. Sàn `34rem` giữ cho màn
+            thấp vẫn còn chỗ gõ; dưới `lg` KHÔNG chốt chiều cao vì màn hẹp không
+            có ngân sách để chia và workspace ở đó là chỉ-đọc. */}
+        <div className="flex flex-col lg:h-[calc(100vh-18rem)] lg:min-h-[34rem]">
+        <div className="min-h-0 lg:flex-1 lg:overflow-hidden">
         {workspaceMode === 'SIMULATE' ? (
           /* `T59-815` — SIMULATE cũng KHÔNG phải editor bị khoá: nó là bản đã
              lưu và đã Kiểm tra mà phiên đang chạy, pin theo Revision của phiên
@@ -666,6 +712,7 @@ export function DesignWorkspacePage({
           )}
           userPouInterfaces={userPouInterfaces}
           forceReadOnly={mobileReadOnly}
+          onWatchVariable={watchVariable}
         />
         )}
         {/* `T59-807` / `WP-06-R1` — MỘT workbench dùng chung. Trước đây mỗi
@@ -673,12 +720,14 @@ export function DesignWorkspacePage({
             FBD nằm trong editor FBD, tham chiếu ST nằm trong editor ST, tìm
             kiếm nằm trong thanh công cụ ST. Không có chỗ nào để hỏi "Draft này
             đang có vấn đề gì" cho CẢ Project. */}
+        </div>
         <DesignWorkbench
           mode={workspaceMode === 'LIVE' ? 'LIVE' : 'EDIT'}
           {...(workspaceMode === 'LIVE' && selectedProgramId
             ? { runtimeOverlay: runtimeOverlays[selectedProgramId] ?? { status: 'unavailable' as const } }
             : {})}
           traceOwnerHref="/eng/programming/runtime?tab=watch"
+          watchAddRequest={watchAddRequest}
           document={document}
           source={workbenchSource}
           sourceLabel={workbenchSourceLabel}
@@ -686,6 +735,7 @@ export function DesignWorkspacePage({
           onSelectProgram={selectProgram}
           onJumpToOffset={jumpToSourceOffset}
         />
+        </div>
       </div>
       <div hidden={tab !== 'mapping'}>
         <MappingTab

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../../../shared/i18n'
+import { WorkbenchWatchPanel, type WatchRow } from './WorkbenchWatchPanel'
 
 /**
  * `T59-807` / `PGM02-V22-WP-06-R1` — workbench dưới đáy, dùng CHUNG cho mọi bề
@@ -38,6 +39,15 @@ export interface WorkbenchSymbol {
   reads: number
   writes: number
   onJump: () => void
+  /**
+   * `DEV-PROG-017` — TỪNG chỗ dùng, không chỉ con số đếm.
+   *
+   * Một con số "7 tham chiếu" trả lời được "có nhiều không" nhưng không trả lời
+   * được "ở đâu" — mà đó mới là câu người đang sửa một biến cần. Danh sách rỗng
+   * là một câu trả lời thật (khai báo rồi nhưng chưa dùng), khác hẳn không có
+   * trường này.
+   */
+  occurrences?: readonly { line: number; role: 'READ' | 'WRITE'; preview: string; onJump: () => void }[]
 }
 
 /**
@@ -46,14 +56,11 @@ export interface WorkbenchSymbol {
  * Đã được **trình bày sẵn** (`display`/`state`) chứ không phải giá trị thô:
  * luật "null/BAD/OFFLINE không bao giờ thành 0" sống ở `presentStRuntimeValue`,
  * và diễn giải lại lần thứ hai ở đây là hai chỗ để lệch nhau.
+ *
+ * `DEV-PROG-003` mở rộng thành đúng kiểu của khay Watch (thêm kiểu dữ liệu,
+ * quality thô, mốc đọc và giá trị số để vẽ xu hướng).
  */
-export interface WorkbenchWatchRow {
-  variableId: string
-  name: string
-  display: string
-  state: 'live' | 'uncertain' | 'stale' | 'invalid'
-  unit?: string
-}
+export type WorkbenchWatchRow = WatchRow
 
 export interface WorkbenchSearchHit {
   offset: number
@@ -63,7 +70,16 @@ export interface WorkbenchSearchHit {
 
 const MIN_HEIGHT = 120
 const MAX_HEIGHT = 520
-const DEFAULT_HEIGHT = 200
+/**
+ * `DEV-PROG-001` — 200 → 150 px.
+ *
+ * Workbench và trình soạn thảo chia CÙNG một ngân sách chiều cao, nên mỗi pixel
+ * mặc định ở đây là một pixel lấy khỏi chỗ người ta gõ. Đo ở 1440×900 sau khi
+ * khay phụ rời khỏi cột giữa: workbench chiếm 260 px và editor chỉ còn ~209 px.
+ * Khay Vấn đề của một Draft sạch chỉ có hai dòng chữ, nên 150 px đã dư — và tay
+ * kéo vẫn còn đó cho lúc danh sách lỗi dài thật.
+ */
+const DEFAULT_HEIGHT = 150
 
 type TabId = 'problems' | 'search' | 'references' | 'watch' | 'trace'
 
@@ -77,6 +93,7 @@ export function ProgrammingWorkbench({
   checkOwnerHref,
   watch,
   traceOwnerHref,
+  watchAddRequest,
 }: {
   mode: WorkbenchMode
   /** Nguồn dữ liệu đang hiển thị, ví dụ `Draft · AHU_FanControl`. */
@@ -95,21 +112,35 @@ export function ProgrammingWorkbench({
   watch?: readonly WorkbenchWatchRow[] | null
   /** PGM-06 sở hữu phiên Trace; workbench chỉ trỏ tới, không mở phiên thứ hai. */
   traceOwnerHref?: string
+  /**
+   * `DEV-PROG-003` — yêu cầu theo dõi một biến, phát từ nháy đúp trong trình
+   * soạn thảo. `nonce` là bắt buộc: nháy đúp HAI LẦN vào cùng một biến vẫn phải
+   * mở lại khay, mà so sánh theo tên thì lần thứ hai không có gì đổi.
+   */
+  watchAddRequest?: { name: string; nonce: number } | null
 }) {
   const { pick } = useI18n()
   const [open, setOpen] = useState(true)
   const [height, setHeight] = useState(DEFAULT_HEIGHT)
   const [tab, setTab] = useState<TabId>('problems')
   const [query, setQuery] = useState('')
+  /** `DEV-PROG-017` — tìm bằng biểu thức chính quy. Tắt theo mặc định: đa số lần
+   *  tìm là tìm một cái tên, và `.` hay `(` trong tên sẽ đổi nghĩa nếu luôn bật. */
+  const [regex, setRegex] = useState(false)
   const resizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null)
 
-  const hits = useMemo<WorkbenchSearchHit[]>(() => {
-    if (!source || query.trim().length === 0) return []
-    const needle = query.toLocaleLowerCase()
-    const haystack = source.toLocaleLowerCase()
+  /**
+   * `DEV-PROG-017` — kết quả tìm kiếm, chữ thường hoặc biểu thức chính quy.
+   *
+   * Biểu thức hỏng KHÔNG âm thầm rơi về tìm chữ thường: người dùng đang gõ dở
+   * `IF (` thì "0 kết quả" là câu trả lời đúng cho một mẫu chưa hoàn chỉnh, còn
+   * lặng lẽ đi tìm chuỗi `IF (` là trả lời một câu hỏi khác câu họ hỏi. Lỗi
+   * được NÓI RA và bề mặt gọi hiển thị nó.
+   */
+  const search = useMemo<{ hits: WorkbenchSearchHit[]; error: string | null }>(() => {
+    if (!source || query.trim().length === 0) return { hits: [], error: null }
     const output: WorkbenchSearchHit[] = []
-    let at = haystack.indexOf(needle)
-    while (at !== -1 && output.length < 200) {
+    const push = (at: number) => {
       const lineStart = source.lastIndexOf('\n', at - 1) + 1
       const lineEnd = source.indexOf('\n', at)
       output.push({
@@ -117,15 +148,51 @@ export function ProgrammingWorkbench({
         line: source.slice(0, at).split('\n').length,
         preview: source.slice(lineStart, lineEnd === -1 ? source.length : lineEnd).trim().slice(0, 120),
       })
+    }
+    if (regex) {
+      let pattern: RegExp
+      try {
+        pattern = new RegExp(query, 'gi')
+      } catch (error) {
+        return { hits: [], error: error instanceof Error ? error.message : String(error) }
+      }
+      let match = pattern.exec(source)
+      while (match !== null && output.length < 200) {
+        push(match.index)
+        /* Mẫu khớp chuỗi RỖNG (`a*`) làm `lastIndex` đứng yên và vòng lặp không
+         * bao giờ kết thúc — đẩy `lastIndex` lên một là điều kiện dừng, không
+         * phải một tinh chỉnh. */
+        if (match[0].length === 0) pattern.lastIndex += 1
+        match = pattern.exec(source)
+      }
+      return { hits: output, error: null }
+    }
+    const needle = query.toLocaleLowerCase()
+    const haystack = source.toLocaleLowerCase()
+    let at = haystack.indexOf(needle)
+    while (at !== -1 && output.length < 200) {
+      push(at)
       at = haystack.indexOf(needle, at + Math.max(1, needle.length))
     }
-    return output
-  }, [source, query])
+    return { hits: output, error: null }
+  }, [source, query, regex])
+  const hits = search.hits
 
   /* Đổi POU/mode thì kết quả tìm kiếm của tài liệu CŨ phải biến mất. Giữ lại
    * là đúng lớp lỗi mà AC "switching mode không giữ samples từ source cũ" tồn
    * tại để chặn. */
   useEffect(() => { setQuery('') }, [sourceLabel, mode])
+
+  /* `DEV-PROG-003` — nháy đúp một biến trong trình soạn thảo phải ĐƯA NGƯỜI
+   * DÙNG TỚI khay Watch, không chỉ âm thầm thêm một dòng vào một khay đang
+   * đóng. Chỉ chuyển tab khi khay Watch thật sự có nguồn giá trị; ở chế độ EDIT
+   * nó không có, và nhảy sang một khay chỉ để hiện lời giải thích là cướp tiêu
+   * điểm của người đang gõ. */
+  useEffect(() => {
+    if (!watchAddRequest || watch === null || watch === undefined) return
+    setTab('watch')
+    setOpen(true)
+  }, [watchAddRequest, watch])
 
   const modeBadge = (
     <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[var(--c-text-dim)]">
@@ -137,7 +204,7 @@ export function ProgrammingWorkbench({
     { id: 'problems', label: pick('Vấn đề', 'Problems'), count: problems.length, available: true },
     { id: 'search', label: pick('Tìm kiếm', 'Search'), count: source ? hits.length : null, available: source !== null },
     { id: 'references', label: pick('Tham chiếu', 'Cross reference'), count: symbols.length, available: symbols.length > 0 || source !== null },
-    { id: 'watch', label: 'Watch', count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
+    { id: 'watch', label: pick('Watch (Trực tiếp)', 'Watch (Live)'), count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
     { id: 'trace', label: 'Trace', count: null, available: false },
   ]
 
@@ -219,7 +286,17 @@ export function ProgrammingWorkbench({
             source === null ? (
               <Unavailable reason={pick('POU này không phải mã nguồn văn bản — dùng khay Vấn đề để tìm block lỗi.', 'This POU is not text source — use Problems to locate faulty blocks.')} />
             ) : (
-              <SearchPanel query={query} setQuery={setQuery} hits={hits} onJumpToOffset={onJumpToOffset} queryLength={query.length} pick={pick} />
+              <SearchPanel
+                query={query}
+                setQuery={setQuery}
+                regex={regex}
+                setRegex={setRegex}
+                error={search.error}
+                hits={hits}
+                onJumpToOffset={onJumpToOffset}
+                queryLength={query.length}
+                pick={pick}
+              />
             )
           )}
           {tab === 'references' && (
@@ -239,7 +316,7 @@ export function ProgrammingWorkbench({
                 'Watch needs a runtime value source. EDIT mode only has the draft, so there is nothing to show — switch to LIVE to see the running package.',
               )} />
             ) : (
-              <WatchPanel rows={watch} pick={pick} />
+              <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
             )
           )}
           {tab === 'trace' && (
@@ -266,42 +343,6 @@ export function ProgrammingWorkbench({
       )}
     </section>
   )
-}
-
-function WatchPanel({ rows, pick }: { rows: readonly WorkbenchWatchRow[]; pick: (vi: string, en: string) => string }) {
-  if (rows.length === 0) {
-    /* Nguồn CÓ nhưng POU này không có biến nào được ánh xạ — khác hẳn "không có
-     * nguồn giá trị". Hai câu dẫn tới hai việc khác nhau. */
-    return <Unavailable reason={pick('POU đang mở không có biến runtime nào được ánh xạ.', 'The open POU has no mapped runtime variables.')} />
-  }
-  return (
-    <table className="w-full text-xs">
-      <caption className="sr-only">{pick('Giá trị runtime theo biến', 'Runtime values by variable')}</caption>
-      <thead>
-        <tr className="text-left text-[var(--c-text-dim)]">
-          <th scope="col" className="py-1">{pick('Biến', 'Variable')}</th>
-          <th scope="col" className="py-1">{pick('Giá trị', 'Value')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.variableId} className="border-t border-[var(--c-border)]">
-            <td className="py-1 font-mono text-[var(--c-text)]">{row.name}</td>
-            <td className={`py-1 font-mono ${WATCH_STATE_CLASS[row.state]}`}>
-              {row.display}{row.unit && row.state !== 'invalid' ? ` ${row.unit}` : ''}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-const WATCH_STATE_CLASS: Record<WorkbenchWatchRow['state'], string> = {
-  live: 'text-[var(--c-good-fg)]',
-  uncertain: 'text-[var(--c-warn-fg)]',
-  stale: 'text-[var(--c-warn-fg)]',
-  invalid: 'text-[var(--c-text-dim)]',
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -357,6 +398,9 @@ function ProblemsPanel({
 function SearchPanel({
   query,
   setQuery,
+  regex,
+  setRegex,
+  error,
   hits,
   onJumpToOffset,
   queryLength,
@@ -364,6 +408,10 @@ function SearchPanel({
 }: {
   query: string
   setQuery: (value: string) => void
+  regex: boolean
+  setRegex: (value: boolean) => void
+  /** Lỗi biên dịch biểu thức; `null` = mẫu hợp lệ. */
+  error: string | null
   hits: readonly WorkbenchSearchHit[]
   onJumpToOffset: (offset: number, length: number) => void
   queryLength: number
@@ -379,7 +427,22 @@ function SearchPanel({
           className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
         />
       </label>
-      {query.trim().length > 0 && hits.length === 0 && (
+      <label className="flex items-center gap-1.5 text-xs text-[var(--c-text-dim)]">
+        <input
+          type="checkbox"
+          checked={regex}
+          onChange={(event) => setRegex(event.target.checked)}
+        />
+        {pick('Biểu thức chính quy', 'Regular expression')}
+      </label>
+      {/* Mẫu hỏng phải NÓI RA. Rơi về tìm chữ thường sẽ trả lời một câu hỏi
+          khác câu người dùng vừa hỏi, và họ không có cách nào biết. */}
+      {error && (
+        <p role="alert" className="text-xs text-[var(--c-fault-fg)]">
+          {pick('Biểu thức không hợp lệ: ', 'Invalid expression: ')}{error}
+        </p>
+      )}
+      {!error && query.trim().length > 0 && hits.length === 0 && (
         <p className="text-xs text-[var(--c-text-dim)]">{pick('Không có kết quả.', 'No matches.')}</p>
       )}
       <ul className="space-y-1">
@@ -416,6 +479,34 @@ function ReferencesPanel({ symbols, pick }: { symbols: readonly WorkbenchSymbol[
               {pick('Đọc', 'Reads')} {symbol.reads} · {pick('Ghi', 'Writes')} {symbol.writes}
             </span>
           </button>
+          {/* `DEV-PROG-017` — TỪNG chỗ dùng. Con số đếm trả lời "có nhiều
+              không"; danh sách này trả lời "ở đâu", và đó mới là câu người đang
+              sửa một biến cần. Gập lại theo mặc định để khay không dài ra gấp
+              mười khi POU có 36 ký hiệu. */}
+          {symbol.occurrences && symbol.occurrences.length > 0 && (
+            <details className="ml-2 border-l border-[var(--c-border)] pl-2">
+              <summary className="cursor-pointer text-[11px] text-[var(--c-text-dim)] hover:text-[var(--c-text)]">
+                {pick(`Xem ${symbol.occurrences.length} chỗ dùng`, `Show ${symbol.occurrences.length} usages`)}
+              </summary>
+              <ul>
+                {symbol.occurrences.map((occurrence, index) => (
+                  <li key={`${symbol.name}-${index}`}>
+                    <button
+                      type="button"
+                      className="w-full rounded px-1 py-0.5 text-left text-[11px] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                      onClick={occurrence.onJump}
+                    >
+                      <span className="text-[var(--c-text-dim)]">
+                        {pick('Dòng', 'Line')} {occurrence.line} ·{' '}
+                        {occurrence.role === 'WRITE' ? pick('ghi', 'write') : pick('đọc', 'read')}
+                      </span>{' '}
+                      <span className="font-mono text-[var(--c-text)]">{occurrence.preview}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </li>
       ))}
     </ul>

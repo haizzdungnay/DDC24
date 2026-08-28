@@ -189,9 +189,13 @@ describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', ()
      *
      * Khẳng định gốc — "ý định Enable là một dữ kiện, runtime thực tế là dữ kiện
      * KHÁC" — vẫn nguyên vẹn: hai nhãn vẫn cùng hiện và vẫn nói hai điều khác
-     * nhau (`1/2 muốn bật` ≠ `FAULTED 1 · RUNNING 1`). Case ngay dưới khoá lại
-     * cùng khẳng định đó ở mức từng Program, chặt hơn mức gộp. */
-    expect(screen.getAllByText('FAULTED 1 · RUNNING 1')).toHaveLength(1)
+     * nhau (`1/2 muốn bật` ≠ `FAULTED 1 · +1`). Case ngay dưới khoá lại
+     * cùng khẳng định đó ở mức từng Program, chặt hơn mức gộp.
+     *
+     * `DEV-PROG-014` rút gọn nhãn gộp còn trạng thái NẶNG NHẤT kèm `+N`; bản
+     * đầy đủ nằm ở `title`. */
+    expect(screen.getAllByText('FAULTED 1 · +1')).toHaveLength(1)
+    expect(screen.getAllByTitle('FAULTED 1 · RUNNING 1')).toHaveLength(1)
   })
 
   it('T60-207: ý định Enable và runtime thực tế tách nhau ở MỨC TỪNG Program trong bảng', async () => {

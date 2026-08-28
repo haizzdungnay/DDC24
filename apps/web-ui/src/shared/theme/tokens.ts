@@ -45,7 +45,15 @@ export const TOKEN_NAMES = [
   '--c-critical', '--c-force', '--c-off',
   '--c-indicator-ok', '--c-indicator-off',
   '--c-good-bg', '--c-warn-bg', '--c-fault-bg', '--c-critical-bg', '--c-force-bg', '--c-off-bg', '--c-accent-bg',
-  '--c-on-accent', '--c-on-fault'
+  '--c-on-accent', '--c-on-fault',
+  /* `DEV-PROG-010` — thanh điều hướng Lập trình có nền TỐI ở CẢ HAI theme.
+   *
+   * Nó không dùng `--c-surface`: rail là vùng điều hướng cố định, và tách nó
+   * khỏi vùng nội dung bằng độ sáng là cách người dùng nhận ra ngay đâu là chỗ
+   * đi lại, đâu là chỗ làm việc. Đề bài đưa mã màu `#1a3a3a`; đưa nó thành
+   * TOKEN thay vì hằng số trong markup để nó đi qua đúng bộ kiểm tương phản
+   * như mọi màu khác, và để một lần đổi bảng màu không bỏ sót rail. */
+  '--c-rail-bg', '--c-rail-text', '--c-rail-text-dim', '--c-rail-active-bg'
 ] as const
 
 export type TokenName = typeof TOKEN_NAMES[number]
@@ -81,7 +89,11 @@ const LIGHT: ThemeTokens = {
   '--c-off-bg': '#E5E6E8',
   '--c-accent-bg': '#E0E6EC',
   '--c-on-accent': '#FFFFFF',
-  '--c-on-fault': '#FFFFFF'
+  '--c-on-fault': '#FFFFFF',
+  '--c-rail-bg': '#1A3A3A',
+  '--c-rail-text': '#F2F6F5',
+  '--c-rail-text-dim': '#B7C7C4',
+  '--c-rail-active-bg': '#2C5754'
 }
 
 const DARK: ThemeTokens = {
@@ -114,7 +126,13 @@ const DARK: ThemeTokens = {
   '--c-off-bg': '#2C3033',
   '--c-accent-bg': '#1E2D3C',
   '--c-on-accent': '#0E1114',
-  '--c-on-fault': '#14171A'
+  '--c-on-fault': '#14171A',
+  /* Theme tối dùng cùng gam nhưng SẪM hơn nền rail của theme sáng: rail
+     phải tách khỏi `--c-bg` (#14171A) chứ không hoà vào nó. */
+  '--c-rail-bg': '#14282A',
+  '--c-rail-text': '#EAF1F0',
+  '--c-rail-text-dim': '#A9BCBA',
+  '--c-rail-active-bg': '#24474A'
 }
 
 export const THEMES: Record<ThemeName, ThemeTokens> = { light: LIGHT, dark: DARK }

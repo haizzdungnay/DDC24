@@ -37,12 +37,12 @@ import {
 import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeValueOverlay'
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
-import { QuickLibraryHost } from '../library/QuickLibraryPanel'
+import { LIBRARY_DRAG_TYPE, QuickLibraryHost } from '../library/QuickLibraryPanel'
 import { catalogEntries, type CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
 import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
-import { stHoverSymbolAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
+import { stDropOffsetAtPoint, stHoverSymbolAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
 import { PouTabBar } from './PouTabBar'
 import {
   activatePouTab, closePouTab, emptyPouTabs, isPouTabMissing, openPouTab, pouTabKey,
@@ -92,20 +92,29 @@ const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
 /* `T59-820` — mẫu đo bề rộng ký tự cho hover. Chuỗi đủ dài để sai số làm tròn
  * của một ký tự không nhân lên thành lệch cột ở cuối dòng dài. */
 /**
- * `T59-822` / `AC-PGM02-002` — chiều cao khung soạn thảo co theo viewport.
+ * `T59-822` / `AC-PGM02-002` → `DEV-PROG-001` — chiều cao khung soạn thảo.
  *
- * Chiều cao cố định 24rem không thể vừa màn 1280×750: chrome phía trên (thanh
- * điều hướng sáu workspace, dải ngữ cảnh, tiêu đề, bộ chuyển chế độ, thanh tab,
- * thanh công cụ) chiếm khoảng 500 px, nên mép dưới rơi xuống 884 px và người
- * dùng phải cuộn trang mới thấy hết chỗ mình gõ.
+ * `T59-822` đã bỏ chiều cao cố định 24rem vì nó không vừa màn 1280×750 và thay
+ * bằng `clamp` theo viewport. Đúng hướng nhưng vẫn là một con số ĐOÁN: nó trừ
+ * cứng 32rem cho chrome phía trên mà không ai đo lại khi chrome đổi.
  *
- * `clamp` giữ nguyên hành vi cũ trên màn cao — từ 1080 px trở lên vẫn ra đúng
- * 24rem — và chỉ co lại trên màn thấp. Sàn 14rem để nó không bao giờ co thành
- * một khe hai dòng; dưới sàn đó thà cuộn còn hơn có một trình soạn thảo không
- * dùng được. Chuỗi lớp phải NGUYÊN VĂN trong source: Tailwind quét tĩnh, một
- * lớp ghép bằng template string sẽ không có trong CSS build ra.
+ * `DEV-PROG-001` bỏ nốt phép đoán đó — khung soạn thảo nay CO GIÃN theo chiều
+ * cao còn lại thật của cột giữa.
+ *
+ * Vì sao đổi: workspace EDIT trước lát này xếp dọc không giới hạn (toolbar →
+ * editor 288 px → danh sách `Ký hiệu & kiểu` KHÔNG chặn chiều cao → code map →
+ * thanh trạng thái → tham chiếu). Đo trên bo Foxlinx 2026-08-28, viewport
+ * 1280×800: tài liệu cao **2861 px** và dải tab của workbench nằm ở `y=2675`,
+ * tức người dùng phải cuộn ~1900 px mới thấy Vấn đề/Tìm kiếm/Watch. Đó chính là
+ * triệu chứng được báo là "tab bị sidebar che": tab không bị phủ, nó bị ĐẨY ra
+ * khỏi màn hình, còn rail thì `sticky` nên vẫn nằm đó suốt lúc cuộn.
+ *
+ * `flex-1` chỉ có tác dụng khi cha có chiều cao xác định (`DesignWorkspacePage`
+ * bọc editor + workbench trong một cột cao theo viewport). Ở màn hẹp, cha cao
+ * `auto` nên `basis:0` + `min-h` cho ra đúng sàn 18rem — không bao giờ sập
+ * thành một khe hai dòng.
  */
-const EDITOR_HEIGHT_CLASS = 'h-[clamp(14rem,calc(100vh-32rem),24rem)]'
+const EDITOR_FRAME_CLASS = 'min-h-[18rem] min-w-0 flex-1 lg:min-h-[10rem]'
 
 const HOVER_SAMPLE = '00000000000000000000'
 const HOVER_METRICS: Omit<StEditorTextMetrics, 'charWidthPx'> = {
@@ -207,6 +216,7 @@ export function ProgramsTab({
   runtimeOverlayByProgramId,
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
   forceReadOnly = false,
+  onWatchVariable,
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
@@ -247,6 +257,8 @@ export function ProgramsTab({
   userPouInterfaces?: readonly UserPouInterface[]
   /** Policy viewport từ route: dưới 768 px thắng cả quyền admin. */
   forceReadOnly?: boolean
+  /** `DEV-PROG-003` — nháy đúp một ký hiệu trong trình soạn thảo ST để theo dõi. */
+  onWatchVariable?: (name: string) => void
 }) {
   const { pick } = useI18n()
   const { session } = useAuth()
@@ -331,11 +343,45 @@ export function ProgramsTab({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [slots, setSlots] = useCollapsibleSlots()
   const [formatRequest, setFormatRequest] = useState<StFormatRequest | null>(null)
+  /* `DEV-PROG-002` — Thư viện nhanh sống ở CỘT PHẢI, không phải trong trình
+   * soạn thảo.
+   *
+   * Đã thử cắm nó vào hàng ngang cạnh khung soạn thảo và đo lại trên bo: ở
+   * 1440 px, ba cột `280 + 1fr + 308` cộng thêm panel 288 px làm bề rộng vùng
+   * gõ còn **188 px** — hẹp hơn cả một dòng khai báo. Cột phải đã là chỗ của
+   * các khay phụ trợ, nên panel về đó và trình soạn thảo giữ nguyên bề ngang.
+   *
+   * Chèn đi bằng YÊU CẦU có `nonce` (cùng khuôn `formatRequest`): panel không
+   * biết cách chèn, và sửa buffer từ ngoài sẽ làm mất lịch sử Undo. */
+  const [libraryDockOpen, setLibraryDockOpen] = useState(false)
+  /* Bản đồ mã là ĐIỀU HƯỚNG trong POU đang mở, nên nó thuộc cột trái cùng cây
+   * POU — không phải một khay nữa chồng dưới chỗ gõ. Mặc định mở: nó là cách
+   * nhanh nhất để đi trong một POU 400 dòng. */
+  const [codeMapOpen, setCodeMapOpen] = useState(true)
+  const [libraryInsertRequest, setLibraryInsertRequest] = useState<{ entry: CatalogEntry; nonce: number } | null>(null)
   /* Điều hướng chéo Program khi chọn một biến ở Bảng lệnh nhanh: đổi
    * `selectedProgramId` rồi TÁI DÙNG đúng cơ chế `focusDiagnostic` đã có
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
    * vùng theo line/column sau khi Program mới mount". */
   const [paletteJumpTarget, setPaletteJumpTarget] = useState<ProgrammingDiagnostic | null>(null)
+
+  /**
+   * Đưa con trỏ tới một offset trong POU ĐANG MỞ, từ một khay nằm ngoài trình
+   * soạn thảo (Bản đồ mã ở cột trái, Tham chiếu ở cột phải).
+   *
+   * Tái dùng đúng cơ chế `focusDiagnostic` đã có thay vì mở một đường thứ hai
+   * chọc vào `textarea`: chỉ một nơi biết cách đặt con trỏ thì chỉ có một hành
+   * vi cuộn/tiêu điểm, và nó đã được kiểm bằng chính bộ test của editor.
+   */
+  function jumpInSelectedPou(offset: number, length: number) {
+    if (!selectedProgramId) return
+    const source = buffers[selectedProgramId] ?? ''
+    const { line, column } = offsetToLineColumn(source, offset)
+    setPaletteJumpTarget({
+      code: '', severity: 'ERROR', messageKey: '',
+      location: { programId: selectedProgramId, line, column, length: Math.max(1, length) },
+    })
+  }
 
   /* Quyết định #04: chỉ mục Bảng lệnh nhanh tính lại theo `buffers`/
    * `document.programs` — KHÔNG theo chuỗi tìm kiếm (đó là việc lọc rẻ ở
@@ -380,8 +426,22 @@ export function ProgramsTab({
       const source = buffers[program.programId] ?? programSource(program)
       const metadata = metadataDrafts[program.programId] ?? metadataOf(program)
       const sourceChanged = source !== programSource(program)
-      const metadataChanged = !sameMetadata(metadata, metadataOf(program))
+      const metadataChanged = !sameIdentityMetadata(metadata, metadataOf(program))
       const nextName = metadata.name.trim()
+      /* `DEV-PROG-004` — chú thích đi bằng operation RIÊNG (`annotateObject`),
+         không ghép vào `upsertProgram`: `upsertProgram` mang theo cả `document`
+         (mã nguồn), nên nếu sửa mô tả cũng phải đi qua nó thì một buffer cũ sẽ
+         ghi đè mã nguồn của phiên khác. Chỉ POU có `objectId` mới ghi được —
+         document v1 không có trục định danh đó. */
+      const stored = metadataOf(program)
+      if (program.objectId && (metadata.description !== stored.description || metadata.access !== stored.access)) {
+        operations.push({
+          op: 'annotateObject',
+          objectId: program.objectId,
+          ...(metadata.description !== stored.description ? { description: metadata.description } : {}),
+          ...(metadata.access !== stored.access ? { access: metadata.access } : {}),
+        })
+      }
       if (metadataChanged && isValidPouName(nextName)) {
         operations.push({
           op: 'upsertProgram',
@@ -439,8 +499,14 @@ export function ProgramsTab({
   }
 
   return (
+    /* `DEV-PROG-001` — lưới ba cột nay cao đúng bằng ô mà `DesignWorkspacePage`
+       cấp cho nó (`lg:h-full`), và MỖI cột tự cuộn trong lòng nó
+       (`lg:min-h-0 lg:overflow-y-auto`). Trước lát này cả ba cột cùng đẩy chiều
+       cao tài liệu, nên cột nào dài nhất quyết định trang dài bao nhiêu — và
+       workbench dưới đáy đi theo. Dưới `lg` giữ nguyên dòng chảy dọc: màn hẹp
+       không có ngân sách chiều cao để chia. */
     <div
-      className={`grid gap-4 md:grid-cols-[280px_1fr] ${SLOT_GRID_CLASS[slotKey(slots)]}`}
+      className={`grid gap-4 md:grid-cols-[280px_1fr] lg:h-full lg:min-h-0 ${SLOT_GRID_CLASS[slotKey(slots)]}`}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
           event.preventDefault()
@@ -457,7 +523,7 @@ export function ProgramsTab({
           trong DOM). Ở đây chỉ còn thứ thuộc về Project chứ không thuộc về cây:
           nhãn chức năng và lối vào Bảng lệnh nhanh. */}
       {slots.left ? (
-      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:min-h-0 lg:overflow-y-auto">
         <div className="mb-2 flex justify-end">
           <button
             type="button"
@@ -471,13 +537,22 @@ export function ProgramsTab({
         </div>
         <div id="programs-slot-left">
         {explorerSlot}
-        <ProjectTagsEditor
-          canEdit={canEdit}
-          value={projectTagsDraft}
-          saving={saving}
-          onChange={setProjectTagsDraft}
-          onSave={() => onSave([{ op: 'setFunctionalTags', tags: parseTags(projectTagsDraft) }])}
-        />
+        {/* Bản đồ mã: ĐIỀU HƯỚNG trong POU đang mở, nên nó đứng cùng cột với
+            cây POU — điều hướng giữa các POU và điều hướng trong một POU là
+            cùng một loại việc. Trước lát này nó nằm DƯỚI chỗ gõ, tức người dùng
+            phải cuộn qua chính chỗ mình đang làm để tới thứ dùng để đi. */}
+        {selected && selected.language === 'ST' && codeMapOpen && (
+          <div className="mt-2">
+            <StCodeMap
+              source={buffers[selected.programId] ?? programSource(selected)}
+              onNavigate={(offset) => jumpInSelectedPou(offset, 1)}
+            />
+          </div>
+        )}
+        {/* `DEV-PROG-011` — `ProjectTagsEditor` đã rời khỏi đây. Nhãn chức năng
+            thuộc về PROJECT chứ không thuộc về cây POU, và để nó dưới cây làm
+            người đọc tưởng nó là nhãn của POU đang chọn. Nó nay ở cột phải,
+            dưới Inspector, trong một mục gập được. */}
         <div className="mt-2 flex justify-end px-1">
           <button
             type="button"
@@ -510,7 +585,7 @@ export function ProgramsTab({
           Đo được ở 1024 px: document 1039 px trên viewport 1024 px. Tràn ngang
           trên tủ điều khiển đẩy nút thao tác ra ngoài vùng chạm, mà người vận
           hành không có chuột để cuộn ngang. */}
-      <div className="min-w-0">
+      <div className="flex min-w-0 flex-col lg:min-h-0">
         <PouTabBar
           state={tabs}
           missingKeys={missingTabKeys}
@@ -523,6 +598,12 @@ export function ProgramsTab({
             // có gì để mở — nó ở lại để NÓI ra điều đó, không phải để mở.
             if (target) onSelectProgram(target.programId)
           }}
+          /* `DEV-PROG-005` — nút `+` mở Bảng lệnh nhanh (Ctrl+P), là bộ chọn POU
+             ĐÃ CÓ: nó liệt kê mọi POU của Project và chọn một mục sẽ gọi đúng
+             `onSelectProgram`, tức đi qua cùng đường mở/lấy-lại-tiêu-điểm tab.
+             Dựng thêm một hộp thoại chọn POU thứ hai chỉ để phục vụ một nút là
+             thêm một danh sách nữa có thể lệch với cây POU. */
+          onOpenPicker={() => setPaletteOpen(true)}
           onClose={(key) => {
             const tab = tabs.tabs.find((candidate) => candidate.key === key)
             const attempt = closePouTab(tabs, key, { dirty: dirtyTabKeys.has(key) })
@@ -565,6 +646,9 @@ export function ProgramsTab({
           </div>
         )}
 
+        {/* Ô này nhận TOÀN BỘ chiều cao còn lại của cột giữa; `min-h-0` là bắt
+            buộc để con của nó được phép cuộn thay vì phình ra (DEV-PROG-001). */}
+        <div className="min-h-0 flex-1">
         {!selected ? (
           /* `Kiểm tra` và `So sánh` có phạm vi GÓI, không phải POU. Toolbar của
              trình soạn thảo là chỗ của chúng khi đang soạn (`PGM-02A §3`),
@@ -605,6 +689,12 @@ export function ProgramsTab({
             canEdit={canEdit}
             saving={saving}
             onCursorSymbolChange={setCursorSymbol}
+            onWatchVariable={onWatchVariable}
+            libraryOpen={libraryDockOpen}
+            onToggleLibrary={() => setLibraryDockOpen((open) => !open)}
+            codeMapOpen={codeMapOpen}
+            onToggleCodeMap={() => setCodeMapOpen((open) => !open)}
+            libraryInsertRequest={libraryInsertRequest}
             libraryEntries={libraryEntries}
             onEnsureLibraryLoaded={libraryCatalog.ensureLoaded}
             onRunCheck={onRunCheck}
@@ -625,7 +715,6 @@ export function ProgramsTab({
             onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
             runtimeOverlay={runtimeOverlayByProgramId?.[selected.programId]}
             formatRequest={formatRequest?.programId === selected.programId ? formatRequest : undefined}
-            projectId={document.project.projectId}
           />
         ) : (
           <FbdEditorPane
@@ -645,8 +734,9 @@ export function ProgramsTab({
             compareDisabledReason={compareDisabledReason}
           />
         )}
+        </div>
       </div>
-      <aside className="min-w-0" aria-label={pick('Thuộc tính', 'Inspector')}>
+      <aside className="min-w-0 lg:min-h-0 lg:overflow-y-auto" aria-label={pick('Thuộc tính', 'Inspector')}>
         <div className="mb-2 flex justify-end">
           <button
             type="button"
@@ -659,6 +749,34 @@ export function ProgramsTab({
           </button>
         </div>
         <div id="programs-slot-inspector" hidden={!slots.inspector}>
+        {/* `DEV-PROG-002` — Thư viện nhanh đứng TRÊN Inspector trong cùng cột
+            phải: cả hai đều là khay phụ trợ của bề mặt đang soạn, và gộp chúng
+            vào một cột giữ nguyên ngân sách bề ngang cho chỗ người ta gõ. */}
+        {selected && selected.language === 'ST' && canEdit && (
+          libraryDockOpen ? (
+            <div className="mb-2">
+              <QuickLibraryHost
+                variant="docked"
+                projectId={document.project.projectId}
+                language="ST"
+                onInsert={(entry) => {
+                  setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
+                  return true
+                }}
+                onClose={() => setLibraryDockOpen(false)}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="mb-2 w-full rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              aria-expanded={false}
+              onClick={() => setLibraryDockOpen(true)}
+            >
+              {pick('Mở Thư viện nhanh', 'Open quick library')}
+            </button>
+          )
+        )}
         {selected ? (
           /* `T59-818` — khay này TỪNG có đúng hai trường (`Tên`, `Loại`), tức
              rơi trúng điều handoff §9 cấm: chiếm 300px cho hai trường. Nay nó
@@ -671,6 +789,17 @@ export function ProgramsTab({
                  `task.periodMs` — trong Project nhiều chu kỳ, giá trị đó chỉ là
                  chu kỳ của Program đầu tiên. */
               cycleMs: selected.periodMs ?? null,
+              /* `DEV-PROG-004` — tên Task đọc từ Draft; Task chưa đặt tên thì
+                 truyền `null` để Inspector chỉ hiện chu kỳ. */
+              taskName: document.task.name ?? null,
+              /* Cổng vào/ra của POU ST, phân tích từ CHÍNH buffer đang mở (kể
+                 cả phần chưa lưu) — đọc từ bản đã lưu sẽ nói sai về giao diện
+                 mà người dùng vừa gõ. POU FBD chưa có đường phân tích tương
+                 đương ⇒ `undefined` ⇒ Inspector nói "không xác định được". */
+              parameters: selected.language === 'ST'
+                ? collectStInterfaceVariables(buffers[selected.programId] ?? programSource(selected))
+                    .map((variable) => ({ name: variable.name, direction: variable.direction, dataType: variable.type }))
+                : undefined,
               /* Intent Enable/Disable sống ở API runtime-intent, chưa được nối
                  vào tab này. Để `null` ⇒ Inspector hiện "không xác định được";
                  hiện `Đã tắt` cho một thứ chưa đọc là nói dối về thiết bị. */
@@ -706,6 +835,32 @@ export function ProgramsTab({
             </p>
           </section>
         )}
+        {/* Tham chiếu tại con trỏ: nó mô tả KÝ HIỆU ĐANG CHỌN, đúng loại thông
+            tin mà cột Thuộc tính đã sở hữu. Để nó dưới chỗ gõ như trước làm cột
+            giữa dài ra và tách nó khỏi phần Inspector nói về chính ký hiệu đó. */}
+        {selected && selected.language === 'ST' && (
+          <div className="mt-2">
+            <StCrossReferencePanel
+              cursorSymbol={cursorSymbol}
+              note={null}
+              onJump={(offset, length) => jumpInSelectedPou(offset, length)}
+            />
+          </div>
+        )}
+        {/* `DEV-PROG-011` — nhãn chức năng của PROJECT. Gập lại theo mặc định:
+            nó là cấu hình đặt một lần, không phải thứ đọc trong lúc soạn. */}
+        <details className="mt-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+          <summary className="cursor-pointer text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+            {pick('Nhãn chức năng (Project)', 'Functional tags (project)')}
+          </summary>
+          <ProjectTagsEditor
+            canEdit={canEdit}
+            value={projectTagsDraft}
+            saving={saving}
+            onChange={setProjectTagsDraft}
+            onSave={() => onSave([{ op: 'setFunctionalTags', tags: parseTags(projectTagsDraft) }])}
+          />
+        </details>
         </div>
       </aside>
     </div>
@@ -802,8 +957,13 @@ export function SourceEditor({
   onEnsurePointCatalogLoaded,
   runtimeOverlay,
   formatRequest,
-  projectId,
   onCursorSymbolChange,
+  onWatchVariable,
+  libraryOpen = false,
+  onToggleLibrary,
+  codeMapOpen = false,
+  onToggleCodeMap,
+  libraryInsertRequest,
   libraryEntries,
   onEnsureLibraryLoaded,
   onRunCheck,
@@ -819,9 +979,6 @@ export function SourceEditor({
   focusDiagnostic: ProgrammingDiagnostic | null
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
-  /** `T59-804`: Quick Library đọc catalog theo Project để thấy cả PROJECT entry,
-   *  không chỉ SYSTEM. `undefined` vẫn hợp lệ — khi đó chỉ có SYSTEM. */
-  projectId?: string
   /** ST Editor Quick Control đề xuất #3 (Panel chèn nhanh Point/Variable) —
    *  trạng thái/cache của `useLazyProgrammingPointCatalog`, sống ở
    *  `ProgramsTab` (cha) để không refetch khi đổi Program đang mở. */
@@ -840,6 +997,22 @@ export function SourceEditor({
    * chúng sẽ lệch nhau đúng lúc con trỏ nằm ở ranh giới một định danh.
    */
   onCursorSymbolChange?: (symbol: StCursorSymbol | null) => void
+  /** `DEV-PROG-003` — người dùng nháy đúp một ký hiệu và muốn theo dõi nó. */
+  onWatchVariable?: (name: string) => void
+  /** `DEV-PROG-002` — Thư viện nhanh (cột phải) đang mở hay không. */
+  libraryOpen?: boolean
+  onToggleLibrary?: () => void
+  /** `DEV-PROG-001` (sửa vị trí) — Bản đồ mã nay sống ở CỘT TRÁI cùng cây POU;
+   *  nút bật/tắt vẫn ở thanh công cụ nên trạng thái do cha giữ. */
+  codeMapOpen?: boolean
+  onToggleCodeMap?: () => void
+  /**
+   * `DEV-PROG-002` — yêu cầu chèn một mục thư viện, phát từ panel ở cột phải.
+   * Cùng khuôn với `formatRequest`: panel KHÔNG biết cách chèn (ST dựng đoạn mã
+   * tại con trỏ, FBD thêm node), nên nó gửi yêu cầu và bề mặt tự xử theo đúng
+   * pipeline history/cursor của mình. Sửa buffer từ ngoài sẽ làm mất Undo.
+   */
+  libraryInsertRequest?: { entry: CatalogEntry; nonce: number } | null
   /** `T59-820` — catalog thư viện đã nạp, dùng CHUNG với Inspector. */
   libraryEntries?: readonly CatalogEntry[]
   onEnsureLibraryLoaded?: () => void
@@ -880,7 +1053,11 @@ export function SourceEditor({
    * hiện tại — `null` khi con trỏ chỉ là một điểm (không hiện thanh lệnh). */
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null)
   const [insertPanelOpen, setInsertPanelOpen] = useState(false)
-  const [libraryPanelOpen, setLibraryPanelOpen] = useState(false)
+  /* `DEV-PROG-002` — trạng thái mở/đóng của Thư viện nhanh nay do `ProgramsTab`
+   * sở hữu, vì panel đã ra khỏi trình soạn thảo và nằm ở cột phải. Nút trên
+   * thanh công cụ vẫn là chỗ bật/tắt, nhưng nó chỉ báo lên chứ không tự giữ
+   * trạng thái — hai bản trạng thái cho cùng một panel sẽ lệch nhau ngay lần
+   * đầu người dùng đóng panel bằng nút `Thu gọn` của chính nó. */
   /* T59-506: một lịch sử riêng cho MỖI POU đang mount. Ref cho phép mọi đường
    * edit (gõ thường/autocomplete/Format/Replace/quick action) ghi snapshot trước
    * khi callback cha echo lại prop `source`; state rỗng chỉ dùng để render lại
@@ -913,7 +1090,7 @@ export function SourceEditor({
   /* `T59-821` — Code Map bật/tắt được. Nó CHỈ hiện khi tài liệu vượt ngưỡng
    * (`CODE_MAP_MIN_LINES`); dưới ngưỡng cả tài liệu đã nằm trong một màn hình
    * và một bản đồ của thứ đang thấy hết là chiếm chỗ vô ích. */
-  const [codeMapOpen, setCodeMapOpen] = useState(true)
+
   /* Phát ra ngoài khi ký hiệu đổi. `useEffect` chứ không gọi trong render: gọi
    * trong render sẽ set state của cha giữa lúc con đang render. */
   useEffect(() => {
@@ -973,6 +1150,42 @@ export function SourceEditor({
     historyRef.current = updateStEditorSelection(historyRef.current, start, end)
   }
 
+  /* `DEV-PROG-012` — hộp "Tới dòng". Mở bằng cách bấm ô `Dòng:Cột` trên thanh
+   * trạng thái hoặc `Ctrl+G`. Không dùng `window.prompt`: nó chặn cả tiến
+   * trình, không đi được bằng trình đọc màn hình theo cách dự đoán được, và
+   * trên bo đặt trong tủ điều khiển thì hộp thoại gốc của trình duyệt nằm ngoài
+   * mọi luật giao diện của sản phẩm. */
+  const [goToOpen, setGoToOpen] = useState(false)
+  const [goToDraft, setGoToDraft] = useState('')
+  const goToInputRef = useRef<HTMLInputElement | null>(null)
+
+  /**
+   * `DEV-PROG-016` — offset văn bản dưới con trỏ của một sự kiện kéo/thả.
+   *
+   * Trả `null` khi chưa đo được bề rộng ký tự (font chưa tải, chưa layout):
+   * đoán một bề rộng sẽ thả khối vào một dòng KHÁC dòng người dùng nhắm, và
+   * chèn nhầm chỗ trong mã điều khiển tệ hơn hẳn không chèn.
+   */
+  function dropOffsetFrom(event: { clientX: number; clientY: number; currentTarget: HTMLTextAreaElement }): number | null {
+    if (charWidthRef.current <= 0 && hoverMeasureRef.current) {
+      const sample = hoverMeasureRef.current.getBoundingClientRect().width / HOVER_SAMPLE.length
+      if (sample > 0) charWidthRef.current = sample
+    }
+    if (charWidthRef.current <= 0) return null
+    const textarea = event.currentTarget
+    const rect = textarea.getBoundingClientRect()
+    return stDropOffsetAtPoint(
+      source,
+      {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        scrollLeft: textarea.scrollLeft,
+        scrollTop: textarea.scrollTop,
+      },
+      { ...HOVER_METRICS, charWidthPx: charWidthRef.current },
+    )
+  }
+
   function selectRange(offset: number, length: number) {
     const textarea = textareaRef.current
     if (!textarea) return
@@ -980,6 +1193,29 @@ export function SourceEditor({
     textarea.setSelectionRange(offset, Math.min(source.length, offset + Math.max(1, length)))
     updateCursor()
   }
+
+  /**
+   * `DEV-PROG-012` — đưa con trỏ tới đầu một dòng.
+   *
+   * Số dòng ngoài phạm vi bị KẸP về dòng cuối thay vì bị từ chối: người gõ
+   * `9999` đang nói "xuống cuối tệp", và một thông báo lỗi ở đó chỉ bắt họ gõ
+   * lại một con số họ không biết. Số không hợp lệ (chữ, số âm) thì không làm gì.
+   */
+  function goToLine(rawLine: string) {
+    const requested = Number.parseInt(rawLine, 10)
+    if (!Number.isFinite(requested) || requested < 1) return
+    const lines = source.split('\n')
+    const line = Math.min(requested, lines.length)
+    let offset = 0
+    for (let index = 0; index < line - 1; index += 1) offset += lines[index].length + 1
+    setGoToOpen(false)
+    selectRange(offset, 0)
+  }
+
+  useEffect(() => {
+    if (!goToOpen) return
+    window.setTimeout(() => goToInputRef.current?.focus(), 0)
+  }, [goToOpen])
 
   useEffect(() => {
     if (!focusDiagnostic?.location) return
@@ -1124,6 +1360,25 @@ export function SourceEditor({
     consumedFormatRequestRef.current = requestKey
     handleFormat()
   }, [formatRequest, program.programId])
+
+  /* `DEV-PROG-002` — yêu cầu chèn từ Thư viện nhanh ở cột phải, cùng khuôn
+   * `nonce` với `formatRequest`: chèn HAI LẦN cùng một khối là một yêu cầu hợp
+   * lệ, nên so sánh theo nội dung sẽ nuốt lần thứ hai. */
+  const consumedLibraryRequestRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!libraryInsertRequest || !canEdit) return
+    if (consumedLibraryRequestRef.current === libraryInsertRequest.nonce) return
+    consumedLibraryRequestRef.current = libraryInsertRequest.nonce
+    const entry = libraryInsertRequest.entry
+    /* Đã có instance cùng kiểu thì HỎI: dùng lại hay tạo mới. Tự dùng lại là
+     * sai (hai lời gọi chung một timer là lỗi điều khiển thật), mà tự tạo mới
+     * cũng sai khi người dùng đang muốn gọi lại đúng instance đó. */
+    if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
+      setPendingLibraryEntry(entry)
+      return
+    }
+    applyLibraryInsertion(entry)
+  }, [libraryInsertRequest, canEdit])
 
   /** FE-ST-008: một hàm lưu DUY NHẤT cho cả nút Lưu và `Ctrl+S` — ghi lại kết
    *  quả (`saved`/`failed`) neo vào đúng buffer vừa thử, để trạng thái hiển
@@ -1275,8 +1530,14 @@ export function SourceEditor({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    /* `DEV-PROG-001` — cột giữa là một CỘT FLEX cao bằng ô lưới của nó, không
+       còn là một chồng `space-y-2` dài vô hạn. Chỉ khung soạn thảo co giãn
+       (`flex-1`); thanh công cụ giữ nguyên kích thước, còn các khay phụ bên
+       dưới nằm trong một vùng cuộn RIÊNG có trần. Trước lát này chính các khay
+       phụ đó (danh sách `Ký hiệu & kiểu` liệt kê đủ 36 ký hiệu, cao ~900 px)
+       đẩy workbench ra khỏi màn hình. */
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-[var(--c-text)]">{program.name}</h3>
         <div className="flex flex-wrap items-center gap-2">
           {/* FE-ST-009: chuẩn hoá Find/Insert/Format/Save cùng một hàng, đều
@@ -1333,9 +1594,9 @@ export function SourceEditor({
                 size="sm"
                 variant="ghost"
                 icon={<Library className="h-4 w-4" aria-hidden="true" />}
-                aria-pressed={libraryPanelOpen}
+                aria-pressed={libraryOpen}
                 title={pick('Thư viện nhanh — cùng catalog với PGM-04', 'Quick library — same catalog as PGM-04')}
-                onClick={() => setLibraryPanelOpen((open) => !open)}
+                onClick={onToggleLibrary}
               >
                 {pick('Thư viện', 'Library')}
               </Button>
@@ -1400,7 +1661,7 @@ export function SourceEditor({
                   <button
                     type="button"
                     className="w-full rounded px-2 py-1 text-left text-sm hover:bg-[var(--c-surface-2)]"
-                    onClick={() => setCodeMapOpen((open) => !open)}
+                    onClick={onToggleCodeMap}
                   >
                     {codeMapOpen ? pick('Ẩn bản đồ mã', 'Hide code map') : pick('Hiện bản đồ mã', 'Show code map')}
                   </button>
@@ -1452,7 +1713,7 @@ export function SourceEditor({
       <label className="sr-only" htmlFor={`programming-st-source-${program.programId}`}>
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
-      <div className={`relative grid ${EDITOR_HEIGHT_CLASS} grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
+      <div className={`relative grid ${EDITOR_FRAME_CLASS} grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
         {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15 và
          * 2026-08-17 — ảnh chụp cho thấy lưới kẻ cắt xuyên chữ, không phải
          * chỉ lệch nhẹ): tắt word-wrap (`whitespace-pre` + `wrap="off"`) đã
@@ -1484,7 +1745,7 @@ export function SourceEditor({
             </div>
           ))}
         </div>
-        <div className={`relative ${EDITOR_HEIGHT_CLASS} overflow-hidden`}>
+        <div className="relative h-full overflow-hidden">
           {/* WP-10 P0: overlay tô cú pháp + gạch chân diagnostic, nằm DƯỚI
            * textarea (chữ trong suốt, chỉ hiện con trỏ) — `EDITOR_TEXT_METRICS`
            * (inline) khớp pixel-cho-pixel với textarea phía trên, xem lý do ở
@@ -1588,6 +1849,18 @@ export function SourceEditor({
               /* Ctrl/Cmd+Click = tới khai báo, đường chuột của F12. */
               if (event.ctrlKey || event.metaKey) handleGoToDefinition()
             }}
+            onDoubleClick={(event) => {
+              /* `DEV-PROG-003` — nháy đúp một ký hiệu = "cho tôi xem giá trị
+                 của biến này". Dùng chính `stSymbolAt` mà Inspector và hover
+                 đang dùng: một bản phân giải thứ hai sẽ nhận diện khác ở đúng
+                 chỗ khó thấy nhất (instance FB, tên trùng một phần).
+
+                 Nháy đúp vào chỗ KHÔNG phải ký hiệu thì không làm gì — không
+                 gửi một cái tên rỗng và cũng không nhảy khay, vì nháy đúp còn
+                 là thao tác chọn từ bình thường của người đang gõ. */
+              const symbol = stSymbolAt(source, event.currentTarget.selectionStart ?? 0, referenceIndex)
+              if (symbol) onWatchVariable?.(symbol.identifier)
+            }}
             onKeyUp={updateCursor}
             onSelect={updateCursor}
             onScroll={(event) => {
@@ -1617,6 +1890,9 @@ export function SourceEditor({
               }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
                 event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0); return
+              }
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'g') {
+                event.preventDefault(); setGoToDraft(String(cursor.line)); setGoToOpen(true); return
               }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && canEdit && canSave) {
                 event.preventDefault(); handleSaveSource(); return
@@ -1673,6 +1949,39 @@ export function SourceEditor({
               if (next?.entry?.kind === 'FB_INSTANCE') onEnsureLibraryLoaded?.()
             }}
             onMouseLeave={() => setHoverSymbol(null)}
+            /* `DEV-PROG-016` — nhận khối kéo từ Thư viện nhanh.
+             *
+             * `onDragOver` phải `preventDefault()` mới cho thả; nó cũng dời con
+             * trỏ tới chỗ sắp thả, để người dùng THẤY nơi khối sẽ rơi vào trước
+             * khi buông tay. Thiếu phản hồi đó thì kéo-thả là một thao tác mù.
+             *
+             * `onDrop` cũng `preventDefault()` để trình duyệt KHÔNG tự chèn gì:
+             * việc chèn đi qua đúng `applyLibraryInsertion` như khi bấm chuột,
+             * nên khai báo instance và một-bước-hoàn-tác giữ nguyên. */
+            onDragOver={(event) => {
+              if (!canEdit || !event.dataTransfer.types.includes(LIBRARY_DRAG_TYPE)) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'copy'
+              const offset = dropOffsetFrom(event)
+              if (offset !== null) selectRange(offset, 0)
+            }}
+            onDrop={(event) => {
+              if (!canEdit || !event.dataTransfer.types.includes(LIBRARY_DRAG_TYPE)) return
+              event.preventDefault()
+              const entryId = event.dataTransfer.getData(LIBRARY_DRAG_TYPE)
+              const entry = libraryEntries?.find((candidate) => candidate.entryId === entryId)
+              /* Không tìm thấy mục ⇒ không làm gì. Catalog có thể đã tải lại
+                 giữa lúc kéo, và chèn "một khối nào đó" thay cho khối người
+                 dùng chọn còn tệ hơn không chèn. */
+              if (!entry) return
+              const offset = dropOffsetFrom(event)
+              if (offset !== null) selectRange(offset, 0)
+              if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
+                setPendingLibraryEntry(entry)
+                return
+              }
+              applyLibraryInsertion(entry)
+            }}
           />
           {/* Phần tử đo, không đọc được bằng trình đọc màn hình và không chiếm
               chỗ. Nó tồn tại chỉ để hover có một bề rộng ký tự THẬT. */}
@@ -1731,25 +2040,6 @@ export function SourceEditor({
             )
           })()}
         </div>
-        {libraryPanelOpen && canEdit && (
-          <QuickLibraryHost
-            projectId={projectId}
-            language="ST"
-            onInsert={(entry) => {
-              /* Đã có instance cùng kiểu thì hỏi: dùng lại hay tạo mới. Tự
-               * dùng lại là sai (hai lời gọi chung một timer là lỗi điều
-               * khiển thật), mà tự tạo mới cũng sai khi người dùng đang muốn
-               * gọi lại đúng instance đó. */
-              if (entry.stateful && collectDeclaredInstances(source, entry.name).length > 0) {
-                setPendingLibraryEntry(entry)
-                return true
-              }
-              applyLibraryInsertion(entry)
-              return true
-            }}
-            onClose={() => setLibraryPanelOpen(false)}
-          />
-        )}
         {pendingLibraryEntry && canEdit && (
           <FbInstancePicker
             entry={pendingLibraryEntry}
@@ -1772,42 +2062,50 @@ export function SourceEditor({
           />
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--c-text-dim)]">
-        <span>{pick('Dòng', 'Line')} {cursor.line}, {pick('cột', 'column')} {cursor.column}</span>
-        <span>{source.length} {pick('ký tự', 'characters')}</span>
-      </div>
+      {/* `DEV-PROG-001`/`DEV-PROG-012` — khay phụ nằm trong vùng cuộn RIÊNG có
+          trần, không còn đẩy chiều cao của cả trang. Hàng "Dòng x, cột y ·
+          n ký tự" từng đứng ở đây đã bỏ: thanh trạng thái phía dưới nói đúng
+          hai số đó, và hai chỗ cùng nói một điều là hai chỗ để lệch nhau. */}
+      <div className="min-h-0 space-y-2 overflow-y-auto lg:max-h-[15rem]">
       {libraryInsertionNote && (
         <p role="status" className="text-xs text-[var(--c-text-dim)]">{libraryInsertionNote}</p>
       )}
-      {runtimeOverlay && <StRuntimeValueOverlay state={runtimeOverlay} />}
-      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
-        <h4 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Ký hiệu & kiểu', 'Symbols & types')}</h4>
-        {symbols.length === 0 ? (
-          <p className="mt-1 text-xs text-[var(--c-text-dim)]">{pick('Chưa nhận diện khai báo VAR.', 'No VAR declarations detected.')}</p>
-        ) : (
-          <ul className="mt-1 flex flex-wrap gap-1">
-            {symbols.map((symbol) => (
-              <li key={`${symbol.name}-${symbol.offset}`}>
-                <button type="button" className="rounded bg-[var(--c-surface-2)] px-2 py-1 font-mono text-xs text-[var(--c-text)] hover:text-[var(--c-accent)]" onClick={() => selectRange(symbol.offset, symbol.name.length)}>
-                  {symbol.name}: {symbol.type} · {symbol.references} {pick('tham chiếu', 'refs')}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      {codeMapOpen && (
-        /* Đặt DƯỚI khung soạn thảo, không bọc khung đó trong một lớp lưới mới:
-           textarea là `absolute inset-0` của khung, nên thêm một tầng flex bao
-           quanh làm hộp của nó lệch và mọi cú bấm rơi vào lớp bao — đúng lỗi
-           `intercepts pointer events` mà e2e bắt được.
-
-           Điều hướng KHÔNG được đổi một byte tài liệu: Code Map chỉ phát ra
-           offset, và `selectRange` là chính đường chọn vùng đã có. */
-        <StCodeMap source={source} onNavigate={(offset) => selectRange(offset, 0)} />
+      {/* Ghi chú của "Tới khai báo (F12)" ở LẠI cạnh trình soạn thảo: nó nói về
+          cú bấm vừa xảy ra trong editor, không phải về ký hiệu dưới con trỏ. */}
+      {referenceNote && (
+        <p role="status" className="text-xs text-[var(--c-warn-fg)]">{referenceNote}</p>
       )}
-
+      {runtimeOverlay && <StRuntimeValueOverlay state={runtimeOverlay} />}
+      </div>
+      {/* Thanh trạng thái GHIM ở đáy cột, ngoài vùng cuộn: nó phải đọc được mà
+          không phải cuộn đi tìm — đúng vai trò của một status bar. */}
+      {goToOpen && (
+        <form
+          data-testid="editor-go-to-line"
+          aria-label={pick('Tới dòng', 'Go to line')}
+          className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 py-1"
+          onSubmit={(event) => { event.preventDefault(); goToLine(goToDraft) }}
+        >
+          <label className="text-xs text-[var(--c-text-dim)]" htmlFor={`programming-st-goto-${program.programId}`}>
+            {pick(`Tới dòng (1–${source.split('\n').length})`, `Go to line (1–${source.split('\n').length})`)}
+          </label>
+          <input
+            id={`programming-st-goto-${program.programId}`}
+            ref={goToInputRef}
+            inputMode="numeric"
+            value={goToDraft}
+            onChange={(event) => setGoToDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Escape') { setGoToOpen(false); textareaRef.current?.focus() } }}
+            className="w-20 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
+          />
+          <Button size="sm" type="submit">{pick('Tới', 'Go')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setGoToOpen(false); textareaRef.current?.focus() }}>
+            {pick('Đóng', 'Close')}
+          </Button>
+        </form>
+      )}
       <EditorStatusBar
+        onGoToPosition={() => { setGoToDraft(String(cursor.line)); setGoToOpen(true) }}
         fields={stStatusFields({
           line: cursor.line,
           column: cursor.column,
@@ -1821,12 +2119,6 @@ export function SourceEditor({
              Chế độ chèn: trình duyệt không cho đọc trạng thái phím Insert đáng
              tin cậy trên `<textarea>`, nên cũng để `—`. */
         })}
-      />
-
-      <StCrossReferencePanel
-        cursorSymbol={cursorSymbol}
-        note={referenceNote}
-        onJump={(offset, length) => { setReferenceNote(null); selectRange(offset, length) }}
       />
       {diagnostics.length > 0 && (
         <p id={`programming-st-diagnostics-${program.programId}`} className="text-xs text-[var(--c-fault-fg)]">
@@ -1973,13 +2265,36 @@ function FbdEditorPane({
 interface ProgramMetadataDraft {
   name: string
   kind: ProgrammingProgram['kind']
+  /** `DEV-PROG-004` — chuỗi rỗng = "chưa ghi" HOẶC "xoá đi"; hai nghĩa đó gộp
+   *  được vì thao tác gửi lên (`annotateObject` với chuỗi rỗng) là như nhau. */
+  description: string
+  access: string
 }
 
 function metadataOf(program: ProgrammingProgram): ProgramMetadataDraft {
-  return { name: program.name, kind: program.kind }
+  return {
+    name: program.name,
+    kind: program.kind,
+    description: program.description ?? '',
+    access: program.access ?? '',
+  }
 }
 
 function sameMetadata(left: ProgramMetadataDraft, right: ProgramMetadataDraft): boolean {
+  return sameIdentityMetadata(left, right)
+    && left.description === right.description && left.access === right.access
+}
+
+/**
+ * Chỉ phần metadata đi qua `upsertProgram` (tên + loại).
+ *
+ * Tách khỏi `sameMetadata` là điểm mấu chốt của `DEV-PROG-004`: `upsertProgram`
+ * gửi kèm CẢ mã nguồn, nên nếu "đổi mô tả" cũng tính là metadata đổi thì mỗi
+ * lần gõ vào ô Mô tả sẽ kéo theo một lần ghi đè `document` — đúng cách một
+ * buffer cũ nuốt mất mã nguồn của phiên khác. Chú thích đi đường riêng
+ * (`annotateObject`, vá tại chỗ).
+ */
+function sameIdentityMetadata(left: ProgramMetadataDraft, right: ProgramMetadataDraft): boolean {
   return left.name === right.name && left.kind === right.kind
 }
 
@@ -2050,6 +2365,36 @@ function ProjectTagsEditor({ canEdit, value, saving, onChange, onSave }: { canEd
   )
 }
 
+/**
+ * `DEV-PROG-004` — nút "Lưu thuộc tính" phát ĐÚNG những operation cần thiết.
+ *
+ * Tên/loại đi `upsertProgram`; chú thích đi `annotateObject`. Gộp cả hai vào
+ * `upsertProgram` sẽ kéo theo mã nguồn trong cùng một lần ghi — xem
+ * `sameIdentityMetadata`. Không có gì đổi ở nhóm nào thì nhóm đó KHÔNG phát
+ * operation: một batch chứa thao tác thừa vẫn ghi đè, chỉ là ghi đè bằng đúng
+ * giá trị cũ, và nó che mất xung đột ETag thật.
+ */
+function programPropertyOperations(
+  program: ProgrammingProgram,
+  draft: ProgramMetadataDraft,
+  normalizedName: string,
+): ProgrammingDraftOperation[] {
+  const stored = metadataOf(program)
+  const operations: ProgrammingDraftOperation[] = []
+  if (!sameIdentityMetadata(draft, stored)) {
+    operations.push({ op: 'upsertProgram', program: programDraftInput(program, { name: normalizedName, kind: draft.kind }) })
+  }
+  if (program.objectId && (draft.description !== stored.description || draft.access !== stored.access)) {
+    operations.push({
+      op: 'annotateObject',
+      objectId: program.objectId,
+      ...(draft.description !== stored.description ? { description: draft.description } : {}),
+      ...(draft.access !== stored.access ? { access: draft.access } : {}),
+    })
+  }
+  return operations
+}
+
 function ProgramInspector({ program, programs, draft, canEdit, saving, onChange, onSave }: { program: ProgrammingProgram; programs: ProgrammingProgram[]; draft: ProgramMetadataDraft; canEdit: boolean; saving: boolean; onChange: (draft: ProgramMetadataDraft) => void; onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean> }) {
   const { pick } = useI18n()
   const dirty = !sameMetadata(draft, metadataOf(program))
@@ -2059,6 +2404,8 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
   const nameHelpId = `program-name-help-${program.programId}`
   const nameInputId = `program-name-${program.programId}`
   const kindInputId = `program-kind-${program.programId}`
+  const accessInputId = `program-access-${program.programId}`
+  const descriptionInputId = `program-description-${program.programId}`
   return (
     <section className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
       <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
@@ -2103,7 +2450,49 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
           )}
         </label>
       </div>
-      {canEdit && <Button className="mt-2" size="sm" loading={saving} disabled={!dirty || invalidName || duplicateName} onClick={() => void onSave([{ op: 'upsertProgram', program: programDraftInput(program, { name: normalizedName, kind: draft.kind }) }])}>{pick('Lưu thuộc tính', 'Save properties')}</Button>}
+      {/* `DEV-PROG-004` — Mô tả (nhiều dòng) và Truy cập (một dòng). Hai ô này
+          ghi bằng `annotateObject`, KHÔNG bằng `upsertProgram`: xem lý do ở
+          `sameIdentityMetadata`. */}
+      <div className="mt-2 grid gap-2">
+        <label className="text-xs text-[var(--c-text-dim)]" htmlFor={accessInputId}>
+          {pick('Truy cập', 'Access')}
+          <input
+            id={accessInputId}
+            className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
+            value={draft.access}
+            readOnly={!canEdit}
+            maxLength={120}
+            placeholder={pick('ví dụ: Kỹ sư vận hành', 'e.g. Commissioning engineer')}
+            onChange={(event) => onChange({ ...draft, access: event.target.value })}
+          />
+          <span className="mt-1 block text-[10px] font-normal normal-case text-[var(--c-text-dim)]">
+            {pick('Ghi chú của người dùng. Quyền thật do máy chủ quyết định, không phải ô này.',
+                  'A human note. Real permissions are decided by the server, not by this field.')}
+          </span>
+        </label>
+        <label className="text-xs text-[var(--c-text-dim)]" htmlFor={descriptionInputId}>
+          {pick('Mô tả', 'Description')}
+          <textarea
+            id={descriptionInputId}
+            rows={3}
+            className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
+            value={draft.description}
+            readOnly={!canEdit}
+            maxLength={2048}
+            onChange={(event) => onChange({ ...draft, description: event.target.value })}
+          />
+        </label>
+      </div>
+      {canEdit && !program.objectId && (draft.description !== '' || draft.access !== '') && (
+        /* POU không có `objectId` (document v1) thì `annotateObject` không có
+           đích để vá. Nói ra thay vì để nút Lưu chạy xong mà chú thích biến
+           mất ở lần tải lại kế tiếp. */
+        <p role="status" className="mt-1 text-xs text-[var(--c-warn-fg)]">
+          {pick('POU này chưa có objectId nên chưa lưu được Mô tả/Truy cập. Lưu mã nguồn một lần để Draft nâng lên v2 rồi thử lại.',
+                'This POU has no objectId yet, so description/access cannot be stored. Save the source once to upgrade the draft to v2, then retry.')}
+        </p>
+      )}
+      {canEdit && <Button className="mt-2" size="sm" loading={saving} disabled={!dirty || invalidName || duplicateName} onClick={() => void onSave(programPropertyOperations(program, draft, normalizedName))}>{pick('Lưu thuộc tính', 'Save properties')}</Button>}
     </section>
   )
 }

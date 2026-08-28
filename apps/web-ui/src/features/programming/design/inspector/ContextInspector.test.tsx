@@ -44,7 +44,10 @@ describe('ContextInspector — thu gọn khi không có ngữ cảnh', () => {
     expect(screen.queryByTestId('inspector-collapsed')).toBeNull()
     expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'PROGRAM')
     expect(screen.getByText('AHU_MAIN')).toBeInTheDocument()
-    expect(screen.getByText('5000 ms')).toBeInTheDocument()
+    // `DEV-PROG-004` — chu kỳ là bội của giây thì hiện theo giây ("5 s"): ba
+    // chu kỳ hợp lệ của profile đều là bội của 1000 ms, và "30000 ms" bắt người
+    // đọc tự chia trước khi so được với chu kỳ họ đã đặt.
+    expect(screen.getByText('5 s')).toBeInTheDocument()
   })
 })
 
@@ -65,13 +68,21 @@ describe('ContextInspector — "không xác định được" là một kết qu
     expect(screen.queryByText('Đã tắt')).toBeNull()
   })
 
-  it('ba trường của UD-PROG-015 không xuất hiện dưới bất kỳ dạng nào', () => {
+  it('DEV-PROG-004: chưa ghi chú thích ⇒ nói "chưa ghi", tuyệt đối không có giá trị mẫu', () => {
     renderInspector({ program, cycleMs: 1000 })
-    // Không nhãn, không ô trống, không giá trị cứng.
-    expect(screen.queryByText(/Access/i)).toBeNull()
+    // Trường CÓ mặt (khác `UD-PROG-015` cũ), nhưng nội dung phải nói ra rằng
+    // Draft chưa có gì — không phải một ô trống trông như đã điền rồi xoá, và
+    // càng không phải giá trị lấy từ ảnh render.
+    expect(screen.getByText('Truy cập')).toBeInTheDocument()
+    expect(screen.getByText('Mô tả')).toBeInTheDocument()
+    expect(screen.getByText('chưa ghi mô tả')).toBeInTheDocument()
     expect(screen.queryByText(/Public/)).toBeNull()
-    expect(screen.queryByText(/Mô tả|Description/i)).toBeNull()
     expect(screen.queryByText(/Control_Main/)).toBeNull()
+  })
+
+  it('DEV-PROG-004: chu kỳ đi kèm TÊN Task khi Draft có tên đó', () => {
+    renderInspector({ program, cycleMs: 1000, taskName: 'Control_Main' })
+    expect(screen.getByText('Control_Main (1 s)')).toBeInTheDocument()
   })
 })
 

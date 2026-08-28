@@ -158,7 +158,13 @@ describe('ProgrammingContextStrip — T60-102 (giữ nguyên ngữ nghĩa của 
     expect(within(field('draft')).getByText('Chưa lưu · Kiểm tra đạt')).toBeInTheDocument()
     expect(within(field('active')).getByText('Có')).toBeInTheDocument()
     expect(within(field('health')).getByText('1/2 muốn bật')).toBeInTheDocument()
-    expect(within(field('health')).getByText('UNKNOWN 1 · RUNNING 1')).toBeInTheDocument()
+    /* `DEV-PROG-014` — hàng 38 px chỉ hiện trạng thái NẶNG NHẤT kèm `+N`; bản
+       đầy đủ ở `title`. Bản cũ nối tất cả trạng thái, và một Project mười
+       Program hỏng cho ra một chuỗi dài hơn cả tên Project — đẩy chính tên
+       Project ra khỏi hàng. Khẳng định gốc không đổi: ý định Enable và runtime
+       thực tế vẫn là HAI nhãn nói hai điều khác nhau. */
+    expect(within(field('health')).getByText('UNKNOWN 1 · +1')).toBeInTheDocument()
+    expect(within(field('health')).getByTitle('UNKNOWN 1 · RUNNING 1')).toBeInTheDocument()
     expect(within(strip()).getByRole('alert')).toHaveTextContent('Chưa xác định kết quả — đang đối soát')
     expect(within(strip()).getByRole('alert')).toHaveTextContent('không tự suy Program đang chạy')
   })

@@ -298,6 +298,15 @@ export interface ProgrammingProgram {
   dependencies?: readonly string[]
   executionOrder?: number
   functionalTags?: string[]
+  /** `DEV-PROG-004` — mô tả nhiều dòng của POU, đọc từ `objects[].description`.
+   *  `undefined` = Draft chưa có khoá đó (POU cũ, hoặc người dùng đã xoá mô
+   *  tả). Khác hẳn chuỗi rỗng, nên Inspector phân biệt được "chưa ghi" với
+   *  "ghi rồi rồi xoá". */
+  description?: string
+  /** `DEV-PROG-004` — ghi chú truy cập MỘT dòng do người dùng viết
+   *  (`objects[].access`). Đây là chú thích của con người, KHÔNG phải một
+   *  quyền do máy chủ cấp: RBAC thật vẫn nằm ở `x-rbac` của từng endpoint. */
+  access?: string
 }
 
 /**
@@ -461,6 +470,10 @@ export type ProgrammingDraftOperation =
    *  `upsertObject` để đổi tên: gửi lại cả `source` sẽ ghi đè nội dung mà người
    *  dùng vừa sửa ở buffer khác. */
   | { op: 'renameObject'; objectId: string; name: string }
+  /** `DEV-PROG-004` — ghi chú thích của POU, VÁ TẠI CHỖ (cùng lý do như
+   *  `renameObject`: không gửi lại `source` thì không thể ghi đè mã nguồn của
+   *  phiên khác). Chuỗi rỗng = XOÁ chú thích; bỏ hẳn khoá = giữ nguyên. */
+  | { op: 'annotateObject'; objectId: string; description?: string; access?: string }
   /** Nhân bản nội dung với identity MỚI do client cấp — retry cùng request phải
    *  cho cùng một `newObjectId`, nếu không idempotency mất nghĩa. */
   | { op: 'duplicateObject'; objectId: string; newObjectId: string; name: string }
