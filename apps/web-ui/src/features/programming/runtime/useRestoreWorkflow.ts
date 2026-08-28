@@ -33,7 +33,8 @@ export function useRestoreWorkflow() {
       const poll = () => {
         client.request<ProgrammingOperationView>('getProgrammingOperation', { path: { operationId } }).then(
           (operation) => {
-            if (operation.state === 'SUCCEEDED' || operation.state === 'REJECTED' || operation.state === 'FAILED') {
+            // Ánh xạ trạng thái operation theo OpenAPI schema / model/types.ts (ROLLED_BACK thay cho REJECTED lạc hậu)
+            if (operation.state === 'SUCCEEDED' || operation.state === 'ROLLED_BACK' || operation.state === 'FAILED') {
               setState({ phase: 'terminal', operation })
               return
             }

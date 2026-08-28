@@ -1,4 +1,5 @@
 import { ClipboardCheck, RefreshCw, Save } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { Button } from '../../../shared/components/Button'
 import type { ProgrammingEditingContext } from './ProgrammingLayout'
@@ -17,9 +18,19 @@ import type { ProgrammingEditingContext } from './ProgrammingLayout'
  * KHÔNG hiện. Một nút chết luôn nằm đó dạy người dùng rằng nó không dùng được,
  * và họ sẽ thôi nhìn nó cả lúc nó sống.
  *
- * `DEV-PROG-013/014` rút gọn phần chữ: tiêu đề còn một dòng, phụ đề dài đã bỏ —
- * nó lặp lại đúng thứ dải ngữ cảnh ngay phía trên đã nói, mà chiếm ~40 px chiều
- * cao của chính vùng soạn thảo.
+ * TIÊU ĐỀ THEO TRANG (hợp nhất `DEV-PROG-013/014` với `PR #311`)
+ * -------------------------------------------------------------
+ * Hai lát đụng nhau ở đúng chỗ này và cả hai đều có lý:
+ *
+ * - `DEV-PROG-013/014` bỏ phụ đề dài vì nó lặp lại thứ dải ngữ cảnh ngay trên
+ *   đã nói, mà chiếm ~40 px chiều cao của chính vùng soạn thảo.
+ * - `PR #311` muốn Tổng quan có tiêu đề lớn kèm phụ đề, vì đó là trang đích đầu
+ *   tiên và người dùng cần biết mình vừa mở cái gì.
+ *
+ * Điều kiện hoà giải là ROUTE: chỉ **Tổng quan** mới có ngân sách chiều cao để
+ * mang phụ đề — nó không có trình soạn thảo tranh chỗ. Năm workspace còn lại
+ * giữ tiêu đề một dòng. Đây không phải thoả hiệp nửa vời mà là điều kiện đúng:
+ * ràng buộc chiều cao chỉ tồn tại ở nơi có editor.
  */
 export function ProgrammingHeader({
   onRefresh,
@@ -31,9 +42,28 @@ export function ProgrammingHeader({
   actions?: ProgrammingEditingContext['actions']
 }) {
   const { pick } = useI18n()
+  const location = useLocation()
+  const overview = location.pathname === '/eng/programming' || location.pathname === '/eng/programming/'
   return (
-    <header className="flex flex-wrap items-center justify-between gap-2">
-      <h1 className="text-xl font-bold text-[var(--c-text)]">{pick('Lập trình điều khiển', 'Control programming')}</h1>
+    <header className={`flex flex-wrap justify-between gap-2 ${overview ? 'items-start' : 'items-center'}`}>
+      <div className="min-w-0">
+        {overview && (
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--c-accent)]">
+            Programming workstation
+          </p>
+        )}
+        <h1 className={`${overview ? 'text-2xl' : 'text-xl'} font-bold text-[var(--c-text)]`}>
+          {pick('Lập trình điều khiển', 'Control programming')}
+        </h1>
+        {overview && (
+          <p className="mt-1 text-sm text-[var(--c-text-dim)]">
+            {pick(
+              'Theo dõi ứng dụng đang chạy, tiếp tục bản nháp và xử lý các vấn đề cần chú ý.',
+              'Monitor the running application, continue draft work, and resolve items requiring attention.'
+            )}
+          </p>
+        )}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         {actions && (
           <>

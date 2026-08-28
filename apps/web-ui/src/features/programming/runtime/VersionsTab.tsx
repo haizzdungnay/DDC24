@@ -51,7 +51,7 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
               <li key={operation.operationId} className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-[var(--c-text)]">{operation.kind ?? '—'}</span>
-                  <StatusBadge state={operation.state === 'SUCCEEDED' ? 'online' : operation.state === 'FAILED' || operation.state === 'REJECTED' ? 'fault' : 'unknown'} label={operation.state} />
+                  <StatusBadge state={operation.state === 'SUCCEEDED' ? 'online' : operation.state === 'FAILED' || operation.state === 'ROLLED_BACK' ? 'fault' : 'unknown'} label={operation.state} />
                 </div>
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
                   <dt className="text-[var(--c-text-dim)]">{pick('Bản đích', 'Target')}</dt><dd className="font-mono">{(operation.requestedRevisionId ?? '—').slice(0, 8)}</dd>
@@ -74,7 +74,7 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
                 <tr key={operation.operationId} className="border-t border-[var(--c-border)]">
                   <td className="py-1 pr-3">{operation.kind ?? '—'}</td>
                   <td className="py-1 pr-3">
-                    <StatusBadge state={operation.state === 'SUCCEEDED' ? 'online' : operation.state === 'FAILED' || operation.state === 'REJECTED' ? 'fault' : 'unknown'} label={operation.state} />
+                    <StatusBadge state={operation.state === 'SUCCEEDED' ? 'online' : operation.state === 'FAILED' || operation.state === 'ROLLED_BACK' ? 'fault' : 'unknown'} label={operation.state} />
                   </td>
                   <td className="py-1 pr-3 font-mono text-xs">{(operation.requestedRevisionId ?? '—').slice(0, 8)}</td>
                   <td className="py-1 text-[var(--c-text-dim)]">{new Date(operation.updatedAt).toLocaleString()}</td>

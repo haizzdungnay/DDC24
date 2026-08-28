@@ -4,16 +4,19 @@
 
 namespace core {
 
-void SafeState::apply(const IoSnapshot& io, const PointTable& table, OutputCmd* inout)
+void SafeState::apply(const IoSnapshot& io, const PointTable& table, OutputCmd* inout,
+                      bool graph_is_active_producer)
 {
     /* T1/T2: IOP fault/safe */
     const bool fault = (io.iop_status == KX_IOP_FAULT || io.iop_status == KX_IOP_SAFE);
     /* T3: shm stale */
     const bool stale = quality_.is_stale();
 
-    /* T6: ui_quality=BAD trên kênh graph đang dùng (chỉ khi có graph) */
+    /* T6: chỉ graph đang SỞ HỮU Local logic mới có quyền làm input graph kích
+     * hoạt SafeState. PROGRAM_ONLY vẫn giữ graph đã load để rollback, nhưng
+     * graph đó không còn chạy và không được chi phối output của Program. */
     bool graph_input_bad = false;
-    if (graph_ && graph_->loaded()) {
+    if (graph_is_active_producer && graph_ && graph_->loaded()) {
         for (const int ch : graph_->used_ai_channels()) {
             if (table.get({PointKind::AI, ch}).quality == KX_Q_BAD) {
                 graph_input_bad = true;
@@ -26,7 +29,8 @@ void SafeState::apply(const IoSnapshot& io, const PointTable& table, OutputCmd* 
      * không ai đang điều khiển → về safe thay vì để default mức 6 tự chạy.
      * (Default mức 6 chỉ có hiệu lực khi hệ có ít nhất 1 nguồn điều khiển.) */
     const bool no_controller = (graph_ && resolver_)
-                             ? (!graph_->loaded() && !resolver_->any_active_above_default())
+                             ? ((!graph_is_active_producer || !graph_->loaded()) &&
+                                !resolver_->any_active_above_default())
                              : false;
 
     /* T8: Task overrun lặp quá ngưỡng. Ngang hàng với các trigger khác —

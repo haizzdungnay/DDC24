@@ -111,6 +111,21 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/**
+ * Chọn một POU theo tên trong CÂY POU.
+ *
+ * Không dùng `screen.getByText(<tên>)` nữa: từ `PR #311`, tab Điểm & Ánh xạ
+ * (luôn mounted, chỉ ẩn bằng CSS) có một `<select>` liệt kê Program, nên mỗi
+ * tên POU xuất hiện HAI lần trong DOM — một ở cây, một ở `<option>`. `getByText`
+ * khi đó ném "found multiple elements" cho một trang hoàn toàn đúng.
+ *
+ * Bám vào tên truy cập của nút trong cây (`Mở <tên>`) là bám đúng thứ case này
+ * nói tới, và nó không vỡ khi một bề mặt khác cũng nhắc tới cùng cái tên.
+ */
+function pouInTree(name: string) {
+  return screen.findByRole('button', { name: `Mở ${name}` })
+}
+
 describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   it('mount Published Signals trên route Mapping bằng raw Draft v2, không qua adapter làm mất signals[]', async () => {
     const project = baseProject()
@@ -231,7 +246,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    fireEvent.click(await screen.findByText('ValidName'))
+    fireEvent.click(await pouInTree('ValidName'))
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
     expect(within(inspector).queryByText('Tag chức năng')).not.toBeInTheDocument()
 
@@ -266,14 +281,14 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
+    await pouInTree('Chương trình A')
 
     // Chưa chọn chương trình nào: cột Inspector vẫn tồn tại, hiện trạng thái trống.
     const tree = screen.getByRole('navigation', { name: 'Cây POU' })
     const inspectorEmpty = screen.getByRole('complementary', { name: 'Thuộc tính' })
     expect(within(inspectorEmpty).getByText('Chọn một chương trình để xem thuộc tính.')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Chương trình A'))
+    fireEvent.click(await pouInTree('Chương trình A'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     // Sau khi chọn: cây, editor và Inspector cùng có mặt đồng thời (3 cột),
@@ -296,8 +311,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Chương trình A'))
+    await pouInTree('Chương trình A')
+    fireEvent.click(await pouInTree('Chương trình A'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
@@ -321,8 +336,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('FB cũ từ bundle')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('FB cũ từ bundle'))
+    await pouInTree('FB cũ từ bundle')
+    fireEvent.click(await pouInTree('FB cũ từ bundle'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
@@ -358,8 +373,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Chương trình A'))
+    await pouInTree('Chương trình A')
+    fireEvent.click(await pouInTree('Chương trình A'))
 
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
     fireEvent.change(textarea, { target: { value: 'X := 2; (* chưa lưu *)' } })
@@ -447,7 +462,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    fireEvent.click(await screen.findByText('Điều khiển AHU'))
+    fireEvent.click(await pouInTree('Điều khiển AHU'))
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
     fireEvent.change(textarea, { target: { value: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;' } })
 
@@ -486,7 +501,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
+    await pouInTree('Điều khiển AHU')
     expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByTitle(/^Xóa /))
@@ -535,7 +550,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('SCALE_LIN')).toBeInTheDocument())
+    await pouInTree('SCALE_LIN')
     fireEvent.click(screen.getByTitle(/^Xóa /))
     const dialog = screen.getByRole('dialog', { name: 'Xóa POU?' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
@@ -572,7 +587,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('AHU_MasterSequence')).toBeInTheDocument())
+    await pouInTree('AHU_MasterSequence')
     fireEvent.click(screen.getByTitle(/^Xóa /))
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Xóa POU?' })).getByRole('button', { name: 'Xóa' }))
 
@@ -596,8 +611,8 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    await pouInTree('Điều khiển AHU')
+    fireEvent.click(await pouInTree('Điều khiển AHU'))
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
 
     fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
@@ -625,8 +640,8 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Program A')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Program A'))
+    await pouInTree('Program A')
+    fireEvent.click(await pouInTree('Program A'))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
     expect(textarea).toHaveValue(sourceA)
 
@@ -654,8 +669,8 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    await pouInTree('Điều khiển AHU')
+    fireEvent.click(await pouInTree('Điều khiển AHU'))
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
 
     fireEvent.keyDown(textarea, { key: 'p', ctrlKey: true })
@@ -679,8 +694,8 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    await pouInTree('Điều khiển AHU')
+    fireEvent.click(await pouInTree('Điều khiển AHU'))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
 
     const start = source.indexOf('X := 1;')
@@ -705,8 +720,8 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    await pouInTree('Điều khiển AHU')
+    fireEvent.click(await pouInTree('Điều khiển AHU'))
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
 
     const start = source.indexOf('X := 1;')
@@ -740,25 +755,29 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Điều khiển AHU')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Điều khiển AHU'))
+    await pouInTree('Điều khiển AHU')
+    fireEvent.click(await pouInTree('Điều khiển AHU'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const countCatalogCalls = () => client.request.mock.calls.filter(([operationId]) => operationId === 'getProgrammingPointCatalog').length
     const before = countCatalogCalls()
 
+    /* Từ `PR #311`, tab Điểm & Ánh xạ (luôn mounted) cũng liệt kê `AO-01`, nên
+       phép chọn phải soi ĐÚNG panel chèn nhanh — thứ case này nói tới. */
+    const insertPanel = () => screen.getByRole('dialog', { name: 'Chèn nhanh Point/Variable' })
+
     fireEvent.click(screen.getByRole('button', { name: 'Chèn Point/Variable' }))
     await waitFor(() => expect(countCatalogCalls()).toBe(before + 1))
-    await waitFor(() => expect(screen.getByText('AO-01')).toBeInTheDocument())
+    await waitFor(() => expect(within(insertPanel()).getByText('AO-01')).toBeInTheDocument())
 
     // Đóng rồi mở lại — dùng cache, không thêm request nào nữa.
     fireEvent.click(screen.getByRole('button', { name: 'Chèn Point/Variable' }))
     fireEvent.click(screen.getByRole('button', { name: 'Chèn Point/Variable' }))
-    await waitFor(() => expect(screen.getByText('AO-01')).toBeInTheDocument())
+    await waitFor(() => expect(within(insertPanel()).getByText('AO-01')).toBeInTheDocument())
     expect(countCatalogCalls()).toBe(before + 1)
 
     const textarea = screen.getByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
-    fireEvent.click(screen.getByText('AO-01'))
+    fireEvent.click(within(insertPanel()).getByText('AO-01'))
     expect(textarea.value).toContain('AO-01')
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
   })
@@ -801,7 +820,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     })
 
     renderWorkspace()
-    fireEvent.click(await screen.findByText('Điều khiển AHU'))
+    fireEvent.click(await pouInTree('Điều khiển AHU'))
     expect(screen.queryByRole('region', { name: 'Lớp giá trị runtime ST' })).not.toBeInTheDocument()
     expect(runtimeMonitor.enabled).toHaveBeenCalledWith(false)
   })
@@ -979,8 +998,8 @@ describe('PGM-02 — viewer/operator không sửa được nguồn (T59-808)', (
     auth.role = role
     stubProject()
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Chương trình A'))
+    await pouInTree('Chương trình A')
+    fireEvent.click(await pouInTree('Chương trình A'))
 
     const source = await screen.findByLabelText(/Mã nguồn ST/)
     expect((source as HTMLTextAreaElement).value).toContain('PROGRAM')
@@ -994,8 +1013,8 @@ describe('PGM-02 — viewer/operator không sửa được nguồn (T59-808)', (
     auth.role = 'admin'
     stubProject()
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Chương trình A')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Chương trình A'))
+    await pouInTree('Chương trình A')
+    fireEvent.click(await pouInTree('Chương trình A'))
     const source = await screen.findByLabelText(/Mã nguồn ST/)
     expect(source).not.toHaveAttribute('readonly')
   })
@@ -1037,13 +1056,13 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText(HOSTILE_NAME)).toBeInTheDocument())
+    await pouInTree(HOSTILE_NAME)
 
     // Tên hiện ra ĐÚNG NGUYÊN VĂN, và không có `<img>` nào được tạo từ nó.
     expect(globalThis.document.querySelector('img[src="x"]')).toBeNull()
     expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined()
 
-    fireEvent.click(screen.getByText(HOSTILE_NAME))
+    fireEvent.click(await pouInTree(HOSTILE_NAME))
     const source = await screen.findByLabelText(/Mã nguồn ST/)
     expect((source as HTMLTextAreaElement).value).toBe(HOSTILE_SOURCE)
     expect(globalThis.document.querySelector('script')).toBeNull()

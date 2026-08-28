@@ -10,8 +10,10 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <chrono>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "ipc/iobus_reader.hpp"
@@ -177,6 +179,91 @@ TEST(StIntegration, OutputGoesThroughPriorityResolverNotDirectly)
     EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
     const OutputCmd out = resolver.resolve();
     EXPECT_FLOAT_EQ(out.ao[0], 10.0f);
+}
+
+TEST(StIntegration, AhuSupplyFanSampleRefreshesMappedOutputsEveryCycle)
+{
+    const char* source = R"ST(
+PROGRAM AHU_SupplyFan_Sample
+VAR_INPUT
+    SupplyVoltage : REAL;
+    SupplyCurrent : REAL;
+END_VAR
+VAR_OUTPUT
+    FanCommand : BOOL;
+    FanSpeedVoltage : REAL;
+END_VAR
+
+FanCommand := (SupplyVoltage > 2.0) AND (SupplyCurrent > 4.0);
+IF FanCommand THEN
+    FanSpeedVoltage := LIMIT(0.0, SupplyVoltage, 10.0);
+ELSE
+    FanSpeedVoltage := 0.0;
+END_IF;
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding supply_voltage{};
+    supply_voltage.slot = slot_of(module, "SupplyVoltage");
+    supply_voltage.point_kind = StPointKind::UI;
+    supply_voltage.point_index = 1;
+    StIrIoBinding supply_current{};
+    supply_current.slot = slot_of(module, "SupplyCurrent");
+    supply_current.point_kind = StPointKind::UI;
+    supply_current.point_index = 5;
+    StIrIoBinding fan_command{};
+    fan_command.slot = slot_of(module, "FanCommand");
+    fan_command.is_output = true;
+    fan_command.point_kind = StPointKind::DO;
+    fan_command.point_index = 1;
+    StIrIoBinding fan_speed_voltage{};
+    fan_speed_voltage.slot = slot_of(module, "FanSpeedVoltage");
+    fan_speed_voltage.is_output = true;
+    fan_speed_voltage.point_kind = StPointKind::AO;
+    fan_speed_voltage.point_index = 1;
+
+    StScheduler scheduler;
+    std::string error;
+    ASSERT_TRUE(scheduler.add_task(task_cfg("main", 1000), &error)) << error;
+    ASSERT_TRUE(scheduler.add_program("main", "program-main", 0, &error)) << error;
+    ASSERT_TRUE(scheduler.request_activation(
+        "program-main",
+        build_with_bindings(source, {supply_voltage, supply_current,
+                                     fan_command, fan_speed_voltage}),
+        &error)) << error;
+    scheduler.tick(0);
+    ASSERT_TRUE(scheduler.start("program-main", &error)) << error;
+
+    PointTable table;
+    PriorityResolver resolver;
+    const auto run_cycle = [&](uint64_t now_ms, float voltage, float current) {
+        IoSnapshot io{};
+        io.ts_ns = now_ms * kMs;
+        io.ui_value[0] = voltage;
+        io.ui_quality[0] = KX_Q_GOOD;
+        io.ui_value[4] = current;
+        io.ui_quality[4] = KX_Q_GOOD;
+        table.update_inputs(io);
+
+        StIoBridgeStats stats{};
+        EXPECT_TRUE(st_capture_due_inputs(&scheduler, table, now_ms * kMs, &stats));
+        EXPECT_EQ(scheduler.tick(now_ms * kMs).programs_run, 1u);
+        EXPECT_TRUE(st_apply_all_outputs(&scheduler, &resolver, &table, &stats));
+        EXPECT_EQ(stats.output_commit_generation, scheduler.base_step_count());
+        return resolver.resolve();
+    };
+
+    OutputCmd output = run_cycle(1000, 6.0f, 5.0f);
+    EXPECT_EQ(output.dout[0], 1u);
+    EXPECT_FLOAT_EQ(output.ao[0], 6.0f);
+
+    output = run_cycle(2000, 7.0f, 0.5f);
+    EXPECT_EQ(output.dout[0], 0u);
+    EXPECT_FLOAT_EQ(output.ao[0], 0.0f);
+
+    output = run_cycle(3000, 8.0f, 5.0f);
+    EXPECT_EQ(output.dout[0], 1u);
+    EXPECT_FLOAT_EQ(output.ao[0], 8.0f);
 }
 
 TEST(StIntegration, ManualCommandBeatsStProgram)
@@ -999,6 +1086,45 @@ TEST(StIntegration, ScanLoopRunsStProgramAndRoutesThroughArbitration)
     EXPECT_EQ(loop.st_tick_for_test().base_step_sequence, base_steps_before + 1);
     EXPECT_EQ(loop.st_tick_for_test().tasks_run, 1u);
     EXPECT_EQ(loop.st_tick_for_test().programs_run, 1u);
+    EXPECT_STREQ(web.snapshot_for_test().task.state.data(), "RUNNING");
+}
+
+TEST(StIntegration, ScanLoopPublishesFaultWhenProgramInstanceFaults)
+{
+    kx_io_shm_t shm{};
+    IobusReader reader;
+    attach_valid_iobus(&reader, &shm);
+    PointTable table;
+    PointQuality quality;
+    WebIpc web;
+    GraphRuntime graph;
+    PriorityResolver resolver;
+    SafeState safe(quality, &graph, &resolver);
+    OutputWriter writer(reader);
+    BacnetObjTable bacnet;
+    ASSERT_TRUE(bacnet.attach());
+    CoreMetrics metrics;
+
+    StScheduler sched;
+    make_running(&sched, doubler_artifact());
+    ScanDeps deps{&reader, &table, &quality, &web, &graph, &resolver, &safe, &writer, &bacnet,
+                  &metrics, -1, nullptr, nullptr};
+    deps.st_sched = &sched;
+    deps.mode = CutoverMode::PROGRAM_ONLY;
+    ScanLoop loop(deps);
+
+    shm.ts_ns += 1000000;
+    loop.step();
+    ASSERT_STREQ(web.snapshot_for_test().task.state.data(), "RUNNING");
+
+    shm.ui_quality[0] = KX_Q_BAD;
+    shm.ts_ns += 1000000;
+    std::this_thread::sleep_for(std::chrono::milliseconds(110));
+    loop.step();
+
+    ASSERT_EQ(sched.find_program("p")->state, StProgramState::FAULTED);
+    EXPECT_STREQ(web.snapshot_for_test().task.state.data(), "FAULT")
+        << "task snapshot phải phản ánh instance FAULTED, không chỉ task enabled";
 }
 
 TEST(StIntegration, ScanLoopWithdrawsStoppedProgramOutputAtSafeBoundary)
@@ -1037,6 +1163,7 @@ TEST(StIntegration, ScanLoopWithdrawsStoppedProgramOutputAtSafeBoundary)
     loop.step();
     EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT)
         << "ScanLoop phải rút proposal mức 5 ngay tick sau khi operator stop";
+    EXPECT_STREQ(web.snapshot_for_test().task.state.data(), "STOPPED");
 }
 
 TEST(StIntegration, ScanLoopStepDoesNotAllocateWithStProgram)

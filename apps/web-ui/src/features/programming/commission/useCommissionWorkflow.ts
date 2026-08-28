@@ -51,7 +51,10 @@ export function useCommissionWorkflow() {
       const poll = () => {
         client.request<ProgrammingOperationView>('getProgrammingOperation', { path: { operationId } }).then(
           (operation) => {
-            if (operation.state === 'SUCCEEDED' || operation.state === 'REJECTED' || operation.state === 'FAILED') {
+            // `ROLLED_BACK` thay cho `REJECTED` cũ: enum operation state theo
+            // contracts/openapi/openapi.yaml là QUEUED/PREFLIGHT/STAGING/
+            // APPLYING/VERIFYING/SUCCEEDED/FAILED/ROLLED_BACK/UNKNOWN_RECONCILING.
+            if (operation.state === 'SUCCEEDED' || operation.state === 'ROLLED_BACK' || operation.state === 'FAILED') {
               setState({ phase: 'terminal', operation })
               return
             }

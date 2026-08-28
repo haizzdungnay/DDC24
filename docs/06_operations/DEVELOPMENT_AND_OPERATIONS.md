@@ -30,6 +30,127 @@ sha256sum --check build/release/checksums.sha256
 
 HMI: thêm `-DMKDDC_ENABLE_HMI=ON` và xác minh dependency/target. BACnet: dùng option hiện có trong CMake và chạy protocol smoke phù hợp. Không coi build trên host là thay thế HIL/target test.
 
+## Chạy local full-stack no-board (không SSH board)
+
+Đường chạy cho FE/API dev tại `http://127.0.0.1:5173`, dùng chuỗi mô phỏng sẵn có
+trong `tools/run_noboard_demo.sh`. **Không viết mock dữ liệu mới** — chuỗi này đã
+sinh I/O thật qua PTY ảo.
+
+```
+socat PTY ─► fake_mcu ─UART ảo─► mkddc-iobus ─► /dev/shm/mkddc_io_shm
+                                                /dev/shm/mkddc_plc_shm
+                                                      └─► mkddc-core ─/tmp/mkddc-core.sock─► mkddc-web :8081
+                                                                                                  ▲ proxy Vite :5173
+```
+
+### Điều kiện bắt buộc
+
+- **Phải chạy trong Linux.** `apps/web-api` dùng `unix.*`, `syscall.Kill`,
+  `SysProcAttr.Setpgid/Pdeathsig` nên **không build native trên Windows**
+  (`go build` host báo 16 lỗi undefined ở `programming/artifact`,
+  `programming/compiler`, `programming/coreipc`, `programming/store`,
+  `internal/system/probe.go`). Trên máy Windows dùng WSL:
+  `MSYS_NO_PATHCONV=1 wsl -d Ubuntu-24.04 -- bash -lc '<lệnh>'`
+  (thiếu `MSYS_NO_PATHCONV=1` thì Git Bash mangle path và báo exit 127).
+- Cần `socat`, `go`, `cmake`, `g++`, `node`.
+
+### Trình tự
+
+1. **Build C++** vào đúng layout mà demo script trông đợi
+   (`build/release/cpp`, khớp `MKDDC_CPP_BUILD_REL` trong
+   `platform/packaging/repository-paths.sh`):
+
+   ```bash
+   cmake -S . -B build/release/cpp -DCMAKE_BUILD_TYPE=Release \
+     -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
+   cmake --build build/release/cpp -j"$(nproc)"
+   ```
+
+   Cần 4 binary: `core/mkddc-core`, `iobus/mkddc-iobus`, `iobus/fake_mcu`,
+   `iobus/shm_dump_io`. Override build root bằng `MKDDC_CPP_BUILD_ROOT` nếu dùng
+   thư mục khác.
+
+2. **Dựng chuỗi mô phỏng:** `./tools/run_noboard_demo.sh`
+   (dừng: `./tools/run_noboard_demo.sh stop`).
+
+3. **Chạy Web API:** `./run-local.sh` — build `mkddc-web` và trỏ runtime path vào
+   `/tmp/mkddc-local-<hash-của-checkout>`. Script bám theo vị trí của chính nó,
+   **không hardcode path repo**, nên chạy ở worktree nào thì build và dùng state
+   của worktree đó.
+
+4. **Chạy FE:** `cd apps/web-ui && npm run dev` → `http://127.0.0.1:5173`.
+   Đăng nhập `admin` / `admin123`.
+
+### Hai điểm nối dễ sai (đã cắn 2026-08-28)
+
+| Triệu chứng | Nguyên nhân | Cách trỏ đúng |
+|---|---|---|
+| `/api/v1/health` báo `core` = `fault` dù core sống | `CORE_SOCK` trỏ sai chỗ | phải là `/tmp/mkddc-core.sock`, khớp `--sock` của `mkddc-core` trong demo script |
+| `core`/`iobus` = `fault` dù `pgrep` thấy tiến trình | `system.ProcessAlive()` đọc **PID file** chứ không quét tiến trình; demo chạy bằng `nohup` nên không ghi PID file nào | `run-local.sh` tự `pgrep` rồi ghi `$ROOT/run/{core,iobus}.pid` **trước khi** start web; chạy demo script trước `run-local.sh` |
+| Vite nhảy sang `5174` | đã có instance cũ giữ `5173` | kiểm tra listener cũ trước, đừng chạy đè |
+| `127.0.0.1:8081` connection refused nhưng `[::1]:8081` `200` | trên WSL backend đến qua `wslrelay`, chỉ bind IPv6 | không phải lỗi; dev đi qua proxy `5173` không ảnh hưởng |
+| Port sai 8080 thay vì 8081 | lệch với `developmentProxy()` trong `apps/web-ui/vite.config.ts` | mọi endpoint 502, trông như hỏng FE — luôn giữ `PORT=8081` |
+| `mkddc-web` chết ngay lúc init: `schema Programming mới hơn binary: version N` | nhiều worktree dùng chung `CONFIG_DIR`; `store.CurrentSchemaVersion` khác nhau giữa các nhánh (nhánh này 5, worktree khác 11/12), binary schema thấp gặp DB do binary schema cao tạo | `run-local.sh` đã tách `ROOT` theo hash đường dẫn checkout; nếu vẫn kẹt thì xoá `/tmp/mkddc-local-*` của checkout đó |
+| `do1`/`do2` trả `{"result":"rejected","error":"id_conflict"}` từ lần gọi thứ hai | core cache response theo `id` để idempotent; `cmd_do` cũ hardcode `"id":1` nên body khác + id trùng = conflict | đã sửa `cmd_do` sinh `id` theo `time.time_ns()`; **không phải core từ chối ghi** |
+| Web API đang chạy tự nhiên báo `core unavailable`, `mkddc-core` thành `<defunct>`, health đảo về `fault` | **checkout khác trên cùng máy cũng chạy demo**, ghi đè `/tmp/mkddc-core.sock` và chiếm `:8081`; `cmd_stop` cũ dùng `pkill -x mkddc-core` nên giết cả core của checkout kia | xem *Chạy song song nhiều checkout* bên dưới |
+
+### Chạy song song nhiều checkout
+
+Máy dev thường có nhiều worktree cùng repo. Bốn tài nguyên dưới đây là **singleton
+toàn máy**, hai checkout cùng chạy sẽ giành nhau và tạo triệu chứng giống hệt lỗi
+code:
+
+| Tài nguyên | Tách được? | Cách tách |
+|---|---|---|
+| `CONFIG_DIR`/`STATE_DIR` | có | `run-local.sh` tự hash đường dẫn checkout |
+| `/tmp/mkddc-core.sock`, `/tmp/mkddc-iop-{a,b}` | có | đặt `MKDDC_DEMO_SUFFIX=-<tên-checkout>` cho **cả** `run_noboard_demo.sh` và `run-local.sh` |
+| Port `8081` | không thực sự | hợp đồng với `developmentProxy()` trong `vite.config.ts`; đổi bằng `MKDDC_WEB_PORT` thì phải đổi `VITE_PROXY_TARGET` tương ứng |
+| `/dev/shm/mkddc_io_shm`, `/dev/shm/mkddc_plc_shm` | không | tên do contract SHM quy định — **chỉ một chuỗi demo chạy được tại một thời điểm** |
+
+**Suffix không bảo vệ được khỏi checkout chạy bản script cũ.** `cmd_stop` bản cũ
+dùng `pkill -x mkddc-core` và `pkill -f "PTY.*mkddc-iop"`; hai pattern đó khớp cả
+tiến trình có suffix. Triệu chứng: `socat` của bạn thành `<defunct>`, PTY biến
+mất, `iop_status` rơi về `SAFE`, và **mọi lệnh `do*` trả
+`{"result":"overridden","active_source":"safety"}`** — đây là safe-state hoạt động
+đúng, không phải core từ chối ghi. Chỉ hết khi mọi checkout trên máy đều dùng bản
+`cmd_stop` có phạm vi hẹp.
+
+Vì SHM không tách được, thực tế là **mỗi lúc chỉ một checkout chạy được chuỗi
+mô phỏng**. Trước khi kết luận backend hỏng, luôn kiểm tra:
+
+```bash
+ps -eo pid,ppid,args --forest | grep -E "mkddc|fake_mcu|socat" | grep -v grep
+ss -lptn | grep 8081        # ai đang thực sự giữ port
+ls -la /tmp/mkddc-core*.sock
+```
+
+Nếu `:8081` do binary ở đường dẫn lạ (ví dụ `/tmp/mkddc-check/mkddc-web`) nắm giữ
+thì số đo đang đo **checkout khác**, không phải cây đang sửa.
+
+Kiểm tra nhanh xem SHM còn sống hay đã đứng — `age` phải cỡ vài ms, không phải
+chục giây:
+
+```bash
+build/release/cpp/iobus/shm_dump_io | head -2
+# magic=0x4B584405 seq=... (age 1 ms)
+# iop_status=NORMAL fault_flags=0x0000
+```
+
+### Trạng thái đúng khi chạy được
+
+- `GET /api/v1/health` → `200`, **cả 6 check `ok`**: `core`, `iobus`, `io_shm`,
+  `plc_shm`, `mcu_connection`, `web`.
+- `GET /api/v1/points` → `200` với giá trị sống;
+  `GET /api/v1/programming/point-catalog` → `200`, 24 điểm.
+- `history` → `400` khi thiếu query bắt buộc và `network/transaction` → `503`
+  khi không có netcfg socket là **fail-closed đúng**, không phải lỗi cài đặt.
+- Kiểm chứng vòng ghi: `./tools/run_noboard_demo.sh do1 1` → core trả
+  `accepted` / `active_source=manual`, API đọc lại `DO-01=True quality=good`;
+  nhớ `do1 0` để trả về trạng thái ban đầu.
+
+Đây là bằng chứng integration trên host, **không thay thế** target/HIL/production
+hoặc release gate.
+
 ## Configuration và deployment
 
 1. Backup config/data và ghi commit/artifact hash.

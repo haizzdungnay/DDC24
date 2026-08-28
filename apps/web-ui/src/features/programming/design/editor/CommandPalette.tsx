@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { filterPaletteEntries, paletteEntryKey, type PaletteEntry } from './quickControl'
 
@@ -30,10 +31,13 @@ export function CommandPalette({
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   const filtered = useMemo(() => filterPaletteEntries(entries, query), [entries, query])
 
   useEffect(() => {
     if (!open) return
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setQuery('')
     setActiveIndex(0)
     window.setTimeout(() => inputRef.current?.focus(), 0)
@@ -43,13 +47,18 @@ export function CommandPalette({
 
   useEffect(() => {
     if (!open) return undefined
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      onClose()
+      closePalette()
     }
     document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('keydown', handleEscape)
+      document.body.style.overflow = previousOverflow
+    }
   }, [onClose, open])
 
   if (!open) return null
@@ -57,21 +66,40 @@ export function CommandPalette({
   function commit(entry: PaletteEntry | undefined) {
     if (!entry) return
     onSelect(entry)
+    closePalette()
+  }
+
+  function closePalette() {
     onClose()
+    returnFocusRef.current?.focus()
+  }
+
+  function trapFocus(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key !== 'Tab' || !dialogRef.current) return
+    const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [href]')]
+    if (focusable.length === 0) { event.preventDefault(); dialogRef.current.focus(); return }
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-[rgba(0,0,0,0.55)] p-4 pt-24" role="presentation" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-center bg-[rgba(0,0,0,0.55)] p-4 pt-24" role="presentation" onMouseDown={closePalette}>
       <section
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={pick('Bảng lệnh nhanh', 'Command palette')}
+        tabIndex={-1}
         className="panel-shadow h-fit w-full max-w-md overflow-hidden rounded-[var(--radius)] border border-[var(--c-line-strong)] bg-[var(--c-surface)]"
         onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={trapFocus}
       >
+        <div className="flex items-center border-b border-[var(--c-border)]">
         <input
           ref={inputRef}
-          className="mono w-full border-b border-[var(--c-border)] bg-transparent px-3 py-2 text-sm text-[var(--c-text)] outline-none"
+          className="mono w-full bg-transparent px-3 py-2 text-sm text-[var(--c-text)] outline-none"
           placeholder={pick('Nhảy tới Program, biến, hoặc chạy lệnh…', 'Jump to a program, variable, or run a command…')}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -81,6 +109,8 @@ export function CommandPalette({
             else if (event.key === 'Enter') { event.preventDefault(); commit(filtered[activeIndex]) }
           }}
         />
+          <button type="button" className="mr-1 min-h-10 min-w-10 rounded p-2" aria-label={pick('Đóng', 'Close')} onClick={closePalette}><X className="h-4 w-4" aria-hidden="true" /></button>
+        </div>
         <ul role="listbox" aria-label={pick('Kết quả', 'Results')} className="max-h-72 overflow-y-auto">
           {filtered.length === 0 && (
             <li className="px-3 py-4 text-center text-xs text-[var(--c-text-dim)]">{pick('Không có kết quả.', 'No results.')}</li>

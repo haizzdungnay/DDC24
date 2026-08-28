@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### Programming — hợp nhất PR #311 vào main, sửa 4 lỗi lộ ra khi hợp nhất (2026-08-28)
+
+- **Fixed — `task.state` của read-back nói dối khi Program dừng hoặc lỗi.**
+  Hai ca `StIntegration` do PR #311 thêm vào đỏ ngay: operator `stop` một Program
+  hoặc một instance rơi `FAULTED`, mà `point_snapshot` vẫn công bố `RUNNING`.
+  Người vận hành đọc một dòng nói mọi thứ đang chạy trong khi output đã bị rút
+  về mức mặc định.
+
+  Nguyên nhân gốc: trạng thái được suy từ HAI dữ kiện ở mức TASK
+  (`should_force_safe()` và `enabled()`) và bỏ qua hoàn toàn trạng thái từng
+  Program. `enabled()` chỉ nói "task còn được lập lịch", không nói "có gì đang
+  chạy". Nay có luật nặng-nhất-thắng: overrun ⇒ FAULT · bất kỳ Program FAULTED ⇒
+  FAULT · không sở hữu output hoặc task tắt ⇒ STOPPED · có Program nhưng không
+  Program nào chạy ⇒ STOPPED · còn lại ⇒ RUNNING. Task rỗng giữ nguyên hành vi
+  cũ: "chưa nạp Program nào" là câu khác hẳn "đã nạp rồi và tất cả đã dừng".
+
+- **Fixed — vùng chạm của cây POU dưới ngưỡng WCAG 2.2.** PR #311 chuyển reset
+  form của `styles.css` vào `@layer base` (sửa đúng một lỗi tương phản thật:
+  nút primary từng kế thừa chữ tối trên nền accent, chỉ 2,03:1). Hệ quả phụ:
+  `text-xs`/`text-sm` của Tailwind mới thật sự áp lên nút, và các nút trong cây
+  POU tụt xuống dưới 24 px — axe bắt `target-size` + `target-offset`. Nay mọi nút
+  trong cây có `min-h-7` (28 px).
+
+- **Fixed — xung đột `ProgrammingHeader.tsx`** giải bằng ROUTE: chỉ **Tổng quan**
+  mang eyebrow + tiêu đề lớn + phụ đề (nó không có trình soạn thảo tranh chỗ);
+  năm workspace còn lại giữ tiêu đề một dòng của `DEV-PROG-013/014`. Ràng buộc
+  chiều cao chỉ tồn tại ở nơi có editor.
+
+- **Changed — bốn phép chọn trong test bám vào tên POU** nay soi đúng CÂY POU.
+  Từ PR #311, tab Điểm & Ánh xạ (luôn mounted, chỉ ẩn bằng CSS) có `<select>`
+  liệt kê Program, nên mỗi tên POU xuất hiện hai lần trong DOM và `getByText`
+  ném "found multiple elements" cho một trang hoàn toàn đúng.
+
+- **Verification** (2026-08-28, sau hợp nhất): `ctest --test-dir build/fw`
+  **1336/1336 PASS**; `npx vitest --run --environment jsdom src` **182 file /
+  2035 test PASS**; `npx playwright test e2e/programming.spec.ts` **55 PASS /
+  13 skipped / 0 fail**; `go vet` + `go test ./... -count=1` PASS;
+  `npm run lint`, `npx tsc --noEmit`, `npm run build` PASS (chunk `programming`
+  **153,36 KiB** gzip / ngân sách R3 165 KiB); hai verifier hợp đồng PASS.
+
 ### Programming PGM-02 — 18 mục `DEV-PROG-001..018` từ review giao diện (2026-08-28)
 
 - **Fixed — `DEV-PROG-001`: dải tab workbench không còn bị đẩy ra khỏi màn hình.**
@@ -6853,6 +6893,487 @@ Chưa chạy e2e Playwright (cần Playwright browsers) — ghi ở §9 của b�
   `plc_shm`/`web`) đều `ok`. Một trình duyệt thật (`101.99.36.34`) đã nạp bản
   mới và gọi thành công `/api/v1/overview`, `/api/v1/alarms`,
   `/api/v1/programming/{capabilities,point-catalog,runtime}` — tất cả 200.
+
+### Added — chạy local full-stack mô phỏng no-board không cần SSH board (2026-08-28)
+
+- Thêm `run-local.sh`: dựng `mkddc-web` trong WSL Ubuntu-24.04, trỏ runtime path
+  vào `/tmp/mkddc-local` và **nối vào chuỗi mô phỏng sẵn có**
+  `tools/run_noboard_demo.sh` (socat PTY ↔ `fake_mcu` ↔ `mkddc-iobus` ↔
+  `mkddc-core`) để FE dev tại `http://127.0.0.1:5173` có dữ liệu I/O thật.
+- Lý do phải qua WSL: backend Go dùng `unix.*`/`syscall.Kill`/
+  `SysProcAttr.Setpgid` nên **không build được native trên Windows**; `go build`
+  host báo 16 lỗi undefined ở `programming/artifact`, `programming/compiler`,
+  `programming/coreipc`, `programming/store` và `internal/system/probe.go`.
+- Hai điểm nối phải sửa, nếu thiếu thì health báo fault dù chuỗi đang sống:
+  `CORE_SOCK` phải là `/tmp/mkddc-core.sock` (khớp `--sock` của demo), và script
+  phải ghi PID file cho `core`/`iobus` vì `system.ProcessAlive()` đọc PID file
+  chứ không quét tiến trình, trong khi demo chạy bằng `nohup`.
+- Kiểm chứng đo thật trong phiên:
+  - Build WSL: `mkddc-core`, `mkddc-iobus`, `fake_mcu`, `shm_dump_io` đều link OK.
+  - Chuỗi mô phỏng: `iop_status=NORMAL`, `crc_err=0`, `timeout=0`,
+    `/dev/shm/mkddc_io_shm` + `/dev/shm/mkddc_plc_shm` hiện diện.
+  - `GET /api/v1/health` `200` — **toàn bộ 6 check `ok`** (`core`, `iobus`,
+    `io_shm`, `plc_shm`, `mcu_connection`, `web`).
+  - Login `admin` `200` cấp JWT role `admin`.
+  - `points` `200` trả giá trị sống; `programming/point-catalog` `200` với `24`
+    điểm (`GOOD 14` / `BAD 10`, `writable 8`, category `LOCAL`).
+  - `overview`, `system/status`, `alarms`, `activity`, `schedules`,
+    `alarm-settings`, `alarm-history`, `modbus/overview`, `modbus/buses`,
+    `modbus/points`, `programming/projects`, `programming/runtime`,
+    `programming/capabilities`, `programming/audit` đều `200`;
+    `history` `400` (thiếu query bắt buộc), `network/transaction` `503`
+    (không có netcfg socket) — đúng fail-closed.
+  - Write loop đóng đầu-cuối: ghi `DO1=1` qua Core IPC trả
+    `{"result":"accepted","applied_value":1.000000,"active_source":"manual"}`,
+    Web API đọc lại `DO-01=True quality=good`; đã reset `DO1=0`.
+- Ghi chú: backend nghe qua `wslrelay` nên chỉ đến được bằng `[::1]:8081` hoặc
+  qua proxy Vite; `127.0.0.1:8081` bị refuse. Dev đi qua `5173` không ảnh hưởng.
+- Đây là bằng chứng FE/local integration trên chuỗi mô phỏng host, **không thay
+  thế** target/HIL/production hay release gate.
+
+### Changed — runbook chạy local trỏ đúng path, không dẫn người mới vào ngõ cụt (2026-08-28)
+
+- `docs/06_operations/DEVELOPMENT_AND_OPERATIONS.md`: thêm mục **Chạy local
+  full-stack no-board** với sơ đồ chuỗi, lệnh `cmake` dựng đúng
+  `build/release/cpp` (khớp `MKDDC_CPP_BUILD_REL` trong
+  `platform/packaging/repository-paths.sh`), trình tự 4 bước, bảng 5 triệu chứng
+  → nguyên nhân → cách trỏ đúng, và trạng thái đúng khi chạy được.
+- `docs/02_design/GETTING_STARTED_DEV.md`: đổi §2.2 từ "SSH vào board" sang
+  "chạy local trước, board sau"; sửa bảng service từ path đã xoá
+  `services/core`, `services/iobus`, `web/` sang `apps/core`, `apps/iobus`,
+  `apps/web-api`; đánh dấu `ssh -p 2222 kinexus@<ip>` + `http://<ip>:8080` là di
+  sản Orange Pi đã ngưng, thay bằng `ssh SOM-DDC-24-foxlinx`.
+- `run-local.sh`: khi không tìm thấy `mkddc-core`/`mkddc-iobus` thì **xoá PID
+  file cũ** và in cảnh báo, thay vì im lặng bỏ qua. Trước đó PID file cũ còn sót
+  từ lần chạy trước làm `ProcessAlive()` báo `ok` cho tiến trình đã chết — health
+  xanh giả trong khi chuỗi mô phỏng không chạy.
+- Kiểm chứng đo thật: `bash -n run-local.sh` và `bash -n
+  tools/run_noboard_demo.sh` đều OK; chạy tách vòng ghi PID file trong WSL —
+  nhánh có tiến trình ghi đúng `core.pid=1535`, `iobus.pid=1532` (khớp `pgrep`),
+  nhánh thiếu tiến trình phát cảnh báo và xoá PID file. Stack đang chạy vẫn
+  `5173=200`, proxy `/api/v1/health=200` với cả 6 check `ok`.
+
+### Fixed — ba lỗi tranh chấp tài nguyên giữa các checkout trong chuỗi demo no-board (2026-08-28)
+
+Phát hiện khi chạy lại runbook đầu-cuối để kiểm chứng: một checkout khác trên cùng
+máy (`programming-fe-sync-20260825-latest`) cũng chạy demo, và ba chỗ dưới đây làm
+hai checkout giết lẫn nhau với triệu chứng trông y hệt lỗi code.
+
+1. **`run-local.sh` hardcode đường dẫn repo và `ROOT=/tmp/mkddc-local`.** Các
+   worktree có `store.CurrentSchemaVersion` khác nhau (nhánh này `5`, worktree kia
+   `11`/`12`) nhưng dùng chung `CONFIG_DIR` nên binary schema thấp gặp DB do binary
+   schema cao tạo và **chết ngay lúc init**: `schema Programming mới hơn binary:
+   version 6`. Sửa: `REPO` bám `BASH_SOURCE`, `ROOT` gắn hash `cksum` của đường dẫn
+   checkout.
+2. **`cmd_do` hardcode `"id":1`.** Core cache response theo `id` để idempotent
+   (`web_ipc.cpp:608`), nên từ lệnh thứ hai trở đi mọi giá trị khác đều bị
+   `{"result":"rejected","error":"id_conflict"}` — demo trông như core từ chối ghi
+   trong khi thực ra script gửi trùng `id`. Sửa: sinh `id` theo `time.time_ns()`.
+3. **`cmd_stop` dùng `pkill -x mkddc-core` / `pkill -f "PTY.*mkddc-iop"`.** Hai
+   pattern này giết cả tiến trình của checkout khác; checkout kia mất core giữa
+   chừng và Web API của nó báo `core unavailable` không rõ lý do. Sửa: `pkill -f`
+   theo đúng lệnh đầy đủ của chính checkout này; thêm `MKDDC_DEMO_SUFFIX` để tách
+   `/tmp/mkddc-core*.sock` và `/tmp/mkddc-iop-{a,b}*`.
+
+- Kiểm chứng đo thật: `bash -n` cả hai script OK. Chạy chuỗi với
+  `MKDDC_DEMO_SUFFIX=-prog01` → 4 tiến trình lên đúng path có suffix
+  (`mkddc-core-prog01.sock`, `mkddc-iop-{a,b}-prog01`), SHM `age 1 ms`,
+  `iop_status=NORMAL`. `cmd_stop` mới dừng đúng 4 tiến trình của cây này trong khi
+  `mkddc-core` PID 6177 của checkout kia **vẫn sống** (bản cũ sẽ giết luôn). Bốn
+  lệnh `do1`/`do3` liên tiếp đều sinh `id` khác nhau, **không còn `id_conflict`**.
+- Giới hạn còn lại, đã ghi vào runbook: `/dev/shm/mkddc_io_shm`,
+  `/dev/shm/mkddc_plc_shm` và port `8081` do contract quy định nên **không tách
+  được** — mỗi lúc chỉ một checkout chạy được chuỗi mô phỏng. Suffix cũng không bảo
+  vệ được khỏi checkout đang chạy `cmd_stop` bản cũ: quan sát thấy `socat` có suffix
+  vẫn bị bản cũ giết, PTY mất, `iop_status` rơi về `SAFE` và mọi lệnh `do*` trả
+  `{"result":"overridden","active_source":"safety"}` — safe-state đúng, không phải
+  lỗi ghi.
+- Đính chính số đo trong entry trước: lần đọc `DO-01=True good` lúc ~10:59 được đo
+  khi `:8081` đã do instance `/tmp/mkddc-check/mkddc-web` của checkout khác phục vụ,
+  **không phải bằng chứng cho `run-local.sh`**. Số đo quy được cho `run-local.sh`
+  là các phép đo lúc 10:56–10:58: `ROOT` tách đúng, `core.pid=5547`/`iobus.pid=5544`
+  khớp `pgrep`, health 6/6 `ok`, `points` `200`, `point-catalog` 24 điểm
+  (GOOD 14 / BAD 10, writable 8), 7 endpoint `200`.
+
+### Planned — kế hoạch nâng cấp PGM-03 Mapping Workbench (2026-08-24)
+
+- Lập kế hoạch implementation chi tiết tại
+  `docs/superpowers/plans/2026-08-24-pgm03-mapping-workbench.md`: workbench
+  Variable/Point, assigned mapping, inspector, live quality, keyboard và
+  responsive.
+- Phản biện source-backed đã tách DoD thành Phase 1A read-only và Phase 1B
+  mutation gated; Core hiện chỉ hỗ trợ `LOCAL` và `VP input`, default quality là
+  `REQUIRE_GOOD`, còn `MB_RTU`/`VP output`/Owner/Published Signal bị khóa chờ
+  capability/contract/replay/pagination authority.
+- Verification note: các finding được đối chiếu với Core `st_io_map`/process image,
+  Web API replay, OpenAPI point-catalog và E2E mock; kế hoạch đầy đủ vẫn giữ
+  trạng thái `BLOCKED` cho phase normative.
+
+### Added — đồng bộ minh họa và hồ sơ UI/UX từ `origin/main` (2026-08-24)
+
+- Khôi phục 17 SVG minh họa mới cho Programming, Operations, Modbus và
+  Scheduler trong `docs/04_uiux/assets/`, cùng 6 PNG handoff Programming trong
+  `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/`.
+- Đồng bộ các hồ sơ UI/UX và handoff đi kèm để asset mới có liên kết/ngữ cảnh
+  tính năng đúng revision; không ghi đè source FE/Core hay tài liệu local đã sửa.
+- Kiểm tra: đối chiếu `git ls-tree origin/main`, hash blob và parse SVG; xác nhận
+  đủ 30 asset trong hai nhóm thư mục sau khi lấy về.
+
+### Verified — FE-PROG-03 Stage 4 final gate (2026-08-21)
+
+- Full Vitest FE chạy tuần tự, không chia song song: `84` file / `749` test
+  PASS; ba timeout xuất hiện khi chạy đồng thời được cô lập lại và đều PASS
+  độc lập. `npm run lint`, `npm run typecheck`, `npm run build` và các kiểm tra
+  programming contracts đều PASS; build còn cảnh báo chunk lớn khoảng `707 kB`.
+- Playwright Programming chạy `--workers=1`: `16/16 PASS`, axe desktop/mobile
+  `2/2 PASS`. Sau khi sửa bảng impact responsive, mobile không overflow và
+  thao tác Commission không còn bị vùng bảng chặn. Dev server của E2E vẫn ghi
+  `ECONNREFUSED` cho một số shell API ngoài `/api/v1/programming/**` vì spec
+  mock riêng Programming; các bài kiểm thử vẫn đạt và live audit dùng Web API
+  thật không có lỗi HTTP.
+- Live runbook trên PC với local-sim đang giữ socat/fake MCU/IOBus/Core, SHM và
+  Programming socket; Vite `5173` proxy Web API `8081` trả health `200`. Project
+  mẫu `Control application` đạt Check `PASSED`, candidate
+  `71392136-2183-4479-a775-7453b52001cf`, Commission POST đúng `1` lần, GET
+  read-back thành công; Console/request/HTTP lỗi đều `0`; overflow `0` tại
+  `1536×1024`, `1024×768`, `390×844`; modal mobile `390×844`, focus đầu
+  `modal-title`, `aria-describedby` nối safety warning và read-back contract.
+- Chrome DevTools MCP chưa có trong phiên; bằng chứng trình duyệt dùng
+  Playwright Chrome thật. Đây là bằng chứng FE/local integration, chưa thay thế
+  target/HIL/production/release gate.
+
+### Changed — FE-PROG-03 Stage 4 safety evidence completion (2026-08-21)
+
+- Sửa accessibility/responsive của impact evidence: bảng desktop là scroll
+  region có keyboard focus và nhãn rõ; mobile dùng card/dl đầy đủ Evidence,
+  Current, Proposed, Owner, Priority, không còn `min-w` làm tràn toàn trang.
+
+- PGM-03 hiển thị bảng evidence impact responsive với bằng chứng server, giá trị
+  hiện tại nếu có registry override, đề xuất/owner/priority unknown giữ `—`;
+  không tạo dữ liệu runtime giả.
+- Safety modal hiển thị candidate, Active, LKG, target profile/controller; copy
+  rõ HTTP 202 accepted, GET read-back và không POST lần hai khi mất phản hồi.
+- Modal focus ban đầu vào tiêu đề, nối `aria-describedby` với cảnh báo/read-back;
+  kiểm chứng targeted PGM-03 và lint component.
+
+### Verified — FE Programming ba giai đoạn và runbook local (2026-08-21)
+
+- Chốt lại bằng chứng trình duyệt thật theo thứ tự Stage 1 → Stage 2 → Stage 3
+  sau khi sửa Explorer: Design, Mapping Workbench và Runtime/Watch đều có ảnh
+  desktop/mobile mới trong `MK_DDC24_PROGRAMMING_FE_HANDOFF/runtime/staged-uat/`.
+  Cả ba audit tuần tự đều ghi `overflowX=0`, Console error `0`, request thất bại
+  `0` và HTTP lỗi `0`; Stage 2 read-back `GOOD` cho `SupplyVoltage ↔ LOCAL:UI-01`.
+- Chạy lại project mẫu `Control application` trên local-sim theo runbook: Core,
+  Iobus, fake MCU, SHM và Programming socket đều đang chạy; Web API PID `558`,
+  health qua Vite proxy `5173` trả `200` với mọi check `ok`. Runtime đọc Active/LKG
+  `bf744b3c-db7d-412e-81fc-8a11935df18b`, task `RUNNING · 1000 ms`, Watch có dữ
+  liệu `GOOD · LIVE` và giá trị I/O thực tế.
+- Gate cuối: Vitest `84/84` file, `745/745` test; lint, typecheck và production
+  build PASS; Programming Playwright `16/16` PASS, axe desktop/mobile `2/2` PASS.
+  Chrome DevTools MCP chưa được cấu hình trong phiên (`codex mcp get
+  chrome-devtools` không tìm thấy server), nên đây là residual của công cụ,
+  không phải lỗi UI; bằng chứng browser dùng Playwright Chrome thật.
+
+### Changed — FE-PROG-03 Stage 4: Check → Impact → Re-auth → Commission (2026-08-21)
+
+- Chuyển PGM-03 thành bàn quyết định trực quan: dải Candidate → Active Revision,
+  chuỗi bốn bước, bố cục readiness/changes/impact và cổng quyết định sticky đọc
+  riêng Check, impact máy chủ, override và Core/safe-state.
+- Override thủ công có bảng desktop và card mobile, không ép tràn ngang; modal
+  xác nhận thành full-screen trên mobile, có Candidate/Active, cảnh báo tác động,
+  acknowledge từng impact, re-auth và nút xác nhận mang ID Revision. Giữ nguyên
+  Check, API, idempotency, polling một POST và Core read-back fail-closed.
+- Bổ sung kiểm thử Check FAILED, ROLLED_BACK/read-back, recovery hết budget và
+  recovery sau reload chỉ GET. Kiểm chứng cuối và browser evidence được ghi sau
+  khi chạy project mẫu theo runbook trong cùng phiên.
+
+### Changed — FE-PROG-03 Runtime evidence và Watch responsive (2026-08-21)
+
+- Bổ sung dải bằng chứng Runtime cho Active/LKG, `Control_Main`, Core/safe-state
+  và tuổi snapshot từ `observedAt`; task và revision chỉ hiện như live khi Core
+  `READY`, còn lại giữ nhãn nguồn và `—`.
+- Watch desktop giữ mapping Program/variable/point, Program/Actual, owner,
+  priority, TTL, quality/freshness; mobile dùng card đọc đủ dữ liệu, không ép
+  bảng tràn ngang. Trace, RBAC và API giữ nguyên.
+- Runtime bỏ evidence Active/LKG lặp và chuyển thành chuỗi bằng chứng
+  Core → Active → LKG có mốc đọc; task dùng lưới metric responsive. Watch thêm
+  dải Active/task/safe-state và timestamp tại từng binding để người vận hành
+  biết rõ dữ liệu thuộc snapshot nào.
+- Giảm nhiễu thị giác trong Runtime/Watch: panel không còn bị kéo thành vùng
+  trắng lớn, mỗi row hiện Program ID/hướng/kiểu và analog được định dạng tối đa
+  ba chữ số thập phân; dữ liệu nguồn không bị thay đổi.
+- Kiểm chứng: Vitest Runtime targeted `18/18` PASS; lint FE PASS. Playwright
+  Chrome thật tại `1536×1024`, `1024×768`, `390×844` cho Runtime và Watch:
+  overflow ngang `0`, Console error `0`, request failure `0`, HTTP `4xx/5xx`
+  `0`. Project mẫu được Check lại `PASSED`, Commission thành công với Active/LKG
+  `bf744b3c-db7d-412e-81fc-8a11935df18b`; Watch đọc thật `4/4 GOOD · LIVE`.
+  Ảnh và audit JSON nằm ngoài Git tại
+  `MK_DDC24_PROGRAMMING_FE_HANDOFF/runtime/staged-uat/`.
+
+### Changed — FE-PROG-01 Giai đoạn 2: Mapping Workbench (2026-08-21)
+
+- Tab `Điểm & Ánh xạ` có workbench tìm kiếm/lọc trạng thái, danh sách biến
+  khai báo chưa map, ma trận/card binding và inspector read-back cho hàng chọn.
+  Inspector dùng identity canonical, type/direction/unit/writable/quality/
+  observedAt từ catalog thật; dữ liệu thiếu vẫn là `—`/UNKNOWN, không tạo value
+  hoặc quality giả.
+- Giữ nguyên endpoint, DTO, parser và operation Draft. Picker vẫn fail-closed
+  theo type/direction; viewer chỉ đọc, admin mới có CTA mutation. Desktop dùng
+  ba vùng có inspector, mobile vẫn dùng card không ép bảng tràn ngang.
+- Kiểm chứng: Vitest mục tiêu `MappingTab.test.tsx` `9/9` PASS và
+  `npm run lint` PASS. Playwright Chrome thật tại `1536×1024`, `1024×768`,
+  `390×844`: overflow ngang `0`, Console error `0`, request failure `0`, HTTP
+  `4xx/5xx` `0`; inspector đọc binding thật `SupplyVoltage ↔ LOCAL:UI-01` với
+  quality `GOOD` và `observedAt` từ catalog.
+
+### Changed — FE-PROG-01 Giai đoạn 1: Design hierarchy + selection orientation (2026-08-21)
+
+- Explorer của Design hiển thị cây thật `Application → nhóm chức năng → Program`,
+  lấy nhóm từ tag trong Draft; Program không có tag được đưa vào `Chưa phân nhóm`,
+  không tạo dữ liệu giả. Mỗi Program chỉ có một leaf theo primary tag đầu tiên;
+  tag phụ hiển thị metadata, nhóm rỗng không render. Node có `aria-level`,
+  `aria-expanded`, số lượng và collapse/expand; luồng chọn, drawer mobile và
+  focus editor được giữ nguyên.
+- Editor thêm dải định hướng `Project / nhóm / Program`, kèm `kind · language`;
+  nhãn `LIVE` chỉ xuất hiện khi runtime và Active Revision đã được xác minh.
+  Không thay đổi API, parser, mutation hoặc runtime authority.
+- Kiểm chứng: Vitest toàn bộ FE `84` file / `744` test PASS; test Design riêng
+  `26/26 PASS`; `npm run lint` PASS. Playwright Chrome thật tại `1536×1024`
+  và `390×844`: overflow ngang `0`, Console error `0`, request failure `0`,
+  HTTP `4xx/5xx` `0`; cây có đúng một leaf Program, primary group `AHU`,
+  metadata `+2 tag` và breadcrumb khớp selection. Typecheck/build được chạy ở
+  gate tổng hợp của cùng phiên.
+- Cấu trúc ARIA của Explorer giữ input chỉnh tag ở ngoài `tree`, đặt `group`
+  làm con trực tiếp của `treeitem` và bỏ `li` không có list parent; axe không
+  còn nhận semantic tree sai khi duyệt desktop/mobile.
+
+### Verified — FE-PROG-02: mẫu ST, ánh xạ I/O và nghiệm thu tích hợp (2026-08-20)
+
+- Chạy được Project mẫu `Control application` với ST `AHU Supply Fan Sample`,
+  task `1000 ms`, bốn ánh xạ local I/O; Check `PASSED`, revision active/LKG
+  `6b7afc67-a161-460a-8e2d-27527411940f`, runtime `READY/RUNNING`, monitor
+  `4/4 GOOD/LIVE`, point catalog `24/24 GOOD`.
+- Sửa Core ở chế độ `PROGRAM_ONLY`: trạng thái graph cũ không còn kích hoạt
+  `graph_input_bad`, `no_controller` dựa trên producer thật, instance ST
+  `FAULTED` được phản ánh thành task `FAULT` và output ST được làm mới qua từng
+  chu kỳ. Build authority bật Modbus/BACnet/HMI hoàn tất `682/682` bước; CTest
+  `1035/1035 PASS`, `6 SKIPPED` tại `build/fw-authority` vì cache `build/fw`
+  hiện trộn generator Ninja/Unix Makefiles và được giữ nguyên để tránh xoá dữ
+  liệu ngoài phạm vi.
+- Dùng chung capability/runtime resource từ `ProgrammingLayout`; polling tài
+  nguyên và operation chạy tuần tự, không chồng request, giữ mốc đọc thành công
+  cuối và chỉ recovery bằng GET. Request monitor chậm gần nhịp `1 Hz` không còn
+  làm mất generation hoặc kẹt vô hạn ở `Đang tải…`. PGM-03 không có
+  `revisionId/checkId` hiển thị `Chưa chạy`, chỉ chuyển `Đang kiểm tra` khi
+  workflow Check thực sự bắt đầu.
+- Hoàn thiện PGM-03, Mapping compatibility, Mapping dạng card trên mobile và
+  breakpoint/focus responsive; RETAIN giữ `CONTRACT_UNAVAILABLE`, nút reset bị
+  khóa và FE không POST khi chưa có authority cấp `confirmationToken` một-lần.
+- Kiểm chứng cuối: full Vitest `84` file / `743` test PASS; lint, TypeScript,
+  build + contract checks PASS; integration catalog `7/7 PASS`; Playwright
+  Programming `16/16 PASS`.
+- Live Playwright Chrome tại `1536`, `1280`, `1024`, `768` và `390 px` đi qua
+  Overview, Programs, Mapping, Commission, Runtime và Watch: overflow `0`,
+  Console error `0`, request failure `0`, HTTP `4xx/5xx` `0`; drawer và card
+  Mapping mobile mở/đóng, trả focus đúng. Ảnh/log nằm ngoài repository tại
+  `MK_DDC24_PROGRAMMING_FE_HANDOFF/runtime/live-current/`.
+- Probe read-only 9 mẫu xác nhận cả hai nhánh ST: `SupplyCurrent > 4 mA` cho
+  `FanCommand=1` và `AO=SupplyVoltage`; `SupplyCurrent <= 4 mA` cho
+  `FanCommand=0` và `AO=0`. Operations có `3` bản ghi, override `0`; số đo cuối
+  có I/O timeout `0`, sequence error `2`, scan overrun `2` và không được dùng
+  để suy ra target/HIL/production.
+- Giới hạn cần giữ nguyên: Chrome DevTools MCP chưa có; target/HIL chưa chạy.
+- Runbook simulator local bỏ endpoint không tồn tại
+  `/programming/projects/{projectId}/runtime`; runtime authority dùng
+  `/programming/runtime` và `/programming/runtime/monitor`.
+
+### Changed — FE-PROG-01: visual workstation, context truth và route fail-closed (2026-08-19)
+
+- Kiểm chứng lại trên cây làm việc hiện tại ngày 2026-08-20; không dùng lại số
+  đo cũ của phiên trước.
+- Cập nhật riêng Web FE Programming: context bar tách Editing/Check/Active
+  Revision/Core, hiển thị `STALE` cùng tuổi snapshot và mốc đọc thành công cuối;
+  `READY`, `DEGRADED`, `UNAVAILABLE`, `UNKNOWN` không còn bị quy về một trạng
+  thái `RUNNING` chung.
+- Thêm route guard cho Project: ID hợp lệ mới dựng workspace; ID lạ giữ nguyên
+  URL, không fallback sang Project đầu và không mount bề mặt mutation; lỗi đọc
+  danh sách Project khóa thay đổi và chỉ cho retry GET.
+- Bổ sung context drawer responsive cho mobile/tablet (đo offset dưới TopBar và
+  reconnect banner, trap focus, Escape, trả focus); Runtime chỉ gắn `FAULT`/
+  `RUNNING` live khi producer đang `READY`, snapshot/degraded/unknown mang nhãn
+  nguồn tương ứng.
+- Hoàn thiện visual slice FE Programming theo hướng workstation công nghiệp:
+  shell/context hierarchy, Overview/Check/Commission/Runtime có accent rail và
+  surface phẳng, Design có tri-pane Explorer–editor–Inspector trên desktop,
+  drawer/sheet progressive disclosure trên mobile/tablet và Problems tray có
+  boundary, focus trap, Escape, backdrop/return-focus.
+- Chốt hierarchy theo mockup ở viewport nghiệm thu `1536×1024`: rút gọn editor
+  desktop, bỏ dải ký hiệu trùng với Inspector trên màn rộng và đưa toàn bộ
+  Problems panel vào viewport đầu (`scrollHeight = innerHeight = 1024`). Dưới
+  `1280 px`, Problems chuyển thành sheet; mobile hiển thị trạng thái Check ngay
+  cạnh hành động Kiểm tra để không phải cuộn hết editor mới biết kết quả.
+- Đồng bộ breakpoint workspace Programs: Explorer chuyển thành cột từ `1024 px`,
+  Inspector và tri-pane chuyển thành bố cục desktop từ `1280 px`; dưới từng
+  ngưỡng tương ứng dùng drawer. Tự chọn Program đầu tiên khi Project đã có dữ
+  liệu, đưa focus về editor sau khi chọn và trả focus đúng về trigger khi đóng/
+  resize. Mapping desktop giữ bảng dày thông tin, mobile chuyển sang card nhưng
+  vẫn đủ Point, hướng, kiểu, đơn vị, quyền ghi, quality, compatibility và
+  read-back thay vì chỉ khóa nút không giải thích.
+- Bổ sung PGM-03 `Kiểm tra & Đưa vào vận hành` cùng chuỗi hiển thị rõ
+  `Draft đã lưu → Niêm phong & Kiểm tra → Xem chẩn đoán → Đưa vào vận hành`, kể
+  cả khi chưa có Check; không thay đổi contract hay hành vi Commission hiện có.
+- Phân biệt rõ `Problems` chưa có kết quả Check với Check đã chạy nhưng không có
+  lỗi: trạng thái trung tính hiển thị nguồn dữ liệu và CTA mở PGM-03, không tự
+  dựng số `0` hoặc câu “Không có lỗi” khi canonical Check chưa tồn tại.
+- Riêng visual lane FE không thay đổi Web BE, Core IPC, firmware, logic đọc/ghi
+  dữ liệu, historian/biểu đồ hoặc ST/FBD/compiler/Core runtime; các bằng chứng Core
+  tích hợp ở entry trên được giữ nguyên như diff có sẵn, không trộn vào thiết kế
+  UI. Bảo toàn các diff mô phỏng/catalog Programming đã có sẵn của user tại
+  (`scripts/generate_programming_errors.py` và
+  `tests/integration/test_programming_error_catalog.py`).
+- Kiểm chứng cuối: Vitest `84` file / `743` test PASS; lint, TypeScript và build PASS;
+  build và contract checks PASS (`20` public / `104` detail, API `25` operation,
+  FBD self-test `10/10`); integration catalog `7/7` PASS; Playwright Programming
+  `16/16` PASS, gồm producer lạ/snapshot stale, drawer/focus và
+  reconnect/no-overflow. Build còn cảnh báo chunk khoảng `706.53 kB`.
+- Browser live bằng Playwright Chrome thật trên `1536/1280/1024/768/390 px` đã
+  đi qua Overview → Design với project local `Control application`: `5/5`
+  viewport không overflow, Console error `0`, request failure `0`, HTTP
+  `4xx/5xx` `0`; Explorer trả focus đúng ở `1280/1024/768/390`, Problems sheet
+  trả focus đúng ở `390`. Web API local được khởi động với override
+  `PROGRAMMING_REV_A=1`, không sửa launcher/runbook và không đổi source backend.
+- Smoke bổ sung trực tiếp route PGM-03 của Project mẫu trên desktop `1536×1024`
+  và mobile `390×844`: workflow hiện đúng, overflow `0`, Console error `0`,
+  request failure `0`, HTTP `4xx/5xx` `0`; ảnh lưu ngoài repository tại
+  `MK_DDC24_PROGRAMMING_FE_HANDOFF/runtime/live-final/`.
+- Chrome DevTools MCP chưa được đăng ký trong phiên; bằng chứng trình duyệt
+  dùng Playwright Chrome thật, không tuyên bố đã có MCP evidence.
+- Kiểm chứng bổ sung sau thay đổi Problems/responsive: Vitest targeted `5` file /
+  `39` test PASS; `git diff --check` PASS. Chạy Windows cần Python shim ngoài
+  repository cùng `PYTHONUTF8=1`; shim không thuộc source sản phẩm.
+- Lần chốt hierarchy chạy lại Playwright Programming `16/16 PASS`, gồm axe WCAG
+  A/AA trên desktop/mobile. Live Chrome tại `1536×1024`, `1024×768` và
+  `390×844` có overflow ngang `0`, Console error `0`, request failure `0`, HTTP
+  `4xx/5xx` `0`; Problems/Inspector/Explorer sheet đều trả focus đúng. Ảnh mới
+  nằm ngoài Git tại `MK_DDC24_PROGRAMMING_FE_HANDOFF/runtime/live-final-current/`.
+
+### Added — Chạy simulator và Web/FE local trên PC (2026-08-19)
+
+- Tách simulator đầu vào/đầu ra khỏi mọi Git worktree tại
+  `E:\TuanDuong\INTERN\MK_DDC_24\MK-DDC-24-local-sim`; giữ bản sao nguồn
+  `fake_mcu`/IOP protocol và graph upstream kèm SHA-256, không đóng gói hoặc
+  đẩy bất kỳ simulator artifact nào lên GitHub.
+- Chạy chuỗi `socat → fake_mcu → mkddc-iobus → mkddc-core → mkddc-web` bằng
+  WSL2 trên chính PC, FE Vite native Windows tại `http://127.0.0.1:5173` và
+  proxy `/api` tới Web API local; Web API dùng dữ liệu, log, JWT secret và
+  state ngoài repository.
+- Điều chỉnh riêng `iobus_runtime.conf` local-only `response_timeout_ms=50`
+  (từ `3`, qua một vòng `15`) để chịu được độ trễ PTY/socat WSL khi PC có tải;
+  frame trễ trước đó bị drop đúng semantics nhưng làm tăng `seq_err`, không phải
+  MCU phát sai sequence. Đây là cấu hình mô phỏng, không thay production.
+- Cô lập đầy đủ socket/PTY trong `local-sim.sh test-lifecycle`; harness hiện
+  `bash -n` và lifecycle fixture PASS, đồng thời vẫn từ chối xóa asset foreign.
+- Bổ sung hướng dẫn vận hành local-only (start/stop, biến môi trường FE, health,
+  tài khoản demo, fallback WSL IP) trong `MK-DDC-24-local-sim/README.vi.md`;
+  file và toàn bộ dữ liệu runtime vẫn nằm ngoài Git worktree.
+- Bổ sung runbook Programming local gồm socket/state/compiler, cờ
+  `PROGRAMMING_REV_A=1`, endpoint read-back và cảnh báo snapshot cũ; Project mẫu
+  `Control application` chạy ST `AHU Supply Fan Sample` chu kỳ `1000 ms`, ánh xạ
+  `SupplyVoltage→UI-01`, `SupplyCurrent→UI-05`, `FanCommand→DO-01` và
+  `FanSpeedVoltage→AO-01`.
+- Read-back ngày 2026-08-20 xác nhận revision active/LKG
+  `6b7afc67-a161-460a-8e2d-27527411940f`, Check `PASSED`, producer `READY`, task
+  `RUNNING`, bốn monitor item `GOOD/LIVE` và point catalog `24/24 GOOD`. Bộ đếm
+  simulator đã tích lũy `27` I/O timeout, `132` sequence error và `3` scan
+  overrun nhưng không tăng trong mẫu 15 giây; đây là giới hạn local WSL, không
+  phải bằng chứng target/HIL hoặc hiệu năng production.
+- Script build/contract FE dùng `python` tương thích Windows; generator lỗi và
+  verifier FBD ép UTF-8 để output tiếng Việt không phụ thuộc code page terminal.
+- Sửa generator manifest Programming dùng đường dẫn POSIX ổn định trên Windows;
+  bổ sung regression test và đồng bộ kỳ vọng catalog hiện hành `20` public /
+  `104` detail. `python3 ... --check` Windows/WSL, 7 integration test và
+  `npm run build` FE đều PASS sau sửa.
+- Kiểm chứng: build firmware host PASS (107/107 target), health Web/API và
+  Vite proxy HTTP 200 với core/iobus/MCU/SHM `ok`; `shm_dump_io` 20 giây sau
+  restart sạch đạt `NORMAL`, `crc=0`, `timeout=0`, `seq_err=0`, `age=0–1 ms`;
+  AO-01
+  `0 V → 5 V → release → 0 V` đọc lại đúng qua API và SHM; Playwright live
+  desktop 1440×900 và mobile 390×844 đăng nhập admin, dashboard hết loading,
+  không Console/page/network error.
+- Soak bổ sung 60 giây dưới tải CPU WSL và lúc thử build FE: 13 snapshot,
+  `rx 75,638→106,504`, `crc/timeout/seq_err` không tăng (đều `0`), IOP luôn
+  `NORMAL`, age `0–2 ms`, AO cuối `0,0,0,0`; không còn process tải nền sau test.
+- Giới hạn môi trường: WSL2 có cảnh báo `SCHED_FIFO` degraded và chưa có
+  `io_safe_state.conf` nguồn nên core dùng default safe; Chrome DevTools MCP
+  chưa đăng ký, bằng chứng trình duyệt dùng Playwright. Ngoài các thay đổi
+  tracked của phiên này, worktree giữ `.codegraph/` untracked có sẵn; không
+  commit/push.
+
+### Added — Kế hoạch cải thiện FE Programming theo hướng FE-first (2026-08-18)
+
+- Soạn `E:\TuanDuong\INTERN\MK_DDC_24\MK_DDC24_PROGRAMMING_FE_HANDOFF\01-plan\MK_DDC24_PROGRAMMING_FE_ONLY_IMPROVEMENT_PLAN.md`
+  từ kế hoạch và mockup do user cung cấp; ghi rõ đây là external handoff
+  `DRAFT / PLAN_ONLY`, không phải baseline hoặc bằng chứng runtime.
+- Kế hoạch giữ bốn workspace hiện hành, ánh xạ từng vùng UI vào contract FE đã
+  có, khóa các nội dung thiếu authority như Check POU, per-program runtime,
+  task/core mapping và full Control Library catalog; protected tree cấm đổi
+  logic dữ liệu/historian/ST/runtime/Core, chỉ để ngoại lệ contract RETAIN có
+  điều kiện và file-level allowlist.
+- Kiểm chứng trong phiên gồm rà soát source/CodeGraph, integrity SHA-256 của hai
+  input và `PYTHONUTF8=1 python scripts/docs_iso_harness.py --expect` (`PASS`,
+  khớp toàn bộ ngưỡng); không sửa code, không chạy build/test FE hoặc browser và
+  không tuyên bố `PLAN_READY`, `IMPLEMENT_READY` hoặc `RELEASE_READY`.
+
+### Changed — Cập nhật kế hoạch FE Programming sau review độc lập (2026-08-18)
+
+- Nâng kế hoạch external handoff lên revision `1.1`; tiếp thu các finding hợp lý
+  nhưng giữ trạng thái `DRAFT / PLAN_ONLY`, không biến review thành chữ ký hoặc
+  bằng chứng implementation.
+- Chuẩn hóa operation state theo OpenAPI hiện hành (`QUEUED` tới
+  `ROLLED_BACK`/`UNKNOWN_RECONCILING`), bổ sung bounded polling, cleanup,
+  single-flight, stale/age, fail-closed producer state và invalid-project guard.
+- Làm rõ `Engineer` là persona của role `admin`, thêm RACI/change control,
+  visual gate desktop/mobile/modal/drawer, mapping destructive confirm,
+  capabilities-driven execution và Playwright target runnable.
+- Kiểm chứng tài liệu sau cập nhật bằng source/read-only cross-check, kiểm tra
+  cấu trúc Markdown, `git diff --check` và docs ISO harness; không sửa FE/BE,
+  OpenAPI, firmware, config hoặc runtime và chưa chạy browser evidence.
+
+### Changed — Hoàn thiện revision 1.2 và tổ chức handoff ngoài repository (2026-08-18)
+
+- Gom input, kế hoạch, review, asset, manifest và decision log vào
+  `E:\TuanDuong\INTERN\MK_DDC_24\MK_DDC24_PROGRAMMING_FE_HANDOFF`; giữ toàn bộ
+  kế hoạch/asset ngoài Git để cây repository không bị rác nhưng vẫn có README,
+  revision và SHA-256 truy xuất được.
+- Bổ sung đặc tả responsive mobile/tablet, safety modal, failure-state và luồng
+  recovery; manifest hiện kiểm đủ `12` SVG cùng `1` PNG (`13/13` hash/byte khớp),
+  và README ghim hash của input/plan/review/manifest/decision log (`5/5`).
+- Chốt operation state canonical, poll `1.500 ms`, budget bounded, cleanup,
+  single-flight, GET-only reload recovery và protected behavior cho đọc/ghi dữ
+  liệu, historian/biểu đồ, ST/FBD/compiler/runtime, MCU/Core và Core IPC.
+- Khóa RETAIN ở `CONTRACT_UNAVAILABLE` khi chưa có authority cấp
+  `confirmationToken` một-lần/5 phút; không render token giả, tự sinh token, bỏ
+  field OpenAPI hoặc POST reset. `CONTRACT-RETAIN-01` chỉ được mở sau dependency
+  security riêng `SEC-RETAIN-TOKEN-01`.
+- Kiểm chứng cuối: XML/width/height/viewBox `12/12`, link/fence/hash handoff `0`
+  lỗi, `python scripts/docs_iso_harness.py --expect` PASS và khớp toàn bộ ngưỡng,
+  `git diff --check` PASS. Không sửa code FE/BE/Core; không chạy build/runtime
+  hoặc browser vì chỉ đổi kế hoạch/asset, và MCP `chrome-devtools` chưa có trong
+  phiên này.
+
+### Changed — Xác nhận quyền fullstack Web và duy trì Programming BE (2026-08-18)
+
+- Ghi nhận `DEC-009`: Tuấn Dương có toàn quyền sửa Web FE và Web BE Programming;
+  firmware, Core, Core IPC và behavior đọc/ghi/historian/chart/ST/runtime vẫn là
+  vùng bảo vệ tuyệt đối.
+- Mở work package `BE-PROG-MAINT-01` cho thay đổi BE tối thiểu có kiểm soát:
+  characterization trước/sau, compatibility/error/RBAC/ordering regression,
+  `go vet`, `go test -count=1` và rollback note; không đổi semantics đang chạy.
+- Chuyển `FE-BLOCK-02` thành `WAIVED FOR IMPLEMENTATION BY USER AUTHORITY`;
+  `PLAN_READY` consumer gate vẫn được giữ riêng cho review/release. Chỉ còn
+  `FE-BLOCK-03` chặn riêng RETAIN vì thiếu token authority one-time/5 phút.
+- Nâng kế hoạch lên revision `1.3`; không sửa source code FE/BE/Core trong phiên,
+  không mở nút RETAIN và không tuyên bố `RELEASE_READY`.
 
 ### Fixed — Historian vẫn DEGRADED sau bản vá `writerActive` trước đó: authority v2 lệch revision vĩnh viễn trên board single-node (2026-08-17)
 

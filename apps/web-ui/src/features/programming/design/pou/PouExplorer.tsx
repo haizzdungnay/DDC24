@@ -175,7 +175,7 @@ export function PouExplorer({
                 chứng mà không đổi hành vi. */}
             <button
               type="button"
-              className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+              className="grid h-7 w-7 place-items-center rounded text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
               title={pick('Thêm chương trình FBD', 'Add FBD program')}
               onClick={() => create('PROGRAM', 'FBD')}
             >
@@ -184,7 +184,7 @@ export function PouExplorer({
             </button>
             <button
               type="button"
-              className="rounded p-1 text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+              className="grid h-7 min-w-7 place-items-center rounded text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
               title={pick('Thêm chương trình ST', 'Add ST program')}
               onClick={() => create('PROGRAM', 'ST')}
             >
@@ -192,7 +192,7 @@ export function PouExplorer({
             </button>
             <button
               type="button"
-              className="rounded p-1 text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+              className="grid h-7 min-w-7 place-items-center rounded text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
               title={pick('Thêm FUNCTION', 'Add FUNCTION')}
               onClick={() => create('FUNCTION', 'ST')}
             >
@@ -200,7 +200,7 @@ export function PouExplorer({
             </button>
             <button
               type="button"
-              className="rounded p-1 text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+              className="grid h-7 min-w-7 place-items-center rounded text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
               title={pick('Thêm FUNCTION_BLOCK', 'Add FUNCTION_BLOCK')}
               onClick={() => create('FUNCTION_BLOCK', 'ST')}
             >
@@ -233,7 +233,12 @@ export function PouExplorer({
                   type="button"
                   aria-expanded={!collapsed}
                   aria-controls={groupId}
-                  className="flex w-full items-center gap-1.5 rounded px-0.5 py-0.5 text-left text-xs font-semibold uppercase text-[var(--c-text-dim)] hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                  /* `min-h-7` (28 px) là NGƯỠNG CẢM ỨNG, không phải trang trí:
+                     WCAG 2.2 `target-size` đòi tối thiểu 24 px, và axe bắt đúng
+                     nút này khi reset form của `styles.css` chuyển vào
+                     `@layer base` — lúc đó `text-xs` của Tailwind mới thật sự
+                     áp lên nút và chiều cao tụt xuống dưới ngưỡng. */
+                  className="flex min-h-7 w-full items-center gap-1.5 rounded px-0.5 text-left text-xs font-semibold uppercase text-[var(--c-text-dim)] hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
                   onClick={() => setCollapsedGroups((current) => (
                     current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]
                   ))}
@@ -303,7 +308,7 @@ export function PouExplorer({
                                vẫn CHỨA tên đang hiện (WCAG 2.5.3). */
                             aria-label={pick(`Mở ${item.name}`, `Open ${item.name}`)}
                             aria-current={item.objectId === selectedObjectId ? 'true' : undefined}
-                            className={`flex min-w-0 flex-1 items-center gap-1 truncate px-1 py-1 text-left text-sm ${
+                            className={`flex min-h-7 min-w-0 flex-1 items-center gap-1 truncate px-1 text-left text-sm ${
                               item.objectId === selectedObjectId ? 'text-[var(--c-accent)]' : ''
                             }`}
                           >
@@ -321,7 +326,7 @@ export function PouExplorer({
                             <>
                               <button
                                 type="button"
-                                className="shrink-0 rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+                                className="grid h-7 w-7 shrink-0 place-items-center rounded text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
                                 title={pick(`Đổi tên ${item.name}`, `Rename ${item.name}`)}
                                 onClick={() => {
                                   setRenamingObjectId(item.objectId)
@@ -332,7 +337,7 @@ export function PouExplorer({
                               </button>
                               <button
                                 type="button"
-                                className="shrink-0 rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+                                className="grid h-7 w-7 shrink-0 place-items-center rounded text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
                                 title={pick(`Nhân bản ${item.name}`, `Duplicate ${item.name}`)}
                                 onClick={() => duplicate(item)}
                               >
@@ -340,7 +345,7 @@ export function PouExplorer({
                               </button>
                               <button
                                 type="button"
-                                className="shrink-0 rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-fault-fg)]"
+                                className="grid h-7 w-7 shrink-0 place-items-center rounded text-[var(--c-text-dim)] hover:text-[var(--c-fault-fg)]"
                                 title={pick(`Xóa ${item.name}`, `Delete ${item.name}`)}
                                 onClick={() => setPendingDeleteObjectId(item.objectId)}
                               >
