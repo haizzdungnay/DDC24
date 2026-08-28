@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { JSX } from 'react'
 import { CalendarClock, Database, Settings2 } from 'lucide-react'
 import { Button } from './Button'
+import { roleCan } from '../auth/capabilities'
 import {
   PointLoggingDialog,
   pointLoggingErrorsFromApiError,
@@ -66,9 +67,15 @@ export function PointLoggingControl({ point, policy, role, serverNowUtc, loading
       )}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--c-border)] pt-3">
-        {role === 'admin' ? (
+        {/* `WEB-RBAC-001` — hỏi NĂNG LỰC, không so vai.
+            `PUT /api/v1/trends/config` đòi `settings.manage`, mà `engineer`
+            CÓ quyền đó. So bằng `role === 'admin'` làm màn hình ghi "Read-only
+            for engineer" trên một điều khiển mà máy chủ sẽ chấp nhận — người
+            dùng bị chặn ở chỗ hệ thống không hề chặn, và họ không có cách nào
+            biết đó là lỗi giao diện chứ không phải chính sách. */}
+        {roleCan(role, 'settings.manage') ? (
           <>
-            <span className="text-xs text-[var(--c-text-dim)]">Admin policy control</span>
+            <span className="text-xs text-[var(--c-text-dim)]">Logging policy control</span>
             <Button
               size="sm"
               icon={<Settings2 className="h-4 w-4" aria-hidden="true" />}

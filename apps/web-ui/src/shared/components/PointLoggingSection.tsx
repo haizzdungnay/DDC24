@@ -1,6 +1,7 @@
 import { useAuth } from '../../features/auth'
 import { historianPolicyFor, useHistorianConfig } from '../hooks/useHistorianConfig'
 import { PointLoggingControl, type PointLoggingControlProps } from './PointLoggingControl'
+import { roleCan } from '../auth/capabilities'
 
 export interface PointLoggingSectionProps {
   pointId: string
@@ -45,7 +46,9 @@ export function PointLoggingSection({ pointId, label, kind }: PointLoggingSectio
         role={session?.role ?? 'viewer'}
         serverNowUtc={historian.data.serverNowUtc}
         loading={historian.loading}
-        onChange={session?.role === 'admin' ? async (patch) => {
+        /* `WEB-RBAC-001` — cùng lý do như `PointLoggingControl`: máy chủ đòi
+           `settings.manage` chứ không đòi vai `admin`. */
+        onChange={roleCan(session?.role, 'settings.manage') ? async (patch) => {
           await historian.savePoint(patch)
           await historian.refetch()
         } : undefined}

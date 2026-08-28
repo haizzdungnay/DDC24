@@ -30,17 +30,23 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // runtime read-only (T59-504) + 1 recovery-reset (T59-702)
     // + 7 operation Simulation R3 (T59-814).
     expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(40);
-    // T59-814 / ADR-053 — RBAC của Simulation nằm ở CHÍNH contract sinh ra:
-    // mọi mutation admin-only, mọi đường đọc mở cho viewer/operator. Nếu ai đó
-    // nới quyền ở OpenAPI thì test này đỏ trước khi FE kịp hiện thêm nút.
+    /* `T59-814`/`ADR-053` — RBAC của Simulation nằm ở CHÍNH contract sinh ra:
+       mọi mutation **admin-only**, mọi đường đọc mở cho viewer/operator. Nếu ai
+       đó nới quyền ở OpenAPI thì test này đỏ trước khi FE kịp hiện thêm nút.
+
+       `T59-816` sửa một chỗ chính bộ test này đã mâu thuẫn với chính nó: chú
+       thích viết "mọi mutation admin-only" trong khi khẳng định lại chờ
+       `["engineer","admin"]`. Bản khẳng định sai, không phải chú thích —
+       `simulation.run` là quyền riêng của admin vì một phiên mô phỏng sinh ra
+       tiến trình worker có hạn ngạch RAM/CPU trên chính tủ điều khiển. */
     expect(PROGRAMMING_ENDPOINTS.createProgrammingSimulationSession).toEqual({
       method: "POST",
       path: "/api/v1/programming/simulation/sessions",
-      roles: ["engineer", "admin"],
+      roles: ["admin"],
     });
-    expect(PROGRAMMING_ENDPOINTS.actProgrammingSimulationSession.roles).toEqual(["engineer", "admin"]);
-    expect(PROGRAMMING_ENDPOINTS.setProgrammingSimulationInput.roles).toEqual(["engineer", "admin"]);
-    expect(PROGRAMMING_ENDPOINTS.stopProgrammingSimulationSession.roles).toEqual(["engineer", "admin"]);
+    expect(PROGRAMMING_ENDPOINTS.actProgrammingSimulationSession.roles).toEqual(["admin"]);
+    expect(PROGRAMMING_ENDPOINTS.setProgrammingSimulationInput.roles).toEqual(["admin"]);
+    expect(PROGRAMMING_ENDPOINTS.stopProgrammingSimulationSession.roles).toEqual(["admin"]);
     expect(PROGRAMMING_ENDPOINTS.getProgrammingSimulationSession.roles).toEqual([
       "viewer",
       "operator",

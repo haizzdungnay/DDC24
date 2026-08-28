@@ -34,6 +34,7 @@ import {
   suppressDemoAlarm,
   updateDemoPointConfig
 } from '../demo/simulator'
+import { USER_ROLES } from '../auth/capabilities'
 import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmEstimateResult, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusFramesResponse, type ModbusRTUPoint, type ModbusTemplate, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkCheckResponse, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
@@ -438,9 +439,16 @@ function normalizeUserAccount(raw: Record<string, unknown> | unknown): UserAccou
   const role = String(record.role ?? '')
   return {
     username: String(record.username ?? ''),
-    // Cùng nguyên tắc fail-closed như F-07 ở AuthProvider: một role lạ hoặc thiếu
-    // phải rơi về quyền THẤP NHẤT, không được mặc định thành admin.
-    role: role === 'admin' || role === 'operator' ? role : 'viewer'
+    /* Cùng nguyên tắc fail-closed như F-07 ở AuthProvider: một role lạ hoặc
+       thiếu phải rơi về quyền THẤP NHẤT, không được mặc định thành admin.
+    
+       `WEB-RBAC-001` — danh sách vai hợp lệ đọc từ `USER_ROLES` thay vì viết
+       tay. Bản viết tay cũ (`'admin' || 'operator'`) không biết `engineer`, nên
+       một tài khoản engineer hiện ra trong trang Quản lý người dùng dưới nhãn
+       `viewer`: người quản trị đang rà soát quyền đọc được một con số SAI về
+       chính hệ thống mình quản. Fail-closed vẫn giữ nguyên — vai không có
+       trong bảng vẫn rơi về `viewer`. */
+    role: (USER_ROLES as readonly string[]).includes(role) ? (role as UserRole) : 'viewer'
   }
 }
 
