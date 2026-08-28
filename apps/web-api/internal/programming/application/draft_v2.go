@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 
 	"mkddc-web/internal/programming/domain"
 )
@@ -198,6 +201,8 @@ func applyDraftOperationV2(document map[string]any, operation string, raw []byte
 		return true, removePouObject(document, raw)
 	case "renameObject":
 		return true, renamePouObject(document, raw)
+	case "annotateObject":
+		return true, annotatePouObject(document, raw)
 	case "duplicateObject":
 		return true, duplicatePouObject(document, raw)
 	case "upsertProgram":
@@ -297,6 +302,86 @@ func removePouObject(document map[string]any, raw []byte) error {
 	}
 	return removeByID(document, "objects", "objectId", payload.ObjectID)
 }
+
+// annotatePouObject ghi chú thích của POU (`DEV-PROG-004`): mô tả nhiều dòng và
+// một dòng ghi chú truy cập. Nó VÁ TẠI CHỖ thay vì đi qua `upsertObject`, và đó
+// là điểm mấu chốt: `upsertObject` thay TOÀN BỘ object, nên sửa một dòng mô tả
+// bằng đường đó buộc client phải gửi kèm cả `source`. Nếu buffer mã nguồn trong
+// trình duyệt đang cũ hơn Draft (một phiên khác vừa lưu), thao tác "sửa mô tả"
+// sẽ âm thầm ghi đè mã nguồn của người khác.
+//
+// Chuỗi rỗng nghĩa là XOÁ chú thích, không phải "giữ nguyên": người dùng phải
+// gỡ được thứ họ đã viết, và một khoá không tồn tại đọc ra `undefined` ở FE —
+// khác hẳn chuỗi rỗng, nên `omitempty` ở đây là ngữ nghĩa chứ không phải để
+// tiết kiệm byte.
+func annotatePouObject(document map[string]any, raw []byte) error {
+	var payload struct {
+		Op          string  `json:"op"`
+		ObjectID    string  `json:"objectId"`
+		Description *string `json:"description,omitempty"`
+		Access      *string `json:"access,omitempty"`
+	}
+	if err := decodeStrict(raw, &payload); err != nil || !isUUID(payload.ObjectID) {
+		return ErrInvalidRequest
+	}
+	if payload.Description == nil && payload.Access == nil {
+		return ErrInvalidRequest
+	}
+	if payload.Description != nil && !validMultilineText(*payload.Description, maxPouDescriptionRunes) {
+		return ErrInvalidRequest
+	}
+	// `access` là MỘT dòng: nó đứng cạnh `Ngôn ngữ`/`Loại` trên một hàng của
+	// Inspector, nên cho xuống dòng ở đây chỉ tạo ra một giá trị không hiển thị
+	// đúng ở chính nơi nó được đọc.
+	if payload.Access != nil && !validText(*payload.Access, 0, maxPouAccessRunes) {
+		return ErrInvalidRequest
+	}
+	for _, object := range collectionOf(document, "objects") {
+		if object["objectId"] != payload.ObjectID {
+			continue
+		}
+		applyAnnotation(object, "description", payload.Description)
+		applyAnnotation(object, "access", payload.Access)
+		return nil
+	}
+	return ErrInvalidRequest
+}
+
+func applyAnnotation(object map[string]any, key string, value *string) {
+	if value == nil {
+		return
+	}
+	if *value == "" {
+		delete(object, key)
+		return
+	}
+	object[key] = norm.NFC.String(*value)
+}
+
+// validMultilineText là `validText` có CHO PHÉP xuống dòng.
+//
+// `validText` chặn mọi ký tự điều khiển (`< 0x20`), trong đó có `\n` — đúng cho
+// tên và nhãn một dòng, nhưng một ô mô tả nhiều dòng đi qua nó thì mọi lần
+// người dùng bấm Enter đều nhận 400 mà không hiểu vì sao. `\r` vẫn bị từ chối:
+// trình duyệt luôn trả `\n` trong `textarea.value`, nên `\r` tới được đây là dấu
+// hiệu một client khác đang gửi thứ khác — nhận nó vào sẽ làm mọi phép so dòng
+// của Draft lệch về sau.
+func validMultilineText(value string, maximum int) bool {
+	if !utf8.ValidString(value) || norm.NFC.String(value) != value {
+		return false
+	}
+	if strings.IndexFunc(value, func(candidate rune) bool {
+		return (candidate < 0x20 && candidate != '\n' && candidate != '\t') || candidate == 0x7f
+	}) >= 0 {
+		return false
+	}
+	return utf8.RuneCountInString(value) <= maximum
+}
+
+const (
+	maxPouDescriptionRunes = 2048
+	maxPouAccessRunes      = 120
+)
 
 func renamePouObject(document map[string]any, raw []byte) error {
 	var payload struct {

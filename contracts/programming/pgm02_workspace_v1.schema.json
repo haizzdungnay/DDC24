@@ -31,7 +31,7 @@
       "required": ["major", "minor"],
       "properties": {
         "major": { "const": 1 },
-        "minor": { "const": 1 }
+        "minor": { "const": 2 }
       }
     },
     "status": { "const": "TARGET_APPROVED_FOR_IMPLEMENTATION" },
@@ -212,7 +212,7 @@
             "replaceProgramSourceIdentity": { "const": "objectId" },
             "deprecatedReplaceProgramSourceAlias": { "const": "programId_FOR_ONE_COMPATIBILITY_MAJOR" },
             "operationDiscriminator": { "const": "op" },
-            "operations": { "type": "array", "minItems": 15, "maxItems": 15, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+            "operations": { "type": "array", "minItems": 16, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
             "responseContentSchema": { "const": "ProgrammingDraftDocumentV2" },
             "conflictError": { "const": "PRG-ERR-CONFLICT-001" },
             "malformedRequestStatus": { "const": 400 },

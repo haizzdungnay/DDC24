@@ -485,3 +485,68 @@ func TestSetTaskTuChoiProgramOrderChuaIdCuaUserPou(t *testing.T) {
 		t.Fatal("programOrder chứa id của FUNCTION phải bị từ chối, không được im lặng bỏ qua")
 	}
 }
+
+// `DEV-PROG-004` — chú thích POU (mô tả nhiều dòng + ghi chú truy cập).
+//
+// Ba điều được khẳng định, và cả ba đều là chỗ dễ làm sai:
+//
+//  1. Chú thích VÁ TẠI CHỖ: mã nguồn không bị đụng tới. Nếu sửa mô tả phải đi
+//     qua `upsertObject` thì client buộc phải gửi kèm `source`, và một buffer cũ
+//     trong trình duyệt sẽ ghi đè mã nguồn của phiên khác.
+//  2. Chuỗi rỗng là XOÁ, không phải "giữ nguyên" — người dùng phải gỡ được thứ
+//     họ đã viết, và khoá biến mất mới cho FE phân biệt "chưa có" với "rỗng".
+//  3. Mô tả CHO PHÉP xuống dòng còn `access` thì KHÔNG: hai ô có hai chỗ hiển
+//     thị khác nhau, và một `access` nhiều dòng sẽ vỡ hàng của Inspector.
+func TestAnnotateObjectVaTaiChoVaChoPhepXuongDong(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	objectID := objectUUID(1)
+	created, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-900000000001",
+		pouOp(objectID, "AHU", "PROGRAM"), programOp(objectID, objectID, 1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceBefore := findByID(draftDocument(t, service, projectID), "objects", "objectId", objectID)["source"]
+
+	annotated, err := saveOps(t, service, projectID, draftID, created.ETag, "70000000-0000-4000-8000-900000000002",
+		op(map[string]any{
+			"op": "annotateObject", "objectId": objectID,
+			"description": "Chuỗi điều khiển chính.\nDòng hai.", "access": "Kỹ sư vận hành",
+		}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	object := findByID(draftDocument(t, service, projectID), "objects", "objectId", objectID)
+	if object["description"] != "Chuỗi điều khiển chính.\nDòng hai." {
+		t.Fatalf("mô tả nhiều dòng không được giữ: %+v", object["description"])
+	}
+	if object["access"] != "Kỹ sư vận hành" {
+		t.Fatalf("ghi chú truy cập không được giữ: %+v", object["access"])
+	}
+	if object["source"] != sourceBefore {
+		t.Fatal("annotateObject đụng tới mã nguồn")
+	}
+
+	cleared, err := saveOps(t, service, projectID, draftID, annotated.ETag, "70000000-0000-4000-8000-900000000003",
+		op(map[string]any{"op": "annotateObject", "objectId": objectID, "description": ""}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterClear := findByID(draftDocument(t, service, projectID), "objects", "objectId", objectID)
+	if _, present := afterClear["description"]; present {
+		t.Fatal("chuỗi rỗng phải XOÁ khoá, không lưu một chuỗi rỗng")
+	}
+	if afterClear["access"] != "Kỹ sư vận hành" {
+		t.Fatal("chỉ gửi description mà access bị mất")
+	}
+
+	// `access` một dòng: xuống dòng phải bị từ chối, không âm thầm cắt bớt.
+	if _, err := saveOps(t, service, projectID, draftID, cleared.ETag, "70000000-0000-4000-8000-900000000004",
+		op(map[string]any{"op": "annotateObject", "objectId": objectID, "access": "hai\ndòng"})); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("access nhiều dòng phải bị từ chối, nhận: %v", err)
+	}
+	// Không có object nào khớp ⇒ lỗi, không im lặng thành công.
+	if _, err := saveOps(t, service, projectID, draftID, cleared.ETag, "70000000-0000-4000-8000-900000000005",
+		op(map[string]any{"op": "annotateObject", "objectId": objectUUID(9), "description": "x"})); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("objectId lạ phải bị từ chối, nhận: %v", err)
+	}
+}

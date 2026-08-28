@@ -3,7 +3,7 @@
   "contractId": "PGM02-WORKSPACE-V1",
   "version": {
     "major": 1,
-    "minor": 1
+    "minor": 2
   },
   "status": "TARGET_APPROVED_FOR_IMPLEMENTATION",
   "sourceBaselineCommit": "1bc3d19e96989c1309f838c0acd01d14d8536d5e",
@@ -204,6 +204,7 @@
         "upsertObject",
         "removeObject",
         "renameObject",
+        "annotateObject",
         "duplicateObject",
         "upsertProgram",
         "removeProgram",
