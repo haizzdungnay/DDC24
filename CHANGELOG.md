@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Web RBAC — vai thứ tư `engineer` và uỷ quyền theo NĂNG LỰC (`WEB-RBAC-001/002`) (2026-08-28)
+
+Port PR #67 (`codex/web-rbac-four-role-release`, viết cho cây `web/backend/` đã
+bị `PLAN-ARCH-RESTRUCT-002` xoá) sang layout `apps/`.
+
+- **Added — vai `engineer`** nằm giữa `operator` và `admin`: cấu hình được thiết
+  bị và đưa chương trình vào vận hành, **không** quản lý được tài khoản hay cơ
+  sở dữ liệu. Trước lát này không thể giao việc chỉnh định cho một kỹ sư mà
+  không đồng thời trao cho họ quyền tạo tài khoản.
+
+- **Added — uỷ quyền theo NĂNG LỰC (9 quyền).** Route khai *việc nó làm*
+  (`settings.manage`, `program.edit`, `program.activate`, `users.manage`…) thay
+  vì *vai nào đủ lớn*. 109 route của `http.go` và 40 route Programming đã chuyển
+  hết; `Route` khai cả `Role` lẫn `Permission` là lỗi cấu hình, bị từ chối ngay
+  lúc dựng router — người đọc không được phép đoán cái nào có hiệu lực.
+
+- **Fixed — lỗ hổng: hạ vai KHÔNG làm token cũ mất hiệu lực.** `Validate` tin
+  vai nằm trong claim của JWT, nên hạ một tài khoản từ `admin` xuống `viewer`
+  không chạm được tới token đã cấp — người vừa bị hạ quyền vẫn thao tác như
+  admin **tối đa một giờ**. Nay sổ người dùng là nguồn sự thật: claim lệch sổ,
+  hoặc tài khoản đã bị xoá ⇒ token bị TỪ CHỐI ngay.
+
+- **Changed — `x-rbac` của OpenAPI sinh lại từ CHÍNH bảng route Go** (119 mục).
+  Trước đó hợp đồng và máy chủ là hai nguồn viết tay riêng; nay hợp đồng nói
+  đúng thứ máy chủ cưỡng chế.
+
+- **Một chỗ CỐ Ý khác bản gốc:** PR #67 cho `operator` quyền `program.edit`. Bản
+  này KHÔNG. Lý do là một phép đo: `TestLibraryRoutesRBAC` đang khẳng định
+  operator nhận 403 khi ghi Control Library. Thêm một vai mới không được là dịp
+  nới quyền cho vai đang có — đó là quyết định sản phẩm riêng. **Bất biến của
+  lát này: không vai nào đang tồn tại được thêm một quyền nào**, và có test
+  khoá điều đó.
+
+- **Verification**: `go vet` + `go test ./... -count=1` PASS (3 bộ test mới: ma
+  trận quyền, token chết khi đổi vai, hợp đồng route↔quyền — bộ cuối đã kiểm
+  bằng đột biến: đổi một quyền thành tên sai ⇒ ĐỎ); `vitest src` **183 file /
+  2061 test PASS**; `lint`, `tsc`, `build` PASS.
+
+### Tài liệu — đưa CEO Strategic Review 2026-06-30 vào `main` (2026-08-28)
+
+Lấy đúng một file từ nhánh `docs/update-2026-06-30`; 52 file `services/hmi/` còn
+lại của nhánh đó thuộc cây thư mục đã bị `PLAN-ARCH-RESTRUCT-002` xoá nên không
+merge. Tài liệu có banner nói rõ nó là ảnh chụp lịch sử và mọi đường dẫn trong
+bài thuộc layout cũ.
+
 ### Programming — hợp nhất PR #311 vào main, sửa 4 lỗi lộ ra khi hợp nhất (2026-08-28)
 
 - **Fixed — `task.state` của read-back nói dối khi Program dừng hoặc lỗi.**
