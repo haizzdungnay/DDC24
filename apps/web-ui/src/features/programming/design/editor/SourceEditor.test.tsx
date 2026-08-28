@@ -581,3 +581,39 @@ describe('SourceEditor — Lưu chỉ chạm Draft (AC-ST-004)', () => {
     expect(operations.some((operation) => /commission|activate|enable|restore/i.test(operation.op))).toBe(false)
   })
 })
+
+describe('DEV-PROG-012 — Tới dòng từ thanh trạng thái', () => {
+  it('bấm ô Dòng:Cột mở hộp Tới dòng, nhập số đưa con trỏ tới đầu dòng đó', () => {
+    const source = 'PROGRAM P\nVAR\n  A : INT;\nEND_VAR\nA := 1;\nEND_PROGRAM\n'
+    const { textarea } = renderEditor(source)
+    fireEvent.click(within(screen.getByTestId('editor-status-position')).getByRole('button'))
+    const form = screen.getByTestId('editor-go-to-line')
+    fireEvent.change(within(form).getByLabelText(/Tới dòng/), { target: { value: '5' } })
+    fireEvent.submit(form)
+    expect(textarea.selectionStart).toBe(source.indexOf('A := 1;'))
+    expect(screen.getByTestId('editor-status-position')).toHaveTextContent('5:1')
+  })
+
+  it('số ngoài phạm vi KẸP về dòng cuối, không báo lỗi bắt gõ lại', () => {
+    // Người gõ `9999` đang nói "xuống cuối tệp"; một thông báo lỗi ở đó chỉ bắt
+    // họ đoán lại một con số họ không biết.
+    const source = 'A := 1;\nB := 2;\n'
+    const { textarea } = renderEditor(source)
+    fireEvent.click(within(screen.getByTestId('editor-status-position')).getByRole('button'))
+    const form = screen.getByTestId('editor-go-to-line')
+    fireEvent.change(within(form).getByLabelText(/Tới dòng/), { target: { value: '9999' } })
+    fireEvent.submit(form)
+    expect(textarea.selectionStart).toBe(source.length)
+  })
+
+  it('số không hợp lệ KHÔNG di chuyển con trỏ và không đóng hộp', () => {
+    const { textarea } = renderEditor('A := 1;\nB := 2;\n')
+    textarea.setSelectionRange(0, 0)
+    fireEvent.click(within(screen.getByTestId('editor-status-position')).getByRole('button'))
+    const form = screen.getByTestId('editor-go-to-line')
+    fireEvent.change(within(form).getByLabelText(/Tới dòng/), { target: { value: 'abc' } })
+    fireEvent.submit(form)
+    expect(textarea.selectionStart).toBe(0)
+    expect(screen.getByTestId('editor-go-to-line')).toBeInTheDocument()
+  })
+})
