@@ -126,15 +126,43 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     expect(screen.getByRole('navigation', { name: 'Cây POU' })).toBeInTheDocument()
   })
 
-  it('inspector ẩn chu kỳ với POU dùng chung và nói rõ POU chưa xếp lịch', () => {
-    cleanup()
-    renderExplorer({ selectedObjectId: 'obj-2' })
-    expect(screen.queryByText('Chu kỳ')).not.toBeInTheDocument()
-    expect(screen.getByText(/chỉ chạy khi được Program gọi/)).toBeInTheDocument()
-
+  it('DEV-PROG-011: thanh bên KHÔNG còn khay thuộc tính POU', () => {
+    // Năm trường (Tên/Loại/Ngôn ngữ/Chu kỳ/Trạng thái mong muốn) đã về
+    // `ContextInspector` ở cột phải. Giữ hai bản ở hai cột là hai chỗ có thể
+    // nói khác nhau về cùng một POU — đúng lớp lỗi mà `T59-803` đã đi gộp một
+    // lần khi DOM có hai cây POU. Cây + tìm kiếm + nút tạo là toàn bộ thanh bên.
     cleanup()
     renderExplorer({ selectedObjectId: 'obj-1' })
-    expect(screen.getByText('Chu kỳ')).toBeInTheDocument()
-    expect(screen.getByText('5000 ms')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Thuộc tính POU')).not.toBeInTheDocument()
+    expect(screen.queryByText('Chu kỳ')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Cây POU')).toBeInTheDocument()
+  })
+
+  it('DEV-PROG-006: nhóm gập được, và đang lọc thì luôn mở', () => {
+    cleanup()
+    const { onSelect } = renderExplorer({})
+    expect(screen.getByRole('button', { name: /Programs \(1\)/ })).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(screen.getByRole('button', { name: /Programs \(1\)/ }))
+    expect(screen.getByRole('button', { name: /Programs \(1\)/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: /^Mở AHU_MAIN$/ })).toBeNull()
+
+    // Gõ vào ô tìm kiếm mà kết quả nằm trong một nhóm đang đóng thì người dùng
+    // nhận một câu trả lời SAI cho một câu hỏi đúng.
+    fireEvent.change(screen.getByLabelText('Tìm POU'), { target: { value: 'AHU' } })
+    expect(screen.getByRole('button', { name: /^Mở AHU_MAIN$/ })).toBeInTheDocument()
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('DEV-PROG-006: chuột phải mở menu Mở/Đổi tên/Nhân bản/Xóa', () => {
+    cleanup()
+    renderExplorer({ selectedObjectId: 'obj-1' })
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Mở AHU_MAIN' }))
+    const menu = screen.getByTestId('pou-context-menu')
+    for (const label of ['Mở', 'Đổi tên', 'Nhân bản', 'Xóa']) {
+      expect(within(menu).getByRole('menuitem', { name: label })).toBeInTheDocument()
+    }
+    // "Đặt làm Active" không có ở đây, và menu NÓI RA nơi thực hiện nó thay vì
+    // im lặng: ý định bật/tắt Program sống ở API runtime-intent, không ở Draft.
+    expect(within(menu).getByText(/Runtime & Bảo trì/)).toBeInTheDocument()
   })
 })

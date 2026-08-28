@@ -58,6 +58,15 @@ export interface InspectorProgramContext {
   parameters: InspectorField<readonly InspectorPouParameter[]>
   /** `DEV-PROG-004` — cặp khoá/giá trị metadata có thật của POU. */
   attributes: readonly { key: string; value: string }[]
+  /**
+   * `DEV-PROG-011` — POU có mục trong `programs[]` (cấu hình chạy) hay không.
+   *
+   * Trường này TỪNG nằm ở khay "Thuộc tính POU" trong thanh bên; nó chuyển về
+   * đây cùng lúc thanh bên rút gọn còn cây + tìm kiếm. Chuyển chỗ chứ KHÔNG bỏ:
+   * một POU kind `PROGRAM` chưa xếp lịch chạy sẽ làm Kiểm tra fail-closed, và
+   * đó đúng là thứ người dùng cần biết trước khi bấm Kiểm tra.
+   */
+  scheduled: InspectorField<boolean>
 }
 
 export interface InspectorPouParameter {
@@ -177,6 +186,12 @@ export function inspectorContextFor(input: InspectorInput): InspectorContext {
        * "không có". */
       parameters: input.parameters === undefined ? unknownField : known(input.parameters),
       attributes: pouAttributes(program),
+      /* `hasRuntimeConfig === undefined` là document v1 đi qua nguyên trạng: ở
+       * đó mọi Program đều có cấu hình chạy nên suy theo kind là đúng — cùng
+       * luật với `pouItems`, không dựng bản thứ hai. */
+      scheduled: program.kind === 'PROGRAM'
+        ? known(program.hasRuntimeConfig ?? true)
+        : known(false),
     }
   }
   return { kind: 'EMPTY' }

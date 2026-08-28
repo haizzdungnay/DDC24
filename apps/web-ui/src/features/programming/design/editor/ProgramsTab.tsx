@@ -515,13 +515,10 @@ export function ProgramsTab({
         </div>
         <div id="programs-slot-left">
         {explorerSlot}
-        <ProjectTagsEditor
-          canEdit={canEdit}
-          value={projectTagsDraft}
-          saving={saving}
-          onChange={setProjectTagsDraft}
-          onSave={() => onSave([{ op: 'setFunctionalTags', tags: parseTags(projectTagsDraft) }])}
-        />
+        {/* `DEV-PROG-011` — `ProjectTagsEditor` đã rời khỏi đây. Nhãn chức năng
+            thuộc về PROJECT chứ không thuộc về cây POU, và để nó dưới cây làm
+            người đọc tưởng nó là nhãn của POU đang chọn. Nó nay ở cột phải,
+            dưới Inspector, trong một mục gập được. */}
         <div className="mt-2 flex justify-end px-1">
           <button
             type="button"
@@ -802,6 +799,20 @@ export function ProgramsTab({
             </p>
           </section>
         )}
+        {/* `DEV-PROG-011` — nhãn chức năng của PROJECT. Gập lại theo mặc định:
+            nó là cấu hình đặt một lần, không phải thứ đọc trong lúc soạn. */}
+        <details className="mt-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2">
+          <summary className="cursor-pointer text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+            {pick('Nhãn chức năng (Project)', 'Functional tags (project)')}
+          </summary>
+          <ProjectTagsEditor
+            canEdit={canEdit}
+            value={projectTagsDraft}
+            saving={saving}
+            onChange={setProjectTagsDraft}
+            onSave={() => onSave([{ op: 'setFunctionalTags', tags: parseTags(projectTagsDraft) }])}
+          />
+        </details>
         </div>
       </aside>
     </div>
@@ -1085,6 +1096,15 @@ export function SourceEditor({
     historyRef.current = updateStEditorSelection(historyRef.current, start, end)
   }
 
+  /* `DEV-PROG-012` — hộp "Tới dòng". Mở bằng cách bấm ô `Dòng:Cột` trên thanh
+   * trạng thái hoặc `Ctrl+G`. Không dùng `window.prompt`: nó chặn cả tiến
+   * trình, không đi được bằng trình đọc màn hình theo cách dự đoán được, và
+   * trên bo đặt trong tủ điều khiển thì hộp thoại gốc của trình duyệt nằm ngoài
+   * mọi luật giao diện của sản phẩm. */
+  const [goToOpen, setGoToOpen] = useState(false)
+  const [goToDraft, setGoToDraft] = useState('')
+  const goToInputRef = useRef<HTMLInputElement | null>(null)
+
   function selectRange(offset: number, length: number) {
     const textarea = textareaRef.current
     if (!textarea) return
@@ -1092,6 +1112,29 @@ export function SourceEditor({
     textarea.setSelectionRange(offset, Math.min(source.length, offset + Math.max(1, length)))
     updateCursor()
   }
+
+  /**
+   * `DEV-PROG-012` — đưa con trỏ tới đầu một dòng.
+   *
+   * Số dòng ngoài phạm vi bị KẸP về dòng cuối thay vì bị từ chối: người gõ
+   * `9999` đang nói "xuống cuối tệp", và một thông báo lỗi ở đó chỉ bắt họ gõ
+   * lại một con số họ không biết. Số không hợp lệ (chữ, số âm) thì không làm gì.
+   */
+  function goToLine(rawLine: string) {
+    const requested = Number.parseInt(rawLine, 10)
+    if (!Number.isFinite(requested) || requested < 1) return
+    const lines = source.split('\n')
+    const line = Math.min(requested, lines.length)
+    let offset = 0
+    for (let index = 0; index < line - 1; index += 1) offset += lines[index].length + 1
+    setGoToOpen(false)
+    selectRange(offset, 0)
+  }
+
+  useEffect(() => {
+    if (!goToOpen) return
+    window.setTimeout(() => goToInputRef.current?.focus(), 0)
+  }, [goToOpen])
 
   useEffect(() => {
     if (!focusDiagnostic?.location) return
@@ -1767,6 +1810,9 @@ export function SourceEditor({
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
                 event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0); return
               }
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'g') {
+                event.preventDefault(); setGoToDraft(String(cursor.line)); setGoToOpen(true); return
+              }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && canEdit && canSave) {
                 event.preventDefault(); handleSaveSource(); return
               }
@@ -1948,7 +1994,33 @@ export function SourceEditor({
       </div>
       {/* Thanh trạng thái GHIM ở đáy cột, ngoài vùng cuộn: nó phải đọc được mà
           không phải cuộn đi tìm — đúng vai trò của một status bar. */}
+      {goToOpen && (
+        <form
+          data-testid="editor-go-to-line"
+          aria-label={pick('Tới dòng', 'Go to line')}
+          className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 py-1"
+          onSubmit={(event) => { event.preventDefault(); goToLine(goToDraft) }}
+        >
+          <label className="text-xs text-[var(--c-text-dim)]" htmlFor={`programming-st-goto-${program.programId}`}>
+            {pick(`Tới dòng (1–${source.split('\n').length})`, `Go to line (1–${source.split('\n').length})`)}
+          </label>
+          <input
+            id={`programming-st-goto-${program.programId}`}
+            ref={goToInputRef}
+            inputMode="numeric"
+            value={goToDraft}
+            onChange={(event) => setGoToDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Escape') { setGoToOpen(false); textareaRef.current?.focus() } }}
+            className="w-20 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
+          />
+          <Button size="sm" type="submit">{pick('Tới', 'Go')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => { setGoToOpen(false); textareaRef.current?.focus() }}>
+            {pick('Đóng', 'Close')}
+          </Button>
+        </form>
+      )}
       <EditorStatusBar
+        onGoToPosition={() => { setGoToDraft(String(cursor.line)); setGoToOpen(true) }}
         fields={stStatusFields({
           line: cursor.line,
           column: cursor.column,

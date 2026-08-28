@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Boxes, Copy, FileCode2, FilePlus, FunctionSquare, Pencil, Trash2 } from 'lucide-react'
+import { Boxes, ChevronDown, Copy, FileCode2, FilePlus, FunctionSquare, Pencil, Trash2 } from 'lucide-react'
 import { Modal } from '../../../../shared/components/Modal'
 import { createUuid } from '../../../../shared/crypto'
 import { useI18n } from '../../../../shared/i18n'
@@ -70,13 +70,20 @@ export function PouExplorer({
   const [renameDraft, setRenameDraft] = useState('')
   const [pendingDeleteObjectId, setPendingDeleteObjectId] = useState<string | null>(null)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
+  /* `DEV-PROG-006` — nhóm gập được. Mặc định MỞ cả ba: một cây mặc định đóng
+   * bắt người dùng bấm thêm một lần cho việc họ luôn làm (tìm POU để mở). */
+  const [collapsedGroups, setCollapsedGroups] = useState<readonly PouKind[]>([])
+  /* Menu ngữ cảnh (chuột phải). Nó KHÔNG phải đường duy nhất tới các thao tác:
+   * ba nút Đổi tên/Nhân bản/Xoá vẫn nằm trên hàng và đi được bằng bàn phím. Một
+   * thao tác chỉ tới được bằng chuột phải là một thao tác người dùng bàn phím
+   * không có. */
+  const [menu, setMenu] = useState<{ objectId: string; x: number; y: number } | null>(null)
 
   const items = useMemo(() => pouItems(document), [document])
   /* Lọc CHỈ đổi thứ được vẽ, không đổi POU đang chọn: gõ vào ô tìm kiếm mà
    * editor bị đổi tệp là mất nội dung đang soạn. */
   const visible = useMemo(() => filterPouItems(items, query), [items, query])
   const groups = useMemo(() => groupPouItems(visible), [visible])
-  const selected = resolvePouSelection(items, selectedObjectId)
   const pendingDelete = resolvePouSelection(items, pendingDeleteObjectId ?? undefined)
   const deleteBlockers = pendingDelete ? pouDeleteBlockers(items, pendingDelete.objectId) : []
   /* Chặn thứ hai, độc lập: POU đang publish một tín hiệu thì backend từ chối
@@ -95,8 +102,23 @@ export function PouExplorer({
     if (!canEdit) {
       setRenamingObjectId(null)
       setPendingDeleteObjectId(null)
+      setMenu(null)
     }
   }, [canEdit])
+
+  /* Menu ngữ cảnh phải đóng khi bấm ra ngoài hoặc nhấn Escape — nếu không nó
+   * sống sót qua mọi thao tác khác và trỏ tới một POU người dùng đã rời khỏi. */
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenu(null) }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [menu])
 
   const renameError = renamingObjectId ? validatePouName(items, renameDraft, renamingObjectId) : null
 
@@ -199,20 +221,47 @@ export function PouExplorer({
       <nav aria-label={pick('Cây POU', 'POU tree')} className="flex flex-col gap-2">
         {groups.map(({ kind, items: group }) => {
           const { label, icon: Icon } = GROUP_META[kind]
+          /* Đang lọc thì nhóm LUÔN mở: gõ vào ô tìm kiếm rồi thấy "0 kết quả"
+             trong khi kết quả nằm trong một nhóm đang đóng là một câu trả lời
+             sai cho một câu hỏi đúng. */
+          const collapsed = query.trim() === '' && collapsedGroups.includes(kind)
+          const groupId = `pou-group-${kind}`
           return (
             <section key={kind}>
-              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase text-[var(--c-text-dim)]">
-                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                {pick(...label)} ({group.length})
+              <h3>
+                <button
+                  type="button"
+                  aria-expanded={!collapsed}
+                  aria-controls={groupId}
+                  className="flex w-full items-center gap-1.5 rounded px-0.5 py-0.5 text-left text-xs font-semibold uppercase text-[var(--c-text-dim)] hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                  onClick={() => setCollapsedGroups((current) => (
+                    current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]
+                  ))}
+                >
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}
+                    aria-hidden="true"
+                  />
+                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {pick(...label)} ({group.length})
+                </button>
               </h3>
-              {group.length === 0 ? (
+              {collapsed ? null : group.length === 0 ? (
                 <p className="px-5 py-1 text-sm text-[var(--c-text-dim)]">
                   {query.trim() === '' ? pick('Chưa có', 'None yet') : pick('Không khớp', 'No match')}
                 </p>
               ) : (
-                <ul aria-label={pick(...label)} className="flex flex-col">
+                <ul id={groupId} aria-label={pick(...label)} className="flex flex-col">
                   {group.map((item) => (
-                    <li key={item.objectId} className="flex items-center gap-1">
+                    <li
+                      key={item.objectId}
+                      className="flex items-center gap-1"
+                      onContextMenu={(event) => {
+                        if (!canEdit) return
+                        event.preventDefault()
+                        setMenu({ objectId: item.objectId, x: event.clientX, y: event.clientY })
+                      }}
+                    >
                       {renamingObjectId === item.objectId ? (
                         <form
                           className="flex min-w-0 flex-1 flex-col gap-1 px-5 py-1"
@@ -248,10 +297,17 @@ export function PouExplorer({
                                vẫn CHỨA tên đang hiện (WCAG 2.5.3). */
                             aria-label={pick(`Mở ${item.name}`, `Open ${item.name}`)}
                             aria-current={item.objectId === selectedObjectId ? 'true' : undefined}
-                            className={`min-w-0 flex-1 truncate px-5 py-1 text-left text-sm ${
+                            className={`flex min-w-0 flex-1 items-center gap-1 truncate px-1 py-1 text-left text-sm ${
                               item.objectId === selectedObjectId ? 'text-[var(--c-accent)]' : ''
                             }`}
                           >
+                            {/* `DEV-PROG-006` — chấm chỉ POU đang mở. Có chữ
+                                kèm cho trình đọc màn hình: một chấm màu không
+                                nói được gì khi không thấy màu. */}
+                            <span aria-hidden="true" className={`w-2 shrink-0 text-center ${item.objectId === selectedObjectId ? 'text-[var(--c-accent)]' : 'text-transparent'}`}>●</span>
+                            {item.objectId === selectedObjectId && (
+                              <span className="sr-only">{pick('Đang mở: ', 'Open: ')}</span>
+                            )}
                             {item.name}
                             <span className="ml-2 text-xs text-[var(--c-text-dim)]">{item.language}</span>
                           </button>
@@ -297,7 +353,43 @@ export function PouExplorer({
         })}
       </nav>
 
-      {selected && <PouInspector item={selected} />}
+
+      {/* `DEV-PROG-006` — menu ngữ cảnh. `fixed` theo toạ độ con trỏ vì cây nằm
+          trong một cột có `overflow-y-auto`: một menu `absolute` trong cột đó
+          sẽ bị chính vùng cuộn cắt cụt. */}
+      {menu && canEdit && (() => {
+        const item = items.find((candidate) => candidate.objectId === menu.objectId)
+        if (!item) return null
+        return (
+          <div
+            role="menu"
+            aria-label={pick(`Thao tác với ${item.name}`, `Actions for ${item.name}`)}
+            data-testid="pou-context-menu"
+            style={{ top: menu.y, left: menu.x }}
+            className="fixed z-50 min-w-40 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] py-1 shadow-lg"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <MenuItem label={pick('Mở', 'Open')} onClick={() => { onSelect(item.objectId); setMenu(null) }} />
+            <MenuItem
+              label={pick('Đổi tên', 'Rename')}
+              onClick={() => { setRenamingObjectId(item.objectId); setRenameDraft(item.name); setMenu(null) }}
+            />
+            <MenuItem label={pick('Nhân bản', 'Duplicate')} onClick={() => { duplicate(item); setMenu(null) }} />
+            <MenuItem
+              label={pick('Xóa', 'Delete')}
+              danger
+              onClick={() => { setPendingDeleteObjectId(item.objectId); setMenu(null) }}
+            />
+            {/* "Đặt làm Active" của đề bài KHÔNG có ở đây, và im lặng bỏ nó đi
+                sẽ để người dùng đi tìm. Ý định bật/tắt Program sống ở API
+                runtime-intent (PGM-05), không ở Draft — đặt một mục cùng tên tại
+                đây sẽ hứa một thao tác mà cây POU không thực hiện được. */}
+            <p className="border-t border-[var(--c-border)] px-3 pt-1 text-[10px] text-[var(--c-text-dim)]">
+              {pick('Bật/tắt Program ở trang Runtime & Bảo trì.', 'Enable/disable a program in Runtime & Maintenance.')}
+            </p>
+          </div>
+        )
+      })()}
 
       <Modal
         open={canEdit && pendingDelete !== null}
@@ -339,6 +431,17 @@ export function PouExplorer({
 }
 
 /**
+ * `DEV-PROG-011` — khay này KHÔNG còn được thanh bên dựng.
+ *
+ * Năm trường của nó (Tên, Loại, Ngôn ngữ, Chu kỳ, Trạng thái mong muốn) đã về
+ * `ContextInspector` ở cột phải, nơi vốn đã là chỗ của thuộc tính. Giữ hai bản
+ * ở hai cột là hai chỗ có thể nói khác nhau về cùng một POU — đúng lớp lỗi mà
+ * `T59-803` đã phải đi gộp một lần (khi DOM có HAI cây POU).
+ *
+ * Component còn lại vì `PouItem` là view model dùng chung và một bề mặt khác
+ * (ví dụ hộp thoại chọn POU) có thể cần đúng khay này; nó không được mount ở
+ * Explorer nữa.
+ *
  * Inspector ẩn — chứ không làm xám — những trường không có nghĩa với từng kind.
  * Một FUNCTION không có chu kỳ và không có trạng thái bật; hiện một ô "chu kỳ"
  * bị xám vẫn nói rằng khái niệm đó tồn tại ở đây, và người dùng sẽ đi tìm cách
@@ -377,6 +480,21 @@ export function PouInspector({ item }: { item: PouItem }) {
         </p>
       )}
     </dl>
+  )
+}
+
+function MenuItem({ label, onClick, danger }: { label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${
+        danger ? 'text-[var(--c-fault-fg)]' : 'text-[var(--c-text)]'
+      }`}
+    >
+      {label}
+    </button>
   )
 }
 

@@ -113,6 +113,19 @@ function renderContext(pick: (vi: string, en: string) => string, context: Inspec
             field={mapField(context.enabled, (value) => value ? pick('Đã bật', 'Enabled') : pick('Đã tắt', 'Disabled'))}
             pick={pick}
           />
+          {/* `DEV-PROG-011` — chuyển từ khay "Thuộc tính POU" của thanh bên.
+              POU dùng chung (FUNCTION/FUNCTION_BLOCK) không có lịch chạy, nên
+              với chúng câu trả lời là "chỉ chạy khi được gọi", không phải một ô
+              xám gợi ý rằng có thể bật ở đâu đó. */}
+          <Field
+            label={pick('Trạng thái mong muốn', 'Desired state')}
+            field={mapField(context.scheduled, (value) => value
+              ? pick('Đã xếp lịch chạy', 'Scheduled to run')
+              : context.pouKind.known && context.pouKind.value !== 'PROGRAM'
+                ? pick('Chạy khi được gọi', 'Runs when called')
+                : pick('Chưa xếp lịch chạy', 'Not scheduled to run'))}
+            pick={pick}
+          />
         </FieldList>
         {/* Mô tả nhiều dòng KHÔNG nằm trong `<dl>` một hàng: xuống dòng trong ô
             giá trị căn phải làm câu chữ vỡ thành bậc thang. */}
