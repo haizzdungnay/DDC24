@@ -3,7 +3,10 @@ export type PointQuality = 'good' | 'uncertain' | 'bad' | 'stale' | 'offline'
 export type HealthStatus = 'ok' | 'degraded' | 'fault' | 'unknown' | 'n/a'
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
 export type DdcMode = 'demo' | 'live'
-export type UserRole = 'admin' | 'operator' | 'viewer'
+/* `WEB-RBAC-001` — bốn vai. `engineer` nằm giữa `operator` và `admin`: cấu hình
+ * được thiết bị và đưa chương trình vào vận hành, nhưng KHÔNG quản lý được tài
+ * khoản hay cơ sở dữ liệu. Xem ma trận ở `apps/web-api/internal/auth`. */
+export type UserRole = 'admin' | 'engineer' | 'operator' | 'viewer'
 export type Language = 'vi' | 'en'
 
 export interface Point {

@@ -22,8 +22,143 @@ type Role string
 const (
 	RoleViewer   Role = "viewer"
 	RoleOperator Role = "operator"
+	RoleEngineer Role = "engineer"
 	RoleAdmin    Role = "admin"
 )
+
+/*
+Permission — QUYỀN theo NĂNG LỰC, không theo thứ bậc (`WEB-RBAC-001`, port từ
+PR #67 sang layout `apps/`).
+
+VÌ SAO KHÔNG CHỈ THÊM MỘT BẬC VAI
+
+Trước lát này, uỷ quyền chỉ có `Require(min Role)` với thứ hạng tuyến tính. Khai
+báo đó nói "ai đủ lớn", trong khi thứ một route thật sự cần là "việc gì". Hai
+câu đó trùng nhau cho tới đúng lúc chúng tách ra: sửa người dùng và sửa cấu hình
+mạng cùng đòi `admin` chỉ vì cả hai đều "cao nhất", nên không thể mở cấu hình
+mạng cho kỹ sư vận hành mà không mở luôn cả quyền tạo tài khoản.
+
+Vai `engineer` sinh ra đúng ở khe đó: cấu hình được thiết bị và đưa chương trình
+vào vận hành, nhưng KHÔNG quản lý được tài khoản hay cơ sở dữ liệu.
+
+Thứ hạng tuyến tính vẫn giữ (`roleRank`) cho `Require(min Role)` cũ — 109 route
+đang dùng nó, và đổi một lần tất cả là cách chắc chắn nhất để sót một route.
+*/
+type Permission string
+
+const (
+	/* Đọc read-model. Mọi vai đăng nhập đều có. */
+	PermissionRead Permission = "read"
+	/* Tự đổi mật khẩu của CHÍNH mình — khác hẳn `users.manage`. */
+	PermissionSelfManage Permission = "self.manage"
+	/* Thao tác vận hành trên thiết bị đang chạy: ack cảnh báo, ghi điểm, bật/tắt
+	   lịch. Không đổi cấu hình. */
+	PermissionOperate Permission = "operate"
+	/* Sửa Draft chương trình. Draft chưa có hiệu lực trên thiết bị. */
+	PermissionProgramEdit Permission = "program.edit"
+	/* Đưa chương trình vào vận hành / khôi phục / reset RETAIN — đây là lúc
+	   chương trình BẮT ĐẦU điều khiển thiết bị thật. */
+	PermissionProgramActivate Permission = "program.activate"
+	/* Cấu hình thiết bị: mạng, điểm, Modbus, BACnet, safe-state, lịch, cảnh báo. */
+	PermissionSettingsManage Permission = "settings.manage"
+	/* Cơ sở dữ liệu/sao lưu. Riêng admin: nó chạm tới toàn bộ dữ liệu lịch sử. */
+	PermissionDatabaseManage Permission = "database.manage"
+	/* Tạo/xoá/đổi vai tài khoản. Riêng admin: đây là quyền tự nhân bản quyền. */
+	PermissionUsersManage Permission = "users.manage"
+	/* Thao tác mức hệ thống có ảnh hưởng ra ngoài phiên: nâng cấp, khởi động lại. */
+	PermissionSystemRelease Permission = "system.release"
+)
+
+/*
+Ma trận vai → quyền.
+
+	                    viewer  operator  engineer  admin
+	read                  ✓        ✓         ✓        ✓
+	self.manage           ✓        ✓         ✓        ✓
+	operate                        ✓         ✓        ✓
+	program.edit                             ✓        ✓
+	program.activate                         ✓        ✓
+	settings.manage                          ✓        ✓
+	system.release                           ✓        ✓
+	database.manage                                   ✓
+	users.manage                                      ✓
+
+Viết bằng `switch` tường minh chứ không bằng phép so thứ hạng: ma trận này KHÔNG
+buộc phải tuyến tính mãi mãi, và một ngày nào đó thêm một vai chỉ-đọc-nhật-ký
+thì phép so thứ hạng sẽ phải bị gỡ bỏ ở khắp nơi.
+
+MỘT CHỖ CỐ Ý KHÁC BẢN GỐC (PR #67): ở đó `operator` có `program.edit`. Bản này
+KHÔNG cho. Lý do là một phép đo chứ không phải khẩu vị: `TestLibraryRoutesRBAC`
+đang khẳng định operator nhận 403 khi ghi Control Library, tức hôm nay operator
+KHÔNG có quyền đó. Thêm một vai mới không được là dịp nới quyền cho vai đang có
+— đó là một quyết định sản phẩm riêng, phải đi kèm lý do riêng. Bất biến của lát
+này: **không vai nào đang tồn tại được thêm một quyền nào.**
+
+Quyền lạ (không nằm trong bảng) luôn bị TỪ CHỐI, kể cả với admin: một route khai
+sai tên quyền phải hỏng ở lúc gọi, không được im lặng mở cho vai cao nhất.
+*/
+func RoleHasPermission(role Role, permission Permission) bool {
+	if !knownPermission(permission) {
+		return false
+	}
+	switch role {
+	case RoleViewer:
+		return permission == PermissionRead || permission == PermissionSelfManage
+	case RoleOperator:
+		switch permission {
+		case PermissionRead, PermissionSelfManage, PermissionOperate:
+			return true
+		}
+		return false
+	case RoleEngineer:
+		switch permission {
+		case PermissionRead, PermissionSelfManage, PermissionOperate, PermissionProgramEdit,
+			PermissionProgramActivate, PermissionSettingsManage, PermissionSystemRelease:
+			return true
+		}
+		return false
+	case RoleAdmin:
+		return true
+	default:
+		return false
+	}
+}
+
+func knownPermission(permission Permission) bool {
+	switch permission {
+	case PermissionRead, PermissionSelfManage, PermissionOperate, PermissionProgramEdit,
+		PermissionProgramActivate, PermissionSettingsManage, PermissionDatabaseManage,
+		PermissionUsersManage, PermissionSystemRelease:
+		return true
+	default:
+		return false
+	}
+}
+
+/* Mọi quyền đã khai — dùng cho test ma trận và cho endpoint tự mô tả năng lực. */
+func AllPermissions() []Permission {
+	return []Permission{
+		PermissionRead, PermissionSelfManage, PermissionOperate, PermissionProgramEdit,
+		PermissionProgramActivate, PermissionSettingsManage, PermissionDatabaseManage,
+		PermissionUsersManage, PermissionSystemRelease,
+	}
+}
+
+/* Mọi vai đã khai, theo thứ tự quyền tăng dần. */
+func AllRoles() []Role {
+	return []Role{RoleViewer, RoleOperator, RoleEngineer, RoleAdmin}
+}
+
+/* Quyền của một vai, theo thứ tự ổn định — để giao diện liệt kê được. */
+func PermissionsForRole(role Role) []Permission {
+	granted := make([]Permission, 0, len(AllPermissions()))
+	for _, permission := range AllPermissions() {
+		if RoleHasPermission(role, permission) {
+			granted = append(granted, permission)
+		}
+	}
+	return granted
+}
 
 type contextKey string
 
@@ -451,6 +586,30 @@ func (a *AuthService) Validate(rawToken string) (*Principal, error) {
 	if !validRole(role) || claims.Subject == "" {
 		return nil, errors.New("invalid claims")
 	}
+
+	/*
+	   `WEB-RBAC-002` — VAI PHẢI KHỚP SỔ NGƯỜI DÙNG HIỆN TẠI.
+
+	   TRIỆU CHỨNG (lỗ hổng có thật trước lát này): hạ một tài khoản từ `admin`
+	   xuống `viewer` KHÔNG chạm được tới token đã cấp. Token tự mang vai trong
+	   claim và `Validate` tin claim đó, nên người vừa bị hạ quyền vẫn thao tác
+	   như admin cho tới khi token hết hạn — tối đa một giờ. Xoá tài khoản cũng
+	   vậy: token của người đã bị xoá vẫn đi qua.
+
+	   Sổ người dùng là nguồn sự thật, claim chỉ là bản chụp lúc đăng nhập. Lệch
+	   nhau ⇒ TỪ CHỐI, không phải "lấy cái thấp hơn": một token nói sai về chính
+	   chủ của nó là token phải bị vứt, và người dùng đăng nhập lại là xong.
+	*/
+	a.mu.Lock()
+	current, known := a.users[claims.Subject]
+	a.mu.Unlock()
+	if !known {
+		return nil, errors.New("account no longer exists")
+	}
+	if current.Role != role {
+		return nil, errors.New("role changed; token no longer valid")
+	}
+
 	a.touchSession(rawToken, claims, role)
 	return &Principal{Username: claims.Subject, Role: role, Token: rawToken}, nil
 }
@@ -527,6 +686,43 @@ var passwordChangeAllowed = map[string]bool{
 	"/api/v1/health":             true,
 }
 
+/* Principal có quyền này không. `nil` KHÔNG bao giờ có quyền — một principal
+ * chưa phân giải được là chưa xác thực, không phải "vai mặc định". */
+func (p *Principal) HasPermission(permission Permission) bool {
+	return p != nil && RoleHasPermission(p.Role, permission)
+}
+
+/*
+`RequirePermission` — uỷ quyền theo NĂNG LỰC.
+
+Khác `Require(min Role)` ở chỗ route khai *việc nó làm* thay vì *vai nào đủ
+lớn*. Nhờ vậy mở một route cho `engineer` là sửa đúng một dòng ở chính route đó,
+không phải hạ ngưỡng vai và kéo theo mọi route khác cùng ngưỡng.
+
+Luật `password_change_required` giữ nguyên: nó là cổng ĐỘC LẬP với quyền — một
+người có đủ quyền nhưng đang nợ đổi mật khẩu thì vẫn bị chặn.
+*/
+func (a *AuthService) RequirePermission(permission Permission, next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := BearerToken(r)
+		principal, err := a.Validate(token)
+		if err != nil {
+			a.writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if !principal.HasPermission(permission) {
+			a.writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		if !passwordChangeAllowed[r.URL.Path] && a.MustChangePassword(principal.Username) {
+			a.writeError(w, http.StatusForbidden, "password_change_required")
+			return
+		}
+		ctx := context.WithValue(r.Context(), principalContextKey, principal)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func (a *AuthService) Require(min Role, next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := BearerToken(r)
@@ -570,7 +766,7 @@ func RoleAllows(actual, required Role) bool {
 }
 
 func validRole(role Role) bool {
-	return role == RoleViewer || role == RoleOperator || role == RoleAdmin
+	return role == RoleViewer || role == RoleOperator || role == RoleEngineer || role == RoleAdmin
 }
 
 func validUsername(username string) bool {
@@ -608,9 +804,19 @@ func countAdmins(users map[string]User) int {
 	return count
 }
 
+/*
+Thứ hạng tuyến tính, GIỮ LẠI cho `Require(min Role)` cũ.
+
+`engineer` chèn vào GIỮA `operator` và `admin`, nên mọi route đang đòi `admin`
+vẫn đòi đúng `admin` — thêm một vai KHÔNG được nới lỏng bất cứ route nào đang
+có. Việc mở route cho `engineer` là quyết định TỪNG ROUTE, đi qua
+`RequirePermission`, không phải hệ quả phụ của việc chèn một bậc.
+*/
 func roleRank(role Role) int {
 	switch role {
 	case RoleAdmin:
+		return 4
+	case RoleEngineer:
 		return 3
 	case RoleOperator:
 		return 2

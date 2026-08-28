@@ -15,6 +15,14 @@ import {
 } from "./client";
 import impactGolden from "../../../../../../../contracts/openapi/testdata/programming-impact.json";
 
+/*
+ * `WEB-RBAC-001` — mọi `x-rbac` của Programming nay có thêm `engineer`.
+ *
+ * Vai này tồn tại đúng để làm việc Programming: sửa Draft (`program.edit`) và
+ * đưa chương trình vào vận hành (`program.activate`). Trước lát này chỉ `admin`
+ * làm được, nên không thể giao việc lập trình cho một kỹ sư mà không đồng thời
+ * trao cho họ quyền tạo tài khoản.
+ */
 describe("Programming API client sinh từ OpenAPI", () => {
   it("khóa đủ 40 operation và contract Commission/Runtime Signal/Simulation", () => {
     // 25 operation Rev A + 4 operation Control Library (T59-202/T59-203)
@@ -28,24 +36,27 @@ describe("Programming API client sinh từ OpenAPI", () => {
     expect(PROGRAMMING_ENDPOINTS.createProgrammingSimulationSession).toEqual({
       method: "POST",
       path: "/api/v1/programming/simulation/sessions",
-      roles: ["admin"],
+      roles: ["engineer", "admin"],
     });
-    expect(PROGRAMMING_ENDPOINTS.actProgrammingSimulationSession.roles).toEqual(["admin"]);
-    expect(PROGRAMMING_ENDPOINTS.setProgrammingSimulationInput.roles).toEqual(["admin"]);
-    expect(PROGRAMMING_ENDPOINTS.stopProgrammingSimulationSession.roles).toEqual(["admin"]);
+    expect(PROGRAMMING_ENDPOINTS.actProgrammingSimulationSession.roles).toEqual(["engineer", "admin"]);
+    expect(PROGRAMMING_ENDPOINTS.setProgrammingSimulationInput.roles).toEqual(["engineer", "admin"]);
+    expect(PROGRAMMING_ENDPOINTS.stopProgrammingSimulationSession.roles).toEqual(["engineer", "admin"]);
     expect(PROGRAMMING_ENDPOINTS.getProgrammingSimulationSession.roles).toEqual([
       "viewer",
       "operator",
+      "engineer",
       "admin",
     ]);
     expect(PROGRAMMING_ENDPOINTS.listProgrammingSimulationObservations.roles).toEqual([
       "viewer",
       "operator",
+      "engineer",
       "admin",
     ]);
     expect(PROGRAMMING_ENDPOINTS.listProgrammingSimulationTrace.roles).toEqual([
       "viewer",
       "operator",
+      "engineer",
       "admin",
     ]);
     // T59-702 — lối ra tường minh khỏi RECOVERY_REQUIRED. Admin-only: đây là
@@ -54,46 +65,46 @@ describe("Programming API client sinh từ OpenAPI", () => {
     expect(PROGRAMMING_ENDPOINTS.resetProgrammingRecovery).toEqual({
       method: "POST",
       path: "/api/v1/programming/runtime/recovery-reset",
-      roles: ["admin"],
+      roles: ["engineer", "admin"],
     });
     expect(PROGRAMMING_ENDPOINTS.getProgrammingRuntimeSignals).toEqual({
       method: "GET",
       path: "/api/v1/programming/runtime/signals",
-      roles: ["viewer", "operator", "admin"],
+      roles: ["viewer", "operator", "engineer", "admin"],
     });
     // Intent Enable/Disable: đọc cho viewer, đặt intent admin-only — RBAC nằm ở
     // CHÍNH contract sinh ra, không chỉ ở BE.
     expect(PROGRAMMING_ENDPOINTS.listProgrammingProgramIntents).toEqual({
       method: "GET",
       path: "/api/v1/programming/projects/{projectId}/programs",
-      roles: ["viewer", "operator", "admin"],
+      roles: ["viewer", "operator", "engineer", "admin"],
     });
     expect(PROGRAMMING_ENDPOINTS.setProgrammingProgramIntent).toEqual({
       method: "PUT",
       path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
-      roles: ["admin"],
+      roles: ["engineer", "admin"],
     });
     expect(PROGRAMMING_ENDPOINTS.searchProgrammingLibraries).toEqual({
       method: "GET",
       path: "/api/v1/programming/libraries",
-      roles: ["viewer", "operator", "admin"],
+      roles: ["viewer", "operator", "engineer", "admin"],
     });
     // Mutation library là admin-only ở CHÍNH contract sinh ra, không chỉ ở BE.
-    expect(PROGRAMMING_ENDPOINTS.upsertProgrammingLibraryEntry.roles).toEqual(["admin"]);
+    expect(PROGRAMMING_ENDPOINTS.upsertProgrammingLibraryEntry.roles).toEqual(["engineer", "admin"]);
     expect(PROGRAMMING_ENDPOINTS.deleteProgrammingLibraryEntry).toEqual({
       method: "DELETE",
       path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}",
-      roles: ["admin"],
+      roles: ["engineer", "admin"],
     });
     expect(PROGRAMMING_ENDPOINTS.deprecateProgrammingLibraryRevision).toEqual({
       method: "POST",
       path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
-      roles: ["admin"],
+      roles: ["engineer", "admin"],
     });
     expect(PROGRAMMING_ENDPOINTS.commissionProgrammingRevision).toEqual({
       method: "POST",
       path: "/api/v1/programming/operations/commission",
-      roles: ["admin"],
+      roles: ["engineer", "admin"],
     });
     const request: ProgrammingCommissionRequest = {
       schemaVersion: PROGRAMMING_SCHEMA_VERSION,

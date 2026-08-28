@@ -181,7 +181,11 @@ func TestOpenAPISeparatesRuntimeRoutesFromRoadmap(t *testing.T) {
 
 	writeTest := openAPIPathSection(t, spec, "/modbus/write-test")
 	for _, required := range []string{
-		"x-rbac: [admin]",
+		/* `WEB-RBAC-001` — `/modbus/write-test` là thao tác CHẠY THỬ khi chỉnh
+		   định, nên nó thuộc `settings.manage`: kỹ sư (`engineer`) làm được,
+		   operator thì không. Trước lát này nó khai `[admin]` vì `admin` là vai
+		   duy nhất còn lại phía trên operator. */
+		"x-rbac: [engineer, admin]",
 		"required: [point_id, value]",
 		"required: [point_id, applied_value, status]",
 		`"429"`,
@@ -194,7 +198,7 @@ func TestOpenAPISeparatesRuntimeRoutesFromRoadmap(t *testing.T) {
 	monitor := openAPIPathSection(t, spec, "/ws/monitor")
 	for _, required := range []string{
 		"x-websocket: true",
-		"x-rbac: [viewer, operator, admin]",
+		"x-rbac: [viewer, operator, engineer, admin]",
 		`"101"`,
 	} {
 		if !strings.Contains(monitor, required) {

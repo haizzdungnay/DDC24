@@ -22,15 +22,21 @@ import (
 // authorizerSpy đóng vai `auth.AuthService.Require` nhưng ghi lại role được yêu
 // cầu và chặn đúng như production: thiếu quyền thì handler KHÔNG được gọi.
 type authorizerSpy struct {
-	role          auth.Role // role của "người gọi" trong kịch bản này
-	authenticated bool
-	requiredRole  auth.Role
-	handlerCalled bool
+	role               auth.Role // role của "người gọi" trong kịch bản này
+	authenticated      bool
+	requiredRole       auth.Role
+	requiredPermission auth.Permission
+	handlerCalled      bool
 }
 
+/* `WEB-RBAC-001` chèn `engineer` vào giữa `operator` và `admin`; thứ hạng ở đây
+ * phải khớp `auth.roleRank`, nếu không spy sẽ cho qua đúng những route mà
+ * production chặn. */
 func rank(role auth.Role) int {
 	switch role {
 	case auth.RoleAdmin:
+		return 4
+	case auth.RoleEngineer:
 		return 3
 	case auth.RoleOperator:
 		return 2
@@ -48,6 +54,23 @@ func (s *authorizerSpy) Require(min auth.Role, next http.HandlerFunc) http.Handl
 			return
 		}
 		if rank(s.role) < rank(min) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		s.handlerCalled = true
+		next(w, r)
+	})
+}
+
+/* Bản quyền-theo-năng-lực của spy: cùng luật chặn, chỉ khác câu hỏi. */
+func (s *authorizerSpy) RequirePermission(permission auth.Permission, next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.requiredPermission = permission
+		if !s.authenticated {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if !auth.RoleHasPermission(s.role, permission) {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
@@ -115,15 +138,22 @@ func TestEveryProgrammingRouteRejectsUnauthenticatedBeforeHandler(t *testing.T) 
 	}
 }
 
-func TestEveryMutationRouteRequiresAdminAndBlocksViewer(t *testing.T) {
+func TestEveryMutationRouteRequiresProgramPermissionAndBlocksViewer(t *testing.T) {
 	for _, definition := range routeDefinitions {
 		definition := definition
 		if !mutates(definition) {
 			continue
 		}
 		t.Run(definition.method+" "+definition.path, func(t *testing.T) {
-			if definition.role != auth.RoleAdmin {
-				t.Fatalf("route mutation phải yêu cầu admin, đang là %q", definition.role)
+			/* `WEB-RBAC-001` — mutation không còn khai "admin" mà khai VIỆC nó
+			   làm. Hai mức hợp lệ, và chỉ hai: sửa Draft (`program.edit`) hoặc
+			   chạm tới thiết bị đang chạy (`program.activate`). Một mutation
+			   khai `read` là lỗ hổng; khai `users.manage` là siết nhầm chỗ. */
+			switch definition.permission {
+			case auth.PermissionProgramEdit, auth.PermissionProgramActivate:
+			default:
+				t.Fatalf("route mutation phải khai program.edit hoặc program.activate, đang là %q",
+					definition.permission)
 			}
 			spy := &authorizerSpy{authenticated: true, role: auth.RoleViewer}
 			routes := []webrouter.Route{}
@@ -141,8 +171,8 @@ func TestEveryMutationRouteRequiresAdminAndBlocksViewer(t *testing.T) {
 			if spy.handlerCalled {
 				t.Fatal("handler chạy dù thiếu quyền — mutation có thể đã xảy ra")
 			}
-			if spy.requiredRole != auth.RoleAdmin {
-				t.Fatalf("role yêu cầu = %q; want admin", spy.requiredRole)
+			if spy.requiredPermission != definition.permission {
+				t.Fatalf("quyền yêu cầu = %q; want %q", spy.requiredPermission, definition.permission)
 			}
 		})
 	}
@@ -156,9 +186,9 @@ func TestReadRoutesNeverRequireMoreThanViewer(t *testing.T) {
 		if mutates(definition) {
 			continue
 		}
-		if definition.role != auth.RoleViewer {
-			t.Errorf("%s %s: role = %q; route đọc phải là viewer",
-				definition.method, definition.path, definition.role)
+		if definition.permission != auth.PermissionRead {
+			t.Errorf("%s %s: quyền = %q; route đọc phải là read",
+				definition.method, definition.path, definition.permission)
 		}
 	}
 }
@@ -229,5 +259,41 @@ func TestErrorEnvelopeNeverLeaksRequestSecrets(t *testing.T) {
 				t.Fatalf("header vọng lại secret: %q", value)
 			}
 		}
+	}
+}
+
+/*
+`WEB-RBAC-001` — vai `engineer` phải LÀM ĐƯỢC việc của nó, và chỉ việc của nó.
+
+Hai chiều cùng phải đúng, vì mỗi chiều một mình đều dễ "đạt" bằng cách sai: cho
+engineer mọi quyền thì chiều thứ nhất xanh, còn không cho gì thì chiều thứ hai
+xanh.
+*/
+func TestEngineerCanReachEveryProgrammingRouteAndOperatorCannotActivate(t *testing.T) {
+	for _, definition := range routeDefinitions {
+		if !auth.RoleHasPermission(auth.RoleEngineer, definition.permission) {
+			t.Errorf("%s %s: engineer KHÔNG có %q — vai này tồn tại để làm việc Programming",
+				definition.method, definition.path, definition.permission)
+		}
+	}
+
+	activations := 0
+	for _, definition := range routeDefinitions {
+		if definition.permission == auth.PermissionProgramActivate {
+			activations++
+		}
+		if definition.permission == auth.PermissionRead {
+			continue
+		}
+		/* Thêm vai `engineer` KHÔNG được là dịp nới quyền cho vai đang có:
+		   operator hôm nay không chạm được mutation nào của Programming, và sau
+		   lát này vẫn phải như vậy. */
+		if auth.RoleHasPermission(auth.RoleOperator, definition.permission) {
+			t.Errorf("%s %s: operator được thêm quyền %q — lát này không được nới quyền vai cũ",
+				definition.method, definition.path, definition.permission)
+		}
+	}
+	if activations == 0 {
+		t.Fatal("không có route nào khai program.activate — bảng route hoặc phép phân loại đã sai")
 	}
 }

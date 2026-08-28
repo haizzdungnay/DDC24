@@ -182,7 +182,7 @@ export type { ProgrammingErrorCode } from "./errors";
 
 export const PROGRAMMING_OPENAPI_VERSION = ${JSON.stringify(document.info.version)} as const;
 export const PROGRAMMING_SCHEMA_VERSION = ${JSON.stringify(schemaVersion)} as const;
-export type ProgrammingRole = "viewer" | "operator" | "admin";
+export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type ProgrammingImpactStatus = ${quotedUnion(impactStatuses)};
 export type ProgrammingImpactKey = ${quotedUnion(impactKeys)};

@@ -1,5 +1,9 @@
 import type { UserRole } from '../../shared/types'
 
+/* `WEB-RBAC-001` — bảng năng lực sống ở `shared/auth`, cùng tầng với `UserRole`;
+ * re-export ở đây để consumer của feature không phải biết chỗ đó. */
+export { roleCan, USER_ROLES, type UserCapability } from '../../shared/auth/capabilities'
+
 /**
  * Thang quyền của frontend — WEB-UX-005.
  *
@@ -12,8 +16,10 @@ import type { UserRole } from '../../shared/types'
 const ROLE_RANK: Record<UserRole, number> = {
   viewer: 1,
   operator: 2,
-  admin: 3
+  engineer: 3,
+  admin: 4
 }
+
 
 export function roleAtLeast(actual: UserRole | undefined | null, required: UserRole): boolean {
   if (!actual) return false
