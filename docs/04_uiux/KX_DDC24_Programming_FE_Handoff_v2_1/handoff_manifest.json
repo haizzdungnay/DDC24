@@ -40,7 +40,11 @@
     {
       "id": "PGM-04",
       "doc": "PGM-04_LIBRARY_FE_HANDOFF.md",
-      "asset": "assets/PGM-04_library.png"
+      "asset": "assets/PGM-04_library.png",
+      "spec": "PGM-04_VISUAL_SPEC_v1.md",
+      "render": "assets/pgm04-visual-spec.html",
+      "renderSha256": "9a839996ee01205d5c8a95ab56c15fcc2626973b005f5fdf82d291d5c0512563",
+      "assetAuthority": false
     },
     {
       "id": "PGM-05",

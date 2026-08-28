@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="vi" data-spec="SPEC-PGM04-VISUAL-001">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PGM-04 Visual Spec v1 — Target render được</title>
+<!--
+  `T61-002` — bản render của SPEC-PGM04-VISUAL-001.
+
+  Tệp này là Target, không phải bản mô phỏng cho đẹp. Nó dùng ĐÚNG tên token của
+  sản phẩm (`--c-*`, `--radius`) nên khi bảng màu đổi thì spec đổi theo, và mọi
+  thay đổi hiện ra trong `git diff` ở đúng dòng.
+
+  Không có JavaScript: một Target cần đọc được kể cả khi trình duyệt chặn script,
+  và mọi trạng thái ở đây phải hiện ĐỒNG THỜI để so sánh được — không phải bấm
+  qua từng tab mới thấy.
+-->
+<style>
+  :root{
+    --c-bg:#C8CCD0; --c-surface:#D8DBDE; --c-surface-2:#C2C6CA;
+    --c-border:#636970; --c-line-strong:#4C5056;
+    --c-text:#1C1F23; --c-text-dim:#4A4F55;
+    --c-accent:#26527C; --c-accent-bg:#D5DEE8;
+    --c-good-fg:#165B2E; --c-good-bg:#E0ECE5;
+    --c-warn-fg:#634D00; --c-warn-bg:#EEE9DB;
+    --c-fault-fg:#A01017; --c-fault-bg:#F7E0E1;
+    --radius:6px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --c-bg:#14171A; --c-surface:#1D2125; --c-surface-2:#262B30;
+      --c-border:#7C838B; --c-line-strong:#9AA0A6;
+      --c-text:#EDEFF2; --c-text-dim:#9AA0A6;
+      --c-accent:#5698DC; --c-accent-bg:#1B2B3D;
+      --c-good-fg:#30A85C; --c-good-bg:#193026;
+      --c-warn-fg:#E8B500; --c-warn-bg:#3A3315;
+      --c-fault-fg:#EA6A6E; --c-fault-bg:#3A2023;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;background:var(--c-bg);color:var(--c-text);
+       font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  h1{font-size:18px;margin:0 0 4px}
+  h2{font-size:14px;margin:32px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--c-border)}
+  .note{color:var(--c-text-dim);max-width:70ch;margin:0 0 8px}
+  .frame{border:1px solid var(--c-line-strong);border-radius:var(--radius);
+         background:var(--c-bg);padding:12px;margin-bottom:12px}
+  .frame > figcaption{color:var(--c-text-dim);font-size:11px;margin-bottom:8px;
+                      text-transform:uppercase;letter-spacing:.04em}
+  .layout{display:grid;grid-template-columns:1fr 22rem;gap:12px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .grid-2{grid-template-columns:repeat(2,1fr)}
+  .grid-1{grid-template-columns:1fr}
+  .card{background:var(--c-surface);border:1px solid var(--c-border);
+        border-radius:var(--radius);padding:8px;display:flex;flex-direction:column;gap:4px}
+  .card:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+  .name{font-weight:600}
+  .sig{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--c-text-dim)}
+  .row{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  .badge{border:1px solid var(--c-border);border-radius:999px;padding:0 6px;
+         font-size:10px;color:var(--c-text-dim)}
+  .badge.warn{background:var(--c-warn-bg);color:var(--c-warn-fg);border-color:var(--c-warn-fg)}
+  .badge.good{background:var(--c-good-bg);color:var(--c-good-fg);border-color:var(--c-good-fg)}
+  .missing{color:var(--c-text-dim);font-size:11px}
+  .aside{background:var(--c-surface);border:1px solid var(--c-border);
+         border-radius:var(--radius);padding:8px}
+  .skeleton .bar{background:var(--c-surface-2);border-radius:3px;height:12px;margin-bottom:6px}
+  .state{border:1px solid var(--c-border);border-radius:var(--radius);padding:10px;
+         background:var(--c-surface)}
+  .state.err{background:var(--c-fault-bg);color:var(--c-fault-fg);border-color:var(--c-fault-fg)}
+  .state.warn{background:var(--c-warn-bg);color:var(--c-warn-fg);border-color:var(--c-warn-fg)}
+  button{font:inherit;background:var(--c-surface-2);color:var(--c-text);
+         border:1px solid var(--c-border);border-radius:var(--radius);
+         min-height:24px;padding:2px 10px}
+  button:disabled{opacity:.55}
+  button:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}
+  .why{font-size:11px;color:var(--c-text-dim);margin-top:4px}
+</style>
+</head>
+<body>
+
+<h1>PGM-04 — Visual Spec v1</h1>
+<p class="note">Target render được cho Control Library. Mọi màu ở đây là token của sản phẩm;
+không có giá trị viết cứng. Bật/tắt chế độ tối của hệ điều hành để kiểm cả hai bảng màu.</p>
+
+<h2>1. Bố cục ≥ 1280 px — lưới 3 cột + Inspector cố định</h2>
+<figure class="frame">
+  <figcaption>desktop · trạng thái bình thường</figcaption>
+  <div class="layout">
+    <div class="grid">
+      <article class="card" tabindex="0">
+        <span class="name">PID</span>
+        <div class="row"><span class="badge">FUNCTION_BLOCK</span><span class="badge">Hệ thống</span>
+          <span class="badge warn">Cần review</span></div>
+        <span class="sig">f(PV: REAL, SP: REAL, MODE: BOOL) → REAL</span>
+        <div class="row"><span class="badge">Điều khiển</span><span class="badge good">v1.4 · PUBLISHED</span></div>
+      </article>
+      <article class="card">
+        <span class="name">SCALE_LIN</span>
+        <div class="row"><span class="badge">FUNCTION</span><span class="badge">Dự án</span></div>
+        <span class="sig">f(X: REAL) → REAL</span>
+        <div class="row"><span class="badge">Chuyển đổi</span><span class="badge good">v2 · PUBLISHED</span></div>
+      </article>
+      <article class="card">
+        <span class="name">TON</span>
+        <div class="row"><span class="badge">FUNCTION_BLOCK</span><span class="badge">Hệ thống</span></div>
+        <span class="sig missing">Chưa đọc được chữ ký</span>
+        <div class="row"><span class="missing">Phân loại: — chưa có nguồn</span></div>
+      </article>
+    </div>
+    <aside class="aside">
+      <strong>Inspector</strong>
+      <p class="why">Details · Parameters · Used In · Versions.
+        Bố cục từng tab chờ <code>T61-005</code> chốt trường — vẽ trước sẽ phải vẽ lại.</p>
+    </aside>
+  </div>
+</figure>
+
+<h2>2. 1024–1279 px — lưới 2 cột, Inspector 20 rem</h2>
+<figure class="frame">
+  <figcaption>compact · Inspector vẫn cố định, không chồng lên lưới</figcaption>
+  <div class="layout" style="grid-template-columns:1fr 20rem">
+    <div class="grid grid-2">
+      <article class="card"><span class="name">PID</span>
+        <div class="row"><span class="badge">FUNCTION_BLOCK</span><span class="badge warn">Cần review</span></div></article>
+      <article class="card"><span class="name">SCALE_LIN</span>
+        <div class="row"><span class="badge">FUNCTION</span></div></article>
+    </div>
+    <aside class="aside"><strong>Inspector</strong></aside>
+  </div>
+</figure>
+
+<h2>3. &lt; 768 px — một cột, không có đường ghi nào</h2>
+<figure class="frame" style="max-width:390px">
+  <figcaption>mobile · chỉ đọc, khớp <code>mobileReadOnly</code> của PGM-02</figcaption>
+  <div class="grid grid-1">
+    <article class="card"><span class="name">PID</span>
+      <div class="row"><span class="badge">FUNCTION_BLOCK</span><span class="badge warn">Cần review</span></div>
+      <span class="sig">f(PV, SP, MODE) → REAL</span></article>
+    <article class="card"><span class="name">SCALE_LIN</span>
+      <div class="row"><span class="badge">FUNCTION</span></div></article>
+  </div>
+  <p class="why">Dưới 768 px PGM-02 đã là chỉ-đọc. Một màn hình cho sửa trong khi
+    màn hình kế bên cấm sửa là hai luật cho một thiết bị.</p>
+</figure>
+
+<h2>4. Ma trận trạng thái</h2>
+
+<figure class="frame">
+  <figcaption>loading · skeleton khớp HÌNH HỌC card thật</figcaption>
+  <div class="grid">
+    <div class="card skeleton"><div class="bar" style="width:60%"></div>
+      <div class="bar" style="width:85%"></div><div class="bar" style="width:40%"></div></div>
+    <div class="card skeleton"><div class="bar" style="width:55%"></div>
+      <div class="bar" style="width:80%"></div><div class="bar" style="width:45%"></div></div>
+    <div class="card skeleton"><div class="bar" style="width:65%"></div>
+      <div class="bar" style="width:75%"></div><div class="bar" style="width:35%"></div></div>
+  </div>
+  <p class="why">Skeleton phải cùng chiều cao card thật: lệch chiều cao thì danh sách
+    nhảy một nhịp khi dữ liệu về, và người đang định bấm sẽ bấm nhầm ô.</p>
+</figure>
+
+<figure class="frame">
+  <figcaption>empty-filter · KHÁC empty thật</figcaption>
+  <div class="state">Không khối nào khớp bộ lọc hiện tại.
+    <div style="margin-top:6px"><button type="button">Xoá bộ lọc</button></div></div>
+</figure>
+
+<figure class="frame">
+  <figcaption>error · KHÔNG được biến thành danh sách rỗng</figcaption>
+  <div class="state err">Không đọc được Thư viện điều khiển.
+    <div style="margin-top:6px"><button type="button">Thử lại</button></div>
+    <p class="why" style="color:inherit">Một danh sách rỗng đọc như “thư viện không có gì”.
+      Sự thật ở đây là “không đọc được thư viện”. Hai câu dẫn tới hai hành động.</p></div>
+</figure>
+
+<figure class="frame">
+  <figcaption>no-permission · nút VẪN THẤY, bị khoá, kèm lý do</figcaption>
+  <div class="state">
+    <button type="button" disabled aria-describedby="why-perm">Tạo khối</button>
+    <p class="why" id="why-perm">Vai hiện tại không có quyền sửa chương trình.</p>
+    <p class="why">Ẩn nút làm người dùng tưởng thiết bị không có khả năng đó, rồi đi hỏi sai người.</p>
+  </div>
+</figure>
+
+<figure class="frame">
+  <figcaption>review-required · Insert khoá, KHÔNG có checkbox bỏ qua</figcaption>
+  <div class="state warn">
+    <span class="badge warn">Cần review</span>
+    <div style="margin-top:6px">
+      <button type="button" disabled aria-describedby="why-pid">Chèn khối</button></div>
+    <p class="why" id="why-pid" style="color:inherit">Khối này đang chờ review Controls/Safety
+      (<code>featureState=REVIEW_REQUIRED</code>). Không có đường bỏ qua.</p>
+  </div>
+</figure>
+
+<figure class="frame">
+  <figcaption>target-chooser · Insert khi chưa có POU đang mở</figcaption>
+  <div class="state">Chọn POU đích để chèn khối:
+    <div style="margin-top:6px"><button type="button">AHU_MasterSequence</button>
+      <button type="button">VAV_Zone1</button></div>
+    <p class="why">Không tự tạo POU và không tự sửa Draft.</p></div>
+</figure>
+
+<figure class="frame">
+  <figcaption>offline · banner dính, phần đã tải VẪN đọc được</figcaption>
+  <div class="state warn">Mất kết nối — danh sách bên dưới là bản đã tải lúc trước.</div>
+  <div class="grid" style="margin-top:8px">
+    <article class="card"><span class="name">PID</span>
+      <div class="row"><span class="badge">FUNCTION_BLOCK</span></div></article>
+  </div>
+</figure>
+
+<h2>5. Tiêu điểm</h2>
+<p class="note">Lưới là MỘT điểm dừng tab (roving tabindex): một thư viện 200 khối
+  mà mỗi card là một điểm dừng sẽ biến phím <kbd>Tab</kbd> thành vô dụng.
+  Bấm <kbd>Tab</kbd> trên trang này để kiểm vòng tiêu điểm và viền
+  <code>--c-accent</code>.</p>
+
+</body>
+</html>
