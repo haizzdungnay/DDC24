@@ -1,3 +1,4 @@
+import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../api/generated/library_registry'
 import type {
   ProgrammingLibraryEntry,
   ProgrammingLibraryUsage,
@@ -97,4 +98,20 @@ export function safeToRemove(usage: ProgrammingLibraryUsage | null | undefined):
   if (display.truncated) return false
   if (display.kind === 'sealed-only') return display.sealed === 0
   return display.sealed === 0 && display.draft === 0
+}
+
+/**
+ * Nhãn hiển thị của một phân loại, lấy từ registry.
+ *
+ * Không viết tay bảng ánh xạ ở FE: registry là nơi `category` được định nghĩa,
+ * nên nó cũng phải là nơi định nghĩa tên hiển thị. Một nhóm mới thêm vào
+ * registry mà FE không biết sẽ hiện ra dưới dạng mã thô — xấu nhưng TRUNG THỰC,
+ * và tốt hơn nhiều so với việc rơi vào một nhóm "khác" tự nghĩ ra.
+ */
+export function categoryLabel(
+  category: string,
+  pick: (vi: string, en: string) => string,
+): string {
+  const known = PROGRAMMING_LIBRARY_CATEGORY_ORDER.find((item) => item.id === category)
+  return known ? pick(known.labelVi, known.labelEn) : category
 }

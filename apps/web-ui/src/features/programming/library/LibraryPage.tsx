@@ -9,6 +9,8 @@ import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
 import { roleCan } from '../../../shared/auth/capabilities'
 import { createUuid } from '../../../shared/crypto'
+import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../api/generated/library_registry'
+import { categoryLabel, metadataValue, scopeLabel } from './libraryPresentation'
 import { useProgrammingLibrary, useProgrammingProjects, type LibrarySearchFilters } from '../api/queries'
 import { useProgrammingLibraryEntryMutations, type LibraryEntryDraft } from '../api/mutations'
 import { useDraftWorkspace } from '../design/useDraftWorkspace'
@@ -89,6 +91,11 @@ export function LibraryPage() {
 
   const [scope, setScope] = useState<ScopeFilter>('')
   const [kind, setKind] = useState<KindFilter>('')
+  /* `T61-204` — lọc theo phân loại nghiệp vụ. Nguồn giá trị là
+     `categoryOrder` của registry, không phải một danh sách viết tay ở FE:
+     thêm một nhóm vào registry mà FE không biết sẽ tạo ra một bộ lọc bỏ sót
+     khối, và người dùng không có cách nào nhận ra. */
+  const [category, setCategory] = useState('')
   const [query, setQuery] = useState('')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [etag, setEtag] = useState<string | null>(null)
@@ -101,10 +108,11 @@ export function LibraryPage() {
     () => ({
       projectId,
       scope: scope === '' ? undefined : scope,
+      ...(category ? { category } : {}),
       kind: kind === '' ? undefined : kind,
       query: query.trim() === '' ? undefined : query.trim()
     }),
-    [projectId, scope, kind, query]
+    [projectId, scope, kind, category, query]
   )
   const library = useProgrammingLibrary(filters)
   const currentEtag = etag ?? workspace.project?.etag ?? projectSummary?.etag ?? ''
@@ -226,9 +234,11 @@ export function LibraryPage() {
         <LibraryFilters
           scope={scope}
           kind={kind}
+          category={category}
           query={query}
           onScope={setScope}
           onKind={setKind}
+          onCategory={setCategory}
           onQuery={setQuery}
         />
         <LibraryVersionLock lock={lock} status={workspace.status} />
@@ -539,23 +549,27 @@ function ReadBackNotice({ readBack, entries }: { readBack: ReadBack; entries: Pr
 function LibraryFilters({
   scope,
   kind,
+  category,
   query,
   onScope,
   onKind,
+  onCategory,
   onQuery
 }: {
   scope: ScopeFilter
   kind: KindFilter
+  category: string
   query: string
   onScope: (value: ScopeFilter) => void
   onKind: (value: KindFilter) => void
+  onCategory: (value: string) => void
   onQuery: (value: string) => void
 }) {
   const { pick } = useI18n()
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-end">
       <label className="flex flex-1 flex-col gap-1 text-sm">
-        <span className="text-[var(--c-text-dim)]">{pick('Tìm theo tên', 'Search by name')}</span>
+        <span className="text-[var(--c-text-dim)]">{pick('Tìm theo tên hoặc mô tả', 'Search name or description')}</span>
         <input
           type="search"
           value={query}
@@ -586,6 +600,22 @@ function LibraryFilters({
           <option value="FUNCTION">FUNCTION</option>
           <option value="FUNCTION_BLOCK">FUNCTION_BLOCK</option>
           <option value="CONVERSION">CONVERSION</option>
+        </select>
+      </label>
+      {/* `T61-204` — nhãn nhóm lấy từ registry, không viết tay ở FE. Registry
+          là nơi `category` được định nghĩa, nên nó cũng phải là nơi định nghĩa
+          THỨ TỰ và TÊN hiển thị của nhóm. */}
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-[var(--c-text-dim)]">{pick('Phân loại', 'Category')}</span>
+        <select
+          value={category}
+          onChange={(event) => onCategory(event.target.value)}
+          className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
+        >
+          <option value="">{pick('Tất cả', 'All')}</option>
+          {PROGRAMMING_LIBRARY_CATEGORY_ORDER.map((item) => (
+            <option key={item.id} value={item.id}>{pick(item.labelVi, item.labelEn)}</option>
+          ))}
         </select>
       </label>
     </div>
@@ -644,8 +674,11 @@ function LibraryList({
             <span className="flex min-w-0 items-center gap-2">
               <Library className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="truncate font-medium">{group.name}</span>
+              {/* `T61-204` — nhãn phạm vi bằng tiếng người, KHÔNG dùng chữ
+                  "Core": sản phẩm đã có `mkddc-core` và hai nghĩa cho một từ
+                  đúng chỗ người trực ca cần đọc nhanh là một cái bẫy. */}
               <span className="shrink-0 rounded bg-[var(--c-surface-2)] px-1.5 py-0.5 text-xs text-[var(--c-text-dim)]">
-                {group.scope}
+                {scopeLabel(group.scope, false)}
               </span>
               {group.scope === 'SYSTEM' && (
                 <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--c-text-dim)]" aria-label={pick('Chỉ đọc', 'Read-only')} />
@@ -653,6 +686,12 @@ function LibraryList({
             </span>
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--c-text-dim)] sm:shrink-0 sm:flex-nowrap">
               {group.kind}
+              {/* Phân loại nghiệp vụ. Vắng nguồn thì hiện `—` KÈM lý do: một ô
+                  trống đọc như "không thuộc nhóm nào", còn sự thật là "chưa ai
+                  phân loại". */}
+              {group.current.category
+                ? <span>{categoryLabel(group.current.category, pick)}</span>
+                : <span title={pick('Khối này chưa được phân loại', 'This block has no category yet')}>—</span>}
               <span>
                 {group.current.libraryVersion} · {group.current.libraryState}
               </span>
@@ -717,7 +756,21 @@ function LibraryDetail({
       <dl className="flex flex-col gap-2 text-sm">
         <Row label={pick('Tên', 'Name')} value={entry.name} />
         <Row label={pick('Loại', 'Kind')} value={entry.kind} />
-        <Row label={pick('Phạm vi', 'Scope')} value={entry.scope} />
+        <Row label={pick('Phạm vi', 'Scope')} value={scopeLabel(entry.scope, false)} />
+        {/* `T61-204` — hai trường metadata. `metadataValue` trả `null` cho
+            field VẮNG, và ở đây `null` phải thành `—` KÈM lý do: một ô trống
+            đọc như "đã điền rồi và nội dung rỗng", nên người dùng sẽ không đi
+            tìm chỗ để điền. */}
+        <Row
+          label={pick('Phân loại', 'Category')}
+          value={metadataValue(entry.category)
+            ? categoryLabel(entry.category as string, pick)
+            : pick('— chưa phân loại', '— not categorised')}
+        />
+        <Row
+          label={pick('Mô tả', 'Description')}
+          value={metadataValue(entry.description) ?? pick('— chưa có mô tả', '— no description yet')}
+        />
         <Row label={pick('Ngôn ngữ', 'Language')} value={entry.language ?? '—'} />
         <Row label={pick('Phiên bản thư viện', 'Library version')} value={`${entry.libraryVersion} · ${entry.libraryState}`} />
         <Row label={pick('Hash nội dung', 'Content hash')} value={entry.contentSha256.slice(0, 16) + '…'} />

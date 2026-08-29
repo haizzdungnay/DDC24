@@ -720,6 +720,8 @@ export interface LibrarySearchFilters {
   projectId?: string
   scope?: 'SYSTEM' | 'PROJECT'
   kind?: 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
+  /** `T61-204` — phân loại nghiệp vụ; so chính xác theo `categoryOrder`. */
+  category?: string
   query?: string
 }
 
@@ -727,14 +729,15 @@ export interface LibrarySearchFilters {
  * filter là tải lại, không phải lọc phía client trên một trang đã cắt. */
 export function useProgrammingLibrary(filters: LibrarySearchFilters): RemoteState<ProgrammingLibraryPage> {
   const client = useProgrammingApiClient()
-  const { projectId, scope, kind, query } = filters
+  const { projectId, scope, kind, category, query } = filters
   const load = useCallback(() => {
     const search: Record<string, string | number> = { limit: 100 }
     if (projectId) search.projectId = projectId
     if (scope) search.scope = scope
     if (kind) search.kind = kind
+    if (category) search.category = category
     if (query) search.q = query
     return client.request<ProgrammingLibraryPage>('searchProgrammingLibraries', { query: search })
-  }, [client, projectId, scope, kind, query])
+  }, [client, projectId, scope, kind, category, query])
   return useProgrammingResource(load, 0)
 }
