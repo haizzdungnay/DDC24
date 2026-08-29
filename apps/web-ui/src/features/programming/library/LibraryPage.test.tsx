@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
@@ -489,5 +489,60 @@ describe('LibraryPage — phân trang', () => {
     expect(await screen.findByRole('button', { name: /KHOI2/ })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/cursor lặp/))
     expect(screen.queryByRole('button', { name: /Tải thêm khối/ })).not.toBeInTheDocument()
+  })
+})
+
+/*
+`T61-204` — bộ lọc và khối đang chọn sống trong URL.
+
+Trước lát này chúng là `useState` cục bộ, nên tải lại trang hoặc gửi đường dẫn
+cho đồng nghiệp đều mất ngữ cảnh: người nhận mở ra thấy toàn bộ thư viện thay vì
+đúng khối đang được nói tới. Một màn hình tra cứu mà không dán link được thì
+người ta sẽ mô tả bằng lời — và mô tả bằng lời là chỗ nhầm khối.
+*/
+describe('LibraryPage — trạng thái trong URL', () => {
+  it('mở bằng đường dẫn có sẵn bộ lọc thì áp ngay, không cần thao tác lại', async () => {
+    const seen: Record<string, unknown>[] = []
+    client.request.mockImplementation((operationId: string, options?: { query?: Record<string, unknown> }) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
+      if (operationId === 'searchProgrammingLibraries') {
+        if (options?.query) seen.push(options.query)
+        return Promise.resolve({ items: [entry({ name: 'SCALE_LIN' })] })
+      }
+      return Promise.reject(new Error('unexpected ' + operationId))
+    })
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[`/eng/programming/projects/${PROJECT_ID}/library?category=timer&kind=FUNCTION`]}>
+          <LibraryPage />
+        </MemoryRouter>
+      </I18nProvider>
+    )
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    // Bộ lọc phải đi TỚI MÁY CHỦ, không chỉ hiện trên ô select.
+    await waitFor(() => expect(seen.some((q) => q.category === 'timer' && q.kind === 'FUNCTION')).toBe(true))
+    expect(screen.getByLabelText(/Phân loại/)).toHaveValue('timer')
+  })
+
+  it('đổi bộ lọc ghi vào URL để dán link được', async () => {
+    stub(() => Promise.resolve({ items: [entry({ name: 'SCALE_LIN' })] }))
+    /* `MemoryRouter` không đụng `window.location`, nên đọc vị trí qua chính
+       router — kiểm `window.location` ở đây sẽ xanh/đỏ vì lý do không liên
+       quan tới thứ đang đo. */
+    function LocationProbe() {
+      const location = useLocation()
+      return <span data-testid="loc">{location.search}</span>
+    }
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[`/eng/programming/projects/${PROJECT_ID}/library`]}>
+          <LibraryPage />
+          <LocationProbe />
+        </MemoryRouter>
+      </I18nProvider>
+    )
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    fireEvent.change(screen.getByLabelText(/Phân loại/), { target: { value: 'control' } })
+    await waitFor(() => expect(screen.getByTestId('loc').textContent).toContain('category=control'))
   })
 })

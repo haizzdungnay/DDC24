@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ArchiveX, History, Library, Lock, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { Panel } from '../../../shared/components/Panel'
 import { StateBlock } from '../../../shared/components/StateBlock'
@@ -94,6 +94,7 @@ export function LibraryPage() {
   /* `WEB-RBAC-001` — ghi PROJECT Library đòi `program.edit`, không đòi vai
      `admin`. Trước lát này `engineer` bị giao diện chặn trên một thao tác mà
      máy chủ chấp nhận. */
+  const [searchParams, setSearchParams] = useSearchParams()
   const canEdit = roleCan(session?.role, 'program.edit')
   const routeParams = useParams<{ projectId: string }>()
   const projects = useProgrammingProjects()
@@ -103,15 +104,40 @@ export function LibraryPage() {
   const projectSummary = projects.data?.items.find((item) => item.projectId === projectId) ?? projects.data?.items[0]
   const workspace = useDraftWorkspace(projectId)
 
-  const [scope, setScope] = useState<ScopeFilter>('')
-  const [kind, setKind] = useState<KindFilter>('')
+  /* `T61-204` — bộ lọc và khối đang chọn sống trong URL, không trong `useState`.
+   *
+   * Trước lát này chúng là state cục bộ, nên `Back`, tải lại trang, hay gửi
+   * đường dẫn cho đồng nghiệp đều mất ngữ cảnh: người nhận mở ra thấy toàn bộ
+   * thư viện thay vì đúng khối đang được nói tới. Một màn hình tra cứu mà không
+   * dán link được thì người ta sẽ mô tả bằng lời, và mô tả bằng lời là chỗ
+   * nhầm khối.
+   *
+   * `replace: true` cho mọi thay đổi bộ lọc: gõ mười ký tự vào ô tìm không được
+   * đẻ ra mười mục lịch sử, nếu không `Back` trở thành nút xoá-một-ký-tự. */
+  const setParam = useCallback((key: string, value: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+
+  const scope = (searchParams.get('scope') ?? '') as ScopeFilter
+  const kind = (searchParams.get('kind') ?? '') as KindFilter
+  const setScope = useCallback((value: ScopeFilter) => setParam('scope', value), [setParam])
+  const setKind = useCallback((value: KindFilter) => setParam('kind', value), [setParam])
   /* `T61-204` — lọc theo phân loại nghiệp vụ. Nguồn giá trị là
      `categoryOrder` của registry, không phải một danh sách viết tay ở FE:
      thêm một nhóm vào registry mà FE không biết sẽ tạo ra một bộ lọc bỏ sót
      khối, và người dùng không có cách nào nhận ra. */
-  const [category, setCategory] = useState('')
-  const [query, setQuery] = useState('')
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const category = searchParams.get('category') ?? ''
+  const setCategory = useCallback((value: string) => setParam('category', value), [setParam])
+  const query = searchParams.get('q') ?? ''
+  const setQuery = useCallback((value: string) => setParam('q', value), [setParam])
+  /* Khối đang chọn cũng nằm trong URL: đó là thứ người ta muốn gửi đi nhất. */
+  const selectedKey = searchParams.get('entry')
+  const setSelectedKey = useCallback((value: string | null) => setParam('entry', value ?? ''), [setParam])
   const [etag, setEtag] = useState<string | null>(null)
   const [editor, setEditor] = useState<EditorMode | null>(null)
   const [deprecationCandidate, setDeprecationCandidate] = useState<ProgrammingLibraryEntry | null>(null)
