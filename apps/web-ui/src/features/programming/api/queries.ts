@@ -21,6 +21,7 @@ import type {
   ProgrammingRuntimeSignalPage,
   RemoteState,
   ProgrammingLibraryUsage,
+  ProgrammingLibraryEntry,
 } from '../model/types'
 
 type PickCopy = (vi: string, en: string) => string
@@ -764,4 +765,198 @@ export function useProgrammingLibraryUsage(
     return client.request<ProgrammingLibraryUsage>('listProgrammingLibraryUsages', { query: search })
   }, [client, libraryRevisionId, entryId, scope])
   return useProgrammingResource(load, 0)
+}
+
+/**
+ * `T61-202` — trang tiếp theo của Control Library.
+ *
+ * Trước lát này `useProgrammingLibrary` đọc đúng MỘT trang `limit: 100` rồi bỏ
+ * `nextCursor`. Với một Project nhiều khối, phần dư biến mất **im lặng**: màn
+ * hình hiện một danh sách trông đầy đủ, và người dùng kết luận khối họ tìm
+ * không tồn tại. Riêng registry SYSTEM đã 46 mục.
+ *
+ * Ba luật ở đây đều rút từ vết thương của `useProgrammingRevisionComparison`:
+ *
+ * 1. **`loadMore` phải chạy được sau một trang hỏng.** Trang trước hỏng chính
+ *    là lúc cần thử lại; đòi `status === 'ready'` là cách đường retry không bao
+ *    giờ chạy được.
+ * 2. **Lỗi một trang KHÔNG xoá danh sách đã tải.** Mất mọi thứ đã cuộn qua chỉ
+ *    vì trang thứ tư lỗi là một đánh đổi không ai chọn.
+ * 3. **Khử trùng theo ĐỊNH DANH, không theo vị trí.** Cursor lặp hoặc trang
+ *    chồng lấn sẽ đẩy cùng một khối vào danh sách hai lần; hai thẻ trùng tên tệ
+ *    hơn một thẻ thiếu, vì người dùng sửa một thẻ rồi thấy thẻ kia vẫn mang giá
+ *    trị cũ và kết luận là mình lưu hỏng.
+ */
+export interface ProgrammingLibraryPagedState {
+  status: 'loading' | 'ready' | 'error'
+  items: ProgrammingLibraryEntry[]
+  error: string | null
+  /** Lỗi của RIÊNG trang vừa xin thêm — không phải lỗi của cả danh sách. */
+  loadMoreError: string | null
+  loadingMore: boolean
+  hasMore: boolean
+  loadMore: () => void
+  refresh: () => void
+}
+
+function libraryEntryIdentity(entry: ProgrammingLibraryEntry): string {
+  return entry.libraryRevisionId + ' ' + entry.entryId
+}
+
+export function useProgrammingLibraryPaged(
+  filters: LibrarySearchFilters,
+): ProgrammingLibraryPagedState {
+  const client = useProgrammingApiClient()
+  const { pick } = useI18n()
+  const { projectId, scope, kind, category, query } = filters
+  /* Khoá bộ lọc: đổi bất kỳ mảnh nào là một danh sách KHÁC, nên mọi trang đã
+   * tải phải bị bỏ. Ghép trang của bộ lọc cũ vào bộ lọc mới là cách người dùng
+   * thấy khối không khớp điều kiện họ vừa chọn. */
+  const filterKey = [projectId ?? '', scope ?? '', kind ?? '', category ?? '', query ?? ''].join(' ')
+
+  const [state, setState] = useState<{
+    key: string
+    status: 'loading' | 'ready' | 'error'
+    items: ProgrammingLibraryEntry[]
+    cursor: string | null
+    error: string | null
+    loadMoreError: string | null
+    loadingMore: boolean
+  }>({
+    key: filterKey, status: 'loading', items: [], cursor: null,
+    error: null, loadMoreError: null, loadingMore: false,
+  })
+
+  const generation = useRef(0)
+  const consumed = useRef(new Set<string>())
+  const inFlight = useRef<string | null>(null)
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  const requestPage = useCallback((cursor: string | null) => {
+    const search: Record<string, string | number> = { limit: 100 }
+    if (projectId) search.projectId = projectId
+    if (scope) search.scope = scope
+    if (kind) search.kind = kind
+    if (category) search.category = category
+    if (query) search.q = query
+    if (cursor) search.cursor = cursor
+    return client.request<ProgrammingLibraryPage>('searchProgrammingLibraries', { query: search })
+  }, [client, projectId, scope, kind, category, query])
+
+  const loadFirst = useCallback(() => {
+    const myGeneration = ++generation.current
+    consumed.current = new Set()
+    inFlight.current = null
+    /* GIỮ danh sách đang hiện trong lúc tải lại.
+     *
+     * Xoá trắng rồi mới tải là cách màn hình nháy một nhịp mỗi lần đổi bộ lọc —
+     * và tệ hơn: `<ul>` bị tháo rồi dựng lại, nên tiêu điểm bàn phím của người
+     * đang dùng phím mũi tên rơi về đầu trang. Trạng thái `loading` chỉ dùng
+     * khi CHƯA có gì để hiện; còn lại là tải lại tại chỗ. */
+    setState((latest) => ({
+      key: filterKey,
+      status: latest.items.length > 0 ? 'ready' : 'loading',
+      items: latest.items,
+      cursor: null,
+      error: null,
+      loadMoreError: null,
+      loadingMore: false,
+    }))
+    Promise.resolve().then(() => requestPage(null)).then(
+      (page) => {
+        if (myGeneration !== generation.current) return
+        setState({
+          key: filterKey, status: 'ready', items: page.items ?? [],
+          cursor: page.nextCursor ?? null, error: null, loadMoreError: null, loadingMore: false,
+        })
+      },
+      (reason: unknown) => {
+        if (myGeneration !== generation.current) return
+        /* Lỗi tải lại KHÔNG xoá danh sách đang hiện: một lần mất mạng không nên
+         * làm người dùng mất luôn thứ họ đang đọc. Nhưng `status` vẫn là
+         * `error` để bề mặt nói ra rằng dữ liệu này có thể đã cũ. */
+        setState((latest) => ({
+          key: filterKey, status: 'error', items: latest.items, cursor: null,
+          error: programmingResourceErrorMessage(pick, reason), loadMoreError: null, loadingMore: false,
+        }))
+      },
+    )
+  }, [filterKey, requestPage, pick])
+
+  useEffect(() => { loadFirst() }, [loadFirst])
+
+  const loadMore = useCallback(() => {
+    const current = stateRef.current
+    /* Cố ý KHÔNG đòi `status === 'ready'`: sau một trang hỏng, `loadMoreError`
+     * khác null và người dùng bấm "Tải thêm" chính là để thử lại. Điều kiện
+     * thật sự là "có cursor và không có request đang bay". */
+    if (!current.cursor || inFlight.current || current.loadingMore) return
+    const cursor = current.cursor
+    if (consumed.current.has(cursor)) return
+    consumed.current.add(cursor)
+    inFlight.current = cursor
+    const myGeneration = generation.current
+    setState((latest) => ({ ...latest, loadingMore: true, loadMoreError: null }))
+    Promise.resolve().then(() => requestPage(cursor)).then(
+      (page) => {
+        if (myGeneration !== generation.current || inFlight.current !== cursor) return
+        inFlight.current = null
+        /* Máy chủ vi phạm hợp đồng phân trang: `nextCursor` trỏ về một trang đã
+         * đọc. Đi tiếp là quay vòng vô hạn. Nhưng trang VỪA nhận thì hợp lệ —
+         * nó về từ một cursor chưa từng tiêu thụ — nên vẫn ghép; chỉ đường đi
+         * tiếp bị cắt. */
+        const nextCursor = page.nextCursor ?? null
+        const looping = nextCursor !== null &&
+          (nextCursor === cursor || consumed.current.has(nextCursor))
+        setState((latest) => {
+          const seen = new Set(latest.items.map(libraryEntryIdentity))
+          const merged = latest.items.slice()
+          for (const item of page.items ?? []) {
+            const identity = libraryEntryIdentity(item)
+            if (seen.has(identity)) continue
+            seen.add(identity)
+            merged.push(item)
+          }
+          return {
+            ...latest,
+            status: 'ready',
+            items: merged,
+            cursor: looping ? null : nextCursor,
+            loadingMore: false,
+            loadMoreError: looping
+              ? pick(
+                'Máy chủ trả cursor lặp; danh sách đã dừng để tránh lặp hoặc bỏ sót khối.',
+                'The server returned a repeated cursor; loading stopped to avoid duplicate or missing blocks.',
+              )
+              : null,
+          }
+        })
+      },
+      (reason: unknown) => {
+        if (myGeneration !== generation.current || inFlight.current !== cursor) return
+        inFlight.current = null
+        /* Cho thử lại đúng cursor này: xoá nó khỏi tập đã tiêu thụ. Không xoá
+         * thì nút "Tải thêm" thành nút chết sau lần lỗi đầu tiên. */
+        consumed.current.delete(cursor)
+        setState((latest) => ({
+          ...latest,
+          loadingMore: false,
+          /* Danh sách đã tải GIỮ NGUYÊN — xem luật 2 ở đầu hàm. */
+          loadMoreError: programmingResourceErrorMessage(pick, reason),
+        }))
+      },
+    )
+  }, [requestPage, pick])
+
+  return {
+    status: state.status,
+    items: state.items,
+    error: state.error,
+    loadMoreError: state.loadMoreError,
+    loadingMore: state.loadingMore,
+    hasMore: state.cursor !== null,
+    loadMore,
+    refresh: loadFirst,
+  }
 }

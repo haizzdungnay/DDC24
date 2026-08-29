@@ -12,7 +12,7 @@ import { createUuid } from '../../../shared/crypto'
 import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../api/generated/library_registry'
 import { categoryLabel, metadataValue, scopeLabel, usageDisplay } from './libraryPresentation'
 import {
-  useProgrammingLibrary,
+  useProgrammingLibraryPaged,
   useProgrammingLibraryUsage,
   useProgrammingProjects,
   type LibrarySearchFilters,
@@ -119,12 +119,12 @@ export function LibraryPage() {
     }),
     [projectId, scope, kind, category, query]
   )
-  const library = useProgrammingLibrary(filters)
+  const library = useProgrammingLibraryPaged(filters)
   const currentEtag = etag ?? workspace.project?.etag ?? projectSummary?.etag ?? ''
   const { saveEntry, deleteEntry, deprecateRevision, pending, error, conflict, reset } =
     useProgrammingLibraryEntryMutations(projectId)
 
-  const entries = useMemo(() => library.data?.items ?? [], [library.data])
+  const entries = library.items
   const groups = useMemo(() => groupLibraryEntries(entries), [entries])
   const selected = groups.find((group) => group.key === selectedKey) ?? null
   /* `T61-105` — Used-In của gói ĐÃ NIÊM PHONG, đọc từ server. Chỉ gọi khi có
@@ -145,7 +145,10 @@ export function LibraryPage() {
   /* Read-back thật: chỉ báo "đã lưu" SAU khi danh sách được đọc lại từ server.
    * Bám vào identity của `library.data` (mỗi lần fetch xong là một object mới)
    * nên không có đường nào hiện giá trị lạc quan rồi thôi. */
-  const libraryData = library.data
+  /* `T61-202` — read-back bám vào identity của MẢNG items (mỗi lần fetch xong
+     là một mảng mới) thay vì của object page, vì hook phân trang ghép nhiều
+     trang vào cùng một state. */
+  const libraryData = library.items
   const readBackRef = useRef<ReadBack | null>(null)
   readBackRef.current = readBack
   useEffect(() => {
@@ -310,6 +313,10 @@ export function LibraryPage() {
             groups={groups}
             errorMessage={library.error}
             onRetry={library.refresh}
+            hasMore={library.hasMore}
+            loadingMore={library.loadingMore}
+            loadMoreError={library.loadMoreError}
+            onLoadMore={library.loadMore}
             selectedKey={selectedKey}
             onSelect={(key) => {
               setSelectedKey(key)
@@ -641,6 +648,10 @@ function LibraryList({
   groups,
   errorMessage,
   onRetry,
+  hasMore,
+  loadingMore,
+  loadMoreError,
+  onLoadMore,
   selectedKey,
   onSelect
 }: {
@@ -648,6 +659,10 @@ function LibraryList({
   groups: LibraryEntryGroup[]
   errorMessage: string | null
   onRetry: () => void
+  hasMore: boolean
+  loadingMore: boolean
+  loadMoreError: string | null
+  onLoadMore: () => void
   selectedKey: string | null
   onSelect: (key: string) => void
 }) {
@@ -719,6 +734,24 @@ function LibraryList({
           </button>
         </li>
       ))}
+      {/* `T61-202` — chân trang phân trang.
+          Trước lát này danh sách đọc đúng một trang `limit: 100` rồi bỏ
+          `nextCursor`: phần dư biến mất IM LẶNG, và người dùng kết luận khối
+          họ tìm không tồn tại. Nay còn trang thì nói ra và cho tải tiếp. */}
+      {(hasMore || loadMoreError) && (
+        <li className="flex flex-col gap-1 py-2">
+          {loadMoreError && (
+            /* Lỗi của RIÊNG trang vừa xin — danh sách phía trên vẫn dùng được.
+               Xoá nó đi vì trang thứ tư lỗi là đánh đổi không ai chọn. */
+            <p role="alert" className="text-xs text-[var(--c-fault-fg)]">{loadMoreError}</p>
+          )}
+          {hasMore && (
+            <Button size="sm" onClick={onLoadMore} disabled={loadingMore}>
+              {loadingMore ? pick('Đang tải…', 'Loading…') : pick('Tải thêm khối', 'Load more blocks')}
+            </Button>
+          )}
+        </li>
+      )}
     </ul>
   )
 }

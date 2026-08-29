@@ -384,3 +384,90 @@ describe('LibraryPage — Used-In hai nguồn', () => {
     expect(within(usage).getByText('Trong bản nháp của Project này')).toBeInTheDocument()
   })
 })
+
+/*
+`T61-202` — phân trang cursor.
+
+Trước lát này danh sách đọc đúng một trang `limit: 100` rồi bỏ `nextCursor`:
+phần dư biến mất IM LẶNG và người dùng kết luận khối họ tìm không tồn tại.
+*/
+describe('LibraryPage — phân trang', () => {
+  it('còn trang thì nói ra và tải tiếp được, không im lặng cắt danh sách', async () => {
+    /* Mock khoá theo CURSOR chứ không theo số lần gọi: trang đầu có thể được
+       xin nhiều lần (bộ lọc đổi khi `projectId` tới), và đếm lần gọi sẽ trả
+       nhầm trang hai cho một lần tải lại trang một. */
+    client.request.mockImplementation((operationId: string, options?: { query?: Record<string, unknown> }) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
+      if (operationId === 'searchProgrammingLibraries') {
+        return options?.query?.cursor === 'trang-2'
+          ? Promise.resolve({ items: [entry({ entryId: 'B', name: 'BETA' })], nextCursor: null })
+          : Promise.resolve({ items: [entry({ entryId: 'A', name: 'ALPHA' })], nextCursor: 'trang-2' })
+      }
+      return Promise.reject(new Error('unexpected ' + operationId))
+    })
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: /ALPHA/ })).toBeInTheDocument()
+    // Chưa tải trang 2 thì BETA chưa có — và màn hình phải NÓI RA là còn nữa.
+    expect(screen.queryByRole('button', { name: /BETA/ })).not.toBeInTheDocument()
+    const more = screen.getByRole('button', { name: /Tải thêm khối/ })
+
+    fireEvent.click(more)
+    expect(await screen.findByRole('button', { name: /BETA/ })).toBeInTheDocument()
+    // Hết trang thì nút biến mất, không để lại một nút bấm mãi không ra gì.
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Tải thêm khối/ })).not.toBeInTheDocument())
+  })
+
+  it('trang lỗi KHÔNG xoá danh sách đã tải, và thử lại được', async () => {
+    let secondPageAttempts = 0
+    client.request.mockImplementation((operationId: string, options?: { query?: Record<string, unknown> }) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
+      if (operationId === 'searchProgrammingLibraries') {
+        if (options?.query?.cursor !== 'trang-2') {
+          return Promise.resolve({ items: [entry({ entryId: 'A', name: 'ALPHA' })], nextCursor: 'trang-2' })
+        }
+        secondPageAttempts += 1
+        // Lần xin trang hai đầu tiên hỏng; lần thứ hai thành công.
+        return secondPageAttempts === 1
+          ? Promise.reject(new Error('mạng hỏng'))
+          : Promise.resolve({ items: [entry({ entryId: 'B', name: 'BETA' })], nextCursor: null })
+      }
+      return Promise.reject(new Error('unexpected ' + operationId))
+    })
+    renderPage()
+    expect(await screen.findByRole('button', { name: /ALPHA/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Tải thêm khối/ }))
+    // Mất mọi thứ đã cuộn qua chỉ vì trang thứ hai lỗi là đánh đổi không ai chọn.
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /ALPHA/ })).toBeInTheDocument()
+
+    // Và nút phải còn bấm được: khoá nó lại sau lần lỗi đầu là biến đường thử
+    // lại thành nút chết.
+    fireEvent.click(screen.getByRole('button', { name: /Tải thêm khối/ }))
+    expect(await screen.findByRole('button', { name: /BETA/ })).toBeInTheDocument()
+  })
+
+  it('cursor lặp thì dừng và nói ra, không quay vòng vô hạn', async () => {
+    client.request.mockImplementation((operationId: string, options?: { query?: Record<string, unknown> }) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
+      if (operationId === 'searchProgrammingLibraries') {
+        // Máy chủ vi phạm hợp đồng: luôn trả về CÙNG một cursor.
+        const second = options?.query?.cursor === 'lap-lai'
+        return Promise.resolve({
+          items: [entry({ entryId: second ? 'A2' : 'A1', name: second ? 'KHOI2' : 'KHOI1' })],
+          nextCursor: 'lap-lai',
+        })
+      }
+      return Promise.reject(new Error('unexpected ' + operationId))
+    })
+    renderPage()
+    expect(await screen.findByRole('button', { name: /KHOI1/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Tải thêm khối/ }))
+    // Trang VỪA nhận vẫn hợp lệ nên được ghép; chỉ đường đi tiếp bị cắt.
+    expect(await screen.findByRole('button', { name: /KHOI2/ })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/cursor lặp/))
+    expect(screen.queryByRole('button', { name: /Tải thêm khối/ })).not.toBeInTheDocument()
+  })
+})
