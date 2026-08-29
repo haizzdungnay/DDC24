@@ -701,7 +701,11 @@ export function DesignWorkspacePage({
             trang — 68 px đó thuộc về chỗ người ta gõ. Sàn `34rem` giữ cho màn
             thấp vẫn còn chỗ gõ; dưới `lg` KHÔNG chốt chiều cao vì màn hẹp không
             có ngân sách để chia và workspace ở đó là chỉ-đọc. */}
-        <div className="flex flex-col lg:h-[calc(100vh-18rem)] lg:min-h-[34rem]">
+        {/* `DEV-PROG-021` — sàn `34rem` (544 px) LỚN HƠN chính ngân sách
+            `100vh-18rem` ở màn 800 px (512 px), nên trên đúng khổ màn phổ biến
+            nhất của tủ, trang tràn dọc 12 px mỗi lần mở workspace. Hạ sàn về
+            `32rem` để nó khớp ngân sách thay vì chống lại nó. */}
+        <div className="flex flex-col lg:h-[calc(100vh-18rem)] lg:min-h-[32rem]">
         <div className="min-h-0 lg:flex-1 lg:overflow-hidden">
         {workspaceMode === 'SIMULATE' ? (
           /* `T59-815` — SIMULATE cũng KHÔNG phải editor bị khoá: nó là bản đã

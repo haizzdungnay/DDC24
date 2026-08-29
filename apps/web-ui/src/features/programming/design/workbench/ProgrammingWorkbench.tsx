@@ -79,7 +79,15 @@ const MAX_HEIGHT = 520
  * Khay Vấn đề của một Draft sạch chỉ có hai dòng chữ, nên 150 px đã dư — và tay
  * kéo vẫn còn đó cho lúc danh sách lỗi dài thật.
  */
-const DEFAULT_HEIGHT = 150
+/* `DEV-PROG-021` — đo trên trình duyệt thật: ở 1280×800, cột soạn thảo chỉ có
+   512 px ngân sách, mà workbench chiếm 211 px (41%) khiến chỗ gõ còn 158 px —
+   khoảng tám dòng. Workbench là nơi TRA CỨU, chỗ gõ là nơi LÀM VIỆC; khi phải
+   chia nhau một màn hình chật thì nơi làm việc được ưu tiên. Người dùng vẫn kéo
+   to nó lên bất cứ lúc nào, và chiều cao đó giữ trong phiên. */
+/* Bằng đúng `MIN_HEIGHT`: đây là sàn của thanh, và một mặc định NHỎ HƠN sàn sẽ
+   làm `aria-valuenow` nằm ngoài `[valuemin, valuemax]` — trình đọc màn hình đọc
+   ra một giá trị vô nghĩa, và axe bắt đúng lỗi đó. */
+const DEFAULT_HEIGHT = 120
 
 type TabId = 'problems' | 'search' | 'references' | 'watch' | 'trace'
 

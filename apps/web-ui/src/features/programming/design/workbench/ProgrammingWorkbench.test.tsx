@@ -161,13 +161,22 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     const handle = screen.getByRole('separator')
     expect(handle).toHaveAttribute('aria-valuemin', '120')
     expect(handle).toHaveAttribute('aria-valuemax', '520')
-    // `DEV-PROG-001` hạ mặc định 200 → 150: workbench và trình soạn thảo chia
-    // cùng một ngân sách chiều cao, nên mỗi pixel mặc định ở đây là một pixel
-    // lấy khỏi chỗ người ta gõ.
-    expect(handle).toHaveAttribute('aria-valuenow', '150')
+    /* `DEV-PROG-021` hạ tiếp 150 → 120 sau khi ĐO trên trình duyệt thật: ở
+     * 1280×800 cột soạn thảo chỉ có 512 px, mà workbench chiếm 211 px khiến chỗ
+     * gõ còn 158 px — khoảng tám dòng. Workbench là nơi tra cứu, chỗ gõ là nơi
+     * làm việc; màn hình chật thì nơi làm việc được ưu tiên, và người dùng vẫn
+     * kéo to lại bất cứ lúc nào.
+     *
+     * Dừng đúng ở 120 chứ không thấp hơn: đó là `MIN_HEIGHT`, và một mặc định
+     * dưới sàn làm `aria-valuenow` rơi ra ngoài `[valuemin, valuemax]`.
+     *
+     * `DEV-PROG-001` trước đó hạ 200 → 150: workbench và trình soạn thảo chia
+     * cùng một ngân sách chiều cao, nên mỗi pixel mặc định ở đây là một pixel
+     * lấy khỏi chỗ người ta gõ. */
+    expect(handle).toHaveAttribute('aria-valuenow', '120')
 
     fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    expect(handle).toHaveAttribute('aria-valuenow', '174')
+    expect(handle).toHaveAttribute('aria-valuenow', '144')
   })
 
   it('đổi chiều cao được bằng BÀN PHÍM, không chỉ bằng chuột', () => {
@@ -175,12 +184,22 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     const handle = screen.getByRole('separator')
     const before = Number.parseInt((screen.getByRole('tabpanel') as HTMLElement).style.height, 10)
 
-    fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    expect(Number.parseInt((screen.getByRole('tabpanel') as HTMLElement).style.height, 10)).toBeGreaterThan(before)
+    const heightNow = () => Number.parseInt((screen.getByRole('tabpanel') as HTMLElement).style.height, 10)
 
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    const raised = heightNow()
+    expect(raised).toBeGreaterThan(before)
+
+    /* Đi xuống từ chỗ ĐÃ NÂNG, không đi xuống từ mặc định: `DEV-PROG-021` đặt
+       mặc định bằng đúng `MIN_HEIGHT`, nên từ đó phím xuống không còn chỗ. Đó
+       là hành vi ĐÚNG và được khẳng định ngay bên dưới — chứ không phải một
+       giới hạn của phép kiểm. */
     fireEvent.keyDown(handle, { key: 'ArrowDown' })
-    fireEvent.keyDown(handle, { key: 'ArrowDown' })
-    expect(Number.parseInt((screen.getByRole('tabpanel') as HTMLElement).style.height, 10)).toBeLessThan(before)
+    expect(heightNow()).toBeLessThan(raised)
+
+    for (let step = 0; step < 6; step += 1) fireEvent.keyDown(handle, { key: 'ArrowDown' })
+    expect(heightNow(), 'phím xuống không được vượt qua sàn').toBeGreaterThanOrEqual(before)
   })
 
   it('kéo chuột đổi chiều cao trong khoảng cho phép, không vượt trần', () => {

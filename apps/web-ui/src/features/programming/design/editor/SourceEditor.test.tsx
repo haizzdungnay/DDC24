@@ -21,6 +21,7 @@ function renderEditor(source: string, options?: {
   pointCatalogItems?: ProgrammingPointCatalogEntry[]
   onEnsurePointCatalogLoaded?: () => void
   onSave?: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
+  codeMapOpen?: boolean
 }) {
   const onChange = options?.onChange ?? vi.fn()
   const onSave = options?.onSave ?? vi.fn().mockResolvedValue(true)
@@ -42,6 +43,7 @@ function renderEditor(source: string, options?: {
     return (
       <>
         <SourceEditor
+          codeMapOpen={options?.codeMapOpen ?? false}
           program={program(source)}
           source={value}
           canEdit={options?.canEdit ?? true}
@@ -727,5 +729,37 @@ describe('SourceEditor — gợi ý ở dòng sâu', () => {
     // KHÔNG bị đẩy xuống dưới đáy khung. Trước bản vá, `top` là hơn 4000px.
     expect(Number.isFinite(top)).toBe(true)
     expect(top).toBeLessThan(1000)
+  })
+})
+
+/*
+`DEV-PROG-021` — bản đồ mã: có nội dung thì mới được chiếm chỗ.
+
+Lỗi người dùng báo: dải bản đồ hiện ra RỖNG. `StCodeMap` tự trả `null` cho POU
+ngắn (dưới 80 dòng), nhưng khung bọc `w-44` vẫn được render — nên một dải trống
+chiếm chỗ và ăn mất bề ngang của chính chỗ gõ. Điều kiện phải hỏi ở chỗ BỌC,
+không để bên trong tự im lặng.
+*/
+describe('SourceEditor — dải bản đồ mã', () => {
+  it('POU ngắn: KHÔNG dựng khung, không để lại dải rỗng', () => {
+    const short = Array.from({ length: 20 }, (_, i) => `L${i} := 1.0;`).join('\n')
+    const { container } = renderEditor(short, { onChange: vi.fn(), codeMapOpen: true })
+    expect(screen.queryByTestId('st-code-map')).not.toBeInTheDocument()
+    // Và không có khung bọc rỗng nào còn lại.
+    expect(container.querySelector('.w-44')).toBeNull()
+  })
+
+  it('POU dài: dải có nội dung thật, điều hướng được', () => {
+    const long = [
+      'PROGRAM Big',
+      'VAR_INPUT',
+      ...Array.from({ length: 90 }, (_, i) => `  L${i} : REAL;`),
+      'END_VAR',
+      'END_PROGRAM',
+    ].join('\n')
+    renderEditor(long, { onChange: vi.fn(), codeMapOpen: true })
+    const map = screen.getByTestId('st-code-map')
+    expect(map).toBeInTheDocument()
+    expect(within(map).getAllByTestId('st-code-map-entry').length).toBeGreaterThan(0)
   })
 })

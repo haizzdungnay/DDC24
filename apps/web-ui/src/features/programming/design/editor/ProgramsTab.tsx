@@ -51,7 +51,7 @@ import {
 } from './pouTabs'
 import { EditorStatusBar } from './EditorStatusBar'
 import { fbdStatusFields, stStatusFields } from './editorStatus'
-import { StCodeMap } from './StCodeMap'
+import { StCodeMap, shouldShowCodeMap } from './StCodeMap'
 import { StCrossReferencePanel } from './StCrossReferencePanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
@@ -115,7 +115,13 @@ const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
  * `auto` nên `basis:0` + `min-h` cho ra đúng sàn 18rem — không bao giờ sập
  * thành một khe hai dòng.
  */
-const EDITOR_FRAME_CLASS = 'min-h-[18rem] min-w-0 flex-1 lg:min-h-[10rem]'
+/* `DEV-PROG-021` — sàn chiều cao của chỗ gõ.
+ *
+ * `10rem` cũ (160 px, tám dòng) là sàn của một ô nhập, không phải của một trình
+ * soạn thảo. Nâng lên `16rem` (256 px, mười hai dòng) và để workbench co lại
+ * trước: khi màn hình chật, thứ bị cắt phải là nơi tra cứu chứ không phải nơi
+ * làm việc. */
+const EDITOR_FRAME_CLASS = 'min-h-[18rem] min-w-0 flex-1 lg:min-h-[16rem]'
 
 const HOVER_SAMPLE = '00000000000000000000'
 const HOVER_METRICS: Omit<StEditorTextMetrics, 'charWidthPx'> = {
@@ -163,10 +169,20 @@ const EDITOR_TEXT_METRICS: CSSProperties = {
  * lớp ghép bằng template string sẽ không có trong CSS build ra và cột sẽ im
  * lặng rơi về mặc định.
  */
+/* `DEV-PROG-021` — bề rộng hai biên co theo màn hình.
+ *
+ * Đo thật ở 1280×800: `280 + 308 = 588 px` cho hai cột phụ, tức 46% màn hình,
+ * và chỗ gõ còn 340 px — khoảng 38 ký tự mỗi dòng. Một dòng ST thật (`fbFanPI(
+ * Enable := Running, SP := DspSetpoint, ...)`) dài hơn thế nhiều, nên người
+ * dùng cuộn ngang liên tục ngay trên màn hình 1280 phổ biến nhất của tủ.
+ *
+ * Hai biên nay hẹp ở `lg` và chỉ nở lại từ `2xl` (≥1536 px), nơi có đủ chỗ cho
+ * cả ba. Con số 44 px của cột đã thu gọn giữ nguyên — nó là bề rộng của cái
+ * tay cầm, không co được nữa. */
 const SLOT_GRID_CLASS = {
-  'both-open': 'lg:grid-cols-[280px_1fr_308px]',
-  'left-closed': 'lg:grid-cols-[44px_1fr_308px]',
-  'inspector-closed': 'lg:grid-cols-[280px_1fr_44px]',
+  'both-open': 'lg:grid-cols-[208px_1fr_240px] 2xl:grid-cols-[280px_1fr_308px]',
+  'left-closed': 'lg:grid-cols-[44px_1fr_240px] 2xl:grid-cols-[44px_1fr_308px]',
+  'inspector-closed': 'lg:grid-cols-[208px_1fr_44px] 2xl:grid-cols-[280px_1fr_44px]',
   'both-closed': 'lg:grid-cols-[44px_1fr_44px]',
 } as const
 
@@ -2171,8 +2187,18 @@ export function SourceEditor({
       {/* Dải bản đồ mã: cao BẰNG khung mã (`h-full` trong hàng flex), cuộn
           riêng, và chỉ hiện từ `lg` trở lên — dưới ngưỡng đó chiều ngang không
           đủ cho hai cột và ép nó vào sẽ bóp chỗ gõ xuống còn vài chục ký tự. */}
-      {codeMapOpen && (
-        <div className="hidden h-full w-48 shrink-0 lg:block">
+      {/* Dải chỉ hiện từ `2xl` (≥1536 px). Đo thật ở 1280 px: cột giữa chỉ
+          rộng ~660 px, và một dải 192 px lấy mất gần một phần ba — chỗ gõ tụt
+          xuống 340 px, khoảng 38 ký tự mỗi dòng. Một bản đồ mã không đáng giá
+          bằng chính chỗ viết mã.
+
+          Điều kiện `shouldShowCodeMap` phải hỏi Ở ĐÂY, không để bên trong
+          component tự trả `null`: bản trước bọc `StCodeMap` trong một khung
+          `w-48` rồi mới để nó trả `null` cho POU ngắn — kết quả là một dải
+          rỗng 12rem vẫn chiếm chỗ và ăn mất bề ngang của chính chỗ gõ. Khung
+          chỉ được tồn tại khi có nội dung để đặt vào. */}
+      {codeMapOpen && shouldShowCodeMap(source) && (
+        <div className="hidden h-full w-44 shrink-0 2xl:block">
           <StCodeMap source={source} onNavigate={(offset) => selectRange(offset, 1)} />
         </div>
       )}
