@@ -698,3 +698,34 @@ describe('DEV-PROG-019 — nút Định dạng trong trình soạn thảo', () =
     expect(screen.getByRole('alert')).toHaveTextContent('Chưa chọn vùng nào để định dạng.')
   })
 })
+
+/*
+`DEV-PROG-020` — gợi ý phải thấy được ở dòng SÂU, sau khi đã cuộn.
+
+Lỗi người dùng báo: "gõ ST thì từ gợi ý đâu mất rồi". Popup được đặt theo
+`cursor.line * ROW_HEIGHT`, tức toạ độ trong toàn bộ văn bản, trong khi khung
+soạn thảo là hộp cao cố định có `overflow-hidden`. Làm việc ở dòng 200 thì popup
+vẽ ở `top: 4000px` — ngoài hộp, bị cắt sạch, không lỗi và không cảnh báo.
+
+Bộ test cũ không bắt được vì mọi case đều gõ ở dòng 1, nơi độ cuộn luôn bằng 0.
+*/
+describe('SourceEditor — gợi ý ở dòng sâu', () => {
+  it('popup gợi ý nằm TRONG khung nhìn sau khi cuộn, không bị đẩy ra ngoài', () => {
+    const lines = Array.from({ length: 200 }, (_, index) => `L${index} := 1.0;`)
+    const before = [...lines, 'X := A'].join('\n')
+    const after = [...lines, 'X := AB'].join('\n')
+    const { textarea } = renderEditor(before, { onChange: vi.fn() })
+
+    // Cuộn xuống như người dùng thật rồi mới gõ.
+    Object.defineProperty(textarea, 'scrollTop', { value: 3800, writable: true, configurable: true })
+    fireEvent.scroll(textarea)
+    fireEvent.change(textarea, { target: { value: after } })
+
+    const popup = screen.getByRole('listbox', { name: /Gợi ý|Suggestions/ })
+    const top = Number.parseFloat((popup as HTMLElement).style.top)
+    // Không khẳng định một con số cụ thể — khẳng định điều người dùng cần: nó
+    // KHÔNG bị đẩy xuống dưới đáy khung. Trước bản vá, `top` là hơn 4000px.
+    expect(Number.isFinite(top)).toBe(true)
+    expect(top).toBeLessThan(1000)
+  })
+})

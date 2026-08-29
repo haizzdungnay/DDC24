@@ -538,18 +538,6 @@ export function ProgramsTab({
         </div>
         <div id="programs-slot-left">
         {explorerSlot}
-        {/* Bản đồ mã: ĐIỀU HƯỚNG trong POU đang mở, nên nó đứng cùng cột với
-            cây POU — điều hướng giữa các POU và điều hướng trong một POU là
-            cùng một loại việc. Trước lát này nó nằm DƯỚI chỗ gõ, tức người dùng
-            phải cuộn qua chính chỗ mình đang làm để tới thứ dùng để đi. */}
-        {selected && selected.language === 'ST' && codeMapOpen && (
-          <div className="mt-2">
-            <StCodeMap
-              source={buffers[selected.programId] ?? programSource(selected)}
-              onNavigate={(offset) => jumpInSelectedPou(offset, 1)}
-            />
-          </div>
-        )}
         {/* `DEV-PROG-011` — `ProjectTagsEditor` đã rời khỏi đây. Nhãn chức năng
             thuộc về PROJECT chứ không thuộc về cây POU, và để nó dưới cây làm
             người đọc tưởng nó là nhãn của POU đang chọn. Nó nay ở cột phải,
@@ -1088,6 +1076,17 @@ export function SourceEditor({
   const hoverMeasureRef = useRef<HTMLSpanElement>(null)
   const charWidthRef = useRef(0)
   const [hoverSymbol, setHoverSymbol] = useState<StCursorSymbol | null>(null)
+  /* `DEV-PROG-020` — độ cuộn của chỗ gõ.
+   *
+   * Popup gợi ý được đặt tuyệt đối theo `cursor.line * ROW_HEIGHT`, tức toạ độ
+   * trong TOÀN BỘ văn bản. Khung soạn thảo lại là một hộp cao cố định có
+   * `overflow-hidden`, nên khi người dùng cuộn xuống làm việc ở dòng 200, popup
+   * được vẽ ở `top: 4000px` — nằm ngoài hộp và bị cắt sạch. Với một POU thật
+   * (AHU_MasterSequence hơn 350 dòng) thì tính năng gợi ý coi như KHÔNG tồn
+   * tại, và nó im lặng: không lỗi, không cảnh báo, chỉ là không có gì hiện ra.
+   *
+   * Bộ test cũ không bắt được vì nó gõ ở dòng 1, nơi độ cuộn luôn bằng 0. */
+  const [editorScroll, setEditorScroll] = useState({ top: 0, left: 0 })
   /* `T59-821` — Code Map bật/tắt được. Nó CHỈ hiện khi tài liệu vượt ngưỡng
    * (`CODE_MAP_MIN_LINES`); dưới ngưỡng cả tài liệu đã nằm trong một màn hình
    * và một bản đồ của thứ đang thấy hết là chiếm chỗ vô ích. */
@@ -1799,7 +1798,16 @@ export function SourceEditor({
       <label className="sr-only" htmlFor={`programming-st-source-${program.programId}`}>
         {pick(`Mã nguồn ST của ${program.name}`, `ST source for ${program.name}`)}
       </label>
-      <div className={`relative grid ${EDITOR_FRAME_CLASS} grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
+      {/* Bản đồ mã là một DẢI DỌC bám mép phải chỗ gõ, cùng chiều cao với nó.
+          Trước lát này nó nằm trong cột trái dưới cây POU: cùng chiều cao với
+          cây nên chỉ hiện được vài mục, và mắt phải rời hẳn khỏi vùng mã để
+          liếc nó. Một bản đồ của đúng tài liệu đang mở thì phải đứng cạnh tài
+          liệu ấy và cao bằng nó — đó là thứ làm nó dùng được khi cuộn.
+
+          `min-w-0` trên khung mã là bắt buộc: thiếu nó, `flex` để textarea nở
+          theo nội dung và dải bản đồ bị đẩy khỏi màn hình. */}
+      <div className={`flex ${EDITOR_FRAME_CLASS} min-h-0 gap-2`}>
+      <div className={`relative grid min-w-0 flex-1 grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
         {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15 và
          * 2026-08-17 — ảnh chụp cho thấy lưới kẻ cắt xuyên chữ, không phải
          * chỉ lệch nhẹ): tắt word-wrap (`whitespace-pre` + `wrap="off"`) đã
@@ -1950,6 +1958,7 @@ export function SourceEditor({
             onKeyUp={updateCursor}
             onSelect={updateCursor}
             onScroll={(event) => {
+              setEditorScroll({ top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft })
               if (lineGutterRef.current) lineGutterRef.current.scrollTop = event.currentTarget.scrollTop
               if (overlayRef.current) {
                 overlayRef.current.scrollTop = event.currentTarget.scrollTop
@@ -2100,7 +2109,12 @@ export function SourceEditor({
               role="listbox"
               aria-label={pick('Gợi ý', 'Suggestions')}
               className="absolute z-10 max-h-48 w-56 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] text-sm shadow-lg"
-              style={{ top: `${cursor.line * EDITOR_ROW_HEIGHT_PX}px`, left: `${Math.min(220, (cursor.column - 1) * 8.4 + EDITOR_PAD_TOP_PX)}px` }}
+              /* Trừ độ cuộn: `cursor.line` đếm theo văn bản, còn `top` đo
+                 theo khung đang nhìn. Không trừ thì popup nằm ngoài hộp. */
+              style={{
+                top: `${cursor.line * EDITOR_ROW_HEIGHT_PX - editorScroll.top}px`,
+                left: `${Math.max(EDITOR_PAD_TOP_PX, Math.min(220, (cursor.column - 1) * 8.4 + EDITOR_PAD_TOP_PX) - editorScroll.left)}px`,
+              }}
             >
               {completion.items.map((item, index) => (
                 <li key={`${item.kind}-${item.label}`}>
@@ -2153,6 +2167,15 @@ export function SourceEditor({
             onClose={() => setInsertPanelOpen(false)}
           />
         )}
+      </div>
+      {/* Dải bản đồ mã: cao BẰNG khung mã (`h-full` trong hàng flex), cuộn
+          riêng, và chỉ hiện từ `lg` trở lên — dưới ngưỡng đó chiều ngang không
+          đủ cho hai cột và ép nó vào sẽ bóp chỗ gõ xuống còn vài chục ký tự. */}
+      {codeMapOpen && (
+        <div className="hidden h-full w-48 shrink-0 lg:block">
+          <StCodeMap source={source} onNavigate={(offset) => selectRange(offset, 1)} />
+        </div>
+      )}
       </div>
       {/* `DEV-PROG-001`/`DEV-PROG-012` — khay phụ nằm trong vùng cuộn RIÊNG có
           trần, không còn đẩy chiều cao của cả trang. Hàng "Dòng x, cột y ·

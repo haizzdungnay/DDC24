@@ -77,7 +77,10 @@ export function StCodeMap({
     <nav
       data-testid="st-code-map"
       aria-label={pick('Bản đồ mã nguồn', 'Code map')}
-      className="max-h-64 w-48 shrink-0 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] p-1 text-xs"
+      /* Cao BẰNG khung chứa, không phải một trần cố định `max-h-64`: trần cũ
+         hợp lý khi bản đồ nằm dưới cây POU, nhưng ở dải dọc cạnh chỗ gõ nó cắt
+         danh sách còn vài mục trong khi cột bên cạnh cao gấp ba. */
+      className="h-full w-full overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] p-1 text-xs"
     >
       <ul>
         {entries.map((entry) => (
