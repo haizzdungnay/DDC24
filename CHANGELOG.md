@@ -51,7 +51,7 @@
 - **Deployed** `mkddc-programming-sim-worker` (cross-build aarch64) lên bo
   Foxlinx và bật `PROGRAMMING_SIM_WORKER`; SIMULATE nay chạy được ở lớp target.
 - **Verification:** `ctest` **1336/1336**; `go vet` + `go test ./... -count=1`
-  PASS; FE **185 file / 2081 test**; lint + build PASS với chunk `programming`
+  PASS; FE **184 file / 2070 test**; lint + build PASS với chunk `programming`
   **153,79/165 KiB (R3)**; mock e2e **59 PASS/13 skip**; real-backend host
   **8 PASS/1 skip**; lane target **5 PASS/2 skip**; worker gate replay
   **100/100**; `verify-project.sh --component layout` `rc=0`;
@@ -63,6 +63,22 @@
   *tin rằng* nó đang xuất ra, không phải điện áp trên đầu cực. Phép đo bằng
   thiết bị cần người và đồng hồ đo; nó cùng nhóm chặn với `T59-706`.
   `RELEASE_READY` giữ `NO-GO`.
+
+### Tài liệu Programming — Plan61 PGM-04 Control Library theo FE Handoff (2026-08-28)
+
+- **Added** `PLAN-FE-PGM-061` cho delta PGM-04: đối chiếu handoff với source/
+  contract hiện hành, khóa route project-scoped và SYSTEM/PROJECT, tách 38 task
+  authority → BE/registry → FE card grid/inspector/drawer/Insert → browser/target.
+- Plan ghi rõ `M2`, `PLAN_READY=NO-GO`, chỉ WP-00 được bắt đầu; không biến PNG
+  thành authority, không mở `USER` scope, không bật Insert cho PID
+  `REVIEW_REQUIRED`, không tạo task firmware MCU và không suy host/browser thành
+  HIL hoặc release PASS.
+- **Fixed** ngưỡng harness `od_prog` từ 15 lên 16 để khớp `UD-PROG-001..016`
+  đã có trong baseline; trước thay đổi này mọi phép kiểm nội dung đều PASS nhưng
+  `--expect` vẫn báo drift vì ngưỡng cũ.
+- **Verification tài liệu:** `python3 scripts/docs_iso_harness.py --expect`
+  PASS sau khi đồng bộ ngưỡng; link/anchor/trailing whitespace/code fence/ID
+  duplicate/trace invariant đều 0 lỗi.
 
 ### Web RBAC — vai thứ tư `engineer` và uỷ quyền theo NĂNG LỰC (`WEB-RBAC-001/002`) (2026-08-28)
 

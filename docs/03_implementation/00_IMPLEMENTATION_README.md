@@ -26,6 +26,10 @@ Programming, đọc theo thứ tự: [Product Spec](../01_product/DDC24_PROGRAMM
 [Prompt thi hành](PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md). Plan53/54/56 và WP
 tracker chỉ còn giá trị truy nguyên, không được dùng để chọn task mới.
 
+Riêng delta giao diện PGM-04 theo gói FE Handoff, đọc thêm
+[Plan61](61_PROGRAMMING_FE_HANDOFF_V21_PGM04_PLAN.md). Plan61 không thay Plan59;
+phiên bản 0.1 chỉ cho phép WP-00 đóng authority/contract, chưa mở production code.
+
 ---
 
 ## 1. Dự án đang ở giai đoạn nào

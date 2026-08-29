@@ -2,7 +2,7 @@
 
 > **Recovery status (2026-07-22): In Review.** Bộ hướng dẫn đã được phục hồi đầy đủ để giữ implementation knowledge. Trạng thái `Active/FROZEN` trong bảng là trạng thái lịch sử; phải đối chiếu với baseline, code và test hiện hành trước khi dùng cho release.
 
-> **Owner:** Dev Lead | **Last Updated:** 2026-08-24
+> **Owner:** Dev Lead | **Last Updated:** 2026-08-28
 
 Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTATION_README.md` trước.
 
@@ -58,6 +58,7 @@ Bộ tài liệu triển khai thực tế của MK-DDC-24. Đọc `00_IMPLEMENTA
 | [TRACKER](PROGRAMMING_IMPLEMENTATION_TRACKER.md) | Snapshot tracker WP của Master Plan 56 | **Superseded — chỉ truy nguyên** |
 | [59](59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | Programming thống nhất: contract → code → test → evidence → release; 52 task/8 Wave | **Active — corrective implementation/target MCU FAKE pending; RELEASE_READY NO-GO** |
 | [60](60_PROGRAMMING_FE_HANDOFF_V21_PGM01_PLAN.md) | FE theo gói Handoff v2.1: shell dùng chung + PGM-01 Overview; 27 task (FW SOM 4 · BE 6 · FE 17) ≈ 34,5 người-ngày | **PLAN_READY — 7/7 quyết định chốt 2026-08-23** |
+| [61](61_PROGRAMMING_FE_HANDOFF_V21_PGM04_PLAN.md) | PGM-04 Control Library theo handoff: authority → contract/metadata/Used-In → card grid/inspector/drawer/Insert → browser/target; 38 task ≈ 49 người-ngày | **M2 — `PLAN_READY=NO-GO`; chỉ WP-00 READY** |
 | [PROMPT-59](PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | Prompt tự động chọn và thi hành task Plan59, kiểm chứng, cập nhật tracker, commit/PR | **Active — dùng ngay; không thay target/HIL/release evidence** |
 | [PROMPT-59-CTO](PROMPT_PLAN59_CTO_W6_W7_EXECUTION.md) | Prompt cấp quyền quyết định CTO để thi hành 13 task còn lại của Plan59 (W6 `T59-601..606`, W7 `T59-701..707`) và đóng sổ W5 | **Active — dùng cho phần còn lại; giới hạn quyền và Must không waive ghi trong file** |
 
