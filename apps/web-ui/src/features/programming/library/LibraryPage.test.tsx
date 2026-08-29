@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
+import { ProgrammingApiError } from '../api/generated/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
@@ -25,6 +26,7 @@ const client = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
+const ENTRY_ID = '44444444-4444-4444-8444-444444444444'
 const PROJECT_ETAG = '"22222222-2222-4222-8222-222222222222:3"'
 const NEXT_ETAG = '"22222222-2222-4222-8222-222222222222:4"'
 
@@ -544,5 +546,112 @@ describe('LibraryPage — trạng thái trong URL', () => {
     await screen.findByRole('button', { name: /SCALE_LIN/ })
     fireEvent.change(screen.getByLabelText(/Phân loại/), { target: { value: 'control' } })
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toContain('category=control'))
+  })
+})
+
+/*
+`T61-206` — 403 phải XOÁ nội dung đang hiện.
+
+Bản trước nối mô hình trạng thái cho `status`/`message` nhưng vẫn vẽ mảng thô,
+nên luật này chết lặng: sau một phán quyết 403, màn hình vẫn hiện đúng những
+khối mà máy chủ vừa nói vai này không được xem. Một sự cố mạng thì giữ nội dung
+là đúng; một phán quyết quyền thì không — nó nói "có thể không còn là của bạn
+để xem".
+*/
+describe('LibraryPage — 403 xoá nội dung đang hiện', () => {
+  it('mất quyền giữa chừng thì danh sách biến mất, không chỉ đổi tiêu đề', async () => {
+    let denied = false
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
+      if (operationId === 'searchProgrammingLibraries') {
+        if (denied) {
+          return Promise.reject(new ProgrammingApiError(403, {
+            error: { code: 'PRG-ERR-FORBIDDEN-001', messageKey: 'programming.error.forbidden' },
+            correlationId: 'corr-403',
+          } as never))
+        }
+        return Promise.resolve({ items: [entry({ name: 'SCALE_LIN' })] })
+      }
+      return Promise.reject(new Error('unexpected ' + operationId))
+    })
+    renderPage()
+    expect(await screen.findByRole('button', { name: /SCALE_LIN/ })).toBeInTheDocument()
+
+    denied = true
+    fireEvent.change(screen.getByLabelText(/Phân loại/), { target: { value: 'control' } })
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /SCALE_LIN/ })).not.toBeInTheDocument())
+  })
+})
+
+/*
+`T61-204` — `returnTo` và tab Inspector nằm trong URL.
+
+Hai thứ này là phần còn nợ của lát URL state trước: gửi một đường dẫn phải gửi
+được đúng thứ mình đang nhìn — khối nào, đang xem mặt nào của nó, và đường về
+chỗ đã rời đi.
+*/
+describe('LibraryPage — returnTo và tab Inspector', () => {
+  it('tab Inspector đọc từ URL và ghi ngược lại URL', async () => {
+    stub(() => Promise.resolve({ items: [entry({ name: 'SCALE_LIN' })] }))
+    function LocationProbe() {
+      const location = useLocation()
+      return <span data-testid="loc">{location.search}</span>
+    }
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[`/eng/programming/projects/${PROJECT_ID}/library?entry=PROJECT%2F${ENTRY_ID}&panel=versions`]}>
+          <LibraryPage />
+          <LocationProbe />
+        </MemoryRouter>
+      </I18nProvider>
+    )
+    // Mở thẳng vào khay Phiên bản, không phải Chi tiết.
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Phiên bản' })).toHaveAttribute('aria-selected', 'true'))
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Tham số' }))
+    await waitFor(() => expect(screen.getByTestId('loc').textContent).toContain('panel=parameters'))
+  })
+
+  it('tham số panel lạ rơi về Chi tiết, không để màn hình trống', async () => {
+    stub(() => Promise.resolve({ items: [entry({ name: 'SCALE_LIN' })] }))
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[`/eng/programming/projects/${PROJECT_ID}/library?entry=PROJECT%2F${ENTRY_ID}&panel=khong-ton-tai`]}>
+          <LibraryPage />
+        </MemoryRouter>
+      </I18nProvider>
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Chi tiết' })).toHaveAttribute('aria-selected', 'true'))
+  })
+
+  it('returnTo nội bộ hiện nút quay lại; returnTo ra ngoài bị bỏ', async () => {
+    stub(() => Promise.resolve({ items: [entry({ name: 'SCALE_LIN' })] }))
+    const { unmount } = render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[`/eng/programming/projects/${PROJECT_ID}/library?returnTo=%2Feng%2Fprogramming%2Fprograms`]}>
+          <LibraryPage />
+        </MemoryRouter>
+      </I18nProvider>
+    )
+    const back = await screen.findByRole('link', { name: /Quay lại chỗ đang làm/ })
+    expect(back).toHaveAttribute('href', '/eng/programming/programs')
+    unmount()
+    cleanup()
+
+    /* Một `returnTo` trỏ ra ngoài là open redirect: người ta gửi link "mở Thư
+       viện" rồi nút Quay lại đưa nạn nhân sang trang khác mang theo phiên đang
+       đăng nhập. */
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[`/eng/programming/projects/${PROJECT_ID}/library?returnTo=https%3A%2F%2Fevil.example%2Fx`]}>
+          <LibraryPage />
+        </MemoryRouter>
+      </I18nProvider>
+    )
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    expect(screen.queryByRole('link', { name: /Quay lại chỗ đang làm/ })).not.toBeInTheDocument()
   })
 })

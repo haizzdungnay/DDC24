@@ -791,6 +791,10 @@ export interface ProgrammingLibraryPagedState {
   status: 'loading' | 'ready' | 'error'
   items: ProgrammingLibraryEntry[]
   error: string | null
+  /* LOẠI lỗi, không chỉ câu chữ. Thiếu nó thì mô hình trạng thái không phân
+     biệt được 403 với mất mạng — mà hai thứ ấy phải hành xử khác nhau: một
+     phán quyết quyền XOÁ nội dung đang hiện, một sự cố mạng thì giữ. */
+  failure: 'permission' | 'offline' | 'error' | null
   /** Lỗi của RIÊNG trang vừa xin thêm — không phải lỗi của cả danh sách. */
   loadMoreError: string | null
   loadingMore: boolean
@@ -820,11 +824,12 @@ export function useProgrammingLibraryPaged(
     items: ProgrammingLibraryEntry[]
     cursor: string | null
     error: string | null
+    failure: 'permission' | 'offline' | 'error' | null
     loadMoreError: string | null
     loadingMore: boolean
   }>({
     key: filterKey, status: 'loading', items: [], cursor: null,
-    error: null, loadMoreError: null, loadingMore: false,
+    error: null, failure: null, loadMoreError: null, loadingMore: false,
   })
 
   const generation = useRef(0)
@@ -860,6 +865,7 @@ export function useProgrammingLibraryPaged(
       items: latest.items,
       cursor: null,
       error: null,
+      failure: null,
       loadMoreError: null,
       loadingMore: false,
     }))
@@ -868,7 +874,8 @@ export function useProgrammingLibraryPaged(
         if (myGeneration !== generation.current) return
         setState({
           key: filterKey, status: 'ready', items: page.items ?? [],
-          cursor: page.nextCursor ?? null, error: null, loadMoreError: null, loadingMore: false,
+          cursor: page.nextCursor ?? null, error: null, failure: null,
+          loadMoreError: null, loadingMore: false,
         })
       },
       (reason: unknown) => {
@@ -878,7 +885,9 @@ export function useProgrammingLibraryPaged(
          * `error` để bề mặt nói ra rằng dữ liệu này có thể đã cũ. */
         setState((latest) => ({
           key: filterKey, status: 'error', items: latest.items, cursor: null,
-          error: programmingResourceErrorMessage(pick, reason), loadMoreError: null, loadingMore: false,
+          error: programmingResourceErrorMessage(pick, reason),
+          failure: classifyProgrammingMonitorFailure(reason),
+          loadMoreError: null, loadingMore: false,
         }))
       },
     )
@@ -953,6 +962,7 @@ export function useProgrammingLibraryPaged(
     status: state.status,
     items: state.items,
     error: state.error,
+    failure: state.failure,
     loadMoreError: state.loadMoreError,
     loadingMore: state.loadingMore,
     hasMore: state.cursor !== null,

@@ -1971,12 +1971,17 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     await openLibrary(page, lane)
 
     const list = libraryList(page)
+    /* `T61-204` — Inspector nay có bốn khay và mở mặc định ở Chi tiết. Khay
+       Used-In phải được CHỌN mới hiện; đọc nó khi chưa chọn là đọc một vùng bị
+       ẩn, và một assertion "không thấy số" sẽ xanh vì lý do sai. */
+    const usageTab = page.getByRole('tab', { name: 'Nơi sử dụng' })
     const usage = page.getByRole('region', { name: 'Nơi sử dụng' })
 
     /* Vế đối chứng, và nó phải đứng TRƯỚC: khi máy chủ ĐO ĐƯỢC thì con số phải
        hiện. Thiếu vế này, một bề mặt không bao giờ in số nào cũng "đạt" case
        dưới — và đó là một cách khác để nói dối. */
     await list.getByRole('button', { name: /^AHU_STAGE/ }).click()
+    await usageTab.click()
     await expect(usage.getByText('2 nơi dùng')).toBeVisible()
     await expect(usage.getByText('Điều khiển AHU')).toBeVisible()
 
@@ -1987,6 +1992,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
       (response) => response.url().includes('/library-usages') && response.url().includes('entryId=LIMIT')
     )
     await list.getByRole('button', { name: /^LIMIT/ }).click()
+    await usageTab.click()
     const payload = (await (await usageResponse).json()) as { availability: string; sealed: { count: number } }
     // Máy chủ CÓ đưa số 0 cho FE; câu hỏi duy nhất là FE có in nó ra không.
     expect(payload.availability).toBe('UNAVAILABLE')
@@ -2040,7 +2046,10 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     /* "Không có khối nào" và "không đọc được" dẫn tới hai hành động khác hẳn:
        một bên là đi tạo khối, một bên là đi xem vì sao máy chủ im. Trang nào
        trộn hai câu đó lại là trang đẩy người dùng đi sai đường. */
-    await expect(page.getByText('Không tải được Thư viện điều khiển.')).toBeVisible()
+    /* 503 được xếp cùng nhánh "không với tới được" với mất mạng, nên câu chữ
+       phải đúng cho CẢ HAI: không đổ cho mạng của người dùng khi thật ra thiết
+       bị đang quá tải. Điều case này khoá vẫn là lỗi ĐỌC ≠ thư viện rỗng. */
+    await expect(page.getByText(/Chưa đọc được Thư viện điều khiển/)).toBeVisible()
     // Cả HAI câu "rỗng" đều bị cấm ở đây, không chỉ câu về bộ lọc: "thư viện
     // của Project chưa có khối nào" còn mời người ta đi tạo lại đúng thứ đang
     // có sẵn trên thiết bị.
@@ -2096,6 +2105,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     // Quét khi khay Chi tiết ĐANG MỞ: đóng nó lại thì hơn nửa bề mặt của trang
     // (Used-In, lịch sử phiên bản, hai nút mutation) không có mặt trong lần quét.
     await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+    await page.getByRole('tab', { name: 'Nơi sử dụng' }).click()
     await expect(page.getByRole('region', { name: 'Nơi sử dụng' })).toBeVisible()
 
     const axe = await new AxeBuilder({ page })

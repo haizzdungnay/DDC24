@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ArchiveX, History, Library, Lock, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, ArchiveX, ArrowLeft, History, Library, Lock, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { Panel } from '../../../shared/components/Panel'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
@@ -30,7 +30,6 @@ import { useProgrammingLibraryEntryMutations, type LibraryEntryDraft } from '../
 import { useDraftWorkspace } from '../design/useDraftWorkspace'
 import { PROGRAMMING_REVIEW_GATED_FEATURES } from '../api/generated/profile'
 import {
-  groupLibraryEntries,
   libraryDependents,
   libraryEntryPermissions,
   libraryRevisionDeprecationBlock,
@@ -66,6 +65,26 @@ import type { ProgrammingLibraryEntry, ProgrammingLibraryUsage } from '../model/
  * tiếp một chiều PUBLISHED -> DEPRECATED có endpoint riêng; trang tuyệt đối
  * không dựng một hành động Publish độc lập.
  */
+/**
+ * `T61-204` — bốn khay của Inspector theo handoff §3.
+ *
+ * `used-in` và `versions` giữ nguyên nội dung đã có; `parameters` là khay mới
+ * đọc chữ ký ĐÃ PHÂN GIẢI mà backend công bố. Không tự parse `interface`: vắng
+ * `signature` nghĩa là backend chưa đọc được chữ ký, và đoán hộ nó là cách hai
+ * nơi kết luận hai kiểu về cùng một khối.
+ */
+export const INSPECTOR_TABS = [
+  { id: 'details', labelVi: 'Chi tiết', labelEn: 'Details' },
+  { id: 'parameters', labelVi: 'Tham số', labelEn: 'Parameters' },
+  { id: 'used-in', labelVi: 'Nơi sử dụng', labelEn: 'Used In' },
+  { id: 'versions', labelVi: 'Phiên bản', labelEn: 'Versions' },
+] as const
+export type InspectorTab = (typeof INSPECTOR_TABS)[number]['id']
+
+export function isInspectorTab(value: string | null): value is InspectorTab {
+  return INSPECTOR_TABS.some((item) => item.id === value)
+}
+
 const REVIEW_GATED = new Set<string>(
   PROGRAMMING_REVIEW_GATED_FEATURES.filter((item) => !item.approved).map((item) => item.featureId)
 )
@@ -137,6 +156,25 @@ export function LibraryPage() {
   const setQuery = useCallback((value: string) => setParam('q', value), [setParam])
   /* Khối đang chọn cũng nằm trong URL: đó là thứ người ta muốn gửi đi nhất. */
   const selectedKey = searchParams.get('entry')
+  /* Tab của Inspector cũng nằm trong URL. Mặc định `details` khi tham số thiếu
+     hoặc lạ — fail-closed về khay an toàn nhất thay vì để màn hình trống. */
+  const tabParam = searchParams.get('panel')
+  const inspectorTab: InspectorTab = isInspectorTab(tabParam) ? tabParam : 'details'
+  const setInspectorTab = useCallback((value: InspectorTab) => setParam('panel', value), [setParam])
+  /* `T61-204` — `returnTo`: đường quay lại đúng chỗ người dùng đã rời đi.
+   *
+   * PGM-02 mở Thư viện để tra một khối rồi phải quay về đúng POU đang sửa. Nếu
+   * không mang đường về, người dùng bấm Back — và Back sau nhiều lần đổi bộ lọc
+   * (`replace: true`) sẽ nhảy ra ngoài Thư viện chứ không về POU. Một nút quay
+   * lại hiện tường minh thì không phụ thuộc lịch sử.
+   *
+   * CHỈ nhận đường dẫn nội bộ. Một `returnTo` trỏ ra ngoài là một open redirect:
+   * người ta gửi link "mở Thư viện" rồi nút Quay lại đưa nạn nhân sang trang
+   * khác mang theo phiên đang đăng nhập. */
+  const returnToRaw = searchParams.get('returnTo')
+  const returnTo = returnToRaw && returnToRaw.startsWith('/') && !returnToRaw.startsWith('//')
+    ? returnToRaw
+    : null
   const setSelectedKey = useCallback((value: string | null) => setParam('entry', value ?? ''), [setParam])
   const [etag, setEtag] = useState<string | null>(null)
   const [editor, setEditor] = useState<EditorMode | null>(null)
@@ -172,9 +210,9 @@ export function LibraryPage() {
   const filtersKey = libraryFiltersKey(filterInput)
   const [readMemory, setReadMemory] = useState<LibraryViewMemory | null>(null)
   const readInput = useMemo<LibraryReadInput>(() => ({
-    status: library.status, items: library.items, error: library.error,
+    status: library.status, items: library.items, error: library.error, failure: library.failure,
     hasMore: library.hasMore, loadingMore: library.loadingMore, loadMoreError: library.loadMoreError,
-  }), [library.status, library.items, library.error, library.hasMore, library.loadingMore, library.loadMoreError])
+  }), [library.status, library.items, library.error, library.failure, library.hasMore, library.loadingMore, library.loadMoreError])
   useEffect(() => {
     setReadMemory((current) => rememberLibraryRead(current, readInput, filtersKey))
   }, [readInput, filtersKey])
@@ -185,7 +223,17 @@ export function LibraryPage() {
     canEdit,
     hasProject: Boolean(projectId),
   })
-  const groups = useMemo(() => groupLibraryEntries(entries), [entries])
+  /* `T61-206` — danh sách vẽ ra phải lấy từ MÔ HÌNH TRẠNG THÁI, không từ mảng
+     thô. Bản trước nối `view` cho `status`/`message` nhưng vẫn vẽ `entries` —
+     nên hai hành vi quan trọng nhất của mô hình chết lặng:
+
+       • `no-permission` KHÔNG xoá nội dung: sau một phán quyết 403, màn hình
+         vẫn hiện đúng những khối mà máy chủ vừa nói vai này không được xem;
+       • nội dung giữ lại khi lỗi không đi kèm cờ `stale`, nên bản cũ trông y
+         hệt bản mới.
+
+     `view.groups` đã gom sẵn theo entry và đã áp cả hai luật. */
+  const groups = view.groups
   const selected = groups.find((group) => group.key === selectedKey) ?? null
   /* `T61-105` — Used-In của gói ĐÃ NIÊM PHONG, đọc từ server. Chỉ gọi khi có
      entry đang chọn: gọi với chuỗi rỗng sẽ nhận 400, và một lỗi 400 hiện lên
@@ -300,6 +348,18 @@ export function LibraryPage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* `T61-204` — đường quay lại tường minh. Không dựa vào `Back` của trình
+          duyệt: mọi thay đổi bộ lọc dùng `replace: true`, nên `Back` sẽ nhảy
+          thẳng ra ngoài Thư viện chứ không về chỗ người dùng đã rời đi. */}
+      {returnTo && (
+        <Link
+          to={returnTo}
+          className="inline-flex w-fit items-center gap-1 text-sm text-[var(--c-accent)] hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          {pick('Quay lại chỗ đang làm', 'Back to where you were')}
+        </Link>
+      )}
       <Panel
         title={pick('Thư viện điều khiển', 'Control Library')}
         subtitle={pick(
@@ -394,6 +454,8 @@ export function LibraryPage() {
               usageSource={workspace.status}
               sealedUsage={sealedUsage.data ?? null}
               sealedUsageLoading={sealedUsage.status === 'loading'}
+              tab={inspectorTab}
+              onTab={setInspectorTab}
               dependents={dependents}
               permissions={permissions}
               pending={pending}
@@ -757,8 +819,11 @@ function LibraryList({
     return (
       <StateBlock
         state="error"
-        title={pick('Mất kết nối nên chưa đọc được Thư viện điều khiển.',
-                    'Offline — the Control Library could not be read.')}
+        /* KHÔNG nói "mất kết nối": nhánh này gom cả trình duyệt offline lẫn
+           máy chủ trả 503/504. Đổ cho mạng của người dùng khi thật ra thiết bị
+           đang quá tải sẽ khiến họ đi kiểm tra dây mạng thay vì kiểm tra tủ. */
+        title={pick('Chưa đọc được Thư viện điều khiển — thiết bị hoặc mạng chưa phản hồi.',
+                    'Control Library unreachable — the controller or the network is not responding.')}
         detail={errorMessage ?? undefined}
         onRetry={onRetry}
       />
@@ -891,6 +956,8 @@ function LibraryDetail({
   usageSource,
   sealedUsage,
   sealedUsageLoading,
+  tab,
+  onTab,
   dependents,
   permissions,
   pending,
@@ -904,6 +971,8 @@ function LibraryDetail({
   usageSource: 'loading' | 'ready' | 'error'
   sealedUsage: ProgrammingLibraryUsage | null
   sealedUsageLoading: boolean
+  tab: InspectorTab
+  onTab: (value: InspectorTab) => void
   dependents: string[]
   permissions: ReturnType<typeof libraryEntryPermissions> | null
   pending: boolean
@@ -919,7 +988,31 @@ function LibraryDetail({
   const entry = group.current
   return (
     <div className="flex flex-col gap-3">
-      <dl className="flex flex-col gap-2 text-sm">
+      {/* `T61-204` — bốn tab của handoff §3. Tab đang mở nằm trong URL cùng
+          `entry`, nên gửi một đường dẫn là gửi đúng thứ mình đang nhìn: khối
+          nào, và đang xem mặt nào của nó. */}
+      <div role="tablist" aria-label={pick('Khay chi tiết khối', 'Block detail panels')}
+        className="flex flex-wrap gap-1 border-b border-[var(--c-border)] pb-1">
+        {INSPECTOR_TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            id={`library-inspector-tab-${item.id}`}
+            aria-selected={tab === item.id}
+            aria-controls={`library-inspector-panel-${item.id}`}
+            onClick={() => onTab(item.id)}
+            className={`min-h-7 rounded px-2 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${
+              tab === item.id ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent)]' : 'text-[var(--c-text-dim)]'
+            }`}
+          >
+            {pick(item.labelVi, item.labelEn)}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`library-inspector-panel-${tab}`}
+        aria-labelledby={`library-inspector-tab-${tab}`} className="flex flex-col gap-3">
+      <dl className={`flex-col gap-2 text-sm ${tab === 'details' ? 'flex' : 'hidden'}`}>
         <Row label={pick('Tên', 'Name')} value={entry.name} />
         <Row label={pick('Loại', 'Kind')} value={entry.kind} />
         <Row label={pick('Phạm vi', 'Scope')} value={scopeLabel(entry.scope, false)} />
@@ -962,13 +1055,21 @@ function LibraryDetail({
         />
       </dl>
 
-      <LibraryUsageList usages={usages} source={usageSource} sealed={sealedUsage} sealedLoading={sealedUsageLoading} />
-      <LibraryVersionHistory
-        group={group}
-        canDeprecate={canDeprecate}
-        pending={pending}
-        onDeprecate={onDeprecate}
-      />
+      {/* `hidden` chứ không phải tháo khỏi cây: khay Used-In tự đọc dữ liệu,
+          và tháo nó ra sẽ huỷ rồi phát lại request mỗi lần đổi tab. */}
+      <div className={tab === 'used-in' ? 'contents' : 'hidden'}>
+        <LibraryUsageList usages={usages} source={usageSource} sealed={sealedUsage} sealedLoading={sealedUsageLoading} />
+      </div>
+      <div className={tab === 'versions' ? 'contents' : 'hidden'}>
+        <LibraryVersionHistory
+          group={group}
+          canDeprecate={canDeprecate}
+          pending={pending}
+          onDeprecate={onDeprecate}
+        />
+      </div>
+      {tab === 'parameters' && <LibraryParameters entry={entry} />}
+      </div>
 
       {REVIEW_GATED.has(entry.name) && (
         <p role="note" className="text-sm text-[var(--c-warn)]">
@@ -1348,5 +1449,54 @@ function LibraryEntryForm({
         </Button>
       </div>
     </form>
+  )
+}
+
+/**
+ * `T61-204` — khay Tham số.
+ *
+ * Đọc `signature` ĐÃ PHÂN GIẢI do backend công bố. Vắng field nghĩa là backend
+ * không đọc được chữ ký thô — nói ra điều đó, đừng tự parse `interface` để đoán
+ * hộ: hai nơi cùng đoán là hai nơi kết luận khác nhau về cùng một khối, và
+ * người dùng không có cách nào biết bên nào đúng.
+ */
+function LibraryParameters({ entry }: { entry: ProgrammingLibraryEntry }) {
+  const { pick } = useI18n()
+  const ports = entry.signature?.ports ?? []
+  if (!entry.signature) {
+    return (
+      <p className="text-sm text-[var(--c-warn-fg)]">
+        {pick('Thiết bị chưa đọc được chữ ký của khối này, nên chưa liệt kê được tham số.',
+              'The controller could not read this block signature, so parameters are unavailable.')}
+      </p>
+    )
+  }
+  if (ports.length === 0) {
+    return (
+      <p className="text-sm text-[var(--c-text-dim)]">
+        {pick('Khối này không khai tham số nào.', 'This block declares no parameters.')}
+      </p>
+    )
+  }
+  return (
+    <table className="w-full text-left text-sm">
+      <caption className="sr-only">{pick('Tham số của khối', 'Block parameters')}</caption>
+      <thead className="text-xs uppercase text-[var(--c-text-dim)]">
+        <tr>
+          <th scope="col" className="py-1">{pick('Tên', 'Name')}</th>
+          <th scope="col" className="py-1">{pick('Hướng', 'Direction')}</th>
+          <th scope="col" className="py-1">{pick('Kiểu', 'Type')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {ports.map((port) => (
+          <tr key={`${port.direction}:${port.name}`} className="border-t border-[var(--c-border)]">
+            <td className="py-1 font-mono">{port.name}</td>
+            <td className="py-1">{port.direction}</td>
+            <td className="py-1 font-mono">{port.dataType}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
