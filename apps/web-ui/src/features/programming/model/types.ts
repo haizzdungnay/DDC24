@@ -749,6 +749,50 @@ export interface ProgrammingLibraryEntry {
   /** `false` nghĩa là layout CHƯA BIẾT, không phải bằng 0. */
   stateLayoutKnown: boolean
   stateSizeBytes: number
+  /**
+   * `T61-101` — metadata TRÌNH BÀY.
+   *
+   * Cả ba đều optional vì hợp đồng là additive. Field VẮNG nghĩa là "chưa ai
+   * điền" và phải render `—`; đừng quy nó về chuỗi rỗng, vì chuỗi rỗng đọc như
+   * một ô đã điền rồi.
+   */
+  category?: string
+  description?: string
+  /** Băm riêng phần trình bày — KHÔNG phải `contentSha256`. */
+  presentationSha256?: string
+}
+
+/** `T61-105` — một mục Used-In: MỘT CẶP (Revision, POU), không phải một lần gọi. */
+export interface ProgrammingLibraryUsageItem {
+  projectId: string
+  projectName: string
+  revisionId: string
+  objectId: string
+  objectName: string
+  requiredVersion: string
+  /** `INSTANCE` mang trạng thái, `CALL` thì không. */
+  usageKind: 'CALL' | 'INSTANCE'
+  isActive: boolean
+}
+
+export interface ProgrammingLibraryUsageScope {
+  count: number
+  truncated: boolean
+  items: ProgrammingLibraryUsageItem[]
+}
+
+/**
+ * `T61-105` — Used-In hai phạm vi.
+ *
+ * `availability` là trường quyết định, và nó không phải chuyện trình bày:
+ * `count: 0` nghĩa là "không chương trình nào dùng khối này" — một câu mời
+ * người ta xoá nó. `UNAVAILABLE` nghĩa là "chưa đo được". FE **không được**
+ * hiện số khi `availability` không phải `COMPLETE`/`SEALED_ONLY`.
+ */
+export interface ProgrammingLibraryUsage {
+  sealed: ProgrammingLibraryUsageScope
+  draft: ProgrammingLibraryUsageScope
+  availability: 'COMPLETE' | 'SEALED_ONLY' | 'UNAVAILABLE'
 }
 
 export interface ProgrammingLibraryPage {
