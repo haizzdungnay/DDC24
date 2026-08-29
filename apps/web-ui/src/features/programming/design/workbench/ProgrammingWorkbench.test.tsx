@@ -41,6 +41,14 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+/* `DEV-PROG-024` — khay nay THU GỌN sẵn (lý do đầy đủ ở chỗ khai `useState`
+ * trong `ProgrammingWorkbench.tsx`: ở 1280×800 nó chiếm 35% ngân sách dọc để
+ * nói "không có vấn đề nào"). Test nào cần nội dung bên trong khay thì mở nó ra
+ * như người dùng vẫn mở — bằng chính nút trên dải tab. */
+function openWorkbench() {
+  fireEvent.click(screen.getByRole('button', { name: 'Mở rộng' }))
+}
+
 /*
  * `T59-807` / `WP-06-R1`. Hai AC được khoá ở đây, và cả hai đều là
  * chống-nói-dối:
@@ -76,6 +84,7 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
         { id: '2', code: 'FBD-SCHEMA-ROOT-001', detail: 'profileId lạ', jumpLabel: null },
       ],
     })
+    openWorkbench()
     fireEvent.click(screen.getByRole('button', { name: /FBD-SEM-TYPE-REF-001/ }))
     expect(onJump).toHaveBeenCalledTimes(1)
     expect(screen.getByText(/không neo vào vị trí nào/)).toBeInTheDocument()
@@ -84,6 +93,7 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
 
   it('nói đích danh nơi sở hữu kết quả Kiểm tra, không để người dùng tưởng khay này là toàn bộ sự thật', () => {
     renderWorkbench()
+    openWorkbench()
     const link = screen.getByRole('link', { name: /Kiểm tra & Đưa vào vận hành/ })
     expect(link).toHaveAttribute('href', '/eng/programming/projects/p1/commission')
   })
@@ -146,13 +156,28 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     expect(onJump).toHaveBeenCalledTimes(1)
   })
 
-  it('thu gọn được và mở lại bằng chính nút đó', () => {
-    renderWorkbench()
-    const toggle = screen.getByRole('button', { name: 'Thu gọn' })
-    expect(screen.getByRole('tabpanel')).toBeInTheDocument()
-    fireEvent.click(toggle)
+  it('THU GỌN SẴN, và dải tab vẫn ở nguyên chỗ với đủ số đếm', () => {
+    /* `DEV-PROG-024` — mặc định đổi từ mở sang thu gọn. Điều phải giữ nguyên là
+       thứ `DEV-PROG-001` đi sửa: khay KHÔNG được biến khỏi tầm mắt. Dải tab
+       đứng yên tại chỗ, mỗi tab mang số đếm của nó, nên "có vấn đề gì không"
+       đọc được mà không cần mở. */
+    renderWorkbench({ problems: [{ id: '1', code: 'FBD-SEM-TYPE-REF-001', detail: 'x', jumpLabel: null }] })
     expect(screen.queryByRole('tabpanel')).toBeNull()
+    expect(screen.getByRole('tab', { name: /Vấn đề \(1\)/ })).toBeInTheDocument()
+    expect(screen.getByRole('separator')).toBeInTheDocument()
+  })
+
+  it('mở lại và thu gọn lại bằng chính nút đó', () => {
+    renderWorkbench()
     fireEvent.click(screen.getByRole('button', { name: 'Mở rộng' }))
+    expect(screen.getByRole('tabpanel')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Thu gọn' }))
+    expect(screen.queryByRole('tabpanel')).toBeNull()
+  })
+
+  it('bấm THẲNG một tab cũng mở khay — không bắt đi qua nút Mở rộng', () => {
+    renderWorkbench()
+    fireEvent.click(screen.getByRole('tab', { name: /Tìm kiếm/ }))
     expect(screen.getByRole('tabpanel')).toBeInTheDocument()
   })
 
@@ -181,6 +206,7 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
 
   it('đổi chiều cao được bằng BÀN PHÍM, không chỉ bằng chuột', () => {
     renderWorkbench()
+    openWorkbench()
     const handle = screen.getByRole('separator')
     const before = Number.parseInt((screen.getByRole('tabpanel') as HTMLElement).style.height, 10)
 
@@ -204,6 +230,7 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
 
   it('kéo chuột đổi chiều cao trong khoảng cho phép, không vượt trần', () => {
     renderWorkbench()
+    openWorkbench()
     const handle = screen.getByRole('separator')
     fireEvent.pointerDown(handle, { pointerId: 1, clientY: 500 })
     fireEvent.pointerMove(handle, { pointerId: 1, clientY: -5000 })

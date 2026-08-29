@@ -2,21 +2,65 @@ import { FBD_DATA_TYPES, type FbdDataType } from '../../fbd/model'
 import { FBD_PALETTE } from '../../fbd/palette'
 import { PROGRAMMING_REVIEW_GATED_FEATURES } from '../../api/generated/profile'
 
-/* WP-10 (Technical Selection Record §A, CTO/Owner approval 2026-08-15):
- * mọi keyword/kiểu/hàm dưới đây đối chiếu trực tiếp
- * docs/02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md §10 (Grammar EBNF)
- * — KHÔNG suy đoán, KHÔNG gợi ý construct compiler chưa hỗ trợ (CASE/FOR/
- * WHILE/REPEAT/FUNCTION/FUNCTION_BLOCK người dùng định nghĩa). Danh sách
- * hàm/FB dùng lại đúng `FBD_PALETTE` (WP-05) — không khai tay lần hai
- * (đúng rule "không viết ST parser/compiler thứ hai trong FE"). */
+/* WP-10 (Technical Selection Record §A, CTO/Owner approval 2026-08-15) dựng
+ * danh sách này từ `ST_SUBSET_SPEC_MK-DDC-24_VI.md` §10 và CỐ Ý bỏ `CASE`,
+ * `FOR`, `WHILE`, `FUNCTION_BLOCK` — vì bản Rev A.0 của spec nói compiler chưa
+ * hỗ trợ chúng.
+ *
+ * `DEV-PROG-022` — mệnh đề đó KHÔNG còn đúng, và không ai quay lại sửa danh
+ * sách. `apps/core/application/st/st_parser.cpp` có `parse_case()` đầy đủ (nhãn
+ * rời, dải `1..3`, `ELSE`, `END_CASE`) và `test_st_lang.cpp` §7.3.3.2 nhận
+ * chương trình `CASE s OF … END_CASE;` là HỢP LỆ. Chính spec §10 cũng đã tự mâu
+ * thuẫn với mình: nó liệt kê `CASE` ở mục "chưa hỗ trợ" trong khi chương trình
+ * AHU thật trên bo dùng `CASE AhuState OF`.
+ *
+ * Hệ quả người dùng báo trực tiếp 2026-08-29: trong trình soạn thảo, `CASE`,
+ * `OF`, `END_CASE` — và cả `FUNCTION_BLOCK`/`END_FUNCTION_BLOCK` của MỌI FB —
+ * không được tô như từ khoá. Chúng hiện y hệt một biến chưa khai báo, nên một
+ * máy trạng thái đúng cú pháp trông như đang hỏng; thụt lề tự động cũng không
+ * mở/đóng khối cho chúng.
+ *
+ * Nay tách làm HAI danh sách, vì chúng trả lời hai câu hỏi khác nhau:
+ *
+ *  - `ST_KEYWORDS` = từ mà compiler GIỮ CHỖ (`is_keyword()` trong
+ *    `st_parser.cpp`). Dùng để tô màu và để loại khỏi bảng tham chiếu. Thiếu
+ *    một từ ở đây là người dùng thấy từ khoá hiện như biến — đúng lỗi này.
+ *    `stKeywordMirror.test.ts` đọc THẲNG tệp C++ và bắt lệch; chỗ này đã trôi
+ *    một lần rồi nên nó không được canh bằng lời hứa trong chú thích.
+ *  - `ST_COMPLETION_KEYWORDS` = từ compiler THỰC SỰ dịch được ở Rev A. Gợi ý
+ *    `FOR`/`GOTO` là mời người ta viết một câu lệnh mà parser sẽ từ chối ngay
+ *    bằng "'FOR' is a keyword and cannot start a statement".
+ *
+ * Tên kiểu (`BOOL`…`TIME`) và tên FB chuẩn (`TON`, `PID`…) cũng nằm trong
+ * `is_keyword()` nhưng CỐ Ý không có mặt dưới đây: chúng đã có `ST_TYPE_NAMES`/
+ * `ST_FB_TYPE_NAMES` với màu riêng, mà `tokenizeSt` hỏi `KEYWORD_SET` TRƯỚC —
+ * thêm vào đây là cướp mất màu kiểu của chúng. Danh sách hàm/FB vẫn dùng lại
+ * đúng `FBD_PALETTE` (WP-05), không khai tay lần hai. */
 
 export const ST_KEYWORDS = [
   'PROGRAM', 'END_PROGRAM',
-  'VAR_INPUT', 'VAR_OUTPUT', 'VAR', 'RETAIN', 'END_VAR',
+  'FUNCTION', 'END_FUNCTION', 'FUNCTION_BLOCK', 'END_FUNCTION_BLOCK',
+  'VAR_INPUT', 'VAR_OUTPUT', 'VAR_GLOBAL', 'VAR_EXTERNAL', 'VAR', 'RETAIN', 'END_VAR',
   'IF', 'THEN', 'ELSIF', 'ELSE', 'END_IF',
+  'CASE', 'OF', 'END_CASE',
+  'FOR', 'END_FOR', 'WHILE', 'END_WHILE', 'REPEAT', 'UNTIL', 'END_REPEAT',
+  'EXIT', 'CONTINUE', 'RETURN', 'GOTO',
+  'NATIVE', 'POINTER', 'REFERENCE', 'AT', 'ARRAY', 'STRUCT', 'STRING', 'WSTRING',
   'OR', 'XOR', 'AND', 'NOT', 'MOD',
   'TRUE', 'FALSE',
 ] as const
+
+/** Từ khoá được GỢI Ý. Hẹp hơn `ST_KEYWORDS` một cách có chủ đích: xem lý do ở
+ *  khối chú thích phía trên. `FOR`/`WHILE`/`REPEAT`/`GOTO`/`RETURN` được giữ
+ *  chỗ nhưng KHÔNG có luật văn phạm nào trong `parse_stmt()`. */
+export const ST_COMPLETION_KEYWORDS: readonly string[] = [
+  'PROGRAM', 'END_PROGRAM',
+  'VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'RETAIN', 'END_VAR',
+  'IF', 'THEN', 'ELSIF', 'ELSE', 'END_IF',
+  'CASE', 'OF', 'END_CASE',
+  'AND', 'OR', 'XOR', 'NOT', 'MOD',
+  'TRUE', 'FALSE',
+]
 
 export const ST_TYPE_NAMES: readonly FbdDataType[] = FBD_DATA_TYPES
 
@@ -170,8 +214,21 @@ export function findMatchingBracket(source: string, offset: number): { open: num
   return null
 }
 
-const OPEN_BLOCK_KEYWORDS = new Set(['PROGRAM', 'VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'IF', 'THEN', 'ELSIF', 'ELSE'])
-const CLOSE_BLOCK_KEYWORDS = new Set(['END_PROGRAM', 'END_VAR', 'END_IF', 'ELSIF', 'ELSE'])
+/* `DEV-PROG-022` — hai tập này phải đi cùng `ST_KEYWORDS`. Trước lát này chúng
+ * chỉ biết `IF`/`VAR`/`PROGRAM`, nên gõ trong một `CASE … OF` hay trong bất kỳ
+ * FUNCTION_BLOCK nào thì Enter trả về đúng thụt lề cũ — người dùng phải tự gõ
+ * hai dấu cách cho từng dòng của cả máy trạng thái. */
+const OPEN_BLOCK_KEYWORDS = new Set([
+  'PROGRAM', 'FUNCTION', 'FUNCTION_BLOCK',
+  'VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR_GLOBAL', 'VAR_EXTERNAL',
+  'IF', 'THEN', 'ELSIF', 'ELSE',
+  'CASE', 'FOR', 'WHILE', 'REPEAT',
+])
+const CLOSE_BLOCK_KEYWORDS = new Set([
+  'END_PROGRAM', 'END_FUNCTION', 'END_FUNCTION_BLOCK', 'END_VAR',
+  'END_IF', 'END_CASE', 'END_FOR', 'END_WHILE', 'END_REPEAT', 'UNTIL',
+  'ELSIF', 'ELSE',
+])
 
 /** Indent gợi ý cho dòng MỚI khi bấm Enter tại `offset` — 2 khoảng trắng
  *  mỗi mức, tăng sau từ khoá mở khối, giảm nếu dòng vừa gõ TỰ nó là từ
@@ -189,6 +246,52 @@ export function computeAutoIndent(source: string, offset: number): string {
   if (OPEN_BLOCK_KEYWORDS.has(firstWord)) indent += '  '
   else if (CLOSE_BLOCK_KEYWORDS.has(firstWord) && indent.length >= 2) indent = indent.slice(2)
   return indent
+}
+
+/**
+ * `DEV-PROG-023` — `scrollTop` mới để dòng `line` (đánh số từ 1) thực sự nằm
+ * trong tầm nhìn.
+ *
+ * Vì sao cần: `textarea.setSelectionRange()` KHÔNG cuộn. Trình duyệt cuộn tới
+ * con trỏ khi CHÍNH NÓ di chuyển con trỏ (gõ phím, bấm chuột), không khi mã
+ * lệnh đặt vùng chọn trên một textarea đang có tiêu điểm. Mọi đường "nhảy tới
+ * một chỗ trong nguồn" của editor đều đi qua `selectRange`, nên tất cả cùng
+ * hỏng một kiểu: bấm một mục trên Bản đồ mã, bấm một kết quả Tìm kiếm, "Tiếp",
+ * `Ctrl+G`, bấm một diagnostic — vùng chọn đổi, khay Dòng/cột đổi, còn màn hình
+ * đứng yên. Người dùng báo đúng triệu chứng đó ngày 2026-08-29.
+ *
+ * Hàm để riêng và thuần tuý vì hình học này không kiểm được trong jsdom:
+ * `clientHeight`/`scrollHeight` của một textarea ở đó luôn là 0.
+ */
+export interface StRevealOptions {
+  /** Dòng đích, đánh số từ 1. */
+  line: number
+  scrollTop: number
+  viewportHeightPx: number
+  contentHeightPx: number
+  rowHeightPx: number
+  padTopPx: number
+}
+
+export function scrollTopForLine(options: StRevealOptions): number {
+  const { line, scrollTop, viewportHeightPx, contentHeightPx, rowHeightPx, padTopPx } = options
+  /* Không có khung nhìn thì không có khái niệm "nhìn thấy được". Trả về 0 ở đây
+   * sẽ làm mọi lần nhảy trong jsdom và ở lần render đầu tiên tự cuộn về đầu
+   * tệp — một hành vi sai, và sai âm thầm. */
+  if (viewportHeightPx <= 0 || rowHeightPx <= 0) return scrollTop
+  const rowTop = padTopPx + (line - 1) * rowHeightPx
+  const maxScroll = Math.max(0, contentHeightPx - viewportHeightPx)
+  /* Lề an toàn hai hàng: một dòng dính sát mép trên hoặc mép dưới là "thấy
+   * được" theo toạ độ nhưng không đọc được theo ngữ cảnh. Khung nhìn quá thấp
+   * thì lề co lại chứ không nuốt mất cả vùng hợp lệ. */
+  const margin = Math.min(2 * rowHeightPx, Math.floor(viewportHeightPx / 4))
+  const alreadyVisible =
+    rowTop >= scrollTop + margin && rowTop <= scrollTop + viewportHeightPx - margin - rowHeightPx
+  /* Đã thấy rõ thì ĐỨNG YÊN. Căn giữa vô điều kiện làm màn hình giật mỗi lần
+   * bấm một mục Bản đồ mã ngay cạnh chỗ đang đứng. */
+  if (alreadyVisible) return scrollTop
+  // Đặt dòng đích ở khoảng một phần ba trên: chỗ mắt tìm tới, còn giữ ngữ cảnh phía trên.
+  return Math.max(0, Math.min(maxScroll, rowTop - Math.floor(viewportHeightPx / 3)))
 }
 
 export interface StDiagnosticRange {
@@ -373,7 +476,7 @@ export function buildStCompletions(
   for (const symbol of declaredSymbols) {
     if (symbol.name.toUpperCase().startsWith(upperPrefix)) push(symbol.name, 'symbol', symbol.type)
   }
-  for (const keyword of ST_KEYWORDS) {
+  for (const keyword of ST_COMPLETION_KEYWORDS) {
     if (keyword.startsWith(upperPrefix)) push(keyword, 'keyword', 'keyword')
   }
   for (const type of ST_TYPE_NAMES) {

@@ -127,6 +127,106 @@ số đo bố cục PGM-04 không tràn ngang ở 1440/1280/1024/768/390 px ·
 đều PASS.
 
 
+### Sửa lỗi — khay bàn làm việc thu gọn làm hỏng `aria-controls` (2026-08-29)
+
+- **`DEV-PROG-025`** — Hồi quy do chính lát `DEV-PROG-024` gây ra và bị e2e bắt.
+  *Triệu chứng*: axe báo `aria-valid-attr-value` mức **critical** trên 42 node;
+  7 test e2e đỏ (`VS-PROG-028`, axe SIMULATE, bốn case `LIVE không tràn ngang`,
+  `UJ-PROG-01..08`).
+  *Nguyên nhân gốc*: khay thu gọn thì `<div role="tabpanel">` không có trong
+  cây, nhưng mỗi tab vẫn giữ `aria-controls="workbench-panel-<id>"`. Commit
+  trước đó còn viết rằng thu gọn "không mất khả năng tiếp cận" — sai: nó hứa
+  với trình đọc màn hình một vùng không tồn tại.
+  *Cách sửa*: chỉ gắn `aria-controls` khi khay đang mở VÀ đúng tab đang chọn.
+
+### Sửa cổng — 13 test `st-editor-alignment` đã đỏ sẵn trên `main` (2026-08-29)
+
+- Toàn bộ tệp `e2e/st-editor-alignment.spec.ts` đỏ trên `main` trước lát này,
+  và không ai thấy vì cả 13 case chết ở cùng một chỗ sớm: `getByRole('button',
+  { name: /Điều khiển AHU/ })` khớp bốn nút mà `PouExplorer` đặt quanh mỗi POU
+  (`Mở`/`Đổi tên`/`Nhân bản`/`Xóa`), Playwright từ chối ở chế độ strict.
+- Sửa locator xong mới lộ ba bệnh nằm dưới: thanh trạng thái đã đổi từ câu chữ
+  `Dòng N, cột M` sang `<dl>` nhãn `Dòng:Cột` giá trị `N:M` mà spec còn dò chuỗi
+  cũ (3 case treo 60 s); và `FE-ST-007` bấm một mục trong khay `Ký hiệu & kiểu`
+  đã đổi chỗ.
+- Ba case "Định dạng/Thay tất cả" kiểm đúng thứ từng được báo là lỗi thật —
+  khay Dòng/cột đứng yên sai chỗ sau khi Format. Cổng ấy đã tắt tiếng từ lúc
+  thanh trạng thái được đổi.
+  *Kiểm chứng*: 13/13 PASS. Baseline `origin/main` kèm bản sửa locator cho đúng
+  cùng 4 case đỏ, xác nhận chúng là bệnh có sẵn chứ không phải hồi quy.
+
+
+### Sửa lỗi — chiều cao workspace Thiết kế đo thay vì đoán (2026-08-29)
+
+- **`DEV-PROG-024`** — Người dùng báo chỗ gõ quá ngắn.
+  *Nguyên nhân gốc*: cột workspace chốt chiều cao bằng `calc(100vh - 18rem)` —
+  lần đoán thứ ba của cùng một con số (32rem → 20rem → 18rem). Đoán thiếu thì
+  trang tràn dọc (đo được 840 px trên viewport 800); đoán thừa thì để lại một
+  dải trống dưới đáy và bóp chỗ gõ đúng bằng phần trống đó.
+  *Cách sửa*: `useViewportFillHeight` hỏi trình duyệt cột đang bắt đầu ở đâu rồi
+  lấy phần còn lại, nên chrome phía trên đổi bao nhiêu cũng không cần sửa hằng
+  số. Sàn chuyển vào hook (`minPx`) chứ không đặt bằng `lg:min-h-*` — một sàn
+  Tailwind lớn hơn ngân sách đo được sẽ thắng và tự tạo lại tràn dọc
+  (`DEV-PROG-021`).
+  Khay bàn làm việc THU GỌN sẵn: ở 1280×800 nó chiếm 181 px (35% ngân sách dọc)
+  để nói "không có vấn đề nào". Dải tab vẫn đứng nguyên chỗ với đủ số đếm và
+  bấm tab nào cũng mở lại, nên không mất thông tin lẫn khả năng tiếp cận.
+  Thanh công cụ soạn thảo gọn lại: đo được nó xuống 3 dòng và cao 100 px ở cả
+  1280×800 lẫn 1680×812 — bằng 39% chính chỗ gõ ngay bên dưới. Nhãn chữ của năm
+  nút phụ chuyển sang `sr-only` dưới `2xl` (giữ nguyên tên cho trình đọc màn
+  hình, giữ `title` cho chuột), tên POU trong thẻ chuyển sang `sr-only` vì nó là
+  bản sao của dải tab ngay phía trên, và khoảng cách nút `gap-2` → `gap-1`.
+  *Số đo TRÊN BO Foxlinx* (đo trước/sau bằng cách đổi qua lại hai bản dựng):
+  chỗ gõ 254 → **309** px ở 1280×800 (12 → 14 dòng), 254 → **317** ở 1680×812
+  (12 → 15 dòng), 453 → **621** ở 1920×1080 (21 → 30 dòng).
+  *Chưa đạt*: yêu cầu "gấp đôi" KHÔNG đạt được ở khổ màn cao 800–812 px. Sau khi
+  trừ 244 px chrome của trang và 24 px lề, cả cột chỉ còn 532 px, nên một chỗ gõ
+  508 px đòi nhiều pixel hơn số màn hình có. Muốn tiến thêm phải cắt chính chrome
+  đó (dải ngữ cảnh dính + hàng tiêu đề trang ≈ 94 px) — việc thuộc `ProgrammingLayout`,
+  có AC riêng, nên tách khỏi lát này.
+  *Số đo trong lane mock*: chiều cao tài liệu 840 → **800** ở 1280×800 (hết tràn);
+  khay bàn làm việc 181 → **61**; thanh công cụ 100 → **64/68**; chỗ gõ ở
+  1920×1080 453 → **561** (21 → 27 dòng).
+
+
+### Sửa lỗi — nhảy tới một dòng không kéo màn hình theo (2026-08-29)
+
+- **`DEV-PROG-023`** — Người dùng báo: bấm vào Bản đồ mã thì editor không đưa
+  tầm nhìn tới dòng đó.
+  *Nguyên nhân gốc*: `textarea.setSelectionRange()` KHÔNG cuộn — trình duyệt chỉ
+  cuộn tới con trỏ khi chính nó dời con trỏ (gõ phím, bấm chuột), không khi mã
+  lệnh đặt vùng chọn trên một textarea đang có tiêu điểm. Mọi đường nhảy của
+  editor đều đi qua `selectRange`, nên tất cả cùng hỏng một kiểu: Bản đồ mã,
+  kết quả Tìm kiếm, nút `Tiếp`, `Ctrl+G`, và bấm vào một diagnostic.
+  *Cách sửa*: `revealOffset` tính `scrollTop` mới bằng `scrollTopForLine` (hàm
+  thuần, có test riêng) rồi đồng bộ gutter/overlay qua `syncEditorScroll` dùng
+  chung với `onScroll`. Dòng đã thấy rõ thì đứng yên; về cột 1 thì về cả mép
+  trái.
+  *Kiểm chứng*: 5 test hình học + 2 test bấm thật; đột biến (bỏ `revealOffset`)
+  làm cả 2 test bấm đỏ.
+
+
+### Sửa lỗi — trình soạn thảo ST không còn nhận ra `CASE` (2026-08-29)
+
+- **`DEV-PROG-022`** — Người dùng báo trực tiếp: `CASE`/`END_CASE` "bị lỗi".
+  *Triệu chứng*: trong trình soạn thảo, `CASE`, `OF`, `END_CASE` — và cả
+  `FUNCTION_BLOCK`/`END_FUNCTION_BLOCK` của mọi FB — hiện đúng như một biến chưa
+  khai báo, nên một máy trạng thái đúng cú pháp trông như đang hỏng; Enter trong
+  các khối đó cũng không thụt lề.
+  *Nguyên nhân gốc*: `ST_KEYWORDS` được chép tay từ `ST_SUBSET_SPEC` Rev A.0
+  ("chưa hỗ trợ CASE") rồi đứng yên, trong khi `apps/core/application/st/st_parser.cpp`
+  đã mọc `parse_case()` đầy đủ và `test_st_lang.cpp` §7.3.3.2 nhận
+  `CASE s OF … END_CASE;` là hợp lệ. Một test cũ còn GHIM chính hành vi sai đó
+  ("không có CASE trong keyword set").
+  *Cách sửa*: tách `ST_KEYWORDS` (từ compiler GIỮ CHỖ — dùng để tô màu) khỏi
+  `ST_COMPLETION_KEYWORDS` (từ compiler THỰC SỰ dịch được — dùng để gợi ý), mở
+  rộng thụt lề tự động cho `CASE`/`FUNCTION_BLOCK` và các `END_*` tương ứng, và
+  thay test sai bằng test đúng. `stKeywordMirror.test.ts` đọc thẳng bảng
+  `kKeywords[]` trong tệp C++ nên lần trôi sau sẽ bị bắt thay vì phải chờ người
+  dùng báo.
+  *Kiểm chứng*: 24 test `stEditorSupport` + 4 test mirror; đột biến (bỏ `CASE`
+  khỏi danh sách) làm 3/4 test mirror đỏ.
+
 
 ### Programming R3 SIMULATE — đóng `T59-816`/`T59-817`, đóng increment R3 và Plan 60 (2026-08-28)
 
@@ -3082,8 +3182,6 @@ là FE gọi một thứ mà hợp đồng cấm.
   Runbook mở khoá đã ghi trong hồ sơ evidence.
 - **Changed — gate FE xanh hoàn toàn lần đầu**: `npx vitest --run --environment
   jsdom src` → **128 file / 1262 test, TẤT CẢ PASS, exit `0`**.
-
-
 
 
 ### Plan 60 Batch 0 — dựng baseline thi hành (2026-08-23)

@@ -128,7 +128,20 @@ export function ProgrammingWorkbench({
   watchAddRequest?: { name: string; nonce: number } | null
 }) {
   const { pick } = useI18n()
-  const [open, setOpen] = useState(true)
+  /* `DEV-PROG-024` — MỞ SẴN hay không, và vì sao là không.
+   *
+   * Đo ở 1280×800 (khổ phổ biến nhất của tủ): khay này chiếm 181 px, tức 35%
+   * ngân sách dọc của cả cột workspace, để nói "Draft không có vấn đề nào ở lớp
+   * cấu trúc" — trong khi chỗ gõ chỉ còn 254 px (12 dòng). Đó là phân bổ ngược:
+   * `DEV-PROG-021` đã chốt rằng khi màn hình chật, thứ bị cắt phải là nơi tra
+   * cứu chứ không phải nơi làm việc.
+   *
+   * Thu gọn KHÔNG làm mất thông tin và không làm khay khó tới: dải tab vẫn nằm
+   * nguyên tại chỗ với đủ số đếm trên nhãn (`Vấn đề (0)`, `Tìm kiếm (3)`…), và
+   * bấm bất kỳ tab nào cũng mở lại ngay (`setOpen(true)` ở handler bên dưới).
+   * Lỗi mà `DEV-PROG-001` đi sửa là khay bị ĐẨY ra khỏi màn hình chứ không phải
+   * khay đóng — dải tab đứng yên trong tầm mắt giữ nguyên điều đó. */
+  const [open, setOpen] = useState(false)
   const [height, setHeight] = useState(DEFAULT_HEIGHT)
   const [tab, setTab] = useState<TabId>('problems')
   const [query, setQuery] = useState('')
@@ -275,7 +288,12 @@ export function ProgrammingWorkbench({
               role="tab"
               id={`workbench-tab-${item.id}`}
               aria-selected={tab === item.id}
-              aria-controls={`workbench-panel-${item.id}`}
+              /* `aria-controls` CHỈ khi khay đang mở và đây là tab đang chọn.
+               * Khay thu gọn thì `<div role="tabpanel">` không có trong cây, nên
+               * một `aria-controls` trỏ vào `id` không tồn tại là vi phạm
+               * `aria-valid-attr-value` thật — axe bắt đúng, và trình đọc màn
+               * hình thì hứa với người dùng một vùng không có ở đó. */
+              aria-controls={open && tab === item.id ? `workbench-panel-${item.id}` : undefined}
               className={`min-h-11 rounded px-2 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${
                 tab === item.id ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent)]' : 'text-[var(--c-text-dim)]'
               }`}

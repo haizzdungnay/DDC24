@@ -78,6 +78,22 @@ async function installMocks(page: Page, source: string) {
   })
 }
 
+/**
+ * Đọc khay Dòng/cột trên thanh trạng thái.
+ *
+ * Thanh trạng thái đã đổi từ câu chữ `Dòng N, cột M` sang một `<dl>` với nhãn
+ * `Dòng:Cột` và giá trị `N:M`, nhưng bốn case của tệp này vẫn dò chuỗi cũ. Cả
+ * bốn vì thế treo 60 s rồi đỏ — và chúng đỏ SẴN trên `main`, núp sau một lỗi
+ * strict-mode xảy ra sớm hơn ở bước mở POU. Nay bám vào `data-testid` mà chính
+ * `EditorStatusBar` phát ra, thay vì bám vào câu chữ hiển thị.
+ */
+async function readCursorLine(page: Page): Promise<number> {
+  const text = await page.getByTestId('editor-status-position').innerText()
+  const line = Number(text.match(/(\d+)\s*:\s*\d+/)?.[1])
+  expect(Number.isFinite(line), `không đọc được số dòng từ "${text}"`).toBe(true)
+  return line
+}
+
 async function navigate(page: Page, path: string) {
   await page.evaluate((target) => {
     window.history.pushState({}, '', target)
@@ -91,7 +107,12 @@ async function openEditor(page: Page, lineCount: number) {
   await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
   await login(page)
   await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
-  await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+  /* Tên CHÍNH XÁC, không phải biểu thức chứa tên POU. `PouExplorer` đặt bốn nút
+   * quanh mỗi POU — `Mở`, `Đổi tên`, `Nhân bản`, `Xóa` — nên một biểu thức
+   * `/Điều khiển AHU/` khớp cả bốn và Playwright từ chối ở chế độ strict. Cả 13
+   * case của tệp này vì thế đỏ ngay ở bước mở POU, và đã đỏ sẵn trên `main`:
+   * một cổng luôn đỏ thì không ai đọc nó nữa, nên nó không còn là cổng. */
+  await page.getByRole('button', { name: 'Mở Điều khiển AHU', exact: true }).click()
   const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
   return textarea
 }
@@ -162,9 +183,15 @@ test.describe('ST Editor — căn chỉnh pixel gutter/overlay/textarea (FE-ST-0
 
   test('FE-ST-007: dòng hiện hành được highlight ở CẢ gutter (nền khác) lẫn overlay (dải nền đúng vị trí)', async ({ page }) => {
     const textarea = await openEditor(page, 20)
-    // Nhảy символ trong Symbols & types để chọn một biến ở dòng giữa file.
-    await page.getByRole('button', { name: /Counter5:/ }).click()
-    await expect(page.getByText(/Dòng \d+, cột \d+/)).toBeVisible()
+    /* Đưa con trỏ xuống một dòng giữa tệp bằng chính đường "Tới dòng" của sản
+       phẩm (`DEV-PROG-012`). Trước đây case này bấm một mục trong khay `Ký hiệu
+       & kiểu`; khay đó đã đổi chỗ nên nút `Counter5:` không còn, và test treo
+       60 s. Đường mới vừa ổn định hơn vừa đi qua một luồng người dùng thật. */
+    await textarea.click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Control+g')
+    await page.getByRole('textbox', { name: /^Tới dòng|^Go to line/ }).fill('8')
+    await page.getByRole('button', { name: /^Tới$|^Go$/ }).click()
+    expect(await readCursorLine(page)).toBe(8)
 
     const state = await page.evaluate(() => {
       const textarea = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
@@ -205,7 +232,7 @@ test.describe('ST Editor — căn chỉnh pixel gutter/overlay/textarea (FE-ST-0
     await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
     await login(page)
     await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
-    await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+    await page.getByRole('button', { name: 'Mở Điều khiển AHU', exact: true }).click()
     const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
 
     await textarea.evaluate((element: HTMLTextAreaElement) => { element.scrollLeft = 200 })
@@ -292,7 +319,7 @@ test.describe('ST Editor — khay Dòng/cột không đứng yên sai lệch sau
     await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
     await login(page)
     await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
-    await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+    await page.getByRole('button', { name: 'Mở Điều khiển AHU', exact: true }).click()
     const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
 
     // Đặt con trỏ ở cuối tài liệu (Ctrl+End) — một thao tác click/điều hướng
@@ -301,17 +328,16 @@ test.describe('ST Editor — khay Dòng/cột không đứng yên sai lệch sau
     await page.keyboard.press('Control+End')
     await page.waitForTimeout(50)
 
-    const beforeIndicator = await page.locator('text=/Dòng \\d+, cột \\d+/').first().innerText()
+    const beforeLine = await readCursorLine(page)
     // Nguồn kết thúc bằng `\n` (quy ước `stProgramTemplate` thật) — Ctrl+End
     // đưa con trỏ tới dòng trống SAU dấu `\n` cuối, tức dòng 6 (5 dòng nội
     // dung + 1 dòng trống cuối), khớp cách đếm dòng nhất quán toàn bộ file.
-    expect(beforeIndicator).toMatch(/Dòng 6,/)
+    expect(beforeLine).toBe(6)
 
     await page.getByRole('button', { name: /Định dạng|Format/ }).click()
     await page.waitForTimeout(100)
 
-    const afterIndicator = await page.locator('text=/Dòng \\d+, cột \\d+/').first().innerText()
-    const reportedLine = Number(afterIndicator.match(/Dòng (\d+)/)?.[1])
+    const reportedLine = await readCursorLine(page)
 
     const real = await page.evaluate(() => {
       const ta = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
@@ -338,7 +364,7 @@ test.describe('ST Editor — khay Dòng/cột không đứng yên sai lệch sau
     await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
     await login(page)
     await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
-    await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+    await page.getByRole('button', { name: 'Mở Điều khiển AHU', exact: true }).click()
     const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
 
     await textarea.click({ position: { x: 5, y: 5 } })
@@ -348,8 +374,7 @@ test.describe('ST Editor — khay Dòng/cột không đứng yên sai lệch sau
     await page.getByRole('button', { name: /Định dạng|Format/ }).click()
     await page.waitForTimeout(100)
 
-    const afterIndicator = await page.locator('text=/Dòng \\d+, cột \\d+/').first().innerText()
-    const reportedLine = Number(afterIndicator.match(/Dòng (\d+)/)?.[1])
+    const reportedLine = await readCursorLine(page)
 
     const real = await page.evaluate(() => {
       const ta = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
@@ -368,7 +393,7 @@ test.describe('ST Editor — khay Dòng/cột không đứng yên sai lệch sau
     await page.addInitScript(() => window.localStorage.setItem('mkddc-lang', 'vi'))
     await login(page)
     await navigate(page, `/eng/programming/projects/${PROJECT_ID}/design`)
-    await page.getByRole('button', { name: /Điều khiển AHU/ }).click()
+    await page.getByRole('button', { name: 'Mở Điều khiển AHU', exact: true }).click()
     const textarea = await page.waitForSelector('textarea[id^="programming-st-source-"]')
 
     await textarea.click({ position: { x: 5, y: 5 } })
@@ -381,8 +406,7 @@ test.describe('ST Editor — khay Dòng/cột không đứng yên sai lệch sau
     await page.getByRole('button', { name: /Thay tất cả|Replace all/i }).click()
     await page.waitForTimeout(100)
 
-    const afterIndicator = await page.locator('text=/Dòng \\d+, cột \\d+/').first().innerText()
-    const reportedLine = Number(afterIndicator.match(/Dòng (\d+)/)?.[1])
+    const reportedLine = await readCursorLine(page)
 
     const real = await page.evaluate(() => {
       const ta = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement

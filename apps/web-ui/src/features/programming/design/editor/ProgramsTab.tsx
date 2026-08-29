@@ -28,6 +28,7 @@ import {
   mergeDiagnosticRanges,
   recordStEditorEdit,
   redoStEditorEdit,
+  scrollTopForLine,
   tokenizeStSource,
   undoStEditorEdit,
   updateStEditorSelection,
@@ -121,6 +122,24 @@ const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
  * soạn thảo. Nâng lên `16rem` (256 px, mười hai dòng) và để workbench co lại
  * trước: khi màn hình chật, thứ bị cắt phải là nơi tra cứu chứ không phải nơi
  * làm việc. */
+/* `DEV-PROG-024` — nhãn chữ của các nút PHỤ trên thanh công cụ soạn thảo.
+ *
+ * Đo trên Chrome thật 2026-08-29: hàng công cụ xuống 3 dòng và cao 100 px ở CẢ
+ * 1280×800 lẫn 1680×812 — bằng 39% chính chỗ gõ ngay bên dưới nó. Cộng bề rộng
+ * từng nút ở 1280 được 926 px trong khi cột giữa chỉ có 538 px, nên nó buộc
+ * phải xuống dòng; bỏ chữ của năm nút phụ còn 571 px, vừa đúng MỘT hàng ở khổ
+ * 1680 của người báo lỗi.
+ *
+ * `sr-only` chứ KHÔNG `hidden`: `display:none` gỡ phần tử khỏi cây trợ năng,
+ * nên nút sẽ mất tên và trình đọc màn hình chỉ còn một icon câm. `sr-only` giấu
+ * khỏi mắt mà giữ nguyên tên — và mỗi nút này đều đã có `title` nêu rõ phím tắt
+ * cho người dùng chuột.
+ *
+ * Chỉ áp cho nút PHỤ: `Lưu`, `Kiểm tra`, `Khác` giữ chữ ở mọi khổ màn. Hai nút
+ * đầu là hành động chính của màn hình, và một icon đĩa mềm không đáng để người
+ * ta phải đoán trước khi bấm. */
+const TOOLBAR_LABEL_CLASS = 'sr-only 2xl:not-sr-only'
+
 const EDITOR_FRAME_CLASS = 'min-h-[18rem] min-w-0 flex-1 lg:min-h-[16rem]'
 
 const HOVER_SAMPLE = '00000000000000000000'
@@ -1202,11 +1221,58 @@ export function SourceEditor({
     )
   }
 
+  /** Đồng bộ hai lớp ăn theo `scrollTop`/`scrollLeft` của textarea. Dùng chung
+   *  cho cả cuộn tay (`onScroll`) lẫn cuộn do mã lệnh (`revealOffset`) —
+   *  gán `scrollTop` bằng mã KHÔNG bảo đảm phát sự kiện `scroll` đồng bộ, nên
+   *  dựa vào `onScroll` sẽ để gutter và overlay trượt khỏi chữ trong một khung
+   *  hình. */
+  function syncEditorScroll(top: number, left: number) {
+    setEditorScroll({ top, left })
+    if (lineGutterRef.current) lineGutterRef.current.scrollTop = top
+    if (overlayRef.current) {
+      overlayRef.current.scrollTop = top
+      overlayRef.current.scrollLeft = left
+    }
+  }
+
+  /**
+   * `DEV-PROG-023` — cuộn cho `offset` thật sự lọt vào tầm nhìn.
+   *
+   * `setSelectionRange` không cuộn: trình duyệt chỉ cuộn tới con trỏ khi CHÍNH
+   * NÓ dời con trỏ. Thiếu bước này thì mọi đường "nhảy tới một chỗ trong nguồn"
+   * — Bản đồ mã, kết quả Tìm kiếm, `Tiếp`, `Ctrl+G`, bấm một diagnostic — đổi
+   * vùng chọn và đổi khay Dòng/cột trong khi màn hình đứng yên, đúng triệu
+   * chứng người dùng báo 2026-08-29.
+   */
+  function revealOffset(textarea: HTMLTextAreaElement, offset: number) {
+    const before = source.slice(0, offset)
+    const line = before.split('\n').length
+    const column = offset - (before.lastIndexOf('\n') + 1) + 1
+    const top = scrollTopForLine({
+      line,
+      scrollTop: textarea.scrollTop,
+      viewportHeightPx: textarea.clientHeight,
+      contentHeightPx: textarea.scrollHeight,
+      rowHeightPx: EDITOR_ROW_HEIGHT_PX,
+      padTopPx: EDITOR_PAD_TOP_PX,
+    })
+    /* Về đầu dòng thì cũng phải về mép trái. Bản đồ mã và `Ctrl+G` luôn đáp
+     * xuống cột 1; giữ nguyên `scrollLeft` cũ (có thể đang ở 400 px vì vừa đọc
+     * một dòng dài) là đưa người dùng tới đúng dòng nhưng nhìn vào khoảng trắng
+     * bên phải của nó. */
+    const left = column === 1 ? 0 : textarea.scrollLeft
+    if (top === textarea.scrollTop && left === textarea.scrollLeft) return
+    textarea.scrollTop = top
+    textarea.scrollLeft = left
+    syncEditorScroll(top, left)
+  }
+
   function selectRange(offset: number, length: number) {
     const textarea = textareaRef.current
     if (!textarea) return
     textarea.focus()
     textarea.setSelectionRange(offset, Math.min(source.length, offset + Math.max(1, length)))
+    revealOffset(textarea, offset)
     updateCursor()
   }
 
@@ -1599,8 +1665,16 @@ export function SourceEditor({
        đẩy workbench ra khỏi màn hình. */
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-[var(--c-text)]">{program.name}</h3>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* `DEV-PROG-024` — tên POU ở đây là bản SAO của thứ đã hiện ngay phía
+            trên trong dải tab (`FB_SafetyLatch ST ×`), mà nó lại tự chiếm trọn
+            một dòng: đo ở 1280 px, nhóm nút rộng hơn cột nên `justify-between`
+            đẩy tiêu đề xuống hàng riêng, mất 32 px chỉ để nhắc lại một cái tên
+            đang hiện cách đó 8 px. `sr-only` giữ nguyên tiêu đề của vùng cho
+            trình đọc màn hình — bỏ hẳn thì vùng soạn thảo mất tên. */}
+        <h3 className="sr-only">{program.name}</h3>
+        {/* `gap-1` chứ không `gap-2`: chín khoảng cách × 4 px = 36 px, đủ để
+            nhóm nút gói vào một hàng ở khổ 1680 thay vì hai. */}
+        <div className="flex flex-wrap items-center gap-1">
           {/* FE-ST-009: chuẩn hoá Find/Insert/Format/Save cùng một hàng, đều
            * có icon + tooltip nêu rõ phím tắt — trước đây Định dạng/Chèn
            * Point-Variable không có icon, rời rạc hơn Tìm/Lưu. */}
@@ -1619,7 +1693,7 @@ export function SourceEditor({
               })
             }}
           >
-            {pick('Tìm', 'Find')}
+            <span className={TOOLBAR_LABEL_CLASS}>{pick('Tìm', 'Find')}</span>
           </Button>
           {canEdit && (
             <>
@@ -1649,7 +1723,7 @@ export function SourceEditor({
                 title={pick('Chèn nhanh Point/Variable (Ctrl+I)', 'Quick insert Point/Variable (Ctrl+I)')}
                 onClick={() => setInsertPanelOpen((open) => !open)}
               >
-                {pick('Chèn Point/Variable', 'Insert Point/Variable')}
+                <span className={TOOLBAR_LABEL_CLASS}>{pick('Chèn Point/Variable', 'Insert Point/Variable')}</span>
               </Button>
               <Button
                 size="sm"
@@ -1659,7 +1733,7 @@ export function SourceEditor({
                 title={pick('Thư viện nhanh — cùng catalog với PGM-04', 'Quick library — same catalog as PGM-04')}
                 onClick={onToggleLibrary}
               >
-                {pick('Thư viện', 'Library')}
+                <span className={TOOLBAR_LABEL_CLASS}>{pick('Thư viện', 'Library')}</span>
               </Button>
               {/* `DEV-PROG-019` — hai mức, không phải 20 tuỳ chọn. Bấm thẳng
                   vào nút = Định dạng tài liệu (việc chiếm ~95% số lần dùng);
@@ -1672,7 +1746,7 @@ export function SourceEditor({
                   title={pick('Định dạng tài liệu (Ctrl+Shift+F)', 'Format document (Ctrl+Shift+F)')}
                   onClick={() => { setFormatMenuOpen(false); handleFormat('document') }}
                 >
-                  {pick('Định dạng', 'Format')}
+                  <span className={TOOLBAR_LABEL_CLASS}>{pick('Định dạng', 'Format')}</span>
                 </Button>
                 <button
                   type="button"
@@ -1749,7 +1823,7 @@ export function SourceEditor({
                 title={compareDisabledReason ?? pick('So sánh với bản đang vận hành', 'Compare with the running revision')}
                 onClick={() => onOpenCompare?.()}
               >
-                {pick('So sánh', 'Compare')}
+                <span className={TOOLBAR_LABEL_CLASS}>{pick('So sánh', 'Compare')}</span>
               </Button>
               <details className="relative" data-testid="st-toolbar-more">
                 <summary
@@ -1973,14 +2047,7 @@ export function SourceEditor({
             }}
             onKeyUp={updateCursor}
             onSelect={updateCursor}
-            onScroll={(event) => {
-              setEditorScroll({ top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft })
-              if (lineGutterRef.current) lineGutterRef.current.scrollTop = event.currentTarget.scrollTop
-              if (overlayRef.current) {
-                overlayRef.current.scrollTop = event.currentTarget.scrollTop
-                overlayRef.current.scrollLeft = event.currentTarget.scrollLeft
-              }
-            }}
+            onScroll={(event) => syncEditorScroll(event.currentTarget.scrollTop, event.currentTarget.scrollLeft)}
             onKeyDown={(event) => {
               if (completion.open) {
                 if (event.key === 'ArrowDown') { event.preventDefault(); setCompletion((c) => ({ ...c, selected: (c.selected + 1) % c.items.length })); return }

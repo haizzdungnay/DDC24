@@ -763,3 +763,61 @@ describe('SourceEditor — dải bản đồ mã', () => {
     expect(within(map).getAllByTestId('st-code-map-entry').length).toBeGreaterThan(0)
   })
 })
+
+describe('DEV-PROG-023 — bấm Bản đồ mã phải kéo màn hình tới đúng dòng', () => {
+  /** POU đủ dài để Bản đồ mã xuất hiện (ngưỡng 80 dòng), với một `IF` ở tận dòng 100. */
+  function longSource(): string {
+    const filler = Array.from({ length: 95 }, (_, index) => `  Counter${index} := ${index};`)
+    return ['PROGRAM P', 'VAR', '  Counter0 : INT;', 'END_VAR', ...filler, '  IF Counter0 > 0 THEN', '    Counter0 := 0;', '  END_IF;', 'END_PROGRAM', ''].join('\n')
+  }
+
+  /** jsdom không có layout: `clientHeight`/`scrollHeight` luôn 0 và `scrollTop`
+   *  không giữ giá trị. Dựng lại đúng ba số đó để hình học được kiểm thật. */
+  function stubGeometry(textarea: HTMLTextAreaElement, lines: number) {
+    let scrollTop = 0
+    Object.defineProperty(textarea, 'scrollTop', {
+      configurable: true, get: () => scrollTop, set: (value: number) => { scrollTop = value },
+    })
+    Object.defineProperty(textarea, 'clientHeight', { configurable: true, value: 260 })
+    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: lines * 20 + 24 })
+  }
+
+  it('mục ở dòng sâu: textarea cuộn tới đó, gutter và overlay đi theo cùng một `scrollTop`', () => {
+    const source = longSource()
+    const { textarea, container } = renderEditor(source, { codeMapOpen: true })
+    stubGeometry(textarea, source.split('\n').length)
+
+    const entries = Array.from(container.querySelectorAll('[data-testid="st-code-map-entry"]')) as HTMLElement[]
+    const deep = entries.find((entry) => Number(entry.dataset.line) > 80)
+    expect(deep, 'Bản đồ mã phải có mục ở dòng sâu để bấm').toBeDefined()
+
+    expect(textarea.scrollTop).toBe(0)
+    fireEvent.click(deep!)
+
+    // Dòng đích nằm quanh 1900 px tính từ đầu tài liệu; điều được khoá ở đây là
+    // "màn hình ĐÃ đi theo", không phải một con số pixel chính xác.
+    expect(textarea.scrollTop).toBeGreaterThan(1000)
+
+    const gutter = container.querySelector('[aria-hidden="true"].mono') as HTMLElement
+    const overlay = container.querySelector('pre.mono') as HTMLElement
+    expect(gutter.scrollTop).toBe(textarea.scrollTop)
+    expect(overlay.scrollTop).toBe(textarea.scrollTop)
+  })
+
+  it('đang cuộn ở cuối tệp rồi bấm mục ở đầu: về đầu, và về cả mép trái', () => {
+    const source = longSource()
+    const { textarea, container } = renderEditor(source, { codeMapOpen: true })
+    stubGeometry(textarea, source.split('\n').length)
+    textarea.scrollTop = 1800
+    textarea.scrollLeft = 400
+
+    const first = container.querySelector('[data-testid="st-code-map-entry"]') as HTMLElement
+    expect(Number(first.dataset.line)).toBe(1)
+    fireEvent.click(first)
+
+    expect(textarea.scrollTop).toBe(0)
+    // Mục Bản đồ mã luôn đáp xuống cột 1; giữ `scrollLeft` cũ là đưa người dùng
+    // tới đúng dòng nhưng nhìn vào khoảng trắng bên phải của nó.
+    expect(textarea.scrollLeft).toBe(0)
+  })
+})

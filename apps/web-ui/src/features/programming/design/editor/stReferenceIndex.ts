@@ -5,11 +5,11 @@ import { maskStComments } from './stInstanceInsertion'
  * Từ khoá ST — tra hoa/thường-độc-lập. Đây là danh sách "KHÔNG phải ký hiệu",
  * và nó RỘNG HƠN `ST_KEYWORDS`.
  *
- * `ST_KEYWORDS` phục vụ tô cú pháp và gợi ý, nên nó cố ý chỉ liệt kê những gì
- * compiler thật hỗ trợ (§10) — thêm `FUNCTION` vào đó sẽ gợi ý một construct
- * compiler chưa nhận. Nhưng câu hỏi ở đây khác hẳn: *"định danh này có phải một
- * ký hiệu người dùng khai không"*. `FUNCTION` không phải, dù compiler có hỗ trợ
- * hay không.
+ * `ST_KEYWORDS` phục vụ tô cú pháp: nó phủ đúng những từ compiler GIỮ CHỖ
+ * (`DEV-PROG-022` — trước đó nó chép tay một tập hẹp hơn và đã trôi khỏi
+ * compiler). Câu hỏi ở đây vẫn khác: *"định danh này có phải một ký hiệu người
+ * dùng khai không"*. `TO`/`BY`/`DO`/`VAR_IN_OUT` không phải ký hiệu, dù
+ * compiler Rev A chưa giữ chỗ chúng — nên danh sách này vẫn rộng hơn.
  *
  * Hai câu hỏi khác nhau nhưng một danh sách phải BAO danh sách kia. Trước
  * `DEV-PROG-004` chúng là hai bản rời và đã lệch: chỉ mục dùng bản hẹp, nên mở

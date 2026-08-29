@@ -5,6 +5,7 @@ import { useAuth, roleAtLeast } from '../../auth'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
 import { useDraftWorkspace } from './useDraftWorkspace'
+import { useViewportFillHeight } from './useViewportFillHeight'
 import { ProgramsTab } from './editor/ProgramsTab'
 import { MappingTab } from './mapping/MappingTab'
 import { ExecutionTab } from './task/ExecutionTab'
@@ -140,6 +141,14 @@ export function DesignWorkspacePage({
   const modeParam = searchParams.get('mode')
   const workspaceMode: ProgramsWorkspaceMode = isProgramsWorkspaceMode(modeParam) ? modeParam : 'EDIT'
   const canEdit = roleAtLeast(session?.role, 'admin') && !mobileReadOnly && workspaceMode === 'EDIT'
+  /* `DEV-PROG-024` — xem khối chú thích ở chỗ dùng, phía dưới. Sàn `24rem`
+   * (384 px) cố ý NHỎ hơn ngân sách của khổ 800 px: sàn lớn hơn ngân sách chính
+   * là cách `DEV-PROG-021` tạo ra tràn dọc. */
+  const [workspaceColumnRef, workspaceColumnHeight] = useViewportFillHeight<HTMLDivElement>({
+    bottomGapPx: 24,
+    minPx: 384,
+    minViewportWidthPx: 1024,
+  })
   const fromQuery: DesignTab = (VALID_TABS as readonly string[]).includes(requested ?? '') ? (requested as DesignTab) : 'programs'
   /* `execution` là tab con, không phải trang IA: nó chỉ có địa chỉ dưới dạng
    * `?tab=execution` trên route `programs`. Mọi giá trị khác thì route thắng. */
@@ -701,11 +710,23 @@ export function DesignWorkspacePage({
             trang — 68 px đó thuộc về chỗ người ta gõ. Sàn `34rem` giữ cho màn
             thấp vẫn còn chỗ gõ; dưới `lg` KHÔNG chốt chiều cao vì màn hẹp không
             có ngân sách để chia và workspace ở đó là chỉ-đọc. */}
-        {/* `DEV-PROG-021` — sàn `34rem` (544 px) LỚN HƠN chính ngân sách
-            `100vh-18rem` ở màn 800 px (512 px), nên trên đúng khổ màn phổ biến
-            nhất của tủ, trang tràn dọc 12 px mỗi lần mở workspace. Hạ sàn về
-            `32rem` để nó khớp ngân sách thay vì chống lại nó. */}
-        <div className="flex flex-col lg:h-[calc(100vh-18rem)] lg:min-h-[32rem]">
+        {/* `DEV-PROG-024` — chiều cao cột nay ĐO, không đoán.
+            `calc(100vh - 18rem)` là lần đoán thứ ba của cùng một con số (32rem
+            → 20rem → 18rem), và nó sai theo cả hai chiều tuỳ máy: đo ở đây
+            2026-08-29 cho mép trên `y=304` trên mọi khổ màn, tức chrome thật
+            lớn hơn 18rem (288 px) và trang tràn dọc 16 px; còn trên bo — nơi
+            thanh ngữ cảnh không kèm banner — chrome nhỏ hơn hẳn và phần chênh
+            trở thành một dải trống dưới đáy, lấy mất đúng chỗ người ta gõ.
+            `useViewportFillHeight` hỏi thẳng trình duyệt cột đang bắt đầu ở
+            đâu, nên chrome đổi bao nhiêu cũng không cần ai sửa lại hằng số.
+            Sàn giữ trong hook (`minPx`), KHÔNG đặt bằng `lg:min-h-*`: một sàn
+            Tailwind lớn hơn ngân sách đo được sẽ thắng và tự tạo lại đúng cú
+            tràn dọc của `DEV-PROG-021`. */}
+        <div
+          ref={workspaceColumnRef}
+          className="flex flex-col"
+          style={workspaceColumnHeight === null ? undefined : { height: workspaceColumnHeight }}
+        >
         <div className="min-h-0 lg:flex-1 lg:overflow-hidden">
         {workspaceMode === 'SIMULATE' ? (
           /* `T59-815` — SIMULATE cũng KHÔNG phải editor bị khoá: nó là bản đã
