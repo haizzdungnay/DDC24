@@ -102,16 +102,36 @@ describe('PGM-04 Control Library', () => {
     expect(await screen.findAllByText('1.0.0 · DRAFT')).toHaveLength(2)
   })
 
-  it('trạng thái rỗng và trạng thái lỗi nói rõ chuyện gì xảy ra', async () => {
-    stub(() => Promise.resolve({ items: [] }))
-    const { unmount } = renderPage()
-    expect(await screen.findByText(/Không có khối nào khớp bộ lọc/)).toBeInTheDocument()
-    unmount()
-    cleanup()
+  /*
+  `T61-206` — ba màn hình "không có gì để xem" là BA trạng thái riêng.
 
+  Bản trước gộp chúng: `groups.length === 0` cho ra cùng câu "không khớp bộ
+  lọc" kể cả khi KHÔNG có bộ lọc nào. Câu đó đổ lỗi cho một bộ lọc không tồn
+  tại, và người dùng sẽ đi xoá bộ lọc thay vì đi tạo khối.
+  */
+  it('thư viện trống mời TẠO KHỐI, không đổ lỗi cho bộ lọc không tồn tại', async () => {
+    stub(() => Promise.resolve({ items: [] }))
+    renderPage()
+    expect(await screen.findByText(/Thư viện của Project này chưa có khối nào/)).toBeInTheDocument()
+    expect(screen.queryByText(/khớp bộ lọc/)).not.toBeInTheDocument()
+  })
+
+  it('có bộ lọc mà 0 kết quả thì mới nói về bộ lọc', async () => {
+    stub(() => Promise.resolve({ items: [] }))
+    renderPage()
+    await screen.findByText(/Thư viện của Project này chưa có khối nào/)
+    fireEvent.change(screen.getByLabelText(/Tìm theo tên hoặc mô tả/), { target: { value: 'khong-ton-tai' } })
+    expect(await screen.findByText(/Không có khối nào khớp bộ lọc/)).toBeInTheDocument()
+  })
+
+  it('lỗi đọc KHÔNG bị trình bày như một thư viện rỗng', async () => {
+    // Danh sách rỗng đọc như "thư viện không có gì"; sự thật ở đây là "không
+    // đọc được thư viện". Hai câu dẫn tới hai hành động khác nhau.
     stub(() => Promise.reject(new Error('mạng lỗi')))
     renderPage()
     expect(await screen.findByText(/Không tải được Thư viện điều khiển/)).toBeInTheDocument()
+    expect(screen.queryByText(/chưa có khối nào/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/khớp bộ lọc/)).not.toBeInTheDocument()
   })
 
   // `stateLayoutKnown=false` KHÔNG được hiển thị là "0 B": đó là chưa biết, và

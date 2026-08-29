@@ -12,6 +12,15 @@ import { createUuid } from '../../../shared/crypto'
 import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../api/generated/library_registry'
 import { categoryLabel, metadataValue, scopeLabel, usageDisplay } from './libraryPresentation'
 import {
+  libraryFiltersKey,
+  libraryViewState,
+  rememberLibraryRead,
+  type LibraryReadInput,
+  type LibraryViewAction,
+  type LibraryViewMemory,
+  type LibraryViewStatus,
+} from './libraryViewState'
+import {
   useProgrammingLibraryPaged,
   useProgrammingLibraryUsage,
   useProgrammingProjects,
@@ -125,6 +134,31 @@ export function LibraryPage() {
     useProgrammingLibraryEntryMutations(projectId)
 
   const entries = library.items
+  /* `T61-206` — MỘT trạng thái cho cả màn hình, thay vì mỗi nhánh render tự
+     suy ra từ `status`/`items`/`error`. Chỗ nguy hiểm mà mô-đun này đóng lại:
+     danh sách rỗng vì LỖI và danh sách rỗng vì THƯ VIỆN TRỐNG trông giống hệt
+     nhau nếu mỗi nơi tự suy. */
+  const filterInput = useMemo(
+    () => ({ scope: scope === '' ? undefined : scope, kind: kind === '' ? undefined : kind,
+             category: category || undefined, query: query.trim() || undefined }),
+    [scope, kind, category, query],
+  )
+  const filtersKey = libraryFiltersKey(filterInput)
+  const [readMemory, setReadMemory] = useState<LibraryViewMemory | null>(null)
+  const readInput = useMemo<LibraryReadInput>(() => ({
+    status: library.status, items: library.items, error: library.error,
+    hasMore: library.hasMore, loadingMore: library.loadingMore, loadMoreError: library.loadMoreError,
+  }), [library.status, library.items, library.error, library.hasMore, library.loadingMore, library.loadMoreError])
+  useEffect(() => {
+    setReadMemory((current) => rememberLibraryRead(current, readInput, filtersKey))
+  }, [readInput, filtersKey])
+  const view = libraryViewState({
+    list: readInput,
+    filters: filterInput,
+    retained: readMemory,
+    canEdit,
+    hasProject: Boolean(projectId),
+  })
   const groups = useMemo(() => groupLibraryEntries(entries), [entries])
   const selected = groups.find((group) => group.key === selectedKey) ?? null
   /* `T61-105` — Used-In của gói ĐÃ NIÊM PHONG, đọc từ server. Chỉ gọi khi có
@@ -309,9 +343,11 @@ export function LibraryPage() {
           }
         >
           <LibraryList
-            state={library.status}
+            state={view.status}
             groups={groups}
-            errorMessage={library.error}
+            errorMessage={view.message}
+            action={view.action}
+            stale={view.stale}
             onRetry={library.refresh}
             hasMore={library.hasMore}
             loadingMore={library.loadingMore}
@@ -647,6 +683,8 @@ function LibraryList({
   state,
   groups,
   errorMessage,
+  action,
+  stale,
   onRetry,
   hasMore,
   loadingMore,
@@ -655,9 +693,13 @@ function LibraryList({
   selectedKey,
   onSelect
 }: {
-  state: 'loading' | 'ready' | 'error'
+  state: LibraryViewStatus
   groups: LibraryEntryGroup[]
   errorMessage: string | null
+  /** `T61-206` — hành động chính mà trạng thái mời người dùng làm. ĐÚNG một. */
+  action: LibraryViewAction
+  /** Nội dung đang hiện KHÔNG đến từ lần đọc thành công hiện tại. */
+  stale: boolean
   onRetry: () => void
   hasMore: boolean
   loadingMore: boolean
@@ -670,7 +712,32 @@ function LibraryList({
   if (state === 'loading') {
     return <StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} />
   }
-  if (state === 'error') {
+  /* `T61-206` — bốn màn hình "không có gì để xem" nay là bốn trạng thái RIÊNG.
+     Trước lát này chúng bị gộp: `groups.length === 0` cho ra cùng một câu
+     "không khớp bộ lọc" dù lý do thật là mất mạng, thiếu quyền hay thư viện
+     trống. Ba lý do ấy dẫn tới ba hành động khác nhau. */
+  if (state === 'no-permission') {
+    return (
+      <StateBlock
+        state="empty"
+        title={pick('Vai hiện tại không xem được Thư viện điều khiển.',
+                    'The current role cannot view the Control Library.')}
+        detail={errorMessage ?? undefined}
+      />
+    )
+  }
+  if (state === 'offline' && groups.length === 0) {
+    return (
+      <StateBlock
+        state="error"
+        title={pick('Mất kết nối nên chưa đọc được Thư viện điều khiển.',
+                    'Offline — the Control Library could not be read.')}
+        detail={errorMessage ?? undefined}
+        onRetry={onRetry}
+      />
+    )
+  }
+  if (state === 'error' && groups.length === 0) {
     return (
       <StateBlock
         state="error"
@@ -680,7 +747,7 @@ function LibraryList({
       />
     )
   }
-  if (groups.length === 0) {
+  if (state === 'empty-filter') {
     return (
       <StateBlock
         state="empty"
@@ -688,8 +755,29 @@ function LibraryList({
       />
     )
   }
+  if (state === 'empty-project') {
+    /* Khác hẳn `empty-filter`: đây là thư viện của Project chưa có khối nào,
+       nên hành động đúng là TẠO, không phải xoá bộ lọc. */
+    return (
+      <StateBlock
+        state="empty"
+        title={pick('Thư viện của Project này chưa có khối nào.',
+                    'This project library has no blocks yet.')}
+        detail={action === 'create-block'
+          ? pick('Dùng nút Tạo khối để bắt đầu.', 'Use Create block to get started.')
+          : pick('Vai hiện tại không tạo được khối.', 'The current role cannot create blocks.')}
+      />
+    )
+  }
   return (
     <ul className="flex flex-col divide-y divide-[var(--c-border)]" aria-label={pick('Danh sách khối Thư viện điều khiển', 'Control Library blocks')}>
+      {/* Dữ liệu đang hiện không đến từ lần đọc thành công hiện tại. Nói ra:
+          một danh sách cũ trông y hệt một danh sách mới. */}
+      {stale && (
+        <li className="py-1 text-xs text-[var(--c-warn-fg)]" role="status">
+          {pick('Danh sách này là bản đã tải trước đó.', 'This list is a previously loaded copy.')}
+        </li>
+      )}
       {groups.map((group) => (
         <li key={group.key}>
           <button
