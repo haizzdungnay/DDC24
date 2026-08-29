@@ -222,3 +222,34 @@ describe('lịch sử ST editor bền (T59-506)', () => {
     expect(history.future).toEqual([])
   })
 })
+
+/*
+`T61-407` — cổng Controls/Safety phải hiện ở chỗ người dùng CHỌN khối.
+
+`PID` có thật trong compiler và gõ được trong ST, nhưng `st_review_gate_check`
+chặn nó ở bước Kiểm tra cho tới khi profile mang approval token. Trước lát này
+gợi ý autocomplete không nói gì: người ta viết xong cả một chương trình quanh
+`PID` rồi mới biết ở Kiểm tra — và lúc ấy chi phí đã bỏ ra rồi.
+*/
+describe('buildStCompletions — cổng review', () => {
+  it('đánh dấu khối đang chờ review ngay trong gợi ý', () => {
+    const item = buildStCompletions('PI', []).find((entry) => entry.label === 'PID')
+    expect(item).toBeDefined()
+    expect(item?.reviewGated).toBe(true)
+    expect(item?.detail).toMatch(/Kiểm tra sẽ từ chối/)
+  })
+
+  it('khối không bị cổng thì KHÔNG mang nhãn cảnh báo', () => {
+    const item = buildStCompletions('TO', []).find((entry) => entry.label === 'TON')
+    expect(item).toBeDefined()
+    expect(item?.reviewGated).toBeUndefined()
+    expect(item?.detail).not.toMatch(/từ chối/)
+  })
+
+  /* Vẫn phải GỢI Ý nó. Giấu khối đi sẽ làm người dùng kết luận sản phẩm không
+     có PID và đi tự viết lại một bộ PID bằng tay — tệ hơn hẳn so với việc biết
+     nó có và đang chờ duyệt. */
+  it('không giấu khối bị cổng khỏi danh sách', () => {
+    expect(buildStCompletions('PID', []).map((entry) => entry.label)).toContain('PID')
+  })
+})

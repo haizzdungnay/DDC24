@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.31.0"
+  version: "1.32.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -4158,6 +4158,20 @@ components:
           type: array
           maxItems: 64
           items: { $ref: "#/components/schemas/ProgrammingLibraryDependency" }
+        # `T61-401` — metadata TRÌNH BÀY trên đường GHI, đối xứng với
+        # `ProgrammingLibraryEntry.category/description` trên đường ĐỌC.
+        # Cả hai OPTIONAL, nên client cũ không gửi chúng vẫn ghi được như cũ.
+        #
+        # Upsert này là phép GHI ĐÈ toàn phần — `source` cũng phải gửi lại đủ —
+        # nên field vắng nghĩa là entry sau lần ghi KHÔNG có metadata đó, đúng
+        # như mọi field optional khác của request. Không có ngữ nghĩa "giữ lại
+        # giá trị cũ" riêng cho hai trường này: một trường vá tại chỗ nằm giữa
+        # các trường ghi đè là chỗ người ta mất mô tả mà không hiểu vì sao.
+        #
+        # Sửa hai trường này KHÔNG đổi `contentSha256` (`D61-09`): danh tính
+        # thực thi không được phụ thuộc vào một lần sửa chính tả.
+        category: { type: string, maxLength: 32 }
+        description: { type: string, maxLength: 512 }
         # Vắng mặt nghĩa là layout chưa biết. FUNCTION không được mang khối này.
         stateLayout: { $ref: "#/components/schemas/ProgrammingLibraryStateLayout" }
     ProgrammingLibraryRevisionDeprecateRequest:

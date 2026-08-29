@@ -8,6 +8,126 @@
 
 ## [Unreleased]
 
+### PGM-04 Control Library — đóng WP-03/WP-04, và bốn lỗi lộ ra khi dựng chúng (2026-08-29)
+
+Phạm vi: `PLAN-FE-PGM-061` WP-03 (`T61-301..307`) + WP-04 (`T61-401..406`) +
+`T61-501..504` của WP-05. Quyền: [`AUTH-PROG-2026-08-29-PGM04-003`](docs/07_records/reviews/AUTH-PROG-2026-08-29-PGM04-003.md).
+Lớp bằng chứng: **HOST/LOCAL** (unit + e2e trình duyệt thật + backend Go thật).
+Không tuyên bố target PASS, không đổi `RELEASE_READY` (vẫn `NO-GO`).
+
+**Fixed — cột metadata không ai ghi được (`T61-401`)**
+
+- *Triệu chứng*: mọi khối PROJECT hiện `— chưa phân loại` và `— chưa có mô tả`
+  vĩnh viễn; bộ lọc Phân loại không bao giờ khớp một khối do người dùng tạo.
+- *Nguyên nhân gốc*: migration `0014` đã thêm cột `category`/`description` và
+  `UpsertProjectLibraryEntryParams` đã nhận chúng, nhưng
+  `UpsertLibraryEntryCommand` và `upsertLibraryEntryRequest` **không có trường
+  tương ứng** — không caller nào tới được cột. Một cột không ai ghi được là một
+  cột không tồn tại.
+- *Cách sửa*: `ProgrammingLibraryEntryRequest` nhận thêm hai trường
+  **optional** (OpenAPI `1.31.0 → 1.32.0`, additive), nối qua HTTP →
+  application → store, và FE có hai ô nhập trong drawer soạn thảo. Sửa metadata
+  **không** đổi `contentSha256` (`D61-09`) — kiểm bằng test đọc lại hai lần.
+
+**Fixed — trần metadata đo byte trong khi hợp đồng đếm ký tự**
+
+- *Triệu chứng*: một mô tả tiếng Việt bị từ chối ở khoảng một nửa độ dài hợp
+  đồng cho phép, kèm thông điệp nói "vượt 512 ký tự" trong khi người dùng mới gõ
+  512.
+- *Nguyên nhân gốc*: store kiểm `len()` (byte) trong khi `maxLength` của JSON
+  Schema và `length()` của trigger SQLite đều đếm ký tự.
+- *Cách sửa*: `utf8.RuneCountInString` ở cả store lẫn application.
+
+**Fixed — nhãn "chờ review Controls/Safety" đọc TÊN khối thay vì `featureState`**
+
+- *Triệu chứng*: một khối PROJECT do người dùng đặt tên `PID` bị gắn nhãn chờ
+  review; ngược lại một khối SYSTEM thật sẽ MẤT nhãn nếu profile trong bundle
+  lạc hậu so với máy chủ — đúng chiều nguy hiểm, vì nhãn biến mất thì không ai
+  đi tìm nó.
+- *Cách sửa*: đọc `entry.featureState` do máy chủ trả.
+
+**Fixed — ba trong bốn tab Inspector trỏ `aria-controls` vào một `id` không có thật**
+
+- *Nguyên nhân gốc*: mỗi tab trỏ tới `library-inspector-panel-<id>` của riêng
+  nó, trong khi cây chỉ có MỘT khay mang `id` của tab đang mở.
+- *Cách sửa*: chỉ tab đang mở mang `aria-controls`; thêm roving tabindex và
+  điều hướng `←/→` cho cả dải.
+
+**Added — bề mặt PGM-04 theo `SPEC-PGM04-VISUAL-001`**
+
+- Lưới thẻ dày thay danh sách một dòng: tên, kind, phạm vi, phân loại, **chữ ký
+  một dòng** (`AC-PGM04-01`), mô tả, phiên bản/trạng thái, số POU dùng trong
+  bản nháp, badge review/deprecated. Vắng chữ ký thì nói ra, **không** tự parse
+  `interface` để đoán hộ.
+- Bàn phím: lưới là MỘT điểm dừng tab (roving tabindex), `←/→/↑/↓` DI CHUYỂN,
+  `Enter` mới MỞ, `Home`/`End` về đầu/cuối.
+- Drawer soạn thảo mở **theo yêu cầu** (`AC-PGM04-03`) — trước đây một khung
+  form thường trực chiếm chỗ bằng một câu hướng dẫn.
+- Used-In **đi tới được** (`AC-PGM04-02`): mỗi POU là link tới đúng POU trong
+  PGM-02 kèm `returnTo`. POU thuộc Project khác hiện tên nhưng không dựng link.
+- Chèn khối (`AC-PGM04-06`): nút luôn thấy, khoá kèm lý do khi
+  `REVIEW_REQUIRED`/`DEPRECATED`/khổ hẹp; bật thì mở bộ chọn POU đích rồi **điều
+  hướng** sang PGM-02 — PGM-04 phát ra **0 lệnh ghi**.
+- Khổ `< 768 px` chỉ-đọc, khớp ngưỡng `mobileReadOnly` của PGM-02.
+- Nút ghi khi thiếu quyền **vẫn thấy** và khoá kèm lý do, thay vì bị ẩn.
+- `LibraryPage.tsx` tách thành controller + `LibraryCardGrid`/`LibraryBlockCard`/
+  `LibraryInspector`/`LibraryAuthoringDrawer`/`TargetPouChooser`/`LibraryNotices`/
+  `LibraryVersionLock`.
+
+**Fixed — hai vi phạm WCAG 2.2 do chính lát này tạo ra, lane axe bắt được**
+
+- `link-in-text-block`: link Used-In phân biệt chỉ bằng màu → gạch chân luôn.
+- `target-size`: hàng Used-In cao 16 px cách nhau 12,8 px → hàng tối thiểu 24 px
+  và giãn khoảng cách.
+
+**Fixed — cổng Controls/Safety vô hình trong ST editor (`T61-407`)**
+
+- *Triệu chứng*: người dùng báo "PID không dùng được ở ST editor".
+- *Điều tra*: `PID` **có thật** trong compiler/runtime (`StFbType::PID`,
+  `st_program.cpp`, anti-windup back-calculation) và gõ được trong ST — nó được
+  tô màu, được gợi ý, khai `VAR` được. Thứ chặn nó là `st_review_gate_check`:
+  `product_profile_v2.json` ghi `PID` với `policy: BLOCK_CHECK` và
+  `approvalToken: null`, nên **Kiểm tra** từ chối. Đó là cổng an toàn theo thiết
+  kế (`D61-04`/`T59-205`), không phải lỗi — và nó chỉ mở bằng token phê duyệt
+  Controls/Safety trong profile, không mở bằng bất kỳ nút nào trên giao diện.
+- *Lỗi thật nằm ở chỗ khác*: gợi ý autocomplete của ST **không nói gì** về cổng
+  ấy. Thư viện điều khiển và Quick Library đều gắn nhãn "chờ review
+  Controls/Safety", còn chỗ người ta thực sự gõ thì im lặng — nên người dùng
+  viết xong cả một chương trình quanh `PID` rồi mới biết ở bước Kiểm tra.
+- *Cách sửa*: `buildStCompletions` đọc `PROGRAMMING_REVIEW_GATED_FEATURES` của
+  profile sinh ra và trả `reviewGated`; danh sách gợi ý hiện "chờ review
+  Controls/Safety — Kiểm tra sẽ từ chối" bằng đúng màu cảnh báo mà Thư viện
+  dùng. **Không giấu** khối khỏi danh sách: giấu đi sẽ làm người dùng kết luận
+  sản phẩm không có PID rồi đi tự viết lại một bộ PID bằng tay.
+
+**Fixed — hai khẳng định e2e lạc hậu trong lane real-backend**
+
+Lane `programming-real.spec.ts` nằm NGOÀI suite mock mặc định, nên nó không chạy
+cùng vòng với thay đổi làm nó đỏ. Hai khẳng định đã hỏng từ trước lát này mà
+không ai thấy: tên khả truy cập của thẻ khối ghim `PROJECT FUNCTION` (đổi từ
+`T61-204` khi nhãn phạm vi chuyển sang tiếng người), và nút Ngừng-sử-dụng được
+đọc mà không mở khay "Phiên bản" (khay bị `display:none` từ `T61-204`). Cả hai
+đã sửa và lane xanh trở lại.
+
+**Deploy — Foxlinx**
+
+BE + FE lên `SOM-DDC-24-foxlinx`, có sao lưu và ba đầu dò **zero-mutation** xác
+nhận đường ghi metadata sống trên bo. Hồ sơ:
+[`2026-08-29-foxlinx-pgm04-library-deploy.md`](docs/07_records/test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md).
+
+*Kiểm chứng*: `vitest` 2186/2186 · `eslint --max-warnings=0` sạch ·
+`npm run build` + ngân sách bundle R3 PASS (161,68/165,00 KiB) ·
+Playwright `programming.spec.ts` desktop+mobile — lane PGM-04 **19 passed /
+3 skipped** theo khổ màn, axe serious/critical = 0 ở cả hai khổ ·
+`programming-real.spec.ts` **8 passed** trên backend Go thật ·
+số đo bố cục PGM-04 không tràn ngang ở 1440/1280/1024/768/390 px ·
+`go vet ./...` + `go test ./... -count=1` sạch ·
+`verify_programming_g1_contracts.py`, `verify_programming_pgm02_contract.py`,
+`generate_programming_library_registry.py --check`, `docs_iso_harness.py --expect`
+đều PASS.
+
+
+
 ### Programming R3 SIMULATE — đóng `T59-816`/`T59-817`, đóng increment R3 và Plan 60 (2026-08-28)
 
 - **Security** — **sửa một mâu thuẫn uỷ quyền hai tầng**. Lát `WEB-RBAC-001`

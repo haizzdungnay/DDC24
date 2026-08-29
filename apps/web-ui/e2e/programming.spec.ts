@@ -1834,20 +1834,43 @@ interface MockLibraryEntry {
   dependencies: never[]
   stateLayoutKnown: boolean
   stateSizeBytes: number
+  /* Chữ ký ĐÃ PHÂN GIẢI do backend công bố (`T59-804`). Cố ý để MỘT khối thiếu
+     field này: bề mặt phải nói "chưa đọc được chữ ký" thay vì tự parse
+     `interface` để đoán hộ, và một lane mà mọi khối đều có chữ ký sẽ không bao
+     giờ chạy qua nhánh ấy. */
+  signature?: {
+    category: string
+    dispatch: 'OPERATOR' | 'FUNC_TABLE' | 'FB_TYPE' | 'EXPANSION'
+    polymorphic: boolean
+    allowedTypes: string[]
+    typedPortNames: string[]
+    ports: { name: string; direction: 'INPUT' | 'OUTPUT'; dataType: string }[]
+  }
 }
 
 /* Bốn khối vì lane cần bốn vai khác nhau: một khối SYSTEM bình thường, khối
    SYSTEM đang chờ review (`PID` — đúng mục `approved:false` của profile), một
    khối SYSTEM thuộc nhóm `timer` để phép lọc có cái để thu hẹp, và một khối
    PROJECT — nguồn DUY NHẤT mà `library_usages` đo được. `description` khác
-   nhau từng khối vì đó là chuỗi chỉ xuất hiện ở khay Chi tiết, nên nó nói
-   được "chi tiết đang mở đúng khối nào" mà không cần bám class. */
+   nhau từng khối để nói được "đang đọc đúng khối nào" mà không cần bám class.
+   Từ `T61-303` mô tả xuất hiện ở CẢ thẻ lẫn khay Chi tiết, nên khẳng định về
+   nó phải nêu rõ đang soi vùng nào. */
 const LIBRARY_CATALOG: MockLibraryEntry[] = [
   {
     scope: 'SYSTEM', libraryRevisionId: SYSTEM_LIBRARY_REVISION_ID, libraryVersion: 'rev-a.3',
     libraryState: 'PUBLISHED', entryId: 'LIMIT', kind: 'FUNCTION', name: 'LIMIT',
     featureState: 'AVAILABLE', category: 'math', description: 'Kẹp giá trị vào khoảng cho phép',
-    contentSha256: 'a'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
+    contentSha256: 'a'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0,
+    signature: {
+      category: 'math', dispatch: 'FUNC_TABLE', polymorphic: false,
+      allowedTypes: ['REAL'], typedPortNames: [],
+      ports: [
+        { name: 'IN', direction: 'INPUT', dataType: 'REAL' },
+        { name: 'MN', direction: 'INPUT', dataType: 'REAL' },
+        { name: 'MX', direction: 'INPUT', dataType: 'REAL' },
+        { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }
+      ]
+    }
   },
   {
     scope: 'SYSTEM', libraryRevisionId: SYSTEM_LIBRARY_REVISION_ID, libraryVersion: 'rev-a.3',
@@ -1859,7 +1882,17 @@ const LIBRARY_CATALOG: MockLibraryEntry[] = [
     scope: 'SYSTEM', libraryRevisionId: SYSTEM_LIBRARY_REVISION_ID, libraryVersion: 'rev-a.3',
     libraryState: 'PUBLISHED', entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON',
     featureState: 'AVAILABLE', category: 'timer', description: 'Bộ định thời trễ bật',
-    contentSha256: 'd'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16
+    contentSha256: 'd'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16,
+    signature: {
+      category: 'timer', dispatch: 'FB_TYPE', polymorphic: false,
+      allowedTypes: [], typedPortNames: [],
+      ports: [
+        { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
+        { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
+        { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
+        { name: 'ET', direction: 'OUTPUT', dataType: 'TIME' }
+      ]
+    }
   },
   {
     scope: 'PROJECT', libraryRevisionId: PROJECT_LIBRARY_REVISION_ID, libraryVersion: '1.2',
@@ -2026,7 +2059,10 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     // Chọn một khối mà làm bộ lọc bật lại "Tất cả" là ném người dùng về đầu
     // danh sách sau mỗi lần xem một khối.
     await list.getByRole('button', { name: /^TON/ }).click()
-    await expect(page.getByText('Bộ định thời trễ bật')).toBeVisible()
+    // Soi trong KHAY chi tiết: từ `T61-303` mô tả cũng nằm trên thẻ, nên một
+    // `getByText` toàn trang khớp hai chỗ và không còn nói được "chi tiết đang
+    // mở đúng khối nào".
+    await expect(page.getByRole('tabpanel').getByText('Bộ định thời trễ bật')).toBeVisible()
     await expect(category).toHaveValue('timer')
     await expect(list.getByRole('button')).toHaveCount(1)
     await expect(list.getByRole('button', { name: /^TON/ })).toHaveAttribute('aria-current', 'true')
@@ -2096,6 +2132,187 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     await expect(page.getByRole('button', { name: /^(Duyệt|Approve)/i })).toHaveCount(0)
 
     expectNoBrowserFailures(failures, 'PGM-04 review gate')
+  })
+
+  /*
+  `AC-PGM04-01` — chữ ký phải đọc được TRÊN THẺ, trước khi mở chi tiết.
+
+  Đây là lý do tồn tại của cả màn hình: "tìm, hiểu và dùng lại khối mà không
+  phải mở mã nguồn chỉ để biết giao diện khối". Một thẻ chỉ có tên bắt người
+  dùng mở từng khối để biết khối nào nhận REAL — với vài chục khối, đó là vài
+  chục lần mở.
+  */
+  test('AC-PGM04-01: chữ ký khối đọc được ngay trên thẻ', async ({ page }) => {
+    const lane = libraryLane()
+    await openLibrary(page, lane)
+
+    const limit = libraryList(page).getByRole('button', { name: /^LIMIT/ })
+    await expect(limit).toContainText('LIMIT(IN: REAL, MN: REAL, MX: REAL) → OUT: REAL')
+    // Nhiều đầu ra được bọc ngoặc để không đọc nhầm thành một kiểu ghép.
+    await expect(libraryList(page).getByRole('button', { name: /^TON/ }))
+      .toContainText('TON(IN: BOOL, PT: TIME) → (Q: BOOL, ET: TIME)')
+    /* Vắng chữ ký thì NÓI RA. Không tự parse `interface` để đoán hộ: hai nơi
+       cùng đoán là hai nơi kết luận khác nhau về cùng một khối, và ở đây "bên
+       nào đúng" quyết định người dùng nối dây vào chân nào. */
+    await expect(libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }))
+      .toContainText('Chưa đọc được chữ ký')
+    // Chưa mở khay chi tiết nào: chữ ký phải có mặt TRƯỚC đó.
+    await expect(page.getByRole('tabpanel')).toHaveCount(0)
+  })
+
+  /*
+  `AC-PGM04-03` — form tạo khối mở THEO YÊU CẦU.
+
+  Bản trước giữ một khung "Tạo khối PROJECT" luôn hiện với một câu hướng dẫn
+  thay cho nội dung, nên một phần chiều cao khung phải luôn dành cho thứ người
+  dùng không dùng tới — đúng phần chiều cao mà danh sách khối đang thiếu.
+  */
+  test('AC-PGM04-03: form tạo khối chỉ mở khi được gọi', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      'khổ hẹp là read-only, có case riêng')
+    const lane = libraryLane()
+    await openLibrary(page, lane)
+    await expect(libraryList(page).getByRole('button').first()).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Khối PROJECT mới' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByLabel('Tên khối')).toBeVisible()
+    // Hai trường metadata phải có mặt: cột `category`/`description` đã được ĐỌC
+    // lên màn hình từ `T61-101`, nhưng tới `T61-401` mới có đường GHI.
+    await expect(dialog.getByLabel('Phân loại')).toBeVisible()
+    await expect(dialog.getByLabel('Mô tả ngắn')).toBeVisible()
+
+    await dialog.getByRole('button', { name: 'Huỷ' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
+  /*
+  `AC-PGM04-06` — Chèn độc lập đòi ngữ cảnh đích TƯỜNG MINH, và Thư viện không
+  tự ghi vào bản nháp (handoff §4: "Do not silently create a POU or mutate
+  draft").
+  */
+  test('AC-PGM04-06: Chèn hỏi POU đích và không ghi gì vào bản nháp', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      'khổ hẹp là read-only, có case riêng')
+    const lane = libraryLane()
+    const writes: string[] = []
+    await page.route(
+      (url) => url.pathname.startsWith('/api/v1/programming/'),
+      async (route) => {
+        if (route.request().method() !== 'GET') writes.push(route.request().method() + ' ' + new URL(route.request().url()).pathname)
+        await route.fallback()
+      }
+    )
+    await openLibrary(page, lane)
+
+    await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+    const insert = page.getByRole('button', { name: /Chèn vào POU/ })
+    await expect(insert).toBeEnabled()
+    await insert.click()
+
+    // Bản nháp của lane này còn ở schema v1 nên chưa liệt kê được POU đích —
+    // và màn hình phải nói ĐÚNG lý do đó, không nói "chưa có POU nào" (câu ấy
+    // mời người dùng đi tạo lại đúng thứ họ đang có).
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText(/chưa ở schema v2/)).toBeVisible()
+    await expect(dialog.getByRole('button', { name: /Mở POU và chèn/ })).toBeDisabled()
+
+    await dialog.getByRole('button', { name: 'Huỷ' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    // Zero mutation: không một lệnh ghi nào rời khỏi trang.
+    expect(writes, 'PGM-04 phát ra lệnh ghi trong đường Chèn').toEqual([])
+  })
+
+  /*
+  `SPEC-PGM04-VISUAL-001` §5 — lưới thẻ là MỘT điểm dừng tab, và mũi tên DI
+  CHUYỂN chứ không MỞ. Một thư viện 200 khối mà mỗi thẻ là một điểm dừng thì
+  phím Tab không còn đi tới được Inspector.
+  */
+  test('T61-306: lưới thẻ là một điểm dừng tab, mũi tên di chuyển không mở', async ({ page }) => {
+    const lane = libraryLane()
+    await openLibrary(page, lane)
+
+    const cards = libraryList(page).getByRole('button')
+    await expect(cards).toHaveCount(LIBRARY_CATALOG.length)
+    expect(await libraryList(page).locator('button[tabindex="0"]').count()).toBe(1)
+
+    await cards.first().focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(cards.nth(1)).toBeFocused()
+    // Di chuyển KHÔNG chọn: URL chưa mang khối nào, và chưa có khay nào mở.
+    expect(new URL(page.url()).searchParams.get('entry')).toBeNull()
+
+    await page.keyboard.press('Enter')
+    await expect.poll(() => new URL(page.url()).searchParams.get('entry')).not.toBeNull()
+  })
+
+  /*
+  `SPEC-PGM04-VISUAL-001` §1 — dưới 768 px PGM-02 đã là chỉ-đọc, nên PGM-04
+  cũng không được hiện MỘT đường ghi nào bật được. Hai luật cho một thiết bị là
+  cách một kỹ thuật viên sửa thư viện trên điện thoại giữa lúc đứng cạnh tủ.
+  */
+  test('PGM-04 khổ hẹp là chỉ-đọc: không một đường ghi nào bật được', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) >= AUTHORING_MIN_WIDTH_PX,
+      'case này thuộc khổ hẹp')
+    const lane = libraryLane()
+    await openLibrary(page, lane)
+    await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+
+    /* Nút vẫn THẤY và mang lý do — ẩn nó đi làm người dùng tưởng thiết bị
+       không có khả năng đó rồi đi hỏi sai người. Điều bị cấm là nó bật được. */
+    for (const label of [/Khối PROJECT mới/, /Chèn vào POU/, /^Sửa/, /^Xoá khối/]) {
+      for (const control of await page.getByRole('button', { name: label }).all()) {
+        await expect(control).toBeDisabled()
+      }
+    }
+    await expect(page.getByText(/Màn hình dưới 768 px là chỉ đọc/)).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
+  /*
+  `T61-505` — SỐ ĐO ở bốn khổ của `SPEC-PGM04-VISUAL-001` §1, không phải cảm
+  giác về bố cục.
+
+  Điều được khoá là **không tràn ngang**: `scrollWidth` của tài liệu không được
+  vượt bề rộng khung nhìn. Một thư viện có tên khối dài và chữ ký dài là đúng
+  chỗ tràn ngang xuất hiện, và tràn ngang trên tủ đặt ở hành lang nghĩa là một
+  nửa thẻ nằm ngoài màn hình mà không ai cuộn tới.
+  */
+  test('T61-505: PGM-04 không tràn ngang ở bốn khổ đã khoá', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'phép đo này tự đặt khung nhìn')
+    const lane = libraryLane()
+    const failures = observeBrowserFailures(page)
+    await openLibrary(page, lane)
+
+    const sizes = [
+      { label: '1440 — lưới 3 cột + inspector cố định', width: 1440, height: 900 },
+      { label: '1280 — lưới 2-3 cột', width: 1280, height: 800 },
+      { label: '1024 — lưới 2 cột', width: 1024, height: 768 },
+      { label: '768 — ngưỡng chỉ-đọc', width: 768, height: 1024 },
+      { label: '390 — một cột', width: 390, height: 844 }
+    ]
+    const measured: string[] = []
+    for (const size of sizes) {
+      await page.setViewportSize({ width: size.width, height: size.height })
+      await expect(libraryList(page).getByRole('button').first()).toBeVisible()
+      // Chọn một khối để Inspector có nội dung: một khay rỗng không tràn được,
+      // nên đo lúc nó rỗng là đo một thứ không có rủi ro.
+      await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+      const metrics = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth
+      }))
+      measured.push(`${size.label}: scrollWidth=${metrics.scrollWidth} clientWidth=${metrics.clientWidth}`)
+      expect(metrics.scrollWidth, `tràn ngang ở ${size.label}`).toBeLessThanOrEqual(metrics.clientWidth + 1)
+    }
+    /* In ra dòng số đo theo đúng thói quen của các lane khác trong tệp này:
+       một attachment chỉ nằm trong thư mục kết quả, còn dòng log thì có mặt
+       ngay trong bản ghi lần chạy mà người đọc hồ sơ nhìn thấy. */
+    console.log(`[T61-505] PGM-04 layout: ${measured.join(' | ')}`)
+    await testInfo.attach('pgm04-layout', { body: measured.join('\n'), contentType: 'text/plain' })
+    expectNoBrowserFailures(failures, 'PGM-04 số đo bố cục')
   })
 
   test('T61-306: PGM-04 không có vi phạm axe nghiêm trọng', async ({ page }) => {

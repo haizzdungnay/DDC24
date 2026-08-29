@@ -929,3 +929,16 @@ expiry/review trigger; change/incident links. Thiếu một field thì giữ `OP
 
 Vòng chi tiết này làm rõ biện pháp kiểm soát nhưng **không giảm rủi ro nào**.
 Gate production vẫn `RED`.
+
+## Cập nhật 2026-08-29 — Plan 61 WP-03/WP-04 (PGM-04)
+
+| Risk | Điều lát này làm | Trạng thái sau lát |
+|---|---|---|
+| `RSK-PROG-005` (review-gate PID) | Nhãn review nay đọc `featureState` của MÁY CHỦ thay vì đối chiếu TÊN khối với profile sinh ra — bỏ được cả dương tính giả (khối PROJECT trùng tên) lẫn âm tính giả (profile lạc hậu). Đường Chèn khoá kèm lý do; e2e khẳng định không có checkbox/switch/nút duyệt ở cả hai khổ màn | `OPEN — PARTIAL SOURCE` (**không đổi**): evidence Controls/Safety thật vẫn thuộc `T59-706` |
+
+**Rủi ro mới ghi nhận, chưa đóng**
+
+| Mã | Mô tả | Ảnh hưởng | Trạng thái |
+|---|---|---|---|
+| `RSK-PGM04-101` | Diễn tập rollback trên Forlinx **chưa chạy**: bản sao lưu đã nằm trên thiết bị và các bước đã ghi, nhưng chưa ai thực hiện một lần khôi phục thật | Đường lùi của lát deploy này là đường **chưa được kiểm**; một sự cố sẽ là lần đầu tiên nó được dùng | `OPEN` — cần một lần chạy có phê duyệt để đóng `VS-PGM04-61-014` |
+| `RSK-PGM04-102` | Lane `programming-real.spec.ts` nằm ngoài suite mock mặc định, nên khẳng định của nó lạc hậu mà không ai thấy — lát này tìm thấy **hai** khẳng định đã hỏng từ các PR trước | Một cổng không chạy cùng vòng với thay đổi làm nó đỏ là một cổng chỉ báo động khi đã muộn | `OPEN` — cần đưa lane real vào cùng vòng chạy với suite mock, hoặc một lịch chạy bắt buộc trước khi đóng mỗi work package |

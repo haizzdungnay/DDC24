@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  blockSignatureLine,
   insertBlockReason,
+  insertTargetCandidates,
   metadataValue,
   safeToRemove,
   scopeLabel,
@@ -121,5 +123,92 @@ describe('safeToRemove', () => {
 
   it('SEALED_ONLY bằng 0 vẫn cho gỡ — phần Draft chưa giao, không phải chưa đo', () => {
     expect(safeToRemove(usage({ availability: 'SEALED_ONLY' }))).toBe(true)
+  })
+})
+
+describe('blockSignatureLine', () => {
+  const base = { name: 'SCALE_LIN' as const }
+
+  it('vắng signature thì NÓI RA, không tự parse interface để đoán', () => {
+    expect(blockSignatureLine({ ...base })).toEqual({ kind: 'unavailable' })
+  })
+
+  it('dựng một dòng đọc được với tên chân và kiểu', () => {
+    const line = blockSignatureLine({
+      ...base,
+      signature: {
+        category: 'math', dispatch: 'FUNC_TABLE', polymorphic: false,
+        allowedTypes: ['REAL'], typedPortNames: [],
+        ports: [
+          { name: 'IN', direction: 'INPUT', dataType: 'REAL' },
+          { name: 'MODE', direction: 'INPUT', dataType: 'BOOL' },
+          { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' },
+        ],
+      },
+    })
+    expect(line).toEqual({ kind: 'ready', text: 'SCALE_LIN(IN: REAL, MODE: BOOL) → OUT: REAL' })
+  })
+
+  it('nhiều đầu ra được bọc ngoặc để không đọc nhầm thành một kiểu ghép', () => {
+    const line = blockSignatureLine({
+      name: 'TON',
+      signature: {
+        category: 'timer', dispatch: 'FB_TYPE', polymorphic: false,
+        allowedTypes: [], typedPortNames: [],
+        ports: [
+          { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
+          { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
+          { name: 'ET', direction: 'OUTPUT', dataType: 'TIME' },
+        ],
+      },
+    })
+    expect(line).toEqual({ kind: 'ready', text: 'TON(IN: BOOL) → (Q: BOOL, ET: TIME)' })
+  })
+
+  it('không đầu ra thì viết dấu gạch, không viết số 0 hay chuỗi rỗng', () => {
+    const line = blockSignatureLine({
+      name: 'LOG_EVENT',
+      signature: {
+        category: 'other', dispatch: 'EXPANSION', polymorphic: false,
+        allowedTypes: [], typedPortNames: [],
+        ports: [{ name: 'MSG', direction: 'INPUT', dataType: 'DINT' }],
+      },
+    })
+    expect(line).toEqual({ kind: 'ready', text: 'LOG_EVENT(MSG: DINT) → —' })
+  })
+})
+
+describe('insertTargetCandidates', () => {
+  const objects = [
+    { objectId: 'aaa', name: 'AHU_MAIN', kind: 'PROGRAM' as const, language: 'ST' as const, dependencies: ['ENTRY'] },
+    { objectId: 'bbb', name: 'FILTER', kind: 'FUNCTION' as const, language: 'FBD' as const, dependencies: [] },
+    { objectId: 'ENTRY', name: 'SCALE_LIN', kind: 'FUNCTION' as const, language: 'ST' as const, dependencies: [] },
+    { objectId: 'ccc', name: 'HELPER', kind: 'FUNCTION' as const, language: 'ST' as const, dependencies: [] },
+  ]
+  const entry = { entryId: 'entry', dependencies: [{ entryId: 'CCC', version: '1.0.0' }] }
+
+  it('chặn chèn khối vào chính nó', () => {
+    const self = insertTargetCandidates(objects, entry).find((item) => item.objectId === 'ENTRY')
+    expect(self?.block).toBe('SELF')
+  })
+
+  it('chặn chèn vào POU mà chính khối đang phụ thuộc — đó là một vòng lặp', () => {
+    const cycle = insertTargetCandidates(objects, entry).find((item) => item.objectId === 'ccc')
+    expect(cycle?.block).toBe('CYCLE')
+  })
+
+  it('POU đã dùng khối rồi vẫn chèn được; "đã dùng" là ghi chú, không phải rào', () => {
+    const used = insertTargetCandidates(objects, entry).find((item) => item.objectId === 'aaa')
+    expect(used?.alreadyDepends).toBe(true)
+    expect(used?.block).toBeNull()
+  })
+
+  /* Máy chủ không ép luật nào về ngôn ngữ hay `kind`, nên giao diện cũng không
+     được ép: chặn ở đây sẽ dựng lại đúng lỗi mà `T61-201` vừa sửa ở đường
+     RBAC — người dùng bị giao diện chặn trên thao tác máy chủ chấp nhận. */
+  it('KHÔNG chặn theo ngôn ngữ hay kind', () => {
+    const fbd = insertTargetCandidates(objects, entry).find((item) => item.objectId === 'bbb')
+    expect(fbd?.block).toBeNull()
+    expect(fbd?.language).toBe('FBD')
   })
 })

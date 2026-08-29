@@ -157,13 +157,25 @@ describe('PGM-04 Control Library', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
-  it('viewer đọc được nhưng không thấy form tạo khối', async () => {
+  /*
+  `SPEC-PGM04-VISUAL-001` §3 — thiếu quyền thì nút ghi VẪN THẤY và bị khoá kèm
+  lý do; ẩn nó đi bị cấm. Ẩn nút làm người dùng tưởng thiết bị không có khả năng
+  đó rồi đi hỏi sai người, thay vì đi xin quyền.
+
+  Câu lý do cũng phải đúng chính sách: quyền ghi là `program.edit`
+  (`engineer` + `admin`), nên nói "chỉ tài khoản quản trị" là mô tả sai một
+  chính sách mà máy chủ không hề ép.
+  */
+  it('viewer đọc được, nút tạo khối vẫn thấy nhưng bị khoá kèm lý do', async () => {
     auth.role = 'viewer'
     stub(() => Promise.resolve({ items: [entry()] }))
     renderPage()
     expect(await screen.findByRole('button', { name: /SCALE_LIN/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Lưu vào bản nháp thư viện/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/Chỉ tài khoản quản trị mới sửa được/)).toBeInTheDocument()
+    const create = screen.getByRole('button', { name: /Khối PROJECT mới/ })
+    expect(create).toBeDisabled()
+    expect(screen.getByText(/Vai hiện tại không sửa được Thư viện điều khiển/)).toBeInTheDocument()
+    expect(create).toHaveAttribute('aria-describedby', 'library-create-reason')
     fireEvent.click(screen.getByRole('button', { name: /SCALE_LIN/ }))
     expect(screen.queryByRole('button', { name: /Ngừng sử dụng phiên bản/ })).not.toBeInTheDocument()
   })
@@ -343,10 +355,10 @@ describe('PGM-04 Control Library', () => {
     const list = await screen.findByRole('list', { name: /Danh sách khối Thư viện điều khiển/ })
     expect(list).toBeInTheDocument()
     expect(screen.getByLabelText(/Tìm theo tên/)).toBeInTheDocument()
-    // Grid item phải được phép co và metadata chuyển thành hai hàng ở mobile;
-    // nếu thiếu hai lớp này, danh sách SYSTEM đẩy document 390 px thành 510 px.
+    // Grid item phải được phép co; nếu thiếu `min-w-0`, một tên khối dài hoặc
+    // một chữ ký dài đẩy document 390 px thành 510 px và cả trang cuộn ngang.
     expect(list.closest('section')).toHaveClass('min-w-0')
-    expect(screen.getByRole('button', { name: /SCALE_LIN/ })).toHaveClass('flex-col', 'sm:flex-row')
+    expect(screen.getByRole('button', { name: /SCALE_LIN/ })).toHaveClass('min-w-0')
   })
 })
 

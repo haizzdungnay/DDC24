@@ -126,3 +126,89 @@ export function categoryLabel(
   const known = PROGRAMMING_LIBRARY_CATEGORY_ORDER.find((item) => item.id === category)
   return known ? pick(known.labelVi, known.labelEn) : category
 }
+
+/**
+ * `T61-303` — chữ ký một dòng của khối, thứ `AC-PGM04-01` đòi phải đọc được
+ * TRƯỚC khi mở chi tiết.
+ *
+ * Nguồn duy nhất là `signature` ĐÃ PHÂN GIẢI của backend. Vắng field nghĩa là
+ * backend không đọc được chữ ký thô, và câu trả lời đúng là nói ra điều đó —
+ * không tự parse `interface` để đoán hộ. Hai nơi cùng đoán là hai nơi kết luận
+ * khác nhau về cùng một khối, và người dùng không có cách nào biết bên nào
+ * đúng; ở đây "bên nào đúng" quyết định họ nối dây vào chân nào.
+ */
+export type BlockSignatureLine =
+  | { kind: 'ready'; text: string }
+  | { kind: 'unavailable' }
+
+export function blockSignatureLine(
+  entry: Pick<ProgrammingLibraryEntry, 'name' | 'signature'>,
+): BlockSignatureLine {
+  const signature = entry.signature
+  if (!signature) return { kind: 'unavailable' }
+  const inputs = signature.ports.filter((port) => port.direction === 'INPUT')
+  const outputs = signature.ports.filter((port) => port.direction === 'OUTPUT')
+  const inputText = inputs.map((port) => `${port.name}: ${port.dataType}`).join(', ')
+  /* Nhiều đầu ra được bọc trong ngoặc để không đọc nhầm thành một kiểu ghép.
+     Không đầu ra thì viết `—`, không viết `void`: sản phẩm này không dùng chữ
+     đó ở bất cứ đâu khác. */
+  const outputText =
+    outputs.length === 0
+      ? '—'
+      : outputs.length === 1
+        ? `${outputs[0].name}: ${outputs[0].dataType}`
+        : `(${outputs.map((port) => `${port.name}: ${port.dataType}`).join(', ')})`
+  return { kind: 'ready', text: `${entry.name}(${inputText}) → ${outputText}` }
+}
+
+/** Vì sao một POU không nhận được khối này — hoặc `null` nếu nhận được. */
+export type InsertTargetBlock = 'SELF' | 'CYCLE' | null
+
+export interface InsertTargetCandidate {
+  objectId: string
+  name: string
+  kind: 'PROGRAM' | 'FUNCTION' | 'FUNCTION_BLOCK'
+  language: 'ST' | 'FBD'
+  block: InsertTargetBlock
+  /** POU này đã khai khối là phụ thuộc rồi. KHÔNG phải lý do chặn. */
+  alreadyDepends: boolean
+}
+
+/**
+ * `T61-405` — POU nào trong Draft nhận được khối này.
+ *
+ * Hai luật chặn ở đây đều là luật CẤU TRÚC, đúng dù máy chủ có kiểm hay không:
+ * một khối không gọi được chính nó, và không gọi được thứ đang gọi nó.
+ *
+ * Cố ý KHÔNG có luật nào về ngôn ngữ hay về `kind`. Máy chủ không ép chúng, nên
+ * ép ở giao diện sẽ chặn người dùng trên một thao tác máy chủ chấp nhận — và họ
+ * không có cách nào biết đó là luật của giao diện chứ không phải của sản phẩm.
+ * Đó đúng là lỗi mà `T61-201` vừa phải sửa ở đường RBAC; không tái lập nó ở
+ * đường Insert. Thay vào đó `kind`/`language` của POU được HIỆN RA để người
+ * dùng chọn có hiểu biết.
+ */
+export function insertTargetCandidates(
+  objects: readonly {
+    objectId: string
+    name: string
+    kind: 'PROGRAM' | 'FUNCTION' | 'FUNCTION_BLOCK'
+    language: 'ST' | 'FBD'
+    dependencies: readonly string[]
+  }[],
+  entry: Pick<ProgrammingLibraryEntry, 'entryId' | 'dependencies'>,
+): InsertTargetCandidate[] {
+  const entryId = entry.entryId.toUpperCase()
+  const requires = new Set(entry.dependencies.map((item) => item.entryId.toUpperCase()))
+  return objects.map((object) => {
+    const objectId = object.objectId.toUpperCase()
+    const block: InsertTargetBlock = objectId === entryId ? 'SELF' : requires.has(objectId) ? 'CYCLE' : null
+    return {
+      objectId: object.objectId,
+      name: object.name,
+      kind: object.kind,
+      language: object.language,
+      block,
+      alreadyDepends: object.dependencies.some((item) => item.toUpperCase() === entryId),
+    }
+  })
+}

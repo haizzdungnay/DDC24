@@ -2142,7 +2142,13 @@ export function SourceEditor({
                     onMouseDown={(event) => { event.preventDefault(); acceptCompletion(item) }}
                   >
                     <span className="mono">{item.label}</span>
-                    <span className="text-xs text-[var(--c-text-dim)]">{item.detail}</span>
+                    {/* `T61-407` — khối đang chờ review Controls/Safety phải
+                        đọc được NGAY trong danh sách gợi ý. Cùng màu cảnh báo
+                        mà Thư viện điều khiển dùng, để hai màn hình nói cùng
+                        một thứ bằng cùng một tín hiệu. */}
+                    <span className={`text-xs ${item.reviewGated ? 'text-[var(--c-warn-fg)]' : 'text-[var(--c-text-dim)]'}`}>
+                      {item.detail}
+                    </span>
                   </button>
                 </li>
               ))}

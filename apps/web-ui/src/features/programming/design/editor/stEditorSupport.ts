@@ -1,5 +1,6 @@
 import { FBD_DATA_TYPES, type FbdDataType } from '../../fbd/model'
 import { FBD_PALETTE } from '../../fbd/palette'
+import { PROGRAMMING_REVIEW_GATED_FEATURES } from '../../api/generated/profile'
 
 /* WP-10 (Technical Selection Record §A, CTO/Owner approval 2026-08-15):
  * mọi keyword/kiểu/hàm dưới đây đối chiếu trực tiếp
@@ -230,7 +231,24 @@ export interface StCompletionItem {
   label: string
   kind: 'keyword' | 'type' | 'function' | 'fb-type' | 'symbol'
   detail: string
+  /**
+   * `T61-407` — khối này có cổng Controls/Safety chưa mở.
+   *
+   * Nó CÓ THẬT trong compiler và gõ được ở đây, nhưng `st_review_gate_check`
+   * sẽ chặn ở bước Kiểm tra cho tới khi profile mang approval token. Trước lát
+   * này gợi ý không nói gì: người dùng viết xong cả một chương trình quanh
+   * `PID` rồi mới biết ở Kiểm tra — và lúc ấy chi phí đã bỏ ra rồi. Cổng phải
+   * hiện ở chỗ người ta CHỌN, không phải chỗ người ta bị từ chối.
+   */
+  reviewGated?: true
 }
+
+/** Tên FB mà profile đang chặn ở Kiểm tra. Nguồn là profile sinh ra, không
+ *  phải danh sách viết tay: thêm một feature vào cổng mà đây không biết sẽ tạo
+ *  ra một gợi ý hứa nhiều hơn sự thật. */
+const REVIEW_GATED_NAMES = new Set<string>(
+  PROGRAMMING_REVIEW_GATED_FEATURES.filter((item) => !item.approved).map((item) => item.featureId)
+)
 
 /**
  * T59-506 — lịch sử của ST editor phải thuộc editor, không được phụ thuộc vào
@@ -344,7 +362,13 @@ export function buildStCompletions(
     const key = `${kind}:${label}`
     if (seen.has(key)) return
     seen.add(key)
-    items.push({ label, kind, detail })
+    const gated = REVIEW_GATED_NAMES.has(label)
+    items.push({
+      label,
+      kind,
+      detail: gated ? 'chờ review Controls/Safety — Kiểm tra sẽ từ chối' : detail,
+      ...(gated ? { reviewGated: true as const } : {}),
+    })
   }
   for (const symbol of declaredSymbols) {
     if (symbol.name.toUpperCase().startsWith(upperPrefix)) push(symbol.name, 'symbol', symbol.type)

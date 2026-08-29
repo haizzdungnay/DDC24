@@ -63,6 +63,13 @@ export interface LibraryEntryDraft {
   /** Entry PROJECT khác mà entry này gọi tới. Server chỉ nhận UUID, và chính
    *  mảng này là thứ chặn xoá một entry còn bị phụ thuộc. */
   dependencies?: { entryId: string; version: string }[]
+  /* `T61-401` — metadata TRÌNH BÀY. Bỏ hẳn field khi người dùng để trống, chứ
+     KHÔNG gửi chuỗi rỗng: upsert ghi đè toàn phần, nên chuỗi rỗng được lưu
+     thành "đã điền, nội dung rỗng" và khối sẽ hiện như đã phân loại vào một
+     nhóm không tên thay vì hiện `—`. Sửa hai trường này không đổi
+     `contentSha256` (`D61-09`). */
+  category?: string
+  description?: string
 }
 
 /** `resource` mà server trả sau mỗi mutation library. `libraryRevisionId` là

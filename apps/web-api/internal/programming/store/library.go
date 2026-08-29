@@ -1261,15 +1261,20 @@ func prepareProjectLibraryEntry(params UpsertProjectLibraryEntryParams, publishi
 	if err != nil {
 		return entry, err
 	}
+	/* Trần đếm theo KÝ TỰ, không theo byte.
+	   `maxLength` của JSON Schema đếm ký tự và trigger `length()` của SQLite
+	   cũng đếm ký tự; đo bằng `len()` (byte) ở giữa hai đầu ấy làm mô tả tiếng
+	   Việt bị từ chối ở khoảng một phần ba độ dài mà hợp đồng cho phép, kèm một
+	   thông điệp nói "vượt 512 ký tự" trong khi người dùng mới gõ 200. */
 	if params.Category != nil {
-		if len(*params.Category) > 32 {
+		if utf8.RuneCountInString(*params.Category) > 32 {
 			return LibraryEntry{}, fmt.Errorf("library entry category vượt 32 ký tự")
 		}
 		value := *params.Category
 		entry.Category = &value
 	}
 	if params.Description != nil {
-		if len(*params.Description) > 512 {
+		if utf8.RuneCountInString(*params.Description) > 512 {
 			return LibraryEntry{}, fmt.Errorf("library entry description vượt 512 ký tự")
 		}
 		value := *params.Description
@@ -1749,9 +1754,11 @@ func libraryEntryMatchesQuery(entry LibraryEntry, upperQuery string) bool {
 	return entry.Description != nil && strings.Contains(strings.ToUpper(*entry.Description), upperQuery)
 }
 
+/*
+Chuỗi rỗng của registry nghĩa là "không phân loại"; ở store nó là `nil` để
 
-/* Chuỗi rỗng của registry nghĩa là "không phân loại"; ở store nó là `nil` để
-   phân biệt với một phân loại đã đặt thành chuỗi rỗng. */
+	phân biệt với một phân loại đã đặt thành chuỗi rỗng.
+*/
 func optionalString(value string) *string {
 	if value == "" {
 		return nil

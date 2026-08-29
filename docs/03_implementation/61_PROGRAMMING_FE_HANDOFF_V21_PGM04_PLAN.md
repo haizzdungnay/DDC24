@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-FE-PGM-061` |
-| Phiên bản | 0.1 |
-| Trạng thái | **M2 — DRAFT CONTENT; `PLAN_READY=NO-GO`; chỉ WP-00 được phép bắt đầu** |
+| Phiên bản | 0.2 |
+| Trạng thái | **ĐÓNG — WP-00…WP-05 `DONE`. `RELEASE_READY` KHÔNG đổi (vẫn `NO-GO`)** |
 | Ngày | 2026-08-28 |
 | Chủ quản | FE Lead + Web API Lead + System Architect |
 | Người review | Product Owner, Controls/Safety, QA, consumer PGM-02 |
@@ -351,11 +351,11 @@ history nào được tính, cách SYSTEM usage được projection, và retenti
 
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
-| `T61-001` | P0 | Reconcile route/scope/RBAC/publish/PID giữa handoff, UX Active, Product/SRS/OpenAPI; ghi finding và disposition. | — | `READY` | 1 nd |
-| `T61-002` | P0 | Tạo visual spec render được cho desktop/mobile và loading/empty/error/offline/permission/PID/authoring/target chooser; khóa token/breakpoint/focus. | `T61-001` | `ORDERED` | 2 nd |
-| `T61-003` | P0 | Cập nhật DDD/UI-UX/component mapping/field→API→state→action→RBAC→test và rollback; không dùng Plan61 thay DDD authority. | `T61-001/002` | `ORDERED` | 1,5 nd |
-| `T61-004` | P0 | Product + Architect review, exact-pin revision/hash và mở `PLAN_READY/IMPLEMENT_READY[PGM04]`. | `T61-003` | `BLOCKED` | 0,5 nd |
-| `T61-005` | P0 | Khóa contract metadata/search/Used-In/compatibility và semantics count. | `T61-001` | `BLOCKED` | 1 nd |
+| `T61-001` | P0 | Reconcile route/scope/RBAC/publish/PID giữa handoff, UX Active, Product/SRS/OpenAPI; ghi finding và disposition. | — | `DONE` | 1 nd |
+| `T61-002` | P0 | Tạo visual spec render được cho desktop/mobile và loading/empty/error/offline/permission/PID/authoring/target chooser; khóa token/breakpoint/focus. | `T61-001` | `DONE` | 2 nd |
+| `T61-003` | P0 | Cập nhật DDD/UI-UX/component mapping/field→API→state→action→RBAC→test và rollback; không dùng Plan61 thay DDD authority. | `T61-001/002` | `DONE` | 1,5 nd |
+| `T61-004` | P0 | Product + Architect review, exact-pin revision/hash và mở `PLAN_READY/IMPLEMENT_READY[PGM04]`. | `T61-003` | `DONE` | 0,5 nd |
+| `T61-005` | P0 | Khóa contract metadata/search/Used-In/compatibility và semantics count. | `T61-001` | `DONE` | 1 nd |
 
 **Exit WP-00:** không còn authority conflict; visual/contract revision được pin;
 mọi blocker còn lại có owner/impact/gate/unlock; `PLAN_READY=PASS` và chỉ lát cắt
@@ -365,13 +365,13 @@ có contract machine-readable mới được `IMPLEMENT_READY=GO`.
 
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
-| `T61-101` | P0 | OpenAPI additive cho metadata/filter/compatibility/usage; stable errors và cursor tuple. | `T61-004/005` | `ORDERED` | 1,5 nd |
-| `T61-102` | P0 | Mở registry schema/generator cho metadata SYSTEM; tách executable `contentSha256` khỏi `presentationSha256/catalogRevision`; versionHistory/hash mutation test. | `T61-101` | `ORDERED` | 1,5 nd |
-| `T61-103` | P0 | Migration/store PROJECT metadata additive, backup/preflight/restart; không rewrite revision immutable. | `T61-101` | `ORDERED` | 1,5 nd |
-| `T61-104` | P0 | Used-In application/store projection cho Draft + sealed scope đã chốt, cursor và summary available/unavailable. | `T61-101` | `ORDERED` | 2 nd |
-| `T61-105` | P0 | HTTP route/validation/RBAC/audit/error mapping; read route cho bốn role, mutation giữ `program.edit`. | `T61-103/104` | `ORDERED` | 1 nd |
-| `T61-106` | P1 | Sinh lại client TS/registry C++/Go/TS, contract-sync và G1 re-pin cùng change-set. | `T61-102/105` | `ORDERED` | 0,5 nd |
-| `T61-107` | P0 | Go/generator tests: hostile input, >100 cursor, filter mismatch, SYSTEM immutable, usage restart, migration fail-closed. | `T61-102..106` | `ORDERED` | 1 nd |
+| `T61-101` | P0 | OpenAPI additive cho metadata/filter/compatibility/usage; stable errors và cursor tuple. | `T61-004/005` | `DONE` | 1,5 nd |
+| `T61-102` | P0 | Mở registry schema/generator cho metadata SYSTEM; tách executable `contentSha256` khỏi `presentationSha256/catalogRevision`; versionHistory/hash mutation test. | `T61-101` | `DONE` | 1,5 nd |
+| `T61-103` | P0 | Migration/store PROJECT metadata additive, backup/preflight/restart; không rewrite revision immutable. | `T61-101` | `DONE` | 1,5 nd |
+| `T61-104` | P0 | Used-In application/store projection cho Draft + sealed scope đã chốt, cursor và summary available/unavailable. | `T61-101` | `DONE` | 2 nd |
+| `T61-105` | P0 | HTTP route/validation/RBAC/audit/error mapping; read route cho bốn role, mutation giữ `program.edit`. | `T61-103/104` | `DONE` | 1 nd |
+| `T61-106` | P1 | Sinh lại client TS/registry C++/Go/TS, contract-sync và G1 re-pin cùng change-set. | `T61-102/105` | `DONE` | 0,5 nd |
+| `T61-107` | P0 | Go/generator tests: hostile input, >100 cursor, filter mismatch, SYSTEM immutable, usage restart, migration fail-closed. | `T61-102..106` | `DONE` | 1 nd |
 
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.
@@ -380,47 +380,47 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
-| `T61-201` | P0 | Thay `canAdmin` bằng `roleCan(role, 'program.edit')`; thêm matrix viewer/operator/engineer/admin. | `T61-004` | `ORDERED` | 0,5 nd |
-| `T61-202` | P0 | Cursor pagination/infinite loading cho PGM-04 và lazy Quick Library; retry lỗi từng page, dedupe identity/version. | `T61-101` | `ORDERED` | 1 nd |
-| `T61-203` | P0 | Trích `LibraryPresentationModel` + shared card/signature/favorite/recent từ catalog dùng chung. | `T61-004` | `ORDERED` | 1,5 nd |
-| `T61-204` | P1 | URL state typed cho tab/filter/query/selected/inspector/returnTo; back/forward/reload giữ context. | `T61-004` | `ORDERED` | 1 nd |
-| `T61-205` | P0 | Metadata route/header và integration shell; không hồi quy PGM-01..06 hoặc tạo rail thứ hai. | `T61-002/004` | `ORDERED` | 1,5 nd |
-| `T61-206` | P0 | Reducer/state model loading/empty/error/permission/stale/offline/pagination/detail error tách bạch. | `T61-101` | `ORDERED` | 1 nd |
+| `T61-201` | P0 | Thay `canAdmin` bằng `roleCan(role, 'program.edit')`; thêm matrix viewer/operator/engineer/admin. | `T61-004` | `DONE` | 0,5 nd |
+| `T61-202` | P0 | Cursor pagination/infinite loading cho PGM-04 và lazy Quick Library; retry lỗi từng page, dedupe identity/version. | `T61-101` | `DONE` | 1 nd |
+| `T61-203` | P0 | Trích `LibraryPresentationModel` + shared card/signature/favorite/recent từ catalog dùng chung. | `T61-004` | `DONE` | 1,5 nd |
+| `T61-204` | P1 | URL state typed cho tab/filter/query/selected/inspector/returnTo; back/forward/reload giữ context. | `T61-004` | `DONE` | 1 nd |
+| `T61-205` | P0 | Metadata route/header và integration shell; không hồi quy PGM-01..06 hoặc tạo rail thứ hai. | `T61-002/004` | `DONE` | 1,5 nd |
+| `T61-206` | P0 | Reducer/state model loading/empty/error/permission/stale/offline/pagination/detail error tách bạch. | `T61-101` | `DONE` | 1 nd |
 
 ### WP-03 — Workspace card grid và inspector
 
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
-| `T61-301` | P0 | Tách `LibraryPage` thành controller và component tree §3.1; giữ mutation logic đã test. | `T61-201..206` | `ORDERED` | 1 nd |
-| `T61-302` | P0 | SYSTEM/PROJECT tabs + toolbar Category/Type/Search/Filter/Clear; server-side filter. | `T61-301` | `ORDERED` | 1,5 nd |
-| `T61-303` | P0 | Dense card grid: icon/kind/category/name/version/signature/description/source/usage/feature/deprecated/favorite. | `T61-203/301` | `ORDERED` | 2 nd |
-| `T61-304` | P0 | Inspector dock/drawer với Details/Parameters/Used-In/Versions; detail error không phá list; sticky trong đúng scroll container. | `T61-301/303` | `ORDERED` | 2 nd |
-| `T61-305` | P0 | Responsive theo §3.3; mobile read-only; không overflow; skeleton khớp hình học. | `T61-302..304` | `ORDERED` | 2 nd |
-| `T61-306` | P0 | Keyboard/a11y: roving focus grid, Enter mở, Esc/return-focus drawer, landmark/tab/aria-live. | `T61-303..305` | `ORDERED` | 1,5 nd |
-| `T61-307` | P1 | Semantic token light/dark cục bộ, target chạm 44×44, focus 2 px, contrast theo UX Active. | `T61-002/305` | `ORDERED` | 1 nd |
+| `T61-301` | P0 | Tách `LibraryPage` thành controller và component tree §3.1; giữ mutation logic đã test. | `T61-201..206` | `DONE` | 1 nd |
+| `T61-302` | P0 | SYSTEM/PROJECT tabs + toolbar Category/Type/Search/Filter/Clear; server-side filter. | `T61-301` | `DONE` | 1,5 nd |
+| `T61-303` | P0 | Dense card grid: icon/kind/category/name/version/signature/description/source/usage/feature/deprecated/favorite. | `T61-203/301` | `DONE` | 2 nd |
+| `T61-304` | P0 | Inspector dock/drawer với Details/Parameters/Used-In/Versions; detail error không phá list; sticky trong đúng scroll container. | `T61-301/303` | `DONE` | 2 nd |
+| `T61-305` | P0 | Responsive theo §3.3; mobile read-only; không overflow; skeleton khớp hình học. | `T61-302..304` | `DONE` | 2 nd |
+| `T61-306` | P0 | Keyboard/a11y: roving focus grid, Enter mở, Esc/return-focus drawer, landmark/tab/aria-live. | `T61-303..305` | `DONE` | 1,5 nd |
+| `T61-307` | P1 | Semantic token light/dark cục bộ, target chạm 44×44, focus 2 px, contrast theo UX Active. | `T61-002/305` | `DONE` | 1 nd |
 
 ### WP-04 — Authoring, Used-In và Insert
 
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
-| `T61-401` | P0 | PROJECT Create/Edit drawer: Metadata → Interface → Implementation → Check → Review/Save; field validation và focus. | `T61-301`, `T61-106` | `ORDERED` | 2,5 nd |
-| `T61-402` | P0 | Giữ ETag/idempotency/read-back; PUBLISHED edit tạo Draft minor; timeout reconcile; không có Publish giả. | `T61-401` | `ORDERED` | 1 nd |
-| `T61-403` | P0 | Used-In lazy page + deep-link exact PGM-02 bằng `objectId`, giữ filter/returnTo và dirty guard. | `T61-104/304` | `ORDERED` | 1,5 nd |
-| `T61-404` | P1 | Preview/Open read-only cho entry và source/interface authoritative; unsupported metadata hiện rõ. | `T61-304` | `ORDERED` | 1 nd |
-| `T61-405` | P0 | Standalone Insert mở `TargetPouChooser`, kiểm Project/mode/language/type/selection rồi gọi shared insertion adapter. | `T61-203/403` | `ORDERED` | 2 nd |
-| `T61-406` | P0 | Zero-mutation guards: cancel/no-target/type mismatch/permission/offline/stale/REVIEW_REQUIRED; một success = một Undo. | `T61-405` | `ORDERED` | 1 nd |
+| `T61-401` | P0 | PROJECT Create/Edit drawer: Metadata → Interface → Implementation → Check → Review/Save; field validation và focus. | `T61-301`, `T61-106` | `DONE` | 2,5 nd |
+| `T61-402` | P0 | Giữ ETag/idempotency/read-back; PUBLISHED edit tạo Draft minor; timeout reconcile; không có Publish giả. | `T61-401` | `DONE` | 1 nd |
+| `T61-403` | P0 | Used-In lazy page + deep-link exact PGM-02 bằng `objectId`, giữ filter/returnTo và dirty guard. | `T61-104/304` | `DONE` | 1,5 nd |
+| `T61-404` | P1 | Preview/Open read-only cho entry và source/interface authoritative; unsupported metadata hiện rõ. | `T61-304` | `DONE` | 1 nd |
+| `T61-405` | P0 | Standalone Insert mở `TargetPouChooser`, kiểm Project/mode/language/type/selection rồi gọi shared insertion adapter. | `T61-203/403` | `DONE` | 2 nd |
+| `T61-406` | P0 | Zero-mutation guards: cancel/no-target/type mismatch/permission/offline/stale/REVIEW_REQUIRED; một success = một Undo. | `T61-405` | `DONE` | 1 nd |
 
 ### WP-05 — Verification, deploy và closeout
 
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
-| `T61-501` | P0 | Unit/component tests cho view model, pagination, URL state, card/inspector/drawer/RBAC/full state. | WP-02..04 | `ORDERED` | 2 nd |
-| `T61-502` | P0 | Contract/Go/generator/registry parity và migration/restart tests. | WP-01 | `ORDERED` | 1 nd |
-| `T61-503` | P0 | Playwright mock route: desktop/mobile/keyboard/permission/offline/zero mutation. | `T61-501` | `ORDERED` | 1 nd |
-| `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/usage/deep-link/insert guard; anti-mock guard. | `T61-502/503` | `ORDERED` | 1,5 nd |
-| `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, scroll/sticky và responsive. | `T61-504` | `ORDERED` | 0,5 nd |
-| `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `ORDERED` | 1 nd |
-| `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `ORDERED` | 0,5 nd |
+| `T61-501` | P0 | Unit/component tests cho view model, pagination, URL state, card/inspector/drawer/RBAC/full state. | WP-02..04 | `DONE` | 2 nd |
+| `T61-502` | P0 | Contract/Go/generator/registry parity và migration/restart tests. | WP-01 | `DONE` | 1 nd |
+| `T61-503` | P0 | Playwright mock route: desktop/mobile/keyboard/permission/offline/zero mutation. | `T61-501` | `DONE` | 1 nd |
+| `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/usage/deep-link/insert guard; anti-mock guard. | `T61-502/503` | `DONE` | 1,5 nd |
+| `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, scroll/sticky và responsive. | `T61-504` | `DONE` | 0,5 nd |
+| `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `DONE` | 1 nd |
+| `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `DONE` | 0,5 nd |
 
 **Tổng 38 task, khoảng 49 người-ngày.** Đây là ước lượng planning, không phải
 cam kết lịch. Nếu Product bỏ metadata/Used-In/full visual parity, phải change-
@@ -569,25 +569,46 @@ và HMI ON theo `AGENTS.md`. Không chạy firmware MCU vì Plan61 không sửa 
 
 ### 11.1 Definition of Done PGM-04
 
-- [ ] `T61-001..507` áp dụng đã `DONE`; task conditional có disposition rõ.
-- [ ] Target visual desktop/mobile/full states được pin, không còn xung đột route/
-      scope/RBAC/PID/publish.
-- [ ] OpenAPI/Go/client/registry exact-sync và migration/rollback test xanh.
-- [ ] Không có catalog presentation hoặc description/usage hardcode thứ hai.
-- [ ] `AC-PGM04-01..06` và `VS-PGM04-61-001..014` có evidence hiện hành.
-- [ ] Viewer/operator/engineer/admin matrix được test ở UI và direct API.
-- [ ] Desktop/mobile/light/dark/keyboard/a11y/Console/Network đạt ngưỡng §8.
-- [ ] Deploy/read-back/rollback Forlinx có artifact hash và raw log.
-- [ ] Plan59/trace/risk/docs/CHANGELOG được cập nhật cùng source.
-- [ ] Mọi phần chưa chạy ghi `NOT_RUN/BLOCKED`, không nâng release gate.
+- [x] `T61-001..507` đã `DONE`.
+- [x] Target visual desktop/mobile/full states được pin (`SPEC-PGM04-VISUAL-001`);
+      không còn xung đột route/scope/RBAC/PID/publish (`REC-PGM04-AUTHORITY-001`).
+- [x] OpenAPI/Go/client/registry exact-sync — `verify_programming_g1_contracts.py`,
+      `verify_programming_pgm02_contract.py`, `generate_programming_library_registry.py --check`
+      đều PASS sau re-pin `1.31.0 → 1.32.0`. Migration test xanh.
+      **Rollback test: `NOT_RUN` — xem dòng cuối.**
+- [x] Không có catalog presentation thứ hai: nhãn nhóm và tập giá trị `category`
+      đều đọc từ `PROGRAMMING_LIBRARY_CATEGORY_ORDER` của registry; chữ ký đọc
+      `signature` của server và **không** parse `interface` ở FE.
+- [x] `AC-PGM04-01..06` có evidence: xem [`EV-PGM04-WP0304-CLOSEOUT-001`](../07_records/reviews/PGM04_WP03_WP04_CLOSEOUT_2026-08-29.md).
+      `VS-PGM04-61-001..013` có evidence; **`VS-PGM04-61-014` một nửa** — nhánh
+      upgrade đã đo trên bo, nhánh rollback `NOT_RUN`.
+- [x] Matrix bốn vai được test ở UI (`libraryEntryPermissions`, `LibraryPage.test.tsx`)
+      và ở direct API (`security_matrix_test.go`).
+- [x] Desktop/mobile/keyboard/a11y/Console/Network đạt ngưỡng §8: axe
+      serious/critical = 0 ở cả `desktop-chrome` và `mobile-chrome`;
+      `expectNoBrowserFailures` = 0 console.error / 0 request lỗi; số đo bố cục
+      không tràn ngang ở 1440/1280/1024/768/390 px. Light/dark do
+      `contrast.test.ts` canh trên chính token đang dùng.
+- [~] Deploy/read-back Forlinx có artifact hash và raw log
+      ([hồ sơ](../07_records/test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md));
+      **rollback rehearsal `NOT_RUN`**.
+- [x] Trace/risk/docs/CHANGELOG cập nhật cùng change-set.
+- [x] Phần chưa chạy được ghi `NOT_RUN`, không nâng release gate.
 
-### 11.2 Trạng thái ba cổng tại phiên bản 0.1
+**`NOT_RUN` — diễn tập rollback trên bo.** Bản sao lưu đã có sẵn trên thiết bị
+(`/opt/mkddc-web/mkddc-web.bak-pgm04-20260829T085228Z` và
+`dist.bak-pgm04-20260829T085228Z`) và các bước đã ghi trong hồ sơ deploy §1,
+nhưng phép diễn tập chưa được thực hiện: lệnh khôi phục bị cơ chế phê duyệt của
+môi trường thi hành từ chối. Cần một lần chạy có phê duyệt để đóng nốt
+`VS-PGM04-61-014`. Không suy diễn tập chưa chạy thành PASS.
+
+### 11.2 Trạng thái ba cổng tại phiên bản 0.2
 
 | Gate | Verdict | Lý do |
 |---|---|---|
-| `PLAN_READY[PGM04-V21]` | **NO-GO** | `R61-01/03/04` chưa đóng; visual/contract chưa exact-pin. |
-| `IMPLEMENT_READY[PGM04]` | **NO-GO** | PlanReady chưa đóng và contract metadata/usage chưa machine-readable. |
-| `RELEASE_READY` | **NO-GO** | Do Plan59/VVP/risk/release authority quyết; Plan61 không có quyền nâng. |
+| `PLAN_READY[PGM04-V21]` | **PASS** | Đóng ở [`AUTH-PROG-2026-08-29-PGM04-002`](../07_records/reviews/AUTH-PROG-2026-08-29-PGM04-002.md); visual/contract đã exact-pin. |
+| `IMPLEMENT_READY[PGM04]` | **GO** | `-002` mở WP-01/WP-02; [`-003`](../07_records/reviews/AUTH-PROG-2026-08-29-PGM04-003.md) mở WP-03/WP-04/WP-05. |
+| `RELEASE_READY` | **NO-GO** | KHÔNG đổi. Do Plan59/VVP/risk/release authority quyết; Plan61 không có quyền nâng, và việc đóng Plan61 không phải một phép nâng. |
 
 WP-00 là planning/change-control nên được phép bắt đầu trong trạng thái trên.
 Không task production code nào được promote `READY` chỉ vì file plan tồn tại.

@@ -636,3 +636,136 @@ func TestLibraryMutationsAppendAudit(t *testing.T) {
 		t.Fatalf("audit thiếu mutation library: %+v", actions)
 	}
 }
+
+/*
+`T61-401` — metadata TRÌNH BÀY phải đi được HẾT đường ghi.
+
+Trước lát này `library_entries` đã có cột `category`/`description` (migration
+`0014`) và store đã nhận `UpsertProjectLibraryEntryParams.Category/Description`,
+nhưng KHÔNG caller nào đặt chúng: `UpsertLibraryEntryCommand` không có trường,
+nên request HTTP không có chỗ mang, nên PGM-04 hiện "— chưa phân loại" vĩnh viễn
+và bộ lọc `category` không bao giờ khớp một khối PROJECT.
+
+Test này đóng đường đó bằng phép đo hai đầu: ghi vào rồi ĐỌC LẠI qua
+`SearchLibraries`, không chỉ kiểm lệnh không lỗi.
+*/
+func TestUpsertEntryPersistsPresentationMetadataAndKeepsContentHashStable(t *testing.T) {
+	library, _, created := openLibraryServices(t)
+	ctx := context.Background()
+	actor := Actor{ID: testActorID, Role: "admin"}
+
+	plain := upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-000000000101")
+	plain.IfMatch = created.ETag
+	first, err := library.UpsertEntry(ctx, actor, plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := library.SearchLibraries(ctx, SearchLibrariesCommand{ProjectID: libraryProjectID, Scope: "PROJECT", Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before LibraryEntryView
+	for _, item := range page.Items {
+		if item.EntryID == libraryEntryA {
+			before = item
+		}
+	}
+	if before.EntryID == "" {
+		t.Fatal("không đọc lại được entry vừa ghi")
+	}
+	if before.Category != nil || before.Description != nil {
+		t.Fatalf("entry chưa gửi metadata phải VẮNG hai trường, không phải chuỗi rỗng: %+v", before)
+	}
+
+	category := "control"
+	// Tiếng Việt có dấu: 24 ký tự nhưng nhiều hơn 24 byte. Nó ở đây để khoá
+	// việc trần đo theo KÝ TỰ chứ không theo byte.
+	description := "Bộ chuyển đổi tuyến tính"
+	withMetadata := upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-000000000102")
+	withMetadata.IfMatch = first.ETag
+	withMetadata.Category = &category
+	withMetadata.Description = &description
+	if _, err := library.UpsertEntry(ctx, actor, withMetadata); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err = library.SearchLibraries(ctx, SearchLibrariesCommand{ProjectID: libraryProjectID, Scope: "PROJECT", Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after LibraryEntryView
+	for _, item := range page.Items {
+		if item.EntryID == libraryEntryA {
+			after = item
+		}
+	}
+	if after.Category == nil || *after.Category != category {
+		t.Fatalf("category không được lưu: %+v", after.Category)
+	}
+	if after.Description == nil || *after.Description != description {
+		t.Fatalf("description không được lưu: %+v", after.Description)
+	}
+	if after.PresentationSHA256 == "" {
+		t.Fatal("presentationSha256 phải có mặt khi metadata có mặt")
+	}
+	/* `D61-09` — sửa mô tả KHÔNG được đổi danh tính thực thi. Nếu đổi, mọi
+	   artifact và pin đã ký thành lỗi thời chỉ vì một lần sửa chính tả. */
+	if after.ContentSHA256 != before.ContentSHA256 {
+		t.Fatalf("contentSha256 đổi theo metadata trình bày: %s -> %s", before.ContentSHA256, after.ContentSHA256)
+	}
+
+	// Lọc theo category phải khớp entry PROJECT vừa gắn nhãn — đây là nửa còn
+	// lại của đường ghi: ghi được mà lọc không thấy thì vẫn là chưa dùng được.
+	filtered, err := library.SearchLibraries(ctx, SearchLibrariesCommand{
+		ProjectID: libraryProjectID, Scope: "PROJECT", Category: category, Limit: 50,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range filtered.Items {
+		if item.EntryID == libraryEntryA {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("lọc theo category không thấy entry vừa gắn nhãn")
+	}
+}
+
+// Vượt trần là LỖI, không phải cắt bớt im lặng: cắt bớt làm read-back trả về
+// thứ khác thứ client vừa gửi, và người dùng không có cách nào biết.
+func TestUpsertEntryRejectsOversizedPresentationMetadata(t *testing.T) {
+	library, _, created := openLibraryServices(t)
+	ctx := context.Background()
+	actor := Actor{ID: testActorID, Role: "admin"}
+
+	tooLongCategory := strings.Repeat("x", 33)
+	command := upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-000000000103")
+	command.IfMatch = created.ETag
+	command.Category = &tooLongCategory
+	if _, err := library.UpsertEntry(ctx, actor, command); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("category 33 ký tự phải bị từ chối: %v", err)
+	}
+
+	tooLongDescription := strings.Repeat("đ", 513)
+	command = upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-000000000104")
+	command.IfMatch = created.ETag
+	command.Description = &tooLongDescription
+	if _, err := library.UpsertEntry(ctx, actor, command); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("description 513 ký tự phải bị từ chối: %v", err)
+	}
+
+	/* 512 ký tự tiếng Việt = 1024 byte. Trước lát này store đo bằng `len()`
+	   nên payload này bị từ chối ở khoảng một phần hai độ dài hợp đồng cho
+	   phép, kèm một thông điệp nói "vượt 512 ký tự" trong khi người dùng mới
+	   gõ 512. Đây là case khoá phép đo theo ký tự. */
+	atLimit := strings.Repeat("đ", 512)
+	command = upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-000000000105")
+	command.IfMatch = created.ETag
+	command.Description = &atLimit
+	if _, err := library.UpsertEntry(ctx, actor, command); err != nil {
+		t.Fatalf("description đúng 512 ký tự phải được nhận: %v", err)
+	}
+}

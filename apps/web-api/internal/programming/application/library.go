@@ -82,17 +82,22 @@ type SearchLibrariesCommand struct {
 }
 
 type UpsertLibraryEntryCommand struct {
-	ProjectID      string
-	SchemaVersion  string
-	EntryID        string
-	Kind           string
-	Name           string
-	Language       string
-	FeatureState   string
-	Source         string
-	InterfaceJSON  json.RawMessage
-	Dependencies   []LibraryDependencyView
-	StateLayout    *LibraryStateLayoutCommand
+	ProjectID     string
+	SchemaVersion string
+	EntryID       string
+	Kind          string
+	Name          string
+	Language      string
+	FeatureState  string
+	Source        string
+	InterfaceJSON json.RawMessage
+	Dependencies  []LibraryDependencyView
+	StateLayout   *LibraryStateLayoutCommand
+	/* `T61-401` — metadata TRÌNH BÀY. `nil` = entry không mang metadata đó,
+	   con trỏ tới chuỗi rỗng = đã điền và nội dung rỗng. Cột store phân biệt
+	   hai thứ (`NULL` khác `''`) và PGM-04 render `NULL` thành `—` kèm lý do. */
+	Category       *string
+	Description    *string
 	IfMatch        string
 	IdempotencyKey string
 	CorrelationID  string
@@ -237,6 +242,16 @@ func (s *LibraryService) UpsertEntry(ctx context.Context, actor Actor, command U
 	if featureState != "AVAILABLE" {
 		return MutationResult{}, ErrInvalidRequest
 	}
+	/* Trần metadata đếm theo KÝ TỰ để khớp `maxLength` của OpenAPI. Từ chối
+	   thẳng thay vì cắt bớt: cắt im lặng làm read-back trả về thứ khác thứ
+	   client vừa gửi, và người dùng không có cách nào biết mô tả của mình đã bị
+	   xén. `validText` cũng chặn ký tự điều khiển. */
+	if command.Category != nil && *command.Category != "" && !validText(*command.Category, 1, 32) {
+		return MutationResult{}, ErrInvalidRequest
+	}
+	if command.Description != nil && *command.Description != "" && !validText(*command.Description, 1, 512) {
+		return MutationResult{}, ErrInvalidRequest
+	}
 	layout, err := libraryStateLayoutFromCommand(command.Kind, command.StateLayout)
 	if err != nil {
 		return MutationResult{}, err
@@ -252,7 +267,8 @@ func (s *LibraryService) UpsertEntry(ctx context.Context, actor Actor, command U
 		map[string]any{"projectId": command.ProjectID, "entryId": command.EntryID, "kind": command.Kind,
 			"name": command.Name, "language": command.Language, "source": command.Source,
 			"interface": string(command.InterfaceJSON), "dependencies": command.Dependencies,
-			"stateLayout": command.StateLayout, "ifMatch": command.IfMatch})
+			"stateLayout": command.StateLayout, "category": command.Category,
+			"description": command.Description, "ifMatch": command.IfMatch})
 	if err != nil {
 		return MutationResult{}, err
 	}
@@ -260,6 +276,7 @@ func (s *LibraryService) UpsertEntry(ctx context.Context, actor Actor, command U
 		EntryID: command.EntryID, Kind: command.Kind, Name: command.Name, Language: command.Language,
 		FeatureState: featureState, Source: []byte(command.Source), InterfaceJSON: command.InterfaceJSON,
 		Dependencies: dependencies, StateLayout: layout,
+		Category: command.Category, Description: command.Description,
 		NewLibraryRevisionID: s.newID(), Identity: identity,
 	})
 	if err != nil {
@@ -430,9 +447,9 @@ type libraryCursor struct {
 	/* `T61-101` — cursor phải mang CẢ bộ lọc. Thiếu `category` ở đây thì trang
 	   thứ hai của một bộ lọc trả về dữ liệu của bộ lọc khác, và người dùng
 	   không có cách nào biết. */
-	Category  string `json:"category"`
-	ProjectID string `json:"projectId"`
-	ExpiresAtUTCMS    int64  `json:"expiresAtUtcMs"`
+	Category       string `json:"category"`
+	ProjectID      string `json:"projectId"`
+	ExpiresAtUTCMS int64  `json:"expiresAtUtcMs"`
 }
 
 func (s *LibraryService) encodeLibraryCursor(cursor libraryCursor) (string, error) {

@@ -160,6 +160,16 @@ type upsertLibraryEntryRequest struct {
 	Interface     json.RawMessage                                   `json:"interface"`
 	Dependencies  []programmingapplication.LibraryDependencyView    `json:"dependencies,omitempty"`
 	StateLayout   *programmingapplication.LibraryStateLayoutCommand `json:"stateLayout,omitempty"`
+	/* `T61-401` — metadata TRÌNH BÀY trên đường GHI.
+	 *
+	 * Con trỏ chứ không phải chuỗi để phân biệt field VẮNG với chuỗi RỖNG:
+	 * upsert ghi đè toàn phần, nên vắng nghĩa là "entry này không có metadata"
+	 * và rỗng nghĩa là "đã điền rồi, nội dung rỗng". Cột store cũng phân biệt
+	 * hai thứ đó (`NULL` khác `''`), và đọc lên PGM-04 render `NULL` thành `—`
+	 * kèm lý do chứ không thành ô trống. Dùng `string` ở đây sẽ làm mọi entry
+	 * chưa phân loại trông như đã phân loại vào một nhóm tên rỗng. */
+	Category    *string `json:"category,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 type deprecateLibraryRevisionRequest struct {
@@ -228,7 +238,8 @@ func handleUpsertLibraryEntry(w http.ResponseWriter, r *http.Request, correlatio
 		ProjectID: r.PathValue("projectId"), SchemaVersion: request.SchemaVersion, EntryID: request.EntryID,
 		Kind: request.Kind, Name: request.Name, Language: request.Language, FeatureState: request.FeatureState,
 		Source: request.Source, InterfaceJSON: request.Interface, Dependencies: request.Dependencies,
-		StateLayout: request.StateLayout, IfMatch: r.Header.Get("If-Match"),
+		StateLayout: request.StateLayout, Category: request.Category, Description: request.Description,
+		IfMatch:        r.Header.Get("If-Match"),
 		IdempotencyKey: r.Header.Get("X-Idempotency-Key"), CorrelationID: correlationID,
 	})
 	if err != nil {

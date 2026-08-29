@@ -312,7 +312,16 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
         language: 'ST',
         source: 'FUNCTION SCALE_LIN : REAL\nVAR_INPUT X : REAL; END_VAR\nSCALE_LIN := X;\nEND_FUNCTION\n',
         interface: LIBRARY_INTERFACE,
-        dependencies: []
+        dependencies: [],
+        /* `T61-401` — metadata TRÌNH BÀY trên backend THẬT.
+           Cột `category`/`description` đã có từ migration `0014`, nhưng cho tới
+           lát này không caller nào tới được chúng: command và request HTTP
+           không có trường. Một cột không ai ghi được là một cột không tồn tại,
+           và hệ quả đọc được trên màn hình là mọi khối PROJECT hiện
+           "— chưa phân loại" vĩnh viễn. Mô tả để tiếng Việt có dấu vì trần đo
+           theo KÝ TỰ, không theo byte. */
+        category: 'math',
+        description: 'Bộ chuyển đổi tuyến tính của dự án'
       }
     }
   )
@@ -331,9 +340,27 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
       kind: 'FUNCTION',
       name: 'SCALE_LIN',
       language: 'ST',
-      libraryState: 'DRAFT'
+      libraryState: 'DRAFT',
+      category: 'math',
+      description: 'Bộ chuyển đổi tuyến tính của dự án'
     })
   ])
+  /* `D61-09` — băm trình bày TÁCH khỏi danh tính thực thi. Nếu `contentSha256`
+     đổi theo mô tả thì mọi artifact và pin đã ký thành lỗi thời sau một lần sửa
+     chính tả, và hậu quả thật không phải "phải build lại" mà là người ta sẽ
+     thôi không sửa tài liệu nữa. */
+  const libraryEntry = (libraryReadback.items as JsonObject[])[0]
+  expect(libraryEntry.presentationSha256).toMatch(/^[0-9a-f]{64}$/)
+  expect(libraryEntry.presentationSha256).not.toBe(libraryEntry.contentSha256)
+
+  /* Lọc theo `category` phải khớp khối PROJECT vừa gắn nhãn: ghi được mà lọc
+     không thấy thì vẫn là chưa dùng được. */
+  const byCategory = await responseJSON(
+    await request.get(`/api/v1/programming/libraries?projectId=${projectID}&scope=PROJECT&category=math`,
+      { headers: readHeaders(token) }),
+    200
+  )
+  expect((byCategory.items as JsonObject[]).map((item) => item.entryId)).toContain(LIBRARY_ENTRY_ID)
 
   /* `T59-804` — parity catalog GIỮA HAI BỀ MẶT trên backend thật. PGM-02 Quick
      Library và PGM-04 Control Library cùng đọc `GET /libraries`; registry sinh
@@ -629,17 +656,31 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
     .getByRole('link', { name: 'Thư viện điều khiển' })
     .click()
   await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/library$`))
+  /* Tên khả truy cập của thẻ khối theo THỨ TỰ ĐỌC mà `SPEC-PGM04-VISUAL-001` §2
+     khoá: tên → kind → phạm vi. Phạm vi hiện bằng tiếng người ("Dự án"/"Hệ
+     thống"), KHÔNG bằng mã thô — và cố ý không dùng chữ "Core" vì sản phẩm đã
+     có `mkddc-core`.
+
+     Khẳng định này từng ghim `PROJECT FUNCTION` và đã lạc hậu từ `T61-204`
+     (`d970aaa`) mà không ai thấy: lane real-backend nằm ngoài suite mock mặc
+     định nên nó không chạy trong cùng vòng với thay đổi làm nó đỏ. Đó là lý do
+     một khẳng định lạc hậu sống được qua nhiều PR. */
   const projectLibraryEntry = page.getByRole('list', { name: 'Danh sách khối Thư viện điều khiển' })
-    .getByRole('button', { name: /SCALE_LIN\s+PROJECT\s+FUNCTION/ })
+    .getByRole('button', { name: /SCALE_LIN\s+FUNCTION\s+Dự án/ })
   await expect(projectLibraryEntry).toBeVisible()
   await projectLibraryEntry.click()
-  // Phải soi trong đúng panel "Chi tiết": danh sách bên trái hiện
-  // "rev-a.1 · PUBLISHED" cho cả 41 khối SYSTEM, nên một locator toàn trang
-  // khớp 42 phần tử và fail ở strict mode — nó cũng sẽ xanh ngay cả khi entry
-  // PROJECT không hề được chọn, tức là một khẳng định không kiểm gì cả.
+  /* Phải soi trong đúng khay khối đang chọn: lưới thẻ bên trái hiện
+     "rev-a.1 · PUBLISHED" cho cả 41 khối SYSTEM, nên một locator toàn trang
+     khớp 42 phần tử và fail ở strict mode — nó cũng sẽ xanh ngay cả khi entry
+     PROJECT không hề được chọn, tức là một khẳng định không kiểm gì cả.
+
+     Khay này từng mang tiêu đề "Chi tiết", TRÙNG với tên khay đầu tiên trong
+     dải bốn tab ngay bên dưới nó — cùng một chữ chỉ hai thứ khác nhau ở hai
+     cấp lồng nhau. `T61-304` đổi tiêu đề khung thành "Khối đang chọn" và để
+     chữ "Chi tiết" cho đúng một nơi: cái tab. */
   const libraryDetail = page
     .locator('section')
-    .filter({ has: page.getByRole('heading', { name: 'Chi tiết', level: 2 }) })
+    .filter({ has: page.getByRole('heading', { name: 'Khối đang chọn', level: 2 }) })
   await expect(libraryDetail.getByText(/· PUBLISHED$/)).toBeVisible()
 
   // F-P59-UI-001: authoring Library phải đi qua mutation + read-back thật.
@@ -682,6 +723,11 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   // Vòng đời Library: Publish vẫn chỉ đi cùng Seal Revision. UI chỉ mở đúng
   // chuyển tiếp một chiều PUBLISHED -> DEPRECATED, cảnh báo phạm vi toàn
   // revision, gửi concurrency headers và chỉ xác nhận sau GET read-back.
+  /* Lịch sử phiên bản nằm ở khay "Phiên bản" của Inspector (`T61-204`), và khay
+     không được chọn thì `display:none` — nên phải MỞ nó trước. Trước lát này
+     khẳng định dưới đây đi thẳng vào nút mà không mở khay, và nó chỉ sống được
+     vì lane real-backend nằm ngoài suite mock mặc định. */
+  await page.getByRole('tab', { name: 'Phiên bản' }).click()
   const deprecateAction = page.getByRole('button', { name: 'Ngừng sử dụng phiên bản 1.0.0' })
   await expect(deprecateAction).toBeVisible()
   await deprecateAction.click()
@@ -814,7 +860,7 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   await page.getByTestId('programming-mobile-more').getByRole('link', { name: 'Thư viện điều khiển' }).click()
   await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/library$`))
   await expect(page.getByRole('list', { name: 'Danh sách khối Thư viện điều khiển' })
-    .getByRole('button', { name: /SCALE_LIN\s+PROJECT\s+FUNCTION/ })).toBeVisible()
+    .getByRole('button', { name: /SCALE_LIN\s+FUNCTION\s+Dự án/ })).toBeVisible()
   await assertMobileSurface(page, 'Library')
 
   await mobileNavigation.getByRole('button', { name: 'Thêm đích Lập trình' }).click()
