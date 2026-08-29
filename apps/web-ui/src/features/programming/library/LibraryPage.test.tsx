@@ -327,3 +327,60 @@ describe('PGM-04 Control Library', () => {
     expect(screen.getByRole('button', { name: /SCALE_LIN/ })).toHaveClass('flex-col', 'sm:flex-row')
   })
 })
+
+/*
+`T61-204`/`T61-105` — Used-In có HAI NGUỒN, và chúng không được gộp.
+
+Phần "đã niêm phong" đến từ server và phủ mọi Project; phần "bản nháp" tính ở FE
+từ chính Draft đang mở nên CHỈ phủ Project hiện tại. Gộp hai con số lại là cách
+một khối bị deprecate trong khi nó đang điều khiển tủ: người dùng thấy "0 nơi
+dùng" của bản nháp và tưởng đó là toàn bộ.
+*/
+describe('LibraryPage — Used-In hai nguồn', () => {
+  it('UNAVAILABLE hiện lý do, KHÔNG hiện số 0', async () => {
+    stub(() => Promise.resolve({ items: [entry({ scope: 'SYSTEM', name: 'PID', entryId: 'PID' })] }), {
+      listProgrammingLibraryUsages: () => Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] },
+        availability: 'UNAVAILABLE',
+      }),
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: /PID/ }))
+
+    const usage = await screen.findByRole('region', { name: 'Nơi sử dụng' })
+    expect(within(usage).getByText(/Chưa đo được/)).toBeInTheDocument()
+    // Con số 0 ở đây sẽ đọc như "không ai dùng khối này" — một câu mời xoá nó.
+    expect(within(usage).queryByText(/^0 nơi dùng$/)).not.toBeInTheDocument()
+  })
+
+  it('phần đã niêm phong nêu đích danh Project và POU, và đánh dấu bản đang chạy', async () => {
+    stub(() => Promise.resolve({ items: [entry({ scope: 'PROJECT', name: 'SCALE_LIN' })] }), {
+      listProgrammingLibraryUsages: () => Promise.resolve({
+        sealed: {
+          count: 1, truncated: false,
+          items: [{
+            projectId: '11111111-1111-4111-8111-111111111111', projectName: 'AHU-01',
+            revisionId: '22222222-2222-4222-8222-222222222222',
+            objectId: '33333333-3333-4333-8333-333333333333', objectName: 'AHU_MAIN',
+            requiredVersion: 'v2', usageKind: 'CALL', isActive: true,
+          }],
+        },
+        draft: { count: 0, truncated: false, items: [] },
+        availability: 'SEALED_ONLY',
+      }),
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: /SCALE_LIN/ }))
+
+    const usage = await screen.findByRole('region', { name: 'Nơi sử dụng' })
+    expect(within(usage).getByText(/1 nơi dùng/)).toBeInTheDocument()
+    // Tên Project và POU chứ không phải UUID — `AC-PGM01-01`.
+    expect(within(usage).getByText(/AHU-01/)).toBeInTheDocument()
+    expect(within(usage).getByText(/AHU_MAIN/)).toBeInTheDocument()
+    expect(within(usage).getByText(/đang chạy/)).toBeInTheDocument()
+    // Hai nguồn phải được gắn nhãn TÁCH BẠCH.
+    expect(within(usage).getByText('Trong Revision đã niêm phong')).toBeInTheDocument()
+    expect(within(usage).getByText('Trong bản nháp của Project này')).toBeInTheDocument()
+  })
+})

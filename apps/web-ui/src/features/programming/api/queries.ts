@@ -19,7 +19,8 @@ import type {
   ProgrammingRuntime,
   ProgrammingMonitorPage,
   ProgrammingRuntimeSignalPage,
-  RemoteState
+  RemoteState,
+  ProgrammingLibraryUsage,
 } from '../model/types'
 
 type PickCopy = (vi: string, en: string) => string
@@ -739,5 +740,28 @@ export function useProgrammingLibrary(filters: LibrarySearchFilters): RemoteStat
     if (query) search.q = query
     return client.request<ProgrammingLibraryPage>('searchProgrammingLibraries', { query: search })
   }, [client, projectId, scope, kind, category, query])
+  return useProgrammingResource(load, 0)
+}
+
+/**
+ * `T61-105` — Used-In của một Control Library entry.
+ *
+ * `libraryRevisionId` rỗng ⇒ hook không gọi gì và trả trạng thái chờ. Không tự
+ * gọi với chuỗi rỗng: server sẽ trả 400, và một lỗi 400 hiện lên màn hình vì FE
+ * gọi sớm là một lỗi FE mặc áo lỗi server.
+ */
+export function useProgrammingLibraryUsage(
+  libraryRevisionId: string | null | undefined,
+  entryId: string | null | undefined,
+  scope: 'SYSTEM' | 'PROJECT' | null | undefined,
+): RemoteState<ProgrammingLibraryUsage> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => {
+    if (!libraryRevisionId) return Promise.reject(new Error('libraryRevisionId is required'))
+    const search: Record<string, string> = { libraryRevisionId }
+    if (entryId) search.entryId = entryId
+    if (scope) search.scope = scope
+    return client.request<ProgrammingLibraryUsage>('listProgrammingLibraryUsages', { query: search })
+  }, [client, libraryRevisionId, entryId, scope])
   return useProgrammingResource(load, 0)
 }

@@ -10,8 +10,13 @@ import { useAuth } from '../../auth'
 import { roleCan } from '../../../shared/auth/capabilities'
 import { createUuid } from '../../../shared/crypto'
 import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../api/generated/library_registry'
-import { categoryLabel, metadataValue, scopeLabel } from './libraryPresentation'
-import { useProgrammingLibrary, useProgrammingProjects, type LibrarySearchFilters } from '../api/queries'
+import { categoryLabel, metadataValue, scopeLabel, usageDisplay } from './libraryPresentation'
+import {
+  useProgrammingLibrary,
+  useProgrammingLibraryUsage,
+  useProgrammingProjects,
+  type LibrarySearchFilters,
+} from '../api/queries'
 import { useProgrammingLibraryEntryMutations, type LibraryEntryDraft } from '../api/mutations'
 import { useDraftWorkspace } from '../design/useDraftWorkspace'
 import { PROGRAMMING_REVIEW_GATED_FEATURES } from '../api/generated/profile'
@@ -26,7 +31,7 @@ import {
   type LibraryUsage
 } from '../model/library'
 import { draftLibraryLock } from '../model/signals'
-import type { ProgrammingLibraryEntry } from '../model/types'
+import type { ProgrammingLibraryEntry, ProgrammingLibraryUsage } from '../model/types'
 
 /**
  * PGM-04 — Control Library (DDD-SW-PROG-UNIFIED-001 §8, UX §3.4/§11).
@@ -122,6 +127,14 @@ export function LibraryPage() {
   const entries = useMemo(() => library.data?.items ?? [], [library.data])
   const groups = useMemo(() => groupLibraryEntries(entries), [entries])
   const selected = groups.find((group) => group.key === selectedKey) ?? null
+  /* `T61-105` — Used-In của gói ĐÃ NIÊM PHONG, đọc từ server. Chỉ gọi khi có
+     entry đang chọn: gọi với chuỗi rỗng sẽ nhận 400, và một lỗi 400 hiện lên
+     màn hình vì FE gọi sớm là lỗi FE mặc áo lỗi server. */
+  const sealedUsage = useProgrammingLibraryUsage(
+    selected?.current.libraryRevisionId ?? null,
+    selected?.entryId ?? null,
+    selected?.scope ?? null,
+  )
   const usages = useMemo(() => libraryUsagesByEntryId(workspace.project?.draft), [workspace.project?.draft])
   const dependents = useMemo(() => (selected ? libraryDependents(selected, entries) : []), [selected, entries])
   const permissions = selected
@@ -310,6 +323,7 @@ export function LibraryPage() {
               group={selected}
               usages={selected ? usages.get(selected.entryId.toUpperCase()) ?? [] : []}
               usageSource={workspace.status}
+              sealedUsage={sealedUsage.data ?? null}
               dependents={dependents}
               permissions={permissions}
               pending={pending}
@@ -727,6 +741,7 @@ function LibraryDetail({
   group,
   usages,
   usageSource,
+  sealedUsage,
   dependents,
   permissions,
   pending,
@@ -738,6 +753,7 @@ function LibraryDetail({
   group: LibraryEntryGroup | null
   usages: LibraryUsage[]
   usageSource: 'loading' | 'ready' | 'error'
+  sealedUsage: ProgrammingLibraryUsage | null
   dependents: string[]
   permissions: ReturnType<typeof libraryEntryPermissions> | null
   pending: boolean
@@ -796,7 +812,7 @@ function LibraryDetail({
         />
       </dl>
 
-      <LibraryUsageList usages={usages} source={usageSource} />
+      <LibraryUsageList usages={usages} source={usageSource} sealed={sealedUsage} />
       <LibraryVersionHistory
         group={group}
         canDeprecate={canDeprecate}
@@ -853,11 +869,72 @@ function LibraryDetail({
   )
 }
 
-function LibraryUsageList({ usages, source }: { usages: LibraryUsage[]; source: 'loading' | 'ready' | 'error' }) {
+/**
+ * `T61-204` — Used-In với HAI NGUỒN được gắn nhãn tách bạch.
+ *
+ * Không gộp thành một con số, và lý do không phải trình bày:
+ *
+ *  - Phần **đã niêm phong** đến từ server (`library_usages`), phủ mọi Project,
+ *    và là thứ nói được "khối này đang chạy ở đâu".
+ *  - Phần **bản nháp** tính ở FE từ chính Draft đang mở, nên nó CHỈ phủ Project
+ *    hiện tại. Gọi nó là "bản nháp" nói chung sẽ hứa rộng hơn sự thật.
+ *
+ * Gộp hai con số lại là cách một khối bị deprecate trong khi nó đang điều khiển
+ * tủ: người dùng thấy "0 nơi dùng" của bản nháp và tưởng đó là toàn bộ.
+ */
+function LibraryUsageList({
+  usages,
+  source,
+  sealed,
+}: {
+  usages: LibraryUsage[]
+  source: 'loading' | 'ready' | 'error'
+  sealed: ProgrammingLibraryUsage | null
+}) {
   const { pick } = useI18n()
+  const sealedView = usageDisplay(sealed)
   return (
     <section aria-label={pick('Nơi sử dụng', 'Usage')} className="border-t border-[var(--c-border)] pt-2">
       <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Nơi sử dụng', 'Usage')}</h3>
+
+      {/* Phạm vi 1: gói ĐÃ NIÊM PHONG, đọc từ server, phủ mọi Project. */}
+      <div className="mt-1 rounded border border-[var(--c-border)] p-2">
+        <p className="text-xs font-medium text-[var(--c-text)]">
+          {pick('Trong Revision đã niêm phong', 'In sealed revisions')}
+        </p>
+        {sealedView.kind === 'unavailable' ? (
+          /* `UNAVAILABLE` KHÔNG được hiện thành 0. `0` nghĩa là "không ai dùng"
+             — một câu mời người ta xoá khối; đây là "chưa đo được". */
+          <p className="text-sm text-[var(--c-warn-fg)]">
+            {pick('Chưa đo được — khối SYSTEM phân giải nơi dùng từ registry, không qua bảng usage.',
+                  'Not measured — SYSTEM blocks resolve usage from the registry, not the usage table.')}
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-[var(--c-text)]">
+              {pick('%n nơi dùng', '%n usages').replace('%n', String(sealedView.sealed))}
+              {sealedView.truncated ? pick(' (còn nữa)', ' (more not listed)') : ''}
+            </p>
+            {sealed !== null && sealed.sealed.items.length > 0 && (
+              <ul className="mt-1 flex flex-col gap-0.5 text-xs text-[var(--c-text-dim)]">
+                {sealed.sealed.items.slice(0, 10).map((item) => (
+                  <li key={`${item.revisionId}:${item.objectId}:${item.usageKind}`} className="flex justify-between gap-2">
+                    <span className="truncate">{item.projectName} › {item.objectName || item.objectId.slice(0, 8)}</span>
+                    <span className="shrink-0">
+                      {item.usageKind}
+                      {item.isActive ? pick(' · đang chạy', ' · running') : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
+
+      <p className="mt-2 text-xs font-medium text-[var(--c-text)]">
+        {pick('Trong bản nháp của Project này', "In this project's draft")}
+      </p>
       {source === 'loading' && <p className="text-sm text-[var(--c-text-dim)]">{pick('Đang đọc bản nháp…', 'Reading the draft…')}</p>}
       {source === 'error' && (
         <p className="text-sm text-[var(--c-warn-fg)]">
