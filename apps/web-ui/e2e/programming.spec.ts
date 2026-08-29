@@ -1791,3 +1791,318 @@ test.describe('PGM-02 hardening SIMULATE (T59-816)', () => {
     expect(severe, 'SIMULATE: axe serious/critical').toEqual([])
   })
 })
+
+/* ==================================================================== *
+ * `T61-503` — PGM-04 Thư viện điều khiển: lane mock của Plan 61 WP-02   *
+ * ==================================================================== */
+
+/**
+ * Vì sao lane này tách khỏi các describe phía trên.
+ *
+ * PGM-04 là màn duy nhất đọc `GET /programming/library-usages`, và câu trả lời
+ * của route đó có đúng một giá trị KHÔNG được phép biến thành con số:
+ * `availability: "UNAVAILABLE"`. Backend giả dùng chung ở đầu tệp cố ý không
+ * trả route này (nó rơi vào 503 mặc định), nên trước lát này chưa lần nào bề
+ * mặt Used-In bị soi bằng trình duyệt thật.
+ *
+ * Hai route dưới đăng ký SAU `installProgrammingMocks`; Playwright ưu tiên
+ * handler đăng ký sau, nên chúng đè lên backend giả dùng chung mà không sửa
+ * nó — mọi case cũ vẫn nhận đúng payload cũ.
+ */
+
+const LIBRARY_PATH = `/eng/programming/projects/${PROJECT_ID}/library`
+
+/* Định danh revision của SYSTEM Library là một CHUỖI CÓ DẤU HAI CHẤM, không
+   phải UUID (`application/library.go`). Giữ đúng hình dạng đó trong mock vì nó
+   là thứ đi qua query string — một mock dùng UUID sẽ bỏ lọt lỗi encoding. */
+const SYSTEM_LIBRARY_REVISION_ID = `PROGRAMMING-POU-LIBRARY-REGISTRY-V1:rev-a.3:${'c'.repeat(64)}`
+const PROJECT_LIBRARY_REVISION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+
+/** Shape đúng như `libraryEntryResponse` của `transport/http/library.go`. */
+interface MockLibraryEntry {
+  scope: 'SYSTEM' | 'PROJECT'
+  libraryRevisionId: string
+  libraryVersion: string
+  libraryState: 'DRAFT' | 'PUBLISHED' | 'DEPRECATED'
+  entryId: string
+  kind: 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
+  name: string
+  featureState: 'AVAILABLE' | 'REVIEW_REQUIRED'
+  category: string
+  description: string
+  contentSha256: string
+  dependencies: never[]
+  stateLayoutKnown: boolean
+  stateSizeBytes: number
+}
+
+/* Bốn khối vì lane cần bốn vai khác nhau: một khối SYSTEM bình thường, khối
+   SYSTEM đang chờ review (`PID` — đúng mục `approved:false` của profile), một
+   khối SYSTEM thuộc nhóm `timer` để phép lọc có cái để thu hẹp, và một khối
+   PROJECT — nguồn DUY NHẤT mà `library_usages` đo được. `description` khác
+   nhau từng khối vì đó là chuỗi chỉ xuất hiện ở khay Chi tiết, nên nó nói
+   được "chi tiết đang mở đúng khối nào" mà không cần bám class. */
+const LIBRARY_CATALOG: MockLibraryEntry[] = [
+  {
+    scope: 'SYSTEM', libraryRevisionId: SYSTEM_LIBRARY_REVISION_ID, libraryVersion: 'rev-a.3',
+    libraryState: 'PUBLISHED', entryId: 'LIMIT', kind: 'FUNCTION', name: 'LIMIT',
+    featureState: 'AVAILABLE', category: 'math', description: 'Kẹp giá trị vào khoảng cho phép',
+    contentSha256: 'a'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
+  },
+  {
+    scope: 'SYSTEM', libraryRevisionId: SYSTEM_LIBRARY_REVISION_ID, libraryVersion: 'rev-a.3',
+    libraryState: 'PUBLISHED', entryId: 'PID', kind: 'FUNCTION_BLOCK', name: 'PID',
+    featureState: 'REVIEW_REQUIRED', category: 'control', description: 'Vòng điều khiển tỉ lệ tích phân vi phân',
+    contentSha256: 'b'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 64
+  },
+  {
+    scope: 'SYSTEM', libraryRevisionId: SYSTEM_LIBRARY_REVISION_ID, libraryVersion: 'rev-a.3',
+    libraryState: 'PUBLISHED', entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON',
+    featureState: 'AVAILABLE', category: 'timer', description: 'Bộ định thời trễ bật',
+    contentSha256: 'd'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16
+  },
+  {
+    scope: 'PROJECT', libraryRevisionId: PROJECT_LIBRARY_REVISION_ID, libraryVersion: '1.2',
+    libraryState: 'PUBLISHED', entryId: 'AHU_STAGE', kind: 'FUNCTION_BLOCK', name: 'AHU_STAGE',
+    featureState: 'AVAILABLE', category: 'control', description: 'Khối phân cấp giai đoạn AHU của dự án',
+    contentSha256: 'e'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 32
+  }
+]
+
+/* Used-In ĐÃ NIÊM PHONG của khối PROJECT. Hai mục, một đang chạy — đủ để phân
+   biệt "server đo được và ra 2" với "server chưa đo được". */
+const PROJECT_USAGE_ITEMS = [
+  {
+    projectId: PROJECT_ID, projectName: 'AHU-01', revisionId: ACTIVE_REVISION_ID,
+    objectId: POU_OBJECT_ID, objectName: 'Điều khiển AHU', requiredVersion: '1.2',
+    usageKind: 'INSTANCE', isActive: true
+  },
+  {
+    projectId: PROJECT_ID, projectName: 'AHU-01', revisionId: SIM_REVISION_ID,
+    objectId: '12121212-1212-4121-8121-121212121212', objectName: 'Giai đoạn sưởi',
+    requiredVersion: '1.1', usageKind: 'CALL', isActive: false
+  }
+]
+
+interface LibraryLane {
+  /** Query string của mọi lần gọi `/libraries` — bằng chứng lọc chạy Ở SERVER. */
+  libraryQueries: string[]
+  /** Bật 503 cho `/libraries`; tắt giữa chừng để nút Thử lại tự chứng minh nó gọi lại thật. */
+  failLibraries: boolean
+}
+
+function libraryLane(): LibraryLane {
+  return { libraryQueries: [], failLibraries: false }
+}
+
+async function installLibraryLaneRoutes(page: Page, lane: LibraryLane) {
+  await page.route(
+    (url) => url.pathname === '/api/v1/programming/libraries',
+    async (route) => {
+      const url = new URL(route.request().url())
+      lane.libraryQueries.push(url.search)
+      if (lane.failLibraries) {
+        return json(
+          route,
+          { error: { code: 'PRG-ERR-UNAVAILABLE-001', messageKey: 'programming.error.unavailable', retryable: true, keepsRunningRevision: true, correlationId: 'e2e-correlation-pgm04' } },
+          503
+        )
+      }
+      /* Lọc Ở ĐÂY chứ không ở client: `GET /libraries` có phân trang
+         (`limit=100`), nên một bộ lọc chạy trên trang đã tải sẽ đúng với bốn
+         khối của mock và sai với thư viện thật. Mock phải ép FE đi đúng đường
+         mà backend thật đòi. */
+      const scope = url.searchParams.get('scope')
+      const kind = url.searchParams.get('kind')
+      const category = url.searchParams.get('category')
+      const q = url.searchParams.get('q')?.toLowerCase() ?? ''
+      const items = LIBRARY_CATALOG.filter((entry) => {
+        if (scope && entry.scope !== scope) return false
+        if (kind && entry.kind !== kind) return false
+        if (category && entry.category !== category) return false
+        if (q && !`${entry.name} ${entry.description}`.toLowerCase().includes(q)) return false
+        return true
+      })
+      return json(route, { items, nextCursor: null })
+    }
+  )
+
+  await page.route(
+    (url) => url.pathname === '/api/v1/programming/library-usages',
+    async (route) => {
+      const url = new URL(route.request().url())
+      const empty = { count: 0, truncated: false, items: [] as typeof PROJECT_USAGE_ITEMS }
+      if (url.searchParams.get('scope') === 'SYSTEM') {
+        /* Đúng `LibraryService.Usage`: entry SYSTEM phân giải nơi dùng từ
+           registry chứ không nằm trong bảng `library_usages`. Payload vẫn mang
+           `sealed.count = 0` — CHÍNH LÀ cái bẫy mà case đầu tiên soi: số 0 có
+           sẵn trong tay FE, và FE không được in nó ra. */
+        return json(route, { sealed: empty, draft: empty, availability: 'UNAVAILABLE' })
+      }
+      const items = url.searchParams.get('entryId') === 'AHU_STAGE' ? PROJECT_USAGE_ITEMS : []
+      return json(route, {
+        sealed: { count: items.length, truncated: false, items },
+        draft: empty,
+        availability: 'SEALED_ONLY'
+      })
+    }
+  )
+}
+
+async function openLibrary(page: Page, lane: LibraryLane) {
+  const state: MockState = {
+    etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED',
+    commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false
+  }
+  await installProgrammingMocks(page, state)
+  await installLibraryLaneRoutes(page, lane)
+  await login(page)
+  await navigate(page, LIBRARY_PATH)
+}
+
+function libraryList(page: Page) {
+  return page.getByRole('list', { name: 'Danh sách khối Thư viện điều khiển' })
+}
+
+test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
+  test('D61-07: “chưa đo được” không được hiện thành “0 nơi dùng”', async ({ page }) => {
+    const lane = libraryLane()
+    const failures = observeBrowserFailures(page)
+    await openLibrary(page, lane)
+
+    const list = libraryList(page)
+    const usage = page.getByRole('region', { name: 'Nơi sử dụng' })
+
+    /* Vế đối chứng, và nó phải đứng TRƯỚC: khi máy chủ ĐO ĐƯỢC thì con số phải
+       hiện. Thiếu vế này, một bề mặt không bao giờ in số nào cũng "đạt" case
+       dưới — và đó là một cách khác để nói dối. */
+    await list.getByRole('button', { name: /^AHU_STAGE/ }).click()
+    await expect(usage.getByText('2 nơi dùng')).toBeVisible()
+    await expect(usage.getByText('Điều khiển AHU')).toBeVisible()
+
+    /* Vế thật: `UNAVAILABLE` nghĩa là CHƯA ĐO ĐƯỢC. In `0` ở đây là mời người
+       ta xoá một khối có thể đang điều khiển tủ — hai câu dẫn tới hai hành
+       động ngược nhau, nên bề mặt không được phép gộp chúng. */
+    const usageResponse = page.waitForResponse(
+      (response) => response.url().includes('/library-usages') && response.url().includes('entryId=LIMIT')
+    )
+    await list.getByRole('button', { name: /^LIMIT/ }).click()
+    const payload = (await (await usageResponse).json()) as { availability: string; sealed: { count: number } }
+    // Máy chủ CÓ đưa số 0 cho FE; câu hỏi duy nhất là FE có in nó ra không.
+    expect(payload.availability).toBe('UNAVAILABLE')
+    expect(payload.sealed.count).toBe(0)
+
+    await expect(usage.getByText(/Chưa đo được/)).toBeVisible()
+    expect(await usage.innerText(), 'khay Nơi sử dụng in một con số khi chưa đo được').not.toMatch(/\d+\s*nơi dùng/)
+    await expect(page.getByText('0 nơi dùng')).toHaveCount(0)
+
+    expectNoBrowserFailures(failures, 'PGM-04 Used-In')
+  })
+
+  test('T61-204: lọc theo phân loại thu hẹp danh sách và sống sót qua khay Chi tiết', async ({ page }) => {
+    const lane = libraryLane()
+    const failures = observeBrowserFailures(page)
+    await openLibrary(page, lane)
+
+    const list = libraryList(page)
+    await expect(list.getByRole('button')).toHaveCount(LIBRARY_CATALOG.length)
+
+    const category = page.getByRole('combobox', { name: 'Phân loại' })
+    await category.selectOption('timer')
+    await expect(list.getByRole('button')).toHaveCount(1)
+    await expect(list.getByRole('button', { name: /^TON/ })).toBeVisible()
+    /* Phép lọc phải đi TỚI MÁY CHỦ. Thư viện thật có phân trang; lọc trên trang
+       đã tải sẽ đúng với bốn khối của mock và bỏ sót ở thư viện thật — một lỗi
+       chỉ lộ ra khi catalog vượt `limit`. */
+    expect(lane.libraryQueries.some((search) => search.includes('category=timer'))).toBe(true)
+
+    // Mở khay Chi tiết rồi quay lại danh sách: bộ lọc và lựa chọn còn nguyên.
+    // Chọn một khối mà làm bộ lọc bật lại "Tất cả" là ném người dùng về đầu
+    // danh sách sau mỗi lần xem một khối.
+    await list.getByRole('button', { name: /^TON/ }).click()
+    await expect(page.getByText('Bộ định thời trễ bật')).toBeVisible()
+    await expect(category).toHaveValue('timer')
+    await expect(list.getByRole('button')).toHaveCount(1)
+    await expect(list.getByRole('button', { name: /^TON/ })).toHaveAttribute('aria-current', 'true')
+
+    // Gỡ bộ lọc trả lại đủ catalog — thu hẹp phải là thu hẹp, không phải mất.
+    await category.selectOption('')
+    await expect(list.getByRole('button')).toHaveCount(LIBRARY_CATALOG.length)
+
+    expectNoBrowserFailures(failures, 'PGM-04 lọc phân loại')
+  })
+
+  test('D61-07: lỗi tải thư viện KHÔNG được hiện như một thư viện rỗng', async ({ page }) => {
+    const lane = libraryLane()
+    lane.failLibraries = true
+    await openLibrary(page, lane)
+
+    /* "Không có khối nào" và "không đọc được" dẫn tới hai hành động khác hẳn:
+       một bên là đi tạo khối, một bên là đi xem vì sao máy chủ im. Trang nào
+       trộn hai câu đó lại là trang đẩy người dùng đi sai đường. */
+    await expect(page.getByText('Không tải được Thư viện điều khiển.')).toBeVisible()
+    // Cả HAI câu "rỗng" đều bị cấm ở đây, không chỉ câu về bộ lọc: "thư viện
+    // của Project chưa có khối nào" còn mời người ta đi tạo lại đúng thứ đang
+    // có sẵn trên thiết bị.
+    await expect(page.getByText('Không có khối nào khớp bộ lọc.')).toHaveCount(0)
+    await expect(page.getByText('Thư viện của Project này chưa có khối nào.')).toHaveCount(0)
+    await expect(libraryList(page)).toHaveCount(0)
+
+    // Đường thử lại phải là đường THẬT: mở lại máy chủ rồi bấm, danh sách phải
+    // về. Một nút Thử lại không gọi lại gì chỉ là một lời an ủi.
+    const blocks = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Danh sách khối' }) })
+    const retry = blocks.getByRole('button', { name: 'Thử lại' })
+    await expect(retry).toBeVisible()
+    const before = lane.libraryQueries.length
+    lane.failLibraries = false
+    await retry.click()
+    await expect(libraryList(page).getByRole('button')).toHaveCount(LIBRARY_CATALOG.length)
+    expect(lane.libraryQueries.length).toBeGreaterThan(before)
+  })
+
+  test('D61-04: khối chờ review có badge, không có Insert bật được và không có ô bỏ qua', async ({ page }) => {
+    const lane = libraryLane()
+    const failures = observeBrowserFailures(page)
+    await openLibrary(page, lane)
+
+    const list = libraryList(page)
+    const pid = list.getByRole('button', { name: /^PID/ })
+    await expect(pid).toContainText('Chờ review Controls/Safety')
+
+    await pid.click()
+    await expect(page.getByText(/chưa qua review Controls\/Safety/)).toBeVisible()
+
+    /* `T59-205`/`D61-04`: không có đường bỏ qua. Khẳng định viết theo "mọi lối
+       Insert đều khoá" chứ không theo "không có nút Insert nào": bề mặt hôm nay
+       chưa dựng Insert ở PGM-04, và khi `T61-405` dựng nó thì case này vẫn phải
+       là phép kiểm đúng thứ nó nói, không phải một case chết. */
+    for (const control of await page.getByRole('button', { name: /Chèn|Insert/i }).all()) {
+      await expect(control).toBeDisabled()
+    }
+    await expect(page.getByRole('link', { name: /Chèn|Insert/i })).toHaveCount(0)
+    // Không có ô tick "bỏ qua review", và cũng không có nút tự duyệt: token phê
+    // duyệt Controls/Safety suy ra từ contract profile, giao diện không cấp được.
+    await expect(page.getByRole('checkbox', { name: /bỏ qua|bypass|ghi đè|override|vẫn dùng/i })).toHaveCount(0)
+    await expect(page.getByRole('switch', { name: /bỏ qua|bypass|ghi đè|override|review/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^(Duyệt|Approve)/i })).toHaveCount(0)
+
+    expectNoBrowserFailures(failures, 'PGM-04 review gate')
+  })
+
+  test('T61-306: PGM-04 không có vi phạm axe nghiêm trọng', async ({ page }) => {
+    const lane = libraryLane()
+    await openLibrary(page, lane)
+
+    // Quét khi khay Chi tiết ĐANG MỞ: đóng nó lại thì hơn nửa bề mặt của trang
+    // (Used-In, lịch sử phiên bản, hai nút mutation) không có mặt trong lần quét.
+    await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+    await expect(page.getByRole('region', { name: 'Nơi sử dụng' })).toBeVisible()
+
+    const axe = await new AxeBuilder({ page })
+      .include('main')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+    const severe = axe.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))
+    expect(severe, 'PGM-04: axe serious/critical').toEqual([])
+  })
+})

@@ -70,6 +70,22 @@ describe('usageDisplay', () => {
     expect(usageDisplay(undefined)).toEqual({ kind: 'unavailable' })
   })
 
+  it('ĐANG TẢI khác CHƯA ĐO ĐƯỢC', () => {
+    /* Trước bản vá này mọi trường hợp không có dữ liệu đều rơi vào
+       `unavailable`, nên trong lúc request còn bay, khay của một khối PROJECT
+       hiện đúng câu lý do của SYSTEM ("phân giải nơi dùng từ registry"). Một
+       trạng thái đang tải mặc áo chưa đo được, và mang lý do của loại khác —
+       người đọc kết luận sai hai lần. */
+    expect(usageDisplay(null, true)).toEqual({ kind: 'loading' })
+    // Đã có dữ liệu rồi thì `loading` của lần đọc lại KHÔNG che kết quả cũ.
+    expect(usageDisplay(usage({ availability: 'UNAVAILABLE' }), true)).toEqual({ kind: 'unavailable' })
+  })
+
+  it('đang tải thì cũng KHÔNG cho gỡ', () => {
+    // Chưa đọc xong cũng là chưa biết.
+    expect(safeToRemove(null)).toBe(false)
+  })
+
   it('SEALED_ONLY chỉ trả phần đã niêm phong, không bịa phần Draft', () => {
     const view = usageDisplay(usage({
       availability: 'SEALED_ONLY',

@@ -62,6 +62,8 @@ export function insertBlockReason(
 export type UsageDisplay =
   | { kind: 'count'; sealed: number; draft: number | null; truncated: boolean }
   | { kind: 'unavailable' }
+  /** Chưa đọc xong — KHÁC "chưa đo được". Xem `usageDisplay`. */
+  | { kind: 'loading' }
   | { kind: 'sealed-only'; sealed: number; truncated: boolean }
 
 /**
@@ -73,7 +75,16 @@ export type UsageDisplay =
  * đang điều khiển tủ** — nên hàm này không bao giờ trả `count` cho trường hợp
  * đó, kể cả khi payload có sẵn số 0 trong `sealed.count`.
  */
-export function usageDisplay(usage: ProgrammingLibraryUsage | null | undefined): UsageDisplay {
+export function usageDisplay(
+  usage: ProgrammingLibraryUsage | null | undefined,
+  loading = false,
+): UsageDisplay {
+  /* `loading` phải được hỏi TRƯỚC. Trước lát này mọi trường hợp không có dữ
+     liệu đều rơi vào `unavailable`, nên trong lúc request còn đang bay, khay
+     Used-In của một khối PROJECT hiện đúng câu lý do của SYSTEM: "khối SYSTEM
+     phân giải nơi dùng từ registry". Một trạng thái ĐANG TẢI mặc áo CHƯA ĐO
+     ĐƯỢC, và lại mang lý do của loại khác — người đọc kết luận sai hai lần. */
+  if (loading && !usage) return { kind: 'loading' }
   if (!usage || usage.availability === 'UNAVAILABLE') return { kind: 'unavailable' }
   if (usage.availability === 'SEALED_ONLY') {
     return { kind: 'sealed-only', sealed: usage.sealed.count, truncated: usage.sealed.truncated }
@@ -94,7 +105,7 @@ export function usageDisplay(usage: ProgrammingLibraryUsage | null | undefined):
  */
 export function safeToRemove(usage: ProgrammingLibraryUsage | null | undefined): boolean {
   const display = usageDisplay(usage)
-  if (display.kind === 'unavailable') return false
+  if (display.kind === 'unavailable' || display.kind === 'loading') return false
   if (display.truncated) return false
   if (display.kind === 'sealed-only') return display.sealed === 0
   return display.sealed === 0 && display.draft === 0

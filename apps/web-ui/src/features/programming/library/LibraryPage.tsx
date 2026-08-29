@@ -367,6 +367,7 @@ export function LibraryPage() {
               usages={selected ? usages.get(selected.entryId.toUpperCase()) ?? [] : []}
               usageSource={workspace.status}
               sealedUsage={sealedUsage.data ?? null}
+              sealedUsageLoading={sealedUsage.status === 'loading'}
               dependents={dependents}
               permissions={permissions}
               pending={pending}
@@ -863,6 +864,7 @@ function LibraryDetail({
   usages,
   usageSource,
   sealedUsage,
+  sealedUsageLoading,
   dependents,
   permissions,
   pending,
@@ -875,6 +877,7 @@ function LibraryDetail({
   usages: LibraryUsage[]
   usageSource: 'loading' | 'ready' | 'error'
   sealedUsage: ProgrammingLibraryUsage | null
+  sealedUsageLoading: boolean
   dependents: string[]
   permissions: ReturnType<typeof libraryEntryPermissions> | null
   pending: boolean
@@ -933,7 +936,7 @@ function LibraryDetail({
         />
       </dl>
 
-      <LibraryUsageList usages={usages} source={usageSource} sealed={sealedUsage} />
+      <LibraryUsageList usages={usages} source={usageSource} sealed={sealedUsage} sealedLoading={sealedUsageLoading} />
       <LibraryVersionHistory
         group={group}
         canDeprecate={canDeprecate}
@@ -1007,13 +1010,15 @@ function LibraryUsageList({
   usages,
   source,
   sealed,
+  sealedLoading,
 }: {
   usages: LibraryUsage[]
   source: 'loading' | 'ready' | 'error'
   sealed: ProgrammingLibraryUsage | null
+  sealedLoading: boolean
 }) {
   const { pick } = useI18n()
-  const sealedView = usageDisplay(sealed)
+  const sealedView = usageDisplay(sealed, sealedLoading)
   return (
     <section aria-label={pick('Nơi sử dụng', 'Usage')} className="border-t border-[var(--c-border)] pt-2">
       <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Nơi sử dụng', 'Usage')}</h3>
@@ -1023,7 +1028,10 @@ function LibraryUsageList({
         <p className="text-xs font-medium text-[var(--c-text)]">
           {pick('Trong Revision đã niêm phong', 'In sealed revisions')}
         </p>
-        {sealedView.kind === 'unavailable' ? (
+        {sealedView.kind === 'loading' ? (
+          /* Đang đọc — KHÔNG được mượn câu lý do của `UNAVAILABLE`. */
+          <p className="text-sm text-[var(--c-text-dim)]">{pick('Đang đọc nơi sử dụng…', 'Reading usage…')}</p>
+        ) : sealedView.kind === 'unavailable' ? (
           /* `UNAVAILABLE` KHÔNG được hiện thành 0. `0` nghĩa là "không ai dùng"
              — một câu mời người ta xoá khối; đây là "chưa đo được". */
           <p className="text-sm text-[var(--c-warn-fg)]">
