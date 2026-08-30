@@ -100,3 +100,51 @@ for (const vp of VIEWPORTS) {
     expect(m.workbenchOpen, 'khay bàn làm việc phải thu gọn sẵn').toBe(false)
   })
 }
+
+/**
+ * `DEV-PROG-026` — YÊU CẦU CỦA CHỦ SỞ HỮU, đo chứ không hứa.
+ *
+ * Đề bài: chỗ gõ phải CAO GẤP ĐÔI ở khổ màn 800–812 px. Phép cộng nói rằng cắt
+ * chrome trang không tới được đó — kể cả xoá sạch thanh app, sidebar, dải ngữ
+ * cảnh, tiêu đề và hàng tab thì ở viewport 800 px chỗ gõ cũng chỉ đạt
+ * 800 − 24 lề − 202 chrome-trong-cột = 574 px, tức 1,86×. Nên lời giải là một
+ * CHẾ ĐỘ bật/tắt: nó bỏ được cả chrome trang lẫn khay tra cứu, và chỉ bỏ đúng
+ * lúc người ta cần.
+ *
+ * Test này đo tỉ lệ thật trên Chrome. Nó tồn tại vì `position: fixed` hỏng một
+ * cách IM LẶNG: chỉ cần một tổ tiên có `transform`/`filter`/`contain` là panel
+ * neo theo tổ tiên đó thay vì theo viewport, và không assertion nào trong jsdom
+ * nhìn thấy.
+ */
+for (const vp of [{ w: 1280, h: 800 }, { w: 1680, h: 812 }]) {
+  test(`chế độ toàn màn hình ${vp.w}x${vp.h}: chỗ gõ cao GẤP ĐÔI trở lên`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.w, height: vp.h })
+    await openEditor(page, 128)
+
+    const editorHeight = () => page.evaluate(() => {
+      const ta = document.querySelector('textarea[id^="programming-st-source-"]') as HTMLTextAreaElement
+      return Math.round(ta.getBoundingClientRect().height)
+    })
+
+    const before = await editorHeight()
+    await page.getByRole('button', { name: 'Gõ toàn màn hình' }).click()
+    const after = await editorHeight()
+
+    const geometry = await page.evaluate(() => {
+      const column = document.querySelector('[data-testid="programming-editor-column"]') as HTMLElement
+      const box = column.getBoundingClientRect()
+      return { maximized: column.dataset.maximized, top: Math.round(box.top), height: Math.round(box.height), viewport: window.innerHeight }
+    })
+    expect(geometry.maximized).toBe('true')
+    /* Panel phải neo theo VIEWPORT. `top === 0` là phép thử trực tiếp cho việc
+     * `fixed` có thật sự thoát khỏi dòng chảy hay không. */
+    expect(geometry.top, 'panel phải neo ở mép trên viewport').toBe(0)
+    expect(geometry.height).toBe(geometry.viewport)
+
+    expect(after / before, `chỗ gõ ${before}px → ${after}px = ${(after / before).toFixed(2)}×`).toBeGreaterThanOrEqual(2)
+
+    // Esc trả lại bố cục cũ — chế độ này không được là đường một chiều.
+    await page.keyboard.press('Escape')
+    expect(await editorHeight()).toBe(before)
+  })
+}

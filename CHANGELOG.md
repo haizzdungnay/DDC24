@@ -8,6 +8,30 @@
 
 ## [Unreleased]
 
+### Thêm — chế độ gõ toàn màn hình cho trình soạn thảo ST (2026-08-29)
+
+- **`DEV-PROG-026`** — Chủ sở hữu đặt yêu cầu cứng: chỗ gõ phải **cao gấp đôi**
+  ở khổ màn 800–812 px.
+  *Vì sao không cắt chrome trang*: phép cộng không cho phép. Đo trên bo, chrome
+  trang 244 px và lề đáy 24 px để lại cột 532 px; trong cột còn dải tab POU 35 +
+  thanh công cụ 64 + thanh trạng thái 26 + khay bàn làm việc 61 + khoảng cách 16
+  = 202 px. Kể cả **xoá sạch** chrome trang — thanh app, sidebar, dải ngữ cảnh,
+  tiêu đề, hàng tab — chỗ gõ cũng chỉ đạt `800 − 24 − 202 = 574 px`, tức
+  **1,86×**, mà đổi lại là phá nát điều hướng của cả sản phẩm.
+  *Cách làm*: một chế độ bật/tắt. Cột giữa chuyển thành panel `fixed inset-0`
+  phủ kín viewport, bỏ được cả chrome trang lẫn khay tra cứu, và chỉ bỏ đúng lúc
+  người dùng cần. Ở chế độ thường không ai mất gì.
+  *Vào/ra*: nút trên thanh công cụ (`aria-pressed`, không nấp trong menu `Khác`),
+  `Ctrl+Shift+M`, và `Esc` để thoát. `Esc` chỉ thoát khi chưa ai nuốt phím đó —
+  gợi ý tự động và khay Tìm đều dùng `Esc`, nên không hỏi `defaultPrevented` thì
+  một lần bấm vừa đóng popup vừa văng khỏi chế độ đang làm việc.
+  *Số đo (Chrome thật, lane mock)*: 1280×800 **254 → 650 px (2,56×)**;
+  1680×812 **257 → 662 px (2,58×)**.
+  *Cổng*: `e2e/programming-workspace-height.spec.ts` khoá tỉ lệ ≥ 2× và khoá cả
+  việc panel neo đúng viewport — `position: fixed` hỏng im lặng khi một tổ tiên
+  có `transform`, và jsdom không thấy được. Đột biến bỏ `fixed inset-0` ⇒ đỏ.
+
+
 ### Sửa lỗi — bẫy tiêu điểm hộp thoại cuộn vòng về một tiêu đề không bấm được (2026-08-29)
 
 - **`Modal.tsx`** — Lỗi bàn phím có sẵn trên `main`, ảnh hưởng MỌI hộp thoại của

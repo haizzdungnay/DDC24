@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ClipboardCheck, Command, GitCompare, Library, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
+import { AlignLeft, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
@@ -534,6 +534,40 @@ export function ProgramsTab({
     onRunCheck()
   }
 
+  /**
+   * `DEV-PROG-026` — chế độ TOÀN MÀN HÌNH cho trình soạn thảo.
+   *
+   * Vì sao phải là một chế độ, không phải cắt bớt chrome cho mọi người: yêu cầu
+   * là chỗ gõ phải CAO GẤP ĐÔI ở khổ màn 800–812 px, và phép cộng nói thẳng rằng
+   * cắt chrome không tới được đó. Đo trên bo: chrome trang 244 px, lề đáy 24 px,
+   * nên cột còn 532 px; trong cột còn dải tab POU 35 + thanh công cụ 64 + thanh
+   * trạng thái 26 + khay bàn làm việc 61 + khoảng cách 16 = 202 px. Kể cả XOÁ
+   * SẠCH chrome trang — thanh app, sidebar, dải ngữ cảnh, tiêu đề, hàng tab —
+   * chỗ gõ cũng chỉ đạt 800 − 24 − 202 = 574 px, tức 1,86× chứ chưa phải 2×, mà
+   * đổi lại là phá nát điều hướng của cả sản phẩm.
+   *
+   * Một chế độ bật/tắt đạt ~2,1× vì nó bỏ được CẢ chrome trang lẫn khay tra
+   * cứu, và chỉ bỏ đúng lúc người ta cần. Ở chế độ thường không ai mất gì.
+   *
+   * `position: fixed` (không phải `height: 100vh` trong dòng chảy) để panel neo
+   * theo viewport bất kể tổ tiên nào đang cuộn. Cổng e2e đo trên Chrome thật
+   * chốt tỉ lệ ≥ 2×, vì một tổ tiên có `transform` sẽ âm thầm biến `fixed`
+   * thành neo-theo-tổ-tiên và không assertion nào trong jsdom thấy được.
+   */
+  const [maximized, setMaximized] = useState(false)
+
+  useEffect(() => {
+    if (!maximized) return undefined
+    /* Nền vẫn cuộn được dưới panel là cách người dùng cuộn mất ngữ cảnh mà
+     * không hiểu vì sao — panel phủ kín nên họ không thấy gì đang chuyển động. */
+    /* `window.document`, không phải `document`: prop `document` của component
+     * này là bản nháp Project và nó che mất global — đúng chỗ TypeScript vừa
+     * kêu, và là một lỗi chạy-mới-biết nếu viết bằng JavaScript. */
+    const previous = window.document.body.style.overflow
+    window.document.body.style.overflow = 'hidden'
+    return () => { window.document.body.style.overflow = previous }
+  }, [maximized])
+
   return (
     /* `DEV-PROG-001` — lưới ba cột nay cao đúng bằng ô mà `DesignWorkspacePage`
        cấp cho nó (`lg:h-full`), và MỖI cột tự cuộn trong lòng nó
@@ -609,7 +643,23 @@ export function ProgramsTab({
           Đo được ở 1024 px: document 1039 px trên viewport 1024 px. Tràn ngang
           trên tủ điều khiển đẩy nút thao tác ra ngoài vùng chạm, mà người vận
           hành không có chuột để cuộn ngang. */}
-      <div className="flex min-w-0 flex-col lg:min-h-0">
+      <div
+        data-testid="programming-editor-column"
+        data-maximized={maximized ? 'true' : 'false'}
+        className={maximized
+          ? 'fixed inset-0 z-40 flex min-w-0 flex-col gap-2 bg-[var(--c-bg)] p-3'
+          : 'flex min-w-0 flex-col lg:min-h-0'}
+        onKeyDown={(event) => {
+          if (!maximized || event.key !== 'Escape') return
+          /* `defaultPrevented` là điều kiện then chốt: gợi ý tự động và khay Tìm
+           * đều nuốt `Escape` bằng `preventDefault()`. Không hỏi nó thì một lần
+           * Escape vừa đóng gợi ý vừa thoát toàn màn hình — người dùng mất chế
+           * độ đang làm việc chỉ vì muốn tắt một popup. */
+          if (event.defaultPrevented) return
+          event.preventDefault()
+          setMaximized(false)
+        }}
+      >
         <PouTabBar
           state={tabs}
           missingKeys={missingTabKeys}
@@ -718,6 +768,8 @@ export function ProgramsTab({
             onToggleLibrary={() => setLibraryDockOpen((open) => !open)}
             codeMapOpen={codeMapOpen}
             onToggleCodeMap={() => setCodeMapOpen((open) => !open)}
+            maximized={maximized}
+            onToggleMaximized={() => setMaximized((current) => !current)}
             libraryInsertRequest={libraryInsertRequest}
             libraryEntries={libraryEntries}
             onEnsureLibraryLoaded={libraryCatalog.ensureLoaded}
@@ -987,6 +1039,8 @@ export function SourceEditor({
   onToggleLibrary,
   codeMapOpen = false,
   onToggleCodeMap,
+  maximized = false,
+  onToggleMaximized,
   libraryInsertRequest,
   libraryEntries,
   onEnsureLibraryLoaded,
@@ -1030,6 +1084,9 @@ export function SourceEditor({
    *  nút bật/tắt vẫn ở thanh công cụ nên trạng thái do cha giữ. */
   codeMapOpen?: boolean
   onToggleCodeMap?: () => void
+  /** `DEV-PROG-026` — trình soạn thảo đang phủ kín viewport hay không. */
+  maximized?: boolean
+  onToggleMaximized?: () => void
   /**
    * `DEV-PROG-002` — yêu cầu chèn một mục thư viện, phát từ panel ở cột phải.
    * Cùng khuôn với `formatRequest`: panel KHÔNG biết cách chèn (ST dựng đoạn mã
@@ -1825,6 +1882,28 @@ export function SourceEditor({
               >
                 <span className={TOOLBAR_LABEL_CLASS}>{pick('So sánh', 'Compare')}</span>
               </Button>
+              {/* `DEV-PROG-026` — nút toàn màn hình đứng NGAY TRƯỚC `Khác`, không
+                  nằm trong đó: nó là cách duy nhất đạt được chiều cao gõ mà khổ
+                  màn 800 px đòi hỏi, nên nó phải nhìn thấy được chứ không nấp
+                  sau một menu. Chỉ icon, như Hoàn tác/Làm lại — `aria-label` và
+                  `title` mang đủ nghĩa, và `aria-pressed` nói trạng thái. */}
+              {onToggleMaximized && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={maximized
+                    ? <Minimize2 className="h-4 w-4" aria-hidden="true" />
+                    : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
+                  aria-pressed={maximized}
+                  aria-label={maximized
+                    ? pick('Thoát toàn màn hình', 'Exit full screen')
+                    : pick('Gõ toàn màn hình', 'Edit full screen')}
+                  title={maximized
+                    ? pick('Thoát toàn màn hình (Esc)', 'Exit full screen (Esc)')
+                    : pick('Gõ toàn màn hình (Ctrl+Shift+M)', 'Edit full screen (Ctrl+Shift+M)')}
+                  onClick={onToggleMaximized}
+                />
+              )}
               <details className="relative" data-testid="st-toolbar-more">
                 <summary
                   className="cursor-pointer list-none rounded-[var(--radius)] px-2 py-1 text-sm text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)]"
@@ -2074,6 +2153,9 @@ export function SourceEditor({
               }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
                 event.preventDefault(); setSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 0); return
+              }
+              if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'm' && onToggleMaximized) {
+                event.preventDefault(); onToggleMaximized(); return
               }
               if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'g') {
                 event.preventDefault(); setGoToDraft(String(cursor.line)); setGoToOpen(true); return

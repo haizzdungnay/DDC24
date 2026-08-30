@@ -22,6 +22,8 @@ function renderEditor(source: string, options?: {
   onEnsurePointCatalogLoaded?: () => void
   onSave?: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   codeMapOpen?: boolean
+  maximized?: boolean
+  onToggleMaximized?: () => void
 }) {
   const onChange = options?.onChange ?? vi.fn()
   const onSave = options?.onSave ?? vi.fn().mockResolvedValue(true)
@@ -44,6 +46,8 @@ function renderEditor(source: string, options?: {
       <>
         <SourceEditor
           codeMapOpen={options?.codeMapOpen ?? false}
+          maximized={options?.maximized ?? false}
+          onToggleMaximized={options?.onToggleMaximized}
           program={program(source)}
           source={value}
           canEdit={options?.canEdit ?? true}
@@ -819,5 +823,37 @@ describe('DEV-PROG-023 — bấm Bản đồ mã phải kéo màn hình tới đ
     // Mục Bản đồ mã luôn đáp xuống cột 1; giữ `scrollLeft` cũ là đưa người dùng
     // tới đúng dòng nhưng nhìn vào khoảng trắng bên phải của nó.
     expect(textarea.scrollLeft).toBe(0)
+  })
+})
+
+describe('DEV-PROG-026 — nút gõ toàn màn hình', () => {
+  it('có mặt trên thanh công cụ, nói đúng trạng thái, và gọi đúng handler', () => {
+    const onToggleMaximized = vi.fn()
+    renderEditor('PROGRAM P\nEND_PROGRAM\n', { onToggleMaximized })
+
+    const button = screen.getByRole('button', { name: 'Gõ toàn màn hình' })
+    // `aria-pressed` chứ không phải chỉ đổi icon: một nút bật/tắt mà trình đọc
+    // màn hình không biết đang bật hay tắt thì người dùng phải đoán.
+    expect(button).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(button)
+    expect(onToggleMaximized).toHaveBeenCalledTimes(1)
+  })
+
+  it('khi đang toàn màn hình thì nhãn và aria-pressed đổi theo, không chỉ đổi icon', () => {
+    renderEditor('PROGRAM P\nEND_PROGRAM\n', { maximized: true, onToggleMaximized: vi.fn() })
+    const button = screen.getByRole('button', { name: 'Thoát toàn màn hình' })
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('KHÔNG dựng nút khi bề mặt gọi không cấp handler — không có nút chết', () => {
+    renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    expect(screen.queryByRole('button', { name: /toàn màn hình/ })).toBeNull()
+  })
+
+  it('Ctrl+Shift+M trong ô gõ bật/tắt chế độ', () => {
+    const onToggleMaximized = vi.fn()
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { onToggleMaximized })
+    fireEvent.keyDown(textarea, { key: 'M', ctrlKey: true, shiftKey: true })
+    expect(onToggleMaximized).toHaveBeenCalledTimes(1)
   })
 })
