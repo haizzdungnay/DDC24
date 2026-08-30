@@ -116,6 +116,145 @@ func (a *App) syncBoundVirtualPointsToCore(ctx context.Context) {
 	}
 }
 
+// virtualPointReconcileInterval — nhịp đối chiếu VP ↔ Core.
+//
+// Đủ thưa để không thành tải cho một thiết bị nhúng đang chạy điều khiển, đủ
+// dày để một lần Core restart không để chương trình đọc giá trị sai quá lâu.
+const virtualPointReconcileInterval = 10 * time.Second
+
+// runVirtualPointReconciler giữ av_[]/bv_[]/msv_[] của Core khớp cấu hình VP.
+//
+// `syncBoundVirtualPointsToCore` chỉ chạy MỘT LẦN lúc web-api khởi động. Nếu
+// Core khởi động lại SAU đó — nâng cấp, watchdog, hay chỉ là `systemctl restart
+// mkddc-core` — các slot ảo reset về 0/BAD và KHÔNG có gì đẩy lại. Mọi ST
+// Program bind VP khi đó đọc thành 0/false một cách IM LẶNG. Quan sát được
+// trên bo Foxlinx 2026-08-28: sau khi restart Core, `VP_OCCUPIED` đọc false
+// nên AHU không rời trạng thái OFF, và không thông điệp nào nói vì sao.
+//
+// `plc_shm` không có "boot id" để bắt riêng sự kiện restart, nên đây là vòng
+// ĐỐI CHIẾU chứ không phải vòng phát hiện: so giá trị Core với cấu hình và chỉ
+// ghi khi lệch. Nó tự lành bất kể nguyên nhân (restart, ai đó ghi đè, SHM mới
+// dựng) và không ghi gì khi mọi thứ đã khớp.
+func (a *App) runVirtualPointReconciler(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			a.reconcileBoundVirtualPointsOnce(ctx)
+		}
+	}
+}
+
+func (a *App) reconcileBoundVirtualPointsOnce(ctx context.Context) {
+	reader, ok := a.core.(pointReader)
+	if !ok {
+		return
+	}
+	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
+	if err != nil {
+		return
+	}
+	items := normalizeVirtualPointsConfig(cfg).Items
+
+	// Không đọc Core khi không có gì để đối chiếu: slot do CHƯƠNG TRÌNH sở hữu
+	// nằm ngoài phạm vi vòng này — ghi vào đó là giẫm lên kết quả điều khiển.
+	pending := make([]VirtualPoint, 0, len(items))
+	for _, item := range items {
+		if item.Enabled && item.BoundPointID != "" &&
+			!strings.EqualFold(item.Source, virtualPointSourceProgram) {
+			pending = append(pending, item)
+		}
+	}
+	if len(pending) == 0 {
+		return
+	}
+
+	corePoints, err := reader.ReadPoints(ctx)
+	if err != nil || corePoints == nil {
+		return
+	}
+	slots := make(map[string]PointDTO, len(corePoints))
+	for _, p := range corePoints {
+		if prefix, _, good := parsePointID(p.ID); good &&
+			(prefix == "AV" || prefix == "BV" || prefix == "MSV") {
+			slots[canonicalBoundPointID(p.ID)] = p
+		}
+	}
+
+	for _, item := range pending {
+		slot, found := slots[canonicalBoundPointID(item.BoundPointID)]
+		if found && virtualPointMatchesSlot(item, slot) {
+			continue
+		}
+		a.syncVirtualPointToCore(ctx, item)
+	}
+}
+
+// virtualPointMatchesSlot — cấu hình VP và slot Core đang nói cùng một điều?
+//
+// Chất lượng khác `good` cũng tính là LỆCH: một slot BAD nghĩa là chương trình
+// đọc nó sẽ fail-closed, nên phải đẩy lại dù con số tình cờ trùng.
+func virtualPointMatchesSlot(item VirtualPoint, slot PointDTO) bool {
+	if !strings.EqualFold(slot.Quality, "good") {
+		return false
+	}
+	want := item.Value
+	if want == nil {
+		want = defaultVirtualPointValue(item.SignalType)
+	}
+	if item.SignalType == virtualPointSignalBoolean {
+		wantBool, okWant := virtualPointBool(want)
+		gotBool, okGot := virtualPointBool(slot.Value)
+		return okWant && okGot && wantBool == gotBool
+	}
+	wantNum, okWant := virtualPointFloat(want)
+	gotNum, okGot := virtualPointFloat(slot.Value)
+	if !okWant || !okGot {
+		return false
+	}
+	// So số thực bằng `==` sẽ đẩy lại vô hạn vì float32 ở SHM không tái lập
+	// đúng bit của float64 trong cấu hình.
+	diff := wantNum - gotNum
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= 1e-4
+}
+
+func virtualPointBool(value any) (bool, bool) {
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case float32:
+		return v > 0.5, true
+	case float64:
+		return v > 0.5, true
+	case int:
+		return v > 0, true
+	}
+	return false, false
+}
+
+func virtualPointFloat(value any) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case bool:
+		if v {
+			return 1, true
+		}
+		return 0, true
+	}
+	return 0, false
+}
+
 func (a *App) handleListVirtualPoints(w http.ResponseWriter, r *http.Request) {
 	cfg, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
 	if err != nil {
@@ -741,7 +880,7 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		virtualPointSignalDateTime: "datetime",
 	}[item.SignalType]
 	defaultValue := defaultVirtualPointValue(item.SignalType)
-	return PointDTO{
+	dto := PointDTO{
 		ID:            item.ID,
 		Channel:       item.Channel,
 		Tag:           tag,
@@ -768,6 +907,8 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		DefaultValue:  defaultValue,
 		SafeValue:     defaultValue,
 	}
+	dto.VirtualSource = item.Source
+	return dto
 }
 
 func defaultVirtualPointValue(signalType string) any {

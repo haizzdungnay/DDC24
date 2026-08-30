@@ -418,12 +418,16 @@ type PointDTO struct {
 	Priority           string   `json:"priority,omitempty"`
 	OverrideExpiresInS *uint32  `json:"overrideExpiresInS,omitempty"`
 	UpdatedAt          string   `json:"updatedAt"`
-	Fault              bool     `json:"fault,omitempty"`
-	Forced             bool     `json:"forced,omitempty"`
-	SignalType         string   `json:"signalType,omitempty"`
-	Writable           bool     `json:"writable,omitempty"`
-	LogEnabled         bool     `json:"logEnabled,omitempty"`
-	LogIntervalMs      *int     `json:"logIntervalMs,omitempty"`
+	// VirtualSource — với point ảo, AI sở hữu slot (`WEB` mặc định vs
+	// `PROGRAM`). Point Catalog cần nó để trả đúng hướng binding: chỉ VP do
+	// chương trình sở hữu mới là đích ghi hợp lệ của `VAR_OUTPUT`.
+	VirtualSource string `json:"virtualSource,omitempty"`
+	Fault         bool   `json:"fault,omitempty"`
+	Forced        bool   `json:"forced,omitempty"`
+	SignalType    string `json:"signalType,omitempty"`
+	Writable      bool   `json:"writable,omitempty"`
+	LogEnabled    bool   `json:"logEnabled,omitempty"`
+	LogIntervalMs *int   `json:"logIntervalMs,omitempty"`
 	// BoundPointID — chỉ đặt cho Kind=="virtual" khi VP đã bind vào slot Core
 	// AV/BV thật (F-PROG-ASBUILT-014); Programming Point Catalog dùng field
 	// này thay cho ID thân thiện ("VP1") khi build binding cho ST Program.
