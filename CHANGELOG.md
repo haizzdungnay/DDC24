@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Sửa lỗi — bẫy tiêu điểm hộp thoại cuộn vòng về một tiêu đề không bấm được (2026-08-29)
+
+- **`Modal.tsx`** — Lỗi bàn phím có sẵn trên `main`, ảnh hưởng MỌI hộp thoại của
+  sản phẩm (component dùng chung).
+  *Triệu chứng*: Tab từ nút cuối cùng của hộp thoại không quay về nút `Đóng` mà
+  rơi vào tiêu đề `<h2>`; người dùng bàn phím phải Tab thêm một nhịp thừa.
+  *Nguyên nhân gốc*: tiêu đề mang `data-modal-initial-focus tabIndex={-1}` để
+  nhận tiêu điểm BAN ĐẦU, nhưng `focusableElements()` gom nó vào vòng Tab qua
+  chính nhánh `[data-modal-initial-focus]` của bộ chọn, biến nó thành phần tử
+  đầu tiên của vòng.
+  *Cách sửa*: loại `tabindex="-1"` khỏi vòng Tab; vai trò nhận tiêu điểm ban đầu
+  giữ nguyên vì nó đi qua một truy vấn khác.
+  *Kiểm chứng*: `e2e/trends.spec.ts` xanh trở lại; thêm `Modal.test.tsx` (3 case,
+  trước đây component này KHÔNG có test đơn vị nào). Đột biến bỏ điều kiện
+  `tabindex` ⇒ 2/3 đỏ.
 ### PGM-04 Control Library — đóng WP-03/WP-04, và bốn lỗi lộ ra khi dựng chúng (2026-08-29)
 
 Phạm vi: `PLAN-FE-PGM-061` WP-03 (`T61-301..307`) + WP-04 (`T61-401..406`) +

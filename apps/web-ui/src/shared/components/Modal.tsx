@@ -148,6 +148,21 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])'
 ].join(',')
 
+/**
+ * Các phần tử tham gia VÒNG TAB của hộp thoại.
+ *
+ * `tabindex="-1"` bị loại, và đó là điểm mấu chốt: tiêu đề `<h2>` mang
+ * `data-modal-initial-focus tabIndex={-1}` để nhận tiêu điểm ban đầu, nhưng nó
+ * KHÔNG phải một điểm dừng Tab. Trước lát này nó lọt vào danh sách qua nhánh
+ * `[data-modal-initial-focus]` của bộ chọn và trở thành phần tử ĐẦU TIÊN, nên
+ * Tab từ nút cuối cùng cuộn vòng về... một cái tiêu đề không bấm được. Người
+ * dùng bàn phím mất một nhịp Tab thừa ở MỌI hộp thoại của sản phẩm.
+ *
+ * `e2e/trends.spec.ts` bắt đúng lỗi này ("Tab từ `Áp dụng` phải về `Đóng`") và
+ * đã đỏ sẵn trên `main`.
+ */
 function focusableElements(dialog: HTMLElement): HTMLElement[] {
-  return [...dialog.querySelectorAll<HTMLElement>(focusableSelector)].filter((element) => element.getAttribute('aria-hidden') !== 'true')
+  return [...dialog.querySelectorAll<HTMLElement>(focusableSelector)].filter(
+    (element) => element.getAttribute('aria-hidden') !== 'true' && element.getAttribute('tabindex') !== '-1',
+  )
 }
