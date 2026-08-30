@@ -2770,7 +2770,7 @@ thái `DONE` của chúng **không** chứng minh redesign mới đã implement:
 | `PGM02-V22-WP-12` | `T59-601/603/604/701..706` | `T59-809` DONE R1 (HOST/LOCAL); `T59-813` DONE R2 (HOST + TARGET-BROWSER); `T59-817` R3 ORDERED |
 | `PGM02-V22-WP-13` | `T59-707` chỉ là verdict lịch sử | `T59-809` DONE R1 (HOST/LOCAL); `T59-813` DONE R2 (HOST + TARGET-BROWSER); `T59-817` R3 ORDERED |
 | `PGM02-V22-WP-14` | — (mở mới 2026-08-27) | `T59-818` READY R3 — Inspector context-sensitive, `F-PGM02-AUD-001` |
-| `PGM02-V22-WP-15` | — (mở mới 2026-08-27) | `T59-821` **READY** R3 — editor chrome: toolbar ba mode + tab đa POU (`UD-PROG-014` CLOSED, phương án B) + status bar + Code Map |
+| `PGM02-V22-WP-15` | — (mở mới 2026-08-27) | `T59-821` **DONE (HOST/LOCAL)** 2026-08-27 — editor chrome: toolbar ba mode + tab đa POU (`UD-PROG-014` CLOSED, phương án B) + status bar + Code Map |
 
 `PGM02-V22-WP-06/10/11/12/13` phải được tách theo R1/R2/R3 khi lập task để
 không có một trạng thái `DONE` mơ hồ cho ba capability khác nhau.
