@@ -47,6 +47,37 @@
   *Kiểm chứng*: `e2e/trends.spec.ts` xanh trở lại; thêm `Modal.test.tsx` (3 case,
   trước đây component này KHÔNG có test đơn vị nào). Đột biến bỏ điều kiện
   `tabindex` ⇒ 2/3 đỏ.
+### Code Map hiện với mọi độ dài POU, và vá lỗ hổng cổng build FE (2026-08-30)
+
+- **Changed — bỏ ngưỡng 80 dòng của Code Map (ST).** Chủ sở hữu chốt: ngắn hay
+  dài đều hiện. Ngưỡng cũ ẩn bản đồ **im lặng** — không dòng nào nói vì sao, nên
+  một POU ngắn nhìn từ ngoài không phân biệt được với một tính năng hỏng.
+  Cổng còn lại duy nhất là "có mục nào để chỉ tới không"; khung chứa vẫn chỉ
+  được dựng khi có nội dung, vì một khung rỗng `w-44` vẫn ăn bề ngang của chính
+  chỗ gõ.
+
+  `AC-FBD-012` **không** bị phá: nó nói về minimap của FBD, truy vết tới
+  `FbdCanvas.test.tsx`, vốn có ngưỡng riêng `FBD_MINIMAP_NODE_THRESHOLD`. ST chỉ
+  từng mượn con số đó. Ngưỡng **bề ngang** `2xl` (≥1536 px) giữ nguyên — đó là
+  ràng buộc vật lý đã đo, không phải phán đoán về nhu cầu người dùng.
+
+- **Fixed — chú thích sai ở call site.** Một khối chú thích còn ghi Code Map
+  "chỉ hiện từ `lg` trở lên" trong khi code là `2xl`, và khối ngay dưới nó nói
+  đúng. Chú thích sót lại sau lần nâng ngưỡng; người đọc sau sẽ tin nhầm con số.
+
+- **Fixed — `npm run build:release` ĐANG ĐỎ trên main, do chính lát fault-fields
+  của tôi.** Bốn fixture dựng `ProgrammingProgramListItem` thiếu ba trường mới;
+  OpenAPI 1.33.0 khai chúng là **bắt buộc** (`string | null`, không optional),
+  nên `tsc` đỏ. Vitest **không kiểm kiểu**, nên 2197 test vẫn xanh trong khi bản
+  phát hành không dựng được — cùng họ với bẫy "exit code chạy nền" đã gặp: một
+  cổng xanh không nói gì về cổng chưa chạy. Lỗi này lọt vì tôi không chạy build
+  FE khi đóng PR #342.
+
+- **Verification** (2026-08-30): trước sửa `tsc -b --noEmit` trên main sạch cho
+  **4 lỗi**; sau sửa **exit 0**. `npx vitest --run --environment jsdom src`
+  **2197/2197 PASS** (189 file); `npm run lint` PASS; `npm run build:release`
+  **exit 0**, chunk `programming` **162,12/165,00 KiB** gzip (dư 2,88 KiB).
+
 ### Deploy Core mang lý do Program hỏng ra tới API, và re-pin hai hồ sơ PGM-04 (2026-08-30)
 
 Đóng nốt phần **target** của PR #342 và trả `candidate_pin_check.py` về xanh.

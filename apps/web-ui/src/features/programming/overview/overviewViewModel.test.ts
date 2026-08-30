@@ -56,6 +56,12 @@ function item(overrides: Partial<ProgrammingProgramListItem> = {}): ProgrammingP
     lastRunAgeMs: 400,
     lane: 0,
     health: 'HEALTHY',
+    /* Ba trường chẩn đoán fault (OpenAPI 1.33.0) là BẮT BUỘC, không optional:
+     * `null` = Core không đọc được, `''` = chưa từng fault. Fixture bỏ trống
+     * sẽ làm chính phân biệt đó vô nghĩa. */
+    lastFaultCode: null,
+    lastFaultLine: null,
+    faultCount: null,
     ...overrides
   }
 }
