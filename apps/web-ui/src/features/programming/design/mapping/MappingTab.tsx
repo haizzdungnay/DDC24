@@ -5,8 +5,7 @@ import type { ProgrammingDraftDocument, ProgrammingDraftOperation } from '../../
 import { AssignedMappingsTable } from './AssignedMappingsTable'
 import { MappingInspector } from './MappingInspector'
 import { MappingToolbar } from './MappingToolbar'
-import { PointCatalogPane } from './PointCatalogPane'
-import { PublishedSignalsPanel } from './PublishedSignalsPanel'
+import { PointCatalogPane, type PointKindFilter } from './PointCatalogPane'
 import { useI18n } from '../../../../shared/i18n'
 import { VariableWorklist } from './VariableWorklist'
 import { buildMappingVariableRows, buildPointRows, rankPointRows, type CatalogTruthState } from './mappingViewModel'
@@ -27,7 +26,7 @@ export function MappingTab(props: {
   forceReadOnly?: boolean
   onOpenSource?: (programId: string) => void
 }) {
-  const { draft, document, saving, onSave, projectId, saveError, active = true, forceReadOnly = false, onOpenSource } = props
+  const { document, saving, projectId, saveError, active = true, forceReadOnly = false, onOpenSource } = props
   const { pick } = useI18n()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
@@ -37,6 +36,7 @@ export function MappingTab(props: {
   const [category, setCategory] = useState<PointCategoryFilter>('ALL')
   const [direction, setDirection] = useState<DirectionFilter>('ALL')
   const [dataType, setDataType] = useState('ALL')
+  const [pointKind, setPointKind] = useState<PointKindFilter>('ALL')
   const [selectedVariableId, setSelectedVariableId] = useState<string | null>(null)
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null)
 
@@ -87,7 +87,9 @@ export function MappingTab(props: {
   })
   const visiblePoints = pointRows.filter((row) => {
     const queryMatch = !normalized || `${row.name} ${row.category} ${row.deviceId ?? ''} ${row.pointId} ${row.dataType}`.toLocaleLowerCase().includes(normalized)
-    return queryMatch && (category === 'ALL' || row.category === category) && (dataType === 'ALL' || row.dataType === dataType)
+    const prefix = row.pointId.split('-', 1)[0].toUpperCase()
+    const kind = row.category === 'VP' ? 'VP' : row.category === 'MB_RTU' ? 'MB_RTU' : prefix
+    return queryMatch && (category === 'ALL' || row.category === category) && (pointKind === 'ALL' || kind === pointKind) && (dataType === 'ALL' || row.dataType === dataType)
   })
 
   const mapped = variableRows.filter((row) => row.bindingStatus === 'MAPPED').length
@@ -103,20 +105,17 @@ export function MappingTab(props: {
   return (
     <div className="space-y-3">
       <h3 className="sr-only">{pick('Ánh xạ Biến ↔ Điểm', 'Variable ↔ point mapping')}</h3>
-      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
-        <PublishedSignalsPanel draft={draft ?? document} saving={saving} onSave={onSave} forceReadOnly={forceReadOnly} />
-      </div>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border-l-4 border-l-[var(--c-accent)] bg-[var(--c-surface-2)] px-4 py-3">
       <div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--c-accent)]">PGM-03 · Mapping Workbench</p><p className="mt-1 text-sm font-semibold text-[var(--c-text)]">Variable ↔ Point authority view</p><p className="mt-1 text-xs text-[var(--c-text-dim)]">Phase 1A chỉ đọc · Map/Remove chờ capability, quality, replay và pagination gates.</p></div>
       <div className="text-right text-xs text-[var(--c-text-dim)]"><span className="block font-mono text-[var(--c-text)]">{document.library.profile} / {document.library.version}</span><span>{saving ? 'Workspace đang lưu ở tab khác' : canEdit ? 'Admin · mutation đang khóa' : 'Viewer · read-only'}</span></div>
     </div>
     {saveError && <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">{saveError}</p>}
     <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} />
-    <div className="grid items-start gap-3 2xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
+    <div className="grid items-stretch gap-3 2xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
       <VariableWorklist rows={visibleVariables} selectedId={selectedVariableId} onSelect={setSelectedVariableId} onOpenSource={(row) => openSource(row.programId)} mutationsBlocked={true} />
-      <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} category={category} onCategoryChange={setCategory} />
+      <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} pointKind={pointKind} onPointKindChange={setPointKind} />
     </div>
-    <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]"><AssignedMappingsTable rows={visibleVariables} onSelect={setSelectedVariableId} /><MappingInspector row={selectedVariable} /></div>
+    <div className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]"><AssignedMappingsTable rows={visibleVariables} onSelect={setSelectedVariableId} /><MappingInspector row={selectedVariable} /></div>
   </div>
   )
 }
