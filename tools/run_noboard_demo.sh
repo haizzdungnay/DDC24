@@ -17,6 +17,8 @@ BUILD="${MKDDC_CPP_BUILD_ROOT:-build/release/cpp}"
 # Web API trước đó báo "core unavailable" — trông như code hỏng. Đặt
 # MKDDC_DEMO_SUFFIX khác nhau cho mỗi checkout khi cần chạy song song.
 SOCK="/tmp/mkddc-core${MKDDC_DEMO_SUFFIX:-}.sock"
+PROGRAMMING_SOCK="/tmp/mkddc-programming-v1${MKDDC_DEMO_SUFFIX:-}.sock"
+PROGRAMMING_STATE="${MKDDC_PROGRAMMING_STATE_DIR:-/tmp/mkddc-local-ddc24/state/programming}"
 PTY_A="/tmp/mkddc-iop-a${MKDDC_DEMO_SUFFIX:-}"
 PTY_B="/tmp/mkddc-iop-b${MKDDC_DEMO_SUFFIX:-}"
 LOGDIR="$(pwd)/logs/demo"   # log trong codebase (logs/ gitignored) cho dễ đọc
@@ -35,7 +37,7 @@ cmd_stop() {
     pkill -f "$IOBUS --uart $PTY_A" 2>/dev/null
     pkill -f "$FAKE --uart $PTY_B" 2>/dev/null
     pkill -f "PTY.*link=$PTY_A" 2>/dev/null
-    rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm "$SOCK"
+    rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm "$SOCK" "$PROGRAMMING_SOCK"
     echo "đã dừng + dọn sạch"
 }
 
@@ -88,7 +90,9 @@ nohup "$IOBUS" --uart "$PTY_A" --config tools/demo/iobus_demo.conf --log-level d
 sleep 1.5
 
 echo "[4/4] mkddc-core scan 1s, IPC tại $SOCK"
-nohup "$CORE" --sock "$SOCK" > "$LOGDIR/core.log" 2>&1 &
+mkdir -p "$PROGRAMMING_STATE"
+nohup env PROGRAMMING_STATE_DIR="$PROGRAMMING_STATE" PROGRAMMING_TARGET_ID=controller-local \
+    "$CORE" --sock "$SOCK" --programming-sock "$PROGRAMMING_SOCK" --programming-runtime > "$LOGDIR/core.log" 2>&1 &
 sleep 1.5
 
 echo

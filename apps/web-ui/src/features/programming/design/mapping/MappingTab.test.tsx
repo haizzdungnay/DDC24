@@ -47,6 +47,7 @@ beforeEach(() => {
   catalog.items = [
     { category: 'LOCAL', pointId: 'UI-01', name: 'Supply Temp', dataType: 'REAL', unit: 'degC', direction: 'READ', writable: false, quality: 'GOOD', value: 21.4 },
     { category: 'LOCAL', pointId: 'DO-01', name: 'Supply Fan', dataType: 'BOOL', direction: 'WRITE', writable: true, quality: 'BAD', value: null },
+    { category: 'LOCAL', pointId: 'AO-01', name: 'Supply Valve', dataType: 'REAL', direction: 'WRITE', writable: true, quality: 'GOOD', value: 42.5 },
     { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD Enable', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true },
   ]
   localStorage.setItem('mkddc-lang', 'vi')
@@ -72,10 +73,31 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
     expect(screen.getAllByText('21.4').length).toBeGreaterThan(0)
   })
 
+  it('giới hạn danh sách biến bằng vùng cuộn nội bộ để pane không kéo dài vô hạn', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    const list = screen.getByTestId('mapping-variable-list')
+    expect(list).toHaveClass('h-[34rem]', 'overflow-y-scroll')
+    expect(list).not.toHaveClass('flex-1')
+  })
+
+  it('giới hạn Point pane ở khoảng 10 dòng và cho kéo xem phần còn lại', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    const list = screen.getByTestId('mapping-point-list')
+    expect(list).toHaveClass('h-[35rem]', 'overflow-y-scroll')
+    expect(list).not.toHaveClass('flex-1')
+  })
+
   it('hiện MB_RTU read-only là Core chưa hỗ trợ', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
     fireEvent.click(screen.getByRole('button', { name: 'AHU_Main · FanCmd · Chưa map' }))
     expect(screen.getByText('Core chưa hỗ trợ')).toBeVisible()
+  })
+
+  it('lọc Point ngay trong pane theo loại UI/AO/DO/VP', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: /^AO$/ }))
+    expect(screen.getByRole('button', { name: 'LOCAL Supply Valve' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'LOCAL Supply Temp' })).not.toBeInTheDocument()
   })
 
   it('viewer chỉ inspect và không có control Map', () => {
