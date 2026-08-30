@@ -47,6 +47,62 @@
   *Kiểm chứng*: `e2e/trends.spec.ts` xanh trở lại; thêm `Modal.test.tsx` (3 case,
   trước đây component này KHÔNG có test đơn vị nào). Đột biến bỏ điều kiện
   `tabindex` ⇒ 2/3 đỏ.
+### VP đọc ngược được, VP tự lành sau Core restart, và lý do Program hỏng đi tới API (2026-08-30)
+
+Ba mục còn nợ từ phiên 2026-08-28. Hai mục đầu xong; mục thứ ba lộ ra rằng chẩn
+đoán cũ của chính tôi sai, và **vì sao** nó sai.
+
+- **Fixed — đường đọc ngược Virtual Point không bao giờ chạy.**
+  `overlayVirtualPoints` bắt slot `AV/BV/MSV` của Core, nhưng phép bỏ qua
+  `Kind == "virtual"` đứng **trước** nhánh bắt slot — mà `pointKindFromID` trả
+  đúng `"virtual"` cho chính `AV`/`BV`/`MSV`. Bản đồ slot rỗng vĩnh viễn, mọi VP
+  do chương trình sở hữu đọc ra `quality = unknown`. Im lặng, vì kết quả đó
+  trông y hệt "Core chưa có giá trị" — nhánh fallback trung thực lại che mất
+  chính lỗi. Sửa: bắt slot trước, bỏ qua theo `Kind` sau. Test hồi quy **đã
+  được kiểm là bắt được lỗi**: hoàn nguyên thứ tự thì nó đỏ.
+
+- **Fixed — VP mất giá trị sau khi Core khởi động lại.** Đồng bộ chỉ chạy MỘT
+  LẦN lúc web-api khởi động; Core restart sau đó thì `av_[]`/`bv_[]` reset và
+  không gì đẩy lại, nên ST Program bind VP đọc 0/false im lặng. `plc_shm` không
+  có "boot id" để bắt riêng sự kiện restart, nên đây là vòng **đối chiếu**: so
+  Core với cấu hình mỗi 10 giây, chỉ ghi khi lệch — tự lành bất kể nguyên nhân.
+  Ba ranh giới: slot do **chương trình** sở hữu nằm ngoài phạm vi; `quality`
+  khác `good` cũng tính là lệch; so số thực có sai số `1e-4` vì float32 ở SHM
+  không tái lập đúng bit của float64 trong cấu hình.
+
+- **Changed — Point Catalog phân biệt hai trục của VP.** `writable` là "operator
+  sửa được từ dashboard không"; `source` là "ai sở hữu slot". VP do chương trình
+  sở hữu nay trả `READ_WRITE`; VP do web-api sở hữu vẫn `READ`, vì chương trình
+  ghi vào đó sẽ bị vòng đối chiếu kéo về giá trị cấu hình mỗi 10 giây — một cuộc
+  giằng co im lặng mà không bên nào thắng hẳn.
+
+- **Added — LÝ DO Program hỏng đi ra tới API.** `StScheduler` vốn đã ghi
+  `last_fault_code`/`last_fault_line` mỗi lần fault, nhưng chúng **chết ở đó**:
+  không vào snapshot, không ra IPC, không tới web-api. Hệ quả đo được trên bo:
+  một Program nằm `FAULTED` suốt **hai ngày** (28→30/08) mà không nơi nào nói vì
+  sao — chỉ thấy `coreState=FAULTED, lastExecNs=0`.
+
+  Chính vì thiếu dòng thông tin này mà phiên trước tôi quy sai nguyên nhân cho
+  `DO-03/04`; đó chỉ là trùng hợp. Nay lý do đi ra tới `GET /programs`. Snapshot
+  vốn đã là JSON nên thay đổi là **ADDITIVE**, không đụng layout SHM.
+
+  **Ba câu khác nhau, không được gộp:** khoá vắng mặt ⇒ `null` (Core đời cũ);
+  chuỗi rỗng ⇒ chưa từng fault; có mã ⇒ lý do thật. Bản nháp đầu dùng `string`
+  và sẽ báo "chưa từng hỏng" cho đúng một Program đang FAULTED trên Core chưa
+  nâng cấp — đã sửa sang con trỏ, có test cả hai chiều.
+
+- **Verification** (2026-08-30): `ctest --test-dir build/fw` **1338/1338 PASS**
+  (2 ca mới cho serializer); `go vet ./...` + `go test ./... -count=1` PASS —
+  cổng đồng bộ hợp đồng `TestProgramsPageOpenAPIMatchesGoResponse` bắt được
+  thiếu khai OpenAPI ngay lần chạy đầu, đúng việc nó sinh ra để làm; vitest hợp
+  đồng FE **28/28 PASS**; `verify_programming_g1_contracts.py` và
+  `verify_programming_pgm02_contract.py` PASS sau re-pin. OpenAPI 1.32.0 →
+  **1.33.0** (additive), sinh lại client TS.
+
+  Đã deploy web-api lên bo Foxlinx: API trả đủ ba trường fault, và với Core cũ
+  chúng ra `null` — đúng nghĩa "không đọc được", không phải "chưa từng fault".
+  **Chưa deploy Core**: sysroot cross-build aarch64 không còn trong phiên này.
+
 ### PGM-04 Control Library — đóng WP-03/WP-04, và bốn lỗi lộ ra khi dựng chúng (2026-08-29)
 
 Phạm vi: `PLAN-FE-PGM-061` WP-03 (`T61-301..307`) + WP-04 (`T61-401..406`) +
