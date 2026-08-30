@@ -47,6 +47,51 @@
   *Kiểm chứng*: `e2e/trends.spec.ts` xanh trở lại; thêm `Modal.test.tsx` (3 case,
   trước đây component này KHÔNG có test đơn vị nào). Đột biến bỏ điều kiện
   `tabindex` ⇒ 2/3 đỏ.
+### Deploy Core mang lý do Program hỏng ra tới API, và re-pin hai hồ sơ PGM-04 (2026-08-30)
+
+Đóng nốt phần **target** của PR #342 và trả `candidate_pin_check.py` về xanh.
+
+- **Deployed — `mkddc-core` aarch64 lên bo Foxlinx.** Cross-build với
+  `-static-libstdc++` ngay từ đầu thay vì chờ hỏng: bo chỉ có `GLIBCXX` tới
+  `3.4.30`, và `objdump -p` xác nhận `libstdc++` **không** còn trong `NEEDED`.
+  Bằng chứng quyết định là A/B trên chính hai binary nằm trên bo: bản sao lưu
+  (cũ) **không có** chuỗi `lastFaultCode`, bản mới **có**. Ba trạng thái phân
+  biệt quan sát được cùng lúc trong một phản hồi: `""` = Core biết và chưa từng
+  fault, `null` = Core không có mục. Đây chính là lý do ba trường phải là con trỏ.
+
+  Một bẫy im lặng tránh được: cây build có **hai** bản `mkddc-core`, bản trong
+  `pkg/` là của **23/08**. Deploy nhầm nó thì service vẫn `active`, API vẫn 200,
+  ba trường vẫn `null` — không có gì báo sai. Đã chọn theo tem thời gian và kiểm
+  chuỗi trong binary trước khi copy. `BUILD_EXIT` cũng đọc từ log chứ không lấy
+  exit code tiến trình nền, vốn là của `tail`.
+
+- **Quan sát phụ, có giá trị hơn cả phép thử chủ đích:** ngay sau restart, nhật
+  ký ghi `user=virtual-point-sync point=AV3 op=write value=12`. Vòng đối chiếu VP
+  10 giây tự phát hiện `av_[]` đã reset và ghi lại — **bằng chứng TARGET** cho
+  nhánh tự lành, thứ trước đây chỉ có test HOST, và nó chạy đúng vào tình huống
+  nó được viết ra để xử lý.
+
+- **Chưa đóng — mã fault THẬT chưa đi qua đường target.** Đã dựng POU lỗi chia-0
+  lúc chạy; Check PASSED, mô phỏng trả `SIM-E-004` (`kErrExecFault`) nên runtime
+  **có** bắt lỗi. Nhưng bước Commission — kích hoạt gói lỗi lên bộ điều khiển
+  đang chạy — **bị chặn, và tôi không lách**; đó là quyết định của chủ sở hữu.
+  Đường mô phỏng không ghi vào `programs[].lastFaultCode` nên không thay thế được.
+
+  Phát hiện phụ đáng ghi vào tài liệu ngôn ngữ: bản ST này **không nhận giá trị
+  khởi tạo trong `VAR`** (`Ticks : INT := 0;` → `ST-SYN-001`), khác IEC 61131-3 đầy đủ.
+
+- **Fixed — manifest baseline 1.62 → 1.63.** `b28e317` (PGM-04 WP-03/WP-04,
+  PR #338) sửa `PROGRAMMING_RISK_REGISTER.md` và `PROGRAMMING_TRACEABILITY_MATRIX.md`
+  nhưng **không phát hành manifest**, nên cổng ghim đỏ từ 29/08 và người đọc theo
+  ghim đang đọc revision cũ hơn cây. Đã **đọc trọn hai mục mới** rồi mới ghim —
+  ghim là chữ ký, không phải phép đồng bộ hash. Cả hai thay đổi là thuần bổ sung;
+  `RSK-PROG-005` giữ nguyên, hai rủi ro mới `RSK-PGM04-101/102` vẫn `OPEN`,
+  `VS-PROG-U03` vẫn `NOT_RUN`.
+
+- **Verification** (2026-08-30): cross-build configure/build exit **0/0**;
+  `docs_iso_harness.py` **PASS**; `candidate_pin_check.py` **PASS 17/17**
+  (trước đó 2 drift); trên bo `systemctl is-active` = `active`, `NRestarts` = **0**.
+
 ### VP đọc ngược được, VP tự lành sau Core restart, và lý do Program hỏng đi tới API (2026-08-30)
 
 Ba mục còn nợ từ phiên 2026-08-28. Hai mục đầu xong; mục thứ ba lộ ra rằng chẩn
