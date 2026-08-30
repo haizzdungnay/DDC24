@@ -84,6 +84,18 @@ struct RuntimeProgramSnapshot {
      * `last_run_mono_ns`. Hai thứ này rất dễ đọc nhầm nhau. */
     uint64_t last_exec_ns = 0;
     uint64_t max_exec_ns = 0;
+    /* LÝ DO fault gần nhất.
+     *
+     * `StScheduler` vốn đã ghi `last_fault_code`/`last_fault_line` vào chính
+     * Program, nhưng trước lát này chúng CHẾT Ở ĐÓ: không vào snapshot, không
+     * ra IPC, không tới API. Hệ quả thực tế đo được trên bo: một Program nằm
+     * `FAULTED` suốt hai ngày mà không nơi nào nói vì sao — người vận hành chỉ
+     * thấy `coreState=FAULTED, lastExecNs=0` và không có gì để lần theo.
+     *
+     * Mã rỗng nghĩa là "chưa từng fault", KHÁC HẲN "fault mà không rõ lý do". */
+    std::array<char, 24> last_fault_code{};
+    uint32_t last_fault_line = 0;
+    uint32_t fault_count = 0;
     /* Bộ đếm TÍCH LUỸ từ lúc release lần đầu. */
     uint32_t missed_release_count = 0;
     /* T60-002 — số chu kỳ lỡ LIÊN TIẾP tính tới lần release gần nhất, reset về 0

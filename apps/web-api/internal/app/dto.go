@@ -311,6 +311,15 @@ type RuntimeProgramSnapshot struct {
 	// được hiểu 0 là "chạy lúc mốc 0" — đó là dữ liệu bịa.
 	LastRunMonoNS uint64 `json:"lastRunMonoNs"`
 	Lane          int    `json:"lane"`
+	// LÝ DO fault gần nhất, do Core cung cấp.
+	//
+	// Chuỗi rỗng = chưa từng fault. Khoá VẮNG MẶT lại là câu khác: "Core đời cũ
+	// chưa biết trường này" — phía đọc phải ra UNAVAILABLE chứ không kết luận
+	// là Program khoẻ. Trước lát này Core ghi lý do rồi bỏ đó, nên một Program
+	// nằm FAULTED hai ngày mà không nơi nào nói vì sao.
+	LastFaultCode *string `json:"lastFaultCode"`
+	LastFaultLine *uint32 `json:"lastFaultLine"`
+	FaultCount    *uint32 `json:"faultCount"`
 }
 
 type RuntimePointSnapshot struct {

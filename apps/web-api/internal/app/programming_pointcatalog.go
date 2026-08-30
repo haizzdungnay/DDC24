@@ -78,6 +78,9 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 				PeriodMS: program.PeriodMS, LastExecNS: program.LastExecNS, MaxExecNS: program.MaxExecNS,
 				MissedReleaseCount:       program.MissedReleaseCount,
 				ConsecutiveMissedRelease: program.ConsecutiveMissedRelease,
+				LastFaultCode:            program.LastFaultCode,
+				LastFaultLine:            program.LastFaultLine,
+				FaultCount:               program.FaultCount,
 				LastRunMonoNS:            program.LastRunMonoNS, Lane: program.Lane,
 			})
 		}

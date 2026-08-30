@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -113,5 +114,35 @@ func TestPointCatalogDirectionSeparatesWritableFromOwnership(t *testing.T) {
 				t.Fatalf("mong (%s,%v), nhan (%s,%v)", tc.direction, tc.writable, dir, w)
 			}
 		})
+	}
+}
+
+// Core ĐỜI CŨ không gửi lý do fault ⇒ phải ra `nil`, KHÔNG ra chuỗi rỗng.
+//
+// Chuỗi rỗng có nghĩa riêng: "Core có gửi và Program chưa từng fault". Gộp hai
+// câu đó lại sẽ báo "chưa từng hỏng" cho đúng một Program đang FAULTED trên một
+// Core chưa nâng cấp — tức che mất thông tin duy nhất người vận hành cần.
+func TestProgramMetricsFaultReasonAbsentStaysNil(t *testing.T) {
+	var row RuntimeProgramSnapshot
+	// Phản hồi của Core cũ: KHÔNG có ba khoá fault.
+	body := `{"instanceId":"P_ahu","state":"FAULTED","enabled":true,"periodMs":1000,
+	          "lastExecNs":0,"maxExecNs":0,"missedReleaseCount":0,
+	          "consecutiveMissedRelease":0,"lastRunMonoNs":0,"lane":0}`
+	if err := json.Unmarshal([]byte(body), &row); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if row.LastFaultCode != nil || row.LastFaultLine != nil || row.FaultCount != nil {
+		t.Fatalf("Core cu khong gui => phai nil, nhan %v/%v/%v",
+			row.LastFaultCode, row.LastFaultLine, row.FaultCount)
+	}
+
+	// Core MỚI, Program khoẻ: khoá CÓ mặt, giá trị rỗng — một câu khác hẳn.
+	body = `{"instanceId":"P_ahu","state":"RUNNING","lastFaultCode":"","lastFaultLine":0,"faultCount":0}`
+	row = RuntimeProgramSnapshot{}
+	if err := json.Unmarshal([]byte(body), &row); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if row.LastFaultCode == nil || *row.LastFaultCode != "" {
+		t.Fatalf("Core moi gui rong => phai la con tro toi \"\", nhan %v", row.LastFaultCode)
 	}
 }

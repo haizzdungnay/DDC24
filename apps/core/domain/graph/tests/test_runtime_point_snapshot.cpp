@@ -840,3 +840,51 @@ TEST(RuntimePointSnapshot, OversizedProgramTableFailsClosedWithoutTruncatedJson)
     EXPECT_EQ(web.snapshot_for_test().snapshot_id, 0u);
     EXPECT_EQ(web.snapshot_for_test().program_count, 0u);
 }
+
+/* Lý do fault phải ĐI RA cùng trạng thái.
+ *
+ * `StScheduler` vốn đã ghi `last_fault_code`/`last_fault_line` vào Program,
+ * nhưng chúng từng CHẾT Ở ĐÓ: không vào snapshot, không ra IPC, không tới API.
+ * Hệ quả đo được trên bo Foxlinx: một Program nằm `FAULTED` suốt hai ngày mà
+ * không nơi nào nói vì sao — người vận hành chỉ thấy `coreState=FAULTED,
+ * lastExecNs=0` và không có gì để lần theo.
+ *
+ * Báo một trạng thái hỏng mà không kèm lý do là buộc người đọc đoán, và ở một
+ * thiết bị điều khiển thì đoán sai có giá.
+ */
+TEST(RuntimePointSnapshotSerialize, ProgramCarriesFaultReasonToWire)
+{
+    RuntimePointSnapshot snapshot{};
+    snapshot.programs[0] = make_program_row("P_ahu", "FAULTED", true, 1000,
+                                            0u, 0u, 0u, 0u, 0ull, 0u);
+    const char kFaultCode[] = "ST-RT-BINDING";
+    std::memcpy(snapshot.programs[0].last_fault_code.data(), kFaultCode, sizeof(kFaultCode));
+    snapshot.programs[0].last_fault_line = 145;
+    snapshot.programs[0].fault_count = 3;
+    snapshot.program_count = 1;
+
+    const auto json = nlohmann::json::parse(serialize_runtime_point_snapshot(snapshot));
+    const auto& row = json.at("programs").at(0);
+    EXPECT_EQ(row.at("lastFaultCode"), "ST-RT-BINDING");
+    EXPECT_EQ(row.at("lastFaultLine").get<uint32_t>(), 145u);
+    EXPECT_EQ(row.at("faultCount").get<uint32_t>(), 3u);
+}
+
+/* Chưa từng fault ⇒ mã RỖNG, không phải một mã bịa.
+ *
+ * Khoá vẫn phải có mặt: thiếu khoá nghĩa là "Core đời cũ chưa biết trường này",
+ * một câu khác hẳn "Program này chưa từng hỏng". */
+TEST(RuntimePointSnapshotSerialize, HealthyProgramReportsEmptyFaultCode)
+{
+    RuntimePointSnapshot snapshot{};
+    snapshot.programs[0] = make_program_row("P_ahu", "RUNNING", true, 1000,
+                                            5600000u, 9100000u, 0u, 0u, 42ull, 0u);
+    snapshot.program_count = 1;
+
+    const auto json = nlohmann::json::parse(serialize_runtime_point_snapshot(snapshot));
+    const auto& row = json.at("programs").at(0);
+    ASSERT_TRUE(row.contains("lastFaultCode"));
+    EXPECT_EQ(row.at("lastFaultCode"), "");
+    EXPECT_EQ(row.at("lastFaultLine").get<uint32_t>(), 0u);
+    EXPECT_EQ(row.at("faultCount").get<uint32_t>(), 0u);
+}
