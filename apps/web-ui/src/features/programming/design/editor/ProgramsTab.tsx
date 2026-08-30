@@ -1179,9 +1179,9 @@ export function SourceEditor({
    *
    * Bộ test cũ không bắt được vì nó gõ ở dòng 1, nơi độ cuộn luôn bằng 0. */
   const [editorScroll, setEditorScroll] = useState({ top: 0, left: 0 })
-  /* `T59-821` — Code Map bật/tắt được. Nó CHỈ hiện khi tài liệu vượt ngưỡng
-   * (`CODE_MAP_MIN_LINES`); dưới ngưỡng cả tài liệu đã nằm trong một màn hình
-   * và một bản đồ của thứ đang thấy hết là chiếm chỗ vô ích. */
+  /* `T59-821` — Code Map bật/tắt được, và từ 2026-08-30 hiện với MỌI độ dài.
+   * Ngưỡng 80 dòng cũ ẩn nó im lặng: một POU ngắn nhìn từ ngoài không phân biệt
+   * được với tính năng hỏng. Cổng còn lại chỉ là "có mục để chỉ tới không". */
 
   /* Phát ra ngoài khi ký hiệu đổi. `useEffect` chứ không gọi trong render: gọi
    * trong render sẽ set state của cha giữa lúc con đang render. */
@@ -2340,12 +2340,15 @@ export function SourceEditor({
         )}
       </div>
       {/* Dải bản đồ mã: cao BẰNG khung mã (`h-full` trong hàng flex), cuộn
-          riêng, và chỉ hiện từ `lg` trở lên — dưới ngưỡng đó chiều ngang không
-          đủ cho hai cột và ép nó vào sẽ bóp chỗ gõ xuống còn vài chục ký tự. */}
-      {/* Dải chỉ hiện từ `2xl` (≥1536 px). Đo thật ở 1280 px: cột giữa chỉ
+          riêng, và chỉ hiện từ `2xl` (≥1536 px) — KHÔNG phải `lg`, một chú
+          thích cũ ở đây từng ghi sai như vậy. Đo thật ở 1280 px: cột giữa chỉ
           rộng ~660 px, và một dải 192 px lấy mất gần một phần ba — chỗ gõ tụt
           xuống 340 px, khoảng 38 ký tự mỗi dòng. Một bản đồ mã không đáng giá
           bằng chính chỗ viết mã.
+
+          Ngưỡng ĐỘ DÀI thì đã bỏ (2026-08-30): bản đồ hiện với mọi POU. Chỉ
+          ngưỡng BỀ NGANG này còn lại, và nó là ràng buộc vật lý chứ không phải
+          một phán đoán về việc người dùng có cần bản đồ hay không.
 
           Điều kiện `shouldShowCodeMap` phải hỏi Ở ĐÂY, không để bên trong
           component tự trả `null`: bản trước bọc `StCodeMap` trong một khung

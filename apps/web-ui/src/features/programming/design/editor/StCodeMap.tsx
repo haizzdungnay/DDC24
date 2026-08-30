@@ -3,11 +3,14 @@ import { useI18n } from '../../../../shared/i18n'
 /**
  * `T59-821` / `TC-PGM02-NAV-01` — Code Map cho ST.
  *
- * `AC-FBD-012` nói minimap xuất hiện với sơ đồ **vượt một ngưỡng cấu hình**.
- * Ngưỡng đó chưa từng tồn tại ở đâu trong repo (`grep -i minimap` trên `src`
- * trả 0 kết quả tại 2026-08-27), nên nó được định nghĩa **một lần** ở đây và
- * dùng chung — thay vì mỗi bên tự chọn một con số rồi hai bề mặt cùng tên lại
- * xuất hiện ở hai kích thước khác nhau.
+ * Không có ngưỡng độ dài. Bản trước ẩn bản đồ dưới 80 dòng với lý do "cả tài
+ * liệu đã nằm trong một màn hình" — nhưng nó ẩn **im lặng**: không dòng nào nói
+ * vì sao, nên một POU ngắn nhìn từ ngoài giống hệt một tính năng hỏng. Chủ sở
+ * hữu chốt 2026-08-30 là luôn hiện, ngắn hay dài.
+ *
+ * `AC-FBD-012` ("minimap cho sơ đồ vượt ngưỡng cấu hình") KHÔNG ràng buộc chỗ
+ * này: nó nói về minimap của FBD và được truy vết tới `FbdCanvas.test.tsx`,
+ * vốn có ngưỡng riêng `FBD_MINIMAP_NODE_THRESHOLD`. ST chỉ từng mượn con số đó.
  *
  * Luật số một, và nó là lý do tồn tại của `TC-PGM02-NAV-01`: **điều hướng không
  * được đổi một byte nào của tài liệu.** Code Map chỉ phát ra một offset để
@@ -16,8 +19,6 @@ import { useI18n } from '../../../../shared/i18n'
  * dạng props chứ không bằng lời hứa trong chú thích.
  */
 
-/** Số dòng tối thiểu để bản đồ có ích. Dưới ngưỡng, cả tài liệu đã nằm trong một màn hình. */
-export const CODE_MAP_MIN_LINES = 80
 
 export interface CodeMapEntry {
   /** Offset ký tự để cuộn tới. */
@@ -57,8 +58,15 @@ export function stCodeMapEntries(source: string): CodeMapEntry[] {
   return entries
 }
 
+/**
+ * Cổng DUY NHẤT còn lại: có mục nào để chỉ tới không.
+ *
+ * Người gọi phải hỏi hàm này TRƯỚC khi dựng khung chứa. Để component tự trả
+ * `null` là chưa đủ — khung `w-44` vẫn tồn tại và vẫn ăn mất bề ngang của chính
+ * chỗ gõ, đúng lỗi đã sửa một lần ở `ProgramsTab`.
+ */
 export function shouldShowCodeMap(source: string): boolean {
-  return source.split('\n').length >= CODE_MAP_MIN_LINES
+  return stCodeMapEntries(source).length > 0
 }
 
 export function StCodeMap({
@@ -71,7 +79,7 @@ export function StCodeMap({
 }) {
   const { pick } = useI18n()
   const entries = stCodeMapEntries(source)
-  if (!shouldShowCodeMap(source) || entries.length === 0) return null
+  if (entries.length === 0) return null
 
   return (
     <nav
