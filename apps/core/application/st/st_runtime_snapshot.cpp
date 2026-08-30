@@ -112,6 +112,12 @@ void st_populate_runtime_snapshot(const StScheduler* scheduler, bool program_own
             target.period_ms = program->period_ms != 0
                                    ? program->period_ms
                                    : scheduler_task->config().period_ms;
+            /* `last_fault_code` là con trỏ tới hằng chuỗi tĩnh của
+             * `st_diag_code`; nullptr = chưa từng fault. */
+            if (program->last_fault_code != nullptr)
+                copy_bounded(&target.last_fault_code, program->last_fault_code);
+            target.last_fault_line = static_cast<uint32_t>(program->last_fault_line);
+            target.fault_count = program->fault_count;
             target.last_exec_ns = program->last_exec_ns;
             target.max_exec_ns = program->max_exec_ns;
             target.missed_release_count = program->missed_release_count;

@@ -78,6 +78,9 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 				PeriodMS: program.PeriodMS, LastExecNS: program.LastExecNS, MaxExecNS: program.MaxExecNS,
 				MissedReleaseCount:       program.MissedReleaseCount,
 				ConsecutiveMissedRelease: program.ConsecutiveMissedRelease,
+				LastFaultCode:            program.LastFaultCode,
+				LastFaultLine:            program.LastFaultLine,
+				FaultCount:               program.FaultCount,
 				LastRunMonoNS:            program.LastRunMonoNS, Lane: program.Lane,
 			})
 		}
@@ -253,12 +256,23 @@ func pointCatalogDirection(point PointDTO) (direction string, writable bool) {
 	case "AO", "DO":
 		return "READ_WRITE", true
 	case "virtual":
-		// `Writable` ở đây là "operator có sửa được giá trị VP từ dashboard
-		// không" — một trục hoàn toàn khác với "ST Program bind VAR_OUTPUT
-		// ghi được VP không". Trục sau CHƯA có (resolve_io_bindings() chặn
-		// tường minh mọi VAR_OUTPUT category VP, F-PROG-ASBUILT-016) nên
-		// Point Catalog phải báo READ bất kể `Writable`, tránh Design/Mapping
-		// tab cho chọn một hướng binding sẽ luôn fail Check.
+		/* Hai trục KHÁC NHAU, và trước đây chúng bị gộp làm một:
+		 *
+		 *   `Writable`  — operator có sửa giá trị VP từ dashboard không;
+		 *   `source`    — AI sở hữu slot: web-api (`WEB`) hay ST Program.
+		 *
+		 * `F-PROG-ASBUILT-016` gỡ chặn chiều ghi, nên trục thứ hai nay tồn tại.
+		 * VP do CHƯƠNG TRÌNH sở hữu là đích ghi hợp lệ của `VAR_OUTPUT`; VP do
+		 * web-api sở hữu thì KHÔNG — chương trình ghi vào đó sẽ bị vòng đối
+		 * chiếu kéo về giá trị cấu hình mỗi 10 giây, một cuộc giằng co im lặng
+		 * mà không bên nào thắng hẳn.
+		 *
+		 * Báo READ cho VP do web-api sở hữu vì thế KHÔNG phải sự thận trọng
+		 * thừa: nó ngăn tab Ánh xạ mời người dùng chọn một hướng binding sẽ
+		 * hỏng lúc chạy chứ không hỏng lúc Check. */
+		if strings.EqualFold(point.VirtualSource, virtualPointSourceProgram) {
+			return "READ_WRITE", true
+		}
 		return "READ", false
 	case "modbus_rtu":
 		if point.Writable {

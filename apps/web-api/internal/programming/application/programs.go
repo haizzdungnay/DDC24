@@ -102,6 +102,15 @@ type ProgramListItemView struct {
 	// `capturedMonotonicNs - lastRunMonoNs` TRONG CÙNG snapshot.
 	LastRunAgeMS *int64 `json:"lastRunAgeMs"`
 	Lane         *int   `json:"lane"`
+	// LastFaultCode/Line — LÝ DO Program hỏng, do Core cung cấp.
+	//
+	// `null` = Core không cấp được (đời cũ hoặc chưa đọc được snapshot), KHÁC
+	// HẲN chuỗi rỗng nghĩa là "chưa từng fault". Báo `FAULTED` mà không kèm lý
+	// do là buộc người vận hành đoán: đo được trên bo, một Program nằm FAULTED
+	// suốt hai ngày và không nơi nào nói vì sao.
+	LastFaultCode *string `json:"lastFaultCode"`
+	LastFaultLine *uint32 `json:"lastFaultLine"`
+	FaultCount    *uint32 `json:"faultCount"`
 
 	// Health do SERVER tính (D-04), nullable. `null` là câu trả lời hợp lệ và có
 	// nghĩa: Program không đang chạy thì "sức khoẻ" không có nội dung gì, FE
@@ -241,6 +250,12 @@ func applyProgramReadBack(item *ProgramListItemView, metrics ProgramMetricsView,
 	item.MissedReleaseCount = &missed
 	item.ConsecutiveMissedRelease = &consecutive
 	item.Lane = &lane
+	// Chuyển tiếp NGUYÊN VẸN con trỏ: `nil` phải đi tới tận FE để nó hiện
+	// "không đọc được", chứ không được hoá thành chuỗi rỗng nghĩa là "chưa
+	// từng fault".
+	item.LastFaultCode = metrics.LastFaultCode
+	item.LastFaultLine = metrics.LastFaultLine
+	item.FaultCount = metrics.FaultCount
 
 	// Mốc lần chạy gần nhất. `lastRunMonoNs == 0` = chưa chạy lần nào kể từ lần
 	// activate gần nhất ⇒ `null`, không phải "chạy lúc mốc 0". Mốc lớn hơn mốc

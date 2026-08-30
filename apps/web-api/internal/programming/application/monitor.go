@@ -61,6 +61,15 @@ type ProgramMetricsView struct {
 	// LastRunMonoNS: 0 = chưa chạy lần nào kể từ lần activate gần nhất.
 	LastRunMonoNS uint64
 	Lane          int
+	// LÝ DO fault gần nhất do Core cấp.
+	//
+	// `nil` = Core KHÔNG gửi trường này (bản Core cũ hơn lát
+	// `F-PROG-ASBUILT-FAULT-REASON`); chuỗi rỗng = Core có gửi và Program chưa
+	// từng fault. Gộp hai câu đó lại sẽ báo "chưa từng hỏng" cho đúng một
+	// Program đang FAULTED trên một Core chưa nâng cấp.
+	LastFaultCode *string
+	LastFaultLine *uint32
+	FaultCount    *uint32
 }
 
 type MonitorPointTruth struct {
@@ -258,7 +267,7 @@ func (s *RuntimeService) GetMonitor(ctx context.Context) (MonitorPageView, error
 		// dữ liệu, nên nó phải sống sót qua mọi lần chuyển tiếp/cache.
 		Producer:  ProducerStampView{CapturedMonotonicNs: strconv.FormatUint(truth.CapturedMonotonicNs, 10)},
 		SafeState: truth.SafeState, Task: truth.Task,
-		Items:     make([]MonitorSampleView, 0, len(bindings)),
+		Items: make([]MonitorSampleView, 0, len(bindings)),
 	}
 	for _, binding := range bindings {
 		variable, ok := variables[binding.VariableID]

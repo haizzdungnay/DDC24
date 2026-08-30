@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.32.0"
+  version: "1.33.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -4232,7 +4232,8 @@ components:
         [programId, desiredEnabled, generation, updatedBy, updatedAtUtcMs,
          runtimeState, runtimeStateSource, coreState, enabled, observedAt,
          periodMs, lastExecNs, maxExecNs, missedReleaseCount,
-         consecutiveMissedRelease, lastRunAtUtc, lastRunAgeMs, lane, health]
+         consecutiveMissedRelease, lastRunAtUtc, lastRunAgeMs, lane,
+         lastFaultCode, lastFaultLine, faultCount, health]
       properties:
         programId: { type: string, minLength: 1, maxLength: 64 }
         # --- Ý định bền vững (`program_runtime_intents`) ---
@@ -4273,6 +4274,17 @@ components:
         lastRunAtUtc: { type: [string, "null"], format: date-time }
         lastRunAgeMs: { type: [integer, "null"], minimum: 0 }
         lane: { type: [integer, "null"], minimum: 0 }
+        # --- LÝ DO Program hỏng, do Core cấp ---
+        # Core vốn đã ghi `last_fault_code`/`last_fault_line` vào Program nhưng
+        # chúng chết ở đó: không vào snapshot, không ra IPC, không tới API. Đo
+        # được trên bo: một Program nằm `FAULTED` suốt hai ngày mà không nơi nào
+        # nói vì sao, người vận hành chỉ thấy `coreState=FAULTED, lastExecNs=0`.
+        #
+        # Chuỗi RỖNG = chưa từng fault; `null` = Core không cấp được. Hai câu đó
+        # khác nhau và client không được gộp.
+        lastFaultCode: { type: [string, "null"], maxLength: 32 }
+        lastFaultLine: { type: [integer, "null"], minimum: 0 }
+        faultCount: { type: [integer, "null"], minimum: 0 }
         health:
           oneOf:
             - { $ref: "#/components/schemas/ProgrammingProgramHealth" }

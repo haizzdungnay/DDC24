@@ -114,11 +114,19 @@ func (a *App) overlayVirtualPoints(points []PointDTO) []PointDTO {
 	// CHƯƠNG TRÌNH sở hữu thì giá trị thật nằm ở đây chứ không ở cấu hình.
 	coreSlots := make(map[string]PointDTO, len(points))
 	for _, p := range points {
-		if p.Kind == "virtual" {
-			continue
-		}
+		/* Bắt slot TRƯỚC khi bỏ qua theo `Kind`, không phải sau.
+		 *
+		 * `pointKindFromID` trả `"virtual"` cho mọi ID không phải UI/AO/DO —
+		 * tức cho CHÍNH các slot `AV`/`BV`/`MSV` cần bắt ở đây. Đặt phép bỏ qua
+		 * `Kind == "virtual"` lên trước thì nhánh dưới không bao giờ chạy,
+		 * `coreSlots` rỗng vĩnh viễn, và mọi VP do chương trình sở hữu đọc ra
+		 * `quality = unknown` — im lặng, vì fallback đó trông y hệt "Core chưa
+		 * có giá trị". */
 		if prefix, _, ok := parsePointID(p.ID); ok && (prefix == "AV" || prefix == "BV" || prefix == "MSV") {
 			coreSlots[canonicalBoundPointID(p.ID)] = p
+			continue
+		}
+		if p.Kind == "virtual" {
 			continue
 		}
 		out = append(out, p)

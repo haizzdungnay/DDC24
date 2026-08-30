@@ -256,6 +256,13 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append(",\"periodMs\":"); writer.append_uint(program.period_ms);
         writer.append(",\"lastExecNs\":"); writer.append_uint(program.last_exec_ns);
         writer.append(",\"maxExecNs\":"); writer.append_uint(program.max_exec_ns);
+        /* Lý do fault đi RA NGOÀI cùng trạng thái. Báo `FAULTED` mà không kèm
+         * lý do là buộc người vận hành đoán, và trên bo điều đó đã thành hai
+         * ngày một Program đứng im không ai biết vì sao. */
+        writer.append(",\"faultCount\":"); writer.append_uint(program.fault_count);
+        writer.append(",\"lastFaultCode\":\"");
+        writer.append_escaped(program.last_fault_code.data(), fixed_length(program.last_fault_code));
+        writer.append("\",\"lastFaultLine\":"); writer.append_uint(program.last_fault_line);
         writer.append(",\"missedReleaseCount\":");
         writer.append_uint(program.missed_release_count);
         writer.append(",\"consecutiveMissedRelease\":");

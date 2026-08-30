@@ -512,6 +512,11 @@ func (a *App) StartSampler(ctx context.Context) {
 				a.runHistorianShadowScheduler(historianCtx)
 			}()
 		}
+		/* `F-PROG-ASBUILT-014` (phần READ) — đẩy VP xuống Core một lần lúc
+		 * khởi động là CHƯA ĐỦ: nếu Core khởi động lại sau đó, av_[]/bv_[]
+		 * reset và không gì đẩy lại, nên ST Program bind VP đọc 0/false im
+		 * lặng. Vòng đối chiếu giữ hai bên khớp nhau liên tục. */
+		go a.runVirtualPointReconciler(ctx, virtualPointReconcileInterval)
 		a.StartAlarmHistory(ctx)
 		// `ADR-036` điều kiện tiên quyết: `alarm_history.jsonl` trước đây không
 		// có xoay vòng và không có retention. Bật cắt định kỳ TRƯỚC khi mở màn

@@ -311,6 +311,15 @@ type RuntimeProgramSnapshot struct {
 	// được hiểu 0 là "chạy lúc mốc 0" — đó là dữ liệu bịa.
 	LastRunMonoNS uint64 `json:"lastRunMonoNs"`
 	Lane          int    `json:"lane"`
+	// LÝ DO fault gần nhất, do Core cung cấp.
+	//
+	// Chuỗi rỗng = chưa từng fault. Khoá VẮNG MẶT lại là câu khác: "Core đời cũ
+	// chưa biết trường này" — phía đọc phải ra UNAVAILABLE chứ không kết luận
+	// là Program khoẻ. Trước lát này Core ghi lý do rồi bỏ đó, nên một Program
+	// nằm FAULTED hai ngày mà không nơi nào nói vì sao.
+	LastFaultCode *string `json:"lastFaultCode"`
+	LastFaultLine *uint32 `json:"lastFaultLine"`
+	FaultCount    *uint32 `json:"faultCount"`
 }
 
 type RuntimePointSnapshot struct {
@@ -418,12 +427,16 @@ type PointDTO struct {
 	Priority           string   `json:"priority,omitempty"`
 	OverrideExpiresInS *uint32  `json:"overrideExpiresInS,omitempty"`
 	UpdatedAt          string   `json:"updatedAt"`
-	Fault              bool     `json:"fault,omitempty"`
-	Forced             bool     `json:"forced,omitempty"`
-	SignalType         string   `json:"signalType,omitempty"`
-	Writable           bool     `json:"writable,omitempty"`
-	LogEnabled         bool     `json:"logEnabled,omitempty"`
-	LogIntervalMs      *int     `json:"logIntervalMs,omitempty"`
+	// VirtualSource — với point ảo, AI sở hữu slot (`WEB` mặc định vs
+	// `PROGRAM`). Point Catalog cần nó để trả đúng hướng binding: chỉ VP do
+	// chương trình sở hữu mới là đích ghi hợp lệ của `VAR_OUTPUT`.
+	VirtualSource string `json:"virtualSource,omitempty"`
+	Fault         bool   `json:"fault,omitempty"`
+	Forced        bool   `json:"forced,omitempty"`
+	SignalType    string `json:"signalType,omitempty"`
+	Writable      bool   `json:"writable,omitempty"`
+	LogEnabled    bool   `json:"logEnabled,omitempty"`
+	LogIntervalMs *int   `json:"logIntervalMs,omitempty"`
 	// BoundPointID — chỉ đặt cho Kind=="virtual" khi VP đã bind vào slot Core
 	// AV/BV thật (F-PROG-ASBUILT-014); Programming Point Catalog dùng field
 	// này thay cho ID thân thiện ("VP1") khi build binding cho ST Program.
