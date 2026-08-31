@@ -786,3 +786,79 @@ TEST(StCompileCli, SignedCompatibilityPathUsesPublicHalfOfProvidedKey)
     EXPECT_TRUE(result.at("manifest").at("artifact").at("signaturePresent"));
     EXPECT_EQ(result.at("integrityMode"), "SIGNED");
 }
+
+/* ---- ISS-STED-02: chính sách profile và bất biến "luôn có một ERROR" -------- */
+
+namespace {
+
+/* Nguồn hợp lệ nhưng khai thừa một biến ⇒ đúng một `ST-WARN-002`. */
+std::string warning_only_source_path()
+{
+    static const std::string path = [] {
+        const std::string file = temporary_path("/tmp/mkddc-cli-warnonly-XXXXXX");
+        write_text(file,
+                   "PROGRAM WarnOnly\n"
+                   "VAR used : INT; unused : INT; END_VAR\n"
+                   "  used := 1;\n"
+                   "END_PROGRAM\n");
+        return file;
+    }();
+    return path;
+}
+
+} // namespace
+
+TEST(StCompileCli, WarningOnlyProgramStillPassesAndShipsArtifact)
+{
+    const CliRun run = run_cli_signed(
+        {"--source", warning_only_source_path(), "--source-id", "cli-warn-only"});
+    ASSERT_EQ(run.exit_code, 0) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_TRUE(result.at("ok")) << "một biến khai thừa không được chặn phát hành";
+    EXPECT_FALSE(result.at("artifactSha256").is_null()) << "artifact phải vẫn sinh";
+    ASSERT_EQ(result.at("diagnostics").size(), 1U);
+    EXPECT_EQ(result.at("diagnostics")[0].at("severity"), "warning");
+    EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-WARN-002");
+}
+
+TEST(StCompileCli, TargetProfilePolicyCanPromoteWarningsToErrors)
+{
+    /* Cùng nguồn, chỉ thêm cờ chính sách. `ISS-STED-02` đòi chính sách này vẫn
+     * khả thi sau khi kênh WARNING sống — nếu không, một profile khắt khe
+     * không còn cách nào chặn phát hành khi có cảnh báo. */
+    const CliRun run = run_cli_signed(
+        {"--source", warning_only_source_path(), "--source-id", "cli-warn-strict",
+         "--warnings-as-errors"});
+    EXPECT_NE(run.exit_code, 0) << run.stdout_text;
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    EXPECT_FALSE(result.at("ok"));
+    EXPECT_TRUE(result.at("artifactSha256").is_null()) << "profile chặn mà artifact vẫn ra";
+    /* Mã giữ nguyên, chỉ severity đổi: hai profile phải nói cùng một ngôn ngữ
+     * về cùng một phát hiện. */
+    ASSERT_GE(result.at("diagnostics").size(), 1U);
+    EXPECT_EQ(result.at("diagnostics")[0].at("code"), "ST-WARN-002");
+    EXPECT_EQ(result.at("diagnostics")[0].at("severity"), "error");
+}
+
+TEST(StCompileCli, FailureAlwaysCarriesAtLeastOneErrorDiagnostic)
+{
+    /* Một lần Check hỏng vì lý do NGOÀI compiler (ở đây: khoá ký sai) trên một
+     * nguồn CHỈ CÓ WARNING. Túi diagnostic khi đó không rỗng nhưng cũng không
+     * có lỗi nào; nếu `fail()` chỉ phát túi thì kết quả là `ok:false` kèm toàn
+     * dòng vàng vô can, còn nguyên nhân thật biến mất. */
+    const std::string bad_key = temporary_path("/tmp/mkddc-cli-badkey-XXXXXX");
+    ASSERT_TRUE(write_text(bad_key, "khong-phai-hex"));
+    const CliRun run = run_cli(
+        {"--source", warning_only_source_path(), "--source-id", "cli-warn-failkey",
+         "--key", bad_key});
+    ::unlink(bad_key.c_str());
+
+    EXPECT_NE(run.exit_code, 0);
+    const nlohmann::json result = nlohmann::json::parse(run.stdout_text);
+    ASSERT_FALSE(result.at("ok"));
+    bool has_error = false;
+    for (const nlohmann::json& diagnostic : result.at("diagnostics"))
+        if (diagnostic.at("severity") == "error") has_error = true;
+    EXPECT_TRUE(has_error)
+        << "Check thất bại mà không một diagnostic ERROR nào: " << run.stdout_text;
+}

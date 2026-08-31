@@ -104,6 +104,19 @@ export function ProblemsDrawer({
         {diagnostics.map((diagnostic, index) => {
           const Icon = diagnostic.severity === 'ERROR' ? AlertCircle : diagnostic.severity === 'WARNING' ? AlertTriangle : Info
           const iconClass = diagnostic.severity === 'ERROR' ? 'text-[var(--c-fault-fg)]' : diagnostic.severity === 'WARNING' ? 'text-[var(--c-warn-fg)]' : 'text-[var(--c-info)]'
+          /* ISS-STED-02 — severity phải tới cả người KHÔNG nhìn thấy màu.
+           *
+           * Icon mang `aria-hidden`, nên severity chỉ tồn tại dưới dạng hình
+           * dạng + màu. Điều đó vô hại khi mọi diagnostic đều là ERROR — không
+           * có gì để phân biệt. Từ lúc kênh WARNING mang dữ liệu thật, "lỗi" và
+           * "cảnh báo" là hai hành động khác nhau của người dùng: một cái chặn
+           * phát hành, một cái không. Sự khác biệt ấy không được phép chỉ nằm
+           * ở màu. */
+          const severityLabel = diagnostic.severity === 'ERROR'
+            ? pick('Lỗi', 'Error')
+            : diagnostic.severity === 'WARNING'
+              ? pick('Cảnh báo', 'Warning')
+              : pick('Thông tin', 'Info')
           const location = diagnostic.location
           const locationText = location
             ? [
@@ -124,6 +137,7 @@ export function ProblemsDrawer({
               >
                 <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
                 <span>
+                  <span className="sr-only">{severityLabel}: </span>
                   <span className="block font-mono text-xs text-[var(--c-text-dim)]">{codeText}{locationText ? ` · ${locationText}` : ''}</span>
                   <span className="block text-[var(--c-text)]">{messageText}</span>
                 </span>

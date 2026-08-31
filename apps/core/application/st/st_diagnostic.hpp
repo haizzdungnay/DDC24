@@ -238,6 +238,28 @@ public:
 
     void clear() { items_.clear(); dropped_ = 0; truncated_ = false; }
 
+    /* Nâng mọi WARNING thành ERROR — chính sách của target profile khắt khe
+     * (`StCompileOptions::warnings_as_errors`).
+     *
+     * Áp ở TÚI chứ không ở chỗ phát: nơi phát biết *đây là chuyện đáng ngờ*,
+     * còn *đáng ngờ có chặn phát hành không* là câu hỏi của profile. Trộn hai
+     * việc lại thì mỗi lần đổi chính sách phải sửa mọi điểm phát.
+     *
+     * Mã KHÔNG đổi khi nâng cấp: `ST-WARN-002` vẫn là `ST-WARN-002`. Đổi cả mã
+     * sẽ làm hai profile nói hai ngôn ngữ khác nhau về cùng một phát hiện. */
+    void promote_warnings_to_errors()
+    {
+        for (StDiagnostic& item : items_)
+            if (item.severity == StSeverity::WARNING) item.severity = StSeverity::ERROR;
+    }
+
+    bool has_warning() const
+    {
+        for (const StDiagnostic& item : items_)
+            if (item.severity == StSeverity::WARNING) return true;
+        return false;
+    }
+
     bool truncated() const { return truncated_; }
 
     /* Sort ổn định + áp trần + gắn `ST-LIM-006`. Gọi được nhiều lần: lần thứ

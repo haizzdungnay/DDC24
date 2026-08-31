@@ -163,6 +163,19 @@ func (b *HMIBroker) Serve(ctx context.Context) error {
 		return fmt.Errorf("chmod hmi socket: %w", err)
 	}
 	b.logger.Printf("INFO hmi_ipc_listen path=%s protocol=%d", b.cfg.HMISock, hmiProtocolVersion)
+	// Đóng listener NGAY TRONG Serve, không phó mặc cho goroutine huỷ ctx.
+	//
+	// Goroutine dưới đây chỉ có nhiệm vụ đánh thức `Accept()` đang chặn. Nếu để
+	// nó là nơi DUY NHẤT đóng listener thì `Serve()` trả về ngay khi `Accept()`
+	// nhận `net.ErrClosed` — tức TRƯỚC khi việc đóng (và việc gỡ file socket đi
+	// kèm) hoàn tất. Ai khởi động lại broker ngay sau khi `Serve()` trả về sẽ
+	// bind được đường dẫn, rồi bị lần gỡ file muộn của tiến trình cũ xoá mất
+	// socket vừa tạo — đúng lỗi đã đo được: broker thứ hai chết với
+	// "chmod hmi socket: no such file or directory".
+	//
+	// `Close()` phải chịu được gọi hai lần, và nó chịu được: đóng một listener
+	// đã đóng chỉ trả lỗi, không panic.
+	defer func() { _ = b.Close() }()
 	go func() {
 		<-ctx.Done()
 		_ = b.Close()
@@ -199,9 +212,14 @@ func (b *HMIBroker) Close() error {
 	if b == nil || b.listener == nil {
 		return nil
 	}
-	err := b.listener.Close()
-	_ = os.Remove(b.cfg.HMISock)
-	return err
+	// KHÔNG `os.Remove(b.cfg.HMISock)` ở đây.
+	//
+	// `net.UnixListener.Close()` đã tự gỡ đúng file mà chính nó tạo ra. Một
+	// lệnh xoá THEO ĐƯỜNG DẪN thì không phân biệt được file của mình với file
+	// của một broker kế nhiệm đã bind lại cùng đường dẫn — nên nó có thể xoá
+	// socket của người khác. File cũ còn sót lại sau một lần crash vẫn được
+	// dọn: `Serve()` gỡ nó ngay trước `net.Listen`.
+	return b.listener.Close()
 }
 
 func (b *HMIBroker) peerAllowed(uid uint32) bool {

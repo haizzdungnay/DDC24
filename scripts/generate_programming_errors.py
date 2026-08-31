@@ -496,10 +496,18 @@ def render_manifest(catalog: dict[str, Any], catalog_hash: str, schema_hash: str
         "schemaSha256": schema_hash,
         "publicErrorCount": len(catalog["publicErrors"]),
         "componentDetailCount": len(catalog["componentDetails"]),
+        # `.as_posix()` chứ không phải `str()`: `str()` dùng dấu phân cách của
+        # HỆ ĐIỀU HÀNH, nên một lần sinh trên Windows ghi vào manifest những
+        # đường dẫn có `\`. Bản commit đó KHÔNG BAO GIỜ khớp lại trên Linux, và
+        # `--check` đỏ vĩnh viễn trong CI vì một khác biệt thuần hình thức —
+        # đã xảy ra thật, làm `npm run build` hỏng trên nhánh chính.
+        #
+        # Manifest là hợp đồng ĐI QUA nhiều máy, nên nó phải có đúng một dạng
+        # chuẩn tắc, không phụ thuộc máy nào chạy generator.
         "generatedConsumers": [
-            str(GO_OUTPUT.relative_to(ROOT)),
-            str(CPP_OUTPUT.relative_to(ROOT)),
-            str(TS_OUTPUT.relative_to(ROOT)),
+            GO_OUTPUT.relative_to(ROOT).as_posix(),
+            CPP_OUTPUT.relative_to(ROOT).as_posix(),
+            TS_OUTPUT.relative_to(ROOT).as_posix(),
         ],
     }
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"

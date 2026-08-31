@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -71,15 +70,49 @@ func TestProcessRunnerKillsWholeProcessGroupOnTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		err = syscall.Kill(pid, 0)
-		if errors.Is(err, syscall.ESRCH) {
+		dead, state := processIsDead(pid)
+		if dead {
 			return
 		}
+		_ = state
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("process con %d chưa được reap/kill: %v", pid, err)
+	_, state := processIsDead(pid)
+	t.Fatalf("process con %d vẫn đang chạy (state %q) — process group chưa bị giết", pid, state)
+}
+
+// processIsDead cho biết pid đã NGỪNG CHẠY chưa, và trả kèm state để thông
+// điệp lỗi nói được nó đang ở đâu.
+//
+// Vì sao không dùng `syscall.Kill(pid, 0) == ESRCH` như bản trước: `kill(pid,0)`
+// vẫn THÀNH CÔNG trên một zombie, vì ô pid còn tồn tại cho tới khi có ai đó
+// reap. Bản trước vì thế đo nhầm "đã được reap" thay vì "đã bị giết" — hai
+// việc của hai chủ thể khác nhau. ProcessRunner chịu trách nhiệm GIẾT cả
+// process group; REAP một tiến trình mồ côi là việc của init.
+//
+// Trong container CI, PID 1 không phải một init biết reap, nên process con
+// mồ côi nằm lại ở trạng thái `Z` vô thời hạn và test đỏ trong khi sản phẩm
+// làm đúng. Đo `/proc/<pid>/stat` phân biệt được `S` (còn sống — hỏng thật)
+// với `Z`/không còn (đã chết — đạt), tức đúng thứ ProcessRunner hứa.
+func processIsDead(pid int) (bool, string) {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return true, "gone" // không còn ô /proc: đã bị reap xong
+	}
+	// Trường `comm` nằm trong ngoặc và có thể chứa cả dấu cách lẫn ')',
+	// nên state là token đầu tiên SAU dấu ')' cuối cùng.
+	closing := strings.LastIndex(string(raw), ")")
+	if closing < 0 || closing+2 >= len(raw) {
+		return true, "unparsable"
+	}
+	fields := strings.Fields(string(raw)[closing+1:])
+	if len(fields) == 0 {
+		return true, "unparsable"
+	}
+	state := fields[0]
+	return state == "Z" || state == "X" || state == "x", state
 }
 
 func TestProcessRunnerFailsClosedOnOOMLikeSignalAndCleansScratch(t *testing.T) {

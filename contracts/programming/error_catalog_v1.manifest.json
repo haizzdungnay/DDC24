@@ -6,8 +6,8 @@
   "publicErrorCount": 38,
   "componentDetailCount": 155,
   "generatedConsumers": [
-    "apps\\web-api\\internal\\programming\\domain\\errors_generated.go",
-    "apps\\core\\application\\programming\\program_error_generated.hpp",
-    "apps\\web-ui\\src\\features\\programming\\api\\generated\\errors.ts"
+    "apps/web-api/internal/programming/domain/errors_generated.go",
+    "apps/core/application/programming/program_error_generated.hpp",
+    "apps/web-ui/src/features/programming/api/generated/errors.ts"
   ]
 }
