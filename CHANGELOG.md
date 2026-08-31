@@ -290,6 +290,58 @@
   `VAR_IN_OUT`" sang **thi hành** `VAR_IN_OUT`+`ARRAY`+`STRUCT` (nâng lên `priority:high`);
   **#368** đổi thành đánh dấu 4 khối mở rộng + lộ trình bổ sung khối IEC thiếu; **#357** hết bị
   chặn; **#359** nhận danh sách mục §9 phải bổ sung kèm lý do.
+### Fixed — `StSignalBus`: hai test đồng thời fail do thiếu chốt khởi động (2026-08-31)
+
+- **`apps/core/application/st/tests/test_st_signal_bus.cpp`** — thêm chốt khởi
+  động cho `ConcurrentReadNeverSeesTornValue` và
+  `ConcurrentInspectNeverPairsValueWithForeignTimestamp`.
+  - *Triệu chứng*: `ctest` fail không ổn định — lần 1 fail một test, lần 2 fail
+    cả hai. Chạy lặp riêng: **0/5 pass**.
+  - *Nguyên nhân gốc*: cả hai test luôn fail ở `EXPECT_GT(observed.load(), 0u)`
+    (`:315`, `:378`), **không phải** ở assert đúng đắn (`torn == 0` `:314`,
+    `mismatched == 0` `:376`). Bus lock-free đúng. Main thread chạy hết 20 000
+    vòng publish trong ~3 ms rồi bật `stop`; trên máy 2 vCPU thread đọc chưa
+    được scheduler cấp lượt nào — `observed == 0`, test tự tuyên bố "không
+    chứng minh gì".
+  - *Cách sửa*: publish một bản mồi rồi `yield()` chờ reader đọc được lần đầu
+    mới vào vòng đo. Chốt đặt ở **đầu**, không nới assert ở cuối — phần đo sau
+    vẫn là đồng thời thật. Bản mồi của test thứ hai dùng `published_at_ns = 1`
+    khớp `value = 1 * kUnit` nên không tạo lệch cặp giả.
+  - *Kiểm chứng*: chạy lặp 5 lần **5/5 PASS** (trước sửa 0/5); toàn bộ
+    `ctest --test-dir build/fw`: **1338/1338 PASS**, exit `0`.
+  - Refs: `EV-GATE369-BASELINE-001`, issue `#369` (`ISS-STED-20`),
+    `F-P59-SIGNAL-READBACK-001`.
+
+### Tài liệu — Hồ sơ đo nền cổng V&V E2E `#369` (2026-08-31)
+
+- **`docs/07_records/test-evidence/programming/2026-08-31-gate369-e2e-vv-baseline.md`**
+  (`EV-GATE369-BASELINE-001`, mới) — đo nền bốn chặng của `ISS-STED-20` trên
+  `main` `f07bf0f4`. Chặng (a) **PASS** (1338/1338); chặng (b) **KHÔNG ĐẠT**
+  (thiếu vector WARNING — CLI phát 0 diagnostic cho biến khai báo không dùng);
+  chặng (c) **KHÔNG ĐẠT** (`message` và `severity` chết tại
+  `checks.go:813`, không có E2E xuyên ba tầng); chặng (d) **BỊ CHẶN** (không có
+  phần cứng). Ghi nhận ba bẫy đo đã tái hiện thật, đều thuộc loại `#369` cảnh
+  báo: build dir hỏng vẫn để `ctest` báo pass giả; tiến trình nền trả exit `0`
+  khi build dừng ở 42%; `$?` bị shell ngoài expand cho exit code giả `0` trong
+  khi `ctest` thật là `8`.
+- **`scripts/gate369-*.sh`** (7 tệp, mới) — chạy từng chặng gate qua script
+  file, exit code do chính shell chạy lệnh ghi ra `logs/gate369-*.exit`, tách
+  riêng configure/build/ctest. Rào chắn cho bẫy exit code thứ ba.
+- *Kết luận*: `REV-STED-IEC-001` **không được ký đóng** — 17/19 issue tiền đề
+  còn `OPEN`, chặng (b)/(c)/(d) chưa đạt.
+
+### Tài liệu — Detailed Design FBD EDIT workspace (2026-08-31)
+
+- **`docs/superpowers/specs/2026-08-31-fbd-edit-design.md`** (`DDD-PGM02-FBD-EDIT-001`,
+  mới) — đặc tả Target FE-only cho FBD EDIT kéo-thả: giữ `FbdDocument`/reducer
+  canonical, pointer/touch/stylus interaction, multi-select/copy-paste, grid/snap,
+  dock responsive, theme, network view kép, Inspector, Problems và cổng spike
+  dependency. Không mở rộng BE/Core/firmware; các blocker `variableId`, bundle,
+  error-catalog drift, browser evidence và PID approval được ghi owner/gate rõ.
+- **`docs/superpowers/specs/assets/fbd-edit-target-v1.svg`** và
+  **`docs/superpowers/specs/assets/fbd-edit-mobile-readonly-v1.svg`** — visual
+  target renderable cho desktop/tablet/mobile; dữ liệu trong ảnh chỉ minh họa,
+  không phải bằng chứng runtime.
 
 
 ### Tài liệu — Review GAP ST Editor so với chuẩn "IEC 61131-3-aligned" (2026-08-31)
