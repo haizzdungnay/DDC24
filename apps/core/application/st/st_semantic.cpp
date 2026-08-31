@@ -82,15 +82,34 @@ public:
         }
     }
 
+    /* ISS-STED-01: bật thu nhiều diagnostic. Không set thì Checker giữ nguyên
+     * hành vi fail-fast cũ. */
+    void set_bag(StDiagnosticBag* bag) { bag_ = bag; }
+    void set_order(int order) { order_ = order; }
+
     bool run()
     {
-        if (!build_symbols()) return false;
-        return check_stmts(prog_->body);
+        /* Khai báo và câu lệnh là HAI pha, không phải một chuỗi `&&`: nguồn
+         * sai kiểu ở khai báo vẫn cần được soát thân, và ngược lại. Chỉ khi
+         * bảng ký hiệu hỏng tới mức không dựng nổi (`fatal_`) mới dừng — soát
+         * thân với bảng rỗng chỉ sinh một rừng "undeclared variable" giả. */
+        const bool symbols_ok = build_symbols();
+        if (!symbols_ok && !bag_) return false;
+        if (fatal_) return finish(false);
+        const bool body_ok = check_stmts(prog_->body);
+        return finish(symbols_ok && body_ok);
     }
 
 private:
     StProgram*    prog_;
     StDiagnostic* diag_;
+    StDiagnosticBag* bag_ = nullptr;
+    StDiagnostic  first_diag_;
+    bool          has_recorded_ = false;
+    /* Lỗi làm bảng ký hiệu không dùng được nữa (chạm trần biến/RETAIN). Soát
+     * tiếp sau đó chỉ sinh diagnostic giả nên phải dừng hẳn. */
+    bool          fatal_ = false;
+    int           order_ = 0;
     std::unordered_map<std::string, Symbol>   vars_;
     std::unordered_map<std::string, FbSymbol> fbs_;
     std::unordered_map<std::string, const StProgram*> pou_defs_;
@@ -101,6 +120,9 @@ private:
      * timer mất ý nghĩa (một lần gọi = một lần cập nhật trạng thái), nên đây
      * là lỗi chứ không phải cảnh báo. */
     std::unordered_set<std::string> fb_called_;
+    /* Instance FB khai báo hỏng (kiểu không phân giải được). Lời gọi tới
+     * chúng bị bỏ qua thay vì sinh lỗi thứ hai cho cùng một nguyên nhân. */
+    std::unordered_set<std::string> poisoned_;
 
     bool fail(const char* code, const std::string& msg, int line, int col, int length = 1)
     {
@@ -108,67 +130,159 @@ private:
         return false;
     }
 
+    /* Lỗi không phục hồi được: ghi rồi chặn mọi pha sau. */
+    bool fail_fatal(const char* code, const std::string& msg, int line, int col,
+                    int length = 1)
+    {
+        fatal_ = true;
+        return fail(code, msg, line, col, length);
+    }
+
+    /* ---- ISS-STED-01: thu lỗi + phục hồi -------------------------------- */
+
+    /* `records_` đếm số lần đã ghi. Vòng lặp lồng nhau (thân IF nằm trong
+     * thân POU) dùng nó để biết lỗi vừa nhận đã được vòng bên trong ghi hay
+     * chưa — không có bộ đếm này thì mỗi tầng lồng ghi lại đúng một diagnostic
+     * thêm một lần, và một lỗi trong IF lồng 3 tầng hiện ra 3 lần. */
+    std::size_t records_ = 0;
+
+    bool record()
+    {
+        if (!has_recorded_) { first_diag_ = *diag_; has_recorded_ = true; }
+        if (bag_ != nullptr) {
+            StDiagnostic entry = *diag_;
+            entry.order = order_;
+            bag_->add(entry);
+        }
+        ++records_;
+        return false;
+    }
+
+    /* Xem `Parser::can_recover` — dừng ở trần+1 để `ST-LIM-006` không bị mất. */
+    bool can_recover() const
+    {
+        if (bag_ == nullptr || fatal_) return false;
+        return bag_->size() <= StDiagnosticBag::kMaxDiagnostics;
+    }
+
+    bool finish(bool ok)
+    {
+        if (!ok && !has_recorded_) record();
+        if (has_recorded_) { *diag_ = first_diag_; return false; }
+        return ok;
+    }
+
     /* ---- Bảng ký hiệu ---- */
 
     bool build_symbols()
     {
         std::size_t retain_count = 0;
+        bool ok = true;
         if (prog_->kind == StPouKind::FUNCTION) {
             /* IEC dùng chính tên FUNCTION làm ô trả về có thể gán. Ô này chỉ
              * tồn tại trong scope lời gọi, không phải state của FUNCTION. */
             vars_[prog_->name] = Symbol{prog_->return_type, StStorage::VAR_LOCAL};
         }
         for (const StVarDecl& v : prog_->vars) {
-            if (vars_.count(v.name) || fbs_.count(v.name))
-                return fail(st_diag_code::kDuplicateVar,
-                            "duplicate declaration of '" + v.name + "'", v.line, v.column,
-                            v.length);
-            if (v.storage == StStorage::VAR_RETAIN &&
-                ++retain_count > st_limits::kMaxRetainVars)
-                return fail(st_diag_code::kTooManyRetainVars,
-                            "RETAIN variable count exceeds limit of " +
-                                std::to_string(st_limits::kMaxRetainVars),
-                            v.line, v.column, v.length);
-            vars_[v.name] = Symbol{v.type, v.storage};
+            if (!check_var_decl(v, &retain_count)) {
+                ok = false;
+                record();
+                if (!can_recover()) return false;
+            }
         }
         for (const StFbDecl& f : prog_->fbs) {
-            if (vars_.count(f.name) || fbs_.count(f.name))
-                return fail(st_diag_code::kDuplicateVar,
-                            "duplicate declaration of '" + f.name + "'", f.line, f.column,
-                            f.length);
-            if (f.retained && ++retain_count > st_limits::kMaxRetainVars)
-                return fail(st_diag_code::kTooManyRetainVars,
-                            "RETAIN variable count exceeds limit of " +
-                                std::to_string(st_limits::kMaxRetainVars),
-                            f.line, f.column, f.length);
-            const StProgram* user_type = nullptr;
-            if (f.is_user_type) {
-                const auto found = pou_defs_.find(fold_pou_name(f.user_type_name));
-                if (found == pou_defs_.end())
-                    return fail(st_diag_code::kLibraryEntryMissing,
-                                "function block type '" + f.user_type_name +
-                                    "' has no linked implementation",
-                                f.line, f.column, f.length);
-                user_type = found->second;
-                if (user_type->kind != StPouKind::FUNCTION_BLOCK)
-                    return fail(st_diag_code::kPouSignatureInvalid,
-                                "'" + f.user_type_name + "' is a " +
-                                    st_pou_kind_name(user_type->kind) +
-                                    " and cannot be instantiated as a function block",
-                                f.line, f.column, f.length);
+            if (!check_fb_decl(f, &retain_count)) {
+                ok = false;
+                record();
+                if (!can_recover()) return false;
             }
-            fbs_[f.name] = FbSymbol{f.fb_type, f.retained, user_type};
         }
+        return ok;
+    }
+
+    /* Một khai báo biến.
+     *
+     * Khi khai báo hỏng, biến VẪN được đăng ký vào `vars_` (trừ trường hợp
+     * trùng tên — ô đó đã có chủ). Đây là điểm then chốt để phục hồi không
+     * sinh diagnostic giả: bỏ đăng ký thì mọi câu lệnh dùng biến đó sau này
+     * đều ăn thêm một `ST-SEM-001 undeclared variable` mà nguyên nhân thật
+     * nằm ở dòng khai báo, không phải ở chỗ dùng. */
+    bool check_var_decl(const StVarDecl& v, std::size_t* retain_count)
+    {
+        if (vars_.count(v.name) || fbs_.count(v.name))
+            return fail(st_diag_code::kDuplicateVar,
+                        "duplicate declaration of '" + v.name + "'", v.line, v.column,
+                        v.length);
+        vars_[v.name] = Symbol{v.type, v.storage};
+        if (v.storage == StStorage::VAR_RETAIN &&
+            ++(*retain_count) > st_limits::kMaxRetainVars)
+            /* Trần tài nguyên: soát tiếp cũng không cho thêm thông tin nào
+             * hữu ích, chỉ lặp lại đúng một thông điệp cho mọi biến còn lại. */
+            return fail_fatal(st_diag_code::kTooManyRetainVars,
+                              "RETAIN variable count exceeds limit of " +
+                                  std::to_string(st_limits::kMaxRetainVars),
+                              v.line, v.column, v.length);
+        return true;
+    }
+
+    bool check_fb_decl(const StFbDecl& f, std::size_t* retain_count)
+    {
+        if (vars_.count(f.name) || fbs_.count(f.name))
+            return fail(st_diag_code::kDuplicateVar,
+                        "duplicate declaration of '" + f.name + "'", f.line, f.column,
+                        f.length);
+        const StProgram* user_type = nullptr;
+        bool resolved = true;
+        std::string pending_code;
+        std::string pending_message;
+        if (f.is_user_type) {
+            const auto found = pou_defs_.find(fold_pou_name(f.user_type_name));
+            if (found == pou_defs_.end()) {
+                resolved = false;
+                pending_code = st_diag_code::kLibraryEntryMissing;
+                pending_message = "function block type '" + f.user_type_name +
+                                  "' has no linked implementation";
+            } else if (found->second->kind != StPouKind::FUNCTION_BLOCK) {
+                resolved = false;
+                pending_code = st_diag_code::kPouSignatureInvalid;
+                pending_message = "'" + f.user_type_name + "' is a " +
+                                  std::string(st_pou_kind_name(found->second->kind)) +
+                                  " and cannot be instantiated as a function block";
+            } else {
+                user_type = found->second;
+            }
+        }
+        /* Instance có kiểu không phân giải được vẫn chiếm chỗ trong bảng, và
+         * được đánh dấu "nhiễm" để mọi lời gọi tới nó im lặng: chữ ký chưa
+         * biết thì mọi phán quyết về tham số đều là đoán mò. */
+        fbs_[f.name] = FbSymbol{f.fb_type, f.retained, user_type};
+        if (!resolved) poisoned_.insert(f.name);
+        if (f.retained && ++(*retain_count) > st_limits::kMaxRetainVars)
+            return fail_fatal(st_diag_code::kTooManyRetainVars,
+                              "RETAIN variable count exceeds limit of " +
+                                  std::to_string(st_limits::kMaxRetainVars),
+                              f.line, f.column, f.length);
+        if (!resolved)
+            return fail(pending_code.c_str(), pending_message, f.line, f.column, f.length);
         return true;
     }
 
     /* ---- Câu lệnh ---- */
 
+    /* Ranh giới phục hồi của tầng semantic là CÂU LỆNH: lỗi trong một biểu
+     * thức vẫn bỏ dở cả câu lệnh chứa nó (chốt kiểu dở dang thì mọi phán quyết
+     * sau đều vô nghĩa), nhưng câu lệnh kế tiếp được soát lại từ đầu. */
     bool check_stmts(std::vector<StStmt>& stmts)
     {
-        for (StStmt& s : stmts)
-            if (!check_stmt(s)) return false;
-        return true;
+        bool ok = true;
+        for (StStmt& s : stmts) {
+            const std::size_t before = records_;
+            if (check_stmt(s)) continue;
+            ok = false;
+            if (records_ == before) record();
+            if (!can_recover()) return false;
+        }
+        return ok;
     }
 
     bool check_stmt(StStmt& s)
@@ -277,6 +391,8 @@ private:
                         "undeclared function block instance '" + s.fb_instance + "'",
                         s.fb_line, s.fb_column, s.fb_length);
         }
+
+        if (poisoned_.count(s.fb_instance)) return true;
 
         if (!fb_called_.insert(s.fb_instance).second)
             return fail(st_diag_code::kFbCalledTwice,
@@ -780,8 +896,14 @@ private:
 
 bool typecheck_st_program(StProgram* prog, StDiagnostic* diag)
 {
+    return typecheck_st_program(prog, diag, nullptr);
+}
+
+bool typecheck_st_program(StProgram* prog, StDiagnostic* diag, StDiagnosticBag* bag)
+{
     StDiagnostic local;
     Checker c(prog, diag ? diag : &local);
+    c.set_bag(bag);
     return c.run();
 }
 
@@ -791,12 +913,27 @@ bool typecheck_st_pou_set(const std::vector<StPouSource>& sources,
                           const std::vector<StPublishedSignalContract>& signals,
                           const std::string& program_identity)
 {
+    return typecheck_st_pou_set(sources, registry, diag, signals, program_identity, nullptr);
+}
+
+bool typecheck_st_pou_set(const std::vector<StPouSource>& sources,
+                          const StPouRegistryResult& registry,
+                          StDiagnostic* diag,
+                          const std::vector<StPublishedSignalContract>& signals,
+                          const std::string& program_identity,
+                          StDiagnosticBag* bag)
+{
     StDiagnostic local;
     StDiagnostic* target = diag ? diag : &local;
+    StDiagnostic first;
+    bool has_first = false;
+    bool ok = true;
+    int order = 0;
     for (const StPouSource& source : sources) {
         if (source.pou == nullptr) {
             set_diag(target, st_diag_code::kPouSignatureInvalid,
                      "POU rỗng trong tập typecheck", 0, 0, 1);
+            if (bag != nullptr) bag->add(*target);
             return false;
         }
         /* Registry nhận con trỏ const vì nó không sửa AST; semantic chốt kiểu
@@ -804,9 +941,19 @@ bool typecheck_st_pou_set(const std::vector<StPouSource>& sources,
         auto* pou = const_cast<StProgram*>(source.pou);
         Checker checker(pou, target, &sources, &registry, &signals,
                         pou->kind == StPouKind::PROGRAM ? program_identity : std::string{});
-        if (!checker.run()) return false;
+        checker.set_bag(bag);
+        /* Thứ hạng POU trong tập là khoá sort cấp cao (DDD §7 "program/order"):
+         * lỗi của POU thứ nhất luôn đứng trước lỗi của POU thứ hai, bất kể số
+         * dòng — hai POU khác nhau không so sánh vị trí với nhau được. */
+        checker.set_order(order++);
+        if (checker.run()) continue;
+        ok = false;
+        if (!has_first) { first = *target; has_first = true; }
+        /* Không có túi thì giữ nguyên hợp đồng cũ: dừng ở POU hỏng đầu tiên. */
+        if (bag == nullptr) return false;
     }
-    return true;
+    if (!ok && has_first) *target = first;
+    return ok;
 }
 
 } // namespace core

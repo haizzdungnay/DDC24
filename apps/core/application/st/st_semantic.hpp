@@ -12,7 +12,9 @@
  *        - kiểm luật riêng của FB: gọi tối đa 1 lần/chu kỳ, tham số đặt tên
  *          hợp lệ, chỉ đọc đầu ra qua truy cập thành viên.
  *
- *        Fail-fast: dừng ở lỗi đầu tiên, trả 1 StDiagnostic có line/column.
+ *        Phục hồi ở ranh giới CÂU LỆNH và KHAI BÁO (`ISS-STED-01`): overload
+ *        nhận `StDiagnosticBag*` thu mọi lỗi độc lập trong một lượt; overload
+ *        không nhận túi giữ nguyên fail-fast cũ.
  */
 #ifndef CORE_ST_SEMANTIC_HPP
 #define CORE_ST_SEMANTIC_HPP
@@ -28,6 +30,10 @@ namespace core {
  * false = *diag mô tả lỗi đầu tiên. */
 bool typecheck_st_program(StProgram* prog, StDiagnostic* diag);
 
+/* ISS-STED-01: thu MỌI lỗi ngữ nghĩa phục hồi được vào `*bag` thay vì dừng ở
+ * lỗi đầu. `*diag` vẫn mang lỗi đầu tiên — hợp đồng cũ không đổi. */
+bool typecheck_st_program(StProgram* prog, StDiagnostic* diag, StDiagnosticBag* bag);
+
 /* Registry-aware typecheck cho một tập POU đã phân giải. Khác entry legacy ở
  * trên, đường này hiểu USER_CALL và instance FUNCTION_BLOCK người dùng; mọi
  * producer ST/FBD cùng đi qua đúng một bảng chữ ký. */
@@ -36,6 +42,13 @@ bool typecheck_st_pou_set(const std::vector<StPouSource>& sources,
                           StDiagnostic* diag,
                           const std::vector<StPublishedSignalContract>& signals = {},
                           const std::string& program_identity = {});
+
+bool typecheck_st_pou_set(const std::vector<StPouSource>& sources,
+                          const StPouRegistryResult& registry,
+                          StDiagnostic* diag,
+                          const std::vector<StPublishedSignalContract>& signals,
+                          const std::string& program_identity,
+                          StDiagnosticBag* bag);
 
 } // namespace core
 
