@@ -8,6 +8,54 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-06` ST Language Profile phiên bản hoá, sinh máy được (#357, 2026-08-31)
+
+- **Triệu chứng.** Gate `G1` **FAIL**: không có hồ sơ ngôn ngữ nào khớp code đang phát
+  hành, và hai tài liệu ngôn ngữ sai theo **hai hướng ngược nhau**. `DDD-LANG-PROG-001`
+  §4.1 tuyên bố *"`CASE` … ngoài subset; parser reject rõ"* trong khi `parse_case()`
+  chấp nhận đầy đủ (`F-STED-005`); `ST_SUBSET_SPEC` §11 tuyên bố parser phủ **40%**
+  grammar và ghim ở commit `7ccf992`, trong khi `INT`, `TIME`, `ELSIF`, `XOR`, số học,
+  gọi FB, truy cập thành viên, chú thích đều đã có từ lâu (`F-STED-007`).
+- **Nguyên nhân gốc.** Hồ sơ ngôn ngữ được **chép tay** rồi đứng yên. Không có cổng nào
+  đối chiếu tài liệu với hành vi thật của compiler, nên hai thứ trôi khỏi nhau tự do.
+  *Một bảng đối chiếu sai 100% nguy hiểm hơn không có bảng, vì nó trông như bằng chứng.*
+- **Cách sửa — ba nguồn, một hợp đồng, cổng hai chiều.**
+  - `apps/core/application/st/st_profile_dump_main.cpp` (target `mkddc-st-profile-dump`)
+    link thẳng `st_compiler_lib` và nói *sự thật đang phát hành*. Là **binary** chứ không
+    phải script regex quét source vì bảng cổng FB nằm rải trong nhiều mảng `FbPort` cục
+    bộ do `fb_spec()` ráp lại; regex đọc chúng sẽ đúng tới lần đầu ai đó đổi cách ráp,
+    rồi âm thầm sinh hồ sơ sai mà vẫn xanh. Ở đây gọi **đúng** accessor mà parser và
+    semantic gọi, nên hồ sơ không thể lệch khỏi hành vi — nó *là* hành vi.
+  - Câu lệnh và toán tử được xác định bằng cách **parse thật** một mẫu tối thiểu cho mỗi
+    dạng, không bằng cách đọc tên hàm `parse_*`. Chỉ phép thử thật mới phân biệt được
+    *tài liệu nói gì* với *code làm gì*.
+  - `contracts/programming/st_language_profile_v1.curated.json` giữ phần code không tự
+    nói được: **lý do** loại trừ và nhãn "mở rộng nhà sản xuất" (`ADR-054`).
+  - `scripts/generate_st_language_profile.py` gộp ba nguồn, thi hành schema **ngay tại
+    chỗ** (không chỉ băm nó — trước `T59-004` catalog lỗi chỉ băm schema và schema đã
+    trôi khỏi dữ liệu suốt nhiều revision mà không cổng nào bắt), rồi sinh
+    `st_language_profile_v1.json` (có `profileVersion` + `sha256`), schema, và tài liệu
+    người đọc `ST_LANGUAGE_PROFILE.generated.md`.
+  - **Cổng hai chiều** là phần có giá trị nhất: (1) mục khai *loại trừ* mà compiler
+    **chấp nhận** ⇒ đỏ — đúng chế độ hỏng `F-STED-005`; (2) cấu trúc compiler **từ chối**
+    mà hồ sơ không ghi **lý do** ⇒ đỏ, vì `ADR-054` buộc loại trừ phải công bố kèm lý do.
+    Nhãn "mở rộng nhà sản xuất" trỏ vào tên không có trong thư viện ⇒ đỏ.
+  - Cổng chạy trong `ctest` (`st_language_profile_contract`) chứ không phải một job CI
+    rời: hồ sơ sinh **từ binary**, nên cổng chỉ có nghĩa khi binary vừa được build từ
+    đúng source đang xét. Một job chạy trên checkout mà không build sẽ so hồ sơ với
+    binary cũ và báo xanh cho cây source đã trôi.
+  - `ST_SUBSET_SPEC` §10 gỡ EBNF chép tay (thiếu `CASE`, thiếu `FUNCTION`/
+    `FUNCTION_BLOCK`, liệt kê 4/6 kiểu và 4/9 Function Block); §11 gỡ **toàn bộ** bảng
+    "40%". Cả hai trỏ sang hồ sơ sinh. Phần *"nhập nhằng đã giải quyết"* của §10 được
+    giữ lại vì nó giải thích **quyết định**, không mô tả **hình dạng** — thứ không sinh
+    máy được.
+  - Hồ sơ ghi `CASE` **được chấp nhận**, đúng kết luận `ISS-STED-07`/`ADR-054`.
+- **Verification** (2026-08-31, `build/fw`, Release, `MODBUS=ON BACNET=ON HMI=ON`):
+  configure exit 0, build exit 0, `ctest` **1353/1353 pass, exit 0**.
+  `scripts/docs_iso_harness.py` **PASS**. Đo cổng bằng cách tiêm trôi thật:
+  khai `CASE` là loại trừ ⇒ **exit 1**; xoá lý do loại trừ của `WHILE` ⇒ **exit 1**;
+  sửa `limits.maxVariables` trong hồ sơ đã commit ⇒ **exit 1**. Sau khi sinh lại: exit 0.
+
 ### Fixed — tiêm lỗi journal độc lập với đặc quyền (2026-08-31)
 
 - **Triệu chứng.** `ProgrammingStageAtomicity.JournalFsyncFailureLeavesLiveStateIntact`
