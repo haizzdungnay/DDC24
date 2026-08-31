@@ -1146,7 +1146,13 @@ int main(int argc, char** argv)
 
     nlohmann::json j;
     j["ok"] = true;
-    j["diagnostics"] = nlohmann::json::array();
+    nlohmann::json diagnostics = nlohmann::json::array();
+    if (g_bag != nullptr && !g_bag->empty()) {
+        g_bag->finalize();
+        for (const core::StDiagnostic& diagnostic : g_bag->items())
+            diagnostics.push_back(diagnostic_json(diagnostic, source_id));
+    }
+    j["diagnostics"] = diagnostics;
     j["programName"] = build.module.program_name;
     j["sourceId"] = source_id;
     j["language"] = language;

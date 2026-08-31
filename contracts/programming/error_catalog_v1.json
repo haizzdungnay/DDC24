@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.8.0",
+  "catalogVersion": "1.9.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     {
@@ -1024,6 +1024,26 @@
       "component": "compiler",
       "detailCode": "ST-SYN-002",
       "publicCode": "PRG-ERR-SCOPE-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WARN-001",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WARN-002",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WARN-003",
+      "publicCode": "PRG-ERR-CHECK-001"
+    },
+    {
+      "component": "compiler",
+      "detailCode": "ST-WARN-004",
+      "publicCode": "PRG-ERR-CHECK-001"
     },
     {
       "component": "compiler",

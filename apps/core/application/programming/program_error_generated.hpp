@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.8.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "39bf243a051dd2553c549f9628fcf13e04ccb161345f2f717eb574846b45dabe";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.9.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -109,7 +109,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 151> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 155> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -188,6 +188,10 @@ inline constexpr std::array<ComponentErrorMapping, 151> kComponentErrorMappings 
     {"compiler", "ST-SIG-005", ProgramPublicError::Check },
     {"compiler", "ST-SYN-001", ProgramPublicError::Check },
     {"compiler", "ST-SYN-002", ProgramPublicError::Scope },
+    {"compiler", "ST-WARN-001", ProgramPublicError::Check },
+    {"compiler", "ST-WARN-002", ProgramPublicError::Check },
+    {"compiler", "ST-WARN-003", ProgramPublicError::Check },
+    {"compiler", "ST-WARN-004", ProgramPublicError::Check },
     {"compiler", "ST-WORKER-CRASH", ProgramPublicError::Unavailable },
     {"compiler", "ST-WORKER-TIMEOUT", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-ACTION-NOT-IMPLEMENTED", ProgramPublicError::Unavailable },

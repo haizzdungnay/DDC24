@@ -151,7 +151,11 @@
     "ST-SIG-004",
     "ST-SIG-005",
     "ST-SYN-001",
-    "ST-SYN-002"
+    "ST-SYN-002",
+    "ST-WARN-001",
+    "ST-WARN-002",
+    "ST-WARN-003",
+    "ST-WARN-004"
   ],
   "grammar": {
     "notation": "EBNF (ISO/IEC 14977), chữ hoa = từ khoá không phân biệt hoa thường",
@@ -424,7 +428,7 @@
     }
   ],
   "schemaVersion": 1,
-  "sha256": "066378d52e5ace912cc7ed5e95a022484cbd0237b64b4a3463a06a2017f0bdd6",
+  "sha256": "f4da1c13dcc741856b6a43d30527075356aa45ebc45d07d28ad6a35d7fde2b8c",
   "standardFunctionBlocks": [
     {
       "inputs": [

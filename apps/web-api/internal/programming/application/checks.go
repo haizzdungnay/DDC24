@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -50,6 +51,7 @@ type DiagnosticView struct {
 	Code       string         `json:"code"`
 	DetailCode string         `json:"detailCode"`
 	Severity   string         `json:"severity"`
+	Message    string         `json:"message,omitempty"`
 	MessageKey string         `json:"messageKey"`
 	Location   map[string]any `json:"location"`
 	Args       map[string]any `json:"args,omitempty"`
@@ -254,6 +256,12 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// Biên dịch TỪNG Program và gộp kết quả. Một Program hỏng không dừng phần
 	// còn lại: người dùng phải thấy hết lỗi của package trong MỘT lần Check.
 	diagnostics := make([]DiagnosticView, 0)
+	// ISS-STED-02: quyết định FAILED bám SEVERITY, không bám "có diagnostic hay
+	// không". Trước đây `len(diagnostics) > 0` là tiêu chí, nên ngay khi
+	// compiler bắt đầu phát WARNING thì mọi chương trình hợp lệ có một biến
+	// thừa sẽ trượt Check — đúng cái mà `ST_SUBSET_SPEC` §12.6 cấm ("cảnh báo
+	// không chặn sinh artifact").
+	hasError := false
 	results := make([]programmingcompiler.Result, 0, len(inputs))
 	for _, input := range inputs {
 		result, err := s.runner.Compile(ctx, input)
@@ -265,31 +273,36 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			// thử đúng một lần nữa. Lần hai vẫn chết sẽ được FailExhaustedChecks đóng.
 			return true, err
 		}
-		if !result.OK {
-			programDiagnostics := make([]DiagnosticView, 0, len(result.Diagnostics))
-			for _, item := range result.Diagnostics {
-				view := compilerDiagnostic(item)
-				// Với package nhiều Program, một mã lỗi không kèm Program nào là
-				// một mã lỗi không dùng được: người đọc không biết mở file nào.
-				if view.Location == nil {
-					view.Location = map[string]any{}
-				}
-				// Ghi đè cả khi khoá đã có nhưng RỖNG: compiler một-nguồn không
-				// biết mình đang ở Program nào, nên nó luôn trả chuỗi rỗng.
-				if existing, _ := view.Location["programId"].(string); existing == "" {
-					view.Location["programId"] = input.SourceID
-				}
-				programDiagnostics = append(programDiagnostics, view)
+		programDiagnostics := make([]DiagnosticView, 0, len(result.Diagnostics))
+		for _, item := range result.Diagnostics {
+			view := compilerDiagnostic(item)
+			// Với package nhiều Program, một mã lỗi không kèm Program nào là
+			// một mã lỗi không dùng được: người đọc không biết mở file nào.
+			if view.Location == nil {
+				view.Location = map[string]any{}
 			}
+			// Ghi đè cả khi khoá đã có nhưng RỖNG: compiler một-nguồn không
+			// biết mình đang ở Program nào, nên nó luôn trả chuỗi rỗng.
+			if existing, _ := view.Location["programId"].(string); existing == "" {
+				view.Location["programId"] = input.SourceID
+			}
+			if view.Severity == "ERROR" {
+				hasError = true
+			}
+			programDiagnostics = append(programDiagnostics, view)
+		}
+		if !result.OK {
+			hasError = true
 			if len(programDiagnostics) == 0 {
 				programDiagnostics = append(programDiagnostics, workerDiagnostic("ST-CLI-IO"))
 			}
 			diagnostics = append(diagnostics, programDiagnostics...)
 			continue
 		}
+		diagnostics = append(diagnostics, programDiagnostics...)
 		results = append(results, result)
 	}
-	if len(diagnostics) > 0 {
+	if hasError || len(results) < len(inputs) {
 		return true, s.complete(ctx, check, "FAILED", diagnostics, nil)
 	}
 	// Published Signal chỉ hợp lệ khi compiler đã lower đúng MỘT lệnh publish
@@ -364,7 +377,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			return true, err
 		}
 	}
-	return true, s.complete(ctx, check, "PASSED", []DiagnosticView{},
+	return true, s.complete(ctx, check, "PASSED", diagnostics,
 		&completion{artifact: storeArtifact, manifest: manifest})
 }
 
@@ -802,6 +815,75 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 	return entries, nil
 }
 
+// normalizeSeverity chuẩn hoá severity từ compiler về tập enum hợp lệ: WARNING, INFO, ERROR.
+// Mặc định an toàn là ERROR: bất kỳ severity lạ hoặc rỗng nào cũng được coi là lỗi nghiêm trọng,
+// tuyệt đối không để severity lạ lọt qua dưới dạng cảnh báo rồi làm Check PASSED sai.
+func normalizeSeverity(severity string) string {
+	switch strings.ToUpper(strings.TrimSpace(severity)) {
+	case "WARNING":
+		return "WARNING"
+	case "INFO":
+		return "INFO"
+	default:
+		return "ERROR"
+	}
+}
+
+// Đường dẫn tuyệt đối POSIX / Windows drive / Windows UNC. Ba mẫu này bắt đúng
+// thứ có thể lộ hạ tầng: chuỗi có phân cách thư mục và neo tuyệt đối.
+//
+// KHÔNG có mẫu bắt token "tmp"/"temp"/"scratch" trần: message của compiler ST
+// mang tên biến của người dùng, và `temp_setpoint`, `tmp_avg`, `scratch_val` là
+// tên biến bình thường bậc nhất trong mã HVAC. Xoá theo tiền tố như vậy sẽ đục
+// thủng chính thông điệp mà #352 yêu cầu giữ nguyên vẹn, mà không chặn thêm
+// được đường dẫn nào — mọi đường dẫn thật đều đã có phân cách và bị ba mẫu
+// dưới đây bắt.
+var (
+	reAbsPathPosix = regexp.MustCompile(`/(?:[a-zA-Z0-9._-]+/)+[a-zA-Z0-9._-]*`)
+	reAbsPathWin   = regexp.MustCompile(`[a-zA-Z]:\\(?:[^\s\\/:*?"<>|\r\n]+\\)*[^\s\\/:*?"<>|\r\n]*`)
+	reAbsPathUNC   = regexp.MustCompile(`\\\\(?:[^\s\\/:*?"<>|\r\n]+\\)+[^\s\\/:*?"<>|\r\n]*`)
+)
+
+// sanitizeCompilerMessage làm sạch message từ compiler trước khi chuyển tiếp tới UI.
+//
+// Mối đe doạ: compiler C++ chạy trên host/worker, message của nó có thể vô tình
+// mang đường dẫn file cục bộ (lộ username, cấu trúc thư mục máy chủ, scratch
+// root) hoặc ký tự điều khiển. Ba lớp xử lý: xoá đường dẫn tuyệt đối, loại ký
+// tự điều khiển, cắt trần 512 byte.
+//
+// Cắt trên BIÊN RUNE chứ không cắt giữa byte: cắt giữa một chuỗi UTF-8 nhiều
+// byte sinh ký tự thay thế trên UI. `for i := range msg` cho đúng chỉ số byte
+// đầu mỗi rune, nên lấy biên lớn nhất còn lọt trần là một lượt duyệt O(n).
+// Không bỏ dần rune cuối trong vòng lặp: mỗi vòng như vậy dựng lại cả chuỗi,
+// nên một message dài bất thường (độ dài do đầu vào chi phối) biến thành O(n²).
+func sanitizeCompilerMessage(msg string) string {
+	if msg == "" {
+		return ""
+	}
+	msg = reAbsPathWin.ReplaceAllString(msg, "")
+	msg = reAbsPathUNC.ReplaceAllString(msg, "")
+	msg = reAbsPathPosix.ReplaceAllString(msg, "")
+	msg = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, msg)
+	msg = strings.TrimSpace(msg)
+	const maxLen = 512
+	if len(msg) > maxLen {
+		cut := 0
+		for i := range msg {
+			if i > maxLen {
+				break
+			}
+			cut = i
+		}
+		msg = strings.TrimSpace(msg[:cut])
+	}
+	return msg
+}
+
 func compilerDiagnostic(item programmingcompiler.Diagnostic) DiagnosticView {
 	code := domain.MapComponentError("compiler", item.Code)
 	public := domain.NewPublicError(code)
@@ -810,7 +892,15 @@ func compilerDiagnostic(item programmingcompiler.Diagnostic) DiagnosticView {
 	if code == domain.ErrCheck {
 		args = map[string]any{"line": item.Line, "column": item.Column, "length": item.Length}
 	}
-	return DiagnosticView{Code: string(code), DetailCode: item.Code, Severity: "ERROR", MessageKey: public.MessageKey, Location: location, Args: domain.SanitizeErrorArgs(code, args)}
+	return DiagnosticView{
+		Code:       string(code),
+		DetailCode: item.Code,
+		Severity:   normalizeSeverity(item.Severity),
+		Message:    sanitizeCompilerMessage(item.Message),
+		MessageKey: public.MessageKey,
+		Location:   location,
+		Args:       domain.SanitizeErrorArgs(code, args),
+	}
 }
 
 // scopeDiagnostic báo vi phạm capacity. `limit` phải là trần thật bị vượt, lấy

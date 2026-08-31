@@ -519,14 +519,25 @@ và được xử lý theo chính sách ở C0.7.
 
 ### 12.6 Cảnh báo
 
-| Code | Ý nghĩa |
-|---|---|
-| `ST-WARN-001` | `PT` của timer nhỏ hơn chu kỳ Task |
-| `ST-WARN-002` | Biến khai báo nhưng không dùng |
-| `ST-WARN-003` | `VAR_OUTPUT` không bao giờ được gán |
+| Code | Ý nghĩa | Trạng thái |
+|---|---|---|
+| `ST-WARN-001` | `PT` của timer nhỏ hơn chu kỳ Task | **Chưa hiện thực** — compiler không nhận chu kỳ Task làm đầu vào |
+| `ST-WARN-002` | Biến khai báo nhưng không dùng | Đã phát (`#351`) |
+| `ST-WARN-003` | `VAR_OUTPUT` không bao giờ được gán | Đã phát (`#351`) |
+| `ST-WARN-004` | Đọc output của một instance FB **trước** lời gọi của nó trong cùng chu kỳ (`DDD-LANG-PROG-001` §4.3) | Đã phát (`#351`) |
 
 Cảnh báo **không** chặn sinh artifact. Chính sách nâng cảnh báo thành lỗi là thuộc tính
-của compiler profile (C0.6), không phải của ngôn ngữ.
+của compiler profile (C0.6), không phải của ngôn ngữ. Hệ quả cho tầng gọi: quyết định
+Check FAILED phải bám `severity`, **không** bám "có diagnostic hay không".
+
+Hai bất biến của lượt phát cảnh báo sử dụng (`ST-WARN-002/003/004`):
+
+1. **Vị trí trỏ dòng khai báo**, không trỏ chỗ dùng — với "khai báo mà không dùng" thì
+   dòng khai báo là chỗ duy nhất sửa được.
+2. **Có lỗi thì không phát cảnh báo sử dụng.** Lỗi làm việc soát dừng giữa chừng nên vết
+   đọc/ghi không đầy đủ; phát cảnh báo trên dữ liệu dở dang sẽ báo "không dùng" cho biến
+   thực ra có dùng ở câu lệnh chưa kịp soát. Tương tự, biến dùng **sai kiểu** vẫn tính là
+   *được dùng*.
 
 ---
 

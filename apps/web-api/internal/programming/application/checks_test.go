@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
@@ -260,4 +262,196 @@ func jsonHashHex(value [32]byte) string {
 		out[i*2+1] = digits[b&15]
 	}
 	return string(out)
+}
+
+func TestCheckServiceWarningOnlyPassesWithDiagnosticsAndMessage(t *testing.T) {
+	projects, store := openProjectService(t)
+	revisionID := createCheckRevisionFixture(t, projects)
+	artifactBytes := []byte("verified-artifact-warn")
+	digest := sha256.Sum256(artifactBytes)
+	runner := &fakeCheckRunner{result: programmingcompiler.Result{
+		OK: true,
+		Diagnostics: []programmingcompiler.Diagnostic{
+			{Code: "ST-WARN-002", Severity: "warning", Message: "variable 'unused' is declared but never used", Line: 10, Column: 2},
+		},
+		Artifact: artifactBytes, ArtifactSHA256: digest, Manifest: json.RawMessage(`{"manifestVersion":1}`),
+		CompilerVersion: checkCompilerVersion, ArtifactSchemaVersion: 1, CompilerProfile: 1, ProfileID: "revA-1t-1-5-30",
+		LibraryVersion: domain.SystemLibraryVersion, IntegrityMode: "HASH_ONLY", TargetABI: 3841,
+	}}
+	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checks, err := NewCheckService(CheckServiceOptions{
+		Store: store, Runner: runner, Packager: &fakePackager{},
+		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
+		Now: func() time.Time { return time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := RequestCheckCommand{
+		RevisionID: revisionID, SchemaVersion: "1.0", TargetProfile: checkTargetProfile,
+		IdempotencyKey: "30000000-0000-4000-8000-000000000901", CorrelationID: testCorrelationID,
+	}
+	accepted, err := checks.RequestCheck(context.Background(), Actor{ID: testActorID, Role: "admin"}, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	processed, err := checks.ProcessNext(context.Background())
+	if err != nil || !processed {
+		t.Fatalf("processed=%v err=%v", processed, err)
+	}
+	view, err := checks.GetCheck(context.Background(), accepted.CheckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.State != "PASSED" {
+		t.Fatalf("state=%s want PASSED", view.State)
+	}
+	if len(view.Diagnostics) != 1 {
+		t.Fatalf("diagnostics count=%d want 1: %+v", len(view.Diagnostics), view.Diagnostics)
+	}
+	diag := view.Diagnostics[0]
+	if diag.Severity != "WARNING" {
+		t.Errorf("severity=%s want WARNING", diag.Severity)
+	}
+	if diag.DetailCode != "ST-WARN-002" {
+		t.Errorf("detailCode=%s want ST-WARN-002", diag.DetailCode)
+	}
+	if diag.Message == "" || diag.Message != "variable 'unused' is declared but never used" {
+		t.Errorf("message=%q want 'variable 'unused' is declared but never used'", diag.Message)
+	}
+}
+
+func TestCheckServiceErrorAndWarningFailsWithBothDiagnosticsPreserved(t *testing.T) {
+	projects, store := openProjectService(t)
+	revisionID := createCheckRevisionFixture(t, projects)
+	runner := &fakeCheckRunner{result: programmingcompiler.Result{
+		OK: false,
+		Diagnostics: []programmingcompiler.Diagnostic{
+			{Code: "ST-SYN-001", Severity: "error", Message: "unexpected token", Line: 5, Column: 1},
+			{Code: "ST-WARN-002", Severity: "warning", Message: "variable 'x' unused", Line: 2, Column: 1},
+		},
+	}}
+	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checks, err := NewCheckService(CheckServiceOptions{
+		Store: store, Runner: runner, Packager: &fakePackager{},
+		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
+		Now: func() time.Time { return time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := RequestCheckCommand{
+		RevisionID: revisionID, SchemaVersion: "1.0", TargetProfile: checkTargetProfile,
+		IdempotencyKey: "30000000-0000-4000-8000-000000000902", CorrelationID: testCorrelationID,
+	}
+	accepted, err := checks.RequestCheck(context.Background(), Actor{ID: testActorID, Role: "admin"}, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	processed, err := checks.ProcessNext(context.Background())
+	if err != nil || !processed {
+		t.Fatalf("processed=%v err=%v", processed, err)
+	}
+	view, err := checks.GetCheck(context.Background(), accepted.CheckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.State != "FAILED" {
+		t.Fatalf("state=%s want FAILED", view.State)
+	}
+	if len(view.Diagnostics) != 2 {
+		t.Fatalf("diagnostics count=%d want 2: %+v", len(view.Diagnostics), view.Diagnostics)
+	}
+	if view.Diagnostics[0].Severity != "ERROR" || view.Diagnostics[0].DetailCode != "ST-SYN-001" {
+		t.Errorf("diagnostic 0=%+v", view.Diagnostics[0])
+	}
+	if view.Diagnostics[1].Severity != "WARNING" || view.Diagnostics[1].DetailCode != "ST-WARN-002" {
+		t.Errorf("diagnostic 1=%+v", view.Diagnostics[1])
+	}
+}
+
+func TestSanitizeCompilerMessageStripsHostPathsAndTokens(t *testing.T) {
+	cases := []struct {
+		name      string
+		input     string
+		forbidden []string
+	}{
+		{
+			name:      "linux scratch path",
+			input:     "error in /tmp/scratch-abc123/src.st: undeclared variable 'x'",
+			forbidden: []string{"/tmp/scratch-abc123/src.st", "/tmp", "scratch-abc123"},
+		},
+		{
+			name:      "windows host path",
+			input:     `error at C:\Users\build\x.st: duplicate declaration`,
+			forbidden: []string{`C:\Users\build\x.st`, `C:\Users`, `build`},
+		},
+		{
+			name:      "unc path",
+			input:     `error at \\server\share\file.st: syntax error`,
+			forbidden: []string{`\\server\share\file.st`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sanitized := sanitizeCompilerMessage(tc.input)
+			for _, forbidden := range tc.forbidden {
+				if strings.Contains(sanitized, forbidden) {
+					t.Errorf("sanitizeCompilerMessage(%q) = %q; still contains forbidden string %q", tc.input, sanitized, forbidden)
+				}
+			}
+		})
+	}
+}
+
+// Message vượt trần bị cắt trên BIÊN RUNE. Độ dài message do đầu vào của người
+// dùng chi phối (tên biến nằm trong message), nên nhánh này chạy thật chứ không
+// phải nhánh lý thuyết. Cắt giữa một rune nhiều byte sẽ sinh U+FFFD trên UI —
+// đúng thứ #352 yêu cầu tránh khi nói "giữ thông điệp".
+func TestSanitizeCompilerMessageTruncatesOnRuneBoundary(t *testing.T) {
+	// Mỗi 'π' là 2 byte: chuỗi 400 ký tự = 800 byte, vượt trần 512.
+	msg := strings.Repeat("π", 400)
+	sanitized := sanitizeCompilerMessage(msg)
+
+	if len(sanitized) > 512 {
+		t.Errorf("len=%d byte, vượt trần 512", len(sanitized))
+	}
+	if !utf8.ValidString(sanitized) {
+		t.Errorf("chuỗi cắt ra không phải UTF-8 hợp lệ: %q", sanitized)
+	}
+	if strings.ContainsRune(sanitized, utf8.RuneError) {
+		t.Errorf("cắt giữa rune sinh U+FFFD: %q", sanitized)
+	}
+	if sanitized == "" {
+		t.Error("cắt hết sạch message — phải giữ lại phần lọt trần")
+	}
+}
+
+func TestNormalizeSeverityDefaultsUnknownAndEmptyToError(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"warning", "WARNING"},
+		{"WARNING", "WARNING"},
+		{"Warning", "WARNING"},
+		{"info", "INFO"},
+		{"INFO", "INFO"},
+		{"fatal", "ERROR"},
+		{"", "ERROR"},
+		{"unknown_severity", "ERROR"},
+		{"   ", "ERROR"},
+	}
+	for _, tt := range tests {
+		got := normalizeSeverity(tt.input)
+		if got != tt.want {
+			t.Errorf("normalizeSeverity(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
 }

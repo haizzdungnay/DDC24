@@ -522,6 +522,8 @@ export interface ProgrammingDiagnostic {
   code: string
   detailCode?: string
   severity: 'ERROR' | 'WARNING' | 'INFO' | string
+  /** Thông điệp kỹ thuật ngắn từ backend/compiler; vắng mặt khi diagnostic không xuất phát từ compiler. */
+  message?: string
   messageKey: string
   location?: { programId?: string; line?: number; column?: number; bindingId?: string; [key: string]: unknown }
   args?: Record<string, unknown>

@@ -302,6 +302,20 @@ TEST(StSignalBus, ConcurrentReadNeverSeesTornValue)
         }
     });
 
+    /* Chốt khởi động: publish một bản rồi ĐỢI consumer đọc được lần đầu mới vào
+     * vòng đo. Không có chốt này, trên máy ít lõi (đo thật: WSL2 2 vCPU) main
+     * thread chạy hết 20 000 vòng trong ~3 ms và `stop` bật trước khi consumer
+     * được scheduler cấp lượt nào — `observed == 0`, test fail dù bus đúng.
+     * Đợi ở ĐẦU chứ không nới ở cuối, để phần đo sau vẫn là đồng thời thật. */
+    {
+        StCell warm{};
+        warm.t = static_cast<int64_t>(0x0001000100010001ll);
+        ASSERT_TRUE(bus.publish(index, warm, 0, "P_pub"));
+        bus.commit_at_boundary();
+        while (observed.load(std::memory_order_relaxed) == 0)
+            std::this_thread::yield();
+    }
+
     for (int64_t round = 1; round <= 20000; ++round) {
         StCell cell{};
         cell.t = round * static_cast<int64_t>(0x0001000100010001ll);
@@ -364,6 +378,19 @@ TEST(StSignalBus, ConcurrentInspectNeverPairsValueWithForeignTimestamp)
      * (F-P59-SIGNAL-READBACK-001). Nâng số vòng KHÔNG phải cách siết: 400 000
      * vòng làm reader/writer giành nhau `bank_readers_` tới mức test chạy quá
      * 20 phút CPU mà vẫn không tất định. */
+    /* Chốt khởi động — cùng lý do như `ConcurrentReadNeverSeesTornValue`: trên
+     * máy ít lõi monitor có thể chưa chạy lần nào trước khi `stop` bật.
+     * `published_at_ns = 1` khớp `value = 1 * kUnit` nên bản mồi này không tự
+     * tạo ra lệch cặp giả. */
+    {
+        StCell warm{};
+        warm.t = kUnit;
+        ASSERT_TRUE(bus.publish(index, warm, 1, "P_pub"));
+        bus.commit_at_boundary();
+        while (observed.load(std::memory_order_relaxed) == 0)
+            std::this_thread::yield();
+    }
+
     for (uint64_t round = 1; round <= 20000; ++round) {
         StCell cell{};
         cell.t = static_cast<int64_t>(round) * kUnit;
