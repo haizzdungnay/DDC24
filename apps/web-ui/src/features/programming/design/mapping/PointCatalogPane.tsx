@@ -12,7 +12,7 @@ export function PointCatalogPane({ rows, selectedKey, onSelect, pointKind, onPoi
   onPointKindChange: (value: PointKindFilter) => void
 }) {
   return (
-    <section className="flex min-h-0 min-w-0 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]" aria-labelledby="mapping-points-title">
+    <section className="flex min-h-0 min-w-0 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] 2xl:h-[39rem] 2xl:max-h-[calc(100vh-18rem)]" aria-labelledby="mapping-points-title">
       <div className="flex items-start justify-between gap-3 border-b border-[var(--c-border)] px-4 py-3"><div><h2 id="mapping-points-title" className="text-sm font-semibold text-[var(--c-text)]">Điểm khả dụng</h2><p className="mt-1 text-xs text-[var(--c-text-dim)]">Canonical Point · giá trị chỉ đọc</p></div><Database className="h-5 w-5 text-[var(--c-accent)]" aria-hidden="true" /></div>
       <div className="flex flex-wrap items-center gap-1.5 border-b border-[var(--c-border)] px-4 py-2" role="group" aria-label="Phân loại Point">
         {(['ALL', 'UI', 'AO', 'DO', 'VP', 'MB_RTU'] as const).map((kind) => (
@@ -22,7 +22,7 @@ export function PointCatalogPane({ rows, selectedKey, onSelect, pointKind, onPoi
         ))}
         <span className="text-xs text-[var(--c-text-dim)]">{rows.length} Point đang inspect</span>
       </div>
-      <div data-testid="mapping-point-list" className="h-[35rem] min-h-0 max-h-[calc(100vh-18rem)] divide-y divide-[var(--c-border)] overflow-y-scroll [scrollbar-gutter:stable]">
+      <div data-testid="mapping-point-list" className="min-h-0 flex-1 divide-y divide-[var(--c-border)] overflow-y-auto [scrollbar-gutter:stable]">
         {rows.length === 0 ? <p className="p-4 text-sm text-[var(--c-text-dim)]">Catalog không có Point khớp bộ lọc.</p> : rows.map((row) => {
           const state = row.quality.toLowerCase() as 'good' | 'uncertain' | 'bad' | 'stale' | 'offline' | 'unknown'
           const unsupported = row.eligibility === 'UNSUPPORTED_BY_CORE' || row.eligibility === 'UNSUPPORTED_IDENTITY'

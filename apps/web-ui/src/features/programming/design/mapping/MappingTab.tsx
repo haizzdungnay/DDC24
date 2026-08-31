@@ -111,7 +111,7 @@ export function MappingTab(props: {
     </div>
     {saveError && <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">{saveError}</p>}
     <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} />
-    <div className="grid items-stretch gap-3 2xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
+    <div className="grid items-start gap-3 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
       <VariableWorklist rows={visibleVariables} selectedId={selectedVariableId} onSelect={setSelectedVariableId} onOpenSource={(row) => openSource(row.programId)} mutationsBlocked={true} />
       <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} pointKind={pointKind} onPointKindChange={setPointKind} />
     </div>
