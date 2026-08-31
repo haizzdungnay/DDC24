@@ -63,6 +63,7 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
     expect(mutationButtons.length).toBeGreaterThan(0)
     expect(mutationButtons.every((button) => button.hasAttribute('disabled'))).toBe(true)
     expect(screen.queryByRole('button', { name: /Gỡ ánh xạ/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Published Signal')).not.toBeInTheDocument()
     expect(onSave).not.toHaveBeenCalled()
   })
 

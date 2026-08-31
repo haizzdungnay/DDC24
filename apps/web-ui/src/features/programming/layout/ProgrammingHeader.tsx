@@ -44,10 +44,11 @@ export function ProgrammingHeader({
   const { pick } = useI18n()
   const location = useLocation()
   const overview = location.pathname === '/eng/programming' || location.pathname === '/eng/programming/'
+  const mapping = location.pathname.includes('/mapping')
   return (
-    <header className={`flex flex-wrap justify-between gap-2 ${overview ? 'items-start' : 'items-center'}`}>
-      <div className="min-w-0">
-        {overview && (
+    <header className={`flex flex-wrap justify-between gap-2 ${mapping ? 'flex-col items-stretch' : overview ? 'items-start' : 'items-center'}`}>
+      <div className={`min-w-0 ${mapping ? 'sr-only' : ''}`}>
+        {overview && !mapping && (
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--c-accent)]">
             Programming workstation
           </p>
@@ -55,7 +56,7 @@ export function ProgrammingHeader({
         <h1 className={`${overview ? 'text-2xl' : 'text-xl'} font-bold text-[var(--c-text)]`}>
           {pick('Lập trình điều khiển', 'Control programming')}
         </h1>
-        {overview && (
+        {overview && !mapping && (
           <p className="mt-1 text-sm text-[var(--c-text-dim)]">
             {pick(
               'Theo dõi ứng dụng đang chạy, tiếp tục bản nháp và xử lý các vấn đề cần chú ý.',
@@ -64,7 +65,7 @@ export function ProgrammingHeader({
           </p>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={`flex flex-wrap items-center gap-2 ${mapping ? 'justify-end border-b border-[var(--c-border)] pb-2' : ''}`}>
         {actions && (
           <>
             {/* Tên truy cập khác nút `Lưu` của thanh công cụ trình soạn thảo,
