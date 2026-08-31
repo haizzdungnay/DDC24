@@ -62,4 +62,86 @@ describe('ProblemsDrawer', () => {
     expect(screen.getByRole('button', { name: 'Mở rộng' })).toHaveAttribute('aria-expanded', 'false')
     expect(localStorage.getItem('programming.problems.collapsed')).toBe('true')
   })
+
+  it('diagnostic severity WARNING hiển thị đúng icon cảnh báo có màu warning', () => {
+    render(
+      <I18nProvider>
+        <ProblemsDrawer
+          diagnostics={[
+            {
+              code: 'PRG-ERR-CHECK-001',
+              detailCode: 'ST-WARN-002',
+              severity: 'WARNING',
+              messageKey: 'programming.error.check'
+            }
+          ]}
+        />
+      </I18nProvider>
+    )
+    const warningBtn = screen.getByRole('button', { name: /PRG-ERR-CHECK-001/ })
+    const icon = warningBtn.querySelector('svg')
+    expect(icon).toBeInTheDocument()
+    expect(icon).toHaveClass('text-[var(--c-warn-fg)]')
+  })
+
+  it('diagnostic có message ưu tiên hiển thị thông điệp thật từ compiler', () => {
+    const rawCompilerMsg = "variable 'unused' is declared but never used"
+    render(
+      <I18nProvider>
+        <ProblemsDrawer
+          diagnostics={[
+            {
+              code: 'PRG-ERR-CHECK-001',
+              detailCode: 'ST-WARN-002',
+              severity: 'WARNING',
+              message: rawCompilerMsg,
+              messageKey: 'programming.error.check'
+            }
+          ]}
+        />
+      </I18nProvider>
+    )
+    expect(screen.getByText(rawCompilerMsg)).toBeInTheDocument()
+  })
+
+  it('diagnostic KHÔNG có message lùi về copy theo detailCode', () => {
+    render(
+      <I18nProvider>
+        <ProblemsDrawer
+          diagnostics={[
+            {
+              code: 'PRG-ERR-CHECK-001',
+              detailCode: 'ST-WARN-002',
+              severity: 'WARNING',
+              messageKey: 'programming.error.check'
+            }
+          ]}
+        />
+      </I18nProvider>
+    )
+    expect(
+      screen.getByText('Biến đã khai báo nhưng chưa từng được sử dụng trong chương trình.')
+    ).toBeInTheDocument()
+  })
+
+  it('detailCode hiện ra cùng code và location', () => {
+    render(
+      <I18nProvider>
+        <ProblemsDrawer
+          diagnostics={[
+            {
+              code: 'PRG-ERR-CHECK-001',
+              detailCode: 'ST-WARN-002',
+              severity: 'WARNING',
+              messageKey: 'programming.error.check',
+              location: { line: 3, column: 5 }
+            }
+          ]}
+        />
+      </I18nProvider>
+    )
+    expect(
+      screen.getByText('PRG-ERR-CHECK-001 · ST-WARN-002 · dòng 3 · cột 5')
+    ).toBeInTheDocument()
+  })
 })

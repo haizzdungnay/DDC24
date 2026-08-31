@@ -113,6 +113,8 @@ export function ProblemsDrawer({
               location.bindingId && pick(`biến ${location.bindingId}`, `variable ${location.bindingId}`)
             ].filter(Boolean).join(' · ')
             : undefined
+          const codeText = [diagnostic.code, diagnostic.detailCode].filter(Boolean).join(' · ')
+          const messageText = diagnostic.message || programmingErrorCopy(pick, diagnostic.detailCode ?? diagnostic.code)
           return (
             <li key={`${diagnostic.code}-${index}`}>
               <button
@@ -122,8 +124,8 @@ export function ProblemsDrawer({
               >
                 <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
                 <span>
-                  <span className="block font-mono text-xs text-[var(--c-text-dim)]">{diagnostic.code}{locationText ? ` · ${locationText}` : ''}</span>
-                  <span className="block text-[var(--c-text)]">{programmingErrorCopy(pick, diagnostic.code)}</span>
+                  <span className="block font-mono text-xs text-[var(--c-text-dim)]">{codeText}{locationText ? ` · ${locationText}` : ''}</span>
+                  <span className="block text-[var(--c-text)]">{messageText}</span>
                 </span>
               </button>
             </li>

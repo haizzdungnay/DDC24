@@ -71,6 +71,15 @@ export function programmingErrorCopy(
       return pick('Không đổi được trạng thái chương trình: sai trạng thái hiện tại hoặc đã đủ số chương trình được bật.', 'The program state could not be changed: wrong current state, or the enabled-program limit is already reached.')
     case 'PRG-ERR-PID-REVIEW-001':
       return pick('Khối PID chưa được Controls và An toàn phê duyệt; không thể đưa vào vận hành.', 'The PID block is not approved by Controls and Safety; it cannot be commissioned.')
+    // ST-WARN-* — Cảnh báo cú pháp/ngữ nghĩa từ trình biên dịch Structured Text (ST_SUBSET_SPEC §12.6)
+    case 'ST-WARN-001':
+      return pick('Khoảng đặt trước PT của timer nhỏ hơn chu kỳ chạy của Task; ngõ ra có thể kích hoạt muộn hơn dự kiến.', 'Timer preset PT is shorter than the Task cycle time; output may trigger later than expected.')
+    case 'ST-WARN-002':
+      return pick('Biến đã khai báo nhưng chưa từng được sử dụng trong chương trình.', 'Variable is declared but never used in the program.')
+    case 'ST-WARN-003':
+      return pick('Ngõ ra VAR_OUTPUT chưa từng được gán giá trị trong chương trình.', 'VAR_OUTPUT is never assigned a value in the program.')
+    case 'ST-WARN-004':
+      return pick('Ngõ ra của khối chức năng được đọc TRƯỚC khi gọi khối đó trong cùng chu kỳ, nên giá trị đọc được là của chu kỳ trước. Nếu không cố ý, hãy chuyển lời gọi lên trước.', 'A function block output is read BEFORE the block is called in the same cycle, so the value comes from the previous cycle. If this is not intentional, move the call earlier.')
     // T59-814 — Simulation R3. Mỗi câu nói ra ĐIỀU NGƯỜI DÙNG PHẢI LÀM tiếp,
     // vì đó là thứ phân biệt một thông báo hữu ích với một mã lỗi được dịch.
     case 'PRG-SIM-UNSUPPORTED':

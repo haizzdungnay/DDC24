@@ -2031,15 +2031,24 @@ export function SourceEditor({
               const isBracket = bracketMatch !== null && (segment.start === bracketMatch.open || segment.start === bracketMatch.close) && segment.kind === 'punctuation'
               const classes = [segmentClass[segment.kind] ?? '']
               if (isBracket) classes.push('rounded bg-[var(--c-accent-bg)]')
-              if (segment.diagnosticIndex !== null) classes.push('underline decoration-wavy decoration-2 [text-decoration-color:var(--c-fault)]')
+              const diagnostic = segment.diagnosticIndex !== null ? diagnostics[segment.diagnosticIndex] : undefined
+              if (diagnostic) {
+                const wavyColor = diagnostic.severity === 'WARNING' ? 'var(--c-warn)' : 'var(--c-fault)'
+                classes.push(`underline decoration-wavy decoration-2 [text-decoration-color:${wavyColor}]`)
+              }
               const shared = segment.text === '' ? '​' : segment.text
               if (segment.diagnosticIndex !== null) {
-                const diagnostic = diagnostics[segment.diagnosticIndex]
+                const titleParts = diagnostic
+                  ? [
+                    `${diagnostic.code}${diagnostic.detailCode ? ` (${diagnostic.detailCode})` : ''}`,
+                    diagnostic.message
+                  ].filter(Boolean)
+                  : []
                 return (
                   <span
                     key={index}
                     className={`${classes.join(' ')} pointer-events-auto cursor-pointer`}
-                    title={diagnostic ? `${diagnostic.code}${diagnostic.detailCode ? ` (${diagnostic.detailCode})` : ''}` : undefined}
+                    title={titleParts.length > 0 ? titleParts.join(' — ') : undefined}
                     onClick={() => {
                       const line = typeof diagnostic?.location?.line === 'number' ? diagnostic.location.line : 1
                       const column = typeof diagnostic?.location?.column === 'number' ? diagnostic.location.column : 1

@@ -27,4 +27,17 @@ describe('programmingErrorCopy phủ toàn bộ catalog', () => {
     expect(programmingErrorCopy(pick, undefined)).toContain('không rõ mã lỗi')
     expect(programmingErrorCopy(pickEn, undefined)).toContain('unknown error code')
   })
+
+  it('các mã ST-WARN-* có bản dịch riêng biệt cho VI và EN', () => {
+    const warnCodes = ['ST-WARN-001', 'ST-WARN-002', 'ST-WARN-003', 'ST-WARN-004']
+    for (const code of warnCodes) {
+      const vi = programmingErrorCopy(pick, code)
+      const en = programmingErrorCopy(pickEn, code)
+      expect(vi, `${code} không được chứa mã thô`).not.toContain(code)
+      expect(en, `${code} không được chứa mã thô`).not.toContain(code)
+      expect(vi.length).toBeGreaterThan(10)
+      expect(en.length).toBeGreaterThan(10)
+      expect(vi).not.toBe(en)
+    }
+  })
 })
