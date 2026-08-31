@@ -8,6 +8,27 @@
 
 ## [Unreleased]
 
+### Vận hành — deploy FE lên bo Foxlinx (2026-08-31)
+
+- **`SOM-DDC-24-foxlinx`** — đưa `main` `2bab307` lên bo; phạm vi chỉ tài sản
+  tĩnh `build/web-ui/dist` → `/opt/mkddc-web/dist`, không đụng binary
+  Core/IObus. Bo trước đó chạy bản có trước cả PR #346 và #347, nên lát này mang
+  lên đồng thời bố cục mapping workbench mới **và** bản vá Published Signal.
+  *Toàn vẹn*: SHA-256 khớp hai đầu — `index.html` `791ec85d…a2c5da13`,
+  `assets/programming-BQ6_a0hv.js` `13992750…f8fe714c`.
+  *Phép đo quyết định*: kéo chunk **qua chính HTTP của service** (không đọc file
+  trên đĩa) rồi `grep -c "Khai Published Signal"` = **1** ⇒ bề mặt authoring
+  `upsertSignal`/`removeSignal` đã trở lại trên bo.
+  *Trạng thái*: `mkddc-web-pi` `active`, `NRestarts` **0** sau 4 s và đo lại sau
+  15 s; `/api/v1/health` `ok` với 6/6 check; login `admin` 200;
+  `/programming/capabilities` `targetState=READY`, `edit`/`live`/`simulation`
+  đều `true`.
+  *Đường lùi*: `/opt/mkddc-web/dist.bak-pubsignal-20260831T015403Z`, rollback một
+  lệnh — **chưa diễn tập**.
+  *Chưa chứng minh*: chưa bấm tay trên trình duyệt của bo; bundle mang code không
+  thay cho một lượt khai signal → lưu → đọc lại (F-P59-UI-001).
+  Hồ sơ: `docs/07_records/test-evidence/fw-som/2026-08-31-foxlinx-mapping-published-signal-deploy.md`.
+
 ### Sửa lỗi — Mapping workbench mất hẳn bề mặt khai Published Signal (2026-08-31)
 
 - **`MappingTab.tsx`** — Hồi quy do `8f851cc` ("refine mapping workbench layout",
