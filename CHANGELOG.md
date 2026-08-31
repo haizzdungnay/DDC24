@@ -447,15 +447,24 @@ minh được (ngữ nghĩa `ST-WARN-004` trên chu kỳ quét thật; artifact 
 ### Tài liệu — Detailed Design FBD EDIT workspace (2026-08-31)
 
 - **`docs/superpowers/specs/2026-08-31-fbd-edit-design.md`** (`DDD-PGM02-FBD-EDIT-001`,
-  mới) — đặc tả Target FE-only cho FBD EDIT kéo-thả: giữ `FbdDocument`/reducer
+  bản 0.2) — đặc tả Target FE-only cho FBD EDIT kéo-thả: giữ `FbdDocument`/reducer
   canonical, pointer/touch/stylus interaction, multi-select/copy-paste, grid/snap,
   dock responsive, theme, network view kép, Inspector, Problems và cổng spike
-  dependency. Không mở rộng BE/Core/firmware; các blocker `variableId`, bundle,
-  error-catalog drift, browser evidence và PID approval được ghi owner/gate rõ.
+  dependency. Bổ sung transport/Check semantics, state board, token/contrast,
+  trace AC→test, network-all hit-test và batch atomicity sau review độc lập.
+  Không mở rộng BE/Core/firmware; blocker `variableId`, R1 bundle, timeout,
+  browser evidence, PID approval và sign-off được ghi owner/gate rõ.
 - **`docs/superpowers/specs/assets/fbd-edit-target-v1.svg`** và
   **`docs/superpowers/specs/assets/fbd-edit-mobile-readonly-v1.svg`** — visual
   target renderable cho desktop/tablet/mobile; dữ liệu trong ảnh chỉ minh họa,
   không phải bằng chứng runtime.
+- **`docs/superpowers/specs/assets/fbd-edit-states-v1.svg`** — state board renderable
+  cho loading/empty/error/permission/unknown/stale/offline/conflict; dữ liệu chỉ
+  minh họa, không phải runtime evidence.
+- *Kiểm chứng hồ sơ*: `PYTHONUTF8=1 python scripts/docs_iso_harness.py --expect`
+  PASS; SVG parse hợp lệ; reviewer độc lập vòng 3 kết luận
+  `APPROVED WITH RESIDUALS` (trace 38/38 scenario). Đây là evidence tài liệu, chưa phải evidence
+  implementation/target/HIL.
 
 
 ### Tài liệu — Review GAP ST Editor so với chuẩn "IEC 61131-3-aligned" (2026-08-31)

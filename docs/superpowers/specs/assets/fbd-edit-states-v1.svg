@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820" role="img" aria-labelledby="title desc">
+  <title id="title">FBD EDIT state board</title>
+  <desc id="desc">Illustrative loading, empty, error, permission, unavailable, stale and conflict states. No runtime evidence.</desc>
+  <style>
+    .page{fill:#101619}.card{fill:#1b272c;stroke:#4c666b;stroke-width:1}.h{fill:#63e2c3;font:700 20px sans-serif}.t{fill:#dce9e7;font:600 16px sans-serif}.s{fill:#a9bcbd;font:13px sans-serif}.action{fill:#244d48;stroke:#63e2c3;stroke-width:1}.warn{fill:#2b2419;stroke:#b78b4c}.err{fill:#311d1f;stroke:#d56c72}.ro{fill:#27343a;stroke:#687d82}.good{fill:#183025;stroke:#65bd87}
+  </style>
+  <rect class="page" width="1400" height="820"/>
+  <text class="h" x="24" y="36">FBD EDIT state board - design illustration only</text>
+  <text class="s" x="24" y="60">Each surface names the source state and recovery; unknown/unavailable never becomes 0.</text>
+
+  <rect class="card" x="24" y="90" width="320" height="190" rx="8"/>
+  <text class="t" x="44" y="120">Loading</text>
+  <text class="s" x="44" y="150">Canvas: skeleton, mutation disabled</text>
+  <text class="s" x="44" y="176">Library: “Đang tải thư viện...”</text>
+  <text class="s" x="44" y="202">Inspector: selection preserved</text>
+  <text class="s" x="44" y="228">Recovery: wait/cancel navigation</text>
+
+  <rect class="card" x="364" y="90" width="320" height="190" rx="8"/>
+  <text class="t" x="384" y="120">Empty</text>
+  <text class="s" x="384" y="150">Network rỗng - kéo block để bắt đầu</text>
+  <text class="s" x="384" y="176">Library empty: no compatible entry</text>
+  <rect class="action" x="384" y="210" width="156" height="40" rx="5"/>
+  <text class="s" x="400" y="236">Mở toàn bộ block</text>
+
+  <rect class="err" x="704" y="90" width="320" height="190" rx="8"/>
+  <text class="t" x="724" y="120">Error / Invalid graph</text>
+  <text class="s" x="724" y="150">Không đọc được tài liệu FBD</text>
+  <text class="s" x="724" y="176">Canonical giữ nguyên; không near-match</text>
+  <rect class="action" x="724" y="210" width="120" height="40" rx="5"/>
+  <text class="s" x="746" y="236">Tải lại</text>
+
+  <rect class="ro" x="1044" y="90" width="332" height="190" rx="8"/>
+  <text class="t" x="1064" y="120">Permission / Read only</text>
+  <text class="s" x="1064" y="150">Không có quyền sửa hoặc &lt;768 px</text>
+  <text class="s" x="1064" y="176">Cho phép xem/chọn/mở Inspector</text>
+  <text class="s" x="1064" y="202">Ẩn/disable mutation kèm lý do</text>
+  <text class="s" x="1064" y="228">Recovery: đổi role/viewport</text>
+
+  <rect class="warn" x="24" y="310" width="320" height="190" rx="8"/>
+  <text class="t" x="44" y="340">Unavailable / Unknown</text>
+  <text class="s" x="44" y="370">Registry/Point Catalog không khả dụng</text>
+  <text class="s" x="44" y="396">Hiện “Không xác định được”</text>
+  <text class="s" x="44" y="422">0 insertion, 0 mapping tự động</text>
+  <rect class="action" x="44" y="448" width="118" height="36" rx="5"/>
+  <text class="s" x="68" y="471">Thử lại</text>
+
+  <rect class="warn" x="364" y="310" width="320" height="190" rx="8"/>
+  <text class="t" x="384" y="340">Stale / Offline</text>
+  <text class="s" x="384" y="370">Watch chỉ dùng nguồn thật</text>
+  <text class="s" x="384" y="396">EDIT không có runtime value: “—”</text>
+  <text class="s" x="384" y="422">Stale/offline mang badge riêng</text>
+  <text class="s" x="384" y="448">Không chuyển thành 0</text>
+
+  <rect class="err" x="704" y="310" width="320" height="190" rx="8"/>
+  <text class="t" x="724" y="340">Conflict</text>
+  <text class="s" x="724" y="370">Draft đã đổi ở phiên khác</text>
+  <text class="s" x="724" y="396">Giữ buffer local, không overwrite</text>
+  <rect class="action" x="724" y="438" width="112" height="38" rx="5"/>
+  <text class="s" x="747" y="463">Tải lại</text>
+  <rect class="action" x="848" y="438" width="148" height="38" rx="5"/>
+  <text class="s" x="864" y="463">Giữ bản đang gõ</text>
+
+  <rect class="good" x="1044" y="310" width="332" height="190" rx="8"/>
+  <text class="t" x="1064" y="340">Ready / Dirty</text>
+  <text class="s" x="1064" y="370">Canvas thao tác được</text>
+  <text class="s" x="1064" y="396">Dirty Draft vẫn Save được</text>
+  <text class="s" x="1064" y="422">Check khóa cho tới khi Save/seal</text>
+  <text class="s" x="1064" y="448">Một thao tác = một undo entry</text>
+
+  <rect class="card" x="24" y="530" width="1352" height="250" rx="8"/>
+  <text class="t" x="44" y="564">Decision surfaces</text>
+  <text class="s" x="44" y="596">Wire invalid: preview đỏ + lý do; thả tay = cancel, canonical byte-identical.</text>
+  <text class="s" x="44" y="626">PID review: card vẫn thấy nhưng disabled; tooltip nêu Controls+Safety approval.</text>
+  <text class="s" x="44" y="656">Auto Layout: preview khác canonical; Apply tạo một history entry, Cancel tạo 0 entry.</text>
+  <text class="s" x="44" y="686">Drawer: focus trap; Escape đóng; focus trả về opener; nền không nhận pointer.</text>
+  <text class="s" x="44" y="716">All-network view: selection/mutation chỉ thuộc một active scene; cross-network paste/connect bị từ chối.</text>
+  <text class="s" x="44" y="746">Every message uses VI/EN copy; no blank/zero fallback for unknown, stale or offline.</text>
+</svg>
