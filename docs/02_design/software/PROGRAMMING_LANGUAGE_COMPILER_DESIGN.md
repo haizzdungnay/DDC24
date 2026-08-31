@@ -3,13 +3,13 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LANG-PROG-001` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Trạng thái | **Active — IMPLEMENT_READY; user POU/library semantics đã khóa** |
-| Ngày | 2026-08-24 |
+| Ngày | 2026-08-31 |
 | Chủ quản | Compiler Lead + Controls Lead |
 | Người review | Core Lead, FE Lead, Verification Lead, Security Lead |
 | Người phê duyệt | System Architect + Product Owner |
-| Nguồn | `SRS-PROG-001` v1.0, Product v3.0, ADR-050, `DDD-SW-PROG-UNIFIED-001` |
+| Nguồn | `SRS-PROG-001` v1.0, Product v3.0, ADR-050, **ADR-054**, `DDD-SW-PROG-UNIFIED-001` |
 | Phạm vi | ST/FBD PROGRAM/FUNCTION/FUNCTION_BLOCK → common typed IR; compiler ngoài RT |
 
 > **Normative update.** Unified DDD §4–§7 là authority cho Product Target. Review discipline được waive khỏi entry theo
@@ -98,8 +98,9 @@ Revision canonical source
 
 Không cho: global mutable variable, pointer/reference, dynamic array/string,
 file/network/system call, direct address `%I/%Q`, recursion, unbounded loop.
-`CASE`, `FOR`, `WHILE`, `REPEAT` và dynamic array vẫn ngoài subset vì không có
-bounded WCET rule; parser reject rõ. User POU đã Active theo ADR-050.
+`FOR`, `WHILE`, `REPEAT` và dynamic array vẫn ngoài subset vì không có bounded
+WCET rule; parser giữ chỗ từ khoá và reject rõ. `CASE` **thuộc subset** — xem
+§4.3 và `ADR-054`. User POU đã Active theo ADR-050.
 
 ### 4.2 Type và literal
 
@@ -120,8 +121,15 @@ không được thay bằng unitless.
 
 ### 4.3 Statement, expression và thứ tự
 
-- Assignment, `IF/ELSIF/ELSE/END_IF`, call FB instance và expression không có
-  side effect ngoài FB call được phép.
+- Assignment, `IF/ELSIF/ELSE/END_IF`, `CASE/OF/ELSE/END_CASE`, call FB instance
+  và expression không có side effect ngoài FB call được phép.
+- **Luật WCET của `CASE`** (`ADR-054`): compiler **khử đường** `CASE` về đúng cây
+  `IF/ELSIF/ELSE` sẵn có (`st_parser.cpp` `parse_case()`), nên nó không thêm opcode
+  IR nào và không mở một đường thực thi thứ hai. Số nhánh là hữu hạn và biết tại
+  compile time; tập nhãn bị chặn trên bởi `kMaxStatements` (§8) và compiler từ chối
+  nhãn trùng, dải rỗng, dải chồng nhau cùng nhãn không phải hằng nguyên. Vì vậy
+  `CASE` giữ nguyên tính chặn trên của một scan — khác `FOR`/`WHILE`/`REPEAT`, nơi
+  số vòng phụ thuộc dữ liệu chạy.
 - Precedence và associativity được parser khóa; evaluation trái sang phải; không
   dựa vào locale/timezone.
 - Một FB instance chỉ được gọi một lần trong một PROGRAM cycle. Read output FB

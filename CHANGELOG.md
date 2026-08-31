@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+### Quyết định — `ADR-054` phạm vi ngôn ngữ ST bám IEC 61131-3 (2026-08-31)
+
+- **`docs/00_governance/DECISIONS.md`** — cấp `ADR-054` **Accepted**, số trống kế tiếp nay là
+  `ADR-055`. Chủ sở hữu ra nguyên tắc *"làm chuẩn theo IEC: có thì giữ, không có thì bỏ"*;
+  áp nguyên văn thì đâm vào ba chỗ nên ADR chốt **cách áp**.
+  *Bốn phán quyết*: (1) nguyên tắc áp cho **cú pháp/ngữ nghĩa ngôn ngữ**, không áp cho thư viện
+  điều khiển ⇒ `CASE` giữ vì IEC có; (2) `PID`/`HYSTERESIS`/`SCALE`/`DEADBAND` **không** thuộc
+  thư viện chuẩn IEC nhưng **giữ**, kèm nghĩa vụ đánh dấu "mở rộng nhà sản xuất" ở hồ sơ, registry
+  và UI — IEC cho phép mở rộng miễn là công bố rõ, nên `PID` không bị gỡ; (3) `FOR`/`WHILE`/
+  `REPEAT` có trong IEC nhưng **giữ loại trừ** vì `P1` (mọi scan chấm dứt trong thời gian chặn
+  trên được) là ràng buộc an toàn của DDC, phải công bố kèm lý do; (4) hệ kiểu làm **theo đợt** —
+  đợt gần `VAR_IN_OUT` + `ARRAY` tĩnh + `STRUCT` (ba thứ đi cùng nhau vì `VAR_IN_OUT` là truyền
+  tham chiếu, không có kiểu hợp thành thì gần như vô dụng), đợt sau `LREAL`/`BYTE`/`WORD`/`DWORD`/
+  enum, loại trừ có lý do `STRING` độ dài biến và `DATE`/`TOD`/`DT` vì `P2`.
+- **`docs/02_design/software/PROGRAMMING_LANGUAGE_COMPILER_DESIGN.md`** lên **1.2** — vá mâu thuẫn
+  authority mà `F-STED-005` nêu: §4.1 trước đây tuyên bố *"`CASE` … ngoài subset; parser reject
+  rõ"* trong khi `st_parser.cpp:975` `parse_case()` chấp nhận đầy đủ và chương trình AHU trên bo
+  đang dùng. Nay §4.1 tách `CASE` khỏi nhóm vòng lặp, §4.3 thêm `CASE/OF/ELSE/END_CASE` kèm
+  **luật WCET**: khử đường về cây `IF/ELSIF` sẵn có, không thêm opcode IR, số nhánh hữu hạn biết
+  tại compile time, tập nhãn chặn trên bởi `kMaxStatements` (`st_parser.cpp:1023`).
+  **Không đổi một dòng mã compiler nào.**
+- **`docs/07_records/reviews/ST_EDITOR_IEC61131_GAP_REVIEW_2026-08-31.md`** lên **1.2** — §10 viết
+  lại thành *10.1 Đã ký* / *10.2 Còn lại*; ghi chú cập nhật vào `F-STED-005`; §0 câu 3 nói rõ
+  gate `G1` **vẫn FAIL** cho tới khi #357 xuất bản hồ sơ ngôn ngữ — mâu thuẫn `CASE` được gỡ
+  không đồng nghĩa `G1` đạt.
+  *Issue*: đóng **#356** (`ISS-STED-07`, đủ 4/4 AC); **#367** đổi bản chất từ "quyết định
+  `VAR_IN_OUT`" sang **thi hành** `VAR_IN_OUT`+`ARRAY`+`STRUCT` (nâng lên `priority:high`);
+  **#368** đổi thành đánh dấu 4 khối mở rộng + lộ trình bổ sung khối IEC thiếu; **#357** hết bị
+  chặn; **#359** nhận danh sách mục §9 phải bổ sung kèm lý do.
+
+
 ### Tài liệu — Review GAP ST Editor so với chuẩn "IEC 61131-3-aligned" (2026-08-31)
 
 - **`docs/07_records/reviews/ST_EDITOR_IEC61131_GAP_REVIEW_2026-08-31.md`** (`REV-STED-IEC-001`,

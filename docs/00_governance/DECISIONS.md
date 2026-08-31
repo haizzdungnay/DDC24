@@ -2,11 +2,12 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-24 (`ADR-053` **Accepted** theo exact Candidate pin
-`413a043748dce3b44d2c5076412de761760ba17a` và
+**Cập nhật:** 2026-08-31 (`ADR-054` **Accepted** — phạm vi ngôn ngữ ST bám
+IEC 61131-3 theo nguyên tắc chủ sở hữu ra ngày 2026-08-31, nguồn finding
+`REV-STED-IEC-001`; `ADR-055` là số trống kế tiếp. Trước đó: `ADR-053` **Accepted**
+theo exact Candidate pin `413a043748dce3b44d2c5076412de761760ba17a` và
 `AUTH-PROG-2026-08-24-05`; R3 vẫn phải chờ predecessor `T59-813 DONE` trước khi
-`T59-814` tự chuyển READY; `ADR-054` là số trống kế tiếp. Trước đó: `ADR-052` là
-ADR Accepted gần nhất.)
+`T59-814` tự chuyển READY.)
 
 Log này hợp nhất các ADR rời. ID trùng cũ đã được chuẩn hóa; **bản 2026-08-19 sửa lại lần chuẩn hoá
 2026-07-22**: EasySet parity thành **`ADR-040`** (không phải `ADR-013`) và raw SHM thành **`ADR-041`**
@@ -24,7 +25,7 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 > định Plan 57 §12, mục nội tuyến bên dưới). Vì vậy `ls docs/adr/` **không** cho
 > biết số nào còn trống. Trước khi đặt số mới, lấy số lớn nhất trong bảng hoặc
 > hồ sơ ADR hiện hành rồi cộng một. Số cao nhất đã cấp phát và Accepted mới
-> nhất: **`ADR-053`** (2026-08-24).
+> nhất: **`ADR-054`** (2026-08-31).
 
 | ID | Quyết định hiện hành | Trạng thái |
 |---|---|---|
@@ -78,6 +79,7 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 | ADR-048 | **Mô phỏng luật cảnh báo đi qua `POST /api/v1/alarm-settings/simulate`, là VỎ gọi `mkddc-alarm-sim`.** Thi hành `ADR-035`: nhận một `AlarmSetting` bản nháp + chuỗi mẫu `(t, value)`, trả các lần bật/tắt kèm mốc thời gian và mức nghiêm trọng. Thiếu binary ⇒ `503` nói rõ thiếu gì; **cấm** bản tính xấp xỉ ở Go hay FE, kể cả "gần đúng". Mô phỏng **không** chạm cấu hình đang lưu và không ghi audit thay đổi. Phục vụ `T57-2.13`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-049 | **Code-splitting theo route dùng `React.lazy` cho các nhánh NẶNG và HIẾM, không chia nhỏ toàn bộ.** Chia theo lô nghiệp vụ: Programming, Xu hướng/biểu đồ, Lịch vận hành, Modbus RTU. Bốn màn hình mở đầu ca trực (Landing, Giám sát, Cảnh báo, Chẩn đoán) **ở lại chunk chính** — chia chúng ra chỉ đổi một lần tải thành hai lần chờ. Mỗi ranh giới `lazy` phải có `Suspense` với khối trạng thái thật, không màn hình trắng. Số đo bắt buộc là **thời gian mở trang đầu trên board thật**, không phải kích thước tệp. Phục vụ `T57-4.2`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-053 | **PGM-02 Simulation dùng `mkddc-programming-sim-worker` ephemeral theo session, tách production Core/SHM/device/iobus/output/RETAIN; Web chỉ supervisor/RBAC/audit/quota, mutation admin-only.** [Hồ sơ](../adr/ADR-053-programming-simulation-worker-cach-ly.md). | **Accepted 2026-08-24** — `AUTH-PROG-2026-08-24-05`, exact Candidate pin `413a043748dce3b44d2c5076412de761760ba17a`; consumer/discipline/Verification/Document Control `WAIVED FOR IMPLEMENTATION`; R3 vẫn ORDERED sau `T59-813`, release NO-GO |
+| ADR-054 | **Phạm vi ngôn ngữ ST bám IEC 61131-3: nguyên tắc áp cho cú pháp/ngữ nghĩa; `CASE` giữ kèm luật WCET; `PID`/`HYSTERESIS`/`SCALE`/`DEADBAND` giữ nhưng bắt buộc đánh dấu là mở rộng nhà sản xuất; `FOR`/`WHILE`/`REPEAT` giữ loại trừ vì `P1`; hệ kiểu làm theo đợt, đợt gần `VAR_IN_OUT`+`ARRAY` tĩnh+`STRUCT`.** Mục nội tuyến bên dưới. | **Accepted 2026-08-31** — nguồn `REV-STED-IEC-001`; đóng #356, đổi phạm vi #367, định hướng #368, gỡ chặn #357 |
 
 > [!IMPORTANT]
 > **Mọi dòng ghi `chữ ký người: WAIVED FOR IMPLEMENTATION` trong bảng trên đều có
@@ -1535,12 +1537,86 @@ profile nên profile đổi sẽ gãy build, không gãy ngoài hiện trường
   đặt hẹn giờ an toàn ở đó sẽ biến mỗi lần chỉnh thành sự kiện tương thích
   artifact trong khi không artifact nào phụ thuộc nó.
 
-ADR được cấp và Accepted mới nhất:
-[`ADR-053`](../adr/ADR-053-programming-simulation-worker-cach-ly.md), theo
-`AUTH-PROG-2026-08-24-05`. Số ADR tiếp theo còn trống: **`ADR-054`**.
+## ADR-054 — Phạm vi ngôn ngữ ST bám IEC 61131-3: chuẩn quyết cú pháp, mở rộng nhà sản xuất phải đánh dấu, loại trừ phải công bố lý do
+
+**Trạng thái:** Accepted
+**Ngày:** 2026-08-31
+**Người quyết định:** Phạm Đình Chương — Product Owner/CTO (nguyên tắc "làm chuẩn
+theo IEC: có thì giữ, không có thì bỏ", phiên 2026-08-31)
+**Nguồn finding:** [`REV-STED-IEC-001`](../07_records/reviews/ST_EDITOR_IEC61131_GAP_REVIEW_2026-08-31.md) §5 `F-STED-005`, §7
+
+### Bối cảnh
+
+Review ST Editor chấm gate `G1` **FAIL**: không hồ sơ ngôn ngữ nào khớp code đang
+phát hành. `DDD-LANG-PROG-001` §4.1 tuyên bố parser từ chối `CASE`, trong khi
+`st_parser.cpp` `parse_case()` chấp nhận đầy đủ và chương trình AHU trên bo đang
+dùng `CASE`. `ST_SUBSET_SPEC` §5.5/§10/§11 cũng lạc hậu theo hướng ngược lại.
+
+Chủ sở hữu ra nguyên tắc: bám IEC 61131-3, IEC có thì giữ, IEC không có thì bỏ.
+Áp nguyên văn thì đâm vào ba chỗ: (1) `PID`, `HYSTERESIS`, `SCALE`, `DEADBAND`
+**không** thuộc thư viện chuẩn IEC — chiếu chữ thì phải gỡ, nhưng `PID` là lõi
+điều khiển HVAC đang chạy thật; (2) `FOR`/`WHILE`/`REPEAT` **có** trong IEC nhưng
+phá nguyên tắc `P1` (mọi scan chấm dứt trong thời gian chặn trên được), vốn là
+ràng buộc an toàn của DDC; (3) nhóm kiểu hợp thành **có** trong IEC nhưng chạm
+`P2` (không cấp phát khi chạy) và toàn bộ IR layout.
+
+Bản thân IEC 61131-3 không đòi implement 100% ngôn ngữ: nó cho phép công bố tập
+con và cho phép mở rộng nhà sản xuất **miễn là đánh dấu rõ**. Quyết định dưới đây
+làm chính xác điều đó.
+
+### Quyết định
+
+1. **Nguyên tắc "IEC có thì giữ, không có thì bỏ" áp cho cú pháp và ngữ nghĩa
+   ngôn ngữ**, không áp cho thư viện điều khiển. Thư viện đi theo luật riêng ở
+   điểm 3.
+2. **`CASE` thuộc subset — giữ.** IEC có `CASE`, compiler đã hiện thực đầy đủ và
+   có test cả hai chiều. `DDD-LANG-PROG-001` §4.1 phải sửa vì nó đang nói ngược
+   với code. Luật WCET đi kèm: `CASE` được khử đường về cây `IF/ELSIF` sẵn có,
+   không thêm opcode IR, số nhánh hữu hạn và biết tại compile time, tập nhãn chặn
+   trên bởi `kMaxStatements`; nên `CASE` giữ nguyên tính chặn trên của một scan.
+3. **Thư viện:** `TON`/`TOF`/`TP`/`R_TRIG`/`F_TRIG`/`CTU`/`CTD`, `ABS`/`MIN`/`MAX`/
+   `LIMIT`/`SEL`/`SQRT` và 14 hàm chuyển đổi là **chuẩn IEC — giữ**. `PID`,
+   `HYSTERESIS`, `SCALE`, `DEADBAND` là **mở rộng nhà sản xuất — giữ, nhưng BẮT
+   BUỘC đánh dấu** "không thuộc IEC 61131-3" trong hồ sơ ngôn ngữ, trong registry
+   thư viện và trên UI nơi người dùng chọn khối. Khối/hàm IEC còn thiếu (`RS`,
+   `SR`, `CTUD`, `SEMA`, `MUX`, `MOVE`, `TRUNC`, `EXPT`, `LN`/`LOG`/`EXP`, lượng
+   giác, `SHL`/`SHR`/`ROL`/`ROR`) bổ sung **theo đợt**, ưu tiên theo nhu cầu HVAC
+   thật, không phủ chuẩn cho đủ.
+4. **Vòng lặp `FOR`/`WHILE`/`REPEAT`: giữ loại trừ.** IEC có, nhưng `P1` là ràng
+   buộc an toàn của một bộ điều khiển phải hoàn tất mọi scan trong thời gian chặn
+   trên được. Loại trừ này **phải được công bố kèm lý do** trong bảng khác biệt,
+   và parser tiếp tục giữ chỗ từ khoá để người gõ vào nhận thông điệp đúng bản
+   chất thay vì một lỗi cú pháp khó hiểu.
+5. **Hệ kiểu: làm theo đợt.** Đợt gần: `VAR_IN_OUT` + `ARRAY` tĩnh + `STRUCT` —
+   ba thứ này đi cùng nhau vì `VAR_IN_OUT` (truyền tham chiếu) chỉ có công dụng
+   thật khi đã có kiểu hợp thành để truyền. Đợt sau: `LREAL`, `BYTE`/`WORD`/
+   `DWORD`, enum. **Loại trừ có công bố lý do:** `STRING` độ dài biến và
+   `DATE`/`TIME_OF_DAY`/`DATE_AND_TIME` (vi phạm `P2`).
+6. **Mọi mở rộng và mọi loại trừ phải nằm trong hồ sơ ngôn ngữ sinh máy được**
+   (`ISS-STED-06`, issue #357), không còn được nằm rải rác ở ba tài liệu mâu
+   thuẫn nhau như hiện nay.
+
+### Hệ quả
+
+- `DDD-LANG-PROG-001` lên 1.2: §4.1 tách `CASE` khỏi nhóm vòng lặp, §4.3 thêm
+  `CASE` và luật WCET của nó. Đóng issue #356 (`ISS-STED-07`).
+- Issue #367 (`ISS-STED-16`) đổi bản chất: từ "quyết định `VAR_IN_OUT`" thành
+  **thi hành** `VAR_IN_OUT` cùng `ARRAY`/`STRUCT` ở đợt gần.
+- Issue #368 (`ISS-STED-17`) có định hướng: đánh dấu 4 khối mở rộng + bổ sung
+  khối IEC thiếu theo đợt.
+- Issue #357 (`ISS-STED-06`) hết bị chặn — hồ sơ ngôn ngữ nay biết phải ghi gì.
+- `ST_SUBSET_SPEC` §5.5/§9/§10/§11 sửa theo, thuộc issue #359 (`ISS-STED-08`).
+- **Không** đổi một dòng mã compiler nào ở quyết định này; `PID` và ba khối mở
+  rộng **được giữ nguyên**, chỉ thêm nhãn phân loại.
+
+ADR được cấp và Accepted mới nhất: **`ADR-054`** (2026-08-31, phạm vi ngôn ngữ ST
+bám IEC 61131-3). Trước đó là
+[`ADR-053`](../adr/ADR-053-programming-simulation-worker-cach-ly.md) theo
+`AUTH-PROG-2026-08-24-05`. Số ADR tiếp theo còn trống: **`ADR-055`**.
 
 ## Lịch sử cập nhật gần nhất
 
 | Ngày | Nội dung |
 |---|---|
+| 2026-08-31 | Cấp `ADR-054` **Accepted**: phạm vi ngôn ngữ ST bám IEC 61131-3 — nguyên tắc áp cho cú pháp, `CASE` giữ (kèm luật WCET), `PID`/`HYSTERESIS`/`SCALE`/`DEADBAND` giữ nhưng phải đánh dấu là mở rộng nhà sản xuất, vòng lặp giữ loại trừ vì `P1`, hệ kiểu làm theo đợt (`VAR_IN_OUT`+`ARRAY`+`STRUCT` trước). Nguồn: `REV-STED-IEC-001`. Số trống kế tiếp `ADR-055`. |
 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`, pin exact Candidate commit `413a043748dce3b44d2c5076412de761760ba17a` và chuyển `ADR-053` từ Proposed sang Accepted cho implementation; giữ dependency R1→R2→R3, maturity/evidence trung thực và `RELEASE_READY=NO-GO`. |

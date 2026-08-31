@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REV-STED-IEC-001` |
-| Phiên bản | 1.1 |
+| Phiên bản | 1.2 |
 | Ngày | 2026-08-31 |
-| Trạng thái | **APPROVED WITH CONDITIONS (2026-08-31)** — chủ sở hữu duyệt bảng §8 kèm điều kiện bổ sung `ISS-STED-18/19/20`; đã bổ sung ở bản 1.1 và **đã tạo issue trên repo** (xem §8.2) |
+| Trạng thái | **APPROVED WITH CONDITIONS (2026-08-31)**, phạm vi ngôn ngữ đã ký bằng `ADR-054` cùng ngày (xem §10) — chủ sở hữu duyệt bảng §8 kèm điều kiện bổ sung `ISS-STED-18/19/20`; đã bổ sung ở bản 1.1 và **đã tạo issue trên repo** (xem §8.2) |
 | Baseline | `main` @ `661a714` (Merge PR #346) |
 | Người thực hiện | Claude Code (review source), theo đề bài chuẩn ST Editor do chủ sở hữu cấp 2026-08-31 |
 | Phạm vi code | `apps/core/application/st/`, `apps/core/application/programming/`, `apps/web-api/internal/programming/`, `apps/web-ui/src/features/programming/design/` |
@@ -20,7 +20,7 @@
 |---|---|
 | 1. Tài liệu này dùng để làm gì? | Chấm ST Editor hiện tại theo 18 gate + 12 use case của chuẩn đề bài, ghi finding có dẫn chứng dòng mã, và đề xuất bảng issue để chủ sở hữu duyệt trước khi tạo trên repo. |
 | 2. Kết luận một câu là gì? | **Lõi ngôn ngữ (L1/L2) và các bất biến an toàn (LKG, Draft/Active, giá trị runtime) đạt mức tốt; đường CHẨN ĐOÁN từ compiler tới mắt người dùng thì hỏng ở cả ba tầng** — mỗi lần Kiểm tra chỉ trả về đúng một lỗi, không có warning, mất thông điệp cụ thể, và trang soạn thảo PGM-02 không hiển thị lỗi ST nào. |
-| 3. Có được gọi "IEC 61131-3-aligned" không? | **Chưa, cho tới khi đóng `F-STED-005`.** Không phải vì thiếu tính năng, mà vì **không có hồ sơ ngôn ngữ nào khớp code đang chạy**: `DDD-LANG-PROG-001` §4.1 nói `CASE` bị parser từ chối, còn `st_parser.cpp` chấp nhận đầy đủ `CASE`. Gate `G1` FAIL. |
+| 3. Có được gọi "IEC 61131-3-aligned" không? | **Chưa, cho tới khi issue #357 xuất bản hồ sơ ngôn ngữ.** Mâu thuẫn `CASE` đã được gỡ ngày 2026-08-31 bằng `ADR-054` + `DDD-LANG-PROG-001` 1.2, nhưng `G1` đòi *hồ sơ ngôn ngữ khớp code*, mà hồ sơ đó chưa tồn tại. Không phải vì thiếu tính năng, mà vì **không có hồ sơ ngôn ngữ nào khớp code đang chạy**: `DDD-LANG-PROG-001` §4.1 nói `CASE` bị parser từ chối, còn `st_parser.cpp` chấp nhận đầy đủ `CASE`. Gate `G1` FAIL. |
 | 4. Cái gì hỏng nặng nhất với người dùng? | Viết sai một dòng ST, người dùng nhận đúng một câu: *"Kiểm tra thất bại hoặc quá thời gian."* — cả 19 mã lỗi `ST-LEX`/`ST-SYN`/`ST-SEM` gộp về một câu, và mỗi lần Kiểm tra chỉ hiện một lỗi. |
 | 5. Bao nhiêu finding? | 15 finding: 4 High, 1 High (doc/authority), 7 Medium, 3 Low. Không có Critical an toàn: **không finding nào cho ghi sai I/O vật lý hoặc mất LKG**. |
 | 6. Bao nhiêu issue? | **20 issue, chia 5 đợt** (17 đề xuất ban đầu + `ISS-STED-18/19/20` do chủ sở hữu yêu cầu khi duyệt). Đợt 1 (6 issue) là điều kiện cần để trình soạn thảo dùng được thật; đợt 2 (6 issue) là điều kiện cần để tuyên bố "IEC-aligned"; đợt 5 là **cổng bằng chứng chặn ký đóng review**. |
@@ -259,6 +259,12 @@ tại rồi thiết kế review/test theo niềm tin đó.
 
 **Lưu ý.** Lỗi hiển thị `CASE` không được tô màu đã sửa (`DEV-PROG-022`, có test đọc thẳng tệp C++).
 Cái còn lại là **hồ sơ**, chưa ai sửa.
+
+> **Cập nhật 2026-08-31 — đã xử lý một nửa.** Chủ sở hữu ra nguyên tắc "làm chuẩn theo IEC: có thì
+> giữ, không có thì bỏ" ⇒ IEC có `CASE` ⇒ **giữ**. Đã ký `ADR-054` và sửa `DDD-LANG-PROG-001` lên
+> 1.2: §4.1 tách `CASE` khỏi nhóm vòng lặp, §4.3 thêm `CASE` kèm **luật WCET** (khử đường về
+> `IF/ELSIF`, không thêm opcode IR, tập nhãn chặn trên bởi `kMaxStatements`). Issue #356 đóng.
+> Phần còn lại của `F-STED-005` — **hồ sơ ngôn ngữ khớp code** — vẫn mở ở #357, nên `G1` vẫn FAIL.
 
 ---
 
@@ -564,14 +570,29 @@ trên đã vào `main`.
 
 ---
 
-## 10. Cần chủ sở hữu quyết định
+## 10. Quyết định của chủ sở hữu
 
-| # | Quyết định | Vì sao chặn |
+### 10.1 Đã ký — `ADR-054` (2026-08-31)
+
+Nguyên tắc chủ sở hữu ra: **"làm chuẩn theo IEC: có thì giữ, không có thì bỏ"**. Áp nguyên văn thì
+đâm vào ba chỗ, nên `ADR-054` chốt cách áp:
+
+| # | Câu hỏi | Quyết định | Hệ quả |
+|---|---|---|---|
+| 1 | **`CASE`** | IEC có ⇒ **giữ**. Nguyên tắc áp cho **cú pháp/ngữ nghĩa ngôn ngữ**, không áp cho thư viện điều khiển | `DDD-LANG-PROG-001` lên 1.2, §4.3 có luật WCET cho `CASE`. **Đóng #356** |
+| 2 | **`PID`, `HYSTERESIS`, `SCALE`, `DEADBAND`** — không thuộc thư viện chuẩn IEC | **Giữ**, nhưng **bắt buộc đánh dấu** "mở rộng nhà sản xuất, không thuộc IEC 61131-3" ở hồ sơ ngôn ngữ, registry và UI | Không gỡ khối nào; `PID` an toàn. Thêm việc gắn nhãn vào #368 |
+| 3 | **`FOR`/`WHILE`/`REPEAT`** — IEC có | **Giữ loại trừ** vì `P1` (mọi scan chấm dứt trong thời gian chặn trên được) là ràng buộc an toàn | Phải công bố kèm lý do ở bảng khác biệt (#359); parser tiếp tục giữ chỗ từ khoá |
+| 4 | **Hệ kiểu** — IEC có ARRAY/STRUCT/STRING/LREAL… | **Làm theo đợt**, ưu tiên nhu cầu HVAC. Đợt gần: `VAR_IN_OUT` + `ARRAY` tĩnh + `STRUCT`. Đợt sau: `LREAL`, `BYTE/WORD/DWORD`, enum. Loại trừ có công bố: `STRING` độ dài biến, `DATE/TOD/DT` (vi phạm `P2`) | **#367 đổi bản chất**: từ "quyết định `VAR_IN_OUT`" thành **thi hành**, đi cùng `ARRAY`/`STRUCT` |
+
+Ba thứ ở đợt gần đi cùng nhau là có lý do: `VAR_IN_OUT` là truyền **tham chiếu**, công dụng thật của
+nó là truyền kiểu hợp thành mà không sao chép. Làm `VAR_IN_OUT` khi chưa có `ARRAY`/`STRUCT` thì được
+một construct đúng chuẩn nhưng gần như không ai dùng.
+
+### 10.2 Còn lại
+
+| # | Quyết định | Vì sao cần ký |
 |---|---|---|
-| 1 | **`CASE`: giữ hay bỏ** (`ISS-STED-07`) | Tài liệu Target đã duyệt nói parser từ chối; code chấp nhận; chương trình AHU trên bo đang dùng. Không thể đóng `G1` khi chưa ký. |
-| 2 | **`VAR_IN_OUT`: hỗ trợ hay công bố là khác biệt cố ý** (`ISS-STED-16`) | Ảnh hưởng interface POU, IR layout và FBD. Sửa sau khi đã có user `FUNCTION_BLOCK` ngoài hiện trường sẽ đắt hơn nhiều. |
-| 3 | **Sửa DDD hay sửa mã lỗi** (`ISS-STED-10`) | Mã lỗi đã là hợp đồng công khai (error catalog, log hiện trường). Tôi khuyến nghị sửa DDD, nhưng đây là quyết định về hợp đồng. |
-| 4 | **Phạm vi thư viện chuẩn** (`ISS-STED-17`) | Quyết định sản phẩm, không phải quyết định kỹ thuật. |
+| 1 | **Sửa DDD hay sửa mã lỗi** (`ISS-STED-10`, #361) | Mã lỗi đã là hợp đồng công khai (error catalog, log hiện trường). Khuyến nghị sửa DDD, nhưng đây là quyết định về hợp đồng, không phải về code. |
 
 ---
 
@@ -594,4 +615,5 @@ Chủ sở hữu đã ghi nhận đúng điểm này khi duyệt: 292 test FE **
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-31 | Bản đầu. 15 finding, chấm 18 gate + 12 UC, 17 issue đề xuất chờ duyệt. |
+| 1.2 | 2026-08-31 | Chủ sở hữu ra nguyên tắc phạm vi ngôn ngữ ("IEC có thì giữ, không có thì bỏ") và ký `ADR-054`. Viết lại §10 thành 10.1 Đã ký / 10.2 Còn lại; ghi chú cập nhật vào `F-STED-005`; sửa §0 câu 3. Đã sửa `DDD-LANG-PROG-001` lên 1.2 (§4.1 + §4.3 luật WCET của `CASE`) ⇒ đóng #356; #367 đổi từ "quyết định" sang "thi hành". |
 | 1.1 | 2026-08-31 | Chủ sở hữu APPROVE WITH CONDITIONS. Bổ sung `ISS-STED-18` (Diagnostic Provenance Contract), `ISS-STED-19` (Language/Artifact Compatibility Version), `ISS-STED-20` (End-to-End V&V Evidence Gate) — tổng 20 issue / 5 đợt. Cập nhật DAG phụ thuộc (`04` nay sau `18`; `19` sau `06`; `20` là cổng cuối). Đã tạo issue trên repo, xem §8.2. |
