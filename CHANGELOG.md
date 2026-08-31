@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+### Sửa lỗi — Mapping workbench mất hẳn bề mặt khai Published Signal (2026-08-31)
+
+- **`MappingTab.tsx`** — Hồi quy do `8f851cc` ("refine mapping workbench layout",
+  PR #346) mang vào `main`, phát hiện khi chạy lại bộ kiểm chứng trên base sau
+  khi pull.
+  *Triệu chứng*: `DesignWorkspacePage.test.tsx:172` đỏ — không tìm thấy
+  `table` tên "Bảng Published Signal của bản nháp" trên route `?tab=mapping`
+  (1 fail / 2200 test).
+  *Nguyên nhân gốc*: commit đó dọn chỗ cho bố cục workbench mới bằng cách gỡ
+  `<PublishedSignalsPanel>` khỏi `MappingTab` và bỏ luôn `draft`/`onSave` khỏi
+  danh sách prop được dùng, nhưng **không đặt panel lại ở bất kỳ đâu**. Sau
+  commit, `PublishedSignalsPanel` không còn được mount trong toàn ứng dụng — chỉ
+  còn chính test riêng của nó tham chiếu tới, nên tree-shaking loại nó khỏi
+  bundle. Đây không phải test lạc hậu mà là **mất chức năng**: panel là đường
+  ghi duy nhất của hai op `upsertSignal`/`removeSignal` (`application/draft_v2.go`);
+  không có nó thì Draft v2 không còn cách khai Published Signal nào từ UI. Kéo
+  theo `UX-REQ-007` (publisher/type/freshness/fallback/consumer) mất bề mặt, và
+  `e2e/programming-real.spec.ts:791` (F-P59-UI-001) bấm thẳng nút
+  "Khai Published Signal" trên chính route Mapping này nên lane real-backend
+  cũng sẽ đỏ — lane đó không chạy mỗi lượt nên hồi quy lọt qua review.
+  *Cách sửa*: mount lại panel ở **cuối** tab Mapping thay vì đầu như trước. Giữ
+  trọn ý đồ của `8f851cc` — worklist và point catalog vẫn giữ vùng cuộn riêng
+  (`h-[34rem]`/`h-[35rem]`) và bộ lọc UI/AO/DO/VP mới, không bị panel đẩy xuống
+  — mà vẫn trả lại đường ghi signal. Panel hiển thị thẳng, không bọc trong khối
+  thu gọn, vì e2e bấm nút bên trong nó.
+  *Kiểm chứng*: vitest 2200/2200 pass (trước sửa 2199/2200); `npm run lint` sạch;
+  `npm run build:release` PASS, chunk `programming` 162.37 KiB gzip / ngân sách
+  R3 165.00 KiB (dư 2.63 KiB); `scripts/verify-project.sh --component layout`
+  exit 0; ctest 1338/1338; `go vet` + `go test ./... -count=1` sạch.
+
+
 ### Thêm — chế độ gõ toàn màn hình cho trình soạn thảo ST (2026-08-29)
 
 - **`DEV-PROG-026`** — Chủ sở hữu đặt yêu cầu cứng: chỗ gõ phải **cao gấp đôi**
