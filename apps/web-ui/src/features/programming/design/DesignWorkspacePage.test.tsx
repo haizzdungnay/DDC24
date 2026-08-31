@@ -127,7 +127,7 @@ function pouInTree(name: string) {
 }
 
 describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
-  it('mount Published Signals trên route Mapping bằng raw Draft v2, không qua adapter làm mất signals[]', async () => {
+  it('không mount Published Signals trên route Mapping', async () => {
     const project = baseProject()
     project.draft = {
       schemaVersion: 2,
@@ -169,9 +169,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     renderWorkspace('/eng/programming/projects/project-1/design?tab=mapping')
 
     expect(await screen.findByRole('tab', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('aria-selected', 'true')
-    const table = await screen.findByRole('table', { name: 'Bảng Published Signal của bản nháp' })
-    expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('AirHandler')
-    expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('5000 ms')
+    expect(screen.queryByRole('table', { name: 'Bảng Published Signal của bản nháp' })).not.toBeInTheDocument()
   })
 
   it('nạp Draft thật và cho phép thêm chương trình ST qua PATCH batch upsertProgram+setTask', async () => {

@@ -6,7 +6,6 @@ import { AssignedMappingsTable } from './AssignedMappingsTable'
 import { MappingInspector } from './MappingInspector'
 import { MappingToolbar } from './MappingToolbar'
 import { PointCatalogPane, type PointKindFilter } from './PointCatalogPane'
-import { PublishedSignalsPanel } from './PublishedSignalsPanel'
 import { useI18n } from '../../../../shared/i18n'
 import { VariableWorklist } from './VariableWorklist'
 import { buildMappingVariableRows, buildPointRows, rankPointRows, type CatalogTruthState } from './mappingViewModel'
@@ -27,7 +26,7 @@ export function MappingTab(props: {
   forceReadOnly?: boolean
   onOpenSource?: (programId: string) => void
 }) {
-  const { draft, document, saving, onSave, projectId, saveError, active = true, forceReadOnly = false, onOpenSource } = props
+  const { document, saving, projectId, saveError, active = true, forceReadOnly = false, onOpenSource } = props
   const { pick } = useI18n()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
@@ -117,15 +116,6 @@ export function MappingTab(props: {
       <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} pointKind={pointKind} onPointKindChange={setPointKind} />
     </div>
     <div className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]"><AssignedMappingsTable rows={visibleVariables} onSelect={setSelectedVariableId} /><MappingInspector row={selectedVariable} /></div>
-    {/* `UX-REQ-007` — Published Signal là bề mặt authoring DUY NHẤT của
-      * `upsertSignal`/`removeSignal`; không có panel này thì Draft v2 không còn
-      * đường khai signal nào từ UI. Bố cục workbench mới đẩy nó xuống cuối để
-      * worklist và catalog giữ được chiều cao cuộn riêng, nhưng panel vẫn phải
-      * mount và hiện rõ — `e2e/programming-real.spec.ts` (F-P59-UI-001) bấm
-      * thẳng nút "Khai Published Signal" trên chính route Mapping này. */}
-    <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
-      <PublishedSignalsPanel draft={draft ?? document} saving={saving} onSave={onSave} forceReadOnly={forceReadOnly} />
-    </div>
   </div>
   )
 }
