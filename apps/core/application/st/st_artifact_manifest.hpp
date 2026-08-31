@@ -76,9 +76,18 @@ struct StManifestVerificationSummary {
 bool BuildStArtifact(std::string_view source_id, std::string_view source,
                      StArtifactBuildResult* out, StManifestError* error,
                      const std::vector<StIoMapEntry>& io_map = {});
+
+/* ISS-STED-01: overload thu MỌI diagnostic của lần dựng vào `*bag`. */
+bool BuildStArtifact(std::string_view source_id, std::string_view source,
+                     StArtifactBuildResult* out, StManifestError* error,
+                     const std::vector<StIoMapEntry>& io_map, StDiagnosticBag* bag);
 bool BuildFbdArtifact(std::string_view source_id, std::string_view source,
                       StArtifactBuildResult* out, StManifestError* error,
                       const std::vector<StIoMapEntry>& io_map = {});
+
+bool BuildFbdArtifact(std::string_view source_id, std::string_view source,
+                      StArtifactBuildResult* out, StManifestError* error,
+                      const std::vector<StIoMapEntry>& io_map, StDiagnosticBag* bag);
 
 /* Dùng khi bytes đã được ký sau compile. Với Rev A HASH_ONLY, Build* gọi hàm
  * này trực tiếp sau encode. */

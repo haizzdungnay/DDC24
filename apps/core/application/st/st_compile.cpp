@@ -1010,11 +1010,18 @@ bool compile_st_to_ir_linked(const StProgram& program, const std::string& bundle
 bool parse_st_pou_text_source(const StPouTextSource& source, StProgram* out,
                               std::string* canonical_source, StDiagnostic* diag)
 {
+    return parse_st_pou_text_source(source, out, canonical_source, diag, nullptr);
+}
+
+bool parse_st_pou_text_source(const StPouTextSource& source, StProgram* out,
+                              std::string* canonical_source, StDiagnostic* diag,
+                              StDiagnosticBag* bag)
+{
     if (out == nullptr || canonical_source == nullptr) return false;
     StDiagnostic local;
     StDiagnostic* target = diag ? diag : &local;
     if (source.language == StPouTextSource::Language::ST) {
-        if (!parse_st_pou(source.source, out, target)) return false;
+        if (!parse_st_pou(source.source, out, target, bag)) return false;
         *canonical_source = source.source;
         if (!source.pou_name.empty() && source.pou_name != out->name) {
             target->severity = StSeverity::ERROR;
@@ -1097,6 +1104,14 @@ bool compile_st_pou_bundle(const std::vector<StPouTextSource>& text_sources,
                            StPouBundleCompileResult* out, StDiagnostic* diag,
                            const StCompileOptions& options)
 {
+    return compile_st_pou_bundle(text_sources, library, out, diag, options, nullptr);
+}
+
+bool compile_st_pou_bundle(const std::vector<StPouTextSource>& text_sources,
+                           const std::vector<StLibraryEntry>& library,
+                           StPouBundleCompileResult* out, StDiagnostic* diag,
+                           const StCompileOptions& options, StDiagnosticBag* bag)
+{
     if (out == nullptr) return false;
     *out = StPouBundleCompileResult{};
     StDiagnostic local;
@@ -1116,11 +1131,20 @@ bool compile_st_pou_bundle(const std::vector<StPouTextSource>& text_sources,
     owned.reserve(text_sources.size());
     std::vector<StPouSource> sources;
     sources.reserve(text_sources.size());
+    /* Pha parse chạy hết MỌI POU trước khi dừng: hai POU hỏng độc lập thì
+     * người dùng phải thấy cả hai trong một vòng Kiểm tra. Chỉ khi pha này
+     * sạch mới đi tiếp — registry/typecheck trên AST thiếu câu lệnh sẽ sinh
+     * lỗi giả, đúng thứ tiêu chí chấp nhận của ISS-STED-01 cấm. */
+    bool parse_ok = true;
+    StDiagnostic first_parse_error;
     for (const StPouTextSource& text_source : text_sources) {
         auto pou = std::make_unique<StProgram>();
         std::string canonical;
-        if (!parse_st_pou_text_source(text_source, pou.get(), &canonical, target))
-            return false;
+        if (!parse_st_pou_text_source(text_source, pou.get(), &canonical, target, bag)) {
+            if (bag == nullptr) return false;
+            if (parse_ok) { first_parse_error = *target; parse_ok = false; }
+            continue;
+        }
         if (text_source.from_library && pou->kind == StPouKind::PROGRAM) {
             target->severity = StSeverity::ERROR;
             target->code = st_diag_code::kPouSignatureInvalid;
@@ -1138,11 +1162,15 @@ bool compile_st_pou_bundle(const std::vector<StPouTextSource>& text_sources,
         owned.push_back(std::move(pou));
         canonical_sources.push_back(std::move(canonical));
     }
+    if (!parse_ok) { *target = first_parse_error; return false; }
 
-    if (!st_build_pou_registry(sources, library, &out->registry, target)) return false;
+    if (!st_build_pou_registry(sources, library, &out->registry, target)) {
+        if (bag != nullptr) bag->add(*target);
+        return false;
+    }
     if (!typecheck_st_pou_set(sources, out->registry, target,
                               options.published_signals,
-                              options.program_identity)) return false;
+                              options.program_identity, bag)) return false;
     if (options.enforce_review_gate) {
         for (const auto& pou : owned)
             if (!st_review_gate_check(*pou, target)) return false;
@@ -1200,6 +1228,15 @@ bool compile_st_pou_bundle(const std::vector<StPouTextSource>& text_sources,
     return true;
 }
 
+/* Nhánh chưa phục hồi được (review gate, lowering, registry): chỉ có ĐÚNG MỘT
+ * diagnostic, nhưng nó vẫn phải vào túi — không thì CLI thấy túi rỗng và phát
+ * ra một mảng rỗng cho một lần Check thất bại. */
+static bool add_and_fail(StDiagnosticBag* bag, const StDiagnostic* diag)
+{
+    if (bag != nullptr && diag != nullptr) bag->add(*diag);
+    return false;
+}
+
 bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag)
 {
     return compile_st_source(source, out, diag, StCompileOptions{});
@@ -1208,22 +1245,37 @@ bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic*
 bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag,
                        const StCompileOptions& options)
 {
+    return compile_st_source(source, out, diag, options, nullptr);
+}
+
+bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag,
+                       const StCompileOptions& options, StDiagnosticBag* bag)
+{
+    /* Pha sau chỉ chạy khi pha trước SẠCH. Typecheck trên AST thiếu câu lệnh,
+     * hay lowering trên AST chưa chốt kiểu, đều sinh diagnostic không tương
+     * ứng lỗi thật của người dùng (ISS-STED-01, tiêu chí "không sinh
+     * diagnostic giả"). */
     StProgram prog;
-    if (!parse_st_program(source, &prog, diag)) return false;
+    if (!parse_st_program(source, &prog, diag, bag)) return false;
     if (options.published_signals.empty() && options.program_identity.empty()) {
-        if (!typecheck_st_program(&prog, diag)) return false;
-        if (options.enforce_review_gate && !st_review_gate_check(prog, diag)) return false;
-        return compile_st_to_ir(prog, source, out, diag);
+        if (!typecheck_st_program(&prog, diag, bag)) return false;
+        if (options.enforce_review_gate && !st_review_gate_check(prog, diag))
+            return add_and_fail(bag, diag);
+        if (!compile_st_to_ir(prog, source, out, diag)) return add_and_fail(bag, diag);
+        return true;
     }
     std::vector<StPouSource> sources{{&prog, {}}};
     StPouRegistryResult registry;
-    if (!st_build_pou_registry(sources, {}, &registry, diag) ||
-        !typecheck_st_pou_set(sources, registry, diag, options.published_signals,
-                              options.program_identity))
+    if (!st_build_pou_registry(sources, {}, &registry, diag)) return add_and_fail(bag, diag);
+    if (!typecheck_st_pou_set(sources, registry, diag, options.published_signals,
+                              options.program_identity, bag))
         return false;
-    if (options.enforce_review_gate && !st_review_gate_check(prog, diag)) return false;
-    return compile_st_to_ir_linked(prog, source, sources, registry, out, nullptr,
-                                   diag, options);
+    if (options.enforce_review_gate && !st_review_gate_check(prog, diag))
+        return add_and_fail(bag, diag);
+    if (!compile_st_to_ir_linked(prog, source, sources, registry, out, nullptr,
+                                 diag, options))
+        return add_and_fail(bag, diag);
+    return true;
 }
 
 } // namespace core

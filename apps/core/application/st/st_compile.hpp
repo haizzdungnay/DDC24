@@ -95,6 +95,9 @@ struct StPouTextSource {
 bool parse_st_pou_text_source(const StPouTextSource& source, StProgram* out,
                               std::string* canonical_source,
                               StDiagnostic* diag);
+bool parse_st_pou_text_source(const StPouTextSource& source, StProgram* out,
+                              std::string* canonical_source,
+                              StDiagnostic* diag, StDiagnosticBag* bag);
 
 struct StLinkedProgram {
     std::string source_id;
@@ -115,11 +118,21 @@ bool compile_st_pou_bundle(const std::vector<StPouTextSource>& sources,
                            StPouBundleCompileResult* out, StDiagnostic* diag,
                            const StCompileOptions& options = StCompileOptions{});
 
+/* ISS-STED-01: như trên nhưng thu MỌI diagnostic phục hồi được vào `*bag`
+ * (parse của mọi POU, rồi typecheck của mọi POU). Túi CHƯA `finalize()` —
+ * caller còn gộp thêm diagnostic của binding trước khi áp trần/sort. */
+bool compile_st_pou_bundle(const std::vector<StPouTextSource>& sources,
+                           const std::vector<StLibraryEntry>& library,
+                           StPouBundleCompileResult* out, StDiagnostic* diag,
+                           const StCompileOptions& options, StDiagnosticBag* bag);
+
 /* Tiện ích một bước cho CLI và test: source -> parse -> typecheck -> review gate
  * -> IR. */
 bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag);
 bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag,
                        const StCompileOptions& options);
+bool compile_st_source(const std::string& source, StIrModule* out, StDiagnostic* diag,
+                       const StCompileOptions& options, StDiagnosticBag* bag);
 
 } // namespace core
 
