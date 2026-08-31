@@ -224,9 +224,14 @@ Tệp sửa: `apps/core/application/st/tests/test_st_signal_bus.cpp`.
 
 | Trạng thái | Issue |
 |---|---|
-| `CLOSED` (2) | `#350`, `#356` |
-| Đã sửa xong, chờ merge (2) | `#351`, `#352` — bằng chứng `EV-STED-0203-001` |
+| `CLOSED` (4) | `#350`, `#356`, **`#351`**, **`#352`** — hai cái sau đóng 2026-08-31 qua PR #413 (`26e34f24`), bằng chứng `EV-STED-0203-001` |
 | `OPEN` (15) | `#353`, `#354`, `#355`, `#357`, `#358`, `#359`, `#360`, `#361`, `#362`, `#363`, `#364`, `#365`, `#366`, `#367`, `#368` |
+| Nợ kiểm chứng mới (1) | **`#414`** (`ISS-STED-21`) — `#351`/`#352` merge **không qua gate CI** (billing GitHub Actions) và **chưa đo trên bo DDC-24 thật** |
+
+> **Lưu ý khi tính điều kiện ký đóng `#369`.** `#351` và `#352` đã `CLOSED` nhưng bằng chứng của
+> chúng là **đo cục bộ trên WSL2**, không phải môi trường phát hành và không qua gate CI. Khi nghiệm
+> thu `#369`, phải tính `#414` là **tiền đề còn mở**, nếu không sẽ đúng vào lỗi mà `#369` sinh ra để
+> chặn: coi một issue `CLOSED` là bằng chứng đã đủ.
 
 ### Giá trị đã xác lập của phiên đo nền
 

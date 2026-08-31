@@ -8,7 +8,8 @@
 | Ngày đo | 2026-08-31 |
 | Base | `68580c0a` (`origin/main`) + nhánh `evidence/gate369-vv-baseline` |
 | Hồ sơ đo nền liên quan | `2026-08-31-gate369-e2e-vv-baseline.md` (`EV-GATE369-BASELINE-001`) |
-| Verdict | **ĐẠT** cho `#351` và `#352`. `ST-WARN-001` khai báo-chưa-hiện-thực, có lý do và điều kiện mở khoá ghi ở §5 |
+| Verdict | **ĐẠT** cho `#351` và `#352` **trong phạm vi đo cục bộ**. `ST-WARN-001` khai báo-chưa-hiện-thực (§5). Gate CI chưa chạy và chưa đo trên bo thật (§5.1) — nợ chuyển sang `#414` |
+| Đã merge | PR #413 → `26e34f24` trên `main`; `#351` và `#352` `CLOSED` |
 
 ## 0. Việc này chứng minh cái gì
 
@@ -262,13 +263,31 @@ PR #413 có **18/18 check `FAILURE`**. Con số đó **không** phản ánh ch�
   failed or your spending limit needs to be increased."*
 
 - **Bị chặn bởi:** billing GitHub Actions của tổ chức `Mekong-HCM`.
-- **Cần để mở khoá:** xử lý `Billing & plans`, chạy lại `Build & Test` + `Security Scan` trên nhánh.
-- **Không dùng `gh pr merge --admin`.** Lách một gate đang hỏng chính là lớp lỗ hổng mà `#369`
-  (`ISS-STED-20`) sinh ra để chặn — số đo cục bộ ở hồ sơ này **bổ sung** cho gate CI, không thay thế.
+- **Cần để mở khoá:** xử lý `Billing & plans`, chạy lại `Build & Test` + `Security Scan`.
+- **Quyết định của chủ sở hữu:** PR #413 được merge **không qua gate** (`26e34f24`), `#351`/`#352`
+  đóng. Số đo cục bộ ở hồ sơ này vì vậy là **bằng chứng duy nhất** cho hai issue đó — nó **bổ sung**
+  cho gate CI chứ không thay thế, nên phần nợ được chuyển sang **`#414`** (`ISS-STED-21`) thay vì
+  biến mất cùng lúc issue đóng.
 
 Đây cũng là một biến thể của cùng một bài học ở §6: **một trạng thái đỏ/xanh chỉ có nghĩa khi biết
 nó đo cái gì**. 18 check đỏ mà không job nào chạy thì đỏ đó rỗng nghĩa, đúng như `ctest` trả `0` khi
 không test nào chạy.
+
+## 5.2 Bốn thứ hồ sơ này KHÔNG chứng minh được
+
+Mọi phép đo ở trên chạy trên **host x86 WSL2**. Bốn khẳng định sau chỉ phần cứng target mới trả lời
+được, và được ghi vào **`#414`** (`ISS-STED-21`) chứ không nằm trong phạm vi hai issue đã đóng:
+
+1. **`ST-WARN-004` có đúng trên chu kỳ quét thật không.** Cảnh báo khẳng định đọc ngõ ra FB trước lời
+   gọi cho giá trị **của chu kỳ trước** (DDD §4.3). Trên host điều này chỉ được kiểm bằng phân tích
+   tĩnh. Nếu runtime hành xử khác, cảnh báo đang nói sai và người dùng sẽ đi sửa nhầm chỗ.
+2. **Artifact sinh kèm cảnh báo có nạp và chạy được không.** §2.3 chứng minh artifact **được sinh**;
+   chưa chứng minh nó **dùng được**. `ST_SUBSET_SPEC` §12.6 chỉ có nghĩa trọn vẹn ở vế sau.
+3. **`PATH_LEAK_COUNT=0` có giữ trên binary cross-build không.** §2.4 đã chỉ ra số 0 này một phần đến
+   từ `-ffile-prefix-map` — một **cờ build**. Toolchain SOM khác toolchain host, nên phải đo lại trên
+   JSON do **binary target** sinh mới biết `sanitizeCompilerMessage()` có phải lớp phòng thủ duy nhất.
+4. **Cảnh báo hiển thị đúng khi chạy `LIVE`.** Test FE chạy với dữ liệu dựng sẵn, chưa lần nào với dữ
+   liệu đi từ bo thật qua BE tới UI.
 
 ## 6. Hai bẫy đo gặp trong chính phiên này
 

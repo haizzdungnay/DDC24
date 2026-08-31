@@ -104,14 +104,23 @@ mọi phán quyết ở tầng compiler sẽ là đoán mò. Hằng vẫn khai v
 mã có một nguồn duy nhất. `#351` cho phép rõ ràng việc này. *Cần để mở khoá:* đưa chu kỳ Task vào
 đầu vào compile (hợp đồng `Input`), việc này thuộc phạm vi khác.
 
-**Bị chặn — gate CI không chạy được.** PR #413 có **18/18 check `FAILURE`**, nhưng **không phải hỏng
-mã**: mọi job chết sau **2–3 giây** với **0 step** đã chạy, đỏ đồng loạt cả những job PR không đụng
-tới (`MCU Firmware`, `Gitleaks`, `CodeQL`), và đỏ trên **cả `main`** từ 03:15 cùng ngày. Annotation của
+**Đã merge và đóng issue — kèm nợ kiểm chứng ghi ở `#414`.** PR #413 merge vào `main` (`26e34f24`),
+`#351` và `#352` `CLOSED`.
+
+Merge diễn ra **không qua gate CI**. PR có **18/18 check `FAILURE`**, nhưng **không phải hỏng mã**:
+mọi job chết sau **2–3 giây** với **0 step** đã chạy, đỏ đồng loạt cả những job PR không đụng tới
+(`MCU Firmware`, `Gitleaks`, `CodeQL`), và đỏ trên **cả `main`** từ 03:15 cùng ngày. Annotation của
 runner: *"The job was not started because recent account payments have failed or your spending limit
-needs to be increased."* — tức **billing GitHub Actions**. *Cần để mở khoá:* xử lý `Billing & plans`
-của tổ chức `Mekong-HCM`, chạy lại `Build & Test` + `Security Scan`. **Không merge bằng `--admin`**:
-lách một gate đang hỏng chính là lớp lỗ hổng mà `#369` (`ISS-STED-20`) sinh ra để chặn. `#351` và
-`#352` vì vậy **chưa đóng**, dù số đo cục bộ đã đủ xanh.
+needs to be increased."* — tức **billing GitHub Actions**.
+
+Hệ quả phải nói thẳng: số đo cục bộ trong `EV-STED-0203-001` là **bằng chứng duy nhất** cho hai issue
+đã đóng, và chúng đo trên **WSL2 x86, không phải môi trường phát hành**. Bốn khẳng định chưa chứng
+minh được (ngữ nghĩa `ST-WARN-004` trên chu kỳ quét thật; artifact kèm cảnh báo có nạp/chạy được;
+`PATH_LEAK_COUNT` trên binary cross-build — vì `-ffile-prefix-map` là **cờ build**; hiển thị khi chạy
+`LIVE`) được chuyển sang **`#414`** (`ISS-STED-21`) thay vì biến mất cùng lúc issue đóng.
+
+*Cần để mở khoá `#414`:* quyền `Billing & plans` của tổ chức `Mekong-HCM`; và bo DDC-24 (SOM Foxlinx)
+đã nạp firmware kèm quyền chạy `LIVE` — **không có phần thay thế bằng phần mềm** cho vế sau.
 
 ### Phê duyệt + tạo issue — kế hoạch Point & I/O b2.2 (2026-08-31)
 
