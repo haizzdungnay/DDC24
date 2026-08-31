@@ -8,6 +8,134 @@
 
 ## [Unreleased]
 
+### Phê duyệt + tạo issue — kế hoạch Point & I/O b2.2 (2026-08-31)
+
+- **`docs/07_records/reviews/POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md`** lên **b2.2**.
+  Chủ sở hữu phán quyết **APPROVED b2.0 WITH 3 ACCEPTANCE CRITERIA**: chấp thuận hướng kiến trúc,
+  thứ tự ưu tiên, và cả ba quyết định (DI = **A**; `AO` giữ trong hợp đồng, `UO` chỉ là nhãn;
+  `Program Disable` = release ownership **khác** `Controller Fault` = hard Safe-State).
+  *Ba AC P0 ghi vào `ISS-PIO-31`* (không mở issue mới, theo yêu cầu giữ bảng gọn):
+  `AC-PIO-ID-01` — `extIndex` **không phải** identity, Binding neo vào `pointId` bền, `extIndex` chỉ
+  là runtime handle; `AC-PIO-ID-02` — referential integrity `pointId → extIndex → bus/device/register/
+  datatype/access` trước activation, lệch fingerprint hoặc config revision ⇒ **BLOCK Commission**
+  (thay một phép kiểm *dải* bằng một phép kiểm *danh tính* — `st_io_map.cpp:112` hiện chỉ kiểm
+  `ext_index ∈ [1,256]` nên slot đã dịch vẫn lọt); `AC-PIO-ID-03` — migration binding legacy, không
+  chứng minh được cùng identity ⇒ **giữ LKG + yêu cầu rebind, không tự remap**.
+  *Bằng chứng mới cho `AC-PIO-ID-03`*: chủ sở hữu nêu rủi ro quy ước base index và nó **có thật** —
+  allocator `iobus` **0-based** (`ext_cursor_ = 0`, `modbus_master.cpp:25`) trong khi artifact/io_map
+  **1-based** (`st_io_map.cpp:112` kiểm `>= 1`; `st_process_image.cpp:24-30` ghi rõ *"Artifact dùng
+  index 1-based; PointTable dùng 0-based"* rồi `point_index - 1`). Core **tự nó nhất quán**; thứ chưa
+  tồn tại là **producer bắc cầu**. Vì chưa ai tạo được binding Modbus nên đường này **chưa từng chạy
+  với dữ liệu thật lần nào** — `ISS-PIO-01` phát thẳng `ext_idx` thô sẽ **lệch đúng một thanh ghi**,
+  hợp lệ với mọi phép kiểm hiện có.
+  *`ISS-PIO-36` mở rộng*: thêm bảy kịch bản V&V `5a…5g` (rename/add/disable điểm, disable device,
+  reorder bus-thiết bị, đổi register-datatype-access ⇒ BLOCK Commission, migration legacy, và quy ước
+  0-based ↔ 1-based khoá cả hai đầu) — nhóm này là **bằng chứng đóng `ISS-PIO-31`**.
+  *Thứ tự P0 đã khoá* (§8.1.2): `ISS-PIO-31 → 32 → 01 → 02/03 → 35 → 36`, kèm ràng buộc **cấm code
+  `ISS-PIO-01/02` trước khi `ISS-PIO-31` đóng** và có test chứng minh năm thao tác — rename điểm ·
+  add điểm · disable điểm · disable device · reboot — đều không làm binding đổi nghĩa.
+  `ISS-PIO-31` 4,0 → 5,5 ngày-người; Đợt 1 23,0 → **24,5**; tổng 80,5 → **82,0**.
+- **Tạo 36 issue trên `Mekong-HCM/MK-DDC-24`** — dải **#375–#410**, nhãn `point-io` + `priority:*`,
+  theo đúng uỷ quyền của chủ sở hữu. Đường găng P0: #375 (`ISS-PIO-31`) → #376 (`ISS-PIO-32`) →
+  #377 (`ISS-PIO-01`) → #378/#379 (`ISS-PIO-02/03`) → #381 (`ISS-PIO-35`) → #382 (`ISS-PIO-36`);
+  #380 (`ISS-PIO-04`) chạy song song. Cross-reference giữa các issue phụ thuộc trỏ bằng số thật.
+  Bảng truy vết `ISS-PIO-NN → #số` ở §8.10 của review. Nhãn `point-io` mới được tạo cho bộ này.
+- **Phân công 33/36 issue cho `@haizzdungnay` (Dinh Tuan Duong)** theo chỉ đạo chủ sở hữu: mọi issue
+  có phạm vi **FE hoặc BE**. Ba issue **không** gán vì nằm ngoài FE/BE — #384 (`ISS-PIO-34` ma trận
+  trạng thái output: quyết định sản phẩm + `apps/core` C++, phải ký ma trận trước khi chạm mã),
+  #388 (`ISS-PIO-11` `apps/iobus` + hợp đồng `contracts/shm`, đổi ABI phải bump `KX_SHM_MAGIC`),
+  #410 (`ISS-PIO-30` chỉ ghi hồ sơ, không có mã). Bảng §8.10 đổi cột *Ghi chú* thành *Người thực hiện*.
+  Review lên **b2.3**.
+- **`docs/07_records/reviews/README.md`** — cập nhật hàng chỉ mục theo trạng thái b2.3.
+  *Verification*: không đổi mã sản phẩm trong phiên này ⇒ số đo giữ nguyên (332 test FE PASS,
+  3/3 gói Go ok). Seam base index xác minh bằng **đọc mã** với dẫn chứng dòng, không phải chạy thử.
+
+### Phán quyết — chủ sở hữu duyệt kiến trúc Point & I/O, trả lại bảng issue (2026-08-31)
+
+- **`docs/07_records/reviews/POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md`** lên **b2.0**.
+  Chủ sở hữu phán quyết **APPROVE ARCHITECTURE / NOT APPROVE IMPLEMENTATION PLAN YET**: chấp thuận
+  kiến trúc `LOCAL/VP/MB_RTU → Canonical Point Catalog → Binding → Program Variable` và phần lớn
+  finding, **không redesign nền**; nhưng trả lại bảng 30 issue vì *"chỉ nối đường ống"*, thiếu các
+  vấn đề kiến trúc có thể gây lỗi vận hành.
+  *Finding mới `F-PIO-029` (Cao)* — **slot `ext` của điểm Modbus không ổn định**, phát hiện sau khi
+  chủ sở hữu chất vấn tính ổn định của `extIndex`. Chất vấn đúng, và nặng hơn mức nghi ngờ: `ext`
+  được cấp phát tuần tự từ 0 không có bảng bền (`modbus_master.cpp:25`, `bus_worker.cpp:83`), nên
+  **ba thao tác vận hành thường ngày đều làm nó dịch** — đổi tên một điểm (`persistence.go:327`
+  sắp theo `name`), thêm/tắt một điểm (`persistence.go:289`), và **tắt một thiết bị**
+  (`persistence.go:260` loại thiết bị khỏi `cfg.Slaves`, dịch `ext_base` của mọi thiết bị sau).
+  `st_io_map.cpp:107-113` chỉ kiểm `ext_index ∈ [1, 256]` nên slot đã dịch **vẫn hợp lệ**: chương
+  trình tiếp tục chạy và ghi lệnh vào một thanh ghi khác mà không tầng nào cảnh báo. Vì vậy
+  `ISS-PIO-01` (chỉ expose `extIndex`) bị **đảo thứ tự** — làm một mình sẽ tự tạo ra lớp lỗi ghi
+  sai I/O vật lý mà chính review xác nhận là chưa tồn tại.
+  *Bảy issue kiến trúc bổ sung theo yêu cầu*: `ISS-PIO-31` Stable Point Identity & Slot Allocation
+  (P0 chặn), `ISS-PIO-32` Server-authoritative Binding Compatibility (P0 chặn — hôm nay FE và
+  Backend cài cùng bộ luật hai lần và **đã** trôi khỏi nhau), `ISS-PIO-33` Physical I/O
+  Configuration Activation Safety (`Edit → Validate → Apply → Read-back Verify` + rollback),
+  `ISS-PIO-34` Output State Policy Matrix, `ISS-PIO-35` Canonical Quality Contract fail-closed,
+  `ISS-PIO-36` Point/I/O E2E V&V Gate (8 kịch bản xuyên tầng, đặt ở **Đợt 1**), `ISS-PIO-37`
+  RBAC/Audit/Revision cho cấu hình Point.
+  *Ba issue chỉnh scope*: `ISS-PIO-03` phải định nghĩa allocator VP đủ cấp phát/collision/
+  delete-reuse/persistence; `ISS-PIO-04` phải dùng cursor **ổn định tất định**, không chỉ thêm
+  `nextCursor`; `ISS-PIO-05` bị `ISS-PIO-35` bao trọn và **không còn tồn tại độc lập**.
+  *Đợt 1 dựng lại*: 5 issue / 8,5 ngày-người → **8 issue / 23,0 ngày-người**, gồm cả stable
+  identity + compatibility authority + cổng V&V, theo đúng chỉ đạo. Tổng kế hoạch
+  30 issue / 54,5 ngày-người → **36 issue / 7 đợt / 80,5 ngày-người**.
+  *Ba quyết định Owner đã chốt (§9 nay là phán quyết, không còn là câu hỏi)*: **DI = phương án A**
+  (base SKU không có DI riêng; DI là optional SKU capability-gated ⇒ Đợt 3 `ISS-PIO-11/12/13`
+  thành **điều kiện cần**, vì `DS` §174 đang hứa một "capability map" không tồn tại trong mã);
+  **`AO` giữ nguyên** trong code/API/SHM để không phá contract, giao diện được phép hiển thị
+  "UO — Universal Output" (thuần lớp nhãn, gộp vào `ISS-PIO-09`); **safe-state: BÁC** đề xuất b1.0
+  *"mọi nguyên nhân dẫn tới cùng một trạng thái"* — phán quyết này đúng, đề xuất cũ gộp một *sự cố*
+  với một *thao tác có chủ ý*: `Program Disable` phải **release ownership** cho relinquish/default
+  policy chứ không ép hard Safe-State; bất biến hội tụ 3 lớp MCU/iobus/core được giữ cho nhánh
+  safety. `F-PIO-012` đã đảo ngược khuyến nghị cho khớp.
+  *Ghi nhận sai sót của chính review* (§12.1): b1.0 kiểm `extIndex` **có tồn tại không** rồi dừng,
+  không hỏi **nó có ổn định không** — với một trường sẽ được ghi vào Binding rồi Commission xuống
+  thiết bị điều khiển, hai câu hỏi đó không tương đương. Cùng lỗi ấy suýt lặp ở `ISS-PIO-03` và
+  `ISS-PIO-04`.
+  *Verification*: không đổi mã sản phẩm trong phiên này ⇒ số đo giữ nguyên bản trước
+  (332 test FE PASS, 3/3 gói Go ok); `F-PIO-029` xác minh bằng **đọc mã** với dẫn chứng dòng, không
+  phải chạy thử. Review ghi thẳng: 332 test xanh trong khi 7 finding Cao tồn tại — đó là lý do
+  `ISS-PIO-36` được đặt ở Đợt 1.
+- **`docs/07_records/reviews/README.md`** — cập nhật hàng chỉ mục của review theo trạng thái b2.0.
+
+### Review — GAP hệ Point & I/O so với đề bài "POINT & I/O PRODUCT SPEC" 3 nguồn (2026-08-31)
+
+- **`docs/07_records/reviews/POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md`** (mới, `REV-PIO-3SRC-001`)
+  — chấm hệ Point & I/O trong `main` @ `dc1f740` theo đề bài 34 mục + 16 UC do chủ sở hữu cấp:
+  ba nguồn Point (Physical / Virtual / Modbus) → Canonical Point Catalog → Binding → Program Variable.
+  *Kết luận*: kiến trúc 3 nguồn **đã tồn tại đúng** (ba category `LOCAL`/`VP`/`MB_RTU`, một authority
+  duy nhất, bốn khái niệm Channel/Point/Variable/Binding tách bạch — đề bài §2 ĐẠT), nhưng **đường từ
+  Catalog sang Program đứt ở cả ba nguồn** nên UC `MAP-01` FAIL: chỉ điểm LOCAL thật sự dùng được
+  trong chương trình. Chấm 16 UC: 5 PASS / 8 PARTIAL / 3 FAIL / 1 N/A.
+  *28 finding* (6 Cao / 19 Trung bình / 3 Thấp), không finding nào cho ghi sai I/O vật lý.
+  Sáu finding Cao: `F-PIO-001` FE hạ mọi quality lạ hoặc thiếu về `good` (`utils.ts:60-64` gặp
+  `dto.Quality = "unknown"` ở `points.go:155` ⇒ huy hiệu GOOD cho điểm không đọc được, phá `D-07`);
+  `F-PIO-002` `PointCatalogEntry` không cấp `extIndex` nên không dựng nổi binding Modbus dù
+  `st_io_map.cpp:107-113` và `checks_invariants.go:232` đã hỗ trợ; `F-PIO-003` Virtual Point tạo từ
+  giao diện không bao giờ map được vì FE không có trường `boundPointId` (`grep boundPointId` trong
+  `apps/web-ui/src` ra 0 kết quả) ⇒ `pointId` là `VP12`, bị allowlist `AV/BV/MSV` loại;
+  `F-PIO-004` catalog cắt cứng 500 mục nhưng `NextCursor` không bao giờ set, còn FE suy "đầy đủ"
+  chỉ từ `nextCursor` (`MappingTab.tsx:64`) — trần thật của hệ là 744 điểm (24 LOCAL + 464 VP + 256 EXT);
+  `F-PIO-008` `BOARD_CAP_MAP` của IOP bị `iobus` đọc rồi vứt (`main.cpp:641-660`, không vào SHM) nên
+  số kênh là hằng biên dịch ở **bốn** nơi trùng nhau; `F-PIO-019` FE chặn cứng mapping `MB_RTU` bằng
+  lý do đã lạc hậu. Ba mục cần chủ sở hữu chốt trước khi tạo issue: phạm vi DI (`ADR-010` ký base SKU
+  0 DI — đề nghị giữ), safe-state phân biệt theo nguyên nhân (đề nghị giữ override cứng),
+  và thuật ngữ `UO` vs `AO` (đề nghị chỉ đổi nhãn hiển thị).
+  *Bảng issue*: **30 issue / 6 đợt / 54,5 ngày-người**; đợt 1 (5 issue, 8,5 ngày-người) là phần nhỏ
+  nhất đủ để `MAP-01` chuyển FAIL → PASS.
+  *Verification (số đo thật trong phiên)*: `npx vitest --run --environment jsdom src/features/points
+  src/features/modbus-rtu src/shared/api` → **33 tệp / 304 test PASS** (6,14 s);
+  `.../programming/design/mapping` → **4 tệp / 28 test PASS** (3,45 s);
+  `go test ./internal/app/... ./internal/modbusrtu/... ./internal/points/... -count=1` → **3/3 gói ok**
+  (`internal/app` 32,9 s). Không dựng lại C++ nên **không** dẫn số `ctest` nào. Ghi nhận thẳng trong
+  review: 332 test FE xanh trong khi 6 finding Cao đang tồn tại — không bộ test nào phủ các đường đó,
+  nên mỗi issue đợt 1 bắt buộc kèm test hồi quy.
+- **`docs/07_records/reviews/README.md`** — chỉ mục §1.1 đã trễ so với thư mục: bốn record
+  2026-08-27…08-31 (`REV-PIO-3SRC-001`, `REV-STED-IEC-001`, `REC-PGM02-DEVPROG-001`,
+  `REC-PGM02-AUD-ADJ-001`) tồn tại trên đĩa nhưng không có hàng nào trong bảng. Bổ sung đủ bốn hàng
+  và cập nhật dòng *Cập nhật* — một chỉ mục thiếu bốn hồ sơ mới nhất khiến người đọc tin rằng
+  record gần nhất là 2026-08-14.
 ### Added — `ISS-STED-06` ST Language Profile phiên bản hoá, sinh máy được (#357, 2026-08-31)
 
 - **Triệu chứng.** Gate `G1` **FAIL**: không có hồ sơ ngôn ngữ nào khớp code đang phát

@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-20 (Programming Product v3.0 thống nhất; manifest authority mới; record theo phạm vi cũ chỉ còn giá trị lịch sử/As-Built)
+**Cập nhật:** 2026-08-31 (bổ sung 4 record 2026-08-27…08-31 vào §1.1 — chỉ mục trước đó đã trễ so với thư mục; Programming Product v3.0 vẫn là authority, record theo phạm vi cũ chỉ còn giá trị lịch sử/As-Built)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -30,6 +30,10 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 
 | Hồ sơ | Ngày | Trạng thái | Nội dung |
 |---|---|---|---|
+| [Gap hệ Point & I/O vs đề bài 3 nguồn Point](POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md) | 2026-08-31 | **b2.3 — APPROVED, 36 issue đã tạo (#375–#410), 33 đã phân công** (`REV-PIO-3SRC-001`) | Chấm Physical/Virtual/Modbus → Canonical Point Catalog → Binding theo 34 mục + 16 UC. Kiến trúc được chấp thuận, không redesign nền. 29 finding (7 Cao — `F-PIO-029` slot `ext` không ổn định). Kế hoạch 36 issue / 7 đợt / 82,0 ngày-người kèm `AC-PIO-ID-01/02/03` trong `ISS-PIO-31`. Đường găng P0 khoá: #375 → #376 → #377 → #378/#379 → #381 → #382. Ba quyết định Owner: DI = A, `AO` giữ trong hợp đồng, `Program Disable` ≠ `Controller Fault`. 33 issue FE/BE gán `@haizzdungnay` |
+| [Gap ST Editor vs chuẩn IEC 61131-3-aligned](ST_EDITOR_IEC61131_GAP_REVIEW_2026-08-31.md) | 2026-08-31 | **APPROVED WITH CONDITIONS** (`REV-STED-IEC-001`) | 18 gate + 12 UC. Lõi ngôn ngữ đạt, đường chẩn đoán từ compiler tới người dùng hỏng ở cả ba tầng. 15 finding, 20 issue; phạm vi ngôn ngữ đã ký bằng `ADR-054` |
+| [Thi hành `DEV-PROG-001..018` giao diện Programming](PROGRAMMING_UI_DEV_PROG_001_018_2026-08-28.md) | 2026-08-28 | Đã thi hành 18/18 (`REC-PGM02-DEVPROG-001`) | 18 mục review giao diện `/eng/programming/programs` của chủ sở hữu; một mục cần ký lại |
+| [Phán quyết gap analysis auditor — PGM-02](PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) | 2026-08-27 | Adjudicated v1.1 (`REC-PGM02-AUD-ADJ-001`) | 4 finding hợp lệ chuyển thành task; phần bác bỏ status bar đã đảo ngược sau khi có ảnh render |
 | [Gap Universal Input FE vs 12 UC đề xuất](UI_UNIVERSAL_INPUT_FE_GAP_REPORT_2026-08-14.md) | 2026-08-14 | Record (không phải bug) | `InputsPage.tsx` mirror thanh ghi firmware `u0..u7`; đáp ứng 1/12 UC đầy đủ, 8 một phần, 3 chưa có so với đề xuất phân lớp Electrical Mode/Sensor Profile/Fault Detection — gap nằm ở tầng dữ liệu Core, không chỉ FE |
 | [Rà soát BE + FE theo module](CODE_REVIEW_BE_FE_2026-08-06.md) | 2026-08-06 | **Đã đóng** 2026-08-08 (14 sửa · 1 hết hiệu lực) | 15 finding `REV-BE/FE/PLT-*`; xử lý theo [Plan 51](../../03_implementation/51_BE_FE_FINDINGS_REMEDIATION_PLAN.md) |
 | [Soi lỗi giao diện theo từng trang — board Foxlinx](FE_BOARD_PAGE_AUDIT_2026-08-06.md) | 2026-08-06 | Đã đóng | 23/23 trang render, 0 trang trắng sau khi vá; Chromium thật qua SSH tunnel |
