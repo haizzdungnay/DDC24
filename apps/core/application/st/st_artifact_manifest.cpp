@@ -141,12 +141,13 @@ json source_map_json(StSourceLanguage language, std::string_view source_id,
 
 bool compile_reference(StSourceLanguage language, std::string_view source,
                        StIrModule* module, std::string* canonical_source,
-                       std::vector<FbdSourceAnchor>* anchors, StManifestError* error)
+                       std::vector<FbdSourceAnchor>* anchors, StManifestError* error,
+                       StDiagnosticBag* bag = nullptr)
 {
     if (language == StSourceLanguage::ST) {
         StDiagnostic diagnostic;
         const std::string owned(source);
-        if (!compile_st_source(owned, module, &diagnostic)) {
+        if (!compile_st_source(owned, module, &diagnostic, StCompileOptions{}, bag)) {
             return fail(error, diagnostic.code.c_str(),
                         diagnostic.code + ": " + diagnostic.message,
                         diagnostic.line, diagnostic.column, diagnostic.length);
@@ -174,7 +175,7 @@ bool compile_reference(StSourceLanguage language, std::string_view source,
 
 bool build(std::string_view source_id, StSourceLanguage language, std::string_view source,
            StArtifactBuildResult* out, StManifestError* error,
-           const std::vector<StIoMapEntry>& io_map)
+           const std::vector<StIoMapEntry>& io_map, StDiagnosticBag* bag)
 {
     if (!out || !valid_source_id(source_id))
         return fail(error, st_manifest_error::kRequest, "sourceId không hợp lệ");
@@ -183,7 +184,7 @@ bool build(std::string_view source_id, StSourceLanguage language, std::string_vi
     candidate.language = language;
     std::vector<FbdSourceAnchor> anchors;
     if (!compile_reference(language, source, &candidate.module, &candidate.canonical_source,
-                           &anchors, error)) {
+                           &anchors, error, bag)) {
         return false;
     }
 
@@ -195,6 +196,11 @@ bool build(std::string_view source_id, StSourceLanguage language, std::string_vi
     if (!io_map.empty()) {
         std::vector<StDiagnostic> binding_diags;
         if (!resolve_io_bindings(&candidate.module, io_map, &binding_diags)) {
+            /* ISS-STED-01: `resolve_io_bindings` là nơi DUY NHẤT trong pipeline
+             * vốn đã tính ra nhiều diagnostic; trước đây `.front()` vứt phần
+             * còn lại. Một io_map sai 6 binding phải hiện đủ 6 dòng. */
+            if (bag != nullptr)
+                for (const StDiagnostic& diagnostic : binding_diags) bag->add(diagnostic);
             const StDiagnostic& first = binding_diags.empty() ? StDiagnostic{} : binding_diags.front();
             return fail(error, first.code.empty() ? st_manifest_error::kCompile : first.code.c_str(),
                         first.message.empty() ? "io_map binding validation failed" : first.message,
@@ -230,14 +236,28 @@ bool BuildStArtifact(std::string_view source_id, std::string_view source,
                      StArtifactBuildResult* out, StManifestError* error,
                      const std::vector<StIoMapEntry>& io_map)
 {
-    return build(source_id, StSourceLanguage::ST, source, out, error, io_map);
+    return build(source_id, StSourceLanguage::ST, source, out, error, io_map, nullptr);
+}
+
+bool BuildStArtifact(std::string_view source_id, std::string_view source,
+                     StArtifactBuildResult* out, StManifestError* error,
+                     const std::vector<StIoMapEntry>& io_map, StDiagnosticBag* bag)
+{
+    return build(source_id, StSourceLanguage::ST, source, out, error, io_map, bag);
 }
 
 bool BuildFbdArtifact(std::string_view source_id, std::string_view source,
                       StArtifactBuildResult* out, StManifestError* error,
                       const std::vector<StIoMapEntry>& io_map)
 {
-    return build(source_id, StSourceLanguage::FBD, source, out, error, io_map);
+    return build(source_id, StSourceLanguage::FBD, source, out, error, io_map, nullptr);
+}
+
+bool BuildFbdArtifact(std::string_view source_id, std::string_view source,
+                      StArtifactBuildResult* out, StManifestError* error,
+                      const std::vector<StIoMapEntry>& io_map, StDiagnosticBag* bag)
+{
+    return build(source_id, StSourceLanguage::FBD, source, out, error, io_map, bag);
 }
 
 bool CreateArtifactManifest(std::string_view source_id, StSourceLanguage language,

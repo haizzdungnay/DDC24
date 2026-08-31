@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-STED-01` compiler ST trả nhiều diagnostic (#350, 2026-08-31)
+
+- **Triệu chứng.** Mỗi lần Kiểm tra chỉ trả **đúng một** diagnostic. POU có 5 lỗi
+  cần 5 vòng Kiểm tra, mà mỗi vòng là một lần Lưu + seal revision + chờ worker.
+- **Nguyên nhân gốc.** Kiến trúc fail-fast: `st_semantic.cpp` và `st_parser.cpp`
+  `return false` ngay ở lỗi đầu tiên; `st_compile_main.cpp:145` `fail()` là đường
+  **duy nhất** phát diagnostic và luôn phát mảng một phần tử. Nơi duy nhất vốn đã
+  tính ra **nhiều** diagnostic — `resolve_io_bindings()` — thì vứt phần còn lại
+  bằng `.front()`. Mã `ST-LIM-006` ("diagnostics truncated") đã có trong catalog và
+  đã ánh xạ ở Go/TS từ trước, tức hạ tầng nhiều-diagnostic đã thiết kế rồi bỏ dở.
+- **Cách sửa.**
+  - `st_diagnostic.hpp` — thêm `StDiagnosticBag`: trần 64 (`kMaxDiagnostics`), sort
+    ổn định theo `program/order/location/code` (`DDD-LANG-PROG-001` §7), chạm trần
+    thì gắn **đúng một** `ST-LIM-006` ở **cuối** mảng. Trần áp **sau** khi sort —
+    cắt trước sort sẽ bỏ mất lỗi đứng đầu nguồn chỉ vì nó được phát hiện muộn.
+    `StDiagnostic` thêm trường `order` (thứ hạng POU trong package) làm khoá sort
+    cấp cao: hai POU khác nhau không so sánh số dòng với nhau được.
+  - `st_parser.cpp` — phục hồi ở ranh giới **câu lệnh** và **khai báo**.
+    `synchronize_statement()` nuốt tới hết `;` gần nhất nhưng **dừng trước** từ
+    khoá mở/đóng khối và trước hình dạng mở đầu câu lệnh (`ident :=` / `ident (`);
+    không có luật thứ hai thì một câu lệnh thiếu `;` nuốt luôn mọi câu lệnh sau nó
+    tới `END_PROGRAM` và nguồn 3 lỗi chỉ báo về 1. Thân vòng `while` của khối VAR
+    tách thành `parse_var_decl()` để có **đúng một** điểm thoát lỗi.
+  - `st_semantic.cpp` — `build_symbols()` tách thành `check_var_decl()` /
+    `check_fb_decl()`, thu lỗi rồi đi tiếp. Biến khai báo hỏng **vẫn được đăng ký**
+    vào bảng ký hiệu, instance FB không phân giải được kiểu thì đánh dấu "nhiễm" —
+    hai cơ chế này chặn lỗi dây chuyền: bỏ đăng ký thì mọi chỗ *dùng* biến đó đều
+    ăn thêm một `ST-SEM-001` mà nguyên nhân thật nằm ở dòng khai báo.
+  - Bộ đếm `records_` chặn nhân bản diagnostic theo số tầng lồng: không có nó, một
+    lỗi trong `IF` lồng 3 tầng hiện ra 3 lần.
+  - **Pha sau chỉ chạy khi pha trước sạch** (lex → parse → registry → typecheck →
+    lowering). Typecheck trên AST thiếu câu lệnh sinh diagnostic không tương ứng
+    lỗi thật của người dùng — đúng thứ tiêu chí chấp nhận cấm.
+  - `st_artifact_manifest.cpp` + `st_compile_main.cpp` — bỏ `.front()` ở đường
+    binding, đẩy **toàn bộ** `binding_diagnostics` vào túi; `fail()` của CLI phát cả
+    mảng và `finalize()` ở **đúng một chỗ**, ngay trước khi phát.
+  - Mọi API mới là **overload nhận `StDiagnosticBag*`**; overload cũ giữ nguyên
+    hành vi fail-fast, nên không call site nào phải đổi. `*diag` vẫn mang lỗi **đầu
+    tiên** theo thứ tự nguồn, không phải lỗi cuối mà đường phục hồi vừa ghi đè.
+- **Verification** (2026-08-31, `build/fw`, Release, `MODBUS=ON BACNET=ON HMI=ON`):
+  `ctest` **1351/1352 pass**. Test mới `test_st_multi_diagnostic.cpp` **14/14 pass**,
+  phủ đủ 5 tiêu chí chấp nhận. Kiểm chứng CLI thật trên nguồn 4 lỗi:
+  `mkddc-st-compile` trả **4** diagnostic (trước đây: 1).
+  *Đỏ còn lại không liên quan*: `ProgrammingStageAtomicity.JournalFsyncFailureLeavesLiveStateIntact`
+  — test tiêm lỗi bằng `chmod 0400`, container CI chạy `root` nên bỏ qua quyền file;
+  đỏ y hệt trên `main` trước khi sửa.
+
 ### Quyết định — `ADR-054` phạm vi ngôn ngữ ST bám IEC 61131-3 (2026-08-31)
 
 - **`docs/00_governance/DECISIONS.md`** — cấp `ADR-054` **Accepted**, số trống kế tiếp nay là

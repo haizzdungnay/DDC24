@@ -1,14 +1,23 @@
 /**
  * @file  st_diagnostic.hpp
- * @brief FW SOM IEC programming foundation: diagnostic 1 lỗi (fail-fast, giữ
- *        nguyên kiến trúc "return false ở lỗi đầu tiên" của st_parser/st_semantic)
- *        nhưng có đủ vị trí/severity/code để FE bôi đúng chỗ và BE forward JSON
- *        ổn định, không phải string tự do.
+ * @brief Hợp đồng diagnostic của compiler ST: `StDiagnostic` (một mục, có
+ *        vị trí/severity/code để FE bôi đúng chỗ và BE forward JSON ổn định,
+ *        không phải string tự do) và `StDiagnosticBag` (danh sách nhiều mục
+ *        theo `DDD-LANG-PROG-001` §7 — trần 64, sort tất định, chạm trần thì
+ *        gắn đúng một `ST-LIM-006`).
+ *
+ *        `ISS-STED-01` đổi kiến trúc từ fail-fast một lỗi sang thu nhiều lỗi:
+ *        parser và semantic vẫn *bỏ dở* câu lệnh đang hỏng, nhưng PHỤC HỒI ở
+ *        ranh giới câu lệnh/khai báo rồi đi tiếp, nên một vòng Kiểm tra trả
+ *        về mọi lỗi độc lập thay vì bắt người dùng sửa từng lỗi một.
  */
 #ifndef CORE_ST_DIAGNOSTIC_HPP
 #define CORE_ST_DIAGNOSTIC_HPP
 
+#include <algorithm>
+#include <cstddef>
 #include <string>
+#include <vector>
 
 namespace core {
 
@@ -143,8 +152,118 @@ struct StDiagnostic {
     int         line = 0;           /* 1-based; 0 = không xác định được vị trí */
     int         column = 0;         /* 1-based */
     int         length = 1;         /* số ký tự bị đánh dấu, tối thiểu 1 */
+    /* ISS-STED-01: thứ hạng của Program/POU trong package. Khoá sắp xếp cấp
+     * cao nhất sau `source_id`, để diagnostic của cùng một POU không bị trộn
+     * lẫn khi nhiều POU cùng lỗi. Producer nào không biết thứ hạng thì để 0 —
+     * mọi diagnostic khi đó cùng hạng và luật sắp xếp lùi về location/code. */
+    int         order = 0;
 
     bool has_position() const { return line > 0 && column > 0; }
+};
+
+/* ---- ISS-STED-01: túi diagnostic nhiều phần tử ----------------------------
+ *
+ * `DDD-LANG-PROG-001` §7: tối đa 64 diagnostic, sort theo
+ * `program/order/location/code`; chạm trần thì thêm ĐÚNG MỘT `ST-LIM-006` ở
+ * cuối mảng.
+ *
+ * Vì sao là một lớp chứ không phải `std::vector` trần: ba bất biến phải đi
+ * cùng dữ liệu, nếu để call site tự lo thì sớm muộn có nơi quên một cái —
+ * (1) trần 64 áp SAU khi sort (cắt trước khi sort thì bỏ mất lỗi đứng đầu
+ * nguồn chỉ vì nó được phát hiện muộn), (2) `ST-LIM-006` luôn là phần tử
+ * CUỐI và chỉ có một, (3) thứ tự phải TẤT ĐỊNH giữa hai lần chạy — nên
+ * `stable_sort` cộng khoá phụ là chỉ số chèn, không phụ thuộc thứ tự duyệt
+ * container/hash ở tầng trên.
+ *
+ * Túi vẫn thu diagnostic sau khi chạm trần (tới `kHardCap`) rồi mới cắt, vì
+ * một lỗi phát hiện muộn có thể đứng TRƯỚC theo location. Chỉ dừng ghi ở
+ * `kHardCap` để nguồn bệnh hoạn không thổi bộ nhớ. */
+class StDiagnosticBag {
+public:
+    /* Trần công bố ở DDD §7. Đổi số này là đổi hợp đồng với BE/FE. */
+    static constexpr std::size_t kMaxDiagnostics = 64;
+    /* Trần cứng nội bộ, KHÔNG phải hợp đồng: chỉ chặn cấp phát vô hạn. */
+    static constexpr std::size_t kHardCap = 4096;
+
+    void add(const StDiagnostic& diagnostic)
+    {
+        if (items_.size() >= kHardCap) { ++dropped_; return; }
+        items_.push_back(diagnostic);
+    }
+
+    void add(StDiagnostic&& diagnostic)
+    {
+        if (items_.size() >= kHardCap) { ++dropped_; return; }
+        items_.push_back(std::move(diagnostic));
+    }
+
+    bool empty() const { return items_.empty(); }
+    std::size_t size() const { return items_.size(); }
+    const std::vector<StDiagnostic>& items() const { return items_; }
+
+    bool has_error() const
+    {
+        for (const StDiagnostic& d : items_)
+            if (d.severity == StSeverity::ERROR) return true;
+        return false;
+    }
+
+    /* Diagnostic ERROR đầu tiên theo thứ tự đã sort — nguồn cho các API một
+     * diagnostic còn lại (không phải "phần tử [0]", vì [0] có thể là WARNING). */
+    const StDiagnostic* first_error() const
+    {
+        for (const StDiagnostic& d : items_)
+            if (d.severity == StSeverity::ERROR) return &d;
+        return nullptr;
+    }
+
+    void clear() { items_.clear(); dropped_ = 0; truncated_ = false; }
+
+    bool truncated() const { return truncated_; }
+
+    /* Sort ổn định + áp trần + gắn `ST-LIM-006`. Gọi được nhiều lần: lần thứ
+     * hai không thêm `ST-LIM-006` thứ hai vì mảng đã ở trạng thái cuối. */
+    void finalize()
+    {
+        if (truncated_) return;
+        std::stable_sort(items_.begin(), items_.end(), less);
+        if (items_.size() > kMaxDiagnostics || dropped_ > 0) {
+            const StDiagnostic anchor =
+                items_.empty() ? StDiagnostic{} : items_.front();
+            if (items_.size() > kMaxDiagnostics)
+                items_.resize(kMaxDiagnostics);
+            StDiagnostic limit;
+            limit.severity = StSeverity::ERROR;
+            limit.code = st_diag_code::kDiagnosticsTruncated;
+            limit.message = "diagnostic list truncated at " +
+                            std::to_string(kMaxDiagnostics) + " entries";
+            limit.source_id = anchor.source_id;
+            limit.order = anchor.order;
+            limit.line = 0;
+            limit.column = 0;
+            limit.length = 1;
+            items_.push_back(limit);
+            truncated_ = true;
+        }
+    }
+
+private:
+    /* Khoá sắp xếp theo đúng thứ tự công bố: program (`source_id`), `order`,
+     * location (`line`, `column`), rồi `code`. `stable_sort` giữ chỉ số chèn
+     * làm khoá cuối, nên hai diagnostic trùng toàn bộ khoá vẫn ra cùng thứ tự
+     * ở mọi lần chạy. */
+    static bool less(const StDiagnostic& a, const StDiagnostic& b)
+    {
+        if (a.source_id != b.source_id) return a.source_id < b.source_id;
+        if (a.order != b.order) return a.order < b.order;
+        if (a.line != b.line) return a.line < b.line;
+        if (a.column != b.column) return a.column < b.column;
+        return a.code < b.code;
+    }
+
+    std::vector<StDiagnostic> items_;
+    std::size_t dropped_ = 0;
+    bool truncated_ = false;
 };
 
 } // namespace core

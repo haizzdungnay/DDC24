@@ -21,9 +21,19 @@ namespace core {
  * false = lex/syntax/kind error, *diag mô tả vị trí/lý do; *out không xác định. */
 bool parse_st_pou(const std::string& source, StProgram* out, StDiagnostic* diag);
 
+/* ISS-STED-01: như trên nhưng thu MỌI lỗi cú pháp phục hồi được vào `*bag`
+ * (chưa `finalize()`; caller quyết định lúc nào áp trần/sort vì nó còn gộp
+ * thêm diagnostic của tầng semantic và binding).
+ *
+ * `*diag` vẫn mang lỗi ĐẦU TIÊN theo thứ tự nguồn — hợp đồng cũ không đổi. */
+bool parse_st_pou(const std::string& source, StProgram* out, StDiagnostic* diag,
+                  StDiagnosticBag* bag);
+
 /* Như trên nhưng CHỈ nhận PROGRAM. Giữ nguyên hợp đồng cho call site hiện có;
  * nguồn khai FUNCTION/FUNCTION_BLOCK bị từ chối bằng mã kind `ST-POU-001`. */
 bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag);
+bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag,
+                      StDiagnosticBag* bag);
 
 } // namespace core
 

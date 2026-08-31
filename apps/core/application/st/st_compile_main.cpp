@@ -136,16 +136,52 @@ int emit(const nlohmann::json& j, int code)
     return code;
 }
 
+const char* severity_text(core::StSeverity severity)
+{
+    return severity == core::StSeverity::WARNING ? "warning" : "error";
+}
+
+nlohmann::json diagnostic_json(const core::StDiagnostic& diagnostic,
+                               const std::string& fallback_source_id)
+{
+    return nlohmann::json{
+        {"severity", severity_text(diagnostic.severity)},
+        {"code", diagnostic.code},
+        {"message", diagnostic.message},
+        {"sourceId", diagnostic.source_id.empty() ? fallback_source_id : diagnostic.source_id},
+        {"line", diagnostic.line},
+        {"column", diagnostic.column},
+        {"length", diagnostic.length}};
+}
+
+/* Túi diagnostic của lần chạy hiện tại.
+ *
+ * Biến file-scope thay vì tham số vì `fail()` được gọi từ ~40 chỗ, trong đó
+ * nhiều chỗ (đọc file, sandbox, tham số CLI) không dính gì tới compiler và
+ * không có túi để truyền. Đường nào có túi thì `fail()` phát cả mảng; đường
+ * nào không thì mảng một phần tử y như trước. */
+core::StDiagnosticBag* g_bag = nullptr;
+
 int fail(const char* code, const std::string& message, int exit_code,
          const std::string& source_id = {}, uint32_t line = 0,
          uint32_t column = 0, uint32_t length = 1)
 {
     nlohmann::json j;
     j["ok"] = false;
-    j["diagnostics"] = nlohmann::json::array({
-        nlohmann::json{{"severity", "error"}, {"code", code}, {"message", message},
-                       {"sourceId", source_id}, {"line", line}, {"column", column},
-                       {"length", length}}});
+    nlohmann::json diagnostics = nlohmann::json::array();
+    if (g_bag != nullptr && !g_bag->empty()) {
+        /* `finalize()` ở ĐÚNG một chỗ, ngay trước khi phát: sort + trần 64 +
+         * `ST-LIM-006` là hợp đồng với BE/FE, không phải chuyện của từng pha. */
+        g_bag->finalize();
+        for (const core::StDiagnostic& diagnostic : g_bag->items())
+            diagnostics.push_back(diagnostic_json(diagnostic, source_id));
+    } else {
+        diagnostics.push_back(
+            nlohmann::json{{"severity", "error"}, {"code", code}, {"message", message},
+                           {"sourceId", source_id}, {"line", line}, {"column", column},
+                           {"length", length}});
+    }
+    j["diagnostics"] = diagnostics;
     j["artifact"] = nullptr;
     j["artifactSha256"] = nullptr;
     j["artifactFileSha256"] = nullptr;
@@ -528,7 +564,8 @@ bool build_linked_artifact(const std::string& source_id, const std::string& lang
                            core::StArtifactBuildResult* out,
                            std::vector<core::StLinkedPouInfo>* linked_pous,
                            core::StManifestError* error,
-                           const core::StCompileOptions& options)
+                           const core::StCompileOptions& options,
+                           core::StDiagnosticBag* bag)
 {
     auto fail_build = [&](const std::string& code, const std::string& message,
                           uint32_t line = 0, uint32_t column = 0,
@@ -549,7 +586,7 @@ bool build_linked_artifact(const std::string& source_id, const std::string& lang
     std::vector<core::FbdSourceAnchor> anchors;
     if (language == "ST") {
         core::StDiagnostic diagnostic;
-        if (!core::parse_st_pou(source, &root_program, &diagnostic))
+        if (!core::parse_st_pou(source, &root_program, &diagnostic, bag))
             return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
                               diagnostic.column, diagnostic.length);
         if (root_program.kind != core::StPouKind::PROGRAM)
@@ -572,14 +609,21 @@ bool build_linked_artifact(const std::string& source_id, const std::string& lang
         out->language = core::StSourceLanguage::FBD;
     }
     sources.push_back({&root_program, root_requirements});
+    /* Parse mọi POU phụ thuộc rồi mới dừng — xem `compile_st_pou_bundle`. */
+    bool deps_ok = true;
+    core::StDiagnostic first_dep_error;
     for (const PouManifestEntry& dependency : dependencies) {
         auto pou = std::make_unique<core::StProgram>();
         core::StDiagnostic diagnostic;
         std::string canonical;
         if (!core::parse_st_pou_text_source(dependency.text, pou.get(), &canonical,
-                                            &diagnostic))
-            return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
-                              diagnostic.column, diagnostic.length);
+                                            &diagnostic, bag)) {
+            if (bag == nullptr)
+                return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
+                                  diagnostic.column, diagnostic.length);
+            if (deps_ok) { first_dep_error = diagnostic; deps_ok = false; }
+            continue;
+        }
         sources.push_back({pou.get(), dependency.text.requires_library,
                            dependency.text.from_library,
                            dependency.text.library_entry_id,
@@ -588,27 +632,41 @@ bool build_linked_artifact(const std::string& source_id, const std::string& lang
         owned.push_back(std::move(pou));
         dependency_canonical.push_back(std::move(canonical));
     }
+    if (!deps_ok)
+        return fail_build(first_dep_error.code, first_dep_error.message,
+                          first_dep_error.line, first_dep_error.column,
+                          first_dep_error.length);
 
     core::StPouRegistryResult registry;
     core::StDiagnostic diagnostic;
-    if (!core::st_build_pou_registry(sources, library, &registry, &diagnostic) ||
-        !core::typecheck_st_pou_set(sources, registry, &diagnostic,
+    if (!core::st_build_pou_registry(sources, library, &registry, &diagnostic)) {
+        if (bag != nullptr) bag->add(diagnostic);
+        return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
+                          diagnostic.column, diagnostic.length);
+    }
+    if (!core::typecheck_st_pou_set(sources, registry, &diagnostic,
                                     options.published_signals,
-                                    options.program_identity))
+                                    options.program_identity, bag))
         return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
                           diagnostic.column, diagnostic.length);
-    if (!core::st_review_gate_check(root_program, &diagnostic))
+    if (!core::st_review_gate_check(root_program, &diagnostic)) {
+        if (bag != nullptr) bag->add(diagnostic);
         return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
                           diagnostic.column, diagnostic.length);
+    }
     for (const auto& pou : owned) {
-        if (!core::st_review_gate_check(*pou, &diagnostic))
+        if (!core::st_review_gate_check(*pou, &diagnostic)) {
+            if (bag != nullptr) bag->add(diagnostic);
             return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
                               diagnostic.column, diagnostic.length);
+        }
     }
     core::StFbLayoutResult layout;
-    if (!core::st_plan_fb_instance_layout(sources, library, &layout, &diagnostic))
+    if (!core::st_plan_fb_instance_layout(sources, library, &layout, &diagnostic)) {
+        if (bag != nullptr) bag->add(diagnostic);
         return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
                           diagnostic.column, diagnostic.length);
+    }
 
     std::vector<std::size_t> order(dependencies.size());
     for (std::size_t index = 0; index < order.size(); ++index) order[index] = index;
@@ -624,9 +682,11 @@ bool build_linked_artifact(const std::string& source_id, const std::string& lang
                          dependency_canonical[index] + "\n";
     }
     if (!core::compile_st_to_ir_linked(root_program, bundle_source, sources, registry,
-                                       &out->module, linked_pous, &diagnostic, options))
+                                       &out->module, linked_pous, &diagnostic, options)) {
+        if (bag != nullptr) bag->add(diagnostic);
         return fail_build(diagnostic.code, diagnostic.message, diagnostic.line,
                           diagnostic.column, diagnostic.length);
+    }
     for (core::StLinkedPouInfo& info : *linked_pous) {
         for (const PouManifestEntry& dependency : dependencies) {
             if (dependency.expected_name != info.name) continue;
@@ -646,6 +706,10 @@ bool build_linked_artifact(const std::string& source_id, const std::string& lang
     if (!io_map.empty()) {
         std::vector<core::StDiagnostic> binding_diagnostics;
         if (!core::resolve_io_bindings(&out->module, io_map, &binding_diagnostics)) {
+            /* ISS-STED-01: giữ TOÀN BỘ, không `.front()` — xem ghi chú cùng
+             * nội dung ở `st_artifact_manifest.cpp`. */
+            if (bag != nullptr)
+                for (const core::StDiagnostic& item : binding_diagnostics) bag->add(item);
             const core::StDiagnostic first = binding_diagnostics.empty()
                                                  ? core::StDiagnostic{}
                                                  : binding_diagnostics.front();
@@ -1021,18 +1085,20 @@ int main(int argc, char** argv)
     core::StArtifactBuildResult build;
     core::StManifestError build_error;
     std::vector<core::StLinkedPouInfo> linked_pous;
+    core::StDiagnosticBag bag;
+    g_bag = &bag;
     const bool built = pou_manifest_path.empty() && signal_manifest_path.empty()
                            ? (language == "ST"
                                   ? core::BuildStArtifact(source_id, source, &build,
-                                                          &build_error, io_map)
+                                                          &build_error, io_map, &bag)
                                   : core::BuildFbdArtifact(source_id, source, &build,
-                                                           &build_error, io_map))
+                                                           &build_error, io_map, &bag))
                            : build_linked_artifact(source_id, language, source,
                                                    pou_dependencies,
                                                    root_library_requirements,
                                                    library_entries,
                                                    io_map, &build, &linked_pous,
-                                                   &build_error, compile_options);
+                                                   &build_error, compile_options, &bag);
     if (!built)
         return fail(build_error.code.c_str(), build_error.message, 1, source_id,
                     build_error.line, build_error.column, build_error.length);
