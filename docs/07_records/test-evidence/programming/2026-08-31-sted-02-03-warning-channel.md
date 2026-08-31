@@ -251,6 +251,25 @@ lặng bỏ qua, đúng loại lỗi mà bộ gác sinh ra để chặn.
 - `#351` cho phép rõ ràng việc này: *"ST-WARN-001 cần chu kỳ Task nên làm sau nếu chưa có
   đầu vào"*.
 
+## 5.1 Mục bị chặn thứ hai — gate CI
+
+PR #413 có **18/18 check `FAILURE`**. Con số đó **không** phản ánh chất lượng mã:
+
+- Mọi job chết sau **2–3 giây** với **0 step** đã chạy — chưa kịp checkout, chưa kịp build.
+- Đỏ đồng loạt cả những job PR **không đụng tới**: `MCU Firmware`, `Gitleaks Secret Scan`, `CodeQL`.
+- Đỏ trên **cả `main`** từ 03:15 cùng ngày, tức có trước nhánh này.
+- Annotation của runner nói thẳng: *"The job was not started because recent account payments have
+  failed or your spending limit needs to be increased."*
+
+- **Bị chặn bởi:** billing GitHub Actions của tổ chức `Mekong-HCM`.
+- **Cần để mở khoá:** xử lý `Billing & plans`, chạy lại `Build & Test` + `Security Scan` trên nhánh.
+- **Không dùng `gh pr merge --admin`.** Lách một gate đang hỏng chính là lớp lỗ hổng mà `#369`
+  (`ISS-STED-20`) sinh ra để chặn — số đo cục bộ ở hồ sơ này **bổ sung** cho gate CI, không thay thế.
+
+Đây cũng là một biến thể của cùng một bài học ở §6: **một trạng thái đỏ/xanh chỉ có nghĩa khi biết
+nó đo cái gì**. 18 check đỏ mà không job nào chạy thì đỏ đó rỗng nghĩa, đúng như `ctest` trả `0` khi
+không test nào chạy.
+
 ## 6. Hai bẫy đo gặp trong chính phiên này
 
 Cả hai đều thuộc đúng loại mà `#369` viết riêng hai gạch đầu dòng để chặn: **một con số `0`

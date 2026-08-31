@@ -104,6 +104,15 @@ mọi phán quyết ở tầng compiler sẽ là đoán mò. Hằng vẫn khai v
 mã có một nguồn duy nhất. `#351` cho phép rõ ràng việc này. *Cần để mở khoá:* đưa chu kỳ Task vào
 đầu vào compile (hợp đồng `Input`), việc này thuộc phạm vi khác.
 
+**Bị chặn — gate CI không chạy được.** PR #413 có **18/18 check `FAILURE`**, nhưng **không phải hỏng
+mã**: mọi job chết sau **2–3 giây** với **0 step** đã chạy, đỏ đồng loạt cả những job PR không đụng
+tới (`MCU Firmware`, `Gitleaks`, `CodeQL`), và đỏ trên **cả `main`** từ 03:15 cùng ngày. Annotation của
+runner: *"The job was not started because recent account payments have failed or your spending limit
+needs to be increased."* — tức **billing GitHub Actions**. *Cần để mở khoá:* xử lý `Billing & plans`
+của tổ chức `Mekong-HCM`, chạy lại `Build & Test` + `Security Scan`. **Không merge bằng `--admin`**:
+lách một gate đang hỏng chính là lớp lỗ hổng mà `#369` (`ISS-STED-20`) sinh ra để chặn. `#351` và
+`#352` vì vậy **chưa đóng**, dù số đo cục bộ đã đủ xanh.
+
 ### Phê duyệt + tạo issue — kế hoạch Point & I/O b2.2 (2026-08-31)
 
 - **`docs/07_records/reviews/POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md`** lên **b2.2**.
