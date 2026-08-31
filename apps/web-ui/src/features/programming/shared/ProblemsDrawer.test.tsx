@@ -144,4 +144,31 @@ describe('ProblemsDrawer', () => {
       screen.getByText('PRG-ERR-CHECK-001 · ST-WARN-002 · dòng 3 · cột 5')
     ).toBeInTheDocument()
   })
+
+  /* ISS-STED-02 — kênh WARNING mang dữ liệu thật, nên khay phải phân biệt được
+   * ba mức cho CẢ người không nhìn thấy màu.
+   *
+   * Icon mang `aria-hidden`, nên nếu severity chỉ tồn tại ở hình dạng + màu thì
+   * người dùng trình đọc màn hình nghe "lỗi" và "cảnh báo" y hệt nhau — mà đó là
+   * hai hành động khác nhau: một cái chặn phát hành, một cái không. */
+  it('phân biệt ERROR / WARNING / INFO cho cả người không nhìn thấy màu', () => {
+    render(<I18nProvider><ProblemsDrawer diagnostics={[
+      { code: 'PRG-ERR-CHECK-001', severity: 'ERROR', messageKey: '' },
+      { code: 'PRG-ERR-CHECK-001', severity: 'WARNING', messageKey: '' },
+      { code: 'PRG-ERR-CHECK-001', severity: 'INFO', messageKey: '' }
+    ]} /></I18nProvider>)
+    expect(screen.getByText('Lỗi:')).toBeInTheDocument()
+    expect(screen.getByText('Cảnh báo:')).toBeInTheDocument()
+    expect(screen.getByText('Thông tin:')).toBeInTheDocument()
+  })
+
+  it('warning dùng token màu cảnh báo, không dùng token lỗi', () => {
+    const { container } = render(<I18nProvider><ProblemsDrawer diagnostics={[
+      { code: 'PRG-ERR-CHECK-001', severity: 'WARNING', messageKey: '' }
+    ]} /></I18nProvider>)
+    // Lấy icon TRONG danh sách, không phải chevron ở đầu khay.
+    const icon = container.querySelector('li svg[aria-hidden="true"]')
+    expect(icon?.getAttribute('class')).toContain('text-[var(--c-warn-fg)]')
+    expect(icon?.getAttribute('class')).not.toContain('c-fault-fg')
+  })
 })
