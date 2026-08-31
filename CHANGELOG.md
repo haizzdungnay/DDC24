@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Tài liệu — Review GAP ST Editor so với chuẩn "IEC 61131-3-aligned" (2026-08-31)
+
+- **`docs/07_records/reviews/ST_EDITOR_IEC61131_GAP_REVIEW_2026-08-31.md`** (`REV-STED-IEC-001`,
+  mới) — chấm ST Editor theo 18 gate `G1..G18` + 12 `ST-UC-xx` của chuẩn chủ sở hữu cấp
+  2026-08-31, trên baseline `main` `661a714`. Đọc trực tiếp `apps/core/application/st/`
+  (20.927 dòng nguồn / 14.841 dòng test), `apps/web-api/internal/programming/` và
+  `apps/web-ui/src/features/programming/design/`.
+  *Kết quả chấm*: **9 PASS / 8 PARTIAL / 1 FAIL**; 15 finding `F-STED-001..015`
+  (4 High + 1 High doc/authority, 7 Medium, 3 Low); **không** finding nào chạm an toàn
+  I/O vật lý hay LKG.
+  *Bốn phát hiện chính, đều truy tới dòng mã*: (1) `DesignWorkspacePage.tsx:763` truyền
+  `EMPTY_DIAGNOSTICS` và `DesignWorkbench.tsx:110` bỏ qua mọi POU không phải FBD ⇒ trang
+  soạn thảo PGM-02 không có bất kỳ chẩn đoán ST nào, toàn bộ hạ tầng gạch chân/tooltip
+  trong `SourceEditor` là mã chết; (2) `st_compile_main.cpp:145` chỉ phát **một**
+  diagnostic và `:649` lấy `.front()` của tập binding, lệch `DDD-LANG-PROG-001` §7
+  ("tối đa 64, sort ổn định"); (3) `StSeverity::WARNING` khai ở `st_diagnostic.hpp:15`
+  nhưng không code path nào set, `checks.go:813` ghi cứng `Severity: "ERROR"` và bỏ
+  `item.Severity` ⇒ `ST-WARN-001/002/003` không bao giờ tới người dùng; (4) `checks.go`
+  bỏ luôn `item.Message` ⇒ 19 mã `ST-LEX/SYN/SEM` cùng hiển thị một câu "Kiểm tra thất
+  bại hoặc quá thời gian".
+  *Gate `G1` FAIL*: `DDD-LANG-PROG-001` §4.1 tuyên bố parser từ chối `CASE`, còn
+  `st_parser.cpp:975` `parse_case()` chấp nhận đầy đủ và chương trình AHU trên bo đang
+  dùng — chưa có hồ sơ ngôn ngữ nào khớp code phát hành.
+  *Kèm theo*: bảng phân loại "IEC bắt buộc vs Mekong UX" (§6) và bảng khoảng cách ngôn
+  ngữ so với IEC 61131-3 Ed.4 tách "cố ý đã ghi" khỏi "chưa công bố" (§7).
+  *Duyệt*: chủ sở hữu **APPROVE AFTER ADDING `ISS-STED-18/19/20`** (2026-08-31) — giữ nguyên
+  17 issue ban đầu, không thêm feature nào khác. Bản **1.1** bổ sung `ISS-STED-18` (Diagnostic
+  Provenance Contract: mỗi diagnostic mang `revisionId`+`pouId`+`sourceSha256`, buffer đã đổi
+  phải hiện `STALE DIAGNOSTIC` chứ không gạch như lỗi hiện tại), `ISS-STED-19`
+  (Language/Artifact Compatibility Version: `PROGRAMMING_LIBRARY_VERSION`/`..._SHA256` được
+  sinh vào bundle FE nhưng `grep` toàn `apps/web-ui/src` cho thấy **không nơi nào đọc** ⇒ FE
+  không tự phát hiện được lệch phiên bản với thiết bị) và `ISS-STED-20` (End-to-End V&V
+  Evidence Gate, chặn ký đóng review). Tổng **20 issue / 5 đợt**; DAG cập nhật: `04` nay sau
+  `18`, `19` sau `06`, `20` là cổng cuối.
+  *Đã tạo trên repo*: **#350–#369** (nhãn `st-editor` + `priority:*`), bản đồ mã ↔ issue ở §8.2
+  của báo cáo và lặp lại trong thân từng issue.
+  *Số đo thật trong phiên*: `npx vitest --run --environment jsdom
+  src/features/programming/design/editor` = **19 tệp / 292 test PASS** (5,90 s). Không
+  dựng lại C++ nên tài liệu không dẫn số ctest nào.
+
+
 ### Vận hành — deploy FE lên bo Foxlinx (2026-08-31)
 
 - **`SOM-DDC-24-foxlinx`** — đưa `main` `2bab307` lên bo; phạm vi chỉ tài sản
