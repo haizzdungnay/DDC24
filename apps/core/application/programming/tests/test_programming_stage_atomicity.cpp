@@ -28,6 +28,8 @@
 #include <thread>
 #include <vector>
 
+#include <cerrno>
+#include <fcntl.h>
 #include <sodium.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -51,6 +53,88 @@ using namespace core;
 using namespace core::programming;
 
 namespace {
+
+/* ---- Tiêm lỗi ghi file KHÔNG dựa vào bit quyền ---------------------------
+ *
+ * Bản trước tiêm lỗi journal bằng `chmod 0400`. Cách đó chỉ chặn được tiến
+ * trình KHÔNG đặc quyền: `root` có `CAP_DAC_OVERRIDE` nên kernel bỏ qua bit
+ * quyền và `open(O_WRONLY)` vẫn thành công. Container CI của dự án chạy
+ * `root`, nên ở đó test không tiêm gì cả — `stage()` thành công thật và test
+ * đỏ với thông điệp "journal chỉ-đọc mà stage vẫn báo thành công", chỉ vào
+ * đúng chỗ KHÔNG sai.
+ *
+ * Nguy hiểm hơn cái đỏ: một tiêm lỗi có thể âm thầm ngừng tiêm. Nếu sản phẩm
+ * đổi theo hướng làm `stage()` trả false vì một lý do KHÁC, test sẽ xanh trở
+ * lại trong khi không còn kiểm gì — đúng loại test tự huỷ giá trị mà không ai
+ * nhận ra.
+ *
+ * Nên fixture này làm hai việc, và việc thứ hai mới là việc quan trọng:
+ *  (1) thay file bằng một THƯ MỤC cùng tên. `open(..., O_WRONLY|O_CREAT|
+ *      O_APPEND)` trả `EISDIR` cho MỌI uid kể cả root — đây là từ chối ở tầng
+ *      KIỂU đối tượng, không phải ở tầng quyền, nên không đặc quyền nào vượt
+ *      được. Nội dung file cũ được giữ nguyên bên cạnh và trả lại lúc thoát.
+ *  (2) TỰ KIỂM tiền điều kiện: mở thử đúng cách mà sản phẩm sẽ mở. Không mở
+ *      được thì mới coi là đã tiêm; mở được thì `ASSERT` ngay tại chỗ tiêm,
+ *      chứ không để test chạy tiếp rồi đổ lỗi cho sản phẩm.
+ *
+ * Chỉ đọc (`read_last`) không bị chặn ở đây, và đó là chủ ý: `stage()` không
+ * đọc journal, chỉ `recover_at_boot()` mới đọc. Tiêm đúng thứ cần tiêm. */
+class UnwritablePath {
+public:
+    explicit UnwritablePath(std::filesystem::path target)
+        : target_(std::move(target)), saved_(target_.string() + ".saved")
+    {
+        /* Không dùng macro `ASSERT_*` ở đây: chúng nở ra thành `return` có giá
+         * trị, không hợp lệ trong constructor. Trạng thái được ghi lại và test
+         * kiểm bằng `ASSERT_TRUE(blocked.ok())`, nên lỗi tiêm vẫn dừng test
+         * ngay tại chỗ tiêm chứ không trôi xuống phần kiểm sản phẩm. */
+        std::error_code code;
+        if (std::filesystem::exists(target_, code)) {
+            std::filesystem::rename(target_, saved_, code);
+            if (code) { failure_ = "không dời được file gốc: " + code.message(); return; }
+            restore_ = true;
+        }
+        std::filesystem::create_directory(target_, code);
+        if (code) { failure_ = "không tạo được thư mục chắn: " + code.message(); return; }
+        injected_ = true;
+
+        /* Tiền điều kiện: chứng minh việc tiêm THẬT SỰ có hiệu lực, bằng đúng
+         * cờ mà `StJournal::append` dùng. */
+        const int probe =
+            ::open(target_.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0640);
+        if (probe >= 0) {
+            ::close(probe);
+            failure_ = "tiêm lỗi không có hiệu lực: vẫn mở ghi được " + target_.string();
+            return;
+        }
+        if (errno != EISDIR) {
+            failure_ = "chắn ghi bằng cơ chế ngoài dự kiến, errno=" + std::to_string(errno);
+            return;
+        }
+        ok_ = true;
+    }
+
+    ~UnwritablePath()
+    {
+        std::error_code code;
+        if (injected_) std::filesystem::remove_all(target_, code);
+        if (restore_) std::filesystem::rename(saved_, target_, code);
+    }
+
+    UnwritablePath(const UnwritablePath&) = delete;
+    UnwritablePath& operator=(const UnwritablePath&) = delete;
+
+    bool ok() const { return ok_; }
+    const std::string& failure() const { return failure_; }
+
+private:
+    std::filesystem::path target_;
+    std::filesystem::path saved_;
+    std::string failure_;
+    bool restore_ = false;
+    bool injected_ = false;
+    bool ok_ = false;
+};
 
 struct TempTree {
     std::string path;
@@ -604,15 +688,18 @@ TEST(ProgrammingStageAtomicity, JournalFsyncFailureLeavesLiveStateIntact)
     const StageCommand command =
         write_candidate(system.tree, kOperation2, kRevision2, healthy, "P_ahu");
 
-    /* Bỏ quyền GHI của journal. `append` sẽ hỏng ở lần mở/ghi kế tiếp. */
-    const std::filesystem::path journal = system.tree.path + "/journal.bin";
-    ASSERT_EQ(::chmod(journal.c_str(), 0400), 0) << "không tiêm được lỗi journal";
-
+    /* Chặn GHI journal. `append` sẽ hỏng ở lần mở kế tiếp — xem
+     * `UnwritablePath` về lý do không dùng `chmod`. */
     std::string detail;
     std::string error;
-    const bool staged = system.coordinator->stage(command, &detail, &error);
-    (void)::chmod(journal.c_str(), 0600);
-    ASSERT_FALSE(staged) << "journal chỉ-đọc mà stage vẫn báo thành công";
+    bool staged = true;
+    {
+        const std::filesystem::path journal = system.tree.path + "/journal.bin";
+        UnwritablePath blocked(journal);
+        ASSERT_TRUE(blocked.ok()) << blocked.failure();
+        staged = system.coordinator->stage(command, &detail, &error);
+    }
+    ASSERT_FALSE(staged) << "journal không ghi được mà stage vẫn báo thành công";
     EXPECT_EQ(detail, "IPC-JOURNAL-FSYNC") << error;
 
     const LiveSnapshot after = system.snapshot();
