@@ -221,6 +221,12 @@ target_link_libraries(mkddc-st-package-golden PRIVATE st_compiler_lib)
 add_executable(mkddc-st-compile application/st/st_compile_main.cpp)
 target_link_libraries(mkddc-st-compile PRIVATE st_compiler_lib)
 
+# ISS-STED-06 — xuất ST Language Profile từ CHÍNH compiler. Xem đầu file
+# st_profile_dump_main.cpp về lý do đây là binary chứ không phải regex quét
+# source.
+add_executable(mkddc-st-profile-dump application/st/st_profile_dump_main.cpp)
+target_link_libraries(mkddc-st-profile-dump PRIVATE st_compiler_lib)
+
 # T59-302/T59-305: lắp package v2 bằng ĐÚNG writer production, không cài lại
 # định dạng ở lớp BE.
 add_executable(mkddc-st-package application/st/st_package_main.cpp)
@@ -373,6 +379,20 @@ if(CORE_BUILD_TESTS)
                 --binary $<TARGET_FILE:mkddc-programming-sim-worker>
                 --compile-cli $<TARGET_FILE:mkddc-st-compile>
                 --package-cli $<TARGET_FILE:mkddc-st-package>)
+  endif()
+
+  # ISS-STED-06 — cổng chống trôi hồ sơ ngôn ngữ.
+  #
+  # Chạy trong `ctest` chứ không phải một script CI rời: hồ sơ được sinh TỪ
+  # binary compiler, nên cổng chỉ có nghĩa khi binary đó vừa được build từ
+  # đúng source đang xét. Một job CI chạy trên checkout mà không build sẽ so
+  # hồ sơ với một binary cũ và báo xanh cho một cây source đã trôi.
+  if(NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME st_language_profile_contract
+        COMMAND ${Python3_EXECUTABLE}
+                ${MKDDC_REPOSITORY_ROOT}/scripts/generate_st_language_profile.py
+                --check
+                --dump-binary $<TARGET_FILE:mkddc-st-profile-dump>)
   endif()
 
   # `T57-2.13`/`T57-3.13`: kiểm ở mức BINARY, vì giá trị của engine nằm ở chỗ nó

@@ -1,0 +1,396 @@
+{
+  "$defs": {
+    "ports": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "$id": "https://mekong-hcm.vn/contracts/programming/st_language_profile_v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Hồ sơ ngôn ngữ ST phiên bản hoá, SINH TỰ ĐỘNG từ compiler bởi scripts/generate_st_language_profile.py. Không sửa tay.",
+  "properties": {
+    "compilerVersion": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "conformanceClaim": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "deliberateExclusions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "construct": {
+            "type": "string"
+          },
+          "inIec": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 20,
+            "type": "string"
+          }
+        },
+        "required": [
+          "construct",
+          "kind",
+          "inIec",
+          "reason",
+          "authority"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "diagnosticCodes": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "grammar": {
+      "additionalProperties": false,
+      "properties": {
+        "notation": {
+          "type": "string"
+        },
+        "rules": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "notation",
+        "rules"
+      ],
+      "type": "object"
+    },
+    "iecBaseline": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "limits": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "type": "object"
+    },
+    "operators": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "rejectedWith": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "accepted"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "plannedAdditions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "type": "string"
+          },
+          "construct": {
+            "type": "string"
+          },
+          "issue": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "wave": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "construct",
+          "wave",
+          "note",
+          "authority",
+          "issue"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "pouKinds": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "wireCode": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "wireCode"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "profileVersion": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "type": "string"
+    },
+    "reservedWords": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "scalarTypes": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "isInteger": {
+            "type": "boolean"
+          },
+          "isSigned": {
+            "type": "boolean"
+          },
+          "max": {
+            "type": "integer"
+          },
+          "min": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "wireCode": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "wireCode",
+          "isInteger"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "standardFunctionBlocks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "inputs": {
+            "$ref": "#/$defs/ports"
+          },
+          "name": {
+            "type": "string"
+          },
+          "outputs": {
+            "$ref": "#/$defs/ports"
+          },
+          "vendorExtension": {
+            "type": "boolean"
+          },
+          "wireCode": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "wireCode",
+          "inputs",
+          "outputs",
+          "vendorExtension"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "standardFunctions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "arity": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "vendorExtension": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "arity",
+          "vendorExtension"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "statements": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rejectedWith": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "accepted"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "storageClasses": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "wireCode": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "wireCode"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "targetAbi": {
+      "type": "integer"
+    },
+    "targetProfileId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "vendorExtensions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 20,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "reason",
+          "authority"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "profileVersion",
+    "sha256",
+    "iecBaseline",
+    "conformanceClaim",
+    "compilerVersion",
+    "targetProfileId",
+    "targetAbi",
+    "grammar",
+    "scalarTypes",
+    "storageClasses",
+    "pouKinds",
+    "statements",
+    "operators",
+    "standardFunctions",
+    "standardFunctionBlocks",
+    "reservedWords",
+    "limits",
+    "diagnosticCodes",
+    "deliberateExclusions",
+    "plannedAdditions",
+    "vendorExtensions"
+  ],
+  "title": "ST Language Profile v1",
+  "type": "object"
+}

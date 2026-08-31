@@ -1,0 +1,199 @@
+{
+  "_comment": [
+    "PHẦN DO CON NGƯỜI PHÁN QUYẾT của ST Language Profile (ISS-STED-06).",
+    "",
+    "Mọi thứ suy được từ code thì KHÔNG nằm ở đây — chúng do",
+    "`mkddc-st-profile-dump` xuất ra từ chính compiler. Tệp này chỉ giữ những",
+    "gì code không thể tự nói: LÝ DO một cấu trúc bị loại trừ, và nhãn 'mở rộng",
+    "nhà sản xuất' theo ADR-054.",
+    "",
+    "Bất biến do `scripts/generate_st_language_profile.py` thi hành: mọi mục",
+    "trong `deliberateExclusions` phải THẬT SỰ bị compiler từ chối. Một mục nói",
+    "'loại trừ' mà parser vẫn chấp nhận sẽ làm build ĐỎ — đó đúng là lỗi",
+    "`F-STED-005`, khi `DDD-LANG-PROG-001` §4.1 tuyên bố parser reject `CASE`",
+    "trong lúc `parse_case()` chấp nhận đầy đủ."
+  ],
+  "profileVersion": "1.0.0",
+  "iecBaseline": "IEC 61131-3:2013 (Ed. 3.0) — Structured Text",
+  "conformanceClaim": "IEC 61131-3-aligned subset. KHÔNG tuyên bố certified/compliant (ADR-020).",
+  "deliberateExclusions": [
+    {
+      "construct": "FOR",
+      "kind": "statement",
+      "inIec": true,
+      "reason": "P1 — mọi scan phải chấm dứt trong thời gian chặn trên biết trước. Vòng lặp có số vòng phụ thuộc dữ liệu làm WCET không tính được tĩnh, nên bị loại vì ràng buộc AN TOÀN của DDC, không phải vì thiếu trong IEC.",
+      "authority": "ADR-054 phán quyết (3)"
+    },
+    {
+      "construct": "WHILE",
+      "kind": "statement",
+      "inIec": true,
+      "reason": "P1 — như FOR: điều kiện dừng phụ thuộc dữ liệu runtime, WCET không chặn trên được.",
+      "authority": "ADR-054 phán quyết (3)"
+    },
+    {
+      "construct": "REPEAT",
+      "kind": "statement",
+      "inIec": true,
+      "reason": "P1 — như WHILE, thêm việc thân luôn chạy ít nhất một lần.",
+      "authority": "ADR-054 phán quyết (3)"
+    },
+    {
+      "construct": "EXIT",
+      "kind": "statement",
+      "inIec": true,
+      "reason": "Chỉ có nghĩa bên trong vòng lặp; không có vòng lặp thì không có gì để thoát.",
+      "authority": "hệ quả của ADR-054 phán quyết (3)"
+    },
+    {
+      "construct": "RETURN",
+      "kind": "statement",
+      "inIec": true,
+      "reason": "Nhiều điểm thoát làm cây WCET rẽ nhánh không cần thiết; FUNCTION gán kết quả qua ô trả về mang tên hàm như IEC quy định.",
+      "authority": "ST_SUBSET_SPEC §5"
+    },
+    {
+      "construct": "**",
+      "kind": "operator",
+      "inIec": true,
+      "reason": "Luỹ thừa trên REAL không có chặn trên chi phí tất định trên FPU mềm của target, và không có ca dùng HVAC nào trong Rev A. Dùng phép nhân tường minh.",
+      "authority": "ST_SUBSET_SPEC §4.2"
+    },
+    {
+      "construct": "STRING",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — độ dài biến kéo theo cấp phát động trong chu kỳ scan. Loại trừ tới khi có kiểu chuỗi độ dài cố định.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "DATE",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — lịch/múi giờ thuộc tầng Schedule, không thuộc ngôn ngữ điều khiển chu kỳ.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "TOD",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — thời điểm trong ngày phụ thuộc múi giờ và quy tắc đổi giờ, hai thứ thuộc tầng Schedule. Chương trình chu kỳ nhận thời gian đã quy đổi qua Point, không tự diễn giải lịch.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "DT",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — ghép DATE và TOD nên thừa hưởng cả hai vấn đề lịch/múi giờ; loại trừ cùng lý do và cùng đợt.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "LD",
+      "kind": "language",
+      "inIec": true,
+      "reason": "Ngoài phạm vi Programming Rev A.",
+      "authority": "ADR-023"
+    },
+    {
+      "construct": "SFC",
+      "kind": "language",
+      "inIec": true,
+      "reason": "Ngoài phạm vi Programming Rev A.",
+      "authority": "ADR-023"
+    }
+  ],
+  "plannedAdditions": [
+    {
+      "construct": "VAR_IN_OUT",
+      "wave": "đợt gần",
+      "note": "Đi cùng ARRAY tĩnh và STRUCT: VAR_IN_OUT là truyền tham chiếu, không có kiểu hợp thành thì gần như vô dụng.",
+      "authority": "ADR-054 phán quyết (4)",
+      "issue": 367
+    },
+    {
+      "construct": "ARRAY (kích thước tĩnh)",
+      "wave": "đợt gần",
+      "note": "Kích thước biết tại compile time nên WCET vẫn chặn trên được.",
+      "authority": "ADR-054 phán quyết (4)",
+      "issue": 367
+    },
+    {
+      "construct": "STRUCT",
+      "wave": "đợt gần",
+      "note": "Đi cùng VAR_IN_OUT.",
+      "authority": "ADR-054 phán quyết (4)",
+      "issue": 367
+    },
+    {
+      "construct": "LREAL, BYTE, WORD, DWORD, enum",
+      "wave": "đợt sau",
+      "note": "Mở rộng hệ kiểu sau khi đợt gần ổn định.",
+      "authority": "ADR-054 phán quyết (4)",
+      "issue": null
+    }
+  ],
+  "vendorExtensions": [
+    {
+      "name": "PID",
+      "kind": "functionBlock",
+      "reason": "Không thuộc thư viện chuẩn IEC 61131-3, nhưng là khối điều khiển cốt lõi của DDC. IEC cho phép mở rộng nhà sản xuất miễn là CÔNG BỐ RÕ.",
+      "authority": "ADR-054 phán quyết (2)"
+    },
+    {
+      "name": "HYSTERESIS",
+      "kind": "functionBlock",
+      "reason": "So sánh có nhớ. Không thuộc thư viện chuẩn IEC; giữ vì ca dùng HVAC, phải đánh dấu là mở rộng.",
+      "authority": "ADR-054 phán quyết (2)"
+    },
+    {
+      "name": "SCALE",
+      "kind": "function",
+      "reason": "Quy đổi tuyến tính raw↔engineering. Không thuộc thư viện chuẩn IEC; giữ, phải đánh dấu.",
+      "authority": "ADR-054 phán quyết (2)"
+    },
+    {
+      "name": "DEADBAND",
+      "kind": "function",
+      "reason": "Vùng chết quanh setpoint. Không thuộc thư viện chuẩn IEC; giữ, phải đánh dấu.",
+      "authority": "ADR-054 phán quyết (2)"
+    }
+  ],
+  "grammar": {
+    "notation": "EBNF (ISO/IEC 14977), chữ hoa = từ khoá không phân biệt hoa thường",
+    "rules": [
+      "pou            = program | function | function_block ;",
+      "program        = 'PROGRAM' identifier { var_block } stmt_list 'END_PROGRAM' ;",
+      "function       = 'FUNCTION' identifier ':' scalar_type { var_block } stmt_list 'END_FUNCTION' ;",
+      "function_block = 'FUNCTION_BLOCK' identifier { var_block } stmt_list 'END_FUNCTION_BLOCK' ;",
+      "var_block      = ( 'VAR' [ 'RETAIN' ] | 'VAR_INPUT' | 'VAR_OUTPUT' ) { var_decl } 'END_VAR' ;",
+      "var_decl       = identifier ':' type_name ';' ;",
+      "type_name      = scalar_type | fb_type_name | user_fb_name ;",
+      "scalar_type    = 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME' ;",
+      "stmt_list      = { statement } ;",
+      "statement      = assignment | if_stmt | case_stmt | fb_call | signal_publish ;",
+      "assignment     = variable ':=' expression ';' ;",
+      "if_stmt        = 'IF' expression 'THEN' stmt_list { 'ELSIF' expression 'THEN' stmt_list } [ 'ELSE' stmt_list ] 'END_IF' ';' ;",
+      "case_stmt      = 'CASE' expression 'OF' { case_element } [ 'ELSE' stmt_list ] 'END_CASE' ';' ;",
+      "case_element   = case_label { ',' case_label } ':' stmt_list ;",
+      "case_label     = signed_integer [ '..' signed_integer ] ;",
+      "fb_call        = identifier '(' [ fb_arg { ',' fb_arg } ] ')' ';' ;",
+      "fb_arg         = identifier ':=' expression ;",
+      "signal_publish = 'SIGNAL_PUBLISH' '(' identifier ',' expression ')' ';' ;",
+      "expression     = or_expr ;",
+      "or_expr        = xor_expr { ( 'OR' ) xor_expr } ;",
+      "xor_expr       = and_expr { 'XOR' and_expr } ;",
+      "and_expr       = compare_expr { 'AND' compare_expr } ;",
+      "compare_expr   = add_expr { ( '=' | '<>' | '<' | '<=' | '>' | '>=' ) add_expr } ;",
+      "add_expr       = mul_expr { ( '+' | '-' ) mul_expr } ;",
+      "mul_expr       = unary_expr { ( '*' | '/' | 'MOD' ) unary_expr } ;",
+      "unary_expr     = [ 'NOT' | '-' ] primary ;",
+      "primary        = literal | variable | member_access | func_call | '(' expression ')' ;",
+      "member_access  = identifier '.' identifier ;",
+      "func_call      = identifier '(' [ expression { ',' expression } ] ')' ;",
+      "literal        = integer_literal | real_literal | time_literal | 'TRUE' | 'FALSE' ;",
+      "time_literal   = ( 'T' | 'TIME' ) '#' { unsigned_integer time_unit } ;",
+      "time_unit      = 'd' | 'h' | 'm' | 's' | 'ms' ;",
+      "comment        = '(*' { character } '*)' | '//' { character } newline ;"
+    ]
+  }
+}
