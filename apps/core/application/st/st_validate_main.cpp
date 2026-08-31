@@ -123,17 +123,31 @@ int main(int argc, char** argv)
 
     core::StProgram program;
     core::StDiagnostic diag;
-    if (!core::parse_st_program(source, &program, &diag))
-        return emit_and_exit(make_result(false, {diag}, nullptr, artifact_hash), 1);
+    core::StDiagnosticBag bag;
+    if (!core::parse_st_program(source, &program, &diag, &bag)) {
+        bag.finalize();
+        return emit_and_exit(
+            make_result(false, bag.empty() ? std::vector<core::StDiagnostic>{diag} : bag.items(),
+                        nullptr, artifact_hash), 1);
+    }
 
-    if (!core::typecheck_st_program(&program, &diag))
-        return emit_and_exit(make_result(false, {diag}, &program, artifact_hash), 1);
+    if (!core::typecheck_st_program(&program, &diag, &bag)) {
+        bag.finalize();
+        return emit_and_exit(
+            make_result(false, bag.empty() ? std::vector<core::StDiagnostic>{diag} : bag.items(),
+                        &program, artifact_hash), 1);
+    }
 
     /* DDD §9: Check chặn feature còn nhãn REVIEW_REQUIRED. Validate CLI là một
      * trong hai đường Check thật, nên nó phải gate y hệt `compile_st_source`;
      * bỏ sót ở đây nghĩa là PID "hợp lệ" ở Check nhưng chết ở compile. */
-    if (!core::st_review_gate_check(program, &diag))
-        return emit_and_exit(make_result(false, {diag}, &program, artifact_hash), 1);
+    if (!core::st_review_gate_check(program, &diag)) {
+        bag.finalize();
+        return emit_and_exit(
+            make_result(false, bag.empty() ? std::vector<core::StDiagnostic>{diag} : bag.items(),
+                        &program, artifact_hash), 1);
+    }
 
-    return emit_and_exit(make_result(true, {}, &program, artifact_hash), 0);
+    bag.finalize();
+    return emit_and_exit(make_result(true, bag.items(), &program, artifact_hash), 0);
 }

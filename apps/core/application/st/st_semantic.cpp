@@ -40,6 +40,19 @@ struct TypeInfo {
 struct Symbol {
     StType    type;
     StStorage storage;
+    /* ISS-STED-02: vết sử dụng để phát `ST-WARN-002`/`ST-WARN-003`. Vị trí lấy
+     * từ chính dòng KHAI BÁO, không phải chỗ dùng — cảnh báo "khai báo mà không
+     * dùng" chỉ có một chỗ sửa đúng là dòng khai báo.
+     *
+     * `reportable` phân biệt biến người dùng viết ra với ô trả về tổng hợp của
+     * FUNCTION (đăng ký dưới chính tên POU): ô đó không có dòng khai báo nào để
+     * trỏ tới, cảnh báo về nó là cảnh báo về mã không ai viết. */
+    int  line = 0;
+    int  column = 0;
+    int  length = 1;
+    bool reportable = false;
+    bool read = false;
+    bool written = false;
 };
 
 struct FbSymbol {
@@ -97,6 +110,7 @@ public:
         if (!symbols_ok && !bag_) return false;
         if (fatal_) return finish(false);
         const bool body_ok = check_stmts(prog_->body);
+        emit_usage_warnings();
         return finish(symbols_ok && body_ok);
     }
 
@@ -128,6 +142,28 @@ private:
     {
         set_diag(diag_, code, msg, line, col, length);
         return false;
+    }
+
+    /* ISS-STED-02: cảnh báo. Khác `fail()` ở hai điểm cốt lõi —
+     * (1) KHÔNG chạm `*diag_`, vì `diag_` là hợp đồng "lỗi đầu tiên" của mọi
+     *     caller cũ; ghi warning vào đó sẽ biến một chương trình hợp lệ thành
+     *     có `diag` khác rỗng và mọi nơi kiểm `diag.code.empty()` sẽ hiểu sai;
+     * (2) KHÔNG trả false, nên không có đường nào để warning làm Check FAILED.
+     *
+     * Không có túi thì warning bị bỏ — đúng: hợp đồng một-diagnostic cũ chỉ
+     * mang được lỗi, thêm warning vào đó là đổi nghĩa của nó. */
+    void warn(const char* code, const std::string& msg, int line, int col, int length = 1)
+    {
+        if (bag_ == nullptr) return;
+        StDiagnostic d;
+        d.severity = StSeverity::WARNING;
+        d.code = code;
+        d.message = msg;
+        d.line = line;
+        d.column = col;
+        d.length = length > 0 ? length : 1;
+        d.order = order_;
+        bag_->add(std::move(d));
     }
 
     /* Lỗi không phục hồi được: ghi rồi chặn mọi pha sau. */
@@ -172,6 +208,51 @@ private:
         return ok;
     }
 
+    /* ---- ISS-STED-02: cảnh báo sử dụng (ST_SUBSET_SPEC §12.6) ------------
+     *
+     * Chạy SAU khi soát xong thân: chỉ khi đó vết `read`/`written` mới đầy đủ.
+     *
+     * Bỏ qua khi đã có lỗi: lỗi làm việc soát bỏ dở câu lệnh (và có thể dừng
+     * hẳn ở `can_recover()` sai), nên vết sử dụng lúc đó KHÔNG đầy đủ. Phát
+     * cảnh báo trên dữ liệu dở dang sẽ báo "biến không dùng" cho biến thực ra
+     * có dùng ở câu lệnh chưa kịp soát — đẩy người dùng đi sửa nhầm chỗ. Cảnh
+     * báo là thứ tốt-thì-có; đúng quan trọng hơn đủ.
+     *
+     * Duyệt theo `prog_->vars` (thứ tự khai báo trong nguồn) chứ không theo
+     * `vars_` (unordered_map): thứ tự duyệt hash phụ thuộc cách cài đặt, hai
+     * lần chạy có thể ra hai thứ tự khác nhau. Túi có sort tất định nhưng
+     * không nên dựa vào đó để che một nguồn bất định ở tầng dưới. */
+    void emit_usage_warnings()
+    {
+        if (bag_ == nullptr || fatal_ || has_recorded_) return;
+        std::unordered_set<std::string> emitted;
+        for (const StVarDecl& v : prog_->vars) {
+            /* Khai báo trùng tên: ô trong bảng thuộc về khai báo ĐẦU. Cảnh báo
+             * hai lần cho cùng một ô là báo cùng một việc hai lần. */
+            if (!emitted.insert(v.name).second) continue;
+            auto it = vars_.find(v.name);
+            if (it == vars_.end() || !it->second.reportable) continue;
+            const Symbol& sym = it->second;
+
+            /* VAR_OUTPUT không bao giờ được gán là chẩn đoán CỤ THỂ hơn "khai
+             * báo mà không dùng" — nó nói đúng cái sai (chương trình không lái
+             * đầu ra) và đúng cách sửa. Phát nó thì thôi cái tổng quát. */
+            if (sym.storage == StStorage::VAR_OUTPUT && !sym.written) {
+                warn(st_diag_code::kWarnOutputNeverWritten,
+                     "VAR_OUTPUT '" + v.name + "' is never assigned",
+                     sym.line, sym.column, sym.length);
+                continue;
+            }
+            /* VAR_INPUT chưa đọc KHÔNG cảnh báo: đầu vào là giao diện của POU,
+             * bên gọi vẫn phải cấp nó dù thân chưa dùng tới. */
+            if (sym.storage == StStorage::VAR_INPUT) continue;
+            if (!sym.read && !sym.written)
+                warn(st_diag_code::kWarnUnusedVariable,
+                     "variable '" + v.name + "' is declared but never used",
+                     sym.line, sym.column, sym.length);
+        }
+    }
+
     /* ---- Bảng ký hiệu ---- */
 
     bool build_symbols()
@@ -181,7 +262,10 @@ private:
         if (prog_->kind == StPouKind::FUNCTION) {
             /* IEC dùng chính tên FUNCTION làm ô trả về có thể gán. Ô này chỉ
              * tồn tại trong scope lời gọi, không phải state của FUNCTION. */
-            vars_[prog_->name] = Symbol{prog_->return_type, StStorage::VAR_LOCAL};
+            Symbol ret;
+            ret.type = prog_->return_type;
+            ret.storage = StStorage::VAR_LOCAL;
+            vars_[prog_->name] = ret; /* reportable=false: không có dòng khai báo */
         }
         for (const StVarDecl& v : prog_->vars) {
             if (!check_var_decl(v, &retain_count)) {
@@ -213,7 +297,14 @@ private:
             return fail(st_diag_code::kDuplicateVar,
                         "duplicate declaration of '" + v.name + "'", v.line, v.column,
                         v.length);
-        vars_[v.name] = Symbol{v.type, v.storage};
+        Symbol sym;
+        sym.type = v.type;
+        sym.storage = v.storage;
+        sym.line = v.line;
+        sym.column = v.column;
+        sym.length = v.length;
+        sym.reportable = true;
+        vars_[v.name] = sym;
         if (v.storage == StStorage::VAR_RETAIN &&
             ++(*retain_count) > st_limits::kMaxRetainVars)
             /* Trần tài nguyên: soát tiếp cũng không cho thêm thông tin nào
@@ -332,6 +423,9 @@ private:
             return fail(st_diag_code::kUnboundVariable,
                         "undeclared variable '" + s.assign_target + "'",
                         s.assign_target_line, s.assign_target_column, s.assign_target_length);
+        /* Cùng lý do như ở nhánh đọc: gán sai kiểu vẫn là một lần GHI. Đánh
+         * dấu trước khi soát kiểu để lỗi kiểu không đẻ thêm cảnh báo giả. */
+        it->second.written = true;
         if (it->second.storage == StStorage::VAR_INPUT)
             return fail(st_diag_code::kReadonlyInput,
                         "'" + s.assign_target + "' is VAR_INPUT and is read-only",
@@ -591,6 +685,11 @@ private:
                             "undeclared variable '" + e.var_name + "'", e.line, e.column,
                             e.length);
             }
+            /* Đánh dấu TRƯỚC mọi phán quyết kiểu: biến bị dùng sai kiểu vẫn là
+             * biến ĐƯỢC dùng. Không tách hai chuyện này ra thì một lỗi kiểu sẽ
+             * kéo theo một cảnh báo "khai báo mà không dùng" giả, và người
+             * dùng đi sửa nhầm chỗ. */
+            it->second.read = true;
             e.result_type = it->second.type;
             *out = TypeInfo::make(it->second.type);
             return true;
@@ -602,6 +701,20 @@ private:
                 return fail(st_diag_code::kUnboundVariable,
                             "undeclared function block instance '" + e.member_object + "'",
                             e.line, e.column, e.length);
+            /* DDD §4.3: đọc output trước lời gọi trong cùng chu kỳ lấy ra giá
+             * trị của chu kỳ TRƯỚC. Hợp lệ nên không fail, nhưng bắt buộc phải
+             * cảnh báo. Phát ở đây — không phải ở cuối `run()` — vì chỉ tại
+             * điểm này mới biết thứ tự thật giữa đọc và gọi.
+             *
+             * Instance "nhiễm" (kiểu chưa phân giải) không cảnh báo: chưa biết
+             * nó có phải FB không thì mọi phán quyết về chu kỳ đều là đoán mò. */
+            if (fb_called_.count(e.member_object) == 0 &&
+                poisoned_.count(e.member_object) == 0)
+                warn(st_diag_code::kWarnFbOutputReadBeforeCall,
+                     "output '" + e.member_field + "' of '" + e.member_object +
+                         "' is read before '" + e.member_object +
+                         "' is called in this cycle; the value is from the previous cycle",
+                     e.line, e.column, e.length);
             const StFbType fb = it->second.type;
             if (it->second.user_type != nullptr) {
                 for (const StVarDecl* output :

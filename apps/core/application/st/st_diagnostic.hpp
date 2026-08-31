@@ -142,6 +142,25 @@ constexpr const char* kOutputOwnerConflict   = "ST-OWN-001";
 
 /* PID chỉ dùng được khi có approval token Controls/Safety (DDD §9). */
 constexpr const char* kPidApprovalMissing    = "ST-PID-001";
+
+/* ---- ISS-STED-02: cảnh báo (ST_SUBSET_SPEC §12.6) --------------------------
+ *
+ * Cảnh báo KHÔNG chặn sinh artifact và KHÔNG làm Check FAILED. Chính sách nâng
+ * cảnh báo thành lỗi là thuộc tính của compiler profile (SPEC §C0.6), không
+ * phải của ngôn ngữ — nên emitter ở đây luôn phát severity WARNING, việc nâng
+ * cấp do tầng trên quyết.
+ *
+ * `ST-WARN-001` (PT timer nhỏ hơn chu kỳ Task) CHƯA hiện thực: compiler không
+ * nhận chu kỳ Task làm đầu vào, mọi phán quyết về nó sẽ là đoán mò. Hằng vẫn
+ * khai để catalog và tài liệu có một nguồn duy nhất. */
+constexpr const char* kWarnTimerPtBelowCycle = "ST-WARN-001";
+constexpr const char* kWarnUnusedVariable    = "ST-WARN-002";
+constexpr const char* kWarnOutputNeverWritten = "ST-WARN-003";
+/* DDD-LANG-PROG-001 §4.3: đọc output của một FB instance TRƯỚC lời gọi của nó
+ * trong cùng chu kỳ đọc ra giá trị của chu kỳ trước. Hợp lệ (nhiều thuật toán
+ * điều khiển cố ý dùng), nhưng gần như luôn là nhầm lẫn nên DDD bắt buộc phải
+ * cảnh báo. Tách khỏi ST-WARN-002/003 vì nguyên nhân và cách sửa khác hẳn. */
+constexpr const char* kWarnFbOutputReadBeforeCall = "ST-WARN-004";
 } // namespace st_diag_code
 
 struct StDiagnostic {
