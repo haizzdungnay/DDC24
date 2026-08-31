@@ -1,0 +1,880 @@
+{
+  "compilerVersion": "fwsom-st-1.2.0",
+  "conformanceClaim": "IEC 61131-3-aligned subset. KHÔNG tuyên bố certified/compliant (ADR-020).",
+  "deliberateExclusions": [
+    {
+      "authority": "ADR-054 phán quyết (3)",
+      "construct": "FOR",
+      "inIec": true,
+      "kind": "statement",
+      "reason": "P1 — mọi scan phải chấm dứt trong thời gian chặn trên biết trước. Vòng lặp có số vòng phụ thuộc dữ liệu làm WCET không tính được tĩnh, nên bị loại vì ràng buộc AN TOÀN của DDC, không phải vì thiếu trong IEC."
+    },
+    {
+      "authority": "ADR-054 phán quyết (3)",
+      "construct": "WHILE",
+      "inIec": true,
+      "kind": "statement",
+      "reason": "P1 — như FOR: điều kiện dừng phụ thuộc dữ liệu runtime, WCET không chặn trên được."
+    },
+    {
+      "authority": "ADR-054 phán quyết (3)",
+      "construct": "REPEAT",
+      "inIec": true,
+      "kind": "statement",
+      "reason": "P1 — như WHILE, thêm việc thân luôn chạy ít nhất một lần."
+    },
+    {
+      "authority": "hệ quả của ADR-054 phán quyết (3)",
+      "construct": "EXIT",
+      "inIec": true,
+      "kind": "statement",
+      "reason": "Chỉ có nghĩa bên trong vòng lặp; không có vòng lặp thì không có gì để thoát."
+    },
+    {
+      "authority": "ST_SUBSET_SPEC §5",
+      "construct": "RETURN",
+      "inIec": true,
+      "kind": "statement",
+      "reason": "Nhiều điểm thoát làm cây WCET rẽ nhánh không cần thiết; FUNCTION gán kết quả qua ô trả về mang tên hàm như IEC quy định."
+    },
+    {
+      "authority": "ST_SUBSET_SPEC §4.2",
+      "construct": "**",
+      "inIec": true,
+      "kind": "operator",
+      "reason": "Luỹ thừa trên REAL không có chặn trên chi phí tất định trên FPU mềm của target, và không có ca dùng HVAC nào trong Rev A. Dùng phép nhân tường minh."
+    },
+    {
+      "authority": "ADR-054 phán quyết (4)",
+      "construct": "STRING",
+      "inIec": true,
+      "kind": "type",
+      "reason": "P2 — độ dài biến kéo theo cấp phát động trong chu kỳ scan. Loại trừ tới khi có kiểu chuỗi độ dài cố định."
+    },
+    {
+      "authority": "ADR-054 phán quyết (4)",
+      "construct": "DATE",
+      "inIec": true,
+      "kind": "type",
+      "reason": "P2 — lịch/múi giờ thuộc tầng Schedule, không thuộc ngôn ngữ điều khiển chu kỳ."
+    },
+    {
+      "authority": "ADR-054 phán quyết (4)",
+      "construct": "TOD",
+      "inIec": true,
+      "kind": "type",
+      "reason": "P2 — thời điểm trong ngày phụ thuộc múi giờ và quy tắc đổi giờ, hai thứ thuộc tầng Schedule. Chương trình chu kỳ nhận thời gian đã quy đổi qua Point, không tự diễn giải lịch."
+    },
+    {
+      "authority": "ADR-054 phán quyết (4)",
+      "construct": "DT",
+      "inIec": true,
+      "kind": "type",
+      "reason": "P2 — ghép DATE và TOD nên thừa hưởng cả hai vấn đề lịch/múi giờ; loại trừ cùng lý do và cùng đợt."
+    },
+    {
+      "authority": "ADR-023",
+      "construct": "LD",
+      "inIec": true,
+      "kind": "language",
+      "reason": "Ngoài phạm vi Programming Rev A."
+    },
+    {
+      "authority": "ADR-023",
+      "construct": "SFC",
+      "inIec": true,
+      "kind": "language",
+      "reason": "Ngoài phạm vi Programming Rev A."
+    }
+  ],
+  "diagnosticCodes": [
+    "ST-IOMAP-001",
+    "ST-IOMAP-002",
+    "ST-IOMAP-003",
+    "ST-IOMAP-004",
+    "ST-IOMAP-005",
+    "ST-IOMAP-006",
+    "ST-IOMAP-007",
+    "ST-IOMAP-008",
+    "ST-LEX-001",
+    "ST-LEX-002",
+    "ST-LEX-003",
+    "ST-LIB-001",
+    "ST-LIB-002",
+    "ST-LIB-003",
+    "ST-LIM-001",
+    "ST-LIM-002",
+    "ST-LIM-003",
+    "ST-LIM-004",
+    "ST-LIM-005",
+    "ST-LIM-006",
+    "ST-LIM-007",
+    "ST-LIM-008",
+    "ST-LIM-009",
+    "ST-OWN-001",
+    "ST-PID-001",
+    "ST-POU-001",
+    "ST-POU-002",
+    "ST-POU-003",
+    "ST-POU-004",
+    "ST-POU-005",
+    "ST-RT-001",
+    "ST-RT-002",
+    "ST-RT-003",
+    "ST-RT-004",
+    "ST-RT-005",
+    "ST-RT-006",
+    "ST-RT-007",
+    "ST-RT-008",
+    "ST-RT-009",
+    "ST-RT-010",
+    "ST-RT-011",
+    "ST-RT-012",
+    "ST-RT-013",
+    "ST-SEM-001",
+    "ST-SEM-002",
+    "ST-SEM-003",
+    "ST-SEM-004",
+    "ST-SEM-005",
+    "ST-SEM-006",
+    "ST-SEM-007",
+    "ST-SEM-008",
+    "ST-SEM-009",
+    "ST-SEM-010",
+    "ST-SEM-011",
+    "ST-SEM-012",
+    "ST-SEM-013",
+    "ST-SEM-014",
+    "ST-SIG-001",
+    "ST-SIG-002",
+    "ST-SIG-003",
+    "ST-SIG-004",
+    "ST-SIG-005",
+    "ST-SYN-001",
+    "ST-SYN-002"
+  ],
+  "grammar": {
+    "notation": "EBNF (ISO/IEC 14977), chữ hoa = từ khoá không phân biệt hoa thường",
+    "rules": [
+      "pou            = program | function | function_block ;",
+      "program        = 'PROGRAM' identifier { var_block } stmt_list 'END_PROGRAM' ;",
+      "function       = 'FUNCTION' identifier ':' scalar_type { var_block } stmt_list 'END_FUNCTION' ;",
+      "function_block = 'FUNCTION_BLOCK' identifier { var_block } stmt_list 'END_FUNCTION_BLOCK' ;",
+      "var_block      = ( 'VAR' [ 'RETAIN' ] | 'VAR_INPUT' | 'VAR_OUTPUT' ) { var_decl } 'END_VAR' ;",
+      "var_decl       = identifier ':' type_name ';' ;",
+      "type_name      = scalar_type | fb_type_name | user_fb_name ;",
+      "scalar_type    = 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME' ;",
+      "stmt_list      = { statement } ;",
+      "statement      = assignment | if_stmt | case_stmt | fb_call | signal_publish ;",
+      "assignment     = variable ':=' expression ';' ;",
+      "if_stmt        = 'IF' expression 'THEN' stmt_list { 'ELSIF' expression 'THEN' stmt_list } [ 'ELSE' stmt_list ] 'END_IF' ';' ;",
+      "case_stmt      = 'CASE' expression 'OF' { case_element } [ 'ELSE' stmt_list ] 'END_CASE' ';' ;",
+      "case_element   = case_label { ',' case_label } ':' stmt_list ;",
+      "case_label     = signed_integer [ '..' signed_integer ] ;",
+      "fb_call        = identifier '(' [ fb_arg { ',' fb_arg } ] ')' ';' ;",
+      "fb_arg         = identifier ':=' expression ;",
+      "signal_publish = 'SIGNAL_PUBLISH' '(' identifier ',' expression ')' ';' ;",
+      "expression     = or_expr ;",
+      "or_expr        = xor_expr { ( 'OR' ) xor_expr } ;",
+      "xor_expr       = and_expr { 'XOR' and_expr } ;",
+      "and_expr       = compare_expr { 'AND' compare_expr } ;",
+      "compare_expr   = add_expr { ( '=' | '<>' | '<' | '<=' | '>' | '>=' ) add_expr } ;",
+      "add_expr       = mul_expr { ( '+' | '-' ) mul_expr } ;",
+      "mul_expr       = unary_expr { ( '*' | '/' | 'MOD' ) unary_expr } ;",
+      "unary_expr     = [ 'NOT' | '-' ] primary ;",
+      "primary        = literal | variable | member_access | func_call | '(' expression ')' ;",
+      "member_access  = identifier '.' identifier ;",
+      "func_call      = identifier '(' [ expression { ',' expression } ] ')' ;",
+      "literal        = integer_literal | real_literal | time_literal | 'TRUE' | 'FALSE' ;",
+      "time_literal   = ( 'T' | 'TIME' ) '#' { unsigned_integer time_unit } ;",
+      "time_unit      = 'd' | 'h' | 'm' | 's' | 'ms' ;",
+      "comment        = '(*' { character } '*)' | '//' { character } newline ;"
+    ]
+  },
+  "iecBaseline": "IEC 61131-3:2013 (Ed. 3.0) — Structured Text",
+  "limits": {
+    "maxDiagnostics": 64,
+    "maxExpressionDepth": 32,
+    "maxFunctionBlockInstances": 64,
+    "maxIdentifierLength": 64,
+    "maxPouNameLength": 64,
+    "maxRetainVariables": 128,
+    "maxSourceBytes": 65536,
+    "maxStatementDepth": 16,
+    "maxStatements": 4096,
+    "maxTimeLiteralNs": 86400000000000,
+    "maxTokens": 32768,
+    "maxVariables": 512
+  },
+  "operators": [
+    {
+      "accepted": true,
+      "symbol": "+"
+    },
+    {
+      "accepted": true,
+      "symbol": "-"
+    },
+    {
+      "accepted": true,
+      "symbol": "*"
+    },
+    {
+      "accepted": true,
+      "symbol": "/"
+    },
+    {
+      "accepted": true,
+      "symbol": "<"
+    },
+    {
+      "accepted": true,
+      "symbol": "<="
+    },
+    {
+      "accepted": true,
+      "symbol": ">"
+    },
+    {
+      "accepted": true,
+      "symbol": ">="
+    },
+    {
+      "accepted": true,
+      "symbol": "="
+    },
+    {
+      "accepted": true,
+      "symbol": "<>"
+    },
+    {
+      "accepted": true,
+      "symbol": "AND"
+    },
+    {
+      "accepted": true,
+      "symbol": "OR"
+    },
+    {
+      "accepted": true,
+      "symbol": "XOR"
+    },
+    {
+      "accepted": true,
+      "symbol": "NOT"
+    },
+    {
+      "accepted": true,
+      "symbol": "MOD"
+    },
+    {
+      "accepted": false,
+      "rejectedWith": "ST-SYN-001",
+      "symbol": "**"
+    }
+  ],
+  "plannedAdditions": [
+    {
+      "authority": "ADR-054 phán quyết (4)",
+      "construct": "VAR_IN_OUT",
+      "issue": 367,
+      "note": "Đi cùng ARRAY tĩnh và STRUCT: VAR_IN_OUT là truyền tham chiếu, không có kiểu hợp thành thì gần như vô dụng.",
+      "wave": "đợt gần"
+    },
+    {
+      "authority": "ADR-054 phán quyết (4)",
+      "construct": "ARRAY (kích thước tĩnh)",
+      "issue": 367,
+      "note": "Kích thước biết tại compile time nên WCET vẫn chặn trên được.",
+      "wave": "đợt gần"
+    },
+    {
+      "authority": "ADR-054 phán quyết (4)",
+      "construct": "STRUCT",
+      "issue": 367,
+      "note": "Đi cùng VAR_IN_OUT.",
+      "wave": "đợt gần"
+    },
+    {
+      "authority": "ADR-054 phán quyết (4)",
+      "construct": "LREAL, BYTE, WORD, DWORD, enum",
+      "issue": null,
+      "note": "Mở rộng hệ kiểu sau khi đợt gần ổn định.",
+      "wave": "đợt sau"
+    }
+  ],
+  "pouKinds": [
+    {
+      "name": "PROGRAM",
+      "wireCode": 0
+    },
+    {
+      "name": "FUNCTION",
+      "wireCode": 1
+    },
+    {
+      "name": "FUNCTION_BLOCK",
+      "wireCode": 2
+    }
+  ],
+  "profileVersion": "1.0.0",
+  "reservedWords": [
+    "PROGRAM",
+    "END_PROGRAM",
+    "VAR",
+    "VAR_INPUT",
+    "VAR_OUTPUT",
+    "END_VAR",
+    "FUNCTION",
+    "END_FUNCTION",
+    "FUNCTION_BLOCK",
+    "END_FUNCTION_BLOCK",
+    "RETAIN",
+    "IF",
+    "THEN",
+    "ELSIF",
+    "ELSE",
+    "END_IF",
+    "AND",
+    "OR",
+    "XOR",
+    "NOT",
+    "MOD",
+    "TRUE",
+    "FALSE",
+    "BOOL",
+    "INT",
+    "DINT",
+    "UINT",
+    "REAL",
+    "TIME",
+    "TON",
+    "TOF",
+    "R_TRIG",
+    "F_TRIG",
+    "PID",
+    "TP",
+    "CTU",
+    "CTD",
+    "HYSTERESIS",
+    "CASE",
+    "OF",
+    "END_CASE",
+    "FOR",
+    "END_FOR",
+    "WHILE",
+    "END_WHILE",
+    "REPEAT",
+    "UNTIL",
+    "END_REPEAT",
+    "EXIT",
+    "CONTINUE",
+    "RETURN",
+    "GOTO",
+    "VAR_GLOBAL",
+    "VAR_EXTERNAL",
+    "NATIVE",
+    "POINTER",
+    "REFERENCE",
+    "AT",
+    "ARRAY",
+    "STRUCT",
+    "STRING",
+    "WSTRING"
+  ],
+  "scalarTypes": [
+    {
+      "isInteger": false,
+      "name": "BOOL",
+      "wireCode": 1
+    },
+    {
+      "isInteger": true,
+      "isSigned": true,
+      "max": 32767,
+      "min": -32768,
+      "name": "INT",
+      "wireCode": 5
+    },
+    {
+      "isInteger": true,
+      "isSigned": true,
+      "max": 2147483647,
+      "min": -2147483648,
+      "name": "DINT",
+      "wireCode": 2
+    },
+    {
+      "isInteger": true,
+      "isSigned": false,
+      "max": 65535,
+      "min": 0,
+      "name": "UINT",
+      "wireCode": 6
+    },
+    {
+      "isInteger": false,
+      "name": "REAL",
+      "wireCode": 3
+    },
+    {
+      "isInteger": false,
+      "name": "TIME",
+      "wireCode": 4
+    }
+  ],
+  "schemaVersion": 1,
+  "sha256": "066378d52e5ace912cc7ed5e95a022484cbd0237b64b4a3463a06a2017f0bdd6",
+  "standardFunctionBlocks": [
+    {
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "BOOL"
+        },
+        {
+          "name": "PT",
+          "type": "TIME"
+        }
+      ],
+      "name": "TON",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        },
+        {
+          "name": "ET",
+          "type": "TIME"
+        }
+      ],
+      "vendorExtension": false,
+      "wireCode": 1
+    },
+    {
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "BOOL"
+        },
+        {
+          "name": "PT",
+          "type": "TIME"
+        }
+      ],
+      "name": "TOF",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        },
+        {
+          "name": "ET",
+          "type": "TIME"
+        }
+      ],
+      "vendorExtension": false,
+      "wireCode": 2
+    },
+    {
+      "inputs": [
+        {
+          "name": "CLK",
+          "type": "BOOL"
+        }
+      ],
+      "name": "R_TRIG",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        }
+      ],
+      "vendorExtension": false,
+      "wireCode": 3
+    },
+    {
+      "inputs": [
+        {
+          "name": "CLK",
+          "type": "BOOL"
+        }
+      ],
+      "name": "F_TRIG",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        }
+      ],
+      "vendorExtension": false,
+      "wireCode": 4
+    },
+    {
+      "inputs": [
+        {
+          "name": "SP",
+          "type": "REAL"
+        },
+        {
+          "name": "PV",
+          "type": "REAL"
+        },
+        {
+          "name": "KP",
+          "type": "REAL"
+        },
+        {
+          "name": "KI",
+          "type": "REAL"
+        },
+        {
+          "name": "KD",
+          "type": "REAL"
+        },
+        {
+          "name": "OUT_MIN",
+          "type": "REAL"
+        },
+        {
+          "name": "OUT_MAX",
+          "type": "REAL"
+        },
+        {
+          "name": "ACTUAL",
+          "type": "REAL"
+        }
+      ],
+      "name": "PID",
+      "outputs": [
+        {
+          "name": "OUT",
+          "type": "REAL"
+        },
+        {
+          "name": "TRACKING",
+          "type": "BOOL"
+        }
+      ],
+      "vendorExtension": true,
+      "wireCode": 5
+    },
+    {
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "BOOL"
+        },
+        {
+          "name": "PT",
+          "type": "TIME"
+        }
+      ],
+      "name": "TP",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        },
+        {
+          "name": "ET",
+          "type": "TIME"
+        }
+      ],
+      "vendorExtension": false,
+      "wireCode": 6
+    },
+    {
+      "inputs": [
+        {
+          "name": "CU",
+          "type": "BOOL"
+        },
+        {
+          "name": "RESET",
+          "type": "BOOL"
+        },
+        {
+          "name": "PV",
+          "type": "INT"
+        }
+      ],
+      "name": "CTU",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        },
+        {
+          "name": "CV",
+          "type": "INT"
+        }
+      ],
+      "vendorExtension": false,
+      "wireCode": 7
+    },
+    {
+      "inputs": [
+        {
+          "name": "CD",
+          "type": "BOOL"
+        },
+        {
+          "name": "LOAD",
+          "type": "BOOL"
+        },
+        {
+          "name": "PV",
+          "type": "INT"
+        }
+      ],
+      "name": "CTD",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        },
+        {
+          "name": "CV",
+          "type": "INT"
+        }
+      ],
+      "vendorExtension": false,
+      "wireCode": 8
+    },
+    {
+      "inputs": [
+        {
+          "name": "IN",
+          "type": "REAL"
+        },
+        {
+          "name": "HIGH",
+          "type": "REAL"
+        },
+        {
+          "name": "LOW",
+          "type": "REAL"
+        }
+      ],
+      "name": "HYSTERESIS",
+      "outputs": [
+        {
+          "name": "Q",
+          "type": "BOOL"
+        }
+      ],
+      "vendorExtension": true,
+      "wireCode": 9
+    }
+  ],
+  "standardFunctions": [
+    {
+      "arity": 1,
+      "name": "ABS",
+      "vendorExtension": false
+    },
+    {
+      "arity": 2,
+      "name": "MIN",
+      "vendorExtension": false
+    },
+    {
+      "arity": 2,
+      "name": "MAX",
+      "vendorExtension": false
+    },
+    {
+      "arity": 3,
+      "name": "LIMIT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 3,
+      "name": "SEL",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "SQRT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 5,
+      "name": "SCALE",
+      "vendorExtension": true
+    },
+    {
+      "arity": 3,
+      "name": "DEADBAND",
+      "vendorExtension": true
+    },
+    {
+      "arity": 1,
+      "name": "INT_TO_REAL",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "REAL_TO_INT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "TIME_TO_REAL",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "REAL_TO_TIME",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "INT_TO_DINT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "INT_TO_UINT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "DINT_TO_INT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "DINT_TO_UINT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "UINT_TO_INT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "UINT_TO_DINT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "DINT_TO_REAL",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "UINT_TO_REAL",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "REAL_TO_DINT",
+      "vendorExtension": false
+    },
+    {
+      "arity": 1,
+      "name": "REAL_TO_UINT",
+      "vendorExtension": false
+    }
+  ],
+  "statements": [
+    {
+      "accepted": true,
+      "name": "ASSIGN"
+    },
+    {
+      "accepted": true,
+      "name": "IF"
+    },
+    {
+      "accepted": true,
+      "name": "ELSIF"
+    },
+    {
+      "accepted": true,
+      "name": "ELSE"
+    },
+    {
+      "accepted": true,
+      "name": "CASE"
+    },
+    {
+      "accepted": true,
+      "name": "FB_CALL"
+    },
+    {
+      "accepted": false,
+      "name": "FOR",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "accepted": false,
+      "name": "WHILE",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "accepted": false,
+      "name": "REPEAT",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "accepted": false,
+      "name": "EXIT",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "accepted": false,
+      "name": "RETURN",
+      "rejectedWith": "ST-SYN-001"
+    }
+  ],
+  "storageClasses": [
+    {
+      "name": "VAR_INPUT",
+      "wireCode": 0
+    },
+    {
+      "name": "VAR_OUTPUT",
+      "wireCode": 1
+    },
+    {
+      "name": "VAR",
+      "wireCode": 2
+    },
+    {
+      "name": "VAR RETAIN",
+      "wireCode": 3
+    }
+  ],
+  "targetAbi": 3841,
+  "targetProfileId": "revA-1t-1-5-30",
+  "vendorExtensions": [
+    {
+      "authority": "ADR-054 phán quyết (2)",
+      "kind": "functionBlock",
+      "name": "PID",
+      "reason": "Không thuộc thư viện chuẩn IEC 61131-3, nhưng là khối điều khiển cốt lõi của DDC. IEC cho phép mở rộng nhà sản xuất miễn là CÔNG BỐ RÕ."
+    },
+    {
+      "authority": "ADR-054 phán quyết (2)",
+      "kind": "functionBlock",
+      "name": "HYSTERESIS",
+      "reason": "So sánh có nhớ. Không thuộc thư viện chuẩn IEC; giữ vì ca dùng HVAC, phải đánh dấu là mở rộng."
+    },
+    {
+      "authority": "ADR-054 phán quyết (2)",
+      "kind": "function",
+      "name": "SCALE",
+      "reason": "Quy đổi tuyến tính raw↔engineering. Không thuộc thư viện chuẩn IEC; giữ, phải đánh dấu."
+    },
+    {
+      "authority": "ADR-054 phán quyết (2)",
+      "kind": "function",
+      "name": "DEADBAND",
+      "reason": "Vùng chết quanh setpoint. Không thuộc thư viện chuẩn IEC; giữ, phải đánh dấu."
+    }
+  ]
+}
