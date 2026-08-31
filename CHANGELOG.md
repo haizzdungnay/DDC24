@@ -8,6 +8,56 @@
 
 ## [Unreleased]
 
+### Fixed — hoàn tất AC còn thiếu của `#351` và bốn lỗi phát hiện khi đo lại (2026-08-31)
+
+Bản thi hành `ISS-STED-02` đã merge trước đó phủ được phần lớn issue, nhưng **thiếu một
+tiêu chí chấp nhận** và để lại bốn chỗ đỏ. Phần trùng lặp đã bị bỏ, chỉ giữ phần bổ sung.
+
+- **AC còn thiếu — chính sách "target profile nâng warning thành error".**
+  `StCompileOptions::warnings_as_errors` + cờ CLI `--warnings-as-errors` +
+  `StDiagnosticBag::promote_warnings_to_errors()`. Áp ở **túi**, sau khi đã biết chương
+  trình hợp lệ, chứ không ở chỗ phát warning: nơi phát biết *đây là chuyện đáng ngờ*, còn
+  *đáng ngờ có chặn phát hành không* là câu hỏi của profile. **Mã không đổi khi nâng cấp**
+  — `ST-WARN-002` vẫn là `ST-WARN-002`; đổi cả mã sẽ làm hai profile nói hai ngôn ngữ khác
+  nhau về cùng một phát hiện và bảng tra của FE phải nhân đôi.
+- **`st_compile_main.cpp` `fail()` nuốt lỗi thật.** Từ khi kênh WARNING sống, một lần
+  Check hỏng vì lý do **ngoài** compiler (hỏng chữ ký, lỗi ghi file) vẫn để lại một túi
+  chỉ chứa warning. `fail()` chỉ phát túi ⇒ `ok:false` kèm **không một lỗi nào**: người
+  dùng thấy "thất bại" và mấy dòng vàng vô can, còn nguyên nhân thật biến mất. Nay bảo
+  đảm mảng luôn có ít nhất một `ERROR`.
+- **`hmi_broker.go` — lỗi đua thật trong sản phẩm.** `Serve()` trả về ngay khi `Accept()`
+  nhận `net.ErrClosed`, tức **trước** khi goroutine huỷ ctx đóng xong listener. Broker
+  khởi động lại ngay sau đó bind được đường dẫn rồi bị lần gỡ file muộn xoá mất socket
+  vừa tạo (`chmod hmi socket: no such file`). Đây là đúng đường mà restart/reload dùng
+  trên bo, không phải chỉ chuyện của test. Thêm `defer Close()` trong `Serve`, và bỏ
+  `os.Remove` **theo đường dẫn** trong `Close()` — `UnixListener.Close()` đã gỡ đúng file
+  của chính nó, còn xoá theo tên thì có thể xoá socket của người kế nhiệm.
+- **`generate_programming_errors.py` — `npm run build` đỏ vĩnh viễn trên Linux.**
+  Manifest ghi `str(path.relative_to(ROOT))`, tức dùng dấu phân cách của **hệ điều hành**.
+  Một lần sinh trên Windows ghi vào manifest các đường dẫn có `\`, và bản commit đó không
+  bao giờ khớp lại trên Linux ⇒ `--check` đỏ vì một khác biệt **thuần hình thức**. Manifest
+  là hợp đồng đi qua nhiều máy nên phải có đúng một dạng chuẩn tắc: dùng `.as_posix()`.
+- **`runner_test.go` — test đo nhầm thứ.** `kill(pid,0)` vẫn thành công trên một zombie,
+  nên test đo "đã được reap" thay vì "đã bị giết" — hai việc của hai chủ thể khác nhau.
+  `ProcessRunner` chịu trách nhiệm giết process group; reap tiến trình mồ côi là việc của
+  init, mà PID 1 của container không phải init biết reap. Đọc `/proc/<pid>/stat` phân biệt
+  `S` (còn sống — hỏng thật) với `Z` (đã chết — đạt).
+- **`simulation_lifecycle_test.go` — so ảnh chụp của bộ đếm chạy tự do.** Vòng chờ dừng ở
+  mẫu **đầu tiên** thấy `>= 3`, nên dưới tải có thể bỏ qua hẳn nhịp 3 và thấy nhịp 4
+  (`virtual=400/300 sequence=4/3`) trong khi bất biến vẫn nguyên vẹn. Nay so **tiến độ mỗi
+  nhịp** bằng nhân chéo — đúng bất biến "tốc độ không tới worker và không đổi kết quả".
+- **FE `ProblemsDrawer` — severity chỉ tồn tại ở màu.** Icon mang `aria-hidden`, nên người
+  dùng trình đọc màn hình nghe "lỗi" và "cảnh báo" y hệt nhau. Vô hại khi mọi diagnostic
+  đều là ERROR; từ lúc kênh WARNING mang dữ liệu thật thì đó là hai hành động khác nhau —
+  một cái chặn phát hành, một cái không. Thêm nhãn `sr-only`.
+- **Verification** (2026-08-31, đo lại thật, đóng góp bằng chứng cho **#414**):
+  C++ Release `MODBUS/BACNET/HMI=ON`, `--fresh`: configure exit 0, build exit 0,
+  `ctest` **1369/1369 pass, exit 0**.
+  Go: `go vet ./...` exit 0, `go test ./... -count=1` **exit 0, 19 gói ok** (trước sửa:
+  exit 1, hai gói đỏ).
+  FE: `vitest` **189 file / 2207 test pass**, `npm run lint` exit 0,
+  `npm run build` **exit 0** (trước sửa: exit 1 ngay ở `check:programming-errors`).
+
 ### Thông kênh WARNING xuyên ba tầng — `ISS-STED-02` (#351) + `ISS-STED-03` (#352) (2026-08-31)
 
 **Triệu chứng.** Đo nền cho `#369` (`docs/07_records/test-evidence/programming/2026-08-31-gate369-e2e-vv-baseline.md`)
