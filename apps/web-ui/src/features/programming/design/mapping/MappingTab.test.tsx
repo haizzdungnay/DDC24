@@ -77,15 +77,13 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
   it('giới hạn danh sách biến bằng vùng cuộn nội bộ để pane không kéo dài vô hạn', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
     const list = screen.getByTestId('mapping-variable-list')
-    expect(list).toHaveClass('h-[34rem]', 'overflow-y-scroll')
-    expect(list).not.toHaveClass('flex-1')
+    expect(list).toHaveClass('flex-1', 'overflow-y-auto')
   })
 
   it('giới hạn Point pane ở khoảng 10 dòng và cho kéo xem phần còn lại', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
     const list = screen.getByTestId('mapping-point-list')
-    expect(list).toHaveClass('h-[35rem]', 'overflow-y-scroll')
-    expect(list).not.toHaveClass('flex-1')
+    expect(list).toHaveClass('flex-1', 'overflow-y-auto')
   })
 
   it('hiện MB_RTU read-only là Core chưa hỗ trợ', () => {

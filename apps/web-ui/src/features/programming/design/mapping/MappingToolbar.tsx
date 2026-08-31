@@ -41,7 +41,7 @@ export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', pr
         {programs.length > 0 && (
           <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]">
             <span>{pick('Chương trình', 'Program')}</span>
-            <select aria-label={pick('Chương trình', 'Program')} className="bg-transparent py-1 text-[var(--c-text)] outline-none" value={programFilter} onChange={(event) => onProgramFilterChange?.(event.target.value)}>
+            <select aria-label={pick('Chương trình', 'Program')} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]" value={programFilter} onChange={(event) => onProgramFilterChange?.(event.target.value)}>
               <option value="ALL">{pick('Tất cả', 'All')}</option>
               {programs.map((p) => (
                 <option key={p.programId} value={p.programId}>{p.name}</option>
@@ -51,15 +51,15 @@ export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', pr
         )}
         <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]">
           <span>{pick('Loại Point', 'Point Category')}</span>
-          <select aria-label={pick('Loại Point', 'Point Category')} className="bg-transparent py-1 text-[var(--c-text)] outline-none" value={category} onChange={(event) => onCategoryChange(event.target.value as MappingToolbarProps['category'])}>
+          <select aria-label={pick('Loại Point', 'Point Category')} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]" value={category} onChange={(event) => onCategoryChange(event.target.value as MappingToolbarProps['category'])}>
             <option value="ALL">{pick('Tất cả', 'All')}</option>
             <option value="LOCAL">LOCAL</option>
             <option value="VP">VP</option>
             <option value="MB_RTU">MB_RTU</option>
           </select>
         </label>
-        <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Hướng', 'Direction')}</span><select aria-label={pick('Hướng Variable', 'Variable direction')} value={direction} onChange={(event) => onDirectionChange(event.target.value as MappingToolbarProps['direction'])} className="bg-transparent py-1 text-[var(--c-text)] outline-none"><option value="ALL">{pick('Tất cả', 'All')}</option><option value="INPUT">INPUT</option><option value="OUTPUT">OUTPUT</option><option value="INOUT">INOUT</option></select></label>
-        <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Kiểu', 'Type')}</span><select aria-label={pick('Kiểu dữ liệu', 'Data type')} value={dataType} onChange={(event) => onDataTypeChange(event.target.value)} className="bg-transparent py-1 text-[var(--c-text)] outline-none"><option value="ALL">{pick('Tất cả', 'All')}</option>{dataTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+        <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Hướng', 'Direction')}</span><select aria-label={pick('Hướng Variable', 'Variable direction')} value={direction} onChange={(event) => onDirectionChange(event.target.value as MappingToolbarProps['direction'])} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]"><option value="ALL">{pick('Tất cả', 'All')}</option><option value="INPUT">INPUT</option><option value="OUTPUT">OUTPUT</option><option value="INOUT">INOUT</option></select></label>
+        <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Kiểu', 'Type')}</span><select aria-label={pick('Kiểu dữ liệu', 'Data type')} value={dataType} onChange={(event) => onDataTypeChange(event.target.value)} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]"><option value="ALL">{pick('Tất cả', 'All')}</option>{dataTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
         <button type="button" disabled className="inline-flex min-h-10 items-center gap-2 rounded border border-dashed border-[var(--c-border)] px-3 text-xs font-semibold text-[var(--c-text-dim)]" title={pick('Suggestions chỉ bật sau khi capability authority được công bố', 'Suggestions available after capability authority published')}>
           <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> {pick('Gợi ý (Phase 1A)', 'Suggestions (Phase 1A)')}
         </button>

@@ -13,12 +13,12 @@ export function VariableWorklist({ rows, selectedId, onSelect, onOpenSource, mut
 }) {
   const { pick } = useI18n()
   return (
-    <section className="flex min-h-0 min-w-0 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]" aria-labelledby="mapping-variables-title">
+    <section className="flex min-h-0 min-w-0 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] 2xl:h-[39rem] 2xl:max-h-[calc(100vh-18rem)]" aria-labelledby="mapping-variables-title">
       <div className="flex items-start justify-between gap-3 border-b border-[var(--c-border)] px-4 py-3">
         <div><h2 id="mapping-variables-title" className="text-sm font-semibold text-[var(--c-text)]">{pick('Biến chương trình', 'Program Variables')}</h2><p className="mt-1 text-xs text-[var(--c-text-dim)]">{rows.length} {pick('biến interface · Map trực tiếp bị khóa trong Phase 1A', 'interface variables · Direct mapping locked in Phase 1A')}</p></div>
         <span className="rounded-full bg-[var(--c-accent-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--c-accent)]">READ-ONLY</span>
       </div>
-      <div data-testid="mapping-variable-list" className="h-[34rem] min-h-0 max-h-[calc(100vh-18rem)] divide-y divide-[var(--c-border)] overflow-y-scroll [scrollbar-gutter:stable]">
+      <div data-testid="mapping-variable-list" className="min-h-0 flex-1 divide-y divide-[var(--c-border)] overflow-y-auto [scrollbar-gutter:stable]">
         {rows.length === 0 ? <p className="p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa có biến I/O có thể inspect.', 'No I/O variables available to inspect.')}</p> : rows.map((row) => {
           const selected = row.id === selectedId
           const qualityState = row.liveQuality.toLowerCase() as 'good' | 'uncertain' | 'bad' | 'stale' | 'offline' | 'unknown'
