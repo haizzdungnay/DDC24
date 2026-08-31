@@ -446,10 +446,31 @@ public:
     explicit Parser(std::vector<Token> tokens, bool allow_user_calls = false)
         : tok_(std::move(tokens)) { allow_user_calls_ = allow_user_calls; }
 
+    /* ISS-STED-01: bật thu nhiều diagnostic. Không set thì parser giữ nguyên
+     * hành vi fail-fast cũ — mọi call site chưa quan tâm nhiều lỗi không phải
+     * đổi một dòng nào. */
+    void set_bag(StDiagnosticBag* bag) { bag_ = bag; }
+
     /* T59-101: một entry cho cả ba loại POU. Thân của chúng là cùng một ngôn
      * ngữ; chỉ chữ ký và quyền hạn khác nhau, nên tách ba parser sẽ nhân bản
      * toàn bộ statement/expression grammar. */
+    /* Entry công khai: chạy parser rồi HOÀ GIẢI kết quả với túi diagnostic.
+     *
+     * Hai bất biến phải giữ cùng lúc: (a) call site cũ đọc `*diag` vẫn thấy
+     * lỗi ĐẦU TIÊN theo thứ tự nguồn, (b) parse "chạy tới cuối" sau khi đã
+     * phục hồi vẫn phải trả false — nếu không, AST thiếu câu lệnh sẽ đi tiếp
+     * xuống typecheck và sinh lỗi giả. */
     bool parse_pou(StProgram* out, StDiagnostic* diag)
+    {
+        const std::size_t before = records_;
+        const bool ok = parse_pou_impl(out, diag);
+        if (!ok && records_ == before) record(diag);
+        if (has_recorded_) { *diag = first_diag_; return false; }
+        return ok;
+    }
+
+private:
+    bool parse_pou_impl(StProgram* out, StDiagnostic* diag)
     {
         StPouKind kind = StPouKind::PROGRAM;
         if (!at_ident() || !st_pou_kind_from_keyword(peek().upper, &kind))
@@ -511,9 +532,20 @@ public:
         return true;
     }
 
-private:
     std::vector<Token> tok_;
     std::size_t pos_ = 0;
+
+    /* Túi diagnostic (tuỳ chọn) và bản sao lỗi ĐẦU TIÊN.
+     *
+     * `*diag` bị mọi nhánh lỗi ghi đè tự do, nên sau khi phục hồi nó mang lỗi
+     * CUỐI chứ không phải lỗi đầu. Call site cũ lại chỉ đọc `*diag` và mong
+     * đó là lỗi đầu tiên, nên phải giữ riêng một bản và khôi phục lúc thoát. */
+    StDiagnosticBag* bag_ = nullptr;
+    StDiagnostic     first_diag_;
+    bool             has_recorded_ = false;
+    /* Số lần đã ghi. `parse_stmt_list` lồng nhau (thân IF/CASE) dùng nó để
+     * không ghi lại một lỗi mà vòng bên trong đã ghi. */
+    std::size_t      records_ = 0;
 
     /* Mặc định TẮT: `parse_st_program()` giữ đúng hành vi cũ là từ chối hàm lạ
      * ngay tại parser. Chỉ đường POU mới bật, nên không có cửa nửa vời. */
@@ -571,6 +603,87 @@ private:
     {
         set_diag(diag, st_diag_code::kSyntaxUnexpected, msg, peek().line, peek().column,
                  peek().length);
+        return false;
+    }
+
+    /* ---- ISS-STED-01: thu lỗi + phục hồi -------------------------------- */
+
+    /* Ghi `*diag` vào túi và nhớ lỗi đầu tiên. Trả false để call site giữ
+     * nguyên kiểu `return record(diag);` ở nhánh không phục hồi được. */
+    bool record(const StDiagnostic* diag)
+    {
+        if (!has_recorded_) { first_diag_ = *diag; has_recorded_ = true; }
+        if (bag_ != nullptr) bag_->add(*diag);
+        ++records_;
+        return false;
+    }
+
+    /* Còn ngân sách phục hồi không.
+     *
+     * Dừng ở `kMaxDiagnostics + 1` chứ không phải `kMaxDiagnostics`: đúng một
+     * mục vượt trần là tín hiệu để `finalize()` gắn `ST-LIM-006`. Dừng ở đúng
+     * trần thì nguồn có 200 lỗi lại báo "vừa đủ 64, hết lỗi" — sai sự thật. */
+    bool can_recover() const
+    {
+        if (bag_ == nullptr) return false;
+        return bag_->size() <= StDiagnosticBag::kMaxDiagnostics;
+    }
+
+    static bool is_recovery_anchor(const std::string& up)
+    {
+        return up == "IF" || up == "CASE" || up == "ELSIF" || up == "ELSE" ||
+               up == "END_IF" || up == "END_CASE" || up == "END_VAR" ||
+               up == "END_PROGRAM" || up == "END_FUNCTION" || up == "END_FUNCTION_BLOCK" ||
+               up == "VAR" || up == "VAR_INPUT" || up == "VAR_OUTPUT";
+    }
+
+    /* Đồng bộ về ranh giới CÂU LỆNH: nuốt tới hết `;` gần nhất, hoặc dừng
+     * trước một từ khoá mở/đóng khối.
+     *
+     * Không nhảy qua từ khoá khối là điểm mấu chốt: nếu nuốt luôn `END_IF` thì
+     * `parse_if` bên ngoài mất token đóng và sinh ra một chuỗi lỗi giả — đúng
+     * thứ mà tiêu chí "phục hồi không sinh diagnostic giả" cấm. */
+    /* Mở đầu một câu lệnh mới: `ident :=` (gán) hoặc `ident (` (lời gọi FB).
+     * Đây là hai — và chỉ hai — hình dạng mở đầu câu lệnh không-từ-khoá của
+     * subset, nên nhận diện chúng là không nhập nhằng.
+     *
+     * Không có luật này thì một câu lệnh thiếu `;` sẽ nuốt luôn mọi câu lệnh
+     * sau nó tới tận `END_PROGRAM` (vì chúng cũng không có `;` nào ở giữa) —
+     * nguồn 3 lỗi chỉ báo về 1. */
+    bool at_statement_start() const
+    {
+        if (!at_ident() || is_keyword(peek().upper)) return false;
+        const Token::Kind next = peek_at(1).kind;
+        return next == Token::Kind::ColonEq || next == Token::Kind::LParen;
+    }
+
+    bool synchronize_statement()
+    {
+        const std::size_t start = pos_;
+        while (!at_end()) {
+            if (peek().kind == Token::Kind::Semicolon) { advance(); return true; }
+            if (at_ident() && is_recovery_anchor(peek().upper))
+                return pos_ > start;   /* tiến được mới coi là phục hồi */
+            /* `pos_ > start` bắt buộc: lỗi phát ra NGAY tại đầu một câu lệnh
+             * thì không được dừng ở chính nó, nếu không vòng ngoài lặp vô hạn. */
+            if (pos_ > start && at_statement_start()) return true;
+            advance();
+        }
+        return false;
+    }
+
+    /* Đồng bộ về ranh giới KHAI BÁO trong khối VAR: tới hết `;`, hoặc dừng
+     * trước `END_VAR` / một khối VAR khác. */
+    bool synchronize_declaration()
+    {
+        const std::size_t start = pos_;
+        while (!at_end()) {
+            if (peek().kind == Token::Kind::Semicolon) { advance(); return true; }
+            if (at_ident() && (peek().upper == "END_VAR" || peek().upper == "VAR" ||
+                               peek().upper == "VAR_INPUT" || peek().upper == "VAR_OUTPUT"))
+                return pos_ > start;
+            advance();
+        }
         return false;
     }
 
@@ -684,6 +797,21 @@ private:
 
         while (!at_kw("END_VAR")) {
             if (at_end()) return fail("unexpected end of source inside VAR block", diag);
+            if (!parse_var_decl(out, storage, diag)) {
+                record(diag);
+                if (!can_recover() || !synchronize_declaration()) return false;
+                continue;
+            }
+        }
+        return expect_kw("END_VAR", diag);
+    }
+
+    /* Một khai báo trong khối VAR. Tách khỏi `parse_var_block` để vòng lặp có
+     * đúng MỘT điểm thoát lỗi — nếu không, mười nhánh `return false` rải rác
+     * đều phải tự nhớ gọi `record` + `synchronize`, và chỗ quên sẽ là chỗ
+     * parser âm thầm nuốt lỗi. */
+    bool parse_var_decl(StProgram* out, StStorage storage, StDiagnostic* diag)
+    {
             if (!at_ident()) return fail("expected variable name", diag);
             if (is_keyword(peek().upper))
                 return fail("'" + peek().text + "' is a keyword and cannot be a variable name", diag);
@@ -764,9 +892,7 @@ private:
                 }
                 out->vars.push_back(std::move(d));
             }
-            if (!expect(Token::Kind::Semicolon, "';' after variable declaration", diag)) return false;
-        }
-        return expect_kw("END_VAR", diag);
+            return expect(Token::Kind::Semicolon, "';' after variable declaration", diag);
     }
 
     /* ---- Câu lệnh ---- */
@@ -805,7 +931,15 @@ private:
                 return false;
             }
             StStmt s;
-            if (!parse_stmt(&s, diag)) return false;
+            const std::size_t before = records_;
+            if (!parse_stmt(&s, diag)) {
+                if (records_ == before) record(diag);
+                /* Câu lệnh hỏng bị VỨT, không đẩy vào AST: một node nửa vời
+                 * sẽ làm tầng semantic báo lỗi thứ hai cho cùng một nguyên
+                 * nhân. Chỉ vị trí đọc được đưa về ranh giới an toàn. */
+                if (!can_recover() || !synchronize_statement()) return false;
+                continue;
+            }
             out->push_back(std::move(s));
         }
         return true;
@@ -1452,21 +1586,44 @@ private:
 
 bool parse_st_pou(const std::string& source, StProgram* out, StDiagnostic* diag)
 {
+    return parse_st_pou(source, out, diag, nullptr);
+}
+
+bool parse_st_pou(const std::string& source, StProgram* out, StDiagnostic* diag,
+                  StDiagnosticBag* bag)
+{
     std::vector<Token> tokens;
-    if (!tokenize(source, &tokens, diag)) return false;
+    /* Lỗi LEX không phục hồi được: một ký tự lạ hay comment không đóng làm
+     * mọi token sau đó vô nghĩa, nên đoán tiếp chỉ sinh rác. Đưa đúng một mục
+     * vào túi rồi dừng. */
+    if (!tokenize(source, &tokens, diag)) {
+        if (bag != nullptr) bag->add(*diag);
+        return false;
+    }
     Parser parser(std::move(tokens), /*allow_user_calls=*/true);
+    parser.set_bag(bag);
     *out = StProgram{};
     return parser.parse_pou(out, diag);
 }
 
 bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag)
 {
+    return parse_st_program(source, out, diag, nullptr);
+}
+
+bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* diag,
+                      StDiagnosticBag* bag)
+{
     /* Giữ nguyên hợp đồng cũ cho mọi call site hiện có: entry này CHỈ nhận
      * PROGRAM. Nếu nguồn là FUNCTION/FUNCTION_BLOCK thì nó parse được nhưng bị
      * từ chối ở đây bằng mã kind — thông tin hữu ích hơn "expected PROGRAM". */
     std::vector<Token> tokens;
-    if (!tokenize(source, &tokens, diag)) return false;
+    if (!tokenize(source, &tokens, diag)) {
+        if (bag != nullptr) bag->add(*diag);
+        return false;
+    }
     Parser parser(std::move(tokens), /*allow_user_calls=*/false);
+    parser.set_bag(bag);
     *out = StProgram{};
     if (!parser.parse_pou(out, diag)) return false;
     if (out->kind != StPouKind::PROGRAM) {
@@ -1474,6 +1631,7 @@ bool parse_st_program(const std::string& source, StProgram* out, StDiagnostic* d
                  std::string("expected PROGRAM but source declares ") +
                      st_pou_kind_name(out->kind),
                  out->line, out->column, out->length);
+        if (bag != nullptr) bag->add(*diag);
         *out = StProgram{};
         return false;
     }
