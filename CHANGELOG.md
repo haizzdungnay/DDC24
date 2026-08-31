@@ -8,6 +8,102 @@
 
 ## [Unreleased]
 
+### Thông kênh WARNING xuyên ba tầng — `ISS-STED-02` (#351) + `ISS-STED-03` (#352) (2026-08-31)
+
+**Triệu chứng.** Đo nền cho `#369` (`docs/07_records/test-evidence/programming/2026-08-31-gate369-e2e-vv-baseline.md`)
+cho thấy chạy CLI trên một chương trình ST hợp lệ có biến thừa trả về `diagnostics: []`,
+`COUNT_WARNING=0`. Người viết chương trình không có cách nào biết mình để sót biến hay quên
+gán `VAR_OUTPUT`.
+
+**Nguyên nhân gốc — ba chỗ đứt độc lập nhau, phải sửa cùng lúc mới thông:**
+
+1. *Không emitter nào phát WARNING.* `StSeverity::WARNING` có trong `st_diagnostic.hpp` và có
+   serializer từ `#350`, nhưng chưa bao giờ được dùng — kênh chết ngay tại tầng C++.
+2. *Hai CLI chỉ xuất túi khi thất bại.* `st_validate_main.cpp` dùng overload không nhận túi;
+   `st_compile_main.cpp:1147` hard-code `j["diagnostics"] = array()` trên nhánh thành công.
+   Cảnh báo không có đường ra kể cả khi đã phát.
+3. *Tầng Go đè cứng severity và vứt message.* `compilerDiagnostic()` gán thẳng `Severity: "ERROR"`
+   và bỏ hẳn văn bản compiler, thay bằng `MessageKey`. Đồng thời tiêu chí FAILED là
+   `len(diagnostics) > 0` — nghĩa là ngay khi compiler bắt đầu phát cảnh báo thì mọi chương trình
+   hợp lệ có một biến thừa sẽ **trượt Check**, đúng cái `ST_SUBSET_SPEC` §12.6 cấm.
+
+**Cách sửa.**
+
+- **`Added` — bốn mã cảnh báo** (`apps/core/application/st/st_diagnostic.hpp`, nối vào cuối enum
+  theo quy ước "không đổi số cũ"): `ST-WARN-001` (PT timer nhỏ hơn chu kỳ Task — **khai báo,
+  chưa hiện thực**, xem mục *Bị chặn* bên dưới), `ST-WARN-002` (biến khai báo không dùng),
+  `ST-WARN-003` (`VAR_OUTPUT` không bao giờ được gán), `ST-WARN-004` (đọc output FB **trước**
+  lời gọi trong cùng chu kỳ — `DDD-LANG-PROG-001` §4.3 bắt buộc cảnh báo nhưng trước nay chưa có
+  mã nào được cấp).
+- **`Added` — vết sử dụng trong `st_semantic.cpp`.** `Symbol` mang thêm `line/column/length` lấy
+  từ **dòng khai báo** (chỗ duy nhất sửa được), cùng `read`/`written`/`reportable`. Hai quyết
+  định chống-cảnh-báo-giả: (a) đánh dấu `read`/`written` **trước** phán quyết kiểu — biến dùng
+  sai kiểu vẫn là biến *được dùng*, nếu không thì một lỗi kiểu kéo theo một `ST-WARN-002` giả
+  làm người dùng đi sửa nhầm chỗ; (b) bỏ qua toàn bộ lượt quét cảnh báo khi đã ghi nhận lỗi —
+  lỗi làm việc soát dừng giữa chừng nên vết `read`/`written` không đầy đủ, phát cảnh báo trên
+  dữ liệu dở dang sẽ báo "không dùng" cho biến thực ra có dùng ở câu lệnh chưa kịp soát.
+  Hàm `warn()` tách khỏi `fail()`: **không** chạm `*diag_` (đó là hợp đồng "lỗi đầu tiên" của mọi
+  caller cũ) và **không** trả `false` (không có đường nào để cảnh báo làm Check FAILED).
+  Duyệt `prog_->vars` theo thứ tự khai báo trong nguồn thay vì `unordered_map` — thứ tự băm
+  không tất định thì thứ tự cảnh báo cũng không tất định.
+- **`Fixed` — hai CLI xuất túi trên **mọi** nhánh.** `st_validate_main.cpp` dùng một
+  `StDiagnosticBag` chung cho cả parse lẫn typecheck, `finalize()` ở mọi lối ra; `st_compile_main.cpp`
+  serialize `g_bag` trên nhánh thành công. Mã thoát **không đổi** (0 hợp lệ kể cả có cảnh báo,
+  1 lỗi ST thật, 2 lỗi dùng/IO).
+- **`Fixed` — tầng Go bám severity, không bám số lượng** (`apps/web-api/internal/programming/application/checks.go`).
+  Tiêu chí FAILED chuyển sang `hasError`; nhánh PASSED trả `diagnostics` thay vì mảng rỗng nên
+  cảnh báo sống sót. `compilerDiagnostic()` chuyển tiếp `Severity` thật qua `normalizeSeverity()`
+  (fail-closed: giá trị lạ hoặc rỗng ⇒ `"ERROR"`) và `Message` thật qua `sanitizeCompilerMessage()`.
+- **`Security` — giữ message nhưng không lộ hạ tầng** (yêu cầu của `#352`).
+  `sanitizeCompilerMessage()` bọc ba mẫu đường dẫn tuyệt đối (POSIX, ổ đĩa Windows, UNC). **Cố ý
+  không** có mẫu bắt token `tmp`/`temp`/`scratch` trần: message compiler ST mang tên biến của người
+  dùng, mà `temp_setpoint`, `tmp_avg`, `scratch_val` là tên biến bình thường bậc nhất trong mã HVAC —
+  xoá theo tiền tố sẽ đục thủng chính thông điệp mà `#352` yêu cầu giữ nguyên vẹn, trong khi không
+  chặn thêm được đường dẫn nào (mọi đường dẫn thật đều có phân cách và đã bị ba mẫu kia bắt).
+- **`Fixed` — cắt message vượt trần từ O(n²) xuống O(n).** Vòng cắt cũ bỏ dần rune cuối và gọi
+  `len(string(runes))` mỗi vòng, tức dựng lại cả chuỗi mỗi vòng. Độ dài message do đầu vào người
+  dùng chi phối (tên biến nằm trong message) nên đây là nhánh chạy thật. Thay bằng một lượt duyệt
+  `for i := range msg` lấy biên rune lớn nhất còn lọt trần 512 byte. Thêm
+  `TestSanitizeCompilerMessageTruncatesOnRuneBoundary` khoá hành vi: kết quả vẫn UTF-8 hợp lệ,
+  không sinh `U+FFFD` trên UI.
+- **`Added` — FE hiện message thật.** `ProgrammingDiagnostic.message?: string` (`model/types.ts`);
+  `ProblemsDrawer` ưu tiên `message` của compiler, chỉ rơi về bản dịch theo mã khi không có;
+  `ProgramsTab` tô gạch chân theo severity (`--c-warn` cho WARNING, `--c-fault` cho ERROR).
+- **`Changed` — profile ngôn ngữ sinh lại.** `contracts/programming/st_language_profile_v1.json` và
+  `docs/02_design/software/ST_LANGUAGE_PROFILE.generated.md` (qua `scripts/generate_st_language_profile.py`):
+  thêm 4 mã `ST-WARN-*` vào danh sách diagnostic, `sha256` đổi theo. Test hợp đồng
+  `st_language_profile_contract` bắt đúng độ trôi này khi catalog đổi mà profile chưa sinh lại —
+  bộ gác hoạt động như thiết kế.
+- **`Changed` — catalog `1.8.0` → `1.9.0`** (`contracts/programming/error_catalog_v1.json`): bốn mã
+  `ST-WARN-*` cùng ánh xạ `publicCode: PRG-ERR-CHECK-001`. `scripts/generate_programming_errors.py`
+  thêm `WARN` vào regex quét mã — thiếu nhánh này thì bộ gác hai chiều catalog ↔ nguồn không nhìn
+  thấy các hằng mới và im lặng bỏ qua.
+
+**`Added` — hồ sơ bằng chứng** `docs/07_records/test-evidence/programming/2026-08-31-sted-02-03-warning-channel.md`
+(`EV-STED-0203-001`): đo cùng khung cùng nguồn với hồ sơ nền `#369` để so trực tiếp trước/sau.
+C++ toàn suite từ **root** (cả 3 option `ON`, chứng minh bằng `CMakeCache.txt`): **1364/1364 PASS**,
+exit `0`, 56,44 s — chênh **+26** so với nền 1338 đã truy hết từng nhóm (11 `StWarning` của bản sửa
+này, 14 `StMultiDiagnostic` + 1 `st_language_profile_contract` từ `#350` vào `main` sau lúc đo nền),
+không test nào biến mất. Riêng nhóm compiler: 11/11 `StWarning` + **597/597** nhóm `^St` (nền: 572).
+Go `vet`+`test` exit `0` / 8 package,
+FE **2204/2205** + lint 0 + build 0. Đo thêm qua `mkddc-st-compile` — đường Go thật sự gọi —
+cho `ok: true` **kèm artifact vẫn sinh** với cả `ST-WARN-002/003` lẫn `ST-WARN-004`, và
+`PATH_LEAK_COUNT=0` trên JSON thật (compiler không nhét path host vào `message` ngay từ nguồn;
+lớp Go là phòng thủ thứ hai, không phải duy nhất).
+
+**`Changed` — tài liệu khớp lại với mã.** `ST_SUBSET_SPEC` §12.6, `docs/handoff/FW_SOM_ERROR_CODES.md`
+và `docs/04_design/INTERFACES.md`: thêm `ST-WARN-004`, ghi rõ **trạng thái từng mã** (mã nào đã
+phát, mã nào chưa hiện thực và vì sao), và nói thẳng hệ quả cho tầng gọi — `diagnostics[]` **có
+thể khác rỗng khi `ok: true`**, nên không được suy ra thất bại từ `len(diagnostics) > 0`. Hồ sơ
+nền `#369` được **bổ chính tại chỗ** (giữ nguyên số đo nền làm mốc, thêm khối đối chiếu sau sửa)
+thay vì sửa số cũ.
+
+**Bị chặn.** `ST-WARN-001` (PT timer nhỏ hơn chu kỳ Task) **không hiện thực được**: compiler không
+nhận chu kỳ Task làm đầu vào — `periodMs` chỉ tồn tại trên đường runtime (`st_control_api.cpp:120`),
+mọi phán quyết ở tầng compiler sẽ là đoán mò. Hằng vẫn khai và vẫn có trong catalog để tài liệu và
+mã có một nguồn duy nhất. `#351` cho phép rõ ràng việc này. *Cần để mở khoá:* đưa chu kỳ Task vào
+đầu vào compile (hợp đồng `Input`), việc này thuộc phạm vi khác.
+
 ### Phê duyệt + tạo issue — kế hoạch Point & I/O b2.2 (2026-08-31)
 
 - **`docs/07_records/reviews/POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md`** lên **b2.2**.

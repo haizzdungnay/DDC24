@@ -197,6 +197,12 @@ biệt "chương trình sai" với "chương trình quá lớn".
 `ST-LIM-006` luôn là **phần tử cuối** của `diagnostics[]` khi danh sách bị cắt;
 BE thấy code này thì biết còn lỗi chưa hiển thị, không được kết luận "hết lỗi".
 
+`diagnostics[]` **có thể khác rỗng khi `ok: true`** — đó là các mục `severity: "warning"`
+(`ST-WARN-*`). BE **không** được suy ra thất bại từ `len(diagnostics) > 0`; phải xét
+`severity` của từng mục. Cảnh báo không chặn sinh artifact (`ST_SUBSET_SPEC` §12.6), nên
+một chương trình hợp lệ có biến thừa vẫn trả `ok: true` kèm `artifactHash` đầy đủ. Giá trị
+`severity` lạ hoặc rỗng phải được hiểu **fail-closed** là `ERROR`.
+
 Bảo đảm bắt buộc của CLI với mọi input, kể cả đối kháng: exit code luôn thuộc
 `{0, 1, 2}`, stdout luôn là **đúng một dòng JSON** parse được với đủ 6 field.
 Verify bằng `st/tests/test_st_limits.cpp` và nhóm test đối kháng trong

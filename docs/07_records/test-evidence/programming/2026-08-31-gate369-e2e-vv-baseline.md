@@ -113,6 +113,13 @@ Kết quả CLI thật:
 
 **Trạng thái: KHÔNG ĐẠT** — 5/6 nhóm có phủ, thiếu nhóm WARNING. Mở khoá bởi `#351` (`ISS-STED-02`).
 
+> **BỔ CHÍNH 2026-08-31 (cùng ngày, sau bản sửa `#351`).** Phần đo trên là **số đo nền trên
+> `f07bf0f4`** và được giữ nguyên làm mốc so sánh, **không** sửa lại. Sau `#351`, phép đo cùng
+> khung cùng nguồn cho `COUNT_WARNING=2`, `COUNT_ERROR=0`, `EXIT=0` với `ST-WARN-002` và
+> `ST-WARN-003` mang đủ thông điệp và vị trí; `ST-WARN-004` cũng phát được qua
+> `mkddc-st-compile` kèm artifact vẫn sinh. Chặng (b) chuyển sang **ĐẠT**. Bằng chứng:
+> `2026-08-31-sted-02-03-warning-channel.md` (`EV-STED-0203-001`).
+
 ### 2.3 Chặng (c) — CLI JSON → Go → FE — **KHÔNG ĐẠT**
 
 ```bash
@@ -158,6 +165,13 @@ Hệ quả ghép chặng (b) + (c): compiler C++ có `StSeverity::WARNING` nhưn
 
 **Trạng thái: KHÔNG ĐẠT** — hai trường diagnostic chết ở tầng Go, và không có E2E xuyên tuyến.
 
+> **BỔ CHÍNH 2026-08-31 (sau bản sửa `#352`).** Hai trường chết ở `checks.go:813` **đã thông**:
+> `severity` chuyển tiếp thật qua `normalizeSeverity()` (fail-closed), `message` giữ nguyên văn
+> bản compiler qua `sanitizeCompilerMessage()` (bọc ba mẫu đường dẫn tuyệt đối). Tiêu chí FAILED
+> chuyển từ `len(diagnostics) > 0` sang `hasError`. `go test ./internal/programming/... -count=1`
+> exit `0`, 8 package `ok`. **Mục §2.3.2 — không có E2E xuyên CLI → Go → FE thật — VẪN CÒN
+> NGUYÊN**, không thuộc phạm vi `#351`/`#352`. Bằng chứng: `EV-STED-0203-001`.
+
 ### 2.4 Chặng (d) — Runtime bo thật + LIVE — **BỊ CHẶN**
 
 - **Bị chặn bởi:** không có controller phần cứng nối vào môi trường đo.
@@ -201,9 +215,9 @@ Tệp sửa: `apps/core/application/st/tests/test_st_signal_bus.cpp`.
 
 | Chặng | Trạng thái | Lý do |
 |---|---|---|
-| (a) C++ build + test | **PASS** | 1338/1338, exit 0, cả 3 option ON |
-| (b) Vector compiler | **KHÔNG ĐẠT** | thiếu nhóm WARNING; CLI phát 0 diagnostic cho biến không dùng |
-| (c) CLI → Go → FE | **KHÔNG ĐẠT** | `message` và `severity` chết ở `checks.go:813`; không có E2E xuyên tuyến |
+| (a) C++ build + test | **PASS** | 1338/1338, exit 0, cả 3 option ON — sau `#350`+`#351`/`#352` là **1364/1364**, exit 0 (`EV-STED-0203-001` §2.0, chênh +26 đã truy hết từng nhóm) |
+| (b) Vector compiler | **KHÔNG ĐẠT** tại thời điểm đo nền → **ĐẠT** sau `#351` (`EV-STED-0203-001`) | thiếu nhóm WARNING; CLI phát 0 diagnostic cho biến không dùng |
+| (c) CLI → Go → FE | **KHÔNG ĐẠT** | `message`/`severity` **đã thông** sau `#352`; **vẫn thiếu E2E xuyên tuyến** — đây mới là phần còn chặn |
 | (d) Runtime bo thật | **BỊ CHẶN** | không có phần cứng |
 
 ### Tiền đề còn mở
@@ -211,7 +225,8 @@ Tệp sửa: `apps/core/application/st/tests/test_st_signal_bus.cpp`.
 | Trạng thái | Issue |
 |---|---|
 | `CLOSED` (2) | `#350`, `#356` |
-| `OPEN` (17) | `#351`, `#352`, `#353`, `#354`, `#355`, `#357`, `#358`, `#359`, `#360`, `#361`, `#362`, `#363`, `#364`, `#365`, `#366`, `#367`, `#368` |
+| Đã sửa xong, chờ merge (2) | `#351`, `#352` — bằng chứng `EV-STED-0203-001` |
+| `OPEN` (15) | `#353`, `#354`, `#355`, `#357`, `#358`, `#359`, `#360`, `#361`, `#362`, `#363`, `#364`, `#365`, `#366`, `#367`, `#368` |
 
 ### Giá trị đã xác lập của phiên đo nền
 

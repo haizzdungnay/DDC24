@@ -89,13 +89,20 @@ các Program còn lại trong cùng Task.
 
 ### Cảnh báo — `ST-WARN-*`
 
-Không chặn sinh artifact.
+**Không chặn sinh artifact và không làm Check FAILED.** BE quyết định FAILED theo
+`severity`, **không** theo `len(diagnostics) > 0`: một chương trình hợp lệ có biến
+thừa vẫn phải PASSED kèm cảnh báo. Chính sách nâng cảnh báo thành lỗi là thuộc tính
+của compiler profile (`ST_SUBSET_SPEC` §C0.6), không phải của ngôn ngữ.
 
-| Mã | Ý nghĩa |
-|---|---|
-| `ST-WARN-001` | `PT` của timer nhỏ hơn chu kỳ Task |
-| `ST-WARN-002` | Biến khai báo nhưng không dùng |
-| `ST-WARN-003` | `VAR_OUTPUT` không bao giờ được gán |
+| Mã | Ý nghĩa | Trạng thái |
+|---|---|---|
+| `ST-WARN-001` | `PT` của timer nhỏ hơn chu kỳ Task | **Chưa hiện thực** — compiler không nhận chu kỳ Task làm đầu vào (`periodMs` chỉ có trên đường runtime), mọi phán quyết sẽ là đoán mò. Mã giữ trong catalog để tài liệu và nguồn có một nguồn duy nhất |
+| `ST-WARN-002` | Biến khai báo nhưng không dùng | Đã phát (`#351`) |
+| `ST-WARN-003` | `VAR_OUTPUT` không bao giờ được gán | Đã phát (`#351`) |
+| `ST-WARN-004` | Đọc output của một instance FB **trước** lời gọi của nó trong cùng chu kỳ ⇒ đọc ra giá trị **chu kỳ trước** (`DDD-LANG-PROG-001` §4.3). Hợp lệ và đôi khi cố ý, nhưng gần như luôn là nhầm lẫn | Đã phát (`#351`) |
+
+Phân biệt với `ST-SEM-010`: gọi **hai lần** một instance trong một chu kỳ là **lỗi**;
+**đọc trước khi gọi** chỉ là cảnh báo.
 
 ---
 
