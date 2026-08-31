@@ -401,76 +401,30 @@ Mọi khác biệt trên phải xuất hiện trong tài liệu bàn giao BE
 
 ---
 
-## 10. Grammar EBNF
+## 10. Grammar EBNF — đã chuyển sang hồ sơ sinh máy
 
-Ký pháp: `{ x }` = 0..n lần, `[ x ]` = tuỳ chọn, `|` = chọn một, `" "` = ký tự nguyên văn.
-Từ khoá **không phân biệt hoa thường**; định danh **có** phân biệt hoa thường.
+> **Nội dung §10 cũ đã bị gỡ** (`ISS-STED-06`, `F-STED-007`).
 
-```ebnf
-program           = "PROGRAM" identifier
-                    { var_block }
-                    statement_list
-                    "END_PROGRAM" ;
+Văn phạm nay nằm ở **[`docs/02_design/software/ST_LANGUAGE_PROFILE.generated.md`](ST_LANGUAGE_PROFILE.generated.md)**
+§9, sinh từ hợp đồng máy đọc
+[`contracts/programming/st_language_profile_v1.json`](../../../contracts/programming/st_language_profile_v1.json).
 
-var_block         = ( "VAR_INPUT" | "VAR_OUTPUT" | "VAR" | "VAR" "RETAIN" )
-                    { var_decl } "END_VAR" ;
+**Vì sao chuyển.** EBNF chép tay ở §10 cũ đã trôi khỏi parser: nó không có luật
+`CASE`, không có `FUNCTION`/`FUNCTION_BLOCK`, và bảng `type_name` chỉ liệt kê 4
+kiểu cùng 4 Function Block trong khi compiler nhận 6 kiểu và 9 Function Block.
+Một tài liệu văn phạm sai là công cụ sinh lỗi cho người viết chương trình.
 
-var_decl          = identifier ":" type_name ";" ;
+**Cơ chế chống trôi.** `scripts/generate_st_language_profile.py --check` chạy
+trong `ctest` (test `st_language_profile_contract`) và làm **đỏ** khi code trôi
+khỏi hồ sơ. Cổng kiểm hai chiều:
 
-type_name         = "BOOL" | "INT" | "REAL" | "TIME"
-                  | "TON" | "TOF" | "R_TRIG" | "F_TRIG" ;
+1. mục nào khai là **loại trừ** mà compiler vẫn **chấp nhận** ⇒ đỏ — đây đúng là
+   chế độ hỏng `F-STED-005`;
+2. cấu trúc nào compiler **từ chối** mà hồ sơ không ghi **lý do** ⇒ đỏ, vì
+   `ADR-054` buộc mọi loại trừ phải công bố kèm lý do.
 
-statement_list    = { statement } ;
-
-statement         = assignment | if_statement | fb_call ;
-
-assignment        = variable ":=" expression ";" ;
-
-if_statement      = "IF" expression "THEN" statement_list
-                    { "ELSIF" expression "THEN" statement_list }
-                    [ "ELSE" statement_list ]
-                    "END_IF" ";" ;
-
-fb_call           = identifier "(" [ param_assign { "," param_assign } ] ")" ";" ;
-
-param_assign      = identifier ":=" expression ;
-
-expression        = or_expr ;
-or_expr           = xor_expr { "OR" xor_expr } ;
-xor_expr          = and_expr { "XOR" and_expr } ;
-and_expr          = equ_expr { "AND" equ_expr } ;
-equ_expr          = cmp_expr { ( "=" | "<>" ) cmp_expr } ;
-cmp_expr          = add_expr { ( "<" | ">" | "<=" | ">=" ) add_expr } ;
-add_expr          = mul_expr { ( "+" | "-" ) mul_expr } ;
-mul_expr          = unary_expr { ( "*" | "/" | "MOD" ) unary_expr } ;
-unary_expr        = [ "-" | "NOT" ] primary_expr ;
-
-primary_expr      = literal
-                  | function_call
-                  | member_access
-                  | variable
-                  | "(" expression ")" ;
-
-function_call     = identifier "(" [ expression { "," expression } ] ")" ;
-member_access     = identifier "." identifier ;
-variable          = identifier ;
-
-literal           = bool_literal | int_literal | real_literal | time_literal ;
-bool_literal      = "TRUE" | "FALSE" ;
-int_literal       = digit { digit } ;
-real_literal      = digit { digit } "." digit { digit } ;
-time_literal      = "T#" time_part { time_part } ;
-time_part         = digit { digit } time_unit ;
-time_unit         = "d" | "h" | "m" | "s" | "ms" ;
-
-identifier        = ( letter | "_" ) { letter | digit | "_" } ;
-letter            = "A".."Z" | "a".."z" ;
-digit             = "0".."9" ;
-
-comment           = "(*" { any_character } "*)" | "//" { any_character } newline ;
-```
-
-**Nhập nhằng đã giải quyết trong grammar:**
+**Nhập nhằng đã giải quyết trong grammar** (phần này vẫn thuộc §10, không sinh
+máy được vì nó giải thích *quyết định*, không mô tả *hình dạng*):
 
 - `function_call` và `fb_call` cùng bắt đầu bằng `identifier "("`. Phân biệt bằng
   **ngữ cảnh**: `fb_call` là *câu lệnh* (kết thúc bằng `;` ở mức statement),
@@ -484,37 +438,26 @@ comment           = "(*" { any_character } "*)" | "//" { any_character } newline
 
 ---
 
-## 11. Bảng đối chiếu grammar với parser hiện tại
+## 11. Bảng đối chiếu grammar với parser — đã gỡ
 
-Đối chiếu tại commit `7ccf992` (sau M-01, trước khi implement MS-02).
+> **Nội dung §11 cũ đã bị gỡ hoàn toàn** (`ISS-STED-06`, `F-STED-007`).
 
-| Mục grammar | Parser hiện tại | Trạng thái |
-|---|---|---|
-| `PROGRAM`/`END_PROGRAM` | có | ✅ khớp |
-| `VAR_INPUT`/`VAR_OUTPUT` | có | ✅ khớp |
-| `VAR` (cục bộ) | **không có** | ❌ phải thêm |
-| `VAR RETAIN` | **không có** | ❌ phải thêm |
-| Kiểu `BOOL`, `REAL` | có | ✅ khớp |
-| Kiểu `INT` | **không có** | ❌ phải thêm |
-| Kiểu `TIME` + literal `T#` | **không có** | ❌ phải thêm |
-| Gán `:=` | có | ✅ khớp |
-| `IF`/`ELSE`/`END_IF` | có | ✅ khớp |
-| `ELSIF` | **không có** | ❌ phải thêm |
-| So sánh `< > <= >= = <>` | có | ⚠️ có nhưng **không cho chuỗi nhiều so sánh**; grammar mới cho `a < b < c` về mặt cú pháp, semantic sẽ bắt lỗi kiểu (`BOOL < INT`) |
-| `AND`, `OR`, `NOT` | có | ✅ khớp |
-| `XOR` | **không có** | ❌ phải thêm |
-| Số học `+ - * / MOD` | **không có** | ❌ phải thêm |
-| Đảo dấu một ngôi `-` | **không có** | ❌ phải thêm |
-| Ngoặc đơn | có | ✅ khớp |
-| Gọi hàm | có (chỉ `LIMIT`) | ⚠️ khung có, phải thêm hàm §6.1 |
-| Gọi FB `inst(P := x)` | **không có** | ❌ phải thêm |
-| Truy cập thành viên `inst.Q` | **không có** | ❌ phải thêm |
-| Chú thích `(* *)`, `//` | **không có** | ❌ phải thêm |
-| Từ khoá không phân biệt hoa thường | **không** — hiện phân biệt | ❌ phải sửa |
-| Giới hạn tài nguyên §8 | có (M-01) | ✅ khớp, còn thiếu `ST-LIM-007/008` |
+Bảng cũ ghim ở commit `7ccf992` và kết luận *"parser hiện tại phủ được khoảng
+**40%** grammar này"*. Tại thời điểm gỡ, bảng đó **sai gần như từng dòng**:
+`VAR`, `VAR RETAIN`, `INT`, `TIME` + literal `T#`, `ELSIF`, `XOR`, số học
+`+ - * / MOD`, đảo dấu một ngôi, gọi FB, truy cập thành viên `inst.Q`, chú thích
+và từ khoá không phân biệt hoa thường — tất cả đều đã có từ lâu, nhưng bảng vẫn
+đánh dấu "❌ phải thêm".
 
-**Kết luận đối chiếu:** parser hiện tại phủ được khoảng **40%** grammar này. Phần thiếu
-tập trung ở: số học, `INT`/`TIME`, Function Block, chú thích. Đây là đầu vào cho ACTION 6.
+**Một bảng đối chiếu sai 100% nguy hiểm hơn không có bảng, vì nó trông như bằng
+chứng.** Người đọc dùng nó để lập kế hoạch sẽ lên lịch làm lại thứ đã có, và —
+tệ hơn — sẽ tin rằng thứ *không* có thì cũng đã được liệt kê đúng.
+
+Thay thế: **§2 và §3 của
+[`ST_LANGUAGE_PROFILE.generated.md`](ST_LANGUAGE_PROFILE.generated.md)**. Cột
+"chấp nhận" ở đó **không phải là một tuyên bố**: nó được đo bằng cách cho
+compiler **parse thật** một mẫu tối thiểu cho từng câu lệnh và từng toán tử,
+mỗi lần chạy generator. Bảng ấy không thể lạc hậu mà vẫn xanh.
 
 ---
 
