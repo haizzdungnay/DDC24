@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "1.8.0",
-  "catalogSha256": "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6",
+  "catalogVersion": "1.9.0",
+  "catalogSha256": "39bf243a051dd2553c549f9628fcf13e04ccb161345f2f717eb574846b45dabe",
   "schemaSha256": "53a42d03f97b41424fb510f2670866506e789578a740cf9f48129daaab38f513",
   "publicErrorCount": 38,
-  "componentDetailCount": 151,
+  "componentDetailCount": 155,
   "generatedConsumers": [
-    "apps/web-api/internal/programming/domain/errors_generated.go",
-    "apps/core/application/programming/program_error_generated.hpp",
-    "apps/web-ui/src/features/programming/api/generated/errors.ts"
+    "apps\\web-api\\internal\\programming\\domain\\errors_generated.go",
+    "apps\\core\\application\\programming\\program_error_generated.hpp",
+    "apps\\web-ui\\src\\features\\programming\\api\\generated\\errors.ts"
   ]
 }

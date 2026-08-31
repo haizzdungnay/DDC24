@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.8.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "39bf243a051dd2553c549f9628fcf13e04ccb161345f2f717eb574846b45dabe" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.9.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -124,6 +124,10 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "compiler\u0000ST-SIG-005": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SYN-001": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-SYN-002": "PRG-ERR-SCOPE-001",
+  "compiler\u0000ST-WARN-001": "PRG-ERR-CHECK-001",
+  "compiler\u0000ST-WARN-002": "PRG-ERR-CHECK-001",
+  "compiler\u0000ST-WARN-003": "PRG-ERR-CHECK-001",
+  "compiler\u0000ST-WARN-004": "PRG-ERR-CHECK-001",
   "compiler\u0000ST-WORKER-CRASH": "PRG-ERR-UNAVAILABLE-001",
   "compiler\u0000ST-WORKER-TIMEOUT": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-ACTION-NOT-IMPLEMENTED": "PRG-ERR-UNAVAILABLE-001",

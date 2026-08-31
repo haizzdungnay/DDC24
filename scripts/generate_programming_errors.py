@@ -142,7 +142,7 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
     }
     diagnostic_source = (ROOT / "apps/core/application/st/st_diagnostic.hpp").read_text()
     expected_details["compiler"] = set(re.findall(
-        r"ST-(?:LEX|SYN|SEM|LIM|IOMAP|POU|LIB|SIG|OWN|PID)-[0-9]{3}", diagnostic_source))
+        r"ST-(?:LEX|SYN|SEM|LIM|IOMAP|POU|LIB|SIG|OWN|PID|WARN)-[0-9]{3}", diagnostic_source))
     for source in ("st_compile_main.cpp", "st_validate_main.cpp"):
         expected_details["compiler"].update(re.findall(r"ST-CLI-[A-Z0-9-]+", (ROOT / "apps/core/application/st" / source).read_text()))
     # Một phần detail code do BE Go phát (`ST-CLI-LIMIT`, `ST-WORKER-*`). Trước
