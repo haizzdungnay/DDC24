@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Fixed — tiêm lỗi journal độc lập với đặc quyền (2026-08-31)
+
+- **Triệu chứng.** `ProgrammingStageAtomicity.JournalFsyncFailureLeavesLiveStateIntact`
+  đỏ với thông điệp *"journal chỉ-đọc mà stage vẫn báo thành công"* — một thông điệp
+  chỉ vào đúng chỗ **không** sai.
+- **Nguyên nhân gốc.** Test tiêm lỗi journal bằng `chmod 0400`. Cách đó chỉ chặn được
+  tiến trình **không đặc quyền**: `root` có `CAP_DAC_OVERRIDE` nên kernel bỏ qua bit
+  quyền và `open(O_WRONLY)` vẫn thành công. Container CI chạy `root`, nên ở đó test
+  **không tiêm gì cả** và `stage()` thành công thật. Sản phẩm không có lỗi; **cơ chế
+  tiêm lỗi mới là thứ hỏng**.
+- **Nguy hiểm hơn cái đỏ.** Một tiêm lỗi có thể *âm thầm ngừng tiêm*. Nếu sản phẩm
+  đổi theo hướng làm `stage()` trả false vì một lý do **khác**, test sẽ xanh trở lại
+  trong khi không còn kiểm gì — đúng loại test tự huỷ giá trị mà không ai nhận ra.
+  Đỏ ồn ào chỉ là biểu hiện may mắn của khiếm khuyết này.
+- **Cách sửa.** Fixture `UnwritablePath` làm hai việc, và việc thứ hai mới là việc
+  quan trọng:
+  1. Thay file bằng một **thư mục** cùng tên. `open(..., O_WRONLY|O_CREAT|O_APPEND)`
+     trả `EISDIR` cho **mọi uid kể cả root** — từ chối ở tầng **kiểu đối tượng**,
+     không phải tầng quyền, nên không đặc quyền nào vượt được. Nội dung file cũ được
+     giữ nguyên bên cạnh và trả lại lúc thoát scope.
+  2. **Tự kiểm tiền điều kiện**: mở thử đúng cờ mà `StJournal::append` dùng, và yêu
+     cầu `errno == EISDIR`. Không chặn được thì `ASSERT` ngay **tại chỗ tiêm**, chứ
+     không để test chạy tiếp rồi đổ lỗi cho sản phẩm.
+  Chỉ đọc (`read_last`) **không** bị chặn, và đó là chủ ý: `stage()` không đọc journal,
+  chỉ `recover_at_boot()` mới đọc — tiêm đúng thứ cần tiêm.
+- **Verification** (2026-08-31, `build/fw`, Release, `MODBUS=ON BACNET=ON HMI=ON`,
+  chạy dưới `uid 0`): `ctest` **1352/1352 pass, exit 0**. Trước sửa: 1351/1352.
+  Bộ `ProgrammingStageAtomicity.*` **11/11 pass**; `stage()` trả `IPC-JOURNAL-FSYNC`
+  đúng như hợp đồng, tức test đã kiểm lại được đúng thứ nó tuyên bố kiểm.
+
 ### Fixed — `ISS-STED-01` compiler ST trả nhiều diagnostic (#350, 2026-08-31)
 
 - **Triệu chứng.** Mỗi lần Kiểm tra chỉ trả **đúng một** diagnostic. POU có 5 lỗi
