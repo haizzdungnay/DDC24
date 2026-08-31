@@ -3,8 +3,8 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-PGM02-FBD-EDIT-001` |
-| Phiên bản | 0.2 |
-| Trạng thái | `M3 — REVIEW READY` (Target, chưa phải As-Built; reviewer vòng 1 đã yêu cầu bổ sung) |
+| Phiên bản | 0.3 |
+| Trạng thái | `M3 — REVIEW READY` (Target, chưa phải As-Built; reviewer độc lập vòng 3 `APPROVED WITH RESIDUALS`) |
 | Ngày | 2026-08-31 |
 | Chủ quản | Programming FE / UX |
 | Người review | FE platform, Programming compiler/runtime consumer, QA |
