@@ -31,6 +31,12 @@ bool compile_st_to_ir(const StProgram& prog, const std::string& source, StIrModu
 /* Chính sách compile ở biên Check. Mặc định BẬT review gate. */
 struct StCompileOptions {
     bool enforce_review_gate = true;
+    /* ISS-STED-02 — chính sách của TARGET PROFILE, không phải của compiler.
+     *
+     * Compiler luôn phát warning với severity thật; profile khắt khe mới quyết
+     * định có nâng chúng thành lỗi hay không. Đặt quyết định này trong Checker
+     * sẽ khoá cứng một chính sách vào ngôn ngữ và không profile nào đổi được. */
+    bool warnings_as_errors = false;
     std::string program_identity;
     std::vector<StPublishedSignalContract> published_signals;
 };

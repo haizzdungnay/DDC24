@@ -169,17 +169,26 @@ int fail(const char* code, const std::string& message, int exit_code,
     nlohmann::json j;
     j["ok"] = false;
     nlohmann::json diagnostics = nlohmann::json::array();
+    const nlohmann::json direct{
+        {"severity", "error"}, {"code", code}, {"message", message},
+        {"sourceId", source_id}, {"line", line}, {"column", column}, {"length", length}};
     if (g_bag != nullptr && !g_bag->empty()) {
         /* `finalize()` ở ĐÚNG một chỗ, ngay trước khi phát: sort + trần 64 +
          * `ST-LIM-006` là hợp đồng với BE/FE, không phải chuyện của từng pha. */
         g_bag->finalize();
         for (const core::StDiagnostic& diagnostic : g_bag->items())
             diagnostics.push_back(diagnostic_json(diagnostic, source_id));
+        /* Túi không rỗng KHÔNG có nghĩa là túi có LỖI.
+         *
+         * Từ khi kênh WARNING sống (ISS-STED-02), một lần Check hỏng vì lý do
+         * NGOÀI compiler — hỏng chữ ký, lỗi ghi file — vẫn có thể để lại một
+         * túi chỉ chứa warning. Nếu chỉ phát túi thì kết quả là `ok:false` kèm
+         * KHÔNG một lỗi nào: người dùng thấy "thất bại" và mấy dòng vàng vô
+         * can, còn nguyên nhân thật biến mất. Bảo đảm luôn có ít nhất một
+         * ERROR trong mảng. */
+        if (!g_bag->has_error()) diagnostics.push_back(direct);
     } else {
-        diagnostics.push_back(
-            nlohmann::json{{"severity", "error"}, {"code", code}, {"message", message},
-                           {"sourceId", source_id}, {"line", line}, {"column", column},
-                           {"length", length}});
+        diagnostics.push_back(direct);
     }
     j["diagnostics"] = diagnostics;
     j["artifact"] = nullptr;
@@ -937,6 +946,9 @@ int main(int argc, char** argv)
     std::string source_path;
     std::string source_id = "main";
     std::string language = "ST";
+    /* ISS-STED-02 — cờ chính sách profile, mặc định TẮT. Bật thì mọi warning
+     * thành lỗi và Check FAILED; xem StCompileOptions::warnings_as_errors. */
+    bool warnings_as_errors = false;
     std::string key_path;
     std::string out_path;
     std::string manifest_out_path;
@@ -962,6 +974,7 @@ int main(int argc, char** argv)
         else if (a == "--pou-manifest" && i + 1 < argc) pou_manifest_path = argv[++i];
         else if (a == "--library-lock" && i + 1 < argc) library_lock_path = argv[++i];
         else if (a == "--signal-manifest" && i + 1 < argc) signal_manifest_path = argv[++i];
+        else if (a == "--warnings-as-errors") warnings_as_errors = true;
         else if (a == "--sandbox") sandbox = true;
         else if (a == "--version") {
             std::printf("compiler_version=%s profile_id=%s profile_sha256=%s "
@@ -1043,6 +1056,7 @@ int main(int argc, char** argv)
             return fail("ST-CLI-LIBRARY-LOCK", lock_error, 2);
     }
     core::StCompileOptions compile_options;
+    compile_options.warnings_as_errors = warnings_as_errors;
     if (!signal_manifest_path.empty()) {
         std::string signal_error;
         if (!read_signal_manifest(signal_manifest_path, &compile_options, &signal_error))
@@ -1102,6 +1116,18 @@ int main(int argc, char** argv)
     if (!built)
         return fail(build_error.code.c_str(), build_error.message, 1, source_id,
                     build_error.line, build_error.column, build_error.length);
+
+    /* Build thành công nhưng túi có warning.
+     *
+     * `warnings_as_errors` là chính sách của TARGET PROFILE, áp ở đây — sau
+     * khi đã biết chương trình hợp lệ — chứ không ở chỗ phát warning. Không có
+     * chính sách đó thì warning đi kèm một Check PASSED và artifact vẫn sinh:
+     * chương trình đúng không được phép bị chặn vì khai thừa một biến. */
+    if (compile_options.warnings_as_errors && bag.has_warning()) {
+        bag.promote_warnings_to_errors();
+        return fail(core::st_diag_code::kWarnUnusedVariable,
+                    "warnings promoted to errors by target profile policy", 1, source_id);
+    }
 
     if (!key_path.empty() && !core::sign_st_artifact(&build.artifact, secret))
         return fail("ST-CLI-KEY", "failed to sign artifact", 2);
