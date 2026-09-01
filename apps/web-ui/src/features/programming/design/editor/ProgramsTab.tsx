@@ -7,6 +7,8 @@ import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import type { FbdSelection } from '../../fbd/commands'
 import { ContextInspector } from '../inspector/ContextInspector'
 import { stSymbolContextFor } from '../inspector/inspectorContext'
+import { hashBufferSource } from '../../shared/diagnosticFreshness'
+import { stCheckProvenance, type StCheckProvenanceState } from './stCheckProvenance'
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
@@ -240,6 +242,8 @@ export function ProgramsTab({
   onSelectProgram,
   onSave,
   diagnostics,
+  hasCheckResult = false,
+  checkRevisionId = null,
   focusDiagnostic,
   focusFbdSelection,
   onPendingOperationsChange,
@@ -260,6 +264,11 @@ export function ProgramsTab({
   onSelectProgram: (programId: string | undefined) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   diagnostics: ProgrammingDiagnostic[]
+  /** `ISS-STED-04` — đã có kết quả Check gần nhất tải về hay chưa. Phân biệt
+   * "chưa kiểm tra" với "kiểm rồi, sạch"; hai câu đó nói hai điều khác hẳn. */
+  hasCheckResult?: boolean
+  /** Revision mà kết quả Check thuộc về — nhãn bắt buộc phải nêu được. */
+  checkRevisionId?: string | null
   focusDiagnostic: ProgrammingDiagnostic | null
   focusFbdSelection?: { programId: string; selection: FbdSelection } | null
   onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
@@ -778,6 +787,8 @@ export function ProgramsTab({
             checkDisabledReason={checkDisabledReason}
             compareDisabledReason={compareDisabledReason}
             diagnostics={diagnostics.filter((item) => item.location?.programId === selected.programId)}
+            hasCheckResult={hasCheckResult}
+            checkRevisionId={checkRevisionId}
             focusDiagnostic={
               paletteJumpTarget?.location?.programId === selected.programId ? paletteJumpTarget
               : focusDiagnostic?.location?.programId === selected.programId ? focusDiagnostic
@@ -1018,12 +1029,76 @@ function StHoverCard({
   )
 }
 
+/** Nhãn trạng thái kết quả Check cho POU đang mở (`ISS-STED-04`).
+ *
+ * Ba câu, ba tình huống KHÁC NHAU — gộp chúng lại là làm hỏng chính thứ issue
+ * yêu cầu:
+ *  - chưa Kiểm tra ≠ "không có lỗi". Nói "không có lỗi" khi chưa ai kiểm là
+ *    khẳng định một điều chưa được xác lập.
+ *  - buffer đã đổi ⇒ chạy lại Kiểm tra là đúng việc cần làm.
+ *  - kết quả thuộc revision khác ⇒ chạy lại KHÔNG giúp gì; phải nói ra để người
+ *    dùng không thử sai cách. */
+function StCheckStateLabel({
+  provenance,
+  programId,
+  diagnosticCount,
+  pick
+}: {
+  provenance: StCheckProvenanceState
+  programId: string
+  diagnosticCount: number
+  pick: (vi: string, en: string) => string
+}) {
+  if (provenance.freshness === 'NEVER_CHECKED') {
+    return (
+      <p className="text-xs text-[var(--c-text-dim)]">
+        {pick('Chưa Kiểm tra — chưa có kết quả nào cho POU này.',
+              'Not checked yet — no result for this POU.')}
+      </p>
+    )
+  }
+
+  if (provenance.freshness === 'STALE') {
+    const reason = provenance.bufferChanged
+      ? pick('buffer đã đổi sau Kiểm tra', 'buffer changed after the check')
+      : provenance.revisionId
+        ? pick(`kết quả thuộc revision ${provenance.revisionId}`, `result belongs to revision ${provenance.revisionId}`)
+        : pick('kết quả thuộc revision khác', 'result belongs to another revision')
+    return (
+      <p className="text-xs text-[var(--c-warn-fg)]">
+        {pick(`Kết quả Kiểm tra không còn khớp nội dung đang mở (${reason}) — không gạch lỗi để tránh chỉ sai dòng.`,
+              `Check result no longer matches the open content (${reason}) — not marking, to avoid pointing at the wrong line.`)}
+      </p>
+    )
+  }
+
+  const revisionText = provenance.revisionId
+    ? pick(`revision ${provenance.revisionId}`, `revision ${provenance.revisionId}`)
+    : pick('revision đã niêm phong', 'the sealed revision')
+  if (diagnosticCount === 0) {
+    return (
+      <p className="text-xs text-[var(--c-text-dim)]">
+        {pick(`Kiểm tra ${revisionText}: POU này không có lỗi.`,
+              `Check on ${revisionText}: no problems in this POU.`)}
+      </p>
+    )
+  }
+  return (
+    <p id={`programming-st-diagnostics-${programId}`} className="text-xs text-[var(--c-fault-fg)]">
+      {pick(`${diagnosticCount} diagnostic từ Kiểm tra ${revisionText}, khớp nội dung đang mở. Chọn lỗi trong khay Vấn đề để tới đúng dòng/cột.`,
+            `${diagnosticCount} diagnostic(s) from the check on ${revisionText}, matching the open content. Select one in Problems to jump to its line and column.`)}
+    </p>
+  )
+}
+
 export function SourceEditor({
   program,
   source,
   canEdit,
   saving,
   diagnostics,
+  hasCheckResult = false,
+  checkRevisionId = null,
   focusDiagnostic,
   onChange,
   onSave,
@@ -1054,6 +1129,8 @@ export function SourceEditor({
   canEdit: boolean
   saving: boolean
   diagnostics: ProgrammingDiagnostic[]
+  hasCheckResult?: boolean
+  checkRevisionId?: string | null
   focusDiagnostic: ProgrammingDiagnostic | null
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
@@ -1190,7 +1267,37 @@ export function SourceEditor({
   }, [cursorSymbol, onCursorSymbolChange])
   const matches = useMemo(() => findTextMatches(source, searchText), [searchText, source])
   const tokens = useMemo(() => tokenizeStSource(source), [source])
-  const diagnosticRanges = useMemo<StDiagnosticRange[]>(() => diagnostics
+  /* `ISS-STED-04` × `ISS-STED-18` — băm buffer để biết kết quả Check có còn nói
+   * về nội dung đang mở không. Băm là bất đồng bộ (WebCrypto) nên chạy trong
+   * effect mỗi lần buffer đổi, KHÔNG chạy trong lượt render. */
+  const [bufferSha256, setBufferSha256] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    let cancelled = false
+    hashBufferSource(source)
+      .then((hash) => { if (!cancelled) setBufferSha256(hash) })
+      /* Không băm được (môi trường thiếu WebCrypto) ⇒ để `undefined`. Khi đó
+       * `diagnosticFreshness` trả `UNVERIFIABLE` và KHÔNG gạch gì — thiếu bằng
+       * chứng không phải bằng chứng khớp. */
+      .catch(() => { if (!cancelled) setBufferSha256(undefined) })
+    return () => { cancelled = true }
+  }, [source])
+
+  const checkProvenance = useMemo(() => stCheckProvenance({
+    hasCheckResult,
+    diagnostics,
+    buffer: {
+      revisionId: checkRevisionId ?? undefined,
+      pouId: program.programId,
+      sourceSha256: bufferSha256
+    }
+  }), [hasCheckResult, diagnostics, checkRevisionId, program.programId, bufferSha256])
+
+  /* CHỈ gạch những mục đã chứng minh được là khớp buffer. Gạch một chỗ trên
+   * buffer đã đổi là chỉ vào dòng không còn là dòng sinh ra lỗi — người dùng
+   * sẽ sửa đúng chỗ bị chỉ, tức sửa một chỗ không hỏng. */
+  const markableDiagnostics = checkProvenance.markable
+
+  const diagnosticRanges = useMemo<StDiagnosticRange[]>(() => markableDiagnostics
     .map((diagnostic, index): StDiagnosticRange | null => {
       if (!diagnostic.location) return null
       const line = typeof diagnostic.location.line === 'number' ? diagnostic.location.line : undefined
@@ -1200,7 +1307,7 @@ export function SourceEditor({
       const start = lineColumnToOffset(source, line, column)
       return { start, end: Math.min(source.length, start + Math.max(1, length)), index }
     })
-    .filter((range): range is StDiagnosticRange => range !== null), [diagnostics, source])
+    .filter((range): range is StDiagnosticRange => range !== null), [markableDiagnostics, source])
   const segments = useMemo(() => mergeDiagnosticRanges(tokens, diagnosticRanges), [tokens, diagnosticRanges])
   const bracketMatch = useMemo(() => findMatchingBracket(source, textareaRef.current?.selectionStart ?? -1), [source, cursor])
 
@@ -2031,7 +2138,7 @@ export function SourceEditor({
               const isBracket = bracketMatch !== null && (segment.start === bracketMatch.open || segment.start === bracketMatch.close) && segment.kind === 'punctuation'
               const classes = [segmentClass[segment.kind] ?? '']
               if (isBracket) classes.push('rounded bg-[var(--c-accent-bg)]')
-              const diagnostic = segment.diagnosticIndex !== null ? diagnostics[segment.diagnosticIndex] : undefined
+              const diagnostic = segment.diagnosticIndex !== null ? markableDiagnostics[segment.diagnosticIndex] : undefined
               if (diagnostic) {
                 const wavyColor = diagnostic.severity === 'WARNING' ? 'var(--c-warn)' : 'var(--c-fault)'
                 classes.push(`underline decoration-wavy decoration-2 [text-decoration-color:${wavyColor}]`)
@@ -2434,11 +2541,15 @@ export function SourceEditor({
              tin cậy trên `<textarea>`, nên cũng để `—`. */
         })}
       />
-      {diagnostics.length > 0 && (
-        <p id={`programming-st-diagnostics-${program.programId}`} className="text-xs text-[var(--c-fault-fg)]">
-          {pick(`${diagnostics.length} diagnostic. Chọn lỗi trong khay Vấn đề để tới đúng dòng/cột.`, `${diagnostics.length} diagnostic(s). Select one in Problems to jump to its line and column.`)}
-        </p>
-      )}
+      {/* `ISS-STED-04` — nhãn BẮT BUỘC: diagnostic thuộc revision nào, và buffer
+        * đã đổi hay chưa. Gạch lỗi mà không nói hai điều đó thì người dùng
+        * không có cách nào biết dấu gạch còn đáng tin không. */}
+      <StCheckStateLabel
+        provenance={checkProvenance}
+        programId={program.programId}
+        diagnosticCount={markableDiagnostics.length}
+        pick={pick}
+      />
       {isEmptySource && (
         <p className="text-xs text-[var(--c-fault-fg)]">
           {pick('Mã nguồn ST không được để trống — cần ít nhất khung PROGRAM/END_PROGRAM để lưu.', 'ST source cannot be empty — needs at least a PROGRAM/END_PROGRAM skeleton to save.')}

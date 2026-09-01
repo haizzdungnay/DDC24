@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-STED-04` PGM-02 hiển thị diagnostic của Check gần nhất (#354, 2026-09-01)
+
+- **Triệu chứng.** Trong chế độ `EDIT`, gõ ST sai cú pháp hay sai kiểu đều **không thấy
+  gì**: không gạch chân, không đếm lỗi. Phải Lưu → sang PGM-03 → chạy Kiểm tra mới biết.
+  Use case `ST-UC-03` FAIL.
+- **Nguyên nhân gốc.** `DesignWorkspacePage` truyền `diagnostics={EMPTY_DIAGNOSTICS}` —
+  một hằng số rỗng — cho `ProgramsTab`, **nơi duy nhất** `ProgramsTab` được mount trong
+  toàn bộ FE. Hệ quả: toàn bộ hạ tầng hiển thị lỗi trong `SourceEditor` (`diagnosticRanges`,
+  `mergeDiagnosticRanges`, tooltip `detailCode`, dòng `aria-describedby`) là **mã chết**,
+  chỉ sống trong test. Quyết định `D-01` chuyển quyền **sở hữu** Check sang PGM-03 là đúng;
+  khi gỡ Check khỏi PGM-02 thì không ai nối lại **đường đọc** kết quả về trang soạn thảo.
+  Bỏ sót, không phải thiết kế.
+- **Cách sửa.**
+  - `DesignWorkspacePage` đọc `latestCheck.checkId` qua `useProgrammingCheck` và truyền
+    diagnostic thật xuống. Đây là đường **đọc**: không dựng bộ kiểm thứ hai ở FE, không
+    biến thành check-as-you-type, `checkDisabledReason` khi buffer bẩn giữ nguyên.
+  - `stCheckProvenance()` — tách **quyết định** khỏi cách vẽ: "được phép gạch lỗi lên
+    buffer này không, và nếu không thì vì sao". Để logic ấy trong JSX thì không test được
+    cái quan trọng nhất — trường hợp **không** được gạch.
+  - **Chỉ gạch mục đã chứng minh khớp.** `UNVERIFIABLE` không được gạch: thiếu bằng chứng
+    không phải bằng chứng khớp. Một mục `STALE` làm cả POU thành `STALE` — gạch nửa vời
+    còn khó hiểu hơn không gạch.
+  - Nhãn **bắt buộc** nêu revision và trạng thái buffer, tách ba câu cho ba tình huống
+    **dẫn tới hành động khác nhau**: chưa Kiểm tra ⇒ chạy Kiểm tra; buffer đã đổi ⇒ chạy
+    lại; kết quả thuộc revision khác ⇒ chạy lại **không** giúp gì, phải mở đúng revision.
+  - Băm buffer chạy trong `useEffect`, không trong lượt render (WebCrypto bất đồng bộ).
+    Không băm được ⇒ `undefined` ⇒ `UNVERIFIABLE` ⇒ không gạch — fail-closed.
+- **Test cũ mã hoá hành vi cũ.** `SourceEditor.test.tsx` trước đây gạch **mọi** diagnostic
+  truyền vào, đúng thứ `ISS-STED-18` cấm. Fixture nay mang provenance thật, và thêm bốn ca
+  cho nửa quan trọng hơn của hợp đồng: không provenance ⇒ không gạch; buffer đổi một ký tự
+  ⇒ gỡ gạch kèm lý do; chưa Kiểm tra ⇒ nói "Chưa Kiểm tra" chứ **không** nói "không có lỗi";
+  đã Kiểm tra và sạch ⇒ nói "không có lỗi" kèm revision.
+- **Verification** (2026-09-01, đo lại thật): C++ Release `MODBUS/BACNET/HMI=ON`, `--fresh`:
+  configure exit 0, build exit 0, `ctest` **1369/1369 pass, exit 0**.
+  Go: `go vet ./...` exit 0, `go test ./... -count=1` **exit 0, 19 gói ok**.
+  FE: `vitest` **191 file / 2236 test pass** (+11), `npm run lint` exit 0, `npm run build` exit 0.
+
 ### Added — `ISS-STED-18` Diagnostic Provenance Contract (#353, 2026-09-01)
 
 - **Triệu chứng.** Provenance chỉ có ở **cấp Check** (`RevisionID` trong bản ghi Check),
