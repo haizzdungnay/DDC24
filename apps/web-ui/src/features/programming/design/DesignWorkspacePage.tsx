@@ -15,7 +15,7 @@ import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/
 import { toWorkspaceDocument } from '../model/draftV2'
 import { draftSignals } from '../model/signals'
 import { PouExplorer } from './pou/PouExplorer'
-import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison } from '../api/queries'
+import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison, useProgrammingCheck } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
@@ -289,6 +289,19 @@ export function DesignWorkspacePage({
    * lên rồi nhận lỗi. */
   const latestCheck = workspace.project?.latestCheck
   const simulateRevisionId = latestCheck && latestCheck.state === 'PASSED' ? latestCheck.revisionId : null
+  /* `ISS-STED-04` — nối lại đường ĐỌC kết quả Check gần nhất về trang soạn thảo.
+   *
+   * `D-01` chuyển quyền SỞ HỮU Check sang PGM-03 (một luồng seal/run/poll duy
+   * nhất) và đó vẫn đúng — đây chỉ là đường đọc, KHÔNG dựng bộ kiểm thứ hai ở
+   * FE và KHÔNG biến thành check-as-you-type. Khi gỡ Check khỏi PGM-02 thì
+   * đường đọc này bị bỏ quên, nên toàn bộ hạ tầng gạch lỗi trong `SourceEditor`
+   * trở thành mã chết: `diagnostics={EMPTY_DIAGNOSTICS}` là hằng số rỗng. */
+  const latestCheckResult = useProgrammingCheck(latestCheck?.checkId)
+  const checkDiagnostics = latestCheckResult.data?.diagnostics ?? EMPTY_DIAGNOSTICS
+  /* "Đã từng Kiểm tra" bám vào việc CÓ kết quả tải về, không bám vào việc có
+   * diagnostic: một Check đạt cũng là đã kiểm, và trạng thái "chưa kiểm tra"
+   * phải khác hẳn "kiểm rồi, sạch". */
+  const hasCheckResult = latestCheckResult.data !== undefined
   /* Revision mà PHIÊN đang mở đã niêm phong — khác `simulateRevisionId` (bản
    * Check đạt gần nhất): một phiên đang chạy có thể neo vào bản cũ hơn nếu
    * người dùng vừa lưu và Check thêm một lần nữa. Workbench phải nói theo
@@ -760,7 +773,9 @@ export function DesignWorkspacePage({
           selectedProgramId={selectedProgramId}
           onSelectProgram={selectProgram}
           onSave={workspace.save}
-          diagnostics={EMPTY_DIAGNOSTICS}
+          diagnostics={checkDiagnostics}
+          hasCheckResult={hasCheckResult}
+          checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
           focusDiagnostic={focusDiagnostic}
           focusFbdSelection={compareFbdFocus}
           onPendingOperationsChange={updateProgramOperations}
