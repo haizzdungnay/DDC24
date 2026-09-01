@@ -262,6 +262,9 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// thừa sẽ trượt Check — đúng cái mà `ST_SUBSET_SPEC` §12.6 cấm ("cảnh báo
 	// không chặn sinh artifact").
 	hasError := false
+	// ISS-STED-18: băm nguồn TỪNG POU MỘT LẦN trước vòng biên dịch. Băm bên
+	// trong vòng sẽ băm lại cùng một POU liên kết cho mỗi Program dùng nó.
+	provenance := newDiagnosticProvenance(check.RevisionID, inputs)
 	results := make([]programmingcompiler.Result, 0, len(inputs))
 	for _, input := range inputs {
 		result, err := s.runner.Compile(ctx, input)
@@ -286,6 +289,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			if existing, _ := view.Location["programId"].(string); existing == "" {
 				view.Location["programId"] = input.SourceID
 			}
+			provenance.stamp(&view)
 			if view.Severity == "ERROR" {
 				hasError = true
 			}
@@ -882,6 +886,68 @@ func sanitizeCompilerMessage(msg string) string {
 		msg = strings.TrimSpace(msg[:cut])
 	}
 	return msg
+}
+
+// ---- ISS-STED-18: Diagnostic Provenance Contract ----------------------------
+//
+// Một diagnostic phải TỰ CHỨNG MINH nó thuộc về nguồn nào. Không có provenance
+// thì việc gạch lỗi trong trình soạn thảo tạo ra một lỗi nguy hiểm hơn lỗi đang
+// có: gạch một chỗ trên buffer đã đổi, tức chỉ vào dòng KHÔNG CÒN là dòng sinh
+// ra lỗi đó — và người dùng không có cách nào biết mình đang bị chỉ sai.
+//
+// Bốn trường, mỗi trường trả lời một câu hỏi khác nhau:
+//
+//	revisionId                — kết quả này thuộc revision nào?
+//	pouId                     — thuộc POU nào?
+//	sourceSha256              — thuộc ĐÚNG nội dung nào của POU đó?
+//	stLanguageProfileVersion  — sinh dưới hồ sơ ngôn ngữ nào?
+//
+// `sourceSha256` băm TỪNG POU, không băm cả gói. Băm cả gói thì sửa POU A sẽ
+// làm mọi lỗi của POU B thành STALE, và người dùng mất luôn kết quả còn đúng.
+type diagnosticProvenance struct {
+	revisionID string
+	// sourceByPOU: pouId -> sha256 hex của chính nguồn POU đó.
+	sourceByPOU map[string]string
+}
+
+func sha256Hex(payload []byte) string {
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
+}
+
+// newDiagnosticProvenance băm nguồn của Program root và của MỌI POU đã liên kết.
+func newDiagnosticProvenance(revisionID string, inputs []programmingcompiler.Input) diagnosticProvenance {
+	sources := make(map[string]string, len(inputs))
+	for _, input := range inputs {
+		sources[input.SourceID] = sha256Hex(input.Source)
+		for _, linked := range input.LinkedPOUs {
+			// POU liên kết được nhận diện bằng TÊN: đó là định danh compiler đặt
+			// vào `sourceId` của diagnostic khi lỗi nằm trong thân POU đó. Ghi đè
+			// một tên đã có là vô hại — trong một Revision đã seal, cùng tên là
+			// cùng nguồn.
+			sources[linked.Name] = sha256Hex(linked.Source)
+		}
+	}
+	return diagnosticProvenance{revisionID: revisionID, sourceByPOU: sources}
+}
+
+// stamp gắn provenance vào một diagnostic đã dựng.
+//
+// `pouId` lấy từ `programId` đã điền trước đó — đó là POU mà diagnostic thuộc
+// về. Không tra được hash cho `pouId` thì BỎ TRỐNG `sourceSha256` chứ không
+// điền hash của gói: một hash sai làm phép so khớp trả lời sai, tệ hơn hẳn một
+// hash vắng mặt mà FE biết là "không kiểm được".
+func (p diagnosticProvenance) stamp(view *DiagnosticView) {
+	if view.Location == nil {
+		view.Location = map[string]any{}
+	}
+	pouID, _ := view.Location["programId"].(string)
+	view.Location["revisionId"] = p.revisionID
+	view.Location["pouId"] = pouID
+	if hash, found := p.sourceByPOU[pouID]; found {
+		view.Location["sourceSha256"] = hash
+	}
+	view.Location["stLanguageProfileVersion"] = domain.STLanguageProfileVersion
 }
 
 func compilerDiagnostic(item programmingcompiler.Diagnostic) DiagnosticView {
