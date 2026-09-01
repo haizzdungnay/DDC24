@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-18` Diagnostic Provenance Contract (#353, 2026-09-01)
+
+- **Triệu chứng.** Provenance chỉ có ở **cấp Check** (`RevisionID` trong bản ghi Check),
+  chưa có ở **cấp diagnostic**: `location` chỉ mang `programId`/`line`/`column`/`bindingId`.
+- **Nguyên nhân gốc — vì sao điều này chặn `ISS-STED-04`.** Một diagnostic không tự chứng
+  minh được nó thuộc về nguồn nào. Gạch lỗi trên nền đó tạo ra **một lỗi nguy hiểm hơn
+  lỗi đang có**: gạch một chỗ trên buffer đã đổi, tức chỉ vào dòng **không còn** là dòng
+  sinh ra lỗi đó. Người dùng không có cách nào tự biết mình đang bị chỉ sai, nên họ sẽ sửa
+  đúng chỗ bị chỉ — sửa một chỗ không hỏng, rồi tin rằng đã xong.
+- **Cách sửa.**
+  - **BE** (`checks.go`) gắn bốn trường vào **từng** diagnostic, mỗi trường trả lời một câu
+    hỏi khác nhau: `revisionId` (thuộc revision nào), `pouId` (thuộc POU nào),
+    `sourceSha256` (thuộc **đúng nội dung nào** của POU đó), `stLanguageProfileVersion`
+    (sinh dưới hồ sơ ngôn ngữ nào).
+  - `sourceSha256` băm **từng POU**, không băm cả gói — băm cả gói thì sửa POU A làm mọi
+    lỗi của POU B thành cũ, và người dùng mất luôn kết quả còn đúng. POU liên kết được băm
+    theo **tên**, đúng định danh compiler đặt vào `sourceId` khi lỗi nằm trong thân POU đó.
+  - Không tra được hash cho một `pouId` thì **bỏ trống** thay vì điền hash của gói: một hash
+    sai làm phép so khớp trả lời **sai**, tệ hơn hẳn một hash vắng mặt mà FE biết là "không
+    kiểm được".
+  - **Hồ sơ ngôn ngữ** sinh thêm hằng số cho Go và TS từ cùng một nguồn
+    (`generate_st_language_profile.py`). Chép tay giá trị này ở hai nơi sẽ biến phép so
+    phiên bản thành một **phép so luôn đúng** — cổng tự tắt chính nó. Cổng `--check` sẵn có
+    của #357 canh luôn hai tệp sinh mới.
+  - **FE** `diagnosticFreshness.ts` — luật phán quyết ba trạng thái. Điểm mấu chốt:
+    **thiếu bằng chứng ≠ khớp**. Diagnostic không mang đủ provenance ra `UNVERIFIABLE`,
+    không phải `FRESH`; coi "không kiểm được" là "khớp" chính là cách một phép so khớp
+    trở thành vô nghĩa.
+  - **Khay Vấn đề** hiện nhãn `CŨ` kèm **lý do đọc được**, và mục cũ **vẫn nằm trong danh
+    sách** — ẩn nó đi làm người dùng tưởng lỗi đã hết. Bốn lý do tách riêng vì chúng dẫn
+    tới **hành động khác nhau**: "buffer đã đổi" thì chạy lại Kiểm tra là đủ, còn "thuộc
+    revision khác" thì chạy lại cũng vô ích cho tới khi mở đúng revision. Khi có mục cũ,
+    khay mời **chạy lại Kiểm tra** — một nhãn "cũ" không có đường thoát chỉ là lời than phiền.
+- **Phạm vi.** Việc **gạch lỗi trong trình soạn thảo** thuộc `ISS-STED-04` (#353 chặn #354);
+  ở đây cung cấp hợp đồng + luật phán quyết đã có test để #354 tiêu thụ, và bề mặt quan sát
+  được hôm nay là khay Vấn đề.
+- **Verification** (2026-09-01, đo lại thật): C++ Release `MODBUS/BACNET/HMI=ON`, `--fresh`:
+  configure exit 0, build exit 0, `ctest` **1369/1369 pass, exit 0**.
+  Go: `go vet ./...` exit 0, `go test ./... -count=1` **exit 0, 19 gói ok**; 5 test provenance mới.
+  FE: `vitest` **190 file / 2225 test pass** (+18), `npm run lint` exit 0, `npm run build` exit 0.
+
 ### Fixed — hoàn tất AC còn thiếu của `#351` và bốn lỗi phát hiện khi đo lại (2026-08-31)
 
 Bản thi hành `ISS-STED-02` đã merge trước đó phủ được phần lớn issue, nhưng **thiếu một
