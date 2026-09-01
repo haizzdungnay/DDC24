@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
+import { ST_LANGUAGE_PROFILE_VERSION } from '../../api/generated/stLanguageProfile'
+import { hashBufferSource } from '../../shared/diagnosticFreshness'
 import { SourceEditor } from './ProgramsTab'
 import { StCrossReferencePanel } from './StCrossReferencePanel'
 import type { StCursorSymbol } from './stReferenceIndex'
@@ -16,6 +18,8 @@ function program(document: string): ProgrammingProgram {
 function renderEditor(source: string, options?: {
   canEdit?: boolean
   diagnostics?: ProgrammingDiagnostic[]
+  hasCheckResult?: boolean
+  checkRevisionId?: string | null
   onChange?: (value: string) => void
   pointCatalogStatus?: 'idle' | 'loading' | 'ready' | 'error'
   pointCatalogItems?: ProgrammingPointCatalogEntry[]
@@ -53,6 +57,8 @@ function renderEditor(source: string, options?: {
           canEdit={options?.canEdit ?? true}
           saving={false}
           diagnostics={options?.diagnostics ?? []}
+          hasCheckResult={options?.hasCheckResult ?? false}
+          checkRevisionId={options?.checkRevisionId ?? null}
           focusDiagnostic={null}
           onChange={(next) => { setValue(next); onChange(next) }}
           onSave={onSave}
@@ -211,17 +217,99 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     expect(screen.getByText('REAL', { selector: 'span.mono' })).toBeInTheDocument()
   })
 
-  it('diagnostic underline: click vào đoạn lỗi nhảy đúng vùng chọn (line/column/length)', () => {
-    const source = 'PROGRAM P\nX := ;\nEND_PROGRAM\n'
-    const diagnostics: ProgrammingDiagnostic[] = [
-      { code: 'ST-SYN-001', severity: 'ERROR', messageKey: 'x', location: { line: 2, column: 6, length: 1 } },
+  /* `ISS-STED-04` × `ISS-STED-18` — gạch lỗi CHỈ khi diagnostic chứng minh được
+   * nó thuộc về đúng nội dung đang mở. Trước hai issue này, mọi diagnostic
+   * truyền vào đều được gạch; đó chính là hành vi nguy hiểm mà chúng cấm, nên
+   * fixture của test cũng phải mang provenance thật. */
+  const UNDERLINE_SOURCE = 'PROGRAM P\nX := ;\nEND_PROGRAM\n'
+
+  async function markableDiagnostics(source: string): Promise<ProgrammingDiagnostic[]> {
+    return [
+      {
+        code: 'ST-SYN-001',
+        severity: 'ERROR',
+        messageKey: 'x',
+        location: {
+          line: 2,
+          column: 6,
+          length: 1,
+          programId: 'program-1',
+          pouId: 'program-1',
+          revisionId: 'rev-1',
+          sourceSha256: await hashBufferSource(source),
+          stLanguageProfileVersion: ST_LANGUAGE_PROFILE_VERSION,
+        },
+      },
     ]
-    const { container, textarea } = renderEditor(source, { diagnostics })
+  }
+
+  it('diagnostic underline: click vào đoạn lỗi nhảy đúng vùng chọn (line/column/length)', async () => {
+    const diagnostics = await markableDiagnostics(UNDERLINE_SOURCE)
+    const { container, textarea } = renderEditor(UNDERLINE_SOURCE, {
+      diagnostics,
+      hasCheckResult: true,
+      checkRevisionId: 'rev-1',
+    })
+    // Băm buffer là bất đồng bộ, nên chờ đúng lúc dấu gạch xuất hiện.
+    const errorSpan = await waitFor(() => {
+      const overlay = container.querySelector('pre.pointer-events-none')!
+      const span = overlay.querySelector('span[class*="decoration-wavy"]')
+      expect(span).toBeTruthy()
+      return span!
+    })
+    fireEvent.click(errorSpan)
+    expect(textarea.selectionStart).toBe(UNDERLINE_SOURCE.indexOf('X := ;') + 5)
+  })
+
+  /* Nửa còn lại của hợp đồng, và là nửa quan trọng hơn: KHÔNG gạch khi không
+   * chứng minh được. Một dấu gạch sai chỗ nguy hiểm hơn không có dấu nào —
+   * người dùng sẽ sửa đúng chỗ bị chỉ, tức sửa một chỗ không hỏng. */
+  it('diagnostic KHÔNG mang provenance thì KHÔNG được gạch', async () => {
+    const { container } = renderEditor(UNDERLINE_SOURCE, {
+      diagnostics: [
+        { code: 'ST-SYN-001', severity: 'ERROR', messageKey: 'x', location: { line: 2, column: 6, length: 1 } },
+      ],
+      hasCheckResult: true,
+      checkRevisionId: 'rev-1',
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/không có lỗi|diagnostic từ Kiểm tra|không còn khớp/)).toBeInTheDocument()
+    })
     const overlay = container.querySelector('pre.pointer-events-none')!
-    const errorSpan = overlay.querySelector('span[class*="decoration-wavy"]')
-    expect(errorSpan).toBeTruthy()
-    fireEvent.click(errorSpan!)
-    expect(textarea.selectionStart).toBe(source.indexOf('X := ;') + 5)
+    expect(overlay.querySelector('span[class*="decoration-wavy"]')).toBeNull()
+  })
+
+  it('buffer đã đổi sau Kiểm tra ⇒ gỡ dấu gạch và nói rõ lý do', async () => {
+    const diagnostics = await markableDiagnostics(UNDERLINE_SOURCE)
+    const { container, textarea } = renderEditor(UNDERLINE_SOURCE, {
+      diagnostics,
+      hasCheckResult: true,
+      checkRevisionId: 'rev-1',
+    })
+    await waitFor(() => {
+      const overlay = container.querySelector('pre.pointer-events-none')!
+      expect(overlay.querySelector('span[class*="decoration-wavy"]')).toBeTruthy()
+    })
+    // Sửa đúng MỘT ký tự.
+    fireEvent.change(textarea, { target: { value: UNDERLINE_SOURCE + ' ' } })
+    await waitFor(() => {
+      expect(screen.getByText(/buffer đã đổi sau Kiểm tra/)).toBeInTheDocument()
+    })
+    const overlay = container.querySelector('pre.pointer-events-none')!
+    expect(overlay.querySelector('span[class*="decoration-wavy"]')).toBeNull()
+  })
+
+  /* Chưa Kiểm tra ≠ "không có lỗi". Nói "không có lỗi" khi chưa ai kiểm là
+   * khẳng định một điều chưa được xác lập. */
+  it('Draft chưa từng Kiểm tra ⇒ nói "Chưa Kiểm tra", KHÔNG nói "không có lỗi"', () => {
+    renderEditor(UNDERLINE_SOURCE, { diagnostics: [], hasCheckResult: false })
+    expect(screen.getByText(/Chưa Kiểm tra/)).toBeInTheDocument()
+    expect(screen.queryByText(/không có lỗi/)).not.toBeInTheDocument()
+  })
+
+  it('đã Kiểm tra và POU sạch ⇒ nói "không có lỗi" kèm revision', () => {
+    renderEditor(UNDERLINE_SOURCE, { diagnostics: [], hasCheckResult: true, checkRevisionId: 'rev-1' })
+    expect(screen.getByText(/revision rev-1: POU này không có lỗi/)).toBeInTheDocument()
   })
 
   it('Find + Replace: Thay tất cả đổi đúng mọi lần xuất hiện', () => {
