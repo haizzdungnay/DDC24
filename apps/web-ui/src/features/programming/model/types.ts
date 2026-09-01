@@ -525,7 +525,27 @@ export interface ProgrammingDiagnostic {
   /** Thông điệp kỹ thuật ngắn từ backend/compiler; vắng mặt khi diagnostic không xuất phát từ compiler. */
   message?: string
   messageKey: string
-  location?: { programId?: string; line?: number; column?: number; bindingId?: string; [key: string]: unknown }
+  /** `ISS-STED-18` — provenance đi kèm TỪNG diagnostic.
+   *
+   * Không có bốn trường này thì việc gạch lỗi trong trình soạn thảo tạo ra một
+   * lỗi nguy hiểm hơn lỗi đang có: gạch một chỗ trên buffer đã đổi, tức chỉ vào
+   * dòng KHÔNG CÒN là dòng sinh ra lỗi đó, và người dùng không có cách nào biết
+   * mình đang bị chỉ sai.
+   *
+   * Tất cả đều tuỳ chọn vì diagnostic không đến từ compiler (scope, worker) sẽ
+   * không có nguồn nào để chứng minh — và "không kiểm được" phải phân biệt được
+   * với "kiểm rồi, khớp". */
+  location?: {
+    programId?: string
+    line?: number
+    column?: number
+    bindingId?: string
+    revisionId?: string
+    pouId?: string
+    sourceSha256?: string
+    stLanguageProfileVersion?: string
+    [key: string]: unknown
+  }
   args?: Record<string, unknown>
 }
 
