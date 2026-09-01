@@ -8,6 +8,41 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-STED-05` khay Vấn đề của workbench phủ cả POU ST (#355, 2026-09-01)
+
+- **Triệu chứng.** Khay Vấn đề của workbench PGM-02 **bỏ qua mọi POU ST**. POU FBD được
+  validate cấu trúc phía FE và có mục trong khay; POU ST thì không có gì. Bất đối xứng ấy
+  khiến người dùng ST đọc *"không có mục nào"* thành *"không có lỗi"* — một kết luận sai
+  mà giao diện không cho họ cách nào phát hiện.
+- **Nguyên nhân gốc.** `DesignWorkbench.tsx` mở đầu vòng lặp bằng
+  `if (program.language !== 'FBD') continue`.
+- **Cách sửa.**
+  - Bỏ nhánh lọc. Nguồn cho POU ST là **diagnostic Check** (qua `ISS-STED-04`), **không**
+    dựng bộ kiểm thứ hai ở FE: FBD là đồ thị mà FE tự đọc được, còn ST cần compiler thật;
+    bịa một bộ phân tích ST ở FE sẽ tạo nguồn sự thật thứ hai và nó sẽ lệch khỏi compiler
+    đúng vào lúc người dùng cần tin nó nhất.
+  - Nhảy tới một mục dùng lại chính `focusDiagnostic` mà PGM-03 và khay So sánh đã dùng —
+    chọn đúng POU rồi neo dòng/cột. Hai đường nhảy song song sẽ lệch nhau đúng lúc một
+    trong hai được sửa.
+  - Trạng thái rỗng phân biệt **"chưa Kiểm tra"** với **"đã Kiểm tra, không có lỗi"**
+    (kèm revision). Gộp hai câu là cách người dùng ST tin rằng chương trình đã sạch trong
+    khi chưa ai kiểm nó.
+- **Hai lỗi phát hiện khi viết test, sửa cùng phiên.**
+  - `ProblemsPanel` nói *"không neo vào vị trí nào"* cho **mọi** mục thiếu `onJump`, kể cả
+    mục **có** `jumpLabel`. Một mục neo đúng chỗ bị mô tả là không neo sẽ bị người dùng bỏ
+    qua. Nay giữ nguyên nhãn, chỉ bỏ nút.
+  - Chân khay viết *"Khay này **chỉ** hiện vấn đề cấu trúc của Draft"* — câu đó **sai từ
+    chính thay đổi này**. Nay ghi đúng: vấn đề cấu trúc (FBD) **và** diagnostic Kiểm tra
+    gần nhất (ST); `D-01` không đổi — PGM-02 vẫn chỉ **đọc**, không sở hữu Check.
+  - Docstring `ProblemsDrawer` viết *"dùng chung cho ba tab của PGM-02 và cho PGM-03"*
+    trong khi component đó **chưa bao giờ** được mount ở PGM-02 — khay của PGM-02 là
+    `ProgrammingWorkbench`, một component khác. Câu sai đó khiến người đọc tin PGM-02 đã
+    có khay lỗi dùng chung, nên **không ai đi tìm lý do POU ST không hiện lỗi**.
+- **Verification** (2026-09-01, đo lại thật): C++ Release `MODBUS/BACNET/HMI=ON`, `--fresh`:
+  configure exit 0, build exit 0, `ctest` **1369/1369 pass, exit 0**.
+  Go: `go vet ./...` exit 0, `go test ./... -count=1` **exit 0, 19 gói ok**.
+  FE: `vitest` **192 file / 2242 test pass** (+6), `npm run lint` exit 0, `npm run build` exit 0.
+
 ### Fixed — `ISS-STED-04` PGM-02 hiển thị diagnostic của Check gần nhất (#354, 2026-09-01)
 
 - **Triệu chứng.** Trong chế độ `EDIT`, gõ ST sai cú pháp hay sai kiểu đều **không thấy
