@@ -1,9 +1,13 @@
 import { useMemo } from 'react'
+
+/** Hằng số module để tham chiếu ổn định giữa các lần render — mảng literal mặc
+ * định sẽ làm mọi `useMemo` phụ thuộc nó trượt ở mỗi render. */
+const EMPTY_CHECK_DIAGNOSTICS: readonly ProgrammingDiagnostic[] = []
 import { useI18n } from '../../../../shared/i18n'
 import { buildStReferenceIndex } from '../editor/stReferenceIndex'
 import { fbdIssueTargets } from '../../fbd/issueTargets'
 import { validateFbdDocument, type FbdDocument } from '../../fbd/model'
-import type { ProgrammingDraftDocument } from '../../model/types'
+import type { ProgrammingDiagnostic, ProgrammingDraftDocument } from '../../model/types'
 import { presentStRuntimeValue, type StRuntimeOverlayState, type StRuntimeQuality } from '../editor/StRuntimeValueOverlay'
 import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol, type WorkbenchWatchRow } from './ProgrammingWorkbench'
 
@@ -43,6 +47,10 @@ export function DesignWorkbench({
   runtimeOverlay,
   traceOwnerHref,
   watchAddRequest,
+  checkDiagnostics = EMPTY_CHECK_DIAGNOSTICS,
+  hasCheckResult = false,
+  checkRevisionId = null,
+  onJumpToDiagnostic,
 }: {
   mode: WorkbenchMode
   document: ProgrammingDraftDocument
@@ -69,6 +77,19 @@ export function DesignWorkbench({
   traceOwnerHref?: string
   /** `DEV-PROG-003` — chuyển tiếp yêu cầu theo dõi biến tới khay Watch. */
   watchAddRequest?: { name: string; nonce: number } | null
+  /** `ISS-STED-05` — diagnostic của Check gần nhất, nguồn DUY NHẤT cho POU ST.
+   *
+   * Không dựng bộ kiểm thứ hai ở FE: POU FBD được validate cấu trúc phía FE vì
+   * FBD là đồ thị mà FE tự đọc được, còn ST cần compiler thật. Bịa một bộ phân
+   * tích ST ở FE sẽ tạo ra một nguồn sự thật thứ hai, và nó sẽ lệch khỏi
+   * compiler đúng vào lúc người dùng cần tin nó nhất. */
+  checkDiagnostics?: readonly ProgrammingDiagnostic[]
+  /** Đã có kết quả Check nào chưa — để trạng thái rỗng phân biệt được "chưa
+   * kiểm tra" với "đã kiểm tra, không có lỗi". */
+  hasCheckResult?: boolean
+  checkRevisionId?: string | null
+  /** Nhảy tới một diagnostic: chọn đúng POU RỒI neo đúng dòng/cột. */
+  onJumpToDiagnostic?: (diagnostic: ProgrammingDiagnostic) => void
 }) {
   const { pick } = useI18n()
 
@@ -107,7 +128,33 @@ export function DesignWorkbench({
   const problems = useMemo<WorkbenchProblem[]>(() => {
     const output: WorkbenchProblem[] = []
     for (const program of document.programs) {
-      if (program.language !== 'FBD') continue
+      /* `ISS-STED-05` — POU ST cũng có mục ở đây.
+       *
+       * Trước đây `if (program.language !== 'FBD') continue` bỏ qua MỌI POU ST,
+       * nên người dùng ST đọc "không có mục nào" thành "không có lỗi" — một
+       * kết luận sai mà giao diện không cho họ cách nào phát hiện.
+       *
+       * Nguồn cho ST là diagnostic Check (ISS-STED-04), KHÔNG phải một bộ kiểm
+       * thứ hai ở FE. */
+      if (program.language !== 'FBD') {
+        for (const diagnostic of checkDiagnostics) {
+          if (diagnostic.location?.programId !== program.programId) continue
+          const line = diagnostic.location?.line
+          const column = diagnostic.location?.column
+          const position = typeof line === 'number'
+            ? pick(`dòng ${line}${typeof column === 'number' ? `, cột ${column}` : ''}`,
+                   `line ${line}${typeof column === 'number' ? `, col ${column}` : ''}`)
+            : pick('không rõ vị trí', 'position unknown')
+          output.push({
+            id: `${program.programId}:${diagnostic.detailCode ?? diagnostic.code}:${line ?? 0}:${column ?? 0}`,
+            code: diagnostic.detailCode ?? diagnostic.code,
+            detail: diagnostic.message ?? position,
+            jumpLabel: `${program.name} › ${position}`,
+            onJump: onJumpToDiagnostic ? () => onJumpToDiagnostic(diagnostic) : undefined,
+          })
+        }
+        continue
+      }
       let parsed: FbdDocument | null = null
       try {
         parsed = typeof program.document === 'string' ? (JSON.parse(program.document) as FbdDocument) : null
@@ -137,7 +184,7 @@ export function DesignWorkbench({
     return output
     /* `onSelectProgram` không nằm trong deps vì cùng lý do như trên; nó chỉ
      * chuyển hướng theo `programId` đã chốt lúc dựng danh sách. */
-  }, [document.programs, pick])
+  }, [document.programs, pick, checkDiagnostics, onJumpToDiagnostic])
 
   /* Kiểu dữ liệu của biến KHÔNG có trong snapshot runtime — Core trả giá trị,
    * không trả khai báo. Tra từ chính chỉ mục ký hiệu của POU đang mở là đọc từ
@@ -212,6 +259,8 @@ export function DesignWorkbench({
       watchAddRequest={watchAddRequest}
       sourceLabel={sourceLabel}
       problems={problems}
+      problemsEmptyState={hasCheckResult ? 'no-problems' : 'not-checked'}
+      problemsRevisionId={checkRevisionId}
       symbols={symbols}
       source={source}
       onJumpToOffset={onJumpToOffset}

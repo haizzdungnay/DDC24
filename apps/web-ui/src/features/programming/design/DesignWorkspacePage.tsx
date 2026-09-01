@@ -509,6 +509,19 @@ export function DesignWorkspacePage({
     })
   }
 
+  /** `ISS-STED-05` — nhảy tới một diagnostic từ khay Vấn đề của workbench.
+   *
+   * Chọn đúng POU RỒI neo dòng/cột, dùng lại chính `focusDiagnostic` mà PGM-03
+   * và khay So sánh đã dùng — không mở đường nhảy thứ hai. Hai đường nhảy song
+   * song sẽ lệch nhau đúng lúc một trong hai được sửa. */
+  const jumpToDiagnostic = (diagnostic: ProgrammingDiagnostic) => {
+    const programId = diagnostic.location?.programId
+    if (typeof programId !== 'string') return
+    const program = document.programs.find((candidate) => candidate.programId === programId)
+    if (program) selectPou(program.objectId ?? program.programId)
+    setFocusDiagnostic(diagnostic)
+  }
+
   /* `signals[]` KHÔNG đi qua `toWorkspaceDocument`, nên phải đọc từ draft THÔ.
    * Explorer cần nó để biết POU nào đang publish — điều kiện backend dùng để
    * từ chối `removeProgram`. */
@@ -827,6 +840,10 @@ export function DesignWorkspacePage({
           checkOwnerHref={`/eng/programming/projects/${projectId}/commission`}
           onSelectProgram={selectProgram}
           onJumpToOffset={jumpToSourceOffset}
+          checkDiagnostics={checkDiagnostics}
+          hasCheckResult={hasCheckResult}
+          checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
+          onJumpToDiagnostic={jumpToDiagnostic}
         />
         </div>
       </div>
