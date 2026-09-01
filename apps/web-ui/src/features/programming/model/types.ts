@@ -80,6 +80,28 @@ export interface ProgrammingCapabilities {
    * nút cho một khả năng thiết bị không có.
    */
   workspaceModes?: ProgrammingWorkspaceModes
+  /**
+   * `ISS-STED-19` — BỘ BA TƯƠNG THÍCH thiết bị công bố, để FE so với hằng đã
+   * build vào bundle của chính nó.
+   *
+   * REQUIRED trong OpenAPI, và khai required ở đây theo đúng hợp đồng. Nhưng
+   * TypeScript chỉ ràng buộc lúc biên dịch: một thiết bị đời cũ vẫn có thể trả
+   * về phản hồi thiếu khối này. Nên `programmingCompatibility()` vẫn nhận
+   * `undefined` và coi đó là KHÔNG KIỂM CHỨNG ĐƯỢC ⇒ chặn — khác hẳn
+   * `workspaceModes`, nơi thiếu nghĩa là "không có khả năng đó". Ở đây thiếu
+   * bằng chứng KHÔNG phải bằng chứng khớp.
+   */
+  compatibility: ProgrammingCompatibility
+}
+
+/** `ISS-STED-19` — chiếu 1-1 `ProgrammingCapabilities.compatibility`. */
+export interface ProgrammingCompatibility {
+  stLanguageProfileVersion: string
+  stLanguageProfileSha256: string
+  libraryRegistryVersion: string
+  libraryRegistrySha256: string
+  compilerProfileId: string
+  targetAbi: number
 }
 
 export interface ProgrammingWorkspaceModes {
@@ -654,7 +676,21 @@ export interface ProgrammingCheck {
   revisionId: string
   state: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'TIMED_OUT'
   diagnostics: ProgrammingDiagnostic[]
-  artifact?: { artifactId: string; sha256: string; byteSize: number; profile: string; targetAbi: number; compilerVersion: string; libraryVersion: string }
+  /**
+   * `stLanguageProfileVersion` (`ISS-STED-19`): phiên bản hồ sơ ngôn ngữ ST đi
+   * CÙNG artifact, không chỉ nằm ở endpoint capabilities — một artifact đọc
+   * lại sau này phải tự nói được nó biên dịch dưới hồ sơ nào.
+   */
+  artifact?: {
+    artifactId: string
+    sha256: string
+    byteSize: number
+    profile: string
+    targetAbi: number
+    compilerVersion: string
+    libraryVersion: string
+    stLanguageProfileVersion: string
+  }
   createdAt: string
   startedAt?: string
   completedAt?: string

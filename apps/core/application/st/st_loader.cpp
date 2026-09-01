@@ -168,14 +168,28 @@ private:
         if (n_ > st_ir::kMaxArtifactSize) return fail(st_ir_error::kBadHeader, "artifact exceeds 1 MiB");
         if (std::memcmp(d_, st_ir::kMagic, 8) != 0)
             return fail(st_ir_error::kBadMagic, "magic mismatch: not a MK-DDC IR artifact");
+        /* `ISS-STED-19` — lý do từ chối phải ĐỌC ĐƯỢC, tức nêu CẢ HAI phía.
+         *
+         * "target ABI mismatch" nói đúng sự thật nhưng không nói được điều
+         * người vận hành cần: lệch giữa cái gì với cái gì. Biết artifact mang
+         * ABI nào và bo chờ ABI nào thì họ dựng lại được nhánh nào cần build
+         * lại; chỉ biết "lệch" thì phải đi hỏi. Mở rộng đúng cơ chế đã có ở
+         * đây, không dựng cơ chế kiểm phiên bản thứ hai. */
         if (rd_u16(d_ + 8) != st_ir::kSchemaVersion)
             return fail(st_ir_error::kBadSchema,
-                        "unsupported schema version " + std::to_string(rd_u16(d_ + 8)));
+                        "artifact schema version " + std::to_string(rd_u16(d_ + 8)) +
+                            " but this runtime accepts " +
+                            std::to_string(st_ir::kSchemaVersion));
         if (rd_u16(d_ + 10) != st_ir::kCompilerProfile)
             return fail(st_ir_error::kBadProfile,
-                        "unsupported compiler profile " + std::to_string(rd_u16(d_ + 10)));
+                        "artifact compiler profile " + std::to_string(rd_u16(d_ + 10)) +
+                            " but this runtime accepts " +
+                            std::to_string(st_ir::kCompilerProfile));
         if (rd_u32(d_ + 12) != st_ir::kTargetAbi)
-            return fail(st_ir_error::kBadAbi, "target ABI mismatch");
+            return fail(st_ir_error::kBadAbi,
+                        "artifact target ABI " + std::to_string(rd_u32(d_ + 12)) +
+                            " but this runtime accepts " +
+                            std::to_string(st_ir::kTargetAbi));
         if (rd_u32(d_ + 16) != st_ir::kHeaderSize)
             return fail(st_ir_error::kBadHeader, "header_size field is wrong");
         total_size_ = rd_u32(d_ + 20);

@@ -9,6 +9,27 @@ import { ProgrammingApiError } from '../api/generated/client'
 import type { ProgrammingDraftDocument, ProgrammingProject } from '../model/types'
 import type { ProgrammingRuntimeMonitorState } from '../api/queries'
 import { slotKey } from './editor/ProgramsTab'
+import { BUNDLE_COMPATIBILITY } from '../shared/programmingCompatibility'
+
+/* `ISS-STED-19` — workspace CHẶN soạn thảo khi không đọc được bộ ba tương
+ * thích của thiết bị (thiếu bằng chứng ≠ khớp). Nên mọi mock ở đây phải trả
+ * lời `getProgrammingCapabilities` như một thiết bị thật: cùng phiên bản với
+ * bundle. Test nào muốn kiểm cảnh lệch thì tự ghi đè bằng phiên bản khác. */
+function deviceCapabilities(compatibility: unknown = { ...BUNDLE_COMPATIBILITY }) {
+  return {
+    schemaVersion: '1.0',
+    profile: 'MK-DDC-24-REV-A',
+    targetState: 'READY',
+    languages: ['ST', 'FBD'],
+    types: ['BOOL', 'INT', 'DINT', 'UINT', 'REAL', 'TIME'],
+    taskPeriodsMs: [1000, 5000, 30000],
+    limits: {
+      projectsPerController: 1, tasks: 1, stSourceBytes: 65536, variables: 512,
+      statements: 4096, fbdBlocks: 256, fbdConnections: 512, artifactBytes: 1048576, bindings: 256,
+    },
+    compatibility,
+  }
+}
 
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
 vi.mock('../../auth', async (importOriginal) => {
@@ -161,6 +182,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
       execution: {}
     } as unknown as ProgrammingDraftDocument
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -181,6 +203,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
       }
     })
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
@@ -232,6 +255,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
@@ -273,6 +297,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -303,6 +328,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -328,6 +354,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.programs.push({ programId: 'program-1', name: 'FB cũ từ bundle', kind: 'FUNCTION_BLOCK', language: 'ST', document: 'FUNCTION_BLOCK X\nEND_FUNCTION_BLOCK' })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -358,6 +385,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.task.programOrder = ['program-1']
 
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
@@ -385,6 +413,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
   it('thêm chương trình FBD mount StructuredFbdEditor thật, không placeholder (TASK-PROG-502)', async () => {
     client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; program?: { programId: string; name: string; document: unknown } }> } }) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
@@ -409,6 +438,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   it('AC-PGM02-009 / AC-ST-004: nút Kiểm tra điều hướng sang PGM-03, không tự seal/check nên Active không đổi (D-01)', async () => {
     const project = baseProject()
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -430,6 +460,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -448,6 +479,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 1;' })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string, options?: { body?: { operations: unknown[] } }) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
@@ -487,6 +519,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.task.programOrder = ['program-1']
 
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
@@ -536,6 +569,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.task.programOrder = []
 
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
@@ -573,6 +607,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     project.draft!.task.programOrder = []
 
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'updateProgrammingDraft') {
@@ -603,6 +638,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM P\nVAR\n  Supply : REAL;\nEND_VAR\nEND_PROGRAM\n' })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -632,6 +668,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     )
     project.draft!.task.programOrder = ['program-a', 'program-b']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -661,6 +698,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM P\nEND_PROGRAM\n' })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -686,6 +724,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -712,6 +751,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -745,6 +785,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') {
         return Promise.resolve({ items: [{ category: 'LOCAL', pointId: 'AO-01', name: 'AO-01', dataType: 'REAL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: 1 }] })
@@ -812,6 +853,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
       }
     }
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -835,6 +877,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
       data: { schemaVersion: '1.0', activeRevisionId: 'revision-active', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null, items: [] }
     }
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'getProgrammingRevision') return Promise.resolve({
@@ -885,6 +928,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
       data: { schemaVersion: '1.0', activeRevisionId: 'revision-active', safeState: false, task: null, items: [] }
     }
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'getProgrammingRevision') return Promise.resolve({
@@ -942,6 +986,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
       programs: [], signals: [], bindings: [], library: {}, execution: {}
     } as unknown as ProgrammingDraftDocument
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -962,6 +1007,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     })
     project.draft!.task.programOrder = ['program-1']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -1003,6 +1049,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     })
     project.draft!.task.programOrder = ['program-fbd']
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -1038,6 +1085,7 @@ describe('PGM-02 — viewer/operator không sửa được nguồn (T59-808)', (
       }]
     }
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -1100,6 +1148,7 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
       programs: [{ programId: 'program-a', name: HOSTILE_NAME, kind: 'PROGRAM', language: 'ST', document: HOSTILE_SOURCE }]
     }
     client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       throw new Error(`unexpected operation ${operationId}`)
@@ -1117,5 +1166,67 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
     expect((source as HTMLTextAreaElement).value).toBe(HOSTILE_SOURCE)
     expect(globalThis.document.querySelector('script')).toBeNull()
     expect((window as unknown as Record<string, unknown>).__pwned).toBeUndefined()
+  })
+  /* `ISS-STED-19` — CỔNG TƯƠNG THÍCH PHIÊN BẢN Ở ĐÚNG NƠI NGƯỜI DÙNG GÕ.
+   *
+   * Test đơn vị của `programmingCompatibility` chứng minh phán quyết đúng;
+   * những test dưới đây chứng minh phán quyết ĐÓ THỰC SỰ CHẶN được màn hình.
+   * Hai thứ này tách nhau: một phán quyết đúng mà không ai nối vào `canEdit`
+   * thì vẫn để người dùng soạn chương trình sai. */
+  it('bundle rev-a.3 gặp thiết bị rev-a.4 thì chặn soạn thảo và nêu rõ hai phiên bản', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') {
+        return Promise.resolve(deviceCapabilities({ ...BUNDLE_COMPATIBILITY, libraryRegistryVersion: 'rev-a.4' }))
+      }
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+
+    const alert = await screen.findByTestId('programming-compatibility-block')
+    expect(alert).toHaveAttribute('data-compatibility-state', 'MISMATCH')
+    expect(alert.textContent).toContain('rev-a.3')
+    expect(alert.textContent).toContain('rev-a.4')
+    // Không tự hạ cấp: cổng soạn thảo phải đóng, không chỉ hiện cảnh báo.
+    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+  })
+
+  it('thiết bị không công bố bộ ba thì chặn (thiếu bằng chứng không phải bằng chứng khớp)', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') {
+        /* Thiết bị đời cũ BỎ HẲN trường, chứ không gửi `compatibility: undefined`.
+         * Xoá key mô phỏng đúng phản hồi đó — và cũng tránh bẫy tham số mặc
+         * định của `deviceCapabilities`, nơi truyền `undefined` lại rơi về bộ
+         * ba khớp. */
+        const capabilities = deviceCapabilities() as Record<string, unknown>
+        delete capabilities.compatibility
+        return Promise.resolve(capabilities)
+      }
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+
+    const alert = await screen.findByTestId('programming-compatibility-block')
+    expect(alert).toHaveAttribute('data-compatibility-state', 'UNVERIFIABLE')
+    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+  })
+
+  it('thiết bị cùng phiên bản thì không hiện cảnh báo và vẫn soạn thảo được', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+
+    expect(await screen.findByTitle('Thêm chương trình ST')).toBeInTheDocument()
+    expect(screen.queryByTestId('programming-compatibility-block')).not.toBeInTheDocument()
   })
 })

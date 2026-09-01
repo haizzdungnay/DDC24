@@ -3066,7 +3066,8 @@ components:
     ProgrammingCapabilities:
       type: object
       additionalProperties: false
-      required: [schemaVersion, profile, targetState, limits, languages, types, taskPeriodsMs]
+      required: [schemaVersion, profile, targetState, limits, languages, types, taskPeriodsMs,
+                 compatibility]
       # `workspaceModes` là bổ sung ADDITIVE của PGM-02 (DDD §5.5) và cố ý
       # KHÔNG required: server đời cũ không có nó, và client mới phải coi mọi
       # mode là UNAVAILABLE khi thiếu — không được đoán.
@@ -3146,6 +3147,30 @@ components:
             fbdConnections: { type: integer, const: 512 }
             artifactBytes: { type: integer, const: 1048576 }
             bindings: { type: integer, const: 256 }
+        # ISS-STED-19 — BỘ BA TƯƠNG THÍCH, công bố thành MỘT KHỐI.
+        #
+        # Ba phiên bản này đã tồn tại rải rác (hồ sơ ngôn ngữ ở compiler,
+        # registry thư viện ở domain, ABI ở profile) nhưng không endpoint nào
+        # gom lại. Rải rác thì mỗi bên tự kiểm một mảnh, và lệch ở mảnh không
+        # ai kiểm sẽ đi qua trong im lặng: bundle FE cũ vẫn vẽ palette/từ khoá
+        # của phiên bản khác với phiên bản thiết bị đang biên dịch.
+        #
+        # KHÁC `workspaceModes`: khối này là REQUIRED. Thiếu nó KHÔNG được đọc
+        # thành "chắc là khớp" — FE phải coi là KHÔNG KIỂM CHỨNG ĐƯỢC và chặn
+        # soạn thảo (fail-closed), vì thiếu bằng chứng không phải là bằng chứng
+        # khớp.
+        compatibility:
+          type: object
+          additionalProperties: false
+          required: [stLanguageProfileVersion, stLanguageProfileSha256, libraryRegistryVersion,
+                     libraryRegistrySha256, compilerProfileId, targetAbi]
+          properties:
+            stLanguageProfileVersion: { type: string, minLength: 1, maxLength: 64 }
+            stLanguageProfileSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+            libraryRegistryVersion: { type: string, minLength: 1, maxLength: 64 }
+            libraryRegistrySha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+            compilerProfileId: { type: string, minLength: 1, maxLength: 64 }
+            targetAbi: { type: integer, const: 3841 }
     ProgrammingProject:
       type: object
       additionalProperties: false
@@ -3467,7 +3492,8 @@ components:
     ProgrammingArtifact:
       type: object
       additionalProperties: false
-      required: [artifactId, sha256, byteSize, profile, targetAbi, compilerVersion, libraryVersion]
+      required: [artifactId, sha256, byteSize, profile, targetAbi, compilerVersion, libraryVersion,
+                 stLanguageProfileVersion]
       properties:
         artifactId: { type: string, format: uuid }
         sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
@@ -3476,6 +3502,10 @@ components:
         targetAbi: { type: integer, const: 3841 }
         compilerVersion: { type: string, minLength: 1, maxLength: 64 }
         libraryVersion: { type: string, minLength: 1, maxLength: 64 }
+        # ISS-STED-19: phiên bản hồ sơ ngôn ngữ ST đi CÙNG artifact. Một artifact
+        # tách khỏi ngữ cảnh sinh ra nó (lưu lại, gửi đi, đọc lại sau) mà không
+        # mang phiên bản ngôn ngữ thì không ai nói được nó biên dịch dưới hồ sơ nào.
+        stLanguageProfileVersion: { type: string, minLength: 1, maxLength: 64 }
     ProgrammingDiagnostic:
       type: object
       additionalProperties: false

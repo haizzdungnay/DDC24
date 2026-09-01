@@ -65,6 +65,11 @@ type ArtifactView struct {
 	TargetABI       int64  `json:"targetAbi"`
 	CompilerVersion string `json:"compilerVersion"`
 	LibraryVersion  string `json:"libraryVersion"`
+	// ISS-STED-19: bộ ba tương thích phải đi CÙNG artifact, không chỉ nằm ở
+	// endpoint capabilities. Một artifact tách khỏi ngữ cảnh sinh ra nó (lưu
+	// lại, gửi đi, đọc lại sau) mà không mang phiên bản ngôn ngữ thì không ai
+	// nói được nó biên dịch dưới hồ sơ nào.
+	StLanguageProfileVersion string `json:"stLanguageProfileVersion"`
 }
 
 type CheckView struct {
@@ -1020,7 +1025,8 @@ func checkView(check programmingstore.Check) (CheckView, error) {
 	if check.Artifact != nil {
 		a := check.Artifact
 		view.Artifact = &ArtifactView{ArtifactID: a.ArtifactID, SHA256: hex.EncodeToString(a.SHA256[:]), ByteSize: a.ByteSize, Profile: a.Profile,
-			TargetABI: a.TargetABI, CompilerVersion: a.CompilerVersion, LibraryVersion: a.LibraryVersion}
+			TargetABI: a.TargetABI, CompilerVersion: a.CompilerVersion, LibraryVersion: a.LibraryVersion,
+			StLanguageProfileVersion: domain.STLanguageProfileVersion}
 	}
 	return view, nil
 }

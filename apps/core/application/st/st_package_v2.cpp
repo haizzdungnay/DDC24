@@ -523,6 +523,47 @@ bool LoadPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_prof
                             error_code);
 }
 
+std::string DescribePackageRejection(const uint8_t* data, std::size_t size,
+                                     uint16_t expected_profile, uint32_t expected_abi,
+                                     const char* error_code)
+{
+    const std::string code = error_code != nullptr ? std::string(error_code) : std::string("PKG-E-001");
+    /* Gói cụt: không được đọc header để "giải thích rõ hơn" — đó đúng là cách
+     * một thông điệp lỗi biến thành lỗi đọc quá biên. */
+    if (data == nullptr || size < st_pkg::kHeaderSize)
+        return "package v2 bị từ chối (" + code + "): gói ngắn hơn header, không đọc được phiên bản";
+
+    const uint16_t schema = read_u16(data, kOffSchemaVersion);
+    const uint16_t layout = read_u16(data, kOffLayoutVersion);
+    const uint16_t profile = read_u16(data, kOffCompilerProfile);
+    const uint32_t abi = read_u32(data, kOffTargetAbi);
+
+    if (code == st_pkg_error::kBadSchema) {
+        return "package v2 bị từ chối (" + code + "): gói khai schema " + std::to_string(schema) +
+               "/layout " + std::to_string(layout) + " nhưng runtime này nhận schema " +
+               std::to_string(st_pkg::kSchemaVersion) + "/layout " + std::to_string(st_pkg::kLayoutVersion);
+    }
+    if (code == st_pkg_error::kBadProfile) {
+        /* Tách hẳn hai vế: `PKG-E-004` gộp lệch hồ sơ với lệch ABI, và người
+         * đọc cần biết chính xác vế nào lệch để làm đúng việc tiếp theo (biên
+         * dịch lại bằng hồ sơ khác, hay nạp firmware khác). */
+        if (profile != expected_profile && abi != expected_abi) {
+            return "package v2 bị từ chối (" + code + "): gói khai hồ sơ biên dịch " +
+                   std::to_string(profile) + " và ABI đích " + std::to_string(abi) +
+                   " nhưng runtime này nhận hồ sơ " + std::to_string(expected_profile) +
+                   " và ABI " + std::to_string(expected_abi);
+        }
+        if (profile != expected_profile) {
+            return "package v2 bị từ chối (" + code + "): gói khai hồ sơ biên dịch " +
+                   std::to_string(profile) + " nhưng runtime này nhận hồ sơ " +
+                   std::to_string(expected_profile);
+        }
+        return "package v2 bị từ chối (" + code + "): gói khai ABI đích " + std::to_string(abi) +
+               " nhưng runtime này nhận ABI " + std::to_string(expected_abi);
+    }
+    return "package v2 bị từ chối (" + code + ")";
+}
+
 bool UnpackPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_profile,
                      uint32_t expected_abi, StPackageContents* out, const char** error_code)
 {

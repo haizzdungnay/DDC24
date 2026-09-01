@@ -214,6 +214,25 @@ std::vector<uint8_t> package_of(const std::vector<std::string>& names,
     return bytes;
 }
 
+/* `ISS-STED-19` — gói hợp lệ mọi mặt TRỪ `targetAbi`. Dùng đúng writer
+ * production rồi chỉ đổi một trường: nếu tự vá byte, gói sẽ hỏng hash và bị
+ * chặn ở một trạm sớm hơn, tức là test đo nhầm trạm. */
+std::vector<uint8_t> package_with_foreign_abi(uint32_t abi)
+{
+    StPackageInput input;
+    input.compiler_profile = st_profile_generated::kProfileCode;
+    input.target_abi = abi;
+    input.programs.push_back({"P_ahu", program_ir("P_ahu", 1), 1000u, 0u});
+    StPouSignature signature;
+    signature.name = "P_ahu";
+    signature.kind = StPouKind::PROGRAM;
+    input.pou_signatures.push_back(signature);
+    std::vector<uint8_t> bytes;
+    std::string error;
+    EXPECT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+    return bytes;
+}
+
 StageCommand write_candidate(const TempTree& tree, const std::string& operation,
                              const std::string& revision, const std::vector<uint8_t>& bytes,
                              const std::string& instance)
@@ -914,4 +933,37 @@ TEST(ProgrammingStageAtomicity, EnableIntentAppliesAtSafeBoundaryWhileScanRuns)
     ASSERT_NE(boiler, nullptr);
     EXPECT_TRUE(boiler->enabled) << "Enable cuối cùng phải thắng";
     EXPECT_EQ(boiler->state, StProgramState::RUNNING);
+}
+
+/* `ISS-STED-19` — ARTIFACT SAI `targetAbi`: TỪ CHỐI KÈM LÝ DO, LKG GIỮ NGUYÊN.
+ *
+ * Hai nửa của một tiêu chí, và cả hai đều phải đúng cùng lúc. Từ chối mà xoá
+ * mất trạng thái sống thì một gói sai phiên bản hạ được cả thiết bị; giữ
+ * nguyên trạng thái nhưng chỉ nói "bị từ chối" thì người vận hành không biết
+ * phải biên dịch lại bằng hồ sơ nào. */
+TEST(ProgrammingStageAtomicity, ForeignTargetAbiIsRejectedWithReadableReasonAndKeepsLiveState)
+{
+    RunningSystem system;
+    ASSERT_NO_FATAL_FAILURE(system.build());
+    const LiveSnapshot before = system.snapshot();
+
+    const uint32_t foreign_abi = st_profile_generated::kTargetAbi + 1u;
+    const std::vector<uint8_t> foreign = package_with_foreign_abi(foreign_abi);
+    const StageCommand command =
+        write_candidate(system.tree, kOperation2, kRevision2, foreign, "P_ahu");
+
+    std::string detail;
+    std::string error;
+    EXPECT_FALSE(system.coordinator->stage(command, &detail, &error));
+    EXPECT_EQ(detail, "PKG-E-004") << "error: " << error;
+
+    /* Lý do phải nêu CẢ HAI phía. Chỉ nêu một phía thì người đọc vẫn không biết
+     * bên nào là bên cũ. */
+    EXPECT_NE(error.find(std::to_string(foreign_abi)), std::string::npos)
+        << "lý do phải nêu ABI của gói: " << error;
+    EXPECT_NE(error.find(std::to_string(st_profile_generated::kTargetAbi)), std::string::npos)
+        << "lý do phải nêu ABI runtime nhận: " << error;
+
+    /* LKG và toàn bộ trạng thái sống không được suy suyển vì một gói bị từ chối. */
+    expect_unchanged(before, system.snapshot(), "gói sai targetAbi");
 }

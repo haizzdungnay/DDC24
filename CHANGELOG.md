@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-19` bộ ba phiên bản ngôn ngữ/artifact được công bố và ĐƯỢC KIỂM (#358, 2026-09-01)
+
+- **Triệu chứng.** `PROGRAMMING_LIBRARY_VERSION` (`rev-a.3`) và
+  `PROGRAMMING_LIBRARY_REGISTRY_SHA256` được sinh sẵn vào bundle FE, nhưng `grep` toàn bộ
+  `apps/web-ui/src` (trừ `generated/`) **không ra một chỗ nào đọc chúng**. Một phép kiểm
+  tra được sinh ra rồi bỏ đó không phải là một phép kiểm tra — đó là một phép kiểm tra
+  *tưởng đã có*. Hệ quả: bundle FE cũ vẫn vẽ palette, từ khoá và chữ ký hàm của một phiên
+  bản **khác** với phiên bản thiết bị đang biên dịch, và không ai biết. Song song đó,
+  runtime **từ chối đúng** artifact không tương thích nhưng chỉ nói `"package v2 rejected
+  by loader"` — một câu không cho biết lệch ở đâu, cũng không cho biết bên nào là bên cũ.
+- **Nguyên nhân gốc.** Ba phiên bản quyết định "FE và thiết bị có nói cùng một ngôn ngữ
+  không" nằm rải ba nơi — hồ sơ ngôn ngữ ST ở compiler, registry thư viện ở domain, ABI ở
+  profile — và **không endpoint nào gom chúng lại**. Rải rác thì mỗi bên tự kiểm một mảnh,
+  và lệch ở mảnh không ai kiểm sẽ đi qua trong im lặng.
+- **Cách sửa.**
+  - **Hợp đồng.** `ProgrammingCapabilities.compatibility` là **một khối required** gồm
+    `stLanguageProfileVersion` + `stLanguageProfileSha256` + `libraryRegistryVersion` +
+    `libraryRegistrySha256` + `compilerProfileId` + `targetAbi`. `ProgrammingArtifact` mang
+    thêm `stLanguageProfileVersion` để một artifact đọc lại sau này, tách khỏi phản hồi
+    sinh ra nó, vẫn tự nói được nó biên dịch dưới hồ sơ nào.
+  - **Backend.** `currentCompatibility()` đọc thẳng từ các hằng **sinh tự động**
+    (`domain.STLanguageProfileVersion`, `domain.SystemLibraryVersion`, `domain.ProfileID`,
+    `domain.ProfileTargetABI`…). Chép tay ở đây sẽ tạo phiên bản thứ hai của sự thật, và nó
+    sẽ trôi khỏi bộ sinh đúng vào lúc phép so cần đúng nhất. Khối này **không** biến mất khi
+    Core mất kết nối: đó là hằng đã build vào web-api, không phải thứ hỏi Core mới biết.
+  - **Frontend.** `programmingCompatibility()` so bộ ba của thiết bị với hằng đã build vào
+    bundle và cho ra **một phán quyết duy nhất**; lệch ⇒ **chặn `canEdit`** (không chỉ hiện
+    cảnh báo: cảnh báo mà vẫn cho gõ thì người dùng vẫn gõ, và cái họ gõ ra mới là thứ gây
+    hại), kèm thông báo nêu **cả hai** phiên bản. **Không tự hạ cấp** — FE không có
+    palette/từ khoá của phiên bản cũ nên chỉ đoán được, mà đoán sai ở đây là soạn ra chương
+    trình sai. Thiếu khối `compatibility` ⇒ `UNVERIFIABLE` ⇒ **vẫn chặn**: thiếu bằng chứng
+    không phải bằng chứng khớp (`undefined === undefined` là cái bẫy chính ở đây).
+  - **Runtime.** Mở rộng cơ chế đã có chứ không dựng cơ chế thứ hai: `st_loader` nay nêu
+    **cả hai** giá trị khi từ chối schema/profile/ABI, và `DescribePackageRejection()` (đặt
+    cạnh parser, nơi duy nhất biết bố cục header) diễn giải `PKG-E-004` — vốn gộp lệch hồ sơ
+    với lệch ABI — thành lý do đọc được, tách rõ vế nào lệch. Gói cụt vẫn cho ra câu chung
+    chung: một thông điệp lỗi không được tự nó thành lỗi đọc quá biên.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1374/1374 pass**, exit 0 — trong đó `StIr.VersionRejectionNamesBothSides`,
+    `StPackageV2.RejectionReason*` (3), và
+    `ProgrammingStageAtomicity.ForeignTargetAbiIsRejectedWithReadableReasonAndKeepsLiveState`.
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **193 file / 2256 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` 160.34 KiB, ngân sách
+    R3 165.00 KiB, dư 4.66 KiB).
+
 ### Fixed — `ISS-STED-05` khay Vấn đề của workbench phủ cả POU ST (#355, 2026-09-01)
 
 - **Triệu chứng.** Khay Vấn đề của workbench PGM-02 **bỏ qua mọi POU ST**. POU FBD được
