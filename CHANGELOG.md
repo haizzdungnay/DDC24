@@ -8,6 +8,64 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-STED-08` `ST_SUBSET_SPEC` nói sai về chính compiler đang chạy (#359, 2026-09-02)
+
+- **Triệu chứng.** Bốn chỗ trong `ST_SUBSET_SPEC` mâu thuẫn với code:
+  - **§3.1** ghi miền `TIME` là *"0 … ~292 năm"* và im lặng về trần **literal**. Người đọc
+    dùng bảng này để thiết kế test sẽ viết ca `T#48h` rồi không hiểu vì sao compiler từ chối.
+  - **§5.5** liệt `CASE`, user `FUNCTION` và user `FUNCTION_BLOCK` vào danh sách *"không có"*
+    trong khi **cả ba đều đã có**.
+  - **§9** dòng D5 (*"Có `CASE`, vòng lặp, POU người dùng → Không có"*) và D6 (*"Chỉ
+    `INT`/`REAL`"*) đều sai; và bảng thiếu hẳn `VAR_IN_OUT`, `**`, các nhóm kiểu IEC vắng
+    mặt, các hàm/Function Block chuẩn IEC vắng mặt — thiếu **thật**, nhưng chưa công bố
+    kèm lý do.
+  - **§12** `ST-LEX-002` và `ST-RT-001` được mô tả hẹp hơn công dụng thật của chúng.
+- **Nguyên nhân gốc.** Ba nhóm sai khác nhau, không phải một. (1) §3.1 nhầm **miền lưu trữ**
+  với **miền literal** — hai bất biến khác nhau, thi hành ở hai pha khác nhau. (2) §5.5/§9
+  là bản chép tay của một trạng thái compiler đã cũ, không có cổng nào bắt khi nó trôi.
+  (3) Các mục thiếu ở §9 chưa từng được công bố kèm lý do, mà `ADR-054` phán quyết (3) buộc
+  mọi loại trừ phải có lý do: loại trừ im lặng khiến người dùng gặp `ST-SYN-001` cho một
+  cấu trúc IEC hợp lệ mà không có chỗ nào đọc được vì sao.
+- **Cách sửa.**
+  - **§3.1** nêu **hai** miền tách bạch: literal 0…24 h (`st_limits.hpp:57`, thi hành ở
+    `st_parser.cpp:195`, mã `ST-LEX-002`); giá trị runtime chỉ bị chặn bởi tràn int64
+    (`ST-RT-001`) và kết quả âm (`ST-RT-005`, fault chứ không kẹp 0 im lặng). Rút gọn thành
+    *"`TIME` = 0..24 h"* cũng sai — nó hứa một bất biến runtime mà compiler không thi hành.
+  - **§5.5** bỏ `CASE`/user POU khỏi danh sách "không có", và trỏ nguồn sự thật sang hồ sơ
+    sinh máy thay vì giữ một bản chép tay thứ hai.
+  - **§9** sửa D5/D6; thêm D9 (`RETURN`), D10 (`**`/`EXPT`), D11 (`VAR_IN_OUT` — **chưa có
+    nhưng đã lên lịch**, #367, khác hẳn "loại trừ vĩnh viễn"); công bố **37 mục loại trừ
+    mới** ở tầng kiểu/hàm/Function Block, **mỗi mục kèm lý do riêng**, đặt trong
+    `st_language_profile_v1.curated.json` để được sinh ra và **được kiểm**, thay vì chép tay
+    49 mục vào tài liệu — chép tay là tạo một bản sao sẽ trôi khỏi compiler, đúng lỗi mà
+    §10/§11 cũ đã mắc.
+  - **§12** `ST-LEX-002` còn dùng cho literal `TIME` vượt trần; `ST-RT-001` còn dùng cho
+    tràn int64 khi cộng/trừ `TIME`.
+- **Phát hiện thêm, sửa luôn trong cùng phiên.**
+  - **Cổng đối chiếu hai chiều chỉ phủ statement và operator.** Một mục khai "không có `SIN`"
+    trong khi compiler đã có `SIN` sai đúng y như khai "không có `CASE`" trong khi đã có
+    `CASE`, nhưng cổng cũ không thấy. Đã mở rộng sang **thư viện** và **hệ kiểu**, thêm chiều
+    thứ tư: một mục ở `plannedAdditions` mà compiler **đã** hiện thực hoá cũng làm đỏ — tài
+    liệu không được hứa một thứ đã giao.
+  - **Chính cổng chưa từng được kiểm.** `st_language_profile_contract` luôn xanh, và "luôn
+    xanh" có hai cách giải thích: cổng đang kiểm và mọi thứ đều đúng, hoặc cổng đã ngừng
+    kiểm — từ ngoài nhìn vào, hai trường hợp ấy giống hệt nhau, và đó đúng là cách
+    `F-STED-005` sống sót qua nhiều revision. Thêm `scripts/verify_st_profile_gate.py`
+    (ctest `st_language_profile_gate`): tiêm **6 hồ sơ sai đã biết** và đòi cổng nổ đỏ từng ca.
+  - **Revision History thiếu hẳn rev 1.2** của `ISS-STED-06` (gỡ §10/§11). Đã bổ sung cùng
+    rev 1.3 của lần này.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1375/1375 pass**, exit 0 (configure 0, build 0) — gồm `st_language_profile_contract`
+    và `st_language_profile_gate` mới.
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **193 file / 2256 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` trong ngân sách R3).
+  - Ghi chú phiên bản: `profileVersion` giữ **1.0.0** vì **bề mặt ngôn ngữ không đổi** —
+    thay đổi nằm ở phần lý do được công bố. `sha256` của hồ sơ đổi theo nội dung, và đó
+    chính là thứ phép so tương thích `ISS-STED-19` dùng để phân biệt hai hồ sơ cùng nhãn
+    phiên bản mà khác nội dung.
+
 ### Added — `ISS-STED-19` bộ ba phiên bản ngôn ngữ/artifact được công bố và ĐƯỢC KIỂM (#358, 2026-09-01)
 
 - **Triệu chứng.** `PROGRAMMING_LIBRARY_VERSION` (`rev-a.3`) và

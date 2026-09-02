@@ -1,7 +1,7 @@
 # ST Subset Specification — MK-DDC-24 FW SOM Program Runtime
 
 > **Document ID:** SW-ST-SUBSET-MK-DDC-24-VI
-> **Phiên bản:** 1.1 | 2026-08-15 (đính chính §3.1/§3.5/§6.2 theo D-06, xem §14)
+> **Phiên bản:** 1.3 | 2026-09-02 (đính chính §3.1/§5.5/§9/§12 theo `ISS-STED-08`, xem §14)
 > **Workstream:** Supporting As-Built của compiler ST; plan C0.4 lịch sử đã bị
 > [Plan 53](../../03_implementation/53_PROGRAMMING_IMPLEMENTATION_PLAN.md) thay
 > thế và phục hồi được tại commit `b69fdf1`.
@@ -101,11 +101,35 @@ Quy tắc:
 | `DINT` | int32 (bù 2) | −2 147 483 648 … 2 147 483 647 | `0` | Implemented — cần Test Result/V&V bổ sung |
 | `UINT` | uint16 | 0 … 65 535 | `0` | Implemented — cần Test Result/V&V bổ sung |
 | `REAL` | IEEE-754 binary32 | hữu hạn (NaN/Inf **bị từ chối**, §6.3) | `0.0` | Implemented |
-| `TIME` | int64, đơn vị **nanosecond** | 0 … ~292 năm; **không âm** | `T#0s` | Implemented |
+| `TIME` | int64, đơn vị **nanosecond** | **Literal:** 0 … 24 h. **Giá trị runtime:** 0 … ~292 năm; **không âm** (xem ghi chú dưới bảng) | `T#0s` | Implemented |
+
+> **Đính chính 2026-09-02 (`ISS-STED-08`, `F-STED-006`) — `TIME` có HAI miền,
+> không phải một.** Bản trước chỉ ghi *"0 … ~292 năm"*, tức miền lưu trữ, và
+> im lặng về trần của **literal**. Người đọc dùng bảng này để thiết kế test sẽ
+> viết một ca `T#48h` và không hiểu vì sao compiler từ chối.
+>
+> - **Literal `T#…` bị chặn ở 24 giờ**, tại thời điểm parse:
+>   [`st_limits.hpp:57`](../../../apps/core/application/st/st_limits.hpp)
+>   (`kMaxTimeLiteralNs = 86400000000000`), thi hành ở
+>   [`st_parser.cpp:195`](../../../apps/core/application/st/st_parser.cpp),
+>   mã `ST-LEX-002`. `DDD-LANG-PROG-001` §4.2 ghi đúng điều này từ đầu; chính
+>   tài liệu **này** mới là chỗ sai.
+> - **Giá trị `TIME` lúc chạy KHÔNG bị chặn ở 24 giờ.** `+`/`-` trên `TIME` cho
+>   phép vượt qua trần literal; điều được thi hành ở runtime là **tràn int64**
+>   (`ST-RT-001`) và **kết quả âm** (`ST-RT-005`) — xem
+>   [`st_exec.cpp`](../../../apps/core/application/st/st_exec.cpp) nhánh
+>   `ADD`/`SUB` của `StType::TIME`. Trừ ra âm là **fault**, không kẹp về 0 im
+>   lặng, vì kẹp sẽ giấu lỗi logic của người viết chương trình.
+>
+> Viết gọn thành "`TIME` = 0..24 h" cũng sai, chỉ là sai theo chiều ngược lại:
+> nó hứa một bất biến runtime mà compiler không thi hành.
 
 Rev A.0 **không có**: `SINT`/`LINT`/`USINT`/`UDINT`/`ULINT`, `LREAL`,
-`BYTE`/`WORD`/`DWORD`, `STRING`/`WSTRING`, `DATE`/`TIME_OF_DAY`/`DATE_AND_TIME`,
-`ARRAY`, `STRUCT`, kiểu người dùng định nghĩa, con trỏ, `ANY`.
+`BYTE`/`WORD`/`DWORD`/`LWORD`, `STRING`/`WSTRING`,
+`DATE`/`TIME_OF_DAY`/`DATE_AND_TIME`, `ARRAY`, `STRUCT`, kiểu người dùng định
+nghĩa, con trỏ, `ANY`. Từng mục kèm **lý do** ở
+[`st_language_profile_v1.json`](../../../contracts/programming/st_language_profile_v1.json)
+(`deliberateExclusions`) — xem §9.
 
 ### 3.2 Literal
 
@@ -280,8 +304,27 @@ Chỉ đọc. Chỉ áp dụng cho instance FB đã khai báo. Ghi vào thành v
 
 ### 5.5 Không có trong Rev A.0
 
-`CASE`, `FOR`, `WHILE`, `REPEAT`, `EXIT`, `CONTINUE`, `RETURN`, `GOTO`, gọi `FUNCTION`
-do người dùng định nghĩa, `FUNCTION_BLOCK` do người dùng định nghĩa.
+`FOR`, `WHILE`, `REPEAT`, `EXIT`, `RETURN`, `GOTO`, `CONTINUE`.
+
+> **Đính chính 2026-09-02 (`ISS-STED-08`, `F-STED-006`).** Danh sách cũ còn kể
+> thêm `CASE`, gọi `FUNCTION` do người dùng định nghĩa và `FUNCTION_BLOCK` do
+> người dùng định nghĩa. **Cả ba đều đã có** — kết luận của `ISS-STED-07`, và
+> nay được đo lại mỗi lần build chứ không phải khẳng định bằng lời:
+> `CASE` xuất hiện với `"accepted": true` trong `statements`, còn `FUNCTION` và
+> `FUNCTION_BLOCK` có trong `pouKinds` của
+> [`st_language_profile_v1.json`](../../../contracts/programming/st_language_profile_v1.json),
+> sinh bằng cách cho parser **nuốt thật** một mẫu tối thiểu.
+>
+> Nói "không có" về một thứ đã có là kiểu sai đắt nhất trong tài liệu ngôn ngữ:
+> người viết chương trình đọc xong sẽ đi vòng qua một cấu trúc họ được phép
+> dùng, và người lập kế hoạch sẽ xếp lịch làm lại thứ đã giao.
+
+**Nguồn sự thật cho mục này** là hồ sơ sinh máy, không phải danh sách chép tay
+ở trên: bảng câu lệnh §2 của
+[`ST_LANGUAGE_PROFILE.generated.md`](ST_LANGUAGE_PROFILE.generated.md) ghi rõ
+từng câu lệnh được chấp nhận hay bị từ chối, kèm mã lỗi khi bị từ chối. Danh
+sách ở đây giữ lại để đọc nhanh và **phải** khớp với hồ sơ đó; lệch nhau thì
+`ctest` (`st_language_profile_contract`) làm đỏ.
 
 ---
 
@@ -385,16 +428,68 @@ Các giá trị này là **normative**. Đổi giá trị = đổi contract vớ
 
 ## 9. Khác biệt cố ý so với IEC 61131-3
 
+> **Đính chính 2026-09-02 (`ISS-STED-08`, `F-STED-006`/`F-STED-009`).** Bảng cũ
+> sai hai dòng và thiếu bốn nhóm:
+>
+> - **D5 sai.** Nó ghi *"Có `CASE`, vòng lặp, POU người dùng → Không có"*. `CASE`
+>   và POU người dùng **đã có** (§5.5); chỉ vòng lặp là không.
+> - **D6 sai.** Nó ghi *"Chỉ `INT`/`REAL`"*. Compiler nhận **sáu** kiểu cơ sở:
+>   `BOOL`, `INT`, `DINT`, `UINT`, `REAL`, `TIME` (§3.1).
+> - **Thiếu** `VAR_IN_OUT`, toán tử `**`, các nhóm kiểu IEC vắng mặt, và các
+>   hàm/Function Block thư viện chuẩn IEC vắng mặt — tất cả đều thiếu **thật**,
+>   nhưng chưa được công bố kèm lý do. `ADR-054` phán quyết (3) buộc mọi loại
+>   trừ phải công bố **kèm lý do**: loại trừ không nêu lý do là loại trừ im
+>   lặng, và người dùng gặp `ST-SYN-001` cho một cấu trúc IEC hợp lệ sẽ không
+>   có chỗ nào để đọc vì sao.
+
+### 9.1 Khác biệt về ngữ nghĩa
+
 | # | Chuẩn nói | MK-DDC-24 làm | Lý do |
 |---|---|---|---|
 | D1 | `AND`/`OR` có thể rút gọn | Luôn đánh giá đủ | WCET ổn định (§4.4) |
 | D2 | Tràn số nguyên do implementation định nghĩa | Luôn là fault | Wrap âm thầm nguy hiểm trong điều khiển |
 | D3 | Có `&` là bí danh của `AND` | Không hỗ trợ `&` | Một cách viết cho một ý nghĩa |
 | D4 | Tham số FB theo vị trí hoặc theo tên | Chỉ theo tên | Đọc được, khó nhầm |
-| D5 | Có `CASE`, vòng lặp, POU người dùng | Không có | P1, P2 — chấm dứt và không cấp phát |
-| D6 | Nhiều kiểu số | Chỉ `INT`/`REAL` | Đủ cho HVAC, giảm bề mặt lỗi |
+| D5 | Có `CASE`, vòng lặp, POU người dùng | `CASE` **có**, POU người dùng **có**; **vòng lặp không** (`FOR`/`WHILE`/`REPEAT`/`EXIT`) | P1 — mọi scan phải chấm dứt trong thời gian chặn trên biết trước; số vòng phụ thuộc dữ liệu làm WCET không tính được tĩnh |
+| D6 | Nhiều kiểu số | Sáu kiểu cơ sở: `BOOL`, `INT`, `DINT`, `UINT`, `REAL`, `TIME` | Đủ cho HVAC, giảm bề mặt lỗi và bảng ép kiểu phải chứng minh |
 | D7 | `REAL` cho phép `NaN`/`Inf` | Luôn từ chối | §6.3 |
 | D8 | Literal đa cơ số, dấu gạch dưới | Chỉ thập phân | Giảm bề mặt lexer |
+| D9 | `RETURN` thoát sớm khỏi POU | Không có | Nhiều điểm thoát làm cây WCET rẽ nhánh không cần thiết; `FUNCTION` gán kết quả qua ô mang tên hàm như IEC quy định |
+| D10 | Có toán tử luỹ thừa `**` (và hàm `EXPT`) | Không có cả hai | Luỹ thừa trên REAL không có chặn trên chi phí tất định trên FPU mềm của target, và không có ca dùng HVAC nào trong Rev A. Dùng phép nhân tường minh |
+| D11 | Có `VAR_IN_OUT` (truyền tham chiếu) | **Chưa có — đã lên lịch**, không phải loại trừ vĩnh viễn | Đi cùng `ARRAY` tĩnh và `STRUCT`: không có kiểu hợp thành thì truyền tham chiếu gần như vô dụng. Đợt gần, [#367](https://github.com/Mekong-HCM/MK-DDC-24/issues/367) |
+
+### 9.2 Cấu trúc IEC vắng mặt — danh sách sinh máy, không chép tay
+
+Bốn nhóm dưới đây **không** liệt kê lại trong tài liệu này. Chép tay một danh
+sách 49 mục là tạo ra một bản sao sẽ trôi khỏi compiler, và đó đúng là lỗi mà
+§10/§11 cũ đã mắc. Nguồn sự thật là hồ sơ máy đọc:
+
+| Nhóm | Ví dụ | Nơi tra |
+|---|---|---|
+| Câu lệnh | `FOR`, `WHILE`, `REPEAT`, `EXIT`, `RETURN` | `deliberateExclusions` kind `statement` |
+| Toán tử | `**` | `deliberateExclusions` kind `operator` |
+| Kiểu | `SINT`, `USINT`, `LINT`, `ULINT`, `UDINT`, `LWORD`, `STRING`, `WSTRING`, `DATE`, `TOD`, `DT` | `deliberateExclusions` kind `type` |
+| Hàm thư viện chuẩn | `LN`, `LOG`, `EXP`, `EXPT`, `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN`, `TRUNC`, `MUX`, `SHL`, `SHR`, `ROL`, `ROR`, và họ hàm chuỗi (`LEN`, `LEFT`, `RIGHT`, `MID`, `CONCAT`, `INSERT`, `DELETE`, `REPLACE`, `FIND`) | `deliberateExclusions` kind `function` |
+| Function Block chuẩn | `SR`, `RS`, `CTUD`, `RTC`, `SEMA` | `deliberateExclusions` kind `functionBlock` |
+
+**Mỗi mục kèm lý do riêng** trong
+[`contracts/programming/st_language_profile_v1.json`](../../../contracts/programming/st_language_profile_v1.json),
+và được kết xuất sang §5 của
+[`ST_LANGUAGE_PROFILE.generated.md`](ST_LANGUAGE_PROFILE.generated.md) để đọc.
+
+**Vì sao danh sách này đáng tin.** `ctest` chạy hai cổng:
+
+1. `st_language_profile_contract` — đối chiếu **hai chiều** giữa hồ sơ và
+   compiler. Một mục khai "loại trừ" mà compiler vẫn nhận ⇒ **đỏ** (đúng chế độ
+   hỏng `F-STED-005`); một cấu trúc compiler từ chối mà hồ sơ không ghi lý do ⇒
+   **đỏ**. `ISS-STED-08` mở rộng cổng này sang **thư viện** và **hệ kiểu**: khai
+   "không có `SIN`" trong khi compiler đã có `SIN` sai đúng y như khai "không có
+   `CASE`" trong khi đã có `CASE`. Cổng cũng bắt một mục ở `plannedAdditions` mà
+   compiler **đã** hiện thực hoá — tài liệu không được hứa một thứ đã giao.
+2. `st_language_profile_gate` — kiểm **chính cổng số 1** bằng cách tiêm sáu hồ
+   sơ sai đã biết và đòi nó phải nổ đỏ từng ca. Một cổng luôn xanh có hai cách
+   giải thích: nó đang kiểm và mọi thứ đều đúng, hoặc nó đã ngừng kiểm — từ
+   ngoài nhìn vào, hai trường hợp ấy giống hệt nhau.
 
 Mọi khác biệt trên phải xuất hiện trong tài liệu bàn giao BE
 ([`FW_SOM_BE_INTEGRATION_GUIDE`](../../handoff/FW_SOM_BE_INTEGRATION_GUIDE.md)).
@@ -468,7 +563,7 @@ mỗi lần chạy generator. Bảng ấy không thể lạc hậu mà vẫn xan
 | Code | Ý nghĩa |
 |---|---|
 | `ST-LEX-001` | Ký tự không hợp lệ |
-| `ST-LEX-002` | Literal `TIME` sai định dạng (sai thứ tự đơn vị, lặp đơn vị, đơn vị lạ) |
+| `ST-LEX-002` | Literal `TIME` sai định dạng (sai thứ tự đơn vị, lặp đơn vị, đơn vị lạ) **hoặc vượt trần 24 giờ** (`st_limits.hpp:57`) |
 | `ST-LEX-003` | Chú thích `(*` không được đóng trước hết file |
 
 ### 12.2 Syntax
@@ -504,7 +599,7 @@ và được xử lý theo chính sách ở C0.7.
 
 | Code | Ý nghĩa |
 |---|---|
-| `ST-RT-001` | Tràn số `INT` |
+| `ST-RT-001` | Tràn số nguyên (`INT`/`DINT`/`UINT`) **hoặc tràn int64 khi cộng/trừ `TIME`** |
 | `ST-RT-002` | Chia cho 0 |
 | `ST-RT-003` | Chuyển kiểu ngoài miền |
 | `ST-RT-004` | Kết quả `REAL` không hữu hạn |
@@ -605,3 +700,5 @@ Hành vi mong đợi (chu kỳ Task 1 s):
 |---|---|---|
 | 1.0 | 2026-07-28 | Tạo mới. Đóng workstream C0.4 (MS-02). Chốt phạm vi: `BOOL`/`INT`/`REAL`/`TIME`, số học đầy đủ, `XOR`, `ELSIF`, chú thích, Function Block chuẩn `TON`/`TOF`/`R_TRIG`/`F_TRIG`, `VAR`/`VAR RETAIN`, 11 hàm chuẩn. Grammar EBNF đầy đủ, bảng đối chiếu với parser hiện tại (phủ ~40%), 8 khác biệt cố ý so với IEC, danh mục diagnostic code đầy đủ, chương trình tham chiếu normative. |
 | 1.1 | 2026-08-15 | **WP-04 (D-06, `REV-PROG-OVERVIEW-DESIGN-GAP-2026-08-15` §7.3/§7.4).** Đính chính §3.1: `INT` là int16 (không phải int32 như 1.0 ghi sai); thêm `DINT`(int32)/`UINT`(uint16) — có thật trong `st_program.cpp`, 1.0 từng khẳng định sai là "không có". §3.5: thêm 10 hàm chuyển đổi `INT/DINT/UINT/REAL` có thật trong compiler nhưng thiếu ở 1.0. §6.2: thêm Function Block `PID` (8 input/2 output, có thật trong `st_program.cpp`) kèm ghi chú trạng thái phê duyệt — semantics PID **chưa được Controls+Safety review chính thức**, khác `DINT`/`UINT` (chỉ cần Test Result/V&V bổ sung, không cần review riêng). Xác nhận trực tiếp từ source, không suy đoán từ tài liệu khác. |
+| 1.2 | 2026-09-01 | **`ISS-STED-06` / `F-STED-007`.** Gỡ hẳn EBNF chép tay ở §10 và bảng đối chiếu grammar↔parser ở §11. Cả hai đã trôi khỏi compiler: EBNF thiếu luật `CASE` và POU người dùng, còn bảng §11 ghim ở commit `7ccf992` kết luận *"phủ ~40%"* trong khi sai gần như từng dòng. Thay bằng hồ sơ **sinh máy** `contracts/programming/st_language_profile_v1.json` + `ST_LANGUAGE_PROFILE.generated.md`, đo bằng cách cho parser nuốt thật một mẫu tối thiểu cho từng câu lệnh/toán tử. Một tài liệu văn phạm sai là công cụ sinh lỗi cho người viết chương trình; một bảng đối chiếu sai 100% còn nguy hiểm hơn không có bảng, vì nó trông như bằng chứng. |
+| 1.3 | 2026-09-02 | **`ISS-STED-08` / `F-STED-006`, `F-STED-009`.** Bốn đính chính, mỗi cái là một chỗ tài liệu nói sai về chính compiler đang chạy. **§3.1** — `TIME` có **hai** miền chứ không một: literal bị chặn ở **24 giờ** (`st_limits.hpp:57`, thi hành ở `st_parser.cpp:195`, mã `ST-LEX-002`), còn giá trị runtime chỉ bị chặn bởi tràn int64 (`ST-RT-001`) và kết quả âm (`ST-RT-005`). Bản 1.0/1.1 chỉ ghi *"0 … ~292 năm"* nên người đọc thiết kế test sẽ viết ca `T#48h` và không hiểu vì sao bị từ chối; nhưng rút gọn thành *"0..24 h"* cũng sai theo chiều ngược lại, vì nó hứa một bất biến runtime mà compiler không thi hành. **§5.5** — bỏ `CASE`, user `FUNCTION` và user `FUNCTION_BLOCK` khỏi danh sách "không có": cả ba **đã có** (kết luận `ISS-STED-07`, nay đo lại mỗi lần build). Nói "không có" về một thứ đã có khiến người viết chương trình đi vòng qua cấu trúc họ được phép dùng, và người lập kế hoạch xếp lịch làm lại thứ đã giao. **§9** — sửa D5 (`CASE`/POU người dùng đã có; chỉ vòng lặp là không) và D6 (sáu kiểu cơ sở, không phải chỉ `INT`/`REAL`); thêm D9 `RETURN`, D10 `**`/`EXPT`, D11 `VAR_IN_OUT` (chưa có nhưng **đã lên lịch**, #367); công bố **37 mục loại trừ mới** ở tầng kiểu/hàm/Function Block, mỗi mục **kèm lý do riêng**, đặt trong hồ sơ sinh máy thay vì chép tay — chép tay 49 mục là tạo một bản sao sẽ trôi khỏi compiler, đúng lỗi mà §10/§11 cũ đã mắc. **§12** — `ST-LEX-002` còn dùng cho literal `TIME` vượt trần 24 giờ, và `ST-RT-001` còn dùng cho tràn int64 khi cộng/trừ `TIME`; cả hai đều thiếu ở danh mục cũ. Kèm theo: cổng đối chiếu hai chiều được mở rộng sang **thư viện** và **hệ kiểu** (khai "không có `SIN`" trong khi đã có `SIN` sai y như khai "không có `CASE`" trong khi đã có `CASE`), và bổ sung `st_language_profile_gate` để kiểm **chính cổng** — một cổng luôn xanh có hai cách giải thích, và từ ngoài nhìn vào chúng giống hệt nhau. |

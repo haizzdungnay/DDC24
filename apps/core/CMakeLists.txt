@@ -394,6 +394,18 @@ if(CORE_BUILD_TESTS)
                 ${MKDDC_REPOSITORY_ROOT}/scripts/generate_st_language_profile.py
                 --check
                 --dump-binary $<TARGET_FILE:mkddc-st-profile-dump>)
+
+    # ISS-STED-08 — kiểm CHÍNH CỔNG phía trên.
+    #
+    # `st_language_profile_contract` luôn xanh, và "luôn xanh" có hai cách giải
+    # thích: cổng đang kiểm và mọi thứ đều đúng, hoặc cổng đã ngừng kiểm. Từ
+    # ngoài nhìn vào, hai trường hợp ấy giống hệt nhau — đó đúng là cách
+    # `F-STED-005` sống sót qua nhiều revision. Test này tiêm hồ sơ sai một cách
+    # đã biết và đòi cổng phải nổ đỏ, cho từng chiều đối chiếu.
+    add_test(NAME st_language_profile_gate
+        COMMAND ${Python3_EXECUTABLE}
+                ${MKDDC_REPOSITORY_ROOT}/scripts/verify_st_profile_gate.py
+                --dump-binary $<TARGET_FILE:mkddc-st-profile-dump>)
   endif()
 
   # `T57-2.13`/`T57-3.13`: kiểm ở mức BINARY, vì giá trị của engine nằm ở chỗ nó

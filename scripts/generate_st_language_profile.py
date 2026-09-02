@@ -160,6 +160,40 @@ def cross_check(dumped: dict[str, Any], curated: dict[str, Any], candidates: lis
     library = {entry["name"] for entry in dumped["standardFunctions"]} | {
         entry["name"] for entry in dumped["standardFunctionBlocks"]
     }
+
+    # Chiều thứ ba (`ISS-STED-08`): loại trừ ở tầng THƯ VIỆN và HỆ KIỂU.
+    #
+    # Hai vòng lặp phía trên chỉ phủ statement và operator, vì chỉ hai nhóm đó
+    # được dumper đo bằng cách cho parser nuốt thật một mẫu. Nhưng `F-STED-005`
+    # không phân biệt tầng: một mục khai "không có `SIN`" trong khi compiler đã
+    # có `SIN` sai đúng y như một mục khai "không có `CASE`" trong khi đã có
+    # `CASE`. Trước cổng này, mọi tuyên bố loại trừ về hàm/FB/kiểu là lời nói
+    # suông — và tệ hơn, nó sẽ vẫn xanh vào đúng ngày ai đó hiện thực hoá chúng.
+    scalar_type_names = {entry["name"] for entry in dumped["scalarTypes"]}
+    for item in curated["deliberateExclusions"]:
+        name = item["construct"]
+        kind = item["kind"]
+        if kind in ("function", "functionBlock") and name in library:
+            problems.append(
+                f"'{name}' được khai là LOẠI TRỪ nhưng thư viện chuẩn của compiler CÓ nó. "
+                "Tuyên bố loại trừ phải đúng ở mọi tầng, không riêng statement/operator."
+            )
+        if kind == "type" and name in scalar_type_names:
+            problems.append(
+                f"kiểu '{name}' được khai là LOẠI TRỪ nhưng compiler nhận nó như một kiểu cơ sở. "
+                "Sửa hồ sơ hoặc sửa compiler — không được để cả hai cùng tồn tại."
+            )
+
+    # Một mục `plannedAdditions` đã được hiện thực hoá thì không còn là "dự
+    # kiến": để nguyên sẽ khiến tài liệu hứa hẹn một thứ đã giao, và người đọc
+    # đi tìm nó trong tương lai thay vì dùng ngay.
+    for item in curated["plannedAdditions"]:
+        name = item["construct"]
+        if name in library or name in scalar_type_names or name in accepted:
+            problems.append(
+                f"'{name}' nằm ở `plannedAdditions` nhưng compiler ĐÃ CÓ nó. "
+                "Chuyển nó ra khỏi danh sách dự kiến — tài liệu đang hứa một thứ đã giao."
+            )
     for item in curated["vendorExtensions"]:
         if item["name"] not in library:
             problems.append(
@@ -578,12 +612,30 @@ def main() -> int:
         default=str(ROOT / "build/fw/core/mkddc-st-profile-dump"),
         help="đường dẫn mkddc-st-profile-dump",
     )
+    parser.add_argument(
+        "--curated",
+        default=str(CURATED),
+        # `ISS-STED-08`: chỉ để KIỂM CHÍNH CỔNG. Một cổng chưa bao giờ được
+        # thấy nổ đỏ thì không ai biết nó còn nổ hay không — và một cổng hỏng
+        # im lặng còn tệ hơn không có cổng, vì nó phát ra tín hiệu "đã kiểm".
+        # `verify_st_profile_gate.py` tiêm hồ sơ sai qua tuỳ chọn này và đòi
+        # generator phải thoát khác 0.
+        help="hồ sơ curated thay thế (chỉ dùng để tự kiểm cổng)",
+    )
+    parser.add_argument(
+        "--cross-check-only",
+        action="store_true",
+        help="chỉ chạy đối chiếu hai chiều rồi thoát (dùng để tự kiểm cổng)",
+    )
     args = parser.parse_args()
 
     candidates = function_names()
     dumped = dump_from_compiler(Path(args.dump_binary), candidates)
-    curated = json.loads(CURATED.read_text(encoding="utf-8"))
+    curated = json.loads(Path(args.curated).read_text(encoding="utf-8"))
     cross_check(dumped, curated, candidates)
+    if args.cross_check_only:
+        print("OK: hồ sơ curated không mâu thuẫn với compiler.")
+        return 0
 
     profile = build_profile(dumped, curated, keywords(), diagnostic_codes())
 

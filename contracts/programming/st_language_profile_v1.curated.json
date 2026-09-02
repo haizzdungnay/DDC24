@@ -100,6 +100,265 @@
       "inIec": true,
       "reason": "Ngoài phạm vi Programming Rev A.",
       "authority": "ADR-023"
+    },
+    {
+      "construct": "SINT",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — số nguyên 8 bit không tiết kiệm gì trên ARM 32 bit của target mà lại thêm một bộ quy tắc tràn/ép kiểu nữa vào bề mặt kiểm thử. `INT` phủ trọn dải của nó.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "USINT",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — như `SINT`: dải giá trị nằm gọn trong `UINT`, thêm kiểu chỉ thêm ca ép kiểu phải chứng minh.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "LINT",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — số nguyên 64 bit có nghĩa cho bộ đếm dài hạn, nhưng ở Rev A mọi bộ đếm đều thuộc tầng Historian chứ không thuộc chương trình chu kỳ. `TIME` đã là int64 cho nhu cầu thời gian.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "ULINT",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — như `LINT`, và không có ca dùng HVAC nào cần dải không dấu 64 bit trong một chu kỳ scan.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "UDINT",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — `DINT` và `UINT` đã phủ các dải đang dùng thật; thêm một kiểu nguyên nữa nhân đôi bảng ép kiểu mà không mở thêm ca dùng nào.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "LWORD",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — đi cùng nhóm chuỗi bit `BYTE`/`WORD`/`DWORD`, vốn đã hoãn sang đợt sau; không tách riêng một mình 64 bit.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "WSTRING",
+      "kind": "type",
+      "inIec": true,
+      "reason": "P2 — thừa hưởng nguyên vấn đề cấp phát động của `STRING`, cộng thêm mã hoá rộng. Loại trừ cùng lý do và cùng đợt với `STRING`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "LN",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm siêu việt trên FPU mềm của target không có chặn trên chi phí tất định, mà WCET của mọi scan phải tính được tĩnh. Không có ca dùng HVAC nào trong Rev A cần logarit.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "LOG",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `LN`: chi phí phụ thuộc giá trị trên FPU mềm, không chặn trên tất định được.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "EXP",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `LN`. Đường cong luỹ thừa trong điều khiển HVAC được xấp xỉ bằng bảng tra ở tầng ứng dụng, không bằng hàm ngôn ngữ.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "EXPT",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Dạng hàm của toán tử `**` đã bị loại; giữ một trong hai sẽ mở lại đúng chi phí mà việc loại `**` muốn tránh. Dùng phép nhân tường minh.",
+      "authority": "ST_SUBSET_SPEC §4.2"
+    },
+    {
+      "construct": "SIN",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm lượng giác trên FPU mềm không có chặn trên tất định, và không có ca dùng HVAC nào trong Rev A cần lượng giác trong chu kỳ scan.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "COS",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `SIN`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "TAN",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `SIN`, thêm điểm kỳ dị tại π/2 phải xử lý riêng cho chính sách NaN/Inf ở §6.3.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "ASIN",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `SIN`, thêm miền xác định [-1, 1] phải kiểm ở runtime.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "ACOS",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `ASIN`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "ATAN",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `SIN`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "TRUNC",
+      "kind": "function",
+      "inIec": true,
+      "reason": "`REAL_TO_INT` và họ hàm ép kiểu tường minh đã phủ nhu cầu cắt phần thập phân, với quy tắc làm tròn công bố rõ ở §3.5. Hai đường cho một việc là hai ngữ nghĩa để trôi khỏi nhau.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "MUX",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Chọn theo chỉ số cần kiểu hợp thành hoặc số tham số thay đổi; `SEL` phủ ca chọn hai nhánh, và `IF`/`CASE` phủ phần còn lại một cách đọc được hơn.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "SHL",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Thao tác dịch bit chỉ có nghĩa trên kiểu chuỗi bit (`BYTE`/`WORD`/`DWORD`), vốn hoãn sang đợt sau. Không có kiểu để dịch thì hàm dịch không có miền xác định.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "SHR",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `SHL`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "ROL",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `SHL`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "ROR",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Cùng lý do với `SHL`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "LEN",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi theo sau kiểu `STRING`, vốn bị loại vì cấp phát động trong chu kỳ scan. Liệt kê riêng từng tên để cổng đối chiếu kiểm được từng cái, thay vì một dòng gộp không kiểm được.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "LEFT",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi, theo sau loại trừ `STRING` (cấp phát động trong chu kỳ scan).",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "RIGHT",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi, theo sau loại trừ `STRING`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "MID",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi, theo sau loại trừ `STRING`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "CONCAT",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi, theo sau loại trừ `STRING`. Nối chuỗi còn là ca cấp phát động rõ rệt nhất: độ dài kết quả chỉ biết tại runtime.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "INSERT",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi, theo sau loại trừ `STRING`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "DELETE",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi, theo sau loại trừ `STRING`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "REPLACE",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi, theo sau loại trừ `STRING`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "FIND",
+      "kind": "function",
+      "inIec": true,
+      "reason": "Hàm chuỗi, theo sau loại trừ `STRING`.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "SR",
+      "kind": "functionBlock",
+      "inIec": true,
+      "reason": "Chốt set-ưu-tiên viết được bằng một `IF` hai nhánh trên một biến `BOOL` có `RETAIN`, và viết tường minh thì thứ tự ưu tiên hiện ra trên mã thay vì nấp trong tên khối.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "RS",
+      "kind": "functionBlock",
+      "inIec": true,
+      "reason": "Chốt reset-ưu-tiên: cùng lý do với `SR`. Đúng cặp này là nơi người viết chương trình hay nhớ nhầm bên nào thắng.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "CTUD",
+      "kind": "functionBlock",
+      "inIec": true,
+      "reason": "`CTU` và `CTD` đã có; bộ đếm hai chiều thêm một tập ngữ nghĩa tải/đặt lại đồng thời phải chứng minh, trong khi ghép hai khối đã có phủ được ca dùng.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "RTC",
+      "kind": "functionBlock",
+      "inIec": true,
+      "reason": "Đồng hồ thời gian thực thuộc tầng Schedule chứ không thuộc ngôn ngữ điều khiển chu kỳ; nó cũng kéo theo `DT`, vốn đã bị loại vì lịch/múi giờ.",
+      "authority": "ADR-054 phán quyết (4)"
+    },
+    {
+      "construct": "SEMA",
+      "kind": "functionBlock",
+      "inIec": true,
+      "reason": "Semaphore giả định nhiều luồng tranh chấp. Rev A chạy một task tuần tự, nên khối này không có vấn đề nào để giải mà chỉ thêm một đường chặn scan.",
+      "authority": "ADR-054 phán quyết (4)"
     }
   ],
   "plannedAdditions": [
