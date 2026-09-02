@@ -519,6 +519,20 @@ private:
             if (!parse_var_block(out, diag)) return false;
         }
 
+        /* `ISS-STED-16` — nói thẳng khi gặp một khối khai báo IEC chưa mở.
+         *
+         * Đặt NGAY SAU vòng đọc khối, trước khi rơi vào danh sách câu lệnh:
+         * để parser đi tiếp thì `VAR_IN_OUT` sẽ bị hiểu thành một phép gán và
+         * lỗi trả về trỏ sai chỗ, sai loại. Người dùng cần biết mình viết một
+         * cấu trúc IEC hợp lệ mà bản này chưa nhận, không phải nghĩ mình gõ
+         * sai cú pháp. */
+        if (at_unsupported_var_block()) {
+            const Token& block = peek();
+            return fail("declaration block '" + block.text +
+                            "' is valid IEC 61131-3 but not supported in Rev A",
+                        diag);
+        }
+
         /* Ràng buộc kind trên khối VAR — kiểm SAU khi đọc hết để thông điệp nói
          * đúng khối vi phạm chứ không phải khối đầu tiên gặp phải. */
         if (!check_var_blocks_for_kind(*out, diag)) return false;
@@ -581,6 +595,19 @@ private:
             "REPEAT", "UNTIL", "END_REPEAT", "EXIT", "CONTINUE", "RETURN", "GOTO",
             "VAR_GLOBAL", "VAR_EXTERNAL", "NATIVE", "POINTER", "REFERENCE", "AT",
             "ARRAY", "STRUCT", "STRING", "WSTRING",
+            /* `ISS-STED-16` — giữ chỗ để lỗi NÓI ĐÚNG BẢN CHẤT.
+             *
+             * Thiếu hai từ này, lexer coi `VAR_IN_OUT` là một định danh bình
+             * thường: `at_var_block_start()` không nhận nó là mở khối, parser
+             * đọc hết khối `VAR` rồi chuyển sang danh sách câu lệnh, gặp
+             * `VAR_IN_OUT` và cố hiểu thành một phép gán. Người dùng nhận về
+             * một lỗi cú pháp khó hiểu ở dòng SAU chỗ họ viết, chứ không phải
+             * câu trả lời thật là "Rev A chưa hỗ trợ khối này".
+             *
+             * `ADR-054` đã chốt sẽ THI HÀNH `VAR_IN_OUT` ở đợt gần; tới lúc đó
+             * hai từ này chuyển từ "giữ chỗ" sang "mở khối". Giữ chỗ là trạng
+             * thái TRUNG GIAN đúng, không phải một tuyên bố loại trừ. */
+            "VAR_IN_OUT", "VAR_TEMP",
         };
         for (const char* k : kKeywords)
             if (up == k) return true;
@@ -771,6 +798,15 @@ private:
     bool at_var_block_start() const
     {
         return at_kw("VAR") || at_kw("VAR_INPUT") || at_kw("VAR_OUTPUT");
+    }
+
+    /* Khối khai báo của IEC mà Rev A CHƯA mở. Tách khỏi `at_var_block_start()`
+     * để nơi gọi phân biệt được "không phải khối khai báo" với "là khối khai
+     * báo nhưng chưa hỗ trợ" — hai câu trả lời khác nhau cho người dùng. */
+    bool at_unsupported_var_block() const
+    {
+        return at_kw("VAR_IN_OUT") || at_kw("VAR_TEMP") ||
+               at_kw("VAR_GLOBAL") || at_kw("VAR_EXTERNAL");
     }
 
     bool parse_var_block(StProgram* out, StDiagnostic* diag)

@@ -68,4 +68,6 @@ export const ST_CORE_RESERVED_WORDS: readonly string[] = [
   'STRUCT',
   'STRING',
   'WSTRING',
+  'VAR_IN_OUT',
+  'VAR_TEMP',
 ]

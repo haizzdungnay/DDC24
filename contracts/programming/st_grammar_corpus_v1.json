@@ -157,6 +157,30 @@
       "note": "Literal đa cơ số bị loại để giảm bề mặt lexer (D8).",
       "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nn := 16#FF;\nEND_PROGRAM\n",
       "rejectedWith": "ST-LEX-001"
+    },
+    {
+      "id": "var-in-out-block",
+      "rule": "VAR_IN_OUT",
+      "accepted": false,
+      "note": "ADR-054 đã chốt THI HÀNH VAR_IN_OUT ở đợt gần (#367); tới lúc đó vector này chuyển sang accepted. Hôm nay nó khoá một điều khác: lỗi phải nói ĐÚNG BẢN CHẤT — 'hợp lệ theo IEC nhưng Rev A chưa hỗ trợ' — chứ không phải một lỗi cú pháp khó hiểu ở dòng sau chỗ người dùng viết.",
+      "source": "PROGRAM P_corpus\nVAR_IN_OUT p : REAL; END_VAR\np := p + 1.0;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "id": "var-temp-block",
+      "rule": "VAR_TEMP",
+      "accepted": false,
+      "note": "Như VAR_IN_OUT: giữ chỗ để thông điệp đúng loại. VAR_TEMP chưa nằm trong đợt gần.",
+      "source": "PROGRAM P_corpus\nVAR_TEMP t : REAL; END_VAR\nt := 1.0;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "id": "struct-declaration",
+      "rule": "STRUCT",
+      "accepted": false,
+      "note": "STRUCT thuộc đợt gần theo ADR-054 điểm 5, cùng VAR_IN_OUT và ARRAY tĩnh. Compiler từ chối ở pha SEMANTIC (`ST-SEM-005`, kiểu không rõ) chứ không phải pha cú pháp: `STRUCT` được giữ chỗ như một từ khoá nên lexer nhận nó, và chỗ hỏng là 'không có kiểu tên STRUCT'.",
+      "source": "PROGRAM P_corpus\nVAR s : STRUCT a : REAL; END_STRUCT; END_VAR\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SEM-005"
     }
   ]
 }

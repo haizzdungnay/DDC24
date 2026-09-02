@@ -40,7 +40,22 @@ const POU_OPENERS: Record<string, string> = {
   FUNCTION_BLOCK: 'END_FUNCTION_BLOCK',
 }
 
-const VAR_OPENERS = new Set(['VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR_IN_OUT', 'VAR_TEMP', 'VAR_GLOBAL'])
+/* `ISS-STED-16` — chỉ những khối compiler THẬT SỰ mở.
+ *
+ * Danh sách này từng gồm cả `VAR_IN_OUT`, `VAR_TEMP` và `VAR_GLOBAL`; compiler
+ * không mở khối nào trong ba cái đó. Corpus văn phạm dùng chung (`ISS-STED-13`)
+ * bắt được ngay khi ba vector mới được thêm — cùng đúng một chế độ trôi
+ * `F-STED-011`: FE hiểu một văn phạm rộng hơn thiết bị, và formatter viết lại
+ * mã theo văn phạm ấy.
+ *
+ * `ADR-054` đã chốt sẽ mở `VAR_IN_OUT` ở đợt gần (#367). Khi compiler mở, thêm
+ * lại vào đây VÀ đổi vector corpus sang `accepted: true` — hai phía cùng một
+ * lần, đó là toàn bộ điểm của việc có corpus chung. */
+const VAR_OPENERS = new Set(['VAR', 'VAR_INPUT', 'VAR_OUTPUT'])
+
+/* Khối khai báo IEC hợp lệ mà Rev A chưa mở. Tách ra để thông điệp nói đúng
+ * bản chất, giống hệt `at_unsupported_var_block()` phía compiler. */
+const UNSUPPORTED_VAR_OPENERS = new Set(['VAR_IN_OUT', 'VAR_TEMP', 'VAR_GLOBAL', 'VAR_EXTERNAL'])
 
 class Parser {
   private at = 0
@@ -164,6 +179,14 @@ class Parser {
 
     const varBlocks: StVarBlock[] = []
     while (this.isKeyword(this.peek(), ...VAR_OPENERS)) varBlocks.push(this.parseVarBlock())
+    const unsupported = this.peek()
+    if (unsupported && this.isKeyword(unsupported, ...UNSUPPORTED_VAR_OPENERS)) {
+      throw new StParseError(
+        `Khối "${unsupported.text}" hợp lệ theo IEC 61131-3 nhưng Rev A chưa hỗ trợ — ` +
+        'formatter không định dạng đoạn mã này',
+        unsupported.line,
+      )
+    }
 
     const body = this.parseStatements(new Set([closer]))
     const endTrivia = this.takeTrivia()

@@ -643,7 +643,9 @@
     "ARRAY",
     "STRUCT",
     "STRING",
-    "WSTRING"
+    "WSTRING",
+    "VAR_IN_OUT",
+    "VAR_TEMP"
   ],
   "scalarTypes": [
     {
@@ -687,7 +689,7 @@
     }
   ],
   "schemaVersion": 1,
-  "sha256": "3d3c9569262f6b2fcec0e6c966bc9176aa2900454fd01cd96d42d5304e05a90f",
+  "sha256": "e06a207e67318c8e81466880cfda057ff460b48e532f980ac043ad2985b9c661",
   "standardFunctionBlocks": [
     {
       "inputs": [

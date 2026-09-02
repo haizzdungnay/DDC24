@@ -8,6 +8,56 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-16` bước 0 của đợt hệ kiểu: giữ chỗ `VAR_IN_OUT`/`VAR_TEMP` + thiết kế đợt gần (#367, 2026-09-02)
+
+- **Triệu chứng.** `VAR_IN_OUT` không nằm trong `kKeywords[]`, nên lexer coi nó là một
+  **định danh bình thường**: `at_var_block_start()` không nhận nó là mở khối, parser đọc
+  hết khối `VAR` rồi chuyển sang danh sách câu lệnh, gặp `VAR_IN_OUT` và cố hiểu thành
+  một phép gán. Người dùng nhận về một lỗi cú pháp khó hiểu ở **dòng sau** chỗ họ viết —
+  chứ không phải câu trả lời thật là *"Rev A chưa hỗ trợ khối này"*.
+- **Quyết định đã có sẵn, không phải của tôi.** `ADR-054` + chữ ký chủ sở hữu 2026-08-31
+  chốt **phương án (A) thi hành**, không phải (B) công bố loại trừ — nguyên tắc *"làm
+  chuẩn theo IEC: có thì giữ, không có thì bỏ"*. Đã ghi ở `DECISIONS.md`, nên tiêu chí
+  "chủ sở hữu ký chọn" **đã đạt từ trước**; phần còn lại là thi hành.
+- **Cách sửa (bước 0 — phần độc lập với ngữ nghĩa).**
+  - `VAR_IN_OUT` và `VAR_TEMP` vào `kKeywords[]`; `at_unsupported_var_block()` tách khỏi
+    `at_var_block_start()` để phân biệt *"không phải khối khai báo"* với *"là khối khai
+    báo nhưng chưa hỗ trợ"* — hai câu trả lời khác nhau cho người dùng. Thông điệp nêu
+    **tên khối** và nói rõ *"valid IEC 61131-3 but not supported in Rev A"*.
+  - Bảng chép của FE sinh lại (`generate_st_reserved_words.py`); `ST_KEYWORDS` nhận hai từ
+    mới nhưng `ST_COMPLETION_KEYWORDS` **không** — không mời người ta viết thứ parser sẽ
+    từ chối.
+  - Test âm cho cả bốn khối (`VAR_IN_OUT`, `VAR_TEMP`, `VAR_GLOBAL`, `VAR_EXTERNAL`), và
+    một test nữa cho vế dễ quên: giữ chỗ phải đi cùng việc **không cho dùng làm tên
+    biến** — thiếu vế đó thì ngày mở khối thật sẽ va vào mã người dùng đã viết.
+  - Ba vector mới vào corpus văn phạm dùng chung (`ISS-STED-13`).
+- **Corpus lập tức bắt được một chỗ trôi mới.** `stFormat/parser.ts` có
+  `VAR_OPENERS = {VAR, VAR_INPUT, VAR_OUTPUT, VAR_IN_OUT, VAR_TEMP, VAR_GLOBAL}` — ba khối
+  cuối compiler **không** mở. Formatter đang định dạng lại mã theo một văn phạm rộng hơn
+  thiết bị, đúng chế độ `F-STED-011`. Đã thu hẹp về đúng ba khối thật và thêm thông điệp
+  cùng loại với compiler. Cổng dựng ở giờ trước bắt được ngay khi vector mới xuất hiện —
+  đó là toàn bộ điểm của việc có corpus chung.
+- **Tài liệu thiết kế trước khi code.** Chủ sở hữu yêu cầu thẳng *"quy tắc ai được ghi và
+  ghi lúc nào phải viết ra trước khi code"* và *"tách thiết kế trước, code sau"*. Đã viết
+  `ST_COMPOSITE_TYPES_DESIGN_MK-DDC-24_VI.md` (Proposed 0.1): năm luật ghi `W1..W5` của
+  `VAR_IN_OUT` — tất cả kiểm được **tĩnh**, không luật nào cần kiểm lúc chạy, đó là điều
+  kiện giữ WCET; phạm vi `ARRAY`/`STRUCT` một mức; kiểm biên là **fault** chứ không kẹp im
+  lặng (cùng lẽ với `ST-RT-005`); đường di trú IR `kSchemaVersion 1 → 2` với dual-reader và
+  test rollback LKG; đề xuất cho phép `RETAIN` với hợp thành **kèm** ràng buộc đổi hình
+  dạng phải cold-init có diagnostic; đề xuất FBD là **ST-only** ở đợt này và **phải công
+  bố** — im lặng sẽ tạo đúng loại "loại trừ không công bố" mà issue này sinh ra để chấm dứt.
+- **Phần CHƯA làm, nói rõ.** Toàn bộ ngữ nghĩa `VAR_IN_OUT`/`ARRAY`/`STRUCT`, bố cục IR và
+  bump schema **chưa bắt đầu**. §7 tài liệu thiết kế xếp 9 bước, và **bước 1 là cổng chặn**:
+  ba trần tài nguyên (§4.3), chính sách RETAIN (§5.3) và vị trí FBD (§6) cần chữ ký chủ sở
+  hữu **trước** khi sinh IR, vì chúng nằm trong provenance của artifact và không sửa lại
+  được sau khi artifact đã ký chạy trên bo.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1384/1384 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **198 file / 2427 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0.
+
 ### Added — `ISS-STED-15` bằng chứng a11y cho ST editor (#366, 2026-09-02)
 
 - **Triệu chứng.** Mã dùng `aria-label`/`role`/`focus-visible` đúng và dày, nhưng **không

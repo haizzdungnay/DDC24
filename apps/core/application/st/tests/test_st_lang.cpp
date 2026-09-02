@@ -659,4 +659,49 @@ TEST(StLangCase, DesugarsIntoIfBranchesWithElseLast)
     EXPECT_EQ(p.body[0].branches[2].cond, nullptr);
 }
 
+/* `ISS-STED-16` / `F-STED-009` — KHỐI KHAI BÁO IEC CHƯA MỞ PHẢI NÓI ĐÚNG BẢN CHẤT.
+ *
+ * Trước lát này `VAR_IN_OUT` không nằm trong `kKeywords[]`, nên lexer coi nó là
+ * một định danh bình thường: `at_var_block_start()` không nhận nó là mở khối,
+ * parser đọc hết khối `VAR` rồi chuyển sang danh sách câu lệnh, gặp
+ * `VAR_IN_OUT` và cố hiểu thành một phép gán. Người dùng nhận về một lỗi cú
+ * pháp khó hiểu ở dòng SAU chỗ họ viết — chứ không phải câu trả lời thật.
+ *
+ * `ADR-054` đã chốt sẽ THI HÀNH `VAR_IN_OUT` ở đợt gần (#367). Trạng thái giữ
+ * chỗ này là bước TRUNG GIAN đúng, không phải một tuyên bố loại trừ: nó chỉ
+ * bảo đảm người dùng biết mình viết một cấu trúc IEC hợp lệ mà bản này chưa
+ * nhận, thay vì nghĩ mình gõ sai.
+ */
+TEST(StLangDeclarationBlocks, UnsupportedIecBlockSaysWhatItReallyIs)
+{
+    for (const char* block : {"VAR_IN_OUT", "VAR_TEMP", "VAR_GLOBAL", "VAR_EXTERNAL"}) {
+        const std::string source =
+            std::string("PROGRAM P\n") + block + " p : REAL; END_VAR\nEND_PROGRAM\n";
+        StProgram program;
+        StDiagnostic diagnostic;
+        EXPECT_FALSE(parse_st_program(source, &program, &diagnostic)) << block;
+        /* Thông điệp phải NÊU TÊN KHỐI và nói rõ đây là IEC hợp lệ mà Rev A
+         * chưa hỗ trợ. Một lỗi cú pháp chung chung sẽ đẩy người dùng đi tìm
+         * dấu chấm phẩy thiếu ở một dòng không hề hỏng. */
+        EXPECT_NE(std::string(diagnostic.message).find(block), std::string::npos)
+            << block << " — thông điệp không nêu tên khối: " << diagnostic.message;
+        EXPECT_NE(std::string(diagnostic.message).find("not supported in Rev A"), std::string::npos)
+            << block << " — thông điệp không nói vì sao: " << diagnostic.message;
+    }
+}
+
+/* Giữ chỗ phải đi cùng việc KHÔNG cho dùng làm tên biến. Thiếu vế này thì
+ * `VAR_IN_OUT : REAL;` trong một khối `VAR` sẽ lặng lẽ thành một biến tên
+ * `VAR_IN_OUT`, và ngày mở khối thật sẽ va vào mã người dùng đã viết. */
+TEST(StLangDeclarationBlocks, ReservedBlockNamesCannotBecomeVariables)
+{
+    for (const char* name : {"VAR_IN_OUT", "VAR_TEMP"}) {
+        const std::string source =
+            std::string("PROGRAM P\nVAR ") + name + " : REAL; END_VAR\nEND_PROGRAM\n";
+        StProgram program;
+        StDiagnostic diagnostic;
+        EXPECT_FALSE(parse_st_program(source, &program, &diagnostic)) << name;
+    }
+}
+
 } // namespace core

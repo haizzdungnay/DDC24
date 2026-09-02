@@ -6,4 +6,4 @@
  * Chép tay giá trị này ở hai nơi sẽ biến phép so thành một phép so luôn đúng.
  */
 export const ST_LANGUAGE_PROFILE_VERSION = "1.0.0"
-export const ST_LANGUAGE_PROFILE_SHA256 = "3d3c9569262f6b2fcec0e6c966bc9176aa2900454fd01cd96d42d5304e05a90f"
+export const ST_LANGUAGE_PROFILE_SHA256 = "e06a207e67318c8e81466880cfda057ff460b48e532f980ac043ad2985b9c661"

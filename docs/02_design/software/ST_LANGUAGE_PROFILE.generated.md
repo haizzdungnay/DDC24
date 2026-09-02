@@ -11,7 +11,7 @@
 | Trường | Giá trị |
 |---|---|
 | Phiên bản hồ sơ | `1.0.0` |
-| `sha256` | `3d3c9569262f6b2fcec0e6c966bc9176aa2900454fd01cd96d42d5304e05a90f` |
+| `sha256` | `e06a207e67318c8e81466880cfda057ff460b48e532f980ac043ad2985b9c661` |
 | Phiên bản compiler | `fwsom-st-1.2.0` |
 | Target profile | `revA-1t-1-5-30` (ABI `3841`) |
 | Chuẩn nền | IEC 61131-3:2013 (Ed. 3.0) — Structured Text |
@@ -239,4 +239,4 @@ comment        = '(*' { character } '*)' | '//' { character } newline ;
 
 ## 11. Từ khoá giữ chỗ
 
-`PROGRAM`, `END_PROGRAM`, `VAR`, `VAR_INPUT`, `VAR_OUTPUT`, `END_VAR`, `FUNCTION`, `END_FUNCTION`, `FUNCTION_BLOCK`, `END_FUNCTION_BLOCK`, `RETAIN`, `IF`, `THEN`, `ELSIF`, `ELSE`, `END_IF`, `AND`, `OR`, `XOR`, `NOT`, `MOD`, `TRUE`, `FALSE`, `BOOL`, `INT`, `DINT`, `UINT`, `REAL`, `TIME`, `TON`, `TOF`, `R_TRIG`, `F_TRIG`, `PID`, `TP`, `CTU`, `CTD`, `HYSTERESIS`, `CASE`, `OF`, `END_CASE`, `FOR`, `END_FOR`, `WHILE`, `END_WHILE`, `REPEAT`, `UNTIL`, `END_REPEAT`, `EXIT`, `CONTINUE`, `RETURN`, `GOTO`, `VAR_GLOBAL`, `VAR_EXTERNAL`, `NATIVE`, `POINTER`, `REFERENCE`, `AT`, `ARRAY`, `STRUCT`, `STRING`, `WSTRING`
+`PROGRAM`, `END_PROGRAM`, `VAR`, `VAR_INPUT`, `VAR_OUTPUT`, `END_VAR`, `FUNCTION`, `END_FUNCTION`, `FUNCTION_BLOCK`, `END_FUNCTION_BLOCK`, `RETAIN`, `IF`, `THEN`, `ELSIF`, `ELSE`, `END_IF`, `AND`, `OR`, `XOR`, `NOT`, `MOD`, `TRUE`, `FALSE`, `BOOL`, `INT`, `DINT`, `UINT`, `REAL`, `TIME`, `TON`, `TOF`, `R_TRIG`, `F_TRIG`, `PID`, `TP`, `CTU`, `CTD`, `HYSTERESIS`, `CASE`, `OF`, `END_CASE`, `FOR`, `END_FOR`, `WHILE`, `END_WHILE`, `REPEAT`, `UNTIL`, `END_REPEAT`, `EXIT`, `CONTINUE`, `RETURN`, `GOTO`, `VAR_GLOBAL`, `VAR_EXTERNAL`, `NATIVE`, `POINTER`, `REFERENCE`, `AT`, `ARRAY`, `STRUCT`, `STRING`, `WSTRING`, `VAR_IN_OUT`, `VAR_TEMP`
