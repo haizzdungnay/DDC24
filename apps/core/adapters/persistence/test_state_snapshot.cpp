@@ -1,7 +1,8 @@
 /**
  * @file  test_state_snapshot.cpp
  * @brief COR-010: state.snap load/save, atomic rename, bad-snap ignored,
- *        restore theo id+type, PID/timer không persist.
+ *        restore theo id+type, PID/timer không persist, và ghi BỀN VỮNG
+ *        (fsync file + fsync thư mục cha trước khi coi là đã lưu).
  */
 #include <gtest/gtest.h>
 
@@ -238,4 +239,60 @@ TEST(StateSnapshot, DirtyFlagBehavior)
     /* execute lần nữa -> dirty lại */
     g.execute(t, r);
     EXPECT_TRUE(g.dirty());
+}
+
+
+/* ---- Ghi bền vững (durable write) ----
+ *
+ * `rename()` nguyên tử với phép THAY THẾ, không nguyên tử với ĐỘ BỀN. Thiếu
+ * fsync, mất điện — chuyện thường ngày của một BMS controller — có thể để lại
+ * `state.snap` rỗng hoặc cụt; `load()` cảnh báo rồi trả {} và RuntimeCounter
+ * (giờ chạy thiết bị) lẫn PulseCounter (đo đếm) âm thầm về 0.
+ *
+ * Bản thân lời gọi `fsync` không quan sát được từ trong tiến trình, nên bộ kiểm
+ * dưới đây khoá phần QUAN SÁT ĐƯỢC của hợp đồng: không để lại rác `.tmp`, và
+ * hỏng thì phải trả false chứ không báo thành công. Giới hạn này được ghi rõ
+ * thay vì giả vờ là đã kiểm fsync.
+ */
+TEST(StateSnapshotDurable, LeavesNoTmpResidueAfterSuccessfulSave)
+{
+    const std::string path = tmp_path("durable_ok");
+    cleanup(path);
+    std::remove((path + ".tmp").c_str());
+
+    StateSnapshot snap(path);
+    std::vector<PersistEntry> entries;
+    PersistEntry e;
+    e.id = "rc1";
+    e.type = "RuntimeCounter";
+    e.run_seconds = 1234.5;
+    entries.push_back(e);
+
+    ASSERT_TRUE(snap.save(entries));
+    EXPECT_TRUE(fs::exists(path));
+    EXPECT_FALSE(fs::exists(path + ".tmp"))
+        << "còn rác .tmp: đường ghi bền vững chưa dọn sau khi rename";
+
+    const auto restored = snap.load();
+    ASSERT_EQ(restored.size(), 1u);
+    EXPECT_EQ(restored[0].id, "rc1");
+    EXPECT_NEAR(restored[0].run_seconds, 1234.5, 1e-6);
+
+    cleanup(path);
+}
+
+TEST(StateSnapshotDurable, ReportsFailureInsteadOfClaimingSaved)
+{
+    /* Thư mục không tồn tại: mọi bước của đường ghi bền vững đều không thể
+     * hoàn tất. Hợp đồng là trả false — báo thành công ở đây nghĩa là lần khởi
+     * động sau mất sạch trạng thái mà không ai biết. */
+    StateSnapshot snap("/tmp/mkddc_snap_khong_ton_tai_dir/state.snap");
+    std::vector<PersistEntry> entries;
+    PersistEntry e;
+    e.id = "rc1";
+    e.type = "RuntimeCounter";
+    e.run_seconds = 1.0;
+    entries.push_back(e);
+
+    EXPECT_FALSE(snap.save(entries));
 }

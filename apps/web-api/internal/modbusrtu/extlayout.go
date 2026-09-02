@@ -14,7 +14,8 @@ import (
 // đúng tập thiết bị/điểm mà `BuildFieldbusConfig`/`BuildProfile` phát ra. Ba
 // thao tác cấu hình bình thường đều làm nó dịch chỗ:
 //
-//  1. đổi tên điểm  — `BuildProfile` sắp theo TÊN;
+//  1. đổi `pointId`  — `BuildProfile` sắp row theo `name`, và `name` là
+//     `PointID` (danh tính bền), không phải `TagName` (nhãn hiển thị);
 //  2. thêm/tắt điểm — điểm tắt bị bỏ khỏi profile;
 //  3. tắt thiết bị  — thiết bị tắt bị bỏ khỏi danh sách slave.
 //
@@ -48,8 +49,13 @@ type ExtSlot struct {
 	// ĐÚNG MỘT THANH GHI — hợp lệ với mọi phép kiểm hiện có, và sai ở đúng chỗ
 	// không ai nhìn. Quy đổi làm MỘT LẦN, ở đây, và có test khoá cả hai đầu.
 	ExtIndex int
-	// RegisterCount là số thanh ghi điểm chiếm (2 với 32 bit). Slot kế tiếp
-	// cách slot này đúng bấy nhiêu.
+	// RegisterCount là số thanh ghi điểm chiếm trên dây (2 với 32 bit).
+	//
+	// Nó KHÔNG phải khoảng cách tới slot kế tiếp. `ext_slots_for_point`
+	// (`device_profile.cpp`) quy đổi `count / 2` cho kiểu 32 bit, tức HAI thanh
+	// ghi gộp thành MỘT điểm luận lý — đúng như `bus_worker.cpp` ghi: "đếm theo
+	// ĐIỂM LUẬN LÝ, không theo số register". Trường này chỉ để hiển thị và đối
+	// chiếu với profile; con số đi vào cursor là `extSlotsForPoint`.
 	RegisterCount int
 }
 
@@ -79,8 +85,7 @@ func (l ExtLayout) AtExtIndex(extIndex int) (ExtSlot, bool) {
 }
 
 // registerCount lặp lại đúng luật của `BuildProfile`: kiểu 32 bit chiếm hai
-// thanh ghi. Đọc từ cùng một chỗ thay vì đoán — nếu luật đổi mà đây không đổi,
-// bản đồ sẽ nói dối một cách nhất quán và rất khó thấy.
+// thanh ghi trên dây. Đọc từ cùng một chỗ thay vì đoán.
 func registerCount(dataType string) int {
 	switch dataType {
 	case "int32", "uint32", "float32":
@@ -89,6 +94,22 @@ func registerCount(dataType string) int {
 		return 1
 	}
 }
+
+// extSlotsForPoint lặp lại `ext_slots_for_point` trong `device_profile.cpp` —
+// hàm QUYẾT ĐỊNH cursor của allocator, không phải số thanh ghi.
+//
+//	if (pt.fc == 1 || pt.fc == 2) return pt.count;   // 1 bit  = 1 điểm luận lý
+//	if (point_type_is_32bit(pt.type)) return pt.count / 2;  // 2 reg = 1 điểm
+//	return pt.count;
+//
+// `BuildProfile` phát MỘT row cho MỘT `Point`, với `count` = 1 hoặc 2 thanh
+// ghi. Thay số đó vào ba nhánh trên thì cả ba đều ra 1: một `Point` của BE
+// luôn chiếm ĐÚNG MỘT slot `ext`, kể cả kiểu 32 bit.
+//
+// Cộng cursor bằng số thanh ghi (2 cho 32 bit) làm mọi điểm phía sau một điểm
+// 32 bit lệch lên một slot so với runtime — tức bản đồ nói dối đúng ở ca nó
+// sinh ra để bắt.
+func extSlotsForPoint(_ Point) int { return 1 }
 
 // BuildExtLayout tính bố cục slot mà `iobus` SẼ cấp cho cấu hình này.
 //
@@ -114,21 +135,25 @@ func BuildExtLayout(devices []Device, points []Point) ExtLayout {
 				devicePoints = append(devicePoints, point)
 			}
 		}
-		// `BuildProfile` sắp theo `name` của row, và `name` là `TagName`.
+		// `BuildProfile` sắp theo `name` của row, và `name` là `PointID`
+		// (`row := map[string]any{"name": point.PointID, ...}`), KHÔNG phải
+		// `TagName`. Sắp theo `TagName` cho ra một thứ tự khác ngay khi hai
+		// trường đó không cùng thứ tự — và `TagName` là nhãn hiển thị, người
+		// dùng đổi nó thường xuyên.
 		sort.SliceStable(devicePoints, func(i, j int) bool {
-			return devicePoints[i].TagName < devicePoints[j].TagName
+			return devicePoints[i].PointID < devicePoints[j].PointID
 		})
 		for _, point := range devicePoints {
-			count := registerCount(point.DataType)
 			slot := ExtSlot{
 				DeviceID: device.DeviceID, PointID: point.PointID, TagName: point.TagName,
 				// +1: quy đổi 0-based (allocator) → 1-based (artifact).
-				ExtIndex: cursor + 1, RegisterCount: count,
+				ExtIndex: cursor + 1, RegisterCount: registerCount(point.DataType),
 			}
 			layout.Slots = append(layout.Slots, slot)
 			layout.byKey[extKey(slot.DeviceID, slot.PointID)] = slot
 			layout.byExt[slot.ExtIndex] = slot
-			cursor += count
+			// Cursor đi theo SLOT, không theo thanh ghi.
+			cursor += extSlotsForPoint(point)
 		}
 	}
 	return layout

@@ -8,6 +8,119 @@
 
 ## [Unreleased]
 
+### Fixed — Test hồi quy memlock đỏ vì môi trường, không vì hành vi (2026-09-02)
+
+*Phát hiện qua review tự động trên PR #440 (P2), đã kiểm chứng lại và đúng.*
+
+`run_child_with_memlock` đặt CỨNG cả `rlim_cur` lẫn `rlim_max` bằng 1 MiB. Tiến
+trình không đặc quyền chỉ được **hạ** `rlim_max`, không được nâng — nên trong bất
+kỳ container nào có hard `RLIMIT_MEMLOCK` thấp hơn 1 MiB, `setrlimit` hỏng, con
+thoát mã 90, và cả ba mệnh đề đỏ **trước khi** chạm tới hành vi `MCL_FUTURE` cần
+kiểm. Đúng loại lỗi biến một cổng thật thành một cổng bị tắt trong tuần đầu.
+
+*Cách sửa:* hạ `rlim_cur`, GIỮ NGUYÊN `rlim_max`, và kẹp giá trị mong muốn theo
+hard limit thừa kế — hạ soft limit thì luôn hợp lệ, và kẹp thì không bao giờ phải
+nâng.
+
+| Phép đo (`prlimit --memlock=65536:65536`, chạy user thường) | Kết quả |
+| --- | --- |
+| Bản test cũ | **3/3 ĐỎ** (mã thoát 90 — hỏng ở `setrlimit`) |
+| Bản sau khi sửa | **2 PASS + 1 SKIP** (skip có lý do rõ, không xanh giả) |
+| `ctest --test-dir build/fw` (MODBUS+BACNET+HMI=ON) | **1389/1389 pass** |
+| `python3 scripts/docs_iso_harness.py --expect` | **PASS — mọi phép kiểm bắt buộc đạt; EXPECT khớp toàn bộ ngưỡng** (`DOC-GOV-001` §7.5) |
+
+### Fixed — Bản đồ slot `ext` của Modbus lệch so với allocator thật (ISS-PIO-31, 2026-09-02)
+
+`BuildExtLayout` (thêm hôm nay ở #433) tồn tại để tính **đúng** bố cục slot mà
+`iobus` sẽ cấp, làm nền cho phép kiểm tham chiếu `AC-PIO-ID-02`. Nó tính sai ở
+hai chỗ, nên chính nó trở thành "bản chép nói dối" mà doc-comment của nó cảnh
+báo.
+
+- **Cursor cộng theo số THANH GHI thay vì số SLOT.** `registerCount` trả 2 cho
+  `int32/uint32/float32`, và cursor cộng 2. Nhưng `ext_slots_for_point`
+  (`device_profile.cpp`) trả `pt.count / 2` cho kiểu 32 bit, và `bus_worker.cpp`
+  ghi thẳng *"đếm theo ĐIỂM LUẬN LÝ, không theo số register"*. `BuildProfile`
+  phát một row cho một `Point` với `count` = 1 hoặc 2 thanh ghi, nên thay vào ba
+  nhánh của `ext_slots_for_point` đều ra **1**: một `Point` luôn chiếm đúng MỘT
+  slot. Hệ quả: mỗi điểm 32 bit làm mọi điểm phía sau nó lệch lên một slot so
+  với runtime.
+- **Sắp xếp theo `TagName` thay vì `PointID`.** `BuildProfile` sắp row theo
+  `rows[i]["name"]`, và `row["name"] = point.PointID`. Doc-comment cũ khẳng định
+  *"`name` là `TagName`"* — sai. `TagName` là nhãn hiển thị người dùng đổi
+  thường xuyên; `PointID` là danh tính bền.
+
+Hai lỗi này đi ngược mục đích của chính module: một binding đúng có thể bị báo
+lệch, và một binding đã lệch có thể lọt.
+
+Bộ test đi kèm **khoá sai luật** chứ không bắt được: `TestExtLayoutAdvancesTwoSlotsFor32Bit`
+khẳng định điểm sau một điểm 32 bit phải nhảy 2, và dữ liệu mẫu dùng `PointID`
+với `TagName` cùng thứ tự nên lỗi sắp xếp vô hình. `TestRenamingAPointReordersTheWholeDevice`
+khẳng định đổi `TagName` làm dịch slot — điều hệ thống thật KHÔNG làm.
+
+*Cách sửa:* `extSlotsForPoint` chép đúng ba nhánh của `ext_slots_for_point`; sắp
+theo `PointID`; `RegisterCount` giữ nguyên nghĩa "số thanh ghi trên dây" và
+doc-comment nói rõ nó KHÔNG phải khoảng cách tới slot kế tiếp. Ba test được
+viết lại cho khớp sự thật, và thêm **cổng chống trôi**
+`TestExtLayoutMatchesIobusAllocator` đọc thẳng `device_profile.cpp` lẫn
+`persistence.go` — cùng khuôn mẫu với `TestPointEligibilityMatchesCoreIoMap` của
+ISS-PIO-32.
+
+**Kiểm chứng (tiêm lỗi ba chiều, đo thật):**
+
+| Tiêm lỗi | Kết quả |
+| --- | --- |
+| Khôi phục cursor cộng theo thanh ghi | `TestExtLayoutAdvancesOneSlotFor32Bit` ĐỎ |
+| Khôi phục sắp theo `TagName` | 3 test ĐỎ, gồm `TestExtLayoutSortsByPointIDLikeBuildProfile` |
+| Đổi `BuildProfile` sang `name = TagName` | cổng chống trôi ĐỎ đúng thông điệp |
+| `verify-project.sh --component go` sau bản vá | 19/19 package `ok` |
+
+### Fixed — `state.snap` ghi không fsync: mất điện là mất giờ chạy và số đo đếm (2026-09-02)
+
+*Triệu chứng (tiềm ẩn, chưa có báo cáo hiện trường):* sau một lần mất điện,
+`/data/mkddc/state.snap` có thể rỗng hoặc cụt. `load()` cảnh báo rồi trả `{}` —
+đúng thiết kế fail-soft — nên hệ thống vẫn chạy, và **RuntimeCounter** (giờ chạy
+thiết bị) lẫn **PulseCounter** (đo đếm) âm thầm quay về 0. Không có lỗi nào được
+báo; chỉ số vận hành đơn giản là biến mất.
+
+*Nguyên nhân gốc:* `StateSnapshot::save()` ghi `.tmp` rồi `std::rename()`, kèm
+chú thích "atomic rename". `rename()` **nguyên tử với phép thay thế, không nguyên
+tử với độ bền**: kernel có thể persist entry thư mục mới trước khi persist nội
+dung file. Đường ghi thiếu cả `fsync(fd)` lẫn `fsync(thư mục cha)`.
+
+Đây không phải một lựa chọn thiết kế còn tranh cãi — `st_retain.cpp`,
+`st_journal.cpp` và `programming_runtime_coordinator.cpp` đều đã làm đúng
+`write → fsync(fd) → rename → fsync(dir)`. `state_snapshot.cpp` là chỗ **duy
+nhất** trong core ghi trạng thái bền vững mà không fsync.
+
+*Cách sửa:* áp đúng khuôn mẫu sẵn có, và cho hỏng trả `false` thay vì báo thành
+công; dọn `.tmp` trên mọi nhánh lỗi.
+
+**Kiểm chứng (đo thật):**
+
+| Phép đo | Kết quả |
+| --- | --- |
+| `strace -e trace=fsync,rename` quanh một lần `save()`, TRƯỚC bản vá | **0 lần fsync**, chỉ có `rename` |
+| Cùng phép đo, SAU bản vá | **2 lần fsync**, đúng thứ tự `fsync(file)` → `rename` → `fsync(dir)` |
+| `ctest --test-dir build/fw` (MODBUS+BACNET+HMI=ON) | **1389/1389 pass** |
+
+**Đánh đổi đã cân nhắc:** `save()` được gọi từ `after_scan`, tức chạy trên thread
+scan RT (mỗi 60 scan, nếu graph dirty). Thêm fsync là thêm chờ đĩa THẬT vào
+đường đó. Đo trên filesystem của môi trường phát triển: **0,57 ms trung bình /
+1,39 ms xấu nhất** cho một `save()` đầy đủ, so với base step **1000 ms** — biên
+còn rất rộng. Lưu ý số này KHÔNG phải đo trên eMMC của bo thật, nơi fsync có thể
+chậm hơn hàng chục lần; ngay cả vậy thì một lần chờ ~100 ms mỗi 60 giây vẫn nằm
+trong ngân sách, và nếu vượt thì bộ đếm `overrun` của scan loop sẽ thấy chứ
+không âm thầm. Nếu số đo trên bo cho thấy cần, bước tiếp theo đúng hướng là đẩy
+phần ghi file sang worker non-RT như `StRetainService` đã làm — không phải bỏ
+fsync.
+
+**Test bổ sung:** `StateSnapshotDurable.LeavesNoTmpResidueAfterSuccessfulSave` và
+`ReportsFailureInsteadOfClaimingSaved`. Giới hạn được ghi thẳng trong test: bản
+thân lời gọi `fsync` không quan sát được từ trong tiến trình, nên hai mệnh đề này
+khoá phần **quan sát được** của hợp đồng (không để lại rác `.tmp`; hỏng thì trả
+`false` chứ không báo thành công), còn chuỗi syscall được chứng minh bằng phép đo
+`strace` ở trên.
+
 ### Fixed — Hai job CI đỏ liên tục trên `main`: abort lúc khởi động và artifact thiếu binary (2026-09-02)
 
 Trên commit mới nhất của `main` (`1e9309a`), 10/12 job của **Build & Test** đã xanh, còn lại hai

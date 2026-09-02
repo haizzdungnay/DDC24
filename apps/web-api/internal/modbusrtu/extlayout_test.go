@@ -1,6 +1,12 @@
 package modbusrtu
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
 
 /*
 `ISS-PIO-31` / `F-PIO-029`. Điều được kiểm ở đây không phải "hàm chạy đúng" mà
@@ -47,7 +53,7 @@ func TestExtLayoutIsOneBasedAtTheArtifactBoundary(t *testing.T) {
 	}
 }
 
-func TestExtLayoutAdvancesTwoSlotsFor32Bit(t *testing.T) {
+func TestExtLayoutAdvancesOneSlotFor32Bit(t *testing.T) {
 	devices := []Device{device("VFD-01", true)}
 	points := []Point{
 		point("VFD-01", "p-a", "a_power", "float32", true),
@@ -55,13 +61,92 @@ func TestExtLayoutAdvancesTwoSlotsFor32Bit(t *testing.T) {
 	}
 	layout := BuildExtLayout(devices, points)
 
-	// Kiểu 32 bit chiếm HAI thanh ghi; điểm sau nó phải nhảy 2, không phải 1.
-	// Sai chỗ này làm mọi điểm phía sau lệch một slot.
+	/* Kiểu 32 bit chiếm HAI THANH GHI trên dây nhưng ĐÚNG MỘT SLOT `ext`:
+	 * `ext_slots_for_point` trả `pt.count / 2` cho kiểu 32 bit, và
+	 * `bus_worker.cpp` ghi thẳng "đếm theo ĐIỂM LUẬN LÝ, không theo số
+	 * register". Cộng cursor bằng 2 làm mọi điểm phía sau lệch lên một slot so
+	 * với runtime — bản đồ nói dối đúng ở ca nó sinh ra để bắt. */
 	a, _ := layout.Lookup("VFD-01", "p-a")
 	b, _ := layout.Lookup("VFD-01", "p-b")
-	if a.ExtIndex != 1 || a.RegisterCount != 2 || b.ExtIndex != 3 {
-		t.Fatalf("bố cục 32-bit sai: a=%+v b=%+v", a, b)
+	if a.ExtIndex != 1 || a.RegisterCount != 2 || b.ExtIndex != 2 {
+		t.Fatalf("bố cục 32-bit sai: a=%+v b=%+v (mong đợi a.ext=1, a.reg=2, b.ext=2)", a, b)
 	}
+}
+
+// TestExtLayoutSortsByPointIDLikeBuildProfile khoá KHOÁ SẮP XẾP.
+//
+// `BuildProfile` sắp row theo `rows[i]["name"]`, và `name` được gán từ
+// `point.PointID`. Sắp bản đồ theo `TagName` cho ra thứ tự khác ngay khi hai
+// trường không cùng thứ tự — và `TagName` là nhãn hiển thị, người dùng đổi nó
+// thường xuyên. Dữ liệu dưới đây cố ý cho hai khoá NGƯỢC nhau; test cũ dùng dữ
+// liệu mà hai khoá trùng thứ tự nên không thấy gì.
+func TestExtLayoutSortsByPointIDLikeBuildProfile(t *testing.T) {
+	devices := []Device{device("VFD-01", true)}
+	points := []Point{
+		point("VFD-01", "p-01-dau", "z_nhan_cuoi", "uint16", true),
+		point("VFD-01", "p-02-sau", "a_nhan_dau", "uint16", true),
+	}
+	layout := BuildExtLayout(devices, points)
+
+	first, _ := layout.Lookup("VFD-01", "p-01-dau")
+	second, _ := layout.Lookup("VFD-01", "p-02-sau")
+	if first.ExtIndex != 1 || second.ExtIndex != 2 {
+		t.Fatalf("bản đồ sắp theo TagName thay vì PointID: p-01-dau=%d p-02-sau=%d"+
+			" (mong đợi 1 và 2 — BuildProfile sắp theo PointID)",
+			first.ExtIndex, second.ExtIndex)
+	}
+}
+
+// TestExtLayoutMatchesIobusAllocator là CỔNG CHỐNG TRÔI.
+//
+// `extSlotsForPoint` và khoá sắp xếp ở đây là BẢN CHÉP của hai nơi khác:
+// `ext_slots_for_point` trong `device_profile.cpp`, và `BuildProfile` trong
+// `persistence.go`. Bản chép không có người canh đúng là cách hai lỗi đầu tiên
+// của file này sinh ra. Test đọc thẳng cả hai nguồn và so, nên lần lệch tiếp
+// theo đỏ ngay thay vì đi vào bo.
+func TestExtLayoutMatchesIobusAllocator(t *testing.T) {
+	source := readDeviceProfileSource(t)
+
+	/* Luật 32 bit: HAI thanh ghi gộp thành MỘT điểm luận lý. Nếu dòng này không
+	 * còn ở C++ thì `extSlotsForPoint` phải được xem lại cùng lúc. */
+	if !strings.Contains(source, "pt.count / 2u") {
+		t.Fatal("luật 32-bit ở device_profile.cpp đã đổi; cập nhật extSlotsForPoint cùng lúc")
+	}
+	if !strings.Contains(source, "if (pt.fc == 1 || pt.fc == 2) return pt.count;") {
+		t.Fatal("luật bit-FC ở device_profile.cpp đã đổi; cập nhật extSlotsForPoint cùng lúc")
+	}
+
+	/* Khoá sắp xếp của profile: `name` phải vẫn là `PointID`. Nếu ai đó đổi nó
+	 * sang `TagName`, bản đồ phải đổi theo trong cùng một lần sửa. */
+	profileSource := readPersistenceSource(t)
+	if !strings.Contains(profileSource, `"name": point.PointID`) {
+		t.Fatal("BuildProfile không còn đặt name = PointID; cập nhật khoá sắp xếp của BuildExtLayout cùng lúc")
+	}
+}
+
+func readDeviceProfileSource(t *testing.T) string {
+	t.Helper()
+	return readRepoFile(t, filepath.Join("apps", "iobus", "adapters", "modbus_rtu", "device_profile.cpp"))
+}
+
+func readPersistenceSource(t *testing.T) string {
+	t.Helper()
+	return readRepoFile(t, filepath.Join("apps", "web-api", "internal", "modbusrtu", "persistence.go"))
+}
+
+func readRepoFile(t *testing.T, relative string) string {
+	t.Helper()
+	_, current, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("không xác định được vị trí file test")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(current), "..", "..", "..", ".."))
+	path := filepath.Join(root, relative)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("không đọc được authority %s: %v", path, err)
+	}
+	return string(data)
 }
 
 /* --- Ba cơ chế dịch chỗ, mỗi cái một test --- */
@@ -106,24 +191,45 @@ func TestDisablingAPointShiftsEveryPointBehindItInTheSameDevice(t *testing.T) {
 	}
 }
 
-func TestRenamingAPointReordersTheWholeDevice(t *testing.T) {
+func TestChangingATagNameDoesNotMoveAnySlot(t *testing.T) {
+	/* Đính chính so với bản đầu của file này: `BuildProfile` sắp theo
+	 * `PointID`, KHÔNG theo `TagName`. Đổi nhãn hiển thị vì thế KHÔNG dịch slot
+	 * — và đó là hành vi đúng, vì nhãn không phải danh tính. Test cũ khẳng định
+	 * ngược lại và chỉ xanh nhờ bản đồ khi ấy sắp sai khoá. */
 	devices, points := scenario()
 	before := BuildExtLayout(devices, points)
 	cmdBefore, _ := before.Lookup("PUMP-02", "p-pump-a")
 
-	/* `BuildProfile` sắp theo TÊN, nên đổi tên một điểm đổi thứ tự cả thiết
-	 * bị. Danh tính bền (`pointId`) không đổi — chỉ nhãn hiển thị đổi — nhưng
-	 * slot thì đổi. Đó chính là điều `AC-PIO-ID-01` nói: `extIndex` không phải
-	 * danh tính. */
 	points[2].TagName = "z_cmd"
 	after := BuildExtLayout(devices, points)
 	cmdAfter, _ := after.Lookup("PUMP-02", "p-pump-a")
 
+	if cmdBefore.ExtIndex != cmdAfter.ExtIndex {
+		t.Fatalf("đổi nhãn hiển thị KHÔNG được dịch slot: %d -> %d",
+			cmdBefore.ExtIndex, cmdAfter.ExtIndex)
+	}
+	if mismatch := after.VerifyBinding("PUMP-02", "p-pump-a", cmdBefore.ExtIndex); mismatch != nil {
+		t.Fatalf("báo lệch giả sau khi chỉ đổi nhãn: %v", mismatch)
+	}
+}
+
+func TestChangingAPointIDReordersTheWholeDevice(t *testing.T) {
+	devices, points := scenario()
+	before := BuildExtLayout(devices, points)
+	cmdBefore, _ := before.Lookup("PUMP-02", "p-pump-a")
+
+	/* Cơ chế THẬT: thứ tự profile theo `PointID`. Một điểm mới chen vào giữa —
+	 * hoặc `pointId` đổi khi nhập lại cấu hình — dịch mọi điểm phía sau, dù
+	 * không ai đụng vào chúng. `extIndex` không phải danh tính (`AC-PIO-ID-01`). */
+	points = append(points, point("PUMP-02", "p-pump-0", "aa_moi", "uint16", true))
+	after := BuildExtLayout(devices, points)
+	cmdAfter, _ := after.Lookup("PUMP-02", "p-pump-a")
+
 	if cmdBefore.ExtIndex == cmdAfter.ExtIndex {
-		t.Fatal("đổi tên lẽ ra làm đổi thứ tự — test không còn tái hiện được cơ chế")
+		t.Fatal("chen một điểm đứng trước lẽ ra làm dịch slot — test không còn tái hiện được cơ chế")
 	}
 	if mismatch := after.VerifyBinding("PUMP-02", "p-pump-a", cmdBefore.ExtIndex); mismatch == nil {
-		t.Fatal("đổi tên làm binding trỏ sai thanh ghi mà không ai phát hiện")
+		t.Fatal("binding trỏ sai thanh ghi mà không ai phát hiện")
 	}
 }
 

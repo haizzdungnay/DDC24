@@ -73,9 +73,18 @@ int run_child_with_memlock(rlim_t limit_bytes, int (*body)())
 {
     const pid_t pid = fork();
     if (pid == 0) {
+        /* HẠ soft limit, GIỮ NGUYÊN hard limit.
+         *
+         * Tiến trình không đặc quyền chỉ được hạ `rlim_max`, không được nâng.
+         * Đặt cứng cả hai bằng một hằng số làm test đỏ với mã 90 ở bất kỳ
+         * container nào có hard limit thấp hơn hằng số đó — đỏ vì môi trường,
+         * trước cả khi chạm tới hành vi đang cần kiểm. Hạ `rlim_cur` thì luôn
+         * hợp lệ, và kẹp theo `rlim_max` thừa kế thì không bao giờ phải nâng. */
         struct rlimit lim {};
+        if (getrlimit(RLIMIT_MEMLOCK, &lim) != 0) _exit(kSetrlimitFailed);
+        if (lim.rlim_max != RLIM_INFINITY && lim.rlim_max < limit_bytes)
+            limit_bytes = lim.rlim_max;
         lim.rlim_cur = limit_bytes;
-        lim.rlim_max = limit_bytes;
         if (setrlimit(RLIMIT_MEMLOCK, &lim) != 0) _exit(kSetrlimitFailed);
         _exit(body());
     }
