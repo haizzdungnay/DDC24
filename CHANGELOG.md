@@ -8,6 +8,48 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-12` Inspector ST bổ sung Scope/Initial/Mapped point/Unit/Reads-Writes (#363, 2026-09-02)
+
+- **Triệu chứng.** `InspectorStSymbolContext` chỉ có `identifier`, `definitionOffset`,
+  `dataType`, `signature`, `referenceCount`, `runtime` — thiếu 4/8 trường chuẩn đặt ra:
+  **Scope**, **Initial**, **Mapped Point**, **Unit**, và không tách **Reads/Writes**.
+- **Nguyên nhân gốc.** Dữ liệu đã có sẵn ở nơi khác nhưng chưa ai nối vào Inspector:
+  `stReferenceIndex` đã phân biệt `role: 'READ' | 'WRITE'`; Draft đã mang `variables[]`
+  (kèm `class`, `initialValue`, `retain`) và `bindings[]` (kèm `point`, `unit`). Trường
+  `Ánh xạ` đã tồn tại ở `ContextInspector` nhưng cho **ngữ cảnh khác**, không cho ký hiệu ST.
+- **Cách sửa.** Năm trường mới, tất cả đi qua `InspectorField` như mọi trường khác — đây là
+  chỗ dễ phá nguyên tắc "biết khi nào mình không biết" nhất, vì mỗi trường đều có một giá
+  trị *trông hợp lý* để điền bừa: `VAR` cho phạm vi, `0` cho khởi tạo, `—` cho điểm ánh xạ.
+  - **Draft là authority** cho Scope/Initial/Mapped point/Unit. Inspector **không** tra
+    catalog Point lần thứ hai và **không** suy phạm vi từ văn bản: hai đường sẽ lệch nhau,
+    và lệch ở đây nghĩa là Inspector nói biến nối tới một điểm mà Kiểm tra không thấy.
+  - **Reads/Writes đếm từ `occurrences.role`** — cùng nguồn với `referenceCount`, nên tổng
+    hai số luôn khớp. Tách đọc/ghi vì *"có ai ghi vào biến này không"* là câu hỏi khác hẳn
+    *"biến này được nhắc mấy lần"*, và nó là câu người ta hỏi khi đi tìm vì sao một giá trị
+    không đổi.
+  - **`retain` là cờ riêng**, không phải một giá trị của `class`. Bỏ qua nó sẽ hiện `VAR`
+    cho một biến thực ra giữ giá trị qua mất điện.
+  - **Nhãn scope theo cách ST viết ra** (`VAR_INPUT`), không theo tên Data Model (`INPUT`):
+    người đọc đang nhìn mã ST, nên `VAR_INPUT` mới là thứ họ tìm lại được trong buffer.
+  - **Điểm RTU kèm thiết bị** (`MB_RTU/dev-1/40001`) — địa chỉ `40001` một mình không định
+    danh được điểm nào.
+  - **Biến lọc theo `programId`**: hai POU được phép có biến trùng tên; không lọc thì
+    Inspector gán điểm của POU khác cho biến đang xem, sai một cách rất khó nhận ra.
+- **Một chi tiết dễ nói dối, đã xử lý tường minh.** Subset ST **không cho** khai giá trị
+  khởi tạo trong `VAR` (`st_parser.cpp` đòi `;` ngay sau tên kiểu), nên khi Draft không ghi
+  `initialValue` thì giá trị thật lúc cold start là **mặc định của kiểu** theo
+  `ST_SUBSET_SPEC` §3.1 — một sự thật tra được. Nhưng hiện trần `0.0` sẽ đọc thành "ai đó
+  đặt 0.0", nên UI ghi rõ `0.0 (mặc định của kiểu)`. Instance FB không có giá trị vô hướng
+  nào ⇒ `unknown`, không bịa `0`.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `npx vitest --run --environment jsdom src`: **194 file / 2291 test pass**, exit 0
+    (thêm 10 test ngữ cảnh + 3 test hiển thị).
+  - `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` trong ngân sách R3,
+    dư 3.16 KiB).
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1379/1379 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
 ### Added — `ISS-STED-11` gợi ý chữ ký cho hàm và Function Block trong ST editor (#362, 2026-09-02)
 
 - **Triệu chứng.** Không có signature help. Người dùng gõ `LIMIT(` phải tự nhớ thứ tự

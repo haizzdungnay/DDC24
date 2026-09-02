@@ -324,4 +324,133 @@ describe('DEV-PROG-004 — Access/Description/tên Task đã có nguồn, nhưng
     expect(notAnalysed.parameters.known).toBe(false)
     expect(analysedEmpty).toMatchObject({ parameters: { known: true, value: [] } })
   })
+  /* `ISS-STED-12` — năm trường mới. Điều được kiểm vẫn là nguyên tắc cũ của
+   * module: biết khi nào mình KHÔNG biết. Năm trường này là chỗ dễ phá nguyên
+   * tắc đó nhất, vì mỗi trường đều có một giá trị "trông hợp lý" để điền bừa:
+   * `VAR` cho phạm vi, `0` cho khởi tạo, `—` cho điểm ánh xạ. */
+  const stSymbol = {
+    identifier: 'SupplyTemp', start: 10, end: 20,
+    entry: {
+      name: 'SupplyTemp', typeName: 'REAL', kind: 'VARIABLE' as const, declarationOffset: 42,
+      occurrences: [
+        { offset: 42, role: 'WRITE' as const },
+        { offset: 80, role: 'READ' as const },
+        { offset: 95, role: 'READ' as const },
+      ],
+    },
+  }
+
+  const supplyVariable = {
+    variableId: 'var-supply', programId: 'program-1', name: 'SupplyTemp',
+    type: 'REAL', class: 'INPUT' as const, initialValue: null, retain: false,
+  }
+
+  const supplyBinding = {
+    bindingId: 'binding-supply', variableId: 'var-supply',
+    point: { category: 'LOCAL' as const, pointId: 'UI-01' },
+    direction: 'READ' as const, dataType: 'REAL', unit: 'degC',
+    writable: false, qualityPolicy: 'REQUIRE_GOOD' as const,
+  }
+
+  it('Phạm vi/Điểm ánh xạ/Đơn vị lấy từ Draft, không dựng authority thứ hai', () => {
+    const context = contextFor({
+      program, cursorSymbol: stSymbol,
+      variables: [supplyVariable], bindings: [supplyBinding],
+    })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.scope).toEqual({ known: true, value: 'VAR_INPUT' })
+    expect(context.mappedPoint).toEqual({ known: true, value: 'LOCAL/UI-01' })
+    expect(context.unit).toEqual({ known: true, value: 'degC' })
+  })
+
+  it('điểm RTU kèm thiết bị — địa chỉ một mình không định danh được điểm nào', () => {
+    const context = contextFor({
+      program, cursorSymbol: stSymbol, variables: [supplyVariable],
+      bindings: [{ ...supplyBinding, point: { category: 'MB_RTU', pointId: '40001', deviceId: 'dev-1' } }],
+    })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.mappedPoint).toEqual({ known: true, value: 'MB_RTU/dev-1/40001' })
+  })
+
+  it('`retain` là cờ riêng, không phải một giá trị của `class`', () => {
+    const context = contextFor({
+      program, cursorSymbol: stSymbol,
+      variables: [{ ...supplyVariable, class: 'LOCAL', retain: true }],
+    })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    // Bỏ qua `retain` sẽ hiện `VAR` cho một biến giữ giá trị qua mất điện.
+    expect(context.scope).toEqual({ known: true, value: 'VAR RETAIN' })
+  })
+
+  it('Khởi tạo nói rõ khi nó là mặc định của kiểu, không giả vờ ai đó đã đặt', () => {
+    const context = contextFor({ program, cursorSymbol: stSymbol, variables: [supplyVariable] })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.initialValue).toEqual({ known: true, value: { text: '0.0', typeDefault: true } })
+
+    const explicit = contextFor({
+      program, cursorSymbol: stSymbol,
+      variables: [{ ...supplyVariable, initialValue: 21.5 }],
+    })
+    if (explicit.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(explicit.initialValue).toEqual({ known: true, value: { text: '21.5', typeDefault: false } })
+  })
+
+  it('instance FB không có giá trị khởi tạo vô hướng ⇒ unknown, không bịa `0`', () => {
+    const context = contextFor({
+      program,
+      cursorSymbol: {
+        identifier: 'TON_1', start: 0, end: 5,
+        entry: { name: 'TON_1', typeName: 'TON', kind: 'FB_INSTANCE', declarationOffset: 5, occurrences: [] },
+      },
+      variables: [{ ...supplyVariable, variableId: 'var-ton', name: 'TON_1', type: 'TON' }],
+    })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.initialValue.known).toBe(false)
+  })
+
+  it('Đọc/Ghi đếm từ `occurrences.role`, không đếm lại bằng đường thứ hai', () => {
+    const context = contextFor({ program, cursorSymbol: stSymbol })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.readWrite).toEqual({ known: true, value: { reads: 2, writes: 1 } })
+    // Tổng vẫn phải khớp `referenceCount` — hai trường cùng một nguồn.
+    expect(context.referenceCount).toEqual({ known: true, value: 3 })
+  })
+
+  it('biến chưa có trong Draft ⇒ Phạm vi/Điểm/Đơn vị đều unknown, KHÔNG đoán', () => {
+    const context = contextFor({ program, cursorSymbol: stSymbol, variables: [], bindings: [] })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.scope.known).toBe(false)
+    expect(context.mappedPoint.known).toBe(false)
+    expect(context.unit.known).toBe(false)
+    // Nhưng Đọc/Ghi vẫn biết được: nó đến từ chỉ mục văn bản, không từ Draft.
+    expect(context.readWrite.known).toBe(true)
+  })
+
+  it('biến có trong Draft nhưng CHƯA ánh xạ ⇒ Điểm/Đơn vị unknown', () => {
+    const context = contextFor({ program, cursorSymbol: stSymbol, variables: [supplyVariable], bindings: [] })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.scope.known).toBe(true)
+    expect(context.mappedPoint.known).toBe(false)
+    expect(context.unit.known).toBe(false)
+  })
+
+  it('binding không có đơn vị ⇒ Đơn vị unknown, không hiện chuỗi rỗng', () => {
+    const context = contextFor({
+      program, cursorSymbol: stSymbol, variables: [supplyVariable],
+      bindings: [{ ...supplyBinding, unit: undefined }],
+    })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.mappedPoint.known).toBe(true)
+    expect(context.unit.known).toBe(false)
+  })
+
+  it('analyzer không tra được thì Đọc/Ghi cũng unknown, không phải `0 / 0`', () => {
+    const context = contextFor({
+      program, cursorSymbol: { identifier: 'KhongRo', start: 0, end: 7, entry: null },
+      variables: [supplyVariable], bindings: [supplyBinding],
+    })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    // `0 / 0` đọc thành "không ai đọc, không ai ghi" — một khẳng định sai.
+    expect(context.readWrite.known).toBe(false)
+  })
 })

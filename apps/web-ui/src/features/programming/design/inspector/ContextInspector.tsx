@@ -197,10 +197,35 @@ function renderContext(pick: (vi: string, en: string) => string, context: Inspec
             pick={pick}
           />
           <Field label={pick('Kiểu', 'Type')} field={context.dataType} pick={pick} />
+          {/* `ISS-STED-12` — Scope đứng ngay dưới Kiểu vì hai thứ này luôn được
+              đọc cùng nhau: `REAL` trong `VAR_INPUT` và `REAL` trong
+              `VAR RETAIN` là hai thứ khác hẳn nhau về vòng đời. */}
+          <Field label={pick('Phạm vi', 'Scope')} field={context.scope} pick={pick} />
+          <Field
+            label={pick('Khởi tạo', 'Initial')}
+            /* Nói rõ giá trị đến từ đâu. Subset ST không cho khai giá trị khởi
+               tạo trong `VAR`, nên hầu hết trường hợp đây là mặc định của kiểu
+               — và người đọc phải phân biệt được điều đó với một giá trị ai đó
+               cố ý đặt. */
+            field={mapField(context.initialValue, (value) => value.typeDefault
+              ? pick(`${value.text} (mặc định của kiểu)`, `${value.text} (type default)`)
+              : value.text)}
+            pick={pick}
+          />
+          <Field label={pick('Điểm ánh xạ', 'Mapped point')} field={context.mappedPoint} pick={pick} />
+          <Field label={pick('Đơn vị', 'Unit')} field={context.unit} pick={pick} />
           <Field label={pick('Chữ ký', 'Signature')} field={context.signature} pick={pick} />
           <Field
             label={pick('Tham chiếu', 'References')}
             field={mapField(context.referenceCount, (value) => String(value))}
+            pick={pick}
+          />
+          {/* Tách đọc/ghi chứ không chỉ tổng: "biến này có ai ghi vào không"
+              là câu hỏi khác hẳn "biến này được nhắc mấy lần", và nó là câu
+              hỏi người ta hỏi khi đi tìm vì sao một giá trị không đổi. */}
+          <Field
+            label={pick('Đọc / Ghi', 'Reads / Writes')}
+            field={mapField(context.readWrite, (value) => `${value.reads} / ${value.writes}`)}
             pick={pick}
           />
           <RuntimeRow label={pick('Giá trị', 'Value')} runtime={context.runtime} pick={pick} />

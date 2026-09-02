@@ -894,6 +894,17 @@ export function ProgramsTab({
                  hiện `Đã tắt` cho một thứ chưa đọc là nói dối về thiết bị. */
               enabled: null,
               cursorSymbol,
+              /* `ISS-STED-12` — Draft là AUTHORITY cho Phạm vi/Khởi tạo/Điểm
+                 ánh xạ/Đơn vị. Inspector không tự đọc catalog Point và không
+                 tự suy phạm vi từ văn bản: hai đường sẽ lệch nhau, và lệch ở
+                 đây nghĩa là Inspector nói biến nối tới một điểm mà Kiểm tra
+                 không thấy.
+
+                 Lọc theo `programId` vì hai POU được phép có biến TRÙNG TÊN;
+                 không lọc thì Inspector sẽ gán điểm của POU khác cho biến đang
+                 xem — sai một cách rất khó nhận ra. */
+              variables: document.variables.filter((variable) => variable.programId === selected.programId),
+              bindings: document.bindings,
               /* Trước `T59-820` khoá này không được truyền, nên trường `Chữ ký`
                  của handoff §9 luôn hiện "không xác định được" — trung thực về
                  hình thức nhưng nói "thư viện không công bố" trong khi sự thật
