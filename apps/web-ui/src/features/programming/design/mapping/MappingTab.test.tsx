@@ -45,10 +45,13 @@ beforeEach(() => {
   catalog.error = null
   catalog.lastSuccessAt = 100
   catalog.items = [
-    { category: 'LOCAL', pointId: 'UI-01', name: 'Supply Temp', dataType: 'REAL', unit: 'degC', direction: 'READ', writable: false, quality: 'GOOD', value: 21.4 },
-    { category: 'LOCAL', pointId: 'DO-01', name: 'Supply Fan', dataType: 'BOOL', direction: 'WRITE', writable: true, quality: 'BAD', value: null },
-    { category: 'LOCAL', pointId: 'AO-01', name: 'Supply Valve', dataType: 'REAL', direction: 'WRITE', writable: true, quality: 'GOOD', value: 42.5 },
-    { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD Enable', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true },
+    /* ISS-PIO-32 — fixture mang `mapping` vì đó là thứ SERVER trả về. Không có
+     * nó, FE fail-closed: đúng hành vi mong muốn với server đời cũ. */
+    { category: 'LOCAL', pointId: 'UI-01', name: 'Supply Temp', dataType: 'REAL', unit: 'degC', direction: 'READ', writable: false, quality: 'GOOD', value: 21.4,
+      mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'INCOMPATIBLE', reasons: ['UI là ngõ vào vật lý; chỉ AO/DO nhận được VAR_OUTPUT'] } } },
+    { category: 'LOCAL', pointId: 'DO-01', name: 'Supply Fan', dataType: 'BOOL', direction: 'WRITE', writable: true, quality: 'BAD', value: null , mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
+    { category: 'LOCAL', pointId: 'AO-01', name: 'Supply Valve', dataType: 'REAL', direction: 'WRITE', writable: true, quality: 'GOOD', value: 42.5 , mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
+    { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD Enable', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true , mapping: { input: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] }, output: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] } } },
   ]
   localStorage.setItem('mkddc-lang', 'vi')
 })
@@ -89,10 +92,15 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
     expect(list).toHaveClass('flex-1', 'overflow-y-auto')
   })
 
-  it('hiện MB_RTU read-only là Core chưa hỗ trợ', () => {
+  /* Nhãn nói TRẠNG THÁI, lý do lấy NGUYÊN VĂN từ server (`ISS-PIO-32`). Câu cũ
+   * "Core chưa hỗ trợ" đổ lỗi cho compiler trong khi Core đã resolve MB_RTU từ
+   * trước baseline — người đọc đi tìm sai chỗ. */
+  it('hiện MB_RTU chưa map được kèm đúng lý do của server', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
     fireEvent.click(screen.getByRole('button', { name: 'AHU_Main · FanCmd · Chưa map' }))
-    expect(screen.getByText('Core chưa hỗ trợ')).toBeVisible()
+    expect(screen.getByText('Chưa map được')).toBeVisible()
+    expect(screen.getByText('Chưa map được')).toHaveAttribute('title', 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU')
+    expect(screen.queryByText('Core chưa hỗ trợ')).not.toBeInTheDocument()
   })
 
   it('lọc Point ngay trong pane theo loại UI/AO/DO/VP', () => {

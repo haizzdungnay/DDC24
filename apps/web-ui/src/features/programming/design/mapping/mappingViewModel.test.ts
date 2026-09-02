@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   ProgrammingDraftDocument,
   ProgrammingPointCatalogEntry,
+  ProgrammingPointMapEligibility,
   ProgrammingVariable,
 } from '../../model/types'
 import {
@@ -38,6 +39,14 @@ function baseDocument(): ProgrammingDraftDocument {
   }
 }
 
+/* ISS-PIO-32 — `mapping` là QUYẾT ĐỊNH của server. Fixture ở đây cố tình khai
+ * nó tường minh: bài test của FE là "hiển thị đúng thứ server nói", nên nếu
+ * fixture tự suy ra quyết định thì test lại đang kiểm một bản luật thứ hai —
+ * đúng thứ vừa bị gỡ khỏi mã sản phẩm. */
+function decision(status: ProgrammingPointMapEligibility['status'], reason?: string): ProgrammingPointMapEligibility {
+  return { status, reasons: status === 'SUPPORTED' ? [] : [reason ?? 'lý do do server cấp'] }
+}
+
 function point(overrides: Partial<ProgrammingPointCatalogEntry> = {}): ProgrammingPointCatalogEntry {
   return {
     category: 'LOCAL',
@@ -50,6 +59,7 @@ function point(overrides: Partial<ProgrammingPointCatalogEntry> = {}): Programmi
     quality: 'GOOD',
     value: 21.4,
     observedAt: '2026-08-24T09:00:00Z',
+    mapping: { input: decision('SUPPORTED'), output: decision('SUPPORTED') },
     ...overrides,
   }
 }
@@ -87,9 +97,22 @@ describe('mappingViewModel — Phase 1A truth model', () => {
     }
     const entries = [
       point({ pointId: 'DO-01', name: 'Supply fan', dataType: 'BOOL', unit: undefined, direction: 'WRITE', writable: true, value: true }),
-      point({ pointId: 'UI-01', dataType: 'REAL', direction: 'READ', writable: false }),
+      point({
+        pointId: 'UI-01', dataType: 'REAL', direction: 'READ', writable: false,
+        mapping: { input: decision('SUPPORTED'), output: decision('INCOMPATIBLE', 'UI là ngõ vào vật lý; chỉ AO/DO nhận được VAR_OUTPUT') },
+      }),
+      /* VP do CHƯƠNG TRÌNH sở hữu: server trả READ_WRITE và eligibility mở.
+       * Bản FE cũ chặn cứng "VP hiện chỉ hỗ trợ VAR_INPUT" — một câu đã sai từ
+       * khi `F-PROG-ASBUILT-016` gỡ chặn chiều ghi. */
       point({ category: 'VP', pointId: 'BV-01', name: 'Virtual binary', dataType: 'BOOL', unit: undefined, direction: 'READ_WRITE', writable: true, value: true }),
-      point({ category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD enable', dataType: 'BOOL', unit: undefined, direction: 'READ_WRITE', writable: true, value: true }),
+      point({
+        category: 'MB_RTU', deviceId: 'bus-1-slave-2', pointId: 'coil-1', name: 'VFD enable',
+        dataType: 'BOOL', unit: undefined, direction: 'READ_WRITE', writable: true, value: true,
+        mapping: {
+          input: decision('UNSUPPORTED_BY_CORE', 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'),
+          output: decision('UNSUPPORTED_BY_CORE', 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'),
+        },
+      }),
       point({ pointId: 'DO-02', name: 'Bad output', dataType: 'BOOL', unit: undefined, direction: 'WRITE', writable: true, quality: 'BAD', value: null }),
       point({ pointId: 'DO-03', name: 'Unknown output', dataType: 'BOOL', unit: undefined, direction: 'WRITE', writable: true, quality: 'UNKNOWN', value: null }),
     ]
@@ -98,10 +121,54 @@ describe('mappingViewModel — Phase 1A truth model', () => {
 
     expect(rows.find((row) => row.pointId === 'DO-01')?.eligibility).toBe('SUPPORTED')
     expect(rows.find((row) => row.pointId === 'UI-01')?.eligibility).toBe('INCOMPATIBLE')
-    expect(rows.find((row) => row.category === 'VP')?.eligibility).toBe('UNSUPPORTED_BY_CORE')
+    // Năng lực đã mở ở Core và ở server ⇒ FE phải theo, không được tự chặn.
+    expect(rows.find((row) => row.category === 'VP')?.eligibility).toBe('SUPPORTED')
     expect(rows.find((row) => row.category === 'MB_RTU')?.eligibility).toBe('UNSUPPORTED_BY_CORE')
+    // Lý do hiển thị phải là NGUYÊN VĂN của server, không phải câu FE tự đặt.
+    expect(rows.find((row) => row.category === 'MB_RTU')?.compatibilityReasons).toEqual([
+      'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU',
+    ])
     expect(rows.find((row) => row.pointId === 'DO-02')?.eligibility).toBe('QUALITY_BLOCKED')
     expect(rows.find((row) => row.pointId === 'DO-03')?.eligibility).toBe('QUALITY_BLOCKED')
+  })
+
+  /* Điều kiện đóng thứ ba của ISS-PIO-32: Core mở một năng lực mới ⇒ FE tự
+   * nhận, KHÔNG cần sửa FE. Bài test này chạy trên đúng mã sản phẩm hiện tại,
+   * chỉ đổi thứ server trả về. */
+  it('nhận năng lực mới do server mở mà không cần sửa dòng FE nào', () => {
+    const output: ProgrammingVariable = {
+      variableId: 'var-output', programId: 'program-1', name: 'FanCmd', type: 'BOOL', class: 'OUTPUT', initialValue: null, retain: false,
+    }
+    const opened = point({
+      category: 'MB_RTU', deviceId: 'bus-1-slave-2', pointId: 'coil-1', name: 'VFD enable',
+      dataType: 'BOOL', unit: undefined, direction: 'READ_WRITE', writable: true, value: true,
+      extIndex: 7,
+      mapping: { input: decision('SUPPORTED'), output: decision('SUPPORTED') },
+    })
+
+    const rows = buildPointRows([opened], { ...output, direction: 'OUTPUT' }, { status: 'ready', lastSuccessAt: 100 })
+
+    expect(rows[0].eligibility).toBe('SUPPORTED')
+    expect(rows[0].compatible).toBe(true)
+    expect(rows[0].compatibilityReasons).toEqual([])
+  })
+
+  /* Server đời cũ không trả `mapping`. FE KHÔNG được suy lại — suy lại là dựng
+   * lại đúng bản luật thứ hai vừa gỡ — nên nó fail-closed và nói rõ vì sao. */
+  it('fail-closed khi server không trả quyết định eligibility', () => {
+    const input: ProgrammingVariable = {
+      variableId: 'var-input', programId: 'program-1', name: 'SupplyTemp', type: 'REAL', class: 'INPUT', initialValue: null, retain: false,
+    }
+    const legacy = point()
+    delete legacy.mapping
+
+    const rows = buildPointRows([legacy], { ...input, direction: 'INPUT' }, { status: 'ready', lastSuccessAt: 100 })
+
+    expect(rows[0].eligibility).toBe('SERVER_DECISION_MISSING')
+    expect(rows[0].compatible).toBe(false)
+    expect(rows[0].compatibilityReasons).toEqual([
+      'Máy chủ chưa trả quyết định eligibility cho điểm này nên chưa map được',
+    ])
   })
 
   it('giữ snapshot chỉ để inspect khi poll lỗi và xếp suggestion deterministic', () => {

@@ -573,6 +573,17 @@ export interface ProgrammingDiagnostic {
 
 /** `GET /point-catalog` — chiếu Point authority hiện hữu (LOCAL/VP/MB_RTU),
  * KHÔNG phải authority Point thứ hai. Quality sáu mức thật từ producer. */
+/** Quyết định eligibility cho MỘT chiều binding, do SERVER cấp (`ISS-PIO-32`).
+ *
+ * `reasons` là văn bản để hiển thị NGUYÊN VĂN. FE không diễn giải lại, không
+ * ánh xạ sang câu của riêng mình: bản diễn giải thứ hai chính là thứ đã trôi
+ * khỏi Core và nói với người dùng rằng "Core chưa hỗ trợ MB_RTU" trong khi Core
+ * đã hỗ trợ từ lâu. */
+export interface ProgrammingPointMapEligibility {
+  status: 'SUPPORTED' | 'UNSUPPORTED_BY_CORE' | 'UNSUPPORTED_IDENTITY' | 'INCOMPATIBLE'
+  reasons: string[]
+}
+
 export interface ProgrammingPointCatalogEntry {
   category: ProgrammingPointCategory
   pointId: string
@@ -585,6 +596,14 @@ export interface ProgrammingPointCatalogEntry {
   quality: 'GOOD' | 'UNCERTAIN' | 'BAD' | 'STALE' | 'OFFLINE' | 'UNKNOWN'
   value: unknown
   observedAt?: string
+  /** Slot EXT 1-based của điểm Modbus. Vắng = catalog chưa cấp (`ISS-PIO-31`). */
+  extIndex?: number
+  /** Quyết định của server cho từng chiều. Vắng mặt = server đời cũ ⇒ FE phải
+   *  fail-closed chứ KHÔNG được tự suy lại. */
+  mapping?: {
+    input: ProgrammingPointMapEligibility
+    output: ProgrammingPointMapEligibility
+  }
 }
 
 export interface ProgrammingPointCatalogPage {

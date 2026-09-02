@@ -18,6 +18,7 @@ export type MapEligibility =
   | 'QUALITY_BLOCKED'
   | 'CATALOG_STALE'
   | 'PAGING_INCOMPLETE'
+  | 'SERVER_DECISION_MISSING'
 export type LiveQuality = ProgrammingPointCatalogEntry['quality']
 export type CatalogTruthState = {
   status: 'loading' | 'ready' | 'error'
@@ -77,17 +78,8 @@ interface DeclaredVariable {
   programName: string
 }
 
-const PREFIX_TYPE: Record<string, string> = {
-  UI: 'REAL', DI: 'BOOL', AO: 'REAL', DO: 'BOOL',
-  AV: 'REAL', BV: 'BOOL', MSV: 'UINT',
-}
-
 function pointKey(point: ProgrammingPointIdentity | ProgrammingPointCatalogEntry): string {
   return `${point.category}:${point.deviceId ?? ''}:${point.pointId}`
-}
-
-function pointPrefix(pointId: string): string {
-  return pointId.split('-', 1)[0].toUpperCase()
 }
 
 function declaredVariables(program: ProgrammingProgram): DeclaredVariable[] {
@@ -137,19 +129,30 @@ function isOutput(direction: string): boolean {
   return direction === 'OUTPUT' || direction === 'INOUT'
 }
 
+/* ISS-PIO-32 — eligibility do SERVER quyết định; hàm này chỉ CHỌN CHIỀU rồi
+ * chuyển nguyên văn kết quả.
+ *
+ * Bản cũ ở đây tự giữ allowlist prefix, bảng `PREFIX_TYPE` và hai câu chặn cứng
+ * theo category. Cả hai câu ấy đã sai vào lúc bị xoá: Core resolve `MB_RTU` từ
+ * trước baseline (`st_io_map.cpp`), và `F-PROG-ASBUILT-016` đã gỡ chặn chiều
+ * ghi của VP. Người dùng đọc "Core chưa hỗ trợ" cho hai năng lực đang chạy được
+ * và đi sửa nhầm chỗ.
+ *
+ * Vắng `entry.mapping` (server đời cũ) thì FAIL-CLOSED. Suy lại ở đây là dựng
+ * lại đúng bản luật thứ hai vừa gỡ — và một bản dự phòng "tạm thời" sẽ sống lâu
+ * đúng bằng tuổi thọ của hệ thống. */
 function supportEligibility(direction: string, entry: ProgrammingPointCatalogEntry): { eligibility: MapEligibility; reasons: string[] } {
   if (direction === 'INOUT') return { eligibility: 'UNSUPPORTED_DIRECTION', reasons: ['Core Rev A chưa hỗ trợ VAR_IN_OUT'] }
-  if (entry.category === 'MB_RTU') return { eligibility: 'UNSUPPORTED_BY_CORE', reasons: ['Core Rev A chưa resolve MB_RTU trong ST io_map'] }
-  if (entry.category === 'VP' && direction === 'OUTPUT') return { eligibility: 'UNSUPPORTED_BY_CORE', reasons: ['VP hiện chỉ hỗ trợ VAR_INPUT'] }
 
-  const prefix = pointPrefix(entry.pointId)
-  if (!(prefix in PREFIX_TYPE) || (entry.category === 'LOCAL' && !['UI', 'DI', 'AO', 'DO'].includes(prefix)) || (entry.category === 'VP' && !['AV', 'BV', 'MSV'].includes(prefix))) {
-    return { eligibility: 'UNSUPPORTED_IDENTITY', reasons: ['Point identity không nằm trong allowlist Core Rev A'] }
+  const decision = entry.mapping ? (isOutput(direction) ? entry.mapping.output : entry.mapping.input) : undefined
+  if (!decision) {
+    return {
+      eligibility: 'SERVER_DECISION_MISSING',
+      reasons: ['Máy chủ chưa trả quyết định eligibility cho điểm này nên chưa map được'],
+    }
   }
-  if (entry.category === 'LOCAL' && isOutput(direction) && !['AO', 'DO'].includes(prefix)) {
-    return { eligibility: 'INCOMPATIBLE', reasons: ['OUTPUT chỉ ghi được vào AO/DO'] }
-  }
-  return { eligibility: 'SUPPORTED', reasons: [] }
+  if (decision.status === 'SUPPORTED') return { eligibility: 'SUPPORTED', reasons: [] }
+  return { eligibility: decision.status, reasons: decision.reasons }
 }
 
 function compatibilityFor(

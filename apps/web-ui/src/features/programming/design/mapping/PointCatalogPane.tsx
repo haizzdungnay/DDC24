@@ -25,12 +25,20 @@ export function PointCatalogPane({ rows, selectedKey, onSelect, pointKind, onPoi
       <div data-testid="mapping-point-list" className="min-h-0 flex-1 divide-y divide-[var(--c-border)] overflow-y-auto [scrollbar-gutter:stable]">
         {rows.length === 0 ? <p className="p-4 text-sm text-[var(--c-text-dim)]">Catalog không có Point khớp bộ lọc.</p> : rows.map((row) => {
           const state = row.quality.toLowerCase() as 'good' | 'uncertain' | 'bad' | 'stale' | 'offline' | 'unknown'
-          const unsupported = row.eligibility === 'UNSUPPORTED_BY_CORE' || row.eligibility === 'UNSUPPORTED_IDENTITY'
+          /* ISS-PIO-32 — nhãn KHÔNG được đoán nguyên nhân. Chip cũ ghi cứng
+           * "Core chưa hỗ trợ" cho mọi lý do, kể cả những lý do không thuộc về
+           * Core: điểm MB_RTU bị chặn vì catalog chưa phát `extIndex`, không
+           * phải vì compiler thiếu năng lực. Chip nay chỉ nói TRẠNG THÁI, còn
+           * NGUYÊN NHÂN lấy nguyên văn từ server. */
+          const unsupported = row.eligibility === 'UNSUPPORTED_BY_CORE'
+            || row.eligibility === 'UNSUPPORTED_IDENTITY'
+            || row.eligibility === 'SERVER_DECISION_MISSING'
+          const blockedReason = row.compatibilityReasons.join(' · ')
           return <button key={row.key} type="button" aria-pressed={selectedKey === row.key} aria-label={`${row.category} ${row.name}`} onClick={() => onSelect(row.key)} className={`grid min-h-[3.5rem] w-full shrink-0 gap-2 px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] md:grid-cols-[minmax(8rem,1fr)_5rem_5rem_6rem] ${selectedKey === row.key ? 'bg-[var(--c-accent-bg)]' : 'hover:bg-[var(--c-surface-2)]'}`}>
-            <span className="min-w-0"><span className="flex items-center gap-2 font-semibold text-[var(--c-text)]">{row.name}{unsupported && <CircleAlert className="h-3.5 w-3.5 text-[var(--c-warn-fg)]" aria-label="Core chưa hỗ trợ" />}</span><span className="mt-1 block truncate font-mono text-[11px] text-[var(--c-text-dim)]">{row.category}:{row.deviceId ? `${row.deviceId}:` : ''}{row.pointId}</span></span>
+            <span className="min-w-0"><span className="flex items-center gap-2 font-semibold text-[var(--c-text)]">{row.name}{unsupported && <CircleAlert className="h-3.5 w-3.5 text-[var(--c-warn-fg)]" aria-label={blockedReason || 'Chưa map được'} />}</span><span className="mt-1 block truncate font-mono text-[11px] text-[var(--c-text-dim)]">{row.category}:{row.deviceId ? `${row.deviceId}:` : ''}{row.pointId}</span></span>
             <span className="text-xs text-[var(--c-text-dim)]"><strong className="block text-[var(--c-text)]">{row.dataType}</strong>{row.unit ?? '—'}</span>
             <span className="font-mono text-xs text-[var(--c-text)]">{formatMappingValue(row.value)}</span>
-            <span className="flex flex-wrap items-start gap-1"><StatusBadge state={state} label={row.quality} />{unsupported ? <span className="flex items-center gap-1 text-[10px] text-[var(--c-warn-fg)]"><Radio className="h-3 w-3" aria-hidden="true" />Core chưa hỗ trợ</span> : row.writable ? <span className="text-[10px] text-[var(--c-good-fg)]">Ghi được</span> : <span className="text-[10px] text-[var(--c-text-dim)]">Chỉ đọc</span>}</span>
+            <span className="flex flex-wrap items-start gap-1"><StatusBadge state={state} label={row.quality} />{unsupported ? <span title={blockedReason} className="flex items-center gap-1 text-[10px] text-[var(--c-warn-fg)]"><Radio className="h-3 w-3" aria-hidden="true" />Chưa map được</span> : row.writable ? <span className="text-[10px] text-[var(--c-good-fg)]">Ghi được</span> : <span className="text-[10px] text-[var(--c-text-dim)]">Chỉ đọc</span>}</span>
           </button>
         })}
       </div>

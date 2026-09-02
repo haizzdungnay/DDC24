@@ -8,6 +8,42 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-32` một authority duy nhất quyết định binding eligibility; hai luật cứng ở FE đã sai (#376, 2026-09-02)
+
+- **Triệu chứng.** Tab Ánh xạ nói *"Core Rev A chưa resolve MB_RTU trong ST io_map"* và
+  *"VP hiện chỉ hỗ trợ VAR_INPUT"*. **Cả hai câu đều sai** vào lúc chúng còn nằm trong mã:
+  `st_io_map.cpp` resolve `MB_RTU` → `StPointKind::EXT` từ trước baseline, và
+  `F-PROG-ASBUILT-016` đã gỡ chặn chiều ghi của VP — `pointCatalogDirection` ở web-api còn
+  trả `READ_WRITE` cho VP do **chương trình** sở hữu. Người dùng đọc "Core chưa hỗ trợ" cho
+  hai năng lực **đang chạy được**, rồi đi sửa nhầm chỗ.
+- **Nguyên nhân gốc.** FE giữ **bản luật thứ hai**: allowlist prefix, bảng `PREFIX_TYPE`, và
+  hai câu chặn cứng theo category. Bản chép ấy đúng vào ngày viết, rồi Core đi tiếp một mình.
+  Không ai canh nó vì không có gì nối nó với authority thật.
+- **Cách sửa.**
+  - `point_eligibility.go` là **authority duy nhất**: mỗi entry của Point Catalog nay mang
+    `mapping.input`/`mapping.output` gồm `status` + `reasons`, tính trên đường ra duy nhất
+    của catalog (`ListPointCatalog`) chứ không ở adapter — "phải nhớ gọi" chính là cách bản
+    luật thứ hai đã sinh ra.
+  - `splitNumberedID` chép **đúng** `split_numbered_id` của Core: bắt buộc `PREFIX-DIGITS`,
+    từ chối định danh thiếu gạch và số thứ tự toàn 0. Bản FE cũ lỏng hơn Core, tức mời người
+    dùng chọn một binding sẽ hỏng ở Check chứ không hỏng lúc chọn.
+  - **Cổng chống trôi:** `TestPointEligibilityMatchesCoreIoMap` đọc **thẳng** `st_io_map.cpp`
+    và so allowlist prefix, luật chiều ghi LOCAL, luật kiểu MB_RTU và hình dạng định danh.
+    Bảng chép **có người canh** thì mới khác bản chép đã gây ra lỗi này.
+  - **MB_RTU nói đúng tầng:** lý do chặn nay là *"Catalog chưa phát extIndex … (ISS-PIO-31);
+    Core đã resolve MB_RTU"*. `PointCatalogEntry.ExtIndex` là seam thật: ngày `ISS-PIO-31`
+    phát số, năng lực **tự mở** — không sửa FE, không sửa cả hàm authority.
+  - **FE chỉ trình bày:** `supportEligibility` chọn chiều rồi chuyển nguyên văn; vắng
+    `mapping` (server đời cũ) thì **fail-closed** `SERVER_DECISION_MISSING`, không suy lại.
+  - **Nhãn thôi đoán nguyên nhân:** chip cũ ghi cứng "Core chưa hỗ trợ" cho mọi lý do; nay
+    chip nói trạng thái *"Chưa map được"* còn nguyên nhân lấy nguyên văn từ server.
+- **Đo lại.** Go 19 package `ok` (`-race`); C++ profile `full` **1384/1384** exit 0; FE 199
+  file / **2440 test**, lint + build + ngân sách bundle PASS (dư địa R3 0.57 KiB); `e2e-real`
+  **8 passed / 1 skipped** exit 0. Tiêm lệch bảng prefix (thêm `PI` vào bảng Go) ⇒ cổng chống
+  trôi đỏ đúng chỗ: *"allowlist LOCAL lệch: st_io_map.cpp có [AO,DI,DO,UI], bảng Go có
+  [AO,DI,DO,PI,UI]"*.
+
+
 ### Fixed — Tiền kiểm phụ thuộc Python chạy vô điều kiện làm đỏ job MCU Firmware (#414, 2026-09-02)
 
 - **Triệu chứng.** Ngay sau `476723a`, job "MCU Firmware" — trước đó xanh — đỏ tức thì với
