@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-09` trục phân loại IEC vs Mekong-UX cho ST Editor, kèm cổng thi hành (#360, 2026-09-02)
+
+- **Triệu chứng.** Không tài liệu nào trong repo phân biệt *"cái này do IEC 61131-3 quy định"*
+  với *"cái này là lựa chọn sản phẩm của Mekong"*. `PROGRAMMING_TRACEABILITY_MATRIX.md` nối
+  Product → 89 requirement → design → task → scenario nhưng **không có trục phân loại chuẩn**.
+- **Nguyên nhân gốc.** Rủi ro ở đây là **rủi ro tuyên bố**, không phải rủi ro kỹ thuật.
+  `ST_SUBSET_SPEC` §0 và `ADR-020` mục 6 đã nói đúng nguyên tắc, nhưng cả hai chỉ là câu chữ
+  trong tài liệu **kỹ thuật**. Hồ sơ bán hàng, datasheet và hồ sơ chứng nhận do người khác
+  viết — người không đọc §0 — nên không có gì ngăn một câu kiểu *"IEC bắt buộc phải có Quick
+  Library"*.
+- **Cách sửa.**
+  - **RTM §14** — trục phân loại cho requirement ST Editor, kèm **luật gắn nhãn**: nhãn `IEC`
+    phải **dẫn được điều khoản cụ thể** (số + tên điều khoản của IEC 61131-3:2013 Ed. 3.0);
+    không dẫn được thì **không được gắn**. Định nghĩa rõ phạm vi "requirement ST Editor" để
+    biết dòng nào cần ô phân loại và dòng nào không.
+  - **§14.5 — bucket "chưa dẫn được"**. Bảng §6 của `REV-STED-IEC-001` đề xuất gắn
+    *"IEC TR 61131-8"* cho chẩn đoán và online monitoring; ở lần lập trục này **chưa tra được
+    số điều khoản cụ thể**, nên theo đúng luật vừa đặt, hai mục đó **không** được gắn nhãn
+    IEC. Chúng nằm ở §14.5 như **nợ bằng chứng đã ghi nhận**, không bị xếp im lặng sang "UX
+    sản phẩm" — hai lý do *"chuẩn không yêu cầu"* và *"chưa tra được"* mà gộp lại thì lần sau
+    không ai biết mục nào cần đi tra.
+  - **§14.6 — câu chốt** về cụm `IEC 61131-3-aligned`, cấm `compliant`/`conformant`/
+    `certified` cùng biến thể tiếng Việt.
+- **Phát hiện thêm, sửa luôn trong cùng phiên.**
+  - **Câu chốt không có cơ chế giữ thì chính là vấn đề mà issue nêu.** Thêm
+    `scripts/verify_iec_claim_policy.py` (ctest `iec_claim_policy`): quét toàn bộ `docs/`, làm
+    **đỏ** khi "IEC 61131" đứng cạnh một từ cấm mà **không** nằm trong ngữ cảnh cấm đoán;
+    đồng thời kiểm §14.4 đủ ô phân loại và **mọi** dòng gắn nhãn IEC đều dẫn được điều khoản.
+  - **Heuristic một dòng báo động thừa 4 lần.** Bốn câu cấm có thật trong repo bị ngắt dòng
+    giữa câu (ví dụ *"không được gọi 'Compliant' hay / 'Certified'"*), nên dấu phủ định nằm ở
+    dòng trước. Đã đổi sang **cửa sổ ngữ cảnh** — một cổng kêu oan bốn lần là một cổng sắp bị
+    tắt.
+  - **Luật gắn nhãn chỉ soi §14.4 thì đi vòng được.** Thêm một bảng thứ hai ở chỗ khác là đủ
+    để lách. Cổng nay áp luật cho **mọi** dòng bảng trong ma trận có ô phân loại nhắc IEC.
+  - **Chính cổng chưa được kiểm.** Thêm `verify_iec_claim_policy_gate.py` (ctest
+    `iec_claim_policy_gate`): 4 ca tiêm — câu khẳng định tiếng Anh, biến thể tiếng Việt, nhãn
+    IEC không dẫn được điều khoản, và mất hẳn câu chốt. Thứ cổng này bảo vệ là một tuyên bố
+    pháp lý/thương mại, và sai sót ở đó không lộ ra trong bất kỳ test kỹ thuật nào.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1377/1377 pass**, exit 0 (configure 0, build 0) — gồm `iec_claim_policy` và
+    `iec_claim_policy_gate` mới.
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **193 file / 2256 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0.
+
 ### Fixed — `ISS-STED-08` `ST_SUBSET_SPEC` nói sai về chính compiler đang chạy (#359, 2026-09-02)
 
 - **Triệu chứng.** Bốn chỗ trong `ST_SUBSET_SPEC` mâu thuẫn với code:

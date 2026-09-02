@@ -408,6 +408,21 @@ if(CORE_BUILD_TESTS)
                 --dump-binary $<TARGET_FILE:mkddc-st-profile-dump>)
   endif()
 
+  # ISS-STED-09 — thi hành chính sách tuyên bố IEC bằng máy.
+  #
+  # `ADR-020` mục 6 cấm gọi sản phẩm là compliant/conformant/certified, nhưng
+  # lệnh cấm đó chỉ nằm trong tài liệu KỸ THUẬT. Hồ sơ bán hàng và hồ sơ chứng
+  # nhận do người khác viết, và không có gì ngăn một câu ngược lại xuất hiện ở
+  # tài liệu khác — đúng `F-STED-015`. Hai test: một cổng quét claim, một cổng
+  # kiểm chính cổng đó bằng bốn ca tiêm. Không phụ thuộc target nên chạy cả khi
+  # cross-compile.
+  add_test(NAME iec_claim_policy
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_iec_claim_policy.py)
+  add_test(NAME iec_claim_policy_gate
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_iec_claim_policy_gate.py)
+
   # `T57-2.13`/`T57-3.13`: kiểm ở mức BINARY, vì giá trị của engine nằm ở chỗ nó
   # là đúng cái binary backend gọi — một unit test gọi thẳng AlarmRuntime sẽ bỏ
   # lọt việc hợp đồng stdin/stdout lệch khỏi thứ Go gửi và đọc.

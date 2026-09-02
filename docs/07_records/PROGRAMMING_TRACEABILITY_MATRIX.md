@@ -72,6 +72,13 @@ Product/Requirement → Architecture/Design → Interface/Data/UI
 PASS. Không có Test Result mới cho suite v0.1, vì vậy evidence production vẫn
 `MISSING/RED`.
 
+**Trục thứ hai — nguồn gốc yêu cầu.** Chuỗi trên trả lời *"yêu cầu này đến từ đâu
+và đã kiểm chưa"*. Nó không trả lời *"do IEC 61131-3 quy định, hay là lựa chọn
+sản phẩm của Mekong?"* — câu hỏi quyết định điều gì được phép viết trong hồ sơ
+bán hàng và hồ sơ chứng nhận. Trục phân loại cho requirement ST Editor nằm ở
+**§14**, kèm luật gắn nhãn: nhãn `IEC` phải **dẫn được điều khoản cụ thể**, không
+dẫn được thì không được gắn.
+
 ## 2. Trace theo nhóm requirement
 
 | Requirement | Design owner | Interface/data/UI | Implementation owner | Scenario | Evidence |
@@ -531,3 +538,116 @@ bằng commit/Test Result/verdict đúng increment theo quy tắc §7–§8.
 
 `VS-PROG-U03` vẫn **NOT_RUN** như trước. Các dòng trên là bằng chứng thi hành
 của Plan 61, không phải verdict của Verification authority.
+
+---
+
+## 14. Trục phân loại `IEC-required` vs `Mekong-UX` cho ST Editor
+
+> **Nguồn:** `ISS-STED-09` / `F-STED-015`, hạt giống là bảng §6 của
+> [`REV-STED-IEC-001`](reviews/ST_EDITOR_IEC61131_GAP_REVIEW_2026-08-31.md).
+
+### 14.1 Vì sao ma trận cần thêm một trục
+
+Ma trận §6 nối Product → requirement → design → task → scenario, tức nó trả lời
+được *"yêu cầu này đến từ đâu và đã kiểm chưa"*. Nó **không** trả lời được câu
+hỏi khác hẳn: *"yêu cầu này do IEC 61131-3 quy định, hay là lựa chọn sản phẩm
+của Mekong?"*
+
+Rủi ro ở đây là **rủi ro tuyên bố**, không phải rủi ro kỹ thuật.
+[`ST_SUBSET_SPEC`](../02_design/software/ST_SUBSET_SPEC_MK-DDC-24_VI.md) §0 đã
+nói đúng nguyên tắc và `ADR-020` đã cấm claim, nhưng cả hai chỉ là câu chữ trong
+tài liệu kỹ thuật. Khi hồ sơ bán hàng, datasheet hay hồ sơ chứng nhận được viết
+bởi người khác — người không đọc §0 — thì không có gì ngăn một câu kiểu *"IEC
+bắt buộc phải có Quick Library"*. Trục phân loại này tồn tại để mỗi lần ai đó
+định viết "IEC yêu cầu…", họ có một chỗ để tra xem điều đó đúng hay không.
+
+### 14.2 Luật gắn nhãn
+
+1. **Nhãn `IEC` phải dẫn được điều khoản cụ thể.** Không dẫn được điều khoản thì
+   **không được gắn** — kể cả khi "ai cũng biết IEC có cái đó". Một nhãn không
+   dẫn được nguồn là một tuyên bố, và tuyên bố chính là thứ trục này ra đời để
+   kiểm soát.
+2. **Không dẫn được ⇒ xếp vào §14.5**, không xếp im lặng sang "UX sản phẩm".
+   Hai lý do khác nhau — *"chuẩn không yêu cầu"* và *"chưa tra được điều khoản"* —
+   mà gộp lại thì lần sau không ai biết mục nào cần đi tra.
+3. **Nhãn không phải mức ưu tiên.** `Mekong UX` không có nghĩa "được phép bỏ";
+   nhiều mục UX là Must trong SRS. Trục này nói về **nguồn gốc của yêu cầu**,
+   không nói về mức bắt buộc thi hành.
+4. **Bản chuẩn được dẫn:** IEC 61131-3:2013 (Ed. 3.0). Bản thân chuẩn **không**
+   được sao chép vào repo (bản quyền IEC), nên mỗi ô dẫn **số điều khoản kèm tên
+   điều khoản** để người có bản chuẩn tra lại được, và người không có vẫn biết
+   phải tra ở đâu.
+
+### 14.3 Phạm vi "requirement ST Editor"
+
+Là những requirement có chủ thể nằm trong một trong bốn nhóm: (a) bề mặt soạn
+thảo ST của PGM-02; (b) ngữ nghĩa ngôn ngữ/compiler ST; (c) chẩn đoán ST; (d)
+quan sát runtime mà chính trình soạn thảo hiển thị. Requirement thuần I/O, MCU,
+HW, mạng, bảo mật hạ tầng **không** thuộc phạm vi này và không có ô phân loại.
+
+### 14.4 Bảng phân loại
+
+| Requirement | Hạng mục | Phân loại | Điều khoản dẫn được |
+|---|---|---|---|
+| `SYS-109` | Ba loại POU `PROGRAM`/`FUNCTION`/`FUNCTION_BLOCK`, chung hệ kiểu và typed IR | **IEC 61131-3** | 6.6 *Program organization units* (6.6.1 Functions, 6.6.2 Function blocks, 6.6.3 Programs); 6.3 *Data types* |
+| `SYS-116` | PGM-02 là Engineering Workspace ba increment `EDIT → LIVE → SIMULATE` | **Thiết kế sản phẩm Mekong** | — (chuẩn không quy định hình dạng công cụ kỹ thuật) |
+| `FE-103` | Trình soạn thảo ST: keyboard-first, diagnostic theo dòng/cột, symbol/type, tìm/tham chiếu | **Hỗn hợp** — cú pháp ST là IEC, còn tiện ích soạn thảo là UX sản phẩm | 7.3 *Structured Text (ST)* cho phần ngôn ngữ; phần keyboard-first/tìm kiếm/symbol **không** có điều khoản |
+| `FE-104` | Tạo/sửa POU theo kind, chỉ hiện property hợp lệ theo kind | **IEC 61131-3** (mô hình POU) + **UX sản phẩm** (cách trình bày) | 6.6.1/6.6.2/6.6.3 cho ràng buộc theo kind |
+| `FE-110` | Mọi mutation gửi ETag/base revision, xử lý 403/409/422 theo mã lỗi | **Mekong UX / kiến trúc sản phẩm** | — |
+| `FE-111` | i18n VI/EN, state không chỉ dùng màu, focus nhìn thấy | **Mekong UX** (dẫn WCAG 2.1 AA, **không** dẫn IEC) | — |
+| `FE-112` | Engineering Problems tách khỏi Alarm store | **Mekong UX** | — |
+| `FE-119` | POU Explorer, Quick Library, ba buffer/mode tách biệt, LIVE read-only | **Mekong UX** | — |
+| `FE-116` | Control Library SYSTEM/PROJECT có search/filter/version/usage | **Mekong UX**; phần "thư viện hàm/FB chuẩn" bên dưới mới là IEC | 6.6.1.4 *Standard functions* và 6.6.2.4 *Standard function blocks* chỉ áp cho **nội dung** thư viện chuẩn, không áp cho giao diện duyệt thư viện |
+| `FE-109` | Core state và Point freshness/quality riêng, không bịa metric | **Mekong UX** | — |
+| `BE-103` | Check tổng hợp source/type/topology/Task/Point/library/target | **Bắt buộc để hiện thực ngữ nghĩa IEC** (phần kiểm kiểu/cú pháp) + **UX sản phẩm** (phần gộp báo cáo) | 6.3 và 7.3 quy định **cái gì** hợp lệ; chuẩn không quy định **quy trình** Check |
+| `BE-104` | Compiler job chạy ngoài RT path, timeout/size limit/isolation | **Bắt buộc để hiện thực ngữ nghĩa IEC** | — (chuẩn không quy định kiến trúc trình biên dịch) |
+| `BE-112` | Check compile toàn package nhiều Program/POU, khóa library DAG | **Mekong UX / kiến trúc sản phẩm** | — |
+| `BE-115` | Artifact v2/manifest/library lock deterministic | **Mekong UX / kiến trúc sản phẩm** | — |
+| `BE-116` | Contract typed cho Draft/signature/diagnostic SOURCE/FBD/POU/GLOBAL | **Mekong UX / kiến trúc sản phẩm**; xem §14.5 về khía cạnh PADT | — |
+| `BE-114` | Monitor/trace đọc per-Program/signal từ Core authority | **Mekong UX**; xem §14.5 | — |
+| `CORE-101` | Chỉ nạp artifact đã verify magic/schema/target/profile/hash | **Mekong UX / an toàn sản phẩm** | — |
+| `CORE-110` | Online monitor mặc định read-only, trace bounded | **Mekong UX**; xem §14.5 | — |
+| `CORE-116` | `TRACE_START/STOP` bằng ring buffer bounded | **Mekong UX** | — |
+| `BE-117` / `CORE-118` | Simulation session từ snapshot Draft, không có quyền xuất vật lý | **Thiết kế sản phẩm Mekong** | — |
+| Hệ kiểu 6 kiểu cơ sở | `BOOL`/`INT`/`DINT`/`UINT`/`REAL`/`TIME` | **IEC 61131-3** (tập con) | 6.3 *Data types*, bảng kiểu cơ sở |
+| Khai báo biến và `RETAIN` | `VAR`/`VAR_INPUT`/`VAR_OUTPUT`/`VAR RETAIN` | **IEC 61131-3** | 6.5.2 *Variable declaration and initialization* |
+| Thư viện hàm/FB chuẩn | `ABS`/`MIN`/`MAX`/`LIMIT`/`SEL`/`SQRT`; `TON`/`TOF`/`TP`/`R_TRIG`/`F_TRIG`/`CTU`/`CTD` | **IEC 61131-3** (tập con) | 6.6.1.4 *Standard functions*; 6.6.2.4 *Standard function blocks* |
+| Mở rộng nhà sản xuất | `PID`, `HYSTERESIS`, `SCALE`, `DEADBAND` | **Mekong** — mở rộng nhà sản xuất, đã công bố | Không thuộc thư viện chuẩn; `ADR-054` phán quyết (2) buộc công bố rõ |
+| Cú pháp/ngữ nghĩa ST | Biểu thức, gán, `IF`/`ELSIF`/`ELSE`, `CASE`, gọi FB | **IEC 61131-3** (tập con hẹp) | 7.3 *Structured Text (ST)* |
+| Khác biệt cố ý `D1..D11` | Xem `ST_SUBSET_SPEC` §9.1 | **Mekong** — lệch chuẩn **có chủ ý, đã công bố kèm lý do** | Từng mục dẫn `ADR-054`/`ADR-020` trong `deliberateExclusions` |
+
+Cột "Phân loại" của phần ngôn ngữ **không phải khai báo bằng lời**: nó bắt nguồn
+từ [`st_language_profile_v1.json`](../../contracts/programming/st_language_profile_v1.json),
+sinh bằng cách cho compiler **parse thật** một mẫu tối thiểu, và có hai cổng
+`ctest` (`st_language_profile_contract`, `st_language_profile_gate`) giữ cho nó
+không trôi (`ISS-STED-06`, `ISS-STED-08`).
+
+### 14.5 Chưa dẫn được điều khoản — KHÔNG được gắn nhãn IEC
+
+Bảng §6 của `REV-STED-IEC-001` đề xuất gắn *"IEC TR 61131-8 (khuyến nghị PADT)"*
+cho **chẩn đoán có mã/vị trí ổn định** và **online monitoring**. Ở lần lập trục
+này, **chưa tra được số điều khoản cụ thể** của TR 61131-8 cho hai mục đó, nên
+theo đúng luật §14.2 mục 1 chúng **không** được gắn nhãn IEC và tạm xếp là
+*Mekong UX / thực hành công nghiệp PADT*.
+
+| Mục | Requirement liên quan | Cần gì để gắn được nhãn |
+|---|---|---|
+| Chẩn đoán có mã và vị trí ổn định | `BE-116`, `FE-103`, `FE-112` | Số + tên điều khoản của IEC TR 61131-8 nói về yêu cầu chẩn đoán của PADT |
+| Online monitoring / giá trị runtime nội tuyến | `BE-114`, `CORE-110`, `FE-109` | Số + tên điều khoản của IEC TR 61131-8 nói về giám sát trực tuyến |
+
+Đây là **nợ bằng chứng đã ghi nhận**, không phải kết luận "chuẩn không yêu cầu".
+Ai có bản TR 61131-8 tra được thì bổ sung vào §14.4 và xoá dòng tương ứng ở đây.
+
+### 14.6 Câu chốt về cách gọi tên sản phẩm
+
+> **Sản phẩm dùng đúng cụm `IEC 61131-3-aligned`.** Cấm dùng `compliant`,
+> `conformant`, `certified` — cùng các biến thể tiếng Việt "tuân thủ IEC
+> 61131-3", "đạt chuẩn IEC 61131-3", "được chứng nhận IEC 61131-3" — cho tới khi
+> có bộ bằng chứng conformance tương ứng (`ADR-020` mục 6).
+
+Câu này **được thi hành bằng máy**, không chỉ nằm trong tài liệu:
+`scripts/verify_iec_claim_policy.py` (ctest `iec_claim_policy`) quét toàn bộ
+`docs/` và làm **đỏ** khi một câu khẳng định compliant/conformant/certified xuất
+hiện mà không nằm trong ngữ cảnh cấm đoán. Cổng này ra đời vì chính vấn đề mà
+`F-STED-015` nêu: nguyên tắc đúng nằm trong một tài liệu kỹ thuật không ngăn
+được người khác viết ngược lại ở tài liệu khác.
