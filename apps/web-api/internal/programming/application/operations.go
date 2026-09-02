@@ -36,6 +36,10 @@ type OperationServiceOptions struct {
 	Lease        time.Duration
 	Now          func() time.Time
 	NewID        func() string
+	// ModbusSlots — nguồn phân giải slot `ext` để đối chiếu LẠI trước khi
+	// activate (`ISS-PIO-31`/`AC-PIO-ID-02`). Nil ⇒ không đối chiếu được, và
+	// Commission một package có binding MB_RTU sẽ bị CHẶN.
+	ModbusSlots ModbusSlotProvider
 }
 
 type OperationService struct {
@@ -48,6 +52,7 @@ type OperationService struct {
 	lease        time.Duration
 	now          func() time.Time
 	newID        func() string
+	modbusSlots  ModbusSlotProvider
 	workerID     string
 	wake         chan struct{}
 	cancel       context.CancelFunc
@@ -232,7 +237,7 @@ func NewOperationService(options OperationServiceOptions) (*OperationService, er
 	service := &OperationService{store: options.Store, projects: options.Projects,
 		artifacts: options.Artifacts, runtime: options.Runtime, controllerID: options.ControllerID,
 		stagingRoot: options.StagingRoot, lease: options.Lease, now: options.Now,
-		newID: options.NewID, wake: make(chan struct{}, 1)}
+		newID: options.NewID, modbusSlots: options.ModbusSlots, wake: make(chan struct{}, 1)}
 	service.workerID = "operation-worker-" + service.newID()
 	options.Projects.SetRuntimeImpactProvider(service)
 	return service, nil
@@ -380,6 +385,18 @@ func (s *OperationService) begin(ctx context.Context, actor Actor, kind string, 
 	check, err := s.resolveArtifact(ctx, kind, command)
 	if err != nil {
 		return OperationAccepted{}, err
+	}
+	if kind == "COMMISSION" {
+		/* `AC-PIO-ID-02` — đối chiếu LẠI ngay trước activation.
+		 *
+		 * Check đã phân giải slot theo danh tính bền, nhưng giữa lúc Check xanh
+		 * và lúc bấm Commission, cấu hình fieldbus vẫn có thể đổi: tắt một
+		 * thiết bị, đổi tên một điểm, thêm một điểm. Package đã PASSED không
+		 * chứng minh được điều gì về cấu hình HIỆN TẠI — và đúng khoảng trống
+		 * đó là nơi lỗi ghi sai thanh ghi đi qua. */
+		if err := s.verifyModbusSlots(ctx, check); err != nil {
+			return OperationAccepted{}, err
+		}
 	}
 	var commissionImpact *RevisionImpact
 	var overrideInventorySHA [32]byte

@@ -137,6 +137,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
 			ControllerID: cfg.ProgrammingTargetID, StagingRoot: cfg.ProgrammingStagingDir,
 			Lease: 30 * time.Second,
+			// ISS-PIO-31: đối chiếu lại slot Modbus ngay trước activation —
+			// cấu hình có thể đã đổi sau khi Check xanh.
+			ModbusSlots: app.programmingModbusSlots(),
 		})
 		if operationErr != nil {
 			_ = store.Close()

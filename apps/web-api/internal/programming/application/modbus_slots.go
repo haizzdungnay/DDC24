@@ -2,7 +2,11 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+
+	"mkddc-web/internal/programming/domain"
+	programmingstore "mkddc-web/internal/programming/store"
 )
 
 // `ISS-PIO-31` / `AC-PIO-ID-01`+`AC-PIO-ID-02` — SLOT `ext` KHÔNG PHẢI DANH TÍNH.
@@ -113,4 +117,71 @@ func resolveModbusExtIndex(snapshot *ModbusSlotSnapshot, deviceID, pointID strin
 		return 0, reason
 	}
 	return slot.ExtIndex, ""
+}
+
+// verifyModbusSlots đối chiếu manifest as-built của một Check PASSED với bố cục
+// slot HIỆN TẠI, ngay trước khi activate (`AC-PIO-ID-02`).
+//
+// Vì sao không đủ nếu chỉ kiểm ở Check: giữa lúc Check xanh và lúc bấm
+// Commission, cấu hình fieldbus vẫn có thể đổi — tắt một thiết bị, đổi tên một
+// điểm, thêm một điểm. Một package "đã PASSED" không nói gì về cấu hình HIỆN
+// TẠI, và đúng khoảng trống đó là nơi lỗi ghi sai thanh ghi đi qua.
+//
+// Không tự remap ở đây, cũng như ở Check: lệch ⇒ chặn, người vận hành rebind
+// rồi Check lại. Bản LKG đang chạy giữ nguyên (`AC-PIO-ID-03`).
+func (s *OperationService) verifyModbusSlots(ctx context.Context, check programmingstore.Check) error {
+	bindings, err := manifestModbusBindings(check.ResultJSON)
+	if err != nil {
+		return err
+	}
+	if len(bindings) == 0 {
+		return nil
+	}
+	if s.modbusSlots == nil {
+		return publicOperationError(domain.ErrMapIdentity, true)
+	}
+	snapshot, err := s.modbusSlots.ResolveModbusSlots(ctx)
+	if err != nil {
+		return err
+	}
+	for _, binding := range bindings {
+		if _, reason := resolveModbusExtIndex(&snapshot, binding.DeviceID, binding.PointID,
+			binding.ExtIndex); reason != "" {
+			return publicOperationError(domain.ErrMapIdentity, true)
+		}
+	}
+	return nil
+}
+
+// manifestModbusBindings đọc phần binding MB_RTU của manifest as-built.
+//
+// Manifest rỗng hoặc không đọc được KHÔNG được coi là "không có binding Modbus":
+// đó là một package không tự mô tả được, và cho nó đi tiếp là bỏ đúng phép kiểm
+// này. Trả lỗi để Commission dừng.
+func manifestModbusBindings(resultJSON []byte) ([]ModbusSlot, error) {
+	if len(resultJSON) == 0 {
+		return nil, nil
+	}
+	var document struct {
+		Manifest struct {
+			Bindings []struct {
+				Category string `json:"category"`
+				PointID  string `json:"pointId"`
+				DeviceID string `json:"deviceId"`
+				ExtIndex int    `json:"extIndex"`
+			} `json:"bindings"`
+		} `json:"manifest"`
+	}
+	if err := json.Unmarshal(resultJSON, &document); err != nil {
+		return nil, publicOperationError(domain.ErrMapIdentity, true)
+	}
+	result := make([]ModbusSlot, 0, len(document.Manifest.Bindings))
+	for _, binding := range document.Manifest.Bindings {
+		if binding.Category != "MB_RTU" {
+			continue
+		}
+		result = append(result, ModbusSlot{DeviceID: binding.DeviceID, PointID: binding.PointID,
+			ExtIndex: binding.ExtIndex})
+	}
+	return result, nil
 }

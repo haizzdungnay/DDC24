@@ -8,6 +8,37 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-31` bước 2: đối chiếu lại slot Modbus ngay trước activation (#375, 2026-09-02)
+
+- **Triệu chứng (khoảng trống còn lại sau bước 1).** Check đã phân giải slot theo danh tính bền,
+  nhưng giữa lúc Check xanh và lúc bấm Commission, cấu hình fieldbus **vẫn có thể đổi** — tắt một
+  thiết bị, đổi tên một điểm, thêm một điểm. Một package *"đã PASSED"* không nói gì về cấu hình
+  **hiện tại**, và đúng khoảng trống đó là nơi lỗi ghi sai thanh ghi đi qua.
+- **Một lệch do chính bước 1 tạo ra, sửa luôn.** Bước 1 biên dịch bằng slot **phân giải lại**, nhưng
+  `packageManifestBindings` vẫn ghi slot **đã lưu** vào manifest as-built. Hồ sơ nói một đằng còn
+  artifact chạy một nẻo — đúng loại lệch mà cả issue này sinh ra để chặn. Manifest nay ghi **số như
+  đã biên dịch**.
+- **Cách sửa (bước 2).** `OperationService.verifyModbusSlots` đọc manifest as-built của Check PASSED,
+  phân giải lại bố cục **tại thời điểm Commission**, và **chặn** khi lệch hoặc khi điểm đã biến mất.
+  Không tự remap ở đây, cũng như ở Check: lệch ⇒ chặn, người vận hành rebind rồi Check lại, bản LKG
+  đang chạy giữ nguyên (`AC-PIO-ID-03`).
+  - Manifest **rỗng hoặc không đọc được** ⇒ chặn, **không** coi là "không có binding Modbus": đó là
+    một package không tự mô tả được, và cho nó đi tiếp là bỏ đúng phép kiểm này.
+  - Package chỉ có điểm LOCAL/VP **không** phụ thuộc resolver — bắt nó phụ thuộc là dựng một phụ
+    thuộc giả và chặn nhầm.
+- **Phạm vi có chủ ý.** Chỉ áp cho `COMMISSION`, đúng câu chữ của `AC-PIO-ID-02`. `RESTORE` cũng
+  activate một artifact nên về lý cần phép kiểm tương tự, **nhưng** chặn đường phục hồi trong lúc
+  sự cố là một đánh đổi thuộc quyền chủ sở hữu, không phải quyết định của người sửa mã. Đã nêu ở
+  comment của #375.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · FE **199 file / 2440 test** + lint
+  + build + ngân sách bundle PASS. Sáu test mới khoá: bố cục không đổi ⇒ qua · slot dịch sau Check ⇒
+  chặn · điểm biến mất sau Check ⇒ chặn · thiếu resolver ⇒ chặn · package không có MB_RTU ⇒ qua ·
+  manifest hỏng ⇒ chặn.
+- **CI:** từ ~20:28 UTC GitHub Actions **không cấp runner** cho tổ chức (mọi job chết sau 2 giây,
+  `runner_id = 0`, log HTTP 404) — chữ ký của lỗ hổng 1 ở #414 tái phát. Số đo trên là **đo cục bộ
+  bằng đúng bộ lệnh CI chạy**; chưa có xác nhận từ CI.
+
+
 ### Fixed — `ISS-PIO-31` bước 1: Check thôi tin con số slot lưu trong binding (#375, 2026-09-02)
 
 - **Triệu chứng (chưa ai gặp vì FE còn chặn MB_RTU, nhưng đường code đã sẵn sàng gây ra).** Binding

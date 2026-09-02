@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -224,5 +225,101 @@ func TestSlotMismatchReasonNamesTheNewOccupant(t *testing.T) {
 	}
 	if !strings.Contains(reason, "KHÔNG tự chuyển slot") {
 		t.Fatalf("lý do phải nói rõ hệ thống không tự remap, nhận %q", reason)
+	}
+}
+
+/* `AC-PIO-ID-02` nửa thứ hai — đối chiếu LẠI trước activation.
+ *
+ * Check xanh không chứng minh được gì về cấu hình lúc bấm Commission. Bộ test
+ * này khoá đúng khoảng trống đó. */
+
+func checkWithManifestBindings(bindings ...map[string]any) programmingstore.Check {
+	document := map[string]any{
+		"schemaVersion": "1.0",
+		"diagnostics":   []any{},
+		"manifest":      map[string]any{"bindings": bindings},
+	}
+	raw, _ := json.Marshal(document)
+	return programmingstore.Check{ResultJSON: raw}
+}
+
+func modbusManifestBinding(deviceID, pointID string, extIndex int) map[string]any {
+	return map[string]any{"category": "MB_RTU", "deviceId": deviceID, "pointId": pointID, "extIndex": extIndex}
+}
+
+type stubSlotProvider struct {
+	snapshot ModbusSlotSnapshot
+	err      error
+}
+
+func (s stubSlotProvider) ResolveModbusSlots(context.Context) (ModbusSlotSnapshot, error) {
+	return s.snapshot, s.err
+}
+
+func TestCommissionVerifyPassesWhenLayoutUnchanged(t *testing.T) {
+	service := &OperationService{modbusSlots: stubSlotProvider{snapshot: ModbusSlotSnapshot{
+		Slots: []ModbusSlot{{DeviceID: "bus-1-slave-2", PointID: "PUMP_CMD", ExtIndex: 3}},
+	}}}
+	check := checkWithManifestBindings(modbusManifestBinding("bus-1-slave-2", "PUMP_CMD", 3))
+
+	if err := service.verifyModbusSlots(context.Background(), check); err != nil {
+		t.Fatalf("bố cục không đổi thì không được chặn: %v", err)
+	}
+}
+
+func TestCommissionBlocksWhenLayoutShiftedAfterCheck(t *testing.T) {
+	// Đúng kịch bản của issue, nhưng xảy ra SAU khi Check đã xanh: kỹ sư tắt
+	// một thiết bị đứng trước, điểm dịch từ 3 xuống 1.
+	service := &OperationService{modbusSlots: stubSlotProvider{snapshot: ModbusSlotSnapshot{
+		Slots: []ModbusSlot{{DeviceID: "bus-1-slave-2", PointID: "PUMP_CMD", ExtIndex: 1}},
+	}}}
+	check := checkWithManifestBindings(modbusManifestBinding("bus-1-slave-2", "PUMP_CMD", 3))
+
+	if err := service.verifyModbusSlots(context.Background(), check); err == nil {
+		t.Fatal("slot đã dịch sau Check thì Commission phải bị chặn")
+	}
+}
+
+func TestCommissionBlocksWhenPointDisappearedAfterCheck(t *testing.T) {
+	service := &OperationService{modbusSlots: stubSlotProvider{snapshot: ModbusSlotSnapshot{
+		Slots: []ModbusSlot{{DeviceID: "bus-1-slave-9", PointID: "PRESSURE", ExtIndex: 3}},
+	}}}
+	check := checkWithManifestBindings(modbusManifestBinding("bus-1-slave-2", "PUMP_CMD", 3))
+
+	if err := service.verifyModbusSlots(context.Background(), check); err == nil {
+		t.Fatal("điểm biến mất sau Check thì Commission phải bị chặn")
+	}
+}
+
+func TestCommissionBlocksModbusPackageWithoutResolver(t *testing.T) {
+	service := &OperationService{}
+	check := checkWithManifestBindings(modbusManifestBinding("bus-1-slave-2", "PUMP_CMD", 3))
+
+	if err := service.verifyModbusSlots(context.Background(), check); err == nil {
+		t.Fatal("không có nguồn đối chiếu thì package có binding MB_RTU phải bị chặn")
+	}
+}
+
+func TestCommissionIgnoresPackagesWithoutModbusBindings(t *testing.T) {
+	// Package chỉ có điểm LOCAL/VP không cần resolver — bắt nó phụ thuộc là
+	// dựng một phụ thuộc giả và chặn nhầm.
+	service := &OperationService{}
+	check := checkWithManifestBindings(map[string]any{
+		"category": "LOCAL", "pointId": "UI-01", "extIndex": 0,
+	})
+
+	if err := service.verifyModbusSlots(context.Background(), check); err != nil {
+		t.Fatalf("package không có binding Modbus không được chặn: %v", err)
+	}
+}
+
+func TestCommissionBlocksWhenManifestIsUnreadable(t *testing.T) {
+	// Manifest hỏng KHÔNG được coi là "không có binding Modbus": đó là một
+	// package không tự mô tả được, và cho nó đi tiếp là bỏ đúng phép kiểm này.
+	service := &OperationService{}
+	check := programmingstore.Check{ResultJSON: []byte("{ this is not json")}
+
+	if err := service.verifyModbusSlots(context.Background(), check); err == nil {
+		t.Fatal("manifest không đọc được thì phải chặn, không được bỏ qua")
 	}
 }
