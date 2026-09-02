@@ -1125,4 +1125,19 @@ describe('ISS-STED-15 — a11y của ST editor', () => {
     await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
     expect(document.activeElement).toBe(textarea)
   })
+  /* Khay Thư viện nhanh sống ở `ProgramsTab` (ngoài `SourceEditor`), nên test
+   * trả-focus của nó nằm ở `DesignWorkspacePage.test.tsx`. Khay Vấn đề đã có
+   * test bẫy focus + trả focus ở `ProblemsDrawer.test.tsx`. */
+  it('nút bật/tắt Bản đồ mã giữ nguyên focus trên chính nó', async () => {
+    // Khác khay Thư viện: nút này KHÔNG biến mất khi bật/tắt, nên focus tự
+    // nhiên ở lại. Test khoá điều đó để một lần đổi sang render có điều kiện
+    // không lặng lẽ tạo ra cùng lỗi mất focus.
+    const onToggleMaximized = vi.fn()
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { onToggleMaximized })
+    textarea.focus()
+    fireEvent.keyDown(textarea, { key: 'M', ctrlKey: true, shiftKey: true })
+    expect(onToggleMaximized).toHaveBeenCalledTimes(1)
+    // Phím tắt không cướp focus khỏi ô gõ.
+    expect(document.activeElement).toBe(textarea)
+  })
 })

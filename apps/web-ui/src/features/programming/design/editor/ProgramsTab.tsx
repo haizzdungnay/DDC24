@@ -434,6 +434,9 @@ export function ProgramsTab({
    * Chèn đi bằng YÊU CẦU có `nonce` (cùng khuôn `formatRequest`): panel không
    * biết cách chèn, và sửa buffer từ ngoài sẽ làm mất lịch sử Undo. */
   const [libraryDockOpen, setLibraryDockOpen] = useState(false)
+  /* Nút mở khay Thư viện nhanh — đích trả focus khi đóng khay. Nút chỉ tồn tại
+   * khi khay ĐANG ĐÓNG, nên phải đợi một nhịp render rồi mới focus được. */
+  const libraryDockToggleRef = useRef<HTMLButtonElement | null>(null)
   /* Bản đồ mã là ĐIỀU HƯỚNG trong POU đang mở, nên nó thuộc cột trái cùng cây
    * POU — không phải một khay nữa chồng dưới chỗ gõ. Mặc định mở: nó là cách
    * nhanh nhất để đi trong một POU 400 dòng. */
@@ -885,11 +888,21 @@ export function ProgramsTab({
                   setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
                   return true
                 }}
-                onClose={() => setLibraryDockOpen(false)}
+                /* `ISS-STED-15` — đóng khay phải TRẢ FOCUS, không chỉ đổi
+                   state. Nút Đóng nằm BÊN TRONG khay, nên khi khay biến mất
+                   focus rơi về `<body>`: người dùng bàn phím phải Tab lại từ
+                   đầu trang để quay về chỗ đang gõ. Hộp Tìm và hộp Tới dòng
+                   của chính trình soạn thảo này đã trả focus đúng từ lâu; khay
+                   Thư viện nhanh là chỗ duy nhất còn lệch. */
+                onClose={() => {
+                  setLibraryDockOpen(false)
+                  window.setTimeout(() => libraryDockToggleRef.current?.focus(), 0)
+                }}
               />
             </div>
           ) : (
             <button
+              ref={libraryDockToggleRef}
               type="button"
               className="mb-2 w-full rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
               aria-expanded={false}

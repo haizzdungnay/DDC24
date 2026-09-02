@@ -39,6 +39,13 @@
   **đang gõ**, tức đang giữ focus. Không có `aria-live` thì số lỗi vừa đổi không được nói
   ra, và người dùng screen reader phải rời ô gõ rồi quay lại mới biết. Đã thêm
   `role="status"` + `aria-live="polite"`.
+- **Sửa thêm một chỗ mất focus thật.** Khay Thư viện nhanh có nút Đóng nằm **bên trong**
+  khay, nên khi khay biến mất focus rơi về `<body>` — người dùng bàn phím phải `Tab` lại
+  từ đầu trang để quay về chỗ đang gõ. Hộp Tìm và hộp Tới dòng của chính trình soạn thảo
+  này đã trả focus đúng từ lâu; khay Thư viện là chỗ duy nhất còn lệch. Đã sửa để đóng khay
+  trả focus về nút mở. **Test tự động cho nó chưa có** — khay chỉ render khi workspace có
+  một POU ST đang chọn và cho sửa, trạng thái mà fixture hiện tại chưa dựng tới; ghi ở §5
+  record là nợ, không nhận là đã kiểm.
 - **Điều record KHÔNG nói.** Nó **không** tuyên bố ST editor "đạt WCAG". §5 ghi rõ ba mục
   còn thiếu như **nợ đã ghi nhận**: quét `axe` tự động trên tab Chương trình; thứ tự focus
   của Thư viện nhanh / Bản đồ mã / khay Vấn đề; và kiểm với screen reader thật
