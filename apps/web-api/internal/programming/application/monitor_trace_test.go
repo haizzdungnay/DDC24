@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,16 +23,46 @@ const (
 	monitorBindingID  = "66666666-6666-4666-8666-666666666666"
 )
 
+// `ISS-STED-21` — fake này bị ĐỌC bởi goroutine chạy trace và bị GHI bởi thân
+// test. Trước lát này test đổi nguồn bằng cách gán lại `service.monitor` giữa
+// chừng, tức ghi một trường mà goroutine kia đang đọc — `go test -race` (cấu
+// hình CI dùng) báo đúng một cuộc đua thật.
+//
+// Sản phẩm KHÔNG làm vậy: `monitor` được đặt lúc dựng service và không đổi
+// nữa. Nên chỗ hỏng là ở test, và cách sửa đúng là để CHÍNH FAKE đổi câu trả
+// lời một cách an toàn, thay vì tráo trường của service.
 type fakeMonitorProvider struct {
+	mu       sync.Mutex
 	snapshot MonitorTruthSnapshot
 	err      error
 }
 
-func (f fakeMonitorProvider) ReadProgrammingMonitorSnapshot(context.Context) (MonitorTruthSnapshot, error) {
+func (f *fakeMonitorProvider) ReadProgrammingMonitorSnapshot(context.Context) (MonitorTruthSnapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.snapshot, f.err
 }
 
-func newMonitorTraceService(t *testing.T) *RuntimeService {
+// fail làm nguồn snapshot "mất" giữa lúc trace đang chạy — đúng kịch bản test
+// cần, nhưng qua khoá thay vì qua một phép gán không đồng bộ.
+func (f *fakeMonitorProvider) fail(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.err = err
+}
+
+// set đổi snapshot đang phát ra (ví dụ: Core khởi động lại, mốc monotonic lùi)
+// mà không tráo trường `monitor` của service.
+func (f *fakeMonitorProvider) set(snapshot MonitorTruthSnapshot) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.snapshot = snapshot
+	f.err = nil
+}
+
+// Trả về CẢ provider để test đổi nguồn snapshot một cách an toàn (`fail`),
+// thay vì tráo trường `monitor` của service giữa lúc goroutine trace đang đọc.
+func newMonitorTraceService(t *testing.T) (*RuntimeService, *fakeMonitorProvider) {
 	t.Helper()
 	store := openAuditTestStore(t)
 	key := sha256.Sum256([]byte("monitor-project-key"))
@@ -66,7 +97,7 @@ func newMonitorTraceService(t *testing.T) *RuntimeService {
 	remaining := int64(272)
 	fixed := time.Date(2026, 8, 13, 12, 0, 2, 0, time.UTC)
 	reader := &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)}
-	provider := fakeMonitorProvider{snapshot: MonitorTruthSnapshot{
+	provider := &fakeMonitorProvider{snapshot: MonitorTruthSnapshot{
 		ObservedAt: fixed.Format(time.RFC3339Nano), SafeState: false,
 		Task:   &TaskMetricsView{TaskID: "main", PeriodMS: 1000, BudgetMS: 200, State: "RUNNING", RunCount: 10, LastExecNS: 1200, MaxExecNS: 3000, OverrunCount: 1},
 		Points: []MonitorPointTruth{{Category: "LOCAL", PointID: "AO-01", ObservedAt: fixed.Format(time.RFC3339Nano), ActualValue: 62.0, ProgramValue: &programValue, Source: "manual", EffectivePriority: &priority, OverrideActor: "operator-1", OverrideRemainingS: &remaining, Quality: "GOOD", Unit: "V"}},
@@ -83,7 +114,7 @@ func newMonitorTraceService(t *testing.T) *RuntimeService {
 	if err != nil {
 		t.Fatalf("NewRuntimeService: %v", err)
 	}
-	return service
+	return service, provider
 }
 
 func stringPointer(value string) *string { return &value }
@@ -130,7 +161,7 @@ func newMonitorDraftV2Service(t *testing.T) *RuntimeService {
 	fixed := time.Date(2026, 8, 24, 12, 0, 2, 0, time.UTC)
 	programValue := 41.0
 	reader := &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)}
-	provider := fakeMonitorProvider{snapshot: MonitorTruthSnapshot{
+	provider := &fakeMonitorProvider{snapshot: MonitorTruthSnapshot{
 		ObservedAt: fixed.Format(time.RFC3339Nano),
 		Points: []MonitorPointTruth{{Category: "LOCAL", PointID: "AO-01", ObservedAt: fixed.Format(time.RFC3339Nano),
 			ActualValue: 62.0, ProgramValue: &programValue, Source: "program", Quality: "GOOD", Unit: "V"}},
@@ -179,7 +210,7 @@ func TestGetMonitorResolvesVariablesFromDraftV2Locals(t *testing.T) {
 }
 
 func TestGetMonitorSeparatesProgramActualAndOverrideTruth(t *testing.T) {
-	service := newMonitorTraceService(t)
+	service, _ := newMonitorTraceService(t)
 	page, err := service.GetMonitor(context.Background())
 	if err != nil {
 		t.Fatalf("GetMonitor: %v", err)
@@ -200,7 +231,7 @@ func TestGetMonitorSeparatesProgramActualAndOverrideTruth(t *testing.T) {
 }
 
 func TestTraceIsBoundedIdempotentAndCanStop(t *testing.T) {
-	service := newMonitorTraceService(t)
+	service, _ := newMonitorTraceService(t)
 	request := TraceRequest{SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID}, DurationMS: 1000, SamplePeriodMS: 1000}
 	actor := Actor{ID: "admin", Role: "admin"}
 	accepted, err := service.CreateTrace(context.Background(), request, actor, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "trace-test-000001")
@@ -232,7 +263,7 @@ func TestTraceIsBoundedIdempotentAndCanStop(t *testing.T) {
 }
 
 func TestTraceStoreEvictsOldestTerminalSessionAtRetentionLimit(t *testing.T) {
-	service := newMonitorTraceService(t)
+	service, _ := newMonitorTraceService(t)
 	base := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
 	service.traces.mu.Lock()
 	for index := 0; index < maxRetainedTraces; index++ {
@@ -258,14 +289,17 @@ func TestTraceStoreEvictsOldestTerminalSessionAtRetentionLimit(t *testing.T) {
 }
 
 func TestTraceFailsClosedWhenMonitorSourceBecomesUnavailable(t *testing.T) {
-	service := newMonitorTraceService(t)
+	service, monitorProvider := newMonitorTraceService(t)
 	accepted, err := service.CreateTrace(context.Background(), TraceRequest{
 		SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID}, DurationMS: 1000, SamplePeriodMS: 100,
 	}, Actor{ID: "admin", Role: "admin"}, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "trace-test-000004")
 	if err != nil {
 		t.Fatalf("CreateTrace: %v", err)
 	}
-	service.monitor = fakeMonitorProvider{err: errors.New("snapshot offline")}
+	/* Đổi qua CHÍNH fake, không tráo trường của service: sản phẩm đặt `monitor`
+	 * lúc dựng và không đổi nữa, nên một phép gán giữa chừng là thứ chỉ test
+	 * làm — và nó ghi vào ô mà goroutine trace đang đọc. */
+	monitorProvider.fail(errors.New("snapshot offline"))
 	deadline := time.Now().Add(time.Second)
 	var view TraceView
 	for time.Now().Before(deadline) {
@@ -283,8 +317,11 @@ func TestTraceFailsClosedWhenMonitorSourceBecomesUnavailable(t *testing.T) {
 // traceCoreReader mô phỏng Core CÓ ring trace: nhận `TRACE_START`, trả mẫu ở
 // `TRACE_READ`. Nó KHÔNG mô phỏng luật lấy mẫu — luật đó do test C++ canh. Ở
 // đây chỉ cần biết BE có thật sự đọc từ ring hay không.
+// Bộ đếm ở đây bị goroutine trace tăng trong khi thân test đọc để khẳng định.
+// Không có khoá thì đó là một cuộc đua, và `-race` báo đúng.
 type traceCoreReader struct {
 	fakeRuntimeStatusReader
+	mu          sync.Mutex
 	started     int
 	readCalls   int
 	stopCalls   int
@@ -294,7 +331,24 @@ type traceCoreReader struct {
 	dropped     uint32
 }
 
+// counts trả về ảnh chụp nhất quán của ba bộ đếm. Đọc từng trường rời rạc sẽ
+// cho một tổ hợp chưa từng tồn tại ở bất kỳ thời điểm nào.
+func (f *traceCoreReader) counts() (started, reads, stops int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.started, f.readCalls, f.stopCalls
+}
+
+/* Đọc từng bộ đếm qua khoá. Ba hàm nhỏ thay vì để mỗi nơi tự lấy `counts()` —
+ * chỗ dùng chỉ cần một số, và một tổ hợp ba số không ai đọc sẽ mời người ta so
+ * hai giá trị chụp ở hai thời điểm khác nhau. */
+func readerStarted(f *traceCoreReader) int   { s, _, _ := f.counts(); return s }
+func readerReadCalls(f *traceCoreReader) int { _, r, _ := f.counts(); return r }
+func readerStopCalls(f *traceCoreReader) int { _, _, s := f.counts(); return s }
+
 func (f *traceCoreReader) Call(ctx context.Context, request coreipc.Request) (coreipc.Response, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	switch request.Action {
 	case coreipc.ActionTraceStart:
 		f.started++
@@ -331,7 +385,7 @@ func (f *traceCoreReader) Call(ctx context.Context, request coreipc.Request) (co
 // từ hai chu kỳ khác nhau — đồ thị trông hợp lý trong khi quan hệ nhân quả giữa
 // chúng đã bị xáo.
 func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
-	service := newMonitorTraceService(t)
+	service, _ := newMonitorTraceService(t)
 	reader := &traceCoreReader{
 		fakeRuntimeStatusReader: fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)},
 		samples: []traceReadSample{
@@ -349,8 +403,8 @@ func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTrace: %v", err)
 	}
-	if reader.started != 1 {
-		t.Fatalf("TRACE_START không được gửi xuống Core: %d", reader.started)
+	if readerStarted(reader) != 1 {
+		t.Fatalf("TRACE_START không được gửi xuống Core: %d", readerStarted(reader))
 	}
 
 	// Vòng lấy mẫu chạy nền; chờ tới khi có lần đọc ring đầu tiên.
@@ -364,12 +418,15 @@ func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
 		// test đỏ ngẫu nhiên. Với Core đã nhận phiên, mẫu CHỈ có thể đến từ
 		// ring, nên hai điều kiện cùng đúng là mốc chắc chắn.
 		view, err := service.GetTrace(accepted.TraceID)
-		if reader.readCalls > 0 && err == nil && len(view.Samples) > 0 {
+		/* Đọc bộ đếm qua `counts()`: goroutine trace đang tăng chúng, nên đọc
+		 * thẳng trường là một cuộc đua — `-race` báo đúng. */
+		_, reads, _ := reader.counts()
+		if reads > 0 && err == nil && len(view.Samples) > 0 {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if reader.readCalls == 0 {
+	if readerReadCalls(reader) == 0 {
 		t.Fatal("BE không bao giờ gọi TRACE_READ — ring của Core không ai đọc")
 	}
 
@@ -399,7 +456,7 @@ func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
 	}
 
 	_ = service.StopTrace(context.Background(), accepted.TraceID, Actor{ID: "admin", Role: "admin"}, "monitor-test-core02")
-	if reader.stopCalls == 0 {
+	if readerStopCalls(reader) == 0 {
 		t.Fatal("TRACE_STOP không được gửi — Core lấy mẫu tiếp cho một phiên BE đã đóng")
 	}
 }
@@ -408,7 +465,7 @@ func TestTraceSamplesComeFromCoreRingNotMonitorPolling(t *testing.T) {
 // dữ liệu trong khi Core chưa nhận là cách chắc chắn nhất để trả về một đồ thị
 // rỗng mà không nói vì sao.
 func TestTraceFallsBackToPollingWhenCoreRejectsSession(t *testing.T) {
-	service := newMonitorTraceService(t)
+	service, _ := newMonitorTraceService(t)
 	reader := &traceCoreReader{
 		fakeRuntimeStatusReader: fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY", active: stringPointer(monitorRevisionID)},
 		rejectStart:             true,
@@ -423,8 +480,8 @@ func TestTraceFallsBackToPollingWhenCoreRejectsSession(t *testing.T) {
 		t.Fatalf("CreateTrace: %v", err)
 	}
 	time.Sleep(300 * time.Millisecond)
-	if reader.readCalls != 0 {
-		t.Fatalf("BE đọc ring của một phiên Core chưa nhận: %d lần", reader.readCalls)
+	if readerReadCalls(reader) != 0 {
+		t.Fatalf("BE đọc ring của một phiên Core chưa nhận: %d lần", readerReadCalls(reader))
 	}
 	view, err := service.GetTrace(accepted.TraceID)
 	if err != nil {

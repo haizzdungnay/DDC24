@@ -312,6 +312,14 @@ TEST(BusWorkerQuality, MissingProfileMarksConfigErrorBeforeAnyIo)
 /* MBR-B102: một bus chết KHÔNG được kéo theo bus còn lại.
  * Đây là bất biến trung tâm của việc tách BusWorker; bản một-bus dùng chung một
  * `modbus_t*` nên một slave chết ở bus 2 giữ dây của bus 1 trọn timeout. */
+/* `ISS-STED-21` — ba test dưới đây mở một CỔNG NỐI TIẾP THẬT qua PTY, nên
+ * chúng chỉ có nghĩa khi `MKDDC_ENABLE_MODBUS=ON`. Build `baseline`/`bacnet`
+ * của CI biên dịch `ModbusMaster` ở dạng rút gọn không mở được cổng, và ba
+ * test này đỏ ở đó — đỏ vì SAI CẤU HÌNH KIỂM, không phải vì sản phẩm hỏng.
+ *
+ * Guard chứ không xoá: với `MODBUS=ON` chúng vẫn kiểm đúng thứ cần kiểm —
+ * một cổng hỏng không được làm chết cả dịch vụ fieldbus. */
+#ifdef MKDDC_ENABLE_MODBUS
 TEST(BusWorkerIsolation, DeadPortOnOneBusDoesNotStopTheOther)
 {
     const std::string prof = write_profile("iso",
@@ -350,6 +358,7 @@ TEST(BusWorkerIsolation, DeadPortOnOneBusDoesNotStopTheOther)
     ::close(pty_master);
     ::unlink(prof.c_str());
 }
+#endif /* MKDDC_ENABLE_MODBUS */
 
 /* MBR-B305 — utilization phải là TỶ LỆ CHIẾM DÂY THẬT.
  *
@@ -632,6 +641,14 @@ TEST(FieldbusConfigContract, BusIdKhongSuyDuocSoHieuThiBiLoai)
  * Nhìn từ ngoài thì Modbus "không chạy", trong khi thực tế chỉ mỗi đường báo
  * cáo là chết. Test này khoá điều kiện mà `main.cpp` nay dựa vào: sau khi áp
  * cấu hình có slave, `bus_count()` phải > 0 để luồng publish biết có việc. */
+/* `ISS-STED-21` — ba test dưới đây mở một CỔNG NỐI TIẾP THẬT qua PTY, nên
+ * chúng chỉ có nghĩa khi `MKDDC_ENABLE_MODBUS=ON`. Build `baseline`/`bacnet`
+ * của CI biên dịch `ModbusMaster` ở dạng rút gọn không mở được cổng, và ba
+ * test này đỏ ở đó — đỏ vì SAI CẤU HÌNH KIỂM, không phải vì sản phẩm hỏng.
+ *
+ * Guard chứ không xoá: với `MODBUS=ON` chúng vẫn kiểm đúng thứ cần kiểm —
+ * một cổng hỏng không được làm chết cả dịch vụ fieldbus. */
+#ifdef MKDDC_ENABLE_MODBUS
 TEST(RuntimeReconfigure, ApplyConfigTuCauHinhRongLamBusCountLonHonKhong)
 {
     const std::string prof = write_profile("runtime_reconf",
@@ -679,6 +696,7 @@ TEST(RuntimeReconfigure, ApplyConfigTuCauHinhRongLamBusCountLonHonKhong)
     master.stop_workers();
     ::close(pty_master);
 }
+#endif /* MKDDC_ENABLE_MODBUS */
 
 /* `T57-3.9` — vòng nhớ khung phải được ghi từ CHÍNH vòng quét thật.
  *
@@ -687,6 +705,14 @@ TEST(RuntimeReconfigure, ApplyConfigTuCauHinhRongLamBusCountLonHonKhong)
  * này thì mọi test vòng nhớ vẫn xanh trong khi màn hình chẩn đoán ngoài hiện
  * trường mãi mãi rỗng — và một bảng rỗng đọc thành "bus im lặng".
  */
+/* `ISS-STED-21` — ba test dưới đây mở một CỔNG NỐI TIẾP THẬT qua PTY, nên
+ * chúng chỉ có nghĩa khi `MKDDC_ENABLE_MODBUS=ON`. Build `baseline`/`bacnet`
+ * của CI biên dịch `ModbusMaster` ở dạng rút gọn không mở được cổng, và ba
+ * test này đỏ ở đó — đỏ vì SAI CẤU HÌNH KIỂM, không phải vì sản phẩm hỏng.
+ *
+ * Guard chứ không xoá: với `MODBUS=ON` chúng vẫn kiểm đúng thứ cần kiểm —
+ * một cổng hỏng không được làm chết cả dịch vụ fieldbus. */
+#ifdef MKDDC_ENABLE_MODBUS
 TEST(BusWorkerFrames, PollRecordsTransactionIncludingTheFailedOnes)
 {
     const std::string prof = write_profile("frames",
@@ -736,3 +762,4 @@ TEST(BusWorkerFrames, PollRecordsTransactionIncludingTheFailedOnes)
     ::close(pty_master);
     ::unlink(prof.c_str());
 }
+#endif /* MKDDC_ENABLE_MODBUS */

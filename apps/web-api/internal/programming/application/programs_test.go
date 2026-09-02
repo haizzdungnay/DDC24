@@ -141,7 +141,7 @@ func TestListProgramsHealthBoundaries(t *testing.T) {
 		programsIntentSeed{programID: "prog-faulted", desiredEnabled: true},
 		programsIntentSeed{programID: "prog-rejected", desiredEnabled: true},
 	)
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: liveProgramsSnapshot(
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot(
 		ProgramMetricsView{InstanceID: "prog-healthy", State: "RUNNING", Enabled: true, PeriodMS: 1000,
 			LastExecNS: 12_000_000, MaxExecNS: 40_000_000, MissedReleaseCount: 3,
 			ConsecutiveMissedRelease: 0, LastRunMonoNS: 8_500_000_000, Lane: 0},
@@ -237,7 +237,7 @@ func TestListProgramsOverrunThresholdIsStrictlyGreater(t *testing.T) {
 		programsIntentSeed{programID: "prog-at-threshold", desiredEnabled: true},
 		programsIntentSeed{programID: "prog-no-period", desiredEnabled: true},
 	)
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: liveProgramsSnapshot(
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot(
 		ProgramMetricsView{InstanceID: "prog-at-threshold", State: "RUNNING", Enabled: true,
 			PeriodMS: 1000, MaxExecNS: 800_000_000, LastRunMonoNS: 8_999_000_000},
 		ProgramMetricsView{InstanceID: "prog-no-period", State: "RUNNING", Enabled: true,
@@ -269,7 +269,7 @@ func TestListProgramsCoreSilentIsUnknownAndUnavailable(t *testing.T) {
 		programsIntentSeed{programID: "prog-b", desiredEnabled: false, lastKnownState: "DISABLED"},
 	)
 	service := newProgramsService(t, store,
-		fakeMonitorProvider{err: errors.New("core unavailable trong test")})
+		&fakeMonitorProvider{err: errors.New("core unavailable trong test")})
 
 	page, err := service.ListPrograms(context.Background(), programsProjectID)
 	if err != nil {
@@ -314,7 +314,7 @@ func TestListProgramsCoreSilentIsUnknownAndUnavailable(t *testing.T) {
 func TestListProgramsLegacyCoreWithoutProgramsKeyIsUnavailable(t *testing.T) {
 	store := openProgramsTestStore(t)
 	seedProgramsProject(t, store, programsIntentSeed{programID: "prog-a", desiredEnabled: true})
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: MonitorTruthSnapshot{
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: MonitorTruthSnapshot{
 		ObservedAt: programsSnapshotObservedAt, CapturedMonotonicNs: programsCapturedMonoNs,
 		Programs: nil, Points: []MonitorPointTruth{},
 	}})
@@ -339,7 +339,7 @@ func TestListProgramsEmptyProgramsArrayIsCoreLive(t *testing.T) {
 		programsIntentSeed{programID: "prog-seen", desiredEnabled: true, lastKnownState: "RUNNING"},
 		programsIntentSeed{programID: "prog-never-seen", desiredEnabled: true},
 	)
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: liveProgramsSnapshot()})
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot()})
 	page, err := service.ListPrograms(context.Background(), programsProjectID)
 	if err != nil {
 		t.Fatalf("ListPrograms: %v", err)
@@ -375,7 +375,7 @@ func TestListProgramsLastKnownRejectsPhantomTransitions(t *testing.T) {
 		programsIntentSeed{programID: "prog-stopping", desiredEnabled: false, lastKnownState: "STOPPING"},
 		programsIntentSeed{programID: "prog-waiting", desiredEnabled: true, lastKnownState: "WAITING"},
 	)
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: liveProgramsSnapshot()})
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot()})
 	page, err := service.ListPrograms(context.Background(), programsProjectID)
 	if err != nil {
 		t.Fatalf("ListPrograms: %v", err)
@@ -399,7 +399,7 @@ func TestListProgramsLastKnownRejectsPhantomTransitions(t *testing.T) {
 func TestListProgramsIncludesCoreOnlyInstancesWithoutFabricatingIntent(t *testing.T) {
 	store := openProgramsTestStore(t)
 	seedProgramsProject(t, store, programsIntentSeed{programID: "prog-known", desiredEnabled: true})
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: liveProgramsSnapshot(
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot(
 		ProgramMetricsView{InstanceID: "prog-known", State: "RUNNING", Enabled: true, PeriodMS: 1000,
 			LastRunMonoNS: 8_900_000_000},
 		ProgramMetricsView{InstanceID: "prog-orphan", State: "RUNNING", Enabled: true, PeriodMS: 5000,
@@ -434,7 +434,7 @@ func TestListProgramsNeverWritesIntentTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProgramRuntimeIntents: %v", err)
 	}
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: liveProgramsSnapshot(
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot(
 		ProgramMetricsView{InstanceID: "prog-a", State: "FAULTED", Enabled: false, PeriodMS: 1000},
 	)})
 	if _, err := service.ListPrograms(context.Background(), programsProjectID); err != nil {
@@ -454,7 +454,7 @@ func TestListProgramsNeverWritesIntentTable(t *testing.T) {
 func TestListProgramsRejectsInvalidProjectID(t *testing.T) {
 	store := openProgramsTestStore(t)
 	seedProgramsProject(t, store)
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: liveProgramsSnapshot()})
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: liveProgramsSnapshot()})
 	if _, err := service.ListPrograms(context.Background(), "not-a-uuid"); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("err = %v; want ErrInvalidRequest", err)
 	}
@@ -468,7 +468,7 @@ func TestListProgramsReportsCoreTruncation(t *testing.T) {
 	snapshot := liveProgramsSnapshot(ProgramMetricsView{InstanceID: "prog-a", State: "RUNNING",
 		Enabled: true, PeriodMS: 1000})
 	snapshot.ProgramsTruncated = true
-	service := newProgramsService(t, store, fakeMonitorProvider{snapshot: snapshot})
+	service := newProgramsService(t, store, &fakeMonitorProvider{snapshot: snapshot})
 	page, err := service.ListPrograms(context.Background(), programsProjectID)
 	if err != nil {
 		t.Fatalf("ListPrograms: %v", err)
@@ -505,9 +505,9 @@ func TestProgramRuntimeStateMappingFollowsD07(t *testing.T) {
 func TestListProgramsEvidenceJSON(t *testing.T) {
 	for _, scenario := range []struct {
 		name    string
-		monitor fakeMonitorProvider
+		monitor *fakeMonitorProvider
 	}{
-		{"(a) Core sống", fakeMonitorProvider{snapshot: liveProgramsSnapshot(
+		{"(a) Core sống", &fakeMonitorProvider{snapshot: liveProgramsSnapshot(
 			ProgramMetricsView{InstanceID: "prog-ahu-supply", State: "RUNNING", Enabled: true,
 				PeriodMS: 1000, LastExecNS: 12_000_000, MaxExecNS: 41_500_000,
 				MissedReleaseCount: 3, ConsecutiveMissedRelease: 0,
@@ -515,7 +515,7 @@ func TestListProgramsEvidenceJSON(t *testing.T) {
 			ProgramMetricsView{InstanceID: "prog-ahu-return", State: "DISABLED", Enabled: false,
 				PeriodMS: 5000, LastRunMonoNS: 0, Lane: 1},
 		)}},
-		{"(b) Core im", fakeMonitorProvider{err: errors.New("core unavailable trong test")}},
+		{"(b) Core im", &fakeMonitorProvider{err: errors.New("core unavailable trong test")}},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			store := openProgramsTestStore(t)

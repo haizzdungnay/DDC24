@@ -126,9 +126,33 @@ jobs:
           path: build/verify/cpp-${{ matrix.profile }}/Testing/
           retention-days: 7
 
+      # ISS-STED-21 — công cụ production cho cổng Go.
+      #
+      # `verify-project.sh --component go` đòi `mkddc-st-compile`/`mkddc-st-package`
+      # do CHÍNH cổng cpp dựng ra (`MKDDC_REQUIRE_PRODUCTION_TOOLS=1`): test Go
+      # phải chạy qua binary thật, không phải fake. Bất biến đó đúng — nhưng job
+      # Go chạy trên runner RIÊNG và không có `build/verify/` của job này, nên
+      # nó hỏng sau chưa tới một giây, mọi lần, kể từ khi cổng được viết.
+      #
+      # Chuyển đúng hai binary qua artifact thay vì bắt job Go dựng lại C++:
+      # dựng lại sẽ cho một binary KHÁC binary mà cổng cpp vừa kiểm, tức phá
+      # chính bất biến "cùng một build".
+      - name: Upload production tools cho cổng Go
+        if: matrix.profile == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-tools
+          path: |
+            build/verify/cpp-full/core/mkddc-st-compile
+            build/verify/cpp-full/core/mkddc-st-package
+          retention-days: 1
+
   web-backend:
     name: Go Web Backend
     runs-on: ubuntu-22.04
+    # ISS-STED-21 — cổng Go dùng production tool do cổng cpp dựng, nên nó phải
+    # đợi job đó xong. Không có `needs` thì artifact chưa tồn tại lúc tải.
+    needs: som-services
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,6 +161,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'apps/web-api/go.mod'
+
+      - name: Tải production tool từ cổng cpp
+        uses: actions/download-artifact@v4
+        with:
+          name: production-tools
+          path: build/verify/cpp-full/core
+
+      # `upload-artifact` không giữ bit thực thi.
+      - name: Khôi phục quyền thực thi
+        run: chmod +x build/verify/cpp-full/core/mkddc-st-compile build/verify/cpp-full/core/mkddc-st-package
 
       - name: Vet và test race Go Web API
         run: scripts/verify-project.sh --component go --profile race

@@ -8,6 +8,62 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-STED-21` lỗ hổng 1: gate CI nay CHẠY, và nó đỏ vì bốn lỗi thật (#414, 2026-09-02)
+
+- **Trạng thái đã đổi so với lúc mở issue.** #414 ghi gate CI chết sau **2–3 giây** với **0
+  step** vì billing GitHub Actions. Đo lại hôm nay: các job chạy **3–9 phút**, `MCU Firmware`
+  **pass**. Chặn billing **đã hết**. Nhưng 11/12 job vẫn đỏ — và lần này là **đỏ thật**.
+- **Vì sao không ai thấy sớm hơn.** Chặn billing giấu đi bốn khiếm khuyết; khi nó được gỡ,
+  chúng lộ ra cùng lúc. Hai lỗi che nhau — đó chính là lý do #414 tồn tại.
+- **Bốn nguyên nhân gốc, đã sửa hết.**
+  1. **Gate `layout` đỏ vì số đếm catalog lạc hậu.** `ST-WARN-001..004` vào catalog ở
+     commit `35515b5` (1.8.0 → 1.9.0, 151 → 155 detail) nhưng **chính commit đó** không sửa
+     ba con số ở `test_programming_error_catalog.py` — đúng chế độ hỏng mà khối chú thích
+     ngay trên chúng đã cảnh báo.
+  2. **Ba pin hash trôi.** `openapiSha256` (PGM-02 + G1 join) và hash/đếm của
+     `error_catalog` chưa được cập nhật sau các thay đổi hợp đồng. Đây là **cổng chống trôi
+     làm đúng việc của nó** — chỉ là chưa ai chạy nó.
+  3. **Build `-Werror` hỏng ở bốn profile.** CI dựng với `-Wall -Wextra -Werror`; build
+     local mặc định **không**. Với `MODBUS=OFF`, `make_slave()` trong
+     `test_modbus_master_fake.cpp` không có nơi gọi (mọi caller nằm trong
+     `#ifdef MKDDC_ENABLE_MODBUS`) ⇒ `-Wunused-function` ⇒ **hỏng ở bước BUILD**, trước khi
+     chạy test nào. Đã chuyển định nghĩa vào đúng khối `#ifdef`.
+  4. **Ba test PTY đỏ ở profile không có MODBUS.** Chúng mở một **cổng nối tiếp thật**, nên
+     chỉ có nghĩa khi `MKDDC_ENABLE_MODBUS=ON`. Guard chứ không xoá: với `MODBUS=ON` chúng
+     vẫn kiểm đúng thứ cần kiểm.
+- **Và một cuộc đua dữ liệu thật, chỉ `-race` mới thấy.** CI chạy `go test -race`; tôi vẫn
+  chạy `go test` thường. Ba test trace đổi nguồn bằng cách **tráo `service.monitor` giữa
+  lúc goroutine trace đang đọc**, và đọc bộ đếm của fake trong khi goroutine đó đang tăng.
+  - **Sản phẩm đúng, test sai:** `monitor` được đặt lúc dựng service và không đổi nữa; chỉ
+    test mới tráo nó. Nên cách sửa là để **chính fake** đổi câu trả lời qua khoá
+    (`fail()`/`set()`), không phải tráo trường của service.
+  - Bộ đếm của `traceCoreReader` nay đọc qua `counts()` — trả **ảnh chụp nhất quán** của ba
+    số, vì đọc từng trường rời rạc cho một tổ hợp chưa từng tồn tại ở bất kỳ thời điểm nào.
+- **Job Go trong CI chưa từng chạy được, và không thể chạy được.** `--component go` đòi
+  `mkddc-st-compile`/`mkddc-st-package` do **chính cổng cpp** dựng
+  (`MKDDC_REQUIRE_PRODUCTION_TOOLS=1`: test Go phải đi qua binary thật). Nhưng job Go chạy
+  trên **runner riêng** và không có `build/verify/` của job kia ⇒ hỏng sau **chưa tới một
+  giây**, mọi lần. Đã chuyển đúng hai binary qua artifact + `needs:` thay vì bắt job Go dựng
+  lại C++ — dựng lại sẽ cho một binary **khác** binary mà cổng cpp vừa kiểm, tức phá chính
+  bất biến "cùng một build".
+- **Kiểm chứng — chạy đúng entrypoint mà CI chạy, cả năm profile C++.**
+
+  | Cổng | Lệnh | Kết quả |
+  |---|---|---|
+  | layout | `verify-project.sh --component layout` | exit 0 |
+  | cpp baseline | `--component cpp --profile baseline` | **1329/1329**, exit 0 |
+  | cpp modbus | `--profile modbus` | **1345/1345**, exit 0 |
+  | cpp bacnet | `--profile bacnet` | **1330/1330**, exit 0 |
+  | cpp modbus-bacnet | `--profile modbus-bacnet` | **1346/1346**, exit 0 |
+  | cpp full | `--profile full` | **1384/1384**, exit 0 |
+  | go race | `--component go --profile race` | **19/19 package ok**, exit 0 |
+  | frontend | `--component frontend` | exit 0 |
+
+  Cả năm profile C++ dựng với `-Wall -Wextra -Werror` như CI. Trước lần này tôi chỉ chạy
+  cấu hình `full` không `-Werror` — tức chưa từng chạy đúng thứ CI chạy.
+- **Còn lại của #414.** Lỗ hổng 2 (đo trên bo DDC-24 thật) **không** đụng tới được: không có
+  phần cứng. Issue để mở.
+
 ### Added — `ISS-STED-17` đánh dấu 4 khối mở rộng + lộ trình thư viện chuẩn IEC (#368, 2026-09-02)
 
 - **Triệu chứng.** `PID`, `HYSTERESIS`, `SCALE`, `DEADBAND` **không** thuộc thư viện chuẩn

@@ -7,7 +7,7 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "3fcb7a6b384b946c17cf66a1fe657a0ec8695c8b232c643f64bcd49e34676c6f",
+      "sha256": "44ce16fad970fb2b1301f2db7eff4fb5717c422f92fd1453673c124695ebc3be",
       "major": 1,
       "version": "1.33.0",
       "operationCount": 41
@@ -55,13 +55,13 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "cbb7041a79685222795851f667ecb2badbede6f50741e4141cef0a83690fcde6",
+      "sha256": "39bf243a051dd2553c549f9628fcf13e04ccb161345f2f717eb574846b45dabe",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "80cc40ccaf3641e83442b0b46cae4994c285e5d92eebbeff38997e1c0c127756",
+      "manifestSha256": "d50e50f1d5287ec8cbef92befa11fc051b47846625b0630e5edfb3626604545c",
       "major": 1,
-      "version": "1.8.0",
+      "version": "1.9.0",
       "publicErrorCount": 38,
-      "componentDetailCount": 151
+      "componentDetailCount": 155
     },
     {
       "name": "store",

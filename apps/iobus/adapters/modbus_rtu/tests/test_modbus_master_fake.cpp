@@ -24,25 +24,6 @@
 
 using namespace iobus::fieldbus;
 
-namespace {
-/* SlaveConfig có thêm `bus_id` (MBR-B101) nên khởi tạo bằng danh sách ngoặc
- * theo vị trí không còn đọc được. Helper đặt tên rõ từng tham số. */
-SlaveConfig make_slave(uint8_t addr, const std::string& profile, const std::string& name,
-                       uint32_t poll_ms, uint32_t timeout_ms = 300, uint8_t retry = 2,
-                       uint8_t bus_id = 1)
-{
-    SlaveConfig sl;
-    sl.addr       = addr;
-    sl.bus_id     = bus_id;
-    sl.profile    = profile;
-    sl.name       = name;
-    sl.poll_ms    = poll_ms;
-    sl.timeout_ms = timeout_ms;
-    sl.retry      = retry;
-    return sl;
-}
-} // namespace
-
 TEST(FieldbusConfig, ParsesRtuPollTimeoutRetryAndSerialSettings)
 {
     const std::string path = "/tmp/mkddc_fieldbus_rtu_" + std::to_string(::getpid()) + ".json";
@@ -224,6 +205,29 @@ TEST(FieldbusMetrics, E303ReArmsAfterCleanWindowWithoutOfflineReset)
 
 #ifdef MKDDC_ENABLE_MODBUS
 namespace {
+
+/* SlaveConfig có thêm `bus_id` (MBR-B101) nên khởi tạo bằng danh sách ngoặc
+ * theo vị trí không còn đọc được. Helper đặt tên rõ từng tham số.
+ *
+ * Định nghĩa nằm TRONG `#ifdef MKDDC_ENABLE_MODBUS` vì MỌI nơi gọi nó đều ở
+ * trong khối này. Trước đây nó nằm ngoài, nên build `MODBUS=OFF` có một hàm
+ * static không ai dùng — và cổng CI dựng với `-Werror` (`-Wunused-function`)
+ * nên bốn job `baseline`/`bacnet`/... hỏng ở bước BUILD, trước khi chạy test
+ * nào. Build local mặc định không bật `-Werror` nên chỗ này không lộ ra. */
+SlaveConfig make_slave(uint8_t addr, const std::string& profile, const std::string& name,
+                       uint32_t poll_ms, uint32_t timeout_ms = 300, uint8_t retry = 2,
+                       uint8_t bus_id = 1)
+{
+    SlaveConfig sl;
+    sl.addr       = addr;
+    sl.bus_id     = bus_id;
+    sl.profile    = profile;
+    sl.name       = name;
+    sl.poll_ms    = poll_ms;
+    sl.timeout_ms = timeout_ms;
+    sl.retry      = retry;
+    return sl;
+}
 
 /* Helper dùng chung cho các test PTY dưới đây. */
 struct PtyRtu {
