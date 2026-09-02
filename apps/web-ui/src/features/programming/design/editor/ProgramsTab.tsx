@@ -37,6 +37,8 @@ import {
   type StCompletionItem,
   type StDiagnosticRange,
 } from './stEditorSupport'
+import { stSignatureHelp, stSignatureLabel, stSignatureParameterLabel,
+  type StSignatureHelp } from './stSignatureHelp'
 import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeValueOverlay'
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
@@ -1204,6 +1206,10 @@ export function SourceEditor({
   const [replaceText, setReplaceText] = useState('')
   const [cursor, setCursor] = useState({ line: 1, column: 1 })
   const [cursorOffset, setCursorOffset] = useState(0)
+  /* `ISS-STED-11` — `null` nghĩa là con trỏ không nằm trong lời gọi nào mà
+   * registry biết. Không dùng cờ `open` riêng: một chữ ký "đang mở nhưng rỗng"
+   * là trạng thái không có nghĩa gì. */
+  const [signature, setSignature] = useState<StSignatureHelp | null>(null)
   const [completion, setCompletion] = useState<{ open: boolean; items: StCompletionItem[]; selected: number; anchor: number }>(
     { open: false, items: [], selected: 0, anchor: 0 },
   )
@@ -1473,6 +1479,19 @@ export function SourceEditor({
 
   function closeCompletion() {
     setCompletion({ open: false, items: [], selected: 0, anchor: 0 })
+  }
+
+  /* `ISS-STED-11` — gợi ý chữ ký.
+   *
+   * Tách khỏi `completion` chứ không gộp: hai thứ này sống theo hai nhịp khác
+   * nhau. Danh sách gợi ý đóng ngay khi gõ `(`, còn chữ ký phải SỐNG SUỐT lời
+   * gọi cho tới dấu `)`. Gộp state sẽ buộc một trong hai hành xử sai. */
+  function closeSignature() {
+    setSignature(null)
+  }
+
+  function refreshSignature(nextSource: string, offset: number) {
+    setSignature(stSignatureHelp(nextSource, offset, collectStSymbols(nextSource)))
   }
 
   /* WP-10 P0 (CTO/Owner approval §5): gợi ý sau MỖI keystroke dựa trên
@@ -2221,10 +2240,12 @@ export function SourceEditor({
               setCursor(offsetToLineColumn(next, selectionEnd))
               setSelectionRange(selectionStart === selectionEnd ? null : { start: selectionStart, end: selectionEnd })
               refreshCompletion(next, selectionEnd)
+              refreshSignature(next, selectionEnd)
             }}
             onClick={(event) => {
               updateCursor()
               closeCompletion()
+              refreshSignature(source, event.currentTarget.selectionStart ?? 0)
               /* Ctrl/Cmd+Click = tới khai báo, đường chuột của F12. */
               if (event.ctrlKey || event.metaKey) handleGoToDefinition()
             }}
@@ -2249,6 +2270,11 @@ export function SourceEditor({
                 if (event.key === 'ArrowUp') { event.preventDefault(); setCompletion((c) => ({ ...c, selected: (c.selected - 1 + c.items.length) % c.items.length })); return }
                 if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); acceptCompletion(completion.items[completion.selected]); return }
                 if (event.key === 'Escape') { event.preventDefault(); closeCompletion(); return }
+              }
+              /* `Esc` đóng chữ ký trước khi đụng tới hộp Tìm kiếm: thứ vừa
+               * bật lên là thứ người dùng muốn tắt trước. */
+              if (event.key === 'Escape' && signature) {
+                event.preventDefault(); closeSignature(); return
               }
               if (event.key === 'Escape' && searchOpen) {
                 event.preventDefault(); setSearchOpen(false); return
@@ -2383,6 +2409,65 @@ export function SourceEditor({
               source={source}
               runtimeOverlay={runtimeOverlay}
             />
+          )}
+
+          {/* `ISS-STED-11` — chữ ký của lời gọi đang gõ.
+              `role="status"` + `aria-live="polite"` chứ không phải `dialog`:
+              nó KHÔNG nhận focus và KHÔNG chặn gõ tiếp — người dùng vẫn đang
+              gõ tham số, cướp focus giữa chừng sẽ phá đúng thao tác nó định
+              giúp. Trình đọc màn hình đọc lại khi tham số đang nhập đổi. */}
+          {signature && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="st-signature-help"
+              data-signature-callee={signature.calleeName}
+              data-signature-active={signature.activeParameter}
+              className="absolute z-10 max-w-[28rem] rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 py-1 text-xs shadow-lg"
+              /* Nằm TRÊN dòng đang gõ, ngược với danh sách gợi ý nằm dưới:
+                 hai thứ có thể cùng hiện, và chồng lên nhau thì cả hai đều
+                 không đọc được. */
+              style={{
+                top: `${Math.max(0, (cursor.line - 1) * EDITOR_ROW_HEIGHT_PX - editorScroll.top)}px`,
+                left: `${Math.max(EDITOR_PAD_TOP_PX, Math.min(220, (cursor.column - 1) * 8.4 + EDITOR_PAD_TOP_PX) - editorScroll.left)}px`,
+              }}
+            >
+              <span className="sr-only">{stSignatureLabel(signature)}</span>
+              <span aria-hidden className="mono text-[var(--c-text)]">
+                {signature.calleeName}
+                {signature.kind === 'function-block' && (
+                  <span className="text-[var(--c-text-dim)]">{` : ${signature.typeRef}`}</span>
+                )}
+                {'('}
+                {signature.parameters.map((parameter, index) => (
+                  <span key={parameter.name}>
+                    {index > 0 && ', '}
+                    <span
+                      className={index === signature.activeParameter
+                        ? 'font-semibold text-[var(--c-accent)] underline'
+                        : 'text-[var(--c-text-dim)]'}
+                    >
+                      {stSignatureParameterLabel(parameter, signature.namedArgumentsRequired)}
+                    </span>
+                  </span>
+                ))}
+                {')'}
+              </span>
+              {signature.namedArgumentsRequired && (
+                /* `D4` của `ST_SUBSET_SPEC` §9: FB chỉ gọi được THEO TÊN. Nói
+                   ra ở đây vì đây là chỗ người dùng đang quyết định viết gì;
+                   để họ phát hiện ở bước Kiểm tra là muộn mất một vòng. */
+                <span className="ml-2 text-[var(--c-text-dim)]">
+                  {pick('gọi theo tên (D4)', 'named arguments only (D4)')}
+                </span>
+              )}
+              {signature.reviewGated && (
+                <span className="ml-2 text-[var(--c-warn-fg)]">
+                  {pick('chờ review Controls/Safety — Kiểm tra sẽ từ chối',
+                        'awaiting Controls/Safety review — Check will reject')}
+                </span>
+              )}
+            </div>
           )}
 
           {completion.open && (

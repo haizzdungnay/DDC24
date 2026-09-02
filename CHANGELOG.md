@@ -8,6 +8,50 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-11` gợi ý chữ ký cho hàm và Function Block trong ST editor (#362, 2026-09-02)
+
+- **Triệu chứng.** Không có signature help. Người dùng gõ `LIMIT(` phải tự nhớ thứ tự
+  `(MN, IN, MX)`; gõ `PID_1(` phải tự nhớ sáu tham số **và** quy tắc chỉ-gọi-theo-tên
+  (khác biệt cố ý `D4` của `ST_SUBSET_SPEC` §9). Nhớ sai thì phải chờ hết một vòng Kiểm
+  tra mới biết.
+- **Nguyên nhân gốc.** Dữ liệu đã có sẵn và đã được dùng ở chỗ khác:
+  `PROGRAMMING_LIBRARY_ENTRIES` mang đủ `ports: [{name, direction, dataType}]` cho cả 46
+  entry, sinh tự động từ `pou_library_registry_v1.json`, và Quick Library **đã** vẽ bảng
+  cổng từ chính dữ liệu đó. Chỉ trình soạn thảo là không dùng — `buildStCompletions()`
+  trả `detail` là chuỗi cố định `'hàm chuẩn'`/`'kiểu function block'`.
+- **Cách sửa.** `stSignatureHelp.ts` — bộ máy thuần logic, **không khai tay danh sách
+  tham số thứ hai**: khai tay sẽ tạo một nguồn sự thật song song, và nó sẽ lệch khỏi
+  registry đúng vào lúc người dùng tin nó nhất, lúc đang gõ dở một lời gọi.
+  - **Quét xuôi, không quét lùi.** Quét lùi từ con trỏ không phân biệt được `(` của lời
+    gọi với `(` mở chú thích `(*`, và cũng không biết mình đang ở trong chú thích hay
+    không. Một chữ ký hiện lên giữa dòng chú thích tệ hơn là không hiện gì.
+  - **FB đọc tham số đang nhập từ tên bên trái `:=`, không đếm dấu phẩy.** Gọi theo tên
+    cho phép viết các cặp theo thứ tự bất kỳ, nên đoạn thứ hai không nhất thiết là tham
+    số thứ hai; đếm dấu phẩy sẽ làm nổi sai chỗ.
+  - **Không làm nổi bừa.** Vượt quá số tham số, hoặc tên chưa khớp cổng nào ⇒
+    `activeParameter = -1`. Làm nổi sai còn tệ hơn không làm nổi, vì nó khẳng định một
+    điều sai.
+  - **Gọi thẳng kiểu FB (`TON(`) không hiện chữ ký** — hiện lên là ngầm bảo rằng viết vậy
+    được, trong khi FB phải qua instance đã khai.
+  - **UI:** `role="status"` + `aria-live="polite"`, **không** phải `dialog` — nó không
+    nhận focus và không chặn gõ tiếp; cướp focus giữa chừng sẽ phá đúng thao tác nó định
+    giúp. Popup nằm **trên** dòng đang gõ, ngược với danh sách gợi ý nằm dưới, vì hai thứ
+    có thể cùng hiện. `Esc` đóng chữ ký **trước** hộp Tìm kiếm: thứ vừa bật lên là thứ
+    người dùng muốn tắt trước. Không tự chèn dấu đóng ngoặc.
+  - **State tách khỏi `completion`**, không gộp: danh sách gợi ý đóng ngay khi gõ `(`, còn
+    chữ ký phải sống suốt lời gọi tới dấu `)`. Gộp state buộc một trong hai hành xử sai.
+  - **Khối chờ review** (`PID`) vẫn hiện chữ ký nhưng nói rõ Kiểm tra sẽ từ chối, lấy từ
+    `PROGRAMMING_REVIEW_GATED_FEATURES` chứ không phải danh sách viết tay — giữ đúng
+    nguyên tắc "cổng phải hiện ở chỗ người ta **chọn**" đã có ở `stEditorSupport.ts`.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `npx vitest --run --environment jsdom src`: **194 file / 2278 test pass**, exit 0
+    (thêm 15 test đơn vị `stSignatureHelp` + 7 test màn hình `SourceEditor`).
+  - `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` trong ngân sách R3,
+    dư 3.75 KiB).
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1379/1379 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
 ### Fixed — `ISS-STED-10` DDD §7 công bố mã diagnostic không tồn tại (#361, 2026-09-02)
 
 - **Triệu chứng.** `DDD-LANG-PROG-001` §7 công bố namespace `ST-LIMIT-*`, mã cắt bớt

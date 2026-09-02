@@ -944,4 +944,85 @@ describe('DEV-PROG-026 — nút gõ toàn màn hình', () => {
     fireEvent.keyDown(textarea, { key: 'M', ctrlKey: true, shiftKey: true })
     expect(onToggleMaximized).toHaveBeenCalledTimes(1)
   })
+  /* `ISS-STED-11` — gợi ý chữ ký ngay tại chỗ người dùng đang gõ.
+   *
+   * Test đơn vị của `stSignatureHelp` chứng minh bộ máy đúng; những test dưới
+   * đây chứng minh nó THỰC SỰ hiện ra và thực sự đóng được — một bộ máy đúng
+   * mà không ai nối vào editor thì người dùng vẫn phải tự nhớ thứ tự tham số.
+   */
+  function typeSource(textarea: HTMLTextAreaElement, next: string) {
+    fireEvent.change(textarea, { target: { value: next, selectionStart: next.length, selectionEnd: next.length } })
+  }
+
+  it('gõ `(` sau tên hàm thì hiện chữ ký lấy từ registry', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nVAR x : REAL; END_VAR\nEND_PROGRAM\n')
+    typeSource(textarea, 'PROGRAM P\nVAR x : REAL; END_VAR\nx := LIMIT(')
+
+    const help = await screen.findByTestId('st-signature-help')
+    expect(help).toHaveAttribute('data-signature-callee', 'LIMIT')
+    expect(help.textContent).toContain('MN')
+    expect(help.textContent).toContain('MX')
+  })
+
+  it('tham số đang nhập dịch theo dấu phẩy', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    typeSource(textarea, 'x := LIMIT(')
+    await waitFor(() => expect(screen.getByTestId('st-signature-help'))
+      .toHaveAttribute('data-signature-active', '0'))
+    typeSource(textarea, 'x := LIMIT(a, ')
+    await waitFor(() => expect(screen.getByTestId('st-signature-help'))
+      .toHaveAttribute('data-signature-active', '1'))
+  })
+
+  it('instance FB hiện dạng gọi theo tên, không gợi ý dạng theo vị trí', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nVAR TON_1 : TON; END_VAR\nEND_PROGRAM\n')
+    typeSource(textarea, 'PROGRAM P\nVAR TON_1 : TON; END_VAR\nTON_1(')
+
+    const help = await screen.findByTestId('st-signature-help')
+    expect(help.textContent).toContain('IN :=')
+    expect(help.textContent).toContain('PT :=')
+    // `D4` phải đọc được ngay tại chỗ đang gõ, không đợi tới bước Kiểm tra.
+    expect(help.textContent).toContain('D4')
+  })
+
+  it('khối chờ review vẫn hiện chữ ký nhưng nói rõ Kiểm tra sẽ từ chối', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nVAR PID_1 : PID; END_VAR\nEND_PROGRAM\n')
+    typeSource(textarea, 'PROGRAM P\nVAR PID_1 : PID; END_VAR\nPID_1(')
+
+    const help = await screen.findByTestId('st-signature-help')
+    expect(help).toHaveAttribute('data-signature-callee', 'PID_1')
+    expect(help.textContent).toContain('Kiểm tra sẽ từ chối')
+  })
+
+  it('Esc đóng chữ ký và KHÔNG chặn gõ tiếp', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    typeSource(textarea, 'x := ABS(')
+    await screen.findByTestId('st-signature-help')
+
+    fireEvent.keyDown(textarea, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByTestId('st-signature-help')).not.toBeInTheDocument())
+
+    // Gõ tiếp vẫn chạy: chữ ký không được cướp focus hay nuốt phím.
+    typeSource(textarea, 'x := ABS(y')
+    expect(textarea.value).toBe('x := ABS(y')
+  })
+
+  it('đóng ngoặc xong thì chữ ký biến mất, và không tự chèn `)`', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    typeSource(textarea, 'x := ABS(')
+    await screen.findByTestId('st-signature-help')
+    // Người dùng tự gõ `)`; editor không được thêm dấu nào ngoài ý muốn.
+    typeSource(textarea, 'x := ABS(y)')
+    await waitFor(() => expect(screen.queryByTestId('st-signature-help')).not.toBeInTheDocument())
+    expect(textarea.value).toBe('x := ABS(y)')
+  })
+
+  it('chữ ký đọc được bằng trình đọc màn hình mà không cướp focus', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    typeSource(textarea, 'x := LIMIT(')
+    const help = await screen.findByTestId('st-signature-help')
+    expect(help).toHaveAttribute('role', 'status')
+    expect(help).toHaveAttribute('aria-live', 'polite')
+    expect(help).not.toHaveAttribute('tabindex')
+  })
 })
