@@ -8,6 +8,56 @@
 
 ## [Unreleased]
 
+### Fixed — Seqlock của Signal Bus ghép value chu kỳ này với timestamp chu kỳ khác (#414, 2026-09-02)
+
+- **Triệu chứng.** `StSignalBus.ConcurrentInspectNeverPairsValueWithForeignTimestamp` đỏ trên
+  CI ở profile `modbus+bacnet` (1/1346), trong khi cùng profile xanh ở máy dev. Đo lại tại
+  chỗ: đỏ **1/40** lần chạy qua `ctest` và **1/51** khi chạy thẳng binary — **lỗi thật, không
+  phải nhiễu hạ tầng**.
+- **Nguyên nhân gốc.** `commit_at_boundary()` **tăng mốc `generation` TRƯỚC rồi mới đổi bản
+  `live`**. Seqlock của `snapshot_slot()` đọc theo thứ tự `generation` → `live` → dữ liệu →
+  `generation` và tin rằng *"mốc không đổi ⇒ chưa đổi bản"*. Mệnh đề đó chỉ đúng nếu mốc tăng
+  **sau** cú đổi bản. Cửa sổ thật: reader đọc `before = G+1` (sau khi tăng mốc, trước khi đổi
+  bản) rồi đọc `live = L` (bản cũ); writer đổi bản; `publish()` chu kỳ kế tính
+  `draft = 1 - live = L` và **ghi đè đúng bản reader đang chép**; reader đọc `after = G+1`,
+  thấy bằng `before` nên **chấp nhận một ô đã bị xé**.
+- **Vì sao nghiêm trọng.** Một số đo "tươi" mang mốc thời gian không thuộc về nó là loại sai
+  nguy hiểm nhất ở Runtime Monitor: nó **trông hoàn toàn hợp lệ**.
+- **Cách sửa.** Đổi bản trước, tăng mốc sau; bất biến thứ tự được ghi thành chú thích tại chỗ
+  vì nó là *bất biến*, không phải sở thích.
+- **Đo lại.** Sau bản vá **0/400** lần chạy đỏ. Năm profile C++ `-Werror`: **1329 / 1345 /
+  1330 / 1346 / 1384**, tất cả exit 0.
+- **Ghi nhận thêm về bộ bắt lỗi.** Chú thích cũ nói bộ bắt lỗi tất định là
+  `-DMKDDC_SANITIZE=thread`; đo lại: TSan **build và chạy được** (khác ghi chú cũ) nhưng báo
+  6 cảnh báo data race **ngay cả trên bản đã sửa** — chúng là phép chép Slot không đồng bộ của
+  chính khuôn seqlock. Muốn TSan thành cổng thì phải chú thích hoặc đổi Slot sang atomic, tức
+  đổi thiết kế đường RT; **chưa làm**, và chú thích trong test đã được sửa cho khớp sự thật.
+
+### Fixed — Chuỗi no-board của lane E2E đua với máy nên chết ở CI mà không nói vì sao (#414, 2026-09-02)
+
+- **Triệu chứng.** Job `Programming E2E backend/Core thật` đỏ: `mkddc-iobus` và `mkddc-core`
+  đều `Aborted (core dumped)`, rồi cổng của lane báo *"chuỗi no-board lên nhưng không thấy
+  /dev/shm/mkddc_plc_shm"*. Không tái hiện được ở máy dev, kể cả khi build đúng bộ tuỳ chọn
+  CMake mà lane E2E dùng.
+- **Nguyên nhân gốc (loại lỗi, không phải một dòng).** `run_noboard_demo.sh` dùng `sleep` cố
+  định giữa các bước (0,7 s cho socat, 1,5 s cho iobus/core) — một cuộc đua với máy: thắng
+  trên máy dev rảnh, thua trên runner CI chạy song song nhiều job. Và khi thua, nó **không nói
+  ra vì sao**: log của chính tiến trình chết nằm trong `logs/demo/*.log` mà CI không giữ lại,
+  nên triệu chứng cách nguyên nhân vài dòng log không ai đọc được.
+- **Cách sửa.** Thay mọi `sleep` cố định bằng `wait_for` — chờ ĐÚNG điều kiện (cặp PTY xuất
+  hiện, fake_mcu còn sống, `/dev/shm/mkddc_io_shm`, socket IPC, `/dev/shm/mkddc_plc_shm`) — và
+  khi hết hạn thì **in 30 dòng cuối log của tiến trình liên quan** rồi mới chết. Một lần đỏ ở
+  CI phải tự nói ra vì sao, vì không ai ssh được vào runner đó.
+- **Đo lại.** Chuỗi lên bình thường với build đúng bộ tuỳ chọn của lane E2E; toàn lane
+  `e2e-real` **8 passed / 1 skipped, exit 0**. Tiêm lỗi (thay `mkddc-iobus` bằng một script
+  thoát 134 ngay lập tức) ⇒ cổng dừng đúng chỗ và in ra dòng cuối của chính tiến trình đó:
+  *"ERROR iop.fatal: giả lập tiến trình chết ngay khi khởi động"*.
+- **Nguyên nhân gốc của `Aborted` đã được tìm ra ở chỗ khác:** `mlockall(MCL_FUTURE)` dưới
+  trần memlock hữu hạn (bản vá riêng, PR #439). Bản vá ở đây **không thay thế** bản vá đó —
+  nó chữa một khiếm khuyết khác cùng lộ ra trong lần đỏ ấy: chuỗi đua với máy, và khi chết thì
+  không ai đọc được vì sao. Hai thứ độc lập, và thứ hai vẫn cần dù thứ nhất đã xong.
+
+
 ### Fixed — Test hồi quy memlock đỏ vì môi trường, không vì hành vi (2026-09-02)
 
 *Phát hiện qua review tự động trên PR #440 (P2), đã kiểm chứng lại và đúng.*

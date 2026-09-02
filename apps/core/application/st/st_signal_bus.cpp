@@ -321,10 +321,40 @@ void StSignalBus::commit_at_boundary()
         if (draft_slot.published_at_ns < live_slot.published_at_ns || !draft_slot.ever_published)
             draft_slot = live_slot;
     }
-    bank.generation.fetch_add(1, std::memory_order_acq_rel);
-    /* Đổi bản là MỘT lần ghi atomic: consumer hoặc thấy trọn bản cũ hoặc trọn
-     * bản mới. */
+    /* THỨ TỰ Ở ĐÂY LÀ MỘT BẤT BIẾN, KHÔNG PHẢI SỞ THÍCH: đổi bản TRƯỚC, tăng
+     * mốc SAU.
+     *
+     * Seqlock của `snapshot_slot` đọc theo thứ tự `generation` → `live` → dữ
+     * liệu → `generation`, và nó tin rằng "mốc không đổi ⇒ chưa đổi bản". Mệnh
+     * đề đó chỉ đúng nếu mốc tăng SAU cú đổi bản. Với thứ tự cũ (tăng mốc rồi
+     * mới đổi bản) có một cửa sổ thật:
+     *
+     *   1. reader đọc `before = G+1` — sau khi mốc đã tăng, TRƯỚC khi đổi bản;
+     *   2. reader đọc `live = L` — vẫn là bản cũ;
+     *   3. writer đổi bản: `live = D`;
+     *   4. `publish()` của chu kỳ kế tính `draft = 1 - live = L` và ghi đè
+     *      ĐÚNG bản mà reader đang chép;
+     *   5. reader đọc `after = G+1` — bằng `before`, nên nó CHẤP NHẬN một ô
+     *      đã bị xé: `value` của chu kỳ này ghép `published_at_ns` của chu kỳ
+     *      kia.
+     *
+     * Đó chính là thứ `ConcurrentInspectNeverPairsValueWithForeignTimestamp`
+     * bắt được — đo thật: 1 lần đỏ trong 40 lần chạy `ctest`, và 1/51 khi chạy
+     * thẳng binary. Một số đo "tươi" mang mốc thời gian không thuộc về nó là
+     * loại sai nguy hiểm nhất ở Runtime Monitor: nó trông hoàn toàn hợp lệ.
+     *
+     * Đổi bản trước rồi mới tăng mốc thì hai nhánh đều kín:
+     *   - reader thấy `before = G` (trước khi tăng) ⇒ nó đọc `live` trước cú
+     *     đổi bản, và bản nó chép chưa thể thành draft của chu kỳ kế; `after`
+     *     sẽ là `G+1` nên nó thử lại;
+     *   - reader thấy `before = G+1` ⇒ nhờ `live.store(release)` xảy ra trước
+     *     RMW trên `generation`, lần `live.load(acquire)` ngay sau đó BUỘC phải
+     *     thấy bản mới, tức bản không ai ghi vào cho tới commit kế.
+     *
+     * Đổi bản vẫn là MỘT lần ghi atomic: consumer hoặc thấy trọn bản cũ hoặc
+     * trọn bản mới. */
     bank.live.store(draft, std::memory_order_release);
+    bank.generation.fetch_add(1, std::memory_order_acq_rel);
     release_bank(bank_index);
 }
 
