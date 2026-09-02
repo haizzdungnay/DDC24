@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-STED-10` DDD §7 công bố mã diagnostic không tồn tại (#361, 2026-09-02)
+
+- **Triệu chứng.** `DDD-LANG-PROG-001` §7 công bố namespace `ST-LIMIT-*`, mã cắt bớt
+  "ST-LIMIT-DIAG-001", namespace "COMP-INTERNAL-*" và ví dụ payload "ST-SEM-TYPE-001".
+  Không mã nào trong số đó tồn tại ở bất kỳ đâu ngoài chính tài liệu ấy. §7 cũng bỏ sót
+  **tám** namespace có thật và đặt mã chi tiết vào **sai trường** của payload.
+- **Nguyên nhân gốc.** Tài liệu được viết trước khi mã lỗi được chuẩn hoá vào
+  `error_catalog_v1.json`, và không có cổng nào đối chiếu hai bên. Hỏng ở đây không dừng
+  lại trong tài liệu: người vận hành đọc runbook rồi `grep` log tìm một mã không tồn tại
+  sẽ **không ra gì** và kết luận sai rằng sự cố không xảy ra — một mã bịa tạo ra **bằng
+  chứng vắng mặt giả**. Người viết client đọc ví dụ rồi so `code` với `ST-SEM-*` sẽ không
+  bao giờ khớp, vì `code` mang **mã công khai** còn mã chi tiết nằm ở `detailCode`.
+- **Hướng đã chọn: sửa tài liệu, KHÔNG đổi mã lỗi.** Mã đã đi vào error catalog,
+  `errors_generated.go`, `errors.ts` và log hiện trường; đổi mã là đổi một hợp đồng công
+  khai và làm hỏng mọi runbook đang dùng. Hướng ngược lại không được thi hành, kể cả một
+  phần — nó cần kế hoạch di trú riêng.
+- **Cách sửa.**
+  - **§7.1** ví dụ payload là payload **thật** do `checks.go` phát, gồm cả bốn trường
+    provenance của `ISS-STED-18`; nói rõ **hai trường mã, không phải một** và vì sao gộp
+    lại sẽ mất một trong hai.
+  - **§7.2** bảng namespace thật: 12 họ compiler (số), 2 họ CLI/worker (chữ), 3 họ FBD
+    (chữ **rồi** số). Kèm ba ghi chú bảng không nói hết: `ST-RT-*` là fault lúc chạy chứ
+    không phải diagnostic lúc biên dịch; họ `FBD-*` **không** đi qua error catalog mà do
+    validator FE phát; và ba hình dạng hậu tố khác nhau làm mọi biểu thức
+    `ST-[A-Z]+-\d{3}` bỏ lọt 14 mã.
+  - **§7.3** trần 64 + `ST-LIM-006`; crash/timeout worker là `ST-WORKER-CRASH`/
+    `ST-WORKER-TIMEOUT` → `PRG-ERR-UNAVAILABLE-001`.
+- **Phát hiện thêm, sửa luôn trong cùng phiên.**
+  - **§6 dẫn "ST-SEM-FBD-CYCLE"** — mã thứ năm không tồn tại, và nó còn sai cả **tầng**:
+    cycle tổ hợp bị chặn bởi `FBD-SEM-ORDER-001` ở validator **FE**, không phải pha
+    semantic của ST.
+  - **§10 dẫn "COMP-DETERMINISM-001"** — không tồn tại và **không có mã thay thế**: kiểm
+    tra rebuild-determinism hiện chỉ chạy ở tầng golden test. Đã ghi rõ là chưa hiện thực
+    hoá; ghi ra một mã chưa có nguy hiểm hơn để trống, vì nó tạo cảm giác đã có đường
+    phát hiện.
+  - **Cổng chống trôi** `scripts/verify_diagnostic_code_refs.py` (ctest
+    `diagnostic_code_refs`): mọi mã trong dấu nháy ngược ở tài liệu thiết kế phải có
+    trong error catalog hoặc validator FBD. Kèm quy ước mới: **dấu nháy ngược nghĩa là
+    "mã có thật"**; mã bịa được trích trong ngoặc kép để nói rằng nó sai.
+  - **Chính cổng suýt hỏng hai lần khi viết.** (a) Biểu thức rút mã FBD dùng
+    `[A-Z0-9_]+` nên không khớp `FBD-SEM-TYPE-REF-001`, làm cổng **kêu oan cho mã có
+    thật**; (b) biểu thức quét tài liệu không có `*` trong lớp ký tự nên **bỏ lọt đúng
+    dạng `ST-LIMIT-*`** mà nó sinh ra để bắt. Cả hai lộ ra nhờ
+    `verify_diagnostic_code_refs_gate.py` (ctest `diagnostic_code_refs_gate`): 3 ca tiêm
+    mã sai **cộng** một ca chiều ngược — mã `FBD-*` có thật phải đi qua, vì một cổng kêu
+    oan là một cổng sắp bị tắt.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1379/1379 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **193 file / 2256 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0.
+
 ### Added — `ISS-STED-09` trục phân loại IEC vs Mekong-UX cho ST Editor, kèm cổng thi hành (#360, 2026-09-02)
 
 - **Triệu chứng.** Không tài liệu nào trong repo phân biệt *"cái này do IEC 61131-3 quy định"*

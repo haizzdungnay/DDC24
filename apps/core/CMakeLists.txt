@@ -423,6 +423,19 @@ if(CORE_BUILD_TESTS)
       COMMAND ${Python3_EXECUTABLE}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_iec_claim_policy_gate.py)
 
+  # ISS-STED-10 — mã diagnostic dẫn trong tài liệu thiết kế phải CÓ THẬT.
+  #
+  # DDD §7 công bố "ST-LIMIT-*", "ST-LIMIT-DIAG-001", "COMP-INTERNAL-*",
+  # "ST-SEM-TYPE-001" và "ST-SEM-FBD-CYCLE" suốt nhiều revision; không mã nào
+  # tồn tại ngoài chính tài liệu đó. Người vận hành `grep` log tìm một mã không
+  # có thật sẽ không ra gì và kết luận sai rằng sự cố không xảy ra.
+  add_test(NAME diagnostic_code_refs
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_diagnostic_code_refs.py)
+  add_test(NAME diagnostic_code_refs_gate
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_diagnostic_code_refs_gate.py)
+
   # `T57-2.13`/`T57-3.13`: kiểm ở mức BINARY, vì giá trị của engine nằm ở chỗ nó
   # là đúng cái binary backend gọi — một unit test gọi thẳng AlarmRuntime sẽ bỏ
   # lọt việc hợp đồng stdin/stdout lệch khỏi thứ Go gửi và đọc.

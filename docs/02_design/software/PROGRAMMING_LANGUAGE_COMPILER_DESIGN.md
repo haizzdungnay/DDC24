@@ -169,7 +169,9 @@ Nếu có lỗi, `ok=false`, module rỗng và không được publish partial a
 
 Topological sort dùng `(network.order, explicit executionOrder, node UUID byte)`
 làm tie-break. Cycle dữ liệu chỉ được đi qua stateful FB/delay đã khai báo; cycle
-tổ hợp bị `ST-SEM-FBD-CYCLE`. Compiler sinh source map từ instruction tới
+tổ hợp bị `FBD-SEM-ORDER-001` (validator FBD phía FE — **không** phải pha
+semantic của ST; bản trước ghi "ST-SEM-FBD-CYCLE", một mã không tồn tại ở đâu
+cả, xem §7). Compiler sinh source map từ instruction tới
 `networkId/nodeId/portId`, để cùng diagnostic envelope với ST.
 
 ## 6. Thư viện chuẩn và semantic control
@@ -189,25 +191,116 @@ unknown major. Thay semantic dù giữ pin phải tăng major và recompile Revi
 
 ## 7. Diagnostic contract
 
+> **Đính chính 2026-09-02 (`ISS-STED-10` / `F-STED-012`).** Bản trước của mục
+> này công bố năm mã và namespace **không tồn tại ở bất kỳ đâu ngoài chính tài
+> liệu này**: "ST-LIMIT-\*", "ST-LIMIT-DIAG-001", "COMP-INTERNAL-\*", ví dụ
+> "ST-SEM-TYPE-001", và — ở §6 — "ST-SEM-FBD-CYCLE". Nó cũng bỏ sót **tám**
+> namespace có thật, và đặt mã chi tiết vào **sai trường** của payload.
+>
+> *(Năm chuỗi trên cố ý viết trong ngoặc kép chứ không trong dấu nháy ngược.
+> Trong tài liệu này **dấu nháy ngược nghĩa là "mã có thật"**, và cổng
+> `diagnostic_code_refs` thi hành đúng quy ước đó.)*
+>
+> Loại sai này đắt hơn một lỗi chính tả: người vận hành đọc runbook rồi `grep`
+> log tìm "ST-LIMIT-DIAG-001" sẽ **không ra gì** và kết luận sai rằng sự cố
+> không xảy ra; người viết client đọc ví dụ rồi so `code` với `ST-SEM-*` sẽ
+> **không bao giờ khớp**, vì `code` mang mã công khai còn mã chi tiết nằm ở
+> `detailCode`.
+>
+> **Hướng đã chọn: sửa tài liệu, KHÔNG đổi mã lỗi.** Mã đã đi vào
+> `contracts/programming/error_catalog_v1.json`, `errors_generated.go`,
+> `errors.ts` và log hiện trường; đổi mã là đổi một hợp đồng công khai và làm
+> hỏng mọi runbook đang dùng. Hướng ngược lại (đổi code theo tài liệu) **không**
+> được chọn và cũng không được thi hành một phần — nó cần kế hoạch di trú riêng
+> cho error catalog + Go + FE + tài liệu vận hành.
+
+### 7.1 Hình dạng payload
+
+Ví dụ dưới là **payload thật** do `checks.go` phát, không phải mã minh hoạ:
+
 ```json
 {
-  "code":"ST-SEM-TYPE-001",
+  "code":"PRG-ERR-CHECK-001",
+  "detailCode":"ST-SEM-002",
   "severity":"ERROR",
-  "messageKey":"programming.compiler.typeMismatch",
-  "location":{"programId":"uuid","line":12,"column":8,"length":4},
-  "fbdLocation":null,
-  "args":{"expected":"REAL","actual":"BOOL"},
+  "messageKey":"programming.error.check",
+  "location":{
+    "programId":"uuid","line":12,"column":8,"length":4,
+    "revisionId":"uuid","pouId":"P_ahu",
+    "sourceSha256":"<64 hex>","stLanguageProfileVersion":"1.0.0"
+  },
+  "args":{"line":12,"column":8,"length":4},
   "related":[]
 }
 ```
 
-Namespace ổn định: `ST-LEX-*`, `ST-SYN-*`, `ST-SEM-*`, `ST-LIMIT-*`,
-`FBD-SCHEMA-*`, `FBD-SEM-*`, `COMP-INTERNAL-*`. Tối đa 64 diagnostic, sort theo
-program/order/location/code; đạt trần thêm đúng một `ST-LIMIT-DIAG-001`. Message
-dịch ở FE; compiler không trả path host, stack hay source khác quyền.
+**Hai trường mã, không phải một.** `code` là **mã công khai** (`PRG-ERR-*`) —
+thứ quyết định HTTP status, `retryable` và `keepsRunningRevision`. `detailCode`
+là **mã chi tiết của component** (`ST-*`) — thứ chỉ ra chính xác chỗ hỏng. Ánh
+xạ chi tiết → công khai nằm ở `componentDetails` của error catalog, không suy
+được từ tên. Gộp hai trường lại sẽ mất một trong hai: hoặc client không biết
+phải xử lý lỗi thế nào, hoặc người vận hành không biết hỏng ở đâu.
 
-Compiler internal crash/resource timeout trả Check failed, không artifact và
-không đổi runtime. Warning không chặn trừ policy target profile nâng thành error.
+Bốn trường provenance trong `location` (`revisionId`, `pouId`, `sourceSha256`,
+`stLanguageProfileVersion`) là bắt buộc theo `ISS-STED-18`: không có chúng thì
+FE không phân biệt được diagnostic còn nói về buffer đang gõ hay đã cũ, và việc
+gạch lỗi sẽ trỏ vào dòng **không còn** là dòng sinh ra lỗi đó.
+
+### 7.2 Namespace mã chi tiết — bảng thật
+
+Ba nguồn khác nhau, và chúng **không** cùng một hình dạng hậu tố:
+
+| Nguồn | Namespace | Hậu tố | Số mã |
+|---|---|---|---:|
+| Compiler (`st_diagnostic.hpp`) | `ST-LEX-*` | số | 3 |
+| | `ST-SYN-*` | số | 2 |
+| | `ST-SEM-*` | số | 14 |
+| | `ST-LIM-*` | số | 9 |
+| | `ST-WARN-*` | số | 4 |
+| | `ST-RT-*` | số | 13 |
+| | `ST-IOMAP-*` | số | 8 |
+| | `ST-LIB-*` | số | 3 |
+| | `ST-POU-*` | số | 5 |
+| | `ST-SIG-*` | số | 5 |
+| | `ST-OWN-*` | số | 1 |
+| | `ST-PID-*` | số | 1 |
+| CLI/worker (BE) | `ST-CLI-*` | **chữ** (`ST-CLI-SANDBOX`) | 12 |
+| | `ST-WORKER-*` | **chữ** (`ST-WORKER-TIMEOUT`) | 2 |
+| Validator FBD (FE) | `FBD-SCHEMA-*` | chữ **+ số** (`FBD-SCHEMA-ROOT-001`) | 3 |
+| | `FBD-SEM-*` | chữ **+ số** (`FBD-SEM-TYPE-REF-001`) | 14 |
+| | `FBD-LIMIT-*` | chữ **+ số** (`FBD-LIMIT-BLOCK-001`) | 4 |
+
+Ba ghi chú mà bảng không nói hết:
+
+1. **`ST-RT-*` là fault lúc CHẠY, không phải diagnostic lúc biên dịch.** Nó nằm
+   chung namespace vì cùng một catalog, nhưng không bao giờ xuất hiện trong kết
+   quả Check.
+2. **`FBD-*` KHÔNG nằm trong error catalog.** Chúng do validator phía FE
+   (`apps/web-ui/src/features/programming/fbd/model.ts`) phát và không đi qua
+   `componentDetails`. Đây là khác biệt về nguồn, không phải thiếu sót — nhưng
+   ai viết công cụ đọc log cần biết để không tìm chúng trong catalog.
+3. **Ba hình dạng hậu tố, không phải một.** `ST-CLI-*`/`ST-WORKER-*` dùng hậu
+   tố **chữ** (`ST-CLI-SANDBOX`); họ `FBD-*` dùng **chữ rồi số**
+   (`FBD-SEM-SIGNAL-PUBLISH-COUNT-001`); phần còn lại dùng **số** thuần. Một
+   biểu thức `ST-[A-Z]+-\d{3}` bỏ lọt cả 14 mã CLI/worker, và
+   `[A-Z]+-[A-Z]+-\d{3}` bỏ lọt phần lớn họ `FBD-*`.
+
+### 7.3 Trần và cắt bớt
+
+Tối đa **64** diagnostic, sort ổn định theo `program/order/location/code`; chạm
+trần thì thêm **đúng một `ST-LIM-006`** ở cuối danh sách. Message dịch ở FE;
+compiler không trả path host, stack hay source khác quyền.
+
+Crash hoặc timeout của worker trả Check failed, **không** artifact và **không**
+đổi runtime; mã chi tiết là `ST-WORKER-CRASH`/`ST-WORKER-TIMEOUT`, cùng ánh xạ
+về mã công khai `PRG-ERR-UNAVAILABLE-001`. Warning không chặn, trừ khi policy
+của target profile nâng thành error.
+
+**Chống trôi.** Mọi mã diagnostic được dẫn trong tài liệu thiết kế đều bị
+`scripts/verify_diagnostic_code_refs.py` (ctest `diagnostic_code_refs`) đối
+chiếu với error catalog và validator FBD; mã không tồn tại làm **đỏ**. Cổng này
+ra đời vì chính mục §7 này đã công bố bốn mã không có thật suốt nhiều revision
+mà không ai phát hiện.
 
 ## 8. Determinism, resource và timing
 
@@ -257,8 +350,15 @@ fuzz corpus bắt buộc. Không resolve include/path/url; bundle import đượ
 quarantine bởi BE. Source không ghi nguyên văn vào production log. Compiler
 cache được xác minh hash trước reuse; artifact đưa loader verify độc lập.
 
-Nếu compiler mới tạo artifact khác compiler cũ cho cùng build key, rollout dừng,
-ghi `COMP-DETERMINISM-001`; runtime đang chạy không bị ảnh hưởng. Rollback
+Nếu compiler mới tạo artifact khác compiler cũ cho cùng build key, rollout dừng
+và runtime đang chạy không bị ảnh hưởng.
+
+> **Đính chính 2026-09-02 (`ISS-STED-10`).** Bản trước ghi *"ghi
+> COMP-DETERMINISM-001"*. Mã đó **không tồn tại** trong error catalog và cũng
+> không có mã nào thay thế: kiểm tra rebuild-determinism hiện chạy ở tầng
+> golden test (`build_manifest_{st,fbd}_v1.json`), **chưa** có mã lỗi runtime
+> nào cho nó. Ghi ra một mã chưa hiện thực hoá nguy hiểm hơn là để trống, vì nó
+> tạo cảm giác đã có đường phát hiện. Rollback
 compiler chỉ dùng để compile mới nếu target ABI/library còn hỗ trợ; không thay
 artifact active.
 
