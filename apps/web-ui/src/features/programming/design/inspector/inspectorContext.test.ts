@@ -453,4 +453,40 @@ describe('DEV-PROG-004 — Access/Description/tên Task đã có nguồn, nhưng
     // `0 / 0` đọc thành "không ai đọc, không ai ghi" — một khẳng định sai.
     expect(context.readWrite.known).toBe(false)
   })
+  /* `ISS-STED-13` — hạ cấp khi chỉ mục lệch khỏi compiler. */
+  it('chỉ mục lệch ⇒ mọi trường SUY RA TỪ CHỈ MỤC hạ xuống unknown, kèm lý do', () => {
+    const context = contextFor({
+      program, cursorSymbol: stSymbol,
+      variables: [supplyVariable], bindings: [supplyBinding],
+      reconciliation: { degraded: true, reason: 'Chỉ mục ký hiệu LỆCH khỏi bảng của trình biên dịch.' },
+    })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    expect(context.dataType.known).toBe(false)
+    expect(context.definitionOffset.known).toBe(false)
+    expect(context.referenceCount.known).toBe(false)
+    expect(context.readWrite.known).toBe(false)
+    expect(context.indexDegradedReason).toContain('LỆCH')
+  })
+
+  it('hạ cấp KHÔNG đụng các trường lấy từ Draft — lệch chỉ mục không nói gì về chúng', () => {
+    const context = contextFor({
+      program, cursorSymbol: stSymbol,
+      variables: [supplyVariable], bindings: [supplyBinding],
+      reconciliation: { degraded: true, reason: 'lệch' },
+    })
+    if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+    // Phạm vi/Điểm/Đơn vị đến từ Draft, không đi qua chỉ mục regex.
+    expect(context.scope.known).toBe(true)
+    expect(context.mappedPoint.known).toBe(true)
+    expect(context.unit.known).toBe(true)
+  })
+
+  it('đối chiếu khớp (hoặc chưa so được) ⇒ không hạ cấp gì', () => {
+    for (const reconciliation of [null, undefined, { degraded: false, reason: 'khớp' }]) {
+      const context = contextFor({ program, cursorSymbol: stSymbol, reconciliation })
+      if (context.kind !== 'ST_SYMBOL') throw new Error('sai ngữ cảnh')
+      expect(context.dataType.known).toBe(true)
+      expect(context.indexDegradedReason).toBeNull()
+    }
+  })
 })

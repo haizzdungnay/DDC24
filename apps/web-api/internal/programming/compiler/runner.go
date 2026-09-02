@@ -159,6 +159,23 @@ type Result struct {
 	IoBindingCount int64
 	LinkedPOUs     []LinkedPOU
 	SignalRefs     []SignalRef
+	// Symbols là bảng biến GIAO DIỆN (`VAR_INPUT`/`VAR_OUTPUT`) do compiler
+	// công bố — nguồn duy nhất biết chắc một POU có những cổng nào, vì nó là
+	// thứ đã thực sự parse nguồn.
+	//
+	// `ISS-STED-13`: CLI đã phát mảng này từ lâu và runner đã đọc nó vào
+	// `compileResponse`, nhưng nó dừng lại ở đó — không ai dùng. FE trong khi
+	// đó dựng chỉ mục ký hiệu bằng regex và không có cách nào biết mình đọc
+	// lệch. Đem `Symbols` đi tiếp là điều kiện cần để có một phép đối chiếu.
+	Symbols []Symbol
+}
+
+// Symbol là một biến giao diện của POU, đúng hình dạng CLI phát ra.
+type Symbol struct {
+	Name      string `json:"name"`
+	Direction string `json:"direction"`
+	Type      string `json:"type"`
+	Slot      int    `json:"slot"`
 }
 
 type SignalRef struct {
@@ -212,7 +229,7 @@ type cliResponse struct {
 	ProgramName             *string         `json:"programName"`
 	SourceID                *string         `json:"sourceId"`
 	Language                *string         `json:"language"`
-	Symbols                 json.RawMessage `json:"symbols"`
+	Symbols                 []Symbol        `json:"symbols"`
 	Artifact                *string         `json:"artifact"`
 	ArtifactBytes           *int64          `json:"artifactBytes"`
 	ArtifactSHA256          *string         `json:"artifactSha256"`
@@ -681,7 +698,7 @@ func validateSuccess(response cliResponse, artifactPath, manifestPath string, in
 		envelope.Target.ABI != response.TargetABI || envelope.Compiler.Version != response.CompilerVersion || envelope.BuildKeySHA256 != *response.BuildKeySHA256 {
 		return Result{}, fmt.Errorf("%w: manifest metadata/provenance", ErrInvalidOutput)
 	}
-	return Result{OK: true, Diagnostics: response.Diagnostics, Artifact: artifact, ArtifactSHA256: digest,
+	return Result{OK: true, Symbols: response.Symbols, Diagnostics: response.Diagnostics, Artifact: artifact, ArtifactSHA256: digest,
 		Manifest: canonicalManifest, CompilerVersion: response.CompilerVersion, ArtifactSchemaVersion: response.ArtifactSchemaVersion,
 		CompilerProfile: *response.CompilerProfile, ProfileID: *response.ProfileID, ProfileSHA256: *response.ProfileSHA256,
 		LibraryVersion: *response.LibraryVersion, IntegrityMode: *response.IntegrityMode, TargetABI: response.TargetABI,

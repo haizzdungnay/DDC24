@@ -72,11 +72,29 @@ type ArtifactView struct {
 	StLanguageProfileVersion string `json:"stLanguageProfileVersion"`
 }
 
+// SymbolView là một biến giao diện của POU, do COMPILER công bố.
+//
+// `ISS-STED-13` — FE dựng chỉ mục ký hiệu bằng regex và không có cách nào biết
+// mình đọc lệch khỏi compiler. Bảng này cho nó một thứ để đối chiếu; lệch ⇒ FE
+// hạ xuống "không xác định được" thay vì hiển thị thông tin sai.
+type SymbolView struct {
+	// PouId cần thiết vì một Check phủ NHIỀU POU: một danh sách phẳng không
+	// nói được cổng nào thuộc POU nào.
+	PouID     string `json:"pouId"`
+	Name      string `json:"name"`
+	Direction string `json:"direction"`
+	Type      string `json:"type"`
+	Slot      int    `json:"slot"`
+}
+
 type CheckView struct {
 	CheckID      string           `json:"checkId"`
 	RevisionID   string           `json:"revisionId"`
 	State        string           `json:"state"`
 	Diagnostics  []DiagnosticView `json:"diagnostics"`
+	// Symbols rỗng là một câu trả lời THẬT ("POU không khai cổng nào"), khác
+	// với việc thiếu hẳn trường — nên nó luôn được phát, không `omitempty`.
+	Symbols []SymbolView `json:"symbols"`
 	Artifact     *ArtifactView    `json:"artifact,omitempty"`
 	CreatedAt    string           `json:"createdAt"`
 	StartedAt    *string          `json:"startedAt,omitempty"`
@@ -87,7 +105,11 @@ type CheckView struct {
 type checkResultDocument struct {
 	SchemaVersion string           `json:"schemaVersion"`
 	Diagnostics   []DiagnosticView `json:"diagnostics"`
-	Manifest      json.RawMessage  `json:"manifest,omitempty"`
+	// `ISS-STED-13` — lưu cùng kết quả Check để đọc lại được sau, không phải
+	// chỉ tồn tại trong lần chạy worker. Một bảng đối chiếu chỉ có lúc vừa
+	// compile xong thì FE mở lại trang là mất.
+	Symbols  []SymbolView    `json:"symbols,omitempty"`
+	Manifest json.RawMessage `json:"manifest,omitempty"`
 }
 
 type CheckServiceOptions struct {
@@ -271,6 +293,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// trong vòng sẽ băm lại cùng một POU liên kết cho mỗi Program dùng nó.
 	provenance := newDiagnosticProvenance(check.RevisionID, inputs)
 	results := make([]programmingcompiler.Result, 0, len(inputs))
+	symbols := make([]SymbolView, 0)
 	for _, input := range inputs {
 		result, err := s.runner.Compile(ctx, input)
 		if errors.Is(err, programmingcompiler.ErrTimeout) {
@@ -280,6 +303,16 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			// Crash/output lỗi giữ RUNNING cho tới lease expiry để cùng input được
 			// thử đúng một lần nữa. Lần hai vẫn chết sẽ được FailExhaustedChecks đóng.
 			return true, err
+		}
+		/* `ISS-STED-13` — gắn `pouId` NGAY TẠI ĐÂY, cùng lối với diagnostic:
+		 * compiler chạy trên một nguồn mỗi lần nên nó không biết mình đang ở
+		 * POU nào; chỉ vòng lặp này biết. Gộp phẳng mà không gắn sẽ cho FE một
+		 * danh sách cổng không nói được của ai. */
+		for _, symbol := range result.Symbols {
+			symbols = append(symbols, SymbolView{
+				PouID: input.SourceID, Name: symbol.Name, Direction: symbol.Direction,
+				Type: symbol.Type, Slot: symbol.Slot,
+			})
 		}
 		programDiagnostics := make([]DiagnosticView, 0, len(result.Diagnostics))
 		for _, item := range result.Diagnostics {
@@ -386,7 +419,10 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			return true, err
 		}
 	}
-	return true, s.complete(ctx, check, "PASSED", diagnostics,
+	/* Chỉ đường PASSED mang bảng cổng: một Check FAILED nghĩa là compiler
+	 * chưa dựng xong bảng ký hiệu, và công bố một bảng dở dang để FE đối chiếu
+	 * sẽ tạo ra chính thứ lệch giả mà cổng này sinh ra để chống. */
+	return true, s.completeWithSymbols(ctx, check, "PASSED", diagnostics, symbols,
 		&completion{artifact: storeArtifact, manifest: manifest})
 }
 
@@ -396,7 +432,12 @@ type completion struct {
 }
 
 func (s *CheckService) complete(ctx context.Context, check programmingstore.Check, state string, diagnostics []DiagnosticView, success *completion) error {
-	result := checkResultDocument{SchemaVersion: "1.0", Diagnostics: diagnostics}
+	return s.completeWithSymbols(ctx, check, state, diagnostics, nil, success)
+}
+
+func (s *CheckService) completeWithSymbols(ctx context.Context, check programmingstore.Check, state string,
+	diagnostics []DiagnosticView, symbols []SymbolView, success *completion) error {
+	result := checkResultDocument{SchemaVersion: "1.0", Diagnostics: diagnostics, Symbols: symbols}
 	var artifact *programmingstore.Artifact
 	if success != nil {
 		result.Manifest = success.manifest
@@ -1006,6 +1047,7 @@ func workerDiagnostic(detail string) DiagnosticView {
 
 func checkView(check programmingstore.Check) (CheckView, error) {
 	view := CheckView{CheckID: check.CheckID, RevisionID: check.RevisionID, State: check.State, Diagnostics: []DiagnosticView{},
+		Symbols: []SymbolView{},
 		CreatedAt: formatTime(check.CreatedAtUTCMS), AttemptCount: check.AttemptCount}
 	if check.StartedAtUTCMS != nil {
 		value := formatTime(*check.StartedAtUTCMS)
@@ -1021,6 +1063,9 @@ func checkView(check programmingstore.Check) (CheckView, error) {
 			return CheckView{}, fmt.Errorf("decode Check result: %w", err)
 		}
 		view.Diagnostics = result.Diagnostics
+		if result.Symbols != nil {
+			view.Symbols = result.Symbols
+		}
 	}
 	if check.Artifact != nil {
 		a := check.Artifact

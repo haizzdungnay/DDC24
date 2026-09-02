@@ -3473,7 +3473,7 @@ components:
     ProgrammingCheck:
       type: object
       additionalProperties: false
-      required: [checkId, revisionId, state, diagnostics, createdAt, attemptCount]
+      required: [checkId, revisionId, state, diagnostics, symbols, createdAt, attemptCount]
       properties:
         checkId: { type: string, format: uuid }
         revisionId: { type: string, format: uuid }
@@ -3481,6 +3481,24 @@ components:
         diagnostics:
           type: array
           items: { $ref: "#/components/schemas/ProgrammingDiagnostic" }
+        # ISS-STED-13 — bảng biến GIAO DIỆN do compiler công bố, để FE đối
+        # chiếu chỉ mục ký hiệu dựng bằng regex của mình. FE có ba bộ đọc ST
+        # độc lập với compiler và trước đây không có cách nào biết mình đọc
+        # lệch. Mảng RỖNG là câu trả lời thật ("POU không khai cổng nào");
+        # Check chưa PASSED thì cũng rỗng, vì một bảng dở dang đem đối chiếu
+        # sẽ tạo ra chính thứ lệch giả mà cổng này sinh ra để chống.
+        symbols:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [pouId, name, direction, type, slot]
+            properties:
+              pouId: { type: string }
+              name: { type: string, minLength: 1, maxLength: 64 }
+              direction: { type: string, enum: [input, output] }
+              type: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+              slot: { type: integer, minimum: 0 }
         artifact:
           oneOf:
             - { $ref: "#/components/schemas/ProgrammingArtifact" }

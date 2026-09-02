@@ -31,7 +31,7 @@ const CHECK_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 const OPERATION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 
 function passedCheck(): ProgrammingCheck {
-  return { checkId: CHECK_ID, revisionId: REVISION_ID, state: 'PASSED', diagnostics: [], createdAt: '2026-08-13T00:00:00Z', attemptCount: 1 }
+  return { checkId: CHECK_ID, revisionId: REVISION_ID, state: 'PASSED', diagnostics: [], symbols: [], createdAt: '2026-08-13T00:00:00Z', attemptCount: 1 }
 }
 
 function baseProject() {

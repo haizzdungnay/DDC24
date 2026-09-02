@@ -190,6 +190,19 @@ function renderContext(pick: (vi: string, en: string) => string, context: Inspec
     case 'ST_SYMBOL':
       return (
         <FieldList>
+          {/* `ISS-STED-13` — nói RÕ vì sao mọi thứ suy ra từ chỉ mục vừa biến
+              thành "không xác định được". Hạ cấp mà không nói lý do trông hệt
+              như một lỗi phân tích ngẫu nhiên, và người dùng sẽ đi tìm sai
+              chỗ. */}
+          {context.indexDegradedReason && (
+            <li
+              role="alert"
+              data-testid="inspector-index-degraded"
+              className="col-span-2 rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-surface-2)] px-2 py-1 text-xs text-[var(--c-text)]"
+            >
+              {context.indexDegradedReason}
+            </li>
+          )}
           <Row label={pick('Ký hiệu', 'Symbol')} value={context.identifier} />
           <Field
             label={pick('Khai báo', 'Definition')}

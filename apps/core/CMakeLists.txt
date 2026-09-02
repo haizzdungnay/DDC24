@@ -291,6 +291,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_compile_cli.cpp
       application/st/tests/test_st_limits.cpp
       application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp
+      application/st/tests/test_st_grammar_corpus.cpp
       application/st/tests/test_st_multi_diagnostic.cpp
       application/st/tests/test_st_warning.cpp
       application/st/tests/test_st_artifact_manifest.cpp

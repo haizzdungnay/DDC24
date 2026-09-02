@@ -1,0 +1,162 @@
+{
+  "$comment": "ISS-STED-13 — CORPUS VĂN PHẠM DÙNG CHUNG giữa FE và compiler. Mỗi vector được chạy ở HAI phía: `test_st_grammar_corpus.cpp` đòi compiler chấp nhận/từ chối đúng như `accepted`, và `stGrammarCorpus.test.ts` đòi `formatStDocument` cũng vậy. Thêm một luật văn phạm mà chỉ sửa một bên sẽ làm ĐỎ ở bên kia. KHÔNG sửa tệp này để 'cho test xanh' — nó là hợp đồng, không phải fixture.",
+  "schemaVersion": 1,
+  "corpusVersion": "1.0.0",
+  "vectors": [
+    {
+      "id": "assign-real",
+      "rule": "assignment",
+      "accepted": true,
+      "note": "Gán vô hướng — luật nền của mọi vector khác.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nx := 1.0;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "assign-chain-expr",
+      "rule": "expression",
+      "accepted": true,
+      "note": "Bốn phép số học cùng ngoặc, để khoá thứ tự ưu tiên §4.1.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nx := (y + 1.0) * 2.0 - 3.0 / 4.0;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "assign-mod",
+      "rule": "expression",
+      "accepted": true,
+      "note": "MOD là toán tử, không phải hàm.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nn := n MOD 3;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "bool-ops",
+      "rule": "expression",
+      "accepted": true,
+      "note": "AND/OR/XOR/NOT viết trung tố; ST không viết AND(a,b).",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nb := b AND NOT b OR b XOR b;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "compare",
+      "rule": "expression",
+      "accepted": true,
+      "note": "So sánh gồm cả `<>` — không phải `!=`.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nb := x > y;\nb := x <= y;\nb := x <> y;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "if-elsif-else",
+      "rule": "IF",
+      "accepted": true,
+      "note": "Ba nhánh đầy đủ; `ELSIF` một từ, không phải `ELSE IF`.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nIF b THEN\nx := 1.0;\nELSIF y > 0.0 THEN\nx := 2.0;\nELSE\nx := 3.0;\nEND_IF;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "case-statement",
+      "rule": "CASE",
+      "accepted": true,
+      "note": "CASE ĐÃ CÓ trong compiler (ISS-STED-07); vector này giữ cho tài liệu và formatter không quay lại nói là không có.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nCASE n OF\n1: x := 1.0;\n2: x := 2.0;\nELSE\nx := 0.0;\nEND_CASE;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "time-literal",
+      "rule": "literal",
+      "accepted": true,
+      "note": "Literal TIME nhiều đơn vị, thứ tự giảm dần.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nt := T#1m30s;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "fb-call-named",
+      "rule": "fb_call",
+      "accepted": true,
+      "note": "Gọi FB theo TÊN và đọc output qua `.` — khác biệt cố ý D4.",
+      "source": "PROGRAM P_corpus\nVAR b : BOOL; TON_1 : TON; END_VAR\nTON_1(IN := b, PT := T#5s);\nb := TON_1.Q;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "function-call",
+      "rule": "function_call",
+      "accepted": true,
+      "note": "Hàm chuẩn gọi theo VỊ TRÍ, ngược với FB.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nx := LIMIT(0.0, y, 100.0);\nEND_PROGRAM\n"
+    },
+    {
+      "id": "comment-block",
+      "rule": "comment",
+      "accepted": true,
+      "note": "Chú thích khối không lồng nhau.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\n(* chú thích *)\nx := 1.0;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "var-retain",
+      "rule": "declaration",
+      "accepted": true,
+      "note": "`VAR RETAIN` là hai từ, không phải `VAR_RETAIN`.",
+      "source": "PROGRAM P_corpus\nVAR RETAIN x : REAL; END_VAR\nx := 1.0;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "var-input-output",
+      "rule": "declaration",
+      "accepted": true,
+      "note": "Biến giao diện — đúng tập hợp mà `symbols` của compiler công bố.",
+      "source": "PROGRAM P_corpus\nVAR_INPUT p : REAL; END_VAR\nVAR_OUTPUT q : REAL; END_VAR\nq := p + 1.0;\nEND_PROGRAM\n"
+    },
+    {
+      "id": "for-loop",
+      "rule": "FOR",
+      "accepted": false,
+      "note": "Vòng lặp bị loại vì WCET không chặn trên tĩnh được (ADR-054 phán quyết 3). stFormat TỪNG parse được cấu trúc này — đúng chỗ trôi mà F-STED-011 nêu.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nFOR n := 1 TO 3 DO\nx := x + 1.0;\nEND_FOR;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "id": "while-loop",
+      "rule": "WHILE",
+      "accepted": false,
+      "note": "Như FOR: điều kiện dừng phụ thuộc dữ liệu runtime.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nWHILE b DO\nx := x + 1.0;\nEND_WHILE;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "id": "repeat-loop",
+      "rule": "REPEAT",
+      "accepted": false,
+      "note": "Như WHILE, thêm việc thân luôn chạy ít nhất một lần.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nREPEAT\nx := x + 1.0;\nUNTIL b\nEND_REPEAT;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "id": "array-index",
+      "rule": "array_index",
+      "accepted": false,
+      "note": "ARRAY chưa có trong Rev A (ADR-054 phán quyết 4, đợt gần #367). AST của stFormat TỪNG có node `Index` cho cú pháp này. Compiler chặn ngay ở LEXER (ký tự không thuộc subset), không phải ở parser — mã thật là `ST-LEX-001`.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nx := y[1];\nEND_PROGRAM\n",
+      "rejectedWith": "ST-LEX-001"
+    },
+    {
+      "id": "exponent-operator",
+      "rule": "operator",
+      "accepted": false,
+      "note": "Toán tử luỹ thừa bị loại (ST_SUBSET_SPEC §9 D10).",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nx := y ** 2.0;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "id": "return-statement",
+      "rule": "RETURN",
+      "accepted": false,
+      "note": "Nhiều điểm thoát làm cây WCET rẽ nhánh không cần thiết (D9).",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nRETURN;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-SYN-001"
+    },
+    {
+      "id": "ampersand-and",
+      "rule": "operator",
+      "accepted": false,
+      "note": "`&` là bí danh của AND trong IEC; Rev A cố ý chỉ giữ một cách viết (D3). Compiler chặn ngay ở LEXER (ký tự không thuộc subset), không phải ở parser — mã thật là `ST-LEX-001`.",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nb := b & b;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-LEX-001"
+    },
+    {
+      "id": "hex-literal",
+      "rule": "literal",
+      "accepted": false,
+      "note": "Literal đa cơ số bị loại để giảm bề mặt lexer (D8).",
+      "source": "PROGRAM P_corpus\nVAR x : REAL; y : REAL; b : BOOL; n : INT; t : TIME; END_VAR\nn := 16#FF;\nEND_PROGRAM\n",
+      "rejectedWith": "ST-LEX-001"
+    }
+  ]
+}

@@ -671,11 +671,29 @@ export interface ProgrammingOverridePage {
   nextCursor?: string | null
 }
 
+/** `ISS-STED-13` — chiếu 1-1 `ProgrammingCheck.symbols[]`. */
+export interface ProgrammingCheckSymbol {
+  pouId: string
+  name: string
+  direction: 'input' | 'output'
+  type: 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME'
+  slot: number
+}
+
 export interface ProgrammingCheck {
   checkId: string
   revisionId: string
   state: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'TIMED_OUT'
   diagnostics: ProgrammingDiagnostic[]
+  /**
+   * `ISS-STED-13` — bảng biến GIAO DIỆN do **compiler** công bố.
+   *
+   * FE có ba bộ đọc ST độc lập với compiler (tô màu, chỉ mục ký hiệu, formatter)
+   * và trước đây không có cách nào biết mình đọc lệch. Mảng này là thứ để đối
+   * chiếu. Rỗng là câu trả lời THẬT ("POU không khai cổng nào"), và Check chưa
+   * PASSED cũng rỗng — nên tuyệt đối không đọc "rỗng" thành "khớp".
+   */
+  symbols: ProgrammingCheckSymbol[]
   /**
    * `stLanguageProfileVersion` (`ISS-STED-19`): phiên bản hồ sơ ngôn ngữ ST đi
    * CÙNG artifact, không chỉ nằm ở endpoint capabilities — một artifact đọc

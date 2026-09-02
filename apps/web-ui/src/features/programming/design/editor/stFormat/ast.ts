@@ -34,7 +34,6 @@ export type StExpr =
   | { kind: 'Literal'; literal: 'number' | 'time' | 'string' | 'bool'; text: string }
   | { kind: 'Ident'; name: string }
   | { kind: 'Member'; object: StExpr; name: string }
-  | { kind: 'Index'; object: StExpr; index: StExpr }
   | { kind: 'Call'; callee: StExpr; args: StArg[] }
   | { kind: 'Unary'; operator: string; operand: StExpr }
   | { kind: 'Binary'; operator: string; left: StExpr; right: StExpr }
@@ -102,19 +101,19 @@ export type StStmt =
       trivia: StTrivia
       endTrivia: StTrivia
     }
-  | {
-      kind: 'For'
-      variable: string
-      from: StExpr
-      to: StExpr
-      by: StExpr | null
-      body: StStmt[]
-      trivia: StTrivia
-      endTrivia: StTrivia
-    }
-  | { kind: 'While'; condition: StExpr; body: StStmt[]; trivia: StTrivia; endTrivia: StTrivia }
-  | { kind: 'Repeat'; body: StStmt[]; condition: StExpr; trivia: StTrivia; endTrivia: StTrivia }
-  | { kind: 'Jump'; keyword: 'RETURN' | 'EXIT' | 'CONTINUE'; trivia: StTrivia }
+/* `ISS-STED-13` — `For`/`While`/`Repeat`/`Jump` và biểu thức `Index` (`a[i]`)
+ * TỪNG có ở đây. Compiler không có cấu trúc nào trong số đó (`ADR-054` phán
+ * quyết (3)/(4), `ST_SUBSET_SPEC` §9 D9), nên một AST hiểu được chúng là một
+ * văn phạm rộng hơn thứ thiết bị nói.
+ *
+ * Trước đây rủi ro bị chặn nhờ kiểm round-trip AST — nhưng đó là bảo vệ nhờ
+ * MAY MẮN: round-trip chỉ đòi in ra rồi đọc lại phải ra cùng cây, nó không hề
+ * hỏi cây ấy có hợp lệ với compiler không. Một `FOR` in ra đẹp đẽ vẫn round-trip
+ * hoàn hảo, và người dùng nhận lại mã đã được "định dạng" cho một cấu trúc
+ * Kiểm tra sẽ từ chối.
+ *
+ * Bỏ hẳn khỏi AST chứ không chỉ chặn ở parser: kiểu dữ liệu còn mô tả cấu trúc
+ * thì lần sửa sau sẽ có người nối lại đường parse cho nó. */
 
 export interface StPou {
   kind: 'Pou'

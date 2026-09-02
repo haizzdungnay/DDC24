@@ -324,6 +324,11 @@ export function DesignWorkspacePage({
    * diagnostic: một Check đạt cũng là đã kiểm, và trạng thái "chưa kiểm tra"
    * phải khác hẳn "kiểm rồi, sạch". */
   const hasCheckResult = latestCheckResult.data !== undefined
+  /* `ISS-STED-13` — bảng ký hiệu của compiler, để `ProgramsTab` đối chiếu với
+   * chỉ mục regex của mình. `undefined` (server đời cũ) khác `[]` (POU không
+   * khai cổng nào): chỉ cái sau mới là một câu trả lời. */
+  const checkSymbols = latestCheckResult.data?.symbols
+  const checkState = latestCheckResult.data?.state ?? latestCheck?.state ?? null
   /* Revision mà PHIÊN đang mở đã niêm phong — khác `simulateRevisionId` (bản
    * Check đạt gần nhất): một phiên đang chạy có thể neo vào bản cũ hơn nếu
    * người dùng vừa lưu và Check thêm một lần nữa. Workbench phải nói theo
@@ -822,6 +827,8 @@ export function DesignWorkspacePage({
           onSelectProgram={selectProgram}
           onSave={workspace.save}
           diagnostics={checkDiagnostics}
+          checkSymbols={checkSymbols}
+          checkState={checkState}
           hasCheckResult={hasCheckResult}
           checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
           focusDiagnostic={focusDiagnostic}

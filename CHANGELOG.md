@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-13` chống trôi văn phạm giữa FE và compiler (#364, 2026-09-02)
+
+- **Triệu chứng.** FE có **ba** bộ đọc ST độc lập với compiler — bộ tô màu
+  (`tokenizeStSource`), chỉ mục ký hiệu bằng regex (`stReferenceIndex`), và một parser
+  đầy đủ 1.181 dòng cho nút Định dạng (`stFormat`) — nhưng chống trôi chỉ phủ **danh sách
+  từ khoá**. Văn phạm, hệ kiểu và quy tắc scope không có gì canh.
+- **Nguyên nhân gốc.** Không có nguồn chung nào để hai phía cùng đọc, và bảng ký hiệu mà
+  compiler **đã** công bố (`symbols[]` từ CLI, runner Go đã đọc vào struct) thì **không ai
+  dùng** — nó dừng lại ở đó. FE không có cách nào biết mình đọc lệch.
+- **Cách sửa — hai cơ chế, mỗi cái đóng một nửa.**
+  1. **Corpus văn phạm dùng chung** `contracts/programming/st_grammar_corpus_v1.json`:
+     21 vector, cả hai chiều phán quyết. `test_st_grammar_corpus.cpp` đòi compiler chấp
+     nhận/từ chối đúng như corpus nói (và mã lỗi ghi trong corpus phải là mã **thật**);
+     `stGrammarCorpus.test.ts` đòi formatter cũng vậy. Thêm một luật văn phạm mà chỉ sửa
+     một bên ⇒ **đỏ** ở bên kia.
+  2. **Đối chiếu chỉ mục với compiler** `stSymbolReconciliation.ts`: `symbols[]` nay đi
+     hết đường CLI → runner → `checkResultDocument` → `CheckView.symbols` → FE. Lệch ⇒
+     Inspector **hạ** mọi trường suy ra từ chỉ mục xuống "không xác định được" kèm lý do,
+     không im lặng hiển thị thông tin sai.
+- **Corpus lập tức lộ ra chỗ trôi thật, và đã sửa trong cùng phiên.** Formatter chấp nhận
+  **năm** cấu trúc compiler không có: `FOR`, `WHILE`, `REPEAT`, `RETURN`/`EXIT`/`CONTINUE`,
+  và chỉ số mảng `a[i]`. Issue nêu bốn; `RETURN` là cái thứ năm chưa ai thấy.
+  - Đã **bỏ hẳn khỏi AST**, không chỉ chặn ở parser: kiểu dữ liệu còn mô tả cấu trúc thì
+    lần sửa sau sẽ có người nối lại đường parse cho nó. Trình biên dịch TypeScript chỉ ra
+    từng chỗ phải dọn.
+  - Kiểm round-trip AST **vẫn còn nguyên** và không phải thứ bị thay thế. Nhưng nó là bảo
+    vệ nhờ may mắn: round-trip chỉ đòi in ra rồi đọc lại phải ra cùng cây — nó **không hề
+    hỏi** cây ấy có hợp lệ với compiler không. Một `FOR` in ra đẹp đẽ vẫn round-trip hoàn
+    hảo, và người dùng nhận lại mã đã "được định dạng" cho một cấu trúc Kiểm tra sẽ từ chối.
+- **Ba điều kiện trước khi được phép so** (một phép so trên dữ liệu không cùng thời điểm
+  còn tệ hơn không so, vì lệch giả dạy người dùng bỏ qua cảnh báo): Check phải `PASSED`;
+  buffer chưa đổi kể từ lần Check đó; và **chỉ so tập biến giao diện** — compiler chỉ công
+  bố `VAR_INPUT`/`VAR_OUTPUT`, nên so cả biến cục bộ sẽ báo mọi biến `VAR` là "FE thừa".
+- **Phát hiện thêm, sửa luôn.** (a) Mã lỗi tôi đoán cho `a[i]` và `&` là `ST-SYN-001`;
+  compiler thật phát `ST-LEX-001` — chặn ở **lexer**, không phải parser. Corpus lấy mã từ
+  compiler, không từ suy đoán. (b) Thông báo lệch trộn `output` (CLI, chữ thường) với
+  `OUTPUT` (FE) trong cùng một câu, làm người đọc tưởng đó là hai thứ khác nhau; đã chuẩn
+  hoá trước khi so **và** trước khi in.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1382/1382 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **196 file / 2327 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` dư 2.78 KiB).
+
 ### Added — `ISS-STED-12` Inspector ST bổ sung Scope/Initial/Mapped point/Unit/Reads-Writes (#363, 2026-09-02)
 
 - **Triệu chứng.** `InspectorStSymbolContext` chỉ có `identifier`, `definitionOffset`,

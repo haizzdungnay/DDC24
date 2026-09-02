@@ -14,6 +14,7 @@ import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
 import { useLazyProgrammingLibraryCatalog, useLazyProgrammingPointCatalog } from '../../api/queries'
 import type {
+  ProgrammingCheckSymbol,
   ProgrammingDiagnostic,
   ProgrammingDraftDocument,
   ProgrammingDraftOperation,
@@ -47,6 +48,7 @@ import { catalogEntries, type CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
 import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
+import { reconcileStSymbols } from './stSymbolReconciliation'
 import { formatStDocument, formatStRange } from './stFormat'
 import { stDropOffsetAtPoint, stHoverSymbolAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
 import { PouTabBar } from './PouTabBar'
@@ -245,6 +247,8 @@ export function ProgramsTab({
   onSave,
   diagnostics,
   hasCheckResult = false,
+  checkSymbols,
+  checkState = null,
   checkRevisionId = null,
   focusDiagnostic,
   focusFbdSelection,
@@ -269,6 +273,9 @@ export function ProgramsTab({
   /** `ISS-STED-04` — đã có kết quả Check gần nhất tải về hay chưa. Phân biệt
    * "chưa kiểm tra" với "kiểm rồi, sạch"; hai câu đó nói hai điều khác hẳn. */
   hasCheckResult?: boolean
+  /** `ISS-STED-13` — bảng ký hiệu compiler công bố; `undefined` = không có. */
+  checkSymbols?: readonly ProgrammingCheckSymbol[]
+  checkState?: string | null
   /** Revision mà kết quả Check thuộc về — nhãn bắt buộc phải nêu được. */
   checkRevisionId?: string | null
   focusDiagnostic: ProgrammingDiagnostic | null
@@ -311,6 +318,7 @@ export function ProgramsTab({
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
   const selected = document.programs.find((program) => program.programId === selectedProgramId)
+
   /* `T59-818` — ngữ cảnh cho Inspector dùng chung. Hai nguồn được NÂNG lên đây
    * thay vì để Inspector tự đọc state của editor: một Inspector dùng chung mà
    * tự đọc state riêng của từng editor sẽ có hai định nghĩa "đang chọn cái gì".
@@ -318,6 +326,29 @@ export function ProgramsTab({
   const [cursorSymbol, setCursorSymbol] = useState<StCursorSymbol | null>(null)
   const [fbdSelection, setFbdSelection] = useState<FbdSelection | null>(null)
   const [buffers, setBuffers] = useState<Record<string, string>>({})
+
+  /* `ISS-STED-13` — đối chiếu chỉ mục ký hiệu của FE với bảng compiler công bố.
+   *
+   * Tính ở ĐÂY chứ không trong `SourceEditor`: chỉ tầng này có `checkSymbols`,
+   * và phán quyết phải dùng chung cho Inspector lẫn mọi nơi khác đọc chỉ mục —
+   * hai phép đối chiếu song song sẽ lệch nhau đúng lúc khó thấy nhất. */
+  const selectedSource = selected ? (buffers[selected.programId] ?? programSource(selected)) : ''
+  const symbolReconciliation = useMemo(() => {
+    if (!selected || selected.language !== 'ST') return null
+    return reconcileStSymbols({
+      index: buildStReferenceIndex(selectedSource),
+      /* Lọc theo POU: một Check phủ nhiều POU, và so bảng của POU khác sẽ báo
+       * lệch cho mọi biến — cổng kêu oan là cổng sắp bị tắt. */
+      compilerSymbols: checkSymbols?.filter((symbol) => symbol.pouId === selected.programId),
+      checkState,
+      /* Buffer đổi kể từ lần Check ⇒ không so. `hasCheckResult` cùng
+       * `checkRevisionId` là cơ chế tươi/cũ sẵn có của `ISS-STED-18`; không
+       * dựng phép so thứ hai ở đây. */
+      bufferChanged: !hasCheckResult || checkRevisionId === null,
+      interfaceVariables: collectStInterfaceVariables(selectedSource)
+        .map((variable) => ({ name: variable.name, type: variable.type, direction: variable.direction })),
+    })
+  }, [selected, selectedSource, checkSymbols, checkState, hasCheckResult, checkRevisionId])
   /* Tài liệu FBD của POU đang chọn, parse MỘT lần cho Inspector. Chỉ dựng khi
    * POU thật sự là FBD: parse một tài liệu ST thành FBD sẽ cho một đồ thị rỗng
    * trông hợp lệ, và Inspector sẽ nói về một sơ đồ không tồn tại. */
@@ -905,6 +936,11 @@ export function ProgramsTab({
                  xem — sai một cách rất khó nhận ra. */
               variables: document.variables.filter((variable) => variable.programId === selected.programId),
               bindings: document.bindings,
+              /* `ISS-STED-13` — phán quyết đối chiếu chỉ mục regex của FE với
+                 bảng ký hiệu compiler công bố. Lệch ⇒ Inspector hạ các trường
+                 suy ra từ chỉ mục xuống "không xác định được" thay vì hiển thị
+                 thông tin sai. */
+              reconciliation: symbolReconciliation,
               /* Trước `T59-820` khoá này không được truyền, nên trường `Chữ ký`
                  của handoff §9 luôn hiện "không xác định được" — trung thực về
                  hình thức nhưng nói "thư viện không công bố" trong khi sự thật

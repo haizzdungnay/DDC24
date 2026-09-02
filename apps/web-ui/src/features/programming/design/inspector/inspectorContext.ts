@@ -122,6 +122,8 @@ export interface InspectorStSymbolContext {
   unit: InspectorField<string>
   /** Số lần đọc / ghi, đếm từ `occurrences.role` — một đường đếm duy nhất. */
   readWrite: InspectorField<{ reads: number; writes: number }>
+  /** `ISS-STED-13` — lý do chỉ mục bị hạ cấp; `null` khi chỉ mục còn dùng được. */
+  indexDegradedReason: string | null
 }
 
 export interface InspectorFbdPortView {
@@ -184,6 +186,16 @@ export interface InspectorInput {
    */
   variables?: readonly ProgrammingVariable[]
   bindings?: readonly ProgrammingBinding[]
+  /**
+   * `ISS-STED-13` — phán quyết đối chiếu chỉ mục ký hiệu của FE với bảng
+   * compiler công bố. `degraded` ⇒ mọi trường SUY RA TỪ CHỈ MỤC hạ xuống
+   * `unknown`: chỉ mục vừa được chứng minh là đọc lệch, nên hiển thị tiếp giá
+   * trị của nó là hiển thị thông tin đã biết là sai.
+   *
+   * Các trường lấy từ Draft (Phạm vi, Điểm ánh xạ, Đơn vị) KHÔNG bị hạ: chúng
+   * không đi qua chỉ mục, nên lệch của chỉ mục không nói gì về chúng.
+   */
+  reconciliation?: { degraded: boolean; reason: string } | null
   catalog?: readonly CatalogEntry[]
   fbd?: { document: FbdDocument; selection: FbdSelection | null } | null
   runtime?: StRuntimeOverlayState | null
@@ -376,7 +388,9 @@ function readWriteOf(entry: StCursorSymbol['entry']): InspectorField<{ reads: nu
 export function stSymbolContextFor(input: InspectorInput): InspectorStSymbolContext | null {
   const symbol = input.cursorSymbol
   if (!symbol) return null
-  const entry = symbol.entry
+  /* Chỉ mục đã được chứng minh lệch ⇒ coi như không tra được. Đây đúng là hành
+   * vi mà `F-STED-011` đòi: hạ cấp có thông báo, không im lặng sai. */
+  const entry = input.reconciliation?.degraded ? null : symbol.entry
   /* Khớp theo TÊN, phân biệt hoa/thường theo đúng cách ST xử lý định danh
    * (không phân biệt). Draft là authority; chỉ số văn bản chỉ nói được vị trí
    * và vai trò đọc/ghi. */
@@ -405,6 +419,7 @@ export function stSymbolContextFor(input: InspectorInput): InspectorStSymbolCont
      * lần nữa, vì hai lần tra là hai câu trả lời có thể khác nhau. */
     unit: binding?.unit ? known(binding.unit) : unknownField,
     readWrite: readWriteOf(entry),
+    indexDegradedReason: input.reconciliation?.degraded ? input.reconciliation.reason : null,
   }
 }
 
