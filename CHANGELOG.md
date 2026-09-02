@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Fixed — Tiền kiểm phụ thuộc Python chạy vô điều kiện làm đỏ job MCU Firmware (#414, 2026-09-02)
+
+- **Triệu chứng.** Ngay sau `476723a`, job "MCU Firmware" — trước đó xanh — đỏ tức thì với
+  chính thông điệp tiền kiểm mới thêm: *"thiếu phụ thuộc Python cho cổng hợp đồng"*.
+- **Nguyên nhân gốc.** Tiền kiểm được gọi **vô điều kiện** ở `verify-project.sh`, trong khi
+  `--component firmware` (và `release`) không đụng tới `jsonschema` và job MCU không cài
+  `requirements-ci.txt`. Một cổng đòi phụ thuộc mà chính nó không dùng là dựng phụ thuộc giả,
+  và nó chặn đúng một lane vốn không liên quan.
+- **Cách sửa.** Gọi tiền kiểm ở **đầu từng component thật sự chạy script hợp đồng** —
+  `layout`, `cpp`, `frontend`, `e2e`, `e2e-real`, và đường `--wave`; `firmware`/`release`/`go`
+  không gọi (Go chỉ dùng `python3` trần cho một stub worker, không import `jsonschema`).
+- **Đo lại.** `--component firmware` exit 0 (đã cài `gcc-arm-none-eabi` để đo thật, không suy
+  đoán); `--component layout` exit 0; tiêm `jsonschema` giả ⇒ `layout` vẫn dừng đúng lý do
+  (exit 1) còn `firmware` **không** bị chặn.
+
 ### Fixed — `ISS-STED-21` lỗ hổng 1: đọc được log CI, và sáu lỗi thật lộ ra (#414, 2026-09-02)
 
 Cổng CI nay chạy được (billing đã mở), nên lần đầu tiên đọc được **log job**. Sáu nguyên

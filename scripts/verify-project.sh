@@ -49,6 +49,7 @@ PY
 }
 
 run_layout() {
+  require_contract_python_deps
   # Guard đóng gói chạy TRƯỚC: script này dùng `set -e`, nên bất kỳ kiểm nào hỏng
   # ở trên cũng làm các kiểm phía dưới không bao giờ chạy. Bất biến phát hành
   # (đúng biến thể FE, không băm firmware chưa boot được) rẻ và độc lập với phần
@@ -72,6 +73,7 @@ run_layout() {
 }
 
 run_cpp() {
+  require_contract_python_deps
   local modbus=OFF bacnet=OFF hmi=OFF
   case "$profile" in
     baseline) ;;
@@ -127,6 +129,7 @@ run_go() {
 }
 
 run_frontend() {
+  require_contract_python_deps
   local frontend_dir
   frontend_dir="$(active_path web-ui)"
   (cd "$repo_root/$frontend_dir" && \
@@ -154,6 +157,7 @@ MKDDC_E2E_QUARANTINE=""
 MKDDC_E2E_REAL_SPEC="e2e/programming-real.spec.ts"
 
 run_e2e() {
+  require_contract_python_deps
   local frontend_dir specs=()
   frontend_dir="$(active_path web-ui)"
   # Liệt kê động: một spec mới thêm vào thư mục sẽ tự vào cổng, không phải nhớ
@@ -201,6 +205,7 @@ run_e2e() {
 }
 
 run_e2e_real() {
+  require_contract_python_deps
   local frontend_dir
   frontend_dir="$(active_path web-ui)"
   (cd "$repo_root/$frontend_dir" && npm run test:e2e:programming-real)
@@ -224,6 +229,11 @@ run_release() {
 # đầu tiên chính là lý do lỗi phía sau nằm im rất lâu.
 # Tiền kiểm phụ thuộc Python của các cổng hợp đồng.
 #
+# Gọi ở ĐẦU từng component thật sự chạy script hợp đồng (`layout`, `cpp`,
+# `frontend`, `e2e`, `e2e-real`, `--wave`), KHÔNG gọi vô điều kiện: `firmware`
+# và `release` không đụng tới `jsonschema`, bắt chúng cài gói là dựng một phụ
+# thuộc giả — và đúng như vậy đã làm job "MCU Firmware" đỏ ở `476723a`.
+#
 # Vì sao đứng ở đây: chín script sinh/kiểm hợp đồng `import jsonschema` và cần
 # `Draft202012Validator` (jsonschema >= 4). Ubuntu 22.04 đóng sẵn jsonschema
 # 3.2, nên trên runner CI các script đó chết bằng `ImportError` THÔ. Trong
@@ -246,9 +256,8 @@ except Exception as exc:  # ImportError, và cả jsonschema quá cũ
 DEPCHECK
 }
 
-require_contract_python_deps
-
 if [ -n "$wave" ]; then
+  require_contract_python_deps
   exec python3 "$repo_root/scripts/verify_wave_gates.py" --wave "$wave" --repeat "$repeat"
 fi
 
