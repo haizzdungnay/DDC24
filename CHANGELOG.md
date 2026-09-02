@@ -8,6 +8,97 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-STED-21` lỗ hổng 1: đọc được log CI, và sáu lỗi thật lộ ra (#414, 2026-09-02)
+
+Cổng CI nay chạy được (billing đã mở), nên lần đầu tiên đọc được **log job**. Sáu nguyên
+nhân riêng biệt, không cái nào là nhiễu:
+
+- **Harness fuzz parser ST trap ở file seed ĐẦU TIÊN — job fuzz chưa từng fuzz một byte
+  nào.** *Triệu chứng:* `fuzz_st_parser` chết ngay giây 0 khi đọc corpus mẫu, exit 77.
+  *Nguyên nhân gốc:* harness giữ bất biến "biên dịch được ⇒ nạp được", nhưng
+  `serialize_st_ir` trả artifact **chưa ký** và loader bắt buộc chữ ký từ `T59-607`
+  (`IR-E-007`). Mệnh đề đúng bây giờ là "biên dịch được ⇒ **ký được** ⇒ nạp được".
+  *Cách sửa:* tách làm hai bất biến — artifact chưa ký **phải** bị từ chối đúng mã
+  `IR-E-007`, artifact đã ký **phải** nạp được. Đo lại: **1 215 944 lượt chạy trong 61 giây,
+  exit 0** (trước: chết ở giây 0). Đã tiêm lỗi hai chiều để chứng minh cả hai bất biến còn
+  kêu: đổi mã kỳ vọng ⇒ trap; bỏ khoá công khai khi nạp ⇒ trap.
+- **Hai binary tự đóng hộp không chạy nổi dưới sanitizer.** *Triệu chứng:* lane ASan đỏ với
+  `Failed to mmap` rồi `LeakSanitizer has encountered a fatal error`; 4 test đỏ.
+  *Nguyên nhân gốc:* worker mô phỏng và `mkddc-st-compile` tự áp `setrlimit(RLIMIT_AS)`
+  vài trăm MB, trong khi ASan/TSan/MSan đặt chỗ hàng chục TB shadow memory; và LSan lúc
+  thoát cần đình chỉ luồng + đọc bộ nhớ tiến trình — đúng những syscall seccomp chặn.
+  *Cách sửa:* `sanitizer_build.hpp` — miễn **riêng** trần không gian địa chỉ và **riêng**
+  phần kiểm rò rỉ, nhận biết bằng macro do chính compiler đặt (`__SANITIZE_ADDRESS__`…),
+  nên không cấu hình nào tắt được trần trong bản phát hành. Mọi thành phần khác của hàng
+  rào — seccomp, `NO_NEW_PRIVS`, cấm fork, trần file/CPU — vẫn áp đủ.
+- **Cổng biên symbol coi `libasan` là dependency lạ.** *Cách sửa:*
+  `--allow-sanitizer-runtime`, và CMake **chỉ** bật cờ này khi `MKDDC_SANITIZE` khác rỗng —
+  lane phát hành vẫn đỏ nếu một binary release kéo theo runtime sanitizer.
+- **UBSan `vptr` báo nhầm bên trong hàng rào.** *Triệu chứng:* `member access … object has
+  invalid vptr` trên một control block `shared_ptr` của libstdc++, chỉ xảy ra sau khi áp
+  seccomp; `-fno-sanitize-recover` biến báo nhầm thành đỏ vĩnh viễn. *Bằng chứng là báo
+  nhầm:* đúng đường code ấy sạch khi chạy không hàng rào, và ASan không kêu. *Cách sửa:*
+  tắt **riêng** `vptr` cho hai binary đóng hộp trong lane UBSan; mọi kiểm UB khác giữ nguyên.
+- **Chín script hợp đồng chết bằng `ImportError` thô trên runner.** *Nguyên nhân gốc:*
+  chúng cần `jsonschema >= 4` (`Draft202012Validator`) còn Ubuntu 22.04 đóng sẵn 3.2. Trong
+  `ctest`, cái chết đó hiện ra là `st_language_profile_contract Failed` — đọc y hệt một vi
+  phạm hợp đồng ngôn ngữ. *Cách sửa:* cài `requirements-ci.txt` ở mọi job chạy cổng, và
+  thêm tiền kiểm ở `verify-project.sh` nói thẳng thiếu gói nào, cài bằng lệnh nào.
+- **`apt-get update` chết vì repo bên thứ ba trả 403.** Ảnh runner mang sẵn
+  `packages.microsoft.com`; nó 403 thì job chết ở bước cài dù mọi repo Ubuntu đều tải được.
+  *Cách sửa:* gỡ repo không dùng trước khi `update`, ở cả năm bước `apt`.
+
+### Fixed — Bề mặt khai Published Signal bị gỡ khỏi tab Ánh xạ, và test bị ĐẢO để hợp thức hoá (#414, 2026-09-02)
+
+- **Triệu chứng.** E2E `T59-505` (lane backend/Core thật) hết giờ 120 giây khi bấm nút
+  *"Khai Published Signal"* trên route Mapping.
+- **Nguyên nhân gốc.** Commit `8437def` gỡ `PublishedSignalsPanel` khỏi `MappingTab` — kèm
+  chính đoạn chú thích cảnh báo rằng đây là **bề mặt authoring DUY NHẤT** của
+  `upsertSignal`/`removeSignal` (`UX-REQ-007`), và rằng E2E bấm thẳng nút đó. Cùng commit
+  **đảo hai assertion đơn vị** thành *"không được mount"*, nên chỉ E2E còn kêu — mà E2E thì
+  đang đỏ vì lý do khác. Panel đã từng bị gỡ và được trả lại một lần ở `#347`.
+- **Cách sửa.** Mount lại panel, trả hai assertion về dạng khẳng định, và ghi rõ trong mã:
+  muốn bỏ bề mặt này thì sửa `UX-REQ-007` cùng hợp đồng E2E **trước**, không phải sửa test
+  cho khớp hiện trạng.
+- **Hệ quả ngân sách bundle.** Gắn tĩnh lại làm chunk `programming` vượt ngân sách gzip R3
+  **3.24 KiB** (nâng ngân sách là quyết định sản phẩm, không phải sửa nhanh trong PR). Nạp
+  trễ panel ⇒ chunk riêng **5.50 KiB gzip**, chunk `programming` còn **164.54 KiB**, dư địa
+  **0.46 KiB**. Dư địa đó rất mỏng: lần thêm tính năng kế tiếp gần như chắc chắn phải có
+  quyết định sản phẩm về R3.
+
+### Fixed — Lane E2E real-backend phụ thuộc một tiền điều kiện không ai dựng (#414, 2026-09-02)
+
+- **Triệu chứng.** Sau khi sửa nút, `T59-505` vẫn đỏ ở khẳng định ngân sách 5xx với
+  `503 /api/v1/programming/point-catalog`.
+- **Nguyên nhân gốc.** Point Catalog đọc PLC SHM (`/dev/shm/mkddc_plc_shm`) do `mkddc-core`
+  thật ghi. `run_programming_real_e2e_stack.sh` **biết** điều đó nhưng chỉ **in cảnh báo**
+  rồi chạy tiếp — trên mọi máy không có ai dựng sẵn chuỗi no-board (CI là ví dụ đúng nhất)
+  endpoint trả 503 tất định. Một tiền điều kiện không ai dựng thì không phải tiền điều kiện.
+- **Cách sửa.** Lane tự dựng chuỗi no-board khi thiếu SHM và tự dọn ở `cleanup`;
+  `run_noboard_demo.sh` có thêm chế độ `start` (không mở dashboard, đợi SHM hiện ra rồi mới
+  trả quyền); SHM **mồ côi** (không tiến trình `mkddc-core` nào ghi) bị xoá và dựng lại,
+  vì "file còn đó" không đồng nghĩa "có ai đang ghi"; job E2E trên CI cài thêm `socat`.
+- **Đo lại.** Toàn lane `e2e-real`: **8 passed / 1 skipped, exit 0** (trước: 1 failed).
+
+**Số đo kiểm chứng (đo lại trong phiên này, không dẫn lại số cũ).**
+
+| Cổng | Kết quả |
+|---|---|
+| `cpp --profile baseline` (`-Werror`) | 1329/1329, exit 0 |
+| `cpp --profile modbus` | 1345/1345, exit 0 |
+| `cpp --profile bacnet` | 1330/1330, exit 0 |
+| `cpp --profile modbus-bacnet` | 1346/1346, exit 0 |
+| `cpp --profile full` | 1384/1384, exit 0 |
+| ASan (`detect_leaks=1`) | 1329/1329, exit 0 (trước: 4 đỏ) |
+| UBSan | 1329/1329, exit 0 (trước: chưa từng chạy tới) |
+| Fuzz `fuzz_st_parser` | 1 215 944 lượt/61 s, exit 0 (trước: chết ở giây 0) |
+| Fuzz `fuzz_st_loader` / `fuzz_st_fbd_model` | 855 340 và 39 345 lượt, exit 0 |
+| `go --profile race` | 19 package `ok`, exit 0 |
+| `frontend` | 199 file / 2438 test, lint + build + ngân sách bundle PASS |
+| `e2e-real` | 8 passed / 1 skipped, exit 0 |
+| `layout` | exit 0 (job "Kiến trúc repository" trên CI đã xanh sau `03d03db`) |
+
+
 ### Added — `ISS-PIO-31` producer bắc cầu `extIndex` + ba cơ chế dịch slot thành test (#375, 2026-09-02)
 
 - **Triệu chứng.** Slot `ext` của điểm Modbus cấp phát **tuần tự, không có bảng bền**, nên

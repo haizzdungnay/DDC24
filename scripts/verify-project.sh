@@ -222,6 +222,32 @@ run_release() {
 # `--wave` là đường đi MỘT LỆNH cho cả ma trận cổng. Nó cố ý KHÔNG dùng `set -e`
 # của script này: runner chạy hết mọi cổng rồi mới kết luận, vì dừng ở cổng hỏng
 # đầu tiên chính là lý do lỗi phía sau nằm im rất lâu.
+# Tiền kiểm phụ thuộc Python của các cổng hợp đồng.
+#
+# Vì sao đứng ở đây: chín script sinh/kiểm hợp đồng `import jsonschema` và cần
+# `Draft202012Validator` (jsonschema >= 4). Ubuntu 22.04 đóng sẵn jsonschema
+# 3.2, nên trên runner CI các script đó chết bằng `ImportError` THÔ. Trong
+# `ctest` cái chết đó hiện ra là "st_language_profile_contract Failed" — đọc y
+# hệt một vi phạm hợp đồng ngôn ngữ, trong khi thứ thiếu chỉ là một gói pip.
+# Một cổng nói sai lý do hỏng còn tốn thời gian hơn một cổng không chạy.
+require_contract_python_deps() {
+  python3 - <<'DEPCHECK' || exit 1
+import sys
+
+try:
+    from jsonschema import Draft202012Validator  # noqa: F401
+except Exception as exc:  # ImportError, và cả jsonschema quá cũ
+    sys.stderr.write(
+        "LỖI: thiếu phụ thuộc Python cho cổng hợp đồng: %s\n"
+        "     cài bằng: python3 -m pip install -r requirements-ci.txt\n"
+        "     (cần jsonschema >= 4.17 — bản 3.2 đóng sẵn trên Ubuntu 22.04 KHÔNG có\n"
+        "      Draft202012Validator, và đây KHÔNG phải lỗi hợp đồng)\n" % exc)
+    raise SystemExit(1)
+DEPCHECK
+}
+
+require_contract_python_deps
+
 if [ -n "$wave" ]; then
   exec python3 "$repo_root/scripts/verify_wave_gates.py" --wave "$wave" --repeat "$repeat"
 fi

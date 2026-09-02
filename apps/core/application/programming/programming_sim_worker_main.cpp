@@ -44,10 +44,15 @@
 #include <array>
 #include <fstream>
 
+#include "sanitizer_build.hpp"
 #include "programming/simulation/sim_error.hpp"
 #include "programming/simulation/sim_sandbox.hpp"
 #include "programming/simulation/sim_session.hpp"
 #include "st/st_profile_generated.hpp"
+
+/* Ngoài anonymous namespace: LSan tra symbol này theo tên C nên nó phải có liên
+ * kết ngoài. */
+MKDDC_SANDBOX_DISABLES_LEAK_CHECK()
 
 namespace {
 
@@ -62,7 +67,12 @@ constexpr const char* kWorkerVersion = "1.0.0";
  * yêu cầu hợp lệ. */
 constexpr std::size_t kMaxLineBytes = 256 * 1024;
 constexpr std::size_t kMaxArtifactBytes = 16u * 1024u * 1024u;
-constexpr unsigned long kAddressSpaceBytes = 192ul * 1024ul * 1024ul;
+/* Trần không gian địa chỉ của hàng rào tiến trình. `0` = giữ nguyên giới hạn
+ * hiện có; xem `sanitizer_build.hpp` để biết vì sao lane sanitizer phải miễn
+ * trần này. Mọi thành phần khác của hàng rào vẫn áp đủ. */
+constexpr unsigned long kAddressSpaceBytes =
+    core::kShadowSanitizerBuild ? 0ul : 192ul * 1024ul * 1024ul;
+
 
 /* Đọc theo dòng trên fd 0 và GIỮ phần dư sau '\n'. Nếu dùng stdio thường thì
  * phần nhị phân của `PREPARE` đã nằm trong bộ đệm của thư viện và không lấy lại

@@ -69,7 +69,12 @@ revive)
     echo "fake MCU sống lại -> nhìn dashboard: ~5s sau reconnect, NORMAL trở lại"
     exit 0 ;;
 run) ;;
-*) die "lệnh lạ: $1 (run|do1..do4 0/1|kill-mcu|revive|stop)" ;;
+# `start` dựng đúng chuỗi như `run` rồi THOÁT, không mở dashboard. Lane E2E
+# real-backend cần `/dev/shm/mkddc_plc_shm` tồn tại nhưng không có ai ngồi xem
+# dashboard; trước đây nó chỉ in cảnh báo rồi để Point Catalog trả 503, và spec
+# đỏ ở một khẳng định cách đó 50 dòng.
+start) ;;
+*) die "lệnh lạ: $1 (run|start|do1..do4 0/1|kill-mcu|revive|stop)" ;;
 esac
 
 [ -x "$IOBUS" ] || die "chưa build: platform/packaging/build-release.sh"
@@ -103,6 +108,19 @@ echo "  ./tools/run_noboard_demo.sh kill-mcu  # xem FAULT + safe-state"
 echo "  ./tools/run_noboard_demo.sh revive    # xem tự hồi phục"
 echo "  ./tools/run_noboard_demo.sh stop      # dọn sạch"
 echo
+if [ "${1:-run}" = "start" ]; then
+    # Đợi PLC SHM hiện ra trước khi trả quyền: người gọi (lane E2E) dựa vào nó
+    # để Point Catalog không trả 503, và "đã chạy lệnh" không đồng nghĩa "SHM đã
+    # có". Thà hỏng ở đây với một câu rõ ràng còn hơn hỏng trong Playwright.
+    for _ in $(seq 1 50); do
+        [ -e /dev/shm/mkddc_plc_shm ] && break
+        sleep 0.2
+    done
+    [ -e /dev/shm/mkddc_plc_shm ] || die "chuỗi no-board lên nhưng không thấy /dev/shm/mkddc_plc_shm (xem $LOGDIR/core.log)"
+    echo "chuỗi no-board đã sẵn sàng: /dev/shm/mkddc_plc_shm"
+    exit 0
+fi
+
 echo "Dashboard IO sống (Ctrl-C để thoát, chuỗi vẫn chạy):"
 echo "──────────────────────────────────────────────────────"
 exec "$DUMP" --watch

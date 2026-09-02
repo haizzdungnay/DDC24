@@ -41,6 +41,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "sanitizer_build.hpp"
 #include "st/st_control_api.hpp"
 #include "st/st_artifact.hpp"
 #include "st/st_artifact_manifest.hpp"
@@ -56,6 +57,10 @@
 #include "st/st_pou_registry.hpp"
 #include "st/st_review_gate.hpp"
 #include "st/st_semantic.hpp"
+
+/* Ngoài anonymous namespace: LSan tra symbol này theo tên C nên nó phải có liên
+ * kết ngoài. */
+MKDDC_SANDBOX_DISABLES_LEAK_CHECK()
 
 namespace {
 
@@ -850,7 +855,10 @@ bool apply_worker_sandbox(std::string* error)
         !limit(RLIMIT_FSIZE, 2u * 1024u * 1024u, "FSIZE") ||
         !limit(RLIMIT_NOFILE, 32, "NOFILE") ||
         !limit(RLIMIT_NPROC, 1, "NPROC") ||
-        !limit(RLIMIT_AS, 256u * 1024u * 1024u, "AS") ||
+        /* Trần AS bị BỎ RIÊNG trong build sanitizer — shadow memory cần hàng
+         * chục TB địa chỉ ảo, xem `sanitizer_build.hpp`. Mọi trần khác và toàn
+         * bộ seccomp vẫn áp đủ, kể cả ở lane đó. */
+        (!core::kShadowSanitizerBuild && !limit(RLIMIT_AS, 256u * 1024u * 1024u, "AS")) ||
         !limit(RLIMIT_CPU, 5, "CPU"))
         return false;
     if (::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {

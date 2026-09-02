@@ -55,7 +55,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('MappingTab Phase 1A — regression boundaries', () => {
-  it('không gọi onSave và khóa toàn bộ Map/Remove với admin', () => {
+  it('không gọi onSave và khóa toàn bộ Map/Remove với admin', async () => {
     const onSave = vi.fn().mockResolvedValue(true)
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={onSave} /></I18nProvider>)
 
@@ -63,7 +63,10 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
     expect(mutationButtons.length).toBeGreaterThan(0)
     expect(mutationButtons.every((button) => button.hasAttribute('disabled'))).toBe(true)
     expect(screen.queryByRole('button', { name: /Gỡ ánh xạ/ })).not.toBeInTheDocument()
-    expect(screen.queryByText('Published Signal')).not.toBeInTheDocument()
+    /* Phase 1A khoá Map/Remove, nhưng KHÔNG khoá Published Signal: đó là bề mặt
+     * authoring riêng của `upsertSignal`/`removeSignal` (`UX-REQ-007`). Khẳng
+     * định "không được mount" ở đây từng che một hồi quy thật. */
+    expect(await screen.findByRole('heading', { name: /Published Signal/ })).toBeInTheDocument()
     expect(onSave).not.toHaveBeenCalled()
   })
 

@@ -83,6 +83,14 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             cmake \
@@ -92,6 +100,9 @@ jobs:
             libsodium-dev \
             ninja-build \
             ${{ matrix.extra_packages }}
+
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
 
       - name: Build và test qua entrypoint chuẩn
         run: scripts/verify-project.sh --component cpp --profile '${{ matrix.profile }}'
@@ -203,6 +214,9 @@ jobs:
       # build). 133 vitest test trên 25 file và `eslint --max-warnings=0` không
       # chặn được gì — chỉ lỗi type và lỗi bundle mới bị bắt, còn mọi regression
       # hành vi ở component/hook/AuthProvider/useWebSocket đều merge xanh.
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
       - name: Test, lint và build React Web UI
         run: scripts/verify-project.sh --component frontend
 
@@ -225,12 +239,21 @@ jobs:
 
       - name: Cài toolchain C++ cho Core simulator và compiler
         run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             cmake \
             g++ \
             libsodium-dev \
-            pkg-config
+            pkg-config \
+            socat
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -257,6 +280,9 @@ jobs:
             exit 1
           fi
 
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
       - name: Project đến Restore qua backend, compiler và Core simulator thật
         run: scripts/verify-project.sh --component e2e-real
 
@@ -269,6 +295,14 @@ jobs:
 
       - name: Install arm-none-eabi-gcc & newlib
         run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi
 
@@ -281,7 +315,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cài phụ thuộc
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsodium-dev
+        run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libsodium-dev
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
       - name: ASan
         run: |
           # -Werror bắt lỗi compile-time; ASan bắt lỗi bộ nhớ lúc chạy. Loader IR
@@ -303,7 +350,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cài phụ thuộc
-        run: sudo apt-get update && sudo apt-get install -y cmake clang libsodium-dev
+        run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libsodium-dev
       - name: Build fuzz harness
         run: |
           CXX=clang++ CC=clang cmake -S . -B build/fuzz -DCMAKE_BUILD_TYPE=Debug \

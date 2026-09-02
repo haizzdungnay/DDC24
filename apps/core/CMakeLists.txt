@@ -229,6 +229,23 @@ target_link_libraries(mkddc-st-profile-dump PRIVATE st_compiler_lib)
 
 # T59-302/T59-305: lắp package v2 bằng ĐÚNG writer production, không cài lại
 # định dạng ở lớp BE.
+# UBSan `vptr` bị TẮT RIÊNG cho hai binary tự đóng hộp.
+#
+# Cả hai áp seccomp cấm đọc `/proc`, mà kiểm `vptr` của UBSan cần đọc bản đồ bộ
+# nhớ tiến trình để phân giải RTTI. Mất đường đọc đó, nó báo "object has invalid
+# vptr" cho một control block `shared_ptr` NẰM TRONG libstdc++ — bằng chứng là
+# cùng đúng đường code ấy sạch khi chạy không hàng rào, và ASan (cũng bắt nhầm
+# kiểu qua bộ nhớ) không kêu. `-fno-sanitize-recover` biến báo nhầm đó thành
+# ctest đỏ vĩnh viễn, tức lane UBSan không bao giờ chạy tới các kiểm khác.
+#
+# Chỉ TẮT `vptr`; mọi kiểm UB còn lại (tràn số, dịch bit, con trỏ lệch, gọi hàm
+# sai chữ ký...) vẫn bật đủ trên hai binary này. Không nới hàng rào để chiều bộ
+# kiểm: hàng rào chính là vật đang được kiểm.
+if(MKDDC_SANITIZE MATCHES "undefined")
+  target_compile_options(mkddc-programming-sim-worker PRIVATE -fno-sanitize=vptr)
+  target_compile_options(mkddc-st-compile PRIVATE -fno-sanitize=vptr)
+endif()
+
 add_executable(mkddc-st-package application/st/st_package_main.cpp)
 target_link_libraries(mkddc-st-package PRIVATE st_compiler_lib)
 
@@ -369,11 +386,21 @@ if(CORE_BUILD_TESTS)
   # không có sẵn cạnh nào tới đường điều khiển", còn cổng hành vi nói "hàng rào
   # tiến trình thật sự chặn, bắt tay thật sự fail-closed và phiên thật sự tất
   # định". Cái nào thiếu thì `SIM_SAFE` chưa được coi là đã chứng minh.
+  # Build sanitizer link thêm `libasan`/`libubsan`; đó là thư viện do CHÍNH cấu
+  # hình build kéo vào, không phải một dependency mới lọt vào worker. Cờ dưới
+  # đây chỉ bật khi `MKDDC_SANITIZE` khác rỗng nên lane phát hành vẫn đỏ nếu
+  # một binary release kéo theo runtime sanitizer.
+  if(MKDDC_SANITIZE)
+    set(MKDDC_SIM_WORKER_BOUNDARY_EXTRA --allow-sanitizer-runtime)
+  else()
+    set(MKDDC_SIM_WORKER_BOUNDARY_EXTRA "")
+  endif()
   add_test(NAME programming_sim_worker_symbol_boundary
       COMMAND ${Python3_EXECUTABLE}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_sim_worker_boundary.py
               --binary $<TARGET_FILE:mkddc-programming-sim-worker>
-              --nm ${CMAKE_NM})
+              --nm ${CMAKE_NM}
+              ${MKDDC_SIM_WORKER_BOUNDARY_EXTRA})
   if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME programming_sim_worker_behaviour
         COMMAND ${Python3_EXECUTABLE}
