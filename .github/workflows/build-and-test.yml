@@ -40,6 +40,12 @@ jobs:
           go-version-file: apps/web-api/go.mod
           cache: false
 
+      # ISS-STED-21 — cổng hợp đồng THI HÀNH schema bằng `jsonschema`, không chỉ
+      # băm nó. Runner không có sẵn gói này, nên trước lát này job hỏng sau ~2
+      # giây với ModuleNotFoundError — trước cả khi kiểm được thứ gì.
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
       - name: Kiểm authority, dependency và build artifact
         run: scripts/verify-project.sh --component layout
 

@@ -8,6 +8,56 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-31` producer bắc cầu `extIndex` + ba cơ chế dịch slot thành test (#375, 2026-09-02)
+
+- **Triệu chứng.** Slot `ext` của điểm Modbus cấp phát **tuần tự, không có bảng bền**, nên
+  **ba thao tác cấu hình bình thường** đều làm nó dịch chỗ, và **không tầng nào phát hiện**:
+  đổi tên điểm (`BuildProfile` sắp theo **tên**), tắt điểm, tắt thiết bị. Kịch bản hỏng:
+  binding đã Commission trỏ `PUMP-02#14`; kỹ sư tắt `VFD-01` để bảo trì ⇒ `PUMP-02` dịch
+  xuống ⇒ slot 14 **không còn là thanh ghi cũ**. `st_io_map.cpp` chỉ kiểm
+  `ext_index ∈ [1, KX_N_EXT]` nên 14 vẫn "hợp lệ": chương trình ghi lệnh bơm **sai chỗ**,
+  không một dòng cảnh báo.
+- **Nguyên nhân gốc của việc không phát hiện được.** Review ghi đúng: *"Producer bắc cầu —
+  **KHÔNG TỒN TẠI** — không nguồn nào phát `extIndex` ra ngoài"*. `PointCatalogEntry` không
+  có `extIndex`, `PointDTO` cũng không. Không có nó thì **không tầng nào đối chiếu được**
+  `(deviceId, pointId)` với slot mà runtime sẽ dùng — mọi phép kiểm tham chiếu của
+  `AC-PIO-ID-02` đều không thi hành được.
+- **Cách sửa (phần làm được trọn trong lần này).** `modbusrtu/extlayout.go` — tính lại
+  **đúng** bố cục mà `iobus` sẽ cấp, từ chính cấu hình BE phát ra.
+  - **Sao lại cả hai đặc điểm gây dịch chỗ** (sắp theo tên, bỏ mục tắt) một cách có chủ ý:
+    đây là bản mô tả **trung thực của hành vi hiện tại**, không phải hành vi mong muốn. Một
+    "bản đồ" tính theo luật khác luật đang chạy sẽ bỏ lọt đúng ca nó sinh ra để bắt.
+  - **Quy đổi 0-based → 1-based làm MỘT LẦN, ở biên**, với test khoá cả hai đầu như review
+    yêu cầu. Allocator `iobus` đếm từ 0; artifact/io_map kiểm `>= 1` và trừ 1 khi đọc. Phát
+    thẳng `ext_idx` thô sẽ **lệch đúng một thanh ghi** — hợp lệ với mọi phép kiểm hiện có.
+  - **`VerifyBinding`** trả mismatch để tầng gọi CHẶN, và thông báo **nói slot cũ nay thuộc
+    về ai**: "binding không hợp lệ" không đủ để người vận hành biết chuyện gì xảy ra.
+  - Kiểu 32 bit chiếm **hai** thanh ghi — có test riêng, vì sai chỗ này làm mọi điểm phía
+    sau lệch một slot.
+- **Ba cơ chế dịch chỗ nay là sự thật chạy lại được**, mỗi cái một test, thay vì một đoạn
+  văn trong review. Kèm test chiều ngược: binding **không** dịch thì **không** được báo —
+  một cổng báo động giả sẽ bị tắt trong tuần đầu.
+- **Chưa làm, nói rõ.** `AC-PIO-ID-01` (schema binding bền), `AC-PIO-ID-02` (nối
+  `VerifyBinding` vào Check/Commission để chặn thật) và `AC-PIO-ID-03` (migration binding
+  legacy) **chưa làm** — chúng đổi schema và luồng Commission trên một đường an toàn P0,
+  nơi một bản sửa nửa vời nguy hiểm hơn không sửa. Issue để mở.
+
+### Fixed — `ISS-STED-21` cổng `layout` của CI thiếu phụ thuộc Python (#414, 2026-09-02)
+
+- **Triệu chứng.** Sau khi bốn lỗi ở PR #432 được sửa, job `Kiến trúc repository` **vẫn**
+  hỏng sau **~2 giây** trên `main`, trong khi cùng lệnh chạy local thì xanh.
+- **Nguyên nhân gốc.** Nhiều script cổng **thi hành** schema bằng `jsonschema` chứ không chỉ
+  băm nó. Job đó chỉ cài Go, **không cài phụ thuộc Python**, nên `ModuleNotFoundError` xảy
+  ra trước cả khi kiểm được thứ gì. Hai giây là dấu hiệu: nó không chạy hỏng, nó **không
+  chạy được**.
+- **Cách sửa.** `requirements-ci.txt` + một bước cài trong job. Ghim major để một bản 5.x
+  đổi API không làm đỏ cổng vì lý do không liên quan tới mã dự án.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `verify-project.sh --component layout` exit 0; `--component go --profile race`
+    **19/19 package ok**, exit 0; `--component frontend` exit 0.
+  - `ctest` (`-Werror`, MODBUS/BACNET/HMI = ON): **1384/1384 pass**, exit 0.
+  - Test mới `modbusrtu`: 7 test bố cục/đối chiếu slot, exit 0.
+
 ### Fixed — `ISS-STED-21` lỗ hổng 1: gate CI nay CHẠY, và nó đỏ vì bốn lỗi thật (#414, 2026-09-02)
 
 - **Trạng thái đã đổi so với lúc mở issue.** #414 ghi gate CI chết sau **2–3 giây** với **0
