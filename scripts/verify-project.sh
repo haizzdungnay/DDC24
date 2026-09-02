@@ -151,10 +151,34 @@ run_frontend() {
 # lại không ai bắt. Nay danh sách cách ly rỗng, và `run_e2e` tự kiểm: spec còn
 # trong cách ly mà PASS thì cổng ĐỎ kèm yêu cầu gỡ, để lần sau không mục lại.
 MKDDC_E2E_QUARANTINE=""
-# Spec real-backend KHÔNG phải cách ly: nó sở hữu stack BE-Core simulator thật và
-# có config Playwright riêng, nên chạy lẫn với bộ mock sẽ vừa lặp test vừa làm sai
-# failure boundary của hai gate. Nó có cổng riêng `e2e-real`.
+# Spec của LANE KHÁC — KHÔNG phải cách ly. Chúng có config Playwright riêng và
+# đăng nhập vào backend THẬT, nên chạy lẫn với bộ mock sẽ vừa lặp test vừa làm
+# sai failure boundary của hai gate.
+#
+# `programming-real.spec.ts` có cổng riêng `e2e-real`.
+# `programming-target-fault.spec.ts` thuộc lane target
+# (`playwright.programming-target.config.ts`) và chỉ chạy trong cửa sổ fault
+# injection có kiểm soát trên bo thật; ở lane mock nó chỉ tồn tại để bị `skip`.
+#
+# Trước bản vá, chỉ spec real-backend được loại. Spec target vì thế vừa bị lane
+# mock chạy (rồi skip), vừa bị cổng "một helper đăng nhập" bắt lỗi vì nó có
+# `loginIfNeeded` riêng — mà nó BUỘC phải có, do nó đăng nhập vào backend thật
+# chứ không phải lane mock. Cổng đó chưa từng chạy trên CI (job FE luôn chết
+# trước ở bước khác), nên vi phạm này ngồi im trong repo.
 MKDDC_E2E_REAL_SPEC="e2e/programming-real.spec.ts"
+MKDDC_E2E_OTHER_LANE_SPECS=(
+  "e2e/programming-real.spec.ts"
+  "e2e/programming-target-fault.spec.ts"
+)
+
+# spec_owned_by_other_lane trả 0 khi spec thuộc lane khác.
+spec_owned_by_other_lane() {
+  local candidate="$1" owned
+  for owned in "${MKDDC_E2E_OTHER_LANE_SPECS[@]}"; do
+    [ "$candidate" = "$owned" ] && return 0
+  done
+  return 1
+}
 
 run_e2e() {
   require_contract_python_deps
@@ -164,7 +188,7 @@ run_e2e() {
   # sửa script. Đó là cách duy nhất để danh sách này không lại tụt hậu.
   while IFS= read -r spec; do
     [ -n "$MKDDC_E2E_QUARANTINE" ] && [ "$spec" = "$MKDDC_E2E_QUARANTINE" ] && continue
-    [ "$spec" = "$MKDDC_E2E_REAL_SPEC" ] && continue
+    spec_owned_by_other_lane "$spec" && continue
     specs+=("$spec")
   done < <(cd "$repo_root/$frontend_dir" && find e2e -maxdepth 1 -name '*.spec.ts' | sort)
   if [ "${#specs[@]}" -eq 0 ]; then
@@ -180,9 +204,15 @@ run_e2e() {
   # backend Go thật bằng JWT thật, còn `helpers/session.ts` là đường đăng nhập của
   # lane mock. Ép chung một helper sẽ buộc helper phải biết cả hai chế độ xác
   # thực — đúng kiểu trừu tượng hoá làm hỏng ranh giới lỗi của hai gate.
-  local dup
-  dup="$(cd "$repo_root/$frontend_dir" && grep -rln 'async function login' e2e --include='*.spec.ts' \
-    | grep -v -F "$MKDDC_E2E_REAL_SPEC" || true)"
+  local dup all_login
+  all_login="$(cd "$repo_root/$frontend_dir" && grep -rln 'async function login' e2e --include='*.spec.ts' || true)"
+  dup=""
+  while IFS= read -r spec; do
+    [ -z "$spec" ] && continue
+    spec_owned_by_other_lane "$spec" && continue
+    dup="${dup}${spec}"$'\n'
+  done <<< "$all_login"
+  dup="$(printf '%s' "$dup")"
   if [ -n "$dup" ]; then
     printf 'LỖI: spec định nghĩa lại helper đăng nhập thay vì dùng e2e/helpers/session.ts:\n%s\n' \
       "$dup" >&2

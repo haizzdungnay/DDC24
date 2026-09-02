@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Fixed — Cổng "một helper đăng nhập" chặn lane mock vì áp nhầm cả spec của lane target (#414, 2026-09-02)
+
+- **Triệu chứng.** Job "React Web Frontend" đỏ ở bước `E2E mock` với
+  *"LỖI: spec định nghĩa lại helper đăng nhập thay vì dùng e2e/helpers/session.ts:
+  e2e/programming-target-fault.spec.ts"*. Trước đó job luôn chết sớm hơn (thiếu `jsonschema`,
+  và trước nữa là billing), nên **bước này chưa từng chạy trên CI** và vi phạm ngồi im.
+- **Nguyên nhân gốc.** Cổng loại trừ đúng **một** spec (`programming-real.spec.ts`) khỏi luật
+  "chỉ một helper đăng nhập", trong khi có **hai** spec thuộc lane khác.
+  `programming-target-fault.spec.ts` chạy dưới `playwright.programming-target.config.ts`, đăng
+  nhập vào backend **thật** bằng mật khẩu của lane target, và chỉ chạy trong cửa sổ fault
+  injection có kiểm soát. Nó **buộc phải** có helper riêng — ép nó dùng helper của lane mock
+  chính là kiểu trừu tượng hoá làm hỏng ranh giới lỗi mà chú thích của cổng đã cảnh báo.
+  Cùng lỗi phạm vi ấy còn khiến lane mock **chạy** spec target (rồi `skip`), tức lane mock
+  tưởng mình phủ một spec mà nó không phủ.
+- **Cách sửa.** Thay hằng một-spec bằng danh sách `MKDDC_E2E_OTHER_LANE_SPECS` dùng chung cho
+  **cả hai** chỗ: danh sách spec chạy và phép kiểm helper đăng nhập.
+- **Đo lại.** `--component e2e` nay qua được cổng và chạy **10 spec / 171 test** (trước: dừng
+  ở cổng, 0 test chạy).
+- **Còn đỏ, và nói rõ:** trong 171 test đó có **5 test `programming.spec.ts` hỏng sẵn** — POU
+  explorer không hiện empty-state, nút "Thêm FUNCTION" không xuất hiện, `focusRingMinPx` đo
+  được 0, và phiên SIMULATE nhận 503 ở `/programming/checks/...`. Chúng **không** do thay đổi
+  nào trong phiên này gây ra. Số đo cục bộ này chạy bằng **Chromium** chứ không phải Google
+  Chrome (proxy chặn tải Chrome — `CONNECT tunnel failed, 403`), nên chưa đủ để khẳng định
+  cả 5 cũng đỏ trên CI; lần chạy CI kế tiếp là phép đo đúng browser đầu tiên của lane này.
+
+
 ### Fixed — `ISS-PIO-32` một authority duy nhất quyết định binding eligibility; hai luật cứng ở FE đã sai (#376, 2026-09-02)
 
 - **Triệu chứng.** Tab Ánh xạ nói *"Core Rev A chưa resolve MB_RTU trong ST io_map"* và
