@@ -100,6 +100,12 @@ run_go() {
   go_dir="$(active_path web-api)"
 	local compiler_binary="$build_root/cpp-full/core/mkddc-st-compile"
 	local packager_binary="$build_root/cpp-full/core/mkddc-st-package"
+	# Sim worker cũng là production tool của cổng Go: `client_test.go` spawn ĐÚNG
+	# binary này để kiểm hợp đồng liên tiến trình (bắt tay, khung lệnh, thu hồi).
+	# Nó KHÔNG công bố `profile_sha256` trong `--version` — nó không đọc product
+	# profile — nên nó được canh riêng bằng phép kiểm executable, không đi qua
+	# vòng so profile phía dưới.
+	local sim_worker_binary="$build_root/cpp-full/core/mkddc-programming-sim-worker"
 	local expected_profile_sha
 	expected_profile_sha="$(sha256sum "$repo_root/contracts/programming/product_profile_v2.json" | awk '{print $1}')"
 	for production_tool in "$compiler_binary" "$packager_binary"; do
@@ -118,9 +124,21 @@ run_go() {
 		sha256sum "$production_tool"
 		printf '%s\n' "$production_version"
 	done
+	if [ ! -x "$sim_worker_binary" ]; then
+		printf 'LỖI: thiếu production tool từ chính build của cổng cpp: %s\n' "$sim_worker_binary" >&2
+		printf '      chạy --component cpp --profile full với cùng MKDDC_BUILD_ROOT trước cổng go\n' >&2
+		return 1
+	fi
+	sha256sum "$sim_worker_binary"
+	printf '%s\n' "$("$sim_worker_binary" --version)"
 	export MKDDC_REQUIRE_PRODUCTION_TOOLS=1
 	export MKDDC_ST_COMPILER_BINARY="$compiler_binary"
 	export MKDDC_ST_PACKAGER_BINARY="$packager_binary"
+	# Truyền tường minh, đúng như hai tool trên: không truyền thì test tự dò
+	# `build/fw` rồi `build/verify/cpp-full` bằng đường dẫn CỨNG, tức nó bỏ qua
+	# MKDDC_BUILD_ROOT — và với `MKDDC_REQUIRE_PRODUCTION_TOOLS=1` thì "không tìm
+	# thấy" là FAIL chứ không phải SKIP. Đó đúng là cách cổng Go đỏ trên CI.
+	export MKDDC_SIM_WORKER_BINARY="$sim_worker_binary"
   if [ "$profile" = "race" ]; then
     (cd "$repo_root/$go_dir" && go vet ./... && go test -race ./... -count=1)
   else

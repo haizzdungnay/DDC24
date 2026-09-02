@@ -151,9 +151,15 @@ jobs:
       # Go chạy trên runner RIÊNG và không có `build/verify/` của job này, nên
       # nó hỏng sau chưa tới một giây, mọi lần, kể từ khi cổng được viết.
       #
-      # Chuyển đúng hai binary qua artifact thay vì bắt job Go dựng lại C++:
+      # Chuyển đúng BA binary qua artifact thay vì bắt job Go dựng lại C++:
       # dựng lại sẽ cho một binary KHÁC binary mà cổng cpp vừa kiểm, tức phá
       # chính bất biến "cùng một build".
+      #
+      # `mkddc-programming-sim-worker` nằm trong danh sách vì
+      # `internal/programming/simworker/client_test.go` spawn ĐÚNG binary đó để
+      # kiểm hợp đồng liên tiến trình. Khi nó thiếu, `MKDDC_REQUIRE_PRODUCTION_TOOLS=1`
+      # biến sáu test ấy thành FAIL — đúng ý đồ của cổng (không có SKIP giả
+      # xanh), nhưng lý do là artifact thiếu file chứ không phải code hỏng.
       - name: Upload production tools cho cổng Go
         if: matrix.profile == 'full'
         uses: actions/upload-artifact@v4
@@ -162,6 +168,7 @@ jobs:
           path: |
             build/verify/cpp-full/core/mkddc-st-compile
             build/verify/cpp-full/core/mkddc-st-package
+            build/verify/cpp-full/core/mkddc-programming-sim-worker
           retention-days: 1
 
   web-backend:
@@ -187,7 +194,7 @@ jobs:
 
       # `upload-artifact` không giữ bit thực thi.
       - name: Khôi phục quyền thực thi
-        run: chmod +x build/verify/cpp-full/core/mkddc-st-compile build/verify/cpp-full/core/mkddc-st-package
+        run: chmod +x build/verify/cpp-full/core/mkddc-st-compile build/verify/cpp-full/core/mkddc-st-package build/verify/cpp-full/core/mkddc-programming-sim-worker
 
       - name: Vet và test race Go Web API
         run: scripts/verify-project.sh --component go --profile race

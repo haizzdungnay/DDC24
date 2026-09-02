@@ -8,6 +8,61 @@
 
 ## [Unreleased]
 
+### Fixed — Hai job CI đỏ liên tục trên `main`: abort lúc khởi động và artifact thiếu binary (2026-09-02)
+
+Trên commit mới nhất của `main` (`1e9309a`), 10/12 job của **Build & Test** đã xanh, còn lại hai
+job đỏ. Cả hai đều là lỗi thật, và cả hai đã được tái hiện cục bộ trước khi sửa.
+
+- **`mkddc-iobus` và `mkddc-core` abort ngay lúc khởi động khi chạy không đặc quyền.**
+  *Triệu chứng:* job *Programming E2E backend/Core thật (host)* đỏ với `Aborted (core dumped)` cho
+  cả hai binary, rồi `LỖI: chuỗi no-board lên nhưng không thấy /dev/shm/mkddc_plc_shm`. Log tiến
+  trình dừng ở `terminate called after throwing an instance of 'std::system_error' — Resource
+  temporarily unavailable`, không nhắc gì tới nguyên nhân.
+  *Nguyên nhân gốc:* `mlockall(MCL_CURRENT|MCL_FUTURE)` **vẫn trả về 0** dưới trần
+  `RLIMIT_MEMLOCK` hữu hạn, vì phần đang map vừa trong trần. Bẫy nằm ở `MCL_FUTURE`: từ đó MỌI
+  mapping mới đều phải khoá được, nên `pthread_create` xin stack 8 MB hỏng với `EAGAIN`,
+  `std::thread` ném `std::system_error`, không ai bắt, và tiến trình abort — cách chỗ gọi
+  `mlockall` vài chục dòng. Unit systemd của bản thật đặt `LimitMEMLOCK=infinity` + `CAP_IPC_LOCK`
+  nên bo thật không dính; runner CI chạy user thường với trần 8 MB thì dính mọi lần. Chú thích
+  ngay tại chỗ gọi đã ghi hợp đồng là *"thiếu cap → degraded, tiếp tục"* — code lại chết.
+  *Cách sửa:* chỉ bật `MCL_FUTURE` khi `RLIMIT_MEMLOCK` là vô hạn; ngược lại khoá `MCL_CURRENT`
+  (có giá trị, không gài mìn) và báo suy giảm. Ở `mkddc-core`, `rt_health.mlock_ok=false` nên dòng
+  `rt.degraded` và `plc_shm` nói đúng rằng jitter không được bảo đảm, thay vì im lặng.
+  *Phạm vi:* `apps/iobus/adapters/platform/realtime.{hpp,cpp}`, `apps/core/bootstrap/main.cpp`.
+
+- **Artifact `production-tools` thiếu `mkddc-programming-sim-worker`.**
+  *Triệu chứng:* job *Go Web Backend* đỏ với 6 test `internal/programming/simworker` báo
+  *"không có sim worker đã dựng"*.
+  *Nguyên nhân gốc:* `run_go` đặt `MKDDC_REQUIRE_PRODUCTION_TOOLS=1` — biến SKIP thành FAIL, đúng
+  ý đồ *"không có đường SKIP giả xanh"* — nhưng chỉ canh và truyền hai binary
+  (`mkddc-st-compile`, `mkddc-st-package`). Sim worker không được canh, không được truyền qua
+  `MKDDC_SIM_WORKER_BINARY`, và cũng không nằm trong artifact của cổng cpp; test tự dò
+  `build/fw` rồi `build/verify/cpp-full` bằng đường dẫn CỨNG, tức bỏ qua `MKDDC_BUILD_ROOT`. Trên
+  runner Go không có thư mục nào trong hai đường đó nên cổng đỏ vì artifact thiếu file, không phải
+  vì code hỏng.
+  *Cách sửa:* `run_go` canh sim worker (kiểm executable riêng — nó không công bố `profile_sha256`)
+  và export `MKDDC_SIM_WORKER_BINARY`; workflow đưa binary thứ ba vào artifact và vào `chmod +x`.
+
+**Kiểm chứng (đo thật trong phiên này):**
+
+| Phép đo | Kết quả |
+| --- | --- |
+| `cmake --fresh` + build, cả ba option MODBUS/BACNET/HMI = ON | configure exit 0, build exit 0 |
+| `ctest --test-dir build/fw` | **1387/1387 pass** (trước bản vá: 1384/1384) |
+| Cổng Go `--component go` với `MKDDC_BUILD_ROOT` riêng | exit 0, **19/19 package `ok`** |
+| Tái hiện lỗi Go trong worktree sạch (đúng điều kiện CI) | 6 test FAIL — đúng lỗi CI |
+| Sau bản vá, cùng worktree | 8/8 test `simworker` PASS |
+| Tiêm lỗi: xoá sim worker khỏi build root | cổng dừng đúng lý do, exit 1 |
+| `mkddc-iobus` chạy bằng user thường, trần memlock 8 MB | trước: exit 134 (SIGABRT); sau: chạy tới `NORMAL_POLL` |
+| `mkddc-core` chạy bằng user thường | trước: abort; sau: `core.ready`, ghi `/dev/shm/mkddc_plc_shm` |
+| Tiêm lỗi: khôi phục hành vi `MCL_FUTURE` vô điều kiện | `RealtimeMemlock.FiniteLimitMustNotAllowMclFuture` ĐỎ ở cả root lẫn user thường |
+
+**Test bổ sung:** `apps/iobus/tests/test_realtime_memlock.cpp` — ba mệnh đề, chạy trong tiến trình
+con vì `setrlimit`/`mlockall` là trạng thái toàn tiến trình. Cổng chính là phép kiểm **quyết định**
+(`FiniteLimitMustNotAllowMclFuture`), tất định ở mọi môi trường; hai phép kiểm hành vi chỉ có răng
+khi chạy không đặc quyền, vì `CAP_IPC_LOCK` bỏ qua `RLIMIT_MEMLOCK` — điều này được ghi rõ trong
+test và tự `SKIP` thay vì xanh giả.
+
 ### Fixed — Lane E2E mock kiểm một bàn làm việc BỊ KHOÁ mà không ai biết (#414, 2026-09-02)
 
 Sau khi cổng helper đăng nhập được sửa, bước `E2E mock` chạy lần đầu và đỏ **5 test**. Cả ba

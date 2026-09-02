@@ -5,6 +5,7 @@
  */
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -19,6 +20,7 @@
 
 #include <pthread.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -265,9 +267,39 @@ int main(int argc, char** argv)
         sp.sched_priority = rt_prio;
         if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp) != 0)
             std::fprintf(stderr, "WARN  rt.sched_fifo_fail prio=%d\n", rt_prio);
-        rt_health.mlock_ok = (mlockall(MCL_CURRENT | MCL_FUTURE) == 0);
-        if (!rt_health.mlock_ok)
-            std::fprintf(stderr, "WARN  rt.mlockall_fail\n");
+        /* MCL_FUTURE chỉ an toàn khi RLIMIT_MEMLOCK vô hạn.
+         *
+         * Với trần hữu hạn, `mlockall(MCL_CURRENT|MCL_FUTURE)` VẪN trả về 0 —
+         * phần đang map vừa trong trần. Bẫy nằm ở MCL_FUTURE: mọi mapping sau đó
+         * đều phải khoá được, nên `pthread_create` (stack 8 MB) hỏng EAGAIN,
+         * `std::thread` ném `std::system_error`, và tiến trình abort ở một chỗ
+         * cách đây rất xa với thông điệp không nhắc gì tới memlock. Đó đúng là
+         * cách `mkddc-core` chết lúc khởi động ở lane E2E real-backend trên CI.
+         *
+         * Unit systemd bản thật đặt `LimitMEMLOCK=infinity` + `CAP_IPC_LOCK` nên
+         * bo thật đi nhánh đầy đủ. Nơi không có trần đó phải degrade thật, chứ
+         * không chết: khoá MCL_CURRENT và để `rt_health.mlock_ok=false` — dòng
+         * `rt.degraded` phía dưới và plc_shm sẽ nói rõ jitter không được bảo đảm.
+         */
+        struct rlimit memlock_limit {};
+        const bool memlock_unlimited =
+            (getrlimit(RLIMIT_MEMLOCK, &memlock_limit) == 0) &&
+            (memlock_limit.rlim_cur == RLIM_INFINITY);
+        if (memlock_unlimited) {
+            rt_health.mlock_ok = (mlockall(MCL_CURRENT | MCL_FUTURE) == 0);
+            if (!rt_health.mlock_ok)
+                std::fprintf(stderr, "WARN  rt.mlockall_fail\n");
+        } else {
+            rt_health.mlock_ok = false;
+            std::fprintf(stderr,
+                         "WARN  rt.mlockall_partial RLIMIT_MEMLOCK hữu hạn — chỉ khoá"
+                         " MCL_CURRENT, KHÔNG bật MCL_FUTURE (cần LimitMEMLOCK=infinity"
+                         " + CAP_IPC_LOCK)\n");
+            if (mlockall(MCL_CURRENT) != 0)
+                std::fprintf(stderr, "WARN  rt.mlockall_fail errno=%d (%s) — trần memlock=%llu byte\n",
+                             errno, std::strerror(errno),
+                             static_cast<unsigned long long>(memlock_limit.rlim_cur));
+        }
 
         const int policy = sched_getscheduler(0);
         struct sched_param actual {};
