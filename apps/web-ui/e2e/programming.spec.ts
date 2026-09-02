@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { login } from './helpers/session'
+import { BUNDLE_COMPATIBILITY } from '../src/features/programming/shared/programmingCompatibility'
 
 /**
  * TASK-PROG-506/T59-503 — nghiệm thu trình duyệt thật cho sáu workspace Programming
@@ -181,6 +182,14 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     if (method === 'GET' && path === '/capabilities') {
       return json(route, {
         schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY',
+        /* `ISS-STED-19` — thiết bị PHẢI công bố bộ ba tương thích. Thiếu nó, FE
+           fail-closed: `UNVERIFIABLE` ⇒ chặn soạn thảo, `canEdit=false`, cây POU
+           mất nút tạo và đổi luôn câu empty-state. Mock trước đây không phát nó,
+           nên toàn bộ journey EDIT của lane mock đang kiểm một bàn làm việc bị
+           KHOÁ mà không ai nhận ra — bước `E2E mock` chưa từng chạy trên CI.
+           Lấy thẳng hằng đã build vào bundle: mock đóng vai một thiết bị chạy
+           ĐÚNG phiên bản này, và khi phiên bản đổi thì nó tự theo. */
+        compatibility: BUNDLE_COMPATIBILITY,
         ...(state.simulation?.supported
           ? {
               workspaceModes: {
@@ -462,6 +471,17 @@ async function installProgrammingMocks(page: Page, state: MockState) {
         { checkId: 'check-mock-0001', statusUrl: '/api/v1/programming/checks/check-mock-0001', state: 'RUNNING', requestHash: 'hash', acceptedAt: new Date().toISOString(), correlationId },
         202
       )
+    }
+    /* `T59-816` — project view khai `latestCheck.checkId = 'check-sim-0001'`,
+       và PGM-03 đọc lại chính check đó qua `GET /checks/{checkId}`. Mock trước
+       đây khai id này mà KHÔNG phục vụ nó: backend giả trả 503, phiên SIMULATE
+       ghi console.error, và cổng `expectNoBrowserFailures` đỏ vì đồ gá chứ
+       không vì sản phẩm. Fixture phải phục vụ đúng thứ chính nó quảng cáo. */
+    if (method === 'GET' && path === '/checks/check-sim-0001') {
+      return json(route, {
+        checkId: 'check-sim-0001', revisionId: SIM_REVISION_ID, state: 'PASSED',
+        diagnostics: [], createdAt: new Date().toISOString(), attemptCount: 1
+      })
     }
     if (method === 'GET' && path === '/checks/check-mock-0001') {
       return json(route, {
@@ -1528,7 +1548,28 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
 
     const target = page.getByRole('button', { name: 'EDIT', exact: true })
     await expect(target).toBeVisible()
-    await target.focus()
+
+    /* Focus phải đến bằng BÀN PHÍM, không bằng `locator.focus()`.
+     *
+     * Vòng ring dùng `:focus-visible`, mà Chromium chỉ khớp giả lớp đó theo
+     * phương thức tương tác gần nhất: sau khi `login()` và `navigate()` đã bấm
+     * chuột, một cú focus bằng script KHÔNG bật `:focus-visible`, nên phép đo cũ
+     * đọc được `outline-width: 0` và tố cáo sản phẩm thiếu vòng focus — trong
+     * khi lớp `focus-visible:outline-2` vẫn nằm nguyên trên nút.
+     *
+     * Đo bằng Tab vừa đúng thứ test tuyên bố đo ("thứ người dùng bàn phím
+     * thấy"), vừa giữ nguyên khả năng bắt lỗi thật: nếu lớp ring bị gỡ, phép đo
+     * này vẫn ra 0. */
+    await page.keyboard.press('Tab')
+    for (let hop = 0; hop < 80; hop += 1) {
+      if (await target.evaluate((element) => element === document.activeElement)) break
+      await page.keyboard.press('Tab')
+    }
+    expect(
+      await target.evaluate((element) => element === document.activeElement),
+      'không Tab tới được nút EDIT — thứ tự tiêu điểm bàn phím đã hỏng',
+    ).toBe(true)
+
     const outlineWidth = await target.evaluate((element) => {
       const style = window.getComputedStyle(element)
       // Trình duyệt trả `px`; `outline-width` là thứ người dùng bàn phím thấy.

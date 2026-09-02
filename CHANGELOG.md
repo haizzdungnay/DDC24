@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Fixed — Lane E2E mock kiểm một bàn làm việc BỊ KHOÁ mà không ai biết (#414, 2026-09-02)
+
+Sau khi cổng helper đăng nhập được sửa, bước `E2E mock` chạy lần đầu và đỏ **5 test**. Cả ba
+nguyên nhân đều là **đồ gá sai**, không phải sản phẩm sai — nhưng nguyên nhân đầu nghiêm
+trọng hơn một test đỏ:
+
+- **Mock không công bố bộ ba tương thích (`ISS-STED-19`) ⇒ FE fail-closed và khoá soạn thảo.**
+  *Triệu chứng:* `UJ-PROG-01..08` không thấy empty-state *"Chưa có chương trình. Bấm + để
+  tạo."*, và `AC-PGM02-001` chờ mãi nút `Thêm FUNCTION`. *Nguyên nhân gốc:* thiếu
+  `capabilities.compatibility` ⇒ `UNVERIFIABLE` ⇒ `canEdit=false` ⇒ cây POU **mất toàn bộ nút
+  tạo** và đổi luôn câu empty-state. Nghĩa là mọi journey EDIT của lane mock đang chạy trên
+  một bàn làm việc **bị khoá**, và vì bước này chưa từng chạy trên CI nên không ai thấy.
+  *Cách sửa:* mock phát `BUNDLE_COMPATIBILITY` — lấy thẳng hằng đã build vào bundle, nên khi
+  phiên bản đổi thì mock tự theo thay vì hoá thành một con số chép tay lỗi thời.
+- **Mock quảng cáo `latestCheck.checkId = check-sim-0001` mà không phục vụ `GET /checks/{id}`**
+  ⇒ backend giả trả 503, phiên SIMULATE ghi `console.error`, cổng `expectNoBrowserFailures`
+  đỏ vì đồ gá. *Cách sửa:* fixture phục vụ đúng thứ chính nó quảng cáo.
+- **Phép đo focus ring dùng `locator.focus()`.** Chromium chỉ khớp `:focus-visible` theo
+  phương thức tương tác gần nhất; sau `login()`/`navigate()` (bấm chuột), focus bằng script
+  **không** bật giả lớp đó, nên phép đo đọc `outline-width: 0` và **tố cáo sản phẩm thiếu
+  vòng focus** trong khi vòng focus vẫn ở đó. *Cách sửa:* Tab tới nút — đúng thứ test tuyên
+  bố đo. Đã tiêm lỗi (`outline: 0px` ở `shared/styles.css`) để chứng minh phép đo mới vẫn bắt
+  được khi vòng focus mất thật.
+- **Đo lại.** Lane mock: **154 passed / 17 skipped, 0 failed** (trước: 5 failed / 149 passed).
+  Chạy bằng Chromium vì proxy chặn tải Google Chrome; CI chạy Chrome thật.
+
+
 ### Fixed — Cổng "một helper đăng nhập" chặn lane mock vì áp nhầm cả spec của lane target (#414, 2026-09-02)
 
 - **Triệu chứng.** Job "React Web Frontend" đỏ ở bước `E2E mock` với
