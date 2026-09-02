@@ -472,6 +472,12 @@ sách 49 mục là tạo ra một bản sao sẽ trôi khỏi compiler, và đó
 | Hàm thư viện chuẩn | `LN`, `LOG`, `EXP`, `EXPT`, `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN`, `TRUNC`, `MUX`, `SHL`, `SHR`, `ROL`, `ROR`, và họ hàm chuỗi (`LEN`, `LEFT`, `RIGHT`, `MID`, `CONCAT`, `INSERT`, `DELETE`, `REPLACE`, `FIND`) | `deliberateExclusions` kind `function` |
 | Function Block chuẩn | `SR`, `RS`, `CTUD`, `RTC`, `SEMA` | `deliberateExclusions` kind `functionBlock` |
 
+**Lộ trình bổ sung** — mục IEC nào làm ở đợt nào, mục nào **không** làm và vì
+sao — ở [`ST_LIBRARY_ROADMAP_MK-DDC-24_VI.md`](ST_LIBRARY_ROADMAP_MK-DDC-24_VI.md)
+(`ISS-STED-17`). Tài liệu đó cũng nói bốn khối `PID`/`HYSTERESIS`/`SCALE`/
+`DEADBAND` là **mở rộng nhà sản xuất** và nhãn của chúng phải hiện ở nơi người
+dùng **chọn** khối, không chỉ trong tài liệu.
+
 **Mỗi mục kèm lý do riêng** trong
 [`contracts/programming/st_language_profile_v1.json`](../../../contracts/programming/st_language_profile_v1.json),
 và được kết xuất sang §5 của

@@ -612,7 +612,7 @@ HW, mạng, bảo mật hạ tầng **không** thuộc phạm vi này và không
 | Hệ kiểu 6 kiểu cơ sở | `BOOL`/`INT`/`DINT`/`UINT`/`REAL`/`TIME` | **IEC 61131-3** (tập con) | 6.3 *Data types*, bảng kiểu cơ sở |
 | Khai báo biến và `RETAIN` | `VAR`/`VAR_INPUT`/`VAR_OUTPUT`/`VAR RETAIN` | **IEC 61131-3** | 6.5.2 *Variable declaration and initialization* |
 | Thư viện hàm/FB chuẩn | `ABS`/`MIN`/`MAX`/`LIMIT`/`SEL`/`SQRT`; `TON`/`TOF`/`TP`/`R_TRIG`/`F_TRIG`/`CTU`/`CTD` | **IEC 61131-3** (tập con) | 6.6.1.4 *Standard functions*; 6.6.2.4 *Standard function blocks* |
-| Mở rộng nhà sản xuất | `PID`, `HYSTERESIS`, `SCALE`, `DEADBAND` | **Mekong** — mở rộng nhà sản xuất, đã công bố | Không thuộc thư viện chuẩn; `ADR-054` phán quyết (2) buộc công bố rõ |
+| Mở rộng nhà sản xuất | `PID`, `HYSTERESIS`, `SCALE`, `DEADBAND` | **Mekong** — mở rộng nhà sản xuất, đã công bố | Không thuộc thư viện chuẩn; `ADR-054` phán quyết (2)/(3) buộc công bố rõ. Nhãn hiện ở **nơi người dùng chọn khối**, không chỉ trong tài liệu — [`ST_LIBRARY_ROADMAP`](../02_design/software/ST_LIBRARY_ROADMAP_MK-DDC-24_VI.md) §2 |
 | Cú pháp/ngữ nghĩa ST | Biểu thức, gán, `IF`/`ELSIF`/`ELSE`, `CASE`, gọi FB | **IEC 61131-3** (tập con hẹp) | 7.3 *Structured Text (ST)* |
 | Khác biệt cố ý `D1..D11` | Xem `ST_SUBSET_SPEC` §9.1 | **Mekong** — lệch chuẩn **có chủ ý, đã công bố kèm lý do** | Từng mục dẫn `ADR-054`/`ADR-020` trong `deliberateExclusions` |
 

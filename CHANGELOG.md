@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-17` đánh dấu 4 khối mở rộng + lộ trình thư viện chuẩn IEC (#368, 2026-09-02)
+
+- **Triệu chứng.** `PID`, `HYSTERESIS`, `SCALE`, `DEADBAND` **không** thuộc thư viện chuẩn
+  IEC 61131-3 nhưng không có nhãn nào nói ra. Và khoảng cách so với IEC chưa được công bố
+  thành một bảng — nó nằm rải rác trong ba tài liệu mâu thuẫn nhau.
+- **Nguyên nhân gốc.** IEC cho phép mở rộng nhà sản xuất **miễn là công bố rõ**, nhưng
+  "công bố rõ" bị hiểu thành "ghi vào tài liệu". Người dùng quyết định dùng khối nào ở màn
+  hình **chọn khối**, không phải khi đọc tài liệu; nhãn nằm ở chỗ khác là nhãn không ai đọc
+  đúng lúc. Hệ quả thật: kỹ sư viết cả một chương trình quanh `PID` rồi mới phát hiện nó
+  không chuyển được sang PLC hãng khác — muộn hơn nhiều so với lúc chọn.
+- **Cách sửa.**
+  - **`iecClassification` cho MỌI entry registry**, **suy ra** từ danh sách
+    `vendorExtensions` của hồ sơ ngôn ngữ chứ không phải một cột chép tay: một bản chép sẽ
+    trôi khỏi hồ sơ đúng vào ngày ai đó thêm khối mở rộng thứ năm. Có test khoá hai danh
+    sách phải khớp nhau.
+  - **Nhãn tới cả ba nơi người dùng chọn khối**: huy hiệu `MỞ RỘNG` ở Thư viện nhanh,
+    `iecClassification` trên entry palette FBD, và dòng mô tả *"mở rộng Mekong — không
+    thuộc IEC"* ở gợi ý ST.
+  - **Chỉ gắn nhãn cho mở rộng**, không dán "IEC" lên 42/46 mục còn lại — dán khắp nơi làm
+    nhiễu đúng 4 mục cần chú ý.
+  - **POU người dùng định nghĩa nhận `null`**, không nhận một trong hai nhãn: nó không
+    thuộc IEC lẫn thư viện Mekong, và gắn nhãn nào cũng là nói sai.
+  - **`ST_LIBRARY_ROADMAP_MK-DDC-24_VI.md`** — bảng lộ trình: đợt 1 bốn mục
+    (`RS`/`SR` → `CTUD` → `TRUNC` → `MUX`) kèm ca dùng HVAC thật và ước lượng; đợt sau ba
+    mục kèm lý do chờ; và **sáu nhóm không làm kèm lý do**, mỗi nhóm chỉ rõ vi phạm `P1`
+    hay `P2`.
+- **Hai quyết định trong bảng lộ trình đáng đọc.**
+  - **`RS`/`SR` đứng đầu ưu tiên**, không phải `MUX`. Chốt báo động có mặt ở gần như mọi
+    dự án và **hiện đang phải viết tay** bằng `IF` + biến `RETAIN` — tức người dùng đang
+    làm việc đó rồi, chỉ bằng cách dài dòng hơn và dễ nhầm bên ưu tiên hơn. `MUX` xuống
+    cuối vì arity thay đổi chạm bảng hàm, tức chạm IR.
+  - **`ROUND` không làm**, và lý do không phải `P1`/`P2`: IEC không quy định chế độ làm
+    tròn thống nhất giữa các hãng, còn `REAL_TO_INT` đã công bố rõ quy tắc ở §3.5. Thêm
+    `ROUND` là thêm quy tắc làm tròn **thứ hai** cho cùng một việc, và hai quy tắc làm
+    tròn trong một ngôn ngữ điều khiển là nguồn lệch số không ai truy được.
+  - `PID` **giữ nguyên** cùng cổng review Controls/Safety — có test khoá rằng nhãn mở rộng
+    **không** thay thế cổng đó: "không thuộc IEC" nói về **nguồn gốc**, "chờ review" nói về
+    **trạng thái phê duyệt**; gộp lại sẽ mất một trong hai.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `npx vitest --run --environment jsdom src`: **199 file / 2438 test pass**, exit 0
+    (thêm 11 test phân loại).
+  - `npm run lint` exit 0; `npm run build` exit 0.
+  - `ctest --test-dir build/fw` (`--fresh` + MODBUS/BACNET/HMI = ON): **1384/1384 pass**,
+    exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
 ### Added — `ISS-STED-16` bước 0 của đợt hệ kiểu: giữ chỗ `VAR_IN_OUT`/`VAR_TEMP` + thiết kế đợt gần (#367, 2026-09-02)
 
 - **Triệu chứng.** `VAR_IN_OUT` không nằm trong `kKeywords[]`, nên lexer coi nó là một

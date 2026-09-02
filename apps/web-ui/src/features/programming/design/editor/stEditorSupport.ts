@@ -83,6 +83,13 @@ export const ST_FB_TYPE_NAMES: readonly string[] = FBD_PALETTE
   .filter((entry) => entry.kind === 'FUNCTION_BLOCK')
   .map((entry) => entry.typeRef)
 
+/** `ISS-STED-17` — tên khối không thuộc thư viện chuẩn IEC, lấy từ registry
+ *  sinh tự động chứ không khai tay. */
+const EXTENSION_NAMES = new Set<string>(
+  FBD_PALETTE.filter((entry) => entry.iecClassification === 'MANUFACTURER_EXTENSION')
+    .map((entry) => entry.typeRef),
+)
+
 const KEYWORD_SET = new Set<string>(ST_KEYWORDS)
 const TYPE_SET = new Set<string>(ST_TYPE_NAMES)
 const FUNCTION_SET = new Set<string>(ST_FUNCTION_NAMES)
@@ -522,11 +529,21 @@ export function buildStCompletions(
   for (const type of ST_TYPE_NAMES) {
     if (type.startsWith(upperPrefix)) push(type, 'type', 'kiểu dữ liệu')
   }
+  /* `ISS-STED-17` — gợi ý nói ra khối nào KHÔNG thuộc IEC 61131-3.
+   *
+   * Đây là một trong ba nơi người dùng CHỌN khối (cùng Thư viện nhanh và
+   * palette FBD), nên nhãn phải tới được cả ba. Chỉ gắn cho mở rộng: dán nhãn
+   * "IEC" lên 42/46 mục sẽ làm nhiễu đúng 4 mục cần chú ý. */
   for (const name of ST_FUNCTION_NAMES) {
-    if (name.startsWith(upperPrefix)) push(name, 'function', 'hàm chuẩn')
+    if (name.startsWith(upperPrefix)) {
+      push(name, 'function', EXTENSION_NAMES.has(name) ? 'mở rộng Mekong — không thuộc IEC' : 'hàm chuẩn')
+    }
   }
   for (const name of ST_FB_TYPE_NAMES) {
-    if (name.startsWith(upperPrefix)) push(name, 'fb-type', 'kiểu function block')
+    if (name.startsWith(upperPrefix)) {
+      push(name, 'fb-type',
+           EXTENSION_NAMES.has(name) ? 'mở rộng Mekong — không thuộc IEC' : 'kiểu function block')
+    }
   }
   return items.slice(0, 20)
 }

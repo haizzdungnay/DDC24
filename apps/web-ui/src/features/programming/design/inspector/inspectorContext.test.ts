@@ -26,7 +26,7 @@ const catalog: CatalogEntry[] = [
   {
     entryId: 'sys-ton', scope: 'SYSTEM', kind: 'FUNCTION_BLOCK', name: 'TON',
     labelVi: 'TON', labelEn: 'TON', category: 'timer', libraryVersion: 'rev-a.3',
-    contentSha256: 'a'.repeat(64), usability: { kind: 'AVAILABLE' },
+    contentSha256: 'a'.repeat(64), usability: { kind: 'AVAILABLE' }, iecClassification: 'IEC_STANDARD',
     ports: [
       { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
       { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
@@ -37,7 +37,7 @@ const catalog: CatalogEntry[] = [
   {
     entryId: 'sys-pid', scope: 'SYSTEM', kind: 'FUNCTION_BLOCK', name: 'PID',
     labelVi: 'PID', labelEn: 'PID', category: 'control', libraryVersion: 'rev-a.3',
-    contentSha256: 'b'.repeat(64), usability: { kind: 'SIGNATURE_UNAVAILABLE' },
+    contentSha256: 'b'.repeat(64), usability: { kind: 'SIGNATURE_UNAVAILABLE' }, iecClassification: 'IEC_STANDARD',
     ports: [], allowedTypes: [], stateful: true,
   },
 ]

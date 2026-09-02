@@ -26,6 +26,14 @@ REGISTRY = ROOT / "contracts/programming/pou_library_registry_v1.json"
 SCHEMA = ROOT / "contracts/programming/pou_library_registry_v1.schema.json"
 PROFILE = ROOT / "contracts/programming/product_profile_v2.json"
 G1_JOIN = ROOT / "contracts/programming/g1_contract_join_v1.json"
+# `ISS-STED-17` — nguồn DUY NHẤT của danh sách mở rộng nhà sản xuất.
+#
+# `ADR-054` điểm 3: IEC cho phép mở rộng nhà sản xuất miễn là ĐÁNH DẤU RÕ. Danh
+# sách bốn khối đó (`PID`, `HYSTERESIS`, `SCALE`, `DEADBAND`) đã sống ở hồ sơ
+# ngôn ngữ curated kèm lý do từng mục; đọc lại từ đó thay vì gõ một cột thứ hai
+# vào registry. Một cột chép tay sẽ trôi khỏi hồ sơ đúng vào ngày ai đó thêm
+# khối mở rộng thứ năm.
+LANGUAGE_PROFILE_CURATED = ROOT / "contracts/programming/st_language_profile_v1.curated.json"
 CPP_OUTPUT = ROOT / "apps/core/application/st/st_library_registry_generated.hpp"
 TS_OUTPUT = ROOT / "apps/web-ui/src/features/programming/api/generated/library_registry.ts"
 GO_OUTPUT = ROOT / "apps/web-api/internal/programming/domain/library_registry_generated.go"
@@ -141,6 +149,23 @@ def validate(
         )
 
 
+def vendor_extension_names() -> set[str]:
+    """Tên khối KHÔNG thuộc thư viện chuẩn IEC 61131-3."""
+    curated = json.loads(LANGUAGE_PROFILE_CURATED.read_text(encoding="utf-8"))
+    return {item["name"] for item in curated["vendorExtensions"]}
+
+
+def iec_classification(entry_id: str, vendor: set[str]) -> str:
+    """`ISS-STED-17` — phân loại từng entry, SUY RA chứ không khai tay.
+
+    Hai giá trị, không có giá trị thứ ba và không có `null`: mỗi khối trong
+    thư viện hoặc thuộc IEC 61131-3, hoặc là mở rộng của nhà sản xuất. Để trống
+    một entry là để người dùng đoán, mà đoán sai ở đây nghĩa là họ tin một khối
+    Mekong tự định nghĩa sẽ chạy trên PLC của hãng khác.
+    """
+    return "MANUFACTURER_EXTENSION" if entry_id in vendor else "IEC_STANDARD"
+
+
 def by_dispatch(registry: dict[str, Any], dispatch: str) -> list[dict[str, Any]]:
     return [item for item in registry["entries"] if item["dispatch"] == dispatch]
 
@@ -207,6 +232,8 @@ inline constexpr std::array<std::string_view, {len(review)}> kReviewRequired = {
 
 
 def render_ts(registry: dict[str, Any], registry_hash: str) -> str:
+    vendor = vendor_extension_names()
+
     def entry_line(entry: dict[str, Any]) -> str:
         ports = ", ".join(
             "{ name: %s, direction: %s, dataType: %s }"
@@ -226,6 +253,7 @@ def render_ts(registry: dict[str, Any], registry_hash: str) -> str:
             "typedPortNames: [%s]" % ", ".join(q(item) for item in entry["typedPortNames"]),
             f"ports: [{ports}]",
             f"featureState: {q(entry['featureState'])}",
+            f"iecClassification: {q(iec_classification(entry['id'], vendor))}",
         ]
         if "warningVi" in entry:
             fields.append(
@@ -252,6 +280,10 @@ export const PROGRAMMING_LIBRARY_VERSION = {q(registry['libraryVersion'])} as co
 export type LibraryEntryKind = "FUNCTION" | "FUNCTION_BLOCK" | "CONVERSION";
 export type LibraryDispatch = "OPERATOR" | "FUNC_TABLE" | "FB_TYPE" | "EXPANSION";
 export type LibraryFeatureState = "AVAILABLE" | "REVIEW_REQUIRED";
+/** `ISS-STED-17` / `ADR-054` điểm 3 — khối này thuộc IEC 61131-3 hay là mở rộng
+ *  của Mekong. IEC cho phép mở rộng nhà sản xuất MIỄN LÀ đánh dấu rõ, nên nhãn
+ *  phải đi tới tận nơi người dùng CHỌN khối, không dừng ở tài liệu. */
+export type LibraryIecClassification = "IEC_STANDARD" | "MANUFACTURER_EXTENSION";
 export type LibraryCategory =
 {category_union};
 
@@ -274,6 +306,7 @@ export interface LibraryEntry {{
   readonly typedPortNames: readonly string[];
   readonly ports: readonly LibraryPort[];
   readonly featureState: LibraryFeatureState;
+  readonly iecClassification: LibraryIecClassification;
   readonly warning?: {{ readonly vi: string; readonly en: string }};
 }}
 
