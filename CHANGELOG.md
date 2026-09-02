@@ -8,6 +8,50 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-15` bằng chứng a11y cho ST editor (#366, 2026-09-02)
+
+- **Triệu chứng.** Mã dùng `aria-label`/`role`/`focus-visible` đúng và dày, nhưng **không
+  có kiểm a11y tự động** và **không có record bằng chứng** cho ST editor. Gate `G17`
+  PARTIAL.
+- **Nguyên nhân gốc.** Trình soạn thảo dựng bằng `<textarea>` trong suốt + lớp phủ `<pre>`
+  tô màu — cấu trúc tạo ra hai rủi ro mà màn hình khác không có, và cả hai **cần đo chứ
+  không suy đoán**: tương phản của token tô màu (chính thứ người dùng đang gõ), và
+  diagnostic báo bằng gạch chân (màu là kênh duy nhất thì người không phân biệt màu không
+  đọc được lỗi của mình).
+- **Cách sửa.**
+  - **Đo tương phản 60/60 phép** — 10 loại token × 2 theme × **3 nền**. Đo ba nền vì một
+    token có thể nằm trên cả ba (khung, dòng đang gõ, ngoặc khớp): một màu đủ tương phản
+    trên nền chính mà chìm trên dòng đang gõ thì hỏng đúng ở dòng người dùng đang nhìn.
+    Ngưỡng **AA 4.5:1**, không dùng 3:1 — đây là chữ, và là chữ đọc lâu nhất trong sản phẩm.
+    **Số thấp nhất `4.60`** (`function`/`fb-type`, theme tối, trên nền ngoặc khớp) — dư
+    0.10, tức một lần chỉnh `--c-good-fg` hay `--c-accent-bg` sẽ đẩy nó xuống dưới ngưỡng.
+  - **Chống trôi bảng màu:** `ST_TOKEN_COLOR` chuyển từ `const` cục bộ trong `ProgramsTab`
+    ra `stEditorSupport.ts` để test đọc **chính nguồn đang dùng**. Trước đó test buộc phải
+    chép bảng màu, và bản chép sẽ trôi khỏi bản thật đúng lúc ai đó đổi màu — để lại một
+    test vẫn xanh cho một bảng màu không còn tồn tại.
+  - **Ba kênh không-phải-màu cho diagnostic**, mỗi kênh một test: hình dạng (gạch lượn
+    sóng), chữ (`title` mang mã + thông điệp; khay Vấn đề mang toàn văn), và **thông báo
+    screen reader**.
+  - **Luồng bàn phím** ghi thành 6 bước có test, không phải một câu khẳng định.
+  - **Record bằng chứng** `docs/07_records/test-evidence/programming/2026-09-02-st-editor-a11y.md`.
+- **Phát hiện thêm, sửa luôn.** Phần tử tóm tắt diagnostic chỉ nối bằng `aria-describedby`
+  — thuộc tính đó được đọc **lúc nhận focus**, nhưng kết quả Kiểm tra về khi người dùng
+  **đang gõ**, tức đang giữ focus. Không có `aria-live` thì số lỗi vừa đổi không được nói
+  ra, và người dùng screen reader phải rời ô gõ rồi quay lại mới biết. Đã thêm
+  `role="status"` + `aria-live="polite"`.
+- **Điều record KHÔNG nói.** Nó **không** tuyên bố ST editor "đạt WCAG". §5 ghi rõ ba mục
+  còn thiếu như **nợ đã ghi nhận**: quét `axe` tự động trên tab Chương trình; thứ tự focus
+  của Thư viện nhanh / Bản đồ mã / khay Vấn đề; và kiểm với screen reader thật
+  (NVDA/VoiceOver) — máy không thay được bước cuối. Gate `G17` vì vậy **vẫn PARTIAL**,
+  không chuyển GREEN bằng bản ghi này.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `npx vitest --run --environment jsdom src`: **198 file / 2423 test pass**, exit 0
+    (thêm 62 test đo tương phản + 5 test hành vi a11y).
+  - `npm run lint` exit 0; `npm run build` exit 0.
+  - `ctest --test-dir build/fw` (`--fresh` + MODBUS/BACNET/HMI = ON): **1382/1382 pass**,
+    exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
 ### Added — `ISS-STED-14` hợp đồng phím cho ST editor (#365, 2026-09-02)
 
 - **Triệu chứng.** FBD có `fbd_keyboard_commands_v1.json` kèm validator từ lâu; **ST không

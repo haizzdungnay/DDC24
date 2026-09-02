@@ -1026,3 +1026,103 @@ describe('DEV-PROG-026 — nút gõ toàn màn hình', () => {
     expect(help).not.toHaveAttribute('tabindex')
   })
 })
+
+/* `ISS-STED-15` / gate `G17` — BẰNG CHỨNG A11Y, KHÔNG PHẢI KHẲNG ĐỊNH A11Y.
+ *
+ * Với một trình soạn thảo dựng bằng `<textarea>` trong suốt + lớp phủ `<pre>`
+ * tô màu, câu hỏi không phải "có `aria-label` không" mà là: **người không phân
+ * biệt màu, và người chỉ dùng bàn phím, có làm được việc không.** Tương phản
+ * token đo ở `stEditorA11y.test.ts`; ở đây đo HÀNH VI.
+ */
+describe('ISS-STED-15 — a11y của ST editor', () => {
+  const SOURCE = 'PROGRAM P\nX := ;\nEND_PROGRAM\n'
+
+  async function markable(): Promise<ProgrammingDiagnostic[]> {
+    return [
+      {
+        code: 'ST-SYN-001', severity: 'ERROR', messageKey: 'programming.error.check',
+        message: 'expected expression',
+        location: {
+          line: 2, column: 6, length: 1,
+          programId: 'program-1', revisionId: 'rev-1', pouId: 'program-1',
+          sourceSha256: await hashBufferSource(SOURCE),
+          stLanguageProfileVersion: ST_LANGUAGE_PROFILE_VERSION,
+        },
+      },
+    ]
+  }
+
+  it('diagnostic có kênh KHÔNG PHẢI MÀU: hình dạng gạch + chữ trong tooltip', async () => {
+    const { container } = renderEditor(SOURCE, {
+      diagnostics: await markable(), hasCheckResult: true, checkRevisionId: 'rev-1',
+    })
+    const span = await waitFor(() => {
+      const found = container.querySelector('pre.pointer-events-none span[class*="decoration-wavy"]')
+      expect(found).toBeTruthy()
+      return found as HTMLElement
+    })
+    // Kênh 1 — HÌNH DẠNG: gạch lượn sóng, đọc được cả khi không thấy màu đỏ.
+    expect(span.className).toContain('decoration-wavy')
+    // Kênh 2 — CHỮ: mã lỗi nằm trong tooltip, không chỉ trong màu.
+    expect(span.getAttribute('title')).toContain('ST-SYN-001')
+  })
+
+  it('diagnostic được THÔNG BÁO cho screen reader, không chỉ mô tả khi nhận focus', async () => {
+    const { textarea } = renderEditor(SOURCE, {
+      diagnostics: await markable(), hasCheckResult: true, checkRevisionId: 'rev-1',
+    })
+    const summary = await screen.findByText(/diagnostic từ Kiểm tra/)
+    // `aria-describedby` chỉ được đọc lúc NHẬN focus. Kết quả Kiểm tra về khi
+    // người dùng đang gõ — tức đang giữ focus — nên phải có `aria-live`.
+    expect(summary).toHaveAttribute('aria-live', 'polite')
+    expect(textarea.getAttribute('aria-describedby')).toBe(summary.id)
+  })
+
+  it('đi hết luồng soạn thảo → xem lỗi → sửa CHỈ BẰNG BÀN PHÍM', async () => {
+    const { textarea } = renderEditor(SOURCE, {
+      diagnostics: await markable(), hasCheckResult: true, checkRevisionId: 'rev-1',
+    })
+    await screen.findByText(/diagnostic từ Kiểm tra/)
+
+    textarea.focus()
+    expect(document.activeElement).toBe(textarea)
+
+    // Ctrl+G mở hộp Tới dòng; Escape trả focus về đúng chỗ đang gõ.
+    fireEvent.keyDown(textarea, { key: 'g', ctrlKey: true })
+    const form = await screen.findByTestId('editor-go-to-line')
+    const goTo = within(form).getByLabelText(/Tới dòng/)
+    fireEvent.keyDown(goTo, { key: 'Escape' })
+    await waitFor(() => expect(document.activeElement).toBe(textarea))
+
+    // Sửa bằng bàn phím ⇒ dấu gạch được gỡ vì buffer đã đổi sau Kiểm tra.
+    fireEvent.change(textarea, {
+      target: { value: SOURCE.replace('X := ;', 'X := 1;'), selectionStart: 0, selectionEnd: 0 },
+    })
+    await waitFor(() => expect(screen.getByText(/buffer đã đổi sau Kiểm tra/)).toBeInTheDocument())
+  })
+
+  it('Escape trả focus về ô gõ khi đóng hộp Tới dòng', async () => {
+    // Mất focus khi đóng một lớp phủ là cách người dùng bàn phím bị đẩy về đầu
+    // trang — họ phải Tab lại từ đầu để quay về chỗ đang gõ.
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    fireEvent.keyDown(textarea, { key: 'g', ctrlKey: true })
+    const form = await screen.findByTestId('editor-go-to-line')
+    const goTo = within(form).getByLabelText(/Tới dòng/)
+    fireEvent.keyDown(goTo, { key: 'Escape' })
+    await waitFor(() => expect(document.activeElement).toBe(textarea))
+  })
+
+  it('danh sách gợi ý KHÔNG cướp focus và đóng được bằng Escape', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    textarea.focus()
+    fireEvent.change(textarea, { target: { value: 'IF', selectionStart: 2, selectionEnd: 2 } })
+    await screen.findByRole('listbox')
+
+    // Người dùng vẫn đang gõ: danh sách phải điều hướng được TỪ ô gõ.
+    expect(document.activeElement).toBe(textarea)
+    fireEvent.keyDown(textarea, { key: 'ArrowDown' })
+    fireEvent.keyDown(textarea, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+    expect(document.activeElement).toBe(textarea)
+  })
+})

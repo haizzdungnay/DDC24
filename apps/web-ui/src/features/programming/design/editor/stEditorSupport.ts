@@ -91,6 +91,45 @@ export type StTokenKind =
   | 'keyword' | 'type' | 'function' | 'fb-type' | 'number' | 'time' | 'comment'
   | 'operator' | 'punctuation' | 'identifier' | 'whitespace'
 
+/**
+ * `ISS-STED-15` — MÀU CỦA TỪNG LOẠI TOKEN, khai một lần ở đây.
+ *
+ * Trước lát này bảng màu là một `const` cục bộ trong `ProgramsTab.tsx`, nên
+ * test đo tương phản không đọc được nó mà phải chép lại — và một bản chép sẽ
+ * trôi khỏi bản thật đúng vào lúc ai đó đổi màu, để lại một test vẫn xanh cho
+ * một bảng màu không còn tồn tại.
+ *
+ * `null` = không tô màu riêng (khoảng trắng), nên không có gì để đo.
+ */
+export const ST_TOKEN_COLOR: Record<StTokenKind, string | null> = {
+  keyword: '--c-accent',
+  type: '--c-info',
+  function: '--c-good-fg',
+  'fb-type': '--c-good-fg',
+  number: '--c-warn-fg',
+  time: '--c-warn-fg',
+  comment: '--c-text-dim',
+  operator: '--c-text',
+  punctuation: '--c-text',
+  identifier: '--c-text',
+  whitespace: null,
+}
+
+/** Lớp Tailwind dựng TỪ bảng trên, không khai màu lần thứ hai. */
+export const ST_TOKEN_CLASS: Record<StTokenKind, string> = {
+  keyword: `text-[var(${ST_TOKEN_COLOR.keyword})] font-semibold`,
+  type: `text-[var(${ST_TOKEN_COLOR.type})]`,
+  function: `text-[var(${ST_TOKEN_COLOR.function})]`,
+  'fb-type': `text-[var(${ST_TOKEN_COLOR['fb-type']})] font-semibold`,
+  number: `text-[var(${ST_TOKEN_COLOR.number})]`,
+  time: `text-[var(${ST_TOKEN_COLOR.time})]`,
+  comment: `text-[var(${ST_TOKEN_COLOR.comment})] italic`,
+  operator: `text-[var(${ST_TOKEN_COLOR.operator})]`,
+  punctuation: `text-[var(${ST_TOKEN_COLOR.punctuation})]`,
+  identifier: `text-[var(${ST_TOKEN_COLOR.identifier})]`,
+  whitespace: '',
+}
+
 export interface StToken {
   start: number
   end: number

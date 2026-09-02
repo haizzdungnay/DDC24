@@ -36,7 +36,9 @@ import {
   undoStEditorEdit,
   updateStEditorSelection,
   type StCompletionItem,
+  ST_TOKEN_CLASS,
   type StDiagnosticRange,
+  type StTokenKind,
 } from './stEditorSupport'
 import { stSignatureHelp, stSignatureLabel, stSignatureParameterLabel,
   type StSignatureHelp } from './stSignatureHelp'
@@ -1133,7 +1135,17 @@ function StCheckStateLabel({
     )
   }
   return (
-    <p id={`programming-st-diagnostics-${programId}`} className="text-xs text-[var(--c-fault-fg)]">
+    /* `ISS-STED-15` — `aria-live` chứ không chỉ `aria-describedby`.
+       `aria-describedby` được đọc lúc NHẬN focus. Nhưng kết quả Kiểm tra về
+       khi người dùng ĐANG gõ, tức đang giữ focus — không có `aria-live` thì
+       số lỗi vừa đổi không được nói ra, và người dùng screen reader phải rời
+       ô gõ rồi quay lại mới biết. */
+    <p
+      id={`programming-st-diagnostics-${programId}`}
+      role="status"
+      aria-live="polite"
+      className="text-xs text-[var(--c-fault-fg)]"
+    >
       {pick(`${diagnosticCount} diagnostic từ Kiểm tra ${revisionText}, khớp nội dung đang mở. Chọn lỗi trong khay Vấn đề để tới đúng dòng/cột.`,
             `${diagnosticCount} diagnostic(s) from the check on ${revisionText}, matching the open content. Select one in Problems to jump to its line and column.`)}
     </p>
@@ -1872,19 +1884,6 @@ export function SourceEditor({
     textarea?.focus()
   }
 
-  const segmentClass: Record<string, string> = {
-    keyword: 'text-[var(--c-accent)] font-semibold',
-    type: 'text-[var(--c-info)]',
-    function: 'text-[var(--c-good-fg)]',
-    'fb-type': 'text-[var(--c-good-fg)] font-semibold',
-    number: 'text-[var(--c-warn-fg)]',
-    time: 'text-[var(--c-warn-fg)]',
-    comment: 'text-[var(--c-text-dim)] italic',
-    operator: 'text-[var(--c-text)]',
-    punctuation: 'text-[var(--c-text)]',
-    identifier: 'text-[var(--c-text)]',
-    whitespace: '',
-  }
 
   return (
     /* `DEV-PROG-001` — cột giữa là một CỘT FLEX cao bằng ô lưới của nó, không
@@ -2202,7 +2201,7 @@ export function SourceEditor({
             />
             {segments.map((segment, index) => {
               const isBracket = bracketMatch !== null && (segment.start === bracketMatch.open || segment.start === bracketMatch.close) && segment.kind === 'punctuation'
-              const classes = [segmentClass[segment.kind] ?? '']
+              const classes = [ST_TOKEN_CLASS[segment.kind as StTokenKind] ?? '']
               if (isBracket) classes.push('rounded bg-[var(--c-accent-bg)]')
               const diagnostic = segment.diagnosticIndex !== null ? markableDiagnostics[segment.diagnosticIndex] : undefined
               if (diagnostic) {
