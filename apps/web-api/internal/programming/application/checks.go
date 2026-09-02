@@ -88,18 +88,18 @@ type SymbolView struct {
 }
 
 type CheckView struct {
-	CheckID      string           `json:"checkId"`
-	RevisionID   string           `json:"revisionId"`
-	State        string           `json:"state"`
-	Diagnostics  []DiagnosticView `json:"diagnostics"`
+	CheckID     string           `json:"checkId"`
+	RevisionID  string           `json:"revisionId"`
+	State       string           `json:"state"`
+	Diagnostics []DiagnosticView `json:"diagnostics"`
 	// Symbols rỗng là một câu trả lời THẬT ("POU không khai cổng nào"), khác
 	// với việc thiếu hẳn trường — nên nó luôn được phát, không `omitempty`.
-	Symbols []SymbolView `json:"symbols"`
-	Artifact     *ArtifactView    `json:"artifact,omitempty"`
-	CreatedAt    string           `json:"createdAt"`
-	StartedAt    *string          `json:"startedAt,omitempty"`
-	CompletedAt  *string          `json:"completedAt,omitempty"`
-	AttemptCount int              `json:"attemptCount"`
+	Symbols      []SymbolView  `json:"symbols"`
+	Artifact     *ArtifactView `json:"artifact,omitempty"`
+	CreatedAt    string        `json:"createdAt"`
+	StartedAt    *string       `json:"startedAt,omitempty"`
+	CompletedAt  *string       `json:"completedAt,omitempty"`
+	AttemptCount int           `json:"attemptCount"`
 }
 
 type checkResultDocument struct {
@@ -121,6 +121,10 @@ type CheckServiceOptions struct {
 	LeaseDuration time.Duration
 	Now           func() time.Time
 	NewID         func() string
+	// ModbusSlots phân giải lại slot `ext` từ cấu hình ĐANG CHẠY
+	// (`ISS-PIO-31`). Nil ⇒ Check CHẶN mọi binding MB_RTU: thiếu nguồn xác
+	// minh thì con số lưu trong binding không có gì bảo chứng.
+	ModbusSlots ModbusSlotProvider
 }
 
 type CheckService struct {
@@ -133,6 +137,7 @@ type CheckService struct {
 	now           func() time.Time
 	newID         func() string
 	workerID      string
+	modbusSlots   ModbusSlotProvider
 	wake          chan struct{}
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
@@ -157,7 +162,8 @@ func NewCheckService(options CheckServiceOptions) (*CheckService, error) {
 	}
 	return &CheckService{store: options.Store, runner: options.Runner, packager: options.Packager,
 		artifacts: options.Artifacts, targetID: options.TargetID, leaseDuration: options.LeaseDuration, now: options.Now, newID: options.NewID,
-		workerID: "check-worker-" + options.NewID(), wake: make(chan struct{}, 1)}, nil
+		modbusSlots: options.ModbusSlots,
+		workerID:    "check-worker-" + options.NewID(), wake: make(chan struct{}, 1)}, nil
 }
 
 func (s *CheckService) Start(parent context.Context) {
@@ -257,7 +263,18 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	inputs, scopeDiagnostics := compilerInputs(revision)
+	/* `ISS-PIO-31`/`AC-PIO-ID-02` — chụp bố cục slot MỘT LẦN cho cả package.
+	 * Tra từng binding sẽ cho hai binding của cùng một package được phân giải
+	 * trên hai cấu hình khác nhau nếu ai đó sửa cấu hình giữa chừng. */
+	var slots *ModbusSlotSnapshot
+	if s.modbusSlots != nil {
+		snapshot, slotErr := s.modbusSlots.ResolveModbusSlots(ctx)
+		if slotErr != nil {
+			return true, slotErr
+		}
+		slots = &snapshot
+	}
+	inputs, scopeDiagnostics := compilerInputs(revision, slots)
 	if len(scopeDiagnostics) == 0 {
 		inputs, err = s.attachPOULinkInputs(ctx, revision, inputs)
 		if err != nil {
@@ -506,7 +523,7 @@ func checkInputHash(revision programmingstore.RevisionSnapshot, targetID string,
 // thứ tự biên dịch — và do đó thứ tự diagnostic — không phụ thuộc thứ tự đọc DB.
 // Một Check chạy lại trên cùng Revision phải cho đúng cùng dãy kết quả, nếu
 // không thì "deterministic build" chỉ là lời nói.
-func compilerInputs(revision programmingstore.RevisionSnapshot) ([]programmingcompiler.Input, []DiagnosticView) {
+func compilerInputs(revision programmingstore.RevisionSnapshot, slots *ModbusSlotSnapshot) ([]programmingcompiler.Input, []DiagnosticView) {
 	var programs []programmingstore.RevisionObject
 	userPou := 0
 	for _, object := range revision.Objects {
@@ -533,7 +550,7 @@ func compilerInputs(revision programmingstore.RevisionSnapshot) ([]programmingco
 	// dùng sửa từng lỗi một rồi chạy lại Check — với 32 Program đó là 32 vòng.
 	diagnostics := make([]DiagnosticView, 0)
 	for _, program := range programs {
-		input, diagnostic := programCompilerInput(revision, program)
+		input, diagnostic := programCompilerInput(revision, program, slots)
 		if diagnostic != nil {
 			diagnostics = append(diagnostics, *diagnostic)
 			continue
@@ -679,7 +696,7 @@ func (s *CheckService) attachPOULinkInputs(ctx context.Context,
 }
 
 func programCompilerInput(revision programmingstore.RevisionSnapshot,
-	program programmingstore.RevisionObject) (programmingcompiler.Input, *DiagnosticView) {
+	program programmingstore.RevisionObject, slots *ModbusSlotSnapshot) (programmingcompiler.Input, *DiagnosticView) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(program.PayloadJSON, &payload); err != nil {
 		diagnostic := scopeDiagnostic(program.ObjectID, 0)
@@ -735,7 +752,7 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 		}
 		runtimeProgramID = config.ProgramID
 	}
-	ioMap, diagnostic := ioMapFromRevision(revision, runtimeProgramID)
+	ioMap, diagnostic := ioMapFromRevision(revision, runtimeProgramID, slots)
 	if diagnostic != nil {
 		return programmingcompiler.Input{}, diagnostic
 	}
@@ -757,7 +774,8 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 // vì gửi io_map sai lặng lẽ cho compiler). category/writable/pointId gửi
 // nguyên trạng cho compiler tự reject (VP/MB_RTU, sai kiểu, trùng...) — không
 // lặp logic validate ở BE, `resolve_io_bindings()` là authority duy nhất.
-func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID string) ([]programmingcompiler.IoMapEntry, *DiagnosticView) {
+func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID string,
+	slots *ModbusSlotSnapshot) ([]programmingcompiler.IoMapEntry, *DiagnosticView) {
 	type variableInfo struct {
 		name      string
 		programID string
@@ -818,9 +836,15 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 				Category string `json:"category"`
 				PointID  string `json:"pointId"`
 				DeviceID string `json:"deviceId"`
-				// T59-303: slot EXT do Point Catalog phân giải khi Mapping tab
-				// chọn điểm MB_RTU. BE chỉ CHUYỂN TIẾP nó — suy slot ở đây là
-				// định nghĩa lại ánh xạ Modbus ở lớp không sở hữu nó.
+				// `ISS-PIO-31` — con số này là DẤU VẾT của lần bind trước, KHÔNG
+				// phải danh tính và KHÔNG được chuyển tiếp thẳng.
+				//
+				// Trước bản vá, BE chuyển tiếp nó xuống compiler. Slot `ext`
+				// được `iobus` cấp tuần tự trên tập thiết bị/điểm đang bật, nên
+				// đổi tên điểm, thêm/tắt điểm hay tắt thiết bị đều làm nó dịch
+				// chỗ — và binding cũ vẫn "hợp lệ" vì `st_io_map.cpp` chỉ kiểm
+				// dải `[1, KX_N_EXT]`. Nay nó chỉ dùng để ĐỐI CHIẾU với slot
+				// phân giải lại từ cấu hình đang chạy.
 				ExtIndex int `json:"extIndex"`
 			} `json:"point"`
 			DataType string `json:"dataType"`
@@ -855,10 +879,24 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			diagnostic := scopeDiagnostic(programID, 0)
 			return nil, &diagnostic
 		}
+		extIndex := payload.Point.ExtIndex
+		if payload.Point.Category == "MB_RTU" {
+			/* `AC-PIO-ID-02` — phân giải lại từ danh tính bền, và CHẶN khi
+			 * không phân giải được hoặc lệch. Không tự remap: đổi slot trong im
+			 * lặng là đổi ý nghĩa một binding người vận hành đã duyệt. */
+			resolved, reason := resolveModbusExtIndex(slots, payload.Point.DeviceID, payload.Point.PointID,
+				payload.Point.ExtIndex)
+			if reason != "" {
+				diagnostic := modbusSlotDiagnostic(programID, variable.name, payload.Point.PointID,
+					payload.Point.ExtIndex, resolved, reason)
+				return nil, &diagnostic
+			}
+			extIndex = resolved
+		}
 		entries = append(entries, programmingcompiler.IoMapEntry{
 			Variable: variable.name, Direction: direction, PointID: payload.Point.PointID,
 			Type: variable.dataType, Unit: payload.Unit, Category: payload.Point.Category,
-			DeviceID: payload.Point.DeviceID, ExtIndex: payload.Point.ExtIndex,
+			DeviceID: payload.Point.DeviceID, ExtIndex: extIndex,
 			Writable: payload.Writable,
 		})
 	}
@@ -1039,6 +1077,25 @@ func scopeDiagnostic(programID string, limit int) DiagnosticView {
 		Location: map[string]any{"programId": programID}, Args: args}
 }
 
+// modbusSlotDiagnostic nói ĐỦ ba thứ người vận hành cần: binding nào, slot nào
+// đã lưu, và slot đó bây giờ là của ai. `PRG-ERR-MAP-003` đã có sẵn ngữ nghĩa
+// "danh tính ánh xạ sai" và bộ args `pointId/variable/expected/actual`.
+func modbusSlotDiagnostic(programID, variable, pointID string, stored, resolved int, reason string) DiagnosticView {
+	public := domain.NewPublicError(domain.ErrMapIdentity)
+	detail := "PIO-SLOT-001"
+	switch {
+	case resolved == 0 && stored != 0:
+		detail = "PIO-SLOT-002"
+	case resolved == 0:
+		detail = "PIO-SLOT-003"
+	}
+	return DiagnosticView{Code: string(domain.ErrMapIdentity), DetailCode: detail, Severity: "ERROR",
+		MessageKey: public.MessageKey,
+		Location:   map[string]any{"programId": programID},
+		Args: map[string]any{"pointId": pointID, "variable": variable,
+			"expected": stored, "actual": resolved}}
+}
+
 func workerDiagnostic(detail string) DiagnosticView {
 	code := domain.MapComponentError("compiler", detail)
 	public := domain.NewPublicError(code)
@@ -1047,7 +1104,7 @@ func workerDiagnostic(detail string) DiagnosticView {
 
 func checkView(check programmingstore.Check) (CheckView, error) {
 	view := CheckView{CheckID: check.CheckID, RevisionID: check.RevisionID, State: check.State, Diagnostics: []DiagnosticView{},
-		Symbols: []SymbolView{},
+		Symbols:   []SymbolView{},
 		CreatedAt: formatTime(check.CreatedAtUTCMS), AttemptCount: check.AttemptCount}
 	if check.StartedAtUTCMS != nil {
 		value := formatTime(*check.StartedAtUTCMS)

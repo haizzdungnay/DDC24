@@ -104,9 +104,13 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `generate_programming_errors.py --check` canh, chạy ngay phía trên
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
-        self.assertEqual(catalog["catalogVersion"], "1.9.0")
+        # ISS-PIO-31 thêm component `point-catalog` với ba detail code
+        # `PIO-SLOT-001..003` (Check chặn khi slot Modbus không phân giải được
+        # theo danh tính bền). Ba con số dưới đây phải đi CÙNG commit thêm mã —
+        # đó chính là chế độ hỏng mà khối chú thích phía trên cảnh báo.
+        self.assertEqual(catalog["catalogVersion"], "1.10.0")
         self.assertEqual(len(catalog["publicErrors"]), 38)
-        self.assertEqual(len(catalog["componentDetails"]), 155)
+        self.assertEqual(len(catalog["componentDetails"]), 158)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 

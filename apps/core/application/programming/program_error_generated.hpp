@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "39bf243a051dd2553c549f9628fcf13e04ccb161345f2f717eb574846b45dabe";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.9.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "d4c25c227ef3eecadd852d0ddb20d8b4f33b2f4cc1c002809094a3fd1b27abfe";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.10.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -109,7 +109,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 155> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 158> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -223,6 +223,9 @@ inline constexpr std::array<ComponentErrorMapping, 155> kComponentErrorMappings 
     {"core-ipc", "IPC-TRACE-REJECTED", ProgramPublicError::Request },
     {"core-ipc", "IPC-TRACE-UNAVAILABLE", ProgramPublicError::Unavailable },
     {"core-ipc", "IPC-UNKNOWN-INSTANCE", ProgramPublicError::NotFound },
+    {"point-catalog", "PIO-SLOT-001", ProgramPublicError::MapIdentity },
+    {"point-catalog", "PIO-SLOT-002", ProgramPublicError::MapIdentity },
+    {"point-catalog", "PIO-SLOT-003", ProgramPublicError::MapIdentity },
     {"retain", "RT-RETAIN-001", ProgramPublicError::Retain },
     {"retain", "RT-RETAIN-002", ProgramPublicError::Retain },
     {"retain", "RT-RETAIN-003", ProgramPublicError::Retain },

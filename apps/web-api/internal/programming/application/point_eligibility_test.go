@@ -18,10 +18,10 @@ func modbusEntry() PointCatalogEntry {
 
 func TestPointEligibilityLocalInputAndOutput(t *testing.T) {
 	cases := []struct {
-		name         string
-		entry        PointCatalogEntry
-		wantInput    string
-		wantOutput   string
+		name       string
+		entry      PointCatalogEntry
+		wantInput  string
+		wantOutput string
 	}{
 		{
 			name:       "UI đọc được, ghi vào là sai vật lý",

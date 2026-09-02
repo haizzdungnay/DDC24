@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-31` bước 1: Check thôi tin con số slot lưu trong binding (#375, 2026-09-02)
+
+- **Triệu chứng (chưa ai gặp vì FE còn chặn MB_RTU, nhưng đường code đã sẵn sàng gây ra).** Binding
+  bền lưu `point.extIndex` do FE ghi lúc chọn điểm, và đường Check **chuyển tiếp thẳng** con số đó
+  xuống compiler. Slot `ext` lại được `iobus` cấp **tuần tự** trên tập thiết bị/điểm **đang bật**, nên
+  đổi `pointId`, thêm/tắt điểm hay tắt thiết bị đều làm nó dịch chỗ. Binding đã Commission trỏ
+  `PUMP-02#14`; tắt `VFD-01` để bảo trì ⇒ slot 14 nay là thanh ghi của điểm khác — và `st_io_map.cpp`
+  chỉ kiểm dải `[1, KX_N_EXT]` nên 14 vẫn "hợp lệ": chương trình ghi lệnh bơm **sai chỗ**, không một
+  dòng cảnh báo.
+- **Nguyên nhân gốc.** `extIndex` bị dùng như **danh tính**, trong khi nó chỉ là **handle runtime**.
+  Danh tính bền của một điểm Modbus là `(deviceId, pointId)` — hai trường người dùng đặt.
+- **Cách sửa (bước 1).**
+  - `ModbusSlotProvider` + `ModbusSlotSnapshot`: adapter ở `internal/app` đọc **chính** cấu hình
+    fieldbus mà `iobus` sẽ nạp và dựng lại bố cục bằng `modbusrtu.BuildExtLayout`.
+  - Check **chụp bố cục một lần cho cả package** (hai binding cùng package không được phân giải trên
+    hai cấu hình khác nhau), rồi phân giải `extIndex` **từ danh tính bền**.
+  - **Ba đường fail-closed:** điểm không còn trong cấu hình ⇒ chặn; số đã lưu lệch số phân giải lại ⇒
+    chặn kèm câu *"cần rebind rồi Commission lại — hệ thống KHÔNG tự chuyển slot"*; không có nguồn
+    phân giải ⇒ chặn mọi binding MB_RTU. Lý do luôn **nêu tên chủ mới của slot** (`slot 14 nay thuộc
+    về bus-1-slave-9#PRESSURE`), vì "extIndex không khớp" không giúp người vận hành đánh giá mức nguy
+    hiểm.
+  - Catalog lỗi thêm component `point-catalog` với `PIO-SLOT-001..003` → `PRG-ERR-MAP-003`.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · FE **199 file / 2440 test** + lint +
+  build + ngân sách bundle PASS · C++ `full` (`-Werror`) **1389/1389** exit 0. Test mới khoá năm thao
+  tác cấu hình (reboot · đổi tên điểm đứng trước · thêm điểm · tắt điểm · tắt thiết bị) và seam
+  0-based ↔ 1-based ở đầu BE.
+- **Còn lại của `ISS-PIO-31` (issue vẫn MỞ, nói rõ để không ai nhầm là đã xong):**
+  1. `AC-PIO-ID-02` mới xác minh `pointId → extIndex`; **chưa** đối chiếu `register / datatype /
+     access`.
+  2. Xác minh đang đứng ở **Check**; cấu hình vẫn có thể đổi giữa Check và Commission, nên cần đóng
+     dấu fingerprint vào kết quả Check rồi đối chiếu lại **ở Commission**.
+  3. Bằng chứng E2E năm kịch bản thuộc #382 (`5a…5g`).
+
+
 ### Fixed — Seqlock của Signal Bus ghép value chu kỳ này với timestamp chu kỳ khác (#414, 2026-09-02)
 
 - **Triệu chứng.** `StSignalBus.ConcurrentInspectNeverPairsValueWithForeignTimestamp` đỏ trên

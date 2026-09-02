@@ -42,7 +42,7 @@ func firstDiagnostic(diagnostics []DiagnosticView) *DiagnosticView {
 }
 
 func TestCompilerInputRejectsOneOverProductCapacity(t *testing.T) {
-	_, diagnostics := compilerInputs(snapshotWithPrograms(domain.MaxProgramsTotal + 1))
+	_, diagnostics := compilerInputs(snapshotWithPrograms(domain.MaxProgramsTotal + 1), nil)
 	diagnostic := firstDiagnostic(diagnostics)
 	if diagnostic == nil {
 		t.Fatalf("%d Program phải bị từ chối", domain.MaxProgramsTotal+1)
@@ -61,7 +61,7 @@ func TestCompilerInputRejectsOneOverProductCapacity(t *testing.T) {
 }
 
 func TestCompilerInputRejectsEmptyProgramSet(t *testing.T) {
-	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshotWithPrograms(0))))
+	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshotWithPrograms(0), nil)))
 	if diagnostic == nil {
 		t.Fatal("Revision không có PROGRAM nào phải bị từ chối")
 	}
@@ -74,7 +74,7 @@ func TestCompilerInputRejectsEmptyProgramSet(t *testing.T) {
 // Program của Revision. Test cũ khoá đúng trần giai đoạn đó nên nó được thay
 // bằng phép kiểm mới — hai Program phải cho HAI input, không phải một lỗi.
 func TestCompilerInputsBuildEveryProgramInStableOrder(t *testing.T) {
-	inputs, diagnostics := compilerInputs(snapshotWithPrograms(3))
+	inputs, diagnostics := compilerInputs(snapshotWithPrograms(3), nil)
 	if len(diagnostics) != 0 {
 		t.Fatalf("ba Program hợp lệ vẫn bị từ chối: %+v", diagnostics)
 	}
@@ -91,7 +91,7 @@ func TestCompilerInputsBuildEveryProgramInStableOrder(t *testing.T) {
 }
 
 func TestCompilerInputAcceptsSingleProgramAtProductProfile(t *testing.T) {
-	inputs, diagnostics := compilerInputs(snapshotWithPrograms(1))
+	inputs, diagnostics := compilerInputs(snapshotWithPrograms(1), nil)
 	if len(diagnostics) != 0 {
 		t.Fatalf("một Program hợp lệ bị từ chối: %+v", diagnostics)
 	}
@@ -104,7 +104,7 @@ func TestCompilerInputAcceptsSingleProgramAtProductProfile(t *testing.T) {
 func TestMalformedPayloadDoesNotReportFakeLimit(t *testing.T) {
 	snapshot := snapshotWithPrograms(1)
 	snapshot.Objects[0].PayloadJSON = []byte(`{"programId":"khong-khop","language":"ST","document":"x"}`)
-	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshot)))
+	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshot, nil)))
 	if diagnostic == nil {
 		t.Fatal("payload sai phải bị từ chối")
 	}
@@ -126,7 +126,7 @@ func TestSourceOverProfileLimitReportsProfileSourceBytes(t *testing.T) {
 		"document":  json.RawMessage(document),
 	})
 	snapshot.Objects[0].PayloadJSON = payload
-	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshot)))
+	diagnostic := firstDiagnostic(secondOf(compilerInputs(snapshot, nil)))
 	if diagnostic == nil {
 		t.Fatal("source vượt trần phải bị từ chối")
 	}
@@ -146,7 +146,7 @@ func TestCompilerInputsAggregateDiagnosticsAcrossPrograms(t *testing.T) {
 	snapshot := snapshotWithPrograms(3)
 	snapshot.Objects[0].PayloadJSON = []byte(`{"programId":"khong-khop","language":"ST","document":"x"}`)
 	snapshot.Objects[2].PayloadJSON = []byte(`{"programId":"cung-khong-khop","language":"ST","document":"x"}`)
-	inputs, diagnostics := compilerInputs(snapshot)
+	inputs, diagnostics := compilerInputs(snapshot, nil)
 	if inputs != nil {
 		t.Fatal("có lỗi thì không được trả input nửa vời")
 	}

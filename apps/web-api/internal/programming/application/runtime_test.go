@@ -12,11 +12,11 @@ import (
 )
 
 type fakeRuntimeStatusReader struct {
-	failCall     bool
-	producerMode string
-	active       *string
-	lkg          *string
-	signals      []runtimeSignalPayload
+	failCall      bool
+	producerMode  string
+	active        *string
+	lkg           *string
+	signals       []runtimeSignalPayload
 	protocolMinor uint16
 }
 
