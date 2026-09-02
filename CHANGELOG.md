@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Added — `ISS-STED-14` hợp đồng phím cho ST editor (#365, 2026-09-02)
+
+- **Triệu chứng.** FBD có `fbd_keyboard_commands_v1.json` kèm validator từ lâu; **ST không
+  có tệp tương đương**, dù ST editor mới là nơi có nhiều phím tắt hơn. Không có hợp đồng
+  ⇒ không có test nào chặn việc một phím bị đổi hoặc mất trong một lần refactor, và một
+  phím tắt biến mất là loại hồi quy người dùng phát hiện trước CI.
+- **Cách sửa.** `contracts/programming/st_keyboard_commands_v1.json` + schema, **23 lệnh /
+  7 ngữ cảnh**, khảo sát từ chính `ProgramsTab.tsx` chứ không chép từ mô tả issue.
+  - **Trường `context` là bắt buộc**, không phải trang trí: `Enter` và `Escape` mang nghĩa
+    khác nhau ở bốn ngữ cảnh khác nhau. Bỏ trường này thì hợp đồng không mô tả được hành vi
+    thật, và nó sẽ trông như tự mâu thuẫn.
+  - **Xung đột với trình duyệt/hệ điều hành ghi rõ từng mục** — `Ctrl+P` (In), `Ctrl+F`
+    (Tìm trong trang), `Ctrl+S` (Lưu trang), `Ctrl+G` (Firefox: tìm tiếp), `F12`
+    (DevTools). Riêng `F12` được ghi thẳng là **không đảm bảo**: trình duyệt xử lý nó
+    TRƯỚC trang, nên `Ctrl/Cmd+Click` mới là đường tương đương luôn dùng được.
+  - **Validator `verify_programming_st_keyboard.py`** (`--self-test`, nối vào
+    `check:programming-contracts` nên chạy trong `npm run build`) kiểm **ba chiều**: schema;
+    không đụng độ nội bộ (hai lệnh cùng phím trong cùng ngữ cảnh là hợp đồng tự mâu thuẫn —
+    chỉ một chạy được và không ai biết cái nào); và **đối chiếu với mã nguồn thật** — mọi
+    phím hợp đồng khai phải có đường xử lý trong `ProgramsTab.tsx`. Chiều thứ ba là chiều
+    quan trọng nhất: một hợp đồng không đối chiếu với code chỉ là tài liệu, và tài liệu thì
+    trôi.
+  - **Test FE đọc chính tệp hợp đồng**, không chép tay danh sách lần hai. Bản khai thứ hai
+    sẽ trôi khỏi hợp đồng đúng vào lúc ai đó sửa một phím — lúc đó test vẫn xanh trong khi
+    hợp đồng và mã nguồn đã nói hai điều khác nhau.
+- **Hai quyết định đáng ghi khi viết cổng.**
+  - **So phím theo TỪNG THÀNH PHẦN, không so nguyên chuỗi.** Mã nguồn viết
+    `event.ctrlKey || event.metaKey` cùng `event.key.toLowerCase() === 'g'`, không viết
+    `"Control+g"` ở đâu cả. Đòi khớp nguyên chuỗi sẽ là một cổng **luôn đỏ**, và một cổng
+    luôn đỏ bị tắt ngay trong tuần đầu.
+  - **Ký tự phải escape trong literal JS.** Cổng đầu tiên báo `Control+Shift+\` là "phím
+    không tồn tại" vì mã nguồn viết `'\\'`. Một cổng báo sai về một phím **có thật** còn
+    tệ hơn không có cổng, vì nó dạy người sửa đi xoá dòng hợp đồng đúng.
+- **Phân vai giữa hai cổng.** Validator Python đọc mã nguồn; test FE chỉ kiểm bất biến nội
+  tại của hợp đồng. Bản đầu tôi cho test FE cũng đọc `ProgramsTab.tsx` — đó là hai đường
+  kiểm cho cùng một việc, và chúng sẽ lệch nhau; đã gộp về đúng một chỗ.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `python3 scripts/verify_programming_st_keyboard.py --self-test`: **5/5** hợp đồng sai bị
+    reject fail-closed; 23 lệnh / 7 ngữ cảnh khớp mã nguồn.
+  - `npx vitest --run --environment jsdom src`: **197 file / 2356 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0 (cổng mới chạy trong build).
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1382/1382 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
 ### Added — `ISS-STED-13` chống trôi văn phạm giữa FE và compiler (#364, 2026-09-02)
 
 - **Triệu chứng.** FE có **ba** bộ đọc ST độc lập với compiler — bộ tô màu

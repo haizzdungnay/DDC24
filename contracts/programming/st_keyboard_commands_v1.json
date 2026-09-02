@@ -1,0 +1,183 @@
+{
+  "$comment": "ISS-STED-14 — HỢP ĐỒNG PHÍM CỦA ST EDITOR. FBD đã có tệp tương đương từ lâu; ST thì không, dù ST mới là nơi có nhiều phím tắt hơn. Không có hợp đồng nghĩa là không có test nào chặn việc một phím bị đổi hoặc mất trong một lần refactor. Tệp này là hợp đồng, không phải tài liệu: `verify_programming_st_keyboard.py` và `stKeyboardContract.test.ts` đều ĐỌC nó, nên sửa tệp mà không sửa code (hoặc ngược lại) sẽ làm đỏ.",
+  "contractId": "PROGRAMMING-ST-KEYBOARD-COMMANDS-V1",
+  "version": 1,
+  "$contexts": "context nói phím có hiệu lực Ở ĐÂU. Cùng một phím có thể mang nghĩa khác nhau ở hai ngữ cảnh (Enter, Escape), nên bỏ trường này đi thì hợp đồng không mô tả được hành vi thật.",
+  "contexts": {
+    "programsTab": "Bất kỳ đâu trong tab Chương trình.",
+    "sourceEditor": "Con trỏ ở trong ô gõ mã nguồn, không có lớp phủ nào mở.",
+    "completionOpen": "Danh sách gợi ý đang mở.",
+    "signatureOpen": "Gợi ý chữ ký đang hiện.",
+    "searchOpen": "Hộp Tìm/Thay thế đang mở.",
+    "searchInput": "Con trỏ ở trong ô nhập của hộp Tìm.",
+    "goToLineInput": "Con trỏ ở trong ô nhập của hộp Tới dòng."
+  },
+  "commands": [
+    {
+      "id": "OPEN_COMMAND_PALETTE",
+      "key": "Control+p",
+      "context": "programsTab",
+      "mutatesDraft": false,
+      "description": "Mở bảng lệnh của tab Chương trình.",
+      "browserConflict": "Chrome/Firefox/Edge dùng Ctrl+P cho In. Trình soạn thảo gọi preventDefault() nên hộp In không mở khi con trỏ ở trong tab."
+    },
+    {
+      "id": "UNDO",
+      "key": "Control+z",
+      "context": "sourceEditor",
+      "mutatesDraft": true,
+      "description": "Hoàn tác một bước, dùng lịch sử RIÊNG của editor chứ không phải undo stack của trình duyệt (T59-506)."
+    },
+    {
+      "id": "REDO_SHIFT",
+      "key": "Control+Shift+z",
+      "context": "sourceEditor",
+      "mutatesDraft": true,
+      "description": "Làm lại — biến thể Shift, quen thuộc với người dùng macOS."
+    },
+    {
+      "id": "REDO",
+      "key": "Control+y",
+      "context": "sourceEditor",
+      "mutatesDraft": true,
+      "description": "Làm lại — biến thể Windows/Linux. Giữ CẢ HAI vì đổi một trong hai là phá thói quen của một nửa người dùng."
+    },
+    {
+      "id": "FORMAT_DOCUMENT",
+      "key": "Control+Shift+f",
+      "context": "sourceEditor",
+      "mutatesDraft": true,
+      "description": "Định dạng cả tài liệu. Không parse được thì KHÔNG đổi một byte nào."
+    },
+    {
+      "id": "FIND_REPLACE",
+      "key": "Control+f",
+      "context": "sourceEditor",
+      "mutatesDraft": false,
+      "description": "Mở hộp Tìm/Thay thế của editor.",
+      "browserConflict": "Ctrl+F là Tìm trong trang của trình duyệt. Editor chiếm phím này vì tìm trong buffer đang gõ mới là thứ người dùng cần, và tìm-trong-trang không thấy được nội dung chưa lưu."
+    },
+    {
+      "id": "TOGGLE_MAXIMIZED",
+      "key": "Control+Shift+m",
+      "context": "sourceEditor",
+      "mutatesDraft": false,
+      "description": "Bật/tắt chế độ toàn màn hình của khung soạn thảo."
+    },
+    {
+      "id": "GO_TO_LINE",
+      "key": "Control+g",
+      "context": "sourceEditor",
+      "mutatesDraft": false,
+      "description": "Mở hộp Tới dòng, điền sẵn số dòng con trỏ đang đứng.",
+      "browserConflict": "Firefox dùng Ctrl+G cho 'tìm tiếp'. Editor chiếm phím này khi con trỏ ở trong ô gõ."
+    },
+    {
+      "id": "SAVE_SOURCE",
+      "key": "Control+s",
+      "context": "sourceEditor",
+      "mutatesDraft": true,
+      "description": "Lưu mã nguồn vào Draft.",
+      "browserConflict": "Ctrl+S là Lưu trang của trình duyệt. preventDefault() chặn hộp thoại lưu tệp — một hộp thoại tải trang HTML về máy là thứ hoàn toàn vô nghĩa ở đây."
+    },
+    {
+      "id": "TOGGLE_COMMENT",
+      "key": "Control+/",
+      "context": "sourceEditor",
+      "mutatesDraft": true,
+      "description": "Bật/tắt chú thích cho dòng hoặc vùng chọn."
+    },
+    {
+      "id": "JUMP_MATCHING_BRACKET",
+      "key": "Control+Shift+\\",
+      "context": "sourceEditor",
+      "mutatesDraft": false,
+      "description": "Nhảy tới ngoặc khớp."
+    },
+    {
+      "id": "GO_TO_DEFINITION",
+      "key": "F12",
+      "context": "sourceEditor",
+      "mutatesDraft": false,
+      "description": "Tới nơi khai báo của ký hiệu dưới con trỏ.",
+      "browserConflict": "F12 mở DevTools ở Chrome/Edge. Trình duyệt xử lý F12 TRƯỚC trang, nên phím này chỉ hoạt động khi DevTools đã bị vô hiệu hoá hoặc trên trình duyệt không dùng F12; Ctrl/Cmd+Click là đường tương đương luôn dùng được."
+    },
+    {
+      "id": "INSERT_POINT_VARIABLE",
+      "key": "Control+i",
+      "context": "sourceEditor",
+      "mutatesDraft": true,
+      "description": "Bật/tắt bảng chèn Point/Variable."
+    },
+    {
+      "id": "AUTO_INDENT_ENTER",
+      "key": "Enter",
+      "context": "sourceEditor",
+      "mutatesDraft": true,
+      "description": "Xuống dòng có tự thụt lề theo khối đang mở. Chỉ áp dụng khi KHÔNG có phím bổ trợ và danh sách gợi ý đang đóng."
+    },
+    {
+      "id": "COMPLETION_NEXT",
+      "key": "ArrowDown",
+      "context": "completionOpen",
+      "mutatesDraft": false,
+      "description": "Chọn mục kế tiếp trong danh sách gợi ý."
+    },
+    {
+      "id": "COMPLETION_PREVIOUS",
+      "key": "ArrowUp",
+      "context": "completionOpen",
+      "mutatesDraft": false,
+      "description": "Chọn mục trước đó trong danh sách gợi ý."
+    },
+    {
+      "id": "COMPLETION_ACCEPT_ENTER",
+      "key": "Enter",
+      "context": "completionOpen",
+      "mutatesDraft": true,
+      "description": "Nhận gợi ý đang chọn. Ưu tiên HƠN auto-indent: khi danh sách mở, Enter thuộc về danh sách."
+    },
+    {
+      "id": "COMPLETION_ACCEPT_TAB",
+      "key": "Tab",
+      "context": "completionOpen",
+      "mutatesDraft": true,
+      "description": "Nhận gợi ý đang chọn — biến thể Tab."
+    },
+    {
+      "id": "COMPLETION_CLOSE",
+      "key": "Escape",
+      "context": "completionOpen",
+      "mutatesDraft": false,
+      "description": "Đóng danh sách gợi ý."
+    },
+    {
+      "id": "SIGNATURE_CLOSE",
+      "key": "Escape",
+      "context": "signatureOpen",
+      "mutatesDraft": false,
+      "description": "Đóng gợi ý chữ ký (ISS-STED-11). Xếp SAU completion và TRƯỚC hộp tìm kiếm: thứ vừa bật lên là thứ người dùng muốn tắt trước."
+    },
+    {
+      "id": "SEARCH_CLOSE",
+      "key": "Escape",
+      "context": "searchOpen",
+      "mutatesDraft": false,
+      "description": "Đóng hộp Tìm/Thay thế và trả con trỏ về ô gõ."
+    },
+    {
+      "id": "SEARCH_JUMP_FIRST",
+      "key": "Enter",
+      "context": "searchInput",
+      "mutatesDraft": false,
+      "description": "Nhảy tới kết quả khớp đầu tiên."
+    },
+    {
+      "id": "GO_TO_LINE_CLOSE",
+      "key": "Escape",
+      "context": "goToLineInput",
+      "mutatesDraft": false,
+      "description": "Đóng hộp Tới dòng và trả con trỏ về ô gõ."
+    }
+  ]
+}
