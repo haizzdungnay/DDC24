@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"mkddc-web/internal/capabilities"
+	"mkddc-web/internal/configschema"
 )
 
 // OWNED BY AGENT A (config) - keep config API logic in this file.
@@ -127,8 +128,9 @@ func (a *App) handlePutConfigIO(w http.ResponseWriter, r *http.Request) {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
 		return
 	}
-	errs := append(validateConfigIO(cfg), validateConfigPointMetadata(cfg)...)
-	errs = append(errs, validateIOAgainstBoard(cfg, a.boardCapability(r.Context()))...)
+	boardCap := a.boardCapability(r.Context())
+	errs := append(validateConfigIOWithBoard(cfg, boardCap), validateConfigPointMetadata(cfg)...)
+	errs = append(errs, validateIOAgainstBoard(cfg, boardCap)...)
 	errs = append(errs, validateFixedPhysicalPointTags(cfg)...)
 	if len(errs) > 0 {
 		writePointTagErrors(w, errs)
@@ -548,101 +550,91 @@ func validateIOAgainstBoard(cfg ConfigIO, boardCap capabilities.BoardCap) []conf
 	return errs
 }
 
+// ioModeSets nối enum mode của `capabilities` vào schema, để enum của validator
+// và enum mà `/system/capabilities` công bố là CÙNG MỘT BIẾN.
+func ioModeSets() configschema.ModeSets {
+	return configschema.ModeSets{UI: capabilities.UIModes, AO: capabilities.AOModes, DO: capabilities.DOModes}
+}
+
+// boundsFor dịch năng lực bo thành trần kênh cho schema (`ISS-PIO-27`: "validate
+// theo capability").
+//
+// Chỉ SIẾT khi có BẰNG CHỨNG DƯƠNG là khối kênh không tồn tại (`presence: no`).
+// `unknown` giữ nguyên sức chứa ABI — siết ở ca chưa biết sẽ làm mọi bo đang
+// không chạy `iobus` mất khả năng lưu lại chính cấu hình nó đang chạy, một cách
+// hỏng tệ hơn hẳn cái nó định tránh. Cùng ngưỡng với cổng nhiệt trở ở
+// `validateIOAgainstBoard`.
+func boundsFor(doc capabilities.Document, kind string, abiCapacity int) configschema.Bounds {
+	for _, block := range doc.Blocks {
+		if block.Kind != kind {
+			continue
+		}
+		if block.Presence == capabilities.PresenceNo {
+			return configschema.Bounds{MaxChannel: 0, AbsentReason: fmt.Sprintf("BOARD_CAP_MAP nói bo không có khối kênh %s nên không nhận cấu hình cho nó", kind)}
+		}
+		if block.Presence == capabilities.PresenceYes && block.Count > 0 {
+			return configschema.Bounds{MaxChannel: block.Count}
+		}
+	}
+	return configschema.Bounds{MaxChannel: abiCapacity}
+}
+
+func ioBounds(boardCap capabilities.BoardCap) map[string]configschema.Bounds {
+	doc := capabilities.Build(boardCap)
+	return map[string]configschema.Bounds{
+		"ui": boundsFor(doc, "UI", capabilities.ABIUniversalInputs),
+		"ao": boundsFor(doc, "AO", capabilities.ABIAnalogOutputs),
+		"do": boundsFor(doc, "DO", capabilities.ABIDigitalOutputs),
+	}
+}
+
+func schemaErrors(errs *[]configValidationError, found []configschema.Error) {
+	for _, item := range found {
+		addConfigErr(errs, item.Path, item.Message)
+	}
+}
+
+// validateConfigIO kiểm hình dạng `io_config.conf` theo schema có kiểu
+// (`internal/configschema`) thay cho chuỗi lệnh `if` viết tay trước đây.
+//
+// Thay đổi hành vi DUY NHẤT so với bản cũ — và là mục đích của `ISS-PIO-27`:
+// khoá lạ nay bị TỪ CHỐI. Trước đây `scale_hi` gõ thành `scale_high` được nhận,
+// ghi xuống đĩa, rồi chỉ lộ ra khi `iobus` khởi động lại và lặng lẽ dùng mặc
+// định. Mọi phép kiểm kiểu/dải/enum cũ đều được schema giữ nguyên nguyên văn
+// thông báo.
 func validateConfigIO(cfg ConfigIO) []configValidationError {
+	return validateConfigIOWithBoard(cfg, capabilities.BoardCap{})
+}
+
+func validateConfigIOWithBoard(cfg ConfigIO, boardCap capabilities.BoardCap) []configValidationError {
 	var errs []configValidationError
-	for i, item := range cfg.UI {
-		base := fmt.Sprintf("ui[%d]", i)
-		validateChannel(&errs, item, base+".ch", 1, 16)
-		// `ISS-PIO-12`: enum của validator và enum mà `/system/capabilities`
-		// công bố phải là CÙNG MỘT BIẾN. Hai danh sách chép tay cạnh nhau sẽ
-		// lệch, và khi lệch thì FE hoặc mời chọn một mode bị từ chối, hoặc giấu
-		// mất một mode hợp lệ — cả hai đều không có test nào bắt được.
-		validateStringEnum(&errs, item, base+".type", "type", true, capabilities.UIModes...)
-		validateOptionalString(&errs, item, base+".unit", "unit")
-		validateOptionalString(&errs, item, base+".name", "name")
-		validateOptionalString(&errs, item, base+".note", "note")
-		if _, ok, good := boolField(item, "enabled"); ok && !good {
-			addConfigErr(&errs, base+".enabled", "must be boolean")
-		}
-		if _, ok, good := boolField(item, "invert"); ok && !good {
-			addConfigErr(&errs, base+".invert", "must be boolean")
-		}
-		if rm, ok, good := intField(item, "range_mult"); ok && (!good || rm < 0 || rm > 5) {
-			addConfigErr(&errs, base+".range_mult", "must be integer in range 0..5")
-		}
-		if samples, ok, good := intField(item, "filter_samples"); ok && (!good || samples < 0 || samples > 100) {
-			addConfigErr(&errs, base+".filter_samples", "must be integer in range 0..100")
-		}
-		if mathFunc, ok, good := intField(item, "math_func"); ok && (!good || mathFunc < 0 || mathFunc > 3) {
-			addConfigErr(&errs, base+".math_func", "must be integer in range 0..3")
-		}
-		if cal, ok, good := numberField(item, "sensor_cal"); ok && (!good || cal < -12.7 || cal > 12.8) {
-			addConfigErr(&errs, base+".sensor_cal", "must be number in range -12.7..12.8")
-		}
-		lo, hasLo, okLo := numberField(item, "scale_lo")
-		hi, hasHi, okHi := numberField(item, "scale_hi")
-		if hasLo && !okLo {
-			addConfigErr(&errs, base+".scale_lo", "must be number")
-		}
-		if hasHi && !okHi {
-			addConfigErr(&errs, base+".scale_hi", "must be number")
-		}
-		if hasLo && hasHi && okLo && okHi && hi <= lo {
-			addConfigErr(&errs, base+".scale_hi", "must be greater than scale_lo")
-		}
-	}
+	collections := configschema.IOCollections(ioModeSets())
+	bounds := ioBounds(boardCap)
+	schemaErrors(&errs, configschema.Validate(collections["ui"], cfg.UI, bounds["ui"]))
+	schemaErrors(&errs, configschema.Validate(collections["ao"], cfg.AO, bounds["ao"]))
+	schemaErrors(&errs, configschema.Validate(collections["do"], cfg.DO, bounds["do"]))
+	// Tên điểm đi qua bộ chuẩn hoá riêng (`ADR-042`) chứ không phải một dải số,
+	// nên nó không diễn đạt được bằng bảng Field.
 	for i, item := range cfg.AO {
-		base := fmt.Sprintf("ao[%d]", i)
-		validateChannel(&errs, item, base+".ch", 1, 4)
-		validateStringEnum(&errs, item, base+".mode", "mode", true, capabilities.AOModes...)
-		if name, ok, good := stringField(item, "name"); ok && !good {
-			addConfigErr(&errs, base+".name", "must be string")
-		} else if ok {
+		if name, ok, good := stringField(item, "name"); ok && good {
 			if _, _, err := normalizePointName(name); err != nil {
-				addConfigErr(&errs, base+".name", err.Error())
+				addConfigErr(&errs, fmt.Sprintf("ao[%d].name", i), err.Error())
 			}
-		}
-		validateStringEnum(&errs, item, base+".units", "units", false,
-			"percent", "volt", "milliampere", "degC", "Pa", "RPM", "ppm", "no_units")
-		minPV, hasMin, okMin := numberField(item, "min_pv")
-		maxPV, hasMax, okMax := numberField(item, "max_pv")
-		if hasMin && !okMin {
-			addConfigErr(&errs, base+".min_pv", "must be number")
-		}
-		if hasMax && !okMax {
-			addConfigErr(&errs, base+".max_pv", "must be number")
-		}
-		if hasMin && hasMax && okMin && okMax && maxPV <= minPV {
-			addConfigErr(&errs, base+".max_pv", "must be greater than min_pv")
-		}
-	}
-	for i, item := range cfg.DO {
-		base := fmt.Sprintf("do[%d]", i)
-		validateChannel(&errs, item, base+".ch", 1, 4)
-		if _, ok, good := stringField(item, "name"); ok && !good {
-			addConfigErr(&errs, base+".name", "must be string")
 		}
 	}
 	return errs
 }
 
 func validateConfigSafeState(cfg ConfigSafeState) []configValidationError {
+	return validateConfigSafeStateWithBoard(cfg, capabilities.BoardCap{})
+}
+
+func validateConfigSafeStateWithBoard(cfg ConfigSafeState, boardCap capabilities.BoardCap) []configValidationError {
 	var errs []configValidationError
-	for i, item := range cfg.AO {
-		base := fmt.Sprintf("ao[%d]", i)
-		validateChannel(&errs, item, base+".ch", 1, 4)
-		safe, ok, good := numberField(item, "safe")
-		if !ok {
-			addConfigErr(&errs, base+".safe", "is required")
-		} else if !good || safe < 0 || safe > 20 {
-			addConfigErr(&errs, base+".safe", "must be number in range 0..20")
-		}
-	}
-	for i, item := range cfg.DO {
-		base := fmt.Sprintf("do[%d]", i)
-		validateChannel(&errs, item, base+".ch", 1, 4)
-		validateStringEnum(&errs, item, base+".safe", "safe", true, capabilities.DOModes...)
-	}
+	collections := configschema.SafeStateCollections(ioModeSets())
+	bounds := ioBounds(boardCap)
+	schemaErrors(&errs, configschema.Validate(collections["ao"], cfg.AO, bounds["ao"]))
+	schemaErrors(&errs, configschema.Validate(collections["do"], cfg.DO, bounds["do"]))
 	return errs
 }
 
@@ -743,17 +735,6 @@ func validateIPInterface(errs *[]configValidationError, path string, cfg map[str
 				addConfigErr(errs, fmt.Sprintf("%s.dns[%d]", path, i), "must be a valid IP address")
 			}
 		}
-	}
-}
-
-func validateChannel(errs *[]configValidationError, item map[string]any, path string, min int, max int) {
-	ch, ok, good := intField(item, "ch")
-	if !ok {
-		addConfigErr(errs, path, "is required")
-		return
-	}
-	if !good || ch < min || ch > max {
-		addConfigErr(errs, path, fmt.Sprintf("must be integer in range %d..%d", min, max))
 	}
 }
 

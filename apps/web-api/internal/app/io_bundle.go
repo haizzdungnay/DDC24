@@ -73,13 +73,14 @@ func (a *App) applyIOBundle(r *http.Request, ioCfg ConfigIO, safeCfg ConfigSafeS
 	if safeCfg.DO == nil {
 		safeCfg.DO = []map[string]any{}
 	}
-	errs := validateConfigIO(ioCfg)
-	errs = append(errs, validateIOAgainstBoard(ioCfg, a.boardCapability(r.Context()))...)
+	boardCap := a.boardCapability(r.Context())
+	errs := validateConfigIOWithBoard(ioCfg, boardCap)
+	errs = append(errs, validateIOAgainstBoard(ioCfg, boardCap)...)
 	if len(ioCfg.UI) > 0 || len(ioCfg.AO) > 0 || len(ioCfg.DO) > 0 {
 		errs = append(errs, validateConfigPointMetadata(ioCfg)...)
 		errs = append(errs, validateFixedPhysicalPointTags(ioCfg)...)
 	}
-	errs = append(errs, validateConfigSafeState(safeCfg)...)
+	errs = append(errs, validateConfigSafeStateWithBoard(safeCfg, boardCap)...)
 	beforeIO, readErr := readConfig(a, configGroupIO, ConfigIO{})
 	if readErr != nil {
 		return ConfigPutResult{}, nil, readErr

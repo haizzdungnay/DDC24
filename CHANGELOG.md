@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-27` schema có kiểu cho `ConfigIO`; khoá gõ sai không còn đi lọt (#385, 2026-09-03)
+
+- **Triệu chứng.** Hình dạng `io_config.conf` chỉ tồn tại dưới dạng `[]map[string]any` cộng một
+  chuỗi lệnh `if` viết tay. Gõ `scale_hi` thành `scale_high` **được nhận**, ghi xuống đĩa, rồi chỉ
+  lộ ra khi `iobus` khởi động lại và lặng lẽ dùng giá trị mặc định — đúng câu issue mô tả: *"lỗi cấu
+  hình chỉ lộ khi `core` khởi động lại"* (`F-PIO-013`).
+- **Một chỗ issue nói chưa đúng, xin ghi lại.** Issue viết *"không validate ở backend"*. Thực tế
+  `validateConfigIO` **có** kiểm kiểu, dải và enum cho gần như mọi trường. Cái **thiếu** không phải
+  validation mà là **schema**: không ai biết tập trường đầy đủ, nên khoá lạ đi lọt và
+  `cal_gain`/`cal_offset` — hai trường hiệu chuẩn mà `iobus_config.cpp` **đọc thật** — chưa từng
+  xuất hiện trong validator Go.
+- **Cách sửa.** Gói `internal/configschema` mô tả **một lần, ở một chỗ** mọi trường của
+  `io_config.conf` và `safe_state.conf`: kiểu, bắt buộc, dải, enum, ràng buộc liên trường, và
+  `ReadBy` ghi **nơi thật sự đọc** từng trường. `validateConfigIO`/`validateConfigSafeState` nay
+  chạy trên schema đó. Thay đổi hành vi **duy nhất**: khoá lạ bị **từ chối**; mọi thông báo cũ giữ
+  nguyên nguyên văn.
+- **Vì sao vẫn là `[]map[string]any` ở tầng lưu trữ.** Issue đặt tiêu đề *"thay `[]map[string]any`"*
+  và tôi **không** làm đúng chữ đó, có lý do: một struct Go chỉ giữ những trường nó khai, nên mọi
+  khoá không được mô hình hoá sẽ bị **xoá âm thầm** ở lần ghi kế tiếp. Với `cal_gain`/`cal_offset` —
+  hai trường mà firmware đọc còn Go thì chưa từng biết — đổi sang struct **ngay lúc này sẽ gây ra
+  chính loại mất dữ liệu mà issue muốn chặn**. Schema mới là thẩm quyền; map chỉ là phương tiện
+  chuyên chở, và nó chuyên chở cả những trường mà một struct sẽ đánh rơi. Khi cổng chống trôi đã
+  chạy đủ lâu để danh sách trường được coi là đầy đủ thì đổi sang struct mới an toàn — và schema này
+  chính là đầu vào của bước đó.
+- **Cổng chống trôi một chiều, và đó là chiều nguy hiểm.** `TestSchemaCoversEveryFieldTheFirmwareReads`
+  đọc **thẳng** `iobus_config.cpp` và `safe_state_config.cpp`, đối chiếu từng khoá mà C++ thật sự
+  đọc với schema. Vì validator nay từ chối khoá lạ, một trường firmware đọc mà schema không biết sẽ
+  làm web-api **từ chối chính cấu hình đang chạy trên bo** — người vận hành mở trang lên, bấm Lưu,
+  và bị chặn với lý do vô nghĩa. Chiều ngược lại **không** kiểm: schema có quyền biết những trường
+  chỉ tầng web dùng (`note`, `equipment`, `tag`, `trend_enabled`).
+- **Validate theo capability** (`ISS-PIO-12`): trần kênh của `ch` đến từ `configschema.Bounds`, dựng
+  từ `BOARD_CAP_MAP`. Chỉ **siết** khi có bằng chứng dương là khối kênh không tồn tại
+  (`presence: no`) — và khi siết thì **nói ra lý do**; `unknown` giữ nguyên sức chứa ABI, cùng ngưỡng
+  với cổng nhiệt trở ở `validateIOAgainstBoard`. Siết ở ca chưa biết sẽ làm mọi bo đang không chạy
+  `iobus` mất khả năng lưu lại chính cấu hình nó đang chạy.
+- **Bốn literal `16`/`4`/`4` nữa bị gỡ** ở `pointtags.go` (trần không gian định danh điểm), nay trỏ
+  vào `capabilities.ABI*`. Đây là **sức chứa ABI**, không phải năng lực bo: siết không gian định
+  danh theo runtime sẽ đổi luôn nghĩa của *"must include channel N exactly once"* và thuộc về đợt
+  hỗ trợ SKU DI, nên chỉ gỡ trùng lặp chứ không đổi hành vi.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · `go test -race` trên `internal/app` + `configschema` + `capabilities`
+  **3/3 `ok`** (`internal/app` 137,8 s).
+- **Ba lần tiêm lỗi** chứng minh cổng còn kiểm: gỡ `cal_gain` khỏi schema ⇒ cổng chống trôi **FAIL**;
+  tiêm một khoá mới vào bản sao mã C++ ⇒ bộ trích xuất **thấy** nó; bỏ chặn khoá lạ ⇒ cả test đơn vị
+  lẫn test HTTP **FAIL**. Khôi phục ⇒ xanh trở lại.
+
+
 ### Fixed — `ISS-PIO-31` Point Catalog không phát `extIndex` nên KHÔNG bind được điểm Modbus nào (2026-09-03)
 
 - **Triệu chứng.** Mọi điểm MB_RTU trong Point Catalog trả

@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	webPoints "mkddc-web/internal/points"
+
+	"mkddc-web/internal/capabilities"
 )
 
 type pointNamespaceEntry struct {
@@ -268,9 +270,9 @@ func validatePointNameEntries(entries []pointNamespaceEntry) []configValidationE
 func pointNamespaceEntries(ioCfg ConfigIO, vpCfg ConfigVirtualPoints) ([]pointNamespaceEntry, []configValidationError) {
 	entries := make([]pointNamespaceEntry, 0, 24+len(vpCfg.Items))
 	var errs []configValidationError
-	entries, errs = appendConfigNamespaceEntries(entries, errs, "ui", ioCfg.UI, "UI", 16)
-	entries, errs = appendConfigNamespaceEntries(entries, errs, "ao", ioCfg.AO, "AO", 4)
-	entries, errs = appendConfigNamespaceEntries(entries, errs, "do", ioCfg.DO, "DO", 4)
+	entries, errs = appendConfigNamespaceEntries(entries, errs, "ui", ioCfg.UI, "UI", capabilities.ABIUniversalInputs)
+	entries, errs = appendConfigNamespaceEntries(entries, errs, "ao", ioCfg.AO, "AO", capabilities.ABIAnalogOutputs)
+	entries, errs = appendConfigNamespaceEntries(entries, errs, "do", ioCfg.DO, "DO", capabilities.ABIDigitalOutputs)
 	for i, item := range vpCfg.Items {
 		id := canonicalVirtualPointID(item.ID)
 		entries = append(entries, pointNamespaceEntry{
@@ -371,9 +373,14 @@ func validateConfigPointMetadata(cfg ConfigIO) []configValidationError {
 			}
 		}
 	}
-	validateRows("ui", "UI", cfg.UI, 16)
-	validateRows("ao", "AO", cfg.AO, 4)
-	validateRows("do", "DO", cfg.DO, 4)
+	// `F-PIO-008`: ba con số này TỪNG là literal. Chúng là SỨC CHỨA ABI, khai
+	// báo một lần ở `internal/capabilities`. Trần theo NĂNG LỰC BO thì khác —
+	// nó nằm ở `configschema.Bounds`, vì siết không gian định danh điểm theo
+	// runtime sẽ đổi luôn nghĩa của "must include channel N exactly once" và
+	// thuộc về đợt hỗ trợ SKU DI.
+	validateRows("ui", "UI", cfg.UI, capabilities.ABIUniversalInputs)
+	validateRows("ao", "AO", cfg.AO, capabilities.ABIAnalogOutputs)
+	validateRows("do", "DO", cfg.DO, capabilities.ABIDigitalOutputs)
 	return errs
 }
 
@@ -513,9 +520,9 @@ func migratePointMetadata(ioCfg ConfigIO, vpCfg ConfigVirtualPoints) (ConfigIO, 
 		}
 		return out
 	}
-	migratedIO.UI = addRows(ioCfg.UI, "UI", 16)
-	migratedIO.AO = addRows(ioCfg.AO, "AO", 4)
-	migratedIO.DO = addRows(ioCfg.DO, "DO", 4)
+	migratedIO.UI = addRows(ioCfg.UI, "UI", capabilities.ABIUniversalInputs)
+	migratedIO.AO = addRows(ioCfg.AO, "AO", capabilities.ABIAnalogOutputs)
+	migratedIO.DO = addRows(ioCfg.DO, "DO", capabilities.ABIDigitalOutputs)
 	for i := range migratedVPs.Items {
 		item := &migratedVPs.Items[i]
 		item.ID = canonicalVirtualPointID(item.ID)
@@ -825,9 +832,9 @@ func validateLegacyPhysicalTopology(cfg ConfigIO) []configValidationError {
 			seen[channel] = i
 		}
 	}
-	validateRows("ui", cfg.UI, 16)
-	validateRows("ao", cfg.AO, 4)
-	validateRows("do", cfg.DO, 4)
+	validateRows("ui", cfg.UI, capabilities.ABIUniversalInputs)
+	validateRows("ao", cfg.AO, capabilities.ABIAnalogOutputs)
+	validateRows("do", cfg.DO, capabilities.ABIDigitalOutputs)
 	return errs
 }
 
