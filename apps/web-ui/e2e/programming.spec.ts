@@ -741,7 +741,7 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
 
     // UJ-PROG-01 — Tổng quan
     await navigate(page, '/eng/programming')
-    await expect(page.getByRole('heading', { name: 'Lập trình điều khiển' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Làm mới|Refresh/ })).toBeVisible()
     expect(await page.evaluate(() => typeof crypto.randomUUID)).toBe('undefined')
     expect(await page.evaluate(() => typeof crypto.subtle)).toBe('undefined')
     // T60-102/T60-103 ĐẢO CHIỀU khẳng định này: trước Plan 60, Tổng quan in
@@ -943,7 +943,7 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await login(page)
 
     const screens = [
-      { path: '/eng/programming', ready: page.getByRole('heading', { name: 'Lập trình điều khiển' }) },
+      { path: '/eng/programming', ready: page.getByRole('button', { name: /Làm mới|Refresh/ }) },
       { path: `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`, ready: page.getByRole('button', { name: /Điều khiển AHU/ }) },
       {
         path: `/eng/programming/projects/${PROJECT_ID}/commission?revisionId=revision-mock-0001&checkId=check-mock-0001`,

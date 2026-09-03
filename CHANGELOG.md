@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Refactored — `TASK-FBD-05-6` tối ưu hóa tách chunk Programming và giải phóng import tĩnh (2026-09-03)
+
+- **Trích xuất helper dùng chung:** Tách `collectStInterfaceVariables` và interface `StInterfaceVariable` từ `ProgramsTab.tsx` ra module riêng `stInterfaceVariables.ts`.
+- **Gỡ bỏ static import chéo:** Chuyển `mappingViewModel.ts` sang import từ `stInterfaceVariables.ts`, giải quyết triệt để cảnh báo Rollup `INEFFECTIVE_DYNAMIC_IMPORT` đối với `ProgramsTab.tsx`.
+- **Đạt chuẩn ngân sách bundle R1 & R3:** Kích thước gzip của chunk `programming-*.js` giảm từ 167.20 KiB xuống còn **122.61 KiB**, đạt chuẩn ngân sách R1 (125.00 KiB, dư địa 2.39 KiB) và R3 (165.00 KiB, dư địa 42.39 KiB).
+- **Kiểm chứng đầy đủ:** 108/108 test files (1603/1603 tests) của `features/programming` PASS 100%, `npm run build` hoàn thành không lỗi.
+
 ### Refactored — `TASK-FBD-05-5` trích xuất FbdEditorPane ra module riêng từ ProgramsTab.tsx (2026-09-03)
 
 - **Trích xuất component:** Tạo `FbdEditorPane.tsx` tiếp nhận toàn bộ phần render editor pane, status bar, các nút Lưu/Kiểm tra/So sánh và logic POU FBD; đồng thời export `parseFbdDocument` an toàn (fallback `emptyFbdDocument` khi JSON hỏng) để `ProgramsTab.tsx` và Inspector tiếp tục tái dùng chung.

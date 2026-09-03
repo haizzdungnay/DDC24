@@ -61,13 +61,13 @@ export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
  *
  * Bọc cả sáu workspace bên trong `AppShell` (đã có `<main>`, skip-link và
  * `RouteErrorBoundary` riêng — KHÔNG mở thêm `<main>`/boundary ở đây, cùng lý
- * do đã ghi ở `ModbusRtuLayout`). Có đúng một `<h1>` (trong `ProgrammingHeader`).
+ * do đã ghi ở `ModbusRtuLayout`). `ProgrammingHeader` chỉ giữ các nút thao tác.
  *
  * BỐ CỤC (README §3 — Feature Rail 220 | Context Strip | workspace):
  *
  * ```text
  * ProgrammingFeatureRail 220px │ ProgrammingContextStrip 38px, sticky
- *                              │ ProgrammingHeader (<h1> + Làm mới)
+ *                              │ ProgrammingHeader (các nút thao tác)
  *                              │ <Outlet/>
  * ```
  *

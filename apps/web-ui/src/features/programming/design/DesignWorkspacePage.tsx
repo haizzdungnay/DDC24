@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth, roleAtLeast } from '../../auth'
@@ -6,7 +6,7 @@ import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
 import { useDraftWorkspace } from './useDraftWorkspace'
 import { useViewportFillHeight } from './useViewportFillHeight'
-import { ProgramsTab } from './editor/ProgramsTab'
+const ProgramsTab = lazy(() => import('./editor/ProgramsTab').then((m) => ({ default: m.ProgramsTab })))
 import { MappingTab } from './mapping/MappingTab'
 import { ExecutionTab } from './task/ExecutionTab'
 import { Modal } from '../../../shared/components/Modal'
@@ -820,45 +820,47 @@ export function DesignWorkspacePage({
             onReturnToDraft={() => switchWorkspaceMode('EDIT')}
           />
         ) : (
-        <ProgramsTab
-          document={document}
-          saving={workspace.saving}
-          selectedProgramId={selectedProgramId}
-          onSelectProgram={selectProgram}
-          onSave={workspace.save}
-          diagnostics={checkDiagnostics}
-          checkSymbols={checkSymbols}
-          checkState={checkState}
-          hasCheckResult={hasCheckResult}
-          checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
-          focusDiagnostic={focusDiagnostic}
-          focusFbdSelection={compareFbdFocus}
-          onPendingOperationsChange={updateProgramOperations}
-          discardVersion={discardVersion}
-          onRunCheck={goToCommission}
-          onOpenCompare={() => setCompareOpen(true)}
-          checkDisabledReason={draftDirty
-            ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
-                   'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
-            : null}
-          compareDisabledReason={null}
-          explorerSlot={(
-            <div className="mb-3">
-              <PouExplorer
-                document={document}
-                publishedSignals={publishedSignals}
-                canEdit={canEdit}
-                saving={workspace.saving}
-                selectedObjectId={selectedObjectId}
-                onSelect={selectPou}
-                onSave={workspace.save}
-              />
-            </div>
-          )}
-          userPouInterfaces={userPouInterfaces}
-          forceReadOnly={mobileReadOnly}
-          onWatchVariable={watchVariable}
-        />
+          <Suspense fallback={<StateBlock state="loading" title={pick('Đang tải trình soạn thảo…', 'Loading editor…')} />}>
+            <ProgramsTab
+              document={document}
+              saving={workspace.saving}
+              selectedProgramId={selectedProgramId}
+              onSelectProgram={selectProgram}
+              onSave={workspace.save}
+              diagnostics={checkDiagnostics}
+              checkSymbols={checkSymbols}
+              checkState={checkState}
+              hasCheckResult={hasCheckResult}
+              checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
+              focusDiagnostic={focusDiagnostic}
+              focusFbdSelection={compareFbdFocus}
+              onPendingOperationsChange={updateProgramOperations}
+              discardVersion={discardVersion}
+              onRunCheck={goToCommission}
+              onOpenCompare={() => setCompareOpen(true)}
+              checkDisabledReason={draftDirty
+                ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
+                       'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
+                : null}
+              compareDisabledReason={null}
+              explorerSlot={(
+                <div className="mb-3">
+                  <PouExplorer
+                    document={document}
+                    publishedSignals={publishedSignals}
+                    canEdit={canEdit}
+                    saving={workspace.saving}
+                    selectedObjectId={selectedObjectId}
+                    onSelect={selectPou}
+                    onSave={workspace.save}
+                  />
+                </div>
+              )}
+              userPouInterfaces={userPouInterfaces}
+              forceReadOnly={mobileReadOnly}
+              onWatchVariable={watchVariable}
+            />
+          </Suspense>
         )}
         {/* `T59-807` / `WP-06-R1` — MỘT workbench dùng chung. Trước đây mỗi
             loại thông tin sống ở một chỗ và theo một luật khác nhau: lỗi Draft

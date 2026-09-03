@@ -271,7 +271,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     fireEvent.click(await pouInTree('ValidName'))
-    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
     expect(within(inspector).queryByText('Tag chức năng')).not.toBeInTheDocument()
 
     const nameInput = within(inspector).getByLabelText('Tên')
@@ -310,7 +310,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     // Chưa chọn chương trình nào: cột Inspector vẫn tồn tại, hiện trạng thái trống.
     const tree = screen.getByRole('navigation', { name: 'Cây POU' })
-    const inspectorEmpty = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    const inspectorEmpty = await screen.findByRole('complementary', { name: 'Thuộc tính' })
     expect(within(inspectorEmpty).getByText('Chọn một chương trình để xem thuộc tính.')).toBeInTheDocument()
 
     fireEvent.click(await pouInTree('Chương trình A'))
@@ -320,7 +320,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     // không phải Inspector thay thế editor hay nằm dưới nó.
     expect(tree).toBeInTheDocument()
     expect(screen.getByLabelText(/Mã nguồn ST/)).toBeInTheDocument()
-    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
     expect(within(inspector).getByLabelText('Tên')).toHaveValue('Chương trình A')
     expect(within(inspector).getByLabelText('Loại')).toHaveValue('PROGRAM')
   })
@@ -341,7 +341,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     fireEvent.click(await pouInTree('Chương trình A'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
-    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
     const kindSelect = within(inspector).getByLabelText('Loại') as HTMLSelectElement
     const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
     expect(options).toEqual(['PROGRAM'])
@@ -367,7 +367,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     fireEvent.click(await pouInTree('FB cũ từ bundle'))
     await screen.findByLabelText(/Mã nguồn ST/)
 
-    const inspector = screen.getByRole('complementary', { name: 'Thuộc tính' })
+    const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
     // Accessible name của <select> nuốt luôn text cảnh báo trong cùng <label>
     // khi kind khác PROGRAM (span warning render bên trong label bao ngoài) —
     // dùng regex bắt đầu bằng "Loại" thay vì so khớp tuyệt đối.
