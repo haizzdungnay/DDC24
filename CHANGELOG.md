@@ -8,6 +8,30 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-36` nhóm `5a…5g`: bằng chứng đóng của `ISS-PIO-31`, chạy trên cấu hình thật (#382, #375, 2026-09-03)
+
+- **Vì sao cần.** Bốn bước trước của `ISS-PIO-31` có test đơn vị dựng `ModbusSlotSnapshot` **bằng
+  tay**. Chúng chứng minh **luật** đúng, nhưng không chứng minh rằng thứ **đọc từ cấu hình thật** cho
+  ra đúng bố cục ấy. Chính issue #375 sinh ra vì một khoảng cách kiểu đó: luật thì đúng, còn dữ liệu
+  đi vào luật lại đến từ chỗ khác.
+- **Cách làm.** Mỗi kịch bản ghi một `fieldbus.conf` **thật**, đi qua **đúng adapter production**
+  (`programmingModbusSlots`), rồi hỏi **đúng authority** mà Check và Commission hỏi. Không mock,
+  không dựng snapshot bằng tay.
+- **Gom hai nửa phép kiểm thành một authority.** `ModbusSlotSnapshot.VerifyBinding` nay chứa cả hai
+  nửa của `AC-PIO-ID-02` (slot còn đúng + thứ slot trỏ tới còn đúng); Commission gọi nó thay vì tự
+  ghép hai phép kiểm. Ba đường — Check, Commission, bằng chứng — đi qua **một** hàm, nên bằng chứng
+  nói về đúng thứ đang chạy chứ không chứng minh cho chính nó.
+- **Bảy kịch bản, tất cả xanh:** `5a` đổi tên hàng xóm ⇒ dịch slot ⇒ chặn · `5b` thêm điểm đứng trước
+  ⇒ chặn · `5c` tắt điểm giữa dải ⇒ chặn · `5d` đảo thứ tự thiết bị ⇒ chặn · `5e` đổi
+  register/địa chỉ/datatype/quyền **mà giữ nguyên slot** ⇒ chặn (4 ca con) · `5f` binding legacy:
+  chứng minh được identity ⇒ đi tiếp, không chứng minh được ⇒ chặn và giữ LKG · `5g` `ext_idx = 0` ⇒
+  `extIndex = 1`, không phát slot 0, và **thanh ghi 0 đọc được như giá trị thật** (bài học của #466).
+- **Đã tiêm lỗi để chứng minh bộ bằng chứng còn kêu:** cho `VerifyBinding` luôn trả "khớp" ⇒ **10/10**
+  kịch bản đỏ.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · bảy kịch bản `5a…5g` xanh.
+- **CI vẫn bị chặn** (không cấp runner) — xem #414.
+
+
 ### Changed — dọn 17 Project rác trên bo Foxlinx; ô `PROJECT` thôi là dropdown (2026-09-03)
 
 - **Triệu chứng.** Ô `PROJECT` ở workspace Programming là dropdown **18 mục**, 17 trong đó là rác của

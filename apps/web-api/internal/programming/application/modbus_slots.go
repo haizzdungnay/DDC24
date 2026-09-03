@@ -97,6 +97,33 @@ type ModbusSlotSnapshot struct {
 	Slots          []ModbusSlot
 }
 
+// VerifyBinding trả lý do CHẶN, hoặc chuỗi rỗng khi binding vẫn đúng.
+//
+// Đây là AUTHORITY duy nhất của `AC-PIO-ID-02`, gom cả hai nửa:
+//
+//  1. slot còn phân giải được từ danh tính bền và khớp số đã đóng dấu;
+//  2. thứ slot TRỎ TỚI (register / address / datatype / access) không đổi.
+//
+// Cả Check, Commission lẫn bộ bằng chứng `5a…5g` của `ISS-PIO-36` đều đi qua
+// đây. Ba đường gọi cùng một hàm là điều kiện để bằng chứng nói về đúng thứ
+// đang chạy — ba bản cài riêng thì bằng chứng chỉ chứng minh cho chính nó.
+func (s ModbusSlotSnapshot) VerifyBinding(binding ModbusSlot) string {
+	if _, reason := resolveModbusExtIndex(&s, binding.DeviceID, binding.PointID,
+		binding.ExtIndex); reason != "" {
+		return reason
+	}
+	current, found := s.Lookup(binding.DeviceID, binding.PointID)
+	if !found {
+		return fmt.Sprintf("điểm %s#%s không còn trong cấu hình đang chạy", binding.DeviceID, binding.PointID)
+	}
+	if !current.SameTarget(binding) {
+		return fmt.Sprintf("điểm %s#%s giữ nguyên slot %d nhưng đã trỏ sang thứ khác "+
+			"(register/địa chỉ/kiểu/quyền); cần rebind rồi Commission lại",
+			binding.DeviceID, binding.PointID, binding.ExtIndex)
+	}
+	return ""
+}
+
 // ModbusSlotProvider được `internal/app` implement (adapter quanh cấu hình
 // fieldbus + `modbusrtu.BuildExtLayout`). `application` KHÔNG import
 // `internal/app` — interface đứng ở đây theo đúng hướng phụ thuộc, giống
@@ -187,19 +214,10 @@ func (s *OperationService) verifyModbusSlots(ctx context.Context, check programm
 		return err
 	}
 	for _, binding := range bindings {
-		if _, reason := resolveModbusExtIndex(&snapshot, binding.DeviceID, binding.PointID,
-			binding.ExtIndex); reason != "" {
-			return publicOperationError(domain.ErrMapIdentity, true)
-		}
-		/* `AC-PIO-ID-02` đòi xác minh TRỌN chuỗi
-		 * `pointId → extIndex → bus / device / register / datatype / access`.
-		 *
-		 * Slot khớp mới là nửa đầu. Sửa `address`, đổi kiểu thanh ghi, đổi
-		 * datatype hay hạ quyền ghi đều KHÔNG làm slot dịch chỗ — nhưng đều làm
-		 * binding đã duyệt đọc/ghi một thứ khác. Không kiểm nốt nửa này thì
-		 * phép kiểm nói "khớp" cho đúng những ca im lặng nhất. */
-		current, found := snapshot.Lookup(binding.DeviceID, binding.PointID)
-		if !found || !current.SameTarget(binding) {
+		/* Một hàm, không hai. `VerifyBinding` gom cả hai nửa của
+		 * `AC-PIO-ID-02` — slot còn đúng, và thứ slot trỏ tới còn đúng — nên
+		 * Commission, Check và bộ bằng chứng `5a…5g` không thể trôi khỏi nhau. */
+		if reason := snapshot.VerifyBinding(binding); reason != "" {
 			return publicOperationError(domain.ErrMapIdentity, true)
 		}
 	}
