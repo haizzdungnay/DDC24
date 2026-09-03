@@ -62,7 +62,7 @@
  * quality_reason + sample timestamp. Đây là ABI change THẬT — stride của
  * plc_shm.ext[] đổi từ 40 lên 64 byte nên MỌI offset sau ext[] dịch chỗ.
  * Magic phải đổi để binary cũ FAIL RÕ thay vì đọc lệch trường trong im lặng. */
-#define KX_SHM_MAGIC      0x4B584405u   /* "KXD\5" v5: ext point v2 (double + quality 5 mức + timestamp) */
+#define KX_SHM_MAGIC      0x4B584406u   /* "KXD\6" v6: io_shm chở BOARD_CAP_MAP (ISS-PIO-11) */
 
 #define KX_N_UI   16   /* v2: Rev A 16 UI analog (ADR-010) */
 #define KX_N_DI   8    /* reserved: DI optional SKU; base SKU stays 0 in SHM */
@@ -229,6 +229,41 @@ typedef struct {
      * poll loop IOP. Đơn vị microsecond giữ đủ độ phân giải quanh cổng 200 ms;
      * 0 = chưa có đủ hai phản hồi để đo. Nối cuối để reader cũ không lệch ABI. */
     uint32_t max_iop_poll_gap_us;
+
+    /* ---- `ISS-PIO-11`/`F-PIO-008`: BẢN ĐỒ NĂNG LỰC BO (WRITER=iobus) ----
+     *
+     * Hợp đồng IOP đã có `BOARD_CAP_MAP` từ lâu (`iop_protocol.h`), `iobus` đọc
+     * nó ở handshake để kiểm hai điều kiện rồi VỨT: `grep board_cap
+     * contracts/shm/mkddc_shm.h` trước bản vá này ra 0 kết quả. Hệ quả: mọi
+     * tầng trên phải VIẾT CỨNG số kênh — bốn nguồn sự thật cho cùng một dữ kiện
+     * (`core_client.go`, `overview.go`, `points/catalog.go`, FE `utils.ts`) —
+     * và `DS_MK-DDC-24_VI` §174 hứa "khi capability map xác nhận" trong khi cơ
+     * chế đó không tồn tại.
+     *
+     * `board_cap_valid = 0` nghĩa là CHƯA HỎI ĐƯỢC (chưa handshake, hoặc MCU
+     * chưa trả). Nó KHÔNG có nghĩa "bo không có năng lực nào" — consumer phải
+     * coi đó là KHÔNG BIẾT và fail-closed, đúng nguyên tắc "thiếu bằng chứng
+     * không phải bằng chứng".
+     *
+     * VÌ SAO BUMP MAGIC — và vì sao lý do KHÔNG PHẢI là "layout đổi":
+     *
+     * Hai field này rơi trọn vào phần padding đuôi đã có, nên `sizeof
+     * (kx_io_shm_t)` GIỮ NGUYÊN 3576 và mọi offset cũ không nhúc nhích. Binary
+     * cũ đọc SHM mới vẫn đúng; binary mới đọc SHM cũ đọc trúng padding đã được
+     * `memset` về 0 lúc tạo, tức thấy `valid = 0`. Không có ca đọc lệch nào.
+     *
+     * Lý do thật nằm ở chỗ khác: KHÔNG CÓ MAGIC MỚI thì `valid = 0` có HAI
+     * nghĩa không phân biệt được — "producer đời cũ không biết field này, và sẽ
+     * không bao giờ điền" và "producer đời mới, chỉ là chưa handshake xong".
+     * Một consumer chờ năng lực bo sẽ chờ mãi ở ca thứ nhất mà không có cách
+     * nào biết. Magic v6 là câu trả lời cho "producer có nói thứ tiếng này
+     * không"; `board_cap_valid` là câu trả lời cho "nó đã hỏi được chưa". Gộp
+     * hai câu hỏi vào một field là cách một trong hai câu trả lời bị mất.
+     *
+     * Đúng tiền lệ v5 (Đ-03): consumer thấy magic cũ PHẢI từ chối. */
+    uint16_t board_cap_map;     /* gương IOP_BOARD_CAP_* từ handshake; chỉ đọc khi board_cap_valid = 1 */
+    uint8_t  board_cap_valid;   /* 1 = đã hỏi được MCU; 0 = CHƯA BIẾT (không phải "không có") */
+    uint8_t  _board_cap_pad;
 } kx_io_shm_t;
 
 /* ============ ext_shm: fieldbus (Modbus RTU master) -> hệ thống ============

@@ -132,7 +132,7 @@ chục giây:
 
 ```bash
 build/release/cpp/iobus/shm_dump_io | head -2
-# magic=0x4B584405 seq=... (age 1 ms)
+# magic=0x4B584406 seq=... (age 1 ms)
 # iop_status=NORMAL fault_flags=0x0000
 ```
 

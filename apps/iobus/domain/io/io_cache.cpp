@@ -90,6 +90,14 @@ bool IoCache::attach()
         shm_->iop_status = KX_IOP_FAULT;
         shm_->mcu_temp_x10 = 0;
         shm_->iop_rx = shm_->iop_crc_err = shm_->iop_timeout = shm_->iop_seq_err = 0;
+        /* `ISS-PIO-11` — cap phải trở lại CHƯA BIẾT sau restart.
+         *
+         * Giữ `valid = 1` từ lần chạy trước nghĩa là trong khoảng từ lúc iobus
+         * lên tới lúc handshake xong, tầng trên đọc được một bản đồ năng lực
+         * của một cái bo có thể đã bị thay. Field này là câu trả lời cho "bo
+         * ĐANG cắm quảng cáo gì", không phải "lần trước quảng cáo gì". */
+        shm_->board_cap_map   = 0;
+        shm_->board_cap_valid = 0;
         KX_WRITE_END(shm_);
         std::fprintf(stderr, "INFO  io_cache.reattach giữ ao_setpoint/do_cmd của core\n");
     }
@@ -243,6 +251,18 @@ void IoCache::write_bacnet_bind(bool bound, uint16_t udp_port)
     KX_WRITE_BEGIN(shm_);
     shm_->bacnet_bound    = bound ? 1u : 0u;
     shm_->bacnet_udp_port = bound ? udp_port : 0u;
+    KX_WRITE_END(shm_);
+}
+
+void IoCache::write_board_capabilities(uint16_t board_cap_map)
+{
+    if (!shm_) return;
+    KX_WRITE_BEGIN(shm_);
+    shm_->board_cap_map   = board_cap_map;
+    /* Chỉ đặt `valid` SAU khi đã ghi giá trị, trong cùng một lượt seqlock:
+     * reader thấy `valid = 1` phải chắc chắn `board_cap_map` đã là số thật, chứ
+     * không phải giá trị khởi tạo. */
+    shm_->board_cap_valid = 1u;
     KX_WRITE_END(shm_);
 }
 

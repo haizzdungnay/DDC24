@@ -44,6 +44,14 @@ public:
     void write_bus_metrics(const kx_bus_metrics_t* buses, size_t count,
                            uint64_t producer_boot_id, uint64_t counters_since_ms);
 
+    /* `ISS-PIO-11` — chở BOARD_CAP_MAP của handshake vào SHM.
+     *
+     * `iobus` là tầng DUY NHẤT nói chuyện IOP, nên nó là nơi duy nhất biết bo
+     * quảng cáo năng lực gì. Trước bản vá này nó đọc cap để kiểm hai điều kiện
+     * rồi vứt, và mọi tầng trên phải viết cứng số kênh — bốn nguồn sự thật cho
+     * cùng một dữ kiện. */
+    void write_board_capabilities(uint16_t board_cap_map);
+
     /* Publish trạng thái bind BACnet/IP THẬT (finding F-04).
      * `bound` phải là kết quả bip_init()/rebind(), không phải cờ enabled trong config. */
     void write_bacnet_bind(bool bound, uint16_t udp_port);

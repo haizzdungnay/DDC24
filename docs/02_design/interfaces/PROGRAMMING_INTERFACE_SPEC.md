@@ -10,7 +10,7 @@
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
 | Nguồn thẩm quyền | Baseline: `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001`; Candidate: `CR-PROG-PGM02-V22-001`, `DDD-SW-PGM02-WORKSPACE-001`, `ADR-053` Proposed |
-| Phạm vi phiên bản | Baseline: 33 OpenAPI operation, v1.28.0, Programming IPC v1 + canonical CBOR, SHM magic v5; Candidate: R1 EDIT → R2 LIVE → R3 SIMULATE |
+| Phạm vi phiên bản | Baseline: 33 OpenAPI operation, v1.28.0, Programming IPC v1 + canonical CBOR, SHM magic v6; Candidate: R1 EDIT → R2 LIVE → R3 SIMULATE |
 | Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001`, `DDD-SW-PGM02-WORKSPACE-001` |
 
 ## 0. Đọc nhanh
@@ -594,7 +594,7 @@ signal lỗi, scheduler phải restore set cũ tại cùng boundary; response gi
 ### 12.1 Web/Iobus shared-memory read-back
 
 `contracts/shm/mkddc_shm.h` là authority: path `/dev/shm/mkddc_io_shm`, magic
-`0x4B584405` (v5), writer iobus và reader Core/Web. Reader Go phải
+`0x4B584406` (v6 — `ISS-PIO-11` chở BOARD_CAP_MAP), writer iobus và reader Core/Web. Reader Go phải
 `mmap(PROT_READ, MAP_SHARED)`, atomic-load `seq`, bỏ seq lẻ, copy toàn segment,
 đọc lại seq và retry bounded tối đa 5 lần; `os.ReadFile`/`pread` bị cấm vì có thể
 trả snapshot xé. Segment đổi inode sau restart phải detach/attach lại.

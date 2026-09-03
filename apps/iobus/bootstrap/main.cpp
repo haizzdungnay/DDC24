@@ -658,6 +658,12 @@ int main(int argc, char** argv)
                              cap, IOP_BOARD_CAP_REV_A);
             }
         }
+        /* `ISS-PIO-11` — chở cap vào SHM NGAY SAU khi kiểm, trước mọi bước có
+         * thể fail: hai kiểm ở trên chỉ dùng cap rồi bỏ, và đó là lý do bốn
+         * tầng phía trên phải viết cứng số kênh. Ghi ở đây thì kể cả khi
+         * RESET_IO/SET_AO_CFG hỏng, tầng trên vẫn biết bo quảng cáo gì. */
+        cache.write_board_capabilities(client.board_cap_map());
+
         /* RESET_IO reason=NORMAL — khuyến nghị, fail chỉ WARN */
         IopResult rst = client.reset_io(IOP_RESET_REASON_NORMAL);
         if (!rst.ok())

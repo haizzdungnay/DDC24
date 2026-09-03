@@ -112,6 +112,12 @@ static void print_text(const kx_io_shm_t* s)
            s->do_feedback[0], s->do_feedback[1], s->do_feedback[2], s->do_feedback[3]);
     printf("  metrics: rx=%u crc_err=%u timeout=%u seq_err=%u\n",
            s->iop_rx, s->iop_crc_err, s->iop_timeout, s->iop_seq_err);
+    /* `ISS-PIO-11` — in ra "CHƯA HỎI ĐƯỢC" chứ không in 0x0000: một bản đồ năng
+     * lực toàn 0 và một bản đồ chưa hỏi được là hai tình huống khác hẳn nhau. */
+    if (s->board_cap_valid)
+        printf("  board_cap=0x%04X\n", s->board_cap_map);
+    else
+        printf("  board_cap=CHƯA HỎI ĐƯỢC (chưa handshake hoặc MCU chưa trả)\n");
 }
 
 static void print_json(const kx_io_shm_t* s)

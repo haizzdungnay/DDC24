@@ -6,7 +6,7 @@
 
 TEST(ShmLayout, IoShmV5OffsetsMatchWebAndTools)
 {
-    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584405u);
+    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584406u);
     EXPECT_EQ(offsetof(kx_io_shm_t, ui_raw), static_cast<std::size_t>(80));
     EXPECT_EQ(offsetof(kx_io_shm_t, ui_reliability), static_cast<std::size_t>(160));
     EXPECT_EQ(offsetof(kx_io_shm_t, ui_raw_unit), static_cast<std::size_t>(304));
@@ -23,7 +23,7 @@ TEST(ShmLayout, IoShmV5OffsetsMatchWebAndTools)
  * uint64, và đó là lý do magic đi từ v4 lên v5. */
 TEST(ShmLayout, FieldbusTelemetryIsAppendedWithoutMovingLegacyFields)
 {
-    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584405u);
+    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584406u);
     EXPECT_EQ(offsetof(kx_io_shm_t, bacnet_udp_port), static_cast<std::size_t>(524));
     EXPECT_EQ(offsetof(kx_io_shm_t, bacnet_bound), static_cast<std::size_t>(526));
     EXPECT_EQ(offsetof(kx_io_shm_t, fb_slave_count), static_cast<std::size_t>(527));
@@ -161,4 +161,39 @@ TEST(ShmLayoutV2, QualityEnumHasFiveLevelsAndTenReasons)
     EXPECT_EQ(static_cast<int>(KX_EXTQ_OFFLINE), 3);
     EXPECT_EQ(static_cast<int>(KX_EXTQ_CONFIG_ERROR), 4);
     EXPECT_EQ(static_cast<int>(KX_EXTR_BUS_OVERLOAD), 10);
+}
+
+/* `ISS-PIO-11` — BOARD_CAP_MAP phải có mặt trong io_shm, và magic phải lên v6.
+ *
+ * Hai khẳng định đi cùng nhau có chủ ý, nhưng KHÔNG phải vì layout đổi: hai
+ * field mới rơi trọn vào padding đuôi, nên `sizeof` giữ nguyên 3576 và mọi
+ * offset cũ không nhúc nhích — chính test này khoá điều đó.
+ *
+ * Magic phải lên vì nếu không, `valid = 0` mang HAI nghĩa không phân biệt được:
+ * "producer đời cũ không bao giờ điền field này" và "producer đời mới chưa
+ * handshake xong". Consumer chờ năng lực bo sẽ chờ mãi ở ca thứ nhất.
+ */
+TEST(ShmLayout, BoardCapabilityFieldsExistAndMagicIsV6)
+{
+    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584406u)
+        << "thêm trường vào io_shm mà không bump magic thì binary cũ đọc lệch trong im lặng";
+
+    kx_io_shm_t shm{};
+    shm.board_cap_map = 0x1234u;
+    shm.board_cap_valid = 1u;
+    EXPECT_EQ(shm.board_cap_map, 0x1234u);
+    EXPECT_EQ(shm.board_cap_valid, 1u);
+
+    /* `valid = 0` là CHƯA BIẾT, không phải "bo không có năng lực nào" — hai thứ
+     * này khác nhau ở chỗ cái sau cho phép tầng trên kết luận, còn cái trước
+     * bắt nó fail-closed. Zero value của struct phải rơi vào "chưa biết". */
+    kx_io_shm_t fresh{};
+    EXPECT_EQ(fresh.board_cap_valid, 0u);
+
+    /* Bằng chứng "không dịch chỗ": kích thước và offset cũ giữ nguyên, hai
+     * field mới nằm trong padding đã có. */
+    EXPECT_EQ(sizeof(kx_io_shm_t), static_cast<std::size_t>(3576));
+    EXPECT_EQ(offsetof(kx_io_shm_t, board_cap_map), static_cast<std::size_t>(3572));
+    EXPECT_EQ(offsetof(kx_io_shm_t, board_cap_valid), static_cast<std::size_t>(3574));
+    EXPECT_EQ(offsetof(kx_io_shm_t, max_iop_poll_gap_us), static_cast<std::size_t>(3568));
 }

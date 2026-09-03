@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-11` chở `BOARD_CAP_MAP` từ handshake IOP vào `io_shm` (#388, 2026-09-03)
+
+- **Triệu chứng.** Hợp đồng IOP **đã có** bản đồ năng lực từ lâu; `iobus` đọc nó ở handshake để kiểm
+  hai điều kiện rồi **vứt** — `grep board_cap contracts/shm/mkddc_shm.h` ra **0 kết quả**. Hệ quả:
+  mọi tầng trên phải **viết cứng** số kênh, thành **bốn nguồn sự thật** cho cùng một dữ kiện
+  (`core_client.go`, `overview.go`, `points/catalog.go`, FE `utils.ts`), và `DS_MK-DDC-24_VI` §174
+  hứa *"khi capability map xác nhận"* trong khi cơ chế đó **không tồn tại**.
+- **Cách sửa.** `io_shm` mang `board_cap_map` + `board_cap_valid`; `iobus` ghi ngay sau handshake,
+  **trước** mọi bước có thể fail, nên kể cả khi `RESET_IO`/`SET_AO_CFG` hỏng thì tầng trên vẫn biết
+  bo quảng cáo gì. `valid` chỉ được đặt **sau** giá trị, trong cùng một lượt seqlock. Khi `iobus`
+  restart, `valid` trở lại 0 — field này trả lời *"bo ĐANG cắm quảng cáo gì"*, không phải *"lần
+  trước quảng cáo gì"*.
+- **Một lý do tôi viết sai rồi sửa.** Bản nháp đầu bump magic với lý do *"binary mới mở SHM cũ sẽ ánh
+  xạ quá cuối file → SIGBUS"*. **Sai:** hai field rơi trọn vào **padding đuôi đã có**, nên
+  `sizeof(kx_io_shm_t)` **giữ nguyên 3576** và mọi offset cũ không nhúc nhích — test khoá cả ba con
+  số đó. Lý do **thật** để bump: không có magic mới thì `valid = 0` mang **hai** nghĩa không phân
+  biệt được — *"producer đời cũ không bao giờ điền field này"* và *"producer đời mới chưa handshake
+  xong"* — và consumer chờ năng lực bo sẽ **chờ mãi** ở ca thứ nhất. Magic v6 trả lời *"producer có
+  nói thứ tiếng này không"*; `board_cap_valid` trả lời *"nó đã hỏi được chưa"*.
+- **Đồng bộ theo magic v6:** `core_client.go`, test ABI BACnet, `shm_dump_io` (in *"CHƯA HỎI ĐƯỢC"*
+  chứ không in `0x0000` — một bản đồ toàn 0 và một bản đồ chưa hỏi được là hai tình huống khác hẳn),
+  và hai tài liệu ghim magic.
+- **Đo lại.** `layout` exit 0 · C++ `full` (`-Werror`) **1390/1390** exit 0 · Go **19 package `ok`**
+  (`-race`).
+- **CI vẫn bị chặn** (không cấp runner) — xem #414.
+
+
 ### Fixed — `ISS-PIO-04` Point Catalog cắt ở 500 mục nhưng vẫn khai là đã đủ (#380, 2026-09-03)
 
 - **Triệu chứng.** `ListPointCatalog` cắt `entries[:limit]` rồi trả `NextCursor = nil`. FE suy "đầy

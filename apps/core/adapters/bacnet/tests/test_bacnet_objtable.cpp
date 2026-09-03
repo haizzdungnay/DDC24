@@ -215,7 +215,8 @@ TEST(BacnetObjTableAbi, MagicBumpedSoStaleReadersFailLoudly)
     /* Layout của ext[] đổi thứ tự/kiểu/kích thước ⇒ magic BẮT BUỘC phải đổi.
      * Giữ nguyên magic ở đây nghĩa là một web binary cũ vẫn chấp nhận SHM mới
      * và đọc lệch trường trong im lặng — sai kiểu tệ nhất. */
-    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584405u);
+    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584406u);
+    EXPECT_NE(KX_SHM_MAGIC, 0x4B584405u);
     EXPECT_NE(KX_SHM_MAGIC, 0x4B584404u);
 }
 

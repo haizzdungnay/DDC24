@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	kxShmMagic    = 0x4B584405
+	kxShmMagic    = 0x4B584406
 	defaultIOShm  = "/dev/shm/mkddc_io_shm"
 	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
 )
