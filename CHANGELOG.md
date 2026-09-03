@@ -76,6 +76,268 @@
   - Cập nhật SHA baseline của plan neo chính xác vào commit HEAD sau merge `70d70c59` (146 file thay đổi).
   - Bổ sung cấu hình mock route và storage state trong `e2e/fbd-edit.spec.ts` để bộ test E2E tự chủ dữ liệu, không cần backend live.
 
+### Fixed — `ISS-PIO-04` Point Catalog cắt ở 500 mục nhưng vẫn khai là đã đủ (#380, 2026-09-03)
+
+- **Triệu chứng.** `ListPointCatalog` cắt `entries[:limit]` rồi trả `NextCursor = nil`. FE suy "đầy
+  đủ" **chỉ từ `nextCursor`**, nên với một cấu hình **hợp lệ** vượt 500 điểm — trần thật của hệ là
+  24 LOCAL + 464 VP + 256 EXT = **744** — những điểm cuối bảng chữ cái **đơn giản không tồn tại** đối
+  với kỹ sư: bảng không có dấu `+`, nút Map vẫn mở, không một dòng cảnh báo.
+- **Nguyên nhân gốc.** Server **nói dối đúng cái trường mà FE tin**. FE vốn đã đúng: `complete =
+  nextCursor ? false : true`, chip hiện `500+`, banner khoá Map/Remove khi chưa đủ — nhưng nó không
+  bao giờ được nghe sự thật.
+- **Cách sửa.** Phân trang **tất định theo khoá bền** `(category, deviceId, pointId)` — đúng bộ ba
+  danh tính mà `ISS-PIO-31` đã khoá. Cursor mang **khoá của mục cuối trang trước**, ký HMAC và có
+  hạn 15 phút, cùng khuôn với cursor thư viện/audit đã có.
+  - **Vì sao khoá chứ không phải offset:** catalog đọc lại authority thật ở mỗi request, nên nội dung
+    có thể đổi giữa hai trang. Với offset, thêm một điểm ở đầu bảng làm cả trang sau lùi một ô —
+    **một điểm bị lặp, một điểm biến mất**. Cursor theo khoá thì chèn/xoá ở phần đã đi qua không đẩy
+    phần chưa đi.
+  - **Không dùng `name` làm khoá:** người dùng đổi nhãn hiển thị thường xuyên, và một khoá sắp xếp
+    đổi được là một cursor nhảy chỗ.
+  - Route `GET /point-catalog` nhận `cursor` từ query; không có nó thì `nextCursor` server trả về
+    không ai dùng được và bảng vẫn dừng ở trang đầu.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · FE **199 file / 2448 test** + lint
+  + build + ngân sách bundle PASS. Bốn test BE: đi hết **744** điểm không lặp không mất · trang đầu
+  **thừa nhận còn nữa** · catalog đổi giữa hai trang **không lặp, không nhảy** · cursor bị sửa **bị
+  từ chối**. Hai test FE khoá nửa nhìn thấy được: chip `+` và banner khoá Map.
+- **CI vẫn bị chặn** (không cấp runner) — xem #414.
+
+
+### Added — `ISS-PIO-36` nhóm `5a…5g`: bằng chứng đóng của `ISS-PIO-31`, chạy trên cấu hình thật (#382, #375, 2026-09-03)
+
+- **Vì sao cần.** Bốn bước trước của `ISS-PIO-31` có test đơn vị dựng `ModbusSlotSnapshot` **bằng
+  tay**. Chúng chứng minh **luật** đúng, nhưng không chứng minh rằng thứ **đọc từ cấu hình thật** cho
+  ra đúng bố cục ấy. Chính issue #375 sinh ra vì một khoảng cách kiểu đó: luật thì đúng, còn dữ liệu
+  đi vào luật lại đến từ chỗ khác.
+- **Cách làm.** Mỗi kịch bản ghi một `fieldbus.conf` **thật**, đi qua **đúng adapter production**
+  (`programmingModbusSlots`), rồi hỏi **đúng authority** mà Check và Commission hỏi. Không mock,
+  không dựng snapshot bằng tay.
+- **Gom hai nửa phép kiểm thành một authority.** `ModbusSlotSnapshot.VerifyBinding` nay chứa cả hai
+  nửa của `AC-PIO-ID-02` (slot còn đúng + thứ slot trỏ tới còn đúng); Commission gọi nó thay vì tự
+  ghép hai phép kiểm. Ba đường — Check, Commission, bằng chứng — đi qua **một** hàm, nên bằng chứng
+  nói về đúng thứ đang chạy chứ không chứng minh cho chính nó.
+- **Bảy kịch bản, tất cả xanh:** `5a` đổi tên hàng xóm ⇒ dịch slot ⇒ chặn · `5b` thêm điểm đứng trước
+  ⇒ chặn · `5c` tắt điểm giữa dải ⇒ chặn · `5d` đảo thứ tự thiết bị ⇒ chặn · `5e` đổi
+  register/địa chỉ/datatype/quyền **mà giữ nguyên slot** ⇒ chặn (4 ca con) · `5f` binding legacy:
+  chứng minh được identity ⇒ đi tiếp, không chứng minh được ⇒ chặn và giữ LKG · `5g` `ext_idx = 0` ⇒
+  `extIndex = 1`, không phát slot 0, và **thanh ghi 0 đọc được như giá trị thật** (bài học của #466).
+- **Đã tiêm lỗi để chứng minh bộ bằng chứng còn kêu:** cho `VerifyBinding` luôn trả "khớp" ⇒ **10/10**
+  kịch bản đỏ.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · bảy kịch bản `5a…5g` xanh.
+- **CI vẫn bị chặn** (không cấp runner) — xem #414.
+
+
+### Changed — dọn 17 Project rác trên bo Foxlinx; ô `PROJECT` thôi là dropdown (2026-09-03)
+
+- **Triệu chứng.** Ô `PROJECT` ở workspace Programming là dropdown **18 mục**, 17 trong đó là rác của
+  các đợt test (`SOAK-10P-*`, `MONITOR-BIND-*` ×8, `GHOST-CHECK-*`, `DEL-CHECK-*`, `FAULTPROBE-*`,
+  `FOX-P5-FULL-CHECK`). Trên một DDC — thiết bị chạy đúng **một** bộ chương trình — bề mặt ấy đọc như
+  một IDE quản nhiều tủ.
+- **Vì sao tích lại được (`F-SHELL-01`, vẫn MỞ).** `projects.archived` **chỉ được đọc**
+  (`WHERE p.archived=0`), **không dòng code nào ghi**; trigger `projects_no_delete` chặn xoá cứng; không
+  có route `DELETE`/archive. Soft-delete được thiết kế nhưng chưa bao giờ nối dây.
+- **Đã làm.** Sao lưu DB rồi đặt `archived=1` cho mọi project trừ `AHU-MASTER-SEQUENCE` — việc thật đang
+  chạy (`AHU_MasterSequence`, `Running/Healthy`, chu kỳ 1000 ms). Revision và lịch sử **không bị xoá**,
+  chỉ ẩn khỏi danh sách. Hoàn tác bằng `UPDATE projects SET archived=0` hoặc file sao lưu.
+- **Kết quả.** API trả **1** project; ô `PROJECT` chuyển từ dropdown thành **chữ tĩnh**. FE **đã có sẵn**
+  luật *"có đúng một Project thì canonicalize, không bắt chọn"* (`PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md`
+  §286) — cảm giác "giống IDE" hoàn toàn đến từ đống rác, không phải từ thiết kế bề mặt. Ba service vẫn
+  `active`, 0 panic/fatal/ERROR.
+- **CHƯA KHÉP LẠI.** Đây là chữa triệu chứng: đợt test kế tiếp lại tích rác đúng như cũ. Thao tác đi
+  thẳng vào SQLite nên **không sinh audit record** — lý do nữa để đường archive phải nằm trong sản phẩm.
+  Hồ sơ: `docs/07_records/test-evidence/programming/2026-09-03-project-cleanup-foxlinx.md`.
+
+
+### Removed — `Project Settings` khỏi shell Programming (`PLAN-FE-SHELL-062`, 2026-09-03)
+
+- **Gỡ cái gì.** Mục thứ bảy `Project Settings` khỏi `ProgrammingFeatureRail` và `ProgrammingMobileNav`.
+- **Không phải cắt tính năng.** Quyết định canonical `UD-PROG-008` (**CLOSED** theo `ADR-050.8`) chốt
+  **sáu** workspace `PGM-01..06`. Mục này chưa bao giờ có route — `ProgrammingRoutes` khai đúng 6 path —
+  nên FE phải render nó `aria-disabled` kèm lý do *"Chưa có trang Cài đặt Project ở bản dựng này"*. Rà
+  `docs/01_requirements/` và `PROGRAMMING_TRACEABILITY_MATRIX.md`: **không** yêu cầu nào mang tên này.
+  Xuất xứ duy nhất là một dòng mô tả trong handoff Plan 60 (`:229` — *"6 đích + Project Settings"*).
+- **Phần quan trọng hơn thao tác gỡ: cổng chống tái phát.** `shellDestinations.test.ts` khoá bất biến
+  *"mọi mục điều hướng của shell phải trỏ tới một đích CÓ THẬT; chỉ được vô hiệu vì **thiếu điều kiện**
+  (chưa chọn Project), **không bao giờ** vì trang không tồn tại"*. Cổng đối chiếu thẳng
+  `PROGRAMMING_WORKSPACE_PATHS` — bảng route đã có, không dựng bảng chép tay thứ hai vốn sẽ tự trôi.
+- **Cổng được chứng minh đỏ TRƯỚC khi gỡ** (thứ tự WP-01 → WP-02 là bắt buộc): trên baseline `6a380c8`
+  cả G1/G2/G3 đỏ, nêu đích danh `project-settings`; phép kiểm thứ tư (*"vẫn cho phép vô hiệu khi CHƯA
+  chọn Project"*) xanh ngay trên baseline — bằng chứng cổng không kiểm quá tay. Sau khi gỡ: **4/4 xanh**.
+- **Bổ chính tài liệu, không viết lại lịch sử.** `T60-101` giữ nguyên trạng thái `DONE`; thêm ghi chú bổ
+  chính tại chỗ dẫn `PLAN-FE-SHELL-062`. Sửa lặng lẽ một task đã đóng là đúng loại trôi hồ sơ mà
+  `DOC_GOVERNANCE` cấm.
+- **Không đổi**: `ProgrammingRoutes`, `NAV_GROUPS`/`ADR-032` (mục này chưa bao giờ nằm trong hợp đồng
+  route↔menu toàn cục), BE, contract, Core. Cơ chế `disabledReason` giữ nguyên cho ba đích phụ thuộc
+  Project.
+- **Bẫy đã tránh.** `toHaveLength(7)` trong test rail **giữ nguyên 7** — đó là 6 đích + lối thoát; mục bị
+  gỡ vốn là `<span role="link">`, chưa từng được đếm. Sửa thành 6 theo phản xạ sẽ làm hỏng phép kiểm.
+- **Đo lại.** FE `vitest` **2446/2446** (200 file), `lint` exit 0, `build:release` exit 0,
+  `verify-project.sh --component layout` exit 0. Đã nạp bo Foxlinx và kiểm chứng bằng Playwright trên chính bo: rail báo
+  `aria-label="Six Programming workspaces navigation"`, **7 link** (6 đích + lối thoát) và
+  `disabledItems: []` — không còn mục xám nào. Ảnh bằng chứng lưu ở
+  `docs/07_records/test-evidence/programming/2026-09-03-plan62-rail-6-destinations.png`.
+
+
+### Added — `PLAN-FE-SHELL-062`: plan gỡ toàn diện `Project Settings` khỏi shell Programming (2026-09-03)
+
+- **Bối cảnh.** Rail Programming có **bảy** mục, trong khi quyết định canonical `UD-PROG-008` (**CLOSED**
+  theo `ADR-050.8`) chỉ chốt **sáu** workspace `PGM-01..06`. Mục thứ bảy `Project Settings` chưa bao giờ
+  có route: `ProgrammingRoutes` chỉ khai 6 path, và FE render nó `aria-disabled` kèm lý do *"Chưa có
+  trang Cài đặt Project ở bản dựng này"*.
+- **Không phải gỡ tính năng.** Rà `docs/01_requirements/` và `PROGRAMMING_TRACEABILITY_MATRIX.md`: không
+  có yêu cầu nào mang tên này. Xuất xứ duy nhất là một dòng mô tả trong handoff Plan 60
+  (`60_..._PGM01_PLAN.md:229` — *"6 đích + Project Settings"*). Gỡ nó là đưa code về khớp quyết định đã ký.
+- **Trọng tâm của plan là cổng chống tái phát, không phải thao tác xoá.** Nguồn gốc mục này là một dòng
+  tài liệu; không sửa dòng đó và không có cổng máy kiểm thì đợt handoff sau chép lại y nguyên. Cổng khoá
+  bất biến *"mọi mục điều hướng phải trỏ tới một đích CÓ THẬT; chỉ được vô hiệu vì thiếu điều kiện, không
+  bao giờ vì trang không tồn tại"*, đối chiếu thẳng với `PROGRAMMING_WORKSPACE_PATHS` — bảng route đã có,
+  không dựng bảng chép tay thứ hai. Cổng phải được chứng minh **đỏ trên baseline** trước khi gỡ.
+- **Kiểm kê đầy đủ**: 6 điểm mã nguồn, 3 điểm test, 3 điểm tài liệu; đã xác nhận **không** có dấu vết
+  trong `contracts/`, `scripts/`, `e2e/`, RTM và `NAV_GROUPS` ⇒ `ADR-032` không bị động tới.
+- **Trạng thái.** DỰ THẢO — chờ duyệt trước khi code, theo `DOC_GOVERNANCE` (doc trước, code sau).
+- **Hai finding ghi lại, ngoài phạm vi plan.** `F-SHELL-01`: `projects.archived` chỉ được đọc, không nơi
+  nào ghi, cộng trigger `projects_no_delete` và không có route xoá ⇒ **project tạo ra không thể gỡ**; đo
+  trên bo 2026-09-03 có **18 project, 1 đang active**, 17 là rác test. `F-SHELL-02`: `Controller 1──*
+  Project` không có biện minh trong toàn bộ `docs/`, trong khi `Controller 1──1 RuntimeState`.
+
+
+### Fixed — dải highlight active-line vẽ ĐÈ lên chữ của chính dòng đang sửa (2026-09-03)
+
+- **Triệu chứng.** Dòng đang có con trỏ trong ST editor bị **xám đi** so với những dòng có nội dung
+  y hệt ở chỗ khác. Vì nó chỉ xảy ra ở dòng có con trỏ, mắt dễ đọc thành "chắc tại highlight" và bỏ qua.
+- **Nguyên nhân gốc.** Dải highlight là `<div position:absolute>` **không có `z-index`**, còn các span
+  tô cú pháp là nội dung inline **trong luồng** của cùng `<pre>`. Theo thứ tự vẽ của CSS, phần tử được
+  định vị với `z-index: auto` vẽ **sau** nội dung inline trong luồng — nên dải nền vẽ chồng lên chữ, và
+  `opacity: 0.55` biến nó thành một tấm màn phủ thay vì một dải nền.
+- **Đo trên Chromium** (dựng lại đúng cấu trúc DOM/CSS của editor, chụp ảnh và lấy độ sáng pixel):
+
+  | dòng | trong dải? | độ sáng chữ sáng nhất |
+  |---|---|---|
+  | 28 | không | 233/255 |
+  | **29** | **có** | **129/255** |
+  | 30 | không | 233/255 |
+
+  Mờ **45%**. Sau bản vá cả ba dòng đều 233/255, nền dải vẫn giữ nguyên.
+- **Cách sửa.** `zIndex: 0` cho dải và bọc phần chữ trong `<span position:relative; zIndex: 1>`.
+  **Không** dùng `z-index` âm cho dải: `<pre>` và các tổ tiên đều `z-index: auto` nên không tạo stacking
+  context, một giá trị âm sẽ đẩy dải ra sau nền của tổ tiên gần nhất có nền đặc — tức mất hẳn dải.
+- **Kiểm chứng.** Hai test hồi quy khoá điều kiện đủ cho thứ tự vẽ (`zIndex` tường minh ở cả hai lớp,
+  chữ lớn hơn dải, dải không âm). Test đỏ khi gỡ `zIndex` khỏi dải. FE `vitest` **2444/2444**,
+  `lint` và `build:release` exit 0.
+- **Đã loại trừ bằng đo, không phải suy đoán:** formatter (in `END_IF;` đúng một dòng, và gộp cả `;`
+  lạc đứng riêng), tokenizer (lớp `comment` là *italic*, dòng nghi vấn không nghiêng), soft-wrap
+  (`textarea` đặt `wrap="off"`), và lệch dòng giữa gutter với dải (cả hai đọc cùng `cursor.line`; đo
+  trên trình duyệt cho dải phủ đúng dòng 29).
+
+
+### Fixed — `alarms_read degraded` trên bo: web-api làm tràn hàng đợi accept của core (2026-09-03)
+
+- **Triệu chứng.** `journalctl -u mkddc-web-pi` trên bo Foxlinx liên tục có
+  `WARN alarms_read degraded err=core unavailable`, trong khi `mkddc-core` khoẻ mạnh và đã chạy 3 ngày
+  không overrun. Endpoint vẫn trả `200` nhưng kèm `degraded=true`, nên UI hiển thị danh sách alarm
+  **rỗng** thay vì báo lỗi — người vận hành đọc "không có cảnh báo nào" trên một hệ đang chạy.
+- **Đo trước khi kết luận.** Cùng mức tải ~90–105 request `/api/v1/alarms` mỗi phút: binary 30-08 hỏng
+  **15,7%** (535 req / 84 degraded), binary 03-09 hỏng **~32%**; ở mức 1,1 req/phút chỉ **2,2%**.
+  Tỉ lệ đi theo **tần suất dial**, không theo phiên bản mã ⇒ **không phải hồi quy của lần nạp**.
+- **Nguyên nhân gốc.** `WebIpc` của core (`web_ipc.cpp`) đặt `::listen(fd_, 4)`, `max_clients = 4`,
+  `max_accept_attempts = 4`, và `poll()` chạy **một lần mỗi scan cycle** — trên Foxlinx
+  `core.base_step_ms=1000`, tức **1 giây/lần**. `CoreClient.sendWebIPC` mở **một kết nối mới cho mỗi
+  request** và **không có hạn mức đồng thời nào**. Với Unix socket, `connect()` không chờ `accept()`:
+  nó thành công khi hàng đợi còn chỗ và **hỏng ngay bằng ECONNREFUSED khi hàng đợi đầy** (không có SYN
+  retry như TCP). Một trang UI poll alarms + overview + runtime + point-catalog cùng lúc vượt 4 cú dial
+  trong một chu kỳ rất dễ.
+  - *Giả thuyết đầu tiên đã bị bác bỏ.* Ban đầu quy cho `dialCore` timeout 100 ms ngắn hơn chu kỳ
+    accept 1 s. Test dựng lại mô hình cho thấy **không phải**: dial vẫn thành công vì kernel nhận vào
+    hàng đợi. Cơ chế thật là **độ sâu hàng đợi**, không phải thời gian chờ.
+- **Cách sửa.** Hạn mức đồng thời `coreWebIPCMaxInFlight = 3` (nhỏ hơn `max_clients = 4` để chừa slot
+  cho HMI/công cụ khác), acquire **tôn trọng `ctx`** để core treo không giữ handler HTTP quá deadline
+  của chính request; deadline round-trip 2 s → 5 s (round-trip thật trên bo là 800–1600 ms vì phản hồi
+  chỉ tới ở biên `poll()` kế); dial timeout 100 ms → 2,5 s (không phải thứ sửa lỗi, nhưng 100 ms không
+  có cơ sở nào so với nhịp 1 s). Đường ghi `CommandPoint` đi qua cùng hạn mức.
+  - **Không** dùng pool kết nối thường trực: `web_ipc.cpp` không có eviction idle, nên giữ 3 kết nối
+    sẽ chiếm chết 3 trong 4 slot của core và bỏ đói mọi client khác.
+- **Kiểm chứng.** `TestWebIPCConcurrentReadsDoNotExhaustCoreBacklog` dựng listener backlog **4 bằng
+  syscall** (`net.Listen` dùng somaxconn nên che mất hẳn lỗi) và mô hình accept theo chu kỳ: **không
+  hạn mức ⇒ 19/24 request hỏng; có hạn mức ⇒ 0/24**. Thêm 2 test khoá việc tôn trọng `ctx` và việc
+  hạn mức phải nhỏ hơn `max_clients`.
+
+### Fixed — Rà soát trước khi nạp bo Foxlinx: ba lỗi thật trong mã 3 ngày gần nhất (2026-09-03)
+
+Rà soát toàn bộ thay đổi từ `2f27dce` (2026-08-30) tới `7aff96a`. Ba lỗi dưới đây đều **không lộ ra**
+ở cổng đang chạy trước phiên này; mỗi lỗi được **chứng minh bằng một test đỏ trước khi sửa**.
+
+- **`exactFields` từ chối chính bốn trường mà producer vừa thêm — chặn mọi Commission Modbus.**
+  - *Triệu chứng.* Mọi Check có binding `MB_RTU` phân giải được slot đều hỏng ở bước dựng manifest:
+    `bindings[0]. trường lạ: address,modbusDataType,readWrite,registerType`. Commission không bao giờ
+    tới được phép đối chiếu target mà `ISS-PIO-31` bước 3 vừa dựng.
+  - *Nguyên nhân gốc.* Bước 3 bổ sung bốn trường target vào `packageManifestBinding`, nhưng
+    `validateManifestBindings` vẫn gọi `exactFields` với allowlist **cũ mười trường**. Writer và
+    verifier của cùng một hồ sơ bất đồng ngay trong một chuỗi gọi hàm.
+  - *Cách sửa.* Thêm `exactFieldsWithOptional` (khoá được phép vắng — bốn trường mang `omitempty`,
+    vắng với LOCAL/VP và với manifest cũ) + `validateManifestBindingTarget` kiểm **giá trị** theo đúng
+    miền của `modbusrtu/validate.go`. Bỏ qua phần kiểm giá trị sẽ để một `address` ngoài dải lọt vào
+    hồ sơ rồi báo "lệch" ở Commission, đẩy người vận hành đi tìm sai chỗ.
+
+- **`address = 0` là thanh ghi hợp lệ, nhưng bị đọc như "thiếu dữ liệu".**
+  - *Triệu chứng.* Một binding đã Commission trên thanh ghi 0 vẫn qua được phép đối chiếu target sau
+    khi người vận hành dời điểm đó sang thanh ghi khác — đúng loại sai lặng mà `AC-PIO-ID-02` sinh ra
+    để chặn.
+  - *Nguyên nhân gốc.* `validate.go` cho `address ∈ 0..65535` nên 0 dùng được thật, nhưng producer
+    khai `Address int` + `json:"address,omitempty"` (số 0 không được ghi ra) còn `SameTarget` lại đọc
+    `other.Address != 0` như dấu hiệu "manifest cũ không mang trường này" và **bỏ qua** phép so địa
+    chỉ. Ba trường kia là chuỗi nên `""` không đụng miền giá trị hợp lệ; `Address` là trường duy nhất
+    mà zero value trùng một giá trị thật.
+  - *Cách sửa.* Producer đổi sang `*int` (phát `"address":0` cho MB_RTU đã phân giải, vẫn vắng với
+    LOCAL/VP nên **byte manifest và `contentSha256` không đổi** cho mọi ca đang chạy được); consumer
+    parse `*int` và đặt `ModbusSlot.AddressKnown`; `SameTarget` so theo cờ đó.
+
+- **`hashBufferSource` dùng `crypto.subtle` — chết đúng trên bo, không chết ở máy dev.**
+  - *Triệu chứng.* Bo phục vụ UI qua `http://<ip>`, không phải secure context, nên trình duyệt không
+    expose `crypto.subtle`. Hash reject ⇒ `bufferSha256` ở lại `undefined` ⇒ mọi diagnostic thành
+    `UNVERIFIABLE` ⇒ **toàn bộ phần gạch lỗi của `ISS-STED-04` im lặng biến mất trên bo**, trong khi
+    chạy tốt qua `localhost` ở máy dev.
+  - *Nguyên nhân gốc.* `ISS-STED-18` viết hàm băm mới bằng WebCrypto, dù `shared/crypto.ts` đã có
+    `sha256Hex` thuần JS tồn tại **đúng vì lý do này** ("để import bundle hoạt động trên endpoint HTTP").
+  - *Cách sửa.* `hashBufferSource` gọi `sha256Hex`; giữ chữ ký `Promise` để không kéo theo sửa đổi
+    không liên quan ở lớp gọi.
+
+- **Cổng hợp đồng chạy bằng interpreter Python không có `jsonschema`.**
+  - *Triệu chứng.* `ctest` đỏ `st_language_profile_contract` + `st_language_profile_gate` với
+    `ModuleNotFoundError: No module named 'jsonschema'`, trong khi cùng script chạy xanh qua
+    `npm run build` và qua shell.
+  - *Nguyên nhân gốc.* `find_package(Python3)` chọn interpreter có **số hiệu bản cao nhất**, không
+    phải interpreter mà phần còn lại của dự án dùng; bản 3.11 do `uv` quản lý đứng trên bản hệ thống
+    và externally-managed nên `pip install -r requirements-ci.txt` cũng không vá được. Nặng hơn "hai
+    test đỏ": cổng chết **trước khi kiểm được gì**, nên một hồ sơ ngôn ngữ mâu thuẫn thật sẽ đi lọt y
+    hệt.
+  - *Cách sửa.* `apps/core/CMakeLists.txt` dò ứng viên và lấy bản **đầu tiên import được** module cổng
+    cần; không bản nào đủ thì dừng ngay ở configure kèm câu lệnh cài, thay vì nổ muộn ở test thứ 1280
+    dưới dạng traceback Python.
+
+**Đo lại tại `7aff96a` + bản vá** — C++ `cmake --fresh` + build + `ctest` (MODBUS/BACNET/HMI = ON):
+**1389/1389 pass, 1 skipped, exit 0** (trước vá: 1387/1389, exit 8) · Go `go vet` exit 0 +
+`go test ./... -count=1` **exit 0** · FE `vitest` **2442/2442 pass** (199 file), `lint` exit 0,
+`build:release` exit 0.
+
+
+### Fixed — `ISS-PIO-31` bước 4: một lần Check nói ra TOÀN BỘ binding phải rebind (#375, 2026-09-03)
+
+- **Triệu chứng.** Đường kiểm slot Modbus dừng ở **binding hỏng đầu tiên**. Sau một lần tắt thiết bị,
+  **mọi** binding của thiết bị đó đều lệch — với 8 điểm là **8 vòng Check**, mỗi vòng chỉ hiện đúng
+  một dòng.
+- **Nguyên nhân gốc.** `ioMapFromRevision` trả về một `*DiagnosticView` và `return` ngay khi gặp lỗi
+  đầu tiên. Chính repo này đã ghi nguyên tắc ngược lại ở cấp Program (`compilerInputs`): *"GỘP
+  diagnostic thay vì dừng ở Program đầu tiên hỏng… với 32 Program đó là 32 vòng"* — nhưng cấp
+  **binding** thì chưa áp.
+- **Cách sửa.** `ioMapFromRevision`/`programCompilerInput` trả về **danh sách** diagnostic; nhánh
+  Modbus gom mọi binding không xác minh được rồi trả một lần. Đây cũng chính là **đường migration**
+  mà `AC-PIO-ID-03` cần: một lần Check liệt kê đủ những gì phải rebind, thay vì bắt người vận hành
+  dò từng cái.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`). Test mới: ba binding của một thiết
+  bị đã tắt ⇒ **một** lần Check trả **ba** diagnostic, mỗi cái nêu đúng `pointId` của nó.
+- **CI vẫn bị chặn** (không cấp runner) — xem #414.
+
+
 ### Fixed — `ISS-PIO-31` bước 3: đối chiếu TRỌN chuỗi, không chỉ số slot (#375, 2026-09-03)
 
 - **Triệu chứng (khoảng trống còn lại sau bước 2).** Phép kiểm ở Check và Commission mới so

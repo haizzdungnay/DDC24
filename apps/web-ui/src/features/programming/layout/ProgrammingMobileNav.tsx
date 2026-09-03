@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Activity, ArrowLeft, Cable, ClipboardCheck, Home, Library, MoreHorizontal, PencilRuler, SlidersHorizontal } from 'lucide-react'
+import { Activity, ArrowLeft, Cable, ClipboardCheck, Home, Library, MoreHorizontal, PencilRuler } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { programsWorkspacePath } from '../shared/programsRoute'
@@ -55,17 +55,6 @@ export function programmingMobileNavItems(projectId: string | null): { primary: 
       { key: 'programs', label: ['Chương trình', 'Programs'], shortLabel: ['Chương trình', 'Programs'], to: projectId ? programsWorkspacePath(projectId) : null, icon: PencilRuler, disabledReason: needsProject },
       { key: 'mapping', label: ['Điểm & Ánh xạ', 'Points & Mapping'], shortLabel: ['Ánh xạ', 'Mapping'], to: projectPath('mapping'), icon: Cable, disabledReason: needsProject },
       { key: 'library', label: ['Thư viện điều khiển', 'Control Library'], shortLabel: ['Thư viện', 'Library'], to: projectPath('library'), icon: Library, disabledReason: needsProject },
-      {
-        /* Giữ đúng cách xử lý của `ProgrammingFeatureRail`: `Project Settings`
-         * của README §3 CHƯA có route, nên nó hiện diện mà vô hiệu hoá KÈM LÝ
-         * DO thay vì trỏ vào một path rơi vào `<Route path="*">`. */
-        key: 'project-settings',
-        label: ['Cài đặt Project', 'Project Settings'],
-        shortLabel: ['Cài đặt', 'Settings'],
-        to: null,
-        icon: SlidersHorizontal,
-        disabledReason: ['Chưa có trang Cài đặt Project ở bản dựng này', 'The Project Settings page does not exist in this build']
-      },
       {
         /* `R60-03` — focus mode gỡ rail toàn cục, nên lối ra phải luôn có mặt.
          * Ở `<768 px` rail Programming cũng bị ẩn, và đây là lối ra duy nhất

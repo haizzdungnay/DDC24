@@ -104,7 +104,10 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     expect(screen.getByRole('link', { name: 'Kiểm tra & Vận hành' })).toHaveAttribute('href', '/eng/programming/projects/project-1/commission')
     expect(screen.getByRole('link', { name: 'Tổng quan' })).toHaveAttribute('href', '/eng/programming')
     expect(screen.getByRole('link', { name: 'Runtime & Bảo trì' })).toHaveAttribute('href', '/eng/programming/runtime')
-    // Sáu đích + lối thoát (thương hiệu); `Project Settings` KHÔNG phải link.
+    /* Sáu đích `PGM-01..06` + lối thoát (thương hiệu) = 7 link.
+     * `PLAN-FE-SHELL-062` KHÔNG đổi con số này: mục `Project Settings` bị gỡ
+     * vốn là `<span role="link">`, không phải `<a>`, nên nó chưa từng được
+     * đếm ở đây. Sửa 7 thành 6 theo phản xạ là làm hỏng phép kiểm. */
     expect(rail().querySelectorAll('a')).toHaveLength(7)
   })
 
@@ -114,15 +117,16 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     expect(screen.getByRole('link', { name: 'Tổng quan' })).not.toHaveAttribute('aria-current')
   })
 
-  it('Project Settings hiện nhưng vô hiệu kèm lý do — không trỏ vào route không tồn tại', () => {
-    renderRail('project-1')
-    const settings = railItem('project-settings')
-    expect(settings.tagName).toBe('SPAN')
-    expect(settings).toHaveAttribute('role', 'link')
-    expect(settings).toHaveAttribute('aria-disabled', 'true')
-    expect(settings).toHaveAttribute('title', 'Chưa có trang Cài đặt Project ở bản dựng này')
-    expect(programmingRailItems('project-1').find((item) => item.key === 'project-settings')?.to).toBeNull()
-  })
+  /* `PLAN-FE-SHELL-062` — test cũ ở đây khoá hành vi "Project Settings hiện
+   * nhưng vô hiệu kèm lý do". Mục đó đã bị gỡ: nó là đích thứ bảy trong một
+   * shell mà `UD-PROG-008` (CLOSED, `ADR-050.8`) chỉ chốt sáu, và nó chưa bao
+   * giờ có route.
+   *
+   * Bất biến thay thế KHÔNG nằm ở đây mà ở `shellDestinations.test.ts`: mọi
+   * đích của shell phải có thật, và một mục chỉ được vô hiệu vì thiếu điều
+   * kiện — không bao giờ vì thiếu trang. Đặt nó thành cổng riêng thay vì một
+   * test component là có chủ ý: nó kiểm một luật của shell, không kiểm DOM của
+   * một component. */
 
   it('rộng 220 px ở desktop, icon-only ở tablet, ẩn hoàn toàn dưới 768 px', () => {
     renderRail('project-1')

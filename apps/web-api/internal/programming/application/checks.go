@@ -550,9 +550,9 @@ func compilerInputs(revision programmingstore.RevisionSnapshot, slots *ModbusSlo
 	// dùng sửa từng lỗi một rồi chạy lại Check — với 32 Program đó là 32 vòng.
 	diagnostics := make([]DiagnosticView, 0)
 	for _, program := range programs {
-		input, diagnostic := programCompilerInput(revision, program, slots)
-		if diagnostic != nil {
-			diagnostics = append(diagnostics, *diagnostic)
+		input, inputDiagnostics := programCompilerInput(revision, program, slots)
+		if len(inputDiagnostics) > 0 {
+			diagnostics = append(diagnostics, inputDiagnostics...)
 			continue
 		}
 		inputs = append(inputs, input)
@@ -696,11 +696,11 @@ func (s *CheckService) attachPOULinkInputs(ctx context.Context,
 }
 
 func programCompilerInput(revision programmingstore.RevisionSnapshot,
-	program programmingstore.RevisionObject, slots *ModbusSlotSnapshot) (programmingcompiler.Input, *DiagnosticView) {
+	program programmingstore.RevisionObject, slots *ModbusSlotSnapshot) (programmingcompiler.Input, []DiagnosticView) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(program.PayloadJSON, &payload); err != nil {
 		diagnostic := scopeDiagnostic(program.ObjectID, 0)
-		return programmingcompiler.Input{}, &diagnostic
+		return programmingcompiler.Input{}, []DiagnosticView{diagnostic}
 	}
 	// Document v2 (T59-301) đặt identity ở `objectId` và mã nguồn ở `source`;
 	// v1 dùng `programId`/`document`. Đọc cả hai tên là điều kiện để một Revision
@@ -718,7 +718,7 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 	if json.Unmarshal(identity, &programID) != nil || json.Unmarshal(payload["language"], &language) != nil ||
 		programID != program.ObjectID || (language != "ST" && language != "FBD") || len(document) == 0 {
 		diagnostic := scopeDiagnostic(program.ObjectID, 0)
-		return programmingcompiler.Input{}, &diagnostic
+		return programmingcompiler.Input{}, []DiagnosticView{diagnostic}
 	}
 	var source []byte
 	var text string
@@ -728,16 +728,16 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 		var value any
 		if json.Unmarshal(document, &value) != nil {
 			diagnostic := scopeDiagnostic(programID, 0)
-			return programmingcompiler.Input{}, &diagnostic
+			return programmingcompiler.Input{}, []DiagnosticView{diagnostic}
 		}
 		source, _ = json.Marshal(value)
 	} else {
 		diagnostic := scopeDiagnostic(programID, 0)
-		return programmingcompiler.Input{}, &diagnostic
+		return programmingcompiler.Input{}, []DiagnosticView{diagnostic}
 	}
 	if len(source) == 0 || len(source) > domain.MaxSourceBytes {
 		diagnostic := scopeDiagnostic(programID, domain.MaxSourceBytes)
-		return programmingcompiler.Input{}, &diagnostic
+		return programmingcompiler.Input{}, []DiagnosticView{diagnostic}
 	}
 	// `programID` ở trên là objectId của POU/source-map. Mapping và runtime dùng
 	// stable `programConfig.programId`; v1 không có config nên hai giá trị trùng.
@@ -748,7 +748,7 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 		}
 		if json.Unmarshal(raw, &config) != nil || !isUUID(config.ProgramID) {
 			diagnostic := scopeDiagnostic(programID, 0)
-			return programmingcompiler.Input{}, &diagnostic
+			return programmingcompiler.Input{}, []DiagnosticView{diagnostic}
 		}
 		runtimeProgramID = config.ProgramID
 	}
@@ -775,7 +775,7 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 // nguyên trạng cho compiler tự reject (VP/MB_RTU, sai kiểu, trùng...) — không
 // lặp logic validate ở BE, `resolve_io_bindings()` là authority duy nhất.
 func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID string,
-	slots *ModbusSlotSnapshot) ([]programmingcompiler.IoMapEntry, *DiagnosticView) {
+	slots *ModbusSlotSnapshot) ([]programmingcompiler.IoMapEntry, []DiagnosticView) {
 	type variableInfo struct {
 		name      string
 		programID string
@@ -805,13 +805,11 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			} `json:"locals"`
 		}
 		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil {
-			diagnostic := scopeDiagnostic(programID, 0)
-			return nil, &diagnostic
+			return nil, []DiagnosticView{scopeDiagnostic(programID, 0)}
 		}
 		for _, local := range payload.Locals {
 			if local.VariableID == "" || local.Name == "" || local.Type == "" {
-				diagnostic := scopeDiagnostic(programID, 0)
-				return nil, &diagnostic
+				return nil, []DiagnosticView{scopeDiagnostic(programID, 0)}
 			}
 			owner := local.ProgramID
 			if owner == "" {
@@ -825,6 +823,8 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 		}
 	}
 	var entries []programmingcompiler.IoMapEntry
+	// Gom mọi binding Modbus không xác minh được, trả về CÙNG một lần.
+	var bindingDiagnostics []DiagnosticView
 	for _, object := range revision.Objects {
 		if object.Kind != "BINDING" {
 			continue
@@ -853,13 +853,11 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 		}
 		if err := json.Unmarshal(object.PayloadJSON, &payload); err != nil || payload.BindingID != object.ObjectID ||
 			payload.Point.PointID == "" || payload.Point.Category == "" || payload.DataType == "" {
-			diagnostic := scopeDiagnostic(programID, 0)
-			return nil, &diagnostic
+			return nil, []DiagnosticView{scopeDiagnostic(programID, 0)}
 		}
 		variable, found := variables[payload.VariableID]
 		if !found {
-			diagnostic := scopeDiagnostic(programID, 0)
-			return nil, &diagnostic
+			return nil, []DiagnosticView{scopeDiagnostic(programID, 0)}
 		}
 		// Binding của Program KHÁC không phải lỗi — nó chỉ không thuộc io_map
 		// đang dựng. Trước bản vá này điều kiện `variable.programID != programID`
@@ -876,8 +874,7 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 		case "OUTPUT":
 			direction = "output"
 		default:
-			diagnostic := scopeDiagnostic(programID, 0)
-			return nil, &diagnostic
+			return nil, []DiagnosticView{scopeDiagnostic(programID, 0)}
 		}
 		extIndex := payload.Point.ExtIndex
 		if payload.Point.Category == "MB_RTU" {
@@ -887,9 +884,19 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			resolved, reason := resolveModbusExtIndex(slots, payload.Point.DeviceID, payload.Point.PointID,
 				payload.Point.ExtIndex)
 			if reason != "" {
-				diagnostic := modbusSlotDiagnostic(programID, variable.name, payload.Point.PointID,
-					payload.Point.ExtIndex, resolved, reason)
-				return nil, &diagnostic
+				/* GỘP thay vì dừng ở binding hỏng đầu tiên.
+				 *
+				 * Cùng lý do đã ghi ở `compilerInputs` cho cấp Program: dừng
+				 * sớm bắt người vận hành sửa từng lỗi một rồi chạy lại Check.
+				 * Sau một lần tắt thiết bị, MỌI binding của thiết bị đó đều
+				 * lệch — với 8 điểm là 8 vòng Check, và mỗi vòng chỉ hiện đúng
+				 * một dòng. Đây cũng chính là "đường migration" mà
+				 * `AC-PIO-ID-03` cần: một lần Check nói ra TOÀN BỘ binding phải
+				 * rebind. */
+				bindingDiagnostics = append(bindingDiagnostics,
+					modbusSlotDiagnostic(programID, variable.name, payload.Point.PointID,
+						payload.Point.ExtIndex, resolved, reason))
+				continue
 			}
 			extIndex = resolved
 		}
@@ -899,6 +906,9 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			DeviceID: payload.Point.DeviceID, ExtIndex: extIndex,
 			Writable: payload.Writable,
 		})
+	}
+	if len(bindingDiagnostics) > 0 {
+		return nil, bindingDiagnostics
 	}
 	return entries, nil
 }

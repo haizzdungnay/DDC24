@@ -53,6 +53,80 @@ type CoreClient struct {
 	// 2026-08-14 (journal `mkddc-web`, xen kẽ status=200/503 dur_ms~650-720).
 	snapshotMu       sync.Mutex
 	snapshotInFlight *coreSnapshotCall
+
+	// webIPCGate giới hạn số kết nối web_ipc ĐỒNG THỜI. Xem
+	// `coreWebIPCMaxInFlight` để biết vì sao con số là 3 chứ không phải "bao
+	// nhiêu cũng được". Khởi tạo lazy để mọi struct literal `&CoreClient{...}`
+	// đang có vẫn dùng được, giống cách `ioSeg`/`plcSeg` attach lazy.
+	webIPCGateOnce sync.Once
+	webIPCGate     chan struct{}
+}
+
+/* Ba hằng dưới đây được rút ra từ CHÍNH cấu hình server, không phải chọn cho
+ * "trông hợp lý". `apps/core/adapters/ipc/web_ipc.cpp`:
+ *
+ *   ::listen(fd_, 4)                  → backlog 4
+ *   max_clients          = 4          → tối đa 4 client cùng lúc
+ *   max_accept_attempts  = 4          → nhận tối đa 4 kết nối MỖI LẦN poll
+ *
+ * và `WebIpc::poll()` chạy đúng MỘT LẦN mỗi scan cycle — trên Foxlinx
+ * `core.base_step_ms=1000`, tức **một giây một lần**.
+ *
+ * CƠ CHẾ HỎNG (đo ra, không phải suy đoán — giả thuyết đầu tiên "timeout dial
+ * 100 ms quá ngắn" đã bị chính test bác bỏ). Với Unix socket, `connect()` KHÔNG
+ * chờ server gọi `accept()`: nó thành công ngay khi hàng đợi accept còn chỗ, và
+ * **hỏng NGAY bằng ECONNREFUSED khi hàng đợi đầy** — khác TCP, không có SYN
+ * retry. Thứ quyết định vì thế KHÔNG phải timeout, mà là SỐ CÚ DIAL ĐỒNG THỜI
+ * so với độ sâu hàng đợi (4).
+ *
+ * `sendWebIPC` mở một kết nối MỚI cho mỗi request, và trước bản vá không có hạn
+ * mức nào. Một trang UI poll alarms + overview + runtime + point-catalog cùng
+ * lúc vượt 4 cú dial trong một chu kỳ rất dễ ⇒ ECONNREFUSED ⇒
+ * `errCoreUnavailable` ⇒ `WARN alarms_read degraded`, trong khi core hoàn toàn
+ * khoẻ mạnh.
+ *
+ * Đo trên bo 2026-09-03, cùng mức tải ~90–105 request/phút: binary 30-08 hỏng
+ * 15,7%, binary 03-09 hỏng ~32%; ở mức 1,1 request/phút chỉ 2,2%. Tỉ lệ đi theo
+ * TẦN SUẤT DIAL, không theo phiên bản mã. `TestWebIPCConcurrentReadsDoNot-
+ * ExhaustCoreBacklog` dựng lại đúng mô hình accept ấy — backlog 4 đặt bằng
+ * syscall, vì `net.Listen` dùng somaxconn và che mất hẳn lỗi: không hạn mức thì
+ * 19/24 request hỏng, có hạn mức thì 0/24.
+ *
+ * KHÔNG sửa bằng cách giữ kết nối thường trực: `web_ipc.cpp` không có eviction
+ * idle, nên một pool 3 kết nối sẽ chiếm chết 3 trong 4 slot của core và bỏ đói
+ * mọi client khác. Giữ mô hình one-shot, chỉ chặn số cú dial đồng thời. */
+const (
+	// coreWebIPCMaxInFlight ≤ max_clients-1 của core: vượt quá thì core
+	// `::accept4` rồi `::close` ngay, và phía client thấy dial THÀNH CÔNG
+	// nhưng write/read hỏng — một kiểu lỗi khó lần hơn hẳn ECONNREFUSED.
+	// Chừa 1 slot cho HMI/công cụ khác.
+	coreWebIPCMaxInFlight = 3
+	// Timeout dial KHÔNG phải thứ sửa lỗi (xem cơ chế trên). Vẫn nới từ 100 ms
+	// vì 100 ms không có cơ sở nào so với nhịp 1 s của server; nó chỉ còn tác
+	// dụng ở ca socket tồn tại mà peer chậm hoàn tất.
+	coreWebIPCDialTimeout = 2500 * time.Millisecond
+	// Cái này thì đo được tác dụng: kết nối nằm trong hàng đợi cho tới khi core
+	// `poll()` ở biên chu kỳ kế, nên round-trip thực tế trên bo là 800–1600 ms.
+	// Deadline 2 s cũ vừa đúng một chu kỳ — không còn dư địa cho jitter.
+	coreWebIPCDeadline = 5 * time.Second
+	// Giữ nhanh cho thăm dò readiness (`/api/v1/system`): ở đó câu hỏi là
+	// "socket có tồn tại không", không phải "core trả lời được không".
+	coreWebIPCProbeTimeout = 300 * time.Millisecond
+)
+
+// acquireWebIPCSlot chặn cho tới khi còn chỗ trong hạn mức đồng thời, hoặc tới
+// khi ctx hết hạn. Tôn trọng ctx là bắt buộc: nếu không, một core treo sẽ dồn
+// toàn bộ handler HTTP vào hàng đợi này thay vì để chúng hết hạn bình thường.
+func (c *CoreClient) acquireWebIPCSlot(ctx context.Context) (func(), error) {
+	c.webIPCGateOnce.Do(func() {
+		c.webIPCGate = make(chan struct{}, coreWebIPCMaxInFlight)
+	})
+	select {
+	case c.webIPCGate <- struct{}{}:
+		return func() { <-c.webIPCGate }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 type coreSnapshotCall struct {
@@ -336,12 +410,20 @@ func (c *CoreClient) ForcePointTTL(ctx context.Context, id string, value any, re
 // CommandPoint is the single Core mutation path used by both Web and local HMI.
 // ttlS is enforced by Core for a manual override; zero means no automatic release.
 func (c *CoreClient) CommandPoint(ctx context.Context, id string, value any, release bool, ttlS uint32, user string) (PointDTO, error) {
+	/* Đường ghi cũng đi qua cùng một hạn mức: không thì một loạt lệnh ghi
+	 * đồng thời vẫn vượt `max_clients` của core và làm hỏng cả đường đọc. */
+	releaseSlot, err := c.acquireWebIPCSlot(ctx)
+	if err != nil {
+		return PointDTO{}, err
+	}
+	defer releaseSlot()
+
 	conn, err := c.dialCore(ctx)
 	if err != nil {
 		return PointDTO{}, errCoreUnavailable
 	}
 	defer conn.Close()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(coreWebIPCDeadline)
 	_ = conn.SetDeadline(deadline)
 
 	op := "write"
@@ -438,12 +520,18 @@ func (c *CoreClient) QueryPoint(ctx context.Context, id, user string) (PointDTO,
 }
 
 func (c *CoreClient) sendWebIPC(ctx context.Context, cmd map[string]any) (webIPCResponse, error) {
+	release, err := c.acquireWebIPCSlot(ctx)
+	if err != nil {
+		return webIPCResponse{}, err
+	}
+	defer release()
+
 	conn, err := c.dialCore(ctx)
 	if err != nil {
 		return webIPCResponse{}, errCoreUnavailable
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(coreWebIPCDeadline))
 
 	line, err := json.Marshal(cmd)
 	if err != nil {
@@ -464,7 +552,7 @@ func (c *CoreClient) sendWebIPC(ctx context.Context, cmd map[string]any) (webIPC
 }
 
 func (c *CoreClient) coreSocketReady(ctx context.Context) bool {
-	conn, err := c.dialCore(ctx)
+	conn, err := c.dialCoreTimeout(ctx, coreWebIPCProbeTimeout)
 	if err != nil {
 		return false
 	}
@@ -473,10 +561,14 @@ func (c *CoreClient) coreSocketReady(ctx context.Context) bool {
 }
 
 func (c *CoreClient) dialCore(ctx context.Context) (net.Conn, error) {
+	return c.dialCoreTimeout(ctx, coreWebIPCDialTimeout)
+}
+
+func (c *CoreClient) dialCoreTimeout(ctx context.Context, timeout time.Duration) (net.Conn, error) {
 	if c.SockPath == "" {
 		return nil, fmt.Errorf("core socket path empty")
 	}
-	dialer := net.Dialer{Timeout: 100 * time.Millisecond}
+	dialer := net.Dialer{Timeout: timeout}
 	return dialer.DialContext(ctx, "unix", c.SockPath)
 }
 

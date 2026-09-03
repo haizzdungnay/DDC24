@@ -127,10 +127,7 @@ describe('ProgrammingMobileNav — T59-503 / T60-208', () => {
     expect(exit).not.toHaveAttribute('aria-disabled')
   })
 
-  it('T60-208: Cài đặt Project hiện diện nhưng vô hiệu hoá KÈM LÝ DO, không trỏ vào path không tồn tại', () => {
-    renderNav('project-1')
-    const more = openMore()
-    expect(more.getByLabelText('Cài đặt Project — Chưa có trang Cài đặt Project ở bản dựng này')).toHaveAttribute('aria-disabled', 'true')
-    expect(more.queryByRole('link', { name: /Cài đặt Project/ })).not.toBeInTheDocument()
-  })
+  /* `PLAN-FE-SHELL-062` — test `T60-208` cho `Cài đặt Project` đã gỡ cùng mục
+   * đó. Bất biến thay thế nằm ở `shellDestinations.test.ts` (G2/G3), phủ cả
+   * bottom nav lẫn rail bằng một luật chung thay vì hai test rời. */
 })

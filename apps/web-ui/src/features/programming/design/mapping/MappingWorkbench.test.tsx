@@ -168,3 +168,49 @@ describe('Mapping Workbench Phase 1A — read-only truth state', () => {
     expect(screen.getByRole('button', { name: 'FCU_Zone · Setpoint · Chưa map' })).toBeVisible()
   })
 })
+
+/* `ISS-PIO-04` — khi server nói "còn nữa", bảng phải NÓI RA và khoá Map.
+ *
+ * FE vốn đã đúng: `complete = nextCursor ? false : true`, chip hiện `500+`, và
+ * banner khoá Map/Remove. Thứ hỏng nằm ở SERVER — nó cắt danh sách ở 500 rồi
+ * vẫn trả `nextCursor = null`, tức nói dối đúng cái trường mà FE tin. Test này
+ * khoá nửa nhìn thấy được của hợp đồng, để lần sau ai đó "dọn" chip `+` hay
+ * banner thì có người kêu.
+ */
+describe('ISS-PIO-04 — catalog chưa đủ thì bảng phải nói ra', () => {
+  it('hiện dấu + và khoá Map khi server còn trang sau', () => {
+    catalog.status = 'ready'
+    catalog.error = null
+    catalog.data = {
+      items: [
+        { category: 'LOCAL', pointId: 'UI-01', name: 'Supply Temp', dataType: 'REAL', unit: 'degC',
+          direction: 'READ', writable: false, quality: 'GOOD', value: 21.4,
+          mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
+      ],
+      nextCursor: 'cursor-trang-2',
+    }
+
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+
+    expect(screen.getByText('Catalog 1+')).toBeVisible()
+    expect(screen.getByText(/Catalog Point chưa tải đủ/)).toBeVisible()
+  })
+
+  it('không hiện dấu + khi server khẳng định đã đủ', () => {
+    catalog.status = 'ready'
+    catalog.error = null
+    catalog.data = {
+      items: [
+        { category: 'LOCAL', pointId: 'UI-01', name: 'Supply Temp', dataType: 'REAL', unit: 'degC',
+          direction: 'READ', writable: false, quality: 'GOOD', value: 21.4,
+          mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
+      ],
+      nextCursor: null,
+    }
+
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+
+    expect(screen.getByText('Catalog 1')).toBeVisible()
+    expect(screen.queryByText(/Catalog Point chưa tải đủ/)).not.toBeInTheDocument()
+  })
+})

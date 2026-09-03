@@ -32,10 +32,14 @@ import { programsWorkspacePath } from '../shared/programsRoute'
  *
  * KHÔNG BỊA ĐÍCH, KHÔNG BỊA THỰC THỂ
  * ----------------------------------
- * Thiếu `projectId` thì ba đích phụ thuộc Project không tồn tại; mục vẫn hiện
- * nhưng **không bấm được** và nói rõ vì sao (giữ đúng khuôn `T60-101` đã dùng
- * cho `Project Settings`). Thực thể không có tên người-đọc-được thì viết câu
- * giải thích, KHÔNG in UUID thay thế (`AC-PGM01-01`).
+ * Thiếu `projectId` thì ba đích phụ thuộc Project (Chương trình, Điểm & Ánh xạ,
+ * Thư viện) không tồn tại; mục vẫn hiện nhưng **không bấm được** và nói rõ vì
+ * sao. Thực thể không có tên người-đọc-được thì viết câu giải thích, KHÔNG in
+ * UUID thay thế (`AC-PGM01-01`).
+ *
+ * Lưu ý ranh giới (`PLAN-FE-SHELL-062`): vô hiệu hoá chỉ hợp lệ khi THIẾU ĐIỀU
+ * KIỆN. Vô hiệu hoá vì *trang không tồn tại* là một mục không nên có mặt ngay
+ * từ đầu — `shellDestinations.test.ts` chặn đúng ca đó.
  */
 
 type Pick = (vi: string, en: string) => string

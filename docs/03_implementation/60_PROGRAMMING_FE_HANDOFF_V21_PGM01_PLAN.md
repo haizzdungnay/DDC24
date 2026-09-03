@@ -226,7 +226,7 @@ hạn. Đây là **phép đo mới duy nhất** của Plan này, và nó rẻ v�
 
 ```text
 ProgrammingLayout
-├── ProgrammingFeatureRail       220px, dọc, 6 đích + Project Settings   [T60-101]
+├── ProgrammingFeatureRail       220px, dọc, 6 đích                     [T60-101]
 └── column
     ├── ProgrammingContextStrip  36–40px, sticky, + DetailsPopover       [T60-102]
     └── <Outlet/>
@@ -311,7 +311,7 @@ JSON có tên trường nên thêm trường là **tương thích ngược**, kh
 
 | Mã | Ưu tiên | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---|
-| `T60-101` | P0 | `ProgrammingFeatureRail` 220 px dọc theo **focus mode** (D-01): trong `/eng/programming` rail này **thay** `NavRail` toàn cục. Bắt buộc mục `← Thoát Lập trình` ở đầu rail — không được để người dùng mắc kẹt trong workspace. 6 đích + `Project Settings`; tablet thu icon-only; `<768 px` ẩn hoàn toàn (nhường bottom nav). `NAV_GROUPS` **không đổi** nên hợp đồng route↔menu (`ADR-032`) không bị động tới — đây là chặn *render*, không phải xoá mục. Đích phụ thuộc Project vẫn vô hiệu hoá khi chưa có `projectId` (giữ hành vi `T59-503`). | — | `DONE` | 2 nd |
+| `T60-101` | P0 | `ProgrammingFeatureRail` 220 px dọc theo **focus mode** (D-01): trong `/eng/programming` rail này **thay** `NavRail` toàn cục. Bắt buộc mục `← Thoát Lập trình` ở đầu rail — không được để người dùng mắc kẹt trong workspace. 6 đích; tablet thu icon-only; `<768 px` ẩn hoàn toàn (nhường bottom nav). `NAV_GROUPS` **không đổi** nên hợp đồng route↔menu (`ADR-032`) không bị động tới — đây là chặn *render*, không phải xoá mục. Đích phụ thuộc Project vẫn vô hiệu hoá khi chưa có `projectId` (giữ hành vi `T59-503`). **Bổ chính 2026-09-03 (`PLAN-FE-SHELL-062`):** mô tả gốc ghi *"6 đích + `Project Settings`"* và đã được cài đặt trung thành, nhưng `Project Settings` là đích **thứ bảy** trong một shell mà `UD-PROG-008` (CLOSED, `ADR-050.8`) chỉ chốt **sáu** `PGM-01..06`; nó không có route, không có yêu cầu trong RTM, và phải render xám kèm lý do *"trang không tồn tại"*. Mục đã được gỡ khỏi cả rail lẫn bottom nav; bất biến thay thế được khoá bằng máy ở `shellDestinations.test.ts`. Trạng thái `DONE` của task **giữ nguyên** — đây là bổ chính hồ sơ As-Built, không phải mở lại task. | — | `DONE` | 2 nd |
 | `T60-102` | P0 | `ProgrammingContextStrip`: một hàng, cao 36–40 px, `position: sticky`, 5 dữ kiện bắt buộc + nút `Details`. **Bỏ mọi UUID khỏi mặt trước.** Giữ nguyên toàn bộ luật fail-closed đã có ở `ProgrammingContextBar` (không suy intent thành `RUNNING`; `UNKNOWN`/`stale`/`offline` tường minh) — đây là **đổi bố cục, không đổi ngữ nghĩa**. | — | `DONE` | 2 nd |
 | `T60-103` | P1 | `ContextDetailsPopover`: revision ID thô, `contentHash`, `observedAt`, `controllerId`, mỗi dòng có nút `Copy`; mở/đóng bằng bàn phím, `Esc` đóng, trả focus. | `T60-102` | `DONE` | 1 nd |
 | `T60-104` | P1 | `shared/semanticState.ts`: 7 trạng thái ngữ nghĩa của README §3, ánh xạ sang `StatusBadge` hiện hữu, bổ sung `reconciling`/`disabled`; mỗi trạng thái **bắt buộc có icon + chữ**, không chỉ màu. | — | `DONE` | 1 nd |

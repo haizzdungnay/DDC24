@@ -20,6 +20,7 @@
  * 3. **Cũ thì không im lặng.** Trạng thái cũ phải nói ĐƯỢC LÝ DO; ẩn nó đi làm
  *    người dùng tưởng lỗi đã hết.
  */
+import { sha256Hex } from '../../../shared/crypto'
 import { ST_LANGUAGE_PROFILE_VERSION } from '../api/generated/stLanguageProfile'
 import type { ProgrammingDiagnostic } from '../model/types'
 
@@ -92,12 +93,16 @@ export function diagnosticFreshness(
 
 /** Băm nội dung buffer đúng cách backend băm nguồn POU (SHA-256, hex thường).
  *
- * Dùng WebCrypto nên là bất đồng bộ; caller băm một lần mỗi lần buffer đổi chứ
- * không băm trong lượt render. */
+ * KHÔNG dùng `crypto.subtle`: bo phục vụ UI qua `http://<ip>`, mà trình duyệt
+ * chỉ expose `crypto.subtle` trong secure context (HTTPS hoặc localhost). Trên
+ * máy dev qua `localhost` bản WebCrypto chạy tốt, nên lỗi này KHÔNG lộ ra ở
+ * đâu ngoài chính con bo: `hashBufferSource` reject, `bufferSha256` ở lại
+ * `undefined`, mọi diagnostic thành `UNVERIFIABLE`, và toàn bộ phần gạch lỗi
+ * của `ISS-STED-04` im lặng biến mất — không một thông báo nào.
+ *
+ * `shared/crypto.ts` đã có SHA-256 thuần JS đúng cho tình huống này. Giữ chữ ký
+ * `Promise` vì caller băm trong `useEffect`, và vì đổi sang đồng bộ sẽ kéo theo
+ * một sửa đổi không liên quan ở lớp gọi. */
 export async function hashBufferSource(source: string): Promise<string> {
-  const bytes = new TextEncoder().encode(source)
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
+  return sha256Hex(new TextEncoder().encode(source))
 }

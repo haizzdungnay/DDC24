@@ -1,0 +1,32 @@
+# MCP cấp repository cho chương trình rà soát UI/UX/UC MEKONG FAC.
+# Không đặt secret hoặc giá trị credential trong file này. Codex chỉ chuyển tiếp
+# hai biến môi trường theo tên khi Playwright MCP được khởi động.
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+  "-y",
+  "@playwright/mcp@0.0.79",
+  "--browser",
+  "chrome",
+  "--isolated",
+  "--output-dir",
+  "artifacts/ui-audit/mcp",
+  "--console-level",
+  "warning",
+  "--snapshot-boxes",
+]
+cwd = "/home/chuong/Desktop/DDC-PROJECT"
+env_vars = ["MEKONG_FAC_USER", "MEKONG_FAC_PASS"]
+
+[mcp_servers.chrome-devtools]
+command = "npx"
+args = [
+  "-y",
+  "chrome-devtools-mcp@1.8.0",
+  "--isolated",
+  "--redact-network-headers",
+  "--no-usage-statistics",
+  "--no-performance-crux",
+]
+cwd = "/home/chuong/Desktop/DDC-PROJECT"

@@ -106,7 +106,10 @@ func handleRuntimeRequest(w http.ResponseWriter, r *http.Request, correlationID 
 				limit = parsed
 			}
 		}
-		page, err := service.ListPointCatalog(r.Context(), limit)
+		/* `ISS-PIO-04` — cursor đi vào từ query, cùng khuôn với các endpoint
+		 * phân trang khác. Không có nó thì `nextCursor` server trả về không ai
+		 * dùng được, và bảng vẫn dừng ở trang đầu. */
+		page, err := service.ListPointCatalog(r.Context(), r.URL.Query().Get("cursor"), limit)
 		if err != nil {
 			writeMappedError(w, err, correlationID)
 			return true

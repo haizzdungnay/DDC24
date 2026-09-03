@@ -1,4 +1,8 @@
 # Build / artifacts
+.playwright-cli/
+# Cache biên dịch tăng dần của tsc — sinh lại được, và commit vào sẽ tạo
+# xung đột ở mọi nhánh vì nội dung phụ thuộc thứ tự build của từng máy.
+*.tsbuildinfo
 build/
 build_*/
 build_core_check/
