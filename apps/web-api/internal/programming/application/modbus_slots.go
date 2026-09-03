@@ -41,6 +41,40 @@ type ModbusSlot struct {
 	DeviceID string `json:"deviceId"`
 	PointID  string `json:"pointId"`
 	ExtIndex int    `json:"extIndex"`
+	// Bốn trường dưới là PHẦN CÒN LẠI của chuỗi `AC-PIO-ID-02`:
+	// `pointId → extIndex → bus / device / register / datatype / access`.
+	//
+	// Chỉ so `extIndex` là chưa đủ vì slot có thể GIỮ NGUYÊN số trong khi thứ
+	// nó trỏ tới đã đổi hẳn: sửa `address`, đổi `holding_register` thành
+	// `input_register`, đổi `uint16` thành `int32`, hay hạ `read_write` xuống
+	// `read`. Cả bốn đều không làm slot dịch chỗ, và đều làm binding đã duyệt
+	// đọc/ghi một thứ khác.
+	RegisterType string `json:"registerType,omitempty"`
+	Address      int    `json:"address,omitempty"`
+	DataType     string `json:"dataType,omitempty"`
+	ReadWrite    string `json:"readWrite,omitempty"`
+}
+
+// SameTarget trả true khi hai mô tả trỏ tới CÙNG một thứ trên dây.
+//
+// So sánh bỏ qua trường rỗng ở phía manifest: package sinh TRƯỚC bản vá này
+// không mang bốn trường mới, và coi "thiếu dữ liệu" là "lệch" sẽ chặn mọi
+// package cũ dù chúng có thể vẫn đúng. Thiếu dữ liệu được xử lý ở tầng gọi
+// (`AC-PIO-ID-03`), không bằng cách im lặng coi như khớp ở đây.
+func (s ModbusSlot) SameTarget(other ModbusSlot) bool {
+	if other.RegisterType != "" && s.RegisterType != other.RegisterType {
+		return false
+	}
+	if other.Address != 0 && s.Address != other.Address {
+		return false
+	}
+	if other.DataType != "" && s.DataType != other.DataType {
+		return false
+	}
+	if other.ReadWrite != "" && s.ReadWrite != other.ReadWrite {
+		return false
+	}
+	return true
 }
 
 // ModbusSlotSnapshot là ẢNH CHỤP bố cục slot tại một thời điểm.
@@ -149,6 +183,17 @@ func (s *OperationService) verifyModbusSlots(ctx context.Context, check programm
 			binding.ExtIndex); reason != "" {
 			return publicOperationError(domain.ErrMapIdentity, true)
 		}
+		/* `AC-PIO-ID-02` đòi xác minh TRỌN chuỗi
+		 * `pointId → extIndex → bus / device / register / datatype / access`.
+		 *
+		 * Slot khớp mới là nửa đầu. Sửa `address`, đổi kiểu thanh ghi, đổi
+		 * datatype hay hạ quyền ghi đều KHÔNG làm slot dịch chỗ — nhưng đều làm
+		 * binding đã duyệt đọc/ghi một thứ khác. Không kiểm nốt nửa này thì
+		 * phép kiểm nói "khớp" cho đúng những ca im lặng nhất. */
+		current, found := snapshot.Lookup(binding.DeviceID, binding.PointID)
+		if !found || !current.SameTarget(binding) {
+			return publicOperationError(domain.ErrMapIdentity, true)
+		}
 	}
 	return nil
 }
@@ -165,10 +210,14 @@ func manifestModbusBindings(resultJSON []byte) ([]ModbusSlot, error) {
 	var document struct {
 		Manifest struct {
 			Bindings []struct {
-				Category string `json:"category"`
-				PointID  string `json:"pointId"`
-				DeviceID string `json:"deviceId"`
-				ExtIndex int    `json:"extIndex"`
+				Category     string `json:"category"`
+				PointID      string `json:"pointId"`
+				DeviceID     string `json:"deviceId"`
+				ExtIndex     int    `json:"extIndex"`
+				RegisterType string `json:"registerType"`
+				Address      int    `json:"address"`
+				ModbusType   string `json:"modbusDataType"`
+				ReadWrite    string `json:"readWrite"`
 			} `json:"bindings"`
 		} `json:"manifest"`
 	}
@@ -181,7 +230,8 @@ func manifestModbusBindings(resultJSON []byte) ([]ModbusSlot, error) {
 			continue
 		}
 		result = append(result, ModbusSlot{DeviceID: binding.DeviceID, PointID: binding.PointID,
-			ExtIndex: binding.ExtIndex})
+			ExtIndex: binding.ExtIndex, RegisterType: binding.RegisterType, Address: binding.Address,
+			DataType: binding.ModbusType, ReadWrite: binding.ReadWrite})
 	}
 	return result, nil
 }

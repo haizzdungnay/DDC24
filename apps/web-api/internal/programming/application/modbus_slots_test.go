@@ -323,3 +323,88 @@ func TestCommissionBlocksWhenManifestIsUnreadable(t *testing.T) {
 		t.Fatal("manifest không đọc được thì phải chặn, không được bỏ qua")
 	}
 }
+
+/* `AC-PIO-ID-02` — nửa còn lại: xác minh TRỌN chuỗi, không chỉ số slot.
+ *
+ * Bốn thao tác dưới đây đều GIỮ NGUYÊN `extIndex`. Một phép kiểm chỉ nhìn số
+ * slot sẽ nói "khớp" cho cả bốn, trong khi binding đã Commission thì đọc/ghi
+ * một thứ khác hẳn. */
+func TestCommissionBlocksWhenSlotKeepsNumberButChangesTarget(t *testing.T) {
+	const device, point = "bus-1-slave-2", "PUMP_CMD"
+	commissioned := ModbusSlot{DeviceID: device, PointID: point, ExtIndex: 3,
+		RegisterType: "holding_register", Address: 40001, DataType: "uint16", ReadWrite: "read_write"}
+
+	cases := []struct {
+		name    string
+		current ModbusSlot
+		block   bool
+	}{
+		{
+			name:    "không đổi gì",
+			current: commissioned,
+		},
+		{
+			name: "đổi địa chỉ thanh ghi",
+			current: ModbusSlot{DeviceID: device, PointID: point, ExtIndex: 3,
+				RegisterType: "holding_register", Address: 40007, DataType: "uint16", ReadWrite: "read_write"},
+			block: true,
+		},
+		{
+			name: "đổi kiểu thanh ghi holding → input",
+			current: ModbusSlot{DeviceID: device, PointID: point, ExtIndex: 3,
+				RegisterType: "input_register", Address: 40001, DataType: "uint16", ReadWrite: "read_write"},
+			block: true,
+		},
+		{
+			name: "đổi datatype uint16 → int32",
+			current: ModbusSlot{DeviceID: device, PointID: point, ExtIndex: 3,
+				RegisterType: "holding_register", Address: 40001, DataType: "int32", ReadWrite: "read_write"},
+			block: true,
+		},
+		{
+			name: "hạ quyền read_write → read",
+			current: ModbusSlot{DeviceID: device, PointID: point, ExtIndex: 3,
+				RegisterType: "holding_register", Address: 40001, DataType: "uint16", ReadWrite: "read"},
+			block: true,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := &OperationService{modbusSlots: stubSlotProvider{
+				snapshot: ModbusSlotSnapshot{Slots: []ModbusSlot{testCase.current}}}}
+			check := checkWithManifestBindings(map[string]any{
+				"category": "MB_RTU", "deviceId": device, "pointId": point, "extIndex": 3,
+				"registerType": commissioned.RegisterType, "address": commissioned.Address,
+				"modbusDataType": commissioned.DataType, "readWrite": commissioned.ReadWrite,
+			})
+
+			err := service.verifyModbusSlots(context.Background(), check)
+			if testCase.block && err == nil {
+				t.Fatal("đổi thứ slot trỏ tới mà không đổi số slot thì vẫn phải chặn")
+			}
+			if !testCase.block && err != nil {
+				t.Fatalf("không đổi gì thì không được chặn: %v", err)
+			}
+		})
+	}
+}
+
+/* `AC-PIO-ID-03` — package sinh TRƯỚC bản vá này không mang bốn trường mới.
+ *
+ * Coi "thiếu dữ liệu" là "lệch" sẽ chặn mọi package cũ dù chúng có thể vẫn
+ * đúng; coi là "khớp" thì mất phép kiểm. Chọn cách thứ nhất một cách CÓ CHỦ Ý ở
+ * tầng gọi, còn `SameTarget` chỉ so những trường thực sự có mặt — quyết định
+ * "package cũ xử lý thế nào" nằm ở một chỗ đọc được, không rải rác trong phép
+ * so sánh. */
+func TestLegacyManifestWithoutTargetFieldsStillMatchesOnSlot(t *testing.T) {
+	service := &OperationService{modbusSlots: stubSlotProvider{snapshot: ModbusSlotSnapshot{
+		Slots: []ModbusSlot{{DeviceID: "bus-1-slave-2", PointID: "PUMP_CMD", ExtIndex: 3,
+			RegisterType: "holding_register", Address: 40001, DataType: "uint16", ReadWrite: "read_write"}},
+	}}}
+	check := checkWithManifestBindings(modbusManifestBinding("bus-1-slave-2", "PUMP_CMD", 3))
+
+	if err := service.verifyModbusSlots(context.Background(), check); err != nil {
+		t.Fatalf("manifest cũ (chưa có bốn trường) vẫn phải so được theo slot: %v", err)
+	}
+}

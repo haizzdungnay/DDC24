@@ -274,3 +274,23 @@ func contains(haystack, needle string) bool {
 		return false
 	})()
 }
+
+// `AC-PIO-ID-02` — bố cục phải chở theo THỨ SLOT TRỎ TỚI, không chỉ số slot.
+// Không có bốn trường này thì tầng trên chỉ đối chiếu được `extIndex`, mà
+// `extIndex` giữ nguyên vẫn có thể trỏ vào một thanh ghi/kiểu/quyền khác.
+func TestExtLayoutCarriesRegisterTargetOfEachSlot(t *testing.T) {
+	devices := []Device{{DeviceID: "bus-1-slave-2", Enabled: true}}
+	points := []Point{{
+		PointID: "PUMP_CMD", DeviceID: "bus-1-slave-2", Enabled: true,
+		RegisterType: "holding_register", Address: 40001, DataType: "uint16", ReadWrite: "read_write",
+	}}
+
+	slot, ok := BuildExtLayout(devices, points).Lookup("bus-1-slave-2", "PUMP_CMD")
+	if !ok {
+		t.Fatal("không tra được slot vừa dựng")
+	}
+	if slot.RegisterType != "holding_register" || slot.Address != 40001 ||
+		slot.DataType != "uint16" || slot.ReadWrite != "read_write" {
+		t.Fatalf("slot phải chở đủ register/address/datatype/access, nhận %+v", slot)
+	}
+}

@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-31` bước 3: đối chiếu TRỌN chuỗi, không chỉ số slot (#375, 2026-09-03)
+
+- **Triệu chứng (khoảng trống còn lại sau bước 2).** Phép kiểm ở Check và Commission mới so
+  `pointId → extIndex`. Nhưng **bốn thao tác cấu hình giữ nguyên số slot** mà vẫn đổi hẳn thứ nó trỏ
+  tới: sửa `address`, đổi `holding_register` → `input_register`, đổi `uint16` → `int32`, hạ
+  `read_write` → `read`. Một phép kiểm chỉ nhìn số slot nói **"khớp"** cho cả bốn — trong khi binding
+  đã Commission đọc/ghi một thứ khác.
+- **Nguyên nhân gốc.** `AC-PIO-ID-02` đòi xác minh trọn chuỗi
+  `pointId → extIndex → bus / device / register / datatype / access`; hai bước trước mới làm được
+  hai mắt đầu.
+- **Cách sửa.** `ExtSlot`/`ModbusSlot` chở thêm `registerType / address / dataType / readWrite`;
+  manifest as-built ghi lại chúng ở Check; Commission so **cả bốn** bằng `SameTarget` và chặn khi
+  lệch.
+- **Package cũ (`AC-PIO-ID-03`).** Manifest sinh trước bản vá này không mang bốn trường đó.
+  `SameTarget` chỉ so **những trường thực sự có mặt**: coi "thiếu dữ liệu" là "lệch" sẽ chặn mọi
+  package cũ dù chúng có thể vẫn đúng, còn coi là "khớp" thì mất phép kiểm. Quyết định nằm ở **một
+  chỗ đọc được**, không rải rác trong phép so sánh, và có test riêng khoá lại.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · FE **199 file / 2440 test** + lint
+  + build + ngân sách bundle PASS. Sáu ca mới: không đổi gì ⇒ qua · đổi địa chỉ ⇒ chặn · đổi kiểu
+  thanh ghi ⇒ chặn · đổi datatype ⇒ chặn · hạ quyền ghi ⇒ chặn · manifest cũ thiếu trường ⇒ vẫn so
+  được theo slot.
+- **CI vẫn bị chặn** (không cấp runner, mọi job chết sau 2–3 giây, `runner_id = 0`) — xem #414. Số đo
+  trên là đo cục bộ bằng đúng bộ lệnh CI chạy.
+
+
 ### Fixed — `ISS-PIO-31` bước 2: đối chiếu lại slot Modbus ngay trước activation (#375, 2026-09-02)
 
 - **Triệu chứng (khoảng trống còn lại sau bước 1).** Check đã phân giải slot theo danh tính bền,

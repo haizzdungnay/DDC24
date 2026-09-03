@@ -49,6 +49,19 @@ type ExtSlot struct {
 	// ĐÚNG MỘT THANH GHI — hợp lệ với mọi phép kiểm hiện có, và sai ở đúng chỗ
 	// không ai nhìn. Quy đổi làm MỘT LẦN, ở đây, và có test khoá cả hai đầu.
 	ExtIndex int
+	// Bốn trường dưới đây là PHẦN CÒN LẠI của chuỗi mà `AC-PIO-ID-02` đòi xác
+	// minh: `pointId → extIndex → bus / device / register / datatype / access`.
+	//
+	// Vì sao chỉ so `extIndex` là chưa đủ: slot có thể giữ nguyên số trong khi
+	// thứ nó trỏ tới đã đổi hẳn. Sửa `address` của một điểm, đổi
+	// `holding_register` thành `input_register`, đổi `uint16` thành `int32`,
+	// hay hạ `read_write` xuống `read` — cả bốn đều KHÔNG làm slot dịch chỗ,
+	// nhưng đều làm binding đã Commission đọc/ghi một thứ khác với thứ nó được
+	// duyệt. Một phép kiểm chỉ nhìn số slot sẽ nói "khớp" cho cả bốn.
+	RegisterType string
+	Address      int
+	DataType     string
+	ReadWrite    string
 	// RegisterCount là số thanh ghi điểm chiếm trên dây (2 với 32 bit).
 	//
 	// Nó KHÔNG phải khoảng cách tới slot kế tiếp. `ext_slots_for_point`
@@ -147,7 +160,10 @@ func BuildExtLayout(devices []Device, points []Point) ExtLayout {
 			slot := ExtSlot{
 				DeviceID: device.DeviceID, PointID: point.PointID, TagName: point.TagName,
 				// +1: quy đổi 0-based (allocator) → 1-based (artifact).
-				ExtIndex: cursor + 1, RegisterCount: registerCount(point.DataType),
+				ExtIndex:     cursor + 1,
+				RegisterType: point.RegisterType, Address: point.Address,
+				DataType: point.DataType, ReadWrite: point.ReadWrite,
+				RegisterCount: registerCount(point.DataType),
 			}
 			layout.Slots = append(layout.Slots, slot)
 			layout.byKey[extKey(slot.DeviceID, slot.PointID)] = slot

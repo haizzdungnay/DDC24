@@ -36,6 +36,8 @@ func (adapter programmingModbusSlotAdapter) ResolveModbusSlots(
 	for _, slot := range layout.Slots {
 		snapshot.Slots = append(snapshot.Slots, programmingapplication.ModbusSlot{
 			DeviceID: slot.DeviceID, PointID: slot.PointID, ExtIndex: slot.ExtIndex,
+			RegisterType: slot.RegisterType, Address: slot.Address,
+			DataType: slot.DataType, ReadWrite: slot.ReadWrite,
 		})
 	}
 	return snapshot, nil
