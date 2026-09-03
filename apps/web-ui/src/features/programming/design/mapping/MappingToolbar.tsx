@@ -2,7 +2,7 @@ import { Search, SlidersHorizontal } from 'lucide-react'
 import { StatusBadge } from '../../../../shared/components/StatusBadge'
 import { useI18n } from '../../../../shared/i18n'
 import { cn } from '../../../../shared/utils'
-import type { CatalogTruthState } from './mappingViewModel'
+import { UNASSIGNED_EQUIPMENT, type CatalogTruthState } from './mappingViewModel'
 
 export interface MappingToolbarProps {
   query: string
@@ -25,13 +25,19 @@ export interface MappingToolbarProps {
    * (`GET /api/v1/system/capabilities`, `ISS-PIO-12`), nên nút mở — nhưng chỉ
    * khi ĐỦ hai điều kiện, và khi thiếu thì `suggestionsBlockedReason` phải nói
    * ra thiếu cái gì thay vì để lại một tooltip vĩnh viễn không ai gỡ. */
+  /* `ISS-PIO-07`: `ADR-042` đã dựng khái niệm thiết bị công nghệ cho trang
+   * Giám sát, nhưng tab Ánh xạ không lọc theo AHU-01 được — đó là mất mát cụ
+   * thể nhất mà `F-PIO-006` nêu. */
+  equipment: string
+  equipmentOptions: string[]
+  onEquipmentChange: (value: string) => void
   suggestionsEnabled: boolean
   suggestionsActive: boolean
   suggestionsBlockedReason?: string
   onToggleSuggestions: () => void
 }
 
-export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, counts, suggestionsEnabled, suggestionsActive, suggestionsBlockedReason, onToggleSuggestions }: MappingToolbarProps) {
+export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, counts, equipment, equipmentOptions, onEquipmentChange, suggestionsEnabled, suggestionsActive, suggestionsBlockedReason, onToggleSuggestions }: MappingToolbarProps) {
   const { pick } = useI18n()
   const stale = truth.status === 'error' || truth.complete === false
   return (
@@ -69,6 +75,24 @@ export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', pr
           </select>
         </label>
         <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Hướng', 'Direction')}</span><select aria-label={pick('Hướng Variable', 'Variable direction')} value={direction} onChange={(event) => onDirectionChange(event.target.value as MappingToolbarProps['direction'])} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]"><option value="ALL">{pick('Tất cả', 'All')}</option><option value="INPUT">INPUT</option><option value="OUTPUT">OUTPUT</option><option value="INOUT">INOUT</option></select></label>
+        {equipmentOptions.length > 0 && (
+          <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]">
+            <span>{pick('Thiết bị', 'Equipment')}</span>
+            <select
+              aria-label={pick('Thiết bị', 'Equipment')}
+              value={equipment}
+              onChange={(event) => onEquipmentChange(event.target.value)}
+              className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]"
+            >
+              <option value="ALL">{pick('Tất cả', 'All')}</option>
+              {equipmentOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === UNASSIGNED_EQUIPMENT ? pick('Chưa gán', 'Unassigned') : option}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Kiểu', 'Type')}</span><select aria-label={pick('Kiểu dữ liệu', 'Data type')} value={dataType} onChange={(event) => onDataTypeChange(event.target.value)} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]"><option value="ALL">{pick('Tất cả', 'All')}</option>{dataTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
         <button
           type="button"

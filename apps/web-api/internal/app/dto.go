@@ -448,7 +448,16 @@ type PointDTO struct {
 	BoundPointID string `json:"boundPointId,omitempty"`
 	// Equipment — `T57-3.1` (`ADR-042`): thiết bị công nghệ mà điểm thuộc về.
 	// Rỗng ⇒ giao diện xếp vào nhóm "Chưa gán"; CẤM đoán từ tên điểm.
-	Equipment    string `json:"equipment,omitempty"`
+	Equipment string `json:"equipment,omitempty"`
+	// Note — mô tả tự do người vận hành nhập (`ISS-PIO-07`). Có ở cả
+	// `io_config` lẫn Virtual Point; điểm Modbus KHÔNG có trường tương ứng
+	// trong `fieldbus.conf`, nên nó rỗng ở đó và đó là sự thật, không phải
+	// thiếu sót của đường chở.
+	Note string `json:"note,omitempty"`
+	// Enabled — điểm có đang được dùng không. KHÔNG `omitempty`: `false` là
+	// một câu trả lời có nghĩa, và bỏ nó đi sẽ khiến consumer đọc thành
+	// "không biết".
+	Enabled      bool   `json:"enabled"`
 	PointID      string `json:"point_id"`
 	TagName      string `json:"tag_name"`
 	DisplayName  string `json:"display_name"`

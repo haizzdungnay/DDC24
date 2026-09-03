@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-07` `description`/`enabled`/`equipment`/`sourceRef` lên Point Catalog + bộ lọc thiết bị (#393, 2026-09-03)
+
+- **Triệu chứng.** `PointCatalogEntry` có 11 trường; đề bài §5 đòi thêm bốn. Mất mát **cụ thể nhất**
+  là `equipment`: `ADR-042` đã dựng khái niệm thiết bị công nghệ cho trang Giám sát, nhưng **tab Ánh
+  xạ không lọc theo `AHU-01` được** (`F-PIO-006`).
+- **Nguyên nhân gốc.** Cả bốn dữ kiện **đã có** ở nguồn — `note`/`enabled`/`equipment` trong
+  `io_config.conf` và Virtual Point, `enabled` và thiết bị trong `fieldbus.conf`. Cái thiếu chỉ là
+  **đường chở chúng ra ngoài**: `PointDTO` không mang `note`/`enabled`, và Catalog không chiếu
+  `equipment` dù `PointDTO` đã có sẵn.
+- **Cách sửa.** `PointDTO` mọc `Note` + `Enabled`; ba nguồn cùng điền; `PointCatalogEntry` mọc
+  `description`/`enabled`/`equipment`/`sourceRef`; FE nhận cả bốn và **tab Ánh xạ có bộ lọc thiết bị**.
+- **`sourceRef` có tiền tố, và tiền tố là bắt buộc chứ không phải trang trí.** `iop:UI-01`,
+  `core:AV-01`, `modbus:bus-1-slave-4`. Một `deviceId` Modbus và một mã kênh trên bo là **hai không
+  gian tên khác nhau**; gộp vào một chuỗi trần thì consumer không phân biệt được `AV-01` (slot Core)
+  với một thiết bị tình cờ tên `AV-01`.
+- **Rỗng nghĩa là CHƯA CÓ NGUỒN, không phải chỗ điền tạm.** Một VP chưa bind slot nào thì thật sự
+  chưa có gì sinh ra giá trị cho nó.
+- **Ba chỗ "vắng" là sự thật về hợp đồng, không phải thiếu sót của đường chở:**
+  - Điểm Modbus **không có** trường mô tả trong `fieldbus.conf` ⇒ `description` rỗng. Có test ghi
+    lại điều này để không ai "sửa" nó bằng cách điền bừa tên điểm vào mô tả.
+  - `enabled` **vắng mặt** trong một hàng `io_config` đời cũ **khác** `enabled: false`: coi nó là
+    "đã tắt" sẽ làm mọi điểm biến mất khỏi bộ lọc, nên cấu hình không khai giữ mặc định *đang dùng*.
+  - `enabled` **không** dùng `omitempty` trong JSON: `false` là một câu trả lời có nghĩa, và bỏ nó
+    đi sẽ khiến consumer đọc thành *"không biết"*.
+- **Bộ lọc thiết bị: "Chưa gán" là một nhóm có thật.** Nó là một lựa chọn riêng
+  (`UNASSIGNED_EQUIPMENT`), không phải chuỗi rỗng — người dùng cần **lọc tới** nhóm đó, khác hẳn
+  *"không lọc"*. Khi thiết bị đang lọc biến mất khỏi catalog, bộ lọc **tự trở về "Tất cả"**: giữ một
+  bộ lọc trỏ vào thứ không còn tồn tại sẽ cho một danh sách rỗng **mà không nói vì sao**.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · FE `vitest src` **212 tệp / 2565 test PASS** · `npm run lint` exit 0 ·
+  `npm run build` exit 0 (chunk `programming` dư địa **41,88 KiB**).
+- **Ba lần tiêm lỗi:** bỏ lọc thiết bị khỏi danh sách Point ⇒ **2 test FE FAIL**; catalog không chở
+  `equipment` ⇒ **1 test Go FAIL**; bỏ tiền tố `sourceRef` ⇒ **1 test Go FAIL**. Khôi phục ⇒ xanh.
+- **Một thiếu sót của chính tôi, phát hiện bằng tiêm lỗi.** Lần tiêm đầu cho backend **không** làm
+  test nào đỏ — vì tôi chưa viết test Go nào cho bốn trường mới. Nửa backend của điều kiện đóng lúc
+  đó **không có bằng chứng**. Đã bổ sung `pointcatalog_enrichment_test.go` rồi tiêm lại.
+
 ### Fixed — `ISS-PIO-08` Mốc thời gian điểm LOCAL là "lúc web đọc SHM", không phải mốc mẫu (#394, 2026-09-03)
 
 - **Triệu chứng.** `decodePoint` điền `UpdatedAt: time.Now()`. Đó là **lúc web đọc SHM**, không phải

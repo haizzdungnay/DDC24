@@ -598,6 +598,16 @@ export interface ProgrammingPointCatalogEntry {
   observedAt?: string
   /** Slot EXT 1-based của điểm Modbus. Vắng = catalog chưa cấp (`ISS-PIO-31`). */
   extIndex?: number
+  /** `ISS-PIO-07` — mô tả tự do. Rỗng ở điểm Modbus vì `fieldbus.conf` không có
+   *  trường tương ứng; đó là sự thật về hợp đồng, không phải thiếu dữ liệu. */
+  description?: string
+  /** Điểm có đang được dùng không. */
+  enabled?: boolean
+  /** Thiết bị công nghệ (`ADR-042`). Rỗng = CHƯA GÁN; cấm đoán từ tên điểm. */
+  equipment?: string
+  /** Định danh nguồn có tiền tố: `iop:` / `core:` / `modbus:`. Rỗng = chưa có
+   *  nguồn (ví dụ VP chưa bind slot). */
+  sourceRef?: string
   /** Quyết định của server cho từng chiều. Vắng mặt = server đời cũ ⇒ FE phải
    *  fail-closed chứ KHÔNG được tự suy lại. */
   mapping?: {

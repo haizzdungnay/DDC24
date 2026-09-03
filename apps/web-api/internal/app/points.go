@@ -165,9 +165,12 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 	if err != nil {
 		ioCfg = ConfigIO{}
 	}
+	/* `ISS-PIO-07`: `note` và `enabled` đi cùng `equipment` lên tới Point
+	 * Catalog. Cả ba đã có trong `io_config.conf` từ lâu; cái thiếu chỉ là
+	 * đường chở chúng ra ngoài. */
 	metadata := map[string]struct {
-		tag, name, unit, signalType, equipment string
-		trend                                  bool
+		tag, name, unit, signalType, equipment, note string
+		trend, enabled, enabledKnown                 bool
 	}{}
 	addRows := func(rows []map[string]any, prefix string) {
 		for _, row := range rows {
@@ -186,10 +189,16 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			// `T57-3.1` (`ADR-042`): thẻ thiết bị đi kèm điểm ra tới giao diện.
 			// Core KHÔNG đọc trường này — nó là dữ liệu trình bày.
 			equipment, _, _ := stringField(row, "equipment")
+			note, _, _ := stringField(row, "note")
+			/* `enabled` vắng mặt KHÁC `enabled: false`: cấu hình đời cũ không
+			 * có khoá này, và coi nó là "đã tắt" sẽ làm mọi điểm biến mất khỏi
+			 * bộ lọc. `enabledKnown` giữ hai ca đó tách nhau. */
+			enabled, enabledPresent, _ := boolField(row, "enabled")
 			metadata[id] = struct {
-				tag, name, unit, signalType, equipment string
-				trend                                  bool
-			}{fallbackPointTag(tag, id), strings.TrimSpace(name), strings.TrimSpace(unit), strings.TrimSpace(signalType), normalizeEquipmentTag(equipment), trend}
+				tag, name, unit, signalType, equipment, note string
+				trend, enabled, enabledKnown                 bool
+			}{fallbackPointTag(tag, id), strings.TrimSpace(name), strings.TrimSpace(unit), strings.TrimSpace(signalType),
+				normalizeEquipmentTag(equipment), strings.TrimSpace(note), trend, enabled, enabledPresent}
 		}
 	}
 	addRows(ioCfg.UI, "UI")
@@ -231,6 +240,10 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			point.LogEnabled = meta.trend
 			point.SignalType = meta.signalType
 			point.Equipment = meta.equipment
+			point.Note = meta.note
+			// Không khai `enabled` ⇒ giữ mặc định "đang dùng": cấu hình đời cũ
+			// không được biến thành một dàn điểm tắt hết.
+			point.Enabled = !meta.enabledKnown || meta.enabled
 		}
 		if point.Name == "" {
 			point.Name = id
@@ -244,6 +257,11 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			point.DefaultValue = meta.DefaultValue
 			point.SafeValue = meta.SafeValue
 			point.Writable = meta.ReadWrite == "read_write"
+			point.Enabled = bool(meta.Enabled)
+			/* `ISS-PIO-07`: `ModbusRTUPoint` KHÔNG có trường mô tả trong
+			 * `fieldbus.conf`. `Note` vì thế rỗng cho điểm Modbus — đó là sự
+			 * thật về hợp đồng, không phải thiếu sót của đường chở. Muốn có mô
+			 * tả cho điểm Modbus thì phải thêm trường vào chính hợp đồng đó. */
 		}
 		point.PointID = point.ID
 		point.TagName = point.Tag

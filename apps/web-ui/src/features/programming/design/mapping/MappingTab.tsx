@@ -17,7 +17,7 @@ const PublishedSignalsPanel = lazy(() =>
 import { useI18n } from '../../../../shared/i18n'
 import { boardChannelConfirmed, fetchSystemCapabilities, type SystemCapabilities } from '../../../../shared/api/capabilities'
 import { VariableWorklist } from './VariableWorklist'
-import { buildMappingVariableRows, buildPointRows, rankPointRows, type CatalogTruthState } from './mappingViewModel'
+import { buildMappingVariableRows, buildPointRows, equipmentOptions, matchesEquipment, rankPointRows, type CatalogTruthState } from './mappingViewModel'
 
 type PointCategoryFilter = 'ALL' | 'LOCAL' | 'VP' | 'MB_RTU'
 type DirectionFilter = 'ALL' | 'INPUT' | 'OUTPUT' | 'INOUT'
@@ -49,6 +49,7 @@ export function MappingTab(props: {
   const [selectedVariableId, setSelectedVariableId] = useState<string | null>(null)
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null)
   const [suggestionsActive, setSuggestionsActive] = useState(false)
+  const [equipment, setEquipment] = useState('ALL')
 
   const programs = useMemo(() => {
     const map = new Map<string, string>()
@@ -129,7 +130,16 @@ export function MappingTab(props: {
     const programMatch = programFilter === 'ALL' || row.programId === programFilter
     return queryMatch && programMatch && (direction === 'ALL' || row.direction === direction) && (dataType === 'ALL' || row.type === dataType)
   })
+  const equipmentChoices = useMemo(() => equipmentOptions(pointRows), [pointRows])
+  /* Thiết bị đang lọc biến mất khỏi catalog (đổi cấu hình, đổi trang) ⇒ trở về
+   * "Tất cả". Giữ một bộ lọc trỏ vào thứ không còn tồn tại sẽ cho một danh sách
+   * rỗng mà không nói vì sao. */
+  useEffect(() => {
+    if (equipment !== 'ALL' && !equipmentChoices.includes(equipment)) setEquipment('ALL')
+  }, [equipment, equipmentChoices])
+
   const visiblePoints = (suggestionsActive && suggestionsEnabled ? suggestedPointRows : pointRows).filter((row) => {
+    if (!matchesEquipment(row, equipment)) return false
     const queryMatch = !normalized || `${row.name} ${row.category} ${row.deviceId ?? ''} ${row.pointId} ${row.dataType}`.toLocaleLowerCase().includes(normalized)
     const prefix = row.pointId.split('-', 1)[0].toUpperCase()
     const kind = row.category === 'VP' ? 'VP' : row.category === 'MB_RTU' ? 'MB_RTU' : prefix
@@ -154,7 +164,7 @@ export function MappingTab(props: {
       <div className="text-right text-xs text-[var(--c-text-dim)]"><span className="block font-mono text-[var(--c-text)]">{document.library.profile} / {document.library.version}</span><span>{saving ? 'Workspace đang lưu ở tab khác' : canEdit ? 'Admin · mutation đang khóa' : 'Viewer · read-only'}</span></div>
     </div>
     {saveError && <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">{saveError}</p>}
-    <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} suggestionsEnabled={suggestionsEnabled} suggestionsActive={suggestionsActive && suggestionsEnabled} suggestionsBlockedReason={suggestionsBlockedReason} onToggleSuggestions={() => setSuggestionsActive((value) => !value)} />
+    <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} equipment={equipment} equipmentOptions={equipmentChoices} onEquipmentChange={setEquipment} suggestionsEnabled={suggestionsEnabled} suggestionsActive={suggestionsActive && suggestionsEnabled} suggestionsBlockedReason={suggestionsBlockedReason} onToggleSuggestions={() => setSuggestionsActive((value) => !value)} />
     <div className="grid items-start gap-3 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
       <VariableWorklist rows={visibleVariables} selectedId={selectedVariableId} onSelect={setSelectedVariableId} onOpenSource={(row) => openSource(row.programId)} mutationsBlocked={true} />
       <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} pointKind={pointKind} onPointKindChange={setPointKind} />

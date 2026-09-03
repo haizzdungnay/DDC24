@@ -40,6 +40,25 @@ type PointCatalogEntry struct {
 	// MB_RTU. Điểm MB_RTU mang `0` tự rơi về nhánh "chưa bind được" — thiếu số
 	// thì không đoán số.
 	ExtIndex int `json:"extIndex,omitempty"`
+	// Description — mô tả tự do người vận hành nhập (`ISS-PIO-07`, đề bài §5).
+	// Rỗng ở điểm Modbus vì `fieldbus.conf` KHÔNG có trường tương ứng — đó là
+	// sự thật về hợp đồng, không phải thiếu sót của đường chở.
+	Description string `json:"description,omitempty"`
+	// Enabled — điểm có đang được dùng không. KHÔNG `omitempty`: `false` là một
+	// câu trả lời có nghĩa, và bỏ nó đi sẽ khiến consumer đọc thành "không biết".
+	Enabled bool `json:"enabled"`
+	// Equipment — thiết bị công nghệ mà điểm thuộc về (`ADR-042`). Thiếu nó là
+	// mất mát cụ thể nhất mà `F-PIO-006` nêu: `ADR-042` đã dựng khái niệm này
+	// cho trang Giám sát, nhưng tab Ánh xạ không lọc theo AHU-01 được.
+	// Rỗng = CHƯA GÁN; CẤM đoán từ tên điểm.
+	Equipment string `json:"equipment,omitempty"`
+	// SourceRef — định danh NGUỒN sinh ra giá trị, có tiền tố để hai không gian
+	// tên không đụng nhau: `iop:UI-01` (kênh trên bo), `core:AV-01` (slot Core
+	// của một VP đã bind), `modbus:bus-1-slave-4` (thiết bị trường).
+	//
+	// Rỗng nghĩa là CHƯA CÓ NGUỒN — ví dụ một VP chưa bind slot nào. Đó là câu
+	// trả lời đúng chứ không phải chỗ để điền tạm một giá trị.
+	SourceRef string `json:"sourceRef,omitempty"`
 	// Mapping là QUYẾT ĐỊNH eligibility do server cấp kèm lý do (`ISS-PIO-32`).
 	// FE render nguyên văn; nó KHÔNG được giữ bản luật thứ hai.
 	Mapping PointMapEligibility `json:"mapping"`

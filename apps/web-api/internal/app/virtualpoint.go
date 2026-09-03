@@ -933,6 +933,8 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		LogIntervalMs: item.LogIntervalMs,
 		BoundPointID:  item.BoundPointID,
 		Equipment:     normalizeEquipmentTag(item.Equipment),
+		Note:          item.Note,
+		Enabled:       item.Enabled,
 		PointID:       item.ID,
 		TagName:       tag,
 		DisplayName:   tag,

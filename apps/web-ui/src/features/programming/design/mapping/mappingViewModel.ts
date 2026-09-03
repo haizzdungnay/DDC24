@@ -68,7 +68,19 @@ export interface MappingPointRow {
   compatible: boolean
   compatibilityReasons: string[]
   suggestionScore?: number
+  /** `ISS-PIO-07` — thiết bị công nghệ (`ADR-042`). Rỗng = CHƯA GÁN. */
+  equipment?: string
+  /** Mô tả tự do; rỗng ở điểm Modbus vì hợp đồng không có trường đó. */
+  description?: string
+  /** Định danh nguồn có tiền tố (`iop:`/`core:`/`modbus:`); rỗng = chưa có nguồn. */
+  sourceRef?: string
 }
+
+/** Nhãn dùng cho bộ lọc thiết bị khi điểm CHƯA được gán thiết bị nào.
+ *
+ *  Là một giá trị riêng chứ không phải chuỗi rỗng: "chưa gán" là một nhóm có
+ *  thật mà người dùng cần lọc tới, khác hẳn "không lọc". */
+export const UNASSIGNED_EQUIPMENT = '__unassigned__' 
 
 interface DeclaredVariable {
   name: string
@@ -260,8 +272,32 @@ export function buildPointRows(catalog: ProgrammingPointCatalogEntry[], variable
       eligibility: result.eligibility,
       compatible: result.assignable,
       compatibilityReasons: result.reasons,
+      equipment: entry.equipment,
+      description: entry.description,
+      sourceRef: entry.sourceRef,
     }
   })
+}
+
+/** Danh sách thiết bị có trong catalog, đã sắp xếp; kèm nhóm "chưa gán" khi có
+ *  ít nhất một điểm chưa được gán. */
+export function equipmentOptions(rows: MappingPointRow[]): string[] {
+  const named = new Set<string>()
+  let hasUnassigned = false
+  for (const row of rows) {
+    const equipment = row.equipment?.trim()
+    if (equipment) named.add(equipment)
+    else hasUnassigned = true
+  }
+  const options = [...named].sort((left, right) => left.localeCompare(right))
+  return hasUnassigned ? [...options, UNASSIGNED_EQUIPMENT] : options
+}
+
+export function matchesEquipment(row: MappingPointRow, filter: string): boolean {
+  if (filter === 'ALL') return true
+  const equipment = row.equipment?.trim() ?? ''
+  if (filter === UNASSIGNED_EQUIPMENT) return equipment === ''
+  return equipment === filter
 }
 
 function tokens(value: string): Set<string> {

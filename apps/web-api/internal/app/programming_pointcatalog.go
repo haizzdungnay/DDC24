@@ -262,6 +262,38 @@ func toPointCatalogEntry(point PointDTO) programmingapplication.PointCatalogEntr
 		Category: category, PointID: pointID, DeviceID: deviceID, Name: pointCatalogName(point),
 		DataType: pointCatalogDataType(point), Unit: point.Unit, Direction: direction, Writable: writable,
 		Quality: pointCatalogQuality(point), Value: point.Value, ObservedAt: point.UpdatedAt,
+		Description: point.Note, Enabled: point.Enabled, Equipment: point.Equipment,
+		SourceRef: pointCatalogSourceRef(category, deviceID, point),
+	}
+}
+
+/* pointCatalogSourceRef — định danh NGUỒN sinh ra giá trị (`ISS-PIO-07`).
+ *
+ * Tiền tố là bắt buộc, không phải trang trí: một `deviceId` Modbus và một mã
+ * kênh trên bo là hai không gian tên khác nhau, và gộp chúng vào một chuỗi
+ * trần thì consumer không phân biệt được `AV-01` (slot Core) với một thiết bị
+ * tình cờ tên `AV-01`.
+ *
+ * Rỗng nghĩa là CHƯA CÓ NGUỒN — một VP chưa bind slot nào thì thật sự chưa có
+ * gì sinh ra giá trị cho nó, và nói "không có" là đúng hơn mọi giá trị tạm.
+ */
+func pointCatalogSourceRef(category, deviceID string, point PointDTO) string {
+	switch category {
+	case "MB_RTU":
+		if deviceID == "" {
+			return ""
+		}
+		return "modbus:" + deviceID
+	case "VP":
+		if point.BoundPointID == "" {
+			return ""
+		}
+		return "core:" + point.BoundPointID
+	default:
+		if point.ID == "" {
+			return ""
+		}
+		return "iop:" + point.ID
 	}
 }
 
