@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+### Finding — `ISS-MBW-03` giá trị Modbus RTU hiển thị **cũ tới ~50 giây**; điều khiển vốn đã nhanh (2026-09-03)
+
+- **Đính chính chẩn đoán trước.** `ISS-MBW-02` mô tả triệu chứng là *"lệnh ghi đến muộn 16–153 s"*.
+  Đo lại có mốc thời gian trên bo cho thấy **cách đọc đó sai**: lệnh ghi đi rất nhanh, thứ đến muộn
+  là **giá trị phản hồi hiển thị**. Bản sửa `ISS-MBW-02` vẫn là lỗi thật và vẫn giữ (lệnh ghi không
+  được đi nhờ lịch đọc), nhưng nó **không phải** nguyên nhân của con số 50 s.
+- **Đo thật, có mốc.** Bấm ghi `CK50804-DO1=1` lúc `09:53:01.538`; `iobus` phát FC05 lên dây lúc
+  `09:53:02.476` — **938 ms**. Relay đóng ngay tại đó. Nhưng `plc_shm.ext[0].value` vẫn báo giá trị
+  cũ thêm ~50 s nữa, và `sample_utc_ms` khi đó **cũ 49,8 s** so với đồng hồ hệ thống.
+- **Nguyên nhân gốc: tồn đọng phía tiêu thụ, không phải trên dây.** Restart **riêng** `mkddc-core`
+  đưa độ cũ về ~0 rồi nó **tăng tuyến tính ~0,92 s mỗi giây**: 6 s → 5,8 s · 21 s → 19,8 s ·
+  41 s → 37,9 s, rồi bão hoà quanh 50 s. Đó là chữ ký kinh điển của lệch nhịp producer/consumer qua
+  một hàng đợi FIFO: `iobus` publish ext snapshot **10 Hz**, `core` tiêu thụ ~**1 datagram mỗi
+  scan** (1 Hz). Restart core dựng lại socket ⇒ xoá sạch tồn đọng ⇒ tươi trở lại, rồi tích lại.
+  `WARN ext_snap.sequence_gap prev=N got=N+10` trong log core là cùng một hiện tượng.
+- **Vì sao trần chống tồn đọng hiện có không cứu được.** `bacnet_objtable.cpp` ĐÃ có vòng vét
+  `kMaxDrainPerScan = 64` với đúng lý do này ghi trong chú thích. Con số 64 lớn hơn 10 datagram/scan
+  nên đáng lẽ dư sức đuổi kịp — nhưng số đo nói tồn đọng vẫn tích ở nhịp ~1 datagram/scan. Cần xác
+  định vòng vét thực tế chạy bao nhiêu lượt mỗi scan trước khi sửa; **chưa đủ căn cứ để kết luận**.
+- **Hệ quả vận hành.** Điều khiển đạt: bấm nút → relay đáp trong **dưới 1 giây**. Cái không đạt là
+  **giám sát**: mọi giá trị Modbus RTU trên giao diện — không riêng điểm vừa ghi — trễ tới ~50 s, nên
+  người vận hành bấm xong nhìn màn hình tưởng lệnh trượt và bấm lại.
+- **Chưa sửa.** Sửa nằm ở đường tiêu thụ ext snapshot của `core`.
+
+### Added — chương trình ST chạy mẫu 32 DO cho CK-508 và CK-509 trên Loop 1 (2026-09-03)
+
+- Thêm `apps/core/application/st/samples/relay_pattern_32do.st` điều khiển đủ 32 DO của
+  CK-508 địa chỉ 04/05 và CK-509 địa chỉ 06/07, chu kỳ 1 s với ba kiểu: đuổi đồng bộ,
+  CK-508 thuận/CK-509 ngược và đuổi tuần tự từng kênh. Mỗi vòng có cửa sổ đầu/cuối tất cả
+  OFF; từng scan gán OFF trước khi chọn mẫu và giới hạn tối đa bốn ngõ ra ON cùng lúc.
+- Đã đăng ký 32 binding theo đúng danh tính bền `CK508-04`, `CK508-05`, `CK509-06`,
+  `CK509-07`. Lần Check đầu đã chặn đúng `PRG-ERR-MAP-003` do dùng nhầm danh tính
+  `bus-1-slave-*`; sau khi rebind, Check trên bo PASS, 0 diagnostic, 32 symbol, artifact
+  `e82324fd-09a4-4170-a84d-f95c0e9f99eb` (11.619 byte).
+- Mô phỏng trên bo PASS 56/56 chu kỳ: chu kỳ 1 tất cả OFF; 5–12 đuổi đồng bộ; 13–20
+  CK-508 thuận/CK-509 ngược; 21–52 lần lượt đi hết CK508-04, CK508-05, CK509-06,
+  CK509-07; 53–56 tất cả OFF. Cả 32 observation giữ quality `GOOD`.
+- Chưa Commission/ngắt safe-state trên ngõ ra thật: Core đang giữ Active Revision
+  `3e104e72-85e9-4599-9a4b-49c5e71a5190` thuộc project đã bị xoá khỏi Web API, trong khi
+  project mới báo `activeRevisionId=null`. Cổng CAS từ chối so sánh cross-project; không
+  bypass audit/impact và không ghi đè chương trình cũ. Không triển khai bản sửa Core/IOBus
+  của team khác trong phiên này.
+
 ### Fixed — `ISS-MBW-02` lệnh ghi Modbus RTU phải đi nhờ lịch đọc nên đến muộn 16–153 s (2026-09-03)
 
 - **Triệu chứng.** Đo trên bo Foxlinx (CK-508 slave 04, `poll_ms=1000`): từ lúc API trả
