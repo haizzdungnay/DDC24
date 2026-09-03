@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-02` bằng chứng đi hết chuỗi binding Modbus: tạo điểm → map → Check → runtime (#378, 2026-09-03)
+
+- **Triệu chứng.** Điểm Modbus không map được vào biến chương trình (`F-PIO-019`).
+- **Trạng thái thật khi mở lại issue.** Hai điều kiện đóng đứng ở hai chỗ khác nhau:
+  - *"Không còn chuỗi `'Core Rev A chưa resolve MB_RTU'` trong mã FE"* — **đã đạt**; `grep` toàn bộ
+    `apps/web-ui/src` ra **0 kết quả**. Chuỗi chỉ còn trong một chú thích Go **trích lại lịch sử**,
+    đúng chỗ nó nên nằm.
+  - *"Test binding Modbus end-to-end"* — **chưa đạt**. Từng mảnh đã có test riêng (eligibility,
+    Catalog phát `extIndex`, danh tính `5a…5g`), nhưng **không mảnh nào chứng minh chúng nối được
+    với nhau**. Đó đúng là chỗ `F-PIO-019` sống: mỗi tầng nói *"tôi hỗ trợ MB_RTU"* trong khi cả
+    chuỗi thì không đi được.
+- **Cách sửa.** Ba test đi **trọn** chuỗi trên cùng một bản đồ slot và kết thúc ở `io_map` mà
+  **compiler thật sự nhận** — tức thứ runtime sẽ chạy:
+  1. Điểm có trong cấu hình đang chạy ⇒ Check **PASSED**, `io_map` mang `category: MB_RTU`, đúng
+     chiều/quyền ghi, và `extIndex` **phân giải lại từ authority** (1-based), không phải con số ai
+     đó lưu trong binding.
+  2. **Không** có authority ⇒ **CHẶN**. Thiếu nguồn xác minh thì con số trong binding không có gì
+     bảo chứng — chạy tiếp là đúng lỗ hổng `ISS-PIO-31` mô tả.
+  3. Điểm **biến mất** khỏi cấu hình đang chạy ⇒ **CHẶN**, chứ không im lặng dùng slot cũ.
+- **Binding trong test mang đúng danh tính bền `(deviceId, pointId)`, không `extIndex`** — vì cửa ghi
+  đã từ chối nó ở #377. Nói cách khác: đường đi hết được **mà không cần** lưu handle runtime, đúng
+  điều `AC-PIO-ID-01` khẳng định.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · `go test -race ./internal/programming/application` **`ok`** (250,2 s).
+- **Một lần tiêm lỗi:** thay phân giải-lại-từ-authority bằng "tin con số trong binding" ⇒ **5 test
+  FAIL** (ba test mới + hai test có sẵn). Khôi phục ⇒ xanh trở lại.
+
 ### Fixed — `ISS-PIO-01` Binding bền có thể mang `extIndex`, đúng thứ `AC-PIO-ID-01` cấm (#377, 2026-09-03)
 
 - **Triệu chứng.** `upsertBindingCompat` chép **mọi khoá** client gửi nguyên vào tài liệu bền —
