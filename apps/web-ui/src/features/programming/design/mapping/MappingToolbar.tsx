@@ -1,6 +1,7 @@
 import { Search, SlidersHorizontal } from 'lucide-react'
 import { StatusBadge } from '../../../../shared/components/StatusBadge'
 import { useI18n } from '../../../../shared/i18n'
+import { cn } from '../../../../shared/utils'
 import type { CatalogTruthState } from './mappingViewModel'
 
 export interface MappingToolbarProps {
@@ -19,9 +20,18 @@ export interface MappingToolbarProps {
   dataTypes: string[]
   onDataTypeChange: (value: string) => void
   counts: { variables: number; mapped: number; unmapped: number; review: number; catalog: number }
+  /* `ISS-PIO-13`: nút Gợi ý từng bị khoá cứng kèm tooltip "chỉ bật sau khi
+   * capability authority được công bố". Authority đó nay có thật
+   * (`GET /api/v1/system/capabilities`, `ISS-PIO-12`), nên nút mở — nhưng chỉ
+   * khi ĐỦ hai điều kiện, và khi thiếu thì `suggestionsBlockedReason` phải nói
+   * ra thiếu cái gì thay vì để lại một tooltip vĩnh viễn không ai gỡ. */
+  suggestionsEnabled: boolean
+  suggestionsActive: boolean
+  suggestionsBlockedReason?: string
+  onToggleSuggestions: () => void
 }
 
-export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, counts }: MappingToolbarProps) {
+export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, counts, suggestionsEnabled, suggestionsActive, suggestionsBlockedReason, onToggleSuggestions }: MappingToolbarProps) {
   const { pick } = useI18n()
   const stale = truth.status === 'error' || truth.complete === false
   return (
@@ -60,8 +70,21 @@ export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', pr
         </label>
         <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Hướng', 'Direction')}</span><select aria-label={pick('Hướng Variable', 'Variable direction')} value={direction} onChange={(event) => onDirectionChange(event.target.value as MappingToolbarProps['direction'])} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]"><option value="ALL">{pick('Tất cả', 'All')}</option><option value="INPUT">INPUT</option><option value="OUTPUT">OUTPUT</option><option value="INOUT">INOUT</option></select></label>
         <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Kiểu', 'Type')}</span><select aria-label={pick('Kiểu dữ liệu', 'Data type')} value={dataType} onChange={(event) => onDataTypeChange(event.target.value)} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]"><option value="ALL">{pick('Tất cả', 'All')}</option>{dataTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
-        <button type="button" disabled className="inline-flex min-h-10 items-center gap-2 rounded border border-dashed border-[var(--c-border)] px-3 text-xs font-semibold text-[var(--c-text-dim)]" title={pick('Suggestions chỉ bật sau khi capability authority được công bố', 'Suggestions available after capability authority published')}>
-          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> {pick('Gợi ý (Phase 1A)', 'Suggestions (Phase 1A)')}
+        <button
+          type="button"
+          disabled={!suggestionsEnabled}
+          aria-pressed={suggestionsActive}
+          onClick={onToggleSuggestions}
+          className={cn(
+            'inline-flex min-h-10 items-center gap-2 rounded border px-3 text-xs font-semibold',
+            suggestionsEnabled ? 'border-[var(--c-border)] text-[var(--c-text)]' : 'border-dashed border-[var(--c-border)] text-[var(--c-text-dim)]',
+            suggestionsActive && 'border-[var(--c-accent)] text-[var(--c-accent)]'
+          )}
+          title={suggestionsEnabled
+            ? pick('Chỉ hiện Point tương thích VÀ nằm trên kênh bo xác nhận có thật', 'Show only Points that are compatible AND on a channel the board confirms')
+            : suggestionsBlockedReason}
+        >
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> {pick('Gợi ý', 'Suggestions')}
         </button>
         <div className="flex flex-wrap items-center gap-1.5 text-xs" aria-label="Mapping counters">
           <StatusBadge state="online" label={`Mapped ${counts.mapped}`} />

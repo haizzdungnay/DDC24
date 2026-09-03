@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-13` FE dựng số kênh và dropdown mode từ capability, bỏ `VISIBLE_UI_CHANNELS` (#390, 2026-09-03)
+
+- **Triệu chứng.** FE liệt kê cứng cả 8 nhóm `signalType 0..8` cho **mọi** kênh UI — kể cả
+  *ánh sáng/chuyển động* và *đếm xung* vốn phụ thuộc mạch — và `VISIBLE_UI_CHANNELS = 16` là nguồn
+  sự thật **thứ tư** cho số kênh. Nút *"Gợi ý"* ở tab Ánh xạ thì khoá cứng kèm tooltip *"chỉ bật sau
+  khi capability authority được công bố"* (`F-PIO-008`/`F-PIO-009`).
+- **Nguyên nhân gốc.** Không có gì để hỏi. `ISS-PIO-12` (#389) vừa cấp `GET /system/capabilities`;
+  trước đó FE **buộc** phải đoán, và đoán đúng ba lần rồi sai lần thứ tư là cách một hằng viết cứng
+  sống sót qua nhiều đợt review.
+- **Cách sửa.** `shared/api/capabilities.ts` là cửa duy nhất sang capability: kiểu dữ liệu, lời gọi,
+  và **các hàm thuần** dịch từ mã hợp đồng sang nhóm mode của giao diện. `InputsPage` lấy trần kênh
+  và tập mode từ đó; `VISIBLE_UI_CHANNELS` **bị xoá**, và `isVisibleUniversalInput` **mất luôn giá
+  trị mặc định** để không còn chỗ nào lặng lẽ tin vào con số 16.
+- **Nhóm mode của giao diện không map 1-1 sang mã hợp đồng.** `resistance` gộp PT100/PT1000 (đòi
+  `IOP_BOARD_CAP_RTD`) với NTC10k/NTC20k (**không bit năng lực nào phủ**). Nên mức tin cậy của một
+  *nhóm* lấy theo thành viên **tốt nhất** — chỉ cần một mã còn dùng được thì nhóm còn dùng được —
+  nhưng **lý do của thành viên bị chặn vẫn hiện ra**: bo không có mạch RTD thì người vận hành vẫn
+  chọn được điện trở nhờ NTC, và vẫn phải thấy rằng PT100/PT1000 đã bị giữ lại.
+- **Ba ngoại lệ có chủ ý, mỗi cái vá một cách hỏng cụ thể.**
+  1. **Mode đang được lưu trên kênh luôn hiện**, kể cả khi bị giữ lại. Giấu nó đi làm nút radio
+     không khớp cấu hình thật — người vận hành thấy một kênh *"không chọn gì"* trong khi nó đang
+     chạy một mode cụ thể, và lần lưu sau sẽ **âm thầm đổi mất** mode đó.
+  2. **Không đọc được capability ⇒ `unverified`, không phải `withheld`.** Giấu hết mode chỉ vì một
+     lần gọi mạng hỏng sẽ **khoá cứng trang cấu hình**, trong khi đường ghi phía backend vẫn chặn
+     đúng chỗ cần chặn (`ISS-PIO-12`).
+  3. **Trần kênh khi chưa có capability suy từ chính danh sách cấu hình backend trả về** — vẫn là
+     backend nói, chỉ kém trực tiếp hơn. **Không có** bước rơi về hằng viết cứng: danh sách rỗng cho
+     trần 0, nghĩa là *"chưa biết kênh nào"*, không phải *"mặc định 16"*.
+- **Nút "Gợi ý" mở khoá, và capability chính là thứ làm nó có nghĩa.** Gợi ý = chỉ hiện ứng viên
+  tương thích **và** nằm trên kênh bo **xác nhận có thật**. Point ảo và điểm Modbus của thiết bị
+  ngoài không thuộc thẩm quyền `BOARD_CAP_MAP` nên **không** bị lọc — `boardChannelConfirmed` trả ba
+  giá trị chứ không hai, vì gộp *"không áp dụng"* vào *"không có"* sẽ loại oan toàn bộ VP và Modbus.
+  Chưa đọc được capability thì nút **vẫn khoá**, và tooltip nói ra **thiếu cái gì** thay vì để lại
+  một lời hứa vĩnh viễn không ai gỡ.
+- **Một lỗi trợ năng tự gây rồi tự sửa.** Nhãn *"chưa xác nhận"* đặt trong `<label>` bị gộp vào **tên
+  trợ năng** của nút radio, làm tên của cùng một nút **đổi theo trạng thái mạng** — một test có sẵn
+  bắt được ngay. Sửa bằng `aria-label` cố định cho tên và `aria-describedby` cho cảnh báo: người dùng
+  trình đọc màn hình vẫn nghe được cảnh báo, nhưng tên nút thì ổn định.
+- **Đo lại.** FE `vitest --run src` **209 tệp / 2548 test PASS**, exit 0 · `npm run lint` exit 0 ·
+  `npm run build` exit 0 · `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch, `go test ./...
+  -count=1` **20 package `ok`** (Go không đổi trong đợt này, chạy để chắc cây sau merge còn nguyên).
+- **Ngân sách bundle rộng ra chứ không hẹp đi, và không phải nhờ đợt này.** Chunk `programming`
+  **122,86 / 165,00 KiB** (dư địa **42,14 KiB**), so với **164,31 KiB** đo ở `ISS-PIO-12`. Phần giảm
+  đến từ các thay đổi FE mà `main` merge vào giữa hai lần đo, không phải từ bản vá này — ghi ra để
+  không ai đọc nhầm con số thành công trạng của `ISS-PIO-13`.
+- **Hai lần tiêm lỗi** chứng minh cổng còn kiểm: bỏ lọc capability khỏi dropdown ⇒ test *"giấu mode
+  bo nói không có"* **FAIL**; bỏ kiểm kênh bo khỏi gợi ý ⇒ test *"loại Point trên kênh bo không xác
+  nhận"* **FAIL**. Khôi phục ⇒ xanh trở lại.
+
 ### Fixed — Cổng C++ không chạy được trên máy build không có egress ra github.com (2026-09-03)
 
 - **Triệu chứng.** `scripts/verify-project.sh --component cpp` hỏng ngay ở bước cmake configure:

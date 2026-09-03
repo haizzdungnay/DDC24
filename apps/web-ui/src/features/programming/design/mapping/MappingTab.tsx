@@ -15,6 +15,7 @@ const PublishedSignalsPanel = lazy(() =>
   import('./PublishedSignalsPanel').then((module) => ({ default: module.PublishedSignalsPanel }))
 )
 import { useI18n } from '../../../../shared/i18n'
+import { boardChannelConfirmed, fetchSystemCapabilities, type SystemCapabilities } from '../../../../shared/api/capabilities'
 import { VariableWorklist } from './VariableWorklist'
 import { buildMappingVariableRows, buildPointRows, rankPointRows, type CatalogTruthState } from './mappingViewModel'
 
@@ -47,6 +48,7 @@ export function MappingTab(props: {
   const [pointKind, setPointKind] = useState<PointKindFilter>('ALL')
   const [selectedVariableId, setSelectedVariableId] = useState<string | null>(null)
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null)
+  const [suggestionsActive, setSuggestionsActive] = useState(false)
 
   const programs = useMemo(() => {
     const map = new Map<string, string>()
@@ -66,6 +68,25 @@ export function MappingTab(props: {
     }
   }, [programFilter, programs])
 
+  /* `ISS-PIO-13`: "capability authority" mà tooltip nút Gợi ý chờ suốt Phase 1A.
+   * `null` = chưa đọc được, và ở trạng thái đó nút vẫn KHÓA — gợi ý một Point
+   * nằm trên kênh không ai xác nhận là mời người dùng đấu dây vào chỗ có thể
+   * không tồn tại. */
+  const [capabilities, setCapabilities] = useState<SystemCapabilities | null>(null)
+  useEffect(() => {
+    let alive = true
+    fetchSystemCapabilities()
+      .then((doc) => {
+        if (alive) setCapabilities(doc)
+      })
+      .catch(() => {
+        if (alive) setCapabilities(null)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
   const truth = useMemo<CatalogTruthState>(() => ({
     status: catalog.status,
     lastSuccessAt: catalog.lastSuccessAt,
@@ -83,6 +104,21 @@ export function MappingTab(props: {
     return selectedVariable ? rankPointRows(rows, selectedVariable) : rows
   }, [catalog.data?.items, selectedVariable, truth])
 
+  /* Gợi ý = "chỉ hiện ứng viên đáng bấm". Hai điều kiện, và điều kiện thứ hai
+   * chính là lý do tính năng này phải chờ capability:
+   *   1. Tương thích với biến đang chọn (hướng + kiểu dữ liệu).
+   *   2. Nếu là kênh trên bo thì bo phải XÁC NHẬN kênh đó có thật. Point ảo và
+   *      điểm Modbus của thiết bị ngoài không thuộc thẩm quyền `BOARD_CAP_MAP`
+   *      nên không bị lọc — `boardChannelConfirmed` trả `null` cho chúng. */
+  const suggestionsEnabled = capabilities !== null && selectedVariable !== null
+  const suggestionsBlockedReason = capabilities === null
+    ? pick('Chưa đọc được /system/capabilities nên chưa biết bo có kênh nào — gợi ý sẽ chỉ là phỏng đoán', 'Cannot read /system/capabilities yet, so the board channels are unknown — suggestions would be guesswork')
+    : pick('Chọn một biến trước để có gì mà gợi ý', 'Select a variable first so there is something to suggest')
+  const suggestedPointRows = useMemo(() => pointRows.filter((row) => {
+    if (!row.compatible) return false
+    return boardChannelConfirmed(capabilities, row.pointId) !== false
+  }), [capabilities, pointRows])
+
   useEffect(() => {
     if (!selectedPointKey || !pointRows.some((row) => row.key === selectedPointKey)) setSelectedPointKey(pointRows[0]?.key ?? null)
   }, [pointRows, selectedPointKey])
@@ -93,7 +129,7 @@ export function MappingTab(props: {
     const programMatch = programFilter === 'ALL' || row.programId === programFilter
     return queryMatch && programMatch && (direction === 'ALL' || row.direction === direction) && (dataType === 'ALL' || row.type === dataType)
   })
-  const visiblePoints = pointRows.filter((row) => {
+  const visiblePoints = (suggestionsActive && suggestionsEnabled ? suggestedPointRows : pointRows).filter((row) => {
     const queryMatch = !normalized || `${row.name} ${row.category} ${row.deviceId ?? ''} ${row.pointId} ${row.dataType}`.toLocaleLowerCase().includes(normalized)
     const prefix = row.pointId.split('-', 1)[0].toUpperCase()
     const kind = row.category === 'VP' ? 'VP' : row.category === 'MB_RTU' ? 'MB_RTU' : prefix
@@ -118,7 +154,7 @@ export function MappingTab(props: {
       <div className="text-right text-xs text-[var(--c-text-dim)]"><span className="block font-mono text-[var(--c-text)]">{document.library.profile} / {document.library.version}</span><span>{saving ? 'Workspace đang lưu ở tab khác' : canEdit ? 'Admin · mutation đang khóa' : 'Viewer · read-only'}</span></div>
     </div>
     {saveError && <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">{saveError}</p>}
-    <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} />
+    <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} suggestionsEnabled={suggestionsEnabled} suggestionsActive={suggestionsActive && suggestionsEnabled} suggestionsBlockedReason={suggestionsBlockedReason} onToggleSuggestions={() => setSuggestionsActive((value) => !value)} />
     <div className="grid items-start gap-3 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
       <VariableWorklist rows={visibleVariables} selectedId={selectedVariableId} onSelect={setSelectedVariableId} onOpenSource={(row) => openSource(row.programId)} mutationsBlocked={true} />
       <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} pointKind={pointKind} onPointKindChange={setPointKind} />

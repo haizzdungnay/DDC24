@@ -1,16 +1,5 @@
 import type { HealthStatus, Point, PointKind, PointQuality } from './types'
 
-/* `F-PIO-008`: hằng NÀY là nguồn sự thật thứ tư — và là cái cuối cùng còn lại —
- * cho câu hỏi "bo có bao nhiêu kênh UI". Ba nguồn phía Go đã gộp về gói
- * `internal/capabilities` ở `ISS-PIO-12` (#389), và backend nay công bố sự thật
- * đó tại `GET /api/v1/system/capabilities`, gốc là `BOARD_CAP_MAP` do MCU trả.
- *
- * Đề bài §6.1 nói rõ FE KHÔNG được hard-code số channel hoặc mode. Việc thay
- * hằng này bằng lời gọi endpoint (và dựng dropdown mode từ `availability` thay
- * vì liệt kê cứng `signalType 0..8`) là #390 — `ISS-PIO-13`. Giữ hằng ở đây cho
- * tới lúc đó là CÓ Ý THỨC, không phải bị bỏ quên. */
-export const VISIBLE_UI_CHANNELS = 16
-
 export function cn(...items: Array<string | false | null | undefined>): string {
   return items.filter(Boolean).join(' ')
 }
@@ -60,7 +49,17 @@ export function isUniversalInputKind(kind: PointKind): boolean {
   return kind === 'UI' || kind === 'AI' || kind === 'DI'
 }
 
-export function isVisibleUniversalInput(point: Point, maxChannel = VISIBLE_UI_CHANNELS): boolean {
+/**
+ * Điểm có thuộc dải Universal Input mà bo NÀY thật sự có hay không.
+ *
+ * `maxChannel` KHÔNG còn giá trị mặc định (`ISS-PIO-13`). Trước đây nó mặc định
+ * `VISIBLE_UI_CHANNELS = 16` — nguồn sự thật thứ tư cho số kênh, cạnh ba nguồn
+ * phía Go mà `ISS-PIO-12` đã gộp lại. Đề bài §6.1 nói rõ FE không được hard-code
+ * số channel, nên trần kênh phải do nơi gọi cấp: từ `/system/capabilities`, hoặc
+ * từ chính danh sách cấu hình backend trả về. Bỏ mặc định đi là cách bảo đảm
+ * không còn chỗ nào lặng lẽ tin vào con số 16.
+ */
+export function isVisibleUniversalInput(point: Point, maxChannel: number): boolean {
   if (!isUniversalInputKind(point.kind)) return false
   const channel = uiChannelFromId(point.id)
   return channel === null || (channel >= 1 && channel <= maxChannel)

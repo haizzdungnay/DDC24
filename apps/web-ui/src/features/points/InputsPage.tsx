@@ -19,16 +19,22 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
 import { isDigitalContact, type AiInputConfig, type AiSignalType, type AlarmSetting, type Point, type TrendSample } from '../../shared/types'
 import { clamp, cn, formatDataAge, formatTime, formatValue, isVisibleUniversalInput, NO_DATA, pointNumber, uiNode } from '../../shared/utils'
+import {
+  electricalModeAvailability,
+  electricalModes,
+  fetchSystemCapabilities,
+  universalInputChannelCount,
+  type ElectricalMode,
+  type SystemCapabilities
+} from '../../shared/api/capabilities'
 import { aiInputDraftDiff } from './inputsDraftDiff'
 
 type TabKey = 'electrical' | 'scaling' | 'signal' | 'calibration' | 'alarmStorage' | 'diagnostics'
-type ElectricalMode = 'none' | 'volt' | 'voltCurrent' | 'resistance' | 'dry' | 'potentiometer' | 'light' | 'pulse'
 type Translate = ReturnType<typeof useI18n>['t']
 type PickText = ReturnType<typeof useI18n>['pick']
 type LiveTrendSample = TrendSample & { raw: number }
 
 const tabOrder: TabKey[] = ['electrical', 'scaling', 'signal', 'calibration', 'alarmStorage', 'diagnostics']
-const electricalModes: ElectricalMode[] = ['none', 'volt', 'voltCurrent', 'resistance', 'dry', 'potentiometer', 'light', 'pulse']
 const sensorProfiles = ['NTC10k', 'NTC20k'] as const
 const rangeMultiplierOptions = [0, 1, 2, 3, 4, 5]
 const mathFunctionOptions = [0, 1, 2, 3]
@@ -38,6 +44,10 @@ export function InputsPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const [configs, setConfigs] = useState<AiInputConfig[]>([])
+  /* `ISS-PIO-13`: năng lực phần cứng do backend cấp (`ISS-PIO-12`), gốc là
+   * `BOARD_CAP_MAP`. `null` nghĩa là CHƯA ĐỌC ĐƯỢC — không phải "bo không có
+   * gì" — nên nơi dùng phải xử lý ba trạng thái chứ không hai. */
+  const [capabilities, setCapabilities] = useState<SystemCapabilities | null>(null)
   /* FE-010 (review UI/UX AHU wiring 2026-08-17): bản chụp lần cuối đã lưu/tải
    * từ backend, dùng làm mốc so sánh "có thay đổi chưa lưu" — không suy ra từ
    * `configs` một mình vì `configs` chính là bản đang gõ dở. */
@@ -73,6 +83,7 @@ export function InputsPage() {
   ], [configs, pointsState.data, virtualPointsState.data])
   const nameConflicts = useMemo(() => pointNameConflicts(namespaceEntries), [namespaceEntries])
   const dirty = useMemo(() => JSON.stringify(configs) !== JSON.stringify(savedConfigs), [configs, savedConfigs])
+  const uiChannelCeiling = useMemo(() => universalInputCeiling(capabilities, configs), [capabilities, configs])
   /* `T57-2.10` — bảng khác biệt "đang lưu ↔ bản nháp" (khối `BB-8`). Tính ở cấp
      trang chứ không bên trong hộp thoại: hộp thoại chỉ tồn tại khi đang mở, còn
      danh sách khác biệt phải tính được cả lúc đóng để nơi khác dùng lại. */
@@ -105,6 +116,23 @@ export function InputsPage() {
       active = false
     }
   }, [reloadToken, t, toast])
+
+  useEffect(() => {
+    let active = true
+    fetchSystemCapabilities()
+      .then((doc) => {
+        if (active) setCapabilities(doc)
+      })
+      .catch(() => {
+        // Không chặn trang vì một lần gọi hỏng: `capabilities` giữ nguyên `null`
+        // và mọi mode xuống mức "chưa xác nhận" thay vì biến mất. Đường ghi phía
+        // backend vẫn chặn đúng chỗ cần chặn.
+        if (active) setCapabilities(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [reloadToken])
 
   useEffect(() => {
     const first = errorFocusPath ?? Object.keys(tagErrors)[0]
@@ -152,8 +180,8 @@ export function InputsPage() {
   // ra một hiện thực bình thường. Cùng lớp lỗi FE-DIAG-01 (2026-08-06).
   // Ở live, không có điểm thì `point` để undefined và các ô hiện trạng thái
   // trống — người trực thấy ngay là chưa có dữ liệu.
-  const livePoint = selected ? findAiPoint(pointsState.data ?? [], selected.channel) : undefined
-  const demoPoint = selected && !livePoint && IS_DEMO ? findAiPoint(getDemoPoints(), selected.channel) : undefined
+  const livePoint = selected ? findAiPoint(pointsState.data ?? [], selected.channel, uiChannelCeiling) : undefined
+  const demoPoint = selected && !livePoint && IS_DEMO ? findAiPoint(getDemoPoints(), selected.channel, uiChannelCeiling) : undefined
   const point = livePoint ?? demoPoint
 
   function updateChannel(channel: number, patch: Partial<AiInputConfig>) {
@@ -292,7 +320,7 @@ export function InputsPage() {
           </div>
           <div className="flex flex-col gap-1 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
             {filteredConfigs.map((config) => {
-              const listPoint = findAiPoint(pointsState.data ?? [], config.channel)
+              const listPoint = findAiPoint(pointsState.data ?? [], config.channel, uiChannelCeiling)
               return (
                 <button
                   key={config.channel}
@@ -357,7 +385,7 @@ export function InputsPage() {
 
               <TabBar activeTab={activeTab} onSelect={setActiveTab} t={t} />
 
-              {activeTab === 'electrical' && <ElectricalModeTab config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />}
+              {activeTab === 'electrical' && <ElectricalModeTab config={selected} capabilities={capabilities} onChange={(patch) => updateChannel(selected.channel, patch)} />}
               {activeTab === 'scaling' && <ScalingTab config={selected} onChange={(patch) => updateChannel(selected.channel, patch)} />}
               {activeTab === 'signal' && <SignalConditioningTab config={selected} configs={configs} onChange={(patch) => updateChannel(selected.channel, patch)} />}
               {activeTab === 'calibration' && <CalibrationTab config={selected} point={point} onChange={(patch) => updateChannel(selected.channel, patch)} />}
@@ -425,6 +453,7 @@ export function InputsPage() {
         open={overviewOpen}
         configs={configs}
         livePoints={pointsState.data ?? []}
+        uiChannelCeiling={uiChannelCeiling}
         onEdit={(channel) => {
           setSelectedChannel(channel)
           setWizardActive(false)
@@ -570,7 +599,7 @@ function CopyToChannelsModal({ open, source, configs, onClose, onApply }: {
   )
 }
 
-function InputsOverviewModal({ open, configs, livePoints, onEdit, onClose }: { open: boolean; configs: AiInputConfig[]; livePoints: Point[]; onEdit: (channel: number) => void; onClose: () => void }) {
+function InputsOverviewModal({ open, configs, livePoints, uiChannelCeiling, onEdit, onClose }: { open: boolean; configs: AiInputConfig[]; livePoints: Point[]; uiChannelCeiling: number; onEdit: (channel: number) => void; onClose: () => void }) {
   const { pick } = useI18n()
   return (
     <Modal open={open} size="xl" title={pick('Tổng quan UI', 'UI Overview')} onClose={onClose}>
@@ -590,7 +619,7 @@ function InputsOverviewModal({ open, configs, livePoints, onEdit, onClose }: { o
           </thead>
           <tbody>
             {configs.map((config) => {
-              const live = findAiPoint(livePoints, config.channel)
+              const live = findAiPoint(livePoints, config.channel, uiChannelCeiling)
               return (
                 <tr key={config.channel} className="border-t border-[var(--c-border)] hover:bg-[var(--c-surface-2)]">
                   <td className="px-3 py-2 font-mono text-xs">{String(config.channel).padStart(2, '0')}</td>
@@ -734,10 +763,22 @@ function WizardProgress({ index, count, onPrevious, onNext, onFinish, onExit }: 
   )
 }
 
-function ElectricalModeTab({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
+function ElectricalModeTab({ config, capabilities, onChange }: { config: AiInputConfig; capabilities: SystemCapabilities | null; onChange: (patch: Partial<AiInputConfig>) => void }) {
   const { pick } = useI18n()
   const mode = electricalModeOf(config.signalType)
   const sensorProfile = sensorProfileOf(config.ioType)
+
+  /* `ISS-PIO-13` — dropdown chỉ hiện mode phần cứng thật sự hỗ trợ.
+   *
+   * `withheld` bị GIẤU: hoặc bo nói rõ là không có mạch, hoặc mode đòi bằng
+   * chứng mà chưa ai hỏi được — cả hai đều không được mời chọn (đề bài §6.1).
+   *
+   * Ngoại lệ có chủ ý: mode ĐANG được lưu trên kênh này luôn được hiện, kể cả
+   * khi bị giữ lại. Giấu nó đi sẽ làm nút radio không khớp cấu hình thật, người
+   * vận hành thấy một kênh "không chọn gì" trong khi nó đang chạy một mode cụ
+   * thể — và lần lưu sau sẽ âm thầm đổi mất mode đó. Hiện nó ra kèm nhãn cảnh
+   * báo mới là cách nói thật. */
+  const offeredModes = electricalModes.filter((item) => item === mode || electricalModeAvailability(capabilities, item).availability !== 'withheld')
 
   function selectMode(next: ElectricalMode) {
     const signalType = electricalModeToSignalType(next, config.signalType)
@@ -749,18 +790,36 @@ function ElectricalModeTab({ config, onChange }: { config: AiInputConfig; onChan
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold text-[var(--c-text)]">{pick('Electrical Mode', 'Electrical Mode')}</legend>
         <div className="grid gap-2 sm:grid-cols-2">
-          {electricalModes.map((item) => (
-            <label key={item} className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-sm text-[var(--c-text)]">
-              <input
-                type="radio"
-                className="h-4 w-4 accent-[var(--c-accent)]"
-                name={`electrical-mode-${config.channel}`}
-                checked={mode === item}
-                onChange={() => selectMode(item)}
-              />
-              {electricalModeLabel(item, pick)}
-            </label>
-          ))}
+          {offeredModes.map((item) => {
+            const capability = electricalModeAvailability(capabilities, item)
+            const note = capability.reasons.join(' · ')
+            const badgeId = `electrical-mode-${config.channel}-${item}-capability`
+            return (
+              <label key={item} title={note || undefined} className="flex items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 py-2 text-sm text-[var(--c-text)]">
+                <input
+                  type="radio"
+                  className="h-4 w-4 accent-[var(--c-accent)]"
+                  name={`electrical-mode-${config.channel}`}
+                  /* Tên trợ năng phải là TÊN MODE, không kèm nhãn tin cậy: nhãn
+                   * đó là *mô tả*, và gộp nó vào tên sẽ làm tên của cùng một nút
+                   * đổi theo trạng thái mạng. Cảnh báo vẫn tới được người dùng
+                   * trình đọc màn hình qua `aria-describedby`. */
+                  aria-label={electricalModeLabel(item, pick)}
+                  aria-describedby={capability.availability === 'confirmed' ? undefined : badgeId}
+                  checked={mode === item}
+                  onChange={() => selectMode(item)}
+                />
+                <span>{electricalModeLabel(item, pick)}</span>
+                {capability.availability !== 'confirmed' && (
+                  <span id={badgeId} className="rounded-full border border-[var(--c-warn)] px-2 py-0.5 text-[10px] font-semibold text-[var(--c-warn-fg)]">
+                    {capability.availability === 'withheld'
+                      ? pick('bo không xác nhận', 'not confirmed by board')
+                      : pick('chưa xác nhận', 'unverified')}
+                  </span>
+                )}
+              </label>
+            )
+          })}
         </div>
         <p className="text-xs text-[var(--c-text-dim)]">
           {pick(
@@ -1438,9 +1497,26 @@ function signalTypePatch(signalType: AiSignalType, analogCurrent?: boolean): Par
   return { signalType, analogCurrent: signalType === 2 ? Boolean(analogCurrent) : false }
 }
 
-function findAiPoint(points: Point[], channel: number): Point | undefined {
+function findAiPoint(points: Point[], channel: number, maxChannel: number): Point | undefined {
   const ids = new Set(aiPointIds(channel).map((id) => id.toUpperCase()))
-  return points.find((point) => isVisibleUniversalInput(point) && ids.has(point.id.trim().toUpperCase()))
+  return points.find((point) => isVisibleUniversalInput(point, maxChannel) && ids.has(point.id.trim().toUpperCase()))
+}
+
+/**
+ * Trần kênh Universal Input, theo thứ tự ưu tiên nguồn sự thật (`ISS-PIO-13`).
+ *
+ * 1. `/system/capabilities` — bo nói nó có bao nhiêu kênh (gốc `BOARD_CAP_MAP`).
+ * 2. Chính danh sách cấu hình backend vừa trả — vẫn là backend nói, chỉ kém
+ *    trực tiếp hơn; dùng khi chưa đọc được capability.
+ *
+ * KHÔNG có bước 3 nào rơi về hằng viết cứng: danh sách rỗng cho trần 0, nghĩa
+ * là "chưa biết kênh nào" chứ không phải "mặc định có 16 kênh". Đúng một con số
+ * 16 viết cứng là thứ mà `F-PIO-008` đang dẹp.
+ */
+function universalInputCeiling(capabilities: SystemCapabilities | null, configs: AiInputConfig[]): number {
+  const fromBoard = universalInputChannelCount(capabilities)
+  if (fromBoard !== null) return fromBoard
+  return configs.reduce((max, config) => Math.max(max, config.channel), 0)
 }
 
 function aiPointIds(channel: number): string[] {
