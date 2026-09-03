@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-31` bước 4: một lần Check nói ra TOÀN BỘ binding phải rebind (#375, 2026-09-03)
+
+- **Triệu chứng.** Đường kiểm slot Modbus dừng ở **binding hỏng đầu tiên**. Sau một lần tắt thiết bị,
+  **mọi** binding của thiết bị đó đều lệch — với 8 điểm là **8 vòng Check**, mỗi vòng chỉ hiện đúng
+  một dòng.
+- **Nguyên nhân gốc.** `ioMapFromRevision` trả về một `*DiagnosticView` và `return` ngay khi gặp lỗi
+  đầu tiên. Chính repo này đã ghi nguyên tắc ngược lại ở cấp Program (`compilerInputs`): *"GỘP
+  diagnostic thay vì dừng ở Program đầu tiên hỏng… với 32 Program đó là 32 vòng"* — nhưng cấp
+  **binding** thì chưa áp.
+- **Cách sửa.** `ioMapFromRevision`/`programCompilerInput` trả về **danh sách** diagnostic; nhánh
+  Modbus gom mọi binding không xác minh được rồi trả một lần. Đây cũng chính là **đường migration**
+  mà `AC-PIO-ID-03` cần: một lần Check liệt kê đủ những gì phải rebind, thay vì bắt người vận hành
+  dò từng cái.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`). Test mới: ba binding của một thiết
+  bị đã tắt ⇒ **một** lần Check trả **ba** diagnostic, mỗi cái nêu đúng `pointId` của nó.
+- **CI vẫn bị chặn** (không cấp runner) — xem #414.
+
+
 ### Fixed — `ISS-PIO-31` bước 3: đối chiếu TRỌN chuỗi, không chỉ số slot (#375, 2026-09-03)
 
 - **Triệu chứng (khoảng trống còn lại sau bước 2).** Phép kiểm ở Check và Commission mới so
