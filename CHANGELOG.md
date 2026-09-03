@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-MBW-01` ghi thử Modbus RTU luôn trả 503: endpoint gọi một hàm không tồn tại (2026-09-03)
+
+- **Triệu chứng.** Trên bo Foxlinx với CK-508 slave 04 ở Loop 1 (`rs485-1` → `/dev/ttyS5`, 9600 8N1,
+  revision 36, `in_sync=true`, 446 lượt poll / 0 lỗi): đọc trạng thái 8 DO chạy tốt, quality GOOD,
+  và điều khiển RS-485 trực tiếp bật/tắt được cả 8 relay — nhưng mọi lệnh từ màn Points đều nhận
+  `HTTP 503: core client không hỗ trợ WritePoint`. Phần cứng và dây PASS; lỗi nằm ở web-api.
+- **Nguyên nhân gốc — một.** `handleModbusWriteTest` dò năng lực core bằng ép kiểu động sang
+  `WritePoint(context.Context, string, any, uint32, bool, string) (PointDTO, error)` — **không type
+  nào trong repo có hàm này**. `CoreClient` chỉ có `ForcePoint`/`ForcePointTTL`/`CommandPoint`. Ép
+  kiểu động không được trình biên dịch kiểm, nên interface ma này biên dịch sạch và trượt ở mọi
+  lệnh, rơi đúng vào nhánh "core đời cũ" mà chính handler viết ra.
+- **Nguyên nhân gốc — hai (chưa ai chạm tới vì lỗi một chặn trước).** Kể cả khi gọi đúng hàm,
+  `foundPoint.PointID` **không phải** tên mà Core hiểu. `web_ipc.cpp::parse_point_name` định danh
+  điểm mở rộng bằng `EXT<n>` với `n` là **slot 1-based**; `point_id` là danh tính bền do người dùng
+  đặt. Gửi thẳng `point_id` thì lệnh bị từ chối — và một `point_id` tình cờ có dạng `AO12` sẽ parse
+  **thành công** rồi ghi xuống ngõ ra analog cục bộ: sai thiết bị, không một dòng lỗi.
+- **Vì sao test cũ vẫn xanh.** `modbus_write_test.go` chỉ kiểm ba ca **bị từ chối** (403 Operator,
+  point không tồn tại, point read-only). Cả ba đều thoát trước chỗ hỏng. Kế hoạch kiểm chứng cũng
+  chỉ có `TC-MBRTU-I-15 Write path — reject`, chưa từng có ca **accept**.
+- **Cách sửa.** Thay nhánh ma bằng `commandCorePoint` — đúng đường ghi mà `/api/v1/points` và HMI
+  đang dùng — và quy đổi `point_id` → `EXT<slot>` bằng `CoreClient.ReadExtCatalog()` đọc thẳng
+  `plc_shm`. Lấy slot từ **runtime** chứ không tính lại từ file cấu hình: slot `ext` được `iobus`
+  cấp tuần tự trên tập điểm đang bật, nên giữa lúc bấm Lưu và lúc `iobus` nạp lại profile, hai bố
+  cục lệch nhau và một lệnh tính theo cấu hình sẽ trúng slot của điểm khác — mọi phép kiểm hiện có
+  vẫn nói "hợp lệ" vì chỉ số còn trong `1…256` (xem `internal/modbusrtu/extlayout.go`).
+- **Hai lỗi nói ra thay vì nuốt.** Điểm không có trong bố cục runtime ⇒ 503 kèm lý do *"iobus chưa
+  nạp cấu hình, hoặc điểm/thiết bị đang tắt"*, và **không** gửi lệnh nào xuống dây. Cấu hình nói
+  `read_write` mà runtime nói read-only ⇒ 409, thay vì đẩy một lệnh mà `PointWriter::can_write` sẽ
+  nuốt im lặng.
+- **Chặn tái diễn.** `core_client_capability_test.go` khai compile-time mọi năng lực tuỳ chọn của
+  `a.core` (`_ pointTTLForcer = (*CoreClient)(nil)` ×16): thêm năng lực mà quên hiện thực là hỏng
+  build, không phải hỏng ở bo. Bổ sung `TC-MBRTU-I-15A Write path — accept` vào
+  `MODBUS_RTU_VERIFICATION_PLAN.md`.
+- **Đo lại.** Go **19/19 package `ok`** (`-count=1`), `go vet ./...` exit 0. Bốn test mới kiểm ngược
+  trên code cũ: **3/4 đỏ** đúng như phải thế (ca thứ tư khoá "không gửi lệnh khi chưa tra được slot",
+  code cũ thoả tầm thường).
+
 ### Fixed — `TASK-FBD-05-6` route Programming mất `<h1>`, đứt hợp đồng trợ năng `F-UX-15` (#478, 2026-09-03)
 
 - **Triệu chứng.** `route-menu-contract.test.ts` N-08 đỏ trên nhánh `feat/fbd-edit-v2`:

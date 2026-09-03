@@ -1159,6 +1159,59 @@ func pointFloat(value any) (float32, bool) {
 	}
 }
 
+// ExtSlotRef là một slot `ext` NHƯ RUNTIME ĐANG THẤY: chỉ số 1-based mà Core
+// dùng trong tên điểm `EXT<n>`, cùng cờ `writable` do chính `iobus` đặt.
+type ExtSlotRef struct {
+	// ExtIndex 1-based, khớp `parse_point_name` của `web_ipc.cpp`
+	// (`out->idx = num - 1`) và `shm_->ext[idx]` của `PointWriter`.
+	ExtIndex int
+	PointID  string
+	Writable bool
+	Online   bool
+}
+
+// ReadExtCatalog trả bản đồ slot `ext` ĐANG chạy, đọc thẳng từ `plc_shm`.
+//
+// Vì sao đọc SHM chứ không tính lại từ file cấu hình: slot `ext` được `iobus`
+// cấp phát TUẦN TỰ trên tập thiết bị/điểm đang bật, nên sửa cấu hình (đổi
+// `point_id`, tắt một điểm, tắt một thiết bị) là mọi điểm phía sau dịch chỗ —
+// xem `internal/modbusrtu/extlayout.go` để biết kịch bản hỏng đầy đủ. Giữa lúc
+// người dùng bấm Lưu và lúc `iobus` nạp lại profile, cấu hình trên đĩa và bố
+// cục đang chạy KHÁC nhau. Một lệnh ghi tính theo cấu hình sẽ trúng slot của
+// điểm khác, mà mọi phép kiểm hiện có đều nói "hợp lệ" vì chỉ số vẫn nằm trong
+// `1…256`. Tên trong SHM do `iobus` ghi lúc bind (`bus_worker.cpp`
+// `ext_point_name`) chính là `point_id`, nên đây là chỗ duy nhất trả lời được
+// "điểm này ĐANG nằm ở slot nào".
+func (c *CoreClient) ReadExtCatalog() ([]ExtSlotRef, error) {
+	data, err := c.readPLCShm()
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < kxPlcShmMinLen {
+		return nil, fmt.Errorf("plc shm ngắn hơn hợp đồng: %d byte", len(data))
+	}
+	count := int(binary.LittleEndian.Uint16(data[offExtCount : offExtCount+2]))
+	if count > 256 {
+		count = 256
+	}
+	out := make([]ExtSlotRef, 0, count)
+	for i := 0; i < count; i++ {
+		base := offExt + i*kxExtPointSize
+		nameBytes := data[base : base+24]
+		end := 0
+		for end < len(nameBytes) && nameBytes[end] != 0 {
+			end++
+		}
+		out = append(out, ExtSlotRef{
+			ExtIndex: i + 1,
+			PointID:  string(nameBytes[:end]),
+			Writable: data[base+offExtWritable] == 1,
+			Online:   data[base+offExtOnline] == 1,
+		})
+	}
+	return out, nil
+}
+
 func decodePoints(data []byte, ioData []byte) []PointDTO {
 	if len(data) < kxPlcShmMinLen {
 		return nil

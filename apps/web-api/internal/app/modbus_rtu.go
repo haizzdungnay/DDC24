@@ -204,6 +204,39 @@ type ModbusWriteTestResponse struct {
 	Message      string  `json:"message,omitempty"`
 }
 
+// extCatalogReader là bố cục slot `ext` như runtime đang thấy. Tách thành
+// interface để test double dựng được bố cục mà không cần `plc_shm` thật.
+type extCatalogReader interface {
+	ReadExtCatalog() ([]ExtSlotRef, error)
+}
+
+// resolveExtSlot đổi `point_id` (danh tính bền của cấu hình) sang slot `ext`
+// mà `iobus` ĐANG cấp cho nó.
+//
+// Thất bại ở đây phải là lỗi, không phải phỏng đoán: ghi vào một slot đoán mò
+// trên dây RS-485 đang chạy là ghi vào thiết bị của người khác.
+func (a *App) resolveExtSlot(pointID string) (ExtSlotRef, error) {
+	reader, ok := a.core.(extCatalogReader)
+	if !ok {
+		return ExtSlotRef{}, fmt.Errorf("lỗi ghi thử: core client không đọc được bố cục slot EXT")
+	}
+	slots, err := reader.ReadExtCatalog()
+	if err != nil {
+		return ExtSlotRef{}, fmt.Errorf("lỗi ghi thử: không đọc được bố cục slot EXT từ core: %v", err)
+	}
+	for _, slot := range slots {
+		if strings.EqualFold(slot.PointID, pointID) {
+			return slot, nil
+		}
+	}
+	/* Điểm có trong cấu hình nhưng không có trong runtime = cấu hình đã lưu mà
+	 * `iobus` chưa nạp (hoặc thiết bị/điểm đang tắt). Đây là thông tin người
+	 * vận hành cần, không phải "core không khả dụng". */
+	return ExtSlotRef{}, fmt.Errorf(
+		"lỗi ghi thử: `%s` chưa có slot EXT nào trong runtime — iobus chưa nạp cấu hình, hoặc điểm/thiết bị đang tắt",
+		pointID)
+}
+
 func (a *App) handleModbusWriteTest(w http.ResponseWriter, r *http.Request) {
 	principal := principalFromContext(r.Context())
 	if principal == nil || principal.Role != RoleAdmin {
@@ -254,15 +287,30 @@ func (a *App) handleModbusWriteTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writer, ok := a.core.(interface {
-		WritePoint(context.Context, string, any, uint32, bool, string) (PointDTO, error)
-	})
-	if !ok {
-		writeError(w, http.StatusServiceUnavailable, "lỗi ghi thử: core client không hỗ trợ WritePoint")
+	/* `point_id` KHÔNG phải tên mà Core hiểu. Core định danh điểm mở rộng bằng
+	 * `EXT<n>` với `n` là SLOT 1-based (`web_ipc.cpp` `parse_point_name`:
+	 * `out->idx = num - 1`), còn `point_id` là danh tính bền do người dùng
+	 * đặt. Gửi thẳng `point_id` xuống thì `parse_point_name` trả false và lệnh
+	 * bị từ chối; tệ hơn, một `point_id` tình cờ có dạng `AO12` sẽ parse THÀNH
+	 * CÔNG và ghi xuống ngõ ra analog cục bộ — sai thiết bị, không một lỗi nào.
+	 * Nên phép quy đổi phải làm ở đây, và làm bằng bố cục ĐANG chạy. */
+	slot, err := a.resolveExtSlot(foundPoint.PointID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	if !slot.Writable {
+		/* Cấu hình nói `read_write`, runtime nói không. Hai nguồn lệch nhau
+		 * nghĩa là `iobus` chưa nạp bản cấu hình vừa lưu — nói đúng điều đó
+		 * thay vì đẩy một lệnh ghi mà `PointWriter::can_write` sẽ nuốt. */
+		writeError(w, http.StatusConflict,
+			fmt.Sprintf("lỗi ghi thử: slot EXT%d của `%s` đang là read-only trong runtime — iobus chưa nạp cấu hình mới",
+				slot.ExtIndex, foundPoint.PointID))
 		return
 	}
 
-	pointDTO, err := writer.WritePoint(r.Context(), foundPoint.PointID, req.Value, 0, false, principal.Username)
+	pointDTO, err := a.commandCorePoint(r.Context(), fmt.Sprintf("EXT%d", slot.ExtIndex),
+		forcePointBody{value: req.Value, release: false}, principal)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, fmt.Sprintf("lỗi ghi thử xuống iobus/core: %v", err))
 		return
