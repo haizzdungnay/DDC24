@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added — `TASK-FBD-04` thêm wire routing Orthogonal và Auto Layout preview cho FBD (2026-09-03)
+
+- **Wire routing:** Mở rộng `geometry.ts` bổ sung hàm `fbdWirePathOrthogonal` (hỗ trợ nối vuông góc thẳng hàng, thuận chiều với bo góc mượt, và chạy vòng loopback ngược chiều khi đích nằm bên trái nguồn); `buildFbdNetworkGeometry` hỗ trợ tùy chọn `wireStyle: 'ORTHOGONAL' | 'BEZIER'`, giữ mặc định `BEZIER` để tương thích ngược hoàn toàn.
+- **Auto Layout planner:** Hiện thực `layout.ts` với hàm thuần túy `computeAutoLayout` phân loại 3 tầng cột (Sources -> Intermediate -> Sinks), tính chiều cao khối động qua `fbdNodeHeight`, hỗ trợ phạm vi `ALL` hoặc `SELECTED`, kiểm tra giới hạn tọa độ `[-100000..100000]` và sinh cảnh báo mà không làm biến đổi tài liệu gốc.
+- **Căn lề & phân bổ:** Cung cấp các helper `alignNodes` (LEFT, RIGHT, TOP, BOTTOM) và `distributeNodes` (HORIZONTAL, VERTICAL) xử lý mảng khối bất biến.
+- **Unit tests:** 29/29 tests PASS (11 tests `geometry.test.ts`, 18 tests `layout.test.ts`).
+
 ### Added — `TASK-FBD-03` thêm selection model, selectionRevision và atomic reducer actions cho FBD (2026-09-03)
 
 - **Revision authority:** Bổ sung trường `selectionRevision: number` vào `FbdEditorState` (khởi tạo 0); tự động tăng 1 khi `commit()` tạo document mới hoặc đổi selection, và khi action `SELECT` đổi selection, hỗ trợ kiểm soát tính hợp lệ của giao dịch chỉnh sửa.

@@ -127,20 +127,74 @@ function portGeometry(node: FbdNode, origin: FbdPoint): FbdPortGeometry[] {
 }
 
 /**
- * Đường dây: bezier ngang từ port OUTPUT sang port INPUT.
- *
- * Đi ngang chứ không đi thẳng để hai dây cùng đích không chồng khít lên nhau,
- * và để dây nối ngược (đích nằm bên trái nguồn) vẫn nhìn ra được là một dây
- * chứ không thành một vạch đè lên các block.
+ * Đường dây Cubic Bézier: ngang từ port OUTPUT sang port INPUT.
  */
-export function fbdWirePath(from: FbdPoint, to: FbdPoint): string {
+export function fbdWirePathBezier(from: FbdPoint, to: FbdPoint): string {
   const distance = Math.max(40, Math.abs(to.x - from.x) / 2)
   return `M ${from.x} ${from.y} C ${from.x + distance} ${from.y}, ${to.x - distance} ${to.y}, ${to.x} ${to.y}`
 }
 
-export function buildFbdNetworkGeometry(network: FbdNetwork, layout?: FbdDocument['layout']): FbdNetworkGeometry {
+/**
+ * Đường nối vuông góc đi từ tâm port `from` đến tâm port `to`.
+ */
+export function fbdWirePathOrthogonal(from: FbdPoint, to: FbdPoint, cornerRadius = 0): string {
+  if (from.y === to.y && to.x >= from.x) {
+    return `M ${from.x} ${from.y} H ${to.x}`
+  }
+
+  if (to.x >= from.x + 40) {
+    const midX = (from.x + to.x) / 2
+    if (cornerRadius <= 0) {
+      return `M ${from.x} ${from.y} H ${midX} V ${to.y} H ${to.x}`
+    }
+    const r = Math.min(cornerRadius, Math.abs(midX - from.x) / 2, Math.abs(to.y - from.y) / 2)
+    const signY = to.y >= from.y ? 1 : -1
+    const p1x = midX - r
+    const p1y = from.y
+    const p2x = midX
+    const p2y = from.y + signY * r
+    const p3y = to.y - signY * r
+    const p4x = midX + r
+    const p4y = to.y
+    return `M ${from.x} ${from.y} H ${p1x} Q ${midX} ${p1y} ${p2x} ${p2y} V ${p3y} Q ${midX} ${to.y} ${p4x} ${p4y} H ${to.x}`
+  }
+
+  // Loopback / ngược chiều: to.x < from.x + 40
+  const offset = 24
+  const fromX_exit = from.x + offset
+  const toX_entry = to.x - offset
+  const midY = from.y < to.y ? Math.min(from.y, to.y) - 30 : Math.max(from.y, to.y) + 30
+
+  if (cornerRadius <= 0) {
+    return `M ${from.x} ${from.y} H ${fromX_exit} V ${midY} H ${toX_entry} V ${to.y} H ${to.x}`
+  }
+
+  return `M ${from.x} ${from.y} H ${fromX_exit} V ${midY} H ${toX_entry} V ${to.y} H ${to.x}`
+}
+
+/**
+ * Đường dây: hỗ trợ BEZIER (mặc định) và ORTHOGONAL.
+ */
+export function fbdWirePath(
+  from: FbdPoint,
+  to: FbdPoint,
+  style: 'ORTHOGONAL' | 'BEZIER' = 'BEZIER',
+): string {
+  return style === 'ORTHOGONAL' ? fbdWirePathOrthogonal(from, to) : fbdWirePathBezier(from, to)
+}
+
+export interface BuildFbdNetworkGeometryOptions {
+  wireStyle?: 'ORTHOGONAL' | 'BEZIER'
+}
+
+export function buildFbdNetworkGeometry(
+  network: FbdNetwork,
+  layout?: FbdDocument['layout'],
+  options?: BuildFbdNetworkGeometryOptions,
+): FbdNetworkGeometry {
   const auto = autoPositions(network)
   const stored = layout?.nodes ?? {}
+  const wireStyle = options?.wireStyle ?? 'BEZIER'
 
   const nodes: FbdNodeGeometry[] = network.nodes.map((node) => {
     const saved = stored[node.id]
@@ -170,7 +224,7 @@ export function buildFbdNetworkGeometry(network: FbdNetwork, layout?: FbdDocumen
     if (!from || !to) continue
     const start = { x: from.cx, y: from.cy }
     const end = { x: to.cx, y: to.cy }
-    wires.push({ id: wire.id, path: fbdWirePath(start, end), from: start, to: end })
+    wires.push({ id: wire.id, path: fbdWirePath(start, end, wireStyle), from: start, to: end })
   }
 
   const width = nodes.reduce((max, node) => Math.max(max, node.x + node.width), 0) + FBD_CANVAS_MARGIN
