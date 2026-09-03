@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added — `TASK-FBD-05` nâng cấp SVG Canvas Viewport và cử chỉ Pointer/Touch cho FBD (2026-09-03)
+
+- **Canvas Viewport:** Tích hợp `viewport.ts` vào `FbdCanvas.tsx` với zoom kẹp trong khoảng `0.4..2.5`, hỗ trợ wheel zoom quanh con trỏ chuột, pan bằng chuột giữa/chuột phải/phím Space + kéo, và pinch zoom đa chạm 2 ngón.
+- **Marquee Selection & Multi-drag:** Hỗ trợ hộp chọn marquee kéo chuột trên nền trống (hoặc touch khi ở `marqueeMode`) tự động chọn tập node; kéo nhóm khối trong `multi-node` nguyên tử với snap lưới và cờ Alt bypass, đảm bảo không dispatch mutation nào trong frame `pointermove` (chỉ dispatch ở `pointerup`).
+- **Layers & A11y:** Tách `FbdCanvasLayers.tsx` quản lý phân tầng lưới SVG, wires, nodes, marquee preview và minimap; gắn nhãn trợ năng `role="button"`, `tabIndex={0}`, `aria-pressed` và `data-fbd-network-id`.
+- **Unit & Interaction tests:** 27/27 tests PASS (13 tests `FbdCanvas.test.tsx`, 14 tests `FbdCanvas.interaction.test.tsx`).
+
 ### Added — `TASK-FBD-04` thêm wire routing Orthogonal và Auto Layout preview cho FBD (2026-09-03)
 
 - **Wire routing:** Mở rộng `geometry.ts` bổ sung hàm `fbdWirePathOrthogonal` (hỗ trợ nối vuông góc thẳng hàng, thuận chiều với bo góc mượt, và chạy vòng loopback ngược chiều khi đích nằm bên trái nguồn); `buildFbdNetworkGeometry` hỗ trợ tùy chọn `wireStyle: 'ORTHOGONAL' | 'BEZIER'`, giữ mặc định `BEZIER` để tương thích ngược hoàn toàn.
