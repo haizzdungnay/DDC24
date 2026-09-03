@@ -272,7 +272,11 @@ func TestReadProgrammingMonitorSnapshotUsesBoundPointIdForVirtual(t *testing.T) 
 		}
 	}
 	create(`{"tag":"zone setpoint","signalType":"float","enabled":true,"writable":true,"value":22,"boundPointId":"AV-01"}`)
-	create(`{"tag":"unbound flag","signalType":"boolean","enabled":true,"writable":true,"value":true}`)
+	/* `ISS-PIO-03`: một VP `boolean` tạo qua API nay ĐƯỢC cấp slot `BV` ngay —
+	 * đó chính là con bug issue đó sửa. Nhánh "chưa bind" vẫn tồn tại và vẫn
+	 * cần phủ, nhưng bằng một kiểu KHÔNG có pool: Core không có slot nào mang
+	 * kiểu `string`, nên VP kiểu ấy giữ nguyên id thân thiện `VP2`. */
+	create(`{"tag":"unbound note","signalType":"string","enabled":true,"writable":true,"value":"x"}`)
 
 	truth, err := app.programmingPointCatalog().ReadProgrammingMonitorSnapshot(context.Background())
 	if err != nil {

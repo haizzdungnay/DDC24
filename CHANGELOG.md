@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-03` Virtual Point tạo từ giao diện KHÔNG BAO GIỜ map được vào biến chương trình (#379, 2026-09-03)
+
+- **Triệu chứng.** Tạo một VP trên giao diện, rồi mở tab Ánh xạ: điểm đó **không có ở đó**. Đường
+  duy nhất để nó dùng được là gọi thẳng `PUT /virtual-points/{id}` với `boundPointId` thủ công — một
+  tính năng chỉ dùng được bằng `curl` (`F-PIO-003`).
+- **Nguyên nhân gốc.** Không ai cấp phát. FE không có ô `boundPointId`, `normalizeVirtualPoint` không
+  tự gán, nên `pointCatalogPointID()` trả `"VP12"`, `supportEligibility()` thấy prefix `VP` ∉
+  {AV, BV, MSV} và kết luận `UNSUPPORTED_IDENTITY`.
+- **Cách sửa.** Allocator đặt **ngay tại phễu ghi** `writeVirtualPointsConfig` — mọi đường ghi VP
+  (create, update, delete, PUT cấu hình, ghi giá trị) đều đi qua đó, nên không còn cửa nào tạo ra
+  một VP không bao giờ map được.
+
+**Sáu gạch đầu dòng của điều kiện đóng, và câu trả lời cho từng cái:**
+
+- **Quy tắc cấp phát.** `boolean` → `BV-1..16`; `integer`/`float` → `AV-1..32`. `string`/`datetime`
+  **không** được cấp — Core không có slot mang kiểu đó, và cấp bừa một `AV` cho một chuỗi là bịa ra
+  một đích không đọc được. `MSV` **chưa** có mặt trong bảng vì chưa có `signalType` nào dẫn tới nó
+  (`multistate` là việc của #401); ghi sẵn một mục không ai với tới được sẽ là quảng cáo một năng
+  lực không tồn tại.
+- **Collision.** Sổ dựng từ **toàn bộ** cấu hình trước khi cấp, nên slot đang bị giữ không bao giờ
+  được phát lại — **kể cả khi VP giữ nó đang tắt**. Bỏ qua VP tắt sẽ khiến bật lại một VP cũ trở
+  thành hành động **cướp slot**.
+- **Delete / reuse.** Allocator **không bao giờ tự nhặt lại** một slot đã trả về; nó luôn lấy chỉ số
+  ngay sau mốc cao nhất từng cấp. Lý do: một Program bind vào `AV-02`; xoá VP giữ `AV-02` rồi tạo VP
+  mới, nếu nhặt lại thì chương trình **âm thầm chuyển sang ghi vào VP khác** — Catalog vẫn có mục
+  `AV-02` nên Check vẫn nói *"khớp"*. Đó đúng lớp lỗi `ISS-PIO-31` vừa dẹp ở phía Modbus, và tái tạo
+  nó ở phía VP thì vô nghĩa. Slot đã trả lại **không mất**: người vận hành vẫn thu hồi được bằng
+  cách đặt `boundPointId` thủ công — nhưng đó là hành động **có chủ ý, nhìn thấy được**.
+- **Persistence.** Sổ dựng lại **từ chính `virtual_points.conf`**, vốn đã bền qua reboot. Không thêm
+  tệp trạng thái nào: một sổ riêng sẽ là nguồn sự thật thứ hai, và hai nguồn cho cùng một dữ kiện là
+  cách chúng lệch nhau. Test khẳng định chạy allocator hai lần trên cùng dữ liệu cho **cùng** kết quả.
+- **Hết slot.** Lỗi **400** (không phải 500 — đây là tình huống người vận hành xử lý được), nêu pool
+  nào cạn, trần bao nhiêu, và **liệt kê chính xác slot nào thu hồi được**. Một thông báo *"hết chỗ"*
+  không nêu đường thoát thì đẩy người ta vào ngõ cụt.
+- **Phơi `boundPointId` lên FE.** Ô **chỉ đọc** — sửa tay là đổi đích của một binding đang chạy. Kiểu
+  không có slot hiện chữ *"không có (kiểu này không map được)"* thay vì để trống: bằng không người
+  dùng chỉ thấy điểm của mình vắng mặt ở tab Ánh xạ mà không hiểu vì sao.
+- **Một test có sẵn phải đổi kỳ vọng, và đó là đúng.**
+  `TestReadProgrammingMonitorSnapshotUsesBoundPointIdForVirtual` khẳng định một VP `boolean` tạo qua
+  API **giữ nguyên** `VP2` — chính là con bug. Nhánh *"chưa bind"* vẫn cần phủ, nên test nay dùng
+  kiểu `string`, kiểu **thật sự** không có pool.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · FE `vitest src` **211 tệp / 2560 test PASS** · `npm run lint` exit 0 ·
+  `npm run build` exit 0.
+- **Hai lần tiêm lỗi:** gỡ allocator khỏi phễu ghi ⇒ test đường-API **FAIL**; cho allocator nhặt lại
+  slot đã trả về ⇒ **3 test FAIL** (collision, delete/reuse, hết slot). Khôi phục ⇒ xanh trở lại.
+
 ### Added — `ISS-PIO-02` bằng chứng đi hết chuỗi binding Modbus: tạo điểm → map → Check → runtime (#378, 2026-09-03)
 
 - **Triệu chứng.** Điểm Modbus không map được vào biến chương trình (`F-PIO-019`).

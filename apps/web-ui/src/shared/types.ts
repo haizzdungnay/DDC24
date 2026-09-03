@@ -1463,6 +1463,14 @@ export interface VirtualPoint {
   updatedAt?: string
   namespaceState?: string
   generation?: number
+  /** `ISS-PIO-03` — slot Core mà VP này chiếm (`AV-01`…`AV-32`, `BV-01`…`BV-16`).
+   *
+   *  Backend cấp tự động theo `signalType` khi tạo. Vắng mặt nghĩa là kiểu tín
+   *  hiệu KHÔNG có slot ở Core (`string`, `datetime`) — VP vẫn dùng được như
+   *  overlay cấu hình, nhưng **không map được vào biến chương trình**, và giao
+   *  diện phải nói ra điều đó thay vì để người dùng đoán vì sao điểm của họ
+   *  không xuất hiện ở tab Ánh xạ. */
+  boundPointId?: string
 }
 
 export interface ApiValidationDetail {

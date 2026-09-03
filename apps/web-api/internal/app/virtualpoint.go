@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -303,9 +304,17 @@ func (a *App) handleCreateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.writeVirtualPointsConfig(r, next, "create"); err != nil {
+		if writeVirtualPointSlotError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	/* `ISS-PIO-03`: allocator chạy TRONG phễu ghi, nên `boundPointId` chỉ tồn
+	 * tại ở bản vừa được ghi xuống đĩa. Lấy lại bản đó cho đáp ứng — trả về một
+	 * VP không có slot trong khi tệp đã có slot là hai sự thật khác nhau cho
+	 * cùng một điểm, và FE sẽ tin bản sai. */
+	item = next.Items[len(next.Items)-1]
 	if authority, err := a.readPointNamespaceAuthority(); err == nil {
 		item.Generation = authority.Generations[item.ID]
 	}
@@ -357,6 +366,9 @@ func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.writeVirtualPointsConfig(r, cfg, "update"); err != nil {
+		if writeVirtualPointSlotError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -395,14 +407,37 @@ func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.writeVirtualPointsConfig(r, cfg, "delete"); err != nil {
+		if writeVirtualPointSlotError(w, err) {
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, ConfigPutResult{Result: "success", Applied: true, Reload: reloadNone, Warnings: []string{}})
 }
 
+// errVirtualPointSlotAllocation là lỗi CẤU HÌNH (hết slot), không phải lỗi hệ
+// thống. Tách ra để nơi gọi trả 400 kèm lý do đọc được, thay vì một 500 nói
+// "lỗi máy chủ" cho một tình huống mà người vận hành xử lý được.
+type errVirtualPointSlotAllocation struct{ details []configValidationError }
+
+func (e errVirtualPointSlotAllocation) Error() string {
+	if len(e.details) == 0 {
+		return "không cấp phát được slot Virtual Point"
+	}
+	return e.details[0].Message
+}
+
 func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints, op string) error {
 	cfg = normalizeVirtualPointsConfig(cfg)
+	/* `ISS-PIO-03`: cấp `boundPointId` NGAY TẠI PHỄU GHI, không ở từng handler.
+	 * Mọi đường ghi VP — create, update, delete, PUT cấu hình, ghi giá trị —
+	 * đều đi qua đây, nên đặt allocator ở đúng một chỗ là cách bảo đảm không có
+	 * cửa nào tạo ra một VP không bao giờ map được. */
+	cfg, allocErrs := assignVirtualPointSlots(cfg)
+	if len(allocErrs) > 0 {
+		return errVirtualPointSlotAllocation{details: allocErrs}
+	}
 	ioCfg, _ := readConfig(a, configGroupIO, ConfigIO{})
 	fieldbus, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
 	if errs := validateUnifiedPointTags(ioCfg, cfg, fieldbus); len(errs) > 0 {
@@ -933,4 +968,15 @@ func normalizeVirtualPointKind(kind string) string {
 		return "VP"
 	}
 	return kind
+}
+
+// writeVirtualPointSlotError trả 400 kèm chi tiết khi lỗi là hết slot; trả
+// `false` để nơi gọi xử lý như lỗi hệ thống trong mọi ca khác.
+func writeVirtualPointSlotError(w http.ResponseWriter, err error) bool {
+	var slotErr errVirtualPointSlotAllocation
+	if !errors.As(err, &slotErr) {
+		return false
+	}
+	writeValidationErrors(w, slotErr.details)
+	return true
 }

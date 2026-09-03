@@ -481,11 +481,22 @@ function QuotaStrip({ quotas }: { quotas: ReturnType<typeof quotaUsage> }) {
 }
 
 function Basics({ item, tagError, nameError, fieldIndex, onChange }: { item: VirtualPoint; tagError?: string; nameError?: string; fieldIndex: number; onChange: (patch: Partial<VirtualPoint>) => void }) {
-  const { t } = useI18n()
+  const { t, pick } = useI18n()
   return (
-    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)_180px_120px_120px]">
+    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_140px_minmax(0,1fr)_180px_120px_120px]">
       <TextInput fieldPath={`items[${fieldIndex}].tag`} label="Tag" value={item.tag} error={tagError} onChange={(tag) => onChange({ tag })} />
       <TextInput label={t('channelLabel')} value={String(item.channel || globalVirtualPointChannel(item.id))} disabled onChange={() => {}} />
+      {/* `ISS-PIO-03`: slot Core do backend cấp — chỉ đọc, vì đổi nó bằng tay là
+        * đổi đích của một binding đang chạy. Kiểu `string`/`datetime` không có
+        * slot ở Core, và ô này NÓI RA điều đó thay vì để trống, bằng không người
+        * dùng chỉ thấy điểm của mình không xuất hiện ở tab Ánh xạ mà không hiểu
+        * vì sao. */}
+      <TextInput
+        label={pick('Slot Core', 'Core slot')}
+        value={item.boundPointId ?? pick('không có (kiểu này không map được)', 'none (type cannot be mapped)')}
+        disabled
+        onChange={() => {}}
+      />
       <TextInput fieldPath={`items[${fieldIndex}].name`} label="Label" value={item.label} error={nameError} onChange={(label) => onChange({ label, name: label })} />
       <SignalTypeSelect value={item.signalType} label onChange={(signalType) => onChange(signalTypePatch(item, signalType))} />
       <CheckField label="Enabled" checked={item.enabled} onChange={(enabled) => onChange({ enabled })} />
