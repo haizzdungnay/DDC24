@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-04` Point Catalog cắt ở 500 mục nhưng vẫn khai là đã đủ (#380, 2026-09-03)
+
+- **Triệu chứng.** `ListPointCatalog` cắt `entries[:limit]` rồi trả `NextCursor = nil`. FE suy "đầy
+  đủ" **chỉ từ `nextCursor`**, nên với một cấu hình **hợp lệ** vượt 500 điểm — trần thật của hệ là
+  24 LOCAL + 464 VP + 256 EXT = **744** — những điểm cuối bảng chữ cái **đơn giản không tồn tại** đối
+  với kỹ sư: bảng không có dấu `+`, nút Map vẫn mở, không một dòng cảnh báo.
+- **Nguyên nhân gốc.** Server **nói dối đúng cái trường mà FE tin**. FE vốn đã đúng: `complete =
+  nextCursor ? false : true`, chip hiện `500+`, banner khoá Map/Remove khi chưa đủ — nhưng nó không
+  bao giờ được nghe sự thật.
+- **Cách sửa.** Phân trang **tất định theo khoá bền** `(category, deviceId, pointId)` — đúng bộ ba
+  danh tính mà `ISS-PIO-31` đã khoá. Cursor mang **khoá của mục cuối trang trước**, ký HMAC và có
+  hạn 15 phút, cùng khuôn với cursor thư viện/audit đã có.
+  - **Vì sao khoá chứ không phải offset:** catalog đọc lại authority thật ở mỗi request, nên nội dung
+    có thể đổi giữa hai trang. Với offset, thêm một điểm ở đầu bảng làm cả trang sau lùi một ô —
+    **một điểm bị lặp, một điểm biến mất**. Cursor theo khoá thì chèn/xoá ở phần đã đi qua không đẩy
+    phần chưa đi.
+  - **Không dùng `name` làm khoá:** người dùng đổi nhãn hiển thị thường xuyên, và một khoá sắp xếp
+    đổi được là một cursor nhảy chỗ.
+  - Route `GET /point-catalog` nhận `cursor` từ query; không có nó thì `nextCursor` server trả về
+    không ai dùng được và bảng vẫn dừng ở trang đầu.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · FE **199 file / 2448 test** + lint
+  + build + ngân sách bundle PASS. Bốn test BE: đi hết **744** điểm không lặp không mất · trang đầu
+  **thừa nhận còn nữa** · catalog đổi giữa hai trang **không lặp, không nhảy** · cursor bị sửa **bị
+  từ chối**. Hai test FE khoá nửa nhìn thấy được: chip `+` và banner khoá Map.
+- **CI vẫn bị chặn** (không cấp runner) — xem #414.
+
+
 ### Added — `ISS-PIO-36` nhóm `5a…5g`: bằng chứng đóng của `ISS-PIO-31`, chạy trên cấu hình thật (#382, #375, 2026-09-03)
 
 - **Vì sao cần.** Bốn bước trước của `ISS-PIO-31` có test đơn vị dựng `ModbusSlotSnapshot` **bằng
