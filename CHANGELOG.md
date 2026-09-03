@@ -8,6 +8,34 @@
 
 ## [Unreleased]
 
+### Removed — `Project Settings` khỏi shell Programming (`PLAN-FE-SHELL-062`, 2026-09-03)
+
+- **Gỡ cái gì.** Mục thứ bảy `Project Settings` khỏi `ProgrammingFeatureRail` và `ProgrammingMobileNav`.
+- **Không phải cắt tính năng.** Quyết định canonical `UD-PROG-008` (**CLOSED** theo `ADR-050.8`) chốt
+  **sáu** workspace `PGM-01..06`. Mục này chưa bao giờ có route — `ProgrammingRoutes` khai đúng 6 path —
+  nên FE phải render nó `aria-disabled` kèm lý do *"Chưa có trang Cài đặt Project ở bản dựng này"*. Rà
+  `docs/01_requirements/` và `PROGRAMMING_TRACEABILITY_MATRIX.md`: **không** yêu cầu nào mang tên này.
+  Xuất xứ duy nhất là một dòng mô tả trong handoff Plan 60 (`:229` — *"6 đích + Project Settings"*).
+- **Phần quan trọng hơn thao tác gỡ: cổng chống tái phát.** `shellDestinations.test.ts` khoá bất biến
+  *"mọi mục điều hướng của shell phải trỏ tới một đích CÓ THẬT; chỉ được vô hiệu vì **thiếu điều kiện**
+  (chưa chọn Project), **không bao giờ** vì trang không tồn tại"*. Cổng đối chiếu thẳng
+  `PROGRAMMING_WORKSPACE_PATHS` — bảng route đã có, không dựng bảng chép tay thứ hai vốn sẽ tự trôi.
+- **Cổng được chứng minh đỏ TRƯỚC khi gỡ** (thứ tự WP-01 → WP-02 là bắt buộc): trên baseline `6a380c8`
+  cả G1/G2/G3 đỏ, nêu đích danh `project-settings`; phép kiểm thứ tư (*"vẫn cho phép vô hiệu khi CHƯA
+  chọn Project"*) xanh ngay trên baseline — bằng chứng cổng không kiểm quá tay. Sau khi gỡ: **4/4 xanh**.
+- **Bổ chính tài liệu, không viết lại lịch sử.** `T60-101` giữ nguyên trạng thái `DONE`; thêm ghi chú bổ
+  chính tại chỗ dẫn `PLAN-FE-SHELL-062`. Sửa lặng lẽ một task đã đóng là đúng loại trôi hồ sơ mà
+  `DOC_GOVERNANCE` cấm.
+- **Không đổi**: `ProgrammingRoutes`, `NAV_GROUPS`/`ADR-032` (mục này chưa bao giờ nằm trong hợp đồng
+  route↔menu toàn cục), BE, contract, Core. Cơ chế `disabledReason` giữ nguyên cho ba đích phụ thuộc
+  Project.
+- **Bẫy đã tránh.** `toHaveLength(7)` trong test rail **giữ nguyên 7** — đó là 6 đích + lối thoát; mục bị
+  gỡ vốn là `<span role="link">`, chưa từng được đếm. Sửa thành 6 theo phản xạ sẽ làm hỏng phép kiểm.
+- **Đo lại.** FE `vitest` **2446/2446** (200 file), `lint` exit 0, `build:release` exit 0,
+  `verify-project.sh --component layout` exit 0. Đã nạp bo Foxlinx và kiểm chứng rail còn **6 đích + lối
+  thoát**, không mục xám nào.
+
+
 ### Added — `PLAN-FE-SHELL-062`: plan gỡ toàn diện `Project Settings` khỏi shell Programming (2026-09-03)
 
 - **Bối cảnh.** Rail Programming có **bảy** mục, trong khi quyết định canonical `UD-PROG-008` (**CLOSED**

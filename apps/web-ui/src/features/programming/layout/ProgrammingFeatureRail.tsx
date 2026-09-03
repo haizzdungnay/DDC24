@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Cable, ClipboardCheck, Home, Library, PencilRuler, SlidersHorizontal } from 'lucide-react'
+import { Activity, ArrowLeft, Cable, ClipboardCheck, Home, Library, PencilRuler } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { PRODUCT_INFO } from '../../../shared/productInfo'
@@ -37,9 +37,15 @@ interface RailItem {
 }
 
 /**
- * Sáu đích canonical + `Project Settings`. Tách khỏi component để test đọc được
- * bảng đích mà không phải suy từ DOM, và để một chỗ duy nhất quyết định mục nào
- * phụ thuộc Project.
+ * SÁU đích canonical `PGM-01..06` — đúng `UD-PROG-008` (CLOSED, `ADR-050.8`).
+ * Tách khỏi component để test đọc được bảng đích mà không phải suy từ DOM, và
+ * để một chỗ duy nhất quyết định mục nào phụ thuộc Project.
+ *
+ * `PLAN-FE-SHELL-062` — trước đây ở đây có mục thứ bảy `Project Settings`, đến
+ * từ một dòng mô tả trong handoff Plan 60 chứ không từ yêu cầu nào. Nó chưa bao
+ * giờ có route, nên phải render xám kèm lý do "trang không tồn tại". Bất biến
+ * thay thế nó được khoá bằng máy ở `shellDestinations.test.ts`: mục chỉ được
+ * vô hiệu vì THIẾU ĐIỀU KIỆN (chưa chọn Project), không bao giờ vì thiếu trang.
  */
 export function programmingRailItems(projectId: string | null): RailItem[] {
   const needsProject: [string, string] = [
@@ -53,19 +59,7 @@ export function programmingRailItems(projectId: string | null): RailItem[] {
     { key: 'mapping', label: ['Điểm & Ánh xạ', 'Points & Mapping'], to: projectPath('mapping'), icon: Cable, disabledReason: projectId ? null : needsProject },
     { key: 'library', label: ['Thư viện điều khiển', 'Control Library'], to: projectPath('library'), icon: Library, disabledReason: projectId ? null : needsProject },
     { key: 'commission', label: ['Kiểm tra & Vận hành', 'Check & Commission'], to: projectPath('commission'), icon: ClipboardCheck, disabledReason: projectId ? null : needsProject },
-    { key: 'runtime', label: ['Runtime & Bảo trì', 'Runtime & Service'], to: '/eng/programming/runtime', icon: Activity, disabledReason: null },
-    {
-      /* `Project Settings` của README §3 CHƯA có route: `ProgrammingRoutes` chỉ
-       * khai đúng sáu workspace. Trỏ nó vào một path chưa tồn tại sẽ rơi vào
-       * `<Route path="*">` và bật ngược về Overview — người dùng bấm một mục
-       * rồi thấy mình quay lại chỗ cũ mà không có lời giải thích nào. Vì vậy
-       * mục hiện diện nhưng vô hiệu hoá KÈM LÝ DO, đúng luật "không bịa đích". */
-      key: 'project-settings',
-      label: ['Cài đặt Project', 'Project Settings'],
-      to: null,
-      icon: SlidersHorizontal,
-      disabledReason: ['Chưa có trang Cài đặt Project ở bản dựng này', 'The Project Settings page does not exist in this build']
-    }
+    { key: 'runtime', label: ['Runtime & Bảo trì', 'Runtime & Service'], to: '/eng/programming/runtime', icon: Activity, disabledReason: null }
   ]
 }
 

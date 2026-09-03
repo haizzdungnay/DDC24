@@ -3,13 +3,13 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-FE-SHELL-062` |
-| Phiên bản | 0.1 |
-| Trạng thái | **DỰ THẢO — chờ duyệt trước khi code** |
+| Phiên bản | 1.0 |
+| Trạng thái | **ĐÓNG — WP-01…WP-05 `DONE` 2026-09-03. `RELEASE_READY` KHÔNG đổi** |
 | Ngày | 2026-09-03 |
 | Chủ quản | FE Lead + System Architect |
 | Người review | Product Owner, QA |
 | Người phê duyệt | Product Owner/CTO + System Architect |
-| Baseline As-Built | `main@6a380c8` |
+| Baseline As-Built | `main@6a380c8`; triển khai tại `main@25a1542` |
 | Authority sản phẩm | [`UD-PROG-008`](../00_governance/PROGRAMMING_OPEN_DECISIONS.md) — *"Sáu workspace `PGM-01..06`"*, **CLOSED** theo `ADR-050.8` |
 | Quan hệ Plan 60 | Sửa một sai lệch của `T60-101`/`T60-208` so với `UD-PROG-008`; **không** mở lại quyết định shell nào khác |
 | Phạm vi | FE shell (`ProgrammingFeatureRail`, `ProgrammingMobileNav`) + test + tài liệu. **Không** động tới route, BE, contract, Core |
@@ -98,11 +98,11 @@ Rà bằng `grep -rn "project-settings|Project Settings|Cài đặt Project"` tr
 
 | WP | Nội dung | Phụ thuộc | Ước lượng |
 |---|---|---|---|
-| **WP-01** | Cổng chống tái phát (§4) — **làm TRƯỚC**, phải **đỏ** trên mã hiện tại | — | 0,5 nd |
-| **WP-02** | Gỡ A1–A5 khỏi rail + mobile nav | WP-01 | 0,25 nd |
-| **WP-03** | Sửa B1–B3; sửa docstring A2, A6 | WP-02 | 0,25 nd |
-| **WP-04** | Bổ chính tài liệu C1–C3 | WP-02 | 0,25 nd |
-| **WP-05** | Chạy gate, deploy bo, kiểm chứng mắt trên bo thật | WP-01…04 | 0,25 nd |
+| **WP-01** | Cổng chống tái phát (§4) — **làm TRƯỚC**, phải **đỏ** trên mã hiện tại | — | `DONE` |
+| **WP-02** | Gỡ A1–A5 khỏi rail + mobile nav | WP-01 | `DONE` |
+| **WP-03** | Sửa B1–B3; sửa docstring A2, A6 | WP-02 | `DONE` |
+| **WP-04** | Bổ chính tài liệu C1–C3 | WP-02 | `DONE` |
+| **WP-05** | Chạy gate, deploy bo, kiểm chứng mắt trên bo thật | WP-01…04 | `DONE` |
 
 **Thứ tự WP-01 trước WP-02 là bắt buộc.** Cổng phải được chứng minh là bắt được lỗi *khi lỗi còn đó*. Viết cổng sau khi đã gỡ thì không ai biết nó có kiểm gì không — đúng cái bẫy `st_language_profile_gate` đã dạy: một cổng luôn xanh có hai cách giải thích, và từ ngoài nhìn vào chúng giống hệt nhau.
 
@@ -143,6 +143,19 @@ G3 là phép kiểm sắc nhất: khi đã có Project, không còn lý do chín
 - Chạy trên `main@6a380c8` (chưa gỡ) ⇒ G1 và G3 **phải đỏ**, nêu đúng `project-settings`.
 - Chạy sau WP-02 ⇒ cả ba **xanh**.
 - Ghi cả hai số đo vào thân commit của WP-01.
+
+**Số đo thật (2026-09-03).** Trên baseline: **3 failed / 1 passed**, cả ba đều nêu đích danh
+`project-settings` —
+
+```
+G1  rail có đích không khai trong PROGRAMMING_WORKSPACE_PATHS: project-settings
+G2  bottom nav có đích không khai trong PROGRAMMING_WORKSPACE_PATHS: project-settings
+G3  rail còn mục không có đích dù đã chọn Project: [ 'project-settings' ]
+```
+
+Phép kiểm thứ tư (*"vẫn cho phép vô hiệu khi CHƯA chọn Project"*) **xanh ngay trên baseline** — bằng
+chứng cổng không kiểm quá tay, tức nó không cấm nhầm cơ chế `disabledReason` hợp lệ. Sau WP-02: **4/4
+xanh**.
 
 ---
 
@@ -202,3 +215,4 @@ Câu hỏi lớn hơn — *"vì sao một DDC lại có nhiều Project"* — **
 | Phiên bản | Ngày | Nội dung | Người |
 |---|---|---|---|
 | 0.1 | 2026-09-03 | Dự thảo đầu tiên | FE Lead |
+| 1.0 | 2026-09-03 | Triển khai WP-01…WP-05; ghi số đo nghiệm thu §4.4 và §6; đóng plan | FE Lead |
