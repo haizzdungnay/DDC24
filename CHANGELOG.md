@@ -13,7 +13,7 @@
 - **A. Nhóm Chặn.**
   - Thêm **Task 0.5** gỡ chặn môi trường dev shell: tạo shim `python3` trỏ về `python` (Python 3.13.2) trong PATH để các script lint/build (`check:ui-strings`, `check:bundle-budget`) không bị vấp stub WindowsApps mà không làm đổi `package.json`.
   - Cập nhật định nghĩa cổng bundle: ghi nhận rõ cổng hiện hành của repo là `r3` (165 KiB); việc đổi cờ `r3` → `r1` toàn repo cần Owner phê duyệt.
-  - Thêm **Task 1.5** giải quyết trực tiếp ngân sách R1 (`BLK-FBD-003`, 157.20 KiB > 125 KiB) bằng cách thêm phân tách chunk `programming` vào `manualChunks` trong `apps/web-ui/vite.config.ts`.
+  - Thêm **Task 1.5** (thực thi sau Task 5.5) giải quyết ngân sách R1 (`BLK-FBD-003`, 157.20 KiB > 125 KiB) bằng lazy-load `ProgramsTab.tsx` — chunk `programming-*.js` đã tách sẵn nhờ `lazy()` ở `App.tsx`, phần nặng là mã nguồn dự án chứ không phải dependency.
   - Bổ sung `selectionRevision: number` vào `FbdEditorState` trong Task 3 để hiện thực hóa revision authority trong reducer trước khi bất kỳ test nào tham chiếu.
 - **B. Nhóm Cao.**
   - Đổi toàn bộ quy trình commit sang nhánh làm việc riêng `feat/fbd-edit`, không commit trực tiếp lên `main`.
