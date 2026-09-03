@@ -8,6 +8,39 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-06` `dataType` của Point Catalog đoán từ giá trị runtime (#392, 2026-09-03)
+
+- **Triệu chứng.** `pointCatalogDataType` kết thúc bằng *"nếu `Value` là `bool` thì BOOL, còn lại
+  REAL"*. Ba hệ quả, và cả ba đều là hệ quả của **chính phép đoán đó**:
+  1. Kênh UI đặt **tiếp điểm khô** mà **chưa có mẫu** (`Value == nil`) bị khai là `REAL`; bind vào
+     `VAR_INPUT : BOOL` báo *"Kiểu dữ liệu không khớp"* — **sai** — rồi **tự hết sai** khi điểm có
+     mẫu. Một lỗi **nhấp nháy theo trạng thái hiện trường** là lỗi khó tin nhất với người vận hành:
+     nó biến mất đúng lúc họ gọi người khác đến xem.
+  2. `MSV` **không bao giờ** ra `UINT`, trong khi FE khai `PREFIX_TYPE.MSV = 'UINT'` ⇒ nhánh
+     Multistate **không có đường chạy**.
+  3. Điểm Modbus `int16`/`int32`/`uint32` gộp hết về `REAL` — mất cả **dải** lẫn **dấu**, tức mất
+     thông tin mà chính người dùng đã nhập vào `fieldbus.conf`.
+- **Cách sửa.** Nguồn sự thật là **cấu hình**, và không nhánh nào còn nhìn vào `point.Value`:
+  - **MB_RTU** ← `data_type` (`bool`→`BOOL`, `int16`→`INT`, `uint16`→`UINT`, `int32`→`DINT`,
+    `uint32`→`UDINT`, `float32`→`REAL`).
+  - **VP** ← **slot đã bind trước** (`BV`→`BOOL`, `MSV`→`UINT`, `AV`→theo `signalType`), rồi mới tới
+    `signalType`. Slot đứng trước vì nó là thứ Core **thật sự** cấp phát — và đó chính là đường làm
+    cho `UINT` xuất hiện được.
+  - **UI** ← `type` của kênh trong `io_config.conf`: `dry` là `BOOL` **bất kể** hôm nay có mẫu hay
+    không.
+  - **AO/DO** ← bản chất phần cứng (DAC → `REAL`, rơ-le → `BOOL`), không phải suy diễn.
+- **Bất biến bao trùm, có test riêng.** Với **cùng một cấu hình**, giá trị runtime — `nil`, `true`,
+  `false`, `0`, `12.5`, chuỗi — **không được đổi** câu trả lời. Đó là thứ khiến lỗi hết nhấp nháy, và
+  cũng là thứ dễ mất nhất trong một lần "tối ưu" sau này.
+- **Một test có sẵn ghim chính con bug, đã đổi.** `TestPointCatalogDataTypeDigitalVsAnalog` truyền
+  `Value: true` / `Value: 12.5` cho một VP và khẳng định `BOOL`/`REAL` — tức nó **khoá lại phép đoán**
+  mà `F-PIO-005` gọi là lỗi. Nay nó truyền `signalType`, giữ nguyên ý nghĩa "digital vs analog"
+  nhưng lấy từ đúng nguồn.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · `go test -race ./internal/app` **`ok`** (145,2 s).
+- **Hai lần tiêm lỗi:** cho UI đoán lại từ `Value` ⇒ **2 test FAIL**; gộp `int32` về `REAL` ⇒
+  **1 test FAIL**. Khôi phục ⇒ xanh trở lại.
+
 ### Fixed — `ISS-PIO-03` Virtual Point tạo từ giao diện KHÔNG BAO GIỜ map được vào biến chương trình (#379, 2026-09-03)
 
 - **Triệu chứng.** Tạo một VP trên giao diện, rồi mở tab Ánh xạ: điểm đó **không có ở đó**. Đường

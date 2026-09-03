@@ -316,21 +316,103 @@ func pointCatalogDirection(point PointDTO) (direction string, writable bool) {
 	}
 }
 
+/* pointCatalogDataType — `ISS-PIO-06`/`F-PIO-005`.
+ *
+ * Bản cũ đọc `point.Value` để đoán kiểu, và cả ba hệ quả đều là hệ quả của
+ * chính phép đoán đó:
+ *
+ *  1. Một kênh UI đặt tiếp điểm khô mà CHƯA CÓ MẪU (`Value == nil`) được khai
+ *     là `REAL`; bind vào `VAR_INPUT : BOOL` bị báo "Kiểu dữ liệu không khớp",
+ *     rồi TỰ HẾT SAI khi điểm có mẫu. Một lỗi nhấp nháy theo trạng thái hiện
+ *     trường là lỗi khó tin nhất đối với người vận hành: nó biến mất đúng lúc
+ *     họ gọi người khác đến xem.
+ *  2. `MSV` không bao giờ ra `UINT`, nên nhánh Multistate không có đường chạy.
+ *  3. Điểm Modbus `int16`/`int32`/`uint32` gộp hết về `REAL`, mất cả dải lẫn dấu.
+ *
+ * Nguồn sự thật nay là CẤU HÌNH: `data_type` của điểm Modbus, `signalType` của
+ * VP và của kênh UI, và bản chất phần cứng của AO/DO. Không nhánh nào ở đây
+ * còn nhìn vào `point.Value` — kiểu của một điểm không được phép đổi theo việc
+ * hôm nay có đọc được số hay không.
+ */
 func pointCatalogDataType(point PointDTO) string {
 	switch point.Kind {
+	case "modbus_rtu":
+		return modbusDataTypeToIEC(point.DataType)
+	case "virtual", "VP":
+		return virtualPointDataType(point)
 	case "DO":
+		// Rơ-le: BOOL là bản chất phần cứng, không phải suy diễn.
 		return "BOOL"
-	case "AO", "UI":
-		if _, ok := point.Value.(bool); ok {
-			return "BOOL"
-		}
+	case "AO":
+		// DAC: luôn tương tự.
 		return "REAL"
-	default:
-		if _, ok := point.Value.(bool); ok {
-			return "BOOL"
-		}
+	case "UI":
+		return universalInputDataType(point.SignalType)
+	}
+	return "REAL"
+}
+
+// modbusDataTypeToIEC giữ nguyên ĐỘ RỘNG và DẤU mà `fieldbus.conf` khai.
+// Gộp tất cả về `REAL` làm mất thông tin mà chính người dùng đã nhập.
+func modbusDataTypeToIEC(dataType string) string {
+	switch strings.ToLower(strings.TrimSpace(dataType)) {
+	case "bool":
+		return "BOOL"
+	case "int16":
+		return "INT"
+	case "uint16":
+		return "UINT"
+	case "int32":
+		return "DINT"
+	case "uint32":
+		return "UDINT"
+	case "float32":
 		return "REAL"
 	}
+	// Cấu hình chưa nói kiểu ⇒ giữ `REAL` như trước. KHÔNG đoán từ giá trị:
+	// một điểm chưa có mẫu và một điểm đang đọc ra `true` phải cho cùng câu
+	// trả lời, vì cấu hình của chúng giống nhau.
+	return "REAL"
+}
+
+/* virtualPointDataType lấy kiểu từ SLOT mà VP đã bind, rồi mới tới `signalType`.
+ *
+ * Slot đứng trước vì nó là thứ Core THẬT SỰ cấp phát: `MSV-*` là `UINT`, và đó
+ * chính là hệ quả (2) — trước bản vá không đường nào cho ra `UINT`, nên nhánh
+ * Multistate của FE (`PREFIX_TYPE.MSV = 'UINT'`) không bao giờ khớp được. */
+func virtualPointDataType(point PointDTO) string {
+	if prefix, _, ok := parsePointID(point.BoundPointID); ok {
+		switch prefix {
+		case "BV":
+			return "BOOL"
+		case "MSV":
+			return "UINT"
+		case "AV":
+			return virtualSignalTypeToIEC(point.SignalType)
+		}
+	}
+	return virtualSignalTypeToIEC(point.SignalType)
+}
+
+func virtualSignalTypeToIEC(signalType string) string {
+	switch strings.ToLower(strings.TrimSpace(signalType)) {
+	case virtualPointSignalBoolean:
+		return "BOOL"
+	case virtualPointSignalInteger:
+		return "DINT"
+	}
+	return "REAL"
+}
+
+/* universalInputDataType đọc `type` của kênh trong `io_config.conf`.
+ *
+ * `dry` là tiếp điểm khô — `AiInputConfig.signalType` 4/5 — và nó là BOOL BẤT
+ * KỂ hôm nay kênh có mẫu hay không. Đó là toàn bộ nội dung của hệ quả (1). */
+func universalInputDataType(signalType string) string {
+	if strings.EqualFold(strings.TrimSpace(signalType), "dry") {
+		return "BOOL"
+	}
+	return "REAL"
 }
 
 // pointCatalogQuality chuẩn hoá quality producer về đúng sáu mức Programming

@@ -111,11 +111,14 @@ func TestPointCatalogDataTypeDigitalVsAnalog(t *testing.T) {
 	if got := pointCatalogDataType(PointDTO{Kind: "AO"}); got != "REAL" {
 		t.Fatalf("AO dataType=%q, want REAL", got)
 	}
-	if got := pointCatalogDataType(PointDTO{Kind: "virtual", Value: true}); got != "BOOL" {
-		t.Fatalf("virtual bool dataType=%q, want BOOL", got)
+	/* `ISS-PIO-06`: kiểu đến từ CẤU HÌNH (`signalType`), không từ giá trị đang
+	 * đọc được. Bản trước của test này truyền `Value: true` / `Value: 12.5` và
+	 * qua được — tức nó ghim chính phép đoán mà `F-PIO-005` gọi là lỗi. */
+	if got := pointCatalogDataType(PointDTO{Kind: "virtual", SignalType: "boolean"}); got != "BOOL" {
+		t.Fatalf("virtual boolean dataType=%q, want BOOL", got)
 	}
-	if got := pointCatalogDataType(PointDTO{Kind: "virtual", Value: 12.5}); got != "REAL" {
-		t.Fatalf("virtual numeric dataType=%q, want REAL", got)
+	if got := pointCatalogDataType(PointDTO{Kind: "virtual", SignalType: "float"}); got != "REAL" {
+		t.Fatalf("virtual float dataType=%q, want REAL", got)
 	}
 }
 
