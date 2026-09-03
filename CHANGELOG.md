@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-31` Point Catalog không phát `extIndex` nên KHÔNG bind được điểm Modbus nào (2026-09-03)
+
+- **Triệu chứng.** Mọi điểm MB_RTU trong Point Catalog trả
+  `mapping.output.status = UNSUPPORTED_BY_CORE` kèm lý do *"Catalog chưa phát extIndex cho điểm
+  Modbus nên chưa dựng được binding"*. Hệ quả: không có đường nào dựng binding Modbus **qua chính
+  sản phẩm**, nên một chương trình ST điều khiển 32 DO không thể chạy — dù Core đã resolve `MB_RTU`
+  từ lâu và `BuildExtLayout` đã tính sẵn con số.
+- **Nguyên nhân gốc — một.** `toPointCatalogEntry` không bao giờ đặt `ExtIndex`.
+  `EvaluatePointMapEligibility` đọc chính trường đó để quyết định điểm đã bind được chưa, và chú
+  thích tại chỗ đã ghi trước điều kiện đóng: *"Khi `ISS-PIO-31` phát `extIndex`, chính hàm này mở
+  khoá — không cần sửa FE, và cũng không cần sửa dòng nào ở đây."* Thiếu đúng một phép gán.
+- **Nguyên nhân gốc — hai (lộ ra khi nối dây).** Hai hệ danh tính thiết bị đang chạy song song:
+  Point Catalog phát `deviceId` dạng **canonical** `bus-<n>-slave-<m>` (dựng từ `bus_id`/`slave_addr`
+  runtime báo về, và `validModbusDeviceID` bắt buộc đúng dạng này), còn `programmingModbusSlotAdapter`
+  phát `device_id` của cấu hình — trên bo thật là `CK508-04`. Để nguyên thì
+  `ModbusSlotSnapshot.Lookup(deviceId, pointId)` của đường Check **không bao giờ** khớp binding dựng
+  từ Catalog: mọi điểm bị báo *"không còn trong cấu hình đang chạy"* dù cấu hình không đổi một chữ.
+  Bộ test cũ không bắt được vì fixture của nó đặt luôn `device_id` ở dạng canonical.
+- **Cách sửa.** Catalog lấy `ExtIndex` từ **cùng** adapter mà đường Check dùng, nên số Catalog quảng
+  cáo và số Check phân giải lại không thể trôi khỏi nhau; lỗi đọc bố cục không làm hỏng cả catalog
+  (điểm MB_RTU giữ `ExtIndex = 0` và tự rơi về đúng nhánh "chưa bind được" có sẵn). Adapter quy đổi
+  `device_id` sang canonical theo ba nhánh tin cậy giảm dần: đã canonical thì giữ nguyên; suy từ
+  `bus_id` + `slave_id` qua `Bus.NumericID()` (cùng phép quy đổi validator bắt buộc và `iobus` dùng);
+  không suy được thì giữ nguyên thay vì bỏ slot — bỏ slot biến một cấu hình bus thiếu sót thành
+  "điểm biến mất" và xoá mất dấu vết nguyên nhân.
+- **Đo trên bo (Foxlinx, 4 module CK-508/CK-509, 48 điểm).**
+
+  | | Trước | Sau |
+  |---|---|---|
+  | Điểm MB_RTU có `extIndex` | 0/48 | **48/48** |
+  | `mapping.output.status` | 48 × `UNSUPPORTED_BY_CORE` | **32 `SUPPORTED`** (DO) + 16 `INCOMPATIBLE` (DI, read-only) |
+
+- **Đo lại.** Go **19/19 package `ok`**, `go vet ./...` exit 0. Hai test mới chạy ngược trên `main`
+  thì **đỏ** (`extIndex = 0`; `deviceId = "CK508-04"` thay vì canonical).
 ### Added — `ISS-PIO-13` FE dựng số kênh và dropdown mode từ capability, bỏ `VISIBLE_UI_CHANNELS` (#390, 2026-09-03)
 
 - **Triệu chứng.** FE liệt kê cứng cả 8 nhóm `signalType 0..8` cho **mọi** kênh UI — kể cả

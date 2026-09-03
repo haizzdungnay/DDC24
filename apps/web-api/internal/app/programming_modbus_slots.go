@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	webModbus "mkddc-web/internal/modbusrtu"
 	programmingapplication "mkddc-web/internal/programming/application"
@@ -29,18 +31,75 @@ func (adapter programmingModbusSlotAdapter) ResolveModbusSlots(
 		return programmingapplication.ModbusSlotSnapshot{}, err
 	}
 	layout := webModbus.BuildExtLayout(cfg.Devices, cfg.Points)
+	canonical := canonicalModbusDeviceIDs(cfg)
 	snapshot := programmingapplication.ModbusSlotSnapshot{
 		ConfigRevision: configRevisionLabel(cfg),
 		Slots:          make([]programmingapplication.ModbusSlot, 0, len(layout.Slots)),
 	}
 	for _, slot := range layout.Slots {
+		deviceID, ok := canonical[slot.DeviceID]
+		if !ok {
+			/* Slot do `BuildExtLayout` phát ra luôn thuộc một device có trong
+			 * `cfg.Devices`, nên không map được nghĩa là bus của device đó khai
+			 * sai (`NumericID() == 0`). Bỏ slot thay vì phát danh tính lai:
+			 * một `deviceId` không đúng dạng canonical sẽ bị
+			 * `validModbusDeviceID` chặn ở tầng trên, nhưng chặn ở đó thì lý do
+			 * đã mất dấu về tận cấu hình bus. */
+			continue
+		}
 		snapshot.Slots = append(snapshot.Slots, programmingapplication.ModbusSlot{
-			DeviceID: slot.DeviceID, PointID: slot.PointID, ExtIndex: slot.ExtIndex,
+			DeviceID: deviceID, PointID: slot.PointID, ExtIndex: slot.ExtIndex,
 			RegisterType: slot.RegisterType, Address: slot.Address, AddressKnown: true,
 			DataType: slot.DataType, ReadWrite: slot.ReadWrite,
 		})
 	}
 	return snapshot, nil
+}
+
+// canonicalModbusDeviceIDs ánh xạ `device_id` của cấu hình sang danh tính
+// CANONICAL của tầng Programming: `bus-<n>-slave-<m>`.
+//
+// Vì sao phải quy đổi: Point Catalog phát `deviceId` theo dạng canonical (dựng
+// từ `bus_id`/`slave_addr` mà runtime báo về), `validModbusDeviceID` bắt buộc
+// đúng dạng đó, và toàn bộ test của `ModbusSlot` cũng viết theo dạng đó. Nhưng
+// `BuildExtLayout` làm việc trên cấu hình nên slot nó phát ra mang `device_id`
+// do người dùng đặt — trên bo thật là `CK508-04`, không phải `bus-1-slave-4`.
+// Để nguyên hai hệ danh tính thì `Lookup(deviceId, pointId)` của đường Check
+// không bao giờ khớp với binding dựng từ Catalog: điểm nào cũng "không còn
+// trong cấu hình đang chạy" dù cấu hình không đổi một chữ.
+//
+// Ba nhánh, theo thứ tự tin cậy giảm dần:
+//  1. `device_id` VỐN đã canonical ⇒ giữ nguyên. Cấu hình đặt tên như vậy là
+//     đã tự nói danh tính runtime của nó; quy đổi lại chỉ tạo cơ hội sai.
+//  2. Suy từ `bus_id` + `slave_id`. `bus_id` là chuỗi (`rs485-1`) và
+//     `NumericID()` là CÙNG phép quy đổi mà validator bắt buộc và `iobus` dùng,
+//     nên số ở đây khớp `bus_id` numeric trong SHM.
+//  3. Không suy được (thiếu `bus_id`, hoặc bus khai sai số) ⇒ giữ nguyên
+//     `device_id`. Bỏ slot ở đây sẽ biến một cấu hình bus thiếu sót thành
+//     "điểm biến mất", và thông báo lỗi ở tầng trên mất hẳn dấu vết về nguyên
+//     nhân thật.
+func canonicalModbusDeviceIDs(cfg ConfigFieldbus) map[string]string {
+	out := make(map[string]string, len(cfg.Devices))
+	for _, device := range cfg.Devices {
+		if isCanonicalModbusDeviceID(device.DeviceID) {
+			out[device.DeviceID] = device.DeviceID
+			continue
+		}
+		if n := (webModbus.Bus{BusID: device.BusID}).NumericID(); n != 0 {
+			out[device.DeviceID] = fmt.Sprintf("bus-%d-slave-%d", n, device.SlaveID)
+			continue
+		}
+		out[device.DeviceID] = device.DeviceID
+	}
+	return out
+}
+
+// isCanonicalModbusDeviceID lặp lại đúng phép kiểm của `validModbusDeviceID`
+// bên `programming/application`. Cố ý lặp thay vì export: hai tầng kiểm cùng
+// một dạng vì hai lý do khác nhau, và nối chúng bằng một hàm chung sẽ khiến
+// một bên đổi luật kéo bên kia đi theo trong im lặng.
+func isCanonicalModbusDeviceID(deviceID string) bool {
+	return strings.HasPrefix(deviceID, "bus-") && strings.Contains(deviceID, "-slave-")
 }
 
 // configRevisionLabel gắn nhãn cấu hình đã dùng để phân giải. `checksum` là thứ

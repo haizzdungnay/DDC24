@@ -35,11 +35,43 @@ func (adapter programmingPointCatalogAdapter) ListPointCatalog(ctx context.Conte
 	if err != nil {
 		return nil, err
 	}
+	/* `ISS-PIO-31` — CATALOG PHẢI PHÁT `extIndex`, KHÔNG CHỈ MÔ TẢ ĐIỂM.
+	 *
+	 * `EvaluatePointMapEligibility` đọc `ExtIndex` để quyết định một điểm
+	 * MB_RTU có bind được chưa; bỏ trống nó thì MỌI điểm Modbus trả về
+	 * `UNSUPPORTED_BY_CORE` kèm lý do "Catalog chưa phát extIndex" — và người
+	 * dùng không có đường nào dựng binding Modbus qua chính sản phẩm, dù Core
+	 * đã resolve `MB_RTU` từ lâu và `BuildExtLayout` đã tính sẵn con số.
+	 *
+	 * Nguồn là CÙNG một adapter mà đường Check dùng, nên số Catalog quảng cáo
+	 * và số Check phân giải lại không thể trôi khỏi nhau. Lỗi đọc bố cục KHÔNG
+	 * làm hỏng cả catalog: điểm LOCAL/VP không phụ thuộc nó, còn điểm MB_RTU
+	 * giữ `ExtIndex = 0` và tự rơi về đúng nhánh "chưa bind được" có sẵn. */
+	slotOf := map[string]int{}
+	if snapshot, slotErr := adapter.app.programmingModbusSlots().ResolveModbusSlots(ctx); slotErr == nil {
+		for _, slot := range snapshot.Slots {
+			slotOf[modbusCatalogKey(slot.DeviceID, slot.PointID)] = slot.ExtIndex
+		}
+	}
+
 	entries := make([]programmingapplication.PointCatalogEntry, 0, len(points))
 	for _, point := range points {
-		entries = append(entries, toPointCatalogEntry(point))
+		entry := toPointCatalogEntry(point)
+		if entry.Category == "MB_RTU" {
+			entry.ExtIndex = slotOf[modbusCatalogKey(entry.DeviceID, entry.PointID)]
+		}
+		entries = append(entries, entry)
 	}
 	return entries, nil
+}
+
+// modbusCatalogKey ghép danh tính bền `(deviceId, pointId)` thành khoá tra.
+// `pointId` là unique không phân biệt hoa thường theo `modbusrtu/validate.go`,
+// nên tra theo mình `pointId` cũng đủ — nhưng ghép cả `deviceId` giữ cho phép
+// tra HỎNG TO khi hai hệ danh tính lệch nhau, thay vì âm thầm khớp nhầm điểm
+// cùng tên ở thiết bị khác nếu ràng buộc unique kia đổi.
+func modbusCatalogKey(deviceID, pointID string) string {
+	return strings.ToLower(deviceID) + "\x00" + strings.ToLower(pointID)
 }
 
 func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx context.Context) (programmingapplication.MonitorTruthSnapshot, error) {
