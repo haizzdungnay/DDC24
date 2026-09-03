@@ -970,6 +970,7 @@ const (
 	offQuality    = 72 // uint8
 	offReliab     = 73 // uint8
 
+	offPLCTsNS        = 8 // `kx_plc_shm_t.ts_ns` — magic(4) + seq(4) đứng trước
 	offPLCScanCount   = 23092
 	offPLCScanOverrun = 23096
 	kxPlcShmMinLen    = 23104
@@ -1128,7 +1129,7 @@ func mapQuality(raw uint8) string {
 	}
 }
 
-func decodePoint(data []byte, offset int, id, name string) PointDTO {
+func decodePoint(data []byte, offset int, id, name, updatedAt string) PointDTO {
 	if offset < 0 || offset+kxPointSize > len(data) {
 		return PointDTO{ID: id, Name: name, Quality: "bad", Source: "core", Fault: true}
 	}
@@ -1141,9 +1142,51 @@ func decodePoint(data []byte, offset int, id, name string) PointDTO {
 		Value:     v,
 		Quality:   q,
 		Source:    "core",
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		UpdatedAt: updatedAt,
 		Fault:     q == "bad",
 	}
+}
+
+/* plcSnapshotUpdatedAt dựng mốc mẫu của snapshot `plc_shm`.
+ *
+ * `ISS-PIO-08`/`F-PIO-007`: chỗ này TỪNG là `time.Now()` — tức "lúc web đọc
+ * SHM", không phải mốc của producer. Hệ quả đúng bằng `PA3-F04`: một điểm mà
+ * Core đã ngừng cập nhật từ lâu vẫn hiện "vừa xong" trên mọi màn hình, và
+ * `isFreshIso()` coi nó là dữ liệu tươi. Một cảm biến chết cứng trông y hệt một
+ * cảm biến đang chạy.
+ *
+ * `kx_point_t` KHÔNG có trường thời gian riêng — chỉ có `ts_ns` ở header của cả
+ * bảng (`mkddc_shm.h`). Đây là hướng 1 mà issue đề nghị: chở `ts_ns` lên làm
+ * mốc chung, không đổi ABI. Nó là `CLOCK_MONOTONIC`, dùng chung toàn hệ thống
+ * trên Linux, nên tuổi snapshot = `mono_now - ts_ns` và mốc treo tường =
+ * `wall_now - tuổi`.
+ *
+ * Trả "" — nghĩa là KHÔNG BIẾT — khi `ts_ns = 0` (producer chưa từng đóng dấu)
+ * hoặc khi không đọc được đồng hồ monotonic. Chuỗi rỗng đi tới FE thành
+ * `updatedAt: undefined`, và giao diện hiện `—`. Đó là điều đúng để nói; điền
+ * `time.Now()` vào đây chính là con bug.
+ */
+func plcSnapshotUpdatedAt(data []byte, wallNow time.Time) string {
+	if len(data) < offPLCTsNS+8 {
+		return ""
+	}
+	sampleMonoNS := binary.LittleEndian.Uint64(data[offPLCTsNS : offPLCTsNS+8])
+	if sampleMonoNS == 0 {
+		return ""
+	}
+	nowMonoNS, ok := monotonicNowNS()
+	if !ok {
+		return ""
+	}
+	if nowMonoNS < sampleMonoNS {
+		/* Snapshot đóng dấu ở TƯƠNG LAI so với đồng hồ của tiến trình này.
+		 * Không thể xảy ra trên cùng một trục monotonic, nên nó có nghĩa là giả
+		 * thiết "cùng trục" đã sai — ví dụ SHM còn sót từ lần boot trước. Nói
+		 * "không biết" thay vì trả một mốc bịa. */
+		return ""
+	}
+	age := time.Duration(nowMonoNS-sampleMonoNS) * time.Nanosecond
+	return wallNow.Add(-age).UTC().Format(time.RFC3339Nano)
 }
 
 func ioString(ioData []byte, base int, ch int) string {
@@ -1264,11 +1307,15 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 		return nil
 	}
 	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV+256)
+	/* Một mốc cho CẢ snapshot: `plc_shm` chỉ có `ts_ns` ở header, nên mọi điểm
+	 * trong cùng lần đọc chia sẻ đúng một mốc mẫu. Tính một lần cũng tránh 76
+	 * lời gọi `clock_gettime` cho một câu trả lời duy nhất. */
+	updatedAt := plcSnapshotUpdatedAt(data, time.Now())
 
 	// UI[0..15]
 	for i := 0; i < kxNUI; i++ {
 		id := formatPointID("UI", i+1)
-		dto := decodePoint(data, offAI+i*kxPointSize, id, id)
+		dto := decodePoint(data, offAI+i*kxPointSize, id, id, updatedAt)
 		dto.Unit = ioUnit(ioData, i)
 		if strings.EqualFold(dto.Unit, "bool") {
 			if v, ok := pointFloat(dto.Value); ok {
@@ -1284,7 +1331,7 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	// AO[0..3] analog output (commandable)
 	for i := 0; i < kxNAO; i++ {
 		id := formatPointID("AO", i+1)
-		dto := decodePoint(data, offAO+i*kxPointSize, id, id)
+		dto := decodePoint(data, offAO+i*kxPointSize, id, id, updatedAt)
 		if raw, unit, ok := ioAORaw(ioData, i); ok {
 			dto.Raw = &raw
 			dto.RawUnit = unit
@@ -1294,7 +1341,7 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	// DO[0..3] digital output feedback (bo[] array)
 	for i := 0; i < kxNDO; i++ {
 		id := formatPointID("DO", i+1)
-		dto := decodePoint(data, offBO+i*kxPointSize, id, id)
+		dto := decodePoint(data, offBO+i*kxPointSize, id, id, updatedAt)
 		if v, ok := dto.Value.(float32); ok {
 			dto.Value = v > 0.5
 		}
@@ -1303,12 +1350,12 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	// AV[0..31]
 	for i := 0; i < kxNAV; i++ {
 		id := fmt.Sprintf("AV%d", i+1)
-		pts = append(pts, decodePoint(data, offAV+i*kxPointSize, id, id))
+		pts = append(pts, decodePoint(data, offAV+i*kxPointSize, id, id, updatedAt))
 	}
 	// BV[0..15]
 	for i := 0; i < kxNBV; i++ {
 		id := fmt.Sprintf("BV%d", i+1)
-		dto := decodePoint(data, offBV+i*kxPointSize, id, id)
+		dto := decodePoint(data, offBV+i*kxPointSize, id, id, updatedAt)
 		if v, ok := dto.Value.(float32); ok {
 			dto.Value = v > 0.5
 		}
@@ -1317,7 +1364,7 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	// MSV[0..7]
 	for i := 0; i < kxNMSV; i++ {
 		id := fmt.Sprintf("MSV%d", i+1)
-		pts = append(pts, decodePoint(data, offMSV+i*kxPointSize, id, id))
+		pts = append(pts, decodePoint(data, offMSV+i*kxPointSize, id, id, updatedAt))
 	}
 	// Modbus RTU ext[] — Point ID do backend cấu hình và iobus giữ ổn định.
 	extCount := int(binary.LittleEndian.Uint16(data[offExtCount : offExtCount+2]))

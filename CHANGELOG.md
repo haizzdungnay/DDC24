@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-08` Mốc thời gian điểm LOCAL là "lúc web đọc SHM", không phải mốc mẫu (#394, 2026-09-03)
+
+- **Triệu chứng.** `decodePoint` điền `UpdatedAt: time.Now()`. Đó là **lúc web đọc SHM**, không phải
+  mốc của producer. Hệ quả đúng bằng `PA3-F04`: một điểm mà Core đã **ngừng cập nhật từ lâu** vẫn
+  hiện *"vừa xong"* trên mọi màn hình, và `isFreshIso()` coi nó là dữ liệu tươi — **một cảm biến
+  chết cứng trông y hệt một cảm biến đang chạy**. Đường Modbus đã làm đúng từ trước (dùng
+  `sample_utc_ms`); đường LOCAL thì chưa.
+- **Nguyên nhân gốc.** `kx_point_t` **không có** trường thời gian riêng — chỉ có `ts_ns` ở header của
+  cả bảng.
+- **Cách sửa — hướng 1 mà issue đề nghị**, không đổi ABI: chở `plc_shm.ts_ns` lên làm mốc chung.
+  `ts_ns` là `CLOCK_MONOTONIC`, mà trên Linux đồng hồ đó dùng chung **toàn hệ thống** — `mkddc-core`
+  và `mkddc-web` chạy cùng board nên đọc ra cùng một trục. Vậy tuổi snapshot = `mono_now - ts_ns`,
+  và mốc treo tường = `wall_now - tuổi`.
+- **Vì sao phải gọi thẳng `clock_gettime`.** `time.Now()` của Go **có** mang số đọc monotonic, nhưng
+  không phơi giá trị tuyệt đối và chỉ so được giữa hai `time.Time` **cùng tiến trình** — không so
+  được với một `ts_ns` do tiến trình khác ghi.
+- **Ba ca "không biết" đều ra chuỗi rỗng, không ra `time.Now()`:** producer chưa từng đóng dấu
+  (`ts_ns = 0`), không đọc được đồng hồ monotonic, và **mốc ở tương lai** so với đồng hồ tiến trình
+  này. Ca thứ ba là bằng chứng giả thiết *"cùng trục"* đã sai — ví dụ SHM còn sót từ lần boot trước
+  — nên nói *"không biết"* thay vì trả một mốc bịa. Chuỗi rỗng tới FE thành `updatedAt: undefined`
+  và giao diện hiện `—`; **điền `time.Now()` vào bất kỳ ca nào trong đây chính là con bug**.
+- **Mọi điểm trong cùng một snapshot chia sẻ đúng một mốc** — hợp đồng chỉ có **một** `ts_ns` cho cả
+  bảng, nên phát ra nhiều mốc khác nhau sẽ là **bịa độ phân giải mà hợp đồng không có**. Tính một
+  lần cũng tránh 76 lời gọi `clock_gettime` cho một câu trả lời duy nhất.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · `go test -race ./internal/app` **`ok`** (143,5 s) · FE `vitest src/shared`
+  **41 tệp / 400 test PASS**.
+- **Một lần tiêm lỗi:** khôi phục `time.Now()` làm mốc ⇒ test *"producer chưa đóng dấu"* **FAIL**.
+  Khôi phục ⇒ xanh trở lại.
+
 ### Fixed — `ISS-PIO-06` `dataType` của Point Catalog đoán từ giá trị runtime (#392, 2026-09-03)
 
 - **Triệu chứng.** `pointCatalogDataType` kết thúc bằng *"nếu `Value` là `bool` thì BOOL, còn lại
