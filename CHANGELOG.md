@@ -8,6 +8,56 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-MBW-02` lệnh ghi Modbus RTU phải đi nhờ lịch đọc nên đến muộn 16–153 s (2026-09-03)
+
+- **Triệu chứng.** Đo trên bo Foxlinx (CK-508 slave 04, `poll_ms=1000`): từ lúc API trả
+  `200 success` tới lúc relay đổi trạng thái mất **16 s / 60 s / 97 s / 153 s** — biến thiên đúng
+  kiểu chờ trùng nhịp, không phải một lịch cố định. Người vận hành bấm nút, thấy báo thành công,
+  rồi nhìn thiết bị đứng yên cả phút.
+- **Nguyên nhân gốc.** `BusWorker::run_loop` chặn trần ngủ ở 200 ms, và chú thích của chính nó nói
+  rõ vì sao: *"worker phải tỉnh đủ dày để phản ứng với `stop` **và với lệnh ghi mới**, kể cả khi
+  mọi slave đều poll chậm"*. Nhưng ý đồ đó **chưa từng được hiện thực**: `flush_pending` chỉ có
+  **một** nơi gọi, và nó nằm bên trong vòng `due` của `poll_once`. Worker tỉnh dậy mà không slave
+  nào tới hạn **ĐỌC** ⇒ `due` rỗng ⇒ vòng `for` không chạy ⇒ lệnh ghi đang chờ nằm im tới lượt đọc
+  kế. Ghép độ trễ ghi vào chu kỳ đọc là sai về bản chất: đọc thưa là lựa chọn tiết kiệm băng thông
+  dây, còn ghi thưa là **lệnh điều khiển đến muộn**.
+- **Đã loại trừ bằng đo, không phải bằng suy đoán.** Đường đọc (`updatedAt` nhảy đúng nhịp 3 s khi
+  lấy mẫu cách nhau 3 s) · seqlock `plc_shm` (seq nhảy 4/s, **0/2000** lần bắt gặp seq lẻ) · khử
+  trùng lặp `last_written_` (coil `DO2` **chưa từng ghi bao giờ** vẫn mất 97 s) · TTL/số lần thử
+  (`write_dropped=0`) · lỗi phát (`write_failed=0`) · cấu hình (`poll_ms=1000`, `timeout_ms=300`) ·
+  điều kiện phía SHM (`ext_count=24`, `writable=1`, `dirty=1` đứng vững liên tục).
+- **Cách sửa.** `poll_once` phát nốt lệnh ghi cho slave chưa được flush trong lượt đó. Vòng thêm
+  **không** đụng tới lịch đọc (`last_poll_ms` không bị chạm) và **không** thêm lưu lượng khi rỗng
+  việc: `has_pending_write_for` chỉ soi hàng đợi trong bộ nhớ, slave không có lệnh chờ thì không
+  phát byte nào.
+- **Test.** `LenhGhiKhongPhaiChoToiLuotDocCuaSlave` dựng slave `poll_ms` một giờ rồi poll ba lượt
+  cách nhau 100 ms — chạy ngược trên code cũ thì **đỏ**. `KhongCoLenhChoThiKhongDungToiDay` khoá
+  ràng buộc ngược lại: hàng đợi trống thì các lượt xen giữa phải là no-op, không sinh giao dịch
+  RS-485 nào. Cả hai dùng PTY vì cổng chết đẩy worker vào `PORT_ERROR` + backoff và `poll_once`
+  thoát sớm, che mất chính đoạn cần kiểm.
+- **Đo lại.** C++ `ctest` **1393/1393** PASS (1390 trước + 3 mới), configure/build exit 0 với cả ba
+  option `MODBUS`/`BACNET`/`HMI` bật.
+- **Chưa xác nhận trên bo.** Kiểm chứng độ trễ thật cần deploy lại `mkddc-iobus` xuống Foxlinx.
+
+### Fixed — `ISS-MBW-02/03` Core tụt hậu snapshot Modbus, hot-apply không hiện Point mới (2026-09-03)
+
+- **Triệu chứng đo trên bo Foxlinx.** IOBus apply revision 38 và báo `ext_count=48`,
+  nhưng `plc_shm`/Web vẫn chỉ có 24 Point cho đến khi restart Core. Read-back sau lệnh
+  ghi CK-509 DO1 cũng giữ giá trị cũ trong nhiều chu kỳ dù Core đã audit `accepted`.
+- **Nguyên nhân gốc.** IOBus publish snapshot mỗi 100 ms, còn Core scan/read socket mỗi
+  1000 ms và `BacnetObjTable::read_ext()` chỉ `recv()` một datagram. Consumer chậm hơn
+  producer 10 lần nên queue tụt hậu liên tục; generation mới nằm sau queue cũ và feedback
+  có thể trễ hàng chục giây. Finding `ISS-MBW-02` trước đó quy trễ cho đường
+  ghi IOBus; phép đo mới chỉ ra nó nằm ở queue snapshot IOBus→Core.
+- **Cách sửa.** Mỗi scan vét có giới hạn tối đa 64 datagram, kiểm magic/schema/
+  sequence trên từng bản, nhưng chỉ apply bản hợp lệ mới nhất. Giới hạn 64 giữ
+  WCET hữu hạn và lớn hơn sức chứa receive queue trên target với payload hiện hành.
+- **Chặn tái diễn.** Test `ReadExtDrainsQueueAndAppliesNewestGeneration` xếp ba snapshot
+  (generation 7→8, revision 37→38) trước một lần đọc và buộc Core publish ngay bản
+  cuối, không báo sequence gap giả. Kiểm chứng: C++ Release với Modbus/BACnet/HMI bật
+  **1.391/1.391 PASS** (8 test phụ thuộc môi trường skip); target/HIL ghi ở bằng chứng
+  commissioning cùng phiên.
+
 ### Verified — `ISS-MBW-01` `TC-MBRTU-I-15A` đóng: điều khiển relay CK-508 từ ứng dụng, đo trên bo thật (2026-09-03)
 
 - **Kết quả.** Ghi thử từ `/api/v1/modbus/write-test` **đóng và mở được relay**, lặp lại 4 lần trên

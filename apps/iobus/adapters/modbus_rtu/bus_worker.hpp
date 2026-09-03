@@ -188,6 +188,19 @@ public:
         return pending_writes_.size();
     }
 
+    /* Có lệnh ghi CHƯA phát nào đang chờ cho slave này không?
+     *
+     * `poll_once` dùng nó để phát nốt lệnh ghi cho slave chưa tới lượt ĐỌC
+     * (`ISS-MBW-02`). Phép soi này chỉ chạm hàng đợi trong bộ nhớ — slave rỗng
+     * việc không tốn một byte nào trên dây. */
+    bool has_pending_write_for(uint8_t slave_addr) const
+    {
+        std::lock_guard<std::mutex> lock(queue_mu_);
+        for (const auto& w : pending_writes_)
+            if (!w.submitted && w.slave_addr == slave_addr) return true;
+        return false;
+    }
+
     /* Lấy VÀ XOÁ danh sách ext slot có lệnh ghi vừa kết thúc mà KHÔNG ghi được
      * (quá hạn TTL, hết lượt thử, hoặc giá trị không encode được).
      *

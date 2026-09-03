@@ -849,10 +849,42 @@ void BusWorker::poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& met
     std::stable_sort(due.begin(), due.end(),
                      [](const DueSlave& a, const DueSlave& b) { return a.overdue > b.overdue; });
 
+    std::vector<bool> flushed(slaves_.size(), false);
     for (const auto& d : due) {
         read_slave(d.idx, now_ms, cache, metrics);
         if (!port_open()) return;   /* cổng chết giữa chừng — nhường vòng sau */
         flush_pending(d.idx, now_ms, metrics);
+        flushed[d.idx] = true;
+    }
+
+    /* `ISS-MBW-02`: LỆNH GHI KHÔNG ĐƯỢC ĐI NHỜ LỊCH ĐỌC.
+     *
+     * `run_loop` cố ý chặn trần ngủ ở 200 ms với lý do ghi ngay trong chú thích
+     * của nó: *"worker phải tỉnh đủ dày để phản ứng với `stop` VÀ VỚI LỆNH GHI
+     * MỚI, kể cả khi mọi slave đều poll chậm"*. Nhưng ý đồ đó chưa từng được
+     * hiện thực: `flush_pending` chỉ có MỘT nơi gọi, và nó nằm trong vòng `due`.
+     * Worker tỉnh dậy mà không slave nào tới hạn ĐỌC ⇒ `due` rỗng ⇒ vòng `for`
+     * không chạy ⇒ lệnh ghi đang chờ nằm im tới lượt đọc kế.
+     *
+     * Đo trên bo Foxlinx (CK-508 slave 04, `poll_ms=1000`): độ trễ từ lúc API
+     * trả `200 success` tới lúc relay đổi trạng thái là 16 s / 60 s / 97 s /
+     * 153 s — biến thiên đúng kiểu "chờ trùng nhịp", không phải một lịch cố
+     * định. Người vận hành bấm nút, thấy báo thành công, rồi nhìn thiết bị đứng
+     * yên cả phút.
+     *
+     * Ghép độ trễ ghi vào chu kỳ đọc là sai về bản chất: hai việc có ràng buộc
+     * thời gian khác hẳn nhau. Đọc thưa là lựa chọn tiết kiệm băng thông dây;
+     * ghi thưa là lệnh điều khiển đến muộn.
+     *
+     * Vòng dưới đây phát nốt cho slave chưa được flush trong lượt này. Nó KHÔNG
+     * đụng tới lịch đọc (`last_poll_ms` không bị chạm) và KHÔNG thêm lưu lượng
+     * khi rỗng việc: `has_pending_write_for` chỉ soi hàng đợi trong bộ nhớ, nên
+     * slave không có lệnh chờ thì không phát byte nào. */
+    for (size_t i = 0; i < slaves_.size(); i++) {
+        if (flushed[i]) continue;
+        if (!has_pending_write_for(slaves_[i].cfg.addr)) continue;
+        flush_pending(i, now_ms, metrics);
+        if (!port_open()) return;
     }
 }
 

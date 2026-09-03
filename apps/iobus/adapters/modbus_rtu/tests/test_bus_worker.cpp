@@ -8,6 +8,7 @@
  */
 #include <atomic>
 #include <fcntl.h>
+#include <stdlib.h>
 #include <fstream>
 #include <thread>
 #include <unistd.h>
@@ -760,6 +761,117 @@ TEST(BusWorkerFrames, PollRecordsTransactionIncludingTheFailedOnes)
 
     master.close();
     ::close(pty_master);
+    ::unlink(prof.c_str());
+}
+#endif /* MKDDC_ENABLE_MODBUS */
+
+#ifdef MKDDC_ENABLE_MODBUS
+/* `ISS-MBW-02`: lệnh ghi phải được phát kể cả khi KHÔNG slave nào tới hạn ĐỌC.
+ *
+ * `run_loop` chặn trần ngủ ở 200 ms với lý do ghi thẳng trong chú thích của nó
+ * — "tỉnh đủ dày để phản ứng với lệnh ghi mới". Nhưng `flush_pending` chỉ có
+ * MỘT nơi gọi và nó nằm trong vòng `due`, nên worker tỉnh dậy giữa hai kỳ đọc
+ * bỏ qua hàng đợi ghi. Đo trên bo Foxlinx (`poll_ms=1000`): độ trễ từ lúc API
+ * trả `200 success` tới lúc relay đổi trạng thái là 16 s / 60 s / 97 s / 153 s
+ * — biến thiên đúng kiểu chờ trùng nhịp.
+ *
+ * Cổng phải MỞ THẬT thì `flush_pending` mới chạy tới, nên test dùng PTY chứ
+ * không dùng `/dev/null`: cổng chết đẩy worker vào `PORT_ERROR` + backoff và
+ * `poll_once` thoát sớm, che mất chính đoạn cần kiểm. Đầu kia của PTY không có
+ * ai trả lời nên mọi giao dịch hết giờ — và đó là thứ quan sát được: hỏng
+ * `kMaxWriteAttempts` lần thì lệnh bị bỏ và hàng đợi rỗng. Hàng đợi KHÔNG rỗng
+ * nghĩa là chưa ai thử phát. */
+TEST(BusWorkerWriteQueue, LenhGhiKhongPhaiChoToiLuotDocCuaSlave)
+{
+    const int pty = ::posix_openpt(O_RDWR | O_NOCTTY);
+    ASSERT_GE(pty, 0);
+    ASSERT_EQ(::grantpt(pty), 0);
+    ASSERT_EQ(::unlockpt(pty), 0);
+    const char* port = ::ptsname(pty);
+    ASSERT_NE(port, nullptr);
+
+    BusWorker worker;
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    metrics.init({"vfd"}, {1});
+    uint16_t cursor = 0;
+    const std::string prof = write_profile("wnodue",
+        R"json({"points":[{"name":"sp","fc":3,"addr":0,"count":1,"type":"uint16","writable":true}]})json");
+    /* `poll_ms` một giờ: sau lần poll đầu, slave không tới hạn ĐỌC lần nào nữa
+       trong khung thời gian test. `timeout_ms` nhỏ để ba lần hết giờ không kéo
+       dài bộ test. */
+    SlaveConfig sl = slave_on(1, 1, prof, "vfd", 3600000);
+    sl.timeout_ms  = 30;
+    worker.bind(bus_on(1, port), {sl}, {0}, &cursor, cache);
+    /* `bind()` cố ý KHÔNG mở cổng (để CONFIG_ERROR phân biệt được với
+       PORT_ERROR); `ModbusMaster::bind_workers` mở ngay sau đó. Test phải làm
+       đúng thứ tự ấy, nếu không `poll_once` thoát ở nhánh cổng đóng. */
+    ASSERT_TRUE(worker.open_port());
+
+    /* Lần poll đầu đặt `last_poll_ms`. Bỏ bước này thì `last_poll_ms == 0` làm
+       slave luôn "quá hạn", vòng `due` luôn chạy và che mất lỗi cần bắt. */
+    worker.poll_once(1000, cache, metrics);
+
+    PendingWrite w{};
+    w.slave_addr = 1;
+    w.fc         = 6;
+    w.reg_addr   = 0;
+    w.value      = 42.0f;
+    w.type       = PointType::Uint16;
+    w.byte_order = ByteOrder::AB;
+    w.scale      = 1.0f;
+    w.request_id = "req-no-due";
+    ASSERT_TRUE(worker.enqueue_write(w));
+    ASSERT_EQ(worker.pending_write_count(), 1u);
+
+    /* Ba vòng cách nhau 100 ms — đúng nhịp `run_loop` tỉnh dậy khi mọi slave
+       còn lâu mới tới hạn. Không vòng nào có slave tới hạn ĐỌC. */
+    for (uint64_t t = 1100; t <= 1300; t += 100)
+        worker.poll_once(t, cache, metrics);
+
+    EXPECT_EQ(worker.pending_write_count(), 0u)
+        << "lệnh ghi vẫn nằm trong hàng đợi sau 3 vòng poll — chưa ai thử phát nó, "
+           "vì `flush_pending` chỉ chạy cho slave tới hạn ĐỌC (ISS-MBW-02)";
+    worker.close_port();
+    ::close(pty);
+    ::unlink(prof.c_str());
+}
+
+/* Slave rỗng việc thì vòng phát-nốt KHÔNG được đụng tới dây: `poll_once` giữa
+ * hai kỳ đọc phải là no-op hoàn toàn khi hàng đợi trống. Không có ràng buộc này
+ * thì bản sửa trên biến mỗi 100 ms thành một lượt giao dịch RS-485 vô ích, ăn
+ * đúng phần băng thông mà nhịp poll thưa sinh ra để tiết kiệm. */
+TEST(BusWorkerWriteQueue, KhongCoLenhChoThiKhongDungToiDay)
+{
+    const int pty = ::posix_openpt(O_RDWR | O_NOCTTY);
+    ASSERT_GE(pty, 0);
+    ASSERT_EQ(::grantpt(pty), 0);
+    ASSERT_EQ(::unlockpt(pty), 0);
+    const char* port = ::ptsname(pty);
+    ASSERT_NE(port, nullptr);
+
+    BusWorker worker;
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    metrics.init({"vfd"}, {1});
+    uint16_t cursor = 0;
+    const std::string prof = write_profile("wnoop",
+        R"json({"points":[{"name":"sp","fc":3,"addr":0,"count":1,"type":"uint16","writable":true}]})json");
+    SlaveConfig sl = slave_on(1, 1, prof, "vfd", 3600000);
+    sl.timeout_ms  = 30;
+    worker.bind(bus_on(1, port), {sl}, {0}, &cursor, cache);
+    ASSERT_TRUE(worker.open_port());
+
+    worker.poll_once(1000, cache, metrics);
+    const uint64_t after_first = metrics.get(0).total_polls;
+
+    for (uint64_t t = 1100; t <= 1500; t += 100)
+        worker.poll_once(t, cache, metrics);
+
+    EXPECT_EQ(metrics.get(0).total_polls, after_first)
+        << "hàng đợi ghi trống mà vẫn phát sinh giao dịch — vòng phát-nốt phải là no-op";
+    worker.close_port();
+    ::close(pty);
     ::unlink(prof.c_str());
 }
 #endif /* MKDDC_ENABLE_MODBUS */
