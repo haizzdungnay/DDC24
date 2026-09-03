@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added — `TASK-FBD-02` thêm preference store, viewport math và feature flag FBD (2026-09-03)
+
+- **Feature flag rollback:** Thêm `isFbdEditEnabled` và `FBD_EDIT_ENABLED` trong `apps/web-ui/src/shared/config.ts` đọc từ `import.meta.env.VITE_FBD_EDIT` phục vụ kiểm soát kích hoạt và rollback an toàn FBD EDIT.
+- **Preference store:** Hiện thực `fbdPreferences.ts` lưu trữ cấu hình giao diện FBD (lưới, snap, wireStyle, theme, dock, viewMode) với `schemaVersion: 1`, khóa cô lập theo `userScope`/`projectId`, cơ chế fallback mặc định an toàn khi JSON hỏng hoặc storage ném ngoại lệ (`QuotaExceededError`/`SecurityError`), kèm 18 unit tests bao phủ toàn diện.
+- **Viewport math:** Hiện thực `viewport.ts` với các hàm thuần túy `screenToGraph`, `graphToScreen`, `snapPoint`, `clampScale`, `nextViewport` phục vụ tính toán không gian tọa độ canvas và hỗ trợ zoom/pan/snap mượt mà, độc lập DOM, kèm 10 unit tests.
+
+
 ### Changed — `PLAN-FBD-EDIT` vá kế hoạch FBD EDIT theo baseline sau merge (#376, 2026-09-03)
 
 - **A. Nhóm Chặn.**
