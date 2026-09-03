@@ -32,8 +32,10 @@
 - **Bẫy đã tránh.** `toHaveLength(7)` trong test rail **giữ nguyên 7** — đó là 6 đích + lối thoát; mục bị
   gỡ vốn là `<span role="link">`, chưa từng được đếm. Sửa thành 6 theo phản xạ sẽ làm hỏng phép kiểm.
 - **Đo lại.** FE `vitest` **2446/2446** (200 file), `lint` exit 0, `build:release` exit 0,
-  `verify-project.sh --component layout` exit 0. Đã nạp bo Foxlinx và kiểm chứng rail còn **6 đích + lối
-  thoát**, không mục xám nào.
+  `verify-project.sh --component layout` exit 0. Đã nạp bo Foxlinx và kiểm chứng bằng Playwright trên chính bo: rail báo
+  `aria-label="Six Programming workspaces navigation"`, **7 link** (6 đích + lối thoát) và
+  `disabledItems: []` — không còn mục xám nào. Ảnh bằng chứng lưu ở
+  `docs/07_records/test-evidence/programming/2026-09-03-plan62-rail-6-destinations.png`.
 
 
 ### Added — `PLAN-FE-SHELL-062`: plan gỡ toàn diện `Project Settings` khỏi shell Programming (2026-09-03)

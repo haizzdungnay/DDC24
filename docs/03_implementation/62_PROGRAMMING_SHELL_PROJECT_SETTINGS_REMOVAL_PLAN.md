@@ -175,8 +175,31 @@ xanh**.
 | E4 | `npx vitest --run --environment jsdom src` exit 0 | số đo thật |
 | E5 | `npm run lint` + `npm run build:release` exit 0 | số đo thật |
 | E6 | `scripts/verify-project.sh --component layout` exit 0 | số đo thật |
-| E7 | Rail trên bo thật hiện **6 đích + lối thoát**, không mục xám nào | ảnh chụp trên bo |
+| E7 | Rail trên bo thật hiện **6 đích + lối thoát**, không mục xám nào | **ĐẠT** — xem §6.1 |
 | E8 | `CHANGELOG.md` có mục `Removed` | diff |
+
+### 6.1 Bằng chứng E7 — đo trên bo thật
+
+Điều hướng bằng Playwright vào `http://mekong-fac.ddns.net:8082/eng/programming` sau khi đăng nhập
+`admin`, đọc thẳng DOM của bo (2026-09-03 12:56):
+
+```json
+{
+  "label": "Six Programming workspaces navigation (desktop)",
+  "links": ["DDC24 Programming", "Overview", "Programs", "Points & Mapping",
+            "Control Library", "Check & Commission", "Runtime & Service"],
+  "disabledItems": []
+}
+```
+
+- **7 phần tử `<a>`** = 6 đích + lối thoát — khớp đúng `toHaveLength(7)` mà §2.2/B2 cảnh báo không
+  được sửa thành 6.
+- **`disabledItems: []`** — không còn mục xám nào trên cả rail lẫn bottom nav.
+- Ảnh: [`2026-09-03-plan62-rail-6-destinations.png`](../07_records/test-evidence/programming/2026-09-03-plan62-rail-6-destinations.png)
+
+Ghi chú phụ thu được khi đo: phiên đăng nhập **không giữ qua một lần tải trang mới** — `goto` thẳng
+`/eng/programming` bị bật về `/login`, phải điều hướng trong SPA. Đây là hiện trạng đã biết, **ngoài
+phạm vi** plan này, không phải hồi quy của nó.
 
 `RELEASE_READY` **không đổi** — plan này không chạm điều kiện phát hành.
 
