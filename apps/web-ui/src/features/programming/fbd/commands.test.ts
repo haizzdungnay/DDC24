@@ -442,3 +442,173 @@ describe('layout sống qua vòng lưu và đọc lại (T59-806)', () => {
     }
   })
 })
+
+describe('Task 3: selectionRevision, multi-node, and atomic actions', () => {
+  it('selectionRevision khởi tạo = 0, tăng 1 khi commit hoặc SELECT thay đổi', () => {
+    const doc = golden()
+    let state = createFbdEditorState(doc)
+    expect(state.selectionRevision).toBe(0)
+
+    // Action SELECT đổi selection => selectionRevision tăng 1
+    const netId = doc.networks[0].id
+    const n1 = doc.networks[0].nodes[0].id
+    state = fbdEditorReducer(state, {
+      type: 'SELECT',
+      selection: { kind: 'node', networkId: netId, nodeId: n1 },
+    })
+    expect(state.selectionRevision).toBe(1)
+
+    // Action SELECT trùng selection cũ => no-op => không tăng
+    state = fbdEditorReducer(state, {
+      type: 'SELECT',
+      selection: { kind: 'node', networkId: netId, nodeId: n1 },
+    })
+    expect(state.selectionRevision).toBe(1)
+
+    // SELECT null => đổi selection => tăng
+    state = fbdEditorReducer(state, { type: 'SELECT', selection: null })
+    expect(state.selectionRevision).toBe(2)
+
+    // Mutation commit (ADD_NETWORK) => tăng selectionRevision
+    state = fbdEditorReducer(state, { type: 'ADD_NETWORK', network: network(2) })
+    expect(state.selectionRevision).toBe(3)
+
+    // Action bị reject => không tăng selectionRevision
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_POSITION',
+      networkId: netId,
+      nodeId: 'non-existent',
+      x: 10,
+      y: 10,
+    })
+    expect(state.selectionRevision).toBe(3)
+  })
+
+  it('DELETE_SELECTION với multi-node: xóa toàn bộ node trong nodeIds và wire nối tới chúng', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    const n0 = doc.networks[0].nodes[0].id
+    const n2 = doc.networks[0].nodes[2].id
+    let state = createFbdEditorState(doc)
+
+    state = fbdEditorReducer(state, {
+      type: 'SELECT',
+      selection: { kind: 'multi-node', networkId: netId, nodeIds: [n0, n2] },
+    })
+    state = fbdEditorReducer(state, { type: 'DELETE_SELECTION' })
+
+    // Ban đầu có 4 nodes, xóa 2 (n0 và n2) còn 2 (n1 và n3)
+    expect(state.document.networks[0].nodes).toHaveLength(2)
+    expect(state.document.networks[0].nodes.map((n) => n.id)).not.toContain(n0)
+    expect(state.document.networks[0].nodes.map((n) => n.id)).not.toContain(n2)
+    // Toàn bộ 3 wire trong ahu_fan_enable đều chạm vào n0 hoặc n2, nên bị xóa sạch
+    expect(state.document.networks[0].wires).toHaveLength(0)
+    expect(state.selection).toBeNull()
+  })
+
+  it('MULTI_MOVE: cập nhật toạ độ nhiều node trong 1 commit duy nhất, kiểm tra bounds và expectedSelectionRevision', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    const n0 = doc.networks[0].nodes[0].id
+    const n1 = doc.networks[0].nodes[1].id
+    let state = createFbdEditorState(doc)
+
+    // expectedSelectionRevision lệch => reject
+    const rejected = fbdEditorReducer(state, {
+      type: 'MULTI_MOVE',
+      networkId: netId,
+      moves: [{ nodeId: n0, x: 100, y: 100 }],
+      expectedSelectionRevision: 999,
+    })
+    expect(rejected.announcement.code).toBe('selection-revision-mismatch')
+    expect(rejected.selectionRevision).toBe(0)
+
+    // Toạ độ ngoài bounds [-100000..100000] => reject
+    const outOfBounds = fbdEditorReducer(state, {
+      type: 'MULTI_MOVE',
+      networkId: netId,
+      moves: [{ nodeId: n0, x: 200000, y: 0 }],
+    })
+    expect(outOfBounds.announcement.code).toBe('invalid-position')
+
+    // MULTI_MOVE hợp lệ => 1 commit duy nhất
+    state = fbdEditorReducer(state, {
+      type: 'MULTI_MOVE',
+      networkId: netId,
+      moves: [
+        { nodeId: n0, x: 120.4, y: 130.6 },
+        { nodeId: n1, x: 200, y: 220 },
+      ],
+      expectedSelectionRevision: 0,
+    })
+    expect(state.document.layout?.nodes[n0]).toEqual({ x: 120, y: 131 })
+    expect(state.document.layout?.nodes[n1]).toEqual({ x: 200, y: 220 })
+    expect(state.selectionRevision).toBe(1)
+    expect(state.past).toHaveLength(1)
+
+    // No-op (không toạ độ nào đổi) => return state cũ, không tăng revision
+    const noop = fbdEditorReducer(state, {
+      type: 'MULTI_MOVE',
+      networkId: netId,
+      moves: [
+        { nodeId: n0, x: 120, y: 131 },
+        { nodeId: n1, x: 200, y: 220 },
+      ],
+    })
+    expect(noop).toBe(state)
+  })
+
+  it('SET_LAYOUT_BATCH: cập nhật layout hàng loạt', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    const n0 = doc.networks[0].nodes[0].id
+    let state = createFbdEditorState(doc)
+
+    state = fbdEditorReducer(state, {
+      type: 'SET_LAYOUT_BATCH',
+      networkId: netId,
+      positions: {
+        [n0]: { x: 300, y: 400 },
+      },
+      expectedSelectionRevision: 0,
+    })
+    expect(state.document.layout?.nodes[n0]).toEqual({ x: 300, y: 400 })
+    expect(state.selectionRevision).toBe(1)
+  })
+
+  it('PASTE_SUBGRAPH: ghép node, wire, layout và cập nhật multi-node selection', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    let state = createFbdEditorState(doc)
+
+    const newNodeId = '70000000-0000-4000-8000-000000000001'
+    const newPortId = '70000000-0000-4000-8000-000000000002'
+    const newNodes = [
+      {
+        id: newNodeId,
+        kind: 'CONSTANT' as const,
+        typeRef: 'BOOL',
+        executionOrder: 0,
+        parameters: { value: true },
+        ports: [{ id: newPortId, name: 'OUT', direction: 'OUTPUT' as const, dataType: 'BOOL' as const, unit: null, order: 0 }],
+      },
+    ]
+
+    state = fbdEditorReducer(state, {
+      type: 'PASTE_SUBGRAPH',
+      targetNetworkId: netId,
+      nodes: newNodes,
+      wires: [],
+      layoutNodes: { [newNodeId]: { x: 500, y: 600 } },
+    })
+
+    expect(state.document.networks[0].nodes.some((n) => n.id === newNodeId)).toBe(true)
+    expect(state.document.layout?.nodes[newNodeId]).toEqual({ x: 500, y: 600 })
+    expect(state.selection).toEqual({
+      kind: 'multi-node',
+      networkId: netId,
+      nodeIds: [newNodeId],
+    })
+    expect(state.selectionRevision).toBe(1)
+  })
+})

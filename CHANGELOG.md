@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added — `TASK-FBD-03` thêm selection model, selectionRevision và atomic reducer actions cho FBD (2026-09-03)
+
+- **Revision authority:** Bổ sung trường `selectionRevision: number` vào `FbdEditorState` (khởi tạo 0); tự động tăng 1 khi `commit()` tạo document mới hoặc đổi selection, và khi action `SELECT` đổi selection, hỗ trợ kiểm soát tính hợp lệ của giao dịch chỉnh sửa.
+- **Selection & Clipboard model:** Hiện thực `selection.ts` với `toggleNodeSelection`, `boxSelectNodes`, `isNodeSelected`, `getSelectedNodeIds`, `copySubgraph` (chỉ sao chép internal wires, tự động loại bỏ dây nối ra ngoài) và `createPastedSubgraph` (remap UUID canonical mới cho node/wire và áp dụng offset).
+- **Atomic Reducer Actions:** Bổ sung các action nguyên tử `MULTI_MOVE`, `SET_LAYOUT_BATCH`, `PASTE_SUBGRAPH` vào `commands.ts` với kiểm tra bounds `[-100000..100000]`, kiểm tra `expectedSelectionRevision`, đảm bảo mọi mutation commit đúng 1 lần snapshot hoặc giữ 0 diff khi có lỗi; nâng cấp `DELETE_SELECTION` hỗ trợ xóa tập node trong `multi-node`.
+- **Unit tests:** 45/45 tests PASS (34 tests `commands.test.ts`, 11 tests `selection.test.ts`).
+
 ### Added — `TASK-FBD-02` thêm preference store, viewport math và feature flag FBD (2026-09-03)
 
 - **Feature flag rollback:** Thêm `isFbdEditEnabled` và `FBD_EDIT_ENABLED` trong `apps/web-ui/src/shared/config.ts` đọc từ `import.meta.env.VITE_FBD_EDIT` phục vụ kiểm soát kích hoạt và rollback an toàn FBD EDIT.
