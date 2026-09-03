@@ -1,0 +1,17 @@
+{
+  "$comment": "ISS-PIO-35 / F-PIO-001 — hợp đồng quality của Point, dùng chung cho Core (C++), web-api (Go) và web-ui (TS). Có version để một bên thêm mức mới KHÔNG âm thầm bị bên kia hạ về một mức sai.",
+  "contractId": "point_quality_v1",
+  "version": 1,
+  "values": [
+    { "id": "good", "wire": "GOOD", "meaning": "Số đo tin được." },
+    { "id": "uncertain", "wire": "UNCERTAIN", "meaning": "Đọc được nhưng độ tin cậy giảm." },
+    { "id": "stale", "wire": "STALE", "meaning": "Có giá trị nhưng đã quá hạn tươi." },
+    { "id": "bad", "wire": "BAD", "meaning": "Thiết bị trả dữ liệu sai." },
+    { "id": "offline", "wire": "OFFLINE", "meaning": "Không liên lạc được với nguồn." },
+    { "id": "config_error", "wire": "CONFIG_ERROR", "meaning": "Cấu hình sai nên CHƯA TỪNG hỏi thiết bị — khác hẳn 'đã hỏi và hỏng'." },
+    { "id": "unknown", "wire": "UNKNOWN", "meaning": "Không xác định được. Producer mới hơn consumer, hoặc chưa ai publish slot này." }
+  ],
+  "unrecognizedFallback": "unknown",
+  "forbiddenFallback": "good",
+  "rationale": "Giá trị lạ hoặc thiếu PHẢI rơi về `unknown`, TUYỆT ĐỐI không về `good`. Một huy hiệu GOOD trên một điểm không ai đọc được là kiểu hỏng tệ nhất cho màn hình vận hành: nó không báo lỗi, nó bịa ra một hiện thực bình thường (D-07, PA3-F04, RSK-PROG-010)."
+}

@@ -58,7 +58,9 @@ const WEB_QUALITY: Record<PointQuality, string> = {
   uncertain: 'UNCERTAIN',
   bad: 'BAD',
   stale: 'STALE',
-  offline: 'OFFLINE'
+  offline: 'OFFLINE',
+  config_error: 'CONFIG ERROR',
+  unknown: 'UNKNOWN'
 }
 
 describe('Từ vựng trạng thái HMI ↔ Web (UX-SYSTEM-001 §1.5)', () => {
@@ -93,15 +95,23 @@ describe('Từ vựng trạng thái HMI ↔ Web (UX-SYSTEM-001 §1.5)', () => {
 
     /* KHOẢNG HỞ ĐÃ BIẾT VÀ ĐƯỢC CHẤP NHẬN CÓ Ý THỨC.
      *
-     * HMI hiện không có `OFFLINE`. Đây không phải lỗi chính tả mà là khác biệt
-     * mô hình: `screen_io.cpp` suy chất lượng từ `KX_Q_*` của SHM cộng cờ
-     * `stale`, và mất liên lạc với MCU được thể hiện bằng dải "I/O FAULT —
-     * Check MCU connection" ở mức toàn màn hình, không phải bằng một nhãn trên
-     * từng điểm.
+     * `OFFLINE` — khác biệt mô hình: `screen_io.cpp` suy chất lượng từ `KX_Q_*`
+     * của SHM cộng cờ `stale`, và mất liên lạc với MCU được thể hiện bằng dải
+     * "I/O FAULT — Check MCU connection" ở mức toàn màn hình, không phải bằng
+     * một nhãn trên từng điểm.
+     *
+     * `CONFIG ERROR` và `UNKNOWN` — thêm ở `ISS-PIO-35`, và quyết định cho HMI
+     * đưa ra NGAY TẠI ĐÂY chứ không để lại sau: HMI vẽ điểm CỤC BỘ, mà chất
+     * lượng điểm cục bộ trong SHM là `kx_quality_t` chỉ có BA giá trị
+     * (`GOOD`/`UNCERTAIN`/`BAD`). Hai trạng thái mới mô tả những tình huống chỉ
+     * tồn tại ở điểm `ext`/ảo — cấu hình sai nên chưa từng hỏi thiết bị, và
+     * producer chưa publish slot — mà màn hình I/O của HMI không hiển thị. Nói
+     * cách khác HMI không thể rơi vào hai trạng thái này, nên nó không cần chữ
+     * cho chúng. Nếu sau này HMI vẽ điểm `ext`, dòng này phải được xem lại.
      *
      * Test khoá danh sách này lại để nó không âm thầm DÀI THÊM. Muốn thêm một
      * trạng thái mới vào Web thì phải quyết định HMI làm gì với nó, ngay tại
      * lúc thêm — chứ không phải phát hiện ra sau vài tháng ở hiện trường. */
-    expect(missingOnHmi).toEqual(['OFFLINE'])
+    expect(missingOnHmi).toEqual(['OFFLINE', 'CONFIG ERROR', 'UNKNOWN'])
   })
 })

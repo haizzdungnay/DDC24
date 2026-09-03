@@ -46,7 +46,15 @@ const qualityVisuals: Record<PointQuality, Visual> = {
   uncertain: { label: 'UNCERTAIN', icon: CircleHelp, fg: 'var(--c-warn-fg)', bg: 'var(--c-warn-bg)', border: 'var(--c-warn)' },
   bad: { label: 'BAD', icon: AlertOctagon, fg: 'var(--c-fault-fg)', bg: 'var(--c-fault-bg)', border: 'var(--c-fault)' },
   stale: { label: 'STALE', icon: AlertTriangle, fg: 'var(--c-warn-fg)', bg: 'var(--c-warn-bg)', border: 'var(--c-warn)' },
-  offline: { label: 'OFFLINE', icon: WifiOff, fg: 'var(--c-text-dim)', bg: 'var(--c-off-bg)', border: 'var(--c-off)' }
+  offline: { label: 'OFFLINE', icon: WifiOff, fg: 'var(--c-text-dim)', bg: 'var(--c-off-bg)', border: 'var(--c-off)' },
+  /* `ISS-PIO-35`: hai mức mà FE trước đây hạ về GOOD.
+   *
+   * `config_error` mang màu fault vì nó là một lỗi CÓ THẬT và sửa được — cấu
+   * hình sai nên chưa từng hỏi thiết bị. `unknown` mang màu "tắt/không biết"
+   * chứ không phải màu tốt: nó không khẳng định hỏng, nhưng cũng tuyệt đối
+   * không được trông giống một số đo tin được. */
+  config_error: { label: 'CONFIG ERROR', icon: AlertOctagon, fg: 'var(--c-fault-fg)', bg: 'var(--c-fault-bg)', border: 'var(--c-fault)' },
+  unknown: { label: 'UNKNOWN', icon: CircleHelp, fg: 'var(--c-text-dim)', bg: 'var(--c-off-bg)', border: 'var(--c-off)' }
 }
 
 const chipClass = 'inline-flex items-center gap-1.5 rounded-[var(--radius)] border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide'

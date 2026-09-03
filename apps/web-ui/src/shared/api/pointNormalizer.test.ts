@@ -120,3 +120,47 @@ describe('PA3 — trung thực thời gian và đủ trường chẩn đoán', (
     expect(normalizePoint({ id: 'AO-01', kind: 'AO', value: 1, overrideExpiresInS: 0 }).overrideExpiresInS).toBeUndefined()
   })
 })
+
+describe('ISS-PIO-35 — quality fail-closed xuyên tầng', () => {
+  /* Kịch bản NGUYÊN VĂN trong `F-PIO-001`, đã truy đủ đường: một Virtual Point
+   * có `source = PROGRAM`, `boundPointId = "AV-3"`, Core chưa publish slot.
+   * Backend làm ĐÚNG — `points.go` trả `{"value": null, "quality": "unknown"}`.
+   * FE nhận, không khớp `offline`, `fault` không `true`, `online` không
+   * `false`, rồi rơi vào nhánh cuối của `normalizeQuality` và ra **`good`**.
+   * Trang Giám sát vẽ huy hiệu GOOD cho một điểm không ai đọc được. */
+  it('VP trỏ tới slot Core chưa publish KHÔNG được hiện good', () => {
+    const point = normalizePoint({ id: 'VP1', kind: 'virtual', value: null, quality: 'unknown', source: 'PROGRAM' })
+    expect(point.quality).toBe('unknown')
+    expect(point.value).toBeUndefined()
+  })
+
+  it('điểm Modbus cấu hình sai giữ nguyên CONFIG_ERROR thay vì bị hạ về good', () => {
+    const point = normalizePoint({ id: 'EXT1', kind: 'modbus_rtu', value: null, quality: 'CONFIG_ERROR' })
+    expect(point.quality).toBe('config_error')
+  })
+
+  it('một mức mà producer đời mới vừa thêm ra unknown, không ra good', () => {
+    expect(normalizePoint({ id: 'UI-01', kind: 'UI', value: 21, quality: 'DEGRADED_SOMEHOW' }).quality).toBe('unknown')
+  })
+
+  it('khoá quality vắng mặt là KHÔNG BIẾT, không phải tin tốt', () => {
+    expect(normalizePoint({ id: 'UI-02', kind: 'UI', value: 21 }).quality).toBe('unknown')
+  })
+
+  /* Yêu cầu thứ ba của issue: `reason`, `timestamp`, `data-age` phải đi xuyên
+   * tầng. Ghim lại để chúng không rụng mất trong một lần dọn dẹp sau này —
+   * một quality không có lý do buộc người vận hành phải đoán. */
+  it('giữ lý do và mốc thời gian của producer đi kèm quality', () => {
+    const point = normalizePoint({
+      id: 'EXT2',
+      kind: 'modbus_rtu',
+      value: null,
+      quality: 'BAD',
+      quality_reason: 'CRC_ERROR',
+      updated_at: '2026-09-03T10:00:00Z'
+    })
+    expect(point.quality).toBe('bad')
+    expect(point.qualityReason).toBe('CRC_ERROR')
+    expect(point.updatedAt).toBe('2026-09-03T10:00:00Z')
+  })
+})

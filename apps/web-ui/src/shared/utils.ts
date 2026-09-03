@@ -1,4 +1,5 @@
 import type { HealthStatus, Point, PointKind, PointQuality } from './types'
+import { normalizePointQuality } from './api/quality'
 
 export function cn(...items: Array<string | false | null | undefined>): string {
   return items.filter(Boolean).join(' ')
@@ -65,10 +66,19 @@ export function isVisibleUniversalInput(point: Point, maxChannel: number): boole
   return channel === null || (channel >= 1 && channel <= maxChannel)
 }
 
+/**
+ * `ISS-PIO-35`/`F-PIO-001` — bản cũ của hàm này kết thúc bằng `return 'good'`.
+ *
+ * Nghĩa là `unknown`, `config_error`, và cả khoá `quality` VẮNG MẶT đều ra
+ * `good`: trang Giám sát vẽ huy hiệu GOOD cho một điểm không ai đọc được. Tầng
+ * Go đã cẩn thận trả `UNKNOWN` kèm chú thích *"không đoán bừa về GOOD"*, rồi
+ * FE phá đúng nguyên tắc đó ở tầng cuối.
+ *
+ * Nay uỷ quyền cho hợp đồng dùng chung ở `api/quality.ts`. Giữ lại tên cũ vì
+ * nó là bề mặt đã có; hành vi thì đảo ngược ở đúng chỗ quan trọng.
+ */
 export function normalizeQuality(value: unknown): PointQuality {
-  const raw = String(value ?? 'good').toLowerCase()
-  if (raw === 'uncertain' || raw === 'bad' || raw === 'stale' || raw === 'offline') return raw
-  return 'good'
+  return normalizePointQuality(value)
 }
 
 export function normalizeHealth(value: unknown): HealthStatus {

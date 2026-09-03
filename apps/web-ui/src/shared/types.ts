@@ -1,6 +1,10 @@
 import type { ActivationReport } from './api/activation'
 export type PointKind = 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'virtual' | 'modbus_rtu'
-export type PointQuality = 'good' | 'uncertain' | 'bad' | 'stale' | 'offline'
+/* `ISS-PIO-35`: nguồn sự thật là `api/quality.ts`, vốn được kiểm hai chiều với
+ * `contracts/quality/point_quality_v1.json`. Khai lại bằng tay ở đây từng là
+ * cách `unknown` và `config_error` biến mất khỏi kiểu rồi bị hạ về `good`. */
+import type { PointQuality } from './api/quality'
+export type { PointQuality }
 export type HealthStatus = 'ok' | 'degraded' | 'fault' | 'unknown' | 'n/a'
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
 export type DdcMode = 'demo' | 'live'

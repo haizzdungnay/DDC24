@@ -119,8 +119,16 @@ function summarizeDemoPoints(points: Point[]): OverviewPointSummary {
     const group = groups.get(point.kind) ?? { kind: point.kind, total: 0, good: 0, uncertain: 0, bad: 0, stale: 0, offline: 0, forced: 0 }
     group.total += 1
     summary.total += 1
-    group[point.quality] += 1
-    summary[point.quality] += 1
+    /* `ISS-PIO-35`: hợp đồng tóm tắt Overview chỉ có NĂM ô đếm, không có ô nào
+     * cho "không biết". `unknown`/`config_error` vì thế phải mượn một ô — và
+     * mượn ô `good` chính là con bug mà issue này sửa, nên chúng đếm vào `bad`.
+     * Đây là lựa chọn fail-closed CÓ Ý THỨC, không phải một phép ánh xạ đúng:
+     * người vận hành thấy số BAD nhích lên sẽ đi tra, thấy GOOD thì không.
+     * Muốn đếm đúng thì hợp đồng tóm tắt (cả phía Go) phải mọc thêm ô — đã ghi
+     * lại ở #381. */
+    const bucket = point.quality === 'unknown' || point.quality === 'config_error' ? 'bad' : point.quality
+    group[bucket] += 1
+    summary[bucket] += 1
     if (point.forced) {
       group.forced += 1
       summary.forced += 1

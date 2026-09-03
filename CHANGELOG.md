@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-35` FE hạ mọi quality lạ hoặc thiếu về `good`; huy hiệu GOOD trên điểm không ai đọc được (#381, 2026-09-03)
+
+- **Triệu chứng.** `normalizeQuality` kết thúc bằng `return 'good'`, nên `unknown`, `config_error`
+  **và cả khoá `quality` vắng mặt** đều ra `good`. Kịch bản đã truy đủ đường trong `F-PIO-001`: một
+  Virtual Point `source = PROGRAM`, `boundPointId = "AV-3"`, Core chưa publish slot ⇒ backend làm
+  **đúng** (`{"value": null, "quality": "unknown"}`) ⇒ FE vẽ huy hiệu **GOOD** cho một điểm **không
+  ai đọc được**.
+- **Nguyên nhân gốc.** Nguyên tắc đúng đã có ở tầng Go — `mapExtQuality` trả `UNKNOWN` kèm chú thích
+  *"không đoán bừa về GOOD"* — rồi bị FE **phá ở tầng cuối**. Nó bị phá được vì nguyên tắc chỉ tồn
+  tại dưới dạng **lời nhắc trong comment ở từng tầng**, không phải một hợp đồng được kiểm.
+- **Cách sửa.** `contracts/quality/point_quality_v1.json` là hợp đồng **có version**; TS
+  (`shared/api/quality.ts`) và Go đều được kiểm **hai chiều** với nó. Giá trị lạ hoặc thiếu rơi về
+  `unknown`, và hợp đồng ghi thẳng `forbiddenFallback: "good"` để ý định đó không thể bị đọc nhầm.
+- **Hai mức mới hiện ra thay vì bị nuốt:** `unknown` (màu "không biết" — không khẳng định hỏng,
+  nhưng tuyệt đối không trông giống một số đo tin được) và `config_error` (màu fault — cấu hình sai
+  nên **chưa từng hỏi** thiết bị, một lỗi có thật và sửa được).
+- **Một quyết định bị ép phải đưa ra ngay, thay vì để lệch âm thầm.** Cổng
+  `i18n.hmiVocabulary.test.ts` bắt mọi trạng thái Web mới phải nói rõ HMI làm gì với nó. Câu trả
+  lời: HMI vẽ điểm **cục bộ**, mà chất lượng điểm cục bộ trong SHM là `kx_quality_t` chỉ có **ba**
+  giá trị. Hai mức mới mô tả tình huống chỉ tồn tại ở điểm `ext`/ảo mà màn hình I/O của HMI không
+  hiển thị — nên HMI **không thể** rơi vào chúng và không cần chữ cho chúng.
+- **Một chỗ buộc phải nói dối, và tôi chọn hướng nói dối an toàn.** Hợp đồng tóm tắt Overview chỉ có
+  **năm** ô đếm, không ô nào cho *"không biết"*. `unknown`/`config_error` vì thế phải mượn một ô — và
+  mượn ô `good` chính là con bug đang sửa, nên chúng đếm vào `bad`. Đây là fail-closed **có ý thức**,
+  không phải ánh xạ đúng: người vận hành thấy số BAD nhích lên sẽ đi tra, thấy GOOD thì không. Muốn
+  đếm đúng thì **hợp đồng tóm tắt (cả phía Go) phải mọc thêm ô** — đã ghi tên ở #381.
+- **`reason`/`timestamp` đã đi xuyên tầng từ trước**; bản vá **ghim** chúng bằng test thay vì khẳng
+  định suông, để chúng không rụng trong một lần dọn dẹp sau này.
+- **Một lỗi tự gây rồi tự sửa.** `quality.test.ts` bản đầu dùng `__dirname` — `npx tsc` cho qua
+  nhưng **cổng `npm run build` bắt được** (`error TS2304: Cannot find name '__dirname'`), vì bộ
+  typecheck của build chạy ESM. Đổi sang `import.meta.url`, cùng cách `i18n.hmiVocabulary.test.ts`
+  định vị gốc repo.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · FE `vitest src` **211 tệp / 2560 test PASS** exit 0 · `npm run lint` exit 0 ·
+  `npm run build` exit 0 (chunk `programming` **122,86 / 165,00 KiB**).
+- **Ba lần tiêm lỗi** chứng minh cổng còn kiểm: cho fallback quay về `good` ⇒ **2 test FAIL**; để Go
+  phát một mức ngoài hợp đồng ⇒ **3 test FAIL**; khôi phục nguyên văn hàm `normalizeQuality` cũ ⇒
+  **4 test kịch bản FAIL**. Khôi phục ⇒ xanh trở lại.
+
 ### Fixed — `ISS-PIO-33` Web báo "lưu thành công" cho một mode AO mà phần cứng chưa hề nhận (#383, 2026-09-03)
 
 - **Triệu chứng.** Đổi kênh AO sang **4-20 mA**, web đáp `200 success`, giao diện hiện mode mới —
