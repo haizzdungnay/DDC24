@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -455,5 +456,96 @@ func TestCheckReportsEveryBrokenModbusBindingAtOnce(t *testing.T) {
 		if !seen[name] {
 			t.Fatalf("thiếu binding %s trong danh sách trả về: %+v", name, diagnostics)
 		}
+	}
+}
+
+/* `AC-PIO-ID-02` — thanh ghi 0 là ĐỊA CHỈ HỢP LỆ, không phải "thiếu dữ liệu".
+ *
+ * Triệu chứng: một binding đã Commission trên thanh ghi 0 vẫn qua được phép
+ * đối chiếu target sau khi người vận hành dời điểm đó sang thanh ghi khác.
+ *
+ * Nguyên nhân gốc: `validate.go` cho `address ∈ 0..65535`, nên 0 là địa chỉ
+ * dùng được thật. Nhưng producer khai `json:"address,omitempty"` — số 0 KHÔNG
+ * được ghi vào manifest — còn `SameTarget` lại đọc `other.Address != 0` như
+ * dấu hiệu "manifest cũ không mang trường này" và BỎ QUA phép so địa chỉ. Ba
+ * trường kia là chuỗi nên `""` không phải giá trị hợp lệ; `Address` là trường
+ * duy nhất mà zero value đụng miền giá trị thật.
+ *
+ * Hệ quả đúng bằng thứ `AC-PIO-ID-02` sinh ra để chặn: slot giữ nguyên số,
+ * `SameTarget` nói "khớp", Commission cho qua, chương trình đọc/ghi một thanh
+ * ghi khác thanh ghi đã được duyệt — im lặng.
+ */
+func TestCommissionBlocksWhenAddressZeroPointMovedToAnotherRegister(t *testing.T) {
+	service := &OperationService{modbusSlots: stubSlotProvider{snapshot: ModbusSlotSnapshot{
+		Slots: []ModbusSlot{{DeviceID: "bus-1-slave-2", PointID: "PUMP_CMD", ExtIndex: 3,
+			RegisterType: "holding_register", Address: 300, AddressKnown: true,
+			DataType: "uint16", ReadWrite: "read_write"}},
+	}}}
+
+	binding := modbusManifestBinding("bus-1-slave-2", "PUMP_CMD", 3)
+	binding["registerType"] = "holding_register"
+	binding["address"] = 0 // đã duyệt trên thanh ghi 0, nay cấu hình chạy ở 300
+	binding["modbusDataType"] = "uint16"
+	binding["readWrite"] = "read_write"
+
+	if err := service.verifyModbusSlots(context.Background(), checkWithManifestBindings(binding)); err == nil {
+		t.Fatal("điểm đã duyệt ở thanh ghi 0 nay nằm ở thanh ghi 300 — phải CHẶN, không được coi là khớp")
+	}
+}
+
+/* Nửa còn lại của cùng một bất biến: thanh ghi 0 KHÔNG đổi thì không được chặn.
+ * Thiếu ca này, một bản vá "coi 0 là luôn lệch" sẽ qua được test trên trong khi
+ * chặn nhầm mọi binding hợp lệ ở thanh ghi 0. */
+func TestCommissionPassesWhenAddressZeroPointUnchanged(t *testing.T) {
+	service := &OperationService{modbusSlots: stubSlotProvider{snapshot: ModbusSlotSnapshot{
+		Slots: []ModbusSlot{{DeviceID: "bus-1-slave-2", PointID: "PUMP_CMD", ExtIndex: 3,
+			RegisterType: "holding_register", Address: 0, AddressKnown: true,
+			DataType: "uint16", ReadWrite: "read_write"}},
+	}}}
+
+	binding := modbusManifestBinding("bus-1-slave-2", "PUMP_CMD", 3)
+	binding["registerType"] = "holding_register"
+	binding["address"] = 0
+	binding["modbusDataType"] = "uint16"
+	binding["readWrite"] = "read_write"
+
+	if err := service.verifyModbusSlots(context.Background(), checkWithManifestBindings(binding)); err != nil {
+		t.Fatalf("thanh ghi 0 không đổi thì không được chặn: %v", err)
+	}
+}
+
+/* `AC-PIO-ID-02` — manifest phải QUA NỔI chính validator của nó.
+ *
+ * Triệu chứng: mọi Check có binding MB_RTU phân giải được slot đều hỏng ở bước
+ * dựng manifest với `bindings[N]. trường lạ: address,modbusDataType,readWrite,
+ * registerType`, tức Commission không bao giờ tới được phép đối chiếu target.
+ *
+ * Nguyên nhân gốc: `packageManifestBinding` được bổ sung bốn trường target,
+ * nhưng `validateManifestBindings` vẫn gọi `exactFields` với allowlist CŨ mười
+ * trường. `exactFields` từ chối trường lạ, nên producer và validator của cùng
+ * một hồ sơ bất đồng ngay trong một hàm gọi nhau.
+ *
+ * Test đi qua ĐÚNG đường thật (`buildPackageCheckManifest` → marshal →
+ * `validatePackageCheckManifest`) chứ không gọi `exactFields` trực tiếp: đó là
+ * chỗ bất đồng thật sự phát tác. */
+func TestPackageManifestAcceptsModbusTargetFields(t *testing.T) {
+	input := validManifestInput(t)
+	address := 300
+	input.Bindings = []packageManifestBinding{{
+		BindingID:  "11111111-1111-4111-8111-111111111111",
+		ProgramID:  manifestProgramID,
+		VariableID: "33333333-3333-4333-8333-333333333333",
+		Variable:   "PumpCmd", Direction: "OUTPUT", Category: "MB_RTU",
+		PointID: "PUMP_CMD", DeviceID: "bus-1-slave-2", ExtIndex: 3,
+		RegisterType: "holding_register", Address: &address,
+		ModbusType: "uint16", ReadWrite: "read_write", Writable: true,
+	}}
+
+	raw, err := buildPackageCheckManifest(input)
+	if err != nil {
+		t.Fatalf("manifest mang bốn trường target MB_RTU phải dựng được, nhận lỗi: %v", err)
+	}
+	if !bytes.Contains(raw, []byte(`"registerType":"holding_register"`)) {
+		t.Fatalf("manifest mất trường registerType: %s", raw)
 	}
 }

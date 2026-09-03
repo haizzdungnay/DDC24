@@ -92,10 +92,16 @@ type packageManifestBinding struct {
 	// Chỉ có nghĩa với MB_RTU nên `omitempty`: gắn chúng vào điểm LOCAL/VP là
 	// mở bốn trường vô nghĩa mà lớp sau phải đoán có nên tin hay không.
 	RegisterType string `json:"registerType,omitempty"`
-	Address      int    `json:"address,omitempty"`
-	ModbusType   string `json:"modbusDataType,omitempty"`
-	ReadWrite    string `json:"readWrite,omitempty"`
-	Writable     bool   `json:"writable"`
+	// Address là CON TRỎ, không phải `int`, vì `omitempty` trên `int` không
+	// phân biệt được "không có trường" với "địa chỉ 0" — mà `modbusrtu/
+	// validate.go` cho `address ∈ 0..65535`, nên 0 là một thanh ghi dùng được
+	// thật. Với `int`, một binding đã duyệt trên thanh ghi 0 sẽ đi vào manifest
+	// KHÔNG mang địa chỉ, và Commission bỏ luôn phép so địa chỉ cho đúng binding
+	// ấy. Ba trường kia là chuỗi nên `""` không đụng miền giá trị hợp lệ.
+	Address    *int   `json:"address,omitempty"`
+	ModbusType string `json:"modbusDataType,omitempty"`
+	ReadWrite  string `json:"readWrite,omitempty"`
+	Writable   bool   `json:"writable"`
 }
 
 // packageCheckManifest — thứ tự field ở đây LÀ thứ tự byte của manifest
@@ -187,6 +193,7 @@ func packageManifestBindings(objects []revisionObjectView, slots *ModbusSlotSnap
 		}
 		extIndex := binding.extIndex
 		var target ModbusSlot
+		targetResolved := false
 		if category == "MB_RTU" {
 			/* Check đã CHẶN mọi ca không phân giải được trước khi tới đây, nên
 			 * nhánh lỗi ở đây là "không thể xảy ra". Giữ nguyên số cũ trong
@@ -196,15 +203,23 @@ func packageManifestBindings(objects []revisionObjectView, slots *ModbusSlotSnap
 				binding.extIndex); reason == "" {
 				extIndex = resolved
 				if slots != nil {
-					target, _ = slots.Lookup(binding.deviceID, binding.pointID)
+					target, targetResolved = slots.Lookup(binding.deviceID, binding.pointID)
 				}
 			}
+		}
+		/* Địa chỉ chỉ được ghi khi ĐÃ TRA ĐƯỢC điểm thật. Ghi `0` cho một
+		 * binding chưa phân giải được là bịa ra một thanh ghi, và Commission
+		 * sẽ đem con số bịa đó đi so. */
+		var address *int
+		if targetResolved {
+			value := target.Address
+			address = &value
 		}
 		result = append(result, packageManifestBinding{BindingID: binding.bindingID,
 			ProgramID: binding.programID, VariableID: binding.variableID, Variable: binding.variable,
 			Direction: binding.direction, Category: category, PointID: binding.pointID,
 			DeviceID: binding.deviceID, ExtIndex: extIndex,
-			RegisterType: target.RegisterType, Address: target.Address,
+			RegisterType: target.RegisterType, Address: address,
 			ModbusType: target.DataType, ReadWrite: target.ReadWrite,
 			Writable: binding.writable})
 	}
@@ -877,6 +892,55 @@ func validateManifestSignals(root map[string]any, programIDs map[string]struct{}
 	return nil
 }
 
+// validateManifestBindingTarget kiểm GIÁ TRỊ của bốn trường target khi chúng có
+// mặt. Miền giá trị lấy đúng từ `modbusrtu/validate.go` — chép hẹp hơn ở đây sẽ
+// từ chối cấu hình hợp lệ, chép rộng hơn thì phép kiểm không kiểm gì.
+func validateManifestBindingTarget(prefix string, fields map[string]any) error {
+	if value, present := fields["registerType"]; present {
+		text, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("%sregisterType: cần string, nhận %T", prefix, value)
+		}
+		switch text {
+		case "coil", "discrete_input", "input_register", "holding_register":
+		default:
+			return fmt.Errorf("%sregisterType=%q không được hỗ trợ", prefix, text)
+		}
+	}
+	if _, present := fields["address"]; present {
+		address, err := intField(fields, "address")
+		if err != nil {
+			return fmt.Errorf("%s%w", prefix, err)
+		}
+		if address < 0 || address > 65535 {
+			return fmt.Errorf("%saddress=%d ngoài dải 0..65535", prefix, address)
+		}
+	}
+	if value, present := fields["modbusDataType"]; present {
+		text, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("%smodbusDataType: cần string, nhận %T", prefix, value)
+		}
+		switch text {
+		case "bool", "int16", "uint16", "int32", "uint32", "float32":
+		default:
+			return fmt.Errorf("%smodbusDataType=%q không được hỗ trợ", prefix, text)
+		}
+	}
+	if value, present := fields["readWrite"]; present {
+		text, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("%sreadWrite: cần string, nhận %T", prefix, value)
+		}
+		switch text {
+		case "read", "write", "read_write":
+		default:
+			return fmt.Errorf("%sreadWrite=%q không được hỗ trợ", prefix, text)
+		}
+	}
+	return nil
+}
+
 func validateManifestBindings(root map[string]any, programIDs map[string]struct{}) error {
 	items, err := arrayField(root, "bindings")
 	if err != nil {
@@ -892,9 +956,19 @@ func validateManifestBindings(root map[string]any, programIDs map[string]struct{
 		if !ok {
 			return fmt.Errorf("%s không phải object", prefix)
 		}
-		fields, err := exactFields(prefix, object, "bindingId", "programId", "variableId", "variable",
+		/* `AC-PIO-ID-02` — bốn trường khoá THỨ MÀ SLOT TRỎ TỚI là tuỳ chọn ở
+		 * mức có mặt, nhưng KHÔNG tuỳ tiện ở mức giá trị: một `address` ngoài
+		 * dải hay một `registerType` lạ lọt vào manifest sẽ được Commission
+		 * đem đi so và luôn báo "lệch", làm người vận hành đi tìm nguyên nhân
+		 * ở cấu hình fieldbus trong khi lỗi nằm ở chính hồ sơ. */
+		fields, err := exactFieldsWithOptional(prefix, object,
+			[]string{"registerType", "address", "modbusDataType", "readWrite"},
+			"bindingId", "programId", "variableId", "variable",
 			"direction", "category", "pointId", "deviceId", "extIndex", "writable")
 		if err != nil {
+			return err
+		}
+		if err := validateManifestBindingTarget(prefix, fields); err != nil {
 			return err
 		}
 		bindingID, err := uuidField(fields, prefix, "bindingId")
@@ -1095,12 +1169,29 @@ func decodeManifestObject(canonical []byte) (map[string]any, error) {
 // là lỗi. Cho phép khoá thừa nghĩa là một trường viết sai chính tả sẽ đi lọt và
 // trường thật thì nhận zero value — im lặng đúng lúc không nên im lặng.
 func exactFields(prefix string, object map[string]any, keys ...string) (map[string]any, error) {
-	expected := make(map[string]struct{}, len(keys))
+	return exactFieldsWithOptional(prefix, object, nil, keys...)
+}
+
+// exactFieldsWithOptional như `exactFields`, nhưng thêm một tập khoá ĐƯỢC PHÉP
+// VẮNG.
+//
+// Vì sao cần: bốn trường target của binding MB_RTU (`registerType`, `address`,
+// `modbusDataType`, `readWrite`) mang `omitempty` — có mặt với điểm Modbus phân
+// giải được, vắng với LOCAL/VP và với manifest sinh trước `AC-PIO-ID-02`. Xếp
+// chúng vào danh sách BẮT BUỘC sẽ từ chối mọi binding không phải Modbus; bỏ
+// chúng ra khỏi mọi danh sách thì `exactFields` gọi chúng là "trường lạ". Cả
+// hai đều làm writer và verifier của CÙNG một hồ sơ bất đồng.
+func exactFieldsWithOptional(prefix string, object map[string]any, optional []string,
+	keys ...string) (map[string]any, error) {
+	expected := make(map[string]struct{}, len(keys)+len(optional))
 	for _, key := range keys {
 		expected[key] = struct{}{}
 		if _, found := object[key]; !found {
 			return nil, fmt.Errorf("%s%s: thiếu trường", prefix, key)
 		}
+	}
+	for _, key := range optional {
+		expected[key] = struct{}{}
 	}
 	unexpected := make([]string, 0)
 	for key := range object {

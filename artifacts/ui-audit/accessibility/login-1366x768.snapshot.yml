@@ -1,0 +1,21 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - button "Toggle language" [ref=e5]: EN
+    - generic [ref=e8]:
+      - generic [ref=e9]: DDC 24
+      - heading "Welcome Back" [level=1] [ref=e10]
+      - paragraph [ref=e11]: Sign in to access your building control system
+    - generic [ref=e13]:
+      - term [ref=e14]: Model
+      - definition [ref=e15]: DDC24
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - text: Username
+        - textbox "Username" [active] [ref=e22]
+      - generic [ref=e23]:
+        - text: Password
+        - generic [ref=e24]:
+          - textbox "Password" [ref=e29]
+          - button "Show password" [ref=e30]
+      - button "Sign In" [ref=e34]
+    - paragraph [ref=e35]: "Warning: change the default password before putting the device into operation."

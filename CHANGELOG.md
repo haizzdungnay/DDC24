@@ -8,6 +8,96 @@
 
 ## [Unreleased]
 
+### Fixed — `alarms_read degraded` trên bo: web-api làm tràn hàng đợi accept của core (2026-09-03)
+
+- **Triệu chứng.** `journalctl -u mkddc-web-pi` trên bo Foxlinx liên tục có
+  `WARN alarms_read degraded err=core unavailable`, trong khi `mkddc-core` khoẻ mạnh và đã chạy 3 ngày
+  không overrun. Endpoint vẫn trả `200` nhưng kèm `degraded=true`, nên UI hiển thị danh sách alarm
+  **rỗng** thay vì báo lỗi — người vận hành đọc "không có cảnh báo nào" trên một hệ đang chạy.
+- **Đo trước khi kết luận.** Cùng mức tải ~90–105 request `/api/v1/alarms` mỗi phút: binary 30-08 hỏng
+  **15,7%** (535 req / 84 degraded), binary 03-09 hỏng **~32%**; ở mức 1,1 req/phút chỉ **2,2%**.
+  Tỉ lệ đi theo **tần suất dial**, không theo phiên bản mã ⇒ **không phải hồi quy của lần nạp**.
+- **Nguyên nhân gốc.** `WebIpc` của core (`web_ipc.cpp`) đặt `::listen(fd_, 4)`, `max_clients = 4`,
+  `max_accept_attempts = 4`, và `poll()` chạy **một lần mỗi scan cycle** — trên Foxlinx
+  `core.base_step_ms=1000`, tức **1 giây/lần**. `CoreClient.sendWebIPC` mở **một kết nối mới cho mỗi
+  request** và **không có hạn mức đồng thời nào**. Với Unix socket, `connect()` không chờ `accept()`:
+  nó thành công khi hàng đợi còn chỗ và **hỏng ngay bằng ECONNREFUSED khi hàng đợi đầy** (không có SYN
+  retry như TCP). Một trang UI poll alarms + overview + runtime + point-catalog cùng lúc vượt 4 cú dial
+  trong một chu kỳ rất dễ.
+  - *Giả thuyết đầu tiên đã bị bác bỏ.* Ban đầu quy cho `dialCore` timeout 100 ms ngắn hơn chu kỳ
+    accept 1 s. Test dựng lại mô hình cho thấy **không phải**: dial vẫn thành công vì kernel nhận vào
+    hàng đợi. Cơ chế thật là **độ sâu hàng đợi**, không phải thời gian chờ.
+- **Cách sửa.** Hạn mức đồng thời `coreWebIPCMaxInFlight = 3` (nhỏ hơn `max_clients = 4` để chừa slot
+  cho HMI/công cụ khác), acquire **tôn trọng `ctx`** để core treo không giữ handler HTTP quá deadline
+  của chính request; deadline round-trip 2 s → 5 s (round-trip thật trên bo là 800–1600 ms vì phản hồi
+  chỉ tới ở biên `poll()` kế); dial timeout 100 ms → 2,5 s (không phải thứ sửa lỗi, nhưng 100 ms không
+  có cơ sở nào so với nhịp 1 s). Đường ghi `CommandPoint` đi qua cùng hạn mức.
+  - **Không** dùng pool kết nối thường trực: `web_ipc.cpp` không có eviction idle, nên giữ 3 kết nối
+    sẽ chiếm chết 3 trong 4 slot của core và bỏ đói mọi client khác.
+- **Kiểm chứng.** `TestWebIPCConcurrentReadsDoNotExhaustCoreBacklog` dựng listener backlog **4 bằng
+  syscall** (`net.Listen` dùng somaxconn nên che mất hẳn lỗi) và mô hình accept theo chu kỳ: **không
+  hạn mức ⇒ 19/24 request hỏng; có hạn mức ⇒ 0/24**. Thêm 2 test khoá việc tôn trọng `ctx` và việc
+  hạn mức phải nhỏ hơn `max_clients`.
+
+### Fixed — Rà soát trước khi nạp bo Foxlinx: ba lỗi thật trong mã 3 ngày gần nhất (2026-09-03)
+
+Rà soát toàn bộ thay đổi từ `2f27dce` (2026-08-30) tới `7aff96a`. Ba lỗi dưới đây đều **không lộ ra**
+ở cổng đang chạy trước phiên này; mỗi lỗi được **chứng minh bằng một test đỏ trước khi sửa**.
+
+- **`exactFields` từ chối chính bốn trường mà producer vừa thêm — chặn mọi Commission Modbus.**
+  - *Triệu chứng.* Mọi Check có binding `MB_RTU` phân giải được slot đều hỏng ở bước dựng manifest:
+    `bindings[0]. trường lạ: address,modbusDataType,readWrite,registerType`. Commission không bao giờ
+    tới được phép đối chiếu target mà `ISS-PIO-31` bước 3 vừa dựng.
+  - *Nguyên nhân gốc.* Bước 3 bổ sung bốn trường target vào `packageManifestBinding`, nhưng
+    `validateManifestBindings` vẫn gọi `exactFields` với allowlist **cũ mười trường**. Writer và
+    verifier của cùng một hồ sơ bất đồng ngay trong một chuỗi gọi hàm.
+  - *Cách sửa.* Thêm `exactFieldsWithOptional` (khoá được phép vắng — bốn trường mang `omitempty`,
+    vắng với LOCAL/VP và với manifest cũ) + `validateManifestBindingTarget` kiểm **giá trị** theo đúng
+    miền của `modbusrtu/validate.go`. Bỏ qua phần kiểm giá trị sẽ để một `address` ngoài dải lọt vào
+    hồ sơ rồi báo "lệch" ở Commission, đẩy người vận hành đi tìm sai chỗ.
+
+- **`address = 0` là thanh ghi hợp lệ, nhưng bị đọc như "thiếu dữ liệu".**
+  - *Triệu chứng.* Một binding đã Commission trên thanh ghi 0 vẫn qua được phép đối chiếu target sau
+    khi người vận hành dời điểm đó sang thanh ghi khác — đúng loại sai lặng mà `AC-PIO-ID-02` sinh ra
+    để chặn.
+  - *Nguyên nhân gốc.* `validate.go` cho `address ∈ 0..65535` nên 0 dùng được thật, nhưng producer
+    khai `Address int` + `json:"address,omitempty"` (số 0 không được ghi ra) còn `SameTarget` lại đọc
+    `other.Address != 0` như dấu hiệu "manifest cũ không mang trường này" và **bỏ qua** phép so địa
+    chỉ. Ba trường kia là chuỗi nên `""` không đụng miền giá trị hợp lệ; `Address` là trường duy nhất
+    mà zero value trùng một giá trị thật.
+  - *Cách sửa.* Producer đổi sang `*int` (phát `"address":0` cho MB_RTU đã phân giải, vẫn vắng với
+    LOCAL/VP nên **byte manifest và `contentSha256` không đổi** cho mọi ca đang chạy được); consumer
+    parse `*int` và đặt `ModbusSlot.AddressKnown`; `SameTarget` so theo cờ đó.
+
+- **`hashBufferSource` dùng `crypto.subtle` — chết đúng trên bo, không chết ở máy dev.**
+  - *Triệu chứng.* Bo phục vụ UI qua `http://<ip>`, không phải secure context, nên trình duyệt không
+    expose `crypto.subtle`. Hash reject ⇒ `bufferSha256` ở lại `undefined` ⇒ mọi diagnostic thành
+    `UNVERIFIABLE` ⇒ **toàn bộ phần gạch lỗi của `ISS-STED-04` im lặng biến mất trên bo**, trong khi
+    chạy tốt qua `localhost` ở máy dev.
+  - *Nguyên nhân gốc.* `ISS-STED-18` viết hàm băm mới bằng WebCrypto, dù `shared/crypto.ts` đã có
+    `sha256Hex` thuần JS tồn tại **đúng vì lý do này** ("để import bundle hoạt động trên endpoint HTTP").
+  - *Cách sửa.* `hashBufferSource` gọi `sha256Hex`; giữ chữ ký `Promise` để không kéo theo sửa đổi
+    không liên quan ở lớp gọi.
+
+- **Cổng hợp đồng chạy bằng interpreter Python không có `jsonschema`.**
+  - *Triệu chứng.* `ctest` đỏ `st_language_profile_contract` + `st_language_profile_gate` với
+    `ModuleNotFoundError: No module named 'jsonschema'`, trong khi cùng script chạy xanh qua
+    `npm run build` và qua shell.
+  - *Nguyên nhân gốc.* `find_package(Python3)` chọn interpreter có **số hiệu bản cao nhất**, không
+    phải interpreter mà phần còn lại của dự án dùng; bản 3.11 do `uv` quản lý đứng trên bản hệ thống
+    và externally-managed nên `pip install -r requirements-ci.txt` cũng không vá được. Nặng hơn "hai
+    test đỏ": cổng chết **trước khi kiểm được gì**, nên một hồ sơ ngôn ngữ mâu thuẫn thật sẽ đi lọt y
+    hệt.
+  - *Cách sửa.* `apps/core/CMakeLists.txt` dò ứng viên và lấy bản **đầu tiên import được** module cổng
+    cần; không bản nào đủ thì dừng ngay ở configure kèm câu lệnh cài, thay vì nổ muộn ở test thứ 1280
+    dưới dạng traceback Python.
+
+**Đo lại tại `7aff96a` + bản vá** — C++ `cmake --fresh` + build + `ctest` (MODBUS/BACNET/HMI = ON):
+**1389/1389 pass, 1 skipped, exit 0** (trước vá: 1387/1389, exit 8) · Go `go vet` exit 0 +
+`go test ./... -count=1` **exit 0** · FE `vitest` **2442/2442 pass** (199 file), `lint` exit 0,
+`build:release` exit 0.
+
+
 ### Fixed — `ISS-PIO-31` bước 4: một lần Check nói ra TOÀN BỘ binding phải rebind (#375, 2026-09-03)
 
 - **Triệu chứng.** Đường kiểm slot Modbus dừng ở **binding hỏng đầu tiên**. Sau một lần tắt thiết bị,

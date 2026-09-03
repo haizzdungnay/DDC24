@@ -51,6 +51,14 @@ type ModbusSlot struct {
 	// đọc/ghi một thứ khác.
 	RegisterType string `json:"registerType,omitempty"`
 	Address      int    `json:"address,omitempty"`
+	// AddressKnown nói `Address` có phải một giá trị ĐỌC ĐƯỢC hay chỉ là zero
+	// value. Cần nó vì `address = 0` là thanh ghi hợp lệ (`modbusrtu/
+	// validate.go`: `0..65535`), nên không thể dùng `Address != 0` làm dấu hiệu
+	// "trường có mặt" như với ba trường chuỗi bên trên.
+	//
+	// Phía snapshot sống luôn đặt `true` (đọc thẳng từ cấu hình đang chạy);
+	// phía manifest đặt theo việc JSON CÓ mang `address` hay không.
+	AddressKnown bool   `json:"-"`
 	DataType     string `json:"dataType,omitempty"`
 	ReadWrite    string `json:"readWrite,omitempty"`
 }
@@ -65,7 +73,7 @@ func (s ModbusSlot) SameTarget(other ModbusSlot) bool {
 	if other.RegisterType != "" && s.RegisterType != other.RegisterType {
 		return false
 	}
-	if other.Address != 0 && s.Address != other.Address {
+	if other.AddressKnown && s.Address != other.Address {
 		return false
 	}
 	if other.DataType != "" && s.DataType != other.DataType {
@@ -215,9 +223,11 @@ func manifestModbusBindings(resultJSON []byte) ([]ModbusSlot, error) {
 				DeviceID     string `json:"deviceId"`
 				ExtIndex     int    `json:"extIndex"`
 				RegisterType string `json:"registerType"`
-				Address      int    `json:"address"`
-				ModbusType   string `json:"modbusDataType"`
-				ReadWrite    string `json:"readWrite"`
+				// `*int`: phân biệt "manifest cũ không mang address" với
+				// "address = 0", vì 0 là thanh ghi hợp lệ.
+				Address    *int   `json:"address"`
+				ModbusType string `json:"modbusDataType"`
+				ReadWrite  string `json:"readWrite"`
 			} `json:"bindings"`
 		} `json:"manifest"`
 	}
@@ -229,9 +239,14 @@ func manifestModbusBindings(resultJSON []byte) ([]ModbusSlot, error) {
 		if binding.Category != "MB_RTU" {
 			continue
 		}
-		result = append(result, ModbusSlot{DeviceID: binding.DeviceID, PointID: binding.PointID,
-			ExtIndex: binding.ExtIndex, RegisterType: binding.RegisterType, Address: binding.Address,
-			DataType: binding.ModbusType, ReadWrite: binding.ReadWrite})
+		slot := ModbusSlot{DeviceID: binding.DeviceID, PointID: binding.PointID,
+			ExtIndex: binding.ExtIndex, RegisterType: binding.RegisterType,
+			DataType: binding.ModbusType, ReadWrite: binding.ReadWrite}
+		if binding.Address != nil {
+			slot.Address = *binding.Address
+			slot.AddressKnown = true
+		}
+		result = append(result, slot)
 	}
 	return result, nil
 }

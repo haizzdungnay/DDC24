@@ -273,6 +273,74 @@ mkddc_apply_provenance(mkddc-alarm-sim)
 option(CORE_BUILD_TESTS "Build core unit tests" ON)
 if(CORE_BUILD_TESTS)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+  # `ISS-STED-21` — interpreter chạy cổng phải CÓ THẬT phụ thuộc mà cổng cần.
+  #
+  # Triệu chứng: `ctest` báo đỏ `st_language_profile_contract` và
+  # `st_language_profile_gate` với `ModuleNotFoundError: No module named
+  # 'jsonschema'`, trong khi CÙNG hai script ấy chạy xanh qua `npm run build`
+  # và qua shell. Hai lối vào cùng một cổng cho hai kết luận trái ngược.
+  #
+  # Nguyên nhân gốc: `find_package(Python3)` chọn interpreter có SỐ HIỆU BẢN
+  # CAO NHẤT, không phải interpreter mà phần còn lại của dự án dùng. Máy dev có
+  # một bản 3.11 do `uv` quản lý (`~/.local/bin/python3.11`) đứng trên bản hệ
+  # thống; bản ấy externally-managed nên `pip install -r requirements-ci.txt`
+  # cũng không vá được. Mọi lối vào khác — npm script, shebang `env python3`,
+  # workflow CI — đều đi theo `python3` của PATH.
+  #
+  # Hệ quả nặng hơn "hai test đỏ": khi cổng chết vì thiếu module, nó chết TRƯỚC
+  # khi kiểm được thứ gì. Một hồ sơ ngôn ngữ mâu thuẫn THẬT sẽ đi lọt y hệt, và
+  # dấu hiệu trên log là như nhau — đúng cách `F-STED-005` từng sống sót.
+  #
+  # Cách sửa: dò ứng viên theo thứ tự ưu tiên, lấy bản ĐẦU TIÊN import được đủ
+  # module mà cổng cần. Không bản nào đủ thì dừng ngay ở configure kèm câu lệnh
+  # cài, thay vì để lỗi nổ muộn ở test thứ 1280 dưới dạng traceback Python.
+  set(MKDDC_GATE_PYTHON_MODULES jsonschema)
+  set(_mkddc_gate_python_candidates "${Python3_EXECUTABLE}")
+  find_program(_mkddc_python3_on_path python3)
+  if(_mkddc_python3_on_path)
+    list(APPEND _mkddc_gate_python_candidates "${_mkddc_python3_on_path}")
+  endif()
+  list(APPEND _mkddc_gate_python_candidates /usr/bin/python3)
+  list(REMOVE_DUPLICATES _mkddc_gate_python_candidates)
+
+  set(MKDDC_GATE_PYTHON "")
+  foreach(_mkddc_cand IN LISTS _mkddc_gate_python_candidates)
+    if(NOT EXISTS "${_mkddc_cand}")
+      continue()
+    endif()
+    set(_mkddc_cand_ok TRUE)
+    foreach(_mkddc_mod IN LISTS MKDDC_GATE_PYTHON_MODULES)
+      execute_process(
+          COMMAND "${_mkddc_cand}" -c "import ${_mkddc_mod}"
+          RESULT_VARIABLE _mkddc_import_rc
+          OUTPUT_QUIET ERROR_QUIET)
+      if(NOT _mkddc_import_rc EQUAL 0)
+        set(_mkddc_cand_ok FALSE)
+        break()
+      endif()
+    endforeach()
+    if(_mkddc_cand_ok)
+      set(MKDDC_GATE_PYTHON "${_mkddc_cand}")
+      break()
+    endif()
+  endforeach()
+
+  if(NOT MKDDC_GATE_PYTHON)
+    message(FATAL_ERROR
+        "Không interpreter Python nào trong ${_mkddc_gate_python_candidates} "
+        "import được ${MKDDC_GATE_PYTHON_MODULES}. Các cổng hợp đồng "
+        "(st_language_profile_*, programming_*) THI HÀNH schema chứ không chỉ "
+        "băm nó, nên thiếu module là không kiểm được gì. Cài bằng:\n"
+        "    python3 -m pip install -r ${MKDDC_REPOSITORY_ROOT}/requirements-ci.txt\n"
+        "rồi cấu hình lại. Muốn chỉ định tay thì thêm "
+        "-DPython3_EXECUTABLE=<đường dẫn>.")
+  endif()
+  if(NOT MKDDC_GATE_PYTHON STREQUAL "${Python3_EXECUTABLE}")
+    message(STATUS
+        "Cổng hợp đồng dùng ${MKDDC_GATE_PYTHON} thay cho ${Python3_EXECUTABLE} "
+        "(bản sau thiếu ${MKDDC_GATE_PYTHON_MODULES}).")
+  endif()
   target_compile_definitions(core_adapters PUBLIC CORE_BUILD_TESTS=1)
   target_compile_definitions(core_runtime PUBLIC CORE_BUILD_TESTS=1)
   target_compile_definitions(core_lib INTERFACE CORE_BUILD_TESTS=1)
@@ -369,13 +437,13 @@ if(CORE_BUILD_TESTS)
   # application phải có loader/executor nhưng tuyệt đối không có parser/compiler;
   # executable production cũng không được kéo các symbol đó qua dependency ẩn.
   add_test(NAME programming_runtime_archive_symbol_boundary
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${MKDDC_GATE_PYTHON}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_runtime_symbols.py
               --binary $<TARGET_FILE:core_application>
               --nm ${CMAKE_NM}
               --require-runtime)
   add_test(NAME programming_core_executable_symbol_boundary
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${MKDDC_GATE_PYTHON}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_runtime_symbols.py
               --binary $<TARGET_FILE:mkddc-core>
               --nm ${CMAKE_NM})
@@ -396,14 +464,14 @@ if(CORE_BUILD_TESTS)
     set(MKDDC_SIM_WORKER_BOUNDARY_EXTRA "")
   endif()
   add_test(NAME programming_sim_worker_symbol_boundary
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${MKDDC_GATE_PYTHON}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_sim_worker_boundary.py
               --binary $<TARGET_FILE:mkddc-programming-sim-worker>
               --nm ${CMAKE_NM}
               ${MKDDC_SIM_WORKER_BOUNDARY_EXTRA})
   if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME programming_sim_worker_behaviour
-        COMMAND ${Python3_EXECUTABLE}
+        COMMAND ${MKDDC_GATE_PYTHON}
                 ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_sim_worker.py
                 --binary $<TARGET_FILE:mkddc-programming-sim-worker>
                 --compile-cli $<TARGET_FILE:mkddc-st-compile>
@@ -418,7 +486,7 @@ if(CORE_BUILD_TESTS)
   # hồ sơ với một binary cũ và báo xanh cho một cây source đã trôi.
   if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME st_language_profile_contract
-        COMMAND ${Python3_EXECUTABLE}
+        COMMAND ${MKDDC_GATE_PYTHON}
                 ${MKDDC_REPOSITORY_ROOT}/scripts/generate_st_language_profile.py
                 --check
                 --dump-binary $<TARGET_FILE:mkddc-st-profile-dump>)
@@ -431,7 +499,7 @@ if(CORE_BUILD_TESTS)
     # `F-STED-005` sống sót qua nhiều revision. Test này tiêm hồ sơ sai một cách
     # đã biết và đòi cổng phải nổ đỏ, cho từng chiều đối chiếu.
     add_test(NAME st_language_profile_gate
-        COMMAND ${Python3_EXECUTABLE}
+        COMMAND ${MKDDC_GATE_PYTHON}
                 ${MKDDC_REPOSITORY_ROOT}/scripts/verify_st_profile_gate.py
                 --dump-binary $<TARGET_FILE:mkddc-st-profile-dump>)
   endif()
@@ -445,10 +513,10 @@ if(CORE_BUILD_TESTS)
   # kiểm chính cổng đó bằng bốn ca tiêm. Không phụ thuộc target nên chạy cả khi
   # cross-compile.
   add_test(NAME iec_claim_policy
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${MKDDC_GATE_PYTHON}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_iec_claim_policy.py)
   add_test(NAME iec_claim_policy_gate
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${MKDDC_GATE_PYTHON}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_iec_claim_policy_gate.py)
 
   # ISS-STED-10 — mã diagnostic dẫn trong tài liệu thiết kế phải CÓ THẬT.
@@ -458,10 +526,10 @@ if(CORE_BUILD_TESTS)
   # tồn tại ngoài chính tài liệu đó. Người vận hành `grep` log tìm một mã không
   # có thật sẽ không ra gì và kết luận sai rằng sự cố không xảy ra.
   add_test(NAME diagnostic_code_refs
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${MKDDC_GATE_PYTHON}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_diagnostic_code_refs.py)
   add_test(NAME diagnostic_code_refs_gate
-      COMMAND ${Python3_EXECUTABLE}
+      COMMAND ${MKDDC_GATE_PYTHON}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_diagnostic_code_refs_gate.py)
 
   # `T57-2.13`/`T57-3.13`: kiểm ở mức BINARY, vì giá trị của engine nằm ở chỗ nó
@@ -469,7 +537,7 @@ if(CORE_BUILD_TESTS)
   # lọt việc hợp đồng stdin/stdout lệch khỏi thứ Go gửi và đọc.
   if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME alarm_sim_behaviour
-        COMMAND ${Python3_EXECUTABLE}
+        COMMAND ${MKDDC_GATE_PYTHON}
                 ${MKDDC_REPOSITORY_ROOT}/scripts/verify_alarm_sim.py
                 --binary $<TARGET_FILE:mkddc-alarm-sim>)
   endif()

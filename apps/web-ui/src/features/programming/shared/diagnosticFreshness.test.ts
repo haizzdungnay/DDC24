@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ST_LANGUAGE_PROFILE_VERSION } from '../api/generated/stLanguageProfile'
 import type { ProgrammingDiagnostic } from '../model/types'
-import { diagnosticFreshness, type OpenBufferContext } from './diagnosticFreshness'
+import { diagnosticFreshness, hashBufferSource, type OpenBufferContext } from './diagnosticFreshness'
 
 const HASH_A = 'a'.repeat(64)
 const HASH_B = 'b'.repeat(64)
@@ -106,5 +106,35 @@ describe('diagnosticFreshness — ISS-STED-18', () => {
     expect(
       diagnosticFreshness(diagnostic(), { ...openBuffer, sourceSha256: undefined }).freshness
     ).toBe('UNVERIFIABLE')
+  })
+})
+
+/* Bo phục vụ UI qua `http://<ip>` — KHÔNG phải secure context — nên trình duyệt
+ * không expose `crypto.subtle`. Bản dùng WebCrypto chạy tốt trên máy dev qua
+ * `localhost` và chỉ chết trên chính con bo: hash reject, `bufferSha256` ở lại
+ * `undefined`, mọi diagnostic thành `UNVERIFIABLE`, và phần gạch lỗi của
+ * `ISS-STED-04` im lặng biến mất. Test này khoá lối regression đó. */
+describe('hashBufferSource ngoài secure context', () => {
+  const originalCrypto = globalThis.crypto
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    Object.defineProperty(globalThis, 'crypto', { configurable: true, value: originalCrypto })
+  })
+
+  it('băm được khi crypto.subtle vắng mặt', async () => {
+    vi.stubGlobal('crypto', {
+      getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto)
+    })
+
+    await expect(hashBufferSource('MK-DDC-24')).resolves.toBe(
+      '3b79d0524c6ec4476430c2c8625994bc5a7da1ef5c02637874dc9fb3b68a1b27'
+    )
+  })
+
+  it('khớp đúng hash mà backend băm cho cùng nội dung', async () => {
+    await expect(hashBufferSource('')).resolves.toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    )
   })
 })
