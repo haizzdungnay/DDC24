@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### Added — `PLAN-FE-SHELL-062`: plan gỡ toàn diện `Project Settings` khỏi shell Programming (2026-09-03)
+
+- **Bối cảnh.** Rail Programming có **bảy** mục, trong khi quyết định canonical `UD-PROG-008` (**CLOSED**
+  theo `ADR-050.8`) chỉ chốt **sáu** workspace `PGM-01..06`. Mục thứ bảy `Project Settings` chưa bao giờ
+  có route: `ProgrammingRoutes` chỉ khai 6 path, và FE render nó `aria-disabled` kèm lý do *"Chưa có
+  trang Cài đặt Project ở bản dựng này"*.
+- **Không phải gỡ tính năng.** Rà `docs/01_requirements/` và `PROGRAMMING_TRACEABILITY_MATRIX.md`: không
+  có yêu cầu nào mang tên này. Xuất xứ duy nhất là một dòng mô tả trong handoff Plan 60
+  (`60_..._PGM01_PLAN.md:229` — *"6 đích + Project Settings"*). Gỡ nó là đưa code về khớp quyết định đã ký.
+- **Trọng tâm của plan là cổng chống tái phát, không phải thao tác xoá.** Nguồn gốc mục này là một dòng
+  tài liệu; không sửa dòng đó và không có cổng máy kiểm thì đợt handoff sau chép lại y nguyên. Cổng khoá
+  bất biến *"mọi mục điều hướng phải trỏ tới một đích CÓ THẬT; chỉ được vô hiệu vì thiếu điều kiện, không
+  bao giờ vì trang không tồn tại"*, đối chiếu thẳng với `PROGRAMMING_WORKSPACE_PATHS` — bảng route đã có,
+  không dựng bảng chép tay thứ hai. Cổng phải được chứng minh **đỏ trên baseline** trước khi gỡ.
+- **Kiểm kê đầy đủ**: 6 điểm mã nguồn, 3 điểm test, 3 điểm tài liệu; đã xác nhận **không** có dấu vết
+  trong `contracts/`, `scripts/`, `e2e/`, RTM và `NAV_GROUPS` ⇒ `ADR-032` không bị động tới.
+- **Trạng thái.** DỰ THẢO — chờ duyệt trước khi code, theo `DOC_GOVERNANCE` (doc trước, code sau).
+- **Hai finding ghi lại, ngoài phạm vi plan.** `F-SHELL-01`: `projects.archived` chỉ được đọc, không nơi
+  nào ghi, cộng trigger `projects_no_delete` và không có route xoá ⇒ **project tạo ra không thể gỡ**; đo
+  trên bo 2026-09-03 có **18 project, 1 đang active**, 17 là rác test. `F-SHELL-02`: `Controller 1──*
+  Project` không có biện minh trong toàn bộ `docs/`, trong khi `Controller 1──1 RuntimeState`.
+
+
 ### Fixed — dải highlight active-line vẽ ĐÈ lên chữ của chính dòng đang sửa (2026-09-03)
 
 - **Triệu chứng.** Dòng đang có con trỏ trong ST editor bị **xám đi** so với những dòng có nội dung
