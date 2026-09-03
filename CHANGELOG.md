@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Refactored — `TASK-FBD-05-5` trích xuất FbdEditorPane ra module riêng từ ProgramsTab.tsx (2026-09-03)
+
+- **Trích xuất component:** Tạo `FbdEditorPane.tsx` tiếp nhận toàn bộ phần render editor pane, status bar, các nút Lưu/Kiểm tra/So sánh và logic POU FBD; đồng thời export `parseFbdDocument` an toàn (fallback `emptyFbdDocument` khi JSON hỏng) để `ProgramsTab.tsx` và Inspector tiếp tục tái dùng chung.
+- **Giảm tải file lớn:** `ProgramsTab.tsx` giảm 118 dòng (từ ~3190 dòng xuống còn ~3072 dòng), chuẩn bị tiền đề cho việc bọc lazy-load ở Task 5.6 mà không làm thay đổi hành vi runtime.
+- **Unit & Component tests:** 8/8 tests PASS (`FbdEditorPane.test.tsx`), bảo đảm 108/108 test files của toàn bộ `features/programming` tiếp tục xanh 100%.
+
 ### Added — `TASK-FBD-05` nâng cấp SVG Canvas Viewport và cử chỉ Pointer/Touch cho FBD (2026-09-03)
 
 - **Canvas Viewport:** Tích hợp `viewport.ts` vào `FbdCanvas.tsx` với zoom kẹp trong khoảng `0.4..2.5`, hỗ trợ wheel zoom quanh con trỏ chuột, pan bằng chuột giữa/chuột phải/phím Space + kéo, và pinch zoom đa chạm 2 ngón.
