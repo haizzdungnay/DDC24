@@ -1141,3 +1141,42 @@ describe('ISS-STED-15 — a11y của ST editor', () => {
     expect(document.activeElement).toBe(textarea)
   })
 })
+
+/* Dải highlight active-line KHÔNG được vẽ đè lên chữ.
+ *
+ * Dải là `position:absolute`, còn các span tô cú pháp là nội dung inline TRONG
+ * LUỒNG của cùng `<pre>`. Theo thứ tự vẽ của CSS, phần tử được định vị với
+ * `z-index: auto` vẽ SAU nội dung inline trong luồng — nên dải nền phủ lên chữ
+ * của chính dòng đang sửa, và `opacity: 0.55` biến nó thành tấm màn.
+ *
+ * Đo trên Chromium trước bản vá: chữ dòng trong dải sáng 129/255 trong khi dòng
+ * ngay trên và ngay dưới sáng 233/255 — mờ 45%.
+ *
+ * jsdom không vẽ nên không đo được độ sáng; test này khoá ĐIỀU KIỆN ĐỦ để thứ
+ * tự vẽ đúng: dải phải có `zIndex` THẤP HƠN lớp bọc chữ, và cả hai phải mang
+ * `zIndex` tường minh (bỏ trống là quay lại đúng lỗi cũ). */
+describe('thứ tự vẽ dải active-line', () => {
+  it('chữ nằm TRÊN dải highlight, không bị dải phủ', () => {
+    renderEditor('PROGRAM p\n  a := 1;\nEND_PROGRAM\n')
+
+    const text = screen.getByTestId('st-overlay-text')
+    const band = text.parentElement?.querySelector<HTMLElement>('div[aria-hidden="true"]')
+    expect(band).not.toBeNull()
+
+    const bandZ = Number(band!.style.zIndex)
+    const textZ = Number(text.style.zIndex)
+    expect(band!.style.zIndex).not.toBe('')
+    expect(text.style.zIndex).not.toBe('')
+    expect(textZ).toBeGreaterThan(bandZ)
+    // z-index chỉ có tác dụng trên phần tử được định vị.
+    expect(text.style.position).toBe('relative')
+  })
+
+  it('không dùng z-index âm cho dải — sẽ đẩy nó ra sau nền tổ tiên và mất hẳn', () => {
+    renderEditor('PROGRAM p\n  a := 1;\nEND_PROGRAM\n')
+
+    const text = screen.getByTestId('st-overlay-text')
+    const band = text.parentElement?.querySelector<HTMLElement>('div[aria-hidden="true"]')
+    expect(Number(band!.style.zIndex)).toBeGreaterThanOrEqual(0)
+  })
+})

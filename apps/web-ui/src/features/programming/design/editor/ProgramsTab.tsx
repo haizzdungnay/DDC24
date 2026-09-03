@@ -2206,12 +2206,30 @@ export function SourceEditor({
           >
             {/* Dải highlight active-line — con ĐẦU TIÊN của chính `<pre>` đang
              * cuộn (không phải phần tử ngoài) nên tự cuộn theo `scrollTop`
-             * đồng bộ sẵn có, không cần state/effect riêng. */}
+             * đồng bộ sẵn có, không cần state/effect riêng.
+             *
+             * `zIndex` ở ĐÂY VÀ ở span bọc chữ bên dưới là BẮT BUỘC, không phải
+             * dọn dẹp. Dải này `position:absolute`, còn các span tô cú pháp là
+             * nội dung inline TRONG LUỒNG của cùng `<pre>`. Theo thứ tự vẽ của
+             * CSS, phần tử được định vị (z-index auto) vẽ SAU nội dung inline
+             * trong luồng — nên dải nền vẽ ĐÈ LÊN CHỮ của chính dòng đang sửa,
+             * và `opacity: 0.55` biến nó thành một tấm màn phủ.
+             *
+             * Đo trên Chromium: chữ dòng trong dải sáng 129/255 trong khi dòng
+             * ngay trên và ngay dưới sáng 233/255 — mờ 45%. Triệu chứng người
+             * dùng thấy là "dòng đang gõ bị xám đi so với các dòng y hệt ở chỗ
+             * khác", và nó chỉ lộ ra ở dòng có con trỏ nên rất dễ bị bỏ qua.
+             *
+             * Không dùng z-index ÂM cho dải: `<pre>` và các tổ tiên của nó đều
+             * `z-index: auto` nên không tạo stacking context, và một giá trị âm
+             * sẽ đẩy dải ra sau nền của tổ tiên gần nhất có nền đặc — tức mất
+             * hẳn dải. Nâng CHỮ lên trên là cách giữ được cả hai. */}
             <div
               aria-hidden="true"
               className="pointer-events-none absolute left-0 right-0 bg-[var(--c-surface-2)]"
-              style={{ top: `${(cursor.line - 1) * EDITOR_ROW_HEIGHT_PX + EDITOR_PAD_TOP_PX}px`, height: `${EDITOR_ROW_HEIGHT_PX}px`, opacity: 0.55 }}
+              style={{ top: `${(cursor.line - 1) * EDITOR_ROW_HEIGHT_PX + EDITOR_PAD_TOP_PX}px`, height: `${EDITOR_ROW_HEIGHT_PX}px`, opacity: 0.55, zIndex: 0 }}
             />
+            <span data-testid="st-overlay-text" style={{ position: 'relative', zIndex: 1 }}>
             {segments.map((segment, index) => {
               const isBracket = bracketMatch !== null && (segment.start === bracketMatch.open || segment.start === bracketMatch.close) && segment.kind === 'punctuation'
               const classes = [ST_TOKEN_CLASS[segment.kind as StTokenKind] ?? '']
@@ -2247,6 +2265,7 @@ export function SourceEditor({
               }
               return <span key={index} className={classes.join(' ')}>{shared}</span>
             })}
+            </span>
           </pre>
           <textarea
             ref={textareaRef}

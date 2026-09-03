@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### Fixed — dải highlight active-line vẽ ĐÈ lên chữ của chính dòng đang sửa (2026-09-03)
+
+- **Triệu chứng.** Dòng đang có con trỏ trong ST editor bị **xám đi** so với những dòng có nội dung
+  y hệt ở chỗ khác. Vì nó chỉ xảy ra ở dòng có con trỏ, mắt dễ đọc thành "chắc tại highlight" và bỏ qua.
+- **Nguyên nhân gốc.** Dải highlight là `<div position:absolute>` **không có `z-index`**, còn các span
+  tô cú pháp là nội dung inline **trong luồng** của cùng `<pre>`. Theo thứ tự vẽ của CSS, phần tử được
+  định vị với `z-index: auto` vẽ **sau** nội dung inline trong luồng — nên dải nền vẽ chồng lên chữ, và
+  `opacity: 0.55` biến nó thành một tấm màn phủ thay vì một dải nền.
+- **Đo trên Chromium** (dựng lại đúng cấu trúc DOM/CSS của editor, chụp ảnh và lấy độ sáng pixel):
+
+  | dòng | trong dải? | độ sáng chữ sáng nhất |
+  |---|---|---|
+  | 28 | không | 233/255 |
+  | **29** | **có** | **129/255** |
+  | 30 | không | 233/255 |
+
+  Mờ **45%**. Sau bản vá cả ba dòng đều 233/255, nền dải vẫn giữ nguyên.
+- **Cách sửa.** `zIndex: 0` cho dải và bọc phần chữ trong `<span position:relative; zIndex: 1>`.
+  **Không** dùng `z-index` âm cho dải: `<pre>` và các tổ tiên đều `z-index: auto` nên không tạo stacking
+  context, một giá trị âm sẽ đẩy dải ra sau nền của tổ tiên gần nhất có nền đặc — tức mất hẳn dải.
+- **Kiểm chứng.** Hai test hồi quy khoá điều kiện đủ cho thứ tự vẽ (`zIndex` tường minh ở cả hai lớp,
+  chữ lớn hơn dải, dải không âm). Test đỏ khi gỡ `zIndex` khỏi dải. FE `vitest` **2444/2444**,
+  `lint` và `build:release` exit 0.
+- **Đã loại trừ bằng đo, không phải suy đoán:** formatter (in `END_IF;` đúng một dòng, và gộp cả `;`
+  lạc đứng riêng), tokenizer (lớp `comment` là *italic*, dòng nghi vấn không nghiêng), soft-wrap
+  (`textarea` đặt `wrap="off"`), và lệch dòng giữa gutter với dải (cả hai đọc cùng `cursor.line`; đo
+  trên trình duyệt cho dải phủ đúng dòng 29).
+
+
 ### Fixed — `alarms_read degraded` trên bo: web-api làm tràn hàng đợi accept của core (2026-09-03)
 
 - **Triệu chứng.** `journalctl -u mkddc-web-pi` trên bo Foxlinx liên tục có
