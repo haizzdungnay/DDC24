@@ -144,6 +144,48 @@ TEST(BacnetObjtable, ReadExtReceivesSnapshot)
     obj.detach();
 }
 
+/* ISS-MBW-02/03: producer publish 100 ms, Core scan 1000 ms. Reader phải vét
+ * queue và apply bản mới nhất trong MỘT chu kỳ; chỉ recv một bản làm
+ * feedback trễ dần và generation hot-apply bị kẹt sau queue cũ. */
+TEST(BacnetObjtable, ReadExtDrainsQueueAndAppliesNewestGeneration)
+{
+    BacnetObjTable obj;
+    if (!obj.attach()) {
+        SUCCEED();
+        return;
+    }
+
+    int sv[2];
+    ASSERT_EQ(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+
+    for (uint64_t sequence = 1; sequence <= 3; ++sequence) {
+        kx_ext_snapshot_v2_t msg{};
+        msg.magic           = KX_EXT_SNAP_V2_MAGIC;
+        msg.schema_version  = KX_EXT_SNAP_SCHEMA_VER;
+        msg.count           = static_cast<uint16_t>(sequence);
+        msg.sequence        = sequence;
+        msg.generation      = sequence < 3 ? 7 : 8;
+        msg.config_revision = sequence < 3 ? 37 : 38;
+        msg.samples[0].value = static_cast<double>(sequence * 10);
+        ASSERT_EQ(::send(sv[0], &msg, sizeof(msg), 0),
+                  static_cast<ssize_t>(sizeof(msg)));
+    }
+
+    obj.read_ext(sv[1]);
+
+    ASSERT_NE(obj.shm(), nullptr);
+    EXPECT_EQ(obj.shm()->ext_count, 3u);
+    EXPECT_DOUBLE_EQ(obj.shm()->ext[0].value, 30.0);
+    EXPECT_EQ(obj.ext_provenance().sequence, 3u);
+    EXPECT_EQ(obj.ext_provenance().generation, 8u);
+    EXPECT_EQ(obj.ext_provenance().config_revision, 38u);
+    EXPECT_EQ(obj.ext_provenance().gap_count, 0u);
+
+    ::close(sv[0]);
+    ::close(sv[1]);
+    obj.detach();
+}
+
 /* MBR-B005 / Đ-03 — kịch bản deploy LỆCH VERSION phải fail-closed.
  *
  * iobus cũ (v1) gửi cho core mới (v2). Nếu core "đọc tạm", mỗi phần tử lệch

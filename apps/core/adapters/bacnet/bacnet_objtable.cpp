@@ -154,41 +154,78 @@ void BacnetObjTable::publish(const PointTable& table,
 void BacnetObjTable::read_ext(int sockfd)
 {
     if (!shm_ || sockfd < 0) return;
-    kx_ext_snapshot_v2_t msg{};
-    const ssize_t n = ::recv(sockfd, &msg, sizeof(msg), MSG_DONTWAIT);
-    if (n < static_cast<ssize_t>(offsetof(kx_ext_snapshot_v2_t, samples)))
-        return;
 
-    /* MBR-B005 / Đ-03: từ chối RÕ RÀNG thay vì đọc theo layout đoán được.
-     * Kịch bản thật: nâng cấp iobus nhưng core còn bản cũ (hoặc ngược lại).
-     * Nếu ở đây "cố đọc tạm", mỗi phần tử lệch 16 byte và core publish giá trị
-     * của Point khác với nhãn GOOD — sai lặng lẽ, không ai phát hiện. */
-    if (msg.magic != KX_EXT_SNAP_V2_MAGIC) {
-        if (msg.magic == KX_EXT_SNAP_MAGIC) {
-            std::fprintf(stderr,
-                         "ERROR ext_snap.version_mismatch producer=v1 consumer=v2"
-                         " — iobus và core lệch phiên bản, TỪ CHỐI snapshot."
-                         " Hai service phải deploy cùng gói (Đ-03)\n");
-        } else {
-            std::fprintf(stderr, "WARN  ext_snap.bad_magic got=0x%08x\n", msg.magic);
+    /* `ISS-MBW-03`: VÉT HẾT QUEUE, APPLY BẢN MỚI NHẤT — KHÔNG recv một bản.
+     *
+     * `iobus` publish ext snapshot mỗi 100 ms; Core scan mỗi 1000 ms. Chỉ `recv`
+     * MỘT datagram mỗi scan là consumer chậm hơn producer 10 lần: queue cứ dài
+     * ra, feedback lùi hàng chục giây và snapshot generation mới sau hot-apply
+     * không bao giờ đuổi kịp phần queue cũ. Vét tối đa 64 datagram và chỉ apply
+     * bản hợp lệ MỚI NHẤT. Trần 64 giữ WCET hữu hạn; với payload hiện tại nó
+     * lớn hơn nhiều sức chứa socket receive buffer trên target.
+     *
+     * Đo trên bo Foxlinx, A/B hai binary core:
+     *   - chỉ recv một bản : độ cũ mẫu 10 s → 32 s → 50 s rồi bão hoà;
+     *   - vét queue        : `drained=10`/scan, độ cũ ổn định ~1 s.
+     * Người vận hành bấm nút thì relay đáp dưới 1 giây trong cả hai ca — thứ
+     * hỏng là CON SỐ trên màn hình, nên lỗi này đọc ra thành "lệnh không ăn". */
+    static constexpr int kMaxDrainPerScan = 64;
+    kx_ext_snapshot_v2_t newest{};
+    bool have_newest = false;
+    uint64_t observed_seq = last_seq_;
+
+    for (int drained = 0; drained < kMaxDrainPerScan; ++drained) {
+        kx_ext_snapshot_v2_t candidate{};
+        const ssize_t n = ::recv(sockfd, &candidate, sizeof(candidate), MSG_DONTWAIT);
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+            std::fprintf(stderr, "WARN  ext_snap.recv_fail errno=%d\n", errno);
+            break;
         }
-        return;
-    }
-    if (msg.schema_version != KX_EXT_SNAP_SCHEMA_VER) {
-        std::fprintf(stderr,
-                     "ERROR ext_snap.schema_mismatch got=%u want=%u — TỪ CHỐI snapshot\n",
-                     msg.schema_version, static_cast<unsigned>(KX_EXT_SNAP_SCHEMA_VER));
-        return;
+        if (n < static_cast<ssize_t>(offsetof(kx_ext_snapshot_v2_t, samples)))
+            continue;
+
+        /* MBR-B005 / Đ-03: từ chối RÕ RÀNG thay vì đọc theo layout đoán được.
+         * Kịch bản thật: nâng cấp iobus nhưng core còn bản cũ (hoặc ngược lại).
+         * Nếu ở đây "cố đọc tạm", mỗi phần tử lệch 16 byte và core publish giá trị
+         * của Point khác với nhãn GOOD — sai lặng lẽ, không ai phát hiện. */
+        if (candidate.magic != KX_EXT_SNAP_V2_MAGIC) {
+            if (candidate.magic == KX_EXT_SNAP_MAGIC) {
+                std::fprintf(stderr,
+                             "ERROR ext_snap.version_mismatch producer=v1 consumer=v2"
+                             " — iobus và core lệch phiên bản, TỪ CHỐI snapshot."
+                             " Hai service phải deploy cùng gói (Đ-03)\n");
+            } else {
+                std::fprintf(stderr, "WARN  ext_snap.bad_magic got=0x%08x\n",
+                             candidate.magic);
+            }
+            continue;
+        }
+        if (candidate.schema_version != KX_EXT_SNAP_SCHEMA_VER) {
+            std::fprintf(stderr,
+                         "ERROR ext_snap.schema_mismatch got=%u want=%u — TỪ CHỐI snapshot\n",
+                         candidate.schema_version,
+                         static_cast<unsigned>(KX_EXT_SNAP_SCHEMA_VER));
+            continue;
+        }
+
+        /* Kiểm sequence trên từng datagram ĐÃ NHẬN, không so bản đầu chu kỳ với
+         * bản cuối: các bản ở giữa được bỏ apply CÓ CHỦ ĐÍCH, không phải packet
+         * loss. So hai đầu sẽ báo "rớt 9 gói" mỗi scan trong khi bus hoàn toàn
+         * lành — một cảnh báo sai lặp lại đủ đều để người vận hành thôi đọc nó. */
+        if (observed_seq != 0 && candidate.sequence != observed_seq + 1) {
+            seq_gaps_++;
+            std::fprintf(stderr, "WARN  ext_snap.sequence_gap prev=%llu got=%llu\n",
+                         static_cast<unsigned long long>(observed_seq),
+                         static_cast<unsigned long long>(candidate.sequence));
+        }
+        observed_seq = candidate.sequence;
+        newest = candidate;
+        have_newest = true;
     }
 
-    /* Phát hiện mất/đảo datagram. Không sửa được gì ở đây, nhưng im lặng thì
-     * người vận hành không bao giờ biết bus đang rớt gói. */
-    if (last_seq_ != 0 && msg.sequence != last_seq_ + 1) {
-        seq_gaps_++;
-        std::fprintf(stderr, "WARN  ext_snap.sequence_gap prev=%llu got=%llu\n",
-                     static_cast<unsigned long long>(last_seq_),
-                     static_cast<unsigned long long>(msg.sequence));
-    }
+    if (!have_newest) return;
+    const kx_ext_snapshot_v2_t& msg = newest;
     last_seq_      = msg.sequence;
     last_revision_ = msg.config_revision;
 

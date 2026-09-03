@@ -8,6 +8,41 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-MBW-03` Core chỉ `recv` MỘT ext snapshot mỗi scan nên feedback Modbus lùi tới ~50 s (2026-09-03)
+
+- **Triệu chứng.** Bấm điều khiển thì relay đáp **dưới 1 giây**, nhưng con số trên giao diện giữ giá
+  trị cũ tới ~50 s. Người vận hành đọc ra thành "lệnh không ăn" rồi bấm lại. Ảnh hưởng **mọi** điểm
+  Modbus RTU, không riêng điểm vừa ghi.
+- **Nguyên nhân gốc.** `BacnetObjTable::read_ext` gọi `::recv(...)` đúng **một lần** mỗi scan.
+  `iobus` publish ext snapshot mỗi **100 ms**, Core scan mỗi **1000 ms** ⇒ consumer chậm hơn
+  producer **10 lần**. Queue socket cứ dài ra, và bản Core đọc mỗi scan là bản mỗi lúc một cũ, cho
+  tới khi bão hoà ở sức chứa receive buffer. Cùng cơ chế đó làm snapshot generation mới sau
+  hot-apply không bao giờ đuổi kịp phần queue cũ.
+- **Cách sửa.** Vét tối đa 64 datagram mỗi scan và chỉ apply bản hợp lệ **mới nhất**. Trần 64 giữ
+  WCET hữu hạn. Phép kiểm sequence chuyển sang so **từng datagram đã nhận** thay vì so bản đầu chu
+  kỳ với bản cuối — các bản ở giữa bị bỏ apply là **có chủ đích**, không phải packet loss; so hai
+  đầu sẽ báo "rớt 9 gói" mỗi scan trong khi bus hoàn toàn lành.
+- **Đo trên bo, A/B hai binary Core.**
+
+  | Binary | Độ cũ mẫu sau 10 s / 35 s / 60 s |
+  |---|---|
+  | chỉ `recv` một bản | 10,0 s → 32,0 s → **50,0 s** (tăng đều rồi bão hoà) |
+  | vét queue | ~1,9 s → ~1,0 s → ~1,2 s (**ổn định**) |
+
+  Bản có vét cho `drained=10`/scan, `applied_seq` tăng đúng 10, `age_ms` của datagram được apply
+  **1008–1019 ms**.
+- **Đính chính hai kết luận trước.** `ISS-MBW-02` mô tả triệu chứng là *"lệnh ghi đến muộn"* —
+  **sai**: `iobus` phát FC05 lên dây 938 ms sau khi bấm. Bản sửa `ISS-MBW-02` vẫn giữ vì nó là lỗi
+  thật (lệnh ghi không được đi nhờ lịch đọc), nhưng nó **không** là nguyên nhân của con số 50 s. Và
+  `ISS-MBW-03` ghi ở entry trước rằng *"vòng vét `kMaxDrainPerScan=64` đã có sẵn"* — cũng **sai**:
+  vòng đó khi ấy chỉ tồn tại trong cây làm việc chưa commit, không có trong `main`.
+- **Ghi công.** Phần sửa `read_ext` và test `ReadExtDrainsQueueAndAppliesNewestGeneration` là công
+  của một phiên làm việc song song. Tôi đã **xoá nhầm** thay đổi chưa commit đó bằng `git checkout --`
+  khi dọn log tạm của mình, rồi dựng lại từ nội dung đã đọc trước đó; test của phiên kia sống sót và
+  chính nó xác nhận bản dựng lại đúng.
+- **Đo lại.** C++ `ctest` **1393/1393** PASS; test dựng lại chạy ngược trên `main` thì **đỏ**
+  (`ext_count=1` thay vì 3, `value=10` thay vì 30).
+
 ### Finding — `ISS-MBW-03` giá trị Modbus RTU hiển thị **cũ tới ~50 giây**; điều khiển vốn đã nhanh (2026-09-03)
 
 - **Đính chính chẩn đoán trước.** `ISS-MBW-02` mô tả triệu chứng là *"lệnh ghi đến muộn 16–153 s"*.
