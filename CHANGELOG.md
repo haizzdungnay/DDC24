@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Changed — `PLAN-FBD-EDIT` vá kế hoạch FBD EDIT theo baseline sau merge (#376, 2026-09-03)
+
+- **A. Nhóm Chặn.**
+  - Thêm **Task 0.5** gỡ chặn môi trường dev shell: tạo shim `python3` trỏ về `python` (Python 3.13.2) trong PATH để các script lint/build (`check:ui-strings`, `check:bundle-budget`) không bị vấp stub WindowsApps mà không làm đổi `package.json`.
+  - Cập nhật định nghĩa cổng bundle: ghi nhận rõ cổng hiện hành của repo là `r3` (165 KiB); việc đổi cờ `r3` → `r1` toàn repo cần Owner phê duyệt.
+  - Thêm **Task 1.5** giải quyết trực tiếp ngân sách R1 (`BLK-FBD-003`, 157.20 KiB > 125 KiB) bằng cách thêm phân tách chunk `programming` vào `manualChunks` trong `apps/web-ui/vite.config.ts`.
+  - Bổ sung `selectionRevision: number` vào `FbdEditorState` trong Task 3 để hiện thực hóa revision authority trong reducer trước khi bất kỳ test nào tham chiếu.
+- **B. Nhóm Cao.**
+  - Đổi toàn bộ quy trình commit sang nhánh làm việc riêng `feat/fbd-edit`, không commit trực tiếp lên `main`.
+  - Thêm **Task 5.5** trích xuất `FbdEditorPane` từ `ProgramsTab.tsx` ra file riêng `design/editor/FbdEditorPane.tsx` để giảm tải file 3190 dòng và giữ chuẩn <800 dòng.
+  - Loại bỏ hoàn toàn `git add -p`; thay bằng quy tắc yêu cầu commit/stash 3 file FE dirty trước khi làm việc và chỉ `git add` đường dẫn cụ thể theo allowlist.
+  - Bổ sung bước tạo feature flag `isFbdEditEnabled` / `FBD_EDIT_ENABLED` trong `apps/web-ui/src/shared/config.ts` tại Task 2 phục vụ quy tắc rollback an toàn.
+- **C. Nhóm Trung bình.**
+  - Thêm tiêu chí nghiệm thu kiểm tra cổng dấu tiếng Việt (`npm run lint` chạy `check:ui-strings`) cho mọi task phát sinh chuỗi UI.
+  - Chốt E2E mới nằm độc lập tại `apps/web-ui/e2e/fbd-edit.spec.ts`, không đụng vào `apps/web-ui/e2e/programming.spec.ts`.
+  - Đổi tên test shell tránh đụng độ và chuyển toàn bộ lệnh PowerShell sang cú pháp Unix bash chuẩn.
+  - Mở rộng bảng truy vết yêu cầu: bổ sung cột và danh mục đối chiếu đầy đủ 38 kịch bản kiểm thử `TC-FBD-*`.
+- **D. Nhóm baseline sau merge.**
+  - Task 10 Step 2 viết lại thành tái dùng `shared/diagnosticFreshness.ts` có sẵn sau merge để xử lý trạng thái stale diagnostic của FBD, không tạo module mới.
+  - Task 9 Step 2 chuyển sang tái dùng component `shared/ProblemsDrawer.tsx` có sẵn sau merge cho panel Problems.
+  - Task 7 chuyển sang nối UI trực tiếp vào context FBD đã có trong `design/inspector/inspectorContext.ts`.
+  - Khóa chặt khối PID theo trạng thái `REVIEW_REQUIRED` có sẵn trong `api/generated/library_registry.ts` và `libraryCatalog.ts` (chốt chặn kỹ thuật cho `BLK-FBD-005`).
+- **E. Nhóm đồng bộ và tự chủ.**
+  - Giải quyết mâu thuẫn lệnh cấm: Task 8 được viết lại theo hướng composition qua `design/DesignWorkspacePage.tsx`, bảo vệ tuyệt đối 2 file dirty `ProgrammingHeader.tsx` và `ProgrammingLayout.tsx`.
+  - Cập nhật SHA baseline của plan neo chính xác vào commit HEAD sau merge `70d70c59` (146 file thay đổi).
+  - Bổ sung cấu hình mock route và storage state trong `e2e/fbd-edit.spec.ts` để bộ test E2E tự chủ dữ liệu, không cần backend live.
+
 ### Fixed — `ISS-PIO-31` bước 3: đối chiếu TRỌN chuỗi, không chỉ số slot (#375, 2026-09-03)
 
 - **Triệu chứng (khoảng trống còn lại sau bước 2).** Phép kiểm ở Check và Commission mới so
@@ -1746,7 +1773,7 @@ minh được (ngữ nghĩa `ST-WARN-004` trên chu kỳ quét thật; artifact 
 ### Tài liệu — Detailed Design FBD EDIT workspace (2026-08-31)
 
 - **`docs/superpowers/specs/2026-08-31-fbd-edit-design.md`** (`DDD-PGM02-FBD-EDIT-001`,
-  bản 0.2) — đặc tả Target FE-only cho FBD EDIT kéo-thả: giữ `FbdDocument`/reducer
+  bản 0.3) — đặc tả Target FE-only cho FBD EDIT kéo-thả: giữ `FbdDocument`/reducer
   canonical, pointer/touch/stylus interaction, multi-select/copy-paste, grid/snap,
   dock responsive, theme, network view kép, Inspector, Problems và cổng spike
   dependency. Bổ sung transport/Check semantics, state board, token/contrast,
