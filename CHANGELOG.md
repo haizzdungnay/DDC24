@@ -8,6 +8,27 @@
 
 ## [Unreleased]
 
+### Changed — dọn 17 Project rác trên bo Foxlinx; ô `PROJECT` thôi là dropdown (2026-09-03)
+
+- **Triệu chứng.** Ô `PROJECT` ở workspace Programming là dropdown **18 mục**, 17 trong đó là rác của
+  các đợt test (`SOAK-10P-*`, `MONITOR-BIND-*` ×8, `GHOST-CHECK-*`, `DEL-CHECK-*`, `FAULTPROBE-*`,
+  `FOX-P5-FULL-CHECK`). Trên một DDC — thiết bị chạy đúng **một** bộ chương trình — bề mặt ấy đọc như
+  một IDE quản nhiều tủ.
+- **Vì sao tích lại được (`F-SHELL-01`, vẫn MỞ).** `projects.archived` **chỉ được đọc**
+  (`WHERE p.archived=0`), **không dòng code nào ghi**; trigger `projects_no_delete` chặn xoá cứng; không
+  có route `DELETE`/archive. Soft-delete được thiết kế nhưng chưa bao giờ nối dây.
+- **Đã làm.** Sao lưu DB rồi đặt `archived=1` cho mọi project trừ `AHU-MASTER-SEQUENCE` — việc thật đang
+  chạy (`AHU_MasterSequence`, `Running/Healthy`, chu kỳ 1000 ms). Revision và lịch sử **không bị xoá**,
+  chỉ ẩn khỏi danh sách. Hoàn tác bằng `UPDATE projects SET archived=0` hoặc file sao lưu.
+- **Kết quả.** API trả **1** project; ô `PROJECT` chuyển từ dropdown thành **chữ tĩnh**. FE **đã có sẵn**
+  luật *"có đúng một Project thì canonicalize, không bắt chọn"* (`PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md`
+  §286) — cảm giác "giống IDE" hoàn toàn đến từ đống rác, không phải từ thiết kế bề mặt. Ba service vẫn
+  `active`, 0 panic/fatal/ERROR.
+- **CHƯA KHÉP LẠI.** Đây là chữa triệu chứng: đợt test kế tiếp lại tích rác đúng như cũ. Thao tác đi
+  thẳng vào SQLite nên **không sinh audit record** — lý do nữa để đường archive phải nằm trong sản phẩm.
+  Hồ sơ: `docs/07_records/test-evidence/programming/2026-09-03-project-cleanup-foxlinx.md`.
+
+
 ### Removed — `Project Settings` khỏi shell Programming (`PLAN-FE-SHELL-062`, 2026-09-03)
 
 - **Gỡ cái gì.** Mục thứ bảy `Project Settings` khỏi `ProgrammingFeatureRail` và `ProgrammingMobileNav`.
