@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-01` Binding bền có thể mang `extIndex`, đúng thứ `AC-PIO-ID-01` cấm (#377, 2026-09-03)
+
+- **Triệu chứng.** `upsertBindingCompat` chép **mọi khoá** client gửi nguyên vào tài liệu bền —
+  hình dạng binding v1 là **mở** có chủ ý, để lớp Check đọc được các trường Mapping tab ghi thêm. Hệ
+  quả không chủ ý: một `extIndex` lọt vào sẽ **nằm lại** trong binding đã seal.
+- **Nguyên nhân gốc.** `AC-PIO-ID-01` nói rõ *"`extIndex` chỉ là runtime slot/handle… Số `14` không
+  bao giờ là danh tính lâu dài của một điểm"*, và phép kiểm nó đòi là *"schema Binding bền không
+  được chứa trường nào mà mất nó thì không xác định lại được điểm"*. Nhánh v2
+  (`upsertBindingV2`) đã đóng cửa này bằng `decodeStrict`; **nhánh v1 thì không**, và nhánh v1 mới
+  là nhánh Mapping tab đang dùng.
+- **Vì sao nó nguy hiểm dù hôm nay chưa client nào gửi.** Đây đúng là **hạt giống** của lỗi mà cả
+  chuỗi `ISS-PIO-31` sinh ra để dẹp: một con số slot nằm trong tài liệu bền là một lời mời để người
+  đọc sau tin nó, rồi cấu hình dịch chỗ và lệnh bơm đi **sai thanh ghi mà không một dòng cảnh báo**.
+- **Cách sửa.** Cửa ghi **TỪ CHỐI** binding mang `extIndex` — ở cả thân binding lẫn nấp trong
+  `point`, không phân biệt hoa thường hay `snake_case`, vì ba tầng sinh JSON này độc lập nhau.
+- **Từ chối chứ không âm thầm gỡ bỏ:** gỡ bỏ sẽ khiến client tưởng nó đã lưu được thứ nó gửi. Không
+  client nào hôm nay gửi trường này — `ProgrammingPointIdentity` của FE chỉ có
+  `(category, pointId, deviceId)` — nên từ chối **không phá ai**, mà giữ cửa đóng cho mai sau.
+- **Một chú thích nói sai hiện thực, đã sửa.** `PointCatalogEntry.ExtIndex` còn ghi *"`ISS-PIO-31`
+  còn nợ bảng cấp phát bền, nên adapter chưa điền được"* — **không còn đúng** từ #487. Một chú thích
+  mô tả sai hệ thống là một khiếm khuyết thật: người đọc sau sẽ tưởng trường này luôn bằng 0.
+- **Phần còn lại của issue đã có sẵn từ #487** (`ISS-PIO-31`): Catalog phát `extIndex` **1-based** từ
+  **cùng adapter** mà đường Check dùng, danh tính bền `(deviceId, pointId)` canonical ở cả hai phía,
+  kèm test khoá.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · `go test -race ./internal/programming/application` **`ok`** (282,3 s).
+- **Một lần tiêm lỗi:** bỏ cửa chặn ⇒ **4 test FAIL** (ba biến thể cách viết + ca nấp trong `point`).
+  Khôi phục ⇒ xanh trở lại.
+
 ### Fixed — `ISS-PIO-35` FE hạ mọi quality lạ hoặc thiếu về `good`; huy hiệu GOOD trên điểm không ai đọc được (#381, 2026-09-03)
 
 - **Triệu chứng.** `normalizeQuality` kết thúc bằng `return 'good'`, nên `unknown`, `config_error`

@@ -952,6 +952,21 @@ func upsertBindingCompat(document map[string]any, raw []byte) error {
 	if !ok || !isUUID(bindingID) || !isUUID(variableID) {
 		return ErrInvalidRequest
 	}
+	// `AC-PIO-ID-01` (`ISS-PIO-31`/`ISS-PIO-01`): `extIndex` là HANDLE RUNTIME,
+	// không phải danh tính. Hình dạng mở ở trên nghĩa là mọi khoá client gửi
+	// đều được chép nguyên vào tài liệu bền — nên nếu không chặn ở đây, một
+	// `extIndex` lọt vào sẽ NẰM LẠI trong binding đã seal, và người đọc sau này
+	// hoàn toàn có thể tin nó. Đó đúng là hạt giống của lỗi mà cả chuỗi
+	// `ISS-PIO-31` sinh ra để dẹp: slot `14` bị coi là danh tính lâu dài của
+	// một điểm, rồi cấu hình dịch chỗ và lệnh bơm đi sai thanh ghi.
+	//
+	// TỪ CHỐI chứ không âm thầm gỡ bỏ: gỡ bỏ sẽ khiến client tưởng nó đã lưu
+	// được thứ nó gửi. Không client nào hôm nay gửi trường này —
+	// `ProgrammingPointIdentity` của FE chỉ có `(category, pointId, deviceId)`
+	// — nên từ chối không phá ai, mà giữ cửa đóng cho mai sau.
+	if bindingCarriesRuntimeSlotHandle(envelope.Binding) {
+		return ErrInvalidRequest
+	}
 	binding := make(map[string]any, len(envelope.Binding)+2)
 	for key, value := range envelope.Binding {
 		binding[key] = value
@@ -961,6 +976,27 @@ func upsertBindingCompat(document map[string]any, raw []byte) error {
 		binding["variable"] = variableName
 	}
 	return replaceOrAppend(document, "bindings", "bindingId", bindingID, binding, domain.MaxPackageBindings)
+}
+
+// bindingCarriesRuntimeSlotHandle bắt `extIndex` ở cả thân binding lẫn trong
+// `point`, và không phân biệt hoa thường: ba tầng sinh JSON này độc lập nhau,
+// nên một phép so khớp chính xác từng chữ sẽ để lọt đúng biến thể mà ai đó gõ
+// khác đi.
+func bindingCarriesRuntimeSlotHandle(binding map[string]any) bool {
+	if hasRuntimeSlotKey(binding) {
+		return true
+	}
+	point, _ := binding["point"].(map[string]any)
+	return hasRuntimeSlotKey(point)
+}
+
+func hasRuntimeSlotKey(object map[string]any) bool {
+	for key := range object {
+		if strings.EqualFold(key, "extIndex") || strings.EqualFold(key, "ext_index") {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveLocalVariable(document map[string]any, variableID string) (string, string) {

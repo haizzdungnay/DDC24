@@ -27,11 +27,18 @@ type PointCatalogEntry struct {
 	Quality    string `json:"quality"`
 	Value      any    `json:"value"`
 	ObservedAt string `json:"observedAt,omitempty"`
-	// ExtIndex — slot EXT 1-based mà runtime sẽ dùng cho điểm MB_RTU. 0 = CHƯA
-	// CẤP: `ISS-PIO-31` còn nợ bảng cấp phát bền, nên adapter chưa điền được.
-	// Đây không phải trường trang trí — `EvaluatePointMapEligibility` đọc nó để
-	// quyết định MB_RTU đã bind được chưa, nên ngày `ISS-PIO-31` phát số thật
-	// thì năng lực tự mở, không ai phải nhớ sửa thêm chỗ nào.
+	// ExtIndex — slot EXT 1-based mà runtime sẽ dùng cho điểm MB_RTU.
+	//
+	// `ISS-PIO-01`: đây là CHI TIẾT VẬN CHUYỂN Ở LỚP RUNTIME, KHÔNG phải danh
+	// tính (`AC-PIO-ID-01`). Danh tính bền là `(DeviceID, PointID)`, và chính
+	// nó — không phải con số này — là thứ Check/Commission phân giải lại mỗi
+	// lần nạp cấu hình. `extIndex` có mặt ở Catalog để FE ĐỐI CHIẾU và để
+	// `EvaluatePointMapEligibility` biết điểm đã bind được chưa; nó bị TỪ CHỐI
+	// ở cửa ghi binding bền (`upsertBindingCompat`).
+	//
+	// `0` = CHƯA CẤP: hoặc bố cục `ext` chưa đọc được, hoặc điểm không thuộc
+	// MB_RTU. Điểm MB_RTU mang `0` tự rơi về nhánh "chưa bind được" — thiếu số
+	// thì không đoán số.
 	ExtIndex int `json:"extIndex,omitempty"`
 	// Mapping là QUYẾT ĐỊNH eligibility do server cấp kèm lý do (`ISS-PIO-32`).
 	// FE render nguyên văn; nó KHÔNG được giữ bản luật thứ hai.
