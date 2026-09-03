@@ -6,6 +6,8 @@ import {
   buildFbdNetworkGeometry,
   fbdNodeHeight,
   fbdWirePath,
+  fbdWirePathBezier,
+  fbdWirePathOrthogonal,
 } from './geometry'
 
 function golden(): FbdDocument {
@@ -119,6 +121,48 @@ describe('buildFbdNetworkGeometry', () => {
 
     // hai điểm sát nhau vẫn có độ phình tối thiểu, không thành đoạn thẳng
     expect(fbdWirePath({ x: 0, y: 0 }, { x: 10, y: 0 })).toBe('M 0 0 C 40 0, -30 0, 10 0')
+  })
+
+  it('fbdWirePath hỗ trợ style ORTHOGONAL và BEZIER', () => {
+    const from = { x: 100, y: 50 }
+    const to = { x: 200, y: 150 }
+    expect(fbdWirePath(from, to, 'BEZIER')).toBe(fbdWirePathBezier(from, to))
+    expect(fbdWirePath(from, to, 'ORTHOGONAL')).toBe(fbdWirePathOrthogonal(from, to))
+    expect(fbdWirePath(from, to)).toBe(fbdWirePathBezier(from, to))
+  })
+
+  describe('fbdWirePathOrthogonal', () => {
+    it('đường thẳng ngang khi cùng Y và to.x >= from.x', () => {
+      expect(fbdWirePathOrthogonal({ x: 100, y: 50 }, { x: 200, y: 50 })).toBe('M 100 50 H 200')
+    })
+
+    it('thuận chiều khi to.x >= from.x + 40 (cornerRadius = 0)', () => {
+      // midX = (100 + 200) / 2 = 150
+      expect(fbdWirePathOrthogonal({ x: 100, y: 50 }, { x: 200, y: 150 })).toBe('M 100 50 H 150 V 150 H 200')
+    })
+
+    it('thuận chiều khi to.x >= from.x + 40 với cornerRadius > 0 bo tròn góc', () => {
+      const path = fbdWirePathOrthogonal({ x: 100, y: 50 }, { x: 200, y: 150 }, 8)
+      expect(path.startsWith('M 100 50')).toBe(true)
+      expect(path.includes('Q') || path.includes('A') || path.includes('C')).toBe(true)
+      expect(path.endsWith('H 200')).toBe(true)
+    })
+
+    it('ngược chiều / loopback khi to.x < from.x + 40', () => {
+      // from = {x: 200, y: 100}, to = {x: 100, y: 150} -> to.x < from.x + 40
+      const path = fbdWirePathOrthogonal({ x: 200, y: 100 }, { x: 100, y: 150 })
+      expect(path.startsWith('M 200 100')).toBe(true)
+      expect(path.endsWith('H 100')).toBe(true)
+    })
+  })
+
+  it('buildFbdNetworkGeometry nhận options wireStyle', () => {
+    const document = golden()
+    const network = document.networks[0]
+    const geomBezier = buildFbdNetworkGeometry(network, undefined, { wireStyle: 'BEZIER' })
+    const geomOrtho = buildFbdNetworkGeometry(network, undefined, { wireStyle: 'ORTHOGONAL' })
+    expect(geomBezier.wires[0].path.includes('C')).toBe(true)
+    expect(geomOrtho.wires[0].path.includes('H') || geomOrtho.wires[0].path.includes('V')).toBe(true)
   })
 })
 

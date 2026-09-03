@@ -48,6 +48,12 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       rollupOptions: {
         output: {
+          chunkFileNames(chunkInfo) {
+            if (chunkInfo.name === 'ProgramsTab' || chunkInfo.facadeModuleId?.includes('ProgramsTab')) {
+              return 'assets/fbd-editor-[hash].js'
+            }
+            return 'assets/[name]-[hash].js'
+          },
           manualChunks(id) {
             if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
               return 'react'

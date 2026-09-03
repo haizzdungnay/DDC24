@@ -8,6 +8,94 @@
 
 ## [Unreleased]
 
+### Fixed — `TASK-FBD-05-6` route Programming mất `<h1>`, đứt hợp đồng trợ năng `F-UX-15` (#478, 2026-09-03)
+
+- **Triệu chứng.** `route-menu-contract.test.ts` N-08 đỏ trên nhánh `feat/fbd-edit-v2`:
+  `ProgrammingHeader.tsx phải là nơi DUY NHẤT khai <h1> ... expected +0 to be 1`. Lỗi có sẵn trên
+  nhánh PR, **không** do gỡ xung đột sinh ra — `origin/main` có `<h1>`, `origin/feat/fbd-edit-v2`
+  thì không.
+- **Nguyên nhân gốc.** `a22e4f9` gỡ khối tiêu đề với lý do *"bỏ h1 trùng"*, nhưng không có cái nào
+  trùng cả: `grep '<h1' features/programming/` sau đó ra **0 thẻ thật** — cả sáu workspace của route
+  mất luôn mốc gốc của cây heading. Chú thích trong bốn trang con vẫn trỏ về header làm nơi giữ
+  `<h1>`, nên cây heading bắt đầu thẳng từ `<h2>`: người dùng trình đọc màn hình nhảy theo phím tắt
+  heading rơi vào trang con mà không biết đang ở nhánh nào. Cùng commit đó đã sửa `programming.spec.ts`
+  sang chờ nút `Làm mới`, nên e2e không còn bắt được sự vắng mặt này — chỉ còn N-08 bắt.
+- **Cách sửa.** Trả `<h1>` về `ProgrammingHeader` dưới dạng `sr-only`. Ý đồ **dọn chiều cao** của
+  `TASK-FBD-05-6` được giữ nguyên (thẻ chiếm 0 px bố cục, header vẫn thuần thanh nút, không lấy lại
+  ~40 px của vùng vẽ FBD), còn cây trợ năng có lại gốc. Không đảo ngược phần refactor nào khác của
+  commit. Đồng bộ chú thích đã lạc hậu ở `ProgrammingHeader.tsx` và `ProgrammingLayout.tsx`.
+- **Đo lại.** vitest `src` **2532/2532** PASS (206/206 file) · `npm run lint` exit 0
+  (`check:ui-strings` OK) · `npm run build` exit 0, chunk `programming` gzip **122.47 KiB** trong
+  ngân sách R3 165.00 KiB · `verify-project.sh --component layout` exit 0.
+
+### Refactored — `TASK-FBD-05-6` tối ưu hóa tách chunk Programming và giải phóng import tĩnh (2026-09-03)
+
+- **Trích xuất helper dùng chung:** Tách `collectStInterfaceVariables` và interface `StInterfaceVariable` từ `ProgramsTab.tsx` ra module riêng `stInterfaceVariables.ts`.
+- **Gỡ bỏ static import chéo:** Chuyển `mappingViewModel.ts` sang import từ `stInterfaceVariables.ts`, giải quyết triệt để cảnh báo Rollup `INEFFECTIVE_DYNAMIC_IMPORT` đối với `ProgramsTab.tsx`.
+- **Đạt chuẩn ngân sách bundle R1 & R3:** Kích thước gzip của chunk `programming-*.js` giảm từ 167.20 KiB xuống còn **122.61 KiB**, đạt chuẩn ngân sách R1 (125.00 KiB, dư địa 2.39 KiB) và R3 (165.00 KiB, dư địa 42.39 KiB).
+- **Kiểm chứng đầy đủ:** 108/108 test files (1603/1603 tests) của `features/programming` PASS 100%, `npm run build` hoàn thành không lỗi.
+
+### Refactored — `TASK-FBD-05-5` trích xuất FbdEditorPane ra module riêng từ ProgramsTab.tsx (2026-09-03)
+
+- **Trích xuất component:** Tạo `FbdEditorPane.tsx` tiếp nhận toàn bộ phần render editor pane, status bar, các nút Lưu/Kiểm tra/So sánh và logic POU FBD; đồng thời export `parseFbdDocument` an toàn (fallback `emptyFbdDocument` khi JSON hỏng) để `ProgramsTab.tsx` và Inspector tiếp tục tái dùng chung.
+- **Giảm tải file lớn:** `ProgramsTab.tsx` giảm 118 dòng (từ ~3190 dòng xuống còn ~3072 dòng), chuẩn bị tiền đề cho việc bọc lazy-load ở Task 5.6 mà không làm thay đổi hành vi runtime.
+- **Unit & Component tests:** 8/8 tests PASS (`FbdEditorPane.test.tsx`), bảo đảm 108/108 test files của toàn bộ `features/programming` tiếp tục xanh 100%.
+
+### Added — `TASK-FBD-05` nâng cấp SVG Canvas Viewport và cử chỉ Pointer/Touch cho FBD (2026-09-03)
+
+- **Canvas Viewport:** Tích hợp `viewport.ts` vào `FbdCanvas.tsx` với zoom kẹp trong khoảng `0.4..2.5`, hỗ trợ wheel zoom quanh con trỏ chuột, pan bằng chuột giữa/chuột phải/phím Space + kéo, và pinch zoom đa chạm 2 ngón.
+- **Marquee Selection & Multi-drag:** Hỗ trợ hộp chọn marquee kéo chuột trên nền trống (hoặc touch khi ở `marqueeMode`) tự động chọn tập node; kéo nhóm khối trong `multi-node` nguyên tử với snap lưới và cờ Alt bypass, đảm bảo không dispatch mutation nào trong frame `pointermove` (chỉ dispatch ở `pointerup`).
+- **Layers & A11y:** Tách `FbdCanvasLayers.tsx` quản lý phân tầng lưới SVG, wires, nodes, marquee preview và minimap; gắn nhãn trợ năng `role="button"`, `tabIndex={0}`, `aria-pressed` và `data-fbd-network-id`.
+- **Unit & Interaction tests:** 27/27 tests PASS (13 tests `FbdCanvas.test.tsx`, 14 tests `FbdCanvas.interaction.test.tsx`).
+
+### Added — `TASK-FBD-04` thêm wire routing Orthogonal và Auto Layout preview cho FBD (2026-09-03)
+
+- **Wire routing:** Mở rộng `geometry.ts` bổ sung hàm `fbdWirePathOrthogonal` (hỗ trợ nối vuông góc thẳng hàng, thuận chiều với bo góc mượt, và chạy vòng loopback ngược chiều khi đích nằm bên trái nguồn); `buildFbdNetworkGeometry` hỗ trợ tùy chọn `wireStyle: 'ORTHOGONAL' | 'BEZIER'`, giữ mặc định `BEZIER` để tương thích ngược hoàn toàn.
+- **Auto Layout planner:** Hiện thực `layout.ts` với hàm thuần túy `computeAutoLayout` phân loại 3 tầng cột (Sources -> Intermediate -> Sinks), tính chiều cao khối động qua `fbdNodeHeight`, hỗ trợ phạm vi `ALL` hoặc `SELECTED`, kiểm tra giới hạn tọa độ `[-100000..100000]` và sinh cảnh báo mà không làm biến đổi tài liệu gốc.
+- **Căn lề & phân bổ:** Cung cấp các helper `alignNodes` (LEFT, RIGHT, TOP, BOTTOM) và `distributeNodes` (HORIZONTAL, VERTICAL) xử lý mảng khối bất biến.
+- **Unit tests:** 29/29 tests PASS (11 tests `geometry.test.ts`, 18 tests `layout.test.ts`).
+
+### Added — `TASK-FBD-03` thêm selection model, selectionRevision và atomic reducer actions cho FBD (2026-09-03)
+
+- **Revision authority:** Bổ sung trường `selectionRevision: number` vào `FbdEditorState` (khởi tạo 0); tự động tăng 1 khi `commit()` tạo document mới hoặc đổi selection, và khi action `SELECT` đổi selection, hỗ trợ kiểm soát tính hợp lệ của giao dịch chỉnh sửa.
+- **Selection & Clipboard model:** Hiện thực `selection.ts` với `toggleNodeSelection`, `boxSelectNodes`, `isNodeSelected`, `getSelectedNodeIds`, `copySubgraph` (chỉ sao chép internal wires, tự động loại bỏ dây nối ra ngoài) và `createPastedSubgraph` (remap UUID canonical mới cho node/wire và áp dụng offset).
+- **Atomic Reducer Actions:** Bổ sung các action nguyên tử `MULTI_MOVE`, `SET_LAYOUT_BATCH`, `PASTE_SUBGRAPH` vào `commands.ts` với kiểm tra bounds `[-100000..100000]`, kiểm tra `expectedSelectionRevision`, đảm bảo mọi mutation commit đúng 1 lần snapshot hoặc giữ 0 diff khi có lỗi; nâng cấp `DELETE_SELECTION` hỗ trợ xóa tập node trong `multi-node`.
+- **Unit tests:** 45/45 tests PASS (34 tests `commands.test.ts`, 11 tests `selection.test.ts`).
+
+### Added — `TASK-FBD-02` thêm preference store, viewport math và feature flag FBD (2026-09-03)
+
+- **Feature flag rollback:** Thêm `isFbdEditEnabled` và `FBD_EDIT_ENABLED` trong `apps/web-ui/src/shared/config.ts` đọc từ `import.meta.env.VITE_FBD_EDIT` phục vụ kiểm soát kích hoạt và rollback an toàn FBD EDIT.
+- **Preference store:** Hiện thực `fbdPreferences.ts` lưu trữ cấu hình giao diện FBD (lưới, snap, wireStyle, theme, dock, viewMode) với `schemaVersion: 1`, khóa cô lập theo `userScope`/`projectId`, cơ chế fallback mặc định an toàn khi JSON hỏng hoặc storage ném ngoại lệ (`QuotaExceededError`/`SecurityError`), kèm 18 unit tests bao phủ toàn diện.
+- **Viewport math:** Hiện thực `viewport.ts` với các hàm thuần túy `screenToGraph`, `graphToScreen`, `snapPoint`, `clampScale`, `nextViewport` phục vụ tính toán không gian tọa độ canvas và hỗ trợ zoom/pan/snap mượt mà, độc lập DOM, kèm 10 unit tests.
+
+
+### Changed — `PLAN-FBD-EDIT` vá kế hoạch FBD EDIT theo baseline sau merge (#376, 2026-09-03)
+
+- **A. Nhóm Chặn.**
+  - Thêm **Task 0.5** gỡ chặn môi trường dev shell: tạo shim `python3` trỏ về `python` (Python 3.13.2) trong PATH để các script lint/build (`check:ui-strings`, `check:bundle-budget`) không bị vấp stub WindowsApps mà không làm đổi `package.json`.
+  - Cập nhật định nghĩa cổng bundle: ghi nhận rõ cổng hiện hành của repo là `r3` (165 KiB); việc đổi cờ `r3` → `r1` toàn repo cần Owner phê duyệt.
+  - Thêm **Task 1.5** (thực thi sau Task 5.5) giải quyết ngân sách R1 (`BLK-FBD-003`, 157.20 KiB > 125 KiB) bằng lazy-load `ProgramsTab.tsx` — chunk `programming-*.js` đã tách sẵn nhờ `lazy()` ở `App.tsx`, phần nặng là mã nguồn dự án chứ không phải dependency.
+  - Bổ sung `selectionRevision: number` vào `FbdEditorState` trong Task 3 để hiện thực hóa revision authority trong reducer trước khi bất kỳ test nào tham chiếu.
+- **B. Nhóm Cao.**
+  - Đổi toàn bộ quy trình commit sang nhánh làm việc riêng `feat/fbd-edit`, không commit trực tiếp lên `main`.
+  - Thêm **Task 5.5** trích xuất `FbdEditorPane` từ `ProgramsTab.tsx` ra file riêng `design/editor/FbdEditorPane.tsx` để giảm tải file 3190 dòng và giữ chuẩn <800 dòng.
+  - Loại bỏ hoàn toàn `git add -p`; thay bằng quy tắc yêu cầu commit/stash 3 file FE dirty trước khi làm việc và chỉ `git add` đường dẫn cụ thể theo allowlist.
+  - Bổ sung bước tạo feature flag `isFbdEditEnabled` / `FBD_EDIT_ENABLED` trong `apps/web-ui/src/shared/config.ts` tại Task 2 phục vụ quy tắc rollback an toàn.
+- **C. Nhóm Trung bình.**
+  - Thêm tiêu chí nghiệm thu kiểm tra cổng dấu tiếng Việt (`npm run lint` chạy `check:ui-strings`) cho mọi task phát sinh chuỗi UI.
+  - Chốt E2E mới nằm độc lập tại `apps/web-ui/e2e/fbd-edit.spec.ts`, không đụng vào `apps/web-ui/e2e/programming.spec.ts`.
+  - Đổi tên test shell tránh đụng độ và chuyển toàn bộ lệnh PowerShell sang cú pháp Unix bash chuẩn.
+  - Mở rộng bảng truy vết yêu cầu: bổ sung cột và danh mục đối chiếu đầy đủ 38 kịch bản kiểm thử `TC-FBD-*`.
+- **D. Nhóm baseline sau merge.**
+  - Task 10 Step 2 viết lại thành tái dùng `shared/diagnosticFreshness.ts` có sẵn sau merge để xử lý trạng thái stale diagnostic của FBD, không tạo module mới.
+  - Task 9 Step 2 chuyển sang tái dùng component `shared/ProblemsDrawer.tsx` có sẵn sau merge cho panel Problems.
+  - Task 7 chuyển sang nối UI trực tiếp vào context FBD đã có trong `design/inspector/inspectorContext.ts`.
+  - Khóa chặt khối PID theo trạng thái `REVIEW_REQUIRED` có sẵn trong `api/generated/library_registry.ts` và `libraryCatalog.ts` (chốt chặn kỹ thuật cho `BLK-FBD-005`).
+- **E. Nhóm đồng bộ và tự chủ.**
+  - Giải quyết mâu thuẫn lệnh cấm: Task 8 được viết lại theo hướng composition qua `design/DesignWorkspacePage.tsx`, bảo vệ tuyệt đối 2 file dirty `ProgrammingHeader.tsx` và `ProgrammingLayout.tsx`.
+  - Cập nhật SHA baseline của plan neo chính xác vào commit HEAD sau merge `70d70c59` (146 file thay đổi).
+  - Bổ sung cấu hình mock route và storage state trong `e2e/fbd-edit.spec.ts` để bộ test E2E tự chủ dữ liệu, không cần backend live.
+
 ### Added — `ISS-PIO-11` chở `BOARD_CAP_MAP` từ handshake IOP vào `io_shm` (#388, 2026-09-03)
 
 - **Triệu chứng.** Hợp đồng IOP **đã có** bản đồ năng lực từ lâu; `iobus` đọc nó ở handshake để kiểm
@@ -2035,15 +2123,24 @@ minh được (ngữ nghĩa `ST-WARN-004` trên chu kỳ quét thật; artifact 
 ### Tài liệu — Detailed Design FBD EDIT workspace (2026-08-31)
 
 - **`docs/superpowers/specs/2026-08-31-fbd-edit-design.md`** (`DDD-PGM02-FBD-EDIT-001`,
-  mới) — đặc tả Target FE-only cho FBD EDIT kéo-thả: giữ `FbdDocument`/reducer
+  bản 0.3) — đặc tả Target FE-only cho FBD EDIT kéo-thả: giữ `FbdDocument`/reducer
   canonical, pointer/touch/stylus interaction, multi-select/copy-paste, grid/snap,
   dock responsive, theme, network view kép, Inspector, Problems và cổng spike
-  dependency. Không mở rộng BE/Core/firmware; các blocker `variableId`, bundle,
-  error-catalog drift, browser evidence và PID approval được ghi owner/gate rõ.
+  dependency. Bổ sung transport/Check semantics, state board, token/contrast,
+  trace AC→test, network-all hit-test và batch atomicity sau review độc lập.
+  Không mở rộng BE/Core/firmware; blocker `variableId`, R1 bundle, timeout,
+  browser evidence, PID approval và sign-off được ghi owner/gate rõ.
 - **`docs/superpowers/specs/assets/fbd-edit-target-v1.svg`** và
   **`docs/superpowers/specs/assets/fbd-edit-mobile-readonly-v1.svg`** — visual
   target renderable cho desktop/tablet/mobile; dữ liệu trong ảnh chỉ minh họa,
   không phải bằng chứng runtime.
+- **`docs/superpowers/specs/assets/fbd-edit-states-v1.svg`** — state board renderable
+  cho loading/empty/error/permission/unknown/stale/offline/conflict; dữ liệu chỉ
+  minh họa, không phải runtime evidence.
+- *Kiểm chứng hồ sơ*: `PYTHONUTF8=1 python scripts/docs_iso_harness.py --expect`
+  PASS; SVG parse hợp lệ; reviewer độc lập vòng 3 kết luận
+  `APPROVED WITH RESIDUALS` (trace 38/38 scenario). Đây là evidence tài liệu, chưa phải evidence
+  implementation/target/HIL.
 
 
 ### Tài liệu — Review GAP ST Editor so với chuẩn "IEC 61131-3-aligned" (2026-08-31)

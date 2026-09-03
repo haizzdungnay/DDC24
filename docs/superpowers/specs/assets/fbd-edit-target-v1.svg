@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">FBD EDIT workspace target</title>
+  <desc id="desc">Illustrative desktop and tablet layouts for the FE-only FBD editor. Content is design illustration, not runtime evidence.</desc>
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M20 0H0V20" fill="none" stroke="#d9e6e3" stroke-width="1"/>
+    </pattern>
+    <style>
+      .page { fill:#101619; }
+      .panel { fill:#1b272c; stroke:#4c666b; stroke-width:1; }
+      .label { fill:#dce9e7; font:600 16px sans-serif; }
+      .small { fill:#a9bcbd; font:12px sans-serif; }
+      .accent { fill:#63e2c3; font:700 18px sans-serif; }
+      .canvas { fill:#f8fbfa; stroke:#4c666b; stroke-width:1; }
+      .node { fill:#eef7ff; stroke:#4d9cf6; stroke-width:2; }
+      .nodeText { fill:#1457a8; font:600 13px sans-serif; }
+      .port { fill:#263d45; }
+      .wire { fill:none; stroke:#637983; stroke-width:3; stroke-linejoin:round; }
+      .warning { fill:#2b2419; stroke:#b78b4c; stroke-width:1; }
+      .readonly { fill:#27343a; stroke:#687d82; stroke-width:1; }
+    </style>
+  </defs>
+  <rect class="page" width="1600" height="980"/>
+  <text class="accent" x="28" y="34">FBD EDIT target - illustrative only</text>
+  <text class="small" x="28" y="56">Canonical graph remains the source of truth; illustrations contain no runtime data.</text>
+
+  <!-- Desktop target -->
+  <rect class="panel" x="24" y="78" width="1552" height="520" rx="8"/>
+  <text class="accent" x="44" y="108">Desktop >= 1440 px</text>
+  <text class="small" x="1320" y="108">Theme: Follow web | Dock: user controlled</text>
+  <rect class="panel" x="44" y="126" width="220" height="360" rx="5"/>
+  <text class="label" x="58" y="151">POU Explorer</text>
+  <rect class="panel" x="58" y="166" width="190" height="28" rx="4"/>
+  <text class="small" x="68" y="185">Find POU...</text>
+  <text class="small" x="62" y="220">+ FBD</text>
+  <text class="small" x="62" y="246">+ ST</text>
+  <text class="small" x="62" y="278">Programs</text>
+  <text class="small" x="78" y="302">AHU_Main</text>
+  <text class="small" x="94" y="326">FBD</text>
+  <text class="small" x="94" y="350">PID_Loop</text>
+  <text class="small" x="78" y="382">Functions</text>
+  <text class="small" x="78" y="414">Function Blocks</text>
+
+  <rect class="canvas" x="276" y="126" width="730" height="360" rx="5"/>
+  <rect x="277" y="127" width="728" height="358" fill="url(#grid)"/>
+  <text class="small" x="294" y="151">AHU_Main.FBD (FBD)</text>
+  <text class="small" x="760" y="151">Undo | Redo | Delete | Grid | Snap | 100% | Fit | Auto Layout</text>
+  <path class="wire" d="M420 260 H500 Q520 260 520 280 V350 Q520 370 540 370 H632"/>
+  <path class="wire" d="M760 300 H824 Q844 300 844 320 V386 Q844 406 864 406 H920"/>
+  <rect class="node" x="322" y="226" width="150" height="68" rx="6"/>
+  <text class="nodeText" x="334" y="248">AI_Temp_SAT</text>
+  <text class="small" x="334" y="270">OUT | REAL</text>
+  <circle class="port" cx="472" cy="260" r="5"/>
+  <rect class="node" x="632" y="330" width="150" height="82" rx="6"/>
+  <text class="nodeText" x="644" y="352">PID</text>
+  <text class="small" x="644" y="374">SP | PV | OUT</text>
+  <circle class="port" cx="632" cy="370" r="5"/>
+  <circle class="port" cx="782" cy="370" r="5"/>
+  <rect class="node" x="920" y="388" width="150" height="68" rx="6" transform="translate(-30 0)"/>
+  <text class="nodeText" x="902" y="412">LIMIT</text>
+  <text class="small" x="902" y="434">IN | OUT</text>
+  <circle class="port" cx="890" cy="420" r="5"/>
+
+  <rect class="panel" x="1018" y="126" width="250" height="360" rx="5"/>
+  <text class="label" x="1032" y="151">Quick Library</text>
+  <text class="small" x="1032" y="178">Search blocks...</text>
+  <text class="small" x="1032" y="208">Common | HVAC | Logic</text>
+  <text class="small" x="1032" y="238">Math | Timer | Counter</text>
+  <rect class="warning" x="1030" y="258" width="220" height="44" rx="4"/>
+  <text class="small" x="1040" y="277">PID - REVIEW_REQUIRED</text>
+  <text class="small" x="1040" y="294">disabled until approval</text>
+  <text class="small" x="1032" y="334">Drag card to canvas</text>
+  <text class="small" x="1032" y="360">Click to place / Esc cancel</text>
+
+  <rect class="panel" x="1280" y="126" width="278" height="360" rx="5"/>
+  <text class="label" x="1294" y="151">Inspector</text>
+  <text class="small" x="1294" y="181">Block Instance</text>
+  <text class="small" x="1304" y="210">Name       PID_01</text>
+  <text class="small" x="1304" y="235">Type       PID</text>
+  <text class="small" x="1304" y="260">Description PID Controller</text>
+  <text class="small" x="1294" y="296">Parameters (collapsible)</text>
+  <text class="small" x="1304" y="322">Kp | Ki | Kd | Ts</text>
+  <text class="small" x="1294" y="358">I/O (port order preserved)</text>
+  <text class="small" x="1304" y="384">SP | PV | OUT</text>
+  <text class="small" x="1294" y="430">EDIT: no runtime values</text>
+
+  <rect class="panel" x="44" y="498" width="1514" height="82" rx="5"/>
+  <text class="label" x="60" y="524">Problems (default) | Runtime Watch | Search | Cross Reference</text>
+  <text class="small" x="60" y="550">Markers jump to exact node/port/wire. Unknown or unavailable data is stated, never replaced by 0.</text>
+  <rect class="panel" x="1320" y="510" width="220" height="58" rx="4"/>
+  <text class="small" x="1332" y="535">Mini Map (large graphs)</text>
+  <text class="small" x="1332" y="554">Orthogonal / Bezier view</text>
+
+  <!-- Tablet target -->
+  <rect class="panel" x="24" y="624" width="1552" height="300" rx="8"/>
+  <text class="accent" x="44" y="654">Tablet 768-1023 px (EDIT)</text>
+  <text class="small" x="1334" y="654">Touch + stylus + Chon vung</text>
+  <rect class="canvas" x="44" y="676" width="1170" height="190" rx="5"/>
+  <rect x="45" y="677" width="1168" height="188" fill="url(#grid)"/>
+  <text class="small" x="60" y="700">Canvas pane | two-finger pan/zoom | one-finger node drag</text>
+  <rect class="node" x="120" y="748" width="130" height="56" rx="6"/>
+  <text class="nodeText" x="132" y="772">INPUT</text>
+  <text class="small" x="132" y="790">REAL</text>
+  <rect class="node" x="440" y="770" width="130" height="56" rx="6"/>
+  <text class="nodeText" x="452" y="794">LIMIT</text>
+  <text class="small" x="452" y="812">IN | OUT</text>
+  <path class="wire" d="M250 776 H440"/>
+  <rect class="panel" x="1226" y="676" width="332" height="88" rx="5"/>
+  <text class="small" x="1240" y="702">Toolbar: Pan | Chon vung | Grid | Snap</text>
+  <text class="small" x="1240" y="724">Zoom | Fit | Auto Layout</text>
+  <text class="small" x="1240" y="746">Dock buttons open drawers</text>
+  <rect class="readonly" x="1226" y="778" width="332" height="88" rx="5"/>
+  <text class="small" x="1240" y="804">Phone &lt;768 px: READ ONLY</text>
+  <text class="small" x="1240" y="826">View/select, no mutation gestures</text>
+  <text class="small" x="1240" y="848">Focus and Escape remain available</text>
+</svg>

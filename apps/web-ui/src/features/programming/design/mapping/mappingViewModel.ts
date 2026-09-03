@@ -1,5 +1,5 @@
 import { collectFbdInterfaceVariables, type FbdDocument } from '../../fbd/model'
-import { collectStInterfaceVariables } from '../editor/ProgramsTab'
+import { collectStInterfaceVariables } from '../editor/stInterfaceVariables'
 import type {
   ProgrammingDraftDocument,
   ProgrammingPointCatalogEntry,

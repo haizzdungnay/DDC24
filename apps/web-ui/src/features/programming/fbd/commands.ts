@@ -17,9 +17,12 @@ import {
   type FbdNetwork,
   type FbdNode,
   type FbdParameterValue,
+  type FbdPoint,
   type FbdWire,
 } from './model'
 import { fbdPaletteEntry, isValidConstantLiteral } from './palette'
+
+export type { FbdPoint, FbdDocument } from './model'
 
 export type FbdKeyboardCommand =
   | 'ADD_NETWORK'
@@ -55,10 +58,28 @@ export const FBD_HISTORY_LIMIT = FBD_KEYBOARD_REGISTRY.historyLimit
 export type FbdSelection =
   | { kind: 'network'; networkId: string }
   | { kind: 'node'; networkId: string; nodeId: string }
+  | { kind: 'multi-node'; networkId: string; nodeIds: string[] }
   | { kind: 'port'; networkId: string; nodeId: string; portId: string }
   | { kind: 'wire'; networkId: string; wireId: string }
 
 type FbdPortSelection = Extract<FbdSelection, { kind: 'port' }>
+
+export function areSelectionsEqual(a: FbdSelection | null, b: FbdSelection | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.kind !== b.kind || a.networkId !== b.networkId) return false
+  if (a.kind === 'network') return true
+  if (a.kind === 'node' && b.kind === 'node') return a.nodeId === b.nodeId
+  if (a.kind === 'port' && b.kind === 'port') return a.nodeId === b.nodeId && a.portId === b.portId
+  if (a.kind === 'wire' && b.kind === 'wire') return a.wireId === b.wireId
+  if (a.kind === 'multi-node' && b.kind === 'multi-node') {
+    if (a.nodeIds.length !== b.nodeIds.length) return false
+    const sortedA = [...a.nodeIds].sort()
+    const sortedB = [...b.nodeIds].sort()
+    return sortedA.every((val, idx) => val === sortedB[idx])
+  }
+  return false
+}
 
 /**
  * BUG-012 — bản cũ ghi thẳng câu tiếng Việt vào `announcement`, nên vùng
@@ -74,6 +95,7 @@ export interface FbdAnnouncement {
 export interface FbdEditorState {
   document: FbdDocument
   selection: FbdSelection | null
+  selectionRevision: number
   connectionFromPortId: string | null
   past: FbdDocument[]
   future: FbdDocument[]
@@ -109,6 +131,26 @@ export type FbdEditorAction =
   | { type: 'DELETE_SELECTION' }
   | { type: 'MOVE_NODE'; delta: -1 | 1 }
   | { type: 'SET_NODE_POSITION'; networkId: string; nodeId: string; x: number; y: number }
+  | {
+      type: 'MULTI_MOVE'
+      networkId: string
+      moves: Array<{ nodeId: string; x: number; y: number }>
+      expectedSelectionRevision?: number
+    }
+  | {
+      type: 'SET_LAYOUT_BATCH'
+      networkId: string
+      positions: Record<string, FbdPoint>
+      expectedSelectionRevision?: number
+    }
+  | {
+      type: 'PASTE_SUBGRAPH'
+      targetNetworkId: string
+      nodes: FbdNode[]
+      wires: FbdWire[]
+      layoutNodes?: Record<string, FbdPoint>
+      expectedSelectionRevision?: number
+    }
   | { type: 'SET_NODE_VARIABLE'; networkId: string; nodeId: string; variable: string; unit: string | null }
   | { type: 'SET_NODE_VALUE'; networkId: string; nodeId: string; value: FbdParameterValue }
   | { type: 'SET_NODE_TYPE'; networkId: string; nodeId: string; dataType: FbdDataType }
@@ -120,6 +162,7 @@ export function createFbdEditorState(document: FbdDocument, canEdit = true): Fbd
   return {
     document: canonicalizeFbdDocument(document),
     selection: null,
+    selectionRevision: 0,
     connectionFromPortId: null,
     past: [],
     future: [],
@@ -143,6 +186,7 @@ function commit(
     ...state,
     document: canonicalizeFbdDocument(document),
     selection,
+    selectionRevision: state.selectionRevision + 1,
     connectionFromPortId: null,
     past,
     future: [],
@@ -213,6 +257,17 @@ function deleteSelection(document: FbdDocument, selection: FbdSelection): boolea
     if (!node) return false
     const portIds = new Set(node.ports.map((port) => port.id))
     network.nodes = network.nodes.filter((item) => item.id !== selection.nodeId)
+    network.wires = network.wires.filter((wire) => !portIds.has(wire.from.portId) && !portIds.has(wire.to.portId))
+    network.nodes.sort((left, right) => left.executionOrder - right.executionOrder)
+      .forEach((item, index) => { item.executionOrder = index })
+    return true
+  }
+  if (selection.kind === 'multi-node') {
+    const toDeleteSet = new Set(selection.nodeIds)
+    const nodesToDelete = network.nodes.filter((item) => toDeleteSet.has(item.id))
+    if (nodesToDelete.length === 0) return false
+    const portIds = new Set(nodesToDelete.flatMap((node) => node.ports.map((port) => port.id)))
+    network.nodes = network.nodes.filter((item) => !toDeleteSet.has(item.id))
     network.wires = network.wires.filter((wire) => !portIds.has(wire.from.portId) && !portIds.has(wire.to.portId))
     network.nodes.sort((left, right) => left.executionOrder - right.executionOrder)
       .forEach((item, index) => { item.executionOrder = index })
@@ -296,8 +351,17 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       }
     case 'SET_CAN_EDIT':
       return { ...state, canEdit: action.canEdit, announcement: { code: action.canEdit ? 'edit-enabled' : 'read-only-mode' } }
-    case 'SELECT':
-      return { ...state, selection: action.selection, announcement: { code: action.selection ? 'selection-changed' : 'selection-cleared' } }
+    case 'SELECT': {
+      if (areSelectionsEqual(state.selection, action.selection)) {
+        return state
+      }
+      return {
+        ...state,
+        selection: action.selection,
+        selectionRevision: state.selectionRevision + 1,
+        announcement: { code: action.selection ? 'selection-changed' : 'selection-cleared' },
+      }
+    }
     case 'SELECT_PORT_OFFSET': { // Duyệt tuần tự bảo đảm thao tác hoàn tất chỉ bằng bàn phím.
       const ports = allPorts(state.document)
       if (!ports.length) return reject(state, { code: 'no-ports' })
@@ -382,6 +446,138 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const layout = document.layout ?? { schemaVersion: 1 as const, nodes: {} }
       document.layout = { schemaVersion: 1, nodes: { ...layout.nodes, [action.nodeId]: { x, y } } }
       return commit(state, document, { code: 'block-moved' })
+    }
+    case 'MULTI_MOVE': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      if (
+        action.expectedSelectionRevision !== undefined &&
+        action.expectedSelectionRevision !== state.selectionRevision
+      ) {
+        return reject(state, { code: 'selection-revision-mismatch' })
+      }
+      const document = cloneFbdDocument(state.document)
+      const network = document.networks.find((item) => item.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+
+      const layout = document.layout ?? { schemaVersion: 1 as const, nodes: {} }
+      const newNodesMap = { ...layout.nodes }
+      let hasChanges = false
+
+      for (const move of action.moves) {
+        if (!network.nodes.some((n) => n.id === move.nodeId)) {
+          return reject(state, { code: 'node-not-found' })
+        }
+        const x = clampLayoutCoordinate(move.x)
+        const y = clampLayoutCoordinate(move.y)
+        if (x === null || y === null) return reject(state, { code: 'invalid-position' })
+
+        const currentPos = newNodesMap[move.nodeId]
+        if (!currentPos || currentPos.x !== x || currentPos.y !== y) {
+          newNodesMap[move.nodeId] = { x, y }
+          hasChanges = true
+        }
+      }
+
+      if (!hasChanges) {
+        return state
+      }
+
+      document.layout = { schemaVersion: 1, nodes: newNodesMap }
+      return commit(state, document, { code: 'blocks-moved' })
+    }
+    case 'SET_LAYOUT_BATCH': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      if (
+        action.expectedSelectionRevision !== undefined &&
+        action.expectedSelectionRevision !== state.selectionRevision
+      ) {
+        return reject(state, { code: 'selection-revision-mismatch' })
+      }
+      const document = cloneFbdDocument(state.document)
+      const network = document.networks.find((item) => item.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+
+      const layout = document.layout ?? { schemaVersion: 1 as const, nodes: {} }
+      const newNodesMap = { ...layout.nodes }
+      let hasChanges = false
+
+      for (const [nodeId, pt] of Object.entries(action.positions)) {
+        if (!network.nodes.some((n) => n.id === nodeId)) {
+          return reject(state, { code: 'node-not-found' })
+        }
+        const x = clampLayoutCoordinate(pt.x)
+        const y = clampLayoutCoordinate(pt.y)
+        if (x === null || y === null) return reject(state, { code: 'invalid-position' })
+
+        const currentPos = newNodesMap[nodeId]
+        if (!currentPos || currentPos.x !== x || currentPos.y !== y) {
+          newNodesMap[nodeId] = { x, y }
+          hasChanges = true
+        }
+      }
+
+      if (!hasChanges) {
+        return state
+      }
+
+      document.layout = { schemaVersion: 1, nodes: newNodesMap }
+      return commit(state, document, { code: 'blocks-moved' })
+    }
+    case 'PASTE_SUBGRAPH': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      if (
+        action.expectedSelectionRevision !== undefined &&
+        action.expectedSelectionRevision !== state.selectionRevision
+      ) {
+        return reject(state, { code: 'selection-revision-mismatch' })
+      }
+      if (nodeCount(state.document) + action.nodes.length > FBD_MAX_BLOCKS) {
+        return reject(state, { code: 'block-limit-reached' })
+      }
+      if (wireCount(state.document) + action.wires.length > FBD_MAX_WIRES) {
+        return reject(state, { code: 'wire-limit-reached' })
+      }
+
+      const allNewIds = [
+        ...action.nodes.flatMap((n) => [n.id, ...n.ports.map((p) => p.id)]),
+        ...action.wires.map((w) => w.id),
+      ]
+      if (!identitiesAreNew(state.document, allNewIds)) {
+        return reject(state, { code: 'block-uuid-invalid' })
+      }
+
+      const document = cloneFbdDocument(state.document)
+      const network = document.networks.find((item) => item.id === action.targetNetworkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+
+      let nextOrder = network.nodes.length
+      const nodesToAdd = action.nodes.map((node) => ({
+        ...node,
+        executionOrder: nextOrder++,
+      }))
+      network.nodes.push(...nodesToAdd)
+      network.wires.push(...action.wires)
+
+      if (action.layoutNodes && Object.keys(action.layoutNodes).length > 0) {
+        const layout = document.layout ?? { schemaVersion: 1 as const, nodes: {} }
+        const newNodesMap = { ...layout.nodes }
+        for (const [nodeId, pt] of Object.entries(action.layoutNodes)) {
+          const x = clampLayoutCoordinate(pt.x)
+          const y = clampLayoutCoordinate(pt.y)
+          if (x !== null && y !== null) {
+            newNodesMap[nodeId] = { x, y }
+          }
+        }
+        document.layout = { schemaVersion: 1, nodes: newNodesMap }
+      }
+
+      const newSelection: FbdSelection = {
+        kind: 'multi-node',
+        networkId: action.targetNetworkId,
+        nodeIds: action.nodes.map((n) => n.id),
+      }
+
+      return commit(state, document, { code: 'subgraph-pasted' }, newSelection)
     }
     case 'SET_NODE_VARIABLE': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
@@ -508,6 +704,10 @@ export function translateFbdAnnouncement(pick: (vi: string, en: string) => strin
     case 'node-type-set': return pick(`Đã đổi kiểu sang ${p.type}`, `Type changed to ${p.type}`)
     case 'invalid-instance-name': return pick('Tên instance không hợp lệ', 'Invalid instance name')
     case 'node-fb-params-set': return pick('Đã cập nhật tham số function block', 'Function block parameters updated')
+    case 'selection-revision-mismatch': return pick('Phiên bản vùng chọn không khớp', 'Selection revision mismatch')
+    case 'wire-limit-reached': return pick('Đã đạt giới hạn wire', 'Reached wire limit')
+    case 'blocks-moved': return pick('Đã đổi vị trí các block trên canvas', 'Blocks moved on canvas')
+    case 'subgraph-pasted': return pick('Đã dán subgraph vào canvas', 'Subgraph pasted to canvas')
     case 'nothing-to-undo': return pick('Không còn thay đổi để hoàn tác', 'No more changes to undo')
     case 'undone': return pick('Đã hoàn tác', 'Undone')
     case 'nothing-to-redo': return pick('Không còn thay đổi để làm lại', 'No more changes to redo')

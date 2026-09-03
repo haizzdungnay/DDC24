@@ -18,19 +18,22 @@ import type { ProgrammingEditingContext } from './ProgrammingLayout'
  * KHÔNG hiện. Một nút chết luôn nằm đó dạy người dùng rằng nó không dùng được,
  * và họ sẽ thôi nhìn nó cả lúc nó sống.
  *
- * TIÊU ĐỀ THEO TRANG (hợp nhất `DEV-PROG-013/014` với `PR #311`)
+ * TIÊU ĐỀ ROUTE — `<h1>` ẨN NHÌN, KHÔNG ẨN VỚI TRÌNH ĐỌC MÀN HÌNH
  * -------------------------------------------------------------
- * Hai lát đụng nhau ở đúng chỗ này và cả hai đều có lý:
+ * `TASK-FBD-05-6` bỏ khối tiêu đề nhìn thấy được ở đây, và bỏ đúng: dải ngữ
+ * cảnh ngay phía trên đã nói người dùng đang ở đâu, còn ~40 px chiều cao mà
+ * khối đó chiếm là chiều cao cắt thẳng vào vùng vẽ FBD.
  *
- * - `DEV-PROG-013/014` bỏ phụ đề dài vì nó lặp lại thứ dải ngữ cảnh ngay trên
- *   đã nói, mà chiếm ~40 px chiều cao của chính vùng soạn thảo.
- * - `PR #311` muốn Tổng quan có tiêu đề lớn kèm phụ đề, vì đó là trang đích đầu
- *   tiên và người dùng cần biết mình vừa mở cái gì.
+ * Nhưng "không cần nhìn thấy" khác "không cần tồn tại". Gỡ luôn thẻ `<h1>` thì
+ * cả sáu workspace của route Programming mất mốc gốc của cây heading: người
+ * dùng trình đọc màn hình nhảy theo phím tắt heading sẽ rơi thẳng vào `<h2>`
+ * của trang con mà không biết mình đang ở nhánh nào, và hợp đồng `F-UX-15`
+ * (`route-menu-contract.test.ts`, N-08 — mỗi route đúng MỘT `<h1>`, do layout
+ * sở hữu) đứt. Chú thích trong cả bốn trang con vẫn trỏ về đây làm nơi giữ
+ * `<h1>`, nên đây là chỗ duy nhất trả lại được nó.
  *
- * Điều kiện hoà giải là ROUTE: chỉ **Tổng quan** mới có ngân sách chiều cao để
- * mang phụ đề — nó không có trình soạn thảo tranh chỗ. Năm workspace còn lại
- * giữ tiêu đề một dòng. Đây không phải thoả hiệp nửa vời mà là điều kiện đúng:
- * ràng buộc chiều cao chỉ tồn tại ở nơi có editor.
+ * Vì vậy `<h1>` ở lại dưới dạng `sr-only`: chiếm 0 px bố cục — giữ nguyên ý đồ
+ * dọn chiều cao của `TASK-FBD-05-6` — nhưng vẫn nằm trong cây trợ năng.
  */
 export function ProgrammingHeader({
   onRefresh,
@@ -43,29 +46,11 @@ export function ProgrammingHeader({
 }) {
   const { pick } = useI18n()
   const location = useLocation()
-  const overview = location.pathname === '/eng/programming' || location.pathname === '/eng/programming/'
   const mapping = location.pathname.includes('/mapping')
   return (
-    <header className={`flex flex-wrap justify-between gap-2 ${mapping ? 'flex-col items-stretch' : overview ? 'items-start' : 'items-center'}`}>
-      <div className={`min-w-0 ${mapping ? 'sr-only' : ''}`}>
-        {overview && !mapping && (
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--c-accent)]">
-            Programming workstation
-          </p>
-        )}
-        <h1 className={`${overview ? 'text-2xl' : 'text-xl'} font-bold text-[var(--c-text)]`}>
-          {pick('Lập trình điều khiển', 'Control programming')}
-        </h1>
-        {overview && !mapping && (
-          <p className="mt-1 text-sm text-[var(--c-text-dim)]">
-            {pick(
-              'Theo dõi ứng dụng đang chạy, tiếp tục bản nháp và xử lý các vấn đề cần chú ý.',
-              'Monitor the running application, continue draft work, and resolve items requiring attention.'
-            )}
-          </p>
-        )}
-      </div>
-      <div className={`flex flex-wrap items-center gap-2 ${mapping ? 'justify-end border-b border-[var(--c-border)] pb-2' : ''}`}>
+    <header className="flex w-full flex-col items-stretch gap-2">
+      <h1 className="sr-only">{pick('Lập trình điều khiển', 'Control programming')}</h1>
+      <div className={`flex w-full flex-wrap items-center justify-end gap-2 ${mapping ? 'border-b border-[var(--c-border)] pb-2' : ''}`}>
         {actions && (
           <>
             {/* Tên truy cập khác nút `Lưu` của thanh công cụ trình soạn thảo,
