@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### Verified — `ISS-MBW-01` `TC-MBRTU-I-15A` đóng: điều khiển relay CK-508 từ ứng dụng, đo trên bo thật (2026-09-03)
+
+- **Kết quả.** Ghi thử từ `/api/v1/modbus/write-test` **đóng và mở được relay**, lặp lại 4 lần trên
+  CK-508 slave 04 Loop 1 (`rs485-1`, 9600 8N1). `TC-MBRTU-I-15A` chuyển từ chưa có bằng chứng sang
+  PASS. Đây là lần đầu đường ghi Modbus RTU **qua ứng dụng** được chứng minh chạm tới thiết bị —
+  trước đó chỉ có bằng chứng điều khiển RS-485 trực tiếp, không qua stack.
+- **Chuỗi bằng chứng, ba tầng độc lập.**
+  - Web API: `{"point_id":"CK50804-DO1","applied_value":1,"status":"success"}` (HTTP 200).
+  - Core audit: `AUDIT web_cmd id=… user=admin point=EXT1 op=write value=1 result=accepted` — xác
+    nhận đúng điều mà `ISS-MBW-01` sửa: lệnh xuống Core mang tên **`EXT1`**, không phải `point_id`
+    thô `CK50804-DO1` (chuỗi có dấu `-` nên `parse_point_name` trả false).
+  - `plc_shm` ext[0] (offset 6704): `name=CK50804-DO1`, `setpoint=1`, `writable=1` → và `value=1`
+    đọc **ngược từ thiết bị**, không phải echo của lệnh.
+- **Bố cục slot runtime xác nhận thiết kế "lấy slot từ SHM".** Sau khi thêm CK-509 slave 06, bo có
+  24 điểm: `EXT1‑8` CK508‑04 DO (writable), `EXT9‑16` CK509‑06 DI (**read-only**), `EXT17‑24`
+  CK509‑06 DO. Tính slot từ file cấu hình thay vì từ runtime là cả dải sau dịch chỗ mỗi lần thêm
+  hoặc tắt một thiết bị.
+- **Trạng thái sau kiểm tra:** DO1 trả về OFF, cả 8 DO OFF, quality GOOD, `write_failed=0`,
+  `write_dropped=0`, `total_errors=0`.
+
+### Finding — `ISS-MBW-02` lệnh ghi Modbus RTU mất 60 s đến hơn 120 s mới xuống dây (2026-09-03)
+
+- **Triệu chứng.** Đo trên bo: từ lúc `write-test` trả `200 success` tới lúc relay thật đổi trạng
+  thái mất **~60 s** ở lần đo mịn nhất, và **>120 s** ở một lần khác — không ổn định. Người vận
+  hành bấm nút, thấy "thành công", rồi nhìn thiết bị không nhúc nhích trong cả phút.
+- **Đã khoanh vùng: lỗi nằm ở ĐƯỜNG GHI, không phải đường đọc.** `updatedAt` của chính điểm đó nhảy
+  đúng nhịp 3 s khi lấy mẫu cách nhau 3 s ⇒ chuỗi đọc device → `ExtCache` → datagram → `plc_shm` →
+  API tươi trong khoảng 1 s. Cấu hình cũng không giải thích được: `poll_ms=1000`, `timeout_ms=300`.
+- **Không phải hệ quả của `ISS-MBW-01`.** Phần web-api đã sửa đưa lệnh tới Core trong đúng một chu
+  kỳ scan — `plc_shm.ext[].setpoint` đổi **ngay** sau khi API trả 200. Độ trễ phát sinh sau đó,
+  trong `iobus`.
+- **Nghi vấn cần kiểm chứng (CHƯA xác nhận).** `BusWorker::poll_once` chỉ gọi `flush_pending()` cho
+  slave **đang tới hạn đọc** trong vòng đó (`bus_worker.cpp`, vòng `due`); lệnh ghi vì thế không có
+  nhịp phát riêng mà phải chờ ghép vào nhịp đọc. Với `poll_ms=1000` thì điều đó lẽ ra ≤1 s, nên
+  riêng nó **không đủ** giải thích 60 s — cần đo thêm trong `iobus` (log thời điểm `enqueue_write`
+  so với thời điểm phát FC05) trước khi kết luận.
+- **Chưa sửa.** Sửa nằm trong `iobus`, và kiểm chứng bất kỳ bản sửa nào đều cần deploy lại `iobus`
+  xuống bo.
+
 ### Fixed — `ISS-MBW-01` ghi thử Modbus RTU luôn trả 503: endpoint gọi một hàm không tồn tại (2026-09-03)
 
 - **Triệu chứng.** Trên bo Foxlinx với CK-508 slave 04 ở Loop 1 (`rs485-1` → `/dev/ttyS5`, 9600 8N1,

@@ -74,7 +74,7 @@ Không được dùng `TC-MBRTU-U/I/S` để chuyển `VR-MBRTU-001/004/011/012`
 | TC-MBRTU-I-13 | Read/write permission | Viewer không read-test; Operator không write-test; Admin được cả hai | `SEC-REQ-MBRTU-001` |
 | TC-MBRTU-I-14 | Audit | mỗi mutation/write có actor, target, old/new, correlation, result | `SEC-REQ-MBRTU-001` |
 | TC-MBRTU-I-15 | Write path — reject | read-only, quality ≠ GOOD, ngoài `min/max`, revision cũ, queue đầy đều bị từ chối đúng mã | `SWR-REQ-MBRTU-006` |
-| TC-MBRTU-I-15A | Write path — accept | Admin ghi một Point `read_write` ⇒ lệnh ĐẾN Core dưới tên `EXT<slot runtime>` (không phải `point_id` thô); slot lấy từ `plc_shm`, không tính lại từ file cấu hình | `SWR-REQ-MBRTU-006` |
+| TC-MBRTU-I-15A ✅ | Write path — accept | Admin ghi một Point `read_write` ⇒ lệnh ĐẾN Core dưới tên `EXT<slot runtime>` (không phải `point_id` thô); slot lấy từ `plc_shm`, không tính lại từ file cấu hình | `SWR-REQ-MBRTU-006` |
 | TC-MBRTU-I-16 | Write path — no replay | restart iobus/core/web sau write ⇒ không byte nào được phát lại | `SWR-REQ-MBRTU-006` |
 | TC-MBRTU-I-17 | Không tự ghi safe/default | mất liên lạc rồi phục hồi ⇒ không có write tự phát | `SWR-REQ-MBRTU-006` |
 | TC-MBRTU-I-18 | ABI snapshot v2 | layout/magic/version/size static assertion; fixture cross-language C++ ↔ Go ↔ TS | `IF-REQ-MBRTU-001` |
