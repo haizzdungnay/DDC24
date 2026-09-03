@@ -124,6 +124,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			// T59-302: container package v2 do CHÍNH writer production ghi; BE
 			// chỉ điều phối, không cài lại định dạng.
 			Packager: programmingcompiler.ProcessPackager{BinaryPath: cfg.ProgrammingPackagerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout},
+			// ISS-PIO-31: Check phân giải lại slot `ext` từ cấu hình fieldbus
+			// đang chạy thay vì tin con số lưu trong binding.
+			ModbusSlots: app.programmingModbusSlots(),
 		})
 		if checkErr != nil {
 			_ = store.Close()
@@ -134,6 +137,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
 			ControllerID: cfg.ProgrammingTargetID, StagingRoot: cfg.ProgrammingStagingDir,
 			Lease: 30 * time.Second,
+			// ISS-PIO-31: đối chiếu lại slot Modbus ngay trước activation —
+			// cấu hình có thể đã đổi sau khi Check xanh.
+			ModbusSlots: app.programmingModbusSlots(),
 		})
 		if operationErr != nil {
 			_ = store.Close()

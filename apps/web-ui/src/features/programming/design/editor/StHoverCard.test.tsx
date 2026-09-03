@@ -35,7 +35,7 @@ const PAD_LEFT = 12
 const tonEntry: CatalogEntry = {
   name: 'TON', kind: 'FUNCTION_BLOCK', category: 'Timers', scope: 'SYSTEM',
   stateful: true, languages: ['ST', 'FBD'],
-  usability: { kind: 'USABLE' },
+  usability: { kind: 'USABLE' }, iecClassification: 'IEC_STANDARD',
   ports: [
     { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
     { name: 'PT', direction: 'INPUT', dataType: 'TIME' },

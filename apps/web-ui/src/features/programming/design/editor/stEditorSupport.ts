@@ -40,7 +40,8 @@ import { PROGRAMMING_REVIEW_GATED_FEATURES } from '../../api/generated/profile'
 export const ST_KEYWORDS = [
   'PROGRAM', 'END_PROGRAM',
   'FUNCTION', 'END_FUNCTION', 'FUNCTION_BLOCK', 'END_FUNCTION_BLOCK',
-  'VAR_INPUT', 'VAR_OUTPUT', 'VAR_GLOBAL', 'VAR_EXTERNAL', 'VAR', 'RETAIN', 'END_VAR',
+  'VAR_INPUT', 'VAR_OUTPUT', 'VAR_IN_OUT', 'VAR_TEMP',
+  'VAR_GLOBAL', 'VAR_EXTERNAL', 'VAR', 'RETAIN', 'END_VAR',
   'IF', 'THEN', 'ELSIF', 'ELSE', 'END_IF',
   'CASE', 'OF', 'END_CASE',
   'FOR', 'END_FOR', 'WHILE', 'END_WHILE', 'REPEAT', 'UNTIL', 'END_REPEAT',
@@ -82,6 +83,13 @@ export const ST_FB_TYPE_NAMES: readonly string[] = FBD_PALETTE
   .filter((entry) => entry.kind === 'FUNCTION_BLOCK')
   .map((entry) => entry.typeRef)
 
+/** `ISS-STED-17` — tên khối không thuộc thư viện chuẩn IEC, lấy từ registry
+ *  sinh tự động chứ không khai tay. */
+const EXTENSION_NAMES = new Set<string>(
+  FBD_PALETTE.filter((entry) => entry.iecClassification === 'MANUFACTURER_EXTENSION')
+    .map((entry) => entry.typeRef),
+)
+
 const KEYWORD_SET = new Set<string>(ST_KEYWORDS)
 const TYPE_SET = new Set<string>(ST_TYPE_NAMES)
 const FUNCTION_SET = new Set<string>(ST_FUNCTION_NAMES)
@@ -90,6 +98,45 @@ const FB_TYPE_SET = new Set<string>(ST_FB_TYPE_NAMES)
 export type StTokenKind =
   | 'keyword' | 'type' | 'function' | 'fb-type' | 'number' | 'time' | 'comment'
   | 'operator' | 'punctuation' | 'identifier' | 'whitespace'
+
+/**
+ * `ISS-STED-15` — MÀU CỦA TỪNG LOẠI TOKEN, khai một lần ở đây.
+ *
+ * Trước lát này bảng màu là một `const` cục bộ trong `ProgramsTab.tsx`, nên
+ * test đo tương phản không đọc được nó mà phải chép lại — và một bản chép sẽ
+ * trôi khỏi bản thật đúng vào lúc ai đó đổi màu, để lại một test vẫn xanh cho
+ * một bảng màu không còn tồn tại.
+ *
+ * `null` = không tô màu riêng (khoảng trắng), nên không có gì để đo.
+ */
+export const ST_TOKEN_COLOR: Record<StTokenKind, string | null> = {
+  keyword: '--c-accent',
+  type: '--c-info',
+  function: '--c-good-fg',
+  'fb-type': '--c-good-fg',
+  number: '--c-warn-fg',
+  time: '--c-warn-fg',
+  comment: '--c-text-dim',
+  operator: '--c-text',
+  punctuation: '--c-text',
+  identifier: '--c-text',
+  whitespace: null,
+}
+
+/** Lớp Tailwind dựng TỪ bảng trên, không khai màu lần thứ hai. */
+export const ST_TOKEN_CLASS: Record<StTokenKind, string> = {
+  keyword: `text-[var(${ST_TOKEN_COLOR.keyword})] font-semibold`,
+  type: `text-[var(${ST_TOKEN_COLOR.type})]`,
+  function: `text-[var(${ST_TOKEN_COLOR.function})]`,
+  'fb-type': `text-[var(${ST_TOKEN_COLOR['fb-type']})] font-semibold`,
+  number: `text-[var(${ST_TOKEN_COLOR.number})]`,
+  time: `text-[var(${ST_TOKEN_COLOR.time})]`,
+  comment: `text-[var(${ST_TOKEN_COLOR.comment})] italic`,
+  operator: `text-[var(${ST_TOKEN_COLOR.operator})]`,
+  punctuation: `text-[var(${ST_TOKEN_COLOR.punctuation})]`,
+  identifier: `text-[var(${ST_TOKEN_COLOR.identifier})]`,
+  whitespace: '',
+}
 
 export interface StToken {
   start: number
@@ -482,11 +529,21 @@ export function buildStCompletions(
   for (const type of ST_TYPE_NAMES) {
     if (type.startsWith(upperPrefix)) push(type, 'type', 'kiểu dữ liệu')
   }
+  /* `ISS-STED-17` — gợi ý nói ra khối nào KHÔNG thuộc IEC 61131-3.
+   *
+   * Đây là một trong ba nơi người dùng CHỌN khối (cùng Thư viện nhanh và
+   * palette FBD), nên nhãn phải tới được cả ba. Chỉ gắn cho mở rộng: dán nhãn
+   * "IEC" lên 42/46 mục sẽ làm nhiễu đúng 4 mục cần chú ý. */
   for (const name of ST_FUNCTION_NAMES) {
-    if (name.startsWith(upperPrefix)) push(name, 'function', 'hàm chuẩn')
+    if (name.startsWith(upperPrefix)) {
+      push(name, 'function', EXTENSION_NAMES.has(name) ? 'mở rộng Mekong — không thuộc IEC' : 'hàm chuẩn')
+    }
   }
   for (const name of ST_FB_TYPE_NAMES) {
-    if (name.startsWith(upperPrefix)) push(name, 'fb-type', 'kiểu function block')
+    if (name.startsWith(upperPrefix)) {
+      push(name, 'fb-type',
+           EXTENSION_NAMES.has(name) ? 'mở rộng Mekong — không thuộc IEC' : 'kiểu function block')
+    }
   }
   return items.slice(0, 20)
 }

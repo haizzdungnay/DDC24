@@ -192,6 +192,22 @@ bool UnpackPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_pr
 bool LoadPackageV2(const uint8_t* data, std::size_t size, uint16_t expected_profile,
                    uint32_t expected_abi, StPackageView* out, const char** error_code);
 
+/* `ISS-STED-19` — DIỄN GIẢI MỘT MÃ TỪ CHỐI THÀNH LÝ DO ĐỌC ĐƯỢC.
+ *
+ * `LoadPackageV2`/`UnpackPackageV2` trả về mã (`PKG-E-004`…). Mã đủ để máy phân
+ * loại nhưng KHÔNG đủ để người vận hành xử lý: `PKG-E-004` gộp cả lệch hồ sơ
+ * biên dịch lẫn lệch ABI, và không nói giá trị nào gặp giá trị nào.
+ *
+ * Hàm này đọc header của chính gói bị từ chối và dựng câu nêu CẢ HAI PHÍA. Nó
+ * đặt ở đây, cạnh parser, chứ không ở nơi gọi: hiểu biết về bố cục header phải
+ * nằm đúng một chỗ, nếu không mỗi lần đổi offset sẽ có một chỗ nói dối.
+ *
+ * An toàn với gói cụt: `size` nhỏ hơn header thì trả về lý do chung chung thay
+ * vì đọc quá biên. */
+std::string DescribePackageRejection(const uint8_t* data, std::size_t size,
+                                     uint16_t expected_profile, uint32_t expected_abi,
+                                     const char* error_code);
+
 /* Dual-reader theo DDD §12.1: nhận cả artifact v1 (một Program) lẫn package v2.
  * `*is_v2` cho biết đường nào đã dùng. Artifact v1 chỉ được kiểm ở mức khung —
  * nội dung của nó do loader v1 hiện hữu chịu trách nhiệm. */

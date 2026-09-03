@@ -19,7 +19,7 @@ function entry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
     category: 'timer',
     libraryVersion: '1.0.0',
     contentSha256: 'a'.repeat(64),
-    usability: { kind: 'AVAILABLE' },
+    usability: { kind: 'AVAILABLE' }, iecClassification: 'IEC_STANDARD',
     ports: [
       { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
       { name: 'PT', direction: 'INPUT', dataType: 'TIME' },

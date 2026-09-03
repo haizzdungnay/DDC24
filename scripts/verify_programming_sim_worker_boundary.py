@@ -73,6 +73,20 @@ ALLOWED_NEEDED = {
     "ld-linux",
 }
 
+# Runtime của sanitizer. KHÔNG nằm trong allowlist mặc định: một binary phát
+# hành mà kéo theo `libasan` là một binary sai, và cổng này phải nói ra.
+# CMake chỉ bật `--allow-sanitizer-runtime` khi `MKDDC_SANITIZE` khác rỗng, nên
+# lane phát hành giữ nguyên danh sách hẹp còn lane ASan/UBSan không đỏ vì một
+# thư viện mà chính cấu hình build vừa yêu cầu.
+SANITIZER_NEEDED = {
+    "libasan.so",
+    "libubsan.so",
+    "libtsan.so",
+    "liblsan.so",
+    "libhwasan.so",
+    "libclang_rt.",
+}
+
 
 def read_symbols(binary: Path, nm: str) -> str:
     result = subprocess.run(
@@ -102,7 +116,13 @@ def main() -> int:
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--nm", default="nm")
     parser.add_argument("--readelf", default="readelf")
+    parser.add_argument("--allow-sanitizer-runtime", action="store_true",
+                        help="cho phép libasan/libubsan/... — chỉ dùng cho build có -fsanitize")
     args = parser.parse_args()
+
+    allowed = set(ALLOWED_NEEDED)
+    if args.allow_sanitizer_runtime:
+        allowed |= SANITIZER_NEEDED
 
     if not args.binary.is_file():
         print(f"FAIL: không tìm thấy binary: {args.binary}", file=sys.stderr)
@@ -116,7 +136,7 @@ def main() -> int:
     needed = read_needed(args.binary, args.readelf)
     unexpected = [
         library for library in needed
-        if not any(library.startswith(prefix) for prefix in ALLOWED_NEEDED)
+        if not any(library.startswith(prefix) for prefix in allowed)
     ]
 
     if violations:

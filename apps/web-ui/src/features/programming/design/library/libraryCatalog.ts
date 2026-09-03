@@ -1,4 +1,6 @@
 import type { ProgrammingLibraryEntry, ProgrammingLibraryPage } from '../../model/types'
+import { iecClassificationOf } from './iecClassification'
+import type { LibraryIecClassification } from '../../api/generated/library_registry'
 
 /**
  * `T59-804` (`PGM02-V22-WP-03`) — MỘT catalog cho cả Quick Library của PGM-02
@@ -39,6 +41,9 @@ export interface CatalogEntry {
   libraryVersion: string
   contentSha256: string
   usability: LibraryUsability
+  /** `ISS-STED-17` — `null` với POU người dùng định nghĩa: nó không thuộc IEC
+   *  lẫn thư viện Mekong, nên gắn một trong hai nhãn là nói sai. */
+  iecClassification: LibraryIecClassification | null
   ports: readonly LibraryPort[]
   allowedTypes: readonly string[]
   defaultType?: string
@@ -119,6 +124,7 @@ export function catalogEntries(page: ProgrammingLibraryPage | null | undefined):
       libraryVersion: entry.libraryVersion,
       contentSha256: entry.contentSha256,
       usability,
+      iecClassification: iecClassificationOf(entry.name),
       ports: ports ?? [],
       allowedTypes: Array.isArray(signature?.allowedTypes)
         ? (signature.allowedTypes as unknown[]).filter((type): type is string => typeof type === 'string')

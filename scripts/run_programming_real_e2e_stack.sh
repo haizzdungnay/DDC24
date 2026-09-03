@@ -12,6 +12,7 @@ backend_port="${PROGRAMMING_REAL_BACKEND_PORT:-4181}"
 runtime_root="$(mktemp -d "${TMPDIR:-/tmp}/mkddc-programming-real.XXXXXX")"
 core_pid=""
 backend_pid=""
+noboard_started=0
 
 cleanup() {
   local exit_code=$?
@@ -28,6 +29,10 @@ cleanup() {
   if [[ -n "${core_pid}" ]]; then
     wait "${core_pid}" 2>/dev/null || true
   fi
+  if [[ "${noboard_started}" == "1" ]]; then
+    MKDDC_CPP_BUILD_ROOT="${build_root}/cpp" "${repository_root}/tools/run_noboard_demo.sh" stop \
+      >/dev/null 2>&1 || true
+  fi
   rm -rf -- "${runtime_root}"
   exit "${exit_code}"
 }
@@ -43,10 +48,25 @@ mkdir -p "${build_root}" "${runtime_root}/config" "${runtime_root}/core/staging"
 # trả 503 tất định (`PRG-ERR-UNAVAILABLE-001`), và spec sẽ đỏ ở một khẳng định
 # xa tít (ngân sách 5xx, hoặc a11y của bảng ánh xạ rỗng) chứ không nói ra nguyên
 # nhân. Cảnh báo ngay từ đây rẻ hơn nhiều so với việc đọc ngược trace Playwright.
+# Trước đây chỗ này chỉ IN CẢNH BÁO rồi chạy tiếp. Hệ quả: trên mọi máy không có
+# ai dựng sẵn chuỗi no-board — CI là ví dụ đúng nhất — `point-catalog` trả 503
+# tất định và spec đỏ ở khẳng định ngân sách 5xx cách đó 50 dòng, tức lane này
+# CHƯA TỪNG xanh được ở CI. Một tiền điều kiện mà không ai dựng thì không phải
+# tiền điều kiện, nó là một lỗ hổng. Lane tự dựng lấy, và tự dọn ở `cleanup`.
+#
+# "File còn đó" KHÔNG đồng nghĩa "có ai đang ghi": Playwright dừng webServer bằng
+# tín hiệu có thể không cho trap chạy xong, nên lần chạy trước có thể để lại một
+# SHM mồ côi. Giữ nó lại là tự lừa mình rằng tiền điều kiện đã có, rồi đọc số
+# liệu chết của lần chạy trước. Không có tiến trình `mkddc-core` nào bám vào thì
+# xoá và dựng lại.
+if [[ -e /dev/shm/mkddc_plc_shm ]] && ! pgrep -f 'mkddc-core --sock' >/dev/null 2>&1; then
+  echo "PLC SHM mồ côi (không tiến trình mkddc-core nào ghi) — dựng lại chuỗi no-board." >&2
+  rm -f /dev/shm/mkddc_plc_shm
+fi
+
+NOBOARD_NEEDED=0
 if [[ ! -e /dev/shm/mkddc_plc_shm ]]; then
-  echo "CẢNH BÁO: thiếu /dev/shm/mkddc_plc_shm — Point Catalog sẽ trả 503." >&2
-  echo "         Dựng chuỗi no-board trước: ./tools/run_noboard_demo.sh" >&2
-  echo "         (dừng bằng ./tools/run_noboard_demo.sh stop)" >&2
+  NOBOARD_NEEDED=1
 fi
 
 if [[ "${PROGRAMMING_REAL_SKIP_BUILD:-0}" != "1" ]]; then
@@ -56,13 +76,32 @@ if [[ "${PROGRAMMING_REAL_SKIP_BUILD:-0}" != "1" ]]; then
     -DIOBUS_BUILD_TESTS=OFF \
     -DMKDDC_ENABLE_FW_HOSTCHECK=OFF \
     -DMKDDC_ENABLE_HMI=OFF
+  noboard_targets=()
+  if [[ "${NOBOARD_NEEDED}" == "1" ]]; then
+    # Chuỗi no-board là thứ ghi PLC SHM thật; chỉ build khi thật sự cần.
+    noboard_targets=(mkddc-core mkddc-iobus fake_mcu shm_dump_io)
+  fi
   cmake --build "${build_root}/cpp" --parallel --target \
     mkddc-programming-core-sim mkddc-st-compile mkddc-st-package \
-    mkddc-programming-sim-worker
+    mkddc-programming-sim-worker "${noboard_targets[@]}"
   (
     cd "${repository_root}/apps/web-api"
     go build -trimpath -o "${build_root}/mkddc-web" ./cmd/mkddc-web
   )
+fi
+
+if [[ "${NOBOARD_NEEDED}" == "1" ]]; then
+  if ! command -v socat >/dev/null 2>&1; then
+    # Fail-closed và nói thẳng: thiếu socat thì không có PLC SHM, không có PLC
+    # SHM thì `point-catalog` trả 503 và spec đỏ ở một khẳng định không liên
+    # quan. Hỏng ở đây với đúng lý do rẻ hơn nhiều so với đọc ngược trace.
+    echo "LỖI: lane E2E real-backend cần socat để dựng chuỗi no-board (PLC SHM)." >&2
+    echo "     cài bằng: sudo apt-get install -y socat" >&2
+    exit 1
+  fi
+  MKDDC_CPP_BUILD_ROOT="${build_root}/cpp" \
+    "${repository_root}/tools/run_noboard_demo.sh" start
+  noboard_started=1
 fi
 
 # T59-607 — lane này phải đi ĐÚNG đường ký của bản thật: backend ký bằng khoá

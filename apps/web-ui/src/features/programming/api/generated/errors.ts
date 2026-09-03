@@ -1,6 +1,6 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "39bf243a051dd2553c549f9628fcf13e04ccb161345f2f717eb574846b45dabe" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.9.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "d4c25c227ef3eecadd852d0ddb20d8b4f33b2f4cc1c002809094a3fd1b27abfe" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.10.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
@@ -159,6 +159,9 @@ const COMPONENT_ERROR_MAP: Readonly<Record<string, ProgrammingErrorCode>> = {
   "core-ipc\u0000IPC-TRACE-REJECTED": "PRG-ERR-REQ-001",
   "core-ipc\u0000IPC-TRACE-UNAVAILABLE": "PRG-ERR-UNAVAILABLE-001",
   "core-ipc\u0000IPC-UNKNOWN-INSTANCE": "PRG-ERR-NOT-FOUND-001",
+  "point-catalog\u0000PIO-SLOT-001": "PRG-ERR-MAP-003",
+  "point-catalog\u0000PIO-SLOT-002": "PRG-ERR-MAP-003",
+  "point-catalog\u0000PIO-SLOT-003": "PRG-ERR-MAP-003",
   "retain\u0000RT-RETAIN-001": "PRG-ERR-RETAIN-001",
   "retain\u0000RT-RETAIN-002": "PRG-ERR-RETAIN-001",
   "retain\u0000RT-RETAIN-003": "PRG-ERR-RETAIN-001",

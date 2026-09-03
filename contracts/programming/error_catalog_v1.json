@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.9.0",
+  "catalogVersion": "1.10.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     {
@@ -737,13 +737,13 @@
     },
     {
       "component": "compiler",
-      "detailCode": "ST-CLI-LIMIT",
-      "publicCode": "PRG-ERR-SCOPE-001"
+      "detailCode": "ST-CLI-LIBRARY-LOCK",
+      "publicCode": "PRG-ERR-LIB-VERSION-001"
     },
     {
       "component": "compiler",
-      "detailCode": "ST-CLI-LIBRARY-LOCK",
-      "publicCode": "PRG-ERR-LIB-VERSION-001"
+      "detailCode": "ST-CLI-LIMIT",
+      "publicCode": "PRG-ERR-SCOPE-001"
     },
     {
       "component": "compiler",
@@ -757,13 +757,13 @@
     },
     {
       "component": "compiler",
-      "detailCode": "ST-CLI-SIGNAL-MANIFEST",
-      "publicCode": "PRG-ERR-CHECK-001"
+      "detailCode": "ST-CLI-SANDBOX",
+      "publicCode": "PRG-ERR-UNAVAILABLE-001"
     },
     {
       "component": "compiler",
-      "detailCode": "ST-CLI-SANDBOX",
-      "publicCode": "PRG-ERR-UNAVAILABLE-001"
+      "detailCode": "ST-CLI-SIGNAL-MANIFEST",
+      "publicCode": "PRG-ERR-CHECK-001"
     },
     {
       "component": "compiler",
@@ -1202,6 +1202,21 @@
       "publicCode": "PRG-ERR-NOT-FOUND-001"
     },
     {
+      "component": "point-catalog",
+      "detailCode": "PIO-SLOT-001",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "point-catalog",
+      "detailCode": "PIO-SLOT-002",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
+      "component": "point-catalog",
+      "detailCode": "PIO-SLOT-003",
+      "publicCode": "PRG-ERR-MAP-003"
+    },
+    {
       "component": "retain",
       "detailCode": "RT-RETAIN-001",
       "publicCode": "PRG-ERR-RETAIN-001"
@@ -1287,6 +1302,86 @@
       "publicCode": "PRG-ERR-COM-001"
     },
     {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-CAPABILITY",
+      "publicCode": "PRG-SIM-UNSUPPORTED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-CRASH",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-EXPIRED",
+      "publicCode": "PRG-SIM-EXPIRED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-HANDSHAKE",
+      "publicCode": "PRG-SIM-UNSUPPORTED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-PROTOCOL",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-QUOTA",
+      "publicCode": "PRG-SIM-QUOTA"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-SPAWN",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-supervisor",
+      "detailCode": "SIM-SUP-TIMEOUT",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-001",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-002",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-003",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-004",
+      "publicCode": "PRG-SIM-WORKER-FAILED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-005",
+      "publicCode": "PRG-SIM-INPUT-NOT-ALLOWED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-006",
+      "publicCode": "PRG-SIM-INPUT-NOT-ALLOWED"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-007",
+      "publicCode": "PRG-SIM-STALE-SESSION"
+    },
+    {
+      "component": "sim-worker",
+      "detailCode": "SIM-E-008",
+      "publicCode": "PRG-SIM-QUOTA"
+    },
+    {
       "component": "st-control-api",
       "detailCode": "API-E-001",
       "publicCode": "PRG-ERR-REQ-001"
@@ -1330,86 +1425,6 @@
       "component": "st-control-api",
       "detailCode": "API-E-009",
       "publicCode": "PRG-ERR-PROGRAM-STATE-001"
-    },
-    {
-      "component": "sim-worker",
-      "detailCode": "SIM-E-001",
-      "publicCode": "PRG-SIM-WORKER-FAILED"
-    },
-    {
-      "component": "sim-worker",
-      "detailCode": "SIM-E-002",
-      "publicCode": "PRG-SIM-WORKER-FAILED"
-    },
-    {
-      "component": "sim-worker",
-      "detailCode": "SIM-E-003",
-      "publicCode": "PRG-SIM-WORKER-FAILED"
-    },
-    {
-      "component": "sim-worker",
-      "detailCode": "SIM-E-004",
-      "publicCode": "PRG-SIM-WORKER-FAILED"
-    },
-    {
-      "component": "sim-worker",
-      "detailCode": "SIM-E-005",
-      "publicCode": "PRG-SIM-INPUT-NOT-ALLOWED"
-    },
-    {
-      "component": "sim-worker",
-      "detailCode": "SIM-E-006",
-      "publicCode": "PRG-SIM-INPUT-NOT-ALLOWED"
-    },
-    {
-      "component": "sim-worker",
-      "detailCode": "SIM-E-007",
-      "publicCode": "PRG-SIM-STALE-SESSION"
-    },
-    {
-      "component": "sim-worker",
-      "detailCode": "SIM-E-008",
-      "publicCode": "PRG-SIM-QUOTA"
-    },
-    {
-      "component": "sim-supervisor",
-      "detailCode": "SIM-SUP-SPAWN",
-      "publicCode": "PRG-SIM-WORKER-FAILED"
-    },
-    {
-      "component": "sim-supervisor",
-      "detailCode": "SIM-SUP-HANDSHAKE",
-      "publicCode": "PRG-SIM-UNSUPPORTED"
-    },
-    {
-      "component": "sim-supervisor",
-      "detailCode": "SIM-SUP-TIMEOUT",
-      "publicCode": "PRG-SIM-WORKER-FAILED"
-    },
-    {
-      "component": "sim-supervisor",
-      "detailCode": "SIM-SUP-PROTOCOL",
-      "publicCode": "PRG-SIM-WORKER-FAILED"
-    },
-    {
-      "component": "sim-supervisor",
-      "detailCode": "SIM-SUP-CRASH",
-      "publicCode": "PRG-SIM-WORKER-FAILED"
-    },
-    {
-      "component": "sim-supervisor",
-      "detailCode": "SIM-SUP-QUOTA",
-      "publicCode": "PRG-SIM-QUOTA"
-    },
-    {
-      "component": "sim-supervisor",
-      "detailCode": "SIM-SUP-EXPIRED",
-      "publicCode": "PRG-SIM-EXPIRED"
-    },
-    {
-      "component": "sim-supervisor",
-      "detailCode": "SIM-SUP-CAPABILITY",
-      "publicCode": "PRG-SIM-UNSUPPORTED"
     }
   ]
 }

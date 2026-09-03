@@ -373,9 +373,20 @@ TEST(StSignalBus, ConcurrentInspectNeverPairsValueWithForeignTimestamp)
     });
 
     /* 20 000 vòng giữ test ở ~20 ms. Đo thật trên bản CHƯA sửa: bắt được lệch
-     * chu kỳ ở 1/3 lần chạy, nên đây là guard XÁC SUẤT — bộ bắt lỗi TẤT ĐỊNH
-     * cho chính đường này là chạy nó dưới `-DMKDDC_SANITIZE=thread`
-     * (F-P59-SIGNAL-READBACK-001). Nâng số vòng KHÔNG phải cách siết: 400 000
+     * chu kỳ ở 1/3 lần chạy, nên đây là guard XÁC SUẤT.
+     *
+     * CẬP NHẬT 2026-09-02 — guard này ĐÃ BẮT ĐƯỢC một lỗi thật (thứ tự đổi bản
+     * và tăng mốc trong `commit_at_boundary`, xem chú thích ở đó), nhưng với
+     * xác suất thấp hơn nhiều so với ghi chú cũ: đo lại trên bản chưa sửa là
+     * 1/40 lần chạy qua `ctest` và 1/51 khi chạy thẳng binary. Sau bản vá:
+     * 0/400.
+     *
+     * Và bộ bắt lỗi "tất định" ghi ở dưới KHÔNG dùng được như đang mô tả: chạy
+     * `-DMKDDC_SANITIZE=thread` build và chạy được (khác với ghi chú cũ), nhưng
+     * TSan báo 6 cảnh báo data race NGAY CẢ trên bản đã sửa — chúng là phép
+     * chép Slot không đồng bộ của chính khuôn seqlock, thứ mà seqlock hợp lệ
+     * vẫn phải có. Muốn TSan thành cổng thì phải chú thích hoặc đổi Slot sang
+     * atomic, tức đổi thiết kế đường RT; chưa làm. Nâng số vòng KHÔNG phải cách siết: 400 000
      * vòng làm reader/writer giành nhau `bank_readers_` tới mức test chạy quá
      * 20 phút CPU mà vẫn không tất định. */
     /* Chốt khởi động — cùng lý do như `ConcurrentReadNeverSeesTornValue`: trên

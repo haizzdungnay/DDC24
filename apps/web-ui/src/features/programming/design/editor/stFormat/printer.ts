@@ -82,7 +82,6 @@ export function flatExpr(node: StExpr): string {
     case 'Literal': return node.text
     case 'Ident': return node.name
     case 'Member': return `${flatExpr(node.object)}.${node.name}`
-    case 'Index': return `${flatExpr(node.object)}[${flatExpr(node.index)}]`
     case 'Paren': return `(${flatExpr(node.inner)})`
     case 'Unary': return node.operator === 'NOT' ? `NOT ${flatExpr(node.operand)}` : `-${flatExpr(node.operand)}`
     case 'Binary': return `${flatExpr(node.left)} ${node.operator} ${flatExpr(node.right)}`
@@ -307,37 +306,6 @@ function printStatement(out: Printer, indent: number, statement: StStmt): void {
       out.blank()
       printComments(out, indent, statement.endTrivia.leading, false)
       out.emit(indent, withTrailing('END_CASE;', statement.endTrivia))
-      return
-    }
-    case 'For': {
-      const by = statement.by ? ` BY ${flatExpr(statement.by)}` : ''
-      out.emit(indent, withTrailing(
-        `FOR ${statement.variable} := ${flatExpr(statement.from)} TO ${flatExpr(statement.to)}${by} DO`,
-        trivia,
-      ))
-      printBody(out, indent + 1, statement.body)
-      printComments(out, indent, statement.endTrivia.leading, false)
-      out.emit(indent, withTrailing('END_FOR;', statement.endTrivia))
-      return
-    }
-    case 'While': {
-      emitExpr(out, indent, 'WHILE ', statement.condition, ' DO')
-      appendTrailing(out, trivia)
-      printBody(out, indent + 1, statement.body)
-      printComments(out, indent, statement.endTrivia.leading, false)
-      out.emit(indent, withTrailing('END_WHILE;', statement.endTrivia))
-      return
-    }
-    case 'Repeat': {
-      out.emit(indent, withTrailing('REPEAT', trivia))
-      printBody(out, indent + 1, statement.body)
-      printComments(out, indent, statement.endTrivia.leading, false)
-      emitExpr(out, indent, 'UNTIL ', statement.condition, '')
-      out.emit(indent, withTrailing('END_REPEAT;', statement.endTrivia))
-      return
-    }
-    case 'Jump': {
-      out.emit(indent, withTrailing(`${statement.keyword};`, trivia))
       return
     }
   }

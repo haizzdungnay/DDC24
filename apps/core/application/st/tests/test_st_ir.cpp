@@ -419,6 +419,42 @@ TEST(StIr, RejectBadTargetAbi)
     EXPECT_EQ(err.code, st_ir_error::kBadAbi);
 }
 
+/* `ISS-STED-19` — lý do từ chối phải nêu CẢ HAI phía.
+ *
+ * "target ABI mismatch" nói đúng sự thật nhưng không nói được điều người vận
+ * hành cần: lệch giữa cái gì với cái gì. Biết artifact mang ABI nào và bo chờ
+ * ABI nào thì họ dựng lại được nhánh nào cần build lại. */
+TEST(StIr, VersionRejectionNamesBothSides)
+{
+    struct Case {
+        const char* what;
+        std::size_t offset;
+        bool wide;                 /* true = trường 32 bit, false = 16 bit */
+        uint32_t injected;
+        uint32_t expected;
+        const char* code;
+    };
+    const Case cases[] = {
+        {"schema", 8, false, 0x0077u, st_ir::kSchemaVersion, st_ir_error::kBadSchema},
+        {"profile", 10, false, 0x0077u, st_ir::kCompilerProfile, st_ir_error::kBadProfile},
+        {"abi", 12, true, 0xDEADBEEFu, st_ir::kTargetAbi, st_ir_error::kBadAbi},
+    };
+    for (const Case& item : cases) {
+        std::vector<uint8_t> a = build_signed();
+        if (item.wide) put_u32(&a, item.offset, item.injected);
+        else put_u16(&a, item.offset, static_cast<uint16_t>(item.injected));
+        StLoadError err;
+        ASSERT_FALSE(try_load(a, &err)) << item.what;
+        EXPECT_EQ(err.code, item.code) << item.what;
+        /* Cả giá trị của artifact LẪN giá trị bo chấp nhận phải có trong thông
+         * điệp — thiếu một trong hai thì người đọc vẫn phải đi hỏi. */
+        EXPECT_NE(err.message.find(std::to_string(item.injected)), std::string::npos)
+            << item.what << ": thiếu giá trị của artifact trong \"" << err.message << "\"";
+        EXPECT_NE(err.message.find(std::to_string(item.expected)), std::string::npos)
+            << item.what << ": thiếu giá trị bo chấp nhận trong \"" << err.message << "\"";
+    }
+}
+
 TEST(StIr, RejectWrongTotalSize)
 {
     std::vector<uint8_t> a = build_signed();

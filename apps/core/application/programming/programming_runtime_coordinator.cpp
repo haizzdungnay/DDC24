@@ -727,7 +727,15 @@ bool ProgrammingRuntimeCoordinator::split_package(
     if (!UnpackPackageV2(bytes.data(), bytes.size(), st_profile_generated::kProfileCode,
                          st_profile_generated::kTargetAbi, &contents, &load_error)) {
         if (detail_code) *detail_code = load_error != nullptr ? load_error : "PKG-E-001";
-        if (error) *error = "package v2 rejected by loader";
+        /* `ISS-STED-19` — "package v2 rejected by loader" là một câu KHÔNG nói
+         * gì: nó không cho biết gói lệch ở đâu, cũng không cho biết bên nào là
+         * bên cũ. Một artifact sai `targetAbi` bị từ chối đúng, nhưng người vận
+         * hành chỉ đọc được "bị từ chối" thì vẫn không biết phải làm gì tiếp.
+         * `DescribePackageRejection` nêu CẢ HAI phía; LKG không đổi vì đường
+         * này trả false trước mọi thay đổi trạng thái. */
+        if (error) *error = DescribePackageRejection(bytes.data(), bytes.size(),
+                                                     st_profile_generated::kProfileCode,
+                                                     st_profile_generated::kTargetAbi, load_error);
         return false;
     }
     if (signals_out != nullptr) signals_out->assign(contents.signals.begin(), contents.signals.end());

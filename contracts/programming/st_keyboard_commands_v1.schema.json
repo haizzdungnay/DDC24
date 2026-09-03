@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mekong.vn/contracts/programming/st_keyboard_commands_v1.schema.json",
+  "title": "ST editor keyboard command contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractId",
+    "version",
+    "contexts",
+    "commands"
+  ],
+  "properties": {
+    "$comment": {
+      "type": "string"
+    },
+    "$contexts": {
+      "type": "string"
+    },
+    "contractId": {
+      "const": "PROGRAMMING-ST-KEYBOARD-COMMANDS-V1"
+    },
+    "version": {
+      "const": 1
+    },
+    "contexts": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 10
+      }
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "key",
+          "context",
+          "mutatesDraft",
+          "description"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^(Control\\+)?(Shift\\+)?(Alt\\+)?[^+]+$"
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mutatesDraft": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 20
+          },
+          "browserConflict": {
+            "type": "string",
+            "minLength": 20
+          }
+        }
+      }
+    }
+  }
+}

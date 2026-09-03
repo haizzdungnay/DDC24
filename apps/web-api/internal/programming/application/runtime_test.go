@@ -12,11 +12,11 @@ import (
 )
 
 type fakeRuntimeStatusReader struct {
-	failCall     bool
-	producerMode string
-	active       *string
-	lkg          *string
-	signals      []runtimeSignalPayload
+	failCall      bool
+	producerMode  string
+	active        *string
+	lkg           *string
+	signals       []runtimeSignalPayload
 	protocolMinor uint16
 }
 
@@ -148,7 +148,7 @@ func newRuntimeServiceWithMonitor(t *testing.T, reader RuntimeStatusReader, moni
 // Commission khi lý do duy nhất khiến Core safe là "chưa ai điều khiển output"
 // (trigger T7 đơn độc ở Core), khác với safe-state do lỗi thật.
 func TestRuntimeServiceGetRuntimePropagatesSafeStateNoControllerOnly(t *testing.T) {
-	monitor := fakeMonitorProvider{snapshot: MonitorTruthSnapshot{SafeState: true, SafeStateNoControllerOnly: true}}
+	monitor := &fakeMonitorProvider{snapshot: MonitorTruthSnapshot{SafeState: true, SafeStateNoControllerOnly: true}}
 	service := newRuntimeServiceWithMonitor(t, &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY"}, monitor)
 	view, err := service.GetRuntime(context.Background())
 	if err != nil {
@@ -165,7 +165,7 @@ func TestRuntimeServiceGetRuntimePropagatesSafeStateNoControllerOnly(t *testing.
 // diễn thêm gì (chính sách quyết định "cho Commission hay không" nằm ở FE
 // coreReady, không phải ở tầng này).
 func TestRuntimeServiceGetRuntimeKeepsSafeStateNoControllerOnlyFalseWhenRealFault(t *testing.T) {
-	monitor := fakeMonitorProvider{snapshot: MonitorTruthSnapshot{SafeState: true, SafeStateNoControllerOnly: false}}
+	monitor := &fakeMonitorProvider{snapshot: MonitorTruthSnapshot{SafeState: true, SafeStateNoControllerOnly: false}}
 	service := newRuntimeServiceWithMonitor(t, &fakeRuntimeStatusReader{producerMode: "PROGRAM_ONLY"}, monitor)
 	view, err := service.GetRuntime(context.Background())
 	if err != nil {

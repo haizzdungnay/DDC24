@@ -65,24 +65,51 @@ type ArtifactView struct {
 	TargetABI       int64  `json:"targetAbi"`
 	CompilerVersion string `json:"compilerVersion"`
 	LibraryVersion  string `json:"libraryVersion"`
+	// ISS-STED-19: bộ ba tương thích phải đi CÙNG artifact, không chỉ nằm ở
+	// endpoint capabilities. Một artifact tách khỏi ngữ cảnh sinh ra nó (lưu
+	// lại, gửi đi, đọc lại sau) mà không mang phiên bản ngôn ngữ thì không ai
+	// nói được nó biên dịch dưới hồ sơ nào.
+	StLanguageProfileVersion string `json:"stLanguageProfileVersion"`
+}
+
+// SymbolView là một biến giao diện của POU, do COMPILER công bố.
+//
+// `ISS-STED-13` — FE dựng chỉ mục ký hiệu bằng regex và không có cách nào biết
+// mình đọc lệch khỏi compiler. Bảng này cho nó một thứ để đối chiếu; lệch ⇒ FE
+// hạ xuống "không xác định được" thay vì hiển thị thông tin sai.
+type SymbolView struct {
+	// PouId cần thiết vì một Check phủ NHIỀU POU: một danh sách phẳng không
+	// nói được cổng nào thuộc POU nào.
+	PouID     string `json:"pouId"`
+	Name      string `json:"name"`
+	Direction string `json:"direction"`
+	Type      string `json:"type"`
+	Slot      int    `json:"slot"`
 }
 
 type CheckView struct {
-	CheckID      string           `json:"checkId"`
-	RevisionID   string           `json:"revisionId"`
-	State        string           `json:"state"`
-	Diagnostics  []DiagnosticView `json:"diagnostics"`
-	Artifact     *ArtifactView    `json:"artifact,omitempty"`
-	CreatedAt    string           `json:"createdAt"`
-	StartedAt    *string          `json:"startedAt,omitempty"`
-	CompletedAt  *string          `json:"completedAt,omitempty"`
-	AttemptCount int              `json:"attemptCount"`
+	CheckID     string           `json:"checkId"`
+	RevisionID  string           `json:"revisionId"`
+	State       string           `json:"state"`
+	Diagnostics []DiagnosticView `json:"diagnostics"`
+	// Symbols rỗng là một câu trả lời THẬT ("POU không khai cổng nào"), khác
+	// với việc thiếu hẳn trường — nên nó luôn được phát, không `omitempty`.
+	Symbols      []SymbolView  `json:"symbols"`
+	Artifact     *ArtifactView `json:"artifact,omitempty"`
+	CreatedAt    string        `json:"createdAt"`
+	StartedAt    *string       `json:"startedAt,omitempty"`
+	CompletedAt  *string       `json:"completedAt,omitempty"`
+	AttemptCount int           `json:"attemptCount"`
 }
 
 type checkResultDocument struct {
 	SchemaVersion string           `json:"schemaVersion"`
 	Diagnostics   []DiagnosticView `json:"diagnostics"`
-	Manifest      json.RawMessage  `json:"manifest,omitempty"`
+	// `ISS-STED-13` — lưu cùng kết quả Check để đọc lại được sau, không phải
+	// chỉ tồn tại trong lần chạy worker. Một bảng đối chiếu chỉ có lúc vừa
+	// compile xong thì FE mở lại trang là mất.
+	Symbols  []SymbolView    `json:"symbols,omitempty"`
+	Manifest json.RawMessage `json:"manifest,omitempty"`
 }
 
 type CheckServiceOptions struct {
@@ -94,6 +121,10 @@ type CheckServiceOptions struct {
 	LeaseDuration time.Duration
 	Now           func() time.Time
 	NewID         func() string
+	// ModbusSlots phân giải lại slot `ext` từ cấu hình ĐANG CHẠY
+	// (`ISS-PIO-31`). Nil ⇒ Check CHẶN mọi binding MB_RTU: thiếu nguồn xác
+	// minh thì con số lưu trong binding không có gì bảo chứng.
+	ModbusSlots ModbusSlotProvider
 }
 
 type CheckService struct {
@@ -106,6 +137,7 @@ type CheckService struct {
 	now           func() time.Time
 	newID         func() string
 	workerID      string
+	modbusSlots   ModbusSlotProvider
 	wake          chan struct{}
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
@@ -130,7 +162,8 @@ func NewCheckService(options CheckServiceOptions) (*CheckService, error) {
 	}
 	return &CheckService{store: options.Store, runner: options.Runner, packager: options.Packager,
 		artifacts: options.Artifacts, targetID: options.TargetID, leaseDuration: options.LeaseDuration, now: options.Now, newID: options.NewID,
-		workerID: "check-worker-" + options.NewID(), wake: make(chan struct{}, 1)}, nil
+		modbusSlots: options.ModbusSlots,
+		workerID:    "check-worker-" + options.NewID(), wake: make(chan struct{}, 1)}, nil
 }
 
 func (s *CheckService) Start(parent context.Context) {
@@ -230,7 +263,18 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	inputs, scopeDiagnostics := compilerInputs(revision)
+	/* `ISS-PIO-31`/`AC-PIO-ID-02` — chụp bố cục slot MỘT LẦN cho cả package.
+	 * Tra từng binding sẽ cho hai binding của cùng một package được phân giải
+	 * trên hai cấu hình khác nhau nếu ai đó sửa cấu hình giữa chừng. */
+	var slots *ModbusSlotSnapshot
+	if s.modbusSlots != nil {
+		snapshot, slotErr := s.modbusSlots.ResolveModbusSlots(ctx)
+		if slotErr != nil {
+			return true, slotErr
+		}
+		slots = &snapshot
+	}
+	inputs, scopeDiagnostics := compilerInputs(revision, slots)
 	if len(scopeDiagnostics) == 0 {
 		inputs, err = s.attachPOULinkInputs(ctx, revision, inputs)
 		if err != nil {
@@ -262,7 +306,11 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// thừa sẽ trượt Check — đúng cái mà `ST_SUBSET_SPEC` §12.6 cấm ("cảnh báo
 	// không chặn sinh artifact").
 	hasError := false
+	// ISS-STED-18: băm nguồn TỪNG POU MỘT LẦN trước vòng biên dịch. Băm bên
+	// trong vòng sẽ băm lại cùng một POU liên kết cho mỗi Program dùng nó.
+	provenance := newDiagnosticProvenance(check.RevisionID, inputs)
 	results := make([]programmingcompiler.Result, 0, len(inputs))
+	symbols := make([]SymbolView, 0)
 	for _, input := range inputs {
 		result, err := s.runner.Compile(ctx, input)
 		if errors.Is(err, programmingcompiler.ErrTimeout) {
@@ -272,6 +320,16 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			// Crash/output lỗi giữ RUNNING cho tới lease expiry để cùng input được
 			// thử đúng một lần nữa. Lần hai vẫn chết sẽ được FailExhaustedChecks đóng.
 			return true, err
+		}
+		/* `ISS-STED-13` — gắn `pouId` NGAY TẠI ĐÂY, cùng lối với diagnostic:
+		 * compiler chạy trên một nguồn mỗi lần nên nó không biết mình đang ở
+		 * POU nào; chỉ vòng lặp này biết. Gộp phẳng mà không gắn sẽ cho FE một
+		 * danh sách cổng không nói được của ai. */
+		for _, symbol := range result.Symbols {
+			symbols = append(symbols, SymbolView{
+				PouID: input.SourceID, Name: symbol.Name, Direction: symbol.Direction,
+				Type: symbol.Type, Slot: symbol.Slot,
+			})
 		}
 		programDiagnostics := make([]DiagnosticView, 0, len(result.Diagnostics))
 		for _, item := range result.Diagnostics {
@@ -286,6 +344,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			if existing, _ := view.Location["programId"].(string); existing == "" {
 				view.Location["programId"] = input.SourceID
 			}
+			provenance.stamp(&view)
 			if view.Severity == "ERROR" {
 				hasError = true
 			}
@@ -350,7 +409,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		Artifacts: artifacts, ProgramManifests: programManifestsOf(results),
 		Topology: topology, Budget: budget,
 		PouGraph: packagePouGraph(objectViews),
-		Signals:  packageManifestSignals(objectViews), Bindings: packageManifestBindings(objectViews),
+		Signals:  packageManifestSignals(objectViews), Bindings: packageManifestBindings(objectViews, slots),
 		LibraryLock:   manifestLibraryLock,
 		IntegrityMode: results[0].IntegrityMode,
 	}
@@ -377,7 +436,10 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 			return true, err
 		}
 	}
-	return true, s.complete(ctx, check, "PASSED", diagnostics,
+	/* Chỉ đường PASSED mang bảng cổng: một Check FAILED nghĩa là compiler
+	 * chưa dựng xong bảng ký hiệu, và công bố một bảng dở dang để FE đối chiếu
+	 * sẽ tạo ra chính thứ lệch giả mà cổng này sinh ra để chống. */
+	return true, s.completeWithSymbols(ctx, check, "PASSED", diagnostics, symbols,
 		&completion{artifact: storeArtifact, manifest: manifest})
 }
 
@@ -387,7 +449,12 @@ type completion struct {
 }
 
 func (s *CheckService) complete(ctx context.Context, check programmingstore.Check, state string, diagnostics []DiagnosticView, success *completion) error {
-	result := checkResultDocument{SchemaVersion: "1.0", Diagnostics: diagnostics}
+	return s.completeWithSymbols(ctx, check, state, diagnostics, nil, success)
+}
+
+func (s *CheckService) completeWithSymbols(ctx context.Context, check programmingstore.Check, state string,
+	diagnostics []DiagnosticView, symbols []SymbolView, success *completion) error {
+	result := checkResultDocument{SchemaVersion: "1.0", Diagnostics: diagnostics, Symbols: symbols}
 	var artifact *programmingstore.Artifact
 	if success != nil {
 		result.Manifest = success.manifest
@@ -456,7 +523,7 @@ func checkInputHash(revision programmingstore.RevisionSnapshot, targetID string,
 // thứ tự biên dịch — và do đó thứ tự diagnostic — không phụ thuộc thứ tự đọc DB.
 // Một Check chạy lại trên cùng Revision phải cho đúng cùng dãy kết quả, nếu
 // không thì "deterministic build" chỉ là lời nói.
-func compilerInputs(revision programmingstore.RevisionSnapshot) ([]programmingcompiler.Input, []DiagnosticView) {
+func compilerInputs(revision programmingstore.RevisionSnapshot, slots *ModbusSlotSnapshot) ([]programmingcompiler.Input, []DiagnosticView) {
 	var programs []programmingstore.RevisionObject
 	userPou := 0
 	for _, object := range revision.Objects {
@@ -483,7 +550,7 @@ func compilerInputs(revision programmingstore.RevisionSnapshot) ([]programmingco
 	// dùng sửa từng lỗi một rồi chạy lại Check — với 32 Program đó là 32 vòng.
 	diagnostics := make([]DiagnosticView, 0)
 	for _, program := range programs {
-		input, diagnostic := programCompilerInput(revision, program)
+		input, diagnostic := programCompilerInput(revision, program, slots)
 		if diagnostic != nil {
 			diagnostics = append(diagnostics, *diagnostic)
 			continue
@@ -629,7 +696,7 @@ func (s *CheckService) attachPOULinkInputs(ctx context.Context,
 }
 
 func programCompilerInput(revision programmingstore.RevisionSnapshot,
-	program programmingstore.RevisionObject) (programmingcompiler.Input, *DiagnosticView) {
+	program programmingstore.RevisionObject, slots *ModbusSlotSnapshot) (programmingcompiler.Input, *DiagnosticView) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(program.PayloadJSON, &payload); err != nil {
 		diagnostic := scopeDiagnostic(program.ObjectID, 0)
@@ -685,7 +752,7 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 		}
 		runtimeProgramID = config.ProgramID
 	}
-	ioMap, diagnostic := ioMapFromRevision(revision, runtimeProgramID)
+	ioMap, diagnostic := ioMapFromRevision(revision, runtimeProgramID, slots)
 	if diagnostic != nil {
 		return programmingcompiler.Input{}, diagnostic
 	}
@@ -707,7 +774,8 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 // vì gửi io_map sai lặng lẽ cho compiler). category/writable/pointId gửi
 // nguyên trạng cho compiler tự reject (VP/MB_RTU, sai kiểu, trùng...) — không
 // lặp logic validate ở BE, `resolve_io_bindings()` là authority duy nhất.
-func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID string) ([]programmingcompiler.IoMapEntry, *DiagnosticView) {
+func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID string,
+	slots *ModbusSlotSnapshot) ([]programmingcompiler.IoMapEntry, *DiagnosticView) {
 	type variableInfo struct {
 		name      string
 		programID string
@@ -768,9 +836,15 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 				Category string `json:"category"`
 				PointID  string `json:"pointId"`
 				DeviceID string `json:"deviceId"`
-				// T59-303: slot EXT do Point Catalog phân giải khi Mapping tab
-				// chọn điểm MB_RTU. BE chỉ CHUYỂN TIẾP nó — suy slot ở đây là
-				// định nghĩa lại ánh xạ Modbus ở lớp không sở hữu nó.
+				// `ISS-PIO-31` — con số này là DẤU VẾT của lần bind trước, KHÔNG
+				// phải danh tính và KHÔNG được chuyển tiếp thẳng.
+				//
+				// Trước bản vá, BE chuyển tiếp nó xuống compiler. Slot `ext`
+				// được `iobus` cấp tuần tự trên tập thiết bị/điểm đang bật, nên
+				// đổi tên điểm, thêm/tắt điểm hay tắt thiết bị đều làm nó dịch
+				// chỗ — và binding cũ vẫn "hợp lệ" vì `st_io_map.cpp` chỉ kiểm
+				// dải `[1, KX_N_EXT]`. Nay nó chỉ dùng để ĐỐI CHIẾU với slot
+				// phân giải lại từ cấu hình đang chạy.
 				ExtIndex int `json:"extIndex"`
 			} `json:"point"`
 			DataType string `json:"dataType"`
@@ -805,10 +879,24 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			diagnostic := scopeDiagnostic(programID, 0)
 			return nil, &diagnostic
 		}
+		extIndex := payload.Point.ExtIndex
+		if payload.Point.Category == "MB_RTU" {
+			/* `AC-PIO-ID-02` — phân giải lại từ danh tính bền, và CHẶN khi
+			 * không phân giải được hoặc lệch. Không tự remap: đổi slot trong im
+			 * lặng là đổi ý nghĩa một binding người vận hành đã duyệt. */
+			resolved, reason := resolveModbusExtIndex(slots, payload.Point.DeviceID, payload.Point.PointID,
+				payload.Point.ExtIndex)
+			if reason != "" {
+				diagnostic := modbusSlotDiagnostic(programID, variable.name, payload.Point.PointID,
+					payload.Point.ExtIndex, resolved, reason)
+				return nil, &diagnostic
+			}
+			extIndex = resolved
+		}
 		entries = append(entries, programmingcompiler.IoMapEntry{
 			Variable: variable.name, Direction: direction, PointID: payload.Point.PointID,
 			Type: variable.dataType, Unit: payload.Unit, Category: payload.Point.Category,
-			DeviceID: payload.Point.DeviceID, ExtIndex: payload.Point.ExtIndex,
+			DeviceID: payload.Point.DeviceID, ExtIndex: extIndex,
 			Writable: payload.Writable,
 		})
 	}
@@ -884,6 +972,68 @@ func sanitizeCompilerMessage(msg string) string {
 	return msg
 }
 
+// ---- ISS-STED-18: Diagnostic Provenance Contract ----------------------------
+//
+// Một diagnostic phải TỰ CHỨNG MINH nó thuộc về nguồn nào. Không có provenance
+// thì việc gạch lỗi trong trình soạn thảo tạo ra một lỗi nguy hiểm hơn lỗi đang
+// có: gạch một chỗ trên buffer đã đổi, tức chỉ vào dòng KHÔNG CÒN là dòng sinh
+// ra lỗi đó — và người dùng không có cách nào biết mình đang bị chỉ sai.
+//
+// Bốn trường, mỗi trường trả lời một câu hỏi khác nhau:
+//
+//	revisionId                — kết quả này thuộc revision nào?
+//	pouId                     — thuộc POU nào?
+//	sourceSha256              — thuộc ĐÚNG nội dung nào của POU đó?
+//	stLanguageProfileVersion  — sinh dưới hồ sơ ngôn ngữ nào?
+//
+// `sourceSha256` băm TỪNG POU, không băm cả gói. Băm cả gói thì sửa POU A sẽ
+// làm mọi lỗi của POU B thành STALE, và người dùng mất luôn kết quả còn đúng.
+type diagnosticProvenance struct {
+	revisionID string
+	// sourceByPOU: pouId -> sha256 hex của chính nguồn POU đó.
+	sourceByPOU map[string]string
+}
+
+func sha256Hex(payload []byte) string {
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
+}
+
+// newDiagnosticProvenance băm nguồn của Program root và của MỌI POU đã liên kết.
+func newDiagnosticProvenance(revisionID string, inputs []programmingcompiler.Input) diagnosticProvenance {
+	sources := make(map[string]string, len(inputs))
+	for _, input := range inputs {
+		sources[input.SourceID] = sha256Hex(input.Source)
+		for _, linked := range input.LinkedPOUs {
+			// POU liên kết được nhận diện bằng TÊN: đó là định danh compiler đặt
+			// vào `sourceId` của diagnostic khi lỗi nằm trong thân POU đó. Ghi đè
+			// một tên đã có là vô hại — trong một Revision đã seal, cùng tên là
+			// cùng nguồn.
+			sources[linked.Name] = sha256Hex(linked.Source)
+		}
+	}
+	return diagnosticProvenance{revisionID: revisionID, sourceByPOU: sources}
+}
+
+// stamp gắn provenance vào một diagnostic đã dựng.
+//
+// `pouId` lấy từ `programId` đã điền trước đó — đó là POU mà diagnostic thuộc
+// về. Không tra được hash cho `pouId` thì BỎ TRỐNG `sourceSha256` chứ không
+// điền hash của gói: một hash sai làm phép so khớp trả lời sai, tệ hơn hẳn một
+// hash vắng mặt mà FE biết là "không kiểm được".
+func (p diagnosticProvenance) stamp(view *DiagnosticView) {
+	if view.Location == nil {
+		view.Location = map[string]any{}
+	}
+	pouID, _ := view.Location["programId"].(string)
+	view.Location["revisionId"] = p.revisionID
+	view.Location["pouId"] = pouID
+	if hash, found := p.sourceByPOU[pouID]; found {
+		view.Location["sourceSha256"] = hash
+	}
+	view.Location["stLanguageProfileVersion"] = domain.STLanguageProfileVersion
+}
+
 func compilerDiagnostic(item programmingcompiler.Diagnostic) DiagnosticView {
 	code := domain.MapComponentError("compiler", item.Code)
 	public := domain.NewPublicError(code)
@@ -927,6 +1077,25 @@ func scopeDiagnostic(programID string, limit int) DiagnosticView {
 		Location: map[string]any{"programId": programID}, Args: args}
 }
 
+// modbusSlotDiagnostic nói ĐỦ ba thứ người vận hành cần: binding nào, slot nào
+// đã lưu, và slot đó bây giờ là của ai. `PRG-ERR-MAP-003` đã có sẵn ngữ nghĩa
+// "danh tính ánh xạ sai" và bộ args `pointId/variable/expected/actual`.
+func modbusSlotDiagnostic(programID, variable, pointID string, stored, resolved int, reason string) DiagnosticView {
+	public := domain.NewPublicError(domain.ErrMapIdentity)
+	detail := "PIO-SLOT-001"
+	switch {
+	case resolved == 0 && stored != 0:
+		detail = "PIO-SLOT-002"
+	case resolved == 0:
+		detail = "PIO-SLOT-003"
+	}
+	return DiagnosticView{Code: string(domain.ErrMapIdentity), DetailCode: detail, Severity: "ERROR",
+		MessageKey: public.MessageKey,
+		Location:   map[string]any{"programId": programID},
+		Args: map[string]any{"pointId": pointID, "variable": variable,
+			"expected": stored, "actual": resolved}}
+}
+
 func workerDiagnostic(detail string) DiagnosticView {
 	code := domain.MapComponentError("compiler", detail)
 	public := domain.NewPublicError(code)
@@ -935,6 +1104,7 @@ func workerDiagnostic(detail string) DiagnosticView {
 
 func checkView(check programmingstore.Check) (CheckView, error) {
 	view := CheckView{CheckID: check.CheckID, RevisionID: check.RevisionID, State: check.State, Diagnostics: []DiagnosticView{},
+		Symbols:   []SymbolView{},
 		CreatedAt: formatTime(check.CreatedAtUTCMS), AttemptCount: check.AttemptCount}
 	if check.StartedAtUTCMS != nil {
 		value := formatTime(*check.StartedAtUTCMS)
@@ -950,11 +1120,15 @@ func checkView(check programmingstore.Check) (CheckView, error) {
 			return CheckView{}, fmt.Errorf("decode Check result: %w", err)
 		}
 		view.Diagnostics = result.Diagnostics
+		if result.Symbols != nil {
+			view.Symbols = result.Symbols
+		}
 	}
 	if check.Artifact != nil {
 		a := check.Artifact
 		view.Artifact = &ArtifactView{ArtifactID: a.ArtifactID, SHA256: hex.EncodeToString(a.SHA256[:]), ByteSize: a.ByteSize, Profile: a.Profile,
-			TargetABI: a.TargetABI, CompilerVersion: a.CompilerVersion, LibraryVersion: a.LibraryVersion}
+			TargetABI: a.TargetABI, CompilerVersion: a.CompilerVersion, LibraryVersion: a.LibraryVersion,
+			StLanguageProfileVersion: domain.STLanguageProfileVersion}
 	}
 	return view, nil
 }

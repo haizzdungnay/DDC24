@@ -20,6 +20,15 @@ type PointCatalogEntry struct {
 	Quality    string `json:"quality"`
 	Value      any    `json:"value"`
 	ObservedAt string `json:"observedAt,omitempty"`
+	// ExtIndex — slot EXT 1-based mà runtime sẽ dùng cho điểm MB_RTU. 0 = CHƯA
+	// CẤP: `ISS-PIO-31` còn nợ bảng cấp phát bền, nên adapter chưa điền được.
+	// Đây không phải trường trang trí — `EvaluatePointMapEligibility` đọc nó để
+	// quyết định MB_RTU đã bind được chưa, nên ngày `ISS-PIO-31` phát số thật
+	// thì năng lực tự mở, không ai phải nhớ sửa thêm chỗ nào.
+	ExtIndex int `json:"extIndex,omitempty"`
+	// Mapping là QUYẾT ĐỊNH eligibility do server cấp kèm lý do (`ISS-PIO-32`).
+	// FE render nguyên văn; nó KHÔNG được giữ bản luật thứ hai.
+	Mapping PointMapEligibility `json:"mapping"`
 }
 
 // PointCatalogProvider được `internal/app` implement (adapter quanh
@@ -51,6 +60,12 @@ func (s *RuntimeService) ListPointCatalog(ctx context.Context, limit int) (Point
 	}
 	if len(entries) > limit {
 		entries = entries[:limit]
+	}
+	/* Eligibility được tính Ở ĐÂY, trên đường ra duy nhất của catalog: tính ở
+	 * adapter thì mỗi provider phải nhớ gọi, mà "phải nhớ gọi" chính là cách
+	 * bản luật thứ hai ở FE đã sinh ra. */
+	for index := range entries {
+		entries[index].Mapping = EvaluatePointMapEligibility(entries[index])
 	}
 	return PointCatalogPage{Items: entries}, nil
 }

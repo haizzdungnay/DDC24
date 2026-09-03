@@ -8,6 +8,1305 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-31` bước 3: đối chiếu TRỌN chuỗi, không chỉ số slot (#375, 2026-09-03)
+
+- **Triệu chứng (khoảng trống còn lại sau bước 2).** Phép kiểm ở Check và Commission mới so
+  `pointId → extIndex`. Nhưng **bốn thao tác cấu hình giữ nguyên số slot** mà vẫn đổi hẳn thứ nó trỏ
+  tới: sửa `address`, đổi `holding_register` → `input_register`, đổi `uint16` → `int32`, hạ
+  `read_write` → `read`. Một phép kiểm chỉ nhìn số slot nói **"khớp"** cho cả bốn — trong khi binding
+  đã Commission đọc/ghi một thứ khác.
+- **Nguyên nhân gốc.** `AC-PIO-ID-02` đòi xác minh trọn chuỗi
+  `pointId → extIndex → bus / device / register / datatype / access`; hai bước trước mới làm được
+  hai mắt đầu.
+- **Cách sửa.** `ExtSlot`/`ModbusSlot` chở thêm `registerType / address / dataType / readWrite`;
+  manifest as-built ghi lại chúng ở Check; Commission so **cả bốn** bằng `SameTarget` và chặn khi
+  lệch.
+- **Package cũ (`AC-PIO-ID-03`).** Manifest sinh trước bản vá này không mang bốn trường đó.
+  `SameTarget` chỉ so **những trường thực sự có mặt**: coi "thiếu dữ liệu" là "lệch" sẽ chặn mọi
+  package cũ dù chúng có thể vẫn đúng, còn coi là "khớp" thì mất phép kiểm. Quyết định nằm ở **một
+  chỗ đọc được**, không rải rác trong phép so sánh, và có test riêng khoá lại.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · FE **199 file / 2440 test** + lint
+  + build + ngân sách bundle PASS. Sáu ca mới: không đổi gì ⇒ qua · đổi địa chỉ ⇒ chặn · đổi kiểu
+  thanh ghi ⇒ chặn · đổi datatype ⇒ chặn · hạ quyền ghi ⇒ chặn · manifest cũ thiếu trường ⇒ vẫn so
+  được theo slot.
+- **CI vẫn bị chặn** (không cấp runner, mọi job chết sau 2–3 giây, `runner_id = 0`) — xem #414. Số đo
+  trên là đo cục bộ bằng đúng bộ lệnh CI chạy.
+
+
+### Fixed — `ISS-PIO-31` bước 2: đối chiếu lại slot Modbus ngay trước activation (#375, 2026-09-02)
+
+- **Triệu chứng (khoảng trống còn lại sau bước 1).** Check đã phân giải slot theo danh tính bền,
+  nhưng giữa lúc Check xanh và lúc bấm Commission, cấu hình fieldbus **vẫn có thể đổi** — tắt một
+  thiết bị, đổi tên một điểm, thêm một điểm. Một package *"đã PASSED"* không nói gì về cấu hình
+  **hiện tại**, và đúng khoảng trống đó là nơi lỗi ghi sai thanh ghi đi qua.
+- **Một lệch do chính bước 1 tạo ra, sửa luôn.** Bước 1 biên dịch bằng slot **phân giải lại**, nhưng
+  `packageManifestBindings` vẫn ghi slot **đã lưu** vào manifest as-built. Hồ sơ nói một đằng còn
+  artifact chạy một nẻo — đúng loại lệch mà cả issue này sinh ra để chặn. Manifest nay ghi **số như
+  đã biên dịch**.
+- **Cách sửa (bước 2).** `OperationService.verifyModbusSlots` đọc manifest as-built của Check PASSED,
+  phân giải lại bố cục **tại thời điểm Commission**, và **chặn** khi lệch hoặc khi điểm đã biến mất.
+  Không tự remap ở đây, cũng như ở Check: lệch ⇒ chặn, người vận hành rebind rồi Check lại, bản LKG
+  đang chạy giữ nguyên (`AC-PIO-ID-03`).
+  - Manifest **rỗng hoặc không đọc được** ⇒ chặn, **không** coi là "không có binding Modbus": đó là
+    một package không tự mô tả được, và cho nó đi tiếp là bỏ đúng phép kiểm này.
+  - Package chỉ có điểm LOCAL/VP **không** phụ thuộc resolver — bắt nó phụ thuộc là dựng một phụ
+    thuộc giả và chặn nhầm.
+- **Phạm vi có chủ ý.** Chỉ áp cho `COMMISSION`, đúng câu chữ của `AC-PIO-ID-02`. `RESTORE` cũng
+  activate một artifact nên về lý cần phép kiểm tương tự, **nhưng** chặn đường phục hồi trong lúc
+  sự cố là một đánh đổi thuộc quyền chủ sở hữu, không phải quyết định của người sửa mã. Đã nêu ở
+  comment của #375.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · FE **199 file / 2440 test** + lint
+  + build + ngân sách bundle PASS. Sáu test mới khoá: bố cục không đổi ⇒ qua · slot dịch sau Check ⇒
+  chặn · điểm biến mất sau Check ⇒ chặn · thiếu resolver ⇒ chặn · package không có MB_RTU ⇒ qua ·
+  manifest hỏng ⇒ chặn.
+- **CI:** từ ~20:28 UTC GitHub Actions **không cấp runner** cho tổ chức (mọi job chết sau 2 giây,
+  `runner_id = 0`, log HTTP 404) — chữ ký của lỗ hổng 1 ở #414 tái phát. Số đo trên là **đo cục bộ
+  bằng đúng bộ lệnh CI chạy**; chưa có xác nhận từ CI.
+
+
+### Fixed — `ISS-PIO-31` bước 1: Check thôi tin con số slot lưu trong binding (#375, 2026-09-02)
+
+- **Triệu chứng (chưa ai gặp vì FE còn chặn MB_RTU, nhưng đường code đã sẵn sàng gây ra).** Binding
+  bền lưu `point.extIndex` do FE ghi lúc chọn điểm, và đường Check **chuyển tiếp thẳng** con số đó
+  xuống compiler. Slot `ext` lại được `iobus` cấp **tuần tự** trên tập thiết bị/điểm **đang bật**, nên
+  đổi `pointId`, thêm/tắt điểm hay tắt thiết bị đều làm nó dịch chỗ. Binding đã Commission trỏ
+  `PUMP-02#14`; tắt `VFD-01` để bảo trì ⇒ slot 14 nay là thanh ghi của điểm khác — và `st_io_map.cpp`
+  chỉ kiểm dải `[1, KX_N_EXT]` nên 14 vẫn "hợp lệ": chương trình ghi lệnh bơm **sai chỗ**, không một
+  dòng cảnh báo.
+- **Nguyên nhân gốc.** `extIndex` bị dùng như **danh tính**, trong khi nó chỉ là **handle runtime**.
+  Danh tính bền của một điểm Modbus là `(deviceId, pointId)` — hai trường người dùng đặt.
+- **Cách sửa (bước 1).**
+  - `ModbusSlotProvider` + `ModbusSlotSnapshot`: adapter ở `internal/app` đọc **chính** cấu hình
+    fieldbus mà `iobus` sẽ nạp và dựng lại bố cục bằng `modbusrtu.BuildExtLayout`.
+  - Check **chụp bố cục một lần cho cả package** (hai binding cùng package không được phân giải trên
+    hai cấu hình khác nhau), rồi phân giải `extIndex` **từ danh tính bền**.
+  - **Ba đường fail-closed:** điểm không còn trong cấu hình ⇒ chặn; số đã lưu lệch số phân giải lại ⇒
+    chặn kèm câu *"cần rebind rồi Commission lại — hệ thống KHÔNG tự chuyển slot"*; không có nguồn
+    phân giải ⇒ chặn mọi binding MB_RTU. Lý do luôn **nêu tên chủ mới của slot** (`slot 14 nay thuộc
+    về bus-1-slave-9#PRESSURE`), vì "extIndex không khớp" không giúp người vận hành đánh giá mức nguy
+    hiểm.
+  - Catalog lỗi thêm component `point-catalog` với `PIO-SLOT-001..003` → `PRG-ERR-MAP-003`.
+- **Đo lại.** `layout` exit 0 · Go **19 package `ok`** (`-race`) · FE **199 file / 2440 test** + lint +
+  build + ngân sách bundle PASS · C++ `full` (`-Werror`) **1389/1389** exit 0. Test mới khoá năm thao
+  tác cấu hình (reboot · đổi tên điểm đứng trước · thêm điểm · tắt điểm · tắt thiết bị) và seam
+  0-based ↔ 1-based ở đầu BE.
+- **Còn lại của `ISS-PIO-31` (issue vẫn MỞ, nói rõ để không ai nhầm là đã xong):**
+  1. `AC-PIO-ID-02` mới xác minh `pointId → extIndex`; **chưa** đối chiếu `register / datatype /
+     access`.
+  2. Xác minh đang đứng ở **Check**; cấu hình vẫn có thể đổi giữa Check và Commission, nên cần đóng
+     dấu fingerprint vào kết quả Check rồi đối chiếu lại **ở Commission**.
+  3. Bằng chứng E2E năm kịch bản thuộc #382 (`5a…5g`).
+
+
+### Fixed — Seqlock của Signal Bus ghép value chu kỳ này với timestamp chu kỳ khác (#414, 2026-09-02)
+
+- **Triệu chứng.** `StSignalBus.ConcurrentInspectNeverPairsValueWithForeignTimestamp` đỏ trên
+  CI ở profile `modbus+bacnet` (1/1346), trong khi cùng profile xanh ở máy dev. Đo lại tại
+  chỗ: đỏ **1/40** lần chạy qua `ctest` và **1/51** khi chạy thẳng binary — **lỗi thật, không
+  phải nhiễu hạ tầng**.
+- **Nguyên nhân gốc.** `commit_at_boundary()` **tăng mốc `generation` TRƯỚC rồi mới đổi bản
+  `live`**. Seqlock của `snapshot_slot()` đọc theo thứ tự `generation` → `live` → dữ liệu →
+  `generation` và tin rằng *"mốc không đổi ⇒ chưa đổi bản"*. Mệnh đề đó chỉ đúng nếu mốc tăng
+  **sau** cú đổi bản. Cửa sổ thật: reader đọc `before = G+1` (sau khi tăng mốc, trước khi đổi
+  bản) rồi đọc `live = L` (bản cũ); writer đổi bản; `publish()` chu kỳ kế tính
+  `draft = 1 - live = L` và **ghi đè đúng bản reader đang chép**; reader đọc `after = G+1`,
+  thấy bằng `before` nên **chấp nhận một ô đã bị xé**.
+- **Vì sao nghiêm trọng.** Một số đo "tươi" mang mốc thời gian không thuộc về nó là loại sai
+  nguy hiểm nhất ở Runtime Monitor: nó **trông hoàn toàn hợp lệ**.
+- **Cách sửa.** Đổi bản trước, tăng mốc sau; bất biến thứ tự được ghi thành chú thích tại chỗ
+  vì nó là *bất biến*, không phải sở thích.
+- **Đo lại.** Sau bản vá **0/400** lần chạy đỏ. Năm profile C++ `-Werror`: **1329 / 1345 /
+  1330 / 1346 / 1384**, tất cả exit 0.
+- **Ghi nhận thêm về bộ bắt lỗi.** Chú thích cũ nói bộ bắt lỗi tất định là
+  `-DMKDDC_SANITIZE=thread`; đo lại: TSan **build và chạy được** (khác ghi chú cũ) nhưng báo
+  6 cảnh báo data race **ngay cả trên bản đã sửa** — chúng là phép chép Slot không đồng bộ của
+  chính khuôn seqlock. Muốn TSan thành cổng thì phải chú thích hoặc đổi Slot sang atomic, tức
+  đổi thiết kế đường RT; **chưa làm**, và chú thích trong test đã được sửa cho khớp sự thật.
+
+### Fixed — Chuỗi no-board của lane E2E đua với máy nên chết ở CI mà không nói vì sao (#414, 2026-09-02)
+
+- **Triệu chứng.** Job `Programming E2E backend/Core thật` đỏ: `mkddc-iobus` và `mkddc-core`
+  đều `Aborted (core dumped)`, rồi cổng của lane báo *"chuỗi no-board lên nhưng không thấy
+  /dev/shm/mkddc_plc_shm"*. Không tái hiện được ở máy dev, kể cả khi build đúng bộ tuỳ chọn
+  CMake mà lane E2E dùng.
+- **Nguyên nhân gốc (loại lỗi, không phải một dòng).** `run_noboard_demo.sh` dùng `sleep` cố
+  định giữa các bước (0,7 s cho socat, 1,5 s cho iobus/core) — một cuộc đua với máy: thắng
+  trên máy dev rảnh, thua trên runner CI chạy song song nhiều job. Và khi thua, nó **không nói
+  ra vì sao**: log của chính tiến trình chết nằm trong `logs/demo/*.log` mà CI không giữ lại,
+  nên triệu chứng cách nguyên nhân vài dòng log không ai đọc được.
+- **Cách sửa.** Thay mọi `sleep` cố định bằng `wait_for` — chờ ĐÚNG điều kiện (cặp PTY xuất
+  hiện, fake_mcu còn sống, `/dev/shm/mkddc_io_shm`, socket IPC, `/dev/shm/mkddc_plc_shm`) — và
+  khi hết hạn thì **in 30 dòng cuối log của tiến trình liên quan** rồi mới chết. Một lần đỏ ở
+  CI phải tự nói ra vì sao, vì không ai ssh được vào runner đó.
+- **Đo lại.** Chuỗi lên bình thường với build đúng bộ tuỳ chọn của lane E2E; toàn lane
+  `e2e-real` **8 passed / 1 skipped, exit 0**. Tiêm lỗi (thay `mkddc-iobus` bằng một script
+  thoát 134 ngay lập tức) ⇒ cổng dừng đúng chỗ và in ra dòng cuối của chính tiến trình đó:
+  *"ERROR iop.fatal: giả lập tiến trình chết ngay khi khởi động"*.
+- **Nguyên nhân gốc của `Aborted` đã được tìm ra ở chỗ khác:** `mlockall(MCL_FUTURE)` dưới
+  trần memlock hữu hạn (bản vá riêng, PR #439). Bản vá ở đây **không thay thế** bản vá đó —
+  nó chữa một khiếm khuyết khác cùng lộ ra trong lần đỏ ấy: chuỗi đua với máy, và khi chết thì
+  không ai đọc được vì sao. Hai thứ độc lập, và thứ hai vẫn cần dù thứ nhất đã xong.
+
+
+### Fixed — Test hồi quy memlock đỏ vì môi trường, không vì hành vi (2026-09-02)
+
+*Phát hiện qua review tự động trên PR #440 (P2), đã kiểm chứng lại và đúng.*
+
+`run_child_with_memlock` đặt CỨNG cả `rlim_cur` lẫn `rlim_max` bằng 1 MiB. Tiến
+trình không đặc quyền chỉ được **hạ** `rlim_max`, không được nâng — nên trong bất
+kỳ container nào có hard `RLIMIT_MEMLOCK` thấp hơn 1 MiB, `setrlimit` hỏng, con
+thoát mã 90, và cả ba mệnh đề đỏ **trước khi** chạm tới hành vi `MCL_FUTURE` cần
+kiểm. Đúng loại lỗi biến một cổng thật thành một cổng bị tắt trong tuần đầu.
+
+*Cách sửa:* hạ `rlim_cur`, GIỮ NGUYÊN `rlim_max`, và kẹp giá trị mong muốn theo
+hard limit thừa kế — hạ soft limit thì luôn hợp lệ, và kẹp thì không bao giờ phải
+nâng.
+
+| Phép đo (`prlimit --memlock=65536:65536`, chạy user thường) | Kết quả |
+| --- | --- |
+| Bản test cũ | **3/3 ĐỎ** (mã thoát 90 — hỏng ở `setrlimit`) |
+| Bản sau khi sửa | **2 PASS + 1 SKIP** (skip có lý do rõ, không xanh giả) |
+| `ctest --test-dir build/fw` (MODBUS+BACNET+HMI=ON) | **1389/1389 pass** |
+| `python3 scripts/docs_iso_harness.py --expect` | **PASS — mọi phép kiểm bắt buộc đạt; EXPECT khớp toàn bộ ngưỡng** (`DOC-GOV-001` §7.5) |
+
+### Fixed — Bản đồ slot `ext` của Modbus lệch so với allocator thật (ISS-PIO-31, 2026-09-02)
+
+`BuildExtLayout` (thêm hôm nay ở #433) tồn tại để tính **đúng** bố cục slot mà
+`iobus` sẽ cấp, làm nền cho phép kiểm tham chiếu `AC-PIO-ID-02`. Nó tính sai ở
+hai chỗ, nên chính nó trở thành "bản chép nói dối" mà doc-comment của nó cảnh
+báo.
+
+- **Cursor cộng theo số THANH GHI thay vì số SLOT.** `registerCount` trả 2 cho
+  `int32/uint32/float32`, và cursor cộng 2. Nhưng `ext_slots_for_point`
+  (`device_profile.cpp`) trả `pt.count / 2` cho kiểu 32 bit, và `bus_worker.cpp`
+  ghi thẳng *"đếm theo ĐIỂM LUẬN LÝ, không theo số register"*. `BuildProfile`
+  phát một row cho một `Point` với `count` = 1 hoặc 2 thanh ghi, nên thay vào ba
+  nhánh của `ext_slots_for_point` đều ra **1**: một `Point` luôn chiếm đúng MỘT
+  slot. Hệ quả: mỗi điểm 32 bit làm mọi điểm phía sau nó lệch lên một slot so
+  với runtime.
+- **Sắp xếp theo `TagName` thay vì `PointID`.** `BuildProfile` sắp row theo
+  `rows[i]["name"]`, và `row["name"] = point.PointID`. Doc-comment cũ khẳng định
+  *"`name` là `TagName`"* — sai. `TagName` là nhãn hiển thị người dùng đổi
+  thường xuyên; `PointID` là danh tính bền.
+
+Hai lỗi này đi ngược mục đích của chính module: một binding đúng có thể bị báo
+lệch, và một binding đã lệch có thể lọt.
+
+Bộ test đi kèm **khoá sai luật** chứ không bắt được: `TestExtLayoutAdvancesTwoSlotsFor32Bit`
+khẳng định điểm sau một điểm 32 bit phải nhảy 2, và dữ liệu mẫu dùng `PointID`
+với `TagName` cùng thứ tự nên lỗi sắp xếp vô hình. `TestRenamingAPointReordersTheWholeDevice`
+khẳng định đổi `TagName` làm dịch slot — điều hệ thống thật KHÔNG làm.
+
+*Cách sửa:* `extSlotsForPoint` chép đúng ba nhánh của `ext_slots_for_point`; sắp
+theo `PointID`; `RegisterCount` giữ nguyên nghĩa "số thanh ghi trên dây" và
+doc-comment nói rõ nó KHÔNG phải khoảng cách tới slot kế tiếp. Ba test được
+viết lại cho khớp sự thật, và thêm **cổng chống trôi**
+`TestExtLayoutMatchesIobusAllocator` đọc thẳng `device_profile.cpp` lẫn
+`persistence.go` — cùng khuôn mẫu với `TestPointEligibilityMatchesCoreIoMap` của
+ISS-PIO-32.
+
+**Kiểm chứng (tiêm lỗi ba chiều, đo thật):**
+
+| Tiêm lỗi | Kết quả |
+| --- | --- |
+| Khôi phục cursor cộng theo thanh ghi | `TestExtLayoutAdvancesOneSlotFor32Bit` ĐỎ |
+| Khôi phục sắp theo `TagName` | 3 test ĐỎ, gồm `TestExtLayoutSortsByPointIDLikeBuildProfile` |
+| Đổi `BuildProfile` sang `name = TagName` | cổng chống trôi ĐỎ đúng thông điệp |
+| `verify-project.sh --component go` sau bản vá | 19/19 package `ok` |
+
+### Fixed — `state.snap` ghi không fsync: mất điện là mất giờ chạy và số đo đếm (2026-09-02)
+
+*Triệu chứng (tiềm ẩn, chưa có báo cáo hiện trường):* sau một lần mất điện,
+`/data/mkddc/state.snap` có thể rỗng hoặc cụt. `load()` cảnh báo rồi trả `{}` —
+đúng thiết kế fail-soft — nên hệ thống vẫn chạy, và **RuntimeCounter** (giờ chạy
+thiết bị) lẫn **PulseCounter** (đo đếm) âm thầm quay về 0. Không có lỗi nào được
+báo; chỉ số vận hành đơn giản là biến mất.
+
+*Nguyên nhân gốc:* `StateSnapshot::save()` ghi `.tmp` rồi `std::rename()`, kèm
+chú thích "atomic rename". `rename()` **nguyên tử với phép thay thế, không nguyên
+tử với độ bền**: kernel có thể persist entry thư mục mới trước khi persist nội
+dung file. Đường ghi thiếu cả `fsync(fd)` lẫn `fsync(thư mục cha)`.
+
+Đây không phải một lựa chọn thiết kế còn tranh cãi — `st_retain.cpp`,
+`st_journal.cpp` và `programming_runtime_coordinator.cpp` đều đã làm đúng
+`write → fsync(fd) → rename → fsync(dir)`. `state_snapshot.cpp` là chỗ **duy
+nhất** trong core ghi trạng thái bền vững mà không fsync.
+
+*Cách sửa:* áp đúng khuôn mẫu sẵn có, và cho hỏng trả `false` thay vì báo thành
+công; dọn `.tmp` trên mọi nhánh lỗi.
+
+**Kiểm chứng (đo thật):**
+
+| Phép đo | Kết quả |
+| --- | --- |
+| `strace -e trace=fsync,rename` quanh một lần `save()`, TRƯỚC bản vá | **0 lần fsync**, chỉ có `rename` |
+| Cùng phép đo, SAU bản vá | **2 lần fsync**, đúng thứ tự `fsync(file)` → `rename` → `fsync(dir)` |
+| `ctest --test-dir build/fw` (MODBUS+BACNET+HMI=ON) | **1389/1389 pass** |
+
+**Đánh đổi đã cân nhắc:** `save()` được gọi từ `after_scan`, tức chạy trên thread
+scan RT (mỗi 60 scan, nếu graph dirty). Thêm fsync là thêm chờ đĩa THẬT vào
+đường đó. Đo trên filesystem của môi trường phát triển: **0,57 ms trung bình /
+1,39 ms xấu nhất** cho một `save()` đầy đủ, so với base step **1000 ms** — biên
+còn rất rộng. Lưu ý số này KHÔNG phải đo trên eMMC của bo thật, nơi fsync có thể
+chậm hơn hàng chục lần; ngay cả vậy thì một lần chờ ~100 ms mỗi 60 giây vẫn nằm
+trong ngân sách, và nếu vượt thì bộ đếm `overrun` của scan loop sẽ thấy chứ
+không âm thầm. Nếu số đo trên bo cho thấy cần, bước tiếp theo đúng hướng là đẩy
+phần ghi file sang worker non-RT như `StRetainService` đã làm — không phải bỏ
+fsync.
+
+**Test bổ sung:** `StateSnapshotDurable.LeavesNoTmpResidueAfterSuccessfulSave` và
+`ReportsFailureInsteadOfClaimingSaved`. Giới hạn được ghi thẳng trong test: bản
+thân lời gọi `fsync` không quan sát được từ trong tiến trình, nên hai mệnh đề này
+khoá phần **quan sát được** của hợp đồng (không để lại rác `.tmp`; hỏng thì trả
+`false` chứ không báo thành công), còn chuỗi syscall được chứng minh bằng phép đo
+`strace` ở trên.
+
+### Fixed — Hai job CI đỏ liên tục trên `main`: abort lúc khởi động và artifact thiếu binary (2026-09-02)
+
+Trên commit mới nhất của `main` (`1e9309a`), 10/12 job của **Build & Test** đã xanh, còn lại hai
+job đỏ. Cả hai đều là lỗi thật, và cả hai đã được tái hiện cục bộ trước khi sửa.
+
+- **`mkddc-iobus` và `mkddc-core` abort ngay lúc khởi động khi chạy không đặc quyền.**
+  *Triệu chứng:* job *Programming E2E backend/Core thật (host)* đỏ với `Aborted (core dumped)` cho
+  cả hai binary, rồi `LỖI: chuỗi no-board lên nhưng không thấy /dev/shm/mkddc_plc_shm`. Log tiến
+  trình dừng ở `terminate called after throwing an instance of 'std::system_error' — Resource
+  temporarily unavailable`, không nhắc gì tới nguyên nhân.
+  *Nguyên nhân gốc:* `mlockall(MCL_CURRENT|MCL_FUTURE)` **vẫn trả về 0** dưới trần
+  `RLIMIT_MEMLOCK` hữu hạn, vì phần đang map vừa trong trần. Bẫy nằm ở `MCL_FUTURE`: từ đó MỌI
+  mapping mới đều phải khoá được, nên `pthread_create` xin stack 8 MB hỏng với `EAGAIN`,
+  `std::thread` ném `std::system_error`, không ai bắt, và tiến trình abort — cách chỗ gọi
+  `mlockall` vài chục dòng. Unit systemd của bản thật đặt `LimitMEMLOCK=infinity` + `CAP_IPC_LOCK`
+  nên bo thật không dính; runner CI chạy user thường với trần 8 MB thì dính mọi lần. Chú thích
+  ngay tại chỗ gọi đã ghi hợp đồng là *"thiếu cap → degraded, tiếp tục"* — code lại chết.
+  *Cách sửa:* chỉ bật `MCL_FUTURE` khi `RLIMIT_MEMLOCK` là vô hạn; ngược lại khoá `MCL_CURRENT`
+  (có giá trị, không gài mìn) và báo suy giảm. Ở `mkddc-core`, `rt_health.mlock_ok=false` nên dòng
+  `rt.degraded` và `plc_shm` nói đúng rằng jitter không được bảo đảm, thay vì im lặng.
+  *Phạm vi:* `apps/iobus/adapters/platform/realtime.{hpp,cpp}`, `apps/core/bootstrap/main.cpp`.
+
+- **Artifact `production-tools` thiếu `mkddc-programming-sim-worker`.**
+  *Triệu chứng:* job *Go Web Backend* đỏ với 6 test `internal/programming/simworker` báo
+  *"không có sim worker đã dựng"*.
+  *Nguyên nhân gốc:* `run_go` đặt `MKDDC_REQUIRE_PRODUCTION_TOOLS=1` — biến SKIP thành FAIL, đúng
+  ý đồ *"không có đường SKIP giả xanh"* — nhưng chỉ canh và truyền hai binary
+  (`mkddc-st-compile`, `mkddc-st-package`). Sim worker không được canh, không được truyền qua
+  `MKDDC_SIM_WORKER_BINARY`, và cũng không nằm trong artifact của cổng cpp; test tự dò
+  `build/fw` rồi `build/verify/cpp-full` bằng đường dẫn CỨNG, tức bỏ qua `MKDDC_BUILD_ROOT`. Trên
+  runner Go không có thư mục nào trong hai đường đó nên cổng đỏ vì artifact thiếu file, không phải
+  vì code hỏng.
+  *Cách sửa:* `run_go` canh sim worker (kiểm executable riêng — nó không công bố `profile_sha256`)
+  và export `MKDDC_SIM_WORKER_BINARY`; workflow đưa binary thứ ba vào artifact và vào `chmod +x`.
+
+**Kiểm chứng (đo thật trong phiên này):**
+
+| Phép đo | Kết quả |
+| --- | --- |
+| `cmake --fresh` + build, cả ba option MODBUS/BACNET/HMI = ON | configure exit 0, build exit 0 |
+| `ctest --test-dir build/fw` | **1387/1387 pass** (trước bản vá: 1384/1384) |
+| Cổng Go `--component go` với `MKDDC_BUILD_ROOT` riêng | exit 0, **19/19 package `ok`** |
+| Tái hiện lỗi Go trong worktree sạch (đúng điều kiện CI) | 6 test FAIL — đúng lỗi CI |
+| Sau bản vá, cùng worktree | 8/8 test `simworker` PASS |
+| Tiêm lỗi: xoá sim worker khỏi build root | cổng dừng đúng lý do, exit 1 |
+| `mkddc-iobus` chạy bằng user thường, trần memlock 8 MB | trước: exit 134 (SIGABRT); sau: chạy tới `NORMAL_POLL` |
+| `mkddc-core` chạy bằng user thường | trước: abort; sau: `core.ready`, ghi `/dev/shm/mkddc_plc_shm` |
+| Tiêm lỗi: khôi phục hành vi `MCL_FUTURE` vô điều kiện | `RealtimeMemlock.FiniteLimitMustNotAllowMclFuture` ĐỎ ở cả root lẫn user thường |
+
+**Test bổ sung:** `apps/iobus/tests/test_realtime_memlock.cpp` — ba mệnh đề, chạy trong tiến trình
+con vì `setrlimit`/`mlockall` là trạng thái toàn tiến trình. Cổng chính là phép kiểm **quyết định**
+(`FiniteLimitMustNotAllowMclFuture`), tất định ở mọi môi trường; hai phép kiểm hành vi chỉ có răng
+khi chạy không đặc quyền, vì `CAP_IPC_LOCK` bỏ qua `RLIMIT_MEMLOCK` — điều này được ghi rõ trong
+test và tự `SKIP` thay vì xanh giả.
+
+### Fixed — Lane E2E mock kiểm một bàn làm việc BỊ KHOÁ mà không ai biết (#414, 2026-09-02)
+
+Sau khi cổng helper đăng nhập được sửa, bước `E2E mock` chạy lần đầu và đỏ **5 test**. Cả ba
+nguyên nhân đều là **đồ gá sai**, không phải sản phẩm sai — nhưng nguyên nhân đầu nghiêm
+trọng hơn một test đỏ:
+
+- **Mock không công bố bộ ba tương thích (`ISS-STED-19`) ⇒ FE fail-closed và khoá soạn thảo.**
+  *Triệu chứng:* `UJ-PROG-01..08` không thấy empty-state *"Chưa có chương trình. Bấm + để
+  tạo."*, và `AC-PGM02-001` chờ mãi nút `Thêm FUNCTION`. *Nguyên nhân gốc:* thiếu
+  `capabilities.compatibility` ⇒ `UNVERIFIABLE` ⇒ `canEdit=false` ⇒ cây POU **mất toàn bộ nút
+  tạo** và đổi luôn câu empty-state. Nghĩa là mọi journey EDIT của lane mock đang chạy trên
+  một bàn làm việc **bị khoá**, và vì bước này chưa từng chạy trên CI nên không ai thấy.
+  *Cách sửa:* mock phát `BUNDLE_COMPATIBILITY` — lấy thẳng hằng đã build vào bundle, nên khi
+  phiên bản đổi thì mock tự theo thay vì hoá thành một con số chép tay lỗi thời.
+- **Mock quảng cáo `latestCheck.checkId = check-sim-0001` mà không phục vụ `GET /checks/{id}`**
+  ⇒ backend giả trả 503, phiên SIMULATE ghi `console.error`, cổng `expectNoBrowserFailures`
+  đỏ vì đồ gá. *Cách sửa:* fixture phục vụ đúng thứ chính nó quảng cáo.
+- **Phép đo focus ring dùng `locator.focus()`.** Chromium chỉ khớp `:focus-visible` theo
+  phương thức tương tác gần nhất; sau `login()`/`navigate()` (bấm chuột), focus bằng script
+  **không** bật giả lớp đó, nên phép đo đọc `outline-width: 0` và **tố cáo sản phẩm thiếu
+  vòng focus** trong khi vòng focus vẫn ở đó. *Cách sửa:* Tab tới nút — đúng thứ test tuyên
+  bố đo. Đã tiêm lỗi (`outline: 0px` ở `shared/styles.css`) để chứng minh phép đo mới vẫn bắt
+  được khi vòng focus mất thật.
+- **Đo lại.** Lane mock: **154 passed / 17 skipped, 0 failed** (trước: 5 failed / 149 passed).
+  Chạy bằng Chromium vì proxy chặn tải Google Chrome; CI chạy Chrome thật.
+
+
+### Fixed — Cổng "một helper đăng nhập" chặn lane mock vì áp nhầm cả spec của lane target (#414, 2026-09-02)
+
+- **Triệu chứng.** Job "React Web Frontend" đỏ ở bước `E2E mock` với
+  *"LỖI: spec định nghĩa lại helper đăng nhập thay vì dùng e2e/helpers/session.ts:
+  e2e/programming-target-fault.spec.ts"*. Trước đó job luôn chết sớm hơn (thiếu `jsonschema`,
+  và trước nữa là billing), nên **bước này chưa từng chạy trên CI** và vi phạm ngồi im.
+- **Nguyên nhân gốc.** Cổng loại trừ đúng **một** spec (`programming-real.spec.ts`) khỏi luật
+  "chỉ một helper đăng nhập", trong khi có **hai** spec thuộc lane khác.
+  `programming-target-fault.spec.ts` chạy dưới `playwright.programming-target.config.ts`, đăng
+  nhập vào backend **thật** bằng mật khẩu của lane target, và chỉ chạy trong cửa sổ fault
+  injection có kiểm soát. Nó **buộc phải** có helper riêng — ép nó dùng helper của lane mock
+  chính là kiểu trừu tượng hoá làm hỏng ranh giới lỗi mà chú thích của cổng đã cảnh báo.
+  Cùng lỗi phạm vi ấy còn khiến lane mock **chạy** spec target (rồi `skip`), tức lane mock
+  tưởng mình phủ một spec mà nó không phủ.
+- **Cách sửa.** Thay hằng một-spec bằng danh sách `MKDDC_E2E_OTHER_LANE_SPECS` dùng chung cho
+  **cả hai** chỗ: danh sách spec chạy và phép kiểm helper đăng nhập.
+- **Đo lại.** `--component e2e` nay qua được cổng và chạy **10 spec / 171 test** (trước: dừng
+  ở cổng, 0 test chạy).
+- **Còn đỏ, và nói rõ:** trong 171 test đó có **5 test `programming.spec.ts` hỏng sẵn** — POU
+  explorer không hiện empty-state, nút "Thêm FUNCTION" không xuất hiện, `focusRingMinPx` đo
+  được 0, và phiên SIMULATE nhận 503 ở `/programming/checks/...`. Chúng **không** do thay đổi
+  nào trong phiên này gây ra. Số đo cục bộ này chạy bằng **Chromium** chứ không phải Google
+  Chrome (proxy chặn tải Chrome — `CONNECT tunnel failed, 403`), nên chưa đủ để khẳng định
+  cả 5 cũng đỏ trên CI; lần chạy CI kế tiếp là phép đo đúng browser đầu tiên của lane này.
+
+
+### Fixed — `ISS-PIO-32` một authority duy nhất quyết định binding eligibility; hai luật cứng ở FE đã sai (#376, 2026-09-02)
+
+- **Triệu chứng.** Tab Ánh xạ nói *"Core Rev A chưa resolve MB_RTU trong ST io_map"* và
+  *"VP hiện chỉ hỗ trợ VAR_INPUT"*. **Cả hai câu đều sai** vào lúc chúng còn nằm trong mã:
+  `st_io_map.cpp` resolve `MB_RTU` → `StPointKind::EXT` từ trước baseline, và
+  `F-PROG-ASBUILT-016` đã gỡ chặn chiều ghi của VP — `pointCatalogDirection` ở web-api còn
+  trả `READ_WRITE` cho VP do **chương trình** sở hữu. Người dùng đọc "Core chưa hỗ trợ" cho
+  hai năng lực **đang chạy được**, rồi đi sửa nhầm chỗ.
+- **Nguyên nhân gốc.** FE giữ **bản luật thứ hai**: allowlist prefix, bảng `PREFIX_TYPE`, và
+  hai câu chặn cứng theo category. Bản chép ấy đúng vào ngày viết, rồi Core đi tiếp một mình.
+  Không ai canh nó vì không có gì nối nó với authority thật.
+- **Cách sửa.**
+  - `point_eligibility.go` là **authority duy nhất**: mỗi entry của Point Catalog nay mang
+    `mapping.input`/`mapping.output` gồm `status` + `reasons`, tính trên đường ra duy nhất
+    của catalog (`ListPointCatalog`) chứ không ở adapter — "phải nhớ gọi" chính là cách bản
+    luật thứ hai đã sinh ra.
+  - `splitNumberedID` chép **đúng** `split_numbered_id` của Core: bắt buộc `PREFIX-DIGITS`,
+    từ chối định danh thiếu gạch và số thứ tự toàn 0. Bản FE cũ lỏng hơn Core, tức mời người
+    dùng chọn một binding sẽ hỏng ở Check chứ không hỏng lúc chọn.
+  - **Cổng chống trôi:** `TestPointEligibilityMatchesCoreIoMap` đọc **thẳng** `st_io_map.cpp`
+    và so allowlist prefix, luật chiều ghi LOCAL, luật kiểu MB_RTU và hình dạng định danh.
+    Bảng chép **có người canh** thì mới khác bản chép đã gây ra lỗi này.
+  - **MB_RTU nói đúng tầng:** lý do chặn nay là *"Catalog chưa phát extIndex … (ISS-PIO-31);
+    Core đã resolve MB_RTU"*. `PointCatalogEntry.ExtIndex` là seam thật: ngày `ISS-PIO-31`
+    phát số, năng lực **tự mở** — không sửa FE, không sửa cả hàm authority.
+  - **FE chỉ trình bày:** `supportEligibility` chọn chiều rồi chuyển nguyên văn; vắng
+    `mapping` (server đời cũ) thì **fail-closed** `SERVER_DECISION_MISSING`, không suy lại.
+  - **Nhãn thôi đoán nguyên nhân:** chip cũ ghi cứng "Core chưa hỗ trợ" cho mọi lý do; nay
+    chip nói trạng thái *"Chưa map được"* còn nguyên nhân lấy nguyên văn từ server.
+- **Đo lại.** Go 19 package `ok` (`-race`); C++ profile `full` **1384/1384** exit 0; FE 199
+  file / **2440 test**, lint + build + ngân sách bundle PASS (dư địa R3 0.57 KiB); `e2e-real`
+  **8 passed / 1 skipped** exit 0. Tiêm lệch bảng prefix (thêm `PI` vào bảng Go) ⇒ cổng chống
+  trôi đỏ đúng chỗ: *"allowlist LOCAL lệch: st_io_map.cpp có [AO,DI,DO,UI], bảng Go có
+  [AO,DI,DO,PI,UI]"*.
+
+
+### Fixed — Tiền kiểm phụ thuộc Python chạy vô điều kiện làm đỏ job MCU Firmware (#414, 2026-09-02)
+
+- **Triệu chứng.** Ngay sau `476723a`, job "MCU Firmware" — trước đó xanh — đỏ tức thì với
+  chính thông điệp tiền kiểm mới thêm: *"thiếu phụ thuộc Python cho cổng hợp đồng"*.
+- **Nguyên nhân gốc.** Tiền kiểm được gọi **vô điều kiện** ở `verify-project.sh`, trong khi
+  `--component firmware` (và `release`) không đụng tới `jsonschema` và job MCU không cài
+  `requirements-ci.txt`. Một cổng đòi phụ thuộc mà chính nó không dùng là dựng phụ thuộc giả,
+  và nó chặn đúng một lane vốn không liên quan.
+- **Cách sửa.** Gọi tiền kiểm ở **đầu từng component thật sự chạy script hợp đồng** —
+  `layout`, `cpp`, `frontend`, `e2e`, `e2e-real`, và đường `--wave`; `firmware`/`release`/`go`
+  không gọi (Go chỉ dùng `python3` trần cho một stub worker, không import `jsonschema`).
+- **Đo lại.** `--component firmware` exit 0 (đã cài `gcc-arm-none-eabi` để đo thật, không suy
+  đoán); `--component layout` exit 0; tiêm `jsonschema` giả ⇒ `layout` vẫn dừng đúng lý do
+  (exit 1) còn `firmware` **không** bị chặn.
+
+### Fixed — `ISS-STED-21` lỗ hổng 1: đọc được log CI, và sáu lỗi thật lộ ra (#414, 2026-09-02)
+
+Cổng CI nay chạy được (billing đã mở), nên lần đầu tiên đọc được **log job**. Sáu nguyên
+nhân riêng biệt, không cái nào là nhiễu:
+
+- **Harness fuzz parser ST trap ở file seed ĐẦU TIÊN — job fuzz chưa từng fuzz một byte
+  nào.** *Triệu chứng:* `fuzz_st_parser` chết ngay giây 0 khi đọc corpus mẫu, exit 77.
+  *Nguyên nhân gốc:* harness giữ bất biến "biên dịch được ⇒ nạp được", nhưng
+  `serialize_st_ir` trả artifact **chưa ký** và loader bắt buộc chữ ký từ `T59-607`
+  (`IR-E-007`). Mệnh đề đúng bây giờ là "biên dịch được ⇒ **ký được** ⇒ nạp được".
+  *Cách sửa:* tách làm hai bất biến — artifact chưa ký **phải** bị từ chối đúng mã
+  `IR-E-007`, artifact đã ký **phải** nạp được. Đo lại: **1 215 944 lượt chạy trong 61 giây,
+  exit 0** (trước: chết ở giây 0). Đã tiêm lỗi hai chiều để chứng minh cả hai bất biến còn
+  kêu: đổi mã kỳ vọng ⇒ trap; bỏ khoá công khai khi nạp ⇒ trap.
+- **Hai binary tự đóng hộp không chạy nổi dưới sanitizer.** *Triệu chứng:* lane ASan đỏ với
+  `Failed to mmap` rồi `LeakSanitizer has encountered a fatal error`; 4 test đỏ.
+  *Nguyên nhân gốc:* worker mô phỏng và `mkddc-st-compile` tự áp `setrlimit(RLIMIT_AS)`
+  vài trăm MB, trong khi ASan/TSan/MSan đặt chỗ hàng chục TB shadow memory; và LSan lúc
+  thoát cần đình chỉ luồng + đọc bộ nhớ tiến trình — đúng những syscall seccomp chặn.
+  *Cách sửa:* `sanitizer_build.hpp` — miễn **riêng** trần không gian địa chỉ và **riêng**
+  phần kiểm rò rỉ, nhận biết bằng macro do chính compiler đặt (`__SANITIZE_ADDRESS__`…),
+  nên không cấu hình nào tắt được trần trong bản phát hành. Mọi thành phần khác của hàng
+  rào — seccomp, `NO_NEW_PRIVS`, cấm fork, trần file/CPU — vẫn áp đủ.
+- **Cổng biên symbol coi `libasan` là dependency lạ.** *Cách sửa:*
+  `--allow-sanitizer-runtime`, và CMake **chỉ** bật cờ này khi `MKDDC_SANITIZE` khác rỗng —
+  lane phát hành vẫn đỏ nếu một binary release kéo theo runtime sanitizer.
+- **UBSan `vptr` báo nhầm bên trong hàng rào.** *Triệu chứng:* `member access … object has
+  invalid vptr` trên một control block `shared_ptr` của libstdc++, chỉ xảy ra sau khi áp
+  seccomp; `-fno-sanitize-recover` biến báo nhầm thành đỏ vĩnh viễn. *Bằng chứng là báo
+  nhầm:* đúng đường code ấy sạch khi chạy không hàng rào, và ASan không kêu. *Cách sửa:*
+  tắt **riêng** `vptr` cho hai binary đóng hộp trong lane UBSan; mọi kiểm UB khác giữ nguyên.
+- **Chín script hợp đồng chết bằng `ImportError` thô trên runner.** *Nguyên nhân gốc:*
+  chúng cần `jsonschema >= 4` (`Draft202012Validator`) còn Ubuntu 22.04 đóng sẵn 3.2. Trong
+  `ctest`, cái chết đó hiện ra là `st_language_profile_contract Failed` — đọc y hệt một vi
+  phạm hợp đồng ngôn ngữ. *Cách sửa:* cài `requirements-ci.txt` ở mọi job chạy cổng, và
+  thêm tiền kiểm ở `verify-project.sh` nói thẳng thiếu gói nào, cài bằng lệnh nào.
+- **`apt-get update` chết vì repo bên thứ ba trả 403.** Ảnh runner mang sẵn
+  `packages.microsoft.com`; nó 403 thì job chết ở bước cài dù mọi repo Ubuntu đều tải được.
+  *Cách sửa:* gỡ repo không dùng trước khi `update`, ở cả năm bước `apt`.
+
+### Fixed — Bề mặt khai Published Signal bị gỡ khỏi tab Ánh xạ, và test bị ĐẢO để hợp thức hoá (#414, 2026-09-02)
+
+- **Triệu chứng.** E2E `T59-505` (lane backend/Core thật) hết giờ 120 giây khi bấm nút
+  *"Khai Published Signal"* trên route Mapping.
+- **Nguyên nhân gốc.** Commit `8437def` gỡ `PublishedSignalsPanel` khỏi `MappingTab` — kèm
+  chính đoạn chú thích cảnh báo rằng đây là **bề mặt authoring DUY NHẤT** của
+  `upsertSignal`/`removeSignal` (`UX-REQ-007`), và rằng E2E bấm thẳng nút đó. Cùng commit
+  **đảo hai assertion đơn vị** thành *"không được mount"*, nên chỉ E2E còn kêu — mà E2E thì
+  đang đỏ vì lý do khác. Panel đã từng bị gỡ và được trả lại một lần ở `#347`.
+- **Cách sửa.** Mount lại panel, trả hai assertion về dạng khẳng định, và ghi rõ trong mã:
+  muốn bỏ bề mặt này thì sửa `UX-REQ-007` cùng hợp đồng E2E **trước**, không phải sửa test
+  cho khớp hiện trạng.
+- **Hệ quả ngân sách bundle.** Gắn tĩnh lại làm chunk `programming` vượt ngân sách gzip R3
+  **3.24 KiB** (nâng ngân sách là quyết định sản phẩm, không phải sửa nhanh trong PR). Nạp
+  trễ panel ⇒ chunk riêng **5.50 KiB gzip**, chunk `programming` còn **164.54 KiB**, dư địa
+  **0.46 KiB**. Dư địa đó rất mỏng: lần thêm tính năng kế tiếp gần như chắc chắn phải có
+  quyết định sản phẩm về R3.
+
+### Fixed — Lane E2E real-backend phụ thuộc một tiền điều kiện không ai dựng (#414, 2026-09-02)
+
+- **Triệu chứng.** Sau khi sửa nút, `T59-505` vẫn đỏ ở khẳng định ngân sách 5xx với
+  `503 /api/v1/programming/point-catalog`.
+- **Nguyên nhân gốc.** Point Catalog đọc PLC SHM (`/dev/shm/mkddc_plc_shm`) do `mkddc-core`
+  thật ghi. `run_programming_real_e2e_stack.sh` **biết** điều đó nhưng chỉ **in cảnh báo**
+  rồi chạy tiếp — trên mọi máy không có ai dựng sẵn chuỗi no-board (CI là ví dụ đúng nhất)
+  endpoint trả 503 tất định. Một tiền điều kiện không ai dựng thì không phải tiền điều kiện.
+- **Cách sửa.** Lane tự dựng chuỗi no-board khi thiếu SHM và tự dọn ở `cleanup`;
+  `run_noboard_demo.sh` có thêm chế độ `start` (không mở dashboard, đợi SHM hiện ra rồi mới
+  trả quyền); SHM **mồ côi** (không tiến trình `mkddc-core` nào ghi) bị xoá và dựng lại,
+  vì "file còn đó" không đồng nghĩa "có ai đang ghi"; job E2E trên CI cài thêm `socat`.
+- **Đo lại.** Toàn lane `e2e-real`: **8 passed / 1 skipped, exit 0** (trước: 1 failed).
+
+**Số đo kiểm chứng (đo lại trong phiên này, không dẫn lại số cũ).**
+
+| Cổng | Kết quả |
+|---|---|
+| `cpp --profile baseline` (`-Werror`) | 1329/1329, exit 0 |
+| `cpp --profile modbus` | 1345/1345, exit 0 |
+| `cpp --profile bacnet` | 1330/1330, exit 0 |
+| `cpp --profile modbus-bacnet` | 1346/1346, exit 0 |
+| `cpp --profile full` | 1384/1384, exit 0 |
+| ASan (`detect_leaks=1`) | 1329/1329, exit 0 (trước: 4 đỏ) |
+| UBSan | 1329/1329, exit 0 (trước: chưa từng chạy tới) |
+| Fuzz `fuzz_st_parser` | 1 215 944 lượt/61 s, exit 0 (trước: chết ở giây 0) |
+| Fuzz `fuzz_st_loader` / `fuzz_st_fbd_model` | 855 340 và 39 345 lượt, exit 0 |
+| `go --profile race` | 19 package `ok`, exit 0 |
+| `frontend` | 199 file / 2438 test, lint + build + ngân sách bundle PASS |
+| `e2e-real` | 8 passed / 1 skipped, exit 0 |
+| `layout` | exit 0 (job "Kiến trúc repository" trên CI đã xanh sau `03d03db`) |
+
+
+### Added — `ISS-PIO-31` producer bắc cầu `extIndex` + ba cơ chế dịch slot thành test (#375, 2026-09-02)
+
+- **Triệu chứng.** Slot `ext` của điểm Modbus cấp phát **tuần tự, không có bảng bền**, nên
+  **ba thao tác cấu hình bình thường** đều làm nó dịch chỗ, và **không tầng nào phát hiện**:
+  đổi tên điểm (`BuildProfile` sắp theo **tên**), tắt điểm, tắt thiết bị. Kịch bản hỏng:
+  binding đã Commission trỏ `PUMP-02#14`; kỹ sư tắt `VFD-01` để bảo trì ⇒ `PUMP-02` dịch
+  xuống ⇒ slot 14 **không còn là thanh ghi cũ**. `st_io_map.cpp` chỉ kiểm
+  `ext_index ∈ [1, KX_N_EXT]` nên 14 vẫn "hợp lệ": chương trình ghi lệnh bơm **sai chỗ**,
+  không một dòng cảnh báo.
+- **Nguyên nhân gốc của việc không phát hiện được.** Review ghi đúng: *"Producer bắc cầu —
+  **KHÔNG TỒN TẠI** — không nguồn nào phát `extIndex` ra ngoài"*. `PointCatalogEntry` không
+  có `extIndex`, `PointDTO` cũng không. Không có nó thì **không tầng nào đối chiếu được**
+  `(deviceId, pointId)` với slot mà runtime sẽ dùng — mọi phép kiểm tham chiếu của
+  `AC-PIO-ID-02` đều không thi hành được.
+- **Cách sửa (phần làm được trọn trong lần này).** `modbusrtu/extlayout.go` — tính lại
+  **đúng** bố cục mà `iobus` sẽ cấp, từ chính cấu hình BE phát ra.
+  - **Sao lại cả hai đặc điểm gây dịch chỗ** (sắp theo tên, bỏ mục tắt) một cách có chủ ý:
+    đây là bản mô tả **trung thực của hành vi hiện tại**, không phải hành vi mong muốn. Một
+    "bản đồ" tính theo luật khác luật đang chạy sẽ bỏ lọt đúng ca nó sinh ra để bắt.
+  - **Quy đổi 0-based → 1-based làm MỘT LẦN, ở biên**, với test khoá cả hai đầu như review
+    yêu cầu. Allocator `iobus` đếm từ 0; artifact/io_map kiểm `>= 1` và trừ 1 khi đọc. Phát
+    thẳng `ext_idx` thô sẽ **lệch đúng một thanh ghi** — hợp lệ với mọi phép kiểm hiện có.
+  - **`VerifyBinding`** trả mismatch để tầng gọi CHẶN, và thông báo **nói slot cũ nay thuộc
+    về ai**: "binding không hợp lệ" không đủ để người vận hành biết chuyện gì xảy ra.
+  - Kiểu 32 bit chiếm **hai** thanh ghi — có test riêng, vì sai chỗ này làm mọi điểm phía
+    sau lệch một slot.
+- **Ba cơ chế dịch chỗ nay là sự thật chạy lại được**, mỗi cái một test, thay vì một đoạn
+  văn trong review. Kèm test chiều ngược: binding **không** dịch thì **không** được báo —
+  một cổng báo động giả sẽ bị tắt trong tuần đầu.
+- **Chưa làm, nói rõ.** `AC-PIO-ID-01` (schema binding bền), `AC-PIO-ID-02` (nối
+  `VerifyBinding` vào Check/Commission để chặn thật) và `AC-PIO-ID-03` (migration binding
+  legacy) **chưa làm** — chúng đổi schema và luồng Commission trên một đường an toàn P0,
+  nơi một bản sửa nửa vời nguy hiểm hơn không sửa. Issue để mở.
+
+### Fixed — `ISS-STED-21` cổng `layout` của CI thiếu phụ thuộc Python (#414, 2026-09-02)
+
+- **Triệu chứng.** Sau khi bốn lỗi ở PR #432 được sửa, job `Kiến trúc repository` **vẫn**
+  hỏng sau **~2 giây** trên `main`, trong khi cùng lệnh chạy local thì xanh.
+- **Nguyên nhân gốc.** Nhiều script cổng **thi hành** schema bằng `jsonschema` chứ không chỉ
+  băm nó. Job đó chỉ cài Go, **không cài phụ thuộc Python**, nên `ModuleNotFoundError` xảy
+  ra trước cả khi kiểm được thứ gì. Hai giây là dấu hiệu: nó không chạy hỏng, nó **không
+  chạy được**.
+- **Cách sửa.** `requirements-ci.txt` + một bước cài trong job. Ghim major để một bản 5.x
+  đổi API không làm đỏ cổng vì lý do không liên quan tới mã dự án.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `verify-project.sh --component layout` exit 0; `--component go --profile race`
+    **19/19 package ok**, exit 0; `--component frontend` exit 0.
+  - `ctest` (`-Werror`, MODBUS/BACNET/HMI = ON): **1384/1384 pass**, exit 0.
+  - Test mới `modbusrtu`: 7 test bố cục/đối chiếu slot, exit 0.
+
+### Fixed — `ISS-STED-21` lỗ hổng 1: gate CI nay CHẠY, và nó đỏ vì bốn lỗi thật (#414, 2026-09-02)
+
+- **Trạng thái đã đổi so với lúc mở issue.** #414 ghi gate CI chết sau **2–3 giây** với **0
+  step** vì billing GitHub Actions. Đo lại hôm nay: các job chạy **3–9 phút**, `MCU Firmware`
+  **pass**. Chặn billing **đã hết**. Nhưng 11/12 job vẫn đỏ — và lần này là **đỏ thật**.
+- **Vì sao không ai thấy sớm hơn.** Chặn billing giấu đi bốn khiếm khuyết; khi nó được gỡ,
+  chúng lộ ra cùng lúc. Hai lỗi che nhau — đó chính là lý do #414 tồn tại.
+- **Bốn nguyên nhân gốc, đã sửa hết.**
+  1. **Gate `layout` đỏ vì số đếm catalog lạc hậu.** `ST-WARN-001..004` vào catalog ở
+     commit `35515b5` (1.8.0 → 1.9.0, 151 → 155 detail) nhưng **chính commit đó** không sửa
+     ba con số ở `test_programming_error_catalog.py` — đúng chế độ hỏng mà khối chú thích
+     ngay trên chúng đã cảnh báo.
+  2. **Ba pin hash trôi.** `openapiSha256` (PGM-02 + G1 join) và hash/đếm của
+     `error_catalog` chưa được cập nhật sau các thay đổi hợp đồng. Đây là **cổng chống trôi
+     làm đúng việc của nó** — chỉ là chưa ai chạy nó.
+  3. **Build `-Werror` hỏng ở bốn profile.** CI dựng với `-Wall -Wextra -Werror`; build
+     local mặc định **không**. Với `MODBUS=OFF`, `make_slave()` trong
+     `test_modbus_master_fake.cpp` không có nơi gọi (mọi caller nằm trong
+     `#ifdef MKDDC_ENABLE_MODBUS`) ⇒ `-Wunused-function` ⇒ **hỏng ở bước BUILD**, trước khi
+     chạy test nào. Đã chuyển định nghĩa vào đúng khối `#ifdef`.
+  4. **Ba test PTY đỏ ở profile không có MODBUS.** Chúng mở một **cổng nối tiếp thật**, nên
+     chỉ có nghĩa khi `MKDDC_ENABLE_MODBUS=ON`. Guard chứ không xoá: với `MODBUS=ON` chúng
+     vẫn kiểm đúng thứ cần kiểm.
+- **Và một cuộc đua dữ liệu thật, chỉ `-race` mới thấy.** CI chạy `go test -race`; tôi vẫn
+  chạy `go test` thường. Ba test trace đổi nguồn bằng cách **tráo `service.monitor` giữa
+  lúc goroutine trace đang đọc**, và đọc bộ đếm của fake trong khi goroutine đó đang tăng.
+  - **Sản phẩm đúng, test sai:** `monitor` được đặt lúc dựng service và không đổi nữa; chỉ
+    test mới tráo nó. Nên cách sửa là để **chính fake** đổi câu trả lời qua khoá
+    (`fail()`/`set()`), không phải tráo trường của service.
+  - Bộ đếm của `traceCoreReader` nay đọc qua `counts()` — trả **ảnh chụp nhất quán** của ba
+    số, vì đọc từng trường rời rạc cho một tổ hợp chưa từng tồn tại ở bất kỳ thời điểm nào.
+- **Job Go trong CI chưa từng chạy được, và không thể chạy được.** `--component go` đòi
+  `mkddc-st-compile`/`mkddc-st-package` do **chính cổng cpp** dựng
+  (`MKDDC_REQUIRE_PRODUCTION_TOOLS=1`: test Go phải đi qua binary thật). Nhưng job Go chạy
+  trên **runner riêng** và không có `build/verify/` của job kia ⇒ hỏng sau **chưa tới một
+  giây**, mọi lần. Đã chuyển đúng hai binary qua artifact + `needs:` thay vì bắt job Go dựng
+  lại C++ — dựng lại sẽ cho một binary **khác** binary mà cổng cpp vừa kiểm, tức phá chính
+  bất biến "cùng một build".
+- **Kiểm chứng — chạy đúng entrypoint mà CI chạy, cả năm profile C++.**
+
+  | Cổng | Lệnh | Kết quả |
+  |---|---|---|
+  | layout | `verify-project.sh --component layout` | exit 0 |
+  | cpp baseline | `--component cpp --profile baseline` | **1329/1329**, exit 0 |
+  | cpp modbus | `--profile modbus` | **1345/1345**, exit 0 |
+  | cpp bacnet | `--profile bacnet` | **1330/1330**, exit 0 |
+  | cpp modbus-bacnet | `--profile modbus-bacnet` | **1346/1346**, exit 0 |
+  | cpp full | `--profile full` | **1384/1384**, exit 0 |
+  | go race | `--component go --profile race` | **19/19 package ok**, exit 0 |
+  | frontend | `--component frontend` | exit 0 |
+
+  Cả năm profile C++ dựng với `-Wall -Wextra -Werror` như CI. Trước lần này tôi chỉ chạy
+  cấu hình `full` không `-Werror` — tức chưa từng chạy đúng thứ CI chạy.
+- **Còn lại của #414.** Lỗ hổng 2 (đo trên bo DDC-24 thật) **không** đụng tới được: không có
+  phần cứng. Issue để mở.
+
+### Added — `ISS-STED-17` đánh dấu 4 khối mở rộng + lộ trình thư viện chuẩn IEC (#368, 2026-09-02)
+
+- **Triệu chứng.** `PID`, `HYSTERESIS`, `SCALE`, `DEADBAND` **không** thuộc thư viện chuẩn
+  IEC 61131-3 nhưng không có nhãn nào nói ra. Và khoảng cách so với IEC chưa được công bố
+  thành một bảng — nó nằm rải rác trong ba tài liệu mâu thuẫn nhau.
+- **Nguyên nhân gốc.** IEC cho phép mở rộng nhà sản xuất **miễn là công bố rõ**, nhưng
+  "công bố rõ" bị hiểu thành "ghi vào tài liệu". Người dùng quyết định dùng khối nào ở màn
+  hình **chọn khối**, không phải khi đọc tài liệu; nhãn nằm ở chỗ khác là nhãn không ai đọc
+  đúng lúc. Hệ quả thật: kỹ sư viết cả một chương trình quanh `PID` rồi mới phát hiện nó
+  không chuyển được sang PLC hãng khác — muộn hơn nhiều so với lúc chọn.
+- **Cách sửa.**
+  - **`iecClassification` cho MỌI entry registry**, **suy ra** từ danh sách
+    `vendorExtensions` của hồ sơ ngôn ngữ chứ không phải một cột chép tay: một bản chép sẽ
+    trôi khỏi hồ sơ đúng vào ngày ai đó thêm khối mở rộng thứ năm. Có test khoá hai danh
+    sách phải khớp nhau.
+  - **Nhãn tới cả ba nơi người dùng chọn khối**: huy hiệu `MỞ RỘNG` ở Thư viện nhanh,
+    `iecClassification` trên entry palette FBD, và dòng mô tả *"mở rộng Mekong — không
+    thuộc IEC"* ở gợi ý ST.
+  - **Chỉ gắn nhãn cho mở rộng**, không dán "IEC" lên 42/46 mục còn lại — dán khắp nơi làm
+    nhiễu đúng 4 mục cần chú ý.
+  - **POU người dùng định nghĩa nhận `null`**, không nhận một trong hai nhãn: nó không
+    thuộc IEC lẫn thư viện Mekong, và gắn nhãn nào cũng là nói sai.
+  - **`ST_LIBRARY_ROADMAP_MK-DDC-24_VI.md`** — bảng lộ trình: đợt 1 bốn mục
+    (`RS`/`SR` → `CTUD` → `TRUNC` → `MUX`) kèm ca dùng HVAC thật và ước lượng; đợt sau ba
+    mục kèm lý do chờ; và **sáu nhóm không làm kèm lý do**, mỗi nhóm chỉ rõ vi phạm `P1`
+    hay `P2`.
+- **Hai quyết định trong bảng lộ trình đáng đọc.**
+  - **`RS`/`SR` đứng đầu ưu tiên**, không phải `MUX`. Chốt báo động có mặt ở gần như mọi
+    dự án và **hiện đang phải viết tay** bằng `IF` + biến `RETAIN` — tức người dùng đang
+    làm việc đó rồi, chỉ bằng cách dài dòng hơn và dễ nhầm bên ưu tiên hơn. `MUX` xuống
+    cuối vì arity thay đổi chạm bảng hàm, tức chạm IR.
+  - **`ROUND` không làm**, và lý do không phải `P1`/`P2`: IEC không quy định chế độ làm
+    tròn thống nhất giữa các hãng, còn `REAL_TO_INT` đã công bố rõ quy tắc ở §3.5. Thêm
+    `ROUND` là thêm quy tắc làm tròn **thứ hai** cho cùng một việc, và hai quy tắc làm
+    tròn trong một ngôn ngữ điều khiển là nguồn lệch số không ai truy được.
+  - `PID` **giữ nguyên** cùng cổng review Controls/Safety — có test khoá rằng nhãn mở rộng
+    **không** thay thế cổng đó: "không thuộc IEC" nói về **nguồn gốc**, "chờ review" nói về
+    **trạng thái phê duyệt**; gộp lại sẽ mất một trong hai.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `npx vitest --run --environment jsdom src`: **199 file / 2438 test pass**, exit 0
+    (thêm 11 test phân loại).
+  - `npm run lint` exit 0; `npm run build` exit 0.
+  - `ctest --test-dir build/fw` (`--fresh` + MODBUS/BACNET/HMI = ON): **1384/1384 pass**,
+    exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
+### Added — `ISS-STED-16` bước 0 của đợt hệ kiểu: giữ chỗ `VAR_IN_OUT`/`VAR_TEMP` + thiết kế đợt gần (#367, 2026-09-02)
+
+- **Triệu chứng.** `VAR_IN_OUT` không nằm trong `kKeywords[]`, nên lexer coi nó là một
+  **định danh bình thường**: `at_var_block_start()` không nhận nó là mở khối, parser đọc
+  hết khối `VAR` rồi chuyển sang danh sách câu lệnh, gặp `VAR_IN_OUT` và cố hiểu thành
+  một phép gán. Người dùng nhận về một lỗi cú pháp khó hiểu ở **dòng sau** chỗ họ viết —
+  chứ không phải câu trả lời thật là *"Rev A chưa hỗ trợ khối này"*.
+- **Quyết định đã có sẵn, không phải của tôi.** `ADR-054` + chữ ký chủ sở hữu 2026-08-31
+  chốt **phương án (A) thi hành**, không phải (B) công bố loại trừ — nguyên tắc *"làm
+  chuẩn theo IEC: có thì giữ, không có thì bỏ"*. Đã ghi ở `DECISIONS.md`, nên tiêu chí
+  "chủ sở hữu ký chọn" **đã đạt từ trước**; phần còn lại là thi hành.
+- **Cách sửa (bước 0 — phần độc lập với ngữ nghĩa).**
+  - `VAR_IN_OUT` và `VAR_TEMP` vào `kKeywords[]`; `at_unsupported_var_block()` tách khỏi
+    `at_var_block_start()` để phân biệt *"không phải khối khai báo"* với *"là khối khai
+    báo nhưng chưa hỗ trợ"* — hai câu trả lời khác nhau cho người dùng. Thông điệp nêu
+    **tên khối** và nói rõ *"valid IEC 61131-3 but not supported in Rev A"*.
+  - Bảng chép của FE sinh lại (`generate_st_reserved_words.py`); `ST_KEYWORDS` nhận hai từ
+    mới nhưng `ST_COMPLETION_KEYWORDS` **không** — không mời người ta viết thứ parser sẽ
+    từ chối.
+  - Test âm cho cả bốn khối (`VAR_IN_OUT`, `VAR_TEMP`, `VAR_GLOBAL`, `VAR_EXTERNAL`), và
+    một test nữa cho vế dễ quên: giữ chỗ phải đi cùng việc **không cho dùng làm tên
+    biến** — thiếu vế đó thì ngày mở khối thật sẽ va vào mã người dùng đã viết.
+  - Ba vector mới vào corpus văn phạm dùng chung (`ISS-STED-13`).
+- **Corpus lập tức bắt được một chỗ trôi mới.** `stFormat/parser.ts` có
+  `VAR_OPENERS = {VAR, VAR_INPUT, VAR_OUTPUT, VAR_IN_OUT, VAR_TEMP, VAR_GLOBAL}` — ba khối
+  cuối compiler **không** mở. Formatter đang định dạng lại mã theo một văn phạm rộng hơn
+  thiết bị, đúng chế độ `F-STED-011`. Đã thu hẹp về đúng ba khối thật và thêm thông điệp
+  cùng loại với compiler. Cổng dựng ở giờ trước bắt được ngay khi vector mới xuất hiện —
+  đó là toàn bộ điểm của việc có corpus chung.
+- **Tài liệu thiết kế trước khi code.** Chủ sở hữu yêu cầu thẳng *"quy tắc ai được ghi và
+  ghi lúc nào phải viết ra trước khi code"* và *"tách thiết kế trước, code sau"*. Đã viết
+  `ST_COMPOSITE_TYPES_DESIGN_MK-DDC-24_VI.md` (Proposed 0.1): năm luật ghi `W1..W5` của
+  `VAR_IN_OUT` — tất cả kiểm được **tĩnh**, không luật nào cần kiểm lúc chạy, đó là điều
+  kiện giữ WCET; phạm vi `ARRAY`/`STRUCT` một mức; kiểm biên là **fault** chứ không kẹp im
+  lặng (cùng lẽ với `ST-RT-005`); đường di trú IR `kSchemaVersion 1 → 2` với dual-reader và
+  test rollback LKG; đề xuất cho phép `RETAIN` với hợp thành **kèm** ràng buộc đổi hình
+  dạng phải cold-init có diagnostic; đề xuất FBD là **ST-only** ở đợt này và **phải công
+  bố** — im lặng sẽ tạo đúng loại "loại trừ không công bố" mà issue này sinh ra để chấm dứt.
+- **Phần CHƯA làm, nói rõ.** Toàn bộ ngữ nghĩa `VAR_IN_OUT`/`ARRAY`/`STRUCT`, bố cục IR và
+  bump schema **chưa bắt đầu**. §7 tài liệu thiết kế xếp 9 bước, và **bước 1 là cổng chặn**:
+  ba trần tài nguyên (§4.3), chính sách RETAIN (§5.3) và vị trí FBD (§6) cần chữ ký chủ sở
+  hữu **trước** khi sinh IR, vì chúng nằm trong provenance của artifact và không sửa lại
+  được sau khi artifact đã ký chạy trên bo.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1384/1384 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **198 file / 2427 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0.
+
+### Added — `ISS-STED-15` bằng chứng a11y cho ST editor (#366, 2026-09-02)
+
+- **Triệu chứng.** Mã dùng `aria-label`/`role`/`focus-visible` đúng và dày, nhưng **không
+  có kiểm a11y tự động** và **không có record bằng chứng** cho ST editor. Gate `G17`
+  PARTIAL.
+- **Nguyên nhân gốc.** Trình soạn thảo dựng bằng `<textarea>` trong suốt + lớp phủ `<pre>`
+  tô màu — cấu trúc tạo ra hai rủi ro mà màn hình khác không có, và cả hai **cần đo chứ
+  không suy đoán**: tương phản của token tô màu (chính thứ người dùng đang gõ), và
+  diagnostic báo bằng gạch chân (màu là kênh duy nhất thì người không phân biệt màu không
+  đọc được lỗi của mình).
+- **Cách sửa.**
+  - **Đo tương phản 60/60 phép** — 10 loại token × 2 theme × **3 nền**. Đo ba nền vì một
+    token có thể nằm trên cả ba (khung, dòng đang gõ, ngoặc khớp): một màu đủ tương phản
+    trên nền chính mà chìm trên dòng đang gõ thì hỏng đúng ở dòng người dùng đang nhìn.
+    Ngưỡng **AA 4.5:1**, không dùng 3:1 — đây là chữ, và là chữ đọc lâu nhất trong sản phẩm.
+    **Số thấp nhất `4.60`** (`function`/`fb-type`, theme tối, trên nền ngoặc khớp) — dư
+    0.10, tức một lần chỉnh `--c-good-fg` hay `--c-accent-bg` sẽ đẩy nó xuống dưới ngưỡng.
+  - **Chống trôi bảng màu:** `ST_TOKEN_COLOR` chuyển từ `const` cục bộ trong `ProgramsTab`
+    ra `stEditorSupport.ts` để test đọc **chính nguồn đang dùng**. Trước đó test buộc phải
+    chép bảng màu, và bản chép sẽ trôi khỏi bản thật đúng lúc ai đó đổi màu — để lại một
+    test vẫn xanh cho một bảng màu không còn tồn tại.
+  - **Ba kênh không-phải-màu cho diagnostic**, mỗi kênh một test: hình dạng (gạch lượn
+    sóng), chữ (`title` mang mã + thông điệp; khay Vấn đề mang toàn văn), và **thông báo
+    screen reader**.
+  - **Luồng bàn phím** ghi thành 6 bước có test, không phải một câu khẳng định.
+  - **Record bằng chứng** `docs/07_records/test-evidence/programming/2026-09-02-st-editor-a11y.md`.
+- **Phát hiện thêm, sửa luôn.** Phần tử tóm tắt diagnostic chỉ nối bằng `aria-describedby`
+  — thuộc tính đó được đọc **lúc nhận focus**, nhưng kết quả Kiểm tra về khi người dùng
+  **đang gõ**, tức đang giữ focus. Không có `aria-live` thì số lỗi vừa đổi không được nói
+  ra, và người dùng screen reader phải rời ô gõ rồi quay lại mới biết. Đã thêm
+  `role="status"` + `aria-live="polite"`.
+- **Sửa thêm một chỗ mất focus thật.** Khay Thư viện nhanh có nút Đóng nằm **bên trong**
+  khay, nên khi khay biến mất focus rơi về `<body>` — người dùng bàn phím phải `Tab` lại
+  từ đầu trang để quay về chỗ đang gõ. Hộp Tìm và hộp Tới dòng của chính trình soạn thảo
+  này đã trả focus đúng từ lâu; khay Thư viện là chỗ duy nhất còn lệch. Đã sửa để đóng khay
+  trả focus về nút mở. **Test tự động cho nó chưa có** — khay chỉ render khi workspace có
+  một POU ST đang chọn và cho sửa, trạng thái mà fixture hiện tại chưa dựng tới; ghi ở §5
+  record là nợ, không nhận là đã kiểm.
+- **Điều record KHÔNG nói.** Nó **không** tuyên bố ST editor "đạt WCAG". §5 ghi rõ ba mục
+  còn thiếu như **nợ đã ghi nhận**: quét `axe` tự động trên tab Chương trình; thứ tự focus
+  của Thư viện nhanh / Bản đồ mã / khay Vấn đề; và kiểm với screen reader thật
+  (NVDA/VoiceOver) — máy không thay được bước cuối. Gate `G17` vì vậy **vẫn PARTIAL**,
+  không chuyển GREEN bằng bản ghi này.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `npx vitest --run --environment jsdom src`: **198 file / 2423 test pass**, exit 0
+    (thêm 62 test đo tương phản + 5 test hành vi a11y).
+  - `npm run lint` exit 0; `npm run build` exit 0.
+  - `ctest --test-dir build/fw` (`--fresh` + MODBUS/BACNET/HMI = ON): **1382/1382 pass**,
+    exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
+### Added — `ISS-STED-14` hợp đồng phím cho ST editor (#365, 2026-09-02)
+
+- **Triệu chứng.** FBD có `fbd_keyboard_commands_v1.json` kèm validator từ lâu; **ST không
+  có tệp tương đương**, dù ST editor mới là nơi có nhiều phím tắt hơn. Không có hợp đồng
+  ⇒ không có test nào chặn việc một phím bị đổi hoặc mất trong một lần refactor, và một
+  phím tắt biến mất là loại hồi quy người dùng phát hiện trước CI.
+- **Cách sửa.** `contracts/programming/st_keyboard_commands_v1.json` + schema, **23 lệnh /
+  7 ngữ cảnh**, khảo sát từ chính `ProgramsTab.tsx` chứ không chép từ mô tả issue.
+  - **Trường `context` là bắt buộc**, không phải trang trí: `Enter` và `Escape` mang nghĩa
+    khác nhau ở bốn ngữ cảnh khác nhau. Bỏ trường này thì hợp đồng không mô tả được hành vi
+    thật, và nó sẽ trông như tự mâu thuẫn.
+  - **Xung đột với trình duyệt/hệ điều hành ghi rõ từng mục** — `Ctrl+P` (In), `Ctrl+F`
+    (Tìm trong trang), `Ctrl+S` (Lưu trang), `Ctrl+G` (Firefox: tìm tiếp), `F12`
+    (DevTools). Riêng `F12` được ghi thẳng là **không đảm bảo**: trình duyệt xử lý nó
+    TRƯỚC trang, nên `Ctrl/Cmd+Click` mới là đường tương đương luôn dùng được.
+  - **Validator `verify_programming_st_keyboard.py`** (`--self-test`, nối vào
+    `check:programming-contracts` nên chạy trong `npm run build`) kiểm **ba chiều**: schema;
+    không đụng độ nội bộ (hai lệnh cùng phím trong cùng ngữ cảnh là hợp đồng tự mâu thuẫn —
+    chỉ một chạy được và không ai biết cái nào); và **đối chiếu với mã nguồn thật** — mọi
+    phím hợp đồng khai phải có đường xử lý trong `ProgramsTab.tsx`. Chiều thứ ba là chiều
+    quan trọng nhất: một hợp đồng không đối chiếu với code chỉ là tài liệu, và tài liệu thì
+    trôi.
+  - **Test FE đọc chính tệp hợp đồng**, không chép tay danh sách lần hai. Bản khai thứ hai
+    sẽ trôi khỏi hợp đồng đúng vào lúc ai đó sửa một phím — lúc đó test vẫn xanh trong khi
+    hợp đồng và mã nguồn đã nói hai điều khác nhau.
+- **Hai quyết định đáng ghi khi viết cổng.**
+  - **So phím theo TỪNG THÀNH PHẦN, không so nguyên chuỗi.** Mã nguồn viết
+    `event.ctrlKey || event.metaKey` cùng `event.key.toLowerCase() === 'g'`, không viết
+    `"Control+g"` ở đâu cả. Đòi khớp nguyên chuỗi sẽ là một cổng **luôn đỏ**, và một cổng
+    luôn đỏ bị tắt ngay trong tuần đầu.
+  - **Ký tự phải escape trong literal JS.** Cổng đầu tiên báo `Control+Shift+\` là "phím
+    không tồn tại" vì mã nguồn viết `'\\'`. Một cổng báo sai về một phím **có thật** còn
+    tệ hơn không có cổng, vì nó dạy người sửa đi xoá dòng hợp đồng đúng.
+- **Phân vai giữa hai cổng.** Validator Python đọc mã nguồn; test FE chỉ kiểm bất biến nội
+  tại của hợp đồng. Bản đầu tôi cho test FE cũng đọc `ProgramsTab.tsx` — đó là hai đường
+  kiểm cho cùng một việc, và chúng sẽ lệch nhau; đã gộp về đúng một chỗ.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `python3 scripts/verify_programming_st_keyboard.py --self-test`: **5/5** hợp đồng sai bị
+    reject fail-closed; 23 lệnh / 7 ngữ cảnh khớp mã nguồn.
+  - `npx vitest --run --environment jsdom src`: **197 file / 2356 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0 (cổng mới chạy trong build).
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1382/1382 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
+### Added — `ISS-STED-13` chống trôi văn phạm giữa FE và compiler (#364, 2026-09-02)
+
+- **Triệu chứng.** FE có **ba** bộ đọc ST độc lập với compiler — bộ tô màu
+  (`tokenizeStSource`), chỉ mục ký hiệu bằng regex (`stReferenceIndex`), và một parser
+  đầy đủ 1.181 dòng cho nút Định dạng (`stFormat`) — nhưng chống trôi chỉ phủ **danh sách
+  từ khoá**. Văn phạm, hệ kiểu và quy tắc scope không có gì canh.
+- **Nguyên nhân gốc.** Không có nguồn chung nào để hai phía cùng đọc, và bảng ký hiệu mà
+  compiler **đã** công bố (`symbols[]` từ CLI, runner Go đã đọc vào struct) thì **không ai
+  dùng** — nó dừng lại ở đó. FE không có cách nào biết mình đọc lệch.
+- **Cách sửa — hai cơ chế, mỗi cái đóng một nửa.**
+  1. **Corpus văn phạm dùng chung** `contracts/programming/st_grammar_corpus_v1.json`:
+     21 vector, cả hai chiều phán quyết. `test_st_grammar_corpus.cpp` đòi compiler chấp
+     nhận/từ chối đúng như corpus nói (và mã lỗi ghi trong corpus phải là mã **thật**);
+     `stGrammarCorpus.test.ts` đòi formatter cũng vậy. Thêm một luật văn phạm mà chỉ sửa
+     một bên ⇒ **đỏ** ở bên kia.
+  2. **Đối chiếu chỉ mục với compiler** `stSymbolReconciliation.ts`: `symbols[]` nay đi
+     hết đường CLI → runner → `checkResultDocument` → `CheckView.symbols` → FE. Lệch ⇒
+     Inspector **hạ** mọi trường suy ra từ chỉ mục xuống "không xác định được" kèm lý do,
+     không im lặng hiển thị thông tin sai.
+- **Corpus lập tức lộ ra chỗ trôi thật, và đã sửa trong cùng phiên.** Formatter chấp nhận
+  **năm** cấu trúc compiler không có: `FOR`, `WHILE`, `REPEAT`, `RETURN`/`EXIT`/`CONTINUE`,
+  và chỉ số mảng `a[i]`. Issue nêu bốn; `RETURN` là cái thứ năm chưa ai thấy.
+  - Đã **bỏ hẳn khỏi AST**, không chỉ chặn ở parser: kiểu dữ liệu còn mô tả cấu trúc thì
+    lần sửa sau sẽ có người nối lại đường parse cho nó. Trình biên dịch TypeScript chỉ ra
+    từng chỗ phải dọn.
+  - Kiểm round-trip AST **vẫn còn nguyên** và không phải thứ bị thay thế. Nhưng nó là bảo
+    vệ nhờ may mắn: round-trip chỉ đòi in ra rồi đọc lại phải ra cùng cây — nó **không hề
+    hỏi** cây ấy có hợp lệ với compiler không. Một `FOR` in ra đẹp đẽ vẫn round-trip hoàn
+    hảo, và người dùng nhận lại mã đã "được định dạng" cho một cấu trúc Kiểm tra sẽ từ chối.
+- **Ba điều kiện trước khi được phép so** (một phép so trên dữ liệu không cùng thời điểm
+  còn tệ hơn không so, vì lệch giả dạy người dùng bỏ qua cảnh báo): Check phải `PASSED`;
+  buffer chưa đổi kể từ lần Check đó; và **chỉ so tập biến giao diện** — compiler chỉ công
+  bố `VAR_INPUT`/`VAR_OUTPUT`, nên so cả biến cục bộ sẽ báo mọi biến `VAR` là "FE thừa".
+- **Phát hiện thêm, sửa luôn.** (a) Mã lỗi tôi đoán cho `a[i]` và `&` là `ST-SYN-001`;
+  compiler thật phát `ST-LEX-001` — chặn ở **lexer**, không phải parser. Corpus lấy mã từ
+  compiler, không từ suy đoán. (b) Thông báo lệch trộn `output` (CLI, chữ thường) với
+  `OUTPUT` (FE) trong cùng một câu, làm người đọc tưởng đó là hai thứ khác nhau; đã chuẩn
+  hoá trước khi so **và** trước khi in.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1382/1382 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **196 file / 2327 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` dư 2.78 KiB).
+
+### Added — `ISS-STED-12` Inspector ST bổ sung Scope/Initial/Mapped point/Unit/Reads-Writes (#363, 2026-09-02)
+
+- **Triệu chứng.** `InspectorStSymbolContext` chỉ có `identifier`, `definitionOffset`,
+  `dataType`, `signature`, `referenceCount`, `runtime` — thiếu 4/8 trường chuẩn đặt ra:
+  **Scope**, **Initial**, **Mapped Point**, **Unit**, và không tách **Reads/Writes**.
+- **Nguyên nhân gốc.** Dữ liệu đã có sẵn ở nơi khác nhưng chưa ai nối vào Inspector:
+  `stReferenceIndex` đã phân biệt `role: 'READ' | 'WRITE'`; Draft đã mang `variables[]`
+  (kèm `class`, `initialValue`, `retain`) và `bindings[]` (kèm `point`, `unit`). Trường
+  `Ánh xạ` đã tồn tại ở `ContextInspector` nhưng cho **ngữ cảnh khác**, không cho ký hiệu ST.
+- **Cách sửa.** Năm trường mới, tất cả đi qua `InspectorField` như mọi trường khác — đây là
+  chỗ dễ phá nguyên tắc "biết khi nào mình không biết" nhất, vì mỗi trường đều có một giá
+  trị *trông hợp lý* để điền bừa: `VAR` cho phạm vi, `0` cho khởi tạo, `—` cho điểm ánh xạ.
+  - **Draft là authority** cho Scope/Initial/Mapped point/Unit. Inspector **không** tra
+    catalog Point lần thứ hai và **không** suy phạm vi từ văn bản: hai đường sẽ lệch nhau,
+    và lệch ở đây nghĩa là Inspector nói biến nối tới một điểm mà Kiểm tra không thấy.
+  - **Reads/Writes đếm từ `occurrences.role`** — cùng nguồn với `referenceCount`, nên tổng
+    hai số luôn khớp. Tách đọc/ghi vì *"có ai ghi vào biến này không"* là câu hỏi khác hẳn
+    *"biến này được nhắc mấy lần"*, và nó là câu người ta hỏi khi đi tìm vì sao một giá trị
+    không đổi.
+  - **`retain` là cờ riêng**, không phải một giá trị của `class`. Bỏ qua nó sẽ hiện `VAR`
+    cho một biến thực ra giữ giá trị qua mất điện.
+  - **Nhãn scope theo cách ST viết ra** (`VAR_INPUT`), không theo tên Data Model (`INPUT`):
+    người đọc đang nhìn mã ST, nên `VAR_INPUT` mới là thứ họ tìm lại được trong buffer.
+  - **Điểm RTU kèm thiết bị** (`MB_RTU/dev-1/40001`) — địa chỉ `40001` một mình không định
+    danh được điểm nào.
+  - **Biến lọc theo `programId`**: hai POU được phép có biến trùng tên; không lọc thì
+    Inspector gán điểm của POU khác cho biến đang xem, sai một cách rất khó nhận ra.
+- **Một chi tiết dễ nói dối, đã xử lý tường minh.** Subset ST **không cho** khai giá trị
+  khởi tạo trong `VAR` (`st_parser.cpp` đòi `;` ngay sau tên kiểu), nên khi Draft không ghi
+  `initialValue` thì giá trị thật lúc cold start là **mặc định của kiểu** theo
+  `ST_SUBSET_SPEC` §3.1 — một sự thật tra được. Nhưng hiện trần `0.0` sẽ đọc thành "ai đó
+  đặt 0.0", nên UI ghi rõ `0.0 (mặc định của kiểu)`. Instance FB không có giá trị vô hướng
+  nào ⇒ `unknown`, không bịa `0`.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `npx vitest --run --environment jsdom src`: **194 file / 2291 test pass**, exit 0
+    (thêm 10 test ngữ cảnh + 3 test hiển thị).
+  - `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` trong ngân sách R3,
+    dư 3.16 KiB).
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1379/1379 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
+### Added — `ISS-STED-11` gợi ý chữ ký cho hàm và Function Block trong ST editor (#362, 2026-09-02)
+
+- **Triệu chứng.** Không có signature help. Người dùng gõ `LIMIT(` phải tự nhớ thứ tự
+  `(MN, IN, MX)`; gõ `PID_1(` phải tự nhớ sáu tham số **và** quy tắc chỉ-gọi-theo-tên
+  (khác biệt cố ý `D4` của `ST_SUBSET_SPEC` §9). Nhớ sai thì phải chờ hết một vòng Kiểm
+  tra mới biết.
+- **Nguyên nhân gốc.** Dữ liệu đã có sẵn và đã được dùng ở chỗ khác:
+  `PROGRAMMING_LIBRARY_ENTRIES` mang đủ `ports: [{name, direction, dataType}]` cho cả 46
+  entry, sinh tự động từ `pou_library_registry_v1.json`, và Quick Library **đã** vẽ bảng
+  cổng từ chính dữ liệu đó. Chỉ trình soạn thảo là không dùng — `buildStCompletions()`
+  trả `detail` là chuỗi cố định `'hàm chuẩn'`/`'kiểu function block'`.
+- **Cách sửa.** `stSignatureHelp.ts` — bộ máy thuần logic, **không khai tay danh sách
+  tham số thứ hai**: khai tay sẽ tạo một nguồn sự thật song song, và nó sẽ lệch khỏi
+  registry đúng vào lúc người dùng tin nó nhất, lúc đang gõ dở một lời gọi.
+  - **Quét xuôi, không quét lùi.** Quét lùi từ con trỏ không phân biệt được `(` của lời
+    gọi với `(` mở chú thích `(*`, và cũng không biết mình đang ở trong chú thích hay
+    không. Một chữ ký hiện lên giữa dòng chú thích tệ hơn là không hiện gì.
+  - **FB đọc tham số đang nhập từ tên bên trái `:=`, không đếm dấu phẩy.** Gọi theo tên
+    cho phép viết các cặp theo thứ tự bất kỳ, nên đoạn thứ hai không nhất thiết là tham
+    số thứ hai; đếm dấu phẩy sẽ làm nổi sai chỗ.
+  - **Không làm nổi bừa.** Vượt quá số tham số, hoặc tên chưa khớp cổng nào ⇒
+    `activeParameter = -1`. Làm nổi sai còn tệ hơn không làm nổi, vì nó khẳng định một
+    điều sai.
+  - **Gọi thẳng kiểu FB (`TON(`) không hiện chữ ký** — hiện lên là ngầm bảo rằng viết vậy
+    được, trong khi FB phải qua instance đã khai.
+  - **UI:** `role="status"` + `aria-live="polite"`, **không** phải `dialog` — nó không
+    nhận focus và không chặn gõ tiếp; cướp focus giữa chừng sẽ phá đúng thao tác nó định
+    giúp. Popup nằm **trên** dòng đang gõ, ngược với danh sách gợi ý nằm dưới, vì hai thứ
+    có thể cùng hiện. `Esc` đóng chữ ký **trước** hộp Tìm kiếm: thứ vừa bật lên là thứ
+    người dùng muốn tắt trước. Không tự chèn dấu đóng ngoặc.
+  - **State tách khỏi `completion`**, không gộp: danh sách gợi ý đóng ngay khi gõ `(`, còn
+    chữ ký phải sống suốt lời gọi tới dấu `)`. Gộp state buộc một trong hai hành xử sai.
+  - **Khối chờ review** (`PID`) vẫn hiện chữ ký nhưng nói rõ Kiểm tra sẽ từ chối, lấy từ
+    `PROGRAMMING_REVIEW_GATED_FEATURES` chứ không phải danh sách viết tay — giữ đúng
+    nguyên tắc "cổng phải hiện ở chỗ người ta **chọn**" đã có ở `stEditorSupport.ts`.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `npx vitest --run --environment jsdom src`: **194 file / 2278 test pass**, exit 0
+    (thêm 15 test đơn vị `stSignatureHelp` + 7 test màn hình `SourceEditor`).
+  - `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` trong ngân sách R3,
+    dư 3.75 KiB).
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1379/1379 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+
+### Fixed — `ISS-STED-10` DDD §7 công bố mã diagnostic không tồn tại (#361, 2026-09-02)
+
+- **Triệu chứng.** `DDD-LANG-PROG-001` §7 công bố namespace `ST-LIMIT-*`, mã cắt bớt
+  "ST-LIMIT-DIAG-001", namespace "COMP-INTERNAL-*" và ví dụ payload "ST-SEM-TYPE-001".
+  Không mã nào trong số đó tồn tại ở bất kỳ đâu ngoài chính tài liệu ấy. §7 cũng bỏ sót
+  **tám** namespace có thật và đặt mã chi tiết vào **sai trường** của payload.
+- **Nguyên nhân gốc.** Tài liệu được viết trước khi mã lỗi được chuẩn hoá vào
+  `error_catalog_v1.json`, và không có cổng nào đối chiếu hai bên. Hỏng ở đây không dừng
+  lại trong tài liệu: người vận hành đọc runbook rồi `grep` log tìm một mã không tồn tại
+  sẽ **không ra gì** và kết luận sai rằng sự cố không xảy ra — một mã bịa tạo ra **bằng
+  chứng vắng mặt giả**. Người viết client đọc ví dụ rồi so `code` với `ST-SEM-*` sẽ không
+  bao giờ khớp, vì `code` mang **mã công khai** còn mã chi tiết nằm ở `detailCode`.
+- **Hướng đã chọn: sửa tài liệu, KHÔNG đổi mã lỗi.** Mã đã đi vào error catalog,
+  `errors_generated.go`, `errors.ts` và log hiện trường; đổi mã là đổi một hợp đồng công
+  khai và làm hỏng mọi runbook đang dùng. Hướng ngược lại không được thi hành, kể cả một
+  phần — nó cần kế hoạch di trú riêng.
+- **Cách sửa.**
+  - **§7.1** ví dụ payload là payload **thật** do `checks.go` phát, gồm cả bốn trường
+    provenance của `ISS-STED-18`; nói rõ **hai trường mã, không phải một** và vì sao gộp
+    lại sẽ mất một trong hai.
+  - **§7.2** bảng namespace thật: 12 họ compiler (số), 2 họ CLI/worker (chữ), 3 họ FBD
+    (chữ **rồi** số). Kèm ba ghi chú bảng không nói hết: `ST-RT-*` là fault lúc chạy chứ
+    không phải diagnostic lúc biên dịch; họ `FBD-*` **không** đi qua error catalog mà do
+    validator FE phát; và ba hình dạng hậu tố khác nhau làm mọi biểu thức
+    `ST-[A-Z]+-\d{3}` bỏ lọt 14 mã.
+  - **§7.3** trần 64 + `ST-LIM-006`; crash/timeout worker là `ST-WORKER-CRASH`/
+    `ST-WORKER-TIMEOUT` → `PRG-ERR-UNAVAILABLE-001`.
+- **Phát hiện thêm, sửa luôn trong cùng phiên.**
+  - **§6 dẫn "ST-SEM-FBD-CYCLE"** — mã thứ năm không tồn tại, và nó còn sai cả **tầng**:
+    cycle tổ hợp bị chặn bởi `FBD-SEM-ORDER-001` ở validator **FE**, không phải pha
+    semantic của ST.
+  - **§10 dẫn "COMP-DETERMINISM-001"** — không tồn tại và **không có mã thay thế**: kiểm
+    tra rebuild-determinism hiện chỉ chạy ở tầng golden test. Đã ghi rõ là chưa hiện thực
+    hoá; ghi ra một mã chưa có nguy hiểm hơn để trống, vì nó tạo cảm giác đã có đường
+    phát hiện.
+  - **Cổng chống trôi** `scripts/verify_diagnostic_code_refs.py` (ctest
+    `diagnostic_code_refs`): mọi mã trong dấu nháy ngược ở tài liệu thiết kế phải có
+    trong error catalog hoặc validator FBD. Kèm quy ước mới: **dấu nháy ngược nghĩa là
+    "mã có thật"**; mã bịa được trích trong ngoặc kép để nói rằng nó sai.
+  - **Chính cổng suýt hỏng hai lần khi viết.** (a) Biểu thức rút mã FBD dùng
+    `[A-Z0-9_]+` nên không khớp `FBD-SEM-TYPE-REF-001`, làm cổng **kêu oan cho mã có
+    thật**; (b) biểu thức quét tài liệu không có `*` trong lớp ký tự nên **bỏ lọt đúng
+    dạng `ST-LIMIT-*`** mà nó sinh ra để bắt. Cả hai lộ ra nhờ
+    `verify_diagnostic_code_refs_gate.py` (ctest `diagnostic_code_refs_gate`): 3 ca tiêm
+    mã sai **cộng** một ca chiều ngược — mã `FBD-*` có thật phải đi qua, vì một cổng kêu
+    oan là một cổng sắp bị tắt.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1379/1379 pass**, exit 0 (configure 0, build 0).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **193 file / 2256 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0.
+
+### Added — `ISS-STED-09` trục phân loại IEC vs Mekong-UX cho ST Editor, kèm cổng thi hành (#360, 2026-09-02)
+
+- **Triệu chứng.** Không tài liệu nào trong repo phân biệt *"cái này do IEC 61131-3 quy định"*
+  với *"cái này là lựa chọn sản phẩm của Mekong"*. `PROGRAMMING_TRACEABILITY_MATRIX.md` nối
+  Product → 89 requirement → design → task → scenario nhưng **không có trục phân loại chuẩn**.
+- **Nguyên nhân gốc.** Rủi ro ở đây là **rủi ro tuyên bố**, không phải rủi ro kỹ thuật.
+  `ST_SUBSET_SPEC` §0 và `ADR-020` mục 6 đã nói đúng nguyên tắc, nhưng cả hai chỉ là câu chữ
+  trong tài liệu **kỹ thuật**. Hồ sơ bán hàng, datasheet và hồ sơ chứng nhận do người khác
+  viết — người không đọc §0 — nên không có gì ngăn một câu kiểu *"IEC bắt buộc phải có Quick
+  Library"*.
+- **Cách sửa.**
+  - **RTM §14** — trục phân loại cho requirement ST Editor, kèm **luật gắn nhãn**: nhãn `IEC`
+    phải **dẫn được điều khoản cụ thể** (số + tên điều khoản của IEC 61131-3:2013 Ed. 3.0);
+    không dẫn được thì **không được gắn**. Định nghĩa rõ phạm vi "requirement ST Editor" để
+    biết dòng nào cần ô phân loại và dòng nào không.
+  - **§14.5 — bucket "chưa dẫn được"**. Bảng §6 của `REV-STED-IEC-001` đề xuất gắn
+    *"IEC TR 61131-8"* cho chẩn đoán và online monitoring; ở lần lập trục này **chưa tra được
+    số điều khoản cụ thể**, nên theo đúng luật vừa đặt, hai mục đó **không** được gắn nhãn
+    IEC. Chúng nằm ở §14.5 như **nợ bằng chứng đã ghi nhận**, không bị xếp im lặng sang "UX
+    sản phẩm" — hai lý do *"chuẩn không yêu cầu"* và *"chưa tra được"* mà gộp lại thì lần sau
+    không ai biết mục nào cần đi tra.
+  - **§14.6 — câu chốt** về cụm `IEC 61131-3-aligned`, cấm `compliant`/`conformant`/
+    `certified` cùng biến thể tiếng Việt.
+- **Phát hiện thêm, sửa luôn trong cùng phiên.**
+  - **Câu chốt không có cơ chế giữ thì chính là vấn đề mà issue nêu.** Thêm
+    `scripts/verify_iec_claim_policy.py` (ctest `iec_claim_policy`): quét toàn bộ `docs/`, làm
+    **đỏ** khi "IEC 61131" đứng cạnh một từ cấm mà **không** nằm trong ngữ cảnh cấm đoán;
+    đồng thời kiểm §14.4 đủ ô phân loại và **mọi** dòng gắn nhãn IEC đều dẫn được điều khoản.
+  - **Heuristic một dòng báo động thừa 4 lần.** Bốn câu cấm có thật trong repo bị ngắt dòng
+    giữa câu (ví dụ *"không được gọi 'Compliant' hay / 'Certified'"*), nên dấu phủ định nằm ở
+    dòng trước. Đã đổi sang **cửa sổ ngữ cảnh** — một cổng kêu oan bốn lần là một cổng sắp bị
+    tắt.
+  - **Luật gắn nhãn chỉ soi §14.4 thì đi vòng được.** Thêm một bảng thứ hai ở chỗ khác là đủ
+    để lách. Cổng nay áp luật cho **mọi** dòng bảng trong ma trận có ô phân loại nhắc IEC.
+  - **Chính cổng chưa được kiểm.** Thêm `verify_iec_claim_policy_gate.py` (ctest
+    `iec_claim_policy_gate`): 4 ca tiêm — câu khẳng định tiếng Anh, biến thể tiếng Việt, nhãn
+    IEC không dẫn được điều khoản, và mất hẳn câu chốt. Thứ cổng này bảo vệ là một tuyên bố
+    pháp lý/thương mại, và sai sót ở đó không lộ ra trong bất kỳ test kỹ thuật nào.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1377/1377 pass**, exit 0 (configure 0, build 0) — gồm `iec_claim_policy` và
+    `iec_claim_policy_gate` mới.
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **193 file / 2256 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0.
+
+### Fixed — `ISS-STED-08` `ST_SUBSET_SPEC` nói sai về chính compiler đang chạy (#359, 2026-09-02)
+
+- **Triệu chứng.** Bốn chỗ trong `ST_SUBSET_SPEC` mâu thuẫn với code:
+  - **§3.1** ghi miền `TIME` là *"0 … ~292 năm"* và im lặng về trần **literal**. Người đọc
+    dùng bảng này để thiết kế test sẽ viết ca `T#48h` rồi không hiểu vì sao compiler từ chối.
+  - **§5.5** liệt `CASE`, user `FUNCTION` và user `FUNCTION_BLOCK` vào danh sách *"không có"*
+    trong khi **cả ba đều đã có**.
+  - **§9** dòng D5 (*"Có `CASE`, vòng lặp, POU người dùng → Không có"*) và D6 (*"Chỉ
+    `INT`/`REAL`"*) đều sai; và bảng thiếu hẳn `VAR_IN_OUT`, `**`, các nhóm kiểu IEC vắng
+    mặt, các hàm/Function Block chuẩn IEC vắng mặt — thiếu **thật**, nhưng chưa công bố
+    kèm lý do.
+  - **§12** `ST-LEX-002` và `ST-RT-001` được mô tả hẹp hơn công dụng thật của chúng.
+- **Nguyên nhân gốc.** Ba nhóm sai khác nhau, không phải một. (1) §3.1 nhầm **miền lưu trữ**
+  với **miền literal** — hai bất biến khác nhau, thi hành ở hai pha khác nhau. (2) §5.5/§9
+  là bản chép tay của một trạng thái compiler đã cũ, không có cổng nào bắt khi nó trôi.
+  (3) Các mục thiếu ở §9 chưa từng được công bố kèm lý do, mà `ADR-054` phán quyết (3) buộc
+  mọi loại trừ phải có lý do: loại trừ im lặng khiến người dùng gặp `ST-SYN-001` cho một
+  cấu trúc IEC hợp lệ mà không có chỗ nào đọc được vì sao.
+- **Cách sửa.**
+  - **§3.1** nêu **hai** miền tách bạch: literal 0…24 h (`st_limits.hpp:57`, thi hành ở
+    `st_parser.cpp:195`, mã `ST-LEX-002`); giá trị runtime chỉ bị chặn bởi tràn int64
+    (`ST-RT-001`) và kết quả âm (`ST-RT-005`, fault chứ không kẹp 0 im lặng). Rút gọn thành
+    *"`TIME` = 0..24 h"* cũng sai — nó hứa một bất biến runtime mà compiler không thi hành.
+  - **§5.5** bỏ `CASE`/user POU khỏi danh sách "không có", và trỏ nguồn sự thật sang hồ sơ
+    sinh máy thay vì giữ một bản chép tay thứ hai.
+  - **§9** sửa D5/D6; thêm D9 (`RETURN`), D10 (`**`/`EXPT`), D11 (`VAR_IN_OUT` — **chưa có
+    nhưng đã lên lịch**, #367, khác hẳn "loại trừ vĩnh viễn"); công bố **37 mục loại trừ
+    mới** ở tầng kiểu/hàm/Function Block, **mỗi mục kèm lý do riêng**, đặt trong
+    `st_language_profile_v1.curated.json` để được sinh ra và **được kiểm**, thay vì chép tay
+    49 mục vào tài liệu — chép tay là tạo một bản sao sẽ trôi khỏi compiler, đúng lỗi mà
+    §10/§11 cũ đã mắc.
+  - **§12** `ST-LEX-002` còn dùng cho literal `TIME` vượt trần; `ST-RT-001` còn dùng cho
+    tràn int64 khi cộng/trừ `TIME`.
+- **Phát hiện thêm, sửa luôn trong cùng phiên.**
+  - **Cổng đối chiếu hai chiều chỉ phủ statement và operator.** Một mục khai "không có `SIN`"
+    trong khi compiler đã có `SIN` sai đúng y như khai "không có `CASE`" trong khi đã có
+    `CASE`, nhưng cổng cũ không thấy. Đã mở rộng sang **thư viện** và **hệ kiểu**, thêm chiều
+    thứ tư: một mục ở `plannedAdditions` mà compiler **đã** hiện thực hoá cũng làm đỏ — tài
+    liệu không được hứa một thứ đã giao.
+  - **Chính cổng chưa từng được kiểm.** `st_language_profile_contract` luôn xanh, và "luôn
+    xanh" có hai cách giải thích: cổng đang kiểm và mọi thứ đều đúng, hoặc cổng đã ngừng
+    kiểm — từ ngoài nhìn vào, hai trường hợp ấy giống hệt nhau, và đó đúng là cách
+    `F-STED-005` sống sót qua nhiều revision. Thêm `scripts/verify_st_profile_gate.py`
+    (ctest `st_language_profile_gate`): tiêm **6 hồ sơ sai đã biết** và đòi cổng nổ đỏ từng ca.
+  - **Revision History thiếu hẳn rev 1.2** của `ISS-STED-06` (gỡ §10/§11). Đã bổ sung cùng
+    rev 1.3 của lần này.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1375/1375 pass**, exit 0 (configure 0, build 0) — gồm `st_language_profile_contract`
+    và `st_language_profile_gate` mới.
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **193 file / 2256 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` trong ngân sách R3).
+  - Ghi chú phiên bản: `profileVersion` giữ **1.0.0** vì **bề mặt ngôn ngữ không đổi** —
+    thay đổi nằm ở phần lý do được công bố. `sha256` của hồ sơ đổi theo nội dung, và đó
+    chính là thứ phép so tương thích `ISS-STED-19` dùng để phân biệt hai hồ sơ cùng nhãn
+    phiên bản mà khác nội dung.
+
+### Added — `ISS-STED-19` bộ ba phiên bản ngôn ngữ/artifact được công bố và ĐƯỢC KIỂM (#358, 2026-09-01)
+
+- **Triệu chứng.** `PROGRAMMING_LIBRARY_VERSION` (`rev-a.3`) và
+  `PROGRAMMING_LIBRARY_REGISTRY_SHA256` được sinh sẵn vào bundle FE, nhưng `grep` toàn bộ
+  `apps/web-ui/src` (trừ `generated/`) **không ra một chỗ nào đọc chúng**. Một phép kiểm
+  tra được sinh ra rồi bỏ đó không phải là một phép kiểm tra — đó là một phép kiểm tra
+  *tưởng đã có*. Hệ quả: bundle FE cũ vẫn vẽ palette, từ khoá và chữ ký hàm của một phiên
+  bản **khác** với phiên bản thiết bị đang biên dịch, và không ai biết. Song song đó,
+  runtime **từ chối đúng** artifact không tương thích nhưng chỉ nói `"package v2 rejected
+  by loader"` — một câu không cho biết lệch ở đâu, cũng không cho biết bên nào là bên cũ.
+- **Nguyên nhân gốc.** Ba phiên bản quyết định "FE và thiết bị có nói cùng một ngôn ngữ
+  không" nằm rải ba nơi — hồ sơ ngôn ngữ ST ở compiler, registry thư viện ở domain, ABI ở
+  profile — và **không endpoint nào gom chúng lại**. Rải rác thì mỗi bên tự kiểm một mảnh,
+  và lệch ở mảnh không ai kiểm sẽ đi qua trong im lặng.
+- **Cách sửa.**
+  - **Hợp đồng.** `ProgrammingCapabilities.compatibility` là **một khối required** gồm
+    `stLanguageProfileVersion` + `stLanguageProfileSha256` + `libraryRegistryVersion` +
+    `libraryRegistrySha256` + `compilerProfileId` + `targetAbi`. `ProgrammingArtifact` mang
+    thêm `stLanguageProfileVersion` để một artifact đọc lại sau này, tách khỏi phản hồi
+    sinh ra nó, vẫn tự nói được nó biên dịch dưới hồ sơ nào.
+  - **Backend.** `currentCompatibility()` đọc thẳng từ các hằng **sinh tự động**
+    (`domain.STLanguageProfileVersion`, `domain.SystemLibraryVersion`, `domain.ProfileID`,
+    `domain.ProfileTargetABI`…). Chép tay ở đây sẽ tạo phiên bản thứ hai của sự thật, và nó
+    sẽ trôi khỏi bộ sinh đúng vào lúc phép so cần đúng nhất. Khối này **không** biến mất khi
+    Core mất kết nối: đó là hằng đã build vào web-api, không phải thứ hỏi Core mới biết.
+  - **Frontend.** `programmingCompatibility()` so bộ ba của thiết bị với hằng đã build vào
+    bundle và cho ra **một phán quyết duy nhất**; lệch ⇒ **chặn `canEdit`** (không chỉ hiện
+    cảnh báo: cảnh báo mà vẫn cho gõ thì người dùng vẫn gõ, và cái họ gõ ra mới là thứ gây
+    hại), kèm thông báo nêu **cả hai** phiên bản. **Không tự hạ cấp** — FE không có
+    palette/từ khoá của phiên bản cũ nên chỉ đoán được, mà đoán sai ở đây là soạn ra chương
+    trình sai. Thiếu khối `compatibility` ⇒ `UNVERIFIABLE` ⇒ **vẫn chặn**: thiếu bằng chứng
+    không phải bằng chứng khớp (`undefined === undefined` là cái bẫy chính ở đây).
+  - **Runtime.** Mở rộng cơ chế đã có chứ không dựng cơ chế thứ hai: `st_loader` nay nêu
+    **cả hai** giá trị khi từ chối schema/profile/ABI, và `DescribePackageRejection()` (đặt
+    cạnh parser, nơi duy nhất biết bố cục header) diễn giải `PKG-E-004` — vốn gộp lệch hồ sơ
+    với lệch ABI — thành lý do đọc được, tách rõ vế nào lệch. Gói cụt vẫn cho ra câu chung
+    chung: một thông điệp lỗi không được tự nó thành lỗi đọc quá biên.
+- **Kiểm chứng (đo lại, không dẫn số cũ).**
+  - `ctest --test-dir build/fw --output-on-failure` (`--fresh` + MODBUS/BACNET/HMI = ON):
+    **1374/1374 pass**, exit 0 — trong đó `StIr.VersionRejectionNamesBothSides`,
+    `StPackageV2.RejectionReason*` (3), và
+    `ProgrammingStageAtomicity.ForeignTargetAbiIsRejectedWithReadableReasonAndKeepsLiveState`.
+  - `go vet ./...` exit 0; `go test ./... -count=1` **19/19 package ok**, exit 0.
+  - `npx vitest --run --environment jsdom src`: **193 file / 2256 test pass**, exit 0;
+    `npm run lint` exit 0; `npm run build` exit 0 (chunk `programming` 160.34 KiB, ngân sách
+    R3 165.00 KiB, dư 4.66 KiB).
+
+### Fixed — `ISS-STED-05` khay Vấn đề của workbench phủ cả POU ST (#355, 2026-09-01)
+
+- **Triệu chứng.** Khay Vấn đề của workbench PGM-02 **bỏ qua mọi POU ST**. POU FBD được
+  validate cấu trúc phía FE và có mục trong khay; POU ST thì không có gì. Bất đối xứng ấy
+  khiến người dùng ST đọc *"không có mục nào"* thành *"không có lỗi"* — một kết luận sai
+  mà giao diện không cho họ cách nào phát hiện.
+- **Nguyên nhân gốc.** `DesignWorkbench.tsx` mở đầu vòng lặp bằng
+  `if (program.language !== 'FBD') continue`.
+- **Cách sửa.**
+  - Bỏ nhánh lọc. Nguồn cho POU ST là **diagnostic Check** (qua `ISS-STED-04`), **không**
+    dựng bộ kiểm thứ hai ở FE: FBD là đồ thị mà FE tự đọc được, còn ST cần compiler thật;
+    bịa một bộ phân tích ST ở FE sẽ tạo nguồn sự thật thứ hai và nó sẽ lệch khỏi compiler
+    đúng vào lúc người dùng cần tin nó nhất.
+  - Nhảy tới một mục dùng lại chính `focusDiagnostic` mà PGM-03 và khay So sánh đã dùng —
+    chọn đúng POU rồi neo dòng/cột. Hai đường nhảy song song sẽ lệch nhau đúng lúc một
+    trong hai được sửa.
+  - Trạng thái rỗng phân biệt **"chưa Kiểm tra"** với **"đã Kiểm tra, không có lỗi"**
+    (kèm revision). Gộp hai câu là cách người dùng ST tin rằng chương trình đã sạch trong
+    khi chưa ai kiểm nó.
+- **Hai lỗi phát hiện khi viết test, sửa cùng phiên.**
+  - `ProblemsPanel` nói *"không neo vào vị trí nào"* cho **mọi** mục thiếu `onJump`, kể cả
+    mục **có** `jumpLabel`. Một mục neo đúng chỗ bị mô tả là không neo sẽ bị người dùng bỏ
+    qua. Nay giữ nguyên nhãn, chỉ bỏ nút.
+  - Chân khay viết *"Khay này **chỉ** hiện vấn đề cấu trúc của Draft"* — câu đó **sai từ
+    chính thay đổi này**. Nay ghi đúng: vấn đề cấu trúc (FBD) **và** diagnostic Kiểm tra
+    gần nhất (ST); `D-01` không đổi — PGM-02 vẫn chỉ **đọc**, không sở hữu Check.
+  - Docstring `ProblemsDrawer` viết *"dùng chung cho ba tab của PGM-02 và cho PGM-03"*
+    trong khi component đó **chưa bao giờ** được mount ở PGM-02 — khay của PGM-02 là
+    `ProgrammingWorkbench`, một component khác. Câu sai đó khiến người đọc tin PGM-02 đã
+    có khay lỗi dùng chung, nên **không ai đi tìm lý do POU ST không hiện lỗi**.
+- **Verification** (2026-09-01, đo lại thật): C++ Release `MODBUS/BACNET/HMI=ON`, `--fresh`:
+  configure exit 0, build exit 0, `ctest` **1369/1369 pass, exit 0**.
+  Go: `go vet ./...` exit 0, `go test ./... -count=1` **exit 0, 19 gói ok**.
+  FE: `vitest` **192 file / 2242 test pass** (+6), `npm run lint` exit 0, `npm run build` exit 0.
+
+### Fixed — `ISS-STED-04` PGM-02 hiển thị diagnostic của Check gần nhất (#354, 2026-09-01)
+
+- **Triệu chứng.** Trong chế độ `EDIT`, gõ ST sai cú pháp hay sai kiểu đều **không thấy
+  gì**: không gạch chân, không đếm lỗi. Phải Lưu → sang PGM-03 → chạy Kiểm tra mới biết.
+  Use case `ST-UC-03` FAIL.
+- **Nguyên nhân gốc.** `DesignWorkspacePage` truyền `diagnostics={EMPTY_DIAGNOSTICS}` —
+  một hằng số rỗng — cho `ProgramsTab`, **nơi duy nhất** `ProgramsTab` được mount trong
+  toàn bộ FE. Hệ quả: toàn bộ hạ tầng hiển thị lỗi trong `SourceEditor` (`diagnosticRanges`,
+  `mergeDiagnosticRanges`, tooltip `detailCode`, dòng `aria-describedby`) là **mã chết**,
+  chỉ sống trong test. Quyết định `D-01` chuyển quyền **sở hữu** Check sang PGM-03 là đúng;
+  khi gỡ Check khỏi PGM-02 thì không ai nối lại **đường đọc** kết quả về trang soạn thảo.
+  Bỏ sót, không phải thiết kế.
+- **Cách sửa.**
+  - `DesignWorkspacePage` đọc `latestCheck.checkId` qua `useProgrammingCheck` và truyền
+    diagnostic thật xuống. Đây là đường **đọc**: không dựng bộ kiểm thứ hai ở FE, không
+    biến thành check-as-you-type, `checkDisabledReason` khi buffer bẩn giữ nguyên.
+  - `stCheckProvenance()` — tách **quyết định** khỏi cách vẽ: "được phép gạch lỗi lên
+    buffer này không, và nếu không thì vì sao". Để logic ấy trong JSX thì không test được
+    cái quan trọng nhất — trường hợp **không** được gạch.
+  - **Chỉ gạch mục đã chứng minh khớp.** `UNVERIFIABLE` không được gạch: thiếu bằng chứng
+    không phải bằng chứng khớp. Một mục `STALE` làm cả POU thành `STALE` — gạch nửa vời
+    còn khó hiểu hơn không gạch.
+  - Nhãn **bắt buộc** nêu revision và trạng thái buffer, tách ba câu cho ba tình huống
+    **dẫn tới hành động khác nhau**: chưa Kiểm tra ⇒ chạy Kiểm tra; buffer đã đổi ⇒ chạy
+    lại; kết quả thuộc revision khác ⇒ chạy lại **không** giúp gì, phải mở đúng revision.
+  - Băm buffer chạy trong `useEffect`, không trong lượt render (WebCrypto bất đồng bộ).
+    Không băm được ⇒ `undefined` ⇒ `UNVERIFIABLE` ⇒ không gạch — fail-closed.
+- **Test cũ mã hoá hành vi cũ.** `SourceEditor.test.tsx` trước đây gạch **mọi** diagnostic
+  truyền vào, đúng thứ `ISS-STED-18` cấm. Fixture nay mang provenance thật, và thêm bốn ca
+  cho nửa quan trọng hơn của hợp đồng: không provenance ⇒ không gạch; buffer đổi một ký tự
+  ⇒ gỡ gạch kèm lý do; chưa Kiểm tra ⇒ nói "Chưa Kiểm tra" chứ **không** nói "không có lỗi";
+  đã Kiểm tra và sạch ⇒ nói "không có lỗi" kèm revision.
+- **Verification** (2026-09-01, đo lại thật): C++ Release `MODBUS/BACNET/HMI=ON`, `--fresh`:
+  configure exit 0, build exit 0, `ctest` **1369/1369 pass, exit 0**.
+  Go: `go vet ./...` exit 0, `go test ./... -count=1` **exit 0, 19 gói ok**.
+  FE: `vitest` **191 file / 2236 test pass** (+11), `npm run lint` exit 0, `npm run build` exit 0.
+
+### Added — `ISS-STED-18` Diagnostic Provenance Contract (#353, 2026-09-01)
+
+- **Triệu chứng.** Provenance chỉ có ở **cấp Check** (`RevisionID` trong bản ghi Check),
+  chưa có ở **cấp diagnostic**: `location` chỉ mang `programId`/`line`/`column`/`bindingId`.
+- **Nguyên nhân gốc — vì sao điều này chặn `ISS-STED-04`.** Một diagnostic không tự chứng
+  minh được nó thuộc về nguồn nào. Gạch lỗi trên nền đó tạo ra **một lỗi nguy hiểm hơn
+  lỗi đang có**: gạch một chỗ trên buffer đã đổi, tức chỉ vào dòng **không còn** là dòng
+  sinh ra lỗi đó. Người dùng không có cách nào tự biết mình đang bị chỉ sai, nên họ sẽ sửa
+  đúng chỗ bị chỉ — sửa một chỗ không hỏng, rồi tin rằng đã xong.
+- **Cách sửa.**
+  - **BE** (`checks.go`) gắn bốn trường vào **từng** diagnostic, mỗi trường trả lời một câu
+    hỏi khác nhau: `revisionId` (thuộc revision nào), `pouId` (thuộc POU nào),
+    `sourceSha256` (thuộc **đúng nội dung nào** của POU đó), `stLanguageProfileVersion`
+    (sinh dưới hồ sơ ngôn ngữ nào).
+  - `sourceSha256` băm **từng POU**, không băm cả gói — băm cả gói thì sửa POU A làm mọi
+    lỗi của POU B thành cũ, và người dùng mất luôn kết quả còn đúng. POU liên kết được băm
+    theo **tên**, đúng định danh compiler đặt vào `sourceId` khi lỗi nằm trong thân POU đó.
+  - Không tra được hash cho một `pouId` thì **bỏ trống** thay vì điền hash của gói: một hash
+    sai làm phép so khớp trả lời **sai**, tệ hơn hẳn một hash vắng mặt mà FE biết là "không
+    kiểm được".
+  - **Hồ sơ ngôn ngữ** sinh thêm hằng số cho Go và TS từ cùng một nguồn
+    (`generate_st_language_profile.py`). Chép tay giá trị này ở hai nơi sẽ biến phép so
+    phiên bản thành một **phép so luôn đúng** — cổng tự tắt chính nó. Cổng `--check` sẵn có
+    của #357 canh luôn hai tệp sinh mới.
+  - **FE** `diagnosticFreshness.ts` — luật phán quyết ba trạng thái. Điểm mấu chốt:
+    **thiếu bằng chứng ≠ khớp**. Diagnostic không mang đủ provenance ra `UNVERIFIABLE`,
+    không phải `FRESH`; coi "không kiểm được" là "khớp" chính là cách một phép so khớp
+    trở thành vô nghĩa.
+  - **Khay Vấn đề** hiện nhãn `CŨ` kèm **lý do đọc được**, và mục cũ **vẫn nằm trong danh
+    sách** — ẩn nó đi làm người dùng tưởng lỗi đã hết. Bốn lý do tách riêng vì chúng dẫn
+    tới **hành động khác nhau**: "buffer đã đổi" thì chạy lại Kiểm tra là đủ, còn "thuộc
+    revision khác" thì chạy lại cũng vô ích cho tới khi mở đúng revision. Khi có mục cũ,
+    khay mời **chạy lại Kiểm tra** — một nhãn "cũ" không có đường thoát chỉ là lời than phiền.
+- **Phạm vi.** Việc **gạch lỗi trong trình soạn thảo** thuộc `ISS-STED-04` (#353 chặn #354);
+  ở đây cung cấp hợp đồng + luật phán quyết đã có test để #354 tiêu thụ, và bề mặt quan sát
+  được hôm nay là khay Vấn đề.
+- **Verification** (2026-09-01, đo lại thật): C++ Release `MODBUS/BACNET/HMI=ON`, `--fresh`:
+  configure exit 0, build exit 0, `ctest` **1369/1369 pass, exit 0**.
+  Go: `go vet ./...` exit 0, `go test ./... -count=1` **exit 0, 19 gói ok**; 5 test provenance mới.
+  FE: `vitest` **190 file / 2225 test pass** (+18), `npm run lint` exit 0, `npm run build` exit 0.
+
+### Fixed — hoàn tất AC còn thiếu của `#351` và bốn lỗi phát hiện khi đo lại (2026-08-31)
+
+Bản thi hành `ISS-STED-02` đã merge trước đó phủ được phần lớn issue, nhưng **thiếu một
+tiêu chí chấp nhận** và để lại bốn chỗ đỏ. Phần trùng lặp đã bị bỏ, chỉ giữ phần bổ sung.
+
+- **AC còn thiếu — chính sách "target profile nâng warning thành error".**
+  `StCompileOptions::warnings_as_errors` + cờ CLI `--warnings-as-errors` +
+  `StDiagnosticBag::promote_warnings_to_errors()`. Áp ở **túi**, sau khi đã biết chương
+  trình hợp lệ, chứ không ở chỗ phát warning: nơi phát biết *đây là chuyện đáng ngờ*, còn
+  *đáng ngờ có chặn phát hành không* là câu hỏi của profile. **Mã không đổi khi nâng cấp**
+  — `ST-WARN-002` vẫn là `ST-WARN-002`; đổi cả mã sẽ làm hai profile nói hai ngôn ngữ khác
+  nhau về cùng một phát hiện và bảng tra của FE phải nhân đôi.
+- **`st_compile_main.cpp` `fail()` nuốt lỗi thật.** Từ khi kênh WARNING sống, một lần
+  Check hỏng vì lý do **ngoài** compiler (hỏng chữ ký, lỗi ghi file) vẫn để lại một túi
+  chỉ chứa warning. `fail()` chỉ phát túi ⇒ `ok:false` kèm **không một lỗi nào**: người
+  dùng thấy "thất bại" và mấy dòng vàng vô can, còn nguyên nhân thật biến mất. Nay bảo
+  đảm mảng luôn có ít nhất một `ERROR`.
+- **`hmi_broker.go` — lỗi đua thật trong sản phẩm.** `Serve()` trả về ngay khi `Accept()`
+  nhận `net.ErrClosed`, tức **trước** khi goroutine huỷ ctx đóng xong listener. Broker
+  khởi động lại ngay sau đó bind được đường dẫn rồi bị lần gỡ file muộn xoá mất socket
+  vừa tạo (`chmod hmi socket: no such file`). Đây là đúng đường mà restart/reload dùng
+  trên bo, không phải chỉ chuyện của test. Thêm `defer Close()` trong `Serve`, và bỏ
+  `os.Remove` **theo đường dẫn** trong `Close()` — `UnixListener.Close()` đã gỡ đúng file
+  của chính nó, còn xoá theo tên thì có thể xoá socket của người kế nhiệm.
+- **`generate_programming_errors.py` — `npm run build` đỏ vĩnh viễn trên Linux.**
+  Manifest ghi `str(path.relative_to(ROOT))`, tức dùng dấu phân cách của **hệ điều hành**.
+  Một lần sinh trên Windows ghi vào manifest các đường dẫn có `\`, và bản commit đó không
+  bao giờ khớp lại trên Linux ⇒ `--check` đỏ vì một khác biệt **thuần hình thức**. Manifest
+  là hợp đồng đi qua nhiều máy nên phải có đúng một dạng chuẩn tắc: dùng `.as_posix()`.
+- **`runner_test.go` — test đo nhầm thứ.** `kill(pid,0)` vẫn thành công trên một zombie,
+  nên test đo "đã được reap" thay vì "đã bị giết" — hai việc của hai chủ thể khác nhau.
+  `ProcessRunner` chịu trách nhiệm giết process group; reap tiến trình mồ côi là việc của
+  init, mà PID 1 của container không phải init biết reap. Đọc `/proc/<pid>/stat` phân biệt
+  `S` (còn sống — hỏng thật) với `Z` (đã chết — đạt).
+- **`simulation_lifecycle_test.go` — so ảnh chụp của bộ đếm chạy tự do.** Vòng chờ dừng ở
+  mẫu **đầu tiên** thấy `>= 3`, nên dưới tải có thể bỏ qua hẳn nhịp 3 và thấy nhịp 4
+  (`virtual=400/300 sequence=4/3`) trong khi bất biến vẫn nguyên vẹn. Nay so **tiến độ mỗi
+  nhịp** bằng nhân chéo — đúng bất biến "tốc độ không tới worker và không đổi kết quả".
+- **FE `ProblemsDrawer` — severity chỉ tồn tại ở màu.** Icon mang `aria-hidden`, nên người
+  dùng trình đọc màn hình nghe "lỗi" và "cảnh báo" y hệt nhau. Vô hại khi mọi diagnostic
+  đều là ERROR; từ lúc kênh WARNING mang dữ liệu thật thì đó là hai hành động khác nhau —
+  một cái chặn phát hành, một cái không. Thêm nhãn `sr-only`.
+- **Verification** (2026-08-31, đo lại thật, đóng góp bằng chứng cho **#414**):
+  C++ Release `MODBUS/BACNET/HMI=ON`, `--fresh`: configure exit 0, build exit 0,
+  `ctest` **1369/1369 pass, exit 0**.
+  Go: `go vet ./...` exit 0, `go test ./... -count=1` **exit 0, 19 gói ok** (trước sửa:
+  exit 1, hai gói đỏ).
+  FE: `vitest` **189 file / 2207 test pass**, `npm run lint` exit 0,
+  `npm run build` **exit 0** (trước sửa: exit 1 ngay ở `check:programming-errors`).
+
 ### Thông kênh WARNING xuyên ba tầng — `ISS-STED-02` (#351) + `ISS-STED-03` (#352) (2026-08-31)
 
 **Triệu chứng.** Đo nền cho `#369` (`docs/07_records/test-evidence/programming/2026-08-31-gate369-e2e-vv-baseline.md`)

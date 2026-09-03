@@ -85,7 +85,17 @@ type packageManifestBinding struct {
 	PointID    string `json:"pointId"`
 	DeviceID   string `json:"deviceId"`
 	ExtIndex   int    `json:"extIndex"`
-	Writable   bool   `json:"writable"`
+	// `AC-PIO-ID-02` — bốn trường này khoá THỨ MÀ SLOT TRỎ TỚI, không chỉ số
+	// slot. Không có chúng, Commission chỉ đối chiếu được `extIndex`, mà
+	// `extIndex` giữ nguyên vẫn có thể trỏ vào một thanh ghi/kiểu/quyền khác.
+	//
+	// Chỉ có nghĩa với MB_RTU nên `omitempty`: gắn chúng vào điểm LOCAL/VP là
+	// mở bốn trường vô nghĩa mà lớp sau phải đoán có nên tin hay không.
+	RegisterType string `json:"registerType,omitempty"`
+	Address      int    `json:"address,omitempty"`
+	ModbusType   string `json:"modbusDataType,omitempty"`
+	ReadWrite    string `json:"readWrite,omitempty"`
+	Writable     bool   `json:"writable"`
 }
 
 // packageCheckManifest — thứ tự field ở đây LÀ thứ tự byte của manifest
@@ -160,7 +170,14 @@ func packageManifestSignals(objects []revisionObjectView) []packageManifestSigna
 	return result
 }
 
-func packageManifestBindings(objects []revisionObjectView) []packageManifestBinding {
+// packageManifestBindings ghi lại binding NHƯ ĐÃ BIÊN DỊCH, không như đã lưu.
+//
+// `ISS-PIO-31`: với MB_RTU, `extIndex` đi vào artifact là số PHÂN GIẢI LẠI từ
+// cấu hình đang chạy (`ioMapFromRevision`), không phải số nằm trong payload
+// binding. Manifest là hồ sơ as-built và là thứ Commission đối chiếu lại, nên
+// ghi số cũ ở đây sẽ làm hồ sơ nói một đằng còn artifact chạy một nẻo — đúng
+// loại lệch mà cả issue này sinh ra để chặn.
+func packageManifestBindings(objects []revisionObjectView, slots *ModbusSlotSnapshot) []packageManifestBinding {
 	bindings, _, _ := collectPackageObjects(objects)
 	result := make([]packageManifestBinding, 0, len(bindings))
 	for _, binding := range bindings {
@@ -168,10 +185,28 @@ func packageManifestBindings(objects []revisionObjectView) []packageManifestBind
 		if category == "" {
 			category = "LOCAL"
 		}
+		extIndex := binding.extIndex
+		var target ModbusSlot
+		if category == "MB_RTU" {
+			/* Check đã CHẶN mọi ca không phân giải được trước khi tới đây, nên
+			 * nhánh lỗi ở đây là "không thể xảy ra". Giữ nguyên số cũ trong
+			 * trường hợp đó là lựa chọn an toàn hơn im lặng ghi 0: Commission
+			 * sẽ đối chiếu lại và chặn. */
+			if resolved, reason := resolveModbusExtIndex(slots, binding.deviceID, binding.pointID,
+				binding.extIndex); reason == "" {
+				extIndex = resolved
+				if slots != nil {
+					target, _ = slots.Lookup(binding.deviceID, binding.pointID)
+				}
+			}
+		}
 		result = append(result, packageManifestBinding{BindingID: binding.bindingID,
 			ProgramID: binding.programID, VariableID: binding.variableID, Variable: binding.variable,
 			Direction: binding.direction, Category: category, PointID: binding.pointID,
-			DeviceID: binding.deviceID, ExtIndex: binding.extIndex, Writable: binding.writable})
+			DeviceID: binding.deviceID, ExtIndex: extIndex,
+			RegisterType: target.RegisterType, Address: target.Address,
+			ModbusType: target.DataType, ReadWrite: target.ReadWrite,
+			Writable: binding.writable})
 	}
 	sort.Slice(result, func(left, right int) bool { return result[left].BindingID < result[right].BindingID })
 	return result

@@ -90,13 +90,27 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # mới được khai trong `st_diagnostic.hpp` và `st_control_api.hpp` cùng
         # commit, nên guard hai chiều vẫn đóng.
         #
+        # Cập nhật `ISS-STED-21` (2026-09-02): 151→155 detail, catalog 1.8.0→1.9.0.
+        # Bốn mã `ST-WARN-001..004` (kênh WARNING của compiler) vào catalog ở
+        # commit `35515b5`, nhưng CHÍNH COMMIT ĐÓ không sửa ba con số ở đây —
+        # đúng chế độ hỏng mà khối chú thích phía trên cảnh báo. Số public giữ
+        # nguyên 38: cả bốn ánh xạ vào public code đã có.
+        #
+        # Hệ quả thật: gate `--component layout` đỏ trên `main` từ 2026-08-31,
+        # và vì CI của tổ chức lúc đó đang bị chặn vì billing nên không ai thấy.
+        # Hai lỗi che nhau — đó là lý do #414 tồn tại.
+        #
         # Bất biến THẬT (catalog ↔ mã sinh ra khớp nhau) do
         # `generate_programming_errors.py --check` canh, chạy ngay phía trên
         # trong cùng gate.
         catalog, raw, schema_raw = GENERATOR.load_and_validate()
-        self.assertEqual(catalog["catalogVersion"], "1.8.0")
+        # ISS-PIO-31 thêm component `point-catalog` với ba detail code
+        # `PIO-SLOT-001..003` (Check chặn khi slot Modbus không phân giải được
+        # theo danh tính bền). Ba con số dưới đây phải đi CÙNG commit thêm mã —
+        # đó chính là chế độ hỏng mà khối chú thích phía trên cảnh báo.
+        self.assertEqual(catalog["catalogVersion"], "1.10.0")
         self.assertEqual(len(catalog["publicErrors"]), 38)
-        self.assertEqual(len(catalog["componentDetails"]), 151)
+        self.assertEqual(len(catalog["componentDetails"]), 158)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 

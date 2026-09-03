@@ -40,6 +40,12 @@ jobs:
           go-version-file: apps/web-api/go.mod
           cache: false
 
+      # ISS-STED-21 — cổng hợp đồng THI HÀNH schema bằng `jsonschema`, không chỉ
+      # băm nó. Runner không có sẵn gói này, nên trước lát này job hỏng sau ~2
+      # giây với ModuleNotFoundError — trước cả khi kiểm được thứ gì.
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
       - name: Kiểm authority, dependency và build artifact
         run: scripts/verify-project.sh --component layout
 
@@ -77,6 +83,14 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             cmake \
@@ -86,6 +100,9 @@ jobs:
             libsodium-dev \
             ninja-build \
             ${{ matrix.extra_packages }}
+
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
 
       - name: Build và test qua entrypoint chuẩn
         run: scripts/verify-project.sh --component cpp --profile '${{ matrix.profile }}'
@@ -126,9 +143,40 @@ jobs:
           path: build/verify/cpp-${{ matrix.profile }}/Testing/
           retention-days: 7
 
+      # ISS-STED-21 — công cụ production cho cổng Go.
+      #
+      # `verify-project.sh --component go` đòi `mkddc-st-compile`/`mkddc-st-package`
+      # do CHÍNH cổng cpp dựng ra (`MKDDC_REQUIRE_PRODUCTION_TOOLS=1`): test Go
+      # phải chạy qua binary thật, không phải fake. Bất biến đó đúng — nhưng job
+      # Go chạy trên runner RIÊNG và không có `build/verify/` của job này, nên
+      # nó hỏng sau chưa tới một giây, mọi lần, kể từ khi cổng được viết.
+      #
+      # Chuyển đúng BA binary qua artifact thay vì bắt job Go dựng lại C++:
+      # dựng lại sẽ cho một binary KHÁC binary mà cổng cpp vừa kiểm, tức phá
+      # chính bất biến "cùng một build".
+      #
+      # `mkddc-programming-sim-worker` nằm trong danh sách vì
+      # `internal/programming/simworker/client_test.go` spawn ĐÚNG binary đó để
+      # kiểm hợp đồng liên tiến trình. Khi nó thiếu, `MKDDC_REQUIRE_PRODUCTION_TOOLS=1`
+      # biến sáu test ấy thành FAIL — đúng ý đồ của cổng (không có SKIP giả
+      # xanh), nhưng lý do là artifact thiếu file chứ không phải code hỏng.
+      - name: Upload production tools cho cổng Go
+        if: matrix.profile == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-tools
+          path: |
+            build/verify/cpp-full/core/mkddc-st-compile
+            build/verify/cpp-full/core/mkddc-st-package
+            build/verify/cpp-full/core/mkddc-programming-sim-worker
+          retention-days: 1
+
   web-backend:
     name: Go Web Backend
     runs-on: ubuntu-22.04
+    # ISS-STED-21 — cổng Go dùng production tool do cổng cpp dựng, nên nó phải
+    # đợi job đó xong. Không có `needs` thì artifact chưa tồn tại lúc tải.
+    needs: som-services
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,6 +185,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'apps/web-api/go.mod'
+
+      - name: Tải production tool từ cổng cpp
+        uses: actions/download-artifact@v4
+        with:
+          name: production-tools
+          path: build/verify/cpp-full/core
+
+      # `upload-artifact` không giữ bit thực thi.
+      - name: Khôi phục quyền thực thi
+        run: chmod +x build/verify/cpp-full/core/mkddc-st-compile build/verify/cpp-full/core/mkddc-st-package build/verify/cpp-full/core/mkddc-programming-sim-worker
 
       - name: Vet và test race Go Web API
         run: scripts/verify-project.sh --component go --profile race
@@ -163,6 +221,9 @@ jobs:
       # build). 133 vitest test trên 25 file và `eslint --max-warnings=0` không
       # chặn được gì — chỉ lỗi type và lỗi bundle mới bị bắt, còn mọi regression
       # hành vi ở component/hook/AuthProvider/useWebSocket đều merge xanh.
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
       - name: Test, lint và build React Web UI
         run: scripts/verify-project.sh --component frontend
 
@@ -185,12 +246,21 @@ jobs:
 
       - name: Cài toolchain C++ cho Core simulator và compiler
         run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             cmake \
             g++ \
             libsodium-dev \
-            pkg-config
+            pkg-config \
+            socat
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -217,6 +287,9 @@ jobs:
             exit 1
           fi
 
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
       - name: Project đến Restore qua backend, compiler và Core simulator thật
         run: scripts/verify-project.sh --component e2e-real
 
@@ -229,6 +302,14 @@ jobs:
 
       - name: Install arm-none-eabi-gcc & newlib
         run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi
 
@@ -241,7 +322,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cài phụ thuộc
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsodium-dev
+        run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libsodium-dev
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
       - name: ASan
         run: |
           # -Werror bắt lỗi compile-time; ASan bắt lỗi bộ nhớ lúc chạy. Loader IR
@@ -263,7 +357,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cài phụ thuộc
-        run: sudo apt-get update && sudo apt-get install -y cmake clang libsodium-dev
+        run: |
+          # Ảnh runner mang sẵn repo bên thứ ba (`packages.microsoft.com`);
+          # repo đó có lúc trả 403 và làm `apt-get update` thoát 100 dù mọi repo
+          # Ubuntu đều tải được — job chết ở bước cài, không liên quan gì tới mã.
+          # Build này không cần gói nào từ đó nên gỡ trước khi update.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libsodium-dev
       - name: Build fuzz harness
         run: |
           CXX=clang++ CC=clang cmake -S . -B build/fuzz -DCMAKE_BUILD_TYPE=Debug \

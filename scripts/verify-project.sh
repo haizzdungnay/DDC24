@@ -49,6 +49,7 @@ PY
 }
 
 run_layout() {
+  require_contract_python_deps
   # Guard đóng gói chạy TRƯỚC: script này dùng `set -e`, nên bất kỳ kiểm nào hỏng
   # ở trên cũng làm các kiểm phía dưới không bao giờ chạy. Bất biến phát hành
   # (đúng biến thể FE, không băm firmware chưa boot được) rẻ và độc lập với phần
@@ -72,6 +73,7 @@ run_layout() {
 }
 
 run_cpp() {
+  require_contract_python_deps
   local modbus=OFF bacnet=OFF hmi=OFF
   case "$profile" in
     baseline) ;;
@@ -98,6 +100,12 @@ run_go() {
   go_dir="$(active_path web-api)"
 	local compiler_binary="$build_root/cpp-full/core/mkddc-st-compile"
 	local packager_binary="$build_root/cpp-full/core/mkddc-st-package"
+	# Sim worker cũng là production tool của cổng Go: `client_test.go` spawn ĐÚNG
+	# binary này để kiểm hợp đồng liên tiến trình (bắt tay, khung lệnh, thu hồi).
+	# Nó KHÔNG công bố `profile_sha256` trong `--version` — nó không đọc product
+	# profile — nên nó được canh riêng bằng phép kiểm executable, không đi qua
+	# vòng so profile phía dưới.
+	local sim_worker_binary="$build_root/cpp-full/core/mkddc-programming-sim-worker"
 	local expected_profile_sha
 	expected_profile_sha="$(sha256sum "$repo_root/contracts/programming/product_profile_v2.json" | awk '{print $1}')"
 	for production_tool in "$compiler_binary" "$packager_binary"; do
@@ -116,9 +124,21 @@ run_go() {
 		sha256sum "$production_tool"
 		printf '%s\n' "$production_version"
 	done
+	if [ ! -x "$sim_worker_binary" ]; then
+		printf 'LỖI: thiếu production tool từ chính build của cổng cpp: %s\n' "$sim_worker_binary" >&2
+		printf '      chạy --component cpp --profile full với cùng MKDDC_BUILD_ROOT trước cổng go\n' >&2
+		return 1
+	fi
+	sha256sum "$sim_worker_binary"
+	printf '%s\n' "$("$sim_worker_binary" --version)"
 	export MKDDC_REQUIRE_PRODUCTION_TOOLS=1
 	export MKDDC_ST_COMPILER_BINARY="$compiler_binary"
 	export MKDDC_ST_PACKAGER_BINARY="$packager_binary"
+	# Truyền tường minh, đúng như hai tool trên: không truyền thì test tự dò
+	# `build/fw` rồi `build/verify/cpp-full` bằng đường dẫn CỨNG, tức nó bỏ qua
+	# MKDDC_BUILD_ROOT — và với `MKDDC_REQUIRE_PRODUCTION_TOOLS=1` thì "không tìm
+	# thấy" là FAIL chứ không phải SKIP. Đó đúng là cách cổng Go đỏ trên CI.
+	export MKDDC_SIM_WORKER_BINARY="$sim_worker_binary"
   if [ "$profile" = "race" ]; then
     (cd "$repo_root/$go_dir" && go vet ./... && go test -race ./... -count=1)
   else
@@ -127,6 +147,7 @@ run_go() {
 }
 
 run_frontend() {
+  require_contract_python_deps
   local frontend_dir
   frontend_dir="$(active_path web-ui)"
   (cd "$repo_root/$frontend_dir" && \
@@ -148,19 +169,44 @@ run_frontend() {
 # lại không ai bắt. Nay danh sách cách ly rỗng, và `run_e2e` tự kiểm: spec còn
 # trong cách ly mà PASS thì cổng ĐỎ kèm yêu cầu gỡ, để lần sau không mục lại.
 MKDDC_E2E_QUARANTINE=""
-# Spec real-backend KHÔNG phải cách ly: nó sở hữu stack BE-Core simulator thật và
-# có config Playwright riêng, nên chạy lẫn với bộ mock sẽ vừa lặp test vừa làm sai
-# failure boundary của hai gate. Nó có cổng riêng `e2e-real`.
+# Spec của LANE KHÁC — KHÔNG phải cách ly. Chúng có config Playwright riêng và
+# đăng nhập vào backend THẬT, nên chạy lẫn với bộ mock sẽ vừa lặp test vừa làm
+# sai failure boundary của hai gate.
+#
+# `programming-real.spec.ts` có cổng riêng `e2e-real`.
+# `programming-target-fault.spec.ts` thuộc lane target
+# (`playwright.programming-target.config.ts`) và chỉ chạy trong cửa sổ fault
+# injection có kiểm soát trên bo thật; ở lane mock nó chỉ tồn tại để bị `skip`.
+#
+# Trước bản vá, chỉ spec real-backend được loại. Spec target vì thế vừa bị lane
+# mock chạy (rồi skip), vừa bị cổng "một helper đăng nhập" bắt lỗi vì nó có
+# `loginIfNeeded` riêng — mà nó BUỘC phải có, do nó đăng nhập vào backend thật
+# chứ không phải lane mock. Cổng đó chưa từng chạy trên CI (job FE luôn chết
+# trước ở bước khác), nên vi phạm này ngồi im trong repo.
 MKDDC_E2E_REAL_SPEC="e2e/programming-real.spec.ts"
+MKDDC_E2E_OTHER_LANE_SPECS=(
+  "e2e/programming-real.spec.ts"
+  "e2e/programming-target-fault.spec.ts"
+)
+
+# spec_owned_by_other_lane trả 0 khi spec thuộc lane khác.
+spec_owned_by_other_lane() {
+  local candidate="$1" owned
+  for owned in "${MKDDC_E2E_OTHER_LANE_SPECS[@]}"; do
+    [ "$candidate" = "$owned" ] && return 0
+  done
+  return 1
+}
 
 run_e2e() {
+  require_contract_python_deps
   local frontend_dir specs=()
   frontend_dir="$(active_path web-ui)"
   # Liệt kê động: một spec mới thêm vào thư mục sẽ tự vào cổng, không phải nhớ
   # sửa script. Đó là cách duy nhất để danh sách này không lại tụt hậu.
   while IFS= read -r spec; do
     [ -n "$MKDDC_E2E_QUARANTINE" ] && [ "$spec" = "$MKDDC_E2E_QUARANTINE" ] && continue
-    [ "$spec" = "$MKDDC_E2E_REAL_SPEC" ] && continue
+    spec_owned_by_other_lane "$spec" && continue
     specs+=("$spec")
   done < <(cd "$repo_root/$frontend_dir" && find e2e -maxdepth 1 -name '*.spec.ts' | sort)
   if [ "${#specs[@]}" -eq 0 ]; then
@@ -176,9 +222,15 @@ run_e2e() {
   # backend Go thật bằng JWT thật, còn `helpers/session.ts` là đường đăng nhập của
   # lane mock. Ép chung một helper sẽ buộc helper phải biết cả hai chế độ xác
   # thực — đúng kiểu trừu tượng hoá làm hỏng ranh giới lỗi của hai gate.
-  local dup
-  dup="$(cd "$repo_root/$frontend_dir" && grep -rln 'async function login' e2e --include='*.spec.ts' \
-    | grep -v -F "$MKDDC_E2E_REAL_SPEC" || true)"
+  local dup all_login
+  all_login="$(cd "$repo_root/$frontend_dir" && grep -rln 'async function login' e2e --include='*.spec.ts' || true)"
+  dup=""
+  while IFS= read -r spec; do
+    [ -z "$spec" ] && continue
+    spec_owned_by_other_lane "$spec" && continue
+    dup="${dup}${spec}"$'\n'
+  done <<< "$all_login"
+  dup="$(printf '%s' "$dup")"
   if [ -n "$dup" ]; then
     printf 'LỖI: spec định nghĩa lại helper đăng nhập thay vì dùng e2e/helpers/session.ts:\n%s\n' \
       "$dup" >&2
@@ -201,6 +253,7 @@ run_e2e() {
 }
 
 run_e2e_real() {
+  require_contract_python_deps
   local frontend_dir
   frontend_dir="$(active_path web-ui)"
   (cd "$repo_root/$frontend_dir" && npm run test:e2e:programming-real)
@@ -222,7 +275,37 @@ run_release() {
 # `--wave` là đường đi MỘT LỆNH cho cả ma trận cổng. Nó cố ý KHÔNG dùng `set -e`
 # của script này: runner chạy hết mọi cổng rồi mới kết luận, vì dừng ở cổng hỏng
 # đầu tiên chính là lý do lỗi phía sau nằm im rất lâu.
+# Tiền kiểm phụ thuộc Python của các cổng hợp đồng.
+#
+# Gọi ở ĐẦU từng component thật sự chạy script hợp đồng (`layout`, `cpp`,
+# `frontend`, `e2e`, `e2e-real`, `--wave`), KHÔNG gọi vô điều kiện: `firmware`
+# và `release` không đụng tới `jsonschema`, bắt chúng cài gói là dựng một phụ
+# thuộc giả — và đúng như vậy đã làm job "MCU Firmware" đỏ ở `476723a`.
+#
+# Vì sao đứng ở đây: chín script sinh/kiểm hợp đồng `import jsonschema` và cần
+# `Draft202012Validator` (jsonschema >= 4). Ubuntu 22.04 đóng sẵn jsonschema
+# 3.2, nên trên runner CI các script đó chết bằng `ImportError` THÔ. Trong
+# `ctest` cái chết đó hiện ra là "st_language_profile_contract Failed" — đọc y
+# hệt một vi phạm hợp đồng ngôn ngữ, trong khi thứ thiếu chỉ là một gói pip.
+# Một cổng nói sai lý do hỏng còn tốn thời gian hơn một cổng không chạy.
+require_contract_python_deps() {
+  python3 - <<'DEPCHECK' || exit 1
+import sys
+
+try:
+    from jsonschema import Draft202012Validator  # noqa: F401
+except Exception as exc:  # ImportError, và cả jsonschema quá cũ
+    sys.stderr.write(
+        "LỖI: thiếu phụ thuộc Python cho cổng hợp đồng: %s\n"
+        "     cài bằng: python3 -m pip install -r requirements-ci.txt\n"
+        "     (cần jsonschema >= 4.17 — bản 3.2 đóng sẵn trên Ubuntu 22.04 KHÔNG có\n"
+        "      Draft202012Validator, và đây KHÔNG phải lỗi hợp đồng)\n" % exc)
+    raise SystemExit(1)
+DEPCHECK
+}
+
 if [ -n "$wave" ]; then
+  require_contract_python_deps
   exec python3 "$repo_root/scripts/verify_wave_gates.py" --wave "$wave" --repeat "$repeat"
 fi
 

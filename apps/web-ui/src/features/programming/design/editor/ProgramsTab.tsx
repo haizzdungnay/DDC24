@@ -7,11 +7,14 @@ import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import type { FbdSelection } from '../../fbd/commands'
 import { ContextInspector } from '../inspector/ContextInspector'
 import { stSymbolContextFor } from '../inspector/inspectorContext'
+import { hashBufferSource } from '../../shared/diagnosticFreshness'
+import { stCheckProvenance, type StCheckProvenanceState } from './stCheckProvenance'
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
 import { useLazyProgrammingLibraryCatalog, useLazyProgrammingPointCatalog } from '../../api/queries'
 import type {
+  ProgrammingCheckSymbol,
   ProgrammingDiagnostic,
   ProgrammingDraftDocument,
   ProgrammingDraftOperation,
@@ -33,8 +36,12 @@ import {
   undoStEditorEdit,
   updateStEditorSelection,
   type StCompletionItem,
+  ST_TOKEN_CLASS,
   type StDiagnosticRange,
+  type StTokenKind,
 } from './stEditorSupport'
+import { stSignatureHelp, stSignatureLabel, stSignatureParameterLabel,
+  type StSignatureHelp } from './stSignatureHelp'
 import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeValueOverlay'
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
@@ -43,6 +50,7 @@ import { catalogEntries, type CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
 import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
+import { reconcileStSymbols } from './stSymbolReconciliation'
 import { formatStDocument, formatStRange } from './stFormat'
 import { stDropOffsetAtPoint, stHoverSymbolAtPoint, stVisualPositionAt, type StEditorTextMetrics } from './stHover'
 import { PouTabBar } from './PouTabBar'
@@ -240,6 +248,10 @@ export function ProgramsTab({
   onSelectProgram,
   onSave,
   diagnostics,
+  hasCheckResult = false,
+  checkSymbols,
+  checkState = null,
+  checkRevisionId = null,
   focusDiagnostic,
   focusFbdSelection,
   onPendingOperationsChange,
@@ -260,6 +272,14 @@ export function ProgramsTab({
   onSelectProgram: (programId: string | undefined) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   diagnostics: ProgrammingDiagnostic[]
+  /** `ISS-STED-04` — đã có kết quả Check gần nhất tải về hay chưa. Phân biệt
+   * "chưa kiểm tra" với "kiểm rồi, sạch"; hai câu đó nói hai điều khác hẳn. */
+  hasCheckResult?: boolean
+  /** `ISS-STED-13` — bảng ký hiệu compiler công bố; `undefined` = không có. */
+  checkSymbols?: readonly ProgrammingCheckSymbol[]
+  checkState?: string | null
+  /** Revision mà kết quả Check thuộc về — nhãn bắt buộc phải nêu được. */
+  checkRevisionId?: string | null
   focusDiagnostic: ProgrammingDiagnostic | null
   focusFbdSelection?: { programId: string; selection: FbdSelection } | null
   onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
@@ -300,6 +320,7 @@ export function ProgramsTab({
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
   const selected = document.programs.find((program) => program.programId === selectedProgramId)
+
   /* `T59-818` — ngữ cảnh cho Inspector dùng chung. Hai nguồn được NÂNG lên đây
    * thay vì để Inspector tự đọc state của editor: một Inspector dùng chung mà
    * tự đọc state riêng của từng editor sẽ có hai định nghĩa "đang chọn cái gì".
@@ -307,6 +328,29 @@ export function ProgramsTab({
   const [cursorSymbol, setCursorSymbol] = useState<StCursorSymbol | null>(null)
   const [fbdSelection, setFbdSelection] = useState<FbdSelection | null>(null)
   const [buffers, setBuffers] = useState<Record<string, string>>({})
+
+  /* `ISS-STED-13` — đối chiếu chỉ mục ký hiệu của FE với bảng compiler công bố.
+   *
+   * Tính ở ĐÂY chứ không trong `SourceEditor`: chỉ tầng này có `checkSymbols`,
+   * và phán quyết phải dùng chung cho Inspector lẫn mọi nơi khác đọc chỉ mục —
+   * hai phép đối chiếu song song sẽ lệch nhau đúng lúc khó thấy nhất. */
+  const selectedSource = selected ? (buffers[selected.programId] ?? programSource(selected)) : ''
+  const symbolReconciliation = useMemo(() => {
+    if (!selected || selected.language !== 'ST') return null
+    return reconcileStSymbols({
+      index: buildStReferenceIndex(selectedSource),
+      /* Lọc theo POU: một Check phủ nhiều POU, và so bảng của POU khác sẽ báo
+       * lệch cho mọi biến — cổng kêu oan là cổng sắp bị tắt. */
+      compilerSymbols: checkSymbols?.filter((symbol) => symbol.pouId === selected.programId),
+      checkState,
+      /* Buffer đổi kể từ lần Check ⇒ không so. `hasCheckResult` cùng
+       * `checkRevisionId` là cơ chế tươi/cũ sẵn có của `ISS-STED-18`; không
+       * dựng phép so thứ hai ở đây. */
+      bufferChanged: !hasCheckResult || checkRevisionId === null,
+      interfaceVariables: collectStInterfaceVariables(selectedSource)
+        .map((variable) => ({ name: variable.name, type: variable.type, direction: variable.direction })),
+    })
+  }, [selected, selectedSource, checkSymbols, checkState, hasCheckResult, checkRevisionId])
   /* Tài liệu FBD của POU đang chọn, parse MỘT lần cho Inspector. Chỉ dựng khi
    * POU thật sự là FBD: parse một tài liệu ST thành FBD sẽ cho một đồ thị rỗng
    * trông hợp lệ, và Inspector sẽ nói về một sơ đồ không tồn tại. */
@@ -390,6 +434,9 @@ export function ProgramsTab({
    * Chèn đi bằng YÊU CẦU có `nonce` (cùng khuôn `formatRequest`): panel không
    * biết cách chèn, và sửa buffer từ ngoài sẽ làm mất lịch sử Undo. */
   const [libraryDockOpen, setLibraryDockOpen] = useState(false)
+  /* Nút mở khay Thư viện nhanh — đích trả focus khi đóng khay. Nút chỉ tồn tại
+   * khi khay ĐANG ĐÓNG, nên phải đợi một nhịp render rồi mới focus được. */
+  const libraryDockToggleRef = useRef<HTMLButtonElement | null>(null)
   /* Bản đồ mã là ĐIỀU HƯỚNG trong POU đang mở, nên nó thuộc cột trái cùng cây
    * POU — không phải một khay nữa chồng dưới chỗ gõ. Mặc định mở: nó là cách
    * nhanh nhất để đi trong một POU 400 dòng. */
@@ -778,6 +825,8 @@ export function ProgramsTab({
             checkDisabledReason={checkDisabledReason}
             compareDisabledReason={compareDisabledReason}
             diagnostics={diagnostics.filter((item) => item.location?.programId === selected.programId)}
+            hasCheckResult={hasCheckResult}
+            checkRevisionId={checkRevisionId}
             focusDiagnostic={
               paletteJumpTarget?.location?.programId === selected.programId ? paletteJumpTarget
               : focusDiagnostic?.location?.programId === selected.programId ? focusDiagnostic
@@ -839,11 +888,21 @@ export function ProgramsTab({
                   setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
                   return true
                 }}
-                onClose={() => setLibraryDockOpen(false)}
+                /* `ISS-STED-15` — đóng khay phải TRẢ FOCUS, không chỉ đổi
+                   state. Nút Đóng nằm BÊN TRONG khay, nên khi khay biến mất
+                   focus rơi về `<body>`: người dùng bàn phím phải Tab lại từ
+                   đầu trang để quay về chỗ đang gõ. Hộp Tìm và hộp Tới dòng
+                   của chính trình soạn thảo này đã trả focus đúng từ lâu; khay
+                   Thư viện nhanh là chỗ duy nhất còn lệch. */
+                onClose={() => {
+                  setLibraryDockOpen(false)
+                  window.setTimeout(() => libraryDockToggleRef.current?.focus(), 0)
+                }}
               />
             </div>
           ) : (
             <button
+              ref={libraryDockToggleRef}
               type="button"
               className="mb-2 w-full rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
               aria-expanded={false}
@@ -881,6 +940,22 @@ export function ProgramsTab({
                  hiện `Đã tắt` cho một thứ chưa đọc là nói dối về thiết bị. */
               enabled: null,
               cursorSymbol,
+              /* `ISS-STED-12` — Draft là AUTHORITY cho Phạm vi/Khởi tạo/Điểm
+                 ánh xạ/Đơn vị. Inspector không tự đọc catalog Point và không
+                 tự suy phạm vi từ văn bản: hai đường sẽ lệch nhau, và lệch ở
+                 đây nghĩa là Inspector nói biến nối tới một điểm mà Kiểm tra
+                 không thấy.
+
+                 Lọc theo `programId` vì hai POU được phép có biến TRÙNG TÊN;
+                 không lọc thì Inspector sẽ gán điểm của POU khác cho biến đang
+                 xem — sai một cách rất khó nhận ra. */
+              variables: document.variables.filter((variable) => variable.programId === selected.programId),
+              bindings: document.bindings,
+              /* `ISS-STED-13` — phán quyết đối chiếu chỉ mục regex của FE với
+                 bảng ký hiệu compiler công bố. Lệch ⇒ Inspector hạ các trường
+                 suy ra từ chỉ mục xuống "không xác định được" thay vì hiển thị
+                 thông tin sai. */
+              reconciliation: symbolReconciliation,
               /* Trước `T59-820` khoá này không được truyền, nên trường `Chữ ký`
                  của handoff §9 luôn hiện "không xác định được" — trung thực về
                  hình thức nhưng nói "thư viện không công bố" trong khi sự thật
@@ -1018,12 +1093,86 @@ function StHoverCard({
   )
 }
 
+/** Nhãn trạng thái kết quả Check cho POU đang mở (`ISS-STED-04`).
+ *
+ * Ba câu, ba tình huống KHÁC NHAU — gộp chúng lại là làm hỏng chính thứ issue
+ * yêu cầu:
+ *  - chưa Kiểm tra ≠ "không có lỗi". Nói "không có lỗi" khi chưa ai kiểm là
+ *    khẳng định một điều chưa được xác lập.
+ *  - buffer đã đổi ⇒ chạy lại Kiểm tra là đúng việc cần làm.
+ *  - kết quả thuộc revision khác ⇒ chạy lại KHÔNG giúp gì; phải nói ra để người
+ *    dùng không thử sai cách. */
+function StCheckStateLabel({
+  provenance,
+  programId,
+  diagnosticCount,
+  pick
+}: {
+  provenance: StCheckProvenanceState
+  programId: string
+  diagnosticCount: number
+  pick: (vi: string, en: string) => string
+}) {
+  if (provenance.freshness === 'NEVER_CHECKED') {
+    return (
+      <p className="text-xs text-[var(--c-text-dim)]">
+        {pick('Chưa Kiểm tra — chưa có kết quả nào cho POU này.',
+              'Not checked yet — no result for this POU.')}
+      </p>
+    )
+  }
+
+  if (provenance.freshness === 'STALE') {
+    const reason = provenance.bufferChanged
+      ? pick('buffer đã đổi sau Kiểm tra', 'buffer changed after the check')
+      : provenance.revisionId
+        ? pick(`kết quả thuộc revision ${provenance.revisionId}`, `result belongs to revision ${provenance.revisionId}`)
+        : pick('kết quả thuộc revision khác', 'result belongs to another revision')
+    return (
+      <p className="text-xs text-[var(--c-warn-fg)]">
+        {pick(`Kết quả Kiểm tra không còn khớp nội dung đang mở (${reason}) — không gạch lỗi để tránh chỉ sai dòng.`,
+              `Check result no longer matches the open content (${reason}) — not marking, to avoid pointing at the wrong line.`)}
+      </p>
+    )
+  }
+
+  const revisionText = provenance.revisionId
+    ? pick(`revision ${provenance.revisionId}`, `revision ${provenance.revisionId}`)
+    : pick('revision đã niêm phong', 'the sealed revision')
+  if (diagnosticCount === 0) {
+    return (
+      <p className="text-xs text-[var(--c-text-dim)]">
+        {pick(`Kiểm tra ${revisionText}: POU này không có lỗi.`,
+              `Check on ${revisionText}: no problems in this POU.`)}
+      </p>
+    )
+  }
+  return (
+    /* `ISS-STED-15` — `aria-live` chứ không chỉ `aria-describedby`.
+       `aria-describedby` được đọc lúc NHẬN focus. Nhưng kết quả Kiểm tra về
+       khi người dùng ĐANG gõ, tức đang giữ focus — không có `aria-live` thì
+       số lỗi vừa đổi không được nói ra, và người dùng screen reader phải rời
+       ô gõ rồi quay lại mới biết. */
+    <p
+      id={`programming-st-diagnostics-${programId}`}
+      role="status"
+      aria-live="polite"
+      className="text-xs text-[var(--c-fault-fg)]"
+    >
+      {pick(`${diagnosticCount} diagnostic từ Kiểm tra ${revisionText}, khớp nội dung đang mở. Chọn lỗi trong khay Vấn đề để tới đúng dòng/cột.`,
+            `${diagnosticCount} diagnostic(s) from the check on ${revisionText}, matching the open content. Select one in Problems to jump to its line and column.`)}
+    </p>
+  )
+}
+
 export function SourceEditor({
   program,
   source,
   canEdit,
   saving,
   diagnostics,
+  hasCheckResult = false,
+  checkRevisionId = null,
   focusDiagnostic,
   onChange,
   onSave,
@@ -1054,6 +1203,8 @@ export function SourceEditor({
   canEdit: boolean
   saving: boolean
   diagnostics: ProgrammingDiagnostic[]
+  hasCheckResult?: boolean
+  checkRevisionId?: string | null
   focusDiagnostic: ProgrammingDiagnostic | null
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
@@ -1127,6 +1278,10 @@ export function SourceEditor({
   const [replaceText, setReplaceText] = useState('')
   const [cursor, setCursor] = useState({ line: 1, column: 1 })
   const [cursorOffset, setCursorOffset] = useState(0)
+  /* `ISS-STED-11` — `null` nghĩa là con trỏ không nằm trong lời gọi nào mà
+   * registry biết. Không dùng cờ `open` riêng: một chữ ký "đang mở nhưng rỗng"
+   * là trạng thái không có nghĩa gì. */
+  const [signature, setSignature] = useState<StSignatureHelp | null>(null)
   const [completion, setCompletion] = useState<{ open: boolean; items: StCompletionItem[]; selected: number; anchor: number }>(
     { open: false, items: [], selected: 0, anchor: 0 },
   )
@@ -1190,7 +1345,37 @@ export function SourceEditor({
   }, [cursorSymbol, onCursorSymbolChange])
   const matches = useMemo(() => findTextMatches(source, searchText), [searchText, source])
   const tokens = useMemo(() => tokenizeStSource(source), [source])
-  const diagnosticRanges = useMemo<StDiagnosticRange[]>(() => diagnostics
+  /* `ISS-STED-04` × `ISS-STED-18` — băm buffer để biết kết quả Check có còn nói
+   * về nội dung đang mở không. Băm là bất đồng bộ (WebCrypto) nên chạy trong
+   * effect mỗi lần buffer đổi, KHÔNG chạy trong lượt render. */
+  const [bufferSha256, setBufferSha256] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    let cancelled = false
+    hashBufferSource(source)
+      .then((hash) => { if (!cancelled) setBufferSha256(hash) })
+      /* Không băm được (môi trường thiếu WebCrypto) ⇒ để `undefined`. Khi đó
+       * `diagnosticFreshness` trả `UNVERIFIABLE` và KHÔNG gạch gì — thiếu bằng
+       * chứng không phải bằng chứng khớp. */
+      .catch(() => { if (!cancelled) setBufferSha256(undefined) })
+    return () => { cancelled = true }
+  }, [source])
+
+  const checkProvenance = useMemo(() => stCheckProvenance({
+    hasCheckResult,
+    diagnostics,
+    buffer: {
+      revisionId: checkRevisionId ?? undefined,
+      pouId: program.programId,
+      sourceSha256: bufferSha256
+    }
+  }), [hasCheckResult, diagnostics, checkRevisionId, program.programId, bufferSha256])
+
+  /* CHỈ gạch những mục đã chứng minh được là khớp buffer. Gạch một chỗ trên
+   * buffer đã đổi là chỉ vào dòng không còn là dòng sinh ra lỗi — người dùng
+   * sẽ sửa đúng chỗ bị chỉ, tức sửa một chỗ không hỏng. */
+  const markableDiagnostics = checkProvenance.markable
+
+  const diagnosticRanges = useMemo<StDiagnosticRange[]>(() => markableDiagnostics
     .map((diagnostic, index): StDiagnosticRange | null => {
       if (!diagnostic.location) return null
       const line = typeof diagnostic.location.line === 'number' ? diagnostic.location.line : undefined
@@ -1200,7 +1385,7 @@ export function SourceEditor({
       const start = lineColumnToOffset(source, line, column)
       return { start, end: Math.min(source.length, start + Math.max(1, length)), index }
     })
-    .filter((range): range is StDiagnosticRange => range !== null), [diagnostics, source])
+    .filter((range): range is StDiagnosticRange => range !== null), [markableDiagnostics, source])
   const segments = useMemo(() => mergeDiagnosticRanges(tokens, diagnosticRanges), [tokens, diagnosticRanges])
   const bracketMatch = useMemo(() => findMatchingBracket(source, textareaRef.current?.selectionStart ?? -1), [source, cursor])
 
@@ -1366,6 +1551,19 @@ export function SourceEditor({
 
   function closeCompletion() {
     setCompletion({ open: false, items: [], selected: 0, anchor: 0 })
+  }
+
+  /* `ISS-STED-11` — gợi ý chữ ký.
+   *
+   * Tách khỏi `completion` chứ không gộp: hai thứ này sống theo hai nhịp khác
+   * nhau. Danh sách gợi ý đóng ngay khi gõ `(`, còn chữ ký phải SỐNG SUỐT lời
+   * gọi cho tới dấu `)`. Gộp state sẽ buộc một trong hai hành xử sai. */
+  function closeSignature() {
+    setSignature(null)
+  }
+
+  function refreshSignature(nextSource: string, offset: number) {
+    setSignature(stSignatureHelp(nextSource, offset, collectStSymbols(nextSource)))
   }
 
   /* WP-10 P0 (CTO/Owner approval §5): gợi ý sau MỖI keystroke dựa trên
@@ -1699,19 +1897,6 @@ export function SourceEditor({
     textarea?.focus()
   }
 
-  const segmentClass: Record<string, string> = {
-    keyword: 'text-[var(--c-accent)] font-semibold',
-    type: 'text-[var(--c-info)]',
-    function: 'text-[var(--c-good-fg)]',
-    'fb-type': 'text-[var(--c-good-fg)] font-semibold',
-    number: 'text-[var(--c-warn-fg)]',
-    time: 'text-[var(--c-warn-fg)]',
-    comment: 'text-[var(--c-text-dim)] italic',
-    operator: 'text-[var(--c-text)]',
-    punctuation: 'text-[var(--c-text)]',
-    identifier: 'text-[var(--c-text)]',
-    whitespace: '',
-  }
 
   return (
     /* `DEV-PROG-001` — cột giữa là một CỘT FLEX cao bằng ô lưới của nó, không
@@ -2029,9 +2214,9 @@ export function SourceEditor({
             />
             {segments.map((segment, index) => {
               const isBracket = bracketMatch !== null && (segment.start === bracketMatch.open || segment.start === bracketMatch.close) && segment.kind === 'punctuation'
-              const classes = [segmentClass[segment.kind] ?? '']
+              const classes = [ST_TOKEN_CLASS[segment.kind as StTokenKind] ?? '']
               if (isBracket) classes.push('rounded bg-[var(--c-accent-bg)]')
-              const diagnostic = segment.diagnosticIndex !== null ? diagnostics[segment.diagnosticIndex] : undefined
+              const diagnostic = segment.diagnosticIndex !== null ? markableDiagnostics[segment.diagnosticIndex] : undefined
               if (diagnostic) {
                 const wavyColor = diagnostic.severity === 'WARNING' ? 'var(--c-warn)' : 'var(--c-fault)'
                 classes.push(`underline decoration-wavy decoration-2 [text-decoration-color:${wavyColor}]`)
@@ -2114,10 +2299,12 @@ export function SourceEditor({
               setCursor(offsetToLineColumn(next, selectionEnd))
               setSelectionRange(selectionStart === selectionEnd ? null : { start: selectionStart, end: selectionEnd })
               refreshCompletion(next, selectionEnd)
+              refreshSignature(next, selectionEnd)
             }}
             onClick={(event) => {
               updateCursor()
               closeCompletion()
+              refreshSignature(source, event.currentTarget.selectionStart ?? 0)
               /* Ctrl/Cmd+Click = tới khai báo, đường chuột của F12. */
               if (event.ctrlKey || event.metaKey) handleGoToDefinition()
             }}
@@ -2142,6 +2329,11 @@ export function SourceEditor({
                 if (event.key === 'ArrowUp') { event.preventDefault(); setCompletion((c) => ({ ...c, selected: (c.selected - 1 + c.items.length) % c.items.length })); return }
                 if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); acceptCompletion(completion.items[completion.selected]); return }
                 if (event.key === 'Escape') { event.preventDefault(); closeCompletion(); return }
+              }
+              /* `Esc` đóng chữ ký trước khi đụng tới hộp Tìm kiếm: thứ vừa
+               * bật lên là thứ người dùng muốn tắt trước. */
+              if (event.key === 'Escape' && signature) {
+                event.preventDefault(); closeSignature(); return
               }
               if (event.key === 'Escape' && searchOpen) {
                 event.preventDefault(); setSearchOpen(false); return
@@ -2276,6 +2468,65 @@ export function SourceEditor({
               source={source}
               runtimeOverlay={runtimeOverlay}
             />
+          )}
+
+          {/* `ISS-STED-11` — chữ ký của lời gọi đang gõ.
+              `role="status"` + `aria-live="polite"` chứ không phải `dialog`:
+              nó KHÔNG nhận focus và KHÔNG chặn gõ tiếp — người dùng vẫn đang
+              gõ tham số, cướp focus giữa chừng sẽ phá đúng thao tác nó định
+              giúp. Trình đọc màn hình đọc lại khi tham số đang nhập đổi. */}
+          {signature && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="st-signature-help"
+              data-signature-callee={signature.calleeName}
+              data-signature-active={signature.activeParameter}
+              className="absolute z-10 max-w-[28rem] rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 py-1 text-xs shadow-lg"
+              /* Nằm TRÊN dòng đang gõ, ngược với danh sách gợi ý nằm dưới:
+                 hai thứ có thể cùng hiện, và chồng lên nhau thì cả hai đều
+                 không đọc được. */
+              style={{
+                top: `${Math.max(0, (cursor.line - 1) * EDITOR_ROW_HEIGHT_PX - editorScroll.top)}px`,
+                left: `${Math.max(EDITOR_PAD_TOP_PX, Math.min(220, (cursor.column - 1) * 8.4 + EDITOR_PAD_TOP_PX) - editorScroll.left)}px`,
+              }}
+            >
+              <span className="sr-only">{stSignatureLabel(signature)}</span>
+              <span aria-hidden className="mono text-[var(--c-text)]">
+                {signature.calleeName}
+                {signature.kind === 'function-block' && (
+                  <span className="text-[var(--c-text-dim)]">{` : ${signature.typeRef}`}</span>
+                )}
+                {'('}
+                {signature.parameters.map((parameter, index) => (
+                  <span key={parameter.name}>
+                    {index > 0 && ', '}
+                    <span
+                      className={index === signature.activeParameter
+                        ? 'font-semibold text-[var(--c-accent)] underline'
+                        : 'text-[var(--c-text-dim)]'}
+                    >
+                      {stSignatureParameterLabel(parameter, signature.namedArgumentsRequired)}
+                    </span>
+                  </span>
+                ))}
+                {')'}
+              </span>
+              {signature.namedArgumentsRequired && (
+                /* `D4` của `ST_SUBSET_SPEC` §9: FB chỉ gọi được THEO TÊN. Nói
+                   ra ở đây vì đây là chỗ người dùng đang quyết định viết gì;
+                   để họ phát hiện ở bước Kiểm tra là muộn mất một vòng. */
+                <span className="ml-2 text-[var(--c-text-dim)]">
+                  {pick('gọi theo tên (D4)', 'named arguments only (D4)')}
+                </span>
+              )}
+              {signature.reviewGated && (
+                <span className="ml-2 text-[var(--c-warn-fg)]">
+                  {pick('chờ review Controls/Safety — Kiểm tra sẽ từ chối',
+                        'awaiting Controls/Safety review — Check will reject')}
+                </span>
+              )}
+            </div>
           )}
 
           {completion.open && (
@@ -2434,11 +2685,15 @@ export function SourceEditor({
              tin cậy trên `<textarea>`, nên cũng để `—`. */
         })}
       />
-      {diagnostics.length > 0 && (
-        <p id={`programming-st-diagnostics-${program.programId}`} className="text-xs text-[var(--c-fault-fg)]">
-          {pick(`${diagnostics.length} diagnostic. Chọn lỗi trong khay Vấn đề để tới đúng dòng/cột.`, `${diagnostics.length} diagnostic(s). Select one in Problems to jump to its line and column.`)}
-        </p>
-      )}
+      {/* `ISS-STED-04` — nhãn BẮT BUỘC: diagnostic thuộc revision nào, và buffer
+        * đã đổi hay chưa. Gạch lỗi mà không nói hai điều đó thì người dùng
+        * không có cách nào biết dấu gạch còn đáng tin không. */}
+      <StCheckStateLabel
+        provenance={checkProvenance}
+        programId={program.programId}
+        diagnosticCount={markableDiagnostics.length}
+        pick={pick}
+      />
       {isEmptySource && (
         <p className="text-xs text-[var(--c-fault-fg)]">
           {pick('Mã nguồn ST không được để trống — cần ít nhất khung PROGRAM/END_PROGRAM để lưu.', 'ST source cannot be empty — needs at least a PROGRAM/END_PROGRAM skeleton to save.')}

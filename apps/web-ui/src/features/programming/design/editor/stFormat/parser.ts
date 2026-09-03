@@ -40,7 +40,22 @@ const POU_OPENERS: Record<string, string> = {
   FUNCTION_BLOCK: 'END_FUNCTION_BLOCK',
 }
 
-const VAR_OPENERS = new Set(['VAR', 'VAR_INPUT', 'VAR_OUTPUT', 'VAR_IN_OUT', 'VAR_TEMP', 'VAR_GLOBAL'])
+/* `ISS-STED-16` — chỉ những khối compiler THẬT SỰ mở.
+ *
+ * Danh sách này từng gồm cả `VAR_IN_OUT`, `VAR_TEMP` và `VAR_GLOBAL`; compiler
+ * không mở khối nào trong ba cái đó. Corpus văn phạm dùng chung (`ISS-STED-13`)
+ * bắt được ngay khi ba vector mới được thêm — cùng đúng một chế độ trôi
+ * `F-STED-011`: FE hiểu một văn phạm rộng hơn thiết bị, và formatter viết lại
+ * mã theo văn phạm ấy.
+ *
+ * `ADR-054` đã chốt sẽ mở `VAR_IN_OUT` ở đợt gần (#367). Khi compiler mở, thêm
+ * lại vào đây VÀ đổi vector corpus sang `accepted: true` — hai phía cùng một
+ * lần, đó là toàn bộ điểm của việc có corpus chung. */
+const VAR_OPENERS = new Set(['VAR', 'VAR_INPUT', 'VAR_OUTPUT'])
+
+/* Khối khai báo IEC hợp lệ mà Rev A chưa mở. Tách ra để thông điệp nói đúng
+ * bản chất, giống hệt `at_unsupported_var_block()` phía compiler. */
+const UNSUPPORTED_VAR_OPENERS = new Set(['VAR_IN_OUT', 'VAR_TEMP', 'VAR_GLOBAL', 'VAR_EXTERNAL'])
 
 class Parser {
   private at = 0
@@ -164,6 +179,14 @@ class Parser {
 
     const varBlocks: StVarBlock[] = []
     while (this.isKeyword(this.peek(), ...VAR_OPENERS)) varBlocks.push(this.parseVarBlock())
+    const unsupported = this.peek()
+    if (unsupported && this.isKeyword(unsupported, ...UNSUPPORTED_VAR_OPENERS)) {
+      throw new StParseError(
+        `Khối "${unsupported.text}" hợp lệ theo IEC 61131-3 nhưng Rev A chưa hỗ trợ — ` +
+        'formatter không định dạng đoạn mã này',
+        unsupported.line,
+      )
+    }
 
     const body = this.parseStatements(new Set([closer]))
     const endTrivia = this.takeTrivia()
@@ -284,15 +307,19 @@ class Parser {
       const keyword = token.text.toUpperCase()
       if (keyword === 'IF') return this.parseIf()
       if (keyword === 'CASE') return this.parseCase()
-      if (keyword === 'FOR') return this.parseFor()
-      if (keyword === 'WHILE') return this.parseWhile()
-      if (keyword === 'REPEAT') return this.parseRepeat()
-      if (keyword === 'RETURN' || keyword === 'EXIT' || keyword === 'CONTINUE') {
-        const trivia = this.takeTrivia()
-        this.next()
-        if (this.isPunct(this.peek(), ';')) this.next()
-        this.attachTrailing(trivia)
-        return { kind: 'Jump', keyword: keyword as 'RETURN' | 'EXIT' | 'CONTINUE', trivia }
+      /* `ISS-STED-13` — năm cấu trúc này compiler KHÔNG có. Formatter từng
+       * parse được chúng, tức nó hiểu một văn phạm rộng hơn thiết bị; định
+       * dạng một đoạn mã như vậy là viết lại mã điều khiển theo một ngôn ngữ
+       * bo không nói. Từ chối và không đổi một byte nào là hành vi đúng, và
+       * cũng chính là chính sách sẵn có của `formatStDocument` cho nguồn ngoài
+       * subset. */
+      if (keyword === 'FOR' || keyword === 'WHILE' || keyword === 'REPEAT' ||
+          keyword === 'RETURN' || keyword === 'EXIT' || keyword === 'CONTINUE') {
+        throw new StParseError(
+          `"${token.text}" không thuộc subset ST của Rev A (ADR-054) — Kiểm tra sẽ từ chối, ` +
+          'nên formatter không định dạng đoạn mã này',
+          token.line,
+        )
       }
       throw new StParseError(`Từ khoá "${token.text}" không mở đầu một câu lệnh nào formatter hiểu`, token.line)
     }
@@ -399,57 +426,6 @@ class Parser {
     return { labels, body, trivia }
   }
 
-  private parseFor(): StStmt {
-    const trivia = this.takeTrivia()
-    this.expectKeyword('FOR')
-    const variable = this.expectIdent().text
-    this.expectPunct(':=')
-    const from = this.parseExpression()
-    this.expectKeyword('TO')
-    const to = this.parseExpression()
-    let by: StExpr | null = null
-    if (this.isKeyword(this.peek(), 'BY')) {
-      this.next()
-      by = this.parseExpression()
-    }
-    this.expectKeyword('DO')
-    this.attachTrailing(trivia)
-    const body = this.parseStatements(new Set(['END_FOR']))
-    const endTrivia = this.takeTrivia()
-    this.expectKeyword('END_FOR')
-    if (this.isPunct(this.peek(), ';')) this.next()
-    this.attachTrailing(endTrivia)
-    return { kind: 'For', variable, from, to, by, body, trivia, endTrivia }
-  }
-
-  private parseWhile(): StStmt {
-    const trivia = this.takeTrivia()
-    this.expectKeyword('WHILE')
-    const condition = this.parseExpression()
-    this.expectKeyword('DO')
-    this.attachTrailing(trivia)
-    const body = this.parseStatements(new Set(['END_WHILE']))
-    const endTrivia = this.takeTrivia()
-    this.expectKeyword('END_WHILE')
-    if (this.isPunct(this.peek(), ';')) this.next()
-    this.attachTrailing(endTrivia)
-    return { kind: 'While', condition, body, trivia, endTrivia }
-  }
-
-  private parseRepeat(): StStmt {
-    const trivia = this.takeTrivia()
-    this.expectKeyword('REPEAT')
-    this.attachTrailing(trivia)
-    const body = this.parseStatements(new Set(['UNTIL']))
-    const endTrivia = this.takeTrivia()
-    this.expectKeyword('UNTIL')
-    const condition = this.parseExpression()
-    this.expectKeyword('END_REPEAT')
-    if (this.isPunct(this.peek(), ';')) this.next()
-    this.attachTrailing(endTrivia)
-    return { kind: 'Repeat', body, condition, trivia, endTrivia }
-  }
-
   /* ---------- biểu thức ---------- */
 
   parseExpression(level = 0): StExpr {
@@ -489,12 +465,15 @@ class Parser {
         node = { kind: 'Member', object: node, name: this.next().text }
         continue
       }
+      /* `ISS-STED-13` — `a[i]` cần `ARRAY`, chưa có trong Rev A (`ADR-054`
+       * phán quyết (4); đợt gần theo #367). Nuốt lặng cú pháp này làm formatter
+       * hứa một hệ kiểu compiler chưa có. */
       if (this.isPunct(token, '[')) {
-        this.next()
-        const index = this.parseExpression()
-        this.expectPunct(']')
-        node = { kind: 'Index', object: node, index }
-        continue
+        throw new StParseError(
+          'Chỉ số mảng `[...]` cần ARRAY, chưa có trong subset ST của Rev A — ' +
+          'formatter không định dạng đoạn mã này',
+          this.lastLine,
+        )
       }
       if (this.isPunct(token, '(')) {
         this.next()

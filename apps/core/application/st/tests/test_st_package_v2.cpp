@@ -618,4 +618,81 @@ void rehash(std::vector<uint8_t>* bytes)
 
 } // namespace
 
+
+/* `ISS-STED-19` — MỘT MÃ TỪ CHỐI KHÔNG PHẢI LÀ MỘT LÝ DO.
+ *
+ * Runtime vẫn từ chối đúng gói không tương thích từ trước; thứ thiếu là câu
+ * giải thích. `PKG-E-004` gộp lệch hồ sơ biên dịch với lệch ABI và không nói
+ * giá trị nào gặp giá trị nào, nên người vận hành đọc xong vẫn không biết phải
+ * biên dịch lại hay nạp firmware khác. */
+TEST(StPackageV2, RejectionReasonNamesBothSidesOfTheAbiMismatch)
+{
+    StPackageInput input = minimal_input();
+    std::vector<uint8_t> bytes;
+    std::string error;
+    ASSERT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+
+    /* Runtime chờ một ABI KHÁC với ABI trong gói: đúng ca "artifact sai
+     * targetAbi" của tiêu chí nghiệm thu. */
+    const uint32_t foreign_abi = st_profile_generated::kTargetAbi + 1u;
+    StPackageView view;
+    const char* code = nullptr;
+    ASSERT_FALSE(LoadPackageV2(bytes.data(), bytes.size(), st_profile_generated::kProfileCode,
+                               foreign_abi, &view, &code));
+    ASSERT_NE(code, nullptr);
+    EXPECT_STREQ(code, st_pkg_error::kBadProfile);
+
+    const std::string reason = DescribePackageRejection(
+        bytes.data(), bytes.size(), st_profile_generated::kProfileCode, foreign_abi, code);
+    EXPECT_NE(reason.find(std::to_string(st_profile_generated::kTargetAbi)), std::string::npos)
+        << "lý do phải nêu ABI CỦA GÓI: " << reason;
+    EXPECT_NE(reason.find(std::to_string(foreign_abi)), std::string::npos)
+        << "lý do phải nêu ABI RUNTIME NHẬN: " << reason;
+    EXPECT_NE(reason.find("ABI"), std::string::npos) << reason;
+}
+
+TEST(StPackageV2, RejectionReasonSeparatesProfileMismatchFromAbiMismatch)
+{
+    StPackageInput input = minimal_input();
+    std::vector<uint8_t> bytes;
+    std::string error;
+    ASSERT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+
+    const uint16_t foreign_profile = static_cast<uint16_t>(st_profile_generated::kProfileCode + 1);
+    const char* code = nullptr;
+    StPackageView view;
+    ASSERT_FALSE(LoadPackageV2(bytes.data(), bytes.size(), foreign_profile,
+                               st_profile_generated::kTargetAbi, &view, &code));
+
+    const std::string reason = DescribePackageRejection(
+        bytes.data(), bytes.size(), foreign_profile, st_profile_generated::kTargetAbi, code);
+    EXPECT_NE(reason.find("hồ sơ"), std::string::npos) << reason;
+    /* Chỉ hồ sơ lệch thì không được kể lể thêm ABI: nói cả hai khi chỉ một vế
+     * sai sẽ đẩy người đọc đi kiểm tra nhầm chỗ. */
+    EXPECT_EQ(reason.find("ABI"), std::string::npos) << reason;
+    EXPECT_NE(reason.find(std::to_string(st_profile_generated::kProfileCode)), std::string::npos) << reason;
+    EXPECT_NE(reason.find(std::to_string(foreign_profile)), std::string::npos) << reason;
+}
+
+/* Thông điệp lỗi KHÔNG được tự nó thành lỗi: một gói ngắn hơn header phải cho
+ * ra câu chung chung, không được đọc quá biên để "giải thích rõ hơn". */
+TEST(StPackageV2, RejectionReasonStaysInBoundsOnTruncatedPackage)
+{
+    StPackageInput input = minimal_input();
+    std::vector<uint8_t> bytes;
+    std::string error;
+    ASSERT_TRUE(WritePackageV2(input, &bytes, &error)) << error;
+    bytes.resize(st_pkg::kHeaderSize - 1);
+
+    const std::string reason = DescribePackageRejection(
+        bytes.data(), bytes.size(), st_profile_generated::kProfileCode,
+        st_profile_generated::kTargetAbi, st_pkg_error::kBadHeader);
+    EXPECT_NE(reason.find("PKG-E-001"), std::string::npos) << reason;
+    EXPECT_NE(reason.find("ngắn hơn header"), std::string::npos) << reason;
+
+    const std::string empty = DescribePackageRejection(
+        nullptr, 0, st_profile_generated::kProfileCode, st_profile_generated::kTargetAbi, nullptr);
+    EXPECT_FALSE(empty.empty());
+}
+
 } // namespace core

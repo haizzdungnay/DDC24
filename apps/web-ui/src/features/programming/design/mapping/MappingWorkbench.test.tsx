@@ -56,8 +56,8 @@ beforeEach(() => {
   catalog.data = {
     items: [
       { category: 'LOCAL', pointId: 'UI-01', name: 'Supply air temperature', dataType: 'REAL', unit: 'degC', direction: 'READ', writable: false, quality: 'GOOD', value: 21.4, observedAt: '2026-08-24T09:00:00Z' },
-      { category: 'LOCAL', pointId: 'DO-01', name: 'Supply fan', dataType: 'BOOL', direction: 'WRITE', writable: true, quality: 'GOOD', value: true, observedAt: '2026-08-24T09:00:00Z' },
-      { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD enable', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true },
+      { category: 'LOCAL', pointId: 'DO-01', name: 'Supply fan', dataType: 'BOOL', direction: 'WRITE', writable: true, quality: 'GOOD', value: true, observedAt: '2026-08-24T09:00:00Z' , mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
+      { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD enable', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true , mapping: { input: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] }, output: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] } } },
     ],
   }
   localStorage.setItem('mkddc-lang', 'vi')
@@ -89,7 +89,8 @@ describe('Mapping Workbench Phase 1A — read-only truth state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AHU_Main · FanCmd · Chưa map' }))
 
     const modbusRow = screen.getByRole('button', { name: /MB_RTU.*VFD enable/ })
-    expect(within(modbusRow).getByText('Core chưa hỗ trợ')).toBeVisible()
+    expect(within(modbusRow).getByText('Chưa map được')).toBeVisible()
+    expect(within(modbusRow).getByText('Chưa map được')).toHaveAttribute('title', 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU')
     expect(screen.getByText('Chưa xác minh — API chưa cung cấp authority')).toBeVisible()
   })
 

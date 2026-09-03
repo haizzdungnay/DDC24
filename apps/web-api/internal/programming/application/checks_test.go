@@ -84,6 +84,13 @@ func TestCheckServiceCompilesImmutableRevisionAndPersistsArtifact(t *testing.T) 
 	if err != nil || view.State != "PASSED" || view.Artifact == nil || len(view.Diagnostics) != 0 {
 		t.Fatalf("view=%+v err=%v", view, err)
 	}
+	// ISS-STED-19: artifact phải TỰ MANG phiên bản hồ sơ ngôn ngữ ST. Một
+	// artifact đọc lại sau này, tách khỏi phản hồi capabilities sinh ra nó, mà
+	// không nói được nó biên dịch dưới hồ sơ nào thì không kiểm chứng được.
+	if view.Artifact.StLanguageProfileVersion != domain.STLanguageProfileVersion {
+		t.Fatalf("artifact.stLanguageProfileVersion = %q, muốn %q",
+			view.Artifact.StLanguageProfileVersion, domain.STLanguageProfileVersion)
+	}
 	stored, err := store.GetCheck(context.Background(), accepted.CheckID)
 	if err != nil || stored.Artifact == nil || stored.Artifact.SchemaVersion != 2 || packager.calls != 1 ||
 		len(packager.programs) != 1 || packager.programs[0].PeriodMs != 1000 {

@@ -620,8 +620,26 @@ func TestSimulationSpeedNeverReachesTheWorkerAndNeverChangesTheResult(t *testing
 			t.Errorf("tốc độ %d× gửi chuỗi lệnh khác 1×:\n1×:  %v\n%d×: %v",
 				speed, base.commands, speed, got.commands)
 		}
-		if got.virtual != base.virtual || got.sequence != base.sequence {
-			t.Errorf("tốc độ %d× cho tiến độ khác 1×: virtual=%d/%d sequence=%d/%d",
+		/* So TIẾN ĐỘ MỖI NHỊP, không so ảnh chụp thô.
+		 *
+		 * `ObservationSequence` là bộ đếm CHẠY TỰ DO: vòng chờ ở trên dừng ở
+		 * mẫu ĐẦU TIÊN thấy `>= 3`, nên dưới tải nó có thể bỏ qua hẳn nhịp 3 và
+		 * quan sát được nhịp 4. So thẳng hai ảnh chụp vì thế là một cuộc đua
+		 * theo thiết kế — đã đỏ thật với `virtual=400/300 sequence=4/3`, trong
+		 * khi bất biến cần kiểm vẫn nguyên vẹn (100 ms ảo mỗi nhịp ở cả hai).
+		 *
+		 * Bất biến thật của test này là "tốc độ không tới worker và không đổi
+		 * kết quả", tức thời gian ảo trôi trên MỖI NHỊP phải như nhau ở mọi
+		 * tốc độ. Nhân chéo thay cho phép chia để không phải lo làm tròn.
+		 *
+		 * Cùng lối nghĩ mà tác giả đã áp cho chuỗi lệnh (cắt còn 5 vì "vòng
+		 * chạy tự động vẫn có thể chèn thêm một tick"); ở đây chỉ là áp nốt cho
+		 * hai bộ đếm. */
+		if got.sequence < 3 || base.sequence < 3 {
+			t.Errorf("tốc độ %d×: chưa đủ 3 nhịp để so (got=%d base=%d)",
+				speed, got.sequence, base.sequence)
+		} else if got.virtual*base.sequence != base.virtual*got.sequence {
+			t.Errorf("tốc độ %d× cho tiến độ MỖI NHỊP khác 1×: virtual=%d/%d sequence=%d/%d",
 				speed, got.virtual, base.virtual, got.sequence, base.sequence)
 		}
 	}

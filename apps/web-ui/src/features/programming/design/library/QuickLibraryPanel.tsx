@@ -343,6 +343,23 @@ function BlockCard({
         <span className="mono shrink-0 rounded bg-[var(--c-surface-2)] px-1 text-[10px] text-[var(--c-text-dim)]">
           {entry.scope === 'SYSTEM' ? 'SYS' : 'PRJ'}
         </span>
+        {/* `ISS-STED-17` / `ADR-054` điểm 3 — nhãn mở rộng nhà sản xuất phải ở
+            ĐÂY, nơi người dùng CHỌN khối. Nằm trong tài liệu thì không ai đọc
+            đúng lúc: kỹ sư viết cả một chương trình quanh `PID` rồi mới biết
+            nó không chuyển được sang PLC hãng khác.
+
+            Chỉ gắn cho mở rộng, không gắn nhãn "IEC" cho phần còn lại: dán
+            nhãn lên 42/46 mục làm nhiễu đúng 4 mục cần chú ý. */}
+        {entry.iecClassification === 'MANUFACTURER_EXTENSION' && (
+          <span
+            data-testid="library-extension-badge"
+            className="mono shrink-0 rounded bg-[var(--c-warn-bg)] px-1 text-[10px] text-[var(--c-warn-fg)]"
+            title={pick('Không thuộc thư viện chuẩn IEC 61131-3 — mở rộng của Mekong',
+                        'Not part of the IEC 61131-3 standard library — Mekong extension')}
+          >
+            {pick('MỞ RỘNG', 'EXT')}
+          </span>
+        )}
         <button
           type="button"
           disabled={!insertable}

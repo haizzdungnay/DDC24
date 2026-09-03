@@ -74,7 +74,7 @@ func TestTraceTupleDriftedBeyondFloatPrecision(t *testing.T) {
 // Đây là chỗ mà một lỗi "chỉ một điểm lạ" khó lần nhất: đồ thị vẫn liền mạch về
 // hình, nhưng điểm cuối thuộc một lần chạy khác với các điểm trước nó.
 func TestTraceStopsBeforeSplicingAcrossProducerRestart(t *testing.T) {
-	service := newMonitorTraceService(t)
+	service, monitorProvider := newMonitorTraceService(t)
 
 	fixed := time.Date(2026, 8, 13, 12, 0, 2, 0, time.UTC)
 	programValue := 41.0
@@ -95,7 +95,7 @@ func TestTraceStopsBeforeSplicingAcrossProducerRestart(t *testing.T) {
 	}
 
 	// Neo phiên vào một mốc monotonic THẬT, không phải 0.
-	service.monitor = fakeMonitorProvider{snapshot: snapshot(5_000_000_000)}
+	monitorProvider.set(snapshot(5_000_000_000))
 	accepted, err := service.CreateTrace(context.Background(), TraceRequest{
 		SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID}, DurationMS: 5000, SamplePeriodMS: 100,
 	}, Actor{ID: "admin", Role: "admin"}, "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "trace-pin-000001")
@@ -121,7 +121,7 @@ func TestTraceStopsBeforeSplicingAcrossProducerRestart(t *testing.T) {
 	beforeDrift := len(pinned.Samples)
 
 	// Core khởi động lại: mốc monotonic LÙI trong khi Revision không đổi.
-	service.monitor = fakeMonitorProvider{snapshot: snapshot(1_000_000)}
+	monitorProvider.set(snapshot(1_000_000))
 
 	deadline := time.Now().Add(2 * time.Second)
 	var view TraceView

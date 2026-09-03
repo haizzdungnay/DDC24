@@ -15,7 +15,8 @@ import type { ProgrammingDiagnostic, ProgrammingDraftOperation } from '../model/
 import { toWorkspaceDocument } from '../model/draftV2'
 import { draftSignals } from '../model/signals'
 import { PouExplorer } from './pou/PouExplorer'
-import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison } from '../api/queries'
+import { programmingCompatibility } from '../shared/programmingCompatibility'
+import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison, useProgrammingCheck } from '../api/queries'
 import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
@@ -140,7 +141,28 @@ export function DesignWorkspacePage({
    * unmount vì route canonical chỉ đổi query. */
   const modeParam = searchParams.get('mode')
   const workspaceMode: ProgramsWorkspaceMode = isProgramsWorkspaceMode(modeParam) ? modeParam : 'EDIT'
-  const canEdit = roleAtLeast(session?.role, 'admin') && !mobileReadOnly && workspaceMode === 'EDIT'
+  /* `ISS-STED-19` — CỔNG TƯƠNG THÍCH PHIÊN BẢN.
+   *
+   * Bundle FE mang sẵn hồ sơ ngôn ngữ ST, registry thư viện POU và ABI của
+   * phiên bản nó được build ra. Nếu thiết bị chạy phiên bản khác thì palette,
+   * từ khoá và chữ ký hàm trên màn hình đang nói về một ngôn ngữ KHÁC với
+   * ngôn ngữ bo sẽ biên dịch. Trước đây các hằng này được sinh vào bundle
+   * nhưng không ai đọc, nên lệch đi qua trong im lặng.
+   *
+   * Chặn ở `canEdit` (chứ không chỉ hiện băng cảnh báo) là có chủ ý: cảnh báo
+   * mà vẫn cho gõ thì người dùng vẫn gõ, và cái họ gõ ra mới là thứ gây hại. */
+  const compatibility = programmingCompatibility(
+    capabilities.data?.compatibility,
+    /* PENDING chỉ khi CHƯA có gì để so. Lần poll 5 s sau đó cũng đặt
+     * `status === 'loading'` trong chốc lát; coi đó là PENDING sẽ nháy chặn
+     * soạn thảo mỗi 5 giây dù đã biết thừa hai phiên bản là khớp. */
+    capabilities.status === 'loading' && !capabilities.data,
+  )
+  const canEdit =
+    roleAtLeast(session?.role, 'admin') &&
+    !mobileReadOnly &&
+    workspaceMode === 'EDIT' &&
+    compatibility.editingAllowed
   /* `DEV-PROG-024` — xem khối chú thích ở chỗ dùng, phía dưới. Sàn `24rem`
    * (384 px) cố ý NHỎ hơn ngân sách của khổ 800 px: sàn lớn hơn ngân sách chính
    * là cách `DEV-PROG-021` tạo ra tràn dọc. */
@@ -289,6 +311,24 @@ export function DesignWorkspacePage({
    * lên rồi nhận lỗi. */
   const latestCheck = workspace.project?.latestCheck
   const simulateRevisionId = latestCheck && latestCheck.state === 'PASSED' ? latestCheck.revisionId : null
+  /* `ISS-STED-04` — nối lại đường ĐỌC kết quả Check gần nhất về trang soạn thảo.
+   *
+   * `D-01` chuyển quyền SỞ HỮU Check sang PGM-03 (một luồng seal/run/poll duy
+   * nhất) và đó vẫn đúng — đây chỉ là đường đọc, KHÔNG dựng bộ kiểm thứ hai ở
+   * FE và KHÔNG biến thành check-as-you-type. Khi gỡ Check khỏi PGM-02 thì
+   * đường đọc này bị bỏ quên, nên toàn bộ hạ tầng gạch lỗi trong `SourceEditor`
+   * trở thành mã chết: `diagnostics={EMPTY_DIAGNOSTICS}` là hằng số rỗng. */
+  const latestCheckResult = useProgrammingCheck(latestCheck?.checkId)
+  const checkDiagnostics = latestCheckResult.data?.diagnostics ?? EMPTY_DIAGNOSTICS
+  /* "Đã từng Kiểm tra" bám vào việc CÓ kết quả tải về, không bám vào việc có
+   * diagnostic: một Check đạt cũng là đã kiểm, và trạng thái "chưa kiểm tra"
+   * phải khác hẳn "kiểm rồi, sạch". */
+  const hasCheckResult = latestCheckResult.data !== undefined
+  /* `ISS-STED-13` — bảng ký hiệu của compiler, để `ProgramsTab` đối chiếu với
+   * chỉ mục regex của mình. `undefined` (server đời cũ) khác `[]` (POU không
+   * khai cổng nào): chỉ cái sau mới là một câu trả lời. */
+  const checkSymbols = latestCheckResult.data?.symbols
+  const checkState = latestCheckResult.data?.state ?? latestCheck?.state ?? null
   /* Revision mà PHIÊN đang mở đã niêm phong — khác `simulateRevisionId` (bản
    * Check đạt gần nhất): một phiên đang chạy có thể neo vào bản cũ hơn nếu
    * người dùng vừa lưu và Check thêm một lần nữa. Workbench phải nói theo
@@ -496,6 +536,19 @@ export function DesignWorkspacePage({
     })
   }
 
+  /** `ISS-STED-05` — nhảy tới một diagnostic từ khay Vấn đề của workbench.
+   *
+   * Chọn đúng POU RỒI neo dòng/cột, dùng lại chính `focusDiagnostic` mà PGM-03
+   * và khay So sánh đã dùng — không mở đường nhảy thứ hai. Hai đường nhảy song
+   * song sẽ lệch nhau đúng lúc một trong hai được sửa. */
+  const jumpToDiagnostic = (diagnostic: ProgrammingDiagnostic) => {
+    const programId = diagnostic.location?.programId
+    if (typeof programId !== 'string') return
+    const program = document.programs.find((candidate) => candidate.programId === programId)
+    if (program) selectPou(program.objectId ?? program.programId)
+    setFocusDiagnostic(diagnostic)
+  }
+
   /* `signals[]` KHÔNG đi qua `toWorkspaceDocument`, nên phải đọc từ draft THÔ.
    * Explorer cần nó để biết POU nào đang publish — điều kiện backend dùng để
    * từ chối `removeProgram`. */
@@ -540,6 +593,19 @@ export function DesignWorkspacePage({
           Ẩn thị giác vì thanh tab đã hiện tên — thứ còn thiếu là mốc điều
           hướng cho trình đọc màn hình, không phải thêm chữ lên màn hình. */}
       <h2 className="sr-only">{pick('Workspace Thiết kế', 'Design workspace')}</h2>
+      {/* `ISS-STED-19` — nêu RÕ HAI PHIÊN BẢN. Một câu "phiên bản không tương
+          thích" trống không thì người vận hành không biết phải nạp lại bản nào,
+          và cũng không biết bo hay giao diện mới là bên cũ. */}
+      {!compatibility.editingAllowed && compatibility.state !== 'PENDING' && (
+        <p
+          role="alert"
+          data-testid="programming-compatibility-block"
+          data-compatibility-state={compatibility.state}
+          className="rounded-[var(--radius)] border border-[var(--c-danger)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text)]"
+        >
+          {compatibility.reason}
+        </p>
+      )}
       {mobileReadOnly && (
         <p role="status" data-testid="programming-mobile-read-only" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
           {pick('Dưới 768 px, workspace chỉ cho xem; hãy dùng màn hình rộng hơn để chỉnh sửa.', 'Below 768 px, the workspace is read-only; use a wider screen to edit.')}
@@ -760,7 +826,11 @@ export function DesignWorkspacePage({
           selectedProgramId={selectedProgramId}
           onSelectProgram={selectProgram}
           onSave={workspace.save}
-          diagnostics={EMPTY_DIAGNOSTICS}
+          diagnostics={checkDiagnostics}
+          checkSymbols={checkSymbols}
+          checkState={checkState}
+          hasCheckResult={hasCheckResult}
+          checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
           focusDiagnostic={focusDiagnostic}
           focusFbdSelection={compareFbdFocus}
           onPendingOperationsChange={updateProgramOperations}
@@ -812,6 +882,10 @@ export function DesignWorkspacePage({
           checkOwnerHref={`/eng/programming/projects/${projectId}/commission`}
           onSelectProgram={selectProgram}
           onJumpToOffset={jumpToSourceOffset}
+          checkDiagnostics={checkDiagnostics}
+          hasCheckResult={hasCheckResult}
+          checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
+          onJumpToDiagnostic={jumpToDiagnostic}
         />
         </div>
       </div>

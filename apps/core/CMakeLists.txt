@@ -229,6 +229,23 @@ target_link_libraries(mkddc-st-profile-dump PRIVATE st_compiler_lib)
 
 # T59-302/T59-305: lắp package v2 bằng ĐÚNG writer production, không cài lại
 # định dạng ở lớp BE.
+# UBSan `vptr` bị TẮT RIÊNG cho hai binary tự đóng hộp.
+#
+# Cả hai áp seccomp cấm đọc `/proc`, mà kiểm `vptr` của UBSan cần đọc bản đồ bộ
+# nhớ tiến trình để phân giải RTTI. Mất đường đọc đó, nó báo "object has invalid
+# vptr" cho một control block `shared_ptr` NẰM TRONG libstdc++ — bằng chứng là
+# cùng đúng đường code ấy sạch khi chạy không hàng rào, và ASan (cũng bắt nhầm
+# kiểu qua bộ nhớ) không kêu. `-fno-sanitize-recover` biến báo nhầm đó thành
+# ctest đỏ vĩnh viễn, tức lane UBSan không bao giờ chạy tới các kiểm khác.
+#
+# Chỉ TẮT `vptr`; mọi kiểm UB còn lại (tràn số, dịch bit, con trỏ lệch, gọi hàm
+# sai chữ ký...) vẫn bật đủ trên hai binary này. Không nới hàng rào để chiều bộ
+# kiểm: hàng rào chính là vật đang được kiểm.
+if(MKDDC_SANITIZE MATCHES "undefined")
+  target_compile_options(mkddc-programming-sim-worker PRIVATE -fno-sanitize=vptr)
+  target_compile_options(mkddc-st-compile PRIVATE -fno-sanitize=vptr)
+endif()
+
 add_executable(mkddc-st-package application/st/st_package_main.cpp)
 target_link_libraries(mkddc-st-package PRIVATE st_compiler_lib)
 
@@ -291,6 +308,7 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_validate_cli.cpp application/st/tests/test_st_compile_cli.cpp
       application/st/tests/test_st_limits.cpp
       application/st/tests/test_st_lang.cpp application/st/tests/test_st_ir.cpp
+      application/st/tests/test_st_grammar_corpus.cpp
       application/st/tests/test_st_multi_diagnostic.cpp
       application/st/tests/test_st_warning.cpp
       application/st/tests/test_st_artifact_manifest.cpp
@@ -368,11 +386,21 @@ if(CORE_BUILD_TESTS)
   # không có sẵn cạnh nào tới đường điều khiển", còn cổng hành vi nói "hàng rào
   # tiến trình thật sự chặn, bắt tay thật sự fail-closed và phiên thật sự tất
   # định". Cái nào thiếu thì `SIM_SAFE` chưa được coi là đã chứng minh.
+  # Build sanitizer link thêm `libasan`/`libubsan`; đó là thư viện do CHÍNH cấu
+  # hình build kéo vào, không phải một dependency mới lọt vào worker. Cờ dưới
+  # đây chỉ bật khi `MKDDC_SANITIZE` khác rỗng nên lane phát hành vẫn đỏ nếu
+  # một binary release kéo theo runtime sanitizer.
+  if(MKDDC_SANITIZE)
+    set(MKDDC_SIM_WORKER_BOUNDARY_EXTRA --allow-sanitizer-runtime)
+  else()
+    set(MKDDC_SIM_WORKER_BOUNDARY_EXTRA "")
+  endif()
   add_test(NAME programming_sim_worker_symbol_boundary
       COMMAND ${Python3_EXECUTABLE}
               ${MKDDC_REPOSITORY_ROOT}/scripts/verify_programming_sim_worker_boundary.py
               --binary $<TARGET_FILE:mkddc-programming-sim-worker>
-              --nm ${CMAKE_NM})
+              --nm ${CMAKE_NM}
+              ${MKDDC_SIM_WORKER_BOUNDARY_EXTRA})
   if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME programming_sim_worker_behaviour
         COMMAND ${Python3_EXECUTABLE}
@@ -394,7 +422,47 @@ if(CORE_BUILD_TESTS)
                 ${MKDDC_REPOSITORY_ROOT}/scripts/generate_st_language_profile.py
                 --check
                 --dump-binary $<TARGET_FILE:mkddc-st-profile-dump>)
+
+    # ISS-STED-08 — kiểm CHÍNH CỔNG phía trên.
+    #
+    # `st_language_profile_contract` luôn xanh, và "luôn xanh" có hai cách giải
+    # thích: cổng đang kiểm và mọi thứ đều đúng, hoặc cổng đã ngừng kiểm. Từ
+    # ngoài nhìn vào, hai trường hợp ấy giống hệt nhau — đó đúng là cách
+    # `F-STED-005` sống sót qua nhiều revision. Test này tiêm hồ sơ sai một cách
+    # đã biết và đòi cổng phải nổ đỏ, cho từng chiều đối chiếu.
+    add_test(NAME st_language_profile_gate
+        COMMAND ${Python3_EXECUTABLE}
+                ${MKDDC_REPOSITORY_ROOT}/scripts/verify_st_profile_gate.py
+                --dump-binary $<TARGET_FILE:mkddc-st-profile-dump>)
   endif()
+
+  # ISS-STED-09 — thi hành chính sách tuyên bố IEC bằng máy.
+  #
+  # `ADR-020` mục 6 cấm gọi sản phẩm là compliant/conformant/certified, nhưng
+  # lệnh cấm đó chỉ nằm trong tài liệu KỸ THUẬT. Hồ sơ bán hàng và hồ sơ chứng
+  # nhận do người khác viết, và không có gì ngăn một câu ngược lại xuất hiện ở
+  # tài liệu khác — đúng `F-STED-015`. Hai test: một cổng quét claim, một cổng
+  # kiểm chính cổng đó bằng bốn ca tiêm. Không phụ thuộc target nên chạy cả khi
+  # cross-compile.
+  add_test(NAME iec_claim_policy
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_iec_claim_policy.py)
+  add_test(NAME iec_claim_policy_gate
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_iec_claim_policy_gate.py)
+
+  # ISS-STED-10 — mã diagnostic dẫn trong tài liệu thiết kế phải CÓ THẬT.
+  #
+  # DDD §7 công bố "ST-LIMIT-*", "ST-LIMIT-DIAG-001", "COMP-INTERNAL-*",
+  # "ST-SEM-TYPE-001" và "ST-SEM-FBD-CYCLE" suốt nhiều revision; không mã nào
+  # tồn tại ngoài chính tài liệu đó. Người vận hành `grep` log tìm một mã không
+  # có thật sẽ không ra gì và kết luận sai rằng sự cố không xảy ra.
+  add_test(NAME diagnostic_code_refs
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_diagnostic_code_refs.py)
+  add_test(NAME diagnostic_code_refs_gate
+      COMMAND ${Python3_EXECUTABLE}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_diagnostic_code_refs_gate.py)
 
   # `T57-2.13`/`T57-3.13`: kiểm ở mức BINARY, vì giá trị của engine nằm ở chỗ nó
   # là đúng cái binary backend gọi — một unit test gọi thẳng AlarmRuntime sẽ bỏ

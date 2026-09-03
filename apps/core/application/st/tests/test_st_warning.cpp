@@ -243,4 +243,49 @@ TEST(StWarning, ErrorSuppressesUsageWarningsBecauseTraceIsIncomplete)
     EXPECT_TRUE(with_severity(outcome.bag, StSeverity::WARNING).empty());
 }
 
+
+/* ---- Chính sách target profile: nâng warning thành lỗi ----------------------
+ *
+ * `ISS-STED-02` yêu cầu chính sách này VẪN KHẢ THI sau khi kênh WARNING sống.
+ * Nó áp ở TÚI, không ở chỗ phát: nơi phát biết "đây là chuyện đáng ngờ", còn
+ * "đáng ngờ có chặn phát hành không" là câu hỏi của profile. Trộn hai việc lại
+ * thì mỗi lần đổi chính sách phải sửa mọi điểm phát warning. */
+
+TEST(StWarning, ProfileCanPromoteWarningsToErrors)
+{
+    CheckOutcome outcome = check_all(
+        "PROGRAM t\n"
+        "VAR used : INT; unused : INT; END_VAR\n"
+        "  used := 1;\n"
+        "END_PROGRAM\n");
+
+    ASSERT_TRUE(outcome.ok) << "chương trình chỉ có warning phải hợp lệ";
+    ASSERT_FALSE(outcome.bag.has_error());
+    ASSERT_TRUE(outcome.bag.has_warning());
+
+    outcome.bag.promote_warnings_to_errors();
+    EXPECT_TRUE(outcome.bag.has_error()) << "profile khắt khe không nâng được warning";
+    EXPECT_FALSE(outcome.bag.has_warning());
+    /* Mã KHÔNG đổi khi nâng cấp: `ST-WARN-002` vẫn là `ST-WARN-002`, chỉ
+     * severity đổi. Đổi cả mã sẽ làm hai profile nói hai ngôn ngữ khác nhau về
+     * cùng một phát hiện, và bảng tra của FE phải nhân đôi. */
+    EXPECT_EQ(outcome.bag.items()[0].code, st_diag_code::kWarnUnusedVariable);
+}
+
+TEST(StWarning, PromotionIsANoOpWhenThereAreNoWarnings)
+{
+    CheckOutcome outcome = check_all(
+        "PROGRAM t\n"
+        "VAR used : INT; END_VAR\n"
+        "  used := 1;\n"
+        "  used := used;\n"
+        "END_PROGRAM\n");
+
+    ASSERT_TRUE(outcome.ok);
+    ASSERT_FALSE(outcome.bag.has_warning());
+    outcome.bag.promote_warnings_to_errors();
+    EXPECT_FALSE(outcome.bag.has_error())
+        << "nâng cấp tự chế ra lỗi trên một chương trình không có cảnh báo nào";
+}
+
 } // namespace core

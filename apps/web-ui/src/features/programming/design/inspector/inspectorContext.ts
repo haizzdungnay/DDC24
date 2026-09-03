@@ -3,7 +3,7 @@ import type { StCursorSymbol } from '../editor/stReferenceIndex'
 import type { StRuntimeOverlayItem, StRuntimeOverlayState } from '../editor/StRuntimeValueOverlay'
 import type { FbdDocument, FbdNode, FbdPort, FbdWire } from '../../fbd/model'
 import type { FbdSelection } from '../../fbd/commands'
-import type { ProgrammingProgram } from '../../model/types'
+import type { ProgrammingBinding, ProgrammingProgram, ProgrammingVariable } from '../../model/types'
 
 /**
  * `T59-818` / `PGM02-V22-WP-14` — ngữ cảnh của Inspector, tách khỏi React.
@@ -95,6 +95,35 @@ export interface InspectorStSymbolContext {
   signature: InspectorField<string>
   referenceCount: InspectorField<number>
   runtime: InspectorRuntimeValue
+  /**
+   * `ISS-STED-12` — năm trường dưới đây trả lời những câu người đọc mã ST hỏi
+   * trước tiên: biến này ở đâu ra, bắt đầu bằng gì, có nối ra ngoài không, đơn
+   * vị là gì, và ai ghi vào nó.
+   *
+   * Cả năm đều đi qua `InspectorField` như mọi trường khác. Đây là chỗ dễ phá
+   * nguyên tắc nhất của module: một biến chưa có trong Draft mà hiện Scope
+   * `VAR` sẽ trông y hệt một sự thật, và người đọc sẽ sửa chương trình dựa
+   * trên nó.
+   */
+  /** `VAR`/`VAR_INPUT`/`VAR_OUTPUT`/`VAR RETAIN` — nguồn là Draft, không suy. */
+  scope: InspectorField<string>
+  /**
+   * Giá trị khởi tạo. Subset ST **không cho** khai giá trị khởi tạo trong `VAR`
+   * (`st_parser.cpp` đòi `;` ngay sau tên kiểu), nên khi Draft không ghi
+   * `initialValue` thì giá trị thật là **mặc định của kiểu** theo
+   * `ST_SUBSET_SPEC` §3.1 — một sự thật tra được, không phải một suy đoán.
+   * `typeDefault` cho UI nói rõ nó đến từ đâu.
+   */
+  initialValue: InspectorField<{ text: string; typeDefault: boolean }>
+  /** Điểm đã ánh xạ, đọc từ `bindings[]` của Draft — KHÔNG dựng authority Point
+   *  thứ hai ở Inspector. Rỗng ⇒ `unknown`, không phải "chưa ánh xạ". */
+  mappedPoint: InspectorField<string>
+  /** Đơn vị kỹ thuật, cũng từ chính binding đó. */
+  unit: InspectorField<string>
+  /** Số lần đọc / ghi, đếm từ `occurrences.role` — một đường đếm duy nhất. */
+  readWrite: InspectorField<{ reads: number; writes: number }>
+  /** `ISS-STED-13` — lý do chỉ mục bị hạ cấp; `null` khi chỉ mục còn dùng được. */
+  indexDegradedReason: string | null
 }
 
 export interface InspectorFbdPortView {
@@ -147,6 +176,26 @@ export interface InspectorInput {
   enabled?: boolean | null
   /** Ký hiệu dưới con trỏ ST; `entry === null` nghĩa là analyzer không tra được. */
   cursorSymbol?: StCursorSymbol | null
+  /**
+   * `ISS-STED-12` — bảng biến và bảng binding của Draft.
+   *
+   * Đây là AUTHORITY cho Scope/Initial/Mapped point/Unit. Inspector không tự
+   * đọc catalog Point và cũng không tự suy scope từ văn bản: hai đường sẽ lệch
+   * nhau, và lệch ở đây nghĩa là Inspector nói biến nối tới một điểm mà Kiểm
+   * tra không thấy.
+   */
+  variables?: readonly ProgrammingVariable[]
+  bindings?: readonly ProgrammingBinding[]
+  /**
+   * `ISS-STED-13` — phán quyết đối chiếu chỉ mục ký hiệu của FE với bảng
+   * compiler công bố. `degraded` ⇒ mọi trường SUY RA TỪ CHỈ MỤC hạ xuống
+   * `unknown`: chỉ mục vừa được chứng minh là đọc lệch, nên hiển thị tiếp giá
+   * trị của nó là hiển thị thông tin đã biết là sai.
+   *
+   * Các trường lấy từ Draft (Phạm vi, Điểm ánh xạ, Đơn vị) KHÔNG bị hạ: chúng
+   * không đi qua chỉ mục, nên lệch của chỉ mục không nói gì về chúng.
+   */
+  reconciliation?: { degraded: boolean; reason: string } | null
   catalog?: readonly CatalogEntry[]
   fbd?: { document: FbdDocument; selection: FbdSelection | null } | null
   runtime?: StRuntimeOverlayState | null
@@ -250,6 +299,84 @@ function signatureOfType(catalog: readonly CatalogEntry[] | undefined, typeName:
   return known(`${entry.name}(${inputs.join(', ')})${outputs.length ? ` → ${outputs.join(', ')}` : ''}`)
 }
 
+/* `ISS-STED-12` — nhãn scope theo đúng cách ST viết ra, không theo tên nội bộ
+ * của Data Model. Người đọc đang nhìn mã ST, nên `VAR_INPUT` mới là thứ họ tìm
+ * lại được trong buffer; `INPUT` thì không. */
+const SCOPE_LABEL: Record<ProgrammingVariable['class'], string> = {
+  LOCAL: 'VAR',
+  INPUT: 'VAR_INPUT',
+  OUTPUT: 'VAR_OUTPUT',
+  INOUT: 'VAR_IN_OUT',
+  GLOBAL: 'VAR_GLOBAL',
+  MAPPED: 'VAR',
+  RETAIN: 'VAR RETAIN',
+  CONSTANT: 'VAR CONSTANT',
+  PARAMETER: 'VAR',
+}
+
+/* Giá trị khởi tạo mặc định theo `ST_SUBSET_SPEC` §3.1. Subset không cho khai
+ * giá trị khởi tạo trong `VAR`, nên với biến vô hướng đây là giá trị THẬT lúc
+ * cold start — tra được, không phải đoán. Kiểu ngoài bảng (instance FB, kiểu
+ * người dùng) không có giá trị vô hướng nào để nói. */
+const TYPE_DEFAULT: Record<string, string> = {
+  BOOL: 'FALSE',
+  INT: '0',
+  DINT: '0',
+  UINT: '0',
+  REAL: '0.0',
+  TIME: 'T#0s',
+}
+
+function scopeOf(variable: ProgrammingVariable | undefined): InspectorField<string> {
+  if (!variable) return unknownField
+  const label = SCOPE_LABEL[variable.class]
+  if (!label) return unknownField
+  /* `retain` là một cờ RIÊNG trong Data Model, không phải một giá trị của
+   * `class`. Bỏ qua nó sẽ hiện `VAR` cho một biến thực ra giữ giá trị qua
+   * mất điện — đúng thứ khác biệt mà người vận hành cần thấy. */
+  if (variable.retain && !label.includes('RETAIN')) return known(`${label} RETAIN`)
+  return known(label)
+}
+
+function initialValueOf(
+  variable: ProgrammingVariable | undefined,
+  typeName: string | undefined,
+): InspectorField<{ text: string; typeDefault: boolean }> {
+  if (variable && variable.initialValue !== null && variable.initialValue !== undefined) {
+    return known({ text: String(variable.initialValue), typeDefault: false })
+  }
+  const type = (variable?.type ?? typeName ?? '').toUpperCase()
+  const fallback = TYPE_DEFAULT[type]
+  if (!fallback) return unknownField
+  return known({ text: fallback, typeDefault: true })
+}
+
+function bindingOf(
+  variable: ProgrammingVariable | undefined,
+  bindings: readonly ProgrammingBinding[] | undefined,
+): ProgrammingBinding | undefined {
+  if (!variable || !bindings) return undefined
+  return bindings.find((binding) => binding.variableId === variable.variableId)
+}
+
+/** Điểm đọc được: `LOCAL/UI-01`, và RTU thì kèm thiết bị vì `40001` một mình
+ *  không định danh được điểm nào cả. */
+function pointLabel(binding: ProgrammingBinding): string {
+  const device = binding.point.deviceId ? `${binding.point.deviceId}/` : ''
+  return `${binding.point.category}/${device}${binding.point.pointId}`
+}
+
+function readWriteOf(entry: StCursorSymbol['entry']): InspectorField<{ reads: number; writes: number }> {
+  if (!entry) return unknownField
+  let reads = 0
+  let writes = 0
+  for (const occurrence of entry.occurrences) {
+    if (occurrence.role === 'WRITE') writes += 1
+    else reads += 1
+  }
+  return known({ reads, writes })
+}
+
 /**
  * Ngữ cảnh của một ký hiệu ST.
  *
@@ -261,7 +388,16 @@ function signatureOfType(catalog: readonly CatalogEntry[] | undefined, typeName:
 export function stSymbolContextFor(input: InspectorInput): InspectorStSymbolContext | null {
   const symbol = input.cursorSymbol
   if (!symbol) return null
-  const entry = symbol.entry
+  /* Chỉ mục đã được chứng minh lệch ⇒ coi như không tra được. Đây đúng là hành
+   * vi mà `F-STED-011` đòi: hạ cấp có thông báo, không im lặng sai. */
+  const entry = input.reconciliation?.degraded ? null : symbol.entry
+  /* Khớp theo TÊN, phân biệt hoa/thường theo đúng cách ST xử lý định danh
+   * (không phân biệt). Draft là authority; chỉ số văn bản chỉ nói được vị trí
+   * và vai trò đọc/ghi. */
+  const variable = input.variables?.find(
+    (candidate) => candidate.name.toUpperCase() === symbol.identifier.toUpperCase(),
+  )
+  const binding = bindingOf(variable, input.bindings)
   return {
     kind: 'ST_SYMBOL',
     identifier: symbol.identifier,
@@ -272,6 +408,18 @@ export function stSymbolContextFor(input: InspectorInput): InspectorStSymbolCont
       : unknownField,
     referenceCount: entry ? known(entry.occurrences.length) : unknownField,
     runtime: runtimeFor(input.runtime, symbol.identifier),
+    scope: scopeOf(variable),
+    /* Instance FB không có giá trị khởi tạo vô hướng: trạng thái của nó do
+     * chính khối quản. Nói "0.0" ở đây là bịa. */
+    initialValue: entry?.kind === 'FB_INSTANCE'
+      ? unknownField
+      : initialValueOf(variable, entry?.typeName),
+    mappedPoint: binding ? known(pointLabel(binding)) : unknownField,
+    /* Đơn vị lấy từ chính binding đã dùng cho điểm — không tra catalog Point
+     * lần nữa, vì hai lần tra là hai câu trả lời có thể khác nhau. */
+    unit: binding?.unit ? known(binding.unit) : unknownField,
+    readWrite: readWriteOf(entry),
+    indexDegradedReason: input.reconciliation?.degraded ? input.reconciliation.reason : null,
   }
 }
 

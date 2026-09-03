@@ -3,26 +3,71 @@ import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../../shared/i18n'
 import { programmingErrorCopy } from '../api/errorCopy'
 import type { ProgrammingDiagnostic } from '../model/types'
+import { diagnosticFreshness, type OpenBufferContext, type StaleReason } from './diagnosticFreshness'
+
+/** Câu giải thích VÌ SAO một diagnostic không còn nói về buffer đang mở.
+ *
+ * Mỗi lý do dẫn tới một hành động khác nhau của người dùng, nên chúng không
+ * được gộp thành một câu chung: "buffer đã đổi" thì chạy lại Kiểm tra là đủ,
+ * còn "thuộc revision khác" thì chạy lại cũng vô ích cho tới khi mở đúng
+ * revision. Một nhãn "cũ" không nói lý do sẽ khiến người dùng thử sai cách. */
+function staleCopy(
+  pick: (vi: string, en: string) => string,
+  reason: StaleReason,
+  revisionId?: string
+): string {
+  switch (reason) {
+    case 'SOURCE_CHANGED':
+      return pick('buffer đã đổi sau Kiểm tra', 'buffer changed after the check')
+    case 'REVISION_MISMATCH':
+      return revisionId
+        ? pick(`kết quả thuộc revision ${revisionId}`, `result belongs to revision ${revisionId}`)
+        : pick('kết quả thuộc revision khác', 'result belongs to another revision')
+    case 'POU_MISMATCH':
+      return pick('kết quả thuộc POU khác', 'result belongs to another POU')
+    case 'PROFILE_CHANGED':
+      return pick('hồ sơ ngôn ngữ đã đổi', 'language profile changed')
+  }
+}
 
 /**
- * `ProblemsDrawer` — dùng chung cho ba tab của PGM-02 và cho PGM-03
- * (DDD-FE-PROG-001 §2). Diagnostic canonical đến từ `GET /checks/{checkId}`;
- * đây chỉ hiển thị lại, không tự tính lỗi. Nhiều lỗi không spam toast — luôn
- * gom vào đây (UX §16.2).
+ * `ProblemsDrawer` — khay Vấn đề của **PGM-03** (`Kiểm tra & Đưa vào vận hành`).
+ * Diagnostic canonical đến từ `GET /checks/{checkId}`; đây chỉ hiển thị lại,
+ * không tự tính lỗi. Nhiều lỗi không spam toast — luôn gom vào đây (UX §16.2).
+ *
+ * `ISS-STED-05` — docstring cũ viết *"dùng chung cho ba tab của PGM-02 và cho
+ * PGM-03 (DDD-FE-PROG-001 §2)"* trong khi component này **chưa bao giờ** được
+ * mount ở PGM-02: khay Vấn đề của PGM-02 là `ProgrammingWorkbench`
+ * (`design/workbench/`), một component khác. Câu sai đó khiến người đọc tin
+ * rằng PGM-02 đã có khay lỗi dùng chung, nên không ai đi tìm lý do POU ST
+ * không hiện lỗi. Nay ghi đúng chỗ nó thật sự sống, và ghi luôn nơi khay của
+ * PGM-02 nằm.
  */
 export function ProblemsDrawer({
   diagnostics,
   onSelect,
   emptyState = 'no-problems',
-  onEmptyAction
+  onEmptyAction,
+  openBuffer,
+  onRecheck
 }: {
   diagnostics: ProgrammingDiagnostic[]
   onSelect?: (diagnostic: ProgrammingDiagnostic) => void
   /** Rỗng vì chưa có kết quả Check khác với Check đã chạy nhưng không có lỗi. */
   emptyState?: 'not-checked' | 'no-problems' | 'check-failed' | 'checking' | 'unknown'
   onEmptyAction?: () => void
+  /** `ISS-STED-18` — bối cảnh buffer ĐANG MỞ, để khay biết diagnostic nào còn
+   * nói về thứ người dùng đang nhìn. Vắng mặt thì mọi mục hiện như trước
+   * (không nhãn), vì khi đó khay không có cơ sở nào để phán quyết. */
+  openBuffer?: OpenBufferContext
+  /** Chạy lại Kiểm tra. `ISS-STED-18` yêu cầu mục STALE phải có đường thoát,
+   * không chỉ có nhãn. */
+  onRecheck?: () => void
 }) {
   const { pick } = useI18n()
+  const hasStale =
+    openBuffer !== undefined &&
+    diagnostics.some((item) => diagnosticFreshness(item, openBuffer).freshness === 'STALE')
   const [open, setOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('programming.problems.collapsed') === 'true')
   const [panelHeight, setPanelHeight] = useState(() => {
@@ -100,10 +145,49 @@ export function ProblemsDrawer({
     </div>
   ) : (
     <div className="rounded-[var(--radius)] border border-[var(--c-border)]" role="region" aria-label={pick('Danh sách lỗi', 'Problems list')}>
+      {hasStale && onRecheck ? (
+        /* `ISS-STED-18` — mục CŨ phải có ĐƯỜNG THOÁT, không chỉ có nhãn: người
+         * dùng thấy "cũ" mà không có cách làm nó mới lại thì nhãn chỉ là lời
+         * than phiền. */
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--c-border)] px-3 py-2 text-xs">
+          <span className="text-[var(--c-warn-fg)]">
+            {pick(
+              'Một số lỗi không còn khớp nội dung đang mở.',
+              'Some problems no longer match the open content.'
+            )}
+          </span>
+          <button
+            type="button"
+            className="shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 font-semibold hover:bg-[var(--c-surface-2)]"
+            onClick={onRecheck}
+          >
+            {pick('Chạy lại Kiểm tra', 'Run check again')}
+          </button>
+        </div>
+      ) : null}
       <ul className="divide-y divide-[var(--c-border)]">
         {diagnostics.map((diagnostic, index) => {
           const Icon = diagnostic.severity === 'ERROR' ? AlertCircle : diagnostic.severity === 'WARNING' ? AlertTriangle : Info
           const iconClass = diagnostic.severity === 'ERROR' ? 'text-[var(--c-fault-fg)]' : diagnostic.severity === 'WARNING' ? 'text-[var(--c-warn-fg)]' : 'text-[var(--c-info)]'
+          /* ISS-STED-02 — severity phải tới cả người KHÔNG nhìn thấy màu.
+           *
+           * Icon mang `aria-hidden`, nên severity chỉ tồn tại dưới dạng hình
+           * dạng + màu. Điều đó vô hại khi mọi diagnostic đều là ERROR — không
+           * có gì để phân biệt. Từ lúc kênh WARNING mang dữ liệu thật, "lỗi" và
+           * "cảnh báo" là hai hành động khác nhau của người dùng: một cái chặn
+           * phát hành, một cái không. Sự khác biệt ấy không được phép chỉ nằm
+           * ở màu. */
+          /* `ISS-STED-18` — mục CŨ không được gạch như lỗi hiện tại, và cũng
+           * không được biến mất im lặng: ẩn nó đi làm người dùng tưởng lỗi đã
+           * hết. Nó ở lại danh sách, mang nhãn nói rõ VÌ SAO cũ. */
+          const freshness = openBuffer ? diagnosticFreshness(diagnostic, openBuffer) : undefined
+          const staleReason = freshness?.freshness === 'STALE' ? freshness.reason : undefined
+          const staleText = staleReason ? staleCopy(pick, staleReason, freshness?.diagnosticRevisionId) : ''
+          const severityLabel = diagnostic.severity === 'ERROR'
+            ? pick('Lỗi', 'Error')
+            : diagnostic.severity === 'WARNING'
+              ? pick('Cảnh báo', 'Warning')
+              : pick('Thông tin', 'Info')
           const location = diagnostic.location
           const locationText = location
             ? [
@@ -124,6 +208,15 @@ export function ProblemsDrawer({
               >
                 <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
                 <span>
+                  <span className="sr-only">{severityLabel}: </span>
+                  {staleReason ? (
+                    <span
+                      className="mb-0.5 inline-block rounded-[var(--radius)] border border-[var(--c-warn-fg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-warn-fg)]"
+                      title={staleText}
+                    >
+                      {pick('CŨ', 'STALE')} · {staleText}
+                    </span>
+                  ) : null}
                   <span className="block font-mono text-xs text-[var(--c-text-dim)]">{codeText}{locationText ? ` · ${locationText}` : ''}</span>
                   <span className="block text-[var(--c-text)]">{messageText}</span>
                 </span>

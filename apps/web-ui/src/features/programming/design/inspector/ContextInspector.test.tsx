@@ -135,3 +135,51 @@ describe('ContextInspector — giá trị runtime dùng đúng bộ trình bày 
     expect(screen.getByTestId('inspector-runtime-value')).not.toHaveTextContent('0')
   })
 })
+
+describe('ContextInspector — ISS-STED-12: năm trường mới của ký hiệu ST', () => {
+  const stSymbol = {
+    identifier: 'SupplyTemp', start: 10, end: 20,
+    entry: {
+      name: 'SupplyTemp', typeName: 'REAL', kind: 'VARIABLE' as const, declarationOffset: 42,
+      occurrences: [
+        { offset: 42, role: 'WRITE' as const },
+        { offset: 80, role: 'READ' as const },
+        { offset: 95, role: 'READ' as const },
+      ],
+    },
+  }
+  const variable = {
+    variableId: 'var-supply', programId: 'p-1', name: 'SupplyTemp',
+    type: 'REAL', class: 'INPUT' as const, initialValue: null, retain: false,
+  }
+  const binding = {
+    bindingId: 'b-1', variableId: 'var-supply',
+    point: { category: 'LOCAL' as const, pointId: 'UI-01' },
+    direction: 'READ' as const, dataType: 'REAL', unit: 'degC',
+    writable: false, qualityPolicy: 'REQUIRE_GOOD' as const,
+  }
+
+  it('hiện đủ Phạm vi, Khởi tạo, Điểm ánh xạ, Đơn vị và Đọc/Ghi', () => {
+    renderInspector({ program, cursorSymbol: stSymbol, variables: [variable], bindings: [binding] })
+    const panel = screen.getByTestId('context-inspector')
+    expect(panel).toHaveTextContent('VAR_INPUT')
+    expect(panel).toHaveTextContent('LOCAL/UI-01')
+    expect(panel).toHaveTextContent('degC')
+    expect(panel).toHaveTextContent('2 / 1')
+  })
+
+  it('Khởi tạo nói rõ đây là mặc định của kiểu, không giả vờ ai đó đã đặt', () => {
+    // Subset ST không cho khai giá trị khởi tạo trong `VAR`; người đọc phải
+    // phân biệt được "mặc định" với "ai đó cố ý đặt 0.0".
+    renderInspector({ program, cursorSymbol: stSymbol, variables: [variable], bindings: [binding] })
+    expect(screen.getByTestId('context-inspector')).toHaveTextContent('0.0 (mặc định của kiểu)')
+  })
+
+  it('biến chưa có trong Draft ⇒ hiện "không xác định được", KHÔNG đoán', () => {
+    renderInspector({ program, cursorSymbol: stSymbol, variables: [], bindings: [] })
+    const panel = screen.getByTestId('context-inspector')
+    // Ba trường phụ thuộc Draft đều phải nói thẳng là không tra được.
+    expect(panel.textContent?.match(/không xác định được/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
+    expect(panel).not.toHaveTextContent('VAR_INPUT')
+  })
+})

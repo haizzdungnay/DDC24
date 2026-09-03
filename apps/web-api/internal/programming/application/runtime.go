@@ -16,6 +16,8 @@ import (
 
 	"mkddc-web/internal/programming/coreipc"
 	programmingstore "mkddc-web/internal/programming/store"
+
+	"mkddc-web/internal/programming/domain"
 )
 
 // RuntimeStatusReader chỉ cần Call — đường đọc capabilities/runtime không bao
@@ -98,6 +100,43 @@ type CapabilitiesView struct {
 	// UNAVAILABLE thay vì đoán — đó là lý do nó dùng con trỏ chứ không phải
 	// struct rỗng.
 	WorkspaceModes *WorkspaceModesView `json:"workspaceModes,omitempty"`
+	// Compatibility là BỘ BA tương thích, công bố thành MỘT KHỐI (ISS-STED-19).
+	//
+	// Ba phiên bản này đã tồn tại rải rác — hồ sơ ngôn ngữ ở compiler, registry
+	// thư viện ở domain, ABI ở profile — nhưng không nơi nào gom chúng lại để
+	// người vận hành đọc được "bo này nói ngôn ngữ nào". Rải rác thì mỗi bên
+	// tự kiểm một mảnh, và lệch ở mảnh không ai kiểm sẽ đi qua trong im lặng.
+	Compatibility CompatibilityView `json:"compatibility"`
+}
+
+// CompatibilityView cho FE biết CHÍNH XÁC thiết bị đang chạy phiên bản nào, để
+// nó so với hằng đã build vào bundle của chính nó.
+//
+// Trước ISS-STED-19, FE sinh sẵn `PROGRAMMING_LIBRARY_VERSION` và
+// `PROGRAMMING_LIBRARY_REGISTRY_SHA256` vào bundle nhưng KHÔNG NƠI NÀO ĐỌC
+// chúng: một bundle cũ vẫn vẽ palette/từ khoá/chữ ký của phiên bản khác với
+// phiên bản thiết bị đang biên dịch, và không ai biết.
+type CompatibilityView struct {
+	STLanguageProfileVersion string `json:"stLanguageProfileVersion"`
+	STLanguageProfileSHA256  string `json:"stLanguageProfileSha256"`
+	LibraryRegistryVersion   string `json:"libraryRegistryVersion"`
+	LibraryRegistrySHA256    string `json:"libraryRegistrySha256"`
+	CompilerProfileID        string `json:"compilerProfileId"`
+	TargetABI                int64  `json:"targetAbi"`
+}
+
+// currentCompatibility đọc từ CHÍNH các hằng sinh tự động, không chép tay.
+// Chép tay ở đây sẽ tạo ra một phiên bản thứ hai của sự thật, và nó sẽ trôi
+// khỏi bộ sinh đúng vào lúc phép so tương thích cần đúng nhất.
+func currentCompatibility() CompatibilityView {
+	return CompatibilityView{
+		STLanguageProfileVersion: domain.STLanguageProfileVersion,
+		STLanguageProfileSHA256:  domain.STLanguageProfileSHA256,
+		LibraryRegistryVersion:   domain.SystemLibraryVersion,
+		LibraryRegistrySHA256:    domain.SystemLibraryRegistrySHA256,
+		CompilerProfileID:        domain.ProfileID,
+		TargetABI:                domain.ProfileTargetABI,
+	}
 }
 
 // WorkspaceModesView nói CHÍNH XÁC những gì controller này làm được, không nói
@@ -162,6 +201,7 @@ func (s *RuntimeService) GetCapabilities(ctx context.Context) (CapabilitiesView,
 			Statements: 4096, FbdBlocks: 256, FbdConnections: 512, ArtifactBytes: 1048576, Bindings: 256,
 		},
 		WorkspaceModes: s.workspaceModes(),
+		Compatibility:  currentCompatibility(),
 	}, nil
 }
 

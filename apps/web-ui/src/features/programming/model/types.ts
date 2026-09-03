@@ -80,6 +80,28 @@ export interface ProgrammingCapabilities {
    * nút cho một khả năng thiết bị không có.
    */
   workspaceModes?: ProgrammingWorkspaceModes
+  /**
+   * `ISS-STED-19` — BỘ BA TƯƠNG THÍCH thiết bị công bố, để FE so với hằng đã
+   * build vào bundle của chính nó.
+   *
+   * REQUIRED trong OpenAPI, và khai required ở đây theo đúng hợp đồng. Nhưng
+   * TypeScript chỉ ràng buộc lúc biên dịch: một thiết bị đời cũ vẫn có thể trả
+   * về phản hồi thiếu khối này. Nên `programmingCompatibility()` vẫn nhận
+   * `undefined` và coi đó là KHÔNG KIỂM CHỨNG ĐƯỢC ⇒ chặn — khác hẳn
+   * `workspaceModes`, nơi thiếu nghĩa là "không có khả năng đó". Ở đây thiếu
+   * bằng chứng KHÔNG phải bằng chứng khớp.
+   */
+  compatibility: ProgrammingCompatibility
+}
+
+/** `ISS-STED-19` — chiếu 1-1 `ProgrammingCapabilities.compatibility`. */
+export interface ProgrammingCompatibility {
+  stLanguageProfileVersion: string
+  stLanguageProfileSha256: string
+  libraryRegistryVersion: string
+  libraryRegistrySha256: string
+  compilerProfileId: string
+  targetAbi: number
 }
 
 export interface ProgrammingWorkspaceModes {
@@ -525,12 +547,43 @@ export interface ProgrammingDiagnostic {
   /** Thông điệp kỹ thuật ngắn từ backend/compiler; vắng mặt khi diagnostic không xuất phát từ compiler. */
   message?: string
   messageKey: string
-  location?: { programId?: string; line?: number; column?: number; bindingId?: string; [key: string]: unknown }
+  /** `ISS-STED-18` — provenance đi kèm TỪNG diagnostic.
+   *
+   * Không có bốn trường này thì việc gạch lỗi trong trình soạn thảo tạo ra một
+   * lỗi nguy hiểm hơn lỗi đang có: gạch một chỗ trên buffer đã đổi, tức chỉ vào
+   * dòng KHÔNG CÒN là dòng sinh ra lỗi đó, và người dùng không có cách nào biết
+   * mình đang bị chỉ sai.
+   *
+   * Tất cả đều tuỳ chọn vì diagnostic không đến từ compiler (scope, worker) sẽ
+   * không có nguồn nào để chứng minh — và "không kiểm được" phải phân biệt được
+   * với "kiểm rồi, khớp". */
+  location?: {
+    programId?: string
+    line?: number
+    column?: number
+    bindingId?: string
+    revisionId?: string
+    pouId?: string
+    sourceSha256?: string
+    stLanguageProfileVersion?: string
+    [key: string]: unknown
+  }
   args?: Record<string, unknown>
 }
 
 /** `GET /point-catalog` — chiếu Point authority hiện hữu (LOCAL/VP/MB_RTU),
  * KHÔNG phải authority Point thứ hai. Quality sáu mức thật từ producer. */
+/** Quyết định eligibility cho MỘT chiều binding, do SERVER cấp (`ISS-PIO-32`).
+ *
+ * `reasons` là văn bản để hiển thị NGUYÊN VĂN. FE không diễn giải lại, không
+ * ánh xạ sang câu của riêng mình: bản diễn giải thứ hai chính là thứ đã trôi
+ * khỏi Core và nói với người dùng rằng "Core chưa hỗ trợ MB_RTU" trong khi Core
+ * đã hỗ trợ từ lâu. */
+export interface ProgrammingPointMapEligibility {
+  status: 'SUPPORTED' | 'UNSUPPORTED_BY_CORE' | 'UNSUPPORTED_IDENTITY' | 'INCOMPATIBLE'
+  reasons: string[]
+}
+
 export interface ProgrammingPointCatalogEntry {
   category: ProgrammingPointCategory
   pointId: string
@@ -543,6 +596,14 @@ export interface ProgrammingPointCatalogEntry {
   quality: 'GOOD' | 'UNCERTAIN' | 'BAD' | 'STALE' | 'OFFLINE' | 'UNKNOWN'
   value: unknown
   observedAt?: string
+  /** Slot EXT 1-based của điểm Modbus. Vắng = catalog chưa cấp (`ISS-PIO-31`). */
+  extIndex?: number
+  /** Quyết định của server cho từng chiều. Vắng mặt = server đời cũ ⇒ FE phải
+   *  fail-closed chứ KHÔNG được tự suy lại. */
+  mapping?: {
+    input: ProgrammingPointMapEligibility
+    output: ProgrammingPointMapEligibility
+  }
 }
 
 export interface ProgrammingPointCatalogPage {
@@ -629,12 +690,44 @@ export interface ProgrammingOverridePage {
   nextCursor?: string | null
 }
 
+/** `ISS-STED-13` — chiếu 1-1 `ProgrammingCheck.symbols[]`. */
+export interface ProgrammingCheckSymbol {
+  pouId: string
+  name: string
+  direction: 'input' | 'output'
+  type: 'BOOL' | 'INT' | 'DINT' | 'UINT' | 'REAL' | 'TIME'
+  slot: number
+}
+
 export interface ProgrammingCheck {
   checkId: string
   revisionId: string
   state: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'TIMED_OUT'
   diagnostics: ProgrammingDiagnostic[]
-  artifact?: { artifactId: string; sha256: string; byteSize: number; profile: string; targetAbi: number; compilerVersion: string; libraryVersion: string }
+  /**
+   * `ISS-STED-13` — bảng biến GIAO DIỆN do **compiler** công bố.
+   *
+   * FE có ba bộ đọc ST độc lập với compiler (tô màu, chỉ mục ký hiệu, formatter)
+   * và trước đây không có cách nào biết mình đọc lệch. Mảng này là thứ để đối
+   * chiếu. Rỗng là câu trả lời THẬT ("POU không khai cổng nào"), và Check chưa
+   * PASSED cũng rỗng — nên tuyệt đối không đọc "rỗng" thành "khớp".
+   */
+  symbols: ProgrammingCheckSymbol[]
+  /**
+   * `stLanguageProfileVersion` (`ISS-STED-19`): phiên bản hồ sơ ngôn ngữ ST đi
+   * CÙNG artifact, không chỉ nằm ở endpoint capabilities — một artifact đọc
+   * lại sau này phải tự nói được nó biên dịch dưới hồ sơ nào.
+   */
+  artifact?: {
+    artifactId: string
+    sha256: string
+    byteSize: number
+    profile: string
+    targetAbi: number
+    compilerVersion: string
+    libraryVersion: string
+    stLanguageProfileVersion: string
+  }
   createdAt: string
   startedAt?: string
   completedAt?: string

@@ -48,7 +48,6 @@ function semanticExpr(node: StExpr): Semantic {
       return [node.kind, node.literal, node.text]
     case 'Ident': return [node.kind, node.name]
     case 'Member': return [node.kind, semanticExpr(node.object), node.name]
-    case 'Index': return [node.kind, semanticExpr(node.object), semanticExpr(node.index)]
     case 'Paren': return [node.kind, semanticExpr(node.inner)]
     case 'Unary': return [node.kind, node.operator, semanticExpr(node.operand)]
     case 'Binary': return [node.kind, node.operator, semanticExpr(node.left), semanticExpr(node.right)]
@@ -72,12 +71,6 @@ function semanticStmt(statement: StStmt): Semantic {
       return ['Case', semanticExpr(statement.selector),
         statement.branches.map((branch) => [branch.labels, branch.body.map(semanticStmt)]),
         statement.elseBody ? statement.elseBody.map(semanticStmt) : null]
-    case 'For':
-      return ['For', statement.variable, semanticExpr(statement.from), semanticExpr(statement.to),
-        statement.by ? semanticExpr(statement.by) : null, statement.body.map(semanticStmt)]
-    case 'While': return ['While', semanticExpr(statement.condition), statement.body.map(semanticStmt)]
-    case 'Repeat': return ['Repeat', statement.body.map(semanticStmt), semanticExpr(statement.condition)]
-    case 'Jump': return ['Jump', statement.keyword]
   }
 }
 
@@ -128,11 +121,6 @@ function commentSequence(unit: StUnit): string[] {
         push(statement.elseTrivia.leading)
         if (statement.elseTrivia.trailing) out.push(statement.elseTrivia.trailing)
         if (statement.elseBody) walkStmts(statement.elseBody)
-        push(statement.endTrivia.leading)
-        if (statement.endTrivia.trailing) out.push(statement.endTrivia.trailing)
-      }
-      if (statement.kind === 'For' || statement.kind === 'While' || statement.kind === 'Repeat') {
-        walkStmts(statement.body)
         push(statement.endTrivia.leading)
         if (statement.endTrivia.trailing) out.push(statement.endTrivia.trailing)
       }

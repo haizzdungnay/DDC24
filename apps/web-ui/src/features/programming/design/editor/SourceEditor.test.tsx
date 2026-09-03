@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
+import { ST_LANGUAGE_PROFILE_VERSION } from '../../api/generated/stLanguageProfile'
+import { hashBufferSource } from '../../shared/diagnosticFreshness'
 import { SourceEditor } from './ProgramsTab'
 import { StCrossReferencePanel } from './StCrossReferencePanel'
 import type { StCursorSymbol } from './stReferenceIndex'
@@ -16,6 +18,8 @@ function program(document: string): ProgrammingProgram {
 function renderEditor(source: string, options?: {
   canEdit?: boolean
   diagnostics?: ProgrammingDiagnostic[]
+  hasCheckResult?: boolean
+  checkRevisionId?: string | null
   onChange?: (value: string) => void
   pointCatalogStatus?: 'idle' | 'loading' | 'ready' | 'error'
   pointCatalogItems?: ProgrammingPointCatalogEntry[]
@@ -53,6 +57,8 @@ function renderEditor(source: string, options?: {
           canEdit={options?.canEdit ?? true}
           saving={false}
           diagnostics={options?.diagnostics ?? []}
+          hasCheckResult={options?.hasCheckResult ?? false}
+          checkRevisionId={options?.checkRevisionId ?? null}
           focusDiagnostic={null}
           onChange={(next) => { setValue(next); onChange(next) }}
           onSave={onSave}
@@ -211,17 +217,99 @@ describe('SourceEditor — WP-10 P0 (CTO/Owner approval 2026-08-15 §4-6)', () =
     expect(screen.getByText('REAL', { selector: 'span.mono' })).toBeInTheDocument()
   })
 
-  it('diagnostic underline: click vào đoạn lỗi nhảy đúng vùng chọn (line/column/length)', () => {
-    const source = 'PROGRAM P\nX := ;\nEND_PROGRAM\n'
-    const diagnostics: ProgrammingDiagnostic[] = [
-      { code: 'ST-SYN-001', severity: 'ERROR', messageKey: 'x', location: { line: 2, column: 6, length: 1 } },
+  /* `ISS-STED-04` × `ISS-STED-18` — gạch lỗi CHỈ khi diagnostic chứng minh được
+   * nó thuộc về đúng nội dung đang mở. Trước hai issue này, mọi diagnostic
+   * truyền vào đều được gạch; đó chính là hành vi nguy hiểm mà chúng cấm, nên
+   * fixture của test cũng phải mang provenance thật. */
+  const UNDERLINE_SOURCE = 'PROGRAM P\nX := ;\nEND_PROGRAM\n'
+
+  async function markableDiagnostics(source: string): Promise<ProgrammingDiagnostic[]> {
+    return [
+      {
+        code: 'ST-SYN-001',
+        severity: 'ERROR',
+        messageKey: 'x',
+        location: {
+          line: 2,
+          column: 6,
+          length: 1,
+          programId: 'program-1',
+          pouId: 'program-1',
+          revisionId: 'rev-1',
+          sourceSha256: await hashBufferSource(source),
+          stLanguageProfileVersion: ST_LANGUAGE_PROFILE_VERSION,
+        },
+      },
     ]
-    const { container, textarea } = renderEditor(source, { diagnostics })
+  }
+
+  it('diagnostic underline: click vào đoạn lỗi nhảy đúng vùng chọn (line/column/length)', async () => {
+    const diagnostics = await markableDiagnostics(UNDERLINE_SOURCE)
+    const { container, textarea } = renderEditor(UNDERLINE_SOURCE, {
+      diagnostics,
+      hasCheckResult: true,
+      checkRevisionId: 'rev-1',
+    })
+    // Băm buffer là bất đồng bộ, nên chờ đúng lúc dấu gạch xuất hiện.
+    const errorSpan = await waitFor(() => {
+      const overlay = container.querySelector('pre.pointer-events-none')!
+      const span = overlay.querySelector('span[class*="decoration-wavy"]')
+      expect(span).toBeTruthy()
+      return span!
+    })
+    fireEvent.click(errorSpan)
+    expect(textarea.selectionStart).toBe(UNDERLINE_SOURCE.indexOf('X := ;') + 5)
+  })
+
+  /* Nửa còn lại của hợp đồng, và là nửa quan trọng hơn: KHÔNG gạch khi không
+   * chứng minh được. Một dấu gạch sai chỗ nguy hiểm hơn không có dấu nào —
+   * người dùng sẽ sửa đúng chỗ bị chỉ, tức sửa một chỗ không hỏng. */
+  it('diagnostic KHÔNG mang provenance thì KHÔNG được gạch', async () => {
+    const { container } = renderEditor(UNDERLINE_SOURCE, {
+      diagnostics: [
+        { code: 'ST-SYN-001', severity: 'ERROR', messageKey: 'x', location: { line: 2, column: 6, length: 1 } },
+      ],
+      hasCheckResult: true,
+      checkRevisionId: 'rev-1',
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/không có lỗi|diagnostic từ Kiểm tra|không còn khớp/)).toBeInTheDocument()
+    })
     const overlay = container.querySelector('pre.pointer-events-none')!
-    const errorSpan = overlay.querySelector('span[class*="decoration-wavy"]')
-    expect(errorSpan).toBeTruthy()
-    fireEvent.click(errorSpan!)
-    expect(textarea.selectionStart).toBe(source.indexOf('X := ;') + 5)
+    expect(overlay.querySelector('span[class*="decoration-wavy"]')).toBeNull()
+  })
+
+  it('buffer đã đổi sau Kiểm tra ⇒ gỡ dấu gạch và nói rõ lý do', async () => {
+    const diagnostics = await markableDiagnostics(UNDERLINE_SOURCE)
+    const { container, textarea } = renderEditor(UNDERLINE_SOURCE, {
+      diagnostics,
+      hasCheckResult: true,
+      checkRevisionId: 'rev-1',
+    })
+    await waitFor(() => {
+      const overlay = container.querySelector('pre.pointer-events-none')!
+      expect(overlay.querySelector('span[class*="decoration-wavy"]')).toBeTruthy()
+    })
+    // Sửa đúng MỘT ký tự.
+    fireEvent.change(textarea, { target: { value: UNDERLINE_SOURCE + ' ' } })
+    await waitFor(() => {
+      expect(screen.getByText(/buffer đã đổi sau Kiểm tra/)).toBeInTheDocument()
+    })
+    const overlay = container.querySelector('pre.pointer-events-none')!
+    expect(overlay.querySelector('span[class*="decoration-wavy"]')).toBeNull()
+  })
+
+  /* Chưa Kiểm tra ≠ "không có lỗi". Nói "không có lỗi" khi chưa ai kiểm là
+   * khẳng định một điều chưa được xác lập. */
+  it('Draft chưa từng Kiểm tra ⇒ nói "Chưa Kiểm tra", KHÔNG nói "không có lỗi"', () => {
+    renderEditor(UNDERLINE_SOURCE, { diagnostics: [], hasCheckResult: false })
+    expect(screen.getByText(/Chưa Kiểm tra/)).toBeInTheDocument()
+    expect(screen.queryByText(/không có lỗi/)).not.toBeInTheDocument()
+  })
+
+  it('đã Kiểm tra và POU sạch ⇒ nói "không có lỗi" kèm revision', () => {
+    renderEditor(UNDERLINE_SOURCE, { diagnostics: [], hasCheckResult: true, checkRevisionId: 'rev-1' })
+    expect(screen.getByText(/revision rev-1: POU này không có lỗi/)).toBeInTheDocument()
   })
 
   it('Find + Replace: Thay tất cả đổi đúng mọi lần xuất hiện', () => {
@@ -855,5 +943,201 @@ describe('DEV-PROG-026 — nút gõ toàn màn hình', () => {
     const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { onToggleMaximized })
     fireEvent.keyDown(textarea, { key: 'M', ctrlKey: true, shiftKey: true })
     expect(onToggleMaximized).toHaveBeenCalledTimes(1)
+  })
+  /* `ISS-STED-11` — gợi ý chữ ký ngay tại chỗ người dùng đang gõ.
+   *
+   * Test đơn vị của `stSignatureHelp` chứng minh bộ máy đúng; những test dưới
+   * đây chứng minh nó THỰC SỰ hiện ra và thực sự đóng được — một bộ máy đúng
+   * mà không ai nối vào editor thì người dùng vẫn phải tự nhớ thứ tự tham số.
+   */
+  function typeSource(textarea: HTMLTextAreaElement, next: string) {
+    fireEvent.change(textarea, { target: { value: next, selectionStart: next.length, selectionEnd: next.length } })
+  }
+
+  it('gõ `(` sau tên hàm thì hiện chữ ký lấy từ registry', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nVAR x : REAL; END_VAR\nEND_PROGRAM\n')
+    typeSource(textarea, 'PROGRAM P\nVAR x : REAL; END_VAR\nx := LIMIT(')
+
+    const help = await screen.findByTestId('st-signature-help')
+    expect(help).toHaveAttribute('data-signature-callee', 'LIMIT')
+    expect(help.textContent).toContain('MN')
+    expect(help.textContent).toContain('MX')
+  })
+
+  it('tham số đang nhập dịch theo dấu phẩy', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    typeSource(textarea, 'x := LIMIT(')
+    await waitFor(() => expect(screen.getByTestId('st-signature-help'))
+      .toHaveAttribute('data-signature-active', '0'))
+    typeSource(textarea, 'x := LIMIT(a, ')
+    await waitFor(() => expect(screen.getByTestId('st-signature-help'))
+      .toHaveAttribute('data-signature-active', '1'))
+  })
+
+  it('instance FB hiện dạng gọi theo tên, không gợi ý dạng theo vị trí', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nVAR TON_1 : TON; END_VAR\nEND_PROGRAM\n')
+    typeSource(textarea, 'PROGRAM P\nVAR TON_1 : TON; END_VAR\nTON_1(')
+
+    const help = await screen.findByTestId('st-signature-help')
+    expect(help.textContent).toContain('IN :=')
+    expect(help.textContent).toContain('PT :=')
+    // `D4` phải đọc được ngay tại chỗ đang gõ, không đợi tới bước Kiểm tra.
+    expect(help.textContent).toContain('D4')
+  })
+
+  it('khối chờ review vẫn hiện chữ ký nhưng nói rõ Kiểm tra sẽ từ chối', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nVAR PID_1 : PID; END_VAR\nEND_PROGRAM\n')
+    typeSource(textarea, 'PROGRAM P\nVAR PID_1 : PID; END_VAR\nPID_1(')
+
+    const help = await screen.findByTestId('st-signature-help')
+    expect(help).toHaveAttribute('data-signature-callee', 'PID_1')
+    expect(help.textContent).toContain('Kiểm tra sẽ từ chối')
+  })
+
+  it('Esc đóng chữ ký và KHÔNG chặn gõ tiếp', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    typeSource(textarea, 'x := ABS(')
+    await screen.findByTestId('st-signature-help')
+
+    fireEvent.keyDown(textarea, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByTestId('st-signature-help')).not.toBeInTheDocument())
+
+    // Gõ tiếp vẫn chạy: chữ ký không được cướp focus hay nuốt phím.
+    typeSource(textarea, 'x := ABS(y')
+    expect(textarea.value).toBe('x := ABS(y')
+  })
+
+  it('đóng ngoặc xong thì chữ ký biến mất, và không tự chèn `)`', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    typeSource(textarea, 'x := ABS(')
+    await screen.findByTestId('st-signature-help')
+    // Người dùng tự gõ `)`; editor không được thêm dấu nào ngoài ý muốn.
+    typeSource(textarea, 'x := ABS(y)')
+    await waitFor(() => expect(screen.queryByTestId('st-signature-help')).not.toBeInTheDocument())
+    expect(textarea.value).toBe('x := ABS(y)')
+  })
+
+  it('chữ ký đọc được bằng trình đọc màn hình mà không cướp focus', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    typeSource(textarea, 'x := LIMIT(')
+    const help = await screen.findByTestId('st-signature-help')
+    expect(help).toHaveAttribute('role', 'status')
+    expect(help).toHaveAttribute('aria-live', 'polite')
+    expect(help).not.toHaveAttribute('tabindex')
+  })
+})
+
+/* `ISS-STED-15` / gate `G17` — BẰNG CHỨNG A11Y, KHÔNG PHẢI KHẲNG ĐỊNH A11Y.
+ *
+ * Với một trình soạn thảo dựng bằng `<textarea>` trong suốt + lớp phủ `<pre>`
+ * tô màu, câu hỏi không phải "có `aria-label` không" mà là: **người không phân
+ * biệt màu, và người chỉ dùng bàn phím, có làm được việc không.** Tương phản
+ * token đo ở `stEditorA11y.test.ts`; ở đây đo HÀNH VI.
+ */
+describe('ISS-STED-15 — a11y của ST editor', () => {
+  const SOURCE = 'PROGRAM P\nX := ;\nEND_PROGRAM\n'
+
+  async function markable(): Promise<ProgrammingDiagnostic[]> {
+    return [
+      {
+        code: 'ST-SYN-001', severity: 'ERROR', messageKey: 'programming.error.check',
+        message: 'expected expression',
+        location: {
+          line: 2, column: 6, length: 1,
+          programId: 'program-1', revisionId: 'rev-1', pouId: 'program-1',
+          sourceSha256: await hashBufferSource(SOURCE),
+          stLanguageProfileVersion: ST_LANGUAGE_PROFILE_VERSION,
+        },
+      },
+    ]
+  }
+
+  it('diagnostic có kênh KHÔNG PHẢI MÀU: hình dạng gạch + chữ trong tooltip', async () => {
+    const { container } = renderEditor(SOURCE, {
+      diagnostics: await markable(), hasCheckResult: true, checkRevisionId: 'rev-1',
+    })
+    const span = await waitFor(() => {
+      const found = container.querySelector('pre.pointer-events-none span[class*="decoration-wavy"]')
+      expect(found).toBeTruthy()
+      return found as HTMLElement
+    })
+    // Kênh 1 — HÌNH DẠNG: gạch lượn sóng, đọc được cả khi không thấy màu đỏ.
+    expect(span.className).toContain('decoration-wavy')
+    // Kênh 2 — CHỮ: mã lỗi nằm trong tooltip, không chỉ trong màu.
+    expect(span.getAttribute('title')).toContain('ST-SYN-001')
+  })
+
+  it('diagnostic được THÔNG BÁO cho screen reader, không chỉ mô tả khi nhận focus', async () => {
+    const { textarea } = renderEditor(SOURCE, {
+      diagnostics: await markable(), hasCheckResult: true, checkRevisionId: 'rev-1',
+    })
+    const summary = await screen.findByText(/diagnostic từ Kiểm tra/)
+    // `aria-describedby` chỉ được đọc lúc NHẬN focus. Kết quả Kiểm tra về khi
+    // người dùng đang gõ — tức đang giữ focus — nên phải có `aria-live`.
+    expect(summary).toHaveAttribute('aria-live', 'polite')
+    expect(textarea.getAttribute('aria-describedby')).toBe(summary.id)
+  })
+
+  it('đi hết luồng soạn thảo → xem lỗi → sửa CHỈ BẰNG BÀN PHÍM', async () => {
+    const { textarea } = renderEditor(SOURCE, {
+      diagnostics: await markable(), hasCheckResult: true, checkRevisionId: 'rev-1',
+    })
+    await screen.findByText(/diagnostic từ Kiểm tra/)
+
+    textarea.focus()
+    expect(document.activeElement).toBe(textarea)
+
+    // Ctrl+G mở hộp Tới dòng; Escape trả focus về đúng chỗ đang gõ.
+    fireEvent.keyDown(textarea, { key: 'g', ctrlKey: true })
+    const form = await screen.findByTestId('editor-go-to-line')
+    const goTo = within(form).getByLabelText(/Tới dòng/)
+    fireEvent.keyDown(goTo, { key: 'Escape' })
+    await waitFor(() => expect(document.activeElement).toBe(textarea))
+
+    // Sửa bằng bàn phím ⇒ dấu gạch được gỡ vì buffer đã đổi sau Kiểm tra.
+    fireEvent.change(textarea, {
+      target: { value: SOURCE.replace('X := ;', 'X := 1;'), selectionStart: 0, selectionEnd: 0 },
+    })
+    await waitFor(() => expect(screen.getByText(/buffer đã đổi sau Kiểm tra/)).toBeInTheDocument())
+  })
+
+  it('Escape trả focus về ô gõ khi đóng hộp Tới dòng', async () => {
+    // Mất focus khi đóng một lớp phủ là cách người dùng bàn phím bị đẩy về đầu
+    // trang — họ phải Tab lại từ đầu để quay về chỗ đang gõ.
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    fireEvent.keyDown(textarea, { key: 'g', ctrlKey: true })
+    const form = await screen.findByTestId('editor-go-to-line')
+    const goTo = within(form).getByLabelText(/Tới dòng/)
+    fireEvent.keyDown(goTo, { key: 'Escape' })
+    await waitFor(() => expect(document.activeElement).toBe(textarea))
+  })
+
+  it('danh sách gợi ý KHÔNG cướp focus và đóng được bằng Escape', async () => {
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n')
+    textarea.focus()
+    fireEvent.change(textarea, { target: { value: 'IF', selectionStart: 2, selectionEnd: 2 } })
+    await screen.findByRole('listbox')
+
+    // Người dùng vẫn đang gõ: danh sách phải điều hướng được TỪ ô gõ.
+    expect(document.activeElement).toBe(textarea)
+    fireEvent.keyDown(textarea, { key: 'ArrowDown' })
+    fireEvent.keyDown(textarea, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+    expect(document.activeElement).toBe(textarea)
+  })
+  /* Khay Thư viện nhanh sống ở `ProgramsTab` (ngoài `SourceEditor`), nên test
+   * trả-focus của nó nằm ở `DesignWorkspacePage.test.tsx`. Khay Vấn đề đã có
+   * test bẫy focus + trả focus ở `ProblemsDrawer.test.tsx`. */
+  it('nút bật/tắt Bản đồ mã giữ nguyên focus trên chính nó', async () => {
+    // Khác khay Thư viện: nút này KHÔNG biến mất khi bật/tắt, nên focus tự
+    // nhiên ở lại. Test khoá điều đó để một lần đổi sang render có điều kiện
+    // không lặng lẽ tạo ra cùng lỗi mất focus.
+    const onToggleMaximized = vi.fn()
+    const { textarea } = renderEditor('PROGRAM P\nEND_PROGRAM\n', { onToggleMaximized })
+    textarea.focus()
+    fireEvent.keyDown(textarea, { key: 'M', ctrlKey: true, shiftKey: true })
+    expect(onToggleMaximized).toHaveBeenCalledTimes(1)
+    // Phím tắt không cướp focus khỏi ô gõ.
+    expect(document.activeElement).toBe(textarea)
   })
 })

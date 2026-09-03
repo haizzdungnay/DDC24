@@ -1,0 +1,10 @@
+# `ISS-STED-21` — phụ thuộc Python của các cổng kiểm hợp đồng.
+#
+# Nhiều script `scripts/verify_*`/`generate_*` import `jsonschema` để THI HÀNH
+# schema chứ không chỉ băm nó. Runner `ubuntu-22.04` không có sẵn gói này, nên
+# cổng `layout` hỏng sau ~2 giây với `ModuleNotFoundError` — trước cả khi kiểm
+# được thứ gì. Suốt thời gian CI bị chặn vì billing, không ai thấy.
+#
+# Ghim major để một bản 5.x đổi API không làm đỏ cổng vì lý do không liên quan
+# tới mã của dự án.
+jsonschema>=4.17,<5

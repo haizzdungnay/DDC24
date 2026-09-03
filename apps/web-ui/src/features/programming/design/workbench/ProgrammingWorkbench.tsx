@@ -95,6 +95,8 @@ export function ProgrammingWorkbench({
   mode,
   sourceLabel,
   problems,
+  problemsEmptyState = 'not-checked',
+  problemsRevisionId = null,
   symbols,
   source,
   onJumpToOffset,
@@ -107,6 +109,12 @@ export function ProgrammingWorkbench({
   /** Nguồn dữ liệu đang hiển thị, ví dụ `Draft · AHU_FanControl`. */
   sourceLabel: string
   problems: readonly WorkbenchProblem[]
+  /** `ISS-STED-05` — "chưa kiểm tra" và "đã kiểm tra, không có lỗi" là hai câu
+   * KHÁC NHAU dẫn tới hai hành động khác nhau. Gộp chúng thành một dòng rỗng
+   * chung là cách người dùng ST tin rằng chương trình đã sạch trong khi chưa
+   * ai kiểm nó. */
+  problemsEmptyState?: 'not-checked' | 'no-problems'
+  problemsRevisionId?: string | null
   symbols: readonly WorkbenchSymbol[]
   /** Nguồn của POU đang mở; `null` khi POU không phải văn bản (FBD). */
   source: string | null
@@ -314,7 +322,13 @@ export function ProgrammingWorkbench({
           style={{ height }}
         >
           {tab === 'problems' && (
-            <ProblemsPanel problems={problems} checkOwnerHref={checkOwnerHref} pick={pick} />
+            <ProblemsPanel
+              problems={problems}
+              emptyState={problemsEmptyState}
+              revisionId={problemsRevisionId}
+              checkOwnerHref={checkOwnerHref}
+              pick={pick}
+            />
           )}
           {tab === 'search' && (
             source === null ? (
@@ -385,17 +399,28 @@ function Unavailable({ reason }: { reason: string }) {
 
 function ProblemsPanel({
   problems,
+  emptyState,
+  revisionId,
   checkOwnerHref,
   pick,
 }: {
   problems: readonly WorkbenchProblem[]
+  emptyState: 'not-checked' | 'no-problems'
+  revisionId: string | null
   checkOwnerHref: string
   pick: (vi: string, en: string) => string
 }) {
   return (
     <div className="space-y-2">
       {problems.length === 0 ? (
-        <p className="text-xs text-[var(--c-text-dim)]">{pick('Draft không có vấn đề nào ở lớp cấu trúc.', 'No structural problems in the draft.')}</p>
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {emptyState === 'no-problems'
+            ? (revisionId
+                ? pick(`Kiểm tra revision ${revisionId}: không có vấn đề nào.`, `Check on revision ${revisionId}: no problems.`)
+                : pick('Đã Kiểm tra: không có vấn đề nào.', 'Checked: no problems.'))
+            : pick('Chưa Kiểm tra — POU ST chưa có kết quả nào. Draft không có vấn đề cấu trúc.',
+                   'Not checked yet — no result for ST POUs. No structural problems in the draft.')}
+        </p>
       ) : (
         <ul className="space-y-1">
           {problems.map((problem) => (
@@ -410,8 +435,12 @@ function ProblemsPanel({
                   <span className="block text-[var(--c-text-dim)]">{problem.detail}</span>
                 </button>
               ) : (
+                /* `jumpLabel` CÓ mà thiếu `onJump` KHÔNG phải là "không neo vào
+                 * vị trí nào": mục vẫn neo, chỉ là bề mặt gọi chưa cấp đường
+                 * nhảy. Nói sai ở đây làm người dùng bỏ qua một lỗi thật ra
+                 * chỉ đúng chỗ. Giữ nguyên nhãn, chỉ bỏ nút. */
                 <p className="px-2 py-1 text-[var(--c-warn-fg)]">
-                  <span className="font-mono">{problem.code}</span> · {pick('không neo vào vị trí nào', 'not anchored to a location')}
+                  <span className="font-mono">{problem.code}</span> · {problem.jumpLabel ?? pick('không neo vào vị trí nào', 'not anchored to a location')}
                   <span className="block text-[var(--c-text-dim)]">{problem.detail}</span>
                 </p>
               )}
@@ -419,10 +448,12 @@ function ProblemsPanel({
           ))}
         </ul>
       )}
-      {/* D-01: PGM-02 KHÔNG sở hữu kết quả Check. Nói đích danh nơi sở hữu
-        * thay vì để người dùng tưởng khay này đã là toàn bộ sự thật. */}
+      {/* D-01: PGM-02 vẫn KHÔNG sở hữu kết quả Check — nó chỉ ĐỌC lại. Nói
+        * đích danh nơi sở hữu thay vì để người dùng tưởng khay này là nơi chạy
+        * Kiểm tra. Câu cũ ("chỉ hiện vấn đề cấu trúc") đã sai từ ISS-STED-05:
+        * khay nay hiện cả diagnostic Check của POU ST. */}
       <p className="border-t border-[var(--c-border)] pt-2 text-xs text-[var(--c-text-dim)]">
-        {pick('Khay này chỉ hiện vấn đề cấu trúc của Draft. Kết quả Kiểm tra (diagnostic của compiler) thuộc trang ', 'This panel only shows structural draft problems. Check results (compiler diagnostics) live in ')}
+        {pick('Vấn đề cấu trúc của Draft (FBD) và diagnostic của Kiểm tra gần nhất (ST). Chạy Kiểm tra ở trang ', 'Structural draft problems (FBD) and the latest check diagnostics (ST). Run checks in ')}
         <a className="text-[var(--c-accent)] underline" href={checkOwnerHref}>{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</a>.
       </p>
     </div>
