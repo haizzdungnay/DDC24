@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-33` Web báo "lưu thành công" cho một mode AO mà phần cứng chưa hề nhận (#383, 2026-09-03)
+
+- **Triệu chứng.** Đổi kênh AO sang **4-20 mA**, web đáp `200 success`, giao diện hiện mode mới —
+  còn bo **vẫn đang chạy 0-10 V**. Người vận hành đấu dây theo dòng, đọc ra điện áp, và **không có
+  chỗ nào trong giao diện nói ra điều đó** (`F-PIO-013`).
+- **Nguyên nhân gốc.** Vòng đời dừng ở bước ba. `applyIOBundle` đã ghi tệp nguyên tử, đã rollback khi
+  ghi hỏng, đã gửi SIGHUP — nhưng tất cả những thứ đó chỉ chứng minh *"web ghi xong tệp"*, **không**
+  chứng minh *"phần cứng đổi mode"*. Khoảng cách đó có thật, không phải giả thiết: `iobus` chỉ gửi
+  `SET_AO_CFG` khi IOP đang poll, và **khi MCU NACK thì nó ghi `ao_mode[] = 0` (giữ 0-10 V) rồi chạy
+  tiếp** (`main.cpp` — nhánh `ac.ok()` sai). Không ai đọc lại con số đó.
+- **Cách sửa.** Bổ sung bước bốn — **Read-back Verify**. Sau SIGHUP, web đọc `io_shm.ao_mode[]` (mode
+  mà `iobus` ghi **sau** ACK `SET_AO_CFG`) và đối chiếu với cấu hình vừa áp, chờ tối đa **3 s** vì
+  `iobus` cần một nhịp để nạp lại và bắt tay.
+- **Ba kết cục, và ranh giới giữa chúng là ranh giới giữa "không có bằng chứng" và "có bằng chứng
+  ngược lại".**
+
+  | Kết cục | Điều kiện | Hành động |
+  |---|---|---|
+  | `verified` | đọc được `ao_mode[]` và **khớp** | giữ cấu hình, `200` |
+  | `unverified` | **không đọc được** SHM, hoặc IOP chưa poll nên `SET_AO_CFG` chưa từng được gửi | **giữ** cấu hình, `200`, kèm cảnh báo **có tên** |
+  | `mismatch` | đọc được, IOP **đang** poll, mode vẫn khác ⇒ MCU đã từ chối | **rollback**, `409`, nêu đúng kênh nào lệch |
+
+  Không rollback ở ca `unverified` là có chủ ý: vứt bỏ chỉnh sửa của người vận hành **vì ta không
+  quan sát được** là phạt nhầm người. Nhưng im lặng cũng không phải lựa chọn — nó đi ra ngoài như
+  một cảnh báo có tên, đúng yêu cầu *"không có trạng thái trung gian mà người vận hành không nhìn
+  thấy"*.
+- **Giao diện phải nói ra, không chỉ API.** `activationWarning` biến báo cáo thành một câu cảnh báo,
+  và **`null` chỉ khi `status === 'verified'`**: thiếu hẳn `activation` (backend đời cũ) cũng cảnh
+  báo, vì **coi "không có thông tin" là "đã xác nhận" chính là cái bẫy issue này dẹp**. Toast cảnh
+  báo được đẩy **trước** toast "Lưu thành công" để không bị đè.
+- **Một chi tiết dễ làm sai và đã tránh.** Kênh AO không được liệt kê trong cấu hình giữ mặc định
+  **0-10 V** — khớp đúng `iobus_config.cpp`, nơi `ao_mode[]` được khởi tạo `V0_10` **trước** khi
+  parse. Đoán khác đi sẽ tạo ra `mismatch` cho một cấu hình hoàn toàn hợp lệ rồi **rollback oan**.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL** exit 0 · `go vet` sạch · `go test ./... -count=1`
+  **21 package `ok`** · `go test -race ./internal/app` **`ok`** (169,9 s) · FE `vitest src`
+  **210 tệp / 2551 test PASS** exit 0 · `npm run lint` exit 0 · `npm run build` exit 0 (chunk
+  `programming` **122,86 / 165,00 KiB**).
+- **Hai lần tiêm lỗi** chứng minh cổng còn kiểm: bỏ rollback khi read-back lệch ⇒ test *"mismatch
+  rollback"* **FAIL**; coi *"không kiểm chứng được"* là `verified` ⇒ test *"activation luôn có
+  mặt"* **FAIL**. Khôi phục ⇒ xanh trở lại.
+
 ### Added — `ISS-PIO-27` schema có kiểu cho `ConfigIO`; khoá gõ sai không còn đi lọt (#385, 2026-09-03)
 
 - **Triệu chứng.** Hình dạng `io_config.conf` chỉ tồn tại dưới dạng `[]map[string]any` cộng một

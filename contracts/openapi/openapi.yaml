@@ -6326,6 +6326,46 @@ components:
         warnings: { type: array, items: { type: string } }
         revision: { type: integer, format: int64 }
         checksum: { type: string }
+        activation: { $ref: "#/components/schemas/ActivationReport" }
+    ActivationReport:
+      type: object
+      required: [status]
+      description: >
+        `ISS-PIO-33` — bước **Read-back Verify** của vòng đời
+        `Edit → Validate → Apply → Read-back Verify`. Ba bước trước chỉ chứng
+        minh *"đã ghi xong tệp và đã gửi SIGHUP"*; chúng KHÔNG chứng minh phần
+        cứng đã đổi mode. Nguồn bằng chứng là `io_shm.ao_mode[]`, thứ mà `iobus`
+        ghi SAU khi MCU ACK `SET_AO_CFG`.
+
+
+        LUÔN có mặt ở đường ghi I/O: yêu cầu *"không có trạng thái trung gian mà
+        người vận hành không nhìn thấy"* nghĩa là im lặng không phải một lựa
+        chọn — kể cả khi không kiểm chứng được thì vẫn phải nói ra là không kiểm
+        chứng được.
+      properties:
+        status:
+          type: string
+          enum: [verified, unverified, mismatch]
+          description: >
+            `verified` = đọc được `ao_mode[]` và nó khớp cấu hình.
+            `unverified` = **thiếu bằng chứng** (không đọc được SHM, hoặc IOP
+            chưa ở trạng thái poll nên `SET_AO_CFG` chưa từng được gửi) — cấu
+            hình được GIỮ, vì vứt bỏ chỉnh sửa của người vận hành chỉ vì ta
+            không quan sát được là phạt nhầm người.
+            `mismatch` = **có bằng chứng ngược lại** (MCU NACK nên `iobus` giữ
+            0-10V) — cấu hình ĐÃ bị rollback và đáp ứng là `409`, nên giá trị
+            này không xuất hiện trong một đáp ứng `200`.
+        reason: { type: string }
+        aoModes:
+          type: array
+          description: Đối chiếu TỪNG kênh AO giữa cấu hình và phần cứng.
+          items:
+            type: object
+            required: [ch, requested, applied]
+            properties:
+              ch: { type: integer }
+              requested: { type: string, enum: ["0-10V", "4-20mA"] }
+              applied: { type: string, enum: ["0-10V", "4-20mA"] }
     User:
       type: object
       required: [username, role]

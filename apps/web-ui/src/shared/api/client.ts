@@ -1,4 +1,5 @@
 import { API_ORIGIN, IS_DEMO } from '../config'
+import type { ActivationReport } from './activation'
 import { createUuid } from '../crypto'
 import {
   ackDemoAlarm,
@@ -1064,14 +1065,14 @@ export const apiClient = {
     return applyAiInputPointNames(aiConfigsFromIo(raw), await this.getPoints())
   },
 
-  async putAiInputs(configs: AiInputConfig[]): Promise<void> {
+  async putAiInputs(configs: AiInputConfig[]): Promise<ActivationReport | null> {
     if (IS_DEMO) {
       putDemoAiInputs(configs)
       saveAiInputPointConfigOverrides(configs)
-      return
+      return null
     }
     const current = completeIoConfig(await requestJson<IoConfig>('/system/config/io'))
-    await requestJson('/system/config/io', {
+    const result = await requestJson<ConfigPutResult>('/system/config/io', {
       method: 'PUT',
       body: JSON.stringify({
         ...current,
@@ -1080,6 +1081,7 @@ export const apiClient = {
         do: current.do
       })
     })
+    return result?.activation ?? null
   },
 
   async getOutputs(): Promise<OutputsConfig> {
@@ -1088,13 +1090,13 @@ export const apiClient = {
     return outputsFromConfig(completeIoConfig(bundle.io ?? {}), bundle.safe_state ?? {})
   },
 
-  async putOutputs(config: OutputsConfig): Promise<void> {
+  async putOutputs(config: OutputsConfig): Promise<ActivationReport | null> {
     putDemoOutputs(config)
-    if (IS_DEMO) return
+    if (IS_DEMO) return null
     const current = await requestJson<{ revision?: number; io?: IoConfig; safe_state?: SafeStateConfig }>('/system/config/io-bundle')
     const currentIo = completeIoConfig(current.io ?? {})
     const currentSafe = current.safe_state ?? {}
-    await requestJson('/system/config/io-bundle', {
+    const result = await requestJson<ConfigPutResult>('/system/config/io-bundle', {
       method: 'PUT',
       body: JSON.stringify({
         base_revision: current.revision ?? 0,
@@ -1102,6 +1104,7 @@ export const apiClient = {
         safe_state: mergeSafeState(currentSafe, config)
       })
     })
+    return result?.activation ?? null
   },
 
   async forceOutput(id: string, value: number | boolean, release = false) {

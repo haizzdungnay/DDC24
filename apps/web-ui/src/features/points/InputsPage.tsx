@@ -27,6 +27,7 @@ import {
   type ElectricalMode,
   type SystemCapabilities
 } from '../../shared/api/capabilities'
+import { activationWarning } from '../../shared/api/activation'
 import { aiInputDraftDiff } from './inputsDraftDiff'
 
 type TabKey = 'electrical' | 'scaling' | 'signal' | 'calibration' | 'alarmStorage' | 'diagnostics'
@@ -234,9 +235,14 @@ export function InputsPage() {
         void pointsState.refetch()
       } else {
         const normalized = nextConfigs.map((config) => ({ ...config, tag: aiNode(config.channel), label: displayPointName(normalizePointName(config.label), aiNode(config.channel)) }))
-        await apiClient.putAiInputs(normalized)
+        const activation = await apiClient.putAiInputs(normalized)
         setConfigs(normalized)
         setSavedConfigs(normalized)
+        /* `ISS-PIO-33`: "Lưu thành công" một mình là một lời nói dối khi phần
+         * cứng chưa xác nhận. Cảnh báo đi TRƯỚC toast thành công để nó không bị
+         * đè, và nó tồn tại vì `iobus` giữ 0-10V khi MCU NACK `SET_AO_CFG`. */
+        const warning = activationWarning(activation, pick)
+        if (warning) toast.push('warn', warning)
       }
       setTagErrors({})
       setErrorFocusPath(undefined)

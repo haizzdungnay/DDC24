@@ -158,6 +158,24 @@ func (a *App) applyIOBundle(r *http.Request, ioCfg ConfigIO, safeCfg ConfigSafeS
 	if principal := principalFromContext(r.Context()); principal != nil {
 		user = principal.Username
 	}
+
+	// `ISS-PIO-33` bước 4 — Read-back Verify. Ba bước trước chỉ chứng minh "đã
+	// ghi xong tệp và đã gửi SIGHUP"; chúng KHÔNG chứng minh phần cứng đã đổi
+	// mode. Đọc `ao_mode[]` mà `iobus` ghi sau ACK `SET_AO_CFG` là chỗ duy nhất
+	// trả lời được câu đó.
+	activation := a.verifyActivation(r.Context(), ioCfg)
+	if activation.Status == ActivationMismatch {
+		// Có BẰNG CHỨNG là phần cứng không nhận: phục hồi cấu hình hợp lệ trước
+		// đó thay vì để bo chạy một mode khác với mode đang hiển thị.
+		restore()
+		a.audit.Change(user, "config.io-bundle", "io_config.conf+io_safe_state.conf", "rollback_readback", r.RemoteAddr)
+		return ConfigPutResult{}, nil, fmt.Errorf("read-back thất bại; đã phục hồi revision %d: %s", currentRevision, activation.Reason)
+	}
+	if activation.Status != ActivationVerified {
+		// Không kiểm chứng được KHÔNG phải lỗi để rollback — nhưng cũng tuyệt
+		// đối không được im lặng. Nó đi ra ngoài như một cảnh báo có tên.
+		warnings = append(warnings, activation.Reason)
+	}
 	a.audit.Change(user, "config.io-bundle", "io_config.conf+io_safe_state.conf", "success", r.RemoteAddr)
-	return ConfigPutResult{Result: "success", Applied: true, Reload: reloadIOBundle, Warnings: warnings, Revision: revision, Checksum: checksum}, nil, nil
+	return ConfigPutResult{Result: "success", Applied: true, Reload: reloadIOBundle, Warnings: warnings, Revision: revision, Checksum: checksum, Activation: &activation}, nil, nil
 }

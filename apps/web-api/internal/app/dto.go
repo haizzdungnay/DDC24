@@ -149,6 +149,11 @@ type ConfigPutResult struct {
 	Warnings []string `json:"warnings"`
 	Revision uint64   `json:"revision,omitempty"`
 	Checksum string   `json:"checksum,omitempty"`
+	// Activation là bước Read-back Verify (`ISS-PIO-33`). LUÔN có mặt ở đường
+	// ghi I/O: yêu cầu "không có trạng thái trung gian mà người vận hành không
+	// nhìn thấy" nghĩa là im lặng không phải một lựa chọn — kể cả khi không
+	// kiểm chứng được thì vẫn phải nói ra là không kiểm chứng được.
+	Activation *ActivationReport `json:"activation,omitempty"`
 }
 type TrendSample map[string]any
 

@@ -1687,3 +1687,19 @@ func (c *CoreClient) CommissionTest(ctx context.Context, id string, value any) (
 		ScanMs:       &elapsed,
 	}, nil
 }
+
+// ReadAOModes đọc `ao_mode[]` mà `iobus` ghi vào `io_shm` SAU khi MCU ACK
+// `SET_AO_CFG` (`ISS-PIO-33`). Đây là nguồn duy nhất trả lời được "phần cứng
+// ĐANG chạy mode nào", khác hẳn với "cấu hình đòi mode nào".
+func (c *CoreClient) ReadAOModes() ([]uint8, error) {
+	data, err := c.readIOShm()
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < offIOAOMode+kxNAO {
+		return nil, fmt.Errorf("io_shm ngắn hơn hợp đồng: %d byte", len(data))
+	}
+	modes := make([]uint8, kxNAO)
+	copy(modes, data[offIOAOMode:offIOAOMode+kxNAO])
+	return modes, nil
+}

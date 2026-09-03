@@ -1,4 +1,5 @@
 import { Activity, ChevronLeft, ChevronRight, LayoutGrid, Pencil, Power, RotateCcw, Save, SlidersHorizontal, Wand2, Zap } from 'lucide-react'
+import { activationWarning } from '../../shared/api/activation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { apiClient } from '../../shared/api/client'
@@ -168,9 +169,14 @@ export function OutputsPage() {
         setSavedConfig(renamed)
         void pointsState.refetch()
       } else {
-        await apiClient.putOutputs(normalized)
+        const activation = await apiClient.putOutputs(normalized)
         setConfig(normalized)
         setSavedConfig(normalized)
+        /* `ISS-PIO-33`: đây là trang ĐỔI MODE AO, nên nó là chỗ mà "đã lưu ≠ đã
+         * áp dụng" gây hậu quả rõ nhất — đấu dây theo 4-20 mA rồi đọc ra điện
+         * áp. Cảnh báo đi TRƯỚC toast thành công để không bị đè. */
+        const warning = activationWarning(activation, pick)
+        if (warning) toast.push('warn', warning)
       }
       setTagErrors({})
       setErrorFocusPath(undefined)

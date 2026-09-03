@@ -1,3 +1,4 @@
+import type { ActivationReport } from './api/activation'
 export type PointKind = 'UI' | 'AI' | 'DI' | 'AO' | 'DO' | 'virtual' | 'modbus_rtu'
 export type PointQuality = 'good' | 'uncertain' | 'bad' | 'stale' | 'offline'
 export type HealthStatus = 'ok' | 'degraded' | 'fault' | 'unknown' | 'n/a'
@@ -600,6 +601,9 @@ export interface ConfigPutResult {
   warnings?: string[]
   revision?: number
   checksum?: string
+  /* `ISS-PIO-33`: bước Read-back Verify. Vắng mặt KHÔNG có nghĩa là "đã xác
+   * nhận" — xem `activationWarning` ở `shared/api/activation.ts`. */
+  activation?: ActivationReport
 }
 
 export interface TimeConfig {
