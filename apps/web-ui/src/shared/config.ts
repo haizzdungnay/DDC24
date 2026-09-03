@@ -23,6 +23,12 @@ export function isProgramsWorkspaceV2Enabled(flag: string | undefined): boolean 
   return flag === '1'
 }
 export const PROGRAMS_WORKSPACE_V2_ENABLED = isProgramsWorkspaceV2Enabled(import.meta.env.VITE_PROGRAMS_WORKSPACE_V2)
+export function isFbdEditEnabled(flag: string | undefined): boolean {
+  return flag === '1'
+}
+export const FBD_EDIT_ENABLED = isFbdEditEnabled(
+  import.meta.env.VITE_FBD_EDIT
+)
 export const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || ''
 export const WS_ORIGIN = import.meta.env.VITE_WS_ORIGIN || ''
 export const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || (IS_DEMO ? 'mock' : 'jwt')
