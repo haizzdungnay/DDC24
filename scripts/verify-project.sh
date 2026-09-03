@@ -84,12 +84,26 @@ run_cpp() {
     *) printf 'LỖI: profile C++ không hỗ trợ: %s\n' "$profile" >&2; exit 2 ;;
   esac
   local cpp_build="$build_root/cpp-$profile"
+  # `MKDDC_CMAKE_EXTRA_ARGS`: tham số cmake thêm, tách theo khoảng trắng.
+  #
+  # Vì sao cần: `FetchContent` tải nlohmann/json, bacnet-stack, lvgl và
+  # googletest THẲNG từ github.com. Trên máy build không có egress ra github
+  # (sandbox agent, runner nội bộ, mạng công ty chặn), cmake configure hỏng ngay
+  # ở bước tải và cổng C++ KHÔNG CHẠY ĐƯỢC — không phải đỏ, mà là không chạy.
+  # Trỏ `FETCHCONTENT_SOURCE_DIR_*` vào cache cục bộ là cách chính thức của cmake
+  # để dùng nguồn có sẵn; biến này chỉ mở đường truyền nó vào, KHÔNG đổi bất kỳ
+  # cờ nào của cổng: `-Werror`, ba option profile và `--fresh` giữ nguyên.
+  local extra_cmake_args=()
+  if [[ -n "${MKDDC_CMAKE_EXTRA_ARGS:-}" ]]; then
+    read -r -a extra_cmake_args <<< "$MKDDC_CMAKE_EXTRA_ARGS"
+  fi
   cmake --fresh -S "$repo_root" -B "$cpp_build" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_FLAGS="-Wall -Wextra -Werror" \
     -DMKDDC_ENABLE_MODBUS="$modbus" \
     -DMKDDC_ENABLE_BACNET="$bacnet" \
-    -DMKDDC_ENABLE_HMI="$hmi"
+    -DMKDDC_ENABLE_HMI="$hmi" \
+    "${extra_cmake_args[@]+"${extra_cmake_args[@]}"}"
   cmake --build "$cpp_build" --parallel "${MKDDC_BUILD_JOBS:-4}"
   ctest --test-dir "$cpp_build" --output-on-failure \
     --parallel "${MKDDC_TEST_JOBS:-4}"

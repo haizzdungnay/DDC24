@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"mkddc-web/internal/capabilities"
 )
 
 // OverviewSchemaVersion tăng khi hình dạng `OverviewResponse` đổi theo cách phá
@@ -122,6 +124,11 @@ type OverviewCapabilities struct {
 	DigitalOutputs  int  `json:"digitalOutputs"`
 	ModbusRTUBuses  int  `json:"modbusRtuBuses"`
 	BacnetIPEnabled bool `json:"bacnetIpEnabled"`
+	// BoardCapKnown = false ⇒ bốn con số kênh ở trên là suy ra từ ABI chứ không
+	// phải đọc từ bo. Không có trường này thì một `digitalInputs: 0` do "chưa
+	// hỏi được" trông y hệt một `0` do "bo thật sự không có DI" — và trang
+	// Overview không có cách nào nói ra sự khác biệt đó.
+	BoardCapKnown bool `json:"boardCapKnown"`
 }
 
 func (a *App) handleOverview(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +201,7 @@ func (a *App) buildOverview(ctx context.Context) OverviewResponse {
 		out.Degraded = append(out.Degraded, "modbus_telemetry")
 	}
 
-	out.Capabilities = a.overviewCapabilities(modbus)
+	out.Capabilities = a.overviewCapabilities(modbus, core.BoardCap)
 	out.Health = a.overviewHealth(nowIso, core, coreErr, pointsErr, points, modbus, modbusOK, ip)
 	out.Attention = buildAttention(alarms, points, modbus)
 	out.OverallState, out.OverallReasonCode = overallFromParts(out)
@@ -248,7 +255,7 @@ func (a *App) readModbusHealthInput(ctx context.Context) (modbusHealthInput, boo
 	return input, true
 }
 
-func (a *App) overviewCapabilities(modbus modbusHealthInput) OverviewCapabilities {
+func (a *App) overviewCapabilities(modbus modbusHealthInput, boardCap capabilities.BoardCap) OverviewCapabilities {
 	bacnet, _ := readConfig(a, configGroupBacnet, ConfigBacnet{})
 	enabled := false
 	if bacnet.BIP != nil {
@@ -262,15 +269,20 @@ func (a *App) overviewCapabilities(modbus modbusHealthInput) OverviewCapabilitie
 		// iobus chưa publish telemetry.
 		buses = 1
 	}
+	// `F-PIO-008`: bốn con số kênh TỪNG được viết cứng ở đây, kèm một chú thích
+	// khẳng định `DigitalInputs: 0` là "hằng của SKU". Nó không phải hằng —
+	// `IOP_BOARD_CAP_DI_8` tồn tại đúng vì có SKU cắm module DI, và
+	// `DS_MK-DDC-24_VI` §174 hứa tạo point DI "khi capability map xác nhận".
+	// Viết cứng 0 là trả lời thay cho bo một câu hỏi chỉ bo mới trả lời được.
+	doc := capabilities.Build(boardCap)
 	return OverviewCapabilities{
-		// Rev A base SKU: 0 DI công nghiệp riêng. Con số này là hằng của SKU,
-		// không phải suy diễn từ dữ liệu runtime — xem UX-REQ §4.2.
-		DigitalInputs:   0,
-		UniversalInputs: kxNUI,
-		AnalogOutputs:   kxNAO,
-		DigitalOutputs:  kxNDO,
+		DigitalInputs:   doc.Count("DI"),
+		UniversalInputs: doc.Count("UI"),
+		AnalogOutputs:   doc.Count("AO"),
+		DigitalOutputs:  doc.Count("DO"),
 		ModbusRTUBuses:  buses,
 		BacnetIPEnabled: enabled,
+		BoardCapKnown:   doc.BoardCapKnown,
 	}
 }
 

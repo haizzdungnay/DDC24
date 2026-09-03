@@ -13,6 +13,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"mkddc-web/internal/capabilities"
 )
 
 // OWNED BY AGENT A (config) - keep config API logic in this file.
@@ -126,6 +128,7 @@ func (a *App) handlePutConfigIO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	errs := append(validateConfigIO(cfg), validateConfigPointMetadata(cfg)...)
+	errs = append(errs, validateIOAgainstBoard(cfg, a.boardCapability(r.Context()))...)
 	errs = append(errs, validateFixedPhysicalPointTags(cfg)...)
 	if len(errs) > 0 {
 		writePointTagErrors(w, errs)
@@ -518,12 +521,43 @@ func validateNetworkServiceConfig(cfg ConfigNetwork) []configValidationError {
 	return validateConfigNetwork(cfg)
 }
 
+// validateIOAgainstBoard là phần kiểm CHỈ trả lời được khi biết bo có gì —
+// tách khỏi `validateConfigIO` (thuần hình dạng dữ liệu) vì hai loại kiểm này
+// có vòng đời khác nhau: hình dạng sai thì luôn sai, còn "kênh này chọn PT100"
+// chỉ sai trên một bo cụ thể.
+//
+// Tiêu chí thứ ba của `ISS-PIO-12` có hai nửa và chúng KHÔNG cùng ngưỡng:
+//
+//   - Không MỜI chọn nhiệt trở khi chưa hỏi được RTD — `/system/capabilities`
+//     lo, và nó giữ lại mode ngay cả ở ca "chưa biết".
+//   - Không CHO GHI nhiệt trở — hàm này lo, và nó chỉ chặn khi có BẰNG CHỨNG
+//     DƯƠNG là bo không có mạch (`Known && !RTD`). Chặn ở ca "chưa biết" sẽ
+//     làm mọi bo đang không chạy iobus mất khả năng lưu lại chính cấu hình
+//     nhiệt trở nó đang dùng thật — một cách hỏng tệ hơn cái nó định tránh.
+func validateIOAgainstBoard(cfg ConfigIO, boardCap capabilities.BoardCap) []configValidationError {
+	var errs []configValidationError
+	for i, item := range cfg.UI {
+		mode, ok, good := stringField(item, "type")
+		if !ok || !good {
+			continue
+		}
+		if reason := capabilities.RTDModeBlockedBy(boardCap, mode); reason != "" {
+			addConfigErr(&errs, fmt.Sprintf("ui[%d].type", i), reason)
+		}
+	}
+	return errs
+}
+
 func validateConfigIO(cfg ConfigIO) []configValidationError {
 	var errs []configValidationError
 	for i, item := range cfg.UI {
 		base := fmt.Sprintf("ui[%d]", i)
 		validateChannel(&errs, item, base+".ch", 1, 16)
-		validateStringEnum(&errs, item, base+".type", "type", true, "none", "0-10V", "2-10V", "4-20mA", "PT100", "PT1000", "NTC10k", "NTC20k", "dry", "potentiometer", "light", "pulse")
+		// `ISS-PIO-12`: enum của validator và enum mà `/system/capabilities`
+		// công bố phải là CÙNG MỘT BIẾN. Hai danh sách chép tay cạnh nhau sẽ
+		// lệch, và khi lệch thì FE hoặc mời chọn một mode bị từ chối, hoặc giấu
+		// mất một mode hợp lệ — cả hai đều không có test nào bắt được.
+		validateStringEnum(&errs, item, base+".type", "type", true, capabilities.UIModes...)
 		validateOptionalString(&errs, item, base+".unit", "unit")
 		validateOptionalString(&errs, item, base+".name", "name")
 		validateOptionalString(&errs, item, base+".note", "note")
@@ -560,7 +594,7 @@ func validateConfigIO(cfg ConfigIO) []configValidationError {
 	for i, item := range cfg.AO {
 		base := fmt.Sprintf("ao[%d]", i)
 		validateChannel(&errs, item, base+".ch", 1, 4)
-		validateStringEnum(&errs, item, base+".mode", "mode", true, "0-10V", "4-20mA")
+		validateStringEnum(&errs, item, base+".mode", "mode", true, capabilities.AOModes...)
 		if name, ok, good := stringField(item, "name"); ok && !good {
 			addConfigErr(&errs, base+".name", "must be string")
 		} else if ok {
@@ -607,7 +641,7 @@ func validateConfigSafeState(cfg ConfigSafeState) []configValidationError {
 	for i, item := range cfg.DO {
 		base := fmt.Sprintf("do[%d]", i)
 		validateChannel(&errs, item, base+".ch", 1, 4)
-		validateStringEnum(&errs, item, base+".safe", "safe", true, "open", "closed")
+		validateStringEnum(&errs, item, base+".safe", "safe", true, capabilities.DOModes...)
 	}
 	return errs
 }

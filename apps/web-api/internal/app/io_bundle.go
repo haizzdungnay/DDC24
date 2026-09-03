@@ -74,6 +74,7 @@ func (a *App) applyIOBundle(r *http.Request, ioCfg ConfigIO, safeCfg ConfigSafeS
 		safeCfg.DO = []map[string]any{}
 	}
 	errs := validateConfigIO(ioCfg)
+	errs = append(errs, validateIOAgainstBoard(ioCfg, a.boardCapability(r.Context()))...)
 	if len(ioCfg.UI) > 0 || len(ioCfg.AO) > 0 || len(ioCfg.DO) > 0 {
 		errs = append(errs, validateConfigPointMetadata(ioCfg)...)
 		errs = append(errs, validateFixedPhysicalPointTags(ioCfg)...)

@@ -7,7 +7,7 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "44ce16fad970fb2b1301f2db7eff4fb5717c422f92fd1453673c124695ebc3be",
+      "sha256": "ac45fef657c020bfe37fee1138f299ff932f951b8c07f67694d7b7e8cec04d6d",
       "major": 1,
       "version": "1.33.0",
       "operationCount": 41

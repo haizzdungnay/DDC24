@@ -194,6 +194,10 @@ func (a *App) routeTable() []webRouter.Route {
 		webRouter.ProtectedPermission("GET /api/v1/system/status", PermissionRead, a.handleSystemStatus),
 		// `T57-3.4`: lịch sử 60 phút của CPU/RAM/nhiệt độ. Đọc ⇒ `viewer`.
 		webRouter.ProtectedPermission("GET /api/v1/system/history", PermissionRead, a.handleSystemHistory),
+		// `ISS-PIO-12`: số kênh + tập mode theo từng kênh, gốc là BOARD_CAP_MAP.
+		// Đọc ⇒ `viewer`: mọi trang cấu hình I/O đều cần nó để dựng dropdown, và
+		// bắt quyền cao hơn chỉ khiến FE quay lại đoán.
+		webRouter.ProtectedPermission("GET /api/v1/system/capabilities", PermissionRead, a.handleSystemCapabilities),
 		// PA3-D02/D03: read model duy nhất của Landing và nhật ký vận hành.
 		// Cả hai ở `viewer`: quan sát không phải là đặc quyền, và mọi mutation
 		// vẫn nằm ở các endpoint riêng có role cao hơn.

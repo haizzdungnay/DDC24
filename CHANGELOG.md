@@ -8,6 +8,80 @@
 
 ## [Unreleased]
 
+### Fixed — Cổng C++ không chạy được trên máy build không có egress ra github.com (2026-09-03)
+
+- **Triệu chứng.** `scripts/verify-project.sh --component cpp` hỏng ngay ở bước cmake configure:
+  `error: downloading '.../bacnet-stack-1.3.8.tar.gz' failed ... The requested URL returned error: 403`.
+  Đây **không phải cổng đỏ** — đây là cổng **không chạy được**, một trạng thái tệ hơn, vì nó không
+  nói gì về mã nguồn cả.
+- **Nguyên nhân gốc.** `FetchContent` tải nlohmann/json, bacnet-stack, lvgl và googletest **thẳng từ
+  github.com**. `verify-project.sh` dựng dòng lệnh cmake cố định, không có chỗ nào truyền
+  `FETCHCONTENT_SOURCE_DIR_*` vào, nên mọi máy build không có egress ra github (sandbox agent,
+  runner nội bộ, mạng công ty chặn) đều không dùng được cổng C++ — kể cả khi đã có sẵn cache nguồn.
+- **Cách sửa.** Thêm biến môi trường `MKDDC_CMAKE_EXTRA_ARGS`, tách theo khoảng trắng và nối vào
+  lệnh cmake configure. Nó **chỉ mở đường truyền tham số**, không đổi bất kỳ cờ nào của cổng:
+  `-Wall -Wextra -Werror`, ba option profile và `--fresh` giữ nguyên. Trỏ `FETCHCONTENT_SOURCE_DIR_*`
+  vào cache cục bộ là cách chính thức của cmake để dùng nguồn có sẵn.
+- **Đo lại sau khi sửa.** `cpp --profile full` (`-Werror`) **1393/1393 pass, 0 fail**, exit 0 (1 test
+  `RealtimeMemlock.MclFutureUnderFiniteLimit…` **Skipped** theo thiết kế vì sandbox không cho
+  `mlockall`). Trước bản vá, cùng lệnh đó exit **1** ở bước configure.
+
+### Added — `ISS-PIO-12` `GET /api/v1/system/capabilities`: số kênh và mode do bo cấp, không do FE đoán (#389, 2026-09-03)
+
+- **Triệu chứng.** Đề bài §6.1 nói rõ *"hardware capability phải do firmware/backend cấp; FE không
+  được hard-code số channel hoặc mode"*. Không có endpoint nào để hỏi, nên mỗi tầng tự viết lại con
+  số: `core_client.go` (`kxNUI/kxNDI/kxNAO/kxNDO`), `overview.go` (`DigitalInputs: 0` viết cứng kèm
+  chú thích khẳng định đó là *"hằng của SKU"*), `points/catalog.go` (`Limits`, **thiếu hẳn DI**) và
+  FE `shared/utils.ts` (`VISIBLE_UI_CHANNELS = 16`). Bốn nguồn sự thật cho một dữ kiện nghĩa là ba
+  trong bốn có thể sai mà không ai biết. Riêng `IOP_BOARD_CAP_RTD` thì **chưa từng được hỏi** trước
+  khi FE mời người dùng chọn nhiệt trở (`F-PIO-009`).
+- **Nguyên nhân gốc.** Bốn hằng đó đều **tự nhận** là "bo có bấy nhiêu kênh" trong khi thực chất
+  chúng là **sức chứa ABI** — bảng point trong `mkddc_shm.h` có bấy nhiêu ô, và mọi offset SHM phía
+  Go được tính từ chúng nên chúng buộc phải là hằng biên dịch. Hai dữ kiện khác hẳn nhau bị gộp làm
+  một, và cái vế thật sự động (*bo đang cắm có gì*) không có ai trả lời.
+- **Cách sửa.** Gói mới `internal/capabilities` tách bạch hai vế đó: `ABI*` là sức chứa ABI (khai báo
+  **một lần**, `core_client.go` nay alias vào), còn `BoardCap` đọc từ `BOARD_CAP_MAP` mà #388 vừa
+  chở vào `io_shm`. Endpoint `GET /api/v1/system/capabilities` (viewer+) công bố từng khối kênh và
+  **từng mode của từng kênh**. `overview.go` hết viết cứng: `digitalInputs` nay suy từ
+  `IOP_BOARD_CAP_DI_8`, kèm `boardCapKnown` để một số `0` do *chưa hỏi được* không còn trông y hệt
+  một số `0` do *bo thật sự không có DI*.
+- **Ba mức tin cậy chứ không phải hai.** Hợp đồng IOP chỉ có **5 bit** năng lực, không phủ hết 12
+  mode UI. Nói *"hỗ trợ"* cho `NTC10k`/`light`/`pulse`/`potentiometer` là **bịa**; giấu chúng đi là
+  **xoá chức năng đang chạy thật**. Nên có mức thứ ba `unverified` — và một test ghim nó lại để
+  khoảng trống hợp đồng đó không âm thầm biến thành một lời khẳng định. Đây là khiếm khuyết hợp đồng
+  đã **ghi tên**, cần một bit năng lực mới ở firmware mới đóng được.
+- **Hai ngưỡng fail-closed KHÔNG bằng nhau, có chủ ý.** *Không MỜI chọn* nhiệt trở áp dụng ngay cả ở
+  ca **chưa hỏi được** (endpoint giữ `PT100`/`PT1000` ở mức `withheld`). *Không CHO GHI* chỉ áp dụng
+  khi có **bằng chứng dương** là bo không có mạch (`Known && !RTD`): chặn ghi ở ca *chưa biết* sẽ làm
+  mọi bo đang không chạy `iobus` mất khả năng lưu lại **chính cấu hình nhiệt trở nó đang dùng thật**
+  — một cách hỏng tệ hơn hẳn cái nó định tránh.
+- **Khối tuỳ chọn và khối bắt buộc cũng không đối xứng.** DI (tuỳ chọn) đòi bằng chứng dương mới công
+  bố kênh — `DS_MK-DDC-24_VI` §174 nói chỉ tạo point DI *"khi capability map xác nhận"*, và bịa ra 8
+  kênh trên bo không cắm module là mời người ta đấu dây vào chỗ không có gì. UI/AO/DO (bắt buộc) khi
+  chưa biết vẫn công bố theo ABI nhưng ở mức `unverified`: giấu chúng sẽ làm **trống trơn** toàn bộ
+  trang cấu hình mỗi lần `iobus` chưa kịp handshake.
+- **Định danh kênh DI dùng lại không gian điểm sẵn có** `UI-17`..`UI-24`, không đẻ ra dãy `DI-01..08`
+  mới. Toàn hệ thống đã ánh xạ khối `bi[8]` của SHM vào không gian UI với độ lệch 16
+  (`canonicalPointID`, `pointtags.go`); dựng một hệ định danh thứ hai ở đây là tái phạm đúng cái lỗi
+  mà issue này đang dẹp.
+- **Endpoint không bao giờ trả 503.** Im lặng hay lỗi sẽ đẩy FE về đúng chỗ cũ: tự đoán. Luôn 200 kèm
+  `board_cap_known: false` để FE **biết** mình đang đứng trên suy diễn.
+- **Một bẫy YAML bắt được khi soạn hợp đồng.** `enum: [yes, no, unknown]` bị YAML 1.1 đọc thành
+  `[True, False, 'unknown']` — hai giá trị đầu biến mất khỏi enum chuỗi. Đã phải trích dẫn tường
+  minh, và kiểm bằng `yaml.safe_load` chứ không bằng mắt.
+- **Còn hở, đã ghi tên (không thuộc phạm vi issue này).** `ConfigIO` chưa có mục `di`, và
+  `points.Limits` vẫn chặn ở `UI-16`, nên một bo **có** module DI vẫn chưa cấu hình được kênh
+  `UI-17..24`. Endpoint này là **cơ chế xác nhận** mà §174 đòi; phần tiêu thụ nó thuộc #390 (FE dựng
+  số kênh và dropdown từ capability) và phần hỗ trợ SKU DI.
+- **Cổng chống trôi.** `TestBoardCapBitsMatchContractHeader` đọc thẳng `contracts/iop/iop_protocol.h`
+  và so từng bit với hằng Go — kèm một test **tiêm lỗi** chứng minh cổng đó thật sự bắt được trôi,
+  vì một cổng không có tiêm lỗi có thể ngừng kiểm mà vẫn xanh.
+- **Đo lại.** `layout` **17 PASS / 0 FAIL**, exit 0 · Go `--profile race` **20 package `ok`**, exit 0
+  (`internal/app` 143,8 s · `programming/application` 359,9 s · `programming/store` 250,5 s) · FE
+  `vitest src` **200 tệp / 2448 test PASS** (235,1 s) · `npm run lint` exit 0 · `npm run build`
+  exit 0, chunk `programming` **164,31 KiB / 165,00 KiB** (dư địa **0,69 KiB**). Không chạm C++
+  nên không dựng lại `ctest` và **không dẫn lại số cũ**.
+
 ### Fixed — `ISS-MBW-03` Core chỉ `recv` MỘT ext snapshot mỗi scan nên feedback Modbus lùi tới ~50 s (2026-09-03)
 
 - **Triệu chứng.** Bấm điều khiển thì relay đáp **dưới 1 giây**, nhưng con số trên giao diện giữ giá

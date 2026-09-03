@@ -663,6 +663,27 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SystemHistory" }
+  /system/capabilities:
+    get:
+      summary: Năng lực phần cứng — số kênh và tập mode theo từng kênh (viewer+)
+      description: >
+        `ISS-PIO-12`/`F-PIO-008`/`F-PIO-009`. Đề bài §6.1: hardware capability
+        phải do firmware/backend cấp, FE không được hard-code số channel hoặc
+        mode. Gốc dữ liệu là `BOARD_CAP_MAP` mà MCU trả ở handshake IOP và
+        `iobus` chở vào `io_shm` (`ISS-PIO-11`).
+
+
+        Endpoint LUÔN đáp 200, kể cả khi chưa đọc được bo: im lặng hay 503 sẽ
+        đẩy FE về đúng chỗ cũ là tự đoán. Khi `board_cap_known = false`, mọi
+        `presence`/`availability` là suy ra từ ABI chứ không phải từ bo, và mode
+        đòi bằng chứng (`PT100`/`PT1000`, cần `IOP_BOARD_CAP_RTD`) bị giữ lại.
+      x-rbac: [viewer, operator, engineer, admin]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemCapabilities" }
   /network:
     get:
       summary: Dá»¯ liá»‡u trang Network (viewer+)
@@ -4523,12 +4544,25 @@ components:
           type: object
           description: "Nang luc THAT cua SKU; giao dien chi dung o cho phan cung co that."
           properties:
-            digitalInputs: { type: integer, example: 0, description: "Rev A base SKU khong co DI cong nghiep rieng." }
+            digitalInputs:
+              type: integer
+              example: 0
+              description: >
+                `ISS-PIO-12`: suy ra từ `BOARD_CAP_MAP`, KHÔNG còn viết cứng 0.
+                `0` kèm `boardCapKnown: false` nghĩa là CHƯA HỎI ĐƯỢC, không
+                phải "bo không có DI" — `IOP_BOARD_CAP_DI_8` tồn tại đúng vì có
+                SKU cắm module DI.
             universalInputs: { type: integer, example: 16 }
             analogOutputs: { type: integer, example: 4 }
             digitalOutputs: { type: integer, example: 4 }
             modbusRtuBuses: { type: integer }
             bacnetIpEnabled: { type: boolean }
+            boardCapKnown:
+              type: boolean
+              description: >
+                `false` ⇒ bốn con số kênh ở trên là suy ra từ ABI SHM chứ không
+                phải đọc từ bo. Dùng `/system/capabilities` khi cần biết chi
+                tiết từng kênh và từng mode.
         degraded:
           type: array
           items: { type: string }
@@ -6323,6 +6357,79 @@ components:
         samples:
           type: array
           items: { $ref: "#/components/schemas/SystemHistorySample" }
+    SystemCapabilities:
+      type: object
+      required: [board_cap_known, blocks]
+      properties:
+        board_cap_known:
+          type: boolean
+          description: >
+            `false` = CHƯA HỎI ĐƯỢC bo (iobus chưa handshake, chưa chạy, hoặc
+            segment `io_shm` cũ hơn ABI v6). KHÔNG có nghĩa "bo không có năng
+            lực nào". Đọc trường này TRƯỚC mọi trường khác.
+        board_cap_map:
+          type: string
+          description: >
+            `BOARD_CAP_MAP` dạng `0xNNNN`. Chỉ có mặt khi `board_cap_known` —
+            `0x0000` là một bản đồ HỢP LỆ nghĩa là "không có năng lực nào", nên
+            không được dùng để biểu diễn ca chưa biết.
+        blocks:
+          type: array
+          items: { $ref: "#/components/schemas/CapabilityBlock" }
+    CapabilityBlock:
+      type: object
+      required: [kind, presence, count, abi_capacity, optional, channels]
+      properties:
+        kind: { type: string, enum: [UI, DI, AO, DO] }
+        presence:
+          type: string
+          enum: ["yes", "no", "unknown"]
+          description: >
+            Ba giá trị chứ không phải hai. Gộp "chưa biết" vào "không có" chính
+            là cách `overview.go` từng công bố `DigitalInputs: 0` cho một bo có
+            thể đang cắm module DI.
+        count:
+          type: integer
+          description: Số kênh THẬT SỰ công bố ở `channels`, không phải sức chứa ABI.
+        abi_capacity:
+          type: integer
+          description: >
+            Số ô mà `contracts/shm/mkddc_shm.h` dành sẵn. Công bố ra để
+            `count < abi_capacity` đọc được là "bo không có / chưa xác nhận"
+            chứ không phải "API cắt bớt".
+        optional:
+          type: boolean
+          description: >
+            Khối tuỳ chọn (DI) đòi BẰNG CHỨNG DƯƠNG mới công bố kênh; khối bắt
+            buộc (UI/AO/DO) khi chưa biết vẫn công bố theo ABI nhưng ở mức
+            `unverified`.
+        channels:
+          type: array
+          items: { $ref: "#/components/schemas/CapabilityChannel" }
+    CapabilityChannel:
+      type: object
+      required: [id, index, modes]
+      properties:
+        id: { type: string, example: "UI-01" }
+        index: { type: integer }
+        modes:
+          type: array
+          items: { $ref: "#/components/schemas/CapabilityMode" }
+    CapabilityMode:
+      type: object
+      required: [id, availability]
+      properties:
+        id: { type: string }
+        availability:
+          type: string
+          enum: [confirmed, unverified, withheld]
+          description: >
+            Ba mức vì hợp đồng IOP chỉ có 5 bit năng lực, không phủ hết 12 mode
+            UI. `unverified` = không bit nào chứng minh cũng không bit nào phủ
+            nhận (NTC, ánh sáng, xung, chiết áp) — FE cho chọn nhưng phải nói rõ
+            là chưa xác nhận. `withheld` = có bằng chứng KHÔNG có, hoặc mode đòi
+            bằng chứng mà chưa hỏi được.
+        reason: { type: string }
     AlarmTopRepeating:
       type: object
       required: [alarmId, count]

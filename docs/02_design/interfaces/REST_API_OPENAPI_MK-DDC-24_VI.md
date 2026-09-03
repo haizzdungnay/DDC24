@@ -63,6 +63,7 @@ curl -k -X PUT https://<ip>:8443/api/v1/points/AO1 \
 | GET/PUT | /trends/config | bearer viewer/admin | viewer đọc trạng thái; admin atomic-update per-point DB logging policy, interval và start UTC |
 | GET | /history | bearer viewer+ | unified UTC range query; backend merge RAM/hot 48h/archive, trả quality/source/tier/gap |
 | GET | /system/status | bearer | CPU/RAM/IOP/ver |
+| GET | /system/capabilities | bearer viewer+ | `ISS-PIO-12`: số kênh + tập mode theo từng kênh, gốc là `BOARD_CAP_MAP`. Luôn 200; `board_cap_known: false` = CHƯA HỎI ĐƯỢC nên mode đòi bằng chứng (`PT100`/`PT1000`) bị giữ lại |
 | GET/PUT | /system/config | admin | cấu hình |
 | GET | /network/transaction | bearer viewer+ | status active/configured/pending, capability và management hostname read-only |
 | POST | /network/transaction/{action} | bearer admin | validate/stage/apply/confirm/rollback Ethernet IPv4 + optional DNS |

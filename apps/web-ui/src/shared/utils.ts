@@ -1,5 +1,14 @@
 import type { HealthStatus, Point, PointKind, PointQuality } from './types'
 
+/* `F-PIO-008`: hằng NÀY là nguồn sự thật thứ tư — và là cái cuối cùng còn lại —
+ * cho câu hỏi "bo có bao nhiêu kênh UI". Ba nguồn phía Go đã gộp về gói
+ * `internal/capabilities` ở `ISS-PIO-12` (#389), và backend nay công bố sự thật
+ * đó tại `GET /api/v1/system/capabilities`, gốc là `BOARD_CAP_MAP` do MCU trả.
+ *
+ * Đề bài §6.1 nói rõ FE KHÔNG được hard-code số channel hoặc mode. Việc thay
+ * hằng này bằng lời gọi endpoint (và dựng dropdown mode từ `availability` thay
+ * vì liệt kê cứng `signalType 0..8`) là #390 — `ISS-PIO-13`. Giữ hằng ở đây cho
+ * tới lúc đó là CÓ Ý THỨC, không phải bị bỏ quên. */
 export const VISIBLE_UI_CHANNELS = 16
 
 export function cn(...items: Array<string | false | null | undefined>): string {

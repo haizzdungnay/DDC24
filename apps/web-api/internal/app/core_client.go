@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"mkddc-web/internal/capabilities"
 )
 
 const (
@@ -147,6 +149,22 @@ func (c *CoreClient) readIOShm() ([]byte, error) {
 	return c.ioSeg.read(c.IOShm, kxIOShmMinLen)
 }
 
+// decodeBoardCap đọc `BOARD_CAP_MAP` mà iobus chở vào `io_shm` (`ISS-PIO-11`).
+//
+// Segment ngắn hơn ABI v6 nghĩa là producer đời cũ: nó KHÔNG BAO GIỜ điền hai
+// trường này, nên đọc padding ra 0 rồi coi là "bo không có năng lực nào" sẽ là
+// một lời khẳng định bịa. Cả ca đó lẫn ca `valid = 0` đều trả về `Known: false`
+// — "chưa hỏi được" — và mọi consumer fail-closed từ đó.
+func decodeBoardCap(data []byte) capabilities.BoardCap {
+	if len(data) < kxIOShmBoardCapLen || data[offIOBoardCapValid] != 1 {
+		return capabilities.BoardCap{}
+	}
+	return capabilities.BoardCap{
+		Map:   binary.LittleEndian.Uint16(data[offIOBoardCapMap : offIOBoardCapMap+2]),
+		Known: true,
+	}
+}
+
 func (c *CoreClient) readPLCShm() ([]byte, error) {
 	return c.plcSeg.read(c.PLCShm, kxPlcShmMinLen)
 }
@@ -157,6 +175,10 @@ type CoreStatus struct {
 	Versions      VersionStatus
 	IOP           IOPStatus
 	Scan          ScanStatus
+	// BoardCap là bản đồ năng lực bo đọc từ `io_shm`. Zero value nghĩa là CHƯA
+	// HỎI ĐƯỢC, không phải "bo không có năng lực nào" — mọi CoreStatusClient
+	// giả lập vì thế mặc định rơi vào ca fail-closed đúng.
+	BoardCap capabilities.BoardCap
 }
 
 type VersionStatus struct {
@@ -293,8 +315,14 @@ func (c *CoreClient) ReadStatus(ctx context.Context) (CoreStatus, error) {
 	} else {
 		firstErr = fmt.Errorf("core socket unavailable")
 	}
-	if iop, err := c.readIOStatus(); err == nil {
-		status.IOP = iop
+	// MỘT lần đọc `io_shm` cho cả trạng thái IOP lẫn bản đồ năng lực. Đọc hai
+	// lần sẽ lấy về hai ảnh chụp seqlock khác nhau, và khi đó `IOP` và
+	// `BoardCap` trong cùng một `CoreStatus` có thể mô tả hai thời điểm khác
+	// nhau — một sự không nhất quán không ai nhìn thấy cho tới khi nó quan
+	// trọng.
+	if data, err := c.readIOShm(); err == nil {
+		status.IOP = decodeIOStatus(data)
+		status.BoardCap = decodeBoardCap(data)
 		status.IobusPresent = true
 	} else if firstErr == nil {
 		firstErr = err
@@ -579,6 +607,10 @@ func (c *CoreClient) readIOStatus() (IOPStatus, error) {
 		// và "fault" là mặc định an toàn (khớp KX_IOP_FAULT ở phía HMI).
 		return IOPStatus{Status: "fault"}, err
 	}
+	return decodeIOStatus(data), nil
+}
+
+func decodeIOStatus(data []byte) IOPStatus {
 	status := IOPStatus{
 		Status:    mapIOPStatus(data[offIOPStatus]),
 		CRCErrors: binary.LittleEndian.Uint32(data[offIOCRCErrors : offIOCRCErrors+4]),
@@ -589,7 +621,7 @@ func (c *CoreClient) readIOStatus() (IOPStatus, error) {
 		gap := float64(binary.LittleEndian.Uint32(data[offIOMaxPollGapUS:offIOMaxPollGapUS+4])) / 1000.0
 		status.MaxPollGapMS = &gap
 	}
-	return status, nil
+	return status
 }
 
 // SlaveTelemetry là số đo THẬT của một slave Modbus, do iobus đếm và publish.
@@ -875,10 +907,16 @@ func mapIOPStatus(raw byte) string {
 // ---- kx_plc_shm point table offsets ----
 
 const (
-	kxNUI  = 16
-	kxNDI  = 8
-	kxNAO  = 4
-	kxNDO  = 4
+	// `F-PIO-008`: bốn con số này TỪNG là một trong bốn nguồn sự thật độc lập
+	// về "bo có bao nhiêu kênh". Chúng không phải thế — chúng là SỨC CHỨA của
+	// bảng point trong ABI SHM, và mọi offset bên dưới được tính từ chúng nên
+	// chúng buộc phải là hằng biên dịch. Khai báo gốc nay nằm ở gói
+	// `capabilities`; "bo THỰC SỰ có gì" là câu hỏi khác, do `BOARD_CAP_MAP`
+	// trả lời.
+	kxNUI  = capabilities.ABIUniversalInputs
+	kxNDI  = capabilities.ABIDigitalInputs
+	kxNAO  = capabilities.ABIAnalogOutputs
+	kxNDO  = capabilities.ABIDigitalOutputs
 	kxNAV  = 32
 	kxNBV  = 16
 	kxNMSV = 8
@@ -1014,7 +1052,16 @@ const (
 	offBusState         = 96
 	kxIOShmBusLen       = offIOFbBus + kxNFbBus*kxBusStride // 3568
 	offIOMaxPollGapUS   = kxIOShmBusLen
-	kxIOShmIOPGapLen    = offIOMaxPollGapUS + 4 // 3572; struct có padding tới 3576
+	kxIOShmIOPGapLen    = offIOMaxPollGapUS + 4 // 3572
+
+	// `ISS-PIO-11`/#388: bản đồ năng lực bo, ghi bởi iobus ngay sau handshake
+	// IOP. Hai trường rơi trọn vào padding đuôi ĐÃ CÓ nên `sizeof` giữ nguyên
+	// 3576 và mọi offset trên không dịch — ShmLayout test khoá đúng ba con số
+	// đó. Magic lên v6 vì nếu không, `board_cap_valid = 0` gộp mất hai nghĩa
+	// "producer đời cũ không bao giờ điền" và "producer mới chưa handshake".
+	offIOBoardCapMap   = 3572
+	offIOBoardCapValid = 3574
+	kxIOShmBoardCapLen = 3576
 
 	kxIOShmMinLen = 528
 )
