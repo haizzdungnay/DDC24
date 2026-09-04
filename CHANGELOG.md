@@ -8,6 +8,50 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-28` Check kiểm phần đặc thù của từng nguồn Point (#407, 2026-09-04)
+
+- **Triệu chứng.** `Check` kiểm cú pháp/kiểu ST, danh tính điểm, hướng, quyền ghi, đơn vị, quality
+  policy, chủ sở hữu OUTPUT và trùng thanh ghi MB_RTU — nhưng **không kiểm bất cứ thứ gì thuộc riêng
+  từng nguồn** (đề bài §33).
+- **Vì sao phải kiểm ở Check chứ không để runtime phát hiện.** Mọi lỗi trong nhóm này đều **không làm
+  gì hỏng ồn ào**: bind vào một kênh đang tắt cho ra một biến đọc mãi một con số không ai cập nhật;
+  bind OUTPUT vào một VP do web-api sở hữu cho ra cuộc giằng co 10 giây một lần mà không bên nào
+  thắng hẳn. Cả hai đều chạy, đều GOOD, và chỉ lộ ra khi có người ngồi so số bằng tay. Check là cửa
+  cuối trước khi một chương trình được duyệt để chạy trên tủ.
+- **Physical (LOCAL).** Kênh phải có trong cấu hình và **đang bật**; kênh UI phải **đã khai kiểu tín
+  hiệu** (capability/scaling — chưa biết kênh đo gì thì con số nó trả về không có nghĩa vật lý nào);
+  binding hướng **output** phải có **safe-state** (khi Core vào chế độ an toàn, không ai biết đưa cơ
+  cấu chấp hành về đâu).
+- **Virtual (VP).** Điểm phải tồn tại và đang bật; binding **output** phải là VP `source: PROGRAM` và
+  `writable` (`ISS-PIO-16`); kiểu tín hiệu phải khớp kiểu biến ST (lệch kiểu cho ra một phép **đổi
+  ngầm** chứ không phải một lỗi); biên kỹ thuật không được đảo ngược (`ISS-PIO-15`); `restartPolicy:
+  initial` phải có `initialValue` (`ISS-PIO-14` — thiếu thì sau khởi động lại điểm về mặc định theo
+  kiểu, không phải con số chương trình đang hình dung).
+- **Phần Modbus KHÔNG cài lần hai.** `AC-PIO-ID-02` của #375 đã phủ ở `resolveModbusExtIndex`: phân
+  giải lại từ danh tính bền và chặn khi điểm không còn tồn tại. Issue này ghi rõ phải phối hợp, và
+  đây là chỗ phối hợp.
+- **Thiếu provider ⇒ phép kiểm KHÔNG chạy và KHÔNG chặn — một lựa chọn có cân nhắc.** Khác slot
+  Modbus (con số lưu trong binding là một *dấu vết* có thể trôi, nên không xác minh được thì không có
+  gì bảo chứng), binding LOCAL/VP mang thẳng **danh tính bền** của điểm. Chặn toàn bộ chúng khi thiếu
+  provider sẽ biến một phép kiểm mới thành phụ thuộc cứng và làm hỏng mọi triển khai chưa nối dây.
+- **Cái giá của lựa chọn đó được trả bằng một CỔNG NỐI DÂY.** Rủi ro là phép kiểm có thể **im lặng
+  biến mất** nếu ai đó gỡ dây — đúng lớp lỗi vừa xảy ra với bộ test `AlarmRuntime` hôm nay.
+  `TestCheckServiceIsWiredWithPointFacts` đọc thẳng khối dựng `CheckService` trong `main.go` và đỏ
+  nếu `PointFacts` biến mất. Gỡ dây thì test đỏ, không phải cả nhóm phép kiểm im lặng ngừng chạy.
+- **Adapter không nuốt lỗi đọc cấu hình.** Trả một ảnh chụp rỗng khi đọc hỏng sẽ khiến **mọi** điểm
+  hiện thành "không có trong cấu hình" — một lời buộc tội sai, và người vận hành sẽ đi sửa binding
+  thay vì sửa cái đang thật sự hỏng.
+- **`enabled` vắng mặt ≠ `enabled: false`.** Cấu hình đời cũ không có khoá này; coi nó là "đã tắt" sẽ
+  làm Check chặn mọi binding của một tủ đang chạy tốt.
+- **Mã slot `AV-xx` tra được về điểm ảo.** Tab Ánh xạ phát mã slot cho category VP, nên nếu chỉ đăng
+  ký khoá `VP1` thì mọi binding đi đường đó hiện thành "điểm ảo không tồn tại" — buộc tội sai một
+  binding đúng.
+
+**Kiểm chứng (đo lại thật, 2026-09-04).** layout **17 PASS / 0 FAIL** exit 0 · C++ configure/build
+exit 0, **0 warning**, `ctest` **1422/1422** · `go vet` sạch, **21 package `ok`** · FE **219 file /
+2636 test**, lint + build exit 0 · **8/8 phép tiêm lỗi ĐỎ** (bỏ kiểm kênh tắt · kiểu tín hiệu UI ·
+safe-state đầu ra · chủ sở hữu VP khi ghi · khớp kiểu tín hiệu VP · persistence `initialValue` ·
+**gỡ dây `PointFacts` khỏi `NewApp`** · adapter nuốt lỗi đọc cấu hình).
 ### Fixed — `ISS-PGM04-05` Quick Library không còn cắt ở trang đầu; một engine phân trang cho mọi bề mặt thư viện (#450, 2026-09-04)
 
 - **Triệu chứng.** Khối thứ 101 trở đi của Control Library **không tồn tại** đối với Quick Library

@@ -59,7 +59,7 @@ func TestCheckResolvesModbusSlotFromDurableIdentity(t *testing.T) {
 	revision := modbusRevision("bus-1-slave-2", "PUMP_CMD", 0)
 	slots := snapshotOf(ModbusSlot{DeviceID: "bus-1-slave-2", PointID: "PUMP_CMD", ExtIndex: 6})
 
-	entries, diagnostics := ioMapFromRevision(revision, "prog-0001", slots)
+	entries, diagnostics := ioMapFromRevision(revision, "prog-0001", slots, nil)
 	if len(diagnostics) > 0 {
 		t.Fatalf("không được chặn khi phân giải được: %+v", diagnostics)
 	}
@@ -78,7 +78,7 @@ func TestCheckBlocksWhenStoredSlotDisagreesWithCurrentLayout(t *testing.T) {
 		ModbusSlot{DeviceID: "bus-1-slave-9", PointID: "PRESSURE", ExtIndex: 14},
 	)
 
-	entries, diagnostics := ioMapFromRevision(revision, "prog-0001", slots)
+	entries, diagnostics := ioMapFromRevision(revision, "prog-0001", slots, nil)
 	if len(diagnostics) != 1 {
 		t.Fatalf("phải chặn khi slot đã lưu lệch với bố cục hiện tại, nhận %+v / %+v", entries, diagnostics)
 	}
@@ -96,7 +96,7 @@ func TestCheckBlocksWhenPointLeftTheRunningConfig(t *testing.T) {
 	revision := modbusRevision("bus-1-slave-2", "PUMP_CMD", 14)
 	slots := snapshotOf(ModbusSlot{DeviceID: "bus-1-slave-9", PointID: "PRESSURE", ExtIndex: 14})
 
-	_, diagnostics := ioMapFromRevision(revision, "prog-0001", slots)
+	_, diagnostics := ioMapFromRevision(revision, "prog-0001", slots, nil)
 	if len(diagnostics) != 1 {
 		t.Fatalf("phải chặn khi điểm không còn trong cấu hình đang chạy, nhận %+v", diagnostics)
 	}
@@ -110,7 +110,7 @@ func TestCheckBlocksModbusBindingWithoutSlotResolver(t *testing.T) {
 	// không phải bằng chứng khớp.
 	revision := modbusRevision("bus-1-slave-2", "PUMP_CMD", 14)
 
-	_, diagnostics := ioMapFromRevision(revision, "prog-0001", nil)
+	_, diagnostics := ioMapFromRevision(revision, "prog-0001", nil, nil)
 	if len(diagnostics) == 0 {
 		t.Fatal("thiếu resolver thì binding MB_RTU phải bị chặn, không được tin con số đã lưu")
 	}
@@ -136,7 +136,7 @@ func TestNonModbusBindingDoesNotNeedSlotResolver(t *testing.T) {
 		{ObjectID: "bind-1", Kind: "BINDING", PayloadJSON: binding},
 	}}
 
-	entries, diagnostics := ioMapFromRevision(revision, "prog-0001", nil)
+	entries, diagnostics := ioMapFromRevision(revision, "prog-0001", nil, nil)
 	if len(diagnostics) > 0 {
 		t.Fatalf("điểm LOCAL không được phụ thuộc resolver Modbus: %+v", diagnostics)
 	}
@@ -195,7 +195,7 @@ func TestFiveConfigOperationsNeverSilentlyRepointBinding(t *testing.T) {
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			revision := modbusRevision(device, point, 3)
-			entries, diagnostics := ioMapFromRevision(revision, "prog-0001", testCase.slots)
+			entries, diagnostics := ioMapFromRevision(revision, "prog-0001", testCase.slots, nil)
 			if testCase.wantBlock {
 				if len(diagnostics) == 0 {
 					t.Fatalf("phải chặn, nhưng đi tiếp với %+v", entries)
@@ -442,7 +442,7 @@ func TestCheckReportsEveryBrokenModbusBindingAtOnce(t *testing.T) {
 
 	// Thiết bị đã tắt ⇒ cả ba điểm biến mất khỏi bố cục.
 	empty := &ModbusSlotSnapshot{Slots: []ModbusSlot{}}
-	_, diagnostics := ioMapFromRevision(programmingstore.RevisionSnapshot{Objects: objects}, "prog-0001", empty)
+	_, diagnostics := ioMapFromRevision(programmingstore.RevisionSnapshot{Objects: objects}, "prog-0001", empty, nil)
 
 	if len(diagnostics) != 3 {
 		t.Fatalf("một lần Check phải nói ra cả ba binding hỏng, nhận %d: %+v", len(diagnostics), diagnostics)

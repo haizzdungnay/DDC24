@@ -127,6 +127,11 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			// ISS-PIO-31: Check phân giải lại slot `ext` từ cấu hình fieldbus
 			// đang chạy thay vì tin con số lưu trong binding.
 			ModbusSlots: app.programmingModbusSlots(),
+			// ISS-PIO-28: phép kiểm ĐẶC THÙ theo nguồn Point (kênh có bật
+			// không, đầu ra đã khai safe-state chưa, VP do ai sở hữu…). Gỡ dây
+			// này là làm cả nhóm phép kiểm biến mất trong im lặng, nên có test
+			// khẳng định nó luôn được nối.
+			PointFacts: app.programmingPointFacts(),
 		})
 		if checkErr != nil {
 			_ = store.Close()

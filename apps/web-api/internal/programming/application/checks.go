@@ -125,6 +125,11 @@ type CheckServiceOptions struct {
 	// (`ISS-PIO-31`). Nil ⇒ Check CHẶN mọi binding MB_RTU: thiếu nguồn xác
 	// minh thì con số lưu trong binding không có gì bảo chứng.
 	ModbusSlots ModbusSlotProvider
+	/* PointFacts cấp cấu hình Point ĐANG CHẠY cho các phép kiểm đặc thù theo
+	 * nguồn (`ISS-PIO-28`). Nil ⇒ Check CHẶN mọi binding LOCAL/VP: thiếu nguồn
+	 * xác minh thì không có gì bảo chứng cho binding, và cho qua im lặng chính
+	 * là thứ Check sinh ra để tránh. */
+	PointFacts PointBindingFactsProvider
 }
 
 type CheckService struct {
@@ -138,6 +143,7 @@ type CheckService struct {
 	newID         func() string
 	workerID      string
 	modbusSlots   ModbusSlotProvider
+	pointFacts    PointBindingFactsProvider
 	wake          chan struct{}
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
@@ -163,6 +169,7 @@ func NewCheckService(options CheckServiceOptions) (*CheckService, error) {
 	return &CheckService{store: options.Store, runner: options.Runner, packager: options.Packager,
 		artifacts: options.Artifacts, targetID: options.TargetID, leaseDuration: options.LeaseDuration, now: options.Now, newID: options.NewID,
 		modbusSlots: options.ModbusSlots,
+		pointFacts:  options.PointFacts,
 		workerID:    "check-worker-" + options.NewID(), wake: make(chan struct{}, 1)}, nil
 }
 
@@ -274,7 +281,18 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		}
 		slots = &snapshot
 	}
-	inputs, scopeDiagnostics := compilerInputs(revision, slots)
+	/* `ISS-PIO-28` — chụp cấu hình Point MỘT LẦN cho cả package, cùng lý do đã
+	 * ghi cho slot Modbus: tra từng binding sẽ cho hai binding của cùng một
+	 * package được kiểm trên hai cấu hình khác nhau nếu ai đó sửa giữa chừng. */
+	var pointFacts *PointBindingSnapshot
+	if s.pointFacts != nil {
+		snapshot, factErr := s.pointFacts.ResolvePointBindingFacts(ctx)
+		if factErr != nil {
+			return true, factErr
+		}
+		pointFacts = &snapshot
+	}
+	inputs, scopeDiagnostics := compilerInputs(revision, slots, pointFacts)
 	if len(scopeDiagnostics) == 0 {
 		inputs, err = s.attachPOULinkInputs(ctx, revision, inputs)
 		if err != nil {
@@ -523,7 +541,7 @@ func checkInputHash(revision programmingstore.RevisionSnapshot, targetID string,
 // thứ tự biên dịch — và do đó thứ tự diagnostic — không phụ thuộc thứ tự đọc DB.
 // Một Check chạy lại trên cùng Revision phải cho đúng cùng dãy kết quả, nếu
 // không thì "deterministic build" chỉ là lời nói.
-func compilerInputs(revision programmingstore.RevisionSnapshot, slots *ModbusSlotSnapshot) ([]programmingcompiler.Input, []DiagnosticView) {
+func compilerInputs(revision programmingstore.RevisionSnapshot, slots *ModbusSlotSnapshot, points *PointBindingSnapshot) ([]programmingcompiler.Input, []DiagnosticView) {
 	var programs []programmingstore.RevisionObject
 	userPou := 0
 	for _, object := range revision.Objects {
@@ -550,7 +568,7 @@ func compilerInputs(revision programmingstore.RevisionSnapshot, slots *ModbusSlo
 	// dùng sửa từng lỗi một rồi chạy lại Check — với 32 Program đó là 32 vòng.
 	diagnostics := make([]DiagnosticView, 0)
 	for _, program := range programs {
-		input, inputDiagnostics := programCompilerInput(revision, program, slots)
+		input, inputDiagnostics := programCompilerInput(revision, program, slots, points)
 		if len(inputDiagnostics) > 0 {
 			diagnostics = append(diagnostics, inputDiagnostics...)
 			continue
@@ -696,7 +714,7 @@ func (s *CheckService) attachPOULinkInputs(ctx context.Context,
 }
 
 func programCompilerInput(revision programmingstore.RevisionSnapshot,
-	program programmingstore.RevisionObject, slots *ModbusSlotSnapshot) (programmingcompiler.Input, []DiagnosticView) {
+	program programmingstore.RevisionObject, slots *ModbusSlotSnapshot, points *PointBindingSnapshot) (programmingcompiler.Input, []DiagnosticView) {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(program.PayloadJSON, &payload); err != nil {
 		diagnostic := scopeDiagnostic(program.ObjectID, 0)
@@ -752,7 +770,7 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 		}
 		runtimeProgramID = config.ProgramID
 	}
-	ioMap, diagnostic := ioMapFromRevision(revision, runtimeProgramID, slots)
+	ioMap, diagnostic := ioMapFromRevision(revision, runtimeProgramID, slots, points)
 	if diagnostic != nil {
 		return programmingcompiler.Input{}, diagnostic
 	}
@@ -775,7 +793,7 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 // nguyên trạng cho compiler tự reject (VP/MB_RTU, sai kiểu, trùng...) — không
 // lặp logic validate ở BE, `resolve_io_bindings()` là authority duy nhất.
 func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID string,
-	slots *ModbusSlotSnapshot) ([]programmingcompiler.IoMapEntry, []DiagnosticView) {
+	slots *ModbusSlotSnapshot, points *PointBindingSnapshot) ([]programmingcompiler.IoMapEntry, []DiagnosticView) {
 	type variableInfo struct {
 		name      string
 		programID string
@@ -875,6 +893,26 @@ func ioMapFromRevision(revision programmingstore.RevisionSnapshot, programID str
 			direction = "output"
 		default:
 			return nil, []DiagnosticView{scopeDiagnostic(programID, 0)}
+		}
+		/* `ISS-PIO-28` — phép kiểm ĐẶC THÙ theo nguồn (đề bài §33).
+		 *
+		 * Gộp vào cùng `bindingDiagnostics` với phần Modbus thay vì dừng ở
+		 * binding hỏng đầu tiên: sau một lần tắt kênh hay đổi chủ sở hữu một
+		 * VP, thường CẢ NHÓM binding cùng hỏng, và bắt người vận hành sửa từng
+		 * dòng rồi chạy lại Check là biến một lần sửa thành tám vòng. */
+		switch payload.Point.Category {
+		case "LOCAL":
+			if reason := checkLocalBinding(points, payload.Point.PointID, direction); reason != "" {
+				bindingDiagnostics = append(bindingDiagnostics,
+					pointSourceDiagnostic(programID, variable.name, payload.Point.PointID, reason))
+				continue
+			}
+		case "VP":
+			if reason := checkVirtualBinding(points, payload.Point.PointID, direction, variable.dataType); reason != "" {
+				bindingDiagnostics = append(bindingDiagnostics,
+					pointSourceDiagnostic(programID, variable.name, payload.Point.PointID, reason))
+				continue
+			}
 		}
 		extIndex := payload.Point.ExtIndex
 		if payload.Point.Category == "MB_RTU" {
@@ -1104,6 +1142,21 @@ func modbusSlotDiagnostic(programID, variable, pointID string, stored, resolved 
 		Location:   map[string]any{"programId": programID},
 		Args: map[string]any{"pointId": pointID, "variable": variable,
 			"expected": stored, "actual": resolved}}
+}
+
+/* pointSourceDiagnostic — chẩn đoán cho một binding hỏng ở phần ĐẶC THÙ của
+ * nguồn Point (`ISS-PIO-28`).
+ *
+ * `reason` đi nguyên văn vào `Args` để giao diện hiển thị lại đúng câu đã viết:
+ * "kênh UI-05 đang TẮT" nói cho người vận hành biết ngay phải làm gì, còn một
+ * mã lỗi chung thì bắt họ đi tra bảng.
+ */
+func pointSourceDiagnostic(programID, variable, pointID, reason string) DiagnosticView {
+	public := domain.NewPublicError(domain.ErrMapIdentity)
+	return DiagnosticView{Code: string(domain.ErrMapIdentity), DetailCode: "PIO-SRC-001", Severity: "ERROR",
+		MessageKey: public.MessageKey,
+		Location:   map[string]any{"programId": programID},
+		Args:       map[string]any{"pointId": pointID, "variable": variable, "reason": reason}}
 }
 
 func workerDiagnostic(detail string) DiagnosticView {
