@@ -464,6 +464,51 @@ proxy chặn tarball HTTP nhưng **không** chặn git — rồi trỏ
 `apt-get update` trước vì chỉ mục có bản `libdrm` đã bị gỡ khỏi mirror). Số đo:
 **1393/1393**.
 
+**Đính chính `T61-202` (`ISS-PGM04-05`, đo `2026-09-04`).** Trạng thái `DONE` đã
+ghi cho task này là đúng một nửa: `useProgrammingLibraryPaged` có thật và
+`LibraryPage` của PGM-04 dùng nó. Nhưng có **ba** đường đọc `GET /libraries`, và
+hai đường còn lại xin đúng một trang `limit: 100` rồi bỏ `nextCursor`:
+
+- `useProgrammingLibrary` — Quick Library của PGM-02 (`QuickLibraryHost`).
+- `useLazyProgrammingLibraryCatalog` — chữ ký khối cho Inspector/hover
+  (`ProgramsTab`).
+
+Cái giá không phải là mã trùng, mà là mã **phân kỳ**: bản của Quick Library chưa
+từng có `loadMore`, nên mọi lần sửa phân trang ở PGM-04 đều không chạm tới
+PGM-02, và không ai nhận ra vì cả hai màn hình vẫn hiện một danh sách trông đầy
+đủ. Với người dùng, khối thứ 101 trở đi **không tồn tại** — và bề mặt không có
+câu nào phân biệt "thư viện chỉ có ngần này" với "mới đọc tới đây".
+
+Nay cả hai là **vỏ** của cùng engine, qua tuỳ chọn `enabled` cho nạp trễ:
+
+- Quick Library nhận thẳng trạng thái phân trang, có nút "Tải thêm khối (đã tải
+  N)"; trang sau lỗi thì danh sách đã tải **giữ nguyên** và nút đổi thành "Thử
+  lại trang này"; khi còn trang chưa tải, câu rỗng nói "không khớp mục nào
+  **trong phần đã tải** — còn khối chưa tải" thay vì mời người dùng bỏ cuộc.
+- Vỏ nạp trễ của Inspector rút cạn các trang còn lại: tra cứu chữ ký cần danh
+  sách ĐẦY ĐỦ chứ không phải một danh sách cuộn được, vì Inspector không có nút
+  "tải thêm" — một trang thiếu ở đó hiện thành "không xác định được chữ ký" cho
+  một khối mà thư viện có công bố. Một trang hỏng thì DỪNG với phần đã đọc, chứ
+  không gõ cửa máy chủ vô hạn trong một `useEffect`.
+- Panel không còn đòi `status === 'ready'` mới vẽ: engine cố công giữ danh sách
+  khi một lần đọc hỏng, mà điều kiện vẽ cũ lại vứt đúng danh sách ấy.
+
+Hai bẫy tiêm lỗi mới, cùng họ "phép tiêm không chạy trông y hệt test không bắt
+được":
+
+1. **Neo của phép tiêm phải DUY NHẤT.** Phép tiêm `if (!enabled) {` vá nhầm
+   `useProgrammingRuntimeMonitor` (cùng chuỗi, đứng trước trong tệp) nên báo
+   XANH trong khi mã đích chưa hề bị sửa.
+2. **Khẳng định "chưa gọi máy chủ" phải chạy SAU khi xả microtask.** Request nằm
+   sau một `Promise.resolve().then(...)`; một khẳng định đồng bộ ngay sau render
+   xanh kể cả với bản bỏ qua `enabled` hoàn toàn.
+
+Và một bẫy của vitest đáng ghi: `beforeEach(() => client.request.mockReset())`
+viết dạng biểu thức **trả về chính mock**, mà vitest coi giá trị hàm trả về từ
+`beforeEach` là hàm dọn dẹp — nên nó gọi thêm `client.request()` sau mỗi test.
+Với một mock đang `reject`, lần gọi thừa ấy thành unhandled rejection và test đỏ
+ở một chỗ không liên quan gì tới thứ nó đang đo.
+
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.
 
@@ -472,7 +517,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
 | `T61-201` | P0 | Thay `canAdmin` bằng `roleCan(role, 'program.edit')`; thêm matrix viewer/operator/engineer/admin. | `T61-004` | `DONE` | 0,5 nd |
-| `T61-202` | P0 | Cursor pagination/infinite loading cho PGM-04 và lazy Quick Library; retry lỗi từng page, dedupe identity/version. | `T61-101` | `DONE` | 1 nd |
+| `T61-202` | P0 | Cursor pagination/infinite loading cho PGM-04 và lazy Quick Library; retry lỗi từng page, dedupe identity/version. | `T61-101` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-05`) | 1 nd |
 | `T61-203` | P0 | Trích `LibraryPresentationModel` + shared card/signature/favorite/recent từ catalog dùng chung. | `T61-004` | `DONE` | 1,5 nd |
 | `T61-204` | P1 | URL state typed cho tab/filter/query/selected/inspector/returnTo; back/forward/reload giữ context. | `T61-004` | `DONE` | 1 nd |
 | `T61-205` | P0 | Metadata route/header và integration shell; không hồi quy PGM-01..06 hoặc tạo rail thứ hai. | `T61-002/004` | `DONE` | 1,5 nd |

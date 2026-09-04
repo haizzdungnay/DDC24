@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-05` Quick Library không còn cắt ở trang đầu; một engine phân trang cho mọi bề mặt thư viện (#450, 2026-09-04)
+
+- **Triệu chứng.** Khối thứ 101 trở đi của Control Library **không tồn tại** đối với Quick Library
+  (PGM-02) và với đường tra chữ ký của Inspector: cả hai xin đúng một trang `limit: 100` rồi bỏ
+  `nextCursor`. Không có bề mặt nào nói ra điều đó — danh sách trông đầy đủ, nên người dùng tìm không
+  thấy khối rồi kết luận sản phẩm không có khối ấy. Riêng registry SYSTEM đã 46 mục, và một Project
+  nhiều khối vượt 100 là chuyện bình thường.
+- **Nguyên nhân gốc.** Có **ba** đường đọc `GET /libraries` chứ không phải một: `useProgrammingLibrary`
+  (Quick Library), `useLazyProgrammingLibraryCatalog` (chữ ký cho Inspector) và `useProgrammingLibraryPaged`
+  (PGM-04). Cái giá không phải là mã trùng mà là mã **phân kỳ**: chỉ bản thứ ba từng học cách đi tiếp
+  trang, nên mọi lần "sửa phân trang" ở PGM-04 đều không chạm tới hai bản kia — và không ai nhận ra,
+  vì cả ba màn hình đều hiện một danh sách trông đầy đủ. `T61-202` được ghi `DONE` đúng vì lý do này:
+  nó đúng cho một trong ba đường.
+- **Cách sửa.** Hai đường kia nay là **vỏ** của cùng engine, qua tuỳ chọn `enabled` cho nạp trễ; chỉ
+  còn một thuật toán ghép trang, một luật khử trùng `(libraryRevisionId, entryId)` và một luật retry.
+  - Quick Library nhận thẳng trạng thái phân trang: nút "Tải thêm khối (đã tải N)"; trang sau lỗi thì
+    danh sách đã tải **giữ nguyên** và nút đổi thành "Thử lại trang này"; khi còn trang chưa tải, câu
+    rỗng nói *"không khớp mục nào **trong phần đã tải** — còn khối chưa tải"*.
+  - Vỏ nạp trễ của Inspector **rút cạn** các trang còn lại — tra cứu chữ ký cần danh sách đầy đủ, vì
+    Inspector không có nút "tải thêm" và một trang thiếu ở đó hiện thành "không xác định được chữ ký"
+    cho một khối mà thư viện có công bố. Một trang hỏng thì **dừng** với phần đã đọc, không gõ cửa máy
+    chủ vô hạn trong một `useEffect`.
+  - Panel không còn đòi `status === 'ready'` mới vẽ: engine cố công giữ danh sách khi một lần đọc
+    hỏng, mà điều kiện vẽ cũ lại vứt đúng danh sách ấy.
+- **Bằng chứng.** 12/12 phép tiêm lỗi đỏ (khử trùng, tuple định danh, giữ danh sách khi lỗi, retry
+  cursor, `enabled`, cursor lặp, reset theo bộ lọc, rút cạn, dừng khi hỏng, ba nhánh UI). Fixture
+  125 mục chia hai trang: ngưỡng 100 đúng chỗ bản cũ cắt, nên fixture nhỏ hơn sẽ xanh cho cả bản hỏng.
+- **Hai bẫy tiêm lỗi mới ghi vào Plan61.** (1) Neo của phép tiêm phải **duy nhất** — `if (!enabled) {`
+  vá nhầm `useProgrammingRuntimeMonitor` nên báo XANH trong khi mã đích chưa hề bị sửa. (2) Khẳng định
+  "chưa gọi máy chủ" phải chạy **sau khi xả microtask**; một khẳng định đồng bộ ngay sau render xanh kể
+  cả với bản bỏ qua `enabled` hoàn toàn.
+- **Bẫy vitest.** `beforeEach(() => client.request.mockReset())` viết dạng biểu thức **trả về chính
+  mock**, mà vitest coi giá trị hàm trả về từ `beforeEach` là hàm dọn dẹp — nên nó gọi thêm
+  `client.request()` sau mỗi test. Với mock đang `reject`, lần gọi thừa ấy thành unhandled rejection và
+  test đỏ ở một chỗ không liên quan gì tới thứ nó đang đo.
+- **Số đo cục bộ (CI chưa cấp runner — `#414`).** layout `17 PASS / 0 FAIL` · `ctest 1422/1422` ·
+  Go `vet` sạch + `21 gói ok` · FE `219 tệp / 2651 test` · `npm run lint` + `npm run build` sạch ·
+  Playwright `e2e/programming.spec.ts -g 'PGM-04|Quick Library'` `18 passed / 4 skipped`.
+- **Phạm vi tệp.** `apps/web-ui/src/features/programming/{api/queries.ts,design/library/QuickLibraryPanel.tsx,
+  design/library/libraryCatalog.ts,design/editor/ProgramsTab.tsx,library/libraryViewState.ts}` + test.
+  Không chạm tệp của làn A.
+
+
 ### Added — `ISS-PIO-21` Quy ước địa chỉ Modbus: offset protocol ↔ tham chiếu vendor (#404, 2026-09-04)
 
 - **Triệu chứng.** Người dùng cầm datasheet ghi `40102` phải **tự trừ** để gõ `101`, và không có ô nào

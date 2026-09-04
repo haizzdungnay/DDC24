@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { I18nProvider } from '../../../../shared/i18n'
-import type { ProgrammingLibraryPage, RemoteState } from '../../model/types'
+import type { ProgrammingLibraryEntry } from '../../model/types'
+import type { ProgrammingLibraryPagedState } from '../../api/queries'
 import { type CatalogEntry } from './libraryCatalog'
 import { stCallStatement } from '../editor/stInstanceInsertion'
 import { QuickLibraryPanel } from './QuickLibraryPanel'
@@ -27,9 +28,8 @@ function cardFor(entryId: string): HTMLElement {
   return card
 }
 
-function libraryPage(): ProgrammingLibraryPage {
-  return {
-    items: [
+function libraryItems(): ProgrammingLibraryEntry[] {
+  return [
       {
         scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
         entryId: 'LIMIT', kind: 'FUNCTION', name: 'LIMIT', featureState: 'AVAILABLE',
@@ -55,15 +55,34 @@ function libraryPage(): ProgrammingLibraryPage {
         }),
         dependencies: [], stateLayoutKnown: true, stateSizeBytes: 64
       }
-    ]
+  ]
+}
+
+/**
+ * `T61-202` — panel nay nhận TRẠNG THÁI PHÂN TRANG dùng chung với PGM-04, chứ
+ * không phải một `RemoteState` bọc đúng một trang. Helper này khai đủ mặc định
+ * để mỗi test chỉ ghi đè phần nó thật sự đang nói về.
+ */
+function paged(overrides: Partial<ProgrammingLibraryPagedState> = {}): ProgrammingLibraryPagedState {
+  return {
+    status: 'ready',
+    items: libraryItems(),
+    error: null,
+    failure: null,
+    loadMoreError: null,
+    loadingMore: false,
+    hasMore: false,
+    loadMore: vi.fn(),
+    refresh: vi.fn(),
+    ...overrides,
   }
 }
 
-function ready(): RemoteState<ProgrammingLibraryPage> {
-  return { status: 'ready', data: libraryPage(), error: null, refresh: vi.fn() }
+function ready(): ProgrammingLibraryPagedState {
+  return paged()
 }
 
-function renderPanel(state: RemoteState<ProgrammingLibraryPage> = ready()) {
+function renderPanel(state: ProgrammingLibraryPagedState = ready()) {
   const onInsert = vi.fn<(entry: CatalogEntry) => boolean>().mockReturnValue(true)
   render(
     <I18nProvider>
@@ -136,7 +155,7 @@ describe('PGM-02 Quick Library (T59-804)', () => {
   })
 
   it('AC-FBD-002: catalog lỗi thì báo lỗi, không hiện danh sách rỗng như thể không có block', async () => {
-    renderPanel({ status: 'error', data: null, error: 'PRG-ERR-UNAVAILABLE-001', refresh: vi.fn() })
+    renderPanel(paged({ status: 'error', items: [], error: 'PRG-ERR-UNAVAILABLE-001', failure: 'error' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('PRG-ERR-UNAVAILABLE-001')
   })
 })
@@ -183,23 +202,14 @@ describe('T59-804 — dock dùng chung: bề mặt tự nói mục nào chưa nh
     render(
       <I18nProvider>
         <QuickLibraryPanel
-          library={{
-            status: 'ready',
-            data: {
-              items: [{
-                scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
-                entryId: 'MYSTERY', kind: 'FUNCTION', name: 'MYSTERY', featureState: 'AVAILABLE',
-                contentSha256: 'c'.repeat(64), interface: 'không-phải-json',
-                dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
-              }],
-              nextCursor: null
-            },
-            error: null,
-            loadingMore: false,
-            loadMoreError: null,
-            refresh: vi.fn(),
-            loadMore: vi.fn()
-          } as unknown as RemoteState<ProgrammingLibraryPage>}
+          library={paged({
+            items: [{
+              scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
+              entryId: 'MYSTERY', kind: 'FUNCTION', name: 'MYSTERY', featureState: 'AVAILABLE',
+              contentSha256: 'c'.repeat(64), interface: 'không-phải-json',
+              dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
+            }] as unknown as ProgrammingLibraryEntry[]
+          })}
           language="ST"
           onInsert={vi.fn()}
           onClose={vi.fn()}
@@ -253,5 +263,108 @@ describe('T59-804 — dock dùng chung: bề mặt tự nói mục nào chưa nh
     expect(within(cardFor('LIMIT')).getByText('Chưa vẽ được trên canvas')).toBeInTheDocument()
     fireEvent.click(limit)
     expect(onInsert).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * `T61-202` / `ISS-PGM04-05` — Quick Library KHÔNG dừng ở trang đầu.
+ *
+ * Lớp lỗi mà bộ này canh là im lặng: bản trước đọc đúng một trang `limit: 100`
+ * rồi bỏ `nextCursor`, nên khối thứ 101 không tồn tại đối với người dùng — và
+ * bề mặt trông y hệt một thư viện chỉ có 100 khối. Vì vậy các khẳng định dưới
+ * đây đều nhắm vào thứ NGƯỜI DÙNG THẤY (nút, thẻ, cảnh báo), không vào state
+ * nội bộ của hook.
+ */
+function bulkItems(count: number, offset = 0): ProgrammingLibraryEntry[] {
+  return Array.from({ length: count }, (_, index) => ({
+    scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
+    entryId: `BLK_${offset + index + 1}`, kind: 'FUNCTION', name: `BLK_${offset + index + 1}`,
+    featureState: 'AVAILABLE', contentSha256: 'd'.repeat(64),
+    interface: JSON.stringify({
+      category: 'math', labelVi: `Khối ${offset + index + 1}`, labelEn: `Block ${offset + index + 1}`,
+      allowedTypes: [], ports: [{ name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }]
+    }),
+    dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
+  })) as unknown as ProgrammingLibraryEntry[]
+}
+
+const lastInsert = vi.fn<(entry: CatalogEntry) => boolean>()
+
+/** Như `renderPanel` nhưng giữ được đường `rerender`: nửa sau của phép kiểm
+ *  "khối 101 tới nơi" là trang sau VỀ, không phải trang sau được xin. */
+function renderPagedPanel(state: ProgrammingLibraryPagedState) {
+  lastInsert.mockReset().mockReturnValue(true)
+  const ui = (value: ProgrammingLibraryPagedState) => (
+    <I18nProvider>
+      <QuickLibraryPanel library={value} language="ST" onInsert={lastInsert} onClose={vi.fn()} />
+    </I18nProvider>
+  )
+  const view = render(ui(state))
+  return { rerender: (next: ProgrammingLibraryPagedState) => view.rerender(ui(next)) }
+}
+
+describe('T61-202 — Quick Library đọc chung engine phân trang của PGM-04', () => {
+  it('còn trang chưa đọc ⇒ có đường đi tiếp, và nó gọi ĐÚNG loadMore của engine', async () => {
+    const loadMore = vi.fn()
+    renderPanel(paged({ items: bulkItems(100), hasMore: true, loadMore }))
+    const button = await screen.findByTestId('quick-library-load-more')
+    // Nhãn nói ra ĐÃ TẢI BAO NHIÊU: "100 khối" cạnh một nút tải thêm là câu
+    // duy nhất phân biệt được "thư viện có ngần này" với "mới đọc tới đây".
+    expect(button).toHaveTextContent('Tải thêm khối (đã tải 100)')
+    fireEvent.click(button)
+    expect(loadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('hết trang ⇒ KHÔNG mời tải thêm', async () => {
+    renderPanel(paged({ items: bulkItems(12), hasMore: false }))
+    await waitFor(() => cardFor('BLK_1'))
+    expect(screen.queryByTestId('quick-library-load-more')).toBeNull()
+  })
+
+  it('khối thứ 101 tìm và chèn được sau khi trang sau về', async () => {
+    const { rerender } = renderPagedPanel(paged({ items: bulkItems(100), hasMore: true }))
+    fireEvent.change(await screen.findByLabelText('Tìm khối thư viện'), { target: { value: 'BLK_125' } })
+    // Chưa tải trang sau: mục chưa có, và bề mặt phải nói ra là DANH SÁCH CHƯA
+    // ĐỦ chứ không phải "không khớp mục nào" — câu sau là lời mời bỏ cuộc.
+    expect(screen.queryByTestId('quick-library-card')).toBeNull()
+    expect(screen.getByText('Không khớp mục nào trong phần đã tải — còn khối chưa tải.')).toBeInTheDocument()
+
+    rerender(paged({ items: [...bulkItems(100), ...bulkItems(25, 100)], hasMore: false }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Chèn BLK_125' }))
+    expect(lastInsert.mock.calls[0][0].entryId).toBe('BLK_125')
+  })
+
+  it('trang sau lỗi: danh sách đã tải GIỮ NGUYÊN và nút đổi thành thử lại', async () => {
+    const loadMore = vi.fn()
+    renderPanel(paged({
+      items: bulkItems(100), hasMore: true, loadMore,
+      loadMoreError: 'PRG-ERR-UNAVAILABLE-001',
+    }))
+    // Luật đắt nhất: một trang hỏng KHÔNG được xoá thứ người dùng đang đọc.
+    expect(await waitFor(() => cardFor('BLK_1'))).toBeInTheDocument()
+    expect(cardFor('BLK_100')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('PRG-ERR-UNAVAILABLE-001')
+    const retry = screen.getByTestId('quick-library-load-more')
+    expect(retry).toHaveTextContent('Thử lại trang này')
+    expect(retry).toBeEnabled()
+    fireEvent.click(retry)
+    expect(loadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('đọc lại lỗi nhưng đã có nội dung ⇒ vẫn vẽ nội dung, kèm cảnh báo', async () => {
+    // `status: 'error'` với `items` khác rỗng là trạng thái engine tạo ra khi
+    // một lần làm mới hỏng. Đòi `status === 'ready'` ở đây sẽ vứt đúng cái
+    // danh sách mà engine cố công giữ lại.
+    renderPanel(paged({ status: 'error', items: bulkItems(3), error: 'PRG-ERR-OFFLINE-001', failure: 'offline' }))
+    expect(await waitFor(() => cardFor('BLK_1'))).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('PRG-ERR-OFFLINE-001')
+  })
+
+  it('đang tải trang sau ⇒ nút bị khoá, không xin chồng hai trang', async () => {
+    const loadMore = vi.fn()
+    renderPanel(paged({ items: bulkItems(100), hasMore: true, loadingMore: true, loadMore }))
+    const button = await screen.findByTestId('quick-library-load-more')
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('Đang tải thêm…')
   })
 })

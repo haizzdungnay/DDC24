@@ -2,11 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MoreHorizontal, Star } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useI18n } from '../../../../shared/i18n'
-import { useProgrammingLibrary } from '../../api/queries'
-import type { ProgrammingLibraryPage, RemoteState } from '../../model/types'
+import { useProgrammingLibraryPaged, type ProgrammingLibraryPagedState } from '../../api/queries'
 import {
   catalogCategories,
-  catalogEntries,
+  catalogEntriesOf,
   filterCatalog,
   isInsertable,
   type CatalogEntry
@@ -48,7 +47,7 @@ export function QuickLibraryPanel({
   variant = 'popover',
   projectId
 }: {
-  library: RemoteState<ProgrammingLibraryPage>
+  library: ProgrammingLibraryPagedState
   /** Ngôn ngữ POU đang mở — mục ràng buộc ngôn ngữ khác bị loại. */
   language: 'ST' | 'FBD'
   /**
@@ -98,7 +97,7 @@ export function QuickLibraryPanel({
     }
   }, [])
 
-  const entries = useMemo(() => catalogEntries(library.data), [library.data])
+  const entries = useMemo(() => catalogEntriesOf(library.items), [library.items])
   const categories = useMemo(() => catalogCategories(entries), [entries])
   const filtered = useMemo(
     () => filterCatalog(entries, { query, category: category || undefined, language }),
@@ -132,6 +131,9 @@ export function QuickLibraryPanel({
   }
 
   const docked = variant === 'docked'
+  /* Nội dung đã tải vẫn được vẽ khi lần đọc mới hỏng — xem chú thích ở khối
+     danh sách bên dưới. */
+  const showList = library.status === 'ready' || entries.length > 0
   return (
     <div
       {...(docked
@@ -188,13 +190,17 @@ export function QuickLibraryPanel({
           </p>
         )}
 
-        {library.status === 'ready' && favorites.length > 0 && (
+        {/* `T61-202` — điều kiện vẽ là CÓ NỘI DUNG, không phải `status === 'ready'`.
+            Engine phân trang giữ lại danh sách đã tải khi một lần đọc hỏng; nếu
+            ở đây vẫn đòi `ready` thì đúng lúc lỗi màn hình lại trống trơn, và
+            "giữ danh sách" của engine không tới được người dùng. */}
+        {showList && favorites.length > 0 && (
           <Section title={pick('Yêu thích', 'Favorites')} entries={favorites} favorites={preferences.favorites} onInsert={insert} onStar={star} surfaceBlock={surfaceBlock} />
         )}
-        {library.status === 'ready' && recent.length > 0 && (
+        {showList && recent.length > 0 && (
           <Section title={pick('Gần đây', 'Recent')} entries={recent} favorites={preferences.favorites} onInsert={insert} onStar={star} surfaceBlock={surfaceBlock} />
         )}
-        {library.status === 'ready' && (
+        {showList && (
           <Section
             title={pick('Catalog', 'Catalog')}
             entries={filtered}
@@ -202,8 +208,39 @@ export function QuickLibraryPanel({
             onInsert={insert}
             onStar={star}
             surfaceBlock={surfaceBlock}
-            emptyLabel={pick('Không khớp mục nào.', 'No entry matches.')}
+            emptyLabel={library.hasMore
+              ? pick(
+                'Không khớp mục nào trong phần đã tải — còn khối chưa tải.',
+                'No entry matches what has been loaded — more blocks remain.'
+              )
+              : pick('Không khớp mục nào.', 'No entry matches.')}
           />
+        )}
+
+        {/* `T61-202` — đường đi tới khối thứ 101 trở đi.
+            Không có nút này thì "danh sách đã cắt" và "thư viện chỉ có ngần ấy"
+            trông hệt nhau, và người dùng dừng tìm ở mục cuối cùng họ thấy. */}
+        {(library.hasMore || library.loadMoreError !== null) && (
+          <div className="px-3 py-2">
+            {library.loadMoreError !== null && (
+              <p role="alert" className="pb-1 text-[11px] text-[var(--c-fault-fg)]">
+                {library.loadMoreError}
+              </p>
+            )}
+            <button
+              type="button"
+              data-testid="quick-library-load-more"
+              disabled={library.loadingMore || !library.hasMore}
+              onClick={library.loadMore}
+              className="w-full rounded border border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)] hover:text-[var(--c-accent)] disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            >
+              {library.loadingMore
+                ? pick('Đang tải thêm…', 'Loading more…')
+                : library.loadMoreError !== null
+                  ? pick('Thử lại trang này', 'Retry this page')
+                  : pick(`Tải thêm khối (đã tải ${entries.length})`, `Load more blocks (${entries.length} loaded)`)}
+            </button>
+          </div>
         )}
       </div>
 
@@ -444,9 +481,14 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Vỏ LAZY: hook `useProgrammingLibrary` fetch ngay khi mount, nên panel chỉ
- * được mount lúc người dùng mở — mở tab Chương trình KHÔNG tạo traffic
+ * Vỏ LAZY: hook `useProgrammingLibraryPaged` fetch ngay khi mount, nên panel
+ * chỉ được mount lúc người dùng mở — mở tab Chương trình KHÔNG tạo traffic
  * `GET /libraries` (cùng quyết định #02 đã áp cho `/point-catalog`).
+ *
+ * `T61-202` — và nó đọc CÙNG engine phân trang với Control Library của PGM-04.
+ * Bản trước gọi `useProgrammingLibrary`, một hook riêng đọc đúng một trang
+ * `limit: 100` rồi bỏ `nextCursor`: khối thứ 101 trở đi không bao giờ tới được
+ * Quick Library, và không có bề mặt nào nói ra điều đó.
  */
 export function QuickLibraryHost(props: {
   projectId?: string
@@ -456,7 +498,7 @@ export function QuickLibraryHost(props: {
   onClose: () => void
   variant?: 'popover' | 'docked'
 }) {
-  const library = useProgrammingLibrary({ projectId: props.projectId })
+  const library = useProgrammingLibraryPaged({ projectId: props.projectId })
   return (
     <QuickLibraryPanel
       library={library}

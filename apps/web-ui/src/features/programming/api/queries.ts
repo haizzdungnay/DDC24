@@ -239,7 +239,8 @@ export function useLazyProgrammingPointCatalog(): LazyPointCatalogState {
 
 export interface LazyLibraryCatalogState {
   status: 'idle' | 'loading' | 'ready' | 'error'
-  data: ProgrammingLibraryPage | null
+  /** MỌI mục đã tải, không phải một trang. Xem `ensureLoaded`. */
+  items: ProgrammingLibraryEntry[]
   error: string | null
   ensureLoaded: () => void
 }
@@ -255,43 +256,31 @@ export interface LazyLibraryCatalogState {
  * Nạp trễ chứ không nạp khi mount: phần lớn phiên soạn thảo không chạm tới một
  * khối thư viện nào, và một request cho mọi lần mở tab là chi phí trả cho việc
  * không dùng.
+ *
+ * `T61-202` — và nạp trễ KHÔNG có nghĩa là nạp một phần. Bản trước đọc đúng một
+ * trang `limit: 100` rồi bỏ `nextCursor`, nên khối thứ 101 trở đi rơi vào đúng
+ * cái hố mà hook này sinh ra để lấp: Inspector lại hiện "không xác định được"
+ * cho một khối mà thư viện CÓ công bố. Ở đây tra cứu chữ ký cần danh sách ĐẦY
+ * ĐỦ chứ không phải một danh sách cuộn được, nên vỏ này rút cạn các trang còn
+ * lại của cùng engine phân trang mà PGM-04 và Quick Library đang dùng — một
+ * thuật toán, không phải ba.
  */
 export function useLazyProgrammingLibraryCatalog(projectId: string | undefined): LazyLibraryCatalogState {
-  const { pick } = useI18n()
-  const client = useProgrammingApiClient()
-  const [status, setStatus] = useState<LazyLibraryCatalogState['status']>('idle')
-  const [data, setData] = useState<ProgrammingLibraryPage | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const statusRef = useRef(status)
-  statusRef.current = status
-  // Đổi Project ⇒ catalog cũ không còn đúng phạm vi. Giữ lại nó sẽ hiện chữ ký
-  // của một Project khác cho tên trùng.
-  const loadedProjectRef = useRef<string | undefined>(undefined)
+  const [awake, setAwake] = useState(false)
+  const paged = useProgrammingLibraryPaged({ projectId }, { enabled: awake })
+  const ensureLoaded = useCallback(() => setAwake(true), [])
 
-  const ensureLoaded = useCallback(() => {
-    const sameProject = loadedProjectRef.current === projectId
-    if (sameProject && (statusRef.current === 'loading' || statusRef.current === 'ready')) return
-    loadedProjectRef.current = projectId
-    setStatus('loading')
-    const search: Record<string, string | number> = { limit: 100 }
-    if (projectId) search.projectId = projectId
-    client.request<ProgrammingLibraryPage>('searchProgrammingLibraries', { query: search }).then(
-      (value) => {
-        if (loadedProjectRef.current !== projectId) return
-        setData(value)
-        setError(null)
-        setStatus('ready')
-      },
-      (reason: unknown) => {
-        if (loadedProjectRef.current !== projectId) return
-        setData(null)
-        setError(programmingResourceErrorMessage(pick, reason))
-        setStatus('error')
-      },
-    )
-  }, [client, pick, projectId])
+  const { status, hasMore, loadingMore, loadMoreError, loadMore } = paged
+  useEffect(() => {
+    /* Dừng khi trang vừa xin bị lỗi: `loadMoreError` khác null nghĩa là lần
+     * trước hỏng, và xin lại ngay trong effect là một vòng lặp gõ cửa máy chủ
+     * mà người dùng không hề bấm gì. Lần `ensureLoaded` sau, hoặc một lần đổi
+     * Project, sẽ mở lại đường. */
+    if (status !== 'ready' || !hasMore || loadingMore || loadMoreError !== null) return
+    loadMore()
+  }, [status, hasMore, loadingMore, loadMoreError, loadMore])
 
-  return { status, data, error, ensureLoaded }
+  return { status, items: paged.items, error: paged.error, ensureLoaded }
 }
 
 /** `GET /checks/{checkId}` — dùng lại độc lập với `useCheckWorkflow` để
@@ -727,23 +716,6 @@ export interface LibrarySearchFilters {
   query?: string
 }
 
-/** `GET /libraries` — PGM-04. Bộ lọc nằm trong dependency của `load` nên đổi
- * filter là tải lại, không phải lọc phía client trên một trang đã cắt. */
-export function useProgrammingLibrary(filters: LibrarySearchFilters): RemoteState<ProgrammingLibraryPage> {
-  const client = useProgrammingApiClient()
-  const { projectId, scope, kind, category, query } = filters
-  const load = useCallback(() => {
-    const search: Record<string, string | number> = { limit: 100 }
-    if (projectId) search.projectId = projectId
-    if (scope) search.scope = scope
-    if (kind) search.kind = kind
-    if (category) search.category = category
-    if (query) search.q = query
-    return client.request<ProgrammingLibraryPage>('searchProgrammingLibraries', { query: search })
-  }, [client, projectId, scope, kind, category, query])
-  return useProgrammingResource(load, 0)
-}
-
 /**
  * `T61-105` — Used-In của một Control Library entry.
  *
@@ -768,12 +740,19 @@ export function useProgrammingLibraryUsage(
 }
 
 /**
- * `T61-202` — trang tiếp theo của Control Library.
+ * `T61-202` — ENGINE phân trang DUY NHẤT của Control Library.
  *
- * Trước lát này `useProgrammingLibrary` đọc đúng MỘT trang `limit: 100` rồi bỏ
- * `nextCursor`. Với một Project nhiều khối, phần dư biến mất **im lặng**: màn
+ * Trước lát này có ba đường đọc `/libraries`, và cả ba đọc đúng MỘT trang
+ * `limit: 100` rồi bỏ `nextCursor`: `useProgrammingLibrary` (Quick Library của
+ * PGM-02), `useLazyProgrammingLibraryCatalog` (chữ ký cho Inspector) và bản
+ * phân trang này. Với một Project nhiều khối, phần dư biến mất **im lặng**: màn
  * hình hiện một danh sách trông đầy đủ, và người dùng kết luận khối họ tìm
  * không tồn tại. Riêng registry SYSTEM đã 46 mục.
+ *
+ * Hai đường kia nay là VỎ của hàm này (`enabled` cho nạp trễ), nên chỉ còn một
+ * thuật toán ghép trang, một luật khử trùng và một luật retry. Ba bản song song
+ * không chỉ là trùng mã: chúng phân kỳ: bản Quick Library chưa từng có đường
+ * `loadMore`, nên "sửa phân trang" ở PGM-04 không hề chạm tới PGM-02.
  *
  * Ba luật ở đây đều rút từ vết thương của `useProgrammingRevisionComparison`:
  *
@@ -787,8 +766,22 @@ export function useProgrammingLibraryUsage(
  *    hơn một thẻ thiếu, vì người dùng sửa một thẻ rồi thấy thẻ kia vẫn mang giá
  *    trị cũ và kết luận là mình lưu hỏng.
  */
+export interface ProgrammingLibraryPagedOptions {
+  /**
+   * `false` ⇒ hook KHÔNG phát request nào và đứng ở `idle`.
+   *
+   * Đây là cách duy nhất để một bề mặt nạp trễ dùng chung engine này. Trước lát
+   * này mỗi bề mặt tự viết đường nạp trễ riêng (`useLazyProgrammingLibraryCatalog`
+   * có bản của nó, `QuickLibraryHost` dựa vào việc chỉ mount khi mở), nên mỗi
+   * bản mang một cách xử lý `nextCursor` khác nhau — mà cả hai bản đều là bỏ nó
+   * đi.
+   */
+  enabled?: boolean
+}
+
 export interface ProgrammingLibraryPagedState {
-  status: 'loading' | 'ready' | 'error'
+  /** `idle` = bị tắt bằng `enabled: false`, chưa hỏi máy chủ lần nào. */
+  status: 'idle' | 'loading' | 'ready' | 'error'
   items: ProgrammingLibraryEntry[]
   error: string | null
   /* LOẠI lỗi, không chỉ câu chữ. Thiếu nó thì mô hình trạng thái không phân
@@ -809,7 +802,9 @@ function libraryEntryIdentity(entry: ProgrammingLibraryEntry): string {
 
 export function useProgrammingLibraryPaged(
   filters: LibrarySearchFilters,
+  options?: ProgrammingLibraryPagedOptions,
 ): ProgrammingLibraryPagedState {
+  const enabled = options?.enabled ?? true
   const client = useProgrammingApiClient()
   const { pick } = useI18n()
   const { projectId, scope, kind, category, query } = filters
@@ -820,7 +815,7 @@ export function useProgrammingLibraryPaged(
 
   const [state, setState] = useState<{
     key: string
-    status: 'loading' | 'ready' | 'error'
+    status: 'idle' | 'loading' | 'ready' | 'error'
     items: ProgrammingLibraryEntry[]
     cursor: string | null
     error: string | null
@@ -828,7 +823,7 @@ export function useProgrammingLibraryPaged(
     loadMoreError: string | null
     loadingMore: boolean
   }>({
-    key: filterKey, status: 'loading', items: [], cursor: null,
+    key: filterKey, status: enabled ? 'loading' : 'idle', items: [], cursor: null,
     error: null, failure: null, loadMoreError: null, loadingMore: false,
   })
 
@@ -853,6 +848,16 @@ export function useProgrammingLibraryPaged(
     const myGeneration = ++generation.current
     consumed.current = new Set()
     inFlight.current = null
+    if (!enabled) {
+      /* Tắt ⇒ trở về `idle` RỖNG, không giữ lại danh sách cũ. Giữ lại là để
+       * một bề mặt đã tắt vẫn vẽ dữ liệu của lần bật trước, và dữ liệu ấy
+       * không còn ai làm mới. */
+      setState({
+        key: filterKey, status: 'idle', items: [], cursor: null,
+        error: null, failure: null, loadMoreError: null, loadingMore: false,
+      })
+      return
+    }
     /* GIỮ danh sách đang hiện trong lúc tải lại.
      *
      * Xoá trắng rồi mới tải là cách màn hình nháy một nhịp mỗi lần đổi bộ lọc —
@@ -891,7 +896,7 @@ export function useProgrammingLibraryPaged(
         }))
       },
     )
-  }, [filterKey, requestPage, pick])
+  }, [filterKey, requestPage, pick, enabled])
 
   useEffect(() => { loadFirst() }, [loadFirst])
 

@@ -44,7 +44,7 @@ import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeVa
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { LIBRARY_DRAG_TYPE, QuickLibraryHost } from '../library/QuickLibraryPanel'
-import { catalogEntries, type CatalogEntry } from '../library/libraryCatalog'
+import { catalogEntriesOf, type CatalogEntry } from '../library/libraryCatalog'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
 import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
@@ -418,7 +418,7 @@ export function ProgramsTab({
    * cache không mất khi đổi POU đang chọn. Chữ ký khối trong Inspector (§9) và
    * trong tooltip hover đọc CHUNG catalog này. */
   const libraryCatalog = useLazyProgrammingLibraryCatalog(document.project.projectId)
-  const libraryEntries = useMemo(() => catalogEntries(libraryCatalog.data), [libraryCatalog.data])
+  const libraryEntries = useMemo(() => catalogEntriesOf(libraryCatalog.items), [libraryCatalog.items])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [slots, setSlots] = useCollapsibleSlots()
   const [formatRequest, setFormatRequest] = useState<StFormatRequest | null>(null)

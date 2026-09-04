@@ -102,8 +102,24 @@ function signatureOf(entry: ProgrammingLibraryEntry): SignatureShape | null {
  * dùng được", thay vì biến mất và trở thành một câu hỏi không ai trả lời được.
  */
 export function catalogEntries(page: ProgrammingLibraryPage | null | undefined): CatalogEntry[] {
-  if (!page?.items) return []
-  return page.items.map((entry) => {
+  return catalogEntriesOf(page?.items)
+}
+
+/**
+ * `T61-202` — cùng phép chuẩn hoá, nhưng nhận DANH SÁCH ĐÃ GHÉP thay vì một
+ * trang.
+ *
+ * Sau khi Quick Library và Control Library dùng chung engine phân trang, thứ
+ * mỗi bề mặt cầm không còn là "trang máy chủ vừa trả" mà là "mọi mục đã tải tới
+ * lúc này". Ép nó trở lại hình dạng `{ items }` chỉ để đi qua `catalogEntries`
+ * là dựng một trang giả — và một trang giả sẽ mời người đọc sau này tin rằng
+ * `nextCursor` của nó có nghĩa.
+ */
+export function catalogEntriesOf(
+  items: readonly ProgrammingLibraryEntry[] | null | undefined
+): CatalogEntry[] {
+  if (!items) return []
+  return items.map((entry) => {
     const signature = signatureOf(entry)
     const ports = signature ? parsePorts(signature.ports) : null
     const usability: LibraryUsability =

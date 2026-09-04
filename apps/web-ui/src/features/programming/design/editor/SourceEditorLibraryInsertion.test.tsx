@@ -37,7 +37,14 @@ function libraryPage(): ProgrammingLibraryPage {
 
 vi.mock('../../api/queries', () => ({
   useLazyProgrammingPointCatalog: () => ({ status: 'idle', items: [], error: null, ensureLoaded: vi.fn() }),
-  useProgrammingLibrary: () => ({ status: 'ready', data: libraryPage(), error: null, refresh: vi.fn() }),
+  /* `T61-202` — Quick Library nay đọc engine phân trang dùng chung với PGM-04,
+     nên giả lập phải mang đúng hình dạng ấy: `items` đã ghép, kèm đường
+     `loadMore`. Một trang đơn lẻ không còn là thứ panel nhận. */
+  useProgrammingLibraryPaged: () => ({
+    status: 'ready', items: libraryPage().items, error: null, failure: null,
+    loadMoreError: null, loadingMore: false, hasMore: false,
+    loadMore: vi.fn(), refresh: vi.fn(),
+  }),
 }))
 
 function program(document: string): ProgrammingProgram {

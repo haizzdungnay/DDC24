@@ -76,7 +76,10 @@ export type LibraryReadFailure = 'permission' | 'offline' | 'error'
  * được — đó là lý do `retained` (bên dưới) mang theo khoá bộ lọc.
  */
 export interface LibraryReadInput {
-  status: 'loading' | 'ready' | 'error'
+  /* `idle` = hook bị tắt (`enabled: false`) nên chưa hỏi máy chủ lần nào. Nó
+     rơi vào đúng nhánh của `loading`: chưa có gì để hiện, và KHÔNG có lỗi để
+     nói. Coi nó là `error` sẽ báo hỏng cho một bề mặt chưa từng gọi ai. */
+  status: 'idle' | 'loading' | 'ready' | 'error'
   items: ProgrammingLibraryEntry[] | null
   error?: string | null
   failure?: LibraryReadFailure | null
