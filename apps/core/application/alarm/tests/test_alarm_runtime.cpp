@@ -734,3 +734,61 @@ TEST(AlarmRuntime, TimedSuppressHidesThenReappears)
     const auto states_12 = alarms.active_states();
     EXPECT_NE(find_state(states_12, "ALM-001"), nullptr);
 }
+
+/* ISS-PIO-19 — nguồn cảnh báo cho điểm Modbus, và một lệch hợp đồng nghiêm trọng
+ * giữa web-api và Core phát hiện khi làm issue này.
+ *
+ * web-api ghi `kind: "VP"` vào ĐÚNG tệp `/data/config/alarm_settings.conf` mà
+ * Core nạp. Core chỉ biết `UI/AO/DO/VI/VO`. Một `kind` lạ làm `parse_source`
+ * trả false, kéo theo `parse_entity` false, kéo theo `load_alarm_config` false
+ * — nghĩa là Core KHÔNG NẠP MỘT CẢNH BÁO NÀO. Đặt một cảnh báo cho điểm ảo qua
+ * giao diện web sẽ vô hiệu hoá TOÀN BỘ cảnh báo phần cứng của tủ, im lặng. */
+TEST(AlarmRuntime, VirtualPointKindFromWebApiDoesNotWipeEveryAlarm)
+{
+    TempFile file(R"([
+      {"id":"ALM-HW","label":"Supply air","enabled":true,"alarmType":1,
+       "sources":[{"kind":"UI","channel":1,"pointId":"UI-01"}],
+       "priority":"high","delayS":0,
+       "params":{"hh":32,"h":28,"l":16,"ll":12}},
+      {"id":"ALM-VP","label":"Virtual point","enabled":true,"alarmType":1,
+       "sources":[{"kind":"VP","channel":1,"pointId":"VP1","boundPointId":"AV-01"}],
+       "priority":"high","delayS":0,
+       "params":{"hh":32,"h":28,"l":16,"ll":12}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()))
+        << "một cảnh báo VP do web-api ghi làm Core bỏ nạp TOÀN BỘ cấu hình";
+
+    PointTable table = table_with_ui(30.0f, 22.0f);
+    ASSERT_TRUE(table.set_virtual({PointKind::AV, 0}, 30.0f, PointSource::WEB));
+    alarms.evaluate(table, 1000);
+    EXPECT_TRUE(alarms.entity_active("ALM-HW"))
+        << "cảnh báo phần cứng phải còn sống bên cạnh cảnh báo VP";
+    EXPECT_TRUE(alarms.entity_active("ALM-VP"));
+    EXPECT_EQ(alarms.entity_source("ALM-VP"), "AV-01");
+}
+
+/* Nguồn Modbus RTU (`MB_RTU`) đọc slot `plc_shm.ext[]` — đây là điều kiện đóng
+ * của ISS-PIO-19: một thanh ghi Fault Word của biến tần là thứ đáng báo động
+ * nhất trong tủ, mà trước bản vá không đặt cảnh báo được. */
+TEST(AlarmRuntime, ModbusRtuSourceReadsExtSlot)
+{
+    TempFile file(R"([
+      {"id":"ALM-MB","label":"VFD fault word","enabled":true,"alarmType":1,
+       "sources":[{"kind":"MB_RTU","channel":3,"pointId":"EXT-03"}],
+       "priority":"high","delayS":0,
+       "params":{"hh":1,"h":0.5,"l":-1,"ll":-2}}
+    ])");
+    AlarmRuntime alarms;
+    ASSERT_TRUE(alarms.load(file.path()));
+
+    PointTable table;
+    kx_ext_point_t points[3] = {};
+    points[2].value = 1.0f;
+    points[2].quality = KX_Q_GOOD;
+    table.update_ext(points, 3);
+    alarms.evaluate(table, 1000);
+
+    EXPECT_TRUE(alarms.entity_active("ALM-MB"));
+    EXPECT_EQ(alarms.entity_source("ALM-MB"), "EXT-03");
+}

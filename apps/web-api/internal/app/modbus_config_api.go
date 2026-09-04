@@ -419,6 +419,15 @@ type modbusMappingRow struct {
 	DataType     string `json:"data_type"`
 	ReadWrite    string `json:"read_write"`
 	Enabled      bool   `json:"enabled"`
+	/* `ISS-PIO-19` — slot `plc_shm.ext[]` 1-based mà điểm này chiếm.
+	 *
+	 * Cần cho cảnh báo Modbus: nguồn cảnh báo trỏ vào SLOT (`EXT-NN`), còn
+	 * người vận hành thì chỉ biết tên điểm. Không phát số này ra thì giao diện
+	 * buộc phải bắt họ chọn một con số trần không nói lên điều gì.
+	 *
+	 * 0 = chưa cấp slot (điểm hoặc thiết bị đang tắt) — nói ra bằng `omitempty`
+	 * thay vì phát một slot bịa. */
+	ExtIndex int `json:"ext_index,omitempty"`
 }
 
 func (a *App) handleModbusMapping(w http.ResponseWriter, _ *http.Request) {
@@ -432,6 +441,9 @@ func (a *App) handleModbusMapping(w http.ResponseWriter, _ *http.Request) {
 	for _, device := range cfg.Devices {
 		devices[strings.ToLower(device.DeviceID)] = device
 	}
+	// `ISS-PIO-19` — dùng lại ĐÚNG bộ cấp phát mà Point Catalog và Core dùng,
+	// không tự đánh số lại: hai cách đánh số cho một khái niệm là hai cách trôi.
+	layout := webModbus.BuildExtLayout(cfg.Devices, cfg.Points)
 	rows := make([]modbusMappingRow, 0, len(cfg.Points))
 	for _, point := range cfg.Points {
 		registers := 1
@@ -445,6 +457,7 @@ func (a *App) handleModbusMapping(w http.ResponseWriter, _ *http.Request) {
 			BusID: modbusDeviceBus(device), SlaveID: device.SlaveID,
 			RegisterType: point.RegisterType, Address: point.Address, Registers: registers,
 			DataType: point.DataType, ReadWrite: point.ReadWrite, Enabled: bool(point.Enabled),
+			ExtIndex: modbusExtIndexOf(layout, point.DeviceID, point.PointID),
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {

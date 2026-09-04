@@ -271,6 +271,12 @@ export interface ModbusMappingRow {
   data_type: string
   read_write: string
   enabled: boolean
+  /** `ISS-PIO-19` — slot `plc_shm.ext[]` 1-based mà điểm này chiếm.
+   *
+   *  Nguồn cảnh báo Modbus trỏ vào SLOT (`EXT-NN`) còn người vận hành chỉ biết
+   *  tên điểm; số này là cầu nối giữa hai thứ đó. Vắng/0 = chưa cấp slot (điểm
+   *  hoặc thiết bị đang tắt) — giao diện phải nói ra, không được đoán. */
+  ext_index?: number
 }
 
 export interface ModbusBusLoad {
@@ -561,7 +567,12 @@ export interface AlarmHistoryQuery {
   status?: string
 }
 
-export type AlarmSourceKind = 'UI' | 'AO' | 'DO' | 'VP'
+/** `ISS-PIO-19` (F-PIO-023) — `MB_RTU` là nguồn cảnh báo cho điểm Modbus RTU.
+ *
+ *  Trước đó một thanh ghi báo lỗi biến tần (`Fault Word`) — thứ đáng báo động
+ *  nhất trong tủ — không đặt cảnh báo được. Nguồn trỏ vào slot `plc_shm.ext[]`
+ *  (`EXT-NN`), đúng thứ Core đọc. */
+export type AlarmSourceKind = 'UI' | 'AO' | 'DO' | 'VP' | 'MB_RTU'
 export type AlarmType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type ActiveAlarmType = 0 | 1 | 3
 export type DeferredAlarmType = 2 | 4 | 5 | 6 | 7
@@ -571,6 +582,12 @@ export interface AlarmSource {
   kind: AlarmSourceKind
   channel: number
   pointId: string
+  /** `ISS-PIO-19` — slot Core (`AV-xx`/`BV-xx`/`MSV-xx`) của nguồn `VP`.
+   *
+   *  Do BACKEND điền lúc ghi tệp cấu hình, vì Core nạp cùng tệp đó nhưng không
+   *  biết ánh xạ điểm ảo → slot. Giao diện chỉ đọc, KHÔNG tự đặt: kênh VP và
+   *  slot Core là hai dãy độc lập nên suy ra sẽ gắn nhầm điểm. */
+  boundPointId?: string
 }
 
 export interface AlarmParams {

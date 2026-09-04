@@ -242,8 +242,16 @@ func validateAlarmSource(errs *[]configValidationError, path string, index int, 
 		maxChannel = 4
 	case "VP":
 		maxChannel = virtualPointTotalCapacity
+	/* `ISS-PIO-19` (F-PIO-023) — nguồn cảnh báo cho điểm Modbus RTU.
+	 *
+	 * Trước bản vá danh sách này chỉ có UI/AO/DO/VP, nên một thanh ghi báo lỗi
+	 * biến tần (`Fault Word`) — thứ đáng báo động nhất trong tủ — KHÔNG đặt
+	 * cảnh báo được. Điểm Modbus chiếm slot `plc_shm.ext[]` 1-based, mang danh
+	 * `EXT-NN`, cùng quy ước với `core_client.go` và lớp lịch. */
+	case alarmSourceKindModbus:
+		maxChannel = kxNEXT
 	default:
-		addConfigErr(errs, path+".kind", "must be one of: UI, AO, DO, VP")
+		addConfigErr(errs, path+".kind", "must be one of: UI, AO, DO, VP, MB_RTU")
 	}
 	if maxChannel > 0 && (source.Channel < 1 || source.Channel > maxChannel) {
 		addConfigErr(errs, path+".channel", fmt.Sprintf("must be integer in range 1..%d for %s", maxChannel, source.Kind))
@@ -253,7 +261,13 @@ func validateAlarmSource(errs *[]configValidationError, path string, index int, 
 		addConfigErr(errs, path+".pointId", "is required")
 	} else if maxChannel > 0 && source.Channel >= 1 && source.Channel <= maxChannel {
 		expected := formatPointID(source.Kind, source.Channel)
-		if source.Kind == "VP" {
+		if source.Kind == alarmSourceKindModbus {
+			// Điểm Modbus không mang danh theo `kind` mà theo slot ext đã cấp.
+			expected = formatPointID("EXT", source.Channel)
+			if !strings.EqualFold(source.PointID, expected) {
+				addConfigErr(errs, path+".pointId", fmt.Sprintf("must be %s for %s channel %d", expected, source.Kind, source.Channel))
+			}
+		} else if source.Kind == "VP" {
 			expected = formatVirtualPointID(source.Channel)
 			if canonicalVirtualPointID(source.PointID) != canonicalVirtualPointID(expected) {
 				addConfigErr(errs, path+".pointId", fmt.Sprintf("must be %s for %s channel %d", expected, source.Kind, source.Channel))

@@ -8,6 +8,61 @@
 
 ## [Unreleased]
 
+### Fixed — Bộ test `AlarmRuntime` đã ngừng chạy trong im lặng (2026-09-04)
+
+- **Triệu chứng.** `ctest` báo **1393/1393 pass** trong khi **không một test nào của `AlarmRuntime`
+  chạy**. Không có gì đỏ, không có gì cảnh báo.
+- **Nguyên nhân gốc.** `apps/core/application/alarm/tests/test_alarm_runtime.cpp` **không nằm trong
+  bất kỳ target CMake nào** kể từ `PLAN-ARCH-RESTRUCT-002`. Tệp vẫn ở trong repo, vẫn được sửa, vẫn
+  được nhắc trong tài liệu bằng chứng — chỉ là không ai biên dịch nó nữa.
+- **Vì sao nguy hiểm hơn một cổng đỏ.** Một cổng đỏ có người sửa. Một cổng **biến mất** thì không ai
+  nhận ra là đã hết kiểm: 29 test của lớp đánh giá cảnh báo — thứ quyết định tủ có kêu khi thiết bị
+  hỏng hay không — nằm im suốt nhiều tuần.
+- **Cách sửa.** Nối lại vào `core_tests`. Số đo trước/sau: `ctest` **1393 → 1422** (+29), và cả 29
+  test cũ đều xanh ngay khi cắm lại — bộ test lành, nó chỉ bị rút phích.
+
+### Fixed — Một cảnh báo điểm ảo làm Core bỏ nạp TOÀN BỘ cảnh báo (2026-09-04)
+
+- **Triệu chứng.** Không nhìn thấy được từ giao diện: mọi thứ trông bình thường, vì web-api tự đánh
+  giá cảnh báo VP (`evaluateVirtualPointAlarm`) và vẫn hiện chúng.
+- **Nguyên nhân gốc.** web-api ghi `kind: "VP"` vào `/data/config/alarm_settings.conf`. Core nạp
+  **đúng tệp đó** nhưng chỉ biết `UI/AO/DO/VI/VO`. Một `kind` lạ làm `parse_source` trả `false`, kéo
+  theo `parse_entity` false, kéo theo `load_alarm_config` false ⇒ **Core không nạp một cảnh báo nào**.
+  Nghĩa là **đặt một cảnh báo cho điểm ảo qua giao diện web sẽ vô hiệu hoá toàn bộ cảnh báo phần cứng
+  của tủ**, im lặng — và màn hình vẫn hiện cảnh báo VP nên không ai nghi ngờ.
+- **Cách sửa.** Core học `kind: "VP"`, phân giải slot qua **`boundPointId`** mà web-api điền lúc ghi
+  (`resolveAlarmSourceBindings`). Bề mặt API giữ nguyên `pointId: "VP1"` nên vòng đọc-ghi của web-api
+  không đổi; trường mới là `omitempty` nên tệp của tủ không dùng điểm ảo giữ nguyên hình dạng cũ.
+- **Vì sao không để Core suy slot từ `channel`.** Số kênh VP và số slot Core là **hai dãy độc lập**
+  (đã chốt ở `ISS-PIO-18`). Suy ra sẽ vừa khớp nhầm điểm khác vừa bỏ sót điểm đúng, và cả hai đều im
+  lặng. Không tra được điểm ảo thì để **trống**, không bịa slot: một slot bịa là đem cảnh báo gắn vào
+  thanh ghi của điểm khác, không ai phát hiện cho tới lúc nó không kêu.
+
+### Added — `ISS-PIO-19` Cảnh báo cho điểm Modbus RTU (#402, 2026-09-04)
+
+- **Triệu chứng.** `validateAlarmSource` chỉ nhận `UI, AO, DO, VP`. Một thanh ghi báo lỗi biến tần
+  (`Fault Word`) — **thứ đáng báo động nhất trong tủ** — không đặt cảnh báo được.
+- **Cách sửa.** Thêm kind `MB_RTU` xuyên suốt: Core (`PointKind::EXT`), web-api (validate, slot
+  1..256), giao diện, hợp đồng.
+- **Nguồn Modbus mang danh theo SLOT (`EXT-NN`), không theo `kind`.** `MB_RTU-03` là chuỗi Core không
+  phân giải được — và Core từ chối một dòng là bỏ nạp cả tệp, đúng lỗi vừa vá ở trên.
+- **Chọn theo TÊN điểm, không theo số trần.** `GET /modbus/mapping` nay phát `ext_index` (dùng lại
+  đúng bộ cấp phát `BuildExtLayout` của Point Catalog, không tự đánh số lại), nên ô chọn nguồn chỉ
+  liệt kê slot **có điểm thật, đang bật** và hiện tên điểm cạnh số. Chưa cấp slot ⇒ 0, nói ra bằng
+  `omitempty` thay vì phát một slot bịa.
+- **Danh sách slot rỗng nghĩa là "chưa biết", không phải "không có".** Viết lại nguồn khi chưa biết
+  sẽ âm thầm đổi một cảnh báo đã lưu sang điểm khác chỉ vì trang chưa tải xong danh sách Modbus —
+  người vận hành mở trang, bấm Lưu, và cảnh báo biến tần lặng lẽ trỏ sang `UI-01`.
+
+**Kiểm chứng (đo lại thật, 2026-09-04).** layout **17 PASS / 0 FAIL** exit 0 · C++ configure/build
+exit 0, **0 warning**, `ctest` **1422/1422** (trước bản vá 1393, +29 là bộ AlarmRuntime vừa nối lại)
+· `go vet` sạch, **21 package `ok`** · FE **218 file / 2626 test**, lint + build exit 0 ·
+**12/12 phép tiêm lỗi ĐỎ** (3 C++: Core quên kind VP, quên kind MB_RTU, VP suy slot từ channel;
+5 Go: bỏ kind MB_RTU, pointId Modbus theo kind, không điền boundPointId, suy slot từ kênh VP, bịa
+slot khi không tra được điểm ảo; 4 FE: bỏ MB_RTU khỏi tập kind, pointId theo kind, liệt kê cả điểm
+đang tắt, hiểu danh sách rỗng thành "không có").
+
+
 ### Added — `ISS-PGM04-04` Used-In đo được phạm vi Draft ở server (#449, 2026-09-04)
 
 - **Hiện trạng.** `LibraryService.Usage` luôn trả `SEALED_ONLY`, tức "phạm vi Draft chưa đo được", và

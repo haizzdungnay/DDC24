@@ -240,6 +240,17 @@ type AlarmSource struct {
 	Kind    string `json:"kind"`
 	Channel int    `json:"channel"`
 	PointID string `json:"pointId"`
+	/* `ISS-PIO-19` — slot Core mà nguồn `kind: "VP"` thật sự nằm trên
+	 * (`AV-xx`/`BV-xx`/`MSV-xx`).
+	 *
+	 * Core nạp cùng tệp `alarm_settings.conf` này nhưng KHÔNG biết ánh xạ điểm
+	 * ảo → slot; số kênh VP và số slot Core là hai dãy độc lập nên suy ra sẽ
+	 * khớp nhầm. web-api điền trường này lúc GHI (`resolveAlarmSourceBindings`);
+	 * bề mặt API vẫn giữ `pointId: "VP1"`.
+	 *
+	 * Rỗng với mọi kind khác VP, và `omitempty` nên tệp của cấu hình không có
+	 * điểm ảo giữ nguyên hình dạng cũ. */
+	BoundPointID string `json:"boundPointId,omitempty"`
 }
 
 // AlarmParams keeps known numeric params type-safe while allowing type-specific optional fields.

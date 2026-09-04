@@ -12,7 +12,7 @@ import { StateBlock } from '../../shared/components/StateBlock'
 import { useToast } from '../../shared/components/Toast'
 import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
-import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType, SeverityRule, VirtualPoint } from '../../shared/types'
+import type { ActiveAlarmType, AlarmPriority, AlarmSetting, AlarmSource, AlarmSourceKind, AlarmType, DeferredAlarmType, ModbusMappingRow, SeverityRule, VirtualPoint } from '../../shared/types'
 import { cn } from '../../shared/utils'
 
 const maxAlarms = 64
@@ -26,7 +26,7 @@ const priorities: AlarmPriority[] = ['low', 'medium', 'high', 'critical', 'flexi
 const clearModes: AlarmClearMode[] = ['auto', 'manual']
 const severities: SeverityRule['severity'][] = ['critical', 'high', 'medium', 'low', 'info']
 const severityOps: SeverityRule['op'][] = ['>=', '<=']
-const sourceKinds: AlarmSourceKind[] = ['UI', 'AO', 'DO', 'VP']
+const sourceKinds: AlarmSourceKind[] = ['UI', 'AO', 'DO', 'VP', 'MB_RTU']
 
 /**
  * Nhãn loại cảnh báo — `T57-2.14`.
@@ -92,15 +92,19 @@ export function AlarmSettingsPage() {
   const [loadError, setLoadError] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
   const [virtualPoints, setVirtualPoints] = useState<VirtualPoint[]>([])
+  // `ISS-PIO-19` — slot ext của điểm Modbus, để chọn nguồn cảnh báo theo TÊN
+  // điểm chứ không theo một con số trần.
+  const [modbusSlots, setModbusSlots] = useState<ModbusMappingRow[]>([])
   const deepLinkApplied = useRef(false)
 
   useEffect(() => {
     let active = true
     setLoading(true)
-    Promise.all([apiClient.getAlarmSettings(), apiClient.getVirtualPoints()])
-      .then(([items, virtualItems]) => {
+    Promise.all([apiClient.getAlarmSettings(), apiClient.getVirtualPoints(), loadModbusSlots()])
+      .then(([items, virtualItems, slots]) => {
         if (!active) return
         setVirtualPoints(virtualItems)
+        setModbusSlots(slots)
         const loaded = items.map((item) => normalizeLoadedAlarm(item, virtualItems))
         setRows(loaded)
         setSavedRows(loaded)
@@ -330,6 +334,7 @@ export function AlarmSettingsPage() {
             <AlarmEditor
               row={selected}
               virtualPoints={virtualPoints}
+              modbusSlots={modbusSlots}
               rowIndex={selectedIndex}
               issues={selectedIssues}
               publishedCount={publishedCount}
@@ -389,10 +394,12 @@ function AlarmEditor({
   onParamsChange,
   onSourceChange,
   onSourceAdd,
-  onSourceRemove
+  onSourceRemove,
+  modbusSlots = []
 }: {
   row: AlarmSetting
   virtualPoints: VirtualPoint[]
+  modbusSlots?: ModbusMappingRow[]
   rowIndex: number
   issues: ValidationIssue[]
   publishedCount: number
@@ -470,6 +477,7 @@ function AlarmEditor({
               key={`${source.kind}-${source.channel}-${sourceIndex}`}
               source={source}
               virtualPoints={virtualPoints}
+              modbusSlots={modbusSlots}
               onChange={(patch) => onSourceChange(sourceIndex, patch)}
               onRemove={() => onSourceRemove(sourceIndex)}
             />
@@ -526,21 +534,42 @@ function AlarmEditor({
   )
 }
 
-function SourceRow({ source, virtualPoints, onChange, onRemove }: { source: AlarmSource; virtualPoints: VirtualPoint[]; onChange: (patch: Partial<AlarmSource>) => void; onRemove: () => void }) {
+/* `ISS-PIO-19` — danh sách slot Modbus là TUỲ CHỌN với trang này.
+ *
+ * Một tủ không dùng Modbus vẫn phải đặt được cảnh báo cho UI/AO/DO/VP, nên lỗi
+ * ở đây trả danh sách rỗng thay vì làm hỏng cả trang cảnh báo. Rỗng đã được
+ * `normalizeSource` hiểu là "chưa biết", không phải "không có". */
+async function loadModbusSlots(): Promise<ModbusMappingRow[]> {
+  try {
+    const mapping = await apiClient.getModbusMapping()
+    return mapping.rows ?? []
+  } catch {
+    return []
+  }
+}
+
+function SourceRow({ source, virtualPoints, modbusSlots = [], onChange, onRemove }: { source: AlarmSource; virtualPoints: VirtualPoint[]; modbusSlots?: ModbusMappingRow[]; onChange: (patch: Partial<AlarmSource>) => void; onRemove: () => void }) {
   const { pick } = useI18n()
-  const channels = channelOptions(source.kind, virtualPoints)
+  const channels = channelOptions(source.kind, virtualPoints, modbusSlots)
   return (
     <div className="grid gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-3 sm:grid-cols-[120px_120px_minmax(0,1fr)_auto]">
-      <SelectField label={pick('Loại nguồn', 'Source kind')} value={source.kind} onChange={(kind) => onChange(normalizeSource({ kind: kind as AlarmSourceKind, channel: firstChannel(kind as AlarmSourceKind, virtualPoints) }, virtualPoints))}>
+      <SelectField label={pick('Loại nguồn', 'Source kind')} value={source.kind} onChange={(kind) => onChange(normalizeSource({ kind: kind as AlarmSourceKind, channel: firstChannel(kind as AlarmSourceKind, virtualPoints, modbusSlots) }, virtualPoints, modbusSlots))}>
         {sourceKinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
       </SelectField>
       <SelectField label={pick('Kênh', 'Channel')} value={String(source.channel)} onChange={(channel) => onChange({ channel: Number(channel) })}>
         {channels.map((channel) => {
           const virtual = source.kind === 'VP' ? virtualSourceFor('VP', channel, virtualPoints) : undefined
-          return <option key={channel} value={channel}>{virtual ? `${channel} - ${virtual.tag}` : channel}</option>
+          const modbus = source.kind === 'MB_RTU' ? modbusSlotLabel(channel, modbusSlots) : undefined
+          const label = virtual?.tag ?? modbus
+          return <option key={channel} value={channel}>{label ? `${channel} - ${label}` : channel}</option>
         })}
       </SelectField>
       <TextField label={source.kind === 'VP' ? pick('Tên gọi (tag)', 'Tag') : pick('Mã điểm', 'Point ID')} value={source.kind === 'VP' ? virtualSourceFor('VP', source.channel, virtualPoints)?.tag ?? source.pointId : source.pointId} disabled onChange={() => undefined} />
+      {source.kind === 'MB_RTU' && channels.length === 0 && (
+        /* Nói ra "chưa có điểm Modbus nào" thay vì hiện một ô chọn rỗng: ô rỗng
+         * để người dùng tự đoán là mình làm sai ở đâu. */
+        <p className="text-xs text-[var(--c-warn-fg)] sm:col-span-4">{pick('Chưa có điểm Modbus nào được cấp slot — bật điểm và thiết bị ở trang Modbus trước.', 'No Modbus point has a slot yet — enable the point and its device on the Modbus page first.')}</p>
+      )}
       <div className="flex items-end">
         <Button variant="danger" size="sm" icon={<Trash2 className="h-4 w-4" />} onClick={onRemove}>{pick('Xoá', 'Remove')}</Button>
       </div>
@@ -754,9 +783,16 @@ function nextSource(sources: AlarmSource[], virtualPoints: VirtualPoint[]): Alar
   return makeSource('UI', 1, virtualPoints)
 }
 
-function normalizeSource(source: Partial<AlarmSource>, virtualPoints: VirtualPoint[] = []): AlarmSource {
+function normalizeSource(source: Partial<AlarmSource>, virtualPoints: VirtualPoint[] = [], modbusSlots: ModbusMappingRow[] = []): AlarmSource {
   let kind = normalizeSourceKind(source.kind)
-  let channels = channelOptions(kind, virtualPoints)
+  let channels = channelOptions(kind, virtualPoints, modbusSlots)
+  /* `ISS-PIO-19` — danh sách slot Modbus RỖNG nghĩa là "chưa biết", KHÔNG phải
+   * "không có". Viết lại nguồn khi chưa biết sẽ âm thầm đổi một cảnh báo đã lưu
+   * sang điểm khác chỉ vì trang chưa tải xong danh sách Modbus. */
+  if (kind === 'MB_RTU' && channels.length === 0) {
+    const declared = normalizeNumber(source.channel ?? 1, 1, maxExtSlots, true)
+    return makeSource(kind, declared, virtualPoints, source.pointId)
+  }
   if (kind === 'VP' && channels.length === 0) {
     kind = 'UI'
     channels = channelOptions(kind, virtualPoints)
@@ -775,16 +811,40 @@ function makeSource(kind: AlarmSourceKind, channel: number, virtualPoints: Virtu
 function pointIdFor(kind: AlarmSourceKind, channel: number, virtualPoints: VirtualPoint[] = [], fallbackPointId = ''): string {
   if (kind === 'VP' && !virtualSourceFor(kind, channel, virtualPoints)) return fallbackPointId.trim().toUpperCase()
   if (kind === 'VP') return `VP${channel}`
+  /* `ISS-PIO-19` — nguồn Modbus mang danh theo SLOT ext, không theo `kind`:
+   * `MB_RTU-03` là một chuỗi Core không phân giải được, và Core từ chối MỘT
+   * dòng là bỏ nạp TOÀN BỘ cấu hình cảnh báo. */
+  if (kind === 'MB_RTU') return `EXT-${String(channel).padStart(2, '0')}`
   return `${kind}-${String(channel).padStart(2, '0')}`
 }
+
+/** `ISS-PIO-19` — số slot `plc_shm.ext[]`, khớp `kxNEXT` phía web-api. */
+const maxExtSlots = 256
 
 function maxChannel(kind: AlarmSourceKind): number {
   if (kind === 'UI') return 16
   if (kind === 'AO' || kind === 'DO') return 4
+  if (kind === 'MB_RTU') return maxExtSlots
   return 464
 }
 
-function channelOptions(kind: AlarmSourceKind, virtualPoints: VirtualPoint[]): number[] {
+/** `ISS-PIO-19` — slot ext của các điểm Modbus ĐANG cấu hình, kèm nhãn.
+ *
+ *  Liệt kê cả 256 slot là bắt người vận hành chọn một con số trần không nói lên
+ *  điều gì; chỉ liệt kê slot có điểm thật, và hiện tên điểm cạnh số. */
+function modbusSlotOptions(modbusSlots: ModbusMappingRow[]): number[] {
+  return [...new Set(modbusSlots
+    .filter((row) => row.enabled && (row.ext_index ?? 0) >= 1 && (row.ext_index ?? 0) <= maxExtSlots)
+    .map((row) => row.ext_index as number))].sort((a, b) => a - b)
+}
+
+function modbusSlotLabel(channel: number, modbusSlots: ModbusMappingRow[]): string | undefined {
+  const row = modbusSlots.find((item) => item.ext_index === channel)
+  return row ? (row.tag_name || row.point_id) : undefined
+}
+
+function channelOptions(kind: AlarmSourceKind, virtualPoints: VirtualPoint[], modbusSlots: ModbusMappingRow[] = []): number[] {
+  if (kind === 'MB_RTU') return modbusSlotOptions(modbusSlots)
   if (kind !== 'VP') {
     return Array.from({ length: maxChannel(kind) }, (_, index) => index + 1)
   }
@@ -795,8 +855,8 @@ function channelOptions(kind: AlarmSourceKind, virtualPoints: VirtualPoint[]): n
   return [...new Set(channels)].sort((a, b) => a - b)
 }
 
-function firstChannel(kind: AlarmSourceKind, virtualPoints: VirtualPoint[]): number {
-  return channelOptions(kind, virtualPoints)[0] ?? 1
+function firstChannel(kind: AlarmSourceKind, virtualPoints: VirtualPoint[], modbusSlots: ModbusMappingRow[] = []): number {
+  return channelOptions(kind, virtualPoints, modbusSlots)[0] ?? 1
 }
 
 function virtualChannel(id: string): number | undefined {
@@ -968,3 +1028,12 @@ function normalizeNumber(value: number, min?: number, max?: number, integer = fa
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
+
+/* `ISS-PIO-19` — phơi ba hàm thuần cho test.
+ *
+ * Chúng quyết định một cảnh báo Modbus trỏ vào slot nào; kiểm qua giao diện
+ * thì một lỗi ánh xạ slot sẽ ẩn sau nhiều lớp render, còn ở đây nó lộ ngay. */
+export const alarmSourceKindsForTest = sourceKinds
+export const pointIdForTest = pointIdFor
+export const channelOptionsForTest = channelOptions
+export const normalizeSourceForTest = normalizeSource

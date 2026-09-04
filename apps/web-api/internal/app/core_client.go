@@ -920,6 +920,10 @@ const (
 	kxNAV  = 32
 	kxNBV  = 16
 	kxNMSV = 8
+	// kxNEXT — số slot `plc_shm.ext[]` mà Point Catalog cấp cho điểm Modbus RTU.
+	// Trước `ISS-PIO-19` con số 256 nằm rải rác dưới dạng literal ở ba chỗ; đặt
+	// tên để nguồn cảnh báo MB_RTU và lớp lịch cùng đọc một hằng số.
+	kxNEXT = 256
 
 	// kx_point_t layout (24 bytes, no padding between fields):
 	//   float value(4) + float[16] priority(64) + float relinquish_default(4)
@@ -961,7 +965,7 @@ const (
 	offExtBusID         = 60
 	offExtOnline        = 61
 	offExtWritable      = 62
-	offExtCount         = offExt + 256*kxExtPointSize
+	offExtCount         = offExt + kxNEXT*kxExtPointSize
 
 	// kx_point_t field offsets within a point (76 bytes):
 	offValue      = 0  // float32
@@ -1306,7 +1310,7 @@ func decodePoints(data []byte, ioData []byte) []PointDTO {
 	if len(data) < kxPlcShmMinLen {
 		return nil
 	}
-	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV+256)
+	pts := make([]PointDTO, 0, kxNUI+kxNAO+kxNDO+kxNAV+kxNBV+kxNMSV+kxNEXT)
 	/* Một mốc cho CẢ snapshot: `plc_shm` chỉ có `ts_ns` ở header, nên mọi điểm
 	 * trong cùng lần đọc chia sẻ đúng một mốc mẫu. Tính một lần cũng tránh 76
 	 * lời gọi `clock_gettime` cho một câu trả lời duy nhất. */

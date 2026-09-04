@@ -228,6 +228,37 @@ bool parse_indexed_point(const std::string& value, std::string* prefix, int* cha
     return true;
 }
 
+/* ISS-PIO-19 — phân giải slot cho nguồn `kind: "VP"` mà web-api ghi ra.
+ *
+ * KHÁC `VI`/`VO` ở chỗ không có ràng buộc dải kênh: `VI`/`VO` là cách chia đôi
+ * không gian AV/BV của một hợp đồng cũ, còn `VP` là một điểm ảo do web-api sở
+ * hữu, và số kênh VP với số slot Core là HAI DÃY ĐỘC LẬP. Suy slot từ số kênh
+ * VP sẽ vừa khớp nhầm vừa bỏ sót — nên slot phải được nói thẳng ra bằng
+ * `boundPointId`, thứ web-api biết và Core thì không.
+ */
+bool parse_bound_virtual_point(const std::string& pid, PointKind* point_kind, int* idx,
+                               std::string* normalized_pid)
+{
+    std::string prefix;
+    int channel = 0;
+    if (!parse_indexed_point(pid, &prefix, &channel)) return false;
+    if (prefix == "AV") {
+        if (channel < 1 || channel > KX_N_AV) return false;
+        *point_kind = PointKind::AV;
+    } else if (prefix == "BV") {
+        if (channel < 1 || channel > KX_N_BV) return false;
+        *point_kind = PointKind::BV;
+    } else if (prefix == "MSV") {
+        if (channel < 2 || channel > KX_N_MSV) return false;
+        *point_kind = PointKind::MSV;
+    } else {
+        return false;
+    }
+    *idx = channel - 1;
+    *normalized_pid = point_id(prefix, channel);
+    return true;
+}
+
 bool parse_virtual_source_point(const std::string& source_kind, const std::string& pid,
                                 PointKind* point_kind, int* idx, std::string* normalized_pid)
 {
@@ -273,6 +304,56 @@ bool parse_source(const json::Value& src, AlarmSourceConfig* out)
 
     int max_channel = 0;
     PointKind point_kind = PointKind::AI;
+    /* ISS-PIO-19 — `VP` là kind mà web-api THẬT SỰ ghi vào
+     * `/data/config/alarm_settings.conf`, đúng tệp Core nạp ở đây.
+     *
+     * Trước bản vá Core chỉ biết `UI/AO/DO/VI/VO`, nên một `kind` lạ làm
+     * `parse_source` trả false → `parse_entity` false → `load_alarm_config`
+     * false ⇒ Core KHÔNG NẠP MỘT CẢNH BÁO NÀO. Đặt một cảnh báo cho điểm ảo
+     * qua giao diện web vô hiệu hoá TOÀN BỘ cảnh báo phần cứng của tủ, im lặng.
+     *
+     * Slot lấy từ `boundPointId` chứ không suy từ `channel`: số kênh VP và số
+     * slot Core là hai dãy độc lập. */
+    if (kind == "VP") {
+        std::string bound;
+        if (!as_string(src.get("boundPointId"), &bound) || bound.empty()) {
+            std::fprintf(stderr,
+                         "ERROR alarm_cfg.vp_missing_bound pointId=%s (cần boundPointId=AV-xx/BV-xx/MSV-xx)\n",
+                         pid.c_str());
+            return false;
+        }
+        std::string normalized_pid;
+        if (!parse_bound_virtual_point(bound, &point_kind, &channel, &normalized_pid)) {
+            std::fprintf(stderr, "ERROR alarm_cfg.bad_bound_point boundPointId=%s pointId=%s\n",
+                         bound.c_str(), pid.c_str());
+            return false;
+        }
+        out->point = {point_kind, channel};
+        out->point_id = normalized_pid;
+        return true;
+    }
+    /* ISS-PIO-19 (F-PIO-023) — nguồn Modbus RTU đọc slot `plc_shm.ext[]`.
+     *
+     * Một thanh ghi Fault Word của biến tần là thứ đáng báo động nhất trong tủ,
+     * mà trước bản vá không đặt cảnh báo được: `MB_RTU` không nằm trong danh
+     * sách kind nào cả. Slot ext do Point Catalog cấp phát, đánh số 1-based và
+     * mang danh `EXT-NN` — cùng quy ước với `core_client.go` và lớp lịch. */
+    if (kind == "MB_RTU") {
+        if (channel < 1 || channel > KX_N_EXT) {
+            std::fprintf(stderr, "ERROR alarm_cfg.bad_source_channel kind=%s ch=%d\n",
+                         kind.c_str(), channel);
+            return false;
+        }
+        const std::string expected = point_id("EXT", channel);
+        if (pid != expected) {
+            std::fprintf(stderr, "ERROR alarm_cfg.bad_source_point pointId=%s expected=%s\n",
+                         pid.c_str(), expected.c_str());
+            return false;
+        }
+        out->point = {PointKind::EXT, channel - 1};
+        out->point_id = expected;
+        return true;
+    }
     if (kind == "UI") {
         max_channel = KX_N_UI;
         point_kind = PointKind::AI;

@@ -18,7 +18,9 @@ func (a *App) LoadAlarmSettings(ctx context.Context) ([]AlarmSetting, error) {
 }
 
 func (a *App) SaveAlarmSettings(ctx context.Context, rows []AlarmSetting) error {
-	return saveAlarmSettingsFile(ctx, a.alarmSettingsPath(), rows)
+	// `ISS-PIO-19` — dịch nguồn VP sang hợp đồng của Core TRƯỚC khi ghi: Core
+	// nạp cùng tệp này và cần slot `AV-xx`/`BV-xx`, thứ nó không tự suy được.
+	return saveAlarmSettingsFile(ctx, a.alarmSettingsPath(), a.resolveAlarmSourceBindings(rows))
 }
 
 func (a *App) alarmSettingsPath() string {

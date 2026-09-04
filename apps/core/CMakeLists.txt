@@ -369,6 +369,11 @@ if(CORE_BUILD_TESTS)
       adapters/ipc/tests/test_config_reload.cpp adapters/persistence/test_state_snapshot.cpp
       adapters/bacnet/tests/test_bacnet_objtable.cpp
       application/schedule/tests/test_schedule_runtime.cpp domain/graph/tests/test_runtime_point_snapshot.cpp
+      # ISS-PIO-19: `test_alarm_runtime.cpp` KHÔNG nằm trong target nào kể từ
+      # PLAN-ARCH-RESTRUCT-002 — cả bộ test của AlarmRuntime im lặng ngừng chạy
+      # trong khi ctest vẫn báo xanh. Một cổng biến mất còn nguy hiểm hơn một
+      # cổng đỏ: không ai nhận ra là đã hết kiểm.
+      application/alarm/tests/test_alarm_runtime.cpp
       domain/graph/tests/test_ext_256_datagram.cpp
       adapters/diagnostics/tests/test_core_metrics.cpp adapters/ipc/tests/test_output_writer.cpp
       application/st/tests/test_st_io_map.cpp application/st/tests/test_st_resolve_io_bindings.cpp
