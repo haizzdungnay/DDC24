@@ -27,6 +27,7 @@ import type {
   UserRow,
   VirtualPoint
 } from '../types'
+import { aiConditioningDefaults, type AiConditioningConfig } from '../types'
 import { DEVICE_DEFAULTS } from '../config'
 import { clamp, nowIso, pointNumber } from '../utils'
 import { displayPointName, normalizePointName } from '../api/pointTags'
@@ -706,7 +707,7 @@ export function getAiInputConfigs(): AiInputConfig[] {
   return demoAiInputConfigs.map((config) => ({ ...config }))
 }
 
-const demoAiInputConfigSeeds: Array<Omit<AiInputConfig, 'tag'>> = [
+const demoAiInputConfigSeeds: Array<Omit<AiInputConfig, 'tag' | keyof AiConditioningConfig> & Partial<AiConditioningConfig>> = [
   { channel: 1, label: 'Supply Air Temp', signalType: 3, displayMin: -20, displayMax: 80, rangeMultiplier: 0, unit: 2, filterSamples: 3, sensorCal: 0, mathFunction: 1, enabled: true, note: 'Check against handheld probe during commissioning.' },
   { channel: 2, label: 'Duct Pressure', signalType: 2, displayMin: 0, displayMax: 200, rangeMultiplier: 2, unit: 3, filterSamples: 5, sensorCal: 0.2, mathFunction: 0, enabled: true, note: 'High alarm review after TAB.' },
   { channel: 3, label: 'Room Humidity', signalType: 1, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 1, filterSamples: 3, sensorCal: 0, mathFunction: 2, enabled: true, note: '' },
@@ -725,7 +726,11 @@ const demoAiInputConfigSeeds: Array<Omit<AiInputConfig, 'tag'>> = [
   { channel: 16, label: 'Spare Universal Input', signalType: 0, displayMin: 0, displayMax: 100, rangeMultiplier: 0, unit: 0, filterSamples: 3, sensorCal: 0, mathFunction: 0, enabled: false, note: '' }
 ]
 
-let demoAiInputConfigs: AiInputConfig[] = demoAiInputConfigSeeds.map((config) => ({ ...config, tag: `UI-${String(config.channel).padStart(2, '0')}` }))
+let demoAiInputConfigs: AiInputConfig[] = demoAiInputConfigSeeds.map((config) => ({
+  ...aiConditioningDefaults(),
+  ...config,
+  tag: `UI-${String(config.channel).padStart(2, '0')}`
+}))
 
 export function putDemoAiInputs(configs: AiInputConfig[]): void {
   demoAiInputConfigs = configs.map((config) => ({ ...config }))

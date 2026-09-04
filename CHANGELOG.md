@@ -8,6 +8,54 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-24` Deadband + clamp + chính sách giá trị khi lỗi cho Universal Input (#409, 2026-09-04)
+
+- **Triệu chứng.** Đề bài §7 yêu cầu bảy năng lực xử lý tín hiệu cho UI. Sản phẩm chỉ có **một**
+  (`filterSamples` — trung bình động). Deadband, clamp, bật/tắt phát hiện over/under range, bật/tắt
+  phát hiện open/shorted loop, chính sách giá trị khi điểm lỗi: **không có ở bất kỳ tầng nào**. Riêng
+  hiệu chuẩn thì FE tự khai là "chỉ 1 điểm (offset)" ngay trên giao diện.
+- **Nguyên nhân gốc.** Không phải quên khai báo trường cấu hình — mà là **không có chỗ nào xử lý mẫu
+  sau khi scale**. Vòng lặp poll trong `apps/iobus/bootstrap/main.cpp` đi thẳng từ `ui_to_eng` →
+  trung bình động → ghi snapshot. Thêm trường vào schema mà không có nơi cưỡng chế thì chỉ sinh ra
+  một ô cấu hình *trông như* đang bảo vệ điểm.
+- **Cách sửa.** Thêm hẳn một bậc điều hoà tín hiệu ở nơi mẫu được sinh ra —
+  `apps/iobus/domain/io/io_conditioning.cpp` — chạy theo thứ tự **mặt nạ lỗi → clamp → deadband →
+  giá trị khi lỗi**, rồi mới nối lên schema Go và FE. Thứ tự này là một quyết định, không phải ngẫu
+  nhiên: clamp trước deadband thì hai mẫu vượt trần bằng nhau sau khi kẹp sẽ không còn làm điểm rung;
+  giá trị-khi-lỗi đứng cuối vì nó **chỉ đổi giá trị, không bao giờ đổi quality**.
+- **Chính sách giá trị khi lỗi không giấu lỗi.** `hold`/`fixed` thay giá trị được phát nhưng
+  `quality`/`reliability` vẫn báo BAD kèm nguyên nhân — cảnh báo và lịch sử vẫn thấy đúng sự thật.
+  Một chính sách vừa thay giá trị vừa xoá dấu vết lỗi sẽ biến hỏng cảm biến thành vô hình.
+- **Tắt phát hiện lỗi không tắt được lỗi phần cứng.** `range_fault_enabled`/`loop_fault_enabled` chỉ
+  che hai nhóm nguyên nhân được nêu tên. Lỗi truyền thông và lỗi ADC đi qua đường override của
+  `ADR-011` **trước** bậc mặt nạ, nên không cấu hình nào tắt được chúng.
+- **Mặc định của cả nhóm bằng đúng hành vi cũ.** `deadband=0`, `clamp_enabled=false`, hai cờ phát
+  hiện lỗi `true`, `failure_mode=invalid`. Bo đang chạy nâng cấp firmware mà không sửa cấu hình thì
+  không đổi hành vi; FE cũng dùng chung bộ mặc định đó (`aiConditioningDefaults`) để mở trang rồi
+  bấm Lưu không đủ làm đổi hành vi thiết bị.
+
+### Fixed — `ISS-PIO-24` FE xoá âm thầm hiệu chuẩn `cal_gain`/`cal_offset` (#409, 2026-09-04)
+
+- **Triệu chứng.** Hiệu chuẩn gain/offset đặt lúc bring-up biến mất sau lần bấm Lưu tiếp theo trên
+  trang Inputs, không có thông báo nào.
+- **Nguyên nhân gốc.** `aiConfigToIo` **dựng lại nguyên hàng `ui[]`** từ state của FE rồi PUT đè cả
+  16 kênh; `PUT /system/config/io` thay toàn bộ cấu hình chứ không merge. Khoá nào FE không liệt kê
+  thì biến mất. `cal_gain`/`cal_offset` được firmware (`iobus_config.cpp`) và schema Go đọc thật từ
+  trước, nhưng FE chưa từng mang chúng theo — đúng kịch bản "xoá âm thầm" mà chính chú thích đầu
+  `configschema/schema.go` đã cảnh báo.
+- **Cách sửa.** Round-trip hai khoá qua `AiInputConfig.calGain`/`calOffset`, và **chỉ gửi khi FE thực
+  sự biết giá trị**: kênh chưa hiệu chuẩn thì bỏ hẳn khoá để thiết bị giữ nguyên, thay vì gửi mặc
+  định của FE đè lên. Kèm form hiệu chuẩn 2 điểm tính gain+offset từ hai cặp (đang đọc, chuẩn) — đóng
+  luôn dòng "chỉ 1 điểm" trong bảng thiếu sót của issue.
+
+### Fixed — `configschema` nuốt biên một phía trong thông điệp lỗi (#409, 2026-09-04)
+
+- **Triệu chứng.** Một trường chỉ có `Min` (như `deadband`) khi vượt biên bị từ chối với thông điệp
+  `must be number` — giống hệt thông điệp của **sai kiểu dữ liệu**, và không nói biên là bao nhiêu.
+- **Nguyên nhân gốc.** `numberMessage`/`intRangeMessage` chỉ dựng chuỗi khi có **cả** `Min` lẫn `Max`.
+  Trước ISS-PIO-24 mọi trường có biên đều có đủ hai phía nên lỗi này chưa lộ.
+- **Cách sửa.** Gộp về một `rangeMessage` nói ra biên một phía (`must be number in range >= 0`).
+
 ### Added — `ISS-PIO-29` Commission Impact tách theo nguồn Point (#408, 2026-09-04)
 
 - **Triệu chứng.** `outputMappingChanges` **gộp cả ba nguồn** vào một con số. Người vận hành đứng

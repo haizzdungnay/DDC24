@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
 import type { AiInputConfig, Point } from '../../shared/types'
+import { aiConditioningDefaults } from '../../shared/types'
 import type { CapabilityMode, SystemCapabilities } from '../../shared/api/capabilities'
 import { InputsPage } from './InputsPage'
 
@@ -47,6 +48,7 @@ vi.mock('../../shared/components/PointLoggingSection', () => ({ PointLoggingSect
 vi.mock('../../shared/components/TrendChart', () => ({ TrendChart: () => <div /> }))
 
 const baseInput: AiInputConfig = {
+  ...aiConditioningDefaults(),
   channel: 1,
   tag: 'UI-01',
   label: 'Supply Temp',

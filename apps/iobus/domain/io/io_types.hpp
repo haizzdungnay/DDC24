@@ -79,6 +79,15 @@ enum class SensorType {
     UNKNOWN
 };
 
+/* ISS-PIO-24 §7 — chính sách giá trị khi điểm lỗi (quality != GOOD).
+ * INVALID giữ nguyên hành vi cũ: vẫn phát giá trị vừa tính kèm quality BAD.
+ * HOLD phát lại giá trị GOOD gần nhất; FIXED phát hằng số `failure_value`.
+ * Quality/reliability KHÔNG bị chính sách này che — chỉ giá trị đổi. */
+enum class UiFailureMode : uint8_t { INVALID = 0, HOLD = 1, FIXED = 2 };
+
+UiFailureMode ui_failure_mode_from_string(const char* s);
+const char*   ui_failure_mode_name(UiFailureMode m);
+
 struct UiScaleConfig {
     SensorType sensor = SensorType::V0_10; /* u0 */
     bool enabled = true;
@@ -92,6 +101,27 @@ struct UiScaleConfig {
     uint8_t math_func = 0;                  /* u7 */
     float cal_gain = 1.0f;                  /* bring-up 2-point calibration */
     float cal_offset = 0.0f;                /* engineering/raw-electric units */
+
+    /* ISS-PIO-24 §7 — điều hoà tín hiệu sau khi scale. Mặc định của cả nhóm
+     * được chọn để TRÙNG hành vi trước khi có issue này: deadband 0 = tắt,
+     * clamp tắt, hai cờ phát hiện lỗi bật, failure mode = INVALID. */
+    float deadband = 0.0f;                  /* đơn vị kỹ thuật; 0 = tắt */
+    bool  clamp_enabled = false;
+    float clamp_min = 0.0f;
+    float clamp_max = 0.0f;
+    bool  range_fault_enabled = true;       /* OVER_RANGE / UNDER_RANGE */
+    bool  loop_fault_enabled = true;        /* OPEN_LOOP / SHORTED_LOOP */
+    UiFailureMode failure_mode = UiFailureMode::INVALID;
+    float failure_value = 0.0f;             /* chỉ dùng khi failure_mode=FIXED */
+};
+
+/* Trạng thái điều hoà theo kênh — deadband cần giá trị đã phát lần trước,
+ * HOLD cần giá trị GOOD gần nhất. Tách khỏi config để config vẫn thuần dữ liệu. */
+struct UiConditioningState {
+    float last_published = 0.0f;
+    float last_good = 0.0f;
+    bool  has_published = false;
+    bool  has_good = false;
 };
 
 inline bool operator==(const UiScaleConfig& a, const UiScaleConfig& b)
@@ -101,7 +131,12 @@ inline bool operator==(const UiScaleConfig& a, const UiScaleConfig& b)
            a.range_mult == b.range_mult && a.unit == b.unit &&
            a.filter_samples == b.filter_samples && a.sensor_cal == b.sensor_cal &&
            a.math_func == b.math_func &&
-           a.cal_gain == b.cal_gain && a.cal_offset == b.cal_offset;
+           a.cal_gain == b.cal_gain && a.cal_offset == b.cal_offset &&
+           a.deadband == b.deadband && a.clamp_enabled == b.clamp_enabled &&
+           a.clamp_min == b.clamp_min && a.clamp_max == b.clamp_max &&
+           a.range_fault_enabled == b.range_fault_enabled &&
+           a.loop_fault_enabled == b.loop_fault_enabled &&
+           a.failure_mode == b.failure_mode && a.failure_value == b.failure_value;
 }
 
 inline bool operator!=(const UiScaleConfig& a, const UiScaleConfig& b)

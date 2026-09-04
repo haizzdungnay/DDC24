@@ -1,5 +1,6 @@
 #include "config/iobus_config.hpp"
 
+#include "io/io_conditioning.hpp"
 #include "io/io_scaling.hpp"
 
 #include <cctype>
@@ -249,6 +250,21 @@ bool load_config(const std::string& path, bool must_exist, IobusConfig* out)
             if (get_int(entry, "range_mult", &n)) out->ui[i].range_mult = clamp_u8(n, 0, 5);
             if (get_int(entry, "filter_samples", &n)) out->ui[i].filter_samples = clamp_u8(n, 0, 100);
             if (get_int(entry, "math_func", &n)) out->ui[i].math_func = clamp_u8(n, 0, 3);
+
+            /* ISS-PIO-24 §7 — deadband / clamp / bật-tắt phát hiện lỗi /
+             * chính sách giá trị khi lỗi. Thiếu key ⇒ giữ mặc định trong
+             * `UiScaleConfig`, tức giữ nguyên hành vi trước issue này. */
+            if (get_float(entry, "deadband", &f)) out->ui[i].deadband = (f > 0.0f) ? f : 0.0f;
+            if (get_bool(entry, "clamp_enabled", &b)) out->ui[i].clamp_enabled = b;
+            if (get_float(entry, "clamp_min", &f)) out->ui[i].clamp_min = f;
+            if (get_float(entry, "clamp_max", &f)) out->ui[i].clamp_max = f;
+            if (get_bool(entry, "range_fault_enabled", &b)) out->ui[i].range_fault_enabled = b;
+            if (get_bool(entry, "loop_fault_enabled", &b)) out->ui[i].loop_fault_enabled = b;
+            if (get_float(entry, "failure_value", &f)) out->ui[i].failure_value = f;
+
+            std::string mode;
+            if (get_string(entry, "failure_mode", &mode))
+                out->ui[i].failure_mode = ui_failure_mode_from_string(mode.c_str());
 
             std::string unit;
             if (get_string(entry, "unit", &unit)) out->ui[i].unit = unit;

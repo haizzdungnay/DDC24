@@ -17,7 +17,7 @@ import { IS_DEMO } from '../../shared/config'
 import { getDemoPoints } from '../../shared/demo/simulator'
 import { useApi } from '../../shared/hooks/useApi'
 import { useI18n } from '../../shared/i18n'
-import { isDigitalContact, type AiInputConfig, type AiSignalType, type AlarmSetting, type Point, type TrendSample } from '../../shared/types'
+import { AI_FAILURE_MODES, AI_FAILURE_MODE_LABELS, isDigitalContact, type AiFailureMode, type AiInputConfig, type AiSignalType, type AlarmSetting, type Point, type TrendSample } from '../../shared/types'
 import { clamp, cn, formatDataAge, formatTime, formatValue, isVisibleUniversalInput, NO_DATA, pointNumber, uiNode } from '../../shared/utils'
 import {
   electricalModeAvailability,
@@ -972,6 +972,110 @@ function SignalConditioningTab({ config, configs, onChange }: { config: AiInputC
           </p>
         )}
       </div>
+
+      {/* ISS-PIO-24 §7 — deadband/clamp/phát hiện lỗi/giá trị khi lỗi. Firmware
+          cưỡng chế thật trong `apps/iobus/domain/io/io_conditioning.cpp`. */}
+      <div className="max-w-xs space-y-2 border-t border-[var(--c-border)] pt-5">
+        <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Vùng chết (deadband)', 'Deadband')}</span>
+        <SmallNumberInput value={config.deadband} min={0} max={100000} step={0.1} onChange={(deadband) => onChange({ deadband: Math.max(0, deadband) })} />
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {pick(
+            'Theo đơn vị kỹ thuật. Thay đổi nhỏ hơn ngưỡng này không được phát đi — mốc so sánh là giá trị ĐÃ PHÁT, nên nhiễu bị chặn mà trôi chậm vẫn qua. 0 = tắt.',
+            'In engineering units. Changes smaller than this are not published — compared against the last PUBLISHED value, so noise is blocked while slow drift still gets through. 0 = off.'
+          )}
+        </p>
+      </div>
+
+      <div className="max-w-xs space-y-2">
+        <label className="flex items-center gap-2 text-sm font-semibold text-[var(--c-text)]">
+          <input
+            className="h-4 w-4 accent-[var(--c-accent)]"
+            type="checkbox"
+            checked={config.clampEnabled}
+            onChange={(event) => onChange({ clampEnabled: event.target.checked })}
+          />
+          {pick('Kẹp giá trị (clamp)', 'Clamp value')}
+        </label>
+        {config.clampEnabled && (
+          <>
+            <div className="flex gap-2">
+              <label className="flex-1 space-y-1">
+                <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Cận dưới', 'Min')}</span>
+                <SmallNumberInput value={config.clampMin} min={-1000000} max={1000000} step={0.1} onChange={(clampMin) => onChange({ clampMin })} />
+              </label>
+              <label className="flex-1 space-y-1">
+                <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Cận trên', 'Max')}</span>
+                <SmallNumberInput value={config.clampMax} min={-1000000} max={1000000} step={0.1} onChange={(clampMax) => onChange({ clampMax })} />
+              </label>
+            </div>
+            {config.clampMax <= config.clampMin && (
+              <p role="alert" className="text-xs text-[var(--c-fault-fg)]">
+                {pick('Cận trên phải lớn hơn cận dưới — thiết bị sẽ từ chối lưu.', 'Max must be greater than min — the device will reject this.')}
+              </p>
+            )}
+          </>
+        )}
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {pick(
+            'Kẹp giá trị kỹ thuật vào dải trên. Đây KHÔNG phải dải hiển thị: dải hiển thị chỉ đổi cách vẽ, clamp đổi chính giá trị được phát.',
+            'Bounds the engineering value. This is NOT the display range: display range only changes rendering, clamp changes the published value itself.'
+          )}
+        </p>
+      </div>
+
+      <div className="max-w-xs space-y-2">
+        <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Điều kiện lỗi được tính', 'Fault detection')}</span>
+        <label className="flex items-center gap-2 text-sm text-[var(--c-text)]">
+          <input
+            className="h-4 w-4 accent-[var(--c-accent)]"
+            type="checkbox"
+            checked={config.rangeFaultEnabled}
+            onChange={(event) => onChange({ rangeFaultEnabled: event.target.checked })}
+          />
+          {pick('Vượt dải trên/dưới (over/under range)', 'Over/under range')}
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[var(--c-text)]">
+          <input
+            className="h-4 w-4 accent-[var(--c-accent)]"
+            type="checkbox"
+            checked={config.loopFaultEnabled}
+            onChange={(event) => onChange({ loopFaultEnabled: event.target.checked })}
+          />
+          {pick('Đứt/chập vòng dòng (open/shorted loop)', 'Open/shorted loop')}
+        </label>
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {pick(
+            'Tắt một điều kiện thì điểm KHÔNG bị hạ chất lượng vì điều kiện đó nữa. Lỗi truyền thông và lỗi ADC không bao giờ bị tắt.',
+            'Turning a condition off stops it from downgrading the point quality. Communication and ADC faults can never be turned off.'
+          )}
+        </p>
+      </div>
+
+      <div className="max-w-xs space-y-2">
+        <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Giá trị khi điểm lỗi', 'Value on fault')}</span>
+        <select
+          className={controlClass()}
+          aria-label={pick('Giá trị khi điểm lỗi', 'Value on fault')}
+          value={config.failureMode}
+          onChange={(event) => onChange({ failureMode: event.target.value as AiFailureMode })}
+        >
+          {AI_FAILURE_MODES.map((mode) => (
+            <option key={mode} value={mode}>{AI_FAILURE_MODE_LABELS[mode]}</option>
+          ))}
+        </select>
+        {config.failureMode === 'fixed' && (
+          <label className="block space-y-1">
+            <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Giá trị cố định', 'Fixed value')}</span>
+            <SmallNumberInput value={config.failureValue} min={-1000000} max={1000000} step={0.1} onChange={(failureValue) => onChange({ failureValue })} />
+          </label>
+        )}
+        <p className="text-xs text-[var(--c-text-dim)]">
+          {pick(
+            'Chỉ đổi GIÁ TRỊ được phát. Chất lượng điểm vẫn báo BAD kèm nguyên nhân — chính sách này không giấu lỗi khỏi cảnh báo hay lịch sử.',
+            'Only changes the published VALUE. Point quality still reports BAD with its reason — this policy never hides the fault from alarms or history.'
+          )}
+        </p>
+      </div>
     </div>
   )
 }
@@ -1008,10 +1112,78 @@ function CalibrationTab({ config, point, onChange }: { config: AiInputConfig; po
         <p className="text-xs text-[var(--c-text-dim)]">{pick('Chỉ điền lại ô "Offset hiện tại" ở trên — bạn tự bấm Lưu.', 'Only fills the "Current offset" field above — you still need to click Save.')}</p>
       </div>
 
+      <TwoPointCalibration config={config} onChange={onChange} />
+
       <p className="text-xs text-[var(--c-text-dim)]">
         {pick(
-          'Chỉ hỗ trợ hiệu chuẩn 1 điểm (offset). Chưa có gain/2-point, chưa lưu ngày/người hiệu chuẩn, chưa có nút khôi phục mặc định.',
-          'Only 1-point (offset) calibration is supported. No gain/2-point, no calibration date/user log, no factory-reset button yet.'
+          'Chưa lưu ngày/người hiệu chuẩn và chưa có nút khôi phục mặc định.',
+          'Calibration date/user is not logged yet and there is no factory-reset button.'
+        )}
+      </p>
+    </div>
+  )
+}
+
+/* ISS-PIO-24 — hiệu chuẩn 2 điểm. `cal_gain`/`cal_offset` đã được firmware đọc
+ * thật từ trước; FE thì vừa không cho sửa, vừa XOÁ chúng ở mỗi lần lưu vì
+ * `aiConfigToIo` dựng lại nguyên hàng `ui[]`. */
+function TwoPointCalibration({ config, onChange }: { config: AiInputConfig; onChange: (patch: Partial<AiInputConfig>) => void }) {
+  const { pick } = useI18n()
+  const [lowRead, setLowRead] = useState('')
+  const [lowRef, setLowRef] = useState('')
+  const [highRead, setHighRead] = useState('')
+  const [highRef, setHighRef] = useState('')
+
+  const gain = config.calGain ?? 1
+  const offset = config.calOffset ?? 0
+  const readings = [lowRead, lowRef, highRead, highRef].map(Number)
+  const spanValid = readings.every((value) => Number.isFinite(value)) &&
+    [lowRead, lowRef, highRead, highRef].every((text) => text !== '') &&
+    readings[0] !== readings[2]
+
+  function applyTwoPoint() {
+    const [xLow, yLow, xHigh, yHigh] = readings
+    if (!spanValid) return
+    const nextGain = (yHigh - yLow) / (xHigh - xLow)
+    onChange({ calGain: nextGain, calOffset: yLow - nextGain * xLow })
+  }
+
+  return (
+    <div className="max-w-sm space-y-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+      <span className="text-sm font-semibold text-[var(--c-text)]">{pick('Hiệu chuẩn 2 điểm (gain + offset)', 'Two-point calibration (gain + offset)')}</span>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="space-y-1">
+          <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Điểm thấp — đang đọc', 'Low point — reading')}</span>
+          <input className={controlClass()} type="number" step={0.1} value={lowRead} onChange={(event) => setLowRead(event.target.value)} />
+        </label>
+        <label className="space-y-1">
+          <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Điểm thấp — chuẩn', 'Low point — reference')}</span>
+          <input className={controlClass()} type="number" step={0.1} value={lowRef} onChange={(event) => setLowRef(event.target.value)} />
+        </label>
+        <label className="space-y-1">
+          <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Điểm cao — đang đọc', 'High point — reading')}</span>
+          <input className={controlClass()} type="number" step={0.1} value={highRead} onChange={(event) => setHighRead(event.target.value)} />
+        </label>
+        <label className="space-y-1">
+          <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Điểm cao — chuẩn', 'High point — reference')}</span>
+          <input className={controlClass()} type="number" step={0.1} value={highRef} onChange={(event) => setHighRef(event.target.value)} />
+        </label>
+      </div>
+      <Button size="sm" disabled={!spanValid} onClick={applyTwoPoint}>{pick('Tính gain + offset', 'Compute gain + offset')}</Button>
+      <div className="flex gap-2">
+        <label className="flex-1 space-y-1">
+          <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Gain', 'Gain')}</span>
+          <SmallNumberInput value={gain} min={-1000} max={1000} step={0.001} onChange={(calGain) => onChange({ calGain })} />
+        </label>
+        <label className="flex-1 space-y-1">
+          <span className="block text-xs uppercase text-[var(--c-text-dim)]">{pick('Offset', 'Offset')}</span>
+          <SmallNumberInput value={offset} min={-1000000} max={1000000} step={0.001} onChange={(calOffset) => onChange({ calOffset })} />
+        </label>
+      </div>
+      <p className="text-xs text-[var(--c-text-dim)]">
+        {pick(
+          'Hai điểm phải khác nhau ở cột "đang đọc". Kết quả chỉ điền vào hai ô Gain/Offset — bạn tự bấm Lưu.',
+          'The two "reading" values must differ. The result only fills the Gain/Offset fields — you still need to click Save.'
         )}
       </p>
     </div>

@@ -1387,6 +1387,45 @@ export function isDigitalContact(signalType: AiSignalType): boolean {
   return signalType === 4 || signalType === 5
 }
 
+/** Chính sách giá trị khi điểm lỗi — khớp `UiFailureMode` (C++) và
+ *  `configschema.UIFailureModes` (Go). Ba nơi phải cùng tập giá trị. */
+export type AiFailureMode = 'invalid' | 'hold' | 'fixed'
+
+export const AI_FAILURE_MODES: readonly AiFailureMode[] = ['invalid', 'hold', 'fixed']
+
+export const AI_FAILURE_MODE_LABELS: Record<AiFailureMode, string> = {
+  invalid: 'Báo INVALID (giữ giá trị vừa đo)',
+  hold: 'Giữ giá trị tốt gần nhất',
+  fixed: 'Dùng giá trị cố định'
+}
+
+/** Điều hoà tín hiệu — nhóm trường ISS-PIO-24 §7 của một kênh UI. */
+export type AiConditioningConfig = {
+  deadband: number
+  clampEnabled: boolean
+  clampMin: number
+  clampMax: number
+  rangeFaultEnabled: boolean
+  loopFaultEnabled: boolean
+  failureMode: AiFailureMode
+  failureValue: number
+}
+
+/** Mặc định phải TRÙNG `UiScaleConfig` trong `apps/iobus/domain/io/io_types.hpp`:
+ *  mở trang rồi bấm Lưu mà không sửa gì thì hành vi của bo không được đổi. */
+export function aiConditioningDefaults(): AiConditioningConfig {
+  return {
+    deadband: 0,
+    clampEnabled: false,
+    clampMin: 0,
+    clampMax: 0,
+    rangeFaultEnabled: true,
+    loopFaultEnabled: true,
+    failureMode: 'invalid',
+    failureValue: 0
+  }
+}
+
 export interface AiInputConfig {
   channel: number
   tag: string
@@ -1402,6 +1441,24 @@ export interface AiInputConfig {
   mathFunction: number
   enabled: boolean
   note: string
+  /** ISS-PIO-24 §7 — điều hoà tín hiệu. Firmware cưỡng chế thật trong
+   *  `apps/iobus/domain/io/io_conditioning.cpp`; các trường này KHÔNG phải
+   *  metadata hiển thị. Bỏ trống ⇒ giữ hành vi trước ISS-PIO-24. */
+  deadband: number
+  clampEnabled: boolean
+  clampMin: number
+  clampMax: number
+  rangeFaultEnabled: boolean
+  loopFaultEnabled: boolean
+  failureMode: AiFailureMode
+  failureValue: number
+  /* HẾT nhóm ISS-PIO-24 §7 (giữ khớp `AiConditioningConfig`). */
+  /** Hiệu chuẩn 2 điểm: `value_eng = raw_eng * calGain + calOffset`. Firmware
+   *  (`iobus_config.cpp`) và schema Go đọc thật hai khoá này từ trước, nhưng FE
+   *  dựng lại nguyên hàng `ui[]` khi lưu nên đã XOÁ ÂM THẦM chúng ở mỗi lần bấm
+   *  Lưu. Để `undefined` = không gửi khoá = giữ nguyên giá trị trên thiết bị. */
+  calGain?: number
+  calOffset?: number
   /** Chuỗi `type`/`unit` gốc từ `io_config.conf` (vd `NTC20k`, `PT1000`, `RPM`) —
    *  FE chưa có control chọn biến thể riêng nên giữ nguyên khi round-trip thay
    *  vì tự ý hạ cấp về giá trị mặc định của nhóm signalType. Xem

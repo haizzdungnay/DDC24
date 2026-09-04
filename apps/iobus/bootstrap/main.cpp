@@ -28,6 +28,7 @@
 #include "diagnostics/alarm_publisher.hpp"
 #include "diagnostics/iobus_metrics.hpp"
 #include "io/io_cache.hpp"
+#include "io/io_conditioning.hpp"
 #include "io/io_scaling.hpp"
 #include "io/io_types.hpp"
 #include "iop/iop_client.hpp"
@@ -733,6 +734,8 @@ int main(int argc, char** argv)
     uint8_t ui_filter_pos[KX_N_UI] = {};
     uint8_t ui_filter_count[KX_N_UI] = {};
     uint8_t ui_filter_size[KX_N_UI] = {};
+    /* ISS-PIO-24: trạng thái deadband/HOLD theo kênh, sống cùng vòng lặp poll */
+    UiConditioningState ui_cond[KX_N_UI] = {};
 
     /* ---- Main loop: poll 10ms tuyệt-đối-thời-gian ---- */
     while (!g_shutdown.load()) {
@@ -882,11 +885,16 @@ int main(int argc, char** argv)
                             ui_filter_count[i] = 0;
                             ui_filter_pos[i] = 0;
                         }
-                        /* ADR-011: override reliability to COMMUNICATION_FAILURE when ADC fault */
+                        /* ADR-011: override reliability to COMMUNICATION_FAILURE when ADC fault.
+                         * Đặt TRƯỚC điều hoà để lỗi phần cứng không bị mặt nạ
+                         * range/loop che, và để chính sách failure value nhìn
+                         * thấy đúng quality cuối cùng. */
                         if (resp.fault_flags & (IOP_FAULT_ADC1 | IOP_FAULT_ADC2)) {
                             q = KX_Q_BAD;
                             r = KX_REL_COMMUNICATION_FAILURE;
                         }
+                        /* ISS-PIO-24 §7: mặt nạ lỗi → clamp → deadband → giá trị khi lỗi */
+                        value = condition_ui_sample(cfg.ui[i], &ui_cond[i], &q, &r, value);
                         pre_math[i] = value;
                         snap.ui_value[i] = value;
                         snap.ui_raw[i] = cfg.ui[i].enabled ? ui_raw_electric(resp.ui_raw[i], cfg.ui[i]) : 0.0f;

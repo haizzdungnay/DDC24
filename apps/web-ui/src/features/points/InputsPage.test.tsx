@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../shared/components/Toast'
 import { I18nProvider } from '../../shared/i18n'
 import { ApiError, type AiInputConfig, type AlarmSetting, type Point } from '../../shared/types'
+import { aiConditioningDefaults } from '../../shared/types'
 import { InputsPage } from './InputsPage'
 
 const api = vi.hoisted(() => ({
@@ -41,6 +42,7 @@ vi.mock('../../shared/components/PointLoggingSection', () => ({ PointLoggingSect
 vi.mock('../../shared/components/TrendChart', () => ({ TrendChart: () => <div /> }))
 
 const baseInput: AiInputConfig = {
+  ...aiConditioningDefaults(),
   channel: 1,
   tag: 'LEGACY_ALIAS',
   label: 'Shared Display',

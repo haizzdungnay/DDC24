@@ -262,3 +262,94 @@ func TestAcceptsBothNumberRepresentations(t *testing.T) {
 		}
 	}
 }
+
+// ISS-PIO-24 §7 — deadband/clamp/failure policy. Firmware đọc thật các khoá này
+// (`io_conditioning.cpp`); nếu schema quên, web-api sẽ từ chối chính cấu hình
+// đang chạy trên bo.
+func TestSignalConditioningFieldsAreAccepted(t *testing.T) {
+	ui := IOCollections(testModes())["ui"]
+	row := jsonRow(t, `{"ch":1,"type":"0-10V","deadband":0.25,"clamp_enabled":true,"clamp_min":4,"clamp_max":36,`+
+		`"range_fault_enabled":false,"loop_fault_enabled":true,"failure_mode":"hold","failure_value":21.5}`)
+	if errs := Validate(ui, []map[string]any{row}, Bounds{MaxChannel: 16}); len(errs) != 0 {
+		t.Fatalf("trường điều hoà tín hiệu bị từ chối: %#v", errs)
+	}
+}
+
+func TestSignalConditioningFieldConstraints(t *testing.T) {
+	ui := IOCollections(testModes())["ui"]
+	row := jsonRow(t, `{"ch":1,"type":"0-10V","deadband":-1,"clamp_enabled":"co","failure_mode":"giu-nguyen"}`)
+	messages := messagesFor(Validate(ui, []map[string]any{row}, Bounds{MaxChannel: 16}))
+	for path, want := range map[string]string{
+		"ui[0].deadband":      "must be number in range",
+		"ui[0].clamp_enabled": "must be boolean",
+		"ui[0].failure_mode":  "must be one of",
+	} {
+		if !strings.Contains(messages[path], want) {
+			t.Fatalf("%s = %q; muốn chứa %q", path, messages[path], want)
+		}
+	}
+}
+
+// Dải clamp nghịch chỉ là lỗi khi clamp ĐANG BẬT — firmware cũng bỏ qua dải
+// nghịch thay vì kẹp về một điểm, nên chặn lúc tắt là chặn dữ liệu ngủ đông.
+func TestClampRangeRuleOnlyAppliesWhenEnabled(t *testing.T) {
+	ui := IOCollections(testModes())["ui"]
+
+	on := jsonRow(t, `{"ch":1,"type":"0-10V","clamp_enabled":true,"clamp_min":36,"clamp_max":4}`)
+	messages := messagesFor(Validate(ui, []map[string]any{on}, Bounds{MaxChannel: 16}))
+	if !strings.Contains(messages["ui[0].clamp_max"], "must be greater than clamp_min") {
+		t.Fatalf("dải clamp nghịch đi lọt khi clamp bật: %#v", messages)
+	}
+
+	missing := jsonRow(t, `{"ch":1,"type":"0-10V","clamp_enabled":true}`)
+	messages = messagesFor(Validate(ui, []map[string]any{missing}, Bounds{MaxChannel: 16}))
+	if !strings.Contains(messages["ui[0].clamp_max"], "required when clamp_enabled") {
+		t.Fatalf("bật clamp mà không có biên vẫn đi lọt: %#v", messages)
+	}
+
+	off := jsonRow(t, `{"ch":1,"type":"0-10V","clamp_enabled":false,"clamp_min":36,"clamp_max":4}`)
+	if errs := Validate(ui, []map[string]any{off}, Bounds{MaxChannel: 16}); len(errs) != 0 {
+		t.Fatalf("dải nghịch khi clamp TẮT không được coi là lỗi: %#v", errs)
+	}
+}
+
+// Enum `failure_mode` của Go phải khớp `ui_failure_mode_from_string` trong C++.
+// Đây là cổng chống trôi: thêm chế độ ở một bên mà quên bên kia thì web-api
+// nhận một giá trị mà firmware âm thầm hạ về `invalid`.
+func TestFailureModeEnumMatchesFirmware(t *testing.T) {
+	source, err := os.ReadFile("../../../../apps/iobus/domain/io/io_conditioning.cpp")
+	if err != nil {
+		t.Fatalf("không đọc được io_conditioning.cpp: %v", err)
+	}
+	text := string(source)
+	for _, mode := range UIFailureModes {
+		if !strings.Contains(text, `"`+mode+`"`) {
+			t.Fatalf("chế độ %q có trong schema Go nhưng firmware không nhận", mode)
+		}
+	}
+	for _, match := range regexp.MustCompile(`std::strcmp\(s, "([a-z]+)"\)`).FindAllStringSubmatch(text, -1) {
+		found := false
+		for _, mode := range UIFailureModes {
+			if mode == match[1] {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("firmware nhận chế độ %q nhưng schema Go không khai", match[1])
+		}
+	}
+}
+
+// Biên MỘT PHÍA phải được nói ra. `deadband` chỉ có Min; trước bản sửa này
+// thông điệp là "must be number" — không phân biệt nổi sai kiểu với vượt biên.
+func TestOneSidedBoundIsNamedInMessage(t *testing.T) {
+	ui := IOCollections(testModes())["ui"]
+	row := jsonRow(t, `{"ch":1,"type":"0-10V","deadband":-1}`)
+	got := messagesFor(Validate(ui, []map[string]any{row}, Bounds{MaxChannel: 16}))["ui[0].deadband"]
+	if !strings.Contains(got, ">= 0") {
+		t.Fatalf("thông điệp không nói ra biên dưới: %q", got)
+	}
+	if got == "must be number" {
+		t.Fatalf("vượt biên bị báo y hệt sai kiểu: %q", got)
+	}
+}

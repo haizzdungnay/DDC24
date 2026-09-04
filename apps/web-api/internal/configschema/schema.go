@@ -29,6 +29,7 @@ package configschema
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -141,9 +142,25 @@ func IOCollections(modes ModeSets) map[string]Collection {
 		Field{Name: "range_mult", Kind: KindInt, Min: num(0), Max: num(5), ReadBy: []string{"iobus_config.cpp"}},
 		Field{Name: "filter_samples", Kind: KindInt, Min: num(0), Max: num(100), ReadBy: []string{"iobus_config.cpp"}},
 		Field{Name: "math_func", Kind: KindInt, Min: num(0), Max: num(3), ReadBy: []string{"iobus_config.cpp"}},
+		// ISS-PIO-24 §7 — điều hoà tín hiệu. Tất cả đều được `iobus` cưỡng chế
+		// thật trong `io_conditioning.cpp`; không trường nào ở đây chỉ để hiển thị.
+		Field{Name: "deadband", Kind: KindNumber, Min: num(0), ReadBy: []string{"iobus_config.cpp", "io_conditioning.cpp:apply_deadband"}},
+		Field{Name: "clamp_enabled", Kind: KindBool, ReadBy: []string{"iobus_config.cpp", "io_conditioning.cpp:apply_clamp"}},
+		Field{Name: "clamp_min", Kind: KindNumber, ReadBy: []string{"iobus_config.cpp", "io_conditioning.cpp:apply_clamp"}},
+		Field{Name: "clamp_max", Kind: KindNumber, ReadBy: []string{"iobus_config.cpp", "io_conditioning.cpp:apply_clamp"}},
+		Field{Name: "range_fault_enabled", Kind: KindBool, ReadBy: []string{"iobus_config.cpp", "io_conditioning.cpp:apply_fault_mask"}},
+		Field{Name: "loop_fault_enabled", Kind: KindBool, ReadBy: []string{"iobus_config.cpp", "io_conditioning.cpp:apply_fault_mask"}},
+		Field{Name: "failure_mode", Kind: KindString, Enum: UIFailureModes, ReadBy: []string{"iobus_config.cpp:ui_failure_mode_from_string", "io_conditioning.cpp:apply_failure_value"}},
+		Field{Name: "failure_value", Kind: KindNumber, ReadBy: []string{"iobus_config.cpp", "io_conditioning.cpp:apply_failure_value"}},
 	)
 	ui.Fields = append(ui.Fields, pointMetadataFields()...)
-	ui.Rules = []Rule{orderedPair("scale_lo", "scale_hi", "must be greater than scale_lo")}
+	ui.Rules = []Rule{
+		orderedPair("scale_lo", "scale_hi", "must be greater than scale_lo"),
+		// Chỉ bắt lỗi khi clamp ĐANG BẬT: một dải nghịch nằm trong hàng đã tắt
+		// clamp là dữ liệu ngủ đông, chặn nó chỉ làm người dùng bực mà không
+		// bảo vệ được gì. `apply_clamp` cũng bỏ qua dải nghịch ở phía firmware.
+		clampRangeRule(),
+	}
 
 	ao := Collection{Name: "ao"}
 	ao.Fields = append(ao.Fields,
@@ -178,6 +195,26 @@ func SafeStateCollections(modes ModeSets) map[string]Collection {
 		{Name: "safe", Kind: KindString, Required: true, Enum: modes.DO, ReadBy: []string{"safe_state_config.cpp"}},
 	}}
 	return map[string]Collection{"ao": ao, "do": do}
+}
+
+// UIFailureModes là enum `failure_mode` của Universal Input, khớp
+// `UiFailureMode` trong `apps/iobus/domain/io/io_types.hpp`. Đổi một bên mà
+// quên bên kia ⇒ web-api nhận giá trị mà firmware âm thầm coi là `invalid`.
+var UIFailureModes = []string{"invalid", "hold", "fixed"}
+
+func clampRangeRule() Rule {
+	return Rule{Path: "clamp_max", Check: func(row map[string]any) (string, bool) {
+		enabled, ok := row["clamp_enabled"].(bool)
+		if !ok || !enabled {
+			return "", false
+		}
+		low, hasLow, okLow := numberOf(row["clamp_min"])
+		high, hasHigh, okHigh := numberOf(row["clamp_max"])
+		if !hasLow || !hasHigh || !okLow || !okHigh {
+			return "clamp_min and clamp_max are required when clamp_enabled is true", true
+		}
+		return "must be greater than clamp_min", high <= low
+	}}
 }
 
 func orderedPair(lowKey, highKey, message string) Rule {
@@ -269,10 +306,10 @@ func validateField(base string, field Field, row map[string]any, bounds Bounds) 
 	case KindNumber:
 		value, _, ok := numberOf(raw)
 		if !ok {
-			return []Error{{Path: path, Message: numberMessage(field)}}
+			return []Error{{Path: path, Message: numberMessage(field, bounds)}}
 		}
 		if outOfRange(field, value, bounds) {
-			return []Error{{Path: path, Message: numberMessage(field)}}
+			return []Error{{Path: path, Message: numberMessage(field, bounds)}}
 		}
 	}
 	return nil
@@ -298,18 +335,30 @@ func outOfRange(field Field, value float64, bounds Bounds) bool {
 }
 
 func intRangeMessage(field Field, bounds Bounds) string {
-	min, max := field.Min, effectiveMax(field, bounds)
-	if min != nil && max != nil {
-		return fmt.Sprintf("must be integer in range %d..%d", int(*min), int(*max))
-	}
-	return "must be integer"
+	return rangeMessage("integer", field.Min, effectiveMax(field, bounds), func(v float64) string {
+		return strconv.Itoa(int(v))
+	})
 }
 
-func numberMessage(field Field) string {
-	if field.Min != nil && field.Max != nil {
-		return fmt.Sprintf("must be number in range %s..%s", trimFloat(*field.Min), trimFloat(*field.Max))
+func numberMessage(field Field, bounds Bounds) string {
+	return rangeMessage("number", field.Min, effectiveMax(field, bounds), trimFloat)
+}
+
+// rangeMessage nói ra biên MỘT PHÍA thay vì nuốt nó. Trước ISS-PIO-24 một
+// trường chỉ có `Min` bị từ chối với thông điệp "must be number" — người vận
+// hành đọc xong tưởng mình gõ sai kiểu dữ liệu trong khi thực ra chỉ vượt biên,
+// còn biên là bao nhiêu thì không ai nói.
+func rangeMessage(kind string, min, max *float64, format func(float64) string) string {
+	switch {
+	case min != nil && max != nil:
+		return fmt.Sprintf("must be %s in range %s..%s", kind, format(*min), format(*max))
+	case min != nil:
+		return fmt.Sprintf("must be %s in range >= %s", kind, format(*min))
+	case max != nil:
+		return fmt.Sprintf("must be %s in range <= %s", kind, format(*max))
+	default:
+		return "must be " + kind
 	}
-	return "must be number"
 }
 
 func trimFloat(value float64) string {

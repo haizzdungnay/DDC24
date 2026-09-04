@@ -36,7 +36,7 @@ import {
   updateDemoPointConfig
 } from '../demo/simulator'
 import { USER_ROLES } from '../auth/capabilities'
-import { ApiError, isDigitalContact, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmEstimateResult, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusFramesResponse, type ModbusRTUPoint, type ModbusTemplate, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkCheckResponse, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
+import { AI_FAILURE_MODES, aiConditioningDefaults, ApiError, isDigitalContact, type AiFailureMode, type AiInputConfig, type AiSignalType, type Alarm, type AlarmHistoryEntry, type AlarmHistoryQuery, type AlarmEstimateResult, type AlarmMetrics, type AlarmSetting, type AlarmSimulateResult, type AoEngineeringUnit, type AoSignalMode, type ApiValidationDetail, type CommissioningTestResult, type ConfigDevice, type ConfigPutResult, type CurrentUser, type DoSafeState, type HealthResponse, type HistorianConfig, type HistorianConfigUpdate, type HistorianPolicy, type IoChannel, type ModbusApplyResult, type ModbusBus, type ModbusBusConfigInput, type ModbusBusInfo, type ModbusCandidate, type ModbusConfigLifecycle, type ModbusConfigState, type ModbusDiffEntry, type ModbusEventItem, type ModbusImportError, type ModbusMappingResponse, type ModbusOverview, type ModbusPortCapability, type ModbusProbeResult, type ModbusRTUDevice, type ModbusRTUDiagnostics, type ModbusFramesResponse, type ModbusRTUPoint, type ModbusTemplate, type NetcfgActive, type NetcfgCandidate, type NetcfgResponse, type NetcfgTransactionAction, type NetcfgTransactionRequest, type NetworkCheckResponse, type NetworkData, type OutputsConfig, type Point, type ScheduleObject, type ScheduleValidationResult, type ScheduleSimulateRequest, type ScheduleSimulateResult, type SchedulePublishRequest, type SchedulePublishResult, type ScheduleRevisionInfo, type ScheduleRuntimeState, type ScheduleAuditEntry, type ScheduleEffectiveResponse, type TimeConfig, type TimeConfigUpdate, type TimeStatus, type TrendSample, type SystemHistoryResponse, type UserAccessResponse, type UserAccessRow, type VirtualPointUsage, type UserAccount, type UserParamsConfig, type UserRole, type VirtualPoint } from '../types'
 import { isGenericPointLabel, normalizeHealth, nowIso, uiNode } from '../utils'
 import { normalizePoint, pointRecordsFrom } from './pointNormalizer'
 import { displayPointName } from './pointTags'
@@ -636,6 +636,16 @@ export type IoUiConfig = {
   filter_samples?: number
   sensor_cal?: number
   math_func?: number
+  deadband?: number
+  clamp_enabled?: boolean
+  clamp_min?: number
+  clamp_max?: number
+  range_fault_enabled?: boolean
+  loop_fault_enabled?: boolean
+  failure_mode?: string
+  failure_value?: number
+  cal_gain?: number
+  cal_offset?: number
 }
 
 type IoConfig = {
@@ -773,8 +783,14 @@ function defaultAiConfig(channel: number): AiInputConfig {
     sensorCal: 0,
     mathFunction: 0,
     enabled: true,
-    note: ''
+    note: '',
+    ...aiConditioningDefaults()
   }
+}
+
+function failureModeFromIo(value: unknown): AiFailureMode {
+  const text = stringFrom(value)
+  return AI_FAILURE_MODES.includes(text as AiFailureMode) ? (text as AiFailureMode) : 'invalid'
 }
 
 export function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
@@ -795,6 +811,16 @@ export function aiConfigFromIo(item: IoUiConfig, index: number): AiInputConfig {
     mathFunction: numberFrom(item.math_func) ?? 0,
     enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
     note: stringFrom(item.note) ?? '',
+    deadband: numberFrom(item.deadband) ?? 0,
+    clampEnabled: typeof item.clamp_enabled === 'boolean' ? item.clamp_enabled : false,
+    clampMin: numberFrom(item.clamp_min) ?? 0,
+    clampMax: numberFrom(item.clamp_max) ?? 0,
+    rangeFaultEnabled: typeof item.range_fault_enabled === 'boolean' ? item.range_fault_enabled : true,
+    loopFaultEnabled: typeof item.loop_fault_enabled === 'boolean' ? item.loop_fault_enabled : true,
+    failureMode: failureModeFromIo(item.failure_mode),
+    failureValue: numberFrom(item.failure_value) ?? 0,
+    calGain: numberFrom(item.cal_gain),
+    calOffset: numberFrom(item.cal_offset),
     ioType: stringFrom(item.type),
     ioUnit: stringFrom(item.unit)
   }
@@ -814,8 +840,22 @@ export function aiConfigToIo(config: AiInputConfig): IoUiConfig {
     range_mult: config.rangeMultiplier,
     filter_samples: config.filterSamples,
     sensor_cal: config.sensorCal,
-    math_func: config.mathFunction
+    math_func: config.mathFunction,
+    /* ISS-PIO-24: `aiConfigToIo` dựng lại NGUYÊN hàng `ui[]` rồi PUT đè, nên
+     * khoá nào không liệt kê ở đây sẽ bị xoá âm thầm ở lần lưu kế tiếp. */
+    deadband: config.deadband,
+    clamp_enabled: config.clampEnabled,
+    clamp_min: config.clampMin,
+    clamp_max: config.clampMax,
+    range_fault_enabled: config.rangeFaultEnabled,
+    loop_fault_enabled: config.loopFaultEnabled,
+    failure_mode: config.failureMode,
+    failure_value: config.failureValue
   }
+  /* Chỉ gửi khi FE thực sự biết giá trị: gửi `undefined` thành khoá thiếu sẽ
+   * đưa thiết bị về mặc định, còn bỏ hẳn khoá thì thiết bị giữ nguyên. */
+  if (config.calGain !== undefined) item.cal_gain = config.calGain
+  if (config.calOffset !== undefined) item.cal_offset = config.calOffset
   if (isDigitalContact(config.signalType)) {
     item.invert = config.signalType === 5
     item.unit = ''

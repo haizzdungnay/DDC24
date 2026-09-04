@@ -160,6 +160,77 @@ TEST(IobusConfig, WebIoConfigMapsEasySetU0ToU7)
     EXPECT_EQ(cfg.ao_mode[3], AoMode::MA4_20);
 }
 
+TEST(IobusConfig, ParsesSignalConditioningKeys)
+{
+    /* ISS-PIO-24 §7: các key mới phải đi tới `UiScaleConfig`, nếu không thì
+     * cấu hình trên UI chỉ là trang trí — đúng lỗi mà issue này tố cáo. */
+    TempConfig f(R"({
+      "ui": [
+        {
+          "ch": 1,
+          "type": "0-10V",
+          "deadband": 0.25,
+          "clamp_enabled": true,
+          "clamp_min": 4,
+          "clamp_max": 36,
+          "range_fault_enabled": false,
+          "loop_fault_enabled": false,
+          "failure_mode": "fixed",
+          "failure_value": 21.5
+        }
+      ],
+      "ao": [ { "ch": 1, "mode": "0-10V" } ]
+    })");
+    IobusConfig cfg;
+    ASSERT_TRUE(load_config(f.path(), true, &cfg));
+    EXPECT_FLOAT_EQ(cfg.ui[0].deadband, 0.25f);
+    EXPECT_TRUE(cfg.ui[0].clamp_enabled);
+    EXPECT_FLOAT_EQ(cfg.ui[0].clamp_min, 4.0f);
+    EXPECT_FLOAT_EQ(cfg.ui[0].clamp_max, 36.0f);
+    EXPECT_FALSE(cfg.ui[0].range_fault_enabled);
+    EXPECT_FALSE(cfg.ui[0].loop_fault_enabled);
+    EXPECT_EQ(cfg.ui[0].failure_mode, UiFailureMode::FIXED);
+    EXPECT_FLOAT_EQ(cfg.ui[0].failure_value, 21.5f);
+}
+
+TEST(IobusConfig, ConditioningKeysAbsentKeepLegacyDefaults)
+{
+    /* Config cũ (không có key ISS-PIO-24) phải giữ NGUYÊN hành vi cũ. */
+    TempConfig f(R"({
+      "ui": [ { "ch": 1, "type": "0-10V", "scale_hi": 10 } ],
+      "ao": [ { "ch": 1, "mode": "0-10V" } ]
+    })");
+    IobusConfig cfg;
+    ASSERT_TRUE(load_config(f.path(), true, &cfg));
+    EXPECT_FLOAT_EQ(cfg.ui[0].deadband, 0.0f);
+    EXPECT_FALSE(cfg.ui[0].clamp_enabled);
+    EXPECT_TRUE(cfg.ui[0].range_fault_enabled);
+    EXPECT_TRUE(cfg.ui[0].loop_fault_enabled);
+    EXPECT_EQ(cfg.ui[0].failure_mode, UiFailureMode::INVALID);
+}
+
+TEST(IobusConfig, NegativeDeadbandIsTreatedAsDisabled)
+{
+    TempConfig f(R"({
+      "ui": [ { "ch": 1, "type": "0-10V", "deadband": -3 } ],
+      "ao": [ { "ch": 1, "mode": "0-10V" } ]
+    })");
+    IobusConfig cfg;
+    ASSERT_TRUE(load_config(f.path(), true, &cfg));
+    EXPECT_FLOAT_EQ(cfg.ui[0].deadband, 0.0f);
+}
+
+TEST(IobusConfig, UnknownFailureModeFallsBackToInvalid)
+{
+    TempConfig f(R"({
+      "ui": [ { "ch": 1, "type": "0-10V", "failure_mode": "giu-nguyen" } ],
+      "ao": [ { "ch": 1, "mode": "0-10V" } ]
+    })");
+    IobusConfig cfg;
+    ASSERT_TRUE(load_config(f.path(), true, &cfg));
+    EXPECT_EQ(cfg.ui[0].failure_mode, UiFailureMode::INVALID);
+}
+
 TEST(IobusConfig, MissingFileUsesDefaults)
 {
     IobusConfig cfg;
