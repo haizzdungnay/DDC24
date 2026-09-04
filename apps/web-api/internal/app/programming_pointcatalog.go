@@ -375,11 +375,33 @@ func pointCatalogDataType(point PointDTO) string {
 	case "DO":
 		// Rơ-le: BOOL là bản chất phần cứng, không phải suy diễn.
 		return "BOOL"
-	case "AO":
-		// DAC: luôn tương tự.
+	case "AO", "UI":
+		/* `ISS-PIO-33` — KIỂU io_map CỦA UI/AO LUÔN LÀ REAL.
+		 *
+		 * `st_io_map.cpp:93` chốt cứng, không có ngoại lệ nào cho tiếp điểm khô:
+		 *     type_valid = ((prefix == "UI" || prefix == "AO") && type == REAL)
+		 *               || ((prefix == "DI" || prefix == "DO") && type == BOOL);
+		 * UI/AO nằm trong `plc_shm.ai[]`/`ao[]` và luôn là float; `DI` mới là họ
+		 * BOOL, và nó là một prefix RIÊNG.
+		 *
+		 * Đã hỏng HAI LẦN theo hai đường khác nhau, nên chú thích này ở lại:
+		 *   1. Bản gốc đánh hơi kiểu Go của `point.Value`: kênh UI cấu hình
+		 *      digital được `decodePoints` đổi `Value` sang `bool` cho giao diện
+		 *      hiển thị ON/OFF ⇒ catalog phát BOOL.
+		 *   2. `ISS-PIO-06` bỏ lối đoán đó và đọc `signalType` từ cấu hình —
+		 *      đúng nguyên tắc, nhưng `universalInputDataType` vẫn trả BOOL khi
+		 *      `signalType == "dry"` ⇒ catalog VẪN phát BOOL. Sửa nguyên nhân mà
+		 *      giữ nguyên triệu chứng.
+		 * Cả hai lần, `EvaluatePointMapEligibility` chặn điểm ở CẢ HAI chiều với
+		 * lý do "Core yêu cầu REAL cho điểm UI". Đo trên bo Foxlinx: `UI-09..UI-13`
+		 * — năm kênh đấu tiếp điểm — không map được vào bất kỳ biến ST nào, dù
+		 * chúng đọc đúng và quality GOOD.
+		 *
+		 * Kiểu HIỂN THỊ và kiểu IO_MAP là hai thứ khác nhau: `signalType: "dry"`
+		 * vẫn nói "kênh này là tiếp điểm" cho giao diện, còn `dataType` phải nói
+		 * đúng cách Core lưu điểm. Trộn hai thứ làm một là để một lựa chọn hiển
+		 * thị âm thầm gỡ mất khả năng lập trình của cả kênh. */
 		return "REAL"
-	case "UI":
-		return universalInputDataType(point.SignalType)
 	}
 	return "REAL"
 }
@@ -432,17 +454,6 @@ func virtualSignalTypeToIEC(signalType string) string {
 		return "BOOL"
 	case virtualPointSignalInteger:
 		return "DINT"
-	}
-	return "REAL"
-}
-
-/* universalInputDataType đọc `type` của kênh trong `io_config.conf`.
- *
- * `dry` là tiếp điểm khô — `AiInputConfig.signalType` 4/5 — và nó là BOOL BẤT
- * KỂ hôm nay kênh có mẫu hay không. Đó là toàn bộ nội dung của hệ quả (1). */
-func universalInputDataType(signalType string) string {
-	if strings.EqualFold(strings.TrimSpace(signalType), "dry") {
-		return "BOOL"
 	}
 	return "REAL"
 }

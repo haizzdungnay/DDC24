@@ -1,22 +1,39 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	programmingapplication "mkddc-web/internal/programming/application"
+)
 
 /* `ISS-PIO-06`/`F-PIO-005` — `dataType` lấy từ CẤU HÌNH, không suy từ giá trị
  * runtime. Mỗi test dưới đây khoá đúng một trong ba hệ quả mà issue nêu. */
 
-// Hệ quả (1): kênh tiếp điểm khô CHƯA CÓ MẪU từng bị khai là `REAL`, nên bind
-// vào `VAR_INPUT : BOOL` báo "Kiểu dữ liệu không khớp" — rồi TỰ HẾT SAI khi
-// điểm có mẫu. Một lỗi nhấp nháy theo trạng thái hiện trường.
-func TestUniversalInputDryContactIsBoolEvenWithoutASample(t *testing.T) {
+/* Hệ quả (1): `dataType` của một kênh KHÔNG được đổi theo dữ liệu runtime.
+ *
+ * Bản đầu của test này chờ `BOOL` cho tiếp điểm khô. Ý ĐỊNH đúng — bất biến
+ * theo runtime, hết nhấp nháy — nhưng KỲ VỌNG sai, và nó khoá lại đúng hồi quy
+ * `ISS-PIO-33`: `st_io_map.cpp:93` chốt `(UI|AO) ⇒ REAL` không ngoại lệ, nên
+ * catalog phát BOOL làm `EvaluatePointMapEligibility` chặn kênh ở CẢ HAI chiều.
+ *
+ * Sửa KỲ VỌNG CỦA TEST, không nới lỏng sản phẩm: bất biến vẫn được canh nguyên
+ * vẹn, chỉ có hằng số đúng đổi từ BOOL sang REAL. `signalType: "dry"` vẫn là
+ * thông tin thật cho GIAO DIỆN; nó chỉ không phải kiểu io_map. */
+func TestUniversalInputDataTypeDoesNotDependOnRuntimeSample(t *testing.T) {
 	withoutSample := PointDTO{Kind: "UI", SignalType: "dry"}
-	if got := pointCatalogDataType(withoutSample); got != "BOOL" {
-		t.Fatalf("UI tiếp điểm khô chưa có mẫu = %q; chờ BOOL", got)
+	if got := pointCatalogDataType(withoutSample); got != "REAL" {
+		t.Fatalf("UI tiếp điểm khô chưa có mẫu = %q; chờ REAL (st_io_map.cpp: UI luôn REAL)", got)
 	}
 	// ...và câu trả lời KHÔNG đổi khi có mẫu. Đó là điều làm lỗi hết nhấp nháy.
 	withSample := PointDTO{Kind: "UI", SignalType: "dry", Value: float64(1)}
-	if got := pointCatalogDataType(withSample); got != "BOOL" {
-		t.Fatalf("UI tiếp điểm khô khi có mẫu = %q; chờ BOOL — kiểu không được đổi theo dữ liệu runtime", got)
+	if got := pointCatalogDataType(withSample); got != "REAL" {
+		t.Fatalf("UI tiếp điểm khô khi có mẫu = %q; kiểu không được đổi theo dữ liệu runtime", got)
+	}
+	// Và bool runtime — thứ `decodePoints` đặt để giao diện hiện ON/OFF — cũng
+	// không được kéo kiểu io_map theo.
+	asBool := PointDTO{Kind: "UI", SignalType: "dry", Value: true}
+	if got := pointCatalogDataType(asBool); got != "REAL" {
+		t.Fatalf("UI tiếp điểm khô có Value bool = %q; chờ REAL", got)
 	}
 }
 
@@ -88,6 +105,32 @@ func TestDataTypeNeverDependsOnRuntimeValue(t *testing.T) {
 				t.Fatalf("kiểu của %s/%s đổi theo giá trị runtime %#v: %q ≠ %q",
 					fixture.Kind, fixture.SignalType+fixture.DataType, sample, got, baseline)
 			}
+		}
+	}
+}
+
+/* CỔNG BẮC CẦU — `ISS-PIO-33`, và đây là cổng đã THIẾU suốt hai lần hỏng.
+ *
+ * Có hai bảng nói về cùng một sự thật:
+ *   - `point_eligibility.go:localPrefixType` — đã có `TestPointEligibilityMatchesCoreIoMap`
+ *     đọc thẳng `st_io_map.cpp` nên nó không lệch được khỏi Core.
+ *   - `pointCatalogDataType` — thứ THẬT SỰ phát ra `dataType`, và KHÔNG có gì
+ *     canh nó khớp bảng trên.
+ *
+ * Khe hở đó để lọt hồi quy HAI LẦN theo hai đường khác nhau (đoán từ `Value`,
+ * rồi đọc `signalType`), và cả hai lần triệu chứng giống hệt: kênh tiếp điểm
+ * khô không map được vào biến ST nào. Cổng này bắc cầu giữa hai bảng: catalog
+ * phát ra cái gì thì eligibility phải nhận cái đó.
+ */
+func TestCatalogDataTypeSatisfiesEligibilityForEveryUISignalType(t *testing.T) {
+	signalTypes := []string{"dry", "0-10V", "4-20mA", "PT100", "PT1000", "NTC10k", "NTC20k", "none", ""}
+	for _, signalType := range signalTypes {
+		point := PointDTO{ID: "UI-09", Kind: "UI", SignalType: signalType, Name: "Kênh thử"}
+		entry := toPointCatalogEntry(point)
+		el := programmingapplication.EvaluatePointMapEligibility(entry)
+		if el.Input.Status != programmingapplication.MapEligibilitySupported {
+			t.Errorf("UI signalType=%q phát dataType=%q ⇒ chiều đọc bị chặn (%s): %v — một kênh UI đọc đúng phải map được vào biến ST",
+				signalType, entry.DataType, el.Input.Status, el.Input.Reasons)
 		}
 	}
 }

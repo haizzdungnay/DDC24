@@ -8,6 +8,62 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-33` (hồi quy) Kênh Universal Input tiếp điểm khô không map được vào biến ST — lần thứ hai (2026-09-04)
+
+- **Triệu chứng.** Trên `main` tại `18ca29d`, một kênh UI cấu hình `dry` bị chặn ở **cả hai chiều**.
+  Đo trực tiếp qua `toPointCatalogEntry` + `EvaluatePointMapEligibility`:
+
+  ```
+  signalType="dry"   dataType=BOOL  input=UNSUPPORTED_IDENTITY
+                     "Core yêu cầu REAL cho điểm UI, catalog đang phát BOOL"
+  signalType="0-10V" dataType=REAL  input=SUPPORTED
+  ```
+
+- **Nguồn chuẩn.** `st_io_map.cpp:93`, không có ngoại lệ nào cho tiếp điểm khô:
+  `((prefix=="UI" || prefix=="AO") && type==REAL) || ((prefix=="DI" || prefix=="DO") && type==BOOL)`.
+  UI/AO nằm trong `plc_shm.ai[]`/`ao[]` và luôn là float; **`DI` mới là họ BOOL, và nó là prefix RIÊNG**.
+- **Nguyên nhân gốc — hỏng HAI LẦN theo hai đường khác nhau, cùng một triệu chứng.**
+  1. Bản gốc đánh hơi kiểu Go của `point.Value`: `decodePoints` đổi `Value` sang `bool` cho giao
+     diện hiện ON/OFF ⇒ catalog phát BOOL. Đây là `ISS-PIO-33` gốc.
+  2. **`ISS-PIO-06` (#392) bỏ lối đoán đó và đọc `signalType` từ cấu hình** — đúng nguyên tắc —
+     **nhưng `universalInputDataType` vẫn trả BOOL khi `signalType == "dry"`**, nên catalog VẪN phát
+     BOOL. Sửa nguyên nhân, giữ nguyên triệu chứng.
+- **Cách sửa.** `pointCatalogDataType` gộp `case "AO", "UI"` ⇒ `REAL`; xoá `universalInputDataType`
+  vì không còn ai đọc. `signalType: "dry"` vẫn là thông tin thật cho **giao diện** — nó chỉ không
+  phải kiểu io_map. Trộn hai thứ làm một là để một lựa chọn hiển thị âm thầm gỡ mất khả năng lập
+  trình của cả kênh.
+- **Một test đang khoá lại hành vi sai.** `TestUniversalInputDryContactIsBoolEvenWithoutASample`
+  chờ `BOOL`. **Ý định đúng** (kiểu bất biến theo runtime, hết lỗi nhấp nháy) nhưng **kỳ vọng sai**.
+  Đã sửa KỲ VỌNG CỦA TEST chứ không nới lỏng sản phẩm: bất biến vẫn được canh nguyên vẹn, chỉ hằng
+  số đúng đổi từ BOOL sang REAL, và thêm ca `Value: true`. Đổi tên thành
+  `TestUniversalInputDataTypeDoesNotDependOnRuntimeSample` cho khớp điều nó thật sự canh.
+- **Cổng đã THIẾU, nay dựng: `TestCatalogDataTypeSatisfiesEligibilityForEveryUISignalType`.**
+  Có hai bảng nói cùng một sự thật — `point_eligibility.go:localPrefixType` (đã có
+  `TestPointEligibilityMatchesCoreIoMap` đọc thẳng `st_io_map.cpp` nên không lệch được khỏi Core) và
+  `pointCatalogDataType` (thứ **thật sự** phát `dataType`). **Không có gì bắc cầu giữa hai bảng**, và
+  chính khe hở đó để lọt hồi quy hai lần. Cổng mới đòi mọi `signalType` của UI phải cho ra một
+  `dataType` mà eligibility chấp nhận.
+- **Vì sao tách khỏi PR #489.** PR #489 đã vá phần này (đường số 1) và đang mở, nhưng nó còn mang
+  `ISS-PRG-CTRL-001` — một quyết định sản phẩm (nới `GetRevisionChanges` cho revision khác project)
+  chưa được chủ sở hữu chốt. Giữ `main` hỏng để chờ một quyết định KHÔNG liên quan là sai, nên bản
+  vá hồi quy đi riêng. Nhánh #489 đã mang sẵn cùng nội dung này (`d08585d`) nên không sinh conflict mới.
+- **Lỗi quy trình đã gây ra việc này.** Bốn PR #498→#501 được merge lên `main` mà **không lần nào
+  liệt kê PR đang mở**, nên không thấy #489 nằm đó từ 2026-09-03 và đang vá đúng thứ #392 làm hồi
+  quy. Từ nay `list_pull_requests state=open` chạy **trước** mỗi lần merge.
+- **Kiểm chứng (đo lại trong phiên).**
+
+  | Cổng | Kết quả |
+  | --- | --- |
+  | `verify-project.sh --component layout` | 17 PASS / 0 FAIL, exit 0 |
+  | C++ configure / build / `ctest` | exit 0 / exit 0, **0 warning** / **1393/1393 pass** |
+  | Go `go vet ./...` | sạch, exit 0 |
+  | Go `go test ./... -count=1` | **21 gói ok** |
+  | FE `npx vitest --run src` | **213 tệp / 2575 test PASS** |
+  | FE `npm run lint` / `npm run build` | exit 0 / exit 0, dư địa 41.87 KiB |
+
+  Tiêm lại đúng hồi quy (UI dry ⇒ BOOL) ⇒ **2 test đỏ**; khôi phục ⇒ xanh.
+
+
 ### Fixed — `ISS-PIO-18` `virtual-points/{id}/usage` quét cả binding Programming (#400, 2026-09-04)
 
 - **Triệu chứng.** `virtualpoint_usage.go` khai `Kind: alarm | schedule | program` và nêu đúng động
