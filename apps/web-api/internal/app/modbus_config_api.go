@@ -428,6 +428,17 @@ type modbusMappingRow struct {
 	 * 0 = chưa cấp slot (điểm hoặc thiết bị đang tắt) — nói ra bằng `omitempty`
 	 * thay vì phát một slot bịa. */
 	ExtIndex int `json:"ext_index,omitempty"`
+	/* `ISS-PIO-21` — hai dạng địa chỉ hiện cạnh nhau (đề bài §23).
+	 *
+	 * `address` là offset protocol đã lưu; `vendor_reference` là chính nó viết
+	 * theo cách đánh số của datasheet (`40102`). Suy sẵn ở server để mọi bề mặt
+	 * đọc bảng ánh xạ thấy cùng một con số — hai chỗ tự suy là hai chỗ có thể
+	 * suy khác nhau, và ở đây sai một đơn vị nghĩa là đọc nhầm thanh ghi.
+	 *
+	 * 0 = không suy được (kiểu thanh ghi lạ). Nói ra bằng `omitempty` thay vì
+	 * hiện một tham chiếu gần đúng — thứ sẽ dẫn người dùng gõ nhầm. */
+	VendorReference   int    `json:"vendor_reference,omitempty"`
+	AddressConvention string `json:"address_convention,omitempty"`
 }
 
 func (a *App) handleModbusMapping(w http.ResponseWriter, _ *http.Request) {
@@ -457,7 +468,9 @@ func (a *App) handleModbusMapping(w http.ResponseWriter, _ *http.Request) {
 			BusID: modbusDeviceBus(device), SlaveID: device.SlaveID,
 			RegisterType: point.RegisterType, Address: point.Address, Registers: registers,
 			DataType: point.DataType, ReadWrite: point.ReadWrite, Enabled: bool(point.Enabled),
-			ExtIndex: modbusExtIndexOf(layout, point.DeviceID, point.PointID),
+			ExtIndex:          modbusExtIndexOf(layout, point.DeviceID, point.PointID),
+			VendorReference:   modbusVendorReferenceOf(point),
+			AddressConvention: webModbus.NormalizeAddressConvention(point.AddressConvention),
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {

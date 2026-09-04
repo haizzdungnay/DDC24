@@ -8,6 +8,42 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-21` Quy ước địa chỉ Modbus: offset protocol ↔ tham chiếu vendor (#404, 2026-09-04)
+
+- **Triệu chứng.** Người dùng cầm datasheet ghi `40102` phải **tự trừ** để gõ `101`, và không có ô nào
+  ghi lại họ đã hiểu theo quy ước nào. Ô nhập trên giao diện còn ghi thẳng lời nhắc *"nhiều tài liệu
+  đánh số từ 1 — trừ đi 1 khi nhập"*: sản phẩm **biết** vấn đề tồn tại và giao phép trừ cho người
+  dùng làm bằng tay.
+- **Vì sao đề bài §23 gọi đây là chỗ "phải xử lý cực kỳ cẩn thận".** Sai một đơn vị ở đây **không làm
+  gì hỏng ồn ào cả**: điểm vẫn đọc, quality vẫn GOOD, đồ thị vẫn chạy — chỉ là nó đang đọc thanh ghi
+  bên cạnh. Một nhiệt độ gió cấp hoá ra là nhiệt độ gió hồi, và không có dấu hiệu nào ngoài "số trông
+  hơi lạ".
+- **Cách sửa.** `address_convention` (`protocol` | `vendor`) ghi lại người dùng đang nghĩ theo quy ước
+  nào; **`address` vẫn LUÔN là offset protocol 0-based** — đúng điều kiện đóng thứ nhất, "lưu địa chỉ
+  protocol chuẩn hoá, không suy mơ hồ mỗi lần đọc". Giao diện có ô chọn quy ước và **hiện cả hai
+  dạng** cạnh ô nhập (điều kiện đóng thứ hai); `GET /modbus/mapping` phát thêm `vendor_reference` để
+  mọi bề mặt thấy cùng một con số.
+- **Lỗi thật do chính bài kiểm tìm ra: trần mỗi vùng phải dừng dưới số đầu vùng kế tiếp.** Bản đầu
+  chỉ chặn offset trong 0..65535, nên `ProtocolAddress("input_register", 40102)` cho ra **10101** —
+  một offset **hợp lệ**, trỏ vào chỗ hoàn toàn khác, không có gì báo. `40102` là số của vùng Holding
+  Register, không lẫn vào đâu được; nhận nó ở vùng khác là đúng lớp lỗi issue này sinh ra để dẹp. Nay
+  Coil nhận offset 0–9999, Discrete Input 0–19999, Input Register 0–9999, Holding Register 0–65535
+  (vùng cao nhất không có vùng nào ở trên nên đủ chỗ cho cách viết 6 chữ số `400001`).
+- **`NormalizePoint` chỉ hạ chữ, KHÔNG ép giá trị lạ về mặc định.** Ép êm sẽ nuốt lỗi gõ nhầm: người
+  dùng chọn `vendor`, gõ sai một ký tự, và nhận về một điểm lặng lẽ hiểu con số của họ theo quy ước
+  khác. `validate.go` mới là nơi từ chối; rỗng ở đó hợp lệ và nghĩa là `protocol`.
+- **Số không thuộc vùng đang chọn thì giao diện KHÔNG ghi bừa một offset.** Giữ nguyên địa chỉ cũ và
+  để dòng đối chiếu nói ra, thay vì lưu một offset hợp lệ trỏ vào chỗ khác.
+- Cổng chống trôi hợp đồng bắt `address_convention` ngay khi thêm vào struct Go — đã bổ sung vào
+  schema `ModbusRTUPoint` cùng `vendor_reference` của `GET /modbus/mapping`.
+
+**Kiểm chứng (đo lại thật, 2026-09-04).** layout **17 PASS / 0 FAIL** exit 0 · C++ configure/build
+exit 0, **0 warning**, `ctest` **1422/1422** · `go vet` sạch, **21 package `ok`** · FE **219 file /
+2636 test**, tsc + lint + build exit 0 · **7/7 phép tiêm lỗi ĐỎ** (3 Go: trần vùng dùng chung
+0..65535, số đầu vùng sai một đơn vị, `NormalizePoint` ép quy ước lạ về mặc định; 4 FE: trần vùng
+dùng chung, quy ước vendor không đổi số, số đầu vùng sai một đơn vị, quy ước lạ đọc thành vendor).
+
+
 ### Added — `ISS-PIO-20` `PUT /points/{id}/config` nhận điểm Modbus (#403, 2026-09-04)
 
 - **Triệu chứng.** `canonicalPointConfigID` chỉ chuẩn hoá `UI/AO/DO/VP`, nên điểm Modbus **không sửa

@@ -2,9 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
 import { useI18n } from '../../../shared/i18n'
-import type { ModbusImportError, ModbusRTUDevice, ModbusRTUPoint, ModbusTemplate } from '../../../shared/types'
+import type { ModbusAddressConvention, ModbusImportError, ModbusRTUDevice, ModbusRTUPoint, ModbusTemplate } from '../../../shared/types'
 import { NO_DATA, buttonClass, emptyPoint, inputClass, readOnlyHint } from '../shared'
 import { Field } from '../components/Field'
+import { displayAddress, normalizeConvention, storedAddress, vendorRange, vendorReference } from '../addressConvention'
 import { RegisterPreview } from '../components/RegisterPreview'
 import { useModbusRuntime } from '../useModbusRuntime'
 
@@ -37,6 +38,25 @@ export function PointsPage() {
   const [templates, setTemplates] = useState<ModbusTemplate[]>([])
   const [templateId, setTemplateId] = useState('')
   const [editingPoint, setEditingPoint] = useState(false)
+  /* `ISS-PIO-21` — ba giá trị suy ra từ điểm đang soạn, để phần JSX bên dưới
+     chỉ còn việc hiển thị. Tách ra vì cả ba đều phải đổi ĐỒNG THỜI khi người
+     dùng đổi kiểu thanh ghi: cùng một con số mang nghĩa khác giữa hai vùng. */
+  const convention = normalizeConvention(point.address_convention)
+  const addressShown = displayAddress(convention, point.register_type, point.address) ?? point.address
+  const addressRange = vendorRange(point.register_type)
+  const addressCrossReference = (() => {
+    const reference = vendorReference(point.register_type, point.address)
+    if (reference === undefined) {
+      return pick('Không đối chiếu được sang số datasheet cho kiểu thanh ghi này.', 'No datasheet reference for this register type.')
+    }
+    // Hiện CẢ HAI dạng cạnh nhau — điều kiện đóng thứ hai của issue. Người dùng
+    // không phải tin vào phép trừ trong đầu mình nữa.
+    return pick(`Offset protocol ${point.address} · datasheet ${reference}`, `Protocol offset ${point.address} · datasheet ${reference}`)
+  })()
+  const addressHint = addressRange
+    ? pick(`Nhập theo quy ước đã chọn. Vùng này nhận ${convention === 'vendor' ? `${addressRange.base}–${addressRange.base + addressRange.maxOffset}` : `0–${addressRange.maxOffset}`}.`,
+        `Enter using the selected convention. This area accepts ${convention === 'vendor' ? `${addressRange.base}–${addressRange.base + addressRange.maxOffset}` : `0–${addressRange.maxOffset}`}.`)
+    : pick('Chọn kiểu thanh ghi trước.', 'Pick a register type first.')
   const [status, setStatus] = useState('')
   /* D-08: xoá phải qua xác nhận. Trước đây nút Xoá gọi thẳng API trong onClick,
    * và vì mỗi mutation đều apply + restart iobus (D-09), một cú nhấp nhầm vừa
@@ -247,8 +267,32 @@ export function PointsPage() {
             <option value="holding_register">Holding Register</option>
             </select>
           </Field>
-          <Field label={pick('Địa chỉ thanh ghi', 'Register address')} hint={pick('Địa chỉ 0-based, 0–65535. Nhiều tài liệu thiết bị đánh số từ 1 — trừ đi 1 khi nhập.', '0-based address, 0–65535. Many device manuals number from 1 — subtract 1 when entering.')}>
-            <input type="number" min={0} max={65535} className={inputClass} aria-label="Address" value={point.address} onChange={(e) => setPoint({ ...point, address: Number(e.target.value) })} />
+          {/* `ISS-PIO-21` (đề bài §23) — quy ước địa chỉ.
+              Trước bản vá ô nhập ghi thẳng "nhiều tài liệu đánh số từ 1 — trừ đi
+              1 khi nhập", tức sản phẩm biết vấn đề tồn tại và giao phép trừ cho
+              người dùng làm bằng tay. Sai một đơn vị ở đây không làm gì hỏng ồn
+              ào: điểm vẫn đọc, quality vẫn GOOD — chỉ là đọc thanh ghi bên cạnh. */}
+          <Field label={pick('Quy ước địa chỉ', 'Address convention')} hint={pick('Chọn cách bạn đang đọc datasheet. Giá trị lưu xuống LUÔN là offset protocol, bất kể chọn gì.', 'Pick how you are reading the datasheet. The stored value is ALWAYS the protocol offset, whichever you pick.')}>
+            <select className={inputClass} aria-label="Address convention" value={convention}
+              onChange={(e) => setPoint({ ...point, address_convention: e.target.value as ModbusAddressConvention })}>
+              <option value="protocol">{pick('Offset protocol (0-based)', 'Protocol offset (0-based)')}</option>
+              <option value="vendor">{pick('Tham chiếu datasheet (4xxxx…)', 'Vendor reference (4xxxx…)')}</option>
+            </select>
+          </Field>
+          <Field label={pick('Địa chỉ thanh ghi', 'Register address')} hint={addressHint}>
+            <input type="number" className={inputClass} aria-label="Address" value={addressShown}
+              onChange={(e) => {
+                const typed = Number(e.target.value)
+                const stored = storedAddress(convention, point.register_type, typed)
+                /* Số không thuộc vùng của kiểu thanh ghi đang chọn thì KHÔNG ghi
+                   bừa một offset: gõ `40102` khi đang chọn Input Register là một
+                   mâu thuẫn có thật, và nhận nó sẽ cho ra một offset hợp lệ trỏ
+                   vào chỗ khác. Giữ nguyên giá trị cũ và để dòng đối chiếu bên
+                   dưới nói ra. */
+                if (stored === undefined) return
+                setPoint({ ...point, address: stored })
+              }} />
+            <p className="mt-1 text-xs text-[var(--c-text-dim)]" data-testid="address-cross-reference">{addressCrossReference}</p>
           </Field>
           <Field label={pick('Kiểu dữ liệu', 'Data type')} hint={pick('Quyết định Point chiếm 1 hay 2 thanh ghi.', 'Determines whether the Point occupies 1 or 2 registers.')}>
             <select className={inputClass} aria-label="Data type" value={point.data_type} onChange={(e) => setPoint({ ...point, data_type: e.target.value as ModbusRTUPoint['data_type'] })}>

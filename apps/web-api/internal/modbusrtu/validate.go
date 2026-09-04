@@ -274,6 +274,16 @@ func validatePoints(cfg Config, devices map[string]Device, opts ValidateOptions,
 		if point.Address < 0 || point.Address > 65535 {
 			add(base+".address", CodeOutOfRange, "phải trong 0..65535")
 		}
+		/* `ISS-PIO-21` — quy ước địa chỉ gõ sai phải KÊU.
+		 *
+		 * Rỗng là hợp lệ và nghĩa là `protocol` (mọi cấu hình đang chạy). Nhưng
+		 * một chuỗi lạ mà bị ép êm về `protocol` sẽ khiến người dùng chọn
+		 * `vendor`, gõ sai một ký tự, rồi nhận một điểm lặng lẽ hiểu con số của
+		 * họ theo quy ước khác — tức đọc sang thanh ghi bên cạnh, với quality
+		 * GOOD và không một dấu hiệu nào. */
+		if point.AddressConvention != "" && !ValidAddressConvention(point.AddressConvention) {
+			add(base+".address_convention", CodeUnsupported, "phải là protocol hoặc vendor")
+		}
 		switch point.DataType {
 		case "bool", "int16", "uint16", "int32", "uint32", "float32":
 		default:

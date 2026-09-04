@@ -84,3 +84,17 @@ func modbusExtIndexOf(layout webModbus.ExtLayout, deviceID, pointID string) int 
 	}
 	return slot.ExtIndex
 }
+
+/* modbusVendorReferenceOf suy tham chiếu vendor của một điểm Modbus.
+ *
+ * `ISS-PIO-21`: trả 0 khi kiểu thanh ghi lạ, không trả một số gần đúng — một
+ * tham chiếu sai hiện cạnh ô nhập là chính xác thứ dẫn người dùng gõ nhầm
+ * thanh ghi, và sai một đơn vị ở đây không làm gì hỏng ồn ào cả.
+ */
+func modbusVendorReferenceOf(point ModbusRTUPoint) int {
+	reference, ok := webModbus.VendorReference(point.RegisterType, point.Address)
+	if !ok {
+		return 0
+	}
+	return reference
+}

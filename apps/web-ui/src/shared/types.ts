@@ -129,6 +129,12 @@ export interface ModbusRTUDevice {
   offline_probe_ms?: number
 }
 
+/** `ISS-PIO-21` — hai cách đánh số địa chỉ Modbus.
+ *  `protocol` = offset 0-based trong khung; `vendor` = số như trong datasheet
+ *  (Coil từ 1, Discrete Input từ 10001, Input Register từ 30001, Holding
+ *  Register từ 40001 — nên `40102` là offset protocol 101). */
+export type ModbusAddressConvention = 'protocol' | 'vendor'
+
 export interface ModbusRTUPoint {
   point_id: string
   device_id: string
@@ -150,6 +156,18 @@ export interface ModbusRTUPoint {
   bit_index?: number | null
   min_value?: number | null
   max_value?: number | null
+  /** `ISS-PIO-20` — hai trường trình bày, Core không đọc. */
+  trend_enabled?: boolean
+  equipment?: string
+  /** `ISS-PIO-21` — người dùng ĐANG NGHĨ theo quy ước địa chỉ nào (đề bài §23).
+   *
+   *  `address` LUÔN là offset protocol 0-based bất kể trường này. Đây chỉ là
+   *  cách nhập, để lần mở sau màn hình nói lại đúng con số họ đã gõ từ
+   *  datasheet — thiếu nó thì mỗi lần mở là một lần tự dịch trong đầu, và mỗi
+   *  lần dịch là một cơ hội sai một đơn vị.
+   *
+   *  Vắng mặt = `protocol`, đúng cách mọi cấu hình đang chạy đã được nhập. */
+  address_convention?: ModbusAddressConvention
 }
 
 /** DATA_MODEL §6.2 — năm mức. `UNKNOWN` xuất hiện khi producer mới hơn
@@ -277,6 +295,10 @@ export interface ModbusMappingRow {
    *  tên điểm; số này là cầu nối giữa hai thứ đó. Vắng/0 = chưa cấp slot (điểm
    *  hoặc thiết bị đang tắt) — giao diện phải nói ra, không được đoán. */
   ext_index?: number
+  /** `ISS-PIO-21` — `address` viết theo cách đánh số của datasheet (`40102`).
+   *  Do SERVER suy; vắng = không suy được (kiểu thanh ghi lạ). */
+  vendor_reference?: number
+  address_convention?: ModbusAddressConvention
 }
 
 export interface ModbusBusLoad {

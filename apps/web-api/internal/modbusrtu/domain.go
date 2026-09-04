@@ -105,6 +105,17 @@ type Point struct {
 	 * `fieldbus.conf` của tủ chưa dùng chúng giữ nguyên hình dạng cũ. */
 	TrendEnabled bool   `json:"trend_enabled,omitempty"`
 	Equipment    string `json:"equipment,omitempty"`
+	/* `ISS-PIO-21` — người dùng ĐANG NGHĨ theo quy ước địa chỉ nào (đề bài §23).
+	 *
+	 * `Address` LUÔN là offset protocol 0-based, bất kể trường này — đó là điều
+	 * kiện đóng "lưu địa chỉ protocol chuẩn hoá, không suy mơ hồ mỗi lần đọc".
+	 * Trường này chỉ ghi lại cách nhập, để lần mở sau màn hình nói lại đúng con
+	 * số người dùng đã gõ từ datasheet.
+	 *
+	 * Thiếu nó thì mỗi lần mở lại là một lần tự dịch trong đầu, và mỗi lần dịch
+	 * là một cơ hội sai một đơn vị — thứ không làm gì hỏng ồn ào, chỉ khiến
+	 * điểm đọc sang thanh ghi bên cạnh với quality GOOD. */
+	AddressConvention string `json:"address_convention,omitempty"`
 }
 
 // MBR-B110: counter là uint64 xuyên suốt. uint32 tràn sau ~2,7 năm ở nhịp poll
@@ -166,6 +177,14 @@ func NormalizePoint(point Point) Point {
 	// `ISS-PIO-20` — gom khoảng trắng như thẻ thiết bị của điểm LOCAL/VP:
 	// `AHU-1 ` và `AHU-1` phải rơi vào cùng một nhóm trên Monitor.
 	point.Equipment = strings.Join(strings.Fields(point.Equipment), " ")
+	/* `ISS-PIO-21` — CHỈ hạ chữ và cắt khoảng trắng, KHÔNG ép về mặc định.
+	 *
+	 * Ép giá trị lạ thành `protocol` ở đây sẽ nuốt mất lỗi gõ nhầm: người dùng
+	 * chọn `vendor`, gõ sai một ký tự, và nhận về một điểm lặng lẽ hiểu con số
+	 * của họ theo quy ước khác — đúng lớp lỗi mà cả issue này sinh ra để dẹp.
+	 * `validate.go` mới là nơi từ chối; rỗng ở đó là hợp lệ và nghĩa là
+	 * `protocol`, đúng như mọi cấu hình đang chạy. */
+	point.AddressConvention = strings.ToLower(strings.TrimSpace(point.AddressConvention))
 	if point.ByteOrder == "" {
 		point.ByteOrder = "big"
 	}

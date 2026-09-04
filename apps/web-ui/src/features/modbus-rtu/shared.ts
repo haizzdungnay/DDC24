@@ -18,7 +18,10 @@ export const emptyDevice: ModbusRTUDevice = {
 export const emptyPoint: ModbusRTUPoint = {
   point_id: '', device_id: '', tag_name: '', display_name: '', register_type: 'holding_register',
   address: 0, data_type: 'uint16', byte_order: 'big', word_order: 'high_low', scale: 1,
-  offset: 0, unit: '', read_write: 'read', default_value: 0, safe_value: 0, enabled: true
+  offset: 0, unit: '', read_write: 'read', default_value: 0, safe_value: 0, enabled: true,
+  // `ISS-PIO-21` — mặc định là quy ước cũ, để form mới không đổi nghĩa con số
+  // mà người dùng quen gõ.
+  address_convention: 'protocol'
 }
 
 export const inputClass = 'h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 text-sm text-[var(--c-text)]'

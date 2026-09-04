@@ -546,6 +546,19 @@ paths:
                         data_type: { type: string }
                         read_write: { type: string, enum: [read, read_write] }
                         enabled: { type: boolean }
+                        vendor_reference:
+                          type: integer
+                          description: >
+                            ISS-PIO-21 — `address` viết theo cách đánh số của
+                            datasheet (`40102`). Suy sẵn ở server để mọi bề mặt
+                            đọc bảng ánh xạ thấy cùng một con số; hai chỗ tự suy
+                            là hai chỗ có thể suy khác nhau, và ở đây sai một
+                            đơn vị nghĩa là đọc nhầm thanh ghi.
+                            Vắng = không suy được (kiểu thanh ghi lạ) — nói ra
+                            thay vì hiện một tham chiếu gần đúng.
+                        address_convention:
+                          type: string
+                          enum: [protocol, vendor]
                         ext_index:
                           type: integer
                           minimum: 1
@@ -5627,6 +5640,24 @@ components:
           description: "OD-MBRTU-003 — trích một bit trong register. Chỉ dùng với data_type=bool trên Holding/Input Register."
         min_value: { type: number, nullable: true, description: "Biên kỹ thuật; mẫu ngoài biên bị đánh BAD/OUT_OF_RANGE." }
         max_value: { type: number, nullable: true }
+        address_convention:
+          type: string
+          enum: [protocol, vendor]
+          default: protocol
+          description: >
+            ISS-PIO-21 (đề bài §23) — người dùng ĐANG NGHĨ theo quy ước địa chỉ
+            nào. `address` LUÔN là offset protocol 0-based bất kể trường này;
+            đây chỉ là cách nhập, để lần mở sau màn hình nói lại đúng con số
+            người dùng đã gõ từ datasheet.
+            `protocol` = offset 0-based đi thẳng trong khung Modbus (mặc định,
+            và là cách mọi cấu hình đang chạy đã được nhập).
+            `vendor` = cách đánh số của tài liệu thiết bị: Coil từ 1,
+            Discrete Input từ 10001, Input Register từ 30001, Holding Register
+            từ 40001 — nên `40102` trong datasheet là offset protocol 101.
+            Vắng mặt = `protocol`. Chuỗi lạ bị TỪ CHỐI chứ không ép êm về mặc
+            định: ép êm sẽ khiến người chọn `vendor` mà gõ sai một ký tự nhận
+            một điểm lặng lẽ hiểu con số của họ theo quy ước khác — tức đọc
+            sang thanh ghi bên cạnh, với quality GOOD và không dấu hiệu nào.
         trend_enabled:
           type: boolean
           default: false
