@@ -367,7 +367,7 @@ có contract machine-readable mới được `IMPLEMENT_READY=GO`.
 |---|---|---|---|---|---:|
 | `T61-101` | P0 | OpenAPI additive cho metadata/filter/compatibility/usage; stable errors và cursor tuple. | `T61-004/005` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-01`) | 1,5 nd |
 | `T61-102` | P0 | Mở registry schema/generator cho metadata SYSTEM; tách executable `contentSha256` khỏi `presentationSha256/catalogRevision`; versionHistory/hash mutation test. | `T61-101` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-02`) | 1,5 nd |
-| `T61-103` | P0 | Migration/store PROJECT metadata additive, backup/preflight/restart; không rewrite revision immutable. | `T61-101` | `DONE` | 1,5 nd |
+| `T61-103` | P0 | Migration/store PROJECT metadata additive, backup/preflight/restart; không rewrite revision immutable. | `T61-101` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-03`) | 1,5 nd |
 | `T61-104` | P0 | Used-In application/store projection cho Draft + sealed scope đã chốt, cursor và summary available/unavailable. | `T61-101` | `DONE` | 2 nd |
 | `T61-105` | P0 | HTTP route/validation/RBAC/audit/error mapping; read route cho bốn role, mutation giữ `program.edit`. | `T61-103/104` | `DONE` | 1 nd |
 | `T61-106` | P1 | Sinh lại client TS/registry C++/Go/TS, contract-sync và G1 re-pin cùng change-set. | `T61-102/105` | `DONE` | 0,5 nd |
@@ -411,6 +411,28 @@ Bump `rev-a.3 → rev-a.4` kéo theo bốn thứ pin phải sinh lại **cùng c
 product profile (+ schema `const`), golden build manifest ST/FBD (`buildKeySha256`
 phụ thuộc `profile.sha256`), golden package `package_v2_ahu.mkpkg` (sinh bằng
 chính `mkddc-st-package-golden`), và ba chốt SHA (`pgm02`, `g1`, `openapi`).
+
+**Đính chính `T61-103` (`ISS-PGM04-03`, đo `2026-09-04`).** Cột và đường ghi đã
+có từ `T61-101`, nhưng bằng chứng thì chưa: không test nào đo round-trip qua
+restart, cũng không test nào migrate từ một DB schema CŨ có dữ liệu thật. Lát này
+bổ sung cả hai và sửa hai lỗi phát hiện trong lúc đo:
+
+- `presentationSha256` được đọc THẲNG từ cột. Công thức băm đã đổi một lần
+  (`T61-101` thêm `tags` vào payload), nên mọi hàng ghi trước đó mang một hash mà
+  không phép tính nào hiện tại tái tạo được — đo được, không phải suy đoán. Hash
+  ấy tồn tại đúng để client biết "phần trình bày có đổi không", nên sau nâng cấp
+  binary client sẽ thấy mọi entry cũ "đã đổi" dù không ai sửa gì, rồi thôi tin
+  vào nó. Đường đọc nay TÍNH LẠI từ ba trường vừa đọc; cột giữ làm bản ghi.
+- `updateLibraryEntryTx` bỏ sót bốn cột trình bày, còn `publishProjectLibraryTx`
+  dựng entry canonical không mang metadata. Hai nửa của cùng một cái bẫy: nửa
+  này che nửa kia, nên chưa mất dữ liệu — nhưng thêm bốn cột vào câu UPDATE
+  (việc hoàn toàn hợp lý) sẽ xoá sạch mô tả và thẻ lúc publish. Sửa cả hai vế
+  cùng lúc; một mình vế nào cũng là nửa vời.
+
+Kinh nghiệm tiêm lỗi: vòng đầu có hai phép XANH, và cả hai là lỗi của TEST chứ
+không phải bằng chứng test đủ. Một ca xanh vì test so `before` với `after` — khi
+cột không hề được ghi thì cả hai lần đọc đều rỗng và "giống nhau". Test round-trip
+phải khẳng định GIÁ TRỊ TUYỆT ĐỐI đã ghi, không chỉ khẳng định hai lần đọc bằng nhau.
 
 **Cổng C++ đã mở lại từ lát này.** `ctest` ở `#503` ghi `NOT_RUN` vì container
 không có cache `FetchContent`. Cách mở: clone bốn nguồn (`nlohmann/json v3.11.3`,

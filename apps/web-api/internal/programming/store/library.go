@@ -744,6 +744,18 @@ func publishProjectLibraryTx(ctx context.Context, tx *sql.Tx, libraryRevisionID 
 			Name: entry.Name, Language: entry.Language, FeatureState: entry.FeatureState,
 			Source: entry.Source, InterfaceJSON: entry.InterfaceJSON, Dependencies: entry.Dependencies,
 			StateLayout: entry.StateLayout,
+			/* `T61-103` — metadata TRÌNH BÀY phải đi cùng.
+			 *
+			 * Không phải để đổi hash: `contentSha256` cố ý không phụ thuộc ba
+			 * trường này (`D61-09`), và test canh đúng điều đó. Lý do là canonical
+			 * entry ở đây được dùng làm bản ĐẦY ĐỦ của entry sau publish —
+			 * `updateLibraryEntryTx` hiện không ghi ba cột ấy nên bỏ trống chúng
+			 * chưa gây mất dữ liệu, nhưng đó là một quả mìn: thêm ba cột vào câu
+			 * UPDATE là việc hoàn toàn hợp lý khi ai đó bổ sung trường mới, và
+			 * ngày ấy publish sẽ XOÁ SẠCH mô tả với thẻ của mọi entry. Truyền
+			 * chúng qua ở đây làm canonical entry trung thực, nên quả mìn không
+			 * còn ngòi. */
+			Category: entry.Category, Description: entry.Description, Tags: entry.Tags,
 		}, true)
 		if err != nil {
 			return err
@@ -1505,14 +1517,32 @@ func insertLibraryEntryTx(ctx context.Context, tx *sql.Tx, entry LibraryEntry) e
 	return err
 }
 
+/*
+updateLibraryEntryTx ghi ĐỦ mọi cột của entry, kể cả ba cột trình bày.
+
+Bản trước bỏ sót `category`, `description`, `tags` và `presentation_sha256`.
+Điều đó chưa gây mất dữ liệu — chỗ gọi duy nhất là đường publish, và nó ghi đè
+bằng chính hàng đang có — nhưng nó là một cái bẫy hai đầu:
+
+  - Một hàm tên "update entry" mà im lặng bỏ qua bốn cột sẽ được người sau tin
+    là ghi đủ, và dùng nó ở một chỗ mà hàng đích KHÁC hàng nguồn.
+  - Ngược lại, thêm bốn cột vào đây (việc hoàn toàn hợp lý) sẽ XOÁ SẠCH mô tả
+    và thẻ của mọi entry lúc publish, vì đường publish dựng entry canonical mà
+    trước lát này không mang metadata.
+
+Nên sửa cả hai đầu cùng lúc: hàm này ghi đủ cột, và `publishProjectLibraryTx`
+truyền metadata vào entry canonical. Một mình vế nào cũng là nửa vời.
+*/
 func updateLibraryEntryTx(ctx context.Context, tx *sql.Tx, entry LibraryEntry) error {
 	arguments := libraryEntrySQLArgs(entry)
 	result, err := tx.ExecContext(ctx, `UPDATE library_entries SET
 		kind=?,name=?,name_folded=?,feature_state=?,signature_json=?,content_sha256=?,
-		language=?,source_blob=?,interface_json=?,dependencies_json=?,state_layout_version=?,state_size_bytes=?,state_layout_sha256=?
+		language=?,source_blob=?,interface_json=?,dependencies_json=?,state_layout_version=?,state_size_bytes=?,state_layout_sha256=?,
+		category=?,description=?,tags=?,presentation_sha256=?
 		WHERE library_revision_id=? AND entry_id=?`,
 		arguments[2], arguments[3], arguments[4], arguments[5], arguments[6], arguments[7], arguments[8], arguments[9],
-		arguments[10], arguments[11], arguments[12], arguments[13], arguments[14], arguments[0], arguments[1])
+		arguments[10], arguments[11], arguments[12], arguments[13], arguments[14],
+		arguments[15], arguments[16], arguments[17], arguments[18], arguments[0], arguments[1])
 	if err != nil {
 		return err
 	}
@@ -1763,9 +1793,29 @@ func scanLibraryEntry(row rowScanner) (LibraryEntry, error) {
 		value := description.String
 		entry.Description = &value
 	}
-	if len(presentationHash) > 0 {
-		entry.PresentationSHA256 = append([]byte(nil), presentationHash...)
-	}
+	/*
+	   `T61-103` — TÍNH LẠI presentation hash, KHÔNG tin cột.
+
+	   Cột `presentation_sha256` được ghi lúc upsert bằng công thức đang hiện
+	   hành LÚC ẤY. Công thức đã đổi một lần: trước `T61-101` nó băm
+	   `{category, description}`, từ `T61-101` nó băm `{category, description,
+	   tags}`. Hai chuỗi JSON khác nhau nên hai hash khác nhau — đo được, không
+	   phải suy đoán.
+
+	   Hệ quả nếu tin cột: sau khi nâng cấp binary, một entry KHÔNG HỀ bị sửa
+	   vẫn trả một hash mà không phép tính nào hiện tại tái tạo được. Mà
+	   `presentationSha256` tồn tại đúng để client biết "phần trình bày có đổi
+	   không" — nên client sẽ thấy mọi entry cũ "đã đổi" ở lần đọc đầu tiên sau
+	   nâng cấp, rồi thôi tin vào hash ấy.
+
+	   Hash này là hàm THUẦN của ba trường vừa đọc, nên tính lại rẻ và không thể
+	   lệch. Cột giữ lại làm bản ghi/để index sau này, nhưng đường đọc không phụ
+	   thuộc nó.
+
+	   Khác `content_sha256` ngay bên dưới: ở đó lệch nghĩa là dữ liệu THỰC THI
+	   hỏng và phải fail closed, không phải tính lại.
+	*/
+	entry.PresentationSHA256 = libraryPresentationDigest(entry.Category, entry.Description, entry.Tags)
 	if !language.Valid || len(source) == 0 || len(interfaceJSON) == 0 {
 		return LibraryEntry{}, fmt.Errorf("PROJECT library entry v6 thiếu source/interface authoritative")
 	}

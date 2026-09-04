@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-03` `presentationSha256` của hàng cũ không tái tạo được sau nâng cấp (#448, 2026-09-04)
+
+- **Triệu chứng.** Sau khi nâng cấp binary, mọi entry PROJECT ghi trước `T61-101` trả về một
+  `presentationSha256` mà không phép tính nào hiện tại tái tạo được — dù không ai sửa gì.
+- **Vì sao quan trọng.** Trường này tồn tại đúng để client biết "phần trình bày có đổi không". Nếu
+  nó đổi mà không có gì đổi, client sẽ thấy mọi entry cũ "đã thay đổi" ở lần đọc đầu tiên sau nâng
+  cấp — rồi thôi tin vào nó. Một trường chống-nói-dối mà tự nói dối thì tệ hơn không có.
+- **Nguyên nhân gốc.** Đường đọc lấy thẳng cột `presentation_sha256`. Cột ấy được ghi bằng công
+  thức đang hiện hành *lúc ghi*, và công thức đã đổi một lần: trước `T61-101` băm
+  `{category, description}`, từ `T61-101` băm `{category, description, tags}`. Hai chuỗi JSON khác
+  nhau nên hai hash khác nhau — đo được, không phải suy đoán.
+- **Cách sửa.** Đường đọc **tính lại** hash từ chính ba trường vừa đọc. Nó là hàm thuần của ba
+  trường ấy, nên tính lại rẻ và không thể lệch; hàng ghi trước lát này tự động đúng, không cần
+  backfill. Cột giữ lại làm bản ghi và để index sau này. Khác `contentSha256`: ở đó lệch nghĩa là
+  dữ liệu **thực thi** hỏng và phải fail closed, không phải tính lại.
+- Refs: `T61-103`, `ISS-PGM04-03`, `D61-09`.
+
+### Fixed — `ISS-PGM04-03` bẫy hai nửa giữa `updateLibraryEntryTx` và đường publish (#448, 2026-09-04)
+
+- **Triệu chứng.** Chưa có triệu chứng — và đó chính là vấn đề.
+- **Nguyên nhân gốc.** `updateLibraryEntryTx` bỏ sót bốn cột (`category`, `description`, `tags`,
+  `presentation_sha256`), còn `publishProjectLibraryTx` dựng entry canonical không mang metadata.
+  Hai nửa che nhau: publish ghi đè bằng hàng đang có nên chưa mất gì. Nhưng thêm bốn cột vào câu
+  UPDATE — việc hoàn toàn hợp lý khi ai đó bổ sung trường mới — sẽ **xoá sạch** mô tả và thẻ của mọi
+  entry ngay lúc publish. Và một hàm tên "update entry" im lặng bỏ qua bốn cột sẽ được người sau tin
+  là ghi đủ.
+- **Cách sửa.** Sửa cả hai vế cùng lúc: hàm ghi đủ cột, và đường publish truyền metadata vào entry
+  canonical. Một mình vế nào cũng là nửa vời — và test chỉ đỏ khi cả hai đúng.
+- Refs: `T61-103`, `ISS-PGM04-03`.
+
+### Added — `ISS-PGM04-03` bằng chứng round-trip, migrate và bất biến cho metadata PROJECT (#448, 2026-09-04)
+
+- **Hiện trạng.** Cột và đường ghi đã có từ `T61-101`, nhưng bằng chứng thì chưa: không test nào đo
+  round-trip qua **restart**, cũng không test nào migrate từ một DB schema **cũ có dữ liệu thật**.
+- **Bổ sung.** Sáu test khoá: đo độ dài theo **ký tự** chứ không byte ở cả hai hàng rào (Go và
+  trigger SQLite) — một mô tả 512 ký tự tiếng Việt chiếm tới 1536 byte, đo bằng byte sẽ từ chối nó ở
+  khoảng một phần ba độ dài hợp đồng cho phép; round-trip qua restart; migrate `v14 → v15` trên DB
+  mang dữ liệu do **chính sản phẩm** ghi ra (hạ cấp nhân tạo rồi migrate lại, thay vì chèn tay một
+  hàng mà chưa đường nào của sản phẩm từng tạo); `contentSha256` không đổi vì metadata và
+  `presentationSha256` **phải** đổi khi thẻ đổi; PUBLISHED bất biến; client cũ không gửi field mới
+  vẫn ghi được và field vắng ở lại là **vắng**.
+- **Kiểm chứng (HOST, cục bộ — repo chưa cấp CI runner, #414).** layout 17 PASS / 0 FAIL ·
+  ctest 1393/1393 · Go 21 gói ok · FE 217 tệp / 2619 test · 9 phép tiêm lỗi đều làm test đỏ.
+- Refs: `T61-103`, `ISS-PGM04-03`, `LOCK-PGM04-CONTRACT-001` §2.
+
+
 ### Fixed — `ISS-PGM04-02` `contentSha256` của entry SYSTEM băm cả nhãn tiếng Việt (#447, 2026-09-04)
 
 - **Triệu chứng.** Sửa `labelVi`, `labelEn` hoặc `category` của một entry trong
