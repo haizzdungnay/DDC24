@@ -515,8 +515,14 @@ func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints,
 	 *
 	 * Diff so `current` (bản trên đĩa trước khi ghi) với `cfg` (bản sắp ghi) —
 	 * đúng hai thứ mà câu hỏi "đổi cái gì" cần. */
+	/* So CÙNG MỘT DẠNG CHUẨN. `current` đọc thẳng từ đĩa nên chưa qua
+	 * `normalizeVirtualPointsConfig`, còn `cfg` thì đã. So hai dạng khác nhau
+	 * làm mọi trường mà chuẩn hoá điền mặc định hiện thành một "thay đổi" giả
+	 * cho MỌI điểm — `ISS-PIO-14` thêm `restartPolicy` và lập tức sinh
+	 * `(không có) -> retain` ở từng hàng, đủ để đẩy thay đổi thật ra khỏi trần
+	 * 8 trường. */
 	a.audit.ChangeWithDetail(user, "virtual-points."+op, configGroupVirtualPoints.file, "applied", r.RemoteAddr,
-		summarizeConfigDiff(current, cfg))
+		summarizeConfigDiff(normalizeVirtualPointsConfig(current), cfg))
 	return nil
 }
 
@@ -530,6 +536,10 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 	logCounts := map[int]int{}
 	for i, item := range cfg.Items {
 		base := fmt.Sprintf("items[%d]", i)
+		// Giữ giá trị THÔ trước khi chuẩn hoá: vòng này chuẩn hoá bản sao ngay
+		// ở dòng dưới, nên mọi phép kiểm "người dùng có gõ đúng không" phải đọc
+		// bản chưa bị làm sạch — xem chú thích `restartPolicy` phía dưới.
+		rawRestartPolicy := item.RestartPolicy
 		item = normalizeVirtualPoint(item)
 		if item.ID == "" {
 			addConfigErr(&errs, base+".id", "is required")
@@ -542,6 +552,17 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 		expectedChannel, channelOK := globalPointChannel(item.ID)
 		if item.Channel != 0 && (!channelOK || item.Channel != expectedChannel) {
 			addConfigErr(&errs, base+".channel", "must match the global channel derived from id")
+		}
+		/* `ISS-PIO-14` — chính sách khởi động lại phải nằm trong tập đã khai.
+		 *
+		 * Kiểm trên giá trị THÔ (`item.RestartPolicy`) chứ không phải bản đã
+		 * chuẩn hoá: `normalizeVirtualPointRestartPolicy` cố ý hiểu giá trị lạ
+		 * thành `retain` để một tệp cấu hình cũ trên đĩa vẫn đọc được. Nếu ở đây
+		 * cũng kiểm bản đã chuẩn hoá thì mọi thứ đều hợp lệ, và người gõ nhầm
+		 * `restartPolicy: "innitial"` sẽ nhận về một thiết bị lặng lẽ chạy
+		 * `retain` — đúng kiểu sai mà tính năng này sinh ra để tránh. */
+		if raw := strings.TrimSpace(rawRestartPolicy); raw != "" && !validVirtualPointRestartPolicy(raw) {
+			addConfigErr(&errs, base+".restartPolicy", "must be retain or initial")
 		}
 		if !validVirtualPointSignalType(item.SignalType) {
 			addConfigErr(&errs, base+".signalType", "must be boolean, integer, float, string, or datetime")
@@ -679,6 +700,7 @@ func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 		item.Tag = display
 	}
 	item.SignalType = strings.ToLower(strings.TrimSpace(item.SignalType))
+	item.RestartPolicy = normalizeVirtualPointRestartPolicy(item.RestartPolicy)
 	item.Label = ""
 	item.Unit = normalizeVirtualPointUnit(item.Unit)
 	item.Note = strings.TrimSpace(item.Note)

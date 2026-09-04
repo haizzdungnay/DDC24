@@ -46,7 +46,7 @@ const (
  * điểm. Cái bị bỏ là bản sao thừa của chúng bên trong tóm tắt khác biệt. */
 func mechanicalConfigKey(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "revision", "checksum", "generation":
+	case "revision", "checksum", "generation", "updatedat", "updated_at":
 		return true
 	}
 	return false

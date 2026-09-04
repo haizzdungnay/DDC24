@@ -1444,6 +1444,8 @@ export interface OutputsConfig {
   do: DoConfig[]
 }
 
+export type VirtualPointRestartPolicy = 'retain' | 'initial'
+
 export type VirtualPointSignalType = 'boolean' | 'integer' | 'float' | 'string' | 'datetime'
 
 export interface VirtualPoint {
@@ -1471,6 +1473,19 @@ export interface VirtualPoint {
   updatedAt?: string
   namespaceState?: string
   generation?: number
+  /** `ISS-PIO-14` — giá trị điểm sau khi bộ điều khiển khởi động lại (đề bài §13).
+   *
+   *  `retain`  giữ giá trị cuối cùng (mặc định, và là hành vi cũ).
+   *  `initial` quay về `initialValue`.
+   *
+   *  Vắng mặt nghĩa là cấu hình đời cũ ⇒ đọc thành `retain`. */
+  restartPolicy?: VirtualPointRestartPolicy
+  /** Giá trị khởi tạo, TÁCH khỏi `value`.
+   *
+   *  Lệnh ghi runtime cập nhật `value` nhưng KHÔNG chạm vào trường này — đó là
+   *  toàn bộ lý do nó tồn tại. Trước `ISS-PIO-14`, một trường gánh cả hai nghĩa
+   *  nên giá trị khởi tạo biến mất ngay lần ghi đầu tiên. */
+  initialValue?: number | boolean | string
   /** `ISS-PIO-03` — slot Core mà VP này chiếm (`AV-01`…`AV-32`, `BV-01`…`BV-16`).
    *
    *  Backend cấp tự động theo `signalType` khi tạo. Vắng mặt nghĩa là kiểu tín

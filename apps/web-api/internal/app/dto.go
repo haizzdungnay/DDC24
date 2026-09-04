@@ -109,6 +109,28 @@ type VirtualPoint struct {
 	MathFunction    int     `json:"mathFunction,omitempty"`
 	Note            string  `json:"note,omitempty"`
 	UpdatedAt       string  `json:"updatedAt,omitempty"`
+	/* `ISS-PIO-14` — chính sách giá trị sau khởi động lại (đề bài §13).
+	 *
+	 * TRIỆU CHỨNG trước bản vá: `Value` gánh HAI nghĩa cùng lúc — "giá trị khởi
+	 * tạo do người dùng đặt" và "giá trị hiện hành". Mỗi lệnh ghi runtime ghi đè
+	 * nó trong `virtual_points.conf`, nên giá trị khởi tạo BIẾN MẤT ngay lần ghi
+	 * đầu tiên và không có đường nào lấy lại. Người dùng đặt 20 °C làm mặc định,
+	 * ai đó ép 35 để thử, và sau lần khởi động kế tiếp điểm khởi động ở 35.
+	 *
+	 * `RestartPolicy`:
+	 *   `retain`  — giữ giá trị cuối cùng (mặc định, GIỮ NGUYÊN hành vi cũ).
+	 *   `initial` — quay về `InitialValue` khi web-api khởi động.
+	 *
+	 * Mặc định là `retain` CÓ CHỦ Ý: đây là hành vi các cấu hình đang chạy vẫn
+	 * có, nên nạp một tệp cũ không được âm thầm đổi cách thiết bị khởi động. */
+	RestartPolicy string `json:"restartPolicy,omitempty"`
+	/* InitialValue là giá trị khởi tạo, TÁCH khỏi `Value`.
+	 *
+	 * Lệnh ghi runtime KHÔNG chạm vào trường này — đó là toàn bộ lý do nó tồn
+	 * tại. Vắng mặt nghĩa là "chưa đặt riêng", và khi đó `defaultVirtualPointValue`
+	 * theo kiểu tín hiệu là câu trả lời; KHÔNG rơi về `Value`, vì `Value` chính
+	 * là thứ đã bị lệnh ghi làm bẩn. */
+	InitialValue any `json:"initialValue,omitempty"`
 	// BoundPointID nối VP này tới một slot AV/BV thật của Core ("AV-1".."AV-32",
 	// "BV-1".."BV-16"), rỗng = chỉ là overlay cấu hình như trước (F-PROG-ASBUILT-014).
 	// Khi đặt, giá trị VP được đồng bộ sang Core qua WebIpc mỗi lần ghi

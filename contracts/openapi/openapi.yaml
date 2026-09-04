@@ -4809,7 +4809,32 @@ components:
         logEnabled: { type: boolean, default: false }
         logIntervalMs: { type: integer, enum: [1000, 100, 10], nullable: true }
         retentionS: { type: integer, minimum: 0, description: "Max: 30d at 1s, 7d at 100ms, 1h at 10ms." }
-        value: { $ref: "#/components/schemas/VirtualPointValue" }
+        value:
+          allOf: [{ $ref: "#/components/schemas/VirtualPointValue" }]
+          description: >
+            Giá trị HIỆN HÀNH. Lệnh ghi runtime cập nhật trường này. Trước
+            ISS-PIO-14 nó gánh cả vai giá trị khởi tạo, nên giá trị khởi tạo biến
+            mất ngay lần ghi đầu tiên — nay dùng `initialValue` cho vai đó.
+        restartPolicy:
+          type: string
+          enum: [retain, initial]
+          default: retain
+          description: >
+            ISS-PIO-14 (đề bài §13) — giá trị điểm sau khi web-api khởi động lại.
+            `retain` giữ giá trị cuối; `initial` quay về `initialValue`.
+            Vắng mặt ⇒ `retain`, tức hành vi của mọi cấu hình đã có: nạp một tệp
+            cũ không được âm thầm đổi cách thiết bị khởi động.
+            GIỚI HẠN: chính sách áp khi WEB-API khởi động. Nếu chỉ Core khởi động
+            lại, vòng đối chiếu đẩy lại giá trị hiện hành — `plc_shm` không có
+            "boot id" nên web-api không phân biệt được "Core vừa dựng lại SHM"
+            với "ai đó vừa ghi đè slot".
+        initialValue:
+          allOf: [{ $ref: "#/components/schemas/VirtualPointValue" }]
+          description: >
+            Giá trị khởi tạo, chỉ dùng khi `restartPolicy: initial`. Lệnh ghi
+            runtime KHÔNG chạm vào trường này. Vắng mặt ⇒ mặc định theo
+            `signalType` (0 / false / ""), KHÔNG rơi về `value` — rơi về `value`
+            sẽ biến `initial` thành `retain` một cách im lặng.
         unit: { type: string, enum: ["", percent, degC, Pa, ppm], description: "Selected from the EasySet u4 Units list." }
         displayMin: { type: number, minimum: -50, maximum: 205, default: 0, description: "EasySet-style u1 Display Min metadata." }
         displayMax: { type: number, minimum: -50, maximum: 205, default: 100, description: "EasySet-style u2 Display Max metadata." }

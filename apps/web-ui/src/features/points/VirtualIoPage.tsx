@@ -16,7 +16,7 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
 import { VirtualPointUsageNotice } from './VirtualPointUsageNotice'
-import type { Point, TrendSample, VirtualPoint, VirtualPointSignalType } from '../../shared/types'
+import type { Point, TrendSample, VirtualPoint, VirtualPointRestartPolicy, VirtualPointSignalType } from '../../shared/types'
 import { cn, formatTime, formatValue, pointNumber } from '../../shared/utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
@@ -501,7 +501,51 @@ function Basics({ item, tagError, nameError, fieldIndex, onChange }: { item: Vir
       <SignalTypeSelect value={item.signalType} label onChange={(signalType) => onChange(signalTypePatch(item, signalType))} />
       <CheckField label="Enabled" checked={item.enabled} onChange={(enabled) => onChange({ enabled })} />
       <CheckField label="Writable" checked={item.writable} onChange={(writable) => onChange({ writable })} />
+      <RestartPolicyField item={item} onChange={onChange} />
     </div>
+  )
+}
+
+/* `ISS-PIO-14` — giá trị điểm sau khi bộ điều khiển khởi động lại (đề bài §13).
+ *
+ * Trước bản vá, `value` gánh HAI nghĩa: giá trị khởi tạo do người dùng đặt, và
+ * giá trị hiện hành do lệnh ghi cập nhật. Người dùng đặt 20 làm mặc định, một
+ * kỹ thuật viên ép 35 để thử, và số 20 biến mất khỏi cấu hình vĩnh viễn.
+ *
+ * Ô "Giá trị khởi tạo" chỉ hiện khi chọn `initial`: khi chọn `retain` thì không
+ * có giá trị khởi tạo nào được dùng, và một ô nhập không ai đọc là một lời hứa
+ * suông — đúng lớp lỗi mà `ISS-PIO-25` vừa dọn khỏi AoConfig/DoConfig.
+ */
+export function RestartPolicyField({ item, onChange }: { item: VirtualPoint; onChange: (patch: Partial<VirtualPoint>) => void }) {
+  const { pick } = useI18n()
+  const policy = item.restartPolicy ?? 'retain'
+  return (
+    <>
+      <label className="block text-xs text-[var(--c-text-dim)]">
+        {pick('Sau khi khởi động lại', 'After restart')}
+        <select
+          className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+          aria-label={pick(`Chính sách khởi động lại cho ${item.id}`, `Restart policy for ${item.id}`)}
+          value={policy}
+          onChange={(event) => onChange({ restartPolicy: event.target.value as VirtualPointRestartPolicy })}
+        >
+          <option value="retain">{pick('Giữ giá trị cuối', 'Retain last value')}</option>
+          <option value="initial">{pick('Về giá trị khởi tạo', 'Return to initial value')}</option>
+        </select>
+      </label>
+      {policy === 'initial' && (
+        <label className="block text-xs text-[var(--c-text-dim)]">
+          {pick('Giá trị khởi tạo', 'Initial value')}
+          <input
+            className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+            aria-label={pick(`Giá trị khởi tạo cho ${item.id}`, `Initial value for ${item.id}`)}
+            value={String(item.initialValue ?? '')}
+            placeholder={String(defaultValue(item.signalType))}
+            onChange={(event) => onChange({ initialValue: parseValue(item.signalType, event.target.value) })}
+          />
+        </label>
+      )}
+    </>
   )
 }
 

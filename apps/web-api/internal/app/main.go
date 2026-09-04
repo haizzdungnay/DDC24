@@ -248,6 +248,11 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 	// bộ lại ngay thì mọi ST Program bind VP sẽ fail-closed (quality != GOOD)
 	// cho tới khi có người vô tình ghi lại giá trị VP. Đẩy một lần khi khởi
 	// động, không chặn boot nếu Core chưa sẵn sàng (ForcePointTTL tự degrade).
+	// `ISS-PIO-14` — áp chính sách khởi động lại TRƯỚC khi đẩy xuống Core: đẩy
+	// trước rồi mới đặt lại sẽ để Core mang giá trị cũ trong khoảng giữa, và ST
+	// Program đọc đúng vào khoảng đó sẽ chạy theo một giá trị người dùng đã bảo
+	// là không được dùng sau khởi động.
+	app.applyRestartPolicyOnBoot(context.Background())
 	app.syncBoundVirtualPointsToCore(context.Background())
 	app.alarmHistory = NewAlarmHistoryStore(app.alarmHistoryPath())
 	app.alarmTracker = NewAlarmHistoryTracker()

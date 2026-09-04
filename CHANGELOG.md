@@ -8,6 +8,73 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-14` Chính sách giá trị Virtual Point sau khởi động lại (#397, 2026-09-04)
+
+- **Triệu chứng.** Đề bài §13 đòi chọn *Retain last value* / *Initial value*. `VirtualPoint` chỉ có
+  `value`, và `syncBoundVirtualPointsToCore` đẩy lại chính `value` đó lúc khởi động.
+- **Nguyên nhân gốc, và nó tệ hơn "thiếu một lựa chọn": MỘT TRƯỜNG GÁNH HAI NGHĨA.** `value` vừa là
+  "giá trị khởi tạo do người dùng đặt" vừa là "giá trị hiện hành". Mọi lệnh ghi runtime ghi đè nó
+  trong `virtual_points.conf`, nên **giá trị khởi tạo biến mất ngay lần ghi đầu tiên** và không có
+  đường nào lấy lại. Người dùng đặt 20 °C làm mặc định, một kỹ thuật viên ép 35 để thử, và sau lần
+  khởi động kế tiếp điểm khởi động ở **35**.
+- **Cách sửa.** Tách `initialValue` khỏi `value`, thêm `restartPolicy: retain | initial`.
+  `applyRestartPolicyOnBoot` chạy **trước** khi đẩy xuống Core — đẩy trước rồi mới đặt lại sẽ để Core
+  mang giá trị cũ trong khoảng giữa, và ST Program đọc đúng vào khoảng đó sẽ chạy theo một giá trị
+  người dùng đã bảo là không được dùng.
+- **Mặc định `retain`, có chủ ý.** Đó là hành vi mọi cấu hình đang chạy vẫn có; nạp một tệp cũ không
+  được âm thầm đổi cách thiết bị khởi động.
+- **Ghi vào cấu hình chứ không chỉ đẩy xuống Core.** Vòng đối chiếu 10 giây so slot Core với `value`
+  trong cấu hình; chỉ đẩy `initialValue` xuống Core mà không sửa cấu hình thì vòng kế tiếp kéo ngược
+  — điểm sẽ **nhấp nháy giữa hai giá trị mỗi 10 giây**, khó chịu hơn hẳn lỗi đang sửa.
+- **`initial` mà chưa đặt `initialValue` ⇒ mặc định theo kiểu tín hiệu, KHÔNG rơi về `value`.** Rơi
+  về `value` sẽ biến `initial` thành `retain` một cách im lặng — tệ hơn không có tuỳ chọn nào, vì màn
+  hình khi ấy nói một đằng và thiết bị làm một nẻo.
+- **Giới hạn, ghi rõ thay vì để người đọc tự phát hiện.** Chính sách áp lúc **web-api** khởi động.
+  Nếu **chỉ Core** khởi động lại, vòng đối chiếu đẩy lại `value` hiện hành: `plc_shm` không có
+  "boot id" nên web-api không phân biệt được "Core vừa dựng lại SHM" với "ai đó vừa ghi đè slot".
+  Đoán bừa ở đây sẽ kéo một điểm đang chạy về giá trị khởi tạo giữa ca vận hành.
+- **Vết audit cho một thay đổi do HỆ THỐNG thực hiện** (`actor = system`), khép vòng với `ISS-PIO-37`:
+  im lặng ở đây nghĩa là giá trị một điểm vật lý đổi mà không dấu vết nào.
+- **Giao diện.** Ô "Giá trị khởi tạo" **chỉ hiện khi chọn `initial`**: ở chế độ `retain` không có giá
+  trị khởi tạo nào được dùng, và một ô nhập không ai đọc là một lời hứa suông — đúng lớp lỗi mà
+  `ISS-PIO-25` vừa dọn khỏi `AoConfig`/`DoConfig`.
+
+**Hai lỗi phát sinh, sửa cùng phiên.**
+
+- **Diff audit so hai dạng khác nhau.** Phễu ghi VP so `current` (đọc thẳng từ đĩa, **chưa** chuẩn
+  hoá) với `cfg` (**đã** chuẩn hoá). Thêm `restartPolicy` lập tức sinh `(không có) -> retain` ở
+  **từng hàng**, đủ đẩy thay đổi thật ra khỏi trần 8 trường — vết audit của `ISS-PIO-37` vừa dựng
+  liền mất tác dụng. Nay chuẩn hoá **cả hai** vế trước khi so. Lỗi này có sẵn từ #391, chỉ chưa lộ
+  vì lúc đó chưa có trường mới nào.
+- **`updatedAt` là nhiễu cơ học**, đã đưa vào `mechanicalConfigKey`: nó đổi ở **mọi** lần ghi.
+
+**Một cái bẫy tôi tự viết chú thích cảnh báo rồi vẫn dính.** `validateConfigVirtualPoints` chuẩn hoá
+bản sao ngay dòng đầu vòng lặp, nên phép kiểm `restartPolicy` của tôi đọc phải bản **đã** làm sạch và
+`"innitial"` lọt qua thành `retain`. Nay giữ giá trị **thô** trước khi chuẩn hoá.
+
+- **Kiểm chứng (đo lại trong phiên).**
+
+  | Cổng | Kết quả |
+  | --- | --- |
+  | `verify-project.sh --component layout` | 17 PASS / 0 FAIL, exit 0 |
+  | C++ configure / build / `ctest` | exit 0 / exit 0, **0 warning** / **1393/1393 pass** |
+  | Go `go vet` + `go test ./... -count=1` | sạch · **21 gói ok** |
+  | FE `vitest src` | **215 tệp / 2592 test PASS** |
+  | FE `npm run lint` / `npm run build` | exit 0 / exit 0, dư địa 41.87 KiB |
+
+  Tiêm lỗi 6/6 đều đỏ: (1) `initial` rơi về `value`; (2) so giá trị bằng `==` trên `any`;
+  (3) validator đọc bản đã chuẩn hoá; (4) bỏ vết audit; (5) FE hiện ô khởi tạo ở chế độ `retain`;
+  (6) FE ghi vào `value` thay vì `initialValue`. Khôi phục ⇒ xanh.
+
+  **Hai phép tiêm đầu ở nhóm (3)(4) chỉ làm HỎNG BIÊN DỊCH** (biến khai mà không dùng) — đỏ vì
+  compiler khó tính, **không** vì test canh được hành vi. Đã tiêm lại theo cách giữ mã biên dịch
+  được, và lần đó mới đúng là test bắt.
+
+  **`BUILD=0` giả**: `npm run build 2>&1 | tail -4; echo $?` trả mã của `tail`, không phải của
+  `npm`. Một lỗi `TS2550` thật (`Array.prototype.at` ngoài lib target) đã suýt lọt. Đọc exit code
+  của lệnh thật, đừng đọc của cái cuối trong pipe.
+
+
 ### Added — `ISS-PIO-37` Audit `old → new` và chống lost-update cho cấu hình Point (#391, 2026-09-04)
 
 **Tiêu chí 1 — ghi `actor / time / old value / new value`.**
