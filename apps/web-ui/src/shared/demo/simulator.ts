@@ -732,10 +732,10 @@ export function putDemoAiInputs(configs: AiInputConfig[]): void {
 }
 
 const defaultAoConfigSeeds: Array<Omit<AoConfig, 'tag'>> = [
-  { kind: 'AO', channel: 1, id: 'AO-01', label: 'VFD Speed', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, source: 1, loopConfig: 1, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 1, alarm0: 2, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 62.5, note: '', demoNote: 'demo' },
-  { kind: 'AO', channel: 2, id: 'AO-02', label: 'Heating Valve', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, source: 1, loopConfig: 0, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 35, note: '', demoNote: 'demo' },
-  { kind: 'AO', channel: 3, id: 'AO-03', label: 'Cooling Valve', enabled: true, mode: '4-20mA', units: 'percent', minPv: 0, maxPv: 100, safeValue: 4, source: 1, loopConfig: 4, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 12.5, note: '', demoNote: 'demo' },
-  { kind: 'AO', channel: 4, id: 'AO-04', label: 'Damper Position', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, source: 6, loopConfig: 7, minHeatOutput: 0, maxHeatOutput: 100, minCoolOutput: 0, maxCoolOutput: 100, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0, piSeqLowerFan1: 0, fanSpeed2: 50, piSeqUpperFan3: 100, setbackAlarm: 50, notInUse16: 0, manualValue: 45, note: '', demoNote: 'demo' }
+  { kind: 'AO', channel: 1, id: 'AO-01', label: 'VFD Speed', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, manualValue: 62.5, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 2, id: 'AO-02', label: 'Heating Valve', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, manualValue: 35, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 3, id: 'AO-03', label: 'Cooling Valve', enabled: true, mode: '4-20mA', units: 'percent', minPv: 0, maxPv: 100, safeValue: 4, manualValue: 12.5, note: '', demoNote: 'demo' },
+  { kind: 'AO', channel: 4, id: 'AO-04', label: 'Damper Position', enabled: true, mode: '0-10V', units: 'percent', minPv: 0, maxPv: 100, safeValue: 0, manualValue: 45, note: '', demoNote: 'demo' }
 ]
 
 const defaultAoConfigs: AoConfig[] = defaultAoConfigSeeds.map((config) => ({ ...config, tag: config.id }))

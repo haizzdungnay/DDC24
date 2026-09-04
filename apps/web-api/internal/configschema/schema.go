@@ -98,6 +98,20 @@ func pointMetadataFields() []Field {
 		{Name: "note", Kind: KindString, ReadBy: []string{"web-ui"}},
 		{Name: "equipment", Kind: KindString, ReadBy: []string{"web-api: pointconfig.go"}},
 		{Name: "trend_enabled", Kind: KindBool, ReadBy: []string{"web-api: historian_policy.go"}},
+		/* `enabled` và `display_unit`: ĐỌC bởi `points.go:addRows` cho CẢ BA khối
+		 * ui/ao/do, nhưng trước `ISS-PIO-25` schema chỉ khai `enabled` ở `ui` và
+		 * không khai `display_unit` ở đâu cả.
+		 *
+		 * Hệ quả đo được: một hàng AO/DO mang `enabled` — đúng khoá mà đường đọc
+		 * đi tìm — bị đường ghi trả 400 `unknown field`. Tức là bộ lọc "điểm đã
+		 * bật" của `ISS-PIO-07` đọc một khoá mà người dùng KHÔNG lưu nổi, và
+		 * `display_unit` thì không lưu được ở bất kỳ khối nào.
+		 *
+		 * Bên nào đúng: đường ĐỌC. Cả hai đều là metadata trình bày hợp lệ cho
+		 * mọi khối kênh, y hệt `note`/`equipment` ngay phía trên. Firmware không
+		 * đọc chúng, nên chúng nằm ở đây chứ không phải trong danh sách C++. */
+		{Name: "enabled", Kind: KindBool, ReadBy: []string{"web-api: points.go:addRows", "iobus_config.cpp (chỉ UI)"}},
+		{Name: "display_unit", Kind: KindString, ReadBy: []string{"web-api: points.go:addRows"}},
 	}
 }
 
@@ -113,7 +127,8 @@ func IOCollections(modes ModeSets) map[string]Collection {
 		Field{Name: "type", Kind: KindString, Required: true, Enum: modes.UI, ReadBy: []string{"iobus_config.cpp:sensor_type_from_string"}},
 		Field{Name: "sensor_type", Kind: KindString, Enum: modes.UI, ReadBy: []string{"iobus_config.cpp (bí danh cũ của type)"}},
 		Field{Name: "unit", Kind: KindString, ReadBy: []string{"iobus_config.cpp"}},
-		Field{Name: "enabled", Kind: KindBool, ReadBy: []string{"iobus_config.cpp"}},
+		// `enabled` nay do `pointMetadataFields()` cấp cho cả ba khối — khai lại ở
+		// đây sẽ thành hai Field cùng tên trong một Collection.
 		Field{Name: "invert", Kind: KindBool, ReadBy: []string{"iobus_config.cpp"}},
 		Field{Name: "scale_lo", Kind: KindNumber, ReadBy: []string{"iobus_config.cpp"}},
 		Field{Name: "scale_hi", Kind: KindNumber, ReadBy: []string{"iobus_config.cpp"}},

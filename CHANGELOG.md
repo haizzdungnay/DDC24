@@ -8,6 +8,77 @@
 
 ## [Unreleased]
 
+### Removed — `ISS-PIO-25` Xoá 26 trường chết ở `AoConfig`/`DoConfig`, và vá chỗ đường đọc/đường ghi bất đồng (#387, 2026-09-04)
+
+- **Triệu chứng.** `types.ts` khai một loạt trường **không có ai đọc**: `minHeatOutput`,
+  `maxHeatOutput`, `minCoolOutput`, `maxCoolOutput`, `piSeqLowerFan1`, `fanSpeed2`,
+  `piSeqUpperFan3`, `setbackAlarm`, `switchOnDelay`, `switchOffDelay`, `pwmCycleTime`,
+  `runtimeAlarmHours`. `grep` cho mỗi trường ra **đúng một kết quả**, chính là dòng khai báo.
+- **Rộng hơn đề bài nêu: 26 trường, không phải 12.** Đếm lại tại chỗ thì `loopConfig`, `source`,
+  `alarm100`, `alarm0`, `input`, `notUsed10`, `notUsed11`, `notInUse16`, `floatingMode`,
+  `notInUse02`, `sequence`, `alarmOn`, `alarmOff`, `runtimeCounter`, `usePiSequence` **cũng chết y
+  hệt**. Xoá 12 rồi để 14 cái còn lại chính là "để lửng" mà đề bài cấm, nên xoá cả cụm.
+- **Nguyên nhân gốc.** Không phải quên hiện thực hoá, mà là **khai từ trên xuống**: hợp đồng TS
+  được viết trước theo một bản đồ thanh ghi mong muốn, rồi chờ firmware bắt kịp. Firmware không bắt
+  kịp — `grep -rn "ramp|slew|min_on|min_off|dwell|pwm" apps/iobus apps/core` ra **0 kết quả**.
+- **Tệ hơn "vô hại".** Các trường AO là **bắt buộc**, nên mọi literal trong repo phải điền số cho
+  chúng, và `outputsFromConfig` dựng danh sách output thật bằng cách trải `getDemoOutputs()` rồi
+  chỉ chồng lên các trường có thật. Nghĩa là ở chế độ **live**, `fanSpeed2: 50`,
+  `piSeqUpperFan3: 100`, `setbackAlarm: 50` là **số của bản demo** đang đội lốt cấu hình thiết bị.
+- **Cách sửa.** `AoConfig` còn `kind/channel/id/tag/label/enabled/mode/units/minPv/maxPv/safeValue/manualValue/note/demoNote`;
+  `DoConfig` còn `kind/channel/id/tag/label/enabled/safeState/manualValue/note/demoNote`. `tsc`
+  xác nhận cụm bị xoá **không có một người đọc nào** — chỉ có seed demo và fixture test phải sửa.
+- **`manualValue` ở lại, có lý do.** Nó không phải cấu hình: `forceSelected()` gửi nó thẳng qua
+  `apiClient.forceOutput` → `PUT /points/{id}`. Nó **có** đường xuống thiết bị thật, khác hẳn 26
+  trường kia.
+- **Cổng canh.** `outputsContract.test.ts` đọc **chính** `internal/configschema/schema.go` làm
+  nguồn chuẩn (không chép lại danh sách — bản sao sẽ lệch âm thầm, đúng cách 26 trường kia sống sót
+  nhiều năm) và bắt mọi trường không có khoá cấu hình lẫn lý do miễn trừ.
+
+### Fixed — `ISS-PIO-25` (phát sinh) `enabled`/`display_unit` đọc được nhưng ghi lại bị từ chối 400
+
+- **Triệu chứng.** `points.go:addRows` đọc `enabled` và `display_unit` từ hàng **ui/ao/do**, nhưng
+  `configschema.IOCollections` chỉ khai `enabled` cho `ui` và **không khai `display_unit` ở đâu cả**.
+  Vì `Validate` từ chối khoá lạ (`ISS-PIO-27`), một hàng AO mang **đúng khoá mà đường đọc đi tìm**
+  bị đường ghi trả `400 unknown field`. Đo trực tiếp: `ao.enabled` → 1 lỗi, `ao.display_unit` → 1
+  lỗi, `do.enabled` → 1 lỗi, `do.display_unit` → 1 lỗi.
+- **Hệ quả cụ thể.** Bộ lọc "điểm đã bật" vừa thêm ở `ISS-PIO-07` đọc một khoá mà người dùng
+  **không lưu nổi** cho AO/DO, và đơn vị hiển thị theo điểm thì không lưu được ở **bất kỳ** khối nào.
+- **Nguyên nhân gốc.** `pointMetadataFields()` gom metadata dùng chung cho cả ba khối nhưng thiếu
+  hai khoá này; `enabled` bị khai lẻ trong `ui` nên khoảng trống ở ao/do không lộ ra.
+- **Bên nào đúng: đường ĐỌC.** Cả hai đều là metadata trình bày hợp lệ cho mọi khối kênh, y hệt
+  `note`/`equipment`. Đã đưa vào `pointMetadataFields()` và bỏ `enabled` khai trùng ở `ui`.
+- **Cổng canh mới.** `TestSchemaCoversEveryKeyPointsGoReads` đọc thân `addRows` trong `points.go`,
+  trích các khoá nó thật sự đọc, và đòi schema khai đủ. Cổng cũ
+  `TestSchemaCoversEveryFieldTheFirmwareReads` **không bắt được** ca này vì nó soi `iobus_config.cpp`
+  — hai khoá trên do **Go** đọc, không phải firmware. `TestPointsGoKeyExtractionStillFindsKnownKeys`
+  canh chính cơ chế trích, để cổng không xanh giả khi regex hỏng.
+- **Ngoại lệ có chủ:** `type` chỉ có nghĩa ở kênh UI; `addRows` đọc nó cho cả ba khối chỉ vì dùng
+  chung vòng lặp. Đưa `type` vào schema AO/DO sẽ là **nhận** một khoá vô nghĩa — tệ hơn từ chối nó.
+- **Kiểm chứng (đo lại trong phiên, không dẫn số cũ).**
+
+  | Cổng | Kết quả |
+  | --- | --- |
+  | `verify-project.sh --component layout` | 17 PASS / 0 FAIL, exit 0 |
+  | C++ `cmake --fresh` configure | exit 0 |
+  | C++ `cmake --build --parallel` | exit 0, **0 warning** |
+  | C++ `ctest` | **1393/1393 pass**, exit 0 |
+  | Go `go vet ./...` | sạch, exit 0 |
+  | Go `go test ./... -count=1` | **21 gói ok** |
+  | FE `npx vitest --run src` | **213 tệp / 2574 test PASS** |
+  | FE `npm run lint` | exit 0 |
+  | FE `npm run build` | exit 0, chunk `programming` dư địa 41.87 KiB |
+
+  Tiêm lỗi 4/4 đều đỏ: (A) gỡ `display_unit` khỏi schema ⇒ cổng Go đỏ; (B) hỏng regex trích khoá ⇒
+  **cả hai** cổng Go đỏ; (C) thêm lại `pwmCycleTime` vào `DoConfig` ⇒ 2 test FE đỏ; (D) hỏng đường
+  đọc `schema.go` ⇒ tệp test FE đỏ. Khôi phục ⇒ xanh.
+
+  **Một lần configure hỏng do chính tôi**: chạy `cmake -S .` khi thư mục làm việc còn ở
+  `apps/web-api` ⇒ `CONFIGURE_EXIT=1`, `BUILD_EXIT=1`, `CTEST_EXIT=1`. Đọc exit code của cả ba bước
+  (đúng quy tắc `CLAUDE.md`) nên bắt được ngay; chạy lại bằng đường dẫn tuyệt đối mới ra số ở bảng
+  trên. Ghi lại vì đây chính là cái bẫy "ctest vẫn chạy binary cũ và báo pass".
+
+
 ### Fixed — `ISS-PIO-26` Lệnh test commissioning có TTL và tự nhả (#386, 2026-09-04)
 
 - **Triệu chứng.** `POST /api/v1/commissioning/points/{id}/test` ghi thẳng ra AO/DO nhưng thân yêu

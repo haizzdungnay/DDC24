@@ -29,9 +29,7 @@ vi.mock('../../shared/components/TrendChart', () => ({ TrendChart: () => <div />
 
 const ao: AoConfig = {
   id: 'AO-01', channel: 1, kind: 'AO', tag: 'AO-01', label: 'Shared Output', enabled: true, mode: '0-10V', units: 'volt',
-  minPv: 0, maxPv: 10, safeValue: 0, source: 0, loopConfig: 0, minHeatOutput: 0, maxHeatOutput: 0,
-  minCoolOutput: 0, maxCoolOutput: 0, alarm100: 0, alarm0: 0, input: 0, notUsed10: 0, notUsed11: 0,
-  piSeqLowerFan1: 0, fanSpeed2: 0, piSeqUpperFan3: 0, setbackAlarm: 0, notInUse16: 0, manualValue: 0, note: ''
+  minPv: 0, maxPv: 10, safeValue: 0, manualValue: 0, note: ''
 }
 const outputConfig: OutputsConfig = {
   ao: [ao],

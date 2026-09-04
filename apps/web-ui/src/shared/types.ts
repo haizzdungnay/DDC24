@@ -1379,6 +1379,34 @@ export type AoEngineeringUnit = 'percent' | 'volt' | 'milliampere' | 'degC' | 'P
 export type DoSafeState = 'open' | 'closed'
 export type OutputDemoNote = 'demo'
 
+/* `ISS-PIO-25` — AoConfig/DoConfig chỉ khai những trường CÓ NGƯỜI ĐỌC.
+ *
+ * TRIỆU CHỨNG: hai interface này từng khai 26 trường phụ (`minHeatOutput`,
+ * `piSeqLowerFan1`, `switchOnDelay`, `pwmCycleTime`, `runtimeAlarmHours`, …).
+ * `grep` cho mỗi trường ra ĐÚNG một kết quả — chính dòng khai báo — cộng với các
+ * literal buộc phải điền vì trường là bắt buộc. Không form nào ghi, không backend
+ * nào đọc, `renderOutputField` trả `null` cho tất cả.
+ *
+ * VÌ SAO PHẢI XOÁ CHỨ KHÔNG ĐỂ ĐÓ: một interface là lời hứa. Ai đọc
+ * `pwmCycleTime` trong `DoConfig` sẽ tin rằng đặt nó vào sẽ đổi chu kỳ PWM của
+ * kênh — trong khi `grep -rn "pwm" apps/iobus apps/core` ra 0 kết quả, tức
+ * firmware KHÔNG có khái niệm đó. Bề mặt hợp đồng hứa một tính năng không tồn
+ * tại thì tệ hơn là không hứa gì.
+ *
+ * NGUỒN CHUẨN cho việc trường nào có thật: `internal/configschema` phía Go, gói
+ * này liệt kê đúng các key firmware đọc (`iobus_config.cpp`,
+ * `safe_state_config.cpp`). AO đọc `ch/mode/units/min_pv/max_pv` + metadata
+ * điểm; DO đọc `ch` + metadata; `safe` nằm ở `safe_state.conf`.
+ * `outputsContract.test.ts` canh cho hai bên không lệch lại.
+ *
+ * `manualValue` KHÔNG phải cấu hình và vẫn ở lại: nó là giá trị soạn cho nút ép
+ * tay, đi thẳng `apiClient.forceOutput` → `PUT /points/{id}`, không đi qua đường
+ * lưu cấu hình. Giữ đúng vì nó CÓ đường xuống thiết bị thật.
+ *
+ * Nếu sau này cần ramp/min-on-time/PWM thật thì thêm lại TỪ DƯỚI LÊN: firmware
+ * trước, `configschema` sau, rồi mới tới đây — chứ không phải khai trước ở TS
+ * rồi chờ ai đó hiện thực hoá.
+ */
 export interface AoConfig {
   kind: 'AO'
   channel: number
@@ -1391,22 +1419,7 @@ export interface AoConfig {
   minPv: number
   maxPv: number
   safeValue: number
-  source: number
-  loopConfig: number
-  minHeatOutput: number
-  maxHeatOutput: number
-  minCoolOutput: number
-  maxCoolOutput: number
-  alarm100: number
-  alarm0: number
-  input: number
-  notUsed10: number
-  notUsed11: number
-  piSeqLowerFan1: number
-  fanSpeed2: number
-  piSeqUpperFan3: number
-  setbackAlarm: number
-  notInUse16: number
+  /** Giá trị soạn cho nút ép tay (phần trăm full-scale). Không lưu vào cấu hình. */
   manualValue: number
   note: string
   demoNote?: OutputDemoNote
@@ -1420,20 +1433,10 @@ export interface DoConfig {
   label: string
   enabled?: boolean
   safeState: DoSafeState
+  /** Giá trị soạn cho nút ép tay. Không lưu vào cấu hình — xem chú thích AoConfig. */
   manualValue: boolean
-  floatingMode?: number
-  source?: number
-  notInUse02?: number
-  sequence?: number
-  switchOffDelay?: number
-  switchOnDelay?: number
-  pwmCycleTime?: number
-  alarmOn?: number
-  alarmOff?: number
-  runtimeCounter?: boolean
-  runtimeAlarmHours?: number
-  usePiSequence?: boolean
   note?: string
+  demoNote?: OutputDemoNote
 }
 
 export interface OutputsConfig {
