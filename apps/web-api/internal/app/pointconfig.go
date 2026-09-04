@@ -45,24 +45,23 @@ func (a *App) auditPointMetadataPatch(r *http.Request, pointID, oldTag, oldName 
 	}
 }
 
-func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
-	a.pointConfigMu.Lock()
-	defer a.pointConfigMu.Unlock()
-
-	rawID := r.PathValue("id")
-	id, ok := canonicalPointConfigID(rawID)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "point config requires canonical point id")
-		return
-	}
+/* decodePointConfigPatch giải mã và chuẩn hoá bản vá metadata điểm.
+ *
+ * Tách ra vì `ISS-PIO-20` cho điểm Modbus đi một nhánh khác ngay từ đầu hàm,
+ * và hai nhánh phải áp CÙNG các phép kiểm ở cửa — một nhánh nới lỏng hơn nhánh
+ * kia là cách sinh ra hai bộ quy tắc cho một API.
+ *
+ * Trả `false` khi đã ghi phản hồi lỗi, nơi gọi chỉ cần `return`.
+ */
+func decodePointConfigPatch(w http.ResponseWriter, r *http.Request) (PointConfigPatch, bool) {
 	var patch PointConfigPatch
 	if err := decodeConfigBody(w, r, &patch); err != nil {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: err.Error()}})
-		return
+		return patch, false
 	}
 	if patch.Tag == nil && patch.Name == nil && patch.Unit == nil && patch.TrendEnabled == nil && patch.Equipment == nil {
 		writeValidationErrors(w, []configValidationError{{Path: "$", Message: "tag, name, unit, trendEnabled hoặc equipment là bắt buộc"}})
-		return
+		return patch, false
 	}
 	// `ADR-042`: chuẩn hoá và giới hạn ngay tại cửa. Thẻ dài vô hạn sẽ phá bố
 	// cục nhóm trên Monitor, và khoảng trắng thừa sẽ đẻ ra hai nhóm cho cùng
@@ -71,9 +70,39 @@ func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
 		normalized := normalizeEquipmentTag(*patch.Equipment)
 		if len([]byte(normalized)) > equipmentTagMaxBytes {
 			writeValidationErrors(w, []configValidationError{{Path: "equipment", Message: fmt.Sprintf("tối đa %d byte", equipmentTagMaxBytes)}})
-			return
+			return patch, false
 		}
 		patch.Equipment = &normalized
+	}
+	return patch, true
+}
+
+func (a *App) handlePutPointConfig(w http.ResponseWriter, r *http.Request) {
+	a.pointConfigMu.Lock()
+	defer a.pointConfigMu.Unlock()
+
+	rawID := r.PathValue("id")
+	id, ok := canonicalPointConfigID(rawID)
+	if !ok {
+		/* `ISS-PIO-20` — điểm Modbus không theo mẫu mã nào: mã do người dùng
+		 * đặt (`vfd-fault-word`). Nên phép kiểm là SỰ TỒN TẠI trong
+		 * `fieldbus.conf`, cùng nguồn mà `overlayPointMetadata` đã dùng để chở
+		 * metadata Modbus ra ngoài — chứ không phải một mẫu chuỗi, thứ sẽ vừa
+		 * nhận nhầm mã gõ sai vừa bỏ sót mã hợp lệ. */
+		if modbusID := strings.TrimSpace(rawID); modbusID != "" && a.modbusPointExists(modbusID) {
+			patch, ok := decodePointConfigPatch(w, r)
+			if !ok {
+				return
+			}
+			a.applyModbusPointMetadataPatch(w, r, modbusID, patch)
+			return
+		}
+		writeError(w, http.StatusBadRequest, "point config requires canonical point id")
+		return
+	}
+	patch, ok := decodePointConfigPatch(w, r)
+	if !ok {
+		return
 	}
 	if patch.Tag != nil && !strings.HasPrefix(id, "VP") {
 		writePointTagErrors(w, []configValidationError{{Path: "tag", Message: "physical point tag is fixed", Reason: "physical_point_tag_fixed", PointID: id, Tag: *patch.Tag}})

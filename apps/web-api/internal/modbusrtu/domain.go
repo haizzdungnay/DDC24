@@ -93,6 +93,18 @@ type Point struct {
 	MinValue *float64 `json:"min_value,omitempty"`
 	MaxValue *float64 `json:"max_value,omitempty"`
 	BitIndex *int     `json:"bit_index,omitempty"`
+	/* `ISS-PIO-20` — hai trường TRÌNH BÀY, để điểm Modbus sửa được cùng bộ
+	 * metadata như điểm LOCAL/VP qua `PUT /points/{id}/config`.
+	 *
+	 * Trước đây `overlayPointMetadata` đã chở `TagName`/`DisplayName`/`Unit` ra
+	 * ngoài, nhưng `trend` và `equipment` thì KHÔNG có chỗ nào để chứa — đúng
+	 * như chú thích cạnh `Note` đã nói: thiếu ở đây là sự thật về HỢP ĐỒNG, nên
+	 * muốn có thì phải thêm trường vào chính hợp đồng, không phải vá đường chở.
+	 *
+	 * Core KHÔNG đọc hai trường này; chúng chỉ đi lên giao diện. `omitempty` nên
+	 * `fieldbus.conf` của tủ chưa dùng chúng giữ nguyên hình dạng cũ. */
+	TrendEnabled bool   `json:"trend_enabled,omitempty"`
+	Equipment    string `json:"equipment,omitempty"`
 }
 
 // MBR-B110: counter là uint64 xuyên suốt. uint32 tràn sau ~2,7 năm ở nhịp poll
@@ -151,6 +163,9 @@ func NormalizePoint(point Point) Point {
 	point.ByteOrder = strings.ToLower(strings.TrimSpace(point.ByteOrder))
 	point.WordOrder = strings.ToLower(strings.TrimSpace(point.WordOrder))
 	point.ReadWrite = strings.ToLower(strings.TrimSpace(point.ReadWrite))
+	// `ISS-PIO-20` — gom khoảng trắng như thẻ thiết bị của điểm LOCAL/VP:
+	// `AHU-1 ` và `AHU-1` phải rơi vào cùng một nhóm trên Monitor.
+	point.Equipment = strings.Join(strings.Fields(point.Equipment), " ")
 	if point.ByteOrder == "" {
 		point.ByteOrder = "big"
 	}

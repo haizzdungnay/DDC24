@@ -259,6 +259,13 @@ func (a *App) overlayPointMetadata(points []PointDTO) []PointDTO {
 			point.SafeValue = meta.SafeValue
 			point.Writable = meta.ReadWrite == "read_write"
 			point.Enabled = bool(meta.Enabled)
+			/* `ISS-PIO-20` — trend và thẻ thiết bị của điểm Modbus.
+			 *
+			 * Trước bản vá hai trường này chỉ được điền từ `metadata` (io_config),
+			 * mà điểm Modbus không nằm trong đó — nên mọi điểm Modbus luôn hiện
+			 * "không ghi trend, chưa gán thiết bị" bất kể người dùng đặt gì. */
+			point.LogEnabled = meta.TrendEnabled
+			point.Equipment = normalizeEquipmentTag(meta.Equipment)
 			/* `ISS-PIO-07`: `ModbusRTUPoint` KHÔNG có trường mô tả trong
 			 * `fieldbus.conf`. `Note` vì thế rỗng cho điểm Modbus — đó là sự
 			 * thật về hợp đồng, không phải thiếu sót của đường chở. Muốn có mô

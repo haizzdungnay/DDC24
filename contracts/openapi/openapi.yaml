@@ -5627,6 +5627,22 @@ components:
           description: "OD-MBRTU-003 — trích một bit trong register. Chỉ dùng với data_type=bool trên Holding/Input Register."
         min_value: { type: number, nullable: true, description: "Biên kỹ thuật; mẫu ngoài biên bị đánh BAD/OUT_OF_RANGE." }
         max_value: { type: number, nullable: true }
+        trend_enabled:
+          type: boolean
+          default: false
+          description: >
+            ISS-PIO-20 — bật ghi trend cho điểm Modbus. Trường TRÌNH BÀY, Core
+            không đọc. Sửa được qua `PUT /points/{id}/config` như điểm LOCAL/VP;
+            trước đó điểm Modbus không có chỗ nào để chứa giá trị này nên luôn
+            hiện "không ghi trend" bất kể người dùng đặt gì.
+        equipment:
+          type: string
+          maxLength: 48
+          description: >
+            ISS-PIO-20 (`ADR-042`) — thẻ thiết bị công nghệ mà điểm thuộc về
+            (`AHU-1`). Trường TRÌNH BÀY, Core không đọc. Khoảng trắng được gom
+            khi chuẩn hoá: `AHU-1 ` và `AHU-1` phải rơi vào cùng một nhóm trên
+            Monitor, nếu không màn hình sẽ có hai khối cùng tên.
     ModbusQuality:
       type: string
       description: >

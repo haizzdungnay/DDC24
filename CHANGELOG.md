@@ -8,6 +8,50 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-20` `PUT /points/{id}/config` nhận điểm Modbus (#403, 2026-09-04)
+
+- **Triệu chứng.** `canonicalPointConfigID` chỉ chuẩn hoá `UI/AO/DO/VP`, nên điểm Modbus **không sửa
+  được** tag / tên / đơn vị / trend / thẻ thiết bị qua API Point chung. Muốn đổi một cái tên phải đi
+  đường CRUD riêng dưới `/modbus/*` với hình dạng payload khác hẳn — và mọi công cụ đã viết cho API
+  Point chung thì lặng lẽ không áp dụng được cho **một phần ba số điểm trong tủ**.
+- **Nhận diện bằng SỰ TỒN TẠI, không bằng mẫu chuỗi.** Mã điểm Modbus do người dùng đặt
+  (`vfd-fault-word`), không theo mẫu nào. Đoán bằng chuỗi sẽ vừa nhận nhầm một mã `UI-99` gõ sai
+  thành "điểm Modbus" — rồi trả lời "điểm Modbus không tồn tại", một chỉ dẫn sai lối — vừa bỏ sót mã
+  hợp lệ. Phép kiểm đúng là sự có mặt trong `fieldbus.conf`, cùng nguồn mà `overlayPointMetadata` đã
+  dùng để chở metadata Modbus ra ngoài.
+- **Đi qua đúng một đường ghi.** Nhánh mới dùng `mutateModbusConfigLocked` — thân của
+  `mutateModbusConfig`, tách ra vì `handlePutPointConfig` đã giữ `pointConfigMu` nên gọi bản có khoá
+  sẽ tự khoá chính mình. Một đường ghi thứ hai bỏ qua validate / apply / bump revision sẽ để lại cấu
+  hình trên đĩa khác với cấu hình đang chạy, im lặng.
+- **Chỉ chạm năm trường TRÌNH BÀY.** `register_type`, `address`, `data_type`, `scale`… là hợp đồng
+  đọc thanh ghi; sửa chúng qua một API đặt tên là "config metadata" là mở cửa hậu vào đúng phần nguy
+  hiểm nhất của cấu hình.
+- **Hai nhánh áp CÙNG phép kiểm ở cửa.** `decodePointConfigPatch` tách ra để nhánh Modbus và nhánh
+  LOCAL/VP không trôi thành hai bộ quy tắc cho một API (bản vá rỗng, giới hạn 48 byte của thẻ thiết bị).
+- **Mở rộng hợp đồng thay vì vá đường chở.** `trend_enabled` và `equipment` **chưa từng có chỗ chứa**
+  trong `modbusrtu.Point`, nên mọi điểm Modbus luôn hiện "không ghi trend, chưa gán thiết bị" bất kể
+  người dùng đặt gì. Đúng như chú thích cạnh `Note` đã nói: thiếu ở đây là sự thật về **hợp đồng**.
+  Hai trường mới `omitempty`, Core không đọc, nên `fieldbus.conf` của tủ chưa dùng giữ nguyên hình dạng.
+- **Vết audit ghi theo kết quả THẬT.** `mutateModbusConfigLocked` nay trả `bool` "đã ghi 200 chưa";
+  suy từ `http.ResponseWriter` là không làm được (nó không phơi mã trạng thái), nên mọi phép đoán sẽ
+  luôn ra cùng một câu trả lời và nhật ký sẽ nói ngược với thực tế — đúng thứ mà truy vết sự cố dựa vào.
+
+**Hai phép tiêm lỗi ĐẦU TIÊN VẪN XANH — và đó là phát hiện về chính bộ test.** Bài kiểm chỉ đo mã
+trạng thái nên không phân biệt được "nhận diện bằng mẫu chuỗi" với "nhận diện bằng sự tồn tại" (phép
+kiểm trong vẫn chặn); và phép chuẩn hoá thẻ thiết bị ở tầng domain bị che bởi phép chuẩn hoá ở cửa
+API. Đã sửa **bài kiểm**, không sửa kỳ vọng: một bài đo THÔNG BÁO lỗi cho `UI-99`, một bài chạy cả
+hai đường ghi (`/points/{id}/config` và CRUD Modbus trực tiếp). Sau đó cả hai phép tiêm đều đỏ.
+
+**Kiểm chứng (đo lại thật, 2026-09-04).** layout **17 PASS / 0 FAIL** exit 0 · C++ configure/build
+exit 0, **0 warning**, `ctest` **1422/1422** · `go vet` sạch, **21 package `ok`** · FE **218 file /
+2626 test**, tsc + lint + build exit 0 · **6/6 phép tiêm lỗi ĐỎ** (bỏ nhánh Modbus, nhận diện bằng
+mẫu chuỗi, bản vá đụng hợp đồng thanh ghi, trend/equipment không ra danh sách Point, nhánh Modbus bỏ
+qua phép kiểm ở cửa, không gom khoảng trắng thẻ thiết bị ở tầng domain).
+
+Cổng chống trôi hợp đồng `TestGoStructFieldsAreDeclaredInOpenAPI` bắt đúng hai trường mới ngay khi
+thêm vào struct Go — đã bổ sung vào schema `ModbusRTUPoint`.
+
+
 ### Fixed — Bộ test `AlarmRuntime` đã ngừng chạy trong im lặng (2026-09-04)
 
 - **Triệu chứng.** `ctest` báo **1393/1393 pass** trong khi **không một test nào của `AlarmRuntime`

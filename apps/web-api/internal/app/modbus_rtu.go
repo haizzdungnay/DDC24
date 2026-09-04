@@ -332,10 +332,28 @@ func (a *App) mutateModbusConfig(w http.ResponseWriter, r *http.Request,
 	mutation func(*ConfigFieldbus) (modbusMutationResponse, []configValidationError)) {
 	a.pointConfigMu.Lock()
 	defer a.pointConfigMu.Unlock()
+	_ = a.mutateModbusConfigLocked(w, r, mutation)
+}
+
+/* mutateModbusConfigLocked là phần thân của `mutateModbusConfig`, dành cho nơi
+ * gọi ĐÃ giữ `pointConfigMu`.
+ *
+ * `ISS-PIO-20`: `PUT /points/{id}/config` giữ khoá đó suốt lượt xử lý (nó đọc
+ * và ghi io_config + virtual_points trong cùng một lần), nên gọi thẳng
+ * `mutateModbusConfig` từ trong đó sẽ tự khoá chính mình. Tách thân hàm ra vẫn
+ * giữ đúng một đường ghi cấu hình Modbus — validate, apply, revision — thay vì
+ * đẻ ra một đường ghi thứ hai bỏ qua các bước đó.
+ */
+// Trả `true` khi cấu hình đã được ghi và phản hồi là 200; `false` khi đã ghi
+// phản hồi lỗi. Nơi gọi cần biết kết quả THẬT để ghi vết audit đúng — suy ra từ
+// mã trạng thái đã viết là không làm được, và đoán bừa sẽ khiến nhật ký nói
+// ngược với thực tế, đúng thứ mà truy vết sự cố dựa vào.
+func (a *App) mutateModbusConfigLocked(w http.ResponseWriter, r *http.Request,
+	mutation func(*ConfigFieldbus) (modbusMutationResponse, []configValidationError)) bool {
 	cfg, err := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+		return false
 	}
 	response, errs := mutation(&cfg)
 	if len(errs) == 0 {
@@ -343,15 +361,16 @@ func (a *App) mutateModbusConfig(w http.ResponseWriter, r *http.Request,
 	}
 	if len(errs) > 0 {
 		writeValidationErrors(w, errs)
-		return
+		return false
 	}
 	result, err := a.applyModbusConfig(r, cfg)
 	if err != nil {
 		writeError(w, http.StatusConflict, err.Error())
-		return
+		return false
 	}
 	response.Apply = result
 	writeJSON(w, http.StatusOK, response)
+	return true
 }
 
 func normalizeModbusDevice(device ModbusRTUDevice) ModbusRTUDevice {
