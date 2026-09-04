@@ -681,6 +681,35 @@ test nào đỏ. Bộ mới cắm `matchMedia` giả cho từng khổ. Nhánh d�
 `matchMedia` cố ý **không** mặc định `'dock'`: đoán một khổ hẹp thành desktop là
 trả lại đúng cái CSS stack vừa gỡ.
 
+**Đính chính `T61-305` (`ISS-PGM04-10`, đo `2026-09-04`).** Hai hình thái phủ đã
+có từ `ISS-PGM04-09`, nhưng hai con số của `SPEC-PGM04-VISUAL-001` §1 vẫn sai:
+
+1. **Lưới chuyển hai cột ở `640 px`** (`sm` của Tailwind), trong khi spec đòi
+   `768`. Dải `640–767` vì thế hiện hai cột **dưới ngưỡng chỉ-đọc** — mỗi thẻ
+   hẹp một nửa trên đúng thiết bị mà người ta cầm bằng một tay.
+2. **Khay cắm rộng `22rem` ở mọi khổ**, trong khi spec đòi `20rem` tại
+   `1024–1279`. Ở 1024 px, Inspector ăn thêm 2rem của lưới — đúng chỗ lưới chỉ
+   còn hai cột và mỗi thẻ đã hẹp nhất.
+
+**Vì sao không test nào đỏ.** Bộ đo `T61-505` chỉ khoá `scrollWidth <=
+clientWidth`. Không tràn ngang là một điều kiện rất dễ đạt: một lưới sai số cột
+và một khay sai bề rộng đều **không** tràn ngang. Nay mỗi khổ khoá **bốn** số —
+tràn ngang, số cột (đếm bằng toạ độ thật, không bằng lớp CSS), hình thái
+Inspector, và bề rộng khay — cộng thêm luật "hình thái phủ thì trang không chừa
+cột thứ hai".
+
+**Khổ `700 px` là khổ quyết định của lát này.** Năm khổ cũ không phân biệt được
+ngưỡng `640` với `768`: ở `768` cả hai đều cho hai cột, ở `390` cả hai đều cho
+một. Chỉ trong dải `640–767` mới lộ ra rằng lưới chuyển cột ở **sai** ngưỡng.
+Một phép tiêm lỗi (đổi `md` thành `sm`) XANH ở vòng đầu vì đúng lý do ấy.
+
+**Một điều kiện thừa đã bị gỡ.** Chuỗi lớp lưới hai cột của trang từng bị bọc
+trong `inspectorMode === 'dock' ? … : ''`. Điều kiện ấy **không thể sai**: `lg`
+của Tailwind chính là ngưỡng cắm (1024 px), nên hai nhánh cho ra cùng một bố cục
+ở mọi khổ — không phép tiêm nào làm nó đỏ được. Một nhánh như thế chỉ dạy người
+đọc sau này rằng ở đây có hai luật, trong khi chỉ có một; ngưỡng runtime của hook
+và `lg` phải đổi **cùng nhau**.
+
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.
 
@@ -703,7 +732,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 | `T61-302` | P0 | SYSTEM/PROJECT tabs + toolbar Category/Type/Search/Filter/Clear; server-side filter. | `T61-301` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-07`) | 1,5 nd |
 | `T61-303` | P0 | Dense card grid: icon/kind/category/name/version/signature/description/source/usage/feature/deprecated/favorite. | `T61-203/301` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-08`) | 2 nd |
 | `T61-304` | P0 | Inspector dock/drawer với Details/Parameters/Used-In/Versions; detail error không phá list; sticky trong đúng scroll container. | `T61-301/303` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-09`) | 2 nd |
-| `T61-305` | P0 | Responsive theo §3.3; mobile read-only; không overflow; skeleton khớp hình học. | `T61-302..304` | `DONE` | 2 nd |
+| `T61-305` | P0 | Responsive theo §3.3; mobile read-only; không overflow; skeleton khớp hình học. | `T61-302..304` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-10`) | 2 nd |
 | `T61-306` | P0 | Keyboard/a11y: roving focus grid, Enter mở, Esc/return-focus drawer, landmark/tab/aria-live. | `T61-303..305` | `DONE` | 1,5 nd |
 | `T61-307` | P1 | Semantic token light/dark cục bộ, target chạm 44×44, focus 2 px, contrast theo UX Active. | `T61-002/305` | `DONE` | 1 nd |
 

@@ -8,6 +8,50 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-10` PGM-04 về đúng số cột và bề rộng Inspector của visual spec (#455, 2026-09-04)
+
+- **Triệu chứng.** Hai con số của `SPEC-PGM04-VISUAL-001` §1 vẫn sai sau khi hai hình thái phủ đã có
+  (`ISS-PGM04-09`):
+  1. Lưới chuyển hai cột ở **640 px** (`sm` của Tailwind) thay vì `768`. Dải `640–767` vì thế hiện hai cột
+     **dưới ngưỡng chỉ-đọc** — mỗi thẻ hẹp một nửa trên đúng thiết bị người ta cầm bằng một tay.
+  2. Khay cắm rộng **22rem ở mọi khổ** thay vì `20rem` tại `1024–1279`. Ở 1024 px, Inspector ăn thêm 2rem của
+     lưới — đúng chỗ lưới chỉ còn hai cột và mỗi thẻ đã hẹp nhất.
+- **Nguyên nhân gốc — vì sao không test nào đỏ.** Bộ đo `T61-505` chỉ khoá `scrollWidth <= clientWidth`.
+  **Không tràn ngang là một điều kiện rất dễ đạt**: một lưới sai số cột và một khay sai bề rộng đều không tràn
+  ngang. Phép đo đúng nhưng đo nhầm thứ.
+- **Cách sửa.** Ngưỡng cột về `md` (768) và đặt trong **một hằng dùng chung** với skeleton; bề rộng khay cắm
+  tách `20rem` (`lg`) và `22rem` (`xl`). Mỗi khổ nay khoá **bốn** số: tràn ngang, **số cột** (đếm bằng toạ độ
+  thật, không bằng lớp CSS — một lớp sai ngưỡng vẫn "có mặt" trong `className`, còn toạ độ thì không nói dối),
+  **hình thái Inspector**, và **bề rộng khay**; cộng luật "hình thái phủ thì trang không chừa cột thứ hai".
+- **Khổ `700 px` là khổ quyết định**, không phải một điểm đo thêm cho đủ. Năm khổ cũ không phân biệt được ngưỡng
+  `640` với `768`: ở `768` cả hai đều cho hai cột, ở `390` cả hai đều cho một. Chỉ trong dải `640–767` mới lộ ra
+  rằng lưới chuyển cột ở **sai** ngưỡng — và một phép tiêm lỗi (`md` → `sm`) XANH ở vòng đầu vì đúng lý do ấy.
+- **Một điều kiện thừa đã bị gỡ.** Chuỗi lớp lưới hai cột của trang từng bị bọc trong
+  `inspectorMode === 'dock' ? … : ''`. Điều kiện ấy **không thể sai**: `lg` của Tailwind chính là ngưỡng cắm
+  (1024 px), nên hai nhánh cho ra cùng một bố cục ở mọi khổ — không phép tiêm nào làm nó đỏ được. Một nhánh như
+  thế chỉ dạy người đọc sau này rằng ở đây có hai luật, trong khi chỉ có một.
+- **Số đo bố cục thật (Chromium, sáu khổ).**
+
+  | Khổ | Cột | Inspector | Bề rộng khay | `scrollWidth`/`clientWidth` |
+  |---|---|---|---|---|
+  | 1440 | 3 | cắm | 352 px | 1440 / 1440 |
+  | 1280 | 3 | cắm | 352 px | 1280 / 1280 |
+  | 1024 | 2 | cắm | 320 px | 1024 / 1024 |
+  | 768 | 2 | khay phủ | 352 px | 768 / 768 |
+  | 700 | 1 | toàn màn | 700 px | 700 / 700 |
+  | 390 | 1 | toàn màn | 390 px | 390 / 390 |
+
+- **Bằng chứng.** 8/8 phép tiêm lỗi đỏ. Vòng đầu có bốn phép XANH và ba phép **không áp được** (neo trỏ vào
+  đoạn mã vừa gỡ) — bộ tiêm phân biệt được hai tình huống ấy, đúng bẫy #1 của quy trình: "phép tiêm không chạy"
+  trông y hệt "test không bắt được".
+- **Số đo cục bộ (CI chưa cấp runner — `#414`).** layout `17 PASS / 0 FAIL` · `ctest 1443/1443` ·
+  Go `vet` sạch + `21 gói ok` · FE `224 tệp / 2741 test` · `npm run lint` + `npm run build` sạch ·
+  Playwright `e2e/programming.spec.ts -g 'PGM-04'` `18 passed / 4 skipped`.
+- **Phạm vi tệp.** `apps/web-ui/src/features/programming/library/{LibraryCardGrid.tsx,LibraryPage.tsx,
+  LibraryWorkspace.test.tsx}`, `apps/web-ui/e2e/programming.spec.ts`, `PGM-04_VISUAL_SPEC_v1.md`, Plan61.
+  Không chạm tệp của làn A.
+
+
 ### Fixed — `ISS-PGM04-09` Inspector PGM-04 thành khay phủ thật ở tablet/mobile, không còn CSS xếp dọc (#454, 2026-09-04)
 
 - **Triệu chứng.** Ở khổ tablet, người dùng chọn một khối rồi phải **cuộn qua hết lưới thẻ** mới thấy chi tiết —

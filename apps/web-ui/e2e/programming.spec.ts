@@ -2369,15 +2369,29 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     test.skip(testInfo.project.name !== 'desktop-chrome', 'phép đo này tự đặt khung nhìn')
     const lane = libraryLane()
     const failures = observeBrowserFailures(page)
-    await openLibrary(page, lane, 'PROJECT')
+    /* Tab Hệ thống có BA khối; tab Dự án chỉ có một. Đếm cột trên một danh sách
+       một phần tử là đo một thứ luôn bằng 1 — nó "đạt" ở mọi khổ và không nói
+       được gì về bố cục. */
+    await openLibrary(page, lane, 'SYSTEM')
 
+    /* `T61-305` — mỗi khổ khoá BA số, không chỉ "không tràn ngang":
+       số cột của lưới, hình thái Inspector, và bề rộng khay khi nó CẮM.
+       `SPEC-PGM04-VISUAL-001` §1 khoá cả ba; đo mỗi một cái thì hai cái kia
+       trôi tự do — và chúng đã trôi: lưới chuyển hai cột ở 640 px thay vì 768,
+       còn khay cắm rộng 22rem ở mọi khổ thay vì 20rem tại 1024. */
     const sizes = [
-      { label: '1440 — lưới 3 cột + inspector cố định', width: 1440, height: 900 },
-      { label: '1280 — lưới 2-3 cột', width: 1280, height: 800 },
-      { label: '1024 — lưới 2 cột', width: 1024, height: 768 },
-      { label: '768 — ngưỡng chỉ-đọc', width: 768, height: 1024 },
-      { label: '390 — một cột', width: 390, height: 844 }
-    ]
+      { label: '1440 — lưới 3 cột + inspector 22rem', width: 1440, height: 900, columns: 3, inspector: 'dock', dockWidth: 352 },
+      { label: '1280 — lưới 3 cột + inspector 22rem', width: 1280, height: 800, columns: 3, inspector: 'dock', dockWidth: 352 },
+      { label: '1024 — lưới 2 cột + inspector 20rem', width: 1024, height: 768, columns: 2, inspector: 'dock', dockWidth: 320 },
+      { label: '768 — lưới 2 cột + khay phủ', width: 768, height: 1024, columns: 2, inspector: 'drawer', dockWidth: null },
+      /* `700` là khổ QUYẾT ĐỊNH của lát này, không phải một điểm đo thêm cho
+         đủ. Bốn khổ kia không phân biệt được ngưỡng `640` với `768`: ở 768 cả
+         hai đều cho hai cột, ở 390 cả hai đều cho một. Chỉ trong dải 640–767
+         mới lộ ra rằng lưới đang chuyển cột ở SAI ngưỡng — và đó đúng là dải
+         mà bản trước hiện hai cột dưới ngưỡng chỉ-đọc. */
+      { label: '700 — dưới ngưỡng chỉ-đọc, vẫn MỘT cột', width: 700, height: 900, columns: 1, inspector: 'fullscreen', dockWidth: null },
+      { label: '390 — một cột + khay toàn màn', width: 390, height: 844, columns: 1, inspector: 'fullscreen', dockWidth: null }
+    ] as const
     const measured: string[] = []
     for (const size of sizes) {
       await page.setViewportSize({ width: size.width, height: size.height })
@@ -2390,16 +2404,76 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
          nên bấm lại vào danh sách phía sau nền mờ sẽ treo. Chỉ chọn khi chưa
          có gì được chọn. */
       if (await page.getByRole('dialog').count() === 0
-          && await libraryCards(page).filter({ has: page.locator('[aria-current="true"]') }).count() === 0
           && await page.locator('[data-testid="library-block-card"][aria-current="true"]').count() === 0) {
-        await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+        await libraryList(page).getByRole('button', { name: /^LIMIT/ }).click()
       }
-      const metrics = await page.evaluate(() => ({
-        scrollWidth: document.documentElement.scrollWidth,
-        clientWidth: document.documentElement.clientWidth
-      }))
-      measured.push(`${size.label}: scrollWidth=${metrics.scrollWidth} clientWidth=${metrics.clientWidth}`)
+      const metrics = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll<HTMLElement>('[data-testid="library-block-card"]')]
+        /* Đếm cột bằng TOẠ ĐỘ THẬT, không bằng lớp CSS: một lớp Tailwind sai
+           ngưỡng vẫn "có mặt" trong `className`, còn toạ độ thì không nói dối. */
+        const top = cards.length ? cards[0].getBoundingClientRect().top : 0
+        const columns = cards.filter((card) => Math.abs(card.getBoundingClientRect().top - top) < 1).length
+        const drawer = document.querySelector<HTMLElement>('[data-testid="library-inspector-drawer"]')
+        const dock = document.querySelector<HTMLElement>('section h2')?.parentElement
+        void dock
+        const heading = [...document.querySelectorAll<HTMLElement>('h2')]
+          .find((node) => node.textContent === 'Khối đang chọn')
+        const dockPanel = heading?.closest('section') as HTMLElement | null
+        return {
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+          columns,
+          inspector: drawer ? drawer.dataset.mode ?? 'drawer' : 'dock',
+          dockWidth: drawer ? null : Math.round(dockPanel?.getBoundingClientRect().width ?? 0),
+          /* Bề rộng THẬT của khay phủ. `data-mode` chỉ nói hook nghĩ gì; nó vẫn
+             đúng khi lớp CSS vẽ ra một khay hẹp giữa màn hình toàn màn. */
+          drawerWidth: drawer ? Math.round(drawer.getBoundingClientRect().width) : null,
+          /* Bề rộng vùng DANH SÁCH. Ở hai hình thái phủ, khay không nằm trong
+             dòng chảy, nên trang không được chừa cột thứ hai cho nó: chừa chỗ
+             cho một thứ đang nổi lên trên là bóp danh sách còn 3/4 mà không đổi
+             lấy gì. */
+          listWidth: Math.round(
+            (document.querySelector('[aria-label="Danh sách khối Thư viện điều khiển"]')
+              ?.closest('section') as HTMLElement | null)?.getBoundingClientRect().width ?? 0,
+          ),
+        }
+      })
+      measured.push(
+        `${size.label}: scrollWidth=${metrics.scrollWidth} clientWidth=${metrics.clientWidth}`
+        + ` cột=${metrics.columns} inspector=${metrics.inspector} dockWidth=${metrics.dockWidth ?? '—'}`
+        + ` drawerWidth=${metrics.drawerWidth ?? '—'} listWidth=${metrics.listWidth}`
+      )
       expect(metrics.scrollWidth, `tràn ngang ở ${size.label}`).toBeLessThanOrEqual(metrics.clientWidth + 1)
+      expect(metrics.columns, `số cột sai ở ${size.label}`).toBe(size.columns)
+      expect(metrics.inspector, `hình thái Inspector sai ở ${size.label}`).toBe(size.inspector)
+      if (size.inspector === 'fullscreen') {
+        // TOÀN MÀN nghĩa là hết bề ngang khung nhìn, không phải "một khay hẹp
+        // mà hook gọi là toàn màn".
+        expect(metrics.drawerWidth, `khay toàn màn không phủ hết bề ngang ở ${size.label}`)
+          .toBe(size.width)
+      }
+      if (size.inspector === 'drawer') {
+        // Khay tablet: 22rem = 352 px, và phải HẸP HƠN khung nhìn — một khay
+        // rộng bằng màn hình ở tablet là toàn màn đội lốt khay.
+        expect(Math.abs((metrics.drawerWidth ?? 0) - 352), `bề rộng khay sai ở ${size.label}`)
+          .toBeLessThanOrEqual(2)
+        expect(metrics.drawerWidth ?? 0).toBeLessThan(size.width)
+      }
+      if (size.inspector !== 'dock') {
+        /* Không chừa cột thứ hai cho khay phủ. Biên `160 px` chọn từ SỐ ĐO
+           thật, không phải từ cảm giác: khung ứng dụng (điều hướng, lề trang)
+           đã ăn khoảng 106 px ở khổ này, còn một cột `20rem` bị chừa ra sẽ
+           cộng thêm 320 px nữa — `160` nằm gọn giữa hai con số ấy, nên nó phân
+           biệt được đúng thứ cần phân biệt. */
+        expect(size.width - metrics.listWidth,
+          `trang chừa cột cho khay phủ ở ${size.label} (listWidth=${metrics.listWidth})`)
+          .toBeLessThanOrEqual(160)
+      }
+      if (size.dockWidth !== null) {
+        // Bề rộng khay cắm: cho phép ±2 px cho viền và bo góc, không hơn.
+        expect(Math.abs((metrics.dockWidth ?? 0) - size.dockWidth),
+          `bề rộng khay cắm sai ở ${size.label} (đo ${metrics.dockWidth})`).toBeLessThanOrEqual(2)
+      }
     }
     /* In ra dòng số đo theo đúng thói quen của các lane khác trong tệp này:
        một attachment chỉ nằm trong thư mục kết quả, còn dòng log thì có mặt

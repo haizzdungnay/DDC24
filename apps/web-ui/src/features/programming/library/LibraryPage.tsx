@@ -466,9 +466,18 @@ export function LibraryPage() {
       {/* Lưới hai cột CHỈ khi Inspector cắm. Ở hai hình thái phủ, khay không
           chiếm chỗ trong dòng chảy, nên một cột thứ hai rỗng sẽ bóp danh sách
           lại còn 3/4 chiều rộng mà không đổi lấy gì. */}
-      <div className={`grid min-w-0 gap-4 ${
-        inspectorMode === 'dock' ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,22rem)]' : ''
-      }`}>
+      {/* `T61-305` — bề rộng Inspector theo `SPEC-PGM04-VISUAL-001` §1: `20rem`
+          ở `1024–1279`, `22rem` từ `1280` trở lên. Bản trước dùng `22rem` cho
+          mọi khổ cắm, nên ở 1024 px Inspector ăn thêm 2rem của lưới — đúng chỗ
+          lưới chỉ còn hai cột và mỗi thẻ đã hẹp nhất.
+
+          KHÔNG bọc thêm điều kiện `inspectorMode === 'dock'` quanh chuỗi lớp
+          này: `lg` của Tailwind CHÍNH LÀ ngưỡng cắm (1024 px), nên hai nhánh
+          cho ra cùng một bố cục ở mọi khổ. Một điều kiện không đổi được kết
+          quả là một nhánh không phép tiêm nào làm sai được — và một nhánh như
+          thế chỉ dạy người đọc sau này rằng ở đây có hai luật, trong khi chỉ
+          có một. Ngưỡng runtime của hook và `lg` phải đổi CÙNG NHAU. */}
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,20rem)] xl:grid-cols-[minmax(0,3fr)_minmax(0,22rem)]">
         <Panel
           className="min-w-0"
           title={pick('Danh sách khối', 'Blocks')}

@@ -33,6 +33,32 @@ Ngưỡng `768` khớp `mobileReadOnly` của workspace: dưới ngưỡng này 
 chỉ-đọc, nên PGM-04 cũng **không** hiện đường ghi nào. Một màn hình cho sửa
 trong khi màn hình kế bên cấm sửa là hai luật cho một thiết bị.
 
+**Số cột của lưới thẻ** (`T61-305`, đo `2026-09-04`): `>= 1280` ba cột;
+`768–1279` hai cột; `< 768` **một** cột. Ngưỡng một-sang-hai cột là `768`, không
+phải `640`: `768` là ngưỡng chỉ-đọc của sản phẩm, nên dưới nó màn hình phải là
+một danh sách đọc bằng ngón tay cái, không phải một lưới hai cột với thẻ hẹp một
+nửa. Skeleton dùng **cùng** luật cột — lệch nhau thì bố cục nhảy một nhịp đúng
+lúc dữ liệu về.
+
+**Bề rộng Inspector khi CẮM:** `22rem` từ `1280` trở lên, `20rem` ở `1024–1279`.
+Ở hai hình thái phủ, trang **không** chừa cột thứ hai: khay nổi lên trên, nên
+chừa chỗ cho nó là bóp danh sách mà không đổi lấy gì.
+
+Số đo thật ở sáu khổ (`e2e/programming.spec.ts`, `T61-505`):
+
+| Khổ | Cột | Inspector | Bề rộng khay |
+|---|---|---|---|
+| 1440 | 3 | cắm | 352 px (22rem) |
+| 1280 | 3 | cắm | 352 px (22rem) |
+| 1024 | 2 | cắm | 320 px (20rem) |
+| 768 | 2 | khay phủ | 352 px |
+| 700 | 1 | toàn màn | 700 px |
+| 390 | 1 | toàn màn | 390 px |
+
+`700` là khổ **quyết định**, không phải một điểm đo thêm cho đủ: năm khổ kia
+không phân biệt được ngưỡng `640` với `768` — ở `768` cả hai đều cho hai cột, ở
+`390` cả hai đều cho một.
+
 ## 2. Thẻ khối (card)
 
 Bắt buộc, theo thứ tự đọc:

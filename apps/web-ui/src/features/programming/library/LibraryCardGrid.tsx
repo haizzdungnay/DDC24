@@ -20,6 +20,26 @@ import type { LibraryViewAction, LibraryViewStatus } from './libraryViewState'
  *     khổ màn, nên `↑/↓` phải nhảy đúng một HÀNG chứ không phải một thẻ; số cột
  *     đo từ bố cục thật, không đoán từ breakpoint.
  */
+/**
+ * `T61-305` — số cột của lưới thẻ, theo `SPEC-PGM04-VISUAL-001` §1.
+ *
+ * | Khổ | Cột |
+ * |---|---|
+ * | `>= 1280 px` | 3 |
+ * | `768–1279 px` | 2 |
+ * | `< 768 px` | 1 |
+ *
+ * Bản trước chuyển sang hai cột ở ngưỡng **640 px** (`sm`), nên từ 640 tới 767
+ * lưới đã hai cột trong khi spec đòi một. Đó không phải chuyện thẩm mỹ: `768`
+ * là ngưỡng chỉ-đọc của sản phẩm, nên dưới nó màn hình phải là một danh sách
+ * đọc bằng ngón tay cái, không phải một lưới hai cột với thẻ hẹp một nửa.
+ *
+ * Hằng CHUNG cho cả skeleton: skeleton lệch cột với lưới thật thì bố cục nhảy
+ * một nhịp đúng lúc dữ liệu về — và cú nhảy ấy rơi vào lúc người dùng vừa đưa
+ * chuột tới chỗ họ tưởng là nút.
+ */
+export const LIBRARY_GRID_COLUMNS_CLASS = 'grid gap-3 md:grid-cols-2 xl:grid-cols-3'
+
 export function LibraryCardGrid({
   state,
   groups,
@@ -167,7 +187,7 @@ export function LibraryCardGrid({
        tới chỗ họ tưởng là nút. */
     return (
       <ul aria-busy="true" aria-label={pick('Đang tải danh sách khối', 'Loading blocks')}
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        className={LIBRARY_GRID_COLUMNS_CLASS}>
         {[0, 1, 2, 3, 4, 5].map((index) => (
           <li key={index} aria-hidden="true"
             className="flex h-[8.5rem] animate-pulse flex-col gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3">
@@ -268,7 +288,7 @@ export function LibraryCardGrid({
         ref={listRef}
         onKeyDown={handleKeyDown}
         aria-label={pick('Danh sách khối Thư viện điều khiển', 'Control Library blocks')}
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+        className={LIBRARY_GRID_COLUMNS_CLASS}
       >
         {groups.map((group, index) => (
           <li key={group.key} className="flex min-w-0">

@@ -429,6 +429,33 @@ function stubViewport(mode: 'dock' | 'drawer' | 'fullscreen') {
   })
 }
 
+/**
+ * `T61-305` / `ISS-PGM04-10` — skeleton phải khớp HÌNH HỌC lưới thật.
+ *
+ * Đo bằng cách so lớp lưới ĐÃ RENDER của hai trạng thái, không bằng cách so
+ * hằng với chính nó: một hằng dùng chung vẫn có thể bị một trong hai nơi bỏ
+ * qua, và đó đúng là lỗi cần bắt.
+ */
+describe('T61-305 — skeleton giữ hình học của lưới', () => {
+  it('lưới skeleton và lưới thật mang cùng luật cột', async () => {
+    const pending: { resolve?: (value: unknown) => void } = {}
+    stub([], {
+      searchProgrammingLibraries: () => new Promise((resolve) => { pending.resolve = resolve }),
+    })
+    renderPage()
+    const skeleton = await screen.findByRole('list', { name: /Đang tải danh sách khối/ })
+    const skeletonClass = skeleton.className
+
+    pending.resolve?.({ items: [entry()] })
+    const list = await screen.findByRole('list', { name: /Danh sách khối Thư viện điều khiển/ })
+    /* Bố cục nhảy một nhịp khi dữ liệu về là cú nhảy rơi đúng lúc người dùng
+       vừa đưa chuột tới chỗ họ tưởng là nút. */
+    expect(skeletonClass).toBe(list.className)
+    expect(skeletonClass).toContain('md:grid-cols-2')
+    expect(skeletonClass).toContain('xl:grid-cols-3')
+  })
+})
+
 describe('T61-304 — Inspector: cắm ở desktop, khay ở tablet, toàn màn ở mobile', () => {
   afterEach(() => {
     Reflect.deleteProperty(window, 'matchMedia')
