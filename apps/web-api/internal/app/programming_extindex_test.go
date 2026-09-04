@@ -130,3 +130,38 @@ func TestModbusSlotPhatDanhTinhCanonicalKhopCatalog(t *testing.T) {
 		}
 	}
 }
+
+/* `ISS-PIO-34`: VP trên slot AV luôn là REAL, kể cả khi khai `integer`.
+ *
+ * `vpPoolFor` CỐ Ý đưa cả `integer` lẫn `float` vào pool AV (MSV để dành cho
+ * `multistate`, #401), còn `st_io_map.cpp` chốt `AV ⇒ REAL`. Trả `DINT` là
+ * catalog tự mâu thuẫn với allocator của chính mình, và điểm bị chặn ở cả hai
+ * chiều. Đo trên bo Foxlinx: `AV-05` (`VP_AHU_STATE`, enum 0..8) không map được
+ * vào biến ST nào dù đọc đúng, quality GOOD. */
+func TestPointCatalogVPTrenSlotAVLuonLaREAL(t *testing.T) {
+	cases := []struct {
+		name       string
+		signalType string
+	}{
+		{"VP integer (enum trạng thái)", virtualPointSignalInteger},
+		{"VP float", virtualPointSignalFloat},
+	}
+	for _, tc := range cases {
+		point := PointDTO{ID: "VP5", Kind: "virtual", BoundPointID: "AV-05",
+			SignalType: tc.signalType, Value: float64(4)}
+		if got := pointCatalogDataType(point); got != "REAL" {
+			t.Fatalf("%s trên slot AV: dataType = %q, chờ REAL — Core chốt AV ⇒ REAL, "+
+				"phát khác làm điểm bị chặn map ở cả hai chiều", tc.name, got)
+		}
+	}
+
+	// Hai họ slot còn lại giữ nguyên hợp đồng của chúng.
+	if got := pointCatalogDataType(PointDTO{ID: "VP1", Kind: "virtual", BoundPointID: "BV-01",
+		SignalType: virtualPointSignalBoolean, Value: true}); got != "BOOL" {
+		t.Fatalf("VP trên slot BV: dataType = %q, chờ BOOL", got)
+	}
+	if got := pointCatalogDataType(PointDTO{ID: "VP2", Kind: "virtual", BoundPointID: "MSV-01",
+		SignalType: virtualPointSignalInteger, Value: float64(2)}); got != "UINT" {
+		t.Fatalf("VP trên slot MSV: dataType = %q, chờ UINT", got)
+	}
+}

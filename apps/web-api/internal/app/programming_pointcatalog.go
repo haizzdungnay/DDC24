@@ -442,7 +442,26 @@ func virtualPointDataType(point PointDTO) string {
 		case "MSV":
 			return "UINT"
 		case "AV":
-			return virtualSignalTypeToIEC(point.SignalType)
+			/* `ISS-PIO-34` — SLOT QUYẾT ĐỊNH KIỂU io_map, KHÔNG PHẢI `signalType`.
+			 *
+			 * `st_io_map.cpp` chốt `AV ⇒ StType::REAL` không ngoại lệ: slot AV
+			 * nằm trong `plc_shm.av[]` và luôn là float. Còn `vpPoolFor` CỐ Ý
+			 * đưa cả `integer` lẫn `float` vào pool AV — `MSV` để dành cho
+			 * `multistate` (#401). Nên một VP `signalType: "integer"` nằm trên
+			 * slot AV là ĐÚNG thiết kế, và trả `DINT` ở đây là catalog tự mâu
+			 * thuẫn với allocator của chính mình.
+			 *
+			 * Hậu quả đo được trên bo Foxlinx: `AV-05` (`VP_AHU_STATE`, enum
+			 * 0..8) bị chặn ở CẢ HAI chiều với lý do "Core yêu cầu REAL cho điểm
+			 * AV, catalog đang phát DINT" — một VP đọc đúng, quality GOOD, mà
+			 * không map được vào biến ST nào.
+			 *
+			 * Đây là lần thứ BA cùng một lớp lỗi: `UI` tiếp điểm khô
+			 * (`ISS-PIO-33`) và nay `AV` kiểu integer. Cùng một gốc: để thuộc
+			 * tính KHAI BÁO/HIỂN THỊ của điểm quyết định kiểu io_map, trong khi
+			 * kiểu io_map chỉ được nói đúng CÁCH CORE LƯU điểm. `signalType`
+			 * vẫn có mặt trong catalog cho giao diện dùng. */
+			return "REAL"
 		}
 	}
 	return virtualSignalTypeToIEC(point.SignalType)

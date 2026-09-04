@@ -8,6 +8,28 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-34` VP trên slot AV khai `integer` không map được vào biến ST (2026-09-04)
+
+- **Triệu chứng.** `AV-05` (`VP_AHU_STATE`, enum trạng thái 0..8) bị chặn ở **cả hai chiều** với lý
+  do *"Core yêu cầu REAL cho điểm AV, catalog đang phát DINT"* — một Virtual Point đọc đúng, quality
+  GOOD, mà không map được vào biến ST nào.
+- **Nguyên nhân gốc.** `virtualPointDataType` lấy kiểu của slot `AV` từ `signalType`, nên
+  `signalType: "integer"` ra `DINT`. Nhưng `st_io_map.cpp` chốt `AV ⇒ StType::REAL` không ngoại lệ
+  (slot AV nằm trong `plc_shm.av[]`, luôn là float), **và** `vpPoolFor` **cố ý** đưa cả `integer`
+  lẫn `float` vào pool AV — `MSV` để dành cho `multistate` (#401). Nghĩa là một VP `integer` nằm
+  trên slot AV là **đúng thiết kế**, và trả `DINT` là catalog tự mâu thuẫn với allocator của chính
+  mình.
+- **Lần thứ ba cùng một lớp lỗi.** `UI` tiếp điểm khô (`ISS-PIO-33`, hỏng hai lần theo hai đường) và
+  nay `AV` kiểu integer. Cùng một gốc: để thuộc tính **khai báo/hiển thị** của điểm quyết định kiểu
+  **io_map**, trong khi kiểu io_map chỉ được nói đúng **cách Core lưu** điểm. Slot quyết định kiểu;
+  `signalType` vẫn có mặt trong catalog cho giao diện dùng.
+- **Bề mặt map trên bo sau khi sửa (88 điểm).** LOCAL 24 input `SUPPORTED` · MB_RTU 48 input
+  `SUPPORTED` / 32 output `SUPPORTED` · VP 15/16 `SUPPORTED`. Điểm còn lại là `VP16` (`ENABLE`) —
+  **dữ liệu cũ**, tạo trước khi allocator `ISS-PIO-03` vào main nên chưa có `boundPointId`; nó tự
+  lành ở lần ghi cấu hình VP kế tiếp vì allocator nằm ở phễu ghi.
+- **Đo lại.** Go **21/21 package `ok`**, `go vet ./...` exit 0. Test mới chạy ngược trên `main` thì
+  **đỏ** (`dataType = "DINT"`).
+
 ### Fixed — `ISS-PRG-CTRL-001` Commission khoá vĩnh viễn khi Core giữ revision của project khác (2026-09-03)
 
 - **Triệu chứng.** Trên bo Foxlinx, Core chạy revision của `SOAK-10P-20260824-172521` (task RUNNING,
