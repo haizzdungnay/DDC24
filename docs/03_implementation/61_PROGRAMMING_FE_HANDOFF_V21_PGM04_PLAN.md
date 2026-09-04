@@ -638,6 +638,49 @@ Ba phép tiêm lỗi XANH ở vòng đầu, và cả ba là lỗi của TEST: kh
 dung mà không khẳng định về TÍNH NHÌN THẤY (một `hidden` vẫn để text trong cây);
 không ai kiểm nhãn của sao có chứa tên khối; không ai kiểm vùng chạm 24 px.
 
+**Đính chính `T61-304` (`ISS-PGM04-09`, đo `2026-09-04`).** Bốn khay có thật,
+`Esc`/`aria-controls` của dải tab đã đúng, và lỗi khay đã không phá danh sách.
+Thứ chưa có là **hình thái**: Inspector là một `<Panel>` trong lưới CSS — từ `lg`
+trở lên nó dính bên phải, dưới đó nó **xếp xuống dưới danh sách**. Đó đúng là
+mục "Không được đóng khi: Chỉ dùng CSS stack dưới desktop thay cho drawer".
+
+Hậu quả đo được ở khổ tablet: người dùng chọn một khối rồi phải cuộn qua hết lưới
+thẻ mới thấy chi tiết — và không có gì nói cho họ biết là phải cuộn.
+
+`SPEC-PGM04-VISUAL-001` §1 khoá ba hình thái, và lát này làm chúng thành policy
+**runtime** (`useProgrammingInspectorMode`), không phải một lớp Tailwind:
+
+| Khổ | Hình thái |
+|---|---|
+| `>= 1024 px` | CẮM cố định bên phải |
+| `768–1023 px` | KHAY phủ từ phải, nền mờ |
+| `< 768 px` | TOÀN MÀN |
+
+**Vì sao phải là runtime.** `role="dialog"`, `aria-modal`, bẫy tiêu điểm và `Esc`
+chỉ đúng ở hai hình thái phủ. Làm bằng CSS thuần thì ở desktop cây DOM vẫn là một
+hộp thoại — bẫy tiêu điểm ở một khay CẮM là nhốt người dùng bàn phím vào một vùng
+họ chưa từng "mở", và `Esc` sẽ đóng một thứ không đóng được. Đó chính là mục
+"Drawer không trả focus hoặc bẫy focus ở desktop" của issue.
+
+**Bẫy tiêu điểm nay là MỘT bản, dùng chung.** Sản phẩm từ lát này có bề mặt phủ
+thứ hai, nên `focusableElements` + vòng `Tab` được tách khỏi `Modal` sang
+`shared/components/focusTrap.ts`. Chép sang khay sẽ là hai danh sách "phần tử bấm
+được" trôi khỏi nhau đúng vào ngày ai đó thêm một loại điều khiển mới, ở đúng chỗ
+người dùng bàn phím không có đường thoát.
+
+**Trả tiêu điểm là phần đắt nhất.** Đóng khay mà không trả thì tiêu điểm rơi về
+`<body>`, và người dùng bàn phím phải `Tab` lại từ đầu trang để quay về đúng thẻ
+họ vừa mở. Ref của thẻ nằm trong lưới còn trang mới là nơi biết khay vừa đóng,
+nên lưới cấp cho trang một hàm "hãy tiêu điểm thẻ này" (`focusCardRef`) thay vì
+nâng cả map ref — một chi tiết nội bộ của lưới — lên trang.
+
+**Một bẫy đo đáng ghi.** jsdom **không có** `window.matchMedia` và `innerWidth`
+mặc định là `1024`, nên toàn bộ bộ test cũ chạy ở hình thái CẮM và sẽ không bao
+giờ chạm tới hai hình thái phủ — đúng lý do khay phủ chưa từng tồn tại mà không
+test nào đỏ. Bộ mới cắm `matchMedia` giả cho từng khổ. Nhánh dự phòng khi thiếu
+`matchMedia` cố ý **không** mặc định `'dock'`: đoán một khổ hẹp thành desktop là
+trả lại đúng cái CSS stack vừa gỡ.
+
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.
 
@@ -659,7 +702,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 | `T61-301` | P0 | Tách `LibraryPage` thành controller và component tree §3.1; giữ mutation logic đã test. | `T61-201..206` | `DONE` | 1 nd |
 | `T61-302` | P0 | SYSTEM/PROJECT tabs + toolbar Category/Type/Search/Filter/Clear; server-side filter. | `T61-301` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-07`) | 1,5 nd |
 | `T61-303` | P0 | Dense card grid: icon/kind/category/name/version/signature/description/source/usage/feature/deprecated/favorite. | `T61-203/301` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-08`) | 2 nd |
-| `T61-304` | P0 | Inspector dock/drawer với Details/Parameters/Used-In/Versions; detail error không phá list; sticky trong đúng scroll container. | `T61-301/303` | `DONE` | 2 nd |
+| `T61-304` | P0 | Inspector dock/drawer với Details/Parameters/Used-In/Versions; detail error không phá list; sticky trong đúng scroll container. | `T61-301/303` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-09`) | 2 nd |
 | `T61-305` | P0 | Responsive theo §3.3; mobile read-only; không overflow; skeleton khớp hình học. | `T61-302..304` | `DONE` | 2 nd |
 | `T61-306` | P0 | Keyboard/a11y: roving focus grid, Enter mở, Esc/return-focus drawer, landmark/tab/aria-live. | `T61-303..305` | `DONE` | 1,5 nd |
 | `T61-307` | P1 | Semantic token light/dark cục bộ, target chạm 44×44, focus 2 px, contrast theo UX Active. | `T61-002/305` | `DONE` | 1 nd |

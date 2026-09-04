@@ -399,6 +399,153 @@ describe('T61-303 — thẻ dày bằng dữ liệu authoritative', () => {
   })
 })
 
+/**
+ * `T61-304` / `ISS-PGM04-09` — hình thái Inspector theo `SPEC-PGM04-VISUAL-001` §1.
+ *
+ * jsdom KHÔNG có `window.matchMedia` và `innerWidth` mặc định là 1024, nên mọi
+ * case khác của tệp này chạy ở hình thái CẮM. Bộ dưới đây cắm `matchMedia` giả
+ * để đo hai hình thái PHỦ — thứ mà một bộ test chỉ chạy ở 1024 px sẽ không bao
+ * giờ chạm tới, và đó đúng là lý do khay phủ chưa từng tồn tại.
+ */
+function stubViewport(mode: 'dock' | 'drawer' | 'fullscreen') {
+  const matches = (query: string) => {
+    if (query.includes('min-width: 1024px')) return mode === 'dock'
+    if (query.includes('max-width: 767px')) return mode === 'fullscreen'
+    return false
+  }
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: matches(query),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
+}
+
+describe('T61-304 — Inspector: cắm ở desktop, khay ở tablet, toàn màn ở mobile', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'matchMedia')
+  })
+
+  it('desktop CẮM: không phải hộp thoại, không bẫy tiêu điểm, không đóng bằng Esc', async () => {
+    /* Bẫy tiêu điểm ở một khay CẮM là nhốt người dùng bàn phím vào một vùng họ
+       chưa từng "mở", và `Esc` sẽ đóng một thứ không đóng được. Đây đúng là mục
+       "Drawer không trả focus hoặc bẫy focus ở desktop" của issue. */
+    stubViewport('dock')
+    stub([entry()])
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    /* Khẳng định theo thứ NGƯỜI DÙNG gặp, không theo một `data-testid` gắn
+       riêng cho test: khay cắm là một VÙNG của trang, nên nó có tiêu đề bình
+       thường và KHÔNG có hộp thoại nào trên màn hình. */
+    expect(await screen.findByRole('heading', { name: 'Khối đang chọn' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByTestId('library-inspector-drawer')).toBeNull()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // Khối vẫn đang chọn: `Esc` không đóng một khay không mở được.
+    await waitFor(() => expect(lastLocation).toContain('entry='))
+  })
+
+  it('tablet: KHAY phủ thật, có role dialog và aria-modal — không phải CSS xếp dọc', async () => {
+    stubViewport('drawer')
+    stub([entry()])
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    const drawer = await screen.findByTestId('library-inspector-drawer')
+    expect(drawer).toHaveAttribute('role', 'dialog')
+    expect(drawer).toHaveAttribute('aria-modal', 'true')
+    expect(drawer).toHaveAttribute('data-mode', 'drawer')
+    expect(screen.queryByTestId('library-inspector-dock')).toBeNull()
+  })
+
+  it('mobile: TOÀN MÀN, vẫn là hộp thoại', async () => {
+    stubViewport('fullscreen')
+    stub([entry()])
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    const drawer = await screen.findByTestId('library-inspector-drawer')
+    expect(drawer).toHaveAttribute('data-mode', 'fullscreen')
+    expect(drawer).toHaveAttribute('aria-modal', 'true')
+  })
+
+  it('chưa chọn khối thì khay phủ KHÔNG tồn tại — hộp thoại rỗng là chặn đường mà không đưa lại gì', async () => {
+    stubViewport('drawer')
+    stub([entry()])
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    expect(screen.queryByTestId('library-inspector-drawer')).toBeNull()
+    expect(screen.queryByTestId('library-inspector-backdrop')).toBeNull()
+  })
+
+  it('Esc đóng khay và TRẢ TIÊU ĐIỂM về đúng thẻ vừa mở', async () => {
+    /* Không trả tiêu điểm thì nó rơi về `<body>`, và người dùng bàn phím phải
+       `Tab` lại từ đầu trang để quay về đúng thẻ họ vừa mở. */
+    stubViewport('drawer')
+    stub([entry()])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    fireEvent.click(card)
+    await screen.findByTestId('library-inspector-drawer')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByTestId('library-inspector-drawer')).toBeNull())
+    await waitFor(() => expect(lastLocation).not.toContain('entry='))
+    expect(document.activeElement).toBe(card)
+  })
+
+  it('nút Đóng của khay cũng trả tiêu điểm về thẻ', async () => {
+    stubViewport('drawer')
+    stub([entry()])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    fireEvent.click(card)
+    fireEvent.click(await screen.findByRole('button', { name: 'Đóng khay chi tiết' }))
+    await waitFor(() => expect(screen.queryByTestId('library-inspector-drawer')).toBeNull())
+    expect(document.activeElement).toBe(card)
+  })
+
+  it('khay phủ BẪY tiêu điểm: Tab từ phần tử cuối cuộn về phần tử đầu', async () => {
+    stubViewport('drawer')
+    stub([entry()])
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    const drawer = await screen.findByTestId('library-inspector-drawer')
+    const focusable = [...drawer.querySelectorAll<HTMLElement>('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+      .filter((node) => node.getAttribute('tabindex') !== '-1')
+    expect(focusable.length).toBeGreaterThan(1)
+    const last = focusable[focusable.length - 1]
+    last.focus()
+    fireEvent.keyDown(drawer, { key: 'Tab' })
+    expect(document.activeElement).toBe(focusable[0])
+  })
+
+  /* Lỗi của KHAY không được biến cả thư viện thành rỗng hay lỗi. Danh sách đã
+     tải là thứ người dùng đang đọc; một 500 ở đường Used-In không phải lý do
+     để lấy nó đi. */
+  it('lỗi chi tiết KHÔNG xoá danh sách đã tải', async () => {
+    stubViewport('dock')
+    stub([entry()], {
+      listProgrammingLibraryUsages: () => Promise.reject(new Error('PRG-ERR-UNAVAILABLE-001')),
+    })
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    fireEvent.click(screen.getByRole('tab', { name: 'Nơi sử dụng' }))
+    /* Thẻ vẫn còn đó, và danh sách vẫn bấm được — số TUYỆT ĐỐI, vì "còn ít nhất
+       một thẻ" sẽ xanh cả với một danh sách đã mất phân nửa. */
+    await waitFor(() => expect(screen.getAllByTestId('library-block-card')).toHaveLength(1))
+    expect(screen.queryByText(/Không tải được Thư viện điều khiển/)).toBeNull()
+    expect(screen.queryByText(/chưa có khối nào/)).toBeNull()
+  })
+})
+
 describe('PGM-04 Inspector (T61-304)', () => {
   /*
   `aria-controls` chỉ được trỏ tới khay ĐANG hiện.

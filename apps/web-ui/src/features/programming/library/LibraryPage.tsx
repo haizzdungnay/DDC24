@@ -39,7 +39,8 @@ import {
 } from '../api/queries'
 import { useProgrammingLibraryEntryMutations, type LibraryEntryDraft } from '../api/mutations'
 import { useDraftWorkspace } from '../design/useDraftWorkspace'
-import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
+import { useProgrammingInspectorMode, useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
+import { LibraryInspectorSurface } from './LibraryInspectorSurface'
 import { canonicalProgramsPath } from '../shared/programsRoute'
 import {
   libraryDependents,
@@ -94,6 +95,10 @@ export function LibraryPage() {
      cũng không được hiện đường ghi nào. Hai luật cho một thiết bị là cách một
      kỹ thuật viên sửa thư viện trên điện thoại giữa lúc đứng cạnh tủ. */
   const mobileReadOnly = useProgrammingMobileReadOnly()
+  /* `T61-304` — hình thái Inspector là policy RUNTIME, không phải CSS: chỉ hai
+     hình thái phủ mới được mang `role="dialog"`, bẫy tiêu điểm và `Esc`. */
+  const inspectorMode = useProgrammingInspectorMode()
+  const focusCardRef = useRef<((key: string) => void) | null>(null)
   const canEdit = roleCan(session?.role, 'program.edit') && !mobileReadOnly
   const routeParams = useParams<{ projectId: string }>()
   const projects = useProgrammingProjects()
@@ -458,7 +463,12 @@ export function LibraryPage() {
       {blocked && <MutationBlockNotice block={blocked} />}
       {readBack && <ReadBackNotice readBack={readBack} entries={entries} />}
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,22rem)]">
+      {/* Lưới hai cột CHỈ khi Inspector cắm. Ở hai hình thái phủ, khay không
+          chiếm chỗ trong dòng chảy, nên một cột thứ hai rỗng sẽ bóp danh sách
+          lại còn 3/4 chiều rộng mà không đổi lấy gì. */}
+      <div className={`grid min-w-0 gap-4 ${
+        inspectorMode === 'dock' ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,22rem)]' : ''
+      }`}>
         <Panel
           className="min-w-0"
           title={pick('Danh sách khối', 'Blocks')}
@@ -517,10 +527,26 @@ export function LibraryPage() {
               setSelectedKey(key)
               setBlocked(null)
             }}
+            focusCardRef={focusCardRef}
           />
           </div>
         </Panel>
-        <Panel className="min-w-0 lg:sticky lg:top-4 lg:self-start" title={pick('Khối đang chọn', 'Selected block')}>
+        <LibraryInspectorSurface
+          mode={inspectorMode}
+          /* Ở hình thái phủ, khay chỉ tồn tại khi thật sự có khối đang chọn:
+             một hộp thoại trống phủ lên danh sách là chặn đường mà không đưa
+             lại gì. Ở hình thái cắm, khay luôn có mặt và tự nói "chọn một
+             khối" — nó không che gì cả. */
+          open={Boolean(selectedKey)}
+          title={pick('Khối đang chọn', 'Selected block')}
+          onClose={() => {
+            const closing = selectedKey
+            setSelectedKey(null)
+            /* Trả tiêu điểm về ĐÚNG thẻ vừa mở. Không trả thì tiêu điểm rơi về
+               `<body>`, và người dùng bàn phím phải `Tab` lại từ đầu trang. */
+            if (closing) focusCardRef.current?.(closing)
+          }}
+        >
           {/* Một đường dẫn ghim `entry` mà bộ lọc hiện tại không chứa khối ấy
               phải NÓI RA. Trước lát này Inspector chỉ hiện "Chọn một khối" —
               cùng câu với lúc chưa chọn gì — nên người nhận link kết luận khối
@@ -576,7 +602,7 @@ export function LibraryPage() {
               setInsertCandidate(group)
             }}
           />
-        </Panel>
+        </LibraryInspectorSurface>
       </div>
 
       <LibraryAuthoringDrawer

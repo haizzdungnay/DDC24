@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-09` Inspector PGM-04 thành khay phủ thật ở tablet/mobile, không còn CSS xếp dọc (#454, 2026-09-04)
+
+- **Triệu chứng.** Ở khổ tablet, người dùng chọn một khối rồi phải **cuộn qua hết lưới thẻ** mới thấy chi tiết —
+  và không có gì nói cho họ biết là phải cuộn.
+- **Nguyên nhân gốc.** Inspector là một `<Panel>` trong lưới CSS: từ `lg` trở lên nó dính bên phải, dưới đó nó
+  **xếp xuống dưới danh sách**. Bốn khay, `Esc` của dải tab và luật "lỗi khay không phá danh sách" đều đã đúng
+  — thứ chưa có là **hình thái**, đúng mục "Không được đóng khi: Chỉ dùng CSS stack dưới desktop thay cho
+  drawer" của issue.
+- **Cách sửa.** Ba hình thái của `SPEC-PGM04-VISUAL-001` §1 thành policy **runtime**
+  (`useProgrammingInspectorMode`), không phải một lớp Tailwind: `>= 1024 px` **cắm** cố định bên phải;
+  `768–1023 px` **khay** phủ từ phải kèm nền mờ; `< 768 px` **toàn màn**.
+- **Vì sao phải là runtime.** `role="dialog"`, `aria-modal`, bẫy tiêu điểm và `Esc` chỉ đúng ở hai hình thái
+  phủ. Làm bằng CSS thuần thì ở desktop cây DOM vẫn là một hộp thoại — bẫy tiêu điểm ở một khay **cắm** là
+  nhốt người dùng bàn phím vào một vùng họ chưa từng "mở", và `Esc` sẽ đóng một thứ không đóng được. Đó chính
+  là mục "Drawer không trả focus hoặc bẫy focus ở desktop".
+- **Bẫy tiêu điểm nay là MỘT bản, dùng chung.** Sản phẩm có bề mặt phủ thứ hai, nên `focusableElements` + vòng
+  `Tab` tách khỏi `Modal` sang `shared/components/focusTrap.ts`. Chép sang khay sẽ là hai danh sách "phần tử
+  bấm được" trôi khỏi nhau đúng vào ngày ai đó thêm một loại điều khiển mới — ở đúng chỗ người dùng bàn phím
+  không có đường thoát.
+- **Trả tiêu điểm là phần đắt nhất.** Đóng khay mà không trả thì tiêu điểm rơi về `<body>`, và người dùng bàn
+  phím phải `Tab` lại từ đầu trang để quay về đúng thẻ họ vừa mở. Ref của thẻ nằm trong lưới còn trang mới là
+  nơi biết khay vừa đóng, nên lưới cấp cho trang một hàm "hãy tiêu điểm thẻ này" thay vì nâng cả map ref lên.
+- **Một bẫy đo đáng ghi.** jsdom **không có** `window.matchMedia` và `innerWidth` mặc định là `1024`, nên toàn
+  bộ bộ test cũ chạy ở hình thái **cắm** và sẽ không bao giờ chạm tới hai hình thái phủ — đúng lý do khay phủ
+  chưa từng tồn tại mà không test nào đỏ. Bộ mới cắm `matchMedia` giả cho từng khổ, và có một bộ đo **trực
+  tiếp** ở hook cho nhánh dự phòng. Nhánh ấy cố ý **không** mặc định `'dock'`: đoán một khổ hẹp thành desktop
+  là trả lại đúng cái CSS stack vừa gỡ.
+- **E2E phải cập nhật theo, và đó là hệ quả có chủ ý.** Một hộp thoại **chặn** trang phía sau, nên hai case
+  từng bấm thẳng vào danh sách khi khay đang mở nay phải đóng khay trước — đúng thao tác người dùng thật phải
+  làm. Case "khổ hẹp là chỉ-đọc" từng khẳng định `dialog = 0`; khẳng định ấy nay đo nhầm thứ (Inspector ở khổ
+  hẹp **chính là** hộp thoại toàn màn mà spec đòi), nên nó chuyển sang cấm đúng thứ cần cấm: hộp thoại **soạn
+  thảo**.
+- **Bằng chứng.** 13/13 phép tiêm lỗi đỏ. Một phép tiêm XANH ở vòng đầu — nhánh dự phòng luôn trả `'dock'` —
+  và nó xanh vì **mọi** test giao diện đều chạy đúng nhánh ấy ở 1024 px; bộ đo trực tiếp ở hook đóng lỗ hổng.
+- **Số đo cục bộ (CI chưa cấp runner — `#414`).** layout `17 PASS / 0 FAIL` · `ctest 1443/1443` ·
+  Go `vet` sạch + `21 gói ok` · FE `224 tệp / 2740 test` · `npm run lint` + `npm run build` sạch ·
+  Playwright `e2e/programming.spec.ts -g 'PGM-04'` `18 passed / 4 skipped`.
+- **Phạm vi tệp.** `apps/web-ui/src/features/programming/{library/**,layout/useProgrammingViewport.ts}`,
+  `apps/web-ui/src/shared/components/{focusTrap.ts,Modal.tsx}`, `e2e/programming.spec.ts`. Không chạm tệp làn A.
+
+
 ### Fixed — `ISS-PGM04-08` Thẻ khối PGM-04: Yêu thích dùng chung kho, tương thích nói ra, và hai loại nơi dùng không còn gộp làm một (#453, 2026-09-04)
 
 - **Triệu chứng.** Thẻ có tên, kind, phân loại, chữ ký, mô tả, version và số POU bản nháp — nhưng thiếu ba

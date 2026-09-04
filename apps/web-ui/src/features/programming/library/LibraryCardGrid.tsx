@@ -29,6 +29,7 @@ export function LibraryCardGrid({
   draftUsageCount,
   isFavorite,
   onToggleFavorite,
+  focusCardRef,
   onRetry,
   onClearFilters,
   onCreate,
@@ -49,6 +50,15 @@ export function LibraryCardGrid({
   /** `T61-303` — Yêu thích dùng chung kho với Quick Library. */
   isFavorite: (group: LibraryEntryGroup) => boolean
   onToggleFavorite: (group: LibraryEntryGroup) => void
+  /**
+   * `T61-304` — đường TRẢ TIÊU ĐIỂM về đúng thẻ sau khi đóng khay.
+   *
+   * Ref của thẻ nằm trong lưới; trang là nơi biết khay vừa đóng. Thay vì nâng
+   * toàn bộ map ref lên trang (một chi tiết nội bộ của lưới), lưới gán vào đây
+   * một hàm "hãy tiêu điểm thẻ này". Không có đường ấy thì tiêu điểm rơi về
+   * `<body>` và người dùng bàn phím phải `Tab` lại từ đầu trang.
+   */
+  focusCardRef?: React.MutableRefObject<((key: string) => void) | null>
   onRetry: () => void
   onClearFilters: () => void
   onCreate: (() => void) | null
@@ -80,6 +90,15 @@ export function LibraryCardGrid({
   // nếu không nữa thì thẻ đầu. Danh sách ngắn lại làm chỉ số cũ hết hiệu lực,
   // và `findIndex` trả `-1` đã tự xử lý điều đó.
   const activeIndex = focusIndex >= 0 ? focusIndex : selectedIndex >= 0 ? selectedIndex : 0
+
+  useEffect(() => {
+    if (!focusCardRef) return undefined
+    focusCardRef.current = (key: string) => {
+      setFocusKey(key)
+      cardRefs.current.get(key)?.focus()
+    }
+    return () => { focusCardRef.current = null }
+  }, [focusCardRef])
 
   useEffect(() => {
     // Danh sách ngắn lại thì bỏ ref của thẻ đã biến mất, nếu không map cứ phình.

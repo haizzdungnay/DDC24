@@ -2083,6 +2083,10 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     const usageResponse = page.waitForResponse(
       (response) => response.url().includes('/library-usages') && response.url().includes('entryId=LIMIT')
     )
+    /* `T61-304` — ở khổ hẹp Inspector là khay PHỦ, nên phải đóng nó trước khi
+       chạm lại vào danh sách phía sau. Đó là hành vi đúng của một hộp thoại, và
+       cũng là thao tác người dùng thật phải làm. */
+    if (await page.getByRole('dialog').count() > 0) await page.keyboard.press('Escape')
     // `LIMIT` là khối SYSTEM: nó nằm ở tab kia, và đó chính là điều tab bảo đảm.
     await switchScope(page, 'SYSTEM')
     await list.getByRole('button', { name: /^LIMIT/ }).click()
@@ -2344,7 +2348,12 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
       }
     }
     await expect(page.getByText(/Màn hình dưới 768 px là chỉ đọc/)).toBeVisible()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
+    /* `T61-304` — điều bị cấm là hộp thoại SOẠN THẢO, không phải mọi hộp thoại:
+       từ lát này Inspector ở khổ hẹp CHÍNH LÀ một hộp thoại toàn màn, đúng
+       `SPEC-PGM04-VISUAL-001` §1. Khẳng định cũ (`dialog` = 0) nay đo nhầm
+       thứ — nó sẽ cấm luôn cái bố cục mà spec đòi. */
+    await expect(page.getByLabel('Tên khối')).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: /Khối PROJECT mới|Sửa khối/ })).toHaveCount(0)
   })
 
   /*
@@ -2373,9 +2382,18 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     for (const size of sizes) {
       await page.setViewportSize({ width: size.width, height: size.height })
       await expect(libraryCards(page).first()).toBeVisible()
-      // Chọn một khối để Inspector có nội dung: một khay rỗng không tràn được,
-      // nên đo lúc nó rỗng là đo một thứ không có rủi ro.
-      await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+      /* Chọn một khối để Inspector có nội dung: một khay rỗng không tràn được,
+         nên đo lúc nó rỗng là đo một thứ không có rủi ro.
+
+         `T61-304` — khối đang chọn nằm trong URL nên nó SỐNG SÓT qua mọi lần
+         đổi khung nhìn; và từ `1023 px` trở xuống Inspector là một khay PHỦ,
+         nên bấm lại vào danh sách phía sau nền mờ sẽ treo. Chỉ chọn khi chưa
+         có gì được chọn. */
+      if (await page.getByRole('dialog').count() === 0
+          && await libraryCards(page).filter({ has: page.locator('[aria-current="true"]') }).count() === 0
+          && await page.locator('[data-testid="library-block-card"][aria-current="true"]').count() === 0) {
+        await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+      }
       const metrics = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         clientWidth: document.documentElement.clientWidth
