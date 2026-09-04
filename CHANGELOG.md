@@ -8,6 +8,70 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-18` `virtual-points/{id}/usage` quét cả binding Programming (#400, 2026-09-04)
+
+- **Triệu chứng.** `virtualpoint_usage.go` khai `Kind: alarm | schedule | program` và nêu đúng động
+  cơ — *"một chương trình ST mất binding"* — nhưng `Scanned` chỉ có `alarm-settings` và `schedules`.
+  **Không nguồn nào sinh `Kind = "program"`.** Xoá một VP đang được chương trình bind cho ra danh
+  sách **rỗng** kèm `incomplete = false`.
+- **Vì sao đây là kiểu sai tệ nhất.** Rỗng + `incomplete=false` không phải "chưa biết" — nó là câu
+  trả lời **"đã kiểm, không ai dùng"** cho một câu hỏi **chưa từng được hỏi**. Một lỗi ồn ào còn
+  khiến người ta dừng lại; câu này khiến người ta bấm xoá.
+- **Nguyên nhân gốc.** Endpoint đọc cấu hình alarm/schedule trực tiếp, nhưng binding Programming
+  nằm trong DB Programming (tài liệu Draft + manifest Revision) mà tầng `app` chưa có đường đọc.
+- **Cách sửa.** `ProjectService.FindPointReferences` quét **Draft của mọi Project** và **Revision
+  đang chạy**, trả kèm phần không đọc được. Endpoint nối vào và khai đủ bốn nguồn trong `Scanned`.
+- **Không dùng `ListProjects`.** Hàm đó hỏi Core để dán nhãn Revision và **trả lỗi khi Core im**. Ở
+  đây Core im chỉ được phép làm kết quả **kém đầy đủ**, không được làm cả câu trả lời biến mất:
+  người vận hành vẫn cần biết Draft nào đang bind điểm này kể cả lúc Core tắt.
+- **Phạm vi quét, và vì sao đúng hai chỗ.** Draft là nơi binding sống trước khi niêm phong; Revision
+  đang chạy là mã đang điều khiển thiết bị. Revision đã seal nhưng **không** chạy là lịch sử bất
+  biến — liệt kê chúng chỉ làm loãng danh sách bằng những mục không hành động được.
+- **Sai lầm bắt được giữa chừng, đáng ghi lại.** Bản đầu của bộ so khớp dùng
+  `canonicalVirtualPointID(pointID)`. Nhưng `pointCatalogPointID` **cố ý** phát `boundPointId`
+  (`AV-01`/`BV-03`) cho category VP, vì Core chỉ resolve được slot thật. Quy `AV-01` về `VP1` theo
+  số là sai: **số kênh VP và số slot Core là hai dãy độc lập** do bộ cấp phát quyết định. Phép quy
+  đó vừa khớp **nhầm** một điểm không liên quan, vừa **bỏ sót** điểm thật — đúng hai kiểu sai mà
+  endpoint này tồn tại để tránh. Đã đổi sang so theo `boundPointId`, và có test riêng khoá lại ca
+  *"AV-01 không phải VP1"*.
+- **`category` rỗng vẫn xét tiếp.** Binding hình dạng v2 (`upsertBindingV2`) chỉ có `pointId` phẳng
+  và không mang category; loại nó vì thiếu category là bỏ sót đúng lớp binding cần tìm.
+- **Dịch vụ Programming chưa bật ⇒ `incomplete = true`.** Coi nó là "không có tham chiếu" sẽ tái lập
+  đúng lỗi đang sửa, chỉ đổi nguyên nhân.
+- **Hai lỗi giao diện phát sinh, sửa cùng phiên:**
+  - Câu "không ai dùng" viết cứng *"Không có cảnh báo hay lịch vận hành nào"* — hẹp hơn sự thật khi
+    backend quét bốn nguồn, và phải sửa lại mỗi lần thêm nguồn. Nay đọc thẳng `usage.scanned`.
+  - Khoá React là `kind-id`, mà binding Programming dùng `projectId` làm `id` ⇒ **trùng khoá** khi
+    một Project có nhiều binding. Đã thêm chỉ số.
+- **Kiểm chứng (đo lại trong phiên, không dẫn số cũ).**
+
+  | Cổng | Kết quả |
+  | --- | --- |
+  | `verify-project.sh --component layout` | 17 PASS / 0 FAIL, exit 0 |
+  | C++ `cmake --fresh` configure | exit 0 |
+  | C++ `cmake --build --parallel` | exit 0, **0 warning** |
+  | C++ `ctest` | **1393/1393 pass**, exit 0 |
+  | Go `go vet ./...` | sạch, exit 0 |
+  | Go `go test ./... -count=1` | **21 gói ok** |
+  | FE `npx vitest --run src` | **213 tệp / 2575 test PASS** |
+  | FE `npm run lint` | exit 0 |
+  | FE `npm run build` | exit 0, chunk `programming` dư địa 41.87 KiB |
+
+  Tiêm lỗi 6/6 đều đỏ: (1) bỏ nhánh quét Programming; (2) quy slot Core về kênh; (3) nuốt lỗi "chưa
+  biết Revision đang chạy"; (4) bỏ hình dạng binding lồng; (5) trả khoá React về `kind-id`;
+  (6) bỏ `scanned` khỏi câu trả lời. Khôi phục ⇒ xanh.
+
+  **Hai lần tiêm không đỏ ở lượt đầu, và cả hai đều là khiếm khuyết thật:**
+  - *Khoá React trùng*: React **vẫn vẽ đủ dòng** ở lần render đầu, nên phép đếm dòng xanh mà không
+    kiểm gì. Chú thích của tôi lúc đó viết "React bỏ mất dòng" — **nói quá**. Đã sửa chú thích cho
+    đúng (cái nó phá là bước đối chiếu khi render LẠI) và đổi test sang canh **lỗi console
+    "same key"** — thứ thật sự khác. Tiêm lại ⇒ đỏ.
+  - *Bỏ `scanned` khỏi câu trả lời*: lượt đầu dùng `sed`/`python` không có `assert`, chuỗi đích
+    **không khớp nên phép tiêm không hề chạy** — và một phép tiêm không chạy trông **y hệt** một
+    test không bắt được. Đã làm lại có `assert` ⇒ đỏ. Bài học ghi lại: mọi phép tiêm phải tự chứng
+    minh là nó đã sửa được mã.
+
+
 ### Removed — `ISS-PIO-25` Xoá 26 trường chết ở `AoConfig`/`DoConfig`, và vá chỗ đường đọc/đường ghi bất đồng (#387, 2026-09-04)
 
 - **Triệu chứng.** `types.ts` khai một loạt trường **không có ai đọc**: `minHeatOutput`,

@@ -196,3 +196,89 @@ func TestChronyTrackingLeavesReferenceTimeEmptyWhenUnparsable(t *testing.T) {
 		t.Fatalf("refTime = %q; want rỗng", refTime)
 	}
 }
+
+/* ISS-PIO-18 — endpoint `usage` phải nói ra khi KHÔNG quét được binding Programming.
+ *
+ * Trong harness test, `programmingProjects` là nil (dịch vụ Programming không
+ * được dựng). Trước bản vá, endpoint bỏ qua nguồn đó trong im lặng và trả
+ * `incomplete = false` — tức tự nhận đã kiểm đủ. Nay nó phải hạ xuống "chưa đầy
+ * đủ", vì `scanned` đã hứa bốn nguồn.
+ */
+func TestVirtualPointUsageDeclaresProgrammingUnscanned(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	resp := serveAuth(t, app.Router(), http.MethodGet, "/api/v1/virtual-points/VP9/usage", ``, token)
+	assertStatus(t, resp, http.StatusOK)
+	var usage VirtualPointUsageResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &usage); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !usage.Incomplete {
+		t.Fatal("không quét được binding Programming mà vẫn incomplete=false — đây là lời khẳng định 'đã kiểm, không ai dùng' cho một câu hỏi chưa hỏi")
+	}
+	found := false
+	for _, item := range usage.Errors {
+		found = found || strings.Contains(item, "programming")
+	}
+	if !found {
+		t.Fatalf("errors = %v; phải nói rõ nguồn nào không đọc được", usage.Errors)
+	}
+}
+
+// `scanned` phải kể tên cả hai nguồn Programming, kể cả khi chúng không trả lời
+// được: nó nói ra PHẠM VI CÂU HỎI, không phải phạm vi đã trả lời.
+func TestVirtualPointUsageScopeNamesProgrammingSources(t *testing.T) {
+	app, token := newTestAppWithAdmin(t)
+	resp := serveAuth(t, app.Router(), http.MethodGet, "/api/v1/virtual-points/VP9/usage", ``, token)
+	assertStatus(t, resp, http.StatusOK)
+	var usage VirtualPointUsageResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &usage); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, want := range []string{"alarm-settings", "schedules", "programming-drafts", "programming-active-revision"} {
+		found := false
+		for _, item := range usage.Scanned {
+			found = found || item == want
+		}
+		if !found {
+			t.Errorf("scanned = %v; thiếu %q", usage.Scanned, want)
+		}
+	}
+}
+
+/* Luật so khớp binding — ISS-PIO-18.
+ *
+ * Ca quan trọng nhất là ca SLOT: `pointCatalogPointID` cố ý phát `boundPointId`
+ * ("AV-01") cho category VP, vì Core chỉ resolve được slot thật. Quy "AV-01" về
+ * "VP1" theo số là sai — số kênh VP và số slot Core là hai dãy độc lập, nên phép
+ * quy đó vừa khớp NHẦM một điểm không liên quan vừa BỎ SÓT điểm thật.
+ */
+func TestMatchesVirtualPointBindingUsesBoundSlotNotChannel(t *testing.T) {
+	for _, tc := range []struct {
+		name                          string
+		category, point               string
+		wantID, wantTag, boundPointID string
+		want                          bool
+	}{
+		{"slot Core khớp", "VP", "AV-01", "VP7", "", "AV-1", true},
+		{"slot Core khác thì loại", "VP", "AV-02", "VP7", "", "AV-1", false},
+		{
+			name:     "KHÔNG quy slot về kênh: AV-01 không phải VP1",
+			category: "VP", point: "AV-01", wantID: "VP1", wantTag: "", boundPointID: "AV-9",
+			want: false,
+		},
+		{"VP chưa bind slot: không khớp slot nào", "VP", "AV-01", "VP1", "", "", false},
+		{"id thân thiện vẫn bắt được", "VP", "VP-07", "VP7", "", "AV-1", true},
+		{"category rỗng vẫn xét tiếp", "", "AV-01", "VP7", "", "AV-1", true},
+		{"category LOCAL thì loại", "LOCAL", "AV-01", "VP7", "", "AV-1", false},
+		{"khớp theo tag", "", "VP_TEST", "VP7", "VP_TEST", "", true},
+		{"pointId rỗng thì loại", "VP", "", "VP7", "", "AV-1", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := matchesVirtualPointBinding(tc.category, tc.point, tc.wantID, tc.wantTag, tc.boundPointID)
+			if got != tc.want {
+				t.Fatalf("matchesVirtualPointBinding(%q,%q,%q,%q,%q) = %v; muốn %v",
+					tc.category, tc.point, tc.wantID, tc.wantTag, tc.boundPointID, got, tc.want)
+			}
+		})
+	}
+}

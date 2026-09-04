@@ -261,8 +261,12 @@ paths:
     get:
       summary: Nơi một Virtual Point đang được tham chiếu (viewer+)
       description: >
+        Quét bốn nguồn, liệt kê trong `scanned`: `alarm-settings`, `schedules`,
+        `programming-drafts`, `programming-active-revision` (ISS-PIO-18).
         `incomplete=true` nghĩa là có nguồn không quét được; danh sách khi đó là
         CHƯA ĐỦ và không được dùng để kết luận "không ai dùng điểm này".
+        Dịch vụ Programming chưa bật, hoặc chưa xác định được Revision đang chạy,
+        đều là `incomplete=true` chứ không phải "không có tham chiếu".
       x-rbac: [viewer, operator, engineer, admin]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
@@ -6562,7 +6566,14 @@ components:
       type: object
       required: [kind, id]
       properties:
-        kind: { type: string }
+        kind:
+          type: string
+          enum: [alarm, schedule, program]
+          description: >
+            `program` là một binding trong Draft hoặc trong Revision đang chạy;
+            `id` khi đó là `projectId` và `detail` nói rõ ở bản soạn hay bản chạy,
+            kèm tên biến. Một Project có thể sinh NHIỀU tham chiếu (mỗi binding một
+            mục), nên `id` KHÔNG duy nhất trong mảng `references`.
         id: { type: string }
         name: { type: string }
         detail: { type: string }

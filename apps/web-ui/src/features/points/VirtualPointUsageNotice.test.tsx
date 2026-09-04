@@ -54,14 +54,55 @@ describe('T57-3.12 — khối tra cứu nơi dùng điểm ảo', () => {
 
   it('không có nơi nào dùng ⇒ nói rõ ĐÃ QUÉT những gì', async () => {
     api.getVirtualPointUsage.mockResolvedValue({
-      pointId: 'VP9', references: [], scanned: ['alarm-settings', 'schedules'], incomplete: false
+      pointId: 'VP9', references: [],
+      scanned: ['alarm-settings', 'schedules', 'programming-drafts', 'programming-active-revision'],
+      incomplete: false
     })
 
     renderNotice('VP9')
 
-    const text = await screen.findByText(/Không có cảnh báo hay lịch vận hành nào/)
-    expect(text).toHaveTextContent('alarm-settings')
-    expect(text).toHaveTextContent('schedules')
+    /* Kỳ vọng cũ đòi câu chữ "Không có cảnh báo hay lịch vận hành nào" — tức nó
+       khoá lại đúng chỗ hẹp mà ISS-PIO-18 sửa: backend nay quét bốn nguồn, còn
+       câu đó chỉ kể hai. Nay kiểm điều thật sự quan trọng: câu trả lời KHÔNG tự
+       liệt kê nguồn, và `scanned` từ backend được đọc ra đủ. */
+    const text = await screen.findByText(/Không nơi nào đang dùng điểm này/)
+    for (const source of ['alarm-settings', 'schedules', 'programming-drafts', 'programming-active-revision']) {
+      expect(text).toHaveTextContent(source)
+    }
+  })
+
+  /* ISS-PIO-18 — tham chiếu `program` phải hiện, và NHIỀU binding trong CÙNG một
+     Project phải hiện đủ. Khoá React cũ là `kind-id`, mà với binding Programming
+     thì `id` là projectId dùng chung — trùng khoá sẽ làm React nuốt mất dòng, và
+     một cảnh báo xoá nuốt mất một mục là đúng thứ nó sinh ra để chặn. */
+  it('nhiều binding cùng một Project ⇒ hiện đủ từng dòng', async () => {
+    api.getVirtualPointUsage.mockResolvedValue({
+      pointId: 'VP9', references: [
+        { kind: 'program', id: 'proj-1', name: 'AHU-1', detail: 'Revision đang chạy: biến Fan (WRITE)' },
+        { kind: 'program', id: 'proj-1', name: 'AHU-1', detail: 'bản đang soạn: biến Setpoint (READ)' }
+      ],
+      scanned: ['alarm-settings', 'schedules', 'programming-drafts', 'programming-active-revision'],
+      incomplete: false
+    })
+
+    /* Canh CHÍNH lỗi khoá trùng, không chỉ canh "có hiện đủ dòng không".
+       Đã kiểm bằng tiêm lỗi: trả khoá về `kind-id` thì React VẪN vẽ đủ hai dòng
+       ở lần render đầu, nên một phép đếm dòng sẽ xanh mà không kiểm gì. Thứ thật
+       sự đổi là React ghi lỗi "same key" ra console. */
+    const errors: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '))
+    })
+
+    renderNotice('VP9')
+
+    expect(await screen.findByText(/2 nơi đang dùng điểm này/)).toBeInTheDocument()
+    expect(screen.getByText(/biến Fan \(WRITE\)/)).toBeInTheDocument()
+    expect(screen.getByText(/biến Setpoint \(READ\)/)).toBeInTheDocument()
+
+    const duplicateKey = errors.filter((line) => /same key|duplicate key/i.test(line))
+    expect(duplicateKey, `React báo khoá trùng: ${duplicateKey.join(' | ')}`).toEqual([])
+    spy.mockRestore()
   })
 
   it('nguồn đọc hỏng ⇒ nói danh sách chưa đầy đủ, không khẳng định là an toàn', async () => {

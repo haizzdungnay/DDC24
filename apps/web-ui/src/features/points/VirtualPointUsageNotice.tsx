@@ -68,7 +68,12 @@ export function VirtualPointUsageNotice({ pointId }: { pointId: string | null })
       <p className="mt-2 text-xs text-[var(--c-text-dim)]">
         {usage.incomplete
           ? pick('Không tìm thấy nơi nào dùng điểm này, nhưng một số nguồn không đọc được nên danh sách chưa đầy đủ.', 'Nothing found using this point, but some sources could not be read, so the list is incomplete.')
-          : pick(`Không có cảnh báo hay lịch vận hành nào đang dùng điểm này (đã quét: ${usage.scanned.join(', ')}).`, `No alarm or schedule uses this point (scanned: ${usage.scanned.join(', ')}).`)}
+          /* KHÔNG liệt kê lại tên các nguồn trong câu này. Bản trước viết "không
+             có cảnh báo hay lịch vận hành nào" trong khi backend quét bốn nguồn
+             (ISS-PIO-18 thêm binding Programming) — câu đó vừa hẹp hơn sự thật,
+             vừa phải sửa lại mỗi lần thêm nguồn. `usage.scanned` ngay sau đó nói
+             đúng phạm vi, và nó lấy thẳng từ backend nên không lệch được. */
+          : pick(`Không nơi nào đang dùng điểm này (đã quét: ${usage.scanned.join(', ')}).`, `Nothing uses this point (scanned: ${usage.scanned.join(', ')}).`)}
       </p>
     )
   }
@@ -79,8 +84,16 @@ export function VirtualPointUsageNotice({ pointId }: { pointId: string | null })
         {pick(`${usage.references.length} nơi đang dùng điểm này`, `${usage.references.length} place(s) use this point`)}
       </div>
       <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[var(--c-text)]">
-        {usage.references.map((reference) => (
-          <li key={`${reference.kind}-${reference.id}`}>
+        {/* Khoá phải kèm CHỈ SỐ. Từ ISS-PIO-18, một Project có thể sinh NHIỀU
+            tham chiếu (mỗi binding một dòng), tất cả cùng `kind='program'` và
+            cùng `id` là projectId — khoá cũ `kind-id` sẽ TRÙNG.
+            React vẫn vẽ đủ dòng ở lần render đầu, nên lỗi này không lộ ra bằng
+            mắt; cái nó phá là bước đối chiếu khi danh sách render LẠI (người
+            dùng mở hộp thoại cho một điểm khác), nơi React ghép nhầm dòng cũ với
+            dòng mới vì hai dòng khai cùng danh tính. Nó cũng ghi một lỗi vào
+            console mỗi lần — và đó là thứ test dưới đây canh. */}
+        {usage.references.map((reference, index) => (
+          <li key={`${reference.kind}-${reference.id}-${index}`}>
             <span className="font-semibold">{kindLabel(reference.kind, pick)}</span>{' '}
             <span className="mono">{reference.id}</span>
             {reference.name ? ` — ${reference.name}` : ''}
