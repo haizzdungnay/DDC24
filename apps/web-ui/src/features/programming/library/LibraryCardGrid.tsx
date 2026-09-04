@@ -189,6 +189,22 @@ export function LibraryCardGrid({
       />
     )
   }
+  /* `T61-302` — tab PROJECT nhưng chưa phân giải được `projectId`.
+     Đây KHÔNG phải "thư viện rỗng" và cũng không phải lỗi máy chủ: yêu cầu chưa
+     hề được gửi, vì FE biết trước là nó sẽ bị store từ chối. Nói đúng câu ấy là
+     khác biệt giữa "bạn chưa chọn Project" và "thiết bị hỏng" — hai câu dẫn tới
+     hai người khác nhau để hỏi. */
+  if (state === 'no-project') {
+    return (
+      <StateBlock
+        state="empty"
+        title={pick('Chưa chọn Project nên chưa đọc được thư viện của Project.',
+                    'No project is selected, so the project library cannot be read.')}
+        detail={pick('Khối hệ thống vẫn xem được ở tab Hệ thống.',
+                     'System blocks are still available on the System tab.')}
+      />
+    )
+  }
   if (state === 'empty-filter') {
     return (
       <div className="flex flex-col items-start gap-3">

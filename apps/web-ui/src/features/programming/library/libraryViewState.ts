@@ -35,6 +35,8 @@ export type LibraryViewStatus =
   | 'offline'
   | 'no-permission'
   | 'detail-error'
+  /** `T61-302` — tab PROJECT nhưng chưa phân giải được `projectId`. */
+  | 'no-project'
 
 /** Dùng cho test bao phủ: thêm một trạng thái mà quên nhánh xử lý sẽ lộ ra ở đây. */
 export const LIBRARY_VIEW_STATUSES: readonly LibraryViewStatus[] = [
@@ -42,6 +44,7 @@ export const LIBRARY_VIEW_STATUSES: readonly LibraryViewStatus[] = [
   'ready',
   'empty-filter',
   'empty-project',
+  'no-project',
   'error',
   'offline',
   'no-permission',
@@ -141,6 +144,9 @@ export interface LibraryViewInput {
   hasProject?: boolean
   /** `navigator.onLine`. Mặc định `true`: không có tin gì thì coi là còn mạng. */
   online?: boolean
+  /** `T61-302` — phạm vi đang chọn có đo được không (`libraryScopeIsMeasurable`).
+   *  `false` ⇒ `no-project`, và KHÔNG phát request. */
+  scopeMeasurable?: boolean
 }
 
 /** Hành động chính mà trạng thái hiện tại mời người dùng làm. Đúng MỘT. */
@@ -222,7 +228,19 @@ export function libraryFiltersKey(filters: LibraryFilterInput | undefined): stri
  * người dùng "xoá bộ lọc" trong khi chẳng có bộ lọc nào ảnh hưởng tới kết quả.
  */
 export function hasActiveLibraryFilter(filters: LibraryFilterInput | undefined): boolean {
-  return libraryFiltersKey(filters) !== libraryFiltersKey(undefined)
+  const value = filters ?? {}
+  /* `T61-302` — `scope` CỐ Ý không được tính.
+   *
+   * Từ lát này phạm vi là một TAB, tức luôn có giá trị. Tính nó là bộ lọc thì
+   * `hasActiveLibraryFilter` luôn đúng, và mọi danh sách rỗng đọc thành "không
+   * khớp bộ lọc" — kể cả một Project chưa có khối nào. Hai câu ấy dẫn tới hai
+   * hành động khác hẳn: xoá bộ lọc, hay tạo khối đầu tiên. Trạng thái
+   * `empty-project` sẽ không bao giờ xuất hiện lại nếu chỗ này đếm tab.
+   *
+   * `libraryFiltersKey` thì VẪN giữ `scope`: nó là khoá ĐỊNH DANH của lần đọc,
+   * và đổi tab phải bỏ ảnh chụp cũ — nếu không, danh sách giữ lại của tab kia
+   * hiện dưới tab này, đúng thứ "SYSTEM/PROJECT không trộn dữ liệu" cấm. */
+  return (value.kind ?? '') !== '' || (value.category ?? '') !== '' || (value.query ?? '').trim() !== ''
 }
 
 /**
@@ -348,7 +366,15 @@ export function libraryViewState(input: LibraryViewInput): LibraryViewState {
   const hasMore = fromMemory ? retained?.hasMore ?? false : list.hasMore ?? false
 
   let status: LibraryViewStatus
-  if (failure === 'permission') status = 'no-permission'
+  /* `T61-302` — FAIL-CLOSED đứng TRƯỚC mọi nhánh khác.
+   *
+   * Tab PROJECT mà chưa có `projectId` thì không có gì để đo. Store từ chối yêu
+   * cầu ấy ("PROJECT library search bắt buộc projectId"), và lỗi đó lên tới màn
+   * hình dưới dạng một sự cố máy chủ — trong khi sự thật là một ngữ cảnh còn
+   * thiếu mà FE biết trước. Nói ra đúng câu ấy là khác biệt giữa "bạn chưa chọn
+   * Project" và "thiết bị hỏng". */
+  if (input.scopeMeasurable === false) status = 'no-project'
+  else if (failure === 'permission') status = 'no-permission'
   else if (!online || failure === 'offline') status = 'offline'
   else if (failure !== null) status = 'error'
   else if (fresh === null && !hasContent) status = 'loading'
@@ -358,7 +384,9 @@ export function libraryViewState(input: LibraryViewInput): LibraryViewState {
 
   /* Ngoại lệ có chủ đích của luật "giữ nội dung": xem `rememberLibraryRead` §2.
      Một phán quyết RBAC không phải một sự cố tạm thời. */
-  const visible = status === 'no-permission' ? [] : held ?? []
+  /* `no-project` cũng XOÁ nội dung đang giữ: nội dung ấy thuộc một tab khác, và
+     vẽ nó dưới tab PROJECT là trộn dữ liệu hai phạm vi. */
+  const visible = status === 'no-permission' || status === 'no-project' ? [] : held ?? []
   const groups = groupLibraryEntries([...visible])
 
   const detail = detailView(input.detail)

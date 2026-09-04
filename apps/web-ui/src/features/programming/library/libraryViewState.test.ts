@@ -63,6 +63,9 @@ describe('libraryViewState — tám trạng thái của SPEC-PGM04-VISUAL-001 §
       { list: { status: 'error', items: [], failure: 'offline' } },
       { list: { status: 'error', items: [], failure: 'permission' } },
       { list: { status: 'ready', items: TWO }, detail: { status: 'error' } },
+      // `T61-302` — fail-closed: tab PROJECT mà chưa có `projectId`. Đứng
+      // TRƯỚC mọi nhánh khác, kể cả lỗi: yêu cầu chưa hề được gửi.
+      { list: { status: 'error', items: TWO, failure: 'error' }, scopeMeasurable: false },
     ]
     const seen = cases.map((input) => libraryViewState(input).status)
     expect(seen).toEqual([
@@ -74,6 +77,7 @@ describe('libraryViewState — tám trạng thái của SPEC-PGM04-VISUAL-001 §
       'offline',
       'no-permission',
       'detail-error',
+      'no-project',
     ])
     // Mỗi trạng thái khai báo phải với tới được; một nhánh không đầu vào nào
     // chạm tới là một nhánh chưa ai kiểm.
@@ -155,13 +159,52 @@ describe('LUẬT 2 — empty-filter khác empty-project', () => {
   it('mọi mảnh bộ lọc đều đủ để thành empty-filter', () => {
     for (const filters of [
       { query: 'PID' },
-      { scope: 'PROJECT' },
       { kind: 'FUNCTION' },
       { category: 'control' },
     ]) {
       expect(view({ list: { status: 'ready', items: [] }, filters }).status).toBe('empty-filter')
     }
   })
+
+  /* `T61-302` — `scope` là TAB, không phải bộ lọc.
+     Từ lát này phạm vi luôn có giá trị (`SYSTEM` hoặc `PROJECT`). Tính nó là bộ
+     lọc thì mọi danh sách rỗng đọc thành "không khớp bộ lọc", và `empty-project`
+     — trạng thái mời người dùng TẠO khối đầu tiên — không bao giờ xuất hiện lại.
+     Hai câu ấy dẫn tới hai hành động khác hẳn nhau. */
+  it('tab phạm vi KHÔNG biến một Project rỗng thành "không khớp bộ lọc"', () => {
+    const state = view({ list: { status: 'ready', items: [] }, filters: { scope: 'PROJECT' } })
+    expect(state.status).toBe('empty-project')
+    expect(state.action).toBe('create-block')
+  })
+
+  /* Nhưng khoá ĐỊNH DANH thì vẫn phải mang `scope`: đổi tab là một danh sách
+     khác, và ảnh chụp giữ lại của tab kia không được hiện dưới tab này — đó
+     đúng là "trộn dữ liệu SYSTEM/PROJECT". */
+  it('đổi tab đổi khoá định danh của lần đọc', () => {
+    expect(libraryFiltersKey({ scope: 'SYSTEM' })).not.toBe(libraryFiltersKey({ scope: 'PROJECT' }))
+  })
+
+  /* Fail-closed thắng cả nội dung đang giữ: nội dung ấy thuộc tab kia. */
+  it('no-project XÓA nội dung đang giữ, không vẽ danh sách của tab khác', () => {
+    const state = view({ list: { status: 'ready', items: TWO }, scopeMeasurable: false })
+    expect(state.status).toBe('no-project')
+    expect(state.groups).toEqual([])
+  })
+
+  /* Fail-closed đứng TRƯỚC MỌI nhánh lỗi, kể cả `permission` và `offline`.
+     Yêu cầu chưa hề được gửi, nên bất kỳ `failure` nào trong đầu vào cũng là
+     tàn dư của một lần đọc trước — của một TAB KHÁC. Báo "thiếu quyền" hay
+     "mất mạng" ở đây là gán cho người dùng một nguyên nhân sai, và họ sẽ đi
+     xin quyền hoặc đi kiểm tra mạng thay vì chọn Project.
+
+     Ca `permission` là ca PHÂN BIỆT ĐƯỢC thứ tự; ca `error` thì không, vì
+     nhánh đứng trước nó vẫn không khớp. */
+  for (const failure of ['permission', 'offline', 'error'] as const) {
+    it(`no-project thắng nhánh ${failure}`, () => {
+      const state = view({ list: { status: 'error', items: TWO, failure }, scopeMeasurable: false })
+      expect(state.status).toBe('no-project')
+    })
+  }
 
   it('không bộ lọc mà 0 kết quả ⇒ đề nghị TẠO KHỐI', () => {
     const state = view({ list: { status: 'ready', items: [] } })

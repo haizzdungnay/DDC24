@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ProgrammingApiError } from '../api/generated/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
@@ -74,11 +74,45 @@ function stub(libraryResponse: () => Promise<unknown>, overrides: Record<string,
   })
 }
 
-function renderPage() {
+/* `T61-302` — URL là một phần của hợp đồng màn hình này (tab + bộ lọc + khối
+   đang chọn), nên test phải ĐỌC được nó, không chỉ dựng nó. */
+let lastLocation = ''
+function LocationProbe() {
+  const location = useLocation()
+  lastLocation = `${location.pathname}${location.search}`
+  return null
+}
+
+/**
+ * Như `renderPage` nhưng có `<Route path>` THẬT, nên `useParams().projectId` có
+ * ngay từ render đầu — đúng đường mà ứng dụng chạy.
+ *
+ * `renderPage` cố ý KHÔNG có Route: nó mô phỏng lối vào cũ
+ * `/eng/programming/library`, nơi Project chỉ biết được sau khi danh sách về.
+ * Hai lối vào ấy khác nhau ở đúng chỗ lát này chạm tới (thời điểm tab mặc định
+ * ngã ngũ), nên trộn chúng vào một helper là để một nửa hành vi không ai đo.
+ */
+function renderPageWithRoute(path = `/eng/programming/projects/${PROJECT_ID}/library`) {
+  lastLocation = ''
   return render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[`/eng/programming/projects/${PROJECT_ID}/library`]}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/eng/programming/projects/:projectId/library" element={<LibraryPage />} />
+        </Routes>
+        <LocationProbe />
+      </MemoryRouter>
+    </I18nProvider>
+  )
+}
+
+function renderPage(path = `/eng/programming/projects/${PROJECT_ID}/library`) {
+  lastLocation = ''
+  return render(
+    <I18nProvider>
+      <MemoryRouter initialEntries={[path]}>
         <LibraryPage />
+        <LocationProbe />
       </MemoryRouter>
     </I18nProvider>
   )
@@ -344,9 +378,166 @@ describe('PGM-04 Control Library', () => {
     })
     renderPage()
     await screen.findByRole('button', { name: /SCALE_LIN/ })
-    fireEvent.change(screen.getByLabelText(/Phạm vi/), { target: { value: 'SYSTEM' } })
+    /* `T61-302` — phạm vi nay là TAB, không phải ô chọn. Bấm tab phải phát một
+       request MỚI mang `scope`, chứ không lọc lại trang đang cầm: lọc phía
+       client chỉ đúng trên phần đã tải, và người dùng đọc kết quả ấy như thể nó
+       phủ cả thư viện. */
+    fireEvent.click(screen.getByTestId('library-scope-tab-SYSTEM'))
     await waitFor(() => expect(queries.length).toBeGreaterThan(1))
     expect(queries[queries.length - 1]).toMatchObject({ scope: 'SYSTEM' })
+  })
+
+  /* Mặc định là tab DỰ ÁN khi có Project: đây là Thư viện CỦA một Project, và
+     mọi đường ghi chỉ áp cho khối PROJECT. Request đầu tiên phải mang đúng
+     phạm vi ấy — nếu không, màn hình mở ra ở một danh sách rồi lặng lẽ đổi
+     sang danh sách khác. */
+  it('mở ra ở tab Dự án khi có Project, và KHÔNG bắn lượt nào với tab sai trước đó', async () => {
+    const searches: unknown[] = []
+    client.request.mockImplementation((operationId: string, options?: { query?: unknown }) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
+      if (operationId === 'searchProgrammingLibraries') searches.push(options?.query)
+      return Promise.resolve({ items: [entry()] })
+    })
+    renderPageWithRoute()
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    expect(screen.getByTestId('library-scope-tab-PROJECT')).toHaveAttribute('aria-selected', 'true')
+    /* Số TUYỆT ĐỐI ở phần tử ĐẦU: lối vào cũ không mang `projectId` trên route,
+       nên nó chỉ biết Project sau khi danh sách về. Hỏi trước lúc đó là bắn một
+       lượt với tab mặc định SAI rồi đổi tab ngay sau đó — request thừa, và
+       người dùng thấy tab nhảy. Khẳng định "có một lượt PROJECT ở đâu đó" sẽ
+       xanh cả với bản bắn hai lượt. */
+    expect(searches[0]).toMatchObject({ scope: 'PROJECT' })
+  })
+
+  /* URL chuẩn tắc: tab mặc định KHÔNG để lại tham số. Hai đường dẫn khác nhau
+     mô tả cùng một màn hình thì người dùng không biết cái nào để gửi đi. */
+  it('chọn lại tab mặc định thì XOÁ tham số scope khỏi URL', async () => {
+    stub(() => Promise.resolve({ items: [entry()] }))
+    renderPage()
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    fireEvent.click(screen.getByTestId('library-scope-tab-SYSTEM'))
+    await waitFor(() => expect(lastLocation).toContain('scope=SYSTEM'))
+    fireEvent.click(screen.getByTestId('library-scope-tab-PROJECT'))
+    await waitFor(() => expect(lastLocation).not.toContain('scope='))
+  })
+
+  /* "Xoá bộ lọc" KHÔNG đổi tab: tab là điều hướng, và người dùng vừa xoá bộ lọc
+     không có nghĩa là họ muốn rời khỏi danh sách đang xem. */
+  it('xoá bộ lọc giữ nguyên tab và chỉ bỏ các tham số lọc', async () => {
+    stub(() => Promise.resolve({ items: [] }))
+    renderPage(`/eng/programming/projects/${PROJECT_ID}/library?scope=SYSTEM&kind=FUNCTION&q=pid`)
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Xoá bộ lọc' }))[0])
+    await waitFor(() => expect(lastLocation).not.toContain('kind='))
+    expect(lastLocation).not.toContain('q=')
+    expect(lastLocation).toContain('scope=SYSTEM')
+  })
+
+  /* FAIL-CLOSED: tab Dự án mà không phân giải được `projectId` thì KHÔNG gửi
+     request nào. Store từ chối yêu cầu ấy ("PROJECT library search bắt buộc
+     projectId"), và lỗi đó lên màn hình dưới dạng một sự cố máy chủ — trong khi
+     sự thật là ngữ cảnh còn thiếu mà FE biết trước. */
+  it('tab Dự án không có Project: không gọi máy chủ, và nói đúng lý do', async () => {
+    const queries: unknown[] = []
+    client.request.mockImplementation((operationId: string, options?: { query?: unknown }) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [] })
+      queries.push(options?.query)
+      return Promise.resolve({ items: [entry()] })
+    })
+    renderPage('/eng/programming/library?scope=PROJECT')
+    expect(await screen.findByText(/Chưa chọn Project nên chưa đọc được thư viện của Project/))
+      .toBeInTheDocument()
+    expect(queries).toEqual([])
+  })
+
+  /* Không có tab `USER`: sản phẩm không có phạm vi ấy ở API lẫn Product
+     authority. Một URL cố tình yêu cầu nó rơi về mặc định, KHÔNG tạo tab thứ ba
+     — một tab rỗng vẽ ra một khả năng không tồn tại. */
+  it('URL đòi scope=USER không tạo tab thứ ba', async () => {
+    stub(() => Promise.resolve({ items: [entry()] }))
+    renderPage(`/eng/programming/projects/${PROJECT_ID}/library?scope=USER`)
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    const tabs = within(screen.getByRole('tablist', { name: 'Phạm vi thư viện' })).getAllByRole('tab')
+    expect(tabs).toHaveLength(2)
+    expect(screen.getByTestId('library-scope-tab-PROJECT')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  /* `SPEC-PGM04-VISUAL-001` §5 — cả dải tab tốn ĐÚNG MỘT nhịp `Tab`, mũi tên đi
+     giữa các tab. Một dải hai tab ăn hai nhịp `Tab` trước khi tới nội dung là
+     thứ người dùng bàn phím phải trả giá ở mọi lần vào trang. */
+  it('dải tab phạm vi: một điểm dừng Tab, mũi tên chuyển tab và đổi URL', async () => {
+    stub(() => Promise.resolve({ items: [entry()] }))
+    renderPage()
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    const tablist = screen.getByRole('tablist', { name: 'Phạm vi thư viện' })
+    const tabs = within(tablist).getAllByRole('tab')
+    expect(tabs.filter((tab) => tab.getAttribute('tabindex') === '0')).toHaveLength(1)
+
+    /* Phải bấm CẢ HAI chiều. Một test chỉ dùng `ArrowLeft` sẽ xanh với bản làm
+       hỏng riêng `ArrowRight` — và người dùng đi tới cuối dải rồi không quay
+       lại được là đúng nửa bàn phím bị hỏng mà không ai đo. */
+    fireEvent.keyDown(tablist, { key: 'ArrowLeft' })
+    await waitFor(() => expect(screen.getByTestId('library-scope-tab-SYSTEM')).toHaveAttribute('aria-selected', 'true'))
+    await waitFor(() => expect(lastLocation).toContain('scope=SYSTEM'))
+
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' })
+    await waitFor(() => expect(screen.getByTestId('library-scope-tab-PROJECT')).toHaveAttribute('aria-selected', 'true'))
+
+    fireEvent.keyDown(tablist, { key: 'Home' })
+    await waitFor(() => expect(screen.getByTestId('library-scope-tab-SYSTEM')).toHaveAttribute('aria-selected', 'true'))
+
+    fireEvent.keyDown(tablist, { key: 'End' })
+    await waitFor(() => expect(screen.getByTestId('library-scope-tab-PROJECT')).toHaveAttribute('aria-selected', 'true'))
+  })
+
+  /* `SPEC-PGM04-VISUAL-001` §1 — dưới 768 px bộ lọc thu vào MỘT nút.
+     Bốn ô lọc ở khổ hẹp chiếm gần hết màn hình, nên danh sách — thứ người dùng
+     tới để đọc — bị đẩy xuống dưới nếp gấp. */
+  it('khổ hẹp: bộ lọc thu vào một nút mang SỐ bộ lọc đang áp', async () => {
+    stub(() => Promise.resolve({ items: [entry()] }))
+    renderPage(`/eng/programming/projects/${PROJECT_ID}/library?kind=FUNCTION&category=timer`)
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    const toggle = screen.getByTestId('library-filter-toggle')
+    /* Con số là toàn bộ giá trị của nút: một thanh đã thu gọn mà không nói gì là
+       cách người ta nhìn một danh sách đã bị lọc và tưởng đó là cả thư viện. */
+    expect(toggle).toHaveTextContent('Bộ lọc (2)')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-expanded', 'true'))
+  })
+
+  it('khổ hẹp: TAB không được đếm vào số bộ lọc', async () => {
+    // Đếm tab thì nút luôn hiện ít nhất `1`, và con số thôi mang tin.
+    stub(() => Promise.resolve({ items: [entry()] }))
+    renderPage(`/eng/programming/projects/${PROJECT_ID}/library?scope=SYSTEM`)
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    expect(screen.getByTestId('library-filter-toggle')).toHaveTextContent('Bộ lọc')
+    expect(screen.getByTestId('library-filter-toggle')).not.toHaveTextContent('(')
+  })
+
+  /* Đường thoát không được nằm SAU một cú bấm nữa: khi đang bị lọc nhầm, thứ
+     người dùng cần là quay lại, không phải mở một ngăn kéo rồi mới quay lại. */
+  it('Xoá bộ lọc nằm NGOÀI phần thu gọn, không cần mở ngăn kéo', async () => {
+    stub(() => Promise.resolve({ items: [entry()] }))
+    renderPage(`/eng/programming/projects/${PROJECT_ID}/library?kind=FUNCTION`)
+    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    const clear = screen.getAllByRole('button', { name: 'Xoá bộ lọc' })[0]
+    const drawer = document.getElementById('library-filter-drawer')
+    expect(drawer).not.toBeNull()
+    expect(drawer?.contains(clear)).toBe(false)
+  })
+
+  /* Mọi bộ lọc phải đi lên SERVER. Lọc phía client chỉ đúng trên phần đã tải,
+     và người dùng đọc kết quả ấy như thể nó phủ cả thư viện. */
+  it('kind và category đi lên server, không lọc trên trang đang cầm', async () => {
+    const searches: Array<Record<string, unknown>> = []
+    client.request.mockImplementation((operationId: string, options?: { query?: Record<string, unknown> }) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
+      if (operationId === 'searchProgrammingLibraries' && options?.query) searches.push(options.query)
+      return Promise.resolve({ items: [entry()] })
+    })
+    renderPageWithRoute(`/eng/programming/projects/${PROJECT_ID}/library?kind=CONVERSION&category=timer&q=ton`)
+    await waitFor(() => expect(searches.length).toBeGreaterThan(0))
+    expect(searches[0]).toMatchObject({ kind: 'CONVERSION', category: 'timer', q: 'ton', scope: 'PROJECT' })
   })
 
   it('danh sách có nhãn a11y và ô tìm kiếm gắn nhãn', async () => {

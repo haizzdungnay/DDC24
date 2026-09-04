@@ -549,6 +549,49 @@ Yêu thích. Khoá đời cũ (`entryId` trần) vẫn phân giải được —
 bắt người ta gắn sao lại từ đầu. Phép vô hiệu hoá là ngầm và đúng: khoá không
 phân giải được thì không vẽ ra gì.
 
+**Đính chính `T61-302` (`ISS-PGM04-07`, đo `2026-09-04`).** Bản trước có ô chọn
+`<select>` cho phạm vi, ba ô lọc và một nút Xoá — đủ để gọi là "toolbar", nhưng
+lệch bốn chỗ so với `SPEC-PGM04-VISUAL-001`:
+
+1. **Phạm vi là ô CHỌN, và có lựa chọn "Tất cả".** Nên SYSTEM và PROJECT nằm
+   chung một lưới. Khối hệ thống không sửa được, khối dự án thì sửa được; trộn
+   chúng lại nghĩa là người dùng phải đọc từng thẻ để biết cái nào bấm được. Cả
+   `<select>` cũng nói sai việc đang xảy ra: trình đọc màn hình đọc nó là "hộp
+   chọn giá trị", trong khi đây là chuyển giữa hai danh sách khác nhau.
+2. **`scope` bị tính là BỘ LỌC.** Với ô chọn thì `scope=''` là "tất cả", nên
+   `hasActiveLibraryFilter` mới chạy đúng. Chuyển sang tab thì phạm vi LUÔN có
+   giá trị — và nếu vẫn đếm nó, mọi danh sách rỗng đọc thành "không khớp bộ
+   lọc", kể cả một Project chưa có khối nào. Trạng thái `empty-project`, thứ mời
+   người dùng tạo khối đầu tiên, sẽ không bao giờ xuất hiện lại.
+3. **`PROJECT` không có `projectId` vẫn được gửi đi.** Store từ chối
+   (`store/library.go`: "PROJECT library search bắt buộc projectId") và lỗi ấy
+   lên màn hình dưới dạng một sự cố máy chủ — trong khi sự thật là một ngữ cảnh
+   còn thiếu mà FE biết trước. Hai câu ấy dẫn tới hai người khác nhau để hỏi.
+4. **Khổ hẹp vẫn dùng toolbar desktop.** `SPEC-PGM04-VISUAL-001` §1 khoá ngưỡng
+   `768 px`: dưới đó bốn ô lọc chiếm gần hết màn hình và danh sách bị đẩy xuống
+   dưới nếp gấp.
+
+Lát này tách `libraryUrlState.ts` — một mô-đun THUẦN (`URLSearchParams` vào,
+`URLSearchParams` ra). Ba luật của nó đều là luật dữ liệu, nên kiểm được mà
+không dựng router: chỉ hai tab (`USER` trong URL rơi về mặc định, không tạo tab
+thứ ba); tab không phải bộ lọc (Xoá bộ lọc giữ nguyên tab, và không đụng
+`entry`/`panel`/`returnTo`); URL chuẩn tắc bỏ giá trị mặc định.
+
+**Một khiếm khuyết phát hiện trong lúc đo, đã sửa cùng lượt:** lối vào cũ
+`/eng/programming/library` không mang `projectId` trên route, nên nó chỉ biết
+Project sau khi danh sách về. Bản trước hỏi `/libraries` ngay lúc đó — tức bắn
+một lượt với tab mặc định SAI rồi đổi tab ngay sau đó: một request thừa, và
+người dùng thấy tab nhảy. Nay yêu cầu đầu tiên chỉ phát khi ngữ cảnh Project đã
+ngã ngũ.
+
+**Bộ lọc thẻ / trạng thái / tương thích: CỐ Ý không có.** `GET /libraries` chỉ
+nhận `projectId`, `scope`, `kind`, `q`, `category` (+ `cursor`/`limit`). Dựng
+một ô lọc cho trường máy chủ không nhận nghĩa là lọc trên đúng trang đang tải —
+và người dùng đọc kết quả ấy như thể nó phủ cả thư viện, đúng điều mục "Không
+được đóng khi" của issue cấm. Thẻ vẫn tìm được: `q` đã bao cả `tags` ở phía
+store (`T61-101`). **Cần gì để mở:** thêm tham số `tags`/`libraryState` vào
+`searchProgrammingLibraries` cùng đường lọc tương ứng ở store.
+
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.
 
@@ -568,7 +611,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
 | `T61-301` | P0 | Tách `LibraryPage` thành controller và component tree §3.1; giữ mutation logic đã test. | `T61-201..206` | `DONE` | 1 nd |
-| `T61-302` | P0 | SYSTEM/PROJECT tabs + toolbar Category/Type/Search/Filter/Clear; server-side filter. | `T61-301` | `DONE` | 1,5 nd |
+| `T61-302` | P0 | SYSTEM/PROJECT tabs + toolbar Category/Type/Search/Filter/Clear; server-side filter. | `T61-301` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-07`) | 1,5 nd |
 | `T61-303` | P0 | Dense card grid: icon/kind/category/name/version/signature/description/source/usage/feature/deprecated/favorite. | `T61-203/301` | `DONE` | 2 nd |
 | `T61-304` | P0 | Inspector dock/drawer với Details/Parameters/Used-In/Versions; detail error không phá list; sticky trong đúng scroll container. | `T61-301/303` | `DONE` | 2 nd |
 | `T61-305` | P0 | Responsive theo §3.3; mobile read-only; không overflow; skeleton khớp hình học. | `T61-302..304` | `DONE` | 2 nd |

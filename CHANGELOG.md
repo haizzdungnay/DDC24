@@ -8,6 +8,54 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-07` Tab SYSTEM/PROJECT thật, bộ lọc server-side và fail-closed khi thiếu Project (#452, 2026-09-04)
+
+- **Triệu chứng.** Phạm vi thư viện là một ô `<select>` có lựa chọn "Tất cả", nên khối SYSTEM (không sửa được)
+  và khối PROJECT (sửa được) nằm chung một lưới — người dùng phải đọc từng thẻ để biết cái nào bấm được.
+  Chọn phạm vi PROJECT khi chưa phân giải được `projectId` thì yêu cầu vẫn được gửi và trả về một **lỗi máy
+  chủ**, trong khi sự thật là ngữ cảnh còn thiếu mà FE biết trước. Ở khổ hẹp, bốn ô lọc chiếm gần hết màn hình
+  và danh sách bị đẩy xuống dưới nếp gấp.
+- **Nguyên nhân gốc.** Bốn chỗ lệch `SPEC-PGM04-VISUAL-001`:
+  1. `<select>` nói sai việc đang xảy ra — trình đọc màn hình đọc nó là "hộp chọn giá trị", trong khi đây là
+     chuyển giữa hai danh sách khác nhau; và lựa chọn "Tất cả" là chỗ hai phạm vi trộn vào nhau.
+  2. `scope` bị tính là **bộ lọc**. Với ô chọn thì `scope=''` là "tất cả" nên còn chạy đúng; chuyển sang tab
+     thì phạm vi **luôn** có giá trị, và nếu vẫn đếm nó thì mọi danh sách rỗng đọc thành "không khớp bộ lọc" —
+     `empty-project`, trạng thái mời tạo khối đầu tiên, không bao giờ xuất hiện lại.
+  3. `PROJECT` không có `projectId` vẫn được gửi đi, dù store từ chối thẳng.
+  4. Khổ hẹp vẫn dùng toolbar desktop, ngược `SPEC-PGM04-VISUAL-001` §1 (ngưỡng `768 px`).
+- **Cách sửa.** Tách `libraryUrlState.ts` — mô-đun **thuần** (`URLSearchParams` vào, `URLSearchParams` ra), vì
+  mọi luật ở đây là luật dữ liệu và kiểm chúng không nên phải dựng router:
+  - **Chỉ hai tab**, `SYSTEM` và `PROJECT`. `?scope=USER` rơi về mặc định chứ không tạo tab thứ ba.
+  - **Tab không phải bộ lọc.** "Xoá bộ lọc" giữ nguyên tab và không đụng `entry`/`panel`/`returnTo`; số trên
+    nút "Bộ lọc (N)" ở khổ hẹp không đếm tab.
+  - **URL chuẩn tắc** bỏ giá trị mặc định; mặc định là `PROJECT` khi có Project, `SYSTEM` khi không.
+  - **Fail-closed:** tab PROJECT mà chưa có `projectId` thì **không phát request nào** và màn hình nói đúng câu
+    "chưa chọn Project", không phải "thiết bị hỏng". Nhánh này đứng **trước** mọi nhánh lỗi: yêu cầu chưa hề
+    được gửi, nên `failure` trong đầu vào chỉ là tàn dư của tab khác.
+  - Khổ hẹp thu bộ lọc vào một nút; **"Xoá bộ lọc" nằm ngoài** phần thu gọn — khi đang bị lọc nhầm, đường thoát
+    không được nằm sau một cú bấm nữa.
+- **Một khiếm khuyết phát hiện trong lúc đo, đã sửa cùng lượt.** Lối vào cũ `/eng/programming/library` không
+  mang `projectId` trên route nên chỉ biết Project sau khi danh sách về; bản trước hỏi `/libraries` ngay lúc đó,
+  tức bắn một lượt với tab mặc định **sai** rồi đổi tab ngay sau đó — một request thừa và một cú nhảy tab. Nay
+  yêu cầu đầu chỉ phát khi ngữ cảnh Project đã ngã ngũ.
+- **Bộ lọc thẻ/trạng thái/tương thích: cố ý KHÔNG có.** `GET /libraries` chỉ nhận `projectId`, `scope`, `kind`,
+  `q`, `category` (+ `cursor`/`limit`). Một ô lọc cho trường máy chủ không nhận sẽ lọc trên đúng trang đang tải,
+  và người dùng đọc kết quả ấy như thể nó phủ cả thư viện. Thẻ vẫn tìm được qua `q` (store đã bao `tags` từ
+  `T61-101`). **Cần gì để mở:** thêm tham số `tags`/`libraryState` vào `searchProgrammingLibraries`.
+- **Bằng chứng.** 21/21 phép tiêm lỗi đỏ. Hai phép tiêm ban đầu XANH và cả hai là lỗi của **test**: một ca kiểm
+  thứ tự dùng `failure: 'error'` — không phân biệt được với nhánh đứng trước nó; và một test bàn phím chỉ bấm
+  `ArrowLeft`, nên bản làm hỏng riêng `ArrowRight` vẫn xanh.
+- **Số đo cục bộ (CI chưa cấp runner — `#414`).** layout `17 PASS / 0 FAIL` · `ctest 1422/1422` ·
+  Go `vet` sạch + `21 gói ok` · FE `221 tệp / 2695 test` · `npm run lint` + `npm run build` sạch ·
+  Playwright `e2e/programming.spec.ts -g 'PGM-04'` `18 passed / 4 skipped`.
+- **E2E phải cập nhật theo, và đó là hệ quả có chủ ý.** Fixture cũ viết cho hành vi "một lưới trộn hai phạm
+  vi": nhiều case mở trang rồi khẳng định về cả khối SYSTEM lẫn khối PROJECT. Nay mỗi case phải nói nó đứng ở
+  tab nào — một case không nói gì sẽ đọc danh sách của tab mặc định rồi khẳng định về khối của tab kia. Case
+  lọc phân loại ở khổ hẹp còn phải mở nút "Bộ lọc" trước, đúng như người dùng thật.
+- **Phạm vi tệp.** `apps/web-ui/src/features/programming/library/{libraryUrlState.ts,libraryViewState.ts,
+  LibraryPage.tsx,LibraryCardGrid.tsx}` + test. Không chạm tệp của làn A.
+
+
 ### Fixed — `ISS-PGM04-06` Một mô hình trình bày cho PGM-04 và Quick Library; Yêu thích không còn trỏ nhầm revision (#451, 2026-09-04)
 
 - **Triệu chứng.** Cùng một khối thư viện hiện **khác nhau** ở hai màn hình: khác phân loại, khác chữ ký,

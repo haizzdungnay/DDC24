@@ -2023,7 +2023,18 @@ async function installLibraryLaneRoutes(page: Page, lane: LibraryLane) {
   )
 }
 
-async function openLibrary(page: Page, lane: LibraryLane) {
+/* `T61-302` — hai phạm vi nay là hai TAB, và chúng KHÔNG trộn dữ liệu. Mỗi case
+   phải nói nó đang đứng ở tab nào; một case không nói gì sẽ đọc danh sách của
+   tab mặc định và khẳng định về khối của tab kia. */
+const SYSTEM_ENTRY_COUNT = LIBRARY_CATALOG.filter((entry) => entry.scope === 'SYSTEM').length
+const PROJECT_ENTRY_COUNT = LIBRARY_CATALOG.filter((entry) => entry.scope === 'PROJECT').length
+
+async function switchScope(page: Page, scope: 'SYSTEM' | 'PROJECT') {
+  await page.getByTestId(`library-scope-tab-${scope}`).click()
+  await expect(page.getByTestId(`library-scope-tab-${scope}`)).toHaveAttribute('aria-selected', 'true')
+}
+
+async function openLibrary(page: Page, lane: LibraryLane, scope: 'SYSTEM' | 'PROJECT' = 'SYSTEM') {
   const state: MockState = {
     etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED',
     commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false
@@ -2031,7 +2042,7 @@ async function openLibrary(page: Page, lane: LibraryLane) {
   await installProgrammingMocks(page, state)
   await installLibraryLaneRoutes(page, lane)
   await login(page)
-  await navigate(page, LIBRARY_PATH)
+  await navigate(page, `${LIBRARY_PATH}?scope=${scope}`)
 }
 
 function libraryList(page: Page) {
@@ -2042,7 +2053,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
   test('D61-07: “chưa đo được” không được hiện thành “0 nơi dùng”', async ({ page }) => {
     const lane = libraryLane()
     const failures = observeBrowserFailures(page)
-    await openLibrary(page, lane)
+    await openLibrary(page, lane, 'PROJECT')
 
     const list = libraryList(page)
     /* `T61-204` — Inspector nay có bốn khay và mở mặc định ở Chi tiết. Khay
@@ -2065,6 +2076,8 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     const usageResponse = page.waitForResponse(
       (response) => response.url().includes('/library-usages') && response.url().includes('entryId=LIMIT')
     )
+    // `LIMIT` là khối SYSTEM: nó nằm ở tab kia, và đó chính là điều tab bảo đảm.
+    await switchScope(page, 'SYSTEM')
     await list.getByRole('button', { name: /^LIMIT/ }).click()
     await usageTab.click()
     const payload = (await (await usageResponse).json()) as { availability: string; sealed: { count: number } }
@@ -2085,7 +2098,13 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     await openLibrary(page, lane)
 
     const list = libraryList(page)
-    await expect(list.getByRole('button')).toHaveCount(LIBRARY_CATALOG.length)
+    await expect(list.getByRole('button')).toHaveCount(SYSTEM_ENTRY_COUNT)
+
+    /* `T61-302` — dưới 768 px bộ lọc thu vào MỘT nút (`SPEC-PGM04-VISUAL-001`
+       §1). Nút chỉ hiện ở khổ hẹp, nên mở nó khi có và bỏ qua khi không — cùng
+       một case đo được cả hai khổ. */
+    const filterToggle = page.getByTestId('library-filter-toggle')
+    if (await filterToggle.isVisible()) await filterToggle.click()
 
     const category = page.getByRole('combobox', { name: 'Phân loại' })
     await category.selectOption('timer')
@@ -2103,14 +2122,16 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     // Soi trong KHAY chi tiết: từ `T61-303` mô tả cũng nằm trên thẻ, nên một
     // `getByText` toàn trang khớp hai chỗ và không còn nói được "chi tiết đang
     // mở đúng khối nào".
-    await expect(page.getByRole('tabpanel').getByText('Bộ định thời trễ bật')).toBeVisible()
+    /* `T61-302` — trang nay có hai dải tab, nên `getByRole('tabpanel')` trần
+       khớp cả khay phạm vi lẫn khay chi tiết. Hỏi đúng khay đang soi. */
+    await expect(page.getByRole('tabpanel', { name: 'Chi tiết' }).getByText('Bộ định thời trễ bật')).toBeVisible()
     await expect(category).toHaveValue('timer')
     await expect(list.getByRole('button')).toHaveCount(1)
     await expect(list.getByRole('button', { name: /^TON/ })).toHaveAttribute('aria-current', 'true')
 
     // Gỡ bộ lọc trả lại đủ catalog — thu hẹp phải là thu hẹp, không phải mất.
     await category.selectOption('')
-    await expect(list.getByRole('button')).toHaveCount(LIBRARY_CATALOG.length)
+    await expect(list.getByRole('button')).toHaveCount(SYSTEM_ENTRY_COUNT)
 
     expectNoBrowserFailures(failures, 'PGM-04 lọc phân loại')
   })
@@ -2142,7 +2163,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     const before = lane.libraryQueries.length
     lane.failLibraries = false
     await retry.click()
-    await expect(libraryList(page).getByRole('button')).toHaveCount(LIBRARY_CATALOG.length)
+    await expect(libraryList(page).getByRole('button')).toHaveCount(SYSTEM_ENTRY_COUNT)
     expect(lane.libraryQueries.length).toBeGreaterThan(before)
   })
 
@@ -2195,10 +2216,12 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     /* Vắng chữ ký thì NÓI RA. Không tự parse `interface` để đoán hộ: hai nơi
        cùng đoán là hai nơi kết luận khác nhau về cùng một khối, và ở đây "bên
        nào đúng" quyết định người dùng nối dây vào chân nào. */
+    await switchScope(page, 'PROJECT')
     await expect(libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }))
       .toContainText('Chưa đọc được chữ ký')
-    // Chưa mở khay chi tiết nào: chữ ký phải có mặt TRƯỚC đó.
-    await expect(page.getByRole('tabpanel')).toHaveCount(0)
+    /* Chưa mở khay chi tiết nào: chữ ký phải có mặt TRƯỚC đó. Khay phạm vi thì
+       luôn có (nó là danh sách đang đọc), nên phải hỏi ĐÍCH DANH khay chi tiết. */
+    await expect(page.getByRole('tabpanel', { name: 'Chi tiết' })).toHaveCount(0)
   })
 
   /*
@@ -2245,7 +2268,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
         await route.fallback()
       }
     )
-    await openLibrary(page, lane)
+    await openLibrary(page, lane, 'PROJECT')
 
     await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
     const insert = page.getByRole('button', { name: /Chèn vào POU/ })
@@ -2276,7 +2299,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     await openLibrary(page, lane)
 
     const cards = libraryList(page).getByRole('button')
-    await expect(cards).toHaveCount(LIBRARY_CATALOG.length)
+    await expect(cards).toHaveCount(SYSTEM_ENTRY_COUNT)
     expect(await libraryList(page).locator('button[tabindex="0"]').count()).toBe(1)
 
     await cards.first().focus()
@@ -2298,7 +2321,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     test.skip((testInfo.project.use.viewport?.width ?? 1280) >= AUTHORING_MIN_WIDTH_PX,
       'case này thuộc khổ hẹp')
     const lane = libraryLane()
-    await openLibrary(page, lane)
+    await openLibrary(page, lane, 'PROJECT')
     await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
 
     /* Nút vẫn THẤY và mang lý do — ẩn nó đi làm người dùng tưởng thiết bị
@@ -2325,7 +2348,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     test.skip(testInfo.project.name !== 'desktop-chrome', 'phép đo này tự đặt khung nhìn')
     const lane = libraryLane()
     const failures = observeBrowserFailures(page)
-    await openLibrary(page, lane)
+    await openLibrary(page, lane, 'PROJECT')
 
     const sizes = [
       { label: '1440 — lưới 3 cột + inspector cố định', width: 1440, height: 900 },
@@ -2358,7 +2381,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
 
   test('T61-306: PGM-04 không có vi phạm axe nghiêm trọng', async ({ page }) => {
     const lane = libraryLane()
-    await openLibrary(page, lane)
+    await openLibrary(page, lane, 'PROJECT')
 
     // Quét khi khay Chi tiết ĐANG MỞ: đóng nó lại thì hơn nửa bề mặt của trang
     // (Used-In, lịch sử phiên bản, hai nút mutation) không có mặt trong lần quét.

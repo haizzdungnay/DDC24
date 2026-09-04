@@ -252,7 +252,11 @@ describe('PGM-04 Inspector (T61-304)', () => {
     renderPage()
     fireEvent.click(await screen.findByTestId('library-block-card'))
 
-    const tabs = screen.getAllByRole('tab')
+    /* `T61-302` — trang nay có HAI dải tab (phạm vi thư viện + khay chi tiết).
+       Hỏi `getAllByRole('tab')` trên cả tài liệu là trộn hai dải vào nhau, và
+       khẳng định "đúng một tab mang aria-controls" sẽ đỏ vì lý do không liên
+       quan gì tới thứ nó đang đo. */
+    const tabs = within(screen.getByRole('tablist', { name: 'Khay chi tiết khối' })).getAllByRole('tab')
     const withControls = tabs.filter((tab) => tab.hasAttribute('aria-controls'))
     expect(withControls).toHaveLength(1)
     expect(withControls[0]).toHaveAttribute('aria-selected', 'true')
@@ -265,8 +269,8 @@ describe('PGM-04 Inspector (T61-304)', () => {
     renderPage()
     fireEvent.click(await screen.findByTestId('library-block-card'))
 
-    const tablist = screen.getByRole('tablist')
-    expect(screen.getAllByRole('tab').filter((tab) => tab.getAttribute('tabindex') === '0')).toHaveLength(1)
+    const tablist = screen.getByRole('tablist', { name: 'Khay chi tiết khối' })
+    expect(within(tablist).getAllByRole('tab').filter((tab) => tab.getAttribute('tabindex') === '0')).toHaveLength(1)
     fireEvent.keyDown(tablist, { key: 'ArrowRight' })
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Tham số' })).toHaveAttribute('aria-selected', 'true'))
     await waitFor(() => expect(lastLocation).toContain('panel=parameters'))

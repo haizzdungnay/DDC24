@@ -15,6 +15,16 @@ import { TargetPouChooser } from './TargetPouChooser'
 import { LibraryVersionLock } from './LibraryVersionLock'
 import { MutationBlockNotice, ReadBackNotice, type ReadBack } from './LibraryNotices'
 import {
+  LIBRARY_SCOPE_TABS,
+  activeLibraryFilterCount,
+  clearLibraryFilters,
+  libraryScopeIsMeasurable,
+  readLibraryUrlState,
+  writeLibraryUrlState,
+  type LibraryKindFilter,
+  type LibraryScopeTab,
+} from './libraryUrlState'
+import {
   libraryFiltersKey,
   libraryViewState,
   rememberLibraryRead,
@@ -63,8 +73,6 @@ export { INSPECTOR_TABS, isInspectorTab, type InspectorTab } from './LibraryInsp
  * đọc được trên màn hình: form soạn thảo phải luôn hiện vì không có chỗ nào
  * khác để đặt nó.
  */
-type ScopeFilter = '' | 'SYSTEM' | 'PROJECT'
-type KindFilter = '' | 'FUNCTION' | 'FUNCTION_BLOCK' | 'CONVERSION'
 
 export function LibraryPage() {
   const { pick } = useI18n()
@@ -106,18 +114,26 @@ export function LibraryPage() {
     }, { replace: true })
   }, [setSearchParams])
 
-  const scope = (searchParams.get('scope') ?? '') as ScopeFilter
-  const kind = (searchParams.get('kind') ?? '') as KindFilter
-  const setScope = useCallback((value: ScopeFilter) => setParam('scope', value), [setParam])
-  const setKind = useCallback((value: KindFilter) => setParam('kind', value), [setParam])
+  /* `T61-302` — tab và bộ lọc đọc/ghi qua `libraryUrlState`, một mô-đun THUẦN.
+     Luật ở đó (chỉ hai tab, tab không phải bộ lọc, URL chuẩn tắc bỏ giá trị mặc
+     định) đều là luật dữ liệu, nên chúng phải kiểm được mà không dựng router. */
+  const urlContext = useMemo(() => ({ hasProject: Boolean(projectId) }), [projectId])
+  const urlState = useMemo(
+    () => readLibraryUrlState(searchParams, urlContext),
+    [searchParams, urlContext],
+  )
+  const { scope, kind, category, query } = urlState
+  const patchUrl = useCallback((patch: Parameters<typeof writeLibraryUrlState>[1]) => {
+    setSearchParams((current) => writeLibraryUrlState(current, patch, urlContext), { replace: true })
+  }, [setSearchParams, urlContext])
+  const setScope = useCallback((value: LibraryScopeTab) => patchUrl({ scope: value }), [patchUrl])
+  const setKind = useCallback((value: LibraryKindFilter) => patchUrl({ kind: value }), [patchUrl])
   /* `T61-204` — lọc theo phân loại nghiệp vụ. Nguồn giá trị là
      `categoryOrder` của registry, không phải một danh sách viết tay ở FE:
      thêm một nhóm vào registry mà FE không biết sẽ tạo ra một bộ lọc bỏ sót
      khối, và người dùng không có cách nào nhận ra. */
-  const category = searchParams.get('category') ?? ''
-  const setCategory = useCallback((value: string) => setParam('category', value), [setParam])
-  const query = searchParams.get('q') ?? ''
-  const setQuery = useCallback((value: string) => setParam('q', value), [setParam])
+  const setCategory = useCallback((value: string) => patchUrl({ category: value }), [patchUrl])
+  const setQuery = useCallback((value: string) => patchUrl({ query: value }), [patchUrl])
   /* Khối đang chọn cũng nằm trong URL: đó là thứ người ta muốn gửi đi nhất. */
   const selectedKey = searchParams.get('entry')
   /* Tab của Inspector cũng nằm trong URL. Mặc định `details` khi tham số thiếu
@@ -140,14 +156,22 @@ export function LibraryPage() {
     ? returnToRaw
     : null
   const setSelectedKey = useCallback((value: string | null) => setParam('entry', value ?? ''), [setParam])
-  const hasFilters = scope !== '' || kind !== '' || category !== '' || query.trim() !== ''
+  /* Tab KHÔNG tính là bộ lọc: nó là điều hướng, và "Xoá bộ lọc" không được đổi
+     tab người dùng đang đứng. */
+  const filterCount = activeLibraryFilterCount(urlState)
+  const hasFilters = filterCount > 0
   const clearFilters = useCallback(() => {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      for (const key of ['scope', 'kind', 'category', 'q']) next.delete(key)
-      return next
-    }, { replace: true })
-  }, [setSearchParams])
+    setSearchParams((current) => clearLibraryFilters(current, urlContext), { replace: true })
+  }, [setSearchParams, urlContext])
+  /* Hàng rào FAIL-CLOSED. Tab PROJECT mà chưa có `projectId` thì không phát
+     request nào: store từ chối yêu cầu ấy, và lỗi đó lên màn hình dưới dạng một
+     sự cố máy chủ trong khi sự thật là ngữ cảnh còn thiếu mà FE biết trước. */
+  /* Ngữ cảnh Project đã NGÃ NGŨ chưa. Lối vào cũ (`/eng/programming/library`)
+     không mang `projectId` trên route, nên nó chỉ biết Project sau khi danh
+     sách về. Hỏi máy chủ trước lúc đó là bắn một lượt với tab mặc định SAI, rồi
+     đổi tab ngay sau đó: một request thừa, và người dùng thấy tab nhảy. */
+  const projectContextReady = Boolean(routeParams.projectId) || projects.status !== 'loading'
+  const scopeMeasurable = !projectContextReady || libraryScopeIsMeasurable(scope, urlContext)
 
   const [etag, setEtag] = useState<string | null>(null)
   const [editor, setEditor] = useState<LibraryEditorMode | null>(null)
@@ -159,14 +183,14 @@ export function LibraryPage() {
   const filters = useMemo<LibrarySearchFilters>(
     () => ({
       projectId,
-      scope: scope === '' ? undefined : scope,
+      scope,
       ...(category ? { category } : {}),
       kind: kind === '' ? undefined : kind,
       query: query.trim() === '' ? undefined : query.trim()
     }),
     [projectId, scope, kind, category, query]
   )
-  const library = useProgrammingLibraryPaged(filters)
+  const library = useProgrammingLibraryPaged(filters, { enabled: projectContextReady && scopeMeasurable })
   const currentEtag = etag ?? workspace.project?.etag ?? projectSummary?.etag ?? ''
   const { saveEntry, deleteEntry, deprecateRevision, pending, error, conflict, reset } =
     useProgrammingLibraryEntryMutations(projectId)
@@ -177,7 +201,7 @@ export function LibraryPage() {
      danh sách rỗng vì LỖI và danh sách rỗng vì THƯ VIỆN TRỐNG trông giống hệt
      nhau nếu mỗi nơi tự suy. */
   const filterInput = useMemo(
-    () => ({ scope: scope === '' ? undefined : scope, kind: kind === '' ? undefined : kind,
+    () => ({ scope, kind: kind === '' ? undefined : kind,
              category: category || undefined, query: query.trim() || undefined }),
     [scope, kind, category, query],
   )
@@ -196,6 +220,7 @@ export function LibraryPage() {
     retained: readMemory,
     canEdit,
     hasProject: Boolean(projectId),
+    scopeMeasurable,
   })
   /* `T61-206` — danh sách vẽ ra phải lấy từ MÔ HÌNH TRẠNG THÁI, không từ mảng
      thô: `no-permission` KHÔNG xoá nội dung, và nội dung giữ lại khi lỗi phải
@@ -360,13 +385,13 @@ export function LibraryPage() {
           'SYSTEM blocks come from the read-only registry; PROJECT blocks are yours and freeze with the revision.'
         )}
       >
+        <LibraryScopeTabs scope={scope} onScope={setScope} />
         <LibraryFilters
-          scope={scope}
           kind={kind}
           category={category}
           query={query}
+          filterCount={filterCount}
           hasFilters={hasFilters}
-          onScope={setScope}
           onKind={setKind}
           onCategory={setCategory}
           onQuery={setQuery}
@@ -440,6 +465,7 @@ export function LibraryPage() {
             </div>
           }
         >
+          <div id="library-scope-panel" role="tabpanel" aria-labelledby={`library-scope-${scope}`}>
           <LibraryCardGrid
             state={view.status}
             groups={groups}
@@ -460,6 +486,7 @@ export function LibraryPage() {
               setBlocked(null)
             }}
           />
+          </div>
         </Panel>
         <Panel className="min-w-0 lg:sticky lg:top-4 lg:self-start" title={pick('Khối đang chọn', 'Selected block')}>
           {/* Một đường dẫn ghim `entry` mà bộ lọc hiện tại không chứa khối ấy
@@ -586,88 +613,195 @@ export function LibraryPage() {
   )
 }
 
-function LibraryFilters({
+/**
+ * `T61-302` — TAB phạm vi, không phải một ô chọn.
+ *
+ * Hai lý do đổi, và cả hai đo được:
+ *
+ * 1. **Trộn dữ liệu.** Bản trước có lựa chọn "Tất cả", nên SYSTEM và PROJECT
+ *    nằm chung một lưới. Khối hệ thống không sửa được và khối dự án thì sửa
+ *    được; trộn chúng lại nghĩa là mỗi thẻ phải tự nói ra nó thuộc loại nào, và
+ *    người dùng phải đọc từng thẻ để biết cái nào bấm được.
+ * 2. **`<select>` không phải điều hướng.** Trình đọc màn hình đọc nó là "hộp
+ *    chọn giá trị", trong khi đây là chuyển giữa hai danh sách khác nhau.
+ *    `role="tablist"` nói đúng việc đang xảy ra.
+ *
+ * Roving tabindex: cả hàng tab là MỘT điểm dừng `Tab`, mũi tên di chuyển giữa
+ * các tab (`SPEC-PGM04-VISUAL-001` §5, cùng luật đã áp cho lưới thẻ).
+ *
+ * KHÔNG có tab `USER`: sản phẩm không có phạm vi ấy ở API lẫn Product authority,
+ * và một tab rỗng vẽ ra một khả năng không tồn tại.
+ */
+function LibraryScopeTabs({
   scope,
+  onScope,
+}: {
+  scope: LibraryScopeTab
+  onScope: (value: LibraryScopeTab) => void
+}) {
+  const { pick } = useI18n()
+  const label = (value: LibraryScopeTab) =>
+    value === 'SYSTEM' ? pick('Hệ thống', 'System') : pick('Dự án', 'Project')
+  return (
+    <div
+      role="tablist"
+      aria-label={pick('Phạm vi thư viện', 'Library scope')}
+      className="flex gap-1 border-b border-[var(--c-border)]"
+      onKeyDown={(event) => {
+        const index = LIBRARY_SCOPE_TABS.indexOf(scope)
+        if (index < 0) return
+        let target: number | null = null
+        if (event.key === 'ArrowRight') target = (index + 1) % LIBRARY_SCOPE_TABS.length
+        else if (event.key === 'ArrowLeft') target = (index - 1 + LIBRARY_SCOPE_TABS.length) % LIBRARY_SCOPE_TABS.length
+        else if (event.key === 'Home') target = 0
+        else if (event.key === 'End') target = LIBRARY_SCOPE_TABS.length - 1
+        if (target === null) return
+        event.preventDefault()
+        const next = LIBRARY_SCOPE_TABS[target]
+        onScope(next)
+        /* Đưa tiêu điểm theo lựa chọn: mũi tên mà tiêu điểm đứng yên thì người
+           dùng bàn phím mất dấu mình đang ở đâu. */
+        document.getElementById(`library-scope-${next}`)?.focus()
+      }}
+    >
+      {LIBRARY_SCOPE_TABS.map((value) => {
+        const active = value === scope
+        return (
+          <button
+            key={value}
+            id={`library-scope-${value}`}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            /* Chỉ tab ĐANG MỞ mang `aria-controls` — cùng luật Inspector đã áp
+               (`T61-304`): khay của tab không được chọn chưa tồn tại trong DOM,
+               nên trỏ tới nó là hứa một quan hệ không có thật, và trình đọc màn
+               hình sẽ báo "không tìm thấy vùng". */
+            {...(active ? { 'aria-controls': 'library-scope-panel' } : {})}
+            /* Roving tabindex: chỉ tab đang chọn nhận `Tab`. */
+            tabIndex={active ? 0 : -1}
+            data-testid={`library-scope-tab-${value}`}
+            onClick={() => onScope(value)}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${
+              active
+                ? 'border-[var(--c-accent)] font-semibold text-[var(--c-accent)]'
+                : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+            }`}
+          >
+            {label(value)}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * `T61-302` — thanh bộ lọc; ở khổ hẹp nó thu vào MỘT nút.
+ *
+ * `SPEC-PGM04-VISUAL-001` §1 khoá điều này ở ngưỡng `768 px`: dưới ngưỡng ấy
+ * bốn ô lọc chiếm gần hết màn hình, nên danh sách — thứ người dùng tới để đọc —
+ * bị đẩy xuống dưới nếp gấp. Nút mang theo SỐ bộ lọc đang áp, vì một thanh đã
+ * thu gọn mà không nói gì là cách người ta nhìn một danh sách đã bị lọc và
+ * tưởng đó là toàn bộ thư viện.
+ *
+ * "Xoá bộ lọc" nằm NGOÀI phần thu gọn: khi đang bị lọc nhầm, đường thoát không
+ * được nằm sau một cú bấm nữa.
+ */
+function LibraryFilters({
   kind,
   category,
   query,
+  filterCount,
   hasFilters,
-  onScope,
   onKind,
   onCategory,
   onQuery,
   onClear,
 }: {
-  scope: ScopeFilter
-  kind: KindFilter
+  kind: LibraryKindFilter
   category: string
   query: string
+  filterCount: number
   hasFilters: boolean
-  onScope: (value: ScopeFilter) => void
-  onKind: (value: KindFilter) => void
+  onKind: (value: LibraryKindFilter) => void
   onCategory: (value: string) => void
   onQuery: (value: string) => void
   onClear: () => void
 }) {
   const { pick } = useI18n()
+  const [open, setOpen] = useState(false)
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-end">
-      <label className="flex flex-1 flex-col gap-1 text-sm">
-        <span className="text-[var(--c-text-dim)]">{pick('Tìm theo tên hoặc mô tả', 'Search name or description')}</span>
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => onQuery(event.target.value)}
-          className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-[var(--c-text-dim)]">{pick('Phạm vi', 'Scope')}</span>
-        <select
-          value={scope}
-          onChange={(event) => onScope(event.target.value as ScopeFilter)}
-          className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
+    <div className="flex flex-col gap-3">
+      <div className="flex items-end gap-2">
+        <label className="flex flex-1 flex-col gap-1 text-sm">
+          <span className="text-[var(--c-text-dim)]">{pick('Tìm theo tên hoặc mô tả', 'Search name or description')}</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+            className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
+          />
+        </label>
+        {/* Nút chỉ tồn tại ở khổ hẹp; từ `md` trở lên các ô lọc luôn hiện. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="md:hidden"
+          aria-expanded={open}
+          aria-controls="library-filter-drawer"
+          data-testid="library-filter-toggle"
+          onClick={() => setOpen((value) => !value)}
         >
-          <option value="">{pick('Tất cả', 'All')}</option>
-          <option value="SYSTEM">SYSTEM</option>
-          <option value="PROJECT">PROJECT</option>
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-[var(--c-text-dim)]">{pick('Loại', 'Kind')}</span>
-        <select
-          value={kind}
-          onChange={(event) => onKind(event.target.value as KindFilter)}
-          className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
-        >
-          <option value="">{pick('Tất cả', 'All')}</option>
-          <option value="FUNCTION">FUNCTION</option>
-          <option value="FUNCTION_BLOCK">FUNCTION_BLOCK</option>
-          <option value="CONVERSION">CONVERSION</option>
-        </select>
-      </label>
-      {/* `T61-204` — nhãn nhóm lấy từ registry, không viết tay ở FE. Registry
-          là nơi `category` được định nghĩa, nên nó cũng phải là nơi định nghĩa
-          THỨ TỰ và TÊN hiển thị của nhóm. */}
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-[var(--c-text-dim)]">{pick('Phân loại', 'Category')}</span>
-        <select
-          value={category}
-          onChange={(event) => onCategory(event.target.value)}
-          className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
-        >
-          <option value="">{pick('Tất cả', 'All')}</option>
-          {PROGRAMMING_LIBRARY_CATEGORY_ORDER.map((item) => (
-            <option key={item.id} value={item.id}>{pick(item.labelVi, item.labelEn)}</option>
-          ))}
-        </select>
-      </label>
-      {/* Handoff §8 — có bộ lọc thì phải có đường xoá bộ lọc, và nó chỉ hiện
-          khi thật sự có gì để xoá: một nút luôn hiện mà không làm gì là một nút
-          người dùng học được cách bỏ qua. */}
-      {hasFilters && (
-        <Button size="sm" variant="ghost" onClick={onClear}>{pick('Xoá bộ lọc', 'Clear filters')}</Button>
-      )}
+          {filterCount > 0
+            ? pick(`Bộ lọc (${filterCount})`, `Filters (${filterCount})`)
+            : pick('Bộ lọc', 'Filters')}
+        </Button>
+        {/* Đường thoát KHÔNG nằm sau nút thu gọn — xem chú thích ở đầu hàm. */}
+        {hasFilters && (
+          <Button size="sm" variant="ghost" onClick={onClear}>{pick('Xoá bộ lọc', 'Clear filters')}</Button>
+        )}
+      </div>
+      <div
+        id="library-filter-drawer"
+        className={`${open ? 'flex' : 'hidden'} flex-col gap-3 md:flex md:flex-row md:items-end`}
+      >
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-[var(--c-text-dim)]">{pick('Loại', 'Kind')}</span>
+          <select
+            value={kind}
+            onChange={(event) => onKind(event.target.value as LibraryKindFilter)}
+            className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
+          >
+            <option value="">{pick('Tất cả', 'All')}</option>
+            <option value="FUNCTION">FUNCTION</option>
+            <option value="FUNCTION_BLOCK">FUNCTION_BLOCK</option>
+            <option value="CONVERSION">CONVERSION</option>
+          </select>
+        </label>
+        {/* `T61-204` — nhãn nhóm lấy từ registry, không viết tay ở FE. Registry
+            là nơi `category` được định nghĩa, nên nó cũng phải là nơi định nghĩa
+            THỨ TỰ và TÊN hiển thị của nhóm. */}
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-[var(--c-text-dim)]">{pick('Phân loại', 'Category')}</span>
+          <select
+            value={category}
+            onChange={(event) => onCategory(event.target.value)}
+            className="rounded border border-[var(--c-border)] bg-transparent px-2 py-1.5"
+          >
+            <option value="">{pick('Tất cả', 'All')}</option>
+            {PROGRAMMING_LIBRARY_CATEGORY_ORDER.map((item) => (
+              <option key={item.id} value={item.id}>{pick(item.labelVi, item.labelEn)}</option>
+            ))}
+          </select>
+        </label>
+        {/* KHÔNG có bộ lọc thẻ / trạng thái / tương thích ở đây.
+            `GET /libraries` chỉ nhận `projectId`, `scope`, `kind`, `q`,
+            `category` (+ `cursor`/`limit`). Dựng một ô lọc cho trường máy chủ
+            không nhận nghĩa là lọc trên đúng trang đang tải — và người dùng đọc
+            kết quả ấy như thể nó phủ cả thư viện. Thẻ vẫn tìm được: `q` đã bao
+            cả `tags` ở phía store (`T61-101`). */}
+      </div>
     </div>
   )
 }
