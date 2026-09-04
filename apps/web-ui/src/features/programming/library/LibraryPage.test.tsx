@@ -118,6 +118,28 @@ function renderPage(path = `/eng/programming/projects/${PROJECT_ID}/library`) {
   )
 }
 
+/**
+ * `T61-303` — thẻ khối nay có HAI nút: mở thẻ, và ngôi sao Yêu thích. Nhãn của
+ * ngôi sao chứa tên khối (WCAG 2.5.3 — nhãn phải chứa tên đang hiện), nên một
+ * truy vấn `getByRole('button', { name: /TÊN/ })` khớp cả hai. Hỏi ĐÚNG nút thẻ
+ * bằng `data-testid` thay vì nới lỏng nhãn của ngôi sao: nhãn "Yêu thích" trống
+ * không, lặp lại trên 200 thẻ, là thứ trình đọc màn hình đọc ra 200 lần giống
+ * hệt nhau.
+ */
+function queryCard(name: string): HTMLElement | null {
+  const pattern = new RegExp(name)
+  return [...document.querySelectorAll<HTMLElement>('[data-testid="library-block-card"]')]
+    .find((card) => pattern.test(card.textContent ?? '')) ?? null
+}
+
+function cardFor(name: string | RegExp): HTMLElement {
+  const pattern = typeof name === 'string' ? new RegExp(name) : name
+  const cards = [...document.querySelectorAll<HTMLElement>('[data-testid="library-block-card"]')]
+    .filter((card) => pattern.test(card.textContent ?? ''))
+  if (cards.length !== 1) throw new Error(`cần đúng 1 thẻ khớp ${pattern}, thấy ${cards.length}`)
+  return cards[0]
+}
+
 beforeEach(() => {
   // Ghim ngôn ngữ: `detectDefaultLang` theo `navigator.language`, nên test khoá
   // chuỗi tiếng Việt sẽ đỏ/xanh theo locale của máy chạy nếu không ghim.
@@ -131,10 +153,10 @@ describe('PGM-04 Control Library', () => {
   it('hiện danh sách trộn SYSTEM và PROJECT, chọn được để xem chi tiết', async () => {
     stub(() => Promise.resolve({ items: [entry(), entry({ scope: 'SYSTEM', entryId: 'TON', name: 'TON', kind: 'FUNCTION_BLOCK', libraryRevisionId: 'system', libraryState: 'PUBLISHED', stateLayoutKnown: true, stateSizeBytes: 16 })] }))
     renderPage()
-    expect(await screen.findByRole('button', { name: /SCALE_LIN/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /TON/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('SCALE_LIN'))).toBeInTheDocument()
+    expect(cardFor('TON')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /SCALE_LIN/ }))
+    fireEvent.click(cardFor('SCALE_LIN'))
     expect(await screen.findAllByText('1.0.0 · DRAFT')).toHaveLength(2)
   })
 
@@ -175,7 +197,7 @@ describe('PGM-04 Control Library', () => {
   it('phân biệt state chưa biết với state bằng 0', async () => {
     stub(() => Promise.resolve({ items: [entry({ kind: 'FUNCTION_BLOCK', name: 'FILTER_T1', stateLayoutKnown: false, stateSizeBytes: 0 })] }))
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: /FILTER_T1/ }))
+    fireEvent.click(await waitFor(() => cardFor('FILTER_T1')))
     expect(await screen.findByText(/Chưa biết — chờ biên dịch/)).toBeInTheDocument()
     expect(screen.queryByText('0 B')).not.toBeInTheDocument()
   })
@@ -186,7 +208,7 @@ describe('PGM-04 Control Library', () => {
     stub(() => Promise.resolve({ items: [entry({ scope: 'SYSTEM', entryId: 'PID', name: 'PID', kind: 'FUNCTION_BLOCK', libraryRevisionId: 'system', libraryState: 'PUBLISHED', featureState: 'REVIEW_REQUIRED' })] }))
     renderPage()
     expect(await screen.findByText(/Chờ review Controls\/Safety/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /PID/ }))
+    fireEvent.click(cardFor('PID'))
     expect(await screen.findByRole('note')).toHaveTextContent(/Kiểm tra sẽ từ chối/)
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
@@ -204,13 +226,13 @@ describe('PGM-04 Control Library', () => {
     auth.role = 'viewer'
     stub(() => Promise.resolve({ items: [entry()] }))
     renderPage()
-    expect(await screen.findByRole('button', { name: /SCALE_LIN/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('SCALE_LIN'))).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Lưu vào bản nháp thư viện/ })).not.toBeInTheDocument()
     const create = screen.getByRole('button', { name: /Khối PROJECT mới/ })
     expect(create).toBeDisabled()
     expect(screen.getByText(/Vai hiện tại không sửa được Thư viện điều khiển/)).toBeInTheDocument()
     expect(create).toHaveAttribute('aria-describedby', 'library-create-reason')
-    fireEvent.click(screen.getByRole('button', { name: /SCALE_LIN/ }))
+    fireEvent.click(cardFor('SCALE_LIN'))
     expect(screen.queryByRole('button', { name: /Ngừng sử dụng phiên bản/ })).not.toBeInTheDocument()
   })
 
@@ -257,7 +279,7 @@ describe('PGM-04 Control Library', () => {
     })
 
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: /SCALE_LIN/ }))
+    fireEvent.click(await waitFor(() => cardFor('SCALE_LIN')))
     fireEvent.click(await screen.findByRole('button', { name: 'Ngừng sử dụng phiên bản 1.0.0' }))
 
     const dialog = await screen.findByRole('dialog', { name: /Ngừng sử dụng phiên bản thư viện/ })
@@ -293,7 +315,7 @@ describe('PGM-04 Control Library', () => {
       })
     )
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: /SCALE_LIN/ }))
+    fireEvent.click(await waitFor(() => cardFor('SCALE_LIN')))
     expect(screen.queryByRole('button', { name: /Ngừng sử dụng phiên bản/ })).not.toBeInTheDocument()
   })
 
@@ -323,7 +345,7 @@ describe('PGM-04 Control Library', () => {
     fireEvent.click(screen.getByRole('button', { name: /Lưu vào bản nháp thư viện/ }))
     await waitFor(() => expect(etags).toEqual([PROJECT_ETAG]))
 
-    fireEvent.click(screen.getByRole('button', { name: /SCALE_LIN/ }))
+    fireEvent.click(cardFor('SCALE_LIN'))
     fireEvent.click(await screen.findByRole('button', { name: /Xoá khối/ }))
     await waitFor(() => expect(etags).toEqual([PROJECT_ETAG, NEXT_ETAG]))
   })
@@ -348,7 +370,7 @@ describe('PGM-04 Control Library', () => {
     })
 
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: /SCALE_LIN/ }))
+    fireEvent.click(await waitFor(() => cardFor('SCALE_LIN')))
     fireEvent.click(screen.getByRole('button', { name: /Sửa khối/ }))
     fireEvent.change(screen.getByLabelText(/Mã nguồn ST/), {
       target: { value: 'FUNCTION SCALE_LIN : REAL\nVAR_INPUT X : REAL; END_VAR\nSCALE_LIN := X;\nEND_FUNCTION\n' }
@@ -377,7 +399,7 @@ describe('PGM-04 Control Library', () => {
       return Promise.resolve({ items: [entry()] })
     })
     renderPage()
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     /* `T61-302` — phạm vi nay là TAB, không phải ô chọn. Bấm tab phải phát một
        request MỚI mang `scope`, chứ không lọc lại trang đang cầm: lọc phía
        client chỉ đúng trên phần đã tải, và người dùng đọc kết quả ấy như thể nó
@@ -399,7 +421,7 @@ describe('PGM-04 Control Library', () => {
       return Promise.resolve({ items: [entry()] })
     })
     renderPageWithRoute()
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     expect(screen.getByTestId('library-scope-tab-PROJECT')).toHaveAttribute('aria-selected', 'true')
     /* Số TUYỆT ĐỐI ở phần tử ĐẦU: lối vào cũ không mang `projectId` trên route,
        nên nó chỉ biết Project sau khi danh sách về. Hỏi trước lúc đó là bắn một
@@ -414,7 +436,7 @@ describe('PGM-04 Control Library', () => {
   it('chọn lại tab mặc định thì XOÁ tham số scope khỏi URL', async () => {
     stub(() => Promise.resolve({ items: [entry()] }))
     renderPage()
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     fireEvent.click(screen.getByTestId('library-scope-tab-SYSTEM'))
     await waitFor(() => expect(lastLocation).toContain('scope=SYSTEM'))
     fireEvent.click(screen.getByTestId('library-scope-tab-PROJECT'))
@@ -455,7 +477,7 @@ describe('PGM-04 Control Library', () => {
   it('URL đòi scope=USER không tạo tab thứ ba', async () => {
     stub(() => Promise.resolve({ items: [entry()] }))
     renderPage(`/eng/programming/projects/${PROJECT_ID}/library?scope=USER`)
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     const tabs = within(screen.getByRole('tablist', { name: 'Phạm vi thư viện' })).getAllByRole('tab')
     expect(tabs).toHaveLength(2)
     expect(screen.getByTestId('library-scope-tab-PROJECT')).toHaveAttribute('aria-selected', 'true')
@@ -467,7 +489,7 @@ describe('PGM-04 Control Library', () => {
   it('dải tab phạm vi: một điểm dừng Tab, mũi tên chuyển tab và đổi URL', async () => {
     stub(() => Promise.resolve({ items: [entry()] }))
     renderPage()
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     const tablist = screen.getByRole('tablist', { name: 'Phạm vi thư viện' })
     const tabs = within(tablist).getAllByRole('tab')
     expect(tabs.filter((tab) => tab.getAttribute('tabindex') === '0')).toHaveLength(1)
@@ -495,7 +517,7 @@ describe('PGM-04 Control Library', () => {
   it('khổ hẹp: bộ lọc thu vào một nút mang SỐ bộ lọc đang áp', async () => {
     stub(() => Promise.resolve({ items: [entry()] }))
     renderPage(`/eng/programming/projects/${PROJECT_ID}/library?kind=FUNCTION&category=timer`)
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     const toggle = screen.getByTestId('library-filter-toggle')
     /* Con số là toàn bộ giá trị của nút: một thanh đã thu gọn mà không nói gì là
        cách người ta nhìn một danh sách đã bị lọc và tưởng đó là cả thư viện. */
@@ -509,7 +531,7 @@ describe('PGM-04 Control Library', () => {
     // Đếm tab thì nút luôn hiện ít nhất `1`, và con số thôi mang tin.
     stub(() => Promise.resolve({ items: [entry()] }))
     renderPage(`/eng/programming/projects/${PROJECT_ID}/library?scope=SYSTEM`)
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     expect(screen.getByTestId('library-filter-toggle')).toHaveTextContent('Bộ lọc')
     expect(screen.getByTestId('library-filter-toggle')).not.toHaveTextContent('(')
   })
@@ -519,7 +541,7 @@ describe('PGM-04 Control Library', () => {
   it('Xoá bộ lọc nằm NGOÀI phần thu gọn, không cần mở ngăn kéo', async () => {
     stub(() => Promise.resolve({ items: [entry()] }))
     renderPage(`/eng/programming/projects/${PROJECT_ID}/library?kind=FUNCTION`)
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     const clear = screen.getAllByRole('button', { name: 'Xoá bộ lọc' })[0]
     const drawer = document.getElementById('library-filter-drawer')
     expect(drawer).not.toBeNull()
@@ -549,7 +571,7 @@ describe('PGM-04 Control Library', () => {
     // Grid item phải được phép co; nếu thiếu `min-w-0`, một tên khối dài hoặc
     // một chữ ký dài đẩy document 390 px thành 510 px và cả trang cuộn ngang.
     expect(list.closest('section')).toHaveClass('min-w-0')
-    expect(screen.getByRole('button', { name: /SCALE_LIN/ })).toHaveClass('min-w-0')
+    expect(cardFor('SCALE_LIN')).toHaveClass('min-w-0')
   })
 })
 
@@ -571,7 +593,7 @@ describe('LibraryPage — Used-In hai nguồn', () => {
       }),
     })
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: /PID/ }))
+    fireEvent.click(await waitFor(() => cardFor('PID')))
 
     const usage = await screen.findByRole('region', { name: 'Nơi sử dụng' })
     expect(within(usage).getByText(/Chưa đo được/)).toBeInTheDocument()
@@ -596,7 +618,7 @@ describe('LibraryPage — Used-In hai nguồn', () => {
       }),
     })
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: /SCALE_LIN/ }))
+    fireEvent.click(await waitFor(() => cardFor('SCALE_LIN')))
 
     const usage = await screen.findByRole('region', { name: 'Nơi sử dụng' })
     expect(within(usage).getByText(/1 nơi dùng/)).toBeInTheDocument()
@@ -632,13 +654,13 @@ describe('LibraryPage — phân trang', () => {
     })
     renderPage()
 
-    expect(await screen.findByRole('button', { name: /ALPHA/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('ALPHA'))).toBeInTheDocument()
     // Chưa tải trang 2 thì BETA chưa có — và màn hình phải NÓI RA là còn nữa.
-    expect(screen.queryByRole('button', { name: /BETA/ })).not.toBeInTheDocument()
+    expect(queryCard('BETA')).not.toBeInTheDocument()
     const more = screen.getByRole('button', { name: /Tải thêm khối/ })
 
     fireEvent.click(more)
-    expect(await screen.findByRole('button', { name: /BETA/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('BETA'))).toBeInTheDocument()
     // Hết trang thì nút biến mất, không để lại một nút bấm mãi không ra gì.
     await waitFor(() => expect(screen.queryByRole('button', { name: /Tải thêm khối/ })).not.toBeInTheDocument())
   })
@@ -660,17 +682,17 @@ describe('LibraryPage — phân trang', () => {
       return Promise.reject(new Error('unexpected ' + operationId))
     })
     renderPage()
-    expect(await screen.findByRole('button', { name: /ALPHA/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('ALPHA'))).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Tải thêm khối/ }))
     // Mất mọi thứ đã cuộn qua chỉ vì trang thứ hai lỗi là đánh đổi không ai chọn.
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /ALPHA/ })).toBeInTheDocument()
+    expect(cardFor('ALPHA')).toBeInTheDocument()
 
     // Và nút phải còn bấm được: khoá nó lại sau lần lỗi đầu là biến đường thử
     // lại thành nút chết.
     fireEvent.click(screen.getByRole('button', { name: /Tải thêm khối/ }))
-    expect(await screen.findByRole('button', { name: /BETA/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('BETA'))).toBeInTheDocument()
   })
 
   it('cursor lặp thì dừng và nói ra, không quay vòng vô hạn', async () => {
@@ -687,11 +709,11 @@ describe('LibraryPage — phân trang', () => {
       return Promise.reject(new Error('unexpected ' + operationId))
     })
     renderPage()
-    expect(await screen.findByRole('button', { name: /KHOI1/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('KHOI1'))).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Tải thêm khối/ }))
     // Trang VỪA nhận vẫn hợp lệ nên được ghép; chỉ đường đi tiếp bị cắt.
-    expect(await screen.findByRole('button', { name: /KHOI2/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('KHOI2'))).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/cursor lặp/))
     expect(screen.queryByRole('button', { name: /Tải thêm khối/ })).not.toBeInTheDocument()
   })
@@ -723,7 +745,7 @@ describe('LibraryPage — trạng thái trong URL', () => {
         </MemoryRouter>
       </I18nProvider>
     )
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     // Bộ lọc phải đi TỚI MÁY CHỦ, không chỉ hiện trên ô select.
     await waitFor(() => expect(seen.some((q) => q.category === 'timer' && q.kind === 'FUNCTION')).toBe(true))
     expect(screen.getByLabelText(/Phân loại/)).toHaveValue('timer')
@@ -746,7 +768,7 @@ describe('LibraryPage — trạng thái trong URL', () => {
         </MemoryRouter>
       </I18nProvider>
     )
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     fireEvent.change(screen.getByLabelText(/Phân loại/), { target: { value: 'control' } })
     await waitFor(() => expect(screen.getByTestId('loc').textContent).toContain('category=control'))
   })
@@ -778,12 +800,12 @@ describe('LibraryPage — 403 xoá nội dung đang hiện', () => {
       return Promise.reject(new Error('unexpected ' + operationId))
     })
     renderPage()
-    expect(await screen.findByRole('button', { name: /SCALE_LIN/ })).toBeInTheDocument()
+    expect(await waitFor(() => cardFor('SCALE_LIN'))).toBeInTheDocument()
 
     denied = true
     fireEvent.change(screen.getByLabelText(/Phân loại/), { target: { value: 'control' } })
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: /SCALE_LIN/ })).not.toBeInTheDocument())
+      expect(queryCard('SCALE_LIN')).not.toBeInTheDocument())
   })
 })
 
@@ -854,7 +876,7 @@ describe('LibraryPage — returnTo và tab Inspector', () => {
         </MemoryRouter>
       </I18nProvider>
     )
-    await screen.findByRole('button', { name: /SCALE_LIN/ })
+    await waitFor(() => cardFor('SCALE_LIN'))
     expect(screen.queryByRole('link', { name: /Quay lại chỗ đang làm/ })).not.toBeInTheDocument()
   })
 })

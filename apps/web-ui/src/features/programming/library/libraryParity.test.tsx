@@ -58,8 +58,10 @@ function renderControlLibrary(items: ProgrammingLibraryEntry[]) {
         group={group}
         selected={false}
         usage={{ draftCount: 0 }}
+        favorite={false}
         tabIndex={0}
         onSelect={vi.fn()}
+        onToggleFavorite={vi.fn()}
       />
     </I18nProvider>,
   )

@@ -2049,6 +2049,13 @@ function libraryList(page: Page) {
   return page.getByRole('list', { name: 'Danh sách khối Thư viện điều khiển' })
 }
 
+/* `T61-303` — mỗi thẻ nay có HAI nút: mở thẻ, và ngôi sao Yêu thích. Đếm
+   `getByRole('button')` trong lưới sẽ ra 2N và không còn nói được điều nó muốn
+   nói ("có bao nhiêu khối"). Đếm THẺ. */
+function libraryCards(page: Page) {
+  return libraryList(page).getByTestId('library-block-card')
+}
+
 test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
   test('D61-07: “chưa đo được” không được hiện thành “0 nơi dùng”', async ({ page }) => {
     const lane = libraryLane()
@@ -2098,7 +2105,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     await openLibrary(page, lane)
 
     const list = libraryList(page)
-    await expect(list.getByRole('button')).toHaveCount(SYSTEM_ENTRY_COUNT)
+    await expect(libraryCards(page)).toHaveCount(SYSTEM_ENTRY_COUNT)
 
     /* `T61-302` — dưới 768 px bộ lọc thu vào MỘT nút (`SPEC-PGM04-VISUAL-001`
        §1). Nút chỉ hiện ở khổ hẹp, nên mở nó khi có và bỏ qua khi không — cùng
@@ -2108,7 +2115,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
 
     const category = page.getByRole('combobox', { name: 'Phân loại' })
     await category.selectOption('timer')
-    await expect(list.getByRole('button')).toHaveCount(1)
+    await expect(libraryCards(page)).toHaveCount(1)
     await expect(list.getByRole('button', { name: /^TON/ })).toBeVisible()
     /* Phép lọc phải đi TỚI MÁY CHỦ. Thư viện thật có phân trang; lọc trên trang
        đã tải sẽ đúng với bốn khối của mock và bỏ sót ở thư viện thật — một lỗi
@@ -2126,12 +2133,12 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
        khớp cả khay phạm vi lẫn khay chi tiết. Hỏi đúng khay đang soi. */
     await expect(page.getByRole('tabpanel', { name: 'Chi tiết' }).getByText('Bộ định thời trễ bật')).toBeVisible()
     await expect(category).toHaveValue('timer')
-    await expect(list.getByRole('button')).toHaveCount(1)
+    await expect(libraryCards(page)).toHaveCount(1)
     await expect(list.getByRole('button', { name: /^TON/ })).toHaveAttribute('aria-current', 'true')
 
     // Gỡ bộ lọc trả lại đủ catalog — thu hẹp phải là thu hẹp, không phải mất.
     await category.selectOption('')
-    await expect(list.getByRole('button')).toHaveCount(SYSTEM_ENTRY_COUNT)
+    await expect(libraryCards(page)).toHaveCount(SYSTEM_ENTRY_COUNT)
 
     expectNoBrowserFailures(failures, 'PGM-04 lọc phân loại')
   })
@@ -2163,7 +2170,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     const before = lane.libraryQueries.length
     lane.failLibraries = false
     await retry.click()
-    await expect(libraryList(page).getByRole('button')).toHaveCount(SYSTEM_ENTRY_COUNT)
+    await expect(libraryCards(page)).toHaveCount(SYSTEM_ENTRY_COUNT)
     expect(lane.libraryQueries.length).toBeGreaterThan(before)
   })
 
@@ -2236,7 +2243,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
       'khổ hẹp là read-only, có case riêng')
     const lane = libraryLane()
     await openLibrary(page, lane)
-    await expect(libraryList(page).getByRole('button').first()).toBeVisible()
+    await expect(libraryCards(page).first()).toBeVisible()
     await expect(page.getByRole('dialog')).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Khối PROJECT mới' }).click()
@@ -2298,9 +2305,14 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     const lane = libraryLane()
     await openLibrary(page, lane)
 
-    const cards = libraryList(page).getByRole('button')
+    const cards = libraryCards(page)
     await expect(cards).toHaveCount(SYSTEM_ENTRY_COUNT)
-    expect(await libraryList(page).locator('button[tabindex="0"]').count()).toBe(1)
+    /* `T61-303` — số điểm dừng `Tab` của lưới là một HẰNG SỐ, không tỉ lệ với
+       số thẻ. Thẻ nay có hai nút (mở thẻ + Yêu thích) và cả hai cùng nhận
+       `tabIndex` luân phiên, nên hằng số là 2; điều bị cấm là 2N. Đúng MỘT
+       trong hai là thẻ. */
+    expect(await libraryList(page).locator('button[tabindex="0"]').count()).toBe(2)
+    expect(await libraryList(page).locator('[data-testid="library-block-card"][tabindex="0"]').count()).toBe(1)
 
     await cards.first().focus()
     await page.keyboard.press('ArrowRight')
@@ -2360,7 +2372,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     const measured: string[] = []
     for (const size of sizes) {
       await page.setViewportSize({ width: size.width, height: size.height })
-      await expect(libraryList(page).getByRole('button').first()).toBeVisible()
+      await expect(libraryCards(page).first()).toBeVisible()
       // Chọn một khối để Inspector có nội dung: một khay rỗng không tràn được,
       // nên đo lúc nó rỗng là đo một thứ không có rủi ro.
       await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()

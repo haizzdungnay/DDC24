@@ -27,6 +27,8 @@ export function LibraryCardGrid({
   action,
   stale,
   draftUsageCount,
+  isFavorite,
+  onToggleFavorite,
   onRetry,
   onClearFilters,
   onCreate,
@@ -44,6 +46,9 @@ export function LibraryCardGrid({
   stale: boolean
   /** `null` = chưa đọc được bản nháp. KHÁC 0 = không POU nào dùng. */
   draftUsageCount: (group: LibraryEntryGroup) => number | null
+  /** `T61-303` — Yêu thích dùng chung kho với Quick Library. */
+  isFavorite: (group: LibraryEntryGroup) => boolean
+  onToggleFavorite: (group: LibraryEntryGroup) => void
   onRetry: () => void
   onClearFilters: () => void
   onCreate: (() => void) | null
@@ -252,6 +257,8 @@ export function LibraryCardGrid({
               group={group}
               selected={group.key === selectedKey}
               usage={{ draftCount: draftUsageCount(group) }}
+              favorite={isFavorite(group)}
+              onToggleFavorite={() => onToggleFavorite(group)}
               tabIndex={index === activeIndex ? 0 : -1}
               cardRef={registerCard(group.key)}
               onSelect={() => {

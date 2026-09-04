@@ -592,6 +592,52 @@ và người dùng đọc kết quả ấy như thể nó phủ cả thư viện
 store (`T61-101`). **Cần gì để mở:** thêm tham số `tags`/`libraryState` vào
 `searchProgrammingLibraries` cùng đường lọc tương ứng ở store.
 
+**Đính chính `T61-303` (`ISS-PGM04-08`, đo `2026-09-04`).** Thẻ có tên, kind,
+phân loại, chữ ký, mô tả, version và số POU của bản nháp — nhưng thiếu ba thứ
+trong danh sách của chính task, và thiếu chúng theo cách nói dối chứ không theo
+cách bỏ trống:
+
+1. **`favorite` không tồn tại ở PGM-04.** Nó chỉ có ở Quick Library, nên người
+   dùng gắn sao ở bề mặt chèn nhanh rồi mở Control Library và không thấy gì —
+   hai màn hình cùng nói về một khối, một bên nhớ, một bên không.
+2. **`compatibility` không hiện.** Trường ấy đã có trên dây từ `T61-101` và đã
+   fail-closed ở mô hình (`compatibilityDisplay`: vắng ⇒ `UNKNOWN`), nhưng thẻ
+   không vẽ nó — nên một khối `REQUIRES_MIGRATION` trông hệt một khối bình
+   thường, và người vận hành nâng version mà không biết mình đang nâng.
+3. **Một con số "nơi dùng" cho hai sự thật khác nhau.** Thẻ hiện `N POU trong
+   bản nháp` — đúng phạm vi, đúng nhãn — nhưng không nói gì về phần còn lại, nên
+   `0` đọc thành "không ai dùng khối này". Đó là câu mời người ta xoá một khối
+   có thể đang chạy ở một Revision đã niêm phong hoặc ở Project khác.
+
+Lát này: sao Yêu thích trên thẻ dùng **chung kho** với Quick Library (cùng túi
+`programmingLibrary`, cùng khoá `libraryEntryKey` = `scope/entryId` từ
+`T61-203`); `compatibility` hiện khi khác `COMPATIBLE`, và `UNKNOWN` cũng hiện —
+im lặng ở đó là một câu khẳng định; dòng nơi dùng tách làm hai, một dòng cho bản
+nháp và một dòng chỉ sang khay Nơi sử dụng.
+
+**Vì sao thẻ KHÔNG tự đo Used-In.** `GET /library-usages` là một request cho mỗi
+khối. Một lưới 200 thẻ sẽ bắn 200 request cho những khối không ai định xem —
+đúng lý do `T61-306` đã tách tiêu điểm khỏi lựa chọn. Nên thẻ nói ra con số nó
+cầm là con số nào và phần còn lại đo ở đâu, thay vì đo hộ. **Cần gì để mở:** một
+đường Used-In theo LÔ (nhiều `entryId` một lần gọi) ở
+`listProgrammingLibraryUsages`.
+
+**Nút thứ hai trên thẻ, và cái giá của nó.** `<button>` lồng `<button>` là HTML
+không hợp lệ, nên sao là ANH EM của nút thẻ trong cùng ô. Cả hai cùng nhận
+`tabIndex` luân phiên: số điểm dừng `Tab` của lưới vẫn là một HẰNG SỐ (2), không
+tỉ lệ với số thẻ — đúng điều `SPEC-PGM04-VISUAL-001` §5 bảo vệ; cho sao
+`tabIndex={-1}` sẽ là một chức năng không ai dùng được bằng bàn phím.
+
+Hệ quả kéo theo ở test: nhãn của sao **chứa tên khối** (WCAG 2.5.3), nên
+`getByRole('button', { name: /TÊN/ })` khớp cả hai nút. 33 truy vấn trong
+`LibraryPage.test.tsx` chuyển sang hỏi đúng `data-testid` của thẻ. Nới lỏng nhãn
+của sao sẽ dễ hơn, nhưng nó tạo ra 200 nút mang cùng một tên cho trình đọc màn
+hình.
+
+Ba phép tiêm lỗi XANH ở vòng đầu, và cả ba là lỗi của TEST: khẳng định về nội
+dung mà không khẳng định về TÍNH NHÌN THẤY (một `hidden` vẫn để text trong cây);
+không ai kiểm nhãn của sao có chứa tên khối; không ai kiểm vùng chạm 24 px.
+
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.
 
@@ -612,7 +658,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 |---|---|---|---|---|---:|
 | `T61-301` | P0 | Tách `LibraryPage` thành controller và component tree §3.1; giữ mutation logic đã test. | `T61-201..206` | `DONE` | 1 nd |
 | `T61-302` | P0 | SYSTEM/PROJECT tabs + toolbar Category/Type/Search/Filter/Clear; server-side filter. | `T61-301` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-07`) | 1,5 nd |
-| `T61-303` | P0 | Dense card grid: icon/kind/category/name/version/signature/description/source/usage/feature/deprecated/favorite. | `T61-203/301` | `DONE` | 2 nd |
+| `T61-303` | P0 | Dense card grid: icon/kind/category/name/version/signature/description/source/usage/feature/deprecated/favorite. | `T61-203/301` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-08`) | 2 nd |
 | `T61-304` | P0 | Inspector dock/drawer với Details/Parameters/Used-In/Versions; detail error không phá list; sticky trong đúng scroll container. | `T61-301/303` | `DONE` | 2 nd |
 | `T61-305` | P0 | Responsive theo §3.3; mobile read-only; không overflow; skeleton khớp hình học. | `T61-302..304` | `DONE` | 2 nd |
 | `T61-306` | P0 | Keyboard/a11y: roving focus grid, Enter mở, Esc/return-focus drawer, landmark/tab/aria-live. | `T61-303..305` | `DONE` | 1,5 nd |

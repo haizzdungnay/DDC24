@@ -50,6 +50,14 @@ import {
   type LibraryMutationBlock,
 } from '../model/library'
 import { draftLibraryLock, draftObjects, isDraftV2 } from '../model/signals'
+import {
+  pullLibraryPreferences,
+  pushLibraryPreferences,
+  readLocalLibraryPreferences,
+  toggleFavorite,
+  type LibraryPreferences,
+} from '../design/library/libraryPreferences'
+import { libraryEntryKey } from './libraryPresentation'
 import type { ProgrammingLibraryEntry } from '../model/types'
 
 export { INSPECTOR_TABS, isInspectorTab, type InspectorTab } from './LibraryInspector'
@@ -249,6 +257,28 @@ export function LibraryPage() {
   /* Số nơi dùng trên THẺ, phạm vi bản nháp của Project đang mở — và nhãn ở thẻ
      nói đúng phạm vi ấy. `null` khi chưa đọc được Draft: `0` nghĩa là "không
      POU nào dùng khối này", một câu mời người ta xoá nó. */
+  /* `T61-303` — Yêu thích dùng CHUNG kho với Quick Library: cùng túi tuỳ chọn
+     `programmingLibrary`, cùng khoá `libraryEntryKey` (`scope/entryId`). Dựng
+     một kho thứ hai ở đây sẽ cho hai danh sách sao khác nhau cho cùng một khối,
+     và người dùng không có cách nào biết bên nào là bên họ vừa bấm. */
+  const [preferences, setPreferences] = useState<LibraryPreferences>(() => readLocalLibraryPreferences())
+  useEffect(() => {
+    let cancelled = false
+    void pullLibraryPreferences().then(({ value }) => {
+      if (!cancelled) setPreferences(value)
+    })
+    return () => { cancelled = true }
+  }, [])
+  const isFavorite = useCallback(
+    (group: LibraryEntryGroup) => preferences.favorites.includes(libraryEntryKey(group)),
+    [preferences],
+  )
+  const onToggleFavorite = useCallback((group: LibraryEntryGroup) => {
+    const next = toggleFavorite(preferences, libraryEntryKey(group))
+    setPreferences(next)
+    void pushLibraryPreferences(next)
+  }, [preferences])
+
   const draftUsageCount = useCallback(
     (group: LibraryEntryGroup): number | null =>
       workspace.status === 'ready' ? (usages.get(group.entryId.toUpperCase()) ?? []).length : null,
@@ -473,6 +503,8 @@ export function LibraryPage() {
             action={view.action}
             stale={view.stale}
             draftUsageCount={draftUsageCount}
+            isFavorite={isFavorite}
+            onToggleFavorite={onToggleFavorite}
             onRetry={library.refresh}
             onClearFilters={clearFilters}
             onCreate={canEdit && projectId ? () => setEditor({ kind: 'create' }) : null}

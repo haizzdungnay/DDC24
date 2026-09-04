@@ -15,6 +15,14 @@ import { LibraryPage } from './LibraryPage'
  * hai harness lại sẽ làm mọi case cũ phải mang theo một Draft mà chúng không
  * dùng tới.
  */
+/* `T61-303` — Yêu thích của thẻ đi qua túi tuỳ chọn dùng chung
+   (`shared/api/client`), đúng kho mà Quick Library dùng. Giả lập ở đây để test
+   đọc được PAYLOAD thật được đẩy lên, không chỉ đọc trạng thái trên màn hình. */
+const preferences = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
+vi.mock('../../../shared/api/client', () => ({
+  apiClient: { getMyPreferences: preferences.get, putMyPreferences: preferences.put }
+}))
+
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
 vi.mock('../../auth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../auth')>()
@@ -121,6 +129,9 @@ function renderPage(initial = `/eng/programming/projects/${PROJECT_ID}/library`)
 beforeEach(() => {
   localStorage.setItem('mkddc-lang', 'vi')
   auth.role = 'admin'
+  localStorage.removeItem('mkddc-programming-library')
+  preferences.get.mockReset().mockResolvedValue({})
+  preferences.put.mockReset().mockResolvedValue(undefined)
   lastLocation = ''
   client.request.mockReset()
 })
@@ -180,12 +191,16 @@ describe('PGM-04 thẻ khối (T61-303)', () => {
   })
 
   /* Chưa đọc được bản nháp KHÁC "không POU nào dùng". `0` là một câu mời người
-     ta xoá khối, nên nó không được thay thế cho "chưa đo được". */
+     ta xoá khối, nên nó không được thay thế cho "chưa đo được".
+
+     `T61-303` — câu chữ nay nói ĐÚNG thứ không đọc được: BẢN NHÁP. Bản trước
+     viết "chưa đo được nơi dùng", nghe như cả Used-In cũng chưa đo — trong khi
+     thẻ chưa bao giờ đo Used-In, và phần ấy có dòng riêng chỉ sang khay. */
   it('chưa đọc được bản nháp thì nói chưa đo được, KHÔNG hiện 0', async () => {
     stub([entry()], { getProgrammingProject: () => Promise.reject(new Error('mạng hỏng')) })
     renderPage()
     const block = await screen.findByTestId('library-block-card')
-    await waitFor(() => expect(within(block).getByText(/chưa đo được nơi dùng/)).toBeInTheDocument())
+    await waitFor(() => expect(within(block).getByText(/chưa đọc được bản nháp/)).toBeInTheDocument())
     expect(within(block).queryByText(/0 POU trong bản nháp/)).not.toBeInTheDocument()
   })
 })
@@ -235,6 +250,152 @@ describe('PGM-04 bàn phím trên lưới thẻ (T61-306)', () => {
     expect(cards[1]).toHaveFocus()
     fireEvent.keyDown(list, { key: 'Home' })
     expect(cards[0]).toHaveFocus()
+  })
+})
+
+/**
+ * `T61-303` / `ISS-PGM04-08` — thẻ phải ĐỦ để ra quyết định mà không mở
+ * Inspector, và mọi trường đều phải có nguồn nói ra được.
+ */
+describe('T61-303 — thẻ dày bằng dữ liệu authoritative', () => {
+  /* Hai con số về "nơi dùng" là HAI SỰ THẬT khác nhau. Thẻ chỉ cầm được một —
+     bản nháp của Project đang mở — vì đo Used-In tốn một request cho mỗi khối,
+     và một lưới 200 thẻ sẽ bắn 200 request cho những khối không ai định xem.
+     Nên thẻ phải nói ra CẢ HAI điều: con số nó cầm là con số nào, và phần còn
+     lại đo ở đâu. Gộp lại thì "0" đọc thành "không ai dùng khối này". */
+  it('tách con số bản nháp khỏi Used-In authoritative, không gộp thành một số', async () => {
+    stub([entry()])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    expect(within(card).getByTestId('library-card-draft-usage')).toBeVisible()
+    expect(within(card).getByTestId('library-card-draft-usage')).toHaveTextContent('POU trong bản nháp')
+    /* `toBeVisible`, không chỉ `toHaveTextContent`: một `hidden` trên dòng này
+       vẫn để text nằm trong cây, nên khẳng định về nội dung sẽ xanh trong khi
+       người dùng không đọc được gì — và "0 POU trong bản nháp" lại một mình
+       đứng đó, đúng cái gộp mà lát này sinh ra để chặn. */
+    expect(within(card).getByTestId('library-card-sealed-usage')).toBeVisible()
+    expect(within(card).getByTestId('library-card-sealed-usage'))
+      .toHaveTextContent('nơi dùng đã niêm phong: xem khay Nơi sử dụng')
+    /* Và thẻ KHÔNG được tự gọi Used-In: đó chính là 200 request kia. */
+    const calls = client.request.mock.calls.map((call) => call[0])
+    expect(calls).not.toContain('listProgrammingLibraryUsages')
+  })
+
+  /* Tương thích đọc từ HỢP ĐỒNG. Trường vắng ⇒ `UNKNOWN`, và `UNKNOWN` phải
+     hiện ra: im lặng làm một khối chưa ai đo trông hệt khối đã đo và đạt. */
+  it('hiện tương thích khi khác COMPATIBLE, và không đoán từ version', async () => {
+    stub([entry({ compatibility: { state: 'REQUIRES_MIGRATION', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: 'lệch version' } })])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    expect(within(card).getByTestId('library-card-compatibility'))
+      .toHaveTextContent('Cần nâng cấp phiên bản thư viện')
+  })
+
+  it('thiếu trường compatibility là CHƯA ĐO ĐƯỢC, không phải "không sao"', async () => {
+    stub([entry()])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    expect(within(card).getByTestId('library-card-compatibility'))
+      .toHaveTextContent('Chưa đo được tương thích')
+  })
+
+  it('COMPATIBLE thì KHÔNG thêm dòng nào — nhiễu cũng là một cách nói dối', async () => {
+    stub([entry({ compatibility: { state: 'COMPATIBLE', requiredVersion: '1.0.0', availableVersion: '1.0.0', reason: null } })])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    expect(within(card).queryByTestId('library-card-compatibility')).toBeNull()
+  })
+
+  /* Yêu thích dùng CHUNG kho với Quick Library: cùng túi tuỳ chọn, cùng khoá
+     `scope/entryId`. Một kho thứ hai sẽ cho hai danh sách sao khác nhau cho
+     cùng một khối, và người dùng không biết bên nào là bên họ vừa bấm. */
+  it('gắn sao ghi vào ĐÚNG kho tuỳ chọn dùng chung, khoá theo scope/entryId', async () => {
+    stub([entry()])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    /* Ngôi sao là ANH EM của nút thẻ, không nằm trong nó: `<button>` lồng
+       `<button>` là HTML không hợp lệ. Hỏi từ ô chứa cả hai. */
+    const cell = card.closest('li') as HTMLElement
+    const star = within(cell).getByTestId('library-card-favorite')
+    expect(star).toHaveAttribute('aria-pressed', 'false')
+    /* Nhãn phải CHỨA tên khối đang hiện. Ba nút quanh đây cùng nói về một khối;
+       một nhãn "Yêu thích" trống không, lặp trên 200 thẻ, là thứ trình đọc màn
+       hình đọc ra 200 lần giống hệt nhau. (Chính ràng buộc này khiến truy vấn
+       `getByRole('button', { name: /TÊN/ })` không còn dùng được cho thẻ.) */
+    expect(star).toHaveAccessibleName(expect.stringContaining('SCALE_LIN'))
+    /* Vùng chạm ≥ 24 px (WCAG 2.5.8). jsdom không có layout nên đo bằng lớp
+       tiện ích — nó là nơi quyết định được ghi ra, và một lần đổi xuống 1rem
+       phải làm test đỏ. */
+    expect(star.className).toContain('min-h-[1.75rem]')
+    expect(star.className).toContain('min-w-[1.75rem]')
+    fireEvent.click(star)
+    await waitFor(() => expect(preferences.put).toHaveBeenCalled())
+    const payload = preferences.put.mock.calls[preferences.put.mock.calls.length - 1][0] as Record<string, unknown>
+    expect(payload.programmingLibrary).toEqual({ favorites: [`PROJECT/${ENTRY_ID}`], recent: [] })
+    await waitFor(() => expect(within(cell).getByTestId('library-card-favorite'))
+      .toHaveAttribute('aria-pressed', 'true'))
+  })
+
+  /* Bấm sao KHÔNG được mở khay chi tiết: hai hành động khác nhau trên cùng một
+     thẻ, và gộp chúng lại thì mỗi lần gắn sao là một lần đổi URL. */
+  it('bấm sao không mở khay chi tiết', async () => {
+    stub([entry()])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    const cell = card.closest('li') as HTMLElement
+    fireEvent.click(within(cell).getByTestId('library-card-favorite'))
+    await waitFor(() => expect(preferences.put).toHaveBeenCalled())
+    expect(lastLocation).not.toContain('entry=')
+  })
+
+  /* `SPEC-PGM04-VISUAL-001` §5 — số điểm dừng `Tab` của lưới là một HẰNG SỐ,
+     không tỉ lệ với số thẻ. Thẻ nay có hai nút, nên hằng số là 2; điều bị cấm
+     là 2N. Kiểm bằng một lưới 200 thẻ chứ không bằng ba thẻ: ba thẻ thì 2N và
+     một hằng số trông không khác nhau mấy. */
+  it('lưới 200 thẻ vẫn chỉ tốn một hằng số điểm dừng Tab', async () => {
+    const many = Array.from({ length: 200 }, (_, index) => entry({
+      entryId: `${index}`.padStart(8, '0') + '-4444-4444-8444-444444444444',
+      name: `KHOI_${index}`,
+    }))
+    stub(many)
+    renderPage()
+    await waitFor(() => expect(screen.getAllByTestId('library-block-card')).toHaveLength(200))
+    const list = screen.getByRole('list', { name: /Danh sách khối Thư viện điều khiển/ })
+    const stops = [...list.querySelectorAll('button')].filter((node) => node.getAttribute('tabindex') === '0')
+    expect(stops).toHaveLength(2)
+    // Và đúng một trong hai là THẺ, không phải hai ngôi sao.
+    expect(stops.filter((node) => node.dataset.testid === 'library-block-card')).toHaveLength(1)
+  })
+
+  /* Chữ dài không được cắt mất thông tin quyết định. `line-clamp` cho mô tả là
+     có chủ đích; TÊN và CHỮ KÝ thì phải còn nguyên trong cây (truncate bằng CSS
+     vẫn giữ text, `title` mang bản đầy đủ) để copy và để trình đọc màn hình
+     đọc được. */
+  it('tên và chữ ký dài vẫn còn NGUYÊN trong cây, không bị cắt mất chữ', async () => {
+    const longName = 'KHOI_' + 'X'.repeat(80)
+    stub([entry({ name: longName, description: 'M'.repeat(400) })])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    expect(within(card).getByText(longName)).toBeInTheDocument()
+    expect(card.textContent).toContain(`${longName}(SP: REAL, PV: REAL) → CV: REAL`)
+  })
+
+  /* Trường VẮNG hiện `—` KÈM lý do. Ô trống đọc như "đã điền rồi và nội dung
+     rỗng", nên người dùng sẽ không đi tìm chỗ để điền. */
+  it('thiếu phân loại và mô tả thì nói ra, không để trống', async () => {
+    stub([entry({ category: undefined, description: undefined })])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    expect(within(card).getByText('— chưa phân loại')).toBeInTheDocument()
+    expect(within(card).getByText('— chưa có mô tả')).toBeInTheDocument()
+  })
+
+  it('REVIEW_REQUIRED và DEPRECATED cùng hiện khi cùng đúng', async () => {
+    stub([entry({ featureState: 'REVIEW_REQUIRED', libraryState: 'DEPRECATED' })])
+    renderPage()
+    const card = await screen.findByTestId('library-block-card')
+    expect(within(card).getByText('Chờ review Controls/Safety')).toBeInTheDocument()
+    expect(within(card).getByText('Ngừng sử dụng')).toBeInTheDocument()
   })
 })
 

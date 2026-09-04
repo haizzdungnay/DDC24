@@ -8,6 +8,48 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-08` Thẻ khối PGM-04: Yêu thích dùng chung kho, tương thích nói ra, và hai loại nơi dùng không còn gộp làm một (#453, 2026-09-04)
+
+- **Triệu chứng.** Thẻ có tên, kind, phân loại, chữ ký, mô tả, version và số POU bản nháp — nhưng thiếu ba
+  thứ trong chính danh sách của task, và thiếu theo cách **nói dối** chứ không theo cách bỏ trống:
+  1. **Không có Yêu thích.** Sao chỉ tồn tại ở Quick Library, nên người dùng gắn sao ở bề mặt chèn nhanh rồi
+     mở Control Library và không thấy gì — hai màn hình cùng nói về một khối, một bên nhớ, một bên không.
+  2. **Không hiện `compatibility`.** Trường ấy đã trên dây từ `T61-101` và đã fail-closed ở mô hình, nhưng thẻ
+     không vẽ nó — một khối `REQUIRES_MIGRATION` trông hệt khối bình thường, và người vận hành nâng version
+     mà không biết mình đang nâng.
+  3. **Một con số "nơi dùng" cho hai sự thật.** Thẻ hiện `N POU trong bản nháp` — đúng phạm vi, đúng nhãn —
+     nhưng không nói gì về phần còn lại, nên `0` đọc thành "không ai dùng khối này". Đó là câu mời người ta
+     xoá một khối có thể đang chạy ở Revision đã niêm phong hoặc ở Project khác.
+- **Cách sửa.** Sao trên thẻ dùng **chung kho** với Quick Library (cùng túi `programmingLibrary`, cùng khoá
+  `libraryEntryKey` = `scope/entryId` từ `T61-203`). `compatibility` hiện khi khác `COMPATIBLE`, và `UNKNOWN`
+  **cũng hiện** — im lặng ở đó là một câu khẳng định. Dòng nơi dùng tách làm hai: một dòng cho bản nháp của
+  Project đang mở, một dòng chỉ sang khay Nơi sử dụng.
+- **Vì sao thẻ KHÔNG tự đo Used-In.** `GET /library-usages` là một request cho mỗi khối; một lưới 200 thẻ sẽ
+  bắn 200 request cho những khối không ai định xem — đúng lý do `T61-306` đã tách tiêu điểm khỏi lựa chọn.
+  Nên thẻ nói ra con số nó cầm là con số **nào** và phần còn lại đo ở đâu, thay vì đo hộ. **Cần gì để mở:**
+  một đường Used-In theo **lô** (nhiều `entryId` một lần gọi) ở `listProgrammingLibraryUsages`.
+- **Nút thứ hai trên thẻ, và cái giá của nó.** `<button>` lồng `<button>` là HTML không hợp lệ, nên sao là
+  **anh em** của nút thẻ trong cùng ô. Cả hai cùng nhận `tabIndex` luân phiên: số điểm dừng `Tab` của lưới
+  vẫn là một **hằng số** (2), không tỉ lệ với số thẻ — đúng điều `SPEC-PGM04-VISUAL-001` §5 bảo vệ; cho sao
+  `tabIndex={-1}` sẽ là một chức năng không ai dùng được bằng bàn phím. Vùng chạm 28 px, trên ngưỡng 24 px
+  của WCAG 2.5.8.
+- **Hệ quả kéo theo ở test.** Nhãn của sao **chứa tên khối** (WCAG 2.5.3), nên
+  `getByRole('button', { name: /TÊN/ })` khớp cả hai nút: 33 truy vấn trong `LibraryPage.test.tsx` chuyển sang
+  hỏi đúng `data-testid` của thẻ, và e2e đếm **thẻ** thay vì đếm `button` (vốn nay ra 2N). Nới lỏng nhãn của
+  sao sẽ dễ hơn, nhưng nó tạo ra 200 nút mang cùng một tên cho trình đọc màn hình.
+- **Bằng chứng.** 15/15 phép tiêm lỗi đỏ. Ba phép tiêm XANH ở vòng đầu và **cả ba là lỗi của test**: khẳng
+  định về nội dung mà không khẳng định **tính nhìn thấy** (một `hidden` vẫn để text trong cây, nên "0 POU
+  trong bản nháp" lại một mình đứng đó); không ai kiểm nhãn của sao có chứa tên khối; không ai kiểm vùng chạm.
+- **Một lỗi quy trình đã tự sửa.** Vòng cổng FE đầu tiên chạy **song song** với vòng tiêm lỗi, mà bộ tiêm sửa
+  file nguồn rồi khôi phục — nên nó đọc phải một cây đang bị tiêm và báo đỏ một test không liên quan. Số đo
+  dưới đây đo lại trên cây sạch.
+- **Số đo cục bộ (CI chưa cấp runner — `#414`).** layout `17 PASS / 0 FAIL` · `ctest 1443/1443` ·
+  Go `vet` sạch + `21 gói ok` · FE `223 tệp / 2728 test` · `npm run lint` + `npm run build` sạch ·
+  Playwright `e2e/programming.spec.ts -g 'PGM-04'` `18 passed / 4 skipped`.
+- **Phạm vi tệp.** `apps/web-ui/src/features/programming/library/{LibraryBlockCard.tsx,LibraryCardGrid.tsx,
+  LibraryPage.tsx}` + test + `e2e/programming.spec.ts`. Không chạm tệp của làn A.
+
+
 ### Added — `ISS-PIO-09` Hàng Point hiện định danh theo nguồn (+ nhãn UO) (#395, 2026-09-04)
 
 - **Triệu chứng.** `PointCatalogPane` hiện `category:deviceId:pointId`. Một điểm Modbus đọc ra
