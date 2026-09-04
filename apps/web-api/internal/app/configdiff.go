@@ -32,6 +32,26 @@ const (
 	configDiffMaxValue  = 40
 )
 
+/* mechanicalConfigKey nhận diện trường đổi theo MÁY, không theo Ý ĐỊNH người dùng.
+ *
+ * `ISS-PIO-37` — vì sao phải lọc chứ không ghi hết: tóm tắt có trần
+ * `configDiffMaxFields = 8` trường. Một lần lưu cấu hình Point luôn bump
+ * `revision`, đổi `checksum`, và bump `generation` của MỌI điểm ảo — tức chỉ
+ * riêng nhiễu cơ học đã có thể vượt trần và đẩy thay đổi THẬT ra ngoài tóm tắt.
+ * Khi đó vết audit vẫn "có nội dung", nhưng nội dung ấy không trả lời được câu
+ * hỏi duy nhất người ta hỏi lúc điều tra sự cố: người dùng đã đổi cái gì.
+ *
+ * Đây KHÔNG phải giấu thông tin: `revision` đi ra ngoài trong chính phản hồi
+ * API và trong tên vết audit, còn `generation` là số nội bộ của không gian tên
+ * điểm. Cái bị bỏ là bản sao thừa của chúng bên trong tóm tắt khác biệt. */
+func mechanicalConfigKey(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "revision", "checksum", "generation":
+		return true
+	}
+	return false
+}
+
 // sensitiveConfigKey nhận diện trường không được ghi giá trị vào nhật ký.
 func sensitiveConfigKey(key string) bool {
 	lower := strings.ToLower(key)
@@ -88,6 +108,9 @@ func collectDiff(prefix string, before, after map[string]any, changes *[]string)
 		keys[key] = struct{}{}
 	}
 	for key := range keys {
+		if mechanicalConfigKey(key) {
+			continue
+		}
 		path := key
 		if prefix != "" {
 			path = prefix + "." + key
@@ -105,6 +128,13 @@ func collectDiff(prefix string, before, after map[string]any, changes *[]string)
 				newNested = map[string]any{}
 			}
 			collectDiff(path, oldNested, newNested, changes)
+			continue
+		}
+
+		oldList, oldIsList := oldValue.([]any)
+		newList, newIsList := newValue.([]any)
+		if (oldIsList || !hasOld) && (newIsList || !hasNew) && (oldIsList || newIsList) {
+			collectListDiff(path, oldList, newList, changes)
 			continue
 		}
 
@@ -143,4 +173,120 @@ func formatDiffValue(key string, value any, present bool) string {
 		return "(rỗng)"
 	}
 	return text
+}
+
+/* collectListDiff so hai MẢNG cấu hình theo DANH TÍNH phần tử.
+ *
+ * `ISS-PIO-37` — vì sao cần: mọi cấu hình Point đều là mảng (`io.ao[]`,
+ * `virtual_points.items[]`, `fieldbus.points[]`). Bản trước của `collectDiff`
+ * chỉ đệ quy vào `map`, nên gặp mảng nó so NGUYÊN KHỐI và in ra một cục JSON bị
+ * cắt ở 40 ký tự:
+ *
+ *     items: [{"channel":0,"enabled":true,"generation… -> [{"boundPointId":"AV-01"…
+ *
+ * Tóm tắt đó tồn tại nhưng không nói được trường nào đổi — tức tính năng "vết
+ * audit mang khác biệt" có mặt mà vô dụng cho đúng nhóm cấu hình nguy hiểm nhất.
+ *
+ * Ghép theo DANH TÍNH chứ không theo CHỈ SỐ: xoá một điểm ở đầu mảng làm mọi
+ * chỉ số phía sau dịch một bậc, và so theo chỉ số sẽ báo "tất cả đều đổi" —
+ * lại một tóm tắt đúng về mặt kỹ thuật mà vô dụng với người đọc.
+ */
+func collectListDiff(path string, before, after []any, changes *[]string) {
+	beforeKeys, beforeByKey, beforeKeyed := indexListByIdentity(before)
+	afterKeys, afterByKey, afterKeyed := indexListByIdentity(after)
+	if !beforeKeyed || !afterKeyed {
+		// Mảng giá trị đơn (cổng, chuỗi…): so theo chỉ số là đúng, vì ở đó vị
+		// trí CHÍNH LÀ danh tính.
+		collectIndexedListDiff(path, before, after, changes)
+		return
+	}
+
+	seen := map[string]bool{}
+	ordered := append(append([]string{}, beforeKeys...), afterKeys...)
+	for _, key := range ordered {
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		oldItem, hasOld := beforeByKey[key]
+		newItem, hasNew := afterByKey[key]
+		itemPath := fmt.Sprintf("%s[%s]", path, key)
+		switch {
+		case !hasOld:
+			*changes = append(*changes, itemPath+": (không có) -> đã thêm")
+		case !hasNew:
+			*changes = append(*changes, itemPath+": đã xoá")
+		default:
+			collectDiff(itemPath, oldItem, newItem, changes)
+		}
+	}
+}
+
+func collectIndexedListDiff(path string, before, after []any, changes *[]string) {
+	max := len(before)
+	if len(after) > max {
+		max = len(after)
+	}
+	for i := 0; i < max; i++ {
+		var oldValue, newValue any
+		hasOld, hasNew := i < len(before), i < len(after)
+		if hasOld {
+			oldValue = before[i]
+		}
+		if hasNew {
+			newValue = after[i]
+		}
+		if hasOld && hasNew && sameJSON(oldValue, newValue) {
+			continue
+		}
+		itemPath := fmt.Sprintf("%s[%d]", path, i)
+		*changes = append(*changes, fmt.Sprintf("%s: %s -> %s", itemPath,
+			formatDiffValue(path, oldValue, hasOld), formatDiffValue(path, newValue, hasNew)))
+	}
+}
+
+/* identityListKeys là các khoá dùng làm danh tính phần tử, theo thứ tự ưu tiên.
+ *
+ * `ch` đứng trước `id` cho cấu hình I/O vì kênh là danh tính bền của một hàng
+ * `io_config.conf`; `id`/`pointId` phục vụ điểm ảo và điểm Modbus. */
+var identityListKeys = []string{"ch", "id", "pointId", "point_id", "bindingId", "tag", "name"}
+
+// indexListByIdentity trả về (thứ tự khoá, bảng tra, có khoá được không).
+//
+// `false` khi CÓ phần tử không phải object, hoặc không tìm được khoá danh tính,
+// hoặc khoá bị TRÙNG — trùng khoá nghĩa là nó không phải danh tính, và ghép theo
+// nó sẽ âm thầm bỏ mất một phần tử.
+func indexListByIdentity(list []any) ([]string, map[string]map[string]any, bool) {
+	keys := make([]string, 0, len(list))
+	byKey := make(map[string]map[string]any, len(list))
+	for _, raw := range list {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			return nil, nil, false
+		}
+		key, ok := identityOf(item)
+		if !ok {
+			return nil, nil, false
+		}
+		if _, duplicate := byKey[key]; duplicate {
+			return nil, nil, false
+		}
+		keys = append(keys, key)
+		byKey[key] = item
+	}
+	return keys, byKey, true
+}
+
+func identityOf(item map[string]any) (string, bool) {
+	for _, key := range identityListKeys {
+		value, present := item[key]
+		if !present {
+			continue
+		}
+		text := strings.TrimSpace(fmt.Sprintf("%v", value))
+		if text != "" && text != "<nil>" {
+			return text, true
+		}
+	}
+	return "", false
 }

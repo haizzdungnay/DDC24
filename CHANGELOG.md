@@ -8,6 +8,83 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-37` Audit `old → new` và chống lost-update cho cấu hình Point (#391, 2026-09-04)
+
+**Tiêu chí 1 — ghi `actor / time / old value / new value`.**
+
+- **Triệu chứng.** Chỉ **một** đường ghi cấu hình (`configapi.go`) dùng `ChangeWithDetail`. Ba đường
+  ghi Point thật — **io-bundle** (trang Ngõ ra/Ngõ vào dùng đường này), **virtual-points**,
+  **modbus.config.apply** — đều gọi `audit.Change(...)`, tức `detail=""`. Vết chỉ nói *"admin đã sửa
+  `virtual_points.conf` lúc 14:03"*.
+- **Cách sửa.** Cả ba nay dùng `ChangeWithDetail` + `summarizeConfigDiff`. Vết **thất bại** và
+  **rollback** cũng mang diff: chúng ghi thứ **đã được yêu cầu** nhưng không áp được — thứ duy nhất
+  giải thích được vì sao thiết bị vẫn ở cấu hình cũ.
+
+**Lỗi phát sinh, phát hiện khi nối và sửa cùng phiên: `summarizeConfigDiff` KHÔNG đi vào mảng.**
+
+- `collectDiff` chỉ đệ quy vào `map`. Gặp mảng nó so **nguyên khối** và in ra một cục JSON cắt ở 40
+  ký tự:
+
+  ```
+  items: [{"channel":0,"enabled":true,"generation… -> [{"boundPointId":"AV-01"…
+  ```
+
+- **Mọi** cấu hình Point đều là mảng (`io.ao[]`, `virtual_points.items[]`, `fieldbus.points[]`).
+  Nghĩa là tính năng "vết audit mang khác biệt" (`T57-3.14`) **có mặt nhưng vô dụng cho đúng nhóm
+  cấu hình nguy hiểm nhất** — và điều đó chỉ lộ ra khi có người nối nó vào ba đường ghi này.
+- **Cách sửa.** `collectListDiff` ghép phần tử theo **danh tính** (`ch`/`id`/`pointId`/…), không theo
+  chỉ số: xoá một điểm ở đầu mảng làm mọi chỉ số phía sau dịch một bậc, và so theo chỉ số sẽ báo
+  *"tất cả đều đổi"* — lại một tóm tắt đúng kỹ thuật mà vô dụng với người đọc. Khoá **trùng** ⇒ rơi
+  về so theo chỉ số, vì trùng nghĩa là nó không phải danh tính. Kết quả nay đọc được:
+  `items[VP1].tag: phong-cu -> hoi-moi`.
+- **Lọc nhiễu cơ học.** `revision`/`checksum`/`generation` bị loại khỏi tóm tắt. Trần là 8 trường;
+  mỗi lần lưu đều bump cả ba, nên chỉ riêng nhiễu đã đủ đẩy thay đổi **thật** ra ngoài — vết audit
+  khi ấy vẫn "có nội dung" mà không trả lời được câu duy nhất người điều tra hỏi.
+
+**Tiêu chí 2 — chống lost-update.**
+
+- **Hiện trạng khảo sát được:** io-bundle **có** `base_revision`; modbus **có** `base_revision`;
+  binding Programming **có** ETag. **Virtual Point không có gì.**
+- **Triệu chứng.** Hai tab cùng mở danh sách điểm ảo, cùng sửa, cùng Lưu. Tab lưu sau **đè trọn**
+  thay đổi của tab lưu trước, và không ai được báo. `pointConfigMu` chỉ tuần tự hoá hai lời gọi
+  trong **cùng tiến trình**; nó không hề biết bản client đang sửa đã cũ.
+- **Cách sửa.** ETag/`If-Match` tiêu chuẩn HTTP. `GET` phát `ETag: "vp:<revision>"`; sửa/xoá/ghi-cả-
+  cấu-hình **bắt buộc** `If-Match`. Kiểm **trong** khoá — đọc revision ngoài khoá rồi mới khoá sẽ để
+  lọt đúng cửa sổ đua cần vá.
+- **Bắt buộc chứ không tuỳ chọn.** Một `If-Match` tuỳ chọn không chống được gì: client cũ cứ bỏ
+  trống là ghi đè như trước, và bề mặt API khi đó **hứa một sự bảo vệ mà nó không cưỡng chế**. Bắt
+  buộc thì hỏng ồn ào và sửa được; tuỳ chọn thì hỏng im lặng — đúng lớp lỗi đang vá.
+- **`428` cho THIẾU, `412` cho LỆCH** — hai mã vì hai cách khắc phục khác nhau: thiếu ⇒ client phải
+  gửi header; lệch ⇒ người dùng phải tải lại. Gộp cả hai vào 412 sẽ bảo một client cũ đi "tải lại",
+  việc không giúp gì.
+- **TẠO MỚI cố ý KHÔNG đòi `If-Match`.** Thêm một điểm không đè lên thay đổi của ai; `If-Match` là
+  phép so **phiên bản của một tài nguyên đã tồn tại**, mà ở đây không có phiên bản nào để so. Đòi nó
+  sẽ bắt người dùng tải lại danh sách trước mỗi lần thêm mà không ngăn được mất mát nào.
+- **Frontend.** `requestJson` mọc `onResponse` để đọc header. ETag được nhớ từ lần **đọc** gần nhất
+  và **không** làm mới trước khi ghi: lấy ETag mới ngay trước khi ghi sẽ luôn khớp và vì thế **tự
+  vô hiệu hoá** đúng phép kiểm này. Có test canh riêng điều đó.
+
+**Tiêu chí 3** — lệnh test output giữ TTL + audit — đã đóng ở `ISS-PIO-26` (#386).
+
+- **Kiểm chứng (đo lại trong phiên).**
+
+  | Cổng | Kết quả |
+  | --- | --- |
+  | `verify-project.sh --component layout` | 17 PASS / 0 FAIL, exit 0 |
+  | C++ configure / build / `ctest` | exit 0 / exit 0, **0 warning** / **1393/1393 pass** |
+  | Go `go vet` + `go test ./... -count=1` | sạch · **21 gói ok** |
+  | FE `vitest src` | **214 tệp / 2587 test PASS** |
+  | FE `npm run lint` / `npm run build` | exit 0 / exit 0, dư địa 41.87 KiB |
+
+  Tiêm lỗi 5/5 đều đỏ: (1) audit VP bỏ diff; (2) diff thôi đi vào mảng ⇒ 3 test đỏ; (3) bỏ `If-Match`
+  ở PUT cả cấu hình; (4) FE bỏ `If-Match` ⇒ 2 test đỏ; (5) FE làm mới ETag trước khi ghi. Khôi phục
+  ⇒ xanh. Mọi phép tiêm đều tự `assert` là nó đã sửa được mã.
+
+  **Năm test cũ đỏ khi bật `If-Match`** — không phải sản phẩm sai, cũng không phải test sai: chúng
+  chỉ chưa biết về điều kiện mới. Thêm helper `withCurrentVPETag` đọc revision thật thay vì gõ cứng
+  một ETag (ETag gõ cứng sẽ mục theo kiểu vẫn-xanh khi bố cục revision đổi).
+
+
 ### Fixed — `ISS-PIO-34` VP trên slot AV khai `integer` không map được vào biến ST (2026-09-04)
 
 - **Triệu chứng.** `AV-05` (`VP_AHU_STATE`, enum trạng thái 0..8) bị chặn ở **cả hai chiều** với lý

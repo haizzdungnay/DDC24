@@ -262,6 +262,8 @@ func (a *App) handleListVirtualPoints(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// `ISS-PIO-37`: ETag đi kèm danh sách để client có cơ sở gửi `If-Match`.
+	a.setVirtualPointETag(w)
 	writeJSON(w, http.StatusOK, normalizeVirtualPointsConfig(cfg).Items)
 }
 
@@ -326,6 +328,12 @@ func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 	a.pointConfigMu.Lock()
 	defer a.pointConfigMu.Unlock()
 
+	// `ISS-PIO-37` — chống lost-update. Kiểm TRONG khoá: đọc revision ngoài
+	// khoá rồi mới khoá sẽ để lọt đúng cửa sổ đua mà phép kiểm này vá.
+	if !a.requireVirtualPointPrecondition(w, r) {
+		return
+	}
+
 	id := canonicalVirtualPointID(r.PathValue("id"))
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "missing virtual point id")
@@ -379,6 +387,12 @@ func (a *App) handleUpdateVirtualPoint(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleDeleteVirtualPoint(w http.ResponseWriter, r *http.Request) {
 	a.pointConfigMu.Lock()
 	defer a.pointConfigMu.Unlock()
+
+	// `ISS-PIO-37` — chống lost-update. Kiểm TRONG khoá: đọc revision ngoài
+	// khoá rồi mới khoá sẽ để lọt đúng cửa sổ đua mà phép kiểm này vá.
+	if !a.requireVirtualPointPrecondition(w, r) {
+		return
+	}
 
 	id := canonicalVirtualPointID(r.PathValue("id"))
 	if id == "" {
@@ -493,7 +507,16 @@ func (a *App) writeVirtualPointsConfig(r *http.Request, cfg ConfigVirtualPoints,
 	if principal := principalFromContext(r.Context()); principal != nil {
 		user = principal.Username
 	}
-	a.audit.Change(user, "virtual-points."+op, configGroupVirtualPoints.file, "applied", r.RemoteAddr)
+	/* `ISS-PIO-37` — vết audit mang GIÁ TRỊ CŨ → GIÁ TRỊ MỚI.
+	 *
+	 * Trước đây dòng này chỉ nói "admin đã sửa virtual_points.conf lúc 14:03".
+	 * Cấu hình điểm ảo quyết định lệnh ghi ra cơ cấu chấp hành; không truy được
+	 * ai đổi trường nào thì mọi phân tích sự cố sau đó đều là phỏng đoán.
+	 *
+	 * Diff so `current` (bản trên đĩa trước khi ghi) với `cfg` (bản sắp ghi) —
+	 * đúng hai thứ mà câu hỏi "đổi cái gì" cần. */
+	a.audit.ChangeWithDetail(user, "virtual-points."+op, configGroupVirtualPoints.file, "applied", r.RemoteAddr,
+		summarizeConfigDiff(current, cfg))
 	return nil
 }
 

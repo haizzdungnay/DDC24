@@ -189,12 +189,21 @@ func (a *App) handlePutConfigSafeState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleGetConfigVirtualPoints(w http.ResponseWriter, r *http.Request) {
+	// `ISS-PIO-37`: ETag để client có cơ sở gửi `If-Match` khi ghi lại cả cấu hình.
+	a.setVirtualPointETag(w)
 	handleGetConfig(a, w, configGroupVirtualPoints, defaultVirtualPointsConfig())
 }
 
 func (a *App) handlePutConfigVirtualPoints(w http.ResponseWriter, r *http.Request) {
 	a.pointConfigMu.Lock()
 	defer a.pointConfigMu.Unlock()
+
+	/* `ISS-PIO-37` — đây là ca lost-update kinh điển nhất: ghi đè TOÀN BỘ cấu
+	 * hình điểm ảo bằng một bản client tải về lúc trước. Không có phép kiểm này
+	 * thì mọi thay đổi xảy ra giữa lúc tải và lúc lưu đều biến mất không dấu vết. */
+	if !a.requireVirtualPointPrecondition(w, r) {
+		return
+	}
 
 	beforeVP, err := readConfig(a, configGroupVirtualPoints, defaultVirtualPointsConfig())
 	if err != nil {

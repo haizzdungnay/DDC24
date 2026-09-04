@@ -168,7 +168,11 @@ func (a *App) applyIOBundle(r *http.Request, ioCfg ConfigIO, safeCfg ConfigSafeS
 		// Có BẰNG CHỨNG là phần cứng không nhận: phục hồi cấu hình hợp lệ trước
 		// đó thay vì để bo chạy một mode khác với mode đang hiển thị.
 		restore()
-		a.audit.Change(user, "config.io-bundle", "io_config.conf+io_safe_state.conf", "rollback_readback", r.RemoteAddr)
+		/* Vết rollback cũng mang diff: nó ghi lại thứ ĐÃ ĐƯỢC YÊU CẦU nhưng
+		 * phần cứng từ chối. Bỏ trống ở đây sẽ để lại một vết "đã phục hồi" mà
+		 * không ai biết đã suýt áp cái gì. */
+		a.audit.ChangeWithDetail(user, "config.io-bundle", "io_config.conf+io_safe_state.conf", "rollback_readback", r.RemoteAddr,
+			summarizeIOBundleDiff(beforeIO, beforeSafe, ioCfg, safeCfg))
 		return ConfigPutResult{}, nil, fmt.Errorf("read-back thất bại; đã phục hồi revision %d: %s", currentRevision, activation.Reason)
 	}
 	if activation.Status != ActivationVerified {
@@ -176,6 +180,24 @@ func (a *App) applyIOBundle(r *http.Request, ioCfg ConfigIO, safeCfg ConfigSafeS
 		// đối không được im lặng. Nó đi ra ngoài như một cảnh báo có tên.
 		warnings = append(warnings, activation.Reason)
 	}
-	a.audit.Change(user, "config.io-bundle", "io_config.conf+io_safe_state.conf", "success", r.RemoteAddr)
+	/* `ISS-PIO-37` — vết audit mang GIÁ TRỊ CŨ → GIÁ TRỊ MỚI.
+	 *
+	 * Gộp `io` và `safe_state` vào MỘT tóm tắt vì chúng được ghi như một giao
+	 * dịch: tách đôi sẽ để lại hai vết mà không vết nào nói được trạng thái an
+	 * toàn đã đổi cùng lúc với mode kênh hay không — đúng cặp cần đối chiếu khi
+	 * một ngõ ra hành xử lạ sau một lần lưu. */
+	a.audit.ChangeWithDetail(user, "config.io-bundle", "io_config.conf+io_safe_state.conf", "success", r.RemoteAddr,
+		summarizeIOBundleDiff(beforeIO, beforeSafe, ioCfg, safeCfg))
 	return ConfigPutResult{Result: "success", Applied: true, Reload: reloadIOBundle, Warnings: warnings, Revision: revision, Checksum: checksum, Activation: &activation}, nil, nil
+}
+
+// summarizeIOBundleDiff gộp hai tệp của một giao dịch io-bundle vào một tóm tắt,
+// với đường dẫn có tiền tố `io.` / `safe_state.` để người đọc biết trường nằm ở
+// tệp nào (`ISS-PIO-37`).
+func summarizeIOBundleDiff(beforeIO ConfigIO, beforeSafe ConfigSafeState, afterIO ConfigIO, afterSafe ConfigSafeState) string {
+	type bundle struct {
+		IO   ConfigIO        `json:"io"`
+		Safe ConfigSafeState `json:"safe_state"`
+	}
+	return summarizeConfigDiff(bundle{beforeIO, beforeSafe}, bundle{afterIO, afterSafe})
 }

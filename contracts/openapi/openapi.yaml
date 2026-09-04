@@ -201,6 +201,13 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            ETag:
+              description: >
+                ISS-PIO-37 — revision hiện tại của cấu hình điểm ảo. Gửi lại giá
+                trị này trong `If-Match` khi sửa/xoá; nếu không, một lần lưu đồng
+                thời sẽ đè mất thay đổi của người khác mà không ai được báo.
+              schema: { type: string, example: "\"vp:7\"" }
           content:
             application/json:
               schema:
@@ -209,7 +216,10 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
     post:
       summary: Create Virtual Point (admin)
-      description: Missing id is allocated as the first free VP1..VP464.
+      description: >
+        Missing id is allocated as the first free VP1..VP464.
+        ISS-PIO-37: tạo mới CỐ Ý không đòi `If-Match` — thêm một điểm không đè lên
+        thay đổi của ai, nên không có phiên bản nào để so.
       x-rbac: [engineer, admin]
       requestBody:
         required: true
@@ -228,8 +238,14 @@ paths:
   /virtual-points/{id}:
     put:
       summary: Update Virtual Point (admin)
+      description: >
+        ISS-PIO-37 — bắt buộc `If-Match` lấy từ ETag của GET /virtual-points.
+        Thiếu ⇒ 428; lệch ⇒ 412. Hai mã khác nhau vì hai cách khắc phục khác
+        nhau: thiếu thì client phải gửi header, lệch thì người dùng phải tải lại.
       x-rbac: [engineer, admin]
-      parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
+      parameters:
+        - { $ref: "#/components/parameters/VirtualPointId" }
+        - { $ref: "#/components/parameters/IfMatchVirtualPoint" }
       requestBody:
         required: true
         content:
@@ -245,10 +261,15 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "412": { description: "If-Match lệch revision hiện tại — tải lại rồi thao tác lại." }
+        "428": { description: "Thiếu If-Match — đọc GET /virtual-points để lấy ETag." }
     delete:
       summary: Delete Virtual Point (admin)
+      description: ISS-PIO-37 — bắt buộc `If-Match`; xem PUT /virtual-points/{id}.
       x-rbac: [engineer, admin]
-      parameters: [ { $ref: "#/components/parameters/VirtualPointId" } ]
+      parameters:
+        - { $ref: "#/components/parameters/VirtualPointId" }
+        - { $ref: "#/components/parameters/IfMatchVirtualPoint" }
       responses:
         "200":
           description: OK
@@ -257,6 +278,8 @@ paths:
               schema: { $ref: "#/components/schemas/ConfigPutResult" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "412": { description: "If-Match lệch revision hiện tại — tải lại rồi thao tác lại." }
+        "428": { description: "Thiếu If-Match — đọc GET /virtual-points để lấy ETag." }
   /virtual-points/{id}/usage:
     get:
       summary: Nơi một Virtual Point đang được tham chiếu (viewer+)
@@ -2932,6 +2955,14 @@ components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
   parameters:
+    IfMatchVirtualPoint:
+      name: If-Match
+      in: header
+      required: true
+      description: >
+        ISS-PIO-37 — ETag lấy từ GET /virtual-points, dạng `"vp:<revision>"`.
+        `*` là ghi đè CÓ CHỦ ĐÍCH theo đúng ngữ nghĩa HTTP và được chấp nhận.
+      schema: { type: string, example: "\"vp:7\"" }
     ScheduleId:
       name: id
       in: path

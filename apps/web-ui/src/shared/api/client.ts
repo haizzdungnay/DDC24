@@ -114,7 +114,13 @@ function runDemoNetworkTransaction(action: NetcfgTransactionAction, payload: Net
   return demoNetcfgResponse ?? previous
 }
 
-type ApiRequestInit = RequestInit & { suppressAuthExpired?: boolean; timeoutMs?: number }
+type ApiRequestInit = RequestInit & {
+  suppressAuthExpired?: boolean
+  timeoutMs?: number
+  /** Được gọi với `Response` thô ngay khi có, để đọc header (ETag…) mà thân
+   *  JSON không mang. `ISS-PIO-37`. */
+  onResponse?: (response: Response) => void
+}
 
 /**
  * Trần thời gian mặc định cho một request.
@@ -193,7 +199,7 @@ function putDemoHistorianConfig(update: HistorianConfigUpdate): HistorianConfig 
 }
 
 export async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
-  const { suppressAuthExpired, timeoutMs, ...fetchInit } = init
+  const { suppressAuthExpired, timeoutMs, onResponse, ...fetchInit } = init
   const headers = new Headers(fetchInit.headers)
   for (const [key, value] of Object.entries(authHeaderProvider())) headers.set(key, value)
   if (fetchInit.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
@@ -220,6 +226,7 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
   } finally {
     window.clearTimeout(timer)
   }
+  onResponse?.(response)
   if (!suppressAuthExpired && response.status === 401) {
     window.dispatchEvent(new CustomEvent('mkddc:auth-expired'))
   }
@@ -952,6 +959,40 @@ function trendTimestamp(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+
+/* `ISS-PIO-37` — ETag của cấu hình điểm ảo, dùng cho `If-Match`.
+ *
+ * VÌ SAO CẦN: hai tab cùng mở danh sách điểm ảo, cùng sửa, cùng lưu — tab lưu
+ * sau đè trọn thay đổi của tab lưu trước và không ai được báo. Backend nay đòi
+ * `If-Match` cho mọi đường ghi có thể đè dữ liệu (sửa, xoá, ghi cả cấu hình).
+ *
+ * Bộ nhớ tạm này KHÔNG phải tối ưu tốc độ mà là tính đúng đắn: giá trị phải là
+ * ETag của lần ĐỌC mà người dùng đang nhìn, chứ không phải ETag mới nhất của
+ * server. Lấy ETag mới ngay trước khi ghi sẽ luôn khớp và vì thế vô hiệu hoá
+ * đúng phép kiểm này — client tự bỏ qua thay đổi của người khác rồi ghi đè.
+ */
+let virtualPointETag = ''
+
+function rememberVirtualPointETag(response: Response): void {
+  const value = response.headers.get('ETag')
+  if (value) virtualPointETag = value
+}
+
+/* Chưa có ETag (vào thẳng một trang sửa mà chưa qua danh sách) thì đọc một lần
+ * để lấy. Đây KHÔNG mâu thuẫn với ghi chú trên: ở đây người dùng chưa từng thấy
+ * một bản nào, nên bản vừa đọc chính là bản họ đang thao tác. */
+async function currentVirtualPointETag(): Promise<string> {
+  if (!virtualPointETag) {
+    await requestJson<VirtualPoint[]>('/virtual-points', { onResponse: rememberVirtualPointETag })
+  }
+  return virtualPointETag
+}
+
+/** Chỉ dùng cho test: xoá ETag đã nhớ để mỗi ca bắt đầu từ trạng thái sạch. */
+export function resetVirtualPointETagForTests(): void {
+  virtualPointETag = ''
+}
+
 export const apiClient = {
   async getHealth(): Promise<HealthResponse> {
     if (IS_DEMO) return getDemoHealth()
@@ -1120,16 +1161,20 @@ export const apiClient = {
 
   async getVirtualPoints(): Promise<VirtualPoint[]> {
     if (IS_DEMO) return getDemoVirtualPoints()
-    return requestJson<VirtualPoint[]>('/virtual-points')
+    return requestJson<VirtualPoint[]>('/virtual-points', { onResponse: rememberVirtualPointETag })
   },
 
+  /* Tạo mới KHÔNG gửi `If-Match`, và đó là quyết định chứ không phải sót: thêm
+     một điểm không đè lên thay đổi của ai, nên không có phiên bản nào để so.
+     Backend cũng cố ý không đòi — xem `virtualpoint_concurrency.go`. */
   async createVirtualPoint(point: Partial<VirtualPoint>): Promise<VirtualPoint> {
     if (IS_DEMO) {
       return putDemoVirtualPoint(point)
     }
     return requestJson<VirtualPoint>('/virtual-points', {
       method: 'POST',
-      body: JSON.stringify({ ...point, name: undefined })
+      body: JSON.stringify({ ...point, name: undefined }),
+      onResponse: rememberVirtualPointETag
     })
   },
 
@@ -1139,7 +1184,9 @@ export const apiClient = {
     }
     return requestJson<VirtualPoint>(`/virtual-points/${encodeURIComponent(point.id)}`, {
       method: 'PUT',
-      body: JSON.stringify({ ...point, name: undefined })
+      headers: { 'If-Match': await currentVirtualPointETag() },
+      body: JSON.stringify({ ...point, name: undefined }),
+      onResponse: rememberVirtualPointETag
     })
   },
 
@@ -1148,7 +1195,11 @@ export const apiClient = {
       deleteDemoVirtualPoint(id)
       return
     }
-    await requestJson(`/virtual-points/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    await requestJson(`/virtual-points/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'If-Match': await currentVirtualPointETag() },
+      onResponse: rememberVirtualPointETag
+    })
   },
 
   async getUserParams(): Promise<UserParamsConfig> {

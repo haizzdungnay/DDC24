@@ -125,7 +125,7 @@ func TestVirtualPointRejectsLogQuota(t *testing.T) {
 		items = append(items, VirtualPoint{ID: formatPointID("VP", i), Label: "Diag", SignalType: "float", Enabled: true, Writable: true, LogEnabled: true, LogIntervalMs: &interval, Value: 1})
 	}
 	body, _ := json.Marshal(ConfigVirtualPoints{Items: items})
-	req := newAuthRequest(http.MethodPut, "/api/v1/system/config/virtual-points", string(body), token)
+	req := withCurrentVPETag(t, app, newAuthRequest(http.MethodPut, "/api/v1/system/config/virtual-points", string(body), token))
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 
@@ -140,7 +140,7 @@ func TestVirtualPointUpdatePreservesMissingWritableFalse(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"items":[{"id":"VP1","label":"A","signalType":"float","enabled":true,"writable":false,"value":1}]}`), 0o644); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	req := newAuthRequest(http.MethodPut, "/api/v1/virtual-points/AV-001", `{"tag":"vp one","label":"B","signalType":"float","enabled":true,"value":2}`, token)
+	req := withCurrentVPETag(t, app, newAuthRequest(http.MethodPut, "/api/v1/virtual-points/AV-001", `{"tag":"vp one","label":"B","signalType":"float","enabled":true,"value":2}`, token))
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -198,7 +198,7 @@ func TestVirtualPointDeleteRemovesItem(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"items":[{"id":"VP1","label":"A","signalType":"float","enabled":true,"writable":true,"value":1}]}`), 0o644); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	req := newAuthRequest(http.MethodDelete, "/api/v1/virtual-points/AV-001", "", token)
+	req := withCurrentVPETag(t, app, newAuthRequest(http.MethodDelete, "/api/v1/virtual-points/AV-001", "", token))
 	w := httptest.NewRecorder()
 	app.Router().ServeHTTP(w, req)
 
@@ -241,7 +241,7 @@ func TestVirtualPointRecreateIncrementsPersistedGeneration(t *testing.T) {
 		t.Fatalf("first = %+v, want VP1 generation 1", first)
 	}
 
-	deleteReq := newAuthRequest(http.MethodDelete, "/api/v1/virtual-points/VP1", "", token)
+	deleteReq := withCurrentVPETag(t, app, newAuthRequest(http.MethodDelete, "/api/v1/virtual-points/VP1", "", token))
 	deleteResponse := httptest.NewRecorder()
 	router.ServeHTTP(deleteResponse, deleteReq)
 	if deleteResponse.Code != http.StatusOK {
@@ -288,7 +288,7 @@ func TestVirtualPointGenerationRecoversAfterNamespaceWriteFailure(t *testing.T) 
 	}
 
 	app.pointNamespaceWriter = writeConfigFileAtomic
-	deleteReq := newAuthRequest(http.MethodDelete, "/api/v1/virtual-points/VP1", "", token)
+	deleteReq := withCurrentVPETag(t, app, newAuthRequest(http.MethodDelete, "/api/v1/virtual-points/VP1", "", token))
 	deleteResponse := httptest.NewRecorder()
 	app.Router().ServeHTTP(deleteResponse, deleteReq)
 	if deleteResponse.Code != http.StatusOK {
@@ -487,4 +487,25 @@ func TestWriteVirtualPointValueWithBoundPointIdSyncsToCore(t *testing.T) {
 	if !called || id != "BV-01" || value != true {
 		t.Fatalf("ForcePointTTL call = id=%q value=%v called=%v, want BV-01/true", id, value, called)
 	}
+}
+
+/* withCurrentVPETag gắn `If-Match` hiện hành lên một request ghi Virtual Point.
+ *
+ * `ISS-PIO-37` bắt buộc `If-Match` cho UPDATE / DELETE / ghi-cả-cấu-hình, vì đó
+ * là ba đường có thể ĐÈ MẤT thay đổi của người khác. Test phải hành xử như một
+ * client thật: đọc revision hiện tại rồi khai nó ra. Helper này CỐ Ý đọc
+ * authority thay vì nhận một hằng số — một ETag gõ cứng sẽ mục ngay khi bố cục
+ * revision đổi, và mục theo kiểu vẫn-xanh.
+ *
+ * Lưu ý: helper KHÔNG dùng cho POST (tạo mới). Thêm một điểm mới không đè lên
+ * thay đổi của ai, nên ở đó không có phiên bản nào để so — xem chú thích trong
+ * `virtualpoint_concurrency.go`. */
+func withCurrentVPETag(t *testing.T, app *App, req *http.Request) *http.Request {
+	t.Helper()
+	authority, err := app.readPointNamespaceAuthority()
+	if err != nil {
+		t.Fatalf("đọc namespace authority để lấy ETag: %v", err)
+	}
+	req.Header.Set("If-Match", formatVirtualPointETag(authority.Revision))
+	return req
 }

@@ -329,14 +329,24 @@ func (a *App) handleApplyModbusConfig(w http.ResponseWriter, r *http.Request) {
 		candidate.State = webModbus.ConfigStateFailed
 		candidate.LastError = err.Error()
 		_ = store.Save(candidate)
-		a.audit.Change(principalName(r), "modbus.config.apply", configGroupFieldbus.file, "failed", r.RemoteAddr)
+		// Vết THẤT BẠI cũng mang diff: nó ghi thứ đã được yêu cầu nhưng không áp
+		// được, thứ duy nhất giải thích được vì sao thiết bị vẫn ở cấu hình cũ.
+		a.audit.ChangeWithDetail(principalName(r), "modbus.config.apply", configGroupFieldbus.file, "failed", r.RemoteAddr,
+			summarizeConfigDiff(active, candidate.Config))
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
 
 	store.RememberOperation(req.OperationID, result.Config.Revision)
 	_ = store.Discard()
-	a.audit.Change(principalName(r), "modbus.config.apply", configGroupFieldbus.file, "success", r.RemoteAddr)
+	/* `ISS-PIO-37` — vết audit mang GIÁ TRỊ CŨ → GIÁ TRỊ MỚI.
+	 *
+	 * `active` là cấu hình fieldbus ĐANG chạy trước khi apply, `result.Config`
+	 * là bản vừa áp. Một thay đổi Modbus đổi địa chỉ thanh ghi hay slave id sẽ
+	 * làm lệnh ghi đi sai thiết bị; vết "đã apply" không kèm trường nào đổi thì
+	 * không dựng lại được chuỗi nhân quả đó. */
+	a.audit.ChangeWithDetail(principalName(r), "modbus.config.apply", configGroupFieldbus.file, "success", r.RemoteAddr,
+		summarizeConfigDiff(active, result.Config))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"result":      "success",
 		"revision":    result.Config.Revision,
