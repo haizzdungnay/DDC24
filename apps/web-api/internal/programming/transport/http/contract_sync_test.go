@@ -447,3 +447,89 @@ func TestRevisionChangesDiffOpenAPIMatchesGoResponse(t *testing.T) {
 		t.Fatalf("ProgrammingRevisionChanges.nextCursor phải nullable:\n%s", nextCursor)
 	}
 }
+
+/*
+TestLibraryContractOpenAPIMatchesGoResponse — khoá read model Control Library
+(`T61-101`) vào contract.
+
+Phía Go KHÔNG có generator: struct phản hồi được viết tay, nên không có phép
+kiểm nào thì `tags` có thể mất `json` tag, `compatibility` có thể mọc thêm
+`omitempty`, hay một trường mới chỉ tồn tại ở docs mà không ai thấy — cho tới
+khi một client tin vào hợp đồng và đọc `undefined`.
+
+Enum `compatibility.state` đọc THẲNG từ hằng của lớp application thay vì chép
+chuỗi: một bản sao trong test chỉ chứng minh test khớp chính nó.
+*/
+func TestLibraryContractOpenAPIMatchesGoResponse(t *testing.T) {
+	spec := readProgrammingOpenAPI(t)
+
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingLibraryEntry", libraryEntryResponse{})
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingLibraryCompatibility",
+		libraryCompatibilityResponse{})
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingLibraryUsage",
+		programmingapplication.LibraryUsageView{})
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingLibraryUsageScope",
+		programmingapplication.LibraryUsageScope{})
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingLibraryUsageItem",
+		programmingapplication.LibraryUsageItem{})
+
+	assertOpenAPIEnum(t,
+		fieldSection(t, schemaSection(t, spec, "ProgrammingLibraryCompatibility"), "state", "requiredVersion"),
+		programmingapplication.LibraryCompatibilityStates)
+
+	/* `compatibility` phải là `required` VÀ không nullable. Cho nó vắng hay
+	   `null` là mời client đọc "chưa có thông tin" thành "không sao" — đúng cái
+	   kết luận mà `UNKNOWN` sinh ra để chặn. */
+	entry := schemaSection(t, spec, "ProgrammingLibraryEntry")
+	compatibility := fieldSection(t, entry, "compatibility", "presentationSha256")
+	if strings.Contains(compatibility, `"null"`) {
+		t.Fatalf("ProgrammingLibraryEntry.compatibility không được nullable:\n%s", compatibility)
+	}
+
+	/* Ba trường version/lý do thì NGƯỢC LẠI phải nullable: `null` là "đã xét,
+	   chưa đo được", và một trường vắng thì client không phân biệt được với
+	   "máy chủ cũ chưa biết trường này". */
+	compatibilitySchema := schemaSection(t, spec, "ProgrammingLibraryCompatibility")
+	for field, next := range map[string]string{
+		"requiredVersion": "availableVersion", "availableVersion": "reason", "reason": "",
+	} {
+		section := fieldSection(t, compatibilitySchema, field, next)
+		if !strings.Contains(section, `"null"`) {
+			t.Fatalf("ProgrammingLibraryCompatibility.%s phải nullable:\n%s", field, section)
+		}
+	}
+
+	/* `nextCursor` của Used-In phải nullable; `truncated` thì không. Hai trường
+	   này đi cùng nhau: `truncated` nói CÓ CÒN, `nextCursor` nói ĐỌC TIẾP BẰNG
+	   GÌ. Một `truncated: true` không có cursor là ngõ cụt. */
+	scope := schemaSection(t, spec, "ProgrammingLibraryUsageScope")
+	if strings.Contains(fieldSection(t, scope, "truncated", "items"), `"null"`) {
+		t.Fatalf("ProgrammingLibraryUsageScope.truncated không được nullable:\n%s", scope)
+	}
+	if !strings.Contains(fieldSection(t, scope, "nextCursor", ""), `"null"`) {
+		t.Fatalf("ProgrammingLibraryUsageScope.nextCursor phải nullable:\n%s", scope)
+	}
+
+	// Trần `tags` là số của hợp đồng §2.1, khoá bằng số tuyệt đối ở cả hai đầu.
+	tags := fieldSection(t, entry, "tags", "compatibility")
+	for _, want := range []string{"maxItems: 8", "maxLength: 24"} {
+		if !strings.Contains(tags, want) {
+			t.Fatalf("ProgrammingLibraryEntry.tags thiếu %q:\n%s", want, tags)
+		}
+	}
+	request := schemaSection(t, spec, "ProgrammingLibraryEntryRequest")
+	requestTags := fieldSection(t, request, "tags", "stateLayout")
+	for _, want := range []string{"maxItems: 8", "maxLength: 24"} {
+		if !strings.Contains(requestTags, want) {
+			t.Fatalf("ProgrammingLibraryEntryRequest.tags thiếu %q:\n%s", want, requestTags)
+		}
+	}
+}
+
+// Đường ghi phải khớp payload OpenAPI đúng như đường đọc — một trường chỉ có ở
+// một phía nghĩa là client gửi được thứ server bỏ qua, hoặc ngược lại.
+func TestLibraryEntryRequestOpenAPIMatchesGoRequest(t *testing.T) {
+	spec := readProgrammingOpenAPI(t)
+	assertSchemaMatchesGoResponse(t, spec, "ProgrammingLibraryEntryRequest",
+		upsertLibraryEntryRequest{})
+}

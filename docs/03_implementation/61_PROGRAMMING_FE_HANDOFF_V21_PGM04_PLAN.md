@@ -365,13 +365,32 @@ có contract machine-readable mới được `IMPLEMENT_READY=GO`.
 
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
-| `T61-101` | P0 | OpenAPI additive cho metadata/filter/compatibility/usage; stable errors và cursor tuple. | `T61-004/005` | `DONE` | 1,5 nd |
+| `T61-101` | P0 | OpenAPI additive cho metadata/filter/compatibility/usage; stable errors và cursor tuple. | `T61-004/005` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-01`) | 1,5 nd |
 | `T61-102` | P0 | Mở registry schema/generator cho metadata SYSTEM; tách executable `contentSha256` khỏi `presentationSha256/catalogRevision`; versionHistory/hash mutation test. | `T61-101` | `DONE` | 1,5 nd |
 | `T61-103` | P0 | Migration/store PROJECT metadata additive, backup/preflight/restart; không rewrite revision immutable. | `T61-101` | `DONE` | 1,5 nd |
 | `T61-104` | P0 | Used-In application/store projection cho Draft + sealed scope đã chốt, cursor và summary available/unavailable. | `T61-101` | `DONE` | 2 nd |
 | `T61-105` | P0 | HTTP route/validation/RBAC/audit/error mapping; read route cho bốn role, mutation giữ `program.edit`. | `T61-103/104` | `DONE` | 1 nd |
 | `T61-106` | P1 | Sinh lại client TS/registry C++/Go/TS, contract-sync và G1 re-pin cùng change-set. | `T61-102/105` | `DONE` | 0,5 nd |
 | `T61-107` | P0 | Go/generator tests: hostile input, >100 cursor, filter mismatch, SYSTEM immutable, usage restart, migration fail-closed. | `T61-102..106` | `DONE` | 1 nd |
+
+**Đính chính `T61-101` (`ISS-PGM04-01`, đo `2026-09-04`).** Trạng thái `DONE` ghi ở
+bảng trên đã KHÔNG khớp source: tại `main@18ca29d`, OpenAPI chỉ mở `category`,
+`description`, `presentationSha256` — `tags` và read model `compatibility` chưa
+tồn tại ở bất kỳ lớp nào, và Used-In không có `nextCursor` dù đã trả
+`truncated: true`. Lát `2026-09-04` thi hành phần còn thiếu và sửa hai lỗi đo
+được trong cùng phạm vi:
+
+- `upper()` của SQLite chỉ gấp ASCII, nên mệnh đề `q` phủ `description` KHÔNG
+  BAO GIỜ khớp một mô tả tiếng Việt khi từ khoá mang dấu — trên một sản phẩm
+  mà mọi mô tả đều viết bằng tiếng Việt, đó là một ô tìm kiếm im lặng bỏ sót gần
+  hết kết quả nó hứa phủ. Sửa bằng hàm SQL `mkddc_upper` dùng chính
+  `strings.ToUpper` của Go, để nhánh SQL và nhánh trong bộ nhớ gấp chữ theo cùng
+  một luật.
+- Route `GET /programming/library-usages` quy MỌI lỗi về `400`, nên store hỏng
+  cũng trả "request không hợp lệ". Lớp application nay trả sentinel
+  (`ErrInvalidRequest`/`ErrInvalidCursor`) và lớp HTTP phân biệt được 400 với 503.
+
+Bằng chứng là số đo cục bộ (`HOST`), không phải CI: repo chưa cấp runner (#414).
 
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.

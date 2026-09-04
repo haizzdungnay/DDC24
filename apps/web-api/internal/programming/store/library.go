@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,8 +13,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
+
+	"modernc.org/sqlite"
 
 	"mkddc-web/internal/programming/domain"
 )
@@ -42,6 +46,12 @@ const (
 	LibraryKindFunction      = "FUNCTION"
 	LibraryKindFunctionBlock = "FUNCTION_BLOCK"
 	LibraryKindConversion    = "CONVERSION"
+
+	/* `T61-101` / `LOCK-PGM04-CONTRACT-001` §2.1 — trần thẻ. Hai hằng này là
+	   NGUỒN cho cả trigger SQL, lớp application và hợp đồng OpenAPI; test khoá
+	   chúng bằng số tuyệt đối chứ không so lại với chính chúng. */
+	libraryMaxTags     = 8
+	libraryMaxTagRunes = 24
 )
 
 var (
@@ -130,8 +140,18 @@ type LibraryEntry struct {
 	   `nil` nghĩa là "chưa ai điền", KHÁC chuỗi rỗng nghĩa là "đã điền rỗng có
 	   chủ đích". Phân biệt này đi thẳng ra tới màn hình: `nil` render `—`.
 	*/
-	Category           *string
-	Description        *string
+	Category    *string
+	Description *string
+	/*
+	   `T61-101` — thẻ. `nil` = "chưa ai gắn thẻ"; mảng rỗng KHÔNG phải một
+	   trạng thái thứ ba (đường ghi quy `[]` về `nil`), khác `Description` nơi
+	   chuỗi rỗng là một mô tả đã viết và cố ý để trống.
+
+	   Giá trị ở đây LUÔN là dạng đã chuẩn hoá của `libraryNormalizeTags`: đã
+	   trim, hạ chữ thường, khử trùng lặp, sắp tăng dần. Đọc lên là dùng được
+	   ngay, không nơi nào phải chuẩn hoá lại.
+	*/
+	Tags               []string
 	PresentationSHA256 []byte
 }
 
@@ -185,6 +205,9 @@ type UpsertProjectLibraryEntryParams struct {
 	   lại sẽ làm người dùng không xoá được một mô tả đã viết. */
 	Category    *string
 	Description *string
+	/* `T61-101` — thẻ đã chuẩn hoá. `nil` = xoá hết thẻ của entry (upsert là
+	   phép GHI ĐÈ toàn phần), giống mọi trường optional khác của request. */
+	Tags []string
 	// NewLibraryRevisionID chỉ dùng khi LibraryRevisionID rỗng và Project chưa
 	// có Draft library nào. Store KHÔNG tự sinh UUID: sinh ID bên trong
 	// transaction làm cùng một request retry ra hai identity khác nhau.
@@ -544,8 +567,8 @@ func (s *Store) UpsertProjectLibraryEntry(ctx context.Context, params UpsertProj
 	if _, err := tx.ExecContext(ctx, `INSERT INTO library_entries(
 		library_revision_id,entry_id,kind,name,name_folded,feature_state,signature_json,content_sha256,
 		language,source_blob,interface_json,dependencies_json,state_layout_version,state_size_bytes,state_layout_sha256,
-		category,description,presentation_sha256)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		category,description,tags,presentation_sha256)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(library_revision_id,entry_id) DO UPDATE SET
 		kind=excluded.kind,name=excluded.name,name_folded=excluded.name_folded,
 		feature_state=excluded.feature_state,signature_json=excluded.signature_json,
@@ -553,7 +576,7 @@ func (s *Store) UpsertProjectLibraryEntry(ctx context.Context, params UpsertProj
 		interface_json=excluded.interface_json,dependencies_json=excluded.dependencies_json,
 		state_layout_version=excluded.state_layout_version,state_size_bytes=excluded.state_size_bytes,
 		state_layout_sha256=excluded.state_layout_sha256,
-		category=excluded.category,description=excluded.description,
+		category=excluded.category,description=excluded.description,tags=excluded.tags,
 		presentation_sha256=excluded.presentation_sha256`, libraryEntrySQLArgs(entry)...); err != nil {
 		if strings.Contains(err.Error(), "library_entries_name_idx") || strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return LibraryEntryMutation{}, ErrAlreadyExists
@@ -977,13 +1000,20 @@ func (s *Store) SearchLibraryEntries(ctx context.Context, params LibrarySearchPa
 	if params.Scope != LibraryScopeSystem && params.ProjectID != "" {
 		arguments := []any{params.ProjectID, params.Kind, params.Kind,
 			params.Category, params.Category,
-			query, query, query, query}
+			query, query, query, query, query}
 		arguments = append(arguments, librarySearchAfterSQLArgs(params.After, params.Limit)...)
+		/* `json_each` chứ không `instr` trên cả chuỗi JSON: quét thô sẽ khớp cả
+		   dấu ngoặc kép và dấu phẩy của chính khung JSON, nên một truy vấn `"`
+		   trả về mọi entry có thẻ. `coalesce(...,'[]')` vì `json_each(NULL)`
+		   là lỗi chứ không phải tập rỗng. Thẻ lưu dạng chữ thường đã chuẩn hoá
+		   nên so bằng `upper()` để cùng thang với ba vế còn lại. */
 		rows, err := s.db.QueryContext(ctx, libraryEntrySelect+` JOIN library_revisions r USING(library_revision_id)
 			WHERE r.scope='PROJECT' AND r.project_id=? AND (?='' OR e.kind=?)
 			AND (?='' OR e.category=?)
-			AND (?='' OR instr(e.name_folded,?)>0 OR instr(upper(e.entry_id),?)>0
-				OR instr(upper(coalesce(e.description,'')),?)>0)
+			AND (?='' OR instr(e.name_folded,?)>0 OR instr(mkddc_upper(e.entry_id),?)>0
+				OR instr(mkddc_upper(coalesce(e.description,'')),?)>0
+				OR EXISTS (SELECT 1 FROM json_each(coalesce(e.tags,'[]'))
+					WHERE instr(mkddc_upper(json_each.value),?)>0))
 			AND (?='' OR e.name_folded>? OR
 				(e.name_folded=? AND e.entry_id>?) OR
 				(e.name_folded=? AND e.entry_id=? AND e.library_revision_id>?))
@@ -1209,7 +1239,7 @@ func (s *Store) ListLibraryUsages(ctx context.Context, libraryRevisionID, entryI
 
 const libraryEntrySelect = `SELECT e.library_revision_id,e.entry_id,e.kind,e.name,e.language,e.feature_state,
 	e.source_blob,e.interface_json,e.signature_json,e.dependencies_json,e.state_layout_version,e.state_size_bytes,e.state_layout_sha256,e.content_sha256,
-	e.category,e.description,e.presentation_sha256
+	e.category,e.description,e.tags,e.presentation_sha256
 	FROM library_entries e`
 
 func prepareProjectLibraryEntry(params UpsertProjectLibraryEntryParams, publishing bool) (LibraryEntry, error) {
@@ -1280,8 +1310,82 @@ func prepareProjectLibraryEntry(params UpsertProjectLibraryEntryParams, publishi
 		value := *params.Description
 		entry.Description = &value
 	}
-	entry.PresentationSHA256 = libraryPresentationDigest(entry.Category, entry.Description)
+	tags, err := libraryNormalizeTags(params.Tags)
+	if err != nil {
+		return LibraryEntry{}, err
+	}
+	entry.Tags = tags
+	entry.PresentationSHA256 = libraryPresentationDigest(entry.Category, entry.Description, entry.Tags)
 	return entry, nil
+}
+
+/*
+libraryNormalizeTags — quyết định chuẩn hoá thẻ đã ghi rõ (`T61-101`,
+`LOCK-PGM04-CONTRACT-001` §2.1).
+
+Bốn luật, và ba luật đầu là CHUẨN HOÁ (nhận rồi sửa) còn luật cuối là TỪ CHỐI:
+
+ 1. Khoảng trắng: cắt hai đầu, và gộp mọi chuỗi khoảng trắng bên trong thành
+    một dấu cách. `" vav  box "` và `"vav box"` là cùng một thẻ; để chúng khác
+    nhau nghĩa là bộ lọc theo thẻ chia đôi cùng một nhóm khối.
+ 2. Chữ hoa/thường: hạ hết về chữ thường. Cùng lý do, và khớp với `category`
+    của registry vốn đã toàn chữ thường (`logic`, `math`, `compare`).
+ 3. Trùng lặp: khử sau khi đã áp (1) và (2), rồi SẮP TĂNG DẦN. Sắp xếp không
+    phải để nhìn cho đẹp: một tập hợp không có thứ tự nội tại, nên giữ thứ tự
+    người gửi sẽ làm `["b","a"]` và `["a","b"]` — cùng một tập — sinh ra hai
+    `presentationSha256` khác nhau, và client dùng hash ấy để biết "phần trình
+    bày có đổi không" sẽ thấy đổi trong khi không có gì đổi.
+ 4. Trần: quá 8 phần tử (đếm SAU khi khử trùng lặp), một phần tử quá 24 ký tự,
+    một phần tử rỗng sau khi trim, hoặc một phần tử mang ký tự điều khiển —
+    TỪ CHỐI, không cắt bớt. Cắt bớt im lặng làm read-back trả về thứ khác thứ
+    client vừa gửi, và người dùng không có cách nào biết thẻ của mình đã mất.
+
+Đếm theo KÝ TỰ chứ không theo byte, y như `category`/`description`: `maxLength`
+của JSON Schema và `length()` của SQLite đều đếm ký tự, nên đo bằng `len()` ở
+giữa hai đầu ấy sẽ từ chối một thẻ tiếng Việt ở khoảng một phần ba độ dài mà
+hợp đồng cho phép.
+
+Mảng rỗng và `nil` cùng trả `nil`: khác `description` (nơi chuỗi rỗng là một mô
+tả đã viết và cố ý để trống), "không thẻ nào" và "chưa gắn thẻ" là cùng một câu.
+*/
+func libraryNormalizeTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return nil, nil
+	}
+	if len(tags) > libraryMaxTags {
+		return nil, fmt.Errorf("library entry vượt %d thẻ", libraryMaxTags)
+	}
+	seen := make(map[string]struct{}, len(tags))
+	normalized := make([]string, 0, len(tags))
+	for _, raw := range tags {
+		if !utf8.ValidString(raw) {
+			return nil, fmt.Errorf("library entry tag không phải UTF-8 hợp lệ")
+		}
+		tag := strings.ToLower(strings.Join(strings.Fields(raw), " "))
+		if tag == "" {
+			return nil, fmt.Errorf("library entry tag rỗng")
+		}
+		if utf8.RuneCountInString(tag) > libraryMaxTagRunes {
+			return nil, fmt.Errorf("library entry tag vượt %d ký tự", libraryMaxTagRunes)
+		}
+		/* `strings.Fields` đã ăn mọi khoảng trắng Unicode, nhưng KHÔNG ăn ký tự
+		   điều khiển khác (ví dụ `\x00`, `\x7f`) — chúng vẫn phải bị chặn. */
+		if strings.IndexFunc(tag, func(candidate rune) bool {
+			return candidate < 0x20 || candidate == 0x7f
+		}) >= 0 {
+			return nil, fmt.Errorf("library entry tag mang ký tự điều khiển")
+		}
+		if _, duplicate := seen[tag]; duplicate {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	if len(normalized) > libraryMaxTags {
+		return nil, fmt.Errorf("library entry vượt %d thẻ", libraryMaxTags)
+	}
+	sort.Strings(normalized)
+	return normalized, nil
 }
 
 /*
@@ -1292,13 +1396,25 @@ trọng hơn: nó tồn tại để KHÔNG ai bị cám dỗ nhét mô tả vào
 cả hai đều rỗng thì trả `nil` — "chưa ai điền" phải phân biệt được với "đã điền
 rồi và nội dung rỗng".
 */
-func libraryPresentationDigest(category, description *string) []byte {
-	if category == nil && description == nil {
+func libraryPresentationDigest(category, description *string, tags []string) []byte {
+	if category == nil && description == nil && len(tags) == 0 {
 		return nil
 	}
-	payload, _ := json.Marshal(map[string]any{"category": category, "description": description})
+	/* `tags` vào hash dưới dạng ĐÃ CHUẨN HOÁ (chỗ gọi bảo đảm điều đó). Băm
+	   dạng thô sẽ làm hai payload cùng nghĩa cho hai hash khác nhau — đúng thứ
+	   `presentationSha256` sinh ra để loại trừ. */
+	payload, _ := json.Marshal(map[string]any{
+		"category": category, "description": description, "tags": tags})
 	digest := sha256.Sum256(payload)
 	return digest[:]
+}
+
+// NormalizeLibraryTags là cửa export của quyết định chuẩn hoá thẻ, dành cho lớp
+// application. Chỉ có MỘT bản luật (`libraryNormalizeTags`); lớp trên gọi vào
+// đây chứ không chép lại, vì hai bản luật thì đường ghi HTTP và đường import
+// bundle sẽ chuẩn hoá khác nhau trên cùng một dữ liệu.
+func NormalizeLibraryTags(tags []string) ([]string, error) {
+	return libraryNormalizeTags(tags)
 }
 
 func validLibraryKind(kind string) bool {
@@ -1384,8 +1500,8 @@ func insertLibraryEntryTx(ctx context.Context, tx *sql.Tx, entry LibraryEntry) e
 	_, err := tx.ExecContext(ctx, `INSERT INTO library_entries(
 		library_revision_id,entry_id,kind,name,name_folded,feature_state,signature_json,content_sha256,
 		language,source_blob,interface_json,dependencies_json,state_layout_version,state_size_bytes,state_layout_sha256,
-		category,description,presentation_sha256)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, libraryEntrySQLArgs(entry)...)
+		category,description,tags,presentation_sha256)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, libraryEntrySQLArgs(entry)...)
 	return err
 }
 
@@ -1418,12 +1534,16 @@ func libraryEntrySQLArgs(entry LibraryEntry) []any {
 		layoutSize = int64(entry.StateLayout.StateSizeBytes)
 		layoutHash = entry.StateLayout.SHA256[:]
 	}
-	var category, description, presentation any
+	var category, description, tags, presentation any
 	if entry.Category != nil {
 		category = *entry.Category
 	}
 	if entry.Description != nil {
 		description = *entry.Description
+	}
+	if len(entry.Tags) > 0 {
+		encoded, _ := json.Marshal(entry.Tags)
+		tags = string(encoded)
 	}
 	if len(entry.PresentationSHA256) > 0 {
 		presentation = entry.PresentationSHA256
@@ -1431,7 +1551,7 @@ func libraryEntrySQLArgs(entry LibraryEntry) []any {
 	return []any{entry.LibraryRevisionID, entry.EntryID, entry.Kind, entry.Name, strings.ToUpper(entry.Name),
 		entry.FeatureState, projectLibraryLegacySignature, entry.ContentSHA256[:], entry.Language, entry.Source,
 		entry.InterfaceJSON, dependencies, layoutVersion, layoutSize, layoutHash,
-		category, description, presentation}
+		category, description, tags, presentation}
 }
 
 func refreshLibraryManifestTx(ctx context.Context, tx *sql.Tx, libraryRevisionID string) error {
@@ -1603,13 +1723,30 @@ func scanLibraryEntry(row rowScanner) (LibraryEntry, error) {
 	var source, interfaceJSON, signatureJSON []byte
 	var layoutVersion, layoutSize sql.NullInt64
 	var layoutHash []byte
-	var category, description sql.NullString
+	var category, description, tagsJSON sql.NullString
 	var presentationHash []byte
 	if err := row.Scan(&entry.LibraryRevisionID, &entry.EntryID, &entry.Kind, &entry.Name, &language,
 		&entry.FeatureState, &source, &interfaceJSON, &signatureJSON, &dependenciesJSON,
 		&layoutVersion, &layoutSize, &layoutHash, &digest,
-		&category, &description, &presentationHash); err != nil {
+		&category, &description, &tagsJSON, &presentationHash); err != nil {
 		return LibraryEntry{}, err
+	}
+	/* Đọc lên phải chuẩn hoá LẠI, không tin cột.
+	   Cột `tags` do đường ghi chuẩn hoá, nhưng bundle import và một bo đã chạy
+	   trước lát này ghi thẳng vào bảng mà không đi qua đường ấy. Tin cột nghĩa
+	   là một hàng `["VAV","vav"]` cũ sẽ ra tới FE thành hai thẻ trông khác nhau
+	   nhưng cùng nghĩa, và `presentation_sha256` tính từ nó không khớp bất cứ
+	   thứ gì tính lại được. */
+	if tagsJSON.Valid {
+		var raw []string
+		if err := json.Unmarshal([]byte(tagsJSON.String), &raw); err != nil {
+			return LibraryEntry{}, fmt.Errorf("library entry tags JSON hỏng: %w", err)
+		}
+		normalized, err := libraryNormalizeTags(raw)
+		if err != nil {
+			return LibraryEntry{}, err
+		}
+		entry.Tags = normalized
 	}
 	if category.Valid {
 		value := category.String
@@ -1734,7 +1871,7 @@ func (s *Store) FindProjectLibraryDraft(ctx context.Context, projectID string) (
 /*
 libraryEntryMatchesQuery — phép so `q` cho nhánh SYSTEM (giữ trong bộ nhớ).
 
-Phủ `name`, `entryId` và `description`. **Không** phủ chữ ký: chữ ký nằm trong
+Phủ `name`, `entryId`, `description` và `tags` (`T61-101`). **Không** phủ chữ ký: chữ ký nằm trong
 `signature_json`, và quét chuỗi trong một khối JSON sẽ khớp cả tên kiểu, tên
 tham số lẫn giá trị mặc định — gõ `REAL` sẽ trả về gần như mọi khối. Một phép
 tìm cho kết quả không giải thích được thì tệ hơn một phép tìm hẹp mà đúng
@@ -1751,7 +1888,15 @@ func libraryEntryMatchesQuery(entry LibraryEntry, upperQuery string) bool {
 	if strings.Contains(strings.ToUpper(entry.EntryID), upperQuery) {
 		return true
 	}
-	return entry.Description != nil && strings.Contains(strings.ToUpper(*entry.Description), upperQuery)
+	if entry.Description != nil && strings.Contains(strings.ToUpper(*entry.Description), upperQuery) {
+		return true
+	}
+	for _, tag := range entry.Tags {
+		if strings.Contains(strings.ToUpper(tag), upperQuery) {
+			return true
+		}
+	}
+	return false
 }
 
 /*
@@ -1764,6 +1909,119 @@ func optionalString(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+/*
+LibraryCompatibilityFacts — số đo THÔ cho read model `compatibility` (`T61-101`,
+`LOCK-PGM04-CONTRACT-001` §4).
+
+Store chỉ trả về những gì ĐO ĐƯỢC; nó cố ý không kết luận `COMPATIBLE` hay
+`REQUIRES_MIGRATION`. Việc phân loại nằm ở lớp application, vì luật fail-closed
+("thiếu một trong hai vế thì là `UNKNOWN`") là luật hợp đồng chứ không phải luật
+lưu trữ, và trộn hai thứ vào một chỗ là cách một mặc định fail-closed lặng lẽ
+biến thành `COMPATIBLE`.
+
+Hai bản đồ, và một cờ nói vì sao chúng có thể rỗng:
+
+  - `PinnedVersions`: entryID -> version mà Revision ĐANG VẬN HÀNH pin. Nguồn là
+    `library_usages` của đúng Revision đã Commission thành công gần nhất. Vắng
+    một entryID nghĩa là gói đang chạy KHÔNG dùng entry đó — không phải version
+    bằng rỗng.
+  - `PublishedVersions`: entryID -> version PUBLISHED mới nhất mang entry đó.
+  - `HasActiveRevision`: Project đã Commission lần nào chưa. `false` làm mọi
+    entry rơi về `UNKNOWN`, đúng như §4: khi chưa có gì để so thì nói "tương
+    thích" là một khẳng định không có cơ sở.
+
+"Mới nhất" đo bằng `created_at_utc_ms` chứ không bằng so chuỗi version: version
+PROJECT do chính store sinh tăng dần trong cùng transaction tạo Draft, nên thứ
+tự tạo LÀ thứ tự version, còn so chuỗi thì `"1.10.0" < "1.9.0"`.
+*/
+type LibraryCompatibilityFacts struct {
+	PinnedVersions    map[string]string
+	PublishedVersions map[string]string
+	HasActiveRevision bool
+}
+
+func (s *Store) LibraryCompatibilityFacts(ctx context.Context, projectID string) (LibraryCompatibilityFacts, error) {
+	facts := LibraryCompatibilityFacts{
+		PinnedVersions:    map[string]string{},
+		PublishedVersions: map[string]string{},
+	}
+	if s == nil || s.db == nil {
+		return LibraryCompatibilityFacts{}, fmt.Errorf("Programming store chưa mở")
+	}
+	if projectID == "" {
+		return facts, nil
+	}
+	if err := validateUUIDs(projectID); err != nil {
+		return LibraryCompatibilityFacts{}, err
+	}
+
+	/* Revision đang vận hành = `new_revision_id` của lần Commission SUCCEEDED
+	   gần nhất trong Project. `previous_revision_id` không dùng ở đây: nó là
+	   thứ đã bị thay thế. */
+	var activeRevisionID string
+	err := s.db.QueryRowContext(ctx, `SELECT c.new_revision_id FROM commission_records c
+		JOIN revisions r ON r.revision_id=c.new_revision_id
+		WHERE r.project_id=? AND c.result='SUCCEEDED'
+		ORDER BY c.closed_at_utc_ms DESC, c.operation_id DESC LIMIT 1`, projectID).Scan(&activeRevisionID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return LibraryCompatibilityFacts{}, err
+	default:
+		facts.HasActiveRevision = true
+		rows, err := s.db.QueryContext(ctx, `SELECT entry_id,required_version FROM library_usages
+			WHERE revision_id=?`, activeRevisionID)
+		if err != nil {
+			return LibraryCompatibilityFacts{}, err
+		}
+		for rows.Next() {
+			var entryID, version string
+			if err := rows.Scan(&entryID, &version); err != nil {
+				rows.Close()
+				return LibraryCompatibilityFacts{}, err
+			}
+			facts.PinnedVersions[entryID] = version
+		}
+		if err := rows.Close(); err != nil {
+			return LibraryCompatibilityFacts{}, err
+		}
+		if err := rows.Err(); err != nil {
+			return LibraryCompatibilityFacts{}, err
+		}
+	}
+
+	/* `ORDER BY created_at_utc_ms ASC` + ghi đè: bản ghi sau đè bản trước, nên
+	   giá trị đọng lại là bản PUBLISHED mới nhất. DEPRECATED bị loại — một
+	   version đã khai tử không phải "bản có sẵn để nâng lên". */
+	rows, err := s.db.QueryContext(ctx, `SELECT e.entry_id,r.version FROM library_entries e
+		JOIN library_revisions r USING(library_revision_id)
+		WHERE r.scope='PROJECT' AND r.project_id=? AND r.state='PUBLISHED'
+		ORDER BY r.created_at_utc_ms ASC, r.library_revision_id ASC`, projectID)
+	if err != nil {
+		return LibraryCompatibilityFacts{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var entryID, version string
+		if err := rows.Scan(&entryID, &version); err != nil {
+			return LibraryCompatibilityFacts{}, err
+		}
+		facts.PublishedVersions[entryID] = version
+	}
+	return facts, rows.Err()
+}
+
+// librarySQLNullIfEmpty biến chuỗi rỗng thành `NULL` để mệnh đề keyset tự tắt.
+// Dùng `?=''` như các câu khác sẽ sai ở đây: `revision_id` là UUID nên không bao
+// giờ rỗng, nhưng một tuple so sánh với chuỗi rỗng vẫn là một phép so THẬT, và
+// trang đầu sẽ lọc mất mọi hàng có `project name` sắp trước chuỗi rỗng.
+func librarySQLNullIfEmpty(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 // LibraryUsageRow là một mục Used-In đã ghép đủ ngữ cảnh để hiển thị.
@@ -1797,13 +2055,42 @@ trình nào dùng khối này", không phải "khối này bị gọi bao nhiêu
 đi kèm vì `INSTANCE` mang trạng thái còn `CALL` thì không — hai loại có hệ quả
 khác nhau khi đổi version.
 */
-func (s *Store) ListLibraryUsageRows(ctx context.Context, libraryRevisionID, entryID string,
-	limit int) ([]LibraryUsageRow, error) {
+// LibraryUsageKey là khoá keyset của danh sách Used-In. Thứ tự bốn trường phải
+// khớp TUYỆT ĐỐI với `ORDER BY` của `ListLibraryUsageRows`; lệch một trường thì
+// trang sau bỏ sót hoặc lặp mục mà không ai thấy — `truncated` vẫn `true`, danh
+// sách vẫn có nội dung, chỉ là thiếu.
+type LibraryUsageKey struct {
+	ProjectName string
+	RevisionID  string
+	ObjectID    string
+	UsageKind   string
+}
+
+// ListLibraryUsageParams — `After` là keyset của trang trước. `nil` là trang đầu.
+type ListLibraryUsageParams struct {
+	LibraryRevisionID string
+	EntryID           string
+	Limit             int
+	After             *LibraryUsageKey
+}
+
+func (s *Store) ListLibraryUsageRows(ctx context.Context, params ListLibraryUsageParams) ([]LibraryUsageRow, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("Programming store chưa mở")
 	}
-	if limit < 1 || limit > 200 {
-		limit = 200
+	limit := params.Limit
+	if limit < 1 || limit > 201 {
+		limit = 201
+	}
+	/* Keyset chứ không OFFSET: một entry SYSTEM phổ biến xuất hiện trong mọi
+	   POU của mọi Project, và OFFSET bắt SQLite quét lại toàn bộ prefix ở mỗi
+	   trang — trang thứ mười đắt gấp mười trang đầu. */
+	var afterName, afterRevision, afterObject, afterKind string
+	if params.After != nil {
+		afterName = params.After.ProjectName
+		afterRevision = params.After.RevisionID
+		afterObject = params.After.ObjectID
+		afterKind = params.After.UsageKind
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT p.project_id,p.name,u.revision_id,u.object_id,
 		coalesce(o.name,''),u.required_version,u.usage_kind,
@@ -1814,8 +2101,10 @@ func (s *Store) ListLibraryUsageRows(ctx context.Context, libraryRevisionID, ent
 		LEFT JOIN pou_objects o ON o.revision_id=u.revision_id AND o.object_id=u.object_id
 		LEFT JOIN commission_records c ON c.new_revision_id=u.revision_id AND c.result='SUCCEEDED'
 		WHERE u.library_revision_id=? AND (?='' OR u.entry_id=?)
+		AND (? IS NULL OR (p.name,u.revision_id,u.object_id,u.usage_kind) > (?,?,?,?))
 		ORDER BY p.name,u.revision_id,u.object_id,u.usage_kind
-		LIMIT ?`, libraryRevisionID, entryID, entryID, limit)
+		LIMIT ?`, params.LibraryRevisionID, params.EntryID, params.EntryID,
+		librarySQLNullIfEmpty(afterRevision), afterName, afterRevision, afterObject, afterKind, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1832,4 +2121,61 @@ func (s *Store) ListLibraryUsageRows(ctx context.Context, libraryRevisionID, ent
 		usages = append(usages, row)
 	}
 	return usages, rows.Err()
+}
+
+/*
+registerUnicodeUpper — `upper()` của SQLite chỉ gấp ASCII.
+
+Đây không phải chi tiết lý thuyết. Đo trên chính driver của sản phẩm
+(`modernc.org/sqlite` v1.29.10):
+
+	SELECT upper('quạt gió')                    -> 'QUạT GIó'
+	SELECT instr(upper('điều khiển quạt'),'QUẠT') -> 0
+
+Nghĩa là mệnh đề `instr(upper(e.description), ?)` của `SearchLibraryEntries`
+KHÔNG BAO GIỜ khớp một mô tả tiếng Việt khi từ khoá mang dấu — trong khi Go đã
+`strings.ToUpper` từ khoá thành `QUẠT`. Trên một sản phẩm mà mọi mô tả đều viết
+bằng tiếng Việt, đó là một ô tìm kiếm im lặng bỏ sót gần như mọi kết quả nó hứa
+phủ, và không có gì trên màn hình nói ra điều đó.
+
+`name` không dính vì `name_folded` được Go tính lúc GHI; `entry_id` không dính
+vì nó chỉ có ASCII. Chỉ `description` (và `tags` từ `T61-101`) đi thẳng qua
+`upper()` của SQLite.
+
+Cách sửa: đăng ký `mkddc_upper` dùng đúng `strings.ToUpper` của Go, để nhánh
+SQL (PROJECT) và nhánh trong bộ nhớ (SYSTEM) gấp chữ theo CÙNG một luật. Hai
+luật khác nhau nghĩa là cùng một từ khoá cho hai kết quả khác nhau tuỳ scope
+người dùng đang xem.
+
+Hàm là DETERMINISTIC (cùng đầu vào, cùng đầu ra) nên SQLite được phép rút gọn
+nó ra ngoài vòng lặp. Đăng ký một lần cho cả tiến trình: driver chỉ cho một tên
+đúng một lần, và `sync.Once` giữ cho việc mở store lần thứ hai không thành lỗi.
+*/
+var unicodeUpperOnce struct {
+	sync.Once
+	err error
+}
+
+func registerUnicodeUpper() error {
+	unicodeUpperOnce.Do(func() {
+		unicodeUpperOnce.err = sqlite.RegisterDeterministicScalarFunction("mkddc_upper", 1,
+			func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+				if len(args) != 1 {
+					return nil, fmt.Errorf("mkddc_upper cần đúng 1 tham số")
+				}
+				switch value := args[0].(type) {
+				case nil:
+					return nil, nil
+				case string:
+					return strings.ToUpper(value), nil
+				case []byte:
+					return strings.ToUpper(string(value)), nil
+				default:
+					// Số, blob nhị phân: trả nguyên vẹn thay vì ép kiểu. Ép sẽ
+					// làm một cột sai kiểu âm thầm khớp thay vì lộ ra.
+					return args[0], nil
+				}
+			})
+	})
+	return unicodeUpperOnce.err
 }

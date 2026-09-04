@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.33.0"
+  version: "1.34.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -2124,6 +2124,16 @@ paths:
         - name: kind
           in: query
           schema: { type: string, enum: [FUNCTION, FUNCTION_BLOCK, CONVERSION] }
+        # `T61-101` — `q` phủ `name`, `entryId`, `description` và `tags`, không
+        # phân biệt hoa thường. **Không** phủ chữ ký: chữ ký nằm trong
+        # `signature_json` và quét chuỗi trong JSON sẽ khớp cả tên kiểu, tên
+        # tham số lẫn giá trị mặc định — gõ `REAL` sẽ trả về gần như mọi khối.
+        # Một phép tìm cho kết quả không giải thích được thì tệ hơn một phép tìm
+        # hẹp mà đúng (`LOCK-PGM04-CONTRACT-001` §3).
+        #
+        # Đổi `q` hoặc `category` làm `cursor` cũ VÔ HIỆU (400): cursor mang cả
+        # bộ lọc, nếu không thì trang thứ hai của một bộ lọc trả về dữ liệu của
+        # bộ lọc khác và người dùng không có cách nào biết.
         - name: q
           in: query
           schema: { type: string, maxLength: 64 }
@@ -2171,6 +2181,20 @@ paths:
         - name: scope
           in: query
           schema: { type: string, enum: [SYSTEM, PROJECT] }
+        # Hai cursor TÁCH BẠCH, mỗi phạm vi một cái: một cursor dùng chung sẽ
+        # buộc phải thêm tham số "đang phân trang phạm vi nào", và hai danh sách
+        # độc lập không có lý do gì phải tiến cùng nhịp. Cursor được ký và mang
+        # cả `libraryRevisionId`/`entryId`; lệch bộ lọc hoặc hết hạn là 400.
+        #
+        # `draftCursor` được KHAI BÁO nhưng máy chủ còn từ chối mọi giá trị khác
+        # rỗng (400) cho tới khi `T61-104` mở đường đo phạm vi Draft. Nhận nó im
+        # lặng sẽ hứa một trang không tồn tại.
+        - name: sealedCursor
+          in: query
+          schema: { type: string, maxLength: 1024 }
+        - name: draftCursor
+          in: query
+          schema: { type: string, maxLength: 1024 }
       responses:
         "200":
           description: Used-In hai phạm vi kèm availability
@@ -4084,7 +4108,7 @@ components:
     ProgrammingLibraryEntry:
       type: object
       additionalProperties: false
-      required: [scope, libraryRevisionId, libraryVersion, libraryState, entryId, kind, name, featureState, contentSha256, dependencies, stateLayoutKnown, stateSizeBytes]
+      required: [scope, libraryRevisionId, libraryVersion, libraryState, entryId, kind, name, featureState, contentSha256, dependencies, compatibility, stateLayoutKnown, stateSizeBytes]
       properties:
         scope: { type: string, enum: [SYSTEM, PROJECT] }
         libraryRevisionId: { type: string, minLength: 1, maxLength: 128 }
@@ -4115,6 +4139,25 @@ components:
         # và PGM-04 render trường vắng thành `—` chứ không thành ô trống.
         category: { type: string, maxLength: 32 }
         description: { type: string, maxLength: 512 }
+        # `tags` CHUẨN HOÁ ở máy chủ trước khi lưu (`T61-101`,
+        # `LOCK-PGM04-CONTRACT-001` §2.1): mỗi phần tử đã trim, gộp khoảng
+        # trắng bên trong thành một dấu cách, hạ về chữ thường; trùng lặp bị
+        # khử; danh sách được SẮP TĂNG DẦN. Sắp xếp không phải để nhìn đẹp —
+        # một tập hợp không có thứ tự nội tại, nên giữ thứ tự người gửi sẽ làm
+        # `["b","a"]` và `["a","b"]` sinh hai `presentationSha256` khác nhau.
+        #
+        # Vượt trần (quá 8 phần tử sau khi khử trùng lặp, một phần tử quá 24 ký
+        # tự, một phần tử rỗng sau khi trim) là 400, KHÔNG phải cắt bớt im lặng.
+        #
+        # Mảng rỗng không phải trạng thái thứ ba: đường ghi quy `[]` về vắng
+        # mặt, vì "không thẻ nào" và "chưa gắn thẻ" là cùng một câu. Khác
+        # `description`, nơi chuỗi rỗng là một mô tả đã viết và cố ý để trống.
+        tags:
+          type: array
+          maxItems: 8
+          items: { type: string, minLength: 1, maxLength: 24 }
+        # `T61-101` — read model tương thích, BẮT BUỘC và fail-closed.
+        compatibility: { $ref: "#/components/schemas/ProgrammingLibraryCompatibility" }
         # Băm RIÊNG phần trình bày. Nó tồn tại để không ai bị cám dỗ nhét mô tả
         # vào `contentSha256`: `contentSha256` là danh tính THỰC THI, đi vào
         # artifact và vào pin của Revision. Sửa một dòng mô tả mà đổi nó thì mọi
@@ -4124,6 +4167,38 @@ components:
         # Consumer không được coi `stateSizeBytes=0` là sự thật khi cờ này false.
         stateLayoutKnown: { type: boolean }
         stateSizeBytes: { type: integer, minimum: 0, maximum: 1048576 }
+    # `T61-101` / `LOCK-PGM04-CONTRACT-001` §4 — trạng thái tương thích của một
+    # entry so với gói ĐANG VẬN HÀNH.
+    #
+    # `UNKNOWN` là giá trị MẶC ĐỊNH, không phải trường hợp lỗi: khi Project chưa
+    # Commission Revision nào thì không có gì để so, và nói "tương thích" lúc ấy
+    # là một khẳng định không có cơ sở. Thiếu BẤT KỲ vế nào trong hai vế
+    # (`requiredVersion`, `availableVersion`) thì kết quả là `UNKNOWN` — không
+    # bao giờ là `COMPATIBLE`.
+    #
+    # Entry SYSTEM luôn `UNKNOWN` ở lát này: `library_usages` cố ý không giữ
+    # usage của chúng (migration `0007`), nên không có pin nào để đọc.
+    #
+    # Phần "không âm thầm nâng version" (`AC-PGM04-05`) đã do cơ chế pin
+    # `libraryRevisionId` ở Revision bảo đảm; read model này chỉ làm trạng thái
+    # ấy NHÌN THẤY ĐƯỢC, nó không thêm cơ chế nào.
+    ProgrammingLibraryCompatibility:
+      type: object
+      additionalProperties: false
+      required: [state, requiredVersion, availableVersion, reason]
+      properties:
+        state: { type: string, enum: [COMPATIBLE, REQUIRES_MIGRATION, UNKNOWN] }
+        # Ba trường sau LUÔN có mặt và có thể `null`. `null` nghĩa là "máy chủ đã
+        # xét và chưa đo được"; một trường VẮNG thì client không phân biệt được
+        # với "máy chủ cũ chưa biết trường này" — và với một read model mà cả
+        # mục đích là nói ra chỗ mình chưa biết, khác biệt ấy chính là nội dung.
+        #
+        # `requiredVersion`: version mà Revision đang vận hành pin.
+        requiredVersion: { type: [string, "null"], maxLength: 64 }
+        # `availableVersion`: version PUBLISHED mới nhất mang entry này.
+        availableVersion: { type: [string, "null"], maxLength: 64 }
+        # `reason` chỉ khác `null` khi `state` khác `COMPATIBLE`.
+        reason: { type: [string, "null"], maxLength: 256 }
     ProgrammingLibrarySignaturePort:
       type: object
       additionalProperties: false
@@ -4183,14 +4258,25 @@ components:
     ProgrammingLibraryUsageScope:
       type: object
       additionalProperties: false
-      required: [count, truncated, items]
+      required: [count, truncated, items, nextCursor]
       properties:
+        # `count` là số mục CỦA TRANG NÀY, không phải tổng toàn cục — `truncated`
+        # nói phần còn lại. Đếm tổng đòi một `COUNT(*)` không giới hạn trên một
+        # bảng mà một khối SYSTEM phổ biến chiếm mọi POU của mọi Project.
         count: { type: integer, minimum: 0 }
         truncated: { type: boolean }
         items:
           type: array
           maxItems: 200
           items: { $ref: "#/components/schemas/ProgrammingLibraryUsageItem" }
+        # `truncated: true` mà không có `nextCursor` là một ngõ cụt: giao diện
+        # nói "còn nữa" rồi không có cách nào đọc tiếp. Hai trường đi cùng nhau
+        # — `truncated` nói CÓ CÒN, `nextCursor` nói ĐỌC TIẾP BẰNG GÌ.
+        #
+        # `null` = đã đọc hết. Cố ý không dùng chuỗi rỗng: một `if (cursor)` ở
+        # FE sẽ đọc chuỗi rỗng thành hết trang một cách tình cờ chứ không phải
+        # theo hợp đồng.
+        nextCursor: { type: [string, "null"], maxLength: 1024 }
     ProgrammingLibraryUsageItem:
       type: object
       additionalProperties: false
@@ -4247,6 +4333,15 @@ components:
         # thực thi không được phụ thuộc vào một lần sửa chính tả.
         category: { type: string, maxLength: 32 }
         description: { type: string, maxLength: 512 }
+        # `tags` trên đường GHI, đối xứng với `ProgrammingLibraryEntry.tags`.
+        # Máy chủ CHUẨN HOÁ trước khi lưu (trim, gộp khoảng trắng, hạ chữ
+        # thường, khử trùng lặp, sắp tăng dần), nên read-back có thể khác payload
+        # về HÌNH THỨC nhưng không khác về NỘI DUNG. Vượt trần thì từ chối bằng
+        # 400, không cắt bớt.
+        tags:
+          type: array
+          maxItems: 8
+          items: { type: string, minLength: 1, maxLength: 24 }
         # Vắng mặt nghĩa là layout chưa biết. FUNCTION không được mang khối này.
         stateLayout: { $ref: "#/components/schemas/ProgrammingLibraryStateLayout" }
     ProgrammingLibraryRevisionDeprecateRequest:

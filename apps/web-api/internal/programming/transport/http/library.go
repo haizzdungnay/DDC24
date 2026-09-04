@@ -33,9 +33,35 @@ type libraryEntryResponse struct {
 	   ADDITIVE: client cũ bỏ qua field lạ và vẫn chạy. Con trỏ chứ không phải
 	   chuỗi để `nil` ("chưa ai điền") tới FE dưới dạng field VẮNG, và màn hình
 	   render `—` thay vì một ô trống trông như đã điền rỗng. */
-	Category           *string `json:"category,omitempty"`
-	Description        *string `json:"description,omitempty"`
-	PresentationSHA256 string  `json:"presentationSha256,omitempty"`
+	Category    *string `json:"category,omitempty"`
+	Description *string `json:"description,omitempty"`
+	/* `tags` cũng `omitempty`: mảng `nil` là "chưa ai gắn thẻ" và tới FE dưới
+	   dạng field VẮNG. Không có trạng thái thứ ba cho mảng rỗng — đường ghi quy
+	   `[]` về `nil`, vì "không thẻ nào" và "chưa gắn thẻ" là cùng một câu. */
+	Tags               []string `json:"tags,omitempty"`
+	PresentationSHA256 string   `json:"presentationSha256,omitempty"`
+	/* `compatibility` KHÔNG `omitempty`: nó luôn có mặt, và mặc định fail-closed
+	   là `UNKNOWN`. Cho nó vắng được nghĩa là một client sẽ đọc "vắng" thành
+	   "không sao" — đúng cái kết luận `UNKNOWN` sinh ra để chặn. */
+	Compatibility libraryCompatibilityResponse `json:"compatibility"`
+}
+
+/*
+libraryCompatibilityResponse — `LOCK-PGM04-CONTRACT-001` §4.
+
+Ba trường sau là con trỏ và KHÔNG `omitempty`, nên chúng luôn xuất hiện trên
+dây, có thể là `null`. `null` nghĩa là "máy chủ đã xét và chưa đo được"; một
+trường VẮNG thì client không phân biệt được với "máy chủ cũ chưa biết trường
+này". Với một read model mà cả mục đích là nói ra chỗ mình chưa biết, khác biệt
+ấy chính là nội dung.
+
+`reason` chỉ khác `null` khi `state` khác `COMPATIBLE`.
+*/
+type libraryCompatibilityResponse struct {
+	State            string  `json:"state"`
+	RequiredVersion  *string `json:"requiredVersion"`
+	AvailableVersion *string `json:"availableVersion"`
+	Reason           *string `json:"reason"`
 }
 
 type librarySignaturePortResponse struct {
@@ -170,6 +196,11 @@ type upsertLibraryEntryRequest struct {
 	 * chưa phân loại trông như đã phân loại vào một nhóm tên rỗng. */
 	Category    *string `json:"category,omitempty"`
 	Description *string `json:"description,omitempty"`
+	/* `T61-101` — thẻ trên đường GHI. Máy chủ CHUẨN HOÁ (trim, chữ thường, khử
+	   trùng lặp, sắp tăng dần) rồi mới lưu, nên read-back có thể khác payload
+	   về hình thức nhưng không khác về nội dung. Vượt trần thì TỪ CHỐI, không
+	   cắt bớt. */
+	Tags []string `json:"tags,omitempty"`
 }
 
 type deprecateLibraryRevisionRequest struct {
@@ -239,6 +270,7 @@ func handleUpsertLibraryEntry(w http.ResponseWriter, r *http.Request, correlatio
 		Kind: request.Kind, Name: request.Name, Language: request.Language, FeatureState: request.FeatureState,
 		Source: request.Source, InterfaceJSON: request.Interface, Dependencies: request.Dependencies,
 		StateLayout: request.StateLayout, Category: request.Category, Description: request.Description,
+		Tags:        request.Tags,
 		IfMatch:        r.Header.Get("If-Match"),
 		IdempotencyKey: r.Header.Get("X-Idempotency-Key"), CorrelationID: correlationID,
 	})
@@ -292,7 +324,23 @@ func toLibraryEntryResponse(item programmingapplication.LibraryEntryView) librar
 		LibraryState: item.LibraryState, EntryID: item.EntryID, Kind: item.Kind, Name: item.Name,
 		Language: item.Language, FeatureState: item.FeatureState, ContentSHA256: item.ContentSHA256,
 		Dependencies: dependencies, StateLayoutKnown: item.StateLayoutKnown, StateSizeBytes: item.StateSizeBytes,
-		Category: item.Category, Description: item.Description, PresentationSHA256: item.PresentationSHA256,
+		Category: item.Category, Description: item.Description, Tags: item.Tags,
+		PresentationSHA256: item.PresentationSHA256,
+		Compatibility: libraryCompatibilityResponse{
+			State: item.Compatibility.State, RequiredVersion: item.Compatibility.RequiredVersion,
+			AvailableVersion: item.Compatibility.AvailableVersion, Reason: item.Compatibility.Reason,
+		},
+	}
+	/* Hàng rào fail-closed CUỐI của đường đọc.
+	 *
+	 * Mọi chỗ dựng `LibraryEntryView` hôm nay đều gán `Compatibility`, nhưng
+	 * `LibraryCompatibility{}` zero-value có `State` là chuỗi RỖNG — không phải
+	 * `UNKNOWN`. Một chỗ dựng mới quên gán sẽ gửi `state: ""` ra dây, và client
+	 * so `state !== 'COMPATIBLE'` thì đúng, còn client so `state === 'UNKNOWN'`
+	 * thì trượt và im lặng coi như không có cảnh báo. Quy chuỗi rỗng về
+	 * `UNKNOWN` ở đây làm mặc định của Go trùng với mặc định của hợp đồng. */
+	if response.Compatibility.State == "" {
+		response.Compatibility.State = programmingapplication.LibraryCompatibleUnknown
 	}
 	if len(item.InterfaceJSON) > 0 {
 		response.Interface = json.RawMessage(item.InterfaceJSON)
@@ -333,9 +381,19 @@ func handleLibraryUsage(w http.ResponseWriter, r *http.Request, correlationID st
 		LibraryRevisionID: r.URL.Query().Get("libraryRevisionId"),
 		EntryID:           r.URL.Query().Get("entryId"),
 		Scope:             r.URL.Query().Get("scope"),
+		SealedCursor:      r.URL.Query().Get("sealedCursor"),
+		DraftCursor:       r.URL.Query().Get("draftCursor"),
 	})
+	/* Dịch lỗi THẬT, không quy tất cả về 400.
+	 *
+	 * Bản trước ghi `writeMappedError(w, ErrInvalidRequest, ...)` bất kể `err`
+	 * là gì, nên store hỏng cũng ra 400 "request không hợp lệ" — bảo người dùng
+	 * sửa một request vốn đúng, và giấu mất sự cố hạ tầng khỏi cả log lẫn mắt
+	 * người vận hành. Lớp application giờ trả sentinel (`ErrInvalidRequest`,
+	 * `ErrInvalidCursor`) cho lỗi request, nên `writeMappedError` phân biệt
+	 * được 400 với 503. */
 	if err != nil {
-		writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+		writeMappedError(w, err, correlationID)
 		return
 	}
 	writeJSON(w, http.StatusOK, correlationID, view)

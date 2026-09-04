@@ -8,6 +8,69 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PGM04-01` `tags`, `compatibility` và cursor Used-In cho Control Library (#446, 2026-09-04)
+
+- **Hiện trạng.** OpenAPI chỉ mở `category`, `description`, `presentationSha256`. `tags` và read
+  model `compatibility` — hai thứ `LOCK-PGM04-CONTRACT-001` §2.1/§4 đã khoá từ `2026-08-29` — chưa
+  tồn tại ở bất kỳ lớp nào (OpenAPI, Go, TS). Used-In trả `truncated: true` nhưng không có
+  `nextCursor`: một ngõ cụt, giao diện nói "còn nữa" rồi không có cách nào đọc tiếp.
+- **`tags`.** Migration `0015` thêm cột `tags` (JSON array) kèm trigger canh trần. Máy chủ CHUẨN
+  HOÁ trước khi lưu: trim, gộp khoảng trắng bên trong thành một dấu cách, hạ chữ thường, khử trùng
+  lặp, **sắp tăng dần**. Sắp xếp là bắt buộc chứ không phải trang trí — một tập hợp không có thứ tự
+  nội tại, nên giữ thứ tự người gửi sẽ làm `["b","a"]` và `["a","b"]` sinh hai `presentationSha256`
+  khác nhau, và client dùng hash ấy để biết "phần trình bày có đổi không" sẽ thấy đổi trong khi
+  không có gì đổi. Vượt trần (>8 thẻ sau khử trùng lặp, >24 ký tự/thẻ, thẻ rỗng, ký tự điều khiển)
+  là **400**, không cắt bớt: cắt bớt im lặng làm read-back trả về thứ khác thứ client vừa gửi.
+  `presentationSha256` từ nay băm bộ **ba** `category`/`description`/`tags`; `contentSha256` **không**
+  đổi (`D61-09`).
+- **`compatibility`.** `{state, requiredVersion, availableVersion, reason}`, LUÔN có mặt trên dây và
+  fail-closed: thiếu bất kỳ vế nào ⇒ `UNKNOWN` kèm lý do, **không bao giờ** `COMPATIBLE`.
+  `COMPATIBLE` là lời hứa rằng gói đang chạy và bản mới nhất là cùng một thứ; phát lời hứa ấy khi
+  chưa đo được là cách người vận hành nâng version mà không biết mình đang nâng. `requiredVersion`
+  đọc từ `library_usages` của Revision đã Commission gần nhất; `availableVersion` là version
+  `PUBLISHED` mới nhất mang entry đó. Entry SYSTEM luôn `UNKNOWN` (usage của chúng phân giải từ
+  registry/profile lock — `T61-104`).
+- **`q` phủ thêm `tags`** ở cả hai nhánh (SYSTEM trong bộ nhớ, PROJECT bằng SQL); `category` vẫn so
+  chính xác và cursor vẫn vô hiệu khi bộ lọc đổi.
+- **Used-In có `nextCursor`.** Hai cursor tách bạch (`sealedCursor`, `draftCursor`), ký HMAC, mang cả
+  `libraryRevisionId`/`entryId`, keyset theo tuple `(projectName, revisionId, objectId, usageKind)`.
+  `draftCursor` được khai báo nhưng còn bị từ chối cho tới `T61-104`: nhận nó im lặng sẽ hứa một
+  trang không tồn tại.
+- **Phạm vi.** OpenAPI `1.33.0 → 1.34.0`, additive. Re-pin cả hai chốt SHA trong cùng change-set.
+  Không đụng scheduling, Core runtime, MCU hay physical I/O.
+- **Kiểm chứng (HOST, cục bộ — repo chưa cấp CI runner, #414).** layout 17 PASS / 0 FAIL · Go 21 gói
+  ok · FE 213 tệp / 2578 test · 15 phép tiêm lỗi đều làm test đỏ. `ctest` **NOT_RUN**: container
+  không có cache `FetchContent` và agent proxy trả 403 cho tarball github — không tệp C++ nào bị
+  thay đổi trong lát này.
+- Refs: `T61-101`, `ISS-PGM04-01`, `LOCK-PGM04-CONTRACT-001` §1.4/§2.1/§3/§4, `B-PGM04-04`.
+
+### Fixed — `ISS-PGM04-01` `q` bỏ sót mọi mô tả tiếng Việt (#446, 2026-09-04)
+
+- **Triệu chứng.** Gõ `quạt` không trả về khối có mô tả "Điều khiển quạt hồi gió". Không có thông
+  báo nào; ô tìm kiếm chỉ đơn giản trả ít kết quả hơn thực tế.
+- **Nguyên nhân gốc.** `upper()` của SQLite chỉ gấp **ASCII**. Đo trên chính driver của sản phẩm
+  (`modernc.org/sqlite` v1.29.10): `upper('quạt gió') = 'QUạT GIó'` và
+  `instr(upper('điều khiển quạt'), 'QUẠT') = 0`. Trong khi đó lớp Go đã `strings.ToUpper` từ khoá
+  thành `QUẠT`. Hai đầu gấp chữ theo hai luật, nên mệnh đề `instr(upper(e.description), ?)` **không
+  bao giờ** khớp một mô tả tiếng Việt khi từ khoá mang dấu. Trên một sản phẩm mà mọi mô tả đều viết
+  bằng tiếng Việt, đó là một ô tìm kiếm im lặng bỏ sót gần hết kết quả nó hứa phủ.
+- **Cách sửa.** Đăng ký hàm SQL deterministic `mkddc_upper` dùng chính `strings.ToUpper` của Go, và
+  thay `upper()` ở mệnh đề tìm kiếm. Nhánh SQL (PROJECT) và nhánh trong bộ nhớ (SYSTEM) nay gấp chữ
+  theo CÙNG một luật — hai luật khác nhau nghĩa là cùng một từ khoá cho hai kết quả khác nhau tuỳ
+  scope người dùng đang xem.
+- Refs: `T61-101`, `ISS-PGM04-01`, `LOCK-PGM04-CONTRACT-001` §3.
+
+### Fixed — `ISS-PGM04-01` route Used-In trả 400 cho cả lỗi hạ tầng (#446, 2026-09-04)
+
+- **Triệu chứng.** `GET /programming/library-usages` trả `400 "request không hợp lệ"` kể cả khi
+  nguyên nhân là store hỏng — bảo người dùng sửa một request vốn đúng, và giấu sự cố hạ tầng khỏi cả
+  log lẫn mắt người vận hành.
+- **Nguyên nhân gốc.** Handler ghi cứng `writeMappedError(w, ErrInvalidRequest, ...)` bất kể `err` là
+  gì. Nó làm vậy vì lớp application trả `fmt.Errorf("libraryRevisionId là bắt buộc")` — một lỗi
+  không có sentinel, nên handler không có gì để phân biệt lỗi request với lỗi hệ thống.
+- **Cách sửa.** Lớp application kiểm đầu vào và trả `ErrInvalidRequest`/`ErrInvalidCursor`; handler
+  dịch `err` thật, nên 400 và 503 tách bạch trở lại.
+- Refs: `T61-101`, `ISS-PGM04-01`.
 ### Fixed — `ISS-PIO-33` (hồi quy) Kênh Universal Input tiếp điểm khô không map được vào biến ST — lần thứ hai (2026-09-04)
 
 - **Triệu chứng.** Trên `main` tại `18ca29d`, một kênh UI cấu hình `dry` bị chặn ở **cả hai chiều**.

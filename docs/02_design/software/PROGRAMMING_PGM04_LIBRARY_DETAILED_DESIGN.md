@@ -23,7 +23,7 @@
 | Câu hỏi | Trả lời |
 |---|---|
 | Thiết kế này khoá cái gì? | Ánh xạ `field → API → state → action → RBAC → test` cho PGM-04, và đường rollback |
-| Cái gì CHƯA khoá? | `tags` và `compatibility` của `LOCK-PGM04-CONTRACT-001` chưa thi hành; `category`/`description`/Used-In đã xong cả đọc lẫn ghi |
+| Cái gì CHƯA khoá? | Phạm vi **Draft** của Used-In và nguồn `tags`/`compatibility` cho entry **SYSTEM** (giao ở `T61-102`/`T61-104`); `category`/`description`/`tags`/`compatibility`/Used-In sealed đã xong cả hợp đồng lẫn đường đọc-ghi PROJECT |
 | Vì sao `M4`? | WP-01…WP-04 đã chạy và có bằng chứng HOST/LOCAL. `M4` **không** nói gì về release |
 
 ## 1. As-Built — đo từ source, không chép từ tài liệu
@@ -54,10 +54,10 @@ route usage, không có route metadata.
 | `stateSizeBytes` | `.stateSizeBytes` + `.stateLayoutKnown` | ✅ có | `stateLayoutKnown=false` ≠ `0` |
 | **`category`** | `.category` — SYSTEM sinh từ registry, PROJECT là cột store | ✅ **đọc + GHI** | Ghi mở ở `T61-401`. Vắng ⇒ render `—` kèm lý do, **cấm** quy về chuỗi rỗng |
 | **`description`** | `.description` — như trên | ✅ **đọc + GHI** | `q` phủ field này |
-| **`presentationSha256`** | băm riêng bộ đôi trên | ✅ có | **Không** nằm trong `contentSha256` (`D61-09`) |
-| **`tags`** | — | ❌ **CHƯA THI HÀNH** | Đã khoá hợp đồng ở `LOCK-PGM04-CONTRACT-001` §2.1, chưa có cột/migration |
+| **`presentationSha256`** | băm riêng bộ **ba** `category`/`description`/`tags` | ✅ có | **Không** nằm trong `contentSha256` (`D61-09`) |
+| **`tags`** | `.tags` — cột store (migration `0015`), PROJECT đọc + GHI | ✅ **đọc + GHI (PROJECT)** | Máy chủ chuẩn hoá: trim, gộp khoảng trắng, hạ chữ thường, khử trùng lặp, **sắp tăng dần**. Vượt trần (>8 thẻ sau khử trùng lặp, >24 ký tự/thẻ) là **400**, không cắt bớt. `q` phủ field này. Nguồn SYSTEM chờ `T61-102` |
 | **Used-In** | `GET /programming/library-usages` | ✅ có | Hai phạm vi tách bạch: sealed (server, mọi Project) và draft (FE, Project đang mở). `UNAVAILABLE` **không bao giờ** render thành `0` |
-| compatibility | pin `libraryRevisionId` ở Revision | ⚠️ một nửa | "Không âm thầm nâng" đã đảm bảo; "hiện trạng thái tương thích" thì chưa |
+| **`compatibility`** | `.compatibility {state, requiredVersion, availableVersion, reason}` | ✅ có | Fail-closed: thiếu một trong hai vế ⇒ `UNKNOWN`, **không bao giờ** `COMPATIBLE`. `requiredVersion` từ Revision đã Commission gần nhất; `availableVersion` là version PUBLISHED mới nhất. Entry SYSTEM luôn `UNKNOWN` cho tới `T61-104` |
 
 **Đường ghi metadata là lỗi mà lát này đóng lại.** Migration `0014` đã thêm cột
 `category`/`description` và store đã nhận `UpsertProjectLibraryEntryParams`
@@ -146,12 +146,13 @@ một lần sửa mô tả sẽ làm mọi artifact đã ký thành lỗi thời
 | `B-PGM04-01` | `category`/`description`/`tags` không có nguồn | **ĐÃ MỞ** — `LOCK-PGM04-CONTRACT-001` §2 khoá hợp đồng; giao ở `T61-102`/`T61-103` |
 | `B-PGM04-02` | Used-In không có API | **ĐÃ MỞ** — `LOCK-PGM04-CONTRACT-001` §1 khoá hợp đồng; dữ liệu sealed đã có sẵn |
 | `B-PGM04-03` | Hồ sơ này ở `M2` | **ĐÃ MỞ** ở `0.2` |
-| `B-PGM04-04` | `tags` và `compatibility` đã khoá hợp đồng nhưng chưa thi hành | **CÒN MỞ** — cần migration cột `tags` và read model compatibility; không chặn WP-03/WP-04 |
+| `B-PGM04-04` | `tags` và `compatibility` đã khoá hợp đồng nhưng chưa thi hành | **ĐÃ MỞ** ở `T61-101` — migration `0015` thêm cột `tags`, read model `compatibility` fail-closed đã lên OpenAPI/Go/TS. Phần còn lại (nguồn SYSTEM cho `tags`, pin SYSTEM cho `compatibility`) thuộc `T61-102`/`T61-104` |
 
 ## 8. Lịch sử
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.4 | 2026-09-04 | Thi hành `T61-101`: `tags` (migration `0015` + chuẩn hoá máy chủ), read model `compatibility` fail-closed, `q` phủ thêm `tags`, Used-In có `nextCursor` và lỗi ổn định. **Đính chính `0.3`:** bảng as-built ghi `presentationSha256` "băm riêng bộ đôi" — nay là bộ **ba** kể cả `tags`. Đóng `B-PGM04-04` phần hợp đồng; phần nguồn SYSTEM chuyển sang `T61-102`/`T61-104`. Ghi hai lỗi đo được và đã sửa trong cùng lát: `upper()` của SQLite chỉ gấp ASCII nên `q` không bao giờ khớp mô tả tiếng Việt; route Used-In quy MỌI lỗi về 400 nên store hỏng cũng báo "request không hợp lệ". |
 | 0.3 | 2026-08-29 | Nâng `M3 → M4` sau khi WP-03/WP-04 thi hành. Ghi as-built cây component đã tách, đường ghi metadata (`T61-401`) và ngữ nghĩa Chèn = điều hướng. **Đính chính `0.2`:** bảng `DD-05` ghi `category`/`description` "không có nguồn", nhưng nguồn ĐÃ có từ `T61-101/103` — thứ thiếu là đường GHI, và chính chỗ mô tả sai ấy che mất một cột không ai ghi được suốt một work package. Mở `B-PGM04-04` cho `tags`/compatibility. |
 | 0.2 | 2026-08-29 | Nâng `M2 → M3` sau `LOCK-PGM04-CONTRACT-001`. **Đính chính một khẳng định của `0.1`:** Used-In được ghi là "không có nguồn", trong khi bảng `library_usages` đã tồn tại từ migration `0007` và đã được ghi trong chính đường Seal — thứ thiếu là route HTTP, không phải dữ liệu. Nửa sai ấy làm ước lượng chi phí đội lên nhiều lần. |
 | 0.1 | 2026-08-29 | Bản đầu cho `T61-003`. Ánh xạ field/action/RBAC/state/test/rollback đo từ source `main@0453891`; ghi bốn field không có nguồn và giữ `M2`. |

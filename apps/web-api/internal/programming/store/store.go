@@ -67,6 +67,9 @@ func OpenProgrammingStore(ctx context.Context, options Options) (*Store, error) 
 		},
 		"_txlock": []string{"immediate"},
 	}.Encode()}).String()
+	if err := registerUnicodeUpper(); err != nil {
+		return nil, err
+	}
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("mở Programming DB: %w", err)

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   blockSignatureLine,
+  compatibilityDisplay,
+  entryTags,
   insertBlockReason,
   insertTargetCandidates,
   metadataValue,
@@ -8,12 +10,12 @@ import {
   scopeLabel,
   usageDisplay,
 } from './libraryPresentation'
-import type { ProgrammingLibraryUsage } from '../model/types'
+import type { ProgrammingLibraryCompatibility, ProgrammingLibraryUsage } from '../model/types'
 
 function usage(overrides: Partial<ProgrammingLibraryUsage> = {}): ProgrammingLibraryUsage {
   return {
-    sealed: { count: 0, truncated: false, items: [] },
-    draft: { count: 0, truncated: false, items: [] },
+    sealed: { count: 0, truncated: false, items: [], nextCursor: null },
+    draft: { count: 0, truncated: false, items: [], nextCursor: null },
     availability: 'COMPLETE',
     ...overrides,
   }
@@ -91,7 +93,7 @@ describe('usageDisplay', () => {
   it('SEALED_ONLY chỉ trả phần đã niêm phong, không bịa phần Draft', () => {
     const view = usageDisplay(usage({
       availability: 'SEALED_ONLY',
-      sealed: { count: 3, truncated: false, items: [] },
+      sealed: { count: 3, truncated: false, items: [], nextCursor: null },
     }))
     expect(view).toEqual({ kind: 'sealed-only', sealed: 3, truncated: false })
     expect(view).not.toHaveProperty('draft')
@@ -99,8 +101,8 @@ describe('usageDisplay', () => {
 
   it('COMPLETE trả cả hai phạm vi tách bạch', () => {
     expect(usageDisplay(usage({
-      sealed: { count: 2, truncated: false, items: [] },
-      draft: { count: 1, truncated: true, items: [] },
+      sealed: { count: 2, truncated: false, items: [], nextCursor: null },
+      draft: { count: 1, truncated: true, items: [], nextCursor: null },
     }))).toEqual({ kind: 'count', sealed: 2, draft: 1, truncated: true })
   })
 })
@@ -114,7 +116,7 @@ describe('safeToRemove', () => {
   it('danh sách bị cắt bớt cũng không cho gỡ', () => {
     // `truncated` nghĩa là còn mục chưa đọc; phần chưa đọc có thể chứa đúng
     // chương trình đang chạy.
-    expect(safeToRemove(usage({ sealed: { count: 200, truncated: true, items: [] } }))).toBe(false)
+    expect(safeToRemove(usage({ sealed: { count: 200, truncated: true, items: [], nextCursor: null } }))).toBe(false)
   })
 
   it('đo được và bằng 0 ở cả hai phạm vi thì cho gỡ', () => {
@@ -210,5 +212,68 @@ describe('insertTargetCandidates', () => {
     const fbd = insertTargetCandidates(objects, entry).find((item) => item.objectId === 'bbb')
     expect(fbd?.block).toBeNull()
     expect(fbd?.language).toBe('FBD')
+  })
+})
+
+describe('entryTags', () => {
+  it('field vắng và mảng rỗng là cùng một câu trả lời', () => {
+    // Khác `metadataValue`: một khối không có thẻ thì không có hàng thẻ nào,
+    // chứ không phải một ô `—` chờ người điền.
+    expect(entryTags({})).toEqual([])
+    expect(entryTags({ tags: [] })).toEqual([])
+  })
+
+  it('KHÔNG chuẩn hoá lại thứ máy chủ đã chuẩn hoá', () => {
+    /* Máy chủ đã trim, hạ chữ thường, khử trùng lặp và sắp tăng dần. Gấp chữ
+       lần hai ở FE tạo ra luật thứ hai, và hai luật thì cùng một thẻ hiện hai
+       kiểu tuỳ nơi hiển thị. Đây là lý do test này khẳng định thứ tự và nội
+       dung đi qua NGUYÊN VẸN. */
+    expect(entryTags({ tags: ['hvac', 'vav box'] })).toEqual(['hvac', 'vav box'])
+  })
+})
+
+describe('compatibilityDisplay', () => {
+  it('field vắng KHÔNG BAO GIỜ thành "tương thích"', () => {
+    // Máy chủ đời cũ chưa gửi trường này. Đọc "vắng" thành "không sao" là đúng
+    // cái kết luận mà `UNKNOWN` sinh ra để chặn.
+    expect(compatibilityDisplay({})).toEqual({ kind: 'unknown', reason: null })
+  })
+
+  it('UNKNOWN giữ nguyên lý do để người đọc biết vì sao chưa đo được', () => {
+    expect(compatibilityDisplay({
+      compatibility: {
+        state: 'UNKNOWN', requiredVersion: null, availableVersion: '1.2.0',
+        reason: 'Chưa có Revision vận hành nào pin entry này',
+      },
+    })).toEqual({ kind: 'unknown', reason: 'Chưa có Revision vận hành nào pin entry này' })
+  })
+
+  it('REQUIRES_MIGRATION mang cả hai version để nói rõ lệch ở đâu', () => {
+    expect(compatibilityDisplay({
+      compatibility: {
+        state: 'REQUIRES_MIGRATION', requiredVersion: '1.0.0', availableVersion: '1.2.0',
+        reason: 'Revision vận hành đang pin 1.0.0, bản PUBLISHED mới nhất là 1.2.0',
+      },
+    })).toEqual({
+      kind: 'requires-migration', requiredVersion: '1.0.0', availableVersion: '1.2.0',
+      reason: 'Revision vận hành đang pin 1.0.0, bản PUBLISHED mới nhất là 1.2.0',
+    })
+  })
+
+  it('COMPATIBLE là trạng thái duy nhất không kèm lý do', () => {
+    expect(compatibilityDisplay({
+      compatibility: { state: 'COMPATIBLE', requiredVersion: '1.2.0', availableVersion: '1.2.0', reason: null },
+    })).toEqual({ kind: 'compatible' })
+  })
+
+  it('giá trị enum lạ rơi về UNKNOWN, không rơi về COMPATIBLE', () => {
+    /* Máy chủ mới có thể mọc thêm một giá trị mà bản FE này chưa biết. Kết luận
+       "ổn" cho một thứ chưa hiểu là cách một khối được nâng version trong im
+       lặng. Ép kiểu ở đây là cố ý: đang mô phỏng đúng payload mà TypeScript
+       không chặn được lúc chạy. */
+    const future = { state: 'PARTIALLY_COMPATIBLE', requiredVersion: null, availableVersion: null, reason: null }
+    expect(compatibilityDisplay({
+      compatibility: future as unknown as ProgrammingLibraryCompatibility,
+    })).toEqual({ kind: 'unknown', reason: null })
   })
 })

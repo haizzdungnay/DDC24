@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.33.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.34.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

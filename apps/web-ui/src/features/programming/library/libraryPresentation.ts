@@ -32,6 +32,57 @@ export function metadataValue(raw: string | undefined): string | null {
   return trimmed.length === 0 ? null : trimmed
 }
 
+/**
+ * `T61-101` — thẻ hiển thị được của một khối.
+ *
+ * Máy chủ ĐÃ chuẩn hoá (trim, gộp khoảng trắng, hạ chữ thường, khử trùng lặp,
+ * sắp tăng dần), nên hàm này KHÔNG chuẩn hoá lại — nó chỉ quy "field vắng" và
+ * "mảng rỗng" về CÙNG một câu trả lời, đúng như hợp đồng đã ghi. Chuẩn hoá lần
+ * hai ở đây sẽ tạo ra luật gấp chữ thứ hai, và hai luật thì cùng một thẻ hiện
+ * hai kiểu tuỳ nơi hiển thị.
+ *
+ * Trả mảng RỖNG chứ không `null`: khác `metadataValue`, một khối không có thẻ
+ * không cần render `—` — nó chỉ đơn giản không có hàng thẻ nào.
+ */
+export function entryTags(entry: Pick<ProgrammingLibraryEntry, 'tags'>): string[] {
+  return entry.tags ?? []
+}
+
+/**
+ * `T61-101` / `LOCK-PGM04-CONTRACT-001` §4 — trạng thái tương thích hiển thị được.
+ *
+ * FAIL-CLOSED là toàn bộ lý do hàm này tồn tại. `compatibility` vắng mặt nghĩa
+ * là máy chủ đời cũ chưa biết trường này — KHÔNG phải "không sao". Quy nó về
+ * `unknown` ở đây làm chỗ gọi không thể vô tình đọc `undefined` thành yên tâm,
+ * và cũng không thể hiện `COMPATIBLE` cho một thứ chưa ai đo.
+ *
+ * `reason` chỉ đi kèm khi `state` khác `COMPATIBLE`, đúng như hợp đồng.
+ */
+export type CompatibilityDisplay =
+  | { kind: 'compatible' }
+  | { kind: 'requires-migration'; requiredVersion: string | null; availableVersion: string | null; reason: string | null }
+  | { kind: 'unknown'; reason: string | null }
+
+export function compatibilityDisplay(
+  entry: Pick<ProgrammingLibraryEntry, 'compatibility'>,
+): CompatibilityDisplay {
+  const compatibility = entry.compatibility
+  if (!compatibility) return { kind: 'unknown', reason: null }
+  if (compatibility.state === 'COMPATIBLE') return { kind: 'compatible' }
+  if (compatibility.state === 'REQUIRES_MIGRATION') {
+    return {
+      kind: 'requires-migration',
+      requiredVersion: compatibility.requiredVersion,
+      availableVersion: compatibility.availableVersion,
+      reason: compatibility.reason,
+    }
+  }
+  /* Mọi giá trị KHÁC ba giá trị đã khoá cũng rơi vào đây, không rơi vào
+     `compatible`. Một enum mọc thêm giá trị ở máy chủ mới không được làm một
+     bản FE cũ kết luận "ổn" cho thứ nó chưa hiểu. */
+  return { kind: 'unknown', reason: compatibility.reason }
+}
+
 export type InsertBlockReason =
   | 'REVIEW_REQUIRED'
   | 'NO_TARGET'

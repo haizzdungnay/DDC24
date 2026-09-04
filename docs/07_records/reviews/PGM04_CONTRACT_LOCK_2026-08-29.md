@@ -162,6 +162,59 @@ pin `libraryRevisionId` ở Revision — hợp đồng này chỉ làm cho trạ
 | Registry generator lệch hằng C++/Go/TS | Metadata SYSTEM sinh từ registry | `verify-project.sh --component layout` đã canh 3/3 tệp sinh |
 | Migration `0014` chạy trên bo có dữ liệu | Cột mới trên bảng đang dùng | `NULL`-able + backup preflight; không rewrite revision |
 
+## 5A. Thi hành — `T61-101` / `ISS-PGM04-01` (`2026-09-04`)
+
+Hợp đồng §1–§4 đã lên source. Ba quyết định mà bản khoá `2026-08-29` để mở, nay
+được ghi rõ ở đây vì chúng ảnh hưởng tới cả client:
+
+**§2.1 — chuẩn hoá `tags`.** Ba luật đầu là CHUẨN HOÁ (nhận rồi sửa), luật cuối
+là TỪ CHỐI:
+
+1. Khoảng trắng: cắt hai đầu, gộp mọi chuỗi khoảng trắng bên trong thành một dấu
+   cách.
+2. Chữ hoa/thường: hạ hết về chữ thường — khớp `category` của registry, vốn đã
+   toàn chữ thường.
+3. Trùng lặp: khử sau khi áp (1) và (2), rồi **sắp tăng dần**. Sắp xếp là bắt
+   buộc chứ không phải trang trí: một tập hợp không có thứ tự nội tại, nên giữ
+   thứ tự người gửi sẽ làm `["b","a"]` và `["a","b"]` sinh hai
+   `presentationSha256` khác nhau — và client dùng hash ấy để biết "phần trình
+   bày có đổi không" sẽ thấy đổi trong khi không có gì đổi.
+4. Vượt trần (quá 8 phần tử **sau** khi khử trùng lặp, một phần tử quá 24 ký tự,
+   một phần tử rỗng sau khi trim, hoặc mang ký tự điều khiển): **400**, không
+   cắt bớt. Cắt bớt im lặng làm read-back trả về thứ khác thứ client vừa gửi.
+
+Mảng rỗng **không** phải trạng thái thứ ba: đường ghi quy `[]` về vắng mặt, vì
+"không thẻ nào" và "chưa gắn thẻ" là cùng một câu. Khác `description`, nơi chuỗi
+rỗng là một mô tả đã viết và cố ý để trống.
+
+`presentationSha256` từ lát này băm bộ **ba** `category`/`description`/`tags`.
+
+**§4 — nguồn của `compatibility`.** `requiredVersion` đọc từ `library_usages` của
+Revision đã Commission thành công gần nhất; `availableVersion` là version của
+library revision `PUBLISHED` mới nhất mang entry đó ("mới nhất" đo bằng
+`created_at_utc_ms`, không bằng so chuỗi version — `"1.10.0" < "1.9.0"`).
+`DEPRECATED` bị loại: một version đã khai tử không phải "bản có sẵn để nâng lên".
+Thiếu bất kỳ vế nào ⇒ `UNKNOWN` kèm lý do. Entry SYSTEM luôn `UNKNOWN` cho tới
+khi `T61-104` mở đường phân giải từ registry/profile lock.
+
+**§1.4 — cursor Used-In.** Hai cursor tách bạch (`sealedCursor`, `draftCursor`),
+mỗi phạm vi một cái; một cursor dùng chung sẽ buộc thêm tham số "đang phân trang
+phạm vi nào", và hai danh sách độc lập không có lý do gì phải tiến cùng nhịp.
+Cursor ký HMAC, mang cả `libraryRevisionId`/`entryId`, hết hạn 15 phút. Keyset là
+tuple `(projectName, revisionId, objectId, usageKind)` — đúng `ORDER BY` của
+truy vấn. `draftCursor` được khai báo nhưng máy chủ còn từ chối mọi giá trị khác
+rỗng cho tới `T61-104`: nhận nó im lặng sẽ hứa một trang không tồn tại.
+
+**Hai lỗi đo được và đã sửa trong cùng lát.**
+
+| Lỗi | Triệu chứng | Nguyên nhân gốc |
+|---|---|---|
+| `q` bỏ sót mô tả tiếng Việt | Gõ `quạt` không ra khối có mô tả "Điều khiển quạt hồi gió" | `upper()` của SQLite chỉ gấp ASCII (`upper('quạt') = 'QUạT'`), trong khi Go đã gấp từ khoá thành `QUẠT`. Sửa bằng hàm SQL `mkddc_upper` dùng `strings.ToUpper` của Go |
+| Used-In trả 400 cho mọi lỗi | Store hỏng cũng báo "request không hợp lệ" | Handler quy mọi `err` về `ErrInvalidRequest`; lớp application trả `fmt.Errorf` trần nên không có gì để phân biệt. Nay dùng sentinel |
+
+OpenAPI `1.33.0 → 1.34.0`, vẫn additive. Cả hai chốt SHA re-pin trong cùng
+change-set.
+
 ## 6. Hệ quả cho gate
 
 | Blocker DDD | Trạng thái |
@@ -169,3 +222,4 @@ pin `libraryRevisionId` ở Revision — hợp đồng này chỉ làm cho trạ
 | `B-PGM04-01` metadata không có nguồn | **MỞ** — hợp đồng §2 khoá xong |
 | `B-PGM04-02` Used-In không có API | **MỞ** — hợp đồng §1 khoá xong; dữ liệu sealed đã có sẵn |
 | `B-PGM04-03` DDD ở `M2` | Mở được sau khi DDD lên `0.2`/`M3` |
+| `B-PGM04-04` `tags`/compatibility chưa thi hành | **ĐÃ MỞ** phần hợp đồng ở `T61-101` (`2026-09-04`); nguồn SYSTEM còn ở `T61-102`/`T61-104` |

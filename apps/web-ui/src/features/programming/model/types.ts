@@ -863,8 +863,49 @@ export interface ProgrammingLibraryEntry {
    */
   category?: string
   description?: string
-  /** Băm riêng phần trình bày — KHÔNG phải `contentSha256`. */
+  /**
+   * `T61-101` — thẻ, đã được MÁY CHỦ chuẩn hoá (trim, gộp khoảng trắng, hạ chữ
+   * thường, khử trùng lặp, sắp tăng dần). FE **không** chuẩn hoá lại và không
+   * sắp lại: mọi phép so/nhóm theo thẻ dùng thẳng giá trị này, nếu không hai
+   * nơi sẽ gấp chữ theo hai luật.
+   *
+   * Vắng field = "chưa ai gắn thẻ". Mảng rỗng không phải trạng thái thứ ba —
+   * đường ghi quy `[]` về vắng mặt.
+   */
+  tags?: string[]
+  /** Băm riêng phần trình bày — KHÔNG phải `contentSha256`. Phủ cả
+   *  `category`, `description` và `tags`. */
   presentationSha256?: string
+  /**
+   * `T61-101` — trạng thái tương thích với gói ĐANG VẬN HÀNH.
+   *
+   * Optional ở TS vì backend cũ trong một chu kỳ nâng cấp chưa gửi field này —
+   * cùng đường lùi đã dùng cho `signature`. Nhưng vắng mặt **không** được đọc
+   * thành "không sao": FE phải xử lý `undefined` y như `UNKNOWN`, tức là nói ra
+   * rằng chưa đo được. Máy chủ hiện tại LUÔN gửi field này.
+   */
+  compatibility?: ProgrammingLibraryCompatibility
+}
+
+/**
+ * `T61-101` / `LOCK-PGM04-CONTRACT-001` §4.
+ *
+ * `UNKNOWN` là giá trị MẶC ĐỊNH, không phải trường hợp lỗi: khi Project chưa
+ * Commission Revision nào thì không có gì để so, và nói "tương thích" lúc ấy là
+ * một khẳng định không có cơ sở.
+ *
+ * Ba trường sau là `string | null` chứ không optional: máy chủ luôn gửi khoá, và
+ * `null` nghĩa là "đã xét, chưa đo được". Đừng quy `null` về chuỗi rỗng — chuỗi
+ * rỗng đọc như một version đã đo và bằng rỗng.
+ */
+export interface ProgrammingLibraryCompatibility {
+  state: 'COMPATIBLE' | 'REQUIRES_MIGRATION' | 'UNKNOWN'
+  /** Version mà Revision đang vận hành pin. */
+  requiredVersion: string | null
+  /** Version PUBLISHED mới nhất mang entry này. */
+  availableVersion: string | null
+  /** Chỉ khác `null` khi `state` khác `COMPATIBLE`. */
+  reason: string | null
 }
 
 /** `T61-105` — một mục Used-In: MỘT CẶP (Revision, POU), không phải một lần gọi. */
@@ -881,9 +922,17 @@ export interface ProgrammingLibraryUsageItem {
 }
 
 export interface ProgrammingLibraryUsageScope {
+  /** Số mục CỦA TRANG NÀY, không phải tổng toàn cục — `truncated` nói phần còn lại. */
   count: number
   truncated: boolean
   items: ProgrammingLibraryUsageItem[]
+  /**
+   * `T61-101` — con trỏ trang kế. `null` = đã đọc hết.
+   *
+   * `truncated: true` mà không có `nextCursor` là ngõ cụt: giao diện nói "còn
+   * nữa" rồi không có cách nào đọc tiếp. Hai trường đi cùng nhau.
+   */
+  nextCursor: string | null
 }
 
 /**

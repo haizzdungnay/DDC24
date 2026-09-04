@@ -54,9 +54,56 @@ type LibraryEntryView struct {
 	/* `T61-101` — metadata trình bày. Con trỏ chứ không phải chuỗi: `nil` là
 	   "chưa ai điền" và phải tới FE dưới dạng field VẮNG, để màn hình render
 	   `—` thay vì một ô trống trông như đã điền rỗng. */
-	Category           *string
-	Description        *string
+	Category    *string
+	Description *string
+	/* `T61-101` — thẻ đã CHUẨN HOÁ (trim, chữ thường, khử trùng lặp, sắp tăng
+	   dần). `nil` là "chưa ai gắn thẻ" và tới FE dưới dạng field VẮNG. Mảng
+	   rỗng không phải trạng thái thứ ba: khác `Description` (nơi chuỗi rỗng là
+	   một mô tả đã viết và cố ý để trống), "không thẻ nào" và "chưa gắn thẻ" là
+	   cùng một câu. */
+	Tags               []string
 	PresentationSHA256 string
+	/* `T61-101` — read model tương thích. KHÔNG phải con trỏ: nó LUÔN có mặt,
+	   và mặc định fail-closed là `UNKNOWN`. Để nó vắng được nghĩa là một client
+	   nào đó sẽ đọc "vắng" thành "không sao", tức đúng cái kết luận mà `UNKNOWN`
+	   sinh ra để chặn. */
+	Compatibility LibraryCompatibility
+}
+
+/*
+LibraryCompatibility — `LOCK-PGM04-CONTRACT-001` §4.
+
+`UNKNOWN` là giá trị MẶC ĐỊNH, không phải trường hợp lỗi: khi Project chưa
+Commission Revision nào thì không có gì để so, và nói "tương thích" lúc ấy là
+một khẳng định không có cơ sở. Đây cũng là lý do ba trường sau là con trỏ —
+`nil` nghĩa là "đã xét, chưa đo được", khác hẳn chuỗi rỗng nghĩa là "đo được và
+bằng rỗng".
+
+Phần "không âm thầm nâng version" (`AC-PGM04-05`) đã do cơ chế pin
+`libraryRevisionId` ở Revision bảo đảm; read model này chỉ làm trạng thái ấy
+NHÌN THẤY ĐƯỢC, nó không thêm cơ chế nào.
+*/
+type LibraryCompatibility struct {
+	State            string
+	RequiredVersion  *string
+	AvailableVersion *string
+	Reason           *string
+}
+
+const (
+	LibraryCompatible         = "COMPATIBLE"
+	LibraryRequiresMigration  = "REQUIRES_MIGRATION"
+	LibraryCompatibleUnknown  = "UNKNOWN"
+	libraryCompatReasonNoPin  = "Chưa có Revision vận hành nào pin entry này"
+	libraryCompatReasonNoPub  = "Chưa có version PUBLISHED nào mang entry này"
+	libraryCompatReasonSystem = "Usage của entry SYSTEM phân giải từ registry/profile lock, chưa đo được ở lát này"
+)
+
+// LibraryCompatibilityStates là NGUỒN của enum `compatibility.state` cho cả
+// OpenAPI lẫn test hợp đồng. Chép tay danh sách này ở chỗ khác là cách một giá
+// trị thứ tư mọc ra ở một đầu mà đầu kia không biết.
+var LibraryCompatibilityStates = []string{
+	LibraryCompatible, LibraryRequiresMigration, LibraryCompatibleUnknown,
 }
 
 type LibraryDependencyView struct {
@@ -96,8 +143,11 @@ type UpsertLibraryEntryCommand struct {
 	/* `T61-401` — metadata TRÌNH BÀY. `nil` = entry không mang metadata đó,
 	   con trỏ tới chuỗi rỗng = đã điền và nội dung rỗng. Cột store phân biệt
 	   hai thứ (`NULL` khác `''`) và PGM-04 render `NULL` thành `—` kèm lý do. */
-	Category       *string
-	Description    *string
+	Category    *string
+	Description *string
+	/* `T61-101` — thẻ. Vắng (`nil`) nghĩa là entry sau lần ghi KHÔNG có thẻ,
+	   đúng như mọi field optional khác của một phép GHI ĐÈ toàn phần. */
+	Tags           []string
 	IfMatch        string
 	IdempotencyKey string
 	CorrelationID  string
@@ -192,6 +242,13 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 	if err != nil {
 		return LibraryPage{}, err
 	}
+	/* Một phép đo cho CẢ TRANG, không phải một phép đo mỗi entry: trang tối đa
+	   100 mục, và hỏi store 100 lần cho một câu trả lời giống nhau là cách một
+	   danh sách đọc thành N+1 truy vấn. */
+	facts, err := s.store.LibraryCompatibilityFacts(ctx, command.ProjectID)
+	if err != nil {
+		return LibraryPage{}, err
+	}
 	page := LibraryPage{Items: make([]LibraryEntryView, 0, min(command.Limit, len(entries)))}
 	revisions := make(map[string]programmingstore.LibraryRevision)
 	for _, entry := range entries[:min(command.Limit, len(entries))] {
@@ -203,7 +260,9 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 			}
 			revisions[entry.LibraryRevisionID] = revision
 		}
-		page.Items = append(page.Items, libraryEntryView(entry, revision))
+		view := libraryEntryView(entry, revision)
+		view.Compatibility = libraryCompatibility(revision.Scope, entry.EntryID, facts)
+		page.Items = append(page.Items, view)
 	}
 	if len(entries) > command.Limit {
 		last := entries[command.Limit-1]
@@ -252,6 +311,20 @@ func (s *LibraryService) UpsertEntry(ctx context.Context, actor Actor, command U
 	if command.Description != nil && *command.Description != "" && !validText(*command.Description, 1, 512) {
 		return MutationResult{}, ErrInvalidRequest
 	}
+	/* Thẻ được CHUẨN HOÁ ở đây, trước cả hash ngữ nghĩa lẫn store.
+	 *
+	 * Thứ tự này quan trọng: `mutationIdentity` băm payload để nhận diện một
+	 * request lặp. Băm dạng THÔ thì hai lần gửi `["VAV"]` và `["vav"]` — cùng
+	 * một ý định sau chuẩn hoá — ra hai hash khác nhau, và khoá idempotency
+	 * dùng lại sẽ bị coi là xung đột thay vì replay.
+	 *
+	 * Vượt trần là 400 `ErrInvalidRequest`, KHÔNG phải lỗi store: trigger SQL
+	 * cũng chặn nhưng nó trả một chuỗi lỗi SQLite mà lớp HTTP dịch thành 503
+	 * "thử lại đi" — bảo client thử lại một thứ không bao giờ thành công. */
+	tags, err := normalizeLibraryTags(command.Tags)
+	if err != nil {
+		return MutationResult{}, err
+	}
 	layout, err := libraryStateLayoutFromCommand(command.Kind, command.StateLayout)
 	if err != nil {
 		return MutationResult{}, err
@@ -268,7 +341,7 @@ func (s *LibraryService) UpsertEntry(ctx context.Context, actor Actor, command U
 			"name": command.Name, "language": command.Language, "source": command.Source,
 			"interface": string(command.InterfaceJSON), "dependencies": command.Dependencies,
 			"stateLayout": command.StateLayout, "category": command.Category,
-			"description": command.Description, "ifMatch": command.IfMatch})
+			"description": command.Description, "tags": tags, "ifMatch": command.IfMatch})
 	if err != nil {
 		return MutationResult{}, err
 	}
@@ -276,7 +349,7 @@ func (s *LibraryService) UpsertEntry(ctx context.Context, actor Actor, command U
 		EntryID: command.EntryID, Kind: command.Kind, Name: command.Name, Language: command.Language,
 		FeatureState: featureState, Source: []byte(command.Source), InterfaceJSON: command.InterfaceJSON,
 		Dependencies: dependencies, StateLayout: layout,
-		Category: command.Category, Description: command.Description,
+		Category: command.Category, Description: command.Description, Tags: tags,
 		NewLibraryRevisionID: s.newID(), Identity: identity,
 	})
 	if err != nil {
@@ -424,6 +497,7 @@ func libraryEntryView(entry programmingstore.LibraryEntry, revision programmings
 		ContentSHA256: hex.EncodeToString(entry.ContentSHA256[:]), Dependencies: dependencies,
 		StateLayoutKnown: entry.StateLayout.Authoritative, StateSizeBytes: entry.StateLayout.StateSizeBytes,
 		Category: entry.Category, Description: entry.Description,
+		Tags: append([]string(nil), entry.Tags...),
 	}
 	if len(entry.PresentationSHA256) > 0 {
 		view.PresentationSHA256 = hex.EncodeToString(entry.PresentationSHA256)
@@ -435,6 +509,81 @@ func libraryEntryView(entry programmingstore.LibraryEntry, revision programmings
 		view.SignatureJSON = append([]byte(nil), entry.SignatureJSON...)
 	}
 	return view
+}
+
+/*
+normalizeLibraryTags — cổng vào của thẻ ở lớp application.
+
+Quyết định chuẩn hoá (`LOCK-PGM04-CONTRACT-001` §2.1) nằm một chỗ duy nhất, ở
+store (`libraryNormalizeTags`), và hàm này chỉ dịch lỗi của nó sang
+`ErrInvalidRequest` để lớp HTTP trả 400 ổn định. Viết lại luật ở đây sẽ tạo ra
+hai bản luật, và bản nào sai thì đường ghi HTTP và đường import bundle sẽ chuẩn
+hoá khác nhau trên cùng một dữ liệu.
+
+Trần đếm ở CẢ HAI đầu: quá 8 phần tử THÔ bị chặn trước khi khử trùng lặp (một
+payload 10 000 thẻ không được phép bắt server chuẩn hoá xong mới từ chối), và
+quá 8 phần tử SAU khi khử trùng lặp cũng bị chặn.
+*/
+func normalizeLibraryTags(tags []string) ([]string, error) {
+	if len(tags) > libraryRequestMaxTags {
+		return nil, ErrInvalidRequest
+	}
+	normalized, err := programmingstore.NormalizeLibraryTags(tags)
+	if err != nil {
+		return nil, ErrInvalidRequest
+	}
+	return normalized, nil
+}
+
+// libraryRequestMaxTags là trần ĐẾM THÔ của payload, khớp `maxItems` của
+// OpenAPI. Số tuyệt đối chứ không tham chiếu hằng store: hai đầu phải khoá lẫn
+// nhau, và một hằng dùng chung sẽ làm test "so một hằng với chính nó".
+const libraryRequestMaxTags = 8
+
+/*
+libraryCompatibility phân loại một entry theo `LOCK-PGM04-CONTRACT-001` §4.
+
+Fail-closed là luật ở đây, không phải phong cách: thiếu BẤT KỲ vế nào trong hai
+vế (version Revision vận hành đang pin, version PUBLISHED mới nhất) thì kết quả
+là `UNKNOWN` kèm lý do — không phải `COMPATIBLE`. `COMPATIBLE` là một lời hứa
+rằng gói đang chạy và bản mới nhất là cùng một thứ; phát lời hứa ấy khi chưa đo
+được là cách người vận hành nâng version mà không biết mình đang nâng.
+
+Entry SYSTEM luôn `UNKNOWN`: `library_usages` cố ý không giữ usage của chúng
+(migration `0007`), nên không có pin nào để đọc. `T61-102`/`T61-104` mở đường
+phân giải từ registry/profile lock; tới lúc đó câu trả lời đúng là "chưa đo
+được", không phải một con số.
+*/
+func libraryCompatibility(scope, entryID string, facts programmingstore.LibraryCompatibilityFacts) LibraryCompatibility {
+	if scope == programmingstore.LibraryScopeSystem {
+		reason := libraryCompatReasonSystem
+		return LibraryCompatibility{State: LibraryCompatibleUnknown, Reason: &reason}
+	}
+	result := LibraryCompatibility{State: LibraryCompatibleUnknown}
+	if version, ok := facts.PublishedVersions[entryID]; ok {
+		value := version
+		result.AvailableVersion = &value
+	}
+	if version, ok := facts.PinnedVersions[entryID]; ok {
+		value := version
+		result.RequiredVersion = &value
+	}
+	switch {
+	case result.RequiredVersion == nil:
+		reason := libraryCompatReasonNoPin
+		result.Reason = &reason
+	case result.AvailableVersion == nil:
+		reason := libraryCompatReasonNoPub
+		result.Reason = &reason
+	case *result.RequiredVersion == *result.AvailableVersion:
+		result.State = LibraryCompatible
+	default:
+		reason := fmt.Sprintf("Revision vận hành đang pin %s, bản PUBLISHED mới nhất là %s",
+			*result.RequiredVersion, *result.AvailableVersion)
+		result.State = LibraryRequiresMigration
+		result.Reason = &reason
+	}
+	return result
 }
 
 type libraryCursor struct {
@@ -544,6 +693,19 @@ type LibraryUsageScope struct {
 	Count     int                `json:"count"`
 	Truncated bool               `json:"truncated"`
 	Items     []LibraryUsageItem `json:"items"`
+	/*
+	   `T61-101` — con trỏ trang KẾ.
+
+	   `truncated: true` mà không có `nextCursor` là một ngõ cụt: giao diện nói
+	   "còn nữa" rồi không có cách nào đọc tiếp, và người dùng kết luận bằng
+	   đúng 200 mục đầu tiên. Hai trường đi cùng nhau: `truncated` nói CÓ CÒN,
+	   `nextCursor` nói ĐỌC TIẾP BẰNG GÌ.
+
+	   `nil` (`null` trên dây) = đã đọc hết. Cố ý KHÔNG dùng chuỗi rỗng: một
+	   `if (cursor)` ở FE sẽ đọc chuỗi rỗng thành hết trang một cách tình cờ
+	   chứ không phải theo hợp đồng.
+	*/
+	NextCursor *string `json:"nextCursor"`
 }
 
 /*
@@ -580,6 +742,11 @@ type LibraryUsageCommand struct {
 	LibraryRevisionID string
 	EntryID           string
 	Scope             string
+	/* Hai cursor TÁCH BẠCH, mỗi phạm vi một cái. Một cursor dùng chung sẽ buộc
+	   phải thêm một tham số "đang phân trang phạm vi nào", và hai danh sách
+	   độc lập thì không có lý do gì phải tiến cùng nhịp. */
+	SealedCursor string
+	DraftCursor  string
 }
 
 /*
@@ -595,19 +762,64 @@ func (s *LibraryService) Usage(ctx context.Context, command LibraryUsageCommand)
 		Sealed: LibraryUsageScope{Items: []LibraryUsageItem{}},
 		Draft:  LibraryUsageScope{Items: []LibraryUsageItem{}},
 	}
-	if command.LibraryRevisionID == "" {
-		return view, fmt.Errorf("libraryRevisionId là bắt buộc")
+	/* Mọi lỗi request ở đây phải là `ErrInvalidRequest` — một SENTINEL, không
+	 * phải `fmt.Errorf` trần.
+	 *
+	 * Bản trước trả `fmt.Errorf("libraryRevisionId là bắt buộc")`, và handler
+	 * HTTP che khuyết điểm ấy bằng cách quy MỌI lỗi của route này về 400. Hệ
+	 * quả là chiều ngược lại: store hỏng, đọc lỗi, DB khoá — tất cả cũng ra
+	 * 400 "request không hợp lệ", bảo người dùng sửa một request đúng. Sentinel
+	 * ở đây cho handler phân biệt được hai loại và trả 503 cho loại thứ hai.
+	 */
+	if !validText(command.LibraryRevisionID, 1, 128) {
+		return view, ErrInvalidRequest
+	}
+	if command.EntryID != "" && !validText(command.EntryID, 1, 128) {
+		return view, ErrInvalidRequest
+	}
+	if command.Scope != "" && command.Scope != programmingstore.LibraryScopeSystem &&
+		command.Scope != programmingstore.LibraryScopeProject {
+		return view, ErrInvalidRequest
+	}
+	/* Draft chưa Seal thì chưa có `pou_objects`, nên phạm vi Draft chưa đo được
+	   ở lát này (`T61-104` mở đường ấy). Một cursor Draft vì vậy không thể là
+	   thật — nhận nó im lặng sẽ hứa một trang không tồn tại. */
+	if command.DraftCursor != "" {
+		return view, ErrInvalidCursor
 	}
 	if command.Scope == programmingstore.LibraryScopeSystem {
 		/* Entry SYSTEM: `library_usages` cố ý không giữ usage của chúng
 		   (migration `0007` — không tạo FK giả tới một row DB không có). Nói ra
 		   là "chưa đo được", KHÔNG trả 0. */
+		if command.SealedCursor != "" {
+			return view, ErrInvalidCursor
+		}
 		view.Availability = LibraryUsageUnavailable
 		return view, nil
 	}
 
-	rows, err := s.store.ListLibraryUsageRows(ctx, command.LibraryRevisionID, command.EntryID,
-		libraryUsageMaxItems+1)
+	var after *programmingstore.LibraryUsageKey
+	if command.SealedCursor != "" {
+		cursor, err := s.decodeUsageCursor(command.SealedCursor)
+		if err != nil {
+			return view, err
+		}
+		/* Cursor mang cả bộ lọc, y như cursor của `GET /libraries`: không ràng
+		   buộc thì trang thứ hai của một entry có thể trả về usage của entry
+		   khác, và người dùng không có cách nào biết. */
+		if cursor.LibraryRevisionID != command.LibraryRevisionID || cursor.EntryID != command.EntryID {
+			return view, ErrInvalidCursor
+		}
+		after = &programmingstore.LibraryUsageKey{
+			ProjectName: cursor.ProjectName, RevisionID: cursor.RevisionID,
+			ObjectID: cursor.ObjectID, UsageKind: cursor.UsageKind,
+		}
+	}
+
+	rows, err := s.store.ListLibraryUsageRows(ctx, programmingstore.ListLibraryUsageParams{
+		LibraryRevisionID: command.LibraryRevisionID, EntryID: command.EntryID,
+		Limit: libraryUsageMaxItems + 1, After: after,
+	})
 	if err != nil {
 		return LibraryUsageView{}, err
 	}
@@ -622,11 +834,81 @@ func (s *LibraryService) Usage(ctx context.Context, command LibraryUsageCommand)
 			RequiredVersion: row.RequiredVersion, UsageKind: row.UsageKind, IsActive: row.IsActive,
 		})
 	}
+	/* `Count` là số mục CỦA TRANG NÀY, không phải tổng toàn cục — đúng như
+	   `truncated` đã nói ra. Đếm tổng đòi một `COUNT(*)` không giới hạn trên
+	   một bảng mà một khối SYSTEM phổ biến chiếm mọi POU của mọi Project. */
 	view.Sealed.Count = len(view.Sealed.Items)
+	if view.Sealed.Truncated {
+		last := view.Sealed.Items[len(view.Sealed.Items)-1]
+		encoded, err := s.encodeUsageCursor(libraryUsageCursor{
+			ProjectName: last.ProjectName, RevisionID: last.RevisionID,
+			ObjectID: last.ObjectID, UsageKind: last.UsageKind,
+			LibraryRevisionID: command.LibraryRevisionID, EntryID: command.EntryID,
+			ExpiresAtUTCMS: s.now().UTC().Add(15 * time.Minute).UnixMilli(),
+		})
+		if err != nil {
+			return LibraryUsageView{}, err
+		}
+		view.Sealed.NextCursor = &encoded
+	}
 
-	/* Draft chưa Seal thì chưa có `pou_objects`, nên phạm vi Draft chưa đo được
-	   ở lát này. Nói `SEALED_ONLY` thay vì để `draft.count = 0` — số 0 ở đó sẽ
-	   đọc như "không Draft nào dùng khối này", một câu chưa ai kiểm chứng. */
+	/* Nói `SEALED_ONLY` thay vì để `draft.count = 0` — số 0 ở đó sẽ đọc như
+	   "không Draft nào dùng khối này", một câu chưa ai kiểm chứng. */
 	view.Availability = LibraryUsageSealedOnly
 	return view, nil
+}
+
+// libraryUsageCursor — keyset của Used-In, ký HMAC như cursor của `GET
+// /libraries`. Bốn trường đầu là vị trí; hai trường sau ràng buộc bộ lọc.
+type libraryUsageCursor struct {
+	ProjectName       string `json:"projectName"`
+	RevisionID        string `json:"revisionId"`
+	ObjectID          string `json:"objectId"`
+	UsageKind         string `json:"usageKind"`
+	LibraryRevisionID string `json:"libraryRevisionId"`
+	EntryID           string `json:"entryId"`
+	ExpiresAtUTCMS    int64  `json:"expiresAtUtcMs"`
+}
+
+func (s *LibraryService) encodeUsageCursor(cursor libraryUsageCursor) (string, error) {
+	payload, err := json.Marshal(cursor)
+	if err != nil {
+		return "", err
+	}
+	mac := hmac.New(sha256.New, s.cursorSecret)
+	_, _ = mac.Write(payload)
+	return base64.RawURLEncoding.EncodeToString(payload) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+func (s *LibraryService) decodeUsageCursor(encoded string) (libraryUsageCursor, error) {
+	parts := strings.Split(encoded, ".")
+	if len(parts) != 2 || len(encoded) > 1024 {
+		return libraryUsageCursor{}, ErrInvalidCursor
+	}
+	/* `Strict()` chứ không decoder mặc định — cùng lý do như cursor thư viện:
+	   base64 raw cho phép ký tự cuối mang những bit KHÔNG được dùng, nên đổi ký
+	   tự cuối của chữ ký vẫn decode ra đúng 32 byte cũ và HMAC vẫn khớp. Một
+	   cursor đã bị sửa đi qua được là một lỗ, không phải một chi tiết. */
+	payload, err := base64.RawURLEncoding.Strict().DecodeString(parts[0])
+	if err != nil {
+		return libraryUsageCursor{}, ErrInvalidCursor
+	}
+	signature, err := base64.RawURLEncoding.Strict().DecodeString(parts[1])
+	if err != nil {
+		return libraryUsageCursor{}, ErrInvalidCursor
+	}
+	mac := hmac.New(sha256.New, s.cursorSecret)
+	_, _ = mac.Write(payload)
+	if !hmac.Equal(signature, mac.Sum(nil)) {
+		return libraryUsageCursor{}, ErrInvalidCursor
+	}
+	var cursor libraryUsageCursor
+	if err := decodeStrict(payload, &cursor); err != nil ||
+		!validText(cursor.RevisionID, 1, 128) || !validText(cursor.ObjectID, 1, 128) ||
+		!validText(cursor.LibraryRevisionID, 1, 128) ||
+		(cursor.UsageKind != "CALL" && cursor.UsageKind != "INSTANCE") ||
+		s.now().UTC().UnixMilli() >= cursor.ExpiresAtUTCMS {
+		return libraryUsageCursor{}, ErrInvalidCursor
+	}
+	return cursor, nil
 }
