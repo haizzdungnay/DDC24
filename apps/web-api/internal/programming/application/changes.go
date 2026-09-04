@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -58,8 +59,54 @@ type RevisionChangesView struct {
 //
 // Đây là đường Commission đi: nó chỉ cần `impact` + `impactRef`, và tính LCS
 // trên toàn bộ mã nguồn cho mỗi lệnh là công vô ích trên một thiết bị nhúng.
+//
+// `ISS-PRG-CTRL-001` — MỘT DDC LÀ MỘT PROJECT, VÀ ĐÔI KHI CORE ĐANG GIỮ REVISION
+// CỦA MỘT HÀNG PROJECT KHÁC.
+//
+// `revisionChanges` từ chối `from`/`to` khác project, và với endpoint diff công
+// khai thì đúng: so hai revision không cùng gốc là câu hỏi vô nghĩa. Nhưng
+// đường Commission hỏi một câu KHÁC — *"cài `to` trong khi `from` đang chạy thì
+// đổi những gì"* — và câu đó luôn có nghĩa, kể cả khi `from` thuộc một hàng
+// project khác.
+//
+// Ca này xảy ra thật trên bo Foxlinx: cột `projects.archived` được dựng nhưng
+// chưa nối dây (`F-SHELL-01`), nên các đợt test để lại 17 project rác; archive
+// chúng làm chúng biến khỏi danh sách nhưng KHÔNG nhả controller, và Core vẫn
+// chạy revision của một project soak-test. Kết quả: Commission project thật trả
+// `ErrInvalidRequest` không kèm lý do nào người dùng hiểu được, và thiết bị kẹt
+// vĩnh viễn ở chương trình rác — không một đường nào trong sản phẩm gỡ ra được.
+//
+// Khác project ⇒ KHÔNG có gì mang sang được: mọi object, binding, signal đều
+// mới. Đó đúng bằng ngữ nghĩa `from = "none"`, nên dùng lại nó thay vì dựng một
+// nhánh impact thứ hai. Người vận hành vẫn nhận đủ danh sách phải xác nhận, chỉ
+// là danh sách "thêm mới toàn bộ".
 func (s *ProjectService) GetRevisionChanges(ctx context.Context, fromRevisionID, toRevisionID string) (RevisionChangesView, error) {
-	return s.revisionChanges(ctx, fromRevisionID, toRevisionID, false, 0)
+	view, err := s.revisionChanges(ctx, fromRevisionID, toRevisionID, false, 0)
+	if err == nil || !errors.Is(err, ErrInvalidRequest) || fromRevisionID == "none" {
+		return view, err
+	}
+	if !s.crossProjectRevisions(ctx, fromRevisionID, toRevisionID) {
+		return view, err
+	}
+	return s.revisionChanges(ctx, "none", toRevisionID, false, 0)
+}
+
+// crossProjectRevisions trả true khi hai revision có thật nhưng khác project.
+//
+// Phép kiểm cố ý HẸP: chỉ ca này mới được hạ về `none`. Mọi lý do
+// `ErrInvalidRequest` khác (revision không tồn tại, id sai dạng, from == to)
+// phải giữ nguyên lỗi — nuốt chúng ở đây sẽ biến một yêu cầu sai thành một bản
+// Commission "thay mới toàn bộ" chạy êm.
+func (s *ProjectService) crossProjectRevisions(ctx context.Context, fromRevisionID, toRevisionID string) bool {
+	before, err := s.store.GetRevision(ctx, fromRevisionID)
+	if err != nil {
+		return false
+	}
+	after, err := s.store.GetRevision(ctx, toRevisionID)
+	if err != nil {
+		return false
+	}
+	return before.Revision.ProjectID != after.Revision.ProjectID
 }
 
 // GetRevisionChangesDetail trả manifest KÈM `stHunks[]`/`fbdChanges[]`.

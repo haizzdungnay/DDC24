@@ -8,6 +8,30 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PRG-CTRL-001` Commission khoá vĩnh viễn khi Core giữ revision của project khác (2026-09-03)
+
+- **Triệu chứng.** Trên bo Foxlinx, Core chạy revision của `SOAK-10P-20260824-172521` (task RUNNING,
+  8224 vòng) trong khi project thật `AHU-MASTER-SEQUENCE` ghi `activeRevisionId: null`. Commission
+  project thật trả `EXPECTED_ACTIVE_MISMATCH`; khai đúng `expectedActiveRevisionId` mà Core báo thì
+  `GetRevisionChanges` chặn tiếp bằng `ErrInvalidRequest` vì hai revision khác project. **Thiết bị
+  kẹt ở chương trình rác, không một đường nào trong sản phẩm gỡ ra được.**
+- **Nguyên nhân gốc.** Một DDC là **một** project (`capabilities.projectsPerController: 1`), nhưng
+  cột `projects.archived` được dựng mà chưa nối dây (`F-SHELL-01`) nên các đợt test để lại 17
+  project rác; archive chúng làm chúng biến khỏi danh sách nhưng **không nhả controller**.
+  `revisionChanges` từ chối `from`/`to` khác project — với endpoint diff công khai thì đúng, nhưng
+  đường Commission hỏi một câu **khác**: *"cài `to` trong khi `from` đang chạy thì đổi những gì"*,
+  và câu đó luôn có nghĩa.
+- **Cách sửa.** Khác project ⇒ không có gì mang sang được ⇒ đúng bằng ngữ nghĩa `from = "none"`
+  (thay mới toàn bộ), nên dùng lại nó thay vì dựng nhánh impact thứ hai; người vận hành vẫn nhận đủ
+  danh sách phải xác nhận. Phép nới cố ý **hẹp**: chỉ khi **cả hai** revision có thật mà khác
+  project. Mọi `ErrInvalidRequest` khác giữ nguyên lỗi — nuốt chúng sẽ biến một yêu cầu sai thành
+  một bản Commission "thay mới toàn bộ" chạy êm.
+- **Kiểm chứng trên bo.** Commission `afbde92b` **SUCCEEDED**
+  (`previousActiveRevisionId: 3e104e72…` → `actualActiveRevisionId: afbde92b…`), Program
+  `RelayPattern32` chuyển `runtimeState: RUNNING`, và `plc_shm.ext[]` cho thấy relay đổi trạng thái
+  mỗi giây trên cả bốn module CK-508/CK-509.
+- **Đo lại.** Go **21/21 package `ok`**, `go vet ./...` exit 0.
+
 ### Added — `ISS-PGM04-01` `tags`, `compatibility` và cursor Used-In cho Control Library (#446, 2026-09-04)
 
 - **Hiện trạng.** OpenAPI chỉ mở `category`, `description`, `presentationSha256`. `tags` và read
