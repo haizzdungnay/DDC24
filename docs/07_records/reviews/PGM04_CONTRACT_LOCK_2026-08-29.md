@@ -215,6 +215,51 @@ rỗng cho tới `T61-104`: nhận nó im lặng sẽ hứa một trang không t
 OpenAPI `1.33.0 → 1.34.0`, vẫn additive. Cả hai chốt SHA re-pin trong cùng
 change-set.
 
+## 5B. Thi hành SYSTEM — `T61-102` / `ISS-PGM04-02` (`2026-09-04`)
+
+§2.1 nói `tags` và `description` có nguồn "SYSTEM: registry sinh". Lát này giao
+nguồn đó, và trong lúc giao thì phát hiện một khẳng định của §2.2 chưa đúng ở
+lớp SYSTEM.
+
+**Chuẩn hoá ở registry là KIỂM, không phải SỬA.** Registry là tệp người viết tay
+và được review. Nếu generator tự hạ chữ thường và sắp lại thẻ lúc sinh, thì bản
+đã review khác bản đã sinh, và không ai nhìn thấy khác biệt đó. Nên registry
+phải mang thẻ ở dạng canonical sẵn (NFC, chữ thường, một dấu cách giữa từ, không
+trùng, **sắp tăng dần**) và generator từ chối tệp lệch chuẩn kèm lý do đọc được.
+Khác hẳn đường ghi PROJECT (§2.1), nơi payload đến từ client nên máy chủ chuẩn
+hoá rồi mới lưu.
+
+**§2.2 chưa đúng ở lớp SYSTEM cho tới lát này.** Bản khoá viết
+"`presentationSha256` chỉ băm phần trình bày" và "sửa một dòng mô tả **không
+được** đổi `contentSha256`". Với PROJECT thì đúng từ `T61-103`. Với SYSTEM thì
+`render_go` băm **toàn bộ** entry vào `ContentSHA256Hex`, nên `labelVi`,
+`labelEn` và `category` nằm trong danh tính thực thi. Hai tập field nay tách
+bạch và được khoá ở **ba** nơi độc lập:
+
+| Nơi | Vai trò |
+|---|---|
+| `EXECUTABLE_FIELDS` / `PRESENTATION_FIELDS` (generator Python) | Sinh hai hash |
+| `splitLibrarySignature` (domain Go) | Tính LẠI hai hash lúc nạp, không tin hằng sinh |
+| `ValidateLibraryEntry` (domain Go) | Chặn entry có hash không khớp tập thực thi |
+
+Ba bản sao là CÓ CHỦ Ý — chúng khoá lẫn nhau. Lệch một field thì hash không khớp
+và binary từ chối nạp registry, thay vì âm thầm công bố một danh tính đã đổi
+nghĩa.
+
+Tập thực thi: `id`, `kind`, `dispatch`, `polymorphic`, `allowedTypes`,
+`defaultType`, `typedPortNames`, `ports`, `featureState`.
+Tập trình bày: `category`, `labelVi`, `labelEn`, `description`, `tags`,
+`warningVi`, `warningEn`.
+
+`SignatureJSON` vẫn giữ **toàn bộ** entry — FE đọc `category`/nhãn/`ports` từ đó,
+nên nó không được rút gọn; hai hash chỉ là hai tập con của chính nó.
+
+**Bump `rev-a.3 → rev-a.4` kéo theo bốn thứ pin.** Ghi ra đây vì lần sau ai bump
+cũng sẽ gặp đúng bốn thứ này: product profile (kèm `const` trong schema của nó),
+golden build manifest ST/FBD (`buildKeySha256` phụ thuộc `profile.sha256` nên
+phải tính lại chứ không sed), golden package `package_v2_ahu.mkpkg` (sinh bằng
+chính `mkddc-st-package-golden`, không sửa tay), và ba chốt SHA.
+
 ## 6. Hệ quả cho gate
 
 | Blocker DDD | Trạng thái |

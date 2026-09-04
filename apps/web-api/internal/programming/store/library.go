@@ -1654,6 +1654,13 @@ func fromDomainLibraryEntry(input domain.LibraryEntry) LibraryEntry {
 		InterfaceJSON: append([]byte(nil), input.InterfaceJSON...), SignatureJSON: append([]byte(nil), input.SignatureJSON...),
 		ContentSHA256: input.ContentSHA256,
 		Category:      optionalString(input.Category),
+		/* `T61-102` — metadata trình bày của entry SYSTEM đi từ registry qua
+		   đây tới API. Thiếu ba dòng này thì registry có mô tả/thẻ nhưng không
+		   endpoint nào trả được chúng — đúng cái đứt dây mà `category` từng
+		   mắc suốt một work package. */
+		Description:        optionalString(input.Description),
+		Tags:               append([]string(nil), input.Tags...),
+		PresentationSHA256: append([]byte(nil), input.PresentationSHA256...),
 		StateLayout: LibraryStateLayout{Authoritative: input.StateLayout.Authoritative,
 			Version: input.StateLayout.Version, StateSizeBytes: input.StateLayout.StateSizeBytes, SHA256: input.StateLayout.SHA256},
 		Dependencies: dependencies,

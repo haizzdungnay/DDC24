@@ -316,3 +316,43 @@ func TestPresentationHashTracksTagContentNotTagOrder(t *testing.T) {
 		t.Fatalf("đổi tập thẻ mà hash không đổi (%s) — thẻ không vào phép băm", changed)
 	}
 }
+
+/*
+`T61-102` — metadata SYSTEM phải đi TỚI API, không dừng ở registry.
+
+Đây đúng chỗ `category` từng đứt suốt một work package: registry có dữ liệu,
+hằng Go sinh ra có dữ liệu, nhưng `libraryEntryView` không chép nên không
+endpoint nào trả được nó. Một test chỉ đọc hằng sinh sẽ xanh trong khi màn hình
+vẫn trống.
+
+Bộ này đọc qua ĐÚNG đường mà FE đi: `SearchLibraries` scope SYSTEM.
+*/
+func TestSearchLibrariesCarriesSystemPresentationMetadata(t *testing.T) {
+	library, _, _ := openLibraryServices(t)
+	page, err := library.SearchLibraries(context.Background(), SearchLibrariesCommand{
+		Scope: programmingstore.LibraryScopeSystem, Limit: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) == 0 {
+		t.Fatal("registry SYSTEM rỗng — fixture hỏng, không phải kết quả hợp lệ")
+	}
+	for _, item := range page.Items {
+		if item.Description == nil || *item.Description == "" {
+			t.Fatalf("entry SYSTEM %s tới API mà không có mô tả", item.EntryID)
+		}
+		if len(item.Tags) == 0 {
+			t.Fatalf("entry SYSTEM %s tới API mà không có thẻ", item.EntryID)
+		}
+		if item.PresentationSHA256 == "" {
+			t.Fatalf("entry SYSTEM %s tới API mà không có presentationSha256", item.EntryID)
+		}
+		// Thẻ phải đã chuẩn hoá từ registry; FE không gấp chữ lần hai.
+		for _, tag := range item.Tags {
+			if tag != strings.ToLower(tag) {
+				t.Fatalf("entry SYSTEM %s có thẻ %q chưa viết thường", item.EntryID, tag)
+			}
+		}
+	}
+}

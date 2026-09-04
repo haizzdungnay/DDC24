@@ -2,7 +2,7 @@
   "$schema": "./pou_library_registry_v1.schema.json",
   "registryId": "PROGRAMMING-POU-LIBRARY-REGISTRY-V1",
   "schemaVersion": 1,
-  "libraryVersion": "rev-a.3",
+  "libraryVersion": "rev-a.4",
   "scope": "SYSTEM",
   "categoryOrder": [
     {
@@ -87,7 +87,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Cho ra TRUE chỉ khi mọi đầu vào cùng TRUE. Dùng để bắt buộc nhiều điều kiện xảy ra đồng thời, ví dụ chỉ chạy quạt khi vừa có lệnh chạy vừa không có báo lỗi.",
+      "tags": [
+        "logic",
+        "điều kiện"
+      ]
     },
     {
       "id": "OR",
@@ -119,7 +124,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Cho ra TRUE khi có ít nhất một đầu vào TRUE. Dùng để gộp nhiều nguyên nhân cùng dẫn tới một hành động, ví dụ dừng máy khi báo cháy HOẶC quá nhiệt.",
+      "tags": [
+        "logic",
+        "điều kiện"
+      ]
     },
     {
       "id": "XOR",
@@ -151,7 +161,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Cho ra TRUE khi hai đầu vào KHÁC nhau. Dùng để phát hiện bất đồng giữa hai nguồn đáng lẽ phải giống nhau, ví dụ lệnh chạy và phản hồi chạy lệch nhau.",
+      "tags": [
+        "bất đồng",
+        "logic"
+      ]
     },
     {
       "id": "NOT",
@@ -178,7 +193,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đảo giá trị logic. Dùng khi tín hiệu thiết bị là mức tích cực thấp, ví dụ tiếp điểm thường đóng báo sự cố khi hở.",
+      "tags": [
+        "logic",
+        "đảo"
+      ]
     },
     {
       "id": "SEL",
@@ -224,7 +244,13 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Chọn một trong hai giá trị theo cổng điều kiện G. Dùng để đổi setpoint theo chế độ, ví dụ setpoint ngày và setpoint đêm.",
+      "tags": [
+        "chọn",
+        "logic",
+        "setpoint"
+      ]
     },
     {
       "id": "EQ",
@@ -264,7 +290,11 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "So sánh bằng. Dùng để nhận biết một trạng thái rời rạc đã tới đúng giá trị, ví dụ chế độ vận hành đang ở đúng số hiệu mong muốn.",
+      "tags": [
+        "so sánh"
+      ]
     },
     {
       "id": "NE",
@@ -304,7 +334,11 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "So sánh khác. Dùng để phát hiện một giá trị đã rời khỏi trạng thái mong đợi.",
+      "tags": [
+        "so sánh"
+      ]
     },
     {
       "id": "LT",
@@ -344,7 +378,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "So sánh nhỏ hơn. Dùng cho ngưỡng dưới, ví dụ nhiệt độ cấp thấp hơn giới hạn thì mở van sưởi.",
+      "tags": [
+        "ngưỡng",
+        "so sánh"
+      ]
     },
     {
       "id": "LE",
@@ -384,7 +423,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "So sánh nhỏ hơn hoặc bằng. Dùng cho ngưỡng dưới có tính cả điểm biên.",
+      "tags": [
+        "ngưỡng",
+        "so sánh"
+      ]
     },
     {
       "id": "GT",
@@ -424,7 +468,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "So sánh lớn hơn. Dùng cho ngưỡng trên, ví dụ áp suất vượt giới hạn thì giảm tốc quạt.",
+      "tags": [
+        "ngưỡng",
+        "so sánh"
+      ]
     },
     {
       "id": "GE",
@@ -464,7 +513,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "So sánh lớn hơn hoặc bằng. Dùng cho ngưỡng trên có tính cả điểm biên.",
+      "tags": [
+        "ngưỡng",
+        "so sánh"
+      ]
     },
     {
       "id": "ADD",
@@ -503,7 +557,11 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Cộng hai giá trị. Dùng để bù trị số, ví dụ cộng thêm độ lệch hiệu chuẩn vào giá trị cảm biến.",
+      "tags": [
+        "số học"
+      ]
     },
     {
       "id": "SUB",
@@ -542,7 +600,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Trừ hai giá trị. Dùng để tính sai lệch giữa giá trị đặt và giá trị đo — đầu vào cơ bản của mọi vòng điều khiển.",
+      "tags": [
+        "sai lệch",
+        "số học"
+      ]
     },
     {
       "id": "MUL",
@@ -581,7 +644,11 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Nhân hai giá trị. Dùng để đổi đơn vị hoặc áp hệ số tỉ lệ.",
+      "tags": [
+        "số học"
+      ]
     },
     {
       "id": "DIV",
@@ -620,7 +687,11 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Chia hai giá trị. Chia cho 0 là lỗi thời gian chạy, nên phải chặn mẫu số bằng 0 trước khi gọi.",
+      "tags": [
+        "số học"
+      ]
     },
     {
       "id": "MOD",
@@ -658,7 +729,12 @@
           "dataType": "INT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Chia lấy dư trên số nguyên. Dùng để chia chu kỳ thành các bước lặp, ví dụ luân phiên máy theo lượt.",
+      "tags": [
+        "luân phiên",
+        "số học"
+      ]
     },
     {
       "id": "ABS",
@@ -691,7 +767,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Giá trị tuyệt đối. Dùng khi chỉ quan tâm ĐỘ LỚN của sai lệch chứ không quan tâm chiều, ví dụ so độ lệch với dải chấp nhận.",
+      "tags": [
+        "sai lệch",
+        "số học"
+      ]
     },
     {
       "id": "MIN",
@@ -730,7 +811,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Lấy giá trị nhỏ hơn. Dùng để áp trần mềm từ nhiều nguồn yêu cầu.",
+      "tags": [
+        "giới hạn",
+        "số học"
+      ]
     },
     {
       "id": "MAX",
@@ -769,7 +855,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Lấy giá trị lớn hơn. Dùng để áp sàn mềm, ví dụ giữ lưu lượng không xuống dưới mức thông gió tối thiểu.",
+      "tags": [
+        "giới hạn",
+        "số học"
+      ]
     },
     {
       "id": "LIMIT",
@@ -814,7 +905,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Kẹp giá trị vào dải giữa cận dưới và cận trên. Dùng ở đầu ra điều khiển để lệnh không bao giờ vượt biên vật lý của cơ cấu chấp hành.",
+      "tags": [
+        "giới hạn",
+        "đầu ra"
+      ]
     },
     {
       "id": "SCALE",
@@ -859,7 +955,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Quy đổi tuyến tính từ dải vào sang dải ra. Dùng để chuyển tín hiệu thô của cảm biến sang đơn vị kỹ thuật, ví dụ 4-20 mA sang áp suất.",
+      "tags": [
+        "cảm biến",
+        "quy đổi"
+      ]
     },
     {
       "id": "DEADBAND",
@@ -894,7 +995,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Trả về 0 khi độ lệch còn nằm trong vùng chết. Dùng để cơ cấu chấp hành thôi chạy theo nhiễu đo quanh điểm đặt.",
+      "tags": [
+        "vùng chết",
+        "ổn định"
+      ]
     },
     {
       "id": "SQRT",
@@ -921,7 +1027,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Căn bậc hai. Dùng cho quan hệ phi tuyến của cảm biến lưu lượng kiểu chênh áp.",
+      "tags": [
+        "lưu lượng",
+        "số học"
+      ]
     },
     {
       "id": "INT_TO_REAL",
@@ -948,7 +1059,11 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số nguyên 16 bit sang số thực. Dùng trước khi đưa giá trị đếm hay giá trị thô vào phép tính có phần thập phân.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "REAL_TO_INT",
@@ -975,7 +1090,11 @@
           "dataType": "INT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số thực sang số nguyên 16 bit, làm tròn theo quy tắc của runtime. Vượt dải là lỗi, không cắt im lặng.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "TIME_TO_REAL",
@@ -1002,7 +1121,12 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi khoảng thời gian sang số thực mili giây. Dùng khi cần đưa thời lượng vào phép tính số học.",
+      "tags": [
+        "chuyển kiểu",
+        "thời gian"
+      ]
     },
     {
       "id": "REAL_TO_TIME",
@@ -1029,7 +1153,12 @@
           "dataType": "TIME"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số thực mili giây sang khoảng thời gian. Dùng để đặt thời gian trễ tính được thay vì hằng số cứng.",
+      "tags": [
+        "chuyển kiểu",
+        "thời gian"
+      ]
     },
     {
       "id": "INT_TO_DINT",
@@ -1056,7 +1185,11 @@
           "dataType": "DINT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Mở rộng số nguyên 16 bit sang 32 bit. Không mất giá trị.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "INT_TO_UINT",
@@ -1083,7 +1216,11 @@
           "dataType": "UINT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số nguyên có dấu sang không dấu. Giá trị âm là lỗi, không bọc vòng im lặng.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "DINT_TO_INT",
@@ -1110,7 +1247,11 @@
           "dataType": "INT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Thu hẹp số nguyên 32 bit về 16 bit. Vượt dải là lỗi thời gian chạy.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "DINT_TO_UINT",
@@ -1137,7 +1278,11 @@
           "dataType": "UINT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số nguyên 32 bit có dấu sang không dấu. Giá trị âm là lỗi.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "UINT_TO_INT",
@@ -1164,7 +1309,11 @@
           "dataType": "INT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số nguyên không dấu sang có dấu. Vượt dải dương là lỗi.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "UINT_TO_DINT",
@@ -1191,7 +1340,11 @@
           "dataType": "DINT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Mở rộng số nguyên không dấu sang 32 bit có dấu. Không mất giá trị.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "DINT_TO_REAL",
@@ -1218,7 +1371,11 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số nguyên 32 bit sang số thực. Giá trị rất lớn có thể mất độ chính xác cuối.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "UINT_TO_REAL",
@@ -1245,7 +1402,11 @@
           "dataType": "REAL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số nguyên không dấu sang số thực.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "REAL_TO_DINT",
@@ -1272,7 +1433,11 @@
           "dataType": "DINT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số thực sang số nguyên 32 bit. Vượt dải là lỗi.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "REAL_TO_UINT",
@@ -1299,7 +1464,11 @@
           "dataType": "UINT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đổi số thực sang số nguyên không dấu. Giá trị âm hoặc vượt dải là lỗi.",
+      "tags": [
+        "chuyển kiểu"
+      ]
     },
     {
       "id": "TON",
@@ -1334,7 +1503,12 @@
           "dataType": "TIME"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Trễ lúc BẬT: đầu ra lên sau khi đầu vào giữ TRUE đủ thời gian PT. Dùng để lọc tín hiệu nhấp nháy và để chờ thiết bị ổn định trước khi báo chạy.",
+      "tags": [
+        "thời gian",
+        "trễ"
+      ]
     },
     {
       "id": "TOF",
@@ -1369,7 +1543,12 @@
           "dataType": "TIME"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Trễ lúc TẮT: đầu ra giữ TRUE thêm PT sau khi đầu vào xuống FALSE. Dùng để chạy dư quạt sau khi tắt bộ sưởi.",
+      "tags": [
+        "thời gian",
+        "trễ"
+      ]
     },
     {
       "id": "TP",
@@ -1404,7 +1583,12 @@
           "dataType": "TIME"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Phát một xung dài đúng PT khi có cạnh lên. Dùng cho lệnh nhấp một lần, ví dụ xung mở van.",
+      "tags": [
+        "thời gian",
+        "xung"
+      ]
     },
     {
       "id": "R_TRIG",
@@ -1429,7 +1613,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Phát hiện cạnh lên: TRUE đúng một chu kỳ khi đầu vào chuyển FALSE sang TRUE. Dùng để một sự kiện chỉ được xử lý một lần.",
+      "tags": [
+        "cạnh",
+        "sự kiện"
+      ]
     },
     {
       "id": "F_TRIG",
@@ -1454,7 +1643,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Phát hiện cạnh xuống: TRUE đúng một chu kỳ khi đầu vào chuyển TRUE sang FALSE.",
+      "tags": [
+        "cạnh",
+        "sự kiện"
+      ]
     },
     {
       "id": "CTU",
@@ -1494,7 +1688,12 @@
           "dataType": "INT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đếm lên mỗi cạnh lên của CU, báo Q khi tới giá trị đặt PV. Dùng để đếm số lần khởi động phục vụ bảo trì.",
+      "tags": [
+        "bảo trì",
+        "đếm"
+      ]
     },
     {
       "id": "CTD",
@@ -1534,7 +1733,11 @@
           "dataType": "INT"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "Đếm xuống mỗi cạnh lên của CD, báo Q khi về 0. Dùng cho hạn mức đếm ngược.",
+      "tags": [
+        "đếm"
+      ]
     },
     {
       "id": "PID",
@@ -1600,6 +1803,11 @@
         }
       ],
       "featureState": "REVIEW_REQUIRED",
+      "description": "Bộ điều khiển tỉ lệ - tích phân - vi phân. Dùng cho vòng điều khiển liên tục như nhiệt độ hay áp suất. Cần Controls/Safety duyệt trước khi đưa vào vận hành vì thông số sai gây dao động cơ cấu chấp hành.",
+      "tags": [
+        "liên tục",
+        "vòng điều khiển"
+      ],
       "warningVi": "Chưa Controls+Safety review — không dùng cho logic sản xuất (xem ST_SUBSET_SPEC §6.2)",
       "warningEn": "Not yet Controls+Safety reviewed — do not use for production logic (see ST_SUBSET_SPEC §6.2)"
     },
@@ -1636,7 +1844,12 @@
           "dataType": "BOOL"
         }
       ],
-      "featureState": "AVAILABLE"
+      "featureState": "AVAILABLE",
+      "description": "So sánh có trễ hai ngưỡng: bật ở ngưỡng trên, tắt ở ngưỡng dưới. Dùng để thiết bị đóng cắt thôi rung quanh một điểm đặt duy nhất.",
+      "tags": [
+        "ngưỡng",
+        "ổn định"
+      ]
     }
   ]
 }

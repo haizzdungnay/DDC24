@@ -16,24 +16,39 @@ describe('programmingCompatibility — ISS-STED-19', () => {
     expect(verdict.mismatches).toEqual([])
   })
 
-  /* TEST ÂM theo đúng tiêu chí nghiệm thu: bundle FE `rev-a.3` gặp thiết bị
-   * `rev-a.4`. Không phải "cảnh báo rồi vẫn cho gõ" — phải CHẶN. */
-  it('bundle rev-a.3 gặp thiết bị rev-a.4 thì chặn soạn thảo và nêu cả hai phiên bản', () => {
-    expect(PROGRAMMING_LIBRARY_VERSION).toBe('rev-a.3')
-    const verdict = programmingCompatibility({ ...matchingDevice(), libraryRegistryVersion: 'rev-a.4' })
+  /* TEST ÂM theo đúng tiêu chí nghiệm thu: bundle FE gặp thiết bị mang version
+   * thư viện KHÁC. Không phải "cảnh báo rồi vẫn cho gõ" — phải CHẶN.
+   *
+   * Phiên bản thiết bị được DỰNG TỪ hằng bundle chứ không chép số.
+   * `T61-102` bump registry `rev-a.3 -> rev-a.4` một cách có kiểm soát, và bản
+   * cũ của test này ghim `expect(PROGRAMMING_LIBRARY_VERSION).toBe('rev-a.3')`
+   * nên nó đỏ vì chính cú bump hợp lệ ấy — một test đỏ mà sản phẩm không sai.
+   * Bản sao số hiệu ở FE cũng không canh thêm gì: gate layout đã khoá hằng này
+   * khớp registry ở cả ba tệp sinh.
+   *
+   * Điều đang kiểm là HÀNH VI KHI LỆCH, không phải giá trị của hằng — nên dùng
+   * hằng để dựng một giá trị khác nó là đúng chỗ, không phải "so test với chính
+   * hằng nó đang kiểm". */
+  const deviceLibraryVersion = `${PROGRAMMING_LIBRARY_VERSION}-thiết-bị-khác`
+
+  it('bundle gặp thiết bị lệch version thư viện thì chặn soạn thảo và nêu cả hai phiên bản', () => {
+    const verdict = programmingCompatibility({
+      ...matchingDevice(),
+      libraryRegistryVersion: deviceLibraryVersion,
+    })
 
     expect(verdict.state).toBe('MISMATCH')
     expect(verdict.editingAllowed).toBe(false)
     expect(verdict.mismatches).toHaveLength(1)
     expect(verdict.mismatches[0]).toMatchObject({
       field: 'libraryRegistryVersion',
-      bundle: 'rev-a.3',
-      device: 'rev-a.4',
+      bundle: PROGRAMMING_LIBRARY_VERSION,
+      device: deviceLibraryVersion,
     })
     // Thông báo phải đọc được và nêu CẢ HAI phía — nếu chỉ nói "không tương
     // thích" thì người vận hành không biết bên nào là bên cũ.
-    expect(verdict.reason).toContain('rev-a.3')
-    expect(verdict.reason).toContain('rev-a.4')
+    expect(verdict.reason).toContain(PROGRAMMING_LIBRARY_VERSION)
+    expect(verdict.reason).toContain(deviceLibraryVersion)
   })
 
   it('lệch hồ sơ ngôn ngữ ST cũng chặn, và nêu đúng phiên bản hai bên', () => {
@@ -63,7 +78,7 @@ describe('programmingCompatibility — ISS-STED-19', () => {
   it('gom đủ mọi trường lệch chứ không dừng ở trường đầu tiên', () => {
     const verdict = programmingCompatibility({
       ...matchingDevice(),
-      libraryRegistryVersion: 'rev-a.4',
+      libraryRegistryVersion: deviceLibraryVersion,
       stLanguageProfileVersion: '2.0.0',
       targetAbi: 3842,
     })
@@ -106,7 +121,7 @@ describe('programmingCompatibility — ISS-STED-19', () => {
       programmingCompatibility(undefined),
       programmingCompatibility(null),
       programmingCompatibility(undefined, true),
-      programmingCompatibility({ ...matchingDevice(), libraryRegistryVersion: 'rev-a.2' }),
+      programmingCompatibility({ ...matchingDevice(), libraryRegistryVersion: deviceLibraryVersion }),
       programmingCompatibility({ ...matchingDevice(), compilerProfileId: 'khác' }),
     ]
     for (const verdict of cases) {

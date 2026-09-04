@@ -8,8 +8,8 @@
 
 namespace core::st_library_registry_generated {
 
-inline constexpr std::string_view kRegistrySha256 = "a59c6db561f6550ab010f3a84118363b76f8e3d4103dd759cbb8200c26dd4660";
-inline constexpr std::string_view kLibraryVersion = "rev-a.3";
+inline constexpr std::string_view kRegistrySha256 = "e79442f2cd781084fd6a0e34b3f7028a51d13b53af945202e0f8e5cc7fbf91b0";
+inline constexpr std::string_view kLibraryVersion = "rev-a.4";
 
 /* Entry compiler nhận diện qua binop/unop trong st_fbd_compile.cpp. */
 inline constexpr std::array<std::string_view, 15> kOperators = {

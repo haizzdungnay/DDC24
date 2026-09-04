@@ -17,6 +17,7 @@ from pathlib import Path
 import subprocess
 import sys
 from typing import Any
+import unicodedata
 
 from jsonschema import Draft202012Validator
 
@@ -37,6 +38,47 @@ LANGUAGE_PROFILE_CURATED = ROOT / "contracts/programming/st_language_profile_v1.
 CPP_OUTPUT = ROOT / "apps/core/application/st/st_library_registry_generated.hpp"
 TS_OUTPUT = ROOT / "apps/web-ui/src/features/programming/api/generated/library_registry.ts"
 GO_OUTPUT = ROOT / "apps/web-api/internal/programming/domain/library_registry_generated.go"
+
+
+# `T61-102` / `D61-09` — HAI TẬP FIELD TÁCH BẠCH, và đây là trọng tâm của lát này.
+#
+# `contentSha256` là danh tính THỰC THI: nó nói "gọi khối này thì máy làm gì".
+# Nó đi vào artifact, vào chữ ký và vào pin của Revision. Nếu sửa một dòng mô tả
+# hay gắn thêm một cái thẻ mà nó đổi, thì mọi artifact và pin đã ký thành lỗi
+# thời chỉ vì một lần sửa chính tả — và hậu quả thật không phải "phải build lại",
+# mà là người ta sẽ thôi không sửa tài liệu nữa.
+#
+# Trước lát này, generator băm TOÀN BỘ entry vào `ContentSHA256Hex`, nên
+# `labelVi`, `labelEn` và `category` — ba thứ thuần trình bày — đang nằm trong
+# danh tính thực thi. Chính comment của hàm ấy đã tự nhận "hash này ghim
+# signature/port/category/dispatch, KHÔNG phải hash executable", nhưng tên trường
+# nó gán vào lại là `ContentSHA256Hex`, và hợp đồng public gọi trường đó là
+# "danh tính THỰC THI". Hai câu ấy không thể cùng đúng.
+EXECUTABLE_FIELDS = (
+    "id", "kind", "dispatch", "polymorphic", "allowedTypes",
+    "defaultType", "typedPortNames", "ports", "featureState",
+)
+PRESENTATION_FIELDS = (
+    "category", "labelVi", "labelEn", "description", "tags", "warningVi", "warningEn",
+)
+
+# Trần thẻ, khớp `LOCK-PGM04-CONTRACT-001` §2.1 và schema. Ba nơi giữ cùng con
+# số một cách CÓ CHỦ Ý: schema chặn payload, hằng này chặn logic, và test khoá
+# bằng số tuyệt đối. Một hằng dùng chung sẽ làm test tự so với chính nó.
+MAX_TAGS = 8
+MAX_TAG_LENGTH = 24
+MAX_DESCRIPTION_LENGTH = 512
+
+
+def canonical_subset(entry: dict[str, Any], fields: tuple[str, ...]) -> str:
+    """JSON canonical của một TẬP CON field. Khoá sắp xếp, không khoảng trắng thừa.
+
+    Field vắng mặt thì KHÔNG chèn giá trị rỗng thay thế: một entry không có
+    `description` phải cho ra hash khác một entry có `description: ""`, vì hai
+    thứ đó là hai câu khác nhau.
+    """
+    subset = {key: entry[key] for key in fields if key in entry}
+    return json.dumps(subset, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def q(value: str) -> str:
@@ -78,6 +120,44 @@ def validate(
         identity = entry["id"]
         if entry["category"] not in categories:
             raise ValueError(f"{identity}: category ngoài categoryOrder")
+
+        # `T61-102` — metadata TRÌNH BÀY phải đã CANONICAL trong chính tệp nguồn.
+        #
+        # Generator KIỂM chứ không tự chuẩn hoá. Registry là tệp người viết tay
+        # và được review; tự sửa nó lúc sinh sẽ làm bản đã review khác bản đã
+        # sinh, và không ai nhìn thấy khác biệt đó. Fail closed, nói rõ chỗ sai.
+        description = entry.get("description")
+        if description is not None:
+            if description != unicodedata.normalize("NFC", description):
+                raise ValueError(f"{identity}: description chưa chuẩn hoá NFC")
+            if description != description.strip():
+                raise ValueError(f"{identity}: description thừa khoảng trắng ở hai đầu")
+            if len(description) > MAX_DESCRIPTION_LENGTH:
+                raise ValueError(
+                    f"{identity}: description vượt {MAX_DESCRIPTION_LENGTH} ký tự"
+                )
+        tags = entry.get("tags")
+        if tags is not None:
+            if len(tags) > MAX_TAGS:
+                raise ValueError(f"{identity}: vượt {MAX_TAGS} thẻ")
+            for tag in tags:
+                if tag != unicodedata.normalize("NFC", tag):
+                    raise ValueError(f"{identity}: thẻ {tag!r} chưa chuẩn hoá NFC")
+                if tag != tag.lower():
+                    raise ValueError(f"{identity}: thẻ {tag!r} phải viết thường")
+                if tag != " ".join(tag.split()):
+                    raise ValueError(f"{identity}: thẻ {tag!r} có khoảng trắng thừa")
+                if len(tag) > MAX_TAG_LENGTH:
+                    raise ValueError(
+                        f"{identity}: thẻ {tag!r} vượt {MAX_TAG_LENGTH} ký tự"
+                    )
+            if len(set(tags)) != len(tags):
+                raise ValueError(f"{identity}: thẻ bị trùng")
+            # Sắp tăng dần là bắt buộc, không phải thẩm mỹ: một tập hợp không có
+            # thứ tự nội tại, nên giữ thứ tự người gõ sẽ làm hai tệp cùng nghĩa
+            # cho hai `presentationSha256` khác nhau.
+            if list(tags) != sorted(tags):
+                raise ValueError(f"{identity}: thẻ phải sắp tăng dần")
 
         names = [port["name"] for port in entry["ports"]]
         if len(set(names)) != len(names):
@@ -255,6 +335,13 @@ def render_ts(registry: dict[str, Any], registry_hash: str) -> str:
             f"featureState: {q(entry['featureState'])}",
             f"iecClassification: {q(iec_classification(entry['id'], vendor))}",
         ]
+        # `T61-102` — metadata TRÌNH BÀY. Chỉ phát ra khi registry thật sự có,
+        # để trường VẮNG ở TS mang đúng nghĩa "chưa ai điền" thay vì "đã điền
+        # rỗng". Đó là cùng một luật mà `ProgrammingLibraryEntry` đã khoá.
+        if "description" in entry:
+            fields.append(f"description: {q(entry['description'])}")
+        if "tags" in entry:
+            fields.append("tags: [%s]" % ", ".join(q(t) for t in entry["tags"]))
         if "warningVi" in entry:
             fields.append(
                 "warning: { vi: %s, en: %s }" % (q(entry["warningVi"]), q(entry["warningEn"]))
@@ -307,6 +394,12 @@ export interface LibraryEntry {{
   readonly ports: readonly LibraryPort[];
   readonly featureState: LibraryFeatureState;
   readonly iecClassification: LibraryIecClassification;
+  /** `T61-102` — metadata TRÌNH BÀY. Optional vì trường VẮNG nghĩa là "chưa ai
+   *  điền", khác chuỗi rỗng nghĩa là "đã điền rỗng có chủ đích". Sửa hai trường
+   *  này KHÔNG đổi danh tính thực thi của khối (`D61-09`). Thẻ đã ở dạng chuẩn
+   *  hoá (chữ thường, sắp tăng dần) ngay trong registry — đừng sắp lại. */
+  readonly description?: string;
+  readonly tags?: readonly string[];
   readonly warning?: {{ readonly vi: string; readonly en: string }};
 }}
 
@@ -338,13 +431,21 @@ def gofmt(content: str) -> str:
 
 def render_go(registry: dict[str, Any], registry_hash: str, raw: bytes) -> str:
     def entry_line(entry: dict[str, Any]) -> str:
-        # `SignatureJSON` giữ toàn bộ metadata canonical của registry. Hash này
-        # ghim signature/port/category/dispatch, KHÔNG phải hash executable
-        # implementation hoặc artifact đã biên dịch.
+        # `SignatureJSON` giữ TOÀN BỘ metadata canonical của registry — FE đọc
+        # `category`/`labelVi`/`ports` từ đây, nên nó không được rút gọn.
+        #
+        # Nhưng HAI HASH thì tính từ hai TẬP CON tách bạch (`D61-09`):
+        #   - `ContentSHA256Hex`   <- EXECUTABLE_FIELDS: gọi khối này máy làm gì.
+        #   - `PresentationSHA256Hex` <- PRESENTATION_FIELDS: người đọc thấy gì.
+        # Băm cả entry vào `ContentSHA256Hex` như bản trước làm cho một lần sửa
+        # nhãn tiếng Việt đổi danh tính thực thi của khối.
         signature_json = json.dumps(
             entry, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         )
-        content_hash = hashlib.sha256(signature_json.encode("utf-8")).hexdigest()
+        executable_json = canonical_subset(entry, EXECUTABLE_FIELDS)
+        presentation_json = canonical_subset(entry, PRESENTATION_FIELDS)
+        content_hash = hashlib.sha256(executable_json.encode("utf-8")).hexdigest()
+        presentation_hash = hashlib.sha256(presentation_json.encode("utf-8")).hexdigest()
         # FUNCTION và CONVERSION thuần/stateless nên 0 là giá trị authoritative.
         # Registry hiện chưa mang layout state của FUNCTION_BLOCK; ghi unknown
         # thay vì đoán. PROJECT FB chỉ được publish sau khi có layout riêng hợp lệ.
@@ -357,8 +458,11 @@ def render_go(registry: dict[str, Any], registry_hash: str, raw: bytes) -> str:
             # `T61-102` — `category` đã có trong registry từ đầu; trước lát này
             # nó không được sinh ra Go nên không endpoint nào trả được nó.
             f"Category: {q(entry['category'])}, "
-            f"SignatureJSON: {q(signature_json)}, "
+            f"Description: {q(entry.get('description', ''))}, "
+            "Tags: %s, " % ("[]string{%s}" % ", ".join(q(t) for t in entry.get("tags", [])))
+            + f"SignatureJSON: {q(signature_json)}, "
             f"ContentSHA256Hex: {q(content_hash)}, "
+            f"PresentationSHA256Hex: {q(presentation_hash)}, "
             "StateSizeBytes: 0, "
             f"StateSizeAuthoritative: {'true' if state_size_authoritative else 'false'}"
             "},"
@@ -434,6 +538,115 @@ def self_test() -> None:
     else:
         raise AssertionError("bump registry mà profile/G1 chưa pin vẫn được chấp nhận")
 
+    # `T61-102` — metadata TRÌNH BÀY phải fail closed, không bỏ field im lặng.
+    #
+    # Mỗi ca dưới đây hỏng đúng MỘT luật và phải bị `validate` từ chối kèm lý do
+    # đọc được. Ca nào đi lọt thì registry có thể mang metadata lệch chuẩn, và
+    # hai tệp cùng nghĩa sẽ cho hai `presentationSha256` khác nhau.
+    faults: list[tuple[str, Any, str]] = [
+        ("thẻ trùng", ["logic", "logic"], "trùng"),
+        ("thẻ chưa sắp tăng dần", ["zzz", "aaa"], "sắp tăng dần"),
+        ("thẻ viết hoa", ["Logic"], "viết thường"),
+        ("thẻ có khoảng trắng thừa", ["vav  box"], "khoảng trắng thừa"),
+        ("thẻ quá dài", ["x" * (MAX_TAG_LENGTH + 1)], f"vượt {MAX_TAG_LENGTH}"),
+        ("quá số thẻ cho phép", [f"t{index}" for index in range(MAX_TAGS + 1)], f"vượt {MAX_TAGS}"),
+        # NFC: "à" dựng từ "a" + U+0300 trông y hệt "à" dựng sẵn nhưng khác byte,
+        # nên khác hash. Một tệp trộn hai dạng là một tệp có hai sự thật.
+        ("thẻ chưa chuẩn hoá NFC", ["a\u0300"], "NFC"),
+    ]
+    for label, tags, expected in faults:
+        candidate = json.loads(json.dumps(registry))
+        candidate["entries"][0]["tags"] = tags
+        try:
+            validate(candidate, hashlib.sha256(b"probe").hexdigest())
+        except ValueError as error:
+            if expected not in str(error):
+                raise AssertionError(f"{label}: lỗi không nói đúng nguyên nhân: {error}") from error
+        else:
+            raise AssertionError(f"{label} vẫn được chấp nhận")
+
+    long_description = json.loads(json.dumps(registry))
+    long_description["entries"][0]["description"] = "x" * (MAX_DESCRIPTION_LENGTH + 1)
+    try:
+        validate(long_description, hashlib.sha256(b"probe").hexdigest())
+    except ValueError as error:
+        if "description" not in str(error):
+            raise AssertionError(f"description quá dài trả sai lỗi: {error}") from error
+    else:
+        raise AssertionError("description vượt trần vẫn được chấp nhận")
+
+    # `D61-09` — TÁCH BIỆT executable/presentation, đo trực tiếp chứ không tin
+    # tên biến. Đây là bất biến đắt nhất của lát này: nếu nó hỏng thì một lần
+    # sửa chính tả làm mọi artifact và pin Revision đã ký thành lỗi thời.
+    base = registry["entries"][0]
+
+    def pair(entry: dict[str, Any]) -> tuple[str, str]:
+        return (
+            hashlib.sha256(canonical_subset(entry, EXECUTABLE_FIELDS).encode("utf-8")).hexdigest(),
+            hashlib.sha256(canonical_subset(entry, PRESENTATION_FIELDS).encode("utf-8")).hexdigest(),
+        )
+
+    content, presentation = pair(base)
+    for label, mutate in [
+        ("description", lambda e: e.update(description=e["description"] + " thêm")),
+        ("tags", lambda e: e.update(tags=sorted(set(e["tags"]) | {"zzz"}))),
+        ("labelVi", lambda e: e.update(labelVi=e["labelVi"] + " x")),
+        ("category", lambda e: e.update(category="control")),
+    ]:
+        candidate = json.loads(json.dumps(base))
+        mutate(candidate)
+        changed_content, changed_presentation = pair(candidate)
+        if changed_content != content:
+            raise AssertionError(f"sửa {label} đã đổi content hash — vi phạm D61-09")
+        if changed_presentation == presentation:
+            raise AssertionError(f"sửa {label} mà presentation hash không đổi")
+
+    # Vế ngược lại: đổi thứ THỰC THI thì content hash BẮT BUỘC đổi, nếu không
+    # hash ấy không canh gì cả.
+    for label, mutate in [
+        ("ports", lambda e: e.update(ports=e["ports"][:-1])),
+        ("dispatch", lambda e: e.update(dispatch="FUNC_TABLE")),
+        ("featureState", lambda e: e.update(featureState="REVIEW_REQUIRED")),
+    ]:
+        candidate = json.loads(json.dumps(base))
+        mutate(candidate)
+        if pair(candidate)[0] == content:
+            raise AssertionError(f"đổi {label} mà content hash không đổi")
+
+    # Field VẮNG khác field RỖNG: hai thứ đó là hai câu khác nhau, nên hai hash.
+    absent = json.loads(json.dumps(base))
+    absent.pop("description")
+    blank = json.loads(json.dumps(base))
+    blank["description"] = ""
+    if pair(absent)[1] == pair(blank)[1]:
+        raise AssertionError("description vắng và description rỗng cho cùng một hash")
+
+    # Canh chính ĐẦU RA của `render_go`, không chỉ canh các hàm nó gọi.
+    #
+    # Đây là chỗ bộ self-test cũ hụt: mọi khẳng định ở trên đo `canonical_subset`
+    # trực tiếp, nên một `render_go` gán nhầm `content_hash = sha256(cả entry)`
+    # vẫn đi lọt — đúng cái lỗi mà lát này sinh ra để sửa. Đo trên chuỗi Go thật
+    # sự được ghi ra đĩa thì phép tiêm ấy không còn chỗ trốn.
+    _, real_hash, real_raw = load()
+    rendered = render_go(registry, real_hash, real_raw)
+    for entry in registry["entries"]:
+        expected_content = hashlib.sha256(
+            canonical_subset(entry, EXECUTABLE_FIELDS).encode("utf-8")
+        ).hexdigest()
+        expected_presentation = hashlib.sha256(
+            canonical_subset(entry, PRESENTATION_FIELDS).encode("utf-8")
+        ).hexdigest()
+        if f'ContentSHA256Hex: "{expected_content}"' not in rendered:
+            raise AssertionError(
+                f"{entry['id']}: ContentSHA256Hex sinh ra không phải hash của TẬP THỰC THI"
+            )
+        if f'PresentationSHA256Hex: "{expected_presentation}"' not in rendered:
+            raise AssertionError(
+                f"{entry['id']}: PresentationSHA256Hex sinh ra không phải hash của TẬP TRÌNH BÀY"
+            )
+        if expected_content == expected_presentation:
+            raise AssertionError(f"{entry['id']}: hai hash trùng nhau — phép tách vô nghĩa")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -443,7 +656,10 @@ def main() -> int:
     try:
         if args.self_test:
             self_test()
-            print("PASS: 2/2 fault SYSTEM library version/content bị chặn")
+            print(
+                "PASS: 12/12 fault SYSTEM library bị chặn "
+                "(2 version/content, 8 metadata trình bày, 2 tách hash executable/presentation)"
+            )
             return 0
         rendered, entry_count = outputs()
     except (OSError, ValueError, KeyError, json.JSONDecodeError,

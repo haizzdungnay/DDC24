@@ -125,9 +125,15 @@ type LibraryEntry struct {
 	/* `T61-102` — phân loại nghiệp vụ. Với SYSTEM nó sinh từ registry; với
 	   PROJECT nó do người dùng đặt và store giữ. Rỗng = chưa phân loại, và
 	   PGM-04 render nó thành `—` chứ không thành một nhóm "khác" tự nghĩ ra. */
-	Category    string
-	StateLayout LibraryStateLayout
-	Dependencies  []LibraryDependency
+	Category string
+	/* `T61-102` — mô tả và thẻ TRÌNH BÀY. Rỗng = chưa ai điền; lớp HTTP đổi nó
+	   thành field VẮNG chứ không thành chuỗi rỗng. */
+	Description string
+	Tags        []string
+	/* Băm RIÊNG phần trình bày, tách khỏi `ContentSHA256` (`D61-09`). */
+	PresentationSHA256 []byte
+	StateLayout        LibraryStateLayout
+	Dependencies       []LibraryDependency
 }
 
 type LibraryUsage struct {
@@ -157,9 +163,33 @@ type LibraryEntryDefinition struct {
 	   nhóm nghiệp vụ (logic/math/timer/control…). Suy từ `Kind` cho ra ba rổ
 	   vô nghĩa với người vận hành — và tệ hơn, chúng TRÔNG như phân loại thật.
 	*/
-	Category               string
-	SignatureJSON          string
+	Category string
+	/*
+	   `T61-102` — mô tả và thẻ TRÌNH BÀY, sinh từ registry.
+
+	   Chuỗi rỗng / lát rỗng ở đây nghĩa là registry KHÔNG khai trường đó, và
+	   lớp trên chuyển nó thành field VẮNG trên dây — không phải một mô tả rỗng.
+	   Thẻ đã canonical trong chính registry (NFC, chữ thường, sắp tăng dần);
+	   generator từ chối registry lệch chuẩn thay vì tự sửa.
+	*/
+	Description   string
+	Tags          []string
+	SignatureJSON string
+	/*
+	   HAI HASH TÁCH BẠCH (`D61-09`), và đây là điểm cốt lõi của `T61-102`.
+
+	   `ContentSHA256Hex` băm TẬP THỰC THI (id, kind, dispatch, polymorphic,
+	   allowedTypes, defaultType, typedPortNames, ports, featureState) — nó nói
+	   "gọi khối này thì máy làm gì". `PresentationSHA256Hex` băm tập trình bày
+	   (category, nhãn, mô tả, thẻ, cảnh báo).
+
+	   Bản trước băm TOÀN BỘ entry vào `ContentSHA256Hex`, nên `labelVi`,
+	   `labelEn` và `category` — ba thứ thuần trình bày — nằm trong danh tính
+	   thực thi: sửa một dấu tiếng Việt trong nhãn là đổi hash mà artifact và pin
+	   Revision đang dựa vào.
+	*/
 	ContentSHA256Hex       string
+	PresentationSHA256Hex  string
 	StateSizeBytes         uint32
 	StateSizeAuthoritative bool
 }
@@ -309,7 +339,18 @@ func ValidateLibraryEntry(entry LibraryEntry, scope LibraryScope, publishing boo
 			!json.Valid(entry.SignatureJSON) {
 			return fmt.Errorf("SYSTEM library signature phải là JSON hợp lệ 2..65536 byte")
 		}
-		if digest := sha256.Sum256(entry.SignatureJSON); digest != entry.ContentSHA256 {
+		/* `T61-102` — kiểm hash trên TẬP THỰC THI, không trên cả signature.
+		 *
+		 * Bản trước băm nguyên `SignatureJSON`, nên `labelVi`/`labelEn`/
+		 * `category` nằm trong danh tính thực thi và một lần sửa nhãn tiếng
+		 * Việt là một lần đổi hash mà artifact với pin Revision đang dựa vào.
+		 * Luật ở đây phải trùng `splitLibrarySignature` và trùng
+		 * `EXECUTABLE_FIELDS` của generator — ba nơi khoá lẫn nhau. */
+		executable, _, err := splitLibrarySignature(entry.SignatureJSON)
+		if err != nil {
+			return fmt.Errorf("SYSTEM library signature không tách được tập thực thi: %w", err)
+		}
+		if digest := sha256.Sum256(executable); digest != entry.ContentSHA256 {
 			return fmt.Errorf("SYSTEM library entry content checksum mismatch")
 		}
 		if entry.Language != "" || len(entry.SourceBlob) != 0 || len(entry.InterfaceJSON) != 0 {
@@ -674,9 +715,32 @@ func SystemLibraryEntries() ([]LibraryEntry, error) {
 		if err != nil || len(digestBytes) != sha256.Size {
 			return nil, fmt.Errorf("SYSTEM library entry %s có content hash sinh lỗi", definition.EntryID)
 		}
-		actual := sha256.Sum256([]byte(definition.SignatureJSON))
+		/*
+		   Go TỰ TÍNH LẠI cả hai hash từ `SignatureJSON`, không tin con số
+		   generator ghi ra.
+
+		   `SignatureJSON` là entry canonical đầy đủ, nên từ nó trích được cả
+		   tập thực thi lẫn tập trình bày bằng CÙNG luật mà generator dùng. Hai
+		   bản luật (Python và Go) là có chủ ý: chúng khoá lẫn nhau. Sửa tập
+		   field ở một bên mà quên bên kia thì hash không khớp và binary từ
+		   chối khởi động registry — fail closed, thay vì âm thầm công bố một
+		   danh tính thực thi đã đổi nghĩa.
+		*/
+		executable, presentation, err := splitLibrarySignature([]byte(definition.SignatureJSON))
+		if err != nil {
+			return nil, fmt.Errorf("SYSTEM library entry %s: %w", definition.EntryID, err)
+		}
+		actual := sha256.Sum256(executable)
 		if !strings.EqualFold(hex.EncodeToString(actual[:]), definition.ContentSHA256Hex) {
 			return nil, fmt.Errorf("SYSTEM library entry %s content hash mismatch", definition.EntryID)
+		}
+		actualPresentation := sha256.Sum256(presentation)
+		if !strings.EqualFold(hex.EncodeToString(actualPresentation[:]), definition.PresentationSHA256Hex) {
+			return nil, fmt.Errorf("SYSTEM library entry %s presentation hash mismatch", definition.EntryID)
+		}
+		presentationDigest, err := hex.DecodeString(definition.PresentationSHA256Hex)
+		if err != nil || len(presentationDigest) != sha256.Size {
+			return nil, fmt.Errorf("SYSTEM library entry %s có presentation hash sinh lỗi", definition.EntryID)
 		}
 		var digest [sha256.Size]byte
 		copy(digest[:], digestBytes)
@@ -687,8 +751,11 @@ func SystemLibraryEntries() ([]LibraryEntry, error) {
 			Name:              definition.Name,
 			FeatureState:      definition.FeatureState,
 			SignatureJSON:     []byte(definition.SignatureJSON),
-			ContentSHA256:     digest,
-			Category:          definition.Category,
+			ContentSHA256:      digest,
+			Category:           definition.Category,
+			Description:        definition.Description,
+			Tags:               append([]string(nil), definition.Tags...),
+			PresentationSHA256: presentationDigest,
 			StateLayout: LibraryStateLayout{
 				Authoritative:  definition.StateSizeAuthoritative,
 				StateSizeBytes: definition.StateSizeBytes,
@@ -701,6 +768,55 @@ func SystemLibraryEntries() ([]LibraryEntry, error) {
 	}
 	return entries, nil
 }
+
+/*
+splitLibrarySignature trích HAI tập con canonical từ signature đầy đủ.
+
+Danh sách field ở đây phải khớp `EXECUTABLE_FIELDS`/`PRESENTATION_FIELDS` của
+`scripts/generate_programming_library_registry.py`. Đó là bản sao thứ hai một
+cách CÓ CHỦ Ý — nó tồn tại để khoá bên kia, không phải vì tiện. Lệch một field
+thì hash không khớp và `SystemLibraryEntries` từ chối cả registry.
+
+Encode lại bằng `json.Marshal` trên `map[string]json.RawMessage`: Go sắp khoá
+map theo thứ tự tăng dần và không chèn khoảng trắng, đúng như
+`sort_keys=True, separators=(",", ":")` của Python. Field VẮNG thì không chèn
+giá trị rỗng thay thế — một entry không có `description` phải cho hash khác một
+entry có `description` rỗng.
+*/
+func splitLibrarySignature(signature []byte) (executable, presentation []byte, err error) {
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(signature, &document); err != nil {
+		return nil, nil, fmt.Errorf("signature registry hỏng: %w", err)
+	}
+	subset := func(fields []string) ([]byte, error) {
+		picked := make(map[string]json.RawMessage, len(fields))
+		for _, field := range fields {
+			if value, ok := document[field]; ok {
+				picked[field] = value
+			}
+		}
+		return json.Marshal(picked)
+	}
+	executable, err = subset(libraryExecutableFields)
+	if err != nil {
+		return nil, nil, err
+	}
+	presentation, err = subset(libraryPresentationFields)
+	if err != nil {
+		return nil, nil, err
+	}
+	return executable, presentation, nil
+}
+
+var (
+	libraryExecutableFields = []string{
+		"id", "kind", "dispatch", "polymorphic", "allowedTypes",
+		"defaultType", "typedPortNames", "ports", "featureState",
+	}
+	libraryPresentationFields = []string{
+		"category", "labelVi", "labelEn", "description", "tags", "warningVi", "warningEn",
+	}
+)
 
 func SystemLibraryRevision() (LibraryRevision, error) {
 	manifest := []byte(SystemLibraryManifestJSON)

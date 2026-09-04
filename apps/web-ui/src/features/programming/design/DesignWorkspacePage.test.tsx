@@ -1175,10 +1175,17 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
    * những test dưới đây chứng minh phán quyết ĐÓ THỰC SỰ CHẶN được màn hình.
    * Hai thứ này tách nhau: một phán quyết đúng mà không ai nối vào `canEdit`
    * thì vẫn để người dùng soạn chương trình sai. */
-  it('bundle rev-a.3 gặp thiết bị rev-a.4 thì chặn soạn thảo và nêu rõ hai phiên bản', async () => {
+  /* Phiên bản thiết bị DỰNG TỪ hằng bundle, không chép số: `T61-102` bump
+   * registry `rev-a.3 -> rev-a.4` có kiểm soát, và bản cũ ghim hai chuỗi ấy nên
+   * đỏ vì chính cú bump hợp lệ. Điều đang kiểm là màn hình có CHẶN khi lệch hay
+   * không, không phải số hiệu version là bao nhiêu. */
+  it('bundle gặp thiết bị lệch version thư viện thì chặn soạn thảo và nêu rõ hai phiên bản', async () => {
+    const deviceLibraryVersion = `${BUNDLE_COMPATIBILITY.libraryRegistryVersion}-thiết-bị-khác`
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') {
-        return Promise.resolve(deviceCapabilities({ ...BUNDLE_COMPATIBILITY, libraryRegistryVersion: 'rev-a.4' }))
+        return Promise.resolve(
+          deviceCapabilities({ ...BUNDLE_COMPATIBILITY, libraryRegistryVersion: deviceLibraryVersion }),
+        )
       }
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
@@ -1189,8 +1196,8 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
 
     const alert = await screen.findByTestId('programming-compatibility-block')
     expect(alert).toHaveAttribute('data-compatibility-state', 'MISMATCH')
-    expect(alert.textContent).toContain('rev-a.3')
-    expect(alert.textContent).toContain('rev-a.4')
+    expect(alert.textContent).toContain(BUNDLE_COMPATIBILITY.libraryRegistryVersion)
+    expect(alert.textContent).toContain(deviceLibraryVersion)
     // Không tự hạ cấp: cổng soạn thảo phải đóng, không chỉ hiện cảnh báo.
     expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
   })

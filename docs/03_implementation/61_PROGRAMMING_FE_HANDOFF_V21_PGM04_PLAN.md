@@ -366,7 +366,7 @@ có contract machine-readable mới được `IMPLEMENT_READY=GO`.
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
 | `T61-101` | P0 | OpenAPI additive cho metadata/filter/compatibility/usage; stable errors và cursor tuple. | `T61-004/005` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-01`) | 1,5 nd |
-| `T61-102` | P0 | Mở registry schema/generator cho metadata SYSTEM; tách executable `contentSha256` khỏi `presentationSha256/catalogRevision`; versionHistory/hash mutation test. | `T61-101` | `DONE` | 1,5 nd |
+| `T61-102` | P0 | Mở registry schema/generator cho metadata SYSTEM; tách executable `contentSha256` khỏi `presentationSha256/catalogRevision`; versionHistory/hash mutation test. | `T61-101` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-02`) | 1,5 nd |
 | `T61-103` | P0 | Migration/store PROJECT metadata additive, backup/preflight/restart; không rewrite revision immutable. | `T61-101` | `DONE` | 1,5 nd |
 | `T61-104` | P0 | Used-In application/store projection cho Draft + sealed scope đã chốt, cursor và summary available/unavailable. | `T61-101` | `DONE` | 2 nd |
 | `T61-105` | P0 | HTTP route/validation/RBAC/audit/error mapping; read route cho bốn role, mutation giữ `program.edit`. | `T61-103/104` | `DONE` | 1 nd |
@@ -391,6 +391,34 @@ tồn tại ở bất kỳ lớp nào, và Used-In không có `nextCursor` dù �
   (`ErrInvalidRequest`/`ErrInvalidCursor`) và lớp HTTP phân biệt được 400 với 503.
 
 Bằng chứng là số đo cục bộ (`HOST`), không phải CI: repo chưa cấp runner (#414).
+
+**Đính chính `T61-102` (`ISS-PGM04-02`, đo `2026-09-04`).** Thân issue ghi registry
+"đã có `category`, `description` và `presentationSha256`". Đo lại tại
+`main@1f2cbb3`: registry chỉ có `category`; `description` và `presentationSha256`
+**chưa tồn tại** ở lớp SYSTEM, và `tags` cũng chưa. Lát `2026-09-04` mở cả ba và
+sửa một lỗi nằm đúng trong phạm vi:
+
+- `render_go` băm **toàn bộ** entry vào `ContentSHA256Hex`, nên `labelVi`,
+  `labelEn` và `category` — ba thứ thuần trình bày — nằm trong danh tính THỰC
+  THI. Chính comment của hàm ấy đã tự nhận "hash này ghim signature/port/
+  category/dispatch, KHÔNG phải hash executable", nhưng tên trường nó gán vào là
+  `ContentSHA256Hex` và hợp đồng public gọi trường đó là danh tính thực thi —
+  hai câu ấy không thể cùng đúng. Hệ quả: sửa một dấu tiếng Việt trong nhãn là
+  đổi hash mà artifact và pin Revision đang dựa vào, tức đúng thứ `D61-09` sinh
+  ra để chặn.
+
+Bump `rev-a.3 → rev-a.4` kéo theo bốn thứ pin phải sinh lại **cùng change-set**:
+product profile (+ schema `const`), golden build manifest ST/FBD (`buildKeySha256`
+phụ thuộc `profile.sha256`), golden package `package_v2_ahu.mkpkg` (sinh bằng
+chính `mkddc-st-package-golden`), và ba chốt SHA (`pgm02`, `g1`, `openapi`).
+
+**Cổng C++ đã mở lại từ lát này.** `ctest` ở `#503` ghi `NOT_RUN` vì container
+không có cache `FetchContent`. Cách mở: clone bốn nguồn (`nlohmann/json v3.11.3`,
+`googletest v1.14.0`, `bacnet-stack 1.3.8`, `lvgl v9.1.0`) qua giao thức git —
+proxy chặn tarball HTTP nhưng **không** chặn git — rồi trỏ
+`FETCHCONTENT_SOURCE_DIR_*` vào, và cài `libsodium-dev`/`libdrm-dev` (cần
+`apt-get update` trước vì chỉ mục có bản `libdrm` đã bị gỡ khỏi mirror). Số đo:
+**1393/1393**.
 
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.

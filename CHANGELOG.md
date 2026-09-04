@@ -8,6 +8,74 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-02` `contentSha256` của entry SYSTEM băm cả nhãn tiếng Việt (#447, 2026-09-04)
+
+- **Triệu chứng.** Sửa `labelVi`, `labelEn` hoặc `category` của một entry trong
+  `pou_library_registry_v1.json` làm `contentSha256` của entry đó đổi.
+- **Vì sao nghiêm trọng.** `contentSha256` là danh tính **thực thi**: nó đi vào artifact, vào chữ ký
+  và vào pin của Revision. Đổi nó vì một lần sửa chính tả làm mọi artifact và pin đã ký thành lỗi
+  thời — và hậu quả thật không phải "phải build lại", mà là người ta sẽ thôi không sửa tài liệu nữa.
+  Đây đúng thứ `D61-09` sinh ra để chặn.
+- **Nguyên nhân gốc.** `render_go` băm `json.dumps(entry)` — TOÀN BỘ entry — rồi gán vào
+  `ContentSHA256Hex`. Chính comment của hàm ấy đã tự nhận "hash này ghim signature/port/category/
+  dispatch, KHÔNG phải hash executable", nhưng tên trường nó gán vào là `ContentSHA256Hex` và hợp
+  đồng public gọi trường đó là danh tính thực thi. Hai câu ấy không thể cùng đúng, và không có test
+  nào bắt phải chọn một.
+- **Cách sửa.** Tách hai tập field. `contentSha256` băm tập THỰC THI (`id`, `kind`, `dispatch`,
+  `polymorphic`, `allowedTypes`, `defaultType`, `typedPortNames`, `ports`, `featureState`);
+  `presentationSha256` băm tập TRÌNH BÀY (`category`, nhãn, `description`, `tags`, cảnh báo). Khoá ở
+  **ba** nơi độc lập: generator Python sinh, `splitLibrarySignature` bên Go **tính lại** chứ không
+  tin hằng sinh, và `ValidateLibraryEntry` chặn entry lệch. Ba bản sao là có chủ ý — chúng khoá lẫn
+  nhau, lệch một field thì binary từ chối nạp registry thay vì âm thầm công bố một danh tính đã đổi
+  nghĩa.
+- Refs: `T61-102`, `ISS-PGM04-02`, `D61-09`, `LOCK-PGM04-CONTRACT-001` §2.2.
+
+### Added — `ISS-PGM04-02` metadata trình bày đầy đủ cho registry SYSTEM (#447, 2026-09-04)
+
+- **Hiện trạng.** Thân issue ghi registry "đã có `category`, `description` và `presentationSha256`".
+  Đo lại tại `main@1f2cbb3`: registry chỉ có `category`. `description`, `tags` và
+  `presentationSha256` **chưa tồn tại** ở lớp SYSTEM, nên 46 khối chuẩn tới PGM-04 không có mô tả
+  lẫn thẻ, trong khi PROJECT entry đã có cả ba từ `T61-101`.
+- **Thay đổi.** Schema mở `description` (≤512, NFC) và `tags` (≤8 phần tử, mỗi ≤24 ký tự). Cả 46
+  entry được điền mô tả **theo nghiệp vụ toà nhà** — không diễn giải lại tên khối, vì một dòng
+  "AND: phép AND" không nói thêm gì so với chính cái tên, còn người đi tìm khối thì đang tìm theo
+  việc họ cần làm.
+- **Chuẩn hoá ở registry là KIỂM, không phải SỬA.** Registry là tệp người viết tay và được review.
+  Generator tự hạ chữ thường rồi sắp lại sẽ làm bản đã review khác bản đã sinh, và không ai nhìn
+  thấy khác biệt đó. Nên registry mang thẻ canonical sẵn (NFC, chữ thường, một dấu cách giữa từ,
+  không trùng, sắp tăng dần) và generator **từ chối** tệp lệch chuẩn kèm lý do đọc được. Khác đường
+  ghi PROJECT, nơi payload đến từ client nên máy chủ chuẩn hoá rồi mới lưu.
+- **Bump `rev-a.3 → rev-a.4`** kéo theo bốn thứ pin, sinh lại trong cùng change-set: product profile
+  (kèm `const` trong schema của nó), golden build manifest ST/FBD (`buildKeySha256` phụ thuộc
+  `profile.sha256` nên phải **tính lại**, không sed), golden package `package_v2_ahu.mkpkg` (sinh
+  bằng chính `mkddc-st-package-golden`, không sửa tay), và ba chốt SHA.
+- **Kiểm chứng (HOST, cục bộ — repo chưa cấp CI runner, #414).** layout 17 PASS / 0 FAIL ·
+  **ctest 1393/1393** · Go 21 gói ok · FE 217 tệp / 2619 test · 11 phép tiêm lỗi đều làm test đỏ.
+- Refs: `T61-102`, `ISS-PGM04-02`, `LOCK-PGM04-CONTRACT-001` §2.1/§2.2, `B-PGM04-04`.
+
+### Fixed — `ISS-PGM04-02` test FE ghim số hiệu registry nên đỏ vì mọi lần bump hợp lệ (#447, 2026-09-04)
+
+- **Triệu chứng.** Bump registry `rev-a.3 → rev-a.4` làm ba test FE đỏ, trong khi sản phẩm không sai.
+- **Nguyên nhân gốc.** `programmingCompatibility.test.ts` ghim
+  `expect(PROGRAMMING_LIBRARY_VERSION).toBe('rev-a.3')` và dựng kịch bản lệch bằng hai chuỗi cứng
+  `'rev-a.3'`/`'rev-a.4'`. Điều test đang kiểm là **hành vi khi lệch** (phải CHẶN soạn thảo), không
+  phải số hiệu version; chép số vào test tạo một bản sao thứ hai của hằng sinh, và bản sao ấy trôi
+  ngay lần bump đầu tiên. Gate layout vốn đã khoá hằng này khớp registry ở cả ba tệp sinh.
+- **Cách sửa.** Dựng phiên bản thiết bị **từ chính hằng bundle** thay vì chép số. Kịch bản nghiệp vụ
+  giữ nguyên và vẫn chặn; test thôi đỏ vì những cú bump có kiểm soát.
+- Refs: `T61-102`, `ISS-PGM04-02`, `ISS-STED-19`.
+
+### Changed — cổng C++ chạy lại được trên container agent (2026-09-04)
+
+- **Hiện trạng.** `#503` phải ghi `ctest` là `NOT_RUN`: `FetchContent` tải tarball từ `github.com` và
+  agent proxy trả **403**, còn container không có cache dependency.
+- **Cách mở.** Proxy chặn tarball HTTP nhưng **không** chặn giao thức git. Clone bốn nguồn
+  (`nlohmann/json v3.11.3`, `googletest v1.14.0`, `bacnet-stack 1.3.8`, `lvgl v9.1.0`) rồi trỏ
+  `FETCHCONTENT_SOURCE_DIR_*` vào, thêm `libsodium-dev` và `libdrm-dev` (`libdrm` cần `apt-get
+  update` trước, vì chỉ mục đóng sẵn trỏ một bản đã bị gỡ khỏi mirror).
+- **Số đo.** `ctest` **1393/1393 PASS**, khớp mốc đã ghi. Khoảng trống `NOT_RUN` của `#503` khép lại.
+
+
 ### Added — `ISS-PIO-16` Phơi quyền sở hữu VP (WEB/PROGRAM) ra sản phẩm (#399, 2026-09-04)
 
 - **Bối cảnh.** Backend đã tách đúng **hai trục** từ lâu: `writable` (*operator có được phép sửa

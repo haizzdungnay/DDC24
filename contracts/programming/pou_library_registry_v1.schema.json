@@ -86,6 +86,19 @@
           "items": { "$ref": "#/$defs/port" }
         },
         "featureState": { "enum": ["AVAILABLE", "REVIEW_REQUIRED"] },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "T61-102 — mô tả TRÌNH BÀY. Nằm ngoài executable identity (D61-09): sửa nó đổi presentationSha256 và catalog revision, KHÔNG đổi contentSha256. Chuẩn hoá Unicode NFC; generator từ chối chuỗi chưa NFC thay vì tự sửa, vì tự sửa làm tệp nguồn khác thứ đã được review."
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "description": "T61-102 / LOCK-PGM04-CONTRACT-001 §2.1 — thẻ TRÌNH BÀY, đã ở dạng CANONICAL trong chính tệp nguồn: NFC, chữ thường, khoảng trắng bên trong gộp thành một dấu cách, không trùng lặp, SẮP TĂNG DẦN theo thứ tự mã điểm. Registry là tệp người viết tay và được review, nên generator KIỂM chứ không tự chuẩn hoá — tự chuẩn hoá sẽ làm bản đã review khác bản đã sinh, và không ai thấy khác biệt đó.",
+          "items": { "type": "string", "minLength": 1, "maxLength": 24, "pattern": "^\\S+( \\S+)*$" }
+        },
         "warningVi": { "type": "string", "minLength": 1 },
         "warningEn": { "type": "string", "minLength": 1 }
       },
