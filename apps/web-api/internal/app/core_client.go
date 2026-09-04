@@ -1432,10 +1432,6 @@ type alarmReturner interface {
 	ReturnAlarm(ctx context.Context, id string) error
 }
 
-type commissionTester interface {
-	CommissionTest(ctx context.Context, id string, value any) (CommissioningTestResult, error)
-}
-
 // ReadAlarms returns the current active/unacked alarm list from core.
 func (c *CoreClient) ReadAlarms(ctx context.Context) ([]AlarmDTO, error) {
 	select {
@@ -1696,23 +1692,30 @@ func formatAlarmValue(value any) string {
 	}
 }
 
-// CommissionTest sends a commissioning test command for point id with the given value
+// CommissionTestTTL sends a commissioning test command for point id with the given value
 // via core web_ipc (Local manual level 2, per 07 §8 + openapi.yaml).
-// Implemented as ForcePoint(write) mapped to CommissioningTestResult.
+// Implemented as ForcePointTTL(write) mapped to CommissioningTestResult.
 // Core unavailable -> degraded result, no hard error.
-func (c *CoreClient) CommissionTest(ctx context.Context, id string, value any) (CommissioningTestResult, error) {
+//
+// `ttlS` đi NGUYÊN VẸN xuống Core, nơi `scan_loop` tự nhả khi hết hạn. Không có
+// hẹn giờ nào ở tầng này: một `time.AfterFunc` trong web-api sẽ biến "restart
+// mkddc-web" thành "output kẹt ép tay vĩnh viễn" (ISS-PIO-26, cùng lớp lỗi với
+// PA3-F05).
+func (c *CoreClient) CommissionTestTTL(ctx context.Context, id string, value any, ttlS uint32, user string) (CommissioningTestResult, error) {
 	select {
 	case <-ctx.Done():
 		return CommissioningTestResult{}, ctx.Err()
 	default:
 	}
+	requested := ttlS
 	start := time.Now()
-	pt, err := c.ForcePoint(ctx, id, value, false)
+	pt, err := c.ForcePointTTL(ctx, id, value, false, ttlS, user)
 	if err != nil {
 		return CommissioningTestResult{
 			Result:  "failed",
 			PointID: id,
 			Message: "core rejected: " + err.Error(),
+			TTLS:    &requested,
 		}, nil
 	}
 	elapsed := int(time.Since(start).Milliseconds())
@@ -1726,13 +1729,22 @@ func (c *CoreClient) CommissionTest(ctx context.Context, id string, value any) (
 		result = "failed"
 		msg = "point fault or bad quality"
 	}
-	return CommissioningTestResult{
+	res := CommissioningTestResult{
 		Result:       result,
 		PointID:      id,
 		AppliedValue: pt.Value,
 		Message:      msg,
 		ScanMs:       &elapsed,
-	}, nil
+		TTLS:         &requested,
+	}
+	/* Chép nguyên `OverrideExpiresInS` do Core báo. Vắng thì để vắng: bịa ra
+	 * `= ttlS` sẽ biến một lệnh Core KHÔNG cưỡng chế thời hạn thành một đồng hồ
+	 * đếm ngược trông rất thuyết phục trên màn hình. */
+	if pt.OverrideExpiresInS != nil {
+		remaining := *pt.OverrideExpiresInS
+		res.ExpiresInS = &remaining
+	}
+	return res, nil
 }
 
 // ReadAOModes đọc `ao_mode[]` mà `iobus` ghi vào `io_shm` SAU khi MCU ACK

@@ -35,7 +35,7 @@ var (
 	_ alarmAcker              = (*CoreClient)(nil)
 	_ alarmSuppressor         = (*CoreClient)(nil)
 	_ alarmReturner           = (*CoreClient)(nil)
-	_ commissionTester        = (*CoreClient)(nil)
+	_ commissionTesterTTL     = (*CoreClient)(nil)
 	_ hmiCore                 = (*CoreClient)(nil)
 	_ scheduleStateReader     = (*CoreClient)(nil)
 )

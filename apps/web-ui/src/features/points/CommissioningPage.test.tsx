@@ -84,7 +84,12 @@ describe('CommissioningPage physical-write safety', () => {
     expect(dialog).toHaveTextContent(/valve\/damper\/drive moves/i)
 
     await user.click(screen.getByRole('button', { name: 'Write value' }))
-    await waitFor(() => expect(mocks.runCommissioningTest).toHaveBeenCalledWith('AO-01', 35))
+    /* Đối số thứ ba là thời hạn tự nhả (ISS-PIO-26). Bản trước của phép so này
+       chỉ có hai đối số, và vì `toHaveBeenCalledWith` so khớp CHÍNH XÁC cả số
+       lượng đối số nên nó đang khoá lại đúng hành vi hỏng: một lệnh ghi ra cơ
+       cấu chấp hành không kèm thời hạn nào. Sửa kỳ vọng của test, không nới
+       lỏng sản phẩm. */
+    await waitFor(() => expect(mocks.runCommissioningTest).toHaveBeenCalledWith('AO-01', 35, 300))
   })
 
   it('writes nothing when the confirmation is cancelled', async () => {
@@ -166,5 +171,77 @@ describe('CommissioningPage physical-write safety', () => {
 
     expect(screen.getByText('Could not load outputs')).toBeInTheDocument()
     expect(screen.getByText('core unreachable')).toBeInTheDocument()
+  })
+})
+
+/**
+ * ISS-PIO-26 — mỗi lệnh chạy thử phải mang thời hạn tự nhả.
+ *
+ * Triệu chứng gốc: `POST /commissioning/points/{id}/test` chỉ nhận `value`, nên
+ * mỗi lần chạy thử để lại một output bị ép cho tới khi có người nhớ nhả tay.
+ * Chính trang này đã phải dựng điều kiện tiên quyết "Không còn điểm kẹt ép tay
+ * từ phiên trước" — hệ thống cảnh báo về hậu quả của chính nó.
+ */
+describe('CommissioningPage auto-release timeout', () => {
+  it('sends the selected timeout with the command', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.selectOptions(screen.getByLabelText('Auto-release timeout for commissioning commands'), '900')
+    await user.type(screen.getByLabelText('Value to write for AO-01'), '35')
+    await user.click(screen.getByRole('button', { name: 'Test AO-01' }))
+    await user.click(screen.getByRole('button', { name: 'Write value' }))
+
+    await waitFor(() => expect(mocks.runCommissioningTest).toHaveBeenCalledWith('AO-01', 35, 900))
+  })
+
+  it('names the timeout inside the confirmation, next to the physical consequence', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.type(screen.getByLabelText('Value to write for AO-01'), '35')
+    await user.click(screen.getByRole('button', { name: 'Test AO-01' }))
+
+    /* Hộp xác nhận nói ĐỦ hậu quả: ghi bao nhiêu VÀ giữ bao lâu. Thiếu vế sau
+       thì người vận hành không có đủ thông tin để quyết định có rời khỏi bàn. */
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('5 min')
+    expect(dialog).toHaveTextContent(/even if this browser closes/i)
+  })
+
+  it('offers no unbounded option — every choice releases by itself', async () => {
+    renderPage()
+    const select = screen.getByLabelText('Auto-release timeout for commissioning commands') as HTMLSelectElement
+    const values = Array.from(select.options).map((option) => Number(option.value))
+    expect(values.length).toBeGreaterThan(0)
+    for (const seconds of values) {
+      expect(seconds).toBeGreaterThan(0)
+      expect(seconds).toBeLessThanOrEqual(86400)
+    }
+  })
+
+  it('says the controller reported no remaining time instead of showing a fake countdown', async () => {
+    const user = userEvent.setup()
+    // Core nhận lệnh nhưng KHÔNG báo `expiresInS`.
+    mocks.runCommissioningTest.mockResolvedValue({ result: 'passed', pointId: 'AO-01', message: 'accepted', ttlS: 300 })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Value to write for AO-01'), '35')
+    await user.click(screen.getByRole('button', { name: 'Test AO-01' }))
+    await user.click(screen.getByRole('button', { name: 'Write value' }))
+
+    await waitFor(() => expect(screen.getByText(/did NOT report a remaining time/i)).toBeInTheDocument())
+  })
+
+  it('shows the remaining time the controller actually reported', async () => {
+    const user = userEvent.setup()
+    mocks.runCommissioningTest.mockResolvedValue({ result: 'passed', pointId: 'AO-01', message: 'accepted', ttlS: 300, expiresInS: 297 })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Value to write for AO-01'), '35')
+    await user.click(screen.getByRole('button', { name: 'Test AO-01' }))
+    await user.click(screen.getByRole('button', { name: 'Write value' }))
+
+    await waitFor(() => expect(screen.getByText(/controller reports 4 min 57s left/i)).toBeInTheDocument())
   })
 })

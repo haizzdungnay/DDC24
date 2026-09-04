@@ -785,6 +785,8 @@ paths:
       description: >
         Gá»­i lá»‡nh test DO/AO qua mkddc-core, vÃ o nguá»“n Local manual má»©c 2 nhÆ° PUT /points/{id}.
         DÃ¹ng cho mÃ n Commissioning; má»i lá»‡nh pháº£i audit log.
+        ISS-PIO-26: lệnh test luôn mang TTL do Core cưỡng chế (`ttlS`, mặc định 300 giây)
+        và tự nhả điểm khi hết hạn, ngang bằng đường ép tay PUT /points/{id}.
       x-rbac: [operator, engineer, admin]
       parameters: [ { $ref: "#/components/parameters/PointId" } ]
       requestBody:
@@ -4731,6 +4733,16 @@ components:
       required: [value]
       properties:
         value: { $ref: "#/components/schemas/PointCommandValue" }
+        ttlS:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          default: 300
+          description: >
+            ISS-PIO-26 — thời hạn (giây) Core giữ lệnh test trước khi tự nhả điểm
+            về điều khiển tự động. Bỏ trống thì áp mặc định 300 giây. Giá trị 0
+            BỊ TỪ CHỐI: với Core, 0 nghĩa là giữ vô hạn, và endpoint này không có
+            lựa chọn vô hạn — mỗi lệnh chạy thử phải tự nhả.
     CommissioningTestResult:
       type: object
       required: [result, pointId, message]
@@ -4740,6 +4752,16 @@ components:
         appliedValue: { $ref: "#/components/schemas/PointCommandValue" }
         message: { type: string, example: "Test accepted" }
         scanMs: { type: number, example: 12 }
+        ttlS:
+          type: integer
+          example: 300
+          description: Thời hạn đã yêu cầu cho lệnh test này (giây).
+        expiresInS:
+          type: integer
+          example: 298
+          description: >
+            Thời hạn CÒN LẠI do Core báo. Vắng mặt nghĩa là Core không báo — khác
+            hẳn "còn 0 giây"; giao diện không được đếm ngược khi trường này vắng.
     GraphValidationError:
       type: object
       required: [path, message, severity]

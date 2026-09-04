@@ -644,6 +644,11 @@ export interface CommissioningTestResult {
   appliedValue?: number | boolean
   message: string
   scanMs?: number
+  /** ISS-PIO-26 — thời hạn ĐÃ YÊU CẦU cho lệnh test (giây). */
+  ttlS?: number
+  /** Thời hạn CÒN LẠI do Core báo. `undefined` nghĩa là Core không báo, KHÁC
+   *  hẳn "còn 0 giây" — không được đếm ngược khi trường này vắng. */
+  expiresInS?: number
 }
 
 export interface GraphValidationResult {

@@ -582,7 +582,14 @@ function normalizeCommissioningResult(raw: Record<string, unknown>, pointId: str
     pointId: String(raw.pointId ?? raw.point_id ?? pointId),
     appliedValue: raw.appliedValue as CommissioningTestResult['appliedValue'] ?? raw.applied_value as CommissioningTestResult['appliedValue'],
     message: String(raw.message ?? raw.detail ?? 'Commissioning test completed'),
-    scanMs: numberFrom(raw.scanMs ?? raw.scan_ms)
+    scanMs: numberFrom(raw.scanMs ?? raw.scan_ms),
+    /* ISS-PIO-26 — KHÔNG có `?? ttlS` cho `expiresInS`: hai con số trả lời hai
+       câu khác nhau ("đã xin bao lâu" và "Core còn giữ bao lâu"). Backend cố ý
+       bỏ trống `expiresInS` khi Core không báo thời hạn còn lại; điền vào bằng
+       `ttlS` ở đây sẽ dựng lại đúng cái đồng hồ đếm ngược giả mà backend vừa
+       từ chối dựng. */
+    ttlS: numberFrom(raw.ttlS ?? raw.ttl_s),
+    expiresInS: numberFrom(raw.expiresInS ?? raw.expires_in_s)
   }
 }
 
@@ -1670,11 +1677,13 @@ export const apiClient = {
     return requestJson('/modbus/import?format=' + format, { method: 'POST', body: content })
   },
 
-  async runCommissioningTest(pointId: string, value: number | boolean): Promise<CommissioningTestResult> {
-    if (IS_DEMO) return runDemoCommissioning(pointId, value)
+  /** ISS-PIO-26 — `ttlS` là thời hạn Core giữ lệnh trước khi tự nhả điểm.
+   *  Bỏ trống thì backend áp mặc định 300 giây; không có lựa chọn "giữ vô hạn". */
+  async runCommissioningTest(pointId: string, value: number | boolean, ttlS?: number): Promise<CommissioningTestResult> {
+    if (IS_DEMO) return runDemoCommissioning(pointId, value, ttlS)
     const raw = await requestJson<Record<string, unknown>>(`/commissioning/points/${encodeURIComponent(pointId)}/test`, {
       method: 'POST',
-      body: JSON.stringify({ value })
+      body: JSON.stringify(ttlS === undefined ? { value } : { value, ttlS })
     })
     return normalizeCommissioningResult(raw, pointId)
   }

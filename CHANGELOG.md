@@ -8,6 +8,73 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-26` Lệnh test commissioning có TTL và tự nhả (#386, 2026-09-04)
+
+- **Triệu chứng.** `POST /api/v1/commissioning/points/{id}/test` ghi thẳng ra AO/DO nhưng thân yêu
+  cầu chỉ nhận đúng `value` — **không có tham số thời hạn nào**. Mỗi lần chạy thử để lại một output
+  bị ép cho tới khi có người nhớ bấm "Trả về tự động". Đề bài §10 đòi *permission + confirm +
+  timeout + audit*; đường ép tay thường (`PUT /points/{id}`) **có** `ttlS`, còn đường test thì không
+  — hai đường **cùng ghi ra một cơ cấu chấp hành** mà chênh nhau đúng ở chỗ nguy hiểm nhất
+  (`F-PIO-011`).
+- **Bằng chứng hệ thống tự cảnh báo về chính nó.** Trang Chạy thử đã phải dựng một điều kiện tiên
+  quyết mang tên "Không còn điểm kẹt ép tay từ phiên trước". Điều kiện đó tồn tại vì lệnh test không
+  tự nhả.
+- **Nguyên nhân gốc.** Cơ chế TTL **đã có sẵn dưới Core**: `web_ipc.cpp:715` nhận `ttlS` 1..86400 cho
+  op `write` nguồn `manual`, và `scan_loop` tự `release_ao/do` khi hết hạn. Chỗ duy nhất đánh rơi nó
+  là hai tầng bọc ở web-api — `CommissionTest` → `ForcePoint` → `ForcePointTTL(..., ttlS = 0, ...)`,
+  và với Core `ttlS = 0` nghĩa là **"không tự nhả"**.
+- **Cách sửa.** `CommissionTest` bị thay bằng `CommissionTestTTL(ctx, id, value, ttlS, user)`; handler
+  áp `defaultCommissionTestTTLS = 300` khi client không gửi; `ttlS` đi nguyên vẹn xuống web_ipc.
+  **Không có hẹn giờ nào trong web-api** — một `time.AfterFunc` ở tầng này sẽ biến "restart
+  mkddc-web" thành "output kẹt ép tay vĩnh viễn", đúng lớp lỗi `PA3-F05`.
+- **`ttlS: 0` bị TỪ CHỐI, không rơi về mặc định.** Với Core, 0 là "giữ vô hạn". Nhận nó rồi âm thầm
+  đổi thành 300 là trả lời một câu khác hẳn câu người gọi hỏi. Endpoint này **không có** lựa chọn vô
+  hạn: muốn giữ lâu thì dùng đường ép tay, có chủ đích, chứ không phải bằng cách quên.
+- **Fail-closed khi Core không cưỡng chế được TTL.** Core client không hiện thực `CommissionTestTTL`
+  ⇒ 409, **không** rơi về đường ghi vô hạn. Thà không chạy thử được còn hơn ép một cơ cấu chấp hành
+  bằng lệnh không ai nhả.
+- **Ngang bằng đường ép tay về audit.** Lệnh test nay ghi cả `commissioning_test` (mang `ttlS` +
+  `remainingS` trong chính bản ghi) lẫn `point_override`, **và** đăng ký vào `OverrideRegistry`.
+  Thiếu bước đăng ký thì sau buổi chạy thử trang Giám sát/Tổng quan **không thấy điểm nào bị ép** —
+  cùng lớp lỗi `PA3-F05`, chỉ khác đường vào.
+- **`ttlS` và `expiresInS` là hai con số khác nhau, không gộp.** `ttlS` = thời hạn đã yêu cầu;
+  `expiresInS` = thời hạn Core báo còn lại. `expiresInS` **vắng nghĩa là Core không báo**, khác hẳn
+  "còn 0 giây" — giao diện nói thẳng điều đó thay vì vẽ một đồng hồ đếm ngược không ai cưỡng chế.
+- **Giao diện.** Trang Chạy thử có bộ chọn "Tự nhả sau" (1/5/15/30 phút, **không có lựa chọn vô
+  hạn**) đặt ngay cạnh nút ghi; hộp xác nhận nêu thời hạn cạnh hậu quả vật lý và nói rõ Core vẫn nhả
+  kể cả khi đóng trình duyệt; hàng kết quả giữ lại thời hạn để ký biên bản nghiệm thu.
+- **Hợp đồng.** `openapi.yaml` mở `ttlS` cho `CommissioningTestRequest` và `ttlS`/`expiresInS` cho
+  `CommissioningTestResult`; hai chốt SHA (`pgm02_workspace_v1.json`, `g1_contract_join_v1.json`)
+  cập nhật theo.
+- **Một test của chính tôi tự vô hiệu hoá, phát hiện bằng tiêm lỗi.** Bản đầu của
+  `TestCommissionTestAppliesDefaultTTLWhenBodyOmitsIt` so `call.ttlS != defaultCommissionTestTTLS`,
+  tức so với chính hằng số: đặt hằng số về 0 (đúng hành vi hỏng đang sửa) thì **cả hai vế cùng thành
+  0 và test vẫn xanh**. Một phép so tự tham chiếu như vậy nguy hiểm hơn việc không có test, vì nó
+  trông như đang canh. Đã đổi sang số tuyệt đối 300 và thêm
+  `TestDefaultCommissionTestTTLIsBoundedAndNonZero` canh riêng hằng số.
+- **Tiêm lỗi thứ ba cũng không đỏ ở lần đầu**: sửa `CoreClient` thành `expiresInS = ttlS` khi Core im
+  lặng thì bộ test handler vẫn xanh, vì chúng thay `CoreClient` bằng core giả. Đã bổ sung hai test
+  chạm thẳng `CoreClient.CommissionTestTTL` qua socket web_ipc giả, rồi **tiêm lại** — lần này đỏ.
+- **Kiểm chứng (đo lại trong phiên, không dẫn số cũ).**
+
+  | Cổng | Kết quả |
+  | --- | --- |
+  | `verify-project.sh --component layout` | 17 PASS / 0 FAIL, exit 0 |
+  | C++ `cmake --fresh` configure | exit 0 |
+  | C++ `cmake --build --parallel` | exit 0, **0 warning** |
+  | C++ `ctest` | **1393/1393 pass**, exit 0 (1 skip có chủ) |
+  | Go `go vet ./...` | sạch, exit 0 |
+  | Go `go test ./... -count=1` | **21 gói ok** |
+  | FE `npx vitest --run src` | **212 tệp / 2570 test PASS** |
+  | FE `npm run lint` | exit 0 |
+  | FE `npm run build` | exit 0, chunk `programming` dư địa 41.87 KiB |
+
+  Tiêm lỗi: 6/6 phép tiêm đều làm test đỏ sau khi vá hai lỗ hổng nêu trên —
+  (1) mặc định TTL về 0 ⇒ 2 test Go đỏ; (2) bỏ `overrides.Note` ⇒ 1 test Go đỏ;
+  (3) bịa `expiresInS = ttlS` ⇒ 1 test Go đỏ; (4) đánh rơi `ttlS` xuống web_ipc ⇒ 1 test Go đỏ;
+  (5) FE không gửi `ttlS` ⇒ 2 test FE đỏ; (6) FE bịa `expiresInS` ⇒ 1 test FE đỏ. Khôi phục ⇒ xanh.
+
+
 ### Added — `ISS-PIO-07` `description`/`enabled`/`equipment`/`sourceRef` lên Point Catalog + bộ lọc thiết bị (#393, 2026-09-03)
 
 - **Triệu chứng.** `PointCatalogEntry` có 11 trường; đề bài §5 đòi thêm bốn. Mất mát **cụ thể nhất**

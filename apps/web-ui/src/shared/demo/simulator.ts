@@ -363,9 +363,14 @@ export function updateDemoPointConfig(id: string, config: { tag?: string; name?:
   return { id, ...config }
 }
 
-export function runDemoCommissioning(pointId: string, value: number | boolean): CommissioningTestResult {
+/** ISS-PIO-26 — bản demo cũng phải trả TTL.
+ *
+ *  Nếu demo trả về một lệnh test không thời hạn trong khi backend thật luôn kèm
+ *  TTL, thì mọi ảnh chụp màn hình và mọi buổi giới thiệu đều mô tả một sản phẩm
+ *  khác với sản phẩm đang chạy. Mặc định 300 khớp `defaultCommissionTestTTLS`. */
+export function runDemoCommissioning(pointId: string, value: number | boolean, ttlS = 300): CommissioningTestResult {
   forceDemoPoint(pointId, value)
-  return { result: 'passed', pointId, appliedValue: value, message: 'Command accepted by demo core', scanMs: 12 }
+  return { result: 'passed', pointId, appliedValue: value, message: 'Command accepted by demo core', scanMs: 12, ttlS, expiresInS: ttlS }
 }
 
 export function getTrendSamples(pointIds: string[] = ['UI-01', 'UI-02', 'UI-03', 'UI-04'], rangeMinutes = 30): TrendSample[] {

@@ -260,17 +260,31 @@ func (a *AuditLogger) alarmAction(action string, principal *Principal, id string
 	a.emit(AuditRecord{Action: action, Actor: username, Role: role, ObjectType: "alarm", ObjectID: id, Outcome: result})
 }
 
-func (a *AuditLogger) CommissioningTest(principal *Principal, id string, result string, remote string) {
+// CommissioningTest ghi vết một lệnh chạy thử. `ttlS` là thời hạn ĐÃ YÊU CẦU,
+// `remainingS` là thời hạn Core báo còn lại (ISS-PIO-26).
+//
+// TTL nằm trong chính bản ghi chứ không chỉ ở bản ghi `point_override` đi kèm:
+// biên bản nghiệm thu đọc theo `action=commissioning_test`, và một dòng audit
+// nói "đã ghi ra AO-01" mà không nói ghi trong bao lâu thì không trả lời được
+// câu hỏi quan trọng nhất sau buổi chạy thử — thiết bị có được nhả ra chưa.
+func (a *AuditLogger) CommissioningTest(principal *Principal, id string, result string, ttlS uint32, remainingS uint32, remote string) {
 	if a == nil {
 		return
 	}
 	username, role := principalIdentity(principal)
 	if a.logger != nil {
-		a.logger.Printf("AUDIT commissioning_test ts=%s user=%s role=%s point=%s result=%s remote=%s",
+		a.logger.Printf("AUDIT commissioning_test ts=%s user=%s role=%s point=%s ttl_s=%d remaining_s=%d result=%s remote=%s",
 			time.Now().UTC().Format(time.RFC3339), sanitizeAudit(username, 32), sanitizeAudit(role, 16),
-			sanitizeAudit(id, 64), sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
+			sanitizeAudit(id, 64), ttlS, remainingS, sanitizeAudit(result, 16), sanitizeAudit(remote, 64))
 	}
-	a.emit(AuditRecord{Action: "commissioning_test", Actor: username, Role: role, ObjectType: "point", ObjectID: id, Outcome: result})
+	detail := "ttlS=" + itoa(int(ttlS))
+	if remainingS > 0 {
+		detail += " remainingS=" + itoa(int(remainingS))
+	}
+	a.emit(AuditRecord{
+		Action: "commissioning_test", Actor: username, Role: role, ObjectType: "point", ObjectID: id,
+		Outcome: result, Detail: detail,
+	})
 }
 
 func principalIdentity(principal *Principal) (string, string) {

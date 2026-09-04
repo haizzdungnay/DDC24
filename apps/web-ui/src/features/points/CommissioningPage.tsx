@@ -42,9 +42,20 @@ import { NO_DATA, formatDateTime, pointDisplayTag } from '../../shared/utils'
 const REFRESH_MS = 1000
 
 type PendingAction =
-  | { kind: 'test'; point: Point; value: number | boolean }
+  | { kind: 'test'; point: Point; value: number | boolean; ttlS: number }
   | { kind: 'release'; point: Point }
   | { kind: 'release-all'; points: Point[] }
+
+/* ISS-PIO-26 — mỗi lệnh chạy thử mang một thời hạn do Core cưỡng chế.
+ *
+ * Không có lựa chọn "giữ vô hạn" trong danh sách này, và đó là chủ ý: đường ép
+ * tay thường (trang Giám sát) mới là chỗ để giữ một điểm lâu dài, vì ở đó điểm
+ * bị ép hiện thường trực kèm nút trả về. Trang này ngược lại — người dùng thử
+ * lần lượt 8 output rồi rời đi, nên một lệnh không tự nhả sẽ để lại van mở mà
+ * không ai còn nhìn màn hình nữa. Muốn giữ lâu thì dùng đường ép tay, có chủ
+ * đích, chứ không phải bằng cách quên. */
+const TTL_CHOICES_S = [60, 300, 900, 1800] as const
+const DEFAULT_TTL_S = 300
 
 type ParsedDraft = { value: number | boolean; error?: undefined } | { value: null; error: string }
 
@@ -60,6 +71,10 @@ interface TestOutcome {
   at: string
   requested: string
   scanMs?: number
+  /** Thời hạn đã yêu cầu và thời hạn Core báo còn lại — ISS-PIO-26. Biên bản
+   *  nghiệm thu cần biết lệnh giữ trong bao lâu, không chỉ "đã ghi". */
+  ttlS?: number
+  expiresInS?: number
 }
 
 /** Một điều kiện tiên quyết. `blocking` = chưa đạt thì KHÔNG cho ghi. */
@@ -137,6 +152,7 @@ export function CommissioningPage() {
   const blocked = prerequisites.some((item) => item.blocking && !item.ok)
 
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [ttlS, setTtlS] = useState<number>(DEFAULT_TTL_S)
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [busy, setBusy] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
@@ -173,7 +189,7 @@ export function CommissioningPage() {
       toast.push('warn', `${pointDisplayTag(point)}: ${parsed.error}`)
       return
     }
-    setPending({ kind: 'test', point, value: parsed.value })
+    setPending({ kind: 'test', point, value: parsed.value, ttlS })
   }
 
   async function runPending() {
@@ -184,13 +200,13 @@ export function CommissioningPage() {
         setRunning(pending.point.id)
         const requested = typeof pending.value === 'boolean' ? (pending.value ? 'ON' : 'OFF') : `${pending.value}%`
         try {
-          const result = await apiClient.runCommissioningTest(pending.point.id, pending.value)
+          const result = await apiClient.runCommissioningTest(pending.point.id, pending.value, pending.ttlS)
           /* Kết quả GIỮ trên màn hình, không chỉ thoáng qua trong toast: một
              buổi commissioning thử 8 output rồi phải ký biên bản, và toast biến
              mất sau vài giây (PA3-504). */
           setOutcomes((current) => ({
             ...current,
-            [pending.point.id]: { result: result.result, message: result.message, at: new Date().toISOString(), requested, scanMs: result.scanMs }
+            [pending.point.id]: { result: result.result, message: result.message, at: new Date().toISOString(), requested, scanMs: result.scanMs, ttlS: result.ttlS, expiresInS: result.expiresInS }
           }))
           toast.push(result.result === 'passed' ? 'success' : 'warn', `${result.pointId}: ${result.message}`)
         } catch (err) {
@@ -239,14 +255,33 @@ export function CommissioningPage() {
           <h1 className="text-2xl font-semibold">{pick('Chạy thử', 'Commissioning')}</h1>
           <p className="text-sm text-[var(--c-text-dim)]">{pick('Ghi trực tiếp ra AO/DO qua core — mọi lệnh đều được ghi audit log', 'Writes directly to AO/DO through core — every command is written to the audit log')}</p>
         </div>
-        <Button
-          variant="danger"
-          icon={<ShieldOff className="h-4 w-4" />}
-          disabled={!canCommission || forced.length === 0}
-          onClick={() => setPending({ kind: 'release-all', points: forced })}
-        >
-          {pick('Trả tất cả về tự động', 'Release all to automatic')} ({forced.length})
-        </Button>
+        <div className="flex items-end gap-3">
+          {/* ISS-PIO-26 — thời hạn nằm NGAY CẠNH nút ghi, không giấu trong một
+              trang cài đặt: nó là một phần của lệnh sắp gửi, và người vận hành
+              phải thấy được mình đang ép thiết bị trong bao lâu. */}
+          <label className="block text-xs text-[var(--c-text-dim)]">
+            {pick('Tự nhả sau', 'Auto-release after')}
+            <select
+              className="mt-1 h-10 w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-3 text-sm text-[var(--c-text)] outline-none focus:border-[var(--c-accent)]"
+              aria-label={pick('Thời hạn tự nhả cho lệnh chạy thử', 'Auto-release timeout for commissioning commands')}
+              value={String(ttlS)}
+              disabled={!canCommission}
+              onChange={(event) => setTtlS(Number(event.target.value))}
+            >
+              {TTL_CHOICES_S.map((seconds) => (
+                <option key={seconds} value={seconds}>{formatTtl(seconds)}</option>
+              ))}
+            </select>
+          </label>
+          <Button
+            variant="danger"
+            icon={<ShieldOff className="h-4 w-4" />}
+            disabled={!canCommission || forced.length === 0}
+            onClick={() => setPending({ kind: 'release-all', points: forced })}
+          >
+            {pick('Trả tất cả về tự động', 'Release all to automatic')} ({forced.length})
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-start gap-3 rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-4 text-sm">
@@ -374,6 +409,19 @@ export function CommissioningPage() {
   )
 }
 
+/** Thời hạn dạng đọc được. Giây và phút chứ không phải "300" trần trụi: đơn vị
+ *  là thứ đầu tiên bị đọc nhầm khi thao tác vội.
+ *
+ *  Dùng ký hiệu `s`/`min` chứ không phải chữ "phút"/"minutes": hàm này chạy
+ *  ngoài `pick` (nó không phải component nên không gọi được hook i18n), nên một
+ *  chuỗi có chữ sẽ kẹt cứng một ngôn ngữ giữa giao diện song ngữ. */
+function formatTtl(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return rest === 0 ? `${minutes} min` : `${minutes} min ${rest}s`
+}
+
 /** Kết quả lần chạy thử gần nhất của một điểm — PA3-504.
  *
  *  Chưa thử thì nói "chưa chạy thử", KHÔNG để trống: một ô trống trong lưới 8
@@ -405,6 +453,16 @@ function TestOutcomeRow({ outcome, running }: { outcome?: TestOutcome; running: 
         {typeof outcome.scanMs === 'number' && <span className="ml-1 font-normal">({outcome.scanMs} ms)</span>}
       </div>
       <div className="mt-0.5 text-[var(--c-text)]">{outcome.message || NO_DATA}</div>
+      {/* `expiresInS` vắng nghĩa là Core KHÔNG báo thời hạn còn lại. Nói thẳng
+          ra thay vì hiện "còn 0 giây" hay im lặng: người vận hành cần biết lệnh
+          này có được ai cưỡng chế nhả hay không (ISS-PIO-26). */}
+      {typeof outcome.ttlS === 'number' && (
+        <div className="mt-0.5 text-[var(--c-text)]">
+          {typeof outcome.expiresInS === 'number'
+            ? pick(`Tự nhả sau ${formatTtl(outcome.ttlS)} — bộ điều khiển báo còn ${formatTtl(outcome.expiresInS)}`, `Auto-release after ${formatTtl(outcome.ttlS)} — controller reports ${formatTtl(outcome.expiresInS)} left`)
+            : pick(`Đã xin thời hạn ${formatTtl(outcome.ttlS)} — bộ điều khiển KHÔNG báo thời hạn còn lại`, `Requested ${formatTtl(outcome.ttlS)} — the controller did NOT report a remaining time`)}
+        </div>
+      )}
       <div className="mono mt-0.5 text-[var(--c-text-dim)]">{formatDateTime(outcome.at)}</div>
     </div>
   )
@@ -482,8 +540,18 @@ function ConfirmDialog({ pending, busy, onConfirm, onClose }: { pending: Pending
         <dt>{pick('Điểm', 'Point')}</dt><dd className="mono font-semibold text-[var(--c-text)]">{pointDisplayTag(pending.point)} — {pending.point.name}</dd>
         <dt>{pick('Giá trị', 'Value')}</dt><dd className="mono font-semibold text-[var(--c-text)]">{valueText}</dd>
         <dt>{pick('Hiện tại', 'Current')}</dt><dd className="mono">{String(pending.point.value)}{pending.point.unit ? ` ${pending.point.unit}` : ''}</dd>
+        {/* Thời hạn phải nằm trong chính hộp xác nhận: nó là một nửa hậu quả của
+            lệnh sắp gửi. Một hộp chỉ nói "sẽ ghi 60%" mà không nói "và giữ 5
+            phút" mô tả thiếu đúng phần người vận hành cần biết để rời khỏi bàn. */}
+        <dt>{pick('Tự nhả sau', 'Auto-release')}</dt><dd className="mono font-semibold text-[var(--c-text)]">{formatTtl(pending.ttlS)}</dd>
       </dl>
       <p className="mt-3 font-semibold text-[var(--c-fault-fg)]">{consequence}</p>
+      <p className="mt-2 text-xs text-[var(--c-text-dim)]">
+        {pick(
+          `Bộ điều khiển tự trả điểm về điều khiển tự động sau ${formatTtl(pending.ttlS)}, kể cả khi trình duyệt đóng hoặc mất mạng. Muốn trả sớm hơn thì bấm "Trả về tự động".`,
+          `The controller returns the point to automatic control after ${formatTtl(pending.ttlS)}, even if this browser closes or the network drops. Use "To automatic" to release sooner.`
+        )}
+      </p>
     </Modal>
   )
 }

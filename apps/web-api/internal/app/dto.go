@@ -528,6 +528,15 @@ type CommissioningTestResult struct {
 	AppliedValue any    `json:"appliedValue,omitempty"` // number | bool
 	Message      string `json:"message"`
 	ScanMs       *int   `json:"scanMs,omitempty"`
+	/* ISS-PIO-26 — hai con số KHÁC NHAU, không gộp làm một:
+	 *
+	 * `TTLS` là thời hạn ĐÃ YÊU CẦU, luôn có mặt khi lệnh được nhận, để biên bản
+	 * nghiệm thu ghi được "đã ép 5 phút" chứ không phải "đã ép".
+	 * `ExpiresInS` là thời hạn CÒN LẠI do Core báo. Vắng mặt nghĩa là Core không
+	 * báo — KHÔNG phải "còn 0 giây". Giao diện phải phân biệt được hai điều đó,
+	 * nếu không nó sẽ đếm ngược một con số không ai cưỡng chế (PA3-107). */
+	TTLS       *uint32 `json:"ttlS,omitempty"`
+	ExpiresInS *uint32 `json:"expiresInS,omitempty"`
 }
 
 type WSOp string
