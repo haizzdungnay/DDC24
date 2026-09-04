@@ -10,6 +10,7 @@ import {
   isInsertable,
   type CatalogEntry
 } from './libraryCatalog'
+import { categoryLabel } from '../../library/libraryPresentation'
 import {
   pullLibraryPreferences,
   pushLibraryPreferences,
@@ -37,6 +38,28 @@ import {
  * editor. Một kiểu riêng khiến chỉ đúng bề mặt biết cách chèn mới nhận.
  */
 export const LIBRARY_DRAG_TYPE = 'application/x-mkddc-library-entry'
+
+/**
+ * Một khoá tuỳ chọn → mục catalog đang hiện, hoặc không gì cả.
+ *
+ * Khoá cũ (trước `T61-203`) là `entryId` TRẦN. Người dùng đã có Yêu thích lưu
+ * theo dạng ấy trên thiết bị, và vứt chúng đi trong một lần nâng cấp là bắt
+ * người ta gắn sao lại từ đầu vì một chuyện họ không gây ra. Nên khoá cũ vẫn
+ * được nhận: nó khớp khi phần sau dấu `/` của một khoá mới trùng nó.
+ *
+ * Khoá không phân giải được (khối đã bị xoá, hoặc thuộc Project khác) đơn giản
+ * KHÔNG hiện. Đó cũng là phép vô hiệu hoá: danh sách tuỳ chọn không cần dọn
+ * chủ động, vì thứ nó trỏ tới không còn thì nó không vẽ ra gì.
+ */
+function resolvePreference(byKey: Map<string, CatalogEntry>, key: string): CatalogEntry[] {
+  const exact = byKey.get(key)
+  if (exact) return [exact]
+  if (key.includes('/')) return []
+  for (const entry of byKey.values()) {
+    if (entry.entryId === key) return [entry]
+  }
+  return []
+}
 
 export function QuickLibraryPanel({
   library,
@@ -103,9 +126,15 @@ export function QuickLibraryPanel({
     () => filterCatalog(entries, { query, category: category || undefined, language }),
     [entries, query, category, language]
   )
-  const byId = useMemo(() => new Map(entries.map((entry) => [entry.entryId, entry])), [entries])
-  const favorites = preferences.favorites.flatMap((id) => byId.get(id) ?? [])
-  const recent = preferences.recent.flatMap((id) => byId.get(id) ?? [])
+  /* `T61-203` — tra theo KHOÁ ĐỊNH DANH (`scope/entryId`), không theo `entryId`
+     trần. `GET /libraries` trả mọi library revision, nên một `Map` khoá bằng
+     `entryId` giữ lại bản gặp sau cùng — tức một version tuỳ ý, và sau lần
+     publish kế tiếp Yêu thích trỏ vào một revision đã DEPRECATED. `catalogEntriesOf`
+     nay đã gom theo khoá và chọn version hiện hành, nên `Map` này có đúng một
+     mục cho mỗi khối. */
+  const byKey = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries])
+  const favorites = preferences.favorites.flatMap((key) => resolvePreference(byKey, key))
+  const recent = preferences.recent.flatMap((key) => resolvePreference(byKey, key))
 
   function surfaceBlock(entry: CatalogEntry): string | null {
     if (!canInsert) return null
@@ -119,13 +148,13 @@ export function QuickLibraryPanel({
     /* Recent chỉ đổi SAU khi chèn thành công: ghi trước là dựng một lịch sử
      * thao tác chưa từng xảy ra. */
     if (!inserted) return
-    const next = recordRecent(preferences, entry.entryId)
+    const next = recordRecent(preferences, entry.key)
     setPreferences(next)
     void pushLibraryPreferences(next).then(setSyncState)
   }
 
   function star(entry: CatalogEntry) {
-    const next = toggleFavorite(preferences, entry.entryId)
+    const next = toggleFavorite(preferences, entry.key)
     setPreferences(next)
     void pushLibraryPreferences(next).then(setSyncState)
   }
@@ -308,9 +337,9 @@ function Section({
       <ul aria-label={title} className="flex flex-col gap-1 px-1 pb-1">
         {entries.map((entry) => (
           <BlockCard
-            key={`${entry.scope}-${entry.entryId}`}
+            key={entry.key}
             entry={entry}
-            favorite={favorites.includes(entry.entryId)}
+            favorite={favorites.includes(entry.key)}
             blocked={surfaceBlock(entry)}
             onInsert={onInsert}
             onStar={onStar}
@@ -347,12 +376,26 @@ function BlockCard({
 }) {
   const { pick } = useI18n()
   const insertable = isInsertable(entry) && blocked === null
+  /* `T61-203` — mọi lý do đến từ THANG BẬC DÙNG CHUNG (`libraryUsability`), thứ
+     tự y hệt PGM-04. Bản trước không có nhánh `DEPRECATED`, nên một khối đã
+     ngừng sử dụng vẫn chèn được từ đây trong khi PGM-04 chặn nó. */
   const reason =
     entry.usability.kind === 'REVIEW_REQUIRED'
       ? pick('Chờ review sản phẩm', 'Awaiting product review')
-      : entry.usability.kind === 'SIGNATURE_UNAVAILABLE'
-        ? pick('Thiếu chữ ký từ thiết bị', 'Signature unavailable from the device')
-        : blocked
+      : entry.usability.kind === 'DEPRECATED'
+        ? pick('Ngừng sử dụng', 'Deprecated')
+        : entry.usability.kind === 'SIGNATURE_UNAVAILABLE'
+          ? pick('Thiếu chữ ký từ thiết bị', 'Signature unavailable from the device')
+          : blocked
+  /* Tương thích chỉ được NÓI RA khi nó không phải `compatible`. Im lặng ở đây
+     là cách một khối `REQUIRES_MIGRATION` trông hệt một khối bình thường —
+     đúng thứ `compatibilityDisplay` fail-closed sinh ra để chặn. */
+  const compatibilityNote =
+    entry.compatibility.kind === 'requires-migration'
+      ? pick('Cần nâng cấp phiên bản thư viện', 'Library version migration required')
+      : entry.compatibility.kind === 'unknown'
+        ? pick('Chưa đo được tương thích', 'Compatibility not measured')
+        : null
   const inputs = entry.ports.filter((port) => port.direction === 'INPUT')
   const outputs = entry.ports.filter((port) => port.direction === 'OUTPUT')
   const label = pick(entry.labelVi, entry.labelEn)
@@ -441,6 +484,11 @@ function BlockCard({
           </ul>
         )}
         {reason && <p className="mt-0.5 text-[10px] text-[var(--c-warn-fg)]">{reason}</p>}
+        {compatibilityNote && (
+          <p data-testid="quick-library-compatibility" className="mt-0.5 text-[10px] text-[var(--c-text-dim)]">
+            {compatibilityNote}
+          </p>
+        )}
         <details className="mt-0.5">
           <summary
             className="flex cursor-pointer items-center gap-1 text-[10px] text-[var(--c-text-dim)] hover:text-[var(--c-text)]"
@@ -451,7 +499,10 @@ function BlockCard({
           </summary>
           <dl className="mt-0.5 flex flex-col gap-0.5 text-[10px]">
             <DetailRow label={pick('Loại', 'Kind')} value={entry.kind} />
-            <DetailRow label={pick('Nhóm', 'Category')} value={entry.category} />
+            <DetailRow
+              label={pick('Nhóm', 'Category')}
+              value={entry.category ? categoryLabel(entry.category, pick) : pick('— chưa phân loại', '— not categorised')}
+            />
             <DetailRow label={pick('Phiên bản', 'Version')} value={entry.libraryVersion} />
             {/* 12 ký tự đầu là đủ để đối chiếu bằng mắt với hồ sơ Revision; in
                 cả 64 ký tự vào một panel rộng 18rem chỉ cho ra một khối chữ

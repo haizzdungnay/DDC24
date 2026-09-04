@@ -5,9 +5,22 @@ import { apiClient } from '../../../../shared/api/client'
  *
  * Ba ràng buộc của plan được giữ đúng: **namespaced** (`programmingLibrary`
  * trong túi tuỳ chọn, không đụng `views` của Monitor/Trends), **bounded** (trần
- * cứng ở dưới), và **không giữ bản sao chữ ký** — chỉ lưu `entryId`. Chép chữ ký
+ * cứng ở dưới), và **không giữ bản sao chữ ký** — chỉ lưu định danh. Chép chữ ký
  * vào tuỳ chọn nghĩa là một ngày nào đó Favorites sẽ mô tả một block khác với
  * catalog thật.
+ *
+ * `T61-203` — thứ được lưu là `libraryEntryKey` (`scope/entryId`), KHÔNG phải
+ * `entryId` trần và cũng KHÔNG kèm `libraryVersion`. Cả hai vế đều là quyết
+ * định có hậu quả:
+ *
+ * - **Có `scope`:** `entryId` của SYSTEM là tên khối (`TON`), của PROJECT là
+ *   UUID. "Chúng không thể trùng nhau" đúng cho tới ngày nó không còn đúng, và
+ *   ngày đó Yêu thích của một Project nhảy sang khối SYSTEM cùng tên.
+ * - **Không có version:** khoá theo version nghĩa là mỗi lần Seal Revision là
+ *   một lần người dùng mất sạch Yêu thích. Version hiện hành được phân giải lúc
+ *   đọc, bằng đúng luật của PGM-04 (ưu tiên DRAFT, nếu không thì cao nhất).
+ *
+ * Khoá đời cũ (`entryId` trần) vẫn đọc được — xem `resolvePreference` ở panel.
  *
  * Recent chỉ được cập nhật SAU khi chèn thành công; đó là lý do `recordRecent`
  * tách khỏi hàm chèn thay vì gọi kèm lúc bấm.
@@ -32,7 +45,9 @@ function sanitize(value: unknown): LibraryPreferences {
     for (const item of raw) {
       if (typeof item !== 'string') continue
       const id = item.trim()
-      if (id === '' || id.length > 64) continue
+      /* `scope/entryId` với PROJECT là `PROJECT/` + UUID 36 ký tự = 44; trần 96
+         để một `entryId` dài của bản sau không bị âm thầm rơi khỏi tuỳ chọn. */
+      if (id === '' || id.length > 96) continue
       seen.add(id)
       if (seen.size >= limit) break
     }
@@ -63,16 +78,16 @@ export function writeLocalLibraryPreferences(value: LibraryPreferences): void {
   }
 }
 
-export function toggleFavorite(current: LibraryPreferences, entryId: string): LibraryPreferences {
-  const favorites = current.favorites.includes(entryId)
-    ? current.favorites.filter((id) => id !== entryId)
-    : [entryId, ...current.favorites].slice(0, LIBRARY_FAVORITE_LIMIT)
+export function toggleFavorite(current: LibraryPreferences, entryKey: string): LibraryPreferences {
+  const favorites = current.favorites.includes(entryKey)
+    ? current.favorites.filter((id) => id !== entryKey)
+    : [entryKey, ...current.favorites].slice(0, LIBRARY_FAVORITE_LIMIT)
   return { ...current, favorites }
 }
 
 /** Đưa mục vừa chèn lên đầu Recent, khử trùng lặp và cắt theo trần. */
-export function recordRecent(current: LibraryPreferences, entryId: string): LibraryPreferences {
-  const recent = [entryId, ...current.recent.filter((id) => id !== entryId)].slice(0, LIBRARY_RECENT_LIMIT)
+export function recordRecent(current: LibraryPreferences, entryKey: string): LibraryPreferences {
+  const recent = [entryKey, ...current.recent.filter((id) => id !== entryKey)].slice(0, LIBRARY_RECENT_LIMIT)
   return { ...current, recent }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProgrammingLibraryPage } from '../../model/types'
+import type { ProgrammingLibraryPage, ProgrammingLibrarySignature } from '../../model/types'
 import {
   catalogCategories,
   catalogEntries,
@@ -9,11 +9,18 @@ import {
 } from './libraryCatalog'
 import { stCallStatement } from '../editor/stInstanceInsertion'
 
-function signature(extra: Record<string, unknown> = {}): string {
-  return JSON.stringify({
+/* `T61-203` — chữ ký ĐÃ PHÂN GIẢI, đúng hình dạng máy chủ trả. FE không còn
+   parse `interface` thô, nên fixture khai bằng chuỗi JSON sẽ không sinh port
+   nào — và một fixture không sinh port thì test đang đo chính thứ nó vừa làm
+   hỏng. */
+function signature(extra: Record<string, unknown> = {}): ProgrammingLibrarySignature {
+  return {
     category: 'math',
     labelVi: 'Giới hạn (LIMIT)',
     labelEn: 'Limit',
+    dispatch: 'FUNC_TABLE',
+    polymorphic: true,
+    typedPortNames: [],
     allowedTypes: ['REAL', 'INT'],
     defaultType: 'REAL',
     ports: [
@@ -23,7 +30,7 @@ function signature(extra: Record<string, unknown> = {}): string {
       { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }
     ],
     ...extra
-  })
+  } as ProgrammingLibrarySignature
 }
 
 function page(): ProgrammingLibraryPage {
@@ -32,32 +39,34 @@ function page(): ProgrammingLibraryPage {
       {
         scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
         entryId: 'LIMIT', kind: 'FUNCTION', name: 'LIMIT', featureState: 'AVAILABLE',
-        contentSha256: 'a'.repeat(64), interface: signature(), dependencies: [],
+        contentSha256: 'a'.repeat(64), signature: signature(), category: 'math', dependencies: [],
         stateLayoutKnown: true, stateSizeBytes: 0
       },
       {
         scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
         entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON', featureState: 'AVAILABLE',
         contentSha256: 'b'.repeat(64),
-        interface: JSON.stringify({
+        signature: {
+          dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [],
           category: 'timer', labelVi: 'Trễ bật (TON)', labelEn: 'On delay', allowedTypes: [],
           ports: [
             { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
             { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
             { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' }
           ]
-        }),
-        dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16
+        },
+        category: 'timer', dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16
       },
       {
         scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
         entryId: 'PID', kind: 'FUNCTION_BLOCK', name: 'PID', featureState: 'REVIEW_REQUIRED',
         contentSha256: 'c'.repeat(64),
-        interface: JSON.stringify({
+        signature: {
+          dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [],
           category: 'control', labelVi: 'PID', labelEn: 'PID', allowedTypes: [],
           ports: [{ name: 'PV', direction: 'INPUT', dataType: 'REAL' }, { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }]
-        }),
-        dependencies: [], stateLayoutKnown: true, stateSizeBytes: 64
+        },
+        category: 'control', dependencies: [], stateLayoutKnown: true, stateSizeBytes: 64
       },
       {
         scope: 'PROJECT', libraryRevisionId: 'prj-1', libraryVersion: '1', libraryState: 'PUBLISHED',
@@ -78,6 +87,11 @@ describe('PGM-02 catalog thư viện dùng chung', () => {
         contentSha256: 'a'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 10,
         // Chữ ký THÔ cố ý hỏng: nếu FE vẫn tự parse thì test này đỏ.
         interface: 'không-phải-json',
+        /* `T61-203` — `category` CÔNG KHAI khác `signature.category` một cách cố
+           ý. Bản cũ của Quick Library đọc từ chữ ký, nên nó sẽ trả `'timer'`
+           trong khi PGM-04 trả `'sensor'` cho cùng một khối. Trường công khai
+           là trường người dùng sửa được; blob chữ ký thì không. */
+        category: 'sensor',
         signature: {
           category: 'timer', labelVi: 'Trễ bật', labelEn: 'On delay', dispatch: 'FB_TYPE',
           polymorphic: false, allowedTypes: [], typedPortNames: [],
@@ -89,18 +103,23 @@ describe('PGM-02 catalog thư viện dùng chung', () => {
       }]
     })
     expect(entry.usability).toEqual({ kind: 'AVAILABLE' })
-    expect(entry.category).toBe('timer')
+    expect(entry.category).toBe('sensor')
     expect(entry.ports.map((port) => port.name)).toEqual(['IN', 'Q'])
   })
 
   it('chuẩn hoá SYSTEM và PROJECT trong cùng một danh sách', () => {
     const entries = catalogEntries(page())
-    expect(entries.map((entry) => entry.entryId)).toEqual(['LIMIT', 'TON', 'PID', 'AHU_HELPER'])
-    expect(entries[0].category).toBe('math')
-    expect(entries[0].ports).toHaveLength(4)
+    /* `T61-203` — thứ tự nay là thứ tự của `groupLibraryEntries`, luật gom của
+       PGM-04 (theo TÊN, rồi `entryId`). Trước lát này Quick Library giữ nguyên
+       thứ tự máy chủ trả, nên cùng một thư viện xếp khác nhau ở hai màn hình. */
+    expect(entries.map((entry) => entry.entryId)).toEqual(['AHU_HELPER', 'LIMIT', 'PID', 'TON'])
+    const limit = entries.find((entry) => entry.entryId === 'LIMIT')!
+    const ton = entries.find((entry) => entry.entryId === 'TON')!
+    expect(limit.category).toBe('math')
+    expect(limit.ports).toHaveLength(4)
     // FB có trạng thái nội tại; FUNCTION thì không.
-    expect(entries[1].stateful).toBe(true)
-    expect(entries[0].stateful).toBe(false)
+    expect(ton.stateful).toBe(true)
+    expect(limit.stateful).toBe(false)
   })
 
   it('mục chữ ký hỏng KHÔNG biến mất mà được đánh dấu không dùng được', () => {
@@ -124,17 +143,20 @@ describe('PGM-02 catalog thư viện dùng chung', () => {
     expect(filterCatalog(entries, { dataType: 'TIME' }).map((entry) => entry.entryId)).toEqual(['TON'])
     // Mục ràng buộc ngôn ngữ ST bị loại khi đang mở POU FBD; mục không ràng
     // buộc thì vẫn hiện.
-    expect(filterCatalog(entries, { language: 'FBD' }).map((entry) => entry.entryId)).toEqual(['LIMIT', 'TON', 'PID'])
-    expect(catalogCategories(entries)).toEqual(['control', 'math', 'other', 'timer'])
+    expect(filterCatalog(entries, { language: 'FBD' }).map((entry) => entry.entryId)).toEqual(['LIMIT', 'PID', 'TON'])
+    /* Không còn chip `'other'`: `AHU_HELPER` chưa được phân loại, và bản cũ quy
+       cái vắng ấy về một nhóm tên `other` mà không ai đặt — người dùng bấm vào
+       nó rồi tưởng đó là một phân loại thật của sản phẩm. */
+    expect(catalogCategories(entries)).toEqual(['control', 'math', 'timer'])
   })
 
   it('đoạn ST cho FUNCTION là một lời gọi, cho FUNCTION_BLOCK có cả khai instance', () => {
     const entries = catalogEntries(page())
-    expect(stCallStatement(entries[0])).toBe('OUT := LIMIT(MN, IN, MX);')
+    expect(stCallStatement(entries.find((entry) => entry.entryId === 'LIMIT')!)).toBe('OUT := LIMIT(MN, IN, MX);')
     /* Lời gọi KHÔNG còn kèm khối `VAR ... END_VAR`: khai báo thuộc vùng khai
      * báo của POU, đặt nó giữa thân là lỗi cú pháp theo grammar ST §10 —
      * `planLibraryInsertion` mới là chỗ đặt hai phần về đúng chỗ. */
-    const ton = stCallStatement(entries[1], 'TON_Fan')
+    const ton = stCallStatement(entries.find((entry) => entry.entryId === 'TON')!, 'TON_Fan')
     expect(ton).toBe('TON_Fan(IN := IN, PT := PT);')
     expect(ton).not.toContain('VAR')
   })

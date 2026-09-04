@@ -4,6 +4,7 @@ import {
   inspectorHasUsefulContext,
   type InspectorInput,
 } from './inspectorContext'
+import { libraryPresentationFixture } from '../../library/libraryFixture'
 import type { CatalogEntry } from '../library/libraryCatalog'
 import type { FbdDocument } from '../../fbd/model'
 import type { StRuntimeOverlayState } from '../editor/StRuntimeValueOverlay'
@@ -22,24 +23,16 @@ const program: ProgrammingProgram = {
   programId: 'p-1', name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM AHU_MAIN\nEND_PROGRAM\n',
 }
 
+/* `T61-203` — fixture đi qua đúng phép chiếu dùng chung. `PID` cố ý KHÔNG có
+   `signature`: đó chính là cách sinh ra `SIGNATURE_UNAVAILABLE` trên đường
+   thật, thay vì gán tay trạng thái ấy vào một đối tượng dựng sẵn. */
 const catalog: CatalogEntry[] = [
-  {
-    entryId: 'sys-ton', scope: 'SYSTEM', kind: 'FUNCTION_BLOCK', name: 'TON',
-    labelVi: 'TON', labelEn: 'TON', category: 'timer', libraryVersion: 'rev-a.3',
-    contentSha256: 'a'.repeat(64), usability: { kind: 'AVAILABLE' }, iecClassification: 'IEC_STANDARD',
-    ports: [
-      { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
-      { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
-      { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
-    ],
-    allowedTypes: [], stateful: true,
-  },
-  {
-    entryId: 'sys-pid', scope: 'SYSTEM', kind: 'FUNCTION_BLOCK', name: 'PID',
-    labelVi: 'PID', labelEn: 'PID', category: 'control', libraryVersion: 'rev-a.3',
-    contentSha256: 'b'.repeat(64), usability: { kind: 'SIGNATURE_UNAVAILABLE' }, iecClassification: 'IEC_STANDARD',
-    ports: [], allowedTypes: [], stateful: true,
-  },
+  libraryPresentationFixture({ entryId: 'sys-ton', name: 'TON', libraryVersion: 'rev-a.3' }),
+  libraryPresentationFixture({
+    entryId: 'sys-pid', name: 'PID', libraryVersion: 'rev-a.3',
+    contentSha256: 'b'.repeat(64), category: 'control',
+    signature: undefined,
+  }),
 ]
 
 function fbdDocument(): FbdDocument {

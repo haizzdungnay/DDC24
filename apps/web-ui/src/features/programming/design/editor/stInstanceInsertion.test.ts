@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CatalogEntry } from '../library/libraryCatalog'
+import { libraryPresentationFixture } from '../../library/libraryFixture'
 import {
   collectDeclaredInstances,
   maskStComments,
@@ -8,27 +9,11 @@ import {
   stCallStatement,
 } from './stInstanceInsertion'
 
+/* `T61-203` — fixture khai ở tầng HỢP ĐỒNG rồi mới chiếu, giống mọi bề mặt
+   thư viện khác. Dựng thẳng một `CatalogEntry` bằng tay sẽ bỏ qua đúng phép
+   chiếu đang được dùng thật. */
 function entry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
-  return {
-    entryId: 'SYSTEM:TON',
-    scope: 'SYSTEM',
-    kind: 'FUNCTION_BLOCK',
-    name: 'TON',
-    labelVi: 'Trễ bật',
-    labelEn: 'On delay',
-    category: 'timer',
-    libraryVersion: '1.0.0',
-    contentSha256: 'a'.repeat(64),
-    usability: { kind: 'AVAILABLE' }, iecClassification: 'IEC_STANDARD',
-    ports: [
-      { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
-      { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
-      { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
-    ],
-    allowedTypes: [],
-    stateful: true,
-    ...overrides,
-  }
+  return { ...libraryPresentationFixture({ entryId: 'SYSTEM:TON' }), ...overrides }
 }
 
 const FUNCTION_ENTRY = entry({

@@ -1,6 +1,7 @@
 import { AlertTriangle, ArchiveX, Library, Lock } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { blockSignatureLine, categoryLabel, metadataValue, scopeLabel } from './libraryPresentation'
+import { iecClassificationOf } from '../design/library/iecClassification'
 import type { LibraryEntryGroup } from '../model/library'
 
 /**
@@ -43,6 +44,11 @@ export function LibraryBlockCard({
      lên một khối PROJECT chỉ vì người dùng đặt tên trùng, và sẽ gỡ nhãn khỏi
      một khối SYSTEM thật khi profile sinh ra lạc hậu. */
   const reviewRequired = entry.featureState === 'REVIEW_REQUIRED'
+  /* `T61-203` — nhãn MỞ RỘNG NHÀ SẢN XUẤT phải hiện ở CẢ HAI bề mặt chọn khối.
+     Trước lát này chỉ Quick Library có nó, nên người chọn khối từ Control
+     Library không hề biết `PID` nằm ngoài IEC 61131-3 — đúng thông tin mà
+     `ISS-STED-17` đặt ở màn chọn khối vì đọc trong tài liệu là đọc quá muộn. */
+  const extension = iecClassificationOf(entry.name) === 'MANUFACTURER_EXTENSION'
 
   return (
     <button
@@ -68,6 +74,16 @@ export function LibraryBlockCard({
         <span className="truncate font-semibold text-[var(--c-text)]">{group.name}</span>
         {group.scope === 'SYSTEM' && (
           <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--c-text-dim)]" aria-label={pick('Chỉ đọc', 'Read-only')} />
+        )}
+        {extension && (
+          <span
+            data-testid="library-extension-badge"
+            className="mono shrink-0 rounded bg-[var(--c-warn-bg)] px-1 text-[10px] text-[var(--c-warn-fg)]"
+            title={pick('Không thuộc thư viện chuẩn IEC 61131-3 — mở rộng của Mekong',
+                        'Not part of the IEC 61131-3 standard library — Mekong extension')}
+          >
+            {pick('MỞ RỘNG', 'EXT')}
+          </span>
         )}
       </span>
 

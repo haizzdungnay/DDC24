@@ -4,12 +4,14 @@ import {
   compatibilityDisplay,
   entryTags,
   insertBlockReason,
+  libraryUsability,
   insertTargetCandidates,
   metadataValue,
   safeToRemove,
   scopeLabel,
   usageDisplay,
 } from './libraryPresentation'
+import { libraryEntryFixture } from './libraryFixture'
 import type { ProgrammingLibraryCompatibility, ProgrammingLibraryUsage } from '../model/types'
 
 function usage(overrides: Partial<ProgrammingLibraryUsage> = {}): ProgrammingLibraryUsage {
@@ -55,9 +57,35 @@ describe('insertBlockReason', () => {
   })
 
   it('khối bình thường có đích thì không bị chặn', () => {
-    expect(insertBlockReason({ featureState: 'AVAILABLE', libraryState: 'PUBLISHED' }, true)).toBeNull()
-    expect(insertBlockReason({ featureState: 'AVAILABLE', libraryState: 'PUBLISHED' }, false)).toBe('NO_TARGET')
-    expect(insertBlockReason({ featureState: 'AVAILABLE', libraryState: 'DEPRECATED' }, true)).toBe('DEPRECATED')
+    const ready = libraryEntryFixture()
+    expect(insertBlockReason(ready, true)).toBeNull()
+    expect(insertBlockReason(ready, false)).toBe('NO_TARGET')
+    expect(insertBlockReason({ ...ready, libraryState: 'DEPRECATED' }, true)).toBe('DEPRECATED')
+  })
+
+  /* `T61-203` — chữ ký không đọc được thì KHÔNG chèn được, ở CẢ HAI bề mặt.
+     Trước lát này Quick Library chặn (nó có `SIGNATURE_UNAVAILABLE`) còn PGM-04
+     thì không — nên cùng một khối chèn được từ màn này và không chèn được từ
+     màn kia. Bên chặn mới là bên đúng: không có chữ ký thì không dựng nổi một
+     lời gọi đủ tham số, và thứ chèn ra sẽ không biên dịch. */
+  it('thiếu chữ ký chặn Insert, không im lặng cho chèn một lời gọi không dựng nổi', () => {
+    expect(insertBlockReason({ ...libraryEntryFixture(), signature: undefined }, true))
+      .toBe('SIGNATURE_UNAVAILABLE')
+  })
+})
+
+/* Thang bậc DUY NHẤT, và thứ tự của nó là hợp đồng. Kiểm bằng chuỗi tuyệt đối
+   chứ không bằng hằng của sản phẩm: so với chính hằng đang kiểm thì hai vế cùng
+   đổi và test xanh vĩnh viễn. */
+describe('libraryUsability', () => {
+  it('REVIEW_REQUIRED thắng DEPRECATED, và cả hai thắng thiếu chữ ký', () => {
+    const base = libraryEntryFixture({ featureState: 'REVIEW_REQUIRED', libraryState: 'DEPRECATED' })
+    expect(libraryUsability({ ...base, signature: undefined }).kind).toBe('REVIEW_REQUIRED')
+    expect(libraryUsability({ ...base, featureState: 'AVAILABLE', signature: undefined }).kind)
+      .toBe('DEPRECATED')
+    expect(libraryUsability({ ...base, featureState: 'AVAILABLE', libraryState: 'PUBLISHED', signature: undefined }).kind)
+      .toBe('SIGNATURE_UNAVAILABLE')
+    expect(libraryUsability(libraryEntryFixture()).kind).toBe('AVAILABLE')
   })
 })
 

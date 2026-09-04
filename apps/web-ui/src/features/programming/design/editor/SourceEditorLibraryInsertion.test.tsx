@@ -21,14 +21,15 @@ function libraryPage(): ProgrammingLibraryPage {
         scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
         entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON', featureState: 'AVAILABLE',
         contentSha256: 'a'.repeat(64),
-        interface: JSON.stringify({
+        signature: {
+          dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [],
           category: 'timer', labelVi: 'Trễ bật', labelEn: 'On delay', allowedTypes: [],
           ports: [
             { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
             { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
             { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
           ],
-        }),
+        },
         dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16,
       },
     ],

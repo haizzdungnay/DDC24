@@ -34,7 +34,8 @@ function libraryItems(): ProgrammingLibraryEntry[] {
         scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
         entryId: 'LIMIT', kind: 'FUNCTION', name: 'LIMIT', featureState: 'AVAILABLE',
         contentSha256: 'a'.repeat(64),
-        interface: JSON.stringify({
+        signature: {
+          dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [],
           category: 'math', labelVi: 'Giới hạn', labelEn: 'Limit', allowedTypes: ['REAL'],
           ports: [
             { name: 'MN', direction: 'INPUT', dataType: 'REAL' },
@@ -42,17 +43,18 @@ function libraryItems(): ProgrammingLibraryEntry[] {
             { name: 'MX', direction: 'INPUT', dataType: 'REAL' },
             { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }
           ]
-        }),
+        },
         dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
       },
       {
         scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
         entryId: 'PID', kind: 'FUNCTION_BLOCK', name: 'PID', featureState: 'REVIEW_REQUIRED',
         contentSha256: 'b'.repeat(64),
-        interface: JSON.stringify({
+        signature: {
+          dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [],
           category: 'control', labelVi: 'PID', labelEn: 'PID', allowedTypes: [],
           ports: [{ name: 'PV', direction: 'INPUT', dataType: 'REAL' }, { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }]
-        }),
+        },
         dependencies: [], stateLayoutKnown: true, stateSizeBytes: 64
       }
   ]
@@ -142,7 +144,10 @@ describe('PGM-02 Quick Library (T59-804)', () => {
     await waitFor(() => expect(preferences.put).toHaveBeenCalled())
     const calls = preferences.put.mock.calls
     const payload = calls[calls.length - 1][0] as Record<string, unknown>
-    expect(payload.programmingLibrary).toEqual({ favorites: ['LIMIT'], recent: [] })
+    /* `T61-203` — khoá là ĐỊNH DANH `scope/entryId`, không phải `entryId` trần.
+       `entryId` trần trỏ vào bất kỳ version nào của khối; sau lần publish kế
+       tiếp nó có thể trỏ vào một revision đã DEPRECATED. */
+    expect(payload.programmingLibrary).toEqual({ favorites: ['SYSTEM/LIMIT'], recent: [] })
     // `views` phải còn nguyên: túi tuỳ chọn dùng chung, PUT toàn bộ sẽ xoá
     // khung nhìn Monitor chỉ vì người dùng vừa bấm một ngôi sao.
     expect(payload.views).toEqual({ monitor: [{ name: 'Ca đêm', params: {} }] })
@@ -280,10 +285,11 @@ function bulkItems(count: number, offset = 0): ProgrammingLibraryEntry[] {
     scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
     entryId: `BLK_${offset + index + 1}`, kind: 'FUNCTION', name: `BLK_${offset + index + 1}`,
     featureState: 'AVAILABLE', contentSha256: 'd'.repeat(64),
-    interface: JSON.stringify({
+    signature: {
+          dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [],
       category: 'math', labelVi: `Khối ${offset + index + 1}`, labelEn: `Block ${offset + index + 1}`,
       allowedTypes: [], ports: [{ name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }]
-    }),
+    },
     dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
   })) as unknown as ProgrammingLibraryEntry[]
 }

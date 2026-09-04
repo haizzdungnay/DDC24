@@ -509,6 +509,46 @@ viết dạng biểu thức **trả về chính mock**, mà vitest coi giá tr�
 Với một mock đang `reject`, lần gọi thừa ấy thành unhandled rejection và test đỏ
 ở một chỗ không liên quan gì tới thứ nó đang đo.
 
+**Đính chính `T61-203` (`ISS-PGM04-06`, đo `2026-09-04`).** `libraryPresentation.ts`
+có thật và PGM-04 dùng nó. Nhưng Quick Library chưa từng dùng: nó có một mô hình
+THỨ HAI (`design/library/libraryCatalog.ts`) với ngữ nghĩa riêng, và hai mô hình
+bất đồng ở đúng bốn chỗ đắt nhất — cả bốn đều đo được, không phải suy đoán:
+
+| Trường | PGM-04 | Quick Library (bản cũ) | Hậu quả |
+|---|---|---|---|
+| `category` | `entry.category` (trường công khai `T61-101`) | `signature.category`, thiếu thì `'other'` | cùng khối, hai nhóm; lọc theo nhóm không tìm thấy nó ở một trong hai màn |
+| chữ ký | chỉ `entry.signature`; vắng thì NÓI RA | vắng thì tự parse `entry.interface` | hai câu trả lời về việc nối dây vào chân nào, không có cách phân xử |
+| `DEPRECATED` | chặn chèn | không biết tới | khối đã ngừng sử dụng vẫn chèn được từ bề mặt chèn nhanh |
+| định danh | gom theo `scope/entryId`, chọn version hiện hành | `Map` khoá `entryId` trần trên danh sách chưa gom | Yêu thích trỏ vào một revision tuỳ ý, có thể là bản đã `DEPRECATED` |
+
+Hàng cuối là hàng khó thấy nhất. `GET /libraries` trả **mọi** library revision
+của Project (DRAFT + PUBLISHED + DEPRECATED), nên `new Map(entries.map(e =>
+[e.entryId, e]))` giữ lại hàng GẶP SAU CÙNG. Sau một lần publish kế tiếp, ngôi
+sao của người dùng trỏ vào bản cũ — và Quick Library còn hiện cùng một khối
+nhiều lần, mỗi lần một version, không nói rõ cái nào đang dùng.
+
+Nay chỉ còn một mô hình. `CatalogEntry` là bí danh của `LibraryPresentation`
+(giữ tên vì bảy mô-đun khác đang cầm kiểu này), `catalogEntriesOf` gom bằng
+`groupLibraryEntries` — đúng luật chọn version của PGM-04 — và thang bậc
+"chưa dùng được" (`libraryUsability`) là một, thứ tự `REVIEW_REQUIRED` →
+`DEPRECATED` → `SIGNATURE_UNAVAILABLE` là hợp đồng.
+
+Hai thay đổi hành vi có chủ ý, ghi ra để không ai đọc nhầm thành hồi quy:
+
+1. **FE không còn parse `interface` thô.** Đường lùi ấy sinh ra cho một chu kỳ
+   nâng cấp; giữ nó ở đúng một consumer là giữ nguyên chỗ hai bề mặt bất đồng.
+2. **Thiếu chữ ký nay CHẶN Insert ở cả hai** (trước: Quick Library chặn, PGM-04
+   không). Bên chặn là bên đúng — không có chữ ký thì không dựng nổi một lời gọi
+   đủ tham số, và thứ chèn ra sẽ không biên dịch.
+
+Yêu thích/Gần đây khoá bằng `libraryEntryKey` = `scope/entryId`: **có** `scope`
+vì `entryId` của SYSTEM là tên khối còn của PROJECT là UUID, và "chúng không thể
+trùng" đúng cho tới ngày nó không còn đúng; **không** có `libraryVersion` vì
+khoá theo version nghĩa là mỗi lần Seal Revision là một lần người dùng mất sạch
+Yêu thích. Khoá đời cũ (`entryId` trần) vẫn phân giải được — nâng cấp không được
+bắt người ta gắn sao lại từ đầu. Phép vô hiệu hoá là ngầm và đúng: khoá không
+phân giải được thì không vẽ ra gì.
+
 **Exit WP-01:** OpenAPI ↔ route Go ↔ client TS exact; metadata/usage không còn
 fixture-only; old FE vẫn đọc được response additive; không có task MCU.
 
@@ -518,7 +558,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 |---|---|---|---|---|---:|
 | `T61-201` | P0 | Thay `canAdmin` bằng `roleCan(role, 'program.edit')`; thêm matrix viewer/operator/engineer/admin. | `T61-004` | `DONE` | 0,5 nd |
 | `T61-202` | P0 | Cursor pagination/infinite loading cho PGM-04 và lazy Quick Library; retry lỗi từng page, dedupe identity/version. | `T61-101` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-05`) | 1 nd |
-| `T61-203` | P0 | Trích `LibraryPresentationModel` + shared card/signature/favorite/recent từ catalog dùng chung. | `T61-004` | `DONE` | 1,5 nd |
+| `T61-203` | P0 | Trích `LibraryPresentationModel` + shared card/signature/favorite/recent từ catalog dùng chung. | `T61-004` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-06`) | 1,5 nd |
 | `T61-204` | P1 | URL state typed cho tab/filter/query/selected/inspector/returnTo; back/forward/reload giữ context. | `T61-004` | `DONE` | 1 nd |
 | `T61-205` | P0 | Metadata route/header và integration shell; không hồi quy PGM-01..06 hoặc tạo rail thứ hai. | `T61-002/004` | `DONE` | 1,5 nd |
 | `T61-206` | P0 | Reducer/state model loading/empty/error/permission/stale/offline/pagination/detail error tách bạch. | `T61-101` | `DONE` | 1 nd |

@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-06` Một mô hình trình bày cho PGM-04 và Quick Library; Yêu thích không còn trỏ nhầm revision (#451, 2026-09-04)
+
+- **Triệu chứng.** Cùng một khối thư viện hiện **khác nhau** ở hai màn hình: khác phân loại, khác chữ ký,
+  và chèn được ở màn này trong khi bị chặn ở màn kia. Yêu thích/Gần đây của Quick Library thì trỏ vào một
+  version tuỳ ý của khối, có thể là bản đã `DEPRECATED`.
+- **Nguyên nhân gốc.** Có **hai** mô hình trình bày, không phải hai bản sao — hai mô hình khác ngữ nghĩa:
+
+  | Trường | PGM-04 | Quick Library (bản cũ) | Hậu quả |
+  |---|---|---|---|
+  | `category` | `entry.category` (trường công khai `T61-101`) | `signature.category`, thiếu thì `'other'` | lọc theo nhóm không tìm thấy khối ở một trong hai màn |
+  | chữ ký | chỉ `entry.signature`; vắng thì nói ra | vắng thì tự parse `entry.interface` | hai câu trả lời về việc nối dây vào chân nào |
+  | `DEPRECATED` | chặn chèn | không biết tới | khối đã ngừng dùng vẫn chèn được từ bề mặt chèn nhanh |
+  | định danh | gom theo `scope/entryId`, chọn version hiện hành | `Map` khoá `entryId` trần trên danh sách **chưa gom** | ngôi sao trỏ vào revision gặp sau cùng |
+
+  Hàng cuối khó thấy nhất: `GET /libraries` trả **mọi** library revision (DRAFT + PUBLISHED + DEPRECATED),
+  nên `new Map(entries.map(e => [e.entryId, e]))` giữ lại hàng gặp sau cùng — và Quick Library còn hiện
+  cùng một khối nhiều lần, mỗi lần một version, không nói cái nào đang dùng.
+- **Cách sửa.** Chỉ còn một mô hình. `CatalogEntry` là bí danh của `LibraryPresentation` (giữ tên vì bảy
+  mô-đun khác đang cầm kiểu này); `catalogEntriesOf` gom bằng `groupLibraryEntries` — đúng luật chọn
+  version của PGM-04; thang bậc "chưa dùng được" (`libraryUsability`) là một, thứ tự `REVIEW_REQUIRED`
+  → `DEPRECATED` → `SIGNATURE_UNAVAILABLE` là hợp đồng. Nhãn MỞ RỘNG (`ISS-STED-17`) nay hiện ở **cả hai**
+  màn chọn khối, và Quick Library nói ra `compatibility` khi nó không phải `compatible`.
+- **Hai thay đổi hành vi có chủ ý** (ghi ra để không ai đọc nhầm thành hồi quy): (1) FE **không còn parse**
+  `interface` thô — đường lùi ấy sinh ra cho một chu kỳ nâng cấp, giữ nó ở đúng một consumer là giữ nguyên
+  chỗ hai bề mặt bất đồng; (2) thiếu chữ ký nay **chặn Insert ở cả hai** (trước: chỉ Quick Library chặn) —
+  không có chữ ký thì không dựng nổi một lời gọi đủ tham số, và thứ chèn ra sẽ không biên dịch.
+- **Định danh Yêu thích/Gần đây.** Khoá là `libraryEntryKey` = `scope/entryId`: **có** `scope` vì `entryId`
+  của SYSTEM là tên khối còn của PROJECT là UUID, và "chúng không thể trùng" đúng cho tới ngày nó không còn
+  đúng; **không** có `libraryVersion` vì khoá theo version nghĩa là mỗi lần Seal Revision là một lần người
+  dùng mất sạch Yêu thích. Khoá đời cũ (`entryId` trần) vẫn phân giải được. Phép vô hiệu hoá là ngầm và
+  đúng: khoá không phân giải được thì không vẽ ra gì.
+- **Bằng chứng.** 14/14 phép tiêm lỗi đỏ. Bộ parity mới (`library/libraryParity.test.tsx`) đẩy **một**
+  payload máy chủ qua **cả hai** đường — dựng hai fixture riêng cho hai vế là so hai fixture với nhau,
+  không so hai bề mặt; fixture dùng chung nằm ở `library/libraryFixture.ts` và khai ở tầng hợp đồng
+  (`ProgrammingLibraryEntry`) rồi mới chiếu.
+- **Số đo cục bộ (CI chưa cấp runner — `#414`).** layout `17 PASS / 0 FAIL` · `ctest 1422/1422` ·
+  Go `vet` sạch + `21 gói ok` · FE `220 tệp / 2664 test` · `npm run lint` + `npm run build` sạch · Playwright `-g 'PGM-04|Quick Library'` `18 passed / 4 skipped`.
+- **Phạm vi tệp.** `apps/web-ui/src/features/programming/{library/**,design/library/**,design/editor/*,
+  model/*}` (chỉ test) + Plan61. Không chạm tệp của làn A.
+
+
 ### Added — `ISS-PIO-28` Check kiểm phần đặc thù của từng nguồn Point (#407, 2026-09-04)
 
 - **Triệu chứng.** `Check` kiểm cú pháp/kiểu ST, danh tính điểm, hướng, quyền ghi, đơn vị, quality
@@ -88,7 +129,7 @@ safe-state đầu ra · chủ sở hữu VP khi ghi · khớp kiểu tín hiệu
   `client.request()` sau mỗi test. Với mock đang `reject`, lần gọi thừa ấy thành unhandled rejection và
   test đỏ ở một chỗ không liên quan gì tới thứ nó đang đo.
 - **Số đo cục bộ (CI chưa cấp runner — `#414`).** layout `17 PASS / 0 FAIL` · `ctest 1422/1422` ·
-  Go `vet` sạch + `21 gói ok` · FE `219 tệp / 2651 test` · `npm run lint` + `npm run build` sạch ·
+  Go `vet` sạch + `21 gói ok` · FE `219 tệp / 2651 test` · `npm run lint` + `npm run build` sạch · Playwright `-g 'PGM-04|Quick Library'` `18 passed / 4 skipped`.
   Playwright `e2e/programming.spec.ts -g 'PGM-04|Quick Library'` `18 passed / 4 skipped`.
 - **Phạm vi tệp.** `apps/web-ui/src/features/programming/{api/queries.ts,design/library/QuickLibraryPanel.tsx,
   design/library/libraryCatalog.ts,design/editor/ProgramsTab.tsx,library/libraryViewState.ts}` + test.

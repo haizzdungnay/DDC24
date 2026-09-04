@@ -1,6 +1,10 @@
 import type { ProgrammingLibraryEntry, ProgrammingLibraryPage } from '../../model/types'
-import { iecClassificationOf } from './iecClassification'
-import type { LibraryIecClassification } from '../../api/generated/library_registry'
+import { groupLibraryEntries } from '../../model/library'
+import {
+  libraryPresentation,
+  type LibraryPresentation,
+  type LibraryUsability as SharedLibraryUsability,
+} from '../../library/libraryPresentation'
 
 /**
  * `T59-804` (`PGM02-V22-WP-03`) — MỘT catalog cho cả Quick Library của PGM-02
@@ -20,81 +24,23 @@ export interface LibraryPort {
   dataType: string
 }
 
-/** Trạng thái dùng được của một mục, đã gộp `featureState` + tính đầy đủ chữ ký. */
-export type LibraryUsability =
-  | { kind: 'AVAILABLE' }
-  /** Có thật nhưng cần review sản phẩm trước khi dùng (vd PID). */
-  | { kind: 'REVIEW_REQUIRED' }
-  /** Backend trả mục nhưng chữ ký không đọc được — KHÔNG đoán port. */
-  | { kind: 'SIGNATURE_UNAVAILABLE' }
-
-export interface CatalogEntry {
-  entryId: string
-  scope: 'SYSTEM' | 'PROJECT'
-  kind: ProgrammingLibraryEntry['kind']
-  name: string
-  labelVi: string
-  labelEn: string
-  category: string
-  /** `undefined` = mục không ràng buộc ngôn ngữ (đa số SYSTEM entry). */
-  language?: 'ST' | 'FBD'
-  libraryVersion: string
-  contentSha256: string
-  usability: LibraryUsability
-  /** `ISS-STED-17` — `null` với POU người dùng định nghĩa: nó không thuộc IEC
-   *  lẫn thư viện Mekong, nên gắn một trong hai nhãn là nói sai. */
-  iecClassification: LibraryIecClassification | null
-  ports: readonly LibraryPort[]
-  allowedTypes: readonly string[]
-  defaultType?: string
-  /** POU dùng chung có trạng thái nội tại: FB phải khai instance trước khi gọi. */
-  stateful: boolean
-}
-
-interface SignatureShape {
-  category?: unknown
-  labelVi?: unknown
-  labelEn?: unknown
-  allowedTypes?: unknown
-  defaultType?: unknown
-  ports?: unknown
-}
-
-function parsePorts(raw: unknown): LibraryPort[] | null {
-  if (!Array.isArray(raw)) return null
-  const ports: LibraryPort[] = []
-  for (const item of raw) {
-    if (typeof item !== 'object' || item === null) return null
-    const port = item as Record<string, unknown>
-    const name = typeof port.name === 'string' ? port.name : null
-    const dataType = typeof port.dataType === 'string' ? port.dataType : null
-    const direction = port.direction === 'INPUT' || port.direction === 'OUTPUT' ? port.direction : null
-    if (!name || !dataType || !direction) return null
-    ports.push({ name, direction, dataType })
-  }
-  return ports
-}
-
 /**
- * Ưu tiên chữ ký ĐÃ PHÂN GIẢI của backend (`T59-804`). Chỉ khi backend chưa có
- * field đó — một chu kỳ nâng cấp cũ — mới quay lại tự parse `interface`. Giữ cả
- * hai đường vì rolling upgrade là chuyện có thật, nhưng thứ tự thì rõ: authority
- * đọc chữ ký là backend, không phải từng client.
+ * `T61-203` — mục catalog CHÍNH LÀ mô hình trình bày dùng chung.
+ *
+ * Trước lát này đây là một mô hình THỨ HAI với ngữ nghĩa riêng: `category` đọc
+ * từ blob chữ ký (thiếu thì bịa `'other'`), chữ ký thì tự parse `interface` khi
+ * `signature` vắng, và không hề biết tới `DEPRECATED`. Hệ quả đo được: một khối
+ * đã ngừng sử dụng bị PGM-04 chặn nhưng vẫn chèn được từ Quick Library, và cùng
+ * một khối hiện hai phân loại khác nhau ở hai màn hình.
+ *
+ * Nay nó là bí danh của `LibraryPresentation`. Giữ tên `CatalogEntry` vì bảy
+ * mô-đun khác (chèn ST, palette FBD, Inspector, hover) đang cầm kiểu này; đổi
+ * tên là một lần sửa cơ học không nói thêm điều gì.
  */
-function signatureOf(entry: ProgrammingLibraryEntry): SignatureShape | null {
-  if (entry.signature) return entry.signature as unknown as SignatureShape
-  const raw = entry.interface
-  if (raw === undefined || raw === null) return null
-  if (typeof raw === 'string') {
-    try {
-      return JSON.parse(raw) as SignatureShape
-    } catch {
-      return null
-    }
-  }
-  if (typeof raw === 'object') return raw as SignatureShape
-  return null
-}
+export type CatalogEntry = LibraryPresentation
+
+/** Bí danh giữ tương thích cho chỗ gọi cũ. Thang bậc thật nằm ở mô hình chung. */
+export type LibraryUsability = SharedLibraryUsability
 
 /**
  * Chuẩn hoá một trang catalog. Mục có chữ ký hỏng KHÔNG bị bỏ đi: nó vẫn xuất
@@ -106,49 +52,21 @@ export function catalogEntries(page: ProgrammingLibraryPage | null | undefined):
 }
 
 /**
- * `T61-202` — cùng phép chuẩn hoá, nhưng nhận DANH SÁCH ĐÃ GHÉP thay vì một
- * trang.
+ * `T61-202`/`T61-203` — cùng phép chiếu, nhận DANH SÁCH ĐÃ GHÉP thay vì một
+ * trang, và GOM THEO ĐỊNH DANH trước khi chiếu.
  *
- * Sau khi Quick Library và Control Library dùng chung engine phân trang, thứ
- * mỗi bề mặt cầm không còn là "trang máy chủ vừa trả" mà là "mọi mục đã tải tới
- * lúc này". Ép nó trở lại hình dạng `{ items }` chỉ để đi qua `catalogEntries`
- * là dựng một trang giả — và một trang giả sẽ mời người đọc sau này tin rằng
- * `nextCursor` của nó có nghĩa.
+ * Phép gom không phải để cho gọn. `GET /libraries` trả mọi library revision của
+ * Project (DRAFT + PUBLISHED + DEPRECATED), nên bản cũ — chiếu thẳng từng hàng —
+ * hiện cùng một khối nhiều lần, mỗi lần một version, và người dùng phải tự đoán
+ * cái nào là cái đang dùng. Luật chọn version hiện hành (`groupLibraryEntries`:
+ * ưu tiên DRAFT, nếu không thì version cao nhất) là luật của PGM-04; dùng lại nó
+ * ở đây chính là điều làm hai màn hình nói cùng một câu.
  */
 export function catalogEntriesOf(
   items: readonly ProgrammingLibraryEntry[] | null | undefined
 ): CatalogEntry[] {
   if (!items) return []
-  return items.map((entry) => {
-    const signature = signatureOf(entry)
-    const ports = signature ? parsePorts(signature.ports) : null
-    const usability: LibraryUsability =
-      ports === null
-        ? { kind: 'SIGNATURE_UNAVAILABLE' }
-        : entry.featureState === 'REVIEW_REQUIRED'
-          ? { kind: 'REVIEW_REQUIRED' }
-          : { kind: 'AVAILABLE' }
-    return {
-      entryId: entry.entryId,
-      scope: entry.scope,
-      kind: entry.kind,
-      name: entry.name,
-      labelVi: typeof signature?.labelVi === 'string' ? signature.labelVi : entry.name,
-      labelEn: typeof signature?.labelEn === 'string' ? signature.labelEn : entry.name,
-      category: typeof signature?.category === 'string' ? signature.category : 'other',
-      ...(entry.language ? { language: entry.language } : {}),
-      libraryVersion: entry.libraryVersion,
-      contentSha256: entry.contentSha256,
-      usability,
-      iecClassification: iecClassificationOf(entry.name),
-      ports: ports ?? [],
-      allowedTypes: Array.isArray(signature?.allowedTypes)
-        ? (signature.allowedTypes as unknown[]).filter((type): type is string => typeof type === 'string')
-        : [],
-      ...(typeof signature?.defaultType === 'string' ? { defaultType: signature.defaultType } : {}),
-      stateful: entry.kind === 'FUNCTION_BLOCK'
-    }
-  })
+  return groupLibraryEntries([...items]).map((group) => libraryPresentation(group.current))
 }
 
 export interface CatalogFilter {
@@ -177,13 +95,20 @@ export function filterCatalog(entries: readonly CatalogEntry[], filter: CatalogF
       entry.entryId.toLocaleLowerCase().includes(needle) ||
       entry.labelVi.toLocaleLowerCase().includes(needle) ||
       entry.labelEn.toLocaleLowerCase().includes(needle) ||
-      entry.category.toLocaleLowerCase().includes(needle)
+      /* `category` nay có thể là `null` ("chưa ai phân loại"). Bản cũ quy nó về
+         `'other'`, nên gõ "other" khớp mọi khối chưa phân loại — một nhóm chưa
+         từng tồn tại. */
+      (entry.category?.toLocaleLowerCase().includes(needle) ?? false) ||
+      entry.tags.some((tag) => tag.toLocaleLowerCase().includes(needle))
     )
   })
 }
 
+/** Các phân loại CÓ THẬT trong danh sách. Khối chưa phân loại không sinh ra một
+ *  chip rỗng — cũng không sinh ra chip `'other'` như bản cũ. */
 export function catalogCategories(entries: readonly CatalogEntry[]): string[] {
-  return [...new Set(entries.map((entry) => entry.category))].sort()
+  const categories = entries.map((entry) => entry.category).filter((value): value is string => value !== null)
+  return [...new Set(categories)].sort()
 }
 
 export function isInsertable(entry: CatalogEntry): boolean {

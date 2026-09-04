@@ -1,6 +1,9 @@
 import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../api/generated/library_registry'
+import { iecClassificationOf } from '../design/library/iecClassification'
+import type { LibraryIecClassification } from '../api/generated/library_registry'
 import type {
   ProgrammingLibraryEntry,
+  ProgrammingLibrarySignaturePort,
   ProgrammingLibraryUsage,
 } from '../model/types'
 
@@ -83,10 +86,44 @@ export function compatibilityDisplay(
   return { kind: 'unknown', reason: compatibility.reason }
 }
 
+/**
+ * `T61-203` — vì sao một khối CHƯA DÙNG ĐƯỢC, xét trên chính khối đó.
+ *
+ * Đây là thang bậc DUY NHẤT của sản phẩm. Trước lát này có hai: PGM-04 hỏi
+ * `insertBlockReason` (biết `REVIEW_REQUIRED` và `DEPRECATED`), còn Quick
+ * Library hỏi một hàm riêng trong catalog của nó (biết `REVIEW_REQUIRED` và
+ * "thiếu chữ ký", KHÔNG biết `DEPRECATED`). Hệ quả đo được: một khối đã ngừng
+ * sử dụng bị PGM-04 chặn nhưng vẫn chèn được từ Quick Library — cùng một khối,
+ * hai câu trả lời, và câu dễ dãi hơn nằm đúng ở bề mặt người ta chèn nhanh.
+ *
+ * Thứ tự là một phần của hợp đồng: `REVIEW_REQUIRED` đứng trước `DEPRECATED`,
+ * và cả hai đứng trước `SIGNATURE_UNAVAILABLE`. Một khối chờ review thì việc
+ * đọc được chữ ký của nó cũng không làm nó dùng được, nên nói "thiếu chữ ký"
+ * là chỉ người dùng đi sửa một thứ không phải nguyên nhân.
+ */
+export type LibraryUsability =
+  | { kind: 'AVAILABLE' }
+  /** Có thật nhưng cần review sản phẩm trước khi dùng (vd PID). */
+  | { kind: 'REVIEW_REQUIRED' }
+  /** Version thư viện đã kết thúc vòng đời. */
+  | { kind: 'DEPRECATED' }
+  /** Máy chủ trả mục nhưng chữ ký không đọc được — KHÔNG đoán port. */
+  | { kind: 'SIGNATURE_UNAVAILABLE' }
+
+export function libraryUsability(
+  entry: Pick<ProgrammingLibraryEntry, 'featureState' | 'libraryState' | 'signature'>,
+): LibraryUsability {
+  if (entry.featureState === 'REVIEW_REQUIRED') return { kind: 'REVIEW_REQUIRED' }
+  if (entry.libraryState === 'DEPRECATED') return { kind: 'DEPRECATED' }
+  if (!entry.signature) return { kind: 'SIGNATURE_UNAVAILABLE' }
+  return { kind: 'AVAILABLE' }
+}
+
 export type InsertBlockReason =
   | 'REVIEW_REQUIRED'
   | 'NO_TARGET'
   | 'DEPRECATED'
+  | 'SIGNATURE_UNAVAILABLE'
   | null
 
 /**
@@ -101,13 +138,125 @@ export type InsertBlockReason =
  * nhận cờ nào để tắt nó.
  */
 export function insertBlockReason(
-  entry: Pick<ProgrammingLibraryEntry, 'featureState' | 'libraryState'>,
+  entry: Pick<ProgrammingLibraryEntry, 'featureState' | 'libraryState' | 'signature'>,
   hasTarget: boolean,
 ): InsertBlockReason {
-  if (entry.featureState === 'REVIEW_REQUIRED') return 'REVIEW_REQUIRED'
-  if (entry.libraryState === 'DEPRECATED') return 'DEPRECATED'
+  const usability = libraryUsability(entry)
+  if (usability.kind !== 'AVAILABLE') return usability.kind
   if (!hasTarget) return 'NO_TARGET'
   return null
+}
+
+/**
+ * `T61-203` — ĐỊNH DANH của một khối, ổn định QUA MỌI VERSION.
+ *
+ * `entryId` một mình không đủ: `GET /libraries` trả mọi library revision của
+ * Project (DRAFT + PUBLISHED + DEPRECATED — xem `model/library.ts`), nên cùng
+ * một `entryId` về nhiều lần với `libraryVersion` khác nhau. Một `Map` khoá
+ * bằng `entryId` trần sẽ giữ lại bản GẶP SAU CÙNG, tức một version tuỳ ý —
+ * và đó chính là cách Yêu thích của Quick Library trỏ vào một revision đã
+ * `DEPRECATED` sau lần publish kế tiếp.
+ *
+ * Khoá gồm `scope` vì hai phạm vi có không gian tên riêng: `entryId` của
+ * SYSTEM là tên khối (`TON`), của PROJECT là UUID. Dựa vào "chúng không thể
+ * trùng nhau" là đúng cho tới ngày nó không còn đúng, và ngày đó Yêu thích của
+ * một Project sẽ nhảy sang khối SYSTEM cùng tên.
+ *
+ * CỐ Ý không mang `libraryVersion`: Yêu thích/Gần đây phải sống sót qua
+ * publish. Khoá theo version nghĩa là mỗi lần Seal Revision là một lần người
+ * dùng mất sạch Yêu thích.
+ */
+export function libraryEntryKey(
+  entry: Pick<ProgrammingLibraryEntry, 'scope' | 'entryId'>,
+): string {
+  return `${entry.scope}/${entry.entryId}`
+}
+
+/**
+ * `T61-203` — MỘT mô hình trình bày cho cả PGM-04 và Quick Library.
+ *
+ * Trước lát này có hai. Không phải hai bản sao — hai mô hình **khác nhau**, và
+ * chúng bất đồng ở đúng những chỗ đắt nhất:
+ *
+ * | Trường | PGM-04 | Quick Library (bản cũ) |
+ * |---|---|---|
+ * | `category` | `entry.category` (trường công khai, `T61-101`) | `signature.category`, thiếu thì `'other'` |
+ * | chữ ký | chỉ `entry.signature`; vắng thì NÓI RA | vắng thì tự parse `entry.interface` |
+ * | `DEPRECATED` | chặn chèn | không biết tới |
+ * | thẻ, tương thích | có | không có |
+ *
+ * Ba hàng đầu đều là "cùng một khối, hai câu trả lời". Hàng chữ ký là hàng
+ * nguy hiểm nhất: chữ ký quyết định người dùng nối dây vào chân nào, và khi
+ * hai bề mặt đoán khác nhau thì không ai có cách biết bên nào đúng.
+ *
+ * Mô hình này thuần dữ liệu (không React, không `pick`): nhãn đa ngữ được suy
+ * ở lớp vẽ bằng `categoryLabel`/`scopeLabel`, để kiểm nó không cần dựng cây
+ * component.
+ */
+export interface LibraryPresentation {
+  /** `libraryEntryKey` — ổn định qua version. Dùng làm khoá React và khoá tuỳ chọn. */
+  key: string
+  scope: ProgrammingLibraryEntry['scope']
+  entryId: string
+  name: string
+  kind: ProgrammingLibraryEntry['kind']
+  /** `undefined` = mục không ràng buộc ngôn ngữ (đa số SYSTEM entry). */
+  language?: 'ST' | 'FBD'
+  labelVi: string
+  labelEn: string
+  /** MÃ phân loại, `null` khi chưa ai phân loại. Nhãn người đọc: `categoryLabel`. */
+  category: string | null
+  description: string | null
+  tags: string[]
+  libraryRevisionId: string
+  libraryVersion: string
+  libraryState: ProgrammingLibraryEntry['libraryState']
+  contentSha256: string
+  signature: BlockSignatureLine
+  ports: readonly ProgrammingLibrarySignaturePort[]
+  allowedTypes: readonly string[]
+  defaultType?: string
+  usability: LibraryUsability
+  compatibility: CompatibilityDisplay
+  /** `ISS-STED-17` — `null` với POU người dùng định nghĩa. */
+  iecClassification: LibraryIecClassification | null
+  /** POU dùng chung có trạng thái nội tại: FB phải khai instance trước khi gọi. */
+  stateful: boolean
+}
+
+export function libraryPresentation(entry: ProgrammingLibraryEntry): LibraryPresentation {
+  const signature = entry.signature
+  return {
+    key: libraryEntryKey(entry),
+    scope: entry.scope,
+    entryId: entry.entryId,
+    name: entry.name,
+    kind: entry.kind,
+    ...(entry.language ? { language: entry.language } : {}),
+    /* Nhãn lấy từ chữ ký ĐÃ PHÂN GIẢI, thiếu thì dùng chính tên khối. KHÔNG
+       dựng nhãn từ `interface` thô: xem bảng ở đầu khối chú thích. */
+    labelVi: signature?.labelVi ?? entry.name,
+    labelEn: signature?.labelEn ?? entry.name,
+    /* `entry.category` là trường CÔNG KHAI của hợp đồng (`T61-101`), không
+       phải một mảnh nằm trong blob chữ ký. Đọc nó từ chữ ký là đọc một bản
+       sao có thể vắng — và bản cũ của Quick Library còn quy cái vắng ấy về
+       `'other'`, tức bịa ra một phân loại mà không ai đặt. */
+    category: metadataValue(entry.category),
+    description: metadataValue(entry.description),
+    tags: entryTags(entry),
+    libraryRevisionId: entry.libraryRevisionId,
+    libraryVersion: entry.libraryVersion,
+    libraryState: entry.libraryState,
+    contentSha256: entry.contentSha256,
+    signature: blockSignatureLine(entry),
+    ports: signature?.ports ?? [],
+    allowedTypes: signature?.allowedTypes ?? [],
+    ...(signature?.defaultType ? { defaultType: signature.defaultType } : {}),
+    usability: libraryUsability(entry),
+    compatibility: compatibilityDisplay(entry),
+    iecClassification: iecClassificationOf(entry.name),
+    stateful: entry.kind === 'FUNCTION_BLOCK',
+  }
 }
 
 export type UsageDisplay =
