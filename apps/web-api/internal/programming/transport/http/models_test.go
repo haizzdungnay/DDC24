@@ -49,7 +49,7 @@ func TestValidateImpactAcknowledgements(t *testing.T) {
 	}
 }
 
-func TestAllEightPresentImpactGroupsRequireAndAcceptExactAckSet(t *testing.T) {
+func TestEveryPresentImpactGroupRequiresAndAcceptsExactAckSet(t *testing.T) {
 	impact := impactWithEveryGroup("impact-v1", ImpactGroup{Status: ImpactNone})
 	acknowledgements := make([]ImpactKey, 0, len(allImpactKeys))
 	for _, key := range allImpactKeys {
@@ -58,13 +58,18 @@ func TestAllEightPresentImpactGroupsRequireAndAcceptExactAckSet(t *testing.T) {
 		})
 		acknowledgements = append(acknowledgements, key)
 	}
-	if got := len(acknowledgements); got != 8 {
-		t.Fatalf("số nhóm impact = %d; want 8", got)
+	/* Số nhóm suy từ `allImpactKeys`, KHÔNG gõ tay.
+	 *
+	 * `ISS-PIO-29` nâng 8 → 12 và một con số gõ tay ở đây chỉ nói "ai đó quên
+	 * sửa test", không nói "một nhóm impact vừa biến mất". Điều đáng khoá là
+	 * MỌI nhóm trong danh sách đều đòi và nhận đúng acknowledgement của nó. */
+	if got, want := len(acknowledgements), len(allImpactKeys); got != want {
+		t.Fatalf("số nhóm impact = %d; want %d", got, want)
 	}
 	if public := ValidateImpactAcknowledgements(impact, CommissionRequest{
 		ImpactRef: impact.ImpactRef, Acknowledgements: acknowledgements,
 	}); public != nil {
-		t.Fatalf("đúng tám acknowledgement bị từ chối: %+v", public)
+		t.Fatalf("đủ %d acknowledgement bị từ chối: %+v", len(allImpactKeys), public)
 	}
 
 	missingLast := append([]ImpactKey(nil), acknowledgements[:len(acknowledgements)-1]...)
@@ -118,6 +123,12 @@ func impactWithEveryGroup(impactRef string, group ImpactGroup) Impact {
 		ControlLibrary:       group,
 		ProgramSet:           group,
 		EnableIntent:         group,
+		// `ISS-PIO-29` — bốn nhóm tách theo nguồn Point. Thiếu chúng ở đây thì
+		// status rỗng ⇒ UNAVAILABLE ⇒ Commission fail-closed, đúng như thiết kế.
+		PhysicalMappingChanges:  group,
+		VirtualPointChanges:     group,
+		ModbusMappingChanges:    group,
+		WritableOutputsAffected: group,
 	}
 }
 
@@ -140,6 +151,14 @@ func withImpactGroups(base Impact, groups map[ImpactKey]ImpactGroup) Impact {
 			base.ProgramSet = group
 		case ImpactEnableIntent:
 			base.EnableIntent = group
+		case ImpactPhysicalMappingChanges:
+			base.PhysicalMappingChanges = group
+		case ImpactVirtualPointChanges:
+			base.VirtualPointChanges = group
+		case ImpactModbusMappingChanges:
+			base.ModbusMappingChanges = group
+		case ImpactWritableOutputsAffected:
+			base.WritableOutputsAffected = group
 		}
 	}
 	return base

@@ -26,6 +26,15 @@ const (
 	ImpactControlLibrary       ImpactKey = "controlLibrary"
 	ImpactProgramSet           ImpactKey = "programSet"
 	ImpactEnableIntent         ImpactKey = "enableIntent"
+	/* `ISS-PIO-29` — bốn nhóm TÁCH THEO NGUỒN Point (đề bài §33).
+	 *
+	 * `outputMappingChanges` gộp cả ba nguồn, nên người vận hành thấy "3 thay
+	 * đổi ánh xạ" mà không biết đó là ba mapping Modbus hay ba mapping AO —
+	 * hai mức rủi ro rất khác nhau khi bấm Commission. */
+	ImpactPhysicalMappingChanges  ImpactKey = "physicalMappingChanges"
+	ImpactVirtualPointChanges     ImpactKey = "virtualPointChanges"
+	ImpactModbusMappingChanges    ImpactKey = "modbusMappingChanges"
+	ImpactWritableOutputsAffected ImpactKey = "writableOutputsAffected"
 )
 
 var allImpactKeys = []ImpactKey{
@@ -37,6 +46,10 @@ var allImpactKeys = []ImpactKey{
 	ImpactControlLibrary,
 	ImpactProgramSet,
 	ImpactEnableIntent,
+	ImpactPhysicalMappingChanges,
+	ImpactVirtualPointChanges,
+	ImpactModbusMappingChanges,
+	ImpactWritableOutputsAffected,
 }
 
 type ImpactGroup struct {
@@ -55,6 +68,11 @@ type Impact struct {
 	ControlLibrary       ImpactGroup `json:"controlLibrary"`
 	ProgramSet           ImpactGroup `json:"programSet"`
 	EnableIntent         ImpactGroup `json:"enableIntent"`
+	// `ISS-PIO-29` — bốn nhóm tách theo nguồn Point.
+	PhysicalMappingChanges  ImpactGroup `json:"physicalMappingChanges"`
+	VirtualPointChanges     ImpactGroup `json:"virtualPointChanges"`
+	ModbusMappingChanges    ImpactGroup `json:"modbusMappingChanges"`
+	WritableOutputsAffected ImpactGroup `json:"writableOutputsAffected"`
 }
 
 type CommissionRequest struct {
@@ -98,6 +116,11 @@ func (i Impact) groups() map[ImpactKey]ImpactGroup {
 		ImpactControlLibrary:       i.ControlLibrary,
 		ImpactProgramSet:           i.ProgramSet,
 		ImpactEnableIntent:         i.EnableIntent,
+
+		ImpactPhysicalMappingChanges:  i.PhysicalMappingChanges,
+		ImpactVirtualPointChanges:     i.VirtualPointChanges,
+		ImpactModbusMappingChanges:    i.ModbusMappingChanges,
+		ImpactWritableOutputsAffected: i.WritableOutputsAffected,
 	}
 }
 

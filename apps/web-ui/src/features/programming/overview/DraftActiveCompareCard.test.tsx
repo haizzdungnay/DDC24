@@ -53,7 +53,10 @@ function impactStub(): ProgrammingImpact {
     publishedSignals: none,
     controlLibrary: none,
     programSet: none,
-    enableIntent: none
+    enableIntent: none,
+    // `ISS-PIO-29` — bốn nhóm tách theo nguồn Point.
+    physicalMappingChanges: none, virtualPointChanges: none,
+    modbusMappingChanges: none, writableOutputsAffected: none
   }
 }
 

@@ -16,6 +16,11 @@ const impact = {
   controlLibrary: { status: 'NONE' as const, items: [] },
   programSet: { status: 'NONE' as const, items: [] },
   enableIntent: { status: 'NONE' as const, items: [] },
+  // `ISS-PIO-29` — bốn nhóm tách theo nguồn Point.
+  physicalMappingChanges: { status: 'NONE' as const, items: [] },
+  virtualPointChanges: { status: 'NONE' as const, items: [] },
+  modbusMappingChanges: { status: 'NONE' as const, items: [] },
+  writableOutputsAffected: { status: 'NONE' as const, items: [] },
 }
 
 function view(patch: Partial<ProgrammingRevisionChanges>): ProgrammingRevisionChanges {

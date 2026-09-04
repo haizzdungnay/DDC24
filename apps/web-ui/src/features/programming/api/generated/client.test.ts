@@ -226,16 +226,28 @@ describe("Programming API client sinh từ OpenAPI", () => {
       .filter(([, value]) => typeof value === "object" && "status" in value && value.status === "PRESENT")
       .map(([key]) => key)
       .sort();
-    expect(acknowledgements).toEqual([
-      "activeOverrides",
-      "controlLibrary",
-      "cutover",
-      "enableIntent",
-      "outputMappingChanges",
-      "programSet",
-      "publishedSignals",
-      "retain",
-    ]);
+    /* `ISS-PIO-29` — kỳ vọng SUY từ chính golden payload, không gõ tay.
+     *
+     * Danh sách gõ tay ở đây chỉ nói "ai đó quên sửa test" khi tập nhóm impact
+     * đổi; nó KHÔNG nói "một nhóm vừa biến mất khỏi payload", là thứ đáng khoá.
+     * Điều test này thật sự phải bảo đảm là hai phía đọc CÙNG một tệp: mọi khoá
+     * dạng nhóm impact trong golden đều được nhận ra, và không khoá nào bị bỏ
+     * sót vì FE chưa biết tên nó. */
+    const impactGroupKeys = Object.entries(impactGolden)
+      .filter(([, value]) => typeof value === "object" && value !== null && "status" in value)
+      .map(([key]) => key)
+      .sort();
+    expect(acknowledgements).toEqual(impactGroupKeys);
+    // Bốn nhóm tách theo nguồn Point phải có mặt — đó là nội dung của ISS-PIO-29.
+    for (const key of ["physicalMappingChanges", "virtualPointChanges",
+      "modbusMappingChanges", "writableOutputsAffected"]) {
+      expect(impactGroupKeys, `golden payload thiếu nhóm ${key}`).toContain(key);
+    }
+    // Và các nhóm cũ không được biến mất khỏi hợp đồng.
+    for (const key of ["retain", "activeOverrides", "cutover", "outputMappingChanges",
+      "publishedSignals", "controlLibrary", "programSet", "enableIntent"]) {
+      expect(impactGroupKeys, `golden payload mất nhóm cũ ${key}`).toContain(key);
+    }
   });
 
   it("resolve path, query và header concurrency đúng contract", async () => {

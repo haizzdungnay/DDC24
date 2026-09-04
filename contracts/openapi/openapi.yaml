@@ -3598,9 +3598,15 @@ components:
       # Rev A một Program, nên một Revision đổi Published Signal, đổi Control
       # Library, thêm/bớt Program, hay chạm đúng Program đang Enabled đều đi qua
       # Commission mà KHÔNG hỏi acknowledgement nào.
+      # ISS-PIO-29 bổ sung bốn nhóm TÁCH THEO NGUỒN Point (đề bài §33).
+      # `outputMappingChanges` gộp cả ba nguồn vào một con số, nên người vận
+      # hành thấy "3 thay đổi ánh xạ" mà không biết đó là ba mapping Modbus hay
+      # ba mapping AO — hai mức rủi ro rất khác nhau khi bấm Commission.
       enum:
         [retain, activeOverrides, cutover, outputMappingChanges,
-         publishedSignals, controlLibrary, programSet, enableIntent]
+         publishedSignals, controlLibrary, programSet, enableIntent,
+         physicalMappingChanges, virtualPointChanges, modbusMappingChanges,
+         writableOutputsAffected]
     ProgrammingImpactGroup:
       type: object
       additionalProperties: false
@@ -3615,7 +3621,9 @@ components:
       additionalProperties: false
       required:
         [impactRef, retain, activeOverrides, cutover, outputMappingChanges,
-         publishedSignals, controlLibrary, programSet, enableIntent]
+         publishedSignals, controlLibrary, programSet, enableIntent,
+         physicalMappingChanges, virtualPointChanges, modbusMappingChanges,
+         writableOutputsAffected]
       properties:
         impactRef: { type: string, minLength: 8, maxLength: 128 }
         retain: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
@@ -3633,6 +3641,21 @@ components:
         # Program đang Enabled mà Revision này chạm tới: người vận hành phải biết
         # thứ đang chạy sắp bị thay, không phải phát hiện sau khi nó đã thay.
         enableIntent: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # ISS-PIO-29 (đề bài §33) — bốn nhóm tách theo NGUỒN Point.
+        #
+        # Đứng CẠNH `outputMappingChanges`, không thay nó: đổi nghĩa một nhóm
+        # đang được xác nhận là cách làm mọi acknowledgement đã cấp trở nên vô
+        # nghĩa mà không ai nhận ra.
+        #
+        # Mapping vật lý: một cơ cấu chấp hành nối cứng vào tủ sẽ nhận lệnh từ
+        # chỗ khác — mức rủi ro cao nhất trong ba nguồn.
+        physicalMappingChanges: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        virtualPointChanges: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        modbusMappingChanges: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
+        # Đếm theo ĐIỂM chứ không theo binding: hai binding cùng trỏ một đầu ra
+        # vẫn chỉ là một cơ cấu chấp hành, và đếm theo binding sẽ thổi phồng
+        # con số người vận hành dùng để đánh giá rủi ro.
+        writableOutputsAffected: { $ref: "#/components/schemas/ProgrammingImpactGroup" }
     ProgrammingCheckRequest:
       type: object
       additionalProperties: false
@@ -4034,7 +4057,11 @@ components:
         impactRef: { type: string, minLength: 8, maxLength: 128 }
         acknowledgements:
           type: array
-          maxItems: 8
+          # ISS-PIO-29: 8 → 12 vì tập nhóm impact vừa thêm bốn nhóm tách theo
+          # nguồn Point. Trần này phải đúng bằng số nhóm: hẹp hơn thì một
+          # Revision chạm đủ mọi nhóm sẽ KHÔNG Commission được, còn rộng hơn
+          # thì nó thôi là một phép kiểm.
+          maxItems: 12
           uniqueItems: true
           items: { $ref: "#/components/schemas/ProgrammingImpactKey" }
         cutover:

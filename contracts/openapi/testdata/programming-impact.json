@@ -2,34 +2,74 @@
   "impactRef": "impact-ref-0001",
   "retain": {
     "status": "PRESENT",
-    "items": ["RETAIN layout thay đổi"]
+    "items": [
+      "RETAIN layout thay đổi"
+    ]
   },
   "activeOverrides": {
     "status": "PRESENT",
-    "items": ["AO-01 đang có override"]
+    "items": [
+      "AO-01 đang có override"
+    ]
   },
   "cutover": {
     "status": "PRESENT",
-    "items": ["GRAPH_ONLY→PROGRAM_ONLY"]
+    "items": [
+      "GRAPH_ONLY→PROGRAM_ONLY"
+    ]
   },
   "outputMappingChanges": {
     "status": "PRESENT",
-    "items": ["AO-01 đổi ánh xạ đầu ra"]
+    "items": [
+      "AO-01 đổi ánh xạ đầu ra"
+    ]
   },
   "publishedSignals": {
     "status": "PRESENT",
-    "items": ["SupplyTemp đổi chính sách stale"]
+    "items": [
+      "SupplyTemp đổi chính sách stale"
+    ]
   },
   "controlLibrary": {
     "status": "PRESENT",
-    "items": ["SCALE_LIN đổi phiên bản"]
+    "items": [
+      "SCALE_LIN đổi phiên bản"
+    ]
   },
   "programSet": {
     "status": "PRESENT",
-    "items": ["AHU_MAIN được thêm vào Revision"]
+    "items": [
+      "AHU_MAIN được thêm vào Revision"
+    ]
   },
   "enableIntent": {
     "status": "PRESENT",
-    "items": ["AHU_MAIN đang Enabled"]
+    "items": [
+      "AHU_MAIN đang Enabled"
+    ]
+  },
+  "physicalMappingChanges": {
+    "status": "PRESENT",
+    "items": [
+      "AO-01 đổi ánh xạ điểm vật lý"
+    ]
+  },
+  "virtualPointChanges": {
+    "status": "PRESENT",
+    "items": [
+      "VP1 đổi ánh xạ điểm ảo"
+    ]
+  },
+  "modbusMappingChanges": {
+    "status": "PRESENT",
+    "items": [
+      "vfd-1#fault đổi ánh xạ Modbus"
+    ]
+  },
+  "writableOutputsAffected": {
+    "status": "PRESENT",
+    "items": [
+      "AO-01"
+    ]
   }
 }

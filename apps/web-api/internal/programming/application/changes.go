@@ -32,6 +32,23 @@ type RevisionImpact struct {
 	ActiveOverrides      RevisionImpactGroup `json:"activeOverrides"`
 	Cutover              RevisionImpactGroup `json:"cutover"`
 	OutputMappingChanges RevisionImpactGroup `json:"outputMappingChanges"`
+	/* `ISS-PIO-29` — bốn nhóm TÁCH THEO NGUỒN (đề bài §33).
+	 *
+	 * `outputMappingChanges` gộp cả ba nguồn vào một con số, nên người vận hành
+	 * đứng trước nút Commission thấy "3 thay đổi ánh xạ" mà không biết đó là ba
+	 * mapping Modbus hay ba mapping AO — hai mức rủi ro rất khác nhau. Một
+	 * mapping AO đổi nghĩa là một cơ cấu chấp hành nối cứng vào tủ sẽ nhận lệnh
+	 * từ chỗ khác.
+	 *
+	 * Bốn nhóm này đứng CẠNH `outputMappingChanges`, không thay nó: đổi nghĩa
+	 * một nhóm đang được xác nhận là cách làm mọi acknowledgement đã cấp trở
+	 * nên vô nghĩa mà không ai nhận ra. */
+	PhysicalMappingChanges RevisionImpactGroup `json:"physicalMappingChanges"`
+	VirtualPointChanges    RevisionImpactGroup `json:"virtualPointChanges"`
+	ModbusMappingChanges   RevisionImpactGroup `json:"modbusMappingChanges"`
+	// WritableOutputsAffected đếm theo ĐIỂM chứ không theo binding: hai binding
+	// cùng trỏ một đầu ra vẫn chỉ là một cơ cấu chấp hành.
+	WritableOutputsAffected RevisionImpactGroup `json:"writableOutputsAffected"`
 	// T59-502 — bốn nhóm cho mô hình đa Program. Bốn nhóm trên chỉ phủ Rev A
 	// một Program, nên trước bản vá một Revision đổi Published Signal, đổi
 	// Control Library, thêm/bớt Program, hay chạm đúng Program đang Enabled đều
@@ -155,13 +172,19 @@ func (s *ProjectService) revisionChanges(ctx context.Context, fromRevisionID, to
 	// store, không suy từ diff: "đang chạy" là trạng thái của thiết bị, không
 	// phải thuộc tính của một Revision.
 	enableItems, enableKnown := s.enabledProgramsTouched(ctx, after.Revision.ProjectID, changes)
+	// `ISS-PIO-29` — phân loại binding đã đổi theo nguồn Point.
+	sourceImpact := collectPointSourceImpact(beforeObjects, after.Objects)
 	impact := RevisionImpact{
-		Retain:               impactFromItems(retainItems),
-		OutputMappingChanges: impactFromItems(outputItems),
-		PublishedSignals:     impactFromItems(sortedItems(byCategory["PUBLISHED_SIGNAL"])),
-		ControlLibrary:       impactFromItems(sortedItems(byCategory["LIBRARY"])),
-		ProgramSet:           impactFromItems(sortedItems(byCategory["PROGRAM_SET"])),
-		EnableIntent:         impactFromItems(enableItems),
+		Retain:                  impactFromItems(retainItems),
+		OutputMappingChanges:    impactFromItems(outputItems),
+		PhysicalMappingChanges:  impactFromItems(sourceImpact.Physical),
+		VirtualPointChanges:     impactFromItems(sourceImpact.Virtual),
+		ModbusMappingChanges:    impactFromItems(sourceImpact.Modbus),
+		WritableOutputsAffected: impactFromItems(sourceImpact.Writable),
+		PublishedSignals:        impactFromItems(sortedItems(byCategory["PUBLISHED_SIGNAL"])),
+		ControlLibrary:          impactFromItems(sortedItems(byCategory["LIBRARY"])),
+		ProgramSet:              impactFromItems(sortedItems(byCategory["PROGRAM_SET"])),
+		EnableIntent:            impactFromItems(enableItems),
 
 		ActiveOverrides: RevisionImpactGroup{Status: "UNAVAILABLE", Items: []string{
 			"Core read-back override chưa được nối; Commission phải fail-closed",

@@ -8,6 +8,48 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-29` Commission Impact tách theo nguồn Point (#408, 2026-09-04)
+
+- **Triệu chứng.** `outputMappingChanges` **gộp cả ba nguồn** vào một con số. Người vận hành đứng
+  trước nút Commission thấy *"3 thay đổi ánh xạ"* và không biết đó là ba mapping Modbus hay ba
+  mapping AO.
+- **Vì sao đó là hai mức rủi ro rất khác nhau.** Một mapping AO đổi nghĩa là một **cơ cấu chấp hành
+  nối cứng vào tủ** sẽ nhận lệnh từ chỗ khác — van, damper, biến tần. Một mapping Modbus đổi thì slot
+  `ext` được cấp lại theo cấu hình đang chạy, và cái sai nếu có đã bị `AC-PIO-ID-02` chặn từ lớp
+  Check. Còn một điểm ảo đổi thì hậu quả nằm trong phần mềm. Gộp cả ba là bắt người vận hành đánh giá
+  rủi ro cao nhất cho mọi thay đổi — và khi mọi thứ đều đáng sợ thì không thứ gì còn đáng sợ nữa.
+- **Cách sửa.** Bốn nhóm mới `physicalMappingChanges` / `virtualPointChanges` / `modbusMappingChanges`
+  / `writableOutputsAffected`, đứng **cạnh** `outputMappingChanges` chứ không thay nó: đổi nghĩa một
+  nhóm đang được xác nhận là cách làm mọi acknowledgement đã cấp trở nên vô nghĩa mà không ai nhận ra.
+- **`writableOutputsAffected` đếm theo ĐIỂM, không theo binding.** Hai binding cùng trỏ một đầu ra vẫn
+  chỉ là một cơ cấu chấp hành; đếm theo binding sẽ thổi phồng con số dùng để đánh giá rủi ro.
+- **Đọc CẢ HAI phía before/after.** Một binding rebind từ LOCAL sang VP đổi rủi ro ở cả hai nguồn, và
+  chỉ đọc phía `after` sẽ giấu mất việc một **đầu ra vật lý vừa bị bỏ trống** — thứ người vận hành
+  cần biết nhất. Binding bị xoá cũng vì thế mà vẫn hiện ra.
+- **Category rỗng/lạ rơi vào nhóm rủi ro CAO NHẤT (Physical), không bị bỏ qua im lặng.** Một binding
+  không phân loại được vẫn là một binding sắp chạy trên thiết bị; đoán nhẹ đi ở đây là đúng chiều
+  nguy hiểm.
+- **Hỗ trợ cả hai hình dạng payload** (v1 lồng `point`, v2 phẳng). Chỉ đọc một hình dạng là bỏ sót
+  đúng lớp binding mà `ISS-PIO-18` đã phải sửa một lần rồi — và bỏ sót thì im lặng chứ không kêu.
+
+**Ba cổng chống trôi hợp đồng bắt được bản vá, mỗi cổng một authority khác nhau — và đó là điểm đáng
+ghi nhất của lượt này:**
+
+1. `TestProgrammingImpactOpenAPIStaysSynchronized` — `allImpactKeys` ở tầng transport là **authority
+   thứ hai** cho tập nhóm acknowledgement. Thêm nhóm ở `application` mà quên ở đây thì Commission
+   không bao giờ hỏi acknowledgement cho nhóm mới.
+2. Kiểm `maxItems` của `acknowledgements` — trần 8 nay phải là 12. **Đã đổi phép kiểm để suy từ
+   `len(allImpactKeys)`** thay vì gõ tay: hai con số không thể trôi khỏi nhau nữa.
+3. `client.test.ts` phía FE đọc **cùng golden payload với Go**. Kỳ vọng cũng đã đổi để **suy từ chính
+   payload** — một danh sách gõ tay chỉ nói "ai đó quên sửa test", không nói "một nhóm vừa biến mất".
+
+Ngoài ra `ValidateImpactAcknowledgements` fail-closed đúng thiết kế: nhóm chưa điền có status rỗng ⇒
+UNAVAILABLE ⇒ Commission bị chặn. Bốn fixture test cũ (không phải sản phẩm) là thứ phải cập nhật.
+
+**Kiểm chứng (đo lại thật, 2026-09-04).** layout **17 PASS / 0 FAIL** exit 0 · C++ configure/build
+exit 0, **0 warning**, `ctest` **1422/1422** · `go vet` sạch, **21 package `ok`** · FE **221 file /
+2670 test**, tsc + lint + build exit 0 · **13/13 phép tiêm lỗi ĐỎ** (6 Go phân loại nguồn, 3 cổng
+hợp đồng, 3 FE thứ tự/nhãn, 1 golden payload).
 ### Fixed — `ISS-PGM04-07` Tab SYSTEM/PROJECT thật, bộ lọc server-side và fail-closed khi thiếu Project (#452, 2026-09-04)
 
 - **Triệu chứng.** Phạm vi thư viện là một ô `<select>` có lựa chọn "Tất cả", nên khối SYSTEM (không sửa được)

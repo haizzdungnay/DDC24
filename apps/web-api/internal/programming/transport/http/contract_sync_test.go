@@ -3,6 +3,7 @@ package programminghttp
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -116,8 +117,14 @@ func TestProgrammingImpactOpenAPIStaysSynchronized(t *testing.T) {
 
 	commission := schemaSection(t, spec, "ProgrammingCommissionRequest")
 	acknowledgements := fieldSection(t, commission, "acknowledgements", "cutover")
-	if !strings.Contains(acknowledgements, "maxItems: 8") {
-		t.Fatalf("ProgrammingCommissionRequest.acknowledgements phải có maxItems: 8:\n%s", acknowledgements)
+	/* Trần `maxItems` phải đúng BẰNG số nhóm impact, không phải một hằng số gõ
+	 * tay: hẹp hơn thì một Revision chạm đủ mọi nhóm sẽ không Commission được,
+	 * còn rộng hơn thì nó thôi là một phép kiểm. Suy từ `allImpactKeys` để hai
+	 * con số không thể trôi khỏi nhau. */
+	wantMaxItems := fmt.Sprintf("maxItems: %d", len(allImpactKeys))
+	if !strings.Contains(acknowledgements, wantMaxItems) {
+		t.Fatalf("ProgrammingCommissionRequest.acknowledgements phải có %s (bằng số nhóm impact):\n%s",
+			wantMaxItems, acknowledgements)
 	}
 
 	change := schemaSection(t, spec, "ProgrammingRevisionChange")

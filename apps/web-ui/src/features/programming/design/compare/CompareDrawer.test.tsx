@@ -20,6 +20,9 @@ const impact = {
   impactRef: 'ref', retain: impactGroup, activeOverrides: impactGroup, cutover: impactGroup,
   outputMappingChanges: impactGroup, publishedSignals: impactGroup, controlLibrary: impactGroup,
   programSet: impactGroup, enableIntent: impactGroup,
+  // `ISS-PIO-29` — bốn nhóm tách theo nguồn Point.
+  physicalMappingChanges: impactGroup, virtualPointChanges: impactGroup,
+  modbusMappingChanges: impactGroup, writableOutputsAffected: impactGroup,
 }
 
 const hunk: ProgrammingStHunk = {

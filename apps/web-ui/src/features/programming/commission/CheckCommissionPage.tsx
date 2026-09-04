@@ -20,11 +20,19 @@ import { ProblemsDrawer } from '../shared/ProblemsDrawer'
 // T59-502: thứ tự đi từ thứ tác động MẠNH NHẤT lên thiết bị đang chạy xuống
 // thứ nhẹ hơn. Người vận hành đọc từ trên xuống, nên thứ có thể làm hỏng quá
 // trình phải nằm trên.
-const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = [
+/* `ISS-PIO-29` — bốn nhóm tách theo NGUỒN Point xen vào đúng thứ tự rủi ro.
+ *
+ * `writableOutputsAffected` và `physicalMappingChanges` đứng NGAY SAU
+ * `outputMappingChanges` vì chúng nói cùng một chuyện ở độ phân giải cao hơn:
+ * một cơ cấu chấp hành nối cứng vào tủ sẽ nhận lệnh từ chỗ khác. `modbus` và
+ * `virtual` xuống dưới — hậu quả của chúng nằm sau một lớp phần mềm nữa. */
+export const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = [
   'enableIntent', 'programSet', 'retain', 'activeOverrides',
-  'cutover', 'outputMappingChanges', 'publishedSignals', 'controlLibrary'
+  'cutover', 'outputMappingChanges', 'writableOutputsAffected',
+  'physicalMappingChanges', 'modbusMappingChanges', 'virtualPointChanges',
+  'publishedSignals', 'controlLibrary'
 ]
-const IMPACT_GROUP_LABEL: Record<ProgrammingImpactKey, [string, string]> = {
+export const IMPACT_GROUP_LABEL: Record<ProgrammingImpactKey, [string, string]> = {
   retain: ['Trạng thái lưu (RETAIN) sẽ khởi tạo lại', 'RETAIN state will be re-initialised'],
   activeOverrides: ['Override thủ công đang giữ đầu ra', 'Manual overrides currently holding outputs'],
   cutover: ['Chuyển quyền điều khiển graph → program', 'Cutover from graph to program control'],
@@ -32,7 +40,12 @@ const IMPACT_GROUP_LABEL: Record<ProgrammingImpactKey, [string, string]> = {
   enableIntent: ['Chương trình ĐANG CHẠY sẽ bị thay', 'Programs currently running will be replaced'],
   programSet: ['Thêm hoặc bớt chương trình trên thiết bị', 'Programs added to or removed from the controller'],
   publishedSignals: ['Đổi tín hiệu công bố: freshness / chính sách khi mất dữ liệu', 'Published signal changes: freshness / stale policy'],
-  controlLibrary: ['Đổi Control Library dùng chung', 'Shared Control Library changes']
+  controlLibrary: ['Đổi Control Library dùng chung', 'Shared Control Library changes'],
+  // `ISS-PIO-29` — nhãn nói RÕ NGUỒN, vì đó chính là thứ quyết định mức rủi ro.
+  physicalMappingChanges: ['Thay đổi ánh xạ điểm VẬT LÝ (UI/AO/DO)', 'Physical point mapping changes (UI/AO/DO)'],
+  virtualPointChanges: ['Thay đổi ánh xạ điểm ẢO', 'Virtual point mapping changes'],
+  modbusMappingChanges: ['Thay đổi ánh xạ điểm MODBUS RTU', 'Modbus RTU point mapping changes'],
+  writableOutputsAffected: ['Đầu ra ghi được bị ảnh hưởng', 'Writable outputs affected']
 }
 
 type RevisionLifecycleState =

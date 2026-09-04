@@ -13,7 +13,7 @@ export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type ProgrammingImpactStatus = "NONE" | "PRESENT" | "UNAVAILABLE";
-export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges" | "publishedSignals" | "controlLibrary" | "programSet" | "enableIntent";
+export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges" | "publishedSignals" | "controlLibrary" | "programSet" | "enableIntent" | "physicalMappingChanges" | "virtualPointChanges" | "modbusMappingChanges" | "writableOutputsAffected";
 
 // --- Bảng Programs của PGM-01 (T60-013/T60-014), sinh thẳng từ schema OpenAPI.
 // Trường nullable là `| null` chứ KHÔNG phải optional: server luôn gửi khoá, và
@@ -156,6 +156,10 @@ export interface ProgrammingImpact {
   controlLibrary: ProgrammingImpactGroup;
   programSet: ProgrammingImpactGroup;
   enableIntent: ProgrammingImpactGroup;
+  physicalMappingChanges: ProgrammingImpactGroup;
+  virtualPointChanges: ProgrammingImpactGroup;
+  modbusMappingChanges: ProgrammingImpactGroup;
+  writableOutputsAffected: ProgrammingImpactGroup;
 }
 
 export interface ProgrammingCommissionRequest {

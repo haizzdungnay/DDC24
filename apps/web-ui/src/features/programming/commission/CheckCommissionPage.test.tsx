@@ -70,7 +70,12 @@ function changesWithTwoPresentGroups(): ProgrammingRevisionChanges {
 
       programSet: { status: 'NONE', items: [] },
 
-      enableIntent: { status: 'NONE', items: [] }
+      enableIntent: { status: 'NONE', items: [] },
+      // `ISS-PIO-29` — bốn nhóm tách theo nguồn Point.
+      physicalMappingChanges: { status: 'NONE', items: [] },
+      virtualPointChanges: { status: 'NONE', items: [] },
+      modbusMappingChanges: { status: 'NONE', items: [] },
+      writableOutputsAffected: { status: 'NONE', items: [] }
     }
   }
 }
