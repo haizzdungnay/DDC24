@@ -308,6 +308,80 @@ export function matchesEquipment(row: MappingPointRow, filter: string): boolean 
   return equipment === filter
 }
 
+/* `ISS-PIO-10` (F-PIO-025, đề bài §28) — hai bộ lọc còn thiếu ở `MappingToolbar`.
+ *
+ * `Access` lọc theo QUYỀN của Point, dùng `direction` — quyết định của máy chủ
+ * cho từng chiều — chứ không dùng riêng cờ `writable`. Hai nguồn này do cùng
+ * `pointCatalogDirection` sinh ra và phải nhất quán; chọn cái nói được CẢ HAI
+ * chiều để `READ_WRITE` lọt vào cả `Read` lẫn `Write`, đúng như nó là.
+ */
+export type AccessFilter = 'ALL' | 'READ' | 'WRITE'
+
+/* `Status` KHÔNG phải ba cái xô loại trừ nhau, mà là ba câu hỏi độc lập:
+ *
+ *   Good     — chất lượng đang GOOD.
+ *   Unmapped — chưa có binding nào trỏ tới điểm này.
+ *   Offline  — chất lượng đang OFFLINE.
+ *
+ * Cố ép chúng thành thứ tự ưu tiên ("offline thắng unmapped") sẽ giấu mất đúng
+ * nhóm điểm người vận hành cần nhất: một điểm vừa chưa map vừa đang offline vẫn
+ * phải hiện ra khi lọc `Unmapped`, vì việc cần làm với nó là map chứ không phải
+ * chờ nó online.
+ *
+ * `STALE`/`BAD`/`UNCERTAIN` KHÔNG bị gộp vào `Offline`: đó là ba câu trả lời
+ * khác nhau của producer, và gộp chúng lại là tự dịch lại sự thật của thiết bị.
+ */
+export type StatusFilter = 'ALL' | 'GOOD' | 'UNMAPPED' | 'OFFLINE'
+
+export function matchesAccess(row: Pick<MappingPointRow, 'direction'>, filter: AccessFilter): boolean {
+  if (filter === 'ALL') return true
+  if (filter === 'READ') return row.direction === 'READ' || row.direction === 'READ_WRITE'
+  return row.direction === 'WRITE' || row.direction === 'READ_WRITE'
+}
+
+/** Khoá của các Point ĐANG được một binding trỏ tới. Dùng chung `pointKey` với
+ *  phần dựng hàng, nếu không thì "chưa map" ở bộ lọc và "đã map" ở worklist sẽ
+ *  đếm theo hai hệ khoá khác nhau và không bao giờ khớp. */
+export function boundPointKeys(rows: Array<Pick<MappingVariableRow, 'point'>>): Set<string> {
+  const keys = new Set<string>()
+  for (const row of rows) {
+    if (row.point) keys.add(pointKey(row.point))
+  }
+  return keys
+}
+
+export function matchesPointStatus(row: MappingPointRow, filter: StatusFilter, bound: Set<string>): boolean {
+  switch (filter) {
+    case 'GOOD':
+      return row.quality === 'GOOD'
+    case 'OFFLINE':
+      return row.quality === 'OFFLINE'
+    case 'UNMAPPED':
+      return !bound.has(row.key)
+    default:
+      return true
+  }
+}
+
+/* Cùng một bộ lọc phải nói cùng một điều ở CẢ HAI danh sách. Lọc mỗi bên Point
+ * mà để nguyên bên Variable sẽ cho một màn hình tự mâu thuẫn: cột trái đầy biến
+ * đã map trong khi cột phải chỉ còn điểm chưa map.
+ *
+ * `Unmapped` ở phía Variable là `bindingStatus`, không phải chất lượng: một biến
+ * chưa map thì chưa có gì để nói về chất lượng. */
+export function matchesVariableStatus(row: MappingVariableRow, filter: StatusFilter): boolean {
+  switch (filter) {
+    case 'GOOD':
+      return row.liveQuality === 'GOOD'
+    case 'OFFLINE':
+      return row.liveQuality === 'OFFLINE'
+    case 'UNMAPPED':
+      return row.bindingStatus === 'UNMAPPED'
+    default:
+      return true
+  }
+}
+
 function tokens(value: string): Set<string> {
   return new Set(value.replace(/([a-z])([A-Z])/g, '$1 $2').toLocaleLowerCase().split(/[^a-z0-9]+/).filter(Boolean))
 }

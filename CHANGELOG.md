@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-10` Bộ lọc Access + Status ở tab Ánh xạ (#396, 2026-09-04)
+
+- **Triệu chứng.** `MappingToolbar` có tìm kiếm, Chương trình, Loại Point, Hướng, Thiết bị và Kiểu dữ
+  liệu — nhưng thiếu hai bộ lọc đề bài §28 đòi: **Access** (Read/Write) và **Status**
+  (Good/Unmapped/Offline). Trên một catalog vài trăm điểm, "tìm điểm ghi được mà chưa ai map" là thao
+  tác thường ngày và hiện phải làm bằng mắt.
+- **Cách sửa.** Thêm hai `select` vào toolbar, cùng bốn hàm thuần kiểm thử được ở `mappingViewModel`.
+- **`Status` KHÔNG phải ba cái xô loại trừ nhau** mà là ba câu hỏi độc lập. Ép chúng thành thứ tự ưu
+  tiên ("offline thắng unmapped") sẽ giấu mất đúng nhóm điểm cần nhất: một điểm **vừa chưa map vừa
+  đang offline** vẫn phải hiện khi lọc `Unmapped`, vì việc cần làm với nó là map chứ không phải chờ
+  nó online.
+- **`Offline` không nuốt `STALE`/`BAD`/`UNCERTAIN`.** Đó là bốn câu trả lời khác nhau của producer;
+  gộp lại là tự dịch lại sự thật của thiết bị — đúng thứ mà `ISS-PIO-32` đã cấm ở lớp nhãn.
+- **Một bộ lọc phải nói cùng một điều ở CẢ HAI danh sách.** `Status` áp lên cả cột Point lẫn worklist
+  Variable; lọc mỗi bên Point sẽ cho một màn hình tự mâu thuẫn — cột trái đầy biến đã map trong khi
+  cột phải chỉ còn điểm chưa map. Ở phía Variable, `Unmapped` đọc `bindingStatus` chứ không đọc chất
+  lượng: một biến ĐÃ map vào điểm chưa có giá trị live là chuyện bình thường lúc mới nạp cấu hình.
+- **`Access` đọc `direction`, không đọc riêng cờ `writable`,** để `READ_WRITE` lọt vào **cả** `Read`
+  lẫn `Write` — đúng như nó là. `boundPointKeys` dùng chung `pointKey` với phần dựng hàng, nếu không
+  thì "chưa map" ở bộ lọc và "đã map" ở worklist sẽ đếm theo hai hệ khoá khác nhau.
 ### Fixed — `ISS-PGM04-10` PGM-04 về đúng số cột và bề rộng Inspector của visual spec (#455, 2026-09-04)
 
 - **Triệu chứng.** Hai con số của `SPEC-PGM04-VISUAL-001` §1 vẫn sai sau khi hai hình thái phủ đã có

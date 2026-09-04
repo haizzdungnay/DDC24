@@ -51,6 +51,12 @@ beforeEach(() => {
       mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'INCOMPATIBLE', reasons: ['UI là ngõ vào vật lý; chỉ AO/DO nhận được VAR_OUTPUT'] } } },
     { category: 'LOCAL', pointId: 'DO-01', name: 'Supply Fan', dataType: 'BOOL', direction: 'WRITE', writable: true, quality: 'BAD', value: null , mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
     { category: 'LOCAL', pointId: 'AO-01', name: 'Supply Valve', dataType: 'REAL', direction: 'WRITE', writable: true, quality: 'GOOD', value: 42.5 , mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
+    /* ISS-PIO-10: một điểm OFFLINE và một điểm STALE để chốt rằng `Offline`
+       KHÔNG nuốt `STALE` — hai câu trả lời khác nhau của producer. */
+    { category: 'LOCAL', pointId: 'UI-02', name: 'Return Temp', dataType: 'REAL', direction: 'READ', writable: false, quality: 'OFFLINE', value: null,
+      mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'INCOMPATIBLE', reasons: [] } } },
+    { category: 'LOCAL', pointId: 'UI-03', name: 'Mixed Temp', dataType: 'REAL', direction: 'READ', writable: false, quality: 'STALE', value: 12,
+      mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'INCOMPATIBLE', reasons: [] } } },
     { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD Enable', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true , mapping: { input: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] }, output: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] } } },
   ]
   localStorage.setItem('mkddc-lang', 'vi')
@@ -116,6 +122,58 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
   it('không có chip nào còn ghi AO — nhãn UO là lớp trình bày duy nhất người dùng thấy', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
     expect(screen.queryByRole('button', { name: /^AO$/ })).not.toBeInTheDocument()
+  })
+
+  /* ISS-PIO-10 (F-PIO-025, đề bài §28) — hai bộ lọc toolbar còn thiếu. */
+  it('lọc Point theo Quyền: READ_WRITE lọt vào cả Đọc lẫn Ghi', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Quyền truy cập Point' }), { target: { value: 'WRITE' } })
+    expect(screen.getByRole('button', { name: /VFD Enable/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /Supply Valve/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Supply Temp/ })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Quyền truy cập Point' }), { target: { value: 'READ' } })
+    expect(screen.getByRole('button', { name: /VFD Enable/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /Supply Temp/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Supply Valve/ })).not.toBeInTheDocument()
+  })
+
+  it('lọc Point theo Trạng thái Offline mà KHÔNG nuốt STALE', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Trạng thái Point' }), { target: { value: 'OFFLINE' } })
+
+    expect(screen.getByRole('button', { name: /Return Temp/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Mixed Temp/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Supply Temp/ })).not.toBeInTheDocument()
+  })
+
+  it('lọc Trạng thái Good chỉ giữ đúng chất lượng GOOD', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Trạng thái Point' }), { target: { value: 'GOOD' } })
+
+    expect(screen.getByRole('button', { name: /Supply Temp/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Supply Fan/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Return Temp/ })).not.toBeInTheDocument()
+  })
+
+  /* `Unmapped` phải nói CÙNG một điều ở cả hai cột. Lọc mỗi bên Point mà để
+   * nguyên bên Variable sẽ cho một màn hình tự mâu thuẫn: cột trái đầy biến đã
+   * map trong khi cột phải chỉ còn điểm chưa map. */
+  it('lọc Trạng thái Chưa map thu hẹp CẢ danh sách Point lẫn worklist Variable', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Trạng thái Point' }), { target: { value: 'UNMAPPED' } })
+
+    // `UI-01` đang có binding ⇒ biến mất khỏi cột Point.
+    expect(screen.queryByRole('button', { name: /Supply Temp/ })).not.toBeInTheDocument()
+    // Điểm chưa ai map vẫn còn, kể cả khi nó đang OFFLINE — việc cần làm với nó
+    // là map, không phải chờ nó online.
+    expect(screen.getByRole('button', { name: /Return Temp/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /Supply Valve/ })).toBeVisible()
+
+    // Cột Variable: biến đã map biến mất, biến chưa map ở lại.
+    expect(screen.queryByRole('button', { name: /^AHU_Main · SupplyTemp ·/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'AHU_Main · FanCmd · Chưa map' })).toBeVisible()
   })
 
   it('viewer chỉ inspect và không có control Map', () => {

@@ -2,7 +2,7 @@ import { Search, SlidersHorizontal } from 'lucide-react'
 import { StatusBadge } from '../../../../shared/components/StatusBadge'
 import { useI18n } from '../../../../shared/i18n'
 import { cn } from '../../../../shared/utils'
-import { UNASSIGNED_EQUIPMENT, type CatalogTruthState } from './mappingViewModel'
+import { UNASSIGNED_EQUIPMENT, type AccessFilter, type CatalogTruthState, type StatusFilter } from './mappingViewModel'
 
 export interface MappingToolbarProps {
   query: string
@@ -19,6 +19,13 @@ export interface MappingToolbarProps {
   dataType: string
   dataTypes: string[]
   onDataTypeChange: (value: string) => void
+  /* `ISS-PIO-10` (F-PIO-025, đề bài §28) — hai bộ lọc còn thiếu.
+   * `Access` lọc Point theo quyền đọc/ghi; `Status` lọc CẢ HAI danh sách để
+   * màn hình không tự mâu thuẫn (xem `matchesVariableStatus`). */
+  access: AccessFilter
+  onAccessChange: (value: AccessFilter) => void
+  status: StatusFilter
+  onStatusChange: (value: StatusFilter) => void
   counts: { variables: number; mapped: number; unmapped: number; review: number; catalog: number }
   /* `ISS-PIO-13`: nút Gợi ý từng bị khoá cứng kèm tooltip "chỉ bật sau khi
    * capability authority được công bố". Authority đó nay có thật
@@ -37,7 +44,7 @@ export interface MappingToolbarProps {
   onToggleSuggestions: () => void
 }
 
-export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, counts, equipment, equipmentOptions, onEquipmentChange, suggestionsEnabled, suggestionsActive, suggestionsBlockedReason, onToggleSuggestions }: MappingToolbarProps) {
+export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, access, onAccessChange, status, onStatusChange, counts, equipment, equipmentOptions, onEquipmentChange, suggestionsEnabled, suggestionsActive, suggestionsBlockedReason, onToggleSuggestions }: MappingToolbarProps) {
   const { pick } = useI18n()
   const stale = truth.status === 'error' || truth.complete === false
   return (
@@ -93,6 +100,23 @@ export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', pr
             </select>
           </label>
         )}
+        <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]">
+          <span>{pick('Quyền', 'Access')}</span>
+          <select aria-label={pick('Quyền truy cập Point', 'Point access')} value={access} onChange={(event) => onAccessChange(event.target.value as AccessFilter)} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]">
+            <option value="ALL">{pick('Tất cả', 'All')}</option>
+            <option value="READ">{pick('Đọc', 'Read')}</option>
+            <option value="WRITE">{pick('Ghi', 'Write')}</option>
+          </select>
+        </label>
+        <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]">
+          <span>{pick('Trạng thái', 'Status')}</span>
+          <select aria-label={pick('Trạng thái Point', 'Point status')} value={status} onChange={(event) => onStatusChange(event.target.value as StatusFilter)} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]">
+            <option value="ALL">{pick('Tất cả', 'All')}</option>
+            <option value="GOOD">Good</option>
+            <option value="UNMAPPED">{pick('Chưa map', 'Unmapped')}</option>
+            <option value="OFFLINE">Offline</option>
+          </select>
+        </label>
         <label className="flex min-h-10 items-center gap-2 rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text-dim)]"><span>{pick('Kiểu', 'Type')}</span><select aria-label={pick('Kiểu dữ liệu', 'Data type')} value={dataType} onChange={(event) => onDataTypeChange(event.target.value)} className="rounded bg-[var(--c-surface-2)] py-1 text-[var(--c-text)] outline-none [color-scheme:dark]"><option value="ALL">{pick('Tất cả', 'All')}</option>{dataTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
         <button
           type="button"
