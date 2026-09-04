@@ -706,10 +706,13 @@ function WizardPanel({ item, step, stepIndex, stepCount, onChange, onStepSelect,
 function Advanced({ item, onChange }: { item: VirtualPoint; onChange: (patch: Partial<VirtualPoint>) => void }) {
   const { t } = useI18n()
   const logValue = item.logEnabled ? item.logIntervalMs ?? 1000 : 0
+  const [displayLow, displayHigh] = displayRangeLimits(item.unit)
   const rows = [
     { register: 'u0', label: t('signalTypeLabel'), control: <SignalTypeSelect value={item.signalType} onChange={(signalType) => onChange(signalTypePatch(item, signalType))} /> },
-    { register: 'u1', label: t('displayMinLabel'), control: <SmallNumberInput value={numberOr(item.displayMin, 0)} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /> },
-    { register: 'u2', label: t('displayMaxLabel'), control: <SmallNumberInput value={numberOr(item.displayMax, 100)} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /> },
+    { register: 'u1', label: t('displayMinLabel'), control: <SmallNumberInput value={numberOr(item.displayMin, 0)} min={displayLow} max={displayHigh} onChange={(displayMin) => onChange({ displayMin })} /> },
+    { register: 'u2', label: t('displayMaxLabel'), control: <SmallNumberInput value={numberOr(item.displayMax, 100)} min={displayLow} max={displayHigh} onChange={(displayMax) => onChange({ displayMax })} /> },
+    { register: 'EL-', label: t('minValueLabel'), control: <OptionalNumberInput value={item.minValue} disabled={!numericSignalType(item.signalType)} label={t('minValueLabel')} onChange={(minValue) => onChange({ minValue })} /> },
+    { register: 'EL+', label: t('maxValueLabel'), control: <OptionalNumberInput value={item.maxValue} disabled={!numericSignalType(item.signalType)} label={t('maxValueLabel')} onChange={(maxValue) => onChange({ maxValue })} /> },
     { register: 'u3', label: t('rangeMultiplierLabel'), control: <RangeMultiplierSelect value={numberOr(item.rangeMultiplier, 0)} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> },
     { register: 'u4', label: t('unitsLabel'), control: <UnitSelect value={unitFromString(item.unit)} onChange={(unit) => onChange({ unit: unitToString(unit) })} /> },
     { register: 'u5', label: t('filterSamplesLabel'), control: <SmallNumberInput value={numberOr(item.filterSamples, 3)} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
@@ -750,8 +753,8 @@ function Advanced({ item, onChange }: { item: VirtualPoint; onChange: (patch: Pa
 
 function renderWizardField(item: VirtualPoint, step: WizardStep, onChange: (patch: Partial<VirtualPoint>) => void, t: Translate): React.ReactNode {
   if (step === 'signal') return <WizardField label={t('signalTypeLabel')}><SignalTypeSelect value={item.signalType} onChange={(signalType) => onChange(signalTypePatch(item, signalType))} /></WizardField>
-  if (step === 'min') return <WizardField label={t('displayMinLabel')}><SmallNumberInput value={numberOr(item.displayMin, 0)} min={-50} max={205} onChange={(displayMin) => onChange({ displayMin })} /></WizardField>
-  if (step === 'max') return <WizardField label={t('displayMaxLabel')}><SmallNumberInput value={numberOr(item.displayMax, 100)} min={-50} max={205} onChange={(displayMax) => onChange({ displayMax })} /></WizardField>
+  if (step === 'min') return <WizardField label={t('displayMinLabel')}><SmallNumberInput value={numberOr(item.displayMin, 0)} min={displayRangeLimits(item.unit)[0]} max={displayRangeLimits(item.unit)[1]} onChange={(displayMin) => onChange({ displayMin })} /></WizardField>
+  if (step === 'max') return <WizardField label={t('displayMaxLabel')}><SmallNumberInput value={numberOr(item.displayMax, 100)} min={displayRangeLimits(item.unit)[0]} max={displayRangeLimits(item.unit)[1]} onChange={(displayMax) => onChange({ displayMax })} /></WizardField>
   if (step === 'range') return <WizardField label={t('rangeMultiplierLabel')}><RangeMultiplierSelect value={numberOr(item.rangeMultiplier, 0)} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /></WizardField>
   if (step === 'unit') return <WizardField label={t('unitsLabel')}><UnitSelect value={unitFromString(item.unit)} onChange={(unit) => onChange({ unit: unitToString(unit) })} /></WizardField>
   if (step === 'filter') return <WizardField label={t('filterSamplesLabel')}><SmallNumberInput value={numberOr(item.filterSamples, 3)} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /></WizardField>
@@ -914,6 +917,46 @@ function TextInput({ label, value, type = 'text', disabled, error, fieldPath, on
   )
 }
 
+/* `ISS-PIO-15` — dải hợp lệ của THANG HIỂN THỊ phụ thuộc `unit`.
+ *
+ * Bản cũ ghi cứng [-50, 205] cho MỌI unit, khớp dải cảm biến nhiệt độ. Nhưng
+ * web-api cho phép `Pa` tới 2000 và `ppm` tới 5000, nên một setpoint áp suất
+ * tĩnh 250 Pa hợp lệ ở backend lại bị `clampNumber` ở đây KẸP xuống 205 —
+ * người dùng gõ 250, ô nhập hiện 205, và không có thông báo nào. Đúng lớp lỗi
+ * mà `ISS-PIO-15` sinh ra để dẹp, chỉ khác là nó nằm ở frontend.
+ *
+ * Giữ đồng bộ với `virtualPointDisplayRangeLimits` (web-api/internal/app/virtualpoint.go). */
+export function displayRangeLimits(unit?: string): [number, number] {
+  if (unit === 'Pa') return [-50, 2000]
+  if (unit === 'ppm') return [0, 5000]
+  return [-50, 205]
+}
+
+/* Ô nhập biên KỸ THUẬT: cho phép để TRỐNG.
+ *
+ * Trống là một trạng thái có nghĩa — "không khai biên" — chứ không phải số 0.
+ * Dùng `SmallNumberInput` ở đây sẽ ép mọi điểm phải có biên và biến ô trống
+ * thành 0, tức lặng lẽ cấm mọi giá trị âm trên mọi điểm chưa cấu hình gì. */
+export function OptionalNumberInput({ value, disabled, label, onChange }: { value?: number; disabled?: boolean; label: string; onChange: (value: number | undefined) => void }) {
+  return (
+    <input
+      className={controlClass()}
+      type="number"
+      step="any"
+      aria-label={label}
+      disabled={disabled}
+      placeholder="—"
+      value={value === undefined || value === null || Number.isNaN(value) ? '' : String(value)}
+      onChange={(event) => {
+        const raw = event.currentTarget.value.trim()
+        if (raw === '') { onChange(undefined); return }
+        const next = Number(raw)
+        onChange(Number.isFinite(next) ? next : undefined)
+      }}
+    />
+  )
+}
+
 function SmallNumberInput({ value, min, max, step = 1, disabled, onChange }: { value: number; min: number; max: number; step?: number; disabled?: boolean; onChange: (value: number) => void }) {
   return (
     <input
@@ -993,6 +1036,7 @@ export function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
   const logEnabled = canLog(signalType) && item.logEnabled
   const logIntervalMs = logEnabled ? item.logIntervalMs ?? 1000 : undefined
   const unit = unitToString(unitFromString(item.unit))
+  const [displayLow, displayHigh] = displayRangeLimits(unit)
   const id = canonicalVirtualPointId(item.id)
   const name = displayPointName(item.label ?? item.name, id || item.tag || 'VP')
   return {
@@ -1004,8 +1048,9 @@ export function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
     label: name,
     signalType,
     unit,
-    displayMin: clampNumber(numberOr(item.displayMin, 0), -50, 205),
-    displayMax: clampNumber(numberOr(item.displayMax, 100), -50, 205),
+    displayMin: clampNumber(numberOr(item.displayMin, 0), displayLow, displayHigh),
+    displayMax: clampNumber(numberOr(item.displayMax, 100), displayLow, displayHigh),
+    ...engineeringLimits(signalType, item.minValue, item.maxValue),
     rangeMultiplier: clampOption(numberOr(item.rangeMultiplier, 0), 0, 5),
     filterSamples: clampOption(numberOr(item.filterSamples, 3), 0, 100),
     sensorCal: clampNumber(numberOr(item.sensorCal, 0), -12.7, 12.8),
@@ -1032,7 +1077,32 @@ function signalTypePatch(item: VirtualPoint, signalType: VirtualPointSignalType)
     value: defaultValue(signalType),
     logEnabled: canLog(signalType) ? item.logEnabled : false,
     logIntervalMs: canLog(signalType) ? item.logIntervalMs : undefined,
-    retentionS: canLog(signalType) ? item.retentionS : undefined
+    retentionS: canLog(signalType) ? item.retentionS : undefined,
+    /* `ISS-PIO-15` — kiểu tín hiệu không phải số thì biên kỹ thuật không cưỡng
+     * chế được gì, và web-api từ chối cấu hình như vậy. Bỏ chúng ở ĐÂY, tại
+     * đúng thao tác người dùng vừa làm, thay vì để form gửi lên rồi nhận 400
+     * cho một trường họ không hề chạm vào ở lần sửa này. */
+    minValue: numericSignalType(signalType) ? item.minValue : undefined,
+    maxValue: numericSignalType(signalType) ? item.maxValue : undefined
+  }
+}
+
+/** `ISS-PIO-15` — biên kỹ thuật chỉ có nghĩa với kiểu số; khớp
+ *  `virtualPointNumericSignalType` phía web-api. */
+export function numericSignalType(signalType?: string): boolean {
+  return signalType === 'integer' || signalType === 'float'
+}
+
+/* engineeringLimits chuẩn hoá cặp biên trước khi gửi lên API.
+ *
+ * KHÔNG tự đảo min/max khi người dùng gõ ngược: đảo hộ là đoán ý, và một dải bị
+ * đảo âm thầm sẽ cưỡng chế đúng cái người dùng không định. Gửi nguyên trạng để
+ * web-api từ chối và nói rõ trường nào sai. */
+export function engineeringLimits(signalType: string | undefined, minValue?: number, maxValue?: number): { minValue?: number; maxValue?: number } {
+  if (!numericSignalType(signalType)) return { minValue: undefined, maxValue: undefined }
+  return {
+    minValue: Number.isFinite(minValue) ? minValue : undefined,
+    maxValue: Number.isFinite(maxValue) ? maxValue : undefined
   }
 }
 

@@ -1463,8 +1463,20 @@ export interface VirtualPoint {
   retentionS?: number
   value?: number | boolean | string
   unit?: string
+  /** Thang HIỂN THỊ — chỉ nói đồ thị vẽ từ đâu tới đâu, KHÔNG chặn lệnh ghi. */
   displayMin?: number
   displayMax?: number
+  /** `ISS-PIO-15` — biên KỸ THUẬT của điểm, tách khỏi thang hiển thị ở trên.
+   *
+   *  `displayMin`/`displayMax` là thang vẽ; chúng không từ chối một lệnh ghi
+   *  45 °C vào setpoint khai dải làm việc 16–30 °C. Hai trường này thì có: API
+   *  TỪ CHỐI lệnh ghi ngoài dải với 400 và KHÔNG kẹp về biên — kẹp im lặng trả
+   *  200 cho một lệnh đã bị đổi nghĩa.
+   *
+   *  `undefined` = KHÔNG khai báo (cấu hình đang chạy giữ nguyên hành vi cũ).
+   *  Chỉ có nghĩa với `signalType` `integer`/`float`. */
+  minValue?: number
+  maxValue?: number
   rangeMultiplier?: number
   filterSamples?: number
   sensorCal?: number

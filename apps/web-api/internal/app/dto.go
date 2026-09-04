@@ -88,27 +88,41 @@ type ConfigVirtualPoints struct {
 }
 
 type VirtualPoint struct {
-	ID              string  `json:"id"`
-	Generation      uint64  `json:"generation"`
-	Channel         int     `json:"channel"`
-	Tag             string  `json:"tag"`
-	Label           string  `json:"label,omitempty"`
-	SignalType      string  `json:"signalType"`
-	Enabled         bool    `json:"enabled"`
-	Writable        bool    `json:"writable"`
-	LogEnabled      bool    `json:"logEnabled"`
-	LogIntervalMs   *int    `json:"logIntervalMs,omitempty"`
-	RetentionS      int     `json:"retentionS,omitempty"`
-	Value           any     `json:"value,omitempty"`
-	Unit            string  `json:"unit,omitempty"`
-	DisplayMin      float64 `json:"displayMin,omitempty"`
-	DisplayMax      float64 `json:"displayMax,omitempty"`
-	RangeMultiplier int     `json:"rangeMultiplier,omitempty"`
-	FilterSamples   int     `json:"filterSamples,omitempty"`
-	SensorCal       float64 `json:"sensorCal,omitempty"`
-	MathFunction    int     `json:"mathFunction,omitempty"`
-	Note            string  `json:"note,omitempty"`
-	UpdatedAt       string  `json:"updatedAt,omitempty"`
+	ID            string  `json:"id"`
+	Generation    uint64  `json:"generation"`
+	Channel       int     `json:"channel"`
+	Tag           string  `json:"tag"`
+	Label         string  `json:"label,omitempty"`
+	SignalType    string  `json:"signalType"`
+	Enabled       bool    `json:"enabled"`
+	Writable      bool    `json:"writable"`
+	LogEnabled    bool    `json:"logEnabled"`
+	LogIntervalMs *int    `json:"logIntervalMs,omitempty"`
+	RetentionS    int     `json:"retentionS,omitempty"`
+	Value         any     `json:"value,omitempty"`
+	Unit          string  `json:"unit,omitempty"`
+	DisplayMin    float64 `json:"displayMin,omitempty"`
+	DisplayMax    float64 `json:"displayMax,omitempty"`
+	/* `ISS-PIO-15` — biên KỸ THUẬT của điểm, TÁCH khỏi thang hiển thị ở trên.
+	 *
+	 * `DisplayMin`/`DisplayMax` chỉ nói đồ thị vẽ từ đâu tới đâu. Chúng không
+	 * và không nên chặn lệnh ghi. `MinValue`/`MaxValue` là dải làm việc thật
+	 * của điểm (vd setpoint gió cấp 16–30 °C), và lệnh ghi ra ngoài dải bị TỪ
+	 * CHỐI — không kẹp về biên, vì kẹp im lặng trả về 200 cho một lệnh đã bị
+	 * đổi nghĩa.
+	 *
+	 * Con trỏ, `nil` = KHÔNG khai báo: cấu hình đang chạy không có hai trường
+	 * này và không được bỗng dưng bị siết. Tên trường lấy đúng theo điểm Modbus
+	 * (`modbusrtu/domain.go`) để hai nguồn Point của cùng một sản phẩm thôi
+	 * chạy hai mức nghiêm ngặt khác nhau. */
+	MinValue        *float64 `json:"minValue,omitempty"`
+	MaxValue        *float64 `json:"maxValue,omitempty"`
+	RangeMultiplier int      `json:"rangeMultiplier,omitempty"`
+	FilterSamples   int      `json:"filterSamples,omitempty"`
+	SensorCal       float64  `json:"sensorCal,omitempty"`
+	MathFunction    int      `json:"mathFunction,omitempty"`
+	Note            string   `json:"note,omitempty"`
+	UpdatedAt       string   `json:"updatedAt,omitempty"`
 	/* `ISS-PIO-14` — chính sách giá trị sau khởi động lại (đề bài §13).
 	 *
 	 * TRIỆU CHỨNG trước bản vá: `Value` gánh HAI nghĩa cùng lúc — "giá trị khởi

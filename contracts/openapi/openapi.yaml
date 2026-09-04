@@ -166,8 +166,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Point"
-        "400": { $ref: "#/components/responses/Error" }
+        "400":
+          description: >
+            Yêu cầu sai. Bao gồm ISS-PIO-15: điểm ảo khai `minValue`/`maxValue`
+            mà giá trị gửi lên nằm ngoài dải — lệnh bị TỪ CHỐI, không kẹp về
+            biên, và cấu hình không đổi. Thông báo lỗi nêu dải hợp lệ để người
+            vận hành gõ lại đúng.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code]
+                properties:
+                  error: { type: string }
+                  code: { type: string }
         "403": { $ref: "#/components/responses/Error" }
+        "409":
+          description: >
+            Xung đột trạng thái thiết bị — điểm chỉ đọc, core từ chối lệnh, hoặc
+            đường ghi không hỗ trợ. KHÁC 400 ở chỗ client không sửa được bằng
+            cách gõ lại một con số khác.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, code]
+                properties:
+                  error: { type: string }
+                  code: { type: string }
   /points/{id}/config:
     put:
       summary: Update point tag/display metadata by canonical point ID (admin)
@@ -4836,8 +4862,42 @@ components:
             `signalType` (0 / false / ""), KHÔNG rơi về `value` — rơi về `value`
             sẽ biến `initial` thành `retain` một cách im lặng.
         unit: { type: string, enum: ["", percent, degC, Pa, ppm], description: "Selected from the EasySet u4 Units list." }
-        displayMin: { type: number, minimum: -50, maximum: 205, default: 0, description: "EasySet-style u1 Display Min metadata." }
-        displayMax: { type: number, minimum: -50, maximum: 205, default: 100, description: "EasySet-style u2 Display Max metadata." }
+        displayMin:
+          type: number
+          default: 0
+          description: >
+            Thang HIỂN THỊ (EasySet u1) — chỉ nói đồ thị vẽ từ đâu, KHÔNG chặn
+            lệnh ghi; biên chặn lệnh ghi là `minValue`/`maxValue`.
+            Dải hợp lệ phụ thuộc `unit`: `Pa` ⇒ [-50, 2000], `ppm` ⇒ [0, 5000],
+            còn lại ⇒ [-50, 205]. Trước đây chỗ này ghi cứng [-50, 205] cho MỌI
+            unit, nên một setpoint áp suất 250 Pa hợp lệ với web-api lại bị client
+            sinh từ hợp đồng này từ chối.
+        displayMax:
+          type: number
+          default: 100
+          description: >
+            Thang HIỂN THỊ (EasySet u2). Cùng dải phụ thuộc `unit` như
+            `displayMin`, và phải >= `displayMin`.
+        minValue:
+          type: number
+          nullable: true
+          description: >
+            ISS-PIO-15 — biên KỸ THUẬT dưới của điểm, TÁCH khỏi thang hiển thị.
+            Vắng mặt = không khai báo (cấu hình đang chạy không bị siết thêm).
+            Chỉ áp dụng cho `signalType` `integer`/`float`; khai trên kiểu khác ⇒
+            400, vì một trường không cưỡng chế được gì còn tệ hơn không có.
+            Đặt tên trùng `min_value` của điểm Modbus để hai nguồn Point của cùng
+            một sản phẩm thôi chạy hai mức nghiêm ngặt khác nhau.
+        maxValue:
+          type: number
+          nullable: true
+          description: >
+            ISS-PIO-15 — biên KỸ THUẬT trên. Phải >= `minValue` khi khai cả hai.
+            Lệnh ghi ra ngoài [`minValue`, `maxValue`] bị TỪ CHỐI với 400, KHÔNG
+            kẹp về biên: kẹp im lặng trả 200 cho một lệnh đã bị đổi nghĩa.
+            PHẠM VI CƯỠNG CHẾ: bề mặt API (`PUT /points/{id}` và các đường ghi
+            cấu hình VP). Chương trình ST ghi thẳng vào slot `plc_shm.av[]` không
+            đi qua đây — biên cho logic điều khiển thuộc về chính chương trình đó.
         rangeMultiplier: { type: integer, minimum: 0, maximum: 5, default: 0, description: "EasySet-style u3 Range Multiplier metadata." }
         filterSamples: { type: integer, minimum: 0, maximum: 100, default: 3, description: "EasySet-style u5 Filter Samples metadata." }
         sensorCal: { type: number, minimum: -12.7, maximum: 12.8, default: 0, description: "EasySet-style u6 Sensor Calibration metadata." }

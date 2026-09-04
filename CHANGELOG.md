@@ -8,6 +8,69 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-15` Biên kỹ thuật min/max cho Virtual Point, chặn ghi ngoài dải (#398, 2026-09-04)
+
+- **Triệu chứng.** `displayMin`/`displayMax` là **thang hiển thị**, không phải biên kỹ thuật. Không
+  có đường nào từ chối một lệnh ghi 45 °C vào `SAT_Setpoint` khai dải làm việc 16–30 °C: lệnh đi trọn
+  xuống Core, xuống cơ cấu chấp hành, và giao diện báo thành công.
+- **Nguyên nhân gốc.** Điểm Modbus của **cùng hệ này** đã có `min_value`/`max_value` với đúng nghĩa
+  biên kỹ thuật (`modbusrtu/domain.go:90-94`), còn VP thì không — **hai nguồn Point trong một sản
+  phẩm chạy hai mức nghiêm ngặt khác nhau**, và người vận hành không có cách nào biết mình đang đứng
+  ở nguồn nào.
+- **Cách sửa.** Thêm `minValue`/`maxValue` cho VP, **đặt tên trùng hệt phía Modbus**, và **TỪ CHỐI**
+  lệnh ghi ngoài dải ở `PUT /api/v1/points/{id}` cùng mọi đường ghi cấu hình VP.
+- **Từ chối chứ không kẹp (clamp).** Kẹp im lặng biến "ghi 45" thành "ghi 30" rồi trả 200: người vận
+  hành tin thiết bị đang ở 45, hệ thống ở 30. Một lệnh sai bị từ chối thì sửa được trong mười giây;
+  một lệnh sai được nhận rồi lặng lẽ đổi nghĩa chỉ lộ ra khi có sự cố. Có bài kiểm riêng khoá đúng
+  hành vi này (`TestForcePointNeverClampsOutOfRangeValue`).
+- **400 chứ không 409.** Ngoài biên là lỗi của **yêu cầu** — client gõ lại một con số là xong; 409
+  bảo người vận hành đi xem thiết bị đang bận gì, một chỉ dẫn sai. Thông báo lỗi nêu rõ dải hợp lệ.
+- **`nil` = không khai báo.** Con trỏ, nên mọi cấu hình đang chạy trên bo giữ nguyên hành vi cũ; siết
+  chúng vì một trường mới xuất hiện là biến một bản vá an toàn thành một sự cố nâng cấp. Khai **một
+  vế** cũng cưỡng chế được vế đó ("không bao giờ dưới 0" là một yêu cầu thật).
+- **Khai biên trên kiểu không phải số bị TỪ CHỐI**, không phải bỏ qua im lặng: một trường trông như
+  đang bảo vệ điểm mà thực chất không cưỡng chế gì còn tệ hơn việc không có trường đó.
+- **`value` và `initialValue` trong cấu hình cũng phải nằm trong dải.** Một cấu hình tự gieo sẵn giá
+  trị ngoài dải biến phép kiểm lúc ghi thành trò hề — điểm khởi động ở 45 °C rồi mọi lệnh ghi hợp lệ
+  sau đó đều so với một trạng thái vốn đã sai.
+- **Phạm vi cưỡng chế, ghi rõ thay vì để người đọc tự phát hiện.** Phép kiểm nằm ở **bề mặt API**.
+  Chương trình ST ghi thẳng vào slot `plc_shm.av[]` không đi qua đây; chặn tại vòng đối chiếu sẽ là
+  web-api đánh nhau với chương trình đang chạy mỗi 10 giây, tệ hơn hẳn lỗi đang sửa. Biên cho logic
+  điều khiển thuộc về chính chương trình đó.
+- **Giao diện.** Hai ô "Biên kỹ thuật nhỏ nhất / lớn nhất" đặt ngay dưới thang hiển thị, **để trống
+  được** (trống = không khai báo, không phải số 0 — biến trống thành 0 sẽ lặng lẽ cấm mọi giá trị âm
+  trên mọi điểm chưa cấu hình gì), khoá khi kiểu tín hiệu không phải số. **Không tự đảo** khi người
+  dùng gõ min > max: đảo hộ là đoán ý, và một dải bị đảo âm thầm sẽ cưỡng chế đúng cái người dùng
+  không định.
+
+### Fixed — Ba lỗi im lặng phát hiện trong lúc làm `ISS-PIO-15` (2026-09-04)
+
+- **`virtualPointFloat`/`virtualPointBool` bỏ sót `int64` và `json.Number`.** Hai hàm liệt kê tay
+  `float64/float32/int` trong khi đường dữ liệu thật sinh ra đúng hai kiểu bị bỏ sót:
+  `normalizeVirtualPointValue` trả `int64` cho signalType `integer`, và mọi decoder cấu hình đều bật
+  `UseNumber()`. Hậu quả: (1) `virtualPointMatchesSlot` coi **mọi VP kiểu `integer` là "lệch"** nên
+  vòng đối chiếu 10 giây đẩy lại giá trị mãi mãi; (2) `sameVirtualPointValue` rơi xuống nhánh so
+  chuỗi, nơi cả hai vế thành `""` và được coi là bằng nhau, nên **`restartPolicy: initial` không bao
+  giờ chạy trên VP kiểu `integer`** — một hồi quy của `ISS-PIO-14` vừa nhập hôm nay. Sửa bằng cách
+  dùng lại `virtualPointNumber`: một bộ đọc số duy nhất, thay vì hai danh sách kiểu phải nhớ giữ
+  đồng bộ bằng tay.
+- **`sameVirtualPointValue` rơi về so chuỗi cho kiểu số.** Ở nhánh đó `virtualPointText` trả `""` cho
+  mọi thứ không phải chuỗi, nên một lỗi đọc kiểu biến thành kết luận "không cần làm gì". Nay kiểu số
+  mà một vế không đọc được thành số ⇒ **coi là khác nhau** (ghi lại), không phải bằng nhau (bỏ qua).
+- **Frontend kẹp thang hiển thị theo dải cứng `[-50, 205]` cho MỌI unit**, trong khi web-api cho `Pa`
+  tới 2000 và `ppm` tới 5000. Một setpoint áp suất tĩnh 250 Pa hợp lệ ở backend bị ô nhập kẹp xuống
+  205 — người dùng gõ 250, ô hiện 205, không một thông báo nào. Đúng lớp lỗi mà `ISS-PIO-15` sinh ra
+  để dẹp, chỉ khác là nó nằm ở frontend. `displayRangeLimits()` nay bám theo
+  `virtualPointDisplayRangeLimits` phía web-api; hợp đồng OpenAPI cũng đã ghi cứng `[-50, 205]` nên
+  một client sinh từ hợp đồng sẽ từ chối chính giá trị mà web-api chấp nhận — đã sửa cả hai.
+
+**Kiểm chứng (đo lại thật, 2026-09-04).** layout **17 PASS / 0 FAIL** exit 0 · C++ configure/build
+exit 0, **0 warning**, `ctest` **1393/1393** · `go vet` sạch, **21 package `ok`** · FE **216 file /
+2605 test**, lint + build exit 0 · **10/10 phép tiêm lỗi đều ĐỎ** (6 Go: bỏ phép kiểm biên, kẹp thay
+vì từ chối, trả 409 thay 400, bỏ validate cấu hình, bộ đọc số bản cũ, so số rơi về so chuỗi; 4 FE:
+dải hiển thị ghi cứng lại, ô trống hoá 0, tự đảo min/max, chuẩn hoá nuốt biên).
+
+
 ### Added — `ISS-PIO-14` Chính sách giá trị Virtual Point sau khởi động lại (#397, 2026-09-04)
 
 - **Triệu chứng.** Đề bài §13 đòi chọn *Retain last value* / *Initial value*. `VirtualPoint` chỉ có

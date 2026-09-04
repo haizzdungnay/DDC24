@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -434,6 +435,15 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 		point, err := a.writeVirtualPointValue(r, item.ID, body.value, body.release)
 		if err != nil {
 			a.audit.PointForce(principal, id, body.release, "rejected", r.RemoteAddr)
+			/* `ISS-PIO-15` — ngoài biên kỹ thuật là lỗi của YÊU CẦU, không phải
+			 * xung đột trạng thái thiết bị: client sửa con số là xong. Gộp nó vào
+			 * 409 sẽ bảo người vận hành đi xem thiết bị đang bận gì, trong khi
+			 * việc phải làm chỉ là gõ lại một con số trong dải. */
+			var rangeErr *virtualPointRangeError
+			if errors.As(err, &rangeErr) {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -609,6 +619,14 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 	nextValue, ok := normalizeVirtualPointValue(item.SignalType, value)
 	if !ok {
 		return PointDTO{}, fmt.Errorf("value must match signalType")
+	}
+	/* `ISS-PIO-15` — biên kỹ thuật chặn TRƯỚC khi giá trị chạm cấu hình.
+	 *
+	 * Kiểm sau khi chuẩn hoá kiểu, vì `"45"` và `45` phải bị chặn như nhau; và
+	 * TRƯỚC `item.Value = nextValue` để một lệnh bị từ chối không để lại dấu vết
+	 * nào trong cấu hình lẫn trong slot Core. */
+	if err := checkVirtualPointValueRange(item, nextValue); err != nil {
+		return PointDTO{}, err
 	}
 	item.Value = nextValue
 	item.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)

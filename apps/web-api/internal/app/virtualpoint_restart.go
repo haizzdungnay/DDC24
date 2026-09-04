@@ -161,10 +161,16 @@ func sameVirtualPointValue(left, right any, signalType string) bool {
 		rightBool, okRight := virtualPointBool(right)
 		return okLeft && okRight && leftBool == rightBool
 	}
-	leftNum, okLeft := virtualPointFloat(left)
-	rightNum, okRight := virtualPointFloat(right)
-	if okLeft && okRight {
-		return leftNum == rightNum
+	if virtualPointNumericSignalType(signalType) {
+		leftNum, okLeft := virtualPointFloat(left)
+		rightNum, okRight := virtualPointFloat(right)
+		/* Kiểu SỐ mà một vế không đọc được thành số ⇒ coi là KHÁC NHAU.
+		 *
+		 * Bản đầu rơi xuống nhánh so chuỗi ở đây, và ở đó `virtualPointText` trả
+		 * `""` cho mọi thứ không phải chuỗi — hai vế cùng `""` nên "bằng nhau",
+		 * và `applyRestartPolicyOnBoot` bỏ qua điểm. Một lỗi đọc kiểu biến thành
+		 * "không cần làm gì": im lặng, và đúng chiều nguy hiểm. */
+		return okLeft && okRight && leftNum == rightNum
 	}
 	// Chuỗi/datetime: so nguyên văn sau khi cắt khoảng trắng.
 	return strings.TrimSpace(virtualPointText(left)) == strings.TrimSpace(virtualPointText(right))

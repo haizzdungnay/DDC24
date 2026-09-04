@@ -225,35 +225,46 @@ func virtualPointMatchesSlot(item VirtualPoint, slot PointDTO) bool {
 	return diff <= 1e-4
 }
 
+// virtualPointBool đọc một giá trị VP thành boolean.
+//
+// Cùng lỗ hổng như `virtualPointFloat` trước `ISS-PIO-15`: danh sách kiểu chép
+// tay bỏ sót `int64`/`json.Number`, nên một `1` đọc từ cấu hình bị coi là "không
+// đọc được" và nơi gọi lặng lẽ kết luận "lệch".
 func virtualPointBool(value any) (bool, bool) {
-	switch v := value.(type) {
-	case bool:
-		return v, true
-	case float32:
-		return v > 0.5, true
-	case float64:
-		return v > 0.5, true
-	case int:
-		return v > 0, true
+	if b, ok := value.(bool); ok {
+		return b, true
 	}
-	return false, false
+	number, ok := virtualPointNumber(value)
+	if !ok {
+		return false, false
+	}
+	return number > 0.5, true
 }
 
+/* virtualPointFloat đọc một giá trị VP thành số thực.
+ *
+ * PHÁT HIỆN TRONG LÚC LÀM `ISS-PIO-15`: bản cũ liệt kê tay `float64/float32/int`
+ * và BỎ SÓT `int64` lẫn `json.Number` — đúng hai kiểu mà đường dữ liệu thật sinh
+ * ra. `normalizeVirtualPointValue` trả `int64` cho signalType `integer`, còn mọi
+ * decoder cấu hình đều bật `UseNumber()`. Hậu quả im lặng:
+ *
+ *   - `virtualPointMatchesSlot` coi mọi VP kiểu `integer` là "lệch" ⇒ vòng đối
+ *     chiếu 10 giây đẩy lại giá trị mãi mãi.
+ *   - `sameVirtualPointValue` (ISS-PIO-14) rơi xuống nhánh so chuỗi, nơi cả hai
+ *     vế đều thành `""` ⇒ "bằng nhau" ⇒ VP kiểu `integer` khai `restartPolicy:
+ *     initial` KHÔNG BAO GIỜ quay về giá trị khởi tạo.
+ *
+ * Nên hàm này dùng lại `virtualPointNumber` — một bộ đọc số duy nhất, thay vì
+ * hai danh sách kiểu phải nhớ giữ đồng bộ bằng tay.
+ */
 func virtualPointFloat(value any) (float64, bool) {
-	switch v := value.(type) {
-	case float64:
-		return v, true
-	case float32:
-		return float64(v), true
-	case int:
-		return float64(v), true
-	case bool:
-		if v {
+	if b, ok := value.(bool); ok {
+		if b {
 			return 1, true
 		}
 		return 0, true
 	}
-	return 0, false
+	return virtualPointNumber(value)
 }
 
 func (a *App) handleListVirtualPoints(w http.ResponseWriter, r *http.Request) {
@@ -597,6 +608,9 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 		if item.DisplayMin > item.DisplayMax {
 			addConfigErr(&errs, base+".displayMax", "must be >= displayMin")
 		}
+		// `ISS-PIO-15` — biên kỹ thuật: kiểm ngay sau thang hiển thị để hai khái
+		// niệm nằm cạnh nhau trong mã, đúng như chúng nằm cạnh nhau trên màn hình.
+		validateVirtualPointLimits(item, base, &errs)
 		if item.RangeMultiplier < 0 || item.RangeMultiplier > 5 {
 			addConfigErr(&errs, base+".rangeMultiplier", "must be 0..5")
 		}
