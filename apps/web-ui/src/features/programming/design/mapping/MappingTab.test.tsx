@@ -103,11 +103,19 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
     expect(screen.queryByText('Core chưa hỗ trợ')).not.toBeInTheDocument()
   })
 
-  it('lọc Point ngay trong pane theo loại UI/AO/DO/VP', () => {
+  /* ISS-PIO-09 — chip `AO` nay hiện là `UO` theo quyết định của chủ sở hữu, và
+   * hàng Point hiện danh tính theo nguồn thay cho `category:deviceId:pointId`.
+   * `AO` vẫn là giá trị trên dây; chỉ nhãn đổi. */
+  it('lọc Point ngay trong pane theo loại UI/UO/DO/VP', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
-    fireEvent.click(screen.getByRole('button', { name: /^AO$/ }))
-    expect(screen.getByRole('button', { name: 'LOCAL Supply Valve' })).toBeVisible()
-    expect(screen.queryByRole('button', { name: 'LOCAL Supply Temp' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^UO$/ }))
+    expect(screen.getByRole('button', { name: /AO-01 Supply Valve PHYSICAL · UO/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Supply Temp/ })).not.toBeInTheDocument()
+  })
+
+  it('không có chip nào còn ghi AO — nhãn UO là lớp trình bày duy nhất người dùng thấy', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    expect(screen.queryByRole('button', { name: /^AO$/ })).not.toBeInTheDocument()
   })
 
   it('viewer chỉ inspect và không có control Map', () => {

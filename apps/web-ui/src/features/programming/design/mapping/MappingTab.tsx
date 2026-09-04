@@ -6,6 +6,7 @@ import { AssignedMappingsTable } from './AssignedMappingsTable'
 import { MappingInspector } from './MappingInspector'
 import { MappingToolbar } from './MappingToolbar'
 import { PointCatalogPane, type PointKindFilter } from './PointCatalogPane'
+import { pointSourceKind } from './pointSourceLabels'
 /* Nạp trễ: panel này chỉ cần khi người dùng ở tab Ánh xạ, còn `programming` là
  * chunk vào đầu tiên và có ngân sách gzip R3 do `pgm02_workspace_v1.json` ghim
  * (`verify_programming_bundle_budget.py`). Gắn tĩnh làm chunk đó vượt ngân sách
@@ -140,9 +141,13 @@ export function MappingTab(props: {
 
   const visiblePoints = (suggestionsActive && suggestionsEnabled ? suggestedPointRows : pointRows).filter((row) => {
     if (!matchesEquipment(row, equipment)) return false
-    const queryMatch = !normalized || `${row.name} ${row.category} ${row.deviceId ?? ''} ${row.pointId} ${row.dataType}`.toLocaleLowerCase().includes(normalized)
-    const prefix = row.pointId.split('-', 1)[0].toUpperCase()
-    const kind = row.category === 'VP' ? 'VP' : row.category === 'MB_RTU' ? 'MB_RTU' : prefix
+    /* ISS-PIO-09 — tìm được bằng CHÍNH thứ đang hiện trên hàng: `MB-014`,
+     * `CK508-04`, `HR 102 · FC03`. Bỏ chúng khỏi chuỗi tìm nghĩa là bày ra một
+     * định danh rồi từ chối tìm theo nó. */
+    const queryMatch = !normalized || `${row.name} ${row.category} ${row.deviceId ?? ''} ${row.pointId} ${row.dataType} ${row.displayId ?? ''} ${row.deviceLabel ?? ''} ${row.sourceDetail ?? ''}`.toLocaleLowerCase().includes(normalized)
+    /* Dùng CHUNG hàm với `PointCatalogPane`: bộ lọc và nhãn trên hàng phải nói
+     * cùng một thứ, nếu không người dùng bấm `UO` rồi thấy hàng ghi `UI`. */
+    const kind = pointSourceKind(row)
     return queryMatch && (category === 'ALL' || row.category === category) && (pointKind === 'ALL' || kind === pointKind) && (dataType === 'ALL' || row.dataType === dataType)
   })
 

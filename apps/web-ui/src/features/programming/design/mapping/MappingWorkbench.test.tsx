@@ -57,7 +57,7 @@ beforeEach(() => {
     items: [
       { category: 'LOCAL', pointId: 'UI-01', name: 'Supply air temperature', dataType: 'REAL', unit: 'degC', direction: 'READ', writable: false, quality: 'GOOD', value: 21.4, observedAt: '2026-08-24T09:00:00Z' },
       { category: 'LOCAL', pointId: 'DO-01', name: 'Supply fan', dataType: 'BOOL', direction: 'WRITE', writable: true, quality: 'GOOD', value: true, observedAt: '2026-08-24T09:00:00Z' , mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
-      { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD enable', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true , mapping: { input: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] }, output: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] } } },
+      { category: 'MB_RTU', deviceId: 'vfd-1', pointId: 'coil-1', name: 'VFD enable', displayId: 'MB-014', deviceLabel: 'VFD-01', sourceDetail: 'CO 12 · FC05', dataType: 'BOOL', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: true , mapping: { input: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] }, output: { status: 'UNSUPPORTED_BY_CORE', reasons: ['Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'] } } },
     ],
   }
   localStorage.setItem('mkddc-lang', 'vi')
@@ -84,11 +84,33 @@ describe('Mapping Workbench Phase 1A — read-only truth state', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  /* ISS-PIO-09 (F-PIO-026, đề bài §29) — hàng Point phải nói được NGUỒN và
+   * CHI TIẾT KỸ THUẬT. Trước bản vá, dòng dưới tên điểm là
+   * `MB_RTU:vfd-1:coil-1`: không thanh ghi, không mã hàm, và `vfd-1` là danh
+   * tính canonical chứ không phải tên thiết bị trong tủ. */
+  it('hàng Point hiện định danh theo nguồn thay cho category:deviceId:pointId', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    const modbusRow = screen.getByRole('button', { name: /VFD enable.*MODBUS/ })
+
+    expect(within(modbusRow).getByText('MB-014')).toBeVisible()
+    expect(within(modbusRow).getByText('MODBUS · VFD-01')).toBeVisible()
+    expect(within(modbusRow).getByText('CO 12 · FC05')).toBeVisible()
+    expect(within(modbusRow).queryByText(/MB_RTU:vfd-1:coil-1/)).not.toBeInTheDocument()
+  })
+
+  it('điểm thiếu danh tính máy chủ dựng vẫn nhận diện được bằng pointId', () => {
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    // `UI-01` không có `displayId`/`sourceDetail` trong fixture: hàng vẫn phải
+    // hiện `UI-01` và `PHYSICAL · UI`, không được để trống chỗ định danh.
+    const localRow = screen.getByRole('button', { name: /Supply air temperature.*PHYSICAL · UI/ })
+    expect(within(localRow).getByText('UI-01')).toBeVisible()
+  })
+
   it('hiện category unsupported và owner thiếu authority mà không bịa', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
     fireEvent.click(screen.getByRole('button', { name: 'AHU_Main · FanCmd · Chưa map' }))
 
-    const modbusRow = screen.getByRole('button', { name: /MB_RTU.*VFD enable/ })
+    const modbusRow = screen.getByRole('button', { name: /VFD enable.*MODBUS/ })
     expect(within(modbusRow).getByText('Chưa map được')).toBeVisible()
     expect(within(modbusRow).getByText('Chưa map được')).toHaveAttribute('title', 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU')
     expect(screen.getByText('Chưa xác minh — API chưa cung cấp authority')).toBeVisible()
@@ -115,7 +137,7 @@ describe('Mapping Workbench Phase 1A — read-only truth state', () => {
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Tìm biến hoặc Point' }), { target: { value: '' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'Loại Point' }), { target: { value: 'MB_RTU' } })
-    expect(screen.getByRole('button', { name: /MB_RTU.*VFD enable/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /VFD enable.*MODBUS/ })).toBeVisible()
   })
 
   it('lọc Program và phân biệt hai biến cùng tên ở hai Program khác nhau', () => {

@@ -8,6 +8,40 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-09` Hàng Point hiện định danh theo nguồn (+ nhãn UO) (#395, 2026-09-04)
+
+- **Triệu chứng.** `PointCatalogPane` hiện `category:deviceId:pointId`. Một điểm Modbus đọc ra
+  `MB_RTU:bus-1-slave-3:VFD_Frequency`: **không thanh ghi, không mã hàm**, và `bus-1-slave-3` là
+  danh tính *canonical* của tầng Programming chứ không phải cái tên người vận hành đặt cho thiết bị
+  trong tủ. Đề bài §29 muốn thấy ngay `MB-014 · VFD Frequency · MODBUS · VFD-01 · HR 102 · FC03`.
+- **Nguyên nhân gốc.** Dữ liệu để dựng những chuỗi đó — dải kỹ thuật của kênh vật lý, chính sách
+  khởi động lại của VP, vùng thanh ghi + mã hàm của điểm Modbus — nằm ở **cấu hình**, không nằm
+  trong `PointDTO` mà runtime báo về. FE không có đường nào biết một điểm `holding_register` sẽ đi
+  bằng FC03, nên hàng chỉ còn ghép lại được ba mảnh danh tính có sẵn.
+- **Cách sửa.** Máy chủ dựng ba trường mới và Catalog phát kèm mỗi hàng: `displayId` (`UI-01`,
+  `AV-01`, `MB-014`), `deviceLabel` (tên thiết bị trong tủ), `sourceDetail` (`0-10V → 0…50 °C` ·
+  `RW · RETAIN` · `HR 102 · FC03`). Adapter đọc cấu hình **một lần cho cả trang**, không phải mỗi
+  hàng một lần.
+- **Thiếu dữ liệu thì bỏ trống, không bịa.** Slot chưa cấp ⇒ không có `MB-nnn`; điểm không còn
+  trong cấu hình ⇒ không có thanh ghi; thiếu một biên ⇒ không có dải. Một hàng ghi `HR 0 · FC03`
+  cho điểm chưa biết địa chỉ tệ hơn hẳn một hàng không ghi gì, vì nó trông như sự thật.
+- **Mã hàm lấy từ đúng bảng đã ghi xuống dây.** `ReadFunctionCode`/`WriteFunctionCode` nay là nguồn
+  sự thật duy nhất, và `BuildProfile` gọi chính chúng khi ghi `fieldbus.conf`. Chép một bảng thứ hai
+  cho giao diện là cách chắc chắn nhất để màn hình nói FC03 trong khi dây nói FC04 — và không cổng
+  nào bắt được vì hai bảng không bao giờ gặp nhau. Điểm ghi được hiện mã **ghi** (FC06/FC05): đó mới
+  là lệnh sẽ chạm vào thiết bị.
+
+### Changed — `ISS-PIO-09` Giao diện hiện `AO` thành `UO — Universal Output` (#395, 2026-09-04)
+
+- Theo quyết định của chủ sở hữu ghi trong thân issue: **giữ `AO` xuyên suốt code / API / SHM** để
+  không phá contract, chỉ lớp hiển thị được đổi nhãn. `UO` vì thế chỉ tồn tại trong `pointKindLabel`
+  và không bao giờ là giá trị được gửi đi, so sánh, hay lưu lại; có test khoá cứng điều đó để một
+  lần "dọn dẹp" sau này không lặng lẽ đổi luôn giá trị trên dây.
+- Bộ lọc và nhãn trên hàng nay dùng **chung** `pointSourceKind`, thay vì mỗi nơi tự tách tiền tố
+  `pointId`. Hai bản luật song song là cách để người dùng bấm `UO` rồi thấy hàng ghi `UI`.
+- Ô tìm kiếm nhận cả `MB-014`, `VFD-01` và `HR 102 · FC03`: bày ra một định danh rồi từ chối tìm
+  theo nó là nửa vời.
+
 ### Added — `ISS-PIO-24` Deadband + clamp + chính sách giá trị khi lỗi cho Universal Input (#409, 2026-09-04)
 
 - **Triệu chứng.** Đề bài §7 yêu cầu bảy năng lực xử lý tín hiệu cho UI. Sản phẩm chỉ có **một**

@@ -74,6 +74,11 @@ export interface MappingPointRow {
   description?: string
   /** Định danh nguồn có tiền tố (`iop:`/`core:`/`modbus:`); rỗng = chưa có nguồn. */
   sourceRef?: string
+  /** `ISS-PIO-09` — ba trường định danh theo nguồn do máy chủ dựng. Rỗng luôn
+   *  nghĩa là "chưa dựng được", không phải "trống". */
+  displayId?: string
+  deviceLabel?: string
+  sourceDetail?: string
 }
 
 /** Nhãn dùng cho bộ lọc thiết bị khi điểm CHƯA được gán thiết bị nào.
@@ -275,6 +280,9 @@ export function buildPointRows(catalog: ProgrammingPointCatalogEntry[], variable
       equipment: entry.equipment,
       description: entry.description,
       sourceRef: entry.sourceRef,
+      displayId: entry.displayId,
+      deviceLabel: entry.deviceLabel,
+      sourceDetail: entry.sourceDetail,
     }
   })
 }

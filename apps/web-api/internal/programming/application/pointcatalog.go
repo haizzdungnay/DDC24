@@ -59,6 +59,13 @@ type PointCatalogEntry struct {
 	// Rỗng nghĩa là CHƯA CÓ NGUỒN — ví dụ một VP chưa bind slot nào. Đó là câu
 	// trả lời đúng chứ không phải chỗ để điền tạm một giá trị.
 	SourceRef string `json:"sourceRef,omitempty"`
+	// PointSourceIdentity — định danh THEO NGUỒN (`ISS-PIO-09`, đề bài §29):
+	// `displayId`, `deviceLabel`, `sourceDetail`. Nhúng thẳng vào entry để ba
+	// khoá nằm phẳng trên JSON như mọi khoá khác của Catalog.
+	//
+	// Cả ba đều CÓ THỂ RỖNG và rỗng luôn có nghĩa "chưa dựng được", không phải
+	// "trống". FE hiện `pointId`/không hiện gì, tuyệt đối không tự suy.
+	PointSourceIdentity
 	// Mapping là QUYẾT ĐỊNH eligibility do server cấp kèm lý do (`ISS-PIO-32`).
 	// FE render nguyên văn; nó KHÔNG được giữ bản luật thứ hai.
 	Mapping PointMapEligibility `json:"mapping"`

@@ -54,12 +54,19 @@ func (adapter programmingPointCatalogAdapter) ListPointCatalog(ctx context.Conte
 		}
 	}
 
+	/* `ISS-PIO-09` — danh tính THEO NGUỒN. Đọc cấu hình MỘT LẦN cho cả trang
+	 * thay vì mỗi hàng một lần: catalog có thể tới vài trăm điểm và đọc lại
+	 * cùng ba file cho từng điểm là biến một trang danh sách thành một bài
+	 * kiểm tra I/O. */
+	identity := adapter.pointCatalogIdentitySource()
+
 	entries := make([]programmingapplication.PointCatalogEntry, 0, len(points))
 	for _, point := range points {
 		entry := toPointCatalogEntry(point)
 		if entry.Category == "MB_RTU" {
 			entry.ExtIndex = slotOf[modbusCatalogKey(entry.DeviceID, entry.PointID)]
 		}
+		identity.apply(&entry)
 		entries = append(entries, entry)
 	}
 	return entries, nil

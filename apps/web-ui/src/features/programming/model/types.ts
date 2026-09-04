@@ -608,6 +608,15 @@ export interface ProgrammingPointCatalogEntry {
   /** Định danh nguồn có tiền tố: `iop:` / `core:` / `modbus:`. Rỗng = chưa có
    *  nguồn (ví dụ VP chưa bind slot). */
   sourceRef?: string
+  /** `ISS-PIO-09` — định danh ngắn theo nguồn (`UI-01`, `AV-01`, `MB-014`).
+   *  Rỗng = máy chủ chưa dựng được ⇒ FE hiện `pointId`, KHÔNG bịa số. */
+  displayId?: string
+  /** Tên thiết bị Modbus do người vận hành đặt (`CK508-04`) — khác `deviceId`
+   *  canonical (`bus-1-slave-4`). Chỉ điểm Modbus mới có. */
+  deviceLabel?: string
+  /** Chi tiết kỹ thuật đọc ngay trên hàng: `0-10V → 0…50 °C`, `RW · RETAIN`,
+   *  `HR 102 · FC03`. Do MÁY CHỦ dựng vì dữ liệu nguồn nằm ở cấu hình. */
+  sourceDetail?: string
   /** Quyết định của server cho từng chiều. Vắng mặt = server đời cũ ⇒ FE phải
    *  fail-closed chứ KHÔNG được tự suy lại. */
   mapping?: {

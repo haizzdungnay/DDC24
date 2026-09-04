@@ -289,7 +289,9 @@ func BuildProfile(device Device, points []Point) ([]byte, error) {
 		if !point.Enabled || point.DeviceID != device.DeviceID {
 			continue
 		}
-		fc := map[string]int{"coil": 1, "discrete_input": 2, "holding_register": 3, "input_register": 4}[point.RegisterType]
+		/* ISS-PIO-09: dùng chung bảng với hiển thị (`registerdisplay.go`) để
+		 * FC trên màn hình không bao giờ lệch FC trên dây. */
+		fc, _ := ReadFunctionCode(point.RegisterType)
 		count := 1
 		if point.DataType == "int32" || point.DataType == "uint32" || point.DataType == "float32" {
 			count = 2
