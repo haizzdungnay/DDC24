@@ -16,14 +16,14 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
 import { VirtualPointUsageNotice } from './VirtualPointUsageNotice'
-import type { Point, TrendSample, VirtualPoint, VirtualPointRestartPolicy, VirtualPointSignalType, VirtualPointSource } from '../../shared/types'
-import { cn, formatTime, formatValue, pointNumber } from '../../shared/utils'
+import type { Point, TrendSample, VirtualPoint, VirtualPointRestartPolicy, VirtualPointSignalType, VirtualPointSource, VirtualPointState } from '../../shared/types'
+import { cn, formatPointValue, formatTime, pointNumber } from '../../shared/utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
 type WizardStep = 'signal' | 'min' | 'max' | 'range' | 'unit' | 'filter' | 'cal' | 'math'
 type Translate = ReturnType<typeof useI18n>['t']
 
-const signalTypes: VirtualPointSignalType[] = ['boolean', 'integer', 'float', 'string', 'datetime']
+const signalTypes: VirtualPointSignalType[] = ['boolean', 'integer', 'float', 'string', 'datetime', 'multistate']
 const unitOptions = [0, 1, 2, 3, 4]
 const rangeMultiplierOptions = [0, 1, 2, 3, 4, 5]
 const mathFunctionOptions = [0, 1, 2, 3]
@@ -612,7 +612,7 @@ function Summary({ item, livePoint, saving, onWrite }: { item: VirtualPoint; liv
             <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={reset}>{pick('Đặt lại', 'Reset')}</Button>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <LiveDataItem label="Value" value={formatValue(livePoint?.value ?? item.value ?? defaultValue(item.signalType), item.unit)} />
+            <LiveDataItem label="Value" value={formatPointValue({ value: livePoint?.value ?? item.value ?? defaultValue(item.signalType), unit: item.unit, signalType: item.signalType, stateLabel: livePoint?.stateLabel })} />
             <LiveDataItem label="Quality" value={livePoint?.quality ?? 'good'} />
             <LiveDataItem label={pick('Nhỏ nhất', 'Minimum')} value={stats ? formatStat(stats.min, unit) : '--'} />
             <LiveDataItem label={pick('Lớn nhất', 'Maximum')} value={stats ? formatStat(stats.max, unit) : '--'} />
@@ -732,7 +732,12 @@ function Advanced({ item, onChange }: { item: VirtualPoint; onChange: (patch: Pa
       onChange({ logEnabled: value !== 0, logIntervalMs: value === 0 ? undefined : value, retentionS: value === 0 ? undefined : defaultRetention(value) })
     }} /> },
     { register: 'RET', label: 'Diagnostic log retention (s)', control: <SmallNumberInput value={item.retentionS ?? 0} min={0} max={defaultRetention(logValue)} disabled={!item.logEnabled} onChange={(retentionS) => onChange({ retentionS })} /> },
-    { register: 'VAL', label: 'Initial value', control: <ValueInput signalType={item.signalType} value={String(item.value ?? defaultValue(item.signalType))} onChange={(raw) => onChange({ value: parseValue(item.signalType, raw) })} compact /> }
+    { register: 'VAL', label: 'Initial value', control: <ValueInput signalType={item.signalType} value={String(item.value ?? defaultValue(item.signalType))} onChange={(raw) => onChange({ value: parseValue(item.signalType, raw) })} compact /> },
+    /* `ISS-PIO-17` — danh sách state. Chỉ hiện với `multistate`: ở kiểu khác nó
+     * không cưỡng chế gì, và web-api coi việc khai nó là lỗi cấu hình. */
+    ...(item.signalType === 'multistate'
+      ? [{ register: 'MSV', label: 'Multistate states', control: <StateListEditor states={item.states ?? defaultStates()} onChange={(states) => onChange({ states })} /> }]
+      : [])
   ]
   return (
     <div className="space-y-4">
@@ -865,7 +870,7 @@ function VirtualPointOverviewModal({ open, items, livePoints, onEdit, onDelete, 
                   </td>
                   <td className="px-3 py-2 font-mono uppercase text-xs">{item.signalType}</td>
                   <td className="px-3 py-2">
-                    <span className="font-mono font-semibold">{formatValue(live?.value ?? item.value ?? defaultValue(item.signalType), item.unit)}</span>
+                    <span className="font-mono font-semibold">{formatPointValue({ value: live?.value ?? item.value ?? defaultValue(item.signalType), unit: item.unit, signalType: item.signalType, stateLabel: live?.stateLabel })}</span>
                     <span className="ml-2 text-xs text-[var(--c-text-dim)]">{live?.quality ?? 'good'}</span>
                   </td>
                   <td className="px-3 py-2 text-xs">{unit}</td>
@@ -1107,6 +1112,7 @@ export function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
     displayMin: clampNumber(numberOr(item.displayMin, 0), displayLow, displayHigh),
     displayMax: clampNumber(numberOr(item.displayMax, 100), displayLow, displayHigh),
     ...engineeringLimits(signalType, item.minValue, item.maxValue),
+    states: signalType === 'multistate' ? sanitizeStates(item.states) : undefined,
     /* `ISS-PIO-16` — `PROGRAM` chỉ có nghĩa khi còn gắn slot Core; backend từ
      * chối đúng như vậy. Rơi về `WEB` ở đây để form không gửi lên một tổ hợp
      * chắc chắn bị 400. */
@@ -1120,6 +1126,80 @@ export function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
     retentionS: logEnabled ? item.retentionS ?? defaultRetention(logIntervalMs ?? 1000) : undefined,
     value: parseValue(signalType, String(item.value ?? defaultValue(signalType)))
   }
+}
+
+/* `ISS-PIO-17` — biên tập danh sách state (đề bài §15: `0 = Off`, `1 = Auto`,
+ * `2 = Manual`, `3 = Emergency`).
+ *
+ * Sửa tại chỗ, không sắp lại trong lúc gõ: sắp mỗi lần đổi một ký tự sẽ làm
+ * hàng nhảy chỗ dưới con trỏ. `sanitizeStates` sắp một lần lúc lưu. */
+function StateListEditor({ states, onChange }: { states: VirtualPointState[]; onChange: (states: VirtualPointState[]) => void }) {
+  const { pick } = useI18n()
+  const duplicateValue = (value: number, index: number) => states.some((state, i) => i !== index && state.value === value)
+  const duplicateLabel = (label: string, index: number) =>
+    label.trim() !== '' && states.some((state, i) => i !== index && state.label.trim().toLowerCase() === label.trim().toLowerCase())
+
+  function update(index: number, patch: Partial<VirtualPointState>) {
+    onChange(states.map((state, i) => (i === index ? { ...state, ...patch } : state)))
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {states.map((state, index) => {
+        const badValue = duplicateValue(state.value, index) || !Number.isInteger(state.value) || state.value < 0
+        const badLabel = state.label.trim() === '' || duplicateLabel(state.label, index)
+        return (
+          <div key={index} className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={0}
+              aria-label={pick(`Giá trị state ${index + 1}`, `State ${index + 1} value`)}
+              className={cn('h-8 w-16 rounded border bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text)] outline-none', badValue ? 'border-[var(--c-fault)]' : 'border-[var(--c-border)]')}
+              value={state.value}
+              onChange={(event) => update(index, { value: Math.trunc(Number(event.target.value)) })}
+            />
+            <input
+              aria-label={pick(`Nhãn state ${index + 1}`, `State ${index + 1} label`)}
+              className={cn('h-8 min-w-0 flex-1 rounded border bg-[var(--c-bg)] px-2 text-xs text-[var(--c-text)] outline-none', badLabel ? 'border-[var(--c-fault)]' : 'border-[var(--c-border)]')}
+              value={state.label}
+              onChange={(event) => update(index, { label: event.target.value })}
+            />
+            <button
+              type="button"
+              aria-label={pick(`Xoá state ${index + 1}`, `Remove state ${index + 1}`)}
+              className="h-8 rounded border border-[var(--c-border)] px-2 text-xs text-[var(--c-text-dim)] disabled:opacity-40"
+              disabled={states.length <= 2}
+              onClick={() => onChange(states.filter((_, i) => i !== index))}
+            >
+              ×
+            </button>
+          </div>
+        )
+      })}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="h-8 rounded border border-[var(--c-border)] px-2 text-xs text-[var(--c-text)]"
+          onClick={() => onChange([...states, { value: nextStateValue(states), label: '' }])}
+        >
+          + {pick('Thêm state', 'Add state')}
+        </button>
+        <span className="text-[11px] text-[var(--c-text-dim)]">
+          {pick(
+            'Ghi vào state không có trong danh sách sẽ bị thiết bị từ chối.',
+            'Writing a state outside this list is rejected by the device.'
+          )}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/** Giá trị đề xuất cho state mới: lớn nhất + 1. Không lấp lỗ trống ở giữa —
+ *  `value` là danh tính, và tái dùng một số vừa bị xoá sẽ khiến mọi binding cũ
+ *  trỏ tới state mới mà không ai thấy. */
+function nextStateValue(states: VirtualPointState[]): number {
+  return states.reduce((max, state) => Math.max(max, state.value), -1) + 1
 }
 
 function defaultVirtualPoint(): VirtualPoint {
@@ -1143,8 +1223,28 @@ function signalTypePatch(item: VirtualPoint, signalType: VirtualPointSignalType)
      * đúng thao tác người dùng vừa làm, thay vì để form gửi lên rồi nhận 400
      * cho một trường họ không hề chạm vào ở lần sửa này. */
     minValue: numericSignalType(signalType) ? item.minValue : undefined,
-    maxValue: numericSignalType(signalType) ? item.maxValue : undefined
+    maxValue: numericSignalType(signalType) ? item.maxValue : undefined,
+    /* `ISS-PIO-17` — cùng lý do với hai dòng trên: `states` chỉ có nghĩa với
+     * `multistate`, và web-api coi việc khai nó ở kiểu khác là LỖI cấu hình chứ
+     * không phải dữ liệu thừa bị bỏ qua. Đổi SANG multistate thì gieo sẵn ví dụ
+     * §15 để form không khởi tạo ở một trạng thái chắc chắn bị từ chối. */
+    states: signalType === 'multistate' ? (item.states?.length ? item.states : defaultStates()) : undefined
   }
+}
+
+/** `ISS-PIO-17` — dọn danh sách state trước khi gửi: cắt khoảng trắng nhãn, bỏ
+ *  state không có nhãn, và sắp theo `value` giống hệt `normalizeVirtualPointStates`
+ *  phía web-api. KHÔNG đánh số lại — `value` là danh tính của state.
+ *
+ *  Danh sách rỗng sau khi dọn thì trả ví dụ §15 chứ không trả `[]`: web-api từ
+ *  chối multistate dưới hai state, và gửi `[]` chỉ đổi một form dở dang thành
+ *  một lỗi 400. */
+export function sanitizeStates(states?: VirtualPointState[]): VirtualPointState[] {
+  const cleaned = (states ?? [])
+    .map((state) => ({ value: Math.trunc(Number(state.value)), label: state.label.trim() }))
+    .filter((state) => Number.isInteger(state.value) && state.value >= 0 && state.label !== '')
+    .sort((a, b) => a.value - b.value)
+  return cleaned.length > 0 ? cleaned : defaultStates()
 }
 
 /** `ISS-PIO-15` — biên kỹ thuật chỉ có nghĩa với kiểu số; khớp
@@ -1177,22 +1277,46 @@ function findLivePoint(points: Point[], id: string): Point | undefined {
 }
 
 function canLog(signalType: VirtualPointSignalType): boolean {
-  return signalType === 'boolean' || signalType === 'integer' || signalType === 'float'
+  /* `ISS-PIO-17` — `multistate` ghi log được: dưới lớp nhãn nó là số nguyên rời
+   * rạc, và lịch sử chuyển chế độ là thứ cần nhất khi truy nguyên sự cố. Khớp
+   * `virtualPointLoggableSignalType` phía web-api. */
+  return signalType === 'boolean' || signalType === 'integer' || signalType === 'float' || signalType === 'multistate'
+}
+
+/** `ISS-PIO-17` — danh sách state MẶC ĐỊNH khi người dùng chuyển sang
+ *  `multistate`. Lấy đúng ví dụ của đề bài §15 để form khởi tạo ở một trạng thái
+ *  HỢP LỆ: web-api từ chối multistate có dưới hai state, nên một danh sách rỗng
+ *  sẽ bắt người dùng nhận 400 trước khi kịp làm gì. */
+function defaultStates(): VirtualPointState[] {
+  return [
+    { value: 0, label: 'Off' },
+    { value: 1, label: 'Auto' },
+    { value: 2, label: 'Manual' },
+    { value: 3, label: 'Emergency' }
+  ]
 }
 
 function defaultValue(signalType: VirtualPointSignalType): number | boolean | string {
   if (signalType === 'boolean') return false
-  if (signalType === 'integer' || signalType === 'float') return 0
+  if (signalType === 'integer' || signalType === 'float' || signalType === 'multistate') return 0
   if (signalType === 'datetime') return new Date().toISOString()
   return ''
 }
 
-function parseValue(signalType: VirtualPointSignalType, raw: string): number | boolean | string {
+export function parseValue(signalType: VirtualPointSignalType, raw: string): number | boolean | string {
   if (signalType === 'boolean') return raw === 'true' || raw === '1' || raw.toUpperCase() === 'ON'
   if (signalType === 'integer') {
     const value = Number(raw)
     if (!Number.isFinite(value)) throw new Error('Value must be an integer')
     return Math.trunc(value)
+  }
+  if (signalType === 'multistate') {
+    /* KHÔNG cắt phần thập phân: `Math.trunc(2.5)` cho 2 — một state có thật —
+     * nên cắt ở đây sẽ âm thầm biến `2.5` thành `Manual`. Web-api từ chối đúng
+     * như vậy; FE phải nói cùng một điều thay vì gửi lên một giá trị đã bị đổi. */
+    const value = Number(raw)
+    if (!Number.isInteger(value) || value < 0) throw new Error('State must be a non-negative integer')
+    return value
   }
   if (signalType === 'float') {
     const value = Number(raw)
@@ -1251,6 +1375,7 @@ function virtualSignalLabel(value: VirtualPointSignalType): string {
   if (value === 'integer') return 'Integer'
   if (value === 'float') return 'Float'
   if (value === 'datetime') return 'DateTime'
+  if (value === 'multistate') return 'Multistate'
   return 'String'
 }
 

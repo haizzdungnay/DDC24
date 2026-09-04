@@ -87,6 +87,12 @@ type ConfigVirtualPoints struct {
 	Items []VirtualPoint `json:"items"`
 }
 
+// VirtualPointState là một state của điểm `multistate` (`ISS-PIO-17`).
+type VirtualPointState struct {
+	Value int    `json:"value"`
+	Label string `json:"label"`
+}
+
 type VirtualPoint struct {
 	ID            string  `json:"id"`
 	Generation    uint64  `json:"generation"`
@@ -145,6 +151,15 @@ type VirtualPoint struct {
 	 * theo kiểu tín hiệu là câu trả lời; KHÔNG rơi về `Value`, vì `Value` chính
 	 * là thứ đã bị lệnh ghi làm bẩn. */
 	InitialValue any `json:"initialValue,omitempty"`
+	/* `ISS-PIO-17` — danh sách state của điểm `multistate` (đề bài §15).
+	 *
+	 * Chỉ có nghĩa khi `SignalType == "multistate"`; khai ở kiểu khác là lỗi
+	 * cấu hình chứ không phải dữ liệu thừa được bỏ qua — xem
+	 * `validateVirtualPointStates`.
+	 *
+	 * `Value` là DANH TÍNH của state, không phải vị trí trong mảng: xoá state
+	 * giữa danh sách không được làm các state còn lại đổi ý nghĩa. */
+	States []VirtualPointState `json:"states,omitempty"`
 	// BoundPointID nối VP này tới một slot AV/BV thật của Core ("AV-1".."AV-32",
 	// "BV-1".."BV-16"), rỗng = chỉ là overlay cấu hình như trước (F-PROG-ASBUILT-014).
 	// Khi đặt, giá trị VP được đồng bộ sang Core qua WebIpc mỗi lần ghi
@@ -486,6 +501,10 @@ type PointDTO struct {
 	Fault         bool   `json:"fault,omitempty"`
 	Forced        bool   `json:"forced,omitempty"`
 	SignalType    string `json:"signalType,omitempty"`
+	/* `ISS-PIO-17` — danh sách state của điểm `multistate`, chở nguyên vẹn lên
+	 * giao diện để HMI hiện "Auto" thay cho "1". Rỗng ở mọi kiểu khác. */
+	States      []VirtualPointState `json:"states,omitempty"`
+	StateLabel  string              `json:"stateLabel,omitempty"`
 	Writable      bool   `json:"writable,omitempty"`
 	LogEnabled    bool   `json:"logEnabled,omitempty"`
 	LogIntervalMs *int   `json:"logIntervalMs,omitempty"`

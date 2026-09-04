@@ -451,6 +451,13 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
+			/* `ISS-PIO-17` — ghi vào một state chưa khai cũng là lỗi của YÊU
+			 * CẦU, cùng lý do: client chọn lại một state có thật là xong. */
+			var stateErr virtualPointStateError
+			if errors.As(err, &stateErr) {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -643,6 +650,11 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 	 * TRƯỚC `item.Value = nextValue` để một lệnh bị từ chối không để lại dấu vết
 	 * nào trong cấu hình lẫn trong slot Core. */
 	if err := checkVirtualPointValueRange(item, nextValue); err != nil {
+		return PointDTO{}, err
+	}
+	/* `ISS-PIO-17` — cùng chỗ, cùng lý do: một state không có trong danh sách
+	 * khai báo không được để lại dấu vết nào trong cấu hình lẫn slot Core. */
+	if err := checkVirtualPointState(item, nextValue); err != nil {
 		return PointDTO{}, err
 	}
 	item.Value = nextValue

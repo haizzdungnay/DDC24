@@ -32,7 +32,7 @@ import { useValueFlash } from '../../shared/hooks/useValueFlash'
 import { useI18n } from '../../shared/i18n'
 import { useRealtime } from '../../shared/realtime'
 import type { Point, PointKind, PointQuality, VirtualPoint } from '../../shared/types'
-import { NO_DATA, canonicalVirtualPointId, cn, formatCountdown, formatDateTime, formatTime, formatValue, isChannelNotConfigured, isFreshIso, mergePointsById, pointDisplayTag, pointNumber, statusColor, statusFill } from '../../shared/utils'
+import { NO_DATA, canonicalVirtualPointId, cn, formatCountdown, formatDateTime, formatPointValue, formatTime, formatValue, isChannelNotConfigured, isFreshIso, mergePointsById, pointDisplayTag, pointNumber, statusColor, statusFill } from '../../shared/utils'
 
 const MAX_TREND_POINTS = 18
 const REALTIME_STALE_MS = 2500
@@ -778,7 +778,7 @@ export function MonitorPage() {
               <dt className="text-[var(--c-text-dim)]">{pick('Đối tượng', 'Object')}</dt>
               <dd className="font-semibold">{pointDisplayTag(selected)} — {selected.name}</dd>
               <dt className="text-[var(--c-text-dim)]">{pick('Giá trị hiện tại', 'Current value')}</dt>
-              <dd className="mono">{formatValue(selected.value, selected.unit)}</dd>
+              <dd className="mono">{formatPointValue(selected)}</dd>
               <dt className="text-[var(--c-text-dim)]">{pick('Nguồn đang giữ', 'Current owner')}</dt>
               <dd>{selected.priority ?? NO_DATA}</dd>
               <dt className="text-[var(--c-text-dim)]">{pick('Người thực hiện', 'Actor')}</dt>
@@ -1014,7 +1014,7 @@ function AnalogRow({ point, conflictIds, selected, onSelect, onOpenDetails, onFo
       <button type="button" onClick={() => onSelect(point.id)} onDoubleClick={() => onOpenDetails(point)} className="grid min-w-0 flex-1 grid-cols-[70px_minmax(150px,1fr)_70px_60px_120px_90px_84px_104px] items-center py-2 text-left transition hover:bg-[var(--c-accent-bg)]">
         <span className="mono font-semibold">{pointDisplayTag(point)}</span>
         <span className="truncate font-semibold">{point.name}{conflictIds?.length ? ' ⚠' : ''}</span>
-        <span className={cn('mono rounded px-1', flash)}>{notConfigured ? NO_DATA : typeof point.value === 'number' ? point.value.toFixed(1) : formatValue(point.value, point.unit)}</span>
+        <span className={cn('mono rounded px-1', flash)}>{notConfigured ? NO_DATA : point.signalType === 'multistate' || typeof point.value !== 'number' ? formatPointValue(point) : point.value.toFixed(1)}</span>
         {/* AO: số ở cột bên là tín hiệu ra thô của Core, nên nhãn phải là đơn vị
             tín hiệu thật (`rawUnit`: V hay mA theo MODE của kênh) chứ không
             phải "V" đóng cứng — kênh 4-20mA trước đây bị dán nhãn V
@@ -1465,7 +1465,7 @@ function PointDetailsModal({
 
           <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4">
             <div className="mono text-3xl font-bold text-[var(--c-accent)]" style={point.kind === 'DO' ? { color: binaryTextColor } : undefined}>
-              {formatValue(point.value, point.unit)}
+              {formatPointValue(point)}
             </div>
             <div className="mt-2 flex items-center justify-between gap-3">
               <StatusBadge
@@ -1482,7 +1482,7 @@ function PointDetailsModal({
           <PointInfo label="Tag" value={point.tag} />
           <PointInfo label="I/O group" value={groupText} />
           <PointInfo label="Signal type" value={point.sensorType ?? '-'} />
-          <PointInfo label="Current value" value={formatValue(point.value, point.unit)} />
+          <PointInfo label="Current value" value={formatPointValue(point)} />
           <PointInfo label="Unit" value={point.unit || '-'} />
           <PointInfo label="Quality" value={point.quality} />
           <PointInfo label="Source" value={point.source} />
@@ -1632,7 +1632,7 @@ function DetailPanel({
           </div>
           <PointNameConflictNotice pointId={point.id} conflictIds={conflictIds} />
           <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-4 text-center" style={valuePanelStyle}>
-            <div className="mono text-2xl font-bold text-[var(--c-accent)]" style={isBinary ? { color: binaryTextColor } : undefined}>{formatValue(point.value, point.unit)}</div>
+            <div className="mono text-2xl font-bold text-[var(--c-accent)]" style={isBinary ? { color: binaryTextColor } : undefined}>{formatPointValue(point)}</div>
             <div className="mt-1 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--c-text-dim)]" style={isBinary ? { color: binaryTextColor } : undefined}>
               {isEditingUnit ? (
                 <div className="flex items-center gap-1">
@@ -1693,7 +1693,7 @@ function DetailPanel({
             {!isBinary && (
               <>
                 <dt className="text-[var(--c-text-dim)]">{pick('Giá trị kỹ thuật', 'Engineering value')}</dt>
-                <dd className="mono font-semibold">{formatValue(point.value, point.unit)}</dd>
+                <dd className="mono font-semibold">{formatPointValue(point)}</dd>
               </>
             )}
             {point.raw !== undefined && (

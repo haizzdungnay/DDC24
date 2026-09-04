@@ -18,6 +18,8 @@ const (
 	virtualPointSignalFloat    = "float"
 	virtualPointSignalString   = "string"
 	virtualPointSignalDateTime = "datetime"
+	// `ISS-PIO-17` — điểm chế độ vận hành, cấp phát vào slot `MSV` của Core.
+	virtualPointSignalMultistate = "multistate"
 
 	virtualPointTotalCapacity  = 464
 	virtualPointNoLogCapacity  = 256
@@ -618,6 +620,9 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 		// `ISS-PIO-15` — biên kỹ thuật: kiểm ngay sau thang hiển thị để hai khái
 		// niệm nằm cạnh nhau trong mã, đúng như chúng nằm cạnh nhau trên màn hình.
 		validateVirtualPointLimits(item, base, &errs)
+		// `ISS-PIO-17` — danh sách state + giá trị khởi tạo phải là state có thật.
+		validateVirtualPointStates(item, base, &errs)
+		validateVirtualPointStateValues(item, base, &errs)
 		if item.RangeMultiplier < 0 || item.RangeMultiplier > 5 {
 			addConfigErr(&errs, base+".rangeMultiplier", "must be 0..5")
 		}
@@ -641,8 +646,8 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 		if item.BoundPointID != "" {
 			prefix, channel, ok := parsePointID(item.BoundPointID)
 			switch {
-			case !ok || (prefix != "AV" && prefix != "BV"):
-				addConfigErr(&errs, base+".boundPointId", "must be AV-1..AV-32 or BV-1..BV-16")
+			case !ok || (prefix != "AV" && prefix != "BV" && prefix != "MSV"):
+				addConfigErr(&errs, base+".boundPointId", fmt.Sprintf("must be AV-1..AV-%d, BV-1..BV-%d or MSV-1..MSV-%d", kxNAV, kxNBV, kxNMSV))
 			case prefix == "AV" && (channel < 1 || channel > kxNAV):
 				addConfigErr(&errs, base+".boundPointId", fmt.Sprintf("AV channel must be 1..%d", kxNAV))
 			case prefix == "BV" && (channel < 1 || channel > kxNBV):
@@ -651,6 +656,15 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 				addConfigErr(&errs, base+".boundPointId", "AV binding requires signalType integer or float")
 			case prefix == "BV" && item.SignalType != virtualPointSignalBoolean:
 				addConfigErr(&errs, base+".boundPointId", "BV binding requires signalType boolean")
+			case prefix == "MSV" && (channel < 1 || channel > kxNMSV):
+				addConfigErr(&errs, base+".boundPointId", fmt.Sprintf("MSV channel must be 1..%d", kxNMSV))
+			case prefix == "MSV" && !virtualPointMultistate(item.SignalType):
+				addConfigErr(&errs, base+".boundPointId", "MSV binding requires signalType multistate")
+			case virtualPointMultistate(item.SignalType) && prefix != "MSV":
+				// Chiều ngược lại cũng phải chặn: một điểm multistate nằm trong
+				// slot AV sẽ được Core đọc như một giá trị analog, và nhãn state
+				// biến mất không dấu vết.
+				addConfigErr(&errs, base+".boundPointId", "signalType multistate chỉ bind được vào slot MSV")
 			}
 		}
 		// `source` chỉ nhận hai giá trị. Một chuỗi lạ ở đây sẽ lặng lẽ rơi về
@@ -723,6 +737,7 @@ func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 	// `ISS-PIO-16` — `source` luôn về đúng một trong hai giá trị, để giao diện
 	// không phải tự đoán nghĩa của chuỗi rỗng.
 	item.Source = normalizeVirtualPointSource(item.Source)
+	item.States = normalizeVirtualPointStates(item.States)
 	item.Label = ""
 	item.Unit = normalizeVirtualPointUnit(item.Unit)
 	item.Note = strings.TrimSpace(item.Note)
@@ -848,7 +863,7 @@ func nextVirtualPointID(items []VirtualPoint) string {
 
 func validVirtualPointSignalType(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case virtualPointSignalBoolean, virtualPointSignalInteger, virtualPointSignalFloat, virtualPointSignalString, virtualPointSignalDateTime:
+	case virtualPointSignalBoolean, virtualPointSignalInteger, virtualPointSignalFloat, virtualPointSignalString, virtualPointSignalDateTime, virtualPointSignalMultistate:
 		return true
 	default:
 		return false
@@ -857,7 +872,10 @@ func validVirtualPointSignalType(value string) bool {
 
 func virtualPointLoggableSignalType(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case virtualPointSignalBoolean, virtualPointSignalInteger, virtualPointSignalFloat:
+		/* `multistate` ghi log được: dưới lớp nhãn nó là một số nguyên rời rạc,
+	 * và lịch sử chuyển chế độ chính là thứ người vận hành cần nhất khi truy
+	 * nguyên một sự cố. */
+	case virtualPointSignalBoolean, virtualPointSignalInteger, virtualPointSignalFloat, virtualPointSignalMultistate:
 		return true
 	default:
 		return false
@@ -924,6 +942,13 @@ func normalizeVirtualPointValue(signalType string, value any) (any, bool) {
 		if n, ok := virtualPointNumber(value); ok && n == float64(int64(n)) {
 			return int64(n), true
 		}
+	case virtualPointSignalMultistate:
+		/* State là số nguyên không âm. Việc số đó có nằm trong danh sách khai
+		 * báo hay không do `checkVirtualPointState` trả lời — hàm này không có
+		 * `item` nên không biết danh sách, và đoán ở đây sẽ là một luật thứ hai. */
+		if n, ok := virtualPointNumber(value); ok && n == float64(int64(n)) && n >= 0 {
+			return int64(n), true
+		}
 	case virtualPointSignalFloat:
 		if n, ok := virtualPointNumber(value); ok {
 			return n, true
@@ -987,6 +1012,9 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		virtualPointSignalBoolean: "bool", virtualPointSignalInteger: "int32",
 		virtualPointSignalFloat: "float32", virtualPointSignalString: "string",
 		virtualPointSignalDateTime: "datetime",
+		// `ISS-PIO-17`: MSV ra `uint32` — đúng phụ thuộc mà thân issue nêu
+		// (`ISS-PIO-06` cấp dataType từ cấu hình để MSV ra được UINT).
+		virtualPointSignalMultistate: "uint32",
 	}[item.SignalType]
 	defaultValue := defaultVirtualPointValue(item.SignalType)
 	dto := PointDTO{
@@ -1002,6 +1030,12 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		Priority:   "Virtual Point",
 		UpdatedAt:  item.UpdatedAt,
 		SignalType: item.SignalType,
+		/* `ISS-PIO-17` — nhãn do MÁY CHỦ tra, không phải FE tự đối chiếu: danh
+		 * sách state nằm ở cấu hình mà chỉ web-api đọc, và hai bản tra sẽ lệch
+		 * nhau ngay lần đầu ai đó sửa danh sách. Rỗng = giá trị hiện tại KHÔNG
+		 * thuộc danh sách, và khi đó FE hiện con số trần chứ không bịa nhãn. */
+		States:     item.States,
+		StateLabel: virtualPointStateLabel(item, value),
 		// `ISS-PIO-16` — cùng lý do với `readWrite` ở trên: giao diện đọc cờ này
 		// để bật/tắt nút Write, nên nó phải là khả năng ghi THẬT.
 		Writable:      virtualPointEffectiveWritable(item),
@@ -1032,6 +1066,8 @@ func defaultVirtualPointValue(signalType string) any {
 		return int64(0)
 	case virtualPointSignalString, virtualPointSignalDateTime:
 		return ""
+	case virtualPointSignalMultistate:
+		return int64(0)
 	default:
 		return float64(0)
 	}

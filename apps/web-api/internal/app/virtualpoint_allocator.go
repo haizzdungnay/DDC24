@@ -30,16 +30,16 @@ type vpSlotPool struct {
  * VP kiểu ấy vẫn là overlay cấu hình. Trả về "không cấp phát" là câu trả lời
  * ĐÚNG cho chúng, không phải một thiếu sót.
  *
- * `MSV` chưa có mặt ở đây vì chưa có `signalType` nào dẫn tới nó —
- * `multistate` là việc của #401 (`ISS-PIO-17`). Bảng này là chỗ #401 thêm đúng
- * một dòng; ghi sẵn một mục MSV không ai với tới được sẽ là quảng cáo một năng
- * lực không tồn tại. */
+ * `MSV` là dòng mà `ISS-PIO-17` thêm vào: từ nay `multistate` dẫn tới tám slot
+ * `msv[KX_N_MSV]` mà Core đã có sẵn nhưng trước đó không ai với tới được. */
 func vpPoolFor(signalType string) (vpSlotPool, bool) {
 	switch strings.ToLower(strings.TrimSpace(signalType)) {
 	case virtualPointSignalBoolean:
 		return vpSlotPool{Prefix: "BV", Capacity: kxNBV}, true
 	case virtualPointSignalInteger, virtualPointSignalFloat:
 		return vpSlotPool{Prefix: "AV", Capacity: kxNAV}, true
+	case virtualPointSignalMultistate:
+		return vpSlotPool{Prefix: "MSV", Capacity: kxNMSV}, true
 	}
 	return vpSlotPool{}, false
 }

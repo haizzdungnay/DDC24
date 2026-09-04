@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-17` Kiểu Multistate cho Virtual Point (#401, 2026-09-04)
+
+- **Triệu chứng.** `VirtualPointSignalType` chỉ có `boolean|integer|float|string|datetime`. Core có
+  sẵn `msv[KX_N_MSV]` (8 slot) và `SchedulePointKind` đã biết `'MSV'`, nhưng **không có đường nào
+  khai danh sách state/label** (`0 = Off · 1 = Auto · 2 = Manual · 3 = Emergency`) — nên tám slot đó
+  không ai với tới được từ sản phẩm và đề bài §15 không thực hiện được.
+- **Cách sửa.** Thêm `signalType: multistate` end-to-end: `states[]` trong cấu hình VP, luật hợp lệ,
+  cấp phát vào pool `MSV`, `dataType: uint32` (đúng phụ thuộc `ISS-PIO-06` mà thân issue nêu), và ô
+  biên tập danh sách state trên trang Virtual I/O.
+- **Danh sách state KHÔNG phải nhãn trang trí** — nó cưỡng chế ba thứ: lệnh ghi vào state chưa khai
+  bị **từ chối 400**; `value`/`initialValue` trong cấu hình phải là state có thật; và HMI hiện
+  `Auto (1)` thay cho `1`.
+- **Không kẹp về state gần nhất.** Giữa `Manual` và `Emergency` không có nửa đường, và kẹp im lặng
+  trả 200 cho một lệnh đã bị đổi nghĩa. Cùng lý do, `2.5` **không** bị cắt phần thập phân: `int64(2.5)`
+  cho `2` — một state thường có thật — nên cắt sẽ âm thầm biến một lệnh sai thành `Manual`. FE nói
+  cùng một điều ở `parseValue`.
+- **`value` là DANH TÍNH của state, không phải vị trí trong mảng.** Chuẩn hoá sắp danh sách theo giá
+  trị nhưng **không đánh số lại**: đánh số lại sẽ làm mọi binding và mọi lịch trình đang trỏ tới
+  state cũ âm thầm đổi nghĩa.
+- **Nhãn do MÁY CHỦ tra, không phải FE tự đối chiếu.** Danh sách state nằm ở cấu hình mà chỉ web-api
+  đọc; hai bản tra sẽ lệch nhau ngay lần đầu ai đó sửa danh sách. `stateLabel` rỗng = giá trị hiện
+  tại không thuộc danh sách ⇒ hiện con số trần, **không bịa nhãn**.
+- **Chưa cưỡng chế, nói rõ thay vì để người đọc tự đoán:** `state_text`/`number_of_states` của đối
+  tượng BACnet MSV vẫn là mặc định của `bacnet_objects.cpp`. Nhãn muốn tới đó phải đi qua một đường
+  cấu hình mà `iobus` hiện **không có** — `virtual_points.conf` do web-api đọc, không phải iobus —
+  nên đó là một mẩu việc riêng, không phải phần bỏ quên của mẩu này.
+
 ### Added — `ISS-PIO-10` Bộ lọc Access + Status ở tab Ánh xạ (#396, 2026-09-04)
 
 - **Triệu chứng.** `MappingToolbar` có tìm kiếm, Chương trình, Loại Point, Hướng, Thiết bị và Kiểu dữ

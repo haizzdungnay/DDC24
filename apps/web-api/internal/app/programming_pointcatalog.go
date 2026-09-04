@@ -480,6 +480,11 @@ func virtualSignalTypeToIEC(signalType string) string {
 		return "BOOL"
 	case virtualPointSignalInteger:
 		return "DINT"
+	case virtualPointSignalMultistate:
+		/* `ISS-PIO-17` — state là chỉ số rời rạc không âm, nên `UINT` chứ không
+		 * phải `DINT`: một biến chương trình nhận state âm là vô nghĩa, và
+		 * `REAL` sẽ mời người viết chương trình so sánh state bằng số thực. */
+		return "UINT"
 	}
 	return "REAL"
 }

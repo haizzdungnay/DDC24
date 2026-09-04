@@ -58,6 +58,12 @@ export interface Point {
   online?: boolean
   sensorType?: string
   signalType?: VirtualPointSignalType | string
+  /** `ISS-PIO-17` — danh sách state và NHÃN của giá trị hiện tại, do MÁY CHỦ
+   *  tra (danh sách nằm ở cấu hình mà chỉ web-api đọc). `stateLabel` rỗng nghĩa
+   *  là giá trị hiện tại KHÔNG thuộc danh sách — khi đó hiện con số trần, không
+   *  bịa nhãn. */
+  states?: VirtualPointState[]
+  stateLabel?: string
   writable?: boolean
   logEnabled?: boolean
   logIntervalMs?: number
@@ -1549,7 +1555,16 @@ export interface OutputsConfig {
 
 export type VirtualPointRestartPolicy = 'retain' | 'initial'
 
-export type VirtualPointSignalType = 'boolean' | 'integer' | 'float' | 'string' | 'datetime'
+export type VirtualPointSignalType = 'boolean' | 'integer' | 'float' | 'string' | 'datetime' | 'multistate'
+
+/** `ISS-PIO-17` — một state của điểm `multistate` (đề bài §15).
+ *
+ *  `value` là DANH TÍNH của state, không phải vị trí trong mảng: xoá một state
+ *  ở giữa danh sách không được làm các state còn lại đổi ý nghĩa. */
+export interface VirtualPointState {
+  value: number
+  label: string
+}
 
 /** `ISS-PIO-16` — hai chủ sở hữu hợp lệ của một slot điểm ảo. */
 export type VirtualPointSource = 'WEB' | 'PROGRAM'
@@ -1583,6 +1598,12 @@ export interface VirtualPoint {
    *  Chỉ có nghĩa với `signalType` `integer`/`float`. */
   minValue?: number
   maxValue?: number
+  /** `ISS-PIO-17` — danh sách state, CHỈ có nghĩa với `signalType: 'multistate'`.
+   *
+   *  Không phải nhãn trang trí: máy chủ TỪ CHỐI (400) lệnh ghi vào một state
+   *  không nằm trong danh sách này, và không kẹp về state gần nhất — giữa
+   *  `Manual` và `Emergency` không có nửa đường. */
+  states?: VirtualPointState[]
   rangeMultiplier?: number
   filterSamples?: number
   sensorCal?: number

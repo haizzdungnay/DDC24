@@ -152,6 +152,22 @@ function mergePointUpdate(current: Point, update: Point): Point {
 /** Ký hiệu "chưa có dữ liệu" dùng chung cho mọi chỗ hiển thị số đo. */
 export const NO_DATA = '—'
 
+/** `ISS-PIO-17` — hiện NHÃN state thay cho con số trần với điểm `multistate`.
+ *
+ *  Nhãn lấy từ `point.stateLabel` mà MÁY CHỦ đã tra, không phải FE tự đối chiếu
+ *  `point.states`: danh sách state nằm ở cấu hình mà chỉ web-api đọc, và hai bản
+ *  tra sẽ lệch nhau ngay lần đầu ai đó sửa danh sách.
+ *
+ *  Rỗng = giá trị hiện tại KHÔNG thuộc danh sách ⇒ hiện con số trần. Đó là câu
+ *  trả lời đúng: bịa một nhãn ở đây là nói dối về trạng thái thiết bị. */
+export function formatPointValue(point: Pick<Point, 'value' | 'unit' | 'signalType' | 'stateLabel'>): string {
+  if (point.signalType === 'multistate' && typeof point.value === 'number') {
+    const label = point.stateLabel?.trim()
+    return label ? `${label} (${point.value})` : String(point.value)
+  }
+  return formatValue(point.value, point.unit)
+}
+
 export function formatValue(value: Point['value'], unit?: string): string {
   // Chưa có số đo thì hiện `—`, không hiện `0` và cũng không hiện "undefined".
   if (value === undefined || value === null) return NO_DATA
