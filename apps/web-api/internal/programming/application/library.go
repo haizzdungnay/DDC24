@@ -781,17 +781,40 @@ func (s *LibraryService) Usage(ctx context.Context, command LibraryUsageCommand)
 		command.Scope != programmingstore.LibraryScopeProject {
 		return view, ErrInvalidRequest
 	}
-	/* Draft chưa Seal thì chưa có `pou_objects`, nên phạm vi Draft chưa đo được
-	   ở lát này (`T61-104` mở đường ấy). Một cursor Draft vì vậy không thể là
-	   thật — nhận nó im lặng sẽ hứa một trang không tồn tại. */
+	var draftAfter *programmingstore.LibraryUsageKey
 	if command.DraftCursor != "" {
-		return view, ErrInvalidCursor
+		cursor, err := s.decodeUsageCursor(command.DraftCursor)
+		if err != nil {
+			return view, err
+		}
+		if cursor.LibraryRevisionID != command.LibraryRevisionID || cursor.EntryID != command.EntryID {
+			return view, ErrInvalidCursor
+		}
+		draftAfter = &programmingstore.LibraryUsageKey{
+			ProjectName: cursor.ProjectName, RevisionID: cursor.RevisionID,
+			ObjectID: cursor.ObjectID, UsageKind: cursor.UsageKind,
+		}
 	}
 	if command.Scope == programmingstore.LibraryScopeSystem {
-		/* Entry SYSTEM: `library_usages` cố ý không giữ usage của chúng
-		   (migration `0007` — không tạo FK giả tới một row DB không có). Nói ra
-		   là "chưa đo được", KHÔNG trả 0. */
-		if command.SealedCursor != "" {
+		/*
+		   Entry SYSTEM vẫn `UNAVAILABLE`, và `T61-104` KHÔNG mở được nó — nên
+		   ghi ra đây vì sao, thay vì để người sau tưởng là chưa ai làm.
+
+		   Hai nguồn usage của sản phẩm đều không thấy entry SYSTEM:
+
+		     - `library_usages` cố ý không giữ chúng (migration `0007` — không
+		       tạo FK giả tới một row DB không tồn tại).
+		     - `objects[].dependencies` của Draft cũng không: `recordLibraryUsagesTx`
+		       đòi mọi dependency phải có hàng trong `library_entries` của PROJECT
+		       library revision, nên khai một entry SYSTEM ở đó là lỗi Seal.
+
+		   Một POU gọi `TON` dùng entry SYSTEM ấy qua SOURCE ST/FBD, không qua
+		   khai báo. Đo được nó đòi phân tích cây cú pháp — việc của compiler,
+		   không phải của store. Cho tới khi có đường ấy, câu trả lời đúng là
+		   "chưa đo được", KHÔNG phải `count: 0`: số 0 ở đây là một câu mời người
+		   ta gỡ một khối đang chạy trong mọi tủ.
+		*/
+		if command.SealedCursor != "" || command.DraftCursor != "" {
 			return view, ErrInvalidCursor
 		}
 		view.Availability = LibraryUsageUnavailable
@@ -813,6 +836,20 @@ func (s *LibraryService) Usage(ctx context.Context, command LibraryUsageCommand)
 		after = &programmingstore.LibraryUsageKey{
 			ProjectName: cursor.ProjectName, RevisionID: cursor.RevisionID,
 			ObjectID: cursor.ObjectID, UsageKind: cursor.UsageKind,
+		}
+	}
+
+	/* Kind của entry ĐANG HỎI, tra một lần rồi dùng cho mọi mục Draft. `CALL`
+	   với `INSTANCE` có hệ quả khác nhau khi đổi version — `INSTANCE` mang trạng
+	   thái — nên gán bừa một trong hai là nói sai về thứ người vận hành sắp
+	   quyết định. Entry không tra được thì để rỗng chứ không đoán. */
+	entryUsageKind := ""
+	if entry, entryErr := s.store.GetLibraryEntry(ctx, command.LibraryRevisionID, command.EntryID); entryErr == nil {
+		switch entry.Kind {
+		case programmingstore.LibraryKindFunctionBlock:
+			entryUsageKind = "INSTANCE"
+		case programmingstore.LibraryKindFunction, programmingstore.LibraryKindConversion:
+			entryUsageKind = "CALL"
 		}
 	}
 
@@ -852,9 +889,60 @@ func (s *LibraryService) Usage(ctx context.Context, command LibraryUsageCommand)
 		view.Sealed.NextCursor = &encoded
 	}
 
-	/* Nói `SEALED_ONLY` thay vì để `draft.count = 0` — số 0 ở đó sẽ đọc như
-	   "không Draft nào dùng khối này", một câu chưa ai kiểm chứng. */
-	view.Availability = LibraryUsageSealedOnly
+	/*
+	   `T61-104` — phạm vi Draft nay ĐO ĐƯỢC.
+
+	   Nguồn là `objects[].dependencies` của chính tài liệu Draft — cùng mảng mà
+	   đường Seal chuyển thành bản ghi `library_usages`. Đó là dữ liệu
+	   authoritative của máy chủ, không phải cache của giao diện.
+
+	   Một điều kiện: phải có `entryId`. Không có nó thì mọi POU khai bất kỳ
+	   dependency nào đều khớp, và danh sách trả về không trả lời câu hỏi nào —
+	   nên khi ấy phạm vi Draft vẫn là "chưa đo được", chứ không phải "không ai
+	   dùng".
+	*/
+	if command.EntryID == "" {
+		view.Availability = LibraryUsageSealedOnly
+		return view, nil
+	}
+	draftRows, err := s.store.ListDraftLibraryUsageRows(ctx, programmingstore.ListLibraryUsageParams{
+		EntryID: command.EntryID, Limit: libraryUsageMaxItems + 1, After: draftAfter,
+	})
+	if err != nil {
+		return LibraryUsageView{}, err
+	}
+	if len(draftRows) > libraryUsageMaxItems {
+		draftRows = draftRows[:libraryUsageMaxItems]
+		view.Draft.Truncated = true
+	}
+	for _, row := range draftRows {
+		view.Draft.Items = append(view.Draft.Items, LibraryUsageItem{
+			ProjectID: row.ProjectID, ProjectName: row.ProjectName,
+			RevisionID: row.RevisionID, ObjectID: row.ObjectID, ObjectName: row.ObjectName,
+			/* `usageKind` lấy từ chính entry đang hỏi, không suy từ POU gọi: tài
+			   liệu Draft không mang kind của khối được gọi, và `kind` của POU là
+			   loại của bên GỌI. `INSTANCE` mang trạng thái còn `CALL` thì không,
+			   nên đoán sai ở đây làm người đọc kết luận sai hệ quả khi đổi
+			   version. */
+			RequiredVersion: row.RequiredVersion, UsageKind: entryUsageKind, IsActive: row.IsActive,
+		})
+	}
+	view.Draft.Count = len(view.Draft.Items)
+	if view.Draft.Truncated {
+		last := view.Draft.Items[len(view.Draft.Items)-1]
+		encoded, err := s.encodeUsageCursor(libraryUsageCursor{
+			ProjectName: last.ProjectName, RevisionID: last.RevisionID,
+			ObjectID: last.ObjectID, UsageKind: last.UsageKind,
+			LibraryRevisionID: command.LibraryRevisionID, EntryID: command.EntryID,
+			ExpiresAtUTCMS: s.now().UTC().Add(15 * time.Minute).UnixMilli(),
+		})
+		if err != nil {
+			return LibraryUsageView{}, err
+		}
+		view.Draft.NextCursor = &encoded
+	}
+
+	view.Availability = LibraryUsageComplete
 	return view, nil
 }
 

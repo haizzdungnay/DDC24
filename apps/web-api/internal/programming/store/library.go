@@ -2070,6 +2070,174 @@ func (s *Store) LibraryCompatibilityFacts(ctx context.Context, projectID string)
 	return facts, rows.Err()
 }
 
+/*
+ListDraftLibraryUsageRows — Used-In trên các Draft ĐANG SỬA.
+
+Vì sao cần một đường riêng: `library_usages` chỉ được ghi trong transaction Seal
+Revision, nên nó chỉ biết những gì đã niêm phong. Draft chưa Seal thì chưa có
+`pou_objects`, và trước lát này phạm vi Draft phải tự khai `SEALED_ONLY` — tức
+"chưa đo được".
+
+Nguồn ở đây là `objects[].dependencies` của chính tài liệu Draft — CÙNG mảng mà
+đường Seal chuyển thành bản ghi `library_usages` (`application/draft.go`), nên
+đây là dữ liệu authoritative của máy chủ, không phải cache của giao diện.
+
+HAI GIỚI HẠN, ghi ra để người đọc sau không tưởng nhầm là đã phủ hết:
+
+ 1. Khớp theo `entryID` mà KHÔNG ràng buộc `libraryRevisionId`. Draft chỉ khai
+    `entryId` trong `dependencies`; version được service phân giải lúc Seal chứ
+    không nằm trong tài liệu. Trong một Project một `entryId` chỉ có một danh
+    tính, và `entryId` của PROJECT entry là UUID, nên nhầm lẫn chéo Project là
+    lý thuyết. Nhưng nó là một phép khớp LỎNG hơn nhánh sealed, và nói ra thì
+    tốt hơn để người sau tự phát hiện.
+ 2. Chỉ thấy entry PROJECT. Entry SYSTEM không bao giờ nằm trong
+    `dependencies`: `recordLibraryUsagesTx` đòi mọi dependency phải có hàng
+    trong `library_entries` của PROJECT library revision. Một POU gọi `TON`
+    dùng entry SYSTEM ấy qua SOURCE, không qua khai báo — nên đo usage SYSTEM
+    đòi phân tích ST/FBD, việc của compiler chứ không phải của store.
+
+Thứ tự và khoá keyset trùng nhánh sealed: `(projectName, revisionId, objectId,
+usageKind)`, với `revisionId` là `draftId` — Draft chưa có Revision, và `draftId`
+là định danh đúng để consumer mở lại đúng tài liệu.
+*/
+func (s *Store) ListDraftLibraryUsageRows(ctx context.Context, params ListLibraryUsageParams) ([]LibraryUsageRow, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("Programming store chưa mở")
+	}
+	if params.EntryID == "" {
+		// Không lọc entry thì mọi POU có bất kỳ dependency nào đều khớp, và
+		// danh sách trả về không trả lời câu hỏi nào. Yêu cầu entryId rõ ràng
+		// thay vì trả một danh sách trông như đã đo.
+		return nil, nil
+	}
+	limit := params.Limit
+	if limit < 1 || limit > 201 {
+		limit = 201
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT p.project_id,p.name,d.draft_id,d.content_json
+		FROM projects p JOIN drafts d ON d.project_id=p.project_id
+		WHERE p.archived=0 ORDER BY p.name,d.draft_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	usages := make([]LibraryUsageRow, 0, limit)
+	for rows.Next() {
+		var projectID, projectName, draftID string
+		var content []byte
+		if err := rows.Scan(&projectID, &projectName, &draftID, &content); err != nil {
+			return nil, err
+		}
+		objects, err := draftObjectsUsingEntry(content, params.EntryID)
+		if err != nil {
+			// Tài liệu Draft hỏng là sự cố dữ liệu, không phải "không có usage".
+			// Trả lỗi để lớp trên nói "chưa đo được" thay vì nói "không ai dùng".
+			return nil, fmt.Errorf("Draft %s của Project %s: %w", draftID, projectID, err)
+		}
+		for _, object := range objects {
+			usages = append(usages, LibraryUsageRow{
+				ProjectID: projectID, ProjectName: projectName,
+				RevisionID: draftID, ObjectID: object.objectID, ObjectName: object.name,
+				RequiredVersion: "", UsageKind: object.usageKind,
+				// Draft chưa Seal nên chưa thể là gói đang vận hành.
+				IsActive: false,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(usages, func(left, right int) bool {
+		return compareUsageRows(usages[left], usages[right]) < 0
+	})
+	if params.After != nil {
+		after := *params.After
+		filtered := usages[:0]
+		for _, row := range usages {
+			if compareUsageRows(row, LibraryUsageRow{ProjectName: after.ProjectName,
+				RevisionID: after.RevisionID, ObjectID: after.ObjectID, UsageKind: after.UsageKind}) > 0 {
+				filtered = append(filtered, row)
+			}
+		}
+		usages = filtered
+	}
+	if len(usages) > limit {
+		usages = usages[:limit]
+	}
+	return usages, nil
+}
+
+type draftUsageObject struct {
+	objectID  string
+	name      string
+	usageKind string
+}
+
+/*
+draftObjectsUsingEntry đọc `objects[]` của tài liệu Draft và trả về những POU
+khai `entryID` trong `dependencies`.
+
+DEDUPE theo cặp (Draft, POU) — `LOCK-PGM04-CONTRACT-001` §1.2: một mục là MỘT
+CẶP (Revision, POU), không phải một lần gọi. Một POU khai cùng một entry hai lần
+vẫn là một mục; câu người dùng hỏi là "chương trình nào đang dùng khối này",
+không phải "khối này bị nhắc bao nhiêu lần".
+
+`usageKind` suy từ `kind` của chính POU không được: nó là loại của POU GỌI, chứ
+không phải loại của khối ĐƯỢC GỌI. Tài liệu Draft không mang kind của entry, nên
+lớp trên điền giá trị này từ chính entry đang hỏi.
+*/
+func draftObjectsUsingEntry(content []byte, entryID string) ([]draftUsageObject, error) {
+	var document struct {
+		Objects []struct {
+			ObjectID     string   `json:"objectId"`
+			Name         string   `json:"name"`
+			Dependencies []string `json:"dependencies"`
+		} `json:"objects"`
+	}
+	if err := json.Unmarshal(content, &document); err != nil {
+		return nil, fmt.Errorf("tài liệu Draft hỏng: %w", err)
+	}
+	seen := make(map[string]struct{}, len(document.Objects))
+	found := make([]draftUsageObject, 0, 4)
+	for _, object := range document.Objects {
+		if object.ObjectID == "" {
+			continue
+		}
+		if _, duplicate := seen[object.ObjectID]; duplicate {
+			continue
+		}
+		for _, dependency := range object.Dependencies {
+			if dependency != entryID {
+				continue
+			}
+			seen[object.ObjectID] = struct{}{}
+			found = append(found, draftUsageObject{objectID: object.ObjectID, name: object.Name})
+			break
+		}
+	}
+	return found, nil
+}
+
+// compareUsageRows là thứ tự DUY NHẤT của Used-In, dùng chung cho nhánh sealed
+// (SQL `ORDER BY`) và nhánh Draft (sắp trong bộ nhớ). Hai nhánh sắp khác nhau thì
+// một cursor sinh ở nhánh này sẽ nhảy sai chỗ ở nhánh kia.
+func compareUsageRows(left, right LibraryUsageRow) int {
+	for _, pair := range [][2]string{
+		{left.ProjectName, right.ProjectName},
+		{left.RevisionID, right.RevisionID},
+		{left.ObjectID, right.ObjectID},
+		{left.UsageKind, right.UsageKind},
+	} {
+		if pair[0] != pair[1] {
+			if pair[0] < pair[1] {
+				return -1
+			}
+			return 1
+		}
+	}
+	return 0
+}
+
 // librarySQLNullIfEmpty biến chuỗi rỗng thành `NULL` để mệnh đề keyset tự tắt.
 // Dùng `?=''` như các câu khác sẽ sai ở đây: `revision_id` là UUID nên không bao
 // giờ rỗng, nhưng một tuple so sánh với chuỗi rỗng vẫn là một phép so THẬT, và

@@ -368,7 +368,7 @@ có contract machine-readable mới được `IMPLEMENT_READY=GO`.
 | `T61-101` | P0 | OpenAPI additive cho metadata/filter/compatibility/usage; stable errors và cursor tuple. | `T61-004/005` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-01`) | 1,5 nd |
 | `T61-102` | P0 | Mở registry schema/generator cho metadata SYSTEM; tách executable `contentSha256` khỏi `presentationSha256/catalogRevision`; versionHistory/hash mutation test. | `T61-101` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-02`) | 1,5 nd |
 | `T61-103` | P0 | Migration/store PROJECT metadata additive, backup/preflight/restart; không rewrite revision immutable. | `T61-101` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-03`) | 1,5 nd |
-| `T61-104` | P0 | Used-In application/store projection cho Draft + sealed scope đã chốt, cursor và summary available/unavailable. | `T61-101` | `DONE` | 2 nd |
+| `T61-104` | P0 | Used-In application/store projection cho Draft + sealed scope đã chốt, cursor và summary available/unavailable. | `T61-101` | `DONE` (đo lại `2026-09-04`, `ISS-PGM04-04`) | 2 nd |
 | `T61-105` | P0 | HTTP route/validation/RBAC/audit/error mapping; read route cho bốn role, mutation giữ `program.edit`. | `T61-103/104` | `DONE` | 1 nd |
 | `T61-106` | P1 | Sinh lại client TS/registry C++/Go/TS, contract-sync và G1 re-pin cùng change-set. | `T61-102/105` | `DONE` | 0,5 nd |
 | `T61-107` | P0 | Go/generator tests: hostile input, >100 cursor, filter mismatch, SYSTEM immutable, usage restart, migration fail-closed. | `T61-102..106` | `DONE` | 1 nd |
@@ -411,6 +411,28 @@ Bump `rev-a.3 → rev-a.4` kéo theo bốn thứ pin phải sinh lại **cùng c
 product profile (+ schema `const`), golden build manifest ST/FBD (`buildKeySha256`
 phụ thuộc `profile.sha256`), golden package `package_v2_ahu.mkpkg` (sinh bằng
 chính `mkddc-st-package-golden`), và ba chốt SHA (`pgm02`, `g1`, `openapi`).
+
+**Đính chính `T61-104` (`ISS-PGM04-04`, đo `2026-09-04`).** Phạm vi Draft của
+Used-In trước lát này luôn trả `SEALED_ONLY` — tức "chưa đo được" — và DDD ghi
+nguồn draft là "(FE, Project đang mở)", một nguồn KHÔNG authoritative. Nay server
+tự đo từ `objects[].dependencies` của tài liệu Draft: cùng mảng mà đường Seal
+chuyển thành bản ghi `library_usages`, nên đó là dữ liệu của máy chủ chứ không
+phải cache của giao diện. `availability` lên `COMPLETE` cho entry PROJECT.
+
+**Entry SYSTEM vẫn `UNAVAILABLE`, và đó là câu trả lời đúng chứ không phải việc
+chưa làm.** Cả hai nguồn usage của sản phẩm đều không thấy chúng:
+`library_usages` cố ý không giữ (migration `0007`), còn `objects[].dependencies`
+chỉ chứa entry PROJECT — `recordLibraryUsagesTx` đòi mọi dependency phải có hàng
+trong `library_entries` của PROJECT library revision. Một POU gọi `TON` dùng
+khối SYSTEM ấy qua SOURCE ST/FBD, không qua khai báo. Đo được nó đòi phân tích
+cây cú pháp, việc của compiler chứ không phải của store. **Cần gì để mở:** một
+đường trích dependency SYSTEM từ AST của compiler, hoặc ghi chúng vào một bảng
+usage riêng lúc Seal.
+
+Ghi thêm một bẫy tiêm lỗi: phép tiêm phải nhắm đúng CƠ CHẾ bảo vệ. Vòng đầu tiêm
+vào map khử trùng `objectId` nhưng vẫn xanh, vì thứ chặn "một POU khai cùng entry
+hai lần" là câu `break` chứ không phải map ấy. Hai lớp bảo vệ khác nhau cần hai
+phép đo khác nhau; gộp lại thì một lớp có thể chết mà không ai biết.
 
 **Đính chính `T61-103` (`ISS-PGM04-03`, đo `2026-09-04`).** Cột và đường ghi đã
 có từ `T61-101`, nhưng bằng chứng thì chưa: không test nào đo round-trip qua

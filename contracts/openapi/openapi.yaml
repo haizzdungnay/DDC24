@@ -2238,9 +2238,16 @@ paths:
         # độc lập không có lý do gì phải tiến cùng nhịp. Cursor được ký và mang
         # cả `libraryRevisionId`/`entryId`; lệch bộ lọc hoặc hết hạn là 400.
         #
-        # `draftCursor` được KHAI BÁO nhưng máy chủ còn từ chối mọi giá trị khác
-        # rỗng (400) cho tới khi `T61-104` mở đường đo phạm vi Draft. Nhận nó im
-        # lặng sẽ hứa một trang không tồn tại.
+        # `T61-104` — cả hai cursor nay đều hoạt động cho entry PROJECT.
+        #
+        # Phạm vi Draft đo từ `objects[].dependencies` của tài liệu Draft, và chỉ
+        # đo được khi request nêu `entryId`: không có nó thì mọi POU khai bất kỳ
+        # dependency nào đều khớp, nên `availability` hạ về `SEALED_ONLY` — nói
+        # "chưa đo được" đúng hơn nói "không ai dùng".
+        #
+        # Entry SYSTEM vẫn từ chối CẢ HAI cursor: usage của chúng chưa đo được
+        # (xem `availability`), và hứa một trang cho một phạm vi chưa đo được là
+        # hứa một thứ không tồn tại.
         - name: sealedCursor
           in: query
           schema: { type: string, maxLength: 1024 }
@@ -4311,9 +4318,13 @@ components:
         draft: { $ref: "#/components/schemas/ProgrammingLibraryUsageScope" }
         # COMPLETE: cả hai phạm vi đo được.
         # SEALED_ONLY: chỉ phần đã niêm phong đo được.
-        # UNAVAILABLE: không phạm vi nào đo được — entry SYSTEM rơi vào đây vì
-        #   usage của chúng phân giải từ registry/profile lock chứ không nằm
-        #   trong bảng `library_usages`.
+        # UNAVAILABLE: không phạm vi nào đo được — entry SYSTEM rơi vào đây.
+        #   `T61-104` KHÔNG mở được nó, và lý do đáng ghi: cả hai nguồn usage
+        #   của sản phẩm đều không thấy entry SYSTEM. `library_usages` cố ý
+        #   không giữ chúng (migration `0007`), còn `objects[].dependencies` của
+        #   Draft chỉ chứa entry PROJECT — một POU gọi `TON` dùng entry SYSTEM
+        #   ấy qua SOURCE, không qua khai báo. Đo được nó đòi phân tích cây cú
+        #   pháp ST/FBD, việc của compiler.
         availability: { type: string, enum: [COMPLETE, SEALED_ONLY, UNAVAILABLE] }
     ProgrammingLibraryUsageScope:
       type: object

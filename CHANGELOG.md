@@ -8,6 +8,42 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PGM04-04` Used-In đo được phạm vi Draft ở server (#449, 2026-09-04)
+
+- **Hiện trạng.** `LibraryService.Usage` luôn trả `SEALED_ONLY`, tức "phạm vi Draft chưa đo được", và
+  DDD ghi nguồn draft là *"(FE, Project đang mở)"* — một nguồn **không** authoritative. Danh sách
+  cắt ở 200 nhưng `draftCursor` bị từ chối mọi giá trị.
+- **Thay đổi.** Server tự đo Draft từ `objects[].dependencies` của tài liệu Draft — **cùng mảng** mà
+  đường Seal chuyển thành bản ghi `library_usages`, nên đây là dữ liệu của máy chủ chứ không phải
+  cache của giao diện. `availability` lên `COMPLETE` cho entry PROJECT; `draftCursor` hoạt động với
+  cùng keyset và cùng phép chống giả mạo như `sealedCursor`.
+- **Dedupe theo cặp (Revision, POU)** — `LOCK-PGM04-CONTRACT-001` §1.2: một mục là một **cặp**, không
+  phải một lần gọi. Hai lớp bảo vệ, mỗi lớp một kiểu trùng: `break` sau dependency khớp đầu tiên chặn
+  một POU khai cùng entry nhiều lần; map theo `objectId` chặn tài liệu có hai object trùng id.
+- **`usageKind` lấy từ entry đang hỏi**, không suy từ POU gọi: `kind` của POU là loại của bên **gọi**,
+  còn `INSTANCE` mang trạng thái và `CALL` thì không — đoán sai làm người đọc kết luận sai hệ quả khi
+  đổi version.
+- **Tài liệu Draft hỏng là lỗi, không phải danh sách rỗng.** Trả rỗng ở đó sẽ đọc thành "không chương
+  trình nào dùng khối này" — một câu mời người ta gỡ khối đang chạy.
+- **Kiểm chứng (HOST, cục bộ — repo chưa cấp CI runner, #414).** layout 17 PASS / 0 FAIL ·
+  ctest 1393/1393 · Go 21 gói ok · FE 217 tệp / 2619 test · 9 phép tiêm lỗi đều làm test đỏ.
+- Refs: `T61-104`, `ISS-PGM04-04`, `LOCK-PGM04-CONTRACT-001` §1.
+
+### Changed — `ISS-PGM04-04` entry SYSTEM giữ `UNAVAILABLE`, kèm lý do đo được (#449, 2026-09-04)
+
+- **Vì sao không mở được.** Cả hai nguồn usage đều không thấy entry SYSTEM: `library_usages` cố ý
+  không giữ chúng (migration `0007` — không tạo FK giả tới một row DB không tồn tại), còn
+  `objects[].dependencies` chỉ chứa entry PROJECT vì `recordLibraryUsagesTx` đòi mọi dependency phải
+  có hàng trong `library_entries` của PROJECT library revision.
+- **Nguyên nhân gốc.** Một POU gọi `TON` dùng khối SYSTEM ấy qua **SOURCE** ST/FBD, không qua khai
+  báo. Đo được nó đòi phân tích cây cú pháp — việc của compiler, không phải của store.
+- **Vì sao không trả `count: 0` cho xong.** Số 0 ở đây là một câu mời người ta gỡ một khối đang chạy
+  trong mọi tủ. `UNAVAILABLE` nói "chưa đo được", và đó là sự thật.
+- **Cần gì để mở.** Một đường trích dependency SYSTEM từ AST của compiler, hoặc ghi chúng vào một
+  bảng usage riêng lúc Seal. Ghi vào Plan61 để lần sau không phải dò lại.
+- Refs: `T61-104`, `ISS-PGM04-04`.
+
+
 ### Fixed — `ISS-PGM04-03` `presentationSha256` của hàng cũ không tái tạo được sau nâng cấp (#448, 2026-09-04)
 
 - **Triệu chứng.** Sau khi nâng cấp binary, mọi entry PROJECT ghi trước `T61-101` trả về một

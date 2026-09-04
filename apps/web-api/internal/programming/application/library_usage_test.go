@@ -60,12 +60,23 @@ func TestUsageRequiresLibraryRevisionID(t *testing.T) {
 	}
 }
 
-func TestProjectEntryUsageReportsSealedOnlyUntilDraftScopeExists(t *testing.T) {
-	// Store rỗng: không có usage nào. Điều đang kiểm KHÔNG phải con số, mà là
-	// việc phạm vi Draft tự khai là chưa đo được thay vì khai 0.
+/*
+`T61-104` đổi hạn chế cũ: phạm vi Draft nay ĐO ĐƯỢC, nên `SEALED_ONLY` không còn
+là câu trả lời mặc định.
+
+Nó vẫn là câu trả lời đúng ở đúng MỘT trường hợp — khi request không nêu
+`entryId`. Khi ấy mọi POU khai bất kỳ dependency nào đều khớp, và một danh sách
+như thế không trả lời câu hỏi nào; nói "chưa đo được" đúng hơn nói "không ai
+dùng".
+*/
+func TestProjectEntryUsageIsCompleteOnceDraftScopeIsMeasured(t *testing.T) {
 	store := openUsageStore(t)
 	service := &LibraryService{store: store}
-	view, err := service.Usage(context.Background(), LibraryUsageCommand{
+	ctx := context.Background()
+
+	// Store rỗng: đã đo cả hai phạm vi và thật sự không có usage nào. `count: 0`
+	// ở đây là một con số HỢP LỆ, khác hẳn `count: 0` khi chưa đo được.
+	measured, err := service.Usage(ctx, LibraryUsageCommand{
 		LibraryRevisionID: "11111111-1111-4111-8111-111111111111",
 		EntryID:           "SCALE_LIN",
 		Scope:             programmingstore.LibraryScopeProject,
@@ -73,11 +84,23 @@ func TestProjectEntryUsageReportsSealedOnlyUntilDraftScopeExists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Availability != LibraryUsageSealedOnly {
-		t.Fatalf("availability = %q; want SEALED_ONLY — phạm vi Draft chưa đo được", view.Availability)
+	if measured.Availability != LibraryUsageComplete {
+		t.Fatalf("availability = %q; want COMPLETE — cả hai phạm vi đã đo được", measured.Availability)
 	}
-	if view.Draft.Count != 0 || len(view.Draft.Items) != 0 {
-		t.Fatal("phạm vi Draft chưa giao mà đã trả dữ liệu")
+
+	// Không nêu `entryId`: phạm vi Draft không đo được, và phải NÓI RA.
+	unscoped, err := service.Usage(ctx, LibraryUsageCommand{
+		LibraryRevisionID: "11111111-1111-4111-8111-111111111111",
+		Scope:             programmingstore.LibraryScopeProject,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unscoped.Availability != LibraryUsageSealedOnly {
+		t.Fatalf("availability = %q; want SEALED_ONLY khi thiếu entryId", unscoped.Availability)
+	}
+	if unscoped.Draft.Count != 0 || len(unscoped.Draft.Items) != 0 {
+		t.Fatal("phạm vi chưa đo được mà đã trả dữ liệu")
 	}
 }
 
@@ -297,4 +320,162 @@ func flipCursorChar(value byte) byte {
 		return 'B'
 	}
 	return 'A'
+}
+
+/*
+`T61-104` — phạm vi Draft đo từ tài liệu Draft THẬT.
+
+Nguồn là `objects[].dependencies` — cùng mảng mà đường Seal chuyển thành bản ghi
+`library_usages`. Test dựng Draft qua ĐÚNG đường ghi của sản phẩm, không nhét
+JSON thẳng vào DB: một fixture chèn tay chỉ chứng minh hàm đọc được thứ chính nó
+vừa viết ra.
+*/
+func TestDraftUsageMeasuresRealDraftDocument(t *testing.T) {
+	library, projects, created := openLibraryServices(t)
+	ctx := context.Background()
+	actor := Actor{ID: testActorID, Role: "admin"}
+
+	entry := upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-000000000960")
+	entry.IfMatch = created.ETag
+	mutated, err := library.UpsertEntry(ctx, actor, entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectIDCounter := 0
+	projects.newID = func() string {
+		projectIDCounter++
+		return fmt.Sprintf("dddddddd-dddd-4ddd-8ddd-%012d", projectIDCounter)
+	}
+
+	// Ba POU: hai dùng entry, một không. POU thứ hai khai entry HAI LẦN — vẫn
+	// phải là MỘT mục (`LOCK-PGM04-CONTRACT-001` §1.2: một mục là một CẶP
+	// (Revision, POU), không phải một lần gọi).
+	operations := []json.RawMessage{}
+	for index, dependencies := range [][]string{
+		{libraryEntryA},
+		{libraryEntryA, libraryEntryA},
+		{},
+	} {
+		objectID := fmt.Sprintf("99999999-9999-4999-8999-%012d", index+1)
+		programID := fmt.Sprintf("88888888-8888-4888-8888-%012d", index+1)
+		name := fmt.Sprintf("AHU_%d", index+1)
+		operations = append(operations, op(map[string]any{"op": "upsertObject", "object": map[string]any{
+			"objectId": objectID, "kind": "PROGRAM", "name": name, "language": "ST",
+			"source":       "PROGRAM " + name + "\nVAR_OUTPUT Y : REAL; END_VAR\nY := SCALE_LIN(1.0);\nEND_PROGRAM\n",
+			"dependencies": dependencies,
+		}}), programOp(programID, objectID, 1000))
+	}
+	if _, err := saveOps(t, projects, libraryProjectID,
+		created.Resource["draftRevisionId"].(string), mutated.ETag,
+		"20000000-0000-4000-8000-000000000961", operations...); err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := library.Usage(ctx, LibraryUsageCommand{
+		LibraryRevisionID: mutated.Resource["libraryRevisionId"].(string),
+		EntryID:           libraryEntryA,
+		Scope:             programmingstore.LibraryScopeProject,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Availability != "COMPLETE" {
+		t.Fatalf("availability = %q; want COMPLETE", view.Availability)
+	}
+	if view.Draft.Count != 2 {
+		t.Fatalf("draft.count = %d; want 2 — POU thứ ba không dùng entry, và POU khai hai lần vẫn là MỘT mục: %+v",
+			view.Draft.Count, view.Draft.Items)
+	}
+	seen := map[string]bool{}
+	for _, item := range view.Draft.Items {
+		key := item.RevisionID + "/" + item.ObjectID
+		if seen[key] {
+			t.Fatalf("mục Draft lặp theo cặp (Revision, POU): %s", key)
+		}
+		seen[key] = true
+		// Deep link phải đủ ba mảnh để consumer mở đúng POU.
+		if item.ProjectID == "" || item.RevisionID == "" || item.ObjectID == "" {
+			t.Fatalf("mục Draft thiếu mảnh deep link: %+v", item)
+		}
+		if item.ObjectName == "" {
+			t.Fatalf("mục Draft không có tên POU — danh sách toàn UUID không trả lời được câu người dùng hỏi: %+v", item)
+		}
+		// `usageKind` là loại của khối ĐƯỢC GỌI, không phải của POU gọi.
+		// `SCALE_LIN` là FUNCTION nên phải là CALL.
+		if item.UsageKind != "CALL" {
+			t.Fatalf("usageKind = %q; SCALE_LIN là FUNCTION nên phải là CALL", item.UsageKind)
+		}
+		if item.IsActive {
+			t.Fatal("mục Draft không thể đang vận hành — Draft chưa Seal")
+		}
+	}
+}
+
+// Cursor Draft phải ràng buộc bộ lọc và chống giả mạo y như cursor sealed. Trước
+// `T61-104` mọi `draftCursor` đều bị từ chối, nên đường này chưa từng được đo.
+func TestDraftUsageCursorBindsFiltersAndRejectsTampering(t *testing.T) {
+	library, _, _ := openLibraryServices(t)
+	ctx := context.Background()
+	const libraryRevisionID = "11111111-1111-4111-8111-111111111111"
+
+	encoded, err := library.encodeUsageCursor(libraryUsageCursor{
+		ProjectName: "AHU tầng 1", RevisionID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+		ObjectID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1", UsageKind: "CALL",
+		LibraryRevisionID: libraryRevisionID, EntryID: libraryEntryA,
+		ExpiresAtUTCMS: library.now().UTC().Add(time.Minute).UnixMilli(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := library.Usage(ctx, LibraryUsageCommand{
+		LibraryRevisionID: libraryRevisionID, EntryID: libraryEntryA,
+		Scope: programmingstore.LibraryScopeProject, DraftCursor: encoded,
+	}); err != nil {
+		t.Fatalf("draftCursor hợp lệ bị từ chối: %v", err)
+	}
+	if _, err := library.Usage(ctx, LibraryUsageCommand{
+		LibraryRevisionID: libraryRevisionID, EntryID: libraryEntryB,
+		Scope: programmingstore.LibraryScopeProject, DraftCursor: encoded,
+	}); !errors.Is(err, ErrInvalidCursor) {
+		t.Fatalf("draftCursor lệch entryId phải bị từ chối, nhận %v", err)
+	}
+	tampered := encoded[:len(encoded)-1] + string(flipCursorChar(encoded[len(encoded)-1]))
+	if _, err := library.Usage(ctx, LibraryUsageCommand{
+		LibraryRevisionID: libraryRevisionID, EntryID: libraryEntryA,
+		Scope: programmingstore.LibraryScopeProject, DraftCursor: tampered,
+	}); !errors.Is(err, ErrInvalidCursor) {
+		t.Fatalf("draftCursor bị sửa phải bị từ chối, nhận %v", err)
+	}
+}
+
+// Entry SYSTEM vẫn `UNAVAILABLE`, và đó là câu trả lời ĐÚNG chứ không phải việc
+// chưa làm: cả `library_usages` lẫn `objects[].dependencies` đều không mang entry
+// SYSTEM, nên đo được nó đòi phân tích source ST/FBD.
+func TestSystemUsageStaysUnavailableWithBothCursorsRejected(t *testing.T) {
+	library, _, _ := openLibraryServices(t)
+	ctx := context.Background()
+	command := LibraryUsageCommand{
+		LibraryRevisionID: "PROGRAMMING-POU-LIBRARY-REGISTRY-V1:rev-a.4:deadbeef",
+		EntryID:           "TON",
+		Scope:             programmingstore.LibraryScopeSystem,
+	}
+	view, err := library.Usage(ctx, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Availability != "UNAVAILABLE" {
+		t.Fatalf("availability = %q; want UNAVAILABLE", view.Availability)
+	}
+	// Cả hai cursor đều phải bị từ chối: hứa một trang cho một phạm vi chưa đo
+	// được là hứa một thứ không tồn tại.
+	for name, mutate := range map[string]func(*LibraryUsageCommand){
+		"sealedCursor": func(c *LibraryUsageCommand) { c.SealedCursor = "bất-kỳ" },
+		"draftCursor":  func(c *LibraryUsageCommand) { c.DraftCursor = "bất-kỳ" },
+	} {
+		candidate := command
+		mutate(&candidate)
+		if _, err := library.Usage(ctx, candidate); !errors.Is(err, ErrInvalidCursor) {
+			t.Fatalf("%s trên entry SYSTEM phải bị từ chối, nhận %v", name, err)
+		}
+	}
 }

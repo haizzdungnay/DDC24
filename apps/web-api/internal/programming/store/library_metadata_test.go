@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -430,5 +431,155 @@ func assertSameMetadata(t *testing.T, before, after LibraryEntry, stage string) 
 	}
 	if string(before.PresentationSHA256) != string(after.PresentationSHA256) {
 		t.Fatalf("%s đổi presentationSha256", stage)
+	}
+}
+
+/*
+`T61-104` — keyset của phạm vi Draft.
+
+Nhánh Draft sắp trong BỘ NHỚ còn nhánh sealed sắp bằng SQL `ORDER BY`. Hai nhánh
+phải cho CÙNG một thứ tự, nếu không một cursor sinh ở nhánh này sẽ nhảy sai chỗ ở
+nhánh kia — và người dùng mất mục mà không có gì báo.
+
+Test đi qua nhiều Project để phủ luôn vế chéo Project: `ORDER BY` bắt đầu bằng
+tên Project, nên đó cũng là chỗ thứ tự dễ lệch nhất.
+*/
+func TestDraftUsageKeysetIsStableAcrossProjectsAndPages(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	const entryID = "66666666-6666-4666-8666-666666666661"
+
+	// Ba Project, tên cố ý KHÔNG theo thứ tự tạo, để phép sắp phải thật sự làm
+	// việc thay vì ăn may theo thứ tự chèn.
+	for index, name := range []string{"Toà C", "Toà A", "Toà B"} {
+		projectFixtureID := fmt.Sprintf("77777777-7777-4777-8777-%012d", index+1)
+		draftFixtureID := fmt.Sprintf("55555555-5555-4555-8555-%012d", index+1)
+		if _, err := store.db.ExecContext(ctx, `INSERT INTO projects(
+			project_id,name,description,archived,created_by,updated_by,created_at_utc_ms,updated_at_utc_ms)
+			VALUES(?,?,'',0,?,?,?,?)`, projectFixtureID, name, actorID, actorID,
+			fixedNow.UnixMilli(), fixedNow.UnixMilli()); err != nil {
+			t.Fatal(err)
+		}
+		content := fmt.Sprintf(`{"schemaVersion":2,"objects":[
+			{"objectId":"aaaaaaaa-aaaa-4aaa-8aaa-%012d","name":"POU_A","dependencies":["%s"]},
+			{"objectId":"bbbbbbbb-bbbb-4bbb-8bbb-%012d","name":"POU_B","dependencies":["%s"]}]}`,
+			index+1, entryID, index+1, entryID)
+		digest := sha256.Sum256([]byte(content))
+		if _, err := store.db.ExecContext(ctx, `INSERT INTO drafts(
+			draft_id,project_id,base_revision_id,etag,content_json,content_sha256,updated_by,updated_at_utc_ms)
+			VALUES(?,?,NULL,1,?,?,?,?)`, draftFixtureID, projectFixtureID, []byte(content), digest[:],
+			actorID, fixedNow.UnixMilli()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	all, err := store.ListDraftLibraryUsageRows(ctx, ListLibraryUsageParams{EntryID: entryID, Limit: 200})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 6 {
+		t.Fatalf("3 Project x 2 POU phải cho 6 mục, nhận %d", len(all))
+	}
+	// Thứ tự bắt đầu bằng TÊN Project, không phải thứ tự chèn.
+	if all[0].ProjectName != "Toà A" || all[len(all)-1].ProjectName != "Toà C" {
+		t.Fatalf("thứ tự không theo tên Project: %s … %s", all[0].ProjectName, all[len(all)-1].ProjectName)
+	}
+
+	// Phân trang hai mục một, ghép lại phải bằng đúng danh sách đầy đủ — không
+	// mất, không nhân đôi.
+	var paged []LibraryUsageRow
+	var after *LibraryUsageKey
+	for page := 0; page < 10; page++ {
+		batch, err := store.ListDraftLibraryUsageRows(ctx, ListLibraryUsageParams{
+			EntryID: entryID, Limit: 2, After: after,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(batch) == 0 {
+			break
+		}
+		paged = append(paged, batch...)
+		last := batch[len(batch)-1]
+		after = &LibraryUsageKey{ProjectName: last.ProjectName, RevisionID: last.RevisionID,
+			ObjectID: last.ObjectID, UsageKind: last.UsageKind}
+	}
+	if len(paged) != len(all) {
+		t.Fatalf("phân trang cho %d mục; danh sách đầy đủ có %d", len(paged), len(all))
+	}
+	for index := range paged {
+		if paged[index].ObjectID != all[index].ObjectID || paged[index].ProjectID != all[index].ProjectID {
+			t.Fatalf("vị trí %d lệch giữa phân trang và danh sách đầy đủ", index)
+		}
+	}
+}
+
+// Tài liệu Draft hỏng là SỰ CỐ DỮ LIỆU, không phải "không có usage". Trả danh
+// sách rỗng ở đây sẽ đọc thành "không chương trình nào dùng khối này" — một câu
+// mời người ta gỡ khối.
+func TestDraftUsageFailsClosedOnCorruptDraft(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO projects(
+		project_id,name,description,archived,created_by,updated_by,created_at_utc_ms,updated_at_utc_ms)
+		VALUES(?,'Toà hỏng','',0,?,?,?,?)`, "77777777-7777-4777-8777-000000000099", actorID, actorID,
+		fixedNow.UnixMilli(), fixedNow.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	broken := []byte(`{"objects": "không phải mảng"}`)
+	digest := sha256.Sum256(broken)
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO drafts(
+		draft_id,project_id,base_revision_id,etag,content_json,content_sha256,updated_by,updated_at_utc_ms)
+		VALUES(?,?,NULL,1,?,?,?,?)`, "55555555-5555-4555-8555-000000000099",
+		"77777777-7777-4777-8777-000000000099", broken, digest[:], actorID, fixedNow.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ListDraftLibraryUsageRows(ctx, ListLibraryUsageParams{
+		EntryID: "66666666-6666-4666-8666-666666666661", Limit: 200,
+	}); err == nil {
+		t.Fatal("tài liệu Draft hỏng phải là lỗi, không phải một danh sách rỗng")
+	}
+}
+
+// Dedupe theo cặp (Draft, POU) có HAI lớp, và mỗi lớp chặn một kiểu trùng khác
+// nhau — nên mỗi lớp cần một phép đo riêng:
+//
+//   - `break` sau dependency khớp đầu tiên: chặn một POU khai CÙNG entry nhiều
+//     lần. Đo ở `TestDraftUsageMeasuresRealDraftDocument` (lớp application).
+//   - map `seen` theo `objectId`: chặn tài liệu Draft có HAI object cùng
+//     `objectId`. Đường ghi không tạo ra hình dạng đó, nên chỉ dựng được ở đây.
+//
+// Bỏ một trong hai đều làm cùng một POU hiện hai lần trong Used-In, và người đọc
+// kết luận có hai chương trình đang dùng khối trong khi chỉ có một.
+func TestDraftUsageDeduplicatesRepeatedObjectID(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	const entryID = "66666666-6666-4666-8666-666666666661"
+	const objectID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO projects(
+		project_id,name,description,archived,created_by,updated_by,created_at_utc_ms,updated_at_utc_ms)
+		VALUES(?,'Toà trùng','',0,?,?,?,?)`, "77777777-7777-4777-8777-000000000077", actorID, actorID,
+		fixedNow.UnixMilli(), fixedNow.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte(fmt.Sprintf(`{"schemaVersion":2,"objects":[
+		{"objectId":"%s","name":"POU_A","dependencies":["%s"]},
+		{"objectId":"%s","name":"POU_A","dependencies":["%s"]}]}`,
+		objectID, entryID, objectID, entryID))
+	digest := sha256.Sum256(content)
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO drafts(
+		draft_id,project_id,base_revision_id,etag,content_json,content_sha256,updated_by,updated_at_utc_ms)
+		VALUES(?,?,NULL,1,?,?,?,?)`, "55555555-5555-4555-8555-000000000077",
+		"77777777-7777-4777-8777-000000000077", content, digest[:], actorID, fixedNow.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := store.ListDraftLibraryUsageRows(ctx, ListLibraryUsageParams{EntryID: entryID, Limit: 200})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("hai object cùng objectId phải gộp thành MỘT mục, nhận %d: %+v", len(rows), rows)
 	}
 }
