@@ -16,7 +16,7 @@ import { useApi } from '../../shared/hooks/useApi'
 import { useDirtyGuard } from '../../shared/hooks/useDirtyGuard'
 import { useI18n } from '../../shared/i18n'
 import { VirtualPointUsageNotice } from './VirtualPointUsageNotice'
-import type { Point, TrendSample, VirtualPoint, VirtualPointRestartPolicy, VirtualPointSignalType } from '../../shared/types'
+import type { Point, TrendSample, VirtualPoint, VirtualPointRestartPolicy, VirtualPointSignalType, VirtualPointSource } from '../../shared/types'
 import { cn, formatTime, formatValue, pointNumber } from '../../shared/utils'
 
 type ViewMode = 'summary' | 'wizard' | 'advanced'
@@ -636,13 +636,21 @@ function Summary({ item, livePoint, saving, onWrite }: { item: VirtualPoint; liv
       </div>
       <section className="space-y-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-4">
         <h3 className="text-sm font-semibold text-[var(--c-text)]">Write Value</h3>
-        {item.writable ? (
+        {virtualPointWritable(item) ? (
           <>
             <ValueInput signalType={item.signalType} value={draft} onChange={setDraft} />
             <Button variant="primary" icon={<Zap className="h-4 w-4" />} loading={saving} onClick={() => onWrite(draft)}>Write</Button>
           </>
         ) : (
-          <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">Read only</div>
+          /* `ISS-PIO-16` — nói VÌ SAO, không chỉ nói "Read only".
+           *
+           * Hai lý do khác nhau cần hai câu khác nhau và hai cách gỡ khác nhau:
+           * chưa bật `writable` thì sửa cấu hình điểm; do chương trình sở hữu
+           * thì phải đổi chủ sở hữu hoặc sửa chương trình. Một nhãn "Read only"
+           * chung cho cả hai trả lời đúng câu hỏi sai. */
+          <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
+            {virtualPointOwner(item) === 'PROGRAM' ? t('readOnlyBecauseProgram') : t('readOnlyBecauseNotWritable')}
+          </div>
         )}
       </section>
     </div>
@@ -713,6 +721,7 @@ function Advanced({ item, onChange }: { item: VirtualPoint; onChange: (patch: Pa
     { register: 'u2', label: t('displayMaxLabel'), control: <SmallNumberInput value={numberOr(item.displayMax, 100)} min={displayLow} max={displayHigh} onChange={(displayMax) => onChange({ displayMax })} /> },
     { register: 'EL-', label: t('minValueLabel'), control: <OptionalNumberInput value={item.minValue} disabled={!numericSignalType(item.signalType)} label={t('minValueLabel')} onChange={(minValue) => onChange({ minValue })} /> },
     { register: 'EL+', label: t('maxValueLabel'), control: <OptionalNumberInput value={item.maxValue} disabled={!numericSignalType(item.signalType)} label={t('maxValueLabel')} onChange={(maxValue) => onChange({ maxValue })} /> },
+    { register: 'OWN', label: t('ownerLabel'), control: <OwnerField item={item} onChange={onChange} /> },
     { register: 'u3', label: t('rangeMultiplierLabel'), control: <RangeMultiplierSelect value={numberOr(item.rangeMultiplier, 0)} onChange={(rangeMultiplier) => onChange({ rangeMultiplier })} /> },
     { register: 'u4', label: t('unitsLabel'), control: <UnitSelect value={unitFromString(item.unit)} onChange={(unit) => onChange({ unit: unitToString(unit) })} /> },
     { register: 'u5', label: t('filterSamplesLabel'), control: <SmallNumberInput value={numberOr(item.filterSamples, 3)} min={0} max={100} onChange={(filterSamples) => onChange({ filterSamples })} /> },
@@ -864,7 +873,8 @@ function VirtualPointOverviewModal({ open, items, livePoints, onEdit, onDelete, 
                   <td className="px-3 py-2 text-xs">
                     <span className={item.enabled ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-text-dim)]'}>{item.enabled ? 'EN' : 'OFF'}</span>
                     <span className="mx-1 text-[var(--c-text-dim)]">/</span>
-                    <span className={item.writable ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-text-dim)]'}>{item.writable ? 'WR' : 'RO'}</span>
+                    <span className={virtualPointWritable(item) ? 'text-[var(--c-good-fg)]' : 'text-[var(--c-text-dim)]'}>{virtualPointWritable(item) ? 'WR' : 'RO'}</span>
+                    {virtualPointOwner(item) === 'PROGRAM' && <span className="ml-1 rounded bg-[var(--c-surface-2)] px-1 text-[10px] font-semibold text-[var(--c-text-dim)]" title={t('ownerProgram')}>PGM</span>}
                   </td>
                   <td className="px-3 py-2 text-xs">{logLabel(item)}</td>
                   <td className="px-3 py-2 text-right">
@@ -955,6 +965,52 @@ export function OptionalNumberInput({ value, disabled, label, onChange }: { valu
       }}
     />
   )
+}
+
+/* `ISS-PIO-16` — ô chọn CHỦ SỞ HỮU giá trị của điểm ảo (F-PIO-017, đề bài §16).
+ *
+ * Backend tách đúng hai trục từ lâu — `writable` ("operator có được phép sửa
+ * không") và `source` ("AI GHI slot") — nhưng trục thứ hai chưa từng có mặt ở
+ * giao diện. Hậu quả: người kỹ sư thấy một VP chỉ đọc và không có bất kỳ manh
+ * mối nào vì sao, đúng khiếu nại của F-PIO-017.
+ *
+ * `PROGRAM` bị KHOÁ khi điểm chưa gắn slot Core: quyền sở hữu chỉ có nghĩa khi
+ * có một slot để sở hữu, và backend cũng từ chối đúng như vậy. Khoá kèm lời
+ * giải thích tốt hơn là để người dùng chọn rồi nhận 400 mà không hiểu. */
+export function OwnerField({ item, onChange }: { item: VirtualPoint; onChange: (patch: Partial<VirtualPoint>) => void }) {
+  const { t } = useI18n()
+  const owner = virtualPointOwner(item)
+  const canProgram = Boolean(item.boundPointId) || owner === 'PROGRAM'
+  return (
+    <div className="space-y-2">
+      <select
+        aria-label={t('ownerLabel')}
+        className={controlClass()}
+        value={owner}
+        onChange={(event) => onChange({ source: event.target.value as VirtualPointSource })}
+      >
+        <option value="WEB">{t('ownerWeb')}</option>
+        <option value="PROGRAM" disabled={!canProgram}>{t('ownerProgram')}</option>
+      </select>
+      <p className="text-xs text-[var(--c-text-dim)]">{t('ownerHint')}</p>
+      {!canProgram && <p className="text-xs text-[var(--c-warn-fg)]">{t('ownerNeedsBound')}</p>}
+    </div>
+  )
+}
+
+/** `ISS-PIO-16` — chủ sở hữu hiệu lực. Vắng mặt = `WEB`, khớp cách backend
+ *  chuẩn hoá; giao diện không được tự nghĩ ra nghĩa thứ ba cho chuỗi rỗng. */
+export function virtualPointOwner(item: Pick<VirtualPoint, 'source'>): VirtualPointSource {
+  return item.source === 'PROGRAM' ? 'PROGRAM' : 'WEB'
+}
+
+/** `ISS-PIO-16` — operator có THẬT SỰ ghi được điểm này không.
+ *
+ *  `writable` một mình không trả lời được: một VP `writable: true` do chương
+ *  trình sở hữu vẫn bị backend từ chối mọi lệnh ghi. Dựng nút Write theo cờ thô
+ *  là dựng một nút bấm vào không có gì xảy ra. */
+export function virtualPointWritable(item: Pick<VirtualPoint, 'source' | 'writable'>): boolean {
+  return Boolean(item.writable) && virtualPointOwner(item) !== 'PROGRAM'
 }
 
 function SmallNumberInput({ value, min, max, step = 1, disabled, onChange }: { value: number; min: number; max: number; step?: number; disabled?: boolean; onChange: (value: number) => void }) {
@@ -1051,6 +1107,10 @@ export function normalizeVirtualPoint(item: VirtualPoint): VirtualPoint {
     displayMin: clampNumber(numberOr(item.displayMin, 0), displayLow, displayHigh),
     displayMax: clampNumber(numberOr(item.displayMax, 100), displayLow, displayHigh),
     ...engineeringLimits(signalType, item.minValue, item.maxValue),
+    /* `ISS-PIO-16` — `PROGRAM` chỉ có nghĩa khi còn gắn slot Core; backend từ
+     * chối đúng như vậy. Rơi về `WEB` ở đây để form không gửi lên một tổ hợp
+     * chắc chắn bị 400. */
+    source: item.source === 'PROGRAM' && item.boundPointId ? 'PROGRAM' : 'WEB',
     rangeMultiplier: clampOption(numberOr(item.rangeMultiplier, 0), 0, 5),
     filterSamples: clampOption(numberOr(item.filterSamples, 3), 0, 100),
     sensorCal: clampNumber(numberOr(item.sensorCal, 0), -12.7, 12.8),

@@ -551,6 +551,13 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 		// ở dòng dưới, nên mọi phép kiểm "người dùng có gõ đúng không" phải đọc
 		// bản chưa bị làm sạch — xem chú thích `restartPolicy` phía dưới.
 		rawRestartPolicy := item.RestartPolicy
+		/* Cùng lý do với `rawRestartPolicy`: từ `ISS-PIO-16`,
+		 * `normalizeVirtualPoint` chuẩn hoá `source` về `WEB` cho mọi chuỗi lạ
+		 * để tệp cũ trên đĩa vẫn đọc được. Kiểm bản đã chuẩn hoá thì phép kiểm
+		 * "must be WEB or PROGRAM" bên dưới thành vô nghĩa, và người gõ nhầm
+		 * `PROGRM` sẽ nhận một điểm lặng lẽ do web-api sở hữu — tức web-api đè
+		 * lên chính chương trình mà họ định trao quyền. */
+		rawSource := item.Source
 		item = normalizeVirtualPoint(item)
 		if item.ID == "" {
 			addConfigErr(&errs, base+".id", "is required")
@@ -649,13 +656,11 @@ func validateConfigVirtualPoints(cfg ConfigVirtualPoints) []configValidationErro
 		// `source` chỉ nhận hai giá trị. Một chuỗi lạ ở đây sẽ lặng lẽ rơi về
 		// nhánh "web-api sở hữu" và ghi đè chương trình — nên nó phải là lỗi
 		// cấu hình, không phải một mặc định êm ái.
-		if item.Source != "" &&
-			!strings.EqualFold(item.Source, virtualPointSourceProgram) &&
-			!strings.EqualFold(item.Source, "WEB") {
+		if raw := strings.TrimSpace(rawSource); raw != "" && !validVirtualPointSource(raw) {
 			addConfigErr(&errs, base+".source", "must be WEB or PROGRAM")
 		}
 		// Sở hữu chỉ có nghĩa khi đã bind vào một slot Core.
-		if strings.EqualFold(item.Source, virtualPointSourceProgram) && item.BoundPointID == "" {
+		if virtualPointOwnedByProgram(item) && item.BoundPointID == "" {
 			addConfigErr(&errs, base+".source", "PROGRAM requires boundPointId")
 		}
 	}
@@ -715,6 +720,9 @@ func normalizeVirtualPoint(item VirtualPoint) VirtualPoint {
 	}
 	item.SignalType = strings.ToLower(strings.TrimSpace(item.SignalType))
 	item.RestartPolicy = normalizeVirtualPointRestartPolicy(item.RestartPolicy)
+	// `ISS-PIO-16` — `source` luôn về đúng một trong hai giá trị, để giao diện
+	// không phải tự đoán nghĩa của chuỗi rỗng.
+	item.Source = normalizeVirtualPointSource(item.Source)
 	item.Label = ""
 	item.Unit = normalizeVirtualPointUnit(item.Unit)
 	item.Note = strings.TrimSpace(item.Note)
@@ -964,8 +972,15 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		value = defaultVirtualPointValue(item.SignalType)
 	}
 	tag := fallbackPointTag(item.Tag, item.ID)
+	/* `ISS-PIO-16` — `readWrite` nói SỰ THẬT VẬN HÀNH, không chép lại cờ cấu hình.
+	 *
+	 * Một VP `writable: true` do chương trình ST sở hữu từ chối mọi lệnh ghi.
+	 * Báo `read_write` cho nó là sinh ra một nút "Write" bấm vào không có gì
+	 * xảy ra — đúng khiếu nại của F-PIO-017. Cờ `writable` trong CẤU HÌNH vẫn
+	 * giữ nguyên: đó là trục "operator có được phép sửa không", tách khỏi trục
+	 * "ai sở hữu slot". */
 	readWrite := "read"
-	if item.Writable {
+	if virtualPointEffectiveWritable(item) {
 		readWrite = "read_write"
 	}
 	dataType := map[string]string{
@@ -975,19 +990,21 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 	}[item.SignalType]
 	defaultValue := defaultVirtualPointValue(item.SignalType)
 	dto := PointDTO{
-		ID:            item.ID,
-		Channel:       item.Channel,
-		Tag:           tag,
-		Name:          tag,
-		Kind:          "virtual",
-		Value:         value,
-		Unit:          item.Unit,
-		Quality:       "good",
-		Source:        "virtual_point",
-		Priority:      "Virtual Point",
-		UpdatedAt:     item.UpdatedAt,
-		SignalType:    item.SignalType,
-		Writable:      item.Writable,
+		ID:         item.ID,
+		Channel:    item.Channel,
+		Tag:        tag,
+		Name:       tag,
+		Kind:       "virtual",
+		Value:      value,
+		Unit:       item.Unit,
+		Quality:    "good",
+		Source:     "virtual_point",
+		Priority:   "Virtual Point",
+		UpdatedAt:  item.UpdatedAt,
+		SignalType: item.SignalType,
+		// `ISS-PIO-16` — cùng lý do với `readWrite` ở trên: giao diện đọc cờ này
+		// để bật/tắt nút Write, nên nó phải là khả năng ghi THẬT.
+		Writable:      virtualPointEffectiveWritable(item),
 		LogEnabled:    item.LogEnabled,
 		LogIntervalMs: item.LogIntervalMs,
 		BoundPointID:  item.BoundPointID,

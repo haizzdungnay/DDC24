@@ -27,6 +27,13 @@ export interface Point {
   rawUnit?: string
   quality: PointQuality
   source: string
+  /** `ISS-PIO-16` — với điểm ảo, AI SỞ HỮU slot (`WEB` / `PROGRAM`).
+   *
+   *  Khác `source` ngay trên: `source` là nguồn của MẪU ĐO hiện tại, còn
+   *  `virtualSource` là chủ sở hữu đã cấu hình. Giao diện cần nó để giải thích
+   *  vì sao nút Write bị khoá; `writable` một mình chỉ nói "không được", không
+   *  nói "vì sao". Vắng mặt với mọi điểm không phải VP. */
+  virtualSource?: VirtualPointSource
   priority?: string
   /** `undefined` = producer KHÔNG cấp mốc thời gian.
    *
@@ -1448,6 +1455,9 @@ export type VirtualPointRestartPolicy = 'retain' | 'initial'
 
 export type VirtualPointSignalType = 'boolean' | 'integer' | 'float' | 'string' | 'datetime'
 
+/** `ISS-PIO-16` — hai chủ sở hữu hợp lệ của một slot điểm ảo. */
+export type VirtualPointSource = 'WEB' | 'PROGRAM'
+
 export interface VirtualPoint {
   id: string
   channel?: number
@@ -1485,6 +1495,20 @@ export interface VirtualPoint {
   updatedAt?: string
   namespaceState?: string
   generation?: number
+  /** `ISS-PIO-16` — AI SỞ HỮU slot của điểm ảo (F-PIO-017, đề bài §16).
+   *
+   *  Tách hẳn khỏi `writable`, và hai trục trả lời hai câu khác nhau:
+   *    `writable` — operator có được phép sửa giá trị từ dashboard không;
+   *    `source`   — ai GHI slot: web-api (`WEB`) hay chương trình ST (`PROGRAM`).
+   *
+   *  `PROGRAM` nghĩa là chương trình ghi slot này mỗi chu kỳ, nên web-api không
+   *  ghi vào và mọi lệnh ghi tay đều bị từ chối — kể cả khi `writable: true`.
+   *  Không phơi trục này ra là để người kỹ sư nhìn một điểm "chỉ đọc" mà không
+   *  có manh mối nào vì sao.
+   *
+   *  Backend luôn chuẩn hoá về `WEB`/`PROGRAM` khi đọc, nên giao diện không phải
+   *  đoán nghĩa của chuỗi rỗng. */
+  source?: VirtualPointSource
   /** `ISS-PIO-14` — giá trị điểm sau khi bộ điều khiển khởi động lại (đề bài §13).
    *
    *  `retain`  giữ giá trị cuối cùng (mặc định, và là hành vi cũ).

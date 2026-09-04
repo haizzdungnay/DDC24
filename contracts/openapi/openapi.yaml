@@ -183,9 +183,12 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409":
           description: >
-            Xung đột trạng thái thiết bị — điểm chỉ đọc, core từ chối lệnh, hoặc
-            đường ghi không hỗ trợ. KHÁC 400 ở chỗ client không sửa được bằng
-            cách gõ lại một con số khác.
+            Xung đột trạng thái thiết bị — điểm chỉ đọc, core từ chối lệnh,
+            đường ghi không hỗ trợ, hoặc (ISS-PIO-16) điểm ảo do chương trình ST
+            sở hữu (`source: PROGRAM`): chương trình ghi slot mỗi chu kỳ nên
+            web-api không ghi vào, và thông báo nêu rõ slot nào cùng cách lấy
+            lại quyền ghi. KHÁC 400 ở chỗ client không sửa được bằng cách gõ lại
+            một con số khác.
           content:
             application/json:
               schema:
@@ -4785,6 +4788,15 @@ components:
         unit: { type: string, example: "Â°C" }
         quality: { type: string, enum: [good, uncertain, bad, stale, offline, GOOD, STALE, OFFLINE, BAD] }
         source: { type: string, enum: [local_physical_io, virtual_point, modbus_rtu] }
+        virtualSource:
+          type: string
+          enum: [WEB, PROGRAM]
+          description: >
+            ISS-PIO-16 — với điểm ảo, AI SỞ HỮU slot. Khác `source` ngay trên:
+            `source` là nguồn của mẫu đo, `virtualSource` là chủ sở hữu đã cấu
+            hình. Giao diện cần nó để giải thích VÌ SAO nút ghi bị khoá —
+            `writable` một mình chỉ nói "không được", không nói "vì sao".
+            Vắng mặt với mọi điểm không phải VP.
         updatedAt: { type: string, format: date-time }
         sensorType: { type: string, example: "NTC10k" }
         raw: { type: number }
@@ -4793,7 +4805,14 @@ components:
         fault: { type: boolean }
         forced: { type: boolean }
         signalType: { type: string, enum: [boolean, integer, float, string, datetime] }
-        writable: { type: boolean, description: "Only writable=true VP may be written through PUT /points/{id}." }
+        writable:
+          type: boolean
+          description: >
+            Khả năng ghi THẬT SỰ, không phải cờ thô của cấu hình. Với VP, đây là
+            `writable` của cấu hình VÀ chủ sở hữu không phải `PROGRAM`:
+            ISS-PIO-16 — một VP `writable: true` do chương trình ST sở hữu từ
+            chối mọi lệnh ghi, nên báo `true` cho nó là sinh ra một nút bấm vào
+            không có gì xảy ra. Xem `virtualSource` để biết vì sao.
         logEnabled: { type: boolean }
         logIntervalMs: { type: integer, enum: [1000, 100, 10] }
         point_id: { type: string, description: "Canonical Point ID ổn định; alias tương thích của id." }
@@ -4903,6 +4922,30 @@ components:
         sensorCal: { type: number, minimum: -12.7, maximum: 12.8, default: 0, description: "EasySet-style u6 Sensor Calibration metadata." }
         mathFunction: { type: integer, minimum: 0, maximum: 3, default: 0, description: "EasySet-style u7 Math Function metadata." }
         note: { type: string }
+        boundPointId:
+          type: string
+          description: >
+            Slot Core mà điểm ảo chiếm (`AV-01`..`AV-32`, `BV-01`..`BV-16`).
+            Rỗng = chưa gắn; khi ấy VP vẫn dùng được như overlay cấu hình nhưng
+            không map được vào biến chương trình.
+        source:
+          type: string
+          enum: [WEB, PROGRAM]
+          default: WEB
+          description: >
+            ISS-PIO-16 (đề bài §16) — AI SỞ HỮU slot của điểm ảo. TÁCH HẲN khỏi
+            `writable`, và hai trường trả lời hai câu khác nhau:
+            `writable` = operator có được phép sửa giá trị không;
+            `source` = ai GHI slot.
+            `WEB` (mặc định, và là hành vi của mọi cấu hình đã có): web-api đồng
+            bộ giá trị cấu hình xuống Core.
+            `PROGRAM`: chương trình ST ghi slot này mỗi chu kỳ, web-api ngừng
+            đồng bộ, và MỌI lệnh ghi tay qua `PUT /points/{id}` bị từ chối với
+            409 — kể cả khi `writable: true`. Chỉ đặt được `PROGRAM` khi đã có
+            `boundPointId`: quyền sở hữu chỉ có nghĩa khi có một slot để sở hữu.
+            Giá trị lạ bị từ chối với 400 chứ không lặng lẽ hoá `WEB` — hoá
+            `WEB` là để web-api đè lên chính chương trình mà người dùng định
+            trao quyền.
     SystemStatus:
       type: object
       properties:

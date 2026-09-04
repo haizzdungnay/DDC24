@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-16` Phơi quyền sở hữu VP (WEB/PROGRAM) ra sản phẩm (#399, 2026-09-04)
+
+- **Bối cảnh.** Backend đã tách đúng **hai trục** từ lâu: `writable` (*operator có được phép sửa
+  không*) và `source` (*ai GHI slot* — web-api hay chương trình ST), kèm 12 dòng comment giải thích
+  cuộc giằng co im lặng nó ngăn.
+- **Triệu chứng.** Trục thứ hai **không tồn tại ở bề mặt sản phẩm**: `source` không có trong type
+  frontend, không có ô nào đặt, không nhãn nào hiện. Người kỹ sư thấy một VP "chỉ đọc" và **không có
+  bất kỳ manh mối nào vì sao**. Đề bài §16 xem đây là mục *"rất quan trọng"*.
+- **Nguyên nhân gốc, và nó nặng hơn "thiếu một ô nhập": MỘT LỆNH GHI IM LẶNG KHÔNG TÁC DỤNG.** Một
+  VP `source: PROGRAM` khai `writable: true` vẫn **nhận** lệnh ghi từ `PUT /points/{id}`. Lệnh đi
+  trọn: cấu hình được ghi, HTTP trả **200**. Nhưng `syncVirtualPointToCore` cố ý không đẩy xuống slot
+  do chương trình sở hữu, còn đường đọc thì overlay thẳng từ slot Core — nên **giá trị trên màn hình
+  không bao giờ đổi**. Người vận hành bấm "Write", thấy báo thành công, và thiết bị không nhúc nhích.
+  Không lỗi, không cảnh báo, không nhật ký.
+- **Cách sửa.**
+  - Lệnh ghi vào VP do chương trình sở hữu bị **từ chối với 409**, kèm câu nói rõ **slot nào** đang
+    thuộc về chương trình và **làm gì** để lấy lại quyền ghi.
+  - `readWrite`/`writable` trong `PointDTO` nói **sự thật vận hành**: một điểm mà mọi lệnh ghi đều bị
+    từ chối thì không phải `read_write`. Cờ `writable` trong **cấu hình** giữ nguyên — hai trục vẫn tách.
+  - `source` được chuẩn hoá về `WEB`/`PROGRAM` khi đọc, nên giao diện không phải đoán nghĩa chuỗi rỗng.
+- **409 chứ không 400.** Đây không phải lỗi của yêu cầu: client sửa con số hay sửa header đều không
+  giúp gì. Đó là xung đột trạng thái — điểm đang thuộc một chương trình đang chạy — nên câu trả lời
+  phải chỉ về phía đổi quyền sở hữu.
+- **Validator kiểm giá trị THÔ.** `normalizeVirtualPointSource` cố ý hiểu giá trị lạ thành `WEB` để
+  tệp cũ trên đĩa vẫn đọc được; nếu validator cũng kiểm bản đã chuẩn hoá thì người gõ nhầm `PROGRM`
+  sẽ nhận một điểm **lặng lẽ do web-api sở hữu** — tức web-api đè lên chính chương trình mà họ định
+  trao quyền. Đây đúng cái bẫy `ISS-PIO-14` đã dính một lần với `restartPolicy`; nay ghi rõ ở cả hai chỗ.
+- **Giao diện.** Ô "Chủ sở hữu giá trị" trong tab Nâng cao, kèm câu giải thích **khác gì "Writable"**
+  — vì đó chính là điều người dùng nhầm. `PROGRAM` bị khoá khi điểm chưa gắn slot Core (quyền sở hữu
+  chỉ có nghĩa khi có slot để sở hữu, và backend từ chối đúng như vậy), khoá **kèm lý do** thay vì để
+  người dùng chọn rồi nhận 400. Khối "Write Value" nay nói **vì sao** chỉ đọc bằng hai câu khác nhau
+  cho hai nguyên nhân khác nhau — nhãn "Read only" trần trụi trả lời đúng câu hỏi sai. Bảng danh sách
+  thêm nhãn `PGM` cho điểm do chương trình sở hữu.
+- **Hợp đồng.** `VirtualPoint.source` và `VirtualPoint.boundPointId` — **cả hai đều là trường backend
+  đã có mà OpenAPI chưa từng mô tả** — cùng `Point.virtualSource`, và 409 của `PUT /points/{id}` nay
+  nêu ca quyền sở hữu.
+
+**Kiểm chứng (đo lại thật, 2026-09-04).** layout **17 PASS / 0 FAIL** exit 0 · C++ configure/build
+exit 0, **0 warning**, `ctest` **1393/1393** · `go vet` sạch, **21 package `ok`** · FE **217 file /
+2619 test**, lint + build exit 0 · **9/9 phép tiêm lỗi ĐỎ** (4 Go: bỏ chặn ghi theo quyền sở hữu, DTO
+chép cờ writable thô, validator kiểm bản đã chuẩn hoá, không chuẩn hoá source khi đọc; 5 FE: nút
+Write theo cờ thô, quay lại nhãn "Read only" trần trụi, khả năng ghi bỏ qua chủ sở hữu, không khoá
+PROGRAM khi chưa gắn slot, chuẩn hoá giữ PROGRAM dù mất slot).
+
+**Bẫy đo ghi lại cho người sau.** `ctest --test-dir build/fw` chạy từ thư mục khác gốc repo trả
+`exit 1` với *"Failed to change working directory"* — lần này nó kêu, nhưng cùng lớp bẫy với
+`cmake -S .` sai cwd đã ghi ở `[ISS-PIO-14]`: **luôn dùng đường dẫn tuyệt đối** cho các cổng C++.
+
+
 ### Added — `ISS-PIO-15` Biên kỹ thuật min/max cho Virtual Point, chặn ghi ngoài dải (#398, 2026-09-04)
 
 - **Triệu chứng.** `displayMin`/`displayMax` là **thang hiển thị**, không phải biên kỹ thuật. Không

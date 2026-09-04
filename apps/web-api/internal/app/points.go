@@ -616,6 +616,16 @@ func (a *App) writeVirtualPointValue(r *http.Request, id string, value any, rele
 	if !item.Writable {
 		return PointDTO{}, fmt.Errorf("virtual point is read-only")
 	}
+	/* `ISS-PIO-16` — quyền sở hữu chặn TRƯỚC mọi thứ khác.
+	 *
+	 * Trước bản vá lệnh ghi vào VP `source: PROGRAM` đi trọn: cấu hình được ghi,
+	 * HTTP trả 200. Nhưng `syncVirtualPointToCore` cố ý không đẩy xuống slot do
+	 * chương trình sở hữu, còn đường đọc thì overlay thẳng từ slot Core — nên
+	 * giá trị trên màn hình không bao giờ đổi. Người vận hành bấm "Write", thấy
+	 * thành công, và thiết bị không nhúc nhích. */
+	if err := checkVirtualPointWriteOwnership(item); err != nil {
+		return PointDTO{}, err
+	}
 	nextValue, ok := normalizeVirtualPointValue(item.SignalType, value)
 	if !ok {
 		return PointDTO{}, fmt.Errorf("value must match signalType")
