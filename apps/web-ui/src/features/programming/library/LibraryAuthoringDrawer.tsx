@@ -35,12 +35,25 @@ export type LibraryEditorMode =
   | { kind: 'create' }
   | { kind: 'edit'; entry: ProgrammingLibraryEntry; savesNewVersion: boolean }
 
-const STEP_TITLES: Record<LibraryWizardStep, string> = {
-  metadata: 'Thông tin',
-  interface: 'Giao diện',
-  implementation: 'Hiện thực',
-  check: 'Kiểm tra',
-  review: 'Xem lại và lưu',
+/**
+ * `ISS-PGUI-02` — tên bước là CẶP vi/en, không phải một chuỗi tiếng Việt.
+ *
+ * Bảng cũ chỉ có tiếng Việt, nên thanh tiến trình của wizard in "Thông tin ·
+ * Giao diện · Hiện thực" giữa một giao diện English. Giữ cặp ngay tại nguồn
+ * (thay vì `pick` rải rác ở chỗ vẽ) để thêm một bước mới là buộc phải viết cả
+ * hai vế.
+ */
+const STEP_TITLES: Record<LibraryWizardStep, readonly [vi: string, en: string]> = {
+  metadata: ['Thông tin', 'Metadata'],
+  interface: ['Giao diện', 'Interface'],
+  implementation: ['Hiện thực', 'Implementation'],
+  check: ['Kiểm tra', 'Check'],
+  review: ['Xem lại và lưu', 'Review and save'],
+}
+
+function stepTitle(step: LibraryWizardStep, pick: (vi: string, en: string) => string): string {
+  const [vi, en] = STEP_TITLES[step]
+  return pick(vi, en)
 }
 
 /**
@@ -302,14 +315,14 @@ function AuthoringWizard({
                     : 'rounded px-2 py-1 text-[var(--c-text-dim)]'
                 }
               >
-                {index + 1}. {STEP_TITLES[item]}
+                {index + 1}. {stepTitle(item, pick)}
               </span>
             </li>
           ))}
         </ol>
 
         <h3 ref={headingRef} tabIndex={-1} className="text-base font-semibold">
-          {STEP_TITLES[step]}
+          {stepTitle(step, pick)}
         </h3>
 
         {existing && (

@@ -1027,6 +1027,26 @@ describe('PGM-04 wizard soạn thảo 5 bước (T61-401)', () => {
 
   /* A11y: mỗi bước là một màn mới. Không dời tiêu điểm thì người dùng bàn phím
      và trình đọc màn hình vẫn đứng ở nút vừa bấm, không biết màn đã đổi. */
+  /* `ISS-PGUI-02` — `STEP_TITLES` là bảng CHỈ tiếng Việt, nên thanh tiến trình
+     của wizard in "Thông tin · Giao diện · Hiện thực" giữa giao diện English.
+     Bảng nay là cặp vi/en, và thêm một bước mới buộc phải viết cả hai vế. */
+  it('ISS-PGUI-02: tên bước theo đúng ngôn ngữ đang chọn', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    stub([entry()])
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    fireEvent.click(screen.getByRole('button', { name: /New PROJECT block/ }))
+    const dialog = await screen.findByRole('dialog')
+
+    for (const title of ['Metadata', 'Interface', 'Implementation', 'Check', 'Review and save']) {
+      expect(within(dialog).getAllByText(new RegExp(title)).length).toBeGreaterThan(0)
+    }
+    for (const vietnamese of ['Thông tin', 'Giao diện', 'Hiện thực', 'Xem lại và lưu']) {
+      expect(within(dialog).queryByText(new RegExp(vietnamese))).not.toBeInTheDocument()
+    }
+    expect(within(dialog).getByRole('heading', { name: 'Metadata' })).toBeInTheDocument()
+  })
+
   it('mỗi lần đổi bước, tiêu điểm về tiêu đề của bước đó', async () => {
     stub([entry()])
     renderPage()

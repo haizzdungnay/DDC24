@@ -8,6 +8,54 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGUI-02` Loại bỏ giao diện trộn EN/VI và raw detail phụ thuộc ngôn ngữ (#472, 2026-09-05)
+
+- **Triệu chứng (production, `PC-005`/`PM-006`/`pm-006`/`pm-014`).** Chuyển giao diện sang English
+  vẫn thấy tiếng Việt ở ba nơi: Points & Mapping (`Điểm khả dụng`, `Tất cả`, `Chỉ đọc`, `Ghi được`,
+  `Ánh xạ đã gán`, `đang inspect`), Control Library (thẻ phạm vi hiện `Hệ thống`), và Dashboard
+  (Modbus RTU hiện `Chưa cấu hình thiết bị Modbus RTU`, Historian hiện `{n} điểm đang ghi`).
+- **Ba nguyên nhân gốc khác nhau, không phải một lỗi lặp lại ba lần.**
+  1. **Chữ ký ép chỗ gọi tự tính ngôn ngữ.** `scopeLabel(scope, english: boolean)` bắt mỗi chỗ gọi
+     truyền cờ vào, và **cả hai** chỗ gọi truyền hằng `false`. Chữ ký mới nhận `pick` — đúng thứ
+     `categoryLabel` ngay bên dưới đã nhận — nên không còn tham số nào để truyền hằng vào.
+  2. **Tầng thuần không có `pick`.** `mappingViewModel` dựng lý do không map được bằng chuỗi tiếng
+     Việt cứng. Nhét `pick` xuống tầng thuần sẽ làm mô hình dữ liệu phụ thuộc locale (cùng một hàng
+     Point cho hai giá trị khác nhau — không so sánh, không snapshot, không test được), nên lý do
+     tách thành **mã** (`mappingReasons.ts`) và **câu** (`mappingReasonText`). Câu NGUYÊN VĂN của
+     máy chủ (`ISS-PIO-32`) đi qua nhánh `server` và không bị mã hoá lại.
+  3. **Máy chủ viết câu thay client.** `apps/web-api/internal/app/overview.go` nối sẵn tiếng Việt
+     vào `detail`/`title`, và `DashboardPage` in thẳng ra — `domain.detail || healthReasonLabel(...)`
+     cho `detail` **thắng** cả nhãn đã dịch ngay bên cạnh. Máy chủ không biết người dùng đang xem
+     bằng ngôn ngữ nào; nó biết *cái gì* (`reasonCode`) và *bao nhiêu* (`detailCount`).
+- **Hợp đồng (OpenAPI `1.36.0` → `1.37.0`, chỉ THÊM trường tuỳ chọn).** `health[].detailCount`;
+  `attention[].titleCode`/`subject`/`detailCode`/`detailParams`. `detail`/`title` giữ nguyên hình
+  dạng cũ làm **diagnostic fallback** cho client đã phát hành. Không có operation mới (43 → 43), nên
+  client cũ chạy y nguyên: đây là thay đổi tương thích ngược, rollback chỉ cần quay lại bản trước.
+- **Ba loại nội dung, ba cách xử.** Mã đóng ⇒ dịch được, và **mã lạ ra câu trung tính KÈM mã**
+  (không nuốt, không in mã trần). Định danh (tên điểm, tên thiết bị, IPv4, `Bus`/`Slave`, `UI`/`UO`/
+  `DO`/`MB_RTU`, `REAL`/`BOOL`, `GOOD`) ⇒ **không dịch**: đó là thứ người dùng tra trong tủ và trong
+  API. Văn bản đục (thông điệp alarm của Core) ⇒ nguyên văn.
+- **Lỗi sản phẩm phát hiện thêm trong phạm vi và đã sửa.** `MappingVariableRow` không bao giờ nhận
+  `observedAt` từ Point đang gắn, nên cột "Cập nhật" của bảng Ánh xạ đã gán và ô "Observed" của
+  Inspector vẽ `—` **vĩnh viễn** — một ô chết trông y hệt "máy chủ không đọc được mốc thời gian".
+  Đây cũng là lý do phép tiêm `toLocaleString('vi-VN')` ban đầu ra GREEN: dòng ấy không chạy được.
+- **Kiểm chứng (HOST, 2026-09-05).** FE `npx vitest --run --environment jsdom src`: **231 file /
+  2932 test PASS** (đo lại sau khi merge `origin/main`); Go `go vet ./... && go test ./... -count=1`: **21 gói ok**; `npm run lint` +
+  `npm run build`: PASS (chunk `programming` 139.17 KiB gzip / ngân sách R3 165 KiB); C++
+  `ctest`: **1479/1479 PASS** (configure/build/ctest cùng exit 0, bật cả MODBUS/BACNET/HMI);
+  `./scripts/verify-project.sh --component layout`: PASS; `verify_programming_g1_contracts.py` +
+  `verify_programming_pgm02_contract.py`: PASS sau khi tính lại SHA.
+  **Fault injection 11/11 RED.** Hai lượt ban đầu ra GREEN và cả hai là lỗ hổng thật (lý do FE
+  chuyển ngược thành chuỗi cứng; `toLocaleString` viết cứng locale) — đã bổ sung test rồi mới RED.
+- **Cần làn A đổi giúp.** `entry.mapping.*.reasons` do `application/point_eligibility.go` dựng và
+  đang là tiếng Việt. Lane này KHÔNG chạm vào file đó: nó thuộc làn A. FE hiển thị chuỗi ấy nguyên
+  văn theo `ISS-PIO-32`, nên giao diện English vẫn còn đúng một nguồn tiếng Việt — cần làn A đổi
+  sang mã + tham số như `overview.go` đã làm.
+- **Chưa đo được.** Browser thật ở EN/VI, desktop + mobile, kèm ảnh Console/Network (#414: CI không
+  có runner). Toàn bộ số đo là **HOST**, không nâng thành TARGET/HIL/`RELEASE_READY`.
+
+Refs: `ISS-PGUI-02`, `PC-005`, `PM-006`, `pm-006`, `pm-014`, `ISS-PIO-32`.
+
 ### Fixed — Monitor I/O không hiển thị point Modbus RTU (2026-09-05)
 
 - **Triệu chứng:** chọn nguồn hoặc nhóm `Modbus RTU` trên `/monitor` làm các bảng

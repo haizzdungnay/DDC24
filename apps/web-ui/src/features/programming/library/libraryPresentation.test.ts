@@ -24,13 +24,30 @@ function usage(overrides: Partial<ProgrammingLibraryUsage> = {}): ProgrammingLib
   }
 }
 
+const pickVi = (vi: string, _en: string) => vi
+const pickEn = (_vi: string, en: string) => en
+
 describe('scopeLabel', () => {
   it('KHÔNG bao giờ gọi SYSTEM là "Core"', () => {
     // Sản phẩm đã có `mkddc-core`. Hai nghĩa cho một từ, đúng chỗ người trực ca
     // cần đọc nhanh, là một cái bẫy — không phải chuyện khẩu vị từ ngữ.
-    expect(scopeLabel('SYSTEM', false)).toBe('Hệ thống')
-    expect(scopeLabel('SYSTEM', true)).toBe('System')
-    expect(scopeLabel('SYSTEM', true).toLowerCase()).not.toContain('core')
+    expect(scopeLabel('SYSTEM', pickVi)).toBe('Hệ thống')
+    expect(scopeLabel('SYSTEM', pickEn)).toBe('System')
+    expect(scopeLabel('SYSTEM', pickEn).toLowerCase()).not.toContain('core')
+  })
+
+  /* `ISS-PGUI-02` — chữ ký cũ nhận cờ `english`, và cả hai chỗ gọi đều truyền
+     hằng `false`, nên thẻ khối in "Hệ thống" giữa giao diện English
+     (`PC-005`). Nhận thẳng `pick` làm cái sai ấy không viết ra được nữa. */
+  it('PROJECT cũng theo đúng ngôn ngữ đang chọn', () => {
+    expect(scopeLabel('PROJECT', pickVi)).toBe('Dự án')
+    expect(scopeLabel('PROJECT', pickEn)).toBe('Project')
+  })
+
+  it('vế EN không mang dấu tiếng Việt', () => {
+    for (const scope of ['SYSTEM', 'PROJECT'] as const) {
+      expect(scopeLabel(scope, pickEn)).not.toMatch(/[àáảãạăâđèéêìíòóôơùúưỳý]/i)
+    }
   })
 })
 

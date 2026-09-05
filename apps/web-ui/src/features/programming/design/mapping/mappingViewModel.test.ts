@@ -125,8 +125,10 @@ describe('mappingViewModel — Phase 1A truth model', () => {
     expect(rows.find((row) => row.category === 'VP')?.eligibility).toBe('SUPPORTED')
     expect(rows.find((row) => row.category === 'MB_RTU')?.eligibility).toBe('UNSUPPORTED_BY_CORE')
     // Lý do hiển thị phải là NGUYÊN VĂN của server, không phải câu FE tự đặt.
+    /* `ISS-PGUI-02` — câu của SERVER đi qua nhánh `server` và giữ NGUYÊN VĂN.
+       FE không mã hoá lại một câu nó không kiểm soát (`ISS-PIO-32`). */
     expect(rows.find((row) => row.category === 'MB_RTU')?.compatibilityReasons).toEqual([
-      'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU',
+      { kind: 'server', text: 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU' },
     ])
     expect(rows.find((row) => row.pointId === 'DO-02')?.eligibility).toBe('QUALITY_BLOCKED')
     expect(rows.find((row) => row.pointId === 'DO-03')?.eligibility).toBe('QUALITY_BLOCKED')
@@ -166,9 +168,9 @@ describe('mappingViewModel — Phase 1A truth model', () => {
 
     expect(rows[0].eligibility).toBe('SERVER_DECISION_MISSING')
     expect(rows[0].compatible).toBe(false)
-    expect(rows[0].compatibilityReasons).toEqual([
-      'Máy chủ chưa trả quyết định eligibility cho điểm này nên chưa map được',
-    ])
+    /* `ISS-PGUI-02` — lý do do CHÍNH FE kết luận là một MÃ, không phải câu
+       tiếng Việt: câu ấy sẽ hiện ra giữa giao diện English. */
+    expect(rows[0].compatibilityReasons).toEqual([{ kind: 'code', code: 'SERVER_DECISION_MISSING' }])
   })
 
   it('giữ snapshot chỉ để inspect khi poll lỗi và xếp suggestion deterministic', () => {
@@ -187,10 +189,54 @@ describe('mappingViewModel — Phase 1A truth model', () => {
     expect(rankPointRows(readyRows, { name: input.name, type: input.type, direction: 'INPUT' }).map((row) => row.pointId)).toEqual(['UI-01', 'UI-02'])
   })
 
+  /* `ISS-PGUI-02` — lý do FE tự kết luận phải là MÃ. Một chuỗi cứng lọt vào
+     đây (kể cả núp dưới nhánh `server`) sẽ mãi mãi là tiếng Việt trên mọi bề
+     mặt, vì tầng này không có `pick`. */
+  it('lý do do FE kết luận đi qua bảng mã, không phải câu chữ', () => {
+    const variable: ProgrammingVariable = {
+      variableId: 'var-input', programId: 'program-1', name: 'SupplyTemp', type: 'REAL', class: 'INPUT', initialValue: null, retain: false,
+    }
+    const boolPoint = point({
+      pointId: 'DO-01', name: 'Supply fan', dataType: 'BOOL', unit: undefined,
+      direction: 'WRITE', writable: true, value: true,
+      mapping: { input: decision('SUPPORTED'), output: decision('SUPPORTED') },
+    })
+
+    const rows = buildPointRows([boolPoint], { ...variable, direction: 'INPUT' }, { status: 'ready', lastSuccessAt: 100 })
+
+    expect(rows[0].compatibilityReasons).toContainEqual({ kind: 'code', code: 'TYPE_MISMATCH' })
+    expect(rows[0].compatibilityReasons.every((reason) => reason.kind === 'code')).toBe(true)
+  })
+
+  /* Mốc đọc của điểm đang gắn phải đi vào hàng biến. Thiếu nó, cột "Cập nhật"
+     và ô "Observed" vẽ `—` VĨNH VIỄN — một ô chết trông y hệt "máy chủ không
+     đọc được mốc thời gian". */
+  it('hàng biến mang mốc đọc của chính Point đang gắn', () => {
+    const document = baseDocument()
+    document.variables.push({ variableId: 'var-supply', programId: 'program-1', name: 'SupplyTemp', type: 'REAL', class: 'INPUT', initialValue: null, retain: false })
+    document.bindings.push({ bindingId: 'binding-supply', variableId: 'var-supply', point: { category: 'LOCAL', pointId: 'UI-01' }, direction: 'READ', dataType: 'REAL', unit: 'degC', writable: false, qualityPolicy: 'REQUIRE_GOOD' })
+
+    const rows = buildMappingVariableRows(document, [point()], { status: 'ready', lastSuccessAt: 100 })
+    expect(rows.find((row) => row.bindingId === 'binding-supply')?.observedAt).toBe('2026-08-24T09:00:00Z')
+  })
+
   it('không biến null thành zero nhưng giữ zero/false thật', () => {
-    expect(formatMappingValue(null)).toBe('—')
-    expect(formatMappingValue(undefined)).toBe('—')
-    expect(formatMappingValue(0)).toBe('0')
-    expect(formatMappingValue(false)).toBe('Tắt')
+    const vi = (v: string, _e: string) => v
+    expect(formatMappingValue(null, vi)).toBe('—')
+    expect(formatMappingValue(undefined, vi)).toBe('—')
+    expect(formatMappingValue(0, vi)).toBe('0')
+    expect(formatMappingValue(false, vi)).toBe('Tắt')
+  })
+
+  /* `ISS-PGUI-02` — BOOL từng in "Tắt"/"Bật" ở cả bốn bề mặt Mapping, kể cả
+     khi giao diện đang là English (`PM-006`). Số và chuỗi thì không dịch:
+     chúng là giá trị đo được. */
+  it('BOOL theo ngôn ngữ đang chọn; số và chuỗi giữ nguyên', () => {
+    const en = (_v: string, e: string) => e
+    expect(formatMappingValue(false, en)).toBe('Off')
+    expect(formatMappingValue(true, en)).toBe('On')
+    expect(formatMappingValue(21.5, en)).toBe('21.5')
+    expect(formatMappingValue('AUTO', en)).toBe('AUTO')
+    expect(formatMappingValue(Number.NaN, en)).toBe('—')
   })
 })

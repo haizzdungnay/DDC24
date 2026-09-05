@@ -17,7 +17,6 @@ import {
   HealthChip,
   QualityBadge,
   SeverityBadge,
-  healthReasonLabel
 } from '../../shared/components/pa3/StateAtoms'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useApi } from '../../shared/hooks/useApi'
@@ -32,6 +31,13 @@ import {
 import { useOverview } from '../../shared/overview/OverviewProvider'
 import { useRealtime } from '../../shared/realtime'
 import type { ActivityEvent, OverviewAttentionItem, OverviewDomainHealth, OverviewResponse, Point, TrendSample } from '../../shared/types'
+import {
+  attentionDetailText,
+  attentionTitleText,
+  healthDetailIsIdentifier,
+  healthDetailText,
+  healthReasonText,
+} from './overviewCopy'
 import {
   NO_DATA,
   cn,
@@ -134,7 +140,7 @@ function OverviewHeader({ overview, receivedAt, degradedFetch, onRefresh }: {
   degradedFetch: boolean
   onRefresh: () => void
 }) {
-  const { lang, pick } = useI18n()
+  const { pick } = useI18n()
   const [, setTick] = useState(0)
   // Tuổi dữ liệu phải TRÔI theo thời gian thật. Nếu chỉ render lại khi có
   // snapshot mới, mất mạng sẽ đóng băng chữ "1s" mãi mãi.
@@ -161,7 +167,9 @@ function OverviewHeader({ overview, receivedAt, degradedFetch, onRefresh }: {
             )}
           </div>
           <p className="mt-2 text-sm text-[var(--c-text-dim)]">
-            {healthReasonLabel(overview.overallReasonCode, lang)}
+            {/* `ISS-PGUI-02` — mã lạ ra câu trung tính KÈM mã, không in mã trần
+                 và cũng không im lặng. */}
+            {healthReasonText(overview.overallReasonCode, pick)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -299,7 +307,14 @@ function HealthStrip({ health, onOpen }: { health: OverviewDomainHealth[]; onOpe
               {link && <ChevronRight className="h-4 w-4 shrink-0 text-[var(--c-accent)]" aria-hidden="true" />}
             </div>
             <div className="mt-2"><HealthChip state={domain.state} /></div>
-            <div className="mt-2 text-xs text-[var(--c-text-dim)]">{domain.detail || healthReasonLabel(domain.reasonCode, lang)}</div>
+            {/* `ISS-PGUI-02` — câu dựng ở CLIENT từ `reasonCode` + `detailCount`.
+                 Bản trước là `domain.detail || nhãn`, nên một chuỗi tiếng Việt do
+                 máy chủ nối sẵn luôn THẮNG chính cái nhãn đã dịch ngay bên cạnh —
+                 đó là toàn bộ cơ chế của `pm-014`. `detail` nay chỉ in nguyên văn
+                 khi nó là một GIÁ TRỊ (địa chỉ IPv4 của ô `network`). */}
+            <div className="mt-2 text-xs text-[var(--c-text-dim)]">
+              {healthDetailIsIdentifier(domain) ? (domain.detail || '—') : healthDetailText(domain, pick)}
+            </div>
             {/* §5.1: mỗi ô phải nói ra nguồn và tuổi dữ liệu của chính nó. */}
             <div className="mono mt-1 text-[11px] text-[var(--c-text-dim)]">{domain.source} · {formatDataAge(domain.observedAt)}</div>
           </>
@@ -353,9 +368,13 @@ function AttentionRow({ item }: { item: OverviewAttentionItem }) {
       <div className="flex min-w-0 items-start gap-3">
         <SeverityBadge severity={item.severity} />
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{item.title}</div>
+          {/* `ISS-PGUI-02` — `title`/`detail` của máy chủ là DIAGNOSTIC FALLBACK.
+               Có `titleCode`/`detailCode` thì câu dựng ở đây theo locale; không có
+               mã thì đó là văn bản ĐỤC của authority thượng nguồn (thông điệp alarm
+               của Core) và được in nguyên văn. */}
+          <div className="truncate text-sm font-semibold">{attentionTitleText(item, pick)}</div>
           <div className="mt-0.5 text-xs text-[var(--c-text-dim)]">
-            {[item.detail, item.observedAt ? formatDateTime(item.observedAt) : null].filter(Boolean).join(' · ') || NO_DATA}
+            {[attentionDetailText(item, pick), item.observedAt ? formatDateTime(item.observedAt) : null].filter(Boolean).join(' · ') || NO_DATA}
           </div>
         </div>
       </div>

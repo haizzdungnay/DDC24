@@ -236,3 +236,90 @@ describe('ISS-PIO-04 — catalog chưa đủ thì bảng phải nói ra', () => 
     expect(screen.queryByText(/Catalog Point chưa tải đủ/)).not.toBeInTheDocument()
   })
 })
+
+
+/**
+ * `ISS-PGUI-02` — Points & Mapping không được trộn EN/VI (`PM-006`).
+ *
+ * Bốn bề mặt của Workbench từng viết cứng toàn bộ nhãn bằng tiếng Việt và
+ * `toLocaleString('vi-VN')`, nên `mkddc-lang=en` vẫn hiện "Điểm khả dụng",
+ * "Tất cả", "Chỉ đọc", "Ghi được", "Ánh xạ đã gán", "đang inspect".
+ */
+describe('ISS-PGUI-02 — Mapping Workbench theo đúng ngôn ngữ đang chọn', () => {
+  const VI_DIACRITICS = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i
+
+  /** Chuỗi CỦA MÁY CHỦ (`ISS-PIO-32`) hiển thị nguyên văn — không phải lỗi i18n. */
+  const SERVER_REASON = 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU'
+
+  function renderEn() {
+    localStorage.setItem('mkddc-lang', 'en')
+    return render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+  }
+
+  it('mọi tiêu đề và nhãn bộ lọc chuyển sang tiếng Anh', () => {
+    renderEn()
+    expect(screen.getByRole('heading', { name: 'Program Variables' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Available Points' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Assigned Mappings' })).toBeVisible()
+    expect(screen.getAllByRole('button', { name: 'All' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Writable').length).toBeGreaterThan(0)
+    // Fixture có một điểm chưa map được (`SERVER_DECISION_MISSING`): chip của
+    // nó phải nói TRẠNG THÁI bằng tiếng Anh, không phải "Chưa map được".
+    expect(screen.getAllByText('Cannot be mapped').length).toBeGreaterThan(0)
+  })
+
+  /* Định danh kỹ thuật KHÔNG được dịch: người dùng tra đúng những chuỗi này
+     trong tài liệu, trong cấu hình và trong API. */
+  it('định danh kỹ thuật giữ nguyên ở cả hai ngôn ngữ', () => {
+    renderEn()
+    for (const identifier of ['MB-014', 'MODBUS · VFD-01', 'CO 12 · FC05', 'GOOD', 'REAL', 'BOOL']) {
+      expect(screen.getAllByText(identifier).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('không còn chữ tiếng Việt nào ngoài chuỗi nguyên văn của máy chủ', () => {
+    const { container } = renderEn()
+    const remaining = (container.textContent ?? '').split(SERVER_REASON).join('')
+    expect(remaining).not.toMatch(VI_DIACRITICS)
+  })
+
+  /* `ISS-PGUI-02` — mốc đọc phải theo `locale` của `useI18n`, không phải hằng
+     `'vi-VN'`. Định dạng ngày của hai locale khác nhau hoàn toàn
+     (`24/8/2026` ≠ `8/24/2026`), nên một phép quét dấu tiếng Việt KHÔNG bắt
+     được lỗi này — phải khẳng định thẳng vào chuỗi. */
+  it('mốc đọc định dạng theo locale đang chọn', () => {
+    renderEn()
+    const en = new Date('2026-08-24T09:00:00Z').toLocaleString('en-US')
+    expect(screen.getAllByText(en).length).toBeGreaterThan(0)
+    expect(screen.queryByText(new Date('2026-08-24T09:00:00Z').toLocaleString('vi-VN'))).not.toBeInTheDocument()
+  })
+
+  /* Lý do do CHÍNH FE kết luận phải đi qua bảng mã. Đổi nó thành một chuỗi
+     tiếng Việt cứng (dù núp dưới nhánh `server`) sẽ hiện ra ở đây. */
+  it('lý do không tương thích nói tiếng Anh; câu của máy chủ giữ nguyên văn', () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    const document = documentFixture()
+    // Biến REAL gắn vào một Point BOOL ⇒ `TYPE_MISMATCH` do FE kết luận.
+    document.bindings = [{
+      bindingId: 'binding-mismatch', variableId: 'var-supply',
+      point: { category: 'LOCAL', pointId: 'DO-01' },
+      direction: 'READ', dataType: 'REAL', writable: false, qualityPolicy: 'REQUIRE_GOOD',
+    }]
+    const { container } = render(<I18nProvider><MappingTab document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
+
+    expect(screen.getAllByText(/Data type does not match/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Kiểu dữ liệu không khớp/)).not.toBeInTheDocument()
+    /* Câu của máy chủ (`ISS-PIO-32`) vẫn nguyên văn, kể cả khi là tiếng Việt.
+       Nó nằm trong `title`/`aria-label` của chip "chưa map được", nên đọc qua
+       `innerHTML` chứ không qua text node. */
+    expect(container.innerHTML).toContain(SERVER_REASON.slice(0, 30))
+  })
+
+  it('cùng fixture ở tiếng Việt vẫn ra tiếng Việt', () => {
+    localStorage.setItem('mkddc-lang', 'vi')
+    render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    expect(screen.getByRole('heading', { name: 'Điểm khả dụng' })).toBeVisible()
+    expect(screen.getAllByText('Ghi được').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Chưa map được').length).toBeGreaterThan(0)
+  })
+})
