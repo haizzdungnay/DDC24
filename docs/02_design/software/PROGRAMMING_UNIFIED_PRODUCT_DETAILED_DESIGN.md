@@ -302,7 +302,7 @@ Visual target:
 - [Programs + POU mobile](../../04_uiux/assets/programming/PGM-02_PROGRAMS_POU_MOBILE.svg)
 - [Control Library desktop](../../04_uiux/assets/programming/PGM-04_CONTROL_LIBRARY_DESKTOP.svg)
 - [Control Library mobile](../../04_uiux/assets/programming/PGM-04_CONTROL_LIBRARY_MOBILE.svg)
-- Commission/Runtime safety states reuse existing PGM-03/PGM-04 assets until FE
+- Commission/Runtime safety states reuse existing PGM-05/PGM-06 assets until FE
   route migration; field/action mapping in this section is normative.
 
 Keyboard: tree arrows, Enter open, Shift+F10 actions, Ctrl+S save, Ctrl+K palette,

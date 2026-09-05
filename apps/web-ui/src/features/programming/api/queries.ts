@@ -284,7 +284,7 @@ export function useLazyProgrammingLibraryCatalog(projectId: string | undefined):
 }
 
 /** `GET /checks/{checkId}` — dùng lại độc lập với `useCheckWorkflow` để
- * PGM-03 luôn đọc trạng thái mới nhất kể cả khi vào thẳng bằng navigation
+ * PGM-05 luôn đọc trạng thái mới nhất kể cả khi vào thẳng bằng navigation
  * state (không phải vừa chạy Check trong cùng phiên). */
 export function useProgrammingCheck(checkId: string | undefined): RemoteState<ProgrammingCheck> {
   const client = useProgrammingApiClient()
@@ -509,7 +509,7 @@ export function useProgrammingRecentAudit(limit = 5): RemoteState<ProgrammingAud
   return useProgrammingResource(load, 0)
 }
 
-/** `GET /audit` — bản đầy đủ cho tab "Phiên bản & Bảo trì" của PGM-04. */
+/** `GET /audit` — bản đầy đủ cho tab "Phiên bản & Bảo trì" của PGM-06. */
 export function useProgrammingAudit(limit = 50): RemoteState<ProgrammingAuditPage> {
   const client = useProgrammingApiClient()
   const load = useCallback(

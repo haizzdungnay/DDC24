@@ -35,7 +35,10 @@
     {
       "id": "PGM-03",
       "doc": "PGM-03_MAPPING_FE_HANDOFF.md",
-      "asset": "assets/PGM-03_mapping.png"
+      "asset": "../assets/programming/PGM-03_MAPPING_SIGNALS_DESKTOP.svg",
+      "assetAuthority": true,
+      "legacyAsset": "assets/PGM-03_mapping.png",
+      "legacyAssetAuthority": false
     },
     {
       "id": "PGM-04",

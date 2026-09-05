@@ -11,6 +11,15 @@
 
 ---
 
+
+> **Ghi chú authority ngày 2026-09-06:** Đây là biên bản lịch sử dùng IA bốn
+> workspace tại thời điểm lập. Các nhãn Check/Commission=PGM-03 và
+> Runtime/Bảo trì=PGM-04 bên dưới chỉ mô tả baseline cũ, đã **SUPERSEDED**.
+> Authority hiện hành là UX-WEB-PROG-001 §2:
+> PGM-03 Mapping, PGM-04 Control Library, PGM-05 Check/Commission,
+> PGM-06 Runtime. Không dùng số PGM lịch sử trong file này làm route hoặc
+> acceptance authority mới.
+
 ## 1. Tóm tắt điều hành
 
 **Cái đã có thật, chạy được, không phải khung sườn:**
@@ -299,4 +308,5 @@ Không câu hỏi nào ở trên tự chặn việc lập kế hoạch — chún
 
 | Revision | Ngày | Nội dung |
 |---|---|---|
+| 1.1 | 2026-09-06 | Thêm banner authority phân biệt số PGM lịch sử với IA sáu workspace hiện hành; không đổi kết luận As-Built tại baseline review. |
 | 1.0 | 2026-08-15 | Tạo báo cáo: đọc trực tiếp source FE (Overview, ST editor, FBD editor) + BE (Programming API) + FW-SOM (ST/FBD compiler, runtime), đối chiếu `UX-WEB-PROG-001`/`DDD-FE-PROG-001`, 10 gap tổng hợp (6 mới, 4 đã biết/bổ sung nguyên nhân), 6 câu hỏi cần PM/CTO/end-user quyết định |

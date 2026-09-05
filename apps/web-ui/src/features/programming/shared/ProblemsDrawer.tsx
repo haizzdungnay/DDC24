@@ -31,12 +31,12 @@ function staleCopy(
 }
 
 /**
- * `ProblemsDrawer` — khay Vấn đề của **PGM-03** (`Kiểm tra & Đưa vào vận hành`).
+ * `ProblemsDrawer` — khay Vấn đề của **PGM-05** (`Kiểm tra & Đưa vào vận hành`).
  * Diagnostic canonical đến từ `GET /checks/{checkId}`; đây chỉ hiển thị lại,
  * không tự tính lỗi. Nhiều lỗi không spam toast — luôn gom vào đây (UX §16.2).
  *
  * `ISS-STED-05` — docstring cũ viết *"dùng chung cho ba tab của PGM-02 và cho
- * PGM-03 (DDD-FE-PROG-001 §2)"* trong khi component này **chưa bao giờ** được
+ * PGM-05 (DDD-FE-PROG-001 §2)"* trong khi component này **chưa bao giờ** được
  * mount ở PGM-02: khay Vấn đề của PGM-02 là `ProgrammingWorkbench`
  * (`design/workbench/`), một component khác. Câu sai đó khiến người đọc tin
  * rằng PGM-02 đã có khay lỗi dùng chung, nên không ai đi tìm lý do POU ST

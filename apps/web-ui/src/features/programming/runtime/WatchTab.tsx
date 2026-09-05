@@ -27,7 +27,7 @@ type CategoryFilter = 'ALL' | ProgrammingPointCategory
 
 const CATEGORIES: ProgrammingPointCategory[] = ['LOCAL', 'VP', 'MB_RTU']
 
-/** PGM-04/UJ-PROG-07, T59-504 — monitor 1 Hz chỉ đọc và trace bounded. Mọi
+/** PGM-06/UJ-PROG-07, T59-504 — monitor 1 Hz chỉ đọc và trace bounded. Mọi
  * candidate, actual, quality, freshness, priority và TTL đều đến từ snapshot
  * Core/BE. `null`/giá trị không hợp lệ luôn hiển thị là chưa có dữ liệu, không
  * bị đổi thành 0. */

@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+### Changed — `ISS-PGM03-06` Đồng bộ authority PGM-03/05/06 và asset Mapping (#559, 2026-09-06)
+
+- Khóa IA sáu workspace theo `UX-WEB-PROG-001`: PGM-03 là Mapping, PGM-04 là
+  Control Library, PGM-05 là Check/Commission và PGM-06 là Runtime/Bảo trì;
+  sửa comment, tooltip, test name và trace matrix còn dùng
+  số PGM cũ, không thay đổi route hay hành vi runtime.
+- Chuyển handoff Mapping cũ sang trạng thái `SUPERSEDED` cho route/bố cục,
+  trỏ route Project-scoped và asset SVG chuẩn, đồng thời truy vết
+  `AC-PGM03-01..07` tới requirement/use case/test cùng gate `#554..#558`.
+- Đổi tên asset RETAIN theo PGM-06 và đánh dấu bốn review cũ là ảnh chụp IA lịch
+  sử, không còn authority cho route hoặc acceptance mới.
+- Kiểm chứng: JSON/SVG parse PASS; không còn Check/Commission mang nhãn PGM-03
+  hay Runtime mang nhãn PGM-04 trong source hiện hành; docs ISO harness,
+  `git diff --check`, FE mục tiêu **9 tệp / 146 test**, lint và production build
+  PASS. Browser local xác nhận rail sáu workspace; backend `:8081` không chạy
+  nên route Project giữ fail-closed với 502, không được tính là runtime evidence.
+
 ### Added — Bằng chứng compiler ST ARM64 trên Foxlinx cho `ISS-STED-21` (#414, 2026-09-06)
 
 - Cross-build `mkddc-st-compile` từ `main@ad8c322e` bằng toolchain

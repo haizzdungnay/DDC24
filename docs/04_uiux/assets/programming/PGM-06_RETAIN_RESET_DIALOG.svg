@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1120" viewBox="0 0 1440 1120" font-family="Inter, Segoe UI, Roboto, Helvetica, Arial, 'DejaVu Sans', sans-serif">
-  <title>PGM-04 hộp thoại Đặt lại trạng thái lưu RETAIN — trạng thái đang mở, đang gửi và bị khóa</title>
+  <title>PGM-06 hộp thoại Đặt lại trạng thái lưu RETAIN — trạng thái đang mở, đang gửi và bị khóa</title>
   <desc>Ba artboard đặc tả RetainResetDialog: xác nhận mạnh kèm xác thực lại khi đang mở, trạng thái đang gửi không có kết quả lạc quan, và trạng thái bị khóa khi Core không đọc được. Dữ liệu là minh họa, không phải dữ liệu runtime.</desc>
 
   <rect width="1440" height="1120" fill="#C8CCD0"/>
@@ -9,7 +9,7 @@
   <g transform="translate(0,36)">
     <rect x="0" y="0" width="1440" height="600" fill="#C8CCD0" stroke="#636970"/>
 
-    <!-- Nền: PGM-04 tab Phiên bản & Bảo trì, vùng nguy hiểm -->
+    <!-- Nền: PGM-06 tab Phiên bản & Bảo trì, vùng nguy hiểm -->
     <rect x="0" y="0" width="232" height="600" fill="#D8DBDE"/>
     <line x1="232" y1="0" x2="232" y2="600" stroke="#636970"/>
     <text x="20" y="34" font-size="15" font-weight="700" fill="#1C1F23">MK-DDC-24</text>

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-FE-PROG-001` |
-| Phiên bản | 1.6-candidate (baseline hiệu lực: 1.5) |
+| Phiên bản | 1.7 (baseline PGM-02 hiệu lực: 1.5; Target candidate giữ nguyên) |
 | Trạng thái | **M3 AS-BUILT baseline + PGM-02 v2.2 TARGET CANDIDATE; Architect exact pin PENDING, code R1/R2/R3 NO-GO** |
-| Ngày | 2026-08-24 |
+| Ngày | 2026-09-06 |
 | Chủ quản | Frontend Lead |
 | Người review | UX Lead, Backend Lead, Verification Lead |
 | Người phê duyệt | Frontend Lead + System Architect |
@@ -47,12 +47,12 @@ features/programming/
 ├── layout/                        ProgrammingLayout, Header, ContextBar
 ├── overview/                      PGM-01                     UJ-PROG-01
 ├── design/                        container chung cho hai route authoring
-│   ├── editor/                    PGM-02 Chương trình/POU      UJ-PROG-02
-│   ├── mapping/                   PGM-03 Điểm/Signal           UJ-PROG-03
+│   ├── editor/                    PGM-02 Chương trình/POU      UJ-PROG-02/03
+│   ├── mapping/                   PGM-03 Điểm/Signal           UJ-PROG-05
 │   ├── task/                      tab tương thích cũ
 │   └── problems/                  khay dùng chung
 ├── library/                       PGM-04 Control Library       UJ-PROG-04
-├── commission/                    PGM-05 Check + Commission    UJ-PROG-05/06
+├── commission/                    PGM-05 Check + Commission    UJ-PROG-06
 └── runtime/                       PGM-06 ba tab
     ├── monitor/                   Runtime, Theo dõi           UJ-PROG-07
     └── service/                   Phiên bản & Bảo trì + DangerZone  UJ-PROG-08
@@ -73,10 +73,10 @@ Ba ràng buộc kỹ thuật của IA hiện hành:
 | Route | Component | Journey |
 |---|---|---|
 | `/eng/programming` | `OverviewPage` | `UJ-PROG-01` |
-| `/eng/programming/projects/:projectId/programs` | `DesignWorkspacePage route="programs"` | `UJ-PROG-02` |
-| `/eng/programming/projects/:projectId/mapping` | `DesignWorkspacePage route="mapping"` | `UJ-PROG-03` |
+| `/eng/programming/projects/:projectId/programs` | `DesignWorkspacePage route="programs"` | `UJ-PROG-02/03` |
+| `/eng/programming/projects/:projectId/mapping` | `DesignWorkspacePage route="mapping"` | `UJ-PROG-05` |
 | `/eng/programming/projects/:projectId/library` | `LibraryPage` | `UJ-PROG-04` |
-| `/eng/programming/projects/:projectId/commission` | `CheckCommissionPage` | `UJ-PROG-05/06` |
+| `/eng/programming/projects/:projectId/commission` | `CheckCommissionPage` | `UJ-PROG-06` |
 | `/eng/programming/runtime` | `RuntimeServicePage` | `UJ-PROG-07/08` |
 
 Các chuyển hướng tương thích theo UX §11.1 nằm trong `ProgrammingRoutes.tsx`, dùng
@@ -124,8 +124,8 @@ Năm thư mục chứa sáu workspace (`overview/`, `design/`, `library/`,
 | `api/` | Cả sáu workspace gọi cùng một client sinh từ OpenAPI; không workspace nào tự viết fetch |
 | `model/` | `editing`, POU/signal/library, `check`, `commission`, `core`, `runtime` dùng kiểu tường minh chung (§3), không tự dựng DTO khác contract |
 | `layout/` | Context bar phải bền vững khi chuyển workspace, nên nằm trên `<Outlet/>` |
-| `shared/ProblemsDrawer` | Dùng ở cả ba tab của `PGM-02` và ở `PGM-03` |
-| `shared/DangerZone` | Chỉ `PGM-04` dùng ở Rev A, nhưng đặt ở `shared/` vì quy tắc “tách thao tác nguy hiểm” áp cho mọi màn hình thêm sau này |
+| `shared/ProblemsDrawer` | Dùng ở cả ba tab của `PGM-02` và ở `PGM-05` |
+| `shared/DangerZone` | Chỉ `PGM-06` dùng ở Rev A, nhưng đặt ở `shared/` vì quy tắc “tách thao tác nguy hiểm” áp cho mọi màn hình thêm sau này |
 
 ## 3. State model
 
@@ -308,8 +308,8 @@ cũng chuyển điều kiện hiện mục từ `LEGACY_GRAPH_DEMO_ENABLED` sang
 | `features/programming/fbd/*` | **As-Built Task 201**, mount thật vào `ProgramsTab` (không còn placeholder); `StructuredFbdEditor.tsx` thêm `sectionRef`+`tabIndex={-1}` để giữ focus bàn phím sau `DELETE_SELECTION` (sửa lỗi thật TASK-PROG-506) |
 | `features/programming/design/mapping/{MappingTab,PublishedSignalsPanel}.tsx`, `model/{draftV2,signals}.ts` | Draft v2 POU/Program/Published Signal authoring; giới hạn field và stale-policy map bám validator BE; invalid/unavailable không thành zero |
 | `features/programming/library/LibraryPage.tsx`, `model/library.ts`, `api/mutations.ts` | group revision theo scope/entry, SYSTEM read-only, PROJECT draft/version truth và deprecate `PUBLISHED→DEPRECATED` qua confirm/ETag/idempotency/read-back |
-| `features/programming/commission/{CheckCommissionPage,useCommissionWorkflow}.tsx` | PGM-03: query canonical `revisionId/checkId`; readiness chỉ READY khi Check PASS, impact/override đọc được, Core READY và không safe-state; re-auth và `UNKNOWN_RECONCILING` |
-| `features/programming/runtime/{RuntimeServicePage,RuntimeTab,WatchTab,VersionsTab,DangerZone,useRestoreWorkflow}.tsx` | PGM-04: Runtime task metric thật; Watch/Trace; Danger Zone chỉ ở Service; Restore chỉ `READY && !safeState`; RETAIN contract-only luôn khóa; Export source-only; Import hash được trên HTTP; history dùng card mobile/focusable audit region |
+| `features/programming/commission/{CheckCommissionPage,useCommissionWorkflow}.tsx` | PGM-05: query canonical `revisionId/checkId`; readiness chỉ READY khi Check PASS, impact/override đọc được, Core READY và không safe-state; re-auth và `UNKNOWN_RECONCILING` |
+| `features/programming/runtime/{RuntimeServicePage,RuntimeTab,WatchTab,VersionsTab,DangerZone,useRestoreWorkflow}.tsx` | PGM-06: Runtime task metric thật; Watch/Trace; Danger Zone chỉ ở Service; Restore chỉ `READY && !safeState`; RETAIN contract-only luôn khóa; Export source-only; Import hash được trên HTTP; history dùng card mobile/focusable audit region |
 | `features/programming/layout/ProgrammingMobileNav.tsx` | Bottom navigation `Tổng quan/Thiết kế/Kiểm tra/Runtime` tại `<md`; project-dependent route bị disabled khi chưa có Project thay vì dựng deep-link giả |
 | `shared/crypto.ts` | UUID v4: ưu tiên `randomUUID`, fallback `getRandomValues`; không dùng `Math.random`; SHA-256 thuần JS và base64 theo khối cho bundle tối đa 4 MiB |
 | `app/App.tsx`, `shared/i18n.tsx` | Protected return URL giữ pathname/search/hash và chặn open redirect; fresh profile mặc định `vi`, chỉ dùng `en` khi giá trị lưu hợp lệ |
@@ -558,6 +558,7 @@ session ephemeral không được phục hồi sau reboot.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.7 | 2026-09-06 | `ISS-PGM03-06`/`#559`: đồng bộ source mapping và ownership theo IA sáu workspace; Check/Commission thuộc PGM-05, Runtime/Bảo trì thuộc PGM-06. Không đổi contract/runtime. |
 | 0.1 | 2026-08-09 | Feature/state/query/editor/commission/test baseline |
 | 0.2 | 2026-08-09 | Bổ sung As-Built migration, source ownership, algorithms, security, deploy và test M3 |
 | 0.3 | 2026-08-09 | Bổ sung route/page/query/mutation/empty-error ownership, query-key và layer contract; chuyển Detailed Draft chờ review |

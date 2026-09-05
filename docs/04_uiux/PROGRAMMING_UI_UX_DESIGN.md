@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `UX-WEB-PROG-001` |
-| Phiên bản | 2.2 |
+| Phiên bản | 2.3 |
 | Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, không phải As-Built** |
-| Ngày | 2026-08-24 |
+| Ngày | 2026-09-06 |
 | Chủ quản | UX Lead + Frontend Lead |
 | Người phê duyệt implementation | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` và `AUTH-PROG-2026-08-24-05` |
 | Nguồn | Product v3.2; ADR-050; `SRS-PROG-001` v1.2; `DDD-SW-PROG-UNIFIED-001` v1.3; PGM-02 Target: `DDD-SW-PGM02-WORKSPACE-001` v0.3 + `PGM02-WORKSPACE-V1` |
@@ -182,7 +182,7 @@ Restore/import/replacement; không trộn vào tab đọc bình thường.
 | PGM-03 | [Mapping/signal desktop](assets/programming/PGM-03_MAPPING_SIGNALS_DESKTOP.svg) | Mobile read/operate-light theo token §8 |
 | PGM-04 | [Library desktop](assets/programming/PGM-04_CONTROL_LIBRARY_DESKTOP.svg) | [Library mobile](assets/programming/PGM-04_CONTROL_LIBRARY_MOBILE.svg) |
 | PGM-05 | [Check/Commission desktop](assets/programming/PGM-05_CHECK_COMMISSION_DESKTOP.svg) | Modal action dùng cùng safety pattern |
-| PGM-06 | [Runtime desktop](assets/programming/PGM-06_RUNTIME_SERVICE_DESKTOP.svg) | RETAIN modal theo [state set](assets/programming/PGM-04_RETAIN_RESET_DIALOG.svg) |
+| PGM-06 | [Runtime desktop](assets/programming/PGM-06_RUNTIME_SERVICE_DESKTOP.svg) | RETAIN modal theo [state set](assets/programming/PGM-06_RETAIN_RESET_DIALOG.svg) |
 
 Với PGM-02 v2.2, ba asset Target Candidate được review/pin cùng revision của DDD:
 [workspace kết hợp ST/FBD](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_annotated_reference.png),
@@ -316,7 +316,7 @@ output/RETAIN impact, hành vi khi mất kết nối, rollback và yêu cầu re
 |---|---|---|
 | Routes/shell/context | `apps/web-ui/src/features/programming/ProgrammingRoutes.tsx` | route/redirect/deep-link desktop/mobile |
 | POU/editor R1 | `.../design/`, `.../fbd/`, Target `.../programs/` | unit + real-backend browser + `VS-PROG-U13` |
-| Mapping/signal | `.../editor/MappingTab.tsx` | conflict/signal/3 Point category, `U06/U09` |
+| Mapping/signal | `apps/web-ui/src/features/programming/design/mapping/MappingTab.tsx` | conflict/signal/3 Point category, `U06/U09` |
 | Library | `.../library/` | loading/error/RBAC/version/usage, `U03` |
 | Check/Commission | `.../commission/` | state/fault/reconcile/rollback, `U08` |
 | LIVE PGM-02 R2 | Core producer/IPC + BE runtime/monitor/trace + keyed FE overlay | coherence/concurrency/fault + `VS-PROG-U14` |
@@ -340,6 +340,7 @@ Playwright/target Test Result.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.3 | 2026-09-06 | `ISS-PGM03-06`/`#559`: khóa IA sáu workspace; PGM-03 Mapping, PGM-04 Library, PGM-05 Check/Commission và PGM-06 Runtime; sửa source mapping thật và đổi tên asset RETAIN theo PGM-06. |
 | 0.1..1.1 | 2026-08-09..13 | Thiết kế/bằng chứng cho IA bốn workspace; superseded về Product Target. |
 | 2.0 | 2026-08-20 | Viết lại authority sáu workspace; POU/Library/Signal/Enable lifecycle, visual mapping, 17 UC, 24 UX requirement và acceptance; loại toàn bộ contradiction phạm vi cũ khỏi nội dung Active. |
 | 2.1-candidate | 2026-08-24 | Reconcile PGM-02 v2.2 route/identity/EDIT-LIVE-SIMULATE/Quick Library/FBD canvas/responsive và thêm `UX-REQ-025..027`; Owner chỉ mở WP-00, Architect exact pin và code R1/R2/R3 còn PENDING/NO-GO. |

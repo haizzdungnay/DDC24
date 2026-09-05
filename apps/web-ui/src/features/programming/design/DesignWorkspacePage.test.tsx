@@ -437,7 +437,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Lệnh FBD' })).toBeInTheDocument())
   })
 
-  it('AC-PGM02-009 / AC-ST-004: nút Kiểm tra điều hướng sang PGM-03, không tự seal/check nên Active không đổi (D-01)', async () => {
+  it('AC-PGM02-009 / AC-ST-004: nút Kiểm tra điều hướng sang PGM-05, không tự seal/check nên Active không đổi (D-01)', async () => {
     const project = baseProject()
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
@@ -451,12 +451,12 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
 
     await waitFor(() => expect(screen.getByText('Check & Commission page')).toBeInTheDocument())
-    // D-01: PGM-02 không được tự gọi seal/Check — đó là việc của PGM-03 giờ.
+    // D-01: PGM-02 không được tự gọi seal/Check — đó là việc của PGM-05 giờ.
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingRevision')).toBe(false)
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingCheck')).toBe(false)
   })
 
-  it('URL mang line/column/length (điều hướng từ Problems ở PGM-03) nhảy đúng vùng chọn trong ST editor (F-PROG-ASBUILT-003)', async () => {
+  it('URL mang line/column/length (điều hướng từ Problems ở PGM-05) nhảy đúng vùng chọn trong ST editor (F-PROG-ASBUILT-003)', async () => {
     const source = 'PROGRAM P\nVAR_OUTPUT X : BOOL; END_VAR\nX := ;\nEND_PROGRAM\n'
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
@@ -695,7 +695,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
   })
 
-  it('Bảng lệnh nhanh: mục "Kiểm tra" điều hướng sang PGM-03 giống hệt nút Kiểm tra (D-01) — chỉ khi người dùng chủ động chọn', async () => {
+  it('Bảng lệnh nhanh: mục "Kiểm tra" điều hướng sang PGM-05 giống hệt nút Kiểm tra (D-01) — chỉ khi người dùng chủ động chọn', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM P\nEND_PROGRAM\n' })
     project.draft!.task.programOrder = ['program-1']

@@ -288,7 +288,7 @@ export function ProgramsTab({
   onPendingOperationsChange: (operations: ProgrammingDraftOperation[]) => void
   discardVersion: number
   /** ST Editor Quick Control đề xuất #2 (Bảng lệnh nhanh), mục "Kiểm tra": PGM-02
-   *  không tự chạy Check nữa từ D-01 — chỉ điều hướng sang PGM-03 giống hệt nút
+   *  không tự chạy Check nữa từ D-01 — chỉ điều hướng sang PGM-05 giống hệt nút
    *  "Kiểm tra" ở `DesignWorkspacePage`, nên nhận callback thay vì tự `useNavigate`
    *  (giữ `ProgramsTab` không phụ thuộc router, đúng ranh giới hiện có). */
   onRunCheck: () => void
@@ -922,7 +922,7 @@ export function ProgramsTab({
                 variant="secondary"
                 icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
                 disabled={Boolean(checkDisabledReason)}
-                title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-03)', 'Check the package (opens PGM-03)')}
+                title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
                 onClick={onRunCheck}
               >
                 {pick('Kiểm tra', 'Check')}
@@ -1386,7 +1386,7 @@ export function SourceEditor({
   /** `T59-820` — catalog thư viện đã nạp, dùng CHUNG với Inspector. */
   libraryEntries?: readonly CatalogEntry[]
   onEnsureLibraryLoaded?: () => void
-  /** `T59-821` — `Kiểm tra` đi thẳng sang PGM-03, nơi SỞ HỮU `useCheckWorkflow`.
+  /** `T59-821` — `Kiểm tra` đi thẳng sang PGM-05, nơi SỞ HỮU `useCheckWorkflow`.
    *  Không dựng luồng seal/run/poll thứ hai ở đây (D-01). */
   onRunCheck?: () => void
   onOpenCompare?: () => void
@@ -2179,7 +2179,7 @@ export function SourceEditor({
                 {pick('Lưu', 'Save')}
               </Button>
               {/* `PGM-02A §3` — `Check` và `Compare` thuộc CHÍNH hàng này.
-                * `Check` điều hướng sang PGM-03, nơi sở hữu trọn vòng
+                * `Check` điều hướng sang PGM-05, nơi sở hữu trọn vòng
                 * seal/run/poll/result (`useCheckWorkflow`); ở đây tuyệt đối
                 * không dựng luồng thứ hai (D-01).
                 * `SIMULATE`/`LIVE` KHÔNG nhân bản thành nút toolbar — chúng là
@@ -2190,7 +2190,7 @@ export function SourceEditor({
                 variant="secondary"
                 icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
                 disabled={!onRunCheck || Boolean(checkDisabledReason)}
-                title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-03)', 'Check the package (opens PGM-03)')}
+                title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
                 onClick={() => onRunCheck?.()}
               >
                 {pick('Kiểm tra', 'Check')}

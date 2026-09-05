@@ -119,7 +119,7 @@ export function ProgrammingWorkbench({
   /** Nguồn của POU đang mở; `null` khi POU không phải văn bản (FBD). */
   source: string | null
   onJumpToOffset: (offset: number, length: number) => void
-  /** Nơi thật sự sở hữu kết quả Check (PGM-03) — nêu đích danh thay vì im lặng. */
+  /** Nơi thật sự sở hữu kết quả Check (PGM-05) — nêu đích danh thay vì im lặng. */
   checkOwnerHref: string
   /**
    * Giá trị runtime của POU đang mở, chiếu từ **chính** snapshot trang cha đã

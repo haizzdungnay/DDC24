@@ -77,7 +77,7 @@ export function ProgrammingHeader({
               aria-label={pick('Kiểm tra gói', 'Check the package')}
               icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
               disabled={actions.checkDisabledReason !== null}
-              title={actions.checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-03)', 'Check the package (opens PGM-03)')}
+              title={actions.checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
               onClick={actions.onCheck}
             >
               {pick('Kiểm tra', 'Check')}

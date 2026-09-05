@@ -88,7 +88,7 @@ function fbdSelectionForCompare(
 
 /**
  * PGM-02 Thiết kế — `UJ-PROG-02/03/04` (TASK-PROG-501..503). Một workspace,
- * ba tab, một context Draft/ETag. D-01: Check/Problems giờ ở PGM-03
+ * ba tab, một context Draft/ETag. D-01: Check/Problems giờ ở PGM-05
  * (`CheckCommissionPage`) — trang này chỉ lưu rồi điều hướng, có dirty guard
  * (DDD-FE-PROG-001 §0.1). Tab là trạng thái URL, đọc/ghi bằng `replace`
  * trong `useEffect` (không setState lúc render).
@@ -176,7 +176,7 @@ export function DesignWorkspacePage({
   /* `execution` là tab con, không phải trang IA: nó chỉ có địa chỉ dưới dạng
    * `?tab=execution` trên route `programs`. Mọi giá trị khác thì route thắng. */
   const tab: DesignTab = requested === 'execution' ? 'execution' : (route ?? fromQuery)
-  // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
+  // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-05
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
   /*
    * `T61-405` / `ISS-PGM04-14` — ý định chèn khối do PGM-04 gửi sang.
@@ -197,7 +197,7 @@ export function DesignWorkspacePage({
    *
    * Trước `T59-803`, `selectedPouId` chỉ đọc query MỘT LẦN lúc mount. Điều đó
    * còn chạy được khi mỗi Project có route riêng — đi tới đó là remount. Sau
-   * cut-over PGM-02, một cú nhảy chẩn đoán từ PGM-03 chỉ đổi QUERY trên cùng
+   * cut-over PGM-02, một cú nhảy chẩn đoán từ PGM-05 chỉ đổi QUERY trên cùng
    * route, nên workspace giữ nguyên POU cũ và người dùng bấm vào lỗi mà không
    * có gì mở ra. Effect này nhận thay đổi query; chọn POU trong ứng dụng thì
    * ghi ngược lại query (bằng `replace`) để reload giữ đúng POU đang mở. */
@@ -205,13 +205,13 @@ export function DesignWorkspacePage({
     if (queryPouId === undefined || queryPouId === selectedPouId) return
     setSelectedPouId(queryPouId)
   }, [queryPouId, selectedPouId])
-  /* D-01/F-PROG-ASBUILT-003: PGM-03 giờ sở hữu Check/Problems (không phải ở
+  /* D-01/F-PROG-ASBUILT-003: PGM-05 giờ sở hữu Check/Problems (không phải ở
    * đây nữa) — khi người dùng bấm một diagnostic ở đó, nó điều hướng sang đây
    * kèm `line/column/length` trong query string thay vì state cùng trang.
    * Đọc một lần lúc mount, đúng pattern `selectedProgramId` ở trên.
    *
    * `T59-807`: setter được mở lại — KHÔNG phải để trang tự chạy Check (D-01 vẫn
-   * giữ nguyên: PGM-03 sở hữu Check), mà để workbench nhảy tới một vị trí trong
+   * giữ nguyên: PGM-05 sở hữu Check), mà để workbench nhảy tới một vị trí trong
    * POU đang mở. Dùng lại đúng cơ chế neo `line/column/length` đã có thay vì
    * dựng đường nhảy thứ hai. */
   const [focusDiagnostic, setFocusDiagnostic] = useState<ProgrammingDiagnostic | null>(() => {
@@ -327,7 +327,7 @@ export function DesignWorkspacePage({
   const simulateRevisionId = latestCheck && latestCheck.state === 'PASSED' ? latestCheck.revisionId : null
   /* `ISS-STED-04` — nối lại đường ĐỌC kết quả Check gần nhất về trang soạn thảo.
    *
-   * `D-01` chuyển quyền SỞ HỮU Check sang PGM-03 (một luồng seal/run/poll duy
+   * `D-01` chuyển quyền SỞ HỮU Check sang PGM-05 (một luồng seal/run/poll duy
    * nhất) và đó vẫn đúng — đây chỉ là đường đọc, KHÔNG dựng bộ kiểm thứ hai ở
    * FE và KHÔNG biến thành check-as-you-type. Khi gỡ Check khỏi PGM-02 thì
    * đường đọc này bị bỏ quên, nên toàn bộ hạ tầng gạch lỗi trong `SourceEditor`
@@ -386,7 +386,7 @@ export function DesignWorkspacePage({
   }, [canEdit, draftDirty, navigate, projectId])
 
   /* D-01: PGM-02 không còn tự chạy Check nên không có `checkState` thật để
-   * báo — Check/Commission (PGM-03) là nơi duy nhất cập nhật giá trị này giờ
+   * báo — Check/Commission (PGM-05) là nơi duy nhất cập nhật giá trị này giờ
    * (`CheckCommissionPage`). Giữ nguyên `idle` ở đây thay vì suy đoán. */
   useEffect(() => {
     if (workspace.status !== 'ready' || !workspace.project) return
@@ -398,7 +398,7 @@ export function DesignWorkspacePage({
       checkState: 'idle',
       /* `DEV-PROG-009` — workspace ĐĂNG KÝ hai hành động của nó để header ở
          trên cùng gọi lại. Header không tự dựng batch operation: luật dirty,
-         danh sách operation và đường sang PGM-03 đều thuộc về đây, và hai nơi
+         danh sách operation và đường sang PGM-05 đều thuộc về đây, và hai nơi
          cùng dựng một lệnh là hai nơi để luật khoá lệch nhau.
 
          KHÔNG đăng ký gì khi không được sửa (LIVE, SIMULATE, dưới 768 px, vai
@@ -534,7 +534,7 @@ export function DesignWorkspacePage({
              `Running · ${selectedProgram?.name ?? 'no POU selected'}`)
 
   /** Nhảy tới một offset trong POU đang mở, dùng lại đúng cơ chế neo
-   *  `line/column/length` mà PGM-03 đã dùng — không dựng đường nhảy thứ hai. */
+   *  `line/column/length` mà PGM-05 đã dùng — không dựng đường nhảy thứ hai. */
   const jumpToSourceOffset = (offset: number, length: number) => {
     if (!selectedProgramId || workbenchSource === null) return
     const before = workbenchSource.slice(0, offset)
@@ -552,7 +552,7 @@ export function DesignWorkspacePage({
 
   /** `ISS-STED-05` — nhảy tới một diagnostic từ khay Vấn đề của workbench.
    *
-   * Chọn đúng POU RỒI neo dòng/cột, dùng lại chính `focusDiagnostic` mà PGM-03
+   * Chọn đúng POU RỒI neo dòng/cột, dùng lại chính `focusDiagnostic` mà PGM-05
    * và khay So sánh đã dùng — không mở đường nhảy thứ hai. Hai đường nhảy song
    * song sẽ lệch nhau đúng lúc một trong hai được sửa. */
   const jumpToDiagnostic = (diagnostic: ProgrammingDiagnostic) => {
@@ -688,7 +688,7 @@ export function DesignWorkspacePage({
              * một trong hai.
              *
              * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
-             * sang PGM-03, nơi sở hữu trọn vòng seal/run/poll/result. */}
+             * sang PGM-05, nơi sở hữu trọn vòng seal/run/poll/result. */}
           </div>
         )}
       </div>

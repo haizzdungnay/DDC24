@@ -15,7 +15,7 @@ import { useRetainResetWorkflow } from './useRetainResetWorkflow'
 import type { ProgrammingRuntime } from '../model/types'
 
 /**
- * Vùng thao tác nguy hiểm của PGM-04 (`UJ-PROG-08`) — tách khỏi vùng chỉ đọc,
+ * Vùng thao tác nguy hiểm của PGM-06 (`UJ-PROG-08`) — tách khỏi vùng chỉ đọc,
  * viền cảnh báo, chỉ `admin` thấy nút thật; viewer thấy ở chế độ đọc kèm lý
  * do, KHÔNG thấy một dãy nút bị vô hiệu hóa (UX §16.4).
  */

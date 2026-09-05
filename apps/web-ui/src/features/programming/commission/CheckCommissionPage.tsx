@@ -89,8 +89,8 @@ export function CheckCommissionPage() {
   }
   const { runtime, setEditingContext } = useProgrammingRuntimeContext()
 
-  /* D-01: PGM-03 sở hữu toàn bộ seal/run/poll Check — trước bản vá này chỉ
-   * PGM-02 gọi được `useCheckWorkflow`, nên mở PGM-03 trực tiếp (không đến từ
+  /* D-01: PGM-05 sở hữu toàn bộ seal/run/poll Check — trước bản vá này chỉ
+   * PGM-02 gọi được `useCheckWorkflow`, nên mở PGM-05 trực tiếp (không đến từ
    * nút "Mở Kiểm tra & Đưa vào vận hành" của PGM-02) không có cách nào bắt
    * đầu Check, đúng gap ghi ở As-Built §3/`F-PROG-ASBUILT-004`. */
   const workspace = useDraftWorkspace(projectId)
@@ -273,7 +273,7 @@ export function CheckCommissionPage() {
               <ProblemsDrawer
                 diagnostics={check.data.diagnostics}
                 onSelect={(diagnostic) => {
-                  // BUG-007 — lỗi Check trước đây không dẫn đi đâu cả. D-01: PGM-03 sở
+                  // BUG-007 — lỗi Check trước đây không dẫn đi đâu cả. D-01: PGM-05 sở
                   // hữu Check/result nhưng editor vẫn ở PGM-02 — điều hướng sang đúng
                   // Program kèm line/column/length qua query string (F-PROG-ASBUILT-003)
                   // để `SourceEditor` chọn đúng vùng nguồn ngay khi PGM-02 mount, không

@@ -394,7 +394,7 @@ export function PouExplorer({
             />
             {/* "Đặt làm Active" của đề bài KHÔNG có ở đây, và im lặng bỏ nó đi
                 sẽ để người dùng đi tìm. Ý định bật/tắt Program sống ở API
-                runtime-intent (PGM-05), không ở Draft — đặt một mục cùng tên tại
+                runtime-intent (PGM-06), không ở Draft — đặt một mục cùng tên tại
                 đây sẽ hứa một thao tác mà cây POU không thực hiện được. */}
             <p className="border-t border-[var(--c-border)] px-3 pt-1 text-[10px] text-[var(--c-text-dim)]">
               {pick('Bật/tắt Program ở trang Runtime & Bảo trì.', 'Enable/disable a program in Runtime & Maintenance.')}

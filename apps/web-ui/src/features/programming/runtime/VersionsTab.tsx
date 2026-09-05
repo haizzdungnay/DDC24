@@ -7,7 +7,7 @@ import { useProgrammingAudit, useProgrammingOperations } from '../api/queries'
 import type { ProgrammingRuntime } from '../model/types'
 
 /**
- * Tab "Phiên bản & Bảo trì" của PGM-04 (`UJ-PROG-08`) — `PreviousVersionsDrawer`
+ * Tab "Phiên bản & Bảo trì" của PGM-06 (`UJ-PROG-08`) — `PreviousVersionsDrawer`
  * + `AuditTimeline`. Rev A không có route "liệt kê mọi Revision của Project"
  * trong hợp đồng hiện hành (chỉ `GET /revisions/{id}` đơn lẻ) nên danh sách
  * "bản trước" ở đây giới hạn đúng những gì có AUTHORITY thật: Active + LKG từ

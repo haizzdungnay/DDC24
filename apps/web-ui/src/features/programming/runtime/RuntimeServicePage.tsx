@@ -17,7 +17,7 @@ const TAB_LABEL: Record<RuntimeTabKey, [string, string]> = {
 }
 
 /**
- * PGM-04 Runtime & Bảo trì — `UJ-PROG-07/08` (TASK-PROG-505). Tab
+ * PGM-06 Runtime & Bảo trì — `UJ-PROG-07/08` (TASK-PROG-505). Tab
  * `?tab=runtime|watch|service` mặc định `runtime` — đây cũng là đích của
  * redirect `/runtime` (không tab) theo UX §11.1 dòng 5 (xem
  * `shared/LegacyTabRedirect.tsx`). `DangerZone` chỉ mount trong tab service;

@@ -87,7 +87,7 @@ export function FbdEditorPane({
           variant="secondary"
           icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
           disabled={!onRunCheck || Boolean(checkDisabledReason)}
-          title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-03)', 'Check the package (opens PGM-03)')}
+          title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
           onClick={() => onRunCheck?.()}
         >
           {pick('Kiểm tra', 'Check')}

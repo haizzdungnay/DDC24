@@ -11,6 +11,15 @@
 | Người đọc chính | PM, CTO, Product Owner, System Architect, Dev Lead, Verification Lead |
 | Quyền bằng chứng | Source review + host/browser/target supporting evidence; **không phải** `TR-PROG-*`, HIL hoặc release approval |
 
+
+> **Ghi chú authority ngày 2026-09-06:** Đây là biên bản lịch sử dùng IA bốn
+> workspace tại thời điểm lập. Các nhãn Check/Commission=PGM-03 và
+> Runtime/Bảo trì=PGM-04 bên dưới chỉ mô tả baseline cũ, đã **SUPERSEDED**.
+> Authority hiện hành là UX-WEB-PROG-001 §2:
+> PGM-03 Mapping, PGM-04 Control Library, PGM-05 Check/Commission,
+> PGM-06 Runtime. Không dùng số PGM lịch sử trong file này làm route hoặc
+> acceptance authority mới.
+
 ## 1. Kết luận điều hành
 
 Programming Rev A **không phải một skeleton**: source hiện có đã bao phủ compiler
@@ -518,6 +527,7 @@ là supporting evidence, không phải Test Result độc lập. `RELEASE_READY`
 
 | Revision | Ngày | Nội dung |
 |---|---|---|
+| 1.4 | 2026-09-06 | Thêm banner authority: số PGM theo IA bốn workspace trong biên bản là lịch sử; IA sáu workspace hiện hành thuộc `UX-WEB-PROG-001` §2. Không đổi finding hoặc bằng chứng tại thời điểm review. |
 | 1.0 | 2026-08-14 | Chốt As-Built đa lớp, tái hiện UC-PROG-03, mở 12 finding, bảng quyết định PM/CTO và giữ NO-GO release |
 | 1.1 | 2026-08-14 | Bổ sung `F-PROG-ASBUILT-013` (Critical) — Variable↔Point Binding không được compiler tiêu thụ, phát hiện qua phiên hỗ trợ user trực tiếp trên board Foxlinx (Commission thành công nhiều lần nhưng `safeStateNoControllerOnly` không bao giờ về `false`); thêm §4 tái hiện kỹ thuật, quyết định D-07, hạ UC-05 xuống nhóm "Không đạt do defect hiện hành" |
 | 1.2 | 2026-08-14 | PM/CTO duyệt D-07 làm authority implement (cùng ngày). Triển khai Binding Manifest cho category `LOCAL` (C++ `resolve_io_bindings`/`--io-map-in`, Go `ioMapFromRevision`/`compiler.Input.IoMap`) — đóng `F-PROG-ASBUILT-013` cho `LOCAL`; 1024/1024 CTest, Go mọi package, 559/559 Vitest; target thật trên Foxlinx: CLI aarch64 (positive + 2 negative) và chuỗi HTTP đầy đủ Check PASSED→Commission SUCCEEDED→Runtime `safeStateNoControllerOnly:false`→Monitor `programValue==actualValue` LIVE trên Program thật của user (§4.5). Mở hai finding phụ chưa sửa: `F-PROG-ASBUILT-014` (category `VP` không có runtime path thật) và `F-PROG-ASBUILT-015` (kênh `UI` cấu hình digital "dry" không bind được do `StPointKind`/`map_kind()` hardcode UI=analog) — §4.6 |

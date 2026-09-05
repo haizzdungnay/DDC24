@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `TRACE-PROG-001` |
-| Phiên bản | 6.11 |
+| Phiên bản | 6.12 |
 | Trạng thái | **89 requirement/47 scenario Active cho implementation; PGM-02 Target đã pin nhưng mọi `I/T/P/R=N`, U13–U15 NOT_RUN** |
-| Cập nhật | 2026-08-25 |
+| Cập nhật | 2026-09-06 |
 | Chủ quản | Verification Lead |
 | Người review | Document Control, Product, Architect và tất cả discipline lead |
 | Người phê duyệt | Verification Lead + Document Control |
@@ -93,8 +93,8 @@ dẫn được thì không được gắn.
 | `SYS-REQ-PROG-108` | ARCH §3 | UX §9 | HMI/FE/QA | VS-028 | MISSING |
 | `SWR-REQ-PROG-FE-101..102` | FE §2–3 | UX §3–4 | FE | VS-002/004/008/026/032 | MISSING |
 | `SWR-REQ-PROG-FE-103..104` | FE §5 | UX §5 `PGM-02` tab Chương trình | FE/compiler | VS-005/006/028 | MISSING |
-| `SWR-REQ-PROG-FE-105..106` | FE §6 | UX §5 `PGM-02` tab Điểm & Ánh xạ và Thực thi; IFSPEC §3 | FE/BE | VS-009/017/018 | MISSING |
-| `SWR-REQ-PROG-FE-107..110` | FE §4/7/9 | UX §5 `PGM-03`/`PGM-04`; IFSPEC §6/7 | FE/BE/Core | VS-010/011/019/020/024/026 | MISSING |
+| `SWR-REQ-PROG-FE-105..106` | FE §6 | UX §3.3 `PGM-03` Điểm/Signal; IFSPEC §3 | FE/BE | VS-009/017/018 | MISSING |
+| `SWR-REQ-PROG-FE-107..110` | FE §4/7/9 | UX §3.5–§3.6 `PGM-05`/`PGM-06`; IFSPEC §6/7 | FE/BE/Core | VS-010/011/019/020/024/026 | MISSING |
 | `SWR-REQ-PROG-FE-111..112` | FE §8 | UX §7–10 | FE/QA | VS-022/025/028 | MISSING |
 | `SWR-REQ-PROG-FE-113..115` | FE §0.1; UX §5, §16.2–§16.3 | IFSPEC §6.1; UX §22–§24 | FE/BE | VS-011/017/019/022/031 | MISSING |
 | `NFR-REQ-PROG-109..110` | UX §14.1; Product Spec §8 | UX §3, §5 | FE/UX/QA | VS-031 | MISSING |
@@ -197,8 +197,8 @@ Alias trong cột Requirement được chuẩn hóa như sau: `SYS-nnn` =
 | `FE-110` | IFSPEC; FE; BE; RSK-008/014 | `4a1e9f5`: generated error catalog/client; `5f96d43`: `useDraftWorkspace` với `If-Match`, 409 giữ nguyên buffer đang gõ (Draft reducer/conflict flow nay đã có) | 024 | Y/Y/N/N/N |
 | `FE-111` | UX; FE | Toàn bộ P5 dùng `pick()` VI/EN; Chrome/Playwright desktop+mobile xác nhận copy và responsive; `EV-PROG-P5-510` axe WCAG A/AA bốn workspace × hai viewport 8/8 scan, 0 violation; reviewer/Test Result độc lập còn thiếu | 025/028 | Y/Y/N/N/N |
 | `FE-112` | UX; FE | `5f96d43`: `ProblemsDrawer` dùng `programmingErrorCopy(pick, code)`, không hiển thị `messageKey` thô | 019/028 | Y/Y/N/N/N |
-| `FE-113` | UX §5 PGM-03; FE; LIFE; RSK-007 | `ca3e198`+`1961006`: `AcknowledgementChecklist` khớp đúng ba nhóm impact `PRESENT`; nhóm `retain` PRESENT dùng đúng câu UC-PROG-13 (sửa finding thật khi soát S5-E) | 011/019/031 | Y/Y/N/N/N |
-| `FE-114` | UX §5 PGM-04, §22 DangerZone; SEC; RSK-012 | baseline DangerZone + role; corrective 508 sửa render chỉ trong tab Phiên bản & Bảo trì, không nằm dưới Runtime/Watch | 022/031 | Y/Y/N/N/N |
+| `FE-113` | UX §5 PGM-05; FE; LIFE; RSK-007 | `ca3e198`+`1961006`: `AcknowledgementChecklist` khớp đúng ba nhóm impact `PRESENT`; nhóm `retain` PRESENT dùng đúng câu UC-PROG-13 (sửa finding thật khi soát S5-E) | 011/019/031 | Y/Y/N/N/N |
+| `FE-114` | UX §5 PGM-06, §22 DangerZone; SEC; RSK-012 | baseline DangerZone + role; corrective 508 sửa render chỉ trong tab Phiên bản & Bảo trì, không nằm dưới Runtime/Watch | 022/031 | Y/Y/N/N/N |
 | `FE-115` | UX §5 PGM-02, §16.2; DM; IFSPEC | `628cebe`+`5f96d43`: `PointPickerDialog` lọc category/direction/writable + BE `GET /point-catalog` | 017/031 | Y/Y/N/N/N |
 | `BE-101` | DM; BE | `66848a1` + `e8c289e` + `95b9388`: lifecycle SQLite v4, Project/Draft/Revision/Check/Artifact/change/bundle và restart host; `TR-PROG-001-20260811-001 BLOCKED`: target/E2E độc lập còn thiếu | 001/019 | Y/N/N/N/N |
 | `BE-102` | DM; IFSPEC; BE; RSK-008 | `66848a1`: Draft ETag/CAS; `e8c289e`: Check receipt/lease; `95b9388`: bundle export/import receipt 24 giờ/replay/conflict; Core operation reconcile còn thiếu | 024 | Y/N/N/N/N |
@@ -338,6 +338,7 @@ tính nhất quán hồ sơ, không đổi trạng thái formal `T/P/R`.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 6.12 | 2026-09-06 | `ISS-PGM03-06`/`#559`: đồng bộ design/interface trace theo IA sáu workspace; Mapping thuộc PGM-03, Check/Commission thuộc PGM-05 và Runtime/Bảo trì thuộc PGM-06. Không đổi `D/I/T/P/R`. |
 | 6.11 | 2026-08-25 | Ghi `T59-803 DONE (HOST/LOCAL)` cho một POU Explorer + mô hình định danh `objectId`/`programId`, `T59-804 READY`. **Không** đổi `I/T/P/R`: requirement còn phủ Quick Library/editor/LIVE/Simulation chưa làm. U13–U15 NOT_RUN, 0/47 PASS, release NO-GO. |
 | 6.10 | 2026-08-25 | Ghi `T59-802 DONE (HOST/LOCAL)` cho vỏ/route/resolver/mobile PGM-02 và `T59-803 READY`; đóng `F-P59-GHOST-POU-001` ở lớp implementation. **Không** đổi `I/T/P/R` của `SYS-REQ-PROG-116`/`FE-119` vì requirement còn phủ POU Explorer/editor/LIVE/Simulation chưa làm; U13–U15 vẫn NOT_RUN, 0/47 PASS, release NO-GO. |
 | 6.8-candidate | 2026-08-24 | Cấp canonical trace cho 7 requirement và 3 scenario PGM-02 v2.2, nâng tổng 89/47; ánh xạ 16 card `T59-802..817` theo từng increment nhưng mọi dòng mới giữ `Y/N/N/N/N`, U13..U15 NOT_RUN và toàn bộ card `NO EXECUTION AUTHORITY`; Architect exact pin/code/release vẫn PENDING/NO-GO. |
@@ -402,10 +403,10 @@ Product Requirement → UJ-PROG-* → Requirement (SRS) → Design/UI → Source
 | `UJ-PROG-02` | `PGM-02` tab Chương trình | FE-101/103/104; CORE-101 | UX §5, §16.2; LANG §4–§5 | VS-003/005/006/007/031 | `EV-PROG-P5-500-506/507/510`: Draft/ST/editor context desktop/mobile; `VS-PROG-031` MISSING |
 | `UJ-PROG-03` | `PGM-02` tab Điểm & Ánh xạ | FE-105/115; BE-109 | UX §16.2; DM §3.5 | VS-017/018/031 | `EV-PROG-P5-500-506/510`; positive target có Variable Binding và `VS-PROG-031` MISSING |
 | `UJ-PROG-04` | `PGM-02` tab Thực thi | FE-106; CORE-102/108 | UX §5; CTRL §3 | VS-009/016/031 | `EV-PROG-P5-500-506/507/510`: false-dirty regression và Task target `RUNNING`; timing/HIL/usability MISSING |
-| `UJ-PROG-05` | `PGM-03` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | `EV-PROG-P5-500-506/507/510`: Check baseline, corrective deep-link/readiness target; reviewer/usability MISSING |
-| `UJ-PROG-06` | `PGM-03` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | `EV-PROG-P5-500-506/507/510`: Commission output-free baseline và corrective safe-state fail-closed; output vật lý/HIL/người thật MISSING |
-| `UJ-PROG-07` | `PGM-04` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | `EV-PROG-P5-500-506/507/510`: Active/Task/Monitor `200` target; positive binding/Trace, soak/timing/người thật MISSING |
-| `UJ-PROG-08` | `PGM-04` Phiên bản & Bảo trì | SYS-107; FE-114; BE-108; CORE-109 | UX §16.4; LIFE §8–§9; SEC §8 | VS-011/021/023/029/031 | `EV-PROG-P5-500-506/510`: Restore E2E và Danger Zone đúng tab; security corpus review/power/usability MISSING |
+| `UJ-PROG-05` | `PGM-05` giai đoạn Kiểm tra | FE-107/112; BE-103/104/105 | UX §5, §16.3; BE §3 | VS-006/019/031 | `EV-PROG-P5-500-506/507/510`: Check baseline, corrective deep-link/readiness target; reviewer/usability MISSING |
+| `UJ-PROG-06` | `PGM-05` giai đoạn Vận hành | SYS-103; FE-107/113; BE-106; CORE-106 | UX §16.3; LIFE §5–§7 | VS-004/011/014/015/020/029/031 | `EV-PROG-P5-500-506/507/510`: Commission output-free baseline và corrective safe-state fail-closed; output vật lý/HIL/người thật MISSING |
+| `UJ-PROG-07` | `PGM-06` Runtime, Theo dõi | FE-108/109; BE-109; CORE-110 | UX §16.4; FWSOM §9 | VS-010/013/018/027/031 | `EV-PROG-P5-500-506/507/510`: Active/Task/Monitor `200` target; positive binding/Trace, soak/timing/người thật MISSING |
+| `UJ-PROG-08` | `PGM-06` Phiên bản & Bảo trì | SYS-107; FE-114; BE-108; CORE-109 | UX §16.4; LIFE §8–§9; SEC §8 | VS-011/021/023/029/031 | `EV-PROG-P5-500-506/510`: Restore E2E và Danger Zone đúng tab; security corpus review/power/usability MISSING |
 
 Bốn requirement mới của Amendment A1 gắn journey như sau: `FE-113` → `UJ-PROG-06`;
 `FE-114` → `UJ-PROG-08`; `FE-115` → `UJ-PROG-03`; `NFR-109` và `NFR-110` phủ cả

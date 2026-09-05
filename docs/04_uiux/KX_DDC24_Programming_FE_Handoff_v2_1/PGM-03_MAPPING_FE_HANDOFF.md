@@ -1,20 +1,28 @@
 # PGM-03 — Points & Mapping — FE Handoff
 
-**Route:** `/eng/programming/mapping`  
-**Reference:** `assets/PGM-03_mapping.png`  
+> **SUPERSEDED cho route và bố cục trực quan từ 2026-09-06.** Nội dung nghiệp
+> vụ và `AC-PGM03-*` bên dưới được giữ làm đầu vào migration. Authority hiện
+> hành là [`UX-WEB-PROG-001` §2/§3.3](../PROGRAMMING_UI_UX_DESIGN.md#2-information-architecture),
+> issue `#554..#558` và asset SVG chuẩn nêu dưới đây. Không dùng bố cục hai pane
+> hoặc ảnh PNG cũ làm acceptance authority.
+
+**Route canonical:** `/eng/programming/projects/:id/mapping`
+
+**Reference chuẩn:** [`PGM-03_MAPPING_SIGNALS_DESKTOP.svg`](../assets/programming/PGM-03_MAPPING_SIGNALS_DESKTOP.svg)
+
+**Reference cũ:** `assets/PGM-03_mapping.png` — chỉ để truy xuất lịch sử, không có authority
 **Primary goal:** Map logical Program variables to canonical controller/network points quickly and safely, with live value and quality visible.
 
 ## 1. Layout
 
-Top toolbar:
-`Direction | Type | Search | Suggestions toggle | Actions`
+Ba vùng chuẩn:
 
-Main split:
-- left: `Program Variables`
-- right: `Available Points`
+- variable/signal consumer;
+- point catalog/filter;
+- binding/output-owner inspector.
 
-Bottom:
-- `Assigned Mappings`
+Toolbar, row density, split ratio và responsive state theo asset chuẩn và
+`UX-WEB-PROG-001`; issue `#556` sở hữu việc triển khai bố cục.
 
 The page should feel like a mapping workspace, not a generic CRUD table.
 
@@ -146,3 +154,28 @@ admin:
 - Live value/quality subscription.
 - Deep-link from variable to PGM-02 source.
 - E2E: successful map, incompatible map, offline catalogue, permission denied.
+
+## 12. Ánh xạ acceptance hiện hành
+
+Các AC này không tự chứng minh implementation đã đạt. Test hiện có chỉ là bằng
+chứng HOST hỗ trợ; các issue mở ở cột cuối là gate phải đóng.
+
+| AC cũ | Requirement/use case authority | Test/source hiện có | Trạng thái và gate |
+|---|---|---|---|
+| `AC-PGM03-01` | `UX-REQ-020/022`, `UJ-PROG-05` | `MappingWorkbench.test.tsx` | As-Built một phần; `#558` phải khóa trạng thái không phụ thuộc màu |
+| `AC-PGM03-02` | `UX-REQ-022`, `UJ-PROG-05` | `MappingTab.test.tsx`, `MappingWorkbench.test.tsx` | Target; `#555` phải có mutation keyboard/click và read-back |
+| `AC-PGM03-03` | `UX-REQ-006`, `UJ-PROG-05` | `mappingViewModel.test.ts`, `MappingTab.test.tsx` | Target; `#554` phải chứng minh server preview/write/check cùng luật |
+| `AC-PGM03-04` | `UX-REQ-005/020`, `UJ-PROG-05` | `mappingViewModel.test.ts` | As-Built một phần; `#558` phải giữ unknown/stale fail-closed |
+| `AC-PGM03-05` | `UX-REQ-006/020`, `UJ-PROG-05` | `MappingTab.test.tsx` | Target; `#555` phải refetch authoritative state sau mutation |
+| `AC-PGM03-06` | `UX-REQ-020/022`, `UJ-PROG-05` | `pointSourceLabels.test.ts`, `MappingWorkbench.test.tsx` | As-Built một phần; `#558` phải khóa copy/icon/focus/a11y |
+| `AC-PGM03-07` | `UX-REQ-006`, `UJ-PROG-05` | `mappingViewModel.test.ts` | Target; `#554` phải khóa canonical identity và không dựng address |
+
+## 13. Gate và điều kiện mở khóa
+
+| Issue | Owner | Ảnh hưởng khi còn mở | Gate | Điều kiện mở khóa |
+|---|---|---|---|---|
+| `#554` | BE + FE + Compiler | Mutation không có một authority fail-closed | Preview/write/Check parity | OpenAPI ổn định, test positive/negative/fault cùng mã lỗi |
+| `#555` | FE + BE | Người dùng chưa thể map/remove an toàn | Phụ thuộc `#554` | Mutation ETag/idempotency, read-back và E2E permission/conflict |
+| `#556` | UX + FE | Bố cục ba vùng chưa đạt asset chuẩn | Visual/responsive | Bằng chứng desktop/mobile/tablet đủ state và không tràn |
+| `#557` | BE + Compiler + FE | Published Signal chưa có source authority | Typed read model | Provenance/freshness/consumer và Check diagnostic cùng contract |
+| `#558` | FE + QA | Row/toolbar/focus/a11y chưa đạt | Phụ thuộc `#555`, phối hợp `#556` | Interaction test, keyboard/focus và a11y evidence PASS |

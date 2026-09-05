@@ -5,7 +5,7 @@ import { StatusBadge } from '../../../shared/components/StatusBadge'
 import type { ProgrammingRuntime } from '../model/types'
 
 /**
- * Tab "Runtime" của PGM-04 (`UJ-PROG-07`) — `RuntimeSummary` + `TaskRuntimeTable`
+ * Tab "Runtime" của PGM-06 (`UJ-PROG-07`) — `RuntimeSummary` + `TaskRuntimeTable`
  * + `CoreConnectionPanel`. Metric Task được chụp cùng point snapshot ở cuối
  * scan; thiếu snapshot giữ `—`, không suy ra từ nhịp poll của trình duyệt.
  */

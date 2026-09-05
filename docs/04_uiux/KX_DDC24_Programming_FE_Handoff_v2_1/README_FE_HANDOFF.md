@@ -28,13 +28,16 @@ As-Built/runtime, Test Result, target/HIL hoặc release.
 
 ## 2. Canonical navigation
 
+Authority route hiện hành là [`UX-WEB-PROG-001` §2](../PROGRAMMING_UI_UX_DESIGN.md#2-information-architecture).
+Handoff này không cấp quyền cho route unscoped cũ.
+
 | Page | Route | Name |
 |---|---|---|
 | PGM-01 | `/eng/programming` | Overview |
-| PGM-02 | `/eng/programming/programs` | Programs |
-| PGM-03 | `/eng/programming/mapping` | Points & Mapping |
-| PGM-04 | `/eng/programming/library` | Control Library |
-| PGM-05 | `/eng/programming/commission` | Check & Commission |
+| PGM-02 | `/eng/programming/projects/:projectId/programs` | Programs |
+| PGM-03 | `/eng/programming/projects/:projectId/mapping` | Points & Mapping |
+| PGM-04 | `/eng/programming/projects/:projectId/library` | Control Library |
+| PGM-05 | `/eng/programming/projects/:projectId/commission` | Check & Commission |
 | PGM-06 | `/eng/programming/runtime` | Runtime & Diagnostics |
 
 Existing canonical routes and deep links SHALL be preserved.
