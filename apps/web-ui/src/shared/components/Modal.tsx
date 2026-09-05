@@ -47,6 +47,22 @@ export function Modal({ open, title, children, descriptionId, confirmLabel, canc
   const cancelText = cancelLabel ?? t('cancel')
 
   useEffect(() => {
+    /* `T61-505` — GHI NHỚ ngay lúc mount, không chỉ nghe sự kiện về sau.
+    
+       Nhiều chỗ gọi chỉ dựng `Modal` KHI mở (`LibraryAuthoringDrawer`:
+       `if (!mode) return null`). Với chúng, `focusin`/`pointerdown` của nút mở
+       đã xảy ra TRƯỚC khi hai listener dưới đây tồn tại, nên `lastOutsideFocusRef`
+       vĩnh viễn rỗng và `Esc` trả tiêu điểm về... không đâu cả. Người dùng bàn
+       phím mở "Khối PROJECT mới", bấm `Esc`, và bị thả ở đầu tài liệu — phải
+       Tab lại từ đầu để về đúng nút họ vừa rời.
+    
+       Đo được ở lane BROWSER (`artifacts/ui-audit/pgm04`): `document.activeElement`
+       sau `Esc` là `BODY`. Hiệu ứng này khai báo TRƯỚC hiệu ứng đặt tiêu điểm
+       ban đầu, nên lúc nó chạy, tiêu điểm vẫn còn ở nút mở. */
+    const opener = document.activeElement
+    if (opener instanceof HTMLElement && opener !== document.body && !dialogRef.current?.contains(opener)) {
+      lastOutsideFocusRef.current = opener
+    }
     const rememberOutsideFocus = (event: Event) => {
       const target = event.target
       if (target instanceof HTMLElement && !dialogRef.current?.contains(target)) lastOutsideFocusRef.current = target
@@ -63,6 +79,21 @@ export function Modal({ open, title, children, descriptionId, confirmLabel, canc
     if (wasOpenRef.current && !open) (returnFocusRef?.current ?? lastOutsideFocusRef.current)?.focus()
     wasOpenRef.current = open
   }, [open, returnFocusRef])
+
+  /* `T61-505` — và trả tiêu điểm CẢ KHI bị GỠ KHỎI CÂY, không chỉ khi `open`
+     chuyển sang `false`.
+  
+     Nhiều chỗ gọi đóng hộp thoại bằng cách thôi dựng nó (`{open && <Modal …/>}`,
+     hoặc `if (!mode) return null`). Ở hình dạng ấy hiệu ứng trên KHÔNG BAO GIỜ
+     chạy: `open` không đổi giá trị, component chỉ biến mất. Người dùng bàn phím
+     bấm `Esc` và bị thả ở đầu tài liệu.
+  
+     `wasOpenRef` phân biệt hai đường: một hộp thoại đã đóng đúng cách rồi mới bị
+     gỡ có `wasOpenRef.current === false`, nên không trả tiêu điểm lần thứ hai. */
+  useEffect(() => () => {
+    if (!wasOpenRef.current) return
+    ;(returnFocusRef?.current ?? lastOutsideFocusRef.current)?.focus()
+  }, [returnFocusRef])
 
   useEffect(() => {
     if (!open) return undefined
