@@ -428,6 +428,10 @@ if(CORE_BUILD_TESTS)
     target_link_libraries(core_tests PRIVATE gtest_main)
   endif()
   include(GoogleTest)
+  add_test(NAME core_cli_rejects_invalid_arguments
+      COMMAND ${MKDDC_GATE_PYTHON}
+              ${MKDDC_REPOSITORY_ROOT}/scripts/verify_core_cli_arguments.py
+              $<TARGET_FILE:mkddc-core>)
   # Cô lập PLC SHM của test khỏi segment production.
   #
   # `BacnetObjTable::attach()` mở bằng O_CREAT|O_RDWR rồi memset toàn bộ segment.

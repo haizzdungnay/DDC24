@@ -196,6 +196,11 @@ int main(int argc, char** argv)
                         " [--log-level LVL]\n");
             return 0;
         }
+        else {
+            std::fprintf(stderr, "ERROR core.invalid_argument '%s' (tham số không được hỗ trợ hoặc thiếu giá trị; xem --help)\n",
+                         a.c_str());
+            return 1;
+        }
     }
     programming_runtime_enabled = programming_runtime_enabled ||
                                   programming_mode == CutoverMode::PROGRAM_ONLY;

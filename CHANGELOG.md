@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### Fixed — Core từ chối tham số CLI sai trước khi mở socket (2026-09-05)
+
+- Khi chẩn đoán deploy bằng cờ không tồn tại `--build-info`, Core bỏ qua tham số,
+  khởi tạo instance thứ hai và làm mất socket của service đang chạy. Bổ sung
+  lỗi `core.invalid_argument` và exit 1 trước mọi khởi tạo runtime cho cờ lạ,
+  đối số ngoài vị trí cho phép hoặc tùy chọn thiếu giá trị.
+- Kiểm chứng: CTest `core_cli_rejects_invalid_arguments` chạy binary thật với
+  16 đầu vào sai và 3 lệnh chẩn đoán hợp lệ, kiểm tra không khởi động runtime
+  và không thay đổi file socket đã tồn tại. C++ host bật Modbus/BACnet/HMI:
+  1.477 ca, 1.476 pass và 1 skip do memlock; không có fail. Các số đo deploy cuối ghi riêng.
 ### Changed — `ISS-PGM04-14` Chốt disposition Chèn khối: PGM-04 chỉ điều hướng, PGM-02 sở hữu phép ghi và Hoàn tác (#459, 2026-09-05)
 
 - **Triệu chứng.** Bảng task Plan61 `T61-405` viết *"PGM-04 gọi shared insertion adapter"*, trong khi authority
