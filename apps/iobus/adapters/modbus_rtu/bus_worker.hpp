@@ -105,6 +105,18 @@ struct ReadBlock {
     uint8_t  fc    = 3;
     uint16_t addr  = 0;
     uint16_t count = 1;
+    /* `ISS-PIO-22` — mọi điểm trong một block phải CÙNG nhóm poll.
+     *
+     * Gộp một điểm `slow` vào block `fast` sẽ làm nó được đọc theo nhịp fast,
+     * và cả tính năng mất tác dụng đúng ở chỗ nó cần nhất. */
+    PollGroup poll_group = PollGroup::Normal;
+    /* Mốc poll gần nhất CỦA BLOCK, không phải của slave: hai nhóm trên cùng
+     * một slave đến hạn ở hai thời điểm khác nhau. */
+    uint64_t last_poll_ms = 0;
+    /* Mốc ĐỌC THÀNH CÔNG gần nhất của block, dùng cho ngưỡng stale theo điểm.
+     * Tách khỏi `last_poll_ms`: "lần cuối ta thử hỏi" khác "lần cuối thiết bị
+     * nói thật", và chỉ cái sau mới trả lời được câu hỏi dữ liệu còn tươi không. */
+    uint64_t last_ok_ms = 0;
     /* Các điểm thuộc khối, kèm offset (đơn vị register/bit) trong khối. */
     struct Member {
         const ProfilePoint* point;
@@ -223,6 +235,8 @@ public:
 private:
     void set_state(BusState s, FieldbusMetrics* metrics);
     void build_blocks(BusSlaveBinding* binding);
+    /* `ISS-PIO-22` — hạ STALE cho block quá ngưỡng của chính nó. */
+    void sweep_stale_blocks(uint64_t now_ms, ExtCache& cache);
     void read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusMetrics& metrics);
     void flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics);
     /* Ghi nhận một ext slot có lệnh ghi kết thúc mà không áp được. Tự lấy

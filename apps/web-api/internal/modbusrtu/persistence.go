@@ -315,6 +315,15 @@ func BuildProfile(device Device, points []Point) ([]byte, error) {
 			"count": count, "type": point.DataType, "byte_order": order,
 			"scale": point.Scale, "offset": point.Offset,
 			"writable": point.ReadWrite == "read_write"}
+		/* `ISS-PIO-22` — chỉ ghi khi KHÁC mặc định, để `fieldbus.conf` của tủ
+		 * chưa dùng tính năng này giữ nguyên hình dạng cũ (và diff cấu hình
+		 * không nở ra vì một trường ai cũng để mặc định). */
+		if group := NormalizePollGroup(point.PollGroup); group != PollGroupNormal {
+			row["poll_group"] = group
+		}
+		if point.StaleAfterMS > 0 {
+			row["stale_after_ms"] = point.StaleAfterMS
+		}
 		if point.BitIndex != nil {
 			row["bit_index"] = *point.BitIndex
 		}

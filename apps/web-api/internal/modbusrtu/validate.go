@@ -281,6 +281,16 @@ func validatePoints(cfg Config, devices map[string]Device, opts ValidateOptions,
 		 * `vendor`, gõ sai một ký tự, rồi nhận một điểm lặng lẽ hiểu con số của
 		 * họ theo quy ước khác — tức đọc sang thanh ghi bên cạnh, với quality
 		 * GOOD và không một dấu hiệu nào. */
+		/* `ISS-PIO-22` — nhóm poll lạ bị TỪ CHỐI, không im lặng hạ về `normal`:
+		 * hạ im lặng sẽ để người vận hành tin rằng đã đặt được `slow` cho một
+		 * điểm cấu hình và đã tiết kiệm được băng thông RS-485. */
+		if !ValidPollGroup(point.PollGroup) {
+			add(base+".poll_group", CodeUnsupported, "phải là fast, normal hoặc slow")
+		}
+		if point.StaleAfterMS < 0 || point.StaleAfterMS > StaleAfterMaxMS {
+			add(base+".stale_after_ms", CodeOutOfRange,
+				fmt.Sprintf("phải trong khoảng 0..%d (0 = suy từ chu kỳ poll)", StaleAfterMaxMS))
+		}
 		if point.AddressConvention != "" && !ValidAddressConvention(point.AddressConvention) {
 			add(base+".address_convention", CodeUnsupported, "phải là protocol hoặc vendor")
 		}

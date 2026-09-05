@@ -13,6 +13,20 @@
 namespace iobus::fieldbus {
 
 enum class PointType { Bool, Int16, Uint16, Int32, Uint32, Float32 };
+
+/* `ISS-PIO-22`/`F-PIO-021` — NHÓM POLL THEO ĐIỂM (đề bài §22).
+ *
+ * Trước bản vá `poll_ms` chỉ có ở cấp Device, nên một điểm cấu hình (đọc một
+ * lần mỗi phút là đủ) bị poll CÙNG NHỊP với tần số VFD (500 ms) và tiêu băng
+ * thông RS-485 vô ích. Dây RS-485 là tài nguyên chia sẻ: mỗi khung thừa đẩy
+ * lượt poll của điểm khác ra sau.
+ *
+ * `Normal` là mặc định và mang đúng `poll_ms` của Device, nên cấu hình đang
+ * chạy KHÔNG đổi hành vi khi nâng cấp firmware. */
+enum class PollGroup : uint8_t { Fast = 0, Normal = 1, Slow = 2 };
+
+PollGroup   poll_group_from_string(const char* s);
+const char* poll_group_name(PollGroup g);
 enum class ByteOrder { AB, BA, ABCD, BADC, CDAB, DCBA };
 
 struct ProfilePoint {
@@ -26,6 +40,16 @@ struct ProfilePoint {
     ByteOrder   byte_order = ByteOrder::AB;
     bool        writable   = false;
     std::string map_to;
+
+    /* `ISS-PIO-22` — nhóm poll của điểm. Chu kỳ thật của mỗi nhóm do Device
+     * khai (`poll_fast_ms`/`poll_ms`/`poll_slow_ms`). */
+    PollGroup   poll_group = PollGroup::Normal;
+    /* Ngưỡng tự hạ STALE riêng cho điểm, tính từ mẫu ĐỌC THÀNH CÔNG gần nhất.
+     *
+     * `0` = suy từ chu kỳ poll hiệu lực của điểm (xem `effective_stale_after_ms`),
+     * chứ KHÔNG phải "tắt": một điểm không bao giờ hạ stale là một điểm nói dối
+     * êm ái khi thiết bị ngừng trả lời đúng nó mà slave vẫn online. */
+    uint32_t    stale_after_ms = 0;
 
     /* 2026-08-20 — `expose_bacnet` / `bacnet_object_type` / `bacnet_instance`
      * ĐÃ BỊ GỠ khỏi ProfilePoint (OD-MBRTU-014, quyết định sản phẩm).

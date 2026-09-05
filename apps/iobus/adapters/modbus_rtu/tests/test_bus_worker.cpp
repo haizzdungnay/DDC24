@@ -129,6 +129,57 @@ TEST(BusWorkerBinding, SlaveOnUnknownBusFallsBackInsteadOfDisappearing)
     ::unlink(prof.c_str());
 }
 
+/* `ISS-PIO-22` — hai điểm liền kề nhưng KHÁC nhóm poll KHÔNG được gộp.
+ *
+ * Gộp chúng sẽ làm điểm `slow` được đọc theo nhịp của điểm `normal`, và cả tính
+ * năng mất tác dụng đúng ở chỗ nó cần nhất: một điểm cấu hình vẫn đi cùng mọi
+ * lượt poll của tần số VFD, đúng triệu chứng mà issue mô tả. */
+TEST(BusWorkerBlocks, PointsInDifferentPollGroupsNeverShareABlock)
+{
+    const std::string prof = write_profile("pollgroup",
+        R"json({"points":[
+            {"name":"vfd_hz","fc":3,"addr":0,"count":2,"type":"uint16","poll_group":"normal"},
+            {"name":"config","fc":3,"addr":2,"count":2,"type":"uint16","poll_group":"slow"}
+        ]})json");
+
+    BusWorker worker;
+    ExtCache cache;
+    uint16_t cursor = 0;
+    worker.bind(bus_on(1, "/dev/null"), {slave_on(1, 1, prof, "m")}, {0}, &cursor, cache);
+
+    ASSERT_EQ(worker.slave_count(), 1u);
+    const auto& blocks = worker.slave(0).blocks;
+    ASSERT_EQ(blocks.size(), 2u) << "hai nhóm poll phải nằm ở hai khối riêng";
+    // Sắp theo (poll_group, fc, addr) nên `normal` (=1) đứng trước `slow` (=2).
+    EXPECT_EQ(blocks[0].poll_group, PollGroup::Normal);
+    EXPECT_EQ(blocks[1].poll_group, PollGroup::Slow);
+    EXPECT_EQ(blocks[0].members.size(), 1u);
+    EXPECT_EQ(blocks[1].members.size(), 1u);
+    ::unlink(prof.c_str());
+}
+
+/* Cùng nhóm poll thì vẫn gộp như cũ: `ISS-PIO-22` không được làm hỏng phép gộp
+ * MBR-B109 đang tiết kiệm turnaround trên dây. */
+TEST(BusWorkerBlocks, SamePollGroupStillMerges)
+{
+    const std::string prof = write_profile("pollgroup_same",
+        R"json({"points":[
+            {"name":"a","fc":3,"addr":0,"count":2,"type":"uint16","poll_group":"slow"},
+            {"name":"b","fc":3,"addr":2,"count":2,"type":"uint16","poll_group":"slow"}
+        ]})json");
+
+    BusWorker worker;
+    ExtCache cache;
+    uint16_t cursor = 0;
+    worker.bind(bus_on(1, "/dev/null"), {slave_on(1, 1, prof, "m")}, {0}, &cursor, cache);
+
+    const auto& blocks = worker.slave(0).blocks;
+    ASSERT_EQ(blocks.size(), 1u) << "cùng nhóm poll và liền địa chỉ ⇒ vẫn một khối";
+    EXPECT_EQ(blocks[0].poll_group, PollGroup::Slow);
+    EXPECT_EQ(blocks[0].count, 4u);
+    ::unlink(prof.c_str());
+}
+
 /* MBR-B109: hai điểm holding register liền kề phải gộp thành MỘT transaction.
  * Trên RS-485 19200 baud mỗi lượt request/response tốn ~5 ms turnaround; gộp
  * cắt gần một nửa thời gian chiếm dây cho profile dày. */

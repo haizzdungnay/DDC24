@@ -73,6 +73,7 @@ set(MODBUS_SOURCES
     adapters/modbus_rtu/device_profile.cpp
     adapters/modbus_rtu/register_codec.cpp
     adapters/modbus_rtu/poll_scheduler.cpp
+    adapters/modbus_rtu/poll_group.cpp
     adapters/modbus_rtu/ext_cache.cpp
     adapters/modbus_rtu/fieldbus_metrics.cpp
     adapters/modbus_rtu/bus_worker.cpp
@@ -197,6 +198,7 @@ if(IOBUS_BUILD_TESTS)
       adapters/modbus_rtu/tests/test_device_profile.cpp
       adapters/modbus_rtu/tests/test_register_codec.cpp
       adapters/modbus_rtu/tests/test_poll_scheduler.cpp
+      adapters/modbus_rtu/tests/test_poll_group.cpp
       adapters/modbus_rtu/tests/test_ext_cache.cpp
       adapters/modbus_rtu/tests/test_bus_worker.cpp
       adapters/modbus_rtu/tests/test_control_channel.cpp

@@ -38,6 +38,11 @@ type Device struct {
 	TimeoutMS          int      `json:"timeout_ms"`
 	Retry              int      `json:"retry"`
 	OfflineAfterErrors int      `json:"offline_after_errors,omitempty"`
+	/* `ISS-PIO-22` — chu kỳ của nhóm `fast`/`slow`. `poll_ms` giữ nguyên nghĩa
+	 * là chu kỳ nhóm `normal`, nên cấu hình cũ đọc đúng như trước.
+	 * 0 = suy từ `poll_ms` (fast = poll_ms, slow = poll_ms × 10). */
+	PollFastMS int `json:"poll_fast_ms,omitempty"`
+	PollSlowMS int `json:"poll_slow_ms,omitempty"`
 	// MBR-B202 / OD-MBRTU-002 (CLOSED): Device thuộc về một Bus.
 	// `rs485_port`/`baud`/`parity`/`stop_bits` vẫn có trong response để UI hiển
 	// thị, nhưng là KẾ THỪA READ-ONLY từ Bus — giao diện Thiết bị không được cho
@@ -116,6 +121,16 @@ type Point struct {
 	 * là một cơ hội sai một đơn vị — thứ không làm gì hỏng ồn ào, chỉ khiến
 	 * điểm đọc sang thanh ghi bên cạnh với quality GOOD. */
 	AddressConvention string `json:"address_convention,omitempty"`
+	/* `ISS-PIO-22` — NHÓM POLL và ngưỡng stale theo ĐIỂM (đề bài §22).
+	 *
+	 * Trước bản vá `poll_ms`/`timeout_ms` chỉ có ở cấp Device, nên một điểm cấu
+	 * hình (đọc một lần mỗi phút là đủ) bị poll cùng nhịp với tần số VFD
+	 * (500 ms) và tiêu băng thông RS-485 vô ích.
+	 *
+	 * Rỗng = `normal`, tức chu kỳ `poll_ms` của Device — hành vi trước bản vá.
+	 * `StaleAfterMS` = 0 nghĩa là SUY từ chu kỳ hiệu lực, không phải "tắt". */
+	PollGroup    string `json:"poll_group,omitempty"`
+	StaleAfterMS int    `json:"stale_after_ms,omitempty"`
 }
 
 // MBR-B110: counter là uint64 xuyên suốt. uint32 tràn sau ~2,7 năm ở nhịp poll

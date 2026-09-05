@@ -140,6 +140,12 @@ static bool parse_slave(const std::string& obj, uint32_t default_poll_ms, SlaveC
     sl->poll_ms = default_poll_ms;
     if (jget_int(obj, "poll_ms", &v) && v > 0)
         sl->poll_ms = static_cast<uint32_t>(v);
+    /* `ISS-PIO-22` — chu kỳ riêng cho nhóm `fast`/`slow`. Vắng mặt ⇒ 0 ⇒ suy
+     * từ `poll_ms` (xem `group_interval_ms`), nên cấu hình cũ không đổi hành vi. */
+    if (jget_int(obj, "poll_fast_ms", &v) && v > 0)
+        sl->poll_fast_ms = static_cast<uint32_t>(v);
+    if (jget_int(obj, "poll_slow_ms", &v) && v > 0)
+        sl->poll_slow_ms = static_cast<uint32_t>(v);
     if (jget_int(obj, "timeout_ms", &v) && v >= 20 && v <= 10000)
         sl->timeout_ms = static_cast<uint32_t>(v);
     /* D-05: `retry` nay là SỐ LẦN PHÁT LẠI một giao dịch (0..3). Giá trị cũ tới

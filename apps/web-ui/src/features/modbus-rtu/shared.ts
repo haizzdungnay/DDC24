@@ -12,7 +12,9 @@ import type { ModbusRTUDevice, ModbusRTUDiagnostics, ModbusRTUPoint } from '../.
 export const emptyDevice: ModbusRTUDevice = {
   device_id: '', display_name: '', enabled: true, rs485_port: '/dev/rs485-1', baud: 19200,
   parity: 'N', stop_bits: 1, slave_id: 1, poll_ms: 1000, timeout_ms: 300, retry: 2,
-  offline_after_errors: 2, offline_probe_ms: 10000
+  offline_after_errors: 2, offline_probe_ms: 10000,
+  // `ISS-PIO-22` — 0 = suy từ `poll_ms`; thiết bị mới không tự ép một nhịp nào.
+  poll_fast_ms: 0, poll_slow_ms: 0
 }
 
 export const emptyPoint: ModbusRTUPoint = {
@@ -21,7 +23,10 @@ export const emptyPoint: ModbusRTUPoint = {
   offset: 0, unit: '', read_write: 'read', default_value: 0, safe_value: 0, enabled: true,
   // `ISS-PIO-21` — mặc định là quy ước cũ, để form mới không đổi nghĩa con số
   // mà người dùng quen gõ.
-  address_convention: 'protocol'
+  address_convention: 'protocol',
+  // `ISS-PIO-22` — `normal` là mặc định và mang đúng `poll_ms` của thiết bị,
+  // nên điểm mới tạo giữ đúng hành vi mà người dùng đang quen.
+  poll_group: 'normal'
 }
 
 export const inputClass = 'h-10 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 text-sm text-[var(--c-text)]'

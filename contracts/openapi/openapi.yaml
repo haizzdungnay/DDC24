@@ -5633,6 +5633,21 @@ components:
           maximum: 10
           default: 2
           description: "Số lượt poll thất bại liên tiếp trước khi chuyển trạng thái kết nối Device sang OFFLINE."
+        poll_fast_ms:
+          type: integer
+          minimum: 0
+          default: 0
+          description: >
+            ISS-PIO-22 — chu kỳ của nhóm poll `fast`. `0` = suy từ `poll_ms`.
+            `poll_ms` giữ nguyên nghĩa là chu kỳ nhóm `normal`.
+        poll_slow_ms:
+          type: integer
+          minimum: 0
+          default: 0
+          description: >
+            ISS-PIO-22 — chu kỳ của nhóm poll `slow`. `0` = suy từ `poll_ms`
+            (× 10). Suy chứ không ép một hằng số tuyệt đối, vì "chậm" chỉ có
+            nghĩa tương đối với nhịp cơ sở của chính thiết bị.
         offline_probe_ms:
           type: integer
           minimum: 1000
@@ -5667,6 +5682,28 @@ components:
           description: "OD-MBRTU-003 — trích một bit trong register. Chỉ dùng với data_type=bool trên Holding/Input Register."
         min_value: { type: number, nullable: true, description: "Biên kỹ thuật; mẫu ngoài biên bị đánh BAD/OUT_OF_RANGE." }
         max_value: { type: number, nullable: true }
+        poll_group:
+          type: string
+          enum: [fast, normal, slow]
+          default: normal
+          description: >
+            ISS-PIO-22 (đề bài §22) — nhóm poll của ĐIỂM. Trước bản vá `poll_ms`
+            chỉ có ở cấp Device, nên một điểm cấu hình (đọc một lần mỗi phút là
+            đủ) bị poll cùng nhịp với tần số VFD và tiêu băng thông RS-485 vô
+            ích. Chu kỳ thật của mỗi nhóm do Device khai
+            (`poll_fast_ms`/`poll_ms`/`poll_slow_ms`). `normal` là mặc định và
+            mang đúng `poll_ms`, nên cấu hình đang chạy không đổi hành vi.
+        stale_after_ms:
+          type: integer
+          minimum: 0
+          maximum: 3600000
+          default: 0
+          description: >
+            ISS-PIO-22 — ngưỡng tự hạ STALE riêng cho điểm, tính từ mẫu ĐỌC
+            THÀNH CÔNG gần nhất. `0` = SUY từ chu kỳ poll hiệu lực (bội số của
+            chu kỳ, có sàn và trần), KHÔNG phải "tắt": một điểm không bao giờ hạ
+            stale là một điểm nói dối êm ái khi thiết bị ngừng trả lời đúng nó
+            mà slave vẫn online.
         address_convention:
           type: string
           enum: [protocol, vendor]

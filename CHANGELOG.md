@@ -8,6 +8,34 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-22` Poll group + stale_after theo điểm Modbus (#405, 2026-09-05)
+
+- **Triệu chứng.** `poll_ms`/`timeout_ms` chỉ có ở cấp **Device**. Một điểm cấu hình (đọc một lần mỗi
+  phút là đủ) bị poll **cùng nhịp với tần số VFD (500 ms)**, tiêu băng thông RS-485 vô ích. Dây
+  RS-485 là tài nguyên chia sẻ: mỗi khung thừa đẩy lượt poll của điểm khác ra sau.
+- **Cách sửa.** `poll_group` (`fast`/`normal`/`slow`) và `stale_after_ms` theo **điểm**, chu kỳ của
+  mỗi nhóm do Device khai (`poll_fast_ms`/`poll_ms`/`poll_slow_ms`), và `BusWorker` chỉ đọc block
+  **đến hạn theo nhóm của chính nó**.
+- **Chỗ tính năng thật sự tiết kiệm dây** là `build_blocks`: hai điểm khác nhóm poll **không bao giờ
+  được gộp**, kể cả khi địa chỉ liền nhau. Gộp một điểm `slow` vào block `normal` sẽ làm nó được đọc
+  theo nhịp normal và cả tính năng mất tác dụng đúng ở chỗ cần nhất.
+- **Cổng ở cấp slave đi theo nhóm NHANH NHẤT** mà slave đó thật sự dùng. Giữ nguyên `poll_ms` sẽ
+  khiến một điểm `fast` không bao giờ đạt được nhịp của nó — `read_slave` không được gọi đủ dày để
+  block fast kịp đến hạn.
+- **Không block nào đến hạn ⇒ không báo cáo gì.** Gọi `on_poll_ok` cho một lượt không hề chạm dây sẽ
+  giữ slave "ONLINE" vĩnh viễn mà chưa từng hỏi nó câu nào: một slave đã rút cáp vẫn hiện khoẻ mạnh.
+- **`stale_after_ms` đóng một lỗ nói dối êm ái.** Trước bản vá chỉ có một đường xuống cấp: slave
+  timeout ⇒ cả dải slot rơi STALE. Một thiết bị vẫn trả lời nhưng ngừng cập nhật đúng một block — vì
+  địa chỉ bị gỡ, vì cảm biến rời ra — sẽ giữ giá trị cũ **mãi mãi với quality GOOD**. `sweep_stale_blocks`
+  hạ STALE theo ngưỡng của chính điểm, và `mark_range_quality` **giữ nguyên mốc thời gian** của mẫu
+  đúng như hợp đồng `ExtCache`: hạ quality không được làm mẫu trẻ lại.
+- **`0` không phải "tắt".** Ngưỡng suy ra là bội số của chu kỳ, có sàn và trần. Hạ STALE ngay khi trễ
+  một chu kỳ sẽ biến mọi nhiễu RS-485 thoáng qua — thứ `retry` sinh ra để chịu đựng — thành một lần
+  nhấp nháy quality trên toàn hệ thống.
+- **Mặc định giữ nguyên hành vi cũ:** `normal` mang đúng `poll_ms`, `poll_fast_ms`/`poll_slow_ms` = 0
+  suy từ `poll_ms`, và `BuildProfile` chỉ ghi khoá khi khác mặc định nên `fieldbus.conf` của tủ chưa
+  dùng tính năng này không đổi một chữ.
+
 ### Added — `ISS-PIO-17` Kiểu Multistate cho Virtual Point (#401, 2026-09-04)
 
 - **Triệu chứng.** `VirtualPointSignalType` chỉ có `boolean|integer|float|string|datetime`. Core có

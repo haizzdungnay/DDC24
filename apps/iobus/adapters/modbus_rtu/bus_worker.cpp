@@ -4,6 +4,7 @@
  *        libmodbus API guarded by MKDDC_ENABLE_MODBUS; logic compile vô điều kiện.
  */
 #include "bus_worker.hpp"
+#include "poll_group.hpp"
 #include "fieldbus_time.hpp"
 #include "register_codec.hpp"
 
@@ -124,6 +125,16 @@ void BusWorker::bind(const BusConfig& bus, const std::vector<SlaveConfig>& slave
         binding.ext_count = need;
         *ext_cursor = static_cast<uint16_t>(*ext_cursor + need);
         build_blocks(&binding);
+        /* `ISS-PIO-22` — cổng ở cấp slave phải theo nhóm NHANH NHẤT mà slave này
+         * thật sự dùng. Giữ nguyên `poll_ms` sẽ khiến một điểm `fast` không bao
+         * giờ đạt được nhịp của nó: `read_slave` không được gọi đủ dày để block
+         * fast kịp đến hạn. */
+        for (const auto& block : binding.blocks) {
+            const uint32_t interval = group_interval_ms(block.poll_group, slaves[i].poll_ms,
+                                                        slaves[i].poll_fast_ms, slaves[i].poll_slow_ms);
+            if (interval > 0 && interval < binding.state.poll_interval_ms)
+                binding.state.poll_interval_ms = interval;
+        }
 
         /* Cấp danh tính slot NGAY, trước lần I/O đầu tiên: lần poll đầu bị lỗi
          * vẫn publish đúng Point ID và BAD/NOT_INITIALIZED thay vì bảng rỗng. */
@@ -185,9 +196,13 @@ void BusWorker::build_blocks(BusSlaveBinding* binding)
         entries.push_back({&pt, ext_idx});
         ext_idx = static_cast<uint16_t>(ext_idx + ext_slots_for_point(pt));
     }
-    /* Sắp theo (fc, addr) để phép gộp chỉ cần xét phần tử kề nhau.
+    /* Sắp theo (poll_group, fc, addr) để phép gộp chỉ cần xét phần tử kề nhau.
+     * `poll_group` đứng TRƯỚC vì `ISS-PIO-22`: hai điểm khác nhóm poll không
+     * bao giờ được gộp, kể cả khi địa chỉ liền nhau.
      * stable_sort giữ thứ tự khai báo cho các điểm cùng địa chỉ. */
     std::stable_sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        if (a.point->poll_group != b.point->poll_group)
+            return static_cast<uint8_t>(a.point->poll_group) < static_cast<uint8_t>(b.point->poll_group);
         if (a.point->fc != b.point->fc) return a.point->fc < b.point->fc;
         return a.point->addr < b.point->addr;
     });
@@ -198,6 +213,7 @@ void BusWorker::build_blocks(BusSlaveBinding* binding)
         ReadBlock* last = binding->blocks.empty() ? nullptr : &binding->blocks.back();
         const bool contiguous =
             last != nullptr && last->fc == e.point->fc &&
+            last->poll_group == e.point->poll_group &&
             static_cast<uint32_t>(last->addr) + last->count == e.point->addr &&
             static_cast<uint32_t>(last->count) + e.point->count <= limit;
         if (contiguous) {
@@ -206,9 +222,10 @@ void BusWorker::build_blocks(BusSlaveBinding* binding)
             last->count = static_cast<uint16_t>(last->count + e.point->count);
         } else {
             ReadBlock block;
-            block.fc    = e.point->fc;
-            block.addr  = e.point->addr;
-            block.count = e.point->count;
+            block.fc         = e.point->fc;
+            block.addr       = e.point->addr;
+            block.count      = e.point->count;
+            block.poll_group = e.point->poll_group;
             block.members.push_back({e.point, 0, e.ext_index});
             binding->blocks.push_back(std::move(block));
         }
@@ -459,7 +476,18 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
     uint8_t exception_code = 0;
     kx_ext_quality_reason_t fail_reason = KX_EXTR_TIMEOUT;
 
-    for (const auto& block : binding.blocks) {
+    /* `ISS-PIO-22` — chỉ đọc block ĐẾN HẠN theo nhóm poll của chính nó.
+     *
+     * Đây là chỗ tính năng thật sự tiết kiệm dây: một điểm `slow` nằm trong
+     * block riêng và chỉ chiếm dây theo nhịp `poll_slow_ms`, thay vì đi cùng
+     * mọi lượt poll của thiết bị như trước bản vá. */
+    bool polled_any_block = false;
+    for (auto& block : binding.blocks) {
+        const uint32_t interval_ms = group_interval_ms(block.poll_group, sc.poll_ms,
+                                                       sc.poll_fast_ms, sc.poll_slow_ms);
+        if (!block_is_due(block.last_poll_ms, now_ms, interval_ms)) continue;
+        polled_any_block = true;
+        block.last_poll_ms = now_ms;
         uint16_t regs[kMaxRegistersPerBlock] = {};
         std::vector<uint8_t> bits;
         if (block.fc == 1 || block.fc == 2) bits.assign(block.count, 0u);
@@ -622,7 +650,18 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
         }
     }
 
+    /* `ISS-PIO-22` — KHÔNG có block nào đến hạn nghĩa là lượt này không hề chạm
+     * dây. Báo `on_poll_ok` ở đây sẽ giữ slave "ONLINE" vĩnh viễn mà chưa từng
+     * hỏi nó câu nào — một slave đã rút cáp vẫn hiện khoẻ mạnh. Không có I/O
+     * thì không có gì để báo cáo, kể cả thành công. */
+    if (!polled_any_block) return;
+
     if (slave_ok) {
+        /* Chỉ ghi mốc "đọc thật thành công" cho các block VỪA đọc trong lượt
+         * này; block chưa đến hạn giữ nguyên mốc cũ và tiếp tục già đi. */
+        for (auto& block : binding.blocks) {
+            if (block.last_poll_ms == now_ms) block.last_ok_ms = now_ms;
+        }
         on_poll_ok(&state, now_ms);
         metrics.update(binding.global_idx, true, now_ms, sc.offline_after_errors);
         if (metrics.get(binding.global_idx).e302_triggered)
@@ -638,6 +677,44 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
                          metrics.get(binding.global_idx).error_rate() * 100.0f);
     }
 #endif
+}
+
+/* `ISS-PIO-22` — hạ STALE theo NGƯỠNG CỦA CHÍNH ĐIỂM.
+ *
+ * Trước bản vá chỉ có một đường xuống cấp: slave timeout ⇒ cả dải slot của
+ * slave rơi STALE. Một thiết bị vẫn trả lời (slave ONLINE) nhưng ngừng cập nhật
+ * đúng một block — vì địa chỉ đó bị gỡ, vì cảm biến rời ra — sẽ giữ giá trị cũ
+ * mãi mãi với quality GOOD. Đó là kiểu nói dối êm ái nguy hiểm nhất: không có
+ * cảnh báo nào, và người vận hành tin vào một con số đã chết.
+ *
+ * `mark_range_quality` GIỮ NGUYÊN mốc thời gian của mẫu — đúng như hợp đồng của
+ * `ExtCache`: mốc trả lời "lần cuối thiết bị nói thật là khi nào", nên hạ
+ * quality không được phép làm mẫu trẻ lại. */
+void BusWorker::sweep_stale_blocks(uint64_t now_ms, ExtCache& cache)
+{
+    for (auto& binding : slaves_) {
+        if (binding.config_error) continue;
+        const SlaveConfig& sc = binding.cfg;
+        for (const auto& block : binding.blocks) {
+            /* Chưa từng đọc thành công lần nào thì slot đang mang
+             * BAD/NOT_INITIALIZED từ `declare_point` — đó đã là sự thật đúng,
+             * và ghi đè bằng STALE sẽ làm mất lý do cụ thể hơn. */
+            if (block.last_ok_ms == 0) continue;
+            if (now_ms < block.last_ok_ms) continue; /* đồng hồ lùi */
+
+            const uint32_t interval = group_interval_ms(block.poll_group, sc.poll_ms,
+                                                        sc.poll_fast_ms, sc.poll_slow_ms);
+            for (const auto& member : block.members) {
+                const uint32_t threshold =
+                    effective_stale_after_ms(member.point->stale_after_ms, interval);
+                if (now_ms - block.last_ok_ms < threshold) continue;
+                const uint16_t slots = ext_slots_for_point(*member.point);
+                if (slots == 0) continue;
+                cache.mark_range_quality(member.ext_index, slots,
+                                         KX_EXTQ_STALE, KX_EXTR_TIMEOUT, binding.state.online);
+            }
+        }
+    }
 }
 
 void BusWorker::note_dropped_write_slot(uint16_t ext_idx)
@@ -848,6 +925,12 @@ void BusWorker::poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& met
     }
     std::stable_sort(due.begin(), due.end(),
                      [](const DueSlave& a, const DueSlave& b) { return a.overdue > b.overdue; });
+
+    /* Quét stale TRƯỚC khi đọc: một block quá hạn phải hạ quality ngay cả khi
+     * lượt này nó lại được đọc thành công — thứ tự ngược sẽ xoá dấu vết của
+     * chính khoảng thời gian dữ liệu đã cũ. Lượt đọc sau đó ghi đè bằng mẫu
+     * mới, đúng như mong muốn. */
+    sweep_stale_blocks(now_ms, cache);
 
     std::vector<bool> flushed(slaves_.size(), false);
     for (const auto& d : due) {

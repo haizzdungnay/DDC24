@@ -133,6 +133,11 @@ export interface ModbusRTUDevice {
   retry: number
   offline_after_errors?: number
   offline_probe_ms?: number
+  /** `ISS-PIO-22` — chu kỳ của nhóm poll `fast`/`slow`. `poll_ms` giữ nguyên
+   *  nghĩa là chu kỳ nhóm `normal`, nên thiết bị đang chạy không đổi hành vi.
+   *  `0`/vắng = suy từ `poll_ms` (fast = poll_ms, slow = poll_ms × 10). */
+  poll_fast_ms?: number
+  poll_slow_ms?: number
 }
 
 /** `ISS-PIO-21` — hai cách đánh số địa chỉ Modbus.
@@ -174,7 +179,21 @@ export interface ModbusRTUPoint {
    *
    *  Vắng mặt = `protocol`, đúng cách mọi cấu hình đang chạy đã được nhập. */
   address_convention?: ModbusAddressConvention
+  /** `ISS-PIO-22` (đề bài §22) — NHÓM POLL của điểm.
+   *
+   *  Trước bản vá `poll_ms` chỉ có ở cấp Device, nên một điểm cấu hình (đọc một
+   *  lần mỗi phút là đủ) bị poll cùng nhịp với tần số VFD (500 ms) và tiêu băng
+   *  thông RS-485 vô ích. Chu kỳ thật của mỗi nhóm do Device khai.
+   *
+   *  Vắng mặt = `normal`, tức chu kỳ `poll_ms` — hành vi trước bản vá. */
+  poll_group?: ModbusPollGroup
+  /** `ISS-PIO-22` — ngưỡng tự hạ STALE riêng cho điểm, tính từ mẫu ĐỌC THÀNH
+   *  CÔNG gần nhất. `0`/vắng = SUY từ chu kỳ poll hiệu lực, KHÔNG phải "tắt". */
+  stale_after_ms?: number
 }
+
+/** `ISS-PIO-22` — ba nhóm poll, khớp `poll_group_from_string` của firmware. */
+export type ModbusPollGroup = 'fast' | 'normal' | 'slow'
 
 /** DATA_MODEL §6.2 — năm mức. `UNKNOWN` xuất hiện khi producer mới hơn
  *  consumer; tuyệt đối không được đoán về GOOD. */

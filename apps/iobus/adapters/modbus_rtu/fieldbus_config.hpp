@@ -20,7 +20,14 @@ struct SlaveConfig {
     uint8_t     bus_id = 1;
     std::string profile;          /* profile ID (tìm trong /usr/share hoặc /data/config) */
     std::string name;             /* tên slave, dùng làm prefix ext point name */
+    /* `poll_ms` là chu kỳ của nhóm `Normal` — tên giữ nguyên để cấu hình cũ
+     * đọc đúng như trước (`ISS-PIO-22`). */
     uint32_t    poll_ms = 1000;
+    /* Chu kỳ của hai nhóm còn lại. `0` = suy từ `poll_ms`: Fast = poll_ms,
+     * Slow = poll_ms × `kSlowPollFactor`. Suy chứ không ép một hằng số tuyệt
+     * đối, vì "chậm" chỉ có nghĩa TƯƠNG ĐỐI với nhịp cơ sở của chính thiết bị. */
+    uint32_t    poll_fast_ms = 0;
+    uint32_t    poll_slow_ms = 0;
     uint32_t    timeout_ms = 300;  /* response timeout riêng từng thiết bị */
     /* D-05: SỐ LẦN PHÁT LẠI một giao dịch Modbus bị lỗi, trong cùng lượt poll.
      *

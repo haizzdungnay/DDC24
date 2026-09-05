@@ -206,6 +206,21 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
 
     jget_str(obj, "map_to", &pt->map_to);
 
+    /* `ISS-PIO-22` — nhóm poll và ngưỡng stale theo ĐIỂM (đề bài §22).
+     * Khoá vắng ⇒ giữ mặc định `normal`/`0`, tức hành vi trước bản vá. */
+    std::string group;
+    if (jget_str(obj, "poll_group", &group)) {
+        pt->poll_group = poll_group_from_string(group.c_str());
+        /* Chuỗi lạ rơi về `normal` và PHẢI nói ra: im lặng hạ về mặc định sẽ để
+         * người vận hành tin rằng đã đặt được `slow` cho một điểm cấu hình. */
+        if (group != poll_group_name(pt->poll_group))
+            std::fprintf(stderr, "WARN  profile.unknown_poll_group name=%s value=%s → normal\n",
+                         pt->name.c_str(), group.c_str());
+    }
+    double stale = 0.0;
+    if (jget_num(obj, "stale_after_ms", &stale) && stale > 0)
+        pt->stale_after_ms = static_cast<uint32_t>(stale);
+
     /* `expose_bacnet` — ĐỌC ĐỂ CẢNH BÁO, KHÔNG THỰC THI (OD-MBRTU-014).
      *
      * Khoá này từng được parse vào ProfilePoint nhưng chưa bao giờ có consumer

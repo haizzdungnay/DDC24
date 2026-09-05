@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth, roleAtLeast } from '../../auth'
 import { apiClient } from '../../../shared/api/client'
 import { useI18n } from '../../../shared/i18n'
-import type { ModbusAddressConvention, ModbusImportError, ModbusRTUDevice, ModbusRTUPoint, ModbusTemplate } from '../../../shared/types'
+import type { ModbusAddressConvention, ModbusImportError, ModbusPollGroup, ModbusRTUDevice, ModbusRTUPoint, ModbusTemplate } from '../../../shared/types'
 import { NO_DATA, buttonClass, emptyPoint, inputClass, readOnlyHint } from '../shared'
 import { Field } from '../components/Field'
 import { displayAddress, normalizeConvention, storedAddress, vendorRange, vendorReference } from '../addressConvention'
@@ -266,6 +266,24 @@ export function PointsPage() {
             <option value="input_register">Input Register</option>
             <option value="holding_register">Holding Register</option>
             </select>
+          </Field>
+          {/* `ISS-PIO-22` (đề bài §22) — nhóm poll theo ĐIỂM.
+              Trước bản vá `poll_ms` chỉ có ở cấp Thiết bị, nên một điểm cấu hình
+              (đọc một lần mỗi phút là đủ) bị poll cùng nhịp với tần số VFD và
+              tiêu băng thông RS-485 vô ích. Dây RS-485 là tài nguyên chia sẻ:
+              mỗi khung thừa đẩy lượt poll của điểm khác ra sau. */}
+          <Field label={pick('Nhóm poll', 'Poll group')} hint={pick('Chu kỳ thật của mỗi nhóm do Thiết bị khai. Nhanh/Chậm chỉ có nghĩa tương đối với nhịp cơ sở của chính thiết bị đó.', 'Each group\u2019s real interval is declared on the Device. Fast/Slow are relative to that device\u2019s base rate.')}>
+            <select className={inputClass} aria-label="Poll group" value={point.poll_group ?? 'normal'}
+              onChange={(e) => setPoint({ ...point, poll_group: e.target.value as ModbusPollGroup })}>
+              <option value="fast">{pick('Nhanh', 'Fast')}</option>
+              <option value="normal">{pick('Bình thường', 'Normal')}</option>
+              <option value="slow">{pick('Chậm', 'Slow')}</option>
+            </select>
+          </Field>
+          <Field label={pick('Ngưỡng STALE (ms)', 'Stale after (ms)')} hint={pick('0 = suy từ chu kỳ poll của nhóm. KHÔNG phải "tắt": một điểm không bao giờ hạ stale sẽ giữ giá trị cũ với nhãn GOOD khi thiết bị ngừng trả lời đúng nó.', '0 = derived from the group\u2019s poll interval. NOT "off": a point that never goes stale keeps a dead value labelled GOOD.')}>
+            <input type="number" min={0} max={3600000} className={inputClass} aria-label="Stale after ms"
+              value={point.stale_after_ms ?? 0}
+              onChange={(e) => setPoint({ ...point, stale_after_ms: Math.max(0, Math.trunc(Number(e.target.value))) })} />
           </Field>
           {/* `ISS-PIO-21` (đề bài §23) — quy ước địa chỉ.
               Trước bản vá ô nhập ghi thẳng "nhiều tài liệu đánh số từ 1 — trừ đi

@@ -271,3 +271,44 @@ TEST(ExtSlotAccounting, ProfileTotalIsSumOverPoints)
     prof.points = {a, b, c, d};
     EXPECT_EQ(ext_slots_for_profile(prof), 8u);   /* lỗi cũ sẽ ra 2+3+4+9 = 18 */
 }
+
+/* `ISS-PIO-22` — parser phải mang `poll_group`/`stale_after_ms` tới
+ * `ProfilePoint`. Không mang thì hai trường chỉ là chữ trong tệp cấu hình, và
+ * người vận hành đặt `slow` cho một điểm cấu hình sẽ tin rằng đã tiết kiệm được
+ * băng thông RS-485 trong khi không có gì đổi. */
+TEST_F(ProfileTest, ParsesPollGroupAndStaleAfterMs)
+{
+    write_profile(R"json({"points":[
+        {"name":"config","fc":3,"addr":0,"count":1,"type":"uint16",
+         "poll_group":"slow","stale_after_ms":45000}
+    ]})json");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    ASSERT_EQ(prof.points.size(), 1u);
+    EXPECT_EQ(prof.points[0].poll_group, PollGroup::Slow);
+    EXPECT_EQ(prof.points[0].stale_after_ms, 45000u);
+}
+
+/* Khoá vắng ⇒ mặc định `normal`/`0`, tức hành vi trước bản vá. Lệch mặc định ở
+ * đây là đổi nhịp poll của MỌI bo đang chạy khi nâng cấp firmware. */
+TEST_F(ProfileTest, PollGroupDefaultsKeepLegacyBehaviour)
+{
+    write_profile(R"json({"points":[
+        {"name":"a","fc":3,"addr":0,"count":1,"type":"uint16"}
+    ]})json");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    EXPECT_EQ(prof.points[0].poll_group, PollGroup::Normal);
+    EXPECT_EQ(prof.points[0].stale_after_ms, 0u);
+}
+
+/* Nhóm lạ rơi về `normal` — nhưng KHÔNG im lặng: xem cảnh báo trong parser. */
+TEST_F(ProfileTest, UnknownPollGroupFallsBackToNormal)
+{
+    write_profile(R"json({"points":[
+        {"name":"a","fc":3,"addr":0,"count":1,"type":"uint16","poll_group":"cuc-nhanh"}
+    ]})json");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    EXPECT_EQ(prof.points[0].poll_group, PollGroup::Normal);
+}
