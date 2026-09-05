@@ -3,6 +3,20 @@
  * @brief MOD-013: Modbus TCP client — kết nối đến nhiều slave TCP độc lập.
  *        Mỗi slave có reconnect state machine: DISCONNECTED → connect → CONNECTED.
  *        libmodbus API guarded by MKDDC_ENABLE_MODBUS; logic compile unconditionally.
+ *
+ * ẨN CÓ CHỦ Ý — KHÔNG PHẢI MÃ CHẾT (`ADR-055`, `ISS-PIO-30`, `F-PIO-024`).
+ *
+ * Tệp này KHÔNG có route, KHÔNG có schema và KHÔNG có trang giao diện. Đó là
+ * trạng thái ĐÚNG ĐỀ BÀI, không phải thiếu sót: đề bài §19 quy định *"Nếu Rev A
+ * hiện chưa hỗ trợ Modbus TCP thì không hiện tab này"*.
+ *
+ * Vì thế `grep` ra "không ai gọi từ web/API" là kết luận SAI về tệp này. Nó có
+ * consumer thật trong firmware (`register_codec`, dùng chung với đường RTU), và
+ * xoá nó để "dọn dẹp" là một hồi quy hai mặt: mã sẽ phải viết lại khi Rev B mở
+ * tab, và `register_codec` mất một consumer đang giữ cho đường mã hoá thanh ghi
+ * không rẽ nhánh theo giao thức.
+ *
+ * Mở tab Modbus TCP là QUYẾT ĐỊNH SẢN PHẨM (Rev B), không phải một PR dọn dẹp.
  */
 #ifndef IOBUS_MODBUS_TCP_HPP
 #define IOBUS_MODBUS_TCP_HPP

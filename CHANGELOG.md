@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PIO-30` Ghi hồ sơ: Modbus TCP ẩn có chủ ý (capability-gated) (#410, 2026-09-05)
+
+- **Bối cảnh.** `apps/iobus/adapters/modbus_rtu/modbus_tcp.{hpp,cpp}` tồn tại, được biên dịch và
+  được `register_codec` dùng — nhưng không có route, không có schema, không có trang. Đề bài §19 nói
+  rõ *"Nếu Rev A hiện chưa hỗ trợ Modbus TCP thì **không hiện tab này**"*, nên **hành vi hiện tại
+  đúng đề bài**. Rủi ro là người sau `grep` thấy "không ai gọi từ web/API" rồi xoá đi như mã chết.
+- **Cách sửa.** Cấp `ADR-055` **Accepted** ghi rõ đây là **ẩn có chủ ý (capability-gated)**, và đặt
+  chính lời cảnh báo đó ở **đầu `modbus_tcp.hpp`** — người sắp xoá tệp đang nhìn vào chính tệp đó,
+  không phải vào `DECISIONS.md`.
+- **Một dòng trong hồ sơ chỉ giúp người ĐỌC hồ sơ.** Nên kèm ba cổng biến lời khẳng định của
+  `ADR-055` thành thứ CI kiểm được: mã vẫn còn và vẫn được build; chú thích cảnh báo vẫn ở đầu
+  header; và Modbus TCP vẫn **thật sự ẩn** (không route/schema trong `openapi.yaml`). Nếu ai đó mở
+  tab mà quên cập nhật `ADR-055`, cổng thứ ba đỏ và bắt phải sửa hồ sơ cùng lúc — hồ sơ và mã không
+  lệch nhau trong im lặng được nữa.
+- **Xoá để "dọn dẹp" là hồi quy hai mặt:** mã sẽ phải viết lại khi Rev B mở tab, và `register_codec`
+  mất một consumer đang giữ cho đường mã hoá thanh ghi không rẽ nhánh theo giao thức.
+
 ### Fixed — Core từ chối tham số CLI sai trước khi mở socket (2026-09-05)
 
 - Khi chẩn đoán deploy bằng cờ không tồn tại `--build-info`, Core bỏ qua tham số,
