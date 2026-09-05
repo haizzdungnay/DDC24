@@ -203,6 +203,31 @@ type upsertLibraryEntryRequest struct {
 	Tags []string `json:"tags,omitempty"`
 }
 
+/*
+`T61-401` — hình dạng câu trả lời của bước Check.
+
+	`diagnostics` KHÔNG `omitempty`: mảng rỗng là câu trả lời "đã kiểm, sạch", và
+	để nó vắng thì client không phân biệt được với "máy chủ cũ chưa kiểm gì".
+*/
+type libraryEntryDiagnosticResponse struct {
+	Field   string `json:"field"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	/* `severity` là chuỗi chứ không phải cờ boolean: thêm một mức thứ ba sau này
+	   không được làm client cũ đọc nó thành "không chặn". */
+	Severity string `json:"severity"`
+}
+
+type libraryEntryCheckResponse struct {
+	Blocking    bool                             `json:"blocking"`
+	Diagnostics []libraryEntryDiagnosticResponse `json:"diagnostics"`
+	/* Draft library SẼ nhận thay đổi. Rỗng nghĩa là Project chưa mở Draft
+	   library nào và lần ghi đầu tiên sẽ tự mở — bước Review phải nói ra điều
+	   đó thay vì hiện một ô trống trông như dữ liệu thiếu. */
+	LibraryRevisionID string `json:"libraryRevisionId,omitempty"`
+	LibraryVersion    string `json:"libraryVersion,omitempty"`
+}
+
 type deprecateLibraryRevisionRequest struct {
 	SchemaVersion string `json:"schemaVersion"`
 }
@@ -218,6 +243,11 @@ func handleLibraryRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		handleSearchLibraries(w, r, correlationID, service)
 	case r.Method == http.MethodGet && path == "/api/v1/programming/library-usages":
 		handleLibraryUsage(w, r, correlationID, service)
+	case r.Method == http.MethodPost && strings.HasSuffix(path, "/library/entries/check") && r.PathValue("projectId") != "":
+		/* Nhánh Check đứng TRƯỚC nhánh upsert và so hậu tố đầy đủ. Đảo thứ tự
+		   hoặc so `Contains` sẽ làm một lần bấm "Kiểm tra" rơi vào đường ghi —
+		   đúng thứ mà dry run sinh ra để tránh. */
+		handleCheckLibraryEntry(w, r, correlationID, service)
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/library/entries") && r.PathValue("projectId") != "":
 		handleUpsertLibraryEntry(w, r, correlationID, service)
 	case r.Method == http.MethodDelete && strings.Contains(path, "/library/entries/") &&
@@ -270,7 +300,7 @@ func handleUpsertLibraryEntry(w http.ResponseWriter, r *http.Request, correlatio
 		Kind: request.Kind, Name: request.Name, Language: request.Language, FeatureState: request.FeatureState,
 		Source: request.Source, InterfaceJSON: request.Interface, Dependencies: request.Dependencies,
 		StateLayout: request.StateLayout, Category: request.Category, Description: request.Description,
-		Tags:        request.Tags,
+		Tags:           request.Tags,
 		IfMatch:        r.Header.Get("If-Match"),
 		IdempotencyKey: r.Header.Get("X-Idempotency-Key"), CorrelationID: correlationID,
 	})
@@ -279,6 +309,53 @@ func handleUpsertLibraryEntry(w http.ResponseWriter, r *http.Request, correlatio
 		return
 	}
 	writeMutation(w, http.StatusOK, correlationID, result)
+}
+
+/*
+`T61-401` — bước Check của wizard Create/Edit PROJECT Library.
+
+Đây là DRY RUN: cùng payload với upsert, không `If-Match`, không idempotency key,
+không ghi gì. Bắt nó mang `If-Match` sẽ tiêu ETag Draft cho một lần bấm "Kiểm
+tra" và buộc người dùng tải lại trang giữa chừng wizard.
+
+Trả `200` kể cả khi có lỗi chặn. Chẩn đoán là NỘI DUNG của câu trả lời, không
+phải một sự cố: trả `400` ở đây sẽ khiến client coi bảng chẩn đoán là thân lỗi
+và mất đúng danh sách trường mà người dùng cần đọc.
+*/
+func handleCheckLibraryEntry(w http.ResponseWriter, r *http.Request, correlationID string,
+	service *programmingapplication.LibraryService) {
+	var request upsertLibraryEntryRequest
+	if err := decodeStrictRequest(r, &request); err != nil {
+		writeMappedError(w, err, correlationID)
+		return
+	}
+	result, err := service.CheckEntry(r.Context(), requestActor(r), programmingapplication.UpsertLibraryEntryCommand{
+		ProjectID: r.PathValue("projectId"), SchemaVersion: request.SchemaVersion, EntryID: request.EntryID,
+		Kind: request.Kind, Name: request.Name, Language: request.Language, FeatureState: request.FeatureState,
+		Source: request.Source, InterfaceJSON: request.Interface, Dependencies: request.Dependencies,
+		StateLayout: request.StateLayout, Category: request.Category, Description: request.Description,
+		Tags: request.Tags, CorrelationID: correlationID,
+	})
+	if err != nil {
+		writeMappedError(w, err, correlationID)
+		return
+	}
+	response := libraryEntryCheckResponse{Blocking: result.Blocking,
+		LibraryRevisionID: result.LibraryRevisionID, LibraryVersion: result.LibraryVersion,
+		Diagnostics: make([]libraryEntryDiagnosticResponse, 0, len(result.Diagnostics))}
+	for _, diagnostic := range result.Diagnostics {
+		response.Diagnostics = append(response.Diagnostics, libraryEntryDiagnosticResponse{
+			Field: diagnostic.Field, Code: diagnostic.Code, Message: diagnostic.Message,
+			Severity: libraryDiagnosticSeverity(diagnostic.Blocking)})
+	}
+	writeJSON(w, http.StatusOK, correlationID, response)
+}
+
+func libraryDiagnosticSeverity(blocking bool) string {
+	if blocking {
+		return "BLOCKING"
+	}
+	return "WARNING"
 }
 
 func handleDeleteLibraryEntry(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.LibraryService) {

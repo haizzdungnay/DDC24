@@ -740,12 +740,59 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
-| `T61-401` | P0 | PROJECT Create/Edit drawer: Metadata → Interface → Implementation → Check → Review/Save; field validation và focus. | `T61-301`, `T61-106` | `DONE` | 2,5 nd |
+| `T61-401` | P0 | PROJECT Create/Edit drawer: Metadata → Interface → Implementation → Check → Review/Save; field validation và focus. | `T61-301`, `T61-106` | `DONE` (sửa lại ở `ISS-PGM04-11`, xem đính chính bên dưới) | 2,5 nd |
 | `T61-402` | P0 | Giữ ETag/idempotency/read-back; PUBLISHED edit tạo Draft minor; timeout reconcile; không có Publish giả. | `T61-401` | `DONE` | 1 nd |
 | `T61-403` | P0 | Used-In lazy page + deep-link exact PGM-02 bằng `objectId`, giữ filter/returnTo và dirty guard. | `T61-104/304` | `DONE` | 1,5 nd |
 | `T61-404` | P1 | Preview/Open read-only cho entry và source/interface authoritative; unsupported metadata hiện rõ. | `T61-304` | `DONE` | 1 nd |
 | `T61-405` | P0 | Standalone Insert mở `TargetPouChooser`, kiểm Project/mode/language/type/selection rồi gọi shared insertion adapter. | `T61-203/403` | `DONE` | 2 nd |
 | `T61-406` | P0 | Zero-mutation guards: cancel/no-target/type mismatch/permission/offline/stale/REVIEW_REQUIRED; một success = một Undo. | `T61-405` | `DONE` | 1 nd |
+
+**Đính chính `T61-401` (`ISS-PGM04-11`, đo `2026-09-05`).** Trạng thái `DONE` đã
+được ghi cho một **form phẳng**, không phải một wizard. Sáu khoảng cách thật:
+
+1. **Không có năm bước.** Mọi trường nằm trên cùng một màn trong `Modal`; không
+   có `Metadata → Interface → Implementation → Check → Review`.
+2. **`interface` không sửa được.** Mã chỉ chép lại `entry.interface` (hoặc
+   `{ inputs: [] }` cho khối mới), nên không có đường nào khai cổng vào/ra hay
+   kiểu trả về — đúng phần mà `AC-PGM04-03` gọi là "Interface".
+3. **`tags` không ghi được.** Trường đã nằm trong hợp đồng ghi từ `T61-101`
+   nhưng không có ô nhập nào và cũng không có trong kiểu `LibraryEntryDraft` của
+   FE, nên mọi khối PROJECT vĩnh viễn không có thẻ.
+4. **Không có bước Kiểm tra.** Đường ghi trả `ErrInvalidRequest` trần — một
+   `400` không nói TRƯỜNG nào sai.
+5. **Vòng phụ thuộc không bị chặn ở đường ghi.**
+   `domain.ValidateLibraryDependencies` chỉ chạy lúc dựng manifest
+   (Seal/Publish), nên `A → B` rồi sửa `B → A` ghi vào Draft trót lọt và chỉ nổ
+   ở lần Seal sau đó, cách chỗ gây lỗi hàng chục thao tác.
+6. **Đóng giữa chừng mất trắng.** Không hỏi lại một câu nào.
+
+**Vì sao không test nào đỏ.** Mọi luật của form chỉ tồn tại dưới dạng biểu thức
+rải rác trong JSX, nên không kiểm được nếu không dựng cả cây DOM — và không có
+test nào hỏi "bước này có tồn tại không". Nay luật nằm ở `libraryWizard.ts`
+(thuần, kiểm trực tiếp được) và mỗi hành vi của wizard có một test riêng.
+
+**Điểm mấu chốt của bản sửa.** `DiagnoseEntry` ở lớp application là **một** nơi
+phát biểu "entry này hợp lệ chưa", và **cả** đường Check
+(`POST .../library/entries/check`, dry run) **lẫn** đường Upsert đi qua đúng hàm
+đó. Nhờ vậy "Check sạch" và "Save nhận" không thể tách nhau — nếu tách, test
+`TestCheckAndSaveAgreeOnEveryPayload` đỏ ngay. Phép dò chu trình gọi lại **chính**
+`domain.ValidateLibraryDependencies` mà Seal dùng, chứ không viết bản thứ hai.
+
+**Tiêm lỗi 14/14 đỏ, sau khi vá một lỗ hổng do chính phép tiêm chỉ ra.** Vòng đầu
+có một phép tiêm XANH: hạ `severity` của chẩn đoán vòng phụ thuộc xuống
+không-chặn vẫn giữ `ErrInvalidRequest` ở đường ghi (đường ghi từ chối khi danh
+sách khác rỗng), nên không test nào đỏ — trong khi FE đọc đúng cờ `blocking` để
+mở nút Lưu. Đã bổ sung khẳng định `CheckEntry(...).Blocking == true` cho ca vòng.
+Bài học: **"có một phát hiện" khác "phát hiện đó chặn được"** — test phải đo đúng
+trường mà client dùng để quyết định.
+
+**Ranh giới còn lại, ghi rõ chứ không giấu.** Máy chủ vẫn **không** trả lại
+`source` của entry đã lưu (`T61-404` giữ phần đó), nên khi sửa, ô mã nguồn bắt
+đầu **trống** và wizard nói ra lý do; Lưu vẫn bị chặn khi ô còn trống, nên không
+có đường nào ghi mã rỗng đè lên khối. Kiểm kiểu **cổng** là luật của FE — máy chủ
+vẫn nhận mọi object JSON làm `interface`, đúng như trước lát này.
+
+---
 
 ### WP-05 — Verification, deploy và closeout
 

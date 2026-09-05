@@ -60,6 +60,17 @@ var (
 	librarySystemVerPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,63}$`)
 )
 
+/*
+ValidLibraryEntryName là CỬA DUY NHẤT ra ngoài của luật tên IEC.
+
+Lớp application cần đúng luật này để nói được "tên sai" TRƯỚC khi ghi (bước
+Check của wizard `T61-401`). Chép lại biểu thức ở đó sẽ tạo bản luật thứ hai:
+nới một đầu thì Check nói "được" rồi Save trả 400, siết một đầu thì Check chặn
+một tên mà máy chủ vẫn nhận. Cùng một `regexp` cho cả hai đầu là cách duy nhất
+hai câu trả lời không tách nhau.
+*/
+func ValidLibraryEntryName(value string) bool { return libraryIECNamePattern.MatchString(value) }
+
 var projectLibraryLegacySignature = []byte(`{"schemaVersion":1,"authority":"interface_json"}`)
 
 // SystemLibraryProvider là hook read-only tới registry Go được sinh. Store
@@ -1110,7 +1121,7 @@ func prepareRevisionPOUObjects(inputs []POUObjectInput) ([]preparedPOUObject, er
 		if input.Kind != "PROGRAM" && input.Kind != "FUNCTION" && input.Kind != "FUNCTION_BLOCK" {
 			return nil, fmt.Errorf("POU kind không hợp lệ: %s", input.Kind)
 		}
-		if !libraryIECNamePattern.MatchString(input.Name) || (input.Language != "ST" && input.Language != "FBD") {
+		if !ValidLibraryEntryName(input.Name) || (input.Language != "ST" && input.Language != "FBD") {
 			return nil, fmt.Errorf("POU name/language không hợp lệ")
 		}
 		if _, duplicate := seenIDs[input.ObjectID]; duplicate {
@@ -1261,7 +1272,7 @@ func prepareProjectLibraryEntry(params UpsertProjectLibraryEntryParams, publishi
 	if err := validateUUIDs(params.EntryID); err != nil {
 		return LibraryEntry{}, err
 	}
-	if !libraryIECNamePattern.MatchString(params.Name) {
+	if !ValidLibraryEntryName(params.Name) {
 		return LibraryEntry{}, fmt.Errorf("name Control Library không hợp lệ")
 	}
 	if (params.Kind != LibraryKindFunction && params.Kind != LibraryKindFunctionBlock) ||

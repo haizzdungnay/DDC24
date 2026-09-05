@@ -38,7 +38,22 @@ type routeDefinition struct {
 	   chạy khi thiếu quyền, nên một vai không đủ quyền không tạo ra side effect
 	   nào — kể cả một lần đọc làm lộ sự tồn tại của phiên.
 	*/
-	permission          auth.Permission
+	permission auth.Permission
+	/*
+	   `T61-401` — POST KHÔNG GHI, khai tường minh.
+
+	   Bất biến cũ của `security_matrix_test.go` là "mọi route khác GET đều là
+	   mutation", và nó đúng cho tới khi có một dry run: bước Check của wizard
+	   nhận cả một payload entry (không nhét vào query string được) nhưng không
+	   ghi gì. Xếp nó vào mutation buộc phải bịa ra `idempotencyRequired` cho
+	   một thứ không có gì để lặp, và làm phép ĐẾM bề mặt mutation trong record
+	   V&V kể một route ghi không hề tồn tại.
+
+	   Cờ này chỉ được đặt khi handler thật sự không gọi đường ghi nào. Nó không
+	   nới lỏng gì: `TestReadOnlyPostsAreEnumeratedAndDoNotWrite` khoá danh sách
+	   route mang cờ này bằng tên, nên thêm một cái nữa vẫn phải đỏ trước.
+	*/
+	readOnly            bool
 	bodyRequired        bool
 	idempotencyRequired bool
 	ifMatchRequired     bool
@@ -62,6 +77,13 @@ var routeDefinitions = []routeDefinition{
 	   hành phải đoán. */
 	{method: "GET", path: "/api/v1/programming/library-usages", permission: auth.PermissionRead},
 	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	/* `T61-401` — Check là DRY RUN của cùng payload: không `If-Match`, không
+	   idempotency key, không ghi. Bắt nó mang `If-Match` sẽ tiêu ETag Draft cho
+	   một lần bấm "Kiểm tra"; bắt nó mang idempotency key sẽ biến hai lần kiểm
+	   giống hệt nhau thành một xung đột. Quyền vẫn là `program.edit` vì nó đọc
+	   được cấu trúc Draft library của Project. */
+	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries/check",
+		permission: auth.PermissionProgramEdit, readOnly: true, bodyRequired: true},
 	{method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", permission: auth.PermissionProgramEdit, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
 		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},

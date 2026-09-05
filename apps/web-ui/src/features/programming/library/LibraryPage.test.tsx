@@ -65,13 +65,48 @@ function entry(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/** `T61-401` — bước Kiểm tra của wizard gọi máy chủ. Mặc định "sạch" để test
+ *  nào không nói gì về phép kiểm vẫn đi hết được wizard; test nào quan tâm thì
+ *  ghi đè bằng `overrides`. */
+function cleanCheck() {
+  return Promise.resolve({ blocking: false, diagnostics: [], libraryVersion: '1.0.0' })
+}
+
 function stub(libraryResponse: () => Promise<unknown>, overrides: Record<string, () => Promise<unknown>> = {}) {
   client.request.mockImplementation((operationId: string) => {
     if (overrides[operationId]) return overrides[operationId]()
     if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
     if (operationId === 'searchProgrammingLibraries') return libraryResponse()
+    if (operationId === 'checkProgrammingLibraryEntry') return cleanCheck()
     return Promise.reject(new Error('unexpected ' + operationId))
   })
+}
+
+/**
+ * `T61-401` — đi hết wizard 5 bước cho tới nút Lưu.
+ *
+ * Viết thành một hàm vì mọi test ghi đều phải đi qua CẢ NĂM bước: nếu một bước
+ * nào đó chặn nhầm, mọi test dùng hàm này đỏ cùng lúc và chỉ đúng vào bước ấy.
+ */
+async function walkWizardAndSave(options: { name?: string; source?: string; returnType?: string } = {}) {
+  const dialog = await screen.findByRole('dialog')
+  const next = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+  if (options.name !== undefined) {
+    fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: options.name } })
+  }
+  next()
+  if (options.returnType !== undefined) {
+    fireEvent.change(within(dialog).getByLabelText(/Kiểu trả về/), { target: { value: options.returnType } })
+  }
+  next()
+  if (options.source !== undefined) {
+    fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST|Nội dung FBD/), { target: { value: options.source } })
+  }
+  next()
+  fireEvent.click(within(dialog).getByRole('button', { name: /Chạy kiểm tra trên máy chủ/ }))
+  await waitFor(() => expect(within(dialog).queryByTestId('library-wizard-check-result')).not.toBeNull())
+  next()
+  fireEvent.click(within(dialog).getByRole('button', { name: /Lưu vào bản nháp thư viện/ }))
 }
 
 /* `T61-302` — URL là một phần của hợp đồng màn hình này (tab + bộ lọc + khối
@@ -331,6 +366,7 @@ describe('PGM-04 Control Library', () => {
       if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
       if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
       if (operationId === 'getProgrammingProject') return Promise.reject(new Error('không cần Draft trong test ETag'))
+      if (operationId === 'checkProgrammingLibraryEntry') return cleanCheck()
       if (operationId !== 'upsertProgrammingLibraryEntry' && operationId !== 'deleteProgrammingLibraryEntry') {
         return Promise.reject(new Error('unexpected ' + operationId))
       }
@@ -340,9 +376,10 @@ describe('PGM-04 Control Library', () => {
 
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: /Khối PROJECT mới/ }))
-    fireEvent.change(await screen.findByLabelText(/Tên khối/), { target: { value: 'HELPER' } })
-    fireEvent.change(screen.getByLabelText(/Mã nguồn ST/), { target: { value: 'FUNCTION HELPER : REAL\nEND_FUNCTION\n' } })
-    fireEvent.click(screen.getByRole('button', { name: /Lưu vào bản nháp thư viện/ }))
+    await walkWizardAndSave({
+      name: 'HELPER', returnType: 'REAL',
+      source: 'FUNCTION HELPER : REAL\nEND_FUNCTION\n'
+    })
     await waitFor(() => expect(etags).toEqual([PROJECT_ETAG]))
 
     fireEvent.click(cardFor('SCALE_LIN'))
@@ -362,6 +399,7 @@ describe('PGM-04 Control Library', () => {
       if (operationId === 'searchProgrammingLibraries') {
         return Promise.resolve({ items: [entry({ interface: canonicalInterface })] })
       }
+      if (operationId === 'checkProgrammingLibraryEntry') return cleanCheck()
       if (operationId === 'upsertProgrammingLibraryEntry') {
         mutationBody = options?.body
         return Promise.resolve({ resource: {}, etag: NEXT_ETAG, auditId: 'a', correlationId: 'c' })
@@ -372,10 +410,10 @@ describe('PGM-04 Control Library', () => {
     renderPage()
     fireEvent.click(await waitFor(() => cardFor('SCALE_LIN')))
     fireEvent.click(screen.getByRole('button', { name: /Sửa khối/ }))
-    fireEvent.change(screen.getByLabelText(/Mã nguồn ST/), {
-      target: { value: 'FUNCTION SCALE_LIN : REAL\nVAR_INPUT X : REAL; END_VAR\nSCALE_LIN := X;\nEND_FUNCTION\n' }
+    // Không đụng vào bước Giao diện: wizard phải dựng lại ĐÚNG hợp đồng đã lưu.
+    await walkWizardAndSave({
+      source: 'FUNCTION SCALE_LIN : REAL\nVAR_INPUT X : REAL; END_VAR\nSCALE_LIN := X;\nEND_FUNCTION\n'
     })
-    fireEvent.click(screen.getByRole('button', { name: /Lưu vào bản nháp thư viện/ }))
 
     await waitFor(() => expect(mutationBody).toBeDefined())
     expect(mutationBody).toMatchObject({ interface: canonicalInterface })
@@ -385,10 +423,26 @@ describe('PGM-04 Control Library', () => {
     stub(() => Promise.resolve({ items: [] }))
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: /Khối PROJECT mới/ }))
-    expect(screen.getByLabelText('Mã nguồn ST')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Ngôn ngữ'), { target: { value: 'FBD' } })
-    expect(screen.getByLabelText('Nội dung FBD (JSON)')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Mã nguồn ST')).not.toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog')
+    const next = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+    const back = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Quay lại' }))
+    /* Ngôn ngữ nằm ở bước Thông tin còn ô mã nguồn ở bước Hiện thực: nhãn phải
+       theo lựa chọn đã đi qua HAI bước, không chỉ theo state cục bộ của một form
+       phẳng. Test cũng đi ngược lại để chứng minh Quay lại không xoá gì. */
+    fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'HELPER' } })
+    next()
+    fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } })
+    next()
+    expect(within(dialog).getByLabelText('Mã nguồn ST')).toBeInTheDocument()
+
+    back()
+    back()
+    expect(within(dialog).getByLabelText(/Tên khối/)).toHaveValue('HELPER')
+    fireEvent.change(within(dialog).getByLabelText('Ngôn ngữ'), { target: { value: 'FBD' } })
+    next()
+    next()
+    expect(within(dialog).getByLabelText('Nội dung FBD (JSON)')).toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('Mã nguồn ST')).not.toBeInTheDocument()
   })
 
   it('đổi bộ lọc là tải lại từ server, không lọc trên trang đã cắt', async () => {

@@ -37,10 +37,11 @@ for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
 
 endpoints.sort((left, right) => left.operationId.localeCompare(right.operationId));
 // 33 operation Rev A/R1-R2 + 7 operation Simulation R3 (T59-814)
-// + 1 operation Used-In (T61-105). Con số là contract: thêm endpoint mà quên
-// sinh lại client sẽ đỏ ở đây thay vì lộ ra dưới dạng một hàm thiếu trong FE.
-if (endpoints.length !== 41) {
-  throw new Error(`Programming OpenAPI phải có 41 operation, thực tế ${endpoints.length}`);
+// + 1 operation Used-In (T61-105) + 1 operation Check entry Library (T61-401).
+// Con số là contract: thêm endpoint mà quên sinh lại client sẽ đỏ ở đây thay vì
+// lộ ra dưới dạng một hàm thiếu trong FE.
+if (endpoints.length !== 42) {
+  throw new Error(`Programming OpenAPI phải có 42 operation, thực tế ${endpoints.length}`);
 }
 if (new Set(endpoints.map(({ operationId }) => operationId)).size !== endpoints.length) {
   throw new Error("Programming OpenAPI có operationId trùng");

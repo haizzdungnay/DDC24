@@ -70,6 +70,36 @@ export interface LibraryEntryDraft {
      `contentSha256` (`D61-09`). */
   category?: string
   description?: string
+  /* `T61-401` — thẻ. Đã có trong hợp đồng ghi từ `T61-101` nhưng thiếu ở kiểu
+     của FE, nên không đường nào gửi được: mọi khối PROJECT vĩnh viễn không có
+     thẻ. Máy chủ CHUẨN HOÁ (trim, hạ chữ thường, khử trùng lặp, sắp tăng dần)
+     trước khi lưu, nên read-back khác payload về hình thức mà không khác nội
+     dung. Bỏ hẳn field khi không có thẻ nào — mảng rỗng và "chưa gắn thẻ" là
+     cùng một câu. */
+  tags?: string[]
+}
+
+/**
+ * `T61-401` — kết quả của bước Check (dry run) trong wizard PROJECT Library.
+ *
+ * `blocking` do MÁY CHỦ tính, không suy lại từ mảng ở FE: một client đọc mảng
+ * rỗng thành "sạch" nhưng quên xét `severity` sẽ cho Lưu đúng lúc không được
+ * phép. `diagnostics` luôn là mảng — mảng rỗng nghĩa là "đã kiểm, sạch".
+ */
+export interface LibraryEntryDiagnostic {
+  field: string
+  code: string
+  message: string
+  severity: 'BLOCKING' | 'WARNING'
+}
+
+export interface LibraryEntryCheckResult {
+  blocking: boolean
+  diagnostics: LibraryEntryDiagnostic[]
+  /** Draft library SẼ nhận thay đổi. `null` nghĩa là Project chưa mở Draft
+   *  library nào và lần ghi đầu tiên sẽ tự mở. */
+  libraryRevisionId: string | null
+  libraryVersion: string | null
 }
 
 /** `resource` mà server trả sau mỗi mutation library. `libraryRevisionId` là
@@ -110,6 +140,11 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<string | null>(null)
+  /* Cờ RIÊNG cho bước Check. Dùng chung `pending`/`error` với đường ghi sẽ làm
+     một lần kiểm hỏng hiện ra như một lần lưu hỏng, và người dùng đi tìm bản
+     ghi vừa tạo. */
+  const [checkPending, setCheckPending] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
 
   const describe = useCallback(
     (reason: unknown, fallback: string): { conflict: boolean; message: string } => {
@@ -127,6 +162,7 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
   const reset = useCallback(() => {
     setError(null)
     setConflict(null)
+    setCheckError(null)
   }, [])
 
   const saveEntry = useCallback(
@@ -198,6 +234,69 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
     [client, describe, pick, projectId]
   )
 
+  /**
+   * `T61-401` — bước Check: gửi ĐÚNG payload của Lưu, không kèm `If-Match` và
+   * không kèm khoá idempotency.
+   *
+   * Không dùng chung `pending` với đường ghi: nút "Kiểm tra" và nút "Lưu" ở hai
+   * bước khác nhau, và để chung một cờ thì một lần kiểm đang chạy sẽ khoá luôn
+   * nút Lưu của bước sau — hoặc ngược lại, một lần lưu đang chạy làm nút Kiểm
+   * tra sáng lên như thể còn bấm được.
+   *
+   * Trả `null` khi hỏng: gọi được máy chủ hay không là một chuyện, còn "sạch"
+   * hay "chặn" là một chuyện khác. Quy lỗi mạng về `blocking: false` sẽ mở đường
+   * Lưu đúng lúc chưa ai kiểm gì.
+   */
+  const checkEntry = useCallback(
+    async (draft: LibraryEntryDraft): Promise<LibraryEntryCheckResult | null> => {
+      if (!projectId) return null
+      setCheckPending(true)
+      setCheckError(null)
+      try {
+        const response = await client.request<{
+          blocking?: unknown
+          diagnostics?: unknown
+          libraryRevisionId?: unknown
+          libraryVersion?: unknown
+        }>('checkProgrammingLibraryEntry', {
+          path: { projectId },
+          body: { schemaVersion: '1.0', ...draft },
+          correlationId: createUuid()
+        })
+        const diagnostics: LibraryEntryDiagnostic[] = Array.isArray(response.diagnostics)
+          ? response.diagnostics.flatMap((item) => {
+              if (typeof item !== 'object' || item === null) return []
+              const record = item as Record<string, unknown>
+              if (typeof record.field !== 'string' || typeof record.code !== 'string' ||
+                  typeof record.message !== 'string') return []
+              return [{
+                field: record.field, code: record.code, message: record.message,
+                /* Mức lạ được coi là CHẶN, không phải cảnh báo. Một mức thứ ba
+                   mà client chưa biết thì fail-closed là câu trả lời duy nhất
+                   không thể sai theo hướng cho lưu nhầm. */
+                severity: record.severity === 'WARNING' ? 'WARNING' : 'BLOCKING'
+              }]
+            })
+          : []
+        return {
+          blocking: response.blocking === true || diagnostics.some((item) => item.severity === 'BLOCKING'),
+          diagnostics,
+          libraryRevisionId: typeof response.libraryRevisionId === 'string' ? response.libraryRevisionId : null,
+          libraryVersion: typeof response.libraryVersion === 'string' ? response.libraryVersion : null
+        }
+      } catch (reason) {
+        setCheckError(describe(reason, pick(
+          'Không chạy được bước kiểm tra trên máy chủ.',
+          'Could not run the server-side check.'
+        )).message)
+        return null
+      } finally {
+        setCheckPending(false)
+      }
+    },
+    [client, describe, pick, projectId]
+  )
+
   const deprecateRevision = useCallback(
     async (etag: string, libraryRevisionId: string): Promise<LibraryRevisionDeprecationResult | null> => {
       if (!projectId) return null
@@ -257,5 +356,5 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
     [client, describe, pick, projectId]
   )
 
-  return { saveEntry, deleteEntry, deprecateRevision, pending, error, conflict, reset }
+  return { saveEntry, checkEntry, deleteEntry, deprecateRevision, pending, error, conflict, checkPending, checkError, reset }
 }

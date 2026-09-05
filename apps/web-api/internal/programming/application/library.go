@@ -281,49 +281,28 @@ func (s *LibraryService) SearchLibraries(ctx context.Context, command SearchLibr
 }
 
 func (s *LibraryService) UpsertEntry(ctx context.Context, actor Actor, command UpsertLibraryEntryCommand) (MutationResult, error) {
-	if command.SchemaVersion != "1.0" || !isUUID(command.ProjectID) || !isUUID(command.EntryID) ||
-		!validText(command.Name, 1, 64) || !validLibrarySource(command.Source) {
-		return MutationResult{}, ErrInvalidRequest
+	/* `T61-401` — đường GHI đi qua ĐÚNG bộ luật mà bước Check chạy.
+	 *
+	 * Trước lát này mỗi tầng giữ một mẩu luật riêng và không tầng nào trả lời
+	 * được "trường nào sai": đường ghi trả `ErrInvalidRequest` trần, còn vòng
+	 * phụ thuộc thì không ai chặn cho tới lần Seal. Gọi chung `DiagnoseEntry`
+	 * làm hai câu trả lời không thể tách nhau — Check nói sạch thì Save nhận,
+	 * Check nói chặn thì Save từ chối, bằng cùng một phép tính.
+	 *
+	 * `ErrInvalidRequest` vẫn là lỗi trả ra ở đây (400 như cũ). Danh sách chẩn
+	 * đoán chi tiết là việc của `CheckEntry`; đường ghi chỉ cần một câu trả lời
+	 * nhị phân và không được đổi hình dạng lỗi mà client hiện có đang đọc.
+	 */
+	diagnostics, tags, _, err := s.DiagnoseEntry(ctx, command)
+	if err != nil {
+		return MutationResult{}, err
 	}
-	if command.Kind != programmingstore.LibraryKindFunction && command.Kind != programmingstore.LibraryKindFunctionBlock {
-		return MutationResult{}, ErrInvalidRequest
-	}
-	if command.Language != "ST" && command.Language != "FBD" {
+	if len(diagnostics) > 0 {
 		return MutationResult{}, ErrInvalidRequest
 	}
 	featureState := command.FeatureState
 	if featureState == "" {
 		featureState = "AVAILABLE"
-	}
-	// `REVIEW_REQUIRED` là cờ Controls/Safety, không phải thứ payload FE tự đặt
-	// cho entry người dùng. Nhận nó ở đây sẽ cho phép client tự dán nhãn review
-	// lên POU của mình và làm nhoè ý nghĩa của cờ trên registry SYSTEM.
-	if featureState != "AVAILABLE" {
-		return MutationResult{}, ErrInvalidRequest
-	}
-	/* Trần metadata đếm theo KÝ TỰ để khớp `maxLength` của OpenAPI. Từ chối
-	   thẳng thay vì cắt bớt: cắt im lặng làm read-back trả về thứ khác thứ
-	   client vừa gửi, và người dùng không có cách nào biết mô tả của mình đã bị
-	   xén. `validText` cũng chặn ký tự điều khiển. */
-	if command.Category != nil && *command.Category != "" && !validText(*command.Category, 1, 32) {
-		return MutationResult{}, ErrInvalidRequest
-	}
-	if command.Description != nil && *command.Description != "" && !validText(*command.Description, 1, 512) {
-		return MutationResult{}, ErrInvalidRequest
-	}
-	/* Thẻ được CHUẨN HOÁ ở đây, trước cả hash ngữ nghĩa lẫn store.
-	 *
-	 * Thứ tự này quan trọng: `mutationIdentity` băm payload để nhận diện một
-	 * request lặp. Băm dạng THÔ thì hai lần gửi `["VAV"]` và `["vav"]` — cùng
-	 * một ý định sau chuẩn hoá — ra hai hash khác nhau, và khoá idempotency
-	 * dùng lại sẽ bị coi là xung đột thay vì replay.
-	 *
-	 * Vượt trần là 400 `ErrInvalidRequest`, KHÔNG phải lỗi store: trigger SQL
-	 * cũng chặn nhưng nó trả một chuỗi lỗi SQLite mà lớp HTTP dịch thành 503
-	 * "thử lại đi" — bảo client thử lại một thứ không bao giờ thành công. */
-	tags, err := normalizeLibraryTags(command.Tags)
-	if err != nil {
-		return MutationResult{}, err
 	}
 	layout, err := libraryStateLayoutFromCommand(command.Kind, command.StateLayout)
 	if err != nil {

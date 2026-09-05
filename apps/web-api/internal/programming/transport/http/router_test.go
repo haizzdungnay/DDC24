@@ -37,8 +37,9 @@ func TestRegisterProgrammingRoutesHonorsFeatureFlag(t *testing.T) {
 	// Simulation R3 của T59-814 + Used-In của T61-105. Thêm route mà quên
 	// OpenAPI/client sẽ đỏ ở `TestRegisteredRoutesMatchProgrammingOpenAPI`;
 	// thêm route mà quên cả hai nơi thì đỏ ở đây.
-	if len(routes) != 41 {
-		t.Fatalf("contract route count = %d; want 41", len(routes))
+	// + dry run Check của PROJECT Library (`T61-401`).
+	if len(routes) != 42 {
+		t.Fatalf("contract route count = %d; want 42", len(routes))
 	}
 }
 

@@ -8,6 +8,62 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PGM04-11` Wizard 5 bước cho PROJECT Library, kèm bước Kiểm tra authoritative (#456, 2026-09-04)
+
+- **Triệu chứng.** Create/Edit khối PROJECT là **một form phẳng** trong `Modal`:
+  1. Không có `Metadata → Interface → Implementation → Check → Review`; mọi ô nằm chung một màn.
+  2. `interface` **không sửa được** — mã chỉ chép lại `entry.interface` (hoặc `{ inputs: [] }` cho khối mới),
+     nên không có đường nào khai cổng vào/ra hay kiểu trả về.
+  3. `tags` đã nằm trong hợp đồng ghi từ `T61-101` nhưng **không có ô nhập nào**, nên mọi khối PROJECT vĩnh
+     viễn không có thẻ và bộ lọc theo thẻ không bao giờ khớp một khối do người dùng tạo.
+  4. **Không có bước kiểm tra nào trước khi ghi.** Đường ghi trả `ErrInvalidRequest` trần — một `400` không
+     nói TRƯỜNG nào sai.
+  5. **Vòng phụ thuộc không bị chặn ở đường ghi.** `domain.ValidateLibraryDependencies` chỉ chạy lúc dựng
+     manifest (Seal/Publish), nên `A → B` rồi sửa `B → A` ghi vào Draft trót lọt và chỉ nổ ở lần Seal sau đó,
+     cách chỗ gây lỗi hàng chục thao tác.
+  6. Đóng giữa chừng mất trắng những gì đã gõ, không hỏi lại.
+- **Nguyên nhân gốc.** Không có MỘT nơi phát biểu "entry này hợp lệ chưa". Mỗi tầng giữ một mẩu luật
+  (regexp tên ở store, trần ký tự ở application, chu trình ở domain), và không tầng nào trả lời được câu hỏi
+  của người dùng. Ở FE thì mọi luật chỉ tồn tại dưới dạng biểu thức rải rác trong JSX, nên không kiểm được
+  nếu không dựng cả cây DOM — và vì thế không có test nào đỏ khi thiếu cả một bước.
+- **Cách sửa.**
+  - **Máy chủ:** `DiagnoseEntry` gom cả ba mẩu luật vào một chỗ và trả **chẩn đoán theo TRƯỜNG**
+    (`field`/`code`/`message`/`severity`). Cả đường Check lẫn đường Upsert đi qua đúng hàm đó, nên "Check sạch"
+    và "Save nhận" không thể tách nhau. Phép dò chu trình gọi lại **chính** `domain.ValidateLibraryDependencies`
+    mà Seal dùng, trên bộ entry giả định (Draft hiện tại + entry đang soạn).
+  - **Hợp đồng:** thêm `POST /programming/projects/{projectId}/library/entries/check`
+    (`checkProgrammingLibraryEntry`) — dry run, **không** `If-Match`, **không** idempotency key, trả `200` kể cả
+    khi có lỗi chặn. OpenAPI `1.34.0 → 1.35.0`, 41 → 42 operation.
+  - **Bảng route:** cờ `readOnly` khai tường minh "POST không ghi", thay vì bịa `idempotencyRequired` cho một
+    thứ không có gì để lặp hoặc để phép đếm bề mặt mutation trong record V&V kể một route ghi không tồn tại.
+    Danh sách route mang cờ này bị **khoá bằng tên** ở `TestReadOnlyPostsAreEnumeratedAndDoNotWrite`.
+  - **FE:** `libraryWizard.ts` là máy trạng thái thuần (bước, phát hiện theo bước/trường, dò vòng, bảng thay
+    đổi kèm phân loại nội dung/trình bày theo `D61-09`, dựng payload). `LibraryAuthoringDrawer.tsx` thành wizard
+    5 bước: Quay lại/Tiếp không đụng dữ liệu; đóng khi bẩn thì hỏi lại **trong** hộp thoại (không dùng
+    `window.confirm` — nó nằm ngoài bẫy tiêu điểm); kết quả Kiểm tra **hết hiệu lực** ngay khi payload đổi;
+    bước Xem lại chỉ có đường ghi vào **bản nháp**, không có Publish rời.
+  - `interface` giữ nguyên mọi khoá wizard không mô hình hoá: upsert ghi đè toàn phần, nên dựng lại nó chỉ từ
+    `inputs`/`outputs`/`returnType` sẽ âm thầm xoá phần còn lại — một lần sửa mô tả cũng đủ làm mất hợp đồng POU.
+- **Ranh giới đã ghi rõ.** Máy chủ vẫn **không** trả lại `source` của entry đã lưu (`T61-404`/#458 giữ phần đó),
+  nên khi sửa, ô mã nguồn bắt đầu **trống** và wizard nói ra lý do; Lưu vẫn bị chặn khi ô còn trống, nên không có
+  đường nào ghi mã rỗng đè lên khối. Kiểm kiểu **cổng** là luật của FE — máy chủ vẫn nhận mọi object JSON làm
+  `interface`, đúng như trước lát này.
+- **Kiểm chứng (đo cục bộ; CI chưa có runner — #414).** Go `./internal/programming/...` xanh, thêm
+  `library_check_test.go` (14 ca Check ⇄ Save khớp nhau, vòng phụ thuộc, dry run không đụng ETag, phân giải
+  phụ thuộc theo bản PUBLISHED khi chưa mở Draft) và `TestLibraryCheckRouteIsDryRunAndReportsFieldDiagnostics`.
+  FE thêm `libraryWizard.test.ts` (21 ca) và nhóm `PGM-04 wizard soạn thảo 5 bước (T61-401)`.
+- **Tiêm lỗi: 14/14 đỏ.** Vòng đầu có **một** phép tiêm XANH (`F1`): hạ `severity` của chẩn đoán vòng phụ
+  thuộc xuống không-chặn vẫn giữ nguyên `ErrInvalidRequest` ở đường ghi (đường ghi từ chối khi danh sách khác
+  rỗng), nên không test nào đỏ — trong khi FE đọc đúng cờ `blocking` để mở nút Lưu. Đó là một đường lưu thẳng
+  vào Draft một đồ thị không Seal được. Đã bổ sung khẳng định `CheckEntry(...).Blocking == true` cho ca vòng
+  phụ thuộc; sau đó 14/14 đỏ. **Bài học lặp lại:** "có một phát hiện" khác "phát hiện đó chặn được"; test phải
+  đo đúng trường mà client dùng để quyết định.
+- **E2E (Playwright, mock lane).** Thêm `T61-401`: đi trọn năm bước bằng bàn phím trong trình duyệt thật, khoá
+  ba điều mà jsdom không thấy được — mỗi lần đổi bước tiêu điểm nằm ở tiêu đề bước mới; bước Kiểm tra gọi đúng
+  `POST .../library/entries/check` và lần gọi đó **không** mang `If-Match`; và tới trước bước cuối **không** có
+  một lệnh ghi nào rời trình duyệt. `-g 'PGM-04'`: 19 passed / 5 skipped.
+
+
 ### Added — `ISS-PIO-22` Poll group + stale_after theo điểm Modbus (#405, 2026-09-05)
 
 - **Triệu chứng.** `poll_ms`/`timeout_ms` chỉ có ở cấp **Device**. Một điểm cấu hình (đọc một lần mỗi

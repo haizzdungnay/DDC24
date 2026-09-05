@@ -205,8 +205,8 @@ export function LibraryPage() {
   )
   const library = useProgrammingLibraryPaged(filters, { enabled: projectContextReady && scopeMeasurable })
   const currentEtag = etag ?? workspace.project?.etag ?? projectSummary?.etag ?? ''
-  const { saveEntry, deleteEntry, deprecateRevision, pending, error, conflict, reset } =
-    useProgrammingLibraryEntryMutations(projectId)
+  const { saveEntry, checkEntry, deleteEntry, deprecateRevision, pending, error, conflict,
+          checkPending, checkError, reset } = useProgrammingLibraryEntryMutations(projectId)
 
   const entries = library.items
   /* `T61-206` — MỘT trạng thái cho cả màn hình, thay vì mỗi nhánh render tự
@@ -618,6 +618,9 @@ export function LibraryPage() {
         mode={editor}
         disabled={pending || !projectId}
         projectEntries={groups.filter((group) => group.scope === 'PROJECT')}
+        checkPending={checkPending}
+        checkError={checkError}
+        onCheck={checkEntry}
         onCancel={() => setEditor(null)}
         onSubmit={handleSave}
       />

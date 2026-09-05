@@ -2263,6 +2263,89 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
   })
 
   /*
+  `T61-401` / `ISS-PGM04-11` — đi TRỌN năm bước bằng BÀN PHÍM, trong trình duyệt
+  thật.
+
+  Test jsdom chứng minh từng luật; nó không chứng minh được rằng năm màn ấy đi
+  hết được mà không có bẫy tiêu điểm nào giữ người dùng lại, và cũng không thấy
+  được lần gọi mạng nào thật sự rời trình duyệt. Ở đây khoá cả hai:
+
+   - mỗi lần đổi bước, tiêu điểm nằm ở tiêu đề của bước mới (nếu không, người
+     dùng bàn phím vẫn đứng ở nút vừa bấm và không biết màn đã đổi);
+   - bước Kiểm tra gọi ĐÚNG `POST .../library/entries/check`, và lần gọi đó
+     KHÔNG mang `If-Match` — một lần bấm "Kiểm tra" không được tiêu ETag Draft;
+   - đường ghi chỉ chạy khi phép kiểm sạch và tới từ bước cuối.
+  */
+  test('T61-401: wizard 5 bước đi hết bằng bàn phím, Kiểm tra là dry run và Lưu chỉ ghi bản nháp', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      'khổ hẹp là read-only, có case riêng')
+    const lane = libraryLane()
+    const checkCalls: { ifMatch: string | null; body: Record<string, unknown> }[] = []
+    const upsertCalls: Record<string, unknown>[] = []
+    await openLibrary(page, lane, 'PROJECT')
+    await page.route(
+      (url) => url.pathname.endsWith('/library/entries/check'),
+      async (route) => {
+        checkCalls.push({
+          ifMatch: route.request().headerValue ? await route.request().headerValue('if-match') : null,
+          body: JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>
+        })
+        return json(route, { blocking: false, diagnostics: [], libraryVersion: '1.0.0' })
+      }
+    )
+    await page.route(
+      (url) => url.pathname.endsWith('/library/entries'),
+      async (route) => {
+        if (route.request().method() !== 'POST') return route.fallback()
+        upsertCalls.push(JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>)
+        return json(route, {
+          resource: { libraryRevisionId: 'lib-draft-1' }, etag: '"draft-1:2"',
+          auditId: 'audit-1', correlationId: 'e2e-correlation-pgm04'
+        })
+      }
+    )
+    await expect(libraryCards(page).first()).toBeVisible()
+
+    await page.getByRole('button', { name: 'Khối PROJECT mới' }).click()
+    const dialog = page.getByRole('dialog')
+    const next = async (heading: string) => {
+      await dialog.getByRole('button', { name: 'Tiếp' }).click()
+      // Tiêu điểm phải ở TIÊU ĐỀ của bước mới, không phải ở nút vừa bấm.
+      await expect(dialog.getByRole('heading', { name: heading })).toBeFocused()
+    }
+
+    await dialog.getByLabel('Tên khối').fill('E2E_RAMP')
+    await dialog.getByLabel('Mô tả ngắn').fill('Khối dốc dựng trong e2e')
+    await next('Giao diện')
+
+    await dialog.getByLabel('Kiểu trả về').selectOption('REAL')
+    await next('Hiện thực')
+
+    await dialog.getByLabel(/Mã nguồn ST/).fill('FUNCTION E2E_RAMP : REAL\nEND_FUNCTION\n')
+    await next('Kiểm tra')
+
+    expect(upsertCalls).toHaveLength(0)
+    await dialog.getByRole('button', { name: 'Chạy kiểm tra trên máy chủ' }).click()
+    await expect(dialog.getByTestId('library-wizard-check-result')).toBeVisible()
+    expect(checkCalls).toHaveLength(1)
+    expect(checkCalls[0].ifMatch).toBeFalsy()
+    expect(checkCalls[0].body.name).toBe('E2E_RAMP')
+    // Dry run: tới lúc này vẫn chưa có một lệnh ghi nào rời trình duyệt.
+    expect(upsertCalls).toHaveLength(0)
+
+    await next('Xem lại và lưu')
+    await expect(dialog.getByTestId('library-wizard-changes')).toBeVisible()
+    // Không có Publish rời: bước cuối chỉ ghi vào BẢN NHÁP.
+    await expect(dialog.getByRole('button', { name: /Publish/i })).toHaveCount(0)
+
+    await dialog.getByRole('button', { name: 'Lưu vào bản nháp thư viện' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    expect(upsertCalls).toHaveLength(1)
+    expect(upsertCalls[0].name).toBe('E2E_RAMP')
+    expect(upsertCalls[0].description).toBe('Khối dốc dựng trong e2e')
+  })
+
+  /*
   `AC-PGM04-06` — Chèn độc lập đòi ngữ cảnh đích TƯỜNG MINH, và Thư viện không
   tự ghi vào bản nháp (handoff §4: "Do not silently create a POU or mutate
   draft").

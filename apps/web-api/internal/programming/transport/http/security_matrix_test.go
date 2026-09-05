@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 
@@ -108,7 +109,53 @@ func requestForRoute(definition routeDefinition) *http.Request {
 }
 
 func mutates(definition routeDefinition) bool {
-	return definition.method != http.MethodGet
+	// `readOnly` là lối ra DUY NHẤT khỏi "khác GET nghĩa là ghi", và nó phải
+	// được khai trên chính bảng route. Suy ra từ tên đường dẫn (ví dụ "kết thúc
+	// bằng /check") sẽ biến một route ghi đặt tên nhầm thành một route được
+	// miễn mọi bảo vệ mà không ai thấy.
+	return definition.method != http.MethodGet && !definition.readOnly
+}
+
+/*
+`T61-401` — danh sách POST KHÔNG GHI, khoá bằng TÊN.
+
+Cờ `readOnly` gỡ một route khỏi mọi bất biến của bề mặt mutation, nên nó phải
+đắt: thêm một route mang cờ này mà không sửa danh sách dưới đây là đỏ. Đếm số
+lượng thôi thì không đủ — đổi cờ từ route này sang route khác vẫn giữ nguyên số
+đếm.
+*/
+func TestReadOnlyPostsAreEnumeratedAndDoNotWrite(t *testing.T) {
+	expected := []string{
+		"POST /api/v1/programming/projects/{projectId}/library/entries/check",
+	}
+	actual := make([]string, 0, len(expected))
+	for _, definition := range routeDefinitions {
+		if definition.readOnly {
+			actual = append(actual, definition.method+" "+definition.path)
+		}
+	}
+	sort.Strings(actual)
+	sort.Strings(expected)
+	if strings.Join(actual, "\n") != strings.Join(expected, "\n") {
+		t.Fatalf("route readOnly = %v; danh sách đã khoá là %v", actual, expected)
+	}
+	for _, definition := range routeDefinitions {
+		if !definition.readOnly {
+			continue
+		}
+		// Một route không ghi thì không có gì để bảo vệ bằng ETag: đòi
+		// `If-Match` sẽ tiêu ETag Draft cho một thao tác chỉ đọc.
+		if definition.ifMatchRequired || definition.idempotencyRequired {
+			t.Errorf("%s %s: route readOnly không được đòi If-Match/idempotency",
+				definition.method, definition.path)
+		}
+		// Không bao giờ được đứng sau quyền kích hoạt: `program.activate` là mức
+		// dành cho lúc chương trình bắt đầu điều khiển thiết bị thật.
+		if definition.permission == auth.PermissionProgramActivate {
+			t.Errorf("%s %s: route readOnly không được đòi program.activate",
+				definition.method, definition.path)
+		}
+	}
 }
 
 func TestEveryProgrammingRouteRejectsUnauthenticatedBeforeHandler(t *testing.T) {
@@ -193,8 +240,14 @@ func TestReadRoutesNeverRequireMoreThanViewer(t *testing.T) {
 	// Chiều ngược lại của cùng bất biến: siết quá tay cũng là lỗi. Một route đọc
 	// mà đòi admin sẽ làm người vận hành quyền viewer không xem được trạng thái
 	// đúng lúc sự cố — và lỗi đó không bao giờ tự lộ ra trong test happy-path.
+	/* Xét đúng route GET, như trước khi cờ `readOnly` tồn tại. Lý do của bất
+	   biến này là QUAN SÁT lúc sự cố: một trạng thái chỉ đọc mà đòi admin sẽ
+	   khoá người trực khỏi thứ họ cần nhìn. Một POST không ghi thì không phải
+	   quan sát — nó là bước tiền kiểm của một lần GHI, nên nó đứng sau đúng
+	   quyền của lần ghi ấy. Ràng buộc riêng cho nhóm đó nằm ở
+	   `TestReadOnlyPostsAreEnumeratedAndDoNotWrite`. */
 	for _, definition := range routeDefinitions {
-		if mutates(definition) {
+		if definition.method != http.MethodGet {
 			continue
 		}
 		if definition.permission != auth.PermissionRead {
@@ -324,7 +377,6 @@ func TestEngineerCanReachEveryProgrammingRouteAndOperatorCannotActivate(t *testi
 		t.Fatal("không có route nào khai program.activate — bảng route hoặc phép phân loại đã sai")
 	}
 }
-
 
 /*
 `VS-PROG-U15` — phép ĐẾM bề mặt mutation, viết thành số.

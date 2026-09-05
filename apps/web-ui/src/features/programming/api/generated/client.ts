@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.34.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.35.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -186,6 +186,7 @@ export interface ProgrammingOperationAccepted {
 
 export const PROGRAMMING_ENDPOINTS = {
   "actProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions", roles: ["admin"] },
+  "checkProgrammingLibraryEntry": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries/check", roles: ["engineer","admin"] },
   "commissionProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/commission", roles: ["engineer","admin"] },
   "compareProgrammingRevisions": { method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", roles: ["viewer","operator","engineer","admin"] },
   "createProgrammingCheck": { method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", roles: ["engineer","admin"] },

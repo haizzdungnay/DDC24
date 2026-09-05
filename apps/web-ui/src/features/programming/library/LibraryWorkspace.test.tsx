@@ -94,6 +94,11 @@ function stub(items: unknown[], overrides: Record<string, () => Promise<unknown>
     if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
     if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
     if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items })
+    /* `T61-401` — bước Kiểm tra gọi máy chủ. Mặc định "sạch" để test nào không
+       nói gì về phép kiểm vẫn đi hết được wizard. */
+    if (operationId === 'checkProgrammingLibraryEntry') {
+      return Promise.resolve({ blocking: false, diagnostics: [], libraryVersion: '1.0.0' })
+    }
     if (operationId === 'listProgrammingLibraryUsages') {
       return Promise.resolve({
         sealed: { count: 0, truncated: false, items: [] },
@@ -727,16 +732,28 @@ describe('PGM-04 soạn thảo theo yêu cầu (T61-401)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Khối PROJECT mới/ }))
 
     const dialog = await screen.findByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } })
-    fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), { target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION' } })
-    fireEvent.change(within(dialog).getByLabelText(/Phân loại/), { target: { value: 'math' } })
-    fireEvent.change(within(dialog).getByLabelText(/Mô tả ngắn/), { target: { value: 'Dốc tuyến tính có giới hạn' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: /Lưu vào bản nháp thư viện/ }))
+    await walkWizardAndSave(dialog, {
+      metadata: () => {
+        fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } })
+        fireEvent.change(within(dialog).getByLabelText(/Phân loại/), { target: { value: 'math' } })
+        fireEvent.change(within(dialog).getByLabelText(/Mô tả ngắn/), { target: { value: 'Dốc tuyến tính có giới hạn' } })
+        fireEvent.change(within(dialog).getByLabelText(/Thẻ/), { target: { value: 'ahu, vav' } })
+      },
+      iface: () => fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } }),
+      implementation: () =>
+        fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), {
+          target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION' }
+        })
+    })
 
     await waitFor(() => expect(upsert).toHaveBeenCalled())
     const body = (upsert.mock.calls[0][1] as { body: Record<string, unknown> }).body
     expect(body.category).toBe('math')
     expect(body.description).toBe('Dốc tuyến tính có giới hạn')
+    /* `tags` đã nằm trong hợp đồng ghi từ `T61-101` nhưng trước lát này KHÔNG có
+       ô nào để nhập, nên mọi khối PROJECT vĩnh viễn không có thẻ và bộ lọc theo
+       thẻ không bao giờ khớp một khối do người dùng tạo. */
+    expect(body.tags).toEqual(['ahu', 'vav'])
   })
 
   /* Để trống thì BỎ HẲN field, không gửi chuỗi rỗng: upsert ghi đè toàn phần,
@@ -759,14 +776,246 @@ describe('PGM-04 soạn thảo theo yêu cầu (T61-401)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Khối PROJECT mới/ }))
 
     const dialog = await screen.findByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } })
-    fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), { target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: /Lưu vào bản nháp thư viện/ }))
+    await walkWizardAndSave(dialog, {
+      metadata: () => fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } }),
+      iface: () => fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } }),
+      implementation: () =>
+        fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), {
+          target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION' }
+        })
+    })
 
     await waitFor(() => expect(upsert).toHaveBeenCalled())
     const body = (upsert.mock.calls[0][1] as { body: Record<string, unknown> }).body
     expect('category' in body).toBe(false)
     expect('description' in body).toBe(false)
+    expect('tags' in body).toBe(false)
+  })
+})
+
+/**
+ * `T61-401` — đi hết wizard 5 bước tới nút Lưu.
+ *
+ * Mỗi bước là một màn riêng, nên một test ghi phải đi qua cả năm. Gói vào một
+ * hàm để bước nào chặn nhầm thì mọi test ghi đỏ cùng lúc và chỉ đúng vào bước
+ * ấy, thay vì mỗi test đỏ một kiểu.
+ */
+async function walkWizardAndSave(
+  dialog: HTMLElement,
+  fill: { metadata?: () => void; iface?: () => void; implementation?: () => void } = {}
+) {
+  const next = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+  fill.metadata?.()
+  next()
+  fill.iface?.()
+  next()
+  fill.implementation?.()
+  next()
+  fireEvent.click(within(dialog).getByRole('button', { name: /Chạy kiểm tra trên máy chủ/ }))
+  await waitFor(() => expect(within(dialog).queryByTestId('library-wizard-check-result')).not.toBeNull())
+  next()
+  fireEvent.click(within(dialog).getByRole('button', { name: /Lưu vào bản nháp thư viện/ }))
+}
+
+/*
+`T61-401` / `ISS-PGM04-11` — hành vi của wizard 5 bước.
+
+Đây là những điều KHÔNG có test nào canh trước lát này, và chính vì thế bản
+trước là một form phẳng mà vẫn được ghi `DONE`: không ai đo được "đóng giữa
+chừng có hỏi không", "Quay lại có mất dữ liệu không", "Lưu có đòi phép kiểm của
+máy chủ không".
+*/
+describe('PGM-04 wizard soạn thảo 5 bước (T61-401)', () => {
+  function openCreateWizard() {
+    fireEvent.click(screen.getByRole('button', { name: /Khối PROJECT mới/ }))
+    return screen.findByRole('dialog')
+  }
+
+  function fillFirstThreeSteps(dialog: HTMLElement, name = 'RAMP_LIN') {
+    const next = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+    fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: name } })
+    next()
+    fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } })
+    next()
+    fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), {
+      target: { value: `FUNCTION ${name} : REAL\nEND_FUNCTION` }
+    })
+    next()
+  }
+
+  /* `AC-PGM04-03` — SYSTEM là registry bất biến. Mở một form ghi trên nó là hứa
+     một thứ máy chủ sẽ từ chối, nên không có nút nào mở được. */
+  it('khối SYSTEM không có đường nào mở được wizard ghi', async () => {
+    stub([entry({ scope: 'SYSTEM', entryId: 'TON', name: 'TON', libraryRevisionId: 'system', libraryState: 'PUBLISHED' })])
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    expect(screen.queryByRole('button', { name: /Sửa khối/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('đi tới rồi quay lại không mất dữ liệu đã nhập ở bước trước', async () => {
+    stub([entry()])
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    const dialog = await openCreateWizard()
+    fillFirstThreeSteps(dialog)
+
+    const back = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Quay lại' }))
+    back()
+    expect(within(dialog).getByLabelText(/Mã nguồn ST/)).toHaveValue('FUNCTION RAMP_LIN : REAL\nEND_FUNCTION')
+    back()
+    expect(within(dialog).getByLabelText('Kiểu trả về')).toHaveValue('REAL')
+    back()
+    expect(within(dialog).getByLabelText(/Tên khối/)).toHaveValue('RAMP_LIN')
+  })
+
+  /* Đóng khi đang bẩn phải HỎI. Mất mười phút gõ vì một lần bấm nhầm ra ngoài
+     là lỗi không có đường hoàn tác nào. */
+  it('đóng giữa chừng khi đã nhập thì hỏi lại trước khi bỏ', async () => {
+    stub([entry()])
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    const dialog = await openCreateWizard()
+    fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } })
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Huỷ' }))
+    expect(within(dialog).getByTestId('library-wizard-discard')).toBeVisible()
+    expect(screen.queryByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Tiếp tục soạn/ }))
+    expect(within(dialog).queryByTestId('library-wizard-discard')).toBeNull()
+    expect(within(dialog).getByLabelText(/Tên khối/)).toHaveValue('RAMP_LIN')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Huỷ' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: /Đóng và bỏ thay đổi/ }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('chưa nhập gì thì đóng ngay, không hỏi một câu vô nghĩa', async () => {
+    stub([entry()])
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    const dialog = await openCreateWizard()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Huỷ' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  /*
+  Bước Kiểm tra gọi MÁY CHỦ. Không có nó, wizard chỉ có luật của client, và luật
+  của client không biết gì về thư viện Draft thật (tên đã dùng, phụ thuộc, vòng).
+  */
+  it('không sang được bước cuối khi máy chủ báo lỗi chặn, và hiện lỗi theo trường', async () => {
+    const upsert = vi.fn()
+    stub([entry()], {
+      upsertProgrammingLibraryEntry: upsert,
+      checkProgrammingLibraryEntry: () =>
+        Promise.resolve({
+          blocking: true,
+          diagnostics: [{ field: 'dependencies', code: 'LIB_DEPENDENCY_CYCLE', message: 'Phụ thuộc tạo thành vòng: A → B → A.', severity: 'BLOCKING' }],
+          libraryVersion: '1.0.0'
+        })
+    })
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    const dialog = await openCreateWizard()
+    fillFirstThreeSteps(dialog)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Chạy kiểm tra trên máy chủ/ }))
+    const result = await within(dialog).findByTestId('library-wizard-check-result')
+    expect(result).toHaveTextContent('dependencies')
+    expect(result).toHaveTextContent('LIB_DEPENDENCY_CYCLE')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+    expect(within(dialog).getByTestId('library-wizard-check-required')).toBeVisible()
+    expect(within(dialog).queryByRole('button', { name: /Lưu vào bản nháp thư viện/ })).toBeNull()
+    expect(upsert).not.toHaveBeenCalled()
+  })
+
+  /* Sửa tiếp SAU khi kiểm xong là một payload khác. Cho Lưu bằng kết quả cũ là
+     đúng cái lỗ hổng mà bước Kiểm tra sinh ra để bịt. */
+  it('kết quả kiểm hết hiệu lực ngay khi nội dung đổi, và Lưu bị khoá lại', async () => {
+    const upsert = vi.fn().mockResolvedValue({ etag: ETAG, resource: { libraryRevisionId: DRAFT_ID }, auditId: 'a' })
+    stub([entry()], { upsertProgrammingLibraryEntry: upsert })
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    const dialog = await openCreateWizard()
+    fillFirstThreeSteps(dialog)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Chạy kiểm tra trên máy chủ/ }))
+    await within(dialog).findByTestId('library-wizard-check-result')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+    expect(within(dialog).getByRole('button', { name: /Lưu vào bản nháp thư viện/ })).toBeEnabled()
+
+    // Quay lại sửa một ký tự: kết quả cũ không còn nói gì về payload hiện tại.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Quay lại' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Quay lại' }))
+    fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), { target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION\n(*sửa*)' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+    expect(within(dialog).getByTestId('library-wizard-check-stale')).toBeVisible()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+    expect(within(dialog).getByTestId('library-wizard-check-required')).toBeVisible()
+    expect(upsert).not.toHaveBeenCalled()
+  })
+
+  /* `AC-PGM04-05` — không có Publish rời. Bước Xem lại phải nói ra điều đó và
+     không được mọc một nút nào khác ngoài Lưu vào bản nháp. */
+  it('bước Xem lại liệt kê thay đổi kèm tác động và chỉ có đường ghi vào bản nháp', async () => {
+    stub([entry()])
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    const dialog = await openCreateWizard()
+    fireEvent.change(within(dialog).getByLabelText(/Mô tả ngắn/), { target: { value: 'Khối dốc tuyến tính' } })
+    fillFirstThreeSteps(dialog)
+    fireEvent.click(within(dialog).getByRole('button', { name: /Chạy kiểm tra trên máy chủ/ }))
+    await within(dialog).findByTestId('library-wizard-check-result')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+
+    const table = within(dialog).getByTestId('library-wizard-changes')
+    expect(within(table).getByTestId('library-wizard-change-source')).toHaveTextContent('Nội dung')
+    expect(within(table).getByTestId('library-wizard-change-description')).toHaveTextContent('Trình bày')
+    expect(within(dialog).queryByRole('button', { name: /Publish/i })).toBeNull()
+    expect(within(dialog).getByText(/Không có Publish riêng/)).toBeInTheDocument()
+  })
+
+  /* A11y: mỗi bước là một màn mới. Không dời tiêu điểm thì người dùng bàn phím
+     và trình đọc màn hình vẫn đứng ở nút vừa bấm, không biết màn đã đổi. */
+  it('mỗi lần đổi bước, tiêu điểm về tiêu đề của bước đó', async () => {
+    stub([entry()])
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    const dialog = await openCreateWizard()
+    fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+
+    const heading = within(dialog).getByRole('heading', { name: 'Giao diện' })
+    expect(document.activeElement).toBe(heading)
+    expect(within(dialog).getByTestId('library-wizard-step-interface')).toHaveAttribute('aria-current', 'step')
+    expect(within(dialog).getByTestId('library-wizard-step-metadata')).not.toHaveAttribute('aria-current')
+  })
+
+  /* Sửa một khối đã lưu: máy chủ chưa trả lại mã nguồn (`T61-404`), nên ô bắt
+     đầu trống. Điều đó phải được NÓI RA — im lặng thì người dùng tưởng khối
+     không có mã, và một lần Lưu là ghi đè toàn phần. */
+  it('sửa khối đã lưu thì nói rõ vì sao ô mã nguồn trống, và không lưu được khi còn trống', async () => {
+    const upsert = vi.fn()
+    stub([entry()], { upsertProgrammingLibraryEntry: upsert })
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    fireEvent.click(screen.getByRole('button', { name: /Sửa khối/ }))
+
+    const dialog = await screen.findByRole('dialog')
+    const next = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+    next()
+    /* Entry cũ không khai `returnType`, và một FUNCTION không có kiểu trả về là
+       một khối không gọi được — wizard đòi khai nó trước khi đi tiếp. */
+    fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } })
+    next()
+    expect(within(dialog).getByLabelText(/Mã nguồn ST/)).toHaveValue('')
+    expect(within(dialog).getByTestId('library-wizard-source-notice')).toBeVisible()
+
+    next()
+    expect(within(dialog).getByTestId('library-wizard-issues')).toHaveTextContent('chưa trả lại mã nguồn')
+    expect(upsert).not.toHaveBeenCalled()
   })
 })
 

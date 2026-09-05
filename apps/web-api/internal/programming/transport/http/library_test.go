@@ -560,3 +560,78 @@ func TestSystemLibraryEntriesCarrySignatureToClients(t *testing.T) {
 	}
 	t.Logf("đã kiểm %d/%d entry SYSTEM có chữ ký đầy đủ", checked, len(entries))
 }
+
+/*
+`T61-401` — endpoint Check của wizard PROJECT Library.
+
+Ba điều được khoá: nó KHÔNG đòi `If-Match`/idempotency (một lần bấm "Kiểm tra"
+không được tiêu ETag Draft), nó trả `200` kể cả khi có lỗi chặn (chẩn đoán là
+NỘI DUNG chứ không phải sự cố), và nó không ghi gì — ETag Draft sau lần kiểm vẫn
+dùng được cho lần Lưu ngay sau đó.
+*/
+func TestLibraryCheckRouteIsDryRunAndReportsFieldDiagnostics(t *testing.T) {
+	mux, projectID, etag := newLibraryTestMux(t, auth.RoleAdmin)
+	checkPath := "/api/v1/programming/projects/" + projectID + "/library/entries/check"
+
+	invalid := strings.Replace(libraryEntryBody("SCALE_LIN"), `"name":"SCALE_LIN"`, `"name":"1BAD"`, 1)
+	if invalid == libraryEntryBody("SCALE_LIN") {
+		t.Fatal("không thay được tên trong payload mẫu")
+	}
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, libraryRequest(t, http.MethodPost, checkPath, invalid, "", ""))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("check status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Blocking    bool `json:"blocking"`
+		Diagnostics []struct {
+			Field    string `json:"field"`
+			Code     string `json:"code"`
+			Message  string `json:"message"`
+			Severity string `json:"severity"`
+		} `json:"diagnostics"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.Blocking || len(response.Diagnostics) == 0 {
+		t.Fatalf("payload sai tên: blocking=%v diagnostics=%d", response.Blocking, len(response.Diagnostics))
+	}
+	found := false
+	for _, diagnostic := range response.Diagnostics {
+		if diagnostic.Field == "name" && diagnostic.Severity == "BLOCKING" && diagnostic.Message != "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("chẩn đoán = %+v; muốn một mục BLOCKING trên trường name", response.Diagnostics)
+	}
+
+	// Payload sạch: không chặn, và ETag Draft chưa bị tiêu — lần Lưu ngay sau đó
+	// vẫn dùng đúng ETag đã đọc trước khi Kiểm tra.
+	clean := httptest.NewRecorder()
+	mux.ServeHTTP(clean, libraryRequest(t, http.MethodPost, checkPath, libraryEntryBody("SCALE_LIN"), "", ""))
+	if clean.Code != http.StatusOK {
+		t.Fatalf("check hợp lệ status=%d body=%s", clean.Code, clean.Body.String())
+	}
+	var cleanResponse struct {
+		Blocking    bool  `json:"blocking"`
+		Diagnostics []any `json:"diagnostics"`
+	}
+	if err := json.Unmarshal(clean.Body.Bytes(), &cleanResponse); err != nil {
+		t.Fatal(err)
+	}
+	if cleanResponse.Blocking || len(cleanResponse.Diagnostics) != 0 {
+		t.Fatalf("payload sạch bị chặn: %s", clean.Body.String())
+	}
+	if cleanResponse.Diagnostics == nil {
+		t.Fatal("diagnostics phải là mảng rỗng, không phải null: null đọc như \"máy chủ cũ chưa kiểm gì\"")
+	}
+	save := httptest.NewRecorder()
+	mux.ServeHTTP(save, libraryRequest(t, http.MethodPost,
+		"/api/v1/programming/projects/"+projectID+"/library/entries", libraryEntryBody("SCALE_LIN"),
+		etag, "20000000-0000-4000-8000-0000000000c9"))
+	if save.Code != http.StatusOK {
+		t.Fatalf("save sau check status=%d body=%s", save.Code, save.Body.String())
+	}
+}
