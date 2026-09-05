@@ -403,13 +403,144 @@ func TestHistorianShadowSchedulerBackwardClockSuspendsUntilDurableFrontier(t *te
 	if len(sink.hot) != 0 {
 		t.Fatalf("persisted before resumed boundary: %+v", sink.hot)
 	}
+	// Cycle vượt qua frontier bền vững chỉ ĐẶT LẠI lịch rồi nhường chỗ; mẫu đầu
+	// tiên sau khi hồi phục nằm ở cycle kế tiếp. Bản trước thấy hot row ngay tại
+	// đây vì `PrepareRestartGaps` gán frontier vào một bản sao rồi vứt đi, nên
+	// `durableUntilUTCMS` là 0 và lịch chưa từng bị treo lần nào.
 	reader.snapshot.SnapshotObservedAtUTC = anchor.Add(45 * time.Second).Format(time.RFC3339)
 	reader.snapshot.CapturedMonotonicNs = uint64(119) * uint64(time.Second)
 	if err := scheduler.RunOnce(context.Background(), anchor.Add(59*time.Second), uint64(119)*uint64(time.Second)); err != nil {
 		t.Fatal(err)
 	}
+	if len(sink.hot) != 0 {
+		t.Fatalf("persisted on the resuming cycle: %+v", sink.hot)
+	}
+	reader.snapshot.SnapshotObservedAtUTC = anchor.Add(60 * time.Second).Format(time.RFC3339)
+	reader.snapshot.CapturedMonotonicNs = uint64(134) * uint64(time.Second)
+	if err := scheduler.RunOnce(context.Background(), anchor.Add(74*time.Second), uint64(134)*uint64(time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	if len(sink.hot) != 1 {
 		t.Fatalf("did not resume beyond durable frontier: %+v", sink.hot)
+	}
+}
+
+// Frontier bền vững phải sống sót qua `PrepareRestartGaps`, nếu không mọi bảo vệ
+// dựa vào nó (treo lịch khi đồng hồ nhảy lùi, lọc row đã bền vững) đều tắt ngóm
+// ngay sau mỗi lần khởi động lại.
+func TestHistorianShadowSchedulerRestartKeepsDurableFrontier(t *testing.T) {
+	config := HistorianConfig{Revision: 7, Points: []HistorianPolicy{{PointID: "UI-01", Generation: 1, DBLoggingEnabled: true, DBInterval: "15s", StartAtUTC: "2026-07-20T09:00:00Z"}}}
+	anchor := time.Date(2026, 7, 20, 10, 1, 0, 0, time.UTC)
+	scheduler, err := NewHistorianShadowScheduler(config, &historianSnapshotReaderStub{}, &historianSinkStub{}, anchor, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frontier := anchor.Add(15 * time.Second).UnixMilli()
+	if err := scheduler.PrepareRestartGaps(context.Background(), historianFrontierStub{bucket: frontier}, anchor.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if got := scheduler.schedules[0].durableUntilUTCMS; got != frontier+15000 {
+		t.Fatalf("durableUntilUTCMS=%d want=%d", got, frontier+15000)
+	}
+}
+
+// Khởi động lại xong BÊN TRONG bucket đang mở thì bucket đó vẫn đóng được bằng
+// số đo hiện tại, và phần duy nhất còn thiếu mới là gap. Đo trên bo 2026-09-05:
+// dịch vụ dừng 11:07:33, lên lại 11:07:47, nhưng cả bucket 11:07:45 bị tuyên bố
+// mất trắng nên trang Trends treo cờ PARTIAL cho khoảng vẫn lấy được.
+func TestHistorianShadowSchedulerRestartClosesOpenBucketInsteadOfGap(t *testing.T) {
+	anchor := time.Date(2026, 9, 5, 11, 7, 47, 0, time.UTC)
+	reader := &historianSnapshotReaderStub{snapshot: RuntimePointSnapshot{
+		SnapshotObservedAtUTC: anchor.Format(time.RFC3339Nano),
+		CapturedMonotonicNs:   uint64(60) * uint64(time.Second),
+		Points:                []RuntimePoint{{ID: "UI-01", Kind: "UI", Value: 23.5, Quality: "GOOD", Source: "io", Generation: 1}},
+	}}
+	sink := &historianSinkStub{}
+	config := HistorianConfig{Revision: 7, Points: []HistorianPolicy{{PointID: "UI-01", Generation: 1, DBLoggingEnabled: true, DBInterval: "15s", StartAtUTC: "2026-09-05T09:00:00Z"}}}
+	scheduler, err := NewHistorianShadowScheduler(config, reader, sink, anchor, uint64(60)*uint64(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := time.Date(2026, 9, 5, 11, 7, 30, 0, time.UTC).UnixMilli()
+	if err := scheduler.PrepareRestartGaps(context.Background(), historianFrontierStub{bucket: last}, anchor.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.gaps) != 0 {
+		t.Fatalf("bucket đang mở vẫn bị báo là gap: %+v", sink.gaps)
+	}
+	if len(sink.hot) != 1 {
+		t.Fatalf("hot=%+v", sink.hot)
+	}
+	openBucket := time.Date(2026, 9, 5, 11, 7, 45, 0, time.UTC).UnixMilli()
+	row := sink.hot[0]
+	if row.PointID != "UI-01" || row.BucketUTCMS != openBucket || row.Value != 23.5 || row.Count != 1 {
+		t.Fatalf("row=%+v", row)
+	}
+	// Mẫu phục hồi giữ nguyên thời điểm đo thật, không bị kéo về biên bucket:
+	// bản ghi phải nói được rằng nó đóng muộn 2 giây.
+	if row.LastSampleUTCMS != anchor.UnixMilli() {
+		t.Fatalf("last_sample=%d want=%d", row.LastSampleUTCMS, anchor.UnixMilli())
+	}
+	// Bucket kế tiếp vẫn theo đúng nhịp cũ, mẫu phục hồi không được đẩy lịch.
+	if got := scheduler.schedules[0].nextUTCMS; got != openBucket+15000 {
+		t.Fatalf("nextUTCMS=%d want=%d", got, openBucket+15000)
+	}
+}
+
+// Phần trôi qua trọn vẹn vẫn phải ra gap: chỉ bucket cuối — bucket đang mở lúc
+// tiến trình sống lại — mới được đóng bằng số đo hiện tại.
+func TestHistorianShadowSchedulerRestartStillReportsFullyMissedBuckets(t *testing.T) {
+	anchor := time.Date(2026, 9, 5, 3, 14, 5, 0, time.UTC)
+	reader := &historianSnapshotReaderStub{snapshot: RuntimePointSnapshot{
+		SnapshotObservedAtUTC: anchor.Format(time.RFC3339Nano),
+		CapturedMonotonicNs:   uint64(60) * uint64(time.Second),
+		Points:                []RuntimePoint{{ID: "UI-01", Kind: "UI", Value: 21, Quality: "GOOD", Source: "io", Generation: 1}},
+	}}
+	sink := &historianSinkStub{}
+	config := HistorianConfig{Revision: 7, Points: []HistorianPolicy{{PointID: "UI-01", Generation: 1, DBLoggingEnabled: true, DBInterval: "15s", StartAtUTC: "2026-09-05T03:00:00Z"}}}
+	scheduler, err := NewHistorianShadowScheduler(config, reader, sink, anchor, uint64(60)*uint64(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := time.Date(2026, 9, 5, 3, 13, 30, 0, time.UTC).UnixMilli()
+	if err := scheduler.PrepareRestartGaps(context.Background(), historianFrontierStub{bucket: last}, anchor.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.gaps) != 1 {
+		t.Fatalf("gaps=%+v", sink.gaps)
+	}
+	gap := sink.gaps[0]
+	wantFrom := time.Date(2026, 9, 5, 3, 13, 45, 0, time.UTC).UnixMilli()
+	wantTo := time.Date(2026, 9, 5, 3, 14, 0, 0, time.UTC).UnixMilli()
+	if gap.Reason != "restart" || gap.Detail != "scheduler_restart_no_backfill" || gap.FromUTCMS != wantFrom || gap.ToUTCMS != wantTo {
+		t.Fatalf("gap=%+v", gap)
+	}
+	if len(sink.hot) != 1 || sink.hot[0].BucketUTCMS != wantTo {
+		t.Fatalf("hot=%+v", sink.hot)
+	}
+}
+
+// Không đọc nổi snapshot thì quay về hành vi cũ: báo thiếu trọn khoảng, tuyệt
+// đối không dựng một bucket không có số đo nào đứng sau.
+func TestHistorianShadowSchedulerRestartFallsBackToFullGapWhenSnapshotUnavailable(t *testing.T) {
+	anchor := time.Date(2026, 9, 5, 11, 7, 47, 0, time.UTC)
+	reader := &historianSnapshotReaderStub{err: errors.New("core unavailable")}
+	sink := &historianSinkStub{}
+	config := HistorianConfig{Revision: 7, Points: []HistorianPolicy{{PointID: "UI-01", Generation: 1, DBLoggingEnabled: true, DBInterval: "15s", StartAtUTC: "2026-09-05T09:00:00Z"}}}
+	scheduler, err := NewHistorianShadowScheduler(config, reader, sink, anchor, uint64(60)*uint64(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := time.Date(2026, 9, 5, 11, 7, 30, 0, time.UTC).UnixMilli()
+	if err := scheduler.PrepareRestartGaps(context.Background(), historianFrontierStub{bucket: last}, anchor.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.hot) != 0 {
+		t.Fatalf("dựng bucket khi không có số đo: %+v", sink.hot)
+	}
+	wantTo := time.Date(2026, 9, 5, 11, 8, 0, 0, time.UTC).UnixMilli()
+	if len(sink.gaps) != 1 || sink.gaps[0].ToUTCMS != wantTo {
+		t.Fatalf("gaps=%+v", sink.gaps)
 	}
 }
 
