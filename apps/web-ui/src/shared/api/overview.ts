@@ -159,7 +159,14 @@ function demoAttention(alarms: Alarm[], points: Point[]): OverviewAttentionItem[
       id: `point:${point.id}`,
       severity: point.quality === 'bad' || point.quality === 'offline' ? 'high' : 'medium',
       category: point.quality === 'offline' ? 'communication' : 'quality',
+      /* `ISS-PGUI-02` — lane demo đi qua ĐÚNG đường của backend thật: mã +
+         `subject`, để giao diện dựng câu theo locale. `title` giữ lại làm
+         diagnostic fallback, giống hợp đồng. */
       title: `${point.name} — ${point.quality.toUpperCase()}`,
+      titleCode: point.quality === 'bad'
+        ? 'point_quality_bad'
+        : point.quality === 'offline' ? 'point_offline' : 'point_stale',
+      subject: point.name,
       detail: point.id,
       targetType: 'point',
       targetId: point.id,
