@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### Changed — `ISS-STED-20` Chạy thật ba chặng cổng V&V E2E và sửa các khiếm khuyết khiến cổng không chạy được (#369, 2026-09-05)
+
+- **Bối cảnh.** `#369` là cổng cuối chặn ký đóng `REV-STED-IEC-001`, gồm bốn chặng: (a) C++ build+test,
+  (b) vector compiler, (c) CLI→Go→FE, (d) runtime bo thật + `LIVE`. Đo nền 2026-08-31
+  (`EV-GATE369-BASELINE-001`) để (b) và (c) ở trạng thái **KHÔNG ĐẠT**. Phiên này chạy thật ba chặng
+  chạy được trên host sau khi các nhánh tiền đề đã vào `main`, và ghi hồ sơ `EV-GATE369-RUN-002`.
+- **Lỗi 1 — chặng (a) không chạy được trên máy bị chặn egress.** `scripts/gate369-stage-a.sh` gọi
+  `cmake --fresh` không có đường trỏ FetchContent vào cache. Máy đo không có egress ra `github.com` thì
+  configure hỏng ngay bước đầu và cả cổng đứng lại. *Cách sửa:* thêm `${MKDDC_CMAKE_DEPS:-}` vào lệnh
+  `cmake`; không đặt biến thì chuỗi rỗng và lệnh y hệt bản cũ — đường thoát cho máy bị chặn mạng, không
+  đổi cách đo trên máy phát hành.
+- **Lỗi 2 — chặng (c) ghim `channel: 'chrome'`.** `playwright.programming-real.config.ts` buộc phép đo
+  release-evidence chỉ chạy được trên máy có Google Chrome ở `/opt/google/chrome/chrome`; trên runner
+  sạch nó đỏ ngay `browserType.launch` **trước khi chạm assertion nào** — một cổng không chạy được là
+  cổng sẽ bị bỏ qua, đúng chế độ hỏng `#369` sinh ra để chặn. Chính repo đã ghi nguyên tắc ngược lại ở
+  `playwright.board.config.ts`. *Cách sửa:* mặc định dùng chromium đi kèm Playwright; thêm
+  `MKDDC_E2E_CHROME_CHANNEL` và `MKDDC_E2E_CHROMIUM_PATH` cho ai cần Chrome thật hoặc browser ở build
+  khác, và `gate369-stage-c.sh` in cả hai ra log để người ký đọc được phép đo chạy trên trình duyệt nào.
+- **Lỗi 3 — chặng (c) login sai mật khẩu (false-red che phép đo thật).** `gate369-cli-go-fe-real.spec.ts`
+  gọi `login(page)` với mặc định `admin`/`admin`, trong khi stack real-backend seed `admin`/`admin123`
+  (`apps/web-api/config/users.conf`), giống mọi spec real-backend khác. Login 401 làm cả cổng đỏ trước
+  khi chạm assertion CLI→Go→FE nào. *Cách sửa:* truyền `password: 'admin123'` cho helper dùng chung.
+- **Chặng (b) — biến tuyên bố phủ vector thành phép kiểm máy chạy.** Đo nền kết luận "5/6 nhóm có phủ,
+  thiếu WARNING" bằng cách một người ĐỌC danh sách tên test; kết luận đọc bằng mắt thì lần sau phải đọc
+  lại bằng mắt, và nhóm WARNING mất đi thì tổng số test vẫn tăng — cổng vẫn xanh. Nay
+  `gate369-stage-b.sh` đọc danh sách test đã đăng ký từ `ctest -N` và đòi mỗi nhóm trong sáu nhóm của
+  thân `#369` có ít nhất một test, in tên test làm bằng chứng. Tiêm mẫu WARNING sang tiền tố không tồn
+  tại ⇒ `STAGE_B=FAIL`, exit 1: phép kiểm phủ vector kêu được.
+- **Số đo (đo thật phiên 2026-09-05, `de8ee26`):** (a) configure/build/ctest exit `0` · **1479/1479**
+  (đo nền 1338) · 30.14 s. (b) **613/613** · **6/6 nhóm phủ** · phép kiểm phủ tự kêu được. (c) `go vet`
+  sạch · `go test -count=1` 21 package `ok` · `vitest ProblemsDrawer` 16/16 · CLI `mkddc-st-validate`
+  phát `ST-WARN-002`/`warning` (đo nền: `diagnostics:[]`) · E2E CLI→Go→FE **1 passed** (Check PASSED mang WARNING, mọi trường khớp CLI) · lint/build
+  exit `0`.
+- **Chặng (d) BỊ CHẶN — chặn bởi phần cứng.** Không có bo DDC-24 (SOM Foxlinx) với firmware/kênh
+  deploy/quyền `LIVE`; cùng lý do #414. Không có phần thay thế bằng phần mềm. **Cần để mở khoá:** một bo
+  DDC-24 đã nạp firmware, kênh deploy tới target, quyền chạy `LIVE`.
+- **`#369` vẫn OPEN:** tiêu chí chấp nhận ghi rõ thiếu bất kỳ chặng nào ⇒ `REV-STED-IEC-001` không được
+  ký đóng. Hai chặng (b)(c) chuyển từ KHÔNG ĐẠT sang ĐẠT (`F-STED-003`, `F-STED-004` nay có phép đo thật
+  phủ); còn (d).
+
 ### Fixed — `ISS-PGM04-15` / `T61-406` Zero-mutation guards và semantics Undo cho Insert (#460, 2026-09-05)
 
 - **Triệu chứng.** Một khối mà máy chủ đã nói `REQUIRES_MIGRATION` — tức Revision **đang vận hành**
