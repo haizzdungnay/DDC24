@@ -123,6 +123,63 @@ func TestOverviewHealthHistorianLegacyWriterCountsAsActive(t *testing.T) {
 	})
 }
 
+// F-OVERVIEW-MODBUS-01 — telemetry publish cả bus disabled để trang chẩn đoán
+// vẫn hiện CLOSED. Overview chỉ được đánh giá bus enabled, và RUNNING là trạng
+// thái khoẻ do IOBus phát thật; nếu không, cấu hình 1 bus chạy + 1 bus tắt bị
+// dựng thành 2 lỗi bus_not_open dù 4/4 slave vẫn online.
+func TestOverviewHealthModbusUsesEnabledBusesAndRunningState(t *testing.T) {
+	a := &App{}
+	core := CoreStatus{CoreAvailable: true, IOP: IOPStatus{Status: "normal"}}
+
+	t.Run("bus enabled RUNNING và bus disabled CLOSED là GOOD", func(t *testing.T) {
+		modbus := modbusHealthInput{
+			configured:   4,
+			enabledBuses: map[uint8]bool{1: true},
+			buses: []BusTelemetry{
+				{ID: 1, State: "RUNNING"},
+				{ID: 2, State: "CLOSED"},
+			},
+			slaves: []SlaveTelemetry{
+				{BusID: 1, Addr: 4, Online: true},
+				{BusID: 1, Addr: 5, Online: true},
+				{BusID: 1, Addr: 6, Online: true},
+				{BusID: 1, Addr: 7, Online: true},
+			},
+		}
+		health := a.overviewHealth("2026-09-05T00:00:00Z", core, nil, nil, nil, modbus, true, "192.168.1.110")
+		got := findDomainHealth(t, health, "modbus")
+		if got.State != HealthGood || got.ReasonCode != "ok" {
+			t.Fatalf("modbus health = state %q reason %q, want good/ok", got.State, got.ReasonCode)
+		}
+	})
+
+	t.Run("bus enabled CLOSED vẫn là FAULT", func(t *testing.T) {
+		modbus := modbusHealthInput{
+			configured:   1,
+			enabledBuses: map[uint8]bool{1: true},
+			buses:        []BusTelemetry{{ID: 1, State: "CLOSED"}},
+			slaves:       []SlaveTelemetry{{BusID: 1, Addr: 4, Online: true}},
+		}
+		health := a.overviewHealth("2026-09-05T00:00:00Z", core, nil, nil, nil, modbus, true, "192.168.1.110")
+		got := findDomainHealth(t, health, "modbus")
+		if got.State != HealthFault || got.ReasonCode != "bus_not_open" || got.DetailCount == nil || *got.DetailCount != 1 {
+			t.Fatalf("modbus health = %+v, want fault/bus_not_open/detailCount=1", got)
+		}
+	})
+
+	t.Run("không có bus enabled không được dựng GOOD", func(t *testing.T) {
+		modbus := modbusHealthInput{
+			enabledBuses: map[uint8]bool{},
+			buses:        []BusTelemetry{{ID: 2, State: "CLOSED"}},
+		}
+		health := a.overviewHealth("2026-09-05T00:00:00Z", core, nil, nil, nil, modbus, true, "192.168.1.110")
+		got := findDomainHealth(t, health, "modbus")
+		if got.State != HealthUnknown || got.ReasonCode != "not_configured" {
+			t.Fatalf("modbus health = %+v, want unknown/not_configured", got)
+		}
+	})
+}
+
 func findDomainHealth(t *testing.T, health []OverviewDomainHealth, domain string) OverviewDomainHealth {
 	t.Helper()
 	for _, item := range health {

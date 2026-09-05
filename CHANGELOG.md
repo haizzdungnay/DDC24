@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### Fixed — `F-OVERVIEW-MODBUS-01` Không báo lỗi giả cho bus Modbus đang chạy hoặc đã tắt (2026-09-05)
+
+- **Triệu chứng TARGET:** sau khi đồng bộ và triển khai `main@2a3ba0ea`, API điểm đọc đúng
+  **72 point** (**24 Core + 48 `modbus_rtu`**), toàn bộ 48 point `GOOD`, 4/4 thiết bị online,
+  không có timeout/CRC; nhưng `/api/v1/overview` vẫn báo miền Modbus `fault`,
+  `reasonCode=bus_not_open`, `detailCount=2`.
+- **Nguyên nhân gốc:** IOBus phát trạng thái bus đang mở là `RUNNING`, còn Overview chỉ coi
+  `OPEN`/`OK` là khoẻ. Phép đếm cũng lấy mọi bus telemetry, kể cả `rs485-2` được cấu hình
+  `enabled=false` và vì thế ở `CLOSED`; một bus chạy + một bus tắt bị dựng thành hai lỗi.
+- **Cách sửa:** dựng tập bus enabled từ cấu hình đã migrate, chỉ đếm thiết bị thực sự enabled
+  trên bus enabled, chấp nhận `RUNNING` là trạng thái khoẻ và bỏ bus disabled khỏi phép tính
+  fault. Trường hợp bus enabled thật sự `CLOSED` vẫn giữ `fault/bus_not_open`; không có bus
+  enabled trả `unknown/not_configured`, không dựng `GOOD` giả.
+- **Kiểm chứng HOST:** test hồi quy mới **3/3 PASS**; `go vet ./...` PASS và
+  `go test ./... -count=1` PASS **21 gói**. Gate nền của cùng candidate: C++ Release bật
+  Modbus/BACnet/HMI **1.479/1.479 PASS**; FE **231/231 file, 2.932/2.932 test PASS**, lint và
+  `build:foxlinx` PASS. Ba test FE từng timeout khi chạy đồng thời với hai build C++ đạt
+  **113/113** khi cô lập và toàn bộ suite đạt khi chạy lại không tranh chấp tài nguyên.
+- **Triển khai TARGET:** candidate `b7c3937b`, provenance `dirty=false`, ARM64 và ST public key
+  chế độ `RELEASE` đã cài lên `SOM-DDC-24-foxlinx`; backup trước thay đổi tại
+  `/var/backups/mkddc/overview-modbus-b7c3937b-20260905T161521Z/`. Sau hơn 10 phút, năm service
+  `mkddc-fakemcu/iobus/core/netcfg/web-pi` vẫn `active/running`, giữ nguyên PID và
+  `NRestarts=0`; `mkddc-pty` cùng `mkddc-hmi` tiếp tục `disabled/inactive`. Sáu mẫu liên tiếp trên
+  cổng nội bộ `8081` đều `status=ok`, đủ **6/6 check**. RootFS dùng **47%**, SoC **51,19 °C**;
+  transaction mạng vẫn `confirmed` và không bị deploy thay đổi.
+- **Read-back Modbus:** IOBus giữ UART IOP local `/tmp/mkddc-iop-a` do FakeMCU cấp, đồng thời fd
+  fieldbus thật trỏ `/dev/ttyS5`. API sau sửa trả **72 point = 24 Core + 48 Modbus**, 48/48
+  Modbus `GOOD`, 4/4 thiết bị online, 0 timeout/CRC; Overview đổi đúng từ lỗi giả
+  `fault/bus_not_open` sang `good/ok` với nguồn `iobus_telemetry`. Hai cảnh báo sau startup đều là
+  `context canceled` đúng lúc đóng WebSocket kiểm thử; không có restart, panic hay fatal.
+- **Trình duyệt TARGET:** Playwright với phiên đăng nhập thật xác nhận Dashboard hiện
+  `Modbus RTU · GOOD · Normal`; Monitor hiện `MODBUS RTU POINTS (48)`, point thật
+  `CK50804-DO1`, source `modbus_rtu`, bus/slave và `GOOD`. Desktop **1440×900** và mobile
+  **390×844** đều hiện dữ liệu; mobile không tràn ngang toàn trang. Phiên sạch cuối có **103**
+  request hoàn tất HTTP 200, Console **0 error / 0 warning**. Một phiên dài trước đó gặp ba
+  `ERR_NETWORK_CHANGED`, nhưng request tự phục hồi về 200, board không restart và lượt sạch không
+  tái hiện. Chrome DevTools MCP đã cấu hình nhưng phiên này không có browser surface, nên dùng
+  Playwright thật làm bằng chứng thay thế.
+- **Debug triển khai:** lần thử đầu dùng nhầm topology `mkddc-pty` (image không có `socat` và
+  FakeMCU tự tạo PTY), rollback bằng `cp -a` còn làm thư mục database thành `root:root`, khiến Web
+  crash-loop. Đã phục hồi ownership `mkddc:mkddc`, bỏ unit PTY khỏi luồng deploy và sửa cách copy
+  rollback. Candidate kế tiếp bị gắn `-dirty` vì symlink `node_modules`; đã bỏ symlink, build sạch
+  lại và chỉ chấp nhận gói có provenance `dirty=false`.
+- **Ranh giới bằng chứng:** không Commission, Enable hay ghi output. Modbus RTU có read-back qua
+  `/dev/ttyS5`, nhưng local I/O vẫn dùng FakeMCU; vì vậy đây là TARGET runtime PASS, **không** nâng
+  thành physical I/O HIL hoặc `RELEASE_READY`.
+
+Refs: `F-OVERVIEW-MODBUS-01`, `ISS-PIO-31`.
+
 ### Fixed — `ISS-PGUI-02` Loại bỏ giao diện trộn EN/VI và raw detail phụ thuộc ngôn ngữ (#472, 2026-09-05)
 
 - **Triệu chứng (production, `PC-005`/`PM-006`/`pm-006`/`pm-014`).** Chuyển giao diện sang English
