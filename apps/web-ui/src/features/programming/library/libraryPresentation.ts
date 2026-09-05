@@ -15,11 +15,24 @@ import type {
  * component.
  */
 
-/** Nhãn phạm vi. **Không** dùng chữ "Core": sản phẩm đã có `mkddc-core`, và hai
- *  nghĩa cho một từ đúng chỗ người trực ca cần đọc nhanh là một cái bẫy. */
-export function scopeLabel(scope: ProgrammingLibraryEntry['scope'], english: boolean): string {
-  if (scope === 'SYSTEM') return english ? 'System' : 'Hệ thống'
-  return english ? 'Project' : 'Dự án'
+/**
+ * Nhãn phạm vi. **Không** dùng chữ "Core": sản phẩm đã có `mkddc-core`, và hai
+ * nghĩa cho một từ đúng chỗ người trực ca cần đọc nhanh là một cái bẫy.
+ *
+ * `ISS-PGUI-02` — tham số thứ hai là `pick`, KHÔNG phải một cờ `english`.
+ *
+ * Chữ ký cũ bắt mỗi chỗ gọi tự tính lấy ngôn ngữ hiện hành rồi truyền vào, và
+ * cả hai chỗ gọi đều truyền hằng `false`: thẻ khối và Inspector in "Hệ thống"
+ * ngay giữa một giao diện English (`PC-005`). Nhận thẳng `pick` — đúng thứ
+ * `categoryLabel` ngay bên dưới đã nhận — làm cái sai ấy không viết ra được
+ * nữa: không còn tham số nào để truyền hằng vào.
+ */
+export function scopeLabel(
+  scope: ProgrammingLibraryEntry['scope'],
+  pick: (vi: string, en: string) => string,
+): string {
+  if (scope === 'SYSTEM') return pick('Hệ thống', 'System')
+  return pick('Dự án', 'Project')
 }
 
 /**

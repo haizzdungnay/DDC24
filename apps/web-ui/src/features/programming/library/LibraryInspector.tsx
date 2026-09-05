@@ -159,7 +159,7 @@ export function LibraryInspector({
         <dl className={`flex-col gap-2 text-sm ${tab === 'details' ? 'flex' : 'hidden'}`}>
           <Row label={pick('Tên', 'Name')} value={entry.name} />
           <Row label={pick('Loại', 'Kind')} value={entry.kind} />
-          <Row label={pick('Phạm vi', 'Scope')} value={scopeLabel(entry.scope, false)} />
+          <Row label={pick('Phạm vi', 'Scope')} value={scopeLabel(entry.scope, pick)} />
           {/* `metadataValue` trả `null` cho field VẮNG, và ở đây `null` phải
               thành `—` KÈM lý do: một ô trống đọc như "đã điền rồi và nội dung
               rỗng", nên người dùng sẽ không đi tìm chỗ để điền. */}

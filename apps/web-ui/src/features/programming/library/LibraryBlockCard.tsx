@@ -133,7 +133,7 @@ export function LibraryBlockCard({
             có `mkddc-core`, và hai nghĩa cho một từ đúng chỗ người trực ca đọc
             nhanh là một cái bẫy (`AUTH …-PGM04-001` §Q4). */}
         <span className="rounded bg-[var(--c-surface)] px-1.5 py-0.5 text-[var(--c-text-dim)]">
-          {scopeLabel(group.scope, false)}
+          {scopeLabel(group.scope, pick)}
         </span>
         {metadataValue(entry.category) ? (
           <span className="rounded bg-[var(--c-surface)] px-1.5 py-0.5 text-[var(--c-text-dim)]">
