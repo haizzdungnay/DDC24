@@ -17,7 +17,9 @@
   JSX chỉ dựng bốn nhóm local/virtual nên point Modbus bị loại ở bước trình bày.
 - **Cách sửa:** thêm section `MODBUS RTU POINTS`, dùng tập đã lọc để chọn point
   cho panel chi tiết, và khóa hồi quy cho cả `group=modbus` lẫn
-  `kind=modbus_rtu`.
+  `kind=modbus_rtu`. Panel lịch sử không còn gửi ID Modbus vào contract
+  `/history` hiện chỉ hỗ trợ UI/AO/DO/VP; thay vào đó nó nói rõ lịch sử Modbus
+  chưa khả dụng và không dẫn sang Trends bằng một liên kết chắc chắn thất bại.
 - **Kiểm chứng HOST:** test hồi quy Monitor **3/3 PASS**; toàn bộ Vitest
   **230/230 file · 2.892/2.892 test PASS**; lint PASS; `build:foxlinx` PASS,
   chunk Programming **138,38/165 KiB gzip**. Gate tích hợp: C++ Release với
