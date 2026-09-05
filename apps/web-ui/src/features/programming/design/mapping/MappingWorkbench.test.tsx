@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
+import { formatTechnicalDateTime } from '../../../../shared/dateTime'
 import type { UserRole } from '../../../../shared/types'
 import type { ProgrammingDraftDocument, ProgrammingPointCatalogEntry } from '../../model/types'
 import { MappingTab } from './MappingTab'
@@ -289,9 +290,9 @@ describe('ISS-PGUI-02 — Mapping Workbench theo đúng ngôn ngữ đang chọn
      được lỗi này — phải khẳng định thẳng vào chuỗi. */
   it('mốc đọc định dạng theo locale đang chọn', () => {
     renderEn()
-    const en = new Date('2026-08-24T09:00:00Z').toLocaleString('en-US')
+    const en = formatTechnicalDateTime('2026-08-24T09:00:00Z', 'en-US')
     expect(screen.getAllByText(en).length).toBeGreaterThan(0)
-    expect(screen.queryByText(new Date('2026-08-24T09:00:00Z').toLocaleString('vi-VN'))).not.toBeInTheDocument()
+    expect(screen.queryByText(formatTechnicalDateTime('2026-08-24T09:00:00Z', 'vi-VN'))).not.toBeInTheDocument()
   })
 
   /* Lý do do CHÍNH FE kết luận phải đi qua bảng mã. Đổi nó thành một chuỗi

@@ -1,5 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatTechnicalTime } from '../../../shared/dateTime'
 import { useI18n } from '../../../shared/i18n'
 import { Panel } from '../../../shared/components/Panel'
 import { StateBlock } from '../../../shared/components/StateBlock'
@@ -314,12 +315,6 @@ function StateCell({ row }: { row: OverviewProgramRow }) {
   )
 }
 
-/** Mốc lần chạy gần nhất theo giờ máy người dùng; chuỗi không phân giải được thì giữ nguyên chứ không bịa. */
-function formatLastRunAt(value: string): string {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleTimeString()
-}
-
 function formatAge(pick: Pick, ageMs: number): string {
   if (ageMs < 1000) return pick(`${ageMs} ms trước`, `${ageMs} ms ago`)
   const seconds = Math.floor(ageMs / 1000)
@@ -329,7 +324,7 @@ function formatAge(pick: Pick, ageMs: number): string {
 }
 
 function LastRunCell({ row }: { row: OverviewProgramRow }) {
-  const { pick } = useI18n()
+  const { pick, locale } = useI18n()
   // CỘT NÀY LÀ MỐC THỜI GIAN. `lastExecNs` của Core là THỜI LƯỢNG một lần chạy
   // và không bao giờ được rò vào đây — view model đã chặn ở tầng dữ liệu, phần
   // hiển thị không có đường nào chạm tới nó.
@@ -337,7 +332,7 @@ function LastRunCell({ row }: { row: OverviewProgramRow }) {
   return (
     <span className="flex flex-col gap-0.5">
       <span className="text-[var(--c-text)]">
-        {row.lastRun.atUtc !== null ? formatLastRunAt(row.lastRun.atUtc) : pick('Chưa rõ mốc', 'Timestamp unknown')}
+        {row.lastRun.atUtc !== null ? formatTechnicalTime(row.lastRun.atUtc, locale) : pick('Chưa rõ mốc', 'Timestamp unknown')}
       </span>
       {row.lastRun.ageMs !== null && (
         <span className="text-[10px] leading-tight text-[var(--c-text-dim)]">{formatAge(pick, row.lastRun.ageMs)}</span>

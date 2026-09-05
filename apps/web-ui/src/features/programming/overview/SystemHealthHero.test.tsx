@@ -130,8 +130,8 @@ describe('systemHealthHeadline', () => {
 })
 
 describe('formatAuthorityTimestamp', () => {
-  it('chuỗi không phân giải được thì giữ nguyên chứ không bịa mốc', () => {
-    expect(formatAuthorityTimestamp('không-phải-thời-gian')).toBe('không-phải-thời-gian')
+  it('chuỗi không phân giải được thì fail-closed thay vì in dữ liệu hỏng', () => {
+    expect(formatAuthorityTimestamp('không-phải-thời-gian')).toBe('—')
   })
 })
 

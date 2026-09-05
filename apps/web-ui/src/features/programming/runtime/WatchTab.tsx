@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Square, TimerReset } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
+import { formatTechnicalDateTime, type HmiLocale } from '../../../shared/dateTime'
 import { createUuid } from '../../../shared/crypto'
 import { Panel } from '../../../shared/components/Panel'
 import { StateBlock } from '../../../shared/components/StateBlock'
@@ -535,7 +536,7 @@ function shortId(value: string): string {
 }
 
 function formatObservedAt(value: string, pick: PickCopy): { valid: boolean; text: string } {
-  const timestamp = new Date(value)
-  if (Number.isNaN(timestamp.getTime())) return { valid: false, text: pick('Không rõ', 'Unknown') }
-  return { valid: true, text: timestamp.toLocaleString() }
+  const locale = pick('vi-VN', 'en-US') as HmiLocale
+  const text = formatTechnicalDateTime(value, locale)
+  return text === '—' ? { valid: false, text: pick('Không rõ', 'Unknown') } : { valid: true, text }
 }

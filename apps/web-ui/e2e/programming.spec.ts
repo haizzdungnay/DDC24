@@ -25,6 +25,7 @@ const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const ACTIVE_REVISION_ID = '22222222-2222-4222-8222-222222222222'
 const POU_OBJECT_ID = '44444444-4444-4444-8444-444444444444'
 const PROGRAM_ID = '66666666-6666-4666-8666-666666666666'
+const TECHNICAL_TIMESTAMP = '2026-09-05T23:07:08Z'
 /* `T59-816` — bản đã niêm phong mà phiên mô phỏng chạy, và ID phiên. Cố ý KHÁC
    `ACTIVE_REVISION_ID`: một phiên mô phỏng chạy được trên bản chưa hề điều
    khiển tủ, và mọi nhãn nguồn phải nói đúng bản nào. */
@@ -239,7 +240,7 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     if (method === 'GET' && path === '/runtime') {
       return json(route, {
         schemaVersion: '1.0', controllerId: 'foxlinx-lab', producerState: 'READY', activeRevisionId: ACTIVE_REVISION_ID, lkgRevisionId: ACTIVE_REVISION_ID,
-        taskState: 'RUNNING', safeState: false, observedAt: new Date().toISOString(),
+        taskState: 'RUNNING', safeState: false, observedAt: TECHNICAL_TIMESTAMP,
         task: { taskId: 'Control_Main', periodMs: 1000, budgetMs: 200, state: 'RUNNING', runCount: 120, missedReleaseCount: 0, lastExecNs: 120000, maxExecNs: 310000, overrunCount: 1, consecutiveOverruns: 0 }
       })
     }
@@ -428,7 +429,7 @@ async function installProgrammingMocks(page: Page, state: MockState) {
         schemaVersion: '1.0',
         projectId: PROJECT_ID,
         runtimeStateSource: 'CORE_LIVE',
-        observedAt: new Date().toISOString(),
+        observedAt: TECHNICAL_TIMESTAMP,
         programsTruncated: false,
         items: state.draft.programs.map((program) => ({
           programId: program.programId,
@@ -440,13 +441,13 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           runtimeStateSource: 'CORE_LIVE',
           coreState: 'RUNNING',
           enabled: true,
-          observedAt: new Date().toISOString(),
+          observedAt: TECHNICAL_TIMESTAMP,
           periodMs: state.draft.task.periodMs,
           lastExecNs: 120000,
           maxExecNs: 310000,
           missedReleaseCount: 0,
           consecutiveMissedRelease: 0,
-          lastRunAtUtc: new Date().toISOString(),
+          lastRunAtUtc: TECHNICAL_TIMESTAMP,
           lastRunAgeMs: 100,
           lane: 0,
           health: 'HEALTHY'
@@ -639,8 +640,8 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     if (method === 'GET' && path === '/point-catalog') {
       return json(route, {
         items: [
-          { category: 'LOCAL', pointId: 'AO-01', name: 'AO-01', dataType: 'REAL', unit: 'V', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: 4.2, observedAt: new Date().toISOString() },
-          { category: 'LOCAL', pointId: 'UI-01', name: 'UI-01', dataType: 'REAL', direction: 'READ', writable: false, quality: 'GOOD', value: 21.5, observedAt: new Date().toISOString() }
+          { category: 'LOCAL', pointId: 'AO-01', name: 'AO-01', dataType: 'REAL', unit: 'V', direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: 4.2, observedAt: TECHNICAL_TIMESTAMP },
+          { category: 'LOCAL', pointId: 'UI-01', name: 'UI-01', dataType: 'REAL', direction: 'READ', writable: false, quality: 'GOOD', value: 21.5, observedAt: TECHNICAL_TIMESTAMP }
         ]
       })
     }
@@ -1062,6 +1063,40 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
  * ==================================================================== */
 
 test.describe('PGM-01 Overview — hợp đồng hiển thị (T60-302)', () => {
+  test('ISS-PGUI-03: timestamp kỹ thuật dùng 24 giờ, UTC và đổi locale trên desktop/mobile', async ({ page }, testInfo) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    state.draft.programs.push({ programId: PROGRAM_ID, name: 'AHU_Main', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM AHU_Main\nEND_PROGRAM' })
+    state.draft.variables.push({ variableId: '55555555-5555-4555-8555-555555555555', programId: PROGRAM_ID, name: 'SupplyTemp', type: 'REAL', class: 'INPUT', initialValue: null, retain: false })
+    state.draft.bindings.push({ bindingId: 'binding-e2e-time', variableId: '55555555-5555-4555-8555-555555555555', point: { category: 'LOCAL', pointId: 'UI-01' }, direction: 'READ', dataType: 'REAL', writable: false, qualityPolicy: 'REQUIRE_GOOD' })
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    await login(page, { lang: 'vi' })
+    await navigate(page, '/eng/programming')
+    await expect(page.getByTestId('system-health-hero')).toBeVisible()
+
+    const viText = await page.locator('body').evaluate((body) => body.innerText)
+    expect(viText).toContain('05/09/2026 · 23:07:08 UTC')
+    expect(viText).not.toMatch(/\b(?:AM|PM)\b/)
+
+    await page.getByRole('button', { name: 'Đổi ngôn ngữ' }).click()
+    const enText = await page.locator('body').evaluate((body) => body.innerText)
+    expect(enText).toContain('09/05/2026 · 23:07:08 UTC')
+    expect(enText).not.toMatch(/\b(?:AM|PM)\b/)
+
+    await navigate(page, '/eng/programming/runtime')
+    await expect(page.getByRole('heading', { name: 'Runtime status' })).toBeAttached()
+    expect(await page.locator('body').evaluate((body) => body.innerText)).toContain('09/05/2026 · 23:07:08 UTC')
+
+    if (testInfo.project.name === 'desktop-chrome') {
+      await navigate(page, `/eng/programming/projects/${PROJECT_ID}/mapping`)
+      await expect(page.getByRole('heading', { name: 'Assigned Mappings' })).toBeVisible()
+      expect(await page.locator('body').evaluate((body) => body.innerText)).toContain('09/05/2026 · 23:07:08 UTC')
+    }
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+    expectNoBrowserFailures(failures, 'ISS-PGUI-03')
+  })
+
   test('AC-PGM01-05: đúng MỘT hành động chính trên toàn trang', async ({ page }) => {
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)

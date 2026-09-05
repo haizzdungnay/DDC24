@@ -1,5 +1,6 @@
 import { Search, SlidersHorizontal } from 'lucide-react'
 import { StatusBadge } from '../../../../shared/components/StatusBadge'
+import { formatTechnicalTime } from '../../../../shared/dateTime'
 import { useI18n } from '../../../../shared/i18n'
 import { cn } from '../../../../shared/utils'
 import { UNASSIGNED_EQUIPMENT, type AccessFilter, type CatalogTruthState, type StatusFilter } from './mappingViewModel'
@@ -45,14 +46,14 @@ export interface MappingToolbarProps {
 }
 
 export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, access, onAccessChange, status, onStatusChange, counts, equipment, equipmentOptions, onEquipmentChange, suggestionsEnabled, suggestionsActive, suggestionsBlockedReason, onToggleSuggestions }: MappingToolbarProps) {
-  const { pick } = useI18n()
+  const { pick, locale } = useI18n()
   const stale = truth.status === 'error' || truth.complete === false
   return (
     <div className="space-y-2">
       {stale && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
           <span><strong>{truth.status === 'error' ? (error ?? pick('Catalog Point không sẵn sàng.', 'Point Catalog unavailable.')) : pick('Catalog Point chưa tải đủ.', 'Point Catalog not fully loaded.')}</strong> {pick('Map/Remove đang khóa; dữ liệu cũ chỉ dùng để inspect.', 'Map/Remove locked; stale data inspect-only.')}</span>
-          {truth.lastSuccessAt && <span>{pick('Lần đọc thành công gần nhất:', 'Last successful read:')} {new Date(truth.lastSuccessAt).toLocaleTimeString('vi-VN')}</span>}
+          {truth.lastSuccessAt && <span>{pick('Lần đọc thành công gần nhất:', 'Last successful read:')} {formatTechnicalTime(truth.lastSuccessAt, locale)}</span>}
         </div>
       )}
       <section aria-label="Mapping toolbar" className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2">

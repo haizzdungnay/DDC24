@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, FolderPlus, PencilRuler, WifiOff } from 'lucide-react'
+import { formatTechnicalDateTime, formatTechnicalTime } from '../../../shared/dateTime'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
 import { roleCan } from '../../../shared/auth/capabilities'
@@ -262,7 +263,7 @@ export function OverviewPage() {
  * `resolvePrimaryCta` giữ (hai hàng đầu của bảng §3 nằm TRƯỚC cổng Core).
  */
 function CoreOfflineBanner({ observedAt }: { observedAt: string | null }) {
-  const { pick } = useI18n()
+  const { pick, locale } = useI18n()
   return (
     <div
       data-testid="core-offline-banner"
@@ -283,8 +284,8 @@ function CoreOfflineBanner({ observedAt }: { observedAt: string | null }) {
                 'There is no recent read — every runtime state on this page is “unknown”.'
               )
             : pick(
-                `Mốc đọc gần nhất: ${new Date(observedAt).toLocaleString()}.`,
-                `Last read at ${new Date(observedAt).toLocaleString()}.`
+                `Mốc đọc gần nhất: ${formatTechnicalDateTime(observedAt, locale)}.`,
+                `Last read at ${formatTechnicalDateTime(observedAt, locale)}.`
               )}
         </span>
       </span>
@@ -515,7 +516,7 @@ function ProgramsSection({
  * ra mặt trước (`AC-PGM01-01`, handoff §7 *no horizontal UUID content*).
  */
 function ProgramsCompactList({ model, projectId }: { model: ProgramsSummaryModel; projectId: string | null }) {
-  const { pick } = useI18n()
+  const { pick, locale } = useI18n()
   const navigate = useNavigate()
   const title = pick('Chương trình đang vận hành', 'Programs in operation')
 
@@ -556,7 +557,7 @@ function ProgramsCompactList({ model, projectId }: { model: ProgramsSummaryModel
                 {row.lastRun === null ? (
                   <MissingValue reason={pick('Chưa đọc được từ Core', 'Not read from Core')} />
                 ) : row.lastRun.atUtc !== null ? (
-                  new Date(row.lastRun.atUtc).toLocaleTimeString()
+                  formatTechnicalTime(row.lastRun.atUtc, locale)
                 ) : (
                   pick('Chưa rõ mốc', 'Timestamp unknown')
                 )}

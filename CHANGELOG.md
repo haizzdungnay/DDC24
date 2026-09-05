@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGUI-03` Chuẩn hóa timestamp kỹ thuật 24 giờ theo UTC (#473, 2026-09-06)
+
+- Gom clock header, Overview/Last Exec, Mapping, Runtime và nhật ký Programming vào helper
+  dùng chung; EN/VI đều khóa `hourCycle=h23` và hiện hậu tố `UTC` để trình duyệt không âm
+  thầm đổi timestamp RFC3339 sang múi giờ máy trạm.
+- Timestamp thiếu/sai fail-closed thành `—`; tuổi dữ liệu và clock header dùng cùng một mẫu
+  thời gian trong mỗi render. Thêm test các mốc 00/12/23 giờ, đổi ngày, EN/VI và dữ liệu lỗi.
+- Kiểm chứng HOST: test mục tiêu **25 tệp / 406 test PASS**; toàn bộ Vitest **232 tệp /
+  2.941 test PASS**; lint và production build PASS, chunk Programming **139,13 KiB gzip**
+  trong ngân sách R3 165 KiB. E2E Chrome thật **2/2 PASS** trên desktop và mobile: Overview,
+  Runtime và Mapping dùng timestamp cố định, đổi VI→EN, không AM/PM và không tràn ngang;
+  Console/Network của bề mặt Programming không có lỗi ngoài các endpoint vỏ ứng dụng bị thiếu
+  có chủ ý trong fixture. Browser demo 1440×900 xác nhận clock EN/VI có hậu tố UTC, không tràn,
+  Dashboard Console **0 error / 0 warning** và không có request động thất bại.
+
 ### Fixed — `F-OVERVIEW-MODBUS-01` Không báo lỗi giả cho bus Modbus đang chạy hoặc đã tắt (2026-09-05)
 
 - **Triệu chứng TARGET:** sau khi đồng bộ và triển khai `main@2a3ba0ea`, API điểm đọc đúng
