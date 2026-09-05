@@ -39,6 +39,11 @@ echo "$cli_diag" > logs/gate369-cli-capture.exit
 # ISS-STED-20 chặng (c): spec đọc JSON CLI vừa chụp, tạo Project với cùng source,
 # chạy production Check, so CLI diagnostic với Go API rồi đòi chính diagnostic
 # API đó xuất hiện trên ProblemsDrawer. Không có fixture diagnostic thứ hai.
+# Trình duyệt đo đi vào log để người ký biết phép đo chạy trên cái gì. Rỗng =
+# chromium đi kèm Playwright (mặc định mới, xem playwright.programming-real.config.ts).
+echo "MKDDC_E2E_CHROME_CHANNEL=${MKDDC_E2E_CHROME_CHANNEL:-<chromium đi kèm Playwright>}"
+echo "MKDDC_E2E_CHROMIUM_PATH=${MKDDC_E2E_CHROMIUM_PATH:-<browser mặc định của Playwright>}"
+
 (
   cd apps/web-ui || exit 1
   GATE369_CLI_DIAGNOSTIC_FILE="$ROOT/logs/gate369-cli-diagnostic.json" \

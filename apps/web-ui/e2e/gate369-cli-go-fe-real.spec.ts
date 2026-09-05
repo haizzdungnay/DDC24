@@ -56,7 +56,12 @@ async function captureAuthorization(page: Page): Promise<string> {
   }
   page.on('request', capture)
   try {
-    await login(page)
+    // Stack real-backend seed tài khoản admin với mật khẩu `admin123`
+    // (`apps/web-api/config/users.conf`), giống mọi spec real-backend khác —
+    // xem `programming-real.spec.ts`. Mặc định `admin`/`admin` của helper là
+    // cho lane mock; ở đây nó khiến login 401 và cả cổng đỏ TRƯỚC khi chạm
+    // được assertion CLI→Go→FE nào, một false-red che mất phép đo thật.
+    await login(page, { password: 'admin123' })
     await page.goto('/eng/programming')
     await expect.poll(() => authorization, { timeout: 10_000 }).toMatch(/^Bearer /)
     return authorization
@@ -187,6 +192,20 @@ test('GATE369-C: cùng WARNING diagnostic giữ nguyên CLI -> Go -> FE', async 
   await page.goto(
     `/eng/programming/projects/${projectID}/commission?revisionId=${encodeURIComponent(revisionID)}&checkId=${encodeURIComponent(checkID)}`
   )
+
+  /* Deep-link buộc UI xác thực lại tương tác: `captureAuthorization` chỉ nạp
+   * token cho APIRequestContext ở trên, còn một `page.goto` tới route sâu đi qua
+   * route guard thật và bị đẩy về `/login` với route gốc giữ lại. Đây là hành
+   * vi ĐÚNG của sản phẩm — spec `programming-real.spec.ts` xử lý y hệt — nên
+   * đăng nhập KHI được hỏi rồi để AuthProvider trả về đúng trang commission,
+   * thay vì coi màn login là một thất bại. */
+  const relogin = page.getByLabel(/Tên đăng nhập|Username/i)
+  if (await relogin.isVisible().catch(() => false)) {
+    await relogin.fill('admin')
+    await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+    await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+    await page.waitForURL(/\/commission/, { timeout: 15_000 })
+  }
 
   await expect(page.getByText('PASSED', { exact: true })).toBeVisible()
   const problems = page.getByRole('region', { name: /Danh sách lỗi|Problems list/i })
