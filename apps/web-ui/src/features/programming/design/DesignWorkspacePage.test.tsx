@@ -1250,7 +1250,7 @@ nó — thuộc về PGM-02, vì đó là nơi người dùng nhìn thấy mã n
 describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405)', () => {
   const LIBRARY_REVISION = 'sys-1'
 
-  function stubWorkspaceWithLibrary() {
+  function stubWorkspaceWithLibrary(entryOverrides: Record<string, unknown> = {}) {
     const project = baseProject()
     project.draft = {
       ...baseDocument(),
@@ -1279,6 +1279,7 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
               ],
             },
             dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16,
+            ...entryOverrides,
           }]
         })
       }
@@ -1355,6 +1356,107 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
     await waitFor(() => expect(banner).toHaveAttribute('data-status', 'revision-mismatch'))
     expect(banner).toHaveTextContent('phiên bản thư viện khác')
     expect(within(banner).queryByRole('button', { name: /Chèn vào POU đang mở/ })).toBeNull()
+  })
+
+  /*
+  `T61-406` / `AC-PGM04` — "Mutation thật chỉ sau xác nhận trong editor và có
+  ĐÚNG MỘT Undo entry".
+
+  Phép chèn một FB có trạng thái ghi vào HAI chỗ cách xa nhau trong tệp: một
+  dòng khai báo trong khối `VAR` và một lời gọi trong thân. Nếu hai chỗ ấy đi
+  qua hai lần ghi thì người dùng bấm `Ctrl+Z` một lần sẽ gỡ lời gọi mà BỎ LẠI
+  dòng khai báo — một biến thừa nằm im trong `VAR`, không lỗi biên dịch, không
+  ai thấy. `AC-ST-003` khoá việc ấy cho đường Quick Library; đường ý định từ
+  PGM-04 là một lối vào KHÁC và phải khoá riêng, vì một lối vào không đi qua
+  `applyEditRange` sẽ hỏng đúng kiểu ấy mà test cũ vẫn xanh.
+  */
+  it('chèn từ băng ý định là ĐÚNG MỘT bước Hoàn tác, không bỏ lại khai báo', async () => {
+    stubWorkspaceWithLibrary()
+    renderWorkspace(designPath(`insertEntry=TON&insertLibraryRevision=${LIBRARY_REVISION}`))
+
+    const banner = await screen.findByTestId('programs-insert-intent')
+    await waitFor(() => expect(banner).toHaveAttribute('data-status', 'ready'))
+    const editor = (await screen.findByLabelText(/Mã nguồn ST/)) as HTMLTextAreaElement
+    const before = editor.value
+
+    fireEvent.click(within(banner).getByRole('button', { name: /Chèn vào POU đang mở/ }))
+    await waitFor(() => expect(editor.value).toContain('TON_1 : TON;'))
+    expect(editor.value).toContain('TON_1(')
+
+    fireEvent.click(screen.getByRole('button', { name: /Hoàn tác/ }))
+    // MỘT lần hoàn tác trả về nguyên trạng: cả khai báo lẫn lời gọi cùng biến
+    // mất. Không còn `TON_1` nào sót lại trong khối VAR.
+    await waitFor(() => expect(editor.value).toBe(before))
+    expect(editor.value).not.toContain('TON_1')
+  })
+
+  /*
+  `ISS-PGM04-15` — "Guard chỉ tồn tại ở UI nhưng test direct intent có thể
+  bypass" là một trong ba lý do issue TỪ CHỐI đóng.
+
+  Ý định đi qua URL. Nút Chèn của PGM-04 khoá cho bốn lý do, nhưng URL dưới đây
+  không hề đi qua cái nút ấy — nó là thứ người ta gõ tay, dán lại, hoặc mở từ
+  một bookmark cũ. Phép chặn phải được ĐỌC LẠI từ danh mục của máy chủ ở đây,
+  và mã nguồn phải không đổi một ký tự.
+  */
+  it('ý định gõ thẳng vào URL vẫn bị chặn bởi cùng luật, và không đổi mã nguồn', async () => {
+    const blocked = [
+      [{ featureState: 'REVIEW_REQUIRED' }, /chờ review Controls\/Safety/],
+      [{ libraryState: 'DEPRECATED' }, /đã ngừng sử dụng/],
+      [{ signature: undefined }, /Không đọc được chữ ký/],
+      [{
+        compatibility: {
+          state: 'REQUIRES_MIGRATION', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: 'pin cũ'
+        }
+      }, /pin một phiên bản khác/],
+    ] as const
+    for (const [overrides, message] of blocked) {
+      cleanup()
+      stubWorkspaceWithLibrary(overrides)
+      renderWorkspace(designPath(`insertEntry=TON&insertLibraryRevision=${LIBRARY_REVISION}`))
+
+      const banner = await screen.findByTestId('programs-insert-intent')
+      await waitFor(() => expect(banner).toHaveAttribute('data-status', 'blocked'))
+      expect(banner).toHaveTextContent(message)
+      expect(within(banner).queryByRole('button', { name: /Chèn vào POU đang mở/ })).toBeNull()
+      const editor = (await screen.findByLabelText(/Mã nguồn ST/)) as HTMLTextAreaElement
+      expect(editor.value).toBe('PROGRAM AHU_MAIN\nEND_PROGRAM\n')
+    }
+  })
+
+  /*
+  `ISS-PGM04-15` — "Unknown compatibility phải fail closed HOẶC yêu cầu flow
+  được authority phê duyệt; không coi unknown là compatible."
+
+  Fail-closed không dùng được ở đây: hợp đồng ghi `UNKNOWN` là giá trị MẶC ĐỊNH
+  và MỌI entry SYSTEM đều mang nó, nên chặn cứng là chặn `TON` trên mọi Project
+  chưa Commission. Đường còn lại là flow của `AUTH-PROG-2026-08-29-PGM04-003`:
+  một lần bấm xác nhận, VỚI sự thật đang hiện trên màn hình. Nếu câu ấy vắng thì
+  lần bấm là một lần bấm mù — và im lặng đúng là cách `UNKNOWN` bị đọc thành
+  `COMPATIBLE`.
+  */
+  it('tương thích chưa đo được thì hiện NGAY trên băng xác nhận', async () => {
+    stubWorkspaceWithLibrary()
+    renderWorkspace(designPath(`insertEntry=TON&insertLibraryRevision=${LIBRARY_REVISION}`))
+    const banner = await screen.findByTestId('programs-insert-intent')
+    await waitFor(() => expect(banner).toHaveAttribute('data-status', 'ready'))
+    expect(within(banner).getByTestId('programs-insert-compatibility'))
+      .toHaveTextContent(/chưa có nghĩa là tương thích/)
+  })
+
+  /* Và nó KHÔNG phải một câu luôn hiện: máy chủ khẳng định tương thích thì im
+     lặng mới đúng. Một cảnh báo hiện ở mọi lần chèn là một cảnh báo không ai
+     đọc nữa. */
+  it('máy chủ khẳng định tương thích thì băng không thêm cảnh báo nào', async () => {
+    stubWorkspaceWithLibrary({
+      compatibility: {
+        state: 'COMPATIBLE', requiredVersion: 'rev-a.1', availableVersion: 'rev-a.1', reason: null
+      }
+    })
+    renderWorkspace(designPath(`insertEntry=TON&insertLibraryRevision=${LIBRARY_REVISION}`))
+    const banner = await screen.findByTestId('programs-insert-intent')
+    await waitFor(() => expect(banner).toHaveAttribute('data-status', 'ready'))
+    expect(within(banner).queryByTestId('programs-insert-compatibility')).toBeNull()
   })
 
   it('không có ý định thì không có băng nào — băng không tự mọc ra', async () => {

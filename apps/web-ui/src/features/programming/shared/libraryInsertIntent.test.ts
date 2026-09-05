@@ -63,9 +63,13 @@ describe('T61-405 — ý định chèn khối mang từ PGM-04 sang PGM-02', () 
   })
 
   describe('phân giải trên danh mục đang tải', () => {
+    const ready = {
+      usability: { kind: 'AVAILABLE' } as const,
+      compatibility: { kind: 'compatible' } as const,
+    }
     const entries = [
-      { entryId: ENTRY, libraryRevisionId: REVISION, name: 'SCALE_LIN' },
-      { entryId: 'TON', libraryRevisionId: 'sys-1', name: 'TON' },
+      { entryId: ENTRY, libraryRevisionId: REVISION, name: 'SCALE_LIN', ...ready },
+      { entryId: 'TON', libraryRevisionId: 'sys-1', name: 'TON', ...ready },
     ]
 
     it('đúng khối đúng bản thì sẵn sàng', () => {
@@ -94,6 +98,58 @@ describe('T61-405 — ý định chèn khối mang từ PGM-04 sang PGM-02', () 
     it('danh mục rỗng thì chưa kết luận được là "khác bản"', () => {
       expect(resolveLibraryInsertIntent({ entryId: ENTRY, libraryRevisionId: REVISION }, []))
         .toEqual({ status: 'unknown-entry' })
+    })
+
+    /*
+    `T61-406` / `ISS-PGM04-15` — ĐÂY là chỗ đóng cửa sau.
+
+    Nút Chèn của PGM-04 bị khoá cho bốn lý do dưới đây, nhưng ý định đi qua URL:
+    một địa chỉ gõ tay, dán lại hay bookmark cũ tới thẳng bộ soạn thảo mà không
+    hề đi qua cái nút ấy. Issue từ chối đóng với đúng câu "guard chỉ tồn tại ở
+    UI nhưng test direct intent có thể bypass", nên phép chặn phải nằm ở đường
+    PHÂN GIẢI — nơi mọi lối vào đều đi qua.
+    */
+    it('khối không dùng được thì BỊ CHẶN, dù ý định trỏ đúng khối đúng bản', () => {
+      const cases = [
+        [{ usability: { kind: 'REVIEW_REQUIRED' } as const, compatibility: { kind: 'compatible' } as const }, 'REVIEW_REQUIRED'],
+        [{ usability: { kind: 'DEPRECATED' } as const, compatibility: { kind: 'compatible' } as const }, 'DEPRECATED'],
+        [{ usability: { kind: 'SIGNATURE_UNAVAILABLE' } as const, compatibility: { kind: 'compatible' } as const }, 'SIGNATURE_UNAVAILABLE'],
+        [
+          {
+            usability: { kind: 'AVAILABLE' } as const,
+            compatibility: {
+              kind: 'requires-migration', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: null,
+            } as const,
+          },
+          'REQUIRES_MIGRATION',
+        ],
+      ] as const
+      for (const [state, reason] of cases) {
+        const entry = { entryId: ENTRY, libraryRevisionId: REVISION, name: 'SCALE_LIN', ...state }
+        const resolution = resolveLibraryInsertIntent(
+          { entryId: ENTRY, libraryRevisionId: REVISION }, [entry]
+        )
+        expect(resolution).toEqual({ status: 'blocked', entry, reason })
+      }
+    })
+
+    /*
+    `UNKNOWN` là giá trị MẶC ĐỊNH của hợp đồng (`openapi.yaml`), và MỌI entry
+    SYSTEM đều mang nó vì `library_usages` cố ý không giữ usage của chúng. Chặn
+    cứng ở đây là chặn `TON`/`TOF`/`CTU` trên mọi Project chưa Commission — nên
+    nó đi đường "flow được authority phê duyệt": vẫn sẵn sàng, nhưng sự thật
+    phải hiện trên băng xác nhận của PGM-02 (kiểm ở `DesignWorkspacePage`).
+    */
+    it('UNKNOWN không chặn — nhưng cũng không được biến thành "tương thích"', () => {
+      const entry = {
+        entryId: 'TON', libraryRevisionId: 'sys-1', name: 'TON',
+        usability: { kind: 'AVAILABLE' } as const,
+        compatibility: { kind: 'unknown', reason: null } as const,
+      }
+      const resolution = resolveLibraryInsertIntent({ entryId: 'TON', libraryRevisionId: 'sys-1' }, [entry])
+      expect(resolution).toEqual({ status: 'ready', entry })
+      // Sự thật KHÔNG bị nuốt: nó vẫn nằm nguyên trên khối được trả về.
+      expect(resolution.status === 'ready' && resolution.entry.compatibility.kind).toBe('unknown')
     })
   })
 })

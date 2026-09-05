@@ -45,6 +45,7 @@ import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { LIBRARY_DRAG_TYPE, QuickLibraryHost } from '../library/QuickLibraryPanel'
 import { catalogEntriesOf, type CatalogEntry } from '../library/libraryCatalog'
+import { insertCompatibilityStatement } from '../../library/libraryPresentation'
 import { resolveLibraryInsertIntent, type LibraryInsertIntent } from '../../shared/libraryInsertIntent'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
@@ -694,13 +695,29 @@ export function ProgramsTab({
                     'Loading the library catalog to identify the block…')}
             </p>
           ) : insertResolution.status === 'ready' ? (
-            <p className="min-w-0 flex-1">
-              {pick('Chèn khối', 'Insert block')}{' '}
-              <strong>{insertResolution.entry.name}</strong>{' '}
-              {selected
-                ? pick(`vào ${selected.name}?`, `into ${selected.name}?`)
-                : pick('— hãy chọn một POU trước.', '— select a POU first.')}
-            </p>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <p>
+                {pick('Chèn khối', 'Insert block')}{' '}
+                <strong>{insertResolution.entry.name}</strong>{' '}
+                {selected
+                  ? pick(`vào ${selected.name}?`, `into ${selected.name}?`)
+                  : pick('— hãy chọn một POU trước.', '— select a POU first.')}
+              </p>
+              {/* `ISS-PGM04-15` — `UNKNOWN` không chặn, nhưng phải NÓI RA ngay
+                  tại chỗ người dùng bấm xác nhận. Đây chính là "flow được
+                  authority phê duyệt" của `AUTH-PROG-2026-08-29-PGM04-003`: một
+                  lần bấm tường minh, với sự thật đang hiện trên màn hình. Bỏ
+                  câu này đi thì lần bấm ấy là một lần bấm mù, và im lặng đúng
+                  là cách `UNKNOWN` bị đọc thành `COMPATIBLE`. */}
+              {insertCompatibilityStatement(insertResolution.entry.compatibility) && (
+                <p data-testid="programs-insert-compatibility" className="text-xs text-[var(--c-warn-fg)]">
+                  {pick(
+                    'Máy chủ chưa đo được mức tương thích của khối này với gói đang vận hành — chưa có nghĩa là tương thích.',
+                    'The server could not determine this block’s compatibility with the running package — that does not mean it is compatible.'
+                  )}
+                </p>
+              )}
+            </div>
           ) : (
             <p role="alert" className="min-w-0 flex-1 text-[var(--c-warn-fg)]">
               {insertResolution.status === 'unknown-entry'
@@ -708,10 +725,33 @@ export function ProgramsTab({
                     'Không tìm thấy khối được đề nghị trong thư viện của Project này, nên không chèn gì cả.',
                     'The proposed block is not in this project library, so nothing was inserted.'
                   )
-                : pick(
-                    'Khối được đề nghị nay thuộc một phiên bản thư viện khác phiên bản bạn đã xem, nên không chèn gì cả.',
-                    'The proposed block now belongs to a different library version than the one you viewed, so nothing was inserted.'
-                  )}
+                : insertResolution.status === 'revision-mismatch'
+                  ? pick(
+                      'Khối được đề nghị nay thuộc một phiên bản thư viện khác phiên bản bạn đã xem, nên không chèn gì cả.',
+                      'The proposed block now belongs to a different library version than the one you viewed, so nothing was inserted.'
+                    )
+                  /* `T61-406` — cùng luật, đọc lại từ danh mục của MÁY CHỦ. Một
+                     URL gõ tay không đi qua nút Chèn của PGM-04, nên nếu luật
+                     chỉ sống ở cái nút ấy thì đường này là một cửa sau. */
+                  : insertResolution.reason === 'REVIEW_REQUIRED'
+                    ? pick(
+                        'Khối được đề nghị đang chờ review Controls/Safety, nên không chèn gì cả.',
+                        'The proposed block is awaiting Controls/Safety review, so nothing was inserted.'
+                      )
+                    : insertResolution.reason === 'DEPRECATED'
+                      ? pick(
+                          'Phiên bản thư viện của khối được đề nghị đã ngừng sử dụng, nên không chèn gì cả.',
+                          'The proposed block’s library version is deprecated, so nothing was inserted.'
+                        )
+                      : insertResolution.reason === 'SIGNATURE_UNAVAILABLE'
+                        ? pick(
+                            'Không đọc được chữ ký của khối được đề nghị, nên không chèn gì cả.',
+                            'The proposed block’s signature could not be read, so nothing was inserted.'
+                          )
+                        : pick(
+                            'Gói đang vận hành pin một phiên bản khác của khối được đề nghị; cần migrate trước, nên không chèn gì cả.',
+                            'The running package pins a different version of the proposed block; it needs a migration first, so nothing was inserted.'
+                          )}
             </p>
           )}
           {insertResolution.status === 'ready' && (
