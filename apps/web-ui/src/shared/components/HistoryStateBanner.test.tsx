@@ -50,6 +50,12 @@ describe('HistoryStateBanner', () => {
     expect(screen.getByText('2026-07-20T01:00:15Z')).toHaveAttribute('datetime', '2026-07-20T01:00:15Z')
   })
 
+  it('đếm một gap thì dùng danh từ số ít', () => {
+    render(<HistoryStateBanner state="partial" gaps={[gaps[0]]} />)
+
+    expect(screen.getByText('1 history gap reported.')).toBeInTheDocument()
+  })
+
   it('keeps an incomplete result explicit when no gap details were supplied', () => {
     render(<HistoryStateBanner state="partial" />)
 
