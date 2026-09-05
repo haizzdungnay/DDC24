@@ -27,6 +27,13 @@
  * đọc, và không có dấu hiệu nào.
  */
 
+import {
+  insertUsabilityBlock,
+  type CompatibilityDisplay,
+  type InsertUsabilityBlock,
+  type LibraryUsability,
+} from '../library/libraryPresentation'
+
 export const LIBRARY_INSERT_INTENT_PARAMS = ['insertEntry', 'insertLibraryRevision'] as const
 
 export interface LibraryInsertIntent {
@@ -71,6 +78,8 @@ export function clearLibraryInsertIntent(search: string | URLSearchParams): URLS
 
 export type LibraryInsertResolution<TEntry> =
   | { status: 'ready'; entry: TEntry }
+  /** Đúng khối đúng bản, nhưng khối ấy KHÔNG dùng được. Xem `T61-406` dưới đây. */
+  | { status: 'blocked'; entry: TEntry; reason: Exclude<InsertUsabilityBlock, null> }
   /** Không có khối nào mang `entryId` ấy trong danh mục đang tải. */
   | { status: 'unknown-entry' }
   /** Có khối, nhưng nó thuộc một bản thư viện KHÁC bản người dùng đã đọc. */
@@ -79,21 +88,45 @@ export type LibraryInsertResolution<TEntry> =
 /**
  * Phân giải ý định thành đúng một khối trong danh mục đang tải.
  *
- * Ba kết quả, và hai kết quả xấu KHÔNG được gộp: "không có khối này" là một
- * danh mục chưa tải xong hoặc một khối đã bị xoá, còn "khối này thuộc bản khác"
- * là một thay đổi thư viện xảy ra giữa lúc người dùng bấm Chèn và lúc bộ soạn
- * thảo mở ra. Hai câu ấy dẫn tới hai hành động khác nhau của người vận hành.
+ * Bốn kết quả, và ba kết quả xấu KHÔNG được gộp: "không có khối này" là một
+ * danh mục chưa tải xong hoặc một khối đã bị xoá, "khối này thuộc bản khác" là
+ * một thay đổi thư viện xảy ra giữa lúc người dùng bấm Chèn và lúc bộ soạn thảo
+ * mở ra, còn "khối này không dùng được" là một luật của sản phẩm. Ba câu ấy dẫn
+ * tới ba hành động khác nhau của người vận hành.
  *
  * Không có nhánh nào trả về "khối gần đúng": chèn nhầm bản là một lỗi im lặng,
  * và ở đây không có gì bù lại được nó.
+ *
+ * ## `T61-406` — vì sao phép chặn phải nằm Ở ĐÂY chứ không chỉ ở PGM-04
+ *
+ * Ý định đi qua **URL**. Nút Chèn của PGM-04 bị khoá cho khối `REVIEW_REQUIRED`
+ * / `DEPRECATED` / `SIGNATURE_UNAVAILABLE` / `REQUIRES_MIGRATION`, nhưng một URL
+ * gõ tay, một liên kết dán lại, hay một bookmark cũ đều tới thẳng bộ soạn thảo
+ * mà không đi qua cái nút ấy. Nếu phép chặn chỉ sống trong `disabled` của một
+ * `<button>` thì nó không phải một luật — nó là một lời khuyên, và
+ * `ISS-PGM04-15` từ chối đóng với đúng câu đó ("guard chỉ tồn tại ở UI nhưng
+ * test direct intent có thể bypass").
+ *
+ * Phép chặn đọc `usability`/`compatibility` từ **danh mục do máy chủ trả**, chứ
+ * không từ tham số URL. Đó là điểm khác biệt quan trọng: một trường mang trong
+ * URL là lời khai của bên gọi, còn danh mục là câu trả lời của authority.
  */
-export function resolveLibraryInsertIntent<TEntry extends { entryId: string; libraryRevisionId: string }>(
+export function resolveLibraryInsertIntent<
+  TEntry extends {
+    entryId: string
+    libraryRevisionId: string
+    usability: LibraryUsability
+    compatibility: CompatibilityDisplay
+  },
+>(
   intent: LibraryInsertIntent,
   entries: readonly TEntry[],
 ): LibraryInsertResolution<TEntry> {
   const matching = entries.filter((entry) => entry.entryId === intent.entryId)
   if (matching.length === 0) return { status: 'unknown-entry' }
   const exact = matching.find((entry) => entry.libraryRevisionId === intent.libraryRevisionId)
-  if (exact) return { status: 'ready', entry: exact }
-  return { status: 'revision-mismatch', available: matching[0].libraryRevisionId }
+  if (!exact) return { status: 'revision-mismatch', available: matching[0].libraryRevisionId }
+  const reason = insertUsabilityBlock(exact.usability, exact.compatibility)
+  if (reason !== null) return { status: 'blocked', entry: exact, reason }
+  return { status: 'ready', entry: exact }
 }

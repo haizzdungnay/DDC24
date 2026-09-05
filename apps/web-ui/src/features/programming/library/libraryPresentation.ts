@@ -119,30 +119,88 @@ export function libraryUsability(
   return { kind: 'AVAILABLE' }
 }
 
-export type InsertBlockReason =
+/**
+ * `T61-406` — vì sao một khối không chèn được, xét trên CHÍNH KHỐI ĐÓ, không
+ * xét ngữ cảnh đích. Đây là thang bậc mà cả ba bề mặt chèn phải hỏi.
+ *
+ * Trước lát này thang bậc chỉ biết `usability` (bản thân khối) và bỏ trắng
+ * `compatibility` (khối so với gói ĐANG VẬN HÀNH). Hệ quả đo được: một khối mà
+ * máy chủ đã nói `REQUIRES_MIGRATION` — tức Revision đang chạy pin một version
+ * khác — vẫn chèn được từ cả PGM-04 lẫn Quick Library, và người dùng chỉ biết
+ * ở lần Kiểm tra sau đó, khi mã nguồn đã đổi.
+ *
+ * Thứ tự: ba lý do `usability` đứng TRƯỚC `REQUIRES_MIGRATION`. `usability` nói
+ * "khối này chưa dùng được ở bất cứ đâu", còn `REQUIRES_MIGRATION` nói "khối
+ * này lệch với gói đang chạy". Nói câu thứ hai cho một khối đang chờ review là
+ * chỉ người dùng đi migrate một thứ mà migrate xong vẫn không chèn được.
+ */
+export type InsertUsabilityBlock =
   | 'REVIEW_REQUIRED'
-  | 'NO_TARGET'
   | 'DEPRECATED'
   | 'SIGNATURE_UNAVAILABLE'
+  | 'REQUIRES_MIGRATION'
   | null
+
+/**
+ * `UNKNOWN` KHÔNG nằm trong danh sách chặn, và đó là một quyết định có chủ ý,
+ * không phải một chỗ bỏ sót.
+ *
+ * Hợp đồng (`openapi.yaml`, `ProgrammingLibraryCompatibility`) ghi rõ `UNKNOWN`
+ * là giá trị **MẶC ĐỊNH**: Project chưa Commission Revision nào thì không có gì
+ * để so, và **mọi entry SYSTEM luôn `UNKNOWN`** vì `library_usages` cố ý không
+ * giữ usage của chúng. Chặn cứng ở đây nghĩa là chặn `TON`/`TOF`/`CTU` trên mọi
+ * Project chưa vận hành — tức chặn gần như toàn bộ người dùng mới, vì một lý do
+ * mà máy chủ không hề khẳng định.
+ *
+ * Thay vào đó `UNKNOWN` đi theo con đường thứ hai mà `ISS-PGM04-15` cho phép:
+ * "yêu cầu flow được authority phê duyệt". Flow ấy là
+ * `AUTH-PROG-2026-08-29-PGM04-003` — PGM-04 chỉ điều hướng, phép chèn thật cần
+ * một lần bấm xác nhận trong PGM-02 — và `insertCompatibilityStatement` dưới
+ * đây bắt buộc sự thật "chưa đo được" phải NẰM TRÊN băng xác nhận ấy. Điều bị
+ * cấm là coi `UNKNOWN` như `COMPATIBLE`; im lặng chính là coi nó như thế.
+ */
+export function insertUsabilityBlock(
+  usability: LibraryUsability,
+  compatibility: CompatibilityDisplay,
+): InsertUsabilityBlock {
+  if (usability.kind !== 'AVAILABLE') return usability.kind
+  if (compatibility.kind === 'requires-migration') return 'REQUIRES_MIGRATION'
+  return null
+}
+
+/**
+ * Câu phải HIỆN RA cạnh lời mời chèn — hoặc `null` khi không có gì để nói.
+ *
+ * Trả về chính `CompatibilityDisplay` (không phải một chuỗi) để lớp vẽ còn đọc
+ * được `requiredVersion`/`availableVersion`/`reason`: "cần migrate" mà không
+ * nói từ version nào sang version nào là một câu người vận hành không hành động
+ * được.
+ */
+export function insertCompatibilityStatement(
+  compatibility: CompatibilityDisplay,
+): Exclude<CompatibilityDisplay, { kind: 'compatible' }> | null {
+  return compatibility.kind === 'compatible' ? null : compatibility
+}
+
+export type InsertBlockReason = InsertUsabilityBlock | 'NO_TARGET'
 
 /**
  * Vì sao Insert bị khoá — hoặc `null` nếu không bị khoá.
  *
- * Thứ tự kiểm là một phần của hợp đồng: `REVIEW_REQUIRED` đứng TRƯỚC
- * `NO_TARGET`. Một khối đang chờ review Controls/Safety thì việc mở đúng POU
- * cũng không làm nó chèn được, nên báo "hãy chọn POU đích" là chỉ người dùng
- * đi một vòng vô ích rồi quay lại đúng chỗ cũ.
+ * Thứ tự kiểm là một phần của hợp đồng: mọi lý do thuộc về CHÍNH KHỐI đứng
+ * TRƯỚC `NO_TARGET`. Một khối đang chờ review Controls/Safety thì việc mở đúng
+ * POU cũng không làm nó chèn được, nên báo "hãy chọn POU đích" là chỉ người
+ * dùng đi một vòng vô ích rồi quay lại đúng chỗ cũ.
  *
  * `D61-04`/`T59-205`: KHÔNG có đường bỏ qua `REVIEW_REQUIRED`. Hàm này không
  * nhận cờ nào để tắt nó.
  */
 export function insertBlockReason(
-  entry: Pick<ProgrammingLibraryEntry, 'featureState' | 'libraryState' | 'signature'>,
+  entry: Pick<ProgrammingLibraryEntry, 'featureState' | 'libraryState' | 'signature' | 'compatibility'>,
   hasTarget: boolean,
 ): InsertBlockReason {
-  const usability = libraryUsability(entry)
-  if (usability.kind !== 'AVAILABLE') return usability.kind
+  const block = insertUsabilityBlock(libraryUsability(entry), compatibilityDisplay(entry))
+  if (block !== null) return block
   if (!hasTarget) return 'NO_TARGET'
   return null
 }

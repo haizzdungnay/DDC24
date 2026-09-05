@@ -7,6 +7,7 @@ import {
   filterCatalog,
   isInsertable,
 } from './libraryCatalog'
+import { insertBlockReason } from '../../library/libraryPresentation'
 import { stCallStatement } from '../editor/stInstanceInsertion'
 
 /* `T61-203` — chữ ký ĐÃ PHÂN GIẢI, đúng hình dạng máy chủ trả. FE không còn
@@ -134,6 +135,52 @@ describe('PGM-02 catalog thư viện dùng chung', () => {
     const pid = catalogEntries(page()).find((entry) => entry.entryId === 'PID')!
     expect(pid.usability).toEqual({ kind: 'REVIEW_REQUIRED' })
     expect(isInsertable(pid)).toBe(false)
+  })
+
+  /*
+  `T61-406` — parity với PGM-04 trên lý do thứ tư.
+
+  Trước lát này `isInsertable` đọc thẳng `usability` và bỏ trắng
+  `compatibility`, nên một khối `REQUIRES_MIGRATION` bị PGM-04 chặn vẫn chèn
+  được từ khay chèn nhanh: cùng một khối, hai câu trả lời, và câu dễ dãi hơn nằm
+  đúng ở bề mặt người ta chèn nhanh. Đây chính là lớp lỗi `T61-203` đã phải sửa
+  một lần cho `DEPRECATED`.
+
+  Kiểm bằng CẢ HAI bề mặt trong cùng một `it`: kiểm mỗi bên một nơi thì hai bên
+  lại lệch được mà không test nào đỏ.
+  */
+  it('REQUIRES_MIGRATION: Quick Library và PGM-04 nói CÙNG một câu', () => {
+    const raw = page()
+    const withPin = {
+      ...raw,
+      items: raw.items.map((item) =>
+        item.entryId === 'TON'
+          ? {
+              ...item,
+              compatibility: {
+                state: 'REQUIRES_MIGRATION' as const,
+                requiredVersion: '1.0.0',
+                availableVersion: '2.0.0',
+                reason: 'Revision đang chạy pin 1.0.0',
+              },
+            }
+          : item
+      ),
+    }
+    const ton = catalogEntries(withPin).find((entry) => entry.entryId === 'TON')!
+    expect(ton.usability).toEqual({ kind: 'AVAILABLE' })
+    expect(isInsertable(ton)).toBe(false)
+    expect(insertBlockReason(withPin.items.find((item) => item.entryId === 'TON')!, true))
+      .toBe('REQUIRES_MIGRATION')
+  })
+
+  /* `UNKNOWN` là mặc định của hợp đồng và MỌI entry SYSTEM đều mang nó — chặn
+     cứng là chặn `TON` trên mọi Project chưa Commission. Fixture này không khai
+     `compatibility`, tức đúng ca "field vắng". */
+  it('UNKNOWN không được biến thành một lệnh cấm chèn', () => {
+    const ton = catalogEntries(page()).find((entry) => entry.entryId === 'TON')!
+    expect(ton.compatibility).toEqual({ kind: 'unknown', reason: null })
+    expect(isInsertable(ton)).toBe(true)
   })
 
   it('lọc theo tên, nhóm, ngôn ngữ và kiểu dữ liệu của port', () => {

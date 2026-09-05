@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-15` / `T61-406` Zero-mutation guards và semantics Undo cho Insert (#460, 2026-09-05)
+
+- **Triệu chứng.** Một khối mà máy chủ đã nói `REQUIRES_MIGRATION` — tức Revision **đang vận hành**
+  pin một version khác version mang khối này — vẫn chèn được từ **cả** PGM-04 lẫn Quick Library.
+  Người dùng chỉ biết ở lần Kiểm tra kế tiếp, **sau khi** mã nguồn đã đổi. Và một khối không đọc
+  được chữ ký (`SIGNATURE_UNAVAILABLE`) vẫn bấm Chèn được ở PGM-04, kèm một dòng lý do **sai**:
+  "màn hình này đang ở chế độ chỉ đọc".
+- **Nguyên nhân gốc.** Thang bậc chặn chèn chỉ đọc `usability` và bỏ trắng `compatibility`; còn
+  `disabled` của nút Chèn **liệt kê lại** hai lý do (`REVIEW_REQUIRED || DEPRECATED`) thay vì đọc
+  kết quả thang bậc, nên lý do thứ ba đã có từ `T61-203` lọt qua mà không test nào đỏ.
+- **Cách sửa.** Một hàm duy nhất `insertUsabilityBlock(usability, compatibility)`; cả ba bề mặt
+  (Inspector PGM-04, `isInsertable` của Quick Library, phân giải ý định ở PGM-02) hỏi nó.
+  `disabled` nay là `insertBlock !== null`.
+- **`UNKNOWN` KHÔNG chặn — có chủ ý.** Hợp đồng ghi `UNKNOWN` là giá trị **mặc định** (Project chưa
+  Commission thì không có gì để so) và **mọi entry SYSTEM đều mang nó** (`library_usages` cố ý không
+  giữ usage của chúng). Chặn cứng là chặn `TON`/`TOF`/`CTU` trên mọi Project chưa vận hành, vì một
+  lý do máy chủ không hề khẳng định. Nó đi đường thứ hai mà issue cho phép — flow của
+  `AUTH-PROG-2026-08-29-PGM04-003`: sự thật "chưa đo được" hiện **ngay cạnh nút Chèn** ở PGM-04 và
+  **trên băng xác nhận** ở PGM-02. Điều bị cấm là coi `UNKNOWN` như `COMPATIBLE`, và im lặng chính
+  là coi nó như thế.
+- **Đóng cửa sau của ý định.** Ý định chèn đi qua **URL**, nên một địa chỉ gõ tay hay bookmark cũ
+  tới thẳng bộ soạn thảo mà không đi qua nút Chèn của PGM-04 — phép chặn sống trong `disabled` của
+  một `<button>` không phải một luật. `resolveLibraryInsertIntent` nay có kết quả thứ tư `blocked`,
+  đọc `usability`/`compatibility` **từ danh mục do máy chủ trả** chứ không từ tham số URL.
+- **"0 mutation" nay đo bằng phương thức HTTP, không bằng danh sách tên.** Bản cũ khẳng định
+  zero-mutation bằng `not.toContain('upsertProgrammingLibraryEntry')` — một danh sách cấm gồm hai
+  cái tên, mà riêng `T61-402`/`T61-404` đã thêm hai operation trong cùng tháng. Phép đo mới đọc
+  `PROGRAMMING_ENDPOINTS` (bảng do hợp đồng sinh ra) và lọc theo method; `operationId` lạ thì **ném
+  lỗi** chứ không im lặng xếp vào "không phải mutation". Ca **bị chặn** cũng được phủ (trước chỉ có
+  thành công/huỷ).
+- **Một success = một Undo, đo trên đúng lối vào.** `AC-ST-003` khoá điều này cho Quick Library;
+  đường ý định từ PGM-04 là lối vào khác nên được khoá riêng ở `DesignWorkspacePage`. Chèn một FB có
+  trạng thái ghi vào hai chỗ cách xa nhau (khai báo trong `VAR`, lời gọi trong thân) — hai lần ghi
+  thì một lần `Ctrl+Z` gỡ lời gọi mà bỏ lại dòng khai báo, một biến thừa nằm im, không lỗi biên
+  dịch, không ai thấy.
+- **Phạm vi.** `apps/web-ui/src/features/programming/library/{libraryPresentation.ts,LibraryInspector.tsx}`,
+  `.../shared/libraryInsertIntent.ts`, `.../design/library/libraryCatalog.ts`,
+  `.../design/editor/ProgramsTab.tsx`, các bộ test tương ứng, `docs/03_implementation/61_…_PGM04_PLAN.md`.
+- **Kiểm chứng (HOST, local; CI chưa có runner — `#414`).** Số đo ghi trong PR. Không nâng lên
+  HIL/TARGET/`RELEASE_READY`.
+
 ### Fixed — `ISS-PIO-36` Cổng V&V đầu-cuối lớp Point/I/O, kịch bản 3–8 (#382, 2026-09-05)
 
 - **Vì sao issue này ở Đợt 1.** Thân #382 nói thẳng: *"332 test FE hiện xanh trong khi 7 finding Cao

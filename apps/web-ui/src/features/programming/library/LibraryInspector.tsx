@@ -6,7 +6,9 @@ import { useI18n } from '../../../shared/i18n'
 import {
   blockSignatureLine,
   categoryLabel,
+  compatibilityDisplay,
   insertBlockReason,
+  insertCompatibilityStatement,
   metadataValue,
   scopeLabel,
   usageDisplay,
@@ -86,6 +88,18 @@ export function LibraryInspector({
   const signature = blockSignatureLine(entry)
   const reviewRequired = entry.featureState === 'REVIEW_REQUIRED'
   const insertBlock = insertBlockReason(entry, canInsert)
+  /* `ISS-PGM04-15` — sự thật tương thích phải nằm CẠNH lời mời chèn, không nằm
+     ở một tab khác. Người dùng quyết định chèn ở đây; một sự thật họ phải đi
+     tìm mới thấy không tham gia vào quyết định ấy. */
+  const compatibilityNote = insertCompatibilityStatement(compatibilityDisplay(entry))
+  const migrationText = pick(
+    `Chưa chèn được: gói đang vận hành pin ${compatibilityNote?.kind === 'requires-migration' ? compatibilityNote.requiredVersion ?? 'một version khác' : 'một version khác'}, khối này cần migrate trước.`,
+    `Cannot insert: the running package pins ${compatibilityNote?.kind === 'requires-migration' ? compatibilityNote.requiredVersion ?? 'another version' : 'another version'}; this block needs a migration first.`
+  )
+  const unknownText = pick(
+    'Máy chủ chưa đo được mức tương thích của khối này với gói đang vận hành — chưa có nghĩa là tương thích.',
+    'The server could not determine this block’s compatibility with the running package — that does not mean it is compatible.'
+  )
 
   /* `role="tablist"` là hợp đồng với người dùng bàn phím: mũi tên đi giữa tab,
      `Tab` rời khỏi cả dải. Thiếu nó thì mỗi tab là một điểm dừng riêng và một
@@ -229,25 +243,48 @@ export function LibraryInspector({
         {/* `AC-PGM04-06` — Chèn LUÔN hiện, và khi bị khoá thì hiện kèm lý do.
             Ẩn nút làm người dùng tưởng thiết bị không có khả năng đó rồi đi hỏi
             sai người; nút bị khoá kèm lý do thì họ đọc được ngay tại chỗ. */}
+        {/* `T61-406` — `disabled` đọc THẲNG kết quả của thang bậc, không liệt
+            kê lại từng lý do. Bản cũ liệt kê `REVIEW_REQUIRED || DEPRECATED`,
+            nên `SIGNATURE_UNAVAILABLE` lọt qua: một khối không đọc được chữ ký
+            vẫn bấm Chèn được, và dòng lý do bên cạnh lại nói "màn hình đang ở
+            chế độ chỉ đọc" — một câu sai, chỉ người dùng đi tìm nhầm nguyên
+            nhân. Mỗi lý do mới thêm vào thang bậc sẽ lặp lại đúng lỗi ấy chừng
+            nào chỗ này còn liệt kê. */}
         <Button
           size="sm"
           icon={<ArrowRightToLine className="h-4 w-4" aria-hidden="true" />}
-          disabled={insertBlock === 'REVIEW_REQUIRED' || insertBlock === 'DEPRECATED' || !canInsert}
-          aria-describedby={insertBlock || !canInsert ? 'library-insert-reason' : undefined}
+          disabled={insertBlock !== null}
+          aria-describedby={insertBlock !== null || compatibilityNote ? 'library-insert-reason' : undefined}
           onClick={() => onInsert(group)}
         >
           {pick('Chèn vào POU…', 'Insert into a POU…')}
         </Button>
-        {(insertBlock || !canInsert) && (
-          <span id="library-insert-reason" className="text-xs text-[var(--c-text-dim)]">
+        {(insertBlock !== null || compatibilityNote) && (
+          <span
+            id="library-insert-reason"
+            data-testid="library-insert-reason"
+            data-block={insertBlock ?? 'NONE'}
+            className="text-xs text-[var(--c-text-dim)]"
+          >
             {insertBlock === 'REVIEW_REQUIRED'
               ? pick('Chưa chèn được: khối đang chờ review Controls/Safety.',
                      'Cannot insert: the block is awaiting Controls/Safety review.')
               : insertBlock === 'DEPRECATED'
                 ? pick('Chưa chèn được: phiên bản này đã ngừng sử dụng.',
                        'Cannot insert: this version is deprecated.')
-                : pick('Chưa chèn được: màn hình này đang ở chế độ chỉ đọc.',
-                       'Cannot insert: this screen is read-only right now.')}
+                : insertBlock === 'SIGNATURE_UNAVAILABLE'
+                  ? pick('Chưa chèn được: không đọc được chữ ký của khối này.',
+                         'Cannot insert: the signature of this block could not be read.')
+                  : insertBlock === 'REQUIRES_MIGRATION'
+                    ? migrationText
+                    : insertBlock === 'NO_TARGET'
+                      ? pick('Chưa chèn được: màn hình này đang ở chế độ chỉ đọc.',
+                             'Cannot insert: this screen is read-only right now.')
+                      /* `ISS-PGM04-15` — `UNKNOWN` KHÔNG chặn (nó là giá trị
+                         mặc định của hợp đồng, và mọi entry SYSTEM đều mang
+                         nó), nhưng cũng KHÔNG được im lặng: im lặng đúng là
+                         cách người đọc hiểu nó thành "tương thích". */
+                      : unknownText}
           </span>
         )}
       </div>
