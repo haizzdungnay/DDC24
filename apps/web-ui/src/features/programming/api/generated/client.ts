@@ -243,6 +243,40 @@ export interface ProgrammingRequestOptions<TBody = unknown> {
   idempotencyKey?: string;
   ifMatch?: string;
   signal?: AbortSignal;
+  /** `T61-402` — trần chờ của MỘT request. Mặc định
+   *  `PROGRAMMING_REQUEST_TIMEOUT_MS`; đặt `0` để tắt (chỉ dùng cho test). */
+  timeoutMs?: number;
+}
+
+/**
+ * `T61-402` — trần chờ mặc định của một request Programming.
+ *
+ * Trước lát này client KHÔNG có trần nào: một request treo sẽ treo mãi, nên
+ * đường ghi không bao giờ tới được trạng thái "không rõ kết quả" mà nó phải xử
+ * lý — nó chỉ đứng im ở "đang gửi" và người dùng bấm lại.
+ */
+export const PROGRAMMING_REQUEST_TIMEOUT_MS = 15000;
+
+/**
+ * `T61-402` — request KHÔNG nhận được dòng trạng thái nào.
+ *
+ * Đây là lớp lỗi DUY NHẤT mà kết quả trên máy chủ là KHÔNG BIẾT: request có thể
+ * đã tới nơi và đã commit, chỉ có phản hồi là mất. Mọi lỗi khác đều mang một mã
+ * HTTP, nghĩa là máy chủ đã trả lời và transaction đã ngã ngũ.
+ *
+ * `reason` giữ nguyên nguyên nhân gốc để màn hình nói đúng chuyện đã xảy ra
+ * thay vì gộp cả ba thành "lỗi mạng".
+ */
+export class ProgrammingNoResponseError extends Error {
+  constructor(
+    readonly reason: "timeout" | "abort" | "network",
+    readonly timeoutMs: number,
+    options?: { cause?: unknown },
+  ) {
+    super(`Không nhận được phản hồi từ máy chủ (${reason})`);
+    this.name = "ProgrammingNoResponseError";
+    if (options && "cause" in options) (this as { cause?: unknown }).cause = options.cause;
+  }
 }
 
 export class ProgrammingApiError extends Error {
@@ -285,13 +319,39 @@ export class ProgrammingApiClient {
     if (options.correlationId) headers.set("X-Correlation-ID", options.correlationId);
     if (options.idempotencyKey) headers.set("X-Idempotency-Key", options.idempotencyKey);
     if (options.ifMatch) headers.set("If-Match", options.ifMatch);
-    const response = await this.fetchImpl(url, {
-      method: endpoint.method,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal,
-      credentials: "same-origin",
-    });
+    /* Trần chờ nằm ở ĐÂY, không ở từng chỗ gọi: một chỗ gọi quên đặt trần là
+       một request có thể treo vô hạn, và một request treo vô hạn không bao giờ
+       tới được nhánh "không rõ kết quả". `AbortController` riêng để không nuốt
+       mất `signal` của caller — huỷ từ caller vẫn phải huỷ được request. */
+    const timeoutMs = options.timeoutMs ?? PROGRAMMING_REQUEST_TIMEOUT_MS;
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = timeoutMs > 0
+      ? setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs)
+      : undefined;
+    if (options.signal) {
+      if (options.signal.aborted) controller.abort();
+      else options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: endpoint.method,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: controller.signal,
+        credentials: "same-origin",
+      });
+    } catch (cause) {
+      /* Ba nguyên nhân, MỘT kết luận: chưa có dòng trạng thái nào, nên kết quả
+         trên máy chủ là không biết. Phân biệt chúng ở `reason` để màn hình nói
+         đúng chuyện đã xảy ra. */
+      if (timedOut) throw new ProgrammingNoResponseError("timeout", timeoutMs, { cause });
+      if (options.signal?.aborted) throw new ProgrammingNoResponseError("abort", timeoutMs, { cause });
+      throw new ProgrammingNoResponseError("network", timeoutMs, { cause });
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
     if (!response.ok) {
       const payload = await response.json().catch(() => undefined);
       const envelope = normalizeProgrammingErrorEnvelope(payload, response.status);

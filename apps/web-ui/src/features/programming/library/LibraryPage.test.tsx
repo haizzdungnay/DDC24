@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { ProgrammingApiError } from '../api/generated/client'
+import { ProgrammingApiError, ProgrammingNoResponseError } from '../api/generated/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
@@ -338,6 +338,43 @@ describe('PGM-04 Control Library', () => {
       ).toBe(true)
     })
     expect(screen.queryByRole('button', { name: /Ngừng sử dụng phiên bản/ })).not.toBeInTheDocument()
+  })
+
+  /*
+  `T61-402` — đường deprecate đi qua CÙNG ranh giới "có dòng trạng thái HTTP hay
+  không". Nó không dùng chung hàm gửi với upsert/delete (nó còn phải đọc lại
+  `resource` để xác nhận đúng revision và đúng state), nên nếu chỉ có test cho
+  đường upsert thì nhánh này lặng lẽ trôi khỏi luật chung.
+  */
+  it('deprecate mất phản hồi cũng vào trạng thái KHÔNG RÕ, không thành lỗi bấm-lại', async () => {
+    const publishedRevisionId = '55555555-5555-4555-8555-555555555555'
+    let deprecateCalls = 0
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectPage())
+      if (operationId === 'getProgrammingProject') return Promise.reject(new Error('không cần Draft ở test này'))
+      if (operationId === 'searchProgrammingLibraries') {
+        return Promise.resolve({
+          items: [entry({ libraryRevisionId: publishedRevisionId, libraryState: 'PUBLISHED' })]
+        })
+      }
+      if (operationId === 'deprecateProgrammingLibraryRevision') {
+        deprecateCalls += 1
+        return Promise.reject(new ProgrammingNoResponseError('timeout', 15000))
+      }
+      return Promise.reject(new Error('unexpected ' + operationId))
+    })
+
+    renderPage()
+    fireEvent.click(await waitFor(() => cardFor('SCALE_LIN')))
+    fireEvent.click(await screen.findByRole('button', { name: 'Ngừng sử dụng phiên bản 1.0.0' }))
+    const dialog = await screen.findByRole('dialog', { name: /Ngừng sử dụng phiên bản thư viện/ })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ngừng sử dụng' }))
+
+    const notice = await screen.findByTestId('library-mutation-unknown')
+    expect(notice).toHaveTextContent('Chưa rõ kết quả')
+    // Không có băng xác nhận lạc quan, và không phát thêm mutation nào.
+    expect(screen.queryByText(/Máy chủ xác nhận phiên bản thư viện/)).toBeNull()
+    expect(deprecateCalls).toBe(1)
   })
 
   it('không hiện hành động deprecate cho bản DRAFT hoặc DEPRECATED', async () => {

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
 import { LibraryPage } from './LibraryPage'
+import { ProgrammingApiError, ProgrammingNoResponseError } from '../api/generated/client'
 
 /**
  * `T61-501` — bề mặt PGM-04 mà WP-03/WP-04 dựng: thẻ khối, bàn phím, Inspector,
@@ -1118,5 +1119,218 @@ describe('PGM-04 Chèn khối (T61-405/406)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Chèn vào POU/ }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/Chưa đọc được bản nháp/)).toBeInTheDocument()
+  })
+})
+
+
+/*
+`T61-402` / `ISS-PGM04-12` — máy chủ ĐÃ ghi nhưng phản hồi mất trên đường về.
+
+Đây là ca nguy hiểm nhất của đường ghi và trước lát này nó không có test nào:
+mọi lỗi mạng rơi vào một dải lỗi chung có nút bấm lại, và mỗi lần bấm lại sinh
+một `X-Idempotency-Key` MỚI — nên máy chủ coi đó là một ý định khác và ghi thêm
+một lần nữa.
+*/
+describe('PGM-04 đối soát lần ghi không rõ kết quả (T61-402)', () => {
+  /**
+   * Máy chủ giả: nó THẬT SỰ commit, chỉ có phản hồi là bị đánh rơi.
+   *
+   * `entryId` lấy từ CHÍNH payload vừa ghi chứ không đoán trước: wizard sinh
+   * `entryId` bằng `createUuid()`, nên một id viết cứng ở đây sẽ làm phép đối
+   * soát không bao giờ khớp — và test sẽ "chứng minh" một hành vi sai.
+   */
+  function serverThatCommitsThenDropsResponse() {
+    const state = { committed: null as Record<string, unknown> | null, upsertCalls: [] as Record<string, unknown>[] }
+    client.request.mockImplementation((operationId: string, options?: Record<string, unknown>) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') {
+        const written = state.committed
+        return Promise.resolve({
+          items: written
+            ? [entry(), entry({ entryId: written.entryId as string, name: written.name as string })]
+            : [entry()]
+        })
+      }
+      if (operationId === 'checkProgrammingLibraryEntry') {
+        return Promise.resolve({ blocking: false, diagnostics: [], libraryVersion: '1.0.0' })
+      }
+      if (operationId === 'upsertProgrammingLibraryEntry') {
+        state.upsertCalls.push(options ?? {})
+        // Commit thật, rồi đánh rơi phản hồi.
+        state.committed = (options?.body ?? {}) as Record<string, unknown>
+        return Promise.reject(new ProgrammingNoResponseError('timeout', 15000))
+      }
+      if (operationId === 'listProgrammingLibraryUsages') {
+        return Promise.resolve({
+          sealed: { count: 0, truncated: false, items: [] },
+          draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+        })
+      }
+      return Promise.reject(new Error('unexpected ' + operationId))
+    })
+    return state
+  }
+
+  async function createBlockThatLosesItsResponse() {
+    const state = serverThatCommitsThenDropsResponse()
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    fireEvent.click(screen.getByRole('button', { name: /Khối PROJECT mới/ }))
+    const dialog = await screen.findByRole('dialog')
+    await walkWizardAndSave(dialog, {
+      metadata: () => fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } }),
+      iface: () => fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } }),
+      implementation: () =>
+        fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), {
+          target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION' }
+        })
+    })
+    return state
+  }
+
+  it('không nói "đã lưu" và cũng không nói "hỏng" — nói KHÔNG RÕ rồi tự đọc lại một lượt', async () => {
+    const state = await createBlockThatLosesItsResponse()
+
+    const notice = await screen.findByTestId('library-mutation-unknown')
+    expect(notice).toHaveTextContent('Chưa rõ kết quả')
+    expect(notice).toHaveTextContent('máy chủ không trả lời kịp')
+    // Không có băng xác nhận lạc quan nào.
+    expect(screen.queryByText(/Máy chủ xác nhận/)).toBeNull()
+
+    // Phép đọc lại hội tụ: entry đã có trên máy chủ nên băng biến mất.
+    await waitFor(() => expect(screen.queryByTestId('library-mutation-unknown')).toBeNull())
+    // Và ĐÚNG MỘT lệnh ghi đã được phát ra trong suốt quá trình.
+    expect(state.upsertCalls).toHaveLength(1)
+  })
+
+  it('trong lúc chưa ngã ngũ, mọi hành động ghi bị khoá', { timeout: 20000 }, async () => {
+    /* Máy chủ KHÔNG commit ở ca này, nên phép đọc lại không xác nhận được và
+       băng "không rõ" ở lại — đúng cửa sổ mà UI phải khoá. */
+    const upsertCalls: Record<string, unknown>[] = []
+    client.request.mockImplementation((operationId: string, options?: Record<string, unknown>) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
+      if (operationId === 'checkProgrammingLibraryEntry') {
+        return Promise.resolve({ blocking: false, diagnostics: [], libraryVersion: '1.0.0' })
+      }
+      if (operationId === 'upsertProgrammingLibraryEntry') {
+        upsertCalls.push(options ?? {})
+        return Promise.reject(new ProgrammingNoResponseError('network', 15000))
+      }
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+      })
+    })
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    fireEvent.click(screen.getByRole('button', { name: /Khối PROJECT mới/ }))
+    const dialog = await screen.findByRole('dialog')
+    await walkWizardAndSave(dialog, {
+      metadata: () => fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } }),
+      iface: () => fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } }),
+      implementation: () =>
+        fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), {
+          target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION' }
+        })
+    })
+
+    await screen.findByTestId('library-mutation-unknown')
+    // Trần đối soát là 4 lượt × 750 ms, nên chỗ này phải chờ lâu hơn mặc định 1 s.
+    await waitFor(() => expect(screen.getByTestId('library-mutation-unresolved')).toBeVisible(),
+      { timeout: 6000 })
+    expect(screen.getByRole('button', { name: /Khối PROJECT mới/ })).toBeDisabled()
+    // Và vẫn đúng MỘT lệnh ghi: phép đọc lại không phát ra mutation nào.
+    expect(upsertCalls).toHaveLength(1)
+  })
+
+  /*
+  `AC` — "Reconcile tạo idempotency key mới" là điều kiện KHÔNG ĐƯỢC ĐÓNG. Gửi
+  lại phải là REPLAY của đúng ý định cũ: cùng khoá, cùng `If-Match`. Máy chủ băm
+  cả hai vào hash ngữ nghĩa của request, nên đổi một trong hai là gửi một ý định
+  khác — khoá mới thì được ghi thêm lần nữa, ETag mới thì bị từ chối là xung đột
+  idempotency.
+  */
+  it('gửi lại dùng ĐÚNG khoá idempotency và ĐÚNG If-Match cũ, không sinh danh tính mới', { timeout: 20000 }, async () => {
+    const upsertCalls: Record<string, unknown>[] = []
+    client.request.mockImplementation((operationId: string, options?: Record<string, unknown>) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
+      if (operationId === 'checkProgrammingLibraryEntry') {
+        return Promise.resolve({ blocking: false, diagnostics: [], libraryVersion: '1.0.0' })
+      }
+      if (operationId === 'upsertProgrammingLibraryEntry') {
+        upsertCalls.push(options ?? {})
+        if (upsertCalls.length === 1) return Promise.reject(new ProgrammingNoResponseError('abort', 15000))
+        // Lần gửi lại: máy chủ nhận ra cùng ý định và replay biên nhận.
+        return Promise.resolve({ resource: { libraryRevisionId: DRAFT_ID }, etag: ETAG, auditId: 'a' })
+      }
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+      })
+    })
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    fireEvent.click(screen.getByRole('button', { name: /Khối PROJECT mới/ }))
+    const dialog = await screen.findByRole('dialog')
+    await walkWizardAndSave(dialog, {
+      metadata: () => fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } }),
+      iface: () => fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } }),
+      implementation: () =>
+        fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), {
+          target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION' }
+        })
+    })
+
+    await screen.findByTestId('library-mutation-unknown')
+    await waitFor(() => expect(screen.getByRole('button', { name: /Gửi lại đúng thao tác cũ/ })).toBeEnabled(),
+      { timeout: 6000 })
+    fireEvent.click(screen.getByRole('button', { name: /Gửi lại đúng thao tác cũ/ }))
+
+    await waitFor(() => expect(upsertCalls).toHaveLength(2))
+    expect(upsertCalls[1].idempotencyKey).toBe(upsertCalls[0].idempotencyKey)
+    expect(upsertCalls[1].ifMatch).toBe(upsertCalls[0].ifMatch)
+  })
+
+  it('409 vẫn đi đường XUNG ĐỘT (tải lại), không lẫn sang đường không-rõ', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
+      if (operationId === 'checkProgrammingLibraryEntry') {
+        return Promise.resolve({ blocking: false, diagnostics: [], libraryVersion: '1.0.0' })
+      }
+      if (operationId === 'upsertProgrammingLibraryEntry') {
+        return Promise.reject(new ProgrammingApiError(409, {
+          error: {
+            code: 'PRG-ERR-CONFLICT-001', messageKey: 'programming.error.conflict',
+            retryable: false, keepsRunningRevision: true, correlationId: 'c'
+          }
+        } as never))
+      }
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+      })
+    })
+    renderPage()
+    await screen.findByTestId('library-block-card')
+    fireEvent.click(screen.getByRole('button', { name: /Khối PROJECT mới/ }))
+    const dialog = await screen.findByRole('dialog')
+    await walkWizardAndSave(dialog, {
+      metadata: () => fireEvent.change(within(dialog).getByLabelText(/Tên khối/), { target: { value: 'RAMP_LIN' } }),
+      iface: () => fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } }),
+      implementation: () =>
+        fireEvent.change(within(dialog).getByLabelText(/Mã nguồn ST/), {
+          target: { value: 'FUNCTION RAMP_LIN : REAL\nEND_FUNCTION' }
+        })
+    })
+
+    expect((await screen.findAllByText(/Bản nháp đã thay đổi ở phiên khác/))[0]).toBeVisible()
+    expect(screen.queryByTestId('library-mutation-unknown')).toBeNull()
   })
 })

@@ -1,10 +1,16 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useProgrammingApiClient } from './authClient'
-import { ProgrammingApiError } from './generated/client'
+import { ProgrammingApiError, type ProgrammingOperationId, type ProgrammingRequestOptions } from './generated/client'
 import { programmingErrorCopy } from './errorCopy'
+import {
+  classifyLibraryFailure,
+  reconcileLibraryMutation,
+  type LibraryMutationIntent,
+  type LibraryReconcileResult,
+} from './libraryReconcile'
 import { useI18n } from '../../../shared/i18n'
 import { createUuid } from '../../../shared/crypto'
-import type { ProgrammingProject } from '../model/types'
+import type { ProgrammingLibraryEntry, ProgrammingProject } from '../model/types'
 
 interface MutationResponse<T> {
   resource: T
@@ -102,6 +108,34 @@ export interface LibraryEntryCheckResult {
   libraryVersion: string | null
 }
 
+/**
+ * `T61-402` — một lần ghi đang treo, với danh tính CỐ ĐỊNH.
+ *
+ * `options` và `intent` được dựng cùng lúc từ cùng một khoá idempotency và cùng
+ * một `If-Match`, nên một lần gửi lại theo yêu cầu người dùng là **replay** của
+ * đúng ý định cũ chứ không phải một ý định mới. Máy chủ băm cả hai giá trị vào
+ * hash ngữ nghĩa của request; đổi bất kỳ cái nào — kể cả "làm mới" ETag cho
+ * đúng — là gửi một request khác.
+ */
+interface PendingLibraryMutation {
+  operationId: ProgrammingOperationId
+  options: ProgrammingRequestOptions<unknown>
+  intent: LibraryMutationIntent
+}
+
+/**
+ * Kết quả KHÔNG BIẾT của một lần ghi.
+ *
+ * `resolved` chỉ bật khi phép đọc lại XÁC NHẬN được là lần ghi đã vào. Không có
+ * giá trị nào nghĩa là "đã hỏng chắc chắn": một phép đọc không chứng minh được
+ * điều đó, và nói vậy sẽ đẩy người dùng tới một lần bấm lại mù.
+ */
+export interface LibraryUnknownOutcome {
+  reason: 'timeout' | 'abort' | 'network'
+  attempts: number
+  resolved: boolean
+}
+
 /** `resource` mà server trả sau mỗi mutation library. `libraryRevisionId` là
  *  bản DRAFT vừa được ghi vào — nó là bằng chứng "version nào đang nhận thay
  *  đổi", và giao diện phải đọc lại theo nó chứ không đoán. */
@@ -145,6 +179,18 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
      ghi vừa tạo. */
   const [checkPending, setCheckPending] = useState(false)
   const [checkError, setCheckError] = useState<string | null>(null)
+  /*
+   * `T61-402` — trạng thái KHÔNG RÕ KẾT QUẢ, tách hẳn khỏi `error`.
+   *
+   * Gộp nó vào `error` là cách một lần ghi có thể ĐÃ THÀNH CÔNG hiện ra như một
+   * lần hỏng có nút bấm lại — và mỗi lần bấm lại trước lát này sinh một khoá
+   * idempotency MỚI, nên máy chủ ghi thêm một lần nữa.
+   */
+  const [unknownOutcome, setUnknownOutcome] = useState<LibraryUnknownOutcome | null>(null)
+  const [reconciling, setReconciling] = useState<{ attempt: number; of: number } | null>(null)
+  /* Danh tính của lần ghi đang treo. `useRef` chứ không `useState`: nó phải đọc
+     được ngay trong cùng một lượt xử lý lỗi, trước khi React kịp render lại. */
+  const intentRef = useRef<PendingLibraryMutation | null>(null)
 
   const describe = useCallback(
     (reason: unknown, fallback: string): { conflict: boolean; message: string } => {
@@ -163,25 +209,85 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
     setError(null)
     setConflict(null)
     setCheckError(null)
+    setUnknownOutcome(null)
+    setReconciling(null)
+    intentRef.current = null
   }, [])
 
-  const saveEntry = useCallback(
-    async (etag: string, draft: LibraryEntryDraft): Promise<LibraryEntryMutationResult | null> => {
-      if (!projectId) return null
+  /* Hai đường ĐỌC của máy chủ mà phép đối soát dùng. Chúng đọc thẳng từ API,
+     không từ danh sách đang hiển thị: đối soát bằng cache của chính mình thì
+     luôn "xác nhận" đúng thứ vừa đoán. */
+  const readEntries = useCallback(async (): Promise<ProgrammingLibraryEntry[]> => {
+    if (!projectId) return []
+    const page = await client.request<{ items?: ProgrammingLibraryEntry[] }>('searchProgrammingLibraries', {
+      query: { projectId, scope: 'PROJECT', limit: 100 },
+      correlationId: createUuid()
+    })
+    return Array.isArray(page.items) ? page.items : []
+  }, [client, projectId])
+
+  const readEtag = useCallback(async (): Promise<string | null> => {
+    if (!projectId) return null
+    const project = await client.request<{ etag?: unknown }>('getProgrammingProject', {
+      path: { projectId }, correlationId: createUuid()
+    })
+    return typeof project.etag === 'string' ? project.etag : null
+  }, [client, projectId])
+
+  /**
+   * Chạy phép đối soát cho lần ghi đang treo. CHỈ ĐỌC — không gửi mutation nào.
+   *
+   * Trả `LibraryReconcileResult` để chỗ gọi biết có nên cập nhật ETag hay không,
+   * và để test khẳng định số lượt đã dùng chứ không đoán.
+   */
+  const reconcile = useCallback(async (): Promise<LibraryReconcileResult | null> => {
+    const pendingIntent = intentRef.current
+    if (!pendingIntent) return null
+    setReconciling({ attempt: 0, of: 0 })
+    try {
+      const result = await reconcileLibraryMutation({
+        intent: pendingIntent.intent,
+        readEntries,
+        readEtag,
+        onAttempt: (attempt, of) => setReconciling({ attempt, of })
+      })
+      if (result.outcome === 'succeeded') {
+        setUnknownOutcome(null)
+        intentRef.current = null
+      } else {
+        setUnknownOutcome((current: LibraryUnknownOutcome | null) =>
+          current ? { ...current, attempts: result.attempts, resolved: false } : current)
+      }
+      return result
+    } finally {
+      setReconciling(null)
+    }
+  }, [readEntries, readEtag])
+
+  /**
+   * `T61-402` — gửi lần ghi bằng ĐÚNG một danh tính, và phân loại lỗi theo đúng
+   * ranh giới "có nhận được dòng trạng thái HTTP hay không".
+   *
+   * `intent` được dựng MỘT LẦN ở chỗ gọi và truyền vào đây nguyên vẹn, nên một
+   * lần gửi lại theo yêu cầu người dùng dùng lại chính khoá và chính ETag cũ.
+   * Sinh khoá mới ở trong hàm này là cách "thử lại" biến thành "ghi lần nữa".
+   */
+  const send = useCallback(
+    async (
+      pendingIntent: PendingLibraryMutation,
+      fallback: string
+    ): Promise<LibraryEntryMutationResult | null> => {
       setPending(true)
       setError(null)
       setConflict(null)
+      setUnknownOutcome(null)
+      intentRef.current = pendingIntent
       try {
         const response = await client.request<MutationResponse<Record<string, unknown>>>(
-          'upsertProgrammingLibraryEntry',
-          {
-            path: { projectId },
-            body: { schemaVersion: '1.0', ...draft },
-            ifMatch: etag,
-            idempotencyKey: createUuid(),
-            correlationId: createUuid()
-          }
+          pendingIntent.operationId,
+          pendingIntent.options
         )
+        intentRef.current = null
         return {
           etag: response.etag,
           libraryRevisionId:
@@ -189,7 +295,15 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
           auditId: response.auditId
         }
       } catch (reason) {
-        const described = describe(reason, pick('Không lưu được entry Control Library.', 'Could not save the Control Library entry.'))
+        const classified = classifyLibraryFailure(reason)
+        if (classified.failure === 'unknown') {
+          /* KHÔNG nói "đã hỏng". Ghi lại ý định nguyên vẹn rồi ĐỌC LẠI máy chủ;
+             không có một mutation nào được phát ra ở nhánh này. */
+          setUnknownOutcome({ reason: classified.reason ?? 'network', attempts: 0, resolved: false })
+          return null
+        }
+        intentRef.current = null
+        const described = describe(reason, fallback)
         if (described.conflict) setConflict(described.message)
         else setError(described.message)
         return null
@@ -197,41 +311,73 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
         setPending(false)
       }
     },
-    [client, describe, pick, projectId]
+    [client, describe]
+  )
+
+  const saveEntry = useCallback(
+    async (etag: string, draft: LibraryEntryDraft): Promise<LibraryEntryMutationResult | null> => {
+      if (!projectId) return null
+      /* Khoá idempotency và correlation id được sinh ĐÚNG MỘT LẦN ở đây, rồi
+         dùng cho cả request lẫn `intent`. Sinh chúng bên trong `send` sẽ làm mỗi
+         lần gửi lại thành một ý định mới — đúng cái lỗi mà lát này sửa. */
+      const idempotencyKey = createUuid()
+      const correlationId = createUuid()
+      return send(
+        {
+          operationId: 'upsertProgrammingLibraryEntry',
+          options: {
+            path: { projectId },
+            body: { schemaVersion: '1.0', ...draft },
+            ifMatch: etag, idempotencyKey, correlationId
+          },
+          intent: {
+            kind: 'save', entryId: draft.entryId, name: draft.name,
+            idempotencyKey, correlationId, ifMatch: etag
+          }
+        },
+        pick('Không lưu được entry Control Library.', 'Could not save the Control Library entry.')
+      )
+    },
+    [pick, projectId, send]
   )
 
   const deleteEntry = useCallback(
     async (etag: string, entryId: string): Promise<LibraryEntryMutationResult | null> => {
       if (!projectId) return null
-      setPending(true)
-      setError(null)
-      setConflict(null)
-      try {
-        const response = await client.request<MutationResponse<Record<string, unknown>>>(
-          'deleteProgrammingLibraryEntry',
-          {
-            path: { projectId, entryId },
-            ifMatch: etag,
-            idempotencyKey: createUuid(),
-            correlationId: createUuid()
-          }
-        )
-        return {
-          etag: response.etag,
-          libraryRevisionId:
-            typeof response.resource?.libraryRevisionId === 'string' ? response.resource.libraryRevisionId : null,
-          auditId: response.auditId
-        }
-      } catch (reason) {
-        const described = describe(reason, pick('Không xoá được entry Control Library.', 'Could not delete the Control Library entry.'))
-        if (described.conflict) setConflict(described.message)
-        else setError(described.message)
-        return null
-      } finally {
-        setPending(false)
-      }
+      const idempotencyKey = createUuid()
+      const correlationId = createUuid()
+      return send(
+        {
+          operationId: 'deleteProgrammingLibraryEntry',
+          options: { path: { projectId, entryId }, ifMatch: etag, idempotencyKey, correlationId },
+          intent: { kind: 'delete', entryId, idempotencyKey, correlationId, ifMatch: etag }
+        },
+        pick('Không xoá được entry Control Library.', 'Could not delete the Control Library entry.')
+      )
     },
-    [client, describe, pick, projectId]
+    [pick, projectId, send]
+  )
+
+  /**
+   * `T61-402` — GỬI LẠI đúng lần ghi đang treo, theo yêu cầu TƯỜNG MINH của
+   * người dùng.
+   *
+   * Đây không phải một phép thử lại tự động, và nó không sinh danh tính mới:
+   * `intentRef` giữ nguyên khoá idempotency, correlation id và `If-Match` cũ,
+   * nên máy chủ nhận ra đây là cùng một ý định và **replay** biên nhận thay vì
+   * ghi thêm một lần nữa.
+   *
+   * Đặc biệt KHÔNG "làm mới" `If-Match` cho đúng ETag hiện tại: `ifMatch` nằm
+   * trong hash ngữ nghĩa của request, nên một ETag mới với khoá cũ bị máy chủ
+   * từ chối là xung đột idempotency — chứ không phải được chấp nhận.
+   */
+  const retryPendingMutation = useCallback(
+    async (): Promise<LibraryEntryMutationResult | null> => {
+      const pendingIntent = intentRef.current
+      if (!pendingIntent) return null
+      return send(pendingIntent, pick('Không hoàn tất được thao tác.', 'Could not complete the operation.'))
+    },
+    [pick, send]
   )
 
   /**
@@ -303,16 +449,22 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
       setPending(true)
       setError(null)
       setConflict(null)
+      setUnknownOutcome(null)
+      const idempotencyKey = createUuid()
+      const correlationId = createUuid()
+      intentRef.current = {
+        operationId: 'deprecateProgrammingLibraryRevision',
+        options: {
+          path: { projectId, libraryRevisionId }, body: { schemaVersion: '1.0' },
+          ifMatch: etag, idempotencyKey, correlationId
+        },
+        intent: { kind: 'deprecate', entryId: libraryRevisionId, libraryRevisionId,
+                  idempotencyKey, correlationId, ifMatch: etag }
+      }
       try {
         const response = await client.request<MutationResponse<Record<string, unknown>>>(
           'deprecateProgrammingLibraryRevision',
-          {
-            path: { projectId, libraryRevisionId },
-            body: { schemaVersion: '1.0' },
-            ifMatch: etag,
-            idempotencyKey: createUuid(),
-            correlationId: createUuid()
-          }
+          intentRef.current.options
         )
         const resourceRevisionId = response.resource?.libraryRevisionId
         const libraryVersion = response.resource?.libraryVersion
@@ -331,6 +483,7 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
           )
           return null
         }
+        intentRef.current = null
         return {
           etag: response.etag,
           libraryRevisionId: resourceRevisionId,
@@ -339,6 +492,14 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
           auditId: response.auditId
         }
       } catch (reason) {
+        const classified = classifyLibraryFailure(reason)
+        if (classified.failure === 'unknown') {
+          /* Cùng ranh giới với `send`: không có dòng trạng thái nào thì kết quả
+             là KHÔNG BIẾT, và màn hình phải đọc lại chứ không được bấm lại. */
+          setUnknownOutcome({ reason: classified.reason ?? 'network', attempts: 0, resolved: false })
+          return null
+        }
+        intentRef.current = null
         const described = describe(
           reason,
           pick(
@@ -356,5 +517,11 @@ export function useProgrammingLibraryEntryMutations(projectId: string | undefine
     [client, describe, pick, projectId]
   )
 
-  return { saveEntry, checkEntry, deleteEntry, deprecateRevision, pending, error, conflict, checkPending, checkError, reset }
+  return {
+    saveEntry, checkEntry, deleteEntry, deprecateRevision, retryPendingMutation, reconcile,
+    pending, error, conflict, checkPending, checkError, reset,
+    /* `T61-402` — hai trạng thái MỚI, tách hẳn khỏi `error`. Màn hình phải phân
+       biệt "hỏng, bấm lại được" với "không rõ kết quả, phải đọc lại". */
+    unknownOutcome, reconciling
+  }
 }

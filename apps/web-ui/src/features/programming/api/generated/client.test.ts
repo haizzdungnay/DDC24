@@ -6,6 +6,7 @@ import {
   PROGRAMMING_SCHEMA_VERSION,
   ProgrammingApiClient,
   ProgrammingApiError,
+  ProgrammingNoResponseError,
   type ProgrammingCommissionRequest,
   type ProgrammingProgramHealth,
   type ProgrammingProgramListItem,
@@ -347,5 +348,47 @@ describe("Programming API client sinh từ OpenAPI", () => {
       expect(apiError.envelope.error.code).toBe("PRG-ERR-UNAVAILABLE-001");
       expect(apiError.envelope.error.keepsRunningRevision).toBe(false);
     }
+  });
+
+  /*
+  `T61-402` — client PHẢI có trần chờ.
+
+  Trước lát này không có trần nào: một request treo sẽ treo mãi, nên đường ghi
+  không bao giờ tới được trạng thái "không rõ kết quả" mà nó phải xử lý — màn
+  hình chỉ đứng im ở "đang gửi" và người dùng bấm lại.
+  */
+  it("hết trần chờ thì ném ProgrammingNoResponseError, không treo vô hạn", async () => {
+    // `fetch` tôn trọng signal: nó chỉ reject khi bị abort. Một mock resolve
+    // ngay sẽ không đo được gì.
+    const fetchImpl = vi.fn((_url: unknown, init?: { signal?: AbortSignal }) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }),
+    );
+    const client = new ProgrammingApiClient("https://controller.test", fetchImpl as unknown as typeof fetch);
+    await expect(client.request("getProgrammingCapabilities", { timeoutMs: 5 }))
+      .rejects.toBeInstanceOf(ProgrammingNoResponseError);
+  });
+
+  it("huỷ từ caller cũng là KHÔNG BIẾT, và nói đúng nguyên nhân là abort", async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn((_url: unknown, init?: { signal?: AbortSignal }) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }),
+    );
+    const client = new ProgrammingApiClient("https://controller.test", fetchImpl as unknown as typeof fetch);
+    const pending = client.request("getProgrammingCapabilities", { signal: controller.signal, timeoutMs: 0 });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "ProgrammingNoResponseError", reason: "abort" });
+  });
+
+  it("lỗi mạng (fetch reject không do abort) cũng là KHÔNG BIẾT, không phải lỗi lạ", async () => {
+    // Máy chủ có thể đã commit rồi mới đứt đường về. Quy nó về "đã hỏng" là mời
+    // người dùng bấm lại một thao tác có thể đã chạy.
+    const fetchImpl = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const client = new ProgrammingApiClient("https://controller.test", fetchImpl as unknown as typeof fetch);
+    await expect(client.request("getProgrammingCapabilities"))
+      .rejects.toMatchObject({ name: "ProgrammingNoResponseError", reason: "network" });
   });
 });

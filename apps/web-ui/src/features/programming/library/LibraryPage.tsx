@@ -13,7 +13,7 @@ import { LibraryInspector, isInspectorTab, type InspectorTab } from './LibraryIn
 import { LibraryAuthoringDrawer, type LibraryEditorMode } from './LibraryAuthoringDrawer'
 import { TargetPouChooser } from './TargetPouChooser'
 import { LibraryVersionLock } from './LibraryVersionLock'
-import { MutationBlockNotice, ReadBackNotice, type ReadBack } from './LibraryNotices'
+import { MutationBlockNotice, MutationUnknownNotice, ReadBackNotice, type ReadBack } from './LibraryNotices'
 import {
   LIBRARY_SCOPE_TABS,
   activeLibraryFilterCount,
@@ -205,8 +205,9 @@ export function LibraryPage() {
   )
   const library = useProgrammingLibraryPaged(filters, { enabled: projectContextReady && scopeMeasurable })
   const currentEtag = etag ?? workspace.project?.etag ?? projectSummary?.etag ?? ''
-  const { saveEntry, checkEntry, deleteEntry, deprecateRevision, pending, error, conflict,
-          checkPending, checkError, reset } = useProgrammingLibraryEntryMutations(projectId)
+  const { saveEntry, checkEntry, deleteEntry, deprecateRevision, retryPendingMutation, reconcile,
+          pending, error, conflict, checkPending, checkError, unknownOutcome, reconciling, reset } =
+    useProgrammingLibraryEntryMutations(projectId)
 
   const entries = library.items
   /* `T61-206` — MỘT trạng thái cho cả màn hình, thay vì mỗi nhánh render tự
@@ -337,6 +338,59 @@ export function LibraryPage() {
     [library, projects, workspace]
   )
 
+  /**
+   * `T61-402` — đối soát một lần ghi không rõ kết quả.
+   *
+   * CHỈ ĐỌC. Khi phép đọc xác nhận được là lần ghi đã vào, màn hình lấy ETag
+   * đọc lại được từ máy chủ làm ETag hiện hành — không đoán, không tự tăng.
+   */
+  const runReconcile = useCallback(async () => {
+    const result = await reconcile()
+    if (!result || result.outcome !== 'succeeded') return
+    if (result.etag) setEtag(result.etag)
+    library.refresh()
+    projects.refresh()
+    workspace.reload()
+  }, [library, projects, reconcile, workspace])
+
+  /*
+   * Tự đọc lại MỘT LƯỢT ngay khi kết quả rơi vào "không biết". Đây là phép phục
+   * hồi tự động DUY NHẤT được phép chạy, và nó không gửi mutation nào.
+   *
+   * Cờ ref chốt "đã chạy" chứ không dựa vào `runReconcile` trong danh sách phụ
+   * thuộc: `runReconcile` phụ thuộc `library`/`projects`/`workspace`, ba object
+   * được dựng lại mỗi lần render, nên để nó trong deps sẽ làm effect bắn lại
+   * giữa chừng và chạy chồng nhiều vòng đối soát trên cùng một lần ghi.
+   */
+  const autoReconciledRef = useRef(false)
+  const runReconcileRef = useRef(runReconcile)
+  runReconcileRef.current = runReconcile
+  useEffect(() => {
+    if (unknownOutcome === null) {
+      autoReconciledRef.current = false
+      return
+    }
+    if (autoReconciledRef.current) return
+    autoReconciledRef.current = true
+    void runReconcileRef.current()
+  }, [unknownOutcome])
+
+  /**
+   * Gửi lại đúng thao tác cũ theo yêu cầu TƯỜNG MINH của người dùng.
+   *
+   * Không sinh khoá idempotency mới và không làm mới `If-Match`: máy chủ nhận ra
+   * cùng một ý định và replay biên nhận, nên một lần bấm ở đây không bao giờ
+   * thành lần ghi thứ hai.
+   */
+  const runRetry = useCallback(async () => {
+    const result = await retryPendingMutation()
+    if (!result) return
+    setEtag(result.etag)
+    library.refresh()
+    projects.refresh()
+    workspace.reload()
+  }, [library, projects, retryPendingMutation, workspace])
+
   async function handleSave(draft: LibraryEntryDraft) {
     // Hàng rào thật, không phải mẹo ẩn nút: kể cả khi một nút bị bỏ sót
     // `disabled`, đường ghi vẫn dừng ở đây và nói rõ lý do.
@@ -461,7 +515,18 @@ export function LibraryPage() {
         </p>
       )}
       {blocked && <MutationBlockNotice block={blocked} />}
-      {readBack && <ReadBackNotice readBack={readBack} entries={entries} />}
+      {/* `T61-402` — băng "không rõ kết quả" đứng TRƯỚC băng read-back: khi kết
+          quả chưa ngã ngũ thì chưa có gì để đọc lại xác nhận, và hiện hai băng
+          cùng lúc là hai câu trả lời khác nhau cho cùng một thao tác. */}
+      {unknownOutcome && (
+        <MutationUnknownNotice
+          outcome={unknownOutcome}
+          reconciling={reconciling}
+          onRecheck={() => { void runReconcile() }}
+          onRetry={() => { void runRetry() }}
+        />
+      )}
+      {!unknownOutcome && readBack && <ReadBackNotice readBack={readBack} entries={entries} />}
 
       {/* Lưới hai cột CHỈ khi Inspector cắm. Ở hai hình thái phủ, khay không
           chiếm chỗ trong dòng chảy, nên một cột thứ hai rỗng sẽ bóp danh sách
@@ -490,7 +555,9 @@ export function LibraryPage() {
               <Button
                 size="sm"
                 icon={<Plus className="h-4 w-4" aria-hidden="true" />}
-                disabled={!canEdit || !projectId}
+                /* `T61-402` — cũng khoá khi lần ghi trước chưa ngã ngũ: mở một
+                   form ghi mới lúc ấy là mời người dùng chồng mutation. */
+                disabled={!canEdit || !projectId || reconciling !== null || unknownOutcome !== null}
                 aria-describedby={!canEdit || !projectId ? 'library-create-reason' : undefined}
                 onClick={() => {
                   setBlocked(null)
@@ -584,7 +651,11 @@ export function LibraryPage() {
             onTab={setInspectorTab}
             dependents={dependents}
             permissions={permissions}
-            pending={pending}
+            /* `T61-402` — khoá luôn mọi hành động ghi khi kết quả lần ghi
+               trước CHƯA NGÃ NGŨ. Mở cho bấm tiếp lúc này là để người dùng
+               chồng một mutation thứ hai lên một mutation có thể đã chạy —
+               đúng lớp hỏng mà lát này sinh ra để chặn. */
+            pending={pending || reconciling !== null || unknownOutcome !== null}
             canDeprecate={canEdit && Boolean(projectId)}
             canInsert={Boolean(projectId) && !mobileReadOnly}
             usedInHref={usedInHref}
@@ -616,7 +687,7 @@ export function LibraryPage() {
 
       <LibraryAuthoringDrawer
         mode={editor}
-        disabled={pending || !projectId}
+        disabled={pending || reconciling !== null || unknownOutcome !== null || !projectId}
         projectEntries={groups.filter((group) => group.scope === 'PROJECT')}
         checkPending={checkPending}
         checkError={checkError}

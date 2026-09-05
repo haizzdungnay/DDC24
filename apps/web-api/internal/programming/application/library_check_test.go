@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	programmingstore "mkddc-web/internal/programming/store"
 )
 
 /*
@@ -280,5 +282,119 @@ func TestCheckResolvesDependenciesAgainstThePublishedParentWhenNoDraftIsOpen(t *
 	}
 	if checked.LibraryRevisionID != "" {
 		t.Fatalf("libraryRevisionId = %q; chưa có Draft nào mở nên phải rỗng", checked.LibraryRevisionID)
+	}
+}
+
+/*
+`T61-402` / `ISS-PGM04-12` — máy chủ đã commit nhưng phản hồi mất trên đường về.
+
+Ba khẳng định ở đây là ba câu mà FE dựa vào để phục hồi. Không có chúng, FE chỉ
+"tin" rằng gửi lại cùng khoá là an toàn.
+*/
+func TestLostResponseReplayConvergesToExactlyOneMutation(t *testing.T) {
+	library, projects, created := openLibraryServices(t)
+	ctx := context.Background()
+	actor := Actor{ID: testActorID, Role: "admin"}
+
+	command := upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-00000000ff01")
+	command.IfMatch = created.ETag
+	first, err := library.UpsertEntry(ctx, actor, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Coi như phản hồi của lần trên đã mất: client không biết `first` tồn tại và
+	// gửi lại NGUYÊN VẸN cùng một request — cùng khoá, cùng If-Match.
+	replay, err := library.UpsertEntry(ctx, actor, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !replay.Replay {
+		t.Fatal("gửi lại cùng khoá phải là replay, không phải một lần ghi mới")
+	}
+	if replay.ETag != first.ETag || replay.AuditID != first.AuditID {
+		t.Fatalf("replay=%+v khác first=%+v", replay, first)
+	}
+
+	// Hội tụ: ĐÚNG MỘT entry, và ETag Draft chỉ tăng đúng một lần.
+	page, err := library.SearchLibraries(ctx, SearchLibrariesCommand{ProjectID: libraryProjectID, Scope: "PROJECT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].EntryID != libraryEntryA {
+		t.Fatalf("sau replay có %d entry; muốn đúng 1", len(page.Items))
+	}
+	view, err := projects.GetProject(ctx, libraryProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.ETag != first.ETag {
+		t.Fatalf("ETag Project=%s; replay không được tăng thêm (mutation=%s)", view.ETag, first.ETag)
+	}
+}
+
+/*
+Vế NGƯỢC LẠI, và nó là lý do tồn tại của cả lát này: cùng một nội dung với một
+khoá idempotency MỚI được ghi thêm một lần nữa. Đó chính là điều xảy ra trước
+lát này mỗi lần người dùng bấm "thử lại" trên một lỗi mạng.
+
+Thiếu test này thì test replay ở trên không chứng minh được gì: một máy chủ bỏ
+qua hoàn toàn khoá idempotency cũng làm nó xanh.
+*/
+func TestNewIdempotencyKeyIsTreatedAsASecondMutation(t *testing.T) {
+	library, projects, created := openLibraryServices(t)
+	ctx := context.Background()
+	actor := Actor{ID: testActorID, Role: "admin"}
+
+	command := upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-00000000ff02")
+	command.IfMatch = created.ETag
+	first, err := library.UpsertEntry(ctx, actor, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Cùng nội dung, khoá MỚI, và ETag đã làm mới cho đúng: máy chủ nhận và ghi
+	// thêm một lần nữa.
+	retry := command
+	retry.IdempotencyKey = "20000000-0000-4000-8000-00000000ff03"
+	retry.IfMatch = first.ETag
+	second, err := library.UpsertEntry(ctx, actor, retry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Replay {
+		t.Fatal("khoá mới không được coi là replay")
+	}
+	if second.ETag == first.ETag {
+		t.Fatalf("ETag không đổi (%s): lần ghi thứ hai đã không xảy ra, test mất ý nghĩa", second.ETag)
+	}
+	view, err := projects.GetProject(ctx, libraryProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.ETag != second.ETag {
+		t.Fatalf("ETag Project=%s; mutation=%s", view.ETag, second.ETag)
+	}
+}
+
+/*
+Và vì sao phép đối soát KHÔNG được "làm mới" `If-Match` cho đúng ETag hiện tại:
+`ifMatch` nằm trong hash ngữ nghĩa của request, nên khoá cũ + ETag mới là một
+request KHÁC dưới cùng một khoá — máy chủ từ chối bằng xung đột idempotency.
+*/
+func TestReplayWithRefreshedIfMatchIsRejectedAsIdempotencyConflict(t *testing.T) {
+	library, _, created := openLibraryServices(t)
+	ctx := context.Background()
+	actor := Actor{ID: testActorID, Role: "admin"}
+
+	command := upsertCommand(libraryEntryA, "SCALE_LIN", "20000000-0000-4000-8000-00000000ff04")
+	command.IfMatch = created.ETag
+	first, err := library.UpsertEntry(ctx, actor, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshed := command
+	refreshed.IfMatch = first.ETag
+	if _, err := library.UpsertEntry(ctx, actor, refreshed); !errors.Is(err, programmingstore.ErrIdempotencyConflict) {
+		t.Fatalf("khoá cũ + ETag mới: err = %v; muốn ErrIdempotencyConflict", err)
 	}
 }

@@ -1,4 +1,6 @@
 import { useI18n } from '../../../shared/i18n'
+import { Button } from '../../../shared/components/Button'
+import type { LibraryUnknownOutcome } from '../api/mutations'
 import type { LibraryMutationBlock } from '../model/library'
 import type { ProgrammingLibraryEntry } from '../model/types'
 
@@ -15,6 +17,80 @@ export interface ReadBack {
   state: 'reading' | 'done'
   libraryRevisionId?: string
   libraryVersion?: string
+}
+
+/**
+ * `T61-402` / `ISS-PGM04-12` — băng "KHÔNG RÕ KẾT QUẢ".
+ *
+ * Đây là băng khó nhất của màn hình này, vì nó phải nói một sự thật khó chịu:
+ * lần ghi có thể đã thành công, có thể chưa, và màn hình chưa biết. Hai câu mà
+ * nó KHÔNG được nói:
+ *
+ *  - "Đã lưu" — không có cơ sở, và người dùng sẽ bỏ đi với một thay đổi không
+ *    tồn tại;
+ *  - "Không lưu được" — cũng không có cơ sở, và người dùng sẽ bấm lại một thao
+ *    tác có thể đã chạy rồi.
+ *
+ * Vì vậy chỉ có hai lối ra, và cả hai đều tường minh: ĐỌC LẠI (không ghi gì), và
+ * GỬI LẠI đúng lần ghi cũ (cùng khoá idempotency, cùng `If-Match`) — nên máy chủ
+ * replay biên nhận thay vì ghi thêm.
+ */
+export function MutationUnknownNotice({
+  outcome,
+  reconciling,
+  onRecheck,
+  onRetry,
+}: {
+  outcome: LibraryUnknownOutcome
+  reconciling: { attempt: number; of: number } | null
+  onRecheck: () => void
+  onRetry: () => void
+}) {
+  const { pick } = useI18n()
+  const cause: Record<LibraryUnknownOutcome['reason'], string> = {
+    timeout: pick('máy chủ không trả lời kịp', 'the server did not answer in time'),
+    abort: pick('yêu cầu bị huỷ giữa chừng', 'the request was cancelled midway'),
+    network: pick('mất kết nối tới máy chủ', 'the connection to the server was lost'),
+  }
+  return (
+    <div
+      role="alert"
+      data-testid="library-mutation-unknown"
+      className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]"
+    >
+      <p>
+        <strong>{pick('Chưa rõ kết quả.', 'The outcome is not known.')}</strong>{' '}
+        {pick(
+          `Thao tác đã được gửi đi nhưng ${cause[outcome.reason]}, nên chưa biết máy chủ đã ghi hay chưa. Không bấm lại một cách mù: hãy đọc lại từ máy chủ.`,
+          `The operation was sent but ${cause[outcome.reason]}, so it is unknown whether the server wrote it. Do not blindly retry: read back from the server.`
+        )}
+      </p>
+      {reconciling && (
+        <p data-testid="library-mutation-reconciling" className="mt-1 text-xs">
+          {pick('Đang đọc lại từ máy chủ…', 'Reading back from the server…')}{' '}
+          {reconciling.of > 0 && `${reconciling.attempt}/${reconciling.of}`}
+        </p>
+      )}
+      {!reconciling && outcome.attempts > 0 && (
+        <p data-testid="library-mutation-unresolved" className="mt-1 text-xs">
+          {pick(
+            `Đã đọc lại ${outcome.attempts} lượt mà vẫn chưa xác nhận được. Tải lại trang để xem trạng thái hiện tại, hoặc gửi lại đúng thao tác cũ.`,
+            `Read back ${outcome.attempts} times without confirmation. Reload the page to see the current state, or resend the same operation.`
+          )}
+        </p>
+      )}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button variant="secondary" disabled={Boolean(reconciling)} onClick={onRecheck}>
+          {pick('Đọc lại từ máy chủ', 'Read back from the server')}
+        </Button>
+        {/* Nút này KHÔNG sinh khoá idempotency mới: nó gửi lại nguyên vẹn lần ghi
+            cũ, nên máy chủ nhận ra là cùng một ý định và replay biên nhận. */}
+        <Button variant="secondary" disabled={Boolean(reconciling)} onClick={onRetry}>
+          {pick('Gửi lại đúng thao tác cũ', 'Resend the same operation')}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export function MutationBlockNotice({ block }: { block: LibraryMutationBlock }) {

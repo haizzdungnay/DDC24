@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-12` Đường ghi Thư viện phân biệt "hỏng" với "không rõ kết quả" (#457, 2026-09-05)
+
+- **Triệu chứng.** Mọi lỗi mạng của đường ghi rơi vào **một dải lỗi chung có nút bấm lại**. Đó là lời khuyên
+  sai cho đúng trường hợp nguy hiểm nhất: nếu máy chủ **đã commit** mà phản hồi mất trên đường về, người dùng
+  không biết gì và bấm lại — và mỗi lần bấm lại sinh một `X-Idempotency-Key` **mới**, nên máy chủ coi đó là một
+  ý định khác và **ghi thêm một lần nữa**.
+- **Nguyên nhân gốc.** Hai chỗ:
+  1. `ProgrammingApiClient` **không có trần chờ nào**. Một request treo sẽ treo mãi, nên đường ghi không bao
+     giờ tới được trạng thái "không rõ kết quả" mà nó phải xử lý — nó chỉ đứng im ở "đang gửi".
+  2. Hook mutation chỉ phân biệt `ProgrammingApiError` với "mọi thứ còn lại", nên **timeout, mất mạng và huỷ
+     giữa chừng** — ba trường hợp mà kết quả trên máy chủ là **không biết** — hiện ra giống hệt một lần hỏng
+     chắc chắn.
+- **Cách sửa.**
+  - **Ranh giới rõ ràng:** *có nhận được dòng trạng thái HTTP hay không*. Có mã HTTP ⇒ máy chủ đã trả lời,
+    transaction đã ngã ngũ (409/412/428 → xung đột, 4xx khác → bị từ chối, 5xx → lỗi máy chủ). Không có mã nào
+    ⇒ **KHÔNG BIẾT**. Một lỗi không nhận dạng được cũng **fail-closed** về `unknown`.
+  - `ProgrammingNoResponseError` + trần chờ `15 s` sinh thẳng trong client (sửa ở **generator**, không sửa tay
+    tệp sinh), mang `reason: timeout | abort | network` để màn hình nói đúng chuyện đã xảy ra.
+  - `libraryReconcile.ts` (thuần): phân loại lỗi, **danh tính cố định** của một lần ghi, và **đọc lại có chặn
+    trên** (4 lượt × 750 ms) đọc **thẳng từ máy chủ**, không từ cache màn hình. Nó **chỉ đọc** — không phát ra
+    một mutation nào. Kết luận chỉ có hai: `succeeded` hoặc `unknown`; **không có `failed`**, vì một phép đọc
+    không bao giờ chứng minh được rằng một lần ghi đã hỏng.
+  - Với một lần **sửa**, "entry có mặt" không kết luận được gì (nó vốn đã có mặt) — chỉ khi **tên** trên máy
+    chủ khớp tên vừa gửi mới xác nhận.
+  - Nút **"Gửi lại đúng thao tác cũ"** dùng lại **nguyên vẹn** khoá idempotency, correlation id và `If-Match`
+    cũ, nên máy chủ replay biên nhận. Đặc biệt **không** "làm mới" `If-Match`: giá trị đó nằm trong hash ngữ
+    nghĩa của request, nên khoá cũ + ETag mới bị từ chối là xung đột idempotency.
+  - Trong lúc chưa ngã ngũ, **mọi hành động ghi bị khoá** (tạo khối mới, Sửa, Xoá, Ngừng sử dụng).
+- **Ở máy chủ không cần đổi gì** — biên nhận idempotency đã đúng. Điều còn thiếu là **bằng chứng**, nay đã có:
+  replay hội tụ về đúng một mutation (ETag Draft chỉ tăng một lần), khoá **mới** thì ghi thêm lần nữa (vế
+  ngược lại, thiếu nó thì test replay vô nghĩa vì một máy chủ bỏ qua hoàn toàn idempotency cũng xanh), và khoá
+  cũ + ETag làm mới bị từ chối.
+- **Kiểm chứng (đo cục bộ; CI chưa có runner — #414).** Thêm `libraryReconcile.test.ts` (13 ca), 3 ca trần chờ
+  trong `generated/client.test.ts`, 4 ca đối soát trong `LibraryWorkspace.test.tsx`, 1 ca deprecate mất phản hồi
+  trong `LibraryPage.test.tsx`, và 3 ca hội tụ trong `library_check_test.go`. **Tiêm lỗi 12/12 đỏ.**
+
+
 ### Added — `ISS-PGM04-11` Wizard 5 bước cho PROJECT Library, kèm bước Kiểm tra authoritative (#456, 2026-09-04)
 
 - **Triệu chứng.** Create/Edit khối PROJECT là **một form phẳng** trong `Modal`:

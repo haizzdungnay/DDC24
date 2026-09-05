@@ -741,7 +741,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 | Mã | P | Nội dung | Phụ thuộc | Trạng thái | Ước lượng |
 |---|---|---|---|---|---:|
 | `T61-401` | P0 | PROJECT Create/Edit drawer: Metadata → Interface → Implementation → Check → Review/Save; field validation và focus. | `T61-301`, `T61-106` | `DONE` (sửa lại ở `ISS-PGM04-11`, xem đính chính bên dưới) | 2,5 nd |
-| `T61-402` | P0 | Giữ ETag/idempotency/read-back; PUBLISHED edit tạo Draft minor; timeout reconcile; không có Publish giả. | `T61-401` | `DONE` | 1 nd |
+| `T61-402` | P0 | Giữ ETag/idempotency/read-back; PUBLISHED edit tạo Draft minor; timeout reconcile; không có Publish giả. | `T61-401` | `DONE` (sửa lại ở `ISS-PGM04-12`, xem đính chính bên dưới) | 1 nd |
 | `T61-403` | P0 | Used-In lazy page + deep-link exact PGM-02 bằng `objectId`, giữ filter/returnTo và dirty guard. | `T61-104/304` | `DONE` | 1,5 nd |
 | `T61-404` | P1 | Preview/Open read-only cho entry và source/interface authoritative; unsupported metadata hiện rõ. | `T61-304` | `DONE` | 1 nd |
 | `T61-405` | P0 | Standalone Insert mở `TargetPouChooser`, kiểm Project/mode/language/type/selection rồi gọi shared insertion adapter. | `T61-203/403` | `DONE` | 2 nd |
@@ -791,6 +791,33 @@ trường mà client dùng để quyết định.
 đầu **trống** và wizard nói ra lý do; Lưu vẫn bị chặn khi ô còn trống, nên không
 có đường nào ghi mã rỗng đè lên khối. Kiểm kiểu **cổng** là luật của FE — máy chủ
 vẫn nhận mọi object JSON làm `interface`, đúng như trước lát này.
+
+**Đính chính `T61-402` (`ISS-PGM04-12`, đo `2026-09-05`).** ETag, khoá idempotency
+và phép phân biệt xung đột đều có thật, nhưng **mọi lỗi mạng rơi vào một dải lỗi
+chung có nút bấm lại**. Đó là lời khuyên sai cho đúng trường hợp nguy hiểm nhất:
+máy chủ đã commit, phản hồi mất trên đường về, người dùng bấm lại — và mỗi lần
+bấm lại sinh một `X-Idempotency-Key` **mới**, nên máy chủ ghi thêm một lần nữa.
+
+**Vì sao không test nào đỏ.** Không có test nào dựng được tình huống ấy, vì
+`ProgrammingApiClient` **không có trần chờ nào**: một request treo thì treo mãi,
+nên trạng thái "không rõ kết quả" chưa từng tồn tại để mà kiểm.
+
+**Ranh giới đã khoá.** *Có nhận được dòng trạng thái HTTP hay không.* Có mã HTTP
+⇒ máy chủ đã trả lời và transaction đã ngã ngũ. Không có mã nào ⇒ **KHÔNG BIẾT**,
+và câu trả lời duy nhất đúng là **đọc lại có chặn trên**, không phải bấm lại.
+Phép đối soát chỉ có hai kết luận — `succeeded` hoặc `unknown`; **không có
+`failed`**, vì một phép đọc không bao giờ chứng minh được rằng một lần ghi đã
+hỏng.
+
+**Điều máy chủ vốn đã đúng, nay có bằng chứng.** Biên nhận idempotency được đọc
+**trước** khi khoá ETag, nên gửi lại nguyên vẹn cùng một request là **replay**
+chứ không phải một lần ghi mới. Ba test khoá điều đó cùng hai vế ngược: khoá
+**mới** thì ghi thêm lần nữa (thiếu vế này thì test replay vô nghĩa — một máy chủ
+bỏ qua hoàn toàn idempotency cũng xanh), và khoá cũ kèm `If-Match` **đã làm mới**
+bị từ chối là xung đột idempotency, vì `ifMatch` nằm trong hash ngữ nghĩa của
+request. Đó là lý do phép đối soát dùng lại **nguyên vẹn** cả ba giá trị.
+
+**Tiêm lỗi 12/12 đỏ.**
 
 ---
 
