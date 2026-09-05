@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.35.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.36.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -199,6 +199,7 @@ export const PROGRAMMING_ENDPOINTS = {
   "exportProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/export", roles: ["engineer","admin"] },
   "getProgrammingCapabilities": { method: "GET", path: "/api/v1/programming/capabilities", roles: ["viewer","operator","engineer","admin"] },
   "getProgrammingCheck": { method: "GET", path: "/api/v1/programming/checks/{checkId}", roles: ["viewer","operator","engineer","admin"] },
+  "getProgrammingLibraryEntrySource": { method: "GET", path: "/api/v1/programming/library-entry-source", roles: ["viewer","operator","engineer","admin"] },
   "getProgrammingOperation": { method: "GET", path: "/api/v1/programming/operations/{operationId}", roles: ["viewer","operator","engineer","admin"] },
   "getProgrammingPointCatalog": { method: "GET", path: "/api/v1/programming/point-catalog", roles: ["viewer","operator","engineer","admin"] },
   "getProgrammingProject": { method: "GET", path: "/api/v1/programming/projects/{projectId}", roles: ["viewer","operator","engineer","admin"] },

@@ -69,6 +69,18 @@ function entry(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/** `T61-404` — câu trả lời của đường đọc mã nguồn. */
+const STORED_SOURCE = 'FUNCTION SCALE_LIN : REAL\nSCALE_LIN := 1.0;\nEND_FUNCTION\n'
+function entrySource(overrides: Record<string, unknown> = {}) {
+  return {
+    scope: 'PROJECT', libraryRevisionId: '33333333-3333-4333-8333-333333333333',
+    libraryVersion: '1.0.0', libraryState: 'DRAFT', entryId: ENTRY_ID, name: 'SCALE_LIN',
+    kind: 'FUNCTION', language: 'ST', contentSha256: 'a'.repeat(64),
+    availability: 'AVAILABLE', source: STORED_SOURCE,
+    ...overrides
+  }
+}
+
 function projectListPage() {
   return {
     items: [{
@@ -99,6 +111,11 @@ function stub(items: unknown[], overrides: Record<string, () => Promise<unknown>
        nói gì về phép kiểm vẫn đi hết được wizard. */
     if (operationId === 'checkProgrammingLibraryEntry') {
       return Promise.resolve({ blocking: false, diagnostics: [], libraryVersion: '1.0.0' })
+    }
+    /* `T61-404` — mã nguồn đã lưu của đúng phiên bản. Mặc định là ĐỌC ĐƯỢC, để
+       test nào không nói gì về mã nguồn vẫn đi hết được wizard Sửa. */
+    if (operationId === 'getProgrammingLibraryEntrySource') {
+      return Promise.resolve(entrySource())
     }
     if (operationId === 'listProgrammingLibraryUsages') {
       return Promise.resolve({
@@ -994,12 +1011,29 @@ describe('PGM-04 wizard soạn thảo 5 bước (T61-401)', () => {
     expect(within(dialog).getByTestId('library-wizard-step-metadata')).not.toHaveAttribute('aria-current')
   })
 
-  /* Sửa một khối đã lưu: máy chủ chưa trả lại mã nguồn (`T61-404`), nên ô bắt
-     đầu trống. Điều đó phải được NÓI RA — im lặng thì người dùng tưởng khối
-     không có mã, và một lần Lưu là ghi đè toàn phần. */
-  it('sửa khối đã lưu thì nói rõ vì sao ô mã nguồn trống, và không lưu được khi còn trống', async () => {
-    const upsert = vi.fn()
-    stub([entry()], { upsertProgrammingLibraryEntry: upsert })
+  /*
+  `T61-404` — sửa một khối đã lưu nay bắt đầu từ MÃ NGUỒN THẬT của đúng phiên
+  bản ấy, không từ một ô trống.
+
+  Đây là điều kiện để "Sửa" an toàn: upsert là phép ghi đè TOÀN PHẦN, nên bắt
+  đầu từ rỗng nghĩa là mọi lần sửa mô tả đều đòi người dùng dán lại toàn bộ mã
+  của một khối họ chưa từng nhìn thấy.
+  */
+  it('nạp mã nguồn đã lưu của ĐÚNG phiên bản đang sửa', async () => {
+    const sourceCalls: Record<string, unknown>[] = []
+    client.request.mockImplementation((operationId: string, options?: Record<string, unknown>) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
+      if (operationId === 'getProgrammingLibraryEntrySource') {
+        sourceCalls.push((options?.query ?? {}) as Record<string, unknown>)
+        return Promise.resolve(entrySource())
+      }
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+      })
+    })
     renderPage()
     fireEvent.click(await screen.findByTestId('library-block-card'))
     fireEvent.click(screen.getByRole('button', { name: /Sửa khối/ }))
@@ -1007,12 +1041,52 @@ describe('PGM-04 wizard soạn thảo 5 bước (T61-401)', () => {
     const dialog = await screen.findByRole('dialog')
     const next = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
     next()
-    /* Entry cũ không khai `returnType`, và một FUNCTION không có kiểu trả về là
-       một khối không gọi được — wizard đòi khai nó trước khi đi tiếp. */
     fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } })
     next()
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText(/Mã nguồn ST/)).toHaveValue(STORED_SOURCE))
+    expect(within(dialog).queryByTestId('library-wizard-source-notice')).toBeNull()
+
+    // Hỏi ĐÚNG phiên bản đang mở, không phải "bản mới nhất".
+    expect(sourceCalls[0]).toMatchObject({
+      libraryRevisionId: '33333333-3333-4333-8333-333333333333', entryId: ENTRY_ID
+    })
+  })
+
+  /*
+  Fail closed: máy chủ nói không có mã nguồn thì wizard NÓI RA, ô ở lại trống, và
+  Lưu vẫn bị chặn. Điền một chuỗi rỗng rồi cho Lưu là ghi đè mất mã.
+  */
+  it('máy chủ không trả được mã nguồn thì nói rõ lý do, và vẫn không lưu được khi ô trống', async () => {
+    const upsert = vi.fn()
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
+      if (operationId === 'getProgrammingLibraryEntrySource') {
+        return Promise.resolve(entrySource({
+          availability: 'HASH_MISMATCH', source: undefined,
+          reason: 'Băm nội dung tính lại không khớp băm đã lưu của revision này'
+        }))
+      }
+      if (operationId === 'upsertProgrammingLibraryEntry') return upsert()
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+      })
+    })
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    fireEvent.click(screen.getByRole('button', { name: /Sửa khối/ }))
+
+    const dialog = await screen.findByRole('dialog')
+    const next = () => fireEvent.click(within(dialog).getByRole('button', { name: 'Tiếp' }))
+    next()
+    fireEvent.change(within(dialog).getByLabelText('Kiểu trả về'), { target: { value: 'REAL' } })
+    next()
+    const notice = await within(dialog).findByTestId('library-wizard-source-notice')
+    expect(notice).toHaveTextContent('không khớp băm đã lưu')
     expect(within(dialog).getByLabelText(/Mã nguồn ST/)).toHaveValue('')
-    expect(within(dialog).getByTestId('library-wizard-source-notice')).toBeVisible()
 
     next()
     expect(within(dialog).getByTestId('library-wizard-issues')).toHaveTextContent('chưa trả lại mã nguồn')
@@ -1332,5 +1406,130 @@ describe('PGM-04 đối soát lần ghi không rõ kết quả (T61-402)', () =>
 
     expect((await screen.findAllByText(/Bản nháp đã thay đổi ở phiên khác/))[0]).toBeVisible()
     expect(screen.queryByTestId('library-mutation-unknown')).toBeNull()
+  })
+})
+
+
+/*
+`T61-404` / `ISS-PGM04-13` — Preview mã nguồn ở Inspector.
+
+Trước lát này Inspector không có Preview và hợp đồng đọc không mang `source`, nên
+người dùng phải quyết định có chèn một khối hay không mà không đọc được nó.
+*/
+describe('PGM-04 Preview mã nguồn (T61-404)', () => {
+  async function openSourceTab() {
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    fireEvent.click(screen.getByRole('tab', { name: 'Mã nguồn' }))
+  }
+
+  it('hiện mã nguồn đã lưu kèm danh tính phiên bản, và hỏi ĐÚNG revision đang mở', async () => {
+    const sourceCalls: Record<string, unknown>[] = []
+    client.request.mockImplementation((operationId: string, options?: Record<string, unknown>) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
+      if (operationId === 'getProgrammingLibraryEntrySource') {
+        sourceCalls.push((options?.query ?? {}) as Record<string, unknown>)
+        return Promise.resolve(entrySource())
+      }
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+      })
+    })
+    renderPage()
+    await openSourceTab()
+
+    const viewer = await screen.findByTestId('library-source-viewer')
+    expect(viewer).toHaveValue(STORED_SOURCE)
+    expect(viewer).toHaveAttribute('readonly')
+    /* Danh tính phiên bản phải nằm NGAY TRÊN nội dung: đọc một đoạn mã mà không
+       biết nó thuộc bản nào thì không dùng để quyết định được gì. */
+    expect(screen.getByTestId('library-source-identity')).toHaveTextContent('1.0.0')
+    expect(sourceCalls[0]).toMatchObject({
+      libraryRevisionId: '33333333-3333-4333-8333-333333333333', entryId: ENTRY_ID
+    })
+    // Preview là đường ĐỌC: không một lệnh ghi nào rời màn hình.
+    const written = client.request.mock.calls.map((call) => call[0])
+    expect(written).not.toContain('upsertProgrammingLibraryEntry')
+    expect(written).not.toContain('deleteProgrammingLibraryEntry')
+  })
+
+  /* Không bao giờ dựng mã nguồn từ chữ ký: ghép một khung ST "trông giống" từ
+     `interface` là bịa ra một thứ chưa từng chạy trên thiết bị nào. */
+  it('khối SYSTEM nói ra vì sao không có mã nguồn, và KHÔNG dựng mã từ chữ ký', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') {
+        return Promise.resolve({
+          items: [entry({ scope: 'SYSTEM', entryId: 'TON', name: 'TON', libraryRevisionId: 'system-rev', libraryState: 'PUBLISHED' })]
+        })
+      }
+      if (operationId === 'getProgrammingLibraryEntrySource') {
+        return Promise.resolve(entrySource({
+          scope: 'SYSTEM', libraryRevisionId: 'system-rev', libraryState: 'PUBLISHED',
+          entryId: 'TON', name: 'TON', language: undefined, source: undefined,
+          availability: 'NOT_STORED',
+          reason: 'Entry SYSTEM thuộc registry chữ ký; phần hiện thực nằm trong firmware'
+        }))
+      }
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'UNAVAILABLE'
+      })
+    })
+    renderPage()
+    await openSourceTab()
+
+    const notice = await screen.findByTestId('library-source-unavailable')
+    expect(notice).toHaveAttribute('data-availability', 'NOT_STORED')
+    expect(notice).toHaveTextContent('nằm trong firmware')
+    expect(screen.queryByTestId('library-source-viewer')).toBeNull()
+  })
+
+  it('băm lệch thì báo và KHÔNG hiện mã nguồn nào', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
+      if (operationId === 'getProgrammingLibraryEntrySource') {
+        return Promise.resolve(entrySource({
+          availability: 'HASH_MISMATCH', source: undefined,
+          reason: 'Băm nội dung tính lại không khớp băm đã lưu của revision này'
+        }))
+      }
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+      })
+    })
+    renderPage()
+    await openSourceTab()
+
+    const notice = await screen.findByTestId('library-source-unavailable')
+    expect(notice).toHaveAttribute('data-availability', 'HASH_MISMATCH')
+    expect(screen.queryByTestId('library-source-viewer')).toBeNull()
+  })
+
+  it('đọc hỏng thì hiện lỗi kèm đường thử lại, không im lặng hiện ô trống', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'listProgrammingProjects') return Promise.resolve(projectListPage())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(projectDetail())
+      if (operationId === 'searchProgrammingLibraries') return Promise.resolve({ items: [entry()] })
+      if (operationId === 'getProgrammingLibraryEntrySource') {
+        return Promise.reject(new ProgrammingNoResponseError('timeout', 15000))
+      }
+      return Promise.resolve({
+        sealed: { count: 0, truncated: false, items: [] },
+        draft: { count: 0, truncated: false, items: [] }, availability: 'SEALED_ONLY'
+      })
+    })
+    renderPage()
+    await openSourceTab()
+
+    expect(await screen.findByTestId('library-source-error')).toBeVisible()
+    expect(screen.queryByTestId('library-source-viewer')).toBeNull()
+    expect(screen.getByRole('button', { name: /Thử đọc lại/ })).toBeEnabled()
   })
 })

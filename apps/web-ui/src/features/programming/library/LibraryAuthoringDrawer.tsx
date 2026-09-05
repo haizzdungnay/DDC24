@@ -4,6 +4,7 @@ import { Button } from '../../../shared/components/Button'
 import { useI18n } from '../../../shared/i18n'
 import { createUuid } from '../../../shared/crypto'
 import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../api/generated/library_registry'
+import { useProgrammingLibraryEntrySource } from '../api/queries'
 import type { LibraryEntryCheckResult, LibraryEntryDraft } from '../api/mutations'
 import type { LibraryEntryGroup } from '../model/library'
 import type { ProgrammingLibraryEntry } from '../model/types'
@@ -126,11 +127,44 @@ function AuthoringWizard({
   const { pick } = useI18n()
   const existing = mode.kind === 'edit' ? mode.entry : null
   const [createdEntryId] = useState(() => createUuid())
-  const baseline = useMemo<LibraryWizardValues>(
+  /*
+   * `T61-404` — nạp mã nguồn ĐÃ LƯU của đúng phiên bản đang sửa.
+   *
+   * Trước lát này ô mã nguồn luôn bắt đầu TRỐNG, và upsert là phép ghi đè toàn
+   * phần: người dùng phải tự dán lại toàn bộ mã của một khối họ không đọc được.
+   * Hook nhận `libraryRevisionId` của CHÍNH phiên bản đang sửa — không có nhánh
+   * "bản mới nhất", vì nạp nhầm bản là ghi đè bản này bằng mã của bản khác.
+   */
+  const stored = useProgrammingLibraryEntrySource(
+    existing?.libraryRevisionId ?? null,
+    existing?.entryId ?? null
+  )
+  const storedReady = existing !== null && stored.status === 'ready' && stored.data !== null
+  const storedSource =
+    storedReady && stored.data?.availability === 'AVAILABLE' && stored.data.source !== undefined
+      ? stored.data.source
+      : null
+
+  const initial = useMemo<LibraryWizardValues>(
     () => (existing ? libraryWizardValuesFrom(existing) : emptyLibraryWizardValues()),
     [existing]
   )
-  const [values, setValues] = useState<LibraryWizardValues>(baseline)
+  const [values, setValues] = useState<LibraryWizardValues>(initial)
+  /* Mốc so "đã bẩn chưa" phải đi theo mã nguồn vừa nạp. Giữ mốc ở chuỗi rỗng
+     thì ngay khi nạp xong, wizard tự coi là người dùng đã sửa — và hộp thoại
+     "mất dữ liệu?" bật lên cho một lần đóng không mất gì. */
+  const [baselineSource, setBaselineSource] = useState('')
+  const baseline = useMemo<LibraryWizardValues>(
+    () => ({ ...initial, source: baselineSource }),
+    [initial, baselineSource]
+  )
+  const [sourceAdopted, setSourceAdopted] = useState(false)
+  useEffect(() => {
+    if (sourceAdopted || storedSource === null) return
+    setSourceAdopted(true)
+    setBaselineSource(storedSource)
+    setValues((current) => (current.source === '' ? { ...current, source: storedSource } : current))
+  }, [sourceAdopted, storedSource])
   const [step, setStep] = useState<LibraryWizardStep>('metadata')
   const [showIssues, setShowIssues] = useState(false)
   const [confirmingClose, setConfirmingClose] = useState(false)
@@ -149,11 +183,13 @@ function AuthoringWizard({
           name: group.name,
           dependencies: group.current.dependencies.map((item) => item.entryId),
         })),
-      /* Hợp đồng đọc hôm nay KHÔNG mang `source` (`T61-404` chưa landing). Nói
-         ra sự thật đó thay vì để ô trống trông như khối không có mã. */
-      storedSourceAvailable: false,
+      /* `T61-404` — nay là một SỰ THẬT ĐO ĐƯỢC, không còn là hằng `false`: chỉ
+         `true` khi máy chủ đã trả về mã nguồn của đúng phiên bản này. Khi không,
+         bước Hiện thực nói ra vì sao ô trống thay vì để người dùng tưởng khối
+         không có mã. Chế độ Tạo luôn `true`: không có gì để nạp. */
+      storedSourceAvailable: existing === null || storedSource !== null,
     }),
-    [createdEntryId, existing, projectEntries]
+    [createdEntryId, existing, projectEntries, storedSource]
   )
 
   const issues = useMemo(() => libraryWizardIssues(values, context), [values, context])
@@ -298,6 +334,12 @@ function AuthoringWizard({
             update={update}
             context={context}
             projectEntries={projectEntries}
+            sourceLoading={existing !== null && stored.status === 'loading'}
+            sourceUnavailable={
+              existing !== null && storedReady && stored.data?.availability !== 'AVAILABLE'
+                ? (stored.data?.reason ?? '')
+                : null
+            }
           />
         )}
         {step === 'check' && (
@@ -521,11 +563,16 @@ function ImplementationStep({
   update,
   context,
   projectEntries,
+  sourceLoading,
+  sourceUnavailable,
 }: {
   values: LibraryWizardValues
   update: (patch: Partial<LibraryWizardValues>) => void
   context: LibraryWizardContext
   projectEntries: LibraryEntryGroup[]
+  sourceLoading: boolean
+  /** Chuỗi lý do khi máy chủ nói không có mã nguồn; `null` khi không rơi vào ca đó. */
+  sourceUnavailable: string | null
 }) {
   const { pick } = useI18n()
   const selectable = projectEntries.filter((group) => group.entryId !== context.entryId)
@@ -541,12 +588,21 @@ function ImplementationStep({
           className={`${inputClass} font-mono text-xs`}
         />
       </Field>
-      {context.mode === 'edit' && !context.storedSourceAvailable && (
-        <p data-testid="library-wizard-source-notice" className="text-xs text-[var(--c-text-dim)]">
+      {sourceLoading && (
+        <p role="status" data-testid="library-wizard-source-loading" className="text-xs text-[var(--c-text-dim)]">
+          {pick('Đang nạp mã nguồn đã lưu của phiên bản này…', 'Loading the stored source of this version…')}
+        </p>
+      )}
+      {/* Fail closed: khi máy chủ không xác nhận được mã nguồn, wizard NÓI RA và
+          ô ở lại trạng thái trống — Lưu vẫn bị chặn vì mã nguồn rỗng là một lỗi
+          của bước này. Điền một chuỗi rỗng rồi cho Lưu là ghi đè mất mã. */}
+      {sourceUnavailable !== null && (
+        <p role="alert" data-testid="library-wizard-source-notice" className="text-xs text-[var(--c-warn-fg)]">
           {pick(
-            'Máy chủ chưa trả lại mã nguồn đã lưu, nên ô này bắt đầu trống. Lưu là ghi đè TOÀN PHẦN, nên hãy dán lại đủ mã của phiên bản mới.',
-            'The server does not return the stored source yet, so this field starts empty. Saving overwrites the whole entry, so paste the full source of the new version.'
+            'Không nạp được mã nguồn đã lưu của phiên bản này, nên ô bắt đầu trống. Lưu là ghi đè TOÀN PHẦN — hãy dán lại đủ mã trước khi lưu.',
+            'The stored source of this version could not be loaded, so the field starts empty. Saving overwrites the whole entry — paste the full source before saving.'
           )}
+          {sourceUnavailable ? ` ${sourceUnavailable}.` : ''}
         </p>
       )}
       {selectable.length > 0 && (

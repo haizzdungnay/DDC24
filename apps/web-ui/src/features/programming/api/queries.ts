@@ -740,6 +740,48 @@ export function useProgrammingLibraryUsage(
 }
 
 /**
+ * `T61-404` / `ISS-PGM04-13` — đọc mã nguồn đã lưu của MỘT entry.
+ *
+ * Hai định danh đều BẮT BUỘC, và hook không có nhánh "lấy bản mới nhất": đọc mã
+ * nguồn của sai revision là đọc sai thứ thiết bị đang chạy, và đó là lỗi im lặng
+ * nhất của cả màn hình này. Thiếu một trong hai thì hook đứng yên chứ không đoán.
+ *
+ * `availability` là thứ màn hình phải xét TRƯỚC khi hiển thị bất cứ gì — `source`
+ * VẮNG nghĩa là không có mã nguồn để đọc, không phải "mã nguồn rỗng".
+ */
+export interface ProgrammingLibraryEntrySource {
+  scope: 'SYSTEM' | 'PROJECT'
+  libraryRevisionId: string
+  libraryVersion: string
+  libraryState: 'DRAFT' | 'PUBLISHED' | 'DEPRECATED'
+  entryId: string
+  name: string
+  kind: string
+  language?: 'ST' | 'FBD'
+  contentSha256: string
+  availability: 'AVAILABLE' | 'NOT_STORED' | 'HASH_MISMATCH'
+  source?: string
+  interface?: unknown
+  reason?: string
+}
+
+export function useProgrammingLibraryEntrySource(
+  libraryRevisionId: string | null | undefined,
+  entryId: string | null | undefined,
+): RemoteState<ProgrammingLibraryEntrySource> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => {
+    if (!libraryRevisionId || !entryId) {
+      return Promise.reject(new Error('libraryRevisionId và entryId đều bắt buộc'))
+    }
+    return client.request<ProgrammingLibraryEntrySource>('getProgrammingLibraryEntrySource', {
+      query: { libraryRevisionId, entryId }
+    })
+  }, [client, libraryRevisionId, entryId])
+  return useProgrammingResource(load, 0)
+}
+
+/**
  * `T61-202` — ENGINE phân trang DUY NHẤT của Control Library.
  *
  * Trước lát này có ba đường đọc `/libraries`, và cả ba đọc đúng MỘT trang

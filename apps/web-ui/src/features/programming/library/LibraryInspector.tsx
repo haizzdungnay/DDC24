@@ -11,6 +11,7 @@ import {
   scopeLabel,
   usageDisplay,
 } from './libraryPresentation'
+import { LibrarySourcePreview } from './LibrarySourcePreview'
 import type { LibraryEntryGroup, LibraryUsage } from '../model/library'
 import type { libraryEntryPermissions } from '../model/library'
 import type { ProgrammingLibraryEntry, ProgrammingLibraryUsage } from '../model/types'
@@ -24,6 +25,10 @@ import type { ProgrammingLibraryEntry, ProgrammingLibraryUsage } from '../model/
 export const INSPECTOR_TABS = [
   { id: 'details', labelVi: 'Chi tiết', labelEn: 'Details' },
   { id: 'parameters', labelVi: 'Tham số', labelEn: 'Parameters' },
+  /* `T61-404` — mã nguồn ĐÃ LƯU của đúng phiên bản đang chọn. Tab riêng chứ
+     không nhét vào "Chi tiết": nội dung này dài, và nó chỉ được đọc từ máy chủ
+     khi người ta thật sự mở ra xem. */
+  { id: 'source', labelVi: 'Mã nguồn', labelEn: 'Source' },
   { id: 'used-in', labelVi: 'Nơi sử dụng', labelEn: 'Used In' },
   { id: 'versions', labelVi: 'Phiên bản', labelEn: 'Versions' },
 ] as const
@@ -205,6 +210,9 @@ export function LibraryInspector({
           />
         </div>
         {tab === 'parameters' && <LibraryParameters entry={entry} />}
+        {/* Chỉ dựng khi tab đang mở: khung này phát một request đọc, và phát nó
+            cho mọi khối người dùng bấm qua là 64 KiB mỗi lần bấm. */}
+        {tab === 'source' && <LibrarySourcePreview entry={entry} />}
       </div>
 
       {reviewRequired && (

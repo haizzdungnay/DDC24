@@ -8,6 +8,41 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PGM04-13` Đọc được mã nguồn đã lưu của đúng một phiên bản khối (#458, 2026-09-05)
+
+- **Triệu chứng.** Inspector không có Preview, và `SearchLibraryEntries` **không mang `source`**. Hệ quả kép:
+  người dùng phải quyết định có chèn một khối hay không **mà không đọc được nó**, và khi Sửa thì ô mã nguồn bắt
+  đầu **trống** trong khi upsert là phép ghi đè **toàn phần** — mỗi lần sửa một dòng mô tả đều đòi họ dán lại
+  toàn bộ mã của một khối họ chưa từng nhìn thấy.
+- **Nguyên nhân gốc.** Hợp đồng đọc chỉ có một đường **danh sách**, và một danh sách không phải chỗ để trả
+  64 KiB mã nguồn cho **mỗi** mục. Thiếu đường đọc theo từng entry nên không có chỗ nào để đặt `source`.
+- **Cách sửa.**
+  - `GET /programming/library-entry-source?libraryRevisionId=…&entryId=…` (`getProgrammingLibraryEntrySource`).
+    Cả hai định danh **bắt buộc**, **không có** nhánh "bản mới nhất" ngầm — một Preview lặng lẽ hiển thị bản mới
+    nhất khi người dùng mở bản cũ là cách họ đọc sai thứ thiết bị đang chạy mà không có dấu hiệu nào. Đường dẫn
+    **phẳng** với định danh ở query, cùng lý do đã ghi cho Used-In: `libraryRevisionId` của SYSTEM là chuỗi có
+    dấu hai chấm, nhét vào path segment sẽ đẻ ra một lớp lỗi encoding.
+  - Máy chủ **tính lại** băm nội dung từ chính dữ liệu vừa đọc và chỉ trả `source` khi khớp `contentSha256` đã
+    lưu. `availability` có ba giá trị và không giá trị nào nghĩa là "chưa biết": `AVAILABLE`, `NOT_STORED`
+    (entry SYSTEM — registry mô tả **chữ ký**, phần hiện thực nằm trong firmware), `HASH_MISMATCH` (fail-closed,
+    **không** trả `source` và **không** lùi về revision khác).
+  - Inspector có tab **Mã nguồn**: viewer chỉ-đọc, danh tính phiên bản hiện ngay trên nội dung, và **không bao
+    giờ** dựng mã nguồn từ chữ ký — ghép một khung ST "trông giống" từ `interface` là bịa ra một thứ chưa từng
+    chạy trên thiết bị nào. Chỉ nạp khi tab được mở: phát một request đọc cho mọi khối người dùng bấm qua là
+    64 KiB mỗi lần bấm.
+  - Wizard Sửa nạp mã nguồn của **đúng phiên bản đang sửa**; mốc so "đã bẩn chưa" đi theo mã vừa nạp, nếu không
+    wizard tự coi là người dùng đã sửa ngay khi nạp xong. Khi máy chủ không xác nhận được, wizard **nói ra lý
+    do** và ô ở lại trống — Lưu vẫn bị chặn, nên không có đường nào ghi đè mất mã.
+- **Một phát hiện dọc đường.** Nhánh `HASH_MISMATCH` **không dựng được qua đường ghi**: trigger SQLite của
+  `library_entries` đã ép `content_sha256` khớp nội dung ở mọi lần `INSERT`/`UPDATE`. Nó vẫn tới được bằng
+  đường khác (phục hồi từ backup, migrate hỏng, tệp SQLite bị sửa ngoài ứng dụng), nên quyết định được tách
+  thành hàm thuần `libraryEntrySourceAvailability` và kiểm ở đúng lớp ấy — **kèm vế dương** (băm khớp thì trả
+  mã nguồn), vì thiếu nó thì một hàm luôn trả `HASH_MISMATCH` vẫn qua được ca âm.
+- **Kiểm chứng (đo cục bộ; CI chưa có runner — #414).** OpenAPI `1.35.0 → 1.36.0`, 42 → 43 operation. Thêm
+  `library_source_test.go` (4 ca), 2 ca route ở `transport/http`, 4 ca Preview và 2 ca wizard ở FE.
+  **Tiêm lỗi 9/9 đỏ.**
+
+
 ### Fixed — `ISS-PIO-23` Read-back verification cho điểm Modbus ghi được (#406, 2026-09-05)
 
 - **Triệu chứng.** `readback` **có** tồn tại từ `MBR-B107`, nhưng nó chỉ **đọc lại rồi báo con số** —

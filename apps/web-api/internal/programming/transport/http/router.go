@@ -76,6 +76,10 @@ var routeDefinitions = []routeDefinition{
 	   dùng TRƯỚC khi quyết định có sửa hay không; chặn nó lại làm người vận
 	   hành phải đoán. */
 	{method: "GET", path: "/api/v1/programming/library-usages", permission: auth.PermissionRead},
+	/* `T61-404` — đọc mã nguồn của một entry theo ĐÚNG một cặp (revision, entry).
+	   Đường dẫn phẳng, hai định danh ở query: revision id của SYSTEM là một chuỗi
+	   có dấu hai chấm, nhét vào path segment sẽ đẻ ra lỗi encoding. */
+	{method: "GET", path: "/api/v1/programming/library-entry-source", permission: auth.PermissionRead},
 	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	/* `T61-401` — Check là DRY RUN của cùng payload: không `If-Match`, không
 	   idempotency key, không ghi. Bắt nó mang `If-Match` sẽ tiêu ETag Draft cho

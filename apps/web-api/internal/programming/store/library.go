@@ -1498,6 +1498,22 @@ func libraryEntryDigest(entry LibraryEntry) ([sha256.Size]byte, error) {
 	return domain.ProjectLibraryEntryContentSHA256(toDomainLibraryEntry(entry))
 }
 
+/*
+LibraryEntryContentSHA256 tính LẠI băm nội dung của một entry đã đọc ra.
+
+`T61-404` cần nó để đường đọc source tự kiểm: băm tính lại từ chính `source` và
+`interface` vừa đọc phải khớp `content_sha256` đã lưu. Không có phép so ấy thì
+một hàng bị hỏng (source mất, blob lệch) vẫn được hiển thị như source thật của
+đúng revision — và người dùng đọc một thứ không phải thứ thiết bị sẽ chạy.
+
+Cùng một hàm với đường GHI dùng (`libraryEntryDigest`), không phải một bản tính
+thứ hai: hai công thức băm là hai câu trả lời có thể trôi khỏi nhau, và bên trôi
+sẽ báo "hỏng" cho dữ liệu lành hoặc "lành" cho dữ liệu hỏng.
+*/
+func LibraryEntryContentSHA256(entry LibraryEntry) ([sha256.Size]byte, error) {
+	return libraryEntryDigest(entry)
+}
+
 // requireMutableProjectLibraryOfProjectTx kiểm CẢ quyền sở hữu Project. Chỉ kiểm
 // "là PROJECT DRAFT" cho phép một admin sửa library Draft của Project khác chỉ
 // bằng cách đoán đúng `libraryRevisionId` — sai lệch quyền im lặng.
@@ -2250,7 +2266,7 @@ func compareUsageRows(left, right LibraryUsageRow) int {
 }
 
 // librarySQLNullIfEmpty biến chuỗi rỗng thành `NULL` để mệnh đề keyset tự tắt.
-// Dùng `?=''` như các câu khác sẽ sai ở đây: `revision_id` là UUID nên không bao
+// Dùng `?=”` như các câu khác sẽ sai ở đây: `revision_id` là UUID nên không bao
 // giờ rỗng, nhưng một tuple so sánh với chuỗi rỗng vẫn là một phép so THẬT, và
 // trang đầu sẽ lọc mất mọi hàng có `project name` sắp trước chuỗi rỗng.
 func librarySQLNullIfEmpty(value string) any {

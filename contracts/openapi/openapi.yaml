@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.35.0"
+  version: "1.36.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -2316,6 +2316,41 @@ paths:
         "401": { $ref: "#/components/responses/ProgrammingError" }
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/library-entry-source:
+    get:
+      operationId: getProgrammingLibraryEntrySource
+      summary: Đọc mã nguồn và interface của một entry Thư viện theo đúng một revision
+      description: >-
+        `T61-404`. Nhận định danh CHÍNH XÁC `libraryRevisionId + entryId`; không
+        có nhánh "bản mới nhất" ngầm — một Preview lặng lẽ hiển thị bản mới nhất
+        khi người dùng mở một bản cũ là cách họ đọc sai thứ thiết bị đang chạy mà
+        không có dấu hiệu nào. Đường dẫn PHẲNG với hai định danh ở query vì
+        `libraryRevisionId` của SYSTEM là một chuỗi có dấu hai chấm; nhét nó vào
+        path segment sẽ đẻ ra một lớp lỗi encoding không cần thiết. Máy chủ TÍNH
+        LẠI băm nội dung từ chính dữ liệu vừa đọc và chỉ trả `source` khi băm
+        khớp `contentSha256` đã lưu.
+      x-rbac: [viewer, operator, engineer, admin]
+      x-implementation-status: t61-404
+      parameters:
+        - name: libraryRevisionId
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: entryId
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        "200":
+          description: Mã nguồn của đúng revision đã yêu cầu, hoặc lý do ổn định vì sao không có
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingLibraryEntrySource" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/projects/{projectId}/library/entries:
     parameters:
       - { $ref: "#/components/parameters/ProgrammingProjectId" }
@@ -4526,6 +4561,33 @@ components:
           items: { type: string, minLength: 1, maxLength: 24 }
         # Vắng mặt nghĩa là layout chưa biết. FUNCTION không được mang khối này.
         stateLayout: { $ref: "#/components/schemas/ProgrammingLibraryStateLayout" }
+    ProgrammingLibraryEntrySource:
+      description: >-
+        Mã nguồn đã LƯU của một entry, đọc theo đúng một revision. `availability`
+        là thứ client phải xét TRƯỚC khi hiển thị bất cứ gì.
+      type: object
+      additionalProperties: false
+      required: [scope, libraryRevisionId, libraryVersion, libraryState, entryId, name, kind, contentSha256, availability]
+      properties:
+        scope: { type: string, enum: [SYSTEM, PROJECT] }
+        libraryRevisionId: { type: string, minLength: 1, maxLength: 200 }
+        libraryVersion: { type: string, minLength: 1, maxLength: 64 }
+        libraryState: { type: string, enum: [DRAFT, PUBLISHED, DEPRECATED] }
+        entryId: { type: string, minLength: 1, maxLength: 200 }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        kind: { type: string, enum: [FUNCTION, FUNCTION_BLOCK, CONVERSION] }
+        language: { type: string, enum: [ST, FBD] }
+        contentSha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        # Ba giá trị, và không giá trị nào nghĩa là "chưa biết". `NOT_STORED` là
+        # entry SYSTEM: registry mô tả CHỮ KÝ, phần hiện thực nằm trong firmware.
+        # `HASH_MISMATCH` là fail-closed — không trả `source`, và tuyệt đối không
+        # lùi về một revision khác.
+        availability: { type: string, enum: [AVAILABLE, NOT_STORED, HASH_MISMATCH] }
+        # VẮNG nghĩa là KHÔNG CÓ mã nguồn để đọc. Một chuỗi rỗng sẽ đọc như "khối
+        # này có mã nguồn, và nó rỗng" — câu dẫn tới một lần ghi đè mất mã.
+        source: { type: string, maxLength: 65536 }
+        interface: { type: object }
+        reason: { type: string, maxLength: 512 }
     ProgrammingLibraryEntryDiagnostic:
       description: >-
         Một phát hiện gắn vào ĐÚNG một trường của form. `field` dùng tên field

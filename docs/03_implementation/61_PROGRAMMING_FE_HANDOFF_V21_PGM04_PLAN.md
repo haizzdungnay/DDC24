@@ -743,7 +743,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 | `T61-401` | P0 | PROJECT Create/Edit drawer: Metadata → Interface → Implementation → Check → Review/Save; field validation và focus. | `T61-301`, `T61-106` | `DONE` (sửa lại ở `ISS-PGM04-11`, xem đính chính bên dưới) | 2,5 nd |
 | `T61-402` | P0 | Giữ ETag/idempotency/read-back; PUBLISHED edit tạo Draft minor; timeout reconcile; không có Publish giả. | `T61-401` | `DONE` (sửa lại ở `ISS-PGM04-12`, xem đính chính bên dưới) | 1 nd |
 | `T61-403` | P0 | Used-In lazy page + deep-link exact PGM-02 bằng `objectId`, giữ filter/returnTo và dirty guard. | `T61-104/304` | `DONE` | 1,5 nd |
-| `T61-404` | P1 | Preview/Open read-only cho entry và source/interface authoritative; unsupported metadata hiện rõ. | `T61-304` | `DONE` | 1 nd |
+| `T61-404` | P1 | Preview/Open read-only cho entry và source/interface authoritative; unsupported metadata hiện rõ. | `T61-304` | `DONE` (sửa lại ở `ISS-PGM04-13`, xem đính chính bên dưới) | 1 nd |
 | `T61-405` | P0 | Standalone Insert mở `TargetPouChooser`, kiểm Project/mode/language/type/selection rồi gọi shared insertion adapter. | `T61-203/403` | `DONE` | 2 nd |
 | `T61-406` | P0 | Zero-mutation guards: cancel/no-target/type mismatch/permission/offline/stale/REVIEW_REQUIRED; một success = một Undo. | `T61-405` | `DONE` | 1 nd |
 
@@ -789,7 +789,8 @@ trường mà client dùng để quyết định.
 **Ranh giới còn lại, ghi rõ chứ không giấu.** Máy chủ vẫn **không** trả lại
 `source` của entry đã lưu (`T61-404` giữ phần đó), nên khi sửa, ô mã nguồn bắt
 đầu **trống** và wizard nói ra lý do; Lưu vẫn bị chặn khi ô còn trống, nên không
-có đường nào ghi mã rỗng đè lên khối. Kiểm kiểu **cổng** là luật của FE — máy chủ
+có đường nào ghi mã rỗng đè lên khối. — *Ranh giới này đã ĐÓNG ở `ISS-PGM04-13`
+(#458): wizard nay nạp mã nguồn của đúng phiên bản đang sửa.* Kiểm kiểu **cổng** là luật của FE — máy chủ
 vẫn nhận mọi object JSON làm `interface`, đúng như trước lát này.
 
 **Đính chính `T61-402` (`ISS-PGM04-12`, đo `2026-09-05`).** ETag, khoá idempotency
@@ -818,6 +819,30 @@ bị từ chối là xung đột idempotency, vì `ifMatch` nằm trong hash ng�
 request. Đó là lý do phép đối soát dùng lại **nguyên vẹn** cả ba giá trị.
 
 **Tiêm lỗi 12/12 đỏ.**
+
+**Đính chính `T61-404` (`ISS-PGM04-13`, đo `2026-09-05`).** Inspector không có
+Preview, và hợp đồng đọc **không mang `source`**. Hệ quả kép: người dùng quyết
+định có chèn một khối hay không **mà không đọc được nó**, và wizard Sửa bắt đầu
+từ ô trống trong khi upsert là phép ghi đè **toàn phần**.
+
+**Nguyên nhân gốc.** Hợp đồng đọc chỉ có một đường **danh sách**, và một danh
+sách không phải chỗ để trả 64 KiB mã nguồn cho **mỗi** mục. Thiếu đường đọc theo
+từng entry nên không có chỗ nào để đặt `source`.
+
+**Điều được khoá.** Đường đọc nhận **định danh chính xác** `libraryRevisionId +
+entryId`; **không có** nhánh "bản mới nhất" ngầm. Máy chủ **tính lại** băm nội
+dung từ chính dữ liệu vừa đọc và chỉ trả `source` khi khớp băm đã lưu; ba giá trị
+`availability` (`AVAILABLE` / `NOT_STORED` / `HASH_MISMATCH`) đều nói ra một
+nguyên nhân người vận hành xử lý được, và không giá trị nào nghĩa là "chưa biết".
+
+**Một phát hiện dọc đường, ghi lại vì nó đổi cách viết test.** Nhánh
+`HASH_MISMATCH` **không dựng được qua đường ghi**: trigger SQLite của
+`library_entries` đã ép `content_sha256` khớp nội dung ở mọi lần ghi. Nó vẫn tới
+được bằng đường khác (phục hồi từ backup, migrate hỏng, tệp SQLite bị sửa ngoài
+ứng dụng), nên quyết định được tách thành hàm thuần và kiểm ở đúng lớp ấy — kèm
+**vế dương**, vì thiếu nó thì một hàm luôn trả `HASH_MISMATCH` vẫn qua được ca âm.
+
+**Tiêm lỗi 9/9 đỏ.**
 
 ---
 

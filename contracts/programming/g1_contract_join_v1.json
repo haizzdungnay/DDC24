@@ -7,10 +7,10 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "d5f08593df1db90f1cb3cec60bb7499a039b42291b256dc38cbd1391cf4fec5b",
+      "sha256": "29d316c42f374f15289296f405ef3fa1d1826d372ee45e51427c9375d9c68516",
       "major": 1,
-      "version": "1.35.0",
-      "operationCount": 42
+      "version": "1.36.0",
+      "operationCount": 43
     },
     {
       "name": "ipc",

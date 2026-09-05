@@ -635,3 +635,80 @@ func TestLibraryCheckRouteIsDryRunAndReportsFieldDiagnostics(t *testing.T) {
 		t.Fatalf("save sau check status=%d body=%s", save.Code, save.Body.String())
 	}
 }
+
+/*
+`T61-404` — route đọc mã nguồn nhận ĐỊNH DANH REVISION, và nó là bắt buộc.
+
+Ca quan trọng nhất ở đây không phải "đọc được", mà là "đọc ĐÚNG BẢN": một
+endpoint lặng lẽ lùi về bản mới nhất khi thiếu định danh sẽ làm người dùng đọc
+sai thứ thiết bị đang chạy, không có dấu hiệu nào.
+*/
+func TestLibraryEntrySourceRouteRequiresRevisionIdentity(t *testing.T) {
+	mux, projectID, etag := newLibraryTestMux(t, auth.RoleAdmin)
+	save := httptest.NewRecorder()
+	mux.ServeHTTP(save, libraryRequest(t, http.MethodPost,
+		"/api/v1/programming/projects/"+projectID+"/library/entries", libraryEntryBody("SCALE_LIN"),
+		etag, "20000000-0000-4000-8000-0000000000d1"))
+	if save.Code != http.StatusOK {
+		t.Fatalf("upsert status=%d body=%s", save.Code, save.Body.String())
+	}
+	var mutation struct {
+		Resource struct {
+			LibraryRevisionID string `json:"libraryRevisionId"`
+		} `json:"resource"`
+	}
+	if err := json.Unmarshal(save.Body.Bytes(), &mutation); err != nil {
+		t.Fatal(err)
+	}
+	revisionID := mutation.Resource.LibraryRevisionID
+	if revisionID == "" {
+		t.Fatal("mutation không trả libraryRevisionId; test mất ý nghĩa")
+	}
+
+	read := httptest.NewRecorder()
+	mux.ServeHTTP(read, libraryRequest(t, http.MethodGet,
+		"/api/v1/programming/library-entry-source?libraryRevisionId="+revisionID+"&entryId="+libraryTestEntry, "", "", ""))
+	if read.Code != http.StatusOK {
+		t.Fatalf("đọc source status=%d body=%s", read.Code, read.Body.String())
+	}
+	var response struct {
+		LibraryRevisionID string  `json:"libraryRevisionId"`
+		EntryID           string  `json:"entryId"`
+		Availability      string  `json:"availability"`
+		Source            *string `json:"source"`
+		ContentSHA256     string  `json:"contentSha256"`
+	}
+	if err := json.Unmarshal(read.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Availability != "AVAILABLE" || response.Source == nil {
+		t.Fatalf("availability=%q source=%v", response.Availability, response.Source)
+	}
+	if response.LibraryRevisionID != revisionID || response.EntryID != libraryTestEntry {
+		t.Fatalf("đọc ra sai định danh: %+v", response)
+	}
+	if !strings.Contains(*response.Source, "SCALE_LIN") {
+		t.Fatalf("source không phải mã đã ghi: %q", *response.Source)
+	}
+
+	// Thiếu định danh revision: 400. KHÔNG có nhánh "lấy bản mới nhất".
+	missing := httptest.NewRecorder()
+	mux.ServeHTTP(missing, libraryRequest(t, http.MethodGet,
+		"/api/v1/programming/library-entry-source?entryId="+libraryTestEntry, "", "", ""))
+	if missing.Code != http.StatusBadRequest {
+		t.Fatalf("thiếu libraryRevisionId status=%d body=%s", missing.Code, missing.Body.String())
+	}
+}
+
+// Đường ĐỌC: viewer gọi được. Đọc được mã nguồn của khối mình sắp chèn là điều
+// kiện để quyết định có chèn hay không; chặn nó lại làm người vận hành phải đoán.
+func TestLibraryEntrySourceRouteIsReadableByViewer(t *testing.T) {
+	mux, _, _ := newLibraryTestMux(t, auth.RoleViewer)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, libraryRequest(t, http.MethodGet,
+		"/api/v1/programming/library-entry-source?libraryRevisionId=missing&entryId="+libraryTestEntry, "", "", ""))
+	// Không tìm thấy là 404 — nghĩa là handler ĐÃ CHẠY, tức viewer không bị 403.
+	if recorder.Code == http.StatusForbidden || recorder.Code == http.StatusUnauthorized {
+		t.Fatalf("viewer bị chặn khỏi đường đọc: status=%d", recorder.Code)
+	}
+}

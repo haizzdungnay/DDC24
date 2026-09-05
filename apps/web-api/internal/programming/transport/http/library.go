@@ -209,6 +209,34 @@ type upsertLibraryEntryRequest struct {
 	`diagnostics` KHÔNG `omitempty`: mảng rỗng là câu trả lời "đã kiểm, sạch", và
 	để nó vắng thì client không phân biệt được với "máy chủ cũ chưa kiểm gì".
 */
+/*
+`T61-404` — hình dạng câu trả lời của đường đọc mã nguồn.
+
+`source` là con trỏ và `omitempty`: field VẮNG nghĩa là KHÔNG CÓ mã nguồn để
+đọc, còn một chuỗi rỗng sẽ đọc như "khối này có mã nguồn, và nó rỗng" — câu thứ
+hai là câu dẫn tới một lần ghi đè mất mã.
+
+`availability` KHÔNG `omitempty`: nó luôn có mặt và là thứ client phải xét trước
+khi hiển thị bất cứ gì. Cho nó vắng được nghĩa là một client sẽ đọc "vắng" thành
+"không sao" — đúng kết luận mà `HASH_MISMATCH` sinh ra để chặn.
+*/
+type libraryEntrySourceResponse struct {
+	Scope             string          `json:"scope"`
+	LibraryRevisionID string          `json:"libraryRevisionId"`
+	LibraryVersion    string          `json:"libraryVersion"`
+	LibraryState      string          `json:"libraryState"`
+	EntryID           string          `json:"entryId"`
+	Name              string          `json:"name"`
+	Kind              string          `json:"kind"`
+	Language          string          `json:"language,omitempty"`
+	ContentSHA256     string          `json:"contentSha256"`
+	Availability      string          `json:"availability"`
+	Source            *string         `json:"source,omitempty"`
+	Interface         json.RawMessage `json:"interface,omitempty"`
+	// Chỉ khác rỗng khi `availability` khác `AVAILABLE`.
+	Reason string `json:"reason,omitempty"`
+}
+
 type libraryEntryDiagnosticResponse struct {
 	Field   string `json:"field"`
 	Code    string `json:"code"`
@@ -243,6 +271,8 @@ func handleLibraryRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		handleSearchLibraries(w, r, correlationID, service)
 	case r.Method == http.MethodGet && path == "/api/v1/programming/library-usages":
 		handleLibraryUsage(w, r, correlationID, service)
+	case r.Method == http.MethodGet && path == "/api/v1/programming/library-entry-source":
+		handleLibraryEntrySource(w, r, correlationID, service)
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/library/entries/check") && r.PathValue("projectId") != "":
 		/* Nhánh Check đứng TRƯỚC nhánh upsert và so hậu tố đầy đủ. Đảo thứ tự
 		   hoặc so `Contains` sẽ làm một lần bấm "Kiểm tra" rơi vào đường ghi —
@@ -285,6 +315,42 @@ func handleSearchLibraries(w http.ResponseWriter, r *http.Request, correlationID
 	response := libraryPageResponse{Items: make([]libraryEntryResponse, 0, len(page.Items)), NextCursor: page.NextCursor}
 	for _, item := range page.Items {
 		response.Items = append(response.Items, toLibraryEntryResponse(item))
+	}
+	writeJSON(w, http.StatusOK, correlationID, response)
+}
+
+/*
+`T61-404` — đọc mã nguồn của MỘT entry, theo đúng một cặp (revision, entry).
+
+Đường dẫn PHẲNG với hai định danh ở query, cùng lý do đã ghi ở
+`handleLibraryUsage`: định danh revision của SYSTEM là một chuỗi có dấu hai chấm
+(`PROGRAMMING-POU-LIBRARY-REGISTRY-V1:rev-a.3:<hash>`), nhét nó vào path segment
+sẽ đẻ ra một lớp lỗi encoding không cần thiết.
+
+Route này là ĐỌC: quyền `read`, mọi vai đã đăng nhập đều gọi được. Đọc được mã
+nguồn của khối mình sắp chèn là điều kiện để quyết định có chèn hay không; chặn
+nó lại làm người vận hành phải đoán.
+
+Cả hai tham số đều BẮT BUỘC, và không có nhánh "lấy bản mới nhất". Một Preview
+lặng lẽ hiển thị bản mới nhất khi người dùng mở một bản cũ là cách họ đọc sai thứ
+thiết bị đang chạy mà không có dấu hiệu nào.
+*/
+func handleLibraryEntrySource(w http.ResponseWriter, r *http.Request, correlationID string,
+	service *programmingapplication.LibraryService) {
+	view, err := service.EntrySource(r.Context(), programmingapplication.LibraryEntrySourceCommand{
+		LibraryRevisionID: r.URL.Query().Get("libraryRevisionId"),
+		EntryID:           r.URL.Query().Get("entryId"),
+	})
+	if err != nil {
+		writeMappedError(w, err, correlationID)
+		return
+	}
+	response := libraryEntrySourceResponse{
+		Scope: view.Scope, LibraryRevisionID: view.LibraryRevisionID, LibraryVersion: view.LibraryVersion,
+		LibraryState: view.LibraryState, EntryID: view.EntryID, Name: view.Name, Kind: view.Kind,
+		Language: view.Language, ContentSHA256: view.ContentSHA256, Availability: view.Availability,
+		Source: view.Source, Reason: view.Reason,
+		Interface: programmingapplication.LibraryEntrySourceInterface(view.InterfaceJSON),
 	}
 	writeJSON(w, http.StatusOK, correlationID, response)
 }
