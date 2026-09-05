@@ -81,14 +81,32 @@ struct PendingWrite {
      * đường ghi cũ qua cờ dirty, không ai chờ kết quả. */
     std::string request_id;
     uint64_t deadline_ms = 0;   /* 0 = chỉ dùng TTL mặc định */
+    /* `ISS-PIO-23` — xác nhận thiết bị THẬT SỰ giữ giá trị sau khi ghi.
+     *
+     * Nguồn có hai: cờ trên chính request (đường control cũ, MBR-B107) HOẶC
+     * `verify_after_write` khai theo ĐIỂM trong profile. Điểm khai bật thì mọi
+     * lệnh ghi vào nó đều được xác nhận, kể cả lệnh không tự yêu cầu — đó là
+     * toàn bộ mục đích của một tuỳ chọn theo điểm. */
     bool     readback    = false;
+    /* Dung sai so sánh cho giá trị đã scale. `0` = suy theo `scale` của điểm.
+     * KHÔNG so bằng `==` trên số thực: `scale=0.1` biến 23.4 thành 234 rồi
+     * ngược lại thành 23.400000572, và một phép so bằng tuyệt đối sẽ báo lệch
+     * cho mọi lệnh ghi đúng. */
+    double   readback_tolerance = 0.0;
 };
 
 /* Kết quả một lệnh ghi (MBR-B107). `applied` CHỈ được dùng khi slave đã trả
  * lời; timeout là `timeout`, không phải applied (FW_SOM_DESIGN §8.2). */
 struct WriteResult {
     std::string request_id;
-    std::string status;          /* accepted | applied | rejected | timeout */
+    /* accepted | applied | rejected | timeout | unverified
+     *
+     * `ISS-PIO-23` thêm `unverified`: slave ĐÃ ACK lệnh ghi nhưng đọc lại không
+     * chứng minh được thiết bị giữ giá trị. Đây KHÔNG phải `applied` — nhiều
+     * VFD ACK rồi bỏ qua khi tham số bị khoá — và cũng KHÔNG phải `rejected`,
+     * vì lệnh đã thật sự đi xuống dây và có thể đã có tác dụng một phần. Gộp nó
+     * vào một trong hai đầu đều là nói sai một nửa. */
+    std::string status;
     std::string reason;
     uint8_t     exception_code = 0;
     bool        has_readback   = false;

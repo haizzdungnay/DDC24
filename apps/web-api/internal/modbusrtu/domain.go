@@ -131,6 +131,17 @@ type Point struct {
 	 * `StaleAfterMS` = 0 nghĩa là SUY từ chu kỳ hiệu lực, không phải "tắt". */
 	PollGroup    string `json:"poll_group,omitempty"`
 	StaleAfterMS int    `json:"stale_after_ms,omitempty"`
+	/* `ISS-PIO-23` — XÁC NHẬN SAU KHI GHI theo điểm (đề bài §26).
+	 *
+	 * Bật thì mọi lệnh ghi vào điểm này đều được đọc lại và ĐỐI CHIẾU, kể cả
+	 * lệnh không tự yêu cầu (lịch trình, chương trình ST, safe-state). Đọc lại
+	 * không khớp ⇒ kết quả là `unverified`, KHÔNG phải `applied`: nhiều VFD ACK
+	 * lệnh rồi bỏ qua khi tham số bị khoá.
+	 *
+	 * Mặc định tắt: đọc lại tốn thêm một giao dịch trên dây chung, nên nó là
+	 * lựa chọn cho thanh ghi actuator/config chứ không phải mặc định toàn hệ. */
+	VerifyAfterWrite  bool    `json:"verify_after_write,omitempty"`
+	ReadbackTolerance float64 `json:"readback_tolerance,omitempty"`
 }
 
 // MBR-B110: counter là uint64 xuyên suốt. uint32 tràn sau ~2,7 năm ở nhịp poll

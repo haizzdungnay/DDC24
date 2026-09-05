@@ -312,3 +312,33 @@ TEST_F(ProfileTest, UnknownPollGroupFallsBackToNormal)
     ASSERT_TRUE(load_device_profile(tmp_path, &prof));
     EXPECT_EQ(prof.points[0].poll_group, PollGroup::Normal);
 }
+
+/* `ISS-PIO-23` — `verify_after_write` phải tới `ProfilePoint`. Không tới thì
+ * tuỳ chọn "theo điểm" chỉ là chữ trong tệp cấu hình, và mọi lệnh ghi không tự
+ * yêu cầu readback (lịch trình, chương trình ST, safe-state) vẫn đi qua mà
+ * không ai xác nhận. */
+TEST_F(ProfileTest, ParsesVerifyAfterWriteAndTolerance)
+{
+    write_profile(R"json({"points":[
+        {"name":"setpoint","fc":3,"addr":10,"count":1,"type":"uint16","writable":true,
+         "verify_after_write":true,"readback_tolerance":0.5}
+    ]})json");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    ASSERT_EQ(prof.points.size(), 1u);
+    EXPECT_TRUE(prof.points[0].verify_after_write);
+    EXPECT_DOUBLE_EQ(prof.points[0].readback_tolerance, 0.5);
+}
+
+/* Mặc định TẮT: đọc lại tốn thêm một giao dịch trên dây chung, nên nó là lựa
+ * chọn cho thanh ghi actuator/config chứ không phải mặc định toàn hệ. */
+TEST_F(ProfileTest, VerifyAfterWriteDefaultsOff)
+{
+    write_profile(R"json({"points":[
+        {"name":"a","fc":3,"addr":0,"count":1,"type":"uint16","writable":true}
+    ]})json");
+    DeviceProfile prof;
+    ASSERT_TRUE(load_device_profile(tmp_path, &prof));
+    EXPECT_FALSE(prof.points[0].verify_after_write);
+    EXPECT_DOUBLE_EQ(prof.points[0].readback_tolerance, 0.0);
+}

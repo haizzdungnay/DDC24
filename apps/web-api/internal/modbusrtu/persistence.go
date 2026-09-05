@@ -324,6 +324,13 @@ func BuildProfile(device Device, points []Point) ([]byte, error) {
 		if point.StaleAfterMS > 0 {
 			row["stale_after_ms"] = point.StaleAfterMS
 		}
+		/* `ISS-PIO-23` — cùng lý do: chỉ ghi khi khác mặc định. */
+		if point.VerifyAfterWrite {
+			row["verify_after_write"] = true
+		}
+		if point.ReadbackTolerance > 0 {
+			row["readback_tolerance"] = point.ReadbackTolerance
+		}
 		if point.BitIndex != nil {
 			row["bit_index"] = *point.BitIndex
 		}

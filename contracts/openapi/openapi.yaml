@@ -5749,6 +5749,24 @@ components:
           description: "OD-MBRTU-003 — trích một bit trong register. Chỉ dùng với data_type=bool trên Holding/Input Register."
         min_value: { type: number, nullable: true, description: "Biên kỹ thuật; mẫu ngoài biên bị đánh BAD/OUT_OF_RANGE." }
         max_value: { type: number, nullable: true }
+        verify_after_write:
+          type: boolean
+          default: false
+          description: >
+            ISS-PIO-23 (đề bài §26) — đọc lại và ĐỐI CHIẾU sau mỗi lệnh ghi vào
+            điểm này, kể cả lệnh không tự yêu cầu (lịch trình, chương trình ST,
+            safe-state). Không khớp ⇒ kết quả là `unverified`, KHÔNG phải
+            `applied`: nhiều VFD ACK lệnh rồi bỏ qua khi tham số bị khoá. Mặc
+            định tắt vì đọc lại tốn thêm một giao dịch trên dây chung.
+            Chỉ dùng được với điểm `read_write`.
+        readback_tolerance:
+          type: number
+          minimum: 0
+          default: 0
+          description: >
+            ISS-PIO-23 — dung sai đối chiếu (đơn vị kỹ thuật). `0` = suy từ
+            `scale` (nửa bước lượng tử), để sai số làm tròn của chính
+            encode/decode không bị báo là thiết bị từ chối.
         poll_group:
           type: string
           enum: [fast, normal, slow]

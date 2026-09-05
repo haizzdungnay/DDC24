@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-23` Read-back verification cho điểm Modbus ghi được (#406, 2026-09-05)
+
+- **Triệu chứng.** `readback` **có** tồn tại từ `MBR-B107`, nhưng nó chỉ **đọc lại rồi báo con số** —
+  không bao giờ **so sánh** với giá trị vừa ghi. `status` vẫn là `applied` kể cả khi thiết bị trả về
+  một giá trị khác hẳn. Một VFD có tham số bị khoá sẽ ACK lệnh, giữ nguyên giá trị cũ, đọc lại ra
+  giá trị cũ — và sản phẩm báo *"applied"*. Đọc lại **thất bại** cũng vậy: bản cũ đặt
+  `reason = "readback_failed"` nhưng để nguyên `status = "applied"`, nên không consumer nào phân biệt
+  được. Đó đúng là "im lặng coi là thành công" mà đề bài §26 cấm.
+- **Cách sửa.** Thêm trạng thái `unverified` và **thật sự đối chiếu**: `verify_write_outcome` là hàm
+  thuần quyết định "khi nào được nói `applied`". Tách nó khỏi vòng lặp ghi vì đây là **luật**, không
+  phải I/O — một luật nằm lẫn trong `flush_pending` thì không có cách nào kiểm mà không dựng cả một
+  bus giả (và đúng vì thế mà lỗi trên sống sót từ `MBR-B107` tới giờ).
+- **`unverified` không gộp vào `rejected`.** Lệnh đã thật sự đi xuống dây và có thể đã có tác dụng
+  một phần; gộp vào một trong hai đầu đều là nói sai một nửa.
+- **Tuỳ chọn `verify_after_write` theo ĐIỂM**, không chỉ cờ trên request. Một điểm actuator đã khai
+  "phải kiểm chứng" thì mọi đường ghi tới nó đều phải kiểm chứng — nếu chỉ nghe cờ request thì đúng
+  những lệnh không tự yêu cầu (lịch trình, chương trình ST, safe-state) lại đi qua mà không ai xác
+  nhận. Bật cho điểm **chỉ đọc** bị từ chối: nó sẽ không bao giờ chạy, và im lặng nhận sẽ để người
+  dùng tin rằng đã bật được kiểm chứng.
+- **Coil cũng xác nhận được.** Bản `MBR-B107` chỉ đọc lại thanh ghi, nên đúng nhóm điểm nguy hiểm
+  nhất — relay đóng/cắt — không có cách nào kiểm chứng.
+- **Không so bằng `==` trên số thực.** Dung sai mặc định là **nửa bước lượng tử của chính `scale`**:
+  `scale=0.1` biến 23.4 thành 234 rồi ngược lại thành 23.400000572, nên một phép so bằng tuyệt đối
+  sẽ báo lệch cho **mọi** lệnh ghi đúng. Một hằng số tuyệt đối thay cho phép suy này sẽ hoặc quá chặt
+  với `scale` thô, hoặc quá lỏng với `scale` mịn.
+- **Mặc định tắt:** đọc lại tốn thêm một giao dịch trên dây chung, nên đây là lựa chọn cho thanh ghi
+  actuator/config chứ không phải mặc định toàn hệ; `BuildProfile` chỉ ghi khoá khi khác mặc định.
 ### Fixed — `ISS-PGM04-12` Đường ghi Thư viện phân biệt "hỏng" với "không rõ kết quả" (#457, 2026-09-05)
 
 - **Triệu chứng.** Mọi lỗi mạng của đường ghi rơi vào **một dải lỗi chung có nút bấm lại**. Đó là lời khuyên

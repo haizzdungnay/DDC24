@@ -142,3 +142,60 @@ func TestValidateBoundsStaleAfterMS(t *testing.T) {
 		t.Fatalf("ngưỡng stale 0 bị từ chối: %#v", messages)
 	}
 }
+
+/* `ISS-PIO-23` — xác nhận sau khi ghi. */
+
+func TestValidateVerifyAfterWriteRequiresWritablePoint(t *testing.T) {
+	// Bật cho điểm CHỈ ĐỌC là hiểu nhầm phải nói ra: nó sẽ không bao giờ chạy,
+	// và im lặng nhận sẽ để người dùng tin rằng đã bật được kiểm chứng.
+	messages := pollGroupMessages(t, func(p *Point) {
+		p.ReadWrite = "read"
+		p.VerifyAfterWrite = true
+	})
+	if messages["points[0].verify_after_write"] == "" {
+		t.Fatalf("bật verify cho điểm chỉ đọc đi lọt: %#v", messages)
+	}
+
+	if messages := pollGroupMessages(t, func(p *Point) {
+		p.ReadWrite = "read_write"
+		p.VerifyAfterWrite = true
+	}); len(messages) != 0 {
+		t.Fatalf("điểm read_write bật verify bị từ chối: %#v", messages)
+	}
+}
+
+func TestValidateRejectsNegativeReadbackTolerance(t *testing.T) {
+	messages := pollGroupMessages(t, func(p *Point) { p.ReadbackTolerance = -1 })
+	if messages["points[0].readback_tolerance"] == "" {
+		t.Fatalf("dung sai âm đi lọt: %#v", messages)
+	}
+}
+
+func TestBuildProfileEmitsVerifyAfterWriteOnlyWhenEnabled(t *testing.T) {
+	device := Device{DeviceID: "d1"}
+	base := Point{PointID: "p1", DeviceID: "d1", RegisterType: "holding_register",
+		Address: 10, DataType: "uint16", Enabled: FlexBool(true), ReadWrite: "read_write"}
+
+	raw, err := BuildProfile(device, []Point{base})
+	if err != nil {
+		t.Fatalf("BuildProfile lỗi: %v", err)
+	}
+	if strings.Contains(string(raw), "verify_after_write") {
+		t.Fatalf("mặc định vẫn ghi verify_after_write: %s", raw)
+	}
+
+	enabled := base
+	enabled.VerifyAfterWrite = true
+	enabled.ReadbackTolerance = 0.5
+	raw, err = BuildProfile(device, []Point{enabled})
+	if err != nil {
+		t.Fatalf("BuildProfile lỗi: %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "verify_after_write") {
+		t.Fatalf("không ghi verify_after_write: %s", text)
+	}
+	if !strings.Contains(text, "readback_tolerance") {
+		t.Fatalf("không ghi readback_tolerance: %s", text)
+	}
+}

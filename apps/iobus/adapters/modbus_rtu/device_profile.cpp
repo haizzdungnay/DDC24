@@ -221,6 +221,21 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
     if (jget_num(obj, "stale_after_ms", &stale) && stale > 0)
         pt->stale_after_ms = static_cast<uint32_t>(stale);
 
+    /* `ISS-PIO-23` — xác nhận sau khi ghi. Chỉ có nghĩa với điểm ghi được;
+     * bật cho điểm chỉ đọc là một hiểu nhầm phải nói ra, vì nó sẽ không bao giờ
+     * chạy và người dùng tin rằng đã bật được kiểm chứng. */
+    bool verify = false;
+    if (jget_bool(obj, "verify_after_write", &verify)) {
+        if (verify && !pt->writable) {
+            std::fprintf(stderr, "WARN  profile.verify_on_readonly_point name=%s — điểm chỉ đọc,"
+                         " verify_after_write không có tác dụng\n", pt->name.c_str());
+        }
+        pt->verify_after_write = verify;
+    }
+    double tol = 0.0;
+    if (jget_num(obj, "readback_tolerance", &tol) && tol > 0)
+        pt->readback_tolerance = tol;
+
     /* `expose_bacnet` — ĐỌC ĐỂ CẢNH BÁO, KHÔNG THỰC THI (OD-MBRTU-014).
      *
      * Khoá này từng được parse vào ProfilePoint nhưng chưa bao giờ có consumer

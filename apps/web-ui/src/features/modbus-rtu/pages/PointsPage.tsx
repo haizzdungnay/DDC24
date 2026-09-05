@@ -267,6 +267,25 @@ export function PointsPage() {
             <option value="holding_register">Holding Register</option>
             </select>
           </Field>
+          {/* `ISS-PIO-23` (đề bài §26) — xác nhận sau khi ghi.
+              `readback` đã tồn tại từ MBR-B107 nhưng chỉ ĐỌC LẠI rồi báo con số;
+              nó không bao giờ so sánh với giá trị vừa ghi, nên một VFD có tham số
+              bị khoá vẫn được báo "applied". */}
+          <Field label={pick('Xác nhận sau khi ghi', 'Verify after write')} hint={pick('Đọc lại và đối chiếu sau mỗi lệnh ghi. Không khớp ⇒ báo `unverified`, KHÔNG coi là thành công. Tốn thêm một giao dịch trên dây nên chỉ bật cho thanh ghi actuator/config.', 'Read back and compare after every write. A mismatch reports `unverified`, never success. Costs an extra transaction on the shared wire, so enable it for actuator/config registers.')}>
+            <label className="flex h-10 items-center gap-2 text-sm text-[var(--c-text)]">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[var(--c-accent)]"
+                aria-label="Verify after write"
+                checked={point.verify_after_write ?? false}
+                disabled={point.read_write !== 'read_write'}
+                onChange={(e) => setPoint({ ...point, verify_after_write: e.target.checked })}
+              />
+              {point.read_write === 'read_write'
+                ? pick('Bật đối chiếu', 'Compare after write')
+                : pick('Chỉ dùng được với điểm ghi được', 'Only for writable points')}
+            </label>
+          </Field>
           {/* `ISS-PIO-22` (đề bài §22) — nhóm poll theo ĐIỂM.
               Trước bản vá `poll_ms` chỉ có ở cấp Thiết bị, nên một điểm cấu hình
               (đọc một lần mỗi phút là đủ) bị poll cùng nhịp với tần số VFD và

@@ -51,6 +51,16 @@ struct ProfilePoint {
      * êm ái khi thiết bị ngừng trả lời đúng nó mà slave vẫn online. */
     uint32_t    stale_after_ms = 0;
 
+    /* `ISS-PIO-23` — xác nhận sau khi ghi, khai theo ĐIỂM (đề bài §26).
+     *
+     * Bật thì MỌI lệnh ghi vào điểm này đều được đọc lại và ĐỐI CHIẾU, kể cả
+     * lệnh không tự yêu cầu — đó là toàn bộ mục đích của một tuỳ chọn theo
+     * điểm. Mặc định tắt: đọc lại tốn thêm một giao dịch trên dây chung, nên nó
+     * là lựa chọn cho thanh ghi actuator/config chứ không phải mặc định toàn hệ. */
+    bool        verify_after_write = false;
+    /* Dung sai đối chiếu (đơn vị kỹ thuật). `0` = suy từ `scale`. */
+    double      readback_tolerance = 0.0;
+
     /* 2026-08-20 — `expose_bacnet` / `bacnet_object_type` / `bacnet_instance`
      * ĐÃ BỊ GỠ khỏi ProfilePoint (OD-MBRTU-014, quyết định sản phẩm).
      *

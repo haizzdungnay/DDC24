@@ -190,6 +190,13 @@ export interface ModbusRTUPoint {
   /** `ISS-PIO-22` — ngưỡng tự hạ STALE riêng cho điểm, tính từ mẫu ĐỌC THÀNH
    *  CÔNG gần nhất. `0`/vắng = SUY từ chu kỳ poll hiệu lực, KHÔNG phải "tắt". */
   stale_after_ms?: number
+  /** `ISS-PIO-23` (đề bài §26) — đọc lại và ĐỐI CHIẾU sau mỗi lệnh ghi.
+   *
+   *  Không khớp ⇒ kết quả là `unverified`, KHÔNG phải `applied`: nhiều VFD ACK
+   *  lệnh rồi bỏ qua khi tham số bị khoá. Chỉ dùng được với điểm `read_write`. */
+  verify_after_write?: boolean
+  /** Dung sai đối chiếu (đơn vị kỹ thuật). `0`/vắng = suy từ `scale`. */
+  readback_tolerance?: number
 }
 
 /** `ISS-PIO-22` — ba nhóm poll, khớp `poll_group_from_string` của firmware. */

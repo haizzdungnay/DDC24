@@ -284,6 +284,16 @@ func validatePoints(cfg Config, devices map[string]Device, opts ValidateOptions,
 		/* `ISS-PIO-22` — nhóm poll lạ bị TỪ CHỐI, không im lặng hạ về `normal`:
 		 * hạ im lặng sẽ để người vận hành tin rằng đã đặt được `slow` cho một
 		 * điểm cấu hình và đã tiết kiệm được băng thông RS-485. */
+		/* `ISS-PIO-23` — bật xác nhận cho một điểm CHỈ ĐỌC là hiểu nhầm phải nói
+		 * ra: nó sẽ không bao giờ chạy, và im lặng nhận sẽ để người dùng tin
+		 * rằng đã bật được kiểm chứng cho điểm đó. */
+		if point.VerifyAfterWrite && point.ReadWrite != "read_write" {
+			add(base+".verify_after_write", CodeUnsupported,
+				"chỉ dùng được với điểm read_write")
+		}
+		if point.ReadbackTolerance < 0 {
+			add(base+".readback_tolerance", CodeOutOfRange, "không được âm")
+		}
 		if !ValidPollGroup(point.PollGroup) {
 			add(base+".poll_group", CodeUnsupported, "phải là fast, normal hoặc slow")
 		}

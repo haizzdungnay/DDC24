@@ -5,6 +5,7 @@
  */
 #include "bus_worker.hpp"
 #include "poll_group.hpp"
+#include "write_verify.hpp"
 #include "fieldbus_time.hpp"
 #include "register_codec.hpp"
 
@@ -748,6 +749,21 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
     for (auto& w : batch) {
         if (w.slave_addr != sc.addr || w.submitted) continue;
 
+        /* `ISS-PIO-23` — tuỳ chọn `verify_after_write` khai theo ĐIỂM cũng bật
+         * xác nhận, không chỉ cờ trên request. Một điểm actuator đã khai "phải
+         * kiểm chứng" thì mọi đường ghi tới nó đều phải kiểm chứng — nếu chỉ
+         * nghe cờ request thì đúng những lệnh không tự yêu cầu (lịch trình,
+         * chương trình ST, safe-state) lại đi qua mà không ai xác nhận. */
+        for (const auto& pt : binding.profile.points) {
+            if (pt.addr != w.reg_addr) continue;
+            const bool coil_write = (w.fc == 5 || w.fc == 15);
+            const bool coil_point = (pt.fc == 1 || pt.fc == 5 || pt.fc == 15);
+            if (coil_write != coil_point) continue;
+            if (pt.verify_after_write) w.readback = true;
+            if (w.readback_tolerance <= 0.0) w.readback_tolerance = pt.readback_tolerance;
+            break;
+        }
+
         /* D-03: mốc TTL. Đường enqueue trực tiếp có thể chưa đặt, stamp ở lần
          * gặp đầu. */
         if (w.enqueued_ms == 0) w.enqueued_ms = now_ms;
@@ -837,16 +853,62 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
         WriteResult result;
         result.request_id = w.request_id;
         result.status     = "applied";
-        if (w.readback && (w.fc == 6 || w.fc == 16)) {
-            uint16_t rb[2] = {};
-            const int n = (w.fc == 16) ? 2 : 1;
-            if (modbus_read_registers(ctx, w.reg_addr, n, rb) >= 0) {
-                result.has_readback   = true;
-                result.readback_value = static_cast<double>(
-                    decode_register(rb, static_cast<uint16_t>(n), w.type, w.byte_order,
-                                    w.scale, w.offset));
+        if (w.readback) {
+            /* `ISS-PIO-23` — coil cũng phải xác nhận được. Bản MBR-B107 chỉ đọc
+             * lại thanh ghi, nên đúng nhóm điểm nguy hiểm nhất — relay đóng/cắt
+             * — không có cách nào kiểm chứng. */
+            bool read_ok = false;
+            double observed = 0.0;
+            if (w.fc == 5 || w.fc == 15) {
+                uint8_t rb_bit = 0;
+                if (modbus_read_bits(ctx, w.reg_addr, 1, &rb_bit) >= 0) {
+                    read_ok  = true;
+                    observed = rb_bit ? 1.0 : 0.0;
+                }
             } else {
-                result.reason = "readback_failed";
+                uint16_t rb[2] = {};
+                const int n = (w.fc == 16) ? 2 : 1;
+                if (modbus_read_registers(ctx, w.reg_addr, n, rb) >= 0) {
+                    read_ok  = true;
+                    observed = static_cast<double>(
+                        decode_register(rb, static_cast<uint16_t>(n), w.type, w.byte_order,
+                                        w.scale, w.offset));
+                }
+            }
+
+            /* Giá trị ĐÃ GHI để đối chiếu: với coil là 0/1 chuẩn hoá, với thanh
+             * ghi là chính `w.value` (đơn vị kỹ thuật, cùng hệ với `decode`). */
+            const double intended = (w.fc == 5 || w.fc == 15)
+                                        ? ((w.value != 0.0f) ? 1.0 : 0.0)
+                                        : static_cast<double>(w.value);
+
+            /* Luật "khi nào được nói applied" nằm ở `verify_write_outcome` —
+             * hàm thuần, kiểm được mà không cần dựng bus giả. Bản MBR-B107 để
+             * luật này lẫn trong vòng lặp và chỉ đặt `reason`, còn `status` vẫn
+             * là `applied`, nên không consumer nào phân biệt được một lệnh đã
+             * xác nhận thật với một lệnh chưa chứng minh được gì. */
+            const VerifyOutcome outcome =
+                verify_write_outcome(read_ok, intended, observed, w.scale, w.readback_tolerance);
+            result.has_readback   = read_ok;
+            result.readback_value = read_ok ? observed : 0.0;
+            result.status = outcome.status;
+            result.reason = outcome.reason;
+
+            if (result.status != std::string("applied")) {
+                metrics.record_write_failed(binding.global_idx);
+                if (!read_ok) {
+                    std::fprintf(stderr, "WARN  modbus.readback_failed bus=%u slave=%s addr=%u fc=%u"
+                                 " reg=%u — slave ACK lệnh ghi nhưng KHÔNG đọc lại được để xác nhận\n",
+                                 bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr);
+                } else {
+                    /* Ca mà issue nêu đích danh: nhiều VFD ACK lệnh rồi bỏ qua
+                     * khi tham số bị khoá. Báo `applied` ở đây là nói dối về một
+                     * thiết bị đang không nghe lời. */
+                    std::fprintf(stderr, "ERROR modbus.readback_mismatch bus=%u slave=%s addr=%u"
+                                 " fc=%u reg=%u written=%g read_back=%g — thiết bị KHÔNG giữ giá trị\n",
+                                 bus_.id, sc.name.c_str(), sc.addr, w.fc, w.reg_addr,
+                                 intended, observed);
+                }
             }
         }
         if (!w.request_id.empty() && result_sink_) result_sink_(result);
