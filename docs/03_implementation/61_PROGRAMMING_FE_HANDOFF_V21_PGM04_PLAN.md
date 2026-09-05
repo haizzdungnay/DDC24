@@ -944,11 +944,58 @@ dịch, không ai thấy.
 |---|---|---|---|---|---:|
 | `T61-501` | P0 | Unit/component tests cho view model, pagination, URL state, card/inspector/drawer/RBAC/full state. | WP-02..04 | `DONE` | 2 nd |
 | `T61-502` | P0 | Contract/Go/generator/registry parity và migration/restart tests. | WP-01 | `DONE` | 1 nd |
-| `T61-503` | P0 | Playwright mock route: desktop/mobile/keyboard/permission/offline/zero mutation. | `T61-501` | `DONE` | 1 nd |
+| `T61-503` | P0 | Playwright mock route: desktop/mobile/keyboard/**bốn vai RBAC**/offline/phân trang lỗi trang-N/zero mutation, và sổ kế toán cho mọi `test.skip`. | `T61-501` | `DONE` (sửa lại ở `ISS-PGM04-16`, xem đính chính bên dưới) | 1 nd |
 | `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/usage/deep-link/insert guard; anti-mock guard. | `T61-502/503` | `DONE` | 1,5 nd |
 | `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, scroll/sticky và responsive. | `T61-504` | `DONE` | 0,5 nd |
 | `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `DONE` | 1 nd |
 | `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `DONE` | 0,5 nd |
+
+**Đính chính `T61-503` (`ISS-PGM04-16`, đo `2026-09-05`).** Trạng thái `DONE` đã
+được ghi cho một suite **chỉ chạy được vai `admin`**, và cho hai fixture đã cũ đi
+tới mức làm hai case đỏ trên chính `main`. Năm khoảng cách thật:
+
+1. **Không có ma trận vai nào, và không thể có.** `build:e2e` đặt
+   `VITE_AUTH_MODE=mock`, còn nhánh mock của `AuthProvider` dựng phiên
+   `role: 'admin'` **viết cứng** bất kể ai đăng nhập — nên lane e2e không có
+   đường nào tới một phiên viewer hay operator. `programming.spec.ts` đã phải
+   ghi thẳng vào mã rằng "ma trận RBAC không kiểm được ở tầng này" và đẩy
+   evidence xuống mức component. Nay `mockRoleOf` suy vai từ **tên đăng nhập**
+   (một bảng ĐÓNG bốn tên; mọi tên khác giữ nguyên `admin`, nên không chỗ gọi
+   nào đang có đổi hành vi), và bốn vai chạy thật trên Chrome.
+2. **Kỳ vọng của ma trận suy TỪ HỢP ĐỒNG.** `PGM04_ROLE_MATRIX` đọc `roles` của
+   `upsertProgrammingLibraryEntry` trong `PROGRAMMING_ENDPOINTS` — bảng sinh từ
+   `openapi.yaml`. Viết tay `engineer: true` sẽ tạo bản sao thứ hai của cùng một
+   luật, và nếu ai đó siết cổng FE rồi sửa luôn ma trận thì test vẫn xanh trong
+   khi giao diện vừa chặn một thao tác máy chủ chấp nhận — đúng lỗi `T61-201` đã
+   phải sửa một lần.
+3. **Lane mock không có phân trang.** Mock luôn trả `nextCursor: null`, nên mọi
+   khẳng định về "trang-N lỗi" hay "giữ lại trang đã tải" **không thể viết**, và
+   tình trạng ấy đọc từ ngoài y hệt "đã phủ". Nay mock cắt trang thật, và có case
+   chứng minh danh sách đã tải **không biến mất** khi trang sau hỏng.
+4. **Hai fixture đã cũ đi và làm `main` đỏ.** (a) Fixture `/libraries` của lane
+   PGM-02 chỉ gửi `interface`, trong khi `T61-203` đã chấm dứt việc FE tự parse
+   `interface`; mọi mục hoá `SIGNATURE_UNAVAILABLE` và `AC-PGM02-004` đỏ.
+   (b) `ISS-PIO-*` thêm bốn nhóm vào `ProgrammingImpactKey` mà không cập nhật
+   fixture `impact`; trang fail-closed đúng như thiết kế và nút Đưa vào vận hành
+   khoá vĩnh viễn, làm journey `UJ-PROG-01..08` đỏ. **Cả hai lần sản phẩm đều
+   đúng; fixture mới là thứ sai.** Kèm theo một case đối chiếu fixture `impact`
+   với `IMPACT_GROUP_ORDER` — danh sách mà chính trang dùng để vẽ — nên nhóm thứ
+   mười ba sẽ làm đỏ ngay tại chỗ, kèm tên nhóm còn thiếu.
+5. **`test.skip` không có ai đối soát.** Một `test.skip` có điều kiện không sai —
+   desktop và khổ hẹp là hai lane. Cái sai là khi một lần bỏ qua **không có lane
+   nào gánh nó**: tổng kết in "95 passed, 23 skipped" và không ai đọc được rằng
+   phép kiểm ấy chưa từng chạy ở đâu. `PGM04_SKIP_LEDGER` bắt mỗi lần bỏ qua phải
+   khai lane gánh nó, và case đối soát đọc **thẳng tệp spec** nên một `test.skip`
+   mới quên khai sẽ làm đỏ.
+
+**Phát hiện ngoài phạm vi, KHÔNG sửa ở lát này.** Ma trận vai làm lộ một chỗ
+lệch giữa các bề mặt Programming: PGM-01 và PGM-04 mở đường ghi cho `engineer`
+(`roleCan(role, 'program.edit')`, đúng bảng `roles` của máy chủ), còn PGM-02,
+PGM-03, Runtime và Design đòi `roleAtLeast(role, 'admin')` — nên một `engineer`
+tạo/sửa được khối thư viện nhưng không sửa được POU. Máy chủ cho phép `engineer`
+trên cả hai. Đây là cùng lớp lỗi `T61-201` đã sửa ở đường RBAC, nhưng nó nằm ở
+tám tệp ngoài PGM-04 và đổi nó là một quyết định sản phẩm về *ai được sửa mã*,
+nên lát này chỉ ghi lại chứ không tự quyết.
 
 **Tổng 38 task, khoảng 49 người-ngày.** Đây là ước lượng planning, không phải
 cam kết lịch. Nếu Product bỏ metadata/Used-In/full visual parity, phải change-
