@@ -33,6 +33,39 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 const base = `${API_ORIGIN.replace(/\/$/, '')}/api/v1`
 
+/**
+ * `T61-503` / `ISS-PGM04-16` — vai trò của phiên GIẢ LẬP, suy từ tên đăng nhập.
+ *
+ * Chế độ `mock`/`none`/demo trước lát này dựng phiên `role: 'admin'` **viết
+ * cứng**, bất kể ai đăng nhập. Hệ quả đo được: lane e2e (`build:e2e` đặt
+ * `VITE_AUTH_MODE=mock`) **không có đường nào** dựng một phiên viewer hay
+ * operator, nên toàn bộ ma trận RBAC của Programming chỉ chạy được ở vai
+ * `admin` — và `programming.spec.ts` đã phải ghi thẳng vào mã rằng "ma trận
+ * RBAC không kiểm được ở tầng này". Một cổng chỉ kiểm vai mạnh nhất không phát
+ * hiện được đúng lớp lỗi mà RBAC sinh ra để chặn: một nút ghi bật lên cho
+ * người không có quyền ghi.
+ *
+ * Bảng dưới đây là một BẢNG ĐÓNG, không phải một phép đoán từ chuỗi: chỉ bốn
+ * tên đúng bằng bốn vai mới đổi vai. Mọi tên khác — gồm cả tên người dùng thật
+ * gõ trong bản demo — giữ nguyên `admin` như trước, nên không một chỗ gọi nào
+ * đang có đổi hành vi. Suy vai bằng cách khớp chuỗi lỏng (ví dụ "tên có chứa
+ * `viewer`") sẽ hạ quyền một người tên `Viewer Nguyen` trong bản demo, và họ
+ * không có cách nào biết vì sao.
+ *
+ * Đây CHỈ là đường giả lập. Nhánh `jwt` phía dưới vẫn đọc vai từ phản hồi của
+ * máy chủ và vẫn đưa vai lạ về `viewer` (F-07); lát này không chạm vào nó.
+ */
+const MOCK_ROLE_BY_USERNAME: Record<string, UserRole> = {
+  viewer: 'viewer',
+  operator: 'operator',
+  engineer: 'engineer',
+  admin: 'admin',
+}
+
+export function mockRoleOf(username: string): UserRole {
+  return MOCK_ROLE_BY_USERNAME[username.trim().toLowerCase()] ?? 'admin'
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const { pick } = useI18n()
@@ -79,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (password: string, username = 'admin') => {
     if (IS_DEMO || AUTH_MODE === 'mock' || AUTH_MODE === 'none') {
-      setSession({ username, role: 'admin', loginAt: new Date().toISOString() })
+      setSession({ username, role: mockRoleOf(username), loginAt: new Date().toISOString() })
       return
     }
 
