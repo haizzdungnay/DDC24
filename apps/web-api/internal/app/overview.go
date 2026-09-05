@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"mkddc-web/internal/capabilities"
+	webModbus "mkddc-web/internal/modbusrtu"
 )
 
 // OverviewSchemaVersion tăng khi hình dạng `OverviewResponse` đổi theo cách phá
@@ -251,6 +252,10 @@ type modbusHealthInput struct {
 	slaves     []SlaveTelemetry
 	buses      []BusTelemetry
 	configured int
+	// enabledBuses là tập bus được bật trong cấu hình đang chạy. Telemetry vẫn
+	// publish bus disabled ở trạng thái CLOSED để API chẩn đoán nói đúng hiện
+	// trạng, nhưng CLOSED có chủ ý không phải fault vận hành.
+	enabledBuses map[uint8]bool
 	// deviceIDFor tra `bus:slave` → deviceID đã cấu hình, và nameFor tra
 	// deviceID → tên hiển thị. Attention cần cả hai: drill-down đi theo ID,
 	// còn người đọc cần tên.
@@ -263,11 +268,26 @@ func overviewSlaveKey(busID, addr uint8) string {
 }
 
 func (a *App) readModbusHealthInput(ctx context.Context) (modbusHealthInput, bool) {
-	input := modbusHealthInput{deviceIDFor: map[string]string{}, nameFor: map[string]string{}}
+	input := modbusHealthInput{
+		deviceIDFor:  map[string]string{},
+		nameFor:      map[string]string{},
+		enabledBuses: map[uint8]bool{},
+	}
 	cfg, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
-	input.configured = len(cfg.Devices)
+	buses, _ := webModbus.MigrateBuses(cfg)
+	enabledBusNames := map[string]bool{}
+	for _, bus := range buses {
+		id := bus.NumericID()
+		if bool(bus.Enabled) && id >= 1 && id <= 255 {
+			input.enabledBuses[uint8(id)] = true
+			enabledBusNames[strings.ToLower(strings.TrimSpace(bus.BusID))] = true
+		}
+	}
 	index := newModbusDeviceIndex(cfg.Devices)
 	for _, device := range cfg.Devices {
+		if bool(device.Enabled) && enabledBusNames[strings.ToLower(strings.TrimSpace(modbusDeviceBus(device)))] {
+			input.configured++
+		}
 		if strings.TrimSpace(device.DisplayName) != "" {
 			input.nameFor[device.DeviceID] = device.DisplayName
 		}
@@ -512,7 +532,14 @@ func (a *App) overviewHealth(nowIso string, core CoreStatus, coreErr, pointsErr 
 		}
 		busFault := 0
 		for _, bus := range modbus.buses {
-			if bus.State != "" && !strings.EqualFold(bus.State, "open") && !strings.EqualFold(bus.State, "ok") {
+			// IOBus phát RUNNING cho bus đã mở và CLOSED cho bus disabled.
+			// Bản cũ chỉ coi OPEN/OK là khoẻ, đồng thời đếm cả bus disabled,
+			// nên cấu hình live 1 bus chạy + 1 bus tắt bị báo sai 2 fault.
+			if modbus.enabledBuses != nil && !modbus.enabledBuses[bus.ID] {
+				continue
+			}
+			if bus.State != "" && !strings.EqualFold(bus.State, "running") &&
+				!strings.EqualFold(bus.State, "open") && !strings.EqualFold(bus.State, "ok") {
 				busFault++
 			}
 		}

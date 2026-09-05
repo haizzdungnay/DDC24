@@ -8,6 +8,27 @@
 
 ## [Unreleased]
 
+### Fixed — `F-OVERVIEW-MODBUS-01` Không báo lỗi giả cho bus Modbus đang chạy hoặc đã tắt (2026-09-05)
+
+- **Triệu chứng TARGET:** sau khi đồng bộ và triển khai `main@2a3ba0ea`, API điểm đọc đúng
+  **72 point** (**24 Core + 48 `modbus_rtu`**), toàn bộ 48 point `GOOD`, 4/4 thiết bị online,
+  không có timeout/CRC; nhưng `/api/v1/overview` vẫn báo miền Modbus `fault`,
+  `reasonCode=bus_not_open`, `detailCount=2`.
+- **Nguyên nhân gốc:** IOBus phát trạng thái bus đang mở là `RUNNING`, còn Overview chỉ coi
+  `OPEN`/`OK` là khoẻ. Phép đếm cũng lấy mọi bus telemetry, kể cả `rs485-2` được cấu hình
+  `enabled=false` và vì thế ở `CLOSED`; một bus chạy + một bus tắt bị dựng thành hai lỗi.
+- **Cách sửa:** dựng tập bus enabled từ cấu hình đã migrate, chỉ đếm thiết bị thực sự enabled
+  trên bus enabled, chấp nhận `RUNNING` là trạng thái khoẻ và bỏ bus disabled khỏi phép tính
+  fault. Trường hợp bus enabled thật sự `CLOSED` vẫn giữ `fault/bus_not_open`; không có bus
+  enabled trả `unknown/not_configured`, không dựng `GOOD` giả.
+- **Kiểm chứng HOST:** test hồi quy mới **3/3 PASS**; `go vet ./...` PASS và
+  `go test ./... -count=1` PASS **21 gói**. Gate nền của cùng candidate: C++ Release bật
+  Modbus/BACnet/HMI **1.479/1.479 PASS**; FE **231/231 file, 2.932/2.932 test PASS**, lint và
+  `build:foxlinx` PASS. Ba test FE từng timeout khi chạy đồng thời với hai build C++ đạt
+  **113/113** khi cô lập và toàn bộ suite đạt khi chạy lại không tranh chấp tài nguyên.
+
+Refs: `F-OVERVIEW-MODBUS-01`, `ISS-PIO-31`.
+
 ### Fixed — `ISS-PGUI-02` Loại bỏ giao diện trộn EN/VI và raw detail phụ thuộc ngôn ngữ (#472, 2026-09-05)
 
 - **Triệu chứng (production, `PC-005`/`PM-006`/`pm-006`/`pm-014`).** Chuyển giao diện sang English
