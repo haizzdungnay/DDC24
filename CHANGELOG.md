@@ -56,6 +56,21 @@
 
 Refs: `ISS-PGUI-02`, `PC-005`, `PM-006`, `pm-006`, `pm-014`, `ISS-PIO-32`.
 
+### Fixed — Monitor I/O không hiển thị point Modbus RTU (2026-09-05)
+
+- **Triệu chứng:** chọn nguồn hoặc nhóm `Modbus RTU` trên `/monitor` làm các bảng
+  `DO/UI/AO/Virtual` về `(0)`, không có bảng Modbus; panel chi tiết vẫn giữ
+  `UI-01` ngoài kết quả lọc.
+- **Nguyên nhân gốc:** bộ lọc đã nhận đúng `kind=modbus_rtu`, nhưng model nhóm và
+  JSX chỉ dựng bốn nhóm local/virtual nên point Modbus bị loại ở bước trình bày.
+- **Cách sửa:** thêm section `MODBUS RTU POINTS`, dùng tập đã lọc để chọn point
+  cho panel chi tiết, và khóa hồi quy cho cả `group=modbus` lẫn
+  `kind=modbus_rtu`.
+- **Kiểm chứng HOST:** test hồi quy Monitor **3/3 PASS**; toàn bộ Vitest
+  **230/230 file · 2.892/2.892 test PASS**; lint PASS; `build:foxlinx` PASS,
+  chunk Programming **138,38/165 KiB gzip**. Gate tích hợp: C++ Release với
+  Modbus/BACnet/HMI ON **1.478 pass · 1 skip memlock · 0 fail**; Go vet PASS và
+  Go test `-count=1` PASS toàn bộ module.
 
 ### Changed — Triển khai `WEB-HIST-006` (`main@d1ab0830`) lên Foxlinx (2026-09-05)
 
