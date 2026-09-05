@@ -26,6 +26,34 @@
   Modbus/BACnet/HMI **1.479/1.479 PASS**; FE **231/231 file, 2.932/2.932 test PASS**, lint và
   `build:foxlinx` PASS. Ba test FE từng timeout khi chạy đồng thời với hai build C++ đạt
   **113/113** khi cô lập và toàn bộ suite đạt khi chạy lại không tranh chấp tài nguyên.
+- **Triển khai TARGET:** candidate `b7c3937b`, provenance `dirty=false`, ARM64 và ST public key
+  chế độ `RELEASE` đã cài lên `SOM-DDC-24-foxlinx`; backup trước thay đổi tại
+  `/var/backups/mkddc/overview-modbus-b7c3937b-20260905T161521Z/`. Sau hơn 10 phút, năm service
+  `mkddc-fakemcu/iobus/core/netcfg/web-pi` vẫn `active/running`, giữ nguyên PID và
+  `NRestarts=0`; `mkddc-pty` cùng `mkddc-hmi` tiếp tục `disabled/inactive`. Sáu mẫu liên tiếp trên
+  cổng nội bộ `8081` đều `status=ok`, đủ **6/6 check**. RootFS dùng **47%**, SoC **51,19 °C**;
+  transaction mạng vẫn `confirmed` và không bị deploy thay đổi.
+- **Read-back Modbus:** IOBus giữ UART IOP local `/tmp/mkddc-iop-a` do FakeMCU cấp, đồng thời fd
+  fieldbus thật trỏ `/dev/ttyS5`. API sau sửa trả **72 point = 24 Core + 48 Modbus**, 48/48
+  Modbus `GOOD`, 4/4 thiết bị online, 0 timeout/CRC; Overview đổi đúng từ lỗi giả
+  `fault/bus_not_open` sang `good/ok` với nguồn `iobus_telemetry`. Hai cảnh báo sau startup đều là
+  `context canceled` đúng lúc đóng WebSocket kiểm thử; không có restart, panic hay fatal.
+- **Trình duyệt TARGET:** Playwright với phiên đăng nhập thật xác nhận Dashboard hiện
+  `Modbus RTU · GOOD · Normal`; Monitor hiện `MODBUS RTU POINTS (48)`, point thật
+  `CK50804-DO1`, source `modbus_rtu`, bus/slave và `GOOD`. Desktop **1440×900** và mobile
+  **390×844** đều hiện dữ liệu; mobile không tràn ngang toàn trang. Phiên sạch cuối có **103**
+  request hoàn tất HTTP 200, Console **0 error / 0 warning**. Một phiên dài trước đó gặp ba
+  `ERR_NETWORK_CHANGED`, nhưng request tự phục hồi về 200, board không restart và lượt sạch không
+  tái hiện. Chrome DevTools MCP đã cấu hình nhưng phiên này không có browser surface, nên dùng
+  Playwright thật làm bằng chứng thay thế.
+- **Debug triển khai:** lần thử đầu dùng nhầm topology `mkddc-pty` (image không có `socat` và
+  FakeMCU tự tạo PTY), rollback bằng `cp -a` còn làm thư mục database thành `root:root`, khiến Web
+  crash-loop. Đã phục hồi ownership `mkddc:mkddc`, bỏ unit PTY khỏi luồng deploy và sửa cách copy
+  rollback. Candidate kế tiếp bị gắn `-dirty` vì symlink `node_modules`; đã bỏ symlink, build sạch
+  lại và chỉ chấp nhận gói có provenance `dirty=false`.
+- **Ranh giới bằng chứng:** không Commission, Enable hay ghi output. Modbus RTU có read-back qua
+  `/dev/ttyS5`, nhưng local I/O vẫn dùng FakeMCU; vì vậy đây là TARGET runtime PASS, **không** nâng
+  thành physical I/O HIL hoặc `RELEASE_READY`.
 
 Refs: `F-OVERVIEW-MODBUS-01`, `ISS-PIO-31`.
 
