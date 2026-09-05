@@ -25,6 +25,26 @@
   chunk Programming **138,38/165 KiB gzip**. Gate tích hợp: C++ Release với
   Modbus/BACnet/HMI ON **1.478 pass · 1 skip memlock · 0 fail**; Go vet PASS và
   Go test `-count=1` PASS toàn bộ module.
+- **Kiểm chứng sau sửa panel lịch sử:** Monitor **3/3 PASS**, toàn bộ FE
+  **2.892/2.892 PASS**, lint/chuỗi UI/build Foxlinx PASS. Một lần chạy toàn bộ
+  gặp lỗi chờ bất đồng bộ ở test bộ lọc Control Library; chạy riêng **36/36**
+  và chạy lại toàn bộ **2.892/2.892** đều PASS, không sửa mã Library trong lát này.
+- **Triển khai TARGET:** bundle từ `aeb47a58`, asset `index-SpCVUE_P.js`,
+  SHA-256 `5114e92ec7460223968b45baba4b3ef801b5b206c47130c1452aa7c2f8d18528`
+  khớp HOST và HTML đang phục vụ. Ba mẫu SSH lúc **12:42:12 / 12:42:17 /
+  12:42:23 UTC** đều health **6/6 ok**, `ext_count=48`, bốn service active và
+  `NRestarts=0`; Core/IOBus/Netcfg giữ PID, chỉ restart Web để đổi static FE.
+  Journal mức error trở lên từ **12:35 UTC** không có entry. Backup trước
+  bundle cuối tại `/opt/mkddc-backups/monitor-modbus-aeb47a58-20260905T123500Z/`;
+  bản trước toàn phiên còn tại `/opt/mkddc-backups/monitor-modbus-18877a30-20260905T122055Z/`.
+- **Trình duyệt:** Playwright chạy bundle TARGET với API fixture chỉ đọc
+  (1 UI + 48 Modbus), desktop **1440×900** và mobile **390×844** đều hiện nhóm
+  **48**, row/detail cùng ID, không rò `UI-01`, không tràn ngang toàn trang.
+  Panel nói rõ lịch sử chưa hỗ trợ và bỏ link Trends không khả dụng. Console
+  còn lỗi WebSocket xác thực vì token fixture; không có lỗi JavaScript mới
+  trong lượt nạp bundle cuối. Chrome DevTools MCP không khởi động được do
+  thiếu X server. Đây chưa phải bằng chứng browser tích hợp xác thực thật,
+  physical I/O/HIL hay `RELEASE_READY`.
 
 ### Changed — Triển khai `WEB-HIST-006` (`main@d1ab0830`) lên Foxlinx (2026-09-05)
 
