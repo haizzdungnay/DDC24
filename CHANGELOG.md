@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Changed — `ISS-STED-20` Hoà giải điều kiện cổng V&V với phạm vi phát hành V1.0 (#369/#367, 2026-09-05)
+
+- **Triệu chứng.** `REV-STED-IEC-001` §8.1 và thân #369 đều nói cổng `ISS-STED-20` *"chỉ chạy được khi
+  các nhánh `ISS-STED-01..19` đã vào `main`"*. Ngày 2026-09-04 chủ sở hữu phân loại `ISS-STED-16`
+  (#367 — `VAR_IN_OUT` + `ARRAY` tĩnh + `STRUCT`) là **`V1-DEFER`**, giữ issue OPEN và cấm thay đổi
+  source ở lane phát hành. Hai câu đó **mâu thuẫn nhau**: cổng đòi một năng lực mà chính quyền phát
+  hành đã tuyên bố nằm ngoài V1, nên nó **không bao giờ đóng được cho V1**.
+- **Nguyên nhân gốc.** Câu điều kiện được viết trước khi V1 chốt phạm vi, và quyết định hoãn tới nay
+  chỉ tồn tại dưới dạng **một bình luận GitHub** — không có chỗ nào trong hồ sơ để người ký đọc.
+- **Cách sửa.** Cấp `ADR-056` **Accepted** và thêm `REV-STED-IEC-001` §8.3: điều kiện của cổng cho
+  lượt ký đóng V1 đọc là *"mọi nhánh `01..19` **trừ những mã đã được phạm vi phát hành chính thức
+  hoãn**"*.
+- **Không nới lỏng cổng.** Ba ràng buộc đi kèm, thiếu một là việc hoãn **không có hiệu lực**: hoãn
+  phải là quyết định phạm vi **có ghi hồ sơ** (không phải một issue tình cờ chưa xong); issue được
+  hoãn vẫn OPEN và vẫn phải qua cổng trước lượt ký đóng của bản đưa nó trở lại; và hồ sơ ký đóng
+  **phải liệt kê tên** từng mã được hoãn — *một cổng bỏ qua thứ gì đó mà không nói ra là một cổng đã
+  ngừng làm cổng*, đúng loại "loại trừ không công bố" mà review này sinh ra để chấm dứt.
+- **`ADR-054` không bị đảo:** đây là quyết định về **thời điểm phát hành**, không phải về phạm vi
+  ngôn ngữ. IEC có `VAR_IN_OUT` thì sản phẩm vẫn phải làm — chỉ là không ở V1.0.
+
 ### Added — `ISS-PIO-30` Ghi hồ sơ: Modbus TCP ẩn có chủ ý (capability-gated) (#410, 2026-09-05)
 
 - **Bối cảnh.** `apps/iobus/adapters/modbus_rtu/modbus_tcp.{hpp,cpp}` tồn tại, được biên dịch và

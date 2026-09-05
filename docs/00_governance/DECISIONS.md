@@ -2,9 +2,11 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-05 (`ADR-055` **Accepted** — Modbus TCP là năng lực ẩn có
+**Cập nhật:** 2026-09-05 (`ADR-056` **Accepted** — `ISS-STED-16` là `V1-DEFER`
+và cổng `ISS-STED-20` đọc phụ thuộc theo phạm vi phát hành; `ADR-057` là số
+trống kế tiếp. Cùng ngày: `ADR-055` **Accepted** — Modbus TCP là năng lực ẩn có
 chủ ý, capability-gated, không phải mã chết; nguồn finding `REV-PIO-3SRC-001`,
-`F-PIO-024`; `ADR-056` là số trống kế tiếp. Trước đó: `ADR-054` **Accepted** —
+`F-PIO-024`. Trước đó: `ADR-054` **Accepted** —
 phạm vi ngôn ngữ ST bám IEC 61131-3 theo nguyên tắc chủ sở hữu ra ngày
 2026-08-31, nguồn finding `REV-STED-IEC-001`. Trước đó: `ADR-053` **Accepted**
 theo exact Candidate pin `413a043748dce3b44d2c5076412de761760ba17a` và
@@ -81,6 +83,7 @@ theo nghĩa EasySet/raw SHM. Áp quy tắc "hợp đồng thắng tài liệu".
 | ADR-048 | **Mô phỏng luật cảnh báo đi qua `POST /api/v1/alarm-settings/simulate`, là VỎ gọi `mkddc-alarm-sim`.** Thi hành `ADR-035`: nhận một `AlarmSetting` bản nháp + chuỗi mẫu `(t, value)`, trả các lần bật/tắt kèm mốc thời gian và mức nghiêm trọng. Thiếu binary ⇒ `503` nói rõ thiếu gì; **cấm** bản tính xấp xỉ ở Go hay FE, kể cả "gần đúng". Mô phỏng **không** chạm cấu hình đang lưu và không ghi audit thay đổi. Phục vụ `T57-2.13`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-049 | **Code-splitting theo route dùng `React.lazy` cho các nhánh NẶNG và HIẾM, không chia nhỏ toàn bộ.** Chia theo lô nghiệp vụ: Programming, Xu hướng/biểu đồ, Lịch vận hành, Modbus RTU. Bốn màn hình mở đầu ca trực (Landing, Giám sát, Cảnh báo, Chẩn đoán) **ở lại chunk chính** — chia chúng ra chỉ đổi một lần tải thành hai lần chờ. Mỗi ranh giới `lazy` phải có `Suspense` với khối trạng thái thật, không màn hình trắng. Số đo bắt buộc là **thời gian mở trang đầu trên board thật**, không phải kích thước tệp. Phục vụ `T57-4.2`. Mục nội tuyến bên dưới. | **Accepted 2026-08-19** — `AUTH-WEBUX-2026-08-19-01`; chữ ký người: `WAIVED FOR IMPLEMENTATION` |
 | ADR-053 | **PGM-02 Simulation dùng `mkddc-programming-sim-worker` ephemeral theo session, tách production Core/SHM/device/iobus/output/RETAIN; Web chỉ supervisor/RBAC/audit/quota, mutation admin-only.** [Hồ sơ](../adr/ADR-053-programming-simulation-worker-cach-ly.md). | **Accepted 2026-08-24** — `AUTH-PROG-2026-08-24-05`, exact Candidate pin `413a043748dce3b44d2c5076412de761760ba17a`; consumer/discipline/Verification/Document Control `WAIVED FOR IMPLEMENTATION`; R3 vẫn ORDERED sau `T59-813`, release NO-GO |
+| ADR-056 | **`ISS-STED-16` (#367 — `VAR_IN_OUT` + `ARRAY` tĩnh + `STRUCT`) là `V1-DEFER`; cổng `ISS-STED-20` (#369) đọc điều kiện phụ thuộc theo phạm vi phát hành, không theo "mọi mã 01..19".** V1.0 đã chốt ST/FBD + `PROGRAM`/`FUNCTION`/`FUNCTION_BLOCK` với profile kiểu tối thiểu `BOOL/INT/DINT/UINT/REAL/TIME`; ba năng lực trên không thuộc tập bắt buộc để mở `RELEASE_READY` V1. `ADR-054` (làm chuẩn theo IEC, phương án A) **không bị đảo** — đây là quyết định về THỜI ĐIỂM phát hành, không phải về phạm vi ngôn ngữ. #367 giữ **OPEN**, không thay đổi source ở lane release, và vẫn phải qua #369 trước lượt ký đóng của bản đưa nó trở lại phạm vi. Hồ sơ ký đóng V1 **phải liệt kê tên** từng mã được hoãn — một cổng bỏ qua thứ gì đó mà không nói ra là một cổng đã ngừng làm cổng. | **Accepted 2026-09-05** — chủ sở hữu phân loại lane phát hành 2026-09-04 tại #367; hoà giải ghi ở `REV-STED-IEC-001` §8.3 |
 | ADR-055 | **Modbus TCP là năng lực ẨN CÓ CHỦ Ý (capability-gated), không phải mã chết.** `apps/iobus/adapters/modbus_rtu/modbus_tcp.{hpp,cpp}` tồn tại, biên dịch và được `register_codec` dùng chung với đường RTU — nhưng KHÔNG có route, KHÔNG có schema và KHÔNG có trang. Đề bài §19 quy định: *"Nếu Rev A hiện chưa hỗ trợ Modbus TCP thì **không hiện tab này**"*, nên trạng thái hiện tại là **đúng đề bài**, không phải thiếu sót. Xoá mã này để "dọn dẹp" là một hồi quy: nó sẽ phải viết lại khi Rev B mở tab, và `register_codec` mất một consumer đang giữ cho đường mã hoá thanh ghi không rẽ nhánh theo giao thức. Mở tab là quyết định sản phẩm (Rev B), không phải một PR dọn dẹp. | **Accepted 2026-09-05** — nguồn `REV-PIO-3SRC-001`, finding `F-PIO-024`, đóng #410 |
 | ADR-054 | **Phạm vi ngôn ngữ ST bám IEC 61131-3: nguyên tắc áp cho cú pháp/ngữ nghĩa; `CASE` giữ kèm luật WCET; `PID`/`HYSTERESIS`/`SCALE`/`DEADBAND` giữ nhưng bắt buộc đánh dấu là mở rộng nhà sản xuất; `FOR`/`WHILE`/`REPEAT` giữ loại trừ vì `P1`; hệ kiểu làm theo đợt, đợt gần `VAR_IN_OUT`+`ARRAY` tĩnh+`STRUCT`.** Mục nội tuyến bên dưới. | **Accepted 2026-08-31** — nguồn `REV-STED-IEC-001`; đóng #356, đổi phạm vi #367, định hướng #368, gỡ chặn #357 |
 
@@ -1612,16 +1615,19 @@ làm chính xác điều đó.
 - **Không** đổi một dòng mã compiler nào ở quyết định này; `PID` và ba khối mở
   rộng **được giữ nguyên**, chỉ thêm nhãn phân loại.
 
-ADR được cấp và Accepted mới nhất: **`ADR-055`** (2026-09-05, Modbus TCP ẩn có
-chủ ý — capability-gated). Trước đó là **`ADR-054`** (2026-08-31, phạm vi ngôn
+ADR được cấp và Accepted mới nhất: **`ADR-056`** (2026-09-05, `ISS-STED-16` là
+`V1-DEFER`; cổng `ISS-STED-20` đọc phụ thuộc theo phạm vi phát hành). Trước đó
+là **`ADR-055`** (2026-09-05, Modbus TCP ẩn có chủ ý — capability-gated) và
+**`ADR-054`** (2026-08-31, phạm vi ngôn
 ngữ ST bám IEC 61131-3) và
 [`ADR-053`](../adr/ADR-053-programming-simulation-worker-cach-ly.md) theo
-`AUTH-PROG-2026-08-24-05`. Số ADR tiếp theo còn trống: **`ADR-056`**.
+`AUTH-PROG-2026-08-24-05`. Số ADR tiếp theo còn trống: **`ADR-057`**.
 
 ## Lịch sử cập nhật gần nhất
 
 | Ngày | Nội dung |
 |---|---|
+| 2026-09-05 | Cấp `ADR-056` **Accepted**: `ISS-STED-16` (#367) là **`V1-DEFER`** — `VAR_IN_OUT`/`ARRAY`/`STRUCT` không thuộc tập bắt buộc mở `RELEASE_READY` V1. Cổng `ISS-STED-20` (#369) đọc phụ thuộc theo **phạm vi phát hành**, không theo "mọi mã 01..19"; hồ sơ ký đóng V1 phải liệt kê tên từng mã được hoãn. `ADR-054` không bị đảo — đây là quyết định về thời điểm, không phải phạm vi ngôn ngữ. Nguồn: phân loại lane phát hành của chủ sở hữu 2026-09-04 tại #367. Số trống kế tiếp `ADR-057`. |
 | 2026-09-05 | Cấp `ADR-055` **Accepted**: Modbus TCP là năng lực **ẩn có chủ ý (capability-gated)**, không phải mã chết bị bỏ quên. `modbus_tcp.{hpp,cpp}` tồn tại và được `register_codec` dùng, nhưng không có route/schema/trang — đúng đề bài §19 (*"Rev A chưa hỗ trợ thì không hiện tab này"*). Xoá để "dọn dẹp" là hồi quy; mở tab là quyết định sản phẩm Rev B. Nguồn: `REV-PIO-3SRC-001`, `F-PIO-024`, đóng #410. Số trống kế tiếp `ADR-056`. |
 | 2026-08-31 | Cấp `ADR-054` **Accepted**: phạm vi ngôn ngữ ST bám IEC 61131-3 — nguyên tắc áp cho cú pháp, `CASE` giữ (kèm luật WCET), `PID`/`HYSTERESIS`/`SCALE`/`DEADBAND` giữ nhưng phải đánh dấu là mở rộng nhà sản xuất, vòng lặp giữ loại trừ vì `P1`, hệ kiểu làm theo đợt (`VAR_IN_OUT`+`ARRAY`+`STRUCT` trước). Nguồn: `REV-STED-IEC-001`. Số trống kế tiếp `ADR-055`. |
 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`, pin exact Candidate commit `413a043748dce3b44d2c5076412de761760ba17a` và chuyển `ADR-053` từ Proposed sang Accepted cho implementation; giữ dependency R1→R2→R3, maturity/evidence trung thực và `RELEASE_READY=NO-GO`. |
