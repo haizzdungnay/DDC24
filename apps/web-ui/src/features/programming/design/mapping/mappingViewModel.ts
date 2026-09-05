@@ -1,4 +1,5 @@
 import { collectFbdInterfaceVariables, type FbdDocument } from '../../fbd/model'
+import { codeReason, serverReasons, type MappingReason } from './mappingReasons'
 import { collectStInterfaceVariables } from '../editor/stInterfaceVariables'
 import type {
   ProgrammingDraftDocument,
@@ -29,7 +30,14 @@ export type CatalogTruthState = {
 export interface MappingCompatibility {
   assignable: boolean
   unitWarning: boolean
-  reasons: string[]
+  /**
+   * `ISS-PGUI-02` — MÃ lý do, không phải câu chữ.
+   *
+   * Tầng này thuần và không có `pick`, nên mọi câu nó tự dựng sẽ mãi mãi là
+   * tiếng Việt và sẽ hiện ra giữa giao diện English. Dịch ở lớp vẽ bằng
+   * `mappingReasonText`.
+   */
+  reasons: MappingReason[]
 }
 
 export interface MappingVariableRow {
@@ -66,7 +74,7 @@ export interface MappingPointRow {
   observedAt?: string
   eligibility: MapEligibility
   compatible: boolean
-  compatibilityReasons: string[]
+  compatibilityReasons: MappingReason[]
   suggestionScore?: number
   /** `ISS-PIO-07` — thiết bị công nghệ (`ADR-042`). Rỗng = CHƯA GÁN. */
   equipment?: string
@@ -158,18 +166,22 @@ function isOutput(direction: string): boolean {
  * Vắng `entry.mapping` (server đời cũ) thì FAIL-CLOSED. Suy lại ở đây là dựng
  * lại đúng bản luật thứ hai vừa gỡ — và một bản dự phòng "tạm thời" sẽ sống lâu
  * đúng bằng tuổi thọ của hệ thống. */
-function supportEligibility(direction: string, entry: ProgrammingPointCatalogEntry): { eligibility: MapEligibility; reasons: string[] } {
-  if (direction === 'INOUT') return { eligibility: 'UNSUPPORTED_DIRECTION', reasons: ['Core Rev A chưa hỗ trợ VAR_IN_OUT'] }
+function supportEligibility(direction: string, entry: ProgrammingPointCatalogEntry): { eligibility: MapEligibility; reasons: MappingReason[] } {
+  if (direction === 'INOUT') {
+    return { eligibility: 'UNSUPPORTED_DIRECTION', reasons: [codeReason('UNSUPPORTED_INOUT')] }
+  }
 
   const decision = entry.mapping ? (isOutput(direction) ? entry.mapping.output : entry.mapping.input) : undefined
   if (!decision) {
     return {
       eligibility: 'SERVER_DECISION_MISSING',
-      reasons: ['Máy chủ chưa trả quyết định eligibility cho điểm này nên chưa map được'],
+      reasons: [codeReason('SERVER_DECISION_MISSING')],
     }
   }
   if (decision.status === 'SUPPORTED') return { eligibility: 'SUPPORTED', reasons: [] }
-  return { eligibility: decision.status, reasons: decision.reasons }
+  /* `ISS-PIO-32` — nguyên nhân lấy NGUYÊN VĂN từ máy chủ; FE không mã hoá lại
+     một câu nó không kiểm soát. */
+  return { eligibility: decision.status, reasons: serverReasons(decision.reasons) }
 }
 
 function compatibilityFor(
@@ -180,18 +192,18 @@ function compatibilityFor(
   truth: CatalogTruthState,
 ): MappingCompatibility & { eligibility: MapEligibility } {
   if (truth.status !== 'ready' || truth.complete === false) {
-    return { assignable: false, unitWarning: false, reasons: ['Catalog Point chưa xác minh đầy đủ hoặc đã stale'], eligibility: truth.status === 'error' ? 'CATALOG_STALE' : 'PAGING_INCOMPLETE' }
+    return { assignable: false, unitWarning: false, reasons: [codeReason('CATALOG_UNVERIFIED')], eligibility: truth.status === 'error' ? 'CATALOG_STALE' : 'PAGING_INCOMPLETE' }
   }
   const support = supportEligibility(direction, entry)
   if (support.eligibility !== 'SUPPORTED') return { assignable: false, unitWarning: false, reasons: support.reasons, eligibility: support.eligibility }
 
-  const reasons: string[] = []
-  if (entry.dataType !== type) reasons.push('Kiểu dữ liệu không khớp')
-  if (isOutput(direction) && (!entry.writable || !['WRITE', 'READ_WRITE'].includes(entry.direction))) reasons.push('Point không có quyền ghi')
-  if (!isOutput(direction) && !['READ', 'READ_WRITE'].includes(entry.direction)) reasons.push('Point không có quyền đọc')
+  const reasons: MappingReason[] = []
+  if (entry.dataType !== type) reasons.push(codeReason('TYPE_MISMATCH'))
+  if (isOutput(direction) && (!entry.writable || !['WRITE', 'READ_WRITE'].includes(entry.direction))) reasons.push(codeReason('NOT_WRITABLE'))
+  if (!isOutput(direction) && !['READ', 'READ_WRITE'].includes(entry.direction)) reasons.push(codeReason('NOT_READABLE'))
   const unitWarning = Boolean(unit && entry.unit && unit !== entry.unit)
-  if (unitWarning) reasons.push('Đơn vị không khớp')
-  if (entry.quality !== 'GOOD') reasons.push(`Quality ${entry.quality} không đạt REQUIRE_GOOD`)
+  if (unitWarning) reasons.push(codeReason('UNIT_MISMATCH'))
+  if (entry.quality !== 'GOOD') reasons.push(codeReason('QUALITY_NOT_GOOD', entry.quality))
   const qualityBlocked = entry.quality !== 'GOOD'
   const assignable = reasons.length === 0
   return { assignable, unitWarning, reasons, eligibility: qualityBlocked ? 'QUALITY_BLOCKED' : assignable ? 'SUPPORTED' : 'INCOMPATIBLE' }
@@ -233,7 +245,7 @@ export function buildMappingVariableRows(document: ProgrammingDraftDocument, cat
         freshness: 'UNAVAILABLE',
         bindingStatus: 'POINT_UNAVAILABLE',
         eligibility: 'UNSUPPORTED_IDENTITY',
-        compatibility: { assignable: false, unitWarning: false, reasons: ['Point không còn trong catalog authority'] },
+        compatibility: { assignable: false, unitWarning: false, reasons: [codeReason('POINT_NOT_IN_CATALOG')] },
       }
     }
     const result = compatibilityFor(variable.direction, binding.dataType, binding.unit, point, truth)
@@ -244,6 +256,11 @@ export function buildMappingVariableRows(document: ProgrammingDraftDocument, cat
       point: binding.point,
       pointName: point.name,
       liveValue: point.value,
+      /* Mốc đọc của chính điểm đang gắn. Thiếu dòng này, `MappingVariableRow`
+         không bao giờ có `observedAt`, nên cột "Cập nhật" của bảng Ánh xạ đã
+         gán và ô "Observed" của Inspector VĨNH VIỄN vẽ `—` — một ô chết trông
+         y hệt "máy chủ không đọc được mốc thời gian". */
+      observedAt: point.observedAt,
       liveQuality: truth.status === 'error' || truth.complete === false ? 'STALE' : point.quality,
       freshness: freshnessFor(point, truth),
       bindingStatus: result.eligibility === 'INCOMPATIBLE' ? 'INCOMPATIBLE' : 'MAPPED',
@@ -395,10 +412,18 @@ export function rankPointRows(rows: MappingPointRow[], variable: { name: string;
   }).sort((a, b) => (b.suggestionScore ?? 0) - (a.suggestionScore ?? 0) || a.key.localeCompare(b.key))
 }
 
-export function formatMappingValue(value: unknown): string {
+/**
+ * `ISS-PGUI-02` — `pick` là THAM SỐ BẮT BUỘC, không có mặc định.
+ *
+ * Hàm này từng trả thẳng "Tắt"/"Bật", nên bốn bề mặt Mapping in hai chữ tiếng
+ * Việt ấy giữa giao diện English. Cho `pick` một giá trị mặc định sẽ khiến chỗ
+ * gọi mới quên truyền mà vẫn biên dịch được — đúng cách lỗi này quay lại. Số
+ * và chuỗi giữ nguyên: chúng là giá trị đo được, không phải chữ để dịch.
+ */
+export function formatMappingValue(value: unknown, pick: (vi: string, en: string) => string): string {
   if (value === null || value === undefined) return '—'
-  if (value === false) return 'Tắt'
-  if (value === true) return 'Bật'
+  if (value === false) return pick('Tắt', 'Off')
+  if (value === true) return pick('Bật', 'On')
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '—'
   return String(value)
 }

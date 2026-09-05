@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { pointDisplayId, pointKindLabel, pointSourceKind, pointSourceLabel } from './pointSourceLabels'
 
+const pickVi = (vi: string, _en: string) => vi
+const pickEn = (_vi: string, en: string) => en
+
 /* ISS-PIO-09 (F-PIO-026) — nhãn nguồn của hàng Point, và quyết định `AO`/`UO`
  * của chủ sở hữu: giữ `AO` xuyên suốt code/API/SHM để KHÔNG phá contract, chỉ
  * giao diện được hiện "UO — Universal Output". */
@@ -21,12 +24,19 @@ describe('pointSourceKind', () => {
 
 describe('pointKindLabel', () => {
   it('chỉ AO được đổi nhãn thành UO', () => {
-    expect(pointKindLabel('AO')).toBe('UO')
-    expect(pointKindLabel('UI')).toBe('UI')
-    expect(pointKindLabel('DO')).toBe('DO')
-    expect(pointKindLabel('VP')).toBe('VP')
-    expect(pointKindLabel('MB_RTU')).toBe('MB_RTU')
-    expect(pointKindLabel('ALL')).toBe('Tất cả')
+    expect(pointKindLabel('AO', pickVi)).toBe('UO')
+    expect(pointKindLabel('UI', pickVi)).toBe('UI')
+    expect(pointKindLabel('DO', pickVi)).toBe('DO')
+    expect(pointKindLabel('VP', pickVi)).toBe('VP')
+    expect(pointKindLabel('MB_RTU', pickVi)).toBe('MB_RTU')
+    expect(pointKindLabel('ALL', pickVi)).toBe('Tất cả')
+    /* `ISS-PGUI-02` — chỉ `ALL` là chữ cho người đọc. Bốn nhãn còn lại là ĐỊNH
+       DANH kỹ thuật và phải GIỮ NGUYÊN ở mọi ngôn ngữ: dịch chúng sẽ làm nhãn
+       trên màn hình không còn khớp tài liệu và API. */
+    expect(pointKindLabel('ALL', pickEn)).toBe('All')
+    for (const kind of ['AO', 'UI', 'DO', 'VP', 'MB_RTU'] as const) {
+      expect(pointKindLabel(kind, pickEn)).toBe(pointKindLabel(kind, pickVi))
+    }
   })
 
   it('UO là NHÃN, không phải giá trị — nhóm kênh trên dây vẫn là AO', () => {

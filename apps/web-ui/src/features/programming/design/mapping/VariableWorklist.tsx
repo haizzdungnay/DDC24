@@ -3,6 +3,7 @@ import { StatusBadge } from '../../../../shared/components/StatusBadge'
 import { Button } from '../../../../shared/components/Button'
 import { useI18n } from '../../../../shared/i18n'
 import { formatMappingValue, type MappingVariableRow } from './mappingViewModel'
+import { mappingReasonText } from './mappingReasons'
 
 export function VariableWorklist({ rows, selectedId, onSelect, onOpenSource, mutationsBlocked }: {
   rows: MappingVariableRow[]
@@ -32,8 +33,8 @@ export function VariableWorklist({ rows, selectedId, onSelect, onOpenSource, mut
               <span className="flex items-center truncate text-xs text-[var(--c-text-dim)]" title={row.programName}><span className="truncate">{row.programName}</span></span>
               <span className="flex items-center gap-1 text-xs font-semibold text-[var(--c-text-dim)]">{row.direction === 'INPUT' ? <ArrowDownToLine className="h-3.5 w-3.5 text-[var(--c-accent)]" aria-hidden="true" /> : row.direction === 'OUTPUT' ? <ArrowUpFromLine className="h-3.5 w-3.5 text-[var(--c-good-fg)]" aria-hidden="true" /> : <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />}{row.direction}</span>
               <span className="text-xs text-[var(--c-text-dim)]"><strong className="block text-[var(--c-text)]">{row.type}</strong>{row.bindingStatus}</span>
-              <span className="min-w-0 text-xs"><strong className="block truncate text-[var(--c-text)]">{row.pointName ?? '—'}</strong><span className="text-[var(--c-text-dim)]">{row.compatibility.reasons[0] ?? 'Read-back authority'}</span></span>
-              <span className="flex items-start gap-2 text-xs"><strong className="font-mono text-[var(--c-text)]">{formatMappingValue(row.liveValue)}</strong><StatusBadge state={qualityState} label={row.liveQuality} /></span>
+              <span className="min-w-0 text-xs"><strong className="block truncate text-[var(--c-text)]">{row.pointName ?? '—'}</strong><span className="text-[var(--c-text-dim)]">{row.compatibility.reasons[0] ? mappingReasonText(row.compatibility.reasons[0], pick) : 'Read-back authority'}</span></span>
+              <span className="flex items-start gap-2 text-xs"><strong className="font-mono text-[var(--c-text)]">{formatMappingValue(row.liveValue, pick)}</strong><StatusBadge state={qualityState} label={row.liveQuality} /></span>
               <div className="flex flex-wrap items-center justify-end gap-1">
                 <Button size="sm" variant="ghost" icon={<ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onOpenSource(row)}>{pick('Mở nguồn', 'Open source')}</Button>
                 <Button size="sm" variant="secondary" disabled icon={<Unlink className="h-3.5 w-3.5" aria-hidden="true" />} title={mutationsBlocked ? pick('Phase 1A read-only: Map sẽ mở sau capability/quality/replay/pagination gates', 'Phase 1A read-only: Map will open after capability/quality/replay/pagination gates') : pick('Mapping bị khóa theo eligibility', 'Mapping blocked by eligibility')} aria-label={`${pick('Ánh xạ', 'Map')} ${row.programName} · ${row.name}`}>Map</Button>
