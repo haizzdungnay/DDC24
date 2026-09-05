@@ -2041,13 +2041,35 @@ func (s *Store) LibraryCompatibilityFacts(ctx context.Context, projectID string)
 		return LibraryCompatibilityFacts{}, err
 	}
 
-	/* Revision đang vận hành = `new_revision_id` của lần Commission SUCCEEDED
+	/* Revision đang vận hành = `new_revision_id` của lần Commission THÀNH CÔNG
 	   gần nhất trong Project. `previous_revision_id` không dùng ở đây: nó là
-	   thứ đã bị thay thế. */
+	   thứ đã bị thay thế.
+
+	   `T61-504` — "thành công" đọc từ `operations.state`, KHÔNG từ
+	   `commission_records.result`.
+
+	   Bản trước lọc `c.result='SUCCEEDED'`. Cột ấy được ghi từ **result code**
+	   của operation, và result code của một lần Commission thành công là
+	   `COMMITTED` (`operations.go`, hai nhánh `transition(... "SUCCEEDED",
+	   "COMMITTED", "COMMITTED" ...)`) — chuỗi `SUCCEEDED` không bao giờ nằm ở
+	   cột đó. Nên điều kiện KHÔNG BAO GIỜ đúng, và hệ quả không phải một chi
+	   tiết: `HasActiveRevision` luôn `false`, `PinnedVersions` luôn rỗng, nên
+	   **`compatibility` của mọi entry PROJECT trên mọi thiết bị luôn là
+	   `UNKNOWN`**. Cả `COMPATIBLE` lẫn `REQUIRES_MIGRATION` — toàn bộ read model
+	   `T61-101` — chưa từng xuất hiện trong sản phẩm. Không test nào bắt được vì
+	   test của lớp application tự dựng `LibraryCompatibilityFacts` bằng tay, tức
+	   kiểm bộ phân loại chứ không kiểm câu truy vấn nuôi nó.
+
+	   Nay lọc theo trạng thái TERMINAL của chính operation. Đó là nguồn đúng:
+	   store chỉ cho ghi `CommissionRecord` cùng lúc operation vào trạng thái
+	   terminal (`UpdateOperation`), nên `state='SUCCEEDED'` là định nghĩa của
+	   "lần Commission này thành công" — độc lập với từ vựng của result code, và
+	   không cần migration cho dữ liệu đã ghi. */
 	var activeRevisionID string
 	err := s.db.QueryRowContext(ctx, `SELECT c.new_revision_id FROM commission_records c
 		JOIN revisions r ON r.revision_id=c.new_revision_id
-		WHERE r.project_id=? AND c.result='SUCCEEDED'
+		JOIN operations o ON o.operation_id=c.operation_id
+		WHERE r.project_id=? AND o.state='SUCCEEDED'
 		ORDER BY c.closed_at_utc_ms DESC, c.operation_id DESC LIMIT 1`, projectID).Scan(&activeRevisionID)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -2344,14 +2366,25 @@ func (s *Store) ListLibraryUsageRows(ctx context.Context, params ListLibraryUsag
 		afterObject = params.After.ObjectID
 		afterKind = params.After.UsageKind
 	}
+	/* `T61-504` — `isActive` mắc ĐÚNG lỗi của `LibraryCompatibilityFacts`.
+
+	   Điều kiện cũ `c.result='SUCCEEDED'` không bao giờ đúng: cột `result` giữ
+	   result code của operation, và mã của một lần Commission thành công là
+	   `COMMITTED`. Nên `isActive` luôn `false`, và PGM-04 chưa từng đánh dấu
+	   được "bản đang chạy" trong khay Nơi sử dụng — đúng dấu hiệu mà người vận
+	   hành dùng để biết khối này có đang điều khiển tủ hay không.
+
+	   Nay đọc trạng thái terminal của chính operation (`co.state='SUCCEEDED'`),
+	   nguồn đúng và không cần migration. */
 	rows, err := s.db.QueryContext(ctx, `SELECT p.project_id,p.name,u.revision_id,u.object_id,
 		coalesce(o.name,''),u.required_version,u.usage_kind,
-		CASE WHEN c.new_revision_id IS NOT NULL THEN 1 ELSE 0 END
+		CASE WHEN co.operation_id IS NOT NULL THEN 1 ELSE 0 END
 		FROM library_usages u
 		JOIN revisions rev ON rev.revision_id=u.revision_id
 		JOIN projects p ON p.project_id=rev.project_id
 		LEFT JOIN pou_objects o ON o.revision_id=u.revision_id AND o.object_id=u.object_id
-		LEFT JOIN commission_records c ON c.new_revision_id=u.revision_id AND c.result='SUCCEEDED'
+		LEFT JOIN commission_records c ON c.new_revision_id=u.revision_id
+		LEFT JOIN operations co ON co.operation_id=c.operation_id AND co.state='SUCCEEDED'
 		WHERE u.library_revision_id=? AND (?='' OR u.entry_id=?)
 		AND (? IS NULL OR (p.name,u.revision_id,u.object_id,u.usage_kind) > (?,?,?,?))
 		ORDER BY p.name,u.revision_id,u.object_id,u.usage_kind
