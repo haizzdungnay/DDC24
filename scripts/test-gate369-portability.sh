@@ -55,4 +55,47 @@ grep -Fq 'toContainText(uiSeverityLabel(api.severity))' apps/web-ui/e2e/gate369-
 grep -Fq 'gate369-cli-go-fe-real' apps/web-ui/playwright.programming-real.config.ts
 grep -Fq 'programming-real' apps/web-ui/playwright.programming-real.config.ts
 
+# Regression for P1 review on PR #521: valid WARNING JSON must never mask a
+# non-zero mkddc-st-validate exit. Use an injected fake binary so this guard is
+# runnable without a C++ build and verifies behavior rather than source text.
+tmpdir="$(mktemp -d)"
+cleanup() { rm -rf "$tmpdir"; }
+trap cleanup EXIT
+
+cat > "$tmpdir/mkddc-st-validate" <<'SH'
+#!/usr/bin/env bash
+cat <<'JSON'
+{"diagnostics":[{"code":"ST-WARN-002","message":"mock warning","severity":"WARNING","line":1,"column":1,"length":1}]}
+JSON
+exit 42
+SH
+chmod +x "$tmpdir/mkddc-st-validate"
+
+set +e
+GATE369_ST_VALIDATE_BIN="$tmpdir/mkddc-st-validate" bash scripts/gate369-cli-capture.sh >/dev/null 2>&1
+capture_status=$?
+set -e
+if (( capture_status != 42 )); then
+  echo "ERROR: gate369 CLI capture masked compiler exit 42 as $capture_status" >&2
+  exit 1
+fi
+
+# The opposite failure mode must also stay closed: a successful CLI with invalid
+# diagnostic JSON cannot make the gate green.
+cat > "$tmpdir/mkddc-st-validate" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"diagnostics":[]}'
+exit 0
+SH
+chmod +x "$tmpdir/mkddc-st-validate"
+
+set +e
+GATE369_ST_VALIDATE_BIN="$tmpdir/mkddc-st-validate" bash scripts/gate369-cli-capture.sh >/dev/null 2>&1
+validation_capture_status=$?
+set -e
+if (( validation_capture_status == 0 )); then
+  echo "ERROR: gate369 CLI capture accepted invalid/empty diagnostic JSON" >&2
+  exit 1
+fi
+
 echo 'gate369 portability/CLI-Go-FE WARNING same-diagnostic guard: PASS'

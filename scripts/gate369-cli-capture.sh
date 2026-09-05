@@ -7,8 +7,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 mkdir -p logs
 
-BIN="build/fw/apps/core/mkddc-st-validate"
-[ -x "$BIN" ] || BIN="$(find build/fw -name mkddc-st-validate -type f 2>/dev/null | head -1)"
+if [ -n "${GATE369_ST_VALIDATE_BIN:-}" ]; then
+  BIN="$GATE369_ST_VALIDATE_BIN"
+else
+  BIN="build/fw/apps/core/mkddc-st-validate"
+  [ -x "$BIN" ] || BIN="$(find build/fw -name mkddc-st-validate -type f 2>/dev/null | head -1)"
+fi
 [ -x "$BIN" ] || { echo "khong tim thay mkddc-st-validate trong build/fw" >&2; exit 3; }
 
 # Cố ý dùng một chương trình HỢP LỆ chỉ phát WARNING. Đây là ca quyết định cho
@@ -21,7 +25,8 @@ SRC="scripts/fixtures/gate369-warning.st"
 status=$?
 echo "$status" > logs/gate369-cli-diagnostic.exit
 
-python3 - <<'PY'
+validation_status=0
+python3 - <<'PY' || validation_status=$?
 import json
 from pathlib import Path
 p = Path('logs/gate369-cli-diagnostic.json')
@@ -37,3 +42,16 @@ if str(d['severity']).upper() != 'WARNING':
     raise SystemExit(f"Gate369 can WARNING authority, nhan {d['severity']!r}")
 print(f"CLI_DIAGNOSTIC={d['code']} severity={d['severity']} line={d['line']} column={d['column']}")
 PY
+
+# JSON hợp lệ không được phép che lỗi thực thi của compiler CLI. Ví dụ CLI có
+# thể flush được WARNING JSON rồi chết bất thường; khi đó gate phải trả đúng mã
+# lỗi CLI thay vì mã 0 của bước validate JSON chạy sau nó.
+if (( status != 0 )); then
+  echo "mkddc-st-validate failed with exit $status" >&2
+  exit "$status"
+fi
+
+if (( validation_status != 0 )); then
+  echo "gate369 CLI diagnostic validation failed with exit $validation_status" >&2
+  exit "$validation_status"
+fi
