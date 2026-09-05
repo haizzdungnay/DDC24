@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-16` / `T61-503` Đủ ma trận mock Playwright cho PGM-04 (#461, 2026-09-05)
+
+- **Triệu chứng 1 — suite e2e chỉ chạy được vai `admin`.** `programming.spec.ts` ghi thẳng vào mã
+  rằng "ma trận RBAC không kiểm được ở tầng này" và đẩy evidence RBAC xuống mức component. Một cổng
+  chỉ kiểm vai mạnh nhất không phát hiện được đúng lớp lỗi mà RBAC sinh ra để chặn: **một nút ghi bật
+  lên cho người không có quyền ghi**.
+- **Nguyên nhân gốc 1.** `build:e2e` đặt `VITE_AUTH_MODE=mock`, và nhánh mock của `AuthProvider` dựng
+  phiên `role: 'admin'` **viết cứng** bất kể ai đăng nhập — `/auth/login` không hề được gọi, nên mock
+  route trả `role` trong spec là mã chết. Không có đường nào tới một phiên viewer.
+- **Cách sửa 1.** `mockRoleOf(username)` suy vai từ tên đăng nhập qua một **bảng ĐÓNG** đúng bốn tên
+  (`viewer`/`operator`/`engineer`/`admin`); mọi tên khác giữ nguyên `admin`, nên **không chỗ gọi nào
+  đang có đổi hành vi** — kể cả bản demo, nơi khớp chuỗi lỏng sẽ hạ quyền một người tên
+  `Viewer Nguyen` mà họ không có cách nào biết. Nhánh `jwt` không bị chạm.
+- **Kỳ vọng của ma trận suy TỪ HỢP ĐỒNG, không viết tay.** `PGM04_ROLE_MATRIX` đọc `roles` của
+  `upsertProgrammingLibraryEntry` trong `PROGRAMMING_ENDPOINTS` (bảng sinh từ `openapi.yaml`). Viết
+  tay `engineer: true` là bản sao thứ hai của cùng một luật: siết cổng FE rồi sửa luôn ma trận thì
+  test vẫn xanh trong khi giao diện vừa chặn một thao tác máy chủ chấp nhận — đúng lỗi `T61-201` đã
+  phải sửa. Kèm một neo chống-tautology: nếu hợp đồng một ngày cho mọi vai ghi được, ma trận sẽ **đỏ**
+  chứ không im lặng hoá rỗng.
+- **Triệu chứng 2 — lane mock KHÔNG có phân trang.** Mock luôn trả `nextCursor: null`, nên "trang-N
+  lỗi" và "giữ lại trang đã tải" là những câu **không thể viết** — và tình trạng ấy đọc từ ngoài y hệt
+  "đã phủ". Nay mock cắt trang thật, và có case chứng minh danh sách đã tải không biến mất khi trang
+  sau hỏng (đúng điều `ISS-PGM04-16` liệt kê là lý do từ chối đóng).
+- **Triệu chứng 3 — hai fixture đã cũ đi và làm `main` ĐỎ.** (a) Fixture `/libraries` của lane PGM-02
+  chỉ gửi `interface`, trong khi `T61-203` đã chấm dứt việc FE tự parse `interface`; mọi mục hoá
+  `SIGNATURE_UNAVAILABLE` và `AC-PGM02-004` đỏ. (b) `ISS-PIO-*` thêm bốn nhóm vào
+  `ProgrammingImpactKey` mà không cập nhật fixture `impact`; trang fail-closed **đúng như thiết kế**
+  và nút Đưa vào vận hành khoá vĩnh viễn, làm journey `UJ-PROG-01..08` đỏ. Cả hai lần **sản phẩm
+  đúng, fixture sai**. Thêm một case đối chiếu fixture `impact` với `IMPACT_GROUP_ORDER` — danh sách
+  mà chính trang dùng để vẽ — nên nhóm thứ mười ba làm đỏ ngay tại chỗ kèm tên nhóm còn thiếu.
+- **Triệu chứng 4 — khay Mã nguồn (`T61-404`) chưa từng có route mock.** Nó rơi vào nhánh 503
+  bắt-tất-cả, in `console.error` mỗi lần mở — và vì không case nào từng mở nó, không ai thấy. Một bề
+  mặt đọc không có mock là một bề mặt không được kiểm.
+- **`test.skip` nay có sổ kế toán.** Một `test.skip` có điều kiện không sai; cái sai là khi một lần bỏ
+  qua **không có lane nào gánh nó**, và tổng kết in "95 passed, 23 skipped" mà không ai đọc được rằng
+  phép kiểm ấy chưa từng chạy ở đâu. `PGM04_SKIP_LEDGER` bắt mỗi lần bỏ qua phải khai lane gánh nó;
+  case đối soát đọc **thẳng tệp spec**, nên một `test.skip` mới quên khai sẽ làm đỏ.
+- **Zero-mutation mở rộng sang Preview và Used-In**, đo theo **phương thức HTTP** đọc từ
+  `PROGRAMMING_ENDPOINTS`, cho cả bốn bề mặt: Preview / Used-In / Chèn-huỷ / Chèn-bị-chặn.
+- **`expectNoBrowserFailures` nhận danh sách path do fixture tự bơm lỗi.** `ISS-PGM04-16` đòi "console
+  error ngoài lỗi fixture = 0"; không có chỗ khai thì mọi case đường hỏng chỉ còn hai lối — bỏ hẳn
+  phép kiểm console, hoặc không viết case đường hỏng nào. `pageerror` **không bao giờ** được nới.
+- **Phát hiện ngoài phạm vi, không sửa ở lát này.** PGM-01/PGM-04 mở đường ghi cho `engineer`
+  (`roleCan(role,'program.edit')`, khớp bảng `roles` của máy chủ), còn PGM-02/PGM-03/Runtime/Design
+  đòi `roleAtLeast(role,'admin')` — một `engineer` tạo được khối thư viện nhưng không sửa được POU,
+  dù máy chủ cho phép cả hai. Tám tệp ngoài PGM-04 và là một quyết định sản phẩm về *ai được sửa mã*.
+- **Phạm vi.** `apps/web-ui/e2e/programming.spec.ts`, `apps/web-ui/e2e/helpers/{pgm04RoleMatrix,pgm04Skips}.ts`,
+  `apps/web-ui/src/features/auth/AuthProvider.tsx`,
+  `apps/web-ui/src/features/programming/commission/{impactGroups.ts,CheckCommissionPage.tsx}`,
+  `docs/03_implementation/61_…_PGM04_PLAN.md`.
+- **Kiểm chứng (HOST/MOCK, local; CI chưa có runner — `#414`).** Số đo ghi trong PR. Lane mock **không**
+  thay lane real (`programming-real.spec.ts`) và không được nâng lên HIL/TARGET/`RELEASE_READY`.
+
 ### Changed — `ISS-STED-20` Chạy thật ba chặng cổng V&V E2E và sửa các khiếm khuyết khiến cổng không chạy được (#369, 2026-09-05)
 
 - **Bối cảnh.** `#369` là cổng cuối chặn ký đóng `REV-STED-IEC-001`, gồm bốn chặng: (a) C++ build+test,

@@ -26,12 +26,11 @@ import { ProblemsDrawer } from '../shared/ProblemsDrawer'
  * `outputMappingChanges` vì chúng nói cùng một chuyện ở độ phân giải cao hơn:
  * một cơ cấu chấp hành nối cứng vào tủ sẽ nhận lệnh từ chỗ khác. `modbus` và
  * `virtual` xuống dưới — hậu quả của chúng nằm sau một lớp phần mềm nữa. */
-export const IMPACT_GROUP_ORDER: ProgrammingImpactKey[] = [
-  'enableIntent', 'programSet', 'retain', 'activeOverrides',
-  'cutover', 'outputMappingChanges', 'writableOutputsAffected',
-  'physicalMappingChanges', 'modbusMappingChanges', 'virtualPointChanges',
-  'publishedSignals', 'controlLibrary'
-]
+/* `T61-503` — danh sách nay ở `impactGroups.ts` (mô-đun thuần dữ liệu), để bộ
+   e2e đối chiếu fixture với CHÍNH danh sách này mà không phải kéo cả cây import
+   của một trang React. Tái xuất ở đây để mọi chỗ gọi cũ không phải đổi. */
+import { IMPACT_GROUP_ORDER } from './impactGroups'
+export { IMPACT_GROUP_ORDER }
 export const IMPACT_GROUP_LABEL: Record<ProgrammingImpactKey, [string, string]> = {
   retain: ['Trạng thái lưu (RETAIN) sẽ khởi tạo lại', 'RETAIN state will be re-initialised'],
   activeOverrides: ['Override thủ công đang giữ đầu ra', 'Manual overrides currently holding outputs'],

@@ -2,6 +2,10 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { login } from './helpers/session'
 import { BUNDLE_COMPATIBILITY } from '../src/features/programming/shared/programmingCompatibility'
+import { PROGRAMMING_ENDPOINTS } from '../src/features/programming/api/generated/client'
+import { PGM04_ROLE_MATRIX, assertMatrixDiscriminates, type Pgm04Role } from './helpers/pgm04RoleMatrix'
+import { PGM04_SKIP_LEDGER, readPgm04SkipReasons } from './helpers/pgm04Skips'
+import { IMPACT_GROUP_ORDER } from '../src/features/programming/commission/impactGroups'
 
 /**
  * TASK-PROG-506/T59-503 — nghiệm thu trình duyệt thật cho sáu workspace Programming
@@ -130,11 +134,30 @@ function observeBrowserFailures(page: Page): BrowserFailures {
   return failures
 }
 
-function expectNoBrowserFailures(failures: BrowserFailures, label: string): void {
-  expect(failures.consoleErrors, `${label}: console.error`).toEqual([])
+/**
+ * `T61-503` — lỗi do FIXTURE CỐ Ý bơm vào không phải lỗi của sản phẩm.
+ *
+ * `ISS-PGM04-16` đòi "console error/requestfailed **ngoài lỗi fixture** = 0". Một
+ * case đo đường hỏng (503 trang-N, 403 mất quyền) BẮT BUỘC sinh ra đúng những
+ * dòng ấy — đó là điều nó đang đo. Không có chỗ khai báo thì mọi case đường hỏng
+ * chỉ còn hai lối: bỏ hẳn phép kiểm console (mất luôn khả năng bắt lỗi thật), hoặc
+ * không viết case đường hỏng nào. Cả hai đều là cách một cổng biến mất.
+ *
+ * `allow` là danh sách path mà case NÀY đã tự bơm lỗi vào. Nó KHÔNG nới cho mọi
+ * lỗi: chỉ path khớp mới được bỏ qua, mọi console error khác vẫn làm đỏ. `pageerror`
+ * (ngoại lệ JS chưa bắt) KHÔNG bao giờ được nới — một fixture 503 không sinh ra
+ * ngoại lệ JS, nên một dòng `pageerror` luôn là lỗi thật.
+ */
+function expectNoBrowserFailures(
+  failures: BrowserFailures,
+  label: string,
+  allow: readonly string[] = [],
+): void {
+  const unexpected = (entry: string) => !allow.some((path) => entry.includes(path))
+  expect(failures.consoleErrors.filter(unexpected), `${label}: console.error`).toEqual([])
   expect(failures.pageErrors, `${label}: pageerror`).toEqual([])
-  expect(failures.requestFailures, `${label}: requestfailed`).toEqual([])
-  expect(failures.serverFailures, `${label}: HTTP 5xx`).toEqual([])
+  expect(failures.requestFailures.filter(unexpected), `${label}: requestfailed`).toEqual([])
+  expect(failures.serverFailures.filter(unexpected), `${label}: HTTP 5xx`).toEqual([])
 }
 
 function draftWithProgram() {
@@ -221,14 +244,35 @@ async function installProgrammingMocks(page: Page, state: MockState) {
       })
     }
     if (method === 'GET' && path === '/libraries') {
-      /* `T59-804`: shape đúng như `GET /programming/libraries` thật — chữ ký đi
-         trong `interface`, `featureState` nói thẳng mục nào chờ review. */
+      /*
+      Shape đúng như `GET /programming/libraries` thật: máy chủ gửi CẢ HAI —
+      `interface` (blob thô) và `signature` (chữ ký ĐÃ PHÂN GIẢI).
+
+      `T61-503` — bản trước chỉ gửi `interface`, kèm chú thích "chữ ký đi trong
+      `interface`". Câu ấy đúng cho tới `T61-203`, lát chấm dứt việc FE tự parse
+      `interface` (hai nơi cùng đoán là hai nơi kết luận khác nhau về cùng một
+      khối, và ở đây "bên nào đúng" quyết định người dùng nối dây vào chân nào).
+      Từ đó, fixture này làm mọi mục hoá `SIGNATURE_UNAVAILABLE`, nên Thư viện
+      nhanh khoá `Chèn LIMIT` với `title="Thiếu chữ ký từ thiết bị"` và
+      `AC-PGM02-004` đỏ trên `main`. Sản phẩm đúng — nó nói thật rằng nó không
+      có chữ ký; fixture mới là thứ đã cũ đi mà không ai sửa.
+      */
       return json(route, {
         items: [
           {
             scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
             entryId: 'LIMIT', kind: 'FUNCTION', name: 'LIMIT', featureState: 'AVAILABLE',
             contentSha256: 'a'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0,
+            signature: {
+              dispatch: 'FUNC_TABLE', polymorphic: true, typedPortNames: [], category: 'math',
+              labelVi: 'Giới hạn (LIMIT)', labelEn: 'Limit', allowedTypes: ['REAL'], defaultType: 'REAL',
+              ports: [
+                { name: 'MN', direction: 'INPUT', dataType: 'REAL' },
+                { name: 'IN', direction: 'INPUT', dataType: 'REAL' },
+                { name: 'MX', direction: 'INPUT', dataType: 'REAL' },
+                { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }
+              ]
+            },
             interface: JSON.stringify({
               category: 'math', labelVi: 'Giới hạn (LIMIT)', labelEn: 'Limit', allowedTypes: ['REAL'],
               ports: [
@@ -243,6 +287,14 @@ async function installProgrammingMocks(page: Page, state: MockState) {
             scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
             entryId: 'PID', kind: 'FUNCTION_BLOCK', name: 'PID', featureState: 'REVIEW_REQUIRED',
             contentSha256: 'b'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 64,
+            signature: {
+              dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [], category: 'control',
+              labelVi: 'PID', labelEn: 'PID', allowedTypes: [],
+              ports: [
+                { name: 'PV', direction: 'INPUT', dataType: 'REAL' },
+                { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }
+              ]
+            },
             interface: JSON.stringify({
               category: 'control', labelVi: 'PID', labelEn: 'PID', allowedTypes: [],
               ports: [
@@ -521,18 +573,25 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           activeOverrides: { status: 'NONE', items: [] },
           cutover: { status: 'PRESENT', items: ['GRAPH_ONLY→PROGRAM_ONLY'] },
           outputMappingChanges: { status: 'NONE', items: [] },
+          /* `T59-502` — MỌI nhóm impact phải có mặt. Thiếu nhóm nào thì trang
+             fail-closed: "không thấy" không phải "không có", và một lần
+             Commission trên một ảnh hưởng chưa đo được là một lần cutover mù.
 
-          // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
-
-          // thì trang fail-closed — "không thấy" không phải "không có".
-
+             `T61-503` — bốn nhóm dưới đây (`writableOutputsAffected` và ba nhóm
+             ánh xạ Điểm) được `ISS-PIO-*` thêm vào `ProgrammingImpactKey` NHƯNG
+             không được thêm vào fixture, nên lane e2e đọc chúng thành `UNAVAILABLE`
+             và nút Đưa vào vận hành khoá vĩnh viễn — journey `UJ-PROG-01..08`
+             đỏ trên `main` vì đúng lý do ấy. Sản phẩm đúng; fixture cũ. Case
+             `T61-503: fixture impact phủ đủ mọi nhóm` dưới đây khoá lại để nhóm
+             thứ mười ba không lặp lại chuyện này trong im lặng. */
           publishedSignals: { status: 'NONE', items: [] },
-
           controlLibrary: { status: 'NONE', items: [] },
-
           programSet: { status: 'NONE', items: [] },
-
-          enableIntent: { status: 'NONE', items: [] }
+          enableIntent: { status: 'NONE', items: [] },
+          writableOutputsAffected: { status: 'NONE', items: [] },
+          physicalMappingChanges: { status: 'NONE', items: [] },
+          modbusMappingChanges: { status: 'NONE', items: [] },
+          virtualPointChanges: { status: 'NONE', items: [] }
         }
       })
     }
@@ -546,18 +605,25 @@ async function installProgrammingMocks(page: Page, state: MockState) {
           activeOverrides: { status: 'NONE', items: [] },
           cutover: { status: 'NONE', items: [] },
           outputMappingChanges: { status: 'NONE', items: [] },
+          /* `T59-502` — MỌI nhóm impact phải có mặt. Thiếu nhóm nào thì trang
+             fail-closed: "không thấy" không phải "không có", và một lần
+             Commission trên một ảnh hưởng chưa đo được là một lần cutover mù.
 
-          // T59-502: bốn nhóm impact của mô hình đa Program. Thiếu nhóm nào
-
-          // thì trang fail-closed — "không thấy" không phải "không có".
-
+             `T61-503` — bốn nhóm dưới đây (`writableOutputsAffected` và ba nhóm
+             ánh xạ Điểm) được `ISS-PIO-*` thêm vào `ProgrammingImpactKey` NHƯNG
+             không được thêm vào fixture, nên lane e2e đọc chúng thành `UNAVAILABLE`
+             và nút Đưa vào vận hành khoá vĩnh viễn — journey `UJ-PROG-01..08`
+             đỏ trên `main` vì đúng lý do ấy. Sản phẩm đúng; fixture cũ. Case
+             `T61-503: fixture impact phủ đủ mọi nhóm` dưới đây khoá lại để nhóm
+             thứ mười ba không lặp lại chuyện này trong im lặng. */
           publishedSignals: { status: 'NONE', items: [] },
-
           controlLibrary: { status: 'NONE', items: [] },
-
           programSet: { status: 'NONE', items: [] },
-
-          enableIntent: { status: 'NONE', items: [] }
+          enableIntent: { status: 'NONE', items: [] },
+          writableOutputsAffected: { status: 'NONE', items: [] },
+          physicalMappingChanges: { status: 'NONE', items: [] },
+          modbusMappingChanges: { status: 'NONE', items: [] },
+          virtualPointChanges: { status: 'NONE', items: [] }
         }
       })
     }
@@ -1940,6 +2006,30 @@ const LIBRARY_CATALOG: MockLibraryEntry[] = [
     libraryState: 'PUBLISHED', entryId: 'AHU_STAGE', kind: 'FUNCTION_BLOCK', name: 'AHU_STAGE',
     featureState: 'AVAILABLE', category: 'control', description: 'Khối phân cấp giai đoạn AHU của dự án',
     contentSha256: 'e'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 32
+  },
+  /*
+  `T61-503` — khối PROJECT **CÓ chữ ký**, và nó phải tồn tại.
+
+  `AHU_STAGE` ở trên cố ý KHÔNG có chữ ký: nó là fixture của case "vắng chữ ký
+  thì nói ra". Nhưng từ `T61-406`, thiếu chữ ký là một lý do CHẶN chèn — nên
+  toàn bộ đường Chèn của lane e2e đang đo trên đúng khối không chèn được, và
+  một case "Chèn bật được" chạy trên nó chỉ còn hai kết cục: đỏ, hoặc xanh vì
+  cổng đã bị nới. Một fixture thứ hai, chèn được thật, là thứ tách hai câu hỏi
+  ấy ra.
+  */
+  {
+    scope: 'PROJECT', libraryRevisionId: PROJECT_LIBRARY_REVISION_ID, libraryVersion: '1.2',
+    libraryState: 'PUBLISHED', entryId: 'AHU_RESET', kind: 'FUNCTION', name: 'AHU_RESET',
+    featureState: 'AVAILABLE', category: 'control', description: 'Đặt lại chuỗi giai đoạn AHU',
+    contentSha256: 'f'.repeat(64), dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0,
+    signature: {
+      dispatch: 'FUNC_TABLE', polymorphic: false, typedPortNames: [], category: 'control',
+      labelVi: 'Đặt lại giai đoạn', labelEn: 'Reset stage', allowedTypes: [],
+      ports: [
+        { name: 'RST', direction: 'INPUT', dataType: 'BOOL' },
+        { name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL' }
+      ]
+    }
   }
 ]
 
@@ -1963,10 +2053,25 @@ interface LibraryLane {
   libraryQueries: string[]
   /** Bật 503 cho `/libraries`; tắt giữa chừng để nút Thử lại tự chứng minh nó gọi lại thật. */
   failLibraries: boolean
+  /**
+   * `T61-503` — CẮT TRANG ở mock, để trang-N có thật.
+   *
+   * Bản trước luôn trả `nextCursor: null`, nên lane e2e **không có phân trang**:
+   * mọi khẳng định về "trang sau lỗi" hay "giữ lại trang đã tải" đều không thể
+   * viết, và tình trạng ấy đọc từ ngoài y hệt "đã phủ".
+   */
+  pageSize: number | null
+  /** Bật 503 cho ĐÚNG lượt gọi có cursor (trang 2+), giữ trang 1 thành công. */
+  failNextPage: boolean
+  /** Bật 403 cho `/libraries` — mất quyền GIỮA CHỪNG, khác 503 mất kết nối. */
+  forbidLibraries: boolean
 }
 
 function libraryLane(): LibraryLane {
-  return { libraryQueries: [], failLibraries: false }
+  return {
+    libraryQueries: [], failLibraries: false,
+    pageSize: null, failNextPage: false, forbidLibraries: false,
+  }
 }
 
 async function installLibraryLaneRoutes(page: Page, lane: LibraryLane) {
@@ -1975,7 +2080,28 @@ async function installLibraryLaneRoutes(page: Page, lane: LibraryLane) {
     async (route) => {
       const url = new URL(route.request().url())
       lane.libraryQueries.push(url.search)
+      const cursor = url.searchParams.get('cursor')
       if (lane.failLibraries) {
+        return json(
+          route,
+          { error: { code: 'PRG-ERR-UNAVAILABLE-001', messageKey: 'programming.error.unavailable', retryable: true, keepsRunningRevision: true, correlationId: 'e2e-correlation-pgm04' } },
+          503
+        )
+      }
+      /* `T61-503` — MẤT QUYỀN giữa chừng ≠ mất kết nối. 403 nói "phiên này
+         không còn được đọc", 503 nói "thiết bị chưa trả lời"; hai câu dẫn tới
+         hai hành động khác nhau của người vận hành, và một bề mặt gộp chúng lại
+         sẽ mời người ta bấm Thử lại mãi cho một thứ thử lại không sửa được. */
+      if (lane.forbidLibraries) {
+        return json(
+          route,
+          { error: { code: 'PRG-ERR-FORBIDDEN-001', messageKey: 'programming.error.forbidden', retryable: false, keepsRunningRevision: true, correlationId: 'e2e-correlation-pgm04' } },
+          403
+        )
+      }
+      /* Trang-N hỏng: chỉ lượt gọi CÓ cursor mới 503. Trang 1 vẫn thành công,
+         nên case đo được đúng thứ nó muốn đo — dữ liệu đã tải có bị xoá không. */
+      if (lane.failNextPage && cursor) {
         return json(
           route,
           { error: { code: 'PRG-ERR-UNAVAILABLE-001', messageKey: 'programming.error.unavailable', retryable: true, keepsRunningRevision: true, correlationId: 'e2e-correlation-pgm04' } },
@@ -1997,7 +2123,57 @@ async function installLibraryLaneRoutes(page: Page, lane: LibraryLane) {
         if (q && !`${entry.name} ${entry.description}`.toLowerCase().includes(q)) return false
         return true
       })
-      return json(route, { items, nextCursor: null })
+      if (lane.pageSize === null) return json(route, { items, nextCursor: null })
+      const start = cursor ? Number(cursor) : 0
+      const slice = items.slice(start, start + lane.pageSize)
+      const nextStart = start + lane.pageSize
+      return json(route, {
+        items: slice,
+        nextCursor: nextStart < items.length ? String(nextStart) : null,
+      })
+    }
+  )
+
+  /*
+  `T61-503` — khay **Mã nguồn** (`T61-404`) chưa từng có route mock nào.
+
+  Nó rơi vào nhánh 503 bắt-tất-cả ở cuối `installProgrammingMocks`, nên mọi lần
+  mở khay ấy trong lane e2e đều in một dòng `console.error` — và vì không case
+  nào từng mở khay ấy, không ai thấy. Một bề mặt đọc không có mock là một bề mặt
+  không được kiểm: một `POST` lọt vào đường đọc sẽ không có gì bắt.
+  */
+  await page.route(
+    (url) => url.pathname === '/api/v1/programming/library-entry-source',
+    async (route) => {
+      const url = new URL(route.request().url())
+      const entryId = url.searchParams.get('entryId')
+      const entry = LIBRARY_CATALOG.find((item) => item.entryId === entryId)
+      if (!entry) {
+        return json(
+          route,
+          { error: { code: 'PRG-ERR-NOT-FOUND-001', messageKey: 'programming.error.notFound', retryable: false, keepsRunningRevision: true, correlationId: 'e2e-correlation-pgm04' } },
+          404
+        )
+      }
+      /* `AHU_STAGE` không lưu mã nguồn — `NOT_STORED` là một câu THẬT của máy
+         chủ, không phải một lỗi. Khay phải nói ra nó và KHÔNG được dựng một
+         khung ST "trông giống" từ `interface`. */
+      const stored = entry.entryId !== 'AHU_STAGE'
+      return json(route, {
+        scope: entry.scope,
+        libraryRevisionId: entry.libraryRevisionId,
+        libraryVersion: entry.libraryVersion,
+        libraryState: entry.libraryState,
+        entryId: entry.entryId,
+        name: entry.name,
+        kind: entry.kind,
+        language: 'ST',
+        contentSha256: entry.contentSha256,
+        availability: stored ? 'AVAILABLE' : 'NOT_STORED',
+        ...(stored
+          ? { source: `FUNCTION ${entry.name} : BOOL\nEND_FUNCTION\n` }
+          : { reason: 'Thiết bị không lưu mã nguồn của phiên bản này' }),
+      })
     }
   )
 
@@ -2034,14 +2210,28 @@ async function switchScope(page: Page, scope: 'SYSTEM' | 'PROJECT') {
   await expect(page.getByTestId(`library-scope-tab-${scope}`)).toHaveAttribute('aria-selected', 'true')
 }
 
-async function openLibrary(page: Page, lane: LibraryLane, scope: 'SYSTEM' | 'PROJECT' = 'SYSTEM') {
+/**
+ * `T61-503` — mở PGM-04 **theo một vai cụ thể**.
+ *
+ * Vai đi vào phiên qua TÊN ĐĂNG NHẬP, không qua một cờ riêng của test: nhánh
+ * mock của `AuthProvider` nay suy vai từ tên (`mockRoleOf`), nên `login(page,
+ * { username: 'viewer' })` dựng đúng một phiên viewer bằng chính đường mà người
+ * dùng đi. Một cờ riêng chỉ cho test sẽ dựng một trạng thái không ai đạt tới
+ * được trong sản phẩm — và một case như thế xanh mà không chứng minh gì.
+ */
+async function openLibrary(
+  page: Page,
+  lane: LibraryLane,
+  scope: 'SYSTEM' | 'PROJECT' = 'SYSTEM',
+  role: Pgm04Role = 'admin',
+) {
   const state: MockState = {
     etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED',
     commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false
   }
   await installProgrammingMocks(page, state)
   await installLibraryLaneRoutes(page, lane)
-  await login(page)
+  await login(page, { username: role, password: role })
   await navigate(page, `${LIBRARY_PATH}?scope=${scope}`)
 }
 
@@ -2364,7 +2554,10 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     )
     await openLibrary(page, lane, 'PROJECT')
 
-    await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+    /* `T61-406` — khối CÓ chữ ký. `AHU_STAGE` cố ý thiếu chữ ký, và thiếu chữ
+       ký nay là một lý do chặn chèn: đo đường Chèn trên nó là đo trên đúng khối
+       không chèn được. */
+    await libraryList(page).getByRole('button', { name: /^AHU_RESET/ }).click()
     const insert = page.getByRole('button', { name: /Chèn vào POU/ })
     await expect(insert).toBeEnabled()
     await insert.click()
@@ -2564,6 +2757,325 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     console.log(`[T61-505] PGM-04 layout: ${measured.join(' | ')}`)
     await testInfo.attach('pgm04-layout', { body: measured.join('\n'), contentType: 'text/plain' })
     expectNoBrowserFailures(failures, 'PGM-04 số đo bố cục')
+  })
+
+  /* ================================================================== *
+   * `T61-503` / `ISS-PGM04-16` — MA TRẬN MOCK: bốn vai, lỗi trang-N,     *
+   * mất quyền, và zero-mutation đo bằng PHƯƠNG THỨC HTTP.                *
+   *                                                                      *
+   * Lane này là **MOCK/HOST**: mọi route `/api/v1/programming/**` do      *
+   * `installProgrammingMocks` + `installLibraryLaneRoutes` phục vụ, không *
+   * có backend Go và không có thiết bị. Bằng chứng ở đây KHÔNG thay thế   *
+   * lane real (`programming-real.spec.ts`, `T61-504`) và không được nâng  *
+   * thành TARGET/HIL.                                                    *
+   * ================================================================== */
+
+  /* Neo chống-tautology, phải đứng riêng: nếu hợp đồng một ngày cho mọi vai
+     ghi được thì mọi kỳ vọng dưới đây hoá `true` và ma trận vẫn "xanh" trong
+     khi nó không còn kiểm gì. */
+  test('T61-503: ma trận bốn vai suy từ hợp đồng và THẬT SỰ phân biệt được vai', async () => {
+    assertMatrixDiscriminates()
+    expect(PGM04_ROLE_MATRIX.map((row) => `${row.role}:${row.canWriteLibrary ? 'W' : 'R'}`))
+      .toEqual(['viewer:R', 'operator:R', 'engineer:W', 'admin:W'])
+    /* Và kỳ vọng ấy phải TRÙNG KHÍT với bảng vai của máy chủ. Viết tay bốn giá
+       trị ở trên rồi cũng viết tay đúng bốn giá trị ấy trong ma trận là so một
+       hằng với chính nó; vế dưới đây mới là vế đối chiếu thật. */
+    expect(PGM04_ROLE_MATRIX.filter((row) => row.canWriteLibrary).map((row) => row.role).sort())
+      .toEqual([...PROGRAMMING_ENDPOINTS.upsertProgrammingLibraryEntry.roles].sort())
+  })
+
+  for (const expectation of PGM04_ROLE_MATRIX) {
+    /*
+    Trước lát này KHÔNG có case nào ở vai khác `admin`, và lý do nằm trong sản
+    phẩm chứ không trong bộ test: nhánh mock của `AuthProvider` dựng phiên
+    `role: 'admin'` viết cứng, nên lane e2e không có đường nào tới một phiên
+    viewer. `mockRoleOf` mở đường ấy, và đây là bốn case dùng nó.
+    */
+    test(`T61-503: vai ${expectation.role} — đọc được, và đường ghi đúng như hợp đồng`, async ({ page }, testInfo) => {
+      test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+        'khổ hẹp khoá mọi vai thành chỉ-đọc; ma trận vai đo ở lane desktop')
+      const lane = libraryLane()
+      const failures = observeBrowserFailures(page)
+      const writes = observeProgrammingWrites(page)
+      await openLibrary(page, lane, 'PROJECT', expectation.role)
+
+      // ĐỌC: mọi vai đều thấy danh sách. PGM-04 không có bí mật nào theo vai.
+      await expect(libraryCards(page)).toHaveCount(PROJECT_ENTRY_COUNT)
+
+      const create = page.getByRole('button', { name: 'Khối PROJECT mới' })
+      /* Nút LUÔN hiện, kể cả khi khoá (`AC-PGM04-06`): ẩn nó đi làm người dùng
+         tưởng thiết bị không có khả năng đó rồi đi hỏi sai người. */
+      await expect(create).toBeVisible()
+
+      await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+      const edit = page.getByRole('button', { name: /^Sửa/ })
+      const remove = page.getByRole('button', { name: /^Xoá khối/ })
+
+      if (expectation.canWriteLibrary) {
+        await expect(create).toBeEnabled()
+        await expect(edit).toBeEnabled()
+      } else {
+        await expect(create).toBeDisabled()
+        await expect(edit).toBeDisabled()
+        await expect(remove).toBeDisabled()
+        /* Khoá mà KHÔNG nói lý do là tệ hơn ẩn: người dùng thấy một nút không
+           bấm được và không có gì để đọc. */
+        await expect(page.getByText(expectation.writeBlockReason!)).toBeVisible()
+      }
+
+      /* Chèn KHÔNG phải một quyền ghi: PGM-04 chỉ điều hướng
+         (`AUTH-PROG-2026-08-29-PGM04-003`), nên nó mở cho mọi vai và cổng ghi
+         thật nằm ở PGM-02. Khẳng định ra ở đây để "Chèn bật cho viewer" không
+         bị đọc nhầm thành một lỗ hổng. Đo trên khối CÓ chữ ký: `AHU_STAGE`
+         thiếu chữ ký nên nó bị chặn vì lý do khác, và một case đọc nhầm hai lý
+         do sẽ "đạt" ở mọi vai. */
+      await libraryList(page).getByRole('button', { name: /^AHU_RESET/ }).click()
+      await expect(page.getByRole('button', { name: /Chèn vào POU/ })).toBeEnabled()
+
+      /* Và bất kể vai nào, PHIÊN NÀY không phát một lệnh ghi nào: người dùng
+         mới chỉ đọc và bấm vào các thẻ. */
+      expect(writes, `vai ${expectation.role} phát lệnh ghi khi chỉ đang đọc`).toEqual([])
+      expectNoBrowserFailures(failures, `PGM-04 vai ${expectation.role}`)
+      await testInfo.attach(`pgm04-role-${expectation.role}`, {
+        body: JSON.stringify({ lane: 'MOCK/HOST', ...expectation, writeBlockReason: String(expectation.writeBlockReason) }, null, 2),
+        contentType: 'application/json',
+      })
+    })
+  }
+
+  /*
+  `ISS-PGM04-16` — "Intercept toàn bộ method mutation để khẳng định zero
+  mutation cho Preview/Used-In/Insert navigation/cancel/blocked."
+
+  Case Chèn cũ đã đếm lệnh ghi, nhưng CHỈ trên đường Chèn. Preview (mã nguồn) và
+  Used-In là hai bề mặt đọc mới của `T61-403`/`T61-404`, và chúng chưa từng bị
+  đo — một `POST` lọt vào đường đọc sẽ không có gì bắt.
+
+  Phép đo đọc `PROGRAMMING_ENDPOINTS` — bảng do hợp đồng sinh ra — chứ không một
+  danh sách tên viết tay: `checkProgrammingLibraryEntry` là `POST` nhưng KHÔNG
+  ghi gì (máy chủ khoá nó theo tên ở `security_matrix_test.go`), và mọi
+  operation khác được phân loại theo đúng method của nó, kể cả operation chưa
+  tồn tại lúc viết dòng này.
+  */
+  test('T61-503: Preview, Used-In và Chèn (cả huỷ lẫn bị chặn) phát 0 mutation', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      'khổ hẹp khoá sẵn mọi đường ghi; case chỉ-đọc khổ hẹp đã có riêng')
+    const lane = libraryLane()
+    const failures = observeBrowserFailures(page)
+    const writes = observeProgrammingWrites(page)
+    await openLibrary(page, lane, 'PROJECT')
+
+    await libraryList(page).getByRole('button', { name: /^AHU_STAGE/ }).click()
+
+    /* 1) Preview mã nguồn (`T61-404`). `AHU_STAGE` không lưu mã nguồn, và khay
+       phải NÓI RA điều đó thay vì dựng một khung ST "trông giống" từ
+       `interface` — ghép ra một thứ chưa từng chạy trên thiết bị nào là cách
+       một người đọc sai thứ đang điều khiển tủ. */
+    await page.getByRole('tab', { name: 'Mã nguồn' }).click()
+    await expect(page.getByTestId('library-source-unavailable'))
+      .toHaveAttribute('data-availability', 'NOT_STORED')
+
+    // 2) Used-In (`T61-403`).
+    await page.getByRole('tab', { name: 'Nơi sử dụng' }).click()
+    await expect(page.getByRole('region', { name: 'Nơi sử dụng' })).toBeVisible()
+
+    // 3) Chèn → HUỶ, trên khối CÓ chữ ký (`AHU_STAGE` thiếu chữ ký nên bị chặn).
+    await libraryList(page).getByRole('button', { name: /^AHU_RESET/ }).click()
+    // Vế đối chứng của khay Mã nguồn: khối CÓ lưu mã nguồn thì phải hiện ra nó.
+    // Thiếu vế này, một khay không bao giờ in gì cũng "đạt" ca NOT_STORED.
+    await page.getByRole('tab', { name: 'Mã nguồn' }).click()
+    await expect(page.getByTestId('library-source-viewer')).toHaveValue(/FUNCTION AHU_RESET/)
+    await page.getByRole('tab', { name: 'Chi tiết' }).click()
+    await page.getByRole('button', { name: /Chèn vào POU/ }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Huỷ' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    // 4) Ca BỊ CHẶN: khối chờ review Controls/Safety, ở tab Hệ thống.
+    await switchScope(page, 'SYSTEM')
+    await libraryList(page).getByRole('button', { name: /^PID/ }).click()
+    const blockedInsert = page.getByRole('button', { name: /Chèn vào POU/ })
+    await expect(blockedInsert).toBeDisabled()
+    await blockedInsert.click({ force: true })
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+
+    const mutations = writes.filter((entry) => {
+      const path = entry.split(' ')[1]
+      // Đường kiểm (`.../entries/check`) là POST CHỈ-ĐỌC, khoá theo tên ở máy
+      // chủ. Nó không xuất hiện trên đường đọc nào ở đây, nhưng loại nó ra một
+      // cách tường minh vẫn đúng hơn là để phép đo phụ thuộc vào việc nó vắng.
+      return !path.endsWith('/library/entries/check')
+    })
+    expect(mutations, 'PGM-04 phát lệnh ghi trên đường CHỈ ĐỌC').toEqual([])
+    await testInfo.attach('pgm04-zero-mutation', {
+      body: `lane=MOCK/HOST\nsurfaces=Preview,Used-In,Insert-cancel,Insert-blocked\nwrites=${JSON.stringify(writes)}`,
+      contentType: 'text/plain',
+    })
+    expectNoBrowserFailures(failures, 'PGM-04 zero mutation')
+  })
+
+  /*
+  `ISS-PGM04-16` — "Offline fixture biến lỗi thành empty thay vì giữ dữ liệu" là
+  một trong ba lý do issue TỪ CHỐI đóng.
+
+  Trang 1 về được; trang 2 hỏng. Điều bị cấm là danh sách đã tải **biến mất**:
+  người dùng đang đọc ba khối, xin thêm, và mất luôn ba khối đang đọc — một cái
+  giá không ai chọn để đổi lấy một thông báo lỗi.
+  */
+  test('T61-503: trang-N lỗi GIỮ NGUYÊN trang đã tải và thử lại được', async ({ page }) => {
+    const lane = libraryLane()
+    lane.pageSize = 2
+    const failures = observeBrowserFailures(page)
+    await openLibrary(page, lane, 'SYSTEM')
+
+    await expect(libraryCards(page)).toHaveCount(2)
+    const more = page.getByRole('button', { name: /Tải thêm khối/ })
+    await expect(more).toBeVisible()
+
+    lane.failNextPage = true
+    await more.click()
+    await expect(page.getByRole('alert')).toBeVisible()
+    // Dữ liệu đã tải KHÔNG bị xoá.
+    await expect(libraryCards(page)).toHaveCount(2)
+    await expect(page.getByText('Không có khối nào khớp bộ lọc.')).toHaveCount(0)
+    await expect(page.getByText(/Chưa đọc được Thư viện điều khiển/)).toHaveCount(0)
+
+    // Và đường thử lại là đường THẬT: mở lại máy chủ rồi bấm, trang sau phải về.
+    lane.failNextPage = false
+    await page.getByRole('button', { name: /Tải thêm khối/ }).click()
+    await expect(libraryCards(page)).toHaveCount(SYSTEM_ENTRY_COUNT)
+    /* 503 của trang 2 là do CHÍNH case này bơm vào — nó là thứ đang được đo.
+       Mọi lỗi console khác vẫn làm đỏ. */
+    expectNoBrowserFailures(failures, 'PGM-04 phân trang lỗi trang-N', ['/programming/libraries'])
+  })
+
+  /* Hai câu "rỗng" khác nhau dẫn tới hai hành động khác nhau: một bên là bỏ bộ
+     lọc, một bên là đi tạo khối. Trang nào gộp chúng lại là trang mời người ta
+     tạo lại đúng thứ đang có sẵn trên thiết bị. */
+  test('T61-503: "0 kết quả vì bộ lọc" KHÁC "thư viện chưa có khối nào"', async ({ page }) => {
+    const lane = libraryLane()
+    await openLibrary(page, lane, 'PROJECT')
+    await expect(libraryCards(page)).toHaveCount(PROJECT_ENTRY_COUNT)
+
+    await page.getByRole('searchbox').fill('KHONG_TON_TAI_KHOI_NAO')
+    await expect(page.getByText('Không có khối nào khớp bộ lọc.')).toBeVisible()
+    await expect(page.getByText('Thư viện của Project này chưa có khối nào.')).toHaveCount(0)
+    /* Đúng MỘT hành động ở trạng thái RỖNG, và nó là đường QUAY LẠI. Thanh lọc
+       phía trên cũng có một nút cùng tên, nên phải hỏi ĐÍCH DANH nút nằm trong
+       khu danh sách — nếu không, phép kiểm đo nút của thanh lọc và không nói
+       được gì về trạng thái rỗng. */
+    const blocksSection = page.locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Danh sách khối' }) })
+    await blocksSection.getByRole('button', { name: 'Xoá bộ lọc' }).click()
+    await expect(libraryCards(page)).toHaveCount(PROJECT_ENTRY_COUNT)
+  })
+
+  /*
+  Mất quyền GIỮA CHỪNG ≠ mất kết nối. 403 nói "phiên này không còn được đọc",
+  503 nói "thiết bị chưa trả lời". Mời người ta bấm Thử lại cho một 403 là mời
+  họ lặp lại một việc không bao giờ thành công.
+  */
+  test('T61-503: mất quyền giữa chừng nói đúng câu, không mượn câu của mất kết nối', async ({ page }) => {
+    const lane = libraryLane()
+    lane.forbidLibraries = true
+    await openLibrary(page, lane, 'PROJECT')
+
+    await expect(page.getByText(/Vai hiện tại không xem được Thư viện điều khiển/)).toBeVisible()
+    await expect(page.getByText(/Chưa đọc được Thư viện điều khiển/)).toHaveCount(0)
+    await expect(page.getByText('Thư viện của Project này chưa có khối nào.')).toHaveCount(0)
+    await expect(libraryCards(page)).toHaveCount(0)
+  })
+
+  /*
+  `ISS-PGM04-16` — "Có test skip nhưng summary gọi toàn suite PASS" là một trong
+  ba lý do issue TỪ CHỐI đóng.
+
+  Một `test.skip` có điều kiện KHÔNG sai: desktop và khổ hẹp là hai lane, và mỗi
+  phép đo chỉ có nghĩa ở một trong hai. Cái sai là khi một lần bỏ qua **không có
+  lane nào gánh nó** — lúc ấy tổng kết in "20 passed, 1 skipped" và không ai đọc
+  được rằng phép kiểm ấy chưa từng chạy ở đâu cả.
+
+  Case này đọc THẲNG tệp spec, gom mọi `test.skip` trong khối PGM-04, rồi đòi mỗi
+  lý do phải có mặt trong sổ kế toán kèm tên lane gánh nó. Thêm một `test.skip`
+  mới mà quên khai sẽ làm ĐỎ ngay tại đây — "bỏ qua rồi quên" không còn là một
+  trạng thái im lặng được nữa.
+  */
+  test('T61-503: mọi lần bỏ qua của PGM-04 đều khai được lane nào gánh nó', async ({}, testInfo) => {
+    const reasons = readPgm04SkipReasons()
+    expect(reasons.length, 'khối PGM-04 không còn test.skip nào — sổ kế toán đã lỗi thời').toBeGreaterThan(0)
+
+    const ledger = new Map(PGM04_SKIP_LEDGER.map((entry) => [entry.reason, entry]))
+    const undeclared = [...new Set(reasons)].filter((reason) => !ledger.has(reason))
+    expect(undeclared, 'test.skip chưa khai trong PGM04_SKIP_LEDGER').toEqual([])
+
+    /* Và chiều ngược lại: một mục trong sổ mà không còn `test.skip` nào ứng với
+       nó là một lời khai về một thứ không tồn tại — nó làm sổ đọc như thể phạm
+       vi rộng hơn thực tế. */
+    const orphaned = PGM04_SKIP_LEDGER.map((entry) => entry.reason)
+      .filter((reason) => !reasons.includes(reason))
+    expect(orphaned, 'mục trong sổ không còn test.skip nào ứng với nó').toEqual([])
+
+    // Không mục nào được để trống lane gánh: đó chính là trạng thái bị cấm.
+    for (const entry of PGM04_SKIP_LEDGER) {
+      expect(entry.coveredBy, `"${entry.reason}" không khai lane gánh`).toBeTruthy()
+      expect(entry.why.length, `"${entry.reason}" không nói vì sao lane kia bỏ qua`).toBeGreaterThan(20)
+    }
+
+    await testInfo.attach('pgm04-skip-ledger', {
+      body: PGM04_SKIP_LEDGER
+        .map((entry) => `${entry.coveredBy}\t${entry.reason}\n\t${entry.why}`)
+        .join('\n'),
+      contentType: 'text/plain',
+    })
+  })
+
+  /*
+  `T61-503` — FIXTURE `impact` phải phủ ĐỦ mọi nhóm mà sản phẩm vẽ ra.
+
+  Đây là một lỗi đã xảy ra thật, không phải một giả thiết. `ISS-PIO-*` thêm bốn
+  nhóm (`writableOutputsAffected` và ba nhóm ánh xạ Điểm) vào
+  `ProgrammingImpactKey`; fixture của lane e2e không được cập nhật, nên trang
+  đọc chúng thành `UNAVAILABLE` — hành vi ĐÚNG, vì "không thấy" không phải
+  "không có" — và nút Đưa vào vận hành khoá vĩnh viễn. Journey `UJ-PROG-01..08`
+  đỏ trên `main`, và không có gì trong bộ test nói được vì sao.
+
+  Case này đọc `IMPACT_GROUP_ORDER` — danh sách mà CHÍNH TRANG dùng để vẽ — rồi
+  đối chiếu với payload fixture thật, lấy qua đúng route mock. Nhóm thứ mười ba
+  thêm vào ngày mai sẽ làm đỏ Ở ĐÂY, kèm tên nhóm còn thiếu, thay vì làm đỏ một
+  journey dài với thông báo "nút không bấm được".
+  */
+  test('T61-503: fixture impact phủ đủ mọi nhóm mà trang Commission vẽ ra', async ({ page }) => {
+    const state: MockState = {
+      etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED',
+      commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false
+    }
+    await installProgrammingMocks(page, state)
+    await login(page)
+
+    /* Gọi THẲNG route mock rồi đọc payload: đối chiếu với một hằng viết tay
+       trong test sẽ là so một bản sao với một bản sao khác. Payload lấy từ
+       chính đường mà ứng dụng đi mới là vế đối chiếu thật. */
+    const payloads = await page.evaluate(async (paths) => {
+      const out: Record<string, string[]> = {}
+      for (const path of paths) {
+        const response = await fetch(path)
+        const body = await response.json() as { impact?: Record<string, unknown> }
+        out[path] = Object.keys(body.impact ?? {})
+      }
+      return out
+    }, [
+      `/api/v1/programming/revisions/${ACTIVE_REVISION_ID}/changes/revision-mock-0001`,
+      `/api/v1/programming/revisions/none/changes/${ACTIVE_REVISION_ID}`,
+    ])
+
+    for (const [path, keys] of Object.entries(payloads)) {
+      const missing = IMPACT_GROUP_ORDER.filter((key) => !keys.includes(key))
+      expect(missing, `fixture impact thiếu nhóm ở ${path}`).toEqual([])
+    }
+    /* Và danh sách của trang phải KHÔNG RỖNG: nếu `IMPACT_GROUP_ORDER` một ngày
+       rỗng thì `missing` cũng rỗng, và case này "đạt" mà không kiểm gì. */
+    expect(IMPACT_GROUP_ORDER.length).toBeGreaterThanOrEqual(12)
   })
 
   test('T61-306: PGM-04 không có vi phạm axe nghiêm trọng', async ({ page }) => {
