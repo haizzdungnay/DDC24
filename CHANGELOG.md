@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGUI-01` Không ghép Active Revision toàn cục vào sai Project (#470, 2026-09-05)
+
+- **Triệu chứng (production, `PC-001`/`PC-002`/`PM-011`).** Overview chọn `AHU-MASTER-SEQUENCE`
+  trong khi Active Revision toàn cục thuộc `SOAK-10P-20260824-172521`. Màn hình đồng thời hiện
+  `Active: Yes`, `Running`, và "active revision number is unresolved" — **ba câu không thể cùng
+  đúng**. FE còn gọi `GET /revisions/{active}/changes/{base}` với hai Revision khác Project; backend
+  từ chối bằng `400 PRG-ERR-REQ-001` **đúng theo invariant**, và nút Thử lại chỉ lặp lại đúng request
+  sai ấy (`retryable=false`).
+- **Nguyên nhân gốc.** `GET /runtime` là read model của **CONTROLLER**, không của Project: nó trả
+  đúng một `activeRevisionId` cho cả thiết bị. Ba bề mặt (Overview, `ProgrammingLayout`,
+  `ProgrammingContextStrip`) tự ghép con số ấy vào Project đang xem, mỗi nơi một luật. Rev A khoá một
+  Project trên mỗi controller nên `items[0]` từng là phép xấp xỉ đúng; nó thôi đúng ngay khi danh
+  sách có Project thứ hai — và danh sách production đã có.
+- **Cách sửa.** Một mô-đun thuần duy nhất trả lời câu hỏi ấy:
+  `features/programming/shared/activeRevisionOwnership.ts` (`owned` / `foreign` / `unresolved` /
+  `not-commissioned` / `unavailable` / `loading`). `ProgrammingLayout` phân giải **một lần** rồi phát
+  `subjectProject` + `activeOwnership` qua context; Overview **đọc** chúng thay vì tự chọn lại — nếu
+  không, `programIntents` (đọc theo Project của shell) sẽ bị ghép với gói đang chạy (chọn theo luật
+  của trang), tức hai nửa của một bảng thuộc hai Project khác nhau. `ownedActiveRevisionId` là **cổng
+  duy nhất** cho phép đọc Revision đang chạy và phép so sánh Draft↔Active, nên cặp chưa chứng minh
+  cùng Project không phát ra request nào.
+- **`null` phải nói được VÌ SAO.** "Chưa Commission", "gói đang chạy thuộc Project khác", "không quy
+  được về Project nào" và "runtime không đọc được" đều làm `activeRevisionId` rỗng, nhưng chỉ câu đầu
+  là sự thật về thiết bị. Lý do được mang theo tới cả ba chỗ hiển thị: dải ngữ cảnh
+  (`ActiveBadge`), popover `Chi tiết` (`contextDetails`), bảng Program (`activeProgramSet`) và thẻ so
+  sánh (`draftActiveRelation`, thêm `ACTIVE_OTHER_PROJECT`/`ACTIVE_PROJECT_UNRESOLVED`). In "Chưa
+  Commission gói nào lên thiết bị" trên một thiết bị **đang chạy** là câu sai mà người vận hành đọc
+  ngay trước lúc cân nhắc rollback.
+- **Backend giữ nguyên invariant.** `GetRevisionChangesDetail` (đường FE) vẫn trả `ErrInvalidRequest`
+  ⇒ `400 PRG-ERR-REQ-001` cho cặp khác Project, trong khi `GetRevisionChanges` (đường Commission) vẫn
+  giữ cách nới của `ISS-PRG-CTRL-001`. Hai đường cố ý xử khác nhau mà **không có gì đang khoá sự khác
+  nhau ấy** — nay có `TestGetRevisionChangesDetailTuChoiCapKhacProject`.
+- **Kiểm chứng (HOST, 2026-09-05).** `npx vitest --run --environment jsdom src`: 230 file / 2889 test
+  PASS (2876 trước lap này) và 18 file / 371 test PASS trên phạm vi đã đổi;
+  `go test ./internal/programming/application ./internal/programming/transport/http -count=1`: `ok`;
+  `npm run lint` + `npm run build`: PASS (chunk `programming` 138.38 KiB gzip, ngân sách R3 165 KiB).
+  **Fault injection 9/9 RED** — 8 lượt trên FE (bỏ luật chọn Project đang chạy, bỏ cổng
+  `ownedActiveRevisionId` ở trang và ở popover, bỏ nhánh `foreign` của badge, gộp lý do ở
+  `activeProgramSet`/`contextDetails`/`draftActiveRelation`, bỏ điều kiện quyền sở hữu ở
+  `overviewViewModel`) và 1 lượt trên Go (bỏ chốt khác-Project trong `revisionChanges`).
+- **Chưa đo được.** Bằng chứng trình duyệt thật với ≥2 Project trên bo (`#414`: CI không có runner).
+  Lane này là **HOST**, không nâng thành TARGET/HIL/`RELEASE_READY`.
+
+Refs: `ISS-PGUI-01`, `PC-001`, `PC-002`, `PM-011`, `ISS-PRG-CTRL-001`, `T60-015`, `T60-017`.
+
+
 ### Fixed — `ISS-PGM04-18` / `T61-505` Bằng chứng Chrome DevTools cho PGM-04, và lỗi trả tiêu điểm (#463, 2026-09-05)
 
 - **Triệu chứng 1.** Bằng chứng UI của PGM-04 chỉ có ảnh Playwright: phiên audit `2026-09-03` không
