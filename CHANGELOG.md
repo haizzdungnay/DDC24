@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Fixed — `WEB-HIST-006` Khởi động lại báo mất cả một bucket vẫn còn lấy được (2026-09-05)
+
+- **Triệu chứng.** Sau mỗi lần nâng cấp, trang Trends treo cờ vàng **PARTIAL** kèm
+  `scheduler_restart_no_backfill`. Đo trên `SOM-DDC-24-foxlinx`: dịch vụ dừng **11:07:33**, lên lại
+  **11:07:47**, nhưng historian ghi gap `[11:07:45, 11:08:00)` — nghĩa là tuyên bố mất trắng trọn
+  bucket 15 giây trong khi tiến trình đã sống lại **bên trong chính bucket đó** và core vẫn còn số
+  đo để đóng nó. Cảnh báo còn nguyên suốt cửa sổ xem, nên cứ mỗi lần deploy lại thêm một vệt đỏ
+  vĩnh viễn vào lịch sử — cờ PARTIAL mất dần ý nghĩa cảnh báo.
+- **Nguyên nhân gốc.** `PrepareRestartGaps` (`historian_scheduler.go`) đặt mốc kế tiếp bằng
+  `floor(restart, interval) + interval`, tức **nhảy qua** biên đang mở, rồi tính trọn khoảng từ
+  frontier tới mốc ấy là gap. Bucket đang mở chưa hề đóng sổ: nó chỉ mất **độ phân giải**, không mất
+  dữ liệu.
+- **Bug thứ hai, cùng hàm.** Vòng lặp dùng `for _, schedule := range s.schedules` — biến value —
+  nên mọi lần gán `schedule.durableUntilUTCMS` đều rơi vào bản sao rồi mất; mọi nơi khác trong file
+  đều lấy `&s.schedules[i]`. Hệ quả: sau **mỗi** lần khởi động lại, frontier bền vững tụt về `0`, và
+  hai bảo vệ dựa vào nó — treo lịch khi đồng hồ nhảy lùi, lọc row đã bền vững — im lặng tắt ngóm.
+- **Cách sửa.** Khi biên đang mở trùng đúng một bucket hot 15 giây và chưa được ghi, scheduler đọc
+  snapshot hiện tại và **đóng nốt bucket đó**; chỉ phần thật sự trôi qua trọn vẹn mới ra gap. Mẫu
+  phục hồi **không** bị kéo về biên: `last_sample_utc_ms` giữ đúng thời điểm core quan sát
+  (11:07:47), nên bản ghi vẫn nói thật rằng bucket này đóng muộn. Chu kỳ ≥ 30 giây có biên rơi giữa
+  hai bucket hot nên giữ nguyên gap; mọi trục trặc (không đọc nổi snapshot, snapshot đã trôi sang
+  bucket khác, ghi hỏng) đều quay về hành vi cũ — thà báo thiếu còn hơn dựng một bucket không có số
+  đo nào đứng sau. Vòng lặp chuyển sang con trỏ nên frontier bền vững sống sót qua khởi động lại.
+- **Vì sao test cũ không bắt được.** `TestHistorianShadowSchedulerBackwardClockSuspendsUntilDurableFrontier`
+  dựng sẵn tình huống để frontier bền vững phải được ghi, nhưng vì gán rơi vào bản sao nên lịch chưa
+  từng bị treo lần nào — test vẫn xanh nhờ một nhánh khác. Sửa xong, cơ chế treo hoạt động thật và
+  cycle vượt frontier chỉ đặt lại lịch, mẫu đầu tiên rơi sang cycle kế; test được cập nhật theo đúng
+  hành vi ấy, kèm khẳng định thẳng `durableUntilUTCMS` khác `0` sau `PrepareRestartGaps`.
+- **Test mới.** Đóng bucket đang mở thay vì ghi gap (khớp mốc đo thật trên bo); bucket trôi qua trọn
+  vẹn vẫn ra gap `[03:13:45, 03:14:00)`; và không đọc được snapshot thì quay về gap đầy đủ, không
+  dựng hot row.
+- **Kèm theo (FE).** Banner lịch sử đếm `1 history gaps reported` — nay dùng đúng số ít
+  `1 history gap reported`, có test.
+- **Kiểm chứng.** Go `go vet` sạch + **21 package** PASS; FE **229/229 file · 2855/2855 test** PASS,
+  `npm run lint` PASS, `npm run build:release` PASS (chunk `programming` 137.64 KiB / ngân sách R3
+  165 KiB).
+
 ### Fixed — `ISS-PGM04-17` / `T61-504` Real-backend E2E cho toàn lifecycle PGM-04, và một read model chết (#462, 2026-09-05)
 
 - **Triệu chứng.** `compatibility` của **mọi entry PROJECT, trên mọi thiết bị**, luôn là `UNKNOWN`.
