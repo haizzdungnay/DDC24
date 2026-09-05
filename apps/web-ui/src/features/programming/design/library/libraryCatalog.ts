@@ -1,6 +1,7 @@
 import type { ProgrammingLibraryEntry, ProgrammingLibraryPage } from '../../model/types'
 import { groupLibraryEntries } from '../../model/library'
 import {
+  insertUsabilityBlock,
   libraryPresentation,
   type LibraryPresentation,
   type LibraryUsability as SharedLibraryUsability,
@@ -111,8 +112,18 @@ export function catalogCategories(entries: readonly CatalogEntry[]): string[] {
   return [...new Set(categories)].sort()
 }
 
+/**
+ * `T61-406` — Quick Library hỏi ĐÚNG thang bậc mà PGM-04 hỏi.
+ *
+ * Trước lát này hàm này đọc thẳng `usability` và bỏ trắng `compatibility`, nên
+ * một khối `REQUIRES_MIGRATION` bị PGM-04 chặn vẫn chèn được từ khay chèn
+ * nhanh — cùng một khối, hai câu trả lời, và câu dễ dãi hơn nằm đúng ở bề mặt
+ * người ta chèn nhanh. Đó là chính xác lớp lỗi mà `T61-203` đã phải sửa một lần
+ * cho `DEPRECATED`; đi qua `insertUsabilityBlock` là cách nó không tái diễn với
+ * lý do thứ tư.
+ */
 export function isInsertable(entry: CatalogEntry): boolean {
-  return entry.usability.kind === 'AVAILABLE'
+  return insertUsabilityBlock(entry.usability, entry.compatibility) === null
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   compatibilityDisplay,
   entryTags,
   insertBlockReason,
+  insertCompatibilityStatement,
   libraryUsability,
   insertTargetCandidates,
   metadataValue,
@@ -71,6 +72,76 @@ describe('insertBlockReason', () => {
   it('thiếu chữ ký chặn Insert, không im lặng cho chèn một lời gọi không dựng nổi', () => {
     expect(insertBlockReason({ ...libraryEntryFixture(), signature: undefined }, true))
       .toBe('SIGNATURE_UNAVAILABLE')
+  })
+
+  /*
+  `T61-406` — `REQUIRES_MIGRATION` là một câu của MÁY CHỦ, không phải một suy
+  đoán của giao diện: nó nghĩa là Revision đang vận hành pin một version khác
+  version mang khối này. Chèn lúc ấy là ghi vào mã nguồn một lời gọi mà lần Kiểm
+  tra kế tiếp sẽ từ chối — và người dùng chỉ biết SAU KHI mã nguồn đã đổi.
+  */
+  it('REQUIRES_MIGRATION chặn Insert, kể cả khi khối tự nó dùng được', () => {
+    expect(insertBlockReason({
+      ...libraryEntryFixture(),
+      compatibility: {
+        state: 'REQUIRES_MIGRATION', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: 'pin cũ',
+      },
+    }, true)).toBe('REQUIRES_MIGRATION')
+  })
+
+  /* Thứ tự là hợp đồng: lý do thuộc về CHÍNH KHỐI đứng trước lý do thuộc về
+     gói đang chạy. Nói "cần migrate" cho một khối đang chờ review là chỉ người
+     dùng đi migrate một thứ mà migrate xong vẫn không chèn được. */
+  it('REVIEW_REQUIRED được báo TRƯỚC REQUIRES_MIGRATION', () => {
+    expect(insertBlockReason({
+      ...libraryEntryFixture(),
+      featureState: 'REVIEW_REQUIRED',
+      compatibility: {
+        state: 'REQUIRES_MIGRATION', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: null,
+      },
+    }, true)).toBe('REVIEW_REQUIRED')
+  })
+
+  /*
+  `UNKNOWN` KHÔNG chặn — và đây là ca dễ làm sai nhất của lát này. Hợp đồng ghi
+  `UNKNOWN` là giá trị MẶC ĐỊNH (Project chưa Commission thì không có gì để so)
+  và MỌI entry SYSTEM đều mang nó. Chặn cứng nghĩa là `TON`/`TOF`/`CTU` không
+  chèn được trên bất kỳ Project mới nào — một lệnh cấm mà máy chủ chưa hề đưa
+  ra. Sự thật ấy đi bằng `insertCompatibilityStatement` (kiểm ngay dưới), không
+  bằng một phép chặn.
+  */
+  it('UNKNOWN và field VẮNG đều không chặn, vì đó là mặc định của hợp đồng', () => {
+    expect(insertBlockReason({ ...libraryEntryFixture(), compatibility: undefined }, true)).toBeNull()
+    expect(insertBlockReason({
+      ...libraryEntryFixture(),
+      compatibility: { state: 'UNKNOWN', requiredVersion: null, availableVersion: null, reason: null },
+    }, true)).toBeNull()
+  })
+})
+
+/*
+`ISS-PGM04-15` — "không coi unknown là compatible". Phép kiểm ở đây là: có gì
+để NÓI hay không. Trả `null` cho `UNKNOWN` chính là quy nó về im lặng, và im
+lặng đúng là cách người đọc hiểu nó thành `COMPATIBLE`.
+*/
+describe('insertCompatibilityStatement', () => {
+  it('chỉ im lặng khi máy chủ đã KHẲNG ĐỊNH là tương thích', () => {
+    expect(insertCompatibilityStatement({ kind: 'compatible' })).toBeNull()
+  })
+
+  it('UNKNOWN có câu để nói, và câu ấy giữ nguyên lý do của máy chủ', () => {
+    expect(insertCompatibilityStatement({ kind: 'unknown', reason: 'chưa Commission' }))
+      .toEqual({ kind: 'unknown', reason: 'chưa Commission' })
+  })
+
+  /* Giữ cả hai version: "cần migrate" mà không nói từ đâu sang đâu là một câu
+     người vận hành không hành động được. */
+  it('REQUIRES_MIGRATION giữ đủ hai version để người vận hành hành động được', () => {
+    expect(insertCompatibilityStatement({
+      kind: 'requires-migration', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: 'pin cũ',
+    })).toEqual({
+      kind: 'requires-migration', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: 'pin cũ',
+    })
   })
 })
 
