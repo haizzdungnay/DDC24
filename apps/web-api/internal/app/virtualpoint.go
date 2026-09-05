@@ -993,8 +993,28 @@ func virtualPointNumber(value any) (float64, bool) {
 func virtualPointDTO(item VirtualPoint) PointDTO {
 	item = normalizeVirtualPoint(item)
 	value := item.Value
+	/* `F-PIO-001` (`ISS-PIO-36` kịch bản 4) — CHẤT LƯỢNG PHẢI CÓ BẰNG CHỨNG.
+	 *
+	 * `value` vắng mặt trong cấu hình nghĩa là CHƯA AI TỪNG GHI điểm này:
+	 * `validateConfigVirtualPoints` không bắt buộc khoá `value`, nên một VP tạo
+	 * qua đúng API sản phẩm có thể sống mãi ở trạng thái đó. Bản cũ đóng dấu
+	 * `quality: good` VÔ ĐIỀU KIỆN cho mọi VP, nên số 0 do
+	 * `defaultVirtualPointValue` sinh ra đi ra Point Catalog dưới nhãn GOOD —
+	 * người vận hành đọc một số bịa như một số đo tốt.
+	 *
+	 * Nhánh `source == PROGRAM` phía `overlayVirtualPoints` đã theo đúng luật
+	 * này từ trước (tra không ra slot ⇒ `quality = unknown`); nhánh VP do người
+	 * vận hành sở hữu thì chưa. Đây là cùng một luật, không phải luật mới.
+	 *
+	 * GIỮ `value` là mặc định theo kiểu tín hiệu chứ không xoá thành `nil`: đó
+	 * là giá trị mà chính điểm sẽ mang theo hợp đồng khi chưa ai ghi
+	 * (`virtualPointBootValue` dùng đúng hàm này), và `syncVirtualPointToCore`
+	 * cũng đẩy đúng số đó xuống Core. Trường nói ra sự thật "chưa có số đo" là
+	 * `quality`, không phải `value`. */
+	quality := "good"
 	if value == nil {
 		value = defaultVirtualPointValue(item.SignalType)
+		quality = "unknown"
 	}
 	tag := fallbackPointTag(item.Tag, item.ID)
 	/* `ISS-PIO-16` — `readWrite` nói SỰ THẬT VẬN HÀNH, không chép lại cờ cấu hình.
@@ -1025,7 +1045,7 @@ func virtualPointDTO(item VirtualPoint) PointDTO {
 		Kind:       "virtual",
 		Value:      value,
 		Unit:       item.Unit,
-		Quality:    "good",
+		Quality:    quality,
 		Source:     "virtual_point",
 		Priority:   "Virtual Point",
 		UpdatedAt:  item.UpdatedAt,

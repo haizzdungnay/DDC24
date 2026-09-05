@@ -8,6 +8,58 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-36` Cổng V&V đầu-cuối lớp Point/I/O, kịch bản 3–8 (#382, 2026-09-05)
+
+- **Vì sao issue này ở Đợt 1.** Thân #382 nói thẳng: *"332 test FE hiện xanh trong khi 7 finding Cao
+  đang tồn tại — không bộ test nào phủ được các đường đó, nên 'xanh' hiện **không chứng minh gì** về
+  lớp Point."* Nhóm `5a…5g` đã đóng ở #476; lượt này làm **kịch bản 3, 4, 5, 6, 7 và 8**.
+- **Lỗi tìm được và đã vá trong cùng phiên (`F-PIO-001`).**
+  - *Triệu chứng:* một VP **chưa ai từng ghi** đi ra Point Catalog với `quality: GOOD` và giá trị `0`.
+  - *Nguyên nhân gốc:* `validateConfigVirtualPoints` **không bắt buộc** khoá `value`, nên một VP tạo
+    qua đúng API sản phẩm có thể không mang giá trị nào; `virtualPointDTO` lại đóng dấu
+    `Quality: "good"` **vô điều kiện**, còn `value` rơi về `defaultVirtualPointValue`. Kết quả là một
+    con số bịa được trình bày như một số đo tốt. Nhánh `source == PROGRAM` ngay bên cạnh đã theo đúng
+    luật ngược lại từ trước (*tra không ra slot ⇒ `quality = unknown`*) — nên đây là **cùng một luật
+    bị bỏ sót ở một nhánh**, không phải luật mới.
+  - *Cách sửa:* `value` vắng mặt ⇒ `quality = unknown`. **Giữ** giá trị mặc định theo kiểu tín hiệu:
+    đó là số mà chính điểm mang theo hợp đồng khi chưa ai ghi (`virtualPointBootValue` và
+    `syncVirtualPointToCore` dùng đúng hàm đó). Trường nói ra sự thật "chưa có số đo" là `quality`.
+- **Bằng chứng đi qua đúng đường sản phẩm** (`apps/web-api/internal/app/pio36_end_to_end_test.go`):
+  mỗi kịch bản ghi cấu hình **thật** vào `ConfigDir`, đọc qua **đúng adapter production**
+  (`programmingPointCatalog`, `programmingModbusSlots`) và hỏi **đúng authority** mà Check/Commission
+  hỏi — cùng nguyên tắc đã dùng cho `5a…5g`, vì một bộ bằng chứng dựng dữ liệu bằng tay sẽ lặp lại
+  đúng lỗ hổng nó sinh ra để bịt.
+  - **KB 3** (`F-PIO-004`): cấu hình 744 điểm thật (24 LOCAL + 464 VP + 256 EXT), phân trang tới hết
+    ở `limit = 100` — không mất, không lặp, và tín hiệu "đã đủ" (`nextCursor == nil`) đúng ở **mọi**
+    trang chứ không chỉ trang cuối.
+  - **KB 4** (`F-PIO-001`): quality rỗng/lạ/`CONFIG_ERROR`/`STALE`/`OFFLINE` đi hết ba lớp overlay ra
+    Catalog mà không lớp nào viết lại thành `GOOD`; kèm hai vế của luật VP nói trên.
+  - **KB 5** (`F-PIO-029`): binding đóng dấu trước **restart** (tiến trình `App` mới trên cùng
+    `ConfigDir`) qua được authority sau restart với **cùng số slot**; thiết bị **mất liên lạc** không
+    đổi nghĩa binding và ra `OFFLINE` (không gộp vào `BAD`/`GOOD`, không biến mất khỏi Catalog);
+    thiết bị bị **vô hiệu hoá trong cấu hình** thì binding cũ bị **CHẶN**, không lặng lẽ trỏ sang
+    điểm khác.
+  - **KB 6** (`F-PIO-008`/`F-PIO-009`): ma trận 4 SKU khoá số kênh từng khối, giữ nguyên **bất đối
+    xứng có chủ ý** (khối bắt buộc UI/AO/DO khi chưa handshake vẫn công bố theo ABI nhưng
+    `presence = unknown`; khối tuỳ chọn DI đòi bằng chứng dương); và `PT100` cho **ba** câu trả lời
+    khác nhau theo SKU với **hai lý do khác nhau** cho hai ca cùng `withheld`.
+  - **KB 7** (`F-PIO-013`): `io_config.conf` + `io_safe_state.conf` được ghi như **một giao dịch**,
+    nên khi read-back lệch thì **cả hai** tệp phải trở lại bản cũ. Test sẵn có chỉ kiểm tệp `io`; một
+    lần rollback đi nửa đường sẽ để bo chạy trạng thái an toàn của một cấu hình vừa bị từ chối.
+  - **KB 8** (`F-PIO-022`, `apps/iobus/.../tests/test_modbus_master_fake.cpp`): lệnh ghi đi ra dây
+    dưới dạng **frame RTU thật** tới một slave libmodbus thật trên PTY. Vế 1: giá trị có mặt ở bảng
+    thanh ghi của slave và kết quả báo về là `applied`. Vế 2 — vế quan trọng hơn: slave **ACK rồi bỏ
+    qua** (đúng hành vi VFD khi tham số bị khoá) thì kết quả phải là `unverified` /
+    `readback_mismatch`, **không bao giờ** `applied`. Hai vế dùng **hai nguồn** bật xác nhận khác
+    nhau (cờ trên request và `verify_after_write` khai theo điểm trong profile).
+- **Đã tiêm lỗi để chứng minh bộ bằng chứng còn kêu: 8/8 đỏ** — catalog luôn khai đã đủ; VP chưa ghi
+  lại đóng dấu GOOD; `VerifyBinding` luôn nói khớp; khối tuỳ chọn công bố kênh không cần bằng chứng;
+  rollback bỏ quên `io_safe_state`; `verify_write_outcome` luôn nói `applied`; bỏ hẳn lượt đọc lại;
+  bỏ nguồn `verify_after_write` theo điểm.
+- **Kịch bản 1, 2 còn lại và issue vẫn MỞ.** Cả hai đòi chân *"chạy runtime, có giá trị thật"* trên
+  bo DDC-24 — không dựng lại được trên host. Kịch bản 8 chứng minh được vì frame RTU là thật; thứ còn
+  thiếu ở đó chỉ là đấu dây vật lý.
+
 ### Changed — `ISS-STED-20` Hoà giải điều kiện cổng V&V với phạm vi phát hành V1.0 (#369/#367, 2026-09-05)
 
 - **Triệu chứng.** `REV-STED-IEC-001` §8.1 và thân #369 đều nói cổng `ISS-STED-20` *"chỉ chạy được khi
