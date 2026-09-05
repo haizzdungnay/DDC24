@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-18` / `T61-505` Bằng chứng Chrome DevTools cho PGM-04, và lỗi trả tiêu điểm (#463, 2026-09-05)
+
+- **Triệu chứng 1.** Bằng chứng UI của PGM-04 chỉ có ảnh Playwright: phiên audit `2026-09-03` không
+  khởi động được Chrome DevTools vì máy đo thiếu X server. Ảnh Playwright không mang Console, không
+  mang Network, và không nói được gì về cây `Accessibility` — **ba trong bốn thứ mà task này tồn tại
+  để đo chưa từng được đo**.
+- **Cách sửa 1.** `--headless=new` khắc phục đúng chỗ thiếu ấy: Chrome thật, DevTools Protocol đầy
+  đủ, profile cô lập, không cần X server. Lane mới nói **CDP trực tiếp** (không qua Playwright) trên
+  **backend Go thật**: 15 ảnh ở sáu khổ, kèm axe/Console/Network/tương tác, và một dòng evidence mang
+  lớp `BROWSER/HOST`.
+- **Mọi trạng thái là trạng thái THẬT.** `offline` dựng bằng `Network.emulateNetworkConditions` —
+  khả năng của DevTools, không phải fixture; `permission` là phiên `viewer` thật; `review-required`
+  là `PID` của registry SYSTEM. Không có `page.route` nào. Một Project duy nhất
+  (`projectsPerController = 1`), nên "thư viện rỗng" dùng **thứ tự thời gian** thay cho hai Project.
+- **Triệu chứng 2 — lỗi sản phẩm mà lane này phát hiện.** `document.activeElement` sau `Esc` là
+  `BODY`: người dùng bàn phím mở drawer soạn thảo, bấm `Esc`, và bị thả ở đầu tài liệu — phải Tab
+  lại từ đầu để về đúng nút họ vừa rời.
+- **Nguyên nhân gốc 2.** `Modal` ghi nhớ nút mở bằng listener `focusin`/`pointerdown` cài lúc
+  **mount**, nhưng nhiều chỗ gọi chỉ dựng `Modal` KHI mở (`LibraryAuthoringDrawer`:
+  `if (!mode) return null`) — sự kiện của nút mở đã xảy ra trước khi listener tồn tại. Và hiệu ứng
+  trả tiêu điểm chỉ chạy khi `open` chuyển sang `false`; hộp thoại bị **gỡ khỏi cây** thì nó không
+  bao giờ chạy. `T61-306` ghi "Esc/return-focus drawer" là `DONE`, nhưng phép đo trước đó **chưa
+  từng hỏi** `document.activeElement` sau khi đóng.
+- **Cách sửa 2.** `Modal` ghi nhớ nút mở ngay lúc mount (hiệu ứng ấy khai báo trước hiệu ứng đặt
+  tiêu điểm ban đầu, nên tiêu điểm còn ở nút mở) **và** trả tiêu điểm khi unmount. Kèm test đơn vị
+  dựng đúng hình dạng gây lỗi (`{open && <Modal/>}`), focus nút mở trước khi bấm — bấm mà không
+  focus là đo phép đo của chính mình.
+- **Số đo bố cục:** 3/3/2/2/1/1 cột ở 1440/1280/1024/768/**700**/390; khay 352/352/320 px rồi
+  phủ/toàn màn; không tràn ngang ở khổ nào; axe serious/critical **0**, `console.error` **0**,
+  `pageerror` **0**, HTTP ≥400 **0**. Ba khối được gieo chứ không phải một: với một thẻ, số cột luôn
+  bằng 1 ở mọi khổ và phép đo không nói được gì.
+- **Bí mật.** Script **từ chối ghi** bằng chứng nếu thấy `Bearer …`, mật khẩu viewer, hay header
+  nhạy cảm chưa che — một hàm lọc chỉ đúng khi không ai đi vòng qua nó.
+- **Giới hạn.** Chrome DevTools **MCP** không có trong phiên đo (`codex` không cài trên máy này);
+  lane dùng CDP trực tiếp — cùng giao thức, cùng dữ liệu. Số đo là `HOST`, không phải target/HIL.
+- **Phạm vi.** `scripts/{run-pgm04-devtools-audit.sh,pgm04_devtools_audit.mjs,pgm04_devtools_seed.mjs}`,
+  `apps/web-ui/src/shared/components/Modal.{tsx,test.tsx}`, `artifacts/ui-audit/pgm04/`,
+  `docs/07_records/reviews/PGM04_DEVTOOLS_AUDIT_2026-09-05.md`, `docs/03_implementation/61_…_PGM04_PLAN.md`.
+
+
 ### Fixed — `ISS-PGM04-17` / `T61-504` Real-backend E2E cho toàn lifecycle PGM-04, và một read model chết (#462, 2026-09-05)
 
 - **Triệu chứng.** `compatibility` của **mọi entry PROJECT, trên mọi thiết bị**, luôn là `UNKNOWN`.

@@ -1,0 +1,428 @@
+{
+  "lane": "BROWSER/HOST",
+  "tool": "Chrome DevTools Protocol (headless=new, profile cô lập)",
+  "commit": "0134bf322210026d1bda62d4b8323083e9e3d799",
+  "startedAt": "2026-09-05T10:17:30.837Z",
+  "baseURL": "http://127.0.0.1:4177",
+  "captures": [
+    {
+      "name": "empty-project-1280x800",
+      "viewport": "1280x800",
+      "band": ">=1280",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT",
+      "at": "2026-09-05T10:17:33.167Z",
+      "screenshot": "empty-project-1280x800.png",
+      "layout": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "cards": 0,
+        "columns": 0,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 0,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "empty-project"
+    },
+    {
+      "name": "ready-1440x900",
+      "viewport": "1440x900",
+      "band": ">=1280",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:34.652Z",
+      "screenshot": "ready-1440x900.png",
+      "layout": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "cards": 3,
+        "columns": 3,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 352,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "ready"
+    },
+    {
+      "name": "ready-1280x800",
+      "viewport": "1280x800",
+      "band": ">=1280",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:35.334Z",
+      "screenshot": "ready-1280x800.png",
+      "layout": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "cards": 3,
+        "columns": 3,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 352,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "ready"
+    },
+    {
+      "name": "ready-1024x768",
+      "viewport": "1024x768",
+      "band": "1024-1279",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:36.011Z",
+      "screenshot": "ready-1024x768.png",
+      "layout": {
+        "scrollWidth": 1024,
+        "clientWidth": 1024,
+        "cards": 3,
+        "columns": 2,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 320,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "ready"
+    },
+    {
+      "name": "ready-768x1024",
+      "viewport": "768x1024",
+      "band": "768-1023",
+      "expectedInspector": "drawer",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:36.693Z",
+      "screenshot": "ready-768x1024.png",
+      "layout": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "cards": 3,
+        "columns": 2,
+        "inspector": "drawer",
+        "drawerWidth": 352,
+        "dockWidth": null,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "ready"
+    },
+    {
+      "name": "ready-700x900",
+      "viewport": "700x900",
+      "band": "<768",
+      "expectedInspector": "fullscreen",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:37.353Z",
+      "screenshot": "ready-700x900.png",
+      "layout": {
+        "scrollWidth": 700,
+        "clientWidth": 700,
+        "cards": 3,
+        "columns": 1,
+        "inspector": "fullscreen",
+        "drawerWidth": 700,
+        "dockWidth": null,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "ready"
+    },
+    {
+      "name": "ready-390x844",
+      "viewport": "390x844",
+      "band": "<768",
+      "expectedInspector": "fullscreen",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:38.057Z",
+      "screenshot": "ready-390x844.png",
+      "layout": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "cards": 3,
+        "columns": 1,
+        "inspector": "fullscreen",
+        "drawerWidth": 390,
+        "dockWidth": null,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "ready"
+    },
+    {
+      "name": "empty-filter-1280x800",
+      "viewport": "1280x800",
+      "band": ">=1280",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&q=KHONG_TON_TAI_KHOI_NAO",
+      "at": "2026-09-05T10:17:38.573Z",
+      "screenshot": "empty-filter-1280x800.png",
+      "layout": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "cards": 0,
+        "columns": 0,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 0,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "empty-filter"
+    },
+    {
+      "name": "review-required-1280x800",
+      "viewport": "1280x800",
+      "band": ">=1280",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=SYSTEM&entry=SYSTEM%2FPID",
+      "at": "2026-09-05T10:17:40.451Z",
+      "screenshot": "review-required-1280x800.png",
+      "layout": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "cards": 46,
+        "columns": 3,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 352,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "review-required",
+      "reviewInsert": {
+        "count": 1,
+        "allDisabled": true
+      }
+    },
+    {
+      "name": "authoring-1280x800",
+      "viewport": "1280x800",
+      "band": ">=1280",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT",
+      "at": "2026-09-05T10:17:40.922Z",
+      "screenshot": "authoring-1280x800.png",
+      "layout": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "cards": 3,
+        "columns": 3,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 0,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "authoring"
+    },
+    {
+      "name": "target-chooser-1280x800",
+      "viewport": "1280x800",
+      "band": ">=1280",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:41.588Z",
+      "screenshot": "target-chooser-1280x800.png",
+      "layout": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "cards": 3,
+        "columns": 3,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 352,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "target-chooser",
+      "insertOpened": {
+        "opened": true,
+        "disabled": false
+      }
+    },
+    {
+      "name": "tablet-drawer-768x1024",
+      "viewport": "768x1024",
+      "band": "768-1023",
+      "expectedInspector": "drawer",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:42.239Z",
+      "screenshot": "tablet-drawer-768x1024.png",
+      "layout": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "cards": 3,
+        "columns": 2,
+        "inspector": "drawer",
+        "drawerWidth": 352,
+        "dockWidth": null,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "drawer-open"
+    },
+    {
+      "name": "mobile-readonly-390x844",
+      "viewport": "390x844",
+      "band": "<768",
+      "expectedInspector": "fullscreen",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT&entry=PROJECT%2F63d2d279-1664-4ee4-9cee-85cdce8c11bd",
+      "at": "2026-09-05T10:17:42.878Z",
+      "screenshot": "mobile-readonly-390x844.png",
+      "layout": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "cards": 3,
+        "columns": 1,
+        "inspector": "fullscreen",
+        "drawerWidth": 390,
+        "dockWidth": null,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "mobile-read-only",
+      "mobileWrites": {
+        "controls": [
+          {
+            "label": "Khối PROJECT mới",
+            "disabled": true
+          },
+          {
+            "label": "Chèn vào POU…",
+            "disabled": true
+          },
+          {
+            "label": "Sửa khối",
+            "disabled": true
+          },
+          {
+            "label": "Xoá khối",
+            "disabled": true
+          }
+        ],
+        "anyEnabled": false
+      }
+    },
+    {
+      "name": "offline-1280x800",
+      "viewport": "1280x800",
+      "band": ">=1280",
+      "state": "offline",
+      "at": "2026-09-05T10:17:48.002Z",
+      "screenshot": "offline-1280x800.png",
+      "note": "Mất mạng dựng bằng Network.emulateNetworkConditions của DevTools, không bằng fixture.",
+      "offline": {
+        "sawFailClosedBanner": true
+      },
+      "inducedRequestFailures": 13
+    },
+    {
+      "name": "permission-viewer-1280x800",
+      "viewport": "1280x800",
+      "band": ">=1280",
+      "expectedInspector": "dock",
+      "url": "/eng/programming/projects/e8a049db-321f-4942-a84a-e13af14c76d9/library?scope=PROJECT",
+      "at": "2026-09-05T10:17:49.515Z",
+      "screenshot": "permission-viewer-1280x800.png",
+      "layout": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "cards": 3,
+        "columns": 3,
+        "inspector": "dock",
+        "drawerWidth": null,
+        "dockWidth": 0,
+        "smallHitTargets": []
+      },
+      "axeSeriousOrCritical": [],
+      "state": "permission",
+      "role": "viewer",
+      "viewerWrites": {
+        "createVisible": true,
+        "createDisabled": true,
+        "reason": "Vai hiện tại không sửa được Thư viện điều khiển."
+      }
+    }
+  ],
+  "browser": "Chrome/141.0.7390.37",
+  "protocol": "1.3",
+  "focusAfterEscape": {
+    "tag": "BUTTON",
+    "label": "Khối PROJECT mới"
+  },
+  "finishedAt": "2026-09-05T10:17:49.516Z",
+  "consoleErrors": [],
+  "pageErrors": [],
+  "requestFailures": [
+    {
+      "requestId": "5064.295",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.296",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.297",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.298",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.299",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.300",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.301",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.302",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.303",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.304",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.305",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.306",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    },
+    {
+      "requestId": "5064.307",
+      "errorText": "net::ERR_INTERNET_DISCONNECTED",
+      "type": "Fetch"
+    }
+  ],
+  "httpErrors": []
+}
