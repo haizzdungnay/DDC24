@@ -35,7 +35,7 @@ function draft(overrides: Partial<OverviewViewModel['draft']> = {}): OverviewVie
 }
 
 function active(overrides: Partial<OverviewViewModel['active']> = {}): OverviewViewModel['active'] {
-  return { label: 'Active #12', sequence: 12, present: true, taskState: 'RUNNING', ...overrides }
+  return { label: 'Active #12', sequence: 12, present: true, ownership: 'owned', taskState: 'RUNNING', ...overrides }
 }
 
 function core(overrides: Partial<OverviewViewModel['core']> = {}): OverviewViewModel['core'] {
@@ -133,8 +133,31 @@ describe('draftActiveRelation — không bao giờ thu gọn nhầm', () => {
   })
 
   it('Core nói chưa có Active ⇒ NO_ACTIVE, khác hẳn "trùng nhau"', () => {
-    expect(draftActiveRelation(draft(), active({ present: false, label: null, sequence: null }), core()))
+    expect(draftActiveRelation(draft(), active({ present: false, ownership: 'not-commissioned', label: null, sequence: null }), core()))
       .toEqual({ relation: 'NO_ACTIVE', reason: 'NO_ACTIVE_REVISION' })
+  })
+
+  /**
+   * `ISS-PGUI-01` — `present === false` KHÔNG đồng nghĩa "controller chưa đưa
+   * gói nào vào vận hành".
+   *
+   * Trên production thiết bị ĐANG chạy `SOAK-10P-20260824-172521` trong khi
+   * người dùng mở `AHU-MASTER-SEQUENCE` (`PC-001`). Câu "chưa đưa gói nào vào
+   * vận hành" ở đây là một khẳng định sai về thiết bị, và nó được đọc ngay
+   * trước lúc cân nhắc rollback.
+   */
+  it('gói đang chạy thuộc Project khác ⇒ lý do riêng, KHÔNG nói controller chưa vận hành', () => {
+    const comparison = draftActiveRelation(
+      draft(), active({ present: false, ownership: 'foreign', label: null, sequence: null }), core()
+    )
+    expect(comparison).toEqual({ relation: 'NO_ACTIVE', reason: 'ACTIVE_OTHER_PROJECT' })
+    expect(comparison.reason).not.toBe('NO_ACTIVE_REVISION')
+  })
+
+  it('không quy được gói đang chạy về Project nào ⇒ UNKNOWN, không kết luận "chưa vận hành"', () => {
+    expect(draftActiveRelation(
+      draft(), active({ present: false, ownership: 'unresolved', label: null, sequence: null }), core()
+    )).toEqual({ relation: 'UNKNOWN', reason: 'ACTIVE_PROJECT_UNRESOLVED' })
   })
 
   it('hai sequence bằng nhau và Draft sạch ⇒ SAME; khác nhau ⇒ DIFFERENT', () => {
