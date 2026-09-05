@@ -745,7 +745,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 | `T61-403` | P0 | Used-In lazy page + deep-link exact PGM-02 bằng `objectId`, giữ filter/returnTo và dirty guard. | `T61-104/304` | `DONE` | 1,5 nd |
 | `T61-404` | P1 | Preview/Open read-only cho entry và source/interface authoritative; unsupported metadata hiện rõ. | `T61-304` | `DONE` (sửa lại ở `ISS-PGM04-13`, xem đính chính bên dưới) | 1 nd |
 | `T61-405` | P0 | Standalone Insert mở `TargetPouChooser`, kiểm Project/mode/language/type/selection rồi **điều hướng** sang PGM-02 kèm ý định chèn (`entryId` + `libraryRevisionId`). PGM-04 **không** gọi insertion adapter. | `T61-203/403` | `DONE` (disposition khoá ở `ISS-PGM04-14`) | 2 nd |
-| `T61-406` | P0 | Zero-mutation guards: cancel/no-target/type mismatch/permission/offline/stale/REVIEW_REQUIRED; một success = một Undo. | `T61-405` | `DONE` | 1 nd |
+| `T61-406` | P0 | Zero-mutation guards: cancel/no-target/self/cycle/permission/read-only/deprecated/review-required **và compatibility**; phép chèn thật ở PGM-02 là **đúng một** bước Hoàn tác. | `T61-405` | `DONE` (sửa lại ở `ISS-PGM04-15`, xem đính chính bên dưới) | 1 nd |
 
 **Đính chính `T61-401` (`ISS-PGM04-11`, đo `2026-09-05`).** Trạng thái `DONE` đã
 được ghi cho một **form phẳng**, không phải một wizard. Sáu khoảng cách thật:
@@ -883,6 +883,58 @@ khác nhau — và cả hai đều **không chèn gì**.
 qua, hoặc không phân giải được). Để nó nằm lại nghĩa là mỗi lần tải lại trang
 lại mời chèn cùng một khối, và người dùng bấm Đồng ý theo phản xạ sẽ chèn hai
 lần.
+
+**Đính chính `T61-406` (`ISS-PGM04-15`, đo `2026-09-05`).** Trạng thái `DONE` đã
+được ghi cho một bộ guard **thiếu một chiều** và cho một bằng chứng
+zero-mutation **không đo thứ nó tuyên bố đo**. Bốn khoảng cách thật:
+
+1. **`compatibility` không tham gia vào phép chặn ở bất kỳ bề mặt nào.**
+   `insertBlockReason` (PGM-04) và `isInsertable` (Quick Library) chỉ đọc
+   `usability`. Hệ quả: một khối mà máy chủ đã nói `REQUIRES_MIGRATION` — tức
+   Revision **đang vận hành** pin một version khác version mang khối này — vẫn
+   chèn được từ cả hai bề mặt, và người dùng chỉ biết ở lần Kiểm tra kế tiếp,
+   **sau khi** mã nguồn đã đổi. Nay cả ba bề mặt đi qua một hàm duy nhất,
+   `insertUsabilityBlock(usability, compatibility)`.
+2. **`UNKNOWN` bị im lặng cho qua.** Issue đòi "không coi unknown là
+   compatible", nhưng **fail-closed không dùng được ở đây**: hợp đồng
+   (`openapi.yaml`, `ProgrammingLibraryCompatibility`) ghi `UNKNOWN` là giá trị
+   **MẶC ĐỊNH** — Project chưa Commission Revision nào thì không có gì để so —
+   và **mọi entry SYSTEM luôn `UNKNOWN`** vì `library_usages` cố ý không giữ
+   usage của chúng (migration `0007`). Chặn cứng nghĩa là chặn `TON`/`TOF`/`CTU`
+   trên mọi Project chưa vận hành, vì một lý do máy chủ **không hề khẳng định**.
+   Nên `UNKNOWN` đi đường thứ hai mà issue cho phép — "flow được authority phê
+   duyệt", tức `AUTH-PROG-2026-08-29-PGM04-003`: sự thật "chưa đo được" hiện
+   **ngay trên băng xác nhận của PGM-02**, nơi người dùng bấm. Điều bị cấm là
+   coi `UNKNOWN` như `COMPATIBLE`, và **im lặng chính là coi nó như thế**.
+3. **Phép chặn chỉ sống trong `disabled` của một `<button>`.** Ý định đi qua
+   **URL**: một địa chỉ gõ tay, dán lại, hay một bookmark cũ tới thẳng bộ soạn
+   thảo mà không đi qua nút Chèn của PGM-04. Đó đúng là câu issue dùng để từ
+   chối đóng ("guard chỉ tồn tại ở UI nhưng test direct intent có thể bypass").
+   Nay `resolveLibraryInsertIntent` trả thêm kết quả thứ tư — `blocked` — và nó
+   đọc `usability`/`compatibility` **từ danh mục do máy chủ trả**, không từ tham
+   số URL: tham số URL là lời khai của bên gọi, danh mục là câu trả lời của
+   authority. Kèm theo, `disabled` của Inspector nay đọc thẳng kết quả thang bậc
+   thay vì liệt kê lại từng lý do — bản cũ liệt kê `REVIEW_REQUIRED ||
+   DEPRECATED` nên **`SIGNATURE_UNAVAILABLE` lọt qua**, và dòng lý do bên cạnh
+   lại nói "màn hình đang ở chế độ chỉ đọc", một câu sai.
+4. **Bằng chứng "0 mutation" là một danh sách cấm gồm hai cái tên.** Test cũ
+   khẳng định zero-mutation bằng `not.toContain('upsertProgrammingLibraryEntry')`
+   và `not.toContain('saveProgrammingDraft')`. Một đường ghi mới thêm vào ngày
+   mai đi qua khẳng định ấy mà không có gì đỏ — và riêng `T61-402`/`T61-404` đã
+   thêm hai operation trong cùng tháng. Nay phép đo đọc `PROGRAMMING_ENDPOINTS`
+   (bảng **do hợp đồng sinh ra**) và lọc theo **phương thức HTTP**, nên mọi
+   operation — kể cả operation chưa tồn tại lúc viết test — đều được phân loại
+   đúng; một `operationId` không có trong bảng thì **ném lỗi**, chứ không im
+   lặng xếp vào "không phải mutation". Ca **bị chặn** cũng được phủ, trước đây
+   chỉ có "thành công" và "huỷ".
+
+**Một success = một Undo, đo trên đúng lối vào.** `AC-ST-003` đã khoá "một phép
+chèn = một bước Hoàn tác" cho đường Quick Library. Đường ý định từ PGM-04 là một
+**lối vào khác**, nên nó được khoá riêng ở `DesignWorkspacePage`: chèn một FB có
+trạng thái ghi vào hai chỗ cách xa nhau (dòng khai báo trong `VAR`, lời gọi
+trong thân); nếu hai chỗ ấy đi qua hai lần ghi thì một lần `Ctrl+Z` gỡ lời gọi
+mà **bỏ lại dòng khai báo** — một biến thừa nằm im trong `VAR`, không lỗi biên
+dịch, không ai thấy.
 
 ---
 
