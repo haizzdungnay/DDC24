@@ -53,8 +53,12 @@ func TestOverviewHealthLocalIOIgnoresDisabledChannels(t *testing.T) {
 		if localIO.ReasonCode != "bad_quality_points" {
 			t.Fatalf("reasonCode = %q, want bad_quality_points", localIO.ReasonCode)
 		}
-		if localIO.Detail != "1 điểm chất lượng bad" {
-			t.Fatalf("detail = %q, want đúng 1 điểm bad (không tính UI-09 none)", localIO.Detail)
+		// `ISS-PGUI-02` — con số đi bằng `detailCount` (tham số typed), không
+		// bằng một câu tiếng Việt dựng sẵn: máy chủ không biết người dùng đang
+		// xem bằng ngôn ngữ nào. Khẳng định gốc không đổi — đúng MỘT điểm bad,
+		// không tính kênh `none`.
+		if localIO.DetailCount == nil || *localIO.DetailCount != 1 {
+			t.Fatalf("detailCount = %v, want đúng 1 điểm bad (không tính UI-09 none)", localIO.DetailCount)
 		}
 	})
 

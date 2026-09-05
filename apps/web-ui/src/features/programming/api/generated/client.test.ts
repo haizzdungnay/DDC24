@@ -130,7 +130,7 @@ describe("Programming API client sinh từ OpenAPI", () => {
   it("khoá hợp đồng bảng Programs sinh từ OpenAPI (T60-013/T60-014)", () => {
     // Bump contract đi kèm thay đổi hình dạng phản hồi; khoá số ở đây để một
     // lần sinh lại quên chạy không lặng lẽ giữ type cũ.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.36.0");
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.37.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,
