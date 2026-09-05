@@ -5,10 +5,15 @@ import { defineConfig, devices } from '@playwright/test'
  * production thật. Cấu hình này cố ý tách khỏi `playwright.config.ts`: spec
  * không dùng `page.route`, không auth mock và không được tái sử dụng một server
  * ngẫu nhiên đang chạy trên máy phát triển.
+ *
+ * `ISS-STED-20` dùng cùng stack REAL-BACKEND cho phép đo CLI -> Go -> FE. Giữ
+ * spec Gate369 trong `testMatch`: truyền tên file trên CLI vẫn bị Playwright
+ * giao với `testMatch`, nên bỏ nó khỏi đây sẽ cho "No tests found" thay vì chạy
+ * phép đo mà stage-c tuyên bố là release evidence.
  */
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /programming-real\.spec\.ts/,
+  testMatch: /(?:programming-real|gate369-cli-go-fe-real)\.spec\.ts/,
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,

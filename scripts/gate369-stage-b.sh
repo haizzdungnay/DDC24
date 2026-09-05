@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # Gate #369 chặng (b) — vector compiler ST. Đếm số test thật theo từng nhóm vector.
+# Chạy được từ mọi clone/worktree: không ghim đường dẫn máy của người đo ban đầu.
 set -u
-cd /mnt/e/TuanDuong/INTERN/DDC24_project/MK-DDC-24 || exit 1
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
 mkdir -p logs
+
 ctest --test-dir build/fw -R "^St" --output-on-failure > logs/gate369-stvector.log 2>&1
-echo "$?" > logs/gate369-stvector.exit
-echo "ST_CTEST_EXIT=$(cat logs/gate369-stvector.exit)"
-grep -E "tests passed|Total Test time" logs/gate369-stvector.log | tail -2
+status=$?
+echo "$status" > logs/gate369-stvector.exit
+
+echo "ST_CTEST_EXIT=$status"
+grep -E "tests passed|Total Test time" logs/gate369-stvector.log | tail -2 || true
+exit "$status"

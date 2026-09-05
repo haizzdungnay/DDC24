@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -u
-cd /mnt/e/TuanDuong/INTERN/DDC24_project/MK-DDC-24 || exit 1
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT" || exit 1
+mkdir -p logs
+
 ctest --test-dir build/fw --output-on-failure > logs/gate369-ctest.log 2>&1
-echo "$?" > logs/gate369-ctest.exit
-echo "CTEST_REAL_EXIT=$(cat logs/gate369-ctest.exit)"
+status=$?
+echo "$status" > logs/gate369-ctest.exit
+echo "CTEST_REAL_EXIT=$status"
+exit "$status"
