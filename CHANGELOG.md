@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Changed — Triển khai `WEB-HIST-006` (`main@d1ab0830`) lên Foxlinx (2026-09-05)
+
+- Cài Web/API `31ee5e97…` và Web UI `assets/index-BBNG7ZEE.js` lên `SOM-DDC-24-foxlinx`; FE dựng
+  bằng `npm run build:foxlinx` và guard `REVA_SCOPE_ROADMAP` = **0** cả trên host lẫn trên bo.
+  Diff `0134bf32..d1ab0830` không chạm `contracts/`, `apps/core`, `apps/iobus` hay `KX_SHM_MAGIC`,
+  nên deploy riêng lớp web không gây lệch magic SHM.
+- **Đối chứng chính.** Cùng độ dài gián đoạn 14 giây: lần khởi động lại trên binary **cũ**
+  (`11:07:33Z → 11:07:47Z`) mất trắng bucket `11:07:45` và ghi gap `[11:07:45, 11:08:00)`; lần trên
+  binary **mới** (`11:54:40Z → 11:54:54Z`) đóng được bucket `11:54:45` với `last_sample=11:54:54Z`
+  và **0 gap** `restart` sinh sau mốc deploy. Nhịp bucket kế tiếp `11:55:00` không bị đẩy.
+- Lịch sử cũ không bị bóp méo: `GET /api/v1/history` cửa sổ `11:00→11:15` vẫn trả `complete=false`
+  kèm đúng gap cũ, trong khi cửa sổ 30 phút mặc định của trang Trends (`11:27→11:57`) nay
+  `complete=true`, `gaps=[]`.
+- Kiểm chứng TARGET: 4/4 service active, health **6/6 ok**, `GET /api/v1/points` HTTP 200 với
+  **72 point**, bundle trên bo khớp bản dựng host, journal khởi động không lỗi mới. Backup tại
+  `/opt/mkddc-backups/webhist006-20260905T115428Z/` (binary + dist + `historian-v2.sqlite`).
+- Bo vẫn dùng Fake MCU và HMI disabled: đây là bằng chứng TARGET/runtime, không phải physical I/O
+  HIL hay `RELEASE_READY`. Hồ sơ:
+  `docs/07_records/test-evidence/fw-som/2026-09-05-foxlinx-web-hist-006-deploy.md`.
+
 ### Fixed — `WEB-HIST-006` Khởi động lại báo mất cả một bucket vẫn còn lấy được (2026-09-05)
 
 - **Triệu chứng.** Sau mỗi lần nâng cấp, trang Trends treo cờ vàng **PARTIAL** kèm
