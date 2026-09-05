@@ -534,7 +534,7 @@ bằng commit/Test Result/verdict đúng increment theo quy tắc §7–§8.
 | `T61-401..406` | `AC-PGM04-02/03/06`; `SYS-REQ-PROG-110` | drawer theo yêu cầu, Used-In deep-link, `TargetPouChooser` zero-mutation; e2e chặn mọi request không phải GET | **HOST/LOCAL** | Chèn KHÔNG ghi Draft từ PGM-04; không suy thành "đã kiểm đường chèn của PGM-02" |
 | `T61-401` (BE) | `SWR-REQ-PROG-BE-112..115` | `application/library_test.go` — metadata ghi được, `contentSha256` không đổi, trần đếm ký tự; `programming-real.spec.ts` đọc lại trên backend thật | **HOST/LOCAL** | Không phải bằng chứng target cho một lần GHI thật trên bo |
 | `T61-505` | `VS-PGM04-61-011/012` | Số đo bố cục 1440/1280/1024/768/390 px — `scrollWidth == clientWidth` ở cả năm; axe serious/critical = 0 | **HOST/LOCAL** | Không thay screenshot review của người thật |
-| `T61-506` | `VS-PGM04-61-014` (một nửa) | [`2026-08-29-foxlinx-pgm04-library-deploy.md`](test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md) — hash artifact, health, ba đầu dò zero-mutation | **TARGET** cho nhánh upgrade | Nhánh **rollback `NOT_RUN`**; không suy deploy thành release |
+| `T61-506` | `VS-PGM04-61-014` | [`2026-08-29-foxlinx-pgm04-library-deploy.md`](test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md) §6 — backup/hash, candidate, rollback thật exit 0, read-back DB/API/browser và redeploy exit 0 | **TARGET — TECHNICAL PASS; REVIEW PENDING** | FakeMCU, không I/O vật lý; chờ reviewer độc lập, không suy thành HIL/Test Result/release PASS |
 
 `VS-PROG-U03` vẫn **NOT_RUN** như trước. Các dòng trên là bằng chứng thi hành
 của Plan 61, không phải verdict của Verification authority.

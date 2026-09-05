@@ -3,16 +3,16 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-SW-PGM04-LIBRARY-001` |
-| Phiên bản | 0.3 |
+| Phiên bản | 0.8 |
 | Trạng thái | **`M4 — AS-BUILT`** (từ `0.3`): WP-01…WP-04 đã thi hành, phần thiết kế dưới đây mô tả code đang có |
-| Ngày | 2026-08-29 |
+| Ngày | 2026-09-06 |
 | Chủ quản đề xuất | FE Lead + Web API Lead + System Architect |
 | Người phê duyệt | Product Owner/CTO + System Architect |
 | Authority work package | `PLAN-FE-PGM-061` / `T61-003` (WP-00) |
 | Disposition authority | [`AUTH-PROG-2026-08-29-PGM04-001`](../../07_records/reviews/AUTH-PROG-2026-08-29-PGM04-001.md) |
 | Đầu vào | [`REC-PGM04-AUTHORITY-001`](../../07_records/reviews/PGM04_AUTHORITY_RECONCILIATION_2026-08-29.md), [`SPEC-PGM04-VISUAL-001`](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-04_VISUAL_SPEC_v1.md), [`LOCK-PGM04-CONTRACT-001`](../../07_records/reviews/PGM04_CONTRACT_LOCK_2026-08-29.md) |
 | Baseline As-Built | `main@2ee3c5b` + lát WP-03/WP-04 của phiên 2026-08-29 |
-| Evidence class | Thiết kế + source inspection + **HOST/LOCAL** (unit + e2e trình duyệt thật, mock route). **Không** phải bằng chứng target/HIL |
+| Evidence class | Thiết kế + source inspection + **HOST/LOCAL**; §6 có **TARGET** rollback/read-back dùng FakeMCU. Không phải HIL/Test Result/release PASS |
 | Gate | `PLAN_READY[PGM04]=PASS`; `IMPLEMENT_READY[PGM04]=GO` (`AUTH-PROG-2026-08-29-PGM04-002`, mở rộng WP-03/WP-04 ở `-003`). `RELEASE_READY` vẫn **NO-GO** |
 
 > Hồ sơ này là DDD của PGM-04. Plan 61 **không** thay thế nó: plan quản lý thứ
@@ -164,6 +164,16 @@ PGM-04 **không** có cờ cut-over riêng. Đường lùi theo thứ tự rẻ 
 lý do metadata trình bày phải tách khỏi `contentSha256` (`D61-09`) — nếu không,
 một lần sửa mô tả sẽ làm mọi artifact đã ký thành lỗi thời.
 
+### 6.1 Read-back As-Built của đường lùi
+
+Ngày 2026-09-06, đường FE + Web/API ở trên đã được chạy thật trên Forlinx theo
+chu kỳ `backup → candidate → rollback → read-back → redeploy`. Bản cũ và mới
+đều khớp checksum binary/cây `dist`; client cũ đọc được DB schema 15 và thư viện
+SYSTEM, Project/Draft fingerprint không đổi. Core/IOBus/FakeMCU không restart.
+Evidence: [`EV-PGM04-TARGET-ROLLBACK-001`](../../07_records/test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md#6-bổ-sung-2026-09-06-—-diễn-tập-rollback-thật-iss-pgm04-19).
+Kết quả kỹ thuật PASS nhưng reviewer độc lập còn `PENDING`; `RELEASE_READY` giữ
+`NO-GO`.
+
 ## 7. Blocker
 
 | Mã | Blocker | Mở bằng |
@@ -177,6 +187,7 @@ một lần sửa mô tả sẽ làm mọi artifact đã ký thành lỗi thời
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.8 | 2026-09-06 | Ghi As-Built cho chu kỳ rollback/redeploy thật của `ISS-PGM04-19`: binary/dist và Project/Draft giữ nguyên, API/browser đọc được ở cả hai phía; TARGET dùng FakeMCU, reviewer độc lập còn PENDING và release vẫn NO-GO. |
 | 0.7 | 2026-09-04 | Thi hành `T61-104`: phạm vi Draft của Used-In nay ĐO Ở SERVER từ `objects[].dependencies`, nên `availability` lên `COMPLETE` cho entry PROJECT thay vì luôn `SEALED_ONLY`. Dedupe theo cặp (Revision, POU) có hai lớp và mỗi lớp có phép đo riêng. **Đính chính:** as-built `0.6` ghi phạm vi draft là "(FE, Project đang mở)" — đó là mô tả một nguồn KHÔNG authoritative; nay server tự đo. Entry SYSTEM giữ `UNAVAILABLE` và ghi rõ vì sao `T61-104` không mở được nó: cả `library_usages` lẫn `dependencies` đều không mang entry SYSTEM, vì một POU gọi `TON` dùng khối ấy qua SOURCE chứ không qua khai báo. |
 | 0.6 | 2026-09-04 | Thi hành `T61-103`: khoá round-trip metadata PROJECT qua restart và qua migrate từ DB `v14` CÓ DỮ LIỆU. Ghi hai lỗi đã sửa: (1) `presentationSha256` đọc thẳng từ cột, trong khi công thức đã đổi một lần ở `T61-101` — nên mọi hàng ghi trước đó trả một hash không phép tính nào hiện tại tái tạo được, và client dùng hash ấy để biết "phần trình bày có đổi không" sẽ thấy mọi entry cũ "đã đổi" ngay lần đọc đầu sau nâng cấp; nay đường đọc TÍNH LẠI. (2) `updateLibraryEntryTx` bỏ sót bốn cột trình bày còn đường publish dựng entry canonical không mang metadata — hai nửa của cùng một cái bẫy, sửa cả hai cùng lúc. |
 | 0.5 | 2026-09-04 | Thi hành `T61-102`: registry SYSTEM mở `description`/`tags` cho cả 46 entry, tách `contentSha256` (tập THỰC THI) khỏi `presentationSha256` (tập TRÌNH BÀY), bump `rev-a.3 → rev-a.4`. **Đính chính `0.4` và cả thân issue `#447`:** as-built ghi registry "đã có `category`, `description` và `presentationSha256`" — đo lại thì registry chỉ có `category`; `description` và `presentationSha256` chưa hề tồn tại ở lớp SYSTEM. Ghi lỗi đã sửa: `contentSha256` của entry SYSTEM băm cả nhãn tiếng Việt, nên một lần sửa chính tả đổi danh tính thực thi mà artifact và pin Revision đang dựa vào. |

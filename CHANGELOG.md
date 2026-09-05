@@ -28,6 +28,23 @@
   `docs/07_records/test-evidence/programming/2026-09-06-sted-21-target-compiler-partial.md`, kèm raw
   JSON/provenance/preflight/postflight/health và `SHA256SUMS`.
 
+### Changed — `ISS-PGM04-19` Diễn tập rollback PGM-04 trên Forlinx (#464, 2026-09-06)
+
+- Chạy thật chu kỳ `backup → candidate ad8c322e → rollback b7c3937b → read-back →
+  redeploy ad8c322e` trên `SOM-DDC-24-foxlinx`; lệnh rollback và redeploy cuối
+  đều exit 0, binary và toàn bộ cây FE khớp checksum dự kiến.
+- DB schema 15 `quick_check=ok`; fingerprint 18 Project/18 Draft, 1 program
+  `RUNNING` và cấu hình user giữ nguyên. Core/IOBus/FakeMCU không restart; Web
+  trở lại `active/running`, `NRestarts=0`, ba mẫu health cuối đều đủ 6/6 check.
+- API Control Library đọc lại đúng `TOF/TON/TP` ở candidate, rollback và
+  redeploy. Chrome thật 1440×900 đọc được program đang chạy ở bản rollback và
+  thư viện SYSTEM ở bản cuối, 0 Console error, 0 request fail/HTTP 5xx, không
+  tràn ngang. Raw log/DB/artifact backup có manifest SHA-256 tại
+  `/opt/mkddc-backups/iss-pgm04-19-20260905T180546Z/`.
+- Bằng chứng là TARGET dùng FakeMCU, không Commission/Enable/ghi output và không
+  phải HIL/release PASS. Phần kỹ thuật `VS-PGM04-61-014` PASS; reviewer độc lập
+  còn `PENDING` nên `RSK-PGM04-101` chưa đóng.
+
 ### Fixed — `ISS-PGUI-03` Chuẩn hóa timestamp kỹ thuật 24 giờ theo UTC (#473, 2026-09-06)
 
 - Gom clock header, Overview/Last Exec, Mapping, Runtime và nhật ký Programming vào helper

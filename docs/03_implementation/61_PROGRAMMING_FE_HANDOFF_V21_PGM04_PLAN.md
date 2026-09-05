@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-FE-PGM-061` |
-| Phiên bản | 0.2 |
-| Trạng thái | **ĐÓNG — WP-00…WP-05 `DONE`. `RELEASE_READY` KHÔNG đổi (vẫn `NO-GO`)** |
-| Ngày | 2026-08-28 |
+| Phiên bản | 0.3 |
+| Trạng thái | **T61-506 đã thi hành TARGET, chờ reviewer độc lập; T61-507/#465 closeout còn mở. `RELEASE_READY` vẫn `NO-GO`** |
+| Ngày | 2026-09-06 |
 | Chủ quản | FE Lead + Web API Lead + System Architect |
 | Người review | Product Owner, Controls/Safety, QA, consumer PGM-02 |
 | Người phê duyệt | Product Owner/CTO + System Architect |
@@ -947,8 +947,8 @@ dịch, không ai thấy.
 | `T61-503` | P0 | Playwright mock route: desktop/mobile/keyboard/**bốn vai RBAC**/offline/phân trang lỗi trang-N/zero mutation, và sổ kế toán cho mọi `test.skip`. | `T61-501` | `DONE` (sửa lại ở `ISS-PGM04-16`, xem đính chính bên dưới) | 1 nd |
 | `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/**usage**/deep-link/**compatibility**/insert guard; anti-mock guard. | `T61-502/503` | `DONE` (sửa lại ở `ISS-PGM04-17`, xem đính chính bên dưới) | 1,5 nd |
 | `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, focus-return, scroll/sticky và responsive. | `T61-504` | `DONE` (sửa lại ở `ISS-PGM04-18`, xem đính chính bên dưới) | 0,5 nd |
-| `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `DONE` | 1 nd |
-| `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `DONE` | 0,5 nd |
+| `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `TARGET TECHNICAL PASS — REVIEW PENDING` | 1 nd |
+| `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `BLOCKED — #464 reviewer + #465 closeout` | 0,5 nd |
 
 **Đính chính `T61-503` (`ISS-PGM04-16`, đo `2026-09-05`).** Trạng thái `DONE` đã
 được ghi cho một suite **chỉ chạy được vai `admin`**, và cho hai fixture đã cũ đi
@@ -1226,13 +1226,13 @@ và HMI ON theo `AGENTS.md`. Không chạy firmware MCU vì Plan61 không sửa 
 - [x] OpenAPI/Go/client/registry exact-sync — `verify_programming_g1_contracts.py`,
       `verify_programming_pgm02_contract.py`, `generate_programming_library_registry.py --check`
       đều PASS sau re-pin `1.31.0 → 1.32.0`. Migration test xanh.
-      **Rollback test: `NOT_RUN` — xem dòng cuối.**
+      Rollback TARGET đã chạy; reviewer độc lập còn `PENDING`.
 - [x] Không có catalog presentation thứ hai: nhãn nhóm và tập giá trị `category`
       đều đọc từ `PROGRAMMING_LIBRARY_CATEGORY_ORDER` của registry; chữ ký đọc
       `signature` của server và **không** parse `interface` ở FE.
 - [x] `AC-PGM04-01..06` có evidence: xem [`EV-PGM04-WP0304-CLOSEOUT-001`](../07_records/reviews/PGM04_WP03_WP04_CLOSEOUT_2026-08-29.md).
-      `VS-PGM04-61-001..013` có evidence; **`VS-PGM04-61-014` một nửa** — nhánh
-      upgrade đã đo trên bo, nhánh rollback `NOT_RUN`.
+      `VS-PGM04-61-001..013` có evidence; phần kỹ thuật TARGET của
+      `VS-PGM04-61-014` PASS, reviewer độc lập còn `PENDING`.
 - [x] Matrix bốn vai được test ở UI (`libraryEntryPermissions`, `LibraryPage.test.tsx`)
       và ở direct API (`security_matrix_test.go`).
 - [x] Desktop/mobile/keyboard/a11y/Console/Network đạt ngưỡng §8: axe
@@ -1240,20 +1240,20 @@ và HMI ON theo `AGENTS.md`. Không chạy firmware MCU vì Plan61 không sửa 
       `expectNoBrowserFailures` = 0 console.error / 0 request lỗi; số đo bố cục
       không tràn ngang ở 1440/1280/1024/768/390 px. Light/dark do
       `contrast.test.ts` canh trên chính token đang dùng.
-- [~] Deploy/read-back Forlinx có artifact hash và raw log
-      ([hồ sơ](../07_records/test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md));
-      **rollback rehearsal `NOT_RUN`**.
+- [~] Deploy/read-back/rollback/redeploy Forlinx có artifact hash, raw log và
+      browser evidence
+      ([hồ sơ](../07_records/test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md#6-bổ-sung-2026-09-06-—-diễn-tập-rollback-thật-iss-pgm04-19));
+      phần kỹ thuật PASS, reviewer độc lập còn `PENDING`.
 - [x] Trace/risk/docs/CHANGELOG cập nhật cùng change-set.
 - [x] Phần chưa chạy được ghi `NOT_RUN`, không nâng release gate.
 
-**`NOT_RUN` — diễn tập rollback trên bo.** Bản sao lưu đã có sẵn trên thiết bị
-(`/opt/mkddc-web/mkddc-web.bak-pgm04-20260829T085228Z` và
-`dist.bak-pgm04-20260829T085228Z`) và các bước đã ghi trong hồ sơ deploy §1,
-nhưng phép diễn tập chưa được thực hiện: lệnh khôi phục bị cơ chế phê duyệt của
-môi trường thi hành từ chối. Cần một lần chạy có phê duyệt để đóng nốt
-`VS-PGM04-61-014`. Không suy diễn tập chưa chạy thành PASS.
+**`TARGET TECHNICAL PASS — REVIEW PENDING`.** Chu kỳ sạch ngày 2026-09-06 chạy
+`candidate → rollback → read-back → redeploy`; lệnh rollback và redeploy đều
+exit 0. DB, Project/Draft, API, browser và checksum đạt; Core/IOBus/FakeMCU giữ
+nguyên PID/NRestarts. Reviewer độc lập phải xác nhận evidence trước khi đóng
+`RSK-PGM04-101`; không suy TARGET/FakeMCU thành HIL hoặc release PASS.
 
-### 11.2 Trạng thái ba cổng tại phiên bản 0.2
+### 11.2 Trạng thái ba cổng tại phiên bản 0.3
 
 | Gate | Verdict | Lý do |
 |---|---|---|
@@ -1311,4 +1311,5 @@ Maturity hiện hành: **M2 — DRAFT CONTENT**. Chỉ chuyển M3 khi bốn ô 
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.3 | 2026-09-06 | Đồng bộ `T61-506` với chu kỳ rollback/redeploy TARGET đã chạy thật; giữ reviewer độc lập, closeout `#465` và `RELEASE_READY` ở trạng thái chưa đạt. |
 | 0.1 | 2026-08-28 | Tạo Plan61 từ audit handoff, source và runtime PGM-04; khóa SYSTEM/PROJECT, project-scoped route, capability RBAC, PID gate, publish-on-Seal; lập 38 task FE/BE/registry/QA và giữ MCU/HIL/release ngoài phạm vi. |
