@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
 import { LibraryPage } from './LibraryPage'
-import { ProgrammingApiError, ProgrammingNoResponseError } from '../api/generated/client'
+import { PROGRAMMING_ENDPOINTS, ProgrammingApiError, ProgrammingNoResponseError } from '../api/generated/client'
 import { readLibraryInsertIntent } from '../shared/libraryInsertIntent'
 
 /**
@@ -127,6 +127,35 @@ function stub(items: unknown[], overrides: Record<string, () => Promise<unknown>
     }
     return Promise.reject(new Error('unexpected ' + operationId))
   })
+}
+
+/**
+ * `T61-406` / `ISS-PGM04-15` — "0 mutation" đo bằng PHƯƠNG THỨC HTTP, không
+ * bằng một danh sách tên.
+ *
+ * Bản cũ khẳng định zero-mutation bằng `expect(written).not.toContain(
+ * 'upsertProgrammingLibraryEntry')` — một danh sách cấm gồm hai cái tên. Một
+ * đường ghi mới thêm vào ngày mai (và lát `T61-402`/`T61-404` đã thêm hai
+ * operation chỉ trong tháng này) sẽ đi qua khẳng định ấy mà không có gì đỏ:
+ * test không đo "không có phép ghi nào", nó chỉ đo "không có HAI phép ghi mà
+ * người viết test hôm ấy nhớ ra".
+ *
+ * Đây đọc `PROGRAMMING_ENDPOINTS` — chính bảng do hợp đồng sinh ra — nên mọi
+ * operation, kể cả operation chưa tồn tại lúc viết dòng này, đều được phân loại
+ * đúng. Và một `operationId` KHÔNG có trong bảng thì ném lỗi chứ không im lặng
+ * xếp vào "không phải mutation": một cái tên gõ sai không được trở thành một
+ * bằng chứng.
+ */
+const READ_ONLY_POSTS = new Set(['checkProgrammingLibraryEntry'])
+
+function mutationsIssued(): string[] {
+  return client.request.mock.calls
+    .map((call) => String(call[0]))
+    .filter((operationId) => {
+      const endpoint = (PROGRAMMING_ENDPOINTS as Record<string, { method: string } | undefined>)[operationId]
+      if (!endpoint) throw new Error(`operationId không có trong hợp đồng: ${operationId}`)
+      return endpoint.method !== 'GET' && !READ_ONLY_POSTS.has(operationId)
+    })
 }
 
 let lastLocation = ''
@@ -1146,9 +1175,7 @@ describe('PGM-04 Chèn khối (T61-405/406)', () => {
       entryId: ENTRY_ID, libraryRevisionId: '33333333-3333-4333-8333-333333333333'
     })
     // Zero mutation: không một lệnh ghi nào được phát ra từ màn hình này.
-    const written = client.request.mock.calls.map((call) => call[0])
-    expect(written).not.toContain('upsertProgrammingLibraryEntry')
-    expect(written).not.toContain('saveProgrammingDraft')
+    expect(mutationsIssued()).toEqual([])
   })
 
   it('huỷ bộ chọn POU không điều hướng và không ghi', async () => {
@@ -1162,6 +1189,86 @@ describe('PGM-04 Chèn khối (T61-405/406)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Huỷ' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(lastLocation.split('?')[0]).toBe(before.split('?')[0])
+    expect(mutationsIssued()).toEqual([])
+  })
+
+  /*
+  `T61-406` — ca BỊ CHẶN cũng phải là 0 mutation, và trước lát này nó không có
+  test nào: hai test zero-mutation cũ chỉ phủ "thành công" và "huỷ". Ca bị chặn
+  là ca người dùng bấm vào một nút đang khoá, mở/đóng Inspector, đổi tab — tức
+  đúng chuỗi thao tác dễ làm một màn hình phát ra một lượt ghi ngoài ý muốn.
+  */
+  it('mọi ca bị chặn cũng phát 0 mutation, kể cả khi người dùng cứ bấm', async () => {
+    const blocked = [
+      entry({ featureState: 'REVIEW_REQUIRED' }),
+      entry({ libraryState: 'DEPRECATED' }),
+      entry({ signature: undefined }),
+      entry({
+        compatibility: {
+          state: 'REQUIRES_MIGRATION', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: 'pin cũ'
+        }
+      }),
+    ]
+    for (const item of blocked) {
+      cleanup()
+      client.request.mockReset()
+      stub([item])
+      renderPage()
+      fireEvent.click(await screen.findByTestId('library-block-card'))
+      const insert = screen.getByRole('button', { name: /Chèn vào POU/ })
+      expect(insert).toBeDisabled()
+      fireEvent.click(insert)
+      // Không có bộ chọn POU nào mở ra, nên cũng không có đường xác nhận nào.
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(mutationsIssued()).toEqual([])
+    }
+  })
+
+  /*
+  `ISS-PGM04-15` — "Unknown compatibility ... không coi unknown là compatible".
+
+  `UNKNOWN` không chặn (nó là mặc định của hợp đồng, và mọi entry SYSTEM đều
+  mang nó), nên phép kiểm duy nhất còn lại là: nó có được NÓI RA không. Fixture
+  mặc định không khai `compatibility`, tức đúng ca "máy chủ đời cũ / chưa đo".
+  */
+  it('tương thích chưa đo được thì NÓI RA cạnh nút Chèn, không im lặng cho qua', async () => {
+    stub([entry()])
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    expect(screen.getByRole('button', { name: /Chèn vào POU/ })).toBeEnabled()
+    const reason = screen.getByTestId('library-insert-reason')
+    expect(reason).toHaveAttribute('data-block', 'NONE')
+    expect(reason).toHaveTextContent(/chưa đo được mức tương thích/)
+    expect(reason).toHaveTextContent(/chưa có nghĩa là tương thích/)
+  })
+
+  it('gói đang vận hành pin version khác thì Chèn bị khoá kèm version cần migrate', async () => {
+    stub([entry({
+      compatibility: {
+        state: 'REQUIRES_MIGRATION', requiredVersion: '1.0.0', availableVersion: '2.0.0', reason: 'pin cũ'
+      }
+    })])
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    expect(screen.getByRole('button', { name: /Chèn vào POU/ })).toBeDisabled()
+    expect(screen.getByTestId('library-insert-reason')).toHaveTextContent(/pin 1\.0\.0/)
+  })
+
+  /*
+  Bản cũ liệt kê lý do trong `disabled`: `REVIEW_REQUIRED || DEPRECATED`. Nên
+  `SIGNATURE_UNAVAILABLE` — lý do thứ ba, đã có trong thang bậc từ `T61-203` —
+  lọt qua: nút vẫn bấm được, và dòng lý do bên cạnh nói "màn hình đang ở chế độ
+  chỉ đọc", một câu SAI chỉ người dùng đi tìm nhầm nguyên nhân.
+  */
+  it('không đọc được chữ ký thì khoá Chèn, và nói ĐÚNG lý do đó', async () => {
+    stub([entry({ signature: undefined })])
+    renderPage()
+    fireEvent.click(await screen.findByTestId('library-block-card'))
+    expect(screen.getByRole('button', { name: /Chèn vào POU/ })).toBeDisabled()
+    const reason = screen.getByTestId('library-insert-reason')
+    expect(reason).toHaveAttribute('data-block', 'SIGNATURE_UNAVAILABLE')
+    expect(reason).toHaveTextContent(/không đọc được chữ ký/)
+    expect(reason).not.toHaveTextContent(/chế độ chỉ đọc/)
   })
 
   /* Không chọn POU thì nút xác nhận phải khoá: một phép chèn "vào đâu đó" là
