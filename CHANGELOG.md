@@ -40,7 +40,7 @@
   Inspector vẽ `—` **vĩnh viễn** — một ô chết trông y hệt "máy chủ không đọc được mốc thời gian".
   Đây cũng là lý do phép tiêm `toLocaleString('vi-VN')` ban đầu ra GREEN: dòng ấy không chạy được.
 - **Kiểm chứng (HOST, 2026-09-05).** FE `npx vitest --run --environment jsdom src`: **231 file /
-  2930 test PASS**; Go `go vet ./... && go test ./... -count=1`: **21 gói ok**; `npm run lint` +
+  2932 test PASS** (đo lại sau khi merge `origin/main`); Go `go vet ./... && go test ./... -count=1`: **21 gói ok**; `npm run lint` +
   `npm run build`: PASS (chunk `programming` 139.17 KiB gzip / ngân sách R3 165 KiB); C++
   `ctest`: **1479/1479 PASS** (configure/build/ctest cùng exit 0, bật cả MODBUS/BACNET/HMI);
   `./scripts/verify-project.sh --component layout`: PASS; `verify_programming_g1_contracts.py` +
