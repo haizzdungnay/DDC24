@@ -5,6 +5,7 @@
  *        Test này verify interface + build sạch.
  */
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -702,6 +703,209 @@ TEST(ModbusMasterWriteLifecycle, UnencodableWriteIsDroppedAndCounted)
 
     EXPECT_EQ(metrics.get(0).write_dropped, 1u);
     EXPECT_EQ(metrics.get(0).write_failed, 0u);
+}
+
+/* ---------------------------------------------------------------------------
+ * `ISS-PIO-36` (#382) KỊCH BẢN 8 — ĐIỂM MODBUS WRITABLE: GHI → XÁC NHẬN →
+ * GIÁ TRỊ ĐÚNG Ở THIẾT BỊ (`F-PIO-022`)
+ *
+ * VÌ SAO KỊCH BẢN NÀY CHỨNG MINH ĐƯỢC TRÊN HOST
+ * ---------------------------------------------
+ * Ba chân còn lại của #382 ("chạy runtime, có giá trị thật") đòi bo DDC-24 thật.
+ * Chân này thì KHÔNG: lệnh ghi đi ra dây dưới dạng một frame RTU thật, và một
+ * slave libmodbus thật ở đầu kia PTY áp nó vào bảng thanh ghi của nó. Thứ chưa
+ * chứng minh được chỉ còn là đấu dây vật lý.
+ *
+ * Điều then chốt là VẾ THỨ HAI. Một test chỉ kiểm `tab_registers[10] == 4321`
+ * chứng minh lệnh tới nơi, nhưng KHÔNG chứng minh hệ biết khi nào lệnh KHÔNG
+ * tới nơi — mà đó mới là nội dung của `F-PIO-022` và `ISS-PIO-23`: nhiều VFD
+ * ACK lệnh ghi rồi bỏ qua khi tham số đang bị khoá. Nên ca thứ hai dựng đúng
+ * thiết bị đó: slave trả lời OK rồi lập tức đặt lại thanh ghi về giá trị cũ.
+ * Hệ phải nói `unverified`, tuyệt đối không `applied`.
+ * ------------------------------------------------------------------------ */
+namespace {
+
+/* Slave RTU thật phục vụ trên PTY. `sabotage_after_write` tái lập thiết bị
+ * "ACK rồi bỏ qua": ngay sau khi trả lời một lệnh ghi, thanh ghi bị đặt về
+ * `sabotage_value` nên lượt đọc lại xác nhận sẽ thấy giá trị khác. */
+struct VerifySlave {
+    modbus_t*        ctx     = nullptr;
+    modbus_mapping_t* mapping = nullptr;
+    std::thread      thread;
+    std::atomic<int> served{0};
+    std::atomic<bool> stop{false};
+    bool             sabotage_after_write = false;
+    uint16_t         sabotage_reg   = 0;
+    uint16_t         sabotage_value = 0;
+
+    void start(const std::string& dev, int pty_master)
+    {
+        ctx = modbus_new_rtu(dev.c_str(), 19200, 'N', 8, 1);
+        ASSERT_NE(ctx, nullptr);
+        modbus_set_slave(ctx, 1);
+        modbus_set_socket(ctx, pty_master);
+        /* Chờ CÓ HẠN, không chờ vô hạn: số lượt request của một `poll_once` phụ
+         * thuộc bố cục block và có thể đổi khi bộ gộp block đổi. Một vòng phục
+         * vụ đếm cứng số lượt sẽ biến một thay đổi vô hại thành test treo. */
+        modbus_set_indication_timeout(ctx, 0, 500000);
+        mapping = modbus_mapping_new(128, 128, 128, 128);
+        ASSERT_NE(mapping, nullptr);
+        thread = std::thread([this]() {
+            uint8_t request[MODBUS_RTU_MAX_ADU_LENGTH] = {};
+            while (!stop.load()) {
+                const int n = modbus_receive(ctx, request);
+                if (n <= 0) {
+                    if (errno == ETIMEDOUT) continue;
+                    break;
+                }
+                /* `request[1]` là mã hàm của ADU RTU. Đọc TRƯỚC khi trả lời để
+                 * biết lượt này có phải lệnh ghi không. */
+                const uint8_t fc = (n > 1) ? request[1] : 0;
+                if (modbus_reply(ctx, request, n, mapping) < 0) break;
+                if (sabotage_after_write && (fc == 6 || fc == 16)) {
+                    mapping->tab_registers[sabotage_reg] = sabotage_value;
+                }
+                served.fetch_add(1);
+            }
+        });
+    }
+
+    void finish()
+    {
+        stop.store(true);
+        if (thread.joinable()) thread.join();
+        if (mapping) modbus_mapping_free(mapping);
+        if (ctx) modbus_free(ctx);
+    }
+};
+
+/* Profile một điểm holding register ghi được, KHAI `verify_after_write` — đúng
+ * hình dạng cấu hình mà một điểm writable của sản phẩm mang. */
+std::string write_verify_profile(const std::string& tag)
+{
+    return write_tmp_profile(tag,
+        R"json({"profile_id":"vv-pio36","points":[{"name":"setpoint","fc":3,"addr":10,)json"
+        R"json("count":1,"type":"uint16","scale":1.0,"offset":0.0,"writable":true,)json"
+        R"json("verify_after_write":true}]})json");
+}
+
+/* `request_readback` tách hai NGUỒN của cùng một luật: cờ trên chính request
+ * (đường control cũ, `MBR-B107`) và `verify_after_write` khai theo ĐIỂM trong
+ * profile. Hai vế của kịch bản 8 dùng hai nguồn khác nhau, nên một bản vá chỉ
+ * nối được một nguồn sẽ lộ ra ngay. */
+PendingWrite setpoint_write(float value, bool request_readback)
+{
+    PendingWrite w{};
+    w.slave_addr = 1;
+    w.fc         = 6;
+    w.reg_addr   = 10;
+    w.value      = value;
+    w.type       = PointType::Uint16;
+    w.byte_order = ByteOrder::AB;
+    w.scale      = 1.0f;
+    w.readback   = request_readback;
+    /* `request_id` rỗng ⇒ không ai chờ kết quả và sink không được gọi. Kịch bản
+     * này nói về đúng đường có người chờ kết quả. */
+    w.request_id = "pio36-scenario-8";
+    return w;
+}
+
+} // namespace
+
+/* Vế 1 — thiết bị NHẬN: giá trị có mặt ở bảng thanh ghi của slave, và kết quả
+ * báo về là `applied` kèm đúng số đã đọc lại. */
+TEST(PIO36Scenario8, WriteReachesDeviceAndIsReportedApplied)
+{
+    PtyRtu pty;
+    pty.open_pair();
+    ASSERT_FALSE(pty.slave_dev.empty());
+    const std::string profile = write_verify_profile("vv_ok");
+
+    VerifySlave slave;
+    slave.start(pty.slave_dev, pty.master_fd);
+    slave.mapping->tab_registers[10] = 1234;
+
+    FieldbusConfig cfg;
+    cfg.rs485.device = pty.slave_dev;
+    cfg.rs485.baud   = 19200;
+    cfg.slaves.push_back(make_slave(1, profile, "vfd", 1));
+
+    ModbusMaster master;
+    ASSERT_TRUE(master.open(cfg));
+    std::vector<WriteResult> results;
+    master.set_write_result_sink([&results](const WriteResult& r) { results.push_back(r); });
+
+    ExtCache      cache;
+    FieldbusMetrics metrics;
+    master.submit_write(setpoint_write(4321.0f, /*request_readback=*/true));
+    master.poll_once(1, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+    slave.finish();
+
+    /* Vế "giá trị đúng Ở THIẾT BỊ" — đọc thẳng bảng thanh ghi của slave, không
+     * hỏi lại chính hệ đang được kiểm. */
+    EXPECT_EQ(slave.mapping->tab_registers[10], 4321);
+
+    ASSERT_EQ(results.size(), 1u) << "lệnh ghi có request_id mà không báo kết quả về";
+    EXPECT_EQ(results[0].status, "applied");
+    EXPECT_EQ(results[0].reason, "");
+    EXPECT_TRUE(results[0].has_readback) << "báo applied mà không có lượt đọc lại nào";
+    EXPECT_DOUBLE_EQ(results[0].readback_value, 4321.0);
+    EXPECT_EQ(metrics.get(0).write_failed, 0u);
+
+    master.close();
+    ::unlink(profile.c_str());
+}
+
+/* Vế 2 — thiết bị ACK RỒI BỎ QUA (tham số bị khoá).
+ *
+ * Đây là ca mà `F-PIO-022` nói tới và là lý do `unverified` tồn tại. Nếu bộ máy
+ * chỉ tin ACK thì nó báo `applied` cho một thiết bị đang không nghe lời, và
+ * người vận hành tin rằng setpoint đã vào. */
+TEST(PIO36Scenario8, DeviceThatAcksButDoesNotHoldTheValueIsNeverApplied)
+{
+    PtyRtu pty;
+    pty.open_pair();
+    ASSERT_FALSE(pty.slave_dev.empty());
+    const std::string profile = write_verify_profile("vv_lock");
+
+    VerifySlave slave;
+    slave.sabotage_after_write = true;
+    slave.sabotage_reg         = 10;
+    slave.sabotage_value       = 1234;   /* thiết bị giữ nguyên giá trị cũ */
+    slave.start(pty.slave_dev, pty.master_fd);
+    slave.mapping->tab_registers[10] = 1234;
+
+    FieldbusConfig cfg;
+    cfg.rs485.device = pty.slave_dev;
+    cfg.rs485.baud   = 19200;
+    cfg.slaves.push_back(make_slave(1, profile, "vfd", 1));
+
+    ModbusMaster master;
+    ASSERT_TRUE(master.open(cfg));
+    std::vector<WriteResult> results;
+    master.set_write_result_sink([&results](const WriteResult& r) { results.push_back(r); });
+
+    ExtCache      cache;
+    FieldbusMetrics metrics;
+    /* Request KHÔNG tự xin xác nhận: nó phải được bật vì chính ĐIỂM khai
+     * `verify_after_write` trong profile. */
+    master.submit_write(setpoint_write(4321.0f, /*request_readback=*/false));
+    master.poll_once(1, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+    slave.finish();
+
+    EXPECT_EQ(slave.mapping->tab_registers[10], 1234) << "slave giả không giữ được ca 'ACK rồi bỏ qua'";
+
+    ASSERT_EQ(results.size(), 1u);
+    EXPECT_NE(results[0].status, "applied")
+        << "thiết bị KHÔNG giữ giá trị mà hệ vẫn khai đã áp — đúng lỗi F-PIO-022";
+    EXPECT_EQ(results[0].status, "unverified");
+    EXPECT_EQ(results[0].reason, "readback_mismatch");
+    EXPECT_TRUE(results[0].has_readback);
+    EXPECT_DOUBLE_EQ(results[0].readback_value, 1234.0);
+    EXPECT_EQ(metrics.get(0).write_failed, 1u);
+
+    master.close();
+    ::unlink(profile.c_str());
 }
 
 #endif

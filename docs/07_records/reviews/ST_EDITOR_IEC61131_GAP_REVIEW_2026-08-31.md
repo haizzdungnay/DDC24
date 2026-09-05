@@ -554,6 +554,33 @@ ngôn ngữ được xuất bản; phần `libraryRegistryVersion`/`targetAbi` l
 `ISS-STED-20` là **cổng cuối**, không phải một hạng mục song song: nó chỉ chạy được khi các nhánh
 trên đã vào `main`.
 
+### 8.3 Hoà giải với phạm vi phát hành V1.0 (`ADR-056`, 2026-09-05)
+
+Câu "các nhánh trên đã vào `main`" ở trên được viết **trước** khi V1.0 chốt phạm vi. Từ
+2026-09-04 chủ sở hữu phân loại `ISS-STED-16` (#367 — `VAR_IN_OUT` + `ARRAY` tĩnh + `STRUCT`) là
+**`V1-DEFER`**: ba năng lực đó **không** nằm trong tập bắt buộc để mở `RELEASE_READY` V1, issue vẫn
+**OPEN**, và **không được kéo critical path V1**.
+
+Vì thế điều kiện của `ISS-STED-20` **cho lượt ký đóng V1** đọc là:
+
+> mọi nhánh `ISS-STED-01..19` **trừ những mã đã được phạm vi phát hành chính thức hoãn** đã vào
+> `main`.
+
+Diễn giải này **không nới lỏng cổng**: nó chỉ ngăn cổng đòi một năng lực mà chính quyền phát hành đã
+tuyên bố nằm ngoài V1. Ba ràng buộc đi kèm, và thiếu bất kỳ ràng buộc nào thì việc hoãn KHÔNG có
+hiệu lực với cổng:
+
+1. Việc hoãn phải là **quyết định phạm vi phát hành có ghi hồ sơ** (`ADR-056` và bình luận phân loại
+   trên chính issue), không phải một issue tình cờ chưa xong.
+2. Issue được hoãn vẫn **OPEN** và vẫn phải đi qua `ISS-STED-20` **trước lượt ký đóng của bản đưa nó
+   trở lại phạm vi**. Hoãn là dời, không phải xoá.
+3. Hồ sơ ký đóng V1 phải **liệt kê tên** từng mã được hoãn. Một cổng bỏ qua thứ gì đó mà không nói ra
+   là một cổng đã ngừng làm cổng — đúng loại "loại trừ không công bố" mà review này sinh ra để chấm
+   dứt.
+
+Ràng buộc thứ ba là lý do mục này nằm ở đây thay vì chỉ nằm trong một bình luận GitHub: bình luận
+không được đọc lúc ký, còn hồ sơ này thì có.
+
 ---
 
 ## 9. Những chỗ ĐẠT — không được "sửa" nhầm khi thi hành các issue trên
@@ -615,5 +642,6 @@ Chủ sở hữu đã ghi nhận đúng điểm này khi duyệt: 292 test FE **
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-08-31 | Bản đầu. 15 finding, chấm 18 gate + 12 UC, 17 issue đề xuất chờ duyệt. |
+| 1.3 | 2026-09-05 | Thêm §8.3 hoà giải điều kiện của `ISS-STED-20` với phạm vi phát hành V1.0 (`ADR-056`). Chủ sở hữu phân loại `ISS-STED-16` (#367) là `V1-DEFER` ngày 2026-09-04, trong khi câu "chỉ chạy được khi các nhánh trên đã vào `main`" ở §8.1 được viết TRƯỚC khi V1 chốt phạm vi — hai câu đó mâu thuẫn nhau và làm cổng không bao giờ đóng được cho V1. §8.3 nêu rõ ba ràng buộc để việc hoãn có hiệu lực với cổng, trong đó hồ sơ ký đóng phải LIỆT KÊ TÊN từng mã được hoãn. `ADR-054` không bị đảo. |
 | 1.2 | 2026-08-31 | Chủ sở hữu ra nguyên tắc phạm vi ngôn ngữ ("IEC có thì giữ, không có thì bỏ") và ký `ADR-054`. Viết lại §10 thành 10.1 Đã ký / 10.2 Còn lại; ghi chú cập nhật vào `F-STED-005`; sửa §0 câu 3. Đã sửa `DDD-LANG-PROG-001` lên 1.2 (§4.1 + §4.3 luật WCET của `CASE`) ⇒ đóng #356; #367 đổi từ "quyết định" sang "thi hành". |
 | 1.1 | 2026-08-31 | Chủ sở hữu APPROVE WITH CONDITIONS. Bổ sung `ISS-STED-18` (Diagnostic Provenance Contract), `ISS-STED-19` (Language/Artifact Compatibility Version), `ISS-STED-20` (End-to-End V&V Evidence Gate) — tổng 20 issue / 5 đợt. Cập nhật DAG phụ thuộc (`04` nay sau `18`; `19` sau `06`; `20` là cổng cuối). Đã tạo issue trên repo, xem §8.2. |
