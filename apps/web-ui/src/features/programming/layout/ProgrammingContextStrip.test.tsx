@@ -211,6 +211,48 @@ describe('ProgrammingContextStrip — T60-102 (giữ nguyên ngữ nghĩa của 
   })
 })
 
+/**
+ * `ISS-PGUI-01` — `runtime.activeRevisionId` là read model của CONTROLLER.
+ *
+ * Ba case dưới đây khoá đúng chỗ strip từng nói sai: nó kết luận `Có` chỉ từ
+ * con số toàn cục ấy, nên mở BẤT KỲ Project nào cũng thấy "thiết bị đang chạy
+ * gói của bạn". Trên production, Project đang mở là `AHU-MASTER-SEQUENCE` còn
+ * gói đang chạy thuộc `SOAK-10P-20260824-172521` (`PC-001`).
+ */
+describe('ProgrammingContextStrip — ISS-PGUI-01: Active phải thuộc đúng Project đang mở', () => {
+  it('gói đang chạy thuộc Project khác ⇒ KHÔNG nói "Có", và nói rõ chủ thật', () => {
+    renderStrip({
+      activeSequence: null,
+      activeOwnership: { kind: 'foreign', ownerProjectId: 'p-2', ownerName: 'SOAK-10P-20260824-172521' }
+    })
+    expect(within(field('active')).queryByText('Có')).not.toBeInTheDocument()
+    expect(within(field('active')).getByText('Gói đang chạy thuộc SOAK-10P-20260824-172521')).toBeInTheDocument()
+  })
+
+  /* Biết id mà chưa biết tên vẫn KHÔNG được rơi về "Có": thiếu tên là thiếu
+     một chi tiết, không phải bằng chứng gói ấy là của Project này. */
+  it('không đọc được tên Project chủ vẫn không rơi về "Có"', () => {
+    renderStrip({
+      activeSequence: null,
+      activeOwnership: { kind: 'foreign', ownerProjectId: 'p-2', ownerName: null }
+    })
+    expect(within(field('active')).getByText('Gói đang chạy thuộc Project khác')).toBeInTheDocument()
+  })
+
+  it('không quy được gói đang chạy về Project nào ⇒ nói chưa xác định, không nói "Có"', () => {
+    renderStrip({ activeSequence: null, activeOwnership: { kind: 'unresolved' } })
+    expect(within(field('active')).queryByText('Có')).not.toBeInTheDocument()
+    expect(within(field('active')).getByText('Chưa xác định được Project của gói đang chạy')).toBeInTheDocument()
+  })
+
+  /* Chốt chặn ngược: `owned` phải giữ NGUYÊN hành vi cũ, nếu không ba case
+     trên chỉ chứng minh rằng strip đã ngừng nói "Có" với mọi thứ. */
+  it('gói đang chạy đúng là của Project này ⇒ vẫn hiện số hiệu như cũ', () => {
+    renderStrip({ activeSequence: 12, activeOwnership: { kind: 'owned', projectId: 'p-1' } })
+    expect(within(field('active')).getByText('r12 · Có')).toBeInTheDocument()
+  })
+})
+
 describe('ProgrammingContextStrip — bố cục README §3', () => {
   it('là một hàng cao 36–40 px và dính theo trang', () => {
     renderStrip()

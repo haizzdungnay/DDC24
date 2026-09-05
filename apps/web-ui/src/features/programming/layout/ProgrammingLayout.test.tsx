@@ -146,3 +146,92 @@ describe('ProgrammingLayout — context sáu workspace', () => {
     ))
   })
 })
+
+/**
+ * `ISS-PGUI-01` — route THEO Project chỉ được hiện Active/Running khi gói đang
+ * chạy thật sự thuộc Project đó.
+ *
+ * Shell từng đổ `runtime.activeRevisionId` (read model của CONTROLLER) thẳng
+ * vào dải ngữ cảnh và vào popover `Chi tiết`. Mở Project nào cũng thấy
+ * `Active: Yes` và thấy UUID của gói đang chạy — kể cả khi gói ấy là của
+ * Project khác (`PC-001`).
+ */
+describe('ProgrammingLayout — ISS-PGUI-01', () => {
+  /** Danh sách hai Project: gói `active-2` đang chạy và thuộc `project-2`. */
+  function ownershipShell(operationId: string) {
+    if (operationId === 'getProgrammingCapabilities') {
+      return Promise.resolve({ schemaVersion: '1.0', profile: 'MK-DDC-24-REV-A', targetState: 'READY', languages: [], types: [], taskPeriodsMs: [], limits: {} })
+    }
+    if (operationId === 'getProgrammingRuntime') {
+      return Promise.resolve({
+        schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY',
+        activeRevisionId: 'active-2', lkgRevisionId: 'active-2', taskState: 'RUNNING',
+        safeState: false, safeStateNoControllerOnly: false, observedAt: '2026-09-03T00:00:00Z'
+      })
+    }
+    if (operationId === 'listProgrammingProjects') {
+      return Promise.resolve({ items: [
+        { projectId: 'project-1', name: 'AHU-MASTER-SEQUENCE', draftRevisionId: 'draft-1', activeRevisionId: null, activeSequence: null, draftSequence: 3 },
+        { projectId: 'project-2', name: 'SOAK-10P-20260824-172521', draftRevisionId: 'draft-2', activeRevisionId: 'active-2', activeSequence: 20, draftSequence: 21 }
+      ] })
+    }
+    if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
+    return null
+  }
+
+  function stubOwnershipShell() {
+    client.request.mockImplementation((operationId: string) => ownershipShell(operationId)
+      ?? Promise.reject(new Error(`unexpected operation ${operationId}`)))
+  }
+
+  function activeField(container: HTMLElement): HTMLElement {
+    const element = container.querySelector<HTMLElement>('[data-context-field="active"]')
+    if (!element) throw new Error('không có dữ kiện "active" trên Context Strip')
+    return element
+  }
+
+  it('mở Project KHÔNG chạy gói ⇒ Active không phải "Có" và nói rõ gói thuộc Project nào', async () => {
+    stubOwnershipShell()
+    const { container } = renderLayout('/eng/programming/projects/project-1/programs')
+
+    await screen.findByTestId('programming-context-strip-row')
+    await waitFor(() => expect(activeField(container).textContent)
+      .toContain('Gói đang chạy thuộc SOAK-10P-20260824-172521'))
+    expect(activeField(container).textContent).not.toContain('Có')
+  })
+
+  /* Popover `Chi tiết` là chỗ thứ hai đọc cùng con số ấy. In UUID của gói
+     Project khác vào đây là mượn dữ liệu của Project khác — điều tiêu chí cấm
+     thẳng — và người vận hành sẽ chép đúng UUID đó đi tra cứu. */
+  it('popover Chi tiết KHÔNG mượn UUID gói đang chạy của Project khác', async () => {
+    stubOwnershipShell()
+    renderLayout('/eng/programming/projects/project-1/programs')
+
+    fireEvent.click(await screen.findByRole('button', { name: /Chi tiết/ }))
+    const popover = await screen.findByRole('dialog')
+    /* Đọc ĐÚNG hàng `ID Revision đang vận hành`. Hàng LKG bên dưới cũng mang
+       `active-2` và nó ĐƯỢC PHÉP: LKG là dữ kiện của bộ điều khiển, không phải
+       một khẳng định về Project đang mở. */
+    const activeRow = await waitFor(() => {
+      const found = popover.querySelector<HTMLElement>('[data-detail-row="activeRevisionId"]')
+      if (!found) throw new Error('không có hàng activeRevisionId trong popover Chi tiết')
+      return found
+    })
+    expect(activeRow.textContent).not.toContain('active-2')
+    // Và ô trống phải nói ĐÚNG lý do, không đổ cho "chưa Commission".
+    expect(activeRow.textContent).toContain('Gói đang vận hành thuộc Project khác')
+  })
+
+  it('mở ĐÚNG Project đang chạy ⇒ giữ nguyên số hiệu và UUID như cũ', async () => {
+    stubOwnershipShell()
+    const { container } = renderLayout('/eng/programming/projects/project-2/programs')
+
+    await screen.findByTestId('programming-context-strip-row')
+    await waitFor(() => expect(activeField(container).textContent).toContain('r20'))
+    fireEvent.click(screen.getByRole('button', { name: /Chi tiết/ }))
+    const popover = await screen.findByRole('dialog')
+    await waitFor(() => expect(
+      popover.querySelector('[data-detail-row="activeRevisionId"]')?.textContent
+    ).toContain('active-2'))
+  })
+})

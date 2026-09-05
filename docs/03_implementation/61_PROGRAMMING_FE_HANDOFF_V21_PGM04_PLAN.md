@@ -946,7 +946,7 @@ dịch, không ai thấy.
 | `T61-502` | P0 | Contract/Go/generator/registry parity và migration/restart tests. | WP-01 | `DONE` | 1 nd |
 | `T61-503` | P0 | Playwright mock route: desktop/mobile/keyboard/**bốn vai RBAC**/offline/phân trang lỗi trang-N/zero mutation, và sổ kế toán cho mọi `test.skip`. | `T61-501` | `DONE` (sửa lại ở `ISS-PGM04-16`, xem đính chính bên dưới) | 1 nd |
 | `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/**usage**/deep-link/**compatibility**/insert guard; anti-mock guard. | `T61-502/503` | `DONE` (sửa lại ở `ISS-PGM04-17`, xem đính chính bên dưới) | 1,5 nd |
-| `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, scroll/sticky và responsive. | `T61-504` | `DONE` | 0,5 nd |
+| `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, focus-return, scroll/sticky và responsive. | `T61-504` | `DONE` (sửa lại ở `ISS-PGM04-18`, xem đính chính bên dưới) | 0,5 nd |
 | `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `DONE` | 1 nd |
 | `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `DONE` | 0,5 nd |
 
@@ -1036,6 +1036,42 @@ terminal — và không cần migration cho dữ liệu đã ghi. Kèm một tes
 `UpdateOperation` tới `SUCCEEDED`), và test ấy khẳng định thẳng rằng giá trị nằm
 trong cột `result` **không** phải `SUCCEEDED` — chính là lý do điều kiện cũ
 trượt, nên nó không thể xanh trên bản mã cũ.
+
+**Đính chính `T61-505` (`ISS-PGM04-18`, đo `2026-09-05`).** Trạng thái `DONE` đã
+được ghi cho bằng chứng **ảnh Playwright**, không phải bằng chứng trình duyệt:
+phiên `2026-09-03` không khởi động được Chrome DevTools vì máy đo thiếu X
+server. Ảnh Playwright không mang Console, không mang Network, và không nói được
+gì về cây `Accessibility` — nên ba trong bốn thứ mà task này tồn tại để đo chưa
+từng được đo.
+
+1. **Môi trường.** `--headless=new` khắc phục đúng chỗ thiếu ấy: Chrome thật, có
+   DevTools Protocol đầy đủ, profile cô lập trong thư mục tạm, **không cần X
+   server**. Lane mới (`scripts/run-pgm04-devtools-audit.sh`) nói CDP trực tiếp,
+   không đi qua Playwright, và chạy trên backend Go thật.
+2. **Trạng thái là trạng thái THẬT.** `offline` dựng bằng
+   `Network.emulateNetworkConditions` — một khả năng của DevTools, không phải
+   một fixture; `permission` là phiên `viewer` thật; `review-required` là `PID`
+   của registry SYSTEM. Không có `page.route` nào.
+3. **Sáu khổ, đo bằng toạ độ.** 3/3/2/2/1/1 cột ở 1440/1280/1024/768/**700**/390,
+   khay 352/352/320 px rồi phủ/toàn màn, không tràn ngang ở khổ nào. Ba khối
+   được gieo chứ không phải một: với một thẻ, số cột luôn bằng 1 ở mọi khổ.
+4. **Lỗi sản phẩm phát hiện được.** `document.activeElement` sau `Esc` là `BODY`:
+   `Modal` ghi nhớ nút mở bằng listener cài lúc mount, nhưng `LibraryAuthoringDrawer`
+   chỉ dựng `Modal` KHI mở (`if (!mode) return null`) — sự kiện của nút mở đã
+   xảy ra trước khi listener tồn tại; và hiệu ứng trả tiêu điểm chỉ chạy khi
+   `open` chuyển sang `false`, còn hộp thoại bị **gỡ khỏi cây** thì nó không bao
+   giờ chạy. `T61-306` ghi "Esc/return-focus drawer" là `DONE`, nhưng phép đo
+   trước đó chưa từng hỏi `document.activeElement` sau khi đóng. Đã sửa ở
+   `Modal.tsx` kèm test dựng đúng hình dạng gây lỗi.
+5. **Bí mật.** Script tự quét chuỗi sắp ghi và **từ chối ghi** nếu thấy
+   `Bearer …`, mật khẩu viewer, hay một header nhạy cảm chưa che — một hàm lọc
+   chỉ đúng khi không ai đi vòng qua nó, và nguồn dữ liệu thứ sáu thêm vào ngày
+   mai sẽ không tự nhớ phải lọc.
+
+**Giới hạn còn lại.** Chrome DevTools **MCP** không có trong phiên đo (`codex`
+không cài trên máy này); lane dùng CDP trực tiếp — cùng giao thức, cùng dữ liệu.
+Ai cần đúng đường MCP vẫn phải cài `codex` + `chrome-devtools-mcp`. Bằng chứng
+đầy đủ: `docs/07_records/reviews/PGM04_DEVTOOLS_AUDIT_2026-09-05.md`.
 
 **Tổng 38 task, khoảng 49 người-ngày.** Đây là ước lượng planning, không phải
 cam kết lịch. Nếu Product bỏ metadata/Used-In/full visual parity, phải change-

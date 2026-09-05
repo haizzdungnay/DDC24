@@ -19,6 +19,7 @@
  * 3. **D-06 — một ngôn ngữ tại một thời điểm.** Mọi chuỗi đi qua `pick` do
  *    tầng gọi truyền vào; module này không tự giữ bảng chữ song ngữ.
  */
+import type { ActiveRevisionOwnership } from '../shared/activeRevisionOwnership'
 
 export type PickFn = (vi: string, en: string) => string
 
@@ -44,7 +45,12 @@ export interface ContextDetailsData {
   draftRevisionId: string | null
   /** `ProgrammingRevision.contentHash` của Draft. Xem `MISSING_CONTENT_HASH_REASON`. */
   draftContentHash: string | null
-  /** `ProgrammingRuntime.activeRevisionId`; `null` khi chưa Commission gói nào. */
+  /**
+   * `ProgrammingRuntime.activeRevisionId` SAU KHI đã chứng minh nó thuộc
+   * Project đang mở (`ownedActiveRevisionId`); `null` khi chưa Commission gói
+   * nào, hoặc khi gói đang chạy là của Project khác. `activeOwnership` bên
+   * dưới nói rõ `null` này nghĩa gì.
+   */
   activeRevisionId: string | null
   /** `ProgrammingRevision.contentHash` của Active. Xem `MISSING_CONTENT_HASH_REASON`. */
   activeContentHash: string | null
@@ -54,6 +60,17 @@ export interface ContextDetailsData {
   controllerId: string | null
   /** `ProgrammingRuntime.observedAt`, dạng ISO-8601 nguyên bản từ máy chủ. */
   observedAt: string | null
+  /**
+   * `ISS-PGUI-01` — VÌ SAO `activeRevisionId` rỗng.
+   *
+   * Thiết bị chưa Commission và "gói đang chạy thuộc Project khác" cùng cho
+   * `null`, nhưng chỉ câu đầu là sự thật về thiết bị. In "Chưa Commission gói
+   * nào lên thiết bị" trên một thiết bị ĐANG chạy một gói là một câu sai, và
+   * đây đúng là ô người vận hành đọc trước khi cân nhắc rollback.
+   *
+   * `undefined` giữ nguyên hành vi cũ cho chỗ gọi chưa phân giải quyền sở hữu.
+   */
+  activeOwnership?: ActiveRevisionOwnership['kind']
   /**
    * Tình trạng read-back Core, BA giá trị chứ không phải một cờ nhị phân:
    *
@@ -115,7 +132,15 @@ export function contextDetailRows(pick: PickFn, data: ContextDetailsData): Conte
   const fromCore = (absent: string) => (
     data.coreStatus === 'loading' ? coreLoading : data.coreStatus === 'unreadable' ? coreSilent : absent
   )
-  const activeAbsent = fromCore(notCommissioned)
+  /* `ISS-PGUI-01` — `foreign`/`unresolved` là "có gói đang chạy nhưng không
+     phải của Project này", KHÔNG phải "chưa Commission". */
+  const activeAbsent = fromCore(
+    data.activeOwnership === 'foreign'
+      ? pick('Gói đang vận hành thuộc Project khác', 'The running package belongs to another project')
+      : data.activeOwnership === 'unresolved'
+        ? pick('Chưa xác định được gói đang vận hành thuộc Project nào', 'The running package could not be attributed to a project')
+        : notCommissioned
+  )
 
   return [
     row('draftRevisionId', pick('ID Revision Nháp', 'Draft revision ID'), data.draftRevisionId, noDraft),
