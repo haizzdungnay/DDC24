@@ -42,6 +42,7 @@ import { useDraftWorkspace } from '../design/useDraftWorkspace'
 import { useProgrammingInspectorMode, useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 import { LibraryInspectorSurface } from './LibraryInspectorSurface'
 import { canonicalProgramsPath } from '../shared/programsRoute'
+import { libraryInsertIntentParams } from '../shared/libraryInsertIntent'
 import {
   libraryDependents,
   libraryEntryPermissions,
@@ -703,16 +704,30 @@ export function LibraryPage() {
         draftSupported={Boolean(workspace.project?.draft && isDraftV2(workspace.project.draft))}
         onCancel={() => setInsertCandidate(null)}
         onChoose={(candidate) => {
+          /* Đọc khối đang chọn TRƯỚC khi xoá state: đọc sau tuy vẫn đúng nhờ
+             closure của React, nhưng nó dựa vào một chi tiết của React chứ
+             không vào thứ đọc được ngay trên dòng lệnh. */
+          const chosenEntry = insertCandidate
           setInsertCandidate(null)
-          if (!projectId) return
+          if (!projectId || !chosenEntry) return
           /* ZERO MUTATION ở phía Thư viện: đây là một lần điều hướng, không phải
              một lần ghi Draft. Phép chèn thật xảy ra trong bộ soạn thảo, nơi có
-             Hoàn tác trong tầm mắt người dùng. */
+             Hoàn tác trong tầm mắt người dùng (`T61-405`).
+             `T61-405` — nhưng điều hướng phải mang theo ĐỦ DANH TÍNH. Trước lát
+             này nó chỉ mang `pou`, `mode` và `returnTo`, nên người dùng chọn một
+             khối rồi hạ cánh vào bộ soạn thảo mà KHÔNG có gì nói khối nào — thao
+             tác chọn ban đầu bị vứt đi và họ phải tìm lại bằng tay. */
           const back = `${window.location.pathname}${window.location.search}`
           navigate(canonicalProgramsPath(projectId, {
             pou: candidate.objectId,
             mode: 'EDIT',
-            search: new URLSearchParams({ returnTo: back }),
+            search: new URLSearchParams({
+              returnTo: back,
+              ...libraryInsertIntentParams({
+                entryId: chosenEntry.entryId,
+                libraryRevisionId: chosenEntry.current.libraryRevisionId,
+              }),
+            }),
           }))
         }}
       />

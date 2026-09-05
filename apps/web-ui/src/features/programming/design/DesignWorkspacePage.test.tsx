@@ -1239,3 +1239,128 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
     expect(screen.queryByTestId('programming-compatibility-block')).not.toBeInTheDocument()
   })
 })
+
+/*
+`T61-405` / `ISS-PGM04-14` — ý định chèn khối tới từ PGM-04.
+
+Quyết định canonical: **PGM-04 chỉ điều hướng**. Phép chèn — và bước Hoàn tác của
+nó — thuộc về PGM-02, vì đó là nơi người dùng nhìn thấy mã nguồn thay đổi và có
+`Ctrl+Z` trong tầm tay. Nhóm test này khoá đúng ranh giới ấy.
+*/
+describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405)', () => {
+  const LIBRARY_REVISION = 'sys-1'
+
+  function stubWorkspaceWithLibrary() {
+    const project = baseProject()
+    project.draft = {
+      ...baseDocument(),
+      programs: [{
+        programId: 'program-a', name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST',
+        document: 'PROGRAM AHU_MAIN\nEND_PROGRAM\n'
+      }]
+    }
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'searchProgrammingLibraries') {
+        return Promise.resolve({
+          items: [{
+            scope: 'SYSTEM', libraryRevisionId: LIBRARY_REVISION, libraryVersion: 'rev-a.1',
+            libraryState: 'PUBLISHED', entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON',
+            featureState: 'AVAILABLE', contentSha256: 'a'.repeat(64),
+            signature: {
+              dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [], category: 'timer',
+              labelVi: 'Trễ bật', labelEn: 'On delay', allowedTypes: [],
+              ports: [
+                { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
+                { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
+                { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
+              ],
+            },
+            dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16,
+          }]
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+  }
+
+  function designPath(query: string) {
+    return `/eng/programming/projects/project-1/design?pou=program-a&mode=EDIT&${query}`
+  }
+
+  /*
+  Điều quan trọng nhất: ý định là một LỜI ĐỀ NGHỊ, không phải một lệnh. Chèn
+  thẳng khi trang vừa mở là một thay đổi mã nguồn người dùng không hề bấm, và họ
+  sẽ không biết `Ctrl+Z` là để hoàn tác cái gì.
+  */
+  it('hỏi lại trước khi chèn, và chỉ chèn sau một lần bấm tường minh', async () => {
+    stubWorkspaceWithLibrary()
+    renderWorkspace(designPath(`insertEntry=TON&insertLibraryRevision=${LIBRARY_REVISION}`))
+
+    const banner = await screen.findByTestId('programs-insert-intent')
+    /* Trong lúc danh mục còn đang nạp, băng KHÔNG được nói "khối này không có
+       trong thư viện": đó là một câu sai, và nó sai đúng lúc người dùng vừa
+       nhìn thấy khối ấy ở màn hình Thư viện. */
+    expect(banner).toHaveAttribute('data-status', 'loading')
+    await waitFor(() => expect(banner).toHaveAttribute('data-status', 'ready'))
+    expect(banner).toHaveTextContent('TON')
+
+    const editor = await screen.findByLabelText(/Mã nguồn ST/)
+    expect(editor).toHaveValue('PROGRAM AHU_MAIN\nEND_PROGRAM\n')
+
+    fireEvent.click(within(banner).getByRole('button', { name: /Chèn vào POU đang mở/ }))
+    // Mã nguồn đổi Ở ĐÂY, trong bộ soạn thảo — chủ sở hữu của phép ghi và của
+    // bước Hoàn tác.
+    /* `toHaveValue` so KHỚP TUYỆT ĐỐI, không nhận matcher con — đọc giá trị ra
+       rồi so chứa mới đúng thứ cần khẳng định ở đây. */
+    await waitFor(() => expect((editor as HTMLTextAreaElement).value).toContain('TON_1 : TON;'))
+    expect((editor as HTMLTextAreaElement).value).toContain('TON_1(')
+    // Ý định đã ngã ngũ thì phải biến mất: để nó nằm lại trên URL nghĩa là mỗi
+    // lần tải trang lại mời chèn cùng một khối.
+    await waitFor(() => expect(screen.queryByTestId('programs-insert-intent')).toBeNull())
+  })
+
+  it('bấm Bỏ qua thì không chèn gì, và ý định không quay lại', async () => {
+    stubWorkspaceWithLibrary()
+    renderWorkspace(designPath(`insertEntry=TON&insertLibraryRevision=${LIBRARY_REVISION}`))
+
+    const banner = await screen.findByTestId('programs-insert-intent')
+    await waitFor(() => expect(banner).toHaveAttribute('data-status', 'ready'))
+    const editor = await screen.findByLabelText(/Mã nguồn ST/)
+    fireEvent.click(within(banner).getByRole('button', { name: 'Bỏ qua' }))
+
+    await waitFor(() => expect(screen.queryByTestId('programs-insert-intent')).toBeNull())
+    expect(editor).toHaveValue('PROGRAM AHU_MAIN\nEND_PROGRAM\n')
+  })
+
+  /* Hai ca xấu nói HAI câu khác nhau, vì chúng đòi hai hành động khác nhau của
+     người vận hành — và cả hai đều không chèn gì. */
+  it('khối được đề nghị không có trong thư viện thì nói ra và không chèn', async () => {
+    stubWorkspaceWithLibrary()
+    renderWorkspace(designPath(`insertEntry=KHONG_CO&insertLibraryRevision=${LIBRARY_REVISION}`))
+
+    const banner = await screen.findByTestId('programs-insert-intent')
+    await waitFor(() => expect(banner).toHaveAttribute('data-status', 'unknown-entry'))
+    expect(banner).toHaveTextContent('không chèn gì cả')
+    expect(within(banner).queryByRole('button', { name: /Chèn vào POU đang mở/ })).toBeNull()
+  })
+
+  it('khối thuộc phiên bản thư viện khác thì nói ra và không chèn', async () => {
+    stubWorkspaceWithLibrary()
+    renderWorkspace(designPath('insertEntry=TON&insertLibraryRevision=ban-khac'))
+
+    const banner = await screen.findByTestId('programs-insert-intent')
+    await waitFor(() => expect(banner).toHaveAttribute('data-status', 'revision-mismatch'))
+    expect(banner).toHaveTextContent('phiên bản thư viện khác')
+    expect(within(banner).queryByRole('button', { name: /Chèn vào POU đang mở/ })).toBeNull()
+  })
+
+  it('không có ý định thì không có băng nào — băng không tự mọc ra', async () => {
+    stubWorkspaceWithLibrary()
+    renderWorkspace(designPath('tab=design'))
+    await screen.findByLabelText(/Mã nguồn ST/)
+    expect(screen.queryByTestId('programs-insert-intent')).toBeNull()
+  })
+})

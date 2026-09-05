@@ -28,7 +28,13 @@ export const PROGRAMS_PRESERVED_QUERY = [
   'port',
   'edge',
   'returnTo',
-  'tab'
+  'tab',
+  /* `T61-405` — ý định chèn khối, mang từ PGM-04 sang PGM-02. Phải nằm trong
+     danh sách GIỮ LẠI, nếu không mọi lần dựng lại đường dẫn canonical (đăng
+     nhập lại, đổi tab, tải lại trang) sẽ đánh rơi ý định và người dùng hạ cánh
+     vào bộ soạn thảo mà không có gì nói khối nào. */
+  'insertEntry',
+  'insertLibraryRevision'
 ] as const
 
 interface ProgramsPathOptions {

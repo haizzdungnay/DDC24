@@ -744,7 +744,7 @@ fixture-only; old FE vẫn đọc được response additive; không có task MC
 | `T61-402` | P0 | Giữ ETag/idempotency/read-back; PUBLISHED edit tạo Draft minor; timeout reconcile; không có Publish giả. | `T61-401` | `DONE` (sửa lại ở `ISS-PGM04-12`, xem đính chính bên dưới) | 1 nd |
 | `T61-403` | P0 | Used-In lazy page + deep-link exact PGM-02 bằng `objectId`, giữ filter/returnTo và dirty guard. | `T61-104/304` | `DONE` | 1,5 nd |
 | `T61-404` | P1 | Preview/Open read-only cho entry và source/interface authoritative; unsupported metadata hiện rõ. | `T61-304` | `DONE` (sửa lại ở `ISS-PGM04-13`, xem đính chính bên dưới) | 1 nd |
-| `T61-405` | P0 | Standalone Insert mở `TargetPouChooser`, kiểm Project/mode/language/type/selection rồi gọi shared insertion adapter. | `T61-203/403` | `DONE` | 2 nd |
+| `T61-405` | P0 | Standalone Insert mở `TargetPouChooser`, kiểm Project/mode/language/type/selection rồi **điều hướng** sang PGM-02 kèm ý định chèn (`entryId` + `libraryRevisionId`). PGM-04 **không** gọi insertion adapter. | `T61-203/403` | `DONE` (disposition khoá ở `ISS-PGM04-14`) | 2 nd |
 | `T61-406` | P0 | Zero-mutation guards: cancel/no-target/type mismatch/permission/offline/stale/REVIEW_REQUIRED; một success = một Undo. | `T61-405` | `DONE` | 1 nd |
 
 **Đính chính `T61-401` (`ISS-PGM04-11`, đo `2026-09-05`).** Trạng thái `DONE` đã
@@ -843,6 +843,46 @@ nguyên nhân người vận hành xử lý được, và không giá trị nào
 **vế dương**, vì thiếu nó thì một hàm luôn trả `HASH_MISMATCH` vẫn qua được ca âm.
 
 **Tiêm lỗi 9/9 đỏ.**
+
+**Disposition `T61-405` (`ISS-PGM04-14`, khoá `2026-09-05`) — NAVIGATION-ONLY.**
+
+Bảng task từng viết "gọi shared insertion adapter", trong khi authority
+`AUTH-PROG-2026-08-29-PGM04-003` §4 và DDD PGM-04 §3 nói PGM-04 **không ghi
+Draft**, và chính mã nguồn (`TargetPouChooser` + `onChoose` của `LibraryPage`)
+làm điều ngược lại với bảng task. Hai mô tả không thể cùng đúng, và giữ cả hai
+là cách một người đọc plan rồi triển khai một adapter ghi thẳng từ Thư viện —
+đúng thứ mà zero-mutation cấm.
+
+**Quyết định canonical, một câu duy nhất:** PGM-04 chỉ **chọn POU và điều
+hướng**. Insertion adapter và bước Hoàn tác thuộc **PGM-02**, vì đó là nơi người
+dùng nhìn thấy mã nguồn thay đổi và có `Ctrl+Z` trong tầm tay. Bảng task ở trên
+đã sửa theo; không còn câu chữ lai ở bất kỳ tài liệu nào.
+
+**Ý định đi qua URL, và phải đủ danh tính.** Trước lát này đường điều hướng chỉ
+mang `pou`, `mode` và `returnTo`: người dùng chọn một khối, bấm Chèn, rồi hạ
+cánh vào bộ soạn thảo **mà không có gì nói khối nào** — thao tác chọn ban đầu bị
+vứt đi. Nay nó mang thêm `insertEntry` + `insertLibraryRevision`; **thiếu một
+trong hai thì không có ý định nào** (fail closed), vì chèn "một khối cùng tên ở
+bản khác" là chèn một thứ khác thứ người dùng vừa đọc.
+
+**PGM-02 tiếp nhận thế nào.** Ý định là một **lời đề nghị**, không phải một
+lệnh: bộ soạn thảo phân giải nó trên danh mục thư viện đang tải, hiện một băng
+nêu tên khối và tên POU, và **chỉ chèn sau một lần bấm tường minh**. Chèn thẳng
+khi trang vừa mở là một thay đổi mã nguồn người dùng không hề yêu cầu — và họ sẽ
+không biết `Ctrl+Z` là để hoàn tác cái gì. Phép chèn đi qua đúng
+`applyLibraryInsertion` sẵn có, nên nó vẫn là **một** bước Hoàn tác
+(`AC-ST-003`).
+
+**Bốn kết quả phân giải, không gộp:** `loading` (danh mục chưa đọc xong — nói
+"khối không có trong thư viện" lúc này là một câu sai, và sai đúng lúc người
+dùng vừa nhìn thấy khối ấy), `ready`, `unknown-entry`, `revision-mismatch`. Hai
+ca xấu đòi hai hành động khác nhau của người vận hành, nên chúng nói hai câu
+khác nhau — và cả hai đều **không chèn gì**.
+
+**Ý định là lệnh dùng một lần**, gỡ khỏi URL ngay khi đã ngã ngũ (đã chèn, đã bỏ
+qua, hoặc không phân giải được). Để nó nằm lại nghĩa là mỗi lần tải lại trang
+lại mời chèn cùng một khối, và người dùng bấm Đồng ý theo phản xạ sẽ chèn hai
+lần.
 
 ---
 

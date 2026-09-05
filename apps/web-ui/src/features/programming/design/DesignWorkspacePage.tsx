@@ -6,6 +6,7 @@ import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
 import { useDraftWorkspace } from './useDraftWorkspace'
 import { useViewportFillHeight } from './useViewportFillHeight'
+import { clearLibraryInsertIntent, readLibraryInsertIntent } from '../shared/libraryInsertIntent'
 const ProgramsTab = lazy(() => import('./editor/ProgramsTab').then((m) => ({ default: m.ProgramsTab })))
 import { MappingTab } from './mapping/MappingTab'
 import { ExecutionTab } from './task/ExecutionTab'
@@ -177,6 +178,19 @@ export function DesignWorkspacePage({
   const tab: DesignTab = requested === 'execution' ? 'execution' : (route ?? fromQuery)
   // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
+  /*
+   * `T61-405` / `ISS-PGM04-14` — ý định chèn khối do PGM-04 gửi sang.
+   *
+   * Nó là một lệnh DÙNG MỘT LẦN: gỡ khỏi URL ngay khi đã ngã ngũ, nếu không mỗi
+   * lần tải lại trang lại mời chèn cùng một khối, và người dùng bấm Đồng ý theo
+   * phản xạ sẽ chèn nó hai lần. `replace: true` để nút Quay lại của trình duyệt
+   * không đưa họ về đúng cái URL vừa dọn.
+   */
+  const insertIntent = useMemo(() => readLibraryInsertIntent(searchParams), [searchParams])
+  const clearInsertIntent = useCallback(() => {
+    setSearchParams((current) => clearLibraryInsertIntent(current), { replace: true })
+  }, [setSearchParams])
+
   const [selectedPouId, setSelectedPouId] = useState<string | undefined>(() => searchParams.get('pou') ?? searchParams.get('program') ?? undefined)
   const queryPouId = searchParams.get('pou') ?? undefined
   /* URL là nguồn chân lý của POU đang mở, không chỉ ở lần mount đầu.
@@ -822,6 +836,13 @@ export function DesignWorkspacePage({
         ) : (
           <Suspense fallback={<StateBlock state="loading" title={pick('Đang tải trình soạn thảo…', 'Loading editor…')} />}>
             <ProgramsTab
+              /* `T61-405` — ý định chèn khối tới từ PGM-04 nằm trên URL, và
+                 trang này là nơi SỞ HỮU URL. Đọc ở đây rồi truyền xuống, thay
+                 vì để bộ soạn thảo tự đọc `window.location`: một component đọc
+                 thẳng URL sẽ không tuân theo router trong test lẫn khi điều
+                 hướng nội bộ. */
+              insertIntent={insertIntent}
+              onInsertIntentResolved={clearInsertIntent}
               document={document}
               saving={workspace.saving}
               selectedProgramId={selectedProgramId}

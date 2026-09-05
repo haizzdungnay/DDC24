@@ -6,6 +6,7 @@ import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
 import { LibraryPage } from './LibraryPage'
 import { ProgrammingApiError, ProgrammingNoResponseError } from '../api/generated/client'
+import { readLibraryInsertIntent } from '../shared/libraryInsertIntent'
 
 /**
  * `T61-501` — bề mặt PGM-04 mà WP-03/WP-04 dựng: thẻ khối, bàn phím, Inspector,
@@ -1137,6 +1138,13 @@ describe('PGM-04 Chèn khối (T61-405/406)', () => {
     await waitFor(() => expect(lastLocation).toContain('/eng/programming/programs'))
     expect(lastLocation).toContain(`pou=${POU_ID}`)
     expect(lastLocation).toContain('returnTo=')
+    /* `T61-405` — điều hướng phải mang ĐỦ DANH TÍNH của khối. Trước lát này nó
+       chỉ mang `pou`/`mode`/`returnTo`, nên người dùng chọn một khối rồi hạ cánh
+       vào bộ soạn thảo mà KHÔNG có gì nói khối nào — thao tác chọn bị vứt đi. */
+    const intent = readLibraryInsertIntent(lastLocation.slice(lastLocation.indexOf('?') + 1))
+    expect(intent).toEqual({
+      entryId: ENTRY_ID, libraryRevisionId: '33333333-3333-4333-8333-333333333333'
+    })
     // Zero mutation: không một lệnh ghi nào được phát ra từ màn hình này.
     const written = client.request.mock.calls.map((call) => call[0])
     expect(written).not.toContain('upsertProgrammingLibraryEntry')

@@ -8,6 +8,38 @@
 
 ## [Unreleased]
 
+### Changed — `ISS-PGM04-14` Chốt disposition Chèn khối: PGM-04 chỉ điều hướng, PGM-02 sở hữu phép ghi và Hoàn tác (#459, 2026-09-05)
+
+- **Triệu chứng.** Bảng task Plan61 `T61-405` viết *"PGM-04 gọi shared insertion adapter"*, trong khi authority
+  `AUTH-PROG-2026-08-29-PGM04-003` §4, DDD PGM-04 §3 và **chính mã nguồn** làm điều ngược lại. Hai mô tả không
+  thể cùng là `DONE`, và giữ cả hai là cách một người đọc plan rồi triển khai một adapter ghi thẳng từ màn hình
+  Thư viện — đúng thứ mà zero-mutation cấm.
+- **Disposition (một câu duy nhất).** PGM-04 **chỉ chọn POU và điều hướng**. Insertion adapter và bước Hoàn tác
+  thuộc **PGM-02**, vì đó là nơi người dùng nhìn thấy mã nguồn thay đổi và có `Ctrl+Z` trong tầm tay. Plan61 đã
+  sửa theo; DDD và authority record mang truy vết. Không tài liệu nào còn câu chữ lai.
+- **Khoảng cách thật, không chỉ là chữ.** Đường điều hướng trước lát này chỉ mang `pou`, `mode` và `returnTo`:
+  người dùng chọn một khối, bấm Chèn, rồi hạ cánh vào bộ soạn thảo **mà không có gì nói khối nào** — thao tác
+  chọn ban đầu bị vứt đi và họ phải tìm lại bằng tay.
+- **Cách sửa.**
+  - `libraryInsertIntent.ts` (thuần): ý định mang **cả hai** định danh — `insertEntry` nói khối nào,
+    `insertLibraryRevision` nói **bản nào**. Thiếu một trong hai thì **không có ý định nào** (fail closed):
+    chèn một khối cùng tên ở bản khác là chèn một thứ khác thứ người dùng vừa đọc.
+  - Cả hai tham số nằm trong danh sách giữ lại của đường dẫn canonical PGM-02, nên ý định sống sót qua đăng
+    nhập lại, đổi tab và tải lại trang.
+  - PGM-02 coi ý định là một **lời đề nghị**: phân giải trên danh mục đang tải, hiện băng nêu tên khối và tên
+    POU, và **chỉ chèn sau một lần bấm tường minh**. Chèn thẳng khi trang vừa mở là một thay đổi mã nguồn người
+    dùng không hề yêu cầu — và họ sẽ không biết `Ctrl+Z` là để hoàn tác cái gì.
+  - Phép chèn đi qua đúng `applyLibraryInsertion` sẵn có, nên vẫn là **một** bước Hoàn tác (`AC-ST-003`).
+  - **Bốn** kết quả phân giải, không gộp: `loading` / `ready` / `unknown-entry` / `revision-mismatch`. Danh mục
+    thư viện nạp **trễ**, nên nói *"khối này không có trong thư viện"* trong lúc còn đang đọc là một câu **sai**
+    — và sai đúng lúc người dùng vừa nhìn thấy khối ấy ở màn hình Thư viện. Một ý định tới cũng là một lý do để
+    đánh thức danh mục.
+  - Ý định là **lệnh dùng một lần**, gỡ khỏi URL ngay khi ngã ngũ (`replace: true` để nút Quay lại của trình
+    duyệt không đưa người dùng về đúng cái URL vừa dọn).
+- **Kiểm chứng (đo cục bộ; CI chưa có runner — #414).** Thêm `libraryInsertIntent.test.ts` (8 ca) và nhóm
+  `PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405)` (5 ca) khoả đúng ranh giới chủ sở hữu phép ghi.
+
+
 ### Added — `ISS-PGM04-13` Đọc được mã nguồn đã lưu của đúng một phiên bản khối (#458, 2026-09-05)
 
 - **Triệu chứng.** Inspector không có Preview, và `SearchLibraryEntries` **không mang `source`**. Hệ quả kép:

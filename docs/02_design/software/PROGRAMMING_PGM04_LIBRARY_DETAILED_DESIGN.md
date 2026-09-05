@@ -88,6 +88,31 @@ Phép chèn thật xảy ra trong bộ soạn thảo. Đó không phải cách l
 ghi Draft phát ra từ màn hình Thư viện là một lần ghi mà chỗ Hoàn tác nằm ở màn
 hình khác — và một lần ghi như thế là lần ghi người ta sẽ không dám thực hiện.
 
+**`ISS-PGM04-14` (`2026-09-05`) — điều hướng mang theo Ý ĐỊNH, và PGM-02 hỏi
+lại.** Bản trước chỉ mang `pou`, `mode` và `returnTo`, nên người dùng chọn một
+khối rồi hạ cánh vào bộ soạn thảo **mà không có gì nói khối nào**: thao tác chọn
+ban đầu bị vứt đi và họ phải tìm lại bằng tay. Hợp đồng nay là:
+
+| Tham số | Bắt buộc | Ý nghĩa |
+|---|---|---|
+| `pou` | có | POU đích đã chọn ở `TargetPouChooser` |
+| `insertEntry` | có (cùng `insertLibraryRevision`) | khối nào |
+| `insertLibraryRevision` | có (cùng `insertEntry`) | **bản nào** — chèn một khối cùng tên ở bản khác là chèn một thứ khác thứ người dùng vừa đọc |
+| `returnTo` | có | đường quay lại đúng màn hình Thư viện đang lọc |
+
+Thiếu **một trong hai** định danh khối thì **không có ý định nào** (fail closed).
+Cả hai nằm trong danh sách giữ lại của đường dẫn canonical PGM-02, nên chúng
+sống sót qua đăng nhập lại, đổi tab và tải lại trang.
+
+PGM-02 coi ý định là một **lời đề nghị**: nó phân giải trên danh mục thư viện
+đang tải, hiện một băng nêu tên khối và tên POU, và **chỉ chèn sau một lần bấm
+tường minh**. Bốn kết quả phân giải không gộp — `loading` (chưa đọc xong danh
+mục), `ready`, `unknown-entry`, `revision-mismatch` — vì ba câu sau đòi ba hành
+động khác nhau của người vận hành. Phép chèn đi qua đúng `applyLibraryInsertion`
+sẵn có nên vẫn là **một** bước Hoàn tác (`AC-ST-003`), và ý định được gỡ khỏi URL
+ngay khi ngã ngũ: để nó nằm lại nghĩa là mỗi lần tải trang lại mời chèn cùng một
+khối.
+
 **Bảng này là chỗ sửa một lỗi đang có trong code phát hành.** Trước
 `main@0453891`, FE so `roleAtLeast(role,'admin')` nên `engineer` bị chặn ở giao
 diện trên đúng những thao tác máy chủ chấp nhận. Đã sửa; bảng trên là hợp đồng

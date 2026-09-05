@@ -45,6 +45,7 @@ import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { LIBRARY_DRAG_TYPE, QuickLibraryHost } from '../library/QuickLibraryPanel'
 import { catalogEntriesOf, type CatalogEntry } from '../library/libraryCatalog'
+import { resolveLibraryInsertIntent, type LibraryInsertIntent } from '../../shared/libraryInsertIntent'
 import { collectDeclaredInstances, nextInstanceName, planLibraryInsertion } from './stInstanceInsertion'
 import { FbInstancePicker } from './FbInstancePicker'
 import { buildStReferenceIndex, stSymbolAt, type StCursorSymbol } from './stReferenceIndex'
@@ -264,6 +265,8 @@ export function ProgramsTab({
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
   forceReadOnly = false,
   onWatchVariable,
+  insertIntent = null,
+  onInsertIntentResolved,
 }: {
   document: ProgrammingDraftDocument
   saving: boolean
@@ -305,6 +308,18 @@ export function ProgramsTab({
    * thêm một bản nào khác — `AC-PGM02-001` đòi đúng MỘT cây POU trong DOM.
    */
   explorerSlot?: ReactNode
+  /**
+   * `T61-405` — ý định chèn khối do PGM-04 gửi sang qua URL.
+   *
+   * Nó là một LỜI ĐỀ NGHỊ, không phải một lệnh: bộ soạn thảo hỏi lại rồi mới
+   * chèn. Chèn thẳng khi trang vừa mở là một thay đổi mã nguồn mà người dùng
+   * không hề bấm — và họ sẽ không biết `Ctrl+Z` là để hoàn tác cái gì.
+   */
+  insertIntent?: LibraryInsertIntent | null
+  /** Gọi khi ý định đã ngã ngũ (đã chèn, đã bỏ qua, hoặc không phân giải được),
+   *  để chỗ sở hữu URL gỡ nó đi. Một ý định nằm lại trên URL sẽ mời chèn lại
+   *  cùng một khối sau mỗi lần tải trang. */
+  onInsertIntentResolved?: () => void
   /** T59-506: dữ liệu chỉ đọc do workspace map từ monitor authority. Không có
    * prop nghĩa là lane monitor chưa được nối, editor không dựng giá trị giả. */
   runtimeOverlayByProgramId?: Readonly<Record<string, StRuntimeOverlayState | undefined>>
@@ -441,6 +456,32 @@ export function ProgramsTab({
    * nhanh nhất để đi trong một POU 400 dòng. */
   const [codeMapOpen, setCodeMapOpen] = useState(true)
   const [libraryInsertRequest, setLibraryInsertRequest] = useState<{ entry: CatalogEntry; nonce: number } | null>(null)
+  /*
+   * `T61-405` — phân giải ý định của PGM-04 trên danh mục ĐANG TẢI ở đây.
+   *
+   * Danh mục thư viện nạp TRỄ (`useLazyProgrammingLibraryCatalog`): nó chỉ được
+   * gọi khi ai đó mở khay Thư viện nhanh. Một ý định tới từ PGM-04 cũng là một
+   * lý do để nạp, nên hiệu ứng dưới đây đánh thức nó.
+   *
+   * Và trong lúc chờ, trạng thái phải là "đang nạp" chứ KHÔNG phải
+   * `unknown-entry`: nói "khối này không có trong thư viện" khi thật ra chưa
+   * đọc xong danh mục là một câu sai, và nó sai đúng lúc người dùng vừa bấm
+   * Chèn từ màn hình Thư viện — nơi họ vừa nhìn thấy khối ấy.
+   */
+  const { ensureLoaded: ensureLibraryLoaded } = libraryCatalog
+  useEffect(() => {
+    if (!insertIntent) return
+    ensureLibraryLoaded()
+  }, [insertIntent, ensureLibraryLoaded])
+  const libraryCatalogReady = libraryCatalog.status === 'ready'
+  const insertResolution = useMemo(() => {
+    if (!insertIntent) return null
+    if (!libraryCatalogReady) return { status: 'loading' as const }
+    /* Ba kết quả tách bạch: đúng khối đúng bản; không có khối ấy; hoặc có khối
+       nhưng thuộc bản khác. Gộp hai ca xấu lại sẽ nói "không chèn được" cho hai
+       nguyên nhân đòi hai hành động khác nhau của người vận hành. */
+    return resolveLibraryInsertIntent(insertIntent, libraryEntries)
+  }, [insertIntent, libraryCatalogReady, libraryEntries])
   /* Điều hướng chéo Program khi chọn một biến ở Bảng lệnh nhanh: đổi
    * `selectedProgramId` rồi TÁI DÙNG đúng cơ chế `focusDiagnostic` đã có
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
@@ -634,6 +675,64 @@ export function ProgramsTab({
           thuộc layout của feature, `<h2>` thuộc màn hình cha, nên tab là
           `<h3>`. Ẩn thị giác vì thanh tab đã hiện tên. */}
       <h3 className="sr-only">{pick('Chương trình', 'Programs')}</h3>
+      {/* `T61-405` — băng XÁC NHẬN cho ý định chèn tới từ PGM-04.
+          PGM-04 chỉ điều hướng; phép chèn — và bước Hoàn tác của nó — xảy ra Ở
+          ĐÂY, sau một lần bấm tường minh. Chèn thẳng khi trang vừa mở là một
+          thay đổi mã nguồn người dùng không hề yêu cầu, và họ sẽ không biết
+          `Ctrl+Z` là để hoàn tác cái gì. */}
+      {insertResolution && (
+        <div
+          role="region"
+          aria-label={pick('Đề nghị chèn khối từ Thư viện', 'Block insertion proposed from the Library')}
+          data-testid="programs-insert-intent"
+          data-status={insertResolution.status}
+          className="mb-2 flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-sm"
+        >
+          {insertResolution.status === 'loading' ? (
+            <p role="status" className="min-w-0 flex-1 text-[var(--c-text-dim)]">
+              {pick('Đang nạp danh mục thư viện để xác định khối…',
+                    'Loading the library catalog to identify the block…')}
+            </p>
+          ) : insertResolution.status === 'ready' ? (
+            <p className="min-w-0 flex-1">
+              {pick('Chèn khối', 'Insert block')}{' '}
+              <strong>{insertResolution.entry.name}</strong>{' '}
+              {selected
+                ? pick(`vào ${selected.name}?`, `into ${selected.name}?`)
+                : pick('— hãy chọn một POU trước.', '— select a POU first.')}
+            </p>
+          ) : (
+            <p role="alert" className="min-w-0 flex-1 text-[var(--c-warn-fg)]">
+              {insertResolution.status === 'unknown-entry'
+                ? pick(
+                    'Không tìm thấy khối được đề nghị trong thư viện của Project này, nên không chèn gì cả.',
+                    'The proposed block is not in this project library, so nothing was inserted.'
+                  )
+                : pick(
+                    'Khối được đề nghị nay thuộc một phiên bản thư viện khác phiên bản bạn đã xem, nên không chèn gì cả.',
+                    'The proposed block now belongs to a different library version than the one you viewed, so nothing was inserted.'
+                  )}
+            </p>
+          )}
+          {insertResolution.status === 'ready' && (
+            <Button
+              size="sm"
+              disabled={!selected || forceReadOnly}
+              onClick={() => {
+                setLibraryInsertRequest((current) => ({
+                  entry: insertResolution.entry, nonce: (current?.nonce ?? 0) + 1,
+                }))
+                onInsertIntentResolved?.()
+              }}
+            >
+              {pick('Chèn vào POU đang mở', 'Insert into the open POU')}
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={() => onInsertIntentResolved?.()}>
+            {pick('Bỏ qua', 'Dismiss')}
+          </Button>
+        </div>
+      )}
       <CommandPalette open={paletteOpen} entries={paletteEntries} onClose={() => setPaletteOpen(false)} onSelect={handlePaletteSelect} />
       {/* `T59-803`: cây POU nay do `PouExplorer` sở hữu (đúng MỘT navigation
           trong DOM). Ở đây chỉ còn thứ thuộc về Project chứ không thuộc về cây:
