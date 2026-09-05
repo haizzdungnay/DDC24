@@ -1,0 +1,1 @@
+compiler_version=fwsom-st-1.2.0 profile_id=revA-1t-1-5-30 profile_sha256=d2866c41065e2a51fba88460068df453d63b6e95b30879eba292f4b667b49ede artifact_schema=1 target_abi=3841

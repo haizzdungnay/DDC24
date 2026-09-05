@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Added — Bằng chứng compiler ST ARM64 trên Foxlinx cho `ISS-STED-21` (#414, 2026-09-06)
+
+- Cross-build `mkddc-st-compile` từ `main@ad8c322e` bằng toolchain
+  `aarch64-linux-gnu-g++ 13.3.0`; binary ELF ARM64 SHA-256
+  `20aa68d0189e1a256132f54f49d2d51c82663dca5865207e547f28e1e049ba25` khớp host/target và
+  chạy trực tiếp trên Foxlinx SOM.
+- Fixture `ST-WARN-004` trả exit `0`, `ok=true`, đúng WARNING dòng 4/cột 14/dài 5 và sinh artifact
+  SIGNED; hai lượt compile cho cùng artifact file SHA-256. JSON do binary target sinh có
+  `PATH_LEAK_COUNT=0` với các mẫu `/tmp/`, `/home/`, `/mnt/` và đường build.
+- Phép đo chỉ dùng `/tmp` và khoá thử nghiệm; không cài service, không Save/Commission/Enable hay đổi
+  Active Revision. Core/IOBus/Web/FakeMCU giữ nguyên PID và `NRestarts=0`; ba mẫu health liên tiếp
+  đều **6/6 check `ok`**.
+- Ranh giới: `mkddc-fakemcu` vẫn active và IOBus nối PTY `/tmp/mkddc-iop-a -> /dev/pts/0`.
+  Do chưa nạp artifact vào Core, chưa đo hai chu kỳ LIVE, chưa có Problems UI cùng revision và chưa
+  nối STM32 thật, `#414` cùng chặng (d) của `#369` vẫn **OPEN/BỊ CHẶN**; không nâng thành HIL,
+  physical I/O hay `RELEASE_READY`.
+- Hồ sơ: `EV-STED-21-TARGET-COMPILER-001` tại
+  `docs/07_records/test-evidence/programming/2026-09-06-sted-21-target-compiler-partial.md`, kèm raw
+  JSON/provenance/preflight/postflight/health và `SHA256SUMS`.
+
 ### Fixed — `ISS-PGUI-03` Chuẩn hóa timestamp kỹ thuật 24 giờ theo UTC (#473, 2026-09-06)
 
 - Gom clock header, Overview/Last Exec, Mapping, Runtime và nhật ký Programming vào helper

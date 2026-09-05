@@ -185,6 +185,17 @@ chứng tự chứng minh cho chính nó mà cổng này sinh ra để dẹp.
 
 **Cần gì để mở khoá:** một bo DDC-24 với firmware đã nạp, kênh deploy tới target, và quyền chạy `LIVE`.
 
+### 6.1 Cập nhật 2026-09-06 — đã có kênh target, chặng (d) vẫn chưa đạt
+
+Kênh SSH/deploy tới Foxlinx đã hoạt động. `EV-STED-21-TARGET-COMPILER-001` cross-build và chạy thật
+`mkddc-st-compile` ARM64 trên SOM: `ST-WARN-004` giữ `ok=true`, sinh artifact, và
+`PATH_LEAK_COUNT=0` trên JSON target. Đây là **bằng chứng target một phần** cho `#414`.
+
+Target hiện chạy `mkddc-fakemcu` qua `/tmp/mkddc-iop-a -> /dev/pts/0`; artifact dùng khoá thử nghiệm
+tạm và chưa được Commission vào Core. Chưa có phép đo output của FB qua hai chu kỳ LIVE, chưa có
+Problems UI từ cùng revision, và chưa có STM32/physical I/O. Vì vậy verdict chặng (d) vẫn
+**BỊ CHẶN**, không đổi trạng thái ký đóng.
+
 ## 7. Kết luận
 
 | Chặng | Verdict | Số đo |
@@ -192,7 +203,7 @@ chứng tự chứng minh cho chính nó mà cổng này sinh ra để dẹp.
 | (a) C++ build + test | **ĐẠT** | configure/build/ctest exit `0` · 1479/1479 · 30.14 s |
 | (b) Vector compiler | **ĐẠT** | 613/613 · 6/6 nhóm phủ · phép kiểm phủ vector tự kêu được |
 | (c) CLI → Go → FE | **ĐẠT** | go/vitest/lint/build exit `0`; CLI phát WARNING; E2E xuyên tuyến `1 passed` |
-| (d) Runtime bo thật + `LIVE` | **BỊ CHẶN** | không có phần cứng |
+| (d) Runtime bo thật + `LIVE` | **BỊ CHẶN** | đã chạy compiler ARM64 trên SOM; còn thiếu Commission/LIVE hai chu kỳ và STM32/physical I/O |
 
 `REV-STED-IEC-001` **chưa được ký đóng**: thiếu chặng (d).
 
@@ -205,4 +216,5 @@ compiler) và `F-STED-004` (Go đè severity, không có E2E xuyên tuyến) nay
 
 | Phiên bản | Ngày | Người sửa | Mô tả |
 |---|---|---|---|
+| 1.1 | 2026-09-06 | Codex | Thêm §6.1: kênh target đã hoạt động và compiler ARM64/path-leak đã đo; giữ chặng (d) BỊ CHẶN vì target vẫn FakeMCU, chưa Commission/LIVE/physical I/O |
 | 1.0 | 2026-09-05 | Claude Code | Chạy thật chặng (a)(b)(c) trên `de8ee26`; sửa hai khiếm khuyết khiến cổng không chạy được (§5.1, §5.2); biến phủ vector chặng (b) thành phép kiểm máy chạy |
