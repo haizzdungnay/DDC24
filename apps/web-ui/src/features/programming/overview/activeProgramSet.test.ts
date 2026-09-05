@@ -157,6 +157,32 @@ describe('activeProgramSet — T60-017 (đọc Program đang vận hành từ Ac
     expect(activeProgramSetReasonLabel(vi, null)).toBeNull()
   })
 
+  /**
+   * `ISS-PGUI-01` — `activeRevisionId === null` có BỐN nguyên nhân, và chỉ một
+   * trong bốn cho phép nói "thiết bị chưa vận hành gói nào".
+   *
+   * Chỗ gọi đã khoá `activeRevisionId` về `null` khi gói đang chạy không thuộc
+   * Project đang xét. Không mang theo lý do thì bảng Program in ra một câu sai
+   * về thiết bị: nó ĐANG chạy một gói, chỉ là gói của Project khác.
+   */
+  it.each([
+    ['gói của Project khác', 'foreign' as const, 'ACTIVE_OTHER_PROJECT', 'thuộc Project khác'],
+    ['không quy được về Project nào', 'unresolved' as const, 'ACTIVE_PROJECT_UNRESOLVED', 'Chưa xác định được'],
+    ['runtime chưa đọc xong', 'loading' as const, 'REVISION_LOADING', 'Đang đọc'],
+    ['runtime không đọc được', 'unavailable' as const, 'REVISION_UNAVAILABLE', 'Không đọc được'],
+    ['thiết bị chưa Commission', 'not-commissioned' as const, 'NO_ACTIVE_REVISION', 'chưa vận hành gói nào']
+  ])('rỗng vì %s ⇒ lý do riêng, không gộp về "chưa Commission"', (_name, ownership, reason, copy) => {
+    const result = activeProgramSet(input({ activeRevisionId: null, ownership }))
+    expect(result.programs).toEqual([])
+    expect(result.reason).toBe(reason)
+    expect(activeProgramSetReasonLabel(vi, result.reason)).toContain(copy)
+    expect(activeProgramSetReasonLabel(en, result.reason)).not.toMatch(/[àáảãạăâđèéêìíòóôơùúưỳý]/i)
+  })
+
+  it('chỗ gọi không phân giải quyền sở hữu vẫn giữ nguyên hành vi cũ', () => {
+    expect(activeProgramSet(input({ activeRevisionId: null })).reason).toBe('NO_ACTIVE_REVISION')
+  })
+
   it('D-06 — lý do có cả hai ngôn ngữ, chọn đúng một tại một thời điểm', () => {
     expect(activeProgramSetReasonLabel(vi, 'NO_ACTIVE_REVISION')).toContain('chưa vận hành gói nào')
     expect(activeProgramSetReasonLabel(en, 'NO_ACTIVE_REVISION')).toContain('not running any package')

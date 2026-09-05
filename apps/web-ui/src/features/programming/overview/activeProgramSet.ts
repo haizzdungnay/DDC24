@@ -1,4 +1,5 @@
 import type { ProgrammingProgram, RemoteState } from '../model/types'
+import type { ActiveRevisionOwnership } from '../shared/activeRevisionOwnership'
 
 /**
  * `T60-017` — tập Program **đang vận hành**, đọc từ Active Revision.
@@ -46,6 +47,14 @@ export type ActiveProgramSetReason =
   | 'SNAPSHOT_UNREADABLE'
   /** Đọc được snapshot và Revision này thật sự không khai Program nào. */
   | 'NO_PROGRAM_DECLARED'
+  /**
+   * `ISS-PGUI-01` — thiết bị ĐANG chạy một gói, nhưng gói ấy thuộc Project
+   * khác. Khác hẳn `NO_ACTIVE_REVISION`: nói "chưa vận hành gói nào" ở đây là
+   * một câu sai về thiết bị, không phải một câu thận trọng.
+   */
+  | 'ACTIVE_OTHER_PROJECT'
+  /** `ISS-PGUI-01` — có gói đang chạy nhưng không Project nào trong danh sách nhận. */
+  | 'ACTIVE_PROJECT_UNRESOLVED'
 
 export interface ActiveProgramDeclaration {
   /** Định danh object POU trong Revision — khoá ổn định để ghép với read-back. */
@@ -67,19 +76,59 @@ export interface ActiveProgramSet {
 }
 
 export interface ActiveProgramSetInput {
-  /** `ProgrammingRuntime.activeRevisionId` — nguồn duy nhất quyết định "đang chạy cái gì". */
+  /**
+   * `ProgrammingRuntime.activeRevisionId` — nguồn duy nhất quyết định "đang
+   * chạy cái gì" — SAU KHI đã chứng minh nó thuộc Project đang xét
+   * (`ownedActiveRevisionId`). Truyền thẳng giá trị toàn cục của controller
+   * vào đây là cách bảng này liệt kê Program của Project khác.
+   */
   activeRevisionId: string | null
   /** Trạng thái đọc `GET /revisions/{activeRevisionId}`. */
   status: RevisionFetchStatus
   /** Thân phản hồi thô. `unknown` vì contract khai `snapshot` là object tự do. */
   revision: unknown
+  /**
+   * `ISS-PGUI-01` — VÌ SAO `activeRevisionId` rỗng.
+   *
+   * `null` vì thiết bị chưa Commission, `null` vì gói đang chạy thuộc Project
+   * khác, và `null` vì runtime không đọc được là ba sự thật khác nhau. Không
+   * có trường này thì cả ba rơi chung vào "thiết bị chưa vận hành gói nào" —
+   * câu duy nhất trong ba câu ấy khẳng định điều gì đó về thiết bị, và là câu
+   * sai ở hai trường hợp còn lại.
+   *
+   * `undefined` giữ nguyên hành vi cũ cho các chỗ gọi không phân giải quyền sở
+   * hữu (`ActiveProgramSource` của PGM-05 đọc theo Revision đã biết).
+   */
+  ownership?: ActiveRevisionOwnership['kind']
 }
 
 const EMPTY: ActiveProgramDeclaration[] = []
 
-export function activeProgramSet({ activeRevisionId, status, revision }: ActiveProgramSetInput): ActiveProgramSet {
+/**
+ * `ISS-PGUI-01` — dịch "vì sao không có `activeRevisionId`" thành lý do đọc
+ * được. Chỉ `not-commissioned` (và các chỗ gọi không phân giải quyền sở hữu)
+ * mới được nói "thiết bị chưa vận hành gói nào".
+ */
+function emptyActiveReason(ownership: ActiveRevisionOwnership['kind'] | undefined): ActiveProgramSetReason {
+  switch (ownership) {
+    case 'foreign':
+      return 'ACTIVE_OTHER_PROJECT'
+    case 'unresolved':
+      return 'ACTIVE_PROJECT_UNRESOLVED'
+    case 'loading':
+      return 'REVISION_LOADING'
+    case 'unavailable':
+      return 'REVISION_UNAVAILABLE'
+    default:
+      return 'NO_ACTIVE_REVISION'
+  }
+}
+
+export function activeProgramSet({ activeRevisionId, status, revision, ownership }: ActiveProgramSetInput): ActiveProgramSet {
   // Chưa Commission thì không có gì để đọc, và tuyệt đối không rơi sang Draft.
-  if (!activeRevisionId) return { revisionId: null, programs: EMPTY, reason: 'NO_ACTIVE_REVISION' }
+  if (!activeRevisionId) {
+    return { revisionId: null, programs: EMPTY, reason: emptyActiveReason(ownership) }
+  }
   if (status === 'loading' || status === 'idle') {
     return { revisionId: activeRevisionId, programs: EMPTY, reason: 'REVISION_LOADING' }
   }
@@ -147,6 +196,16 @@ export function activeProgramSetReasonLabel(
       return pick(
         'Gói đang vận hành không khai báo Program nào.',
         'The running package declares no Program.'
+      )
+    case 'ACTIVE_OTHER_PROJECT':
+      return pick(
+        'Gói đang vận hành thuộc Project khác — Project này không có Program đang chạy.',
+        'The running package belongs to another project — this project has no running Program.'
+      )
+    case 'ACTIVE_PROJECT_UNRESOLVED':
+      return pick(
+        'Chưa xác định được gói đang vận hành thuộc Project nào; danh sách để trống thay vì đoán.',
+        'The running package could not be attributed to a project; the list stays empty instead of guessing.'
       )
     default:
       return null

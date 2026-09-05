@@ -12,6 +12,7 @@ import type {
   ProgrammingTargetState,
   RemoteState
 } from '../model/types'
+import type { ActiveRevisionOwnership } from '../shared/activeRevisionOwnership'
 import type { ProgrammingEditingContext } from './ProgrammingLayout'
 
 type ResourceStatus = RemoteState<unknown>['status']
@@ -93,7 +94,8 @@ export function ProgrammingContextStrip({
   selectedProjectId = null,
   onSelectProject,
   draftSequence = null,
-  activeSequence = null
+  activeSequence = null,
+  activeOwnership = { kind: 'owned', projectId: '' }
 }: {
   projectStatus: ResourceStatus
   runtimeStatus: ResourceStatus
@@ -127,6 +129,13 @@ export function ProgrammingContextStrip({
    */
   draftSequence?: number | null
   activeSequence?: number | null
+  /**
+   * `ISS-PGUI-01` — Revision đang chạy có thuộc Project đang mở không.
+   *
+   * Mặc định `owned` để mọi chỗ gọi cũ giữ nguyên hành vi; chỗ gọi thật
+   * (`ProgrammingLayout`) truyền kết quả của `activeRevisionOwnership`.
+   */
+  activeOwnership?: ActiveRevisionOwnership
 }) {
   const { pick } = useI18n()
   const notice = contextNotice({
@@ -190,7 +199,7 @@ export function ProgrammingContextStrip({
         </ContextField>
 
         <ContextField field="active" label={pick('Đang vận hành', 'Active')}>
-          <ActiveBadge pick={pick} runtimeStatus={runtimeStatus} runtime={runtime} sequence={activeSequence} />
+          <ActiveBadge pick={pick} runtimeStatus={runtimeStatus} runtime={runtime} sequence={activeSequence} ownership={activeOwnership} />
         </ContextField>
 
         <ContextField field="core" label={pick('Core', 'Core')}>
@@ -300,17 +309,35 @@ function DraftBadge({ pick, projectStatus, editing, sequence }: {
  * chưa có thì nói "đang vận hành / chưa vận hành", tuyệt đối không rút gọn UUID
  * để lấp chỗ trống.
  */
-function ActiveBadge({ pick, runtimeStatus, runtime, sequence }: {
+function ActiveBadge({ pick, runtimeStatus, runtime, sequence, ownership }: {
   pick: Pick
   runtimeStatus: ResourceStatus
   runtime: ProgrammingRuntime | null
   sequence: number | null
+  ownership: ActiveRevisionOwnership
 }) {
   if (runtimeStatus === 'loading') return <SemanticBadge pick={pick} state="unknown" label={pick('Đang tải…', 'Loading…')} />
   if (runtimeStatus === 'error' || !runtime || runtime.producerState === 'UNAVAILABLE') {
     return <SemanticBadge pick={pick} state="unknown" label={pick('Không đọc được', 'Unavailable')} />
   }
   if (!runtime.activeRevisionId) return <SemanticBadge pick={pick} state="disabled" label={pick('Chưa vận hành', 'Not commissioned')} />
+  /* `ISS-PGUI-01` — gói đang chạy thuộc Project KHÁC, hoặc không phân giải
+     được về Project nào. Cả hai đều KHÔNG phải "Có".
+  
+     Bản trước kết luận "Có" chỉ từ `runtime.activeRevisionId` toàn cục, nên khi
+     người dùng mở một Project không vận hành, dải này vẫn nói thiết bị đang
+     chạy gói của họ. Đó là câu sai nguy hiểm nhất trong ba câu sai của lỗi
+     này: nó nằm ở chỗ người trực ca liếc qua để biết "có đang điều khiển
+     không". */
+  if (ownership.kind === 'foreign') {
+    return <SemanticBadge pick={pick} state="unknown"
+      label={pick(`Gói đang chạy thuộc ${ownership.ownerName ?? 'Project khác'}`,
+                  `Running package belongs to ${ownership.ownerName ?? 'another project'}`)} />
+  }
+  if (ownership.kind === 'unresolved') {
+    return <SemanticBadge pick={pick} state="unknown"
+      label={pick('Chưa xác định được Project của gói đang chạy', 'Cannot resolve the running package’s project')} />
+  }
   /* `DEV-PROG-008` — `activeSequence` chỉ được điền khi Revision đang chạy
      THUỘC ĐÚNG Project này (`T60-015`). Thiếu nó thì nhãn nói "Có" như cũ; ghép
      một số của Project khác vào đây sẽ là một câu khẳng định sai về thiết bị. */

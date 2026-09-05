@@ -115,3 +115,44 @@ func TestCommissionImpactVanTuChoiYeuCauSai(t *testing.T) {
 		}
 	}
 }
+
+/* `ISS-PGUI-01` — hai đường đọc diff CỐ Ý xử khác nhau, và không gì đang khoá
+ * sự khác nhau ấy.
+ *
+ * `GetRevisionChanges` (đường Commission) hạ ca khác-project về "thay mới toàn
+ * bộ", theo `ISS-PRG-CTRL-001` ngay phía trên. `GetRevisionChangesDetail` —
+ * đường mà `GET /revisions/{from}/changes/{to}` của FE gọi — thì KHÔNG: nó
+ * phải giữ `ErrInvalidRequest` (HTTP 400 `PRG-ERR-REQ-001`).
+ *
+ * Lý do khác nhau: Commission hỏi "cài `to` trong khi `from` đang chạy thì đổi
+ * những gì", câu ấy luôn có nghĩa. FE hỏi "bản nháp của Project này khác gì bản
+ * đang vận hành của Project này", và một cặp khác Project làm câu hỏi đó vô
+ * nghĩa — trả về một diff "thêm mới toàn bộ" ở đây là dựng một bảng thay đổi
+ * trông hợp lệ cho hai bản không liên quan, đúng thứ người vận hành sẽ ký duyệt.
+ *
+ * Nới `revisionChanges` cho khớp đường Commission sẽ làm chốt chặn này biến mất
+ * lặng lẽ, nên nó phải có test riêng: FE (`ISS-PGUI-01`) đã ngừng phát request
+ * chéo Project, nhưng invariant phía máy chủ vẫn phải đứng cho client xấu. */
+func TestGetRevisionChangesDetailTuChoiCapKhacProject(t *testing.T) {
+	service, _ := openDiffService(t)
+	ctx := context.Background()
+	running := sealSingleProgramRevision(t, service, 4, "SOAKRAC2")
+	target := sealSingleProgramRevision(t, service, 5, "THATSU3")
+
+	if _, err := service.GetRevisionChangesDetail(ctx, running, target, 0); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("cặp khác Project trên đường FE phải là ErrInvalidRequest (HTTP 400), nhận %v", err)
+	}
+
+	// Chốt chặn ngược: cùng Project vẫn tính được, nếu không test trên chỉ
+	// chứng minh rằng đường này đã hỏng với mọi đầu vào.
+	same := sealSingleProgramRevision(t, service, 6, "CUNGPROJ")
+	if _, err := service.GetRevisionChangesDetail(ctx, "none", same, 0); err != nil {
+		t.Fatalf("cặp hợp lệ vẫn phải tính được, nhận %v", err)
+	}
+
+	// Và đường Commission GIỮ NGUYÊN cách nới của `ISS-PRG-CTRL-001` — hai
+	// đường phải tách nhau, không phải cùng thắt hay cùng nới.
+	if _, err := service.GetRevisionChanges(ctx, running, target); err != nil {
+		t.Fatalf("đường Commission vẫn phải chấp nhận cặp khác Project, nhận %v", err)
+	}
+}

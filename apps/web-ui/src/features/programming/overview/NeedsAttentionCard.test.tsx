@@ -59,7 +59,7 @@ function vm(overrides: Partial<OverviewViewModel> = {}): OverviewViewModel {
     projectId: PROJECT_ID,
     projectName: 'AHU-01',
     draft: { label: 'Draft #14', sequence: 14, dirty: false, checkState: 'PASSED' },
-    active: { label: 'Active #12', sequence: 12, present: true, taskState: 'RUNNING' },
+    active: { label: 'Active #12', sequence: 12, present: true, ownership: 'owned', taskState: 'RUNNING' },
     core: { semantic: 'good', producerState: 'READY', observedAt: '2026-08-24T02:00:00Z' },
     safeState: { active: false, noControllerOnly: false },
     programs: programs(),
@@ -118,7 +118,7 @@ describe('buildAttentionItems — sắp fault → warning → info', () => {
     const items = buildAttentionItems(pickVi, {
       vm: vm({
         core: { semantic: 'good', producerState: 'READY', observedAt: null },
-        active: { label: 'Active #12', sequence: 12, present: true, taskState: 'FAULT' },
+        active: { label: 'Active #12', sequence: 12, present: true, ownership: 'owned', taskState: 'FAULT' },
         safeState: { active: true, noControllerOnly: true },
         draft: { label: 'Draft #14', sequence: 14, dirty: true, checkState: 'FAILED' },
         programs: programs({ truncated: true })
@@ -279,7 +279,7 @@ describe('NeedsAttentionCard — hiển thị', () => {
   it('"Xem tất cả (n)" chỉ hiện khi dài hơn phần xem trước và mở hết danh sách', () => {
     const model = vm({
       core: { semantic: 'good', producerState: 'READY', observedAt: null },
-      active: { label: 'Active #12', sequence: 12, present: true, taskState: 'FAULT' },
+      active: { label: 'Active #12', sequence: 12, present: true, ownership: 'owned', taskState: 'FAULT' },
       safeState: { active: true, noControllerOnly: false },
       draft: { label: 'Draft #14', sequence: 14, dirty: true, checkState: 'FAILED' },
       programs: programs({ truncated: true, rows: [row({ runtimeState: 'FAULTED', health: 'FAULT' })] })

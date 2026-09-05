@@ -10,6 +10,7 @@ import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { semanticBadgeProps, semanticStateDescriptor } from '../shared/semanticState'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import { useProgrammingRevision, useProgrammingRevisionChanges } from '../api/queries'
+import { ownedActiveRevisionId } from '../shared/activeRevisionOwnership'
 import { useCreateProgrammingProject } from '../api/mutations'
 import { activeProgramSet } from './activeProgramSet'
 import {
@@ -79,16 +80,33 @@ import { programsWorkspacePath } from '../shared/programsRoute'
 export function OverviewPage() {
   const { pick } = useI18n()
   const { session } = useAuth()
-  const { runtime, projects, programIntents } = useProgrammingRuntimeContext()
+  const { runtime, projects, programIntents, subjectProject, activeOwnership } = useProgrammingRuntimeContext()
   /* `WEB-RBAC-001` — lối tắt và thẻ "chưa có Project" nói về việc SỬA chương
      trình, tức `program.edit`, chứ không về vai `admin`. */
   const canEdit = roleCan(session?.role, 'program.edit')
 
-  // Cùng luật chọn Project với `ProgrammingLayout` (route Tổng quan không mang
-  // `projectId`): Project đầu tiên của trang đầu. Rev A khoá một Project trên
-  // mỗi controller nên đây là Project duy nhất.
-  const project = projects.data?.items[0] ?? null
-  const activeRevisionId = runtime.data?.activeRevisionId ?? null
+  /* `ISS-PGUI-01` — Project và quyền sở hữu gói đang chạy đến TỪ SHELL, không
+     tính lại ở đây.
+
+     `GET /runtime` là read model của CONTROLLER: nó trả đúng một
+     `activeRevisionId` cho cả thiết bị. Bản trước ghép con số ấy vào
+     `projects.items[0]`, và trên production hai thứ ấy thuộc hai Project khác
+     nhau — màn hình đồng thời hiện `Active: Yes`, `Running`, và "active
+     revision number is unresolved". Ba câu không thể cùng đúng.
+
+     Tính lại ở trang cũng không sửa được lỗi, chỉ dời nó: `programIntents` mà
+     trang này đọc read-back đã được shell gọi theo `subjectProject`. Trang tự
+     chọn một Project khác là ghép nửa khai báo của Project này với nửa
+     read-back của Project kia — đúng thứ tiêu chí "bảng runtime không được
+     hiện Program của Project khác" cấm. Nên chủ ngữ chỉ có MỘT nguồn. */
+  const project = subjectProject
+  const runtimeActiveRevisionId = runtime.data?.activeRevisionId ?? null
+  /* Chỉ dùng `activeRevisionId` khi nó ĐÃ CHỨNG MINH thuộc Project này. Đây là
+     cổng duy nhất cho cả phép đọc Revision đang chạy lẫn phép so sánh
+     Draft↔Active: gọi compare với cặp chưa chứng minh cùng Project là phát ra
+     một request mà backend BẮT BUỘC từ chối (`400 PRG-ERR-REQ-001`,
+     `retryable=false`). */
+  const activeRevisionId = ownedActiveRevisionId(activeOwnership, runtimeActiveRevisionId)
 
   // `T60-017`: tập Program KHAI BÁO đọc từ chính Revision đang chạy. Hook luôn
   // được gọi (không đặt trong nhánh) — `useProgrammingRevision` tự từ chối khi
@@ -129,8 +147,13 @@ export function OverviewPage() {
     activeSet: activeProgramSet({
       activeRevisionId,
       status: revision.status,
-      revision: revision.data
-    })
+      revision: revision.data,
+      /* `ISS-PGUI-01` — vì sao `activeRevisionId` rỗng. Thiếu nó thì "gói đang
+         chạy thuộc Project khác" bị in ra thành "thiết bị chưa vận hành gói
+         nào". */
+      ownership: activeOwnership.kind
+    }),
+    activeOwnership: activeOwnership.kind
   })
 
   /* Lần đọc ĐẦU của hai read-model nền. `useProgrammingResource` chỉ để
