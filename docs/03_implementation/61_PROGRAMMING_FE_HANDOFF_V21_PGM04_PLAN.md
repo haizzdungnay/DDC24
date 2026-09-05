@@ -945,7 +945,7 @@ dịch, không ai thấy.
 | `T61-501` | P0 | Unit/component tests cho view model, pagination, URL state, card/inspector/drawer/RBAC/full state. | WP-02..04 | `DONE` | 2 nd |
 | `T61-502` | P0 | Contract/Go/generator/registry parity và migration/restart tests. | WP-01 | `DONE` | 1 nd |
 | `T61-503` | P0 | Playwright mock route: desktop/mobile/keyboard/**bốn vai RBAC**/offline/phân trang lỗi trang-N/zero mutation, và sổ kế toán cho mọi `test.skip`. | `T61-501` | `DONE` (sửa lại ở `ISS-PGM04-16`, xem đính chính bên dưới) | 1 nd |
-| `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/usage/deep-link/insert guard; anti-mock guard. | `T61-502/503` | `DONE` | 1,5 nd |
+| `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/**usage**/deep-link/**compatibility**/insert guard; anti-mock guard. | `T61-502/503` | `DONE` (sửa lại ở `ISS-PGM04-17`, xem đính chính bên dưới) | 1,5 nd |
 | `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, scroll/sticky và responsive. | `T61-504` | `DONE` | 0,5 nd |
 | `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `DONE` | 1 nd |
 | `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `DONE` | 0,5 nd |
@@ -996,6 +996,46 @@ tạo/sửa được khối thư viện nhưng không sửa được POU. Máy c
 trên cả hai. Đây là cùng lớp lỗi `T61-201` đã sửa ở đường RBAC, nhưng nó nằm ở
 tám tệp ngoài PGM-04 và đổi nó là một quyết định sản phẩm về *ai được sửa mã*,
 nên lát này chỉ ghi lại chứ không tự quyết.
+
+**Đính chính `T61-504` (`ISS-PGM04-17`, đo `2026-09-05`).** Trạng thái `DONE` đã
+được ghi cho một lane real-backend **chưa từng gọi `GET /library-usages` lần
+nào**, chưa từng đọc `compatibility`, và chưa từng đi đường Chèn. Lần đầu ba read
+model ấy chạm backend thật, chúng lộ ra **một lỗi sản phẩm nghiêm trọng**:
+
+1. **`compatibility` của mọi entry PROJECT luôn là `UNKNOWN`, trên mọi thiết
+   bị.** `LibraryCompatibilityFacts` xác định Revision đang vận hành bằng
+   `commission_records.result='SUCCEEDED'`. Cột ấy được ghi từ **result code**
+   của operation, và result code của một lần Commission thành công là
+   `COMMITTED` (`application/operations.go`: `transition(operation, "SUCCEEDED",
+   "COMMITTED", "COMMITTED", …)`). Chuỗi `SUCCEEDED` **không bao giờ** nằm ở cột
+   đó, nên điều kiện không bao giờ đúng: `HasActiveRevision` luôn `false`,
+   `PinnedVersions` luôn rỗng. **Toàn bộ read model `T61-101` — cả `COMPATIBLE`
+   lẫn `REQUIRES_MIGRATION` — chưa từng xuất hiện trong sản phẩm**, và guard
+   `REQUIRES_MIGRATION` mà `T61-406` vừa dựng chưa từng có cơ hội kích hoạt.
+2. **`isActive` của Used-In luôn `false`** — cùng một điều kiện sai, ở truy vấn
+   thứ hai. PGM-04 vì thế chưa từng đánh dấu được "bản đang chạy", đúng dấu hiệu
+   người vận hành dùng để biết một khối có đang điều khiển tủ hay không **trước
+   khi** sửa nó.
+3. **Vì sao không test nào bắt được.** `library_compatibility_test.go` dựng
+   `LibraryCompatibilityFacts` **bằng tay**: nó kiểm bộ phân loại, không kiểm câu
+   truy vấn nuôi bộ phân loại. Đó là hình dạng điển hình của một vùng "có test
+   mà không có phủ": mọi nhánh của hàm phân loại đều xanh, trong khi đầu vào của
+   nó không bao giờ khác rỗng ở đời thật.
+4. **Lane real-backend chưa từng chạy được trong container.** `cmake --fresh`
+   xoá cache mỗi lần, nên `FetchContent` đi tải `googletest`/`nlohmann_json` qua
+   HTTP; máy đo không có lối ra Internet thì bước configure chết trước khi chạm
+   assertion nào. Đúng chế độ hỏng mà `playwright.programming-real.config.ts` đã
+   ghi lại một lần: *"một cổng không chạy được là một cổng sẽ bị bỏ qua"*. Nay
+   script tự dùng `build/deps-cache/` khi có, và không đổi gì khi không có.
+
+**Cách sửa (backend).** Cả hai truy vấn nay lọc theo **trạng thái terminal của
+chính operation** (`operations.state='SUCCEEDED'`) thay vì từ vựng result code.
+Đó là nguồn đúng — store chỉ cho ghi `CommissionRecord` cùng lúc operation vào
+terminal — và không cần migration cho dữ liệu đã ghi. Kèm một test store đi qua
+**đúng đường ghi của sản phẩm** (`BeginOperation` → `ClaimOperation` → chuỗi
+`UpdateOperation` tới `SUCCEEDED`), và test ấy khẳng định thẳng rằng giá trị nằm
+trong cột `result` **không** phải `SUCCEEDED` — chính là lý do điều kiện cũ
+trượt, nên nó không thể xanh trên bản mã cũ.
 
 **Tổng 38 task, khoảng 49 người-ngày.** Đây là ước lượng planning, không phải
 cam kết lịch. Nếu Product bỏ metadata/Used-In/full visual parity, phải change-

@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM04-17` / `T61-504` Real-backend E2E cho toàn lifecycle PGM-04, và một read model chết (#462, 2026-09-05)
+
+- **Triệu chứng.** `compatibility` của **mọi entry PROJECT, trên mọi thiết bị**, luôn là `UNKNOWN`.
+  `COMPATIBLE` và `REQUIRES_MIGRATION` — toàn bộ read model `T61-101` — **chưa từng xuất hiện trong
+  sản phẩm**, nên guard `REQUIRES_MIGRATION` mà `T61-406` vừa dựng cũng chưa từng có cơ hội kích
+  hoạt. Cùng lúc, `isActive` của Used-In luôn `false`: PGM-04 chưa từng đánh dấu được "bản đang
+  chạy" — đúng dấu hiệu người vận hành dùng để biết một khối có đang điều khiển tủ hay không **trước
+  khi** sửa nó.
+- **Nguyên nhân gốc.** Hai truy vấn trong `store/library.go` xác định Revision đang vận hành bằng
+  `commission_records.result='SUCCEEDED'`. Cột `result` được ghi từ **result code** của operation, và
+  result code của một lần Commission thành công là `COMMITTED`
+  (`application/operations.go`: `transition(operation, "SUCCEEDED", "COMMITTED", "COMMITTED", …)`).
+  Chuỗi `SUCCEEDED` **không bao giờ** nằm ở cột đó, nên điều kiện không bao giờ đúng:
+  `HasActiveRevision` luôn `false`, `PinnedVersions` luôn rỗng.
+- **Vì sao không test nào bắt được.** `library_compatibility_test.go` dựng `LibraryCompatibilityFacts`
+  **bằng tay** — nó kiểm bộ phân loại, không kiểm câu truy vấn nuôi bộ phân loại. Mọi nhánh của hàm
+  phân loại đều xanh, trong khi đầu vào của nó không bao giờ khác rỗng ở đời thật.
+- **Cách sửa.** Cả hai truy vấn nay lọc theo **trạng thái terminal của chính operation**
+  (`operations.state='SUCCEEDED'`) thay vì từ vựng result code. Nguồn đúng — store chỉ cho ghi
+  `CommissionRecord` cùng lúc operation vào terminal — và **không cần migration**. Kèm test store đi
+  qua **đúng đường ghi của sản phẩm** (`BeginOperation` → `ClaimOperation` → chuỗi `UpdateOperation`
+  tới `SUCCEEDED`), và test ấy khẳng định thẳng rằng giá trị trong cột `result` **không** phải
+  `SUCCEEDED` — chính là lý do điều kiện cũ trượt, nên nó không thể xanh trên bản mã cũ.
+- **Lane real-backend chưa từng chạy được trong container.** `cmake --fresh` xoá cache mỗi lần, nên
+  `FetchContent` đi tải `googletest`/`nlohmann_json` qua HTTP; máy đo không có lối ra Internet thì
+  bước configure chết **trước khi chạm assertion nào** — đúng chế độ hỏng mà
+  `playwright.programming-real.config.ts` đã ghi lại: *"một cổng không chạy được là một cổng sẽ bị bỏ
+  qua"*. Script stack nay tự dùng `build/deps-cache/` khi có và không đổi gì khi không có.
+- **Test mới `T61-504`** đi trọn một mạch trên backend thật: tạo entry kèm **thẻ** (gửi bẩn —
+  hoa/thường lẫn lộn, khoảng trắng thừa, trùng lặp — rồi khẳng định máy chủ chuẩn hoá, thứ một
+  fixture FE không phân biệt được) → `UNKNOWN` → POU khai dependency → seal → check → commission →
+  **Used-In** (count/items/`isActive`/deep-link đúng `objectId`) → **`COMPATIBLE`** → lên version →
+  **`REQUIRES_MIGRATION`** → giao diện PGM-04 khoá Chèn kèm đúng version cần migrate → **0 mutation**
+  trên cả phiên duyệt. In một dòng evidence mang lớp `HOST/REAL-BACKEND`, project, pin và thời lượng.
+- **Anti-mock hai vế.** (a) Một case quét **thẳng tệp spec** và cấm mọi API chặn request của
+  Playwright — chuỗi cần tìm được **ghép lúc chạy**, vì viết nguyên văn sẽ làm chính case ấy đỏ, và
+  điều đó cho thấy phép quét phải nói về *lời gọi* chứ không về sự có mặt của một dãy ký tự.
+  (b) Vế dữ liệu: khối hiện trên màn hình mang `projectId` do máy chủ sinh trong **chính lần chạy
+  ấy** — một route dựng sẵn không thể biết trước.
+- **Phạm vi.** `apps/web-api/internal/programming/store/library.go` (+ test mới),
+  `apps/web-ui/e2e/programming-real.spec.ts`, `scripts/run_programming_real_e2e_stack.sh`,
+  `docs/03_implementation/61_…_PGM04_PLAN.md`.
+- **Kiểm chứng (HOST/REAL-BACKEND, local; CI chưa có runner — `#414`).** Số đo ghi trong PR. PASS ở
+  lane này **không** phải target/HIL/`RELEASE_READY`.
+
+
 ### Fixed — `ISS-PGM04-16` / `T61-503` Đủ ma trận mock Playwright cho PGM-04 (#461, 2026-09-05)
 
 - **Triệu chứng 1 — suite e2e chỉ chạy được vai `admin`.** `programming.spec.ts` ghi thẳng vào mã

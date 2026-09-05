@@ -69,13 +69,41 @@ if [[ ! -e /dev/shm/mkddc_plc_shm ]]; then
   NOBOARD_NEEDED=1
 fi
 
+# `T61-504` — NGUỒN PHỤ THUỘC ĐỌC TỪ ĐĨA khi có sẵn, thay vì tải về.
+#
+# `cmake --fresh` xoá cache, nên mỗi lần chạy lane này là một lần `FetchContent`
+# đi tải `googletest`/`nlohmann_json` qua HTTP. Trên máy đo không có lối ra
+# Internet — container CI là ca điển hình — bước configure chết ngay ở
+# `googletest-populate-download`, TRƯỚC khi chạm được assertion nào. Đó đúng chế
+# độ hỏng mà `playwright.programming-real.config.ts` đã ghi lại một lần:
+# "một cổng không chạy được là một cổng sẽ bị bỏ qua".
+#
+# `build/deps-cache/<tên>` là quy ước sẵn có của repo (clone bằng git, đã nằm
+# trong `.gitignore`). Có thư mục nào thì trỏ `FETCHCONTENT_SOURCE_DIR_*` vào
+# đó; không có thì KHÔNG truyền gì và hành vi giữ nguyên như trước. Đây là một
+# đường thoát cho môi trường, không phải một thay đổi cách đo: mã nguồn phụ
+# thuộc vẫn đúng tag mà `CMakeLists.txt` khai.
+deps_cache="${PROGRAMMING_REAL_DEPS_CACHE:-${repository_root}/build/deps-cache}"
+deps_args=()
+for dep in nlohmann_json:NLOHMANN_JSON googletest:GOOGLETEST \
+           bacnet_stack_src:BACNET_STACK_SRC lvgl:LVGL; do
+  dep_dir="${deps_cache}/${dep%%:*}"
+  if [[ -d "${dep_dir}" ]]; then
+    deps_args+=("-DFETCHCONTENT_SOURCE_DIR_${dep##*:}=${dep_dir}")
+  fi
+done
+if (( ${#deps_args[@]} > 0 )); then
+  echo "Dùng nguồn phụ thuộc có sẵn ở ${deps_cache}: ${deps_args[*]}" >&2
+fi
+
 if [[ "${PROGRAMMING_REAL_SKIP_BUILD:-0}" != "1" ]]; then
   cmake --fresh -S "${repository_root}" -B "${build_root}/cpp" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCORE_BUILD_TESTS=OFF \
     -DIOBUS_BUILD_TESTS=OFF \
     -DMKDDC_ENABLE_FW_HOSTCHECK=OFF \
-    -DMKDDC_ENABLE_HMI=OFF
+    -DMKDDC_ENABLE_HMI=OFF \
+    ${deps_args[@]+"${deps_args[@]}"}
   noboard_targets=()
   if [[ "${NOBOARD_NEEDED}" == "1" ]]; then
     # Chuỗi no-board là thứ ghi PLC SHM thật; chỉ build khi thật sự cần.
