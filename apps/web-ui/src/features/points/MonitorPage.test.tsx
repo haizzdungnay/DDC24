@@ -98,7 +98,8 @@ describe('MonitorPage hiển thị point Modbus RTU', () => {
     unit: '',
     quality: 'good',
     source: 'modbus_rtu',
-    updatedAt: '2026-09-05T12:00:00Z'
+    updatedAt: '2026-09-05T12:00:00Z',
+    logEnabled: true
   }
 
   beforeEach(() => {
@@ -123,6 +124,8 @@ describe('MonitorPage hiển thị point Modbus RTU', () => {
       expect(screen.getAllByText('CK50804-DO1').length).toBeGreaterThanOrEqual(2)
       expect(screen.getAllByText('Relay 1').length).toBeGreaterThan(0)
       expect(screen.queryByText('UI-01')).not.toBeInTheDocument()
+      expect(screen.getByText('History is not available for Modbus RTU points yet')).toBeInTheDocument()
+      expect(screen.queryByText('Open in Trends')).not.toBeInTheDocument()
     }
   )
 })
