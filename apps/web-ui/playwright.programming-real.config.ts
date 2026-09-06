@@ -73,7 +73,10 @@ export default defineConfig({
       }
     },
     {
-      command: 'npm run dev -- --port 4175 --strictPort',
+      // Reload là một phần của bằng chứng migration. Dùng build/preview để
+      // dynamic chunk có tên bất biến suốt suite; dev server từng mất module
+      // lazy giữa reload và làm phép đo đỏ ngắt quãng dù backend/read-back đúng.
+      command: 'npm run build:e2e:programming-real && npm run preview -- --port 4175 --strictPort',
       url: 'http://127.0.0.1:4175/login',
       reuseExistingServer: false,
       timeout: 120_000,
@@ -84,7 +87,6 @@ export default defineConfig({
         // T59-802: chỉ lane host E2E dùng route tree mới; production default
         // vẫn false cho tới khi authority cut-over riêng.
         VITE_PROGRAMS_WORKSPACE_V2: '1',
-        VITE_E2E_NO_WATCH: '1',
         VITE_PROXY_TARGET: 'http://127.0.0.1:4181'
       }
     }
