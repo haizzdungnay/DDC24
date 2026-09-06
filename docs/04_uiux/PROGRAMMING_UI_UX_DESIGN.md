@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `UX-WEB-PROG-001` |
-| Phiên bản | 2.3 |
+| Phiên bản | 2.4 |
 | Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, không phải As-Built** |
 | Ngày | 2026-09-06 |
 | Chủ quản | UX Lead + Frontend Lead |
@@ -40,9 +40,9 @@ lớp bằng chứng riêng và release vẫn NO-GO.
 | Persona | Việc chính | Quyền server |
 |---|---|---|
 | Operator | Xem runtime, signal, Point, fault; Enable/Disable khi policy cho phép | `viewer`/`operator` |
-| Controls Engineer | Tạo POU, library, mapping, Check | `admin` cho mutation |
-| Commissioning Engineer | Impact, Commission, read-back, Restore | `admin` + re-auth khi policy yêu cầu |
-| Service Technician | Trace, RETAIN reset, backup/restore | read; `admin` cho mutation nguy hiểm |
+| Controls Engineer | Tạo POU, library, mapping, Check, Trace | `engineer`/`admin` với `program.edit` |
+| Commissioning Engineer | Impact, Commission, read-back, Restore | `engineer`/`admin` với `program.activate` + re-auth khi policy yêu cầu |
+| Service Technician | Trace, RETAIN reset, backup/restore | `program.edit` cho Trace/export; `program.activate` cho thao tác runtime |
 
 UI không tự suy quyền. Response `403`, readiness, Active/LKG, output owner,
 priority, quality và runtime state từ server/Core là authority. Mất Web không
@@ -122,7 +122,7 @@ Mode truth không được trộn:
 - `LIVE`: immutable Active Revision, read-only cho mọi role; chỉ overlay value
   khi document/value tuple coherent, mismatch thành `RECONCILING/UNAVAILABLE`.
 - `SIMULATE`: immutable Saved-Draft snapshot trong worker ephemeral, không physical
-  output; viewer/operator/admin được đọc theo scope, chỉ admin được mutation.
+  output; mọi vai được đọc theo scope, chỉ admin có `simulation.run` để mutation.
 
 Sáu state `loading/error/permission/unknown/stale/offline` dùng cùng layout,
 copy/focus rõ; missing/invalid/stale/offline không được dựng thành số 0.
@@ -134,6 +134,13 @@ lọc type/direction/writable nhưng compiler/server vẫn validate. Hai output 
 Point hiện conflict ngay, nêu Program đang giữ owner và chặn Save/Check. Signal
 hiện publisher duy nhất, type/unit, freshness, fallback và consumer list. Không
 đổi Published Signal thành Point hoặc ghi cross-Program trực tiếp.
+
+Controls Engineer chọn Variable và Point từ catalog đã đọc đủ, bấm Assign hoặc
+Change, rồi đọc verdict/issue của preview server trước khi xác nhận. Remove có
+hộp xác nhận riêng. Cả ba action chỉ kết thúc sau Draft read-back; 403/409/
+timeout/mismatch giữ ngữ cảnh và không tự phát lại. Viewer/operator/mobile chỉ
+đọc và không có mutation control. Binding chỉ dùng canonical Point identity;
+`extIndex` là dữ liệu runtime và không xuất hiện trong request hay Draft.
 
 ### 3.4 PGM-04 — Control Library
 
@@ -218,13 +225,13 @@ ProgrammingRoutes
 | Vùng | Data/API | State | RBAC/action |
 |---|---|---|---|
 | Context bar | project/draft/active/runtime | loading/stale/offline | read all |
-| POU tree/editor | Draft POU + ETag | clean/dirty/saving/conflict/error | admin save |
-| Mapping/signal | catalog/binding/signal | valid/conflict/missing/stale | admin save |
-| Library | entries/version/usage | empty/deprecated/review-required | admin project mutation |
-| Check/Commission | checks/operation/impact | state machine §3.5 | admin + idempotency/re-auth |
+| POU tree/editor | Draft POU + ETag | clean/dirty/saving/conflict/error | `program.edit` save |
+| Mapping/signal | catalog/binding/signal | preview/valid/conflict/missing/stale/read-back | `program.edit` save |
+| Library | entries/version/usage | empty/deprecated/review-required | `program.edit` mutation |
+| Check/Commission | checks/operation/impact | state machine §3.5 | Check `program.edit`; Commission `program.activate` + idempotency/re-auth |
 | Runtime | status/monitor/trace/overrides | starting/running/fault/unknown | read; policy mutation |
-| Danger Zone | retain/restore/import | ready/in-flight/unknown/fail | admin + reason/confirm |
-| PGM-02 mode | Draft/Active Revision/runtime tuple/simulation session | EDIT/LIVE/SIMULATE + unavailable/reconciling | EDIT admin mutation; LIVE read-only; SIM read all scoped, mutation admin-only |
+| Danger Zone | retain/restore/import/export | ready/in-flight/unknown/fail | export `program.edit`; còn lại `program.activate` + reason/confirm |
+| PGM-02 mode | Draft/Active Revision/runtime tuple/simulation session | EDIT/LIVE/SIMULATE + unavailable/reconciling | EDIT `program.edit`; LIVE read-only; SIM read all scoped, mutation `simulation.run` |
 
 ## 6. Mười bảy use case
 
@@ -309,6 +316,8 @@ output/RETAIN impact, hành vi khi mất kết nối, rollback và yêu cầu re
 | `UX-REQ-025` | PGM-02 dùng một canonical route/query resolver, một POU Explorer và selection `objectId`; legacy redirect giữ deep-link, dirty Draft và không fallback Project/POU khác. |
 | `UX-REQ-026` | PGM-02 hiển thị truth riêng cho EDIT Saved Draft, LIVE sealed Active read-only và SIMULATE immutable sandbox; capability/mismatch/unknown/stale/offline fail closed, không dựng dữ liệu thiếu thành 0. |
 | `UX-REQ-027` | Quick Library dùng signature SYSTEM/PROJECT authoritative và atomic undo; true FBD canvas giữ node-edge/port order; responsive `<768` read-only, keyboard/focus/contrast/performance đạt budget từng increment. |
+| `UX-REQ-028` | Mọi Programming action dùng capability; thu hồi 403 gỡ mutation action trong phiên, giữ read context và không auto-replay. |
+| `UX-REQ-029` | Assign/Change/Remove Mapping dùng preview/ETag/read-back authority; catalog incomplete/stale, 409, timeout và mismatch đều fail-closed; không persist `extIndex`. |
 
 ## 10. Verification và source mapping
 
@@ -341,6 +350,7 @@ Playwright/target Test Result.
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 2.3 | 2026-09-06 | `ISS-PGM03-06`/`#559`: khóa IA sáu workspace; PGM-03 Mapping, PGM-04 Library, PGM-05 Check/Commission và PGM-06 Runtime; sửa source mapping thật và đổi tên asset RETAIN theo PGM-06. |
+| 2.4 | 2026-09-06 | `ISS-PGM-RBAC-01`/`ISS-PGM03-02`: dùng capability cho toàn bộ action, engineer thực hiện Draft→Mapping→Check→Commission/Trace; Simulation giữ admin-only. Mở Mapping preview/xác nhận/read-back và fail-closed cho 403/409/timeout/mismatch/catalog thiếu. |
 | 0.1..1.1 | 2026-08-09..13 | Thiết kế/bằng chứng cho IA bốn workspace; superseded về Product Target. |
 | 2.0 | 2026-08-20 | Viết lại authority sáu workspace; POU/Library/Signal/Enable lifecycle, visual mapping, 17 UC, 24 UX requirement và acceptance; loại toàn bộ contradiction phạm vi cũ khỏi nội dung Active. |
 | 2.1-candidate | 2026-08-24 | Reconcile PGM-02 v2.2 route/identity/EDIT-LIVE-SIMULATE/Quick Library/FBD canvas/responsive và thêm `UX-REQ-025..027`; Owner chỉ mở WP-00, Architect exact pin và code R1/R2/R3 còn PENDING/NO-GO. |

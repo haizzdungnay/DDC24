@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Changed — `ISS-PGM-RBAC-01` Capability Programming và `ISS-PGM03-02` Mapping mutation (#564, #555, 2026-09-06)
+
+- Thay toàn bộ guard Programming viết cứng `admin` bằng bảng action→capability:
+  Draft/POU/Binding/Signal/Library/Check/Trace/export dùng `program.edit`;
+  Commission/Restore/import/RETAIN reset/runtime intent/recovery reset dùng
+  `program.activate`; Simulation giữ `simulation.run` admin-only. HTTP 403 thu
+  hồi đúng capability trong phiên `{username, role, loginAt}`, gỡ mutation
+  action nhưng giữ ngữ cảnh đọc và không tự phát lại request.
+- OpenAPI `1.39.0` công bố `x-permission` cho đủ 44 Programming operation.
+  Generator sinh manifest RBAC; test khóa ba lớp OpenAPI/FE/Go theo exact
+  operation, method, path, permission và role, ngăn contract trôi im lặng.
+- Mở Assign/Change/Remove ở PGM-03 cho engineer. Assign/Change bắt buộc Point
+  Catalog đầy đủ và preview server-authoritative với `baseRevisionId`/ETag;
+  Remove có xác nhận riêng. Cả hai chỉ báo hoàn tất sau Draft read-back khớp,
+  giữ lựa chọn khi 403/409/timeout/mismatch và không persist `extIndex`.
+- Kiểm chứng: Vitest toàn FE **236 tệp / 2.983 test PASS**, riêng hai suite
+  Mapping **22/22 PASS**; lint, TypeScript, build production và bundle budget
+  PASS; generator/client/manifest đồng bộ **44 operation**; `go vet ./...` và
+  `go test ./... -count=1` PASS; harness tài liệu PASS với EXPECT **29 UX-REQ**.
+  C++ Release fresh build với Modbus/BACnet/HMI cùng bật PASS; CTest **1.479 ca,
+  0 fail, 8 skip**. Playwright Google Chrome trên real-backend no-board **2/2
+  PASS**: engineer save→map→reload→remove→Check→Commission/Trace, viewer và
+  operator không có mutation; desktop/mobile không tràn, axe severe=0,
+  HTTP 5xx=0, requestfailed=0, console.error=0. Đây là bằng chứng HOST/no-board,
+  không phải physical HIL hoặc `RELEASE_READY`.
+
 ### Fixed — `ISS-PGM03-08` PGM-03 đọc hết Point Catalog phân trang trước khi cho Map (#563, 2026-09-06)
 
 - Hook Point Catalog gửi trang đầu với `limit=500` và không có cursor, tự rút

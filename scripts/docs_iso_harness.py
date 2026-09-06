@@ -53,7 +53,7 @@ EXPECT = {
     "od_prog": 16,
     "uc_prog": 17,
     "uj_prog": 8,
-    "ux_req": 27,
+    "ux_req": 29,
     "svg_assets": 14,
 }
 
