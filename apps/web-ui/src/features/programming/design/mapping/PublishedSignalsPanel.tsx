@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Plus, Radio, Save, Trash2 } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
+import { useProgrammingActionAllowed } from '../../api/authorization'
 import { StateBlock } from '../../../../shared/components/StateBlock'
 import { createUuid } from '../../../../shared/crypto'
 import {
@@ -57,8 +57,7 @@ export function PublishedSignalsPanel({
   forceReadOnly?: boolean
 }) {
   const { pick } = useI18n()
-  const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
+  const canEdit = useProgrammingActionAllowed('publishedSignal') && !forceReadOnly
 
   const supported = isDraftV2(draft)
   const signals = useMemo(() => (supported ? draftSignals(draft) : []), [draft, supported])

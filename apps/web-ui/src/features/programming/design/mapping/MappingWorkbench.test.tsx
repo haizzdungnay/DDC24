@@ -68,8 +68,8 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-describe('Mapping Workbench Phase 1A — read-only truth state', () => {
-  it('dựng đúng ba vùng, hiển thị live data và khóa mutation cho admin', () => {
+describe('Mapping Workbench — truth state', () => {
+  it('dựng đúng ba vùng, hiển thị live data và khóa mutation khi thiếu Project', () => {
     const onSave = vi.fn().mockResolvedValue(true)
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={onSave} /></I18nProvider>)
 
@@ -83,7 +83,7 @@ describe('Mapping Workbench Phase 1A — read-only truth state', () => {
     fireEvent.click(fanRow)
     const mapButton = screen.getByRole('button', { name: 'Ánh xạ AHU_Main · FanCmd' })
     expect(mapButton).toBeDisabled()
-    expect(mapButton).toHaveAttribute('title', expect.stringMatching(/Phase 1A/))
+    expect(mapButton).toHaveAttribute('title', expect.stringMatching(/Project/))
     expect(onSave).not.toHaveBeenCalled()
   })
 

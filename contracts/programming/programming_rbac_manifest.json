@@ -1,0 +1,485 @@
+{
+  "schemaVersion": "1.0",
+  "operations": [
+    {
+      "operationId": "actProgrammingSimulationSession",
+      "method": "POST",
+      "path": "/api/v1/programming/simulation/sessions/{sessionId}/actions",
+      "roles": [
+        "admin"
+      ],
+      "permission": "simulation.run"
+    },
+    {
+      "operationId": "checkProgrammingLibraryEntry",
+      "method": "POST",
+      "path": "/api/v1/programming/projects/{projectId}/library/entries/check",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "commissionProgrammingRevision",
+      "method": "POST",
+      "path": "/api/v1/programming/operations/commission",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.activate"
+    },
+    {
+      "operationId": "compareProgrammingRevisions",
+      "method": "GET",
+      "path": "/api/v1/programming/revisions/{from}/changes/{to}",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "createProgrammingCheck",
+      "method": "POST",
+      "path": "/api/v1/programming/revisions/{revisionId}/checks",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "createProgrammingProject",
+      "method": "POST",
+      "path": "/api/v1/programming/projects",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "createProgrammingRevision",
+      "method": "POST",
+      "path": "/api/v1/programming/projects/{projectId}/draft/revisions",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "createProgrammingSimulationSession",
+      "method": "POST",
+      "path": "/api/v1/programming/simulation/sessions",
+      "roles": [
+        "admin"
+      ],
+      "permission": "simulation.run"
+    },
+    {
+      "operationId": "createProgrammingTrace",
+      "method": "POST",
+      "path": "/api/v1/programming/runtime/traces",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "deleteProgrammingLibraryEntry",
+      "method": "DELETE",
+      "path": "/api/v1/programming/projects/{projectId}/library/entries/{entryId}",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "deprecateProgrammingLibraryRevision",
+      "method": "POST",
+      "path": "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "exportProgrammingBundle",
+      "method": "POST",
+      "path": "/api/v1/programming/bundles/export",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "getProgrammingCapabilities",
+      "method": "GET",
+      "path": "/api/v1/programming/capabilities",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingCheck",
+      "method": "GET",
+      "path": "/api/v1/programming/checks/{checkId}",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingLibraryEntrySource",
+      "method": "GET",
+      "path": "/api/v1/programming/library-entry-source",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingOperation",
+      "method": "GET",
+      "path": "/api/v1/programming/operations/{operationId}",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingPointCatalog",
+      "method": "GET",
+      "path": "/api/v1/programming/point-catalog",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingProject",
+      "method": "GET",
+      "path": "/api/v1/programming/projects/{projectId}",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingRevision",
+      "method": "GET",
+      "path": "/api/v1/programming/revisions/{revisionId}",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingRuntime",
+      "method": "GET",
+      "path": "/api/v1/programming/runtime",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingRuntimeMonitor",
+      "method": "GET",
+      "path": "/api/v1/programming/runtime/monitor",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingRuntimeSignals",
+      "method": "GET",
+      "path": "/api/v1/programming/runtime/signals",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingSimulationSession",
+      "method": "GET",
+      "path": "/api/v1/programming/simulation/sessions/{sessionId}",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "getProgrammingTrace",
+      "method": "GET",
+      "path": "/api/v1/programming/runtime/traces/{traceId}",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "importProgrammingBundle",
+      "method": "POST",
+      "path": "/api/v1/programming/bundles/import",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.activate"
+    },
+    {
+      "operationId": "listProgrammingAudit",
+      "method": "GET",
+      "path": "/api/v1/programming/audit",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "listProgrammingLibraryUsages",
+      "method": "GET",
+      "path": "/api/v1/programming/library-usages",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "listProgrammingOperations",
+      "method": "GET",
+      "path": "/api/v1/programming/operations",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "listProgrammingOverrides",
+      "method": "GET",
+      "path": "/api/v1/programming/overrides",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "listProgrammingProgramIntents",
+      "method": "GET",
+      "path": "/api/v1/programming/projects/{projectId}/programs",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "listProgrammingProjects",
+      "method": "GET",
+      "path": "/api/v1/programming/projects",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "listProgrammingSimulationObservations",
+      "method": "GET",
+      "path": "/api/v1/programming/simulation/sessions/{sessionId}/observations",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "listProgrammingSimulationTrace",
+      "method": "GET",
+      "path": "/api/v1/programming/simulation/sessions/{sessionId}/trace",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "previewProgrammingBinding",
+      "method": "POST",
+      "path": "/api/v1/programming/projects/{projectId}/draft/bindings/preview",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "resetProgrammingRecovery",
+      "method": "POST",
+      "path": "/api/v1/programming/runtime/recovery-reset",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.activate"
+    },
+    {
+      "operationId": "resetProgrammingRetain",
+      "method": "POST",
+      "path": "/api/v1/programming/retain/reset",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.activate"
+    },
+    {
+      "operationId": "restoreProgrammingRevision",
+      "method": "POST",
+      "path": "/api/v1/programming/operations/restore",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.activate"
+    },
+    {
+      "operationId": "searchProgrammingLibraries",
+      "method": "GET",
+      "path": "/api/v1/programming/libraries",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
+      "operationId": "setProgrammingProgramIntent",
+      "method": "PUT",
+      "path": "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.activate"
+    },
+    {
+      "operationId": "setProgrammingSimulationInput",
+      "method": "PUT",
+      "path": "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}",
+      "roles": [
+        "admin"
+      ],
+      "permission": "simulation.run"
+    },
+    {
+      "operationId": "stopProgrammingSimulationSession",
+      "method": "DELETE",
+      "path": "/api/v1/programming/simulation/sessions/{sessionId}",
+      "roles": [
+        "admin"
+      ],
+      "permission": "simulation.run"
+    },
+    {
+      "operationId": "stopProgrammingTrace",
+      "method": "DELETE",
+      "path": "/api/v1/programming/runtime/traces/{traceId}",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "updateProgrammingDraft",
+      "method": "PATCH",
+      "path": "/api/v1/programming/projects/{projectId}/draft",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    },
+    {
+      "operationId": "upsertProgrammingLibraryEntry",
+      "method": "POST",
+      "path": "/api/v1/programming/projects/{projectId}/library/entries",
+      "roles": [
+        "engineer",
+        "admin"
+      ],
+      "permission": "program.edit"
+    }
+  ]
+}

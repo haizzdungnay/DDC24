@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { AlertTriangle, Download, RotateCcw, Upload } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { bytesToBase64, createUuid, sha256Hex } from '../../../shared/crypto'
-import { useAuth, roleAtLeast } from '../../auth'
 import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
 import { Modal } from '../../../shared/components/Modal'
@@ -13,23 +12,24 @@ import { useProgrammingRevisionChanges } from '../api/queries'
 import { useRestoreWorkflow } from './useRestoreWorkflow'
 import { useRetainResetWorkflow } from './useRetainResetWorkflow'
 import type { ProgrammingRuntime } from '../model/types'
+import { useProgrammingActionAllowed } from '../api/authorization'
 
 /**
  * Vùng thao tác nguy hiểm của PGM-06 (`UJ-PROG-08`) — tách khỏi vùng chỉ đọc,
- * viền cảnh báo, chỉ `admin` thấy nút thật; viewer thấy ở chế độ đọc kèm lý
+ * viền cảnh báo; capability tương ứng mới làm hiện nút thật, vai chỉ đọc thấy lý
  * do, KHÔNG thấy một dãy nút bị vô hiệu hóa (UX §16.4).
  */
 export function DangerZone({ runtime, runtimeStatus }: { runtime: ProgrammingRuntime | null; runtimeStatus: 'loading' | 'ready' | 'error' }) {
   const { pick } = useI18n()
-  const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin')
+  const canActivate = useProgrammingActionAllowed('restore')
+  const canExport = useProgrammingActionAllowed('bundleExport')
   const coreMutationReady = runtimeStatus === 'ready' && runtime?.producerState === 'READY' && runtime.safeState === false
 
-  if (!canEdit) {
+  if (!canActivate && !canExport) {
     return (
       <Panel title={pick('Vùng thao tác nguy hiểm', 'Danger zone')} className="border-[var(--c-warn)]">
         <p className="text-sm text-[var(--c-text-dim)]">
-          {pick('Cần quyền Quản trị viên để khôi phục, nhập gói hoặc đặt lại trạng thái lưu.', 'Admin permission is required to restore, import a bundle, or reset RETAIN state.')}
+          {pick('Cần capability Programming phù hợp để khôi phục, xuất/nhập gói hoặc đặt lại trạng thái lưu.', 'The matching Programming capability is required to restore, export/import a bundle, or reset RETAIN state.')}
         </p>
       </Panel>
     )
@@ -38,13 +38,13 @@ export function DangerZone({ runtime, runtimeStatus }: { runtime: ProgrammingRun
   return (
     <Panel title={pick('Vùng thao tác nguy hiểm', 'Danger zone')} className="border-[var(--c-warn)]">
       <div className="space-y-4">
-        <RestoreSection runtime={runtime} coreMutationReady={coreMutationReady} />
-        <div className="h-px bg-[var(--c-border)]" />
-        <BundleExportSection revisionId={runtime?.activeRevisionId ?? null} />
-        <div className="h-px bg-[var(--c-border)]" />
-        <BundleImportSection />
-        <div className="h-px bg-[var(--c-border)]" />
-        <RetainResetSection runtime={runtime} coreMutationReady={coreMutationReady} />
+        {canActivate && <RestoreSection runtime={runtime} coreMutationReady={coreMutationReady} />}
+        {canActivate && canExport && <div className="h-px bg-[var(--c-border)]" />}
+        {canExport && <BundleExportSection revisionId={runtime?.activeRevisionId ?? null} />}
+        {canActivate && canExport && <div className="h-px bg-[var(--c-border)]" />}
+        {canActivate && <BundleImportSection />}
+        {canActivate && <div className="h-px bg-[var(--c-border)]" />}
+        {canActivate && <RetainResetSection runtime={runtime} coreMutationReady={coreMutationReady} />}
       </div>
     </Panel>
   )

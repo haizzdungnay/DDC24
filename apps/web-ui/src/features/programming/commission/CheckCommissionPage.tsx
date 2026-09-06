@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ClipboardCheck, ShieldCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../auth'
 import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
 import { Modal } from '../../../shared/components/Modal'
@@ -16,6 +15,7 @@ import { useCommissionWorkflow, type CommissionWorkflowState } from './useCommis
 import type { ProgrammingImpactKey } from '../api/generated/client'
 import type { ProgrammingCheck } from '../model/types'
 import { ProblemsDrawer } from '../shared/ProblemsDrawer'
+import { useProgrammingActionAllowed } from '../api/authorization'
 
 // T59-502: thứ tự đi từ thứ tác động MẠNH NHẤT lên thiết bị đang chạy xuống
 // thứ nhẹ hơn. Người vận hành đọc từ trên xuống, nên thứ có thể làm hỏng quá
@@ -76,8 +76,8 @@ interface NavState {
  */
 export function CheckCommissionPage() {
   const { pick } = useI18n()
-  const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin')
+  const canCheck = useProgrammingActionAllowed('check')
+  const canCommission = useProgrammingActionAllowed('commission')
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -185,7 +185,7 @@ export function CheckCommissionPage() {
           `SchedulerGridPage`. `<h1>` của route nằm ở `ProgrammingLayout`. */}
         <h2 className="sr-only">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
         <RevisionLifecycle current={phase === 'sealing' || phase === 'checking' ? 'CHECKING' : phase === 'error' ? 'FAILED' : 'DRAFT'} />
-        {!canEdit ? <ReadOnlyCommissionNotice /> : null}
+        {!canCheck ? <ReadOnlyCommissionNotice /> : null}
         {phase === 'error' ? (
           <StateBlock state="error" title={checkWorkflow.state.message} onRetry={checkWorkflow.reset} />
         ) : (
@@ -208,7 +208,7 @@ export function CheckCommissionPage() {
             }
           />
         )}
-        {canEdit && !running && phase !== 'error' && (
+        {canCheck && !running && phase !== 'error' && (
           <Button
             icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
             disabled={workspace.status !== 'ready' || !workspace.project}
@@ -257,7 +257,7 @@ export function CheckCommissionPage() {
     <div className="space-y-4">
       <h2 className="sr-only">{pick('Kiểm tra & Đưa vào vận hành', 'Check & Commission')}</h2>
       <RevisionLifecycle current={commissionLifecycleState(check.status, check.data, commission.state)} />
-      {!canEdit ? <ReadOnlyCommissionNotice /> : null}
+      {!canCommission ? <ReadOnlyCommissionNotice /> : null}
       <Panel title={pick('Kết quả Kiểm tra', 'Check result')}>
         {check.status === 'loading' ? (
           <StateBlock state="loading" title={pick('Đang tải…', 'Loading…')} />
@@ -401,7 +401,7 @@ export function CheckCommissionPage() {
         </div>
       )}
 
-      {canEdit && (
+      {canCommission && (
         <div className="flex justify-end">
           <Button icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} disabled={!readyToCommission} onClick={openConfirmDialog}>
             {pick('Đưa vào vận hành…', 'Commission…')}

@@ -8,6 +8,7 @@ import { LibraryPage } from './library/LibraryPage'
 import { LegacyDesignRedirect, LegacyProgramsRedirect, LegacyTabRedirect } from './shared/LegacyTabRedirect'
 import { ProgramsWorkspaceRoute } from './design/ProgramsWorkspaceRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../shared/config'
+import { ProgrammingAuthorizationProvider } from './api/authorization'
 
 /** Route tương đối canonical của đúng sáu workspace theo UX-WEB-PROG-001 §2. */
 export const PROGRAMMING_WORKSPACE_PATHS = {
@@ -31,7 +32,7 @@ export const PROGRAMMING_LEGACY_PROGRAMS_PATH = 'projects/:projectId/programs'
  */
 export function ProgrammingRoutes() {
   return (
-    <Routes>
+    <ProgrammingAuthorizationProvider><Routes>
       <Route element={<ProgrammingLayout />}>
         <Route index element={<OverviewPage />} />
         {/* `/design` giữ NGUYÊN một element ở cả hai trạng thái cờ: nó phải
@@ -57,6 +58,6 @@ export function ProgrammingRoutes() {
         <Route path="projects/:projectId/task" element={<LegacyTabRedirect tab="execution" />} />
       </Route>
       <Route path="*" element={<Navigate to="/eng/programming" replace />} />
-    </Routes>
+    </Routes></ProgrammingAuthorizationProvider>
   )
 }

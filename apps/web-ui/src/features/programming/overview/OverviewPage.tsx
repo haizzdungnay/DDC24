@@ -4,7 +4,6 @@ import { ArrowRight, FolderPlus, PencilRuler, WifiOff } from 'lucide-react'
 import { formatTechnicalDateTime, formatTechnicalTime } from '../../../shared/dateTime'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
-import { roleCan } from '../../../shared/auth/capabilities'
 import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
@@ -39,6 +38,7 @@ import {
 } from './QuickActions'
 import type { ProgrammingProgramHealth, ProgrammingProgramRuntimeState, RemoteState } from '../model/types'
 import { programsWorkspacePath } from '../shared/programsRoute'
+import { useProgrammingActionAllowed } from '../api/authorization'
 
 /**
  * `OverviewPage` (PGM-01) — `UJ-PROG-01`, ráp trang theo `T60-207`/`T60-208`.
@@ -84,7 +84,8 @@ export function OverviewPage() {
   const { runtime, projects, programIntents, subjectProject, activeOwnership } = useProgrammingRuntimeContext()
   /* `WEB-RBAC-001` — lối tắt và thẻ "chưa có Project" nói về việc SỬA chương
      trình, tức `program.edit`, chứ không về vai `admin`. */
-  const canEdit = roleCan(session?.role, 'program.edit')
+  const canEdit = useProgrammingActionAllowed('editDraft')
+  const canActivate = useProgrammingActionAllowed('commission')
 
   /* `ISS-PGUI-01` — Project và quyền sở hữu gói đang chạy đến TỪ SHELL, không
      tính lại ở đây.
@@ -167,6 +168,8 @@ export function OverviewPage() {
   const quickActions = {
     projectId: vm.projectId,
     role: session?.role ?? null,
+    canEdit,
+    canActivate,
     producerState: vm.core.producerState,
     safeState: vm.safeState,
     primaryCtaKind: vm.primaryCta.kind

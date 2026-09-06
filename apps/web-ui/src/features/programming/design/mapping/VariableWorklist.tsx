@@ -5,19 +5,21 @@ import { useI18n } from '../../../../shared/i18n'
 import { formatMappingValue, type MappingVariableRow } from './mappingViewModel'
 import { mappingReasonText } from './mappingReasons'
 
-export function VariableWorklist({ rows, selectedId, onSelect, onOpenSource, mutationsBlocked }: {
+export function VariableWorklist({ rows, selectedId, onSelect, onOpenSource, canMutate, mutationDisabled, onMap }: {
   rows: MappingVariableRow[]
   selectedId: string | null
   onSelect: (id: string) => void
   onOpenSource: (row: MappingVariableRow) => void
-  mutationsBlocked: boolean
+  canMutate: boolean
+  mutationDisabled: boolean
+  onMap: (row: MappingVariableRow) => void
 }) {
   const { pick } = useI18n()
   return (
     <section className="flex min-h-0 min-w-0 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] 2xl:h-[39rem] 2xl:max-h-[calc(100vh-18rem)]" aria-labelledby="mapping-variables-title">
       <div className="flex items-start justify-between gap-3 border-b border-[var(--c-border)] px-4 py-3">
-        <div><h2 id="mapping-variables-title" className="text-sm font-semibold text-[var(--c-text)]">{pick('Biến chương trình', 'Program Variables')}</h2><p className="mt-1 text-xs text-[var(--c-text-dim)]">{rows.length} {pick('biến interface · Map trực tiếp bị khóa trong Phase 1A', 'interface variables · Direct mapping locked in Phase 1A')}</p></div>
-        <span className="rounded-full bg-[var(--c-accent-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--c-accent)]">READ-ONLY</span>
+        <div><h2 id="mapping-variables-title" className="text-sm font-semibold text-[var(--c-text)]">{pick('Biến chương trình', 'Program Variables')}</h2><p className="mt-1 text-xs text-[var(--c-text-dim)]">{rows.length} {pick('biến interface · thay đổi chỉ ghi sau bước xem trước', 'interface variables · changes are written only after preview')}</p></div>
+        <span className="rounded-full bg-[var(--c-accent-bg)] px-2 py-1 text-[11px] font-semibold text-[var(--c-accent)]">{canMutate ? 'EDIT' : 'READ-ONLY'}</span>
       </div>
       <div data-testid="mapping-variable-list" className="min-h-0 flex-1 divide-y divide-[var(--c-border)] overflow-y-auto [scrollbar-gutter:stable]">
         {rows.length === 0 ? <p className="p-4 text-sm text-[var(--c-text-dim)]">{pick('Chưa có biến I/O có thể inspect.', 'No I/O variables available to inspect.')}</p> : rows.map((row) => {
@@ -37,7 +39,7 @@ export function VariableWorklist({ rows, selectedId, onSelect, onOpenSource, mut
               <span className="flex items-start gap-2 text-xs"><strong className="font-mono text-[var(--c-text)]">{formatMappingValue(row.liveValue, pick)}</strong><StatusBadge state={qualityState} label={row.liveQuality} /></span>
               <div className="flex flex-wrap items-center justify-end gap-1">
                 <Button size="sm" variant="ghost" icon={<ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onOpenSource(row)}>{pick('Mở nguồn', 'Open source')}</Button>
-                <Button size="sm" variant="secondary" disabled icon={<Unlink className="h-3.5 w-3.5" aria-hidden="true" />} title={mutationsBlocked ? pick('Phase 1A read-only: Map sẽ mở sau capability/quality/replay/pagination gates', 'Phase 1A read-only: Map will open after capability/quality/replay/pagination gates') : pick('Mapping bị khóa theo eligibility', 'Mapping blocked by eligibility')} aria-label={`${pick('Ánh xạ', 'Map')} ${row.programName} · ${row.name}`}>Map</Button>
+                {canMutate && <Button size="sm" variant="secondary" disabled={mutationDisabled || !selected || row.direction === 'INOUT'} icon={<Unlink className="h-3.5 w-3.5" aria-hidden="true" />} title={mutationDisabled ? pick('Cần Project, Point đã chọn và Point Catalog đầy đủ trước khi xem trước', 'A project, selected point, and complete Point Catalog are required before preview') : undefined} aria-label={`${pick(row.bindingId ? 'Đổi ánh xạ' : 'Ánh xạ', row.bindingId ? 'Change mapping' : 'Map')} ${row.programName} · ${row.name}`} onClick={() => onMap(row)}>{pick(row.bindingId ? 'Đổi' : 'Map', row.bindingId ? 'Change' : 'Map')}</Button>}
               </div>
             </div>
           )

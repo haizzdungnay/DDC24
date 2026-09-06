@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
 import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
-import { roleAtLeast, useAuth } from '../../auth'
+import { useProgrammingActionAllowed } from '../api/authorization'
 import { ProgrammingHeader } from './ProgrammingHeader'
 import { ProgrammingContextStrip } from './ProgrammingContextStrip'
 import { activeRevisionOwnership, ownedActiveRevisionId, runningProject } from '../shared/activeRevisionOwnership'
@@ -92,7 +92,7 @@ export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
  * trạng thái nào bị bỏ.
  */
 export function ProgrammingLayout() {
-  const { session } = useAuth()
+  const canSetRuntimeIntent = useProgrammingActionAllowed('runtimeIntent')
   const capabilities = useProgrammingCapabilities()
   const runtime = useProgrammingRuntime()
   const projects = useProgrammingProjects()
@@ -195,7 +195,7 @@ export function ProgrammingLayout() {
             intents={programIntents.data}
             intentError={programIntents.error}
             editing={visibleEditingContext}
-            canMutate={roleAtLeast(session?.role, 'admin')}
+            canMutate={canSetRuntimeIntent}
             /* `DEV-PROG-007` — bộ chọn Project. Danh sách và Project đang mở
                đều lấy từ CÙNG read-model mà shell đã tải; strip không tự gọi
                HTTP (README §5.1/§5.2). */

@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-BE-PROG-001` |
-| Phiên bản | 1.7 |
+| Phiên bản | 1.8 |
 | Trạng thái | **M3 — corrective POU/library/signal/package source đang tích hợp; chưa merge/target evidence mới** |
-| Ngày | 2026-08-24 |
+| Ngày | 2026-09-06 |
 | Chủ quản | Backend Lead |
 | Người review | Core Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | Backend Lead + System Architect |
@@ -200,11 +200,17 @@ REST và refetch snapshot.
 
 ## 7. RBAC, audit và security
 
-| Capability | viewer | operator | admin |
-|---|:---:|:---:|:---:|
-| list/read source/runtime/monitor/history | ✓ | ✓ | ✓ |
-| edit/save/check | — | — | ✓ |
-| commission/restore/import/export/reset retain | — | — | ✓ |
+| Capability | viewer | operator | engineer | admin |
+|---|:---:|:---:|:---:|:---:|
+| `read`: source/runtime/monitor/history | ✓ | ✓ | ✓ | ✓ |
+| `program.edit`: Draft/Binding/Signal/Library/Check/Trace/export | — | — | ✓ | ✓ |
+| `program.activate`: Commission/Restore/import/RETAIN reset/intent/recovery | — | — | ✓ | ✓ |
+| `simulation.run`: tạo/điều khiển/dừng phiên mô phỏng | — | — | — | ✓ |
+
+Mỗi operation `/programming/*` phải khai đồng thời `x-rbac` và `x-permission`
+trong OpenAPI. Generator xuất `programming_rbac_manifest.json`; security matrix
+Go so sánh đủ method/path/operation/permission/roles với `routeDefinitions` và
+`auth.RolesWithPermission`. Drift ở bất kỳ lớp nào làm test hỏng.
 
 Audit mutation và reject gồm actor ID/role, remote context đã sanitize, action,
 object/revision/controller, operation/correlation/idempotency hash, result/code
@@ -295,7 +301,7 @@ capacity sai bị reject trước transaction hoặc rollback toàn bộ.
 
 | HTTP/worker | Application/store/compiler | Invariant và kết quả |
 |---|---|---|
-| `POST /revisions/{revisionId}/checks` | `RequestCheck` → `EnqueueCheck` | admin + idempotency key; receipt/Check `QUEUED`/audit atomic; trả `202`, `Location`, cùng request trả cùng `checkId`; không IPC/Core |
+| `POST /revisions/{revisionId}/checks` | `RequestCheck` → `EnqueueCheck` | `program.edit` + idempotency key; receipt/Check `QUEUED`/audit atomic; trả `202`, `Location`, cùng request trả cùng `checkId`; không IPC/Core |
 | `GET /checks/{checkId}` | `GetCheck` | viewer; kiểm checksum result/artifact metadata; chỉ `PASSED` có Artifact; không lộ locator/bytes |
 | Check worker | `ProcessNext` → `ClaimCheck` → `ProcessRunner.Compile` → `artifact.Put/Verify` → `CompleteCheck` | lease owner/expiry CAS; tối đa hai attempt; một terminal transition; `FAILED/TIMED_OUT` không Artifact |
 | startup/ticker | `FailExhaustedChecks` + bounded poll | expired attempt thứ hai đóng `FAILED`; shutdown cancel child/process group và để lease recoverable |
@@ -323,7 +329,7 @@ request conflict, replay qua restart giữ Project/Draft/ETag/audit và safety f
 ### 12.4 Contract corrective của Control Library deprecate
 
 `POST /projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate`
-yêu cầu admin, `If-Match`, `X-Idempotency-Key` và body strict
+yêu cầu `program.edit`, `If-Match`, `X-Idempotency-Key` và body strict
 `{"schemaVersion":"1"}`. Application gọi `LibraryService.DeprecateRevision`;
 store đổi duy nhất Revision `PUBLISHED→DEPRECATED`, ghi mutation receipt + audit
 trong cùng transaction và trả ETag/read-back mới. Replay cùng actor/action/target/
@@ -509,6 +515,7 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 | 1.4 | 2026-08-13 | Hoàn tất target `TASK-PROG-507` tại `0f1526c`: Web normalize nil IO/safe-state slice thành `[]`, Core tương thích `null` legacy chỉ về default an toàn và vẫn reject type sai; deploy compiler/Core/Web ARM64, cờ `ON`, UDS `0660`; hai Check `PASSED`, Commission output-free `SUCCEEDED/COMMITTED`, Active/LKG/Task đọc-ngược đúng. Supporting target evidence không thay Test Result/HIL. |
 | 1.5 | 2026-08-13 | `TASK-PROG-509`: nối Monitor/Trace source thật. `ProgrammingMonitorService` join Revision binding với Core/Point truth và bảo vệ namespace LOCAL; `TraceService` bounded/idempotent/audited/in-memory; runtime trả controller/task metric; HTTP routes/OpenAPI v1.20.0/FE client đồng bộ. Host Go tests PASS; target bản mới NOT_RUN do SSH. |
 | 1.6 | 2026-08-13 | `EV-PROG-P5-510`: full Go gate PASS; ARM64 Web deploy/hash/health/rollback rehearsal PASS; target Runtime/Task và Monitor `200` read-back đúng, Trace invalid selector `400`. Fixture active không binding nên chưa có positive row/Trace target; source chưa merge và không nâng Test Result. |
+| 1.8 | 2026-09-06 | `ISS-PGM-RBAC-01`: công bố `x-permission` cho đủ 44 Programming operation, sinh manifest và khóa drift OpenAPI/FE/Go; chuẩn hóa ma trận engineer cho `program.edit`/`program.activate`, giữ Simulation admin-only. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
