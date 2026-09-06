@@ -51,37 +51,69 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0, enabl
   loadRef.current = load
   const generation = useRef(0)
   const inFlight = useRef(false)
+  const rerunAfterFlight = useRef(false)
+  const active = useRef(false)
+  const runRef = useRef<() => void>(() => {})
 
   const run = useCallback(() => {
-    if (inFlight.current) return
+    if (!active.current) return
+    /* Đổi định danh tài nguyên hoặc gọi refresh trong lúc request cũ còn bay
+       không được làm mất lượt đọc mới. Coalesce thành đúng một lượt kế tiếp:
+       không mở request chồng nhau, nhưng cũng không kẹt mãi ở dữ liệu cũ. */
+    if (inFlight.current) {
+      rerunAfterFlight.current = true
+      return
+    }
     inFlight.current = true
-    const myGeneration = ++generation.current
+    const myGeneration = generation.current
+    const finish = () => {
+      inFlight.current = false
+      if (!active.current || !rerunAfterFlight.current) return
+      rerunAfterFlight.current = false
+      queueMicrotask(() => runRef.current())
+    }
     // Một client validator hoặc test double có thể ném đồng bộ trước khi trả
     // Promise. Chuẩn hoá cả hai đường vào cùng RemoteState error; nếu không một
     // endpoint context mới đủ làm sập toàn bộ sáu-workspace layout.
     Promise.resolve().then(() => loadRef.current()).then(
       (value) => {
-        inFlight.current = false
-        if (myGeneration !== generation.current) return
-        setData(value)
-        setError(null)
-        setStatus('ready')
+        if (myGeneration === generation.current) {
+          setData(value)
+          setError(null)
+          setStatus('ready')
+        }
+        finish()
       },
       (reason: unknown) => {
-        inFlight.current = false
-        if (myGeneration !== generation.current) return
-        setError(programmingResourceErrorMessage(pick, reason))
-        setStatus('error')
+        if (myGeneration === generation.current) {
+          setError(programmingResourceErrorMessage(pick, reason))
+          setStatus('error')
+        }
+        finish()
       }
     )
   }, [pick])
+  runRef.current = run
 
   useEffect(() => {
-    if (!enabled) return undefined
+    active.current = enabled
+    generation.current += 1
+    rerunAfterFlight.current = false
+    if (!enabled) {
+      return () => {
+        active.current = false
+        generation.current += 1
+        rerunAfterFlight.current = false
+      }
+    }
     run()
-    if (intervalMs <= 0) return undefined
-    const timer = window.setInterval(run, intervalMs)
-    return () => window.clearInterval(timer)
+    const timer = intervalMs > 0 ? window.setInterval(run, intervalMs) : null
+    return () => {
+      active.current = false
+      generation.current += 1
+      rerunAfterFlight.current = false
+      if (timer !== null) window.clearInterval(timer)
+    }
     // `load` cố ý nằm trong deps dù `run()` luôn đọc qua `loadRef` (giá trị
     // mới nhất) — thiếu nó, đổi định danh tài nguyên (vd `checkId` từ
     // `undefined` sang giá trị thật sau một `navigate` cùng trang, xem D-01/

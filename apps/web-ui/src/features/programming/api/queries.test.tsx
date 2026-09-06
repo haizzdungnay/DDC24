@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   useLazyProgrammingLibraryCatalog,
   useProgrammingLibraryPaged,
+  useProgrammingRevision,
   useProgrammingRevisionComparison,
   useProgrammingRuntimeMonitor,
 } from './queries'
@@ -34,6 +35,30 @@ function deferred<T>() {
   })
   return { promise, resolve, reject }
 }
+
+describe('useProgrammingResource — không làm rơi lượt đọc khi định danh đổi', () => {
+  beforeEach(() => { client.request.mockReset() })
+
+  it('Revision đổi khi request cũ còn bay: bỏ response cũ và đọc đúng Revision mới', async () => {
+    const first = deferred<{ revisionId: string }>()
+    client.request
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ revisionId: 'rev-b' })
+
+    const { result, rerender } = renderHook(
+      ({ revisionId }: { revisionId: string }) => useProgrammingRevision(revisionId),
+      { initialProps: { revisionId: 'rev-a' } },
+    )
+    await waitFor(() => expect(client.request).toHaveBeenCalledTimes(1))
+
+    rerender({ revisionId: 'rev-b' })
+    await act(async () => first.resolve({ revisionId: 'rev-a' }))
+
+    await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(result.current.data).toEqual({ revisionId: 'rev-b' }))
+    expect(client.request.mock.calls[1][1]).toEqual({ path: { revisionId: 'rev-b' } })
+  })
+})
 
 describe('useProgrammingRuntimeMonitor — vòng đời LIVE T59-812', () => {
   /* Thân KHỐI, không phải biểu thức: `mockReset()` trả về CHÍNH mock, và
