@@ -378,6 +378,21 @@ func TestMigrateDraftToV2KeepsLocalVpAndModbusCanonicalIdentity(t *testing.T) {
 	if !reflect.DeepEqual(beforeVariables, bindingVariablesFromDocument(document)) {
 		t.Fatalf("owner/Variable đổi nghĩa sau migration")
 	}
+	// Check dùng đúng hai projection trên. So quyết định validator trước/sau để
+	// tránh một migration giữ đủ JSON nhưng đổi nghĩa ở cổng Check.
+	catalog := standardBindingCatalog().entries
+	validate := func(candidates []BindingCandidate, variables map[string]bindingVariable) []BindingValidationResult {
+		results := make([]BindingValidationResult, 0, len(candidates))
+		for _, candidate := range candidates {
+			results = append(results, ValidateBindingCandidate(candidate, variables, candidates, catalog))
+		}
+		return results
+	}
+	beforeValidation := validate(beforeCandidates, beforeVariables)
+	afterValidation := validate(afterCandidates, bindingVariablesFromDocument(document))
+	if !reflect.DeepEqual(beforeValidation, afterValidation) {
+		t.Fatalf("Check đổi nghĩa sau migration:\ntrước=%+v\nsau=%+v", beforeValidation, afterValidation)
+	}
 	for index, expected := range bindings {
 		want := expected.(map[string]any)
 		got := findByID(document, "bindings", "bindingId", want["bindingId"].(string))

@@ -950,8 +950,15 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     // Nhãn khay phải nói nguồn, không được ghi "Draft" khi đang chiếu bản chạy.
     expect(screen.getByText(/LIVE · Đang chạy · Điều khiển AHU/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('tab', { name: /Tìm kiếm/ }))
-    fireEvent.change(screen.getByLabelText('Tìm trong POU đang mở'),
+    /* `LiveProgramView` và workbench hiện đọc cùng Revision qua hai hook riêng.
+       Textarea sẵn sàng chỉ chứng minh lượt đọc của view; đợi số đếm `(0)`
+       chứng minh workbench cũng đã nhận nguồn Active trước khi tương tác. */
+    const searchTab = await screen.findByRole('tab', { name: 'Tìm kiếm (0)' })
+    fireEvent.click(searchTab)
+    expect(searchTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel')).toHaveAccessibleName(/Tìm kiếm/)
+    const search = screen.getByLabelText('Tìm trong POU đang mở')
+    fireEvent.change(search,
       { target: { value: 'CHI_CO_TRONG' } })
     /* Đọc TRONG khay kết quả: chuỗi này cũng nằm trong textarea chiếu nguồn,
        nên tìm ở phạm vi toàn trang sẽ khớp cả hai và không chứng minh được

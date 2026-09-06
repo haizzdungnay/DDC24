@@ -63,17 +63,30 @@ func seed(ctx context.Context, databasePath, backupDir string) error {
 		"programs": []any{map[string]any{
 			"programId": "70444444-4444-4444-8444-444444444444", "name": "LEGACY_MAP_SOURCE",
 			"kind": "PROGRAM", "language": "ST",
-			"document": "PROGRAM LEGACY_MAP_SOURCE\nVAR_INPUT\n  SupplyTemp : REAL;\nEND_VAR\nEND_PROGRAM\n",
+			"document": "PROGRAM LEGACY_MAP_SOURCE\nVAR_INPUT\n  SupplyTemp : REAL;\n  PumpReady : BOOL;\nEND_VAR\nEND_PROGRAM\n",
 		}},
-		"variables": []any{map[string]any{
-			"variableId": "70555555-5555-4555-8555-555555555555", "programId": "70444444-4444-4444-8444-444444444444",
-			"name": "SupplyTemp", "type": "REAL", "class": "INPUT", "initialValue": nil, "retain": false,
-		}},
-		"bindings": []any{map[string]any{
-			"bindingId": "70666666-6666-4666-8666-666666666666", "variableId": "70555555-5555-4555-8555-555555555555",
-			"point":     map[string]any{"category": "LOCAL", "pointId": "UI-01"},
-			"direction": "READ", "dataType": "REAL", "unit": "V", "writable": false, "qualityPolicy": "REQUIRE_GOOD",
-		}},
+		"variables": []any{
+			map[string]any{
+				"variableId": "70555555-5555-4555-8555-555555555555", "programId": "70444444-4444-4444-8444-444444444444",
+				"name": "SupplyTemp", "type": "REAL", "class": "INPUT", "initialValue": nil, "retain": false,
+			},
+			map[string]any{
+				"variableId": "70555555-5555-4555-8555-555555555556", "programId": "70444444-4444-4444-8444-444444444444",
+				"name": "PumpReady", "type": "BOOL", "class": "INPUT", "initialValue": nil, "retain": false,
+			},
+		},
+		"bindings": []any{
+			map[string]any{
+				"bindingId": "70666666-6666-4666-8666-666666666666", "variableId": "70555555-5555-4555-8555-555555555555",
+				"point":     map[string]any{"category": "LOCAL", "pointId": "UI-01"},
+				"direction": "READ", "dataType": "REAL", "unit": "V", "writable": false, "qualityPolicy": "REQUIRE_GOOD",
+			},
+			map[string]any{
+				"bindingId": "70666666-6666-4666-8666-666666666667", "variableId": "70555555-5555-4555-8555-555555555556",
+				"point":     map[string]any{"category": "MB_RTU", "deviceId": "bus-1-slave-4", "pointId": "PUMP_CMD"},
+				"direction": "READ", "dataType": "BOOL", "writable": false, "qualityPolicy": "REQUIRE_GOOD",
+			},
+		},
 		"task": map[string]any{
 			"taskId": "70777777-7777-4777-8777-777777777777", "periodMs": 1000,
 			"programOrder": []string{"70444444-4444-4444-8444-444444444444"},

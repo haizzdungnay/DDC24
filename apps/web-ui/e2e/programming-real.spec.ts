@@ -297,7 +297,7 @@ async function commission(
   return operation
 }
 
-test('ISS-PGM03-07: Draft v1 migrate qua HTTP, reload Mapping giữ canonical Binding và Check PASS', async ({ page, request }) => {
+test('ISS-PGM03-07: Draft v1 LOCAL+MB_RTU migrate qua HTTP, reload giữ đủ Binding và Check không bỏ qua', async ({ page, request }) => {
   test.setTimeout(120_000)
   const token = await loginAPI(request)
   const projects = await responseJSON(
@@ -319,13 +319,22 @@ test('ISS-PGM03-07: Draft v1 migrate qua HTTP, reload Mapping giữ canonical Bi
   }), 200)
   const migrated = (saved.resource as JsonObject).content as JsonObject
   expect(migrated.schemaVersion).toBe(2)
-  expect(migrated.bindings).toEqual([expect.objectContaining({
-    bindingId: '70666666-6666-4666-8666-666666666666',
-    variableId: '70555555-5555-4555-8555-555555555555',
-    programId: '70444444-4444-4444-8444-444444444444', variable: 'SupplyTemp',
-    point: { category: 'LOCAL', pointId: 'UI-01' },
-    direction: 'READ', dataType: 'REAL', unit: 'V', writable: false, qualityPolicy: 'REQUIRE_GOOD'
-  })])
+  expect(migrated.bindings).toEqual([
+    expect.objectContaining({
+      bindingId: '70666666-6666-4666-8666-666666666666',
+      variableId: '70555555-5555-4555-8555-555555555555',
+      programId: '70444444-4444-4444-8444-444444444444', variable: 'SupplyTemp',
+      point: { category: 'LOCAL', pointId: 'UI-01' },
+      direction: 'READ', dataType: 'REAL', unit: 'V', writable: false, qualityPolicy: 'REQUIRE_GOOD'
+    }),
+    expect.objectContaining({
+      bindingId: '70666666-6666-4666-8666-666666666667',
+      variableId: '70555555-5555-4555-8555-555555555556',
+      programId: '70444444-4444-4444-8444-444444444444', variable: 'PumpReady',
+      point: { category: 'MB_RTU', deviceId: 'bus-1-slave-4', pointId: 'PUMP_CMD' },
+      direction: 'READ', dataType: 'BOOL', writable: false, qualityPolicy: 'REQUIRE_GOOD'
+    })
+  ])
 
   const consoleErrors: string[] = []
   const failedRequests: string[] = []
@@ -337,8 +346,11 @@ test('ISS-PGM03-07: Draft v1 migrate qua HTTP, reload Mapping giữ canonical Bi
   await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
   await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
   await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
-  const row = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })
-  await expect(row).toBeVisible()
+  const localRow = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })
+  const modbusRow = page.getByRole('row', { name: /PumpReady\s+MB_RTU:bus-1-slave-4:PUMP_CMD\s+INPUT\s+·\s+BOOL/ })
+  await expect(localRow).toBeVisible()
+  await expect(modbusRow).toBeVisible()
+  await expect(page.getByText('2 binding', { exact: true })).toBeVisible()
   await page.reload()
   // JWT của AuthProvider chỉ sống trong memory theo chủ ý; reload toàn tài
   // liệu vì thế phải đăng nhập lại. Sau login mở lại đúng deep-link để phép
@@ -354,18 +366,44 @@ test('ISS-PGM03-07: Draft v1 migrate qua HTTP, reload Mapping giữ canonical Bi
     window.dispatchEvent(new PopStateEvent('popstate'))
   }, `/eng/programming/projects/${projectID}/mapping`)
   await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
-  await expect(row).toBeVisible()
-  // Chromium có thể phát `ERR_NETWORK_CHANGED` cho các request của document
-  // vừa bị reload cưỡng bức trong lúc Vite dev server đổi connection. Bắt đầu
-  // ngân sách Console/Network ở snapshot đã ổn định; lỗi sau mốc này vẫn làm
-  // test đỏ và không bị lọc theo chuỗi.
+  await expect(localRow).toBeVisible()
+  await expect(modbusRow).toBeVisible()
+  await expect(page.getByText('2 binding', { exact: true })).toBeVisible()
+  // Reload có thể hủy request của document cũ trong lúc context điều hướng.
+  // Bắt đầu ngân sách Console/Network ở snapshot production-preview đã ổn
+  // định; lỗi sau mốc này vẫn làm test đỏ và không bị lọc theo chuỗi.
   consoleErrors.length = 0
   failedRequests.length = 0
 
   const readBack = await responseJSON(
     await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200)
   expect((readBack.draft as JsonObject).bindings).toEqual(migrated.bindings)
-  await sealAndCheck(request, token, projectID, draftID, saved.etag as string, 'ISS-PGM03-07 migrated')
+  // Lane HOST này không dựng slave Modbus nên Check phải fail-closed cho đúng
+  // PUMP_CMD. Việc diagnostic còn mang chính identity MB_RTU chứng minh Check
+  // đã đọc Binding sau migration, không âm thầm làm rơi rồi PASS giả.
+  const sealedResponse = await request.post(`/api/v1/programming/projects/${projectID}/draft/revisions`, {
+    headers: mutationHeaders(token, { 'if-match': saved.etag as string }),
+    data: { schemaVersion: '1.0', baseRevisionId: draftID, label: 'ISS-PGM03-07 migrated', comment: 'GATE562-A' }
+  })
+  const sealed = await responseJSON(sealedResponse, 201)
+  const revisionID = (sealed.resource as JsonObject).revisionId as string
+  const accepted = await responseJSON(await request.post(`/api/v1/programming/revisions/${revisionID}/checks`, {
+    headers: mutationHeaders(token),
+    data: { schemaVersion: '1.0', targetProfile: 'MK-DDC-24-REV-A' }
+  }), 202)
+  let checked: JsonObject | undefined
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    checked = await responseJSON(await request.get(`/api/v1/programming/checks/${accepted.checkId as string}`, {
+      headers: readHeaders(token)
+    }), 200)
+    if (['FAILED', 'PASSED', 'TIMED_OUT'].includes(String(checked.state))) break
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  expect(checked?.state).toBe('FAILED')
+  const diagnostics = JSON.stringify(checked?.diagnostics)
+  expect(diagnostics).toContain('PIO-SLOT-003')
+  expect(diagnostics).toContain('PUMP_CMD')
+  expect(diagnostics).toContain('PumpReady')
   expect(consoleErrors).toEqual([])
   expect(failedRequests).toEqual([])
 })
