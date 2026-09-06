@@ -102,6 +102,14 @@
   có chủ ý trong fixture. Browser demo 1440×900 xác nhận clock EN/VI có hậu tố UTC, không tràn,
   Dashboard Console **0 error / 0 warning** và không có request động thất bại.
 
+### Fixed — `ISS-565` Point catalog không tải khi tab Mapping không active (2026-09-06)
+
+- **Triệu chứng:** tab Mapping ẩn (active=false) vẫn gọi `getProgrammingPointCatalog`, làm chồng request không cần thiết và có thể gây race condition khi tab đổi nhanh.
+- **Nguyên nhân gốc:** `useProgrammingResource` không có cơ chế `enabled` để tắt fetch; `useProgrammingPointCatalog` gọi unconditional; `MappingTab` không kiểm soát được khi nào catalog load.
+- **Cách sửa:** thêm param `enabled` vào `useProgrammingResource`, thêm guard chống request chồng bằng `inFlightRef`, `useProgrammingPointCatalog` nhận `enabled` từ caller, `MappingTab` truyền `active` vào catalog hook.
+- **Kiểm chứng:** test mới 3/3 PASS (enabled=false không fetch, enabled=true fetch ngay, chống chồng request khi refresh liên tiếp); suite queries.test.tsx 21/21 PASS; `npm run build` + `npm run lint` PASS.
+- Refs: #565
+
 ### Fixed — `F-OVERVIEW-MODBUS-01` Không báo lỗi giả cho bus Modbus đang chạy hoặc đã tắt (2026-09-05)
 
 - **Triệu chứng TARGET:** sau khi đồng bộ và triển khai `main@2a3ba0ea`, API điểm đọc đúng
@@ -379,6 +387,19 @@ Refs: `ISS-PGUI-01`, `PC-001`, `PC-002`, `PM-011`, `ISS-PRG-CTRL-001`, `T60-015`
   `apps/web-ui/src/shared/components/Modal.{tsx,test.tsx}`, `artifacts/ui-audit/pgm04/`,
   `docs/07_records/reviews/PGM04_DEVTOOLS_AUDIT_2026-09-05.md`, `docs/03_implementation/61_…_PGM04_PLAN.md`.
 
+### Changed — Đồng bộ `main@0134bf32` và triển khai Foxlinx (2026-09-05)
+
+- Fast-forward checkout chính từ `d728fa76` lên `0134bf32`, bảo toàn WIP cục bộ; cross-build
+  Linux/aarch64 với Modbus, BACnet, HMI và khóa phát hành, rồi cài đồng bộ Core, IObus, Netcfg,
+  Web/API, Programming worker và Web UI lên `SOM-DDC-24-foxlinx`.
+- Kiểm chứng HOST: C++ **1479/1479** test PASS (1 test phụ thuộc môi trường skip), Go `go vet` sạch
+  và **21 package** test PASS, FE **229/229 file · 2854/2854 test** PASS, lint và
+  `build:release` PASS. Kiểm chứng TARGET: provenance ghim `0134bf32`, runtime checksum **8/8**,
+  5 service MK-DDC active với `NRestarts=0`, health **6/6 ok**, Web UI đúng hash và failed-unit 0.
+- Backup trước deploy tại `/var/backups/mkddc/predeploy-0134bf32-20260905T110632Z.tar.gz`; snapshot
+  rollback binary + Programming DB tại `/var/backups/mkddc/0.1.0-20260905-110728`. Board giữ
+  Fake MCU và HMI disabled; kết quả này là TARGET/runtime, không phải physical I/O HIL hay
+  `RELEASE_READY`.
 
 ### Fixed — `ISS-PGM04-17` / `T61-504` Real-backend E2E cho toàn lifecycle PGM-04, và một read model chết (#462, 2026-09-05)
 
@@ -1129,6 +1150,36 @@ Refs: `ISS-PGUI-01`, `PC-001`, `PC-002`, `PM-011`, `ISS-PRG-CTRL-001`, `T60-015`
 - **Nguyên nhân gốc.** `numberMessage`/`intRangeMessage` chỉ dựng chuỗi khi có **cả** `Min` lẫn `Max`.
   Trước ISS-PIO-24 mọi trường có biên đều có đủ hai phía nên lỗi này chưa lộ.
 - **Cách sửa.** Gộp về một `rangeMessage` nói ra biên một phía (`must be number in range >= 0`).
+
+### Changed — Triển khai `main@65a5e6d` lên Foxlinx và dừng hai restart storm (2026-09-05)
+
+- Fast-forward checkout chính từ `67f8ca3` lên `65a5e6d`, giữ nguyên toàn bộ thay đổi cục bộ;
+  cross-build aarch64 với Modbus, BACnet, HMI và khóa phát hành, rồi cài đồng bộ Core, IObus,
+  Netcfg, Web/API, Programming worker và Web UI lên `SOM-DDC-24-foxlinx`.
+- Trước khi cài đã tạo backup dữ liệu/config và snapshot rollback kèm Programming DB; sau cài,
+  provenance/runtime cùng ghim `65a5e6d`, checksum runtime **8/8**, service MK-DDC **5/5 active**,
+  health **6/6 ok**, failed-unit **0** và trình duyệt desktop/mobile tải **8/8** tài nguyên HTTP 200
+  với Console **0 lỗi / 0 cảnh báo**. Chưa đăng nhập vì môi trường không có
+  `MEKONG_FAC_USER`/`MEKONG_FAC_PASS`; board đang dùng Fake MCU nên đây không phải physical HIL.
+- Debug target: disable (không xóa) `masscan-agent.service` thiếu executable và
+  `AgentSvr-agent.service` sai kiến trúc, chấm dứt vòng tự khởi động lại hơn 241.000/569 lần;
+  kiểm tra lại không còn journal error mới và không ảnh hưởng health MK-DDC.
+
+### Added — Báo cáo hiệu năng Programming/runtime và khả năng cạnh tranh (2026-09-04)
+
+- Thêm và cập nhật record `REC-PROG-RUNTIME-PERF-COMP-001` tại
+  `docs/07_records/reviews/PROGRAMMING_RUNTIME_PERFORMANCE_COMPETITIVE_REVIEW_2026-09-04.md`,
+  ghim `main@67f8ca3`; tổng hợp benchmark HOST và hai lượt ARM64 trên Forlinx, compiler load,
+  cycle `1/5/30 s`, multi-program `32 total / 16 Enabled` và read-back runtime live.
+- Ghi bảy finding: budget WCET chưa enforce, blocking persistence ngoài metrics, production chưa
+  nối multi-core, Check tăng tuyến tính, Program missed release tích lũy dù Task miss bằng 0/health
+  xanh, Active source 50 ms thực chạy period 1.000 ms trong project mang identity AHU, và hai
+  systemd unit ngoài MK-DDC auto-restart mỗi 5/10 giây làm nhiễu tail/jitter.
+- Kiểm chứng TARGET: max-IR 16 Program tuần tự mean **2,00–2,05 ms**, max **3,008 ms**, 0 fault;
+  200 compiler load **26,775 s**, 0 scan overrun, 0 IOP timeout tăng; các service MK-DDC 0 restart.
+  Binary production provenance chỉ `PARTIAL`; TARGET `NOT_CONTROLLED` vì hai unit ngoài MK-DDC
+  restart lặp; board dùng FakeMCU nên physical HIL/24 giờ/power-cut
+  vẫn `NOT_RUN`, release Programming vẫn `NO-GO`. Không đổi source/runtime/contract/Test Result.
 
 ### Added — `ISS-PIO-29` Commission Impact tách theo nguồn Point (#408, 2026-09-04)
 

@@ -1,0 +1,176 @@
+- generic [ref=e41] [box=0,0,780,1665]:
+  - link "Skip navigation, go to main content" [ref=e42] [cursor=pointer] [box=-1,-1,1,1]:
+    - /url: "#main-content"
+  - generic [ref=e44] [box=1,0,778,1665]:
+    - banner [ref=e45] [box=1,0,778,64]:
+      - generic [ref=e46] [box=21,12,260,40]:
+        - button "Open navigation" [ref=e47] [box=21,12,40,40]
+        - generic [ref=e49] [box=73,19,131,25]: "Device: OFFLINE"
+        - generic [ref=e56] [box=216,20,66,24]: LIVE
+      - generic [ref=e62] [box=383,12,376,40]:
+        - link "Alarms" [ref=e63] [cursor=pointer] [box=383,12,40,40]:
+          - /url: /alarms
+        - link "Help" [ref=e67] [cursor=pointer] [box=435,12,40,40]:
+          - /url: /help?topic=%2Fmonitor
+        - link "User" [ref=e71] [cursor=pointer] [box=487,12,40,40]:
+          - /url: /me
+        - button "Switch to dark theme" [ref=e75] [box=539,12,40,40]
+        - button "Toggle language" [ref=e78] [box=591,12,66,40]: EN
+        - button "Logout" [ref=e81] [box=669,16,90,32]
+    - generic [ref=e86] [box=1,64,778,37]: WebSocket lost. Reconnecting; displayed data is stale.
+    - main [ref=e87] [box=1,101,778,1564]:
+      - generic [ref=e88] [box=21,121,738,1524]:
+        - generic [ref=e89] [box=21,121,738,41]:
+          - heading "Monitor I/O" [level=1] [ref=e90] [box=21,121,738,25]
+          - paragraph [ref=e91] [box=21,146,738,16]: Monitor I/O point states
+        - generic [ref=e92] [box=21,174,738,143]:
+          - generic [ref=e93] [box=21,174,176,143]:
+            - generic [ref=e94] [box=38,191,142,17]: Total points
+            - generic [ref=e95] [box=38,220,142,40]: "49"
+            - generic [ref=e96] [box=38,268,142,16]: UI 1 | DO 0 | AO 0
+          - generic [ref=e98] [box=209,174,176,143]:
+            - generic [ref=e99] [box=226,191,142,17]: Binary points ON
+            - generic [ref=e100] [box=226,220,142,40]: "24"
+            - generic [ref=e101] [box=226,268,142,16]: 24/48 · 50%
+          - generic [ref=e103] [box=396,174,176,143]:
+            - generic [ref=e104] [box=413,191,142,17]: Normal UI/AO points
+            - generic [ref=e105] [box=413,220,142,40]: "1"
+            - generic [ref=e106] [box=413,268,142,16]: 100%
+          - generic [ref=e108] [box=584,174,176,143]:
+            - generic [ref=e109] [box=601,191,142,33]: Fault / signal-loss points
+            - generic [ref=e110] [box=601,236,142,40]: "0"
+            - generic [ref=e111] [box=601,284,142,16]: 0%
+        - generic [ref=e113] [box=21,329,738,57]:
+          - generic [ref=e114] [box=21,329,225,32]:
+            - text: Saved view
+            - combobox "Saved views" [ref=e115] [box=91,329,155,32]:
+              - option "— No saved views —" [selected] [box=0,0,0,0]
+          - button "Save view" [ref=e116] [box=254,329,104,32]
+          - button "Rename" [disabled] [ref=e119] [box=366,329,96,32]
+          - button "Delete" [disabled] [ref=e123] [box=471,329,87,32]
+          - generic [ref=e127] [box=21,369,257,17]: Stored on the device under the signed-in account.
+        - generic [ref=e128] [box=21,398,738,40]:
+          - combobox "Filter by point source" [ref=e129] [box=21,398,170,40]:
+            - option "Source - All" [selected] [box=0,0,0,0]
+            - option "Local I/O" [box=0,0,0,0]
+            - option "Virtual" [box=0,0,0,0]
+            - option "Modbus RTU" [box=0,0,0,0]
+          - combobox "Filter by equipment" [ref=e130] [box=203,398,170,40]:
+            - option "Equipment - All" [selected] [box=0,0,0,0]
+            - option "Unassigned (49)" [box=0,0,0,0]
+          - combobox "Filter by I/O group" [ref=e131] [box=385,398,170,40]:
+            - option "I/O group - All" [box=0,0,0,0]
+            - option "UI" [box=0,0,0,0]
+            - option "DO" [box=0,0,0,0]
+            - option "AO" [box=0,0,0,0]
+            - option "Virtual" [box=0,0,0,0]
+            - option "Modbus RTU" [selected] [box=0,0,0,0]
+          - combobox "Filter by quality" [ref=e132] [box=567,398,170,40]:
+            - option "Quality - All" [selected] [box=0,0,0,0]
+            - option "Good" [box=0,0,0,0]
+            - option "Uncertain" [box=0,0,0,0]
+            - option "Bad" [box=0,0,0,0]
+            - option "Stale" [box=0,0,0,0]
+            - option "Offline" [box=0,0,0,0]
+          - combobox "Filter by operating state" [ref=e133] [box=749,398,190,40]:
+            - option "State - All" [selected] [box=0,0,0,0]
+            - option "Forced" [box=0,0,0,0]
+            - option "Fault" [box=0,0,0,0]
+            - option "Offline" [box=0,0,0,0]
+            - option "Writable" [box=0,0,0,0]
+            - option "Logging" [box=0,0,0,0]
+          - textbox [ref=e135] [box=964,408,10,20]:
+            - /placeholder: Search id, tag, name, source...
+          - button "Refresh" [ref=e139] [box=1013,398,132,40]
+        - generic [ref=e145] [box=21,450,738,1195]:
+          - generic [ref=e146] [box=21,450,738,304]:
+            - generic [ref=e147] [box=21,450,738,67]:
+              - generic [ref=e148] [box=22,451,736,33]: DO - DIGITAL OUTPUT (0)
+              - generic [ref=e152] [box=64,492,634,15]:
+                - generic [ref=e153] [box=64,492,70,15]: Point
+                - generic [ref=e154] [box=134,492,220,15]: Point name
+                - generic [ref=e155] [box=354,492,112,15]: Status
+                - generic [ref=e156] [box=466,492,128,15]: Updated at
+                - generic [ref=e157] [box=594,492,104,15]: Remaining
+            - generic [ref=e159] [box=21,529,738,67]:
+              - generic [ref=e160] [box=22,530,736,33]: UI - UNIVERSAL INPUT (0)
+              - generic [ref=e164] [box=64,571,606,15]:
+                - generic [ref=e165] [box=64,571,70,15]: Point
+                - generic [ref=e166] [box=134,571,150,15]: Point name
+                - generic [ref=e167] [box=284,571,70,15]: Value
+                - generic [ref=e168] [box=354,571,60,15]: Unit
+                - generic [ref=e169] [box=414,571,120,15]: Status
+                - generic [ref=e170] [box=534,571,90,15]: Trend
+                - generic [ref=e171] [box=624,571,84,15]: Updated
+                - generic [ref=e172] [box=708,571,104,15]: Remaining
+            - generic [ref=e174] [box=21,608,738,67]:
+              - generic [ref=e175] [box=22,609,736,33]: AO - ANALOG OUTPUT (0)
+              - generic [ref=e179] [box=64,650,606,15]:
+                - generic [ref=e180] [box=64,650,70,15]: Point
+                - generic [ref=e181] [box=134,650,150,15]: Point name
+                - generic [ref=e182] [box=284,650,70,15]: Value
+                - generic [ref=e183] [box=354,650,60,15]: Unit
+                - generic [ref=e184] [box=414,650,120,15]: Status
+                - generic [ref=e185] [box=534,650,90,15]: Trend
+                - generic [ref=e186] [box=624,650,84,15]: Updated
+                - generic [ref=e187] [box=708,650,104,15]: Remaining
+            - generic [ref=e189] [box=21,687,738,67]:
+              - generic [ref=e190] [box=22,688,736,33]: VIRTUAL POINTS (0)
+              - generic [ref=e194] [box=64,729,606,15]:
+                - generic [ref=e195] [box=64,729,70,15]: Point
+                - generic [ref=e196] [box=134,729,150,15]: Point name
+                - generic [ref=e197] [box=284,729,70,15]: Value
+                - generic [ref=e198] [box=354,729,60,15]: Unit
+                - generic [ref=e199] [box=414,729,120,15]: Status
+                - generic [ref=e200] [box=534,729,90,15]: Trend
+                - generic [ref=e201] [box=624,729,84,15]: Updated
+                - generic [ref=e202] [box=708,729,104,15]: Remaining
+          - generic [ref=e204] [box=21,766,738,879]:
+            - generic [ref=e205] [box=21,766,738,587]:
+              - heading "Point details" [level=2] [ref=e208] [box=38,783,88,20]
+              - generic [ref=e212] [box=38,819,704,517]:
+                - generic [ref=e213] [box=38,819,704,56]:
+                  - generic [ref=e214] [box=38,819,704,32]: UI-01
+                  - generic [ref=e215] [box=38,855,704,20]:
+                    - generic [ref=e216] [box=38,855,165,20]: Supply Air Temperature
+                    - button "Rename" [ref=e217] [box=211,857,16,16]
+                - generic [ref=e221] [box=38,891,704,86]:
+                  - generic [ref=e222] [box=55,908,670,32]: 22.4 degC
+                  - generic [ref=e223] [box=55,944,670,16]:
+                    - generic [ref=e224] [box=336,944,37,16]: Active
+                    - generic [ref=e225] [box=381,944,7,16]: "|"
+                    - generic [ref=e226] [box=395,944,29,16]: degC
+                    - button "Change unit" [ref=e227] [box=432,946,12,12]
+                - generic [ref=e231] [box=38,993,704,263]:
+                  - term [ref=e232] [box=38,993,118,16]: I/O group
+                  - definition [ref=e233] [box=156,993,586,16]: UI - UNIVERSAL INPUT
+                  - term [ref=e234] [box=38,1021,118,16]: Signal type
+                  - definition [ref=e235] [box=156,1021,586,16]: —
+                  - term [ref=e236] [box=38,1049,118,21]: Quality
+                  - definition [ref=e237] [box=156,1049,586,21]:
+                    - generic [ref=e238] [box=156,1049,73,21]: GOOD
+                  - term [ref=e243] [box=38,1082,118,16]: Engineering value
+                  - definition [ref=e244] [box=156,1082,586,16]: 22.4 degC
+                  - term [ref=e245] [box=38,1110,118,16]: Source
+                  - definition [ref=e246] [box=156,1110,586,16]: core
+                  - term [ref=e247] [box=38,1138,118,16]: Priority owner
+                  - definition [ref=e248] [box=156,1138,586,16]: —
+                  - term [ref=e249] [box=38,1166,118,16]: Updated at
+                  - definition [ref=e250] [box=156,1166,586,16]: 19:23:21 5/9/2026
+                  - term [ref=e251] [box=38,1194,118,16]: Description
+                  - definition [ref=e252] [box=156,1194,586,16]: Supply Air Temperature
+                  - generic [ref=e253] [box=38,1222,704,34]:
+                    - generic [ref=e254] [box=47,1231,64,16]: Show trend
+                    - generic [ref=e255] [box=694,1231,39,16]:
+                      - generic [ref=e256] [box=694,1231,19,16]: "Off"
+                      - button "Edit trend settings" [ref=e257] [box=721,1233,12,12]
+                - generic [ref=e261] [box=38,1272,704,24]: GOOD
+                - link "View audit trail for this point →" [ref=e267] [cursor=pointer] [box=38,1318,188,16]:
+                  - /url: /activity?objectId=UI-01
+            - generic [ref=e268] [box=21,1365,738,280]:
+              - heading "Last 60 minutes" [level=2] [ref=e271] [box=38,1382,110,20]
+              - generic [ref=e273] [box=224,1466,332,84]:
+                - heading "History unavailable" [level=3] [ref=e276] [box=224,1510,332,20]
+                - paragraph [ref=e277] [box=224,1534,332,16]: history response from must be an RFC3339 UTC timestamp
+              - link "Open in Trends →" [ref=e278] [cursor=pointer] [box=38,1610,105,16]:
+                - /url: /trends?points=UI-01

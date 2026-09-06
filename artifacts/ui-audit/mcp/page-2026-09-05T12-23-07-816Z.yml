@@ -1,0 +1,21 @@
+- main [ref=e3] [box=0,0,780,562]:
+  - generic [ref=e4] [box=166,24,448,514]:
+    - button "Toggle language" [ref=e5] [box=537,41,60,36]: EN
+    - generic [ref=e8] [box=195,53,390,100]:
+      - generic [ref=e9] [box=195,53,390,32]: DDC 24
+      - heading "Welcome Back" [level=1] [ref=e10] [box=195,101,390,28]
+      - paragraph [ref=e11] [box=195,133,390,20]: Sign in to access your building control system
+    - generic [ref=e13] [box=208,186,364,16]:
+      - term [ref=e14] [box=208,186,35,16]: Model
+      - definition [ref=e15] [box=533,186,39,16]: DDC24
+    - generic [ref=e16] [box=195,239,390,192]:
+      - generic [ref=e17] [box=195,239,390,60]:
+        - text: Username
+        - textbox "Username" [ref=e22] [box=231,269,341,20]: admin
+      - generic [ref=e23] [box=195,315,390,60]:
+        - text: Password
+        - generic [ref=e24] [box=195,335,390,40]:
+          - textbox "Password" [ref=e29] [box=230,345,318,20]: fixture-only
+          - button "Show password" [ref=e30] [box=556,347,16,16]
+      - button "Sign In" [disabled] [ref=e34] [box=195,391,390,40]
+    - paragraph [ref=e35] [box=195,451,390,58]: "Warning: change the default password before putting the device into operation."

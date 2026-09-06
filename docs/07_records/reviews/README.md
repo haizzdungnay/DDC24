@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-31 (bổ sung 4 record 2026-08-27…08-31 vào §1.1 — chỉ mục trước đó đã trễ so với thư mục; Programming Product v3.0 vẫn là authority, record theo phạm vi cũ chỉ còn giá trị lịch sử/As-Built)
+**Cập nhật:** 2026-09-04 (record hiệu năng Programming/runtime v1.1 tại `main@67f8ca3`; TARGET exploratory đã đo, môi trường `NOT_CONTROLLED`, provenance live `PARTIAL`, HIL/release `NO-GO`)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -30,6 +30,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 
 | Hồ sơ | Ngày | Trạng thái | Nội dung |
 |---|---|---|---|
+| [Hiệu năng Programming/runtime và khả năng cạnh tranh](PROGRAMMING_RUNTIME_PERFORMANCE_COMPETITIVE_REVIEW_2026-09-04.md) | 2026-09-04 | **Source/HOST/TARGET exploratory đã rà; provenance live `PARTIAL`; HIL/release `NO-GO`** (`REC-PROG-RUNTIME-PERF-COMP-001` v1.1) | Hai lượt ARM64, compiler load và runtime live trên Forlinx; bảy finding gồm budget, blocking I/O, multi-core, Check scaling, missed release/health, mismatch identity/cycle và hai unit auto-restart; FakeMCU không phải physical HIL |
 | [Gap hệ Point & I/O vs đề bài 3 nguồn Point](POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md) | 2026-08-31 | **b2.3 — APPROVED, 36 issue đã tạo (#375–#410), 33 đã phân công** (`REV-PIO-3SRC-001`) | Chấm Physical/Virtual/Modbus → Canonical Point Catalog → Binding theo 34 mục + 16 UC. Kiến trúc được chấp thuận, không redesign nền. 29 finding (7 Cao — `F-PIO-029` slot `ext` không ổn định). Kế hoạch 36 issue / 7 đợt / 82,0 ngày-người kèm `AC-PIO-ID-01/02/03` trong `ISS-PIO-31`. Đường găng P0 khoá: #375 → #376 → #377 → #378/#379 → #381 → #382. Ba quyết định Owner: DI = A, `AO` giữ trong hợp đồng, `Program Disable` ≠ `Controller Fault`. 33 issue FE/BE gán `@haizzdungnay` |
 | [Gap ST Editor vs chuẩn IEC 61131-3-aligned](ST_EDITOR_IEC61131_GAP_REVIEW_2026-08-31.md) | 2026-08-31 | **APPROVED WITH CONDITIONS** (`REV-STED-IEC-001`) | 18 gate + 12 UC. Lõi ngôn ngữ đạt, đường chẩn đoán từ compiler tới người dùng hỏng ở cả ba tầng. 15 finding, 20 issue; phạm vi ngôn ngữ đã ký bằng `ADR-054` |
 | [Thi hành `DEV-PROG-001..018` giao diện Programming](PROGRAMMING_UI_DEV_PROG_001_018_2026-08-28.md) | 2026-08-28 | Đã thi hành 18/18 (`REC-PGM02-DEVPROG-001`) | 18 mục review giao diện `/eng/programming/programs` của chủ sở hữu; một mục cần ký lại |
@@ -180,3 +181,5 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.19 | 2026-08-11 | Đồng bộ review/evidence G2 `TASK-PROG-204`: sáu API Project/Draft/Revision + SQLite v2/ETag/idempotency/restart, P2 5/8, candidate v2.19; giữ 0/32 PASS, PR/merge chờ ghi provenance |
 | 1.20 | 2026-08-11 | Ghi provenance PR #147/merge `27a06e1`/tree `4e4e4d24` cho candidate v2.19; remote feature branch đã xóa, trạng thái P2/evidence không đổi |
 | 1.21 | 2026-08-14 | Loại 12 record lịch sử dùng cây source cũ cùng README archive; thay liên kết bằng authority hiện hành và ghim đường phục hồi tại commit `b69fdf1`; không đổi Test Result hay release gate |
+| 1.22 | 2026-09-04 | Đăng ký `REC-PROG-RUNTIME-PERF-COMP-001`: review hiệu năng Programming/runtime, cycle và multi-program tại `main@67f8ca3`; số đo HOST chỉ là exploratory, TARGET/HIL chưa chạy và release giữ `NO-GO` |
+| 1.23 | 2026-09-04 | Nâng `REC-PROG-RUNTIME-PERF-COMP-001` v1.1: ghi benchmark/compiler/runtime live trên Forlinx, bảy finding; TARGET environment `NOT_CONTROLLED`, provenance `PARTIAL`, FakeMCU không phải HIL và release giữ `NO-GO` |

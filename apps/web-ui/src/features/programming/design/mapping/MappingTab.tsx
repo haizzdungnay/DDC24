@@ -40,7 +40,7 @@ export function MappingTab(props: {
   const { pick } = useI18n()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
-  const catalog = useProgrammingPointCatalog()
+  const catalog = useProgrammingPointCatalog(active)
   const [query, setQuery] = useState('')
   const [programFilter, setProgramFilter] = useState('ALL')
   const [category, setCategory] = useState<PointCategoryFilter>('ALL')

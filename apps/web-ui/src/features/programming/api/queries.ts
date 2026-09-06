@@ -39,8 +39,10 @@ function programmingResourceErrorMessage(pick: PickCopy, reason: unknown): strin
  * `useModbusConfig` sẵn có trong repo (không dùng react-query, dự án này
  * chưa có dependency đó và không cần thêm cho một tập hook đọc/poll đơn
  * giản). `intervalMs` mặc định `0` = chỉ đọc lúc mount + khi gọi `refresh()`.
+ *
+ * ISS-#565: thêm `enabled` để tắt fetch + poll khi tab không active.
  */
-function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): RemoteState<T> {
+function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0, enabled = true): RemoteState<T> {
   const { pick } = useI18n()
   const [status, setStatus] = useState<RemoteState<T>['status']>('loading')
   const [data, setData] = useState<T | null>(null)
@@ -48,20 +50,25 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
   const loadRef = useRef(load)
   loadRef.current = load
   const generation = useRef(0)
+  const inFlight = useRef(false)
 
   const run = useCallback(() => {
+    if (inFlight.current) return
+    inFlight.current = true
     const myGeneration = ++generation.current
     // Một client validator hoặc test double có thể ném đồng bộ trước khi trả
     // Promise. Chuẩn hoá cả hai đường vào cùng RemoteState error; nếu không một
     // endpoint context mới đủ làm sập toàn bộ sáu-workspace layout.
     Promise.resolve().then(() => loadRef.current()).then(
       (value) => {
+        inFlight.current = false
         if (myGeneration !== generation.current) return
         setData(value)
         setError(null)
         setStatus('ready')
       },
       (reason: unknown) => {
+        inFlight.current = false
         if (myGeneration !== generation.current) return
         setError(programmingResourceErrorMessage(pick, reason))
         setStatus('error')
@@ -70,6 +77,7 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
   }, [pick])
 
   useEffect(() => {
+    if (!enabled) return undefined
     run()
     if (intervalMs <= 0) return undefined
     const timer = window.setInterval(run, intervalMs)
@@ -79,7 +87,7 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
     // `undefined` sang giá trị thật sau một `navigate` cùng trang, xem D-01/
     // `CheckCommissionPage`) sẽ không tự fetch lại, chỉ đọc mãi kết quả rỗng
     // của lần mount đầu tới khi ai đó gọi `refresh()` thủ công.
-  }, [run, load, intervalMs])
+  }, [run, load, intervalMs, enabled])
 
   return { status, data, error, refresh: run }
 }
@@ -179,11 +187,14 @@ export function useProgrammingRevision(revisionId: string | null | undefined): R
 }
 
 /** `GET /point-catalog` — tab Điểm & Ánh xạ có nhịp làm mới riêng (UX §0.1
- * ràng buộc 3: `usePointCatalogQuery` tách khỏi `useDraftQuery`). */
-export function useProgrammingPointCatalog(): RemoteState<ProgrammingPointCatalogPage> {
+ * ràng buộc 3: `usePointCatalogQuery` tách khỏi `useDraftQuery`).
+ *
+ * ISS-#565: thêm `enabled` để tắt fetch + poll khi tab không active.
+ */
+export function useProgrammingPointCatalog(enabled = true): RemoteState<ProgrammingPointCatalogPage> {
   const client = useProgrammingApiClient()
   const load = useCallback(() => client.request<ProgrammingPointCatalogPage>('getProgrammingPointCatalog'), [client])
-  return useProgrammingResource(load, 10000)
+  return useProgrammingResource(load, 10000, enabled)
 }
 
 export interface LazyPointCatalogState {

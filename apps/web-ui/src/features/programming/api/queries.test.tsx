@@ -461,3 +461,42 @@ describe('useLazyProgrammingLibraryCatalog — nạp trễ nhưng ĐẦY ĐỦ T
     expect(client.request).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('useProgrammingPointCatalog — enabled flag ISS-#565', () => {
+  beforeEach(() => { client.request.mockReset() })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('enabled=false không fetch và không poll', async () => {
+    const { useProgrammingPointCatalog } = await import('./queries')
+    client.request.mockResolvedValue({ schemaVersion: '1.0', items: [] })
+    const { result } = renderHook(() => useProgrammingPointCatalog(false))
+    await waitFor(() => expect(result.current.status).toBe('loading'))
+    expect(client.request).not.toHaveBeenCalled()
+  })
+
+  it('enabled=true fetch ngay', async () => {
+    const { useProgrammingPointCatalog } = await import('./queries')
+    client.request.mockResolvedValue({ schemaVersion: '1.0', items: [] })
+    const { result } = renderHook(() => useProgrammingPointCatalog(true))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(client.request).toHaveBeenCalledWith('getProgrammingPointCatalog')
+  })
+
+  it('chống chồng request', async () => {
+    const { useProgrammingPointCatalog } = await import('./queries')
+    const first = deferred<{ schemaVersion: string; items: unknown[] }>()
+    client.request.mockReturnValue(first.promise)
+    const { result } = renderHook(() => useProgrammingPointCatalog(true))
+    await waitFor(() => expect(client.request).toHaveBeenCalledTimes(1))
+    
+    act(() => { result.current.refresh() })
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(client.request).toHaveBeenCalledTimes(1)
+    
+    first.resolve({ schemaVersion: '1.0', items: [] })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    
+    act(() => { result.current.refresh() })
+    await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
+  })
+})

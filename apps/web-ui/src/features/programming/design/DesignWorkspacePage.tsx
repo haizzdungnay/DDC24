@@ -914,6 +914,7 @@ export function DesignWorkspacePage({
       </div>
       <div hidden={tab !== 'mapping'}>
         <MappingTab
+          active={tab === 'mapping'}
           draft={workspace.project.draft}
           document={document}
           saving={workspace.saving}
