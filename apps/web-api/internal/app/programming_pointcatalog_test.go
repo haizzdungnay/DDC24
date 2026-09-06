@@ -64,6 +64,33 @@ func TestPointCatalogQualityNeverFabricatesGood(t *testing.T) {
 	}
 }
 
+func TestPointCatalogUsesProgrammingCoreEndScanTruthForLocalQuality(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	app.core = &programmingMonitorCore{
+		pointsCore: &pointsCore{points: []PointDTO{
+			{ID: "UI-01", Kind: "UI", Value: 0.0, Quality: "bad", UpdatedAt: "2026-08-13T00:00:00Z", Unit: "V"},
+			{ID: "MB-01", Kind: "modbus_rtu", BusID: 1, SlaveAddr: 2, Value: 7.0, Quality: "stale", UpdatedAt: "2026-08-13T00:00:01Z"},
+		}},
+		snapshot: RuntimePointSnapshot{SnapshotObservedAtUTC: "2026-08-13T00:00:02Z", Points: []RuntimePoint{
+			{ID: "UI-01", Value: 21.5, Quality: "GOOD", Unit: "degC"},
+			{ID: "MB-01", Value: 99.0, Quality: "GOOD"},
+		}},
+	}
+
+	entries, err := app.programmingPointCatalog().ListPointCatalog(context.Background())
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("ListPointCatalog=%+v err=%v", entries, err)
+	}
+	if local := entries[0]; local.Category != "LOCAL" || local.Value != 21.5 || local.Quality != "GOOD" ||
+		local.Unit != "degC" || local.ObservedAt != "2026-08-13T00:00:02Z" {
+		t.Fatalf("LOCAL chưa dùng end-scan truth của Programming Core: %+v", local)
+	}
+	if external := entries[1]; external.Category != "MB_RTU" || external.Value != 7.0 || external.Quality != "STALE" ||
+		external.ObservedAt != "2026-08-13T00:00:01Z" {
+		t.Fatalf("MB_RTU bị snapshot LOCAL ghi đè: %+v", external)
+	}
+}
+
 func TestPointCatalogDirectionOutputsAreReadWrite(t *testing.T) {
 	if direction, writable := pointCatalogDirection(PointDTO{Kind: "AO"}); direction != "READ_WRITE" || !writable {
 		t.Fatalf("AO direction=%q writable=%v", direction, writable)

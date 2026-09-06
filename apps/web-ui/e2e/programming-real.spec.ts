@@ -96,10 +96,15 @@ function readHeaders(token: string): Record<string, string> {
 async function openWorkspaceRoute(page: Page, url: string): Promise<void> {
   await page.goto(url)
   const boundary = page.getByTestId('route-error-boundary')
-  if (await boundary.isVisible().catch(() => false)) {
+  const rootChild = page.locator('#root > *').first()
+  const mounted = await rootChild.waitFor({ state: 'attached', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false)
+  if (!mounted || await boundary.isVisible().catch(() => false)) {
     await page.reload()
   }
   await expect(boundary, 'route vẫn hỏng sau một lần nạp lại').toHaveCount(0)
+  await expect(rootChild, 'ứng dụng vẫn chưa mount sau một lần nạp lại').toBeAttached()
 }
 
 async function loginAPI(request: APIRequestContext): Promise<string> {
@@ -241,7 +246,8 @@ async function commission(
   fromRevisionID: string,
   revisionID: string,
   checkID: string,
-  expectedPresent: string[] = []
+  expectedPresent: string[] = [],
+  expectedActiveFromRevisionID: string = fromRevisionID
 ): Promise<JsonObject> {
   const changesResponse = await request.get(
     `/api/v1/programming/revisions/${fromRevisionID}/changes/${revisionID}`,
@@ -268,7 +274,9 @@ async function commission(
   })
   for (const key of expectedPresent) expect(acknowledgements).toContain(key)
 
-  const expectedActiveRevisionId = fromRevisionID === 'none' ? null : fromRevisionID
+  const expectedActiveRevisionId = expectedActiveFromRevisionID === 'none'
+    ? null
+    : expectedActiveFromRevisionID
   const acceptedResponse = await request.post('/api/v1/programming/operations/commission', {
     headers: mutationHeaders(token),
     data: {
@@ -424,6 +432,7 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
             point: { category: 'LOCAL', pointId: 'UI-01' },
             direction: 'READ',
             dataType: 'REAL',
+            unit: 'V',
             writable: false,
             qualityPolicy: 'REQUIRE_GOOD'
           }
@@ -433,10 +442,51 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   })
   const savedR1 = await responseJSON(savedR1Response, 200)
 
+  // ISS-PGM03-01: preview và cửa PATCH phải dùng cùng authority. Candidate
+  // hợp lệ được server xác nhận trên đúng ETag/base Revision; client bỏ qua
+  // preview rồi gửi type giả vẫn bị chặn và Draft không đổi một byte logic.
+  const validBinding = {
+    bindingId: BINDING_ID,
+    variableId: VARIABLE_ID,
+    point: { category: 'LOCAL', pointId: 'UI-01' },
+    direction: 'READ',
+    dataType: 'REAL',
+    unit: 'V',
+    writable: false,
+    qualityPolicy: 'REQUIRE_GOOD'
+  }
+  const previewResponse = await request.post(
+    `/api/v1/programming/projects/${projectID}/draft/bindings/preview`,
+    {
+      headers: { ...readHeaders(token), 'if-match': savedR1.etag as string },
+      data: { schemaVersion: '1.0', baseRevisionId: draftID, binding: validBinding }
+    }
+  )
+  const preview = await responseJSON(previewResponse, 200)
+  expect(preview).toMatchObject({ schemaVersion: '1.0', verdict: 'ALLOW', issues: [],
+    projectId: projectID, draftRevisionId: draftID, baseRevisionId: draftID, etag: savedR1.etag })
+  expect(previewResponse.headers().etag).toBe(savedR1.etag)
+
+  const rejectedBindingResponse = await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': savedR1.etag as string }),
+    data: {
+      schemaVersion: '1.0',
+      baseRevisionId: draftID,
+      operations: [{ op: 'upsertBinding', binding: { ...validBinding, dataType: 'BOOL' } }]
+    }
+  })
+  const rejectedBinding = await responseJSON(rejectedBindingResponse, 422)
+  expect(rejectedBinding.error).toMatchObject({
+    code: 'PRG-ERR-MAP-004',
+    field: 'binding.dataType',
+    args: { detailCode: 'PGM-MAP-TYPE-001', expected: 'REAL', actual: 'BOOL' }
+  })
+
   const projectReadbackResponse = await request.get(`/api/v1/programming/projects/${projectID}`, {
     headers: readHeaders(token)
   })
   const projectReadback = await responseJSON(projectReadbackResponse, 200)
+  expect(projectReadback.etag).toBe(savedR1.etag)
   const draft = projectReadback.draft as JsonObject
   const draftProgram = (draft.objects as JsonObject[]).find((candidate) => candidate.objectId === PROGRAM_ID)
   expect((draftProgram?.locals as JsonObject[])).toContainEqual(expect.objectContaining({
@@ -690,15 +740,26 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   // canonical mà GET /libraries trả về — thay nó bằng `{inputs:[]}` làm mất
   // contract POU khỏi content hash dù người dùng chỉ sửa source.
   await page.getByRole('button', { name: 'Sửa — tạo phiên bản mới' }).click()
+  const libraryWizard = page.getByRole('dialog', { name: 'Sửa khối PROJECT' })
+  await libraryWizard.getByRole('button', { name: 'Tiếp' }).click()
+  await expect(libraryWizard.getByRole('heading', { name: 'Giao diện' })).toBeFocused()
+  await libraryWizard.getByRole('button', { name: 'Tiếp' }).click()
+  await expect(libraryWizard.getByRole('heading', { name: 'Hiện thực' })).toBeFocused()
   const editedLibrarySource =
     'FUNCTION SCALE_LIN : REAL\nVAR_INPUT X : REAL; END_VAR\nSCALE_LIN := X + 1.0;\nEND_FUNCTION\n'
-  await page.getByLabel('Mã nguồn ST').fill(editedLibrarySource)
+  await libraryWizard.getByLabel('Mã nguồn ST').fill(editedLibrarySource)
+  await libraryWizard.getByRole('button', { name: 'Tiếp' }).click()
+  await expect(libraryWizard.getByRole('heading', { name: 'Kiểm tra' })).toBeFocused()
+  await libraryWizard.getByRole('button', { name: 'Chạy kiểm tra trên máy chủ' }).click()
+  await expect(libraryWizard.getByTestId('library-wizard-check-result')).toBeVisible()
+  await libraryWizard.getByRole('button', { name: 'Tiếp' }).click()
+  await expect(libraryWizard.getByRole('heading', { name: 'Xem lại và lưu' })).toBeFocused()
   const uiLibraryMutationResponse = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return response.request().method() === 'POST' &&
       url.pathname === `/api/v1/programming/projects/${projectID}/library/entries`
   })
-  await page.getByRole('button', { name: 'Lưu vào bản nháp thư viện' }).click()
+  await libraryWizard.getByRole('button', { name: 'Lưu vào bản nháp thư viện' }).click()
   const uiLibraryMutation = await uiLibraryMutationResponse
   expect(uiLibraryMutation.status(), await uiLibraryMutation.text()).toBe(200)
   const uiLibraryMutationResult = await uiLibraryMutation.json() as JsonObject
@@ -1941,13 +2002,18 @@ test('T61-504: PGM-04 trên backend thật — thẻ, Used-In, ba trạng thái 
   const libraryRevisionID = publishedEntry.libraryRevisionId as string
   const publishedVersion = publishedEntry.libraryVersion as string
 
-  /* Ba nhóm ảnh hưởng CÓ MẶT ở Revision này, đo từ chính phản hồi `/changes`:
-     `cutover` (graph → program), `programSet` (thêm chương trình) và
-     `controlLibrary` (pin thư viện mới). Project này không công bố Signal nào
-     nên `publishedSignals` vắng — liệt kê nó ở đây sẽ là một kỳ vọng về dữ liệu
-     mà chính test này không dựng. */
+  /* Hai nhóm ảnh hưởng do chính Revision này tạo ra phải CÓ MẶT:
+     `programSet` (thêm chương trình) và `controlLibrary` (pin thư viện mới).
+     `cutover` phụ thuộc producer mode toàn cục trước test: nếu một case trước đã
+     chuyển sang PROGRAM_ONLY thì nhóm này đúng là NONE. Project này không công
+     bố Signal nào nên `publishedSignals` cũng vắng. Đọc current Active ngay
+     trước Commission để CAS không phụ thuộc test này chạy riêng hay sau T59-505;
+     backend sẽ chiếu diff khác Project về đúng ngữ nghĩa thay mới toàn bộ. */
+  const runtimeBeforeCommission = await responseJSON(
+    await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+  const fromRevisionID = (runtimeBeforeCommission.activeRevisionId as string | null) ?? 'none'
   await commission(request, token, 'none', sealed.revisionID, sealed.checkID,
-    ['cutover', 'programSet', 'controlLibrary'])
+    ['programSet', 'controlLibrary'], fromRevisionID)
 
   /* ---- 4) Used-In đọc từ store THẬT --------------------------------- */
   /* `isActive` suy từ `commission_records.result='SUCCEEDED'` — một bản ghi được

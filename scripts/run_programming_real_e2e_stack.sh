@@ -175,6 +175,13 @@ fi
 # biết. Chín tài khoản như vậy đã lọt vào repo trước khi phát hiện.
 cp "${repository_root}/apps/web-api/config/users.conf" "${runtime_root}/config/users.conf"
 
+# Check không chỉ đọc Point Catalog sống; nó đối chiếu binding LOCAL với
+# `io_config.conf` đang chạy. Lane dựng PLC SHM từ cấu hình đóng gói nhưng trước
+# đây để CONFIG_DIR của web-api rỗng, nên cùng UI-01 vừa có trong catalog lại bị
+# Check kết luận "không có trong cấu hình". Sao chép đúng baseline đóng gói vào
+# runtime tạm để hai bề mặt nói về cùng một cấu hình; không ghi vào `/data`.
+cp "${repository_root}/platform/packaging/io_config.conf" "${runtime_root}/config/io_config.conf"
+
 env \
   PORT="${backend_port}" \
   JWT_SECRET="programming-real-e2e-secret-at-least-32-bytes" \

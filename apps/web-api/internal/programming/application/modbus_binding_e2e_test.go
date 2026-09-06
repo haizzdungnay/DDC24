@@ -110,8 +110,8 @@ func checkModbusBinding(t *testing.T, slots ModbusSlotProvider, point map[string
 	}
 	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: &fakePackager{},
 		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
-		ModbusSlots: slots,
-		Now:         func() time.Time { return time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC) }})
+		ModbusSlots: slots, Catalog: standardBindingCatalog(),
+		Now: func() time.Time { return time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC) }})
 	if err != nil {
 		t.Fatal(err)
 	}

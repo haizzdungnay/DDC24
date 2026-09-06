@@ -1,14 +1,14 @@
 // Tệp sinh tự động bởi scripts/generate_programming_errors.py. Không sửa bằng tay.
-export const PROGRAMMING_ERROR_CATALOG_SHA256 = "d4c25c227ef3eecadd852d0ddb20d8b4f33b2f4cc1c002809094a3fd1b27abfe" as const;
-export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.10.0" as const;
+export const PROGRAMMING_ERROR_CATALOG_SHA256 = "555c28877e22f82997d044db6670222f1e03058dd3a92a4b11d8f3f8b2896bdd" as const;
+export const PROGRAMMING_ERROR_CATALOG_VERSION = "1.11.0" as const;
 
 export const PROGRAMMING_ERROR_CATALOG = {
-  "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes"] },
+  "PRG-ERR-REQ-001": { ownerComponent: "api", statusClass: "REQUEST", httpStatuses: [400, 413, 422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.request", allowedArgs: ["actual", "supportedMajor", "maxBytes", "detailCode"] },
   "PRG-ERR-NOT-FOUND-001": { ownerComponent: "api", statusClass: "NOT_FOUND", httpStatuses: [404], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.notFound", allowedArgs: [] },
   "PRG-ERR-CONFLICT-001": { ownerComponent: "api", statusClass: "CONFLICT", httpStatuses: [409, 428], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.conflict", allowedArgs: ["expected", "actual"] },
   "PRG-ERR-SCOPE-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.scope", allowedArgs: ["profile", "limit"] },
-  "PRG-ERR-MAP-003": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.mappingIdentity", allowedArgs: ["pointId", "variable", "expected", "actual"] },
-  "PRG-ERR-MAP-004": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.mappingType", allowedArgs: ["pointId", "variable", "expected", "actual"] },
+  "PRG-ERR-MAP-003": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.mappingIdentity", allowedArgs: ["pointId", "variable", "expected", "actual", "detailCode"] },
+  "PRG-ERR-MAP-004": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.mappingType", allowedArgs: ["pointId", "variable", "expected", "actual", "detailCode"] },
   "PRG-ERR-CHECK-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.check", allowedArgs: ["line", "column", "length", "diagnosticCount"] },
   "PRG-ERR-ARTIFACT-001": { ownerComponent: "artifact-loader", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.artifact", allowedArgs: ["artifactId", "section"] },
   "PRG-ERR-TARGET-001": { ownerComponent: "artifact-loader", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.target", allowedArgs: ["expected", "actual"] },
@@ -23,7 +23,7 @@ export const PROGRAMMING_ERROR_CATALOG = {
   "PRG-ERR-IMPACT-UNAVAILABLE-001": { ownerComponent: "api", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.impactUnavailable", allowedArgs: ["key"] },
   "PRG-ERR-IMPACT-STALE-001": { ownerComponent: "api", statusClass: "CONFLICT", httpStatuses: [409], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.impactStale", allowedArgs: ["expected", "actual"] },
   "PRG-ERR-UNAVAILABLE-001": { ownerComponent: "runtime", statusClass: "UNAVAILABLE", httpStatuses: [503, 504, 429], retryable: true, keepsRunningRevision: false, messageKey: "programming.error.unavailable", allowedArgs: ["retryAfterSeconds"] },
-  "PRG-ERR-OUTPUT-OWNER-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.outputOwner", allowedArgs: ["pointId", "ownerProgramId", "conflictProgramId"] },
+  "PRG-ERR-OUTPUT-OWNER-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.outputOwner", allowedArgs: ["pointId", "ownerProgramId", "conflictProgramId", "detailCode"] },
   "PRG-ERR-PID-REVIEW-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.pidReview", allowedArgs: ["entryId", "featureState"] },
   "PRG-ERR-POU-KIND-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.pouKind", allowedArgs: ["objectId", "kind", "expected", "actual"] },
   "PRG-ERR-POU-RECURSION-001": { ownerComponent: "compiler", statusClass: "VALIDATION", httpStatuses: [422], retryable: false, keepsRunningRevision: true, messageKey: "programming.error.pouRecursion", allowedArgs: ["objectId", "cycleLength"] },

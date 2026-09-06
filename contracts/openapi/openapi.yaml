@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.37.0"
+  version: "1.38.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-08-27"
-  note: "v1.30.0 (T59-819) mở rộng ADDITIVE change manifest bằng stHunks[]/fbdChanges[] tất định, có bounded payload + truncated + cursor; diff không đi vào impactRef nên mọi acknowledgement Commission đã cấp vẫn còn hiệu lực."
+  date: "2026-09-06"
+  note: "v1.38.0 (ISS-PGM03-01) thêm preview binding typed trên đúng Draft/ETag; cùng validator chặn cửa ghi và Check, lỗi catalog fail-closed."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -2075,6 +2075,40 @@ paths:
         "422": { $ref: "#/components/responses/ProgrammingError" }
         "428": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/draft/bindings/preview:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    post:
+      operationId: previewProgrammingBinding
+      summary: Kiểm tra một binding trên đúng Draft mà không ghi dữ liệu
+      description: >
+        Dùng cùng validator server với PATCH Draft và Check. If-Match cùng
+        baseRevisionId khóa preview vào đúng ảnh Draft; catalog thiếu hoặc lỗi
+        trả 503, không suy đoán từ payload client.
+      x-rbac: [engineer, admin]
+      x-implementation-status: ISS-PGM03-01
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingBindingPreviewRequest" }
+      responses:
+        "200":
+          description: Quyết định ALLOW/WARN/BLOCK và toàn bộ lý do ổn định
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingBindingPreview" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/projects/{projectId}/draft/revisions:
     parameters:
       - { $ref: "#/components/parameters/ProgrammingProjectId" }
@@ -3300,6 +3334,71 @@ components:
           type: boolean
           description: Chỉ true khi producer có invariant/read-back chứng minh; false nghĩa là chưa được xác nhận và client phải query operation/runtime.
         correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingBindingPointIdentity:
+      type: object
+      additionalProperties: false
+      required: [category, pointId]
+      properties:
+        category: { type: string, enum: [LOCAL, VP, MB_RTU] }
+        pointId: { type: string, minLength: 1, maxLength: 64 }
+        deviceId: { type: string, minLength: 1, maxLength: 64 }
+    ProgrammingBindingCandidate:
+      type: object
+      additionalProperties: false
+      required: [bindingId, variableId, point, direction, dataType, writable, qualityPolicy]
+      properties:
+        bindingId: { type: string, format: uuid }
+        variableId: { type: string, format: uuid }
+        point: { $ref: "#/components/schemas/ProgrammingBindingPointIdentity" }
+        direction: { type: string, enum: [READ, WRITE] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        unit: { type: string, maxLength: 32 }
+        writable: { type: boolean }
+        qualityPolicy: { type: string, enum: [REQUIRE_GOOD, ALLOW_UNCERTAIN, FAIL_POLICY] }
+    ProgrammingBindingPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, baseRevisionId, binding]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        baseRevisionId: { type: string, format: uuid }
+        binding: { $ref: "#/components/schemas/ProgrammingBindingCandidate" }
+    ProgrammingBindingValidationIssue:
+      type: object
+      additionalProperties: false
+      required: [code, detailCode, severity, field]
+      properties:
+        code:
+          type: string
+          enum: [PRG-ERR-REQ-001, PRG-ERR-MAP-003, PRG-ERR-MAP-004, PRG-ERR-OUTPUT-OWNER-001]
+        detailCode: { type: string, pattern: "^PGM-MAP-[A-Z-]+-[0-9]{3}$" }
+        severity: { type: string, enum: [WARNING, ERROR] }
+        field: { type: string, minLength: 1, maxLength: 128 }
+        bindingId: { type: string, format: uuid }
+        variableId: { type: string, format: uuid }
+        programId: { type: string, format: uuid }
+        ownerProgramId: { type: string, format: uuid }
+        conflictProgramId: { type: string, format: uuid }
+        category: { type: string, enum: [LOCAL, VP, MB_RTU] }
+        deviceId: { type: string }
+        pointId: { type: string }
+        expected: { type: string }
+        actual: { type: string }
+    ProgrammingBindingPreview:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, verdict, issues, projectId, draftRevisionId, baseRevisionId, etag]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        verdict: { type: string, enum: [ALLOW, WARN, BLOCK] }
+        issues:
+          type: array
+          maxItems: 32
+          items: { $ref: "#/components/schemas/ProgrammingBindingValidationIssue" }
+        projectId: { type: string, format: uuid }
+        draftRevisionId: { type: string, format: uuid }
+        baseRevisionId: { type: string, format: uuid }
+        etag: { type: string }
     ProgrammingCapabilities:
       type: object
       additionalProperties: false

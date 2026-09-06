@@ -31,6 +31,7 @@ func openBundleService(t *testing.T) (*ProjectService, *programmingstore.Store) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	service.SetPointCatalogProvider(standardBindingCatalog())
 	service.now = func() time.Time { return fixedNow }
 	return service, store
 }
@@ -68,9 +69,10 @@ func createBundleRevisionPair(t *testing.T, service *ProjectService) (string, st
 	variableID := "67777777-7777-4777-8777-777777777777"
 	bindingID := "68888888-8888-4888-8888-888888888888"
 	variable, _ := json.Marshal(map[string]any{"op": "upsertVariable", "variable": map[string]any{
-		"variableId": variableID, "programId": programID, "name": "Fan", "type": "BOOL", "retain": true}})
+		"variableId": variableID, "programId": programID, "name": "Fan", "type": "BOOL", "class": "OUTPUT", "retain": true}})
 	binding, _ := json.Marshal(map[string]any{"op": "upsertBinding", "binding": map[string]any{
-		"bindingId": bindingID, "variableId": variableID, "pointId": "BO-1", "direction": "WRITE"}})
+		"bindingId": bindingID, "variableId": variableID, "point": map[string]any{"category": "LOCAL", "pointId": "DO-01"},
+		"direction": "WRITE", "dataType": "BOOL", "writable": true, "qualityPolicy": "REQUIRE_GOOD"}})
 	savedTwo, err := service.SaveDraft(ctx, actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: revisionOne,
 		Operations: []json.RawMessage{variable, binding}, IfMatch: sealedOne.ETag,
 		IdempotencyKey: "60000000-0000-4000-8000-000000000004", CorrelationID: testCorrelationID})

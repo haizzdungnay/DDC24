@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM03-01` Validator binding phía máy chủ trước khi lưu (#554, 2026-09-06)
+
+- Thêm `POST /programming/projects/{projectId}/draft/bindings/preview` typed
+  phiên bản `1.0`, khóa vào đúng `baseRevisionId` và Draft ETag; phản hồi
+  `ALLOW/WARN/BLOCK` kèm public code, `detailCode`, severity, field và identity/
+  owner context ổn định.
+- Dùng cùng validator cho preview, `upsertBinding` và Check với identity
+  LOCAL/VP/MB_RTU, direction, type, writable, unit, quality policy, Point đã
+  mất và duplicate output owner. Binding bị chặn hoặc catalog unavailable giữ
+  nguyên nội dung/ETag Draft; request thiếu typed pair không thể đi vòng preview.
+- Nâng OpenAPI lên `1.38.0` với 44 Programming operation, sinh lại client FE và
+  catalog lỗi `1.11.0`; FE thu hẹp response fail-closed khi server cũ, payload
+  mâu thuẫn, context/ETag stale hoặc reason code chưa biết. Binding lịch sử vẫn
+  đọc được; lần rebind phải dùng contract typed.
+- Đồng bộ quality/value LOCAL của Point Catalog với end-scan snapshot từ đúng
+  Programming Core đang phục vụ Check/runtime; lane real-backend nạp cùng
+  `io_config.conf`, đi đúng wizard Library và không phụ thuộc thứ tự Commission.
+- Kiểm chứng HOST: Go `vet` + toàn module test PASS; Vitest **233 tệp / 2.946
+  test**, lint và production build PASS, chunk Programming **139,19 KiB gzip**
+  trong ngân sách 165 KiB. Playwright real-backend **10 PASS / 1 SKIP TARGET**,
+  T59-505 có HTTP 5xx/request fail/Console error = 0 và axe nghiêm trọng = 0 ở
+  mobile. C++ đủ MODBUS/BACNET/HMI **1.479/1.479 PASS**, 1 phép môi trường skip;
+  docs ISO harness, error/client generator drift và `git diff --check` PASS.
+  Không có deploy target, FakeMCU, HIL hoặc bằng chứng release trong thay đổi này.
+
 ### Changed — `ISS-PGM03-06` Đồng bộ authority PGM-03/05/06 và asset Mapping (#559, 2026-09-06)
 
 - Khóa IA sáu workspace theo `UX-WEB-PROG-001`: PGM-03 là Mapping, PGM-04 là

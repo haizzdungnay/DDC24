@@ -25,14 +25,20 @@ import impactGolden from "../../../../../../../contracts/openapi/testdata/progra
  * trao cho họ quyền tạo tài khoản.
  */
 describe("Programming API client sinh từ OpenAPI", () => {
-  it("khóa đủ 40 operation và contract Commission/Runtime Signal/Simulation", () => {
+  it("khóa đủ 44 operation và contract Commission/Runtime Signal/Simulation", () => {
     // 25 operation Rev A + 4 operation Control Library (T59-202/T59-203)
     // + 2 operation intent Enable/Disable (T59-405) + 1 Published Signal
     // runtime read-only (T59-504) + 1 recovery-reset (T59-702)
     // + 7 operation Simulation R3 (T59-814) + 1 Used-In (T61-105)
     // + 1 Check entry PROJECT Library (T61-401)
-    // + 1 đọc mã nguồn entry theo revision (T61-404).
-    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(43);
+    // + 1 đọc mã nguồn entry theo revision (T61-404)
+    // + 1 preview binding server-authoritative (ISS-PGM03-01).
+    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(44);
+    expect(PROGRAMMING_ENDPOINTS.previewProgrammingBinding).toEqual({
+      method: "POST",
+      path: "/api/v1/programming/projects/{projectId}/draft/bindings/preview",
+      roles: ["engineer", "admin"],
+    });
     /* `T59-814`/`ADR-053` — RBAC của Simulation nằm ở CHÍNH contract sinh ra:
        mọi mutation **admin-only**, mọi đường đọc mở cho viewer/operator. Nếu ai
        đó nới quyền ở OpenAPI thì test này đỏ trước khi FE kịp hiện thêm nút.
@@ -130,7 +136,7 @@ describe("Programming API client sinh từ OpenAPI", () => {
   it("khoá hợp đồng bảng Programs sinh từ OpenAPI (T60-013/T60-014)", () => {
     // Bump contract đi kèm thay đổi hình dạng phản hồi; khoá số ở đây để một
     // lần sinh lại quên chạy không lặng lẽ giữ type cũ.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.37.0");
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.38.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

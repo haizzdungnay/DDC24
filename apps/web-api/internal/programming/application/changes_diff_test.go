@@ -383,6 +383,7 @@ func openDiffService(t *testing.T) (*ProjectService, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	service.SetPointCatalogProvider(standardBindingCatalog())
 	service.now = func() time.Time { return fixedNow }
 	return service, path
 }
