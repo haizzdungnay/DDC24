@@ -1,4 +1,6 @@
 import type { ProgrammingSimulationCapability } from '../model/types'
+import { roleCan, USER_ROLES } from '../../../shared/auth/capabilities'
+import type { UserRole } from '../../../shared/types'
 
 /**
  * `T59-815` / `PGM02-V22-WP-08` — mô hình THUẦN của một phiên SIMULATE.
@@ -166,9 +168,8 @@ export function isSimulationSupported(
 /**
  * Vai này có được điều khiển phiên không.
  *
- * Đọc từ `capability.mutationRoles` do SERVER công bố, không từ nhãn vai. Nếu
- * suy từ nhãn thì FE và server có hai định nghĩa quyền, và bản nào sai thì cũng
- * là bản người dùng nhìn thấy.
+ * Phải đồng thời qua capability `simulation.run` của FE và `mutationRoles` do
+ * server công bố. Giao của hai nguồn giữ fail-closed khi một phía bị drift.
  */
 export function canControlSimulation(
   capability: ProgrammingSimulationCapability | undefined | null,
@@ -176,7 +177,9 @@ export function canControlSimulation(
 ): boolean {
   if (!isSimulationSupported(capability)) return false
   if (!role) return false
-  return capability!.mutationRoles.some((allowed) => allowed.toLowerCase() === role.toLowerCase())
+  const normalized = role.toLowerCase() as UserRole
+  if (!USER_ROLES.includes(normalized) || !roleCan(normalized, 'simulation.run')) return false
+  return capability!.mutationRoles.some((allowed) => allowed.toLowerCase() === normalized)
 }
 
 /**

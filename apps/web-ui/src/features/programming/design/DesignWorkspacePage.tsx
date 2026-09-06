@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../auth'
+import { useAuth } from '../../auth'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
 import { useDraftWorkspace } from './useDraftWorkspace'
@@ -35,6 +35,7 @@ import { CompareDrawer } from './compare/CompareDrawer'
 import { compareGateFor, type CompareEntry } from './compare/compareModel'
 import type { FbdSelection } from '../fbd/commands'
 import type { FbdDocument } from '../fbd/model'
+import { useProgrammingActionAllowed } from '../api/authorization'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
@@ -160,10 +161,11 @@ export function DesignWorkspacePage({
     capabilities.status === 'loading' && !capabilities.data,
   )
   const canEdit =
-    roleAtLeast(session?.role, 'admin') &&
+    useProgrammingActionAllowed('editDraft') &&
     !mobileReadOnly &&
     workspaceMode === 'EDIT' &&
     compatibility.editingAllowed
+  const canSimulate = useProgrammingActionAllowed('simulation')
   /* `DEV-PROG-024` — xem khối chú thích ở chỗ dùng, phía dưới. Sàn `24rem`
    * (384 px) cố ý NHỎ hơn ngân sách của khổ 800 px: sàn lớn hơn ngân sách chính
    * là cách `DEV-PROG-021` tạo ra tràn dọc. */
@@ -820,6 +822,7 @@ export function DesignWorkspacePage({
             objectId={selectedObjectId}
             draftDirty={draftDirty}
             draftRevisionId={simulateRevisionId}
+            allowMutation={canSimulate}
             onStart={startSimulation}
             onAction={simulation.act}
             onSetInput={simulation.setInput}
@@ -917,6 +920,8 @@ export function DesignWorkspacePage({
           active={tab === 'mapping'}
           draft={workspace.project.draft}
           document={document}
+          project={workspace.project}
+          projectId={projectId}
           saving={workspace.saving}
           onSave={workspace.save}
           forceReadOnly={mobileReadOnly}

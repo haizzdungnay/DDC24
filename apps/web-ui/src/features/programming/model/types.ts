@@ -114,8 +114,8 @@ export interface ProgrammingWorkspaceModes {
 export interface ProgrammingSimulationCapability {
   supported: boolean
   workerVersion: string | null
-  /** Server là authority của quyền; FE chỉ đọc. v1 phải là `['admin']`. */
-  mutationRoles: Array<'viewer' | 'operator' | 'admin'>
+  /** Server là authority cuối; FE lấy giao với capability local. v1 là `['admin']`. */
+  mutationRoles: Array<'viewer' | 'operator' | 'engineer' | 'admin'>
   limits: {
     maxConcurrentSessionsPerController: number
     idleTtlSeconds: number

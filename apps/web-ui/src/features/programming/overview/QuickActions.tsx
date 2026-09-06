@@ -74,6 +74,9 @@ export interface QuickActionsInput {
   projectId: string | null
   /** Vai của phiên hiện tại; `null` khi chưa có phiên. Tầng gọi truyền `session?.role ?? null`. */
   role: UserRole | null
+  /** Phán quyết đã gồm thu hồi 403 của phiên; bỏ trống chỉ dành cho hàm/test thuần cũ. */
+  canEdit?: boolean
+  canActivate?: boolean
   /** `overviewViewModel().core.producerState`; `null` = chưa đọc được. */
   producerState: ProgrammingTargetState | null
   /** `overviewViewModel().safeState`. */
@@ -142,8 +145,8 @@ export function quickActionItems(input: QuickActionsInput): QuickActionItem[] {
    * Kiểm tra là `program.edit`, Đưa vào vận hành là `program.activate`. So
    * `role >= admin` chặn luôn `engineer` — vai tồn tại đúng để làm việc
    * Programming — trên những thao tác máy chủ sẵn sàng chấp nhận. */
-  const canEdit = roleCan(input.role, 'program.edit')
-  const canActivate = roleCan(input.role, 'program.activate')
+  const canEdit = input.canEdit ?? roleCan(input.role, 'program.edit')
+  const canActivate = input.canActivate ?? roleCan(input.role, 'program.activate')
   const projectPath = (suffix: string) =>
     input.projectId ? `/eng/programming/projects/${input.projectId}/${suffix}` : null
 

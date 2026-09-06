@@ -16,6 +16,7 @@ import { catalogEntries, catalogParity } from '../src/features/programming/desig
 const PROGRAM_ID = '81111111-1111-4111-8111-111111111111'
 const SIGNAL_ID = '82222222-2222-4222-8222-222222222222'
 const VARIABLE_ID = '83333333-3333-4333-8333-333333333333'
+const FAN_VARIABLE_ID = '83333333-3333-4333-8333-333333333334'
 const BINDING_ID = '84444444-4444-4444-8444-444444444444'
 const LIBRARY_ENTRY_ID = '85555555-5555-4555-8555-555555555555'
 const LIBRARY_INTERFACE = { inputs: [{ name: 'X', type: 'REAL' }], returnType: 'REAL' }
@@ -499,9 +500,23 @@ test('ISS-PGM03-08: UI rút cạn Catalog 504 mục qua đúng hai request và c
   expect(serverErrors).toEqual([])
 })
 
-test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến invalid thành 0', async ({ page, request }) => {
-  test.setTimeout(120_000)
-  const token = await loginAPI(request)
+test('T59-505/ISS-PGM-RBAC-01: engineer chạy lifecycle thật, Mapping và Trace theo capability', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  const adminToken = await loginAPI(request)
+  const engineerName = `pgmeng${Date.now().toString(36)}`
+  const engineerPassword = 'Engineer#2026'
+  const engineerCreated = await request.post('/api/v1/users', {
+    headers: mutationHeaders(adminToken),
+    data: { username: engineerName, role: 'engineer', password: engineerPassword }
+  })
+  expect(engineerCreated.status(), await engineerCreated.text()).toBe(201)
+  const engineerLogin = await responseJSON(await request.post('/api/v1/auth/login', {
+    data: { username: engineerName, password: engineerPassword }
+  }), 200)
+  expect(engineerLogin.role).toBe('engineer')
+  const token = engineerLogin.token as string
+
+  try {
 
   const createdResponse = await request.post('/api/v1/programming/projects', {
     headers: mutationHeaders(token),
@@ -623,6 +638,18 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
             type: 'REAL',
             class: 'INPUT',
             initialValue: null,
+            retain: false
+          }
+        },
+        {
+          op: 'upsertVariable',
+          variable: {
+            variableId: FAN_VARIABLE_ID,
+            programId: PROGRAM_ID,
+            name: 'Fan',
+            type: 'BOOL',
+            class: 'OUTPUT',
+            initialValue: false,
             retain: false
           }
         },
@@ -807,7 +834,13 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
       serverFailures.push(`${response.status()} ${url.pathname}`)
     }
   })
-  page.on('requestfailed', (requestFailed) => failedRequests.push(new URL(requestFailed.url()).pathname))
+  page.on('requestfailed', (requestFailed) => {
+    const errorText = requestFailed.failure()?.errorText ?? 'unknown'
+    // Hai lần reload bên dưới chủ ý hủy các poll của document cũ. Chỉ bỏ đúng
+    // ERR_ABORTED đó; mọi lỗi mạng khác vẫn làm gate đỏ với cả path và lý do.
+    if (errorText.includes('ERR_ABORTED')) return
+    failedRequests.push(`${new URL(requestFailed.url()).pathname}: ${errorText}`)
+  })
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
@@ -816,8 +849,8 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   // route sau login, không được dựa vào token của APIRequestContext phía trên.
   await page.goto('/eng/programming/runtime?tab=watch')
   await expect(page).toHaveURL(/\/login$/)
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill(engineerName)
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill(engineerPassword)
   await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
   await expect(page).toHaveURL(/\/eng\/programming\/runtime\?tab=watch$/)
 
@@ -851,6 +884,26 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   await expect(watchRow).toContainText('GOOD')
   // Binding là READ: cột đề xuất đầu ra mức 5 KHÔNG được bịa ra một số.
   await expect(watchRow).toContainText('Không áp dụng')
+
+  // ISS-PGM-RBAC-01: Trace là `program.edit`, vì vậy engineer phải thấy và
+  // chạy được action thật. Khóa cả request POST/DELETE để tránh xanh giả chỉ
+  // vì nút hiện trong DOM nhưng backend vẫn từ chối.
+  await watchRow.getByRole('checkbox', { name: 'Trace SupplyTemp' }).check()
+  const traceAcceptedResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/programming/runtime/traces')
+  await page.getByRole('button', { name: 'Bắt đầu trace' }).click()
+  const traceAccepted = await traceAcceptedResponse
+  expect(traceAccepted.status(), await traceAccepted.text()).toBe(202)
+  expect(traceAccepted.request().postDataJSON()).toMatchObject({
+    schemaVersion: '1.0', variableIds: [VARIABLE_ID]
+  })
+  const stopTrace = page.getByRole('button', { name: 'Dừng trace' })
+  await expect(stopTrace).toBeVisible()
+  const traceStoppedResponse = page.waitForResponse((response) =>
+    response.request().method() === 'DELETE' && /\/api\/v1\/programming\/runtime\/traces\/[0-9a-f-]+$/.test(new URL(response.url()).pathname))
+  await stopTrace.click()
+  const traceStopped = await traceStoppedResponse
+  expect(traceStopped.status()).toBe(204)
 
   // VS-PROG-U10: API setup ở trên chưa đủ. Ba workspace chỉnh sửa phải tự đọc
   // lại đúng dữ liệu từ backend thật sau điều hướng client-side (giữ JWT thật),
@@ -1050,6 +1103,72 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   const mappingRow = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })
   await expect(mappingRow).toBeVisible()
 
+  // ISS-PGM03-02: engineer gán output chưa map vào Point canonical, qua preview
+  // server-authoritative, rồi reload để chứng minh Draft read-back bền vững.
+  await expect(page.getByText('Catalog 504 · đã đủ', { exact: true })).toBeVisible()
+  const fanVariable = page.getByTestId('mapping-variable-list').getByRole('button', { name: /AHU_MAIN · Fan · Chưa map/ })
+  await fanVariable.click()
+  const do01Point = page.getByTestId('mapping-point-list').getByRole('button', { name: /\bDO-01\b/ })
+  await do01Point.click()
+  const mappingPreviewResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' &&
+    new URL(response.url()).pathname === `/api/v1/programming/projects/${projectID}/draft/bindings/preview`)
+  await page.getByRole('button', { name: 'Ánh xạ AHU_MAIN · Fan' }).click()
+  const mappingPreview = await mappingPreviewResponse
+  expect(mappingPreview.status(), await mappingPreview.text()).toBe(200)
+  const previewBody = mappingPreview.request().postDataJSON() as JsonObject
+  expect(previewBody).toMatchObject({
+    schemaVersion: '1.0',
+    binding: {
+      bindingId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      variableId: FAN_VARIABLE_ID,
+      point: { category: 'LOCAL', pointId: 'DO-01' },
+      direction: 'WRITE', dataType: 'BOOL', writable: true
+    }
+  })
+  expect(JSON.stringify(previewBody)).not.toContain('extIndex')
+  const changeDialog = page.getByRole('dialog', { name: 'Xem trước ánh xạ' })
+  await expect(changeDialog.getByText('ALLOW', { exact: true })).toBeVisible()
+  const mappingChangeResponse = page.waitForResponse((response) =>
+    response.request().method() === 'PATCH' &&
+    new URL(response.url()).pathname === `/api/v1/programming/projects/${projectID}/draft`)
+  await changeDialog.getByRole('button', { name: 'Ghi vào Draft' }).click()
+  const mappingChange = await mappingChangeResponse
+  expect(mappingChange.status(), await mappingChange.text()).toBe(200)
+  await expect(changeDialog.getByText('Read-back xác nhận Draft đã đổi.')).toBeVisible()
+  await changeDialog.getByRole('button', { name: 'Đóng' }).click()
+  await expect(page.getByRole('row', { name: /Fan\s+LOCAL:DO-01\s+OUTPUT\s+·\s+BOOL/ })).toBeVisible()
+  await expect(page.getByText('2 binding', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill(engineerName)
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill(engineerPassword)
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  const assignedFanRow = page.getByRole('row', { name: /Fan\s+LOCAL:DO-01\s+OUTPUT\s+·\s+BOOL/ })
+  await expect(assignedFanRow).toBeVisible()
+
+  // Remove chỉ hoàn tất khi response server và read-back trên UI đều mất
+  // binding; reload lần hai khóa việc component tự xóa optimistic.
+  await assignedFanRow.getByRole('button', { name: 'Gỡ', exact: true }).click()
+  const removeDialog = page.getByRole('dialog', { name: 'Xác nhận gỡ ánh xạ' })
+  const mappingRemoveResponse = page.waitForResponse((response) =>
+    response.request().method() === 'PATCH' &&
+    new URL(response.url()).pathname === `/api/v1/programming/projects/${projectID}/draft`)
+  await removeDialog.getByRole('button', { name: 'Gỡ ánh xạ' }).click()
+  const mappingRemove = await mappingRemoveResponse
+  expect(mappingRemove.status(), await mappingRemove.text()).toBe(200)
+  await expect(removeDialog.getByText('Read-back xác nhận Draft đã đổi.')).toBeVisible()
+  await removeDialog.getByRole('button', { name: 'Đóng' }).click()
+  await expect(page.getByText('1 binding', { exact: true })).toBeVisible()
+  await page.reload()
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill(engineerName)
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill(engineerPassword)
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(page.getByText('1 binding', { exact: true })).toBeVisible()
+  await expect(page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })).toBeVisible()
+
   // F-P59-UI-001: Published Signal được tạo bằng UI, không phải chỉ seed API.
   // Assert cả payload trên dây và Draft server trả lại để khoá mapping tên
   // policy UI (`USE_FALLBACK`) cùng fallback số, không chấp nhận optimistic UI.
@@ -1132,6 +1251,9 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   await page.getByTestId('programming-mobile-more').getByRole('link', { name: 'Điểm & Ánh xạ' }).click()
   await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
   await expect(page.getByRole('row', { name: /RETURN_AIR_TEMP/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^(Ánh xạ|Đổi ánh xạ) / })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^(Đổi|Gỡ|Gỡ ánh xạ)$/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Khai Published Signal' })).toHaveCount(0)
   await assertMobileSurface(page, 'Mapping + Published Signal')
 
   console.info(
@@ -1139,6 +1261,62 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
     `(${[...new Set(serverFailures)].join(', ')}); requestfailed=${failedRequests.length}; ` +
     `console.error=${consoleErrors.length} (expected 0)`
   )
+  } finally {
+    const removed = await request.delete(`/api/v1/users/${engineerName}`, {
+      headers: mutationHeaders(adminToken)
+    })
+    expect([200, 204], `không dọn được engineer tạm ${engineerName}`).toContain(removed.status())
+  }
+})
+
+test('ISS-PGM-RBAC-01: viewer và operator thấy Mapping read-only nhưng có zero mutation', async ({ browser, request }, testInfo) => {
+  test.setTimeout(120_000)
+  const adminToken = await loginAPI(request)
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(adminToken) }), 200)
+  const seeded = (projects.items as JsonObject[]).find((item) => item.name === 'ISS-PGM03-07 legacy migration')
+  expect(seeded, 'stack real-backend chưa seed Project dùng cho phép đo RBAC Mapping').toBeTruthy()
+  const projectID = seeded!.projectId as string
+  const suffix = Date.now().toString(36)
+  const password = 'ReadOnly#2026'
+  const accounts = [
+    { username: `pgmview${suffix}`, role: 'viewer' },
+    { username: `pgmop${suffix}`, role: 'operator' },
+  ] as const
+  const created: string[] = []
+
+  try {
+    for (const account of accounts) {
+      const response = await request.post('/api/v1/users', {
+        headers: mutationHeaders(adminToken),
+        data: { username: account.username, role: account.role, password }
+      })
+      expect(response.status(), await response.text()).toBe(201)
+      created.push(account.username)
+
+      const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL, locale: 'vi-VN' })
+      try {
+        const rolePage = await context.newPage()
+        await openWorkspaceRoute(rolePage, `/eng/programming/projects/${projectID}/mapping`)
+        await rolePage.getByLabel(/Tên đăng nhập|Username/i).fill(account.username)
+        await rolePage.getByLabel(/^Mật khẩu$|^Password$/i).fill(password)
+        await rolePage.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+        await expect(rolePage).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+        await expect(rolePage.getByText('READ-ONLY', { exact: true })).toBeVisible()
+        await expect(rolePage.getByText(/binding$/).first()).toBeVisible()
+        await expect(rolePage.getByRole('button', { name: /^(Ánh xạ|Đổi ánh xạ) / })).toHaveCount(0)
+        await expect(rolePage.getByRole('button', { name: /^(Đổi|Gỡ|Gỡ ánh xạ)$/ })).toHaveCount(0)
+        await expect(rolePage.getByRole('button', { name: 'Khai Published Signal' })).toHaveCount(0)
+      } finally {
+        await context.close()
+      }
+    }
+  } finally {
+    for (const username of created) {
+      const removed = await request.delete(`/api/v1/users/${username}`, { headers: mutationHeaders(adminToken) })
+      expect([200, 204], `không dọn được tài khoản tạm ${username}`).toContain(removed.status())
+    }
+  }
 })
 
 /**

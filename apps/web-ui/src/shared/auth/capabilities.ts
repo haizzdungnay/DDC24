@@ -27,6 +27,7 @@ export type UserCapability =
   | 'operate'
   | 'program.edit'
   | 'program.activate'
+  | 'simulation.run'
   | 'settings.manage'
   | 'database.manage'
   | 'users.manage'
@@ -42,7 +43,7 @@ const ROLE_CAPABILITIES: Record<UserRole, readonly UserCapability[]> = {
   admin: [
     'read', 'self.manage', 'operate',
     'program.edit', 'program.activate', 'settings.manage', 'system.release',
-    'database.manage', 'users.manage'
+    'simulation.run', 'database.manage', 'users.manage'
   ]
 }
 

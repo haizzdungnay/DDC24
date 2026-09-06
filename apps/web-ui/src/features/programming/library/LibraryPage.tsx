@@ -5,9 +5,8 @@ import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
 import { Modal } from '../../../shared/components/Modal'
 import { useI18n } from '../../../shared/i18n'
-import { useAuth } from '../../auth'
-import { roleCan } from '../../../shared/auth/capabilities'
 import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../api/generated/library_registry'
+import { useProgrammingActionAllowed } from '../api/authorization'
 import { LibraryCardGrid } from './LibraryCardGrid'
 import { LibraryInspector, isInspectorTab, type InspectorTab } from './LibraryInspector'
 import { LibraryAuthoringDrawer, type LibraryEditorMode } from './LibraryAuthoringDrawer'
@@ -86,7 +85,6 @@ export { INSPECTOR_TABS, isInspectorTab, type InspectorTab } from './LibraryInsp
 
 export function LibraryPage() {
   const { pick } = useI18n()
-  const { session } = useAuth()
   const navigate = useNavigate()
   /* `WEB-RBAC-001` — ghi PROJECT Library đòi `program.edit`, không đòi vai
      `admin`. Trước lát này `engineer` bị giao diện chặn trên một thao tác mà
@@ -100,7 +98,7 @@ export function LibraryPage() {
      hình thái phủ mới được mang `role="dialog"`, bẫy tiêu điểm và `Esc`. */
   const inspectorMode = useProgrammingInspectorMode()
   const focusCardRef = useRef<((key: string) => void) | null>(null)
-  const canEdit = roleCan(session?.role, 'program.edit') && !mobileReadOnly
+  const canEdit = useProgrammingActionAllowed('library') && !mobileReadOnly
   const routeParams = useParams<{ projectId: string }>()
   const projects = useProgrammingProjects()
   // Route là nguồn sự thật; danh sách chỉ là đường lùi cho lối vào cũ không

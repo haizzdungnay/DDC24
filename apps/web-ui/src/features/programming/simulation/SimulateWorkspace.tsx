@@ -35,6 +35,7 @@ export function SimulateWorkspace({
   objectId,
   draftDirty,
   draftRevisionId,
+  allowMutation = true,
   onStart,
   onAction,
   onSetInput,
@@ -48,6 +49,8 @@ export function SimulateWorkspace({
   draftDirty: boolean
   /** Revision đã lưu gần nhất — nguồn hợp lệ DUY NHẤT để mở phiên. */
   draftRevisionId: string | null
+  /** Phán quyết capability của phiên, đã gồm thu hồi HTTP 403. */
+  allowMutation?: boolean
   onStart: () => void
   onAction: (action: SimulationAction, speed?: number) => void
   onSetInput: (descriptor: SimulationInputDescriptor, raw: string) => void
@@ -56,7 +59,7 @@ export function SimulateWorkspace({
   const { pick } = useI18n()
   const session = currentSession(slice)
   const supported = isSimulationSupported(capability)
-  const canControl = canControlSimulation(capability, role)
+  const canControl = allowMutation && canControlSimulation(capability, role)
 
   const revision = useProgrammingRevision(session?.sourceDraftRevisionId ?? null)
   const sealed = activeProgramSource({

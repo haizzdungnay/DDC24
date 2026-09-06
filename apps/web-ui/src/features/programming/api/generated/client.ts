@@ -8,9 +8,10 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.38.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.39.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
+export type ProgrammingPermission = "read" | "program.edit" | "program.activate" | "simulation.run";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type ProgrammingImpactStatus = "NONE" | "PRESENT" | "UNAVAILABLE";
 export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "outputMappingChanges" | "publishedSignals" | "controlLibrary" | "programSet" | "enableIntent" | "physicalMappingChanges" | "virtualPointChanges" | "modbusMappingChanges" | "writableOutputsAffected";
@@ -235,54 +236,55 @@ export interface ProgrammingOperationAccepted {
 }
 
 export const PROGRAMMING_ENDPOINTS = {
-  "actProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions", roles: ["admin"] },
-  "checkProgrammingLibraryEntry": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries/check", roles: ["engineer","admin"] },
-  "commissionProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/commission", roles: ["engineer","admin"] },
-  "compareProgrammingRevisions": { method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", roles: ["viewer","operator","engineer","admin"] },
-  "createProgrammingCheck": { method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", roles: ["engineer","admin"] },
-  "createProgrammingProject": { method: "POST", path: "/api/v1/programming/projects", roles: ["engineer","admin"] },
-  "createProgrammingRevision": { method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", roles: ["engineer","admin"] },
-  "createProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions", roles: ["admin"] },
-  "createProgrammingTrace": { method: "POST", path: "/api/v1/programming/runtime/traces", roles: ["engineer","admin"] },
-  "deleteProgrammingLibraryEntry": { method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", roles: ["engineer","admin"] },
-  "deprecateProgrammingLibraryRevision": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate", roles: ["engineer","admin"] },
-  "exportProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/export", roles: ["engineer","admin"] },
-  "getProgrammingCapabilities": { method: "GET", path: "/api/v1/programming/capabilities", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingCheck": { method: "GET", path: "/api/v1/programming/checks/{checkId}", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingLibraryEntrySource": { method: "GET", path: "/api/v1/programming/library-entry-source", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingOperation": { method: "GET", path: "/api/v1/programming/operations/{operationId}", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingPointCatalog": { method: "GET", path: "/api/v1/programming/point-catalog", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingProject": { method: "GET", path: "/api/v1/programming/projects/{projectId}", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingRevision": { method: "GET", path: "/api/v1/programming/revisions/{revisionId}", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingRuntime": { method: "GET", path: "/api/v1/programming/runtime", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingRuntimeMonitor": { method: "GET", path: "/api/v1/programming/runtime/monitor", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingRuntimeSignals": { method: "GET", path: "/api/v1/programming/runtime/signals", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingSimulationSession": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["viewer","operator","engineer","admin"] },
-  "getProgrammingTrace": { method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["viewer","operator","engineer","admin"] },
-  "importProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/import", roles: ["engineer","admin"] },
-  "listProgrammingAudit": { method: "GET", path: "/api/v1/programming/audit", roles: ["viewer","operator","engineer","admin"] },
-  "listProgrammingLibraryUsages": { method: "GET", path: "/api/v1/programming/library-usages", roles: ["viewer","operator","engineer","admin"] },
-  "listProgrammingOperations": { method: "GET", path: "/api/v1/programming/operations", roles: ["viewer","operator","engineer","admin"] },
-  "listProgrammingOverrides": { method: "GET", path: "/api/v1/programming/overrides", roles: ["viewer","operator","engineer","admin"] },
-  "listProgrammingProgramIntents": { method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", roles: ["viewer","operator","engineer","admin"] },
-  "listProgrammingProjects": { method: "GET", path: "/api/v1/programming/projects", roles: ["viewer","operator","engineer","admin"] },
-  "listProgrammingSimulationObservations": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", roles: ["viewer","operator","engineer","admin"] },
-  "listProgrammingSimulationTrace": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", roles: ["viewer","operator","engineer","admin"] },
-  "previewProgrammingBinding": { method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/bindings/preview", roles: ["engineer","admin"] },
-  "resetProgrammingRecovery": { method: "POST", path: "/api/v1/programming/runtime/recovery-reset", roles: ["engineer","admin"] },
-  "resetProgrammingRetain": { method: "POST", path: "/api/v1/programming/retain/reset", roles: ["engineer","admin"] },
-  "restoreProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/restore", roles: ["engineer","admin"] },
-  "searchProgrammingLibraries": { method: "GET", path: "/api/v1/programming/libraries", roles: ["viewer","operator","engineer","admin"] },
-  "setProgrammingProgramIntent": { method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent", roles: ["engineer","admin"] },
-  "setProgrammingSimulationInput": { method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}", roles: ["admin"] },
-  "stopProgrammingSimulationSession": { method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["admin"] },
-  "stopProgrammingTrace": { method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["engineer","admin"] },
-  "updateProgrammingDraft": { method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", roles: ["engineer","admin"] },
-  "upsertProgrammingLibraryEntry": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", roles: ["engineer","admin"] },
+  "actProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions", roles: ["admin"], permission: "simulation.run" },
+  "checkProgrammingLibraryEntry": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries/check", roles: ["engineer","admin"], permission: "program.edit" },
+  "commissionProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/commission", roles: ["engineer","admin"], permission: "program.activate" },
+  "compareProgrammingRevisions": { method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "createProgrammingCheck": { method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", roles: ["engineer","admin"], permission: "program.edit" },
+  "createProgrammingProject": { method: "POST", path: "/api/v1/programming/projects", roles: ["engineer","admin"], permission: "program.edit" },
+  "createProgrammingRevision": { method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", roles: ["engineer","admin"], permission: "program.edit" },
+  "createProgrammingSimulationSession": { method: "POST", path: "/api/v1/programming/simulation/sessions", roles: ["admin"], permission: "simulation.run" },
+  "createProgrammingTrace": { method: "POST", path: "/api/v1/programming/runtime/traces", roles: ["engineer","admin"], permission: "program.edit" },
+  "deleteProgrammingLibraryEntry": { method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", roles: ["engineer","admin"], permission: "program.edit" },
+  "deprecateProgrammingLibraryRevision": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate", roles: ["engineer","admin"], permission: "program.edit" },
+  "exportProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/export", roles: ["engineer","admin"], permission: "program.edit" },
+  "getProgrammingCapabilities": { method: "GET", path: "/api/v1/programming/capabilities", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingCheck": { method: "GET", path: "/api/v1/programming/checks/{checkId}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingLibraryEntrySource": { method: "GET", path: "/api/v1/programming/library-entry-source", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingOperation": { method: "GET", path: "/api/v1/programming/operations/{operationId}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingPointCatalog": { method: "GET", path: "/api/v1/programming/point-catalog", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingProject": { method: "GET", path: "/api/v1/programming/projects/{projectId}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingRevision": { method: "GET", path: "/api/v1/programming/revisions/{revisionId}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingRuntime": { method: "GET", path: "/api/v1/programming/runtime", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingRuntimeMonitor": { method: "GET", path: "/api/v1/programming/runtime/monitor", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingRuntimeSignals": { method: "GET", path: "/api/v1/programming/runtime/signals", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingSimulationSession": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingTrace": { method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "importProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/import", roles: ["engineer","admin"], permission: "program.activate" },
+  "listProgrammingAudit": { method: "GET", path: "/api/v1/programming/audit", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "listProgrammingLibraryUsages": { method: "GET", path: "/api/v1/programming/library-usages", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "listProgrammingOperations": { method: "GET", path: "/api/v1/programming/operations", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "listProgrammingOverrides": { method: "GET", path: "/api/v1/programming/overrides", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "listProgrammingProgramIntents": { method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "listProgrammingProjects": { method: "GET", path: "/api/v1/programming/projects", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "listProgrammingSimulationObservations": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "listProgrammingSimulationTrace": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "previewProgrammingBinding": { method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/bindings/preview", roles: ["engineer","admin"], permission: "program.edit" },
+  "resetProgrammingRecovery": { method: "POST", path: "/api/v1/programming/runtime/recovery-reset", roles: ["engineer","admin"], permission: "program.activate" },
+  "resetProgrammingRetain": { method: "POST", path: "/api/v1/programming/retain/reset", roles: ["engineer","admin"], permission: "program.activate" },
+  "restoreProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/restore", roles: ["engineer","admin"], permission: "program.activate" },
+  "searchProgrammingLibraries": { method: "GET", path: "/api/v1/programming/libraries", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "setProgrammingProgramIntent": { method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent", roles: ["engineer","admin"], permission: "program.activate" },
+  "setProgrammingSimulationInput": { method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}", roles: ["admin"], permission: "simulation.run" },
+  "stopProgrammingSimulationSession": { method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["admin"], permission: "simulation.run" },
+  "stopProgrammingTrace": { method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["engineer","admin"], permission: "program.edit" },
+  "updateProgrammingDraft": { method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", roles: ["engineer","admin"], permission: "program.edit" },
+  "upsertProgrammingLibraryEntry": { method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", roles: ["engineer","admin"], permission: "program.edit" },
 } as const satisfies Record<string, {
   method: ProgrammingHttpMethod;
   path: string;
   roles: readonly ProgrammingRole[];
+  permission: ProgrammingPermission;
 }>;
 
 export type ProgrammingOperationId = keyof typeof PROGRAMMING_ENDPOINTS;
@@ -355,6 +357,7 @@ export class ProgrammingApiClient {
   constructor(
     private readonly origin = "",
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly onForbidden?: (permission: ProgrammingPermission, operationId: ProgrammingOperationId) => void,
   ) {}
 
   async request<TResponse, TBody = unknown>(
@@ -407,6 +410,9 @@ export class ProgrammingApiClient {
     if (!response.ok) {
       const payload = await response.json().catch(() => undefined);
       const envelope = normalizeProgrammingErrorEnvelope(payload, response.status);
+      /* ISS-PGM-RBAC-01: 403 là bằng chứng quyền đã bị thu hồi sau mount.
+         Báo đúng capability của operation cho provider; không tự retry mutation. */
+      if (response.status === 403) this.onForbidden?.(endpoint.permission, operationId);
       throw new ProgrammingApiError(response.status, envelope);
     }
     if (response.status === 204) return undefined as TResponse;

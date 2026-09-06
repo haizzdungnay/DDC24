@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { AlignLeft, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
 import { FbdEditorPane, parseFbdDocument } from './FbdEditorPane'
 import type { FbdSelection } from '../../fbd/commands'
@@ -63,6 +62,7 @@ import { stStatusFields } from './editorStatus'
 import { StCodeMap, shouldShowCodeMap } from './StCodeMap'
 import { StCrossReferencePanel } from './StCrossReferencePanel'
 import { SelectionQuickActions } from './SelectionQuickActions'
+import { useProgrammingActionAllowed } from '../../api/authorization'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 import { collectStInterfaceVariables } from './stInterfaceVariables'
 
@@ -332,8 +332,7 @@ export function ProgramsTab({
   onWatchVariable?: (name: string) => void
 }) {
   const { pick } = useI18n()
-  const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
+  const canEdit = useProgrammingActionAllowed('editDraft') && !forceReadOnly
   const selected = document.programs.find((program) => program.programId === selectedProgramId)
 
   /* `T59-818` — ngữ cảnh cho Inspector dùng chung. Hai nguồn được NÂNG lên đây

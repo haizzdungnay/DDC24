@@ -5,8 +5,8 @@ import { Button } from '../../../shared/components/Button'
 import { Panel } from '../../../shared/components/Panel'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { useI18n } from '../../../shared/i18n'
-import { roleAtLeast, useAuth } from '../../auth'
 import { useCreateProgrammingProject } from '../api/mutations'
+import { useProgrammingActionAllowed } from '../api/authorization'
 import { useProgrammingRuntimeContext } from '../layout/ProgrammingLayout'
 import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 import {
@@ -22,7 +22,7 @@ import { DesignWorkspacePage } from './DesignWorkspacePage'
  */
 export function ProgramsWorkspaceRoute() {
   const { pick } = useI18n()
-  const { session } = useAuth()
+  const canCreateProject = useProgrammingActionAllowed('createProject')
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -54,7 +54,7 @@ export function ProgramsWorkspaceRoute() {
     )
   }
   if (resolution.kind === 'EMPTY') {
-    return <EmptyProjectState canCreate={roleAtLeast(session?.role, 'admin') && !mobileReadOnly} onCreated={(projectId) => navigate(canonicalProgramsPath(projectId), { replace: true })} />
+    return <EmptyProjectState canCreate={canCreateProject && !mobileReadOnly} onCreated={(projectId) => navigate(canonicalProgramsPath(projectId), { replace: true })} />
   }
   if (resolution.kind === 'CHOOSE') {
     return (

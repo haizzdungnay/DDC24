@@ -88,14 +88,15 @@ describe('capability là nguồn quyền, không phải nhãn vai', () => {
     expect(isSimulationSupported({ ...capability(), limits: undefined as never })).toBe(false)
   })
 
-  it('quyền điều khiển đọc từ mutationRoles server công bố', () => {
+  it('quyền điều khiển là giao của simulation.run và mutationRoles server', () => {
     expect(canControlSimulation(capability(), 'admin')).toBe(true)
     expect(canControlSimulation(capability(), 'ADMIN')).toBe(true)
     expect(canControlSimulation(capability(), 'operator')).toBe(false)
     expect(canControlSimulation(capability(), 'viewer')).toBe(false)
     expect(canControlSimulation(capability(), undefined)).toBe(false)
     // Server mở cho operator ⇒ FE theo server, không giữ bảng quyền riêng.
-    expect(canControlSimulation(capability({ mutationRoles: ['operator', 'admin'] }), 'operator')).toBe(true)
+    expect(canControlSimulation(capability({ mutationRoles: ['operator', 'admin'] }), 'operator')).toBe(false)
+    expect(canControlSimulation(capability({ mutationRoles: ['engineer', 'admin'] }), 'engineer')).toBe(false)
     // Nhưng capability tắt thì không vai nào điều khiển được.
     expect(canControlSimulation(capability({ supported: false }), 'admin')).toBe(false)
   })
