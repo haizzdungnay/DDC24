@@ -54,7 +54,10 @@ func migrateDraftToV2(document map[string]any) error {
 
 	legacyPrograms, _ := document["programs"].([]any)
 	legacyVariables, _ := document["variables"].([]any)
-	legacyBindings, _ := document["bindings"].([]any)
+	legacyBindings, bindingsOK := document["bindings"].([]any)
+	if !bindingsOK {
+		return fmt.Errorf("%w: bindings v1 phải là mảng", ErrInvalidRequest)
+	}
 	task, _ := document["task"].(map[string]any)
 	periodMs := float64(1000)
 	if task != nil {
@@ -126,21 +129,14 @@ func migrateDraftToV2(document map[string]any) error {
 	}
 
 	bindings := make([]any, 0, len(legacyBindings))
-	for _, item := range legacyBindings {
+	for index, item := range legacyBindings {
 		legacy, ok := item.(map[string]any)
 		if !ok {
-			return ErrInvalidRequest
+			return fmt.Errorf("%w: bindings[%d] không phải object", ErrInvalidRequest, index)
 		}
-		variableID, _ := legacy["variableId"].(string)
-		variable := variableByID[variableID]
-		binding := map[string]any{
-			"bindingId": legacy["bindingId"],
-			"pointId":   legacy["pointId"],
-			"direction": legacy["direction"],
-		}
-		if variable != nil {
-			binding["programId"] = variable["programId"]
-			binding["variable"] = variable["name"]
+		binding, err := migrateBindingV1(legacy, variableByID)
+		if err != nil {
+			return fmt.Errorf("%w: bindings[%d]: %v", ErrInvalidRequest, index, err)
 		}
 		bindings = append(bindings, binding)
 	}
@@ -172,6 +168,147 @@ func migrateDraftToV2(document map[string]any) error {
 	delete(library, "version")
 	delete(document, "variables")
 	delete(document, "task")
+	return nil
+}
+
+// migrateBindingV1 có hai nhánh tương thích tường minh:
+//
+//   - canonical: hình dạng typed mà FE/API hiện hành dùng, với `point` lồng;
+//     clone nguyên object rồi chỉ bổ sung owner đã resolve từ Variable;
+//   - flat legacy: hình dạng đời đầu chỉ có `pointId` cấp gốc. Nhánh này giữ
+//     đúng dữ liệu đã có, không tự bịa category/deviceId/type/unit/writable.
+//
+// Một object trộn cả hai hình dạng bị từ chối. Chọn một nửa sẽ tạo Binding có
+// vẻ hợp lệ nhưng mang hai identity khác nhau, nguy hiểm hơn việc dừng migration.
+func migrateBindingV1(legacy map[string]any, variableByID map[string]map[string]any) (map[string]any, error) {
+	if bindingCarriesRuntimeSlotHandle(legacy) {
+		return nil, fmt.Errorf("binding chứa runtime handle extIndex")
+	}
+	bindingID, bindingIDOK := legacy["bindingId"].(string)
+	variableID, variableIDOK := legacy["variableId"].(string)
+	variable := variableByID[variableID]
+	if !bindingIDOK || !isUUID(bindingID) || !variableIDOK || !isUUID(variableID) || variable == nil {
+		return nil, fmt.Errorf("bindingId/variableId không hợp lệ hoặc Variable không tồn tại")
+	}
+
+	_, hasPoint := legacy["point"]
+	_, hasFlatPointID := legacy["pointId"]
+	if hasPoint == hasFlatPointID {
+		return nil, fmt.Errorf("binding phải có đúng một identity point canonical hoặc flat legacy")
+	}
+
+	binding := make(map[string]any, len(legacy)+2)
+	for key, value := range legacy {
+		binding[key] = value
+	}
+	binding["programId"] = variable["programId"]
+	binding["variable"] = variable["name"]
+
+	if hasPoint {
+		if err := validateCanonicalStoredBinding(binding); err != nil {
+			return nil, err
+		}
+		return binding, nil
+	}
+	if err := validateFlatLegacyStoredBinding(binding); err != nil {
+		return nil, err
+	}
+	return binding, nil
+}
+
+var canonicalStoredBindingFields = map[string]struct{}{
+	"bindingId": {}, "variableId": {}, "point": {}, "direction": {}, "dataType": {},
+	"unit": {}, "writable": {}, "qualityPolicy": {}, "programId": {}, "variable": {},
+}
+
+var flatLegacyStoredBindingFields = map[string]struct{}{
+	"bindingId": {}, "variableId": {}, "pointId": {}, "direction": {}, "programId": {}, "variable": {},
+}
+
+var canonicalStoredPointFields = map[string]struct{}{
+	"category": {}, "deviceId": {}, "pointId": {},
+}
+
+func exactObjectFields(value map[string]any, allowed map[string]struct{}) bool {
+	for key := range value {
+		if _, ok := allowed[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func validStoredBindingDirection(value string, allowReadWrite bool) bool {
+	return value == "READ" || value == "WRITE" || (allowReadWrite && value == "READ_WRITE")
+}
+
+func validateCanonicalStoredBinding(binding map[string]any) error {
+	if !exactObjectFields(binding, canonicalStoredBindingFields) || bindingCarriesRuntimeSlotHandle(binding) {
+		return fmt.Errorf("binding canonical có field ngoài hợp đồng")
+	}
+	for _, required := range []string{"bindingId", "variableId", "point", "direction", "dataType", "writable", "qualityPolicy", "programId", "variable"} {
+		if _, ok := binding[required]; !ok {
+			return fmt.Errorf("binding canonical thiếu %s", required)
+		}
+	}
+	bindingID, _ := binding["bindingId"].(string)
+	variableID, _ := binding["variableId"].(string)
+	programID, _ := binding["programId"].(string)
+	variable, _ := binding["variable"].(string)
+	direction, _ := binding["direction"].(string)
+	dataType, _ := binding["dataType"].(string)
+	_, writableOK := binding["writable"].(bool)
+	qualityPolicy, _ := binding["qualityPolicy"].(string)
+	if !isUUID(bindingID) || !isUUID(variableID) || !isUUID(programID) || !validPouName(variable) ||
+		!validStoredBindingDirection(direction, true) || !validSignalType(dataType) || !writableOK ||
+		(qualityPolicy != "REQUIRE_GOOD" && qualityPolicy != "ALLOW_UNCERTAIN" && qualityPolicy != "FAIL_POLICY") {
+		return fmt.Errorf("binding canonical có metadata không hợp lệ")
+	}
+	if unit, present := binding["unit"]; present {
+		text, ok := unit.(string)
+		if !ok || !validText(text, 0, 32) {
+			return fmt.Errorf("binding canonical có unit không hợp lệ")
+		}
+	}
+	point, ok := binding["point"].(map[string]any)
+	if !ok || !exactObjectFields(point, canonicalStoredPointFields) {
+		return fmt.Errorf("binding canonical có point không hợp lệ")
+	}
+	category, _ := point["category"].(string)
+	pointID, _ := point["pointId"].(string)
+	deviceID, hasDeviceID := point["deviceId"].(string)
+	if !validText(pointID, 1, 64) || (category != "LOCAL" && category != "VP" && category != "MB_RTU") {
+		return fmt.Errorf("binding canonical có point identity không hợp lệ")
+	}
+	if category == "MB_RTU" {
+		if !hasDeviceID || !validText(deviceID, 1, 64) {
+			return fmt.Errorf("binding MB_RTU thiếu deviceId")
+		}
+	} else if _, present := point["deviceId"]; present {
+		return fmt.Errorf("binding %s không được mang deviceId", category)
+	}
+	return nil
+}
+
+func validateFlatLegacyStoredBinding(binding map[string]any) error {
+	if !exactObjectFields(binding, flatLegacyStoredBindingFields) || bindingCarriesRuntimeSlotHandle(binding) {
+		return fmt.Errorf("binding flat legacy có field ngoài hợp đồng")
+	}
+	bindingID, _ := binding["bindingId"].(string)
+	pointID, _ := binding["pointId"].(string)
+	direction, _ := binding["direction"].(string)
+	programID, _ := binding["programId"].(string)
+	variable, _ := binding["variable"].(string)
+	if !isUUID(bindingID) || !validText(pointID, 1, 64) || !validStoredBindingDirection(direction, true) ||
+		!isUUID(programID) || !validPouName(variable) {
+		return fmt.Errorf("binding flat legacy không hợp lệ")
+	}
+	if variableID, present := binding["variableId"]; present {
+		text, ok := variableID.(string)
+		if !ok || !isUUID(text) {
+			return fmt.Errorf("binding flat legacy có variableId không hợp lệ")
+		}
+	}
 	return nil
 }
 
@@ -640,12 +777,16 @@ func validateDraftDocumentV2(document map[string]any) error {
 		signalIDs[id], signalNames[strings.ToUpper(name)] = struct{}{}, struct{}{}
 	}
 
-	bindings := collectionOf(document, "bindings")
-	if len(bindings) > domain.MaxPackageBindings {
+	rawBindings, ok := document["bindings"].([]any)
+	if !ok || len(rawBindings) > domain.MaxPackageBindings {
 		return ErrInvalidRequest
 	}
-	bindingIDs := make(map[string]struct{}, len(bindings))
-	for _, binding := range bindings {
+	bindingIDs := make(map[string]struct{}, len(rawBindings))
+	for _, rawBinding := range rawBindings {
+		binding, ok := rawBinding.(map[string]any)
+		if !ok {
+			return ErrInvalidRequest
+		}
 		id, ok := binding["bindingId"].(string)
 		if !ok || !isUUID(id) {
 			return ErrInvalidRequest
@@ -654,12 +795,16 @@ func validateDraftDocumentV2(document map[string]any) error {
 			return ErrInvalidRequest
 		}
 		bindingIDs[id] = struct{}{}
-		// `programId` chỉ có khi resolve được biến; binding v1 ghi trước lúc khai
-		// biến vẫn hợp lệ ở Draft và sẽ chết ở Check với mã đúng nghĩa.
-		if programID, exists := binding["programId"].(string); exists {
-			if _, known := programIDs[programID]; !known {
-				return ErrInvalidRequest
+		if _, canonical := binding["point"]; canonical {
+			if err := validateCanonicalStoredBinding(binding); err != nil {
+				return fmt.Errorf("%w: binding canonical: %v", ErrInvalidRequest, err)
 			}
+		} else if err := validateFlatLegacyStoredBinding(binding); err != nil {
+			return fmt.Errorf("%w: binding flat legacy: %v", ErrInvalidRequest, err)
+		}
+		programID, _ := binding["programId"].(string)
+		if _, known := programIDs[programID]; !known {
+			return ErrInvalidRequest
 		}
 	}
 

@@ -182,6 +182,20 @@ cp "${repository_root}/apps/web-api/config/users.conf" "${runtime_root}/config/u
 # runtime tạm để hai bề mặt nói về cùng một cấu hình; không ghi vào `/data`.
 cp "${repository_root}/platform/packaging/io_config.conf" "${runtime_root}/config/io_config.conf"
 
+# `ISS-PGM03-07` — public API tạo Draft v2 ngay từ đầu, nên lane E2E không thể
+# chạm đường nâng dữ liệu v1 bằng request thông thường. Seed một Project v1 vào
+# CHÍNH SQLite tạm trước khi backend mở DB; browser sau đó PATCH qua HTTP thật,
+# reload và Check. Tool không được build/deploy cùng sản phẩm và chỉ chạy khi
+# cấu hình Playwright yêu cầu tường minh.
+if [[ "${PROGRAMMING_REAL_SEED_LEGACY_V1:-0}" == "1" ]]; then
+  (
+    cd "${repository_root}/apps/web-api"
+    go run ./cmd/mkddc-programming-e2e-seed \
+      --db "${runtime_root}/programming/programming.sqlite" \
+      --backup-dir "${runtime_root}/programming/backups"
+  )
+fi
+
 env \
   PORT="${backend_port}" \
   JWT_SECRET="programming-real-e2e-secret-at-least-32-bytes" \

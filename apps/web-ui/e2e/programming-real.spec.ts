@@ -297,6 +297,79 @@ async function commission(
   return operation
 }
 
+test('ISS-PGM03-07: Draft v1 migrate qua HTTP, reload Mapping giữ canonical Binding và Check PASS', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  const token = await loginAPI(request)
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(token) }), 200)
+  const seeded = (projects.items as JsonObject[]).find((item) => item.name === 'ISS-PGM03-07 legacy migration')
+  expect(seeded, 'stack real-backend chưa seed fixture Draft v1').toBeTruthy()
+  const projectID = seeded!.projectId as string
+
+  const before = await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200)
+  expect((before.draft as JsonObject).schemaVersion).toBe(1)
+  const draftID = before.draftRevisionId as string
+  const saved = await responseJSON(await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': before.etag as string }),
+    data: {
+      schemaVersion: '1.0', baseRevisionId: before.baseRevisionId,
+      operations: [{ op: 'setFunctionalTags', tags: ['e2e-migrated'] }]
+    }
+  }), 200)
+  const migrated = (saved.resource as JsonObject).content as JsonObject
+  expect(migrated.schemaVersion).toBe(2)
+  expect(migrated.bindings).toEqual([expect.objectContaining({
+    bindingId: '70666666-6666-4666-8666-666666666666',
+    variableId: '70555555-5555-4555-8555-555555555555',
+    programId: '70444444-4444-4444-8444-444444444444', variable: 'SupplyTemp',
+    point: { category: 'LOCAL', pointId: 'UI-01' },
+    direction: 'READ', dataType: 'REAL', unit: 'V', writable: false, qualityPolicy: 'REQUIRE_GOOD'
+  })])
+
+  const consoleErrors: string[] = []
+  const failedRequests: string[] = []
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
+  page.on('requestfailed', (failed) => failedRequests.push(new URL(failed.url()).pathname))
+  await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
+  await expect(page).toHaveURL(/\/login$/)
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  const row = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })
+  await expect(row).toBeVisible()
+  await page.reload()
+  // JWT của AuthProvider chỉ sống trong memory theo chủ ý; reload toàn tài
+  // liệu vì thế phải đăng nhập lại. Sau login mở lại đúng deep-link để phép
+  // đo vẫn là GET Draft mới từ backend, không phải state React còn giữ.
+  const loginAfterReload = page.getByLabel(/Tên đăng nhập|Username/i)
+  if (await loginAfterReload.isVisible().catch(() => false)) {
+    await loginAfterReload.fill('admin')
+    await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+    await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  }
+  await page.evaluate((path) => {
+    window.history.pushState({}, '', path)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }, `/eng/programming/projects/${projectID}/mapping`)
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(row).toBeVisible()
+  // Chromium có thể phát `ERR_NETWORK_CHANGED` cho các request của document
+  // vừa bị reload cưỡng bức trong lúc Vite dev server đổi connection. Bắt đầu
+  // ngân sách Console/Network ở snapshot đã ổn định; lỗi sau mốc này vẫn làm
+  // test đỏ và không bị lọc theo chuỗi.
+  consoleErrors.length = 0
+  failedRequests.length = 0
+
+  const readBack = await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200)
+  expect((readBack.draft as JsonObject).bindings).toEqual(migrated.bindings)
+  await sealAndCheck(request, token, projectID, draftID, saved.etag as string, 'ISS-PGM03-07 migrated')
+  expect(consoleErrors).toEqual([])
+  expect(failedRequests).toEqual([])
+})
+
 test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến invalid thành 0', async ({ page, request }) => {
   test.setTimeout(120_000)
   const token = await loginAPI(request)

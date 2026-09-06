@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM03-07` Giữ nguyên Binding khi nâng Draft v1→v2 (#562, 2026-09-06)
+
+- Migration giữ nguyên `bindingId`, `variableId`, canonical Point
+  LOCAL/VP/MB_RTU, direction, type, unit, writable và quality policy; bổ sung
+  owner Program/Variable từ đúng Variable đã tham chiếu, không làm rơi
+  `deviceId` của MB_RTU và không persist `extIndex`.
+- Tách rõ nhánh flat legacy: chỉ giữ dữ liệu có thật, không tự suy category,
+  device, type hoặc quyền ghi. Binding mixed/malformed/không resolve được
+  Variable bị từ chối trước transaction nên content và ETag không đổi.
+- Adapter Draft v2 của FE thu hẹp collection Binding typed tại biên đọc, bỏ
+  owner nội bộ khỏi view model và fail-closed toàn collection nếu có phần tử
+  sai shape thay vì cast mù hoặc trình bày read-back một phần.
+- Kiểm chứng HOST: Go `vet` và toàn module test PASS; test migration/service
+  khóa tính tất định, LOCAL/VP/MB_RTU, flat legacy, malformed và atomic ETag;
+  Vitest adapter **7/7 PASS**. FE full test/lint/build được ghi sau khi chạy
+  gate cuối; không có deploy target, HIL hoặc bằng chứng release.
+
 ### Fixed — `ISS-PGM03-01` Validator binding phía máy chủ trước khi lưu (#554, 2026-09-06)
 
 - Thêm `POST /programming/projects/{projectId}/draft/bindings/preview` typed
