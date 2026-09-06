@@ -504,7 +504,10 @@ describe('useProgrammingPointCatalog — enabled flag ISS-#565', () => {
     client.request.mockResolvedValue({ schemaVersion: '1.0', items: [] })
     const { result } = renderHook(() => useProgrammingPointCatalog(true))
     await waitFor(() => expect(result.current.status).toBe('ready'))
-    expect(client.request).toHaveBeenCalledWith('getProgrammingPointCatalog')
+    expect(client.request).toHaveBeenCalledWith('getProgrammingPointCatalog', expect.objectContaining({
+      query: { limit: 500 },
+      signal: expect.any(AbortSignal),
+    }))
   })
 
   it('chống chồng request', async () => {
@@ -514,14 +517,13 @@ describe('useProgrammingPointCatalog — enabled flag ISS-#565', () => {
     const { result } = renderHook(() => useProgrammingPointCatalog(true))
     await waitFor(() => expect(client.request).toHaveBeenCalledTimes(1))
     
-    act(() => { result.current.refresh() })
-    await new Promise(resolve => setTimeout(resolve, 10))
-    expect(client.request).toHaveBeenCalledTimes(1)
-    
-    first.resolve({ schemaVersion: '1.0', items: [] })
-    await waitFor(() => expect(result.current.status).toBe('ready'))
-    
+    const firstSignal = client.request.mock.calls[0][1].signal as AbortSignal
     act(() => { result.current.refresh() })
     await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
+    expect(firstSignal.aborted).toBe(true)
+
+    first.resolve({ schemaVersion: '1.0', items: [] })
+    await act(async () => { await Promise.resolve() })
+    expect(client.request).toHaveBeenCalledTimes(2)
   })
 })

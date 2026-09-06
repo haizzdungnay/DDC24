@@ -15,6 +15,9 @@ export interface MappingToolbarProps {
   onCategoryChange: (value: 'ALL' | 'LOCAL' | 'VP' | 'MB_RTU') => void
   truth: CatalogTruthState
   error?: string | null
+  canRetry?: boolean
+  onRetry?: () => void
+  onRestart?: () => void
   direction: 'ALL' | 'INPUT' | 'OUTPUT' | 'INOUT'
   onDirectionChange: (value: 'ALL' | 'INPUT' | 'OUTPUT' | 'INOUT') => void
   dataType: string
@@ -45,7 +48,7 @@ export interface MappingToolbarProps {
   onToggleSuggestions: () => void
 }
 
-export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, access, onAccessChange, status, onStatusChange, counts, equipment, equipmentOptions, onEquipmentChange, suggestionsEnabled, suggestionsActive, suggestionsBlockedReason, onToggleSuggestions }: MappingToolbarProps) {
+export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', programs = [], onProgramFilterChange, category, onCategoryChange, truth, error, canRetry = false, onRetry, onRestart, direction, onDirectionChange, dataType, dataTypes, onDataTypeChange, access, onAccessChange, status, onStatusChange, counts, equipment, equipmentOptions, onEquipmentChange, suggestionsEnabled, suggestionsActive, suggestionsBlockedReason, onToggleSuggestions }: MappingToolbarProps) {
   const { pick, locale } = useI18n()
   const stale = truth.status === 'error' || truth.complete === false
   return (
@@ -53,7 +56,19 @@ export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', pr
       {stale && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-3 py-2 text-xs text-[var(--c-warn-fg)]">
           <span><strong>{truth.status === 'error' ? (error ?? pick('Catalog Point không sẵn sàng.', 'Point Catalog unavailable.')) : pick('Catalog Point chưa tải đủ.', 'Point Catalog not fully loaded.')}</strong> {pick('Map/Remove đang khóa; dữ liệu cũ chỉ dùng để inspect.', 'Map/Remove locked; stale data inspect-only.')}</span>
-          {truth.lastSuccessAt && <span>{pick('Lần đọc thành công gần nhất:', 'Last successful read:')} {formatTechnicalTime(truth.lastSuccessAt, locale)}</span>}
+          <span className="flex flex-wrap items-center gap-2">
+            {truth.lastSuccessAt && <span>{pick('Lần đọc đầy đủ gần nhất:', 'Last complete read:')} {formatTechnicalTime(truth.lastSuccessAt, locale)}</span>}
+            {truth.status === 'error' && canRetry && onRetry && (
+              <button type="button" onClick={onRetry} className="rounded border border-current px-2 py-1 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]">
+                {pick('Thử lại trang lỗi', 'Retry failed page')}
+              </button>
+            )}
+            {truth.status === 'error' && onRestart && (
+              <button type="button" onClick={onRestart} className="rounded border border-current px-2 py-1 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]">
+                {pick('Đọc lại từ đầu', 'Restart from first page')}
+              </button>
+            )}
+          </span>
         </div>
       )}
       <section aria-label="Mapping toolbar" className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2">
@@ -139,7 +154,11 @@ export function MappingToolbar({ query, onQueryChange, programFilter = 'ALL', pr
           <StatusBadge state="online" label={`Mapped ${counts.mapped}`} />
           <StatusBadge state={counts.unmapped ? 'warning' : 'online'} label={`${pick('Chưa map', 'Unmapped')} ${counts.unmapped}`} />
           <StatusBadge state={counts.review ? 'warning' : 'online'} label={`Review ${counts.review}`} />
-          <span className="rounded-full border border-[var(--c-border)] px-2.5 py-1 font-semibold text-[var(--c-text-dim)]">Catalog {truth.complete === false ? `${counts.catalog}+` : counts.catalog}</span>
+          <span className="rounded-full border border-[var(--c-border)] px-2.5 py-1 font-semibold text-[var(--c-text-dim)]">
+            {truth.complete === false
+              ? pick(`Catalog ${counts.catalog}+ · đang tải/chưa đủ`, `Catalog ${counts.catalog}+ · loading/incomplete`)
+              : pick(`Catalog ${counts.catalog} · đã đủ`, `Catalog ${counts.catalog} · complete`)}
+          </span>
         </div>
       </section>
     </div>

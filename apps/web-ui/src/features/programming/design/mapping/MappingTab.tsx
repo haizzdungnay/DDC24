@@ -40,7 +40,7 @@ export function MappingTab(props: {
   const { pick } = useI18n()
   const { session } = useAuth()
   const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
-  const catalog = useProgrammingPointCatalog(active)
+  const catalog = useProgrammingPointCatalog(active, projectId)
   const [query, setQuery] = useState('')
   const [programFilter, setProgramFilter] = useState('ALL')
   const [category, setCategory] = useState<PointCategoryFilter>('ALL')
@@ -95,8 +95,8 @@ export function MappingTab(props: {
   const truth = useMemo<CatalogTruthState>(() => ({
     status: catalog.status,
     lastSuccessAt: catalog.lastSuccessAt,
-    complete: catalog.data?.nextCursor ? false : true,
-  }), [catalog.data?.nextCursor, catalog.lastSuccessAt, catalog.status])
+    complete: catalog.complete ?? (catalog.status === 'ready' && !catalog.data?.nextCursor),
+  }), [catalog.complete, catalog.data?.nextCursor, catalog.lastSuccessAt, catalog.status])
   const variableRows = useMemo(() => buildMappingVariableRows(document, catalog.data?.items ?? [], truth), [catalog.data?.items, document, truth])
 
   useEffect(() => {
@@ -178,7 +178,7 @@ export function MappingTab(props: {
       <div className="text-right text-xs text-[var(--c-text-dim)]"><span className="block font-mono text-[var(--c-text)]">{document.library.profile} / {document.library.version}</span><span>{saving ? pick('Workspace đang lưu ở tab khác', 'The workspace is saving in another tab') : canEdit ? pick('Admin · mutation đang khóa', 'Admin · mutations are locked') : 'Viewer · read-only'}</span></div>
     </div>
     {saveError && <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">{saveError}</p>}
-    <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} access={access} onAccessChange={setAccess} status={status} onStatusChange={setStatus} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} equipment={equipment} equipmentOptions={equipmentChoices} onEquipmentChange={setEquipment} suggestionsEnabled={suggestionsEnabled} suggestionsActive={suggestionsActive && suggestionsEnabled} suggestionsBlockedReason={suggestionsBlockedReason} onToggleSuggestions={() => setSuggestionsActive((value) => !value)} />
+    <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} canRetry={catalog.canRetry} onRetry={catalog.retry} onRestart={catalog.restart} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} access={access} onAccessChange={setAccess} status={status} onStatusChange={setStatus} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} equipment={equipment} equipmentOptions={equipmentChoices} onEquipmentChange={setEquipment} suggestionsEnabled={suggestionsEnabled} suggestionsActive={suggestionsActive && suggestionsEnabled} suggestionsBlockedReason={suggestionsBlockedReason} onToggleSuggestions={() => setSuggestionsActive((value) => !value)} />
     <div className="grid items-start gap-3 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
       <VariableWorklist rows={visibleVariables} selectedId={selectedVariableId} onSelect={setSelectedVariableId} onOpenSource={(row) => openSource(row.programId)} mutationsBlocked={true} />
       <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} pointKind={pointKind} onPointKindChange={setPointKind} />
