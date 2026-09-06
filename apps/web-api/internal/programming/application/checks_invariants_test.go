@@ -81,6 +81,17 @@ func TestOutputOwnerConflictUsesPhysicalIdentityForModbus(t *testing.T) {
 	}
 }
 
+func TestOutputOwnerLegacyFallbackDoesNotDuplicateTypedConflict(t *testing.T) {
+	bindings := []packageBinding{
+		{programID: "a1111111-1111-4111-8111-111111111111", direction: "WRITE", category: "LOCAL", pointID: "AO-01", typed: true},
+		{programID: "b2222222-2222-4222-8222-222222222222", direction: "WRITE", category: "LOCAL", pointID: "AO-01", typed: true},
+		{programID: "c3333333-3333-4333-8333-333333333333", direction: "WRITE", category: "LOCAL", pointID: "AO-02", typed: false},
+	}
+	if diagnostics := outputOwnerDiagnostics(bindings); len(diagnostics) != 0 {
+		t.Fatalf("fallback legacy lặp diagnostic của validator typed: %+v", diagnostics)
+	}
+}
+
 // Chiều khẳng định: đọc chung một điểm là hợp lệ, và mỗi Program ghi điểm riêng
 // cũng hợp lệ. Guard chặn tất cả cũng là guard sai.
 func TestOutputOwnerAllowsSharedReadsAndDistinctWrites(t *testing.T) {

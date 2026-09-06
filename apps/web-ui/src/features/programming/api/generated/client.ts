@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.37.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.38.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -18,6 +18,56 @@ export type ProgrammingImpactKey = "retain" | "activeOverrides" | "cutover" | "o
 // --- Bảng Programs của PGM-01 (T60-013/T60-014), sinh thẳng từ schema OpenAPI.
 // Trường nullable là `| null` chứ KHÔNG phải optional: server luôn gửi khoá, và
 // `null` nghĩa là "đã xét, chưa biết" — không được suy thành `0`/`false`.
+export interface ProgrammingBindingPointIdentity {
+  category: "LOCAL" | "VP" | "MB_RTU";
+  pointId: string;
+  deviceId?: string;
+}
+
+export interface ProgrammingBindingCandidate {
+  bindingId: string;
+  variableId: string;
+  point: ProgrammingBindingPointIdentity;
+  direction: "READ" | "WRITE";
+  dataType: "BOOL" | "INT" | "DINT" | "UINT" | "REAL" | "TIME";
+  unit?: string;
+  writable: boolean;
+  qualityPolicy: "REQUIRE_GOOD" | "ALLOW_UNCERTAIN" | "FAIL_POLICY";
+}
+
+export interface ProgrammingBindingPreviewRequest {
+  schemaVersion: "1.0";
+  baseRevisionId: string;
+  binding: ProgrammingBindingCandidate;
+}
+
+export interface ProgrammingBindingValidationIssue {
+  code: "PRG-ERR-REQ-001" | "PRG-ERR-MAP-003" | "PRG-ERR-MAP-004" | "PRG-ERR-OUTPUT-OWNER-001";
+  detailCode: string;
+  severity: "WARNING" | "ERROR";
+  field: string;
+  bindingId?: string;
+  variableId?: string;
+  programId?: string;
+  ownerProgramId?: string;
+  conflictProgramId?: string;
+  category?: "LOCAL" | "VP" | "MB_RTU";
+  deviceId?: string;
+  pointId?: string;
+  expected?: string;
+  actual?: string;
+}
+
+export interface ProgrammingBindingPreview {
+  schemaVersion: "1.0";
+  verdict: "ALLOW" | "WARN" | "BLOCK";
+  issues: ProgrammingBindingValidationIssue[];
+  projectId: string;
+  draftRevisionId: string;
+  baseRevisionId: string;
+  etag: string;
+}
+
 export type ProgrammingProgramRuntimeState = "RUNNING" | "WAITING" | "DISABLED" | "FAULTED" | "UNKNOWN";
 
 export type ProgrammingProgramRuntimeStateSource = "CORE_LIVE" | "LAST_KNOWN" | "UNAVAILABLE";
@@ -218,6 +268,7 @@ export const PROGRAMMING_ENDPOINTS = {
   "listProgrammingProjects": { method: "GET", path: "/api/v1/programming/projects", roles: ["viewer","operator","engineer","admin"] },
   "listProgrammingSimulationObservations": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", roles: ["viewer","operator","engineer","admin"] },
   "listProgrammingSimulationTrace": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", roles: ["viewer","operator","engineer","admin"] },
+  "previewProgrammingBinding": { method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/bindings/preview", roles: ["engineer","admin"] },
   "resetProgrammingRecovery": { method: "POST", path: "/api/v1/programming/runtime/recovery-reset", roles: ["engineer","admin"] },
   "resetProgrammingRetain": { method: "POST", path: "/api/v1/programming/retain/reset", roles: ["engineer","admin"] },
   "restoreProgrammingRevision": { method: "POST", path: "/api/v1/programming/operations/restore", roles: ["engineer","admin"] },

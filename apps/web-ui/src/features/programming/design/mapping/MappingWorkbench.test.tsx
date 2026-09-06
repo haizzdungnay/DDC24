@@ -114,7 +114,7 @@ describe('Mapping Workbench Phase 1A — read-only truth state', () => {
     const modbusRow = screen.getByRole('button', { name: /VFD enable.*MODBUS/ })
     expect(within(modbusRow).getByText('Chưa map được')).toBeVisible()
     expect(within(modbusRow).getByText('Chưa map được')).toHaveAttribute('title', 'Catalog chưa phát extIndex cho điểm Modbus nên chưa dựng được binding (ISS-PIO-31); Core đã resolve MB_RTU')
-    expect(screen.getByText('Chưa xác minh — API chưa cung cấp authority')).toBeVisible()
+		expect(screen.getByText('Chưa xác minh — chưa chạy preview phía máy chủ')).toBeVisible()
   })
 
   it('giữ snapshot cũ để inspect nhưng cảnh báo persistent và khóa mọi mutation khi poll lỗi', () => {

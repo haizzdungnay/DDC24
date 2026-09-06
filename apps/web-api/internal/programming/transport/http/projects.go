@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"mkddc-web/internal/auth"
 	programmingapplication "mkddc-web/internal/programming/application"
@@ -30,6 +31,12 @@ type createRevisionRequest struct {
 	BaseRevisionID string `json:"baseRevisionId"`
 	Label          string `json:"label"`
 	Comment        string `json:"comment,omitempty"`
+}
+
+type bindingPreviewRequest struct {
+	SchemaVersion  string                                  `json:"schemaVersion"`
+	BaseRevisionID string                                  `json:"baseRevisionId"`
+	Binding        programmingapplication.BindingCandidate `json:"binding"`
 }
 
 type mutationResponse struct {
@@ -89,6 +96,9 @@ func handleProjectRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		handleGetProject(w, r, correlationID, service)
 	case r.Method == http.MethodPatch && r.PathValue("projectId") != "":
 		handleSaveDraft(w, r, correlationID, service)
+	case r.Method == http.MethodPost && r.PathValue("projectId") != "" &&
+		strings.HasSuffix(r.URL.Path, "/draft/bindings/preview"):
+		handlePreviewBinding(w, r, correlationID, service)
 	case r.Method == http.MethodPost && r.PathValue("projectId") != "":
 		handleSealRevision(w, r, correlationID, service)
 	case r.Method == http.MethodGet && r.PathValue("revisionId") != "":
@@ -97,6 +107,22 @@ func handleProjectRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		return false
 	}
 	return true
+}
+
+func handlePreviewBinding(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) {
+	var request bindingPreviewRequest
+	if err := decodeStrictRequest(r, &request); err != nil || request.SchemaVersion != programmingapplication.BindingValidationSchemaVersion {
+		writeMappedError(w, programmingapplication.ErrInvalidRequest, correlationID)
+		return
+	}
+	result, err := service.PreviewBinding(r.Context(), r.PathValue("projectId"), request.BaseRevisionID,
+		r.Header.Get("If-Match"), request.Binding)
+	if err != nil {
+		writeMappedError(w, err, correlationID)
+		return
+	}
+	w.Header().Set("ETag", result.ETag)
+	writeJSON(w, http.StatusOK, correlationID, result)
 }
 
 func handleGetRevisionChanges(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) {

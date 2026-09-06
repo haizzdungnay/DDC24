@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	programmingstore "mkddc-web/internal/programming/store"
 )
 
 /* ISS-PIO-18 — bộ quét binding Programming cho "ai đang dùng điểm này".
@@ -42,14 +44,39 @@ func seedProjectWithBinding(t *testing.T, service *ProjectService, name, idemPre
 	program, _ := json.Marshal(map[string]any{"op": "upsertProgram", "program": map[string]any{
 		"programId": programID, "name": "AHU", "kind": "PROGRAM", "language": "ST",
 		"document": "PROGRAM AHU\nVAR_OUTPUT Fan : BOOL; END_VAR\nFan := TRUE;\nEND_PROGRAM\n"}})
+	variableClass := "OUTPUT"
+	if direction, _ := binding["direction"].(string); strings.EqualFold(direction, "READ") {
+		variableClass = "INPUT"
+	}
 	variable, _ := json.Marshal(map[string]any{"op": "upsertVariable", "variable": map[string]any{
-		"variableId": variableID, "programId": programID, "name": "Fan", "type": "BOOL", "retain": true}})
+		"variableId": variableID, "programId": programID, "name": "Fan", "type": "BOOL", "class": variableClass, "retain": true}})
 	bindingOp, _ := json.Marshal(map[string]any{"op": "upsertBinding", "binding": binding})
 
-	if _, err := service.SaveDraft(ctx, actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
-		Operations: []json.RawMessage{program, variable, bindingOp}, IfMatch: created.ETag,
-		IdempotencyKey: idemPrefix + "2", CorrelationID: testCorrelationID}); err != nil {
+	operations := []json.RawMessage{program, variable, bindingOp}
+	legacy := binding["variableId"] == nil
+	if legacy {
+		operations = operations[:2]
+	}
+	saved, err := service.SaveDraft(ctx, actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
+		Operations: operations, IfMatch: created.ETag, IdempotencyKey: idemPrefix + "2", CorrelationID: testCorrelationID})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if legacy {
+		// Fixture tương thích đọc dữ liệu đã tồn tại trước ISS-PGM03-01. Cửa API
+		// mới cố ý từ chối tạo thêm binding thiếu typed Point/Variable contract,
+		// nên chèn snapshot lịch sử thẳng vào store để vẫn khóa đường đọc cũ.
+		document := saved.Resource["content"].(map[string]any)
+		document["bindings"] = append(document["bindings"].([]any), binding)
+		content, _ := json.Marshal(document)
+		draft, _ := service.store.GetDraft(ctx, draftID)
+		var keyHash, requestHash [32]byte
+		keyHash[0], requestHash[0] = 1, 2
+		if _, err := service.store.SaveDraft(ctx, programmingstore.SaveDraftParams{DraftID: draftID, ExpectedETag: draft.ETag,
+			ContentJSON: content, ActorID: actor.ID, Role: actor.Role, AuditID: "69999999-9999-4999-8999-999999999999",
+			CorrelationID: testCorrelationID, At: service.now(), IdempotencyKeySHA256: keyHash, RequestSHA256: requestHash}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return projectID
 }

@@ -26,8 +26,8 @@ export function MappingInspector({ row }: { row: MappingVariableRow | null }) {
             <dt className="text-[var(--c-text-dim)]">Observed</dt><dd className="whitespace-nowrap text-[var(--c-text)]">{formatTechnicalDateTime(row.observedAt, locale)}</dd>
           </dl>
           <div className="rounded border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-[var(--c-warn-fg)]">
-            <ShieldAlert className="mr-1 inline h-4 w-4" aria-hidden="true" /><strong>{pick('Chưa xác minh — API chưa cung cấp authority', 'Unverified — the API provides no authority')}</strong>
-            <p className="mt-1">{pick('Owner/Published Signal/consumer không được suy đoán từ FE.', 'Owner/Published Signal/consumer must not be inferred by the frontend.')}</p>
+            <ShieldAlert className="mr-1 inline h-4 w-4" aria-hidden="true" /><strong>{pick('Chưa xác minh — chưa chạy preview phía máy chủ', 'Unverified — server preview has not run')}</strong>
+            <p className="mt-1">{pick('Owner, xung đột và verdict lưu chỉ lấy từ preview; FE không tự suy đoán.', 'Owner, conflicts, and the save verdict come only from preview; the frontend does not infer them.')}</p>
           </div>
           {row.compatibility.reasons.length > 0 && <p className="rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-[var(--c-text-dim)]">{mappingReasonsText(row.compatibility.reasons, pick)}</p>}
         </div>

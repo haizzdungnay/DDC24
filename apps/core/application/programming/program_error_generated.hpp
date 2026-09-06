@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "d4c25c227ef3eecadd852d0ddb20d8b4f33b2f4cc1c002809094a3fd1b27abfe";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.10.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "555c28877e22f82997d044db6670222f1e03058dd3a92a4b11d8f3f8b2896bdd";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.11.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,

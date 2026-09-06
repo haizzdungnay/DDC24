@@ -126,6 +126,7 @@ lượng thôi thì không đủ — đổi cờ từ route này sang route khá
 */
 func TestReadOnlyPostsAreEnumeratedAndDoNotWrite(t *testing.T) {
 	expected := []string{
+		"POST /api/v1/programming/projects/{projectId}/draft/bindings/preview",
 		"POST /api/v1/programming/projects/{projectId}/library/entries/check",
 	}
 	actual := make([]string, 0, len(expected))
@@ -143,9 +144,11 @@ func TestReadOnlyPostsAreEnumeratedAndDoNotWrite(t *testing.T) {
 		if !definition.readOnly {
 			continue
 		}
-		// Một route không ghi thì không có gì để bảo vệ bằng ETag: đòi
-		// `If-Match` sẽ tiêu ETag Draft cho một thao tác chỉ đọc.
-		if definition.ifMatchRequired || definition.idempotencyRequired {
+		// Preview binding không ghi nhưng phải khóa vào đúng ảnh Draft; vì vậy nó
+		// là ngoại lệ duy nhất được đòi If-Match. Dry run library không phụ thuộc
+		// toàn bộ Draft nên vẫn không được đòi header này.
+		preview := definition.path == "/api/v1/programming/projects/{projectId}/draft/bindings/preview"
+		if (!preview && definition.ifMatchRequired) || definition.idempotencyRequired {
 			t.Errorf("%s %s: route readOnly không được đòi If-Match/idempotency",
 				definition.method, definition.path)
 		}

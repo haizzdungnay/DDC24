@@ -66,6 +66,7 @@ var routeDefinitions = []routeDefinition{
 	{method: "POST", path: "/api/v1/programming/projects", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
 	{method: "GET", path: "/api/v1/programming/projects/{projectId}", permission: auth.PermissionRead},
 	{method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/bindings/preview", permission: auth.PermissionProgramEdit, readOnly: true, bodyRequired: true, ifMatchRequired: true},
 	{method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{method: "GET", path: "/api/v1/programming/revisions/{revisionId}", permission: auth.PermissionRead},
 	{method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", permission: auth.PermissionRead},

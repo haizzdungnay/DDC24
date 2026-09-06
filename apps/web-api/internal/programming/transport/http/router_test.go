@@ -38,9 +38,10 @@ func TestRegisterProgrammingRoutesHonorsFeatureFlag(t *testing.T) {
 	// OpenAPI/client sẽ đỏ ở `TestRegisteredRoutesMatchProgrammingOpenAPI`;
 	// thêm route mà quên cả hai nơi thì đỏ ở đây.
 	// + dry run Check của PROJECT Library (`T61-401`)
-	// + đọc mã nguồn entry theo đúng một revision (`T61-404`).
-	if len(routes) != 43 {
-		t.Fatalf("contract route count = %d; want 43", len(routes))
+	// + đọc mã nguồn entry theo đúng một revision (`T61-404`)
+	// + preview binding server-authoritative (`ISS-PGM03-01`).
+	if len(routes) != 44 {
+		t.Fatalf("contract route count = %d; want 44", len(routes))
 	}
 }
 
