@@ -408,6 +408,97 @@ test('ISS-PGM03-07: Draft v1 LOCAL+MB_RTU migrate qua HTTP, reload giữ đủ B
   expect(failedRequests).toEqual([])
 })
 
+test('ISS-PGM03-08: UI rút cạn Catalog 504 mục qua đúng hai request và chọn được mục thứ 501', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  const token = await loginAPI(request)
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(token) }), 200)
+  const seeded = (projects.items as JsonObject[]).find((item) => item.name === 'ISS-PGM03-07 legacy migration')
+  expect(seeded, 'stack real-backend chưa seed Project dùng cho Mapping').toBeTruthy()
+  const projectID = seeded!.projectId as string
+
+  // Cho phép chạy riêng test này: nếu case #562 chưa chạy trước thì nâng fixture
+  // v1 bằng đúng public API; không sửa thẳng SQLite hoặc dựng Project giả.
+  const projectResponse = await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200)
+  if ((projectResponse.draft as JsonObject).schemaVersion === 1) {
+    await responseJSON(await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+      headers: mutationHeaders(token, { 'if-match': projectResponse.etag as string }),
+      data: {
+        schemaVersion: '1.0',
+        baseRevisionId: projectResponse.baseRevisionId,
+        operations: [{ op: 'setFunctionalTags', tags: ['e2e-pagination'] }]
+      }
+    }), 200)
+  }
+
+  const catalogResponses: Array<{ url: string; body: JsonObject }> = []
+  const consoleErrors: string[] = []
+  const failedRequests: string[] = []
+  const serverErrors: string[] = []
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
+  page.on('requestfailed', (failed) => failedRequests.push(new URL(failed.url()).pathname))
+  page.on('response', (response) => {
+    const url = new URL(response.url())
+    if (response.status() >= 500) serverErrors.push(`${response.status()} ${url.pathname}`)
+    if (url.pathname !== '/api/v1/programming/point-catalog' || response.status() !== 200) return
+    void response.json().then((body: JsonObject) => {
+      catalogResponses.push({ url: response.url(), body })
+    })
+  })
+
+  await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
+  const usernameField = page.getByLabel(/Tên đăng nhập|Username/i)
+  if (await usernameField.isVisible().catch(() => false)) {
+    await usernameField.fill('admin')
+    await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+    await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  }
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(page.getByText('Catalog 504 · đã đủ', { exact: true })).toBeVisible()
+  await expect.poll(() => catalogResponses.length, {
+    message: 'UI phải đọc đúng hai trang trước khi công bố complete'
+  }).toBe(2)
+
+  const first = catalogResponses.find((entry) => !new URL(entry.url).searchParams.has('cursor'))
+  const second = catalogResponses.find((entry) => new URL(entry.url).searchParams.has('cursor'))
+  expect(first, 'thiếu request trang đầu không mang cursor').toBeTruthy()
+  expect(second, 'thiếu request trang sau').toBeTruthy()
+  const firstURL = new URL(first!.url)
+  const secondURL = new URL(second!.url)
+  expect(firstURL.searchParams.get('limit')).toBe('500')
+  expect(firstURL.searchParams.has('cursor')).toBe(false)
+  expect(secondURL.searchParams.get('limit')).toBe('500')
+  expect(secondURL.searchParams.get('cursor')).toBe(first!.body.nextCursor)
+
+  const firstItems = first!.body.items as JsonObject[]
+  const secondItems = second!.body.items as JsonObject[]
+  expect(firstItems).toHaveLength(500)
+  expect(secondItems).toHaveLength(4)
+  expect(second!.body.nextCursor ?? null).toBeNull()
+  const allItems = [...firstItems, ...secondItems]
+  const keys = new Set(allItems.map((item) =>
+    `${String(item.category)}\u0000${String(item.deviceId ?? '')}\u0000${String(item.pointId)}`))
+  expect(keys.size).toBe(504)
+
+  // `secondItems[0]` nằm đúng vị trí 501 của snapshot đã sắp xếp phía server.
+  // Tìm và chọn nó trên UI chứng minh consumer không chỉ đếm đủ rồi bỏ dữ liệu
+  // trang sau; title của chip là verdict compatibility mà server phát.
+  const latePointID = String(secondItems[0].pointId)
+  await page.getByRole('searchbox', { name: /Tìm biến hoặc Point|Search variable or Point/i }).fill(latePointID)
+  const latePoint = page.getByTestId('mapping-point-list').getByRole('button', {
+    name: new RegExp(`\\b${latePointID}\\b`)
+  })
+  await expect(latePoint).toBeVisible()
+  await latePoint.click()
+  await expect(latePoint).toHaveAttribute('aria-pressed', 'true')
+  await expect(latePoint.locator('[title]').first()).toHaveAttribute('title', /AV\/BV\/MSV/)
+
+  expect(consoleErrors).toEqual([])
+  expect(failedRequests).toEqual([])
+  expect(serverErrors).toEqual([])
+})
+
 test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến invalid thành 0', async ({ page, request }) => {
   test.setTimeout(120_000)
   const token = await loginAPI(request)

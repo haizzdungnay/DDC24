@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REV-PIO-3SRC-001` |
-| Phiên bản | 2.3 |
+| Phiên bản | 2.4 |
 | Ngày | 2026-08-31 |
 | Trạng thái | **APPROVED b2.0 WITH 3 ACCEPTANCE CRITERIA** (chủ sở hữu, 2026-08-31) — kiến trúc `LOCAL/VP/MB_RTU → Canonical Point Catalog → Binding → Program Variable` được chấp thuận, không redesign nền; thứ tự ưu tiên b2.0 được chấp thuận. `AC-PIO-ID-01/02/03` đã ghi vào `ISS-PIO-31` (§8.1.1) và V&V vào `ISS-PIO-36` (§8.2) ⇒ **đã tạo 36 issue trên repo** (#375–#410, nhãn `point-io`) — bảng truy vết + phân công ở §8.10. **Cấm code `ISS-PIO-01/02` trước khi `ISS-PIO-31` đóng** kèm test chứng minh rename / add / disable point / disable device / reboot đều không làm binding đổi nghĩa. Ba quyết định Owner đã chốt ở §9 |
 | Baseline | `main` @ `dc1f740` (ADR-054, PR #372) |
@@ -817,6 +817,26 @@ disable-device và quy ước base index đều vào đây thay vì mở issue r
 | 7 | Physical config apply → **read-back verify**; apply lỗi → giữ config hợp lệ trước đó | F-PIO-013 |
 | 8 | Điểm Modbus writable: ghi → xác nhận → giá trị đúng ở thiết bị | F-PIO-022 |
 
+**Bằng chứng kịch bản 3 — ĐẠT trên HOST (2026-09-06, `ISS-PGM03-08` #563):**
+
+- `apps/web-api/internal/app/pio36_end_to_end_test.go` dựng cấu hình hợp lệ
+  **744 mục** (24 LOCAL + 464 VP + 256 EXT), đọc qua adapter production và đi
+  hết cursor; trang cuối là trang duy nhất không còn `nextCursor`.
+- `apps/web-ui/src/features/programming/api/useProgrammingPointCatalog.test.tsx`
+  khóa consumer ở `limit=500`: đúng hai request nhận đủ 744 khóa canonical,
+  khử overlap theo `(category, deviceId, pointId)`, giữ partial khi trang sau
+  lỗi, retry đúng cursor và loại response khác generation.
+- `MappingWorkbench.test.tsx` chứng minh Binding tới mục 501 không bị gắn
+  `POINT_UNAVAILABLE` giữa hai trang, action vẫn khóa khi incomplete và mục đó
+  tìm/chọn được sau trang cuối.
+- `e2e/programming-real.spec.ts` chạy Chrome qua backend, Core và iobus
+  production với fixture no-board **504 mục**; UI phát đúng `500 + 4`, cursor
+  request hai khớp byte-for-byte với response một, chọn được mục vị trí 501 và
+  không có Console error, request fail hay HTTP 5xx.
+
+Đây là bằng chứng HOST/no-board; không thay thế target, I/O vật lý, HIL hoặc
+thẩm quyền `RELEASE_READY` cho các kịch bản khác.
+
 ### 8.3 Đợt 2 — An toàn cấu hình và chính sách trạng thái output
 
 | Issue | Tiêu đề | Finding | Ưu tiên | Ước lượng |
@@ -1065,10 +1085,12 @@ Gộp vào `ISS-PIO-09` (đợt 4) như một mục nhãn, không mở issue ri�
 
 **Không dựng lại C++ trong phiên này** — không có số `ctest` nào được dẫn trong tài liệu này.
 
-Điều đáng chú ý: **332 test đều xanh trong khi 7 finding Cao đang tồn tại**. Không bộ test
-nào hiện có phủ được đường "tạo VP trên giao diện rồi map vào chương trình", "catalog vượt 500
-mục", "điểm quality `unknown` hiển thị ra sao", hay "tắt một thiết bị Modbus rồi binding còn
-trỏ đúng thanh ghi không".
+Điều đáng chú ý tại baseline review 2026-08-31: **332 test đều xanh trong khi 7 finding Cao
+đang tồn tại**. Khi đó chưa bộ test nào phủ được đường "tạo VP trên giao diện rồi map vào
+chương trình", "catalog vượt 500 mục", "điểm quality `unknown` hiển thị ra sao", hay "tắt
+một thiết bị Modbus rồi binding còn trỏ đúng thanh ghi không". Từ bản b2.4, riêng kịch bản
+Catalog vượt 500 đã có bằng chứng consumer UI xuyên tầng ghi tại §8.2; các kịch bản còn lại
+vẫn phải giữ đúng thẩm quyền bằng chứng riêng.
 
 Đây chính là lý do chủ sở hữu yêu cầu `ISS-PIO-36` (**Point/I/O E2E V&V Gate**) và đặt nó ở
 **Đợt 1** thay vì cuối kế hoạch: một bộ test xanh không phủ lớp Point thì "xanh" không chứng
@@ -1125,6 +1147,7 @@ seam mà **chưa từng chạy với dữ liệu thật lần nào**. Thứ tự
 | b2.2 | 2026-08-31 | **Đã tạo 36 issue trên repo** (#375–#410, nhãn `point-io` + `priority:*`) theo đúng uỷ quyền của chủ sở hữu ở b2.1. Bảng truy vết `ISS-PIO-NN → #số` ở §8.10, kèm đường găng P0 với số issue thật. Cross-reference giữa các issue phụ thuộc đã trỏ bằng số thật (#375 chặn #377/#378/#379; bằng chứng đóng ở #382). Không đổi nội dung finding hay ước lượng. |
 
 | b2.3 | 2026-08-31 | **Phân công theo chỉ đạo chủ sở hữu**: 33 issue có phạm vi FE hoặc BE gán cho `@haizzdungnay` (Dinh Tuan Duong). Ba issue không gán vì ngoài FE/BE — #384 (`ISS-PIO-34`, ma trận trạng thái output: quyết định sản phẩm + `apps/core` C++), #388 (`ISS-PIO-11`, `apps/iobus` + hợp đồng SHM, đổi ABI), #410 (`ISS-PIO-30`, chỉ ghi hồ sơ). Bảng §8.10 đổi cột *Ghi chú* thành *Người thực hiện*. |
+| b2.4 | 2026-09-06 | Bổ sung bằng chứng UI cho kịch bản 3 của `ISS-PIO-36`: hook PGM-03 rút cạn 744 mục trong unit test, component giữ Binding mục 501 fail-closed giữa trang, và Chrome real-backend đi đúng hai request cho fixture no-board 504 mục. Ghi rõ ranh giới HOST/no-board, không nâng thành target/HIL hay `RELEASE_READY`. |
 
 ### 12.1 Điều review này đã sai ở b1.0
 

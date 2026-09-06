@@ -21,6 +21,8 @@ PROGRAMMING_SOCK="/tmp/mkddc-programming-v1${MKDDC_DEMO_SUFFIX:-}.sock"
 PROGRAMMING_STATE="${MKDDC_PROGRAMMING_STATE_DIR:-/tmp/mkddc-local-ddc24/state/programming}"
 PTY_A="/tmp/mkddc-iop-a${MKDDC_DEMO_SUFFIX:-}"
 PTY_B="/tmp/mkddc-iop-b${MKDDC_DEMO_SUFFIX:-}"
+FIELDBUS_CONFIG="${MKDDC_DEMO_FIELDBUS_CONFIG:-}"
+FIELDBUS_SOCK="${MKDDC_DEMO_FIELDBUS_SOCK:-}"
 LOGDIR="$(pwd)/logs/demo"   # log trong codebase (logs/ gitignored) cho dễ đọc
 IOBUS=$BUILD/iobus/mkddc-iobus
 CORE=$BUILD/core/mkddc-core
@@ -38,6 +40,9 @@ cmd_stop() {
     pkill -f "$FAKE --uart $PTY_B" 2>/dev/null
     pkill -f "PTY.*link=$PTY_A" 2>/dev/null
     rm -f /dev/shm/mkddc_io_shm /dev/shm/mkddc_plc_shm "$SOCK" "$PROGRAMMING_SOCK"
+    if [ -n "$FIELDBUS_SOCK" ]; then
+        rm -f "$FIELDBUS_SOCK"
+    fi
     echo "đã dừng + dọn sạch"
 }
 
@@ -78,6 +83,9 @@ start) ;;
 esac
 
 [ -x "$IOBUS" ] || die "chưa build: platform/packaging/build-release.sh"
+if [ -n "$FIELDBUS_CONFIG" ] && [ -z "$FIELDBUS_SOCK" ]; then
+    die "MKDDC_DEMO_FIELDBUS_CONFIG cần MKDDC_DEMO_FIELDBUS_SOCK đi kèm"
+fi
 mkdir -p "$LOGDIR"
 cmd_stop > /dev/null 2>&1
 sleep 0.5
@@ -123,13 +131,21 @@ fake_pid=$!
 wait_for "fake_mcu còn sống" 10 "$LOGDIR/fake_mcu.log" kill -0 "$fake_pid"
 
 echo "[3/4] mkddc-iobus poll 500Hz đầu A -> ghi /dev/shm/mkddc_io_shm"
-nohup "$IOBUS" --uart "$PTY_A" --config tools/demo/iobus_demo.conf --log-level debug > "$LOGDIR/iobus.log" 2>&1 &
+iobus_fieldbus_args=()
+core_fieldbus_args=()
+if [ -n "$FIELDBUS_CONFIG" ]; then
+    iobus_fieldbus_args=(--fieldbus-config "$FIELDBUS_CONFIG" --fieldbus-sock "$FIELDBUS_SOCK")
+    core_fieldbus_args=(--fieldbus-sock "$FIELDBUS_SOCK")
+fi
+nohup "$IOBUS" --uart "$PTY_A" --config tools/demo/iobus_demo.conf --log-level debug \
+    "${iobus_fieldbus_args[@]}" > "$LOGDIR/iobus.log" 2>&1 &
 wait_for "/dev/shm/mkddc_io_shm xuất hiện" 30 "$LOGDIR/iobus.log" test -e /dev/shm/mkddc_io_shm
 
 echo "[4/4] mkddc-core scan 1s, IPC tại $SOCK"
 mkdir -p "$PROGRAMMING_STATE"
 nohup env PROGRAMMING_STATE_DIR="$PROGRAMMING_STATE" PROGRAMMING_TARGET_ID=controller-local \
-    "$CORE" --sock "$SOCK" --programming-sock "$PROGRAMMING_SOCK" --programming-runtime > "$LOGDIR/core.log" 2>&1 &
+    "$CORE" --sock "$SOCK" --programming-sock "$PROGRAMMING_SOCK" --programming-runtime \
+    "${core_fieldbus_args[@]}" > "$LOGDIR/core.log" 2>&1 &
 wait_for "socket IPC $SOCK xuất hiện" 30 "$LOGDIR/core.log" test -S "$SOCK"
 
 echo
