@@ -21,9 +21,18 @@
   owner nội bộ khỏi view model và fail-closed toàn collection nếu có phần tử
   sai shape thay vì cast mù hoặc trình bày read-back một phần.
 - Kiểm chứng HOST: Go `vet` và toàn module test PASS; test migration/service
-  khóa tính tất định, LOCAL/VP/MB_RTU, flat legacy, malformed và atomic ETag;
-  Vitest adapter **7/7 PASS**. FE full test/lint/build được ghi sau khi chạy
-  gate cuối; không có deploy target, HIL hoặc bằng chứng release.
+  khóa tính tất định, LOCAL/VP/MB_RTU, flat legacy, malformed, atomic ETag và
+  quyết định Check trước/sau không đổi. Bộ đọc tài nguyên FE nay coalesce lượt
+  đọc khi Revision đổi giữa một request đang bay, bỏ response cũ và đọc lại
+  đúng định danh mới thay vì kẹt ở trạng thái thiếu nguồn. Vitest adapter
+  **7/7 PASS**; FE full test **233 tệp / 2.952 test**, lint và production build
+  PASS, chunk Programming **139,79 KiB gzip**. Playwright real-backend **11 PASS / 1 SKIP
+  TARGET**; `GATE562-A` migrate cùng Draft có LOCAL+MB_RTU, reload vẫn đủ 2
+  Binding và Check fail-closed `PIO-SLOT-003` cho đúng `PUMP_CMD` chưa có slave
+  trên lane HOST. Lane real-backend phục vụ bản build qua Vite preview để reload
+  không mất dynamic chunk giữa phép đo; test LIVE chờ đúng lượt đọc Active của
+  workbench trước khi mở Tìm kiếm để full Vitest không còn race.
+  Không có deploy target, HIL hoặc bằng chứng release.
 
 ### Fixed — `ISS-PGM03-01` Validator binding phía máy chủ trước khi lưu (#554, 2026-09-06)
 
