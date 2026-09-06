@@ -3,14 +3,14 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `IFSPEC-PROG-001` |
-| Phiên bản | 2.1-candidate |
-| Trạng thái | **Baseline 2.0 M3 AS-BUILT; PGM-02 v2.2 CONTRACT OVERLAY TARGET CANDIDATE — NO EXECUTION AUTHORITY** |
-| Ngày | 2026-08-24 |
+| Phiên bản | 2.2 |
+| Trạng thái | **Baseline 2.0 M3 AS-BUILT + ISS-PGM03-01 AS-BUILT; PGM-02 v2.2 CONTRACT OVERLAY TARGET CANDIDATE — NO EXECUTION AUTHORITY** |
+| Ngày | 2026-09-06 |
 | Chủ quản | Backend Lead + Runtime Architect |
 | Người review | FE Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | System Architect + Product Owner |
 | Nguồn thẩm quyền | Baseline: `SRS-PROG-001`, `ARCH-PROG-001`, `DM-PROG-001`, `PROG-OD-001`; Candidate: `CR-PROG-PGM02-V22-001`, `DDD-SW-PGM02-WORKSPACE-001`, `ADR-053` Proposed |
-| Phạm vi phiên bản | Baseline: 33 OpenAPI operation, v1.28.0, Programming IPC v1 + canonical CBOR, SHM magic v6; Candidate: R1 EDIT → R2 LIVE → R3 SIMULATE |
+| Phạm vi phiên bản | As-Built: 44 OpenAPI operation, v1.38.0, gồm preview binding typed; Programming IPC v1 + canonical CBOR, SHM magic v6; Candidate: R1 EDIT → R2 LIVE → R3 SIMULATE |
 | Liên quan | `DM-PROG-001`, `ARCH-PROG-001`, `SRS-PROG-001`, `DDD-SW-PGM02-WORKSPACE-001` |
 
 ## 0. Đọc nhanh
@@ -19,8 +19,8 @@
 |---|---|
 | 1. File này dùng để quyết định hoặc triển khai việc gì? | Là **hợp đồng** giữa các bên: REST và WebSocket giữa trình duyệt và BE, IPC giữa BE và Core. Định nghĩa đường dẫn, payload, mã lỗi, timeout, retry, idempotency và thứ tự sự kiện. Đây cũng là **nguồn chuẩn duy nhất của mã lỗi** `PRG-ERR-*`. |
 | 2. Ai phải đọc file này? | FE và BE bắt buộc đọc cùng nhau — hai bên phải review **một** hợp đồng, không phải hai bản mô tả. Core đọc §8 và §12 (hợp đồng BE↔Core). Security đọc §15. QA dựng contract test từ §14 và §18. |
-| 3. Hệ thống hiện tại đang có gì? | OpenAPI `1.28.0` và generated FE client có 33 operation, gồm Library search/upsert/delete/deprecate, Program intent/list, Runtime Signals và recovery reset. BE↔Core dùng frame bounded/canonical CBOR; Web đọc SHM qua mmap+seqlock, không dùng `os.ReadFile`. Source Plan 59 chưa có evidence target mới. |
-| 4. Thiết kế mới thay đổi điều gì? | Baseline 2.0: Draft v2, whole-set atomic lifecycle. PGM-02 Candidate: R1 typed Draft/signature/reference/refactor/diagnostic; R2 coherent LIVE tuple; R3 Simulation session qua worker riêng cách ly và admin-only mutation. |
+| 3. Hệ thống hiện tại đang có gì? | OpenAPI `1.38.0` và generated FE client có 44 operation, gồm preview binding typed của `ISS-PGM03-01`. BE↔Core dùng frame bounded/canonical CBOR; Web đọc SHM qua mmap+seqlock, không dùng `os.ReadFile`. Source Plan 59 chưa có evidence target mới. |
+| 4. Thiết kế mới thay đổi điều gì? | As-Built `ISS-PGM03-01`: preview, cửa ghi và Check dùng chung validator Variable↔Point. PGM-02 Candidate: R1 typed Draft/signature/reference/refactor/diagnostic; R2 coherent LIVE tuple; R3 Simulation session qua worker riêng cách ly và admin-only mutation. |
 | 5. Team phải sửa module/contract nào? | `contracts/openapi/openapi.yaml`, generated FE client, BE application/store/HTTP/compiler packager, Core Programming IPC/runtime coordinator, `contracts/shm/mkddc_shm.h` và Web `shm_reader.go`. §3.2/§8/§12 khóa giới hạn và authority. |
 | 6. Điều gì còn bị chặn? | Baseline còn thiếu exact merged/deployed evidence, soak/VVP/HIL. PGM-02 Candidate còn chờ Owner + System Architect exact revision/hash pin; OpenAPI/IPC production chưa được phép đổi; R1/R2/R3 đều `NO-GO`. |
 | 7. Test hoặc bằng chứng nào chứng minh hoàn tất? | Contract/router/generated-client/CBOR/SHM tests chứng minh host; target phải lưu exact OpenAPI/artifact/service checksum, API/IPC/SHM read-back và raw soak. Evidence 2026-08-13 không chứng minh binary Plan 59 mới. |
@@ -78,6 +78,7 @@ buộc hai tập mã bằng nhau; §14 ánh xạ detail nội bộ ra mã công 
 | `POST /projects` | admin | **As-Built 204** — tạo Project + Draft đầu tiên |
 | `GET /projects/{projectId}` | viewer | **As-Built 204/507** — metadata, ETag, `draftRevisionId` ổn định và `baseRevisionId` hiện hành để mutation/seal kế tiếp |
 | `PATCH /projects/{projectId}/draft` | admin | **As-Built 204** — mutation batch canonical, If-Match bắt buộc |
+| `POST /projects/{projectId}/draft/bindings/preview` | engineer, admin | **As-Built ISS-PGM03-01** — dry run typed trên đúng `baseRevisionId` + `If-Match`; trả `ALLOW/WARN/BLOCK`, không ghi |
 | `POST /projects/{projectId}/draft/revisions` | admin | **As-Built 204** — đóng Draft thành immutable Revision |
 | `GET /revisions/{revisionId}` | viewer | **As-Built 204** — snapshot metadata; source theo quyền/policy |
 | `GET /revisions/{from}/changes/{to}` | viewer | **As-Built 206** — structured change manifest deterministic do BE tính |
@@ -212,6 +213,25 @@ không đổi gì. Partial apply bị cấm.
 
 Client không được suy `baseRevisionId` từ `draftRevisionId`. Đây là điều kiện
 để reload rồi Check/save lần hai không bị conflict giả dù ETag đã hiện hành.
+
+### 4.1 Preview và cửa ghi binding server-authoritative
+
+`POST .../draft/bindings/preview` nhận `schemaVersion=1.0`, `baseRevisionId` và
+candidate gồm `bindingId`, `variableId`, canonical Point
+`(category,deviceId?,pointId)`, `direction`, `dataType`, `unit?`, `writable` và
+`qualityPolicy`. Server chụp Point Catalog một lần, dùng cùng validator tại
+preview, `upsertBinding` và Check. Mỗi issue có public `code`, `detailCode` ổn
+định, `severity`, `field` và identity/owner context; `WARNING` cho phép lưu nhưng
+giữ verdict `WARN`, `ERROR` trả `BLOCK` và mutation không tăng ETag.
+
+Binding v2 lịch sử thiếu typed pair vẫn được đọc và kiểm bằng đường tương thích.
+Một request mới thiếu typed field bị từ chối `PRG-ERR-REQ-001` với
+`detailCode=PGM-MAP-BINDING-002`; không dùng hình dạng cũ để đi vòng preview.
+Catalog thiếu/lỗi trả `PRG-ERR-UNAVAILABLE-001`, giữ nguyên Draft.
+FE chỉ nhận verdict khi `schemaVersion`, `projectId`, `draftRevisionId`,
+`baseRevisionId` và `etag` khớp chính request/ảnh Draft đang mở. Context thiếu,
+khác ETag, public code không khớp `detailCode` hoặc reason code chưa biết đều
+khóa Assign; FE không tự tính lại type/unit/writable/quality để thay server.
 
 ## 5. Check và diagnostic
 
@@ -397,7 +417,7 @@ test giữa Go và C++.
 | `PRG-ERR-PROGRAM-LIMIT-001` | vượt trần capacity cấp package (Program, FB instance) | 422, nêu `limit` từ profile |
 | `PRG-ERR-SIGNAL-PUBLISHER-001` | Published Signal trùng publisher hoặc consumer trỏ signal không có publisher | 422, không mutation runtime |
 | `PRG-ERR-SIGNAL-FRESHNESS-001` | `freshnessMs` ngoài khoảng hoặc không tương thích chu kỳ producer | 422, không mutation runtime |
-| `PRG-ERR-OUTPUT-OWNER-001` | một binding output có nhiều hơn một Program owner | 422, Check từ chối trước Commission |
+| `PRG-ERR-OUTPUT-OWNER-001` | một binding output có nhiều hơn một Program owner canonical | 422 ở preview/cửa ghi/Check; Draft không đổi |
 | `PRG-ERR-ENABLE-NOT-COMMISSIONED-001` | Enable Program chưa Commission hoặc không có trong package Active | 409, intent không đổi |
 | `PRG-ERR-PROGRAM-STATE-001` | Enable/Disable sai trạng thái hiện tại hoặc đã đủ trần 16 Program Enabled | 409, intent không đổi |
 | `PRG-ERR-PID-REVIEW-001` | package dùng PID mà thiếu approval token Controls/Safety | 422, chặn Commission |
@@ -462,6 +482,10 @@ Hai khoảng hở của gate được đóng cùng task:
 
 - Mọi schema có version; unknown major bị reject, unknown optional field theo
   policy minor không phá vỡ consumer.
+- FE mới gặp BE cũ (`404`/thiếu schema preview) phải khóa Assign; FE cũ hiện chỉ
+  đọc Mapping nên bỏ qua endpoint additive. Sau rollback BE, FE không được suy
+  verdict từ catalog. Dữ liệu binding legacy vẫn đọc được, nhưng lần rebind kế
+  tiếp phải gửi contract typed v1.0.
 - OpenAPI, Go handler/model, TS generated types và contract tests phải cùng commit.
 - Internal protocol/schema và core/BE negative tests phải cùng commit.
 - Đổi artifact/RETAIN/SHM/IOP contract cần compatibility, deploy order và rollback
@@ -480,6 +504,7 @@ Core đã đổi trạng thái.
 | `POST /projects` | `201` | key bắt buộc, TTL 24 h | 3 s | một transaction tạo Project, Draft và audit |
 | `GET /projects/{id}` | `200` + ETag | không | 2 s | read-only; kiểm UUID/checksum; trả cả Draft identity và Revision nền; archived hoặc không có trả 404 |
 | `PATCH .../draft` | `200` + ETag mới | key + `If-Match` bắt buộc | 5 s | all-or-nothing; không tạo Revision/Artifact |
+| `POST .../draft/bindings/preview` | `200` + cùng ETag | `If-Match` + `baseRevisionId`; không idempotency vì read-only | 2 s | zero write; stale `409`, catalog lỗi `503`, phản hồi thiếu fail-closed |
 | `POST .../revisions` | `201` | key + Draft ETag | 5 s | đóng snapshot immutable; Draft không đổi nếu fail |
 | `GET /revisions/{id}` | `200` | không | 2 s | read-only; manifest/object checksum phải khớp trước response |
 | `GET /revisions/{from}/changes/{to}` | `200` | không | 2 s | hai Revision cùng Project; change/impactRef sort + hash ổn định; Core impact chưa biết là `UNAVAILABLE` |
@@ -772,6 +797,7 @@ enum meaning, error class hoặc ABI là breaking change dù endpoint path giữ
 
 | Phiên bản | Ngày | Nội dung | Tác giả |
 |---|---|---|---|
+| 2.2 | 2026-09-06 | Đồng bộ As-Built `ISS-PGM03-01`: OpenAPI v1.38.0/44 operation, preview binding typed khóa bằng ETag/base revision, validator dùng chung ở preview/upsert/Check, detailCode công khai qua allowlist và compatibility fail-closed. Chỉ có bằng chứng HOST; không nâng HIL/release. | BE + FE + QA |
 | 2.1-candidate | 2026-08-24 | Thêm contract overlay PGM-02 cho typed EDIT, coherent LIVE và Simulation worker cách ly; bổ sung `IF-T-016..018`; giữ OpenAPI v1.28.0 Active không đổi và R1/R2/R3 `NO-GO` chờ exact pin. | System Architecture + Programming Team |
 | 0.1 | 2026-08-09 | Draft REST/event/internal contract | System Engineering |
 | 0.2 | 2026-08-09 | Bổ sung field, timeout, idempotency, state, error map, deploy/rollback và test để đạt M3 | System Engineering |
