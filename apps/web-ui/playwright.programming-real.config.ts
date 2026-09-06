@@ -69,7 +69,8 @@ export default defineConfig({
       timeout: 240_000,
       env: {
         PROGRAMMING_REAL_BACKEND_PORT: '4181',
-        PROGRAMMING_REAL_SEED_LEGACY_V1: '1'
+        PROGRAMMING_REAL_SEED_LEGACY_V1: '1',
+        PROGRAMMING_REAL_FULL_CATALOG: '1'
       }
     },
     {

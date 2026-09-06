@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PGM03-08` PGM-03 đọc hết Point Catalog phân trang trước khi cho Map (#563, 2026-09-06)
+
+- Hook Point Catalog gửi trang đầu với `limit=500` và không có cursor, tự rút
+  cạn tuần tự các trang sau bằng đúng `nextCursor`; chỉ công bố `complete` và
+  `lastSuccessAt` khi nhận trang cuối. Các mục được ghép theo canonical identity
+  `(category, deviceId, pointId)`, không theo tên, vị trí hoặc `extIndex`.
+- Mỗi refresh/Project/route/tab dùng generation riêng và abort request cũ;
+  response trễ không lọt vào snapshot mới. Trang sau lỗi giữ partial ở chế độ
+  inspect-only, cho retry đúng cursor; cursor rỗng/lặp/không tiến triển dừng
+  fail-closed và chỉ cho đọc lại từ trang đầu.
+- Mapping phân biệt rõ `N+ · đang tải/chưa đủ` với `N · đã đủ`, giữ action khóa
+  khi incomplete và không gắn `POINT_UNAVAILABLE` giả cho Binding có Point chưa
+  xuất hiện ở trang đang tải.
+- Lane real-backend dựng fixture hợp lệ 504 mục qua Core/iobus production và
+  no-board, kiểm Chrome phát đúng hai request `500 + 4`, chọn được mục thứ 501,
+  không Console error/request fail/HTTP 5xx. Unit hook dùng fixture 744 mục;
+  test component phủ khóa giữa trang, partial/retry, overlap, cursor lỗi,
+  generation stale và unmount. Kiểm chứng HOST: C++ đủ MODBUS/BACNET/HMI
+  **1.479/1.479 PASS**, 1 phép môi trường skip; Go `vet` + toàn module test
+  `-count=1` PASS; Vitest **234 tệp / 2.961 test**, lint và production build
+  PASS, chunk Programming **141,01 KiB gzip**. Playwright real-backend trên
+  Google Chrome **12 PASS / 1 SKIP TARGET**; GATE369 chạy riêng qua wrapper đúng
+  thẩm quyền **PASS**. Docs ISO harness, shell syntax và `git diff --check`
+  PASS. Bằng chứng chỉ có thẩm quyền HOST/no-board, không phải target, I/O vật
+  lý, HIL hay `RELEASE_READY`.
+
 ### Fixed — `ISS-PGM03-07` Giữ nguyên Binding khi nâng Draft v1→v2 (#562, 2026-09-06)
 
 - Migration giữ nguyên `bindingId`, `variableId`, canonical Point

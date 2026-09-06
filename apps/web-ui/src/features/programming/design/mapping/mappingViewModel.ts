@@ -234,6 +234,25 @@ export function buildMappingVariableRows(document: ProgrammingDraftDocument, cat
         compatibility: { assignable: false, unitWarning: false, reasons: [] },
       }
     }
+    if (!point && (truth.status !== 'ready' || truth.complete === false)) {
+      /* Catalog chưa đủ thì việc chưa thấy Point chỉ có nghĩa là "chưa đọc tới
+       * trang chứa nó". Gắn nhãn POINT_UNAVAILABLE ở đây tạo cảnh báo mất Point
+       * giả cho mọi Binding trỏ sang trang sau — đúng lỗi ISS-PGM03-08. Binding
+       * vẫn tồn tại; chỉ metadata/value của Point bị giữ STALE tới khi snapshot
+       * đầy đủ hoặc một lần đọc đầy đủ thật sự chứng minh Point đã mất. */
+      return {
+        ...variable,
+        id: variable.variableId,
+        bindingId: binding.bindingId,
+        point: binding.point,
+        liveValue: null,
+        liveQuality: 'STALE',
+        freshness: 'STALE',
+        bindingStatus: 'MAPPED',
+        eligibility: truth.status === 'error' ? 'CATALOG_STALE' : 'PAGING_INCOMPLETE',
+        compatibility: { assignable: false, unitWarning: false, reasons: [codeReason('CATALOG_UNVERIFIED')] },
+      }
+    }
     if (!point) {
       return {
         ...variable,

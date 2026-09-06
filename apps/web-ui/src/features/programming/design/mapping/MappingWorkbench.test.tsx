@@ -13,6 +13,7 @@ const catalog = vi.hoisted(() => ({
   data: null as { items: ProgrammingPointCatalogEntry[]; nextCursor?: string | null } | null,
   error: null as string | null,
   lastSuccessAt: 1_777_000_000_000 as number | null,
+  complete: undefined as boolean | undefined,
 }))
 
 vi.mock('../../../auth', async (importOriginal) => {
@@ -54,6 +55,7 @@ beforeEach(() => {
   catalog.status = 'ready'
   catalog.error = null
   catalog.lastSuccessAt = 1_777_000_000_000
+  catalog.complete = undefined
   catalog.data = {
     items: [
       { category: 'LOCAL', pointId: 'UI-01', name: 'Supply air temperature', dataType: 'REAL', unit: 'degC', direction: 'READ', writable: false, quality: 'GOOD', value: 21.4, observedAt: '2026-08-24T09:00:00Z' },
@@ -123,7 +125,7 @@ describe('Mapping Workbench Phase 1A — read-only truth state', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
 
     expect(screen.getByRole('alert')).toHaveTextContent('Không đọc được Point Catalog.')
-    expect(screen.getByRole('alert')).toHaveTextContent('Lần đọc thành công gần nhất')
+    expect(screen.getByRole('alert')).toHaveTextContent('Lần đọc đầy đủ gần nhất')
     expect(screen.getAllByText('21.4').length).toBeGreaterThan(0)
     expect(screen.getAllByText('STALE').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: /^Ánh xạ / }).every((button) => button.hasAttribute('disabled'))).toBe(true)
@@ -215,7 +217,7 @@ describe('ISS-PIO-04 — catalog chưa đủ thì bảng phải nói ra', () => 
 
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
 
-    expect(screen.getByText('Catalog 1+')).toBeVisible()
+    expect(screen.getByText('Catalog 1+ · đang tải/chưa đủ')).toBeVisible()
     expect(screen.getByText(/Catalog Point chưa tải đủ/)).toBeVisible()
   })
 
@@ -233,8 +235,57 @@ describe('ISS-PIO-04 — catalog chưa đủ thì bảng phải nói ra', () => 
 
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
 
-    expect(screen.getByText('Catalog 1')).toBeVisible()
+    expect(screen.getByText('Catalog 1 · đã đủ')).toBeVisible()
     expect(screen.queryByText(/Catalog Point chưa tải đủ/)).not.toBeInTheDocument()
+  })
+})
+
+describe('ISS-PGM03-08 — Point ở trang sau vẫn giữ đúng Binding', () => {
+  it('không báo POINT_UNAVAILABLE giữa các trang; sau trang cuối tìm và chọn được Point thứ 501', () => {
+    const document = documentFixture()
+    document.bindings = [{
+      ...document.bindings[0],
+      point: { category: 'VP', pointId: 'VP501' },
+    }]
+    catalog.status = 'loading'
+    catalog.complete = false
+    catalog.lastSuccessAt = null
+    catalog.data = {
+      items: [
+        { category: 'VP', pointId: 'VP001', name: 'Point trang đầu', dataType: 'REAL', unit: 'degC',
+          direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: 20,
+          mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
+      ],
+      nextCursor: 'cursor-500',
+    }
+
+    const view = render(<I18nProvider><MappingTab document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
+
+    expect(screen.queryByText('Point không còn')).not.toBeInTheDocument()
+    expect(screen.getByText('PAGING_INCOMPLETE')).toBeVisible()
+    expect(screen.getByText('Catalog 1+ · đang tải/chưa đủ')).toBeVisible()
+    expect(screen.getAllByRole('button', { name: /^Ánh xạ / }).every((button) => button.hasAttribute('disabled'))).toBe(true)
+
+    catalog.status = 'ready'
+    catalog.complete = true
+    catalog.lastSuccessAt = 1_777_000_000_001
+    catalog.data = {
+      items: [
+        ...(catalog.data?.items ?? []),
+        { category: 'VP', pointId: 'VP501', name: 'Point thứ 501', dataType: 'REAL', unit: 'degC',
+          direction: 'READ_WRITE', writable: true, quality: 'GOOD', value: 25,
+          mapping: { input: { status: 'SUPPORTED', reasons: [] }, output: { status: 'SUPPORTED', reasons: [] } } },
+      ],
+      nextCursor: null,
+    }
+    view.rerender(<I18nProvider><MappingTab document={document} saving={false} onSave={vi.fn()} /></I18nProvider>)
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Tìm biến hoặc Point' }), { target: { value: 'Point thứ 501' } })
+    const latePoint = screen.getByRole('button', { name: /VP501 Point thứ 501/ })
+    fireEvent.click(latePoint)
+    expect(latePoint).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByText('Point không còn')).not.toBeInTheDocument()
+    expect(screen.getByText('Catalog 2 · đã đủ')).toBeVisible()
   })
 })
 
