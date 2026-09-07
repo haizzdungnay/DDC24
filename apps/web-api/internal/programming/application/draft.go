@@ -26,6 +26,12 @@ func applyDraftOperations(content []byte, operations []json.RawMessage) ([]byte,
 	if err := migrateDraftToV2(document); err != nil {
 		return nil, err
 	}
+	// Một số Draft v2 đã được ghi trước AC-PIO-ID-01 còn giữ `extIndex` trong
+	// Binding bền. Validator hiện hành từ chối đúng field runtime đó, nhưng nếu
+	// không làm sạch snapshot CŨ trước vòng operation thì mọi mutation không liên
+	// quan (kể cả tạo POU FBD) cũng bị chặn và người dùng không có đường tự sửa.
+	// Chỉ sửa bản đang đọc; Store vẫn ghi nguyên tử sau khi toàn batch hợp lệ.
+	removePersistedBindingRuntimeHandlesV2(document)
 	for index, raw := range operations {
 		var header operationHeader
 		if err := json.Unmarshal(raw, &header); err != nil || header.Op == "" {

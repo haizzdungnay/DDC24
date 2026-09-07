@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Fixed — Tạo Program FBD trên Draft cũ có Binding chứa runtime handle (2026-09-07)
+
+- Sửa lỗi `PATCH /draft` trả `400 PRG-ERR-REQ-001` khi tạo Program FBD trên
+  Project đã lưu `point.extIndex` trước `AC-PIO-ID-01`: lớp nâng cấp giờ gỡ riêng
+  runtime handle tồn dư trước khi áp operation, giữ nguyên danh tính bền
+  `(category, deviceId, pointId)` và lưu toàn batch nguyên tử.
+- Request Binding mới vẫn bị từ chối nếu cố ghi `extIndex`; Check tiếp tục phân
+  giải slot từ Point Catalog đang chạy. Bổ sung hồi quy tái hiện đúng batch
+  `upsertProgram` + `setTask` và xác nhận FBD được tạo mà Binding không đổi đích.
+- Kiểm chứng HOST/no-board: `go vet ./...` và toàn module Go `-count=1` PASS;
+  package Programming application PASS; Vitest toàn FE **243 tệp / 3.075 test**,
+  hai test suite tạo POU **25/25**, lint, contract check, `build:foxlinx`, bundle
+  Programming **149,69/165 KiB gzip** và docs ISO harness **17/17** đều PASS.
+  Đây chưa phải bằng chứng TARGET, physical HIL hoặc `RELEASE_READY`.
+
 ### Changed — Đồng bộ `main` và triển khai PR #572 lên bo Forlinx (2026-09-07)
 
 - Fast-forward `main` từ `13ad7891` lên merge commit
