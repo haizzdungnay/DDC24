@@ -387,7 +387,12 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const next = current < 0
         ? (action.offset > 0 ? 0 : ports.length - 1)
         : (current + action.offset + ports.length) % ports.length
-      return { ...state, selection: ports[next], announcement: { code: 'port-selected', params: { index: next + 1, total: ports.length } } }
+      return {
+        ...state,
+        selection: ports[next],
+        selectionRevision: state.selectionRevision + 1,
+        announcement: { code: 'port-selected', params: { index: next + 1, total: ports.length } },
+      }
     }
     case 'ADD_NETWORK': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
@@ -779,7 +784,8 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const previous = state.past[state.past.length - 1]
       if (!previous) return reject(state, { code: 'nothing-to-undo' })
       return {
-        ...state, document: previous, selection: null, connectionFromPortId: null,
+        ...state, document: previous, selection: null,
+        selectionRevision: state.selectionRevision + 1, connectionFromPortId: null,
         past: state.past.slice(0, -1), future: [state.document, ...state.future].slice(0, FBD_HISTORY_LIMIT),
         announcement: { code: 'undone' },
       }
@@ -789,7 +795,8 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const [next, ...future] = state.future
       if (!next) return reject(state, { code: 'nothing-to-redo' })
       return {
-        ...state, document: next, selection: null, connectionFromPortId: null,
+        ...state, document: next, selection: null,
+        selectionRevision: state.selectionRevision + 1, connectionFromPortId: null,
         past: [...state.past, state.document].slice(-FBD_HISTORY_LIMIT), future,
         announcement: { code: 'redone' },
       }

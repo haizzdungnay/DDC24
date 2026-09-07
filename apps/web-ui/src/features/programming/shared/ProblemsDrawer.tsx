@@ -35,24 +35,26 @@ function staleCopy(
  * Diagnostic canonical đến từ `GET /checks/{checkId}`; đây chỉ hiển thị lại,
  * không tự tính lỗi. Nhiều lỗi không spam toast — luôn gom vào đây (UX §16.2).
  *
- * `ISS-STED-05` — docstring cũ viết *"dùng chung cho ba tab của PGM-02 và cho
- * PGM-05 (DDD-FE-PROG-001 §2)"* trong khi component này **chưa bao giờ** được
- * mount ở PGM-02: khay Vấn đề của PGM-02 là `ProgrammingWorkbench`
- * (`design/workbench/`), một component khác. Câu sai đó khiến người đọc tin
- * rằng PGM-02 đã có khay lỗi dùng chung, nên không ai đi tìm lý do POU ST
- * không hiện lỗi. Nay ghi đúng chỗ nó thật sự sống, và ghi luôn nơi khay của
- * PGM-02 nằm.
+ * `ISS-STED-05` / `TC-FBD-DIAG-001` — danh sách diagnostic dùng chung cho
+ * PGM-05 và tab Vấn đề của `ProgrammingWorkbench`. Biến thể `embedded` chỉ bỏ
+ * chrome drawer; cùng renderer vẫn giữ severity, mã lỗi, provenance và luật
+ * không biến một diagnostic thiếu anchor thành nút nhảy giả.
  */
 export function ProblemsDrawer({
   diagnostics,
   onSelect,
+  isSelectable,
   emptyState = 'no-problems',
   onEmptyAction,
   openBuffer,
-  onRecheck
+  onRecheck,
+  variant = 'tray',
 }: {
   diagnostics: ProgrammingDiagnostic[]
   onSelect?: (diagnostic: ProgrammingDiagnostic) => void
+  /** Cho phép bề mặt nhúng giữ lỗi không có anchor ở dạng văn bản, thay vì
+   * biến mọi dòng thành nút có vẻ sẽ điều hướng được. */
+  isSelectable?: (diagnostic: ProgrammingDiagnostic) => boolean
   /** Rỗng vì chưa có kết quả Check khác với Check đã chạy nhưng không có lỗi. */
   emptyState?: 'not-checked' | 'no-problems' | 'check-failed' | 'checking' | 'unknown'
   onEmptyAction?: () => void
@@ -63,6 +65,9 @@ export function ProblemsDrawer({
   /** Chạy lại Kiểm tra. `ISS-STED-18` yêu cầu mục STALE phải có đường thoát,
    * không chỉ có nhãn. */
   onRecheck?: () => void
+  /** `embedded` chỉ render danh sách dùng chung bên trong workbench đã sở hữu
+   * collapse/resize/tab; không dựng thêm một drawer lồng drawer. */
+  variant?: 'tray' | 'embedded'
 }) {
   const { pick } = useI18n()
   const hasStale =
@@ -199,13 +204,12 @@ export function ProblemsDrawer({
             : undefined
           const codeText = [diagnostic.code, diagnostic.detailCode].filter(Boolean).join(' · ')
           const messageText = diagnostic.message || programmingErrorCopy(pick, diagnostic.detailCode ?? diagnostic.code)
-          return (
-            <li key={`${diagnostic.code}-${index}`}>
-              <button
-                type="button"
-                className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--c-surface-2)] focus-visible:bg-[var(--c-surface-2)]"
-                onClick={() => onSelect?.(diagnostic)}
-              >
+          /* Mặc định giữ đúng contract lịch sử: mọi diagnostic là một button
+           * kể cả caller chỉ dùng focus/inspection. Bề mặt nhúng phải truyền
+           * `isSelectable` để gỡ button cho lỗi không có anchor. */
+          const selectable = isSelectable?.(diagnostic) ?? true
+          const row = (
+            <>
                 <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
                 <span>
                   <span className="sr-only">{severityLabel}: </span>
@@ -220,13 +224,32 @@ export function ProblemsDrawer({
                   <span className="block font-mono text-xs text-[var(--c-text-dim)]">{codeText}{locationText ? ` · ${locationText}` : ''}</span>
                   <span className="block text-[var(--c-text)]">{messageText}</span>
                 </span>
-              </button>
+            </>
+          )
+          return (
+            <li key={`${diagnostic.code}-${index}`}>
+              {selectable ? (
+                <button
+                  type="button"
+                  className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--c-surface-2)] focus-visible:bg-[var(--c-surface-2)]"
+                  onClick={() => onSelect?.(diagnostic)}
+                >
+                  {row}
+                </button>
+              ) : (
+                <div className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm">
+                  {row}
+                </div>
+              )}
             </li>
           )
         })}
       </ul>
     </div>
   )
+  if (variant === 'embedded') {
+    return <div data-testid="problems-drawer-embedded">{content}</div>
+  }
   return (
     <section className="mt-4 border-t border-[var(--c-line-strong)] bg-[var(--c-surface)] pt-2" aria-label={pick('Khay vấn đề', 'Problems tray')}>
       <div className="flex items-center justify-between">

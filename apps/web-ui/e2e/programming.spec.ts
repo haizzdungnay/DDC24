@@ -1,11 +1,13 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { readFileSync } from 'node:fs'
 import { login } from './helpers/session'
 import { BUNDLE_COMPATIBILITY } from '../src/features/programming/shared/programmingCompatibility'
 import { PROGRAMMING_ENDPOINTS } from '../src/features/programming/api/generated/client'
 import { PGM04_ROLE_MATRIX, assertMatrixDiscriminates, type Pgm04Role } from './helpers/pgm04RoleMatrix'
 import { PGM04_SKIP_LEDGER, readPgm04SkipReasons } from './helpers/pgm04Skips'
 import { IMPACT_GROUP_ORDER } from '../src/features/programming/commission/impactGroups'
+import type { FbdDocument } from '../src/features/programming/fbd/model'
 
 /**
  * TASK-PROG-506/T59-503 — nghiệm thu trình duyệt thật cho sáu workspace Programming
@@ -31,6 +33,10 @@ const TECHNICAL_TIMESTAMP = '2026-09-05T23:07:08Z'
    khiển tủ, và mọi nhãn nguồn phải nói đúng bản nào. */
 const SIM_REVISION_ID = '77777777-7777-4777-8777-777777777777'
 const SIM_SESSION_ID = '88888888-8888-4888-8888-888888888888'
+const GOLDEN_FBD = JSON.parse(readFileSync(
+  new URL('../../../contracts/programming/fbd/golden/ahu_fan_enable.json', import.meta.url),
+  'utf8',
+)) as FbdDocument
 
 interface MockProgram {
   objectId?: string
@@ -66,6 +72,8 @@ interface MockState {
   traceRunning: boolean
   /** `T59-812`: bộ đếm chỉ dùng để chứng minh subscription LIVE đã cleanup. */
   monitorRequests?: number
+  monitorQuality?: 'GOOD' | 'UNCERTAIN' | 'BAD' | 'STALE' | 'OFFLINE' | 'UNKNOWN'
+  monitorFreshness?: 'LIVE' | 'STALE' | 'UNAVAILABLE'
   /**
    * `T59-816`: phiên mô phỏng do thiết bị công bố.
    *
@@ -172,6 +180,26 @@ function draftWithProgram() {
     document: 'PROGRAM AHU_MAIN\nEND_PROGRAM\n',
     executionOrder: 0,
     functionalTags: ['AHU']
+  })
+  draft.task.programOrder = [PROGRAM_ID]
+  return draft
+}
+
+function draftWithFbdProblem() {
+  const draft = initialDraft()
+  const document = structuredClone(GOLDEN_FBD)
+  // Wire đầu vẫn vẽ được nhưng nguồn chạy sau đích: validator phải neo đúng
+  // `FBD-SEM-ORDER-001` vào chính wire này.
+  document.networks[0].nodes[0].executionOrder = 5
+  draft.programs.push({
+    objectId: POU_OBJECT_ID,
+    programId: PROGRAM_ID,
+    name: 'FBD_WITH_PROBLEM',
+    kind: 'PROGRAM',
+    language: 'FBD',
+    document: JSON.stringify(document),
+    executionOrder: 0,
+    functionalTags: [],
   })
   draft.task.programOrder = [PROGRAM_ID]
   return draft
@@ -647,6 +675,9 @@ async function installProgrammingMocks(page: Page, state: MockState) {
     }
     if (method === 'GET' && path === '/runtime/monitor') {
       state.monitorRequests = (state.monitorRequests ?? 0) + 1
+      const quality = state.monitorQuality ?? 'GOOD'
+      const freshness = state.monitorFreshness ?? 'LIVE'
+      const available = quality !== 'BAD' && quality !== 'OFFLINE' && quality !== 'UNKNOWN' && freshness !== 'UNAVAILABLE'
       return json(route, {
         schemaVersion: '1.0', activeRevisionId: ACTIVE_REVISION_ID, safeState: false,
         producer: { capturedMonotonicNs: String(1_000 + state.monitorRequests) },
@@ -654,8 +685,11 @@ async function installProgrammingMocks(page: Page, state: MockState) {
         items: [{
           variableId: '55555555-5555-4555-8555-555555555555', variableName: 'SupplySetpoint', programId: state.draft.programs[0]?.programId ?? '44444444-4444-4444-8444-444444444444',
           point: { category: 'LOCAL', pointId: 'AO-01' }, direction: 'WRITE', dataType: 'REAL', unit: 'V',
-          programValue: 4.1, actualValue: 6.2, overriddenBy: 'manual', effectivePriority: 2,
-          overrideActor: 'operator-e2e', overrideRemainingS: 272, quality: 'GOOD', observedAt: new Date().toISOString(), freshness: 'LIVE'
+          programValue: available ? 4.1 : null, actualValue: available ? 6.2 : null,
+          overriddenBy: available ? 'manual' : null, effectivePriority: available ? 2 : null,
+          overrideActor: available ? 'operator-e2e' : null,
+          overrideRemainingS: available ? 272 : null,
+          quality, observedAt: new Date().toISOString(), freshness,
         }]
       })
     }
@@ -873,8 +907,38 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await fbdToolbar.getByRole('button').first().focus()
     await page.keyboard.press('Insert') // ADD_BLOCK — block AND #1 (network_1 có sẵn từ emptyFbdDocument)
     await expect(page.getByText('1/256 block')).toBeVisible()
+    // Problems là sibling của editor nhưng phải đọc buffer local chưa Save:
+    // network rỗng có 1 lỗi; thêm block hợp lệ phải xóa lỗi ngay trước read-back.
+    await expect(page.getByRole('tab', { name: 'Vấn đề (0)', exact: true })).toBeVisible()
     await page.keyboard.press('Insert') // ADD_BLOCK — block AND #2
     await expect(page.getByText('2/256 block')).toBeVisible()
+
+    // TASK-9-FBD-EDIT: làm lệch một block để Auto Layout có delta thật, rồi
+    // đo cả hai nhánh Cancel/Apply trên Chrome. Ghost preview là transient:
+    // nó xuất hiện trước khi Draft đổi và phải biến mất sau mỗi quyết định.
+    const firstFbdNode = page.locator('[data-fbd-node-id]').first()
+    const firstFbdNodeBox = await firstFbdNode.boundingBox()
+    expect(firstFbdNodeBox, 'block FBD đầu tiên phải có hình học trên Chrome').not.toBeNull()
+    await page.mouse.move(firstFbdNodeBox!.x + 20, firstFbdNodeBox!.y + 20)
+    await page.mouse.down()
+    await page.mouse.move(firstFbdNodeBox!.x + 180, firstFbdNodeBox!.y + 84, { steps: 4 })
+    await page.mouse.up()
+
+    await fbdToolbar.getByRole('button', { name: 'Tự sắp xếp', exact: true }).click()
+    await expect(page.locator('[data-fbd-layout-preview]')).toBeVisible()
+    await expect(page.getByRole('status').filter({ hasText: 'Draft chưa thay đổi' })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('03a-design-fbd-layout-preview.png'), fullPage: true })
+    await fbdToolbar.getByRole('button', { name: 'Hủy xem trước', exact: true }).click()
+    await expect(page.locator('[data-fbd-layout-preview]')).toHaveCount(0)
+
+    await fbdToolbar.getByRole('button', { name: 'Tự sắp xếp', exact: true }).click()
+    await fbdToolbar.getByRole('button', { name: 'Áp dụng bố cục', exact: true }).click()
+    await expect(page.locator('[data-fbd-layout-preview]')).toHaveCount(0)
+    await expect(page.getByRole('status').filter({ hasText: 'một bước hoàn tác' })).toBeVisible()
+    // Các click toolbar ở trên để focus trên button; trả focus về graph trước
+    // khi tiếp tục hợp đồng phím Arrow/Enter của editor.
+    await page.locator('section[aria-label="Bộ dựng FBD có cấu trúc"]').focus()
+
     await page.keyboard.press('ArrowDown') // chọn port #1.IN1
     await page.keyboard.press('ArrowDown') // chọn port #1.IN2
     await page.keyboard.press('ArrowDown') // chọn port #1.OUT — nguồn nối
@@ -1462,6 +1526,106 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), '390px không tràn ngang').toBe(true)
 
     expectNoBrowserFailures(failures, 'ma trận responsive FBD')
+  })
+
+  test('TC-FBD-DIAG-001: Problems nhảy đúng wire lỗi trên Chrome', async ({ page }) => {
+    const state: MockState = { etagGeneration: 1, draft: draftWithFbdProblem(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    const writes = observeProgrammingWrites(page)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
+
+    await page.getByRole('tab', { name: /Vấn đề/ }).click()
+    await page.getByRole('button', { name: /FBD-SEM-ORDER-001/ }).click()
+    const selectedWire = page.locator('path[role="button"][aria-pressed="true"]')
+    await expect(selectedWire).toHaveCount(1)
+    expect(await selectedWire.getAttribute('d')).toMatch(/^M /)
+    expect(writes, 'jump diagnostic chỉ đổi selection, không ghi Draft').toEqual([])
+    expectNoBrowserFailures(failures, 'FBD diagnostic exact wire')
+  })
+
+  test('TC-FBD-NAV-001: Mini Map click/kéo/phím chính xác và không mutate trên Chrome', async ({ page }, testInfo) => {
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    const writes = observeProgrammingWrites(page)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
+    await page.getByTitle('Thêm chương trình FBD').click()
+    const editor = page.locator('section[aria-label="Bộ dựng FBD có cấu trúc"]')
+    await editor.focus()
+    for (let index = 0; index < 25; index += 1) await page.keyboard.press('Insert')
+    await expect(page.getByText('25/256 block')).toBeVisible()
+    await expect.poll(() => writes.length).toBeGreaterThan(0)
+    writes.splice(0, writes.length)
+
+    const minimap = page.locator('[data-fbd-minimap="true"]')
+    await expect(minimap).toBeVisible()
+    await minimap.scrollIntoViewIfNeeded()
+    const surface = page.locator('svg[data-fbd-network-id]').first()
+    const transformsBefore = await surface.locator('[data-fbd-node-id]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('transform')))
+    const box = await minimap.boundingBox()
+    expect(box).not.toBeNull()
+    await minimap.click({ position: { x: box!.width * 0.3, y: box!.height * 0.5 } })
+    expect(await surface.evaluate((element) => element.parentElement?.scrollLeft ?? 0)).toBeGreaterThan(0)
+    const dragBox = await minimap.boundingBox()
+    expect(dragBox).not.toBeNull()
+    await page.mouse.move(dragBox!.x + dragBox!.width * 0.3, dragBox!.y + dragBox!.height * 0.5)
+    await page.mouse.down()
+    await page.mouse.move(dragBox!.x + dragBox!.width * 0.7, dragBox!.y + dragBox!.height * 0.5, { steps: 5 })
+    await page.mouse.up()
+
+    const minimapMetrics = await minimap.evaluate((element, ratio) => {
+      const svg = element as SVGSVGElement
+      const rect = svg.getBoundingClientRect()
+      const viewBox = svg.viewBox.baseVal
+      const scale = Math.min(rect.width / viewBox.width, rect.height / viewBox.height)
+      const offsetX = (rect.width - viewBox.width * scale) / 2
+      const graphX = Math.min(viewBox.width, Math.max(0, (rect.width * ratio - offsetX) / scale))
+      const surfaceElement = document.querySelector<SVGSVGElement>('svg[data-fbd-network-id]')
+      const scroller = surfaceElement?.parentElement
+      if (!scroller) throw new Error('Thiếu viewport FBD')
+      return {
+        centerError: Math.abs(scroller.scrollLeft + scroller.clientWidth / 2 - graphX),
+        clientWidth: scroller.clientWidth,
+        scrollLeft: scroller.scrollLeft,
+        scrollWidth: scroller.scrollWidth,
+        graphX,
+        viewBoxWidth: viewBox.width,
+      }
+    }, 0.7)
+    expect(
+      minimapMetrics.centerError,
+      `tâm viewport lệch không quá một grid 8 px: ${JSON.stringify(minimapMetrics)}`,
+    ).toBeLessThanOrEqual(8)
+
+    const scrollBeforeKey = await surface.evaluate((element) => element.parentElement?.scrollLeft ?? 0)
+    await minimap.focus()
+    await page.keyboard.press('ArrowLeft')
+    const scrollAfterKey = await surface.evaluate((element) => element.parentElement?.scrollLeft ?? 0)
+    expect(scrollAfterKey).toBeLessThan(scrollBeforeKey)
+    expect(await surface.locator('[data-fbd-node-id]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('transform')))).toEqual(transformsBefore)
+    await page.screenshot({ path: testInfo.outputPath('fbd-minimap-navigation.png'), fullPage: true })
+    expect(writes, 'điều hướng Mini Map không gửi mutation').toEqual([])
+    expectNoBrowserFailures(failures, 'FBD Mini Map')
+  })
+
+  test('TC-FBD-STATE-006: Watch OFFLINE giữ badge và không biến null thành 0 trên Chrome', async ({ page }) => {
+    const state: MockState = {
+      etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0,
+      restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false,
+      monitorQuality: 'OFFLINE', monitorFreshness: 'UNAVAILABLE',
+    }
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=LIVE`)
+    await page.getByRole('tab', { name: /Watch/ }).click()
+    await expect(page.getByText('Mất kết nối')).toHaveAttribute('data-quality', 'OFFLINE')
+    await expect(page.getByRole('tabpanel')).toContainText('—')
+    await expect(page.getByRole('tabpanel').getByText(/^0(?:\.0+)?$/)).toHaveCount(0)
+    expectNoBrowserFailures(failures, 'FBD Watch offline')
   })
 
   test('AC-PGM02-002: 1280×750 — trình soạn thảo PGM-02 thấy được mà KHÔNG cuộn trang', async ({ page }, testInfo) => {

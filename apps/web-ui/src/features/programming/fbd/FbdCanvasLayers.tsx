@@ -305,6 +305,45 @@ export function FbdNodesLayer({
   )
 }
 
+/** `TC-FBD-LAYOUT-001` — lớp ghost chỉ đọc. Vị trí xem trước không thay thế
+ * geometry canonical và không nhận pointer/focus, nên Cancel luôn là 0 diff. */
+export function FbdLayoutPreviewLayer({
+  nodes,
+  positions,
+}: {
+  nodes: readonly FbdNodeGeometry[]
+  positions: Readonly<Record<string, FbdPoint>> | null
+}) {
+  if (!positions) return null
+  return (
+    <g data-fbd-layout-preview="true" aria-hidden="true" pointerEvents="none">
+      {nodes.map((node) => {
+        const point = positions[node.id]
+        if (!point) return null
+        return (
+          <g key={node.id} data-fbd-layout-preview-node={node.id}>
+            <rect
+              x={point.x}
+              y={point.y}
+              width={node.width}
+              height={node.height}
+              rx={6}
+              fill="var(--c-accent-bg)"
+              fillOpacity={0.45}
+              stroke="var(--c-accent)"
+              strokeWidth={2}
+              strokeDasharray="7 4"
+            />
+            <text x={point.x + 8} y={point.y + 16} className="text-[10px]" fill="var(--c-accent)">
+              #{node.id.slice(0, 8)}
+            </text>
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 export interface FbdMarqueeLayerProps {
   marquee: {
     startX: number

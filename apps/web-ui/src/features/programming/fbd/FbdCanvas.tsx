@@ -22,6 +22,7 @@ import { boxSelectNodes, type FbdNodeBox } from './selection'
 import {
   FbdGridPattern,
   FbdMarqueeLayer,
+  FbdLayoutPreviewLayer,
   FbdNodesLayer,
   FbdWiresLayer,
   FbdWirePreviewLayer,
@@ -54,6 +55,28 @@ export function buildPaletteNode(entry: FbdPaletteEntry): FbdNode {
 }
 
 const ZOOM_STEP = 0.2
+
+/** Đổi điểm client của Mini Map sang graph coordinate có tính phần letterbox
+ * do `preserveAspectRatio="xMidYMid meet"`. Chia thẳng theo toàn bounding box
+ * sẽ sai ở graph dài/hẹp và có thể đưa viewport sang nhầm vùng. */
+export function minimapClientToGraph(
+  client: FbdPoint,
+  rect: ViewportRect,
+  graphWidth: number,
+  graphHeight: number,
+): FbdPoint | null {
+  if (rect.width <= 0 || rect.height <= 0 || graphWidth <= 0 || graphHeight <= 0) return null
+  const scale = Math.min(rect.width / graphWidth, rect.height / graphHeight)
+  if (!Number.isFinite(scale) || scale <= 0) return null
+  const renderedWidth = graphWidth * scale
+  const renderedHeight = graphHeight * scale
+  const offsetX = (rect.width - renderedWidth) / 2
+  const offsetY = (rect.height - renderedHeight) / 2
+  return {
+    x: Math.min(graphWidth, Math.max(0, (client.x - rect.left - offsetX) / scale)),
+    y: Math.min(graphHeight, Math.max(0, (client.y - rect.top - offsetY) / scale)),
+  }
+}
 
 interface PanState {
   pointerId: number
@@ -104,6 +127,8 @@ export interface FbdCanvasProps {
   pendingPlacement?: { entryId: string } | null
   onCancelPlacement?: () => void
   onCommitPlacement?: () => void
+  /** Ghost positions của Auto Layout; không tham gia geometry canonical. */
+  layoutPreview?: Readonly<Record<string, FbdPoint>> | null
 }
 
 export function FbdCanvas({
@@ -125,6 +150,7 @@ export function FbdCanvas({
   pendingPlacement,
   onCancelPlacement,
   onCommitPlacement,
+  layoutPreview,
 }: FbdCanvasProps) {
   const [viewport, setViewport] = useState<FbdViewport>(DEFAULT_VIEWPORT)
   const [pan, setPan] = useState<PanState | null>(null)
@@ -139,6 +165,7 @@ export function FbdCanvas({
   const activePointersRef = useRef<Map<number, TouchPoint>>(new Map())
   const pinchStartDistRef = useRef<number | null>(null)
   const pinchStartViewportRef = useRef<FbdViewport | null>(null)
+  const minimapPointerRef = useRef<number | null>(null)
 
   const geometry = useMemo(
     () => buildFbdNetworkGeometry(network, layout, { wireStyle }),
@@ -175,6 +202,22 @@ export function FbdCanvas({
 
   function select(next: FbdSelection) {
     dispatch({ type: 'SELECT', selection: next })
+  }
+
+  function navigateFromMinimap(clientX: number, clientY: number, element: SVGSVGElement) {
+    const container = scrollRef.current
+    if (!container) return
+    const point = minimapClientToGraph(
+      { x: clientX, y: clientY },
+      element.getBoundingClientRect(),
+      width,
+      height,
+    )
+    if (!point) return
+    /* Scene có thể đã được pan bằng translate pixel. Mini Map phải đưa chính
+     * graph point về tâm vùng nhìn của scene hiện tại, không được giả x/y=0. */
+    container.scrollLeft = viewport.x + point.x * viewport.scale - container.clientWidth / 2
+    container.scrollTop = viewport.y + point.y * viewport.scale - container.clientHeight / 2
   }
 
   function getSceneRect(): ViewportRect {
@@ -740,6 +783,8 @@ export function FbdCanvas({
               onPortClick={handlePortClick}
             />
 
+            <FbdLayoutPreviewLayer nodes={geometry.nodes} positions={layoutPreview ?? null} />
+
             <FbdWirePreviewLayer preview={wirePreview} wireStyle={wireStyle} />
 
             <FbdGhostLayer ghost={ghost} />
@@ -753,19 +798,42 @@ export function FbdCanvas({
         <svg
           role="group"
           aria-label={pick('Bản đồ thu nhỏ', 'Minimap')}
+          aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
+          tabIndex={0}
+          data-fbd-minimap="true"
           width={FBD_MINIMAP_WIDTH}
           height={FBD_MINIMAP_HEIGHT}
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="xMidYMid meet"
           className="rounded border border-[var(--c-border)] bg-[var(--c-surface-2)]"
-          onClick={(event) => {
+          onPointerDown={(event) => {
+            minimapPointerRef.current = event.pointerId
+            event.currentTarget.setPointerCapture(event.pointerId)
+            navigateFromMinimap(event.clientX, event.clientY, event.currentTarget)
+          }}
+          onPointerMove={(event) => {
+            if (minimapPointerRef.current !== event.pointerId) return
+            navigateFromMinimap(event.clientX, event.clientY, event.currentTarget)
+          }}
+          onPointerUp={(event) => {
+            if (minimapPointerRef.current !== event.pointerId) return
+            navigateFromMinimap(event.clientX, event.clientY, event.currentTarget)
+            minimapPointerRef.current = null
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }}
+          onPointerCancel={(event) => {
+            if (minimapPointerRef.current === event.pointerId) minimapPointerRef.current = null
+          }}
+          onKeyDown={(event) => {
             const container = scrollRef.current
-            const box = event.currentTarget.getBoundingClientRect()
-            if (!container || box.width === 0 || box.height === 0) return
-            const ratioX = (event.clientX - box.left) / box.width
-            const ratioY = (event.clientY - box.top) / box.height
-            container.scrollLeft = ratioX * width * viewport.scale - container.clientWidth / 2
-            container.scrollTop = ratioY * height * viewport.scale - container.clientHeight / 2
+            if (!container) return
+            const step = snapSize * 4 * viewport.scale
+            if (event.key === 'ArrowLeft') container.scrollLeft -= step
+            else if (event.key === 'ArrowRight') container.scrollLeft += step
+            else if (event.key === 'ArrowUp') container.scrollTop -= step
+            else if (event.key === 'ArrowDown') container.scrollTop += step
+            else return
+            event.preventDefault()
           }}
         >
           {geometry.nodes.map((placed) => (
