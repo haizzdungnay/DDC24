@@ -53,6 +53,16 @@ export function graphToScreen(
   }
 }
 
+/**
+ * SVG đã phóng toàn bộ viewBox thông qua width/height. Vì x/y của viewport được
+ * lưu theo pixel màn hình, phần translate trong hệ user-unit phải chia cho scale.
+ */
+export function viewportSceneTransform(viewport: FbdViewport): string | undefined {
+  if (viewport.x === 0 && viewport.y === 0) return undefined
+  const scale = clampScale(viewport.scale)
+  return `translate(${viewport.x / scale}, ${viewport.y / scale}) scale(1)`
+}
+
 export function snapPoint(point: FbdPoint, snapSize: number, bypassAlt = false): FbdPoint {
   if (bypassAlt || snapSize <= 0) {
     return point

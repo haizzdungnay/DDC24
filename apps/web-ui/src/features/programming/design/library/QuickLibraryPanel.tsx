@@ -214,9 +214,20 @@ export function QuickLibraryPanel({
           <p className="px-3 py-2 text-xs text-[var(--c-text-dim)]">{pick('Đang tải catalog…', 'Loading the catalog…')}</p>
         )}
         {library.status === 'error' && (
-          <p role="alert" className="px-3 py-2 text-xs text-[var(--c-fault-fg)]">
-            {library.error ?? pick('Không đọc được thư viện.', 'Could not read the library.')}
-          </p>
+          <div className="flex flex-col items-start gap-2 px-3 py-2">
+            <p role="alert" className="text-xs text-[var(--c-fault-fg)]">
+              {library.error ?? pick('Không đọc được thư viện.', 'Could not read the library.')}
+            </p>
+            {typeof library.refresh === 'function' && (
+              <button
+                type="button"
+                onClick={() => library.refresh()}
+                className="rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 py-1 text-xs text-[var(--c-text)] hover:bg-[var(--c-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              >
+                {pick('Thử lại', 'Retry')}
+              </button>
+            )}
+          </div>
         )}
 
         {/* `T61-202` — điều kiện vẽ là CÓ NỘI DUNG, không phải `status === 'ready'`.
@@ -416,6 +427,7 @@ function BlockCard({
       onDragStart={(event) => {
         if (!insertable) return
         event.dataTransfer.setData(LIBRARY_DRAG_TYPE, entry.entryId)
+        event.dataTransfer.setData(`${LIBRARY_DRAG_TYPE}/${entry.entryId}`, '')
         event.dataTransfer.effectAllowed = 'copy'
       }}
       className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">

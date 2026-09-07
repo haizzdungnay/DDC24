@@ -7,6 +7,8 @@ import { ContextInspector } from './ContextInspector'
 import type { InspectorInput } from './inspectorContext'
 import type { ProgrammingProgram } from '../../model/types'
 import type { StRuntimeOverlayState } from '../editor/StRuntimeValueOverlay'
+import type { FbdDocument } from '../../fbd/model'
+import { FBD_PROFILE_ID, FBD_SCHEMA_VERSION } from '../../fbd/model'
 
 /**
  * `TC-PGM02-INS-01/03` ở lớp hiển thị.
@@ -181,5 +183,89 @@ describe('ContextInspector — ISS-STED-12: năm trường mới của ký hiệ
     // Ba trường phụ thuộc Draft đều phải nói thẳng là không tra được.
     expect(panel.textContent?.match(/không xác định được/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
     expect(panel).not.toHaveTextContent('VAR_INPUT')
+  })
+})
+
+describe('ContextInspector — FBD context & editable slots', () => {
+  it('A-T6: Chọn wire ⇒ dock hiện FBD_CONNECTION chỉ đọc, không có form mutation', () => {
+    const fbdDoc: FbdDocument = {
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: FBD_SCHEMA_VERSION,
+      profileId: FBD_PROFILE_ID,
+      graphId: 'g-1',
+      name: 'FBD_MAIN',
+      networks: [
+        {
+          id: 'net-1',
+          name: 'Network 1',
+          order: 1,
+          nodes: [
+            {
+              id: 'node-1',
+              kind: 'INPUT' as const,
+              typeRef: 'BOOL',
+              executionOrder: 1,
+              parameters: { variable: 'Start' },
+              ports: [{ id: 'p1', name: 'OUT', direction: 'OUTPUT' as const, dataType: 'BOOL', unit: null, order: 1 }],
+            },
+            {
+              id: 'node-2',
+              kind: 'OUTPUT' as const,
+              typeRef: 'BOOL',
+              executionOrder: 2,
+              parameters: { variable: 'Motor' },
+              ports: [{ id: 'p2', name: 'IN', direction: 'INPUT' as const, dataType: 'BOOL', unit: null, order: 1 }],
+            },
+          ],
+          wires: [
+            {
+              id: 'wire-1',
+              from: { nodeId: 'node-1', portId: 'p1' },
+              to: { nodeId: 'node-2', portId: 'p2' },
+            },
+          ],
+        },
+      ],
+    }
+
+    render(
+      <I18nProvider>
+        <ContextInspector
+          input={{
+            fbd: {
+              document: fbdDoc,
+              selection: { kind: 'wire', networkId: 'net-1', wireId: 'wire-1' },
+            },
+          }}
+        />
+      </I18nProvider>
+    )
+
+    expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'FBD_CONNECTION')
+    expect(screen.getByText('wire-1')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Lưu|Save/ })).toBeNull()
+  })
+
+  it('CB-1: Khi không có useful context và không có slot nào ⇒ thu gọn', () => {
+    render(
+      <I18nProvider>
+        <ContextInspector input={{}} />
+      </I18nProvider>
+    )
+    expect(screen.getByTestId('inspector-collapsed')).toBeInTheDocument()
+  })
+
+  it('CB-1: Khi có editableFbdSlot ⇒ nở ra và hiển thị slot', () => {
+    render(
+      <I18nProvider>
+        <ContextInspector
+          input={{}}
+          editableFbdSlot={<div data-testid="test-fbd-slot">FBD Slot Content</div>}
+        />
+      </I18nProvider>
+    )
+    expect(screen.queryByTestId('inspector-collapsed')).toBeNull()
+    expect(screen.getByTestId('test-fbd-slot')).toBeInTheDocument()
   })
 })

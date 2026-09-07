@@ -297,6 +297,7 @@ describe('translateFbdAnnouncement (BUG-012)', () => {
   it('dịch mã không tham số', () => {
     expect(translateFbdAnnouncement(pick, { code: 'undone' })).toBe('Đã hoàn tác')
     expect(translateFbdAnnouncement(pickEn, { code: 'undone' })).toBe('Undone')
+    expect(translateFbdAnnouncement(pick, { code: 'invalid-node-attributes' })).toBe('Thuộc tính không áp dụng cho loại node này')
   })
 
   it('mã idle hoặc lạ trả về chuỗi rỗng', () => {
@@ -630,5 +631,135 @@ describe('Task 3: selectionRevision, multi-node, and atomic actions', () => {
       nodeIds: [newNodeId],
     })
     expect(state.selectionRevision).toBe(1)
+  })
+
+  it('UPDATE_NODE_ATTRIBUTES: cập nhật đồng thời type + variable nguyên tử, past.length chỉ tăng 1 và 1 lần Undo phục hồi toàn bộ', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    const node = doc.networks[0].nodes.find((n) => n.kind === 'INPUT')!
+    let state = createFbdEditorState(doc)
+    const initialPastLength = state.past.length
+    const originalType = node.typeRef
+    const originalVar = node.parameters.variable
+
+    state = fbdEditorReducer(state, {
+      type: 'UPDATE_NODE_ATTRIBUTES',
+      networkId: netId,
+      nodeId: node.id,
+      dataType: 'REAL',
+      variable: 'TempSensor',
+      unit: 'degC',
+    })
+
+    // past.length chỉ tăng đúng 1
+    expect(state.past.length).toBe(initialPastLength + 1)
+
+    // Node được cập nhật đầy đủ cả kiểu, biến, và đơn vị
+    const updatedNode = state.document.networks[0].nodes.find((n) => n.id === node.id)!
+    expect(updatedNode.typeRef).toBe('REAL')
+    expect(updatedNode.parameters.variable).toBe('TempSensor')
+    expect(updatedNode.ports[0].dataType).toBe('REAL')
+    expect(updatedNode.ports[0].unit).toBe('degC')
+
+    // Đúng 1 lần UNDO hoàn nguyên cả type và variable về ban đầu
+    state = fbdEditorReducer(state, { type: 'UNDO' })
+    expect(state.past.length).toBe(initialPastLength)
+    const revertedNode = state.document.networks[0].nodes.find((n) => n.id === node.id)!
+    expect(revertedNode.typeRef).toBe(originalType)
+    expect(revertedNode.parameters.variable).toBe(originalVar)
+  })
+
+  it('UPDATE_NODE_ATTRIBUTES: cập nhật đồng thời type + value của CONSTANT nguyên tử, 1 lần Undo phục hồi toàn bộ', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    let state = createFbdEditorState(doc)
+
+    // Thêm một CONSTANT node
+    const constId = '80000000-0000-4000-8000-000000000001'
+    const constPortId = '80000000-0000-4000-8000-000000000002'
+    state = fbdEditorReducer(state, {
+      type: 'ADD_NODE',
+      networkId: netId,
+      node: {
+        id: constId,
+        kind: 'CONSTANT',
+        typeRef: 'INT',
+        executionOrder: 0,
+        parameters: { value: 10 },
+        ports: [{ id: constPortId, name: 'OUT', direction: 'OUTPUT', dataType: 'INT', unit: null, order: 0 }],
+      },
+    })
+
+    const pastBeforeUpdate = state.past.length
+
+    state = fbdEditorReducer(state, {
+      type: 'UPDATE_NODE_ATTRIBUTES',
+      networkId: netId,
+      nodeId: constId,
+      dataType: 'REAL',
+      value: 99.5,
+    })
+
+    expect(state.past.length).toBe(pastBeforeUpdate + 1)
+    const updated = state.document.networks[0].nodes.find((n) => n.id === constId)!
+    expect(updated.typeRef).toBe('REAL')
+    expect(updated.parameters.value).toBe(99.5)
+    expect(updated.ports[0].dataType).toBe('REAL')
+
+    // 1 lần Undo phục hồi lại INT và 10
+    state = fbdEditorReducer(state, { type: 'UNDO' })
+    expect(state.past.length).toBe(pastBeforeUpdate)
+    const reverted = state.document.networks[0].nodes.find((n) => n.id === constId)!
+    expect(reverted.typeRef).toBe('INT')
+    expect(reverted.parameters.value).toBe(10)
+    expect(reverted.ports[0].dataType).toBe('INT')
+  })
+
+  it('UPDATE_NODE_ATTRIBUTES: từ chối nguyên tử field sai kind, không làm lọt field hợp lệ đi kèm', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    const input = doc.networks[0].nodes.find((node) => node.kind === 'INPUT')!
+    const before = createFbdEditorState(doc)
+
+    const after = fbdEditorReducer(before, {
+      type: 'UPDATE_NODE_ATTRIBUTES',
+      networkId: netId,
+      nodeId: input.id,
+      unit: 'rpm',
+      retained: true,
+    })
+
+    expect(canonicalFbdJson(after.document)).toBe(canonicalFbdJson(before.document))
+    expect(after.past).toHaveLength(0)
+    expect(after.announcement.code).toBe('invalid-node-attributes')
+  })
+
+  it.each([
+    { instance: null },
+    { unit: 'rpm' },
+    { retained: false },
+  ])('UPDATE_NODE_ATTRIBUTES: block cố định từ chối payload sai kind %o', (attributes) => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    const fixed = doc.networks[0].nodes.find((node) => node.kind === 'FUNCTION')!
+    const before = createFbdEditorState(doc)
+    const after = fbdEditorReducer(before, {
+      type: 'UPDATE_NODE_ATTRIBUTES', networkId: netId, nodeId: fixed.id, ...attributes,
+    })
+
+    expect(canonicalFbdJson(after.document)).toBe(canonicalFbdJson(before.document))
+    expect(after.past).toHaveLength(0)
+  })
+
+  it('UPDATE_NODE_ATTRIBUTES: payload rỗng không tạo snapshot Undo giả', () => {
+    const doc = golden()
+    const before = createFbdEditorState(doc)
+    const input = doc.networks[0].nodes.find((node) => node.kind === 'INPUT')!
+    const after = fbdEditorReducer(before, {
+      type: 'UPDATE_NODE_ATTRIBUTES', networkId: doc.networks[0].id, nodeId: input.id,
+    })
+
+    expect(after).toBe(before)
+    expect(after.past).toHaveLength(0)
   })
 })

@@ -1,14 +1,45 @@
+import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { useState } from 'react'
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
-import { I18nProvider } from '../../../shared/i18n'
+import { I18nProvider, useI18n } from '../../../shared/i18n'
 import { StructuredFbdEditor } from './StructuredFbdEditor'
+import { FbdNodeInspector } from './FbdNodeInspector'
+import type { FbdNodeEditorTarget } from './nodeEditor'
 import type { FbdDocument } from './model'
 import type { UserPouInterface } from './userPou'
 
 function golden(): FbdDocument {
   return JSON.parse(JSON.stringify(goldenJson)) as FbdDocument
+}
+
+function EditorTestHarness({
+  document,
+  canEdit,
+  onChange,
+  userPouInterfaces,
+}: {
+  document: FbdDocument
+  canEdit: boolean
+  onChange: (doc: FbdDocument) => void
+  userPouInterfaces: readonly UserPouInterface[]
+}) {
+  const { pick } = useI18n()
+  const [target, setTarget] = useState<FbdNodeEditorTarget | null>(null)
+  return (
+    <>
+      <StructuredFbdEditor
+        document={document}
+        canEdit={canEdit}
+        onChange={onChange}
+        userPouInterfaces={userPouInterfaces}
+        onNodeEditorTargetChange={setTarget}
+      />
+      {target && <FbdNodeInspector target={target} pick={pick} />}
+    </>
+  )
 }
 
 function renderEditor(
@@ -21,7 +52,7 @@ function renderEditor(
     onChange,
     ...render(
       <I18nProvider>
-        <StructuredFbdEditor
+        <EditorTestHarness
           document={document}
           canEdit={canEdit}
           onChange={onChange}
@@ -225,18 +256,87 @@ describe('StructuredFbdEditor — POU và keyboard/a11y (T59-506)', () => {
     expect(screen.queryByRole('option', { name: /1 bad POU/ })).toBeNull()
   })
 
-  it('Arrow/Delete/Ctrl+Z trong ô nhập giữ hành vi native, không biến thành lệnh sửa graph', () => {
-    const onChange = vi.fn()
-    renderEditor(golden(), true, onChange)
-    fireEvent.click(screen.getByRole('button', { name: /^Input$/ }))
-    const variableInput = screen.getByLabelText(/Variable name|Tên biến/) as HTMLInputElement
-    variableInput.focus()
+  it('TC-FBD-LIB-003: số trong nhãn bộ lọc cổng tương thích luôn bằng đúng số option thật trong DOM', () => {
+    const document = golden()
+    // Thêm một node INPUT kiểu REAL để có cổng REAL trên canvas bên cạnh các cổng BOOL sẵn có
+    document.networks[0].nodes.push({
+      id: '30000000-0000-4000-8000-000000000099',
+      kind: 'INPUT',
+      typeRef: 'REAL',
+      executionOrder: 4,
+      parameters: { variable: 'TEMP' },
+      ports: [
+        {
+          id: '40000000-0000-4000-8000-000000000099',
+          name: 'OUT',
+          direction: 'OUTPUT',
+          dataType: 'REAL',
+          unit: 'degC',
+          order: 0,
+        },
+      ],
+    })
 
-    fireEvent.keyDown(variableInput, { key: 'ArrowDown' })
-    fireEvent.keyDown(variableInput, { key: 'Delete' })
-    fireEvent.keyDown(variableInput, { key: 'z', ctrlKey: true })
+    renderEditor(document)
 
-    expect(document.activeElement).toBe(variableInput)
-    expect(onChange).not.toHaveBeenCalled()
+    function getFilterCount(): number {
+      const label = screen.getByText(/Chỉ khối khớp cổng|Only blocks matching the/i)
+      const match = label.textContent?.match(/\((\d+)\)/)
+      if (!match) throw new Error('Không tìm thấy số đếm trong nhãn bộ lọc cổng')
+      return parseInt(match[1], 10)
+    }
+
+    function getOptionCount(): number {
+      const select = screen.getByLabelText(/^Block$|^Khối$/) as HTMLSelectElement
+      return select.querySelectorAll('option').length
+    }
+
+    // 1. Chọn cổng BOOL
+    const boolPort = screen.getAllByRole('button', { name: /OUTPUT OUT BOOL/ })[0]
+    fireEvent.click(boolPort)
+
+    const boolCheckbox = screen.getByRole('checkbox', {
+      name: /Chỉ khối khớp cổng BOOL|Only blocks matching the BOOL port/i,
+    })
+    // Mặc định compatibleFilterOn khởi tạo là true
+    expect(boolCheckbox).toBeChecked()
+    const boolFilteredCount = getFilterCount()
+    expect(boolFilteredCount).toBe(getOptionCount())
+
+    // Tắt bộ lọc tương thích BOOL
+    fireEvent.click(boolCheckbox)
+    expect(boolCheckbox).not.toBeChecked()
+    const allCountUnfiltered = getFilterCount()
+    expect(allCountUnfiltered).toBe(getOptionCount())
+    expect(allCountUnfiltered).toBeGreaterThan(boolFilteredCount)
+
+    // Bật lại bộ lọc
+    fireEvent.click(boolCheckbox)
+    expect(boolCheckbox).toBeChecked()
+    expect(getFilterCount()).toBe(getOptionCount())
+    expect(getFilterCount()).toBe(boolFilteredCount)
+
+    // 2. Chọn cổng REAL
+    const realPort = screen.getByRole('button', { name: /REAL OUTPUT OUT REAL/i })
+    fireEvent.click(realPort)
+
+    const realCheckbox = screen.getByRole('checkbox', {
+      name: /Chỉ khối khớp cổng REAL|Only blocks matching the REAL port/i,
+    })
+    expect(realCheckbox).toBeChecked()
+    const realFilteredCount = getFilterCount()
+    expect(realFilteredCount).toBe(getOptionCount())
+
+    // Tắt bộ lọc tương thích REAL
+    fireEvent.click(realCheckbox)
+    expect(realCheckbox).not.toBeChecked()
+    expect(getFilterCount()).toBe(getOptionCount())
+    expect(getFilterCount()).toBe(allCountUnfiltered)
+
+    // Bật lại bộ lọc REAL
+    fireEvent.click(realCheckbox)
+    expect(realCheckbox).toBeChecked()
+    expect(getFilterCount()).toBe(getOptionCount())
+    expect(getFilterCount()).toBe(realFilteredCount)
   })
 })

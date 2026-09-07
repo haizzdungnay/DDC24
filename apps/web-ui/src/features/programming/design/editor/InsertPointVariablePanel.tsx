@@ -29,14 +29,16 @@ export function InsertPointVariablePanel({
   onEnsureLoaded,
   onInsert,
   onClose,
+  variant = 'popover',
 }: {
   variables: readonly InsertVariableOption[]
   pointCatalogStatus: 'idle' | 'loading' | 'ready' | 'error'
   pointCatalogItems: readonly ProgrammingPointCatalogEntry[]
   pointCatalogError: string | null
   onEnsureLoaded: () => void
-  onInsert: (name: string) => void
+  onInsert: (name: string, detail?: { dataType?: string; unit?: string }) => void
   onClose: () => void
+  variant?: 'popover' | 'embedded'
 }) {
   const { pick } = useI18n()
   const [query, setQuery] = useState('')
@@ -65,7 +67,9 @@ export function InsertPointVariablePanel({
     <div
       role="dialog"
       aria-label={pick('Chèn nhanh Point/Variable', 'Insert point/variable')}
-      className="panel-shadow absolute right-0 top-0 z-20 w-72 overflow-hidden rounded-[var(--radius)] border border-[var(--c-line-strong)] bg-[var(--c-surface)]"
+      className={`panel-shadow overflow-hidden rounded-[var(--radius)] border border-[var(--c-line-strong)] bg-[var(--c-surface)] ${
+        variant === 'embedded' ? 'w-full' : 'absolute right-0 top-0 z-20 w-72'
+      }`}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose() } }}
     >
       <input
@@ -83,7 +87,7 @@ export function InsertPointVariablePanel({
             key={variable.name}
             type="button"
             className="flex w-full items-center gap-2 px-3 py-1 text-left text-xs hover:bg-[var(--c-surface-2)]"
-            onClick={() => onInsert(variable.name)}
+            onClick={() => onInsert(variable.name, { dataType: variable.type })}
           >
             <span className="mono flex-1 truncate text-[var(--c-text)]">{variable.name}</span>
             <span className="mono shrink-0 text-[var(--c-text-dim)]">{variable.type}</span>
@@ -92,14 +96,25 @@ export function InsertPointVariablePanel({
 
         <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">Point</p>
         {pointCatalogStatus === 'loading' && <p className="px-3 pb-2 text-xs text-[var(--c-text-dim)]">{pick('Đang tải…', 'Loading…')}</p>}
-        {pointCatalogStatus === 'error' && <p className="px-3 pb-2 text-xs text-[var(--c-fault-fg)]">{pointCatalogError}</p>}
+        {pointCatalogStatus === 'error' && (
+          <div className="px-3 pb-2 text-xs text-[var(--c-fault-fg)]">
+            <p>{pointCatalogError}</p>
+            <button
+              type="button"
+              className="mt-1 rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 py-0.5 text-xs text-[var(--c-text)] hover:bg-[var(--c-surface)]"
+              onClick={onEnsureLoaded}
+            >
+              {pick('Thử lại', 'Retry')}
+            </button>
+          </div>
+        )}
         {pointCatalogStatus === 'ready' && filteredPoints.length === 0 && <p className="px-3 pb-2 text-xs text-[var(--c-text-dim)]">{pick('Không có.', 'None.')}</p>}
         {pointCatalogStatus === 'ready' && filteredPoints.map((point) => (
           <button
             key={`${point.category}-${point.pointId}`}
             type="button"
             className="flex w-full items-center gap-2 px-3 py-1 text-left text-xs hover:bg-[var(--c-surface-2)]"
-            onClick={() => onInsert(point.pointId)}
+            onClick={() => onInsert(point.pointId, { dataType: point.dataType, unit: point.unit })}
           >
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${QUALITY_DOT_CLASS[point.quality]}`} aria-hidden="true" />
             <span className="mono shrink-0 rounded bg-[var(--c-surface-2)] px-1 text-[10px] text-[var(--c-text-dim)]">{point.category}</span>

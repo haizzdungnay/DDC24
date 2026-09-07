@@ -31,6 +31,7 @@ import {
 export function ContextInspector({
   input,
   editableProgramSlot,
+  editableFbdSlot,
 }: {
   input: InspectorInput
   /**
@@ -38,6 +39,10 @@ export function ContextInspector({
    * transaction Draft. Inspector chỉ dành chỗ, không nhân bản luồng lưu.
    */
   editableProgramSlot?: React.ReactNode
+  /**
+   * Form sửa node FBD do `ProgramsTab` cung cấp khi có node FBD đang chọn.
+   */
+  editableFbdSlot?: React.ReactNode
 }) {
   const { pick } = useI18n()
   const context = inspectorContextFor(input)
@@ -57,7 +62,7 @@ export function ContextInspector({
         </span>
       </h3>
 
-      {!useful && editableProgramSlot === undefined ? (
+      {!useful && editableProgramSlot === undefined && editableFbdSlot === undefined ? (
         /* Thu gọn: một dòng, không chiếm chỗ. Đây là vế còn lại của luật §9 —
            khay chỉ nở ra khi có ngữ cảnh đáng đọc. */
         <p className="mt-1 text-xs text-[var(--c-text-dim)]" data-testid="inspector-collapsed">
@@ -67,6 +72,7 @@ export function ContextInspector({
       ) : (
         <div className="mt-2 space-y-2">
           {editableProgramSlot}
+          {editableFbdSlot}
           {renderContext(pick, context)}
         </div>
       )}

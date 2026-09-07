@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Fixed — Rà soát lại và mở khóa merge PR #572 FBD Edit task 6–7 (2026-09-07)
+
+- Đồng bộ `main` sau khi Task 8 (#574) được merge, xử lý xung đột bằng cách giữ
+  Inspector ngoài của #572 cùng shell responsive, chế độ đa-network và preference
+  mới; Quick Library vẫn yêu cầu chọn vị trí đặt block trên canvas.
+- Siết `UPDATE_NODE_ATTRIBUTES` theo đúng loại node: payload chứa field sai loại
+  bị từ chối nguyên tử, không làm lọt phần hợp lệ đi kèm; payload rỗng hoặc không
+  đổi byte canonical không còn tạo snapshot Undo giả.
+- Sửa hệ tọa độ zoom/pan: độ dịch chuyển lưu theo pixel màn hình được quy đổi sang
+  user-unit của SVG, nên vị trí hiển thị, ghost, marquee và thả block cùng dùng một
+  phép biến đổi khi scale khác 1.
+- Đồng bộ ngưỡng ISO harness `od_prog` từ 16 lên 17 với quyết định
+  `UD-PROG-017` mà nhánh PR đã thêm, loại bỏ drift `--expect` của chính PR.
+- Kiểm chứng HOST/no-board: Vitest toàn FE **243 tệp / 3.075 test PASS**; tập
+  trung FBD **110 test PASS**; TypeScript, lint/UI strings và production build
+  PASS. Bundle Programming **149,69/165 KiB gzip**; Chrome Playwright **2/2
+  PASS** cho shell responsive sáu mốc và Quick Library. Chrome DevTools MCP đã
+  bật nhưng không khởi động được browser headful vì thiếu X server; đây không
+  phải physical HIL hoặc `RELEASE_READY`.
+
 ### Added — `TASK-8-FBD-EDIT` shell responsive, network view và preference cho FBD Editor (#574, 2026-09-07)
 
 - Dựng workspace FBD responsive: từ 1440 px hiển thị đồng thời Explorer,
@@ -52,6 +72,40 @@
   source link→Draft stale→delete impact; mobile 390 px không tràn, axe severe=0,
   HTTP 5xx/requestfailed/console.error=0. Docs ISO harness PASS với **15 SVG** và
   **29 UX-REQ**. Đây không phải physical HIL hoặc `RELEASE_READY`.
+
+### Fixed — Khắc phục 3 Major code review findings trên PR #572 FBD Edit task 6–7 (2026-09-07)
+
+- **Finding 1 (Major) — Mutation thuộc tính node FBD thành action nguyên tử:**
+  - *Triệu chứng:* Khi lưu form Inspector node FBD đổi đồng thời cả kiểu dữ liệu (`dataType`) lẫn biến/giá trị (`variable`/`value`/`parameters`), form phát tuần tự nhiều dispatch action (`SET_NODE_TYPE` rồi `SET_NODE_VARIABLE`...), mỗi lệnh push một bản ghi lịch sử vào `state.past` khiến người dùng phải Undo 2 lần cho 1 lần bấm Lưu.
+  - *Nguyên nhân:* Reducer `fbdEditorReducer` phân tách xử lý từng thuộc tính riêng rẽ và commit snapshot riêng từng action.
+  - *Cách sửa:* Thêm action nguyên tử `UPDATE_NODE_ATTRIBUTES` trong `commands.ts` và `nodeEditor.ts`, thẩm định đồng thời và commit đúng 1 snapshot tài liệu duy nhất.
+- **Finding 2 (Major) — Native HTML5 Drag & Drop ghost preview:**
+  - *Triệu chứng:* Kéo block từ `QuickLibraryPanel` vào `FbdCanvas` không hiển thị ghost preview trong sự kiện `dragover`.
+  - *Nguyên nhân:* Chế độ bảo vệ (protected mode) của HTML5 Drag & Drop trả về chuỗi rỗng khi gọi `event.dataTransfer.getData()` trong lúc `dragover`, chỉ cho phép truy cập `event.dataTransfer.types`.
+  - *Cách sửa:* Mã hoá `entryId` vào custom MIME type `application/x-mkddc-library-entry/${entryId}` trong `handleDragStart`, canvas trích xuất `entryId` từ `dataTransfer.types`, hiển thị ghost layer snap chuẩn toạ độ và dọn sạch khi `dragleave` hoặc `drop`.
+- **Finding 3 (Major) — Inspector collapse khi FBD không chọn node:**
+  - *Triệu chứng:* Mở POU FBD khi chưa chọn node nào thì dock Inspector vẫn hiển thị form `ProgramInspector`, không thu gọn đúng đặc tả `TC-FBD-INS-002` / `R-04`.
+  - *Nguyên nhân:* `ProgramsTab.tsx` luôn truyền `ProgramInspector` vào `editableProgramSlot` và truyền `program: selected` vào `input`, làm `inspectorHasUsefulContext` trả về `true`.
+  - *Cách sửa:* Khi `selected.language === 'FBD' && fbdSelection === null`, đặt `editableProgramSlot={undefined}` và `input.program={undefined}` để dock Inspector thu gọn thành `<p data-testid="inspector-collapsed">` với 0 form mutation; cập nhật assertion của test `A-T5` trong `ProgramsTab.test.tsx`.
+- **Dọn dẹp Whitespace / EOF:** Đã xử lý các lỗi EOF blank line và trailing whitespace được `git diff --check` phát hiện.
+
+### Fixed — `FE-TR-01` Không xoá ngầm điểm deep link không resolve được trên Trends (2026-09-07)
+
+- **Triệu chứng:** Mở deep link `?points=<id>` mà id không có trong `/points`, effect ở dòng
+  ~254 lọc `selectedIds` theo danh sách điểm vừa tải về và xoá ngầm id đó ngay khi có kết quả.
+- **Nguyên nhân gốc:** `hasSavedPrefsRef.current` bật `true` khi có deep link khiến nhánh lọc
+  luôn chạy; mâu thuẫn trực tiếp với thiết kế sự cố `FE-TR-01` (board DDC-24-TANG-1, 2026-08-06)
+  và làm memo `unresolvedSelectedIds` thành code chết (id không resolve được lẽ ra phải giữ thẻ
+  riêng kèm nút gỡ và lời giải thích, thay vì biến mất im lặng).
+- **Cách sửa:** Giữ nguyên `selectedIds` khi `hasSavedPrefsRef.current` bật, thay vì lọc qua
+  `analogPoints`. Nhánh "chưa có prefs → dựng mặc định `UI-01..08`" giữ nguyên hành vi cũ.
+- **Bẫy đã tránh:** Ca `TrendsPage.deepLink.test.tsx` → `it('id không tồn tại vẫn hiện ra kèm lời
+  giải thích, KHÔNG im lặng bỏ qua')` có thể bị "sửa" giả bằng cách mock `/points` trả rỗng — khi
+  đó test chạm early-return `if (!analogPoints.length) return` và né hẳn nhánh lọc, xanh mà lỗi
+  còn nguyên. Đã bác cách này và sửa đúng gốc; test xanh với `/points` trả dữ liệu thật.
+- **Kiểm chứng:** Vitest toàn FE đạt **3.058/3.059 PASS** (1 ca fail duy nhất tại
+  `ShellNavigation.test.tsx` do cờ `.env.local` `VITE_PROGRAMMING_REV_A=1` trên máy phát triển,
+  không có trên CI); `npx tsc --noEmit` 0 lỗi; `npm run lint` exit 0.
 
 ### Changed — `ISS-PGM-RBAC-01` Capability Programming và `ISS-PGM03-02` Mapping mutation (#564, #555, 2026-09-06)
 
@@ -2362,6 +2416,66 @@ bản sao ngay dòng đầu vòng lặp, nên phép kiểm `restartPolicy` của
   (đúng quy tắc `CLAUDE.md`) nên bắt được ngay; chạy lại bằng đường dẫn tuyệt đối mới ra số ở bảng
   trên. Ghi lại vì đây chính là cái bẫy "ctest vẫn chạy binary cũ và báo pass".
 
+### Changed — `UD-PROG-017` chốt mốc ngân sách bundle R1 là mốc lịch sử, cổng thi hành là R3 (2026-09-05)
+
+- **Triệu chứng.** Task 7 của lát FBD EDIT đo chunk `programming` **128,54 KiB** gzip, vượt **3,54 KiB** so với mốc R1 125 KiB mà spec của lát tự đặt; lát không thể tự tuyên "đạt gate" trong khi `npm run build` vẫn PASS. Hồ sơ quyết định `PROGRAMMING_OPEN_DECISIONS.md` đồng thời có hai lỗi truy nguyên: bảng §4 Lịch sử có **hai dòng cùng đánh số 1.5** và **thiếu hẳn dòng 1.7** dù header đã khai 1.7; header còn ghi `UD-PROG-014` "ĐANG MỞ" trong khi thân hồ sơ đã ghi CLOSED từ 2026-08-27.
+- **Nguyên nhân gốc.** R1 **không phải cổng đang thi hành**. `apps/web-ui/package.json:28` pin `--increment r3` (trần 165 KiB) từ trước khi lát FBD EDIT bắt đầu, `package.json:8` nối cổng đó vào `build`, và `grep -rn "bundle-budget" .github/` trả **0 kết quả** — không có wiring CI nào khác. Plan 59 dòng 7 ghi increment R1, R2, R3 **đều ĐÓNG** với 74/74 task DONE hoặc WAIVED/DEFERRED tường minh. Chunk đã vượt 125 KiB từ `T59-816` ngày 2026-08-27, và bốn task R3 liên tiếp (`T59-816` 153,79; `T59-819` 127,67; `T59-820` 128,97; `T59-821` 132,88 KiB) đều ghi nhãn `/165 KiB (R3)` và đều được nhận là hợp lệ. Vậy đây không phải hồi quy do Task 7, mà là tài liệu plan/spec còn tham chiếu tới một cổng đã hết hiệu lực.
+- **Cách sửa.**
+  - Ghi `UD-PROG-017` = **CLOSED** vào `docs/00_governance/PROGRAMMING_OPEN_DECISIONS.md` (§1 bảng quyết định + mục chi tiết 1.6): Owner chọn **lựa chọn A** — R1 125 KiB là mốc lịch sử của increment đã đóng; cổng thi hành duy nhất là R3 165 KiB. Kèm **mốc cảnh báo mềm 145 KiB** dạng quy ước tài liệu, cố ý **không** cài vào script.
+  - Nâng hồ sơ quyết định `1.7 → 1.8`; cập nhật dòng Trạng thái theo trạng thái thật (hai quyết định ĐANG MỞ là `UD-PROG-015` và `UD-PROG-016`, không phải `UD-PROG-014`).
+  - Đính chính bảng §4 Lịch sử: bổ sung dòng `1.7` còn thiếu (gộp `8289aa56` đóng `UD-PROG-014` + mở `UD-PROG-015`, và `febac794` đóng `T59-820` + mở `UD-PROG-016`); ghi rõ vì sao hai dòng cùng mang số 1.5 (commit `a65eb762` không nâng số phiên bản) thay vì đánh lại số cho quá khứ; sắp lại bảng theo thứ tự phiên bản giảm dần.
+  - `docs/superpowers/specs/2026-08-31-fbd-edit-design.md`: sửa dòng 15, 83-84 và 109 để gate trỏ đúng cổng R3; đóng `BLK-FBD-003` ở bảng blocker §12 và gỡ nó khỏi danh sách residual của `APPROVED WITH RESIDUALS`. **Giữ nguyên** con số 125 KiB trong §5.4 Spike dependency gate và chỉ thêm ghi chú — mục đó là tiêu chí của một spike `@xyflow/react` **không thực hiện** (đã đóng bằng SVG-first theo chính mục 6 của nó), không phải cổng đang thi hành.
+  - `docs/superpowers/plans/2026-08-31-fbd-edit.md`: ghi disposition đóng vào bốn vị trí tham chiếu `BLK-FBD-003` / ngân sách R1, giữ nguyên câu gốc làm bằng chứng truy nguyên.
+- **Kiểm chứng.**
+  - Chunk `programming-CEgDVswx.js`: raw 511.152 byte → gzip zlib mức 6 = 131.629 byte = **128,54 KiB** (1 KiB = 1024 byte). Cổng repo R3 165,00 KiB ⇒ **PASS**, dư **36,46 KiB**.
+  - `fbd-editor-DGrHrJO8.js`: gzip 45.144 byte = 44,09 KiB — đã tách khỏi chunk `programming` nhờ Task 1.5.
+  - `grep -rn "bundle-budget" .github/` ⇒ 0 kết quả; `apps/web-ui/package.json:28` pin `--increment r3`.
+  - Phiên này **chỉ sửa tài liệu Markdown**, không đụng mã nguồn, `contracts/`, `scripts/` hay `package.json`; số đo lấy từ build có sẵn của Task 7, không build lại.
+- **Phạm vi không thay đổi.** Ngân sách trong `contracts/programming/pgm02_workspace_v1.json` §`nfr.frontend` (R1 125 / R2 145 / R3 165 KiB) **giữ nguyên** — sửa nó sẽ phá SHA-256 pin `pgm02_workspace_v1.json=2c2900661d…` ở `AUTH-PROG-2026-08-24-05`. Cờ `--increment r3` trong `package.json` **giữ nguyên**. `RELEASE_READY` vẫn **NO-GO**.
+
+### Added — `TASK-7-FBD-EDIT` I/O picker, Inspector và node presentation cho FBD Editor (2026-09-04)
+
+- **Triệu chứng.** Form sửa node FBD nằm ở khay inline trong canvas dẫn đến tồn tại song song hai khay thuộc tính mô tả cùng một selection FBD ("nhân bản state"); `StructuredFbdEditor.tsx` vượt trần độ dài tệp 800 dòng (823 dòng); node `INPUT`/`OUTPUT` thiếu bộ chọn I/O picker; node canvas chưa hiển thị đầy đủ kiểu/đơn vị port và parameter; `fbdIssueTargets` tính toán inline trong JSX gây suy giảm hiệu năng render.
+- **Nguyên nhân gốc.** Kiến trúc FBD Editor ban đầu nhúng form sửa trực tiếp vào canvas thay vì chuyển giao vào dock Inspector; thiếu component chuyên biệt cho thanh tra node FBD và thiếu hợp đồng interface tách biệt giữa canvas và dock; bộ chọn `InsertPointVariablePanel` chưa hỗ trợ chế độ nhúng (`embedded`) cho dock; nhãn port và tóm tắt tham số trên canvas chưa có cơ chế cắt ngắn chống tràn khung layout cố định `FBD_NODE_WIDTH = 168`.
+- **Cách sửa.**
+  - Dời form sửa node FBD từ khay inline trong canvas về **dock Inspector bên phải** qua slot mới `editableFbdSlot`; nay chỉ còn **một** khay thuộc tính mô tả selection FBD (trước đó có hai khay song song, đúng thứ spec gọi là "nhân bản state"). `StructuredFbdEditor.tsx` **823 → 697 dòng**, đóng vi phạm trần 800 dòng đang tồn tại.
+  - Tách `FbdNodeInspector.tsx` (320 dòng) và hợp đồng `nodeEditor.ts` (16 dòng); canonical state ở lại reducer, dock chỉ cầm bản đọc của node kèm hàm `apply`.
+  - Điều kiện thu gọn của `ContextInspector` nay tính cả `editableFbdSlot`, nên khi không chọn gì dock hiện đúng 1 thông báo `inspector-collapsed` và **0 form mutation** trong DOM.
+  - I/O picker cho node `INPUT`/`OUTPUT` tái dùng `InsertPointVariablePanel` với prop `variant` mới (`'popover'` mặc định giữ nhánh ST bất biến, `'embedded'` cho dock). Picker chỉ điền `name`/`dataType`/`unit`; `node.parameters` sau khi chọn point **chỉ** chứa `variable` — **0** `variableId`, **0** `pointId`, **0** `deviceId`, **0** Mapping/Binding ẩn, đúng ràng buộc `BLK-FBD-001`.
+  - Catalog lỗi ⇒ hiện lý do + nút Thử lại, danh sách rỗng, **0 entry giả**; trạng thái `loading` hiện "Đang tải…" và không cho chọn point.
+  - Node trên canvas nay hiện kiểu/đơn vị port (`name : TYPE (unit)`), tóm tắt parameter theo `kind`, và marker chẩn đoán. Chống tràn khung bằng hàm cắt ngắn thuần `nodeLabel.ts` (ngưỡng 22 ký tự tính từ `FBD_NODE_WIDTH = 168`), **giữ nguyên `aria-label` đầy đủ** để trình đọc màn hình không mất thông tin. Không nới `FBD_NODE_WIDTH`.
+  - `fbdIssueTargets` nâng lên `useMemo` dùng chung cho cả danh sách Problems và `issueNodeIds` (trước đó gọi inline trong JSX, chạy lại mỗi render); không gọi validator lần thứ hai.
+  - Chế độ EDIT không hiển thị giá trị runtime nào; `executionOrder`, thứ tự port và schema FBD v1 giữ nguyên.
+  - Chọn một **port** nay cũng mở form sửa của **node cha** trong dock (trước đó `selectedNodeInfo` chỉ khớp `kind === 'node'` nên chọn port làm form biến mất), khớp lại với `inspectorContext.ts` vốn đã coi `node` và `port` là cùng ngữ cảnh `FBD_BLOCK`. Không sinh khay riêng cho port.
+- **Kiểm chứng.**
+  - `npm test`: **219 test file / 2646 test PASS** (Task 6 nền: 214 file / 2604 test — tăng 5 file, 42 test).
+  - `npm run lint`: PASS, 0 error, 0 warning; `check:ui-strings` OK.
+  - `npm run typecheck`: PASS, 0 lỗi.
+  - `npm run build`: PASS.
+  - `npm run check:bundle-budget` (R3, cổng cấu hình thật của repo): **PASS** — chunk `programming` gzip **128.54 KiB**, ngân sách 165.00 KiB, dư địa 36.46 KiB.
+  - Mục tiêu R1 (125 KiB): **FAIL, vượt 3.54 KiB** (128.54 / 125.00). Task 6 để lại 122.45 KiB, dư địa chỉ 2.55 KiB nên plan §7.1 đã lường trước rủi ro này.
+- **Nợ kỹ thuật tồn đọng.**
+  - R1 vượt 3.54 KiB **đã được Owner chốt ngày 2026-09-05** bằng `UD-PROG-017` (lựa chọn A): mốc R1 125 KiB là mốc lịch sử của increment đã đóng, cổng thi hành duy nhất là R3 165 KiB. **Không** hạ chuẩn, **không** sửa `scripts/verify_programming_bundle_budget.py`, **không** sửa `contracts/programming/pgm02_workspace_v1.json` (cả hai nằm ngoài allowlist FE) — quyết định chỉ đính chính tài liệu plan/spec.
+  - Giới hạn jsdom: jsdom không dựng layout SVG (`getBBox` trả 0), nên test chỉ chứng minh nội dung text và `aria-label`, **không** chứng minh text không tràn khung / không đè dây. Kiểm chứng thị giác chuyển sang Task 11 (E2E browser).
+  - ~~Nợ kỹ thuật còn tồn từ trước Task 7: `fbd/FbdCanvas.tsx` **846 dòng** và `fbd/commands.ts` **844 dòng** vẫn vượt trần 800 dòng; cần tách file ở task sau.~~ → **ĐÃ XỬ LÝ 2026-09-05:** tách `useFbdNodeDrag.ts` (148 dòng) và `announcements.ts` (73 dòng) + `keyboard.ts` (56 dòng); `FbdCanvas.tsx` giảm 846 → **753 dòng**, `commands.ts` giảm 844 → **721 dòng**. Chunk `programming` đo lại **128.69 KiB gzip** (R3 165 KiB ⇒ PASS, dư 36.31 KiB). Test 2646/2646 PASS; tsc, lint, build đều PASS.
+
+### Added — `TASK-6-FBD-EDIT` Quick Library placement và typed wiring cho FBD Editor (2026-09-04)
+
+- **Triệu chứng.** Sơ đồ khối FBD chưa hỗ trợ kéo-thả trực tiếp khối từ thư viện Quick Library xuống canvas và chưa hỗ trợ kéo dây trực quan bằng chuột/cảm ứng; khối `PID` (chưa qua kiểm định an toàn Controls+Safety `REVIEW_REQUIRED`) có nguy cơ bị đưa vào sơ đồ; chưa có cơ chế kiểm tra kiểu dữ liệu (data types) khi nối dây trực quan.
+- **Nguyên nhân gốc.** Action `ADD_NODE` thiếu toạ độ `position` đi kèm trong cùng transaction (dẫn đến phân mảnh lịch sử Undo); thiếu action chuyên biệt `ADD_WIRE` cho luồng kéo dây pointer/touch; thiếu tầng validator dùng chung độc lập `validateFbdWireCandidate` giữa bàn phím và chuột; `FbdCanvas` và `FbdCanvasLayers` thiếu các tầng xử lý HTML5 DnD, click-to-place Ghost preview và wire drag preview.
+- **Cách sửa.**
+  - Mở rộng `ADD_NODE` nhận `position?: FbdPoint` tuỳ chọn, snap toạ độ và cập nhật layout trong cùng 1 lần `commit` (đúng 1 snapshot history undo/redo).
+  - Thêm action `ADD_WIRE` nhận `networkId` và `wire`, tách hàm thuần `validateFbdWireCandidate` độc lập kiểm tra tương thích kiểu dữ liệu (type/unit), hướng (OUTPUT → INPUT), cấm self-loop, cấm ngược thứ tự, cấm fan-in và giới hạn số lượng dây.
+  - Khối `PID` (hoặc bất kỳ khối nào có `featureState !== 'AVAILABLE'`) bị khóa kéo thả (`draggable={false}`), nút chèn disabled, và bị reducer từ chối dứt khoát với mã `block-review-required`.
+  - Triển khai HTML5 Drag & Drop với MIME type chuẩn `application/x-mkddc-library-entry`.
+  - Triển khai click-to-place có `FbdGhostLayer` bám theo con trỏ chuột; nhấn phím `Escape`, `pointercancel` hoặc thả ngoài canvas huỷ sạch state tạm với 0 mutation.
+  - Triển khai `FbdWirePreviewLayer` và điều khiển kéo dây chuột/cảm ứng trên port SVG, cô lập hoàn toàn sự kiện khỏi gesture di chuyển node; hỗ trợ nối dây qua Ctrl click-click và phím Enter bàn phím.
+  - Bổ sung nút "Thử lại" kích hoạt `refresh` khi thư viện Quick Library gặp sự cố đọc catalog.
+- **Kiểm chứng.**
+  - `npm test`: **214 tệp / 2604 test PASS 100%**.
+  - `npm run lint`: **0 warning, 0 error** (ESLint sạch, kiểm tra chuỗi tiếng Việt đạt chuẩn).
+  - `npm run typecheck`: **0 lỗi TypeScript**.
+  - `npm run check:bundle-budget`: Chunk `programming` đạt **122.45 KiB gzip**, nằm dưới cả hai ngưỡng R1 (125 KiB) và R3 (165 KiB), dư địa 42.55 KiB.
 
 ### Fixed — `ISS-PIO-26` Lệnh test commissioning có TTL và tự nhả (#386, 2026-09-04)
 

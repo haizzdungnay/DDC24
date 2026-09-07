@@ -156,7 +156,10 @@ describe('FbdCanvas — Task 5 Viewport, Layering & Interaction', () => {
       const sceneGroup = surface.querySelector('[data-fbd-scene="true"]')
       expect(sceneGroup).toBeInTheDocument()
       const transform = sceneGroup?.getAttribute('transform') || ''
-      expect(transform).toMatch(/scale\(/)
+      const translated = transform.match(/translate\(([-\d.]+), ([-\d.]+)\)/)
+      expect(translated).not.toBeNull()
+      expect(Number(translated![1]) * 1.15).toBeCloseTo(-30)
+      expect(Number(translated![2]) * 1.15).toBeCloseTo(-22)
     })
   })
 

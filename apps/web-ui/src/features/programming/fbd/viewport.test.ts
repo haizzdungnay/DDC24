@@ -5,6 +5,7 @@ import {
   nextViewport,
   screenToGraph,
   snapPoint,
+  viewportSceneTransform,
   type FbdViewport,
   type ViewportRect,
 } from './viewport'
@@ -77,6 +78,17 @@ describe('viewport math', () => {
 
       const backToGraph = screenToGraph(screen, viewport, defaultSceneRect)
       expect(backToGraph).toEqual(graphPoint)
+    })
+  })
+
+  describe('viewportSceneTransform', () => {
+    it('đổi pan pixel màn hình sang đúng user-unit SVG khi đã zoom', () => {
+      expect(viewportSceneTransform({ x: 50, y: 30, scale: 2 }))
+        .toBe('translate(25, 15) scale(1)')
+    })
+
+    it('không tạo transform dư khi chưa pan', () => {
+      expect(viewportSceneTransform({ x: 0, y: 0, scale: 2 })).toBeUndefined()
     })
   })
 

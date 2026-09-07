@@ -3,6 +3,7 @@ import { useI18n } from '../../../../shared/i18n'
 import { THEMES, TOKEN_NAMES } from '../../../../shared/theme/tokens'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import type { FbdSelection } from '../../fbd/commands'
+import type { FbdNodeEditorTarget } from '../../fbd/nodeEditor'
 import {
   readFbdPreferences,
   writeFbdPreferences,
@@ -41,6 +42,7 @@ export interface FbdEditorPaneProps {
   userScope?: string
   /** `T59-818` — chuyển tiếp lựa chọn canvas lên Inspector dùng chung. */
   onSelectionChange?: (selection: FbdSelection | null) => void
+  onNodeEditorTargetChange?: (target: FbdNodeEditorTarget | null) => void
   focusSelection?: FbdSelection | null
   onRunCheck?: () => void
   onOpenCompare?: () => void
@@ -57,6 +59,7 @@ export function FbdEditorPane({
   projectId,
   userScope,
   onSelectionChange,
+  onNodeEditorTargetChange,
   focusSelection,
 }: FbdEditorPaneProps) {
   const { pick } = useI18n()
@@ -191,6 +194,7 @@ export function FbdEditorPane({
           if (selection?.networkId) setActiveNetworkId(selection.networkId)
           onSelectionChange?.(selection)
         }}
+        onNodeEditorTargetChange={onNodeEditorTargetChange}
         focusSelection={focusSelection}
       />
       <EditorStatusBar

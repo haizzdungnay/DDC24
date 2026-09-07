@@ -109,6 +109,8 @@ export function userPouPaletteEntry(pou: UserPouInterface): FbdPaletteEntry {
     polymorphic: false,
     allowedTypes: [defaultType],
     defaultType,
+    // POU người dùng do người dùng định nghĩa, không thuộc registry duyệt sản phẩm của hệ thống.
+    featureState: 'AVAILABLE',
     /* `ISS-STED-17` — POU do người dùng định nghĩa không thuộc IEC 61131-3 lẫn
      * thư viện Mekong. Gắn cho nó một trong hai nhãn là nói sai; `null` là câu
      * trả lời đúng, và UI chỉ hiện nhãn cho `MANUFACTURER_EXTENSION`. */
