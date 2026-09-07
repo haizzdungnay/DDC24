@@ -21,7 +21,21 @@
   package Programming application PASS; Vitest toàn FE **243 tệp / 3.075 test**,
   hai test suite tạo POU **25/25**, lint, contract check, `build:foxlinx`, bundle
   Programming **149,69/165 KiB gzip** và docs ISO harness **17/17** đều PASS.
-  Đây chưa phải bằng chứng TARGET, physical HIL hoặc `RELEASE_READY`.
+- Triển khai merge commit `280cea2245a5131fffcddc9c41400e3f86eb9a4b`
+  (`dirty=false`, khoá ST `RELEASE`) lên Forlinx bằng gói ARM64 SHA-256
+  `48c6bd114ca2fb69ddbbf6a57b0ca4a8f8ea3e3b4c23df393c1fdc830c23f0e5`;
+  đã sao lưu trước triển khai tại
+  `/var/backups/mkddc/predeploy-280cea22-20260907T111834Z.tar.gz` và snapshot
+  rollback tại `/var/backups/mkddc/0.1.0-20260907-161134`.
+- Kiểm chứng TARGET/FakeMCU: health **6/6 `ok`**, checksum runtime **8/8 PASS**,
+  năm service bắt buộc `active` với `NRestarts=0`, HMI/PTY vẫn `disabled`, không
+  có unit failed và cấu hình mạng giữ nguyên. Chính binary ARM64 xử lý bản sao
+  online của Draft thật qua API: batch `upsertProgram(FBD)+setTask` trả HTTP 200,
+  tạo đúng POU FBD, đưa số `extIndex` từ 32 về 0 và giữ nguyên mọi
+  `(bindingId, deviceId, pointId)`; chữ ký Draft vận hành không đổi trong phép
+  thử. Sau đó DB live cũng đã tự nâng cấp về 0 `extIndex` qua các PATCH hợp lệ,
+  không còn response 400 trong log sau deploy. Không Commission, không ghi
+  output; đây không phải bằng chứng physical HIL hoặc `RELEASE_READY`.
 
 ### Changed — Đồng bộ `main` và triển khai PR #572 lên bo Forlinx (2026-09-07)
 
