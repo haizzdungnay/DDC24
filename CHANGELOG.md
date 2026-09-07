@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Added — `TASK-8-FBD-EDIT` shell responsive, network view và preference cho FBD Editor (#574, 2026-09-07)
+
+- Dựng workspace FBD responsive: từ 1440 px hiển thị đồng thời Explorer,
+  Canvas, Thư viện nhanh và Inspector; dải 1024–1439 px chuyển các khay phải
+  thành drawer; tablet 768–1023 px có chế độ Chọn vùng; dưới 768 px chỉ đọc,
+  hiện đúng cảnh báo màn hình nhỏ và khóa mọi thao tác ghi.
+- Bổ sung chế độ xem network đang chọn/tất cả, network hoạt động, thuộc tính
+  `data-fbd-network-id`, theme Sáng/Tối/Theo web, lưới, bám lưới, kiểu dây và
+  trạng thái dock lưu cục bộ theo tài khoản + Project. Khôi phục giới hạn tám
+  tab POU, giữ xác nhận tab bẩn và bỏ các nút Lưu/Kiểm tra/Làm mới trùng khỏi
+  FBD để dùng duy nhất lệnh chung trên header.
+- Kiểm chứng HOST/no-board: Vitest toàn FE **236 tệp / 2.989 test PASS**;
+  tập trung **120 test PASS**; Playwright trên
+  Google Chrome **2/2 PASS**, gồm journey ST/FBD đầy đủ và ma trận FBD
+  1440/1280/1024/820/768/390 px, không tràn ngang, drawer trả focus bằng Escape
+  và mobile phát sinh **0 request ghi**. TypeScript, lint, production build và
+  bundle budget PASS; chunk Programming **144,27 KiB gzip**, còn **20,73 KiB**
+  so với trần 165 KiB. Đây không phải bằng chứng physical HIL hoặc
+  `RELEASE_READY`.
+
 ### Added — `ISS-PGM03-04` Published Signal dependency authoritative và provenance (#557, 2026-09-07)
 
 - Compiler ST/FBD ghi exact vị trí read/publish vào output Check; package

@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { ProgrammingDraftOperation, ProgrammingProgram } from '../../model/types'
@@ -7,7 +7,11 @@ import { FbdEditorPane, parseFbdDocument } from './FbdEditorPane'
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  window.localStorage.clear()
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+})
 
 describe('parseFbdDocument', () => {
   it('trả về FbdDocument hợp lệ khi JSON chuẩn cú pháp', () => {
@@ -91,104 +95,83 @@ describe('FbdEditorPane', () => {
     }
   }
 
-  it('render cơ bản: hiển thị tên POU, EditorStatusBar, nút Lưu', () => {
+  it('TC-FBD-HEADER-001: shell chỉ giữ lệnh canvas, không lặp Lưu/Kiểm tra/So sánh của header chung', () => {
     renderPane()
     expect(screen.getByRole('heading', { level: 3, name: 'FBD_Sample' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Lưu|Save/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Kiểm tra|Check/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /So sánh|Compare/ })).toBeInTheDocument()
+    const toolbar = screen.getByRole('toolbar', { name: /Lệnh FBD|FBD commands/ })
+    expect(within(toolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check|So sánh|Compare|Làm mới|Refresh/ })).toBeNull()
     expect(screen.getByTestId('editor-status-bar')).toBeInTheDocument()
   })
 
-  it('nút Lưu bị disabled khi chưa sửa (dirty=false), enabled khi dirty=true', () => {
-    const { rerender, onSave, onChange, onRunCheck, onOpenCompare } = renderPane()
-    const saveButton = screen.getByRole('button', { name: /Lưu|Save/ })
-    expect(saveButton).toBeDisabled()
-    expect(screen.queryByText(/Chưa lưu|Not saved/)).not.toBeInTheDocument()
-
-    // Sửa source tài liệu thành đồ thị khác
-    const modifiedDoc: FbdDocument = {
+  function twoNetworkDocument(): FbdDocument {
+    return {
       ...sampleDoc,
       networks: [
         ...sampleDoc.networks,
-        { id: 'net-2', name: 'network_2', order: 1, nodes: [], wires: [] },
+        { id: '20000000-0000-4000-8000-000000000002', name: 'network_2', order: 1, nodes: [], wires: [] },
       ],
     }
-    const modifiedJson = canonicalFbdJson(modifiedDoc)
+  }
 
-    rerender(
-      <I18nProvider>
-        <FbdEditorPane
-          program={sampleProgram}
-          source={modifiedJson}
-          canEdit={true}
-          saving={false}
-          onChange={onChange}
-          onSave={onSave}
-          userPouInterfaces={[]}
-          onRunCheck={onRunCheck}
-          onOpenCompare={onOpenCompare}
-        />
-      </I18nProvider>,
-    )
+  it('TC-FBD-RESP-001: shell có min-width guard và lớp 4 cột nội bộ tại 1440 px', () => {
+    renderPane()
+    expect(screen.getByTestId('fbd-workspace-shell')).toHaveClass('min-w-0', 'overflow-x-hidden')
+    const grid = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ }).children[1]
+    expect(grid).toHaveClass('min-[1440px]:grid-cols-[minmax(0,1fr)_18rem]')
+    expect(screen.getByRole('button', { name: /Chọn vùng|Marquee select/ })).toHaveClass('md:inline-flex', 'lg:hidden')
+  })
 
-    expect(saveButton).not.toBeDisabled()
+  it('TC-FBD-RESP-002: nút Chọn vùng cho tablet đổi mode mà chưa phát mutation', () => {
+    const { onChange } = renderPane()
+    const marquee = screen.getByRole('button', { name: /Chọn vùng|Marquee select/ })
+    expect(marquee).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(marquee)
+    expect(marquee).toHaveAttribute('aria-pressed', 'true')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('TC-FBD-NET-001: selected chỉ render network active; ALL render đủ network có data-fbd-network-id', () => {
+    const document = twoNetworkDocument()
+    renderPane({ program: { ...sampleProgram, document: canonicalFbdJson(document) }, source: canonicalFbdJson(document) })
+    expect(screen.getAllByRole('article')).toHaveLength(1)
+    fireEvent.change(screen.getByLabelText(/Khung nhìn|View/), { target: { value: 'ALL' } })
+    const articles = screen.getAllByRole('article')
+    expect(articles).toHaveLength(2)
+    expect(articles.map((article) => article.getAttribute('data-fbd-network-id'))).toEqual(document.networks.map((network) => network.id))
+  })
+
+  it('TC-FBD-NET-002: đổi network active cập nhật scene và nhãn toolbar', () => {
+    const document = twoNetworkDocument()
+    renderPane({ program: { ...sampleProgram, document: canonicalFbdJson(document) }, source: canonicalFbdJson(document) })
+    fireEvent.change(screen.getByLabelText(/Network hoạt động|Active network/), { target: { value: document.networks[1].id } })
+    expect(screen.getByTestId('fbd-active-network')).toHaveTextContent('network_2')
+    expect(screen.getByRole('article')).toHaveAttribute('data-fbd-network-id', document.networks[1].id)
+  })
+
+  it('TC-FBD-PREF-001: theme/grid/network view lưu cục bộ mà không đổi canonical buffer', () => {
+    const { onChange } = renderPane()
+    const before = canonicalFbdJson(sampleDoc)
+    fireEvent.change(screen.getByLabelText(/Giao diện FBD|FBD theme/), { target: { value: 'DARK' } })
+    fireEvent.click(screen.getByLabelText(/Lưới|Grid/))
+    fireEvent.change(screen.getByLabelText(/Khung nhìn|View/), { target: { value: 'ALL' } })
+    expect(screen.getByTestId('fbd-workspace-shell')).toHaveAttribute('data-fbd-theme', 'DARK')
+    expect(screen.getByTestId('fbd-workspace-shell').style.getPropertyValue('--c-bg')).not.toBe('')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(canonicalFbdJson(sampleDoc)).toBe(before)
+    expect(window.localStorage.getItem('mkddc:fbd-preferences:v1:global:default')).toContain('"theme":"DARK"')
+  })
+
+  it('TC-FBD-STATE-004: viewer không phát mutation từ shortcut hoặc palette', () => {
+    const { onChange } = renderPane({ canEdit: false })
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    expect(screen.getByRole('button', { name: /Thêm khối|Add block/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Chọn vùng|Marquee select/ })).toBeDisabled()
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('dirty vẫn được công bố để header chung khoá Check theo pending operations', () => {
+    renderPane({ source: canonicalFbdJson(twoNetworkDocument()) })
     expect(screen.getByText(/Chưa lưu|Not saved/)).toBeInTheDocument()
-  })
-
-  it('click Lưu gọi onSave đúng draft operation', () => {
-    const modifiedDoc: FbdDocument = {
-      ...sampleDoc,
-      networks: [
-        ...sampleDoc.networks,
-        { id: 'net-2', name: 'network_2', order: 1, nodes: [], wires: [] },
-      ],
-    }
-    const modifiedJson = canonicalFbdJson(modifiedDoc)
-    const { onSave } = renderPane({ source: modifiedJson })
-
-    const saveButton = screen.getByRole('button', { name: /Lưu|Save/ })
-    expect(saveButton).not.toBeDisabled()
-    fireEvent.click(saveButton)
-
-    expect(onSave).toHaveBeenCalledTimes(1)
-    expect(onSave).toHaveBeenCalledWith([
-      {
-        op: 'replaceProgramSource',
-        programId: 'fbd-prog-1',
-        language: 'FBD',
-        source: modifiedJson,
-      },
-    ])
-  })
-
-  it('nút Kiểm tra và So sánh hiển thị đúng trạng thái và callback', () => {
-    const { onRunCheck, onOpenCompare } = renderPane()
-    const checkButton = screen.getByRole('button', { name: /Kiểm tra|Check/ })
-    const compareButton = screen.getByRole('button', { name: /So sánh|Compare/ })
-
-    expect(checkButton).not.toBeDisabled()
-    expect(compareButton).not.toBeDisabled()
-
-    fireEvent.click(checkButton)
-    expect(onRunCheck).toHaveBeenCalledTimes(1)
-
-    fireEvent.click(compareButton)
-    expect(onOpenCompare).toHaveBeenCalledTimes(1)
-  })
-
-  it('nút Kiểm tra và So sánh bị disabled khi có lý do khoá', () => {
-    renderPane({
-      checkDisabledReason: 'Draft is dirty',
-      compareDisabledReason: 'No baseline revision',
-    })
-    const checkButton = screen.getByRole('button', { name: /Kiểm tra|Check/ })
-    const compareButton = screen.getByRole('button', { name: /So sánh|Compare/ })
-
-    expect(checkButton).toBeDisabled()
-    expect(checkButton).toHaveAttribute('title', 'Draft is dirty')
-
-    expect(compareButton).toBeDisabled()
-    expect(compareButton).toHaveAttribute('title', 'No baseline revision')
   })
 })

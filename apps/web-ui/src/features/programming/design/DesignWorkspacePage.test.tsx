@@ -148,6 +148,14 @@ function pouInTree(name: string) {
 }
 
 describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
+  it('TC-FBD-STATE-001: khi Draft chưa tải xong chỉ hiện skeleton và chưa mount control mutation', () => {
+    client.request.mockReturnValue(new Promise(() => {}))
+    renderWorkspace()
+    expect(screen.getByText('Đang tải Draft…')).toBeInTheDocument()
+    expect(screen.queryByTestId('fbd-workspace-shell')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Thêm khối/ })).toBeNull()
+  })
+
   it('mount Published Signals trên route Mapping bằng raw Draft v2, không qua adapter làm mất signals[]', async () => {
     const project = baseProject()
     project.draft = {
@@ -413,7 +421,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(textarea).toHaveValue('X := 2; (* chưa lưu *)')
   })
 
-  it('thêm chương trình FBD mount StructuredFbdEditor thật, không placeholder (TASK-PROG-502)', async () => {
+  it('TC-FBD-UX-001: + FBD tạo canonical POU và mount StructuredFbdEditor thật', async () => {
     client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; program?: { programId: string; name: string; document: unknown } }> } }) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
@@ -1042,7 +1050,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     expect(within(palette).queryByRole('option', { name: /Định dạng/ })).not.toBeInTheDocument()
   })
 
-  it('T59-802: dưới 768 px FBD nhận canEdit=false và Insert không đổi graph', async () => {
+  it('TC-FBD-RESP-003 / TC-FBD-STATE-004: dưới 768 px hiện banner, FBD khóa mutation và không gửi write API', async () => {
     stubMobileViewport()
     const fbd = JSON.stringify({
       $schema: '../../fbd_v1.schema.json',
@@ -1067,6 +1075,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     renderWorkspace('/eng/programming/projects/project-1/design?pou=object-fbd')
 
     const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
+    expect(screen.getByTestId('programming-mobile-read-only')).toHaveTextContent('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ')
     expect(within(editor).getByText('Chỉ đọc')).toBeInTheDocument()
     expect(within(editor).getByRole('button', { name: 'Thêm khối' })).toBeDisabled()
     expect(within(editor).getByText('0/256 block')).toBeInTheDocument()

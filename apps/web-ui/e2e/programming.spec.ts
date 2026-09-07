@@ -896,7 +896,9 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     expect(fbdAxe.violations, 'Vi phạm a11y trên canvas FBD').toEqual([])
 
     await page.screenshot({ path: testInfo.outputPath('03-design-fbd.png'), fullPage: true })
-    await page.getByRole('button', { name: 'Lưu', exact: true }).click()
+    // FBD chỉ dùng lệnh chung ở header; tên truy cập đầy đủ của nút là
+    // “Lưu bản nháp”, còn nhãn nhìn thấy được rút gọn thành “Lưu”.
+    await page.getByRole('button', { name: 'Lưu bản nháp', exact: true }).click()
 
     // UJ-PROG-03 — Điểm & Ánh xạ
     await page.getByRole('tab', { name: /Điểm & Ánh xạ/ }).click()
@@ -914,10 +916,9 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-03 sở
     // hữu toàn bộ seal/run/poll/result — không còn seal/Check inline ở đây).
     await page.getByRole('tab', { name: 'Chương trình', exact: true }).click()
-    /* Hai nút cùng hành động (`DEV-PROG-009`), tên truy cập khác nhau. Case này
-       đi bằng nút của thanh công cụ — đúng đường người dùng vừa gõ xong sẽ bấm. */
-    await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toBeEnabled()
-    await page.getByRole('button', { name: 'Kiểm tra', exact: true }).click()
+    // FBD không lặp lệnh Kiểm tra trong editor; dùng lệnh chung ở header.
+    await expect(page.getByRole('button', { name: 'Kiểm tra gói', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: 'Kiểm tra gói', exact: true }).click()
     await page.waitForURL((url) => url.pathname === `/eng/programming/projects/${PROJECT_ID}/commission`)
     await expect(page.getByText('Chưa có Kiểm tra nào.')).toBeVisible()
     await page.getByRole('button', { name: 'Kiểm tra' }).click()
@@ -1385,6 +1386,82 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
 
     expect(writes, 'màn hẹp không được gửi mutation nào').toEqual([])
     expectNoBrowserFailures(failures, 'mobile read-only')
+  })
+
+  test('TC-FBD-RESP-001..003/HEADER-001/STATE-004: shell FBD đúng sáu mốc và mobile không ghi', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', 'Một lane desktop tự đổi kích thước để giữ cùng một tài liệu FBD')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    const writes = observeProgrammingWrites(page)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
+
+    await page.getByTitle('Thêm chương trình FBD').click()
+    const shell = page.getByTestId('fbd-workspace-shell')
+    await expect(shell).toBeVisible()
+    const fbdToolbar = page.getByRole('toolbar', { name: 'Lệnh FBD' })
+    await expect(fbdToolbar).toBeVisible()
+
+    // HEADER-001: FBD chỉ có lệnh chung ở header, không dựng bản sao trong shell.
+    await expect(page.getByRole('button', { name: 'Lưu bản nháp', exact: true })).toHaveCount(1)
+    await expect(shell.getByRole('button', { name: /^(Lưu|Kiểm tra|Làm mới)$/ })).toHaveCount(0)
+
+    // Hai network chứng minh view SELECTED/ALL bằng chính DOM canvas.
+    await fbdToolbar.getByRole('button', { name: 'Network', exact: true }).click()
+    await expect(shell.locator('article[data-fbd-network-id]')).toHaveCount(1)
+    await page.getByLabel('Khung nhìn').selectOption('ALL')
+    await expect(shell.locator('article[data-fbd-network-id]')).toHaveCount(2)
+    await expect(shell.getByTestId('fbd-active-network')).toContainText('Network')
+
+    const inspector = page.locator('aside[aria-label="Thuộc tính"]')
+    const inspectorOpener = page.getByRole('button', { name: 'Mở Thuộc tính', exact: true }).first()
+    const libraryDock = page.locator('[data-fbd-dock="library"]')
+    const marquee = page.getByRole('button', { name: 'Chọn vùng', exact: true })
+
+    // ≥1440: Explorer | Canvas + Thư viện nhanh | Inspector cùng hiển thị.
+    await expect(inspector).toBeVisible()
+    await expect(libraryDock).toBeVisible()
+    await expect(inspectorOpener).toBeHidden()
+    await expect(marquee).toBeHidden()
+
+    for (const width of [1280, 1024]) {
+      await page.setViewportSize({ width, height: 820 })
+      await expect(shell).toBeVisible()
+      await expect(inspector).toBeHidden()
+      await expect(libraryDock).toBeHidden()
+      await expect(inspectorOpener).toBeVisible()
+      await expect(marquee).toBeHidden()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${width}px không tràn ngang`).toBe(true)
+    }
+
+    // Drawer trả focus sau Escape ở dải desktop hẹp.
+    await page.setViewportSize({ width: 1280, height: 820 })
+    await inspectorOpener.click()
+    await expect(inspector).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(inspector).toBeHidden()
+    await expect(inspectorOpener).toBeFocused()
+
+    // 768–1023: nút Chọn vùng dành cho touch/stylus xuất hiện.
+    for (const width of [820, 768]) {
+      await page.setViewportSize({ width, height: 900 })
+      await expect(marquee).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${width}px không tràn ngang`).toBe(true)
+    }
+
+    // <768: banner đúng nội dung, điều khiển sửa bị khóa và không có mutation.
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(page.getByTestId('programming-mobile-read-only')).toContainText('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ')
+    await expect(shell.getByRole('button', { name: 'Thêm khối', exact: true })).toBeDisabled()
+    const writesBeforeMobileAttempt = writes.length
+    await page.locator('body').focus()
+    await page.keyboard.press('Insert')
+    await expect.poll(() => writes.length).toBe(writesBeforeMobileAttempt)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), '390px không tràn ngang').toBe(true)
+
+    expectNoBrowserFailures(failures, 'ma trận responsive FBD')
   })
 
   test('AC-PGM02-002: 1280×750 — trình soạn thảo PGM-02 thấy được mà KHÔNG cuộn trang', async ({ page }, testInfo) => {
