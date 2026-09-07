@@ -60,6 +60,7 @@ export function translateFbdAnnouncement(pick: (vi: string, en: string) => strin
     case 'node-type-set': return pick(`Đã đổi kiểu sang ${p.type}`, `Type changed to ${p.type}`)
     case 'invalid-instance-name': return pick('Tên instance không hợp lệ', 'Invalid instance name')
     case 'node-fb-params-set': return pick('Đã cập nhật tham số function block', 'Function block parameters updated')
+    case 'node-attributes-updated': return pick('Đã cập nhật thuộc tính node', 'Node attributes updated')
     case 'selection-revision-mismatch': return pick('Phiên bản vùng chọn không khớp', 'Selection revision mismatch')
     case 'wire-limit-reached': return pick('Đã đạt giới hạn wire', 'Reached wire limit')
     case 'blocks-moved': return pick('Đã đổi vị trí các block trên canvas', 'Blocks moved on canvas')

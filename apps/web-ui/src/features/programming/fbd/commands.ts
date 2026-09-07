@@ -121,6 +121,17 @@ export type FbdEditorAction =
   | { type: 'SET_NODE_VALUE'; networkId: string; nodeId: string; value: FbdParameterValue }
   | { type: 'SET_NODE_TYPE'; networkId: string; nodeId: string; dataType: FbdDataType }
   | { type: 'SET_NODE_FB_PARAMS'; networkId: string; nodeId: string; instance: string | null; retained: boolean }
+  | {
+      type: 'UPDATE_NODE_ATTRIBUTES'
+      networkId: string
+      nodeId: string
+      dataType?: FbdDataType
+      variable?: string
+      unit?: string | null
+      value?: FbdParameterValue
+      instance?: string | null
+      retained?: boolean
+    }
   | { type: 'UNDO' }
   | { type: 'REDO' }
 
@@ -696,6 +707,89 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       if (action.retained) parameters.retained = true
       found.node.parameters = parameters
       return commit(state, document, { code: 'node-fb-params-set' })
+    }
+    case 'UPDATE_NODE_ATTRIBUTES': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const document = cloneFbdDocument(state.document)
+      const found = findNode(document, action.networkId, action.nodeId)
+      if (!found) return reject(state, { code: 'node-not-found' })
+      const { node } = found
+
+      // Validate dataType nếu có
+      if (action.dataType !== undefined) {
+        if (!FBD_DATA_TYPES.includes(action.dataType)) return reject(state, { code: 'invalid-data-type' })
+        if (node.kind !== 'INPUT' && node.kind !== 'OUTPUT' && node.kind !== 'CONSTANT') {
+          const entry = fbdPaletteEntry(node.typeRef)
+          if (!entry || !entry.polymorphic || !entry.allowedTypes.includes(action.dataType)) {
+            return reject(state, { code: 'invalid-data-type' })
+          }
+        }
+      }
+
+      const effectiveType = (action.dataType ?? node.typeRef) as FbdDataType
+
+      // Validate variable / unit
+      if (action.variable !== undefined) {
+        if (node.kind !== 'INPUT' && node.kind !== 'OUTPUT') return reject(state, { code: 'node-not-found' })
+        if (!isFbdIdentifier(action.variable)) return reject(state, { code: 'invalid-variable-name' })
+      }
+      if (action.unit !== undefined && action.unit !== null) {
+        if (action.unit.length < 1 || action.unit.length > 32) return reject(state, { code: 'invalid-unit' })
+      }
+
+      // Validate value
+      if (action.value !== undefined) {
+        if (node.kind !== 'CONSTANT') return reject(state, { code: 'node-not-found' })
+        if (!isValidConstantLiteral(effectiveType, action.value)) return reject(state, { code: 'invalid-constant-value' })
+      }
+
+      // Validate FB params
+      if (action.instance !== undefined && action.instance !== null) {
+        if (node.kind !== 'FUNCTION_BLOCK') return reject(state, { code: 'node-not-found' })
+        if (!isFbdIdentifier(action.instance)) return reject(state, { code: 'invalid-instance-name' })
+      }
+
+      // Áp dụng kiểu dữ liệu
+      if (action.dataType !== undefined && action.dataType !== node.typeRef) {
+        if (node.kind === 'INPUT' || node.kind === 'OUTPUT' || node.kind === 'CONSTANT') {
+          node.typeRef = action.dataType
+          node.ports = node.ports.map((port) => ({ ...port, dataType: action.dataType! }))
+          if (node.kind === 'CONSTANT' && action.value === undefined && !isValidConstantLiteral(action.dataType, node.parameters.value)) {
+            node.parameters = { ...node.parameters, value: action.dataType === 'BOOL' ? false : action.dataType === 'TIME' ? 'T#0s' : 0 }
+          }
+        } else {
+          applyOperandType(node, action.dataType)
+        }
+      }
+
+      // Áp dụng biến / đơn vị
+      if (action.variable !== undefined) {
+        node.parameters = { ...node.parameters, variable: action.variable }
+      }
+      if (action.unit !== undefined && node.ports[0]) {
+        node.ports[0].unit = action.unit
+      }
+
+      // Áp dụng giá trị hằng số
+      if (action.value !== undefined) {
+        node.parameters = { ...node.parameters, value: action.value }
+      }
+
+      // Áp dụng FB params
+      if (action.instance !== undefined || action.retained !== undefined) {
+        const nextParams = { ...node.parameters }
+        if (action.instance !== undefined) {
+          if (action.instance !== null) nextParams.instance = action.instance
+          else delete nextParams.instance
+        }
+        if (action.retained !== undefined) {
+          if (action.retained) nextParams.retained = true
+          else delete nextParams.retained
+        }
+        node.parameters = nextParams
+      }
+
+      return commit(state, document, { code: 'node-attributes-updated' })
     }
     case 'UNDO': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })

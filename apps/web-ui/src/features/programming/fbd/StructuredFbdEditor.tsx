@@ -249,6 +249,18 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
           instance: change.instance,
           retained: change.retained,
         })
+      } else if (change.kind === 'attributes') {
+        dispatch({
+          type: 'UPDATE_NODE_ATTRIBUTES',
+          networkId,
+          nodeId: node.id,
+          dataType: change.dataType,
+          variable: change.variable,
+          unit: change.unit,
+          value: change.value,
+          instance: change.instance,
+          retained: change.retained,
+        })
       }
     },
     [selectedNodeInfo, dispatch]

@@ -62,7 +62,7 @@ describe('FbdNodeInspector', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
 
     expect(apply).toHaveBeenCalledTimes(1)
-    expect(apply).toHaveBeenCalledWith({ kind: 'value', value: 25.5 })
+    expect(apply).toHaveBeenCalledWith({ kind: 'attributes', dataType: 'REAL', value: 25.5 })
   })
 
   it('A-T2: Tên biến INPUT không hợp lệ báo lỗi tại chỗ, 0 dispatch', () => {
@@ -323,10 +323,11 @@ describe('FbdNodeInspector', () => {
     // Bấm Lưu
     fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
 
-    // Kiểm tra các lệnh apply
-    expect(apply).toHaveBeenCalledWith({ kind: 'dataType', dataType: 'REAL' })
+    // Kiểm tra lệnh apply nguyên tử duy nhất
+    expect(apply).toHaveBeenCalledTimes(1)
     expect(apply).toHaveBeenCalledWith({
-      kind: 'variable',
+      kind: 'attributes',
+      dataType: 'REAL',
       variable: 'MB_FLOW_01',
       unit: 'l/s',
     })
@@ -374,16 +375,17 @@ describe('FbdNodeInspector', () => {
     fireEvent.click(screen.getByRole('button', { name: /DO_FAN_CMD/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Lưu' }))
 
-    // Node typeRef là BOOL, point dataType là BOOL => không đổi type, chỉ phát đúng 1 lệnh 'variable'
+    // Node typeRef là BOOL, point dataType là BOOL => phát đúng 1 lệnh 'attributes' nguyên tử
     expect(apply).toHaveBeenCalledTimes(1)
     expect(apply).toHaveBeenCalledWith({
-      kind: 'variable',
+      kind: 'attributes',
+      dataType: 'BOOL',
       variable: 'DO_FAN_CMD',
       unit: null,
     })
 
     const payload = apply.mock.calls[0][0] as Record<string, unknown>
-    expect(Object.keys(payload).sort()).toEqual(['kind', 'unit', 'variable'])
+    expect(Object.keys(payload).sort()).toEqual(['dataType', 'kind', 'unit', 'variable'])
     expect(payload).not.toHaveProperty('pointId')
     expect(payload).not.toHaveProperty('deviceId')
     expect(payload).not.toHaveProperty('variableId')

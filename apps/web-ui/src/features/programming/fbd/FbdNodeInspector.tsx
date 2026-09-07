@@ -70,12 +70,10 @@ export function FbdNodeInspector({
               return
             }
             setError(null)
-            if (typeDraft !== node.typeRef) {
-              apply({ kind: 'dataType', dataType: typeDraft })
-            }
             const cleanUnit = unitDraft.trim()
             apply({
-              kind: 'variable',
+              kind: 'attributes',
+              dataType: typeDraft,
               variable: variableDraft,
               unit: cleanUnit.length > 0 && cleanUnit !== unknownUnitLabel ? cleanUnit : null,
             })
@@ -173,10 +171,11 @@ export function FbdNodeInspector({
             return
           }
           setError(null)
-          if (typeDraft !== node.typeRef) {
-            apply({ kind: 'dataType', dataType: typeDraft })
-          }
-          apply({ kind: 'value', value: parsed })
+          apply({
+            kind: 'attributes',
+            dataType: typeDraft,
+            value: parsed,
+          })
         }}
       >
         <label className="flex flex-col gap-1 text-xs">

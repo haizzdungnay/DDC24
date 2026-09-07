@@ -14,3 +14,12 @@ export type FbdNodeEditorChange =
   | { kind: 'value'; value: FbdParameterValue }
   | { kind: 'dataType'; dataType: FbdDataType }
   | { kind: 'fbParams'; instance: string | null; retained: boolean }
+  | {
+      kind: 'attributes'
+      dataType?: FbdDataType
+      variable?: string
+      unit?: string | null
+      value?: FbdParameterValue
+      instance?: string | null
+      retained?: boolean
+    }
