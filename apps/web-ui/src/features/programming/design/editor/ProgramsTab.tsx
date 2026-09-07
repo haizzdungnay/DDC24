@@ -264,6 +264,7 @@ export function ProgramsTab({
   explorerSlot,
   runtimeOverlayByProgramId,
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
+  userScope,
   forceReadOnly = false,
   onWatchVariable,
   insertIntent = null,
@@ -326,6 +327,8 @@ export function ProgramsTab({
   runtimeOverlayByProgramId?: Readonly<Record<string, StRuntimeOverlayState | undefined>>
   /** Interface POU typed do Draft/API cung cấp; FBD không tự parse ST để đoán pin. */
   userPouInterfaces?: readonly UserPouInterface[]
+  /** Danh tính cục bộ để preference FBD không rò giữa các tài khoản dùng chung HMI. */
+  userScope?: string
   /** Policy viewport từ route: dưới 768 px thắng cả quyền admin. */
   forceReadOnly?: boolean
   /** `DEV-PROG-003` — nháy đúp một ký hiệu trong trình soạn thảo ST để theo dõi. */
@@ -451,6 +454,15 @@ export function ProgramsTab({
   /* Nút mở khay Thư viện nhanh — đích trả focus khi đóng khay. Nút chỉ tồn tại
    * khi khay ĐANG ĐÓNG, nên phải đợi một nhịp render rồi mới focus được. */
   const libraryDockToggleRef = useRef<HTMLButtonElement | null>(null)
+  const fbdInspectorOpenerRef = useRef<HTMLButtonElement | null>(null)
+  const [fbdInspectorDrawerOpen, setFbdInspectorDrawerOpen] = useState(false)
+  const [fbdWideDesktop, setFbdWideDesktop] = useState(() => window.innerWidth >= 1440)
+
+  useEffect(() => {
+    const update = () => setFbdWideDesktop(window.innerWidth >= 1440)
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
   /* Bản đồ mã là ĐIỀU HƯỚNG trong POU đang mở, nên nó thuộc cột trái cùng cây
    * POU — không phải một khay nữa chồng dưới chỗ gõ. Mặc định mở: nó là cách
    * nhanh nhất để đi trong một POU 400 dòng. */
@@ -487,6 +499,21 @@ export function ProgramsTab({
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
    * vùng theo line/column sau khi Program mới mount". */
   const [paletteJumpTarget, setPaletteJumpTarget] = useState<ProgrammingDiagnostic | null>(null)
+  const fbdInspectorOpen = selected?.language === 'FBD' && !fbdWideDesktop
+    ? fbdInspectorDrawerOpen
+    : slots.inspector
+
+  useEffect(() => {
+    if (selected?.language !== 'FBD' || fbdWideDesktop || !fbdInspectorDrawerOpen) return undefined
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setFbdInspectorDrawerOpen(false)
+      window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [fbdInspectorDrawerOpen, fbdWideDesktop, selected?.language])
 
   /**
    * Đưa con trỏ tới một offset trong POU ĐANG MỞ, từ một khay nằm ngoài trình
@@ -663,7 +690,11 @@ export function ProgramsTab({
        workbench dưới đáy đi theo. Dưới `lg` giữ nguyên dòng chảy dọc: màn hẹp
        không có ngân sách chiều cao để chia. */
     <div
-      className={`grid gap-4 md:grid-cols-[280px_1fr] lg:h-full lg:min-h-0 ${SLOT_GRID_CLASS[slotKey(slots)]}`}
+      className={`grid min-w-0 gap-4 lg:h-full lg:min-h-0 ${
+        selected?.language === 'FBD'
+          ? 'md:grid-cols-[208px_minmax(0,1fr)] min-[1440px]:grid-cols-[208px_minmax(0,1fr)_240px]'
+          : `md:grid-cols-[280px_1fr] ${SLOT_GRID_CLASS[slotKey(slots)]}`
+      }`}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
           event.preventDefault()
@@ -844,6 +875,20 @@ export function ProgramsTab({
           setMaximized(false)
         }}
       >
+        {selected?.language === 'FBD' && (
+          <div className="mb-2 flex justify-end min-[1440px]:hidden">
+            <button
+              ref={fbdInspectorOpenerRef}
+              type="button"
+              className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-xs"
+              aria-expanded={fbdInspectorDrawerOpen}
+              aria-controls="programs-slot-inspector"
+              onClick={() => setFbdInspectorDrawerOpen(true)}
+            >
+              {pick('Mở Thuộc tính', 'Open inspector')}
+            </button>
+          </div>
+        )}
         <PouTabBar
           state={tabs}
           missingKeys={missingTabKeys}
@@ -988,6 +1033,7 @@ export function ProgramsTab({
             onSave={onSave}
             userPouInterfaces={userPouInterfaces}
             projectId={document.project.projectId}
+            userScope={userScope}
             onSelectionChange={setFbdSelection}
             focusSelection={focusFbdSelection?.programId === selected.programId ? focusFbdSelection.selection : null}
             onRunCheck={onRunCheck}
@@ -998,19 +1044,37 @@ export function ProgramsTab({
         )}
         </div>
       </div>
-      <aside className="min-w-0 lg:min-h-0 lg:overflow-y-auto" aria-label={pick('Thuộc tính', 'Inspector')}>
+      <aside
+        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${selected?.language === 'FBD'
+          ? `${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl min-[1440px]:static min-[1440px]:block min-[1440px]:w-auto min-[1440px]:bg-transparent min-[1440px]:p-0 min-[1440px]:shadow-none`
+          : ''}`}
+        aria-label={pick('Thuộc tính', 'Inspector')}
+        onKeyDown={(event) => {
+          if (selected?.language !== 'FBD' || event.key !== 'Escape' || window.innerWidth >= 1440) return
+          event.preventDefault()
+          setFbdInspectorDrawerOpen(false)
+          window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
+        }}
+      >
         <div className="mb-2 flex justify-end">
           <button
             type="button"
             className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-            aria-expanded={slots.inspector}
+            aria-expanded={fbdInspectorOpen}
             aria-controls="programs-slot-inspector"
-            onClick={() => setSlots({ ...slots, inspector: !slots.inspector })}
+            onClick={() => {
+              const nextOpen = !fbdInspectorOpen
+              if (selected?.language === 'FBD' && !fbdWideDesktop) setFbdInspectorDrawerOpen(nextOpen)
+              else setSlots({ ...slots, inspector: nextOpen })
+              if (!nextOpen && selected?.language === 'FBD' && !fbdWideDesktop) {
+                window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
+              }
+            }}
           >
-            {slots.inspector ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}
+            {fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}
           </button>
         </div>
-        <div id="programs-slot-inspector" hidden={!slots.inspector}>
+        <div id="programs-slot-inspector" hidden={!fbdInspectorOpen}>
         {/* `DEV-PROG-002` — Thư viện nhanh đứng TRÊN Inspector trong cùng cột
             phải: cả hai đều là khay phụ trợ của bề mặt đang soạn, và gộp chúng
             vào một cột giữ nguyên ngân sách bề ngang cho chỗ người ta gõ. */}

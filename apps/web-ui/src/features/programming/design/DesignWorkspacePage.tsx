@@ -624,7 +624,7 @@ export function DesignWorkspacePage({
       )}
       {mobileReadOnly && (
         <p role="status" data-testid="programming-mobile-read-only" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
-          {pick('Dưới 768 px, workspace chỉ cho xem; hãy dùng màn hình rộng hơn để chỉnh sửa.', 'Below 768 px, the workspace is read-only; use a wider screen to edit.')}
+          {pick('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ. Hãy dùng màn hình rộng từ 768 px để chỉnh sửa.', 'Small screen — diagram view only. Use a screen at least 768 px wide to edit.')}
         </p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
@@ -881,6 +881,7 @@ export function DesignWorkspacePage({
                 </div>
               )}
               userPouInterfaces={userPouInterfaces}
+              userScope={session?.username}
               forceReadOnly={mobileReadOnly}
               onWatchVariable={watchVariable}
             />

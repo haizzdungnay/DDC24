@@ -412,6 +412,26 @@ describe('nối sai kiểu bị chặn ngay (AC-FBD-006)', () => {
     expect(after.announcement.code).toBe('connect-incompatible')
     expect(after.document.networks[0].wires).toHaveLength(0)
   })
+
+  it('TC-FBD-NET-003: dây xuyên network bị reducer chặn và không đổi canonical graph', () => {
+    const document = typedGraph('BOOL', 'BOOL')
+    const target = document.networks[0].nodes.splice(2, 1)[0]
+    document.networks[0].wires = []
+    document.networks.push({
+      id: uuid(0x90000000, 1),
+      name: 'network_2',
+      order: 1,
+      nodes: [target],
+      wires: [],
+    })
+    const before = canonicalFbdJson(document)
+
+    const after = attempt(document)
+
+    expect(after.announcement.code).toBe('connect-incompatible')
+    expect(canonicalFbdJson(after.document)).toBe(before)
+    expect(after.document.networks.every((network) => network.wires.length === 0)).toBe(true)
+  })
 })
 
 /* `WP-05` AC: "Save/reload reproduces layout; port `order` unchanged". Hình học

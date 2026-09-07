@@ -71,7 +71,7 @@ describe('bất biến định danh — objectId, không bao giờ là tên', ()
 })
 
 describe('điều 1 — trần số tab và hành vi khi vượt', () => {
-  it(`trần là ${POU_TAB_LIMIT}; vượt thì đóng tab SẠCH ít dùng nhất`, () => {
+  it(`TC-FBD-UX-002: trần là ${POU_TAB_LIMIT}; vượt thì đóng tab SẠCH ít dùng nhất`, () => {
     const keys = Array.from({ length: POU_TAB_LIMIT }, (_, index) => `obj-${index}`)
     const state = openAll(keys)
     // `obj-0` mở đầu tiên và không được chạm lại ⇒ ít dùng nhất.
@@ -115,7 +115,7 @@ describe('điều 1 — trần số tab và hành vi khi vượt', () => {
 })
 
 describe('điều 2 — đóng tab bẩn phải xác nhận', () => {
-  it('tab bẩn chưa xác nhận ⇒ không đóng', () => {
+  it('TC-FBD-UX-002: tab bẩn chưa xác nhận ⇒ không đóng', () => {
     const state = openAll(['obj-a', 'obj-b'])
     const closed = closePouTab(state, 'obj-a', { dirty: true })
     expect(closed.ok).toBe(false)
