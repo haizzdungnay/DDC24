@@ -3,6 +3,7 @@ import {
   PROGRAMMING_LIBRARY_ENTRIES,
   type LibraryCategory,
   type LibraryEntry,
+  type LibraryFeatureState,
 } from '../api/generated/library_registry'
 import { type FbdDataType, type FbdNodeKind, type FbdParameterValue } from './model'
 
@@ -38,6 +39,8 @@ export interface FbdPaletteEntry {
   /** Tên các port đổi theo T khi `SET_NODE_TYPE`; port không có trong danh
    *  sách này giữ nguyên kiểu cố định (vd `OUT:BOOL` của phép so sánh). */
   typedPortNames: readonly string[]
+  /** Trạng thái duyệt của khối (AVAILABLE | REVIEW_REQUIRED). */
+  featureState: LibraryFeatureState
   /** `ISS-STED-17` — khối thuộc IEC 61131-3 hay là mở rộng của Mekong. */
   iecClassification: LibraryEntry['iecClassification'] | null
   warning?: { vi: string; en: string }
@@ -57,6 +60,7 @@ function toPaletteEntry(entry: LibraryEntry): FbdPaletteEntry {
     allowedTypes: entry.allowedTypes,
     defaultType: entry.defaultType,
     typedPortNames,
+    featureState: entry.featureState,
     iecClassification: entry.iecClassification,
     ...(entry.warning ? { warning: entry.warning } : {}),
     // Port trong registry ghi kiểu ở `defaultType`; port nằm trong

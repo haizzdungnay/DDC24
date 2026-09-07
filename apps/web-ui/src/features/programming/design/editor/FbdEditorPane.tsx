@@ -4,6 +4,7 @@ import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import type { FbdSelection } from '../../fbd/commands'
+import type { FbdNodeEditorTarget } from '../../fbd/nodeEditor'
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
@@ -35,6 +36,7 @@ export interface FbdEditorPaneProps {
   projectId?: string
   /** `T59-818` — chuyển tiếp lựa chọn canvas lên Inspector dùng chung. */
   onSelectionChange?: (selection: FbdSelection | null) => void
+  onNodeEditorTargetChange?: (target: FbdNodeEditorTarget | null) => void
   focusSelection?: FbdSelection | null
   onRunCheck?: () => void
   onOpenCompare?: () => void
@@ -52,6 +54,7 @@ export function FbdEditorPane({
   userPouInterfaces,
   projectId,
   onSelectionChange,
+  onNodeEditorTargetChange,
   focusSelection,
   onRunCheck,
   onOpenCompare,
@@ -110,6 +113,7 @@ export function FbdEditorPane({
         projectId={projectId}
         onChange={(next) => onChange(canonicalFbdJson(next))}
         onSelectionChange={onSelectionChange}
+        onNodeEditorTargetChange={onNodeEditorTargetChange}
         focusSelection={focusSelection}
       />
       <EditorStatusBar

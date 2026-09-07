@@ -4,6 +4,8 @@ import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { FbdEditorPane, parseFbdDocument } from './FbdEditorPane'
 import type { FbdSelection } from '../../fbd/commands'
+import type { FbdNodeEditorTarget } from '../../fbd/nodeEditor'
+import { FbdNodeInspector } from '../../fbd/FbdNodeInspector'
 import { ContextInspector } from '../inspector/ContextInspector'
 import { stSymbolContextFor } from '../inspector/inspectorContext'
 import { hashBufferSource } from '../../shared/diagnosticFreshness'
@@ -341,7 +343,13 @@ export function ProgramsTab({
    */
   const [cursorSymbol, setCursorSymbol] = useState<StCursorSymbol | null>(null)
   const [fbdSelection, setFbdSelection] = useState<FbdSelection | null>(null)
+  const [fbdNodeEditorTarget, setFbdNodeEditorTarget] = useState<FbdNodeEditorTarget | null>(null)
   const [buffers, setBuffers] = useState<Record<string, string>>({})
+
+  /* CB-2: Reset fbdNodeEditorTarget khi selected.programId đổi hoặc selected.language !== 'FBD' */
+  useEffect(() => {
+    setFbdNodeEditorTarget(null)
+  }, [selected?.programId, selected?.language])
 
   /* `ISS-STED-13` — đối chiếu chỉ mục ký hiệu của FE với bảng compiler công bố.
    *
@@ -989,6 +997,7 @@ export function ProgramsTab({
             userPouInterfaces={userPouInterfaces}
             projectId={document.project.projectId}
             onSelectionChange={setFbdSelection}
+            onNodeEditorTargetChange={setFbdNodeEditorTarget}
             focusSelection={focusFbdSelection?.programId === selected.programId ? focusFbdSelection.selection : null}
             onRunCheck={onRunCheck}
             onOpenCompare={onOpenCompare}
@@ -1113,6 +1122,18 @@ export function ProgramsTab({
                 onChange={(draft) => setMetadataDrafts((current) => ({ ...current, [selected.programId]: draft }))}
                 onSave={onSave}
               />
+            }
+            editableFbdSlot={
+              fbdNodeEditorTarget ? (
+                <FbdNodeInspector
+                  target={fbdNodeEditorTarget}
+                  pick={pick}
+                  pointCatalogStatus={pointCatalog.status}
+                  pointCatalogItems={pointCatalog.data?.items ?? []}
+                  pointCatalogError={pointCatalog.error}
+                  onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
+                />
+              ) : undefined
             }
           />
         ) : (
