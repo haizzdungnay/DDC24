@@ -38,7 +38,7 @@ Việc ban hành đợt vá là điều kiện tiên quyết để đảm bảo 
 |---|---|---|---|---|
 | A1 | Chặn | `python3` là stub WindowsApps khiến 7 script npm và lint/build hỏng | Thêm Task 0.5 tạo shim `python3` trỏ về `python` (3.13.2); không sửa `package.json` | §0.5 (dòng 60–89) |
 | A2 | Chặn | Plan giả định cổng bundle là `r1` trong khi `package.json` cấu hình `r3` | Ghi nhận đúng cổng repo là `r3`; đưa việc đổi sang `r1` vào mục quyết định cần Owner | §0.3 (dòng 51) |
-| A3 | Chặn | Chưa có task xử lý vượt budget R1 (`BLK-FBD-003`, đo thật 157.20 > 125 KiB) | Thêm Task 1.5 cấu hình `manualChunks` cho `programming` trong `vite.config.ts` | §1.5 (dòng 158–196) |
+| A3 | Chặn | Chưa có task xử lý vượt budget R1 (`BLK-FBD-003`, đo thật 157.20 > 125 KiB) | Thêm Task 1.5 cấu hình `manualChunks` cho `programming` trong `vite.config.ts` | §1.5 (dòng 158–196) — **Kết quả 2026-09-05:** Task 1.5 cắt 28,66 KiB (157,20 → 128,54 KiB); phần chênh còn lại đóng bằng `UD-PROG-017` lựa chọn A. |
 | A4 | Chặn | `expectedSelectionRevision` chỉ có trong văn xuôi, chưa có trong reducer | Task 3 bổ sung `selectionRevision: number` vào state và reducer atomic quản lý | §3 (dòng 253–268) |
 | B1 | Cao | Plan yêu cầu commit 11 lần trực tiếp lên `main` vi phạm quy trình | Tạo nhánh riêng `feat/fbd-edit` ở Task 0; toàn bộ commit thực hiện trên nhánh này | §0.2 (dòng 39), §1 |
 | B2 | Cao | `ProgramsTab.tsx` dài 3,190 dòng mà 5 task còn tiếp tục thêm code | Thêm Task 5.5 tách `FbdEditorPane` ra file riêng `design/editor/FbdEditorPane.tsx` | §0.1 (dòng 23–24), §5.5 (dòng 395–434) |
@@ -70,7 +70,7 @@ Việc ban hành đợt vá là điều kiện tiên quyết để đảm bảo 
 ### Task 1.5: Tách chunk programming (Task 1.5 — Bundle Optimization)
 - **Vị trí trong tài liệu:** Mục §1.5 (dòng 158–196), đặt giữa Task 1 và Task 2.
 - **Nội dung và kỹ thuật:** Bổ sung quy tắc phân tách gói thủ công (`manualChunks`) cho đường dẫn `src/features/programming/**` bên trong cấu hình `build.rollupOptions.output` của file `apps/web-ui/vite.config.ts`.
-- **Mục đích:** Xử lý triệt để blocker kỹ thuật `BLK-FBD-003` khi gói bundle R1 hiện tại đạt 157.20 KiB, vượt quá hạn mức thiết kế 125 KiB gzip.
+- **Mục đích:** Xử lý triệt để blocker kỹ thuật `BLK-FBD-003` khi gói bundle R1 hiện tại đạt 157.20 KiB, vượt quá hạn mức thiết kế 125 KiB gzip. **Cập nhật 2026-09-05:** `BLK-FBD-003` đã **CLOSED**. Task 1.5 đưa chunk về 128,54 KiB; Owner ký `UD-PROG-017` chốt cổng thi hành là R3 165 KiB, mốc R1 125 KiB là mốc lịch sử của increment đã đóng.
 - **Tiêu chí hoàn thành:** Chunk `programming` được tách riêng khi build; đo đạc số liệu thực tế bằng script chuyên dụng; ghi nhận kết quả minh bạch để Owner quyết định về hạn mức nếu không đạt 125 KiB.
 
 ### Task 5.5: Tách FbdEditorPane ra module riêng (Task 5.5)
@@ -99,7 +99,7 @@ Toàn bộ các phép kiểm tra tính toàn vẹn cơ học và quy chuẩn tà
 ## 6. Việc còn mở: blocker và quyết định cần Owner
 
 ### Các Blocker kỹ thuật và quy trình tiếp tục mở
-1. **`BLK-FBD-003` (Ngân sách bundle R1):** Đo thực tế hiện tại là 157.20 KiB, vượt trần 125 KiB gzip. Đợt vá này mới chỉ bổ sung giải pháp kỹ thuật tại Task 1.5 trong tài liệu kế hoạch chứ chưa tiến hành sửa code thực tế.
+1. **`BLK-FBD-003` (Ngân sách bundle R1):** Đo thực tế hiện tại là 157.20 KiB, vượt trần 125 KiB gzip. Đợt vá này mới chỉ bổ sung giải pháp kỹ thuật tại Task 1.5 trong tài liệu kế hoạch chứ chưa tiến hành sửa code thực tế. **Cập nhật 2026-09-05 — mục này KHÔNG còn mở.** Task 1.5 đã thực thi thật (chunk 157,20 → 128,54 KiB, cắt 28,66 KiB) và `BLK-FBD-003` **CLOSED** theo `UD-PROG-017`: cổng thi hành là R3 165 KiB (PASS, dư 36,46 KiB), không phải R1 125 KiB.
 2. **`BLK-FBD-006` (Timeout transport client):** Client kết nối của phân hệ programming chưa thiết lập timeout mặc định. Kế hoạch tuân thủ nghiêm ngặt nguyên tắc fail-closed, không tự ý bổ sung retry/timeout mà chờ quyết định kiến trúc transport.
 3. **`BLK-FBD-004` và `BLK-FBD-007` (Bằng chứng duyệt trình duyệt và phê duyệt baseline):** Việc nghiệm thu trên trình duyệt thực tế và ký duyệt baseline vẫn mở, bắt buộc phải có biên bản thực hiện khi chạy xong kế hoạch.
 4. **`BLK-FBD-005` (Khối hàm PID):** Về mặt kỹ thuật, khối đã được khóa an toàn bằng cờ `featureState: "REVIEW_REQUIRED"` và trạng thái chặn kéo thả trong code hiện hữu; blocker này chuyển sang trạng thái đã có chốt chặn kỹ thuật, tiếp tục mở để chờ chữ ký phê duyệt từ hội đồng Controls + Safety.
