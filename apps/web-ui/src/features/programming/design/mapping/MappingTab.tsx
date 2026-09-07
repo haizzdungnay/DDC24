@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { useProgrammingPointCatalog } from '../../api/queries'
+import { useProgrammingPointCatalog, useProgrammingSignalDependencies } from '../../api/queries'
 import { useProgrammingActionAllowed } from '../../api/authorization'
 import { useProgrammingApiClient } from '../../api/authClient'
 import { ProgrammingApiError, ProgrammingNoResponseError, type ProgrammingBindingCandidate, type ProgrammingBindingPreview } from '../../api/generated/client'
 import { createUuid } from '../../../../shared/crypto'
 import { Modal } from '../../../../shared/components/Modal'
 import type { ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProject } from '../../model/types'
+import { draftSignals, isDraftV2 } from '../../model/signals'
 import { AssignedMappingsTable } from './AssignedMappingsTable'
 import { MappingInspector } from './MappingInspector'
 import { MappingToolbar } from './MappingToolbar'
@@ -60,6 +61,9 @@ export function MappingTab(props: {
   const canEdit = useProgrammingActionAllowed('mapping') && !forceReadOnly
   const client = useProgrammingApiClient()
   const catalog = useProgrammingPointCatalog(active, projectId)
+  const signalDocument = draft ?? document
+  const hasPublishedSignals = isDraftV2(signalDocument) && draftSignals(signalDocument).length > 0
+  const signalDependencies = useProgrammingSignalDependencies(projectId, active && hasPublishedSignals, project?.etag)
   const [query, setQuery] = useState('')
   const [programFilter, setProgramFilter] = useState('ALL')
   const [category, setCategory] = useState<PointCategoryFilter>('ALL')
@@ -326,7 +330,8 @@ export function MappingTab(props: {
       * E2E TRƯỚC, không phải sửa test cho khớp hiện trạng. */}
     <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
       <Suspense fallback={<p role="status" className="text-sm text-[var(--c-text-dim)]">{pick('Đang tải bảng Published Signal…', 'Loading the published signals panel…')}</p>}>
-        <PublishedSignalsPanel draft={draft ?? document} saving={saving} onSave={onSave} forceReadOnly={forceReadOnly} />
+        <PublishedSignalsPanel draft={draft ?? document} saving={saving} onSave={onSave}
+          forceReadOnly={forceReadOnly} dependencies={signalDependencies} projectId={projectId} />
       </Suspense>
     </div>
     <Modal

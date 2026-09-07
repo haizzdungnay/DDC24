@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-BE-PROG-001` |
-| Phiên bản | 1.8 |
+| Phiên bản | 1.9 |
 | Trạng thái | **M3 — corrective POU/library/signal/package source đang tích hợp; chưa merge/target evidence mới** |
-| Ngày | 2026-09-06 |
+| Ngày | 2026-09-07 |
 | Chủ quản | Backend Lead |
 | Người review | Core Lead, Security Lead, Verification Lead, Operations Lead |
 | Người phê duyệt | Backend Lead + System Architect |
@@ -144,6 +144,16 @@ và `--library-lock`. Tất cả file tạm mode `0600`, hash vào build key và
 success/fail/cancel. Output compiler/package được parse/verify lại; metadata FE
 không được chép thẳng vào artifact. Lỗi bất kỳ manifest/ref tạo Check `FAILED`,
 không Artifact và không stage/Commission.
+
+`GET /programming/projects/{projectId}/signal-dependencies` đọc duy nhất
+manifest Check `PASSED`, trả publisher/consumer kèm `programId`, `objectId`,
+POU, language và vị trí nguồn. Response luôn neo `draftRevisionId`,
+`draftSha256`, `baseRevisionId`, `checkedDraftSha256`, `checkId`,
+`checkRevisionId` và `checkInputSha256`. Manifest v4 hợp lệ và hash Draft khớp
+mới là `AUTHORITATIVE/VERIFIED`; chưa seal/Check là `PENDING_CHECK`, Draft đổi
+là `STALE/DRAFT_CHANGED`, Check lỗi hoặc contract cũ là `UNAVAILABLE`.
+Contract thiếu/malformed fail closed và không dùng mảng rỗng để ám chỉ không có
+consumer. Endpoint chỉ đọc, không stage hoặc Commission.
 
 ## 4. Commission coordinator
 
@@ -516,6 +526,7 @@ major khác, mutation disable. Restore LKG compatible trước mọi Core downgr
 | 1.5 | 2026-08-13 | `TASK-PROG-509`: nối Monitor/Trace source thật. `ProgrammingMonitorService` join Revision binding với Core/Point truth và bảo vệ namespace LOCAL; `TraceService` bounded/idempotent/audited/in-memory; runtime trả controller/task metric; HTTP routes/OpenAPI v1.20.0/FE client đồng bộ. Host Go tests PASS; target bản mới NOT_RUN do SSH. |
 | 1.6 | 2026-08-13 | `EV-PROG-P5-510`: full Go gate PASS; ARM64 Web deploy/hash/health/rollback rehearsal PASS; target Runtime/Task và Monitor `200` read-back đúng, Trace invalid selector `400`. Fixture active không binding nên chưa có positive row/Trace target; source chưa merge và không nâng Test Result. |
 | 1.8 | 2026-09-06 | `ISS-PGM-RBAC-01`: công bố `x-permission` cho đủ 44 Programming operation, sinh manifest và khóa drift OpenAPI/FE/Go; chuẩn hóa ma trận engineer cho `program.edit`/`program.activate`, giữ Simulation admin-only. |
+| 1.9 | 2026-09-07 | `ISS-PGM03-04`/`#557`: manifest Check v4 lưu publisher/consumer và exact source location từ compiler; thêm read model dependency neo Project/Draft/Revision/hash/Check, fail closed contract cũ và phân biệt authoritative/pending/stale/unavailable. |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|

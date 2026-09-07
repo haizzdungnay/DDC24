@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
   <title id="title">PGM-03 Mapping và Published Signal desktop</title>
-  <desc id="desc">Đặc tả trực quan ba vùng variable, Point Catalog và binding output owner</desc>
+  <desc id="desc">Đặc tả trực quan ba vùng variable, Published Signal có consumer compiler-authoritative, Point Catalog và binding output owner</desc>
   <rect width="1440" height="900" fill="#f5f7fa"/>
   <rect width="1440" height="72" fill="#132238"/>
   <text x="32" y="44" fill="#fff" font-family="sans-serif" font-size="22" font-weight="700">MK-DDC-24 · Programming</text>
@@ -22,8 +22,9 @@
     <text x="292" y="322" fill="#123c66" font-weight="700">AHU_Main.SupplyFanCmd</text><text x="292" y="348" fill="#526274">BOOL · OUTPUT · owner pending</text>
     <rect x="278" y="382" width="286" height="74" rx="6" fill="#fff" stroke="#d5dce5"/>
     <text x="292" y="408" fill="#132238" font-weight="700">AHU_Main.ZoneTemp</text><text x="292" y="434" fill="#526274">REAL · INPUT</text>
-    <rect x="278" y="468" width="286" height="88" rx="6" fill="#fff" stroke="#d5dce5"/>
+    <rect x="278" y="468" width="286" height="116" rx="6" fill="#fff" stroke="#d5dce5"/>
     <text x="292" y="494" fill="#132238" font-weight="700">Signal.SupplyDemand</text><text x="292" y="520" fill="#526274">REAL · publisher AHU_Main</text><text x="292" y="542" fill="#526274">freshness 2 s · fallback 0</text>
+    <text x="292" y="566" fill="#247844" font-size="13" font-weight="700">Đã kiểm · 2 consumer · mở đúng POU</text>
   </g>
   <rect x="606" y="178" width="390" height="640" rx="8" fill="#fff" stroke="#c7d0dc"/>
   <text x="628" y="214" fill="#132238" font-family="sans-serif" font-size="18" font-weight="700">Point Catalog</text>

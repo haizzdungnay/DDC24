@@ -27,7 +27,7 @@ import { roleCan, USER_ROLES } from "../../../../shared/auth/capabilities";
  * trao cho họ quyền tạo tài khoản.
  */
 describe("Programming API client sinh từ OpenAPI", () => {
-  it("khớp vai của cả 44 operation với capability FE", () => {
+  it("khớp vai của cả 45 operation với capability FE", () => {
     for (const [operationId, endpoint] of Object.entries(PROGRAMMING_ENDPOINTS)) {
       for (const role of USER_ROLES) {
         expect(
@@ -38,7 +38,7 @@ describe("Programming API client sinh từ OpenAPI", () => {
     }
   });
 
-  it("khóa đủ 44 operation và contract Commission/Runtime Signal/Simulation", () => {
+  it("khóa đủ 45 operation và contract Commission/Runtime Signal/Simulation", () => {
     // 25 operation Rev A + 4 operation Control Library (T59-202/T59-203)
     // + 2 operation intent Enable/Disable (T59-405) + 1 Published Signal
     // runtime read-only (T59-504) + 1 recovery-reset (T59-702)
@@ -46,7 +46,7 @@ describe("Programming API client sinh từ OpenAPI", () => {
     // + 1 Check entry PROJECT Library (T61-401)
     // + 1 đọc mã nguồn entry theo revision (T61-404)
     // + 1 preview binding server-authoritative (ISS-PGM03-01).
-    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(44);
+    expect(Object.keys(PROGRAMMING_ENDPOINTS)).toHaveLength(45);
     expect(PROGRAMMING_ENDPOINTS.previewProgrammingBinding).toEqual({
       method: "POST",
       path: "/api/v1/programming/projects/{projectId}/draft/bindings/preview",
@@ -159,7 +159,7 @@ describe("Programming API client sinh từ OpenAPI", () => {
   it("khoá hợp đồng bảng Programs sinh từ OpenAPI (T60-013/T60-014)", () => {
     // Bump contract đi kèm thay đổi hình dạng phản hồi; khoá số ở đây để một
     // lần sinh lại quên chạy không lặng lẽ giữ type cũ.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.39.0");
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.40.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

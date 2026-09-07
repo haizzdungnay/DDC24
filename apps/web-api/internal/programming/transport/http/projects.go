@@ -92,6 +92,8 @@ func handleProjectRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		handleListProjects(w, r, correlationID, service)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/programming/projects":
 		handleCreateProject(w, r, correlationID, service)
+	case r.Method == http.MethodGet && r.PathValue("projectId") != "" && strings.HasSuffix(r.URL.Path, "/signal-dependencies"):
+		handleGetSignalDependencies(w, r, correlationID, service)
 	case r.Method == http.MethodGet && r.PathValue("projectId") != "" && r.URL.Path != "/api/v1/programming/projects":
 		handleGetProject(w, r, correlationID, service)
 	case r.Method == http.MethodPatch && r.PathValue("projectId") != "":
@@ -107,6 +109,15 @@ func handleProjectRequest(w http.ResponseWriter, r *http.Request, correlationID 
 		return false
 	}
 	return true
+}
+
+func handleGetSignalDependencies(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) {
+	result, err := service.GetSignalDependencies(r.Context(), r.PathValue("projectId"))
+	if err != nil {
+		writeMappedError(w, err, correlationID)
+		return
+	}
+	writeJSON(w, http.StatusOK, correlationID, result)
 }
 
 func handlePreviewBinding(w http.ResponseWriter, r *http.Request, correlationID string, service *programmingapplication.ProjectService) {

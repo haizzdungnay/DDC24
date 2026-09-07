@@ -515,6 +515,8 @@ TEST(StFbdCompile, SignalReadAndPublishLowerToTheSameTypedIrAsStructuredText)
         EXPECT_EQ(fbd.module.signal_refs[0].type, StType::REAL);
         EXPECT_EQ(fbd.module.signal_refs[0].read, !item.publish);
         EXPECT_EQ(fbd.module.signal_refs[0].publish, item.publish);
+        EXPECT_GT(item.publish ? fbd.module.signal_refs[0].publish_line
+                               : fbd.module.signal_refs[0].read_line, 0U);
         EXPECT_TRUE(std::any_of(fbd.module.code.begin(), fbd.module.code.end(),
                                 [&](const StInstr& instruction) {
                                     return instruction.op ==
@@ -526,6 +528,9 @@ TEST(StFbdCompile, SignalReadAndPublishLowerToTheSameTypedIrAsStructuredText)
         StDiagnostic diagnostic;
         ASSERT_TRUE(compile_st_source(item.st_source, &st, &diagnostic, options))
             << diagnostic.code << ": " << diagnostic.message;
+        ASSERT_EQ(st.signal_refs.size(), 1U);
+        EXPECT_GT(item.publish ? st.signal_refs[0].publish_line
+                               : st.signal_refs[0].read_line, 0U);
         std::string reason;
         EXPECT_TRUE(fbd_ir_semantically_equivalent(st, fbd.module, &reason)) << reason;
     }

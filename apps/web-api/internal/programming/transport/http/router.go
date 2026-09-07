@@ -67,6 +67,7 @@ var routeDefinitions = []routeDefinition{
 	{operationID: "listProgrammingProjects", method: "GET", path: "/api/v1/programming/projects", permission: auth.PermissionRead},
 	{operationID: "createProgrammingProject", method: "POST", path: "/api/v1/programming/projects", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
 	{operationID: "getProgrammingProject", method: "GET", path: "/api/v1/programming/projects/{projectId}", permission: auth.PermissionRead},
+	{operationID: "getProgrammingSignalDependencies", method: "GET", path: "/api/v1/programming/projects/{projectId}/signal-dependencies", permission: auth.PermissionRead},
 	{operationID: "updateProgrammingDraft", method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	{operationID: "previewProgrammingBinding", method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/bindings/preview", permission: auth.PermissionProgramEdit, readOnly: true, bodyRequired: true, ifMatchRequired: true},
 	{operationID: "createProgrammingRevision", method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},

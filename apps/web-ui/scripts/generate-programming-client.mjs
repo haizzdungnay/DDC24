@@ -62,8 +62,8 @@ endpoints.sort((left, right) => left.operationId.localeCompare(right.operationId
 // Con số là contract: thêm endpoint
 // mà quên sinh lại client sẽ đỏ ở đây thay vì lộ ra dưới dạng một hàm thiếu
 // trong FE.
-if (endpoints.length !== 44) {
-  throw new Error(`Programming OpenAPI phải có 44 operation, thực tế ${endpoints.length}`);
+if (endpoints.length !== 45) {
+  throw new Error(`Programming OpenAPI phải có 45 operation, thực tế ${endpoints.length}`);
 }
 if (new Set(endpoints.map(({ operationId }) => operationId)).size !== endpoints.length) {
   throw new Error("Programming OpenAPI có operationId trùng");

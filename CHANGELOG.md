@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### Added — `ISS-PGM03-04` Published Signal dependency authoritative và provenance (#557, 2026-09-07)
+
+- Compiler ST/FBD ghi exact vị trí read/publish vào output Check; package
+  manifest v4 kết hợp signal definition với publisher/consumer canonical theo
+  `programId`, `objectId`, POU, language và line/column/length. Comment chứa tên
+  signal không bị quét thành consumer; manifest thiếu, sai hash hoặc contract cũ
+  bị từ chối fail-closed.
+- Thêm read-only API
+  `GET /programming/projects/{projectId}/signal-dependencies`, neo response vào
+  Project, Draft/Revision/hash và Check/input hash; phân biệt
+  `AUTHORITATIVE/PENDING_CHECK/STALE/UNAVAILABLE`. OpenAPI `1.40.0`, generated
+  client và manifest RBAC đồng bộ đủ **45 operation**.
+- PGM-03 chỉ hiển thị publisher/consumer do Check xác nhận, mở consumer tại đúng
+  POU/vị trí nguồn canonical và tự đọc lại khi ETag Draft đổi. Chỉ trạng thái
+  authoritative được phép hiện “Đã kiểm: không có”; xoá Signal luôn xác nhận
+  impact, chờ Draft read-back và không Commission.
+- Kiểm chứng HOST/no-board: C++ Release fresh với Modbus/BACnet/HMI cùng bật và
+  CTest **1.479 ca, 0 fail, 8 skip**; `go vet ./...` và toàn module test
+  `-count=1` PASS; Vitest **236 tệp / 2.984 test**, lint, TypeScript, production
+  build và bundle budget PASS, Programming **144,25 KiB gzip**. Playwright
+  Google Chrome real-backend **1/1 PASS** trong 49 giây: Check→provenance→exact
+  source link→Draft stale→delete impact; mobile 390 px không tràn, axe severe=0,
+  HTTP 5xx/requestfailed/console.error=0. Docs ISO harness PASS với **15 SVG** và
+  **29 UX-REQ**. Đây không phải physical HIL hoặc `RELEASE_READY`.
+
 ### Fixed — Khắc phục 3 Major code review findings trên PR #572 FBD Edit task 6–7 (2026-09-07)
 
 - **Finding 1 (Major) — Mutation thuộc tính node FBD thành action nguyên tử:**

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	programmingcompiler "mkddc-web/internal/programming/compiler"
 	"mkddc-web/internal/programming/domain"
 )
 
@@ -36,12 +37,17 @@ func validManifestInput(t *testing.T) packageManifestInput {
 		}},
 		ProgramManifests: []json.RawMessage{json.RawMessage(`{"manifestVersion":1}`)},
 		Topology:         topology, Budget: budget, PouGraph: packagePouGraph(objects),
-		Signals: packageManifestSignals(objects), Bindings: []packageManifestBinding{},
+		Signals: packageManifestSignals(objects,
+			[]programmingcompiler.Input{{SourceID: manifestObjectID, ProgramID: manifestProgramID, Language: "ST"}},
+			[]programmingcompiler.Result{{SignalRefs: []programmingcompiler.SignalRef{{
+				Name: "SUPPLY_TEMP", Type: "REAL", Publish: true,
+				PublishLocation: &programmingcompiler.SourceLocation{Line: 2, Column: 3, Length: 11},
+			}}}}, topology), Bindings: []packageManifestBinding{},
 		LibraryLock: packageLibraryLockFrom(objects, ""), IntegrityMode: "HASH_ONLY",
 	}
 }
 
-func TestPackageManifestV3CarriesStableRuntimeIdentityAndValidatesItself(t *testing.T) {
+func TestPackageManifestV4CarriesStableRuntimeIdentityAndValidatesItself(t *testing.T) {
 	raw, err := buildPackageCheckManifest(validManifestInput(t))
 	if err != nil {
 		t.Fatal(err)
@@ -64,6 +70,67 @@ func TestPackageManifestV3CarriesStableRuntimeIdentityAndValidatesItself(t *test
 	}
 	if document.Signals[0].FallbackValue == nil || *document.Signals[0].FallbackValue != 21.5 {
 		t.Fatalf("manifest làm mất fallback typed: %+v", document.Signals[0])
+	}
+}
+
+func TestPackageManifestV4CarriesCompilerVerifiedPublisherAndConsumers(t *testing.T) {
+	consumerObjectID := "d4444444-4444-4444-8444-444444444444"
+	consumerProgramID := "e5555555-5555-4555-8555-555555555555"
+	objects := []revisionObjectView{
+		objectView("PROGRAM", manifestObjectID, map[string]any{"objectId": manifestObjectID, "kind": "PROGRAM", "name": "PUBLISHER", "language": "ST", "source": "PROGRAM PUBLISHER END_PROGRAM", "dependencies": []string{}, "programConfig": map[string]any{"programId": manifestProgramID, "periodMs": 1000}}),
+		objectView("PROGRAM", consumerObjectID, map[string]any{"objectId": consumerObjectID, "kind": "PROGRAM", "name": "CONSUMER", "language": "FBD", "source": `{}`, "dependencies": []string{}, "programConfig": map[string]any{"programId": consumerProgramID, "periodMs": 1000}}),
+		signalView(manifestSignalID, "SUPPLY_TEMP", "REAL", manifestProgramID, "WAIT", 5000, nil),
+	}
+	topology, _ := packageTopology(2, objects)
+	signals := packageManifestSignals(objects,
+		[]programmingcompiler.Input{{SourceID: manifestObjectID, ProgramID: manifestProgramID, Language: "ST"}, {SourceID: consumerObjectID, ProgramID: consumerProgramID, Language: "FBD"}},
+		[]programmingcompiler.Result{
+			{SignalRefs: []programmingcompiler.SignalRef{{Name: "SUPPLY_TEMP", Type: "REAL", Publish: true, PublishLocation: &programmingcompiler.SourceLocation{Line: 3, Column: 2, Length: 11}}}},
+			{SignalRefs: []programmingcompiler.SignalRef{{Name: "SUPPLY_TEMP", Type: "REAL", Read: true, ReadLocation: &programmingcompiler.SourceLocation{Line: 7, Column: 4, Length: 11}}}},
+		}, topology)
+	if len(signals) != 1 || signals[0].Publisher.ObjectID != manifestObjectID || len(signals[0].Consumers) != 1 ||
+		signals[0].Consumers[0].ObjectID != consumerObjectID || signals[0].Consumers[0].Language != "FBD" ||
+		signals[0].Consumers[0].Location == nil || signals[0].Consumers[0].Location.Line != 7 {
+		t.Fatalf("dependency compiler bị mất provenance: %+v", signals)
+	}
+}
+
+func TestPackageManifestV4RejectsSignalReferenceThatContradictsTopology(t *testing.T) {
+	input := validManifestInput(t)
+	raw, err := buildPackageCheckManifest(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document packageCheckManifest
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	document.Signals[0].Publisher.ObjectID = "d4444444-4444-4444-8444-444444444444"
+	document.ContentSHA256, err = packageManifestContentHash(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validatePackageCheckManifest(tampered); err == nil || !strings.Contains(err.Error(), "identity không khớp topology") {
+		t.Fatalf("provenance tự mâu thuẫn phải bị từ chối dù content hash đã tính lại: %v", err)
+	}
+}
+
+func TestPackageManifestV4DoesNotInferConsumersFromSourceText(t *testing.T) {
+	objects := []revisionObjectView{
+		objectView("PROGRAM", manifestObjectID, map[string]any{"objectId": manifestObjectID, "kind": "PROGRAM", "name": "PUBLISHER", "language": "ST", "source": "PROGRAM PUBLISHER END_PROGRAM", "dependencies": []string{}, "programConfig": map[string]any{"programId": manifestProgramID, "periodMs": 1000}}),
+		objectView("PROGRAM", "d4444444-4444-4444-8444-444444444444", map[string]any{"objectId": "d4444444-4444-4444-8444-444444444444", "kind": "PROGRAM", "name": "COMMENT_ONLY", "language": "ST", "source": "PROGRAM COMMENT_ONLY\n// SUPPLY_TEMP is documentation only\nEND_PROGRAM", "dependencies": []string{}, "programConfig": map[string]any{"programId": "e5555555-5555-4555-8555-555555555555", "periodMs": 1000}}),
+		signalView(manifestSignalID, "SUPPLY_TEMP", "REAL", manifestProgramID, "WAIT", 5000, nil),
+	}
+	topology, _ := packageTopology(2, objects)
+	signals := packageManifestSignals(objects,
+		[]programmingcompiler.Input{{SourceID: manifestObjectID, ProgramID: manifestProgramID, Language: "ST"}, {SourceID: "d4444444-4444-4444-8444-444444444444", ProgramID: "e5555555-5555-4555-8555-555555555555", Language: "ST"}},
+		[]programmingcompiler.Result{{SignalRefs: []programmingcompiler.SignalRef{{Name: "SUPPLY_TEMP", Type: "REAL", Publish: true}}}, {}}, topology)
+	if len(signals) != 1 || len(signals[0].Consumers) != 0 {
+		t.Fatalf("tên signal chỉ xuất hiện trong comment không được suy diễn thành consumer: %+v", signals)
 	}
 }
 

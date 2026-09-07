@@ -23,10 +23,11 @@ import (
 // Hệ quả: manifest mà Check lưu lại KHÔNG mô tả thứ runtime sẽ chạy, nên không
 // có cách nào chứng minh gói đang chạy chính là gói vừa được Check.
 //
-// Manifest v3 vì vậy mang ĐỦ mặt cắt mà DDD §5.3 liệt kê cho package v2:
+// Manifest v4 vì vậy mang ĐỦ mặt cắt mà DDD §5.3 liệt kê cho package v2:
 // topology (Program/chu kỳ/thứ tự), resource budget, đồ thị POU, khai báo signal,
-// binding manifest, và bộ version pin (profile/compiler/library lock).
-const packageManifestSchemaVersion = 3
+// dependency signal do compiler xác nhận, binding manifest, và bộ version pin
+// (profile/compiler/library lock).
+const packageManifestSchemaVersion = 4
 
 // maxCheckManifestBytes — trần cho chính tài liệu manifest. 32 Program × (POU +
 // binding + signal) vẫn nằm xa dưới mức này; trần tồn tại để một Revision hỏng
@@ -65,14 +66,30 @@ type packagePouNode struct {
 }
 
 type packageManifestSignal struct {
-	SignalID           string   `json:"signalId"`
-	Name               string   `json:"name"`
-	Type               string   `json:"type"`
-	Unit               *string  `json:"unit"`
-	PublisherProgramID string   `json:"publisherProgramId"`
-	FreshnessMs        int64    `json:"freshnessMs"`
-	StalePolicy        string   `json:"stalePolicy"`
-	FallbackValue      *float64 `json:"fallbackValue"`
+	SignalID           string                   `json:"signalId"`
+	Name               string                   `json:"name"`
+	Type               string                   `json:"type"`
+	Unit               *string                  `json:"unit"`
+	PublisherProgramID string                   `json:"publisherProgramId"`
+	FreshnessMs        int64                    `json:"freshnessMs"`
+	StalePolicy        string                   `json:"stalePolicy"`
+	FallbackValue      *float64                 `json:"fallbackValue"`
+	Publisher          packageSignalReference   `json:"publisher"`
+	Consumers          []packageSignalReference `json:"consumers"`
+}
+
+type packageSignalSourceLocation struct {
+	Line   int `json:"line"`
+	Column int `json:"column"`
+	Length int `json:"length"`
+}
+
+type packageSignalReference struct {
+	ProgramID string                       `json:"programId"`
+	ObjectID  string                       `json:"objectId"`
+	Name      string                       `json:"name"`
+	Language  string                       `json:"language"`
+	Location  *packageSignalSourceLocation `json:"location"`
 }
 
 type packageManifestBinding struct {
@@ -158,8 +175,28 @@ func packagePouGraph(objects []revisionObjectView) []packagePouNode {
 // packageManifestSignals và packageManifestBindings đọc qua ĐÚNG
 // `collectPackageObjects` mà `packageInvariantDiagnostics` dùng. Một bộ đọc thứ
 // hai cho cùng dữ liệu là chỗ để manifest và phép kiểm bất biến trôi khỏi nhau.
-func packageManifestSignals(objects []revisionObjectView) []packageManifestSignal {
+func packageManifestSignals(objects []revisionObjectView, inputs []programmingcompiler.Input,
+	results []programmingcompiler.Result, topology []packageProgramTopology) []packageManifestSignal {
 	_, signals, _ := collectPackageObjects(objects)
+	topologyByObject := make(map[string]packageProgramTopology, len(topology))
+	for _, item := range topology {
+		topologyByObject[item.ObjectID] = item
+	}
+	references := make(map[string][]struct {
+		input  programmingcompiler.Input
+		result programmingcompiler.Result
+	}, len(signals))
+	for index, input := range inputs {
+		if index >= len(results) {
+			break
+		}
+		for _, ref := range results[index].SignalRefs {
+			references[strings.ToUpper(ref.Name)] = append(references[strings.ToUpper(ref.Name)], struct {
+				input  programmingcompiler.Input
+				result programmingcompiler.Result
+			}{input: input, result: results[index]})
+		}
+	}
 	result := make([]packageManifestSignal, 0, len(signals))
 	for _, signal := range signals {
 		var unit *string
@@ -167,13 +204,46 @@ func packageManifestSignals(objects []revisionObjectView) []packageManifestSigna
 			value := signal.unit
 			unit = &value
 		}
-		result = append(result, packageManifestSignal{SignalID: signal.signalID, Name: signal.name,
+		entry := packageManifestSignal{SignalID: signal.signalID, Name: signal.name,
 			Type: signal.dataType, Unit: unit, PublisherProgramID: signal.publisherID,
 			FreshnessMs: int64(signal.freshnessMs), StalePolicy: signal.stalePolicy,
-			FallbackValue: signal.fallbackValue})
+			FallbackValue: signal.fallbackValue, Consumers: []packageSignalReference{}}
+		for _, compiled := range references[strings.ToUpper(signal.name)] {
+			topologyItem, found := topologyByObject[compiled.input.SourceID]
+			if !found {
+				continue
+			}
+			for _, ref := range compiled.result.SignalRefs {
+				if !strings.EqualFold(ref.Name, signal.name) {
+					continue
+				}
+				base := packageSignalReference{ProgramID: topologyItem.ProgramID, ObjectID: topologyItem.ObjectID,
+					Name: topologyItem.Name, Language: compiled.input.Language}
+				if ref.Publish {
+					entry.Publisher = base
+					entry.Publisher.Location = packageSignalLocation(ref.PublishLocation)
+				}
+				if ref.Read {
+					consumer := base
+					consumer.Location = packageSignalLocation(ref.ReadLocation)
+					entry.Consumers = append(entry.Consumers, consumer)
+				}
+			}
+		}
+		sort.Slice(entry.Consumers, func(left, right int) bool {
+			return entry.Consumers[left].ObjectID < entry.Consumers[right].ObjectID
+		})
+		result = append(result, entry)
 	}
 	sort.Slice(result, func(left, right int) bool { return result[left].SignalID < result[right].SignalID })
 	return result
+}
+
+func packageSignalLocation(location *programmingcompiler.SourceLocation) *packageSignalSourceLocation {
+	if location == nil {
+		return nil
+	}
+	return &packageSignalSourceLocation{Line: location.Line, Column: location.Column, Length: location.Length}
 }
 
 // packageManifestBindings ghi lại binding NHƯ ĐÃ BIÊN DỊCH, không như đã lưu.
@@ -447,7 +517,11 @@ func validatePackageCheckManifest(raw []byte) error {
 	if err := validateManifestPouGraph(fields, objectIDs); err != nil {
 		return err
 	}
-	if err := validateManifestSignals(fields, programIDs); err != nil {
+	topologyByProgramID := make(map[string]packageProgramTopology, len(typed.Topology))
+	for _, item := range typed.Topology {
+		topologyByProgramID[item.ProgramID] = item
+	}
+	if err := validateManifestSignals(fields, programIDs, topologyByProgramID); err != nil {
 		return err
 	}
 	if err := validateManifestBindings(fields, programIDs); err != nil {
@@ -802,7 +876,8 @@ func validateManifestPouGraph(root map[string]any, programIDs map[string]struct{
 	return nil
 }
 
-func validateManifestSignals(root map[string]any, programIDs map[string]struct{}) error {
+func validateManifestSignals(root map[string]any, programIDs map[string]struct{},
+	topologyByProgramID map[string]packageProgramTopology) error {
 	items, err := arrayField(root, "signals")
 	if err != nil {
 		return err
@@ -819,7 +894,7 @@ func validateManifestSignals(root map[string]any, programIDs map[string]struct{}
 			return fmt.Errorf("%s không phải object", prefix)
 		}
 		fields, err := exactFields(prefix, object, "signalId", "name", "type", "unit",
-			"publisherProgramId", "freshnessMs", "stalePolicy", "fallbackValue")
+			"publisherProgramId", "freshnessMs", "stalePolicy", "fallbackValue", "publisher", "consumers")
 		if err != nil {
 			return err
 		}
@@ -864,6 +939,29 @@ func validateManifestSignals(root map[string]any, programIDs map[string]struct{}
 		if _, found := programIDs[publisher]; !found {
 			return fmt.Errorf("%spublisherProgramId=%s không có trong topology", prefix, publisher)
 		}
+		publisherRef, err := validateManifestSignalReference(fields["publisher"], prefix+"publisher.", programIDs, topologyByProgramID)
+		if err != nil {
+			return err
+		}
+		if publisherRef.ProgramID != publisher {
+			return fmt.Errorf("%spublisher.programId=%s không khớp publisherProgramId=%s", prefix, publisherRef.ProgramID, publisher)
+		}
+		consumers, ok := fields["consumers"].([]any)
+		if !ok {
+			return fmt.Errorf("%sconsumers không phải array", prefix)
+		}
+		previousConsumer := ""
+		for consumerIndex, rawConsumer := range consumers {
+			consumerPrefix := fmt.Sprintf("%sconsumers[%d].", prefix, consumerIndex)
+			consumer, validateErr := validateManifestSignalReference(rawConsumer, consumerPrefix, programIDs, topologyByProgramID)
+			if validateErr != nil {
+				return validateErr
+			}
+			if consumerIndex > 0 && consumer.ObjectID <= previousConsumer {
+				return fmt.Errorf("%sobjectId=%q không tăng ngặt sau %q", consumerPrefix, consumer.ObjectID, previousConsumer)
+			}
+			previousConsumer = consumer.ObjectID
+		}
 		freshness, err := intField(fields, "freshnessMs")
 		if err != nil {
 			return err
@@ -890,6 +988,61 @@ func validateManifestSignals(root map[string]any, programIDs map[string]struct{}
 		}
 	}
 	return nil
+}
+
+func validateManifestSignalReference(raw any, prefix string, programIDs map[string]struct{},
+	topologyByProgramID map[string]packageProgramTopology) (packageSignalReference, error) {
+	object, ok := raw.(map[string]any)
+	if !ok {
+		return packageSignalReference{}, fmt.Errorf("%s không phải object", strings.TrimSuffix(prefix, "."))
+	}
+	fields, err := exactFields(prefix, object, "programId", "objectId", "name", "language", "location")
+	if err != nil {
+		return packageSignalReference{}, err
+	}
+	programID, err := uuidField(fields, prefix, "programId")
+	if err != nil {
+		return packageSignalReference{}, err
+	}
+	if _, found := programIDs[programID]; !found {
+		return packageSignalReference{}, fmt.Errorf("%sprogramId=%s không có trong topology", prefix, programID)
+	}
+	objectID, err := uuidField(fields, prefix, "objectId")
+	if err != nil {
+		return packageSignalReference{}, err
+	}
+	name, err := stringField(fields, "name")
+	if err != nil || !validText(name, 1, 120) {
+		return packageSignalReference{}, fmt.Errorf("%sname không hợp lệ", prefix)
+	}
+	language, err := stringField(fields, "language")
+	if err != nil || (language != "ST" && language != "FBD") {
+		return packageSignalReference{}, fmt.Errorf("%slanguage phải là ST hoặc FBD", prefix)
+	}
+	topology, found := topologyByProgramID[programID]
+	if !found || topology.ObjectID != objectID || topology.Name != name {
+		return packageSignalReference{}, fmt.Errorf("%sidentity không khớp topology của programId=%s", prefix, programID)
+	}
+	var location *packageSignalSourceLocation
+	if fields["location"] != nil {
+		locationObject, locationOK := fields["location"].(map[string]any)
+		if !locationOK {
+			return packageSignalReference{}, fmt.Errorf("%slocation không phải object hoặc null", prefix)
+		}
+		locationFields, locationErr := exactFields(prefix+"location.", locationObject, "line", "column", "length")
+		if locationErr != nil {
+			return packageSignalReference{}, locationErr
+		}
+		line, lineErr := intField(locationFields, "line")
+		column, columnErr := intField(locationFields, "column")
+		length, lengthErr := intField(locationFields, "length")
+		if lineErr != nil || columnErr != nil || lengthErr != nil || line < 1 || line > 65535 ||
+			column < 1 || column > 65535 || length < 1 || length > 64 {
+			return packageSignalReference{}, fmt.Errorf("%slocation ngoài dải", prefix)
+		}
+		location = &packageSignalSourceLocation{Line: int(line), Column: int(column), Length: int(length)}
+	}
+	return packageSignalReference{ProgramID: programID, ObjectID: objectID, Name: name, Language: language, Location: location}, nil
 }
 
 // validateManifestBindingTarget kiểm GIÁ TRỊ của bốn trường target khi chúng có

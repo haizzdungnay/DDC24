@@ -6,7 +6,8 @@ import type { UserRole } from '../../../../shared/types'
 import type {
   ProgrammingDraftDocument,
   ProgrammingDraftOperation,
-  ProgrammingPublishedSignal
+  ProgrammingPublishedSignal,
+  ProgrammingSignalDependencies
 } from '../../model/types'
 import { validateSignalForm, type SignalFormValue } from '../../model/signals'
 import { PublishedSignalsPanel } from './PublishedSignalsPanel'
@@ -30,6 +31,20 @@ const PROGRAM_ID = '11111111-1111-4111-8111-111111111111'
 const PROGRAM_OBJECT_ID = '22222222-2222-4222-8222-222222222222'
 const CONSUMER_OBJECT_ID = '33333333-3333-4333-8333-333333333333'
 const SIGNAL_ID = '44444444-4444-4444-8444-444444444444'
+
+function authoritativeDependencies(): ProgrammingSignalDependencies {
+  return {
+    schemaVersion: '1.0', status: 'AUTHORITATIVE', reasonCode: 'VERIFIED', projectId: 'project-1',
+    draftRevisionId: 'draft-1', draftSha256: 'a'.repeat(64), baseRevisionId: 'revision-1',
+    checkedDraftSha256: 'a'.repeat(64), checkId: 'check-1', checkRevisionId: 'revision-1',
+    checkInputSha256: 'b'.repeat(64), dependencies: [{
+      signalId: SIGNAL_ID, name: 'SupplyTemp', type: 'REAL', unit: 'degC',
+      publisherProgramId: PROGRAM_ID, freshnessMs: 5_000, stalePolicy: 'HOLD_LAST', fallbackValue: null,
+      publisher: { programId: PROGRAM_ID, objectId: PROGRAM_OBJECT_ID, name: 'AirHandler', language: 'ST', location: { line: 2, column: 1, length: 10 } },
+      consumers: [{ programId: PROGRAM_ID, objectId: CONSUMER_OBJECT_ID, name: 'SafetyConsumer', language: 'ST', location: { line: 5, column: 11, length: 10 } }],
+    }],
+  }
+}
 
 function signal(overrides: Partial<ProgrammingPublishedSignal> = {}): ProgrammingPublishedSignal {
   return {
@@ -85,7 +100,9 @@ function renderPanel(
 ) {
   return render(
     <I18nProvider>
-      <PublishedSignalsPanel draft={draft} saving={false} onSave={onSave} />
+      <PublishedSignalsPanel draft={draft} saving={false} onSave={onSave} dependencies={{
+        status: 'ready', data: authoritativeDependencies(), error: null, refresh: () => {},
+      }} projectId="project-1" />
     </I18nProvider>
   )
 }
@@ -97,13 +114,32 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('PublishedSignalsPanel — authoring Draft v2 Plan59', () => {
-  it('đọc signal và POU nhắc tên trực tiếp từ Draft v2', () => {
+  it('đọc consumer authoritative từ Check thay vì quét text Draft', () => {
     renderPanel(v2Draft([signal()]), vi.fn().mockResolvedValue(true))
 
     const table = screen.getByRole('table', { name: 'Bảng Published Signal của bản nháp' })
     expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('AirHandler')
     expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('SafetyConsumer')
-    expect(screen.getByText(/không phải danh sách consumer chính thức/)).toBeInTheDocument()
+    expect(screen.getByText(/lấy từ compiler trong Check/)).toBeInTheDocument()
+    expect(screen.getByText(/Đã kiểm chứng/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'SafetyConsumer' }))
+    expect(globalThis.location.search).toContain(`program=${CONSUMER_OBJECT_ID}`)
+    expect(globalThis.location.search).toContain('line=5')
+  })
+
+  it('không diễn giải stale hoặc unavailable thành không có consumer', () => {
+    const stale = authoritativeDependencies()
+    stale.status = 'STALE'
+    stale.reasonCode = 'DRAFT_CHANGED'
+    render(
+      <I18nProvider>
+        <PublishedSignalsPanel draft={v2Draft([signal()])} saving={false} onSave={vi.fn().mockResolvedValue(true)}
+          dependencies={{ status: 'ready', data: stale, error: null, refresh: () => {} }} projectId="project-1" />
+      </I18nProvider>
+    )
+    expect(screen.getByText(/Đã cũ — bản nháp đã đổi/)).toBeInTheDocument()
+    expect(screen.getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('Đã cũ')
+    expect(screen.queryByText('Đã kiểm: không có')).not.toBeInTheDocument()
   })
 
   it('chặn dữ liệu sai, gửi USE_FALLBACK đúng kiểu và chỉ xác nhận sau read-back server', async () => {
@@ -254,6 +290,8 @@ describe('PublishedSignalsPanel — authoring Draft v2 Plan59', () => {
     const view = renderPanel(v2Draft([signal()]), onSave)
 
     fireEvent.click(screen.getByRole('button', { name: 'Xoá' }))
+    expect(screen.getByText('Check xác nhận 1 consumer bị ảnh hưởng.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá khỏi Draft' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledWith([{ op: 'removeSignal', signalId: SIGNAL_ID }]))
     expect(screen.getByRole('row', { name: /SupplyTemp/ })).toBeInTheDocument()
     expect(screen.getByText('Đang đọc lại bản nháp từ máy chủ…')).toBeInTheDocument()

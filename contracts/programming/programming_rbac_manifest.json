@@ -242,6 +242,18 @@
       "permission": "read"
     },
     {
+      "operationId": "getProgrammingSignalDependencies",
+      "method": "GET",
+      "path": "/api/v1/programming/projects/{projectId}/signal-dependencies",
+      "roles": [
+        "viewer",
+        "operator",
+        "engineer",
+        "admin"
+      ],
+      "permission": "read"
+    },
+    {
       "operationId": "getProgrammingSimulationSession",
       "method": "GET",
       "path": "/api/v1/programming/simulation/sessions/{sessionId}",
