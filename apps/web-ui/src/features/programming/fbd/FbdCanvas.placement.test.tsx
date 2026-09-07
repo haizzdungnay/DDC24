@@ -157,6 +157,53 @@ describe('FbdCanvas — Task 6 Placement & Wiring Interaction Tests', () => {
 
       expect(dispatch).not.toHaveBeenCalled()
     })
+
+    it('hiển thị ghost layer khi dragover (native HTML5 DnD) và dọn sạch khi dragleave / drop', () => {
+      const { surface } = renderCanvas()
+
+      // Giả lập HTML5 Drag & Drop protected mode: getData trả rỗng trong dragover,
+      // nhưng types mang kiểu mã hoá entryId: application/x-mkddc-library-entry/OR
+      const dataTransfer = {
+        types: [LIBRARY_DRAG_TYPE, `${LIBRARY_DRAG_TYPE}/OR`],
+        getData: (_type: string) => '',
+        dropEffect: 'none',
+      }
+
+      // 1. dragEnter + dragOver: ghost xuất hiện tại vị trí snapped
+      const dragEnterEvent = new Event('dragenter', { bubbles: true, cancelable: true })
+      Object.assign(dragEnterEvent, { dataTransfer, clientX: 160, clientY: 120 })
+      fireEvent(surface, dragEnterEvent)
+
+      const dragOverEvent = new Event('dragover', { bubbles: true, cancelable: true })
+      Object.assign(dragOverEvent, { dataTransfer, clientX: 160, clientY: 120 })
+      fireEvent(surface, dragOverEvent)
+
+      let ghost = surface.querySelector('[data-fbd-ghost="true"]')
+      expect(ghost).toBeInTheDocument()
+      expect(ghost?.getAttribute('transform')).toBe('translate(160, 120)')
+
+      // 2. dragLeave: ghost bị gỡ bỏ
+      const dragLeaveEvent = new Event('dragleave', { bubbles: true, cancelable: true })
+      Object.assign(dragLeaveEvent, { dataTransfer, relatedTarget: null })
+      fireEvent(surface, dragLeaveEvent)
+
+      ghost = surface.querySelector('[data-fbd-ghost="true"]')
+      expect(ghost).not.toBeInTheDocument()
+
+      // 3. dragOver lại rồi drop: ghost biến mất sau drop
+      fireEvent(surface, dragOverEvent)
+      expect(surface.querySelector('[data-fbd-ghost="true"]')).toBeInTheDocument()
+
+      const dropEvent = new Event('drop', { bubbles: true, cancelable: true })
+      const dropDataTransfer = {
+        ...dataTransfer,
+        getData: (type: string) => (type === LIBRARY_DRAG_TYPE ? 'OR' : ''),
+      }
+      Object.assign(dropEvent, { dataTransfer: dropDataTransfer, clientX: 160, clientY: 120 })
+      fireEvent(surface, dropEvent)
+
+      expect(surface.querySelector('[data-fbd-ghost="true"]')).not.toBeInTheDocument()
+    })
   })
 
   describe('TC-FBD-LIB-002: Click-to-place Ghost element & Cancellation', () => {

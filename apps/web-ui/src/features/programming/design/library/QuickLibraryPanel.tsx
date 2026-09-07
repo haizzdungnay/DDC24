@@ -427,6 +427,7 @@ function BlockCard({
       onDragStart={(event) => {
         if (!insertable) return
         event.dataTransfer.setData(LIBRARY_DRAG_TYPE, entry.entryId)
+        event.dataTransfer.setData(`${LIBRARY_DRAG_TYPE}/${entry.entryId}`, '')
         event.dataTransfer.effectAllowed = 'copy'
       }}
       className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">

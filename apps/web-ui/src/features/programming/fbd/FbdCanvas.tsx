@@ -26,7 +26,7 @@ import {
   FbdWirePreviewLayer,
   FbdGhostLayer,
 } from './FbdCanvasLayers'
-import { fbdPaletteEntry, type FbdPaletteEntry } from './palette'
+import { fbdPaletteEntry, FBD_PALETTE, type FbdPaletteEntry } from './palette'
 import { createUuid } from '../../../shared/crypto'
 import { LIBRARY_DRAG_TYPE } from '../design/library/QuickLibraryPanel'
 import { useFbdNodeDrag } from './useFbdNodeDrag'
@@ -544,11 +544,51 @@ export function FbdCanvas({
     return null
   }, [pendingPlacement, nativeDragEntryId, ghostPosition])
 
+  function extractDragEntryId(event: React.DragEvent<SVGSVGElement>): string | null {
+    const prefix = `${LIBRARY_DRAG_TYPE}/`
+    const typeWithId = Array.from(event.dataTransfer.types).find((t) =>
+      t.toLowerCase().startsWith(prefix.toLowerCase())
+    )
+    if (typeWithId) {
+      const raw = typeWithId.slice(prefix.length)
+      const matched = FBD_PALETTE.find((e) => e.id.toLowerCase() === raw.toLowerCase())
+      return matched?.id ?? raw.toUpperCase()
+    }
+    const direct = event.dataTransfer.getData(LIBRARY_DRAG_TYPE)
+    return direct || null
+  }
+
+  function handleDragEnter(event: React.DragEvent<SVGSVGElement>) {
+    if (!canEdit) return
+    const prefix = `${LIBRARY_DRAG_TYPE}/`
+    const hasLibraryType = Array.from(event.dataTransfer.types).some(
+      (t) =>
+        t.toLowerCase() === LIBRARY_DRAG_TYPE.toLowerCase() ||
+        t.toLowerCase().startsWith(prefix.toLowerCase())
+    )
+    if (!hasLibraryType) return
+    const entryId = extractDragEntryId(event)
+    if (entryId) {
+      setNativeDragEntryId(entryId)
+    }
+  }
+
   function handleDragOver(event: React.DragEvent<SVGSVGElement>) {
     if (!canEdit) return
-    if (!event.dataTransfer.types.includes(LIBRARY_DRAG_TYPE)) return
+    const prefix = `${LIBRARY_DRAG_TYPE}/`
+    const hasLibraryType = Array.from(event.dataTransfer.types).some(
+      (t) =>
+        t.toLowerCase() === LIBRARY_DRAG_TYPE.toLowerCase() ||
+        t.toLowerCase().startsWith(prefix.toLowerCase())
+    )
+    if (!hasLibraryType) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'copy'
+
+    const entryId = extractDragEntryId(event)
+    if (entryId && nativeDragEntryId !== entryId) {
+      setNativeDragEntryId(entryId)
+    }
 
     const sceneRect = getSceneRect()
     const rawClientX = (event as unknown as { clientX?: number }).clientX ?? (event as unknown as { pageX?: number }).pageX
@@ -560,14 +600,18 @@ export function FbdCanvas({
     setGhostPosition(snapPoint(pt, effectiveSnap, event.altKey))
   }
 
-  function handleDragLeave() {
+  function handleDragLeave(event: React.DragEvent<SVGSVGElement>) {
+    // Chỉ reset khi con trỏ thật sự rời khỏi SVG surface (tránh reset khi di chuyển giữa các phần tử con bên trong SVG)
+    if (event.relatedTarget && surfaceRef.current?.contains(event.relatedTarget as Node)) {
+      return
+    }
     setNativeDragEntryId(null)
     setGhostPosition(null)
   }
 
   function handleDrop(event: React.DragEvent<SVGSVGElement>) {
     if (!canEdit) return
-    const entryId = event.dataTransfer.getData(LIBRARY_DRAG_TYPE)
+    const entryId = event.dataTransfer.getData(LIBRARY_DRAG_TYPE) || extractDragEntryId(event)
     if (!entryId) return
     event.preventDefault()
 
@@ -639,6 +683,7 @@ export function FbdCanvas({
           className="block touch-none"
           onContextMenu={(e) => e.preventDefault()}
           onWheel={handleWheel}
+          onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}

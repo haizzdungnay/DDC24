@@ -439,4 +439,3 @@ export function FbdGhostLayer({ ghost }: FbdGhostLayerProps) {
     </g>
   )
 }
-
