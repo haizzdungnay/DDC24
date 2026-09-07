@@ -8,6 +8,22 @@
 
 ## [Unreleased]
 
+### Fixed — Khắc phục 3 Major code review findings trên PR #572 FBD Edit task 6–7 (2026-09-07)
+
+- **Finding 1 (Major) — Mutation thuộc tính node FBD thành action nguyên tử:**
+  - *Triệu chứng:* Khi lưu form Inspector node FBD đổi đồng thời cả kiểu dữ liệu (`dataType`) lẫn biến/giá trị (`variable`/`value`/`parameters`), form phát tuần tự nhiều dispatch action (`SET_NODE_TYPE` rồi `SET_NODE_VARIABLE`...), mỗi lệnh push một bản ghi lịch sử vào `state.past` khiến người dùng phải Undo 2 lần cho 1 lần bấm Lưu.
+  - *Nguyên nhân:* Reducer `fbdEditorReducer` phân tách xử lý từng thuộc tính riêng rẽ và commit snapshot riêng từng action.
+  - *Cách sửa:* Thêm action nguyên tử `UPDATE_NODE_ATTRIBUTES` trong `commands.ts` và `nodeEditor.ts`, thẩm định đồng thời và commit đúng 1 snapshot tài liệu duy nhất.
+- **Finding 2 (Major) — Native HTML5 Drag & Drop ghost preview:**
+  - *Triệu chứng:* Kéo block từ `QuickLibraryPanel` vào `FbdCanvas` không hiển thị ghost preview trong sự kiện `dragover`.
+  - *Nguyên nhân:* Chế độ bảo vệ (protected mode) của HTML5 Drag & Drop trả về chuỗi rỗng khi gọi `event.dataTransfer.getData()` trong lúc `dragover`, chỉ cho phép truy cập `event.dataTransfer.types`.
+  - *Cách sửa:* Mã hoá `entryId` vào custom MIME type `application/x-mkddc-library-entry/${entryId}` trong `handleDragStart`, canvas trích xuất `entryId` từ `dataTransfer.types`, hiển thị ghost layer snap chuẩn toạ độ và dọn sạch khi `dragleave` hoặc `drop`.
+- **Finding 3 (Major) — Inspector collapse khi FBD không chọn node:**
+  - *Triệu chứng:* Mở POU FBD khi chưa chọn node nào thì dock Inspector vẫn hiển thị form `ProgramInspector`, không thu gọn đúng đặc tả `TC-FBD-INS-002` / `R-04`.
+  - *Nguyên nhân:* `ProgramsTab.tsx` luôn truyền `ProgramInspector` vào `editableProgramSlot` và truyền `program: selected` vào `input`, làm `inspectorHasUsefulContext` trả về `true`.
+  - *Cách sửa:* Khi `selected.language === 'FBD' && fbdSelection === null`, đặt `editableProgramSlot={undefined}` và `input.program={undefined}` để dock Inspector thu gọn thành `<p data-testid="inspector-collapsed">` với 0 form mutation; cập nhật assertion của test `A-T5` trong `ProgramsTab.test.tsx`.
+- **Dọn dẹp Whitespace / EOF:** Đã xử lý các lỗi EOF blank line và trailing whitespace được `git diff --check` phát hiện.
+
 ### Fixed — `FE-TR-01` Không xoá ngầm điểm deep link không resolve được trên Trends (2026-09-07)
 
 - **Triệu chứng:** Mở deep link `?points=<id>` mà id không có trong `/points`, effect ở dòng

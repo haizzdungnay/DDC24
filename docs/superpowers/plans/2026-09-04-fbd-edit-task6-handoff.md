@@ -45,7 +45,7 @@ Trong phiên này, đã hoàn thành trọn vẹn **Task 6: Quick Library placem
 ### 4. CURRENT WORKFLOW POSITION
 ```
 Workflow FBD EDIT:
-[Task 0.5 - 5.6] (Nền tảng, Canvas, Reducer, Layout, Split chunk) 
+[Task 0.5 - 5.6] (Nền tảng, Canvas, Reducer, Layout, Split chunk)
   → [Task 6] (Quick Library placement & typed wiring) [HOÀN THÀNH]
   → [Task 7] (I/O picker & Inspector) [TIẾP THEO]
   → [Task 8 - 11] (Shell, Diagnostics, Boundaries, E2E & Gate)
