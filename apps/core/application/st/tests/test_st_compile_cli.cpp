@@ -638,6 +638,8 @@ TEST(StCompileCli, SignalManifestProducesActualPublishReference)
     EXPECT_EQ(result.at("signalRefs")[0].at("type"), "REAL");
     EXPECT_FALSE(result.at("signalRefs")[0].at("read"));
     EXPECT_TRUE(result.at("signalRefs")[0].at("publish"));
+    EXPECT_TRUE(result.at("signalRefs")[0].at("readLocation").is_null());
+    EXPECT_GT(result.at("signalRefs")[0].at("publishLocation").at("line"), 0);
     EXPECT_EQ(artifact.size(), result.at("artifactBytes").get<std::size_t>());
     EXPECT_GT(artifact.size(), 0u);
 }
@@ -678,6 +680,8 @@ TEST(StCompileCli, FbdSignalManifestProducesActualPublishReference)
     EXPECT_EQ(result.at("signalRefs")[0].at("type"), "REAL");
     EXPECT_FALSE(result.at("signalRefs")[0].at("read"));
     EXPECT_TRUE(result.at("signalRefs")[0].at("publish"));
+    EXPECT_TRUE(result.at("signalRefs")[0].at("readLocation").is_null());
+    EXPECT_GT(result.at("signalRefs")[0].at("publishLocation").at("line"), 0);
     EXPECT_EQ(artifact.size(), result.at("artifactBytes").get<std::size_t>());
     EXPECT_GT(artifact.size(), 0U);
 }

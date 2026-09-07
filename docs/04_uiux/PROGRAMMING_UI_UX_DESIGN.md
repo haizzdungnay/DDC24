@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `UX-WEB-PROG-001` |
-| Phiên bản | 2.4 |
+| Phiên bản | 2.5 |
 | Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, không phải As-Built** |
-| Ngày | 2026-09-06 |
+| Ngày | 2026-09-07 |
 | Chủ quản | UX Lead + Frontend Lead |
 | Người phê duyệt implementation | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` và `AUTH-PROG-2026-08-24-05` |
 | Nguồn | Product v3.2; ADR-050; `SRS-PROG-001` v1.2; `DDD-SW-PROG-UNIFIED-001` v1.3; PGM-02 Target: `DDD-SW-PGM02-WORKSPACE-001` v0.3 + `PGM02-WORKSPACE-V1` |
@@ -134,6 +134,13 @@ lọc type/direction/writable nhưng compiler/server vẫn validate. Hai output 
 Point hiện conflict ngay, nêu Program đang giữ owner và chặn Save/Check. Signal
 hiện publisher duy nhất, type/unit, freshness, fallback và consumer list. Không
 đổi Published Signal thành Point hoặc ghi cross-Program trực tiếp.
+
+Publisher/consumer mang nhãn `Đã kiểm chứng`, `Chưa kiểm chứng`, `Đã cũ` hoặc
+`Không khả dụng` từ Check; chỉ trạng thái đầu được phép hiện “Đã kiểm: không
+có”. Consumer là link tới đúng POU và line/column. Xoá Signal luôn mở hộp impact
+liệt kê consumer khi authoritative; nếu Check thiếu/cũ/lỗi, hộp nói impact chưa
+được kiểm chứng. Xác nhận chỉ xoá khỏi Draft, chờ server read-back và không
+Commission. Đặc tả modal: [PGM-03 signal delete impact](assets/programming/PGM-03_SIGNAL_DELETE_IMPACT_MODAL.svg).
 
 Controls Engineer chọn Variable và Point từ catalog đã đọc đủ, bấm Assign hoặc
 Change, rồi đọc verdict/issue của preview server trước khi xác nhận. Remove có
@@ -295,7 +302,7 @@ output/RETAIN impact, hành vi khi mất kết nối, rollback và yêu cầu re
 | `UX-REQ-004` | ST/FBD editor giữ Draft, diagnostic và durable undo/redo. |
 | `UX-REQ-005` | Runtime overlay không giả stale/unknown thành live. |
 | `UX-REQ-006` | Mapping cảnh báo duplicate physical output trước Check. |
-| `UX-REQ-007` | Published Signal hiện publisher/type/freshness/fallback/consumer. |
+| `UX-REQ-007` | Published Signal hiện publisher/type/freshness/fallback/consumer từ Check; phân biệt authoritative/pending/stale/unavailable, exact source link và delete-impact/read-back không Commission. |
 | `UX-REQ-008` | SYSTEM library read-only; PROJECT library versioned. |
 | `UX-REQ-009` | PID hiển thị REVIEW_REQUIRED và không cho bypass token. |
 | `UX-REQ-010` | Check diagnostic gắn POU/location và không đổi Active. |
@@ -351,6 +358,7 @@ Playwright/target Test Result.
 |---|---|---|
 | 2.3 | 2026-09-06 | `ISS-PGM03-06`/`#559`: khóa IA sáu workspace; PGM-03 Mapping, PGM-04 Library, PGM-05 Check/Commission và PGM-06 Runtime; sửa source mapping thật và đổi tên asset RETAIN theo PGM-06. |
 | 2.4 | 2026-09-06 | `ISS-PGM-RBAC-01`/`ISS-PGM03-02`: dùng capability cho toàn bộ action, engineer thực hiện Draft→Mapping→Check→Commission/Trace; Simulation giữ admin-only. Mở Mapping preview/xác nhận/read-back và fail-closed cho 403/409/timeout/mismatch/catalog thiếu. |
+| 2.5 | 2026-09-07 | `ISS-PGM03-04`/`#557`: Published Signal hiển thị dependency compiler-authoritative cùng provenance, exact POU/location; stale/pending/unavailable không thành zero consumer; thêm đặc tả modal impact trước xoá và Draft read-back không Commission. |
 | 0.1..1.1 | 2026-08-09..13 | Thiết kế/bằng chứng cho IA bốn workspace; superseded về Product Target. |
 | 2.0 | 2026-08-20 | Viết lại authority sáu workspace; POU/Library/Signal/Enable lifecycle, visual mapping, 17 UC, 24 UX requirement và acceptance; loại toàn bộ contradiction phạm vi cũ khỏi nội dung Active. |
 | 2.1-candidate | 2026-08-24 | Reconcile PGM-02 v2.2 route/identity/EDIT-LIVE-SIMULATE/Quick Library/FBD canvas/responsive và thêm `UX-REQ-025..027`; Owner chỉ mở WP-00, Architect exact pin và code R1/R2/R3 còn PENDING/NO-GO. |

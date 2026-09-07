@@ -54,7 +54,7 @@ EXPECT = {
     "uc_prog": 17,
     "uj_prog": 8,
     "ux_req": 29,
-    "svg_assets": 14,
+    "svg_assets": 15,
 }
 
 BASELINE = [

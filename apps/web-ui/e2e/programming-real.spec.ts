@@ -298,6 +298,127 @@ async function commission(
   return operation
 }
 
+test('ISS-PGM03-04: dependency Signal neo Check, mở đúng POU và thành stale ngay khi Draft đổi', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  const token = await loginAPI(request)
+  const publisherID = '86111111-1111-4111-8111-111111111111'
+  const consumerID = '86222222-2222-4222-8222-222222222222'
+  const signalID = '86333333-3333-4333-8333-333333333333'
+  const publisherSource = `PROGRAM SIGNAL_PUBLISHER
+VAR
+  Value : REAL;
+END_VAR
+Value := 21.5;
+SIGNAL_PUBLISH(SUPPLY_TEMP, Value);
+END_PROGRAM
+`
+  const consumerSource = `PROGRAM SIGNAL_CONSUMER
+VAR
+  Observed : REAL;
+END_VAR
+Observed := SIGNAL_READ(SUPPLY_TEMP);
+END_PROGRAM
+`
+
+  const created = await responseJSON(await request.post('/api/v1/programming/projects', {
+    headers: mutationHeaders(token),
+    data: { schemaVersion: '1.0', name: 'ISS-PGM03-04 dependency provenance', description: 'Real backend, host/no-board' }
+  }), 201)
+  const resource = created.resource as JsonObject
+  const projectID = resource.projectId as string
+  const draftID = resource.draftRevisionId as string
+  const saved = await responseJSON(await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': created.etag as string }),
+    data: {
+      schemaVersion: '1.0', baseRevisionId: draftID,
+      operations: [
+        { op: 'upsertProgram', program: { programId: publisherID, name: 'SIGNAL_PUBLISHER', kind: 'PROGRAM', language: 'ST', document: publisherSource } },
+        { op: 'upsertProgram', program: { programId: consumerID, name: 'SIGNAL_CONSUMER', kind: 'PROGRAM', language: 'ST', document: consumerSource } },
+        { op: 'upsertSignal', signal: { signalId: signalID, name: 'SUPPLY_TEMP', type: 'REAL', unit: 'degC', publisherProgramId: publisherID, freshnessMs: 5000, stalePolicy: 'HOLD_LAST' } }
+      ]
+    }
+  }), 200)
+  const checked = await sealAndCheck(request, token, projectID, draftID, saved.etag as string, 'Dependency provenance')
+  const dependencyResponse = await request.get(
+    `/api/v1/programming/projects/${projectID}/signal-dependencies`, { headers: readHeaders(token) })
+  const dependency = await responseJSON(dependencyResponse, 200)
+  expect(dependency).toMatchObject({
+    schemaVersion: '1.0', status: 'AUTHORITATIVE', reasonCode: 'VERIFIED', projectId: projectID,
+    baseRevisionId: checked.revisionID, checkId: checked.checkID, checkRevisionId: checked.revisionID
+  })
+  expect(dependency.draftSha256).toMatch(/^[a-f0-9]{64}$/)
+  expect(dependency.checkedDraftSha256).toBe(dependency.draftSha256)
+  expect(dependency.checkInputSha256).toMatch(/^[a-f0-9]{64}$/)
+  expect(dependency.dependencies).toEqual([
+    expect.objectContaining({
+      signalId: signalID, name: 'SUPPLY_TEMP', publisherProgramId: publisherID, stalePolicy: 'HOLD_LAST',
+      publisher: expect.objectContaining({ programId: publisherID, objectId: publisherID, name: 'SIGNAL_PUBLISHER', language: 'ST', location: expect.objectContaining({ line: 6 }) }),
+      consumers: [expect.objectContaining({ programId: consumerID, objectId: consumerID, name: 'SIGNAL_CONSUMER', language: 'ST', location: expect.objectContaining({ line: 5 }) })]
+    })
+  ])
+
+  const consoleErrors: string[] = []
+  const failedRequests: string[] = []
+  const serverErrors: string[] = []
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
+  page.on('requestfailed', (failed) => {
+    const errorText = failed.failure()?.errorText ?? 'unknown'
+    if (errorText.includes('ERR_ABORTED')) return
+    failedRequests.push(`${new URL(failed.url()).pathname}: ${errorText}`)
+  })
+  page.on('response', (response) => { if (response.status() >= 500) serverErrors.push(`${response.status()} ${new URL(response.url()).pathname}`) })
+  await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(page.getByText('Đã kiểm chứng — khớp bản nháp hiện tại')).toBeVisible()
+  const signalRow = page.getByRole('row', { name: /SUPPLY_TEMP/ })
+  await expect(signalRow).toContainText('SIGNAL_PUBLISHER')
+  const consumerLink = signalRow.getByRole('button', { name: 'SIGNAL_CONSUMER' })
+  await expect(consumerLink).toBeVisible()
+  await consumerLink.click()
+  await expect.poll(() => {
+    const url = new URL(page.url())
+    return {
+      path: url.pathname,
+      project: url.searchParams.get('project'),
+      pou: url.searchParams.get('pou'),
+      line: url.searchParams.get('line'),
+      column: url.searchParams.get('column'),
+      length: url.searchParams.get('length')
+    }
+  }).toEqual({ path: '/eng/programming/programs', project: projectID, pou: consumerID, line: '5', column: '13', length: '11' })
+
+  await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  const refreshedRow = page.getByRole('row', { name: /SUPPLY_TEMP/ })
+  await refreshedRow.getByRole('button', { name: 'Sửa' }).click()
+  const form = page.getByRole('form', { name: 'Biểu mẫu Published Signal' })
+  await form.getByLabel('Đơn vị').fill('°C')
+  const staleResponse = page.waitForResponse((response) => response.request().method() === 'GET' &&
+    new URL(response.url()).pathname === `/api/v1/programming/projects/${projectID}/signal-dependencies` && response.status() === 200)
+  await form.getByRole('button', { name: 'Lưu Published Signal' }).click()
+  await staleResponse
+  await expect(page.getByText('Đã cũ — bản nháp đã đổi sau Check')).toBeVisible()
+  await expect(refreshedRow).toContainText('Đã cũ')
+
+  await refreshedRow.getByRole('button', { name: 'Xoá' }).click()
+  const deleteDialog = page.getByRole('dialog', { name: 'Xác nhận xoá Published Signal' })
+  await expect(deleteDialog.getByText('Impact chưa được kiểm chứng cho bản nháp hiện tại.')).toBeVisible()
+  await expect(deleteDialog).toContainText('không Commission')
+  await deleteDialog.getByRole('button', { name: 'Giữ signal' }).click()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await assertMobileSurface(page, 'Published Signal dependency provenance')
+  expect(consoleErrors).toEqual([])
+  expect(failedRequests).toEqual([])
+  expect(serverErrors).toEqual([])
+})
+
 test('ISS-PGM03-07: Draft v1 LOCAL+MB_RTU migrate qua HTTP, reload giữ đủ Binding và Check không bỏ qua', async ({ page, request }) => {
   test.setTimeout(120_000)
   const token = await loginAPI(request)
