@@ -68,15 +68,8 @@ export interface FbdEditorState {
   announcement: FbdAnnouncement
 }
 
-/**
- * Toạ độ hợp lệ theo đúng trần của hợp đồng (`fbd_v1.schema.json` §layout).
- *
- * Làm tròn về số nguyên: một pixel lẻ 0,333 không có ý nghĩa hiển thị nào
- * nhưng đủ để làm byte tài liệu đổi mỗi lần kéo, tức mỗi lần kéo là một Draft
- * "bẩn" khác. `null` = ngoài trần hoặc không phải số hữu hạn, và đó là TỪ CHỐI
- * chứ không phải kẹp về biên — kẹp âm thầm sẽ đặt block vào chỗ người dùng
- * không hề chọn.
- */
+/** Toạ độ theo trần `fbd_v1.schema.json` §layout. Làm tròn để pixel lẻ không
+ * tạo Draft "bẩn"; trả `null` để từ chối giá trị ngoài trần/không hữu hạn. */
 function clampLayoutCoordinate(value: number): number | null {
   if (!Number.isFinite(value)) return null
   const rounded = Math.round(value)
@@ -121,17 +114,8 @@ export type FbdEditorAction =
   | { type: 'SET_NODE_VALUE'; networkId: string; nodeId: string; value: FbdParameterValue }
   | { type: 'SET_NODE_TYPE'; networkId: string; nodeId: string; dataType: FbdDataType }
   | { type: 'SET_NODE_FB_PARAMS'; networkId: string; nodeId: string; instance: string | null; retained: boolean }
-  | {
-      type: 'UPDATE_NODE_ATTRIBUTES'
-      networkId: string
-      nodeId: string
-      dataType?: FbdDataType
-      variable?: string
-      unit?: string | null
-      value?: FbdParameterValue
-      instance?: string | null
-      retained?: boolean
-    }
+  | { type: 'UPDATE_NODE_ATTRIBUTES'; networkId: string; nodeId: string; dataType?: FbdDataType;
+      variable?: string; unit?: string | null; value?: FbdParameterValue; instance?: string | null; retained?: boolean }
   | { type: 'UNDO' }
   | { type: 'REDO' }
 
@@ -348,9 +332,8 @@ function connect(
   return commit(state, document, { code: 'wire-connected', params: { from: source.port.name, to: target.port.name } })
 }
 
-/* WP-05..07 (FBD_EDITOR_DESIGN.md §3.1): đổi kiểu toán hạng T cho node đa
- * hình phải giữ nguyên id/order từng port (wire trỏ theo portId, không theo
- * tên) — chỉ ghi đè `dataType` cho các port khớp tên với `entry.buildPorts`. */
+/* WP-05..07: đổi kiểu toán hạng T phải giữ id/order của port; chỉ cập nhật
+ * `dataType` cho port khớp tên với registry. */
 function applyOperandType(node: FbdNode, dataType: FbdDataType): void {
   const entry = fbdPaletteEntry(node.typeRef)
   if (!entry) return
@@ -714,42 +697,48 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const found = findNode(document, action.networkId, action.nodeId)
       if (!found) return reject(state, { code: 'node-not-found' })
       const { node } = found
+      const { variable, unit, value, instance, retained } = action
+      const hasVariable = variable !== undefined
+      const hasUnit = unit !== undefined
+      const hasValue = value !== undefined
+      const hasInstance = instance !== undefined
+      const hasRetained = retained !== undefined
+      const entry = fbdPaletteEntry(node.typeRef)
+      const hasWrongKindAttribute =
+        node.kind === 'INPUT' || node.kind === 'OUTPUT'
+          ? hasValue || hasInstance || hasRetained
+          : node.kind === 'CONSTANT'
+            ? hasVariable || hasUnit || hasInstance || hasRetained
+            : node.kind === 'FUNCTION_BLOCK'
+              ? action.dataType !== undefined || hasVariable || hasUnit || hasValue
+              : hasVariable || hasUnit || hasValue || hasInstance || hasRetained ||
+                (action.dataType !== undefined && !entry?.polymorphic)
+      if (hasWrongKindAttribute) return reject(state, { code: 'invalid-node-attributes' })
 
-      // Validate dataType nếu có
       if (action.dataType !== undefined) {
         if (!FBD_DATA_TYPES.includes(action.dataType)) return reject(state, { code: 'invalid-data-type' })
         if (node.kind !== 'INPUT' && node.kind !== 'OUTPUT' && node.kind !== 'CONSTANT') {
-          const entry = fbdPaletteEntry(node.typeRef)
           if (!entry || !entry.polymorphic || !entry.allowedTypes.includes(action.dataType)) {
             return reject(state, { code: 'invalid-data-type' })
           }
         }
       }
-
       const effectiveType = (action.dataType ?? node.typeRef) as FbdDataType
-
-      // Validate variable / unit
-      if (action.variable !== undefined) {
+      if (variable !== undefined) {
         if (node.kind !== 'INPUT' && node.kind !== 'OUTPUT') return reject(state, { code: 'node-not-found' })
-        if (!isFbdIdentifier(action.variable)) return reject(state, { code: 'invalid-variable-name' })
+        if (!isFbdIdentifier(variable)) return reject(state, { code: 'invalid-variable-name' })
       }
-      if (action.unit !== undefined && action.unit !== null) {
-        if (action.unit.length < 1 || action.unit.length > 32) return reject(state, { code: 'invalid-unit' })
+      if (unit !== undefined && unit !== null) {
+        if (unit.length < 1 || unit.length > 32) return reject(state, { code: 'invalid-unit' })
       }
-
-      // Validate value
-      if (action.value !== undefined) {
+      if (value !== undefined) {
         if (node.kind !== 'CONSTANT') return reject(state, { code: 'node-not-found' })
-        if (!isValidConstantLiteral(effectiveType, action.value)) return reject(state, { code: 'invalid-constant-value' })
+        if (!isValidConstantLiteral(effectiveType, value)) return reject(state, { code: 'invalid-constant-value' })
       }
-
-      // Validate FB params
-      if (action.instance !== undefined && action.instance !== null) {
+      if (instance !== undefined && instance !== null) {
         if (node.kind !== 'FUNCTION_BLOCK') return reject(state, { code: 'node-not-found' })
-        if (!isFbdIdentifier(action.instance)) return reject(state, { code: 'invalid-instance-name' })
+        if (!isFbdIdentifier(instance)) return reject(state, { code: 'invalid-instance-name' })
       }
-
-      // Áp dụng kiểu dữ liệu
       if (action.dataType !== undefined && action.dataType !== node.typeRef) {
         if (node.kind === 'INPUT' || node.kind === 'OUTPUT' || node.kind === 'CONSTANT') {
           node.typeRef = action.dataType
@@ -761,34 +750,28 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
           applyOperandType(node, action.dataType)
         }
       }
-
-      // Áp dụng biến / đơn vị
-      if (action.variable !== undefined) {
-        node.parameters = { ...node.parameters, variable: action.variable }
+      if (variable !== undefined) {
+        node.parameters = { ...node.parameters, variable }
       }
-      if (action.unit !== undefined && node.ports[0]) {
-        node.ports[0].unit = action.unit
+      if (unit !== undefined && node.ports[0]) {
+        node.ports[0].unit = unit
       }
-
-      // Áp dụng giá trị hằng số
-      if (action.value !== undefined) {
-        node.parameters = { ...node.parameters, value: action.value }
+      if (value !== undefined) {
+        node.parameters = { ...node.parameters, value }
       }
-
-      // Áp dụng FB params
-      if (action.instance !== undefined || action.retained !== undefined) {
+      if (hasInstance || hasRetained) {
         const nextParams = { ...node.parameters }
-        if (action.instance !== undefined) {
-          if (action.instance !== null) nextParams.instance = action.instance
+        if (instance !== undefined) {
+          if (instance !== null) nextParams.instance = instance
           else delete nextParams.instance
         }
-        if (action.retained !== undefined) {
-          if (action.retained) nextParams.retained = true
+        if (retained !== undefined) {
+          if (retained) nextParams.retained = true
           else delete nextParams.retained
         }
         node.parameters = nextParams
       }
-
+      if (canonicalFbdJson(document) === canonicalFbdJson(state.document)) return state
       return commit(state, document, { code: 'node-attributes-updated' })
     }
     case 'UNDO': {

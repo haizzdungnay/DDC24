@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### Fixed — Rà soát lại và mở khóa merge PR #572 FBD Edit task 6–7 (2026-09-07)
+
+- Đồng bộ `main` sau khi Task 8 (#574) được merge, xử lý xung đột bằng cách giữ
+  Inspector ngoài của #572 cùng shell responsive, chế độ đa-network và preference
+  mới; Quick Library vẫn yêu cầu chọn vị trí đặt block trên canvas.
+- Siết `UPDATE_NODE_ATTRIBUTES` theo đúng loại node: payload chứa field sai loại
+  bị từ chối nguyên tử, không làm lọt phần hợp lệ đi kèm; payload rỗng hoặc không
+  đổi byte canonical không còn tạo snapshot Undo giả.
+- Sửa hệ tọa độ zoom/pan: độ dịch chuyển lưu theo pixel màn hình được quy đổi sang
+  user-unit của SVG, nên vị trí hiển thị, ghost, marquee và thả block cùng dùng một
+  phép biến đổi khi scale khác 1.
+- Đồng bộ ngưỡng ISO harness `od_prog` từ 16 lên 17 với quyết định
+  `UD-PROG-017` mà nhánh PR đã thêm, loại bỏ drift `--expect` của chính PR.
+- Kiểm chứng HOST/no-board: Vitest toàn FE **243 tệp / 3.075 test PASS**; tập
+  trung FBD **110 test PASS**; TypeScript, lint/UI strings và production build
+  PASS. Bundle Programming **149,69/165 KiB gzip**; Chrome Playwright **2/2
+  PASS** cho shell responsive sáu mốc và Quick Library. Chrome DevTools MCP đã
+  bật nhưng không khởi động được browser headful vì thiếu X server; đây không
+  phải physical HIL hoặc `RELEASE_READY`.
+
 ### Added — `TASK-8-FBD-EDIT` shell responsive, network view và preference cho FBD Editor (#574, 2026-09-07)
 
 - Dựng workspace FBD responsive: từ 1440 px hiển thị đồng thời Explorer,

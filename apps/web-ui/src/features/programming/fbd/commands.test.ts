@@ -297,6 +297,7 @@ describe('translateFbdAnnouncement (BUG-012)', () => {
   it('dịch mã không tham số', () => {
     expect(translateFbdAnnouncement(pick, { code: 'undone' })).toBe('Đã hoàn tác')
     expect(translateFbdAnnouncement(pickEn, { code: 'undone' })).toBe('Undone')
+    expect(translateFbdAnnouncement(pick, { code: 'invalid-node-attributes' })).toBe('Thuộc tính không áp dụng cho loại node này')
   })
 
   it('mã idle hoặc lạ trả về chuỗi rỗng', () => {
@@ -712,5 +713,53 @@ describe('Task 3: selectionRevision, multi-node, and atomic actions', () => {
     expect(reverted.typeRef).toBe('INT')
     expect(reverted.parameters.value).toBe(10)
     expect(reverted.ports[0].dataType).toBe('INT')
+  })
+
+  it('UPDATE_NODE_ATTRIBUTES: từ chối nguyên tử field sai kind, không làm lọt field hợp lệ đi kèm', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    const input = doc.networks[0].nodes.find((node) => node.kind === 'INPUT')!
+    const before = createFbdEditorState(doc)
+
+    const after = fbdEditorReducer(before, {
+      type: 'UPDATE_NODE_ATTRIBUTES',
+      networkId: netId,
+      nodeId: input.id,
+      unit: 'rpm',
+      retained: true,
+    })
+
+    expect(canonicalFbdJson(after.document)).toBe(canonicalFbdJson(before.document))
+    expect(after.past).toHaveLength(0)
+    expect(after.announcement.code).toBe('invalid-node-attributes')
+  })
+
+  it.each([
+    { instance: null },
+    { unit: 'rpm' },
+    { retained: false },
+  ])('UPDATE_NODE_ATTRIBUTES: block cố định từ chối payload sai kind %o', (attributes) => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    const fixed = doc.networks[0].nodes.find((node) => node.kind === 'FUNCTION')!
+    const before = createFbdEditorState(doc)
+    const after = fbdEditorReducer(before, {
+      type: 'UPDATE_NODE_ATTRIBUTES', networkId: netId, nodeId: fixed.id, ...attributes,
+    })
+
+    expect(canonicalFbdJson(after.document)).toBe(canonicalFbdJson(before.document))
+    expect(after.past).toHaveLength(0)
+  })
+
+  it('UPDATE_NODE_ATTRIBUTES: payload rỗng không tạo snapshot Undo giả', () => {
+    const doc = golden()
+    const before = createFbdEditorState(doc)
+    const input = doc.networks[0].nodes.find((node) => node.kind === 'INPUT')!
+    const after = fbdEditorReducer(before, {
+      type: 'UPDATE_NODE_ATTRIBUTES', networkId: doc.networks[0].id, nodeId: input.id,
+    })
+
+    expect(after).toBe(before)
+    expect(after.past).toHaveLength(0)
   })
 })

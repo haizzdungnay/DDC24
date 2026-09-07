@@ -1,5 +1,13 @@
 # SESSION HANDOFF: HOÀN THÀNH FBD EDIT TASK 6–7, AUDIT GATE, MỞ ISSUES TASK 8 & TASK 9
 
+> **Đính chính sau rà soát PR #572 ngày 2026-09-07:** Các trạng thái `MERGEABLE`,
+> HEAD và số đo bên dưới là ảnh chụp tại thời điểm bàn giao ban đầu, không phải
+> trạng thái hiện hành. Nhánh PR đã được đồng bộ với `main` chứa Task 8 (#574),
+> xử lý conflict theo hướng giữ Inspector ngoài và shell responsive, đồng thời
+> vá kiểm tra field sai loại/no-op của `UPDATE_NODE_ATTRIBUTES` và phép đổi tọa
+> độ zoom/pan. Ngưỡng ISO harness cũng đã đồng bộ với `UD-PROG-017`; bằng chứng
+> hiện hành phải lấy từ mục PR và CHANGELOG mới nhất.
+
 ### 1. SESSION OBJECTIVE
 - Triển khai tính năng **FBD EDIT** (Function Block Diagram editor, kéo-thả, kết nối dây, inspector, phím tắt) cho `apps/web-ui` thuộc dự án MK-DDC-24 (DDC/IoT Gateway/BMS controller).
 - Mục tiêu phiên: Kiểm chứng và hoàn tất bàn giao Task 6 & Task 7; xử lý triệt để các lỗi gate tồn đọng; đưa toàn bộ 4 gate kỹ thuật về trạng thái GREEN; push lên GitHub và tạo Pull Request để người dùng merge thủ công; rà soát tiến độ tổng thể kế hoạch 14 task và khởi tạo issue theo dõi cho các task tiếp theo (Task 8 và Task 9).

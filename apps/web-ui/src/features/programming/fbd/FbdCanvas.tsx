@@ -14,6 +14,7 @@ import {
   nextViewport,
   screenToGraph,
   snapPoint,
+  viewportSceneTransform,
   type FbdViewport,
   type ViewportRect,
 } from './viewport'
@@ -708,11 +709,7 @@ export function FbdCanvas({
           <g
             data-fbd-scene="true"
             data-fbd-network-id={network.id}
-            transform={
-              viewport.x !== 0 || viewport.y !== 0
-                ? `translate(${viewport.x}, ${viewport.y}) scale(1)`
-                : undefined
-            }
+            transform={viewportSceneTransform(viewport)}
           >
             <FbdWiresLayer
               wires={geometry.wires}

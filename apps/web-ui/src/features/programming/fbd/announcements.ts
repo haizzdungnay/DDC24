@@ -51,6 +51,7 @@ export function translateFbdAnnouncement(pick: (vi: string, en: string) => strin
     case 'block-review-required': return pick('Khối chưa qua Controls+Safety review, không thể thêm vào sơ đồ', 'Block is not Controls+Safety reviewed and cannot be added')
     case 'invalid-position': return pick('Vị trí ngoài phạm vi canvas cho phép', 'Position is outside the allowed canvas range')
     case 'node-not-found': return pick('Không tìm thấy node đã chọn', 'Selected node not found')
+    case 'invalid-node-attributes': return pick('Thuộc tính không áp dụng cho loại node này', 'Attributes do not apply to this node kind')
     case 'invalid-variable-name': return pick('Tên biến không hợp lệ', 'Invalid variable name')
     case 'invalid-unit': return pick('Đơn vị không hợp lệ (1-32 ký tự)', 'Invalid unit (1-32 characters)')
     case 'node-variable-set': return pick(`Đã đặt biến ${p.variable}`, `Set variable ${p.variable}`)
