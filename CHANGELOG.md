@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+### Fixed — `FE-TR-01` Không xoá ngầm điểm deep link không resolve được trên Trends (2026-09-07)
+
+- **Triệu chứng:** Mở deep link `?points=<id>` mà id không có trong `/points`, effect ở dòng
+  ~254 lọc `selectedIds` theo danh sách điểm vừa tải về và xoá ngầm id đó ngay khi có kết quả.
+- **Nguyên nhân gốc:** `hasSavedPrefsRef.current` bật `true` khi có deep link khiến nhánh lọc
+  luôn chạy; mâu thuẫn trực tiếp với thiết kế sự cố `FE-TR-01` (board DDC-24-TANG-1, 2026-08-06)
+  và làm memo `unresolvedSelectedIds` thành code chết (id không resolve được lẽ ra phải giữ thẻ
+  riêng kèm nút gỡ và lời giải thích, thay vì biến mất im lặng).
+- **Cách sửa:** Giữ nguyên `selectedIds` khi `hasSavedPrefsRef.current` bật, thay vì lọc qua
+  `analogPoints`. Nhánh "chưa có prefs → dựng mặc định `UI-01..08`" giữ nguyên hành vi cũ.
+- **Bẫy đã tránh:** Ca `TrendsPage.deepLink.test.tsx` → `it('id không tồn tại vẫn hiện ra kèm lời
+  giải thích, KHÔNG im lặng bỏ qua')` có thể bị "sửa" giả bằng cách mock `/points` trả rỗng — khi
+  đó test chạm early-return `if (!analogPoints.length) return` và né hẳn nhánh lọc, xanh mà lỗi
+  còn nguyên. Đã bác cách này và sửa đúng gốc; test xanh với `/points` trả dữ liệu thật.
+- **Kiểm chứng:** Vitest toàn FE đạt **3.058/3.059 PASS** (1 ca fail duy nhất tại
+  `ShellNavigation.test.tsx` do cờ `.env.local` `VITE_PROGRAMMING_REV_A=1` trên máy phát triển,
+  không có trên CI); `npx tsc --noEmit` 0 lỗi; `npm run lint` exit 0.
+
 ### Changed — `ISS-PGM-RBAC-01` Capability Programming và `ISS-PGM03-02` Mapping mutation (#564, #555, 2026-09-06)
 
 - Thay toàn bộ guard Programming viết cứng `admin` bằng bảng action→capability:

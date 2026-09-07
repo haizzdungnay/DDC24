@@ -254,9 +254,10 @@ export function TrendsPage() {
   useEffect(() => {
     if (!analogPoints.length) return
     setSelectedIds((current) => {
+      /* Giữ nguyên mọi id đã chọn để unresolvedSelectedIds dựng thẻ kèm nút gỡ
+         và lời giải thích nếu id không resolve được — xoá ngầm là đúng lớp lỗi FE-TR-01. */
+      if (hasSavedPrefsRef.current) return current
       const available = new Set(analogPoints.map((point) => point.id))
-      if (hasSavedPrefsRef.current) return current.filter((id) => available.has(id))
-
       const defaults = DEFAULT_TREND_IDS.filter((id) => available.has(id))
       return defaults.length ? defaults : analogPoints.slice(0, 8).map((point) => point.id)
     })
