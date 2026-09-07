@@ -162,7 +162,8 @@ describe('ProgramsTab — Luồng A: FBD Node Inspector & Slot Integration', () 
         />
       </I18nProvider>,
     )
-    // Dock Inspector có ProgramInspector (sửa tên POU), nhưng tuyệt đối KHÔNG có form FbdNodeInspector
+    // Dock Inspector thu gọn (inspector-collapsed, 0 mutation form) vì POU FBD chưa chọn node nào (TC-FBD-INS-002)
+    expect(screen.getByTestId('inspector-collapsed')).toBeInTheDocument()
     expect(screen.queryByLabelText(/Tên biến/i)).toBeNull()
     expect(screen.queryByLabelText(/Kiểu toán hạng/i)).toBeNull()
   })

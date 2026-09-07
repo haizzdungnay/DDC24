@@ -1058,85 +1058,90 @@ export function ProgramsTab({
             </button>
           )
         )}
-        {selected ? (
-          /* `T59-818` — khay này TỪNG có đúng hai trường (`Tên`, `Loại`), tức
-             rơi trúng điều handoff §9 cấm: chiếm 300px cho hai trường. Nay nó
-             là Inspector năm ngữ cảnh dùng chung ST↔FBD; phần sửa metadata vẫn
-             do `ProgramsTab` sở hữu vì nó gắn với transaction Draft. */
-          <ContextInspector
-            input={{
-              program: selected,
-              /* Chu kỳ đi theo TỪNG POU (`programs[]`), không lấy từ
-                 `task.periodMs` — trong Project nhiều chu kỳ, giá trị đó chỉ là
-                 chu kỳ của Program đầu tiên. */
-              cycleMs: selected.periodMs ?? null,
-              /* `DEV-PROG-004` — tên Task đọc từ Draft; Task chưa đặt tên thì
-                 truyền `null` để Inspector chỉ hiện chu kỳ. */
-              taskName: document.task.name ?? null,
-              /* Cổng vào/ra của POU ST, phân tích từ CHÍNH buffer đang mở (kể
-                 cả phần chưa lưu) — đọc từ bản đã lưu sẽ nói sai về giao diện
-                 mà người dùng vừa gõ. POU FBD chưa có đường phân tích tương
-                 đương ⇒ `undefined` ⇒ Inspector nói "không xác định được". */
-              parameters: selected.language === 'ST'
-                ? collectStInterfaceVariables(buffers[selected.programId] ?? programSource(selected))
-                    .map((variable) => ({ name: variable.name, direction: variable.direction, dataType: variable.type }))
-                : undefined,
-              /* Intent Enable/Disable sống ở API runtime-intent, chưa được nối
-                 vào tab này. Để `null` ⇒ Inspector hiện "không xác định được";
-                 hiện `Đã tắt` cho một thứ chưa đọc là nói dối về thiết bị. */
-              enabled: null,
-              cursorSymbol,
-              /* `ISS-STED-12` — Draft là AUTHORITY cho Phạm vi/Khởi tạo/Điểm
-                 ánh xạ/Đơn vị. Inspector không tự đọc catalog Point và không
-                 tự suy phạm vi từ văn bản: hai đường sẽ lệch nhau, và lệch ở
-                 đây nghĩa là Inspector nói biến nối tới một điểm mà Kiểm tra
-                 không thấy.
+        {selected ? (() => {
+          const isFbdWithoutSelection = selected.language === 'FBD' && fbdSelection === null
+          return (
+            /* `T59-818` — khay này TỪNG có đúng hai trường (`Tên`, `Loại`), tức
+               rơi trúng điều handoff §9 cấm: chiếm 300px cho hai trường. Nay nó
+               là Inspector năm ngữ cảnh dùng chung ST↔FBD; phần sửa metadata vẫn
+               do `ProgramsTab` sở hữu vì nó gắn với transaction Draft. */
+            <ContextInspector
+              input={{
+                program: isFbdWithoutSelection ? undefined : selected,
+                /* Chu kỳ đi theo TỪNG POU (`programs[]`), không lấy từ
+                   `task.periodMs` — trong Project nhiều chu kỳ, giá trị đó chỉ là
+                   chu kỳ của Program đầu tiên. */
+                cycleMs: selected.periodMs ?? null,
+                /* `DEV-PROG-004` — tên Task đọc từ Draft; Task chưa đặt tên thì
+                   truyền `null` để Inspector chỉ hiện chu kỳ. */
+                taskName: document.task.name ?? null,
+                /* Cổng vào/ra của POU ST, phân tích từ CHÍNH buffer đang mở (kể
+                   cả phần chưa lưu) — đọc từ bản đã lưu sẽ nói sai về giao diện
+                   mà người dùng vừa gõ. POU FBD chưa có đường phân tích tương
+                   đương ⇒ `undefined` ⇒ Inspector nói "không xác định được". */
+                parameters: selected.language === 'ST'
+                  ? collectStInterfaceVariables(buffers[selected.programId] ?? programSource(selected))
+                      .map((variable) => ({ name: variable.name, direction: variable.direction, dataType: variable.type }))
+                  : undefined,
+                /* Intent Enable/Disable sống ở API runtime-intent, chưa được nối
+                   vào tab này. Để `null` ⇒ Inspector hiện "không xác định được";
+                   hiện `Đã tắt` cho một thứ chưa đọc là nói dối về thiết bị. */
+                enabled: null,
+                cursorSymbol,
+                /* `ISS-STED-12` — Draft là AUTHORITY cho Phạm vi/Khởi tạo/Điểm
+                   ánh xạ/Đơn vị. Inspector không tự đọc catalog Point và không
+                   tự suy phạm vi từ văn bản: hai đường sẽ lệch nhau, và lệch ở
+                   đây nghĩa là Inspector nói biến nối tới một điểm mà Kiểm tra
+                   không thấy.
 
-                 Lọc theo `programId` vì hai POU được phép có biến TRÙNG TÊN;
-                 không lọc thì Inspector sẽ gán điểm của POU khác cho biến đang
-                 xem — sai một cách rất khó nhận ra. */
-              variables: document.variables.filter((variable) => variable.programId === selected.programId),
-              bindings: document.bindings,
-              /* `ISS-STED-13` — phán quyết đối chiếu chỉ mục regex của FE với
-                 bảng ký hiệu compiler công bố. Lệch ⇒ Inspector hạ các trường
-                 suy ra từ chỉ mục xuống "không xác định được" thay vì hiển thị
-                 thông tin sai. */
-              reconciliation: symbolReconciliation,
-              /* Trước `T59-820` khoá này không được truyền, nên trường `Chữ ký`
-                 của handoff §9 luôn hiện "không xác định được" — trung thực về
-                 hình thức nhưng nói "thư viện không công bố" trong khi sự thật
-                 là "chưa ai hỏi thư viện". */
-              catalog: libraryEntries,
-              fbd: inspectorFbdDocument
-                ? { document: inspectorFbdDocument, selection: fbdSelection }
-                : null,
-              runtime: runtimeOverlayByProgramId?.[selected.programId] ?? null,
-            }}
-            editableProgramSlot={
-              <ProgramInspector
-                program={selected}
-                programs={document.programs}
-                draft={metadataDrafts[selected.programId] ?? metadataOf(selected)}
-                canEdit={canEdit}
-                saving={saving}
-                onChange={(draft) => setMetadataDrafts((current) => ({ ...current, [selected.programId]: draft }))}
-                onSave={onSave}
-              />
-            }
-            editableFbdSlot={
-              fbdNodeEditorTarget ? (
-                <FbdNodeInspector
-                  target={fbdNodeEditorTarget}
-                  pick={pick}
-                  pointCatalogStatus={pointCatalog.status}
-                  pointCatalogItems={pointCatalog.data?.items ?? []}
-                  pointCatalogError={pointCatalog.error}
-                  onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
-                />
-              ) : undefined
-            }
-          />
-        ) : (
+                   Lọc theo `programId` vì hai POU được phép có biến TRÙNG TÊN;
+                   không lọc thì Inspector sẽ gán điểm của POU khác cho biến đang
+                   xem — sai một cách rất khó nhận ra. */
+                variables: document.variables.filter((variable) => variable.programId === selected.programId),
+                bindings: document.bindings,
+                /* `ISS-STED-13` — phán quyết đối chiếu chỉ mục regex của FE với
+                   bảng ký hiệu compiler công bố. Lệch ⇒ Inspector hạ các trường
+                   suy ra từ chỉ mục xuống "không xác định được" thay vì hiển thị
+                   thông tin sai. */
+                reconciliation: symbolReconciliation,
+                /* Trước `T59-820` khoá này không được truyền, nên trường `Chữ ký`
+                   của handoff §9 luôn hiện "không xác định được" — trung thực về
+                   hình thức nhưng nói "thư viện không công bố" trong khi sự thật
+                   là "chưa ai hỏi thư viện". */
+                catalog: libraryEntries,
+                fbd: inspectorFbdDocument
+                  ? { document: inspectorFbdDocument, selection: fbdSelection }
+                  : null,
+                runtime: runtimeOverlayByProgramId?.[selected.programId] ?? null,
+              }}
+              editableProgramSlot={
+                isFbdWithoutSelection ? undefined : (
+                  <ProgramInspector
+                    program={selected}
+                    programs={document.programs}
+                    draft={metadataDrafts[selected.programId] ?? metadataOf(selected)}
+                    canEdit={canEdit}
+                    saving={saving}
+                    onChange={(draft) => setMetadataDrafts((current) => ({ ...current, [selected.programId]: draft }))}
+                    onSave={onSave}
+                  />
+                )
+              }
+              editableFbdSlot={
+                fbdNodeEditorTarget ? (
+                  <FbdNodeInspector
+                    target={fbdNodeEditorTarget}
+                    pick={pick}
+                    pointCatalogStatus={pointCatalog.status}
+                    pointCatalogItems={pointCatalog.data?.items ?? []}
+                    pointCatalogError={pointCatalog.error}
+                    onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
+                  />
+                ) : undefined
+              }
+            />
+          )
+        })() : (
           <section className="rounded-[var(--radius)] border border-[var(--c-border)] p-3">
             <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
             <p className="mt-2 text-xs text-[var(--c-text-dim)]">
