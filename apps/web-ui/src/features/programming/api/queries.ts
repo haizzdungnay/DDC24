@@ -22,6 +22,7 @@ import type {
   RemoteState,
   ProgrammingLibraryUsage,
   ProgrammingLibraryEntry,
+  ProgrammingSignalDependencies,
 } from '../model/types'
 
 type PickCopy = (vi: string, en: string) => string
@@ -588,6 +589,20 @@ export function useProgrammingCheck(checkId: string | undefined): RemoteState<Pr
     return client.request<ProgrammingCheck>('getProgrammingCheck', { path: { checkId } })
   }, [client, checkId])
   return useProgrammingResource(load, 0)
+}
+
+/** Publisher/consumer do compiler xác nhận, neo vào đúng Draft/Revision/Check. */
+export function useProgrammingSignalDependencies(
+  projectId: string | undefined,
+  enabled = true,
+  draftVersion?: string,
+): RemoteState<ProgrammingSignalDependencies> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => {
+    if (!projectId) return Promise.reject(new Error('projectId is required'))
+    return client.request<ProgrammingSignalDependencies>('getProgrammingSignalDependencies', { path: { projectId } })
+  }, [client, projectId, draftVersion])
+  return useProgrammingResource(load, 0, enabled && Boolean(projectId))
 }
 
 /** `GET /revisions/{from}/changes/{to}` — thay đổi có cấu trúc + impact bốn
