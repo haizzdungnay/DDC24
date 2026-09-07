@@ -1135,6 +1135,29 @@ func bindingCarriesRuntimeSlotHandle(binding map[string]any) bool {
 	return hasRuntimeSlotKey(point)
 }
 
+// removePersistedBindingRuntimeHandlesV2 là cầu nâng cấp cho Draft v2 đã lưu
+// trước AC-PIO-ID-01. `extIndex` chỉ là handle của lần nạp cấu hình trước; danh
+// tính bền `(category, deviceId, pointId)` vẫn nguyên vẹn và Check sẽ phân giải
+// lại slot từ Point Catalog đang chạy.
+//
+// Hàm này PHẢI chạy trước khi áp operation mới. Nhờ vậy dữ liệu tồn dư được
+// sửa, còn `upsertBindingCompat` vẫn từ chối request mới cố ghi `extIndex`.
+func removePersistedBindingRuntimeHandlesV2(document map[string]any) {
+	for _, binding := range collectionOf(document, "bindings") {
+		removeRuntimeSlotKeys(binding)
+		point, _ := binding["point"].(map[string]any)
+		removeRuntimeSlotKeys(point)
+	}
+}
+
+func removeRuntimeSlotKeys(object map[string]any) {
+	for key := range object {
+		if strings.EqualFold(key, "extIndex") || strings.EqualFold(key, "ext_index") {
+			delete(object, key)
+		}
+	}
+}
+
 func hasRuntimeSlotKey(object map[string]any) bool {
 	for key := range object {
 		if strings.EqualFold(key, "extIndex") || strings.EqualFold(key, "ext_index") {

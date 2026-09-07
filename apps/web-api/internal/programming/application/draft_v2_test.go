@@ -463,6 +463,81 @@ func TestMigrateDraftToV2RejectsMixedMalformedAndRuntimeHandleBindings(t *testin
 	}
 }
 
+// F-PROG-CREATE-FBD-EXTINDEX-001 — dữ liệu thật trên Foxlinx từng lưu
+// `point.extIndex` trước AC-PIO-ID-01. Từ khi validator cấm runtime handle,
+// field tồn dư đó làm mọi PATCH kế tiếp trả PRG-ERR-REQ-001 dù operation tạo
+// FBD hoàn toàn hợp lệ. Mutation thành công phải đồng thời nâng binding về
+// identity bền và tuyệt đối không đổi `(deviceId, pointId)`.
+func TestCreateFbdRepairsPersistedRuntimeHandleWithoutLaunderingNewInput(t *testing.T) {
+	projectID := "11111111-1111-4111-8111-111111111111"
+	existingID := "70000001-0000-4000-8000-000000000001"
+	variableID := "70000003-0000-4000-8000-000000000003"
+	document := newDraftDocumentV2(projectID, "Foxlinx")
+	document["objects"] = []any{map[string]any{
+		"objectId": existingID, "kind": "PROGRAM", "name": "RelayPattern32",
+		"language": "ST", "source": "PROGRAM RelayPattern32\nEND_PROGRAM\n",
+		"locals": []any{map[string]any{
+			"variableId": variableID, "programId": existingID, "name": "Relay1",
+			"type": "BOOL", "class": "OUTPUT", "retain": false,
+		}},
+	}}
+	document["programs"] = []any{map[string]any{
+		"programId": existingID, "objectId": existingID, "periodMs": float64(1000),
+	}}
+	document["bindings"] = []any{map[string]any{
+		"bindingId":  "70000004-0000-4000-8000-000000000004",
+		"variableId": variableID, "programId": existingID, "variable": "Relay1",
+		"point": map[string]any{
+			"category": "MB_RTU", "deviceId": "bus-1-slave-4",
+			"pointId": "CK50804-DO1", "extIndex": float64(1),
+		},
+		"direction": "WRITE", "dataType": "BOOL", "unit": "bool",
+		"writable": true, "qualityPolicy": "REQUIRE_GOOD",
+	}}
+	if err := validateDraftDocumentV2(document); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("fixture phải tái hiện Draft bị chặn bởi extIndex, nhận %v", err)
+	}
+
+	before, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newID := "70000002-0000-4000-8000-000000000002"
+	result, err := applyDraftOperations(before, []json.RawMessage{
+		op(map[string]any{"op": "upsertProgram", "program": map[string]any{
+			"programId": newID, "name": "NewFbdProgram", "kind": "PROGRAM",
+			"language": "FBD", "document": `{"schemaVersion":"1.0","networks":[]}`,
+		}}),
+		op(map[string]any{"op": "setTask", "task": map[string]any{
+			"taskId": projectID, "periodMs": 1000, "programOrder": []string{existingID, newID},
+		}}),
+	})
+	if err != nil {
+		t.Fatalf("tạo FBD trên Draft có extIndex tồn dư: %v", err)
+	}
+
+	var repaired map[string]any
+	if err := json.Unmarshal(result, &repaired); err != nil {
+		t.Fatal(err)
+	}
+	if findByID(repaired, "objects", "objectId", newID) == nil || findByID(repaired, "programs", "programId", newID) == nil {
+		t.Fatal("batch thành công nhưng thiếu Program FBD mới")
+	}
+	binding := findByID(repaired, "bindings", "bindingId", "70000004-0000-4000-8000-000000000004")
+	point, _ := binding["point"].(map[string]any)
+	if bindingCarriesRuntimeSlotHandle(binding) {
+		t.Fatalf("runtime handle vẫn còn sau repair: %+v", binding)
+	}
+	if point["deviceId"] != "bus-1-slave-4" || point["pointId"] != "CK50804-DO1" {
+		t.Fatalf("repair làm đổi identity bền: %+v", point)
+	}
+
+	// Cầu nâng cấp chỉ áp lên snapshot cũ; cửa ghi mới vẫn fail-closed.
+	if err := upsertBindingCompat(repaired, bindingOp(t, durableBinding(nil, map[string]any{"extIndex": 7}))); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("request mới mang extIndex phải bị từ chối, nhận %v", err)
+	}
+}
+
 func legacyDraftWithBinding(t *testing.T, binding map[string]any) map[string]any {
 	t.Helper()
 	programID := "70000001-0000-4000-8000-000000000001"
