@@ -443,7 +443,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		Artifacts: artifacts, ProgramManifests: programManifestsOf(results),
 		Topology: topology, Budget: budget,
 		PouGraph: packagePouGraph(objectViews),
-		Signals:  packageManifestSignals(objectViews), Bindings: packageManifestBindings(objectViews, slots),
+		Signals:  packageManifestSignals(objectViews, inputs, results, topology), Bindings: packageManifestBindings(objectViews, slots),
 		LibraryLock:   manifestLibraryLock,
 		IntegrityMode: results[0].IntegrityMode,
 	}

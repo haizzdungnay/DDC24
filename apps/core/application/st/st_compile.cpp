@@ -835,6 +835,14 @@ private:
         for (std::size_t index = 0; index < out_->signal_refs.size(); ++index) {
             StIrSignalRef& ref = out_->signal_refs[index];
             if (fold_pou(ref.name) != fold_pou(contract->second->name)) continue;
+            if (read && !ref.read) {
+                ref.read_line = static_cast<uint16_t>(line);
+                ref.read_column = static_cast<uint16_t>(column);
+            }
+            if (publish && !ref.publish) {
+                ref.publish_line = static_cast<uint16_t>(line);
+                ref.publish_column = static_cast<uint16_t>(column);
+            }
             ref.read = ref.read || read;
             ref.publish = ref.publish || publish;
             *out_index = static_cast<uint16_t>(index);
@@ -848,6 +856,14 @@ private:
         ref.type = type;
         ref.read = read;
         ref.publish = publish;
+        if (read) {
+            ref.read_line = static_cast<uint16_t>(line);
+            ref.read_column = static_cast<uint16_t>(column);
+        }
+        if (publish) {
+            ref.publish_line = static_cast<uint16_t>(line);
+            ref.publish_column = static_cast<uint16_t>(column);
+        }
         out_->signal_refs.push_back(std::move(ref));
         *out_index = static_cast<uint16_t>(out_->signal_refs.size() - 1);
         return true;

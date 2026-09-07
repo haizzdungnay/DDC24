@@ -753,6 +753,50 @@ export interface ProgrammingCheck {
   attemptCount: number
 }
 
+export interface ProgrammingSignalDependencyLocation {
+  line: number
+  column: number
+  length: number
+}
+
+export interface ProgrammingSignalDependencyReference {
+  programId: string
+  objectId: string
+  name: string
+  language: 'ST' | 'FBD'
+  location: ProgrammingSignalDependencyLocation | null
+}
+
+export interface ProgrammingSignalDependency {
+  signalId: string
+  name: string
+  type: ProgrammingSignalType
+  unit: string | null
+  publisherProgramId: string
+  freshnessMs: number
+  stalePolicy: ProgrammingSignalStalePolicyWire
+  fallbackValue: number | null
+  publisher: ProgrammingSignalDependencyReference
+  consumers: ProgrammingSignalDependencyReference[]
+}
+
+export interface ProgrammingSignalDependencies {
+  schemaVersion: '1.0'
+  status: 'AUTHORITATIVE' | 'STALE' | 'PENDING_CHECK' | 'UNAVAILABLE'
+  reasonCode: 'VERIFIED' | 'DRAFT_CHANGED' | 'NO_SEALED_REVISION' | 'NO_CHECK' |
+    'CHECK_IN_PROGRESS' | 'CHECK_FAILED' | 'CHECK_TIMED_OUT' |
+    'CHECK_RESULT_UNAVAILABLE' | 'DEPENDENCY_CONTRACT_UNAVAILABLE'
+  projectId: string
+  draftRevisionId: string
+  draftSha256: string
+  baseRevisionId: string | null
+  checkedDraftSha256: string | null
+  checkId: string | null
+  checkRevisionId: string | null
+  checkInputSha256: string | null
+  dependencies: ProgrammingSignalDependency[] | null
+}
+
 export interface ProgrammingProjectPage {
   items: ProgrammingProject[]
   nextCursor?: string | null

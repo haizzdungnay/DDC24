@@ -40,8 +40,8 @@ func TestRegisterProgrammingRoutesHonorsFeatureFlag(t *testing.T) {
 	// + dry run Check của PROJECT Library (`T61-401`)
 	// + đọc mã nguồn entry theo đúng một revision (`T61-404`)
 	// + preview binding server-authoritative (`ISS-PGM03-01`).
-	if len(routes) != 44 {
-		t.Fatalf("contract route count = %d; want 44", len(routes))
+	if len(routes) != 45 {
+		t.Fatalf("contract route count = %d; want 45", len(routes))
 	}
 }
 

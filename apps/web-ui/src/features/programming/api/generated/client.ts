@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.39.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.40.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingPermission = "read" | "program.edit" | "program.activate" | "simulation.run";
@@ -258,6 +258,7 @@ export const PROGRAMMING_ENDPOINTS = {
   "getProgrammingRuntime": { method: "GET", path: "/api/v1/programming/runtime", roles: ["viewer","operator","engineer","admin"], permission: "read" },
   "getProgrammingRuntimeMonitor": { method: "GET", path: "/api/v1/programming/runtime/monitor", roles: ["viewer","operator","engineer","admin"], permission: "read" },
   "getProgrammingRuntimeSignals": { method: "GET", path: "/api/v1/programming/runtime/signals", roles: ["viewer","operator","engineer","admin"], permission: "read" },
+  "getProgrammingSignalDependencies": { method: "GET", path: "/api/v1/programming/projects/{projectId}/signal-dependencies", roles: ["viewer","operator","engineer","admin"], permission: "read" },
   "getProgrammingSimulationSession": { method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
   "getProgrammingTrace": { method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", roles: ["viewer","operator","engineer","admin"], permission: "read" },
   "importProgrammingBundle": { method: "POST", path: "/api/v1/programming/bundles/import", roles: ["engineer","admin"], permission: "program.activate" },

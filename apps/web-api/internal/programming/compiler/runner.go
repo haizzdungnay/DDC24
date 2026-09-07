@@ -179,10 +179,18 @@ type Symbol struct {
 }
 
 type SignalRef struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Read    bool   `json:"read"`
-	Publish bool   `json:"publish"`
+	Name            string          `json:"name"`
+	Type            string          `json:"type"`
+	Read            bool            `json:"read"`
+	Publish         bool            `json:"publish"`
+	ReadLocation    *SourceLocation `json:"readLocation"`
+	PublishLocation *SourceLocation `json:"publishLocation"`
+}
+
+type SourceLocation struct {
+	Line   int `json:"line"`
+	Column int `json:"column"`
+	Length int `json:"length"`
 }
 
 // LinkedPOU là record compiler đã lower THẬT SỰ và là nguồn duy nhất để
@@ -722,6 +730,15 @@ func validateSignalOutput(output []SignalRef, input Input) error {
 		}
 		if _, duplicate := seen[key]; duplicate {
 			return fmt.Errorf("%w: signalRefs trùng", ErrInvalidOutput)
+		}
+		for _, location := range []*SourceLocation{ref.ReadLocation, ref.PublishLocation} {
+			if location != nil && (location.Line < 1 || location.Line > 65535 || location.Column < 1 ||
+				location.Column > 65535 || location.Length < 1 || location.Length > 64) {
+				return fmt.Errorf("%w: signalRefs source location không hợp lệ", ErrInvalidOutput)
+			}
+		}
+		if (ref.ReadLocation != nil) != ref.Read || (ref.PublishLocation != nil) != ref.Publish {
+			return fmt.Errorf("%w: signalRefs source location không khớp quyền", ErrInvalidOutput)
 		}
 		seen[key] = struct{}{}
 	}

@@ -1236,10 +1236,19 @@ int main(int argc, char** argv)
     }
     j["signalRefs"] = nlohmann::json::array();
     for (const core::StIrSignalRef& ref : build.module.signal_refs) {
-        j["signalRefs"].push_back({{"name", ref.name},
-                                     {"type", core::st_type_name(ref.type)},
-                                     {"read", ref.read},
-                                     {"publish", ref.publish}});
+        nlohmann::json item = {{"name", ref.name},
+                               {"type", core::st_type_name(ref.type)},
+                               {"read", ref.read},
+                               {"publish", ref.publish}};
+        item["readLocation"] = ref.read_line == 0
+            ? nlohmann::json(nullptr)
+            : nlohmann::json({{"line", ref.read_line}, {"column", ref.read_column},
+                              {"length", ref.name.size()}});
+        item["publishLocation"] = ref.publish_line == 0
+            ? nlohmann::json(nullptr)
+            : nlohmann::json({{"line", ref.publish_line}, {"column", ref.publish_column},
+                              {"length", ref.name.size()}});
+        j["signalRefs"].push_back(std::move(item));
     }
     /* Artifact trả kèm dạng base64 để BE dùng thẳng cho `program_stage` mà
      * không cần đọc lại file — bớt một bước là bớt một chỗ sai. */
