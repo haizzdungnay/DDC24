@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Plus, Redo2, RotateCcw, Trash2, Undo2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, BoxSelect, Plus, Redo2, RotateCcw, Trash2, Undo2 } from 'lucide-react'
 import { useEffect, useId, useMemo, useReducer, useRef, useState } from 'react'
 
 import { Button } from '../../../shared/components/Button'
@@ -39,6 +39,7 @@ import {
 } from './palette'
 import { userPouPaletteEntry, type UserPouInterface } from './userPou'
 import { QuickLibraryHost } from '../design/library/QuickLibraryPanel'
+import type { FbdNetworkViewPreference, FbdSnapSizePreference, FbdWireStylePreference } from './fbdPreferences'
 
 export interface StructuredFbdEditorProps {
   /**
@@ -60,6 +61,14 @@ export interface StructuredFbdEditorProps {
   /** `T59-804`: Quick Library dùng chung đọc catalog theo Project. Vắng thì dock
    *  vẫn mở được và chỉ thấy SYSTEM entry. */
   projectId?: string
+  networkView?: FbdNetworkViewPreference
+  activeNetworkId?: string
+  wireStyle?: FbdWireStylePreference
+  gridVisible?: boolean
+  snapEnabled?: boolean
+  snapSize?: FbdSnapSizePreference
+  libraryDefaultOpen?: boolean
+  onLibraryOpenChange?: (open: boolean) => void
 }
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
@@ -326,7 +335,23 @@ function NodeInspector({
   )
 }
 
-export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES, projectId, onSelectionChange, focusSelection }: StructuredFbdEditorProps) {
+export function StructuredFbdEditor({
+  document,
+  canEdit,
+  onChange,
+  userPouInterfaces = EMPTY_USER_POU_INTERFACES,
+  projectId,
+  onSelectionChange,
+  focusSelection,
+  networkView = 'ALL',
+  activeNetworkId,
+  wireStyle = 'BEZIER',
+  gridVisible = true,
+  snapEnabled = true,
+  snapSize = 8,
+  libraryDefaultOpen = false,
+  onLibraryOpenChange,
+}: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
@@ -345,7 +370,10 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
   const [constantValue, setConstantValue] = useState('false')
   const [createError, setCreateError] = useState<string | null>(null)
   const [compatibleFilterOn, setCompatibleFilterOn] = useState(true)
-  const [libraryDockOpen, setLibraryDockOpen] = useState(false)
+  const [libraryDockOpen, setLibraryDockOpen] = useState(libraryDefaultOpen)
+  const [marqueeMode, setMarqueeMode] = useState(false)
+
+  useEffect(() => setLibraryDockOpen(libraryDefaultOpen), [libraryDefaultOpen])
   const userPouPalette = useMemo(() => {
     const entries: FbdPaletteEntry[] = []
     const issues: string[] = []
@@ -424,7 +452,11 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
     setPaletteTypeRef(FBD_PALETTE[0]?.id ?? '')
   }, [paletteEntries, paletteTypeRef])
 
-  const selectedNetworkId = state.selection?.networkId ?? state.document.networks[0]?.id
+  const selectedNetworkId = activeNetworkId ?? state.selection?.networkId ?? state.document.networks[0]?.id
+  const visibleNetworks = networkView === 'SELECTED'
+    ? state.document.networks.filter((network) => network.id === selectedNetworkId)
+    : state.document.networks
+  const activeNetwork = state.document.networks.find((network) => network.id === selectedNetworkId)
   const selectedPaletteEntry = paletteEntries.find((entry) => entry.id === paletteTypeRef)
   /* `T59-804`: kiểu của cổng đang chọn — cơ sở để lọc palette theo tương thích.
    * `null` khi không đứng ở cổng nào; khi đó không lọc gì cả. */
@@ -550,6 +582,9 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
           </p>
         </div>
         <div className="flex flex-wrap gap-2" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
+          <span className="inline-flex min-h-11 items-center rounded border border-[var(--c-border)] px-2 text-xs" data-testid="fbd-active-network">
+            {pick('Network đang mở', 'Active network')}: {activeNetwork?.name ?? '—'}
+          </span>
           <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('ADD_NETWORK')}>
             {pick('Network', 'Network')}
           </Button>
@@ -561,9 +596,21 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
           <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} disabled={!state.connectionFromPortId} onClick={() => dispatchCommand('CANCEL_CONNECTION')}>
             {pick('Hủy nối', 'Cancel wire')}
           </Button>
+          <button
+            type="button"
+            className="hidden min-h-11 items-center gap-1 rounded border border-[var(--c-border)] px-2 text-xs md:inline-flex lg:hidden"
+            aria-pressed={marqueeMode}
+            disabled={!canEdit}
+            onClick={() => setMarqueeMode((enabled) => !enabled)}
+          >
+            <BoxSelect className="h-4 w-4" aria-hidden="true" />
+            {pick('Chọn vùng', 'Marquee select')}
+          </button>
         </div>
       </div>
 
+      <div className="grid min-w-0 gap-4 min-[1440px]:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="min-w-0 space-y-4">
       {/* WP-05/06 (FBD_EDITOR_DESIGN.md §1/§2) — palette 9 nhóm + tạo node giao diện */}
       <div className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3" role="group" aria-label={pick('Palette FBD', 'FBD palette')}>
         <label className="flex flex-col gap-1 text-xs">
@@ -601,36 +648,13 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
           disabled={!canEdit || !selectedNetworkId}
           aria-pressed={libraryDockOpen}
           title={pick('Thư viện nhanh — cùng catalog với ST và PGM-04', 'Quick library — same catalog as ST and PGM-04')}
-          onClick={() => setLibraryDockOpen((open) => !open)}
+          onClick={() => setLibraryDockOpen((open) => {
+            onLibraryOpenChange?.(!open)
+            return !open
+          })}
         >
           {pick('Thư viện', 'Library')}
         </Button>
-        {libraryDockOpen && canEdit && (
-          <div className="relative">
-            <QuickLibraryHost
-              projectId={projectId}
-              language="FBD"
-              /* Canvas chỉ vẽ được mục mà palette biết dựng port; mục PROJECT
-                 chưa có entry palette phải nói ra lý do tại chỗ thay vì biến
-                 mất khỏi danh sách và để người dùng đi tìm. */
-              canInsert={(entry) =>
-                paletteEntries.some((item) => item.id === entry.entryId)
-                  ? { ok: true }
-                  : { ok: false, reason: pick('Chưa vẽ được trên canvas', 'Not drawable on the canvas') }
-              }
-              onInsert={(entry) => {
-                const paletteEntry = paletteEntries.find((item) => item.id === entry.entryId)
-                const network = state.document.networks.find((item) => item.id === selectedNetworkId)
-                if (!paletteEntry || !network) return false
-                /* Cùng `ADD_NODE` mà palette dùng, nên chèn từ dock vẫn là ĐÚNG
-                   MỘT bước hoàn tác và không tự nối dây. */
-                dispatch({ type: 'ADD_NODE', networkId: network.id, node: buildPaletteNode(paletteEntry) })
-                return true
-              }}
-              onClose={() => setLibraryDockOpen(false)}
-            />
-          </div>
-        )}
         {selectedPortType !== null && (
           <label className="flex items-center gap-1.5 text-xs text-[var(--c-text-dim)]">
             <input
@@ -786,8 +810,8 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
       )}
 
       <div className="space-y-3">
-        {state.document.networks.map((network) => (
-          <article key={network.id} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+        {visibleNetworks.map((network) => (
+          <article key={network.id} data-fbd-network-id={network.id} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
             <button
               type="button"
               data-fbd-canvas-control="true"
@@ -803,6 +827,12 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
               selection={state.selection}
               connectionFromPortId={state.connectionFromPortId}
               canEdit={canEdit}
+              wireStyle={wireStyle}
+              gridVisible={gridVisible}
+              snapEnabled={snapEnabled}
+              snapSize={snapSize}
+              marqueeMode={marqueeMode}
+              selectionRevision={state.selectionRevision}
               dispatch={dispatch}
               pick={pick}
               registerPort={(portId, element) => {
@@ -829,6 +859,37 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
             })()}
           </article>
         ))}
+      </div>
+      </div>
+      {libraryDockOpen && (
+        <aside
+          data-fbd-dock="library"
+          aria-label={pick('Khay Thư viện nhanh FBD', 'FBD Quick Library dock')}
+          className="fixed inset-y-16 right-0 z-40 w-[min(24rem,100vw)] min-w-0 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2 shadow-2xl min-[1440px]:static min-[1440px]:z-auto min-[1440px]:w-auto min-[1440px]:max-h-[44rem] min-[1440px]:shadow-none"
+        >
+          <QuickLibraryHost
+            variant="docked"
+            projectId={projectId}
+            language="FBD"
+            canInsert={(entry) =>
+              paletteEntries.some((item) => item.id === entry.entryId)
+                ? { ok: true }
+                : { ok: false, reason: pick('Chưa vẽ được trên canvas', 'Not drawable on the canvas') }
+            }
+            onInsert={(entry) => {
+              const paletteEntry = paletteEntries.find((item) => item.id === entry.entryId)
+              const network = state.document.networks.find((item) => item.id === selectedNetworkId)
+              if (!canEdit || !paletteEntry || !network) return false
+              dispatch({ type: 'ADD_NODE', networkId: network.id, node: buildPaletteNode(paletteEntry) })
+              return true
+            }}
+            onClose={() => {
+              setLibraryDockOpen(false)
+              onLibraryOpenChange?.(false)
+            }}
+          />
+        </aside>
+      )}
       </div>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{translateFbdAnnouncement(pick, state.announcement)}</p>
     </section>

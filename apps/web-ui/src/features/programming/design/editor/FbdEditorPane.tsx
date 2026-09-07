@@ -1,9 +1,14 @@
-import { useMemo } from 'react'
-import { ClipboardCheck, GitCompare, Save } from 'lucide-react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useI18n } from '../../../../shared/i18n'
-import { Button } from '../../../../shared/components/Button'
+import { THEMES, TOKEN_NAMES } from '../../../../shared/theme/tokens'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
 import type { FbdSelection } from '../../fbd/commands'
+import {
+  readFbdPreferences,
+  writeFbdPreferences,
+  type FbdPreferences,
+  type FbdThemePreference,
+} from '../../fbd/fbdPreferences'
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
@@ -33,6 +38,7 @@ export interface FbdEditorPaneProps {
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   userPouInterfaces: readonly UserPouInterface[]
   projectId?: string
+  userScope?: string
   /** `T59-818` — chuyển tiếp lựa chọn canvas lên Inspector dùng chung. */
   onSelectionChange?: (selection: FbdSelection | null) => void
   focusSelection?: FbdSelection | null
@@ -46,70 +52,145 @@ export function FbdEditorPane({
   program,
   source,
   canEdit,
-  saving,
   onChange,
-  onSave,
   userPouInterfaces,
   projectId,
+  userScope,
   onSelectionChange,
   focusSelection,
-  onRunCheck,
-  onOpenCompare,
-  checkDisabledReason,
-  compareDisabledReason,
 }: FbdEditorPaneProps) {
   const { pick } = useI18n()
   const committedJson = useMemo(() => canonicalFbdJson(parseFbdDocument(program.document, program.name)), [program.document, program.name])
   const local = useMemo(() => parseFbdDocument(source, program.name), [program.name, source])
   const localJson = useMemo(() => canonicalFbdJson(local), [local])
   const dirty = localJson !== committedJson
+  const [preferences, setPreferences] = useState(() => readFbdPreferences(userScope, projectId))
+  const [activeNetworkId, setActiveNetworkId] = useState(() => local.networks[0]?.id)
+  const [wideDesktop, setWideDesktop] = useState(() => window.innerWidth >= 1440)
+
+  useEffect(() => {
+    setPreferences(readFbdPreferences(userScope, projectId))
+  }, [projectId, userScope])
+
+  useEffect(() => {
+    const update = () => setWideDesktop(window.innerWidth >= 1440)
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+
+  useEffect(() => {
+    if (local.networks.some((network) => network.id === activeNetworkId)) return
+    setActiveNetworkId(local.networks[0]?.id)
+  }, [activeNetworkId, local.networks])
+
+  function updatePreferences(patch: Partial<FbdPreferences>) {
+    setPreferences(writeFbdPreferences(patch, userScope, projectId))
+  }
+
+  const explicitTheme = preferences.theme === 'FOLLOW_WEB'
+    ? null
+    : preferences.theme.toLowerCase() as 'light' | 'dark'
+  const themeStyle = explicitTheme
+    ? {
+        ...Object.fromEntries(TOKEN_NAMES.map((token) => [token, THEMES[explicitTheme][token]])),
+        colorScheme: explicitTheme,
+      } as CSSProperties
+    : undefined
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
+    <div
+      className="min-w-0 space-y-2 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-1 text-[var(--c-text)]"
+      data-testid="fbd-workspace-shell"
+      data-fbd-theme={preferences.theme}
+      style={themeStyle}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-[var(--c-text)]">{program.name}</h3>
-        {canEdit && (
-          <Button
-            size="sm"
-            icon={<Save className="h-4 w-4" aria-hidden="true" />}
-            loading={saving}
-            disabled={!dirty}
-            onClick={() => void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'FBD', source: localJson }])}
-          >
-            {pick('Lưu', 'Save')}
-          </Button>
-        )}
-        {/* `Kiểm tra`/`So sánh` là hành động cấp GÓI nên chúng có mặt ở cả hai
-            ngôn ngữ — bỏ chúng khỏi FBD sẽ làm cùng một việc chỉ làm được khi
-            đang mở một POU ST. */}
-        <Button
-          size="sm"
-          variant="secondary"
-          icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
-          disabled={!onRunCheck || Boolean(checkDisabledReason)}
-          title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
-          onClick={() => onRunCheck?.()}
-        >
-          {pick('Kiểm tra', 'Check')}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<GitCompare className="h-4 w-4" aria-hidden="true" />}
-          disabled={!onOpenCompare || Boolean(compareDisabledReason)}
-          title={compareDisabledReason ?? pick('So sánh với bản đang vận hành', 'Compare with the running revision')}
-          onClick={() => onOpenCompare?.()}
-        >
-          {pick('So sánh', 'Compare')}
-        </Button>
+        <div className="flex flex-wrap items-end gap-2" role="group" aria-label={pick('Tuỳ chọn hiển thị FBD', 'FBD display preferences')}>
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Khung nhìn', 'View')}
+            <select
+              className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2"
+              value={preferences.networkView}
+              onChange={(event) => updatePreferences({ networkView: event.target.value as FbdPreferences['networkView'] })}
+            >
+              <option value="SELECTED">{pick('Network đang chọn', 'Selected network')}</option>
+              <option value="ALL">{pick('Tất cả network', 'All networks')}</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Network hoạt động', 'Active network')}
+            <select
+              className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2"
+              value={activeNetworkId ?? ''}
+              onChange={(event) => {
+                const next = event.target.value
+                setActiveNetworkId(next)
+                onSelectionChange?.({ kind: 'network', networkId: next })
+              }}
+            >
+              {local.networks.map((network) => <option key={network.id} value={network.id}>{network.order + 1}. {network.name}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Giao diện FBD', 'FBD theme')}
+            <select
+              className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2"
+              value={preferences.theme}
+              onChange={(event) => updatePreferences({ theme: event.target.value as FbdThemePreference })}
+            >
+              <option value="FOLLOW_WEB">{pick('Theo giao diện web', 'Follow web')}</option>
+              <option value="LIGHT">{pick('Sáng', 'Light')}</option>
+              <option value="DARK">{pick('Tối', 'Dark')}</option>
+            </select>
+          </label>
+          <label className="inline-flex min-h-11 items-center gap-2 text-xs">
+            <input type="checkbox" checked={preferences.gridVisible} onChange={(event) => updatePreferences({ gridVisible: event.target.checked })} />
+            {pick('Lưới', 'Grid')}
+          </label>
+          <label className="inline-flex min-h-11 items-center gap-2 text-xs">
+            <input type="checkbox" checked={preferences.snapEnabled} onChange={(event) => updatePreferences({ snapEnabled: event.target.checked })} />
+            {pick('Bám lưới', 'Snap')}
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            {pick('Kiểu dây', 'Wire style')}
+            <select
+              className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2"
+              value={preferences.wireStyle}
+              onChange={(event) => updatePreferences({ wireStyle: event.target.value as FbdPreferences['wireStyle'] })}
+            >
+              <option value="ORTHOGONAL">{pick('Vuông góc', 'Orthogonal')}</option>
+              <option value="BEZIER">Bezier</option>
+            </select>
+          </label>
+          <label className="inline-flex min-h-11 items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={preferences.dock.library}
+              onChange={(event) => updatePreferences({ dock: { ...preferences.dock, library: event.target.checked } })}
+            />
+            {pick('Khay Thư viện', 'Library dock')}
+          </label>
+        </div>
       </div>
       <StructuredFbdEditor
         document={local}
         canEdit={canEdit}
         userPouInterfaces={userPouInterfaces}
         projectId={projectId}
+        networkView={preferences.networkView}
+        activeNetworkId={activeNetworkId}
+        wireStyle={preferences.wireStyle}
+        gridVisible={preferences.gridVisible}
+        snapEnabled={preferences.snapEnabled}
+        snapSize={preferences.snapSize}
+        libraryDefaultOpen={preferences.dock.library && wideDesktop}
+        onLibraryOpenChange={(open) => updatePreferences({ dock: { ...preferences.dock, library: open } })}
         onChange={(next) => onChange(canonicalFbdJson(next))}
-        onSelectionChange={onSelectionChange}
+        onSelectionChange={(selection) => {
+          if (selection?.networkId) setActiveNetworkId(selection.networkId)
+          onSelectionChange?.(selection)
+        }}
         focusSelection={focusSelection}
       />
       <EditorStatusBar
