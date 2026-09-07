@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Added — Workbench, diagnostic và Auto Layout cho FBD Editor (#573, 2026-09-08)
+
+- Hợp nhất danh sách lỗi FBD vào `ProblemsDrawer` dùng chung; mục có đích thật
+  nhảy đúng node/wire, còn JSON hỏng hoặc diagnostic không neo được chỉ hiển thị
+  văn bản. Buffer JSON hỏng được khóa fail-closed và giữ nguyên thay vì âm thầm
+  thay bằng tài liệu rỗng có thể ghi đè nguồn canonical.
+- Bổ sung xem trước Auto Layout/căn lề bằng ghost không sửa Draft, Hủy không tạo
+  diff/Undo, và Áp dụng bằng đúng một giao dịch `SET_LAYOUT_BATCH`; trạng thái
+  no-op, thiếu vùng chọn và vùng chọn đã đổi đều nói rõ nguyên nhân. Mini Map
+  hỗ trợ click/kéo với phép đổi tọa độ có tính letterbox, không mutate tài liệu.
+- Watch ở EDIT tiếp tục không poll runtime; Search/XRef thiếu chỉ mục trả
+  `Không xác định được`; trạng thái stale/offline không bị biến thành số 0.
+  Thanh trạng thái vẫn công bố số network/block/wire, tính hợp lệ, dirty và
+  read-only từ nguồn thật.
+- Kiểm chứng HOST/no-board: Vitest mục tiêu **8 tệp / 96 test PASS**, toàn FE
+  **244 tệp / 3.093 test PASS**; TypeScript, lint/UI strings và production build
+  PASS. Bundle Programming **150,70/165 KiB gzip**. Google Chrome thật **4/4
+  PASS**: journey Programming, jump đúng wire lỗi, Mini Map click/kéo/phím với
+  sai số tâm không quá 8 px và Watch OFFLINE; có ảnh ghost Auto Layout và Mini
+  Map, đồng thời kiểm tra Console/Network của chính bề mặt Programming. Chrome
+  DevTools MCP đã cấu hình nhưng không được nạp trong phiên hiện tại; bằng chứng
+  browser này không phải CI, target/physical HIL hay `RELEASE_READY`.
+- Gate toàn repo trước commit: C++ Release fresh bật Modbus/BACnet/HMI
+  **1.479/1.479 PASS, 8 skip**; Go vet/test `-count=1` PASS; docs ISO harness
+  **17/17 PASS**. Đây đều là bằng chứng HOST, không thay thế phê duyệt thiết kế.
+
 ### Fixed — Tạo Program FBD trên Draft cũ có Binding chứa runtime handle (2026-09-07)
 
 - Sửa lỗi `PATCH /draft` trả `400 PRG-ERR-REQ-001` khi tạo Program FBD trên

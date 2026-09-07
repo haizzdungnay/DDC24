@@ -11,6 +11,7 @@ import {
   type FbdThemePreference,
 } from '../../fbd/fbdPreferences'
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
+import { readFbdDocument } from '../../fbd/readDocument'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import type { UserPouInterface } from '../../fbd/userPou'
 import type { ProgrammingDraftOperation, ProgrammingProgram } from '../../model/types'
@@ -63,9 +64,17 @@ export function FbdEditorPane({
   focusSelection,
 }: FbdEditorPaneProps) {
   const { pick } = useI18n()
-  const committedJson = useMemo(() => canonicalFbdJson(parseFbdDocument(program.document, program.name)), [program.document, program.name])
-  const local = useMemo(() => parseFbdDocument(source, program.name), [program.name, source])
-  const localJson = useMemo(() => canonicalFbdJson(local), [local])
+  const committedResult = useMemo(() => readFbdDocument(program.document), [program.document])
+  const localResult = useMemo(() => readFbdDocument(source), [source])
+  const committedJson = committedResult.ok ? committedResult.canonical : String(program.document ?? '')
+  /* Buffer hỏng vẫn phải có fallback ổn định để các hook phía dưới giữ đúng
+   * thứ tự. Tạo `emptyFbdDocument` ở mỗi render sinh UUID mới, khiến effect
+   * active-network tự cập nhật vô hạn ngay cả khi nhánh fail-closed đã khóa UI. */
+  const local = useMemo(
+    () => localResult.ok ? localResult.document : emptyFbdDocument(program.name),
+    [localResult, program.name],
+  )
+  const localJson = localResult.ok ? localResult.canonical : source
   const dirty = localJson !== committedJson
   const [preferences, setPreferences] = useState(() => readFbdPreferences(userScope, projectId))
   const [activeNetworkId, setActiveNetworkId] = useState(() => local.networks[0]?.id)
@@ -86,6 +95,15 @@ export function FbdEditorPane({
     setActiveNetworkId(local.networks[0]?.id)
   }, [activeNetworkId, local.networks])
 
+  useEffect(() => {
+    if (localResult.ok) return
+    /* Editor invalid không được để Inspector giữ selection/mutation callback
+     * của graph hợp lệ trước đó. Buffer vẫn nguyên byte nhưng mọi target sửa
+     * phải bị thu hồi ngay. */
+    onSelectionChange?.(null)
+    onNodeEditorTargetChange?.(null)
+  }, [localResult.ok, onNodeEditorTargetChange, onSelectionChange])
+
   function updatePreferences(patch: Partial<FbdPreferences>) {
     setPreferences(writeFbdPreferences(patch, userScope, projectId))
   }
@@ -99,6 +117,26 @@ export function FbdEditorPane({
         colorScheme: explicitTheme,
       } as CSSProperties
     : undefined
+
+  if (!localResult.ok) {
+    return (
+      <div
+        className="min-w-0 space-y-3 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-3 text-[var(--c-text)]"
+        data-testid="fbd-workspace-shell"
+        data-fbd-theme={preferences.theme}
+        style={themeStyle}
+      >
+        <div role="alert" data-testid="fbd-invalid-source" className="rounded-[var(--radius)] border border-[var(--c-fault-fg)] bg-[var(--c-fault-bg)] p-3">
+          <p className="font-mono text-xs font-semibold text-[var(--c-fault-fg)]">{localResult.code}</p>
+          <p className="mt-1 text-sm text-[var(--c-text)]">
+            {pick('Tài liệu FBD bị hỏng nên trình soạn thảo đã khóa thay đổi. Buffer gốc được giữ nguyên; dùng Làm mới để đọc lại nguồn canonical.', 'The FBD document is damaged, so editing is locked. The original buffer is preserved; use Refresh to read the canonical source again.')}
+          </p>
+          <p className="mt-1 font-mono text-xs text-[var(--c-text-dim)]">{localResult.detail}</p>
+        </div>
+        <EditorStatusBar fields={fbdStatusFields({ language: 'FBD', dirty })} />
+      </div>
+    )
+  }
 
   return (
     <div

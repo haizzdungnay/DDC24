@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { AlignLeft, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
-import { FbdEditorPane, parseFbdDocument } from './FbdEditorPane'
+import { FbdEditorPane } from './FbdEditorPane'
 import type { FbdSelection } from '../../fbd/commands'
+import { readFbdDocument } from '../../fbd/readDocument'
 import type { FbdNodeEditorTarget } from '../../fbd/nodeEditor'
 import { FbdNodeInspector } from '../../fbd/FbdNodeInspector'
 import { ContextInspector } from '../inspector/ContextInspector'
@@ -380,9 +381,11 @@ export function ProgramsTab({
    * POU thật sự là FBD: parse một tài liệu ST thành FBD sẽ cho một đồ thị rỗng
    * trông hợp lệ, và Inspector sẽ nói về một sơ đồ không tồn tại. */
   const inspectorFbdDocument = useMemo(
-    () => (selected && selected.language === 'FBD'
-      ? parseFbdDocument(buffers[selected.programId] ?? selected.document, selected.name)
-      : null),
+    () => {
+      if (!selected || selected.language !== 'FBD') return null
+      const result = readFbdDocument(buffers[selected.programId] ?? selected.document)
+      return result.ok ? result.document : null
+    },
     [buffers, selected],
   )
   const [projectTagsDraft, setProjectTagsDraft] = useState(() => document.project.functionalTags.join(', '))

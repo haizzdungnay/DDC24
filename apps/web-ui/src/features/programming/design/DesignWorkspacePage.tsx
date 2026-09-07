@@ -22,6 +22,7 @@ import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
+import { projectPendingProgramSources } from './workbench/workbenchDraft'
 import { LiveProgramView } from './LiveProgramView'
 import { SimulateWorkspace } from '../simulation/SimulateWorkspace'
 import { useSimulation } from '../simulation/useSimulation'
@@ -455,6 +456,11 @@ export function DesignWorkspacePage({
   }
   // T59-301: BE trả document v2; adapter chiếu về view model của bốn tab.
   const document = workspaceDocument as NonNullable<typeof workspaceDocument>
+  /* Bottom workbench phải đọc buffer đang chỉnh, không phải chỉ bản Draft đã
+   * read-back. `programOperations` là ảnh chiếu local do ProgramsTab sở hữu;
+   * chiếu nó vào một document chỉ-đọc giúp Problems cập nhật trước Save mà
+   * không biến local state thành authority transport. */
+  const workbenchDraftDocument = projectPendingProgramSources(document, programOperations)
   /* Route v2 chọn POU bằng `objectId`; editor cũ vẫn nhận `programId`. Adapter
    * hẹp này chỉ nối hai định danh khi cùng một record Draft khai cả hai, không
    * suy theo tên/index và không dùng objectId làm mutation target sai. */
@@ -492,8 +498,9 @@ export function DesignWorkspacePage({
    * Nguồn văn bản chỉ có với POU ngôn ngữ ST; POU FBD trả `null` để tab Tìm
    * kiếm nói thẳng "không phải mã nguồn văn bản" thay vì hiện một ô nhập vô
    * nghĩa. */
-  const draftSource = selectedProgram?.language === 'ST' && typeof selectedProgram.document === 'string'
-    ? selectedProgram.document
+  const workbenchSelectedProgram = workbenchDraftDocument.programs.find((program) => program.programId === selectedProgramId)
+  const draftSource = workbenchSelectedProgram?.language === 'ST' && typeof workbenchSelectedProgram.document === 'string'
+    ? workbenchSelectedProgram.document
     : null
 
   /* `T59-816` — workbench phải đọc ĐÚNG tài liệu của chế độ đang mở.
@@ -563,6 +570,17 @@ export function DesignWorkspacePage({
     const program = document.programs.find((candidate) => candidate.programId === programId)
     if (program) selectPou(program.objectId ?? program.programId)
     setFocusDiagnostic(diagnostic)
+  }
+
+  /** `TC-FBD-DIAG-001` — workbench đã phân giải JSON path thành canonical
+   * selection; trang chỉ chọn đúng POU và chuyển nguyên anchor đó xuống editor.
+   * Không tìm gần đúng theo tên/index ở đây. */
+  const jumpToFbdSelection = (programId: string, selection: FbdSelection) => {
+    const program = document.programs.find((candidate) => candidate.programId === programId)
+    if (!program || program.language !== 'FBD') return
+    selectPou(program.objectId ?? program.programId)
+    setFocusDiagnostic(null)
+    setCompareFbdFocus({ programId, selection })
   }
 
   /* `signals[]` KHÔNG đi qua `toWorkspaceDocument`, nên phải đọc từ draft THÔ.
@@ -903,7 +921,7 @@ export function DesignWorkspacePage({
             : {})}
           traceOwnerHref="/eng/programming/runtime?tab=watch"
           watchAddRequest={watchAddRequest}
-          document={document}
+          document={workspaceMode === 'EDIT' ? workbenchDraftDocument : document}
           source={workbenchSource}
           sourceLabel={workbenchSourceLabel}
           checkOwnerHref={`/eng/programming/projects/${projectId}/commission`}
@@ -913,6 +931,7 @@ export function DesignWorkspacePage({
           hasCheckResult={hasCheckResult}
           checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
           onJumpToDiagnostic={jumpToDiagnostic}
+          onJumpToFbdSelection={jumpToFbdSelection}
         />
         </div>
       </div>

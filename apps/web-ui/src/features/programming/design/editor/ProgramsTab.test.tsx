@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { FbdDocument } from '../../fbd/model'
@@ -40,7 +40,10 @@ beforeEach(() => {
 })
 
 const sampleFbdDoc: FbdDocument = {
+  $schema: '../../fbd_v1.schema.json',
   schemaVersion: 1,
+  profileId: 'revA-1t-1-5-30',
+  graphId: '10000000-0000-4000-8000-000000000001',
   name: 'FBD_PROG',
   networks: [
     {
@@ -105,6 +108,7 @@ const draftDoc: ProgrammingDraftDocument = {
 }
 
 function renderProgramsTab(props?: {
+  document?: ProgrammingDraftDocument
   selectedProgramId?: string
   onSelectProgram?: (id: string | undefined) => void
   onSave?: (ops: ProgrammingDraftOperation[]) => Promise<boolean>
@@ -117,7 +121,7 @@ function renderProgramsTab(props?: {
   const utils = render(
     <I18nProvider>
       <ProgramsTab
-        document={draftDoc}
+        document={props?.document ?? draftDoc}
         saving={false}
         selectedProgramId={props?.selectedProgramId}
         onSelectProgram={onSelectProgram}
@@ -139,6 +143,46 @@ function renderProgramsTab(props?: {
 }
 
 describe('ProgramsTab — Luồng A: FBD Node Inspector & Slot Integration', () => {
+  it('STATE-003: payload FBD lồng hỏng khóa editor và không làm sập ContextInspector', () => {
+    const malformedProgram = {
+      ...fbdProgram,
+      document: JSON.stringify({ networks: [{}] }),
+    }
+    renderProgramsTab({
+      selectedProgramId: malformedProgram.programId,
+      document: { ...draftDoc, programs: [malformedProgram, stProgram] },
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent('FBD-SCHEMA-JSON-001')
+    expect(screen.getByTestId('inspector-collapsed')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Tên biến/i)).toBeNull()
+  })
+
+  it('STATE-003: read-back đổi valid sang invalid thu hồi Inspector cũ', async () => {
+    const { rerender } = renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+    fireEvent.click(screen.getByRole('button', { name: /#1 · BOOL · INPUT/ }))
+    expect(screen.getByLabelText(/Tên biến/i)).toBeInTheDocument()
+    const malformedProgram = { ...fbdProgram, document: JSON.stringify({ networks: [{}] }) }
+    rerender(
+      <I18nProvider>
+        <ProgramsTab
+          document={{ ...draftDoc, programs: [malformedProgram, stProgram] }}
+          saving={false}
+          selectedProgramId="prog-fbd-1"
+          onSelectProgram={vi.fn()}
+          onSave={vi.fn().mockResolvedValue(true)}
+          diagnostics={[]}
+          focusDiagnostic={null}
+          onPendingOperationsChange={vi.fn()}
+          discardVersion={1}
+          onRunCheck={vi.fn()}
+        />
+      </I18nProvider>,
+    )
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('FBD-SCHEMA-JSON-001'))
+    expect(screen.queryByLabelText(/Tên biến/i)).toBeNull()
+    expect(screen.getByTestId('inspector-collapsed')).toBeInTheDocument()
+  })
+
   it('A-T5: Không chọn gì (hoặc chưa chọn node FBD) ⇒ dock không có form sửa node FBD', () => {
     // 1. Khi chưa chọn POU nào
     const { rerender } = renderProgramsTab({ selectedProgramId: undefined })

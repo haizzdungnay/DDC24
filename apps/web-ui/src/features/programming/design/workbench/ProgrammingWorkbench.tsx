@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../../../shared/i18n'
+import type { ProgrammingDiagnostic } from '../../model/types'
+import { ProblemsDrawer } from '../../shared/ProblemsDrawer'
 import { WorkbenchWatchPanel, type WatchRow } from './WorkbenchWatchPanel'
 
 /**
@@ -27,6 +29,7 @@ export interface WorkbenchProblem {
   id: string
   code: string
   detail: string
+  severity?: ProgrammingDiagnostic['severity']
   /** `null` = lỗi không neo vào vị trí nào; nút nhảy sẽ không hiện. */
   jumpLabel: string | null
   onJump?: () => void
@@ -332,7 +335,7 @@ export function ProgrammingWorkbench({
           )}
           {tab === 'search' && (
             source === null ? (
-              <Unavailable reason={pick('POU này không phải mã nguồn văn bản — dùng khay Vấn đề để tìm block lỗi.', 'This POU is not text source — use Problems to locate faulty blocks.')} />
+              <Unavailable reason={pick('Không xác định được kết quả tìm kiếm vì POU này không phải mã nguồn văn bản — dùng khay Vấn đề để tìm block lỗi.', 'Search results are unavailable because this POU is not text source — use Problems to locate faulty blocks.')} />
             ) : (
               <SearchPanel
                 query={query}
@@ -349,7 +352,7 @@ export function ProgrammingWorkbench({
           )}
           {tab === 'references' && (
             symbols.length === 0 ? (
-              <Unavailable reason={pick('Chưa nhận diện khai báo nào trong POU đang mở.', 'No declarations detected in the open POU.')} />
+              <Unavailable reason={pick('Không xác định được tham chiếu vì chưa có chỉ mục cho POU đang mở.', 'Cross references are unavailable because the open POU has no index.')} />
             ) : (
               <ReferencesPanel symbols={symbols} pick={pick} />
             )
@@ -410,9 +413,24 @@ function ProblemsPanel({
   checkOwnerHref: string
   pick: (vi: string, en: string) => string
 }) {
+  const diagnostics = useMemo<ProgrammingDiagnostic[]>(() => problems.map((problem) => ({
+    code: problem.code,
+    severity: problem.severity ?? 'ERROR',
+    messageKey: '',
+    message: problem.jumpLabel
+      ? `${problem.jumpLabel} · ${problem.detail}`
+      : `${pick('không neo vào vị trí nào', 'not anchored to a location')} · ${problem.detail}`,
+    args: { workbenchProblemId: problem.id },
+  })), [pick, problems])
+
+  const problemFor = (diagnostic: ProgrammingDiagnostic) => {
+    const id = diagnostic.args?.workbenchProblemId
+    return typeof id === 'string' ? problems.find((problem) => problem.id === id) : undefined
+  }
+
   return (
     <div className="space-y-2">
-      {problems.length === 0 ? (
+      {problems.length === 0 && (
         <p className="text-xs text-[var(--c-text-dim)]">
           {emptyState === 'no-problems'
             ? (revisionId
@@ -421,32 +439,18 @@ function ProblemsPanel({
             : pick('Chưa Kiểm tra — POU ST chưa có kết quả nào. Draft không có vấn đề cấu trúc.',
                    'Not checked yet — no result for ST POUs. No structural problems in the draft.')}
         </p>
-      ) : (
-        <ul className="space-y-1">
-          {problems.map((problem) => (
-            <li key={problem.id} className="text-xs">
-              {problem.onJump && problem.jumpLabel ? (
-                <button
-                  type="button"
-                  className="min-h-11 w-full rounded px-2 py-1 text-left text-[var(--c-warn-fg)] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-                  onClick={problem.onJump}
-                >
-                  <span className="font-mono">{problem.code}</span> · {problem.jumpLabel}
-                  <span className="block text-[var(--c-text-dim)]">{problem.detail}</span>
-                </button>
-              ) : (
-                /* `jumpLabel` CÓ mà thiếu `onJump` KHÔNG phải là "không neo vào
-                 * vị trí nào": mục vẫn neo, chỉ là bề mặt gọi chưa cấp đường
-                 * nhảy. Nói sai ở đây làm người dùng bỏ qua một lỗi thật ra
-                 * chỉ đúng chỗ. Giữ nguyên nhãn, chỉ bỏ nút. */
-                <p className="px-2 py-1 text-[var(--c-warn-fg)]">
-                  <span className="font-mono">{problem.code}</span> · {problem.jumpLabel ?? pick('không neo vào vị trí nào', 'not anchored to a location')}
-                  <span className="block text-[var(--c-text-dim)]">{problem.detail}</span>
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
+      )}
+      {problems.length > 0 && (
+        <ProblemsDrawer
+          variant="embedded"
+          diagnostics={diagnostics}
+          emptyState={emptyState}
+          isSelectable={(diagnostic) => {
+            const problem = problemFor(diagnostic)
+            return Boolean(problem?.onJump && problem.jumpLabel)
+          }}
+          onSelect={(diagnostic) => problemFor(diagnostic)?.onJump?.()}
+        />
       )}
       {/* D-01: PGM-02 vẫn KHÔNG sở hữu kết quả Check — nó chỉ ĐỌC lại. Nói
         * đích danh nơi sở hữu thay vì để người dùng tưởng khay này là nơi chạy

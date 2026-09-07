@@ -91,6 +91,21 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     expect(screen.queryByRole('button', { name: /FBD-SCHEMA-ROOT-001/ })).toBeNull()
   })
 
+  it('giữ nguyên severity WARNING/INFO khi dùng ProblemsDrawer chung', () => {
+    renderWorkbench({
+      problems: [{
+        id: 'warning-1',
+        code: 'ST-WARN-001',
+        detail: 'Cảnh báo từ compiler',
+        severity: 'WARNING',
+        jumpLabel: null,
+      }],
+    })
+    fireEvent.click(screen.getByRole('tab', { name: /Vấn đề/ }))
+    expect(screen.getByText('Cảnh báo:')).toBeInTheDocument()
+    expect(screen.queryByText('Lỗi:')).toBeNull()
+  })
+
   it('nói đích danh nơi sở hữu kết quả Kiểm tra, không để người dùng tưởng khay này là toàn bộ sự thật', () => {
     renderWorkbench()
     openWorkbench()

@@ -24,10 +24,14 @@ import {
   type FbdNetwork,
   type FbdNode,
   type FbdParameterValue,
+  type FbdPoint,
   type FbdWire,
 } from './model'
 import { FbdCanvas, buildPaletteNode } from './FbdCanvas'
+import { buildFbdNetworkGeometry } from './geometry'
 import { fbdIssueTargets } from './issueTargets'
+import { alignNodes, computeAutoLayout } from './layout'
+import { snapPoint } from './viewport'
 import {
   FBD_PALETTE,
   FBD_PALETTE_CATEGORY_ORDER,
@@ -177,6 +181,14 @@ export function StructuredFbdEditor({
   const [libraryDockOpen, setLibraryDockOpen] = useState(libraryDefaultOpen)
   const [pendingPlacement, setPendingPlacement] = useState<{ entryId: string } | null>(null)
   const [marqueeMode, setMarqueeMode] = useState(false)
+  const [layoutPreview, setLayoutPreview] = useState<{
+    networkId: string
+    positions: Record<string, FbdPoint>
+    expectedSelectionRevision: number
+    expectedSelectionKey: string
+    expectedDocumentCanonical: string
+  } | null>(null)
+  const [layoutStatus, setLayoutStatus] = useState<string | null>(null)
 
   useEffect(() => setLibraryDockOpen(libraryDefaultOpen), [libraryDefaultOpen])
   const userPouPalette = useMemo(() => {
@@ -211,6 +223,7 @@ export function StructuredFbdEditor({
 
   useEffect(() => {
     publishedDocument.current = canonicalFbdJson(document)
+    setLayoutPreview(null)
     dispatch({ type: 'REPLACE_DOCUMENT', document })
   }, [document])
 
@@ -306,6 +319,7 @@ export function StructuredFbdEditor({
       canEdit,
       apply: applyNodeEditorChange,
     })
+    return () => onNodeEditorTargetChange?.(null)
   }, [selectedNodeInfo, canEdit, applyNodeEditorChange, onNodeEditorTargetChange])
 
   useEffect(() => {
@@ -337,6 +351,28 @@ export function StructuredFbdEditor({
     : state.document.networks
   const activeNetwork = state.document.networks.find((network) => network.id === selectedNetworkId)
   const selectedPaletteEntry = paletteEntries.find((entry) => entry.id === paletteTypeRef)
+  const selectionKey = JSON.stringify(state.selection)
+  const documentCanonical = canonicalFbdJson(state.document)
+
+  useEffect(() => {
+    if (!layoutPreview) return
+    if (!canEdit) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Quyền chỉnh sửa đã đổi; xem trước bị hủy.', 'Edit permission changed; the preview was cancelled.'))
+      return
+    }
+    if (layoutPreview.networkId !== selectedNetworkId) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Network hoạt động đã đổi; xem trước bị hủy.', 'The active network changed; the preview was cancelled.'))
+      return
+    }
+    if (layoutPreview.expectedSelectionKey !== selectionKey ||
+        layoutPreview.expectedDocumentCanonical !== documentCanonical) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Vùng chọn hoặc tài liệu đã đổi; xem trước bị hủy.', 'The selection or document changed; the preview was cancelled.'))
+    }
+  }, [canEdit, documentCanonical, layoutPreview, pick, selectedNetworkId, selectionKey])
+
   /* `T59-804`: kiểu của cổng đang chọn — cơ sở để lọc palette theo tương thích.
    * `null` khi không đứng ở cổng nào; khi đó không lọc gì cả. */
   const selectedPortType = useMemo<FbdDataType | null>(() => {
@@ -426,6 +462,114 @@ export function StructuredFbdEditor({
     setCreatingKind(null)
   }
 
+  function networkPositions(network: FbdNetwork): Record<string, FbdPoint> {
+    const geometry = buildFbdNetworkGeometry(network, state.document.layout, { wireStyle })
+    return Object.fromEntries(geometry.nodes.map((node) => [node.id, { x: node.x, y: node.y }]))
+  }
+
+  function snapLayoutPositions(positions: Record<string, FbdPoint>): Record<string, FbdPoint> {
+    return Object.fromEntries(Object.entries(positions).map(([nodeId, point]) => [
+      nodeId,
+      snapPoint(point, snapSize),
+    ]))
+  }
+
+  function createLayoutPreview(networkId: string, positions: Record<string, FbdPoint>) {
+    setLayoutPreview({
+      networkId,
+      positions,
+      expectedSelectionRevision: state.selectionRevision,
+      expectedSelectionKey: selectionKey,
+      expectedDocumentCanonical: documentCanonical,
+    })
+  }
+
+  function previewAutoLayout() {
+    const network = state.document.networks.find((item) => item.id === selectedNetworkId)
+    if (!network) return
+    if (network.nodes.length < 2) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Cần ít nhất 2 block để tự sắp xếp.', 'Select a network with at least 2 blocks to auto layout.'))
+      return
+    }
+    const current = networkPositions(network)
+    const result = computeAutoLayout(network, current)
+    const snapped = snapLayoutPositions(result.positions)
+    const positions = Object.fromEntries(network.nodes
+      .map((node) => [node.id, snapped[node.id]] as const)
+      .filter(([nodeId, point]) => point && (point.x !== current[nodeId]?.x || point.y !== current[nodeId]?.y)))
+    if (Object.keys(positions).length === 0) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Bố cục hiện tại đã đúng; không có thay đổi để áp dụng.', 'The current layout is already up to date; there is nothing to apply.'))
+      return
+    }
+    createLayoutPreview(network.id, positions)
+    setLayoutStatus(result.warnings.length > 0
+      ? pick(`Xem trước có ${result.warnings.length} cảnh báo; chưa thay đổi Draft.`, `Preview has ${result.warnings.length} warnings; the draft is unchanged.`)
+      : pick(`Đang xem trước vị trí mới cho ${Object.keys(positions).length} block; Draft chưa thay đổi.`, `Previewing new positions for ${Object.keys(positions).length} blocks; the draft is unchanged.`))
+  }
+
+  function previewAlignment(alignment: 'LEFT' | 'RIGHT' | 'TOP' | 'BOTTOM') {
+    const network = state.document.networks.find((item) => item.id === selectedNetworkId)
+    if (!network) return
+    const selectedIds = state.selection?.kind === 'multi-node'
+      ? state.selection.nodeIds
+      : state.selection?.kind === 'node'
+        ? [state.selection.nodeId]
+        : []
+    if (selectedIds.length < 2) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Chọn ít nhất 2 block trong cùng network để căn lề.', 'Select at least 2 blocks in the same network to align them.'))
+      return
+    }
+    const current = networkPositions(network)
+    const selectedNodes = network.nodes.filter((node) => selectedIds.includes(node.id))
+    const aligned = snapLayoutPositions(alignNodes(selectedNodes, current, alignment))
+    const positions = Object.fromEntries(selectedNodes
+      .map((node) => [node.id, aligned[node.id]] as const)
+      .filter(([nodeId, point]) => point && (point.x !== current[nodeId]?.x || point.y !== current[nodeId]?.y)))
+    if (Object.keys(positions).length === 0) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Các block đã thẳng hàng; không có thay đổi để áp dụng.', 'The blocks are already aligned; there is nothing to apply.'))
+      return
+    }
+    createLayoutPreview(network.id, positions)
+    setLayoutStatus(pick(`Đang xem trước căn lề ${Object.keys(positions).length} block; Draft chưa thay đổi.`, `Previewing alignment for ${Object.keys(positions).length} blocks; the draft is unchanged.`))
+  }
+
+  function applyLayoutPreview() {
+    if (!layoutPreview) return
+    if (!canEdit) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Không có quyền chỉnh sửa; xem trước bị hủy.', 'Editing is not allowed; the preview was cancelled.'))
+      return
+    }
+    if (layoutPreview.networkId !== selectedNetworkId) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Network hoạt động đã đổi; xem trước bị hủy.', 'The active network changed; the preview was cancelled.'))
+      return
+    }
+    if (layoutPreview.expectedSelectionKey !== selectionKey ||
+        layoutPreview.expectedDocumentCanonical !== documentCanonical) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Vùng chọn hoặc tài liệu đã đổi; xem trước bị hủy.', 'The selection or document changed; the preview was cancelled.'))
+      return
+    }
+    if (layoutPreview.expectedSelectionRevision !== state.selectionRevision) {
+      setLayoutPreview(null)
+      setLayoutStatus(pick('Vùng chọn đã đổi; xem trước bị hủy để tránh áp sai block.', 'The selection changed; the preview was cancelled to avoid moving the wrong blocks.'))
+      return
+    }
+    dispatch({
+      type: 'SET_LAYOUT_BATCH',
+      networkId: layoutPreview.networkId,
+      positions: layoutPreview.positions,
+      expectedSelectionRevision: layoutPreview.expectedSelectionRevision,
+    })
+    setLayoutStatus(pick('Đã áp dụng bố cục trong một bước hoàn tác.', 'The layout was applied as one undo step.'))
+    setLayoutPreview(null)
+  }
+
   const issues = validateFbdDocument(state.document)
   const issueTargets = useMemo(() => fbdIssueTargets(state.document, issues), [state.document, issues])
   const issueNodeIds = useMemo(() => {
@@ -483,6 +627,30 @@ export function StructuredFbdEditor({
           <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} disabled={!state.connectionFromPortId} onClick={() => dispatchCommand('CANCEL_CONNECTION')}>
             {pick('Hủy nối', 'Cancel wire')}
           </Button>
+          <Button size="sm" disabled={!canEdit || !activeNetwork} onClick={previewAutoLayout}>
+            {pick('Tự sắp xếp', 'Auto layout')}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={!canEdit || !activeNetwork} onClick={() => previewAlignment('LEFT')}>
+            {pick('Căn trái', 'Align left')}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={!canEdit || !activeNetwork} onClick={() => previewAlignment('TOP')}>
+            {pick('Căn trên', 'Align top')}
+          </Button>
+          {layoutPreview && (
+            <>
+              <Button size="sm" disabled={!canEdit} onClick={applyLayoutPreview}>{pick('Áp dụng bố cục', 'Apply layout')}</Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setLayoutPreview(null)
+                  setLayoutStatus(pick('Đã hủy xem trước; Draft không thay đổi.', 'Preview cancelled; the draft is unchanged.'))
+                }}
+              >
+                {pick('Hủy xem trước', 'Cancel preview')}
+              </Button>
+            </>
+          )}
           <button
             type="button"
             className="hidden min-h-11 items-center gap-1 rounded border border-[var(--c-border)] px-2 text-xs md:inline-flex lg:hidden"
@@ -495,6 +663,8 @@ export function StructuredFbdEditor({
           </button>
         </div>
       </div>
+
+      {layoutStatus && <p role="status" className="text-xs text-[var(--c-text-dim)]">{layoutStatus}</p>}
 
       <div className="grid min-w-0 gap-4 min-[1440px]:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="min-w-0 space-y-4">
@@ -664,38 +834,6 @@ export function StructuredFbdEditor({
         {!canEdit && <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-1">{pick('Chỉ đọc', 'Read only')}</span>}
       </div>
 
-      {issues.length > 0 && (
-        /* `AC-FBD-007` — validator đã biết CHÍNH XÁC lỗi nằm ở block/dây nào
-         * (đường dẫn `$.networks[0].nodes[2].typeRef`). Trước đây UI chỉ hiện
-         * một con số, nên người dùng có toạ độ lỗi trong tay mà vẫn phải tự đi
-         * tìm. Mỗi dòng dưới đây nhảy thẳng tới đúng phần tử. */
-        <div className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2" role="group" aria-label={pick('Vấn đề FBD', 'FBD problems')}>
-          <h4 className="text-xs font-semibold uppercase text-[var(--c-warn-fg)]">{pick('Vấn đề', 'Problems')}</h4>
-          <ul className="mt-1 space-y-1">
-            {issueTargets.map((target, index) => (
-              <li key={`${target.issue.code}-${target.issue.path}-${index}`}>
-                {target.selection ? (
-                  <button
-                    type="button"
-                    data-fbd-canvas-control="true"
-                    className="min-h-11 w-full rounded px-2 py-1 text-left text-xs text-[var(--c-warn-fg)] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-                    onClick={() => dispatch({ type: 'SELECT', selection: target.selection })}
-                  >
-                    <span className="font-mono">{target.issue.code}</span> · {target.label}
-                  </button>
-                ) : (
-                  /* Lỗi không neo được vào phần tử nào thì nói thẳng, thay vì
-                   * đưa người dùng tới một block gần đúng. */
-                  <p className="px-2 py-1 text-xs text-[var(--c-warn-fg)]">
-                    <span className="font-mono">{target.issue.code}</span> · {pick('không neo vào block nào', 'not anchored to a block')} (<span className="font-mono">{target.issue.path}</span>)
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <div className="space-y-3">
         {visibleNetworks.map((network) => (
           <article key={network.id} data-fbd-network-id={network.id} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
@@ -729,6 +867,7 @@ export function StructuredFbdEditor({
                 else portButtons.current.delete(portId)
               }}
               pendingPlacement={network.id === selectedNetworkId ? pendingPlacement : null}
+              layoutPreview={layoutPreview?.networkId === network.id ? layoutPreview.positions : null}
               onCancelPlacement={() => setPendingPlacement(null)}
               onCommitPlacement={() => setPendingPlacement(null)}
             />
