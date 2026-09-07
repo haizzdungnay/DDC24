@@ -56,6 +56,21 @@ function libraryItems(): ProgrammingLibraryEntry[] {
           ports: [{ name: 'PV', direction: 'INPUT', dataType: 'REAL' }, { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }]
         },
         dependencies: [], stateLayoutKnown: true, stateSizeBytes: 64
+      },
+      {
+        scope: 'SYSTEM', libraryRevisionId: 'sys-1', libraryVersion: 'rev-a.1', libraryState: 'PUBLISHED',
+        entryId: 'AND', kind: 'FUNCTION', name: 'AND', featureState: 'AVAILABLE',
+        contentSha256: 'c'.repeat(64),
+        signature: {
+          dispatch: 'OPERATOR', polymorphic: false, typedPortNames: [],
+          category: 'logic', labelVi: 'VÀ', labelEn: 'AND', allowedTypes: ['BOOL'],
+          ports: [
+            { name: 'IN1', direction: 'INPUT', dataType: 'BOOL' },
+            { name: 'IN2', direction: 'INPUT', dataType: 'BOOL' },
+            { name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL' }
+          ]
+        },
+        dependencies: [], stateLayoutKnown: true, stateSizeBytes: 0
       }
   ]
 }
@@ -162,6 +177,45 @@ describe('PGM-02 Quick Library (T59-804)', () => {
   it('AC-FBD-002: catalog lỗi thì báo lỗi, không hiện danh sách rỗng như thể không có block', async () => {
     renderPanel(paged({ status: 'error', items: [], error: 'PRG-ERR-UNAVAILABLE-001', failure: 'error' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('PRG-ERR-UNAVAILABLE-001')
+  })
+
+  it('TC-FBD-LIB-001: khoá hành vi khối PID REVIEW_REQUIRED (draggable false, disabled) và cho phép khối AVAILABLE (AND)', async () => {
+    renderPanel()
+
+    // Khối PID (REVIEW_REQUIRED): draggable === false, nút chèn disabled
+    const pidCard = await waitFor(() => cardFor('PID'))
+    expect(pidCard).toHaveAttribute('draggable', 'false')
+    const pidButton = await screen.findByRole('button', { name: 'Chèn PID' })
+    expect(pidButton).toBeDisabled()
+
+    // Khối AVAILABLE (AND): draggable === true, nút chèn không disabled
+    const andCard = cardFor('AND')
+    expect(andCard).toHaveAttribute('draggable', 'true')
+    const andButton = screen.getByRole('button', { name: 'Chèn AND' })
+    expect(andButton).not.toBeDisabled()
+  })
+
+  it('TC-FBD-STATE-005: catalog đọc hỏng hiện lý do, có nút Thử lại gọi refresh và 0 entry được render', async () => {
+    const refreshSpy = vi.fn()
+    renderPanel(paged({
+      status: 'error',
+      items: [],
+      error: 'PRG-ERR-UNAVAILABLE-001',
+      refresh: refreshSpy
+    }))
+
+    // Hiện lý do lỗi trong role="alert"
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('PRG-ERR-UNAVAILABLE-001')
+
+    // Có nút "Thử lại", click nút gọi đúng refresh
+    const retryBtn = screen.getByRole('button', { name: /Thử lại|Retry/ })
+    expect(retryBtn).toBeInTheDocument()
+    fireEvent.click(retryBtn)
+    expect(refreshSpy).toHaveBeenCalledTimes(1)
+
+    // Panel trống về mặt dữ liệu: tuyệt đối không render thẻ khối hay fallback giả
+    expect(screen.queryAllByTestId('quick-library-card')).toHaveLength(0)
   })
 })
 

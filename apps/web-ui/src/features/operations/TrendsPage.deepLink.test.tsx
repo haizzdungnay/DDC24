@@ -43,7 +43,7 @@ vi.mock('../../shared/api/history', async (importOriginal) => {
     historyClient: {
       query: vi.fn(async () => ({
         from: '2026-08-19T00:00:00.000Z', fromMs: 0, to: '2026-08-19T01:00:00.000Z', toMs: 1,
-        complete: true, tiersUsed: ['hot'], series: []
+        complete: true, tiersUsed: ['hot'] as const, series: [], gaps: []
       }))
     }
   }
