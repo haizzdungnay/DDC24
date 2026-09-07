@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Changed — Đồng bộ `main` và triển khai PR #572 lên bo Forlinx (2026-09-07)
+
+- Fast-forward `main` từ `13ad7891` lên merge commit
+  `afd98357b4f3b4b2a93bdf887b4edeba8f89b887`, cross-build sạch cho ARM64 và
+  triển khai đồng bộ Core, I/O bus, netcfg, Web/API, Programming compiler/worker,
+  giao diện web và HMI lên bo `OK1126B-buildroot`; provenance trên đích ghi
+  `dirty=false`, khoá ST chế độ `RELEASE`. HMI vẫn giữ `disabled`, không thay đổi
+  chương trình điều khiển, không Commission và không ghi output.
+- Trước triển khai đã xác nhận giao dịch mạng `confirmed`, sao lưu toàn bộ cấu
+  hình/dữ liệu vào
+  `/var/backups/mkddc/predeploy-afd98357-20260907T105054Z.tar.gz` và snapshot bản
+  đang chạy vào `/var/backups/mkddc/0.1.0-20260907-105333`; database Programming,
+  WAL/SHM vẫn tồn tại đúng owner/mode sau khi service khởi động lại.
+- Kiểm chứng HOST: docs ISO harness **17/17 PASS**; C++ Release fresh bật
+  Modbus/BACnet/HMI **1.479/1.479 PASS, 8 skip**; Go vet/test `-count=1` PASS;
+  Vitest **243 tệp / 3.075 test PASS**, lint và `build:foxlinx` PASS. Gói ARM64
+  11 MiB có SHA-256
+  `e47e07d95963cbd8b68e80a0488b0852fb5ae49e3db691abc2ada3ac8e5397de`.
+- Kiểm chứng TARGET/FakeMCU: health Core/I/O/MCU/PLC/Web **6/6 `ok`**, checksum
+  runtime **8/8 PASS**, năm service chính `active` với `NRestarts=0`, không có
+  unit failed và giao dịch mạng vẫn `confirmed`. Playwright headless qua SSH
+  tunnel kiểm tra trang đăng nhập ở 1440×900 và 390×844 đều HTTP 200, không có
+  Console error/warning, request failed hoặc response từ 400; Chrome DevTools
+  MCP headful bị chặn vì host thiếu X server. Bo đang dùng FakeMCU, không có
+  bằng chứng physical HIL và không tuyên bố `RELEASE_READY`.
+
 ### Fixed — Rà soát lại và mở khóa merge PR #572 FBD Edit task 6–7 (2026-09-07)
 
 - Đồng bộ `main` sau khi Task 8 (#574) được merge, xử lý xung đột bằng cách giữ
