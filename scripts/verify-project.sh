@@ -33,6 +33,15 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+# Mọi consumer của build_root phải nhận cùng một đường dẫn tuyệt đối. Riêng cổng
+# Go đổi cwd sang module apps/web-api; nếu giữ `--build-root build/verify` ở dạng
+# tương đối thì shell preflight thấy binary từ root repo, nhưng Go test lại hiểu
+# nó là apps/web-api/build/verify và báo thiếu production tool giả.
+case "$build_root" in
+  /*) ;;
+  *) build_root="$repo_root/$build_root" ;;
+esac
+
 active_path() {
   python3 - "$repo_root/tools/restructure/repository-path-map.json" "$1" <<'PY'
 import json
