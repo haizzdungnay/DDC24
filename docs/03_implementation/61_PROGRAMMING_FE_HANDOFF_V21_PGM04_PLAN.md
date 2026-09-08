@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-FE-PGM-061` |
-| Phiên bản | 0.3 |
+| Phiên bản | 0.4 |
 | Trạng thái | **T61-506 đã thi hành TARGET, chờ reviewer độc lập; T61-507/#465 closeout còn mở. `RELEASE_READY` vẫn `NO-GO`** |
-| Ngày | 2026-09-06 |
+| Ngày | 2026-09-08 |
 | Chủ quản | FE Lead + Web API Lead + System Architect |
 | Người review | Product Owner, Controls/Safety, QA, consumer PGM-02 |
 | Người phê duyệt | Product Owner/CTO + System Architect |
 | Baseline As-Built | `main@eecc2f89844a`; các thay đổi code chưa commit đang có trong worktree tại thời điểm lập plan là công việc đồng thời của người dùng, không thuộc baseline và không được plan này ghi đè |
 | Authority sản phẩm | [`PROD-PROG-001`](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md), [`SRS-PROG-001`](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md), [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md), [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
-| Đầu vào Target Candidate | [PGM-04 FE Handoff](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-04_LIBRARY_FE_HANDOFF.md) và [ảnh PGM-04](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-04_library.png) |
+| Authority trực quan Target | [PGM-04 FE Handoff](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-04_LIBRARY_FE_HANDOFF.md), [ảnh PGM-04](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-04_library.png) và HTML visual spec theo `AUTH-UX-PROG-2026-09-08-01` |
 | Quan hệ Plan59 | **Bổ sung, không thay thế.** Plan59 sở hữu lifecycle/contract/runtime/evidence/release; Plan61 sở hữu delta UI, metadata trình bày, Used-In và handoff PGM-04 |
 | Quan hệ Plan60 | Kế thừa shell Programming đã triển khai; không làm lại PGM-01 hoặc mở lại các quyết định shell đã đóng |
 | Phạm vi | FE PGM-04, contract/API cần để render trung thực, generator SYSTEM Library có điều kiện, kiểm chứng browser và deploy Web trên SoM |
@@ -27,7 +27,7 @@
 | Source đang có gì? | Domain/store/API Control Library đã có; FE đã có search/detail/version/mutation nhưng bố cục chưa đạt handoff và thiếu metadata/usage authoritative. |
 | Thay đổi chính? | Mở contract metadata/usage khi cần, tách `LibraryPage`, tạo card grid/inspector/drawer, nối Preview/Used-In/Insert với PGM-02. |
 | Layer nào không đổi? | STM32 firmware, IOP, physical I/O, SHM và HMI native. |
-| Đang bị chặn gì? | Ảnh PGM-04 chưa là visual authority, `User Library` không có domain/API, semantics Used-In chưa khóa, và asset bật Insert cho PID đang `REVIEW_REQUIRED`. |
+| Đang bị chặn gì? | Authority trực quan PGM-04 đã được chủ sở hữu tái xác nhận ngày 2026-09-08; `User Library` không có domain/API, semantics Used-In và PID `REVIEW_REQUIRED` vẫn phải tuân contract/safety trước khi closeout. |
 | Bằng chứng đóng plan là gì? | Contract sync + Go/FE test + E2E real-backend + Chrome desktop/mobile + target browser/read-back; không suy các bằng chứng này thành HIL hay release PASS. |
 
 ### 0.1 Kết luận kiến trúc
@@ -62,7 +62,7 @@
 |---|---|---|
 | Route PGM-04 | `UX-WEB-PROG-001` và source dùng `/eng/programming/projects/:projectId/library` | Giữ route project-scoped; route global trong handoff không được đổi thành canonical ngầm. |
 | Scope library | Product/SRS/OpenAPI chỉ có `SYSTEM` và `PROJECT` | `Core Library → SYSTEM`, `Project Library → PROJECT`; không tạo `USER`. |
-| Visual PGM-04 | Asset SVG Active hiện là list/detail; UX Active nói asset PGM-04 cũ không normative | PNG handoff chỉ là Target Candidate tới khi WP-00 pin revision mới. |
+| Visual PGM-04 | PNG handoff + HTML visual spec là authority trực quan theo `AUTH-UX-PROG-2026-09-08-01`; bộ SVG Programming đã loại | Dùng PNG cho composition và HTML cho state/breakpoint; không phục hồi SVG cũ, không suy asset thành As-Built. |
 | Mutation | OpenAPI/current RBAC cho `engineer` và `admin`; server là authority | FE dùng capability `program.edit`, không dùng ngưỡng `admin` viết tay. |
 | Publish | PROJECT library publish cùng transaction Seal Revision | Wizard chỉ Save Draft; không tạo nút/API Publish độc lập. |
 | PID | SYSTEM PID là `REVIEW_REQUIRED` cho tới khi token hợp lệ | Preview được phép; Insert/Check production bị khóa và phải nêu lý do. |
@@ -77,7 +77,7 @@
 | `D61-03` | Read: viewer/operator/engineer/admin. Mutation: capability `program.edit` (`engineer/admin`). | **LOCKED** bởi contract/server hiện hành; handoff cũ phải được reconcile ở WP-00. |
 | `D61-04` | PID/feature `REVIEW_REQUIRED` luôn có badge; Insert disabled; không có checkbox bypass. | **LOCKED** bởi `T59-205`. |
 | `D61-05` | Save PROJECT entry chỉ tạo/cập nhật Library Draft; publish chỉ khi Seal Revision. | **LOCKED** bởi domain/store Plan59. |
-| `D61-06` | Dùng card grid + inspector + drawer của PNG làm visual Target mới, nhưng phải có desktop/mobile/full-state asset cùng revision. | **BLOCKED** — Product + Architect pin ở `T61-004`. |
+| `D61-06` | Dùng card grid + inspector + drawer của PNG làm visual Target; HTML cùng gói khóa desktop/mobile/full-state. | **LOCKED** bởi `AUTH-UX-PROG-2026-09-08-01`; browser/a11y evidence vẫn là gate triển khai riêng. |
 | `D61-07` | Metadata thiếu render `—/Không khả dụng`; retained stale render có nhãn; không biến thành zero/empty. | **LOCKED** bởi fail-closed baseline. |
 | `D61-08` | Used-In là read model typed từ server; FE không suy toàn bộ lịch sử chỉ từ Draft hiện tại. | **BLOCKED** — Product + BE owner khóa semantics ở `T61-005`. |
 | `D61-09` | Metadata trình bày có hash/revision riêng; sửa mô tả không đổi `contentSha256` của semantics thực thi. | **PROPOSED** — Architect + Compiler owner khóa ở `T61-005`. |
@@ -1200,7 +1200,7 @@ và HMI ON theo `AGENTS.md`. Không chạy firmware MCU vì Plan61 không sửa 
 
 | Mã | Rủi ro/blocker | Mức | Owner | Ảnh hưởng/gate | Điều kiện mở/giảm thiểu |
 |---|---|---|---|---|---|
-| `R61-01` | PNG không phải visual authority Active | P0 | Product + Architect | Chặn `PLAN_READY` | Pin desktop/mobile/full-state asset + DDD revision. |
+| `R61-01` | PNG chưa là visual authority Active | P0 | Product + Architect | **CLOSED 2026-09-08** | `AUTH-UX-PROG-2026-09-08-01` pin PNG composition + HTML full-state; browser/a11y evidence vẫn theo task QA. |
 | `R61-02` | `USER` scope trong handoff nhưng không có Product/API/store | P0 | Product | Chặn nếu UI còn tab User | Plan61 loại User; muốn thêm phải mở Product/ADR/contract/plan riêng. |
 | `R61-03` | Asset bật Insert PID review-required | P0 | Controls/Safety + UX | Chặn visual pin | Sửa asset: badge/reason/disabled Insert; test zero mutation. |
 | `R61-04` | Used-In semantics chưa khóa, đặc biệt SYSTEM/history | P0 | Product + BE | Chặn contract/AC-02 | Đóng `D61-08` và OpenAPI typed. |
@@ -1295,14 +1295,14 @@ Plan61 là **Implementation Plan**, không thay thế Detailed Design. Bảng d�
 | `DD-05` Data từng field | BLOCKED | §4.1 là proposal; owner Product+BE, chặn WP-01, mở khi `T61-005` ký. |
 | `DD-06` Interface | BLOCKED | Used-In/search contract chưa machine-readable; owner BE+Architect, chặn WP-01. |
 | `DD-07` State/algorithm/timing | PASS cho plan | §3.4 + budget §4.3; chi tiết transaction giữ ở DDD/domain hiện hành. |
-| `DD-08` UX flow | BLOCKED | Component/responsive đã có nhưng visual full-state chưa render/pin; owner UX, chặn `PLAN_READY`. |
+| `DD-08` UX flow | PASS cho plan | PNG composition và HTML full-state/breakpoint đã được pin bởi `AUTH-UX-PROG-2026-09-08-01`; browser/a11y result vẫn là gate triển khai, không phải thiết kế còn thiếu. |
 | `DD-09` Error/safety/security | PASS cho plan | §4.4, PID/RBAC/zero-mutation và rủi ro. |
 | `DD-10` Repository mapping | PASS cho plan | §5. |
 | `DD-11` Verification | PASS cho plan | §8 fixture/expected/target/authority. |
 | `DD-12` Deploy/rollback | PASS cho plan | §9. |
-| `DD-13` Trace/risk/sign-off | BLOCKED | §10–§11; Product/Architect chưa pin/sign; chặn `PLAN_READY`. |
+| `DD-13` Trace/risk/sign-off | BLOCKED | Visual đã được pin; Used-In/metadata semantics, reviewer độc lập và closeout vẫn phải đóng theo §10–§11. |
 
-Maturity hiện hành: **M2 — DRAFT CONTENT**. Chỉ chuyển M3 khi bốn ô BLOCKED
+Maturity hiện hành: **M2 — DRAFT CONTENT**. Chỉ chuyển M3 khi các ô BLOCKED
 được đóng trong authority/DDD, link/harness sạch và self-check được đo lại.
 
 ---
@@ -1311,5 +1311,6 @@ Maturity hiện hành: **M2 — DRAFT CONTENT**. Chỉ chuyển M3 khi bốn ô 
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.4 | 2026-09-08 | Ghi `AUTH-UX-PROG-2026-09-08-01`: PNG PGM-04 và HTML visual spec cùng là authority trực quan bổ sung nhau; loại dependency vào bộ SVG Programming sai. Giữ gate contract/Used-In/reviewer/runtime/release trung thực. |
 | 0.3 | 2026-09-06 | Đồng bộ `T61-506` với chu kỳ rollback/redeploy TARGET đã chạy thật; giữ reviewer độc lập, closeout `#465` và `RELEASE_READY` ở trạng thái chưa đạt. |
 | 0.1 | 2026-08-28 | Tạo Plan61 từ audit handoff, source và runtime PGM-04; khóa SYSTEM/PROJECT, project-scoped route, capability RBAC, PID gate, publish-on-Seal; lập 38 task FE/BE/registry/QA và giữ MCU/HIL/release ngoài phạm vi. |

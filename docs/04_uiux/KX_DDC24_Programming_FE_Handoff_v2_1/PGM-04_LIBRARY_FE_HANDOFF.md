@@ -1,7 +1,8 @@
 # PGM-04 — Control Library — FE Handoff
 
-**Route:** `/eng/programming/library`  
-**Reference:** `assets/PGM-04_library.png`  
+**Route canonical:** `/eng/programming/projects/:projectId/library`<br>
+**Authority trực quan:** [`assets/PGM-04_library.png`](assets/PGM-04_library.png) + [`assets/pgm04-visual-spec.html`](assets/pgm04-visual-spec.html) theo `AUTH-UX-PROG-2026-09-08-01`<br>
+**Giới hạn bằng chứng:** Target visual; không phải As-Built/runtime evidence.<br>
 **Primary goal:** Find, understand, reuse and manage control blocks without manually opening source just to know block interface or usage.
 
 ## 1. Information architecture
@@ -9,7 +10,8 @@
 Tabs:
 - Core Library
 - Project Library
-- User Library
+- User Library chỉ là future visual affordance; ẩn/disabled cho tới khi Product,
+  domain và API có authority. Rev A chỉ có `SYSTEM` (`Core`) và `PROJECT`.
 
 Filters:
 `Category | Type | Search | Filter`

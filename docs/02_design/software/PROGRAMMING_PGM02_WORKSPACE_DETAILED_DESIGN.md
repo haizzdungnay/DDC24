@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-SW-PGM02-WORKSPACE-001` |
-| Phiên bản | 0.5 |
+| Phiên bản | 0.6 |
 | Trạng thái | **`M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`; chưa phải M4/M5 hoặc As-Built** |
-| Ngày | 2026-08-24 |
+| Ngày | 2026-09-08 |
 | Chủ quản đề xuất | System Architecture + Programming Cross-functional Team |
 | Người review bắt buộc | Product, System Architect, FE, BE, Compiler, Core/Runtime, Security, QA/V&V, UX, Document Control |
 | Người phê duyệt | Product Owner/CTO + System Architect |
@@ -178,7 +178,7 @@ thành As-Built runtime.
 | Simulation | [`programming_core_sim_main.cpp`](../../../apps/core/application/programming/programming_core_sim_main.cpp) là host integration harness | Không phải product session; chưa có capability/API/store/worker/sandbox/RBAC/audit/quota/expiry/zero-output proof |
 | Capability | `GET /programming/capabilities` trả profile/language/type/limits/taskPeriods | Chưa có workspace increment/capability version, LIVE coherence state hoặc Simulation support flag |
 | API/client pin | HTTP router hiện có 33 Programming operations; FE generator và G1 join pin số này | R1 references route làm operation count thành 34; mọi pin/generator/consumer phải đổi atomic, không chỉnh tay FE |
-| Visual authority | Ba SVG combined/ST/FBD và manifest v2.2 hiện có trong exact Candidate; asset baseline desktop/mobile cũng hiện có | Asset đã được pin cho implementation; consumer review được waive cho entry nhưng browser/a11y/runtime evidence chưa có |
+| Visual authority | Bốn PNG PGM-02 trong gói handoff và manifest v2.4 là authority trực quan theo `AUTH-UX-PROG-2026-09-08-01` | Asset đã được pin cho implementation; consumer review được waive cho entry nhưng browser/a11y/runtime evidence chưa có |
 
 ### 2.1 Phân loại capability, không trộn FE với BE/Core
 
@@ -870,18 +870,16 @@ rlimit violation phải terminate fail closed, không hạ precision hoặc bỏ
 
 Các asset sau là tài liệu trực quan, không phải screenshot runtime:
 
+- [Programs Target](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_programs.png).
 - [Combined desktop/mobile Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_annotated_reference.png).
 - [ST editor Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02A_ST_editor_reference.png).
 - [FBD editor Target Candidate](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.png).
-- [Desktop POU baseline hiện hành](../../04_uiux/assets/programming/PGM-02_PROGRAMS_POU_DESKTOP.svg),
-  [Mobile POU baseline hiện hành](../../04_uiux/assets/programming/PGM-02_PROGRAMS_POU_MOBILE.svg)
-  và [Design workspace baseline](../../04_uiux/assets/programming/PGM-02_DESIGN_WORKSPACE_DESKTOP.svg)
-  chỉ là tham chiếu baseline; không đủ thay asset R2/R3 Candidate.
 
-`handoff_manifest.json` trong worktree đã liệt kê bộ v2.2/asset mới, nhưng
-revision/hash và consumer review còn nằm trong change-set Candidate. Dữ liệu
-trong SVG là minh họa; `OD-PGM02-V22-004` giữ gate pin/review, không claim asset
-đã Active.
+`handoff_manifest.json` liệt kê duy nhất bộ PNG/HTML hiện hành. Bộ SVG
+Programming song song đã bị loại vì sai thiết kế mong muốn và không còn là
+baseline/migration reference. Dữ liệu trong ảnh là minh họa;
+`OD-PGM02-V22-004` giữ gate browser/a11y/review, không biến asset thành bằng
+chứng As-Built/runtime.
 
 ### 7.2 Cây component Target
 
@@ -1310,7 +1308,7 @@ available. Rollback R2/R3 không tắt Core control hoặc đổi Active/LKG.
 
 `candidate_pin_check.py` xác minh bytes của 17 hồ sơ Markdown trong manifest;
 exact Candidate Git `413a043748dce3b44d2c5076412de761760ba17a` là pin bao
-trùm contract/schema, `ADR-053`, handoff manifest và ba SVG theo
+trùm contract/schema, `ADR-053`, handoff manifest và bốn PNG theo
 `AUTH-PROG-2026-08-24-05`. Hai lớp pin đã mở `PLAN_READY`; mọi revision tiếp theo
 phải cập nhật manifest/change record nhưng không được tự suy Test Result hay
 release PASS.
@@ -1355,6 +1353,7 @@ CR-PROG-PGM02-V22-001
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.6 | 2026-09-08 | Ghi nhận bốn PNG PGM-02 trong gói FE Handoff là authority trực quan theo `AUTH-UX-PROG-2026-09-08-01`; loại ba SVG baseline song song và sửa DD-08/manifest mapping. Không đổi contract, state machine, evidence hoặc release gate. |
 | 0.5 | 2026-08-27 | Ba ảnh render PGM-02 do chủ sở hữu cấp (`PGM-02A_ST_editor_reference.png`, `PGM-02B_FBD_editor_reference.png`, ảnh chú giải) được đăng ký vào `handoff_manifest.json` 2.3 và trở thành tham chiếu bố cục/phạm vi. Hệ quả: **đảo ngược** kết luận "status bar ngoài phạm vi" của bản 0.4; thêm `EditorTabBar`, `NavigatorMap`, `WorkspaceStatusBar` vào §7.2; ba dòng ánh xạ §7.3; ba ca kiểm `TC-PGM02-TAB-01`/`SB-01`/`NAV-01` §10.2. `UD-PROG-014` chốt phương án B (nhiều tab). Không đổi contract, state machine hay increment order. |
 | 0.4 | 2026-08-27 | Khôi phục hai vùng UI mà handoff v2.2 bắt buộc nhưng bản 0.1–0.3 bỏ sót khi chuyển tiếp: `ContextInspector` (handoff cha §1/§9, `PGM-02A §9`, `PGM-02B §9`) và `EditorToolbar` mode-aware (`PGM-02A §2/§3/§11`, `PGM-02B §2`). Thêm hai dòng ánh xạ vùng UI §7.3 và ghi tường minh status bar ngoài phạm vi §1.4. Nguồn: [`REC-PGM02-AUD-ADJ-001`](../../07_records/reviews/PROGRAMMING_PGM02_AUDIT_GAP_ADJUDICATION_2026-08-27.md) `F-PGM02-AUD-001`/`F-PGM02-AUD-004`. Không đổi contract, state machine hay increment order; không nâng maturity. |
 | 0.3 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05` pin exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; nâng đúng `M3 REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, mở R1/R2/R3 theo dependency; chốt `F-P59-GHOST-POU-001` fail closed `ST-POU-005`; giữ consumer review waived, U13–U15 NOT_RUN và release NO-GO. |
@@ -1383,7 +1382,7 @@ CR-PROG-PGM02-V22-001
 | `DD-05` Data từng field | PASS | `4` định nghĩa Draft, Library, reference/anchor, LIVE tuple, session/input/observation, null/lifecycle/migration |
 | `DD-06` Interface | PASS | `5` có path/payload/RBAC/timeout/retry/idempotency/concurrency/error/side effect/audit/compatibility |
 | `DD-07` State/algorithm/timing | PASS | `6` có mode/session, transaction, LIVE join, GCD/Step, atomicity, resource, crash/restart/power path |
-| `DD-08` UX hoặc operation flow | PASS | `7` có route, cây component, field/API/state/action/RBAC/copy, ba SVG Target renderable, responsive/a11y và luồng lỗi; asset đã được pin cho implementation, consumer review/test còn theo R1 và không bị nhầm thành As-Built |
+| `DD-08` UX hoặc operation flow | PASS | `7` có route, cây component, field/API/state/action/RBAC/copy, bốn PNG Target, responsive/a11y và luồng lỗi; asset đã được pin cho implementation, consumer review/test còn theo R1 và không bị nhầm thành As-Built |
 | `DD-09` Error/safety/security | PASS | `8` có detect/code/held state/recovery/audit, malicious inputs, zero-output evidence plan |
 | `DD-10` Repository mapping | PASS | `9` nêu file/symbol cần tạo/sửa, dependency được phép/bị cấm và test map |
 | `DD-11` Verification | PASS | `10` có derived requirement→fixture/negative/fault/định lượng/evidence/pass authority; đây là kế hoạch, chưa claim result |

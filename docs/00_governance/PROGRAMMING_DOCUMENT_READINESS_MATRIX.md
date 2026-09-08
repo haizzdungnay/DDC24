@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PROG-DRM-001` |
-| Phiên bản | 2.7 |
+| Phiên bản | 2.8 |
 | Trạng thái | **Baseline ADR-050 và PGM-02 v2.2 exact-pinned cho implementation; `T59-801..803=DONE`, `T59-804=READY`, R1→R2→R3; `RELEASE_READY=NO-GO`** |
-| Ngày | 2026-08-25 |
+| Ngày | 2026-09-08 |
 | Chủ quản | System Engineering + Document Control |
 | Product authority | [`PROD-PROG-001` v3.0](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) |
 | Design authority | [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
@@ -52,7 +52,7 @@ cổng phát hành.
 | Decision | `ADR-050`; `DEC-PROG-REGISTER-001` v1.4 + `ADR-053` Accepted | 12 unified CLOSED; change request/exact pin CLOSED; ghost policy RESOLVED, corrective pending | PASS cho implementation; release độc lập |
 | Requirement | `SRS-PROG-001` v1.2 | 82 baseline + 7 PGM-02 = 89 requirement | PASS cho implementation; evidence pending |
 | Detailed Design | `DDD-SW-PROG-UNIFIED-001` v1.3 + `DDD-SW-PGM02-WORKSPACE-001` v0.3 | Formal model/contract/state/algorithm/error/security/source/test/rollback PGM-02 đã exact-pin | M3 / AUTHORIZED FOR IMPLEMENTATION; không phải M4/M5 |
-| UX | `UX-WEB-PROG-001` v2.2 + ba SVG/handoff v2.2 | Route/mode/POU/Quick Library/ST/FBD/LIVE/SIMULATE/mobile state Target | Target approved for implementation; chưa phải As-Built |
+| UX | `UX-WEB-PROG-001` v2.6 + handoff PGM-01..06 v2.3 | Handoff PNG/HTML là authority trực quan theo `AUTH-UX-PROG-2026-09-08-01`; UX-WEB khóa route/mode/POU/Quick Library/ST/FBD/LIVE/SIMULATE/safety/state | Target approved for implementation; chưa phải As-Built/runtime evidence |
 | Compiler | `DDD-LANG-PROG-001` v1.0 | User Function/FB, purity, instance state, call graph và artifact v2 | PASS |
 | Verification | `VVP-PROG-001` v2.2 | 32 legacy + 12 unified + 3 PGM-02 = 47 scenario; `U13..U15` NOT_RUN | Plan authorized; evidence pending |
 | Traceability | `TRACE-PROG-001` v6.9 | 89/89 requirement và 47/47 scenario join máy; bảy dòng PGM-02 chỉ `D=Y`, `I/T/P/R=N` | PASS consistency; implementation/evidence pending |
@@ -117,6 +117,7 @@ scenario unified `NOT_RUN` cho tới khi có Test Result đúng thẩm quyền.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.8 | 2026-09-08 | Đồng bộ authority trực quan sang gói FE Handoff PNG/HTML theo `AUTH-UX-PROG-2026-09-08-01`; UX-WEB v2.6 giữ contract/safety companion. Không nâng maturity hoặc `RELEASE_READY`. |
 | 2.7 | 2026-08-25 | Ghi `T59-803 DONE (HOST/LOCAL)` và `T59-804 READY`; `G-PGM02-01` còn thiếu một catalog authority. Không đổi maturity, evidence hay `RELEASE_READY`. |
 | 2.6 | 2026-08-25 | Ghi `T59-802 DONE (HOST/LOCAL)` cho vỏ/route canonical/resolver/mobile read-only PGM-02 và `T59-803 READY`; đóng corrective `F-P59-GHOST-POU-001` ở lớp source/test. `IMPLEMENTATION_CLOSE` giữ PENDING (còn `T59-803..809`), MCU FAKE PARTIAL và `RELEASE_READY=NO-GO` không đổi. |
 | 2.5 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: exact pin Candidate `413a043`, `T59-801=DONE`, `T59-802=READY`, mở cả ba IMPLEMENT_READY nhưng giữ dependency R1→R2→R3; ghost-POU chỉ đóng quyết định, corrective/evidence/release vẫn PENDING/NO-GO. |

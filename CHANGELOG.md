@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### Changed — Authority trực quan Programming PGM-01..06 (2026-09-08)
+
+- Ghi quyết định chủ sở hữu `AUTH-UX-PROG-2026-09-08-01`: gói
+  `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1` và 9 PNG + 1 HTML bên
+  trong là authority cho bố cục, thứ bậc thông tin và interaction target;
+  `UX-WEB-PROG-001` v2.6 giữ requirement, safety, contract, state, RBAC và
+  acceptance companion. Asset vẫn chỉ là Target visual, không phải bằng chứng
+  As-Built/runtime/target/HIL hay `RELEASE_READY`.
+- Loại toàn bộ 15 SVG trong `docs/04_uiux/assets/programming` vì tạo phương án
+  thiết kế song song sai mong muốn; giữ nguyên asset Modbus, Operations và
+  Scheduler. PGM-03 được khóa lại đúng hình học hai pane phía trên (`Program
+  Variables`, `Available Points`) và `Assigned Mappings` toàn chiều rộng phía
+  dưới; inspector chỉ mở theo ngữ cảnh.
+- Đóng issue #556 ở trạng thái `NOT_PLANNED`, bỏ branch/worktree thử nghiệm và
+  xác nhận không có code từ issue này được merge. Đồng bộ manifest handoff,
+  Design Index, DDD, readiness matrix, plan/review lịch sử, UI/UX/UC và harness
+  để không còn đường dẫn tới bộ SVG đã loại.
+- Kiểm chứng tài liệu: JSON manifest hợp lệ; `candidate_pin_check.py` **17/17
+  PASS** và `docs_iso_harness.py --expect` **PASS** với 17/17 baseline, 5/5
+  support, 0 link/anchor/path/trace violation và đúng 10 asset handoff. Manifest
+  1.64 đồng thời sửa 5 hash drift kế thừa từ `main` sau khi đối chiếu commit.
+  Không chạy test FE/browser vì thay đổi này chỉ gồm tài liệu và xoá asset sai.
+
 ### Added — Workbench, diagnostic và Auto Layout cho FBD Editor (#573, 2026-09-08)
 
 - Hợp nhất danh sách lỗi FBD vào `ProblemsDrawer` dùng chung; mục có đích thật

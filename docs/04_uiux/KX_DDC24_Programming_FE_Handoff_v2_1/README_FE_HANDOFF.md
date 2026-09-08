@@ -1,6 +1,6 @@
-# KX-DDC24 Programming — FE Handoff Package v2.2
+# KX-DDC24 Programming — FE Handoff Package v2.3
 
-**Status:** TARGET FE HANDOFF — AUTHORIZED FOR IMPLEMENTATION BY `AUTH-PROG-2026-08-24-05`; NOT AS-BUILT / NOT RUNTIME EVIDENCE<br>
+**Status:** TARGET VISUAL AUTHORITY theo `AUTH-UX-PROG-2026-09-08-01`; AUTHORIZED FOR IMPLEMENTATION BY `AUTH-PROG-2026-08-24-05`; NOT AS-BUILT / NOT RUNTIME EVIDENCE<br>
 **Formal PGM-02 Detailed Design authority:** [PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md](../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)<br>
 **Product:** MK-DDC-24 Generic DDC/BACS Controller  
 **Programming languages Rev A:** ST + FBD  
@@ -10,10 +10,14 @@
 
 ## 1. Source baseline
 
-Package này ghi nhận hướng thiết kế Target và đã được Owner + System Architect
+Package này là authority hiện hành cho bố cục, thứ bậc thông tin và interaction
+target của PGM-01..06 theo quyết định trực tiếp của chủ sở hữu ngày 2026-09-08.
+Nó đồng thời ghi nhận hướng thiết kế Target đã được Owner + System Architect
 exact-pin tại Candidate `413a043748dce3b44d2c5076412de761760ba17a` để triển
-khai tuần tự `R1 EDIT → R2 LIVE → R3 SIMULATE`. Nó không tự chứng minh năng lực
-As-Built/runtime, Test Result, target/HIL hoặc release.
+khai tuần tự `R1 EDIT → R2 LIVE → R3 SIMULATE`. `UX-WEB-PROG-001` là hồ sơ
+companion cho requirement, safety, contract, state, RBAC và acceptance. Package
+này không tự chứng minh năng lực As-Built/runtime, Test Result, target/HIL hoặc
+release.
 
 - A Program is a user-facing independent control unit.
 - Normal users do not manage CPU core/thread/task directly.
@@ -28,8 +32,9 @@ As-Built/runtime, Test Result, target/HIL hoặc release.
 
 ## 2. Canonical navigation
 
-Authority route hiện hành là [`UX-WEB-PROG-001` §2](../PROGRAMMING_UI_UX_DESIGN.md#2-information-architecture).
-Handoff này không cấp quyền cho route unscoped cũ.
+Route/contract hiện hành lấy từ [`UX-WEB-PROG-001` §2](../PROGRAMMING_UI_UX_DESIGN.md#2-information-architecture);
+gói handoff này quyết định composition trực quan. Nó không cấp quyền cho route
+unscoped cũ.
 
 | Page | Route | Name |
 |---|---|---|
@@ -106,7 +111,16 @@ Server is the authority. FE permission gating is convenience only.
 7. Engineering actions are keyboard reachable.
 8. One route = one `<h1>`.
 9. Shared error pattern: human message first, technical code second.
-10. The visual reference images in `/assets` are layout references, not pixel-perfect screenshots to copy blindly.
+10. Ảnh trong `/assets` là authority cho bố cục và thứ bậc thông tin, không phải ảnh chụp pixel-perfect để sao chép mù quáng và không phải nguồn dữ liệu/runtime evidence.
+
+### 5.1 Quy tắc thay thế asset
+
+- Chỉ dùng các PNG/HTML được liệt kê trong `handoff_manifest.json`.
+- Không dùng hoặc phục hồi bộ SVG từng nằm ở `docs/04_uiux/assets/programming`;
+  bộ đó bị loại ngày 2026-09-08 vì sai thiết kế mong muốn.
+- PGM-03 bắt buộc giữ bố cục `Program Variables` + `Available Points` ở phía
+  trên và `Assigned Mappings` toàn chiều rộng phía dưới. Inspector chỉ mở theo
+  ngữ cảnh, không thành cột thứ ba thường trực.
 
 ## 6. Delivery Definition of Done
 

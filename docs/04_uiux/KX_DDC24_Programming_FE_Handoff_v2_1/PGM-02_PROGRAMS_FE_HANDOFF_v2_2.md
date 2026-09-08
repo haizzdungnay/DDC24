@@ -6,6 +6,7 @@
 **Route:** `/eng/programming/programs`  
 **Editor variants:** `PGM-02A ST` + `PGM-02B FBD`  
 **Visual reference:** [PGM-02 ST/FBD combined Target](assets/PGM-02_ST_FBD_annotated_reference.png)<br>
+**Visual authority:** `AUTH-UX-PROG-2026-09-08-01`; dùng thêm [Programs composition](assets/PGM-02_programs.png), không dùng bộ SVG Programming đã loại.<br>
 **Target contract supplement:** [PGM-02 Quick Library / SIMULATE / LIVE v2.2](PGM-02_QUICK_LIBRARY_SIM_LIVE_SPEC_v2_2.md)<br>
 **Formal Detailed Design authority:** [PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md](../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md)
 **Exact Candidate pin:** `413a043748dce3b44d2c5076412de761760ba17a`; thực thi theo Plan59 `R1 → R2 → R3`; chưa phải As-Built/release evidence.
