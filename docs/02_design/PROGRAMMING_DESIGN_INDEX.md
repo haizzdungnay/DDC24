@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `PROG-DOCSET-001` |
-| Phiên bản | 4.5 |
+| Phiên bản | 4.6 |
 | Trạng thái | **Unified baseline Active; PGM-02 v2.2 Target đã pin và AUTHORIZED FOR IMPLEMENTATION theo R1→R2→R3; release NO-GO** |
-| Ngày | 2026-08-24 |
+| Ngày | 2026-09-08 |
 | Chủ quản | System Engineering |
 | Phạm vi | Một Product Programming — Product/SRS/Architecture/DDD/FE/BE/Core/HW/FW/V&V/Ops |
 
@@ -56,7 +56,7 @@ Product/ADR Active
 |---|---|---|
 | Product/PM/CTO | Product v3.0 + [SRS](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | ADR-050 → Unified DDD → Risk → Traceability |
 | Kiến trúc sư | [Architecture](../03_architecture/PROGRAMMING_ARCHITECTURE.md) | Unified DDD → Data/Interface/FW-SOM → Verification |
-| FE | [UI/UX](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | FE Design → Interface → Data Model → Verification |
+| FE | [FE Handoff PGM-01..06](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md) + [UI/UX companion](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | Dùng handoff cho composition; dùng UI/UX companion cho requirement/safety/contract → FE Design → Interface → Data Model → Verification |
 | BE | [BE Design](software/PROGRAMMING_BE_DESIGN.md) | Data Model → Interface → Operations → Verification |
 | FW-SOM/Core | [FW-SOM Design](software/PROGRAMMING_FW_SOM_DESIGN.md) | Interface → ST/IR/Task component specs → Verification |
 | FW MCU | [FW MCU Design](firmware/PROGRAMMING_FW_MCU_DESIGN.md) | IOP contract → HW Design → HIL scenarios |
@@ -80,7 +80,7 @@ Product/ADR Active
 | `IFSPEC-ART-PROG-001` | [Artifact/Loader Spec](interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) | artifact layout, bounded loader, stage/load/swap/reject | `M3` v0.9 — verified file staging, O(1) swap/LKG và checkpoint recovery có source; target còn mở |
 | `DDD-CTRL-PROG-001` | [Control Semantics](software/PROGRAMMING_CONTROL_SEMANTICS.md) | scan order, priority, PID, hold-last, overrun, transition | `M3` v1.1 — exclusive owner, TTL hold-last 60 s và first-output cutover/rollback As-Built; target/HIL còn mở |
 | `DDD-LIFE-PROG-001` | [Runtime Lifecycle](software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md) | Check/Commission/Restore/RETAIN/LKG/restart/power-loss | `M3` v0.6 — P4 operation/journal/cutover/restart recovery source/host hoàn tất; target còn mở |
-| `UX-WEB-PROG-001` | [Programming UI/UX Design](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | IA sáu workspace, POU tree, Control Library, lifecycle, copy, states, responsive, accessibility | Active v2.2; PGM-02 Target authorized, chưa As-Built |
+| `UX-WEB-PROG-001` | [Programming UI/UX Design](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) + [FE Handoff PGM-01..06](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md) | UI/UX companion khóa requirement/safety/contract; handoff PNG/HTML khóa composition và interaction target theo `AUTH-UX-PROG-2026-09-08-01` | Active v2.6 + handoff v2.3; Target authorized, chưa As-Built/runtime evidence |
 | `DDD-FE-PROG-001` | [Programming FE Design](software/PROGRAMMING_FE_DESIGN.md) | React feature, state/query/mutation, error recovery | Baseline M3; v1.6-candidate overlay PGM-02, không có runtime source change |
 | `DDD-BE-PROG-001` | [Programming BE Design](software/PROGRAMMING_BE_DESIGN.md) | Go service, persistence, compiler job, RBAC/audit | `M3` v1.6 — Monitor/Trace bounded; target Monitor/read-back supporting evidence |
 | `DDD-FWSOM-PROG-001` | [Programming FW-SOM Design](software/PROGRAMMING_FW_SOM_DESIGN.md) | compiler/runtime boundary, scheduler, activation, RETAIN | `M3` v1.0 — snapshot/task target read-back; positive binding còn mở |
@@ -194,6 +194,7 @@ code; review/evidence thực được bổ sung trong task và trước release.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 4.6 | 2026-09-08 | Đăng ký gói FE Handoff PGM-01..06 làm authority trực quan theo `AUTH-UX-PROG-2026-09-08-01`; UX-WEB v2.6 giữ requirement/safety/contract companion; loại mọi tham chiếu tới bộ SVG Programming sai. Không đổi gate runtime/release. |
 | 4.4-candidate | 2026-08-24 | Đăng ký review package PGM-02 v2.2: formal DDD/contract/ADR-053/assets, 89 requirement/47 scenario, 17-file pin set và 16 card `T59-802..817`; `T59-801` REVIEW, exact pin/production code vẫn PENDING/NO-GO. |
 | 4.5 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`, exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`, PGM-02 DDD M3 và execution order R1→R2→R3; chốt `ST-POU-005`; giữ U13–U15 NOT_RUN, risk 23/23 Open và release NO-GO. |
 | 4.3 | 2026-08-24 | Sửa drift register và ghi scoped change PGM-02 v2.2: Decision Register v1.1 có 2 record OPEN, Risk v4.21 có 23/23 Open, Trace v6.7, Plan59 v2.5 có 53 task/9 Wave. Owner mở duy nhất `T59-801`; System Architect pin và code R1/R2/R3 giữ PENDING/NO-GO; không tái sử dụng chữ ký baseline cũ. |

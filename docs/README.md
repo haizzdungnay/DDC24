@@ -26,6 +26,7 @@
 | [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định unified đã khóa; `CR-PROG-PGM02-V22-001` Owner + Architect approved (`AUTH-PROG-2026-08-24-05`), `ADR-053` Accepted và `F-P59-GHOST-POU-001` `CLOSED` (quyết định + implementation); `T59-801`/`T59-802` DONE, `T59-803` READY |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào Product/SRS/Unified DDD/UX/VVP/Trace/Risk/Plan authority |
 | [Programming Unified Detailed Design](02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | data/contract/state/algorithm/error/source/test/deploy/rollback đủ DD-01..DD-13 |
+| [Programming FE Handoff PGM-01..06](04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md) | authority trực quan PNG/HTML theo `AUTH-UX-PROG-2026-09-08-01`; `UX-WEB-PROG-001` giữ requirement/safety/contract companion; asset không phải As-Built/runtime evidence |
 | [PGM-02 Workspace ST/FBD Detailed Design](02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) | Target Candidate chi tiết route/identity/EDIT/LIVE/SIMULATE/worker/NFR/test/rollback; exact pin pending |
 | [Programming Plan 59](03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | 53 authority + 16 Candidate card/9 Wave; `T59-801` REVIEW, downstream NO EXECUTION; tách implementation close, target MCU FAKE và release NO-GO |
 | [Prompt tự động Plan59](03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | hướng dẫn agent chọn task, implement, test, cập nhật tracker và commit/PR sạch |

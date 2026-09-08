@@ -7,7 +7,12 @@
 > **Đối chiếu mã nguồn:** nhánh `feat/t59-201-control-library-domain`, commit `a35f578`
 > **Phạm vi:** kiến trúc thông tin, bố cục, hệ thị giác và tương tác của sáu trang `PGM-01..06` (`/eng/programming/*`)
 > **Không bao gồm:** hợp đồng API `IFSPEC-PROG-001`, mô hình miền Draft/Revision, ngữ nghĩa Check/Commission, Core/IPC
-> **Tài liệu nền:** [`UX-WEB-PROG-001` v2.0 Active](PROGRAMMING_UI_UX_DESIGN.md) · [`KX-DDC24-UX-SYSTEM-001`](KX-DDC24-UX-SYSTEM-001_VI.md) (token, component)
+> **Tài liệu nền hiện hành:** [FE Handoff PGM-01..06](KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md) là authority trực quan theo `AUTH-UX-PROG-2026-09-08-01`; [`UX-WEB-PROG-001` v2.6](PROGRAMMING_UI_UX_DESIGN.md) là companion requirement/safety/contract; [`KX-DDC24-UX-SYSTEM-001`](KX-DDC24-UX-SYSTEM-001_VI.md) cung cấp token/component
+
+> **Ghi chú 2026-09-08:** Đây là hồ sơ proposal và bằng chứng lịch sử. Mọi sơ
+> đồ/bố cục trong file này chỉ dùng để giải thích quyết định; khi khác với PNG/
+> HTML trong gói handoff thì gói handoff thắng. Không dùng proposal này để khôi
+> phục bộ SVG Programming đã loại.
 
 ---
 

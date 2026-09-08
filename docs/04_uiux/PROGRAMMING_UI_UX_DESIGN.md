@@ -3,12 +3,12 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `UX-WEB-PROG-001` |
-| Phiên bản | 2.5 |
+| Phiên bản | 2.6 |
 | Trạng thái | **Active; PGM-02 v2.2 TARGET APPROVED FOR IMPLEMENTATION, không phải As-Built** |
-| Ngày | 2026-09-07 |
+| Ngày | 2026-09-08 |
 | Chủ quản | UX Lead + Frontend Lead |
 | Người phê duyệt implementation | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` và `AUTH-PROG-2026-08-24-05` |
-| Nguồn | Product v3.2; ADR-050; `SRS-PROG-001` v1.2; `DDD-SW-PROG-UNIFIED-001` v1.3; PGM-02 Target: `DDD-SW-PGM02-WORKSPACE-001` v0.3 + `PGM02-WORKSPACE-V1` |
+| Nguồn | Product v3.2; ADR-050; `SRS-PROG-001` v1.2; `DDD-SW-PROG-UNIFIED-001` v1.3; authority trực quan PGM-01..06: `KX_DDC24_Programming_FE_Handoff_v2_1` theo `AUTH-UX-PROG-2026-09-08-01`; PGM-02 Target: `DDD-SW-PGM02-WORKSPACE-001` v0.3 + `PGM02-WORKSPACE-V1` |
 | PGM-02 v2.2 authority | Exact Candidate `413a043748dce3b44d2c5076412de761760ba17a`; `T59-801=DONE`, `T59-802=READY`, task sau `ORDERED`; ba `IMPLEMENT_READY=GO`; `RELEASE_READY=NO-GO` |
 | As-Built migration | Source hiện hành vẫn dùng route Project-scoped, mobile short-edit và editor/PouTree hiện có; không được đổi nhãn thành PGM-02 v2.2 As-Built |
 
@@ -27,6 +27,13 @@ Baseline thống nhất được duyệt ngày 2026-08-20 vẫn là authority ch
 triển khai. PGM-02 v2.2 trong revision này là **Target đã được phê duyệt cho
 implementation**: route, mode, Quick Library, responsive và identity mới vẫn
 không phải As-Built và không được dùng để claim runtime/evidence.
+
+Theo `AUTH-UX-PROG-2026-09-08-01`, thư mục
+[`KX_DDC24_Programming_FE_Handoff_v2_1`](KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md)
+là authority cho bố cục, thứ bậc thông tin và interaction target của PGM-01..06.
+Hồ sơ này giữ authority cho requirement, safety, contract, state, RBAC và
+acceptance bổ sung. Khi hai nguồn khác nhau về hình học màn hình, asset trong
+gói handoff thắng; không được dùng ảnh minh họa để claim As-Built/runtime.
 
 `AUTH-PROG-2026-08-24-05` đã pin exact Candidate
 `413a043748dce3b44d2c5076412de761760ba17a`: `PLAN_READY[PGM02-V22]=PASS` và
@@ -129,7 +136,11 @@ copy/focus rõ; missing/invalid/stale/offline không được dựng thành số
 
 ### 3.3 PGM-03 — Mapping và Published Signal
 
-Ba vùng: variable/signal consumer, catalog/filter, binding/owner inspector. UI
+Bố cục desktop theo ảnh `PGM-03_mapping.png`: hai pane phía trên gồm `Program
+Variables` bên trái và `Available Points` bên phải; bảng `Assigned Mappings`
+chạy toàn chiều rộng phía dưới. Binding/output-owner inspector chỉ mở theo
+selection bằng drawer/panel ngữ cảnh, không tồn tại như cột thứ ba thường trực.
+Published Signal dùng tab/action ngữ cảnh nhưng không thay hình học `2 + 1`. UI
 lọc type/direction/writable nhưng compiler/server vẫn validate. Hai output cùng
 Point hiện conflict ngay, nêu Program đang giữ owner và chặn Save/Check. Signal
 hiện publisher duy nhất, type/unit, freshness, fallback và consumer list. Không
@@ -140,7 +151,8 @@ Publisher/consumer mang nhãn `Đã kiểm chứng`, `Chưa kiểm chứng`, `Đ
 có”. Consumer là link tới đúng POU và line/column. Xoá Signal luôn mở hộp impact
 liệt kê consumer khi authoritative; nếu Check thiếu/cũ/lỗi, hộp nói impact chưa
 được kiểm chứng. Xác nhận chỉ xoá khỏi Draft, chờ server read-back và không
-Commission. Đặc tả modal: [PGM-03 signal delete impact](assets/programming/PGM-03_SIGNAL_DELETE_IMPACT_MODAL.svg).
+Commission. Hộp impact dùng cùng token/modal pattern của gói handoff và phải
+được kiểm chứng bằng browser; asset SVG riêng trước đây đã bị loại.
 
 Controls Engineer chọn Variable và Point từ catalog đã đọc đủ, bấm Assign hoặc
 Change, rồi đọc verdict/issue của preview server trước khi xác nhận. Remove có
@@ -189,22 +201,19 @@ Restore/import/replacement; không trộn vào tab đọc bình thường.
 
 ## 4. Asset trực quan normative
 
-| Workspace | Desktop | Mobile/ghi chú |
+| Workspace | Authority trực quan hiện hành | Ghi chú |
 |---|---|---|
-| PGM-01 | [Tổng quan desktop](assets/programming/PGM-01_LANDING_PAGE_DESKTOP.svg) | [Tổng quan mobile](assets/programming/PGM-01_LANDING_PAGE_MOBILE.svg) |
-| PGM-02 | [POU/editor desktop](assets/programming/PGM-02_PROGRAMS_POU_DESKTOP.svg) | [POU mobile](assets/programming/PGM-02_PROGRAMS_POU_MOBILE.svg) |
-| PGM-03 | [Mapping/signal desktop](assets/programming/PGM-03_MAPPING_SIGNALS_DESKTOP.svg) | Mobile read/operate-light theo token §8 |
-| PGM-04 | [Library desktop](assets/programming/PGM-04_CONTROL_LIBRARY_DESKTOP.svg) | [Library mobile](assets/programming/PGM-04_CONTROL_LIBRARY_MOBILE.svg) |
-| PGM-05 | [Check/Commission desktop](assets/programming/PGM-05_CHECK_COMMISSION_DESKTOP.svg) | Modal action dùng cùng safety pattern |
-| PGM-06 | [Runtime desktop](assets/programming/PGM-06_RUNTIME_SERVICE_DESKTOP.svg) | RETAIN modal theo [state set](assets/programming/PGM-06_RETAIN_RESET_DIALOG.svg) |
+| PGM-01 | [Overview](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-01_overview.png) | Shell và thứ bậc tổng quan |
+| PGM-02 | [Programs](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_programs.png), [workspace ST/FBD](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_annotated_reference.png), [ST editor](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02A_ST_editor_reference.png), [FBD canvas](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.png) | Target đã pin; mobile `<768 px` chỉ đọc |
+| PGM-03 | [Points & Mapping](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-03_mapping.png) | Hai pane trên + Assigned Mappings toàn chiều rộng phía dưới |
+| PGM-04 | [Control Library](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-04_library.png), [spec render được](KX_DDC24_Programming_FE_Handoff_v2_1/assets/pgm04-visual-spec.html) | HTML bổ sung trạng thái/breakpoint, không thay bố cục chính của PNG |
+| PGM-05 | [Check & Commission](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-05_commission.png) | Modal action phải giữ safety pattern |
+| PGM-06 | [Runtime & Diagnostics](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-06_runtime.png) | RETAIN/Restore vẫn cần confirmation và read-back |
 
-Với PGM-02 v2.2, ba asset Target Candidate được review/pin cùng revision của DDD:
-[workspace kết hợp ST/FBD](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_annotated_reference.png),
-[ST editor](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02A_ST_editor_reference.png)
-và [FBD canvas](KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.png).
-Chúng thể hiện dữ liệu minh họa, không phải runtime evidence. Asset PGM-02 cũ
-vẫn là baseline/migration reference tới khi Candidate được pin; asset PGM-03/04
-cũ không normative.
+Toàn bộ asset trên thể hiện dữ liệu minh họa, không phải runtime evidence. Bộ
+SVG Programming song song trong `docs/04_uiux/assets/programming` đã bị loại
+ngày 2026-09-08 vì xung đột với ý đồ thiết kế của chủ sở hữu; không được khôi
+phục hoặc dùng làm acceptance baseline.
 
 ## 5. Component tree và mapping
 
@@ -356,6 +365,7 @@ Playwright/target Test Result.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 2.6 | 2026-09-08 | `AUTH-UX-PROG-2026-09-08-01`: đặt gói `KX_DDC24_Programming_FE_Handoff_v2_1` làm authority trực quan PGM-01..06; sửa PGM-03 về bố cục hai pane trên + Assigned Mappings toàn chiều rộng; loại bộ SVG Programming sai và giữ requirement/safety/contract của hồ sơ này làm companion. |
 | 2.3 | 2026-09-06 | `ISS-PGM03-06`/`#559`: khóa IA sáu workspace; PGM-03 Mapping, PGM-04 Library, PGM-05 Check/Commission và PGM-06 Runtime; sửa source mapping thật và đổi tên asset RETAIN theo PGM-06. |
 | 2.4 | 2026-09-06 | `ISS-PGM-RBAC-01`/`ISS-PGM03-02`: dùng capability cho toàn bộ action, engineer thực hiện Draft→Mapping→Check→Commission/Trace; Simulation giữ admin-only. Mở Mapping preview/xác nhận/read-back và fail-closed cho 403/409/timeout/mismatch/catalog thiếu. |
 | 2.5 | 2026-09-07 | `ISS-PGM03-04`/`#557`: Published Signal hiển thị dependency compiler-authoritative cùng provenance, exact POU/location; stale/pending/unavailable không thành zero consumer; thêm đặc tả modal impact trước xoá và Draft read-back không Commission. |

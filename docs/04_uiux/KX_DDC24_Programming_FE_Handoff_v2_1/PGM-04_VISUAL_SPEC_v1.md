@@ -7,7 +7,8 @@
 | Ngày | 2026-08-29 |
 | Authority | `AUTH-PROG-2026-08-29-PGM04-001` §`D61-06` |
 | Bản render | [`assets/pgm04-visual-spec.html`](assets/pgm04-visual-spec.html) |
-| Thay thế | `assets/PGM-04_library.png` **thôi làm authority**, hạ xuống đầu vào tham khảo |
+| Ảnh bố cục authority | [`assets/PGM-04_library.png`](assets/PGM-04_library.png), được tái xác nhận bởi `AUTH-UX-PROG-2026-09-08-01` |
+| Quan hệ asset | PNG khóa composition chính; HTML khóa trạng thái, breakpoint và interaction chi tiết. Hai nguồn bổ sung nhau, không nguồn nào là runtime evidence. |
 
 ## 0. Vì sao spec này tồn tại dưới dạng render được
 
@@ -18,7 +19,8 @@ tự nghĩ ra bảy trạng thái ấy rồi tới lúc review mới biết mìn
 
 Bản HTML kèm theo **diff được và gate được**: nó dùng đúng tên token của sản
 phẩm, nên khi bảng màu đổi thì spec đổi theo, và khi spec đổi thì `git diff` chỉ
-ra đúng dòng nào.
+ra đúng dòng nào. HTML không được dùng để thay composition của PNG do chủ sở hữu
+cung cấp; nếu có xung đột phải ghi change request và xin quyết định mới.
 
 ## 1. Bố cục và breakpoint
 

@@ -1,7 +1,8 @@
 # PGM-06 — Runtime & Diagnostics — FE Handoff
 
-**Route:** `/eng/programming/runtime`  
-**Reference:** `assets/PGM-06_runtime.png`  
+**Route:** `/eng/programming/runtime`<br>
+**Authority trực quan:** [`assets/PGM-06_runtime.png`](assets/PGM-06_runtime.png) theo `AUTH-UX-PROG-2026-09-08-01`<br>
+**Giới hạn bằng chứng:** Target visual; không phải As-Built/runtime evidence.<br>
 **Primary goal:** Show only what is actually executing on the controller and provide high-quality monitoring, trace, diagnostics and version/LKG context.
 
 ## 1. Workspace modes

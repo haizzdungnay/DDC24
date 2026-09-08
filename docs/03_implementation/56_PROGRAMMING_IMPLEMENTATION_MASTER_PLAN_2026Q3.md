@@ -276,7 +276,7 @@ evidence · owner · sequence · exit criteria — đúng cấu trúc Lệnh CTO
 | Evidence | Chưa có |
 | Owner | UX + FE |
 | Sequence | Phase 3, độc lập WP-10 |
-| Exit criteria | Layout khớp asset `PGM-02_DESIGN_WORKSPACE_DESKTOP.svg`, Inspector là cột riêng không nằm dưới editor |
+| Exit criteria | Layout khớp asset `KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_annotated_reference.png`; không phục hồi bố cục từ bộ SVG Programming đã loại |
 
 ### WP-12 — RETAIN Reset — **NOT STARTED**
 
@@ -351,5 +351,6 @@ DoD đầy đủ 15 mục nằm ở Lệnh CTO/Owner §XII, không lặp lại �
 
 | Revision | Ngày | Nội dung |
 |---|---|---|
+| 1.2 | 2026-09-08 | Sửa tham chiếu visual PGM-02 lịch sử sang PNG trong gói FE Handoff theo `AUTH-UX-PROG-2026-09-08-01`; plan vẫn Superseded và không quản task mới. |
 | 1.0 | 2026-08-15 | Tạo mới theo Lệnh CTO/Owner. Phase 0 + Phase 1 (WP-01..04) DONE trong cùng phiên; Phase 2-5 lập kế hoạch đầy đủ, NOT STARTED, có điều kiện mở rõ ràng theo Document Readiness Matrix. |
 | 1.1 | 2026-08-20 | Đồng bộ header/phase với Tracker: WP-01..08, WP-10..12 DONE; WP-09 BLOCKED; WP-13 DESIGN; multi-Program BLOCKED. Gắn Plan 59 làm candidate doc→code/release và đánh dấu §4 là task card lịch sử, không phải status authority. |

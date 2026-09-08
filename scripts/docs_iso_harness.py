@@ -54,7 +54,7 @@ EXPECT = {
     "uc_prog": 17,
     "uj_prog": 8,
     "ux_req": 29,
-    "svg_assets": 15,
+    "programming_visual_assets": 10,
 }
 
 BASELINE = [
@@ -250,10 +250,16 @@ def main():
     print(f"UJ-PROG trong Product Spec: {len(sorted(set(uj_re.findall(prod))))}")
     print(f"UJ-PROG trong Trace: {len(sorted(set(uj_re.findall(trace_txt))))}")
 
-    # SVG assets
+    # Asset trực quan Programming theo gói FE Handoff được chủ sở hữu duyệt.
     import glob as _g
-    svgs = _g.glob(os.path.join(REPO, "docs/04_uiux/assets/programming/*.svg"))
-    print(f"SVG asset: {len(svgs)}")
+    handoff_assets_dir = os.path.join(
+        REPO, "docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets"
+    )
+    programming_visual_assets = [
+        path for path in _g.glob(os.path.join(handoff_assets_dir, "*"))
+        if os.path.splitext(path)[1].lower() in {".png", ".html"}
+    ]
+    print(f"Asset trực quan Programming: {len(programming_visual_assets)}")
 
     uxr_re = re.compile(r"`?(UX-REQ-\d{3})`?")
     uxr = sorted(set(uxr_re.findall(ux_txt)))
@@ -336,7 +342,7 @@ def main():
         "uc_prog": len(uc),
         "uj_prog": len(sorted(set(uj_re.findall(ux_txt)))),
         "ux_req": len(uxr),
-        "svg_assets": len(svgs),
+        "programming_visual_assets": len(programming_visual_assets),
     }
 
     # Vi phạm bắt buộc: các phép kiểm phải bằng 0 hoặc đủ file baseline.

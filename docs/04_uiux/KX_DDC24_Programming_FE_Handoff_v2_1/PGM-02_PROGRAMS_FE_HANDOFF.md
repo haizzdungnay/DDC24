@@ -1,7 +1,11 @@
 # PGM-02 — Programs (ST/FBD) — FE Handoff
 
-**Route:** `/eng/programming/programs`  
-**Reference:** `assets/PGM-02_programs.png`  
+> **REFERENCE LỊCH SỬ.** Bản hiện hành là
+> [`PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md`](PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md)
+> cùng bốn PNG PGM-02 trong manifest. Không dùng file này làm authority riêng.
+
+**Route:** `/eng/programming/programs`<br>
+**Authority trực quan:** [`assets/PGM-02_programs.png`](assets/PGM-02_programs.png) theo `AUTH-UX-PROG-2026-09-08-01`<br>
 **Primary goal:** Production-grade engineering workspace for creating/editing Programs, ST/FBD logic, diagnostics, references and online monitoring.
 
 ## 1. Mandatory desktop layout

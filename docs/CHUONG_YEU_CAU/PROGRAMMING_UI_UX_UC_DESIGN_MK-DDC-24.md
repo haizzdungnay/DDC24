@@ -6,8 +6,8 @@
 | Product | MK-DDC-24 |
 | Module | Engineering → Programming |
 | Design family | PA3 — Adaptive Hybrid Control Workspace |
-| Revision | **v2.2 — đóng phản biện vòng 2 ngày 2026-08-09** |
-| Status | **REFERENCE — Proposal v2.2; phần IA và use case đã `SUPERSEDED` bởi `UX-WEB-PROG-001`** |
+| Revision | **v2.3 — cập nhật authority trực quan ngày 2026-09-08** |
+| Status | **REFERENCE — requirement/use-case companion; composition PGM-01..06 theo gói FE Handoff** |
 | Date | 2026-08-09 |
 | Companion document | `PROGRAMMING_PRODUCT_SPEC_MK-DDC-24.md` v2.2 |
 | Primary principle | **DDC/BACS task workflow trên UI; compiler/version/safety complexity nằm dưới hệ thống** |
@@ -18,6 +18,14 @@ amendment v2.2; không supersede Product/Requirement/Verification Active, không
 tạo API authority và không chứng minh implementation. Chỉ được nâng thành Design
 baseline sau khi `OD-PROG-015` cùng các quyết định type/task/FBD/RETAIN/monitor/
 cutover liên quan được đóng và traceability được cập nhật.
+
+> **Quyết định chủ sở hữu 2026-09-08 — `AUTH-UX-PROG-2026-09-08-01`.** Gói
+> [`KX_DDC24_Programming_FE_Handoff_v2_1`](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md)
+> là authority cho bố cục, thứ bậc thông tin và interaction target của
+> PGM-01..06. [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) giữ
+> requirement, safety, contract, state, RBAC và acceptance companion. Nội dung
+> lịch sử bên dưới không được dùng phục hồi bộ SVG Programming đã loại hoặc ghi
+> đè các PNG/HTML trong gói handoff. Asset không phải bằng chứng As-Built/runtime.
 
 > **Ghi chú kiểm soát 2026-08-09 — IA trong tài liệu này đã bị đề xuất thay
 > thế.** Tài liệu mô tả **sáu** navigation entry và 17 use case. Ngày
@@ -34,13 +42,11 @@ cutover liên quan được đóng và traceability được cập nhật.
 > thì IA sáu trang trong tài liệu này là phương án quay lui.
 >
 > **Phạm vi còn normative của tài liệu này.** Để tránh hai UX authority song
-> song, các mục sau **không còn normative** kể từ 2026-08-09 và chỉ giữ giá trị
-> tham chiếu/rollback: §4 (IA sáu trang), §7–§12 (sáu navigation entry), §21
-> (catalog 17 use case) và `UX-REQ-002` ở §44. Bản normative tương ứng nằm ở
-> [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) §3, §5, §6 và
-> §21.1. Các mục còn lại — nguyên tắc UX §3, mô hình dữ liệu/trạng thái §25–§26,
-> accessibility §30, responsive §31, copy VI/EN §37.1 — vẫn là đầu vào hợp lệ và
-> đã được hợp nhất vào hồ sơ thiết kế.
+> song, bố cục chi tiết trong tài liệu này chỉ là lịch sử/reference. Bản
+> composition normative nằm trong gói FE Handoff; requirement/state/safety
+> normative nằm ở `UX-WEB-PROG-001`. Các mục nguyên tắc UX §3, mô hình dữ
+> liệu/trạng thái §25–§26, accessibility §30, responsive §31 và copy VI/EN
+> §37.1 vẫn là đầu vào hợp lệ nếu không xung đột hai authority trên.
 
 ## Mục lục
 
@@ -2061,6 +2067,7 @@ model, IA và interaction; không lặp lại compiler/runtime architecture ở 
 
 | Phiên bản | Ngày | Nội dung | Trạng thái |
 |---|---|---|---|
+| v2.3 | 2026-09-08 | Gắn `AUTH-UX-PROG-2026-09-08-01`: gói FE Handoff là authority trực quan PGM-01..06; UX-WEB giữ requirement/safety/contract; cấm dùng nội dung lịch sử phục hồi bộ SVG Programming sai. | Reference companion; không phải As-Built/runtime evidence. |
 | v2.0 | 2026-08-08 | Bản DDC-first/BACS Engineering ban đầu. | Draft; bị phản biện, không baseline. |
 | v2.1 | 2026-08-09 | Đồng bộ Product proposal v2.1; sửa IA/UC, core connectivity, arbitration, i18n, accessibility, concurrency, cutover và replacement. | Proposal / In Review. |
 | v2.2 | 2026-08-09 | Đóng R2-01..14; thêm `UX-REQ-001..024`, chuyển scenario sang catalog controlled duy nhất, xóa artefact scope cũ, cắt trùng authority và sửa R3-01. | Proposal / In Review; chưa phê duyệt. |
@@ -2082,4 +2089,4 @@ còn RED hoặc bất kỳ UX requirement/Release Critical UC nào chưa có evi
 
 ---
 
-**END OF UI / UX / USE CASE DESIGN SPECIFICATION PROPOSAL — v2.2**
+**END OF UI / UX / USE CASE DESIGN SPECIFICATION — v2.3 REFERENCE COMPANION**

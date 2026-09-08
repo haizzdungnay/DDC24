@@ -1,44 +1,47 @@
 {
-  "package": "KX-DDC24 Programming FE Handoff v2.2",
-  "version": "2.3",
-  "status": "TARGET_NOT_AS_BUILT",
+  "package": "KX-DDC24 Programming FE Handoff v2.3",
+  "version": "2.4",
+  "status": "TARGET_VISUAL_AUTHORITY_NOT_AS_BUILT",
+  "visualAuthorityDecision": "AUTH-UX-PROG-2026-09-08-01",
   "formalDetailedDesign": "../../02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md",
   "pages": [
     {
       "id": "PGM-01",
       "doc": "PGM-01_OVERVIEW_FE_HANDOFF.md",
-      "asset": "assets/PGM-01_overview.png"
+      "asset": "assets/PGM-01_overview.png",
+      "assetAuthority": true
     },
     {
       "id": "PGM-02",
       "doc": "PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md",
-      "asset": "assets/PGM-02_ST_FBD_combined_reference.svg",
+      "asset": "assets/PGM-02_programs.png",
+      "assetAuthority": true,
       "supplement": "PGM-02_QUICK_LIBRARY_SIM_LIVE_SPEC_v2_2.md",
       "variants": [
         {
           "id": "PGM-02A",
           "language": "ST",
           "doc": "PGM-02A_ST_EDITOR_FE_HANDOFF_v2_2.md",
-          "asset": "assets/PGM-02A_ST_editor_reference.svg",
-          "renderedReference": "assets/PGM-02A_ST_editor_reference.png"
+          "asset": "assets/PGM-02A_ST_editor_reference.png",
+          "assetAuthority": true
         },
         {
           "id": "PGM-02B",
           "language": "FBD",
           "doc": "PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md",
-          "asset": "assets/PGM-02B_FBD_editor_reference.svg",
-          "renderedReference": "assets/PGM-02B_FBD_editor_reference.png"
+          "asset": "assets/PGM-02B_FBD_editor_reference.png",
+          "assetAuthority": true
         }
       ],
-      "annotatedOverview": "assets/PGM-02_ST_FBD_annotated_reference.png"
+      "annotatedOverview": "assets/PGM-02_ST_FBD_annotated_reference.png",
+      "annotatedOverviewAuthority": true
     },
     {
       "id": "PGM-03",
       "doc": "PGM-03_MAPPING_FE_HANDOFF.md",
-      "asset": "../assets/programming/PGM-03_MAPPING_SIGNALS_DESKTOP.svg",
+      "asset": "assets/PGM-03_mapping.png",
       "assetAuthority": true,
-      "legacyAsset": "assets/PGM-03_mapping.png",
-      "legacyAssetAuthority": false
+      "layout": "two-upper-panes-plus-full-width-assigned-mappings"
     },
     {
       "id": "PGM-04",
@@ -47,18 +50,21 @@
       "spec": "PGM-04_VISUAL_SPEC_v1.md",
       "render": "assets/pgm04-visual-spec.html",
       "renderSha256": "9a839996ee01205d5c8a95ab56c15fcc2626973b005f5fdf82d291d5c0512563",
-      "assetAuthority": false
+      "assetAuthority": true,
+      "renderAuthority": true
     },
     {
       "id": "PGM-05",
       "doc": "PGM-05_COMMISSION_FE_HANDOFF.md",
-      "asset": "assets/PGM-05_commission.png"
+      "asset": "assets/PGM-05_commission.png",
+      "assetAuthority": true
     },
     {
       "id": "PGM-06",
       "doc": "PGM-06_RUNTIME_FE_HANDOFF.md",
-      "asset": "assets/PGM-06_runtime.png"
+      "asset": "assets/PGM-06_runtime.png",
+      "assetAuthority": true
     }
   ],
-  "assetNote": "Ba ảnh render PGM-02 (ST/FBD/annotated) do chủ sở hữu cung cấp 2026-08-27 là THAM CHIẾU BỐ CỤC VÀ PHẠM VI, không phải chuẩn pixel (README §5.10) và không phải nguồn dữ liệu: mọi nội dung Quick Library phải sinh từ pou_library_registry_v1.json."
+  "assetNote": "Các PNG/HTML trong thư mục assets là authority cho bố cục, thứ bậc thông tin và interaction target theo quyết định của chủ sở hữu ngày 2026-09-08; không phải chuẩn pixel, nguồn dữ liệu hay runtime evidence. Bộ SVG Programming song song đã bị loại. Mọi nội dung Quick Library vẫn phải sinh từ pou_library_registry_v1.json."
 }
