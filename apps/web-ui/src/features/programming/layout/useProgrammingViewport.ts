@@ -86,3 +86,54 @@ export function useProgrammingInspectorMode(): ProgrammingInspectorMode {
 
   return mode
 }
+
+export type FbdBreakpoint = 'xl' | 'lg' | 'md' | 'sm'
+export type FbdDockMode = 'dock-4col' | 'drawer' | 'overlay'
+
+export const FBD_BREAKPOINT_XL_MIN_WIDTH_PX = 1440
+export const FBD_BREAKPOINT_LG_MIN_WIDTH_PX = 1024
+export const FBD_BREAKPOINT_MD_MIN_WIDTH_PX = 768
+
+const FBD_XL_QUERY = `(min-width: ${FBD_BREAKPOINT_XL_MIN_WIDTH_PX}px)`
+const FBD_LG_QUERY = `(min-width: ${FBD_BREAKPOINT_LG_MIN_WIDTH_PX}px)`
+const FBD_MD_QUERY = `(min-width: ${FBD_BREAKPOINT_MD_MIN_WIDTH_PX}px)`
+
+function readFbdViewport(): { breakpoint: FbdBreakpoint; dockMode: FbdDockMode } {
+  if (typeof window === 'undefined') return { breakpoint: 'xl', dockMode: 'dock-4col' }
+  if (typeof window.matchMedia === 'function') {
+    if (window.matchMedia(FBD_XL_QUERY).matches) return { breakpoint: 'xl', dockMode: 'dock-4col' }
+    if (window.matchMedia(FBD_LG_QUERY).matches) return { breakpoint: 'lg', dockMode: 'drawer' }
+    if (window.matchMedia(FBD_MD_QUERY).matches) return { breakpoint: 'md', dockMode: 'overlay' }
+    return { breakpoint: 'sm', dockMode: 'overlay' }
+  }
+  const width = window.innerWidth
+  if (width >= FBD_BREAKPOINT_XL_MIN_WIDTH_PX) return { breakpoint: 'xl', dockMode: 'dock-4col' }
+  if (width >= FBD_BREAKPOINT_LG_MIN_WIDTH_PX) return { breakpoint: 'lg', dockMode: 'drawer' }
+  if (width >= FBD_BREAKPOINT_MD_MIN_WIDTH_PX) return { breakpoint: 'md', dockMode: 'overlay' }
+  return { breakpoint: 'sm', dockMode: 'overlay' }
+}
+
+export function useFbdViewport(): { breakpoint: FbdBreakpoint; dockMode: FbdDockMode } {
+  const [viewport, setViewport] = useState<{ breakpoint: FbdBreakpoint; dockMode: FbdDockMode }>(readFbdViewport)
+
+  useEffect(() => {
+    const sync = () => setViewport(readFbdViewport())
+    sync()
+    if (typeof window.matchMedia === 'function') {
+      const queries = [
+        window.matchMedia(FBD_XL_QUERY),
+        window.matchMedia(FBD_LG_QUERY),
+        window.matchMedia(FBD_MD_QUERY),
+      ]
+      for (const query of queries) query.addEventListener?.('change', sync)
+      return () => {
+        for (const query of queries) query.removeEventListener?.('change', sync)
+      }
+    }
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [])
+
+  return viewport
+}
+

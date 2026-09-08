@@ -64,6 +64,7 @@ export interface StructuredFbdEditorProps {
   /** `T59-804`: Quick Library dùng chung đọc catalog theo Project. Vắng thì dock
    *  vẫn mở được và chỉ thấy SYSTEM entry. */
   projectId?: string
+  marqueeMode?: boolean
 }
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
@@ -129,7 +130,7 @@ function ignoresGraphCommand(target: EventTarget | null, command: FbdKeyboardCom
   )
 }
 
-export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES, projectId, onSelectionChange, onNodeEditorTargetChange, focusSelection }: StructuredFbdEditorProps) {
+export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterfaces = EMPTY_USER_POU_INTERFACES, projectId, onSelectionChange, onNodeEditorTargetChange, focusSelection, marqueeMode = false }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
@@ -412,6 +413,10 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
       onKeyDown={(event) => {
         const command = resolveFbdKeyboardCommand(event)
         if (!command || ignoresGraphCommand(event.target, command)) return
+        if (!canEdit && (command === 'ADD_BLOCK' || command === 'DELETE_SELECTION' || command === 'ADD_NETWORK' || command === 'BEGIN_OR_COMMIT_CONNECTION' || command === 'MOVE_NODE_UP' || command === 'MOVE_NODE_DOWN' || command === 'UNDO' || command === 'REDO')) {
+          event.preventDefault()
+          return
+        }
         const insertStartedFromToolbar =
           command === 'ADD_BLOCK' &&
           event.target instanceof HTMLElement &&
@@ -692,6 +697,7 @@ export function StructuredFbdEditor({ document, canEdit, onChange, userPouInterf
               canEdit={canEdit}
               dispatch={dispatch}
               pick={pick}
+              marqueeMode={marqueeMode}
               registerPort={(portId, element) => {
                 if (element) portButtons.current.set(portId, element)
                 else portButtons.current.delete(portId)

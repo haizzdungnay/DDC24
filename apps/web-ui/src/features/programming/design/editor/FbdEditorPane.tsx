@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { ClipboardCheck, GitCompare, Save } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { BoxSelect, ClipboardCheck, GitCompare, Save } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
@@ -30,6 +30,7 @@ export interface FbdEditorPaneProps {
   source: string
   canEdit: boolean
   saving: boolean
+  loading?: boolean
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   userPouInterfaces: readonly UserPouInterface[]
@@ -49,6 +50,7 @@ export function FbdEditorPane({
   source,
   canEdit,
   saving,
+  loading = false,
   onChange,
   onSave,
   userPouInterfaces,
@@ -62,49 +64,78 @@ export function FbdEditorPane({
   compareDisabledReason,
 }: FbdEditorPaneProps) {
   const { pick } = useI18n()
+  const [marqueeMode, setMarqueeMode] = useState(false)
   const committedJson = useMemo(() => canonicalFbdJson(parseFbdDocument(program.document, program.name)), [program.document, program.name])
   const local = useMemo(() => parseFbdDocument(source, program.name), [program.name, source])
   const localJson = useMemo(() => canonicalFbdJson(local), [local])
   const dirty = localJson !== committedJson
 
+  if (loading) {
+    return (
+      <div data-testid="fbd-editor-skeleton" className="animate-pulse space-y-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
+        <div className="h-8 w-1/3 rounded bg-[var(--c-border)]" />
+        <div data-testid="fbd-canvas-skeleton" className="h-96 w-full rounded bg-[var(--c-surface-2)]" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-2">
+      {!canEdit && (
+        <div
+          data-testid="fbd-readonly-banner"
+          className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 py-2 text-xs text-[var(--c-text-dim)]"
+        >
+          {pick('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ', 'Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ')}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-[var(--c-text)]">{program.name}</h3>
-        {canEdit && (
+        <div className="flex items-center gap-2">
           <Button
             size="sm"
-            icon={<Save className="h-4 w-4" aria-hidden="true" />}
-            loading={saving}
-            disabled={!dirty}
-            onClick={() => void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'FBD', source: localJson }])}
+            variant="ghost"
+            aria-pressed={marqueeMode}
+            icon={<BoxSelect className="h-4 w-4" aria-hidden="true" />}
+            onClick={() => setMarqueeMode((prev) => !prev)}
           >
-            {pick('Lưu', 'Save')}
+            {pick('Chọn vùng', 'Marquee')}
           </Button>
-        )}
-        {/* `Kiểm tra`/`So sánh` là hành động cấp GÓI nên chúng có mặt ở cả hai
-            ngôn ngữ — bỏ chúng khỏi FBD sẽ làm cùng một việc chỉ làm được khi
-            đang mở một POU ST. */}
-        <Button
-          size="sm"
-          variant="secondary"
-          icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
-          disabled={!onRunCheck || Boolean(checkDisabledReason)}
-          title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
-          onClick={() => onRunCheck?.()}
-        >
-          {pick('Kiểm tra', 'Check')}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<GitCompare className="h-4 w-4" aria-hidden="true" />}
-          disabled={!onOpenCompare || Boolean(compareDisabledReason)}
-          title={compareDisabledReason ?? pick('So sánh với bản đang vận hành', 'Compare with the running revision')}
-          onClick={() => onOpenCompare?.()}
-        >
-          {pick('So sánh', 'Compare')}
-        </Button>
+          {canEdit && (
+            <Button
+              size="sm"
+              icon={<Save className="h-4 w-4" aria-hidden="true" />}
+              loading={saving}
+              disabled={!dirty}
+              onClick={() => void onSave([{ op: 'replaceProgramSource', programId: program.programId, language: 'FBD', source: localJson }])}
+            >
+              {pick('Lưu', 'Save')}
+            </Button>
+          )}
+          {/* `Kiểm tra`/`So sánh` là hành động cấp GÓI nên chúng có mặt ở cả hai
+              ngôn ngữ — bỏ chúng khỏi FBD sẽ làm cùng một việc chỉ làm được khi
+              đang mở một POU ST. */}
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+            disabled={!onRunCheck || Boolean(checkDisabledReason)}
+            title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
+            onClick={() => onRunCheck?.()}
+          >
+            {pick('Kiểm tra', 'Check')}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<GitCompare className="h-4 w-4" aria-hidden="true" />}
+            disabled={!onOpenCompare || Boolean(compareDisabledReason)}
+            title={compareDisabledReason ?? pick('So sánh với bản đang vận hành', 'Compare with the running revision')}
+            onClick={() => onOpenCompare?.()}
+          >
+            {pick('So sánh', 'Compare')}
+          </Button>
+        </div>
       </div>
       <StructuredFbdEditor
         document={local}
@@ -115,6 +146,7 @@ export function FbdEditorPane({
         onSelectionChange={onSelectionChange}
         onNodeEditorTargetChange={onNodeEditorTargetChange}
         focusSelection={focusSelection}
+        marqueeMode={marqueeMode}
       />
       <EditorStatusBar
         fields={fbdStatusFields({

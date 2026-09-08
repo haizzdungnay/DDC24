@@ -67,6 +67,7 @@ import { SelectionQuickActions } from './SelectionQuickActions'
 import { useProgrammingActionAllowed } from '../../api/authorization'
 import { buildCommandPaletteEntries, toggleComment, wrapInBlock, type PaletteEntry, type ProgramSymbolLike } from './quickControl'
 import { collectStInterfaceVariables } from './stInterfaceVariables'
+import { useFbdViewport } from '../../layout/useProgrammingViewport'
 
 
 /** Nguồn chân lý DUY NHẤT cho số đo ST editor — gutter số dòng, overlay tô
@@ -336,6 +337,8 @@ export function ProgramsTab({
   const { pick } = useI18n()
   const canEdit = useProgrammingActionAllowed('editDraft') && !forceReadOnly
   const selected = document.programs.find((program) => program.programId === selectedProgramId)
+  const fbdViewport = useFbdViewport()
+  const isFbd = selected?.language === 'FBD'
 
   /* `T59-818` — ngữ cảnh cho Inspector dùng chung. Hai nguồn được NÂNG lên đây
    * thay vì để Inspector tự đọc state của editor: một Inspector dùng chung mà
@@ -671,6 +674,11 @@ export function ProgramsTab({
        workbench dưới đáy đi theo. Dưới `lg` giữ nguyên dòng chảy dọc: màn hẹp
        không có ngân sách chiều cao để chia. */
     <div
+      {...(isFbd ? {
+        'data-testid': 'fbd-shell-layout',
+        'data-breakpoint': fbdViewport.breakpoint,
+        'data-dock-mode': fbdViewport.dockMode,
+      } : {})}
       className={`grid gap-4 md:grid-cols-[280px_1fr] lg:h-full lg:min-h-0 ${SLOT_GRID_CLASS[slotKey(slots)]}`}
       onKeyDown={(event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
@@ -785,7 +793,10 @@ export function ProgramsTab({
           trong DOM). Ở đây chỉ còn thứ thuộc về Project chứ không thuộc về cây:
           nhãn chức năng và lối vào Bảng lệnh nhanh. */}
       {slots.left ? (
-      <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:min-h-0 lg:overflow-y-auto">
+      <div
+        data-testid={isFbd ? 'fbd-dock-explorer' : undefined}
+        className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:min-h-0 lg:overflow-y-auto"
+      >
         <div className="mb-2 flex justify-end">
           <button
             type="button"
@@ -817,7 +828,10 @@ export function ProgramsTab({
         </div>
       </div>
       ) : (
-        <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-1">
+        <div
+          data-testid={isFbd ? 'fbd-dock-explorer' : undefined}
+          className="rounded-[var(--radius)] border border-[var(--c-border)] p-1"
+        >
           <button
             type="button"
             className="min-h-11 w-full rounded px-1 py-2 text-[10px] leading-tight text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
@@ -836,7 +850,7 @@ export function ProgramsTab({
           trên tủ điều khiển đẩy nút thao tác ra ngoài vùng chạm, mà người vận
           hành không có chuột để cuộn ngang. */}
       <div
-        data-testid="programming-editor-column"
+        data-testid={isFbd ? 'fbd-dock-canvas' : 'programming-editor-column'}
         data-maximized={maximized ? 'true' : 'false'}
         className={maximized
           ? 'fixed inset-0 z-40 flex min-w-0 flex-col gap-2 bg-[var(--c-bg)] p-3'
@@ -1007,7 +1021,12 @@ export function ProgramsTab({
         )}
         </div>
       </div>
-      <aside className="min-w-0 lg:min-h-0 lg:overflow-y-auto" aria-label={pick('Thuộc tính', 'Inspector')}>
+      <aside
+        data-testid={isFbd ? 'fbd-dock-inspector' : undefined}
+        className="min-w-0 lg:min-h-0 lg:overflow-y-auto"
+        aria-label={pick('Thuộc tính', 'Inspector')}
+      >
+        {isFbd && <div data-testid="fbd-dock-library" aria-hidden="true" className="hidden" />}
         <div className="mb-2 flex justify-end">
           <button
             type="button"
