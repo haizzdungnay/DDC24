@@ -1271,23 +1271,27 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'searchProgrammingLibraries') {
-        return Promise.resolve({
-          items: [{
-            scope: 'SYSTEM', libraryRevisionId: LIBRARY_REVISION, libraryVersion: 'rev-a.1',
-            libraryState: 'PUBLISHED', entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON',
-            featureState: 'AVAILABLE', contentSha256: 'a'.repeat(64),
-            signature: {
-              dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [], category: 'timer',
-              labelVi: 'Trễ bật', labelEn: 'On delay', allowedTypes: [],
-              ports: [
-                { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
-                { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
-                { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
-              ],
-            },
-            dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16,
-            ...entryOverrides,
-          }]
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              items: [{
+                scope: 'SYSTEM', libraryRevisionId: LIBRARY_REVISION, libraryVersion: 'rev-a.1',
+                libraryState: 'PUBLISHED', entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON',
+                featureState: 'AVAILABLE', contentSha256: 'a'.repeat(64),
+                signature: {
+                  dispatch: 'FB_TYPE', polymorphic: false, typedPortNames: [], category: 'timer',
+                  labelVi: 'Trễ bật', labelEn: 'On delay', allowedTypes: [],
+                  ports: [
+                    { name: 'IN', direction: 'INPUT', dataType: 'BOOL' },
+                    { name: 'PT', direction: 'INPUT', dataType: 'TIME' },
+                    { name: 'Q', direction: 'OUTPUT', dataType: 'BOOL' },
+                  ],
+                },
+                dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16,
+                ...entryOverrides,
+              }]
+            })
+          }, 0)
         })
       }
       throw new Error(`unexpected operation ${operationId}`)
