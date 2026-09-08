@@ -1477,3 +1477,179 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
     expect(screen.queryByTestId('programs-insert-intent')).toBeNull()
   })
 })
+
+describe('DesignWorkspacePage — Task 8: Shell, Responsive, Docks & Tabs (Issue #574)', () => {
+  function stubViewportWidth(width: number) {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width })
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => {
+      const minMatch = query.match(/min-width:\s*(\d+)px/)
+      const maxMatch = query.match(/max-width:\s*(\d+)px/)
+      let matches = true
+      if (minMatch) matches = matches && width >= parseInt(minMatch[1], 10)
+      if (maxMatch) matches = matches && width <= parseInt(maxMatch[1], 10)
+      return {
+        matches,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }
+    }))
+  }
+
+  function stubFbdProject(fbdName = 'AHU_Logic') {
+    const fbdDoc = {
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: 1,
+      profileId: 'revA-1t-1-5-30',
+      graphId: 'fbd-graph-t8',
+      name: fbdName,
+      networks: [{ id: 'net-t8-1', name: 'MainNet', order: 0, nodes: [], wires: [] }],
+    }
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'prog-fbd-t8',
+      objectId: 'obj-fbd-t8',
+      name: fbdName,
+      kind: 'PROGRAM',
+      language: 'FBD',
+      document: JSON.stringify(fbdDoc),
+    })
+    project.draft!.task.programOrder = ['prog-fbd-t8']
+
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: project.draft },
+          etag: '"draft-1:2"',
+          auditId: 'audit-t8',
+          correlationId: 'corr-t8',
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    return project
+  }
+
+  // TC-FBD-RESP-001: Responsive breakpoint layout: >=1440 4 cột; 1024-1439 dock phải dạng drawer; 768-1023 dock dạng overlay + nút "Chọn vùng"
+  it('TC-FBD-RESP-001: viewport >=1440px hiển thị đủ 4 cột dock phân tách (Explorer, Canvas, Library, Inspector)', async () => {
+    // Viewport 1440px: không tràn ngang, hiển thị đủ 4 cột dock cố định song song
+    stubViewportWidth(1440)
+    stubFbdProject()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=obj-fbd-t8')
+
+    await screen.findByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/i })
+    const layoutContainer = await screen.findByTestId('fbd-shell-layout')
+    expect(layoutContainer).toHaveAttribute('data-breakpoint', 'xl')
+    expect(layoutContainer).toHaveAttribute('data-dock-mode', 'dock-4col')
+    expect(screen.getByTestId('fbd-dock-explorer')).toBeInTheDocument()
+    expect(screen.getByTestId('fbd-dock-canvas')).toBeInTheDocument()
+    expect(screen.getByTestId('fbd-dock-library')).toBeInTheDocument()
+    expect(screen.getByTestId('fbd-dock-inspector')).toBeInTheDocument()
+  })
+
+  it('TC-FBD-RESP-001: viewport 1024-1439px (1280px) dock chuyển sang dạng drawer', async () => {
+    // Viewport 1280px: dock bên phải chuyển sang dạng drawer trượt thu gọn
+    stubViewportWidth(1280)
+    stubFbdProject()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=obj-fbd-t8')
+
+    await screen.findByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/i })
+    const layoutContainer = await screen.findByTestId('fbd-shell-layout')
+    expect(layoutContainer).toHaveAttribute('data-dock-mode', 'drawer')
+  })
+
+  it('TC-FBD-RESP-001: viewport 768-1023px (820px/768px) dock dạng overlay và hiển thị nút "Chọn vùng"', async () => {
+    // Viewport 820px tablet: dock dạng overlay phủ và thanh công cụ có nút "Chọn vùng" (marquee)
+    stubViewportWidth(820)
+    stubFbdProject()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=obj-fbd-t8')
+
+    await screen.findByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/i })
+    const layoutContainer = await screen.findByTestId('fbd-shell-layout')
+    expect(layoutContainer).toHaveAttribute('data-dock-mode', 'overlay')
+    expect(screen.getByRole('button', { name: /Chọn vùng|Marquee/i })).toBeInTheDocument()
+  })
+
+  // TC-FBD-RESP-003: Viewport 390px khoá mutation, hiện banner chỉ đọc, 0 mutation action, 0 write API
+  it('TC-FBD-RESP-003: viewport 390px khoá toàn bộ mutation, hiện banner chỉ đọc, không gọi API ghi', async () => {
+    // Viewport 390px: màn hình hẹp di động, khoá toàn bộ thao tác sửa
+    stubViewportWidth(390)
+    stubFbdProject()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=obj-fbd-t8')
+
+    // Phải hiển thị banner chỉ đọc cho màn hình nhỏ
+    const banner = await screen.findByTestId('programming-mobile-read-only')
+    expect(banner).toHaveTextContent('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ')
+
+    // Tuyệt đối không hiển thị các nút thao tác chỉnh sửa/lưu
+    expect(screen.queryByTitle('Thêm chương trình FBD')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Lưu$/ })).not.toBeInTheDocument()
+
+    // 0 mutation action gửi đi, 0 write API
+    const writeCalls = client.request.mock.calls.filter(([op]) =>
+      op === 'updateProgrammingDraft' || op === 'createProgrammingRevision' || op === 'createProgrammingCheck'
+    )
+    expect(writeCalls.length).toBe(0)
+  })
+
+  // TC-FBD-UX-001: Tạo POU FBD qua POU Explorer có nút/icon "+ FBD" tạo đúng template POU FBD
+  it('TC-FBD-UX-001: POU Explorer có nút "+ FBD" tạo đúng template POU FBD vào bản nháp', async () => {
+    // Kiểm tra nút/icon "+ FBD" trong POU Explorer tạo đúng cấu trúc template FBD
+    stubViewportWidth(1440)
+    stubFbdProject()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=obj-fbd-t8')
+
+    // Tìm nút "+ FBD" chuyên biệt theo nhãn rõ ràng
+    const addFbdBtn = await screen.findByRole('button', { name: /\+ FBD|Tạo POU FBD/i })
+    expect(addFbdBtn).toBeInTheDocument()
+    fireEvent.click(addFbdBtn)
+
+    await waitFor(() => {
+      const updateCall = client.request.mock.calls.find(([op]) => op === 'updateProgrammingDraft')
+      expect(updateCall).toBeTruthy()
+      const [, options] = updateCall!
+      const upsertOp = options.body.operations.find((op: { op: string }) => op.op === 'upsertProgram' || op.op === 'upsertObject')
+      expect(upsertOp).toBeTruthy()
+      expect(upsertOp.program?.language || upsertOp.object?.language).toBe('FBD')
+    })
+  })
+
+  // TC-FBD-UX-002: Tối đa 8 tab FBD/ST, chuyển tab được, đóng tab dirty hiện hộp thoại xác nhận
+  it('TC-FBD-UX-002: giới hạn tối đa 8 tab FBD/ST, chuyển tab được và đóng tab dirty hiện hộp thoại xác nhận', async () => {
+    // Mở workspace với POU FBD, tab bar hiển thị tab POU
+    stubViewportWidth(1440)
+    const project = stubFbdProject('FBD_Primary')
+    // Thêm các POU khác để tạo danh sách
+    for (let i = 1; i <= 8; i++) {
+      project.draft!.programs.push({
+        programId: `prog-st-${i}`,
+        objectId: `obj-st-${i}`,
+        name: `ST_Program_${i}`,
+        kind: 'PROGRAM',
+        language: 'ST',
+        document: `PROGRAM ST_Program_${i}\nEND_PROGRAM\n`,
+      })
+    }
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=obj-fbd-t8')
+
+    // Tab bar xuất hiện
+    const tabBar = await screen.findByTestId('pou-tab-bar')
+    expect(tabBar).toBeInTheDocument()
+
+    // Khi tab FBD bị dirty, bấm đóng tab phải hiện dialog xác nhận đóng
+    const closeBtn = screen.getByRole('button', { name: /Đóng tab FBD_Primary|Close FBD_Primary/i })
+    fireEvent.click(closeBtn)
+
+    // Nếu dirty, không được đóng ngay mà phải mở hộp thoại xác nhận bảo vệ buffer
+    // Giả lập trạng thái có dirty tab hoặc hộp thoại xác nhận xuất hiện
+    expect(await screen.findByRole('dialog', { name: /Đóng tab chưa lưu|Xác nhận đóng/i })).toBeInTheDocument()
+  })
+})

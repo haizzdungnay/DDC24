@@ -8,6 +8,28 @@
 
 ## [Unreleased]
 
+### Added — Task 8 Công đoạn A: bộ test pha đỏ cho Shell, Responsive, Docks & Tabs FBD Editor (Issue #574) (2026-09-08)
+
+- **Phạm vi:** Thêm 11 test tự động phủ 8 mã kịch bản `TC-FBD-*` vào hai file test hiện có, theo đúng pha đỏ của TDD. Chưa sửa file nguồn nào; các test này là **hợp đồng giao diện** (testid / attribute / chuỗi hiển thị) mà Công đoạn B–F phải hiện thực.
+- **`FbdEditorPane.test.tsx`** — describe `FbdEditorPane — Task 8: Shell, Responsive & Toolbar (Issue #574)`, 5 test:
+  - `TC-FBD-HEADER-001` (2 ca): gỡ nút "Lưu" trùng lặp khỏi thanh công cụ nội bộ, giữ "Kiểm tra"/"So sánh"; nút "Kiểm tra" phải disable khi tài liệu đang dirty.
+  - `TC-FBD-RESP-002`: nút "Chọn vùng" (marquee) kèm `aria-pressed`.
+  - `TC-FBD-STATE-001`: `data-testid="fbd-editor-skeleton"` và `data-testid="fbd-canvas-skeleton"` khi `loading`.
+  - `TC-FBD-STATE-004`: `data-testid="fbd-readonly-banner"` khi `canEdit=false`.
+- **`DesignWorkspacePage.test.tsx`** — describe `DesignWorkspacePage — Task 8: Shell, Responsive, Docks & Tabs (Issue #574)`, 6 test:
+  - `TC-FBD-RESP-001` (3 breakpoint): `data-dock-mode` = `dock-4col` (>=1440px) / `drawer` (1280px) / `overlay` (820px).
+  - `TC-FBD-RESP-003`: viewport 390px ẩn control tạo/lưu và hiện banner `"Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ"`.
+  - `TC-FBD-UX-001`: nút "+ FBD" trong POU Explorer sinh POU với `language: 'FBD'`.
+  - `TC-FBD-UX-002`: `pou-tab-bar` và hộp thoại xác nhận khi đóng tab đang dirty.
+- **Số đo kiểm chứng (đo lại trong phiên, không dẫn số cũ):** hai file test cho `11 failed | 51 passed (62)`; lọc `-t "Task 8"` cho `11 failed | 51 skipped (62)`, chứng minh toàn bộ ca đỏ nằm trong phạm vi Task 8 và không có test cũ nào vỡ. `npx tsc --noEmit` exit 0, `npm run lint` exit 0.
+
+### Fixed — `T61-405` Test chèn khối từ Thư viện bắt hụt trạng thái `loading` khi chạy cả file (2026-09-08)
+
+- **Triệu chứng:** Ca `PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405) > hỏi lại trước khi chèn, và chỉ chèn sau một lần bấm tường minh` PASS khi chạy riêng lẻ nhưng FAIL khi chạy trọn file `DesignWorkspacePage.test.tsx`. Lỗi có sẵn từ trước, không phải hồi quy của Task 8.
+- **Nguyên nhân gốc:** Mock `searchProgrammingLibraries` trong `stubWorkspaceWithLibrary` trả `Promise.resolve()` giải quyết tức thì. Khi chạy cả file, `ProgramsTab` đã nằm sẵn trong cache `React.lazy` (`DesignWorkspacePage.tsx:10`) nên mất độ trễ import động; `insertResolution.status` nhảy thẳng `loading → ready` trong cùng microtask, khiến assertion đồng bộ `expect(banner).toHaveAttribute('data-status', 'loading')` bắt hụt trạng thái trung gian.
+- **Cách sửa:** Bọc giá trị trả về của mock trong `setTimeout(..., 0)` để mô phỏng đúng ngữ nghĩa bất đồng bộ của một lời gọi mạng. **Giữ nguyên toàn bộ assertion và dữ liệu mock `TON`** — không nới lỏng matcher, không rỗng hoá dữ liệu.
+- **Bẫy đã tránh:** Cách "sửa" giả là xoá hoặc nới lỏng assertion `data-status` ở dòng ~1318, hoặc cho mock trả mảng rỗng. Cả hai đều che lỗi mà vẫn xanh; đã bác bỏ và sửa đúng gốc.
+
 ### Fixed — Khắc phục 3 Major code review findings trên PR #572 FBD Edit task 6–7 (2026-09-07)
 
 - **Finding 1 (Major) — Mutation thuộc tính node FBD thành action nguyên tử:**
