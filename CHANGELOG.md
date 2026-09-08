@@ -20,8 +20,21 @@
 - Kiểm chứng HOST: hồi quy production-tool gate **3/3 PASS**; C++ Release bật
   Modbus/BACnet/HMI **1.479/1.479 PASS, 8 skip**; Go `vet` và toàn module test
   `-count=1` PASS sau sửa; FE **244 tệp / 3.093 test PASS**, lint,
-  `build:foxlinx` và docs ISO harness **17/17 PASS**. Đây chưa phải bằng chứng
-  TARGET, physical HIL hoặc `RELEASE_READY`.
+  `build:foxlinx` và docs ISO harness **17/17 PASS**.
+- Triển khai `main@8e00e4b1fa4b96d002d1e1df7f70dc82a700b468` lên Foxlinx
+  bằng gói ARM64 SHA-256
+  `9580ebf0cbe926e20a5206bff9d174d9b21753cc60975a6b089e69fa89ef7218`;
+  backup trước triển khai tại
+  `/var/backups/mkddc/predeploy-8e00e4b1-20260908T073351Z.tar.gz` và snapshot
+  rollback tại `/var/backups/mkddc/0.1.0-20260908-073645`.
+- Kiểm chứng TARGET/FakeMCU: sáu mẫu health liên tiếp **6/6 `ok`**, checksum
+  runtime **8/8 PASS**, năm service bắt buộc `active` với `NRestarts=0`, không
+  có unit failed/cảnh báo-lỗi mới sau readiness; HMI/PTY giữ `disabled`, netcfg
+  giữ `confirmed`, DB Programming giữ owner `mkddc:mkddc`. Playwright headless
+  trên chính URL board kiểm desktop `1440x900` và mobile `390x844`: Programming
+  render đúng bundle mới, Console/Network/page error đều 0. Chrome DevTools MCP
+  không khởi tạo do host thiếu X server. Không Commission, không ghi output;
+  đây chưa phải physical HIL hoặc `RELEASE_READY`.
 
 ### Changed — Authority trực quan Programming PGM-01..06 (2026-09-08)
 
