@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Fixed — Cổng Go giữ đúng production tool khi dùng build root tương đối (2026-09-08)
+
+- Sửa `scripts/verify-project.sh --component go --build-root build/verify` báo
+  thiếu compiler/packager/sim-worker dù các binary đã được dựng đúng profile.
+  Nguyên nhân là cổng đổi thư mục làm việc sang `apps/web-api`, còn ba biến môi
+  trường vẫn giữ đường dẫn tương đối theo root repository.
+- Chuẩn hóa `build_root` thành đường dẫn tuyệt đối ngay sau khi đọc tham số để
+  mọi cổng dùng cùng một artifact; bổ sung hồi quy chạy bằng build root tương
+  đối và xác nhận cả ba đường dẫn vẫn tuyệt đối/executable bên trong module Go.
+- Kiểm chứng HOST: hồi quy production-tool gate **3/3 PASS**; C++ Release bật
+  Modbus/BACnet/HMI **1.479/1.479 PASS, 8 skip**; Go `vet` và toàn module test
+  `-count=1` PASS sau sửa; FE **244 tệp / 3.093 test PASS**, lint,
+  `build:foxlinx` và docs ISO harness **17/17 PASS**. Đây chưa phải bằng chứng
+  TARGET, physical HIL hoặc `RELEASE_READY`.
+
 ### Changed — Authority trực quan Programming PGM-01..06 (2026-09-08)
 
 - Ghi quyết định chủ sở hữu `AUTH-UX-PROG-2026-09-08-01`: gói
