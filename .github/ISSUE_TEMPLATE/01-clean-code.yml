@@ -1,0 +1,90 @@
+name: "Clean code — dọn mã nguồn"
+description: "Nợ kỹ thuật trong mã nguồn. Chỉ vai Manager/Planner được tạo Issue ở state:ready."
+title: "[CLEAN-CODE] "
+labels: ["wf:clean-code", "role:manager", "state:triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Authority quy trình: [`WF-CLEAN-001`](../blob/main/docs/00_governance/CLEAN_CODE_WORKFLOW.md).
+
+        **Ràng buộc N1 — người tạo Issue không được tự implement.** Trường
+        `Manager-Run` bên dưới là bắt buộc và phải **khác** `Implementer-Run`
+        trong PR; job `workflow-guard` chặn merge nếu trùng.
+
+        **Ràng buộc N6 — clean code không được đổi hành vi.** Nếu việc này đổi
+        contract/API/schema thì đóng Issue lại và mở Issue `enhancement`.
+
+  - type: input
+    id: manager_run
+    attributes:
+      label: "Manager-Run"
+      description: "Định danh phiên Manager đã tạo Issue: URL phiên agent, hoặc manager-YYYYMMDDThhmmZ."
+      placeholder: "manager-20260909T0300Z"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Vấn đề và tác động"
+      description: "Hiện trạng As-Built cụ thể, dẫn file:line. Nêu tác động thật, không nói chung chung 'code chưa sạch'."
+      placeholder: |
+        `apps/core/application/runtime/scan_loop.cpp:214-268` lặp lại đúng khối
+        clamp của `io_scaler.cpp:88-140` với hằng số khác nhau...
+    validations:
+      required: true
+
+  - type: textarea
+    id: source_ownership
+    attributes:
+      label: "Source ownership — phạm vi file được phép chạm"
+      description: "Liệt kê đường dẫn. PR chạm file ngoài danh sách này sẽ bị Reviewer FAIL (N5)."
+      placeholder: |
+        - apps/core/application/runtime/scan_loop.cpp
+        - apps/core/application/runtime/scan_loop.hpp
+        - test hiện có trong apps/core/tests/runtime/
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: "Tiêu chí chấp nhận (acceptance criteria)"
+      description: "Mỗi tiêu chí phải đo được hoặc chỉ ra được bằng chứng. Không dùng 'code dễ đọc hơn'."
+      value: |
+        - [ ] 
+        - [ ] Không đổi contract/API/schema; test hợp đồng hiện có giữ nguyên kết quả.
+        - [ ] `CHANGELOG.md` `[Unreleased]` cập nhật kèm ngày, phạm vi và số đo.
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: "Kiểm chứng tối thiểu"
+      description: "Lệnh cụ thể Implementer phải chạy và ghi số đo thật vào PR."
+      value: |
+        - [ ] `cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON && cmake --build build/fw --parallel && ctest --test-dir build/fw --output-on-failure`
+        - [ ] `(cd apps/web-api && go vet ./... && go test ./... -count=1)`
+        - [ ] `(cd apps/web-ui && npx vitest --run --environment jsdom src && npm run lint && npm run build)`
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Ưu tiên do Manager xếp"
+      options:
+        - "priority:critical — an toàn/bảo mật/chặn release"
+        - "priority:high — làm trong đợt hiện tại"
+        - "priority:medium — làm khi hết P0/P1"
+        - "priority:low — dọn dần"
+    validations:
+      required: true
+
+  - type: textarea
+    id: blocked
+    attributes:
+      label: "Phụ thuộc / điều kiện chặn"
+      description: "Nếu bị chặn: ghi rõ CHẶN BỞI GÌ và CẦN GÌ ĐỂ MỞ KHOÁ. Bỏ trống nếu không bị chặn."

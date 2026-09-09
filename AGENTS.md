@@ -6,6 +6,33 @@
 - Keep FE local changes as the source of truth; do not overwrite unrelated local FE work.
 - Luôn trả lời bằng tiếng Việt và viết tài liệu (docs, changelog, báo cáo, review) bằng tiếng Việt. Hạn chế tối đa tiếng Anh trong nội dung rule và skill của agent; chỉ giữ nguyên tiếng Anh cho thuật ngữ kỹ thuật/tên riêng không có bản dịch tương đương rõ ràng (ví dụ: BACnet, Modbus, CRC, endian, watchdog, tên biến/hàm/API trong code).
 
+## Quy trình clean code & clean docs — ba vai tách biệt
+
+Bộ quy tắc vận hành việc dọn mã nguồn và dọn tài liệu là
+**`docs/00_governance/CLEAN_CODE_WORKFLOW.md`** (`WF-CLEAN-001`, Active). Nó
+quy định ba vai tách biệt, ma trận quyền, workflow state, quy tắc nhánh/merge,
+quality gate, truy xuất Issue → PR → Test → Merge → Close và lịch chạy.
+
+| Vai | Nhịp | Skill | Cấm |
+|---|---|---|---|
+| Manager/Planner | 1 lần/ngày | `.claude/skills/ddc-manager-planner/` | implement, tạo PR, merge |
+| Implementer | mỗi 1h30 | `.claude/skills/ddc-implementer/` | tự tạo Issue rồi tự làm, gắn `review:pass`, merge |
+| Reviewer/Gatekeeper | 1 lần/ngày | `.claude/skills/ddc-reviewer/` | tự sửa code trong PR đang review, merge khi CI đỏ |
+
+Ba ràng buộc được thi hành bằng máy qua `scripts/workflow_guard.py` (job
+`Cổng quy trình clean-code`), không phải bằng thiện chí:
+
+1. **Người tạo Issue không tự implement** — `Manager-Run` của Issue phải khác
+   `Implementer-Run` của PR.
+2. **Người implement không tự merge** — merge chỉ mở khi có nhãn `review:pass`
+   và comment `[REVIEW-VERDICT: PASS]` mang `Reviewer-Run` khác hai giá trị trên.
+3. **Mọi thay đổi trace được** — PR phải `Closes` đúng một Issue và có bảng
+   Verification điền số đo thật.
+
+Mục "Làm hết việc, không chừa lại" bên dưới vẫn áp dụng **trong phạm vi vai**:
+lỗi thuộc phạm vi Issue đang làm thì sửa luôn; lỗi ngoài phạm vi thì mở finding
+`state:triage` cho Manager, không tự nhảy sang làm.
+
 ## Nguồn quy tắc tài liệu nằm trong repository
 
 Bộ quy tắc kiểm soát tài liệu là **`docs/00_governance/DOC_GOVERNANCE.md`**
