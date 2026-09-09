@@ -62,6 +62,21 @@ Bắt buộc điền:
 
 - `Manager-Run` — định danh phiên này (URL phiên agent hoặc `manager-YYYYMMDDThhmmZ`).
   **Không có nó thì `workflow-guard` chặn mọi PR đóng Issue này.**
+
+> **Lấy định danh phiên của CHÍNH BẠN như thế nào.** Gọi
+> `mcp__Claude_Code_Remote__get_session` **bỏ trống `session_id`** — nó mô tả
+> chính phiên đang chạy, và `ccr.id` là session id của bạn. URL là
+> `https://claude.ai/code/<session id đó>`.
+>
+> **Không bao giờ chép lại định danh có sẵn trong Issue hoặc PR.** Những giá trị
+> đó là của phiên khác. Chép chúng làm hỏng đúng thứ trường này sinh ra để giữ:
+> dấu vết ai đã làm gì. Đây không phải lo xa — nó đã xảy ra thật ở vòng sửa lại
+> PR #594 ngày 2026-09-09: phiên rework ghi lại session id của phiên vòng 1, nên
+> body PR có hai dòng `Implementer-Run` trùng nhau và mất dấu người sửa vòng 2.
+> Guard không bắt được lỗi này vì nó chỉ đọc dòng đầu.
+>
+> Không lấy được session id ⇒ dùng `<vai>-YYYYMMDDThhmmZ` với thời điểm hiện tại
+> và ghi rõ trong PR/verdict là định danh dự phòng. Vẫn tốt hơn một giá trị sai.
 - **Vấn đề và tác động** — dẫn `file:line` thật. Không viết "code chưa sạch".
 - **Source ownership** — danh sách file được phép chạm. Reviewer dùng đúng danh
   sách này để FAIL PR mở rộng phạm vi, nên viết thiếu là mở cửa cho scope creep,

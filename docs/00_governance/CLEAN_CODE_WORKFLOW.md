@@ -370,6 +370,15 @@ Mỗi mắt xích là một trường bắt buộc, guard CI kiểm được:
 `<định danh phiên>` là URL phiên agent hoặc `<vai>-<YYYYMMDDThhmmZ>`. Điều kiện
 duy nhất: **giá trị của ba vai phải khác nhau trên cùng một chuỗi Issue→PR**.
 
+**Cách lấy định danh của chính mình:** gọi `get_session` **bỏ trống `session_id`**
+— nó mô tả chính phiên đang chạy; URL là `https://claude.ai/code/<ccr.id>`.
+
+**Tuyệt đối không chép lại một định danh có sẵn trong Issue hoặc PR** — đó là của
+phiên khác. Guard chỉ đọc dòng `Implementer-Run` **đầu tiên** để kiểm N1, nên một
+dòng thứ hai ghi sai **không bị cổng nào bắt** và chỉ mất khi có người đọc. Lỗi
+này đã xảy ra thật ở vòng sửa lại PR #594 (2026-09-09): phiên rework ghi lại
+session id của phiên vòng 1, làm mất dấu người sửa vòng 2.
+
 ---
 
 ## 8. Lịch chạy

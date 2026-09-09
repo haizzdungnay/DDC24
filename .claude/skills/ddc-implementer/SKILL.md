@@ -140,6 +140,21 @@ Mở PR bằng GitHub MCP `create_pull_request` (phiên chạy theo Routine **kh
 
 - `Closes #<số Issue>` — đúng một Issue. `Refs #N` không tính, guard sẽ chặn.
 - `Implementer-Run:` — định danh phiên này. Phải **khác** `Manager-Run` của Issue.
+
+> **Lấy định danh phiên của CHÍNH BẠN như thế nào.** Gọi
+> `mcp__Claude_Code_Remote__get_session` **bỏ trống `session_id`** — nó mô tả
+> chính phiên đang chạy, và `ccr.id` là session id của bạn. URL là
+> `https://claude.ai/code/<session id đó>`.
+>
+> **Không bao giờ chép lại định danh có sẵn trong Issue hoặc PR.** Những giá trị
+> đó là của phiên khác. Chép chúng làm hỏng đúng thứ trường này sinh ra để giữ:
+> dấu vết ai đã làm gì. Đây không phải lo xa — nó đã xảy ra thật ở vòng sửa lại
+> PR #594 ngày 2026-09-09: phiên rework ghi lại session id của phiên vòng 1, nên
+> body PR có hai dòng `Implementer-Run` trùng nhau và mất dấu người sửa vòng 2.
+> Guard không bắt được lỗi này vì nó chỉ đọc dòng đầu.
+>
+> Không lấy được session id ⇒ dùng `<vai>-YYYYMMDDThhmmZ` với thời điểm hiện tại
+> và ghi rõ trong PR/verdict là định danh dự phòng. Vẫn tốt hơn một giá trị sai.
 - Bảng Verification điền kết quả thật cho từng cổng.
 - Mục đối chiếu acceptance criteria: chép từng AC của Issue kèm bằng chứng.
 

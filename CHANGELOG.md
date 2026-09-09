@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Added — Guard cảnh báo khi chuỗi `Implementer-Run` bị chép lại (2026-09-09)
+
+- Thi hành đề xuất của finding #598, do vai Reviewer mở sau khi phát hiện lỗi
+  chép định danh ở vòng sửa lại PR #594.
+- `extract_all_runs()` quét **mọi** dòng khai một trường, khoan dung với hậu tố
+  mô tả mà người viết thật sự dùng (`**Implementer-Run (vòng 2 — sửa lại sau
+  FAIL):** <url>`). `extract_field()` giữ nguyên hành vi chỉ trả dòng đầu, nên
+  N1/N2 không đổi một chút nào — đã có ca self-test khẳng định điều đó.
+- Guard in **ghi nhận** khi có từ hai dòng `Implementer-Run` mà giá trị trùng
+  nhau. Cố ý **không chặn merge**: không cổng nào bị ảnh hưởng (N1 đọc dòng đầu),
+  không có động cơ né cổng, và chặn vì một dòng chữ trong body sẽ tốn một vòng
+  FAIL đắt hơn thứ nó mua — đúng lập luận vai Reviewer đã đưa ra khi quyết định
+  không FAIL PR #594 vì lỗi này.
+- Kiểm chứng HOST: `--selftest` **48/48 PASS** (42 cũ + 6 ca mới: quét được dòng
+  có hậu tố mô tả, `extract_field` vẫn chỉ lấy dòng đầu, dòng trùng sinh cảnh
+  báo, cảnh báo không chặn, hai dòng khác nhau không cảnh báo, một dòng duy nhất
+  không cảnh báo). Chạy thật trên body PR #594: cảnh báo bắn đúng, `GUARD_EXIT=0`.
+  `docs_iso_harness --expect` PASS. CI: `NOT_RUN` (#414).
+
+### Fixed — Agent không biết lấy định danh phiên của chính mình, nên chép lại của phiên trước (2026-09-09)
+
+- Triệu chứng: ở vòng sửa lại PR #594, phiên rework thêm dòng
+  `Implementer-Run (vòng 2)` đúng theo `WF-CLEAN-001` §3.1 — nhưng ghi **session
+  id của phiên vòng 1** thay vì của chính nó. Body PR vì thế có hai dòng
+  `Implementer-Run` trùng khít, và dấu vết ai đã sửa ở vòng 2 biến mất.
+- Vì sao không cổng nào bắt: guard cố ý chỉ đọc dòng `Implementer-Run` **đầu
+  tiên** để kiểm N1 — và dòng đầu đúng, nên `--input` vẫn trả kết quả chính xác.
+  Một dòng thứ hai ghi sai không vi phạm bất kỳ mã lỗi nào. Lớp lỗi này chỉ mất
+  khi có người đọc, và đó chính là lý do phải viết nó thành luật thay vì tin vào
+  sự cẩn thận.
+- Nguyên nhân gốc: cả ba skill đều yêu cầu ghi `<vai>-Run` = "định danh phiên
+  này" nhưng **chưa bao giờ nói cách lấy nó**. Thiếu chỉ dẫn thì nguồn duy nhất
+  trong tầm mắt của agent là các giá trị đã có sẵn trong Issue/PR — tức đúng
+  những giá trị nó không được phép dùng.
+- Cách sửa: ba skill và `WF-CLEAN-001` §7 ghi rõ gọi `get_session` **bỏ trống
+  `session_id`** để lấy chính phiên đang chạy (`ccr.id`), cấm tuyệt đối chép lại
+  định danh có sẵn trong Issue/PR, và cho đường lùi `<vai>-YYYYMMDDThhmmZ` kèm
+  yêu cầu ghi rõ đó là định danh dự phòng. Sự cố PR #594 được dẫn thẳng trong
+  luật làm ví dụ, để người đọc sau biết đây là chuyện đã xảy ra chứ không phải
+  lo xa.
+- Kiểm chứng HOST: `python3 scripts/workflow_guard.py --selftest` **42/42 PASS**;
+  `python3 scripts/docs_iso_harness.py --expect` PASS. Đã xác nhận bằng ca thật
+  rằng `extract_field` vẫn đọc đúng dòng đầu, tức N1 không bị ảnh hưởng bởi lỗi
+  này. CI: `NOT_RUN` — không có runner (#414).
+
+
 ### Fixed — Vòng sửa lại sau verdict FAIL: hai lỗi chặn/lọt và luật còn thiếu (2026-09-09)
 
 - Triệu chứng 1 — **deadlock**: Reviewer FAIL (gắn `review:changes-requested`),

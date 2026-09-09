@@ -114,6 +114,34 @@ def extract_field(body: str, name: str) -> str | None:
     return None
 
 
+def extract_all_runs(body: str, name: str) -> list[str]:
+    """Mọi giá trị `<name>` khai trong body, theo thứ tự xuất hiện.
+
+    `extract_field` cố ý chỉ trả dòng ĐẦU vì đó là giá trị các cổng N1/N2 xét.
+    Hàm này quét rộng hơn để đọc *chuỗi* dấu vết ở vòng sửa lại, nơi mỗi lượt
+    chạy thêm một dòng (WF-CLEAN-001 §3.1). Nó khoan dung với hậu tố mô tả —
+    `**Implementer-Run (vòng 2 — sửa lại sau FAIL):** <url>` — vì người viết
+    thật sự chú thích như vậy.
+    """
+    if not body:
+        return []
+    out: list[str] = []
+    for line in body.splitlines():
+        if name.lower() not in line.lower():
+            continue
+        match = re.search(
+            r"%s[^:]{0,80}:[ \t]*(?:\*\*)?[ \t]*(\S+)" % re.escape(name),
+            line,
+            re.IGNORECASE,
+        )
+        if not match:
+            continue
+        value = match.group(1).strip().strip("`*")
+        if value and not is_placeholder(value):
+            out.append(value)
+    return out
+
+
 def linked_issues(body: str) -> list[int]:
     """Số hiệu Issue mà PR tuyên bố đóng.
 
@@ -259,6 +287,21 @@ def check(pr: dict, issue: dict | None, comments: list[dict], labels: set[str]) 
             "N3-IMPL",
             "PR thiếu trường `Implementer-Run`. Điền định danh phiên đã "
             "implement (URL phiên agent hoặc implementer-YYYYMMDDThhmmZ).",
+        )
+
+    # WF-CLEAN-001 §3.1: mỗi vòng sửa lại THÊM một dòng `Implementer-Run`. Một
+    # dòng sau chép lại giá trị của dòng trước làm mất đúng dấu vết mà quy tắc
+    # ấy sinh ra để giữ. Đây là GHI NHẬN, không phải lỗi chặn: không cổng nào bị
+    # ảnh hưởng (N1 đọc dòng đầu), không có động cơ né cổng, và chặn merge vì một
+    # dòng chữ trong body sẽ tốn một vòng FAIL đắt hơn thứ nó mua.
+    # Nguồn: finding #598, phát hiện ở vòng sửa lại PR #594 (2026-09-09).
+    all_impl = extract_all_runs(body, "Implementer-Run")
+    if len(all_impl) > 1 and len(set(v.lower().rstrip("/") for v in all_impl)) < len(all_impl):
+        report.note(
+            f"CẢNH BÁO truy xuất: body PR có {len(all_impl)} dòng "
+            "`Implementer-Run` nhưng có giá trị trùng nhau. Mỗi vòng sửa lại phải "
+            "ghi định danh phiên CỦA CHÍNH NÓ (`get_session` bỏ trống `session_id`), "
+            "không chép lại dòng trước — xem WF-CLEAN-001 §7."
         )
 
     rows = verification_rows(body)
@@ -793,6 +836,36 @@ def selftest() -> int:
                     verdict("FAIL", "rev-1"), verdict("PASS", "rev-1")], {"review:pass"})
     expect("3 vòng FAIL ⇒ có cảnh báo escalate", any("escalate" in n for n in capped.notes))
     expect("cảnh báo escalate KHÔNG chặn merge", capped.errors == [])
+
+    # --- chuỗi dấu vết Implementer-Run (finding #598) ---------------------
+    real_body = (
+        "Closes #589\n"
+        "- **Implementer-Run:** https://claude.ai/code/session_A\n"
+        "- **Implementer-Run (vòng 2 — sửa lại sau verdict FAIL):** https://claude.ai/code/session_A\n"
+    )
+    expect(
+        "quét được cả dòng có hậu tố mô tả",
+        extract_all_runs(real_body, "Implementer-Run")
+        == ["https://claude.ai/code/session_A", "https://claude.ai/code/session_A"],
+    )
+    expect(
+        "extract_field vẫn chỉ lấy dòng đầu (N1 không đổi)",
+        extract_field(real_body, "Implementer-Run") == "https://claude.ai/code/session_A",
+    )
+    dup = check(
+        {"number": 1, "body": real_body + "\n## Verification\n\n| C | L | K |\n|---|---|---|\n| Go | `x` | 42 PASS |\n"},
+        good_issue, [verdict("PASS", "rev-1")], {"review:pass"},
+    )
+    expect("dòng trùng ⇒ có cảnh báo truy xuất", any("truy xuất" in n for n in dup.notes))
+    expect("cảnh báo truy xuất KHÔNG chặn merge", dup.errors == [])
+
+    distinct_body = real_body.replace("session_A\n- **Implementer-Run (vòng 2", "session_B\n- **Implementer-Run (vòng 2")
+    distinct = check(
+        {"number": 1, "body": distinct_body + "\n## Verification\n\n| C | L | K |\n|---|---|---|\n| Go | `x` | 42 PASS |\n"},
+        good_issue, [verdict("PASS", "rev-1")], {"review:pass"},
+    )
+    expect("hai dòng khác nhau ⇒ không cảnh báo", not any("truy xuất" in n for n in distinct.notes))
+    expect("một dòng duy nhất ⇒ không cảnh báo", not any("truy xuất" in n for n in passing.notes))
 
     failed = [name for name, ok in cases if not ok]
     for name, ok in cases:
