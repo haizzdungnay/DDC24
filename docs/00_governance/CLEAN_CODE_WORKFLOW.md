@@ -397,11 +397,13 @@ session id của phiên vòng 1, làm mất dấu người sửa vòng 2.
 
 ## 8. Lịch chạy
 
-> **Trạng thái 2026-09-09: KHÔNG có Routine nào đang hoạt động.** Bốn Routine
-> tạo bằng `create_trigger` đã bị xoá sau khi đo được rằng chúng không thể chạy
-> (§8.1). Ba vai hiện chỉ chạy khi được kích hoạt tay. Muốn có lịch tự động,
-> chủ sở hữu phải tạo Routine từ **giao diện Routines trên claude.ai** bằng các
-> prompt ở §8.2.
+> **Trạng thái 2026-09-09 (cập nhật cuối ngày): một Routine đang hoạt động —
+> Clean Code Auditor 06:00 giờ Việt Nam** (`trig_01Gt1weroASWGntFuTVZWCBK`), dựng
+> theo cơ chế hai lớp ở §8.3. Bốn Routine cũ tạo bằng `create_trigger` sinh phiên
+> mới trực tiếp đã bị xoá vì chúng không thể chạy (§8.1), và cơ chế đó vẫn hỏng
+> khi đo lại. **Vai Implementer và Reviewer chưa có Routine** — hai vai đó hiện
+> vẫn chỉ chạy khi kích hoạt tay; dựng chúng theo §8.3 hoặc từ giao diện Routines
+> trên claude.ai bằng prompt ở §8.2.
 
 Lịch mục tiêu khi Routine được dựng lại:
 
@@ -447,6 +449,7 @@ Không phải giả thuyết. Ngày 2026-09-09 đã thử đủ ba cơ chế mà
 | 2 | Cơ chế 1 + bootstrap `add_repo` trong prompt | **Không thể** — `add_repo` chính là một MCP tool, mà phiên không có MCP tool | Lượt Manager 09:35Z báo toàn bộ `mcp__Claude_Code_Remote__*` và `mcp__github__*` vắng mặt |
 | 3 | `create_session(source_url=…)` + `create_trigger(persistent_session_id=…)` | Phiên bền **có** đủ repo + MCP, nhưng Routine bắn vào **không đánh thức được nó** | Phiên bền chạy tay thành công (gọi thật `list_issues`, trả về 4 Issue `state:ready`). Trigger bắn 09:50:38Z; phiên giữ nguyên `updated_at 09:40:40Z`, `used_tokens 76.931` không đổi, `post_turn_summary` vẫn của lượt trước, `status: IDLE`, `connection_status: disconnected`; trigger **không** ghi `last_run`. Issue được giao xử lý không hề bị chạm |
 | 4 | Lặp lại cơ chế 1 ngày 2026-09-09 lúc 18:39Z, khi dựng Routine Clean Code Auditor | **Vẫn hỏng, y hệt.** `create_trigger` trả cảnh báo *"this trigger stores no MCP connectors"*; tham số `connectors` bị từ chối (`not available for this organization`); `session_request.config.sources` = `[]`; phiên bắn thử (`session_01XZiFQFoAAJN51kQQcVZf3H`) có `session_context` **không** chứa `sources` nào và chạy `claude-sonnet-5` chứ không kế thừa model phiên mẹ | Trigger `trig_012Z8viyS2DzmV7rtHQsEsCH`, bắn tay lúc 18:39:19Z |
+| 5 | **Hai lớp:** Routine self-bind bắn vào một phiên đang có repo + connector; phiên đó chỉ làm một việc là gọi `create_session(source_url=…)` để sinh phiên Auditor mới | **CHẠY ĐƯỢC.** Trigger self-bind đánh thức đúng phiên đang IDLE (đo bằng một reminder `send_later`, bắn 18:44:10Z, phiên nhận được ngay). Phiên con do `create_session` sinh ra có đủ hạ tầng: phép đo `session_01FWpxeae2NYsW1MPMsPeVdq` tự gắn bốn nhãn `probe:repo-ok`, `probe:files-ok`, `probe:github-ok`, `probe:ccr-ok` sau khi gọi thật `list_issues`, và kế thừa model `claude-opus-5` | Trigger `trig_01Gt1weroASWGntFuTVZWCBK` (self-bind, `0 23 * * *`); phiên probe đã archive, nhãn còn nguyên |
 
 Kết luận: **`update_trigger` chỉ sửa được `name`, `cron_expression`, `enabled`,
 `model`, `prompt` — không sửa được `sources` hay `mcp_servers`.** Một Routine
@@ -463,8 +466,15 @@ chính `create_trigger` trả về ngay lần gọi đầu**:
 
 Cảnh báo đó nói đúng kết luận cuối cùng, ngay từ đầu.
 
-**Cách duy nhất còn lại: tạo Routine từ giao diện Routines trên claude.ai**, nơi
-repo và connector GitHub được chọn lúc tạo. Prompt sẵn dùng ở §8.2.
+Vì vậy **không dùng Routine sinh phiên mới trực tiếp**. Hai cách dựng được:
+
+1. **Giao diện Routines trên claude.ai** — repo và connector GitHub chọn lúc tạo.
+   Đây là cách **bền nhất**: Routine không phụ thuộc phiên nào còn sống. Prompt
+   sẵn dùng ở §8.2 và §8.3.
+2. **Cơ chế hai lớp từ phiên agent** (hàng 5 bảng trên) — Routine self-bind đánh
+   thức một phiên có sẵn repo + connector, phiên đó gọi `create_session` sinh
+   phiên làm việc mới. Chạy được, nhưng **sống nhờ phiên host**: host bị archive
+   hay xoá thì Routine mất tay thi hành. Xem §8.3.
 
 ### 8.2 Prompt Routine sẵn dùng
 
@@ -673,13 +683,38 @@ kèm khu vực đã kiểm, đừng tạo Issue mơ hồ cho đủ số.
 Khi prompt này và skill `ddc-manager-planner` mâu thuẫn, **skill trong repository
 thắng** — prompt là cấu hình ngoài repo, sửa được lặng lẽ; skill đi qua PR.
 
+#### Routine đang chạy — cơ chế hai lớp
+
+| Mục | Giá trị (đo 2026-09-09) |
+|---|---|
+| Trigger | `trig_01Gt1weroASWGntFuTVZWCBK`, cron `0 23 * * *` UTC = 06:00 giờ Việt Nam |
+| Kiểu | **self-bind** — bắn vào phiên host `session_01D1pwCB4f6o6DrcFq88djCc`, phiên này có sẵn repo và connector GitHub |
+| Việc của phiên host | Đọc §8.3 lấy **nguyên văn** khối prompt ở trên, gọi `create_session(source_url=…MK-DDC-24, revision=main)` sinh phiên Auditor mới, in session id, rồi kết thúc |
+| Việc của phiên Auditor | Toàn bộ Bước 0–5 của prompt; định danh `Manager-Run` là của **chính nó** |
+
+Hai lớp là bắt buộc, không phải kiến trúc thừa: Routine sinh phiên mới trực tiếp
+cho ra phiên **không repo, không MCP connector** (§8.1 hàng 1 và 4), còn phiên do
+`create_session` sinh thì có đủ — đo bằng phiên `session_01FWpxeae2NYsW1MPMsPeVdq`,
+nó tự gắn `probe:repo-ok` / `probe:files-ok` / `probe:github-ok` / `probe:ccr-ok`
+sau khi gọi thật `list_issues`.
+
+Phiên host chỉ **khởi động**, không làm vai Auditor. Nếu nó tự rà rồi tự tạo Issue
+thì mọi Issue của nhiều ngày sẽ mang cùng một `Manager-Run`, và N1 mất hiệu lực
+đúng ở chỗ nó đang bảo vệ.
+
+> **Điểm mong manh phải biết trước.** Routine này **sống nhờ phiên host**: host bị
+> archive, bị xoá, hoặc mất quyền GitHub thì lượt 06:00 hôm đó không có tay thi
+> hành, và không có cảnh báo nào tự phát ra. Cách bền hơn là tạo Routine từ
+> **giao diện Routines trên claude.ai** (chọn repo + connector lúc tạo) bằng đúng
+> prompt ở trên — khi đó xoá Routine self-bind này đi để không chạy hai lượt.
+
 ## 9. Hạng mục bị chặn
 
 | Hạng mục | Bị chặn bởi | Cần gì để mở khoá |
 |---|---|---|
 | Cổng *Require approvals* native của GitHub cho agent | Ba vai dùng chung tài khoản `Mekong-HCM`; GitHub cấm tự approve PR của mình | Cấp machine user hoặc GitHub App riêng cho vai Reviewer, thêm vào repo với quyền `write` |
 | Bật branch protection trên `main` | Cần quyền admin repo qua giao diện `Settings → Branches`; API branch-protection không có trong tool set của phiên agent | Owner bật thủ công theo checklist `§5.1` |
-| Không có Routine nào đang chạy; ba vai chỉ hoạt động khi kích hoạt tay | Từ phiên agent không tạo được Routine chạy được — đã đo đủ ba cơ chế, cả ba hỏng (`§8.1`). Bốn Routine cũ đã bị xoá vì chúng chỉ sinh phiên rỗng | Chủ sở hữu tạo bốn Routine từ **giao diện Routines trên claude.ai**, chọn repo `Mekong-HCM/MK-DDC-24` + connector GitHub lúc tạo. Prompt sẵn dùng ở `§8.2`. |
+| Vai Implementer và Reviewer chưa có Routine (vai Manager/Auditor **đã có**, `§8.3`) | Routine sinh phiên mới trực tiếp cho ra phiên không repo, không connector — đo bốn lần, hỏng cả bốn (`§8.1`). Cơ chế hai lớp ở `§8.3` chạy được nhưng phụ thuộc một phiên host còn sống, nên nhân bản nó cho ba vai là ba điểm mong manh | Chủ sở hữu tạo Routine từ **giao diện Routines trên claude.ai**, chọn repo `Mekong-HCM/MK-DDC-24` + connector GitHub lúc tạo; prompt sẵn dùng ở `§8.2` (Implementer, Reviewer) và `§8.3` (Auditor). Tạm thời dựng thêm hai Routine self-bind theo `§8.3` cũng được. |
 | Xoá nhánh remote sau merge | Credential git của phiên không có quyền xoá ref (`HTTP 403` ở cả `git push --delete` lẫn refspec rỗng, từ nhiều phiên khác nhau); không có tool MCP xoá branch | Bật `Settings → General → Automatically delete head branches`, hoặc xoá tay tại trang Branches |
 | Toàn bộ cổng CI (`Build & Test`, `Security Scan`, job `workflow-guard`) | GitHub Actions không cấp runner (#414), và chủ sở hữu **đã quyết định không bật lại** (2026-09-09) | **Không phải mục chờ mở khoá — là một quyết định đã chốt.** §6.1a chỉ thay được cổng quy trình; cổng biên dịch và test đa nền tảng **không có phần thay thế bằng phần mềm** và sẽ do Implementer tự đo, Reviewer tự kiểm lại. |
 
@@ -690,3 +725,4 @@ thắng** — prompt là cấu hình ngoài repo, sửa được lặng lẽ; sk
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-09 | Thiết lập ban đầu: ba vai, ma trận quyền, workflow state, nhãn, branch/merge rule, quality gate, truy xuất và lịch chạy. |
+| 1.1 | 2026-09-09 | Routine Clean Code Auditor 06:00 giờ Việt Nam: nhịp Manager chuyển 23:00 UTC, kích thước Issue ~45 phút, nhóm nhãn `module:*`, §8.3 (hợp đồng 10 ràng buộc + prompt sẵn dùng + cơ chế hai lớp đang chạy), §8.1 bổ sung hai lần đo (cơ chế trực tiếp vẫn hỏng; cơ chế hai lớp chạy được), §9 cập nhật theo. |
