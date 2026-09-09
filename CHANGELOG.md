@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Added — Quy trình clean code & clean docs ba vai tách biệt (2026-09-09)
+
+- Thiết lập `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (`WF-CLEAN-001` v1.0
+  Active) làm authority vận hành cho việc dọn mã nguồn và dọn tài liệu: ba vai
+  Manager/Planner, Implementer và Reviewer/Merge Gatekeeper, ma trận quyền,
+  workflow state bảy trạng thái, quy tắc nhánh/merge, quality gate, ánh xạ truy
+  xuất Issue → PR → Test → Merge → Close và lịch chạy.
+- Triệu chứng cần giải quyết: repo đã có Issue/PR nhưng không có ràng buộc nào
+  chặn cùng một tác nhân vừa tạo Issue vừa implement vừa merge, nên chuỗi bằng
+  chứng không có lớp kiểm tra độc lập nào. Nguyên nhân gốc: cả ba vai agent chạy
+  dưới cùng một tài khoản GitHub `Mekong-HCM`, mà cổng *Require approvals* của
+  GitHub cấm một tài khoản approve PR của chính nó — bật lên sẽ khoá cứng chứ
+  không tách được vai. Cách sửa: tách vai bằng định danh phiên
+  (`Manager-Run` / `Implementer-Run` / `Reviewer-Run`) và thi hành bằng máy.
+- Thêm `scripts/workflow_guard.py` và workflow `Cổng quy trình clean-code`
+  (`.github/workflows/workflow-guard.yml`) chặn merge khi: PR không `Closes`
+  đúng một Issue, thiếu `Implementer-Run`, bảng Verification bỏ trống,
+  `Manager-Run` trùng `Implementer-Run` (N1), chưa có `review:pass` kèm comment
+  `[REVIEW-VERDICT: PASS]`, hoặc `Reviewer-Run` trùng hai giá trị kia (N2).
+  Nhãn `gate:waived` chỉ miễn cổng review và bắt buộc có comment lý do; nó
+  **không** miễn ràng buộc tách vai.
+- Thêm Issue template `01-clean-code.yml`, `02-clean-docs.yml`, `03-finding.yml`
+  và `config.yml` (tắt blank issue); mở rộng `pull_request_template.md` với khối
+  Truy xuất, bảng Verification theo lớp bằng chứng và mục đối chiếu acceptance
+  criteria.
+- Thêm `.github/labels.yml` (21 nhãn `role:*`/`state:*`/`wf:*`/`priority:*`/
+  `review:*`/`gate:waived`) và workflow `labels-sync.yml` đồng bộ lên GitHub;
+  workflow cố ý không xoá nhãn ngoài danh sách để giữ phân loại chủ đề của các
+  Issue cũ.
+- Thêm `.github/CODEOWNERS` khoanh vùng quản trị quy trình, cổng CI và
+  `contracts/`.
+- Thêm ba skill vai `ddc-manager-planner`, `ddc-implementer`, `ddc-reviewer`
+  trong `.claude/skills/`, mirror sang `.agents/skills/`; cập nhật `AGENTS.md`,
+  `CLAUDE.md`, `docs/README.md` và `docs/00_governance/CONTROL.md` trỏ tới
+  authority mới.
+- Kiểm chứng HOST: `python3 scripts/workflow_guard.py --selftest` **25/25 PASS**
+  (parse ba dạng trường khai báo, loại placeholder/`_No response_`, chỉ nhận từ
+  khoá đóng chứ không nhận `Refs`, bảng Verification rỗng, ma trận N1/N2 tự
+  implement và tự merge, `gate:waived` có/không lý do, nhãn `state:*` sai hoặc
+  trùng). Cả 5 file YAML mới parse sạch bằng `yaml.safe_load`.
+- Còn chặn: branch protection trên `main` và danh tính GitHub riêng cho vai
+  Reviewer cần quyền tổ chức, chưa làm được từ phiên agent — checklist và điều
+  kiện mở khoá ghi tại `WF-CLEAN-001` §5.1 và §9.
+
+
 ### Fixed — Cổng Go giữ đúng production tool khi dùng build root tương đối (2026-09-08)
 
 - Sửa `scripts/verify-project.sh --component go --build-root build/verify` báo
