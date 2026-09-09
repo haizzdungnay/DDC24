@@ -32,7 +32,9 @@ liệu) và [`DOC-CTRL-001`](CONTROL.md) (thẩm quyền tài liệu). Hai hồ 
 
 ### 2.1 Manager/Planner — `role:manager`
 
-- **Nhịp:** mỗi ngày **một lần** (03:00 UTC ≈ 10:00 giờ Việt Nam).
+- **Nhịp:** mỗi ngày **một lần** (23:00 UTC ≈ **06:00 giờ Việt Nam**, múi giờ
+  `Asia/Ho_Chi_Minh`). Mỗi lượt chạy trong **một phiên mới**, không nối tiếp phiên
+  hôm trước — xem `§8.3`.
 - **Việc:** rà repo + tài liệu, phát hiện nợ kỹ thuật/nợ tài liệu, tạo Issue có
   scope và acceptance criteria đo được, xếp ưu tiên, chuyển Issue sang `state:ready`.
 - **Được phép:** tạo/sửa/đóng Issue, gắn nhãn `state:*`/`priority:*`/`wf:*`,
@@ -40,6 +42,8 @@ liệu) và [`DOC-CTRL-001`](CONTROL.md) (thẩm quyền tài liệu). Hai hồ 
 - **Cấm tuyệt đối:** viết code hoặc sửa tài liệu sản phẩm, tạo PR, gắn `review:pass`, merge.
 - **Đầu ra mỗi phiên:** tối đa **5** Issue `state:ready` mới, cộng một comment
   cập nhật thứ tự ưu tiên nếu backlog `state:ready` đã ≥ 10.
+- **Kích thước Issue:** mỗi Issue phải nhỏ, độc lập và implement được trong
+  **~45 phút**. Việc lớn hơn phải tách thành nhiều Issue có ghi thứ tự phụ thuộc.
 
 ### 2.2 Implementer — `role:implementer`
 
@@ -195,6 +199,7 @@ lên GitHub (tạo/cập nhật, **không xoá** nhãn cũ đang dùng).
 | Trạng thái | `state:triage`, `state:ready`, `state:in-progress`, `state:in-review`, `state:changes-requested`, `state:blocked`, `state:done` |
 | Loại việc | `wf:clean-code`, `wf:clean-docs`, `wf:test-debt`, `wf:tooling` |
 | Ưu tiên | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` |
+| Module | `module:core`, `module:hmi`, `module:iobus`, `module:netcfg`, `module:web-api`, `module:web-ui`, `module:firmware`, `module:contracts`, `module:platform`, `module:tools`, `module:scripts`, `module:docs` |
 | Cổng review | `review:pass`, `review:changes-requested` — **loại trừ nhau**; hai nhãn cùng lúc bị guard chặn bằng `N2-LABEL` |
 | Ngoại lệ | `gate:waived` (chỉ CTO gắn, bắt buộc kèm lý do trong comment) |
 
@@ -402,7 +407,7 @@ Lịch mục tiêu khi Routine được dựng lại:
 
 | Vai | Nhịp | Cron (UTC) | Giờ Việt Nam |
 |---|---|---|---|
-| Manager/Planner | 1 lần/ngày | `0 3 * * *` | ~10:00 |
+| Manager/Planner (Clean Code Auditor) | 1 lần/ngày | `0 23 * * *` | **~06:00** (`Asia/Ho_Chi_Minh`) |
 | Implementer A | mỗi 3 giờ | `5 0,3,6,9,12,15,18,21 * * *` | 07:05, 10:05, 13:05, 16:05, 19:05, 22:05, 01:05, 04:05 |
 | Implementer B | mỗi 3 giờ, lệch 90 phút | `35 1,4,7,10,13,16,19,22 * * *` | 08:35, 11:35, 14:35, 17:35, 20:35, 23:35, 02:35, 05:35 |
 | Reviewer/Gatekeeper | 1 lần/ngày | `0 11 * * *` | ~18:00 |
@@ -441,6 +446,7 @@ Không phải giả thuyết. Ngày 2026-09-09 đã thử đủ ba cơ chế mà
 | 1 | `create_trigger(create_new_session_on_fire=true)` | Phiên sinh ra **không repo và không MCP tool** | Lượt Manager 07:01Z báo `git clone` lỗi xác thực, không có `mcp__github__*`, skill không tồn tại. Cấu hình trigger: `sources: []`, `mcp_servers: []`, `mcp_connections: []` |
 | 2 | Cơ chế 1 + bootstrap `add_repo` trong prompt | **Không thể** — `add_repo` chính là một MCP tool, mà phiên không có MCP tool | Lượt Manager 09:35Z báo toàn bộ `mcp__Claude_Code_Remote__*` và `mcp__github__*` vắng mặt |
 | 3 | `create_session(source_url=…)` + `create_trigger(persistent_session_id=…)` | Phiên bền **có** đủ repo + MCP, nhưng Routine bắn vào **không đánh thức được nó** | Phiên bền chạy tay thành công (gọi thật `list_issues`, trả về 4 Issue `state:ready`). Trigger bắn 09:50:38Z; phiên giữ nguyên `updated_at 09:40:40Z`, `used_tokens 76.931` không đổi, `post_turn_summary` vẫn của lượt trước, `status: IDLE`, `connection_status: disconnected`; trigger **không** ghi `last_run`. Issue được giao xử lý không hề bị chạm |
+| 4 | Lặp lại cơ chế 1 ngày 2026-09-09 lúc 18:39Z, khi dựng Routine Clean Code Auditor | **Vẫn hỏng, y hệt.** `create_trigger` trả cảnh báo *"this trigger stores no MCP connectors"*; tham số `connectors` bị từ chối (`not available for this organization`); `session_request.config.sources` = `[]`; phiên bắn thử (`session_01XZiFQFoAAJN51kQQcVZf3H`) có `session_context` **không** chứa `sources` nào và chạy `claude-sonnet-5` chứ không kế thừa model phiên mẹ | Trigger `trig_012Z8viyS2DzmV7rtHQsEsCH`, bắn tay lúc 18:39:19Z |
 
 Kết luận: **`update_trigger` chỉ sửa được `name`, `cron_expression`, `enabled`,
 `model`, `prompt` — không sửa được `sources` hay `mcp_servers`.** Một Routine
@@ -512,6 +518,160 @@ Phần riêng của từng vai lấy nguyên từ mục **Việc phải làm** t
 | Implementer A | `ddc-implementer` | `Implementer` | Ưu tiên `state:changes-requested` trước mọi Issue mới. Đúng một Issue, đúng một PR. Không gắn `review:pass`, không merge. |
 | Implementer B | `ddc-implementer` | `Implementer` | Y hệt A. Hai Routine chỉ khác lịch; chúng tự tránh nhau nhờ nhãn `state:in-progress` gắn trước khi viết dòng code đầu tiên. |
 | Reviewer/Gatekeeper | `ddc-reviewer` | `Reviewer` | PASS thì phải **gỡ** `review:changes-requested` trước khi gắn `review:pass`, rồi chạy `workflow_guard.py --input` từ cây `main` và chỉ merge khi exit 0. |
+
+### 8.3 Routine Clean Code Auditor — 06:00 giờ Việt Nam
+
+Đây là lượt chạy hằng ngày của vai Manager/Planner (§2.1), đặt tên vận hành là
+**Clean Code Auditor**. Mười ràng buộc dưới đây là hợp đồng của Routine; prompt
+ở cuối mục thi hành đúng chúng.
+
+| # | Ràng buộc | Thi hành ở đâu |
+|---|---|---|
+| 1 | Mỗi lượt chạy trong **một phiên mới** | Routine cấu hình sinh phiên mới mỗi lần bắn |
+| 2 | Chỉ làm việc trên `Mekong-HCM/MK-DDC-24` | Bước 0 của prompt + §0 của skill |
+| 3 | Kiểm tên repo và `remote origin` trước khi phân tích; sai thì **dừng và báo lỗi** | `git remote -v`, in `SAI REPOSITORY: origin=…` rồi kết thúc |
+| 4 | Kiểm Issue `[CLEAN-CODE]` đang mở để không tạo trùng | Bước 1: `list_issues` + `search_issues` theo từ khoá |
+| 5 | Phân tích mã nguồn, test và **thay đổi mới**; ưu tiên lỗi có bằng chứng | Bước 2: `git log origin/main`, quét nợ theo bảng §2 của skill |
+| 6 | Mỗi Issue nhỏ, độc lập, **~45 phút**; việc lớn phải tách | Bước 3 + §2.1 "Kích thước Issue" |
+| 7 | Issue ghi rõ nguyên nhân, `file:line`, phạm vi sửa, acceptance criteria, lệnh kiểm chứng local | Mẫu `.github/ISSUE_TEMPLATE/01-clean-code.yml` |
+| 8 | Nhãn đủ năm nhóm: `[CLEAN-CODE]` (tiền tố + `wf:*`), `priority:*`, `module:*`, `role:implementer`, `state:ready` | Bước 4 + §4 |
+| 9 | **Chỉ phân tích và tạo Issue** — không sửa code, không merge, không chạy CI | Ranh giới vai §2.1, N1 |
+| 10 | Tối đa **05** Issue/ngày, rồi báo cáo Issue mới / trùng đã bỏ / khu vực đã kiểm | Bước 5 + §6 của skill |
+
+Vai Implementer nhận từng Issue `state:ready` theo thứ tự ưu tiên và xử lý tuần
+tự (§2.2). Vì vậy điều kiện 6 không phải chuyện thẩm mỹ: một Issue quá lớn làm
+lượt Implementer kết thúc giữa chừng, và phần dở dang đó không ai nhận lại.
+
+**Prompt sẵn dùng** — dán nguyên văn khi tạo Routine (chọn repository
+`Mekong-HCM/MK-DDC-24` nhánh `main` và connector GitHub ngay lúc tạo):
+
+````markdown
+# Routine Clean Code Auditor — MK-DDC-24 (06:00 giờ Việt Nam, hằng ngày)
+
+Bạn là AI Agent vai **Clean Code Auditor / Manager** của dự án MK-DDC-24. Mỗi lượt
+chạy là một **phiên mới, độc lập**: không giả định ngữ cảnh của lượt trước, mọi dữ
+kiện phải đọc lại từ repository và từ GitHub trong chính phiên này.
+
+## Bước 0 — kiểm hạ tầng và ĐÚNG repository (làm trước mọi thứ khác)
+
+1. `git remote -v` trong thư mục làm việc.
+   - `origin` phải trỏ `https://github.com/Mekong-HCM/MK-DDC-24` (chấp nhận dạng
+     `git@github.com:Mekong-HCM/MK-DDC-24.git`, có hoặc không hậu tố `.git`).
+   - Tên repository phải là `MK-DDC-24`, owner `Mekong-HCM`.
+   - Sai, thiếu, hoặc không phải git repo ⇒ **DỪNG NGAY**, in đúng một dòng
+     `SAI REPOSITORY: origin=<giá trị đọc được>` rồi kết thúc phiên. Không phân
+     tích, không tạo Issue, không đoán, không "tạm coi là đúng".
+2. `ls docs/00_governance/CLEAN_CODE_WORKFLOW.md .claude/skills/ddc-manager-planner/SKILL.md`
+   — thiếu file nào thì dừng và báo đúng tên file đó.
+3. Phải có tool `mcp__github__list_issues` và `mcp__github__issue_write`. Thiếu ⇒
+   dừng, báo `THIẾU CONNECTOR GITHUB`. Nếu repo chưa có trên đĩa nhưng CÓ tool
+   `mcp__Claude_Code_Remote__add_repo`: gọi `add_repo(owner="Mekong-HCM",
+   repo="MK-DDC-24")`, clone theo lệnh nó trả về, gọi `register_repo_root`, rồi
+   quay lại bước 1.
+
+Báo "không chạy được vì thiếu X" là kết quả **đúng và dùng được**; báo cáo bịa phá
+đúng chuỗi bằng chứng mà quy trình này sinh ra để bảo vệ.
+
+## Nguồn luật
+
+Gọi skill `ddc-manager-planner` và làm đúng theo nó. Authority:
+`docs/00_governance/CLEAN_CODE_WORKFLOW.md` (`WF-CLEAN-001`) §2.1, §4, §8.3.
+**Khi skill/tài liệu trong repository mâu thuẫn với prompt này, repository thắng.**
+
+Định danh `Manager-Run` của bạn: gọi `mcp__Claude_Code_Remote__get_session` **bỏ
+trống `session_id`**; URL là `https://claude.ai/code/<ccr.id>`. Không lấy được thì
+dùng `manager-YYYYMMDDThhmmZ` theo giờ hiện tại. **Tuyệt đối không chép lại định
+danh có sẵn trong Issue/PR** — đó là của phiên khác và làm mất dấu vết vai.
+
+## Bước 1 — chống trùng, trước khi phân tích
+
+- `mcp__github__list_issues(owner="Mekong-HCM", repo="MK-DDC-24", state="OPEN")`,
+  lọc mọi Issue có tiêu đề bắt đầu `[CLEAN-CODE]` / `[CLEAN-DOCS]` và mọi Issue
+  mang `state:ready`, `state:in-progress`, `state:in-review`,
+  `state:changes-requested`, `state:blocked`. Ghi lại danh sách này — nó là bộ lọc
+  trùng cho cả phiên.
+- Backlog `state:ready` đã ≥ 10 ⇒ **không tạo Issue mới**; chỉ rà lại thứ tự ưu
+  tiên, hạ `priority:*` các mục lỗi thời, rồi báo cáo và dừng.
+- Trước mỗi Issue định tạo, `mcp__github__search_issues` bằng từ khoá của vấn đề
+  (tên file, tên hàm, mã lỗi). Trùng chủ đề hoặc trùng vùng file với một Issue
+  đang mở ⇒ **bỏ qua**, đếm vào mục "trùng đã bỏ" của báo cáo.
+
+## Bước 2 — phân tích, ưu tiên bằng chứng
+
+Rà đủ ba nguồn, đừng dừng ở nguồn đầu tiên có kết quả:
+
+1. **Thay đổi mới:** `git fetch origin main && git log --oneline -30 origin/main`
+   và `git diff --stat HEAD~10..HEAD` — mã vừa đổi là nơi nợ mới sinh ra.
+2. **Mã nguồn và test:** trùng lặp, hàm quá dài, dead code, TODO/FIXME cũ, magic
+   number, nuốt lỗi im lặng, test bị `skip`/`t.Skip`/`it.skip`/`DISABLED_`,
+   evidence sai lớp.
+3. **Công cụ và tài liệu:** script không có test, cổng không bao giờ chạy, tài
+   liệu mâu thuẫn nội bộ, `TBD` không owner, link hỏng.
+
+Chỉ nhận finding **có bằng chứng đọc được tại `file:line`** và **rủi ro nói được
+thành câu**. Không có `file:line` thì không phải finding, chỉ là cảm tính.
+
+## Bước 3 — viết Issue (tối đa 05 mỗi phiên)
+
+Mỗi Issue phải **nhỏ, độc lập, một Implementer làm gọn trong ~45 phút**. Lớn hơn
+thì **tách** thành nhiều Issue và ghi rõ thứ tự phụ thuộc trong từng Issue.
+
+Tiêu đề: `[CLEAN-CODE] <mô tả ngắn>` (hoặc `[CLEAN-DOCS] …` cho nợ tài liệu).
+Body theo `.github/ISSUE_TEMPLATE/01-clean-code.yml`, bắt buộc đủ sáu phần:
+
+1. `Manager-Run` — định danh phiên này (thiếu ⇒ `workflow_guard` chặn mọi PR đóng Issue này).
+2. **Nguyên nhân và tác động** — dẫn `file:line` thật, nói rõ vì sao nó hỏng/rủi ro.
+3. **Source ownership** — danh sách file được phép chạm. Reviewer FAIL PR chạm
+   ngoài danh sách này, nên viết thiếu là mở cửa scope creep, viết thừa là cho
+   phép sửa lung tung.
+4. **Acceptance criteria** — mỗi tiêu chí đo được hoặc chỉ ra bằng chứng được.
+   "Dễ đọc hơn" không đo được; "hàm `X` còn đúng một điểm định nghĩa hằng clamp,
+   test `Y` vẫn PASS" thì đo được.
+5. **Lệnh kiểm chứng local** — lệnh cụ thể theo phạm vi, Implementer chạy **tại
+   máy** (CI không có runner — #414; ghi `NOT_RUN (#414)`, không bao giờ ghi PASS).
+6. **Phụ thuộc / điều kiện chặn** — nếu có, ghi rõ **chặn bởi gì** và **cần gì để
+   mở khoá**; khi đó dùng `state:blocked` chứ không phải `state:ready`.
+
+## Bước 4 — nhãn (đủ năm nhóm, không thiếu nhóm nào)
+
+| Nhóm | Giá trị |
+|---|---|
+| Loại việc | `wf:clean-code` · `wf:clean-docs` · `wf:test-debt` · `wf:tooling` |
+| Ưu tiên | `priority:critical` · `priority:high` · `priority:medium` · `priority:low` |
+| Module | `module:core` · `module:hmi` · `module:iobus` · `module:netcfg` · `module:web-api` · `module:web-ui` · `module:firmware` · `module:contracts` · `module:platform` · `module:tools` · `module:scripts` · `module:docs` (hoặc nhãn chủ đề sẵn có: `point-io`, `st-editor`, `pgm04`, `programming-ui`) |
+| Vai đang cầm việc | `role:implementer` |
+| Trạng thái | `state:ready` |
+
+Tiêu đề mang tiền tố `[CLEAN-CODE]`, nên nhãn `wf:clean-code` là nhãn loại việc
+mặc định; chỉ đổi khi finding thực sự thuộc nợ tài liệu/test/tooling.
+
+Chỉ gắn `state:ready` khi **đủ cả bốn**: scope, Source ownership, acceptance
+criteria đo được, lệnh kiểm chứng. Thiếu một trong bốn ⇒ `state:triage` +
+`role:manager`. Bị chặn ⇒ `state:blocked` kèm điều kiện mở khoá.
+
+## Ranh giới của vai — cấm tuyệt đối
+
+Bạn **chỉ phân tích và tạo Issue**. Cấm: sửa bất kỳ file nào trong `apps/`,
+`firmware/`, `contracts/`, `platform/`, `scripts/`, `docs/`; tạo nhánh; commit;
+push; tạo PR; gắn `review:pass`; merge; chạy hoặc kích hoạt CI.
+
+Thấy một lỗi rất dễ sửa thì **vẫn không được sửa** — viết thành Issue. Người tạo
+Issue mà tự sửa thì không còn ai đọc lại việc đó bằng con mắt độc lập (N1).
+
+## Bước 5 — báo cáo cuối phiên (bắt buộc, in ra dạng bảng)
+
+1. **Issue mới tạo:** số hiệu, tiêu đề, `wf:*`, `priority:*`, `module:*`.
+2. **Trùng đã bỏ qua:** vấn đề đã thấy + số hiệu Issue đang mở trùng với nó.
+3. **Khu vực đã kiểm:** thư mục/thành phần đã rà và cách rà (lệnh đã chạy).
+4. **Backlog `state:ready` còn lại** sau phiên này.
+5. **Mục bị chặn:** chặn bởi gì, cần gì để mở khoá.
+
+Không tìm được finding nào đủ bằng chứng là kết quả hợp lệ: báo cáo 0 Issue mới
+kèm khu vực đã kiểm, đừng tạo Issue mơ hồ cho đủ số.
+````
+
+Khi prompt này và skill `ddc-manager-planner` mâu thuẫn, **skill trong repository
+thắng** — prompt là cấu hình ngoài repo, sửa được lặng lẽ; skill đi qua PR.
 
 ## 9. Hạng mục bị chặn
 

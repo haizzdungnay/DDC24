@@ -15,7 +15,7 @@ quality gate, truy xuất Issue → PR → Test → Merge → Close và lịch c
 
 | Vai | Nhịp | Skill | Cấm |
 |---|---|---|---|
-| Manager/Planner | 1 lần/ngày | `.claude/skills/ddc-manager-planner/` | implement, tạo PR, merge |
+| Manager/Planner (Clean Code Auditor) | 1 lần/ngày — 06:00 giờ VN | `.claude/skills/ddc-manager-planner/` | implement, tạo PR, merge |
 | Implementer | mỗi 1h30 | `.claude/skills/ddc-implementer/` | tự tạo Issue rồi tự làm, gắn `review:pass`, merge |
 | Reviewer/Gatekeeper | 1 lần/ngày | `.claude/skills/ddc-reviewer/` | tự sửa code trong PR đang review, merge khi CI đỏ |
 

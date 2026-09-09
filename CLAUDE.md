@@ -13,7 +13,7 @@ File này được Claude Code tự động nạp vào mỗi phiên làm việc 
 Authority: **`docs/00_governance/CLEAN_CODE_WORKFLOW.md`** (`WF-CLEAN-001`).
 
 Ba vai tách biệt, mỗi vai một skill trong `.claude/skills/`:
-`ddc-manager-planner` (1 lần/ngày, tạo Issue), `ddc-implementer` (mỗi 1h30,
+`ddc-manager-planner` (1 lần/ngày lúc 06:00 giờ VN, tạo Issue), `ddc-implementer` (mỗi 1h30,
 implement + PR), `ddc-reviewer` (1 lần/ngày, review + merge).
 
 Ràng buộc thi hành bằng `scripts/workflow_guard.py`: người tạo Issue không tự
