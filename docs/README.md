@@ -9,6 +9,7 @@
 |---|---|
 | [Control](00_governance/CONTROL.md) | quản trị, thẩm quyền, trạng thái và quy tắc thay đổi |
 | [Quy tắc kiểm soát tài liệu](00_governance/DOC_GOVERNANCE.md) | `DOC-GOV-001`: cấu trúc bắt buộc `DD-01..DD-13`, thang `M0..M5`, ba cổng `PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`, harness và quy tắc trung thực |
+| [Quy trình clean code & clean docs](00_governance/CLEAN_CODE_WORKFLOW.md) | `WF-CLEAN-001`: ba vai Manager/Implementer/Reviewer, ma trận quyền, workflow state, nhánh/merge, quality gate, truy xuất Issue→PR→Test→Merge→Close và lịch chạy |
 | [Decision log](00_governance/DECISIONS.md) | quyết định kiến trúc hiện hành, gồm các ADR đã hợp nhất |
 | [Product](01_product/PRODUCT.md) | định vị và baseline sản phẩm toàn hệ thống |
 | [Product Spec Programming thống nhất](01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | đa Program, POU, Control Library, Published Signal, lifecycle, safety và sáu workspace |
