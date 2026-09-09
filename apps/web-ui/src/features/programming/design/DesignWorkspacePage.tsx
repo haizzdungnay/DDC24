@@ -18,7 +18,7 @@ import { draftSignals } from '../model/signals'
 import { PouExplorer } from './pou/PouExplorer'
 import { programmingCompatibility } from '../shared/programmingCompatibility'
 import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison, useProgrammingCheck } from '../api/queries'
-import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
+import { pouInterfaceFromDraft, runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
@@ -590,6 +590,10 @@ export function DesignWorkspacePage({
   const simulationWatch = simulationWatchRows(simulation.slice.frame)
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
+  const selectedPouInterface = pouInterfaceFromDraft(
+    workspace.project.draft,
+    selectedProgram?.objectId ?? selectedProgram?.programId,
+  )
   const pouNameByObjectId = new Map(
     document.programs.map((program) => [program.objectId ?? program.programId, program.name] as const),
   )
@@ -646,46 +650,54 @@ export function DesignWorkspacePage({
         </p>
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
-        <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
-          {VALID_TABS.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              role="tab"
-              aria-selected={candidate === tab}
-              className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
-                candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-              }`}
-              onClick={() => {
-                /* Điều hướng sang ROUTE của IA thay vì chỉ ghi `?tab=`: trên
-                 * `/programs` và `/mapping`, query bị `route` ghi đè nên ghi
-                 * query là bấm vào chỗ không có gì xảy ra. */
-                const query = new URLSearchParams(searchParams)
-                query.delete('tab')
-                if (PROGRAMS_WORKSPACE_V2_ENABLED) {
-                  /* Cut-over BẬT: cả ba tab ở LẠI route canonical và chỉ đổi
-                   * query. Cho tab Ánh xạ nhảy sang `/projects/:id/mapping` sẽ
-                   * unmount workspace — và cùng với nó là buffer ST chưa lưu
-                   * của người dùng. Trước khi siết chỗ này, journey "đổi tab
-                   * không mất nội dung đang gõ" mất trắng nội dung, vì hai địa
-                   * chỉ mount hai cây component khác nhau. */
-                  if (candidate !== 'programs') query.set('tab', candidate)
-                  navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
-                  return
-                }
-                if (candidate === 'execution') query.set('tab', 'execution')
-                const target = candidate === 'mapping' ? 'mapping' : 'programs'
-                const suffix = query.toString()
-                const destination = target === 'programs'
-                  ? programsWorkspacePath(projectId ?? '', { search: suffix })
-                  : `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`
-                navigate(destination, { replace: true })
-              }}
-            >
-              {pick(...TAB_LABEL[candidate])}
-            </button>
-          ))}
-        </div>
+        {PROGRAMS_WORKSPACE_V2_ENABLED ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid="programming-task-configuration-toggle"
+            aria-pressed={tab === 'execution'}
+            onClick={() => {
+              const query = new URLSearchParams(searchParams)
+              query.delete('tab')
+              if (tab !== 'execution') query.set('tab', 'execution')
+              navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
+            }}
+          >
+            {tab === 'execution'
+              ? pick('Về trình soạn thảo', 'Back to editor')
+              : pick('Cấu hình Task', 'Task configuration')}
+          </Button>
+        ) : (
+          <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
+            {VALID_TABS.map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                role="tab"
+                aria-selected={candidate === tab}
+                className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
+                  candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+                }`}
+                onClick={() => {
+                  /* Nhánh legacy giữ route/tab cũ để feature flag vẫn là một
+                   * rollback thực sự; cut-over v2 dùng sidebar product và chỉ
+                   * còn nút Cấu hình Task có ngữ nghĩa cục bộ. */
+                  const query = new URLSearchParams(searchParams)
+                  query.delete('tab')
+                  if (candidate === 'execution') query.set('tab', 'execution')
+                  const target = candidate === 'mapping' ? 'mapping' : 'programs'
+                  const suffix = query.toString()
+                  const destination = target === 'programs'
+                    ? programsWorkspacePath(projectId ?? '', { search: suffix })
+                    : `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`
+                  navigate(destination, { replace: true })
+                }}
+              >
+                {pick(...TAB_LABEL[candidate])}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {/* `T59-807` — trước lát này `?mode=` chỉ đổi được bằng cách GÕ TAY
               vào URL, và giao diện không nói workspace đang ở chế độ nào. */}
@@ -698,19 +710,16 @@ export function DesignWorkspacePage({
             capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
             onSwitch={switchWorkspaceMode}
           />
+          {draftDirty && (
+            <span
+              role="status"
+              data-testid="draft-dirty-indicator"
+              className="inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-1 text-xs font-medium text-[var(--c-warn-fg)]"
+            >
+              {pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check')}
+            </span>
+          )}
         </div>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            {/* `T59-821` — `Kiểm tra` và `So sánh` ĐÃ CHUYỂN vào toolbar của
-             * chính trình soạn thảo, đúng `PGM-02A §3`. Giữ thêm một bản ở đây
-             * sẽ là HAI nút cho cùng một hành động: người dùng phải đoán chúng
-             * có khác nhau không, và một lần sửa điều kiện khoá sẽ chỉ áp cho
-             * một trong hai.
-             *
-             * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
-             * sang PGM-05, nơi sở hữu trọn vòng seal/run/poll/result. */}
-          </div>
-        )}
       </div>
 
       {compareOpen && (
@@ -747,12 +756,6 @@ export function DesignWorkspacePage({
           </div>
         </div>
       )}
-      {draftDirty && (
-        <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
-          {pick('Draft có thay đổi chưa lưu. Hãy lưu trước khi Kiểm tra.', 'The draft has unsaved changes. Save before running Check.')}
-        </div>
-      )}
-
       {/* Cả ba tab luôn MOUNTED, chỉ ẩn bằng CSS (không unmount/remount theo
           `tab`). Bắt buộc: unmount xoá state cục bộ của `SourceEditor`/
           `FbdEditorPane` (buffer đang gõ, chưa lưu), nên đổi tab rồi quay lại
@@ -899,6 +902,7 @@ export function DesignWorkspacePage({
                 </div>
               )}
               userPouInterfaces={userPouInterfaces}
+              selectedPouInterface={selectedPouInterface}
               userScope={session?.username}
               forceReadOnly={mobileReadOnly}
               onWatchVariable={watchVariable}

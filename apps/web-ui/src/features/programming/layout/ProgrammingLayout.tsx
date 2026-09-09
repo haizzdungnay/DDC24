@@ -3,13 +3,13 @@ import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
 import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
 import { useProgrammingActionAllowed } from '../api/authorization'
-import { ProgrammingHeader } from './ProgrammingHeader'
-import { ProgrammingContextStrip } from './ProgrammingContextStrip'
+import { GlobalContextBar } from './GlobalContextBar'
 import { activeRevisionOwnership, ownedActiveRevisionId, runningProject } from '../shared/activeRevisionOwnership'
 import type { ActiveRevisionOwnership } from '../shared/activeRevisionOwnership'
 import { ProgrammingFeatureRail } from './ProgrammingFeatureRail'
 import { ProgrammingMobileNav } from './ProgrammingMobileNav'
 import { programsWorkspacePath } from '../shared/programsRoute'
+import { useI18n } from '../../../shared/i18n'
 
 interface ProgrammingRuntimeContextValue {
   capabilities: RemoteState<ProgrammingCapabilities>
@@ -62,7 +62,7 @@ export interface ProgrammingEditingContext {
 const ProgrammingRuntimeContext = createContext<ProgrammingRuntimeContextValue | null>(null)
 
 /** Sáu workspace dùng chung các read-model ở tầng layout — tránh poll trùng
- * lặp và giữ đúng một nguồn cho `ProgrammingContextStrip`. */
+ * lặp và giữ đúng một nguồn cho `GlobalContextBar`. */
 export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
   const ctx = useContext(ProgrammingRuntimeContext)
   if (!ctx) throw new Error('useProgrammingRuntimeContext phải nằm trong ProgrammingLayout')
@@ -80,8 +80,8 @@ export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
  * BỐ CỤC (README §3 — Feature Rail 220 | Context Strip | workspace):
  *
  * ```text
- * ProgrammingFeatureRail 220px │ ProgrammingContextStrip 38px, sticky
- *                              │ ProgrammingHeader (<h1> sr-only + các nút)
+ * ProgrammingFeatureRail 220px │ GlobalContextBar 38px, sticky
+ *                              │ <h1> sr-only
  *                              │ <Outlet/>
  * ```
  *
@@ -92,6 +92,7 @@ export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
  * trạng thái nào bị bỏ.
  */
 export function ProgrammingLayout() {
+  const { pick } = useI18n()
   const canSetRuntimeIntent = useProgrammingActionAllowed('runtimeIntent')
   const capabilities = useProgrammingCapabilities()
   const runtime = useProgrammingRuntime()
@@ -187,7 +188,8 @@ export function ProgrammingLayout() {
             KHÔNG co lại dưới kích thước nội dung, nên một bảng rộng trong
             workspace sẽ đẩy cả trang tràn ngang thay vì tự cuộn trong ô của nó. */}
         <div className="min-w-0 flex-1 space-y-4">
-          <ProgrammingContextStrip
+          <h1 className="sr-only">{pick('Lập trình điều khiển', 'Control programming')}</h1>
+          <GlobalContextBar
             projectStatus={projects.status}
             runtimeStatus={runtime.status}
             runtime={runtime.data}
@@ -208,6 +210,14 @@ export function ProgrammingLayout() {
             draftSequence={listedProject?.draftSequence ?? null}
             activeSequence={listedProject?.activeSequence ?? null}
             activeOwnership={activeOwnership}
+            actions={visibleEditingContext?.actions}
+            refreshing={refreshing}
+            onRefresh={() => {
+              capabilities.refresh()
+              runtime.refresh()
+              projects.refresh()
+              programIntents.refresh()
+            }}
             details={{
               draftRevisionId: visibleEditingContext?.draftRevisionId ?? null,
               /* Chỉ in khi ĐÃ CHỨNG MINH thuộc Project đang mở; ngược lại
@@ -241,16 +251,6 @@ export function ProgrammingLayout() {
                 : runtime.status === 'error' || !runtime.data || runtime.data.producerState === 'UNAVAILABLE'
                   ? 'unreadable'
                   : 'readable'
-            }}
-          />
-          <ProgrammingHeader
-            actions={visibleEditingContext?.actions}
-            refreshing={refreshing}
-            onRefresh={() => {
-              capabilities.refresh()
-              runtime.refresh()
-              projects.refresh()
-              programIntents.refresh()
             }}
           />
           <Outlet />

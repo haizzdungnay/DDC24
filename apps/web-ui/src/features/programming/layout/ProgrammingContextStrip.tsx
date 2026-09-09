@@ -1,12 +1,12 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, Info, Loader2, ShieldAlert, WifiOff } from 'lucide-react'
+import { AlertTriangle, ClipboardCheck, Info, Loader2, RefreshCw, Save, ShieldAlert, WifiOff } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
+import { Button } from '../../../shared/components/Button'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { semanticBadgeProps, type SemanticState } from '../shared/semanticState'
 import { ContextDetailsPopover, type ContextDetailsCloseOptions } from './ContextDetailsPopover'
 import { formatObservedAt, type ContextDetailsData } from './contextDetails'
 import type {
-  ProgrammingProgramRuntimeState,
   ProgrammingProgramsPage,
   ProgrammingRuntime,
   ProgrammingTargetState,
@@ -33,12 +33,13 @@ interface ContextNotice {
 export const PROGRAMMING_CONTEXT_STRIP_HEIGHT_PX = 38
 
 /**
- * `R60-05` — ở 1280 px không đủ chỗ cho cả năm dữ kiện trên một hàng 38 px.
- * Thứ tự rút gọn đã chốt: **Core → Active → Draft**. Dữ kiện bị cắt KHÔNG biến
- * mất, nó đi vào popover `Details` (`T60-103`).
+ * `R60-05` / G-03 — hàng chính chỉ giữ bốn dữ kiện quyết định: Project, bản
+ * đang sửa, bản đang vận hành và kết nối bộ điều khiển. Trạng thái từng Program
+ * thuộc Runtime/Diagnostics, không lặp lại thành hai badge ở đây.
  *
- * Hai dữ kiện không bao giờ bị cắt: tên Project (người dùng phải luôn biết mình
- * đang ở đâu) và tóm tắt sức khoẻ Program (thứ trả lời "hệ có đang chạy không").
+ * Ở màn hẹp, thứ tự rút gọn là **Controller → Running → Editing**. Dữ kiện
+ * bị cắt không mất: read-back kỹ thuật vẫn có trong `Details`, còn trạng thái
+ * Program đầy đủ nằm ở workspace Runtime.
  */
 export const CONTEXT_STRIP_TRIM_ORDER = ['core', 'active', 'draft'] as const
 
@@ -46,13 +47,13 @@ export type TrimmableContextField = typeof CONTEXT_STRIP_TRIM_ORDER[number]
 
 /**
  * Ngưỡng ẩn của từng dữ kiện. Cắt trước ⇒ cần màn RỘNG HƠN mới hiện, nên
- * breakpoint giảm dần đúng theo `CONTEXT_STRIP_TRIM_ORDER`. Ở 1280 px (`xl`)
- * còn Project + Draft + Active + sức khoẻ; `Core` đã vào `Details`.
+ * breakpoint giảm dần đúng theo `CONTEXT_STRIP_TRIM_ORDER`. Từ desktop `lg`
+ * trở lên, cả bốn dữ kiện đều hiện vì không còn hai badge Program lặp lại.
  */
 const TRIM_BREAKPOINT_CLASS: Readonly<Record<TrimmableContextField, string>> = {
-  core: 'hidden 2xl:flex',
-  active: 'hidden xl:flex',
-  draft: 'hidden lg:flex'
+  core: 'hidden lg:flex',
+  active: 'hidden md:flex',
+  draft: 'hidden sm:flex'
 }
 
 /**
@@ -95,7 +96,10 @@ export function ProgrammingContextStrip({
   onSelectProject,
   draftSequence = null,
   activeSequence = null,
-  activeOwnership = { kind: 'owned', projectId: '' }
+  activeOwnership = { kind: 'owned', projectId: '' },
+  actions,
+  refreshing = false,
+  onRefresh
 }: {
   projectStatus: ResourceStatus
   runtimeStatus: ResourceStatus
@@ -136,6 +140,9 @@ export function ProgrammingContextStrip({
    * (`ProgrammingLayout`) truyền kết quả của `activeRevisionOwnership`.
    */
   activeOwnership?: ActiveRevisionOwnership
+  actions?: ProgrammingEditingContext['actions']
+  refreshing?: boolean
+  onRefresh?: () => void
 }) {
   const { pick } = useI18n()
   const notice = contextNotice({
@@ -154,15 +161,16 @@ export function ProgrammingContextStrip({
 
   return (
     <section
+      data-testid="programming-global-context-bar"
       aria-labelledby="programming-context-title"
-      /* `top-16`, KHÔNG phải `top-0`: `TopBar` là `sticky top-0 z-40 h-16`, nên
-       * một strip dính ở `top-0` sẽ trượt xuống DƯỚI nó và biến mất đúng lúc
-       * người dùng cuộn — tức là mất luôn thứ mà "sticky" sinh ra để giữ.
+      /* Mobile vẫn có `TopBar` (`sticky top-0 h-16`) nên dùng `top-16`.
+       * G-01 ẩn TopBar của Programming từ `lg`; cùng breakpoint đó strip trở
+       * về `top-0` để không chừa một khoảng trống 64 px.
        * `z-20` nằm dưới banner mất kết nối (`z-30`) và dưới `TopBar` (`z-40`),
        * đúng thứ tự ưu tiên: cảnh báo hạ tầng luôn thắng ngữ cảnh workspace. */
       /* `relative` là mỏ neo của popover `Chi tiết` (`T60-103`): panel đó phải
        * nằm NGOÀI hàng 38 px vì hàng đó `overflow-hidden`. */
-      className="relative sticky top-16 z-20 border-b border-[var(--c-border)] bg-[var(--c-surface-2)] px-3"
+      className="relative sticky top-16 z-20 border-b border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 lg:top-0"
     >
       <h2 id="programming-context-title" className="sr-only">
         {pick('Ngữ cảnh Lập trình hiện tại', 'Current Programming context')}
@@ -202,27 +210,55 @@ export function ProgrammingContextStrip({
           <ActiveBadge pick={pick} runtimeStatus={runtimeStatus} runtime={runtime} sequence={activeSequence} ownership={activeOwnership} />
         </ContextField>
 
-        <ContextField field="core" label={pick('Core', 'Core')}>
+        <ContextField field="core" label={pick('Bộ điều khiển', 'Controller')}>
           <CoreBadge pick={pick} runtimeStatus={runtimeStatus} runtime={runtime} />
         </ContextField>
 
-        <ContextField field="health" label={pick('Chương trình', 'Programs')}>
-          <IntentBadge pick={pick} projectStatus={projectStatus} intentStatus={intentStatus} intents={intents} editing={editing} />
-          <RuntimeBadge
-            pick={pick}
-            projectStatus={projectStatus}
-            runtimeStatus={runtimeStatus}
-            runtime={runtime}
-            intentStatus={intentStatus}
-            intents={intents}
-            editing={editing}
-          />
-        </ContextField>
+        {actions && (
+          <div className="ml-auto flex shrink-0 items-center gap-1" data-testid="programming-global-actions">
+            <Button
+              size="sm"
+              aria-label={pick('Lưu bản nháp', 'Save the draft')}
+              icon={<Save className="h-4 w-4" aria-hidden="true" />}
+              loading={actions.saving}
+              disabled={actions.saveDisabledReason !== null}
+              title={actions.saveDisabledReason ?? pick('Lưu bản nháp', 'Save the draft')}
+              onClick={actions.onSave}
+            >
+              {pick('Lưu', 'Save')}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={pick('Kiểm tra gói', 'Check the package')}
+              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+              disabled={actions.checkDisabledReason !== null}
+              title={actions.checkDisabledReason ?? pick('Kiểm tra gói', 'Check the package')}
+              onClick={actions.onCheck}
+            >
+              {pick('Kiểm tra', 'Check')}
+            </Button>
+          </div>
+        )}
+
+        {onRefresh && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={actions ? '' : 'ml-auto'}
+            icon={<RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />}
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-busy={refreshing}
+          >
+            {pick('Làm mới', 'Refresh')}
+          </Button>
+        )}
 
         <button
           ref={detailsButtonRef}
           type="button"
-          className="ml-auto shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-[11px] font-semibold text-[var(--c-text-dim)] transition hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] disabled:opacity-50"
+          className={`${actions || onRefresh ? '' : 'ml-auto'} shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-[11px] font-semibold text-[var(--c-text-dim)] transition hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] disabled:opacity-50`}
           aria-haspopup="dialog"
           aria-expanded={detailsOpen}
           aria-controls={detailsOpen ? 'programming-context-details' : undefined}
@@ -243,7 +279,12 @@ export function ProgrammingContextStrip({
         </button>
       </div>
       {details && detailsOpen
-        ? <ContextDetailsPopover data={details} anchorRef={detailsButtonRef} onClose={closeDetails} />
+        ? <ContextDetailsPopover
+            data={details}
+            programs={{ status: intentStatus, data: intents }}
+            anchorRef={detailsButtonRef}
+            onClose={closeDetails}
+          />
         : null}
       {notice ? <ContextStateNotice notice={notice} /> : null}
     </section>
@@ -262,7 +303,7 @@ function ContextField({ field, label, children }: { field: string; label: string
       data-context-field={field}
       className={`min-w-0 shrink items-center gap-1.5 whitespace-nowrap ${trimClass ?? 'flex'}`}
     >
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">{label}</span>
+      <span className="shrink-0 text-[10px] font-semibold text-[var(--c-text-dim)]">{label}</span>
       {children}
     </div>
   )
@@ -356,123 +397,9 @@ function CoreBadge({ pick, runtimeStatus, runtime }: {
   return <SemanticBadge pick={pick} state={coreConnectionState(runtimeStatus, runtime?.producerState)} label={coreConnectionLabel(pick, runtimeStatus, runtime?.producerState)} />
 }
 
-function IntentBadge({ pick, projectStatus, intentStatus, intents, editing }: {
-  pick: Pick
-  projectStatus: ResourceStatus
-  intentStatus: ResourceStatus
-  intents: ProgrammingProgramsPage | null
-  editing: ProgrammingEditingContext | null
-}) {
-  if (projectStatus === 'loading' || (editing && intentStatus === 'loading')) {
-    return <SemanticBadge pick={pick} state="unknown" label={pick('Đang tải…', 'Loading…')} />
-  }
-  if (projectStatus === 'error' || intentStatus === 'error') {
-    return <SemanticBadge pick={pick} state="fault" label={pick('Không đọc được', 'Unavailable')} />
-  }
-  if (!editing || !intents || intents.items.length === 0) {
-    return <SemanticBadge pick={pick} state="disabled" label={pick('Chưa có chương trình', 'No programs')} />
-  }
-  const enabled = intents.items.filter((item) => item.desiredEnabled).length
-  return (
-    <SemanticBadge
-      pick={pick}
-      state={enabled > 0 ? 'good' : 'disabled'}
-      label={pick(`${enabled}/${intents.items.length} muốn bật`, `${enabled}/${intents.items.length} enabled by intent`)}
-    />
-  )
-}
-
-function RuntimeBadge({ pick, projectStatus, runtimeStatus, runtime, intentStatus, intents, editing }: {
-  pick: Pick
-  projectStatus: ResourceStatus
-  runtimeStatus: ResourceStatus
-  runtime: ProgrammingRuntime | null
-  intentStatus: ResourceStatus
-  intents: ProgrammingProgramsPage | null
-  editing: ProgrammingEditingContext | null
-}) {
-  if (runtimeStatus === 'error' || runtime?.producerState === 'UNAVAILABLE') {
-    return <SemanticBadge pick={pick} state="fault" label={pick('Không kết nối được Core', 'Core unreachable')} />
-  }
-  if (runtime?.producerState === 'DEGRADED') {
-    return <SemanticBadge pick={pick} state="stale" label={pick('Dữ liệu đã cũ', 'Data is stale')} />
-  }
-  if (projectStatus === 'loading' || runtimeStatus === 'loading' || (editing && intentStatus === 'loading')) {
-    return <SemanticBadge pick={pick} state="unknown" label={pick('Đang tải…', 'Loading…')} />
-  }
-  if (projectStatus === 'error' || intentStatus === 'error') {
-    return <SemanticBadge pick={pick} state="fault" label={pick('Không đọc được', 'Unavailable')} />
-  }
-  if (!runtime || !editing || !intents || intents.items.length === 0) {
-    return <SemanticBadge pick={pick} state="disabled" label={pick('Chưa có chương trình', 'No programs')} />
-  }
-
-  const counts = countRuntimeStates(intents)
-  const state: SemanticState = counts.FAULTED > 0
-    ? 'fault'
-    : counts.UNKNOWN > 0
-      ? 'unknown'
-      : counts.WAITING > 0
-        ? 'warning'
-        : counts.RUNNING > 0
-          ? 'good'
-          : 'disabled'
-  return (
-    <SemanticBadge
-      pick={pick}
-      state={state}
-      label={runtimeStateSummary(counts)}
-      title={runtimeStateSummaryFull(counts)}
-    />
-  )
-}
-
 /** Mọi badge của strip đi qua đây: `T60-104` bảo đảm icon + chữ, không chỉ màu. */
 function SemanticBadge({ pick, state, label, title }: { pick: Pick; state: SemanticState; label: string; title?: string }) {
   return <StatusBadge {...semanticBadgeProps(pick, state, label)} className="shrink-0" title={title} />
-}
-
-function countRuntimeStates(intents: ProgrammingProgramsPage): Record<ProgrammingProgramRuntimeState, number> {
-  // ĐÚNG năm trạng thái (D-07). Hai giá trị chuyển tiếp đã bị gỡ khỏi hợp
-  // đồng: `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức
-  // thì nên không có pha trung gian nào để đếm. Giữ lại hai ô đó là dựng sẵn
-  // chỗ cho một con số không bao giờ khác 0 — và dạy người đọc một mô hình đã
-  // lỗi thời.
-  const counts: Record<ProgrammingProgramRuntimeState, number> = {
-    DISABLED: 0,
-    RUNNING: 0,
-    WAITING: 0,
-    FAULTED: 0,
-    UNKNOWN: 0
-  }
-  for (const item of intents.items) counts[item.runtimeState] += 1
-  return counts
-}
-
-/**
- * `DEV-PROG-014` — tóm tắt NGẮN cho hàng 38 px, bản đầy đủ đi vào `title`.
- *
- * Bản cũ nối tất cả trạng thái có mặt: một Project mười Program hỏng cho ra
- * `FAULTED 10 · UNKNOWN 2 · RUNNING 1` — dài hơn cả tên Project, và nó đẩy
- * chính tên Project ra khỏi hàng. Trạng thái NẶNG NHẤT là thứ quyết định người
- * vận hành làm gì tiếp; phần còn lại là `+N` và đọc đủ ở tooltip hoặc ở trang
- * Runtime & Bảo trì, nơi sở hữu bảng trạng thái.
- *
- * `RUNNING 1` một mình vẫn hiện nguyên: khi mọi thứ đang chạy, đó không phải
- * một phần bị cắt mà là toàn bộ câu trả lời.
- */
-export function runtimeStateSummary(counts: Record<ProgrammingProgramRuntimeState, number>): string {
-  const order: ProgrammingProgramRuntimeState[] = ['FAULTED', 'UNKNOWN', 'WAITING', 'RUNNING', 'DISABLED']
-  const present = order.filter((state) => counts[state] > 0)
-  if (present.length === 0) return ''
-  const head = `${present[0]} ${counts[present[0]]}`
-  return present.length === 1 ? head : `${head} · +${present.length - 1}`
-}
-
-/** Bản đầy đủ, dùng cho `title` — không cắt gì. */
-export function runtimeStateSummaryFull(counts: Record<ProgrammingProgramRuntimeState, number>): string {
-  const order: ProgrammingProgramRuntimeState[] = ['FAULTED', 'UNKNOWN', 'WAITING', 'RUNNING', 'DISABLED']
-  return order.filter((state) => counts[state] > 0).map((state) => `${state} ${counts[state]}`).join(' · ')
 }
 
 function contextNotice({

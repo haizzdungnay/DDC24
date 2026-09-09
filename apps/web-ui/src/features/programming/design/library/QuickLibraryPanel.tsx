@@ -114,11 +114,14 @@ export function QuickLibraryPanel({
       setPreferences(value)
       setSyncState(state)
     })
-    window.setTimeout(() => searchRef.current?.focus(), 0)
+    /* Panel cắm sẵn là một cột thường của workspace: tự cướp focus khỏi
+     * editor mỗi lần chọn POU sẽ làm người dùng đang gõ bị bật sang ô tìm.
+     * Chỉ popover do người dùng chủ động mở mới nhận focus ban đầu. */
+    if (variant !== 'docked') window.setTimeout(() => searchRef.current?.focus(), 0)
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [variant])
 
   const entries = useMemo(() => catalogEntriesOf(library.items), [library.items])
   const categories = useMemo(() => catalogCategories(entries), [entries])
@@ -171,7 +174,7 @@ export function QuickLibraryPanel({
       data-testid="quick-library-panel"
       data-variant={variant}
       className={docked
-        ? 'flex w-72 shrink-0 flex-col overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]'
+        ? 'flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius)] bg-[var(--c-surface)]'
         : 'panel-shadow absolute right-0 top-0 z-20 w-80 overflow-hidden rounded-[var(--radius)] border border-[var(--c-line-strong)] bg-[var(--c-surface)]'}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {

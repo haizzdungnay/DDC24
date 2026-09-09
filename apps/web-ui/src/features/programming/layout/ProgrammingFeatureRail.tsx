@@ -93,7 +93,7 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
   return (
     <aside
       data-testid="programming-feature-rail"
-      className="sticky top-16 hidden shrink-0 flex-col gap-2 self-stretch rounded-[var(--radius)] bg-[var(--c-rail-bg)] py-2 md:flex md:w-16 lg:w-[220px]"
+      className="sticky top-16 hidden shrink-0 flex-col gap-2 self-stretch rounded-[var(--radius)] bg-[var(--c-rail-bg)] py-2 md:flex md:w-16 lg:top-0 lg:w-[220px]"
     >
       {/* `DEV-PROG-010` — LOGO LÀ LỐI RA.
         *

@@ -312,7 +312,120 @@
   GitHub khi nhánh này merge vào `main` (`labels-sync.yml` chạy theo path
   `.github/labels.yml`).
 
+### Added — Rebuild Programming Workspace G-01..G-30 (2026-09-09)
 
+- Dựng workspace PGM-02 bốn cột `POU Explorer | Editor | Thư viện nhanh |
+  Inspector`; ba panel phụ có tay kéo, giới hạn kích thước, thu gọn/mở lại và
+  ghi nhớ chiều rộng cục bộ. Workbench dưới đáy tiếp tục resize/collapse và giữ
+  đủ Vấn đề, Tìm kiếm, Tham chiếu, Watch và Trace.
+- Mở rộng Inspector theo ngữ cảnh thành sáu mục `Thông tin chung`, `Giao diện
+  IEC`, `Thực thi`, `Thuộc tính`, `Metadata DDC`, `Tham chiếu`; hiển thị
+  `VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT`, kiểu trả về FUNCTION, Task/chu kỳ và quan
+  hệ Used by/Uses. Trường chưa có trong Draft v2 nói rõ `không xác định được`,
+  không suy tên Task, priority, watchdog, IEC attribute hay metadata DDC.
+- Bảng Interface đọc trực tiếp buffer ST đang sửa, nên đổi declaration
+  `Name/Direction/Type` phản ánh tức thời trước khi lưu; ba cột Init/Retain/Mô
+  tả giữ `không xác định được` khi Draft v2 chưa công bố dữ liệu.
+- Bổ sung đường nhảy từ Inspector tới cấu hình Task toàn Project; liên kết nội
+  bộ dùng router để không reload và không làm mất buffer chưa lưu.
+
+### Changed — Global Context Bar và tinh gọn editor Programming (2026-09-09)
+
+- Giải xung đột PR #601 với `main@8350c26d`: giữ `ProgramsTab` là facade của
+  refactor mới, đồng thời chuyển điều kiện Quick Library FBD của Task 8 sang
+  đúng owner `EditorPane`. FBD từ 1440 px tiếp tục mount thư viện ở cột thứ ba,
+  dưới 1440 px giữ luồng drawer; các sửa dark-mode, tab POU, status bar và
+  workbench đã merge trên `main` được giữ nguyên.
+- Kiểm chứng sau giải xung đột: test tập trung editor/FBD/tab/workbench **57/57
+  PASS**; toàn FE **245 tệp / 3.113 test PASS**, lint/UI strings và production
+  build PASS; bundle Programming **151,08/165 KiB gzip**. Playwright Google
+  Chrome cho FBD responsive và Quick Library đạt **2/2 PASS**; C++ Release bật
+  Modbus/BACnet/HMI **1.482/1.482 PASS, 8 skip môi trường**; Go `vet` và toàn
+  module test `-count=1` PASS; docs ISO harness **17/17 baseline, 5/5 support**
+  và `git diff --check` PASS. Chrome DevTools MCP đã cấu hình nhưng không được
+  nạp vào tool surface của phiên, nên không claim bằng chứng DevTools.
+- Gộp ba tầng header desktop thành một Global Context Bar 38 px gồm Project,
+  Revision Nháp, Revision đang vận hành, trạng thái bộ điều khiển và hành động
+  Lưu/Kiểm tra/Làm mới/Chi tiết. TopBar toàn hệ thống vẫn được giữ ở mobile để
+  không mất NavDrawer, cảnh báo và tài khoản.
+- Tách monolith `ProgramsTab` thành facade tương thích và các boundary
+  `ProgramsWorkspace`, `EditorPane`, `QuickLibraryPanel`, `EditorToolbar`;
+  shell Programming dùng component `GlobalContextBar` có tên kiến trúc rõ ràng.
+- Cập nhật gate hợp đồng bàn phím ST đọc source authority mới `EditorPane.tsx`
+  cùng facade `ProgramsTab.tsx`, tránh báo mất toàn bộ phím tắt sau refactor.
+- Bỏ badge trạng thái Program lặp khỏi hàng chính; ý định Enable và read-back
+  runtime từng Program chuyển vào `Chi tiết`, vẫn tách hai nguồn và giữ trạng
+  thái loading/error/unknown. Bỏ navigation Programs/Mapping/Execution trùng
+  trong workspace v2, giữ route legacy phía sau feature flag để rollback.
+- Sắp cây POU theo `Programs | Function Blocks | Functions`, thay các nút
+  `ST+/FN+/FB+` bằng menu `Mới`, gom đổi tên/nhân bản/xóa vào menu `…`; giữ
+  chuột phải và đường bàn phím. Thanh công cụ ST được nhóm theo lịch sử, chèn,
+  tìm kiếm, định dạng và Lưu/Kiểm tra; Lưu/Kiểm tra là hành động chính, trạng
+  thái Draft bẩn là pill gọn và EDIT/LIVE/SIMULATE giữ guard bỏ thay đổi.
+- Giảm chữ in hoa/đường viền ở các bề mặt chính, giữ semantic color kèm icon và
+  chữ; Thư viện nhanh không tự cướp tiêu điểm khi mount và chiếm đúng cột được
+  cấp thay vì áp chiều rộng cố định.
+
+### Fixed — Metadata POU legacy trong Inspector (2026-09-09)
+
+- Không còn báo lỗi đỏ hoặc khóa lưu Mô tả/Truy cập chỉ vì tên POU legacy có
+  khoảng trắng; validation tên IEC chỉ kích hoạt khi người dùng thực sự đổi
+  tên, còn backend vẫn là authority khi ghi.
+- Kiểm chứng HOST/no-board: toàn FE **245 tệp / 3.107 test PASS**; TypeScript,
+  lint/UI strings, toàn bộ Programming contract checks và production build
+  PASS. Bundle Programming **150,93/165 KiB gzip**, dư **14,07 KiB**.
+  Playwright trên Google Chrome thật: desktop **10/10 PASS** và mobile
+  **2/2 PASS** (1 case mutation desktop được skip có chủ đích), gồm hành trình
+  ST/FBD, layout 1920×1080, 1280×750, responsive FBD, 4 cột, keyboard/focus,
+  mode guard, workbench và chống tràn ngang 390 px. Đây là bằng chứng mock/host,
+  không phải Core thật, physical HIL, CI hay `RELEASE_READY`; Chrome DevTools
+  MCP không được nạp trong phiên nên không claim bằng chứng DevTools. Docs ISO
+  harness đạt **17/17 baseline, 5/5 support** và `git diff --check` PASS.
+- Cổng pre-commit và phép đo lại sau khi rebase `origin/main` chạy trên đúng
+  worktree: C++ Release bật đồng thời Modbus/BACnet/HMI đạt **1.482/1.482 PASS,
+  8 skip môi trường**; Go `vet` và
+  toàn module test `-count=1` PASS; FE giữ **245 tệp / 3.107 test PASS**, lint,
+  build mặc định và build Forlinx có cut-over v2 đều PASS. Lần Go đầu chạy
+  song song lúc linker đang thay binary compiler làm đỏ một test compiler;
+  chạy độc lập sau khi C++ kết thúc thì package compiler và toàn module PASS.
+  Batch Chrome chọn lọc đạt 9 PASS/8 skip có chủ đích nhưng journey dài timeout
+  một lần khi preview Auto Layout tự hủy; tái chạy độc lập và lặp song song ba
+  lần đều PASS (**4/4**), không tái hiện đổi quyền. Giữ lại phép đo đỏ này để
+  không biến một lần chạy lại thành bằng chứng che flake.
+
+### Changed — Triển khai Programming Workspace v2 lên Forlinx (2026-09-09)
+
+- Build static FE từ worktree cục bộ `main@14872059547caeff470475c39d92d35557cfee3b`
+  bằng `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:foxlinx`, vì profile
+  `build:foxlinx` chỉ bật `VITE_PROGRAMMING_REV_A` và nếu thiếu cờ cut-over thì
+  route vẫn quay về workspace cũ. Đây là artifact từ WIP chưa commit; provenance
+  binary trên board vẫn giữ bản sạch `8e00e4b1fa4b96d002d1e1df7f70dc82a700b468`,
+  không được diễn giải static FE này thành một release từ commit sạch.
+- Đưa gói static 16 tệp SHA-256
+  `10d628947c466136974d8871606c715641a4107a01503497345786927cdcea23` vào
+  `/opt/mkddc-web/dist` bằng staging và đổi tên nguyên tử; chỉ restart
+  `mkddc-web-pi`, không restart Core/I/O bus, không Commission và không ghi
+  output. Backup nguyên trạng trước phiên tại
+  `/var/backups/mkddc/predeploy-local-ui-20260909T092310Z`; backup artifact lần
+  đầu chưa bật cut-over tại
+  `/var/backups/mkddc/predeploy-programs-v2-20260909T092637Z`.
+- Checksum `index.html` trên host, board và URL công khai cùng bằng
+  `998e9a48236d86844bd7286f229a51c1565e51b2cf7d7ad6f573c63ac829404d`;
+  bundle `programming-u53EmmMr.js` trên host/public cùng bằng
+  `44ab127d0bc3aace66ea321c066dbf2857dfd8c279eb4d72f89a3f9efb1e5e90`
+  và trả HTTP 200.
+- Kiểm chứng TARGET tại `http://mekong-fac.ddns.net:8082`: health cách nhau 2 s
+  đạt **6/6 `ok`**; `mkddc-web-pi`, `mkddc-core`, `mkddc-iobus` đều `active`,
+  `NRestarts=0`, không có panic/fatal/segfault/failed mới trong nhật ký Web.
+  Một nhịp health `core=fault` thoáng qua xuất hiện khi bắn nhiều request đồng
+  thời ngay sau restart; Core PID 722 và socket vẫn sống, giao tiếp IPC tiếp tục
+  thành công, sau đó health tự phục hồi mà không restart Core.
+- Google Chrome thật trên chính URL board: hai case LIVE `T59-811` **2/2 PASS**;
+  smoke EDIT desktop 1440×900 thấy đủ bốn cột POU/Editor/Thư viện nhanh/Inspector,
+  mobile 390×844 không tràn ngang; route error, Console error, request fail và
+  response HTTP từ 400 đều bằng 0. Chrome DevTools MCP đã cấu hình nhưng không
+  được nạp vào tool surface của phiên, nên bằng chứng trình duyệt dùng Playwright
+  và không được ghi nhận là DevTools, physical HIL hay `RELEASE_READY`.
 ### Fixed — Cổng Go giữ đúng production tool khi dùng build root tương đối (2026-09-08)
 
 - Sửa `scripts/verify-project.sh --component go --build-root build/verify` báo

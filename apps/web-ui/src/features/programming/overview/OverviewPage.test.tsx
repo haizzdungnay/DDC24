@@ -177,25 +177,14 @@ describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', ()
       ] })
     })
     renderOverview('vi')
-    expect(await screen.findAllByText('1/2 muốn bật')).not.toHaveLength(0)
-    /* SELECTOR ĐỔI VÌ BỐ CỤC ĐỔI (`T60-207`), khẳng định giữ nguyên.
-     *
-     * Trước đây con số tổng hợp này xuất hiện HAI lần: một ở
-     * `ProgrammingContextStrip` (tầng layout) và một ở panel "Ứng dụng đang vận
-     * hành" mà `OverviewPage` tự vẽ. Handoff v2.1 §1 chốt sáu khối cho PGM-01
-     * và KHÔNG có khối tổng hợp thứ hai — bảng Programs nói trạng thái theo
-     * TỪNG Program, còn con số gộp là việc của context strip. Nhân đôi cùng một
-     * con số ở hai chỗ chỉ tạo thêm một nguồn có thể trôi lệch.
-     *
-     * Khẳng định gốc — "ý định Enable là một dữ kiện, runtime thực tế là dữ kiện
-     * KHÁC" — vẫn nguyên vẹn: hai nhãn vẫn cùng hiện và vẫn nói hai điều khác
-     * nhau (`1/2 muốn bật` ≠ `FAULTED 1 · +1`). Case ngay dưới khoá lại
-     * cùng khẳng định đó ở mức từng Program, chặt hơn mức gộp.
-     *
-     * `DEV-PROG-014` rút gọn nhãn gộp còn trạng thái NẶNG NHẤT kèm `+N`; bản
-     * đầy đủ nằm ở `title`. */
-    expect(screen.getAllByText('FAULTED 1 · +1')).toHaveLength(1)
-    expect(screen.getAllByTitle('FAULTED 1 · RUNNING 1')).toHaveLength(1)
+    const context = await screen.findByRole('region', { name: 'Ngữ cảnh Lập trình hiện tại' })
+    // G-03: tổng hợp theo Program rời khỏi hàng chính để giảm nhiễu, nhưng vẫn
+    // phải tra được trong Chi tiết và vẫn tách ý định khỏi read-back runtime.
+    expect(within(context).queryByText('1/2 muốn bật')).not.toBeInTheDocument()
+    fireEvent.click(within(context).getByRole('button', { name: 'Chi tiết' }))
+    const details = await screen.findByTestId('programming-context-program-details')
+    expect(details).toHaveTextContent('1/2 muốn bật')
+    expect(details).toHaveTextContent('FAULTED 1 · RUNNING 1')
   })
 
   it('T60-207: ý định Enable và runtime thực tế tách nhau ở MỨC TỪNG Program trong bảng', async () => {
@@ -219,9 +208,9 @@ describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', ()
     expect(faulted[3]).toHaveTextContent('Lỗi')
     const running = within(table.getByRole('row', { name: /VAV_Zone/ })).getAllByRole('cell')
     expect(running[3]).toHaveTextContent('Đang chạy')
-    // Ý định gộp vẫn nói `1/2 muốn bật` — con số đó KHÔNG được dùng để suy ra
-    // Program nào đang chạy.
-    expect(screen.getAllByText('1/2 muốn bật').length).toBeGreaterThan(0)
+    const context = screen.getByRole('region', { name: 'Ngữ cảnh Lập trình hiện tại' })
+    fireEvent.click(within(context).getByRole('button', { name: 'Chi tiết' }))
+    expect(screen.getByTestId('programming-context-program-details')).toHaveTextContent('1/2 muốn bật')
   })
 
   it('BUG-018: phạm vi PRG-SAFE-ACTIVE không rò tiếng Việt cứng khi ở chế độ EN', async () => {

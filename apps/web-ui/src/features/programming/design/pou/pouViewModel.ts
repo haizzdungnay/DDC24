@@ -13,7 +13,7 @@ import type { ProgrammingDraftDocument, ProgrammingProgram } from '../../model/t
 export type PouKind = ProgrammingProgram['kind']
 export type PouLanguage = ProgrammingProgram['language']
 
-export const POU_KINDS: readonly PouKind[] = ['PROGRAM', 'FUNCTION', 'FUNCTION_BLOCK']
+export const POU_KINDS: readonly PouKind[] = ['PROGRAM', 'FUNCTION_BLOCK', 'FUNCTION']
 
 export interface PouItem {
   /** Identity tài liệu — authority cho mọi thao tác của Explorer. */
