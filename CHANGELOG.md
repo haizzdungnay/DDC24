@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### Fixed — Ba test hợp đồng Go hết fail-open: `t.Skip` đổi thành `t.Fatalf` khi không thấy `contracts/` (2026-09-09)
+
+- Phạm vi: `apps/web-api/internal/modbusrtu/contract_sync_test.go`,
+  `apps/web-api/internal/app/contract_routes_test.go`,
+  `apps/web-api/internal/app/schedulecontract_test.go`. Không chạm file
+  production, không chạm `contracts/**`. Closes #590.
+- Triệu chứng: ba helper định vị file hợp đồng (`repoRoot`, `openAPIPath`,
+  `scheduleSchemaPath`) đi lên tối đa 8 cấp thư mục, và khi không thấy thì gọi
+  `t.Skip`. Hôm nay ba file hợp đồng đang tồn tại nên test vẫn chạy thật, nhưng
+  hành vi khi chúng biến mất là **fail-open**: cổng canh đồng bộ contract tự
+  tắt mà `go test ./...` vẫn báo `ok`.
+- Nguyên nhân gốc: nhánh "không tìm thấy" bị xử lý như *điều kiện môi trường
+  còn thiếu* (giống các skip hợp lệ cần `root`, cần `linux`, cần
+  `MKDDC_REAL_SCHEDULE_CONF`), trong khi thực chất nó là *lỗi cấu trúc repo* —
+  file hợp đồng luôn phải có mặt. Tái cấu trúc kiểu `PLAN-ARCH-RESTRUCT-002`
+  (`services/` → `apps/`) là đúng lớp sự kiện làm nó kích hoạt.
+- Cách sửa: cả ba nhánh đổi sang `t.Fatalf`, thông điệp nêu đường dẫn đang tìm,
+  số cấp đã đi lên và thư mục xuất phát để đọc log là biết sửa gì. Số cấp 8
+  tách thành hằng số đặt tên (`repoRootMaxParents`, `contractLookupMaxParents`)
+  thay cho số ma thuật lặp ba chỗ. Không đổi contract/API/schema, không đụng
+  logic parse (N6).
+- Verification (đo tại máy 2026-09-09, CI `NOT_RUN` theo #414):
+
+  | Phép đo | Trước | Sau |
+  |---|---|---|
+  | `go vet ./...` (trong `apps/web-api`) | exit 0 | exit 0 |
+  | `go test ./... -count=1` | — | exit 0 — 21 `ok`, 0 `FAIL`, 3 `no test files` |
+  | `--- SKIP` trong `./internal/modbusrtu/ ./internal/app/` (`-count=1 -v`) | 2 | 2 |
+  | `rg -c 't\.Skip' -g '*_test.go' apps/web-api` (tổng) | 33 | 30 |
+  | `rg -n 't\.Skip'` trên ba file sửa | 3 dòng | 0 dòng |
+
+- Hai `--- SKIP` còn lại là skip có điều kiện thật, cố ý giữ nguyên:
+  `TestMigrationAgainstRealBoardConfig` (cần `MKDDC_REAL_SCHEDULE_CONF` trỏ tới
+  bản sao `schedule.conf` của bo lab) và một subtest của
+  `TestTelemetryTraCuuTheoBusVaSlaveTrenMoiEndpoint`. Tổng `t.Skip` giảm đúng 3,
+  toàn bộ nằm trong ba file thuộc phạm vi — không "dọn" nhầm sang skip hợp lệ.
+- 11 test dùng ba helper đều `--- PASS`: `TestGoStructFieldsAreDeclaredInOpenAPI`,
+  `TestOpenAPIDescribesRetrySemanticsAfterDecision05`,
+  `TestOpenAPISeparatesRuntimeRoutesFromRoadmap`,
+  `TestQualityEnumMatchesAcrossContractLayers`,
+  `TestMaxPointsMatchesContractCapacity`, `TestPortAllowlistMatchesOpenAPIEnum`,
+  `TestControlChannelSchemaCoversEveryOperation`, `TestRouteTableMatchesOpenAPI`,
+  `TestRevBSurfacesStayOutOfRevAContract`,
+  `TestScheduleSchemaOneOfBranchesAreDisjoint`,
+  `TestScheduleSchemaAcceptsEveryValueType`.
+- Kiểm chứng fail-close thật (không chỉ đọc mã): tạm đổi tên `contracts/` rồi
+  chạy lại ba test đại diện — cả ba `--- FAIL` với đúng thông điệp mới, `exit 1`
+  thay vì `ok`; `contracts/` khôi phục nguyên vẹn, `git status` sạch.
+
 ### Changed — Không tạo được Routine từ phiên agent: ghi ba lần đo và chuyển sang giao diện Routines (2026-09-09)
 
 - Triệu chứng: mọi lượt Routine đều chết với thông báo *"session chưa được cấp

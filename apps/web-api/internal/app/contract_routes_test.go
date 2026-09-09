@@ -55,20 +55,29 @@ var forbiddenInRevA = []string{
 	"/logs/download",
 }
 
+// contractLookupMaxParents là số cấp thư mục tối đa đi ngược lên để tìm file
+// hợp đồng dùng chung của package app.
+const contractLookupMaxParents = 8
+
 func openAPIPath(t *testing.T) string {
 	t.Helper()
-	dir, err := os.Getwd()
+	start, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 8; i++ {
+	dir := start
+	for i := 0; i < contractLookupMaxParents; i++ {
 		candidate := filepath.Join(dir, "contracts", "openapi", "openapi.yaml")
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}
 		dir = filepath.Dir(dir)
 	}
-	t.Skip("không tìm thấy contracts/openapi/openapi.yaml — bỏ qua test đồng bộ route")
+	// Fail-close, cố tình KHÔNG bỏ qua test: xem ghi chú cùng nội dung ở
+	// repoRoot trong internal/modbusrtu/contract_sync_test.go.
+	t.Fatalf("không tìm thấy contracts/openapi/openapi.yaml sau khi đi lên %d cấp từ %q — "+
+		"kiểm tra contracts/ có bị đổi tên/di chuyển không, hoặc nâng contractLookupMaxParents nếu cây thư mục sâu thêm",
+		contractLookupMaxParents, start)
 	return ""
 }
 
