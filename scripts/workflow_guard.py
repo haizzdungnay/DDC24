@@ -307,31 +307,60 @@ def check(pr: dict, issue: dict | None, comments: list[dict], labels: set[str]) 
             )
 
     # --- Nhóm 3: cổng merge ----------------------------------------------
+    #
+    # Thứ tự ở đây quan trọng. Một PR đi qua nhiều vòng review sẽ tích luỹ nhiều
+    # verdict, và chỉ verdict MỚI NHẤT còn hiệu lực: một PASS ở vòng 1 đã bị FAIL
+    # ở vòng 2 phủ định thì không còn là giấy thông hành. Lấy `passes[-1]` (PASS
+    # gần nhất) thay vì verdict gần nhất là cho merge dựa trên một phán quyết đã
+    # bị thu hồi.
     verdicts = review_verdicts(comments)
-    passes = [v for v in verdicts if v[0] == "PASS"]
+    latest = verdicts[-1] if verdicts else None
+    fail_rounds = sum(1 for v in verdicts if v[0] == "FAIL")
 
-    if "review:changes-requested" in labels:
+    has_pass_label = "review:pass" in labels
+    has_cr_label = "review:changes-requested" in labels
+
+    if has_pass_label and has_cr_label:
+        # Vòng sửa lại: Reviewer FAIL (gắn changes-requested), Implementer sửa,
+        # Reviewer PASS (gắn review:pass) — nhưng quên gỡ nhãn cũ. Trước lát này
+        # PR đó bị chặn vĩnh viễn bởi một thông điệp chỉ sai người: nó bảo
+        # Implementer đi sửa, trong khi việc cần làm là Reviewer gỡ một cái nhãn.
+        report.fail(
+            "N2-LABEL",
+            "PR mang đồng thời `review:pass` và `review:changes-requested` — hai "
+            "nhãn phủ định nhau nên không đọc được trạng thái cổng. **Vai "
+            "Reviewer** phải gỡ nhãn không còn đúng (giữ đúng một nhãn khớp "
+            "verdict mới nhất). Đây không phải việc của Implementer.",
+        )
+    elif has_cr_label:
         report.fail(
             "N2-GATE",
             "PR đang mang nhãn `review:changes-requested`. Sửa theo verdict "
-            "FAIL rồi báo Reviewer đổi nhãn, không tự gỡ.",
+            "FAIL rồi báo Reviewer review lại; Implementer không tự gỡ nhãn này.",
         )
-
-    if "review:pass" not in labels:
+    elif not has_pass_label:
         report.fail(
             "N2-GATE",
             "Chưa có nhãn `review:pass`. Cổng merge do vai Reviewer mở; "
             "Implementer không được tự gắn nhãn này. Job đỏ ở đây là trạng "
             "thái BÌNH THƯỜNG của PR đang chờ review.",
         )
-    elif not passes:
+    elif latest is None:
         report.fail(
             "N2-VERDICT",
             "Có nhãn `review:pass` nhưng không tìm thấy comment "
             "`[REVIEW-VERDICT: PASS]`. Nhãn không thay được verdict có nội dung.",
         )
+    elif latest[0] == "FAIL":
+        report.fail(
+            "N2-VERDICT",
+            "Verdict MỚI NHẤT trên PR là `[REVIEW-VERDICT: FAIL]`, nhưng PR vẫn "
+            "mang nhãn `review:pass`. Một PASS ở vòng trước đã bị FAIL sau đó phủ "
+            "định thì không còn hiệu lực; Reviewer phải review lại và post verdict "
+            "mới sau khi Implementer sửa.",
+        )
     else:
-        reviewer_run = passes[-1][1]
+        reviewer_run = latest[1]
         if reviewer_run is None:
             report.fail(
                 "N2-VERDICT",
@@ -351,6 +380,18 @@ def check(pr: dict, issue: dict | None, comments: list[dict], labels: set[str]) 
                     "vai phải là ba lượt chạy khác nhau.",
                 )
             report.note(f"Verdict PASS bởi `{reviewer_run}`.")
+
+    # Vòng sửa lại không được chạy vô hạn. Ba lần FAIL trên cùng một PR thường
+    # có nghĩa là Issue bị scope sai chứ không phải Implementer làm ẩu — và đó là
+    # việc của Manager, không phải việc lặp thêm vòng thứ tư. Đây là ghi nhận
+    # hiển thị ở mọi lần chạy guard, KHÔNG phải lỗi chặn: chặn ở đây sẽ khoá luôn
+    # bản sửa đang đúng.
+    if fail_rounds >= 3:
+        report.note(
+            f"CẢNH BÁO vòng sửa lại: PR đã nhận {fail_rounds} verdict FAIL. "
+            "WF-CLEAN-001 §3.1 yêu cầu escalate cho Manager xem lại scope của "
+            "Issue thay vì chạy tiếp vòng mới."
+        )
 
     return report
 
@@ -718,6 +759,40 @@ def selftest() -> int:
     )
     expect("offline JSON sai hình dạng trả 2", offline({"khong_co_pr": 1}) == 2)
     expect("offline file không tồn tại trả 2", run_offline("/nonexistent/guard-input.json") == 2)
+
+    # --- vòng sửa lại (WF-CLEAN-001 §3.1) ---------------------------------
+    def verdict(kind: str, run: str) -> dict:
+        return {"body": f"[REVIEW-VERDICT: {kind}]\nReviewer-Run: {run}", "user": {"login": "r"}}
+
+    # Deadlock cũ: FAIL rồi PASS nhưng không ai gỡ nhãn changes-requested.
+    both = check(good_pr, good_issue, [verdict("FAIL", "rev-1"), verdict("PASS", "rev-1")],
+                 {"review:pass", "review:changes-requested"})
+    expect("hai nhãn review mâu thuẫn ⇒ N2-LABEL", any(e.startswith("N2-LABEL") for e in both.errors))
+    expect("N2-LABEL chỉ đúng người (Reviewer)", any("Reviewer** phải gỡ" in e for e in both.errors))
+
+    # Lỗ hổng cũ: PASS vòng 1 bị FAIL vòng 2 phủ định, nhưng nhãn còn review:pass.
+    stale = check(good_pr, good_issue, [verdict("PASS", "rev-1"), verdict("FAIL", "rev-1")],
+                  {"review:pass"})
+    expect("verdict FAIL mới nhất phủ định PASS cũ", any(e.startswith("N2-VERDICT") for e in stale.errors))
+
+    # Vòng sửa lại hợp lệ: FAIL → sửa → PASS, Reviewer đã gỡ nhãn cũ.
+    reworked = check(good_pr, good_issue, [verdict("FAIL", "rev-1"), verdict("PASS", "rev-1")],
+                     {"review:pass"})
+    expect("vòng sửa lại đúng cách thì merge được", reworked.errors == [])
+
+    # Đang chờ Implementer sửa.
+    waiting = check(good_pr, {**good_issue, "labels": [{"name": "state:changes-requested"}]},
+                    [verdict("FAIL", "rev-1")], {"review:changes-requested"})
+    expect("state:changes-requested là trạng thái hợp lệ khi có PR",
+           not any(e.startswith("WF-STATE") for e in waiting.errors))
+    expect("đang chờ sửa thì chặn bằng N2-GATE", any(e.startswith("N2-GATE") for e in waiting.errors))
+
+    # Trần vòng lặp: ghi nhận, KHÔNG chặn bản sửa đang đúng.
+    capped = check(good_pr, good_issue,
+                   [verdict("FAIL", "rev-1"), verdict("FAIL", "rev-1"),
+                    verdict("FAIL", "rev-1"), verdict("PASS", "rev-1")], {"review:pass"})
+    expect("3 vòng FAIL ⇒ có cảnh báo escalate", any("escalate" in n for n in capped.notes))
+    expect("cảnh báo escalate KHÔNG chặn merge", capped.errors == [])
 
     failed = [name for name, ok in cases if not ok]
     for name, ok in cases:

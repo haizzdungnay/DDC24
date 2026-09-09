@@ -124,6 +124,65 @@ kiểm điều này ở mỗi lần chạy.
 
 ---
 
+### 3.1 Vòng sửa lại — chuyện gì xảy ra khi Reviewer FAIL
+
+FAIL không phải điểm kết thúc. Nó mở một vòng, và vòng đó phải khép lại được.
+
+```
+Reviewer FAIL
+   │  PR   ← review:changes-requested   (Reviewer gắn)
+   │  Issue ← state:changes-requested   (Reviewer chuyển, gỡ state:in-review)
+   ▼
+Implementer kế tiếp NHẬN LẠI chính PR đó
+   │  state:changes-requested được ưu tiên TRƯỚC mọi Issue state:ready mới
+   │  sửa theo danh sách "phải sửa", push lên CHÍNH nhánh cũ — không mở PR mới
+   │  Issue ← state:in-review
+   ▼
+Reviewer review lại
+   │  PASS ⇒ gỡ review:changes-requested, gắn review:pass, post verdict PASS
+   │  FAIL ⇒ giữ review:changes-requested, post verdict FAIL mới
+   ▼
+merge, hoặc vòng tiếp theo
+```
+
+**Ai sửa lại.** Vai Implementer, ở **lượt chạy kế tiếp** — không phải cùng phiên
+đã mở PR (phiên đó đã kết thúc). Đây là lý do skill `ddc-implementer` xếp
+`state:changes-requested` **trên** mọi Issue mới: một PR đang chờ sửa có giá trị
+hơn một PR mới mở, và một PR bị bỏ quên là công đã làm bị mất trắng.
+
+**Nhánh và PR giữ nguyên.** Sửa lại thì push lên nhánh cũ của PR đó. Mở PR mới
+làm đứt chuỗi verdict và Reviewer mất ngữ cảnh vòng trước.
+
+**Chuỗi `Implementer-Run`.** Phiên sửa lại là một lượt chạy khác, nên nó **thêm**
+một dòng `Implementer-Run` vào body PR chứ không ghi đè dòng cũ. Guard đọc dòng
+đầu tiên để kiểm N1; các dòng sau là dấu vết ai đã chạm PR này.
+
+**Gỡ nhãn cũ là việc của Reviewer.** Khi PASS ở vòng sau, Reviewer phải **gỡ**
+`review:changes-requested` trước khi gắn `review:pass`. Hai nhãn cùng lúc là
+trạng thái không đọc được, và guard chặn bằng mã `N2-LABEL` — chặn đúng, nhưng
+việc cần làm là gỡ nhãn, không phải sửa code.
+
+**Verdict cũ hết hiệu lực.** Guard đọc verdict **mới nhất**, không phải PASS gần
+nhất. Một PASS ở vòng 1 đã bị FAIL ở vòng 2 phủ định thì không còn là giấy thông
+hành; phải có verdict PASS mới sau khi sửa.
+
+**Trần ba vòng.** Ba verdict FAIL trên cùng một PR thường có nghĩa là **Issue bị
+scope sai**, không phải Implementer làm ẩu. Đến đó, guard in cảnh báo escalate và
+Manager phải xem lại Issue: viết lại acceptance criteria, tách nhỏ, hoặc đóng
+Issue và mở lại đúng phạm vi. Vòng thứ tư trên cùng một scope sai là lãng phí có
+hệ thống. Cảnh báo này **không chặn merge** — chặn ở đó sẽ khoá luôn bản sửa
+đang đúng.
+
+**PR bỏ quên.** Một PR ở `review:changes-requested` quá **48 giờ** mà không có
+push mới là việc của Manager ở lượt rà hằng ngày: hỏi Implementer lượt sau nhận
+lại, hoặc đóng PR và trả Issue về `state:ready` nếu bản sửa không còn dùng được.
+Không có ai khác canh việc này.
+
+**Nếu sai sau khi đã merge.** Không sửa ngược vào Issue đã đóng. Mở finding mới
+bằng `.github/ISSUE_TEMPLATE/03-finding.yml` ở `state:triage`, dẫn PR đã merge
+làm nguồn. Issue đã đóng là bản ghi của một quyết định có ngày; sửa lại nó làm
+mất dấu vết vì sao khi đó mọi người tưởng là xong.
+
 ## 4. Nhãn chuẩn
 
 Nguồn chuẩn machine-readable: [`.github/labels.yml`](../../.github/labels.yml).
@@ -136,7 +195,7 @@ lên GitHub (tạo/cập nhật, **không xoá** nhãn cũ đang dùng).
 | Trạng thái | `state:triage`, `state:ready`, `state:in-progress`, `state:in-review`, `state:changes-requested`, `state:blocked`, `state:done` |
 | Loại việc | `wf:clean-code`, `wf:clean-docs`, `wf:test-debt`, `wf:tooling` |
 | Ưu tiên | `priority:critical`, `priority:high`, `priority:medium`, `priority:low` |
-| Cổng review | `review:pass`, `review:changes-requested` |
+| Cổng review | `review:pass`, `review:changes-requested` — **loại trừ nhau**; hai nhãn cùng lúc bị guard chặn bằng `N2-LABEL` |
 | Ngoại lệ | `gate:waived` (chỉ CTO gắn, bắt buộc kèm lý do trong comment) |
 
 Nhãn chủ đề sẵn có (`programming-ui`, `point-io`, `st-editor`, `pgm04`,

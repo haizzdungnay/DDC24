@@ -32,6 +32,21 @@ trong cùng mức thì lấy Issue cũ nhất.
 - Issue mang `state:changes-requested` **được ưu tiên trước mọi Issue mới**: PR
   đang chờ sửa có giá trị hơn PR mới mở.
 
+  Khi nhận một Issue `state:changes-requested`, bạn đang bước vào **vòng sửa lại**
+  (`WF-CLEAN-001` §3.1), không phải bắt đầu việc mới:
+
+  - Đọc comment `[REVIEW-VERDICT: FAIL]` gần nhất trên PR — danh sách "phải sửa"
+    là phạm vi của bạn.
+  - Checkout **nhánh cũ của PR đó** và push lên chính nó. **Không mở PR mới**:
+    PR mới làm đứt chuỗi verdict và Reviewer mất ngữ cảnh vòng trước.
+  - **Thêm** một dòng `Implementer-Run` cho phiên này vào body PR, **không ghi
+    đè** dòng cũ — guard đọc dòng đầu để kiểm N1, các dòng sau là dấu vết ai đã
+    chạm PR này.
+  - Đo lại toàn bộ cổng và **cập nhật bảng Verification**. Số đo của vòng trước
+    không còn đúng cho mã vừa đổi.
+  - **Không** tự gỡ `review:changes-requested` — Reviewer gỡ khi PASS.
+  - Chuyển Issue về `state:in-review` khi đã push xong.
+
 Gắn `state:in-progress`, gỡ `state:ready`, comment vào Issue: nhận việc + định
 danh phiên. Làm bước này **trước** khi viết dòng code đầu tiên, nếu không hai
 phiên chạy song song sẽ nhận trùng.

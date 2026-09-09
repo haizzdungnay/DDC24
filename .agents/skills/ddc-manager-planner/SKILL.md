@@ -87,6 +87,20 @@ Thiếu quyết định sản phẩm hoặc phụ thuộc Issue khác ⇒ để 
 rõ **chặn bởi gì** + **cần gì để mở khoá**. Không để `state:ready` với hy vọng
 Implementer tự quyết — nó sẽ tự quyết, và quyết sai.
 
+### 4a. Canh vòng sửa lại bị treo
+
+Không ai khác canh việc này.
+
+- **PR ở `review:changes-requested` quá 48 giờ không có push mới** ⇒ hoặc nhắc
+  lượt Implementer sau nhận lại, hoặc đóng PR và trả Issue về `state:ready` nếu
+  bản sửa không còn dùng được. Một PR bị bỏ quên là công đã làm bị mất trắng.
+- **PR đã nhận ba verdict FAIL** ⇒ đừng để nó chạy vòng thứ tư. Ba lần FAIL trên
+  cùng một PR thường nghĩa là **bạn đã scope sai Issue**, không phải Implementer
+  làm ẩu. Viết lại acceptance criteria cho đo được, tách nhỏ, hoặc đóng Issue và
+  mở lại đúng phạm vi.
+- **Issue ở `state:in-progress` mà không có PR nào** quá một ngày ⇒ phiên
+  Implementer đã chết giữa chừng; trả Issue về `state:ready`.
+
 ### 5. Phân loại Issue `state:triage` do người khác mở
 
 Issue mở bằng mẫu `03-finding.yml` (finding ngoài phạm vi) là đầu vào của vai

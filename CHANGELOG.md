@@ -8,6 +8,48 @@
 
 ## [Unreleased]
 
+### Fixed — Vòng sửa lại sau verdict FAIL: hai lỗi chặn/lọt và luật còn thiếu (2026-09-09)
+
+- Triệu chứng 1 — **deadlock**: Reviewer FAIL (gắn `review:changes-requested`),
+  Implementer sửa, Reviewer PASS (gắn `review:pass`) nhưng không ai gỡ nhãn cũ.
+  Guard kiểm `review:changes-requested` trước và chặn vô điều kiện, nên PR **không
+  bao giờ merge được** dù đã được duyệt. Thông điệp lỗi còn chỉ sai người: nó bảo
+  Implementer đi sửa code, trong khi việc cần làm là Reviewer gỡ một cái nhãn.
+- Triệu chứng 2 — **lọt**: guard lấy `passes[-1]` (verdict PASS gần nhất) thay vì
+  verdict mới nhất. Một PR có PASS ở vòng 1 rồi FAIL ở vòng 2 vẫn merge được nếu
+  nhãn `review:pass` còn sót — tức merge dựa trên một phán quyết đã bị thu hồi.
+  Đây là lỗ hổng nặng hơn deadlock: deadlock làm việc đứng lại, cái này cho mã
+  chưa được duyệt đi vào `main`.
+- Nguyên nhân gốc chung: `WF-CLEAN-001` định nghĩa đường đi khi review PASS,
+  nhưng **chưa từng định nghĩa vòng sửa lại**. Không có luật thì guard được viết
+  theo giả định "mỗi PR review đúng một lần", và cả hai lỗi trên là hệ quả trực
+  tiếp của giả định đó.
+- Cách sửa — guard: xét cặp nhãn trước (hai nhãn `review:*` cùng lúc ⇒ mã mới
+  `N2-LABEL`, nêu đích danh **Reviewer** là người phải gỡ); đọc **verdict mới
+  nhất** thay vì PASS gần nhất, và chặn khi verdict mới nhất là FAIL trong lúc
+  nhãn `review:pass` còn đó; thêm ghi nhận escalate khi PR đã nhận ≥ 3 verdict
+  FAIL. Cảnh báo ba vòng cố ý **không chặn** — chặn ở đó sẽ khoá luôn bản sửa
+  đang đúng.
+- Cách sửa — luật: `WF-CLEAN-001` §3.1 định nghĩa trọn vòng sửa lại — ai nhận lại
+  (Implementer lượt kế tiếp, ưu tiên trên mọi Issue mới), push lên **nhánh cũ**
+  chứ không mở PR mới, `Implementer-Run` **thêm dòng** chứ không ghi đè, Reviewer
+  gỡ nhãn cũ khi PASS, verdict cũ hết hiệu lực, trần ba vòng thì Manager xem lại
+  scope, PR bỏ quên quá 48 giờ thì Manager kéo về, và sai sau khi đã merge thì mở
+  finding mới chứ không sửa ngược vào Issue đã đóng.
+- Ba skill vai cập nhật theo: Reviewer phải gỡ nhãn đối lập trước khi gắn nhãn
+  mới và phải escalate ở vòng FAIL thứ ba; Implementer nhận `state:changes-requested`
+  thì đọc verdict FAIL gần nhất làm phạm vi, dùng lại nhánh cũ, đo lại toàn bộ
+  cổng; Manager thêm bước canh PR treo, PR ba vòng FAIL và Issue `in-progress`
+  không có PR.
+- Kiểm chứng HOST: `python3 scripts/workflow_guard.py --selftest` **42/42 PASS**
+  (34 ca cũ + 8 ca vòng sửa lại: hai nhãn mâu thuẫn ⇒ `N2-LABEL`, thông điệp chỉ
+  đúng người, verdict FAIL mới nhất phủ định PASS cũ, vòng sửa lại đúng cách thì
+  merge được, `state:changes-requested` hợp lệ khi có PR, đang chờ sửa thì chặn,
+  3 vòng FAIL sinh cảnh báo, cảnh báo không chặn merge). Cả hai lỗi đã được tái
+  hiện bằng ca thật **trước** khi sửa. `docs_iso_harness.py --expect` PASS.
+  CI: `NOT_RUN` — không có runner (#414).
+
+
 ### Fixed — Routine không có `sources` sinh phiên rỗng; ghi bẫy vào WF-CLEAN-001 §8.1 (2026-09-09)
 
 - Triệu chứng: lượt Manager đầu tiên **không tạo được Issue nào**. Phiên báo
