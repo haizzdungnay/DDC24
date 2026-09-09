@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+### Changed — Cổng quy trình clean-code chạy được khi CI không có runner (2026-09-09)
+
+- Triệu chứng: GitHub Actions của tổ chức không cấp runner (billing, #414). Merge
+  `69089a5` và `5cfeef2` không sinh workflow run nào; run gần nhất trên `main` là
+  2026-09-04, và mọi run gần đây chết sau 2–3 giây với 0 step. Hệ quả với
+  `WF-CLEAN-001` vừa thiết lập: job `Cổng quy trình clean-code` không chạy, nên
+  hai nguyên tắc N1 (người tạo Issue không tự implement) và N2 (người implement
+  không tự merge) mất lớp thi hành bằng máy và trở lại thành chữ trong tài liệu.
+- Nguyên nhân gốc: cổng được thiết kế chỉ có một đường chạy — bên trong GitHub
+  Actions, đọc `GITHUB_EVENT_PATH` và gọi API bằng `GITHUB_TOKEN`. Đường đó chết
+  cùng runner.
+- Cách sửa: `scripts/workflow_guard.py` thêm chế độ `--input <file.json>`. Vai
+  Reviewer/Implementer lấy ảnh chụp PR + Issue + comments bằng GitHub MCP, ghi ra
+  JSON rồi chạy guard trên đó — không cần Actions, không cần token, không cần
+  mạng. Chế độ này **không nới lỏng gì**: nó gọi đúng `check()` và
+  `apply_waiver()` mà job CI gọi, nên phán quyết giống hệt; khác biệt duy nhất là
+  ai đi lấy dữ liệu. `normalize_labels` nhận nhãn ở cả dạng API
+  (`[{"name": …}]`) lẫn dạng viết tay (`["…"]`), và `issue` được phép `null` để
+  PR chưa liên kết Issue vẫn ra đúng mã `N3-LINK` thay vì làm hỏng script.
+- Reviewer bắt buộc chạy guard offline **từ cây làm việc trên `main`**, không phải
+  từ nhánh PR: chạy bản guard nằm trong PR thì một PR sửa guard sẽ tự mở cổng cho
+  chính nó — cùng lỗ hổng đã vá ở phía CI, nay vá lại ở phía chạy tay. Output
+  phải dán nguyên văn vào comment verdict, vì CI không để lại dấu vết nào khác.
+- Ba skill vai bỏ mọi bước "đợi CI xanh" — đợi một job không bao giờ chạy là treo
+  vĩnh viễn. Reviewer đổi phép kiểm (2) từ "đọc màu CI" sang "đọc bảng
+  Verification và tự chạy lại khi nghi ngờ"; Implementer được nhắc rằng bảng
+  Verification tự đo là lớp kiểm chứng **duy nhất** trước khi mã vào `main`;
+  Manager không được viết Issue với giả định "CI sẽ bắt".
+- `WF-CLEAN-001` §6.1 ghi thẳng mọi cổng CI là `NOT_RUN` kèm lý do và cảnh báo
+  không được đọc "không có check đỏ" thành PASS; §6.1a mô tả cổng offline thay
+  thế; §9 thêm hạng mục bị chặn với ghi chú rằng §6.1a chỉ thay được cổng quy
+  trình, **không** thay được cổng biên dịch và test đa nền tảng.
+- File workflow được **giữ nguyên**, không xoá: chúng đúng và sẽ tự sống lại khi
+  billing được xử lý; xoá đi là mất công thiết kế cổng cho một sự cố tạm thời.
+- Kiểm chứng HOST: `python3 scripts/workflow_guard.py --selftest` **34/34 PASS**
+  (25 ca cũ + 9 ca mới cho chế độ offline: hai dạng nhãn, nhãn sai kiểu, PASS
+  hợp lệ, chặn khi `Reviewer-Run` trùng `Implementer-Run`, chặn khi thiếu
+  `review:pass`, `issue` null, JSON sai hình dạng, file không tồn tại). Chạy thật
+  trên ca `Manager-Run` trùng `Implementer-Run`: exit 1 kèm mã `N1-SELF`.
+  `python3 scripts/docs_iso_harness.py --expect` PASS.
+- CI: `NOT_RUN` — không có runner (#414).
+
+
 ### Added — Quy trình clean code & clean docs ba vai tách biệt (2026-09-09)
 
 - Thiết lập `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (`WF-CLEAN-001` v1.0

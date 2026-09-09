@@ -70,6 +70,10 @@ Bắt buộc điền:
   "Dễ đọc hơn" không đo được; "hàm `X` còn ≤ 1 điểm định nghĩa hằng số clamp,
   test `Y` vẫn PASS" thì đo được.
 - **Kiểm chứng tối thiểu** — lệnh cụ thể theo phạm vi (xem `WF-CLEAN-001` §6.2).
+  GitHub Actions hiện **không cấp runner** (billing — #414), nên viết Issue với
+  giả định "CI sẽ bắt" là viết sai: mọi lệnh trong mục này là lệnh Implementer
+  phải chạy **tại máy** và ghi số đo vào PR. Ghi CI là `NOT_RUN (#414)`, không
+  ghi PASS.
 
 Kích thước Issue: một Implementer làm gọn trong **một phiên 90 phút**. Việc lớn
 hơn thì tách thành nhiều Issue có thứ tự phụ thuộc ghi rõ.

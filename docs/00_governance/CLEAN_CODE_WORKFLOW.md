@@ -187,27 +187,73 @@ Nhãn chủ đề sẵn có (`programming-ui`, `point-io`, `st-editor`, `pgm04`,
 
 ## 6. Quality gate
 
-### 6.1 Cổng tự động (chạy trên mọi PR)
+### 6.1 Cổng tự động — **hiện KHÔNG chạy**
 
-| Cổng | Workflow / lệnh | Chặn merge |
+> **GitHub Actions của tổ chức không cấp runner** (billing — [#414](https://github.com/Mekong-HCM/MK-DDC-24/issues/414)).
+> Job không bao giờ khởi động: chúng hỏng sau 2–3 giây với 0 step. Run gần nhất
+> trên `main` là 2026-09-04; merge sau đó không sinh run nào.
+>
+> Hệ quả phải nói thẳng: **`Build & Test`, `Security Scan` và `Cổng quy trình
+> clean-code` đều là `NOT_RUN`.** Một PR "không có check đỏ" hiện nay không có
+> nghĩa là nó xanh — nghĩa là chưa ai kiểm. Không được đọc trạng thái trống
+> thành PASS.
+>
+> Các file workflow **được giữ nguyên trong repository**, không xoá: chúng đúng
+> và sẽ tự sống lại khi billing được xử lý. Cho tới lúc đó, cổng chuyển sang
+> chạy tay theo §6.1a và §6.2.
+
+| Cổng | Workflow / lệnh | Trạng thái hiện tại |
 |---|---|---|
-| Kiến trúc repository | `scripts/verify-project.sh --component layout` | ✅ |
-| C++ 5 profile + GoogleTest | `Build & Test` job `som-services` | ✅ |
-| Go vet + test race | `scripts/verify-project.sh --component go --profile race` | ✅ |
-| FE vitest + lint + build | `scripts/verify-project.sh --component frontend` | ✅ |
-| E2E mock + E2E real backend | `--component e2e`, `--component e2e-real` | ✅ |
-| MCU firmware | `--component firmware` | ✅ |
-| ASan/UBSan, fuzz smoke | `Build & Test` | ✅ |
-| Bảo mật | `Security Scan` | ✅ |
-| Quy trình clean-code | `scripts/workflow_guard.py` | ✅ |
-| Self-test của guard | `scripts/workflow_guard.py --selftest` | ✅ |
-| Harness tài liệu | `python3 scripts/docs_iso_harness.py --expect` | ✅ khi PR chạm `docs/` |
+| Kiến trúc repository | `scripts/verify-project.sh --component layout` | `NOT_RUN` — không runner |
+| C++ 5 profile + GoogleTest | `Build & Test` job `som-services` | `NOT_RUN` — không runner |
+| Go vet + test race | `--component go --profile race` | `NOT_RUN` — không runner |
+| FE vitest + lint + build | `--component frontend` | `NOT_RUN` — không runner |
+| E2E mock + real backend | `--component e2e`, `e2e-real` | `NOT_RUN` — không runner |
+| MCU firmware | `--component firmware` | `NOT_RUN` — không runner |
+| ASan/UBSan, fuzz smoke | `Build & Test` | `NOT_RUN` — không runner |
+| Bảo mật | `Security Scan` | `NOT_RUN` — không runner |
+| Quy trình clean-code | `scripts/workflow_guard.py` | **chuyển sang offline, xem §6.1a** |
+
+### 6.1a Cổng quy trình chạy offline — thay thế job CI
+
+Cổng tách vai là thứ **không được phép mất** cùng với CI: nếu nó nghỉ thì N1 và
+N2 chỉ còn là chữ trong tài liệu. Vì vậy `workflow_guard.py` có chế độ chạy
+không cần Actions, không cần token, không cần mạng:
+
+```bash
+python3 scripts/workflow_guard.py --input <ảnh-chụp>.json
+```
+
+Ảnh chụp do chính vai đang làm lấy bằng GitHub MCP (`pull_request_read`,
+`issue_read`, comments) rồi ghi ra file:
+
+```json
+{
+  "pr":       {"number": 601, "body": "...", "labels": [{"name": "review:pass"}]},
+  "issue":    {"number": 600, "body": "...", "labels": [{"name": "state:in-review"}]},
+  "comments": [{"body": "[REVIEW-VERDICT: PASS]\nReviewer-Run: rev-1", "user": {"login": "r"}}]
+}
+```
+
+Chế độ này **không nới lỏng gì**: nó gọi đúng `check()` và `apply_waiver()` mà
+job CI gọi, nên phán quyết giống hệt. Khác biệt duy nhất là ai đi lấy dữ liệu.
+
+| Ai chạy | Khi nào | Ý nghĩa |
+|---|---|---|
+| Implementer | trước khi mở PR, và sau khi mở PR bằng chính số PR đó | tự kiểm N3 — thiếu `Closes`, thiếu `Implementer-Run`, Verification rỗng |
+| Reviewer | **trước khi merge**, sau khi đã gắn `review:pass` và post verdict | thi hành N1 + N2; exit code khác 0 ⇒ **cấm merge** |
+
+Reviewer phải dán nguyên văn output của guard vào comment verdict. Không có
+output đó thì verdict chưa hoàn tất — đây là cách duy nhất còn lại để chứng minh
+cổng đã chạy khi CI không để lại dấu vết nào.
 
 > **Cổng không tự vô hiệu hoá được.** Job thi hành chạy bản
 > `scripts/workflow_guard.py` trên **nhánh mặc định**, không phải bản trong PR:
 > nếu lấy bản của PR thì một PR chỉ cần sửa guard thành luôn trả về 0 là tự mở
 > cổng cho chính nó. Bản guard bị sửa vẫn được kiểm — nhưng ở job
-> `guard-selftest`, chạy trước và chạy đúng bản của PR.
+> `guard-selftest`, chạy trước và chạy đúng bản của PR. Trong lúc CI ngủ, lớp
+> bảo vệ tương đương là: Reviewer chạy guard từ **cây làm việc trên `main`**, không
+> phải từ nhánh PR, và `scripts/workflow_guard.py` nằm trong CODEOWNERS.
 
 ### 6.2 Cổng do Implementer chạy tại máy **trước khi** mở PR
 
@@ -307,6 +353,7 @@ cấu hình ẩn ở đâu đó.
 |---|---|---|
 | Cổng *Require approvals* native của GitHub cho agent | Ba vai dùng chung tài khoản `Mekong-HCM`; GitHub cấm tự approve PR của mình | Cấp machine user hoặc GitHub App riêng cho vai Reviewer, thêm vào repo với quyền `write` |
 | Bật branch protection trên `main` | Cần quyền admin repo qua giao diện `Settings → Branches`; API branch-protection không có trong tool set của phiên agent | Owner bật thủ công theo checklist `§5.1` |
+| Toàn bộ cổng CI (`Build & Test`, `Security Scan`, job `workflow-guard`) | GitHub Actions của tổ chức không cấp runner — billing (#414) | Xử lý `Billing & plans` của tổ chức `Mekong-HCM`. **Không có phần thay thế bằng phần mềm** cho build/test đa nền tảng; §6.1a chỉ thay được cổng quy trình, không thay được cổng biên dịch và test. |
 
 ---
 

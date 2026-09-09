@@ -90,6 +90,11 @@ Dùng `-count=1` cho Go: kết quả cache che được hồi quy.
 Cổng không chạy được ⇒ ghi `NOT_RUN` kèm lý do trong PR. **Không bao giờ** ghi
 PASS cho cổng chưa chạy.
 
+**CI không gác giúp bạn.** GitHub Actions của tổ chức không cấp runner (billing —
+#414), nên `Build & Test` và `Security Scan` sẽ không chạy trên PR của bạn. Bảng
+Verification bạn tự đo là **lớp kiểm chứng duy nhất** trước khi mã vào `main`.
+Chạy đủ cổng theo phạm vi, đừng cắt bớt vì "CI sẽ bắt".
+
 ### 5. Tự review trước khi mở PR
 
 ```bash
@@ -125,16 +130,27 @@ Mở PR bằng GitHub MCP `create_pull_request` (phiên chạy theo Routine **kh
 
 Chuyển Issue sang `state:in-review`, gỡ `state:in-progress`.
 
-### 7. Job `Cổng quy trình clean-code` đỏ vì thiếu `review:pass` là BÌNH THƯỜNG
+### 7. Tự chạy cổng quy trình offline
 
-Đó là cổng merge do vai Reviewer mở. **Không** tự gắn nhãn, **không** tìm cách
-qua mặt nó. Các vi phạm khác (`N3-*`, `N1-*`, `WF-STATE`) thì phải sửa ngay.
+Job `Cổng quy trình clean-code` không chạy (không có runner), nên tự kiểm trước
+khi bàn giao. Lấy ảnh chụp PR + Issue + comments bằng GitHub MCP, ghi ra JSON
+rồi:
 
-### 8. Khi CI thật (`Build & Test`, `Security Scan`) đỏ
+```bash
+python3 scripts/workflow_guard.py --input <ảnh-chụp>.json
+```
 
-Đó là việc của phiên này, không đợi ai. Tái hiện lỗi tại máy, sửa, chứng minh
-cổng đó xanh trở lại, rồi push. Đỏ vì nguyên nhân ngoài PR (đỏ sẵn trên `main`)
-thì comment nêu rõ check nào, vì sao không thuộc PR này, và fix đã port nếu có.
+Mã `N3-LINK`, `N3-IMPL`, `N3-EVID`, `N1-*`, `WF-STATE` là **của bạn** — sửa ngay.
+
+Mã `N2-GATE` ("chưa có nhãn `review:pass`") là **bình thường**: đó là cổng merge
+do vai Reviewer mở. Không tự gắn nhãn, không tìm cách qua mặt nó.
+
+### 8. Khi CI sống lại
+
+Nếu `Build & Test` hoặc `Security Scan` chạy và đỏ, đó là việc của phiên này,
+không đợi ai: tái hiện lỗi tại máy, sửa, chứng minh cổng xanh trở lại, rồi push.
+Đỏ vì nguyên nhân ngoài PR (đỏ sẵn trên `main`) thì comment nêu rõ check nào, vì
+sao không thuộc PR này, và fix đã port nếu có.
 
 ## Giới hạn mỗi phiên
 

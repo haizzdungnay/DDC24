@@ -32,9 +32,32 @@ Dừng ở phép kiểm đầu tiên FAIL; không cần chạy hết rồi mới
 `Implementer-Run` khác `Manager-Run` của Issue? Nếu `workflow-guard` đã báo
 `N3-*` hoặc `N1-*` thì FAIL ngay, không review tiếp.
 
-**(2) CI.** `Build & Test` và `Security Scan` xanh trên **commit hiện tại**?
-Đỏ ⇒ FAIL. Đỏ vì lý do ngoài PR (đỏ sẵn trên `main`, billing runner) ⇒ ghi rõ
-trong verdict, và **vẫn không merge** trừ khi CTO gắn `gate:waived` kèm lý do.
+**(2) Bằng chứng thay cho CI.** GitHub Actions của tổ chức **không cấp runner**
+(billing — #414), nên `Build & Test` và `Security Scan` là `NOT_RUN`, không phải
+PASS. Một PR không có check đỏ **không phải** một PR đã được kiểm.
+
+Vì vậy phép kiểm này đổi đối tượng: thay vì đọc màu CI, đọc **bảng Verification
+của PR** và hỏi ba câu — Implementer có chạy đúng bộ cổng tương ứng phạm vi đã
+chạm không; số đo có phải của lượt này không; cổng nào ghi `NOT_RUN` có kèm lý
+do không. Bảng trống, hoặc ghi PASS cho cổng không có lệnh tương ứng ⇒ FAIL.
+
+Khi nghi ngờ số đo, **tự chạy lại** cổng tương ứng trên cây làm việc — đó là
+nguồn sự thật duy nhất còn lại.
+
+**(2b) Cổng quy trình, chạy offline.** Job CI cũng không chạy, nên bạn phải tự
+thi hành N1/N2. Sau khi đã post verdict và gắn `review:pass`, lấy ảnh chụp bằng
+GitHub MCP rồi chạy:
+
+```bash
+python3 scripts/workflow_guard.py --input <ảnh-chụp>.json
+```
+
+Chạy từ cây làm việc trên **`main`**, không phải từ nhánh PR — nếu chạy bản guard
+nằm trong PR thì một PR sửa guard sẽ tự mở cổng cho chính nó.
+
+Exit code khác 0 ⇒ **CẤM merge**, bất kể bảy phép kiểm kia đã PASS. Dán nguyên
+văn output vào comment verdict: CI không để lại dấu vết nào, nên output đó là
+bằng chứng duy nhất chứng minh cổng đã chạy.
 
 **(3) Phạm vi.**
 
@@ -119,9 +142,12 @@ Merge bằng GitHub MCP `merge_pull_request` với `merge_method: "squash"`, r�
 xoá nhánh remote. Trên máy cục bộ có `gh` thì tương đương
 `gh pr merge <số PR> --squash --delete-branch`.
 
-Thứ tự bắt buộc: gắn `review:pass` → đợi `workflow-guard` chạy lại và xanh →
-merge. Guard xanh là bằng chứng máy đã kiểm lại tách vai; merge trước khi nó
-xanh là bỏ qua chính cổng mình đang gác.
+Thứ tự bắt buộc: post verdict → gắn `review:pass` → chạy
+`workflow_guard.py --input` và được exit 0 → dán output vào verdict → merge.
+
+Trong lúc CI ngủ, **không đợi job `Cổng quy trình clean-code`** — nó sẽ không bao
+giờ chạy, đợi nó là treo vĩnh viễn. Guard offline thay đúng vai trò đó. Merge
+trước khi chạy guard là bỏ qua chính cổng mình đang gác.
 
 Sau merge: xác nhận Issue đã đóng bởi `Closes #N`, gắn `state:done`, gỡ nhãn
 `state:*` cũ và `role:implementer`.

@@ -15,8 +15,25 @@ Script kiểm ba nhóm ràng buộc mà con người rất dễ bỏ qua khi rev
 3.  **Cổng merge (N2)** — job chỉ xanh khi Issue đúng trạng thái, nhãn
     `review:pass` đã được gắn và tồn tại comment `[REVIEW-VERDICT: PASS]`.
 
-Chạy không tham số trong GitHub Actions; `--selftest` chạy bộ kiểm nội bộ của
-các hàm parse mà không cần mạng.
+Ba chế độ chạy:
+
+* không tham số — trong GitHub Actions, tự đọc `GITHUB_EVENT_PATH` và gọi API.
+* `--input <file.json>` — **chế độ offline**, dùng khi Actions không cấp runner.
+  Vai Reviewer/Implementer lấy dữ liệu bằng GitHub MCP, ghi ra JSON rồi chạy
+  guard trên đó. Cùng một hàm `check()`, cùng một phán quyết; chỉ khác nguồn dữ
+  liệu. Không cần token, không cần mạng.
+* `--selftest` — bộ kiểm nội bộ của các hàm parse, chạy offline.
+
+Hình dạng JSON của `--input`:
+
+    {
+      "pr":       {"number": 1, "body": "...", "labels": [{"name": "review:pass"}]},
+      "issue":    {"number": 10, "body": "...", "labels": [{"name": "state:in-review"}]},
+      "comments": [{"body": "[REVIEW-VERDICT: PASS]...", "user": {"login": "x"}}]
+    }
+
+`issue` được phép là `null` (PR chưa liên kết Issue) — guard sẽ báo đúng mã lỗi
+`N3-LINK` thay vì hỏng. `labels` nhận cả `[{"name": "x"}]` lẫn `["x"]`.
 """
 
 from __future__ import annotations
@@ -373,16 +390,81 @@ def apply_waiver(report: Report, labels: set[str], comments: list[dict]) -> Repo
     return report
 
 
+def normalize_labels(raw: object) -> set[str]:
+    """Nhận nhãn ở cả hai dạng: [{"name": "x"}] của API và ["x"] viết tay."""
+    out: set[str] = set()
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if isinstance(item, dict) and "name" in item:
+            out.add(str(item["name"]))
+        elif isinstance(item, str):
+            out.add(item)
+    return out
+
+
+def run_offline(path: str) -> int:
+    """Chạy guard trên một ảnh chụp JSON thay vì gọi GitHub API.
+
+    Đây KHÔNG phải chế độ nới lỏng: nó gọi đúng `check()` và `apply_waiver()` mà
+    job CI gọi, nên phán quyết giống hệt. Khác biệt duy nhất là ai đi lấy dữ
+    liệu — ở đây là vai Reviewer/Implementer qua GitHub MCP.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"LỖI: không đọc được `{path}`: {error}")
+        return 2
+
+    if not isinstance(data, dict) or not isinstance(data.get("pr"), dict):
+        print("LỖI: JSON phải là object có khoá `pr` là object.")
+        return 2
+
+    pr = data["pr"]
+    issue = data.get("issue") if isinstance(data.get("issue"), dict) else None
+    comments = data.get("comments") if isinstance(data.get("comments"), list) else []
+    labels = normalize_labels(pr.get("labels"))
+
+    report = apply_waiver(check(pr, issue, comments, labels), labels, comments)
+
+    number = pr.get("number", "?")
+    issues = linked_issues(pr.get("body") or "")
+    print(f"# Cổng quy trình clean-code (offline) — PR #{number}")
+    print(f"Nguồn dữ liệu: {path} · Issue liên kết: {issues or 'không có'}\n")
+    if report.notes:
+        print("## Ghi nhận")
+        for note in report.notes:
+            print(f"- {note}")
+        print()
+    if report.errors:
+        print(f"## CHẶN MERGE — {len(report.errors)} vi phạm")
+        for error_line in report.errors:
+            print(f"- {error_line}")
+        return 1
+    print("## PASS — đủ điều kiện merge")
+    return 0
+
+
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
+
+    if "--input" in sys.argv:
+        index = sys.argv.index("--input")
+        if index + 1 >= len(sys.argv):
+            print("LỖI: `--input` cần đường dẫn file JSON.")
+            return 2
+        return run_offline(sys.argv[index + 1])
 
     token = os.environ.get("GITHUB_TOKEN") or ""
     repo = os.environ.get("GITHUB_REPOSITORY") or ""
     event_path = os.environ.get("GITHUB_EVENT_PATH") or ""
     if not (token and repo and event_path and os.path.exists(event_path)):
         print("LỖI: thiếu GITHUB_TOKEN / GITHUB_REPOSITORY / GITHUB_EVENT_PATH.")
-        print("Script này chạy trong GitHub Actions; dùng --selftest để kiểm cục bộ.")
+        print("Không ở trong GitHub Actions. Dùng `--input <file.json>` để chạy")
+        print("offline (vai Reviewer/Implementer lấy dữ liệu bằng GitHub MCP),")
+        print("hoặc `--selftest` để kiểm logic guard.")
         return 2
 
     with open(event_path, encoding="utf-8") as handle:
@@ -579,6 +661,63 @@ def selftest() -> int:
         {"review:pass"},
     )
     expect("hai nhãn state thì chặn", any(e.startswith("WF-STATE") for e in two_states.errors))
+
+    # --- chế độ offline: nguồn dữ liệu khác, phán quyết phải giống hệt -----
+    expect("nhãn dạng API", normalize_labels([{"name": "review:pass"}]) == {"review:pass"})
+    expect("nhãn dạng chuỗi", normalize_labels(["review:pass"]) == {"review:pass"})
+    expect("nhãn sai kiểu ra rỗng", normalize_labels("review:pass") == set())
+
+    import tempfile
+
+    def offline(payload: object) -> int:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
+            json.dump(payload, handle)
+            path = handle.name
+        try:
+            import contextlib
+            import io
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                return run_offline(path)
+        finally:
+            os.unlink(path)
+
+    expect(
+        "offline PASS trên PR hợp lệ",
+        offline(
+            {
+                "pr": {**good_pr, "labels": [{"name": "review:pass"}]},
+                "issue": good_issue,
+                "comments": [
+                    {"body": "[REVIEW-VERDICT: PASS]\nReviewer-Run: rev-1", "user": {"login": "r"}}
+                ],
+            }
+        )
+        == 0,
+    )
+    expect(
+        "offline CHẶN khi Reviewer-Run trùng Implementer-Run",
+        offline(
+            {
+                "pr": {**good_pr, "labels": [{"name": "review:pass"}]},
+                "issue": good_issue,
+                "comments": [
+                    {"body": "[REVIEW-VERDICT: PASS]\nReviewer-Run: impl-1", "user": {"login": "r"}}
+                ],
+            }
+        )
+        == 1,
+    )
+    expect(
+        "offline CHẶN khi thiếu review:pass",
+        offline({"pr": {**good_pr, "labels": []}, "issue": good_issue, "comments": []}) == 1,
+    )
+    expect(
+        "offline chịu được issue null",
+        offline({"pr": {**good_pr, "labels": []}, "issue": None, "comments": []}) == 1,
+    )
+    expect("offline JSON sai hình dạng trả 2", offline({"khong_co_pr": 1}) == 2)
+    expect("offline file không tồn tại trả 2", run_offline("/nonexistent/guard-input.json") == 2)
 
     failed = [name for name, ok in cases if not ok]
     for name, ok in cases:
