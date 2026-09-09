@@ -49,6 +49,48 @@
   hiện bằng ca thật **trước** khi sửa. `docs_iso_harness.py --expect` PASS.
   CI: `NOT_RUN` — không có runner (#414).
 
+### Fixed — HMI `alarm_model` không còn nuốt im lặng khung alarm JSON hỏng (2026-09-09)
+
+- Phạm vi: `apps/hmi/screens/alarm_model.cpp`, `apps/hmi/screens/screen_base.hpp`,
+  `apps/hmi/tests/test_alarm_model.cpp`. Refs: #589.
+- Triệu chứng: `AlarmModel::on_alarm_json()` bọc toàn thân hàm trong
+  `try { … } catch (...) {}` với khối `catch` **rỗng hoàn toàn**. Mỗi khung alarm
+  push mà parser JSON không đọc được — payload cụt do đứt socket, byte rác trên
+  đường IPC, core đổi schema — biến mất không để lại dấu vết: không log, không
+  đếm, không cờ trạng thái. Màn HMI tại chỗ vẫn hiển thị danh sách alarm cũ, nên
+  người vận hành không phân biệt được "không có alarm mới" với "khung alarm đang
+  bị vứt". Trên đường alarm, mất khung là mất cảnh báo an toàn.
+- Nguyên nhân gốc: nhánh lỗi không có đường quan sát nào. Đây là chỗ **duy nhất**
+  trong `apps/hmi/` nuốt exception mà không xử lý — ba site còn lại
+  (`data/point_db.cpp:81`, `screens/network_model.cpp:143`,
+  `api/hmi_api_client.cpp:269`) đều log, trả `false`, hoặc đặt `reason_code`. Nên
+  đây là lệch chuẩn so với chính quy ước của module. Hàm còn một đường thoát im
+  lặng thứ hai: `if (code_s.empty()) return;` — khung parse được nhưng thiếu
+  `code` cũng bị bỏ mà không đếm.
+- Cách sửa: thêm `AlarmModel::drop_frame(const char* reason)` — tăng bộ đếm
+  `dropped_frames_` (`std::atomic<uint64_t>`, vì `on_alarm_json` chạy trên luồng
+  LVGL còn bộ đếm đọc từ nơi khác) và ghi một dòng `ERR   hmi.alarm_model dropped
+  frame: %s` ra stderr theo đúng định dạng `point_db.cpp:81`. `catch (...)` rỗng
+  được tách thành `catch (const std::exception& ex)` (ghi `ex.what()`) và
+  `catch (...)` (ghi `unknown exception`); cả hai đều gọi `drop_frame`. Đường
+  thoát thiếu `code` cũng gọi `drop_frame("missing \"code\" field")`. Phơi bộ
+  đếm ra ngoài bằng `uint64_t dropped_frame_count() const`.
+- Không đổi hành vi công khai: state machine `update_condition()`, payload alarm
+  và contract REST/IPC giữ nguyên; 6 test cũ trong `test_alarm_model.cpp` PASS mà
+  không phải sửa.
+- Kiểm chứng HOST (đo lại trong phiên này, không dẫn số cũ):
+  `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON
+  -DMKDDC_ENABLE_HMI=ON` exit **0**; `cmake --build build/fw --parallel` exit
+  **0**; `ctest -R AlarmModelTest` **9/9 PASS** (6 cũ + 3 mới); `ctest` toàn bộ
+  **1482/1482 PASS, 0 FAIL** (1 skip sẵn có: `RealtimeMemlock.MclFuture…`);
+  `grep -c 'catch (\.\.\.) {}' apps/hmi/screens/alarm_model.cpp` = **0**.
+  CI: `NOT_RUN` — không có runner (#414).
+- Ghi chú môi trường: egress policy của phiên chặn tải tarball/release HTTP từ
+  `github.com` (403), nên `FetchContent` theo `URL` của `googletest`,
+  `nlohmann_json` và `bacnet_stack_src` không chạy được. Đã lấy đúng tag đã ghim
+  bằng `git clone` (giao thức git qua proxy vẫn thông) rồi trỏ
+  `-DFETCHCONTENT_SOURCE_DIR_*`. Đây là chỗ dựng tại máy, **không** đổi file nào
+  trong repo.
 
 ### Fixed — Routine không có `sources` sinh phiên rỗng; ghi bẫy vào WF-CLEAN-001 §8.1 (2026-09-09)
 
