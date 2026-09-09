@@ -336,6 +336,12 @@ mới cho định danh `*-Run` mới, nên hai vai không bao giờ chia sẻ m�
 Sửa lịch bằng `update_trigger`, tạm dừng bằng `enabled: false`, xoá bằng
 `delete_trigger`.
 
+**Skill trong repository thắng prompt của Routine khi hai bên mâu thuẫn.** Prompt
+Routine là cấu hình ngoài repo, sửa được lặng lẽ và không để lại dấu vết; skill
+đi qua PR và review. Cụ thể hiện nay: prompt Routine của vai Reviewer còn câu
+"đợi job `Cổng quy trình clean-code` xanh rồi merge", viết trước sự cố runner —
+skill `ddc-reviewer` ghi đè câu đó bằng cổng offline `§6.1a`.
+
 Mỗi Routine chạy đúng một skill vai:
 
 - Manager → `.claude/skills/ddc-manager-planner/SKILL.md`
