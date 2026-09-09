@@ -10,7 +10,8 @@ import contract from '../../../../../../../contracts/programming/st_keyboard_com
  * đây đều duyệt từ chính tệp hợp đồng.
  *
  * Phân vai rõ ràng: validator Python (`verify_programming_st_keyboard.py`) đọc
- * `ProgramsTab.tsx` và đối chiếu hợp đồng với MÃ NGUỒN; tệp này chỉ kiểm các
+ * `EditorPane.tsx` cùng facade `ProgramsTab.tsx` và đối chiếu hợp đồng với MÃ
+ * NGUỒN; tệp này chỉ kiểm các
  * BẤT BIẾN NỘI TẠI của hợp đồng. Đọc mã nguồn ở cả hai nơi là hai đường kiểm
  * cho cùng một việc, và chúng sẽ lệch nhau.
  */

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Check, Copy, X } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
+import type { ProgrammingProgramRuntimeState, ProgrammingProgramsPage, RemoteState } from '../model/types'
 import { contextDetailRows, type ContextDetailRow, type ContextDetailRowId, type ContextDetailsData } from './contextDetails'
 
 export interface ContextDetailsCloseOptions {
@@ -41,8 +42,10 @@ export interface ContextDetailsCloseOptions {
  * `copyToClipboard` và biến thành một thông điệp có ích, KHÔNG bao giờ thành
  * promise reject lọt ra ngoài làm hỏng cả strip.
  */
-export function ContextDetailsPopover({ data, anchorRef, onClose }: {
+export function ContextDetailsPopover({ data, programs, anchorRef, onClose }: {
   data: ContextDetailsData
+  /** G-03: trạng thái gộp rời khỏi hàng chính nhưng vẫn đọc được ở Chi tiết. */
+  programs: { status: RemoteState<unknown>['status']; data: ProgrammingProgramsPage | null }
   /** Nút `Chi tiết` — vừa là mỏ neo, vừa là nơi tiêu điểm quay về. */
   anchorRef: RefObject<HTMLElement | null>
   onClose: (options: ContextDetailsCloseOptions) => void
@@ -134,6 +137,8 @@ export function ContextDetailsPopover({ data, anchorRef, onClose }: {
         </button>
       </div>
 
+      <ProgramStatusDetails status={programs.status} programs={programs.data} />
+
       <dl className="mt-2 divide-y divide-[var(--c-border)] text-xs">
         {rows.map((row) => (
           <div key={row.id} data-detail-row={row.id} className="flex items-start gap-2 py-1.5">
@@ -191,6 +196,46 @@ export function ContextDetailsPopover({ data, anchorRef, onClose }: {
         {copyResult?.message ?? ''}
       </p>
     </div>
+  )
+}
+
+function ProgramStatusDetails({ status, programs }: {
+  status: RemoteState<unknown>['status']
+  programs: ProgrammingProgramsPage | null
+}) {
+  const { pick } = useI18n()
+  let intent: string
+  let runtime: string
+  if (status === 'loading') {
+    intent = runtime = pick('Đang tải…', 'Loading…')
+  } else if (status === 'error') {
+    intent = runtime = pick('Không đọc được trạng thái Program', 'Program status is unavailable')
+  } else if (!programs) {
+    intent = runtime = pick('Không xác định được', 'Not determinable')
+  } else if (programs.items.length === 0) {
+    intent = runtime = pick('Chưa có Program', 'No programs')
+  } else {
+    const enabled = programs.items.filter((item) => item.desiredEnabled === true).length
+    intent = pick(`${enabled}/${programs.items.length} muốn bật`, `${enabled}/${programs.items.length} enabled by intent`)
+    const counts: Record<ProgrammingProgramRuntimeState, number> = {
+      DISABLED: 0,
+      RUNNING: 0,
+      WAITING: 0,
+      FAULTED: 0,
+      UNKNOWN: 0,
+    }
+    for (const item of programs.items) counts[item.runtimeState] += 1
+    const order: ProgrammingProgramRuntimeState[] = ['FAULTED', 'UNKNOWN', 'WAITING', 'RUNNING', 'DISABLED']
+    runtime = order.filter((state) => counts[state] > 0).map((state) => `${state} ${counts[state]}`).join(' · ')
+  }
+
+  return (
+    <dl data-testid="programming-context-program-details" className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-[var(--radius)] bg-[var(--c-surface-2)] p-2 text-xs">
+      <dt className="text-[var(--c-text-dim)]">{pick('Ý định Enable', 'Enable intent')}</dt>
+      <dd className="text-right font-mono text-[var(--c-text)]">{intent}</dd>
+      <dt className="text-[var(--c-text-dim)]">{pick('Runtime từng Program', 'Per-program runtime')}</dt>
+      <dd className="text-right font-mono text-[var(--c-text)]">{runtime}</dd>
+    </dl>
   )
 }
 

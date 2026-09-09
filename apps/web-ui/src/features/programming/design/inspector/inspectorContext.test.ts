@@ -99,6 +99,16 @@ describe('TC-PGM02-INS-01 — ngữ cảnh Program và ký hiệu ST', () => {
     expect(noCycle.cycleMs.known).toBe(false)
   })
 
+  it('reverse lookup References dùng objectId và giữ dependency lạ dưới dạng định danh', () => {
+    const current = { ...program, objectId: 'obj-1', dependencies: ['obj-2', 'missing-object'] }
+    const caller = { ...program, programId: 'p-3', objectId: 'obj-3', name: 'CALLER', dependencies: ['obj-1'] }
+    const dependency = { ...program, programId: 'p-2', objectId: 'obj-2', name: 'HELPER', kind: 'FUNCTION' as const }
+    const context = contextFor({ program: current, programs: [current, caller, dependency] })
+    if (context.kind !== 'PROGRAM') throw new Error('sai ngữ cảnh')
+    expect(context.uses).toEqual({ known: true, value: ['HELPER', 'missing-object'] })
+    expect(context.usedBy).toEqual({ known: true, value: ['CALLER'] })
+  })
+
   it('ký hiệu ST tra được: Definition/Type/References từ chỉ mục thật', () => {
     const context = contextFor({
       program,

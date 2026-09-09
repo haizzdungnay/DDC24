@@ -56,8 +56,13 @@ export interface InspectorProgramContext {
   /** `DEV-PROG-004` — cổng giao diện của POU (VAR_INPUT/VAR_OUTPUT). Rỗng là
    *  một câu trả lời THẬT ("POU không khai cổng nào"), khác `unknown`. */
   parameters: InspectorField<readonly InspectorPouParameter[]>
+  /** Kiểu trả về của FUNCTION; chỉ known khi Draft/source công bố. */
+  returnType: InspectorField<string>
   /** `DEV-PROG-004` — cặp khoá/giá trị metadata có thật của POU. */
   attributes: readonly { key: string; value: string }[]
+  /** Tên POU được tham chiếu trực tiếp và reverse lookup theo objectId. */
+  uses: InspectorField<readonly string[]>
+  usedBy: InspectorField<readonly string[]>
   /**
    * `DEV-PROG-011` — POU có mục trong `programs[]` (cấu hình chạy) hay không.
    *
@@ -167,12 +172,16 @@ export type InspectorContext =
 
 export interface InspectorInput {
   program?: ProgrammingProgram | null
+  /** Toàn bộ POU của Draft để reverse lookup References. */
+  programs?: readonly ProgrammingProgram[]
   /** Chu kỳ của Program đang chọn, đọc từ bảng Thực thi/Draft. */
   cycleMs?: number | null
   /** Tên Task chứa Program (`task.name` của Draft). */
   taskName?: string | null
   /** Cổng giao diện của POU đang mở; `undefined` = chưa phân tích. */
   parameters?: readonly InspectorPouParameter[]
+  /** Kiểu trả về của FUNCTION; `null`/`undefined` nghĩa là chưa tra được. */
+  returnType?: string | null
   enabled?: boolean | null
   /** Ký hiệu dưới con trỏ ST; `entry === null` nghĩa là analyzer không tra được. */
   cursorSymbol?: StCursorSymbol | null
@@ -234,7 +243,10 @@ export function inspectorContextFor(input: InspectorInput): InspectorContext {
        * POU không khai cổng nào). Gộp hai thứ đó lại là biến "chưa đọc" thành
        * "không có". */
       parameters: input.parameters === undefined ? unknownField : known(input.parameters),
+      returnType: input.returnType ? known(input.returnType) : unknownField,
       attributes: pouAttributes(program),
+      uses: dependencyNames(program, input.programs),
+      usedBy: reverseDependencyNames(program, input.programs),
       /* `hasRuntimeConfig === undefined` là document v1 đi qua nguyên trạng: ở
        * đó mọi Program đều có cấu hình chạy nên suy theo kind là đúng — cùng
        * luật với `pouItems`, không dựng bản thứ hai. */
@@ -244,6 +256,29 @@ export function inspectorContextFor(input: InspectorInput): InspectorContext {
     }
   }
   return { kind: 'EMPTY' }
+}
+
+function dependencyNames(
+  program: ProgrammingProgram,
+  programs: readonly ProgrammingProgram[] | undefined,
+): InspectorField<readonly string[]> {
+  if (program.dependencies === undefined) return unknownField
+  return known(program.dependencies.map((dependencyId) => {
+    const dependency = programs?.find((candidate) =>
+      (candidate.objectId ?? candidate.programId) === dependencyId || candidate.programId === dependencyId)
+    return dependency?.name ?? dependencyId
+  }))
+}
+
+function reverseDependencyNames(
+  program: ProgrammingProgram,
+  programs: readonly ProgrammingProgram[] | undefined,
+): InspectorField<readonly string[]> {
+  if (!programs) return unknownField
+  const objectId = program.objectId ?? program.programId
+  return known(programs
+    .filter((candidate) => candidate.programId !== program.programId && candidate.dependencies?.includes(objectId))
+    .map((candidate) => candidate.name))
 }
 
 /**

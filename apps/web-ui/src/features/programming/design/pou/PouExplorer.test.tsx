@@ -43,6 +43,16 @@ function renderExplorer(overrides: Partial<Parameters<typeof PouExplorer>[0]> = 
   return { onSave, onSelect }
 }
 
+function createPou(label: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Mới' }))
+  fireEvent.click(within(screen.getByRole('menu', { name: 'Tạo POU mới' })).getByRole('menuitem', { name: label }))
+}
+
+function pouAction(name: string, action: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Thao tác với ${name}` }))
+  fireEvent.click(within(screen.getByRole('menu', { name: `Thao tác với ${name}` })).getByRole('menuitem', { name: action }))
+}
+
 beforeEach(() => localStorage.setItem('mkddc-lang', 'vi'))
 afterEach(cleanup)
 
@@ -71,7 +81,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('tạo FUNCTION gửi đúng một upsertObject và không xếp lịch', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Thêm FUNCTION'))
+    createPou('Function · ST')
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const operations = onSave.mock.calls[0][0] as ProgrammingDraftOperation[]
     expect(operations.map((operation) => operation.op)).toEqual(['upsertObject'])
@@ -79,7 +89,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('tạo Program ST gửi upsertProgram + setTask', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Thêm chương trình ST'))
+    createPou('Program · ST')
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const operations = onSave.mock.calls[0][0] as ProgrammingDraftOperation[]
     expect(operations.map((operation) => operation.op)).toEqual(['upsertProgram', 'setTask'])
@@ -87,7 +97,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('đổi tên trùng bị chặn kèm lý do và không gửi gì lên server', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Đổi tên AHU_MAIN'))
+    pouAction('AHU_MAIN', 'Đổi tên')
     const input = screen.getByLabelText('Tên POU mới')
     fireEvent.change(input, { target: { value: 'SCALE_LIN' } })
     expect(await screen.findByRole('alert')).toHaveTextContent('đã tồn tại')
@@ -97,7 +107,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('đổi tên hợp lệ gửi renameObject', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Đổi tên AHU_MAIN'))
+    pouAction('AHU_MAIN', 'Đổi tên')
     const input = screen.getByLabelText('Tên POU mới')
     fireEvent.change(input, { target: { value: 'AHU_MAIN_V2' } })
     fireEvent.submit(input)
@@ -108,7 +118,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('xóa POU còn người gọi bị chặn ở hộp thoại, nút Xóa không bấm được', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Xóa SCALE_LIN'))
+    pouAction('SCALE_LIN', 'Xóa')
     const dialog = await screen.findByRole('dialog', { name: 'Xóa POU?' })
     expect(within(dialog).getByRole('alert')).toHaveTextContent('AHU_MAIN')
     expect(within(dialog).getByRole('button', { name: 'Xóa' })).toBeDisabled()
@@ -118,10 +128,8 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('vai chỉ đọc không thấy bất kỳ lối tạo/đổi tên/xóa nào', () => {
     renderExplorer({ canEdit: false })
-    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Thêm FUNCTION')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Đổi tên AHU_MAIN')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Xóa AHU_MAIN')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mới' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Thao tác với AHU_MAIN' })).not.toBeInTheDocument()
     // Vẫn đọc được cây và inspector.
     expect(screen.getByRole('navigation', { name: 'Cây POU' })).toBeInTheDocument()
   })

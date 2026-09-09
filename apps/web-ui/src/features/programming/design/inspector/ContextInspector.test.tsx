@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
+import { MemoryRouter } from 'react-router-dom'
 import { ContextInspector } from './ContextInspector'
 import type { InspectorInput } from './inspectorContext'
 import type { ProgrammingProgram } from '../../model/types'
@@ -84,7 +85,50 @@ describe('ContextInspector — "không xác định được" là một kết qu
 
   it('DEV-PROG-004: chu kỳ đi kèm TÊN Task khi Draft có tên đó', () => {
     renderInspector({ program, cycleMs: 1000, taskName: 'Control_Main' })
-    expect(screen.getByText('Control_Main (1 s)')).toBeInTheDocument()
+    expect(screen.getByText('Control_Main')).toBeInTheDocument()
+    expect(screen.getByText('1 s')).toBeInTheDocument()
+  })
+
+  it('G-14/G-16/G-18/G-19/G-20: Program có đủ năm section, không bịa Resource hay Mode', () => {
+    const dependency: ProgrammingProgram = {
+      programId: 'p-2', objectId: 'obj-2', name: 'LIMIT_FN', kind: 'FUNCTION', language: 'ST',
+      document: '', dependencies: [],
+    }
+    renderInspector({
+      program: { ...program, objectId: 'obj-1', dependencies: ['obj-2'] },
+      programs: [{ ...program, objectId: 'obj-1', dependencies: ['obj-2'] }, dependency],
+      cycleMs: 100,
+      taskName: 'Control_Main',
+      parameters: [
+        { name: 'temp_sp', direction: 'INPUT', dataType: 'REAL' },
+        { name: 'command', direction: 'OUTPUT', dataType: 'BOOL' },
+      ],
+    })
+    expect(screen.getByTestId('inspector-interface-section')).toHaveTextContent('VAR_INPUT')
+    expect(screen.getByTestId('inspector-interface-section')).toHaveTextContent('temp_sp')
+    expect(screen.getByTestId('inspector-execution-section')).toHaveTextContent('100 ms')
+    expect(screen.getByTestId('inspector-attributes-section')).toBeInTheDocument()
+    expect(screen.getByTestId('inspector-ddc-metadata-section')).toBeInTheDocument()
+    expect(screen.getByTestId('inspector-references-section')).toHaveTextContent('LIMIT_FN')
+    expect(screen.queryByText('CPU_Main')).toBeNull()
+    expect(screen.queryByText('Cyclic')).toBeNull()
+  })
+
+  it('G-20: References có lối tới cấu hình Task toàn Project khi caller cung cấp', () => {
+    render(
+      <MemoryRouter>
+        <I18nProvider>
+          <ContextInspector
+            executionTabHref="/eng/programming/programs?project=p-1&mode=EDIT&tab=execution"
+            input={{ program: { ...program, dependencies: [] }, programs: [program], parameters: [] }}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Mở cấu hình Task toàn cục' })).toHaveAttribute(
+      'href',
+      '/eng/programming/programs?project=p-1&mode=EDIT&tab=execution',
+    )
   })
 })
 
