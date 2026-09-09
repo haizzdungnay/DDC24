@@ -6,15 +6,17 @@
 # point-io, st-editor, pgm04, ...) vẫn được dùng bổ sung.
 
 # --- Vai trò ---------------------------------------------------------------
+# Nhãn `role:*` chỉ VAI ĐANG CẦM VIỆC, không phải vai đã tạo Issue: đúng một
+# nhãn role:* mỗi lúc, đổi theo state:* (WF-CLEAN-001 §4.1).
 - name: "role:manager"
   color: "5319E7"
-  description: "Do vai Manager/Planner tạo hoặc phân loại"
+  description: "Đang ở tay Manager/Planner: chờ phân loại hoặc bổ sung scope"
 - name: "role:implementer"
   color: "1D76DB"
-  description: "Đang do vai Implementer thi hành"
+  description: "Đang ở tay Implementer: sẵn sàng nhận hoặc đang thi hành"
 - name: "role:reviewer"
   color: "0E8A16"
-  description: "Đang ở tay vai Reviewer/Merge Gatekeeper"
+  description: "Đang ở tay Reviewer/Merge Gatekeeper"
 
 # --- Trạng thái workflow (một Issue chỉ mang ĐÚNG MỘT nhãn state:*) --------
 - name: "state:triage"
@@ -66,6 +68,46 @@
 - name: "priority:low"
   color: "C5DEF5"
   description: "P3 — dọn dần"
+
+# --- Module (khu vực mã nguồn bị ảnh hưởng) --------------------------------
+# Bắt buộc gắn đúng MỘT nhãn module:* cho mỗi Issue clean-code/clean-docs, để
+# Implementer biết cần dựng bộ công cụ nào trước khi nhận việc (WF-CLEAN-001 §4).
+- name: "module:core"
+  color: "0052CC"
+  description: "apps/core — runtime, control engine, historian, alarm"
+- name: "module:hmi"
+  color: "0052CC"
+  description: "apps/hmi — LVGL/HMI trên bo"
+- name: "module:iobus"
+  color: "0052CC"
+  description: "apps/iobus — I/O bus, fake MCU, RS485"
+- name: "module:netcfg"
+  color: "0052CC"
+  description: "apps/netcfg — cấu hình mạng"
+- name: "module:web-api"
+  color: "0052CC"
+  description: "apps/web-api — backend Go"
+- name: "module:web-ui"
+  color: "0052CC"
+  description: "apps/web-ui — frontend"
+- name: "module:firmware"
+  color: "0052CC"
+  description: "firmware/ — MCU"
+- name: "module:contracts"
+  color: "0052CC"
+  description: "contracts/ — OpenAPI, schema, chốt SHA"
+- name: "module:platform"
+  color: "0052CC"
+  description: "platform/ — cmake, packaging, systemd, udev"
+- name: "module:tools"
+  color: "0052CC"
+  description: "tools/ — harness, QA, demo, deploy"
+- name: "module:scripts"
+  color: "0052CC"
+  description: "scripts/ — script kiểm chứng và cổng quy trình"
+- name: "module:docs"
+  color: "0052CC"
+  description: "docs/ — hồ sơ thiết kế, governance, records"
 
 # --- Cổng review -----------------------------------------------------------
 - name: "review:pass"
