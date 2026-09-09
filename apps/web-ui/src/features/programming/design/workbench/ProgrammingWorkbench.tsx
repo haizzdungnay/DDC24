@@ -90,7 +90,13 @@ const MAX_HEIGHT = 520
 /* Bằng đúng `MIN_HEIGHT`: đây là sàn của thanh, và một mặc định NHỎ HƠN sàn sẽ
    làm `aria-valuenow` nằm ngoài `[valuemin, valuemax]` — trình đọc màn hình đọc
    ra một giá trị vô nghĩa, và axe bắt đúng lỗi đó. */
-const DEFAULT_HEIGHT = 120
+/* `PGM-02B` — 120 → 173 px. Ảnh chuẩn đo được khay đáy chiếm y=729..901, tức
+   173 px. Con số này THAY THẾ mặc định 120 px của `DEV-PROG-021`, nhưng không
+   bác bỏ lập luận của nó: ngân sách chiều cao vẫn là thứ chia nhau, nên 173 px
+   chỉ đúng ở khổ lớn mà ảnh chuẩn mô tả. Sàn `MIN_HEIGHT` giữ nguyên 120 px để
+   người dùng ở màn hình chật vẫn thu về đúng mức cũ, và chiều cao đó giữ trong
+   phiên. */
+const DEFAULT_HEIGHT = 173
 
 type TabId = 'problems' | 'search' | 'references' | 'watch' | 'trace'
 
@@ -139,20 +145,20 @@ export function ProgrammingWorkbench({
   watchAddRequest?: { name: string; nonce: number } | null
 }) {
   const { pick } = useI18n()
-  /* `DEV-PROG-024` — MỞ SẴN hay không, và vì sao là không.
+  /* `PGM-02B` — MỞ SẴN. Quyết định này THAY THẾ `DEV-PROG-024`, vốn chốt thu gọn
+   * sẵn.
    *
-   * Đo ở 1280×800 (khổ phổ biến nhất của tủ): khay này chiếm 181 px, tức 35%
-   * ngân sách dọc của cả cột workspace, để nói "Draft không có vấn đề nào ở lớp
-   * cấu trúc" — trong khi chỗ gõ chỉ còn 254 px (12 dòng). Đó là phân bổ ngược:
-   * `DEV-PROG-021` đã chốt rằng khi màn hình chật, thứ bị cắt phải là nơi tra
-   * cứu chứ không phải nơi làm việc.
+   * Lập luận cũ của `DEV-PROG-024` đo ở 1280×800: khay chiếm 181 px, tức 35%
+   * ngân sách dọc, để nói "Draft không có vấn đề nào" — trong khi chỗ gõ chỉ còn
+   * 254 px. Lập luận đó KHÔNG SAI, và nó vẫn đúng ở khổ chật. Cái đổi là ảnh
+   * chuẩn PGM-02B mô tả khổ 1672 px, nơi ngân sách dọc dư để khay mở sẵn mà
+   * không lấn chỗ gõ, và nơi Runtime Watch cần hiện thường trực chứ không nằm
+   * sau một cú bấm.
    *
-   * Thu gọn KHÔNG làm mất thông tin và không làm khay khó tới: dải tab vẫn nằm
-   * nguyên tại chỗ với đủ số đếm trên nhãn (`Vấn đề (0)`, `Tìm kiếm (3)`…), và
-   * bấm bất kỳ tab nào cũng mở lại ngay (`setOpen(true)` ở handler bên dưới).
-   * Lỗi mà `DEV-PROG-001` đi sửa là khay bị ĐẨY ra khỏi màn hình chứ không phải
-   * khay đóng — dải tab đứng yên trong tầm mắt giữ nguyên điều đó. */
-  const [open, setOpen] = useState(false)
+   * Ràng buộc từ `DEV-PROG-024` vẫn giữ: dải tab đứng nguyên tại chỗ với đủ số
+   * đếm trên nhãn, và người dùng thu gọn được bất cứ lúc nào — chiều cao đó giữ
+   * trong phiên. */
+  const [open, setOpen] = useState(true)
   const [height, setHeight] = useState(DEFAULT_HEIGHT)
   const [tab, setTab] = useState<TabId>('problems')
   const [query, setQuery] = useState('')
@@ -324,72 +330,112 @@ export function ProgrammingWorkbench({
           className="overflow-auto p-2"
           style={{ height }}
         >
-          {tab === 'problems' && (
-            <ProblemsPanel
-              problems={problems}
-              emptyState={problemsEmptyState}
-              revisionId={problemsRevisionId}
-              checkOwnerHref={checkOwnerHref}
-              pick={pick}
-            />
-          )}
-          {tab === 'search' && (
-            source === null ? (
-              <Unavailable reason={pick('Không xác định được kết quả tìm kiếm vì POU này không phải mã nguồn văn bản — dùng khay Vấn đề để tìm block lỗi.', 'Search results are unavailable because this POU is not text source — use Problems to locate faulty blocks.')} />
-            ) : (
-              <SearchPanel
-                query={query}
-                setQuery={setQuery}
-                regex={regex}
-                setRegex={setRegex}
-                error={search.error}
-                hits={hits}
-                onJumpToOffset={onJumpToOffset}
-                queryLength={query.length}
-                pick={pick}
-              />
-            )
-          )}
-          {tab === 'references' && (
-            symbols.length === 0 ? (
-              <Unavailable reason={pick('Không xác định được tham chiếu vì chưa có chỉ mục cho POU đang mở.', 'Cross references are unavailable because the open POU has no index.')} />
-            ) : (
-              <ReferencesPanel symbols={symbols} pick={pick} />
-            )
-          )}
-          {tab === 'watch' && (
-            /* AC: "unavailable tab giải thích capability". Hiện một danh sách
-             * rỗng sẽ đọc như "không có giá trị nào", trong khi sự thật là
-             * "chế độ này không có nguồn giá trị runtime nào cả". */
-            watch === null || watch === undefined ? (
-              <Unavailable reason={pick(
-                'Watch cần nguồn giá trị runtime. Chế độ EDIT chỉ có Draft, không có giá trị nào để hiện — chuyển sang LIVE để xem gói đang chạy.',
-                'Watch needs a runtime value source. EDIT mode only has the draft, so there is nothing to show — switch to LIVE to see the running package.',
-              )} />
-            ) : (
-              <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
-            )
-          )}
-          {tab === 'trace' && (
-            /* Trace SỞ HỮU một phiên có vòng đời riêng (quota, stop reason,
-             * ring của Core). Mở một phiên thứ hai từ đây là đúng thứ AC
-             * "không duplicate concurrent trace session" cấm — nên workbench
-             * trỏ tới nơi sở hữu nó thay vì tự mở. */
-            <div className="space-y-2">
-              <Unavailable reason={pick(
-                'Trace mở một phiên có quota và vòng đời riêng, nên nó thuộc về đúng một nơi.',
-                'Trace opens a session with its own quota and lifecycle, so it belongs in exactly one place.',
-              )} />
-              {traceOwnerHref && (
-                <p className="text-xs text-[var(--c-text-dim)]">
-                  {pick('Mở phiên Trace tại ', 'Start a trace session in ')}
-                  <a className="text-[var(--c-accent)] underline" href={traceOwnerHref}>
-                    {pick('Runtime & Bảo trì', 'Runtime & Maintenance')}
-                  </a>.
-                </p>
+          {/* Ảnh chuẩn PGM-02B chia khay đáy thành 3 cột (x=196..839, x=839..1214, x=1214..1672):
+           * Cột trái (~643px, co giãn): dải tab và nội dung tab đang chọn.
+           * Cột giữa (~375px): bảng Runtime Watch hiển thị thường trực.
+           * Cột phải (~458px): Mini Map — CHƯA DỰNG.
+           *
+           * Cột thứ ba cố ý vắng mặt. Logic Mini Map nằm trong `FbdCanvas`; dựng
+           * một ô rỗng ghi "chờ kết nối dữ liệu" ở đây chỉ tạo ra một khoảng
+           * trắng 458px hứa một thứ không tồn tại, và một bản sao thứ hai của
+           * minimap sẽ lệch khỏi bản gốc ngay lần canvas đổi khung nhìn đầu
+           * tiên. Khi `FbdCanvas` công bố được khung nhìn ra ngoài thì mới thêm
+           * cột này và trả lưới về ba cột. */}
+          <div className="grid h-full grid-cols-[minmax(0,1fr)_375px] divide-x divide-[var(--c-border)]">
+            {/* Cột trái: Nội dung tab đang chọn */}
+            <div className="h-full overflow-auto pr-2">
+              {tab === 'problems' && (
+                <ProblemsPanel
+                  problems={problems}
+                  emptyState={problemsEmptyState}
+                  revisionId={problemsRevisionId}
+                  checkOwnerHref={checkOwnerHref}
+                  pick={pick}
+                />
+              )}
+              {tab === 'search' && (
+                source === null ? (
+                  <Unavailable reason={pick('Không xác định được kết quả tìm kiếm vì POU này không phải mã nguồn văn bản — dùng khay Vấn đề để tìm block lỗi.', 'Search results are unavailable because this POU is not text source — use Problems to locate faulty blocks.')} />
+                ) : (
+                  <SearchPanel
+                    query={query}
+                    setQuery={setQuery}
+                    regex={regex}
+                    setRegex={setRegex}
+                    error={search.error}
+                    hits={hits}
+                    onJumpToOffset={onJumpToOffset}
+                    queryLength={query.length}
+                    pick={pick}
+                  />
+                )
+              )}
+              {tab === 'references' && (
+                symbols.length === 0 ? (
+                  <Unavailable reason={pick('Không xác định được tham chiếu vì chưa có chỉ mục cho POU đang mở.', 'Cross references are unavailable because the open POU has no index.')} />
+                ) : (
+                  <ReferencesPanel symbols={symbols} pick={pick} />
+                )
+              )}
+              {tab === 'watch' && (
+                /* AC: "unavailable tab giải thích capability". Hiện một danh sách
+                 * rỗng sẽ đọc như "không có giá trị nào", trong khi sự thật là
+                 * "chế độ này không có nguồn giá trị runtime nào cả". */
+                watch === null || watch === undefined ? (
+                  <Unavailable reason={pick(
+                    'Watch cần nguồn giá trị runtime. Chế độ EDIT chỉ có Draft, không có giá trị nào để hiện — chuyển sang LIVE để xem gói đang chạy.',
+                    'Watch needs a runtime value source. EDIT mode only has the draft, so there is nothing to show — switch to LIVE to see the running package.',
+                  )} />
+                ) : (
+                  <p className="text-xs text-[var(--c-text-dim)]">
+                    {pick(
+                      'Bảng Runtime Watch đang hiển thị thường trực ở cột giữa.',
+                      'Runtime Watch panel is permanently displayed in the middle column.',
+                    )}
+                  </p>
+                )
+              )}
+              {tab === 'trace' && (
+                /* Trace SỞ HỮU một phiên có vòng đời riêng (quota, stop reason,
+                 * ring của Core). Mở một phiên thứ hai từ đây là đúng thứ AC
+                 * "không duplicate concurrent trace session" cấm — nên workbench
+                 * trỏ tới nơi sở hữu nó thay vì tự mở. */
+                <div className="space-y-2">
+                  <Unavailable reason={pick(
+                    'Trace mở một phiên có quota và vòng đời riêng, nên nó thuộc về đúng một nơi.',
+                    'Trace opens a session with its own quota and lifecycle, so it belongs in exactly one place.',
+                  )} />
+                  {traceOwnerHref && (
+                    <a
+                      className="inline-block text-xs text-[var(--c-accent)] underline"
+                      href={traceOwnerHref}
+                    >
+                      {pick('Mở Runtime & Bảo trì', 'Open Runtime & Maintenance')}
+                    </a>
+                  )}
+                </div>
               )}
             </div>
-          )}
+
+            {/* Cột giữa: Runtime Watch thường trực */}
+            <div data-testid="workbench-watch-column" className="flex h-full flex-col overflow-auto px-2">
+              <div className="mb-1 text-xs font-semibold text-[var(--c-text-dim)]">
+                {mode === 'SIMULATE'
+                  ? pick('Watch (Mô phỏng)', 'Watch (Simulation)')
+                  : pick('Watch (Trực tiếp)', 'Watch (Live)')}
+              </div>
+              {watch === null || watch === undefined ? (
+                <p className="text-xs text-[var(--c-text-dim)]">
+                  {pick(
+                    'Chưa có nguồn giá trị runtime cho chế độ này.',
+                    'No runtime watch source available for this mode.',
+                  )}
+                </p>
+              ) : (
+                <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
+              )}
+            </div>
+          </div>
         </div>
       )}
     </section>

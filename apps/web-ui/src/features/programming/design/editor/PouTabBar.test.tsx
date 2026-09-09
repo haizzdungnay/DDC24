@@ -87,6 +87,22 @@ describe('thanh tab — bắc qua ST và FBD', () => {
     expect(screen.getByTestId('pou-tab-add')).toHaveAttribute('title', expect.stringContaining('tối đa 8'))
     expect(screen.getByTestId('pou-tab-limit')).toBeInTheDocument()
   })
+
+  it('nút đóng tab chỉ hiện trên tab đang mở theo đặc tả handoff PGM-02B', () => {
+    const props = renderBar()
+    const tabs = screen.getAllByTestId('pou-tab')
+    // Tab đang mở (obj-st) có nút đóng
+    const activeCloseBtn = within(tabs[0]).getByTestId('pou-tab-close')
+    expect(activeCloseBtn).toBeInTheDocument()
+    expect(activeCloseBtn).toHaveAttribute('aria-label', expect.stringContaining('AHU_Main'))
+
+    // Tab không hoạt động (obj-fbd) KHÔNG có nút đóng
+    expect(within(tabs[1]).queryByTestId('pou-tab-close')).toBeNull()
+
+    // Bấm nút đóng tab đang mở phát ra sự kiện onClose với đúng key
+    fireEvent.click(activeCloseBtn)
+    expect(props.onClose).toHaveBeenCalledWith('obj-st')
+  })
 })
 
 describe('thanh trạng thái — null hiện "—", cấm mặc định UTF-8/LF', () => {
