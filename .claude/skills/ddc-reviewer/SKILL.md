@@ -38,9 +38,9 @@ trong verdict, và **vẫn không merge** trừ khi CTO gắn `gate:waived` kèm
 
 **(3) Phạm vi.**
 
-```bash
-gh pr diff <số PR> --name-only    # hoặc pull_request_read qua MCP
-```
+Lấy danh sách file bằng GitHub MCP `pull_request_read` (method `get_files`).
+Phiên chạy theo Routine **không có `gh` CLI** — mọi thao tác GitHub đi qua tool
+`mcp__github__*`. `gh` chỉ dùng được khi chạy tay trên máy có cài nó.
 
 Đối chiếu từng file với mục **Source ownership** của Issue. Có file ngoài danh
 sách mà PR không giải thích ⇒ FAIL (N5). Đây là phép kiểm hay bị bỏ nhất và là
@@ -115,9 +115,9 @@ Reviewer-Run: reviewer-YYYYMMDDThhmmZ
 
 ### 4. Merge khi PASS
 
-```bash
-gh pr merge <số PR> --squash --delete-branch
-```
+Merge bằng GitHub MCP `merge_pull_request` với `merge_method: "squash"`, rồi
+xoá nhánh remote. Trên máy cục bộ có `gh` thì tương đương
+`gh pr merge <số PR> --squash --delete-branch`.
 
 Thứ tự bắt buộc: gắn `review:pass` → đợi `workflow-guard` chạy lại và xanh →
 merge. Guard xanh là bằng chứng máy đã kiểm lại tách vai; merge trước khi nó

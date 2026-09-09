@@ -200,7 +200,14 @@ Nhãn chủ đề sẵn có (`programming-ui`, `point-io`, `st-editor`, `pgm04`,
 | ASan/UBSan, fuzz smoke | `Build & Test` | ✅ |
 | Bảo mật | `Security Scan` | ✅ |
 | Quy trình clean-code | `scripts/workflow_guard.py` | ✅ |
+| Self-test của guard | `scripts/workflow_guard.py --selftest` | ✅ |
 | Harness tài liệu | `python3 scripts/docs_iso_harness.py --expect` | ✅ khi PR chạm `docs/` |
+
+> **Cổng không tự vô hiệu hoá được.** Job thi hành chạy bản
+> `scripts/workflow_guard.py` trên **nhánh mặc định**, không phải bản trong PR:
+> nếu lấy bản của PR thì một PR chỉ cần sửa guard thành luôn trả về 0 là tự mở
+> cổng cho chính nó. Bản guard bị sửa vẫn được kiểm — nhưng ở job
+> `guard-selftest`, chạy trước và chạy đúng bản của PR.
 
 ### 6.2 Cổng do Implementer chạy tại máy **trước khi** mở PR
 
@@ -262,16 +269,28 @@ duy nhất: **giá trị của ba vai phải khác nhau trên cùng một chuỗ
 
 ## 8. Lịch chạy
 
-| Vai | Nhịp | Cron (UTC) | Giờ Việt Nam |
-|---|---|---|---|
-| Manager/Planner | 1 lần/ngày | `0 3 * * *` | 10:00 |
-| Implementer | mỗi 1h30 | `0 0,3,6,9,12,15,18,21 * * *` + `30 1,4,7,10,13,16,19,22 * * *` | mỗi 90 phút |
-| Reviewer | 1 lần/ngày | `0 11 * * *` | 18:00 |
+| Routine | Vai | Cron (UTC) | Giờ Việt Nam | Trigger ID |
+|---|---|---|---|---|
+| DDC-24 · Manager/Planner | Manager | `0 3 * * *` | ~10:00 mỗi ngày | `trig_01VLb9Q9b8BPKHuPAHcLFRWA` |
+| DDC-24 · Implementer A | Implementer | `5 0,3,6,9,12,15,18,21 * * *` | 07:05, 10:05, 13:05, 16:05, 19:05, 22:05, 01:05, 04:05 | `trig_01B7dwHh85Y4QxMB8KoDAx7M` |
+| DDC-24 · Implementer B | Implementer | `35 1,4,7,10,13,16,19,22 * * *` | 08:35, 11:35, 14:35, 17:35, 20:35, 23:35, 02:35, 05:35 | `trig_01XQwkLiyWPQmeh6Sb5H4qXf` |
+| DDC-24 · Reviewer/Merge Gatekeeper | Reviewer | `0 11 * * *` | ~18:00 mỗi ngày | `trig_01VPsiXuQm4avWwct4VjAUNf` |
 
 Nhịp 90 phút không biểu diễn được bằng một biểu thức cron 5 trường, nên vai
-Implementer dùng **hai** Routine xen kẽ chu kỳ 3 giờ (lệch nhau 90 phút).
+Implementer dùng **hai** Routine chu kỳ 3 giờ lệch nhau đúng 90 phút: A ở phút
+05 của giờ chẵn-3, B ở phút 35 của giờ lệch. Ghép lại được 16 lượt/ngày, khoảng
+cách đều 90 phút.
 
-Mỗi Routine mở một phiên mới và chạy đúng một skill vai:
+Phút của Routine chạy theo giờ được server neo vào phút tạo, nên lịch hằng ngày
+có thể lệch vài phút so với cron ghi ở trên. Hai Routine Implementer dùng phút
+khác 0 nên được lưu nguyên văn và giữ đúng khoảng cách 90 phút.
+
+Mỗi Routine mở **phiên mới** khi kích hoạt. Đó là điều kiện của tách vai: phiên
+mới cho định danh `*-Run` mới, nên hai vai không bao giờ chia sẻ một lượt chạy.
+Sửa lịch bằng `update_trigger`, tạm dừng bằng `enabled: false`, xoá bằng
+`delete_trigger`.
+
+Mỗi Routine chạy đúng một skill vai:
 
 - Manager → `.claude/skills/ddc-manager-planner/SKILL.md`
 - Implementer → `.claude/skills/ddc-implementer/SKILL.md`

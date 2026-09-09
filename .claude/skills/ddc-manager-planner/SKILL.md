@@ -30,7 +30,8 @@ lại việc đó bằng con mắt độc lập.
 git -C . fetch origin main && git -C . log --oneline -15 origin/main
 ```
 
-Đọc backlog hiện có qua GitHub MCP (`list_issues`, `search_issues`) — lọc
+Đọc backlog qua GitHub MCP (`list_issues`, `search_issues`) — phiên chạy theo
+Routine **không có `gh` CLI**, mọi thao tác GitHub đi qua `mcp__github__*` — lọc
 `state:ready` và `state:in-review`. Ghi lại số lượng.
 
 **Nếu backlog `state:ready` đã ≥ 10:** không tạo Issue mới. Thay vào đó rà lại

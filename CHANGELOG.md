@@ -48,9 +48,25 @@
   khoá đóng chứ không nhận `Refs`, bảng Verification rỗng, ma trận N1/N2 tự
   implement và tự merge, `gate:waived` có/không lý do, nhãn `state:*` sai hoặc
   trùng). Cả 5 file YAML mới parse sạch bằng `yaml.safe_load`.
+- Job thi hành của `workflow-guard` chạy bản `scripts/workflow_guard.py` trên
+  nhánh mặc định chứ không phải bản trong PR: lấy bản của PR thì một PR chỉ cần
+  sửa guard thành luôn trả về 0 là tự mở cổng cho chính nó. Bản guard bị sửa vẫn
+  được kiểm ở job `guard-selftest` chạy trước, đúng bản của PR.
+- Tạo bốn Routine lịch chạy (đang bật): Manager `0 3 * * *`, Reviewer
+  `0 11 * * *`, và hai Routine Implementer xen kẽ
+  `5 0,3,6,9,12,15,18,21 * * *` + `35 1,4,7,10,13,16,19,22 * * *` cho nhịp 90
+  phút — một biểu thức cron 5 trường không biểu diễn được nhịp này. Mỗi Routine
+  mở phiên mới, đó chính là điều kiện của tách vai: phiên mới cho định danh
+  `*-Run` mới nên hai vai không bao giờ chia sẻ một lượt chạy. Trigger ID ghi
+  tại `WF-CLEAN-001` §8.
+- Sửa ba skill vai dùng GitHub MCP (`mcp__github__*`) thay cho `gh` CLI: phiên
+  chạy theo Routine không có `gh` trong PATH, nên hướng dẫn cũ sẽ làm vai
+  Reviewer không merge được và vai Implementer không mở được PR.
 - Còn chặn: branch protection trên `main` và danh tính GitHub riêng cho vai
   Reviewer cần quyền tổ chức, chưa làm được từ phiên agent — checklist và điều
-  kiện mở khoá ghi tại `WF-CLEAN-001` §5.1 và §9.
+  kiện mở khoá ghi tại `WF-CLEAN-001` §5.1 và §9. Nhãn workflow được tạo trên
+  GitHub khi nhánh này merge vào `main` (`labels-sync.yml` chạy theo path
+  `.github/labels.yml`).
 
 
 ### Fixed — Cổng Go giữ đúng production tool khi dùng build root tương đối (2026-09-08)

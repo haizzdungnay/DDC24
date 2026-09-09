@@ -114,7 +114,9 @@ Commit tách theo nhóm logic, Conventional Commits, thân bài **tiếng Việt
 git push -u origin <tên-nhánh>
 ```
 
-PR dùng `.github/pull_request_template.md`, bắt buộc:
+Mở PR bằng GitHub MCP `create_pull_request` (phiên chạy theo Routine **không có
+`gh` CLI**; mọi thao tác GitHub đi qua `mcp__github__*`). Nội dung theo
+`.github/pull_request_template.md`, bắt buộc:
 
 - `Closes #<số Issue>` — đúng một Issue. `Refs #N` không tính, guard sẽ chặn.
 - `Implementer-Run:` — định danh phiên này. Phải **khác** `Manager-Run` của Issue.
