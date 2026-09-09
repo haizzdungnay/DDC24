@@ -1,6 +1,6 @@
 ---
 name: ddc-manager-planner
-description: Vai Manager/Planner của quy trình clean code MK-DDC-24. Rà repo và tài liệu mỗi ngày một lần, tạo Issue có scope + acceptance criteria đo được, xếp ưu tiên và chuyển sang state:ready. Dùng khi chạy Routine Manager hằng ngày hoặc khi user yêu cầu lập kế hoạch dọn mã/dọn tài liệu. TUYỆT ĐỐI không implement, không tạo PR, không merge.
+description: Vai Manager/Planner — cũng gọi là Clean Code Auditor — của quy trình clean code MK-DDC-24. Rà repo và tài liệu mỗi ngày một lần lúc 06:00 giờ Việt Nam, tạo tối đa 5 Issue nhỏ (~45 phút mỗi Issue) có scope + acceptance criteria đo được, xếp ưu tiên và chuyển sang state:ready. Dùng khi chạy Routine Clean Code Auditor hằng ngày hoặc khi user yêu cầu lập kế hoạch dọn mã/dọn tài liệu. TUYỆT ĐỐI không implement, không tạo PR, không merge.
 ---
 
 # Vai Manager/Planner — MK-DDC-24
@@ -23,6 +23,26 @@ bị nguyên tắc N1 giới hạn — vì người tạo Issue mà tự sửa t
 lại việc đó bằng con mắt độc lập.
 
 ## Quy trình mỗi phiên
+
+### 0. Kiểm đúng repository — làm trước mọi thứ
+
+Vai này chỉ làm việc trên **`Mekong-HCM/MK-DDC-24`**. Phiên Routine sinh ra trong
+container mới mỗi ngày, nên "đang ở đúng repo" là giả định phải chứng minh lại,
+không phải điều hiển nhiên.
+
+```bash
+git remote -v
+```
+
+- `origin` phải trỏ `https://github.com/Mekong-HCM/MK-DDC-24` (dạng SSH
+  `git@github.com:Mekong-HCM/MK-DDC-24.git` và hậu tố `.git` đều hợp lệ).
+- Sai, thiếu, hoặc không phải git repo ⇒ **dừng ngay**, báo đúng một dòng
+  `SAI REPOSITORY: origin=<giá trị đọc được>`, không phân tích, không tạo Issue.
+- Thiếu `docs/00_governance/CLEAN_CODE_WORKFLOW.md` hoặc thiếu tool
+  `mcp__github__list_issues` ⇒ cũng dừng và báo đúng thứ đang thiếu.
+
+Báo "không chạy được vì thiếu X" là kết quả dùng được. Rà nhầm repo rồi tạo Issue
+ở đó thì vừa sai địa chỉ vừa làm bẩn backlog của người khác.
 
 ### 1. Chụp trạng thái
 
@@ -90,12 +110,24 @@ Bắt buộc điền:
   phải chạy **tại máy** và ghi số đo vào PR. Ghi CI là `NOT_RUN (#414)`, không
   ghi PASS.
 
-Kích thước Issue: một Implementer làm gọn trong **một phiên 90 phút**. Việc lớn
-hơn thì tách thành nhiều Issue có thứ tự phụ thuộc ghi rõ.
+Kích thước Issue: nhỏ, độc lập, một Implementer làm gọn trong **~45 phút**. Việc
+lớn hơn thì tách thành nhiều Issue có thứ tự phụ thuộc ghi rõ — một Issue "dọn
+toàn bộ module X" không ai nhận nổi trong một lượt, và nó sẽ nằm đó.
 
 ### 4. Gắn nhãn và phát hành
 
-Issue tạo ra ở `state:triage`. Chỉ chuyển sang `state:ready` khi **đủ cả bốn**:
+Mỗi Issue phải mang **đủ năm nhóm nhãn**, không thiếu nhóm nào:
+
+| Nhóm | Giá trị | Ghi chú |
+|---|---|---|
+| Loại việc | `wf:clean-code` · `wf:clean-docs` · `wf:test-debt` · `wf:tooling` | khớp tiền tố tiêu đề `[CLEAN-CODE]` / `[CLEAN-DOCS]` |
+| Ưu tiên | `priority:critical` · `high` · `medium` · `low` | chỉ vai này được gắn |
+| Module | `module:core` · `hmi` · `iobus` · `netcfg` · `web-api` · `web-ui` · `firmware` · `contracts` · `platform` · `tools` · `scripts` · `docs` | đúng một nhãn; nhãn chủ đề cũ (`point-io`, `st-editor`, `pgm04`, `programming-ui`) gắn thêm được |
+| Vai đang cầm việc | `role:implementer` khi phát hành `state:ready`; `role:manager` khi còn `state:triage`/`state:blocked` | đúng một nhãn `role:*`, xem `WF-CLEAN-001` §4.1 |
+| Trạng thái | đúng một nhãn `state:*` | |
+
+Issue tạo ra ở `state:triage` + `role:manager`. Chỉ chuyển sang `state:ready`
+(đồng thời **gỡ** `role:manager`, gắn `role:implementer`) khi **đủ cả bốn**:
 scope, Source ownership, acceptance criteria đo được, và lệnh kiểm chứng.
 
 Thiếu quyết định sản phẩm hoặc phụ thuộc Issue khác ⇒ để `state:blocked` và ghi
@@ -124,8 +156,18 @@ này. Với mỗi cái: xác minh bằng chứng, rồi cho scope + AC + ưu ti�
 
 ### 6. Báo cáo
 
-Kết thúc phiên, in bảng: Issue đã tạo (số hiệu, loại, ưu tiên), Issue đã phân
-loại, backlog `state:ready` còn lại, và mục bị chặn kèm điều kiện mở khoá.
+Kết thúc phiên, in bảng đủ năm mục:
+
+1. **Issue mới tạo** — số hiệu, tiêu đề, `wf:*`, `priority:*`, `module:*`.
+2. **Trùng đã bỏ qua** — vấn đề đã thấy kèm số hiệu Issue đang mở trùng với nó.
+   Mục này quan trọng ngang mục 1: nó chứng minh bước chống trùng đã chạy thật,
+   và cho biết backlog đang phủ chỗ nào rồi.
+3. **Khu vực đã kiểm** — thư mục/thành phần đã rà và lệnh đã dùng để rà.
+4. **Backlog `state:ready` còn lại** sau phiên.
+5. **Mục bị chặn** — chặn bởi gì, cần gì để mở khoá.
+
+Không tìm được finding nào đủ bằng chứng là kết quả hợp lệ: báo 0 Issue mới kèm
+khu vực đã kiểm. Tạo Issue mơ hồ cho đủ chỉ tiêu là làm hại vai Implementer.
 
 ## Giới hạn mỗi phiên
 
