@@ -703,7 +703,7 @@ export function ProgramsTab({
     <div
       className={`grid min-w-0 gap-4 lg:h-full lg:min-h-0 ${
         selected?.language === 'FBD'
-          ? 'md:grid-cols-[208px_minmax(0,1fr)] min-[1440px]:grid-cols-[208px_minmax(0,1fr)_240px]'
+          ? 'md:grid-cols-[208px_minmax(0,1fr)] min-[1440px]:grid-cols-[244px_minmax(0,1fr)_223px_341px]'
           : `md:grid-cols-[280px_1fr] ${SLOT_GRID_CLASS[slotKey(slots)]}`
       }`}
       onKeyDown={(event) => {
@@ -1056,6 +1056,27 @@ export function ProgramsTab({
         )}
         </div>
       </div>
+      {/* Với FBD ở khổ ≥1440px: Quick Library là cột độc lập thứ 3 trong lưới 4 cột,
+          đặt trước Inspector trong DOM theo đúng ảnh chuẩn PGM-02B.
+          Chỉ mount khi fbdWideDesktop (window.innerWidth >= 1440) để tránh tải thư viện
+          không cần thiết khi ở màn hình nhỏ (theo quyết định #02) và giữ đúng hành vi drawer
+          dưới 1440px. Đồng thời vẫn giữ class min-[1440px]:block hidden để đảm bảo
+          layout CSS tĩnh của Tailwind. */}
+      {selected?.language === 'FBD' && fbdWideDesktop && canEdit && (
+        <div className="hidden min-[1440px]:block min-w-0 lg:min-h-0 lg:overflow-y-auto">
+          <QuickLibraryHost
+            variant="docked"
+            projectId={document.project.projectId}
+            language="FBD"
+            onInsert={(entry) => {
+              if (!canEdit) return false
+              setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
+              return true
+            }}
+            onClose={() => {}}
+          />
+        </div>
+      )}
       <aside
         className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${selected?.language === 'FBD'
           ? `${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl min-[1440px]:static min-[1440px]:block min-[1440px]:w-auto min-[1440px]:bg-transparent min-[1440px]:p-0 min-[1440px]:shadow-none`

@@ -51,10 +51,12 @@ export function PouTabBar({
         *
         * Danh sách + `aria-current` mô tả ĐÚNG thứ đang có: một dãy nút điều
         * hướng, một cái đang được chọn. */}
+      {/* Cụm tab POU đo thật từ ảnh tham chiếu PGM-02B (y=57..103):
+          chiều cao 47px, nền theo theme, đường kẻ đáy 1px. */}
       <ul
         aria-label={pick('POU đang mở', 'Open POUs')}
         data-testid="pou-tab-bar"
-        className="flex flex-wrap items-center gap-1 border-b border-[var(--c-border)] pb-1"
+        className="flex h-[47px] items-center gap-1 border-b border-[var(--c-border)] bg-[var(--c-surface)] px-2"
       >
         {state.tabs.map((tab) => (
           <TabButton
@@ -68,7 +70,7 @@ export function PouTabBar({
           />
         ))}
         {onOpenPicker && (
-          <li>
+          <li className="my-auto border-l border-[var(--c-border)] pl-2">
           <button
             type="button"
             data-testid="pou-tab-add"
@@ -109,22 +111,24 @@ function TabButton({
       data-tab-key={tab.key}
       data-active={active}
       data-missing={missing}
-      className={`inline-flex items-center gap-1 rounded-t-[var(--radius)] border-b-2 px-2 py-1 text-sm ${
-        active ? 'border-[var(--c-accent)] bg-[var(--c-surface-2)]' : 'border-transparent'
+      className={`inline-flex h-full items-center gap-1.5 border-b-2 px-3 text-sm ${
+        active
+          ? 'border-[var(--c-accent)] bg-[var(--c-surface)] font-bold text-[var(--c-text)]'
+          : 'border-transparent bg-transparent font-normal text-[var(--c-text-dim)]'
       }`}
     >
       <button
         type="button"
         aria-current={active ? 'true' : undefined}
-        className="inline-flex items-center gap-1 text-left"
+        className="inline-flex items-center gap-1.5 text-left"
         onClick={onActivate}
       >
-        <Icon className="h-3.5 w-3.5 text-[var(--c-text-dim)]" aria-hidden="true" />
-        <span className={missing ? 'line-through text-[var(--c-text-dim)]' : 'text-[var(--c-text)]'}>
+        <Icon className={`h-3.5 w-3.5 ${active ? 'text-[var(--c-text)]' : 'text-[var(--c-text-dim)]'}`} aria-hidden="true" />
+        <span className={missing ? 'line-through text-[var(--c-text-dim)]' : undefined}>
           {tab.lastKnownName}
         </span>
         {/* Ngôn ngữ bằng CHỮ, không chỉ bằng icon hay màu. */}
-        <span className="text-[10px] uppercase text-[var(--c-text-dim)]">{tab.language}</span>
+        <span className={`text-[10px] uppercase ${active ? 'text-[var(--c-text)]/70' : 'text-[var(--c-text-dim)]'}`}>{tab.language}</span>
         {dirty && (
           <span className="text-[var(--c-warn-fg)]" title={pick('Có thay đổi chưa lưu', 'Unsaved changes')}>
             •<span className="sr-only">{pick('Có thay đổi chưa lưu', 'Unsaved changes')}</span>
@@ -136,15 +140,18 @@ function TabButton({
           </span>
         )}
       </button>
-      <button
-        type="button"
-        data-testid="pou-tab-close"
-        aria-label={pick(`Đóng ${tab.lastKnownName}`, `Close ${tab.lastKnownName}`)}
-        className="rounded p-0.5 text-[var(--c-text-dim)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)]"
-        onClick={onClose}
-      >
-        <X className="h-3 w-3" aria-hidden="true" />
-      </button>
+      {/* Nút đóng × chỉ hiện trên tab đang mở theo đặc tả handoff PGM-02B. */}
+      {active && (
+        <button
+          type="button"
+          data-testid="pou-tab-close"
+          aria-label={pick(`Đóng ${tab.lastKnownName}`, `Close ${tab.lastKnownName}`)}
+          className="rounded p-0.5 text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]"
+          onClick={onClose}
+        >
+          <X className="h-3 w-3" aria-hidden="true" />
+        </button>
+      )}
     </li>
   )
 }
