@@ -248,18 +248,27 @@ Nhãn chủ đề sẵn có (`programming-ui`, `point-io`, `st-editor`, `pgm04`,
 
 ### 6.1 Cổng tự động — **hiện KHÔNG chạy**
 
-> **GitHub Actions của tổ chức không cấp runner** (billing — [#414](https://github.com/Mekong-HCM/MK-DDC-24/issues/414)).
+> **GitHub Actions của tổ chức không cấp runner** (billing — [#414](https://github.com/Mekong-HCM/MK-DDC-24/issues/414)),
+> và chủ sở hữu **đã quyết định không bật lại** (2026-09-09). Đây là **một quyết
+> định thường trực**, không phải sự cố chờ khắc phục — mọi câu chữ trong hồ sơ
+> này phải viết theo đúng nghĩa đó.
+>
 > Job không bao giờ khởi động: chúng hỏng sau 2–3 giây với 0 step. Run gần nhất
-> trên `main` là 2026-09-04; merge sau đó không sinh run nào.
+> trên `main` là 2026-09-04; mọi merge sau đó không sinh run nào.
 >
 > Hệ quả phải nói thẳng: **`Build & Test`, `Security Scan` và `Cổng quy trình
-> clean-code` đều là `NOT_RUN`.** Một PR "không có check đỏ" hiện nay không có
-> nghĩa là nó xanh — nghĩa là chưa ai kiểm. Không được đọc trạng thái trống
-> thành PASS.
+> clean-code` đều là `NOT_RUN` — lâu dài.** Một PR "không có check đỏ" không có
+> nghĩa là nó xanh; nghĩa là **chưa ai kiểm**. Không được đọc trạng thái trống
+> thành PASS, và không được chờ nó đổi.
 >
-> Các file workflow **được giữ nguyên trong repository**, không xoá: chúng đúng
-> và sẽ tự sống lại khi billing được xử lý. Cho tới lúc đó, cổng chuyển sang
-> chạy tay theo §6.1a và §6.2.
+> **Bảng Verification do Implementer tự đo là lớp kiểm chứng DUY NHẤT** trước khi
+> mã vào `main`, và sẽ còn như vậy. Vai Reviewer vì thế mang trách nhiệm nặng
+> hơn thiết kế ban đầu: nghi ngờ số đo thì phải **tự chạy lại**, không có lưới
+> đỡ nào phía sau.
+>
+> Các file workflow **được giữ nguyên trong repository**, không xoá: chúng đúng,
+> chi phí giữ bằng không, và nếu quyết định trên thay đổi thì chúng dùng lại
+> được ngay. Giữ chúng **không** hàm ý sẽ bật lại.
 
 | Cổng | Workflow / lệnh | Trạng thái hiện tại |
 |---|---|---|
@@ -383,79 +392,126 @@ session id của phiên vòng 1, làm mất dấu người sửa vòng 2.
 
 ## 8. Lịch chạy
 
-| Routine | Vai | Cron (UTC) | Giờ Việt Nam | Trigger ID |
-|---|---|---|---|---|
-| DDC-24 · Manager/Planner | Manager | `0 3 * * *` | ~10:00 mỗi ngày | `trig_01VLb9Q9b8BPKHuPAHcLFRWA` |
-| DDC-24 · Implementer A | Implementer | `5 0,3,6,9,12,15,18,21 * * *` | 07:05, 10:05, 13:05, 16:05, 19:05, 22:05, 01:05, 04:05 | `trig_01B7dwHh85Y4QxMB8KoDAx7M` |
-| DDC-24 · Implementer B | Implementer | `35 1,4,7,10,13,16,19,22 * * *` | 08:35, 11:35, 14:35, 17:35, 20:35, 23:35, 02:35, 05:35 | `trig_01XQwkLiyWPQmeh6Sb5H4qXf` |
-| DDC-24 · Reviewer/Merge Gatekeeper | Reviewer | `0 11 * * *` | ~18:00 mỗi ngày | `trig_01VPsiXuQm4avWwct4VjAUNf` |
+> **Trạng thái 2026-09-09: KHÔNG có Routine nào đang hoạt động.** Bốn Routine
+> tạo bằng `create_trigger` đã bị xoá sau khi đo được rằng chúng không thể chạy
+> (§8.1). Ba vai hiện chỉ chạy khi được kích hoạt tay. Muốn có lịch tự động,
+> chủ sở hữu phải tạo Routine từ **giao diện Routines trên claude.ai** bằng các
+> prompt ở §8.2.
+
+Lịch mục tiêu khi Routine được dựng lại:
+
+| Vai | Nhịp | Cron (UTC) | Giờ Việt Nam |
+|---|---|---|---|
+| Manager/Planner | 1 lần/ngày | `0 3 * * *` | ~10:00 |
+| Implementer A | mỗi 3 giờ | `5 0,3,6,9,12,15,18,21 * * *` | 07:05, 10:05, 13:05, 16:05, 19:05, 22:05, 01:05, 04:05 |
+| Implementer B | mỗi 3 giờ, lệch 90 phút | `35 1,4,7,10,13,16,19,22 * * *` | 08:35, 11:35, 14:35, 17:35, 20:35, 23:35, 02:35, 05:35 |
+| Reviewer/Gatekeeper | 1 lần/ngày | `0 11 * * *` | ~18:00 |
 
 Nhịp 90 phút không biểu diễn được bằng một biểu thức cron 5 trường, nên vai
 Implementer dùng **hai** Routine chu kỳ 3 giờ lệch nhau đúng 90 phút: A ở phút
-05 của giờ chẵn-3, B ở phút 35 của giờ lệch. Ghép lại được 16 lượt/ngày, khoảng
-cách đều 90 phút.
+05 của giờ chia hết cho 3, B ở phút 35 của giờ lệch. Ghép lại được 16 lượt/ngày,
+khoảng cách đều.
 
-Phút của Routine chạy theo giờ được server neo vào phút tạo, nên lịch hằng ngày
-có thể lệch vài phút so với cron ghi ở trên. Hai Routine Implementer dùng phút
+Phút của Routine chạy theo giờ có thể được server neo vào phút tạo, nên lịch
+hằng ngày lệch vài phút so với cron ghi ở trên. Hai Routine Implementer dùng phút
 khác 0 nên được lưu nguyên văn và giữ đúng khoảng cách 90 phút.
 
-Mỗi Routine mở **phiên mới** khi kích hoạt. Đó là điều kiện của tách vai: phiên
-mới cho định danh `*-Run` mới, nên hai vai không bao giờ chia sẻ một lượt chạy.
-Sửa lịch bằng `update_trigger`, tạm dừng bằng `enabled: false`, xoá bằng
-`delete_trigger`.
+**Mỗi vai phải có phiên riêng.** Đó là điều kiện của tách vai: định danh `*-Run`
+lấy từ phiên đang chạy, nên hai vai dùng chung một phiên sẽ cho cùng một định
+danh và guard chặn bằng `N1-SELF`/`N2-SELF`.
 
-### 8.1 Routine phải được cấp `sources` — bẫy đã dính một lần
-
-Một Routine không có `sources` sẽ sinh ra **phiên rỗng**: không repository, không
-skill, không công cụ GitHub. Vai được đánh thức nhưng không đọc được luật của
-chính nó và không chạm được vào Issue nào.
-
-Đây không phải giả thuyết. Lượt Manager đầu tiên (2026-09-09) chạy đúng như vậy
-và **không tạo được Issue nào**: phiên báo không có `mcp__github__*`, `git clone`
-lỗi xác thực, và skill `ddc-manager-planner` không tồn tại ở đâu truy cập được.
-Nó **từ chối bịa** kết quả — đó là hành vi đúng, và cũng là thứ duy nhất khiến sự
-cố này lộ ra thay vì trôi qua thành một báo cáo trông có vẻ ổn.
-
-Nguyên nhân: tool `create_trigger` **không có tham số `sources` và không kế thừa**
-`sources` từ phiên gọi. `update_trigger` chỉ sửa được `name`, `cron_expression`,
-`enabled`, `model` và `prompt` — **không sửa được `sources`**. Một Routine tạo
-thiếu `sources` vì thế **không vá được**, chỉ tạo lại.
-
-| Cách tạo Routine | Có `sources`? | Ghi chú |
-|---|---|---|
-| Giao diện Routines trên claude.ai | ✅ chọn repo và connector khi tạo | **Cách đúng cho vận hành thường xuyên** |
-| `create_session(source_url=…)` rồi bind bằng `create_trigger(persistent_session_id=…)` | ✅ | Phiên bền tích luỹ ngữ cảnh; chấp nhận được với nhịp 1 lần/ngày, **không** hợp với nhịp 90 phút |
-| `create_trigger(create_new_session_on_fire=true)` | ❌ | Phiên rỗng — chính là bẫy này |
-
-**Mỗi prompt Routine phải mở đầu bằng một bước kiểm môi trường** và dừng hẳn khi
-thiếu, thay vì cố làm tiếp:
-
-```
-0. ls docs/00_governance/CLEAN_CODE_WORKFLOW.md .claude/skills/<vai>/SKILL.md
-   Có tool mcp__github__* không?
-   Thiếu bất kỳ thứ nào ⇒ DỪNG, báo đúng thứ đang thiếu, không bịa.
-```
-
-Báo cáo "không chạy được vì thiếu X" là kết quả đúng và dùng được. Báo cáo bịa
-một lượt review hoặc một Issue chưa từng tồn tại thì hỏng nặng hơn không chạy —
-vì nó làm hỏng chính chuỗi bằng chứng mà quy trình này sinh ra để bảo vệ.
-
-**Skill trong repository thắng prompt của Routine khi hai bên mâu thuẫn.** Prompt
-Routine là cấu hình ngoài repo, sửa được lặng lẽ và không để lại dấu vết; skill
-đi qua PR và review. Cụ thể hiện nay: prompt Routine của vai Reviewer còn câu
-"đợi job `Cổng quy trình clean-code` xanh rồi merge", viết trước sự cố runner —
-skill `ddc-reviewer` ghi đè câu đó bằng cổng offline `§6.1a`.
-
-Mỗi Routine chạy đúng một skill vai:
+Skill nằm trong repository nên đổi quy trình = sửa file + PR, không phải sửa
+cấu hình ẩn ở đâu đó:
 
 - Manager → `.claude/skills/ddc-manager-planner/SKILL.md`
 - Implementer → `.claude/skills/ddc-implementer/SKILL.md`
 - Reviewer → `.claude/skills/ddc-reviewer/SKILL.md`
 
-Skill nằm trong repository nên đổi quy trình = sửa file + PR, không phải sửa
-cấu hình ẩn ở đâu đó.
+**Skill trong repository thắng prompt của Routine khi hai bên mâu thuẫn.** Prompt
+Routine là cấu hình ngoài repo, sửa được lặng lẽ và không để lại dấu vết; skill
+đi qua PR và review.
 
----
+### 8.1 Vì sao không tạo được Routine từ phiên agent — ba cơ chế, ba lần đo
+
+Không phải giả thuyết. Ngày 2026-09-09 đã thử đủ ba cơ chế mà tool cho phép, và
+**cả ba đều hỏng**. Ghi lại đây vì người kế tiếp sẽ thử lại đúng ba cơ chế đó.
+
+| # | Cơ chế | Kết quả đo | Bằng chứng |
+|---|---|---|---|
+| 1 | `create_trigger(create_new_session_on_fire=true)` | Phiên sinh ra **không repo và không MCP tool** | Lượt Manager 07:01Z báo `git clone` lỗi xác thực, không có `mcp__github__*`, skill không tồn tại. Cấu hình trigger: `sources: []`, `mcp_servers: []`, `mcp_connections: []` |
+| 2 | Cơ chế 1 + bootstrap `add_repo` trong prompt | **Không thể** — `add_repo` chính là một MCP tool, mà phiên không có MCP tool | Lượt Manager 09:35Z báo toàn bộ `mcp__Claude_Code_Remote__*` và `mcp__github__*` vắng mặt |
+| 3 | `create_session(source_url=…)` + `create_trigger(persistent_session_id=…)` | Phiên bền **có** đủ repo + MCP, nhưng Routine bắn vào **không đánh thức được nó** | Phiên bền chạy tay thành công (gọi thật `list_issues`, trả về 4 Issue `state:ready`). Trigger bắn 09:50:38Z; phiên giữ nguyên `updated_at 09:40:40Z`, `used_tokens 76.931` không đổi, `post_turn_summary` vẫn của lượt trước, `status: IDLE`, `connection_status: disconnected`; trigger **không** ghi `last_run`. Issue được giao xử lý không hề bị chạm |
+
+Kết luận: **`update_trigger` chỉ sửa được `name`, `cron_expression`, `enabled`,
+`model`, `prompt` — không sửa được `sources` hay `mcp_servers`.** Một Routine
+tạo thiếu hai thứ đó không vá được bằng bất kỳ prompt nào, vì mọi đường vá đều
+cần một tool mà phiên đó không có.
+
+Ba lần đo trên tốn bốn phiên. Bài học rẻ hơn nhiều nếu đọc kỹ **cảnh báo mà
+chính `create_trigger` trả về ngay lần gọi đầu**:
+
+> *"this trigger stores no MCP connectors, so the sessions it fires will run
+> without connector (`mcp__<server>__*`) tools … If the routine needs connectors,
+> create it from a session that holds them, or ask the user to create it from the
+> claude.ai routines UI."*
+
+Cảnh báo đó nói đúng kết luận cuối cùng, ngay từ đầu.
+
+**Cách duy nhất còn lại: tạo Routine từ giao diện Routines trên claude.ai**, nơi
+repo và connector GitHub được chọn lúc tạo. Prompt sẵn dùng ở §8.2.
+
+### 8.2 Prompt Routine sẵn dùng
+
+Tạo **bốn** Routine trên claude.ai. Với mỗi Routine, khi tạo phải chọn:
+
+- **Repository:** `Mekong-HCM/MK-DDC-24`, nhánh `main`
+- **Connector:** GitHub (bắt buộc — thiếu nó thì vai không đọc/ghi được Issue và PR)
+- **Cron:** theo bảng §8
+- **Phiên riêng cho từng vai** — bốn Routine, bốn phiên, không dùng chung (§8)
+
+Mỗi prompt dưới đây là bản đầy đủ, dán thẳng, không cần sửa.
+
+**Khối chung — dán vào đầu cả bốn prompt:**
+
+```
+## Bước 0 — kiểm môi trường, làm trước mọi thứ
+
+1. `ls docs/00_governance/CLEAN_CODE_WORKFLOW.md .claude/skills/<TÊN-SKILL>/SKILL.md`
+2. Có tool `mcp__github__list_issues` không?
+
+Thiếu bất kỳ thứ nào ⇒ DỪNG NGAY, báo đúng thứ đang thiếu, kết thúc.
+TUYỆT ĐỐI không đoán, không bịa, không báo đã làm việc chưa làm.
+Báo cáo "không chạy được vì thiếu X" là kết quả đúng và dùng được;
+báo cáo bịa làm hỏng chính chuỗi bằng chứng mà quy trình này bảo vệ.
+
+## Nguồn luật
+
+Gọi skill `<TÊN-SKILL>` và làm đúng theo nó.
+Authority: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (WF-CLEAN-001).
+Khi skill và prompt này mâu thuẫn, SKILL TRONG REPOSITORY THẮNG.
+
+Định danh `<VAI>-Run` của bạn: gọi `get_session` BỎ TRỐNG `session_id`,
+URL là `https://claude.ai/code/<ccr.id>`. TUYỆT ĐỐI không chép lại định danh
+có sẵn trong Issue/PR — đó là của phiên khác (§7).
+
+## Hạ tầng — đọc kỹ
+
+GitHub Actions KHÔNG có runner và chủ sở hữu đã quyết định KHÔNG bật lại (#414).
+`Build & Test`, `Security Scan`, `Cổng quy trình clean-code` đều NOT_RUN — lâu dài.
+Một PR không có check đỏ KHÔNG phải PR đã được kiểm.
+KHÔNG chờ CI xanh; chờ một job không bao giờ chạy là treo vĩnh viễn.
+```
+
+Phần riêng của từng vai lấy nguyên từ mục **Việc phải làm** trong skill tương
+ứng; skill là bản đúng, prompt chỉ cần trỏ tới nó. Ba giá trị `<TÊN-SKILL>` và
+`<VAI>`:
+
+| Routine | `<TÊN-SKILL>` | `<VAI>` | Nhắc thêm trong prompt |
+|---|---|---|---|
+| Manager/Planner | `ddc-manager-planner` | `Manager` | Không sửa file, không nhánh/commit/PR/merge. Thấy lỗi dễ sửa vẫn phải viết thành Issue (N1). Canh vòng sửa lại treo theo mục 4a của skill. |
+| Implementer A | `ddc-implementer` | `Implementer` | Ưu tiên `state:changes-requested` trước mọi Issue mới. Đúng một Issue, đúng một PR. Không gắn `review:pass`, không merge. |
+| Implementer B | `ddc-implementer` | `Implementer` | Y hệt A. Hai Routine chỉ khác lịch; chúng tự tránh nhau nhờ nhãn `state:in-progress` gắn trước khi viết dòng code đầu tiên. |
+| Reviewer/Gatekeeper | `ddc-reviewer` | `Reviewer` | PASS thì phải **gỡ** `review:changes-requested` trước khi gắn `review:pass`, rồi chạy `workflow_guard.py --input` từ cây `main` và chỉ merge khi exit 0. |
 
 ## 9. Hạng mục bị chặn
 
@@ -463,8 +519,9 @@ cấu hình ẩn ở đâu đó.
 |---|---|---|
 | Cổng *Require approvals* native của GitHub cho agent | Ba vai dùng chung tài khoản `Mekong-HCM`; GitHub cấm tự approve PR của mình | Cấp machine user hoặc GitHub App riêng cho vai Reviewer, thêm vào repo với quyền `write` |
 | Bật branch protection trên `main` | Cần quyền admin repo qua giao diện `Settings → Branches`; API branch-protection không có trong tool set của phiên agent | Owner bật thủ công theo checklist `§5.1` |
-| Bốn Routine hiện có (`trig_01VLb9…`, `trig_01B7dw…`, `trig_01XQwk…`, `trig_01VPsi…`) sinh phiên rỗng | Được tạo bằng `create_trigger`, vốn không cấp `sources`; `update_trigger` không sửa được trường đó | Tạo lại Routine từ giao diện Routines trên claude.ai, chọn repo `Mekong-HCM/MK-DDC-24` và connector GitHub, rồi xoá bốn Routine cũ bằng `delete_trigger`. Xem `§8.1`. |
-| Toàn bộ cổng CI (`Build & Test`, `Security Scan`, job `workflow-guard`) | GitHub Actions của tổ chức không cấp runner — billing (#414) | Xử lý `Billing & plans` của tổ chức `Mekong-HCM`. **Không có phần thay thế bằng phần mềm** cho build/test đa nền tảng; §6.1a chỉ thay được cổng quy trình, không thay được cổng biên dịch và test. |
+| Không có Routine nào đang chạy; ba vai chỉ hoạt động khi kích hoạt tay | Từ phiên agent không tạo được Routine chạy được — đã đo đủ ba cơ chế, cả ba hỏng (`§8.1`). Bốn Routine cũ đã bị xoá vì chúng chỉ sinh phiên rỗng | Chủ sở hữu tạo bốn Routine từ **giao diện Routines trên claude.ai**, chọn repo `Mekong-HCM/MK-DDC-24` + connector GitHub lúc tạo. Prompt sẵn dùng ở `§8.2`. |
+| Xoá nhánh remote sau merge | Credential git của phiên không có quyền xoá ref (`HTTP 403` ở cả `git push --delete` lẫn refspec rỗng, từ nhiều phiên khác nhau); không có tool MCP xoá branch | Bật `Settings → General → Automatically delete head branches`, hoặc xoá tay tại trang Branches |
+| Toàn bộ cổng CI (`Build & Test`, `Security Scan`, job `workflow-guard`) | GitHub Actions không cấp runner (#414), và chủ sở hữu **đã quyết định không bật lại** (2026-09-09) | **Không phải mục chờ mở khoá — là một quyết định đã chốt.** §6.1a chỉ thay được cổng quy trình; cổng biên dịch và test đa nền tảng **không có phần thay thế bằng phần mềm** và sẽ do Implementer tự đo, Reviewer tự kiểm lại. |
 
 ---
 
