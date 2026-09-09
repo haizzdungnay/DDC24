@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Fixed — Routine không có `sources` sinh phiên rỗng; ghi bẫy vào WF-CLEAN-001 §8.1 (2026-09-09)
+
+- Triệu chứng: lượt Manager đầu tiên **không tạo được Issue nào**. Phiên báo
+  không có công cụ `mcp__github__*`, `git clone` vào `Mekong-HCM/MK-DDC-24` lỗi
+  xác thực, không có `gh` CLI, và skill `ddc-manager-planner` không tồn tại ở đâu
+  truy cập được. Nó **từ chối bịa** kết quả — hành vi đúng, và cũng là thứ duy
+  nhất khiến sự cố lộ ra thay vì trôi qua thành một báo cáo trông có vẻ ổn.
+- Nguyên nhân gốc: bốn Routine được tạo bằng `create_trigger` với
+  `create_new_session_on_fire=true`. Tool đó **không có tham số `sources` và
+  không kế thừa `sources` từ phiên gọi**, nên mọi phiên nó sinh ra đều rỗng:
+  không repository, không skill, không GitHub. Đối chiếu: phiên CTO có
+  `session_context.sources = [Mekong-HCM/MK-DDC-24]`, còn cả bốn trigger có
+  `session_request.config.sources = []`.
+- `update_trigger` chỉ sửa được `name`, `cron_expression`, `enabled`, `model`,
+  `prompt` — **không sửa được `sources`**. Bốn Routine hiện tại vì thế không vá
+  được bằng cách sửa prompt; phải tạo lại.
+- Cách sửa đã làm: `WF-CLEAN-001` §8.1 ghi lại bẫy này kèm bảng ba cách tạo
+  Routine và cách nào cấp được `sources`; §9 thêm hạng mục bị chặn với điều kiện
+  mở khoá. Prompt Routine của vai Reviewer được cập nhật thêm **bước 0 kiểm môi
+  trường**: thiếu repo hoặc thiếu `mcp__github__*` thì DỪNG và báo đúng thứ
+  đang thiếu, tuyệt đối không bịa verdict. Báo cáo "không chạy được vì thiếu X"
+  là kết quả đúng; báo cáo bịa làm hỏng chính chuỗi bằng chứng mà quy trình này
+  sinh ra để bảo vệ.
+- Kiểm chứng HOST: `python3 scripts/docs_iso_harness.py --expect` PASS;
+  `python3 scripts/workflow_guard.py --selftest` 34/34 PASS. Xác nhận
+  `create_session(source_url=…)` cấp `sources` đúng: phiên
+  `session_01NfhNEaoZrPjk7sF2fKBkmG` có `current_branches = main`, tức repo đã
+  được checkout. CI: `NOT_RUN` — không có runner (#414).
+
+
 ### Changed — Cổng quy trình clean-code chạy được khi CI không có runner (2026-09-09)
 
 - Triệu chứng: GitHub Actions của tổ chức không cấp runner (billing, #414). Merge

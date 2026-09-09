@@ -336,6 +336,42 @@ mới cho định danh `*-Run` mới, nên hai vai không bao giờ chia sẻ m�
 Sửa lịch bằng `update_trigger`, tạm dừng bằng `enabled: false`, xoá bằng
 `delete_trigger`.
 
+### 8.1 Routine phải được cấp `sources` — bẫy đã dính một lần
+
+Một Routine không có `sources` sẽ sinh ra **phiên rỗng**: không repository, không
+skill, không công cụ GitHub. Vai được đánh thức nhưng không đọc được luật của
+chính nó và không chạm được vào Issue nào.
+
+Đây không phải giả thuyết. Lượt Manager đầu tiên (2026-09-09) chạy đúng như vậy
+và **không tạo được Issue nào**: phiên báo không có `mcp__github__*`, `git clone`
+lỗi xác thực, và skill `ddc-manager-planner` không tồn tại ở đâu truy cập được.
+Nó **từ chối bịa** kết quả — đó là hành vi đúng, và cũng là thứ duy nhất khiến sự
+cố này lộ ra thay vì trôi qua thành một báo cáo trông có vẻ ổn.
+
+Nguyên nhân: tool `create_trigger` **không có tham số `sources` và không kế thừa**
+`sources` từ phiên gọi. `update_trigger` chỉ sửa được `name`, `cron_expression`,
+`enabled`, `model` và `prompt` — **không sửa được `sources`**. Một Routine tạo
+thiếu `sources` vì thế **không vá được**, chỉ tạo lại.
+
+| Cách tạo Routine | Có `sources`? | Ghi chú |
+|---|---|---|
+| Giao diện Routines trên claude.ai | ✅ chọn repo và connector khi tạo | **Cách đúng cho vận hành thường xuyên** |
+| `create_session(source_url=…)` rồi bind bằng `create_trigger(persistent_session_id=…)` | ✅ | Phiên bền tích luỹ ngữ cảnh; chấp nhận được với nhịp 1 lần/ngày, **không** hợp với nhịp 90 phút |
+| `create_trigger(create_new_session_on_fire=true)` | ❌ | Phiên rỗng — chính là bẫy này |
+
+**Mỗi prompt Routine phải mở đầu bằng một bước kiểm môi trường** và dừng hẳn khi
+thiếu, thay vì cố làm tiếp:
+
+```
+0. ls docs/00_governance/CLEAN_CODE_WORKFLOW.md .claude/skills/<vai>/SKILL.md
+   Có tool mcp__github__* không?
+   Thiếu bất kỳ thứ nào ⇒ DỪNG, báo đúng thứ đang thiếu, không bịa.
+```
+
+Báo cáo "không chạy được vì thiếu X" là kết quả đúng và dùng được. Báo cáo bịa
+một lượt review hoặc một Issue chưa từng tồn tại thì hỏng nặng hơn không chạy —
+vì nó làm hỏng chính chuỗi bằng chứng mà quy trình này sinh ra để bảo vệ.
+
 **Skill trong repository thắng prompt của Routine khi hai bên mâu thuẫn.** Prompt
 Routine là cấu hình ngoài repo, sửa được lặng lẽ và không để lại dấu vết; skill
 đi qua PR và review. Cụ thể hiện nay: prompt Routine của vai Reviewer còn câu
@@ -359,6 +395,7 @@ cấu hình ẩn ở đâu đó.
 |---|---|---|
 | Cổng *Require approvals* native của GitHub cho agent | Ba vai dùng chung tài khoản `Mekong-HCM`; GitHub cấm tự approve PR của mình | Cấp machine user hoặc GitHub App riêng cho vai Reviewer, thêm vào repo với quyền `write` |
 | Bật branch protection trên `main` | Cần quyền admin repo qua giao diện `Settings → Branches`; API branch-protection không có trong tool set của phiên agent | Owner bật thủ công theo checklist `§5.1` |
+| Bốn Routine hiện có (`trig_01VLb9…`, `trig_01B7dw…`, `trig_01XQwk…`, `trig_01VPsi…`) sinh phiên rỗng | Được tạo bằng `create_trigger`, vốn không cấp `sources`; `update_trigger` không sửa được trường đó | Tạo lại Routine từ giao diện Routines trên claude.ai, chọn repo `Mekong-HCM/MK-DDC-24` và connector GitHub, rồi xoá bốn Routine cũ bằng `delete_trigger`. Xem `§8.1`. |
 | Toàn bộ cổng CI (`Build & Test`, `Security Scan`, job `workflow-guard`) | GitHub Actions của tổ chức không cấp runner — billing (#414) | Xử lý `Billing & plans` của tổ chức `Mekong-HCM`. **Không có phần thay thế bằng phần mềm** cho build/test đa nền tảng; §6.1a chỉ thay được cổng quy trình, không thay được cổng biên dịch và test. |
 
 ---
