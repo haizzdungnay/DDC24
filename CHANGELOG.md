@@ -8,6 +8,43 @@
 
 ## [Unreleased]
 
+### Added — Routine Clean Code Auditor 06:00 giờ Việt Nam: hợp đồng vận hành, nhãn `module:*`, cổng kiểm repo (2026-09-09)
+
+- **Phạm vi:** `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (§2.1, §4, §8, §8.1,
+  §8.3 mới), `.claude/skills/ddc-manager-planner/SKILL.md`, `.github/labels.yml`,
+  `AGENTS.md`, `CLAUDE.md`.
+- **Vì sao:** vai Manager/Planner trước đây chỉ có nhịp mục tiêu 03:00 UTC và
+  không có cổng nào bắt buộc kiểm *đang đứng ở repo nào* trước khi rà. Phiên
+  Routine sinh trong container mới mỗi ngày, nên "đúng repo" là giả định phải
+  chứng minh lại chứ không hiển nhiên; rà nhầm repo rồi tạo Issue ở đó vừa sai
+  địa chỉ vừa làm bẩn backlog của người khác.
+- **Thay đổi:**
+  - Nhịp vai Manager/Planner (tên vận hành: **Clean Code Auditor**) chuyển sang
+    **23:00 UTC ≈ 06:00 giờ Việt Nam** (`Asia/Ho_Chi_Minh`), mỗi lượt một phiên
+    mới; bảng lịch §8 và `AGENTS.md`/`CLAUDE.md` cập nhật theo.
+  - Thêm §8.3: hợp đồng 10 ràng buộc của Routine (một phiên mới mỗi lượt, khoá
+    repo `Mekong-HCM/MK-DDC-24`, kiểm `remote origin` trước khi phân tích, chống
+    trùng `[CLEAN-CODE]`, ưu tiên bằng chứng, Issue ~45 phút, đủ sáu phần nội
+    dung, đủ năm nhóm nhãn, chỉ tạo Issue, tối đa 05 Issue + báo cáo) kèm prompt
+    sẵn dùng dán thẳng khi tạo Routine.
+  - Skill `ddc-manager-planner` thêm **Bước 0 — kiểm đúng repository** (dừng và
+    báo `SAI REPOSITORY: origin=…` khi sai), hạ kích thước Issue từ 90 xuống
+    **~45 phút**, thêm bảng năm nhóm nhãn bắt buộc và mở rộng mục báo cáo cuối
+    phiên (Issue mới / trùng đã bỏ / khu vực đã kiểm / backlog còn lại / bị chặn).
+  - `.github/labels.yml` thêm nhóm **`module:*`** (12 nhãn theo cây repo) và ghi
+    rõ `role:*` là **vai đang cầm việc**, không phải vai đã tạo Issue: Issue
+    `state:ready` mang `role:implementer`, Issue `state:triage`/`state:blocked`
+    mang `role:manager`.
+- **Verification:** `python3 scripts/workflow_guard.py --selftest` PASS (không
+  đổi logic guard, chạy để chắc thay đổi tài liệu/nhãn không phá cổng);
+  `python3 -c "import yaml; yaml.safe_load(open('.github/labels.yml'))"` OK — 33
+  nhãn, không trùng tên, trong đó 12 nhãn `module:*` mới;
+  `python3 scripts/docs_iso_harness.py --expect` PASS (khớp toàn bộ ngưỡng,
+  0 code-span `docs/**` trỏ file không tồn tại). Đo thêm về hạ tầng Routine ghi tại §8.1 hàng 4: `create_trigger`
+  từ phiên agent **vẫn** sinh phiên không repo, không MCP connector
+  (`connectors` bị tổ chức từ chối), nên Routine phải tạo từ giao diện Routines
+  trên claude.ai — xem §9.
+
 ### Changed — Không tạo được Routine từ phiên agent: ghi ba lần đo và chuyển sang giao diện Routines (2026-09-09)
 
 - Triệu chứng: mọi lượt Routine đều chết với thông báo *"session chưa được cấp
