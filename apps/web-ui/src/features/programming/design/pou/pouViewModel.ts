@@ -58,16 +58,30 @@ export interface PouGroup {
   items: PouItem[]
 }
 
+export interface PouGroupedItems {
+  programs: PouItem[]
+  functionBlocks: PouItem[]
+  functions: PouItem[]
+}
+
+export type PouGroups = PouGroup[] & PouGroupedItems
+
 /** Nhóm theo kind và sắp theo tên; thứ tự nhóm cố định để tiêu điểm bàn phím
  *  không nhảy chỗ giữa hai lần render. */
-export function groupPouItems(items: readonly PouItem[]): PouGroup[] {
-  return POU_KINDS.map((kind) => ({
+export function groupPouItems(items: readonly PouItem[]): PouGroups {
+  const groups = POU_KINDS.map((kind) => ({
     kind,
     items: items
       .filter((item) => item.kind === kind)
       .slice()
       .sort((left, right) => left.name.localeCompare(right.name))
   }))
+
+  return Object.assign(groups, {
+    programs: groups.find((group) => group.kind === 'PROGRAM')?.items ?? [],
+    functions: groups.find((group) => group.kind === 'FUNCTION')?.items ?? [],
+    functionBlocks: groups.find((group) => group.kind === 'FUNCTION_BLOCK')?.items ?? []
+  })
 }
 
 /** Lọc theo tên/ngôn ngữ, không phân biệt hoa thường và bỏ khoảng trắng thừa. */
