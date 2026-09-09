@@ -518,7 +518,15 @@ export function EditorPane({
   const fbdInspectorOpen = selected?.language === 'FBD' && !fbdWideDesktop
     ? fbdInspectorDrawerOpen
     : slots.inspector
-  const libraryColumnOpen = selected?.language === 'ST' && canEdit && libraryDockOpen
+  /* Task 8 đã đưa Quick Library FBD thành cột thứ ba ở desktop rộng. Sau khi
+   * tách `ProgramsTab` thành facade, điều kiện mount phải sống tại owner mới
+   * này; nếu chỉ giữ nhánh ST thì merge vẫn sạch cú pháp nhưng làm mất cột FBD
+   * đã có trên `main`. Dưới 1440 px FBD tiếp tục dùng luồng drawer hiện hữu. */
+  const libraryColumnEligible = canEdit && (
+    selected?.language === 'ST'
+    || (selected?.language === 'FBD' && fbdWideDesktop)
+  )
+  const libraryColumnOpen = libraryColumnEligible && libraryDockOpen
   const workspaceGrid = useProgramsWorkspaceGrid({
     explorerOpen: slots.left,
     libraryOpen: libraryColumnOpen,
@@ -1078,14 +1086,15 @@ export function EditorPane({
       <aside
         data-testid="quick-library-column"
         aria-label={pick('Thư viện nhanh', 'Quick library')}
-        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${selected?.language === 'ST' && canEdit ? '' : 'hidden lg:flex lg:items-start'}`}
+        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${libraryColumnEligible ? '' : 'hidden lg:flex lg:items-start'}`}
       >
-        {selected?.language === 'ST' && canEdit && libraryDockOpen ? (
+        {libraryColumnEligible && libraryDockOpen && selected ? (
           <QuickLibraryHost
             variant="docked"
             projectId={document.project.projectId}
-            language="ST"
+            language={selected.language}
             onInsert={(entry) => {
+              if (!canEdit) return false
               setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
               return true
             }}
@@ -1094,7 +1103,7 @@ export function EditorPane({
               window.setTimeout(() => libraryDockToggleRef.current?.focus(), 0)
             }}
           />
-        ) : selected?.language === 'ST' && canEdit ? (
+        ) : libraryColumnEligible ? (
           <button
             ref={libraryDockToggleRef}
             type="button"

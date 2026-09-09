@@ -41,12 +41,11 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-/* `DEV-PROG-024` — khay nay THU GỌN sẵn (lý do đầy đủ ở chỗ khai `useState`
- * trong `ProgrammingWorkbench.tsx`: ở 1280×800 nó chiếm 35% ngân sách dọc để
- * nói "không có vấn đề nào"). Test nào cần nội dung bên trong khay thì mở nó ra
- * như người dùng vẫn mở — bằng chính nút trên dải tab. */
+/* Ảnh chuẩn PGM-02B quy định khay đáy MỞ SẴN khi vào trang với chiều cao
+ * mặc định 173 px. Quyết định này thay thế `DEV-PROG-024`. */
 function openWorkbench() {
-  fireEvent.click(screen.getByRole('button', { name: 'Mở rộng' }))
+  const expandBtn = screen.queryByRole('button', { name: 'Mở rộng' })
+  if (expandBtn) fireEvent.click(expandBtn)
 }
 
 /*
@@ -171,23 +170,28 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     expect(onJump).toHaveBeenCalledTimes(1)
   })
 
-  it('THU GỌN SẴN, và dải tab vẫn ở nguyên chỗ với đủ số đếm', () => {
-    /* `DEV-PROG-024` — mặc định đổi từ mở sang thu gọn. Điều phải giữ nguyên là
+  it('MỞ SẴN ở chiều cao 173 px, và dải tab vẫn ở nguyên chỗ với đủ số đếm', () => {
+    /* `PGM-02B` — mặc định đổi từ thu gọn sang mở, thay thế `DEV-PROG-024`.
+       Ảnh chuẩn đo khay đáy y=729..901 tức 173 px. Điều phải giữ nguyên vẫn là
        thứ `DEV-PROG-001` đi sửa: khay KHÔNG được biến khỏi tầm mắt. Dải tab
        đứng yên tại chỗ, mỗi tab mang số đếm của nó, nên "có vấn đề gì không"
-       đọc được mà không cần mở. */
+       đọc được ngay. */
     renderWorkbench({ problems: [{ id: '1', code: 'FBD-SEM-TYPE-REF-001', detail: 'x', jumpLabel: null }] })
-    expect(screen.queryByRole('tabpanel')).toBeNull()
+    const panel = screen.getByRole('tabpanel')
+    expect(panel).toBeInTheDocument()
+    expect(panel.style.height).toBe('173px')
     expect(screen.getByRole('tab', { name: /Vấn đề \(1\)/ })).toBeInTheDocument()
     expect(screen.getByRole('separator')).toBeInTheDocument()
   })
 
-  it('mở lại và thu gọn lại bằng chính nút đó', () => {
+  it('thu gọn rồi mở lại bằng chính nút đó', () => {
+    /* Đảo thứ tự so với bản cũ vì khay nay mở sẵn: thao tác đầu tiên có nghĩa
+       là thu gọn, không phải mở rộng. */
     renderWorkbench()
-    fireEvent.click(screen.getByRole('button', { name: 'Mở rộng' }))
-    expect(screen.getByRole('tabpanel')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Thu gọn' }))
     expect(screen.queryByRole('tabpanel')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Mở rộng' }))
+    expect(screen.getByRole('tabpanel')).toBeInTheDocument()
   })
 
   it('bấm THẲNG một tab cũng mở khay — không bắt đi qua nút Mở rộng', () => {
@@ -201,22 +205,19 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     const handle = screen.getByRole('separator')
     expect(handle).toHaveAttribute('aria-valuemin', '120')
     expect(handle).toHaveAttribute('aria-valuemax', '520')
-    /* `DEV-PROG-021` hạ tiếp 150 → 120 sau khi ĐO trên trình duyệt thật: ở
-     * 1280×800 cột soạn thảo chỉ có 512 px, mà workbench chiếm 211 px khiến chỗ
-     * gõ còn 158 px — khoảng tám dòng. Workbench là nơi tra cứu, chỗ gõ là nơi
-     * làm việc; màn hình chật thì nơi làm việc được ưu tiên, và người dùng vẫn
-     * kéo to lại bất cứ lúc nào.
+    /* `PGM-02B` nâng mặc định 120 → 173 theo số đo ảnh chuẩn (y=729..901).
      *
-     * Dừng đúng ở 120 chứ không thấp hơn: đó là `MIN_HEIGHT`, và một mặc định
-     * dưới sàn làm `aria-valuenow` rơi ra ngoài `[valuemin, valuemax]`.
+     * Sàn `MIN_HEIGHT` giữ nguyên 120 px, nên mặc định nay nằm HẲN TRONG
+     * `[valuemin, valuemax]` thay vì đúng bằng sàn — `aria-valuenow` vẫn hợp
+     * lệ, và đó là điều phép kiểm này canh.
      *
-     * `DEV-PROG-001` trước đó hạ 200 → 150: workbench và trình soạn thảo chia
-     * cùng một ngân sách chiều cao, nên mỗi pixel mặc định ở đây là một pixel
-     * lấy khỏi chỗ người ta gõ. */
-    expect(handle).toHaveAttribute('aria-valuenow', '120')
+     * Lập luận cũ vẫn còn hiệu lực ở khổ chật: `DEV-PROG-021` hạ 150 → 120 sau
+     * khi đo ở 1280×800, nơi workbench chiếm 211 px khiến chỗ gõ còn 158 px.
+     * Người dùng ở màn hình đó thu khay về đúng 120 px như trước. */
+    expect(handle).toHaveAttribute('aria-valuenow', '173')
 
     fireEvent.keyDown(handle, { key: 'ArrowUp' })
-    expect(handle).toHaveAttribute('aria-valuenow', '144')
+    expect(handle).toHaveAttribute('aria-valuenow', '197')
   })
 
   it('đổi chiều cao được bằng BÀN PHÍM, không chỉ bằng chuột', () => {
@@ -232,15 +233,15 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     const raised = heightNow()
     expect(raised).toBeGreaterThan(before)
 
-    /* Đi xuống từ chỗ ĐÃ NÂNG, không đi xuống từ mặc định: `DEV-PROG-021` đặt
-       mặc định bằng đúng `MIN_HEIGHT`, nên từ đó phím xuống không còn chỗ. Đó
-       là hành vi ĐÚNG và được khẳng định ngay bên dưới — chứ không phải một
-       giới hạn của phép kiểm. */
+    /* `PGM-02B` nâng mặc định lên 173 px, cách sàn 120 px một khoảng thật — nên
+       khẳng định được điều bản cũ không khẳng định nổi: phím xuống ĐI XUỐNG
+       ĐƯỢC từ chính mặc định, và dừng ĐÚNG ở sàn chứ không xuyên qua. Bản cũ
+       đặt mặc định bằng đúng sàn nên chỉ kiểm được vế "không xuyên sàn". */
     fireEvent.keyDown(handle, { key: 'ArrowDown' })
     expect(heightNow()).toBeLessThan(raised)
 
     for (let step = 0; step < 6; step += 1) fireEvent.keyDown(handle, { key: 'ArrowDown' })
-    expect(heightNow(), 'phím xuống không được vượt qua sàn').toBeGreaterThanOrEqual(before)
+    expect(heightNow(), 'phím xuống phải dừng đúng ở sàn MIN_HEIGHT').toBe(120)
   })
 
   it('kéo chuột đổi chiều cao trong khoảng cho phép, không vượt trần', () => {
@@ -302,6 +303,18 @@ describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
   it('tab Watch đếm đúng số biến đang theo dõi', () => {
     renderLiveWatch(rows)
     expect(screen.getByRole('tab', { name: 'Watch (Trực tiếp) (2)' })).toBeInTheDocument()
+  })
+
+  it('cột Runtime Watch hiện THƯỜNG TRỰC, không nằm sau một cú bấm tab', () => {
+    /* `PGM-02B` — ảnh chuẩn đặt bảng Runtime Watch ở cột giữa khay đáy, luôn
+       hiện. Đây là khác biệt hành vi thật so với bản cũ: trước kia phải bấm tab
+       Watch mới thấy giá trị. Phép kiểm này canh đúng vế đó — KHÔNG bấm tab nào
+       cả, và giá trị vẫn phải đọc được. */
+    renderLiveWatch(rows)
+    const watchColumn = screen.getByTestId('workbench-watch-column')
+    expect(within(watchColumn).getByText('21.5 degC')).toBeInTheDocument()
+    // Tab đang chọn vẫn là Vấn đề, chứng minh cột Watch không phụ thuộc tab.
+    expect(screen.getByRole('tab', { name: /Vấn đề/, selected: true })).toBeInTheDocument()
   })
 
   it('có nguồn nhưng POU không có biến ánh xạ ⇒ nói đúng vế đó', () => {

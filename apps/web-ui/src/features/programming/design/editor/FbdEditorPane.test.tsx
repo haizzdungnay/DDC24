@@ -174,4 +174,37 @@ describe('FbdEditorPane', () => {
     renderPane({ source: canonicalFbdJson(twoNetworkDocument()) })
     expect(screen.getByText(/Chưa lưu|Not saved/)).toBeInTheDocument()
   })
+
+  it('PGM-02B: thanh công cụ phụ gom cụm mà KHÔNG mất điều khiển nào', () => {
+    /* Gom nhóm là thao tác dễ đánh rơi một điều khiển mà không ai thấy — mắt
+       chỉ đếm được "trông gọn hơn". Phép kiểm này đếm đúng 7 điều khiển gốc. */
+    renderPane()
+    const toolbar = screen.getByTestId('fbd-secondary-toolbar')
+    const group = within(toolbar).getByRole('group', { name: /Tuỳ chọn hiển thị FBD|FBD display preferences/ })
+    expect(within(group).getAllByRole('combobox')).toHaveLength(4)
+    expect(within(group).getAllByRole('checkbox')).toHaveLength(3)
+  })
+
+  it('PGM-02B: vùng chạm 44px được giữ ở khổ nhỏ, chỉ rút ở khổ ≥1440px', () => {
+    /* Ảnh chuẩn vẽ thanh 46px, nhưng hạ vùng chạm toàn cục sẽ lấy mất 44px trên
+       đúng những tủ dùng màn cảm ứng. `min-h-11` phải còn, và lớp rút gọn phải
+       có tiền tố khổ lớn. */
+    renderPane()
+    const toolbar = screen.getByTestId('fbd-secondary-toolbar')
+    const select = within(toolbar).getAllByRole('combobox')[0]
+    expect(select).toHaveClass('min-h-11')
+    expect(select).toHaveClass('min-[1440px]:min-h-0')
+  })
+
+  it('PGM-02B: dải trạng thái neo "Sẵn sàng" bên trái nhưng KHÔNG bịa thu phóng', () => {
+    /* Ảnh chuẩn vẽ `(100%)` và `● Online`. Bố cục lấy theo ảnh; giá trị thì
+       không — canvas chưa công bố tỉ lệ thu phóng, và tab chưa nối trạng thái
+       kết nối. Cả hai phải còn là `—`. */
+    renderPane()
+    const bar = screen.getByTestId('editor-status-bar')
+    expect(within(bar).getByText(/Sẵn sàng|Ready/)).toBeInTheDocument()
+    expect(within(screen.getByTestId('editor-status-zoom')).getByText('—')).toBeInTheDocument()
+    expect(within(screen.getByTestId('editor-status-connection')).getByText('—')).toBeInTheDocument()
+    expect(within(bar).queryByText('100%')).toBeNull()
+  })
 })

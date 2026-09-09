@@ -42,6 +42,7 @@ vi.mock('../../api/queries', () => ({
 afterEach(cleanup)
 beforeEach(() => {
   localStorage.setItem('mkddc-lang', 'vi')
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1024 })
 })
 
 const sampleFbdDoc: FbdDocument = {
@@ -164,6 +165,16 @@ describe('ProgramsTab — workspace bốn cột', () => {
     await waitFor(() => expect(screen.queryByTestId('quick-library-panel')).not.toBeInTheDocument())
     expect(screen.getByTestId('programs-workspace').style.getPropertyValue('--pgm-library-width')).toBe('44px')
     expect(within(libraryColumn).getByRole('button', { name: 'Mở Thư viện nhanh' })).toBeInTheDocument()
+  })
+
+  it('giữ Quick Library FBD ở cột thứ ba khi desktop rộng sau khi merge Task 8', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    const libraryColumn = screen.getByTestId('quick-library-column')
+    const panel = await within(libraryColumn).findByTestId('quick-library-panel')
+    expect(panel).toBeVisible()
+    expect(screen.getByTestId('programs-workspace').style.getPropertyValue('--pgm-library-width')).not.toBe('44px')
   })
 
   it('G-15: bảng Interface bám theo declaration đang sửa trong buffer, không chờ save/read-back', async () => {

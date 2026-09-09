@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Changed — Không tạo được Routine từ phiên agent: ghi ba lần đo và chuyển sang giao diện Routines (2026-09-09)
+
+- Triệu chứng: mọi lượt Routine đều chết với thông báo *"session chưa được cấp
+  quyền truy cập GitHub cho repo Mekong-HCM/MK-DDC-24"*.
+- Đã thử đủ **ba cơ chế** mà tool cho phép, **cả ba hỏng**, mỗi cái có bằng chứng
+  riêng ghi tại `WF-CLEAN-001` §8.1:
+  1. `create_trigger(create_new_session_on_fire=true)` — phiên sinh ra không repo
+     **và không MCP tool** (`sources: []`, `mcp_servers: []`, `mcp_connections: []`).
+  2. Cơ chế 1 cộng bootstrap `add_repo` trong prompt — **không thể**, vì
+     `add_repo` chính là một MCP tool mà phiên đó không có. Đây là sai lầm thiết
+     kế: bảo phiên gọi một thứ không tồn tại trong chính nó.
+  3. `create_session(source_url=…)` + `create_trigger(persistent_session_id=…)` —
+     phiên bền **có** đủ repo + MCP và chạy tay thành công (gọi thật
+     `list_issues`, trả về 4 Issue `state:ready`), nhưng Routine bắn vào **không
+     đánh thức được nó**: sau khi trigger bắn 09:50:38Z, phiên giữ nguyên
+     `updated_at 09:40:40Z`, `used_tokens 76.931`, `status IDLE`,
+     `connection_status disconnected`, và trigger không ghi `last_run`.
+- Nguyên nhân gốc của việc mất thời gian: `create_trigger` **đã cảnh báo đúng kết
+  luận này ngay lần gọi đầu tiên** (*"the sessions it fires will run without
+  connector tools … ask the user to create it from the claude.ai routines UI"*),
+  nhưng cảnh báo đó bị bỏ qua. Ba lần đo tốn bốn phiên để xác nhận lại một câu
+  đã được nói sẵn.
+- Cách sửa: xoá cả năm trigger đã tạo (bốn Routine vai + một bind phiên bền);
+  `WF-CLEAN-001` §8 ghi rõ **không có Routine nào đang hoạt động** và ba vai chỉ
+  chạy khi kích hoạt tay; §8.1 thay bằng bảng ba cơ chế và bằng chứng từng cái;
+  §8.2 mới cung cấp prompt sẵn dùng để chủ sở hữu tạo Routine từ giao diện
+  Routines trên claude.ai, kèm yêu cầu chọn repo + connector GitHub lúc tạo và
+  **mỗi vai một phiên riêng** (điều kiện của N1/N2).
+- §6.1 sửa lại theo quyết định của chủ sở hữu: GitHub Actions **không bật lại** —
+  đây là quyết định thường trực, không phải sự cố chờ khắc phục. Bảng Verification
+  do Implementer tự đo là lớp kiểm chứng **duy nhất và lâu dài**; vai Reviewer vì
+  thế gánh trách nhiệm nặng hơn thiết kế ban đầu và phải tự chạy lại khi nghi ngờ
+  số đo. File workflow vẫn giữ trong repo vì chi phí bằng không, nhưng giữ chúng
+  **không** hàm ý sẽ bật lại.
+- §9 cập nhật: cổng CI không còn là "mục chờ mở khoá" mà là quyết định đã chốt;
+  thêm mục xoá nhánh remote bị chặn bởi `HTTP 403` (không có tool MCP xoá branch,
+  đã thử `git push --delete` và refspec rỗng từ nhiều phiên).
+- Kiểm chứng HOST: `docs_iso_harness.py --expect` PASS; `workflow_guard.py
+  --selftest` **48/48 PASS**. CI: `NOT_RUN` — không có runner (#414).
+
+
 ### Added — Guard cảnh báo khi chuỗi `Implementer-Run` bị chép lại (2026-09-09)
 
 - Thi hành đề xuất của finding #598, do vai Reviewer mở sau khi phát hiện lỗi
@@ -290,6 +331,19 @@
 
 ### Changed — Global Context Bar và tinh gọn editor Programming (2026-09-09)
 
+- Giải xung đột PR #601 với `main@8350c26d`: giữ `ProgramsTab` là facade của
+  refactor mới, đồng thời chuyển điều kiện Quick Library FBD của Task 8 sang
+  đúng owner `EditorPane`. FBD từ 1440 px tiếp tục mount thư viện ở cột thứ ba,
+  dưới 1440 px giữ luồng drawer; các sửa dark-mode, tab POU, status bar và
+  workbench đã merge trên `main` được giữ nguyên.
+- Kiểm chứng sau giải xung đột: test tập trung editor/FBD/tab/workbench **57/57
+  PASS**; toàn FE **245 tệp / 3.113 test PASS**, lint/UI strings và production
+  build PASS; bundle Programming **151,08/165 KiB gzip**. Playwright Google
+  Chrome cho FBD responsive và Quick Library đạt **2/2 PASS**; C++ Release bật
+  Modbus/BACnet/HMI **1.482/1.482 PASS, 8 skip môi trường**; Go `vet` và toàn
+  module test `-count=1` PASS; docs ISO harness **17/17 baseline, 5/5 support**
+  và `git diff --check` PASS. Chrome DevTools MCP đã cấu hình nhưng không được
+  nạp vào tool surface của phiên, nên không claim bằng chứng DevTools.
 - Gộp ba tầng header desktop thành một Global Context Bar 38 px gồm Project,
   Revision Nháp, Revision đang vận hành, trạng thái bộ điều khiển và hành động
   Lưu/Kiểm tra/Làm mới/Chi tiết. TopBar toàn hệ thống vẫn được giữ ở mobile để

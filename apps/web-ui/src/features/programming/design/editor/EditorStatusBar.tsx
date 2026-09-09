@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useI18n } from '../../../../shared/i18n'
 import type { EditorStatusField } from './editorStatus'
 
@@ -11,6 +12,7 @@ import type { EditorStatusField } from './editorStatus'
 export function EditorStatusBar({
   fields,
   onGoToPosition,
+  leading,
 }: {
   fields: readonly EditorStatusField[]
   /**
@@ -21,6 +23,13 @@ export function EditorStatusBar({
    * lệnh; biến chúng thành nút sẽ hứa một thao tác không tồn tại.
    */
   onGoToPosition?: () => void
+  /**
+   * `PGM-02B` — nội dung neo bên trái dải trạng thái (ảnh chuẩn đặt chữ
+   * `Sẵn sàng` ở đó). Có `leading` thì dải chuyển sang bố cục ảnh chuẩn: cao
+   * 37px, các ô trạng thái dồn về phải. Không có thì giữ nguyên bố cục cũ —
+   * tab ST đang dùng nó và không có lý do gì để đổi theo.
+   */
+  leading?: ReactNode
 }) {
   const { pick } = useI18n()
   const label = (id: string): string => {
@@ -55,8 +64,11 @@ export function EditorStatusBar({
     <dl
       data-testid="editor-status-bar"
       aria-label={pick('Trạng thái trình soạn thảo', 'Editor status')}
-      className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)]"
+      className={leading
+        ? 'flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)] min-[1440px]:h-[37px] min-[1440px]:flex-nowrap min-[1440px]:justify-end min-[1440px]:py-0'
+        : 'flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)]'}
     >
+      {leading && <div className="min-[1440px]:mr-auto">{leading}</div>}
       {fields.map((field) => {
         const value = (
           <dd className={field.value === null ? 'text-[var(--c-text-dim)]' : 'font-mono text-[var(--c-text)]'}>
