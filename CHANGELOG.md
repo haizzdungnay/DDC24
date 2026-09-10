@@ -8,6 +8,50 @@
 
 ## [Unreleased]
 
+### Fixed — `--sandbox-probe` dò 5/8 đường dẫn không tồn tại, nên chưa từng đo biên sandbox với SHM/IPC/RETAIN thật (2026-09-10)
+
+- Phạm vi: `apps/core/application/programming/programming_sim_worker_main.cpp`,
+  `scripts/verify_programming_sim_worker_boundary.py`,
+  `docs/07_records/test-evidence/programming/2026-08-28-pgm02-t59-817-r3-closeout.md`.
+  Issue: #605. Không đổi contract/API/schema, không đổi giao thức worker, không
+  đổi cấu hình hàng rào.
+- Triệu chứng: `--sandbox-probe` báo `9/9 denied (errno 13)` và cổng
+  `verify_programming_sim_worker.py` PASS, nhưng vế *"production handle denied"*
+  của `VS-PROG-U15` không có bằng chứng nào chạm đường dẫn sản phẩm thật.
+- Nguyên nhân gốc: năm trong tám target là hằng số **chép tay** đã trôi khỏi
+  nguồn chuẩn (`mkddc_io_cache`, `/dev/shm/mkddc_plc`, `retain.bin`,
+  `journal.bin`, `program_ipc.sock`). Hàng rào Landlock/seccomp từ chối ở lớp
+  syscall **trước khi** phân giải đường dẫn, nên một đường dẫn không tồn tại trả
+  `EACCES` y hệt một đường dẫn tồn tại — cổng errno kiểm `denied`/`errno` của
+  đúng cái danh sách được đưa cho nó, và một tên sai vẫn thoả cả hai. Số đo có
+  thật, kết luận rút ra từ nó rộng hơn thứ nó đo (`WF-CLEAN-001` N4).
+- Cách sửa: hai target SHM lấy thẳng macro hợp đồng `KX_SHM_IO_PATH` /
+  `KX_SHM_PLC_PATH` (`contracts/shm/mkddc_shm.h:59-60`); ba target còn lại về
+  đúng `/data/mkddc/programming/retain`,
+  `/data/mkddc/programming/journal/lifecycle.bin`,
+  `/run/mkddc/programming-v1.sock`, mỗi cái kèm comment dẫn `file:line` nguồn
+  chuẩn. Bề mặt probe giữ nguyên 8 đường dẫn + 1 phép thử `AF_UNIX socket`, có
+  `static_assert` canh số lượng. `verify_programming_sim_worker_boundary.py`
+  thêm phép kiểm tĩnh thứ tư chặn tái phát (`--binary` thành tuỳ chọn để cổng
+  tĩnh chạy được trên cây chưa build; `ctest` vẫn truyền `--binary`).
+  Bản ghi `EV-PGM02-R3-CLOSEOUT-001` được **thêm** §7 Đính chính, không sửa dòng
+  cũ.
+- Kiểm chứng (đo tại máy 2026-09-10; CI `NOT_RUN` — #414):
+  - Tái hiện lỗi: cổng tĩnh trên cây chưa sửa FAIL đúng 7 mục, `exit=1`; sau khi
+    sửa `exit=0`.
+  - CMake configure `exit=0`, build `exit=0` (đọc riêng từng exit code);
+    `ctest` **1481/1481 PASS**, 0 fail, 1 skipped, 23.21 s — gồm
+    `programming_sim_worker_symbol_boundary` và `programming_sim_worker_behaviour`.
+  - `--sandbox-probe`: `sandboxApplied=true`, `seccompInstalled=true`,
+    **9/9 denied (errno 13)** với danh sách đã sửa.
+  - `docs_iso_harness.py --expect`: PASS.
+  - `grep '"/dev/shm/'` trong file worker: 0 dòng.
+  - `MKDDC_ENABLE_BACNET=ON`: **NOT_RUN** — egress policy của container chặn
+    (HTTP 403) tarball `bacnet-stack-1.3.8` và không có gói apt thay thế. Không
+    liên quan tới thay đổi này; sim worker không phụ thuộc BACnet.
+  - Đo lại trên bo Foxlinx: **NOT_RUN (cần bo)** — cùng nhóm chặn phần cứng với
+    `T59-706`/#414, không phải điều kiện đóng #605.
+
 ### Changed — Triển khai đồng bộ `main@de6b753b` lên Foxlinx và review bản chạy thật (2026-09-10)
 
 - Thay bản phát hành đầy đủ trước đó `8e00e4b1fa4b96d002d1e1df7f70dc82a700b468`
