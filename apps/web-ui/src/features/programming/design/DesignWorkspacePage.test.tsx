@@ -380,7 +380,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(within(inspector).getByLabelText('Loại')).toHaveValue('PROGRAM')
   })
 
-  it('WP-02 (CTO/Owner approval 2026-08-15 §1): dropdown Loại chỉ expose PROGRAM, không tự hiện lại FUNCTION/FUNCTION_BLOCK', async () => {
+  it('PPI-001: Loại là identity chỉ đọc, hiện đủ ba kind và KHÔNG còn cảnh báo "chưa được Kiểm tra hỗ trợ"', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
     project.draft!.task.programOrder = ['program-1']
@@ -399,14 +399,17 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
     const kindSelect = within(inspector).getByLabelText('Loại') as HTMLSelectElement
     const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
-    expect(options).toEqual(['PROGRAM'])
-    expect(options).not.toContain('FUNCTION')
-    expect(options).not.toContain('FUNCTION_BLOCK')
+    // Backend (`attachLocalPOUSources`/`compilerInputs`) biên dịch cả ba kind,
+    // nên UI không được nói ngược lại bằng cách ẩn hai lựa chọn.
+    expect(options).toEqual(['PROGRAM', 'FUNCTION', 'FUNCTION_BLOCK'])
     expect(kindSelect).toHaveValue('PROGRAM')
+    // Kind cố định lúc tạo: mỗi kind có header source riêng và BE không kiểm
+    // header khớp kind, nên đổi tại đây là đường dẫn tới Check đỏ.
+    expect(kindSelect).toBeDisabled()
     expect(within(inspector).queryByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).not.toBeInTheDocument()
   })
 
-  it('WP-02: Program có kind khác PROGRAM sẵn từ trước (import bundle) vẫn hiện đúng giá trị thật kèm cảnh báo, không bị ẩn/mất dữ liệu', async () => {
+  it('PPI-001: POU kind FUNCTION_BLOCK hiện đúng giá trị thật, không bị ẩn và không bị khuyên "đổi về PROGRAM"', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'FB cũ từ bundle', kind: 'FUNCTION_BLOCK', language: 'ST', document: 'FUNCTION_BLOCK X\nEND_FUNCTION_BLOCK' })
     project.draft!.task.programOrder = ['program-1']
@@ -423,17 +426,11 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
-    // Accessible name của <select> nuốt luôn text cảnh báo trong cùng <label>
-    // khi kind khác PROGRAM (span warning render bên trong label bao ngoài) —
-    // dùng regex bắt đầu bằng "Loại" thay vì so khớp tuyệt đối.
-    const kindSelect = within(inspector).getByLabelText(/^Loại/) as HTMLSelectElement
-    const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
-    // Chỉ đúng 2 lựa chọn: PROGRAM (luôn có) + giá trị thật hiện tại của Program
-    // (FUNCTION_BLOCK) — không tự thêm lựa chọn thứ ba (FUNCTION) chưa từng
-    // được backend hỗ trợ.
-    expect(options.sort()).toEqual(['FUNCTION_BLOCK', 'PROGRAM'].sort())
+    const kindSelect = within(inspector).getByLabelText('Loại') as HTMLSelectElement
     expect(kindSelect).toHaveValue('FUNCTION_BLOCK')
-    expect(within(inspector).getByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).toBeInTheDocument()
+    expect(kindSelect).toBeDisabled()
+    expect(within(inspector).queryByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).not.toBeInTheDocument()
+    expect(within(inspector).queryByText(/đổi về PROGRAM/)).not.toBeInTheDocument()
   })
 
   it('409 giữ nguyên buffer đang gõ và hiện banner reload/merge (UX §9)', async () => {

@@ -52,6 +52,71 @@
   - Đo lại trên bo Foxlinx: **NOT_RUN (cần bo)** — cùng nhóm chặn phần cứng với
     `T59-706`/#414, không phải điều kiện đóng #605.
 
+### Fixed — Review tính năng Programming: mở lại cổng `layout` và vá 5 lỗi xếp tầng (2026-09-10)
+
+Phạm vi: `REC-PROG-FEATURE-REVIEW-001` trên `main@14538e81`. Review toàn tính
+năng Programming (FE/BE/Core/contracts/docs) phát hiện `main` đang **đỏ cổng
+`layout` của chính nó** với bốn lỗi che nhau, cộng một chỗ UI nói sai về
+capability backend. Tất cả đã sửa trong cùng phiên.
+
+- **`F-REV-001` (Cao) — rule boundary Go chặn đầu gate, che ba lỗi phía sau.**
+  Triệu chứng: `scripts/verify-project.sh --component layout` exit 1 với
+  `apps/web-api/cmd/mkddc-programming-e2e-seed/main.go: package main nằm ngoài
+  cmd/mkddc-web`. Nguyên nhân gốc: `tools/restructure/verify_repository.py` ghim
+  cứng entrypoint duy nhất `cmd/mkddc-web`, trong khi repo có binary thứ hai hợp
+  lệ do `scripts/run_programming_real_e2e_stack.sh` gọi; vì `verify-project.sh`
+  chạy `set -e`, mọi cổng hợp đồng phía sau không bao giờ chạy. Cách sửa: nới rule
+  về đúng bất biến "entrypoint chỉ sống dưới `cmd/<binary>/`" — `package main`
+  ngoài `cmd/` và `cmd/foo.go` đặt trực tiếp vẫn bị từ chối.
+- **`F-REV-002` (Cao) — pin `g1_contract_join_v1.json` lệch 2 contract.** `openapi`
+  pin `56eb241a…`/v1.37.0/43 operation trong khi thực tế `e966fb6f…`/v1.40.0/45;
+  `errors` pin `d4c25c22…`/v1.10.0 trong khi thực tế `555c2887…`/v1.11.0 (manifest
+  `b8eb9899…`→`6266d456…`). Nguyên nhân gốc: pin cập nhật lần cuối ở `9597e4d`,
+  sau đó `496559a`/`f2524bb`/`acff5be` đổi contract mà không re-pin. Đã đối chiếu
+  diff trước khi sửa: thuần additive (+`getProgrammingSignalDependencies`,
+  +`previewProgrammingBinding`, +arg `detailCode` cho 4 public error; 0 xóa), nên
+  re-pin là phục hồi bất biến chứ không nới cổng.
+- **`F-REV-003` (Trung bình) — `pgm02_workspace_v1.json` lệch `pins.openapiSha256`.**
+  Cùng gốc `F-REV-002`; `F-P59-OPENAPI-PIN-001` từng được sửa ở increment R2 và
+  nay **tái diễn** vì cổng chỉ chạy khi có người chạy tay (CI waive vì ngân sách).
+- **`F-REV-004` (Trung bình) — ảnh chụp `catalogVersion` không đi cùng commit.**
+  `tests/integration/test_programming_error_catalog.py` assert `1.10.0` trong khi
+  catalog đã `1.11.0` (do `acff5be`); số mã không đổi (38 public/158 detail). Đây
+  là lần thứ hai đúng chế độ hỏng mà khối chú thích trong chính file đó cảnh báo,
+  và lần này lại bị `F-REV-001` che.
+- **`F-REV-005` (Cao) — UI nói sai capability backend (`PPI-001`).** `EditorPane.tsx`
+  ẩn `FUNCTION`/`FUNCTION_BLOCK` khỏi dropdown *Loại* và khuyên "đổi về PROGRAM
+  trước khi Kiểm tra". Câu này sai kể từ khi user POU hạ cánh:
+  `attachLocalPOUSources()` thu cả `revision.POUObjects` kind khác PROGRAM và
+  PROJECT library entry vào `LinkedPOUs` kèm source, `compilerInputs()` đếm chúng
+  vào `MaxUserPou`, và `PouExplorer` ngay cạnh đã cho tạo Function/Function Block
+  — hai đường tạo POU trong cùng workspace nói hai capability model trái ngược,
+  bản sai lại khuyên người dùng phá chính POU của họ. Cách sửa: hiện đủ ba kind
+  (không nói dối capability) nhưng để **chỉ đọc**, vì kind là identity lúc tạo —
+  mỗi kind có header source riêng (`pouSourceTemplate()`) còn BE không kiểm header
+  khớp kind, nên đổi kind mà không viết lại source sẽ đỏ ở tầng parser. Help text
+  đặt ngoài `<label>` + `aria-describedby` để accessible name của `<select>` không
+  dính câu giải thích. Hai test WP-02 cũ khóa hành vi sai đã được thay bằng hai
+  test `PPI-001` khóa hành vi đúng.
+
+Gap còn mở (cần quyết định thiết kế, **không** sửa trong phiên): `PPI-002` Task
+identity bị dựng từ `projectLibraryRevisionId` và `document.task.name` không bao
+giờ được adapter sinh ra; `PPI-005` `enabled: null` cứng dù API đã có dữ liệu;
+`PPI-003`/`004`/`006`..`011`; `F-REV-006` FBD chỉ tạo được cho `PROGRAM`;
+`F-REV-007` `EditorPane.tsx` 3355 dòng; `F-REV-008` ngân sách bundle chỉ còn
+13.91 KiB. Chi tiết và thứ tự thi hành ở
+[`REC-PROG-FEATURE-REVIEW-001`](docs/07_records/reviews/PROGRAMMING_FEATURE_DESIGN_REVIEW_2026-09-10.md)
+§4-§5.
+
+Kiểm chứng (đo lại trong phiên, không dẫn số cũ): `ctest` **1481/1481 PASS**
+(`MODBUS=ON`, `HMI=ON`, `BACNET=OFF` — tarball bacnet-stack bị network policy trả
+**403**, ghi rõ là nhánh bị chặn, không claim); `go vet ./...` exit 0;
+`go test ./... -count=1` exit 0 (21 package, 8/8 package Programming);
+`tsc --noEmit` exit 0; `npm run lint` exit 0; `vitest` **245 file/3113 test PASS**;
+`npm run build` exit 0 (chunk `programming` 151.09/165.00 KiB gzip);
+`docs_iso_harness.py --expect` PASS; **`--component layout` exit 1 → exit 0**.
+Không sửa file Go hoặc C++ production nào.
+
 ### Changed — Triển khai đồng bộ `main@de6b753b` lên Foxlinx và review bản chạy thật (2026-09-10)
 
 - Thay bản phát hành đầy đủ trước đó `8e00e4b1fa4b96d002d1e1df7f70dc82a700b468`

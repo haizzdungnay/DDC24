@@ -108,7 +108,16 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # `PIO-SLOT-001..003` (Check chặn khi slot Modbus không phân giải được
         # theo danh tính bền). Ba con số dưới đây phải đi CÙNG commit thêm mã —
         # đó chính là chế độ hỏng mà khối chú thích phía trên cảnh báo.
-        self.assertEqual(catalog["catalogVersion"], "1.10.0")
+        #
+        # Cập nhật review 2026-09-10: `1.10.0`→`1.11.0`. `acff5be`
+        # ("xác thực binding bằng authority máy chủ") thêm arg `detailCode` vào
+        # `allowedArgs` của bốn public error và bump catalogVersion, nhưng KHÔNG
+        # cập nhật ảnh chụp này. Số mã không đổi (38 public / 158 detail) nên
+        # chỉ version lệch. Đúng chế độ hỏng khối chú thích trên cảnh báo, và
+        # lần này nó lại bị che: `verify_repository.py` fail trước trong
+        # `run_layout` (`cmd/mkddc-programming-e2e-seed` vs rule chỉ cho
+        # `cmd/mkddc-web`) và `set -e` cắt phần còn lại của gate.
+        self.assertEqual(catalog["catalogVersion"], "1.11.0")
         self.assertEqual(len(catalog["publicErrors"]), 38)
         self.assertEqual(len(catalog["componentDetails"]), 158)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
