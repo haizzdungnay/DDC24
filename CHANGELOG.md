@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### Added — Plan triển khai BACnet Rev A từ tài liệu tới source code và E2E trên bo Forlinx (2026-09-10)
+
+- Phạm vi: `docs/03_implementation/BACNET_DOC_TO_CODE_E2E_PLAN.md` (file mới),
+  liên kết chéo trong `BACNET_REV_A_ASBUILT_REVIEW.md`,
+  `BACNET_REV_A_IMPLEMENTATION_PLAN.md`, `BACNET_OPEN_DECISIONS.md`, `CHANGELOG.md`.
+  **Chỉ tài liệu — PROPOSED, chờ review.** Review OK thì mới tạo Issue theo từng task;
+  chưa dòng mã sản phẩm nào được sửa.
+- Bối cảnh: `PLAN-BACNET-REVA-001` trả lời "sửa gì, thứ tự nào" ở mức Work Package.
+  Plan mới trả lời "làm cụ thể ra sao, chạm file nào, verify trên bo Forlinx bằng cách
+  nào" — chia 40 task/7 Wave, mỗi task giao được cho một người trong một lần ngồi và
+  tương ứng đúng một Issue.
+- Ràng buộc target đã khảo sát từ hồ sơ deploy thật, không suy đoán: bo production là
+  Forlinx OK1126B-S (RV1126B, Cortex-A53), chạy **Buildroot 2024.02 không có
+  apt/dpkg/pip** (`FX-F05`), nên bacnet-stack **bắt buộc link tĩnh** và cross-compile
+  là đường duy nhất. Hai bẫy đã biết được đưa thẳng vào runbook: `gtest_discover_tests`
+  chạy binary aarch64 trên host (`-DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST`)
+  và trần `GLIBCXX_3.4.30` của bo (`-static-libstdc++ -static-libgcc`). Script deploy
+  hiện có `tools/deploy/deploy_board.sh` viết cho Orange Pi (`sudo -n`, `/home/orangepi`)
+  nên **không dùng được** cho Forlinx — tách thành `T-BAC-060`.
+- Ba quyết định thiết kế đáng review nhất:
+  (1) **Thêm tầng bằng chứng `LOOPBACK`** (`T-BAC-013`) — hiện có một hố giữa `HOST`
+  (không chạm mạng) và `TARGET` (cần bo). Chính hố đó là lý do 67 test BACnet PASS mà
+  không ai phát hiện `SERVICE_CONFIRMED_SUBSCRIBE_COV` chưa được đăng ký. Tầng loopback
+  bắt đúng loại lỗi này trên CI trong vài giây, không cần bo.
+  (2) **E2E chia hai tầng** — tầng `TARGET-FAKE` (T1/T3/T5/T7/T8/T9 + T6a) chạy được
+  ngay với `mkddc-fakemcu`, chứng minh chuỗi BMS→BACnet→iobus→core→arbitration→plc_shm
+  trên aarch64/Buildroot; tầng `TARGET-HIL` (T2/T4/T6b) cần MCU thật + tín hiệu + thiết
+  bị đo. Ranh giới ghi bắt buộc vào `board.txt` của evidence qua trường `MCU_MODE` —
+  thiếu trường này chính là cách hồ sơ pre-test 2026-07-01 trở thành bằng chứng gây
+  hiểu lầm.
+  (3) **Tách `T-BAC-063` (bring-up MCU STM32 thật) chạy song song từ ngày đầu** thay vì
+  xếp vào Wave cuối. Bo Forlinx **chưa bao giờ** chạy MCU thật — mọi evidence hiện có
+  đều `MCU_MODE=FAKE` và `T59-703` đã bị defer đúng vì lý do này. Đây là dependency dự
+  án đã tồn tại, không phải rủi ro riêng của BACnet; xếp nó vào W6 sẽ khiến toàn bộ
+  phần code xong xuôi nằm chờ một hạng mục phần cứng có lead time không đoán trước.
+- Ba cổng kiểm bắt buộc trước khi copy binary lên bo, tự động hoá trong `T-BAC-011`:
+  trần GLIBCXX ≤ 3.4.30; không phát sinh `.so` mới mà bo không có; và **có symbol
+  `bip_init` trong binary**. Cổng thứ ba là bài học trực tiếp từ review as-built — thiếu
+  nó thì một bản dựng `BACNET=OFF` vẫn deploy trót lọt và mọi thứ trông như đang chạy.
+- Luật thi hành bổ sung: không task nào sau `T-BAC-030` được đánh `DONE` trước khi
+  `T-BAC-062` có evidence `TARGET-FAKE`, vì mọi task sau đều đứng trên giả định "dữ liệu
+  là thật". Task `GATED` không được bắt đầu tới khi `OD-BAC-*` tương ứng được ký. Thiếu
+  bo hay thiếu MCU là `EVIDENCE_QUEUE`, không phải `BLOCKED` — không dừng các Wave code
+  còn làm được.
+- Verification: `python3 scripts/docs_iso_harness.py` → link missing 0 (quét 441 file
+  .md), anchor missing 0, trailing whitespace 0, code fence lệch 0, duplicate doc ID 0.
+- Refs: `PLAN-BACNET-D2C-001`, `REV-BACNET-ASBUILT-001`, `PLAN-BACNET-REVA-001`,
+  `OD-BAC-SET-001`, `HW-FOXLINX-DEPLOY-001`, `HW-FOXLINX-SPEC-001`, `FX-F05`, `T59-703`.
+
 ### Added — Rà soát as-built BACnet Rev A: kế hoạch đóng sản phẩm và tích hợp dữ liệu thật với BMS (2026-09-10)
 
 - Phạm vi: `docs/05_verification/BACNET_REV_A_ASBUILT_REVIEW.md` (file mới),
