@@ -218,4 +218,37 @@ describe('PGM-02 catalog thư viện dùng chung', () => {
       onlyInBackend: [], onlyInGenerated: ['SCALE'], matched: 3
     })
   })
+
+  it('TC-LIB-CATS: catalogCategories trả về danh sách phân loại duy nhất, đã sắp xếp và loại bỏ null', () => {
+    const rawEntries = catalogEntries(page())
+    // Giả lập thêm entry trùng phân loại và entry có category là null
+    const dummyEntries = [
+      ...rawEntries,
+      { ...rawEntries[0], entryId: 'EXTRA_MATH', category: 'math' },
+      { ...rawEntries[0], entryId: 'ANOTHER_NULL', category: null },
+      { ...rawEntries[0], entryId: 'ALPHA_CAT', category: 'arithmetic' },
+    ]
+
+    const categories = catalogCategories(dummyEntries)
+    // Phân loại phải duy nhất (unique), loại bỏ null, và sắp xếp theo thứ tự bảng chữ cái
+    expect(categories).toEqual(['arithmetic', 'control', 'math', 'timer'])
+    expect(categories.includes(null as unknown as string)).toBe(false)
+    expect(new Set(categories).size).toBe(categories.length)
+  })
+
+  it('TC-LIB-FILTER-CAT: filterCatalog với bộ lọc phân loại chỉ trả về các mục thuộc phân loại đó', () => {
+    const entries = catalogEntries(page())
+    const mathEntries = filterCatalog(entries, { category: 'math' })
+    expect(mathEntries.length).toBeGreaterThan(0)
+    expect(mathEntries.every((entry) => entry.category === 'math')).toBe(true)
+    expect(mathEntries.map((entry) => entry.entryId)).toEqual(['LIMIT'])
+
+    const timerEntries = filterCatalog(entries, { category: 'timer' })
+    expect(timerEntries.every((entry) => entry.category === 'timer')).toBe(true)
+    expect(timerEntries.map((entry) => entry.entryId)).toEqual(['TON'])
+
+    // Lọc theo phân loại không tồn tại trả về mảng rỗng
+    const emptyEntries = filterCatalog(entries, { category: 'non_existent_category' })
+    expect(emptyEntries).toEqual([])
+  })
 })

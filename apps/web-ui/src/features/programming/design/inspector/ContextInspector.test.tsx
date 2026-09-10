@@ -268,4 +268,67 @@ describe('ContextInspector — FBD context & editable slots', () => {
     expect(screen.queryByTestId('inspector-collapsed')).toBeNull()
     expect(screen.getByTestId('test-fbd-slot')).toBeInTheDocument()
   })
+
+  it('TC-INSP-341: Inspector hiển thị với đúng data-testid="context-inspector" và nhãn aria-label hợp lệ', () => {
+    renderInspector({})
+    const inspector = screen.getByTestId('context-inspector')
+    expect(inspector).toBeInTheDocument()
+    expect(inspector).toHaveAttribute('aria-label', 'Thuộc tính')
+  })
+
+  it('TC-INSP-COLLAPSE: Thu gọn khi không có ngữ cảnh hữu ích và hiện thông báo inspector-collapsed', () => {
+    renderInspector({})
+    const collapsed = screen.getByTestId('inspector-collapsed')
+    expect(collapsed).toBeInTheDocument()
+    expect(collapsed).toHaveTextContent('Chưa có ngữ cảnh nào để xem. Chọn một POU, một ký hiệu hoặc một khối.')
+    expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'EMPTY')
+  })
+
+  it('TC-INSP-FBD-BLOCK: Inspector hiển thị ngữ cảnh FBD_BLOCK với instance ID, kiểu và danh sách cổng', () => {
+    const fbdDoc: FbdDocument = {
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: FBD_SCHEMA_VERSION,
+      profileId: FBD_PROFILE_ID,
+      graphId: 'g-1',
+      name: 'FBD_TEST',
+      networks: [
+        {
+          id: 'net-1',
+          name: 'Network 1',
+          order: 1,
+          nodes: [
+            {
+              id: 'node-ton-1',
+              kind: 'FUNCTION_BLOCK' as const,
+              typeRef: 'TON',
+              executionOrder: 1,
+              parameters: { PT: 'T#10s' },
+              ports: [
+                { id: 'p-in', name: 'IN', direction: 'INPUT' as const, dataType: 'BOOL', unit: null, order: 1 },
+                { id: 'p-pt', name: 'PT', direction: 'INPUT' as const, dataType: 'TIME', unit: null, order: 2 },
+                { id: 'p-q', name: 'Q', direction: 'OUTPUT' as const, dataType: 'BOOL', unit: null, order: 3 },
+              ],
+            },
+          ],
+          wires: [],
+        },
+      ],
+    }
+
+    renderInspector({
+      fbd: {
+        document: fbdDoc,
+        selection: { kind: 'node', networkId: 'net-1', nodeId: 'node-ton-1' },
+      },
+    })
+
+    const inspector = screen.getByTestId('context-inspector')
+    expect(inspector).toHaveAttribute('data-context', 'FBD_BLOCK')
+    expect(screen.queryByTestId('inspector-collapsed')).toBeNull()
+    expect(screen.getByText('node-ton-1')).toBeInTheDocument()
+    expect(screen.getByText('TON')).toBeInTheDocument()
+    expect(screen.getByText(/→ IN : BOOL/)).toBeInTheDocument()
+    expect(screen.getByText(/→ PT : TIME/)).toBeInTheDocument()
+    expect(screen.getByText(/← Q : BOOL/)).toBeInTheDocument()
+  })
 })

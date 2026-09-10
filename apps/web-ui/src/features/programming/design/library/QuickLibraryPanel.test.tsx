@@ -217,6 +217,46 @@ describe('PGM-02 Quick Library (T59-804)', () => {
     // Panel trống về mặt dữ liệu: tuyệt đối không render thẻ khối hay fallback giả
     expect(screen.queryAllByTestId('quick-library-card')).toHaveLength(0)
   })
+
+  it('TC-LIB-CHIP-ALL: hiển thị chip "Tất cả" ở vị trí đầu tiên với aria-pressed="true" theo mặc định', async () => {
+    // Cung cấp entry có category công khai hợp lệ
+    const itemsWithCategory = libraryItems().map((item) => ({
+      ...item,
+      category: item.signature?.category ?? null,
+    }))
+    renderPanel(paged({ items: itemsWithCategory }))
+
+    // Chờ danh sách tải xong
+    await waitFor(() => cardFor('LIMIT'))
+
+    // Tìm tất cả các button chip phân loại
+    const chips = screen.getAllByRole('button').filter((btn) => btn.hasAttribute('aria-pressed'))
+    expect(chips.length).toBeGreaterThan(1)
+
+    // Chip đầu tiên luôn là "Tất cả" và đang được chọn theo mặc định
+    const allChip = chips[0]
+    expect(allChip).toHaveTextContent('Tất cả')
+    expect(allChip).toHaveAttribute('aria-pressed', 'true')
+
+    // Các chip danh mục còn lại không được chọn theo mặc định
+    const otherChips = chips.slice(1)
+    for (const chip of otherChips) {
+      expect(chip).toHaveAttribute('aria-pressed', 'false')
+    }
+
+    // Khi click chọn một phân loại khác (ví dụ "math")
+    const mathChip = screen.getByRole('button', { name: 'math' })
+    fireEvent.click(mathChip)
+
+    // Chip "math" chuyển sang aria-pressed="true", còn "Tất cả" chuyển sang aria-pressed="false"
+    expect(mathChip).toHaveAttribute('aria-pressed', 'true')
+    expect(allChip).toHaveAttribute('aria-pressed', 'false')
+
+    // Bấm lại vào "Tất cả" khôi phục trạng thái được chọn
+    fireEvent.click(allChip)
+    expect(allChip).toHaveAttribute('aria-pressed', 'true')
+    expect(mathChip).toHaveAttribute('aria-pressed', 'false')
+  })
 })
 
 describe('T59-804 — dock dùng chung: bề mặt tự nói mục nào chưa nhận được', () => {
