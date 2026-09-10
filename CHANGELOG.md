@@ -8,6 +8,52 @@
 
 ## [Unreleased]
 
+### Added — Routine Clean Code Implementer chạy mỗi giờ, phút `:00` giờ Việt Nam (2026-09-10)
+
+- Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (§8, §8.1a, §8.2, §8.3,
+  §8.4, §5, §9, lịch sử sửa đổi → v1.1), `.claude/skills/ddc-implementer/SKILL.md`
+  và bản gương `.agents/skills/ddc-implementer/SKILL.md`. Không chạm code sản
+  phẩm, không chạm `contracts/`, không chạm `.github/`.
+- Cấu hình ngoài repo đi kèm: trigger `trig_01GqDKDuHc5iV6dKGq86DL93`, bắn vào
+  phiên điều phối `session_01R1Ga52pakcTifHxCmRd3ty`. Mỗi lượt phiên điều phối
+  chỉ kiểm repo, kiểm khoá thực thi rồi `create_session` sinh một phiên
+  Implementer sạch — nó không tự làm việc của vai.
+- Triệu chứng: `§8` khẳng định "KHÔNG có Routine nào đang hoạt động" và `§8.1`
+  kết luận "cách duy nhất còn lại là tạo Routine từ giao diện claude.ai". Cả hai
+  đã sai so với thực tế: Routine Auditor `trig_01Gt1weroASWGntFuTVZWCBK` do một
+  phiên agent tạo đã chạy thật lúc 2026-09-09 23:01:43Z và sinh ra phiên con
+  `session_01Gu2MPNGiCA7yjVY97hixbC`, phiên này mở các Issue #604–#608.
+- Nguyên nhân gốc: ba cơ chế đo ở `§8.1` đều cố làm cho **phiên do Routine sinh
+  ra** tự có repo + MCP, và đó là thứ không làm được. Cơ chế thứ tư tách đôi
+  việc — Routine chỉ đánh thức một phiên bền đã có sẵn repo + connector, phiên
+  đó `create_session` sinh phiên con cho vai. Cảnh báo "this trigger stores no
+  MCP connectors" chỉ nói về `create_new_session_on_fire=true`, nên đọc nó như
+  một kết luận chung là cái bẫy đã khiến bốn Routine bị xoá oan ngày 2026-09-09.
+- Cách sửa: thêm `§8.1a` ghi cơ chế thứ tư kèm bằng chứng đo được và hai ràng
+  buộc phải giữ; thêm `§8.4` đặc tả làn Implementer mỗi giờ (khoá thực thi hai
+  lớp — tag phiên + nhãn `state:in-progress`; nhánh `clean-code/issue-<số>`;
+  báo conflict thay vì sửa song song cùng file); thêm `§8.3` vốn **không tồn
+  tại** dù Routine Auditor đang trỏ tới nó khi đi lấy prompt của vai.
+- Ngoại lệ có chủ đích: làn này **tự squash-merge** PR của nó theo quyết định
+  của chủ sở hữu ngày 2026-09-10. Thi hành bằng nhãn `gate:waived` + comment
+  `GATE-WAIVED:` — cơ chế mà `scripts/workflow_guard.py` đã có sẵn, miễn đúng
+  hai mã `N2-GATE`/`N2-VERDICT` và giữ nguyên `N1-*`, `N3-*`, `WF-STATE`. Không
+  dùng `review:pass`: nhãn đó bịa ra một lần review chưa từng xảy ra, còn
+  `gate:waived` để lại dấu vết PR nào đi đường tắt và ai cho phép.
+- Đo được về lịch: phút của Routine chạy theo giờ bị server neo vào **thời điểm
+  gọi** `create_trigger`/`update_trigger`, không theo trường phút của cron. Tạo
+  lúc `03:06:31Z` với `0 0-23 * * *` → `next_run_at` `04:04:19Z`; `update_trigger`
+  lúc `03:06:56Z` với danh sách 24 giờ viết tường minh → `04:06:44Z`. Lấy đúng
+  phút `:00` phải gọi `update_trigger` trong đúng phút `:00` UTC.
+- Verification (2026-09-10): `python3 scripts/workflow_guard.py --selftest` →
+  **48/48 PASS**, exit 0. `./scripts/verify-project.sh --component layout` →
+  **FAIL, nhưng FAIL sẵn trên cây sạch** (`git stash` rồi chạy lại cho đúng một
+  thông điệp lỗi: `apps/web-api/cmd/mkddc-programming-e2e-seed/main.go: package
+  main nằm ngoài cmd/mkddc-web`) — lỗi có trước, không thuộc thay đổi này.
+  `python3 scripts/docs_iso_harness.py --expect` → **NOT_RUN**: bị chặn bởi
+  classifier quyền hạn của phiên, không phải lỗi tài liệu. Cổng C++/Go/FE
+  **NOT_RUN**: thay đổi chỉ gồm Markdown, không chạm mã nguồn của ba cổng đó.
+
 ### Fixed — Ba test hợp đồng Go hết fail-open: `t.Skip` đổi thành `t.Fatalf` khi không thấy `contracts/` (2026-09-09)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/contract_sync_test.go`,
