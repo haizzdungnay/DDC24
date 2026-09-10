@@ -8,6 +8,44 @@
 
 ## [Unreleased]
 
+### Governance — CTO chốt 8/11 quyết định BACnet Rev A; 3 mã `PENDING-HUMAN` (2026-09-10)
+
+- Phạm vi: `docs/00_governance/BACNET_OPEN_DECISIONS.md`, `docs/00_governance/DECISIONS.md`,
+  `docs/07_records/reviews/BACNET_REV_A_APPROVAL_RECORD_2026-09-10.md` (mới). **Không chạm mã**
+  (`apps/`, `firmware/`, `contracts/`, `platform/` giữ nguyên) — phiên này chốt quyết định và
+  tạo Issue, không implement.
+- Triệu chứng: `OD-BAC-SET-001` có 11 quyết định `OPEN`, trong đó `OD-BAC-001` chặn toàn bộ
+  WP-BAC-01 và kéo theo mọi WP sau. Không ai ký ⇒ kế hoạch doc→code→E2E không khởi động được.
+- Nguyên nhân gốc: bản rà soát `REV-BACNET-ASBUILT-001` liệt kê khuyến nghị kỹ thuật nhưng
+  theo đúng thiết kế của nó thì **không tự quyết định thay authority**.
+- Cách sửa:
+  - **8 mã CLOSED** (`-001`, `-002`, `-003`, `-004`, `-005`, `-006`, `-010`, `-011`) — chốt dứt khoát,
+    ghi lý do bằng lời của người ký. `OD-BAC-004` chốt `N = 90 s` với ba trạng thái và ngưỡng nằm
+    trong config, kèm điều kiện đo lại sau `T-BAC-064` — không để trống chỉ vì chưa đo được site thật.
+  - **3 mã `PENDING-HUMAN`** (`-007` thiết bị HIL, `-008` đơn ASHRAE, `-009` egress policy) — là cam kết
+    nguồn lực và thẩm quyền tổ chức, **không** phải phán đoán kỹ thuật. `OD-BAC-SET-001` §4 mới ghi
+    rõ ai ký, cần gì để mở khoá, và hệ quả nếu không duyệt.
+  - Bốn ADR mới: `ADR-057` (Alarm/Schedule/Calendar/Trend Log → V1.1), `ADR-058` (chấp nhận breaking
+    change tập object một lần ở Rev A), `ADR-059` (mở lại `/bacnet/objects` chỉ đọc, đảo quyết định
+    2026-08-20), `ADR-060` (thang bằng chứng BACnet: `HOST` không tính, thêm `LOOPBACK`,
+    `VERIFIED` chỉ cấp cho `TARGET`).
+- Kiểm chứng — số đo THẬT đo lại trong phiên, không dẫn lại số của bản review:
+  - `cmake --fresh … -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` → **exit 1**,
+    `HTTP/1.1 403 Forbidden` tải `bacnet-stack-1.3.8.tar.gz` từ `github.com`.
+  - `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=OFF -DMKDDC_ENABLE_HMI=OFF`
+    → exit 0; `cmake --build --parallel` → exit 0; `ctest` → **1440/1440 PASS**, 0 fail,
+    1 skipped, 22,21 s.
+  - `ctest -N | grep -ci bacnet` → **81** (bản review ghi 67 — sai lệch đã ghi vào biên bản §3.2).
+  - Chỉ **1/1440** test chạm `BacnetServer` (`#151`) — số đo mạnh nhất cho `OD-BAC-010`, bản review
+    không nêu (biên bản §3.3).
+  - `python3 scripts/docs_iso_harness.py` → **exit 0**, `PASS`, `code-span docs/** không tồn tại: 0`.
+  - CI: `NOT_RUN (#414)` — tổ chức chưa cấp runner.
+- Ghi chú: biên bản §3 ghi bốn sai lệch tìm được **trong chính bản review** (lệnh kiểm chứng G-02
+  khớp nhầm `IoCache::write_ao_mode`; số test 67 vs 81; phạm vi `OD-BAC-009` thiếu googletest;
+  số đo §5.1 không tái lập được từ container sạch) và một finding mới `F-CTO-BAC-01`:
+  `bacnet_server.cpp:301` quét COV `i <= 8` trong khi `KX_N_UI = 16` ⇒ AI9…AI16 sẽ không bao giờ
+  được kiểm COV kể cả sau khi COV được nối ra mạng thật.
+
 ### Changed — Thu hồi ~14px từ dải dùng chung workspace Thiết kế (Phần 4 plan tối ưu không gian) (2026-09-10)
 
 - Triệu chứng: Dải dùng chung (notification strip và thanh tab) chiếm nhiều diện tích dọc không cần thiết, làm hẹp vùng hiển thị editor POU/ST/FBD.
