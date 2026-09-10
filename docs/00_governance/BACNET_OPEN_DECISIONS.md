@@ -5,7 +5,8 @@
 **Ngày:** 2026-09-10
 **Chủ quản:** Project Engineering
 **Đọc cùng:** [As-Built Review](../05_verification/BACNET_REV_A_ASBUILT_REVIEW.md) ·
-[Implementation Plan](../03_implementation/BACNET_REV_A_IMPLEMENTATION_PLAN.md)
+[Implementation Plan](../03_implementation/BACNET_REV_A_IMPLEMENTATION_PLAN.md) ·
+[Plan doc→code→E2E Forlinx](../03_implementation/BACNET_DOC_TO_CODE_E2E_PLAN.md)
 
 > Tài liệu này liệt kê **quyết định còn thiếu authority**. Nó không tự quyết định thay
 > Product/CTO. Không được coi khuyến nghị ở đây là quyết định đã duyệt.

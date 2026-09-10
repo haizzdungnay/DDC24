@@ -449,6 +449,8 @@ firmware version, IP, Device ID.
 
 - Kế hoạch sửa theo Work Package, dependency graph, và danh sách Issue:
   [BACNET_REV_A_IMPLEMENTATION_PLAN.md](../03_implementation/BACNET_REV_A_IMPLEMENTATION_PLAN.md)
+- Plan triển khai chi tiết từ tài liệu tới source code và E2E trên bo Forlinx:
+  [BACNET_DOC_TO_CODE_E2E_PLAN.md](../03_implementation/BACNET_DOC_TO_CODE_E2E_PLAN.md)
 - Các điểm cần Owner ký trước khi implement:
   [BACNET_OPEN_DECISIONS.md](../00_governance/BACNET_OPEN_DECISIONS.md)
 

@@ -4,7 +4,9 @@
 > **Phiên bản:** 1.0 | 2026-09-10
 > **Trạng thái:** **PROPOSED — chờ Owner duyệt.** Chưa được tạo Issue, chưa được implement.
 > **Đầu vào:** [As-Built Review](../05_verification/BACNET_REV_A_ASBUILT_REVIEW.md) (REV-BACNET-ASBUILT-001)
-> **Đọc cùng:** [Quyết định còn mở](../00_governance/BACNET_OPEN_DECISIONS.md)
+> **Đọc cùng:** [Quyết định còn mở](../00_governance/BACNET_OPEN_DECISIONS.md) ·
+> [Plan doc→code→E2E Forlinx](BACNET_DOC_TO_CODE_E2E_PLAN.md) (`PLAN-BACNET-D2C-001`,
+> chi tiết hoá plan này xuống mức task thi hành được)
 
 ---
 
