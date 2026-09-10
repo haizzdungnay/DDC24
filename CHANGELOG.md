@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Changed — Triển khai đồng bộ `main@9b5608d7` lên bo Foxlinx (2026-09-10)
+
+- Nâng bản đang chạy từ `de6b753b223dc23b4a6059b4b267a765b90de492` lên
+  `9b5608d7746dd2997408e378dd5985974e2f3b14` (`dirty=false`) trên
+  `SOM-DDC-24-foxlinx`. Delta triển khai gồm bản sửa reconcile
+  `RuntimeIntentService`, đường dò `--sandbox-probe`, các thay đổi workspace
+  Programming/FBD và frontend Task 8; đồng bộ Core, I/O bus, netcfg, Web API,
+  compiler/packager/worker Programming, HMI và static frontend.
+- Kiểm chứng host đo lại trên đúng candidate: C++ Release bật Modbus/BACnet/HMI
+  **1482/1482 PASS** (8 test môi trường skip); `go vet ./...` và
+  `go test ./... -count=1` PASS; Vitest **245 file/3122 test PASS**, lint và
+  `build:foxlinx` PASS; chunk Programming **151,44/165,00 KiB gzip**;
+  `docs_iso_harness.py --expect` **17/17 PASS**; `npm audit --omit=dev` không có
+  lỗ hổng production.
+- Gói ARM64 11 MiB có SHA-256
+  `3d0de539944b5caf7076438c84ca5c81f966a8c8f1628e551415f18cbe1dc634`;
+  binary cần tối đa `GLIBCXX_3.4.29` trong khi bo có `GLIBCXX_3.4.30`, có symbol
+  `bip_init`, khóa ST ở chế độ `RELEASE`. Installer dry-run PASS sau khi chỉ
+  QEMU tới sysroot ARM64 bằng `QEMU_LD_PREFIX=/usr/aarch64-linux-gnu`; lỗi
+  `libstdc++.so.6` ban đầu là lỗi môi trường host, chưa chạm bo.
+- Backup nhất quán sau khi dừng Web writer tại
+  `/var/backups/mkddc/predeploy-9b5608d7-20260910T104351Z.tar.gz` (16 MiB);
+  snapshot rollback do installer tạo tại
+  `/var/backups/mkddc/0.1.0-20260910-104404`. Giữ nguyên khóa thiết bị,
+  data/config, FakeMCU, HMI/PTY disabled; không Commission, không Enable Program
+  và không chủ động ghi output.
+- Kiểm chứng target sau cài: runtime checksum **8/8 PASS**; sáu mẫu health liên
+  tiếp đều **6/6 `status=ok`**; `mkddc-fakemcu`, `mkddc-iobus`, `mkddc-core`,
+  `mkddc-netcfg`, `mkddc-web-pi` đều active với `NRestarts=0`; không có unit
+  failed hay executable `(deleted)`. Toàn bộ **16/16** file static hiện hành
+  khớp SHA-256 với gói; HTTP phục vụ **8/8** request của trang đăng nhập mã 200.
+- Playwright trên URL thật `http://mekong-fac.ddns.net:8082/login` tại
+  1440x900 và 390x844: render đúng, không tràn ngang, Console 0 error/0 warning,
+  các request ghi nhận đều 200. Chrome DevTools MCP đã cấu hình nhưng không có
+  trong bộ công cụ của phiên này, nên không tuyên bố DevTools PASS.
+- Trạng thái tồn tại trước deploy vẫn còn: I/O bus timeout khi ghi tới các slave
+  CK508/CK509 và bỏ lệnh sau ba lần thử. Cùng lỗi đã có trên PID cũ trước mốc
+  cài và tiếp tục trên PID mới; không quy lỗi này cho candidate, không thay đổi
+  cấu hình RS485 để che lỗi. Bằng chứng lần này là target dùng FakeMCU, không
+  phải physical HIL, soak 24 giờ, power-cut hay `RELEASE_READY`.
+
 ### Changed — Thu hồi ~14px từ dải dùng chung workspace Thiết kế (Phần 4 plan tối ưu không gian) (2026-09-10)
 
 - Triệu chứng: Dải dùng chung (notification strip và thanh tab) chiếm nhiều diện tích dọc không cần thiết, làm hẹp vùng hiển thị editor POU/ST/FBD.
