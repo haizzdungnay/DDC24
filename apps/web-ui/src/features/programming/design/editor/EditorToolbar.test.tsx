@@ -55,6 +55,7 @@ afterEach(cleanup)
 describe('toolbar EDIT — đúng tập nút, không rò nút mode khác', () => {
   it('hàng công cụ có đủ Find/Undo/Redo/Insert/Library/Format/Save + Check/Compare/More', () => {
     renderToolbar()
+    expect(screen.getByTestId('editor-toolbar')).toBeInTheDocument()
     for (const name of ['Tìm', 'Chèn Point/Variable', 'Thư viện', 'Định dạng', 'Lưu', 'Kiểm tra', 'So sánh']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
@@ -65,6 +66,20 @@ describe('toolbar EDIT — đúng tập nút, không rò nút mode khác', () =>
     renderToolbar()
     expect(screen.getAllByRole('button', { name: 'Kiểm tra' })).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: 'So sánh' })).toHaveLength(1)
+  })
+
+  it('nhóm toolbar theo thứ tự Undo/Redo → Insert/Library → Search → Format → Save/Check', () => {
+    renderToolbar()
+    const labels = screen.getAllByRole('group')
+      .map((group) => group.getAttribute('aria-label'))
+      .filter((label) => label && ['Lịch sử chỉnh sửa', 'Chèn nội dung', 'Tìm kiếm', 'Định dạng mã', 'Lưu và Kiểm tra'].includes(label))
+    expect(labels).toEqual([
+      'Lịch sử chỉnh sửa',
+      'Chèn nội dung',
+      'Tìm kiếm',
+      'Định dạng mã',
+      'Lưu và Kiểm tra',
+    ])
   })
 
   it('KHÔNG rò nút đổi mode vào toolbar', () => {

@@ -118,6 +118,21 @@ export function userPouInterfacesFromDraft(
   return result
 }
 
+/** Interface canonical của đúng POU đang mở; null giữ nguyên nghĩa chưa công bố. */
+export function pouInterfaceFromDraft(
+  draft: ProgrammingDraftDocument,
+  objectId: string | undefined,
+): ProgrammingPouInterface | null {
+  if (!objectId) return null
+  const root = draft as unknown as Record<string, unknown>
+  if (draft.schemaVersion !== 2 || !Array.isArray(root.objects)) return null
+  for (const rawObject of root.objects) {
+    const object = readDraftObject(rawObject)
+    if (object?.objectId === objectId) return object.interface ?? null
+  }
+  return null
+}
+
 function mapMonitorItem(item: NonNullable<ProgrammingRuntimeMonitorState['data']>['items'][number]): StRuntimeOverlayItem {
   return {
     variableId: item.variableId,

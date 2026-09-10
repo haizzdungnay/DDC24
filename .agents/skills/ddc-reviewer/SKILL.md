@@ -121,8 +121,19 @@ Phải sửa:
 Đã đạt: <những phép kiểm đã PASS, để lần sau không phải làm lại>
 ```
 
-Rồi: gắn `review:changes-requested` trên PR, chuyển Issue sang
-`state:changes-requested`, gỡ `state:in-review`. **Không** đóng PR.
+Rồi: gắn `review:changes-requested` trên PR, **gỡ `review:pass` nếu PR còn mang
+nó từ vòng trước**, chuyển Issue sang `state:changes-requested`, gỡ
+`state:in-review`. **Không** đóng PR, **không** đóng Issue.
+
+Vòng sửa lại (`WF-CLEAN-001` §3.1): Implementer ở lượt chạy kế tiếp sẽ nhận lại
+chính PR này và push lên nhánh cũ. Đây là lý do không được đóng PR — đóng là mất
+chuỗi verdict và mất công đã làm.
+
+**Trần ba vòng.** Nếu đây là verdict FAIL thứ **ba** trên cùng PR, đừng chỉ liệt
+kê lỗi lần nữa: nhiều khả năng **Issue bị scope sai**, không phải Implementer làm
+ẩu. Ghi thẳng điều đó vào verdict, mở finding `03-finding.yml` ở `state:triage`
+yêu cầu Manager viết lại acceptance criteria hoặc tách nhỏ Issue, và nói rõ trong
+verdict rằng bạn đang escalate thay vì mở vòng thứ tư.
 
 Danh sách "phải sửa" phải hành động được. "Chất lượng chưa đạt" không phải một
 mục sửa được; "AC-2 không có bằng chứng — cần tên test phủ nhánh
@@ -147,14 +158,34 @@ Reviewer-Run: reviewer-YYYYMMDDThhmmZ
 `Reviewer-Run` phải **khác** `Implementer-Run` và `Manager-Run`, nếu không
 `workflow-guard` chặn merge (N2).
 
+> **Lấy định danh phiên của CHÍNH BẠN như thế nào.** Gọi
+> `mcp__Claude_Code_Remote__get_session` **bỏ trống `session_id`** — nó mô tả
+> chính phiên đang chạy, và `ccr.id` là session id của bạn. URL là
+> `https://claude.ai/code/<session id đó>`.
+>
+> **Không bao giờ chép lại định danh có sẵn trong Issue hoặc PR.** Những giá trị
+> đó là của phiên khác. Chép chúng làm hỏng đúng thứ trường này sinh ra để giữ:
+> dấu vết ai đã làm gì. Đây không phải lo xa — nó đã xảy ra thật ở vòng sửa lại
+> PR #594 ngày 2026-09-09: phiên rework ghi lại session id của phiên vòng 1, nên
+> body PR có hai dòng `Implementer-Run` trùng nhau và mất dấu người sửa vòng 2.
+> Guard không bắt được lỗi này vì nó chỉ đọc dòng đầu.
+>
+> Không lấy được session id ⇒ dùng `<vai>-YYYYMMDDThhmmZ` với thời điểm hiện tại
+> và ghi rõ trong PR/verdict là định danh dự phòng. Vẫn tốt hơn một giá trị sai.
+
 ### 4. Merge khi PASS
 
 Merge bằng GitHub MCP `merge_pull_request` với `merge_method: "squash"`, rồi
 xoá nhánh remote. Trên máy cục bộ có `gh` thì tương đương
 `gh pr merge <số PR> --squash --delete-branch`.
 
-Thứ tự bắt buộc: post verdict → gắn `review:pass` → chạy
-`workflow_guard.py --input` và được exit 0 → dán output vào verdict → merge.
+Thứ tự bắt buộc: post verdict → **gỡ `review:changes-requested` nếu PR còn mang
+nó từ vòng trước** → gắn `review:pass` → chạy `workflow_guard.py --input` và được
+exit 0 → dán output vào verdict → merge.
+
+Bước gỡ nhãn không được bỏ: hai nhãn `review:*` cùng lúc là trạng thái không đọc
+được và guard chặn bằng `N2-LABEL`. Đó là việc của bạn, không phải của
+Implementer — thông điệp lỗi nói rõ điều này.
 
 Trong lúc CI ngủ, **không đợi job `Cổng quy trình clean-code`** — nó sẽ không bao
 giờ chạy, đợi nó là treo vĩnh viễn. Guard offline thay đúng vai trò đó. Merge

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <cstring>
 #include <string>
 
@@ -60,6 +61,53 @@ TEST(AlarmModelTest, InfoEventsAreNotAcknowledgeable)
     ASSERT_GE(idx, 0);
     model.ack(idx);
     EXPECT_EQ(model.unacked_count(), 1);
+}
+
+/* #589: khung JSON sai cú pháp phải được đếm và không được đụng ring buffer. */
+TEST(AlarmModelTest, MalformedJsonFrameIsCountedAndLeavesRingUntouched)
+{
+    AlarmModel model;
+    model.update_condition("F001", true, AlarmSeverity::FAULT, "IOP", "lost");
+    const int active_before  = model.active_count();
+    const int unacked_before = model.unacked_count();
+    const uint64_t dropped_before = model.dropped_frame_count();
+
+    const char* broken = R"({"code":"W002","active":)";   /* payload cụt */
+    model.on_alarm_json(broken, std::strlen(broken));
+
+    EXPECT_EQ(model.dropped_frame_count(), dropped_before + 1);
+    EXPECT_EQ(model.active_count(),  active_before);
+    EXPECT_EQ(model.unacked_count(), unacked_before);
+    EXPECT_LT(index_for(model, "W002"), 0);
+}
+
+/* #589: khung parse được nhưng thiếu "code" cũng là khung bị loại, không phải
+ * đường thoát im lặng. */
+TEST(AlarmModelTest, JsonFrameWithoutCodeIsCountedAsDropped)
+{
+    AlarmModel model;
+    model.update_condition("F001", true, AlarmSeverity::FAULT, "IOP", "lost");
+    const int active_before  = model.active_count();
+    const int unacked_before = model.unacked_count();
+    const uint64_t dropped_before = model.dropped_frame_count();
+
+    const char* no_code =
+        R"({"active":true,"severity":"warn","source":"core","message":"no code"})";
+    model.on_alarm_json(no_code, std::strlen(no_code));
+
+    EXPECT_EQ(model.dropped_frame_count(), dropped_before + 1);
+    EXPECT_EQ(model.active_count(),  active_before);
+    EXPECT_EQ(model.unacked_count(), unacked_before);
+}
+
+/* Khung hợp lệ không được tính là khung bị loại. */
+TEST(AlarmModelTest, ValidJsonFrameDoesNotIncrementDropCounter)
+{
+    AlarmModel model;
+    const char* ok = R"({"code":"W003","active":true,"severity":"warn"})";
+    model.on_alarm_json(ok, std::strlen(ok));
+    EXPECT_EQ(model.dropped_frame_count(), 0u);
+    EXPECT_GE(index_for(model, "W003"), 0);
 }
 
 TEST(AlarmModelTest, DrainsExistingAlarmDatagramBus)

@@ -22,19 +22,30 @@ import (
 // Test này cố tình đọc file contract THẬT thay vì một bản sao trong test: bản
 // sao sẽ trôi cùng lúc với thứ nó phải canh gác.
 
+// repoRootMaxParents là số cấp thư mục tối đa đi ngược lên để tìm gốc repo.
+const repoRootMaxParents = 8
+
 func repoRoot(t *testing.T) string {
 	t.Helper()
-	dir, err := os.Getwd()
+	start, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 8; i++ {
+	dir := start
+	for i := 0; i < repoRootMaxParents; i++ {
 		if _, err := os.Stat(filepath.Join(dir, "contracts", "openapi", "openapi.yaml")); err == nil {
 			return dir
 		}
 		dir = filepath.Dir(dir)
 	}
-	t.Skip("không tìm thấy thư mục contracts/ — bỏ qua test đồng bộ contract")
+	// Fail-close, cố tình KHÔNG bỏ qua test: file hợp đồng luôn phải có trong
+	// repo, nên không tìm thấy nghĩa là cây thư mục đã đổi (đổi tên/di chuyển
+	// contracts/, hoặc lồng sâu hơn giới hạn) chứ không phải "môi trường thiếu
+	// điều kiện". Bỏ qua ở đây làm cổng đồng bộ contract tự biến mất mà
+	// go test vẫn báo ok.
+	t.Fatalf("không tìm thấy contracts/openapi/openapi.yaml sau khi đi lên %d cấp từ %q — "+
+		"kiểm tra contracts/ có bị đổi tên/di chuyển không, hoặc nâng repoRootMaxParents nếu cây thư mục sâu thêm",
+		repoRootMaxParents, start)
 	return ""
 }
 

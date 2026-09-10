@@ -19,7 +19,7 @@ import { draftSignals } from '../model/signals'
 import { PouExplorer } from './pou/PouExplorer'
 import { programmingCompatibility } from '../shared/programmingCompatibility'
 import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison, useProgrammingCheck } from '../api/queries'
-import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
+import { pouInterfaceFromDraft, runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
@@ -649,6 +649,10 @@ export function DesignWorkspacePage({
   const simulationWatch = simulationWatchRows(simulation.slice.frame)
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
+  const selectedPouInterface = pouInterfaceFromDraft(
+    workspace.project.draft,
+    selectedProgram?.objectId ?? selectedProgram?.programId,
+  )
   const pouNameByObjectId = new Map(
     document.programs.map((program) => [program.objectId ?? program.programId, program.name] as const),
   )
@@ -707,37 +711,58 @@ export function DesignWorkspacePage({
       {/* ponytail: ẩn thanh chứa tab + mode switcher — cả hai cụm đã chuyển đi. Bỏ {false && ...} để bật lại. */}
       {false && (<div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-1">
         {/* ponytail: ẩn tab Programs/Points & Mapping/Execution — điều hướng qua rail bên trái. Bỏ {false && ...} để bật lại. */}
-        {false && (<div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
-          {VALID_TABS.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              role="tab"
-              aria-selected={candidate === tab}
-              className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1 text-sm font-medium ${
-                candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-              }`}
+        {false && (
+          PROGRAMS_WORKSPACE_V2_ENABLED ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid="programming-task-configuration-toggle"
+              aria-pressed={tab === 'execution'}
               onClick={() => {
                 const query = new URLSearchParams(searchParams)
                 query.delete('tab')
-                if (PROGRAMS_WORKSPACE_V2_ENABLED) {
-                  if (candidate !== 'programs') query.set('tab', candidate)
-                  navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
-                  return
-                }
-                if (candidate === 'execution') query.set('tab', 'execution')
-                const target = candidate === 'mapping' ? 'mapping' : 'programs'
-                const suffix = query.toString()
-                const destination = target === 'programs'
-                  ? programsWorkspacePath(projectId ?? '', { search: suffix })
-                  : `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`
-                navigate(destination, { replace: true })
+                if (tab !== 'execution') query.set('tab', 'execution')
+                navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
               }}
             >
-              {pick(...TAB_LABEL[candidate])}
-            </button>
-          ))}
-        </div>)}
+              {tab === 'execution'
+                ? pick('Về trình soạn thảo', 'Back to editor')
+                : pick('Cấu hình Task', 'Task configuration')}
+            </Button>
+          ) : (
+            <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
+              {VALID_TABS.map((candidate) => (
+                <button
+                  key={candidate}
+                  type="button"
+                  role="tab"
+                  aria-selected={candidate === tab}
+                  className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1 text-sm font-medium ${
+                    candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+                  }`}
+                  onClick={() => {
+                    const query = new URLSearchParams(searchParams)
+                    query.delete('tab')
+                    if (PROGRAMS_WORKSPACE_V2_ENABLED) {
+                      if (candidate !== 'programs') query.set('tab', candidate)
+                      navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
+                      return
+                    }
+                    if (candidate === 'execution') query.set('tab', 'execution')
+                    const target = candidate === 'mapping' ? 'mapping' : 'programs'
+                    const suffix = query.toString()
+                    const destination = target === 'programs'
+                      ? programsWorkspacePath(projectId ?? '', { search: suffix })
+                      : `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`
+                    navigate(destination, { replace: true })
+                  }}
+                >
+                  {pick(...TAB_LABEL[candidate])}
+                </button>
+              ))}
+            </div>
+          )
+        )}
         {/* ponytail: ẩn cụm EDIT/LIVE/SIMULATE + Save/Check/Refresh — đã chuyển lên ContextStrip qua contextStripSlot. Bỏ {false && ...} để bật lại. */}
         {false && (<div className="flex flex-wrap items-center gap-2">
           {/* `T59-807` — trước lát này `?mode=` chỉ đổi được bằng cách GÕ TAY
@@ -829,12 +854,6 @@ export function DesignWorkspacePage({
           </div>
         </div>
       )}
-      {draftDirty && (
-        <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
-          {pick('Draft có thay đổi chưa lưu. Hãy lưu trước khi Kiểm tra.', 'The draft has unsaved changes. Save before running Check.')}
-        </div>
-      )}
-
       {/* Cả ba tab luôn MOUNTED, chỉ ẩn bằng CSS (không unmount/remount theo
           `tab`). Bắt buộc: unmount xoá state cục bộ của `SourceEditor`/
           `FbdEditorPane` (buffer đang gõ, chưa lưu), nên đổi tab rồi quay lại
@@ -985,6 +1004,7 @@ export function DesignWorkspacePage({
                 </div>
               )}
               userPouInterfaces={userPouInterfaces}
+              selectedPouInterface={selectedPouInterface}
               userScope={session?.username}
               forceReadOnly={mobileReadOnly}
               onWatchVariable={watchVariable}

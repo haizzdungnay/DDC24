@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <algorithm>
+#include <exception>
 #include <cerrno>
 #include <cstdio>
 #include <chrono>
@@ -134,7 +135,10 @@ void AlarmModel::on_alarm_json(const char* buf, size_t len)
     try {
         json j = json::parse(buf, buf + len);
         std::string code_s = j.value("code", "");
-        if (code_s.empty()) return;
+        if (code_s.empty()) {
+            drop_frame("missing \"code\" field");
+            return;
+        }
 
         bool active = j.value("active", true);
         const std::string state = j.value("state", "");
@@ -146,7 +150,23 @@ void AlarmModel::on_alarm_json(const char* buf, size_t len)
         update_condition(code_s.c_str(), active,
                          parse_severity(j.value("severity", "info")),
                          src.c_str(), msg.c_str(), ts.c_str());
-    } catch (...) {}
+    } catch (const std::exception& ex) {
+        drop_frame(ex.what());
+    } catch (...) {
+        drop_frame("unknown exception");
+    }
+}
+
+void AlarmModel::drop_frame(const char* reason)
+{
+    dropped_frames_.fetch_add(1, std::memory_order_relaxed);
+    std::fprintf(stderr, "ERR   hmi.alarm_model dropped frame: %s\n",
+                 reason ? reason : "unknown");
+}
+
+uint64_t AlarmModel::dropped_frame_count() const
+{
+    return dropped_frames_.load(std::memory_order_relaxed);
 }
 
 void AlarmModel::update_condition(const char* code, bool active, AlarmSeverity severity,

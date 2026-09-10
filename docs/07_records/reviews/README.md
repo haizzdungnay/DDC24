@@ -2,7 +2,7 @@
 
 **ID:** REC-REVIEW-INDEX-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-08 (đăng ký `AUTH-UX-PROG-2026-09-08-01`; gói FE Handoff là authority trực quan PGM-01..06, không đổi runtime/HIL/release gate)
+**Cập nhật:** 2026-09-09 (thêm rà soát Program Property/Inspector `REC-PGM02-PROP-INS-001`; không đổi authority/runtime/HIL/release gate)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -30,6 +30,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 
 | Hồ sơ | Ngày | Trạng thái | Nội dung |
 |---|---|---|---|
+| [Hiện trạng và đề xuất đại tu Program Property / Inspector](PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md) | 2026-09-09 | **PARTIAL / CHƯA MATCH `d.md` / READY FOR CONTROLLED PLANNING** (`REC-PGM02-PROP-INS-001`) | Rà FE→web-api→Core/FW-SOM theo G-12..G-21: 0/10 đạt đầy đủ; form Property bị lặp; Task/Enable/interface/metadata/reference còn gap; không cần đổi FW-SOM/STM32 cho Rev A |
 | [Authority trực quan Programming PGM-01..06](AUTH-UX-PROG-2026-09-08-01.md) | 2026-09-08 | **APPROVED / ACTIVE** (`AUTH-UX-PROG-2026-09-08-01`) | Gói FE Handoff PNG/HTML là authority composition; loại 15 SVG Programming sai; thay riêng `D61-06`; issue #556 đóng `NOT_PLANNED`; không claim As-Built/runtime/HIL/release |
 | [Hiệu năng Programming/runtime và khả năng cạnh tranh](PROGRAMMING_RUNTIME_PERFORMANCE_COMPETITIVE_REVIEW_2026-09-04.md) | 2026-09-04 | **Source/HOST/TARGET exploratory đã rà; provenance live `PARTIAL`; HIL/release `NO-GO`** (`REC-PROG-RUNTIME-PERF-COMP-001` v1.1) | Hai lượt ARM64, compiler load và runtime live trên Forlinx; bảy finding gồm budget, blocking I/O, multi-core, Check scaling, missed release/health, mismatch identity/cycle và hai unit auto-restart; FakeMCU không phải physical HIL |
 | [Gap hệ Point & I/O vs đề bài 3 nguồn Point](POINT_IO_PRODUCT_SPEC_GAP_REVIEW_2026-08-31.md) | 2026-08-31 | **b2.3 — APPROVED, 36 issue đã tạo (#375–#410), 33 đã phân công** (`REV-PIO-3SRC-001`) | Chấm Physical/Virtual/Modbus → Canonical Point Catalog → Binding theo 34 mục + 16 UC. Kiến trúc được chấp thuận, không redesign nền. 29 finding (7 Cao — `F-PIO-029` slot `ext` không ổn định). Kế hoạch 36 issue / 7 đợt / 82,0 ngày-người kèm `AC-PIO-ID-01/02/03` trong `ISS-PIO-31`. Đường găng P0 khoá: #375 → #376 → #377 → #378/#379 → #381 → #382. Ba quyết định Owner: DI = A, `AO` giữ trong hợp đồng, `Program Disable` ≠ `Controller Fault`. 33 issue FE/BE gán `@haizzdungnay` |

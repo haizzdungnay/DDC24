@@ -18,6 +18,22 @@ import (
 	"mkddc-web/internal/capabilities"
 )
 
+// Ba hằng số dưới đây là BẢN SAO RỜI của hợp đồng SHM, không phải nguồn chuẩn.
+// Phía C++ `#include "mkddc_shm.h"` nên không bao giờ lệch; chỉ Go chép tay.
+// Đổi giá trị ở đây mà không đổi ở hợp đồng (hoặc ngược lại) là hỏng câm ở lớp
+// ABI: web-api coi SHM của Core là không hợp lệ, Overview mất dữ liệu Point
+// trong khi Core và iobus vẫn chạy bình thường.
+//
+// Nguồn chuẩn — sửa ở đó TRƯỚC, rồi mới sửa ở đây:
+//   - kxShmMagic    ← KX_SHM_MAGIC    (contracts/shm/mkddc_shm.h:65)
+//   - defaultIOShm  ← KX_SHM_IO_PATH  (contracts/shm/mkddc_shm.h:59)
+//   - defaultPLCShm ← KX_SHM_PLC_PATH (contracts/shm/mkddc_shm.h:60)
+//
+// Canh bởi TestShmContractConstantsMatchHeader
+// (shm_contract_sync_test.go, ISS-606) — test đó đọc file hợp đồng THẬT nên nó
+// đỏ ngay khi hai bên thôi khớp. Các fixture dùng kxShmMagic trong
+// core_client_test.go / shm_reader_test.go KHÔNG canh được việc này: chúng ghi
+// và đọc cùng một hằng số nên luôn đúng với mọi giá trị.
 const (
 	kxShmMagic    = 0x4B584406
 	defaultIOShm  = "/dev/shm/mkddc_io_shm"

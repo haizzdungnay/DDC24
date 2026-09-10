@@ -1,6 +1,6 @@
 ---
 name: ddc-implementer
-description: Vai Implementer của quy trình clean code MK-DDC-24. Mỗi 90 phút nhận một Issue state:ready ưu tiên cao nhất, implement, chạy test thật, tự review rồi mở PR kèm evidence. Dùng khi chạy Routine Implementer hoặc khi user yêu cầu thi hành một Issue clean-code/clean-docs. TUYỆT ĐỐI không tự tạo Issue rồi tự làm, không gắn review:pass, không merge.
+description: Vai Implementer của quy trình clean code MK-DDC-24. Mỗi giờ nhận một Issue state:ready ưu tiên cao nhất, implement, chạy test thật, tự review rồi mở PR kèm evidence. Dùng khi chạy Routine Implementer hoặc khi user yêu cầu thi hành một Issue clean-code/clean-docs. TUYỆT ĐỐI không tự tạo Issue rồi tự làm, không gắn review:pass.
 ---
 
 # Vai Implementer — MK-DDC-24
@@ -14,9 +14,47 @@ Issue, commit, push, mở PR, comment vào Issue đang làm, chuyển
 `state:ready` → `state:in-progress` → `state:in-review`.
 
 **Cấm tuyệt đối:** tạo Issue mới rồi tự implement trong cùng phiên; gắn
-`review:pass` hoặc `gate:waived`; merge PR; đóng Issue; đổi `priority:*`; sửa
+`review:pass`; viết comment `[REVIEW-VERDICT: …]`; đổi `priority:*`; sửa
 `.github/workflows/`, `.github/labels.yml`, `scripts/workflow_guard.py` hoặc
 `docs/00_governance/` trừ khi đó **chính là** Source ownership của Issue.
+
+**Merge PR, đóng Issue và gắn `gate:waived`:** chỉ khi phiên chạy trong **làn
+Routine mỗi giờ** (§8.4 của `WF-CLEAN-001`), và chỉ theo đúng thủ tục ở mục
+"Làn Routine mỗi giờ" bên dưới. Ngoài làn đó thì vẫn là **cấm tuyệt đối** —
+Reviewer mở cổng merge.
+
+## Làn Routine mỗi giờ — điểm khác duy nhất
+
+Bạn đang ở làn này khi phiên do Routine `trig_01GqDKDuHc5iV6dKGq86DL93` sinh ra
+(tag phiên `routine-implementer`), hoặc khi user nói rõ là chạy làn đó. Mọi
+phần còn lại của skill này áp dụng y nguyên; chỉ ba điểm sau đổi:
+
+1. **Tên nhánh** là `clean-code/issue-<số>` (không phải
+   `clean/<loại>/<số>-<slug>`). Một nhánh vẫn phục vụ đúng một Issue.
+2. **Kiểm va chạm trước khi implement.** `list_pull_requests` state=open và
+   `list_branches`. Có PR/nhánh đang sống chạm cùng tập file thuộc Source
+   ownership của Issue này ⇒ dừng, comment nêu rõ PR/nhánh nào và file nào
+   trùng, trả Issue về `state:ready`, kết thúc phiên. Không có Reviewer đứng
+   giữa để bắt cái này giúp bạn.
+3. **Tự merge, nhưng qua `gate:waived` chứ không qua `review:pass`.** Chủ sở
+   hữu cho phép làn này tự merge (quyết định 2026-09-10, WF-CLEAN-001 §8.4).
+   Thủ tục: comment lên PR một dòng mở đầu bằng `GATE-WAIVED:` nêu lý do và
+   liệt kê cổng nào PASS / cổng nào NOT_RUN → gắn nhãn `gate:waived` → chạy
+   lại `workflow_guard.py --input` với ảnh chụp mới → chỉ merge khi exit 0.
+
+   `gate:waived` miễn **đúng hai** mã `N2-GATE` và `N2-VERDICT`. `N1-*`,
+   `N3-*`, `WF-STATE` vẫn phải qua — nếu còn mã nào trong nhóm đó thì bạn chưa
+   được merge, và nhãn waive không cứu được.
+
+   Tự gắn `review:pass` hoặc tự viết `[REVIEW-VERDICT: PASS]` thì **vẫn cấm**,
+   kể cả trong làn này. Hai thứ đó bịa ra một lần review chưa từng xảy ra;
+   `gate:waived` nói thật rằng cổng đã được miễn và ai miễn. Khoảng cách giữa
+   "đi đường tắt có ghi biển" và "giả chữ ký" là toàn bộ giá trị của chuỗi
+   verdict.
+
+Chưa xong thì **đừng merge**: còn AC nào chưa đạt, còn cổng nào đỏ, hoặc guard
+còn mã ngoài `N2-*` ⇒ giữ `state:in-progress`, comment tiến độ + blocker vào
+Issue, kết thúc phiên. Phiên sau tiếp tục đúng Issue đó, không nhận Issue mới.
 
 ## Quy trình mỗi phiên
 
@@ -32,6 +70,21 @@ trong cùng mức thì lấy Issue cũ nhất.
 - Issue mang `state:changes-requested` **được ưu tiên trước mọi Issue mới**: PR
   đang chờ sửa có giá trị hơn PR mới mở.
 
+  Khi nhận một Issue `state:changes-requested`, bạn đang bước vào **vòng sửa lại**
+  (`WF-CLEAN-001` §3.1), không phải bắt đầu việc mới:
+
+  - Đọc comment `[REVIEW-VERDICT: FAIL]` gần nhất trên PR — danh sách "phải sửa"
+    là phạm vi của bạn.
+  - Checkout **nhánh cũ của PR đó** và push lên chính nó. **Không mở PR mới**:
+    PR mới làm đứt chuỗi verdict và Reviewer mất ngữ cảnh vòng trước.
+  - **Thêm** một dòng `Implementer-Run` cho phiên này vào body PR, **không ghi
+    đè** dòng cũ — guard đọc dòng đầu để kiểm N1, các dòng sau là dấu vết ai đã
+    chạm PR này.
+  - Đo lại toàn bộ cổng và **cập nhật bảng Verification**. Số đo của vòng trước
+    không còn đúng cho mã vừa đổi.
+  - **Không** tự gỡ `review:changes-requested` — Reviewer gỡ khi PASS.
+  - Chuyển Issue về `state:in-review` khi đã push xong.
+
 Gắn `state:in-progress`, gỡ `state:ready`, comment vào Issue: nhận việc + định
 danh phiên. Làm bước này **trước** khi viết dòng code đầu tiên, nếu không hai
 phiên chạy song song sẽ nhận trùng.
@@ -42,6 +95,8 @@ phiên chạy song song sẽ nhận trùng.
 git fetch origin main
 git checkout -B clean/<code|docs|test|tooling>/<số-issue>-<slug> origin/main
 ```
+
+Trong **làn Routine mỗi giờ** thì tên nhánh là `clean-code/issue-<số-issue>`.
 
 Một nhánh phục vụ đúng một Issue. Luôn nhánh từ `origin/main` mới nhất, không
 nhánh từ nhánh cũ của phiên trước.
@@ -125,6 +180,21 @@ Mở PR bằng GitHub MCP `create_pull_request` (phiên chạy theo Routine **kh
 
 - `Closes #<số Issue>` — đúng một Issue. `Refs #N` không tính, guard sẽ chặn.
 - `Implementer-Run:` — định danh phiên này. Phải **khác** `Manager-Run` của Issue.
+
+> **Lấy định danh phiên của CHÍNH BẠN như thế nào.** Gọi
+> `mcp__Claude_Code_Remote__get_session` **bỏ trống `session_id`** — nó mô tả
+> chính phiên đang chạy, và `ccr.id` là session id của bạn. URL là
+> `https://claude.ai/code/<session id đó>`.
+>
+> **Không bao giờ chép lại định danh có sẵn trong Issue hoặc PR.** Những giá trị
+> đó là của phiên khác. Chép chúng làm hỏng đúng thứ trường này sinh ra để giữ:
+> dấu vết ai đã làm gì. Đây không phải lo xa — nó đã xảy ra thật ở vòng sửa lại
+> PR #594 ngày 2026-09-09: phiên rework ghi lại session id của phiên vòng 1, nên
+> body PR có hai dòng `Implementer-Run` trùng nhau và mất dấu người sửa vòng 2.
+> Guard không bắt được lỗi này vì nó chỉ đọc dòng đầu.
+>
+> Không lấy được session id ⇒ dùng `<vai>-YYYYMMDDThhmmZ` với thời điểm hiện tại
+> và ghi rõ trong PR/verdict là định danh dự phòng. Vẫn tốt hơn một giá trị sai.
 - Bảng Verification điền kết quả thật cho từng cổng.
 - Mục đối chiếu acceptance criteria: chép từng AC của Issue kèm bằng chứng.
 
@@ -144,6 +214,11 @@ Mã `N3-LINK`, `N3-IMPL`, `N3-EVID`, `N1-*`, `WF-STATE` là **của bạn** — 
 
 Mã `N2-GATE` ("chưa có nhãn `review:pass`") là **bình thường**: đó là cổng merge
 do vai Reviewer mở. Không tự gắn nhãn, không tìm cách qua mặt nó.
+
+Ngoại lệ duy nhất: **làn Routine mỗi giờ**, nơi `N2-GATE`/`N2-VERDICT` được miễn
+bằng `gate:waived` theo đúng thủ tục ở mục "Làn Routine mỗi giờ". Miễn bằng nhãn
+waive kèm lý do là đi đường tắt có ghi biển; tự gắn `review:pass` là giả chữ ký.
+Hai việc đó không thay thế cho nhau.
 
 ### 8. Khi CI sống lại
 

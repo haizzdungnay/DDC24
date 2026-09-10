@@ -764,6 +764,11 @@ async function navigate(page: Page, path: string) {
   await page.waitForLoadState('networkidle').catch(() => undefined)
 }
 
+async function createPou(page: Page, label: 'Program · ST' | 'Program · FBD' | 'Function · ST' | 'Function Block · ST') {
+  await page.getByRole('button', { name: 'Mới', exact: true }).click()
+  await page.getByRole('menu', { name: 'Tạo POU mới' }).getByRole('menuitem', { name: label }).click()
+}
+
 test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
   test.beforeEach(async ({ page }) => {
     // Mô phỏng chính xác secure-context=false của endpoint HTTP trên board:
@@ -866,10 +871,12 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     // e2e — không phải hạ tầng, mà là một assertion đua với redirect.
     await page.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }).click()
     await page.waitForURL((url) => url.pathname === CANONICAL_PROGRAMS_PATH)
-    await expect(page.getByText('Chưa có chương trình. Bấm + để tạo.')).toBeVisible()
+    await expect(page.getByText('Chưa có chương trình. Bấm Mới để tạo.')).toBeVisible()
 
     // Thêm chương trình ST bằng bàn phím hoàn toàn (Tab tới nút, Enter kích hoạt)
-    await page.getByTitle('Thêm chương trình ST').focus()
+    await page.getByRole('button', { name: 'Mới', exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('menuitem', { name: 'Program · ST' }).focus()
     await page.keyboard.press('Enter')
     await expect(page.getByRole('heading', { name: 'NewProgram' })).toBeVisible()
     const sourceBox = page.getByLabel(/Mã nguồn ST/)
@@ -878,13 +885,11 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await expect(page.getByText('Chưa lưu.')).toHaveCount(0)
     await page.screenshot({ path: testInfo.outputPath('02-design-st.png'), fullPage: true })
 
-    // Đổi tab không mất nội dung đang gõ: gõ dở rồi chuyển tab và quay lại
+    // Buffer bẩn phải chặn Check và được cảnh báo gọn ngay cạnh mode switch.
+    // Cut-over v2 không còn cụm tab Programs/Mapping/Execution trùng sidebar.
     await sourceBox.fill('AO1 := UI1 * 2.0; (* dở dang *)')
-    await page.getByRole('tab', { name: /Điểm & Ánh xạ/ }).click()
-    await expect(page.getByRole('tab', { name: /Chương trình/ })).toBeVisible()
-    await page.getByRole('tab', { name: 'Chương trình', exact: true }).click()
-    await expect(sourceBox).toHaveValue('AO1 := UI1 * 2.0; (* dở dang *)')
-    await expect(page.getByText(/Draft có thay đổi chưa lưu/)).toBeVisible()
+    await expect(page.getByRole('tablist', { name: /Tab workspace Thiết kế/ })).toHaveCount(0)
+    await expect(page.getByTestId('draft-dirty-indicator')).toContainText(/Chưa lưu/)
     /* `DEV-PROG-009` đưa `Kiểm tra` lên header nữa, nên có HAI nút cho cùng
        hành động — đúng ý đồ ("giữ ở toolbar, nơi chính là header"). Tên truy
        cập khác nhau (`Kiểm tra` vs `Kiểm tra gói`) nên phép chọn phải nói rõ
@@ -895,7 +900,7 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await expect(page.getByText('Chưa lưu.')).toHaveCount(0)
 
     // UJ-PROG-02 (FBD) — thêm chương trình FBD, mount StructuredFbdEditor thật
-    await page.getByTitle('Thêm chương trình FBD').click()
+    await createPou(page, 'Program · FBD')
     const fbdToolbar = page.getByRole('toolbar', { name: 'Lệnh FBD' })
     await expect(fbdToolbar).toBeVisible()
 
@@ -965,7 +970,8 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await page.getByRole('button', { name: 'Lưu bản nháp', exact: true }).click()
 
     // UJ-PROG-03 — Điểm & Ánh xạ
-    await page.getByRole('tab', { name: /Điểm & Ánh xạ/ }).click()
+    const workspaceRail = page.getByRole('navigation', { name: /Điều hướng sáu workspace/ })
+    await workspaceRail.getByRole('link', { name: 'Điểm & Ánh xạ' }).click()
     /* `PR #311` dựng lại tab Điểm & Ánh xạ (`MappingWorkbench`); câu trạng thái
        rỗng nay nói rõ nó nói về DRAFT, không phải về thiết bị — "Chưa có ánh xạ
        nào" một mình có thể bị đọc thành "thiết bị không có điểm nào". */
@@ -973,13 +979,14 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await page.screenshot({ path: testInfo.outputPath('04-design-mapping.png'), fullPage: true })
 
     // UJ-PROG-04 — Thực thi
-    await page.getByRole('tab', { name: 'Thực thi' }).click()
+    await workspaceRail.getByRole('link', { name: 'Chương trình' }).click()
+    await page.getByRole('button', { name: 'Cấu hình Task' }).click()
     await expect(page.getByText('Control_Main')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('05-design-execution.png'), fullPage: true })
 
     // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-03 sở
     // hữu toàn bộ seal/run/poll/result — không còn seal/Check inline ở đây).
-    await page.getByRole('tab', { name: 'Chương trình', exact: true }).click()
+    await page.getByRole('button', { name: 'Về trình soạn thảo' }).click()
     // FBD không lặp lệnh Kiểm tra trong editor; dùng lệnh chung ở header.
     await expect(page.getByRole('button', { name: 'Kiểm tra gói', exact: true })).toBeEnabled()
     await page.getByRole('button', { name: 'Kiểm tra gói', exact: true }).click()
@@ -1446,7 +1453,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
 
     // Không nút lưu/tạo/xóa nào được mở trên màn hẹp.
     await expect(page.getByRole('button', { name: 'Lưu', exact: true })).toHaveCount(0)
-    await expect(page.getByTitle('Thêm chương trình ST')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Mới', exact: true })).toHaveCount(0)
 
     expect(writes, 'màn hẹp không được gửi mutation nào').toEqual([])
     expectNoBrowserFailures(failures, 'mobile read-only')
@@ -1462,7 +1469,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await login(page)
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
 
-    await page.getByTitle('Thêm chương trình FBD').click()
+    await createPou(page, 'Program · FBD')
     const shell = page.getByTestId('fbd-workspace-shell')
     await expect(shell).toBeVisible()
     const fbdToolbar = page.getByRole('toolbar', { name: 'Lệnh FBD' })
@@ -1552,7 +1559,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     const writes = observeProgrammingWrites(page)
     await login(page)
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
-    await page.getByTitle('Thêm chương trình FBD').click()
+    await createPou(page, 'Program · FBD')
     const editor = page.locator('section[aria-label="Bộ dựng FBD có cấu trúc"]')
     await editor.focus()
     for (let index = 0; index < 25; index += 1) await page.keyboard.press('Insert')
@@ -1743,9 +1750,9 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await expect(page.getByRole('navigation', { name: 'Cây ứng dụng' })).toHaveCount(0)
 
     // Ba kind cùng có mặt, và FUNCTION/FUNCTION_BLOCK KHÔNG có chu kỳ.
-    await page.getByTitle('Thêm FUNCTION', { exact: true }).click()
+    await createPou(page, 'Function · ST')
     await expect(page.getByRole('button', { name: 'Mở NewFunction', exact: true })).toBeVisible()
-    await page.getByTitle('Thêm FUNCTION_BLOCK').click()
+    await createPou(page, 'Function Block · ST')
     await expect(page.getByRole('button', { name: 'Mở NewFunctionBlock' })).toBeVisible()
     await page.getByRole('button', { name: 'Mở NewFunction', exact: true }).click()
     /* `DEV-PROG-011` — câu này TỪNG nằm trong khay "Thuộc tính POU" của thanh
@@ -1788,20 +1795,35 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
       if (url.pathname.endsWith('/programming/libraries')) libraryRequests.push(url.pathname)
     })
     await login(page)
+    await page.setViewportSize({ width: 1920, height: 1080 })
 
     await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&pou=${POU_OBJECT_ID}&mode=EDIT`)
     await expect(page.getByLabel(/Mã nguồn ST/)).toBeVisible()
-    // Mở tab Chương trình KHÔNG được tạo traffic catalog; panel mới là thứ fetch.
-    expect(libraryRequests, 'catalog phải LAZY').toEqual([])
-
-    /* `DEV-PROG-002` — Thư viện nhanh nay là panel CẮM ở cột phải
-       (`role="region"`), không còn là hộp thoại nổi phủ lên mã nguồn; và nút
-       trên thanh công cụ có tên chính xác là `Thư viện` (nút "Mở Thư viện
-       nhanh" ở cột phải là lối mở thứ hai khi panel đang thu gọn). */
-    await page.getByRole('button', { name: 'Thư viện', exact: true }).click()
+    // G-01/G-03: desktop chỉ còn một Global Context Bar ở mép trên; TopBar
+    // toàn hệ thống không tạo tầng header thứ hai và badge Program chi tiết đã
+    // rời khỏi hàng chính.
+    await expect(page.getByTestId('app-top-bar')).toBeHidden()
+    const contextBox = await page.getByTestId('programming-global-context-bar').boundingBox()
+    expect(contextBox?.y ?? 999).toBeLessThanOrEqual(16)
+    await expect(page.locator('[data-context-field="health"]')).toHaveCount(0)
+    /* Workspace mới mở sẵn panel cắm ở cột thứ ba. Catalog vẫn chỉ được nạp
+       bởi chính panel này, không bởi shell hay editor trước khi panel mount. */
     const panel = page.getByRole('region', { name: 'Thư viện nhanh' })
     await expect(panel).toBeVisible()
     await expect.poll(() => libraryRequests.length).toBeGreaterThan(0)
+
+    const fourColumns = await page.evaluate(() => {
+      const ids = ['pou-explorer-column', 'programming-editor-column', 'quick-library-column', 'inspector-column']
+      return ids.map((id) => {
+        const node = document.querySelector<HTMLElement>(`[data-testid="${id}"]`)
+        const box = node?.getBoundingClientRect()
+        return { id, x: Math.round(box?.x ?? -1), width: Math.round(box?.width ?? 0) }
+      })
+    })
+    expect(fourColumns.every((column) => column.width > 0), JSON.stringify(fourColumns)).toBe(true)
+    expect(fourColumns.map((column) => column.x)).toEqual([...fourColumns.map((column) => column.x)].sort((a, b) => a - b))
+    await expect(page.getByRole('button', { name: /Đổi kích thước/ })).toHaveCount(3)
+    await page.screenshot({ path: testInfo.outputPath('pgm02-four-column-1920x1080.png'), fullPage: false })
 
     // Mục chờ review hiện ra kèm lý do và KHÔNG bấm được — giấu nó đi sẽ biến
     // "chưa hỗ trợ" thành "không tồn tại".
@@ -2052,8 +2074,7 @@ test.describe('PGM-02 hardening LIVE (T59-812)', () => {
       await expect(source).toHaveAttribute('readonly', '')
       await expect(page.getByRole('button', { name: 'Lưu', exact: true })).toHaveCount(0)
       await expect(page.getByRole('button', { name: 'Kiểm tra', exact: true })).toHaveCount(0)
-      await expect(page.getByTitle('Thêm chương trình ST')).toHaveCount(0)
-      await expect(page.getByTitle('Thêm chương trình FBD')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Mới', exact: true })).toHaveCount(0)
 
       const width = await page.evaluate(() => ({
         viewport: document.documentElement.clientWidth,

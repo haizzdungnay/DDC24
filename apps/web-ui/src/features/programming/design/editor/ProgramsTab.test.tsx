@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { FbdDocument } from '../../fbd/model'
 import { canonicalFbdJson } from '../../fbd/model'
@@ -20,6 +21,10 @@ vi.mock('../../../auth', () => ({
 }))
 
 vi.mock('../../api/queries', () => ({
+  useProgrammingLibraryPaged: () => ({
+    status: 'ready', items: [], error: null, failure: null, loadMoreError: null,
+    loadingMore: false, hasMore: false, loadMore: vi.fn(), refresh: vi.fn(),
+  }),
   useLazyProgrammingLibraryCatalog: () => ({
     status: 'ready',
     data: { items: [] },
@@ -37,6 +42,7 @@ vi.mock('../../api/queries', () => ({
 afterEach(cleanup)
 beforeEach(() => {
   localStorage.setItem('mkddc-lang', 'vi')
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1024 })
 })
 
 const sampleFbdDoc: FbdDocument = {
@@ -133,6 +139,7 @@ function renderProgramsTab(props?: {
         onRunCheck={onRunCheck}
       />
     </I18nProvider>,
+    { wrapper: MemoryRouter },
   )
 
   return {
@@ -141,6 +148,61 @@ function renderProgramsTab(props?: {
     onSave,
   }
 }
+
+describe('ProgramsTab — workspace bốn cột', () => {
+  it('hiện Explorer | Editor | Library | Inspector, có ba tay kéo và thu gọn Library', async () => {
+    renderProgramsTab({ selectedProgramId: 'prog-st-1' })
+
+    expect(screen.getByTestId('pou-explorer-column')).toBeInTheDocument()
+    expect(screen.getByTestId('programming-editor-column')).toBeInTheDocument()
+    const libraryColumn = screen.getByTestId('quick-library-column')
+    expect(libraryColumn).toBeInTheDocument()
+    expect(screen.getByTestId('inspector-column')).toBeInTheDocument()
+    expect(screen.getAllByTestId(/^workspace-resize-/)).toHaveLength(3)
+
+    const panel = await screen.findByTestId('quick-library-panel')
+    fireEvent.click(within(panel).getByRole('button', { name: 'Thu gọn' }))
+    await waitFor(() => expect(screen.queryByTestId('quick-library-panel')).not.toBeInTheDocument())
+    expect(screen.getByTestId('programs-workspace').style.getPropertyValue('--pgm-library-width')).toBe('44px')
+    expect(within(libraryColumn).getByRole('button', { name: 'Mở Thư viện nhanh' })).toBeInTheDocument()
+  })
+
+  it('giữ Quick Library FBD ở cột thứ ba khi desktop rộng sau khi merge Task 8', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    const libraryColumn = screen.getByTestId('quick-library-column')
+    const panel = await within(libraryColumn).findByTestId('quick-library-panel')
+    expect(panel).toBeVisible()
+    expect(screen.getByTestId('programs-workspace').style.getPropertyValue('--pgm-library-width')).not.toBe('44px')
+  })
+
+  it('G-15: bảng Interface bám theo declaration đang sửa trong buffer, không chờ save/read-back', async () => {
+    const source = 'PROGRAM ST_PROG\nVAR_INPUT\n  Sensor : BOOL;\nEND_VAR\nEND_PROGRAM'
+    renderProgramsTab({
+      selectedProgramId: 'prog-st-1',
+      document: {
+        ...draftDoc,
+        programs: [fbdProgram, { ...stProgram, document: source }],
+      },
+    })
+
+    const table = screen.getByTestId('interface-input-table')
+    expect(within(table).getByText('Sensor')).toBeInTheDocument()
+    expect(within(table).getByText('BOOL')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Mã nguồn ST của ST_PROG'), {
+      target: {
+        value: 'PROGRAM ST_PROG\nVAR_INPUT\n  SensorSetpoint : REAL;\nEND_VAR\nEND_PROGRAM',
+      },
+    })
+
+    await waitFor(() => {
+      expect(within(table).getByText('SensorSetpoint')).toBeInTheDocument()
+      expect(within(table).getByText('REAL')).toBeInTheDocument()
+    })
+  })
+})
 
 describe('ProgramsTab — Luồng A: FBD Node Inspector & Slot Integration', () => {
   it('STATE-003: payload FBD lồng hỏng khóa editor và không làm sập ContextInspector', () => {
@@ -153,7 +215,7 @@ describe('ProgramsTab — Luồng A: FBD Node Inspector & Slot Integration', () 
       document: { ...draftDoc, programs: [malformedProgram, stProgram] },
     })
     expect(screen.getByRole('alert')).toHaveTextContent('FBD-SCHEMA-JSON-001')
-    expect(screen.getByTestId('inspector-collapsed')).toBeInTheDocument()
+    expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'PROGRAM')
     expect(screen.queryByLabelText(/Tên biến/i)).toBeNull()
   })
 
@@ -180,7 +242,7 @@ describe('ProgramsTab — Luồng A: FBD Node Inspector & Slot Integration', () 
     )
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('FBD-SCHEMA-JSON-001'))
     expect(screen.queryByLabelText(/Tên biến/i)).toBeNull()
-    expect(screen.getByTestId('inspector-collapsed')).toBeInTheDocument()
+    expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'PROGRAM')
   })
 
   it('A-T5: Không chọn gì (hoặc chưa chọn node FBD) ⇒ dock không có form sửa node FBD', () => {
@@ -206,8 +268,8 @@ describe('ProgramsTab — Luồng A: FBD Node Inspector & Slot Integration', () 
         />
       </I18nProvider>,
     )
-    // Dock Inspector thu gọn (inspector-collapsed, 0 mutation form) vì POU FBD chưa chọn node nào (TC-FBD-INS-002)
-    expect(screen.getByTestId('inspector-collapsed')).toBeInTheDocument()
+    // Chưa chọn node thì Inspector trở về context POU, vẫn không có form mutation của node.
+    expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'PROGRAM')
     expect(screen.queryByLabelText(/Tên biến/i)).toBeNull()
     expect(screen.queryByLabelText(/Kiểu toán hạng/i)).toBeNull()
   })

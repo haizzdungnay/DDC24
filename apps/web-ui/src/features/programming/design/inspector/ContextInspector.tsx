@@ -8,6 +8,11 @@ import {
   type InspectorInput,
   type InspectorRuntimeValue,
 } from './inspectorContext'
+import { AttributesSection } from './sections/AttributesSection'
+import { DdcMetadataSection } from './sections/DdcMetadataSection'
+import { ExecutionSection } from './sections/ExecutionSection'
+import { InterfaceSection } from './sections/InterfaceSection'
+import { ReferencesSection } from './sections/ReferencesSection'
 
 /**
  * `T59-818` / `PGM02-V22-WP-14` — Inspector dùng chung cho ST và FBD.
@@ -32,6 +37,7 @@ export function ContextInspector({
   input,
   editableProgramSlot,
   editableFbdSlot,
+  executionTabHref,
 }: {
   input: InspectorInput
   /**
@@ -43,6 +49,8 @@ export function ContextInspector({
    * Form sửa node FBD do `ProgramsTab` cung cấp khi có node FBD đang chọn.
    */
   editableFbdSlot?: React.ReactNode
+  /** Đích cấu hình Task toàn Project; chỉ render ở ngữ cảnh POU. */
+  executionTabHref?: string
 }) {
   const { pick } = useI18n()
   const context = inspectorContextFor(input)
@@ -55,7 +63,7 @@ export function ContextInspector({
       data-testid="context-inspector"
       data-context={context.kind}
     >
-      <h3 className="text-xs font-semibold uppercase text-[var(--c-text-dim)]">
+      <h3 className="text-xs font-semibold text-[var(--c-text-dim)]">
         {pick('Thuộc tính', 'Inspector')}
         <span className="ml-2 font-normal normal-case text-[var(--c-text-dim)]">
           {contextLabel(pick, context.kind)}
@@ -73,7 +81,7 @@ export function ContextInspector({
         <div className="mt-2 space-y-2">
           {editableProgramSlot}
           {editableFbdSlot}
-          {renderContext(pick, context)}
+          {renderContext(pick, context, executionTabHref)}
         </div>
       )}
     </section>
@@ -91,91 +99,45 @@ function contextLabel(pick: (vi: string, en: string) => string, kind: InspectorC
   }
 }
 
-function renderContext(pick: (vi: string, en: string) => string, context: InspectorContext) {
+function renderContext(
+  pick: (vi: string, en: string) => string,
+  context: InspectorContext,
+  executionTabHref?: string,
+) {
   switch (context.kind) {
     case 'PROGRAM':
       return (
         <>
-        <FieldList>
-          <Field label={pick('Tên', 'Name')} field={context.name} pick={pick} />
-          <Field label={pick('Ngôn ngữ', 'Language')} field={context.language} pick={pick} />
-          <Field label={pick('Loại', 'Kind')} field={context.pouKind} pick={pick} />
-          <Field label={pick('Truy cập', 'Access')} field={context.access} pick={pick} />
-          {/* `DEV-PROG-004` — "Chu kỳ (trong Task)": chu kỳ mà KHÔNG kèm tên
-              Task là một con số không nói được nó thuộc lịch chạy nào, và
-              Project nhiều Task thì hai Program cùng 1 s vẫn có thể nằm ở hai
-              Task khác nhau. Task chưa đặt tên ⇒ chỉ hiện chu kỳ, không tự bịa
-              một cái tên như "Control_Main". */}
-          <Field
-            label={pick('Chu kỳ (trong Task)', 'Cycle (in Task)')}
-            field={mapField(context.cycleMs, (value) => {
-              const cycle = value >= 1000 && value % 1000 === 0 ? `${value / 1000} s` : `${value} ms`
-              return context.taskName.known ? `${context.taskName.value} (${cycle})` : cycle
-            })}
-            pick={pick}
-          />
-          <Field
-            label={pick('Bật', 'Enable')}
-            field={mapField(context.enabled, (value) => value ? pick('Đã bật', 'Enabled') : pick('Đã tắt', 'Disabled'))}
-            pick={pick}
-          />
-          {/* `DEV-PROG-011` — chuyển từ khay "Thuộc tính POU" của thanh bên.
-              POU dùng chung (FUNCTION/FUNCTION_BLOCK) không có lịch chạy, nên
-              với chúng câu trả lời là "chỉ chạy khi được gọi", không phải một ô
-              xám gợi ý rằng có thể bật ở đâu đó. */}
-          <Field
-            label={pick('Trạng thái mong muốn', 'Desired state')}
-            field={mapField(context.scheduled, (value) => value
-              ? pick('Đã xếp lịch chạy', 'Scheduled to run')
-              : context.pouKind.known && context.pouKind.value !== 'PROGRAM'
-                ? pick('Chạy khi được gọi', 'Runs when called')
-                : pick('Chưa xếp lịch chạy', 'Not scheduled to run'))}
-            pick={pick}
-          />
-        </FieldList>
-        {/* Mô tả nhiều dòng KHÔNG nằm trong `<dl>` một hàng: xuống dòng trong ô
-            giá trị căn phải làm câu chữ vỡ thành bậc thang. */}
-        <div className="mt-2 border-t border-[var(--c-border)] pt-2 text-xs">
-          <p className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</p>
-          {context.description.known ? (
-            <p className="mt-0.5 whitespace-pre-wrap text-[var(--c-text)]">{context.description.value}</p>
-          ) : (
-            <p className="mt-0.5 italic text-[var(--c-text-dim)]">{pick('chưa ghi mô tả', 'no description yet')}</p>
-          )}
-        </div>
-        <CollapsibleSection
-          title={pick('Tham số', 'Parameters')}
-          count={context.parameters.known ? context.parameters.value.length : null}
-        >
-          {!context.parameters.known ? (
-            <p className="text-[var(--c-text-dim)]">{pick('không xác định được', 'not determinable')}</p>
-          ) : context.parameters.value.length === 0 ? (
-            <p className="text-[var(--c-text-dim)]">{pick('POU không khai cổng vào/ra nào.', 'This POU declares no I/O ports.')}</p>
-          ) : (
-            <ul className="flex flex-col gap-0.5">
-              {context.parameters.value.map((parameter) => (
-                <li key={`${parameter.direction}-${parameter.name}`} className="flex justify-between gap-3">
-                  <span className="font-mono text-[var(--c-text)]">{parameter.name}</span>
-                  <span className="text-[var(--c-text-dim)]">{parameter.direction} · {parameter.dataType}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CollapsibleSection>
-        <CollapsibleSection title={pick('Thuộc tính khác', 'Attributes')} count={context.attributes.length}>
-          {context.attributes.length === 0 ? (
-            <p className="text-[var(--c-text-dim)]">{pick('Không có.', 'None.')}</p>
-          ) : (
-            <dl className="flex flex-col gap-0.5">
-              {context.attributes.map((attribute) => (
-                <div key={attribute.key} className="flex justify-between gap-3">
-                  <dt className="text-[var(--c-text-dim)]">{attribute.key}</dt>
-                  <dd className="min-w-0 truncate font-mono text-[var(--c-text)]">{attribute.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </CollapsibleSection>
+          <details open className="text-xs" data-testid="inspector-general-section">
+            <summary className="cursor-pointer font-medium text-[var(--c-text-dim)] hover:text-[var(--c-text)]">
+              {pick('Thông tin chung', 'General')}
+            </summary>
+            <FieldList>
+              <Field label={pick('Tên', 'Name')} field={context.name} pick={pick} />
+              <Field label={pick('Loại POU', 'POU type')} field={context.pouKind} pick={pick} />
+              <Field label={pick('Ngôn ngữ', 'Language')} field={context.language} pick={pick} />
+              <Field label={pick('Namespace', 'Namespace')} field={{ known: false }} pick={pick} />
+              <Field label={pick('Truy cập', 'Access')} field={context.access} pick={pick} />
+              <Field
+                label={pick('Bật', 'Enable')}
+                field={mapField(context.enabled, (value) => value ? pick('Đã bật', 'Enabled') : pick('Đã tắt', 'Disabled'))}
+                pick={pick}
+              />
+            </FieldList>
+            <div className="mt-2 border-t border-[var(--c-border)]/60 pt-2">
+              <p className="text-[var(--c-text-dim)]">{pick('Mô tả', 'Description')}</p>
+              {context.description.known ? (
+                <p className="mt-0.5 whitespace-pre-wrap text-[var(--c-text)]">{context.description.value}</p>
+              ) : (
+                <p className="mt-0.5 italic text-[var(--c-text-dim)]">{pick('chưa ghi mô tả', 'no description yet')}</p>
+              )}
+            </div>
+          </details>
+          <InterfaceSection parameters={context.parameters} pouKind={context.pouKind} returnType={context.returnType} />
+          <ExecutionSection cycleMs={context.cycleMs} taskName={context.taskName} scheduled={context.scheduled} pouKind={context.pouKind} />
+          <AttributesSection iecAttributes={[]} ddcAttributes={context.attributes} />
+          <DdcMetadataSection />
+          <ReferencesSection usedBy={context.usedBy} uses={context.uses} executionTabHref={executionTabHref} />
         </>
       )
     case 'VARIABLE':
@@ -320,27 +282,6 @@ function FieldList({ children }: { children: React.ReactNode }) {
   return <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">{children}</dl>
 }
 
-/**
- * `DEV-PROG-004` — mục gập được của Inspector.
- *
- * Dùng `<details>` của trình duyệt chứ không dựng state riêng: nó đã có sẵn
- * ngữ nghĩa mở/đóng cho trình đọc màn hình, đi được bằng bàn phím, và giữ
- * trạng thái khi React render lại — ba thứ mà một `useState` + `aria-expanded`
- * viết tay phải làm lại từ đầu và thường làm thiếu.
- */
-function CollapsibleSection({
-  title, count, children,
-}: { title: string; count: number | null; children: React.ReactNode }) {
-  return (
-    <details className="mt-2 border-t border-[var(--c-border)] pt-2 text-xs">
-      <summary className="cursor-pointer text-[var(--c-text-dim)] hover:text-[var(--c-text)]">
-        {title}{count === null ? '' : ` (${count})`}
-      </summary>
-      <div className="mt-1">{children}</div>
-    </details>
-  )
-}
-
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <>
@@ -385,7 +326,7 @@ function RuntimeRow({
       <dd className="text-[var(--c-text)]" data-testid="inspector-runtime-value">
         <span className="font-mono">{presentation.displayValue}</span>
         {presentation.state !== 'live' && (
-          <span className="ml-1 text-[11px] uppercase text-[var(--c-warn-fg)]">
+          <span className="ml-1 text-[11px] text-[var(--c-warn-fg)]">
             {presentation.state === 'stale'
               ? pick('cũ', 'stale')
               : presentation.state === 'uncertain' ? pick('chưa chắc', 'uncertain') : pick('không đọc được', 'invalid')}

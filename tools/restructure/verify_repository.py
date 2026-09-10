@@ -207,9 +207,16 @@ def validate_dependency_boundaries(root: Path = ROOT) -> None:
         content = path.read_text(encoding="utf-8", errors="replace")
         if re.search(r"^package\s+main\s*$", content, re.MULTILINE):
             relative = path.relative_to(go_root)
-            if relative.parts[:2] != ("cmd", "mkddc-web"):
+            # Bất biến là "entrypoint chỉ sống dưới `cmd/<tên binary>/`", KHÔNG
+            # phải "chỉ được có đúng một binary tên `mkddc-web`". Bản cũ ghim
+            # cứng `mkddc-web` nên `cmd/mkddc-programming-e2e-seed` (tool seed do
+            # `scripts/run_programming_real_e2e_stack.sh` gọi) làm đỏ cổng
+            # `layout`; vì `verify-project.sh` chạy `set -e`, mọi cổng hợp đồng
+            # phía sau KHÔNG bao giờ chạy — đúng cơ chế đã che hai drift pin
+            # trong `test_programming_error_catalog.py` ghi lại trước đây.
+            if len(relative.parts) < 3 or relative.parts[0] != "cmd":
                 violations.append(
-                    f"{path.relative_to(root)}: package main nằm ngoài cmd/mkddc-web"
+                    f"{path.relative_to(root)}: package main nằm ngoài cmd/<binary>"
                 )
 
     ui_source = root / "apps/web-ui/src"

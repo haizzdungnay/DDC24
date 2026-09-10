@@ -21,6 +21,679 @@
   - Vitest: 69 test files (985 tests) PASS sạch trong `src/features/programming/layout/` và `src/features/programming/design/`.
   - Playwright: 13/13 tests PASS (`npx playwright test e2e/st-editor-alignment.spec.ts`).
 
+### Added — Plan triển khai BACnet Rev A từ tài liệu tới source code và E2E trên bo Forlinx (2026-09-10)
+
+- Phạm vi: `docs/03_implementation/BACNET_DOC_TO_CODE_E2E_PLAN.md` (file mới),
+  liên kết chéo trong `BACNET_REV_A_ASBUILT_REVIEW.md`,
+  `BACNET_REV_A_IMPLEMENTATION_PLAN.md`, `BACNET_OPEN_DECISIONS.md`, `CHANGELOG.md`.
+  **Chỉ tài liệu — PROPOSED, chờ review.** Review OK thì mới tạo Issue theo từng task;
+  chưa dòng mã sản phẩm nào được sửa.
+- Bối cảnh: `PLAN-BACNET-REVA-001` trả lời "sửa gì, thứ tự nào" ở mức Work Package.
+  Plan mới trả lời "làm cụ thể ra sao, chạm file nào, verify trên bo Forlinx bằng cách
+  nào" — chia 40 task/7 Wave, mỗi task giao được cho một người trong một lần ngồi và
+  tương ứng đúng một Issue.
+- Ràng buộc target đã khảo sát từ hồ sơ deploy thật, không suy đoán: bo production là
+  Forlinx OK1126B-S (RV1126B, Cortex-A53), chạy **Buildroot 2024.02 không có
+  apt/dpkg/pip** (`FX-F05`), nên bacnet-stack **bắt buộc link tĩnh** và cross-compile
+  là đường duy nhất. Hai bẫy đã biết được đưa thẳng vào runbook: `gtest_discover_tests`
+  chạy binary aarch64 trên host (`-DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST`)
+  và trần `GLIBCXX_3.4.30` của bo (`-static-libstdc++ -static-libgcc`). Script deploy
+  hiện có `tools/deploy/deploy_board.sh` viết cho Orange Pi (`sudo -n`, `/home/orangepi`)
+  nên **không dùng được** cho Forlinx — tách thành `T-BAC-060`.
+- Ba quyết định thiết kế đáng review nhất:
+  (1) **Thêm tầng bằng chứng `LOOPBACK`** (`T-BAC-013`) — hiện có một hố giữa `HOST`
+  (không chạm mạng) và `TARGET` (cần bo). Chính hố đó là lý do 67 test BACnet PASS mà
+  không ai phát hiện `SERVICE_CONFIRMED_SUBSCRIBE_COV` chưa được đăng ký. Tầng loopback
+  bắt đúng loại lỗi này trên CI trong vài giây, không cần bo.
+  (2) **E2E chia hai tầng** — tầng `TARGET-FAKE` (T1/T3/T5/T7/T8/T9 + T6a) chạy được
+  ngay với `mkddc-fakemcu`, chứng minh chuỗi BMS→BACnet→iobus→core→arbitration→plc_shm
+  trên aarch64/Buildroot; tầng `TARGET-HIL` (T2/T4/T6b) cần MCU thật + tín hiệu + thiết
+  bị đo. Ranh giới ghi bắt buộc vào `board.txt` của evidence qua trường `MCU_MODE` —
+  thiếu trường này chính là cách hồ sơ pre-test 2026-07-01 trở thành bằng chứng gây
+  hiểu lầm.
+  (3) **Tách `T-BAC-063` (bring-up MCU STM32 thật) chạy song song từ ngày đầu** thay vì
+  xếp vào Wave cuối. Bo Forlinx **chưa bao giờ** chạy MCU thật — mọi evidence hiện có
+  đều `MCU_MODE=FAKE` và `T59-703` đã bị defer đúng vì lý do này. Đây là dependency dự
+  án đã tồn tại, không phải rủi ro riêng của BACnet; xếp nó vào W6 sẽ khiến toàn bộ
+  phần code xong xuôi nằm chờ một hạng mục phần cứng có lead time không đoán trước.
+- Ba cổng kiểm bắt buộc trước khi copy binary lên bo, tự động hoá trong `T-BAC-011`:
+  trần GLIBCXX ≤ 3.4.30; không phát sinh `.so` mới mà bo không có; và **có symbol
+  `bip_init` trong binary**. Cổng thứ ba là bài học trực tiếp từ review as-built — thiếu
+  nó thì một bản dựng `BACNET=OFF` vẫn deploy trót lọt và mọi thứ trông như đang chạy.
+- Luật thi hành bổ sung: không task nào sau `T-BAC-030` được đánh `DONE` trước khi
+  `T-BAC-062` có evidence `TARGET-FAKE`, vì mọi task sau đều đứng trên giả định "dữ liệu
+  là thật". Task `GATED` không được bắt đầu tới khi `OD-BAC-*` tương ứng được ký. Thiếu
+  bo hay thiếu MCU là `EVIDENCE_QUEUE`, không phải `BLOCKED` — không dừng các Wave code
+  còn làm được.
+- Verification: `python3 scripts/docs_iso_harness.py` → link missing 0 (quét 441 file
+  .md), anchor missing 0, trailing whitespace 0, code fence lệch 0, duplicate doc ID 0.
+- Refs: `PLAN-BACNET-D2C-001`, `REV-BACNET-ASBUILT-001`, `PLAN-BACNET-REVA-001`,
+  `OD-BAC-SET-001`, `HW-FOXLINX-DEPLOY-001`, `HW-FOXLINX-SPEC-001`, `FX-F05`, `T59-703`.
+
+### Added — Rà soát as-built BACnet Rev A: kế hoạch đóng sản phẩm và tích hợp dữ liệu thật với BMS (2026-09-10)
+
+- Phạm vi: `docs/05_verification/BACNET_REV_A_ASBUILT_REVIEW.md` (file mới),
+  `docs/03_implementation/BACNET_REV_A_IMPLEMENTATION_PLAN.md` (file mới),
+  `docs/00_governance/BACNET_OPEN_DECISIONS.md` (file mới), `CHANGELOG.md`.
+  **Chỉ tài liệu — không chạm một dòng mã sản phẩm nào.** Đây là phiên review theo
+  thứ tự SOURCE REVIEW → PRODUCT DECISION → GAP ANALYSIS → TARGET ARCHITECTURE →
+  IMPLEMENTATION PLAN → ISSUE BREAKDOWN → V&V/HIL GATE; implement chỉ bắt đầu sau
+  khi Owner duyệt.
+- Triệu chứng: mọi tín hiệu quan sát được đều xanh — bộ test host 1440/1440 PASS,
+  hồ sơ BACnet pre-test 14/14 PASS, đèn `bmsLink` trên trang mạng báo `online` —
+  trong khi BMS ngoài **không** lấy được dữ liệu thật của phần lớn object.
+- Nguyên nhân gốc: chuỗi dữ liệu đứt ở lớp `iobus ↔ bacnet-stack`, không phải ở
+  phần cứng hay SHM. Ba đứt gãy chồng nhau, mỗi cái tự nó đã đủ chặn Rev A:
+  (1) `bacnet_server.cpp:228-256` — `sync_stack_inputs()` chỉ đẩy AI và BI, nên
+  64/88 object đăng ký với bacnet-stack không bao giờ được nạp dữ liệu: AV×32,
+  BV×16, MSV×8 trả `0.0` vĩnh viễn, còn AO×4/BO×4 trả giá trị **BACnet đã ghi**
+  chứ không phải giá trị core thực áp — khi core override vì safe-state hay
+  interlock thì BMS vẫn thấy lệnh của mình có hiệu lực, là sai lệch liên quan
+  an toàn;
+  (2) `bacnet_server.cpp:116-127` — không đăng ký `SERVICE_CONFIRMED_SUBSCRIBE_COV`,
+  nên BMS gửi SubscribeCOV bị `handler_unrecognized_service` trả Reject; và
+  `:286-293` gửi COV notification bằng `fprintf` ra stderr thay vì gói tin. COV là
+  capability MUST của Rev A và hiện **không tồn tại trên mạng**;
+  (3) `bacnet_server.cpp:44-60` và `:141-152` — callback ghi gọi thẳng `core_fn_`,
+  bỏ qua `BacnetObjects::write_ao()`, khiến toàn bộ `bacnet_priority.cpp` thành mã
+  chết cùng với kiểm biên `min_pv`/`max_pv` và quy đổi `ao_engineering_to_physical()`.
+- Vì sao không cổng nào bắt được: `apps/iobus/CMakeLists.txt:60-68` biên dịch
+  `BACNET_SOURCES` vô điều kiện và bọc mọi lời gọi bacnet-stack trong
+  `#ifdef MKDDC_ENABLE_BACNET`, nên 67 test mang tên BACnet vẫn PASS với
+  `MKDDC_ENABLE_BACNET=OFF` — không test nào gửi hay nhận một gói UDP. Bộ test đang
+  kiểm các hàm mà sản phẩm không gọi (`BacnetObjects.EngineeringPercentConvertsToPhysicalCurrent` là ví dụ rõ nhất: PASS, nhưng hàm nó kiểm nằm trên đường chết).
+  Hồ sơ pre-test cũng không cứu được: `bacnet.conf` ghi `bind_interface: docker0`,
+  `summary.txt` ghi `Target: 172.17.0.1` — chạy trên container máy build, không phải
+  board; và bài T5 "WriteProperty AV1 readback PASS" chỉ chứng minh bacnet-stack nhớ
+  được giá trị vừa ghi vào chính nó, vì AV không có callback nào tới core.
+- Các finding còn lại đã xác minh bằng mã nguồn: Alarm/Event là placeholder ba tầng
+  (`bacnet_alarm.cpp:93-101` tự ghi "Placeholder", `targets_` rỗng vì `add_target()`
+  không caller, `sockfd_ = -1` vì `open()` không caller); Schedule/Calendar là
+  TEST-ONLY (`BacnetScheduleObjects` không có caller sản phẩm, không object nào
+  register vào stack); Trend Log không có dòng mã nào trong repo; BBMD/Foreign Device
+  là CONFIG-ONLY chết (4 field trong `bacnet_config.hpp:19-22`, 0 field được parse);
+  `bacnet_server.cpp:219` tạo 8 BI vô điều kiện, trái ADR-010/`PRODUCT.md:84`/
+  `mkddc_shm.h:68` vốn nói base SKU không có isolated-DI; `networkapi.go:300-307`
+  map `bip_init()` thành công thẳng thành `bmsLink=online`.
+- Kết quả: **`BACNET_REV_A = NOT READY`** — 0/15 điều kiện Definition of Done đạt
+  trọn vẹn. PICS có 9/14 BIBB khai sai và phải sửa xuống đúng thực trạng, theo đúng
+  nguyên tắc mà chính PICS §4 đã viết ngày 2026-08-07 ("khai sai nguy hiểm hơn khai
+  thiếu"). Kế hoạch sửa chia 10 Work Package và 18 Issue theo dependency, đường găng
+  `WP-01 → 02 → 03 → 04 → 09 → 10`, kèm Hard Release Gate T1..T9 bắt buộc chạy trên
+  board DDC-24 thật với BMS thật và tín hiệu vật lý thật. 11 quyết định cần Owner ký
+  được tách vào `BACNET_OPEN_DECISIONS.md`.
+- Verification (số đo thật đo trong phiên, không dẫn lại số cũ):
+
+  | Bước | Lệnh | Kết quả |
+  |---|---|---|
+  | Configure `BACNET=ON` | `cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` | **exit 1** — FetchContent bacnet-stack 1.3.8 bị egress policy chặn (HTTP 403 từ `github.com`) |
+  | Configure `BACNET=OFF` | cùng lệnh, `-DMKDDC_ENABLE_BACNET=OFF -DMKDDC_ENABLE_HMI=OFF` | exit 0 |
+  | Build | `cmake --build build/fw --parallel` | exit 0 |
+  | Test | `ctest --test-dir build/fw --output-on-failure` | **1440/1440 PASS**, 0 fail, 1 skipped, 23.11s |
+  | Trong đó test tên BACnet | — | **67 test PASS với `BACNET=OFF`** — chính là bằng chứng cho finding về bằng chứng giả |
+  | Cổng tài liệu | `python3 scripts/docs_iso_harness.py` | link missing 0/440 file, anchor missing 0, duplicate doc ID 0 |
+
+- Bị chặn (ghi rõ để khỏi hiểu nhầm là kết luận về mã nguồn): không dựng được bản
+  `BACNET=ON` trong môi trường phiên này vì policy egress chặn tải bacnet-stack từ
+  `github.com`. **Cần để mở khoá:** cho phép host đó trong egress policy, hoặc vendor
+  bacnet-stack 1.3.8 vào artifact nội bộ, hoặc cài `bacnet-stack>=1.3` qua pkg-config
+  trên runner — đã ghi thành `OD-BAC-009`, kèm yêu cầu thêm gate CI dựng `BACNET=ON`
+  để cấu hình `OFF` thôi là đường build duy nhất được kiểm. Mọi finding ở trên đọc
+  trực tiếp từ mã nguồn và không phụ thuộc build này.
+- Refs: `REV-BACNET-ASBUILT-001`, `PLAN-BACNET-REVA-001`, `OD-BAC-SET-001`,
+  `ADR-010`, `ADR-011`, `ADR-012`, `ARCH-R010`, `OD-MBRTU-014`.
+
+### Fixed — Vòng reconcile nền của `RuntimeIntentService` không còn vứt lỗi câm (2026-09-10)
+
+- Phạm vi: `apps/web-api/internal/programming/application/runtime_intent.go`, `runtime_intent_test.go`. Issue #591.
+- Triệu chứng: web-api khởi động lại xong, chương trình hiện "đã bật" trên UI nhưng runtime không chạy, và log web-api hoàn toàn sạch — chẩn đoán phải bắt đầu từ số không.
+- Nguyên nhân gốc: goroutine nền trong `Start()` gọi `_, _ = s.ReconcileOnce(ctx)` mỗi 2 giây. `ReconcileOnce` là đường DUY NHẤT đưa intent bền vững về đúng trạng thái trên Core sau restart; khi nó hỏng lâu dài (Core IPC chết, store lỗi) thì intent không bao giờ hội tụ, và cả số bản ghi lẫn `error` đều bị vứt nên không chỗ nào trong hệ thống nói ra điều đó.
+- Cách sửa:
+  - Tách thân vòng lặp thành `reconcileTick`, ghi lỗi theo đúng quy ước worker sẵn có trong cùng package (`checks.go:520`): `log.Printf("WARN programming_runtime_intent_worker err=%v streak=%d", ...)`.
+  - Chống spam bằng bậc lùi luỹ thừa 2 (tick lỗi thứ 1, 2, 4, 8, 16...): vòng chạy mỗi 2 giây, log mỗi tick sẽ là ~43200 dòng/ngày cho MỘT sự cố đứng yên. Lỗi đổi dạng thì đếm lại chuỗi từ 1 để tin mới không bị nuốt trong quãng im lặng.
+  - Phơi trạng thái đọc được: `LastReconcileError()` và `ConsecutiveReconcileFailures()`, khoá bằng `healthMu` riêng (không dùng chung `intentMu` vốn bị `ReconcileOnce` giữ suốt vòng đẩy IPC).
+  - Lỗi do context bị huỷ khi `Close()` không tính là sự cố — cùng điều kiện `ctx.Err() == nil` mà `checks.go` đang dùng.
+  - Không đổi contract/API/schema: không thêm/sửa route HTTP, không đổi payload, giữ nguyên `intentReconcileInterval` và ngữ nghĩa `Start()`/`Close()`.
+- Kiểm chứng (đo tại máy 2026-09-10):
+  - `go vet ./...` — exit 0.
+  - `go test ./... -count=1` — 21 package `ok`, 0 FAIL.
+  - `go test ./internal/programming/application/ -count=1 -race -run 'RuntimeIntent|Reconcile|...'` — 18/18 PASS, gồm 9 test cũ của `runtime_intent_test.go` không phải sửa và 5 test mới.
+  - `rg -n '_, _ = s\.ReconcileOnce' .../runtime_intent.go` — 0 dòng.
+  - `python3 scripts/docs_iso_harness.py --expect` — PASS.
+  - CI `Build & Test` / `Security Scan`: NOT_RUN (#414 — tổ chức không cấp runner).
+
+### Added — Cổng đồng bộ ba hằng số SHM chép tay trong Go với `contracts/shm/mkddc_shm.h` (2026-09-10)
+
+- Phạm vi: `apps/web-api/internal/app/shm_contract_sync_test.go` (file mới),
+  `apps/web-api/internal/app/core_client.go` (chỉ comment dẫn nguồn trên khối
+  `const`), `CHANGELOG.md`. Không chạm `contracts/**`.
+- Triệu chứng: `kxShmMagic`, `defaultIOShm`, `defaultPLCShm` là bản sao rời của
+  `KX_SHM_MAGIC`, `KX_SHM_IO_PATH`, `KX_SHM_PLC_PATH`. Hôm nay ba giá trị khớp,
+  nhưng không test nào bắt được khi chúng thôi khớp.
+- Nguyên nhân gốc: 16 chỗ dùng `kxShmMagic` trong package `app`, mọi chỗ trừ một
+  là fixture tự dựng SHM giả rồi **ghi chính hằng số đó** vào header
+  (`core_client_test.go:178`); chỗ còn lại là nơi **đọc** (`shm_reader.go:166`).
+  Test viết bằng hằng số A rồi khẳng định code đọc được hằng số A — luôn đúng
+  với mọi giá trị của A, nên bộ test không thể phân biệt hằng số đúng với hằng
+  số sai. Đường hỏng đã đi qua một lần: `mkddc_shm.h:248-286` ghi lại lần bump
+  magic v5 → v6 (`ISS-PIO-11`). Lần bump sau mà Go không đổi theo thì `go test`
+  vẫn xanh, còn trên thiết bị thật web-api coi SHM là không hợp lệ và Overview
+  mất dữ liệu Point trong khi Core/iobus vẫn chạy.
+- Cách sửa: áp khuôn mẫu sẵn có của `internal/modbusrtu/contract_sync_test.go`
+  sang hợp đồng SHM — `TestShmContractConstantsMatchHeader` đọc **file hợp đồng
+  thật** và so cả ba hằng số. Helper định vị gốc repo fail-close (`t.Fatalf` kèm
+  đường dẫn đang tìm, số cấp đã đi lên và thư mục xuất phát), **không** `t.Skip`
+  — đúng lỗi #590 vừa vá. Phần parse tách hai lớp: hàm thuần trả `error`
+  (`parseShmDefineUint`/`parseShmDefineString`, bóc hậu tố kiểu C `0x4B584406u`
+  và cặp nháy kép) và lớp bọc `t.Fatalf`, nhờ vậy nhánh fail-close kiểm được
+  trực tiếp thay vì tự nó là thứ không ai canh. Ba hằng số trong `core_client.go`
+  nay có comment dẫn `contracts/shm/mkddc_shm.h:59/:60/:65` và tên test canh
+  chúng. Không đổi giá trị hằng số nào, không đổi contract/API/schema, không đổi
+  hành vi runtime.
+- Kiểm chứng (đo tại máy 2026-09-10, CI `NOT_RUN` — #414):
+  - `go vet ./...` — exit 0.
+  - `go test ./... -count=1` — 21 package `ok`, 0 FAIL, 3 package không có test.
+  - `go test ./internal/app/ -count=1 -run ShmContract -v` — 3 test PASS
+    (`TestShmContractConstantsMatchHeader` + 3 subtest,
+    `TestShmContractParserAcceptsCStyleSuffix`,
+    `TestShmContractParserFailsClosed` + 5 subtest).
+  - Số đo drift: sửa tạm `kxShmMagic` → `0x4B584405` và `defaultIOShm` →
+    `/dev/shm/mkddc_io_shm_OLD`, test **FAIL** đúng hai subtest tương ứng, subtest
+    `KX_SHM_PLC_PATH` không đụng vẫn PASS; đã hoàn nguyên.
+  - `rg -n 'mkddc_shm\.h' apps/web-api` — package `app` nay có đường đọc file hợp
+    đồng thật (trước đó chỉ `internal/modbusrtu` đọc, package `app` chỉ nhắc tên
+    file trong comment).
+
+### Fixed — `--sandbox-probe` dò 5/8 đường dẫn không tồn tại, nên chưa từng đo biên sandbox với SHM/IPC/RETAIN thật (2026-09-10)
+
+- Phạm vi: `apps/core/application/programming/programming_sim_worker_main.cpp`,
+  `scripts/verify_programming_sim_worker_boundary.py`,
+  `docs/07_records/test-evidence/programming/2026-08-28-pgm02-t59-817-r3-closeout.md`.
+  Issue: #605. Không đổi contract/API/schema, không đổi giao thức worker, không
+  đổi cấu hình hàng rào.
+- Triệu chứng: `--sandbox-probe` báo `9/9 denied (errno 13)` và cổng
+  `verify_programming_sim_worker.py` PASS, nhưng vế *"production handle denied"*
+  của `VS-PROG-U15` không có bằng chứng nào chạm đường dẫn sản phẩm thật.
+- Nguyên nhân gốc: năm trong tám target là hằng số **chép tay** đã trôi khỏi
+  nguồn chuẩn (`mkddc_io_cache`, `/dev/shm/mkddc_plc`, `retain.bin`,
+  `journal.bin`, `program_ipc.sock`). Hàng rào Landlock/seccomp từ chối ở lớp
+  syscall **trước khi** phân giải đường dẫn, nên một đường dẫn không tồn tại trả
+  `EACCES` y hệt một đường dẫn tồn tại — cổng errno kiểm `denied`/`errno` của
+  đúng cái danh sách được đưa cho nó, và một tên sai vẫn thoả cả hai. Số đo có
+  thật, kết luận rút ra từ nó rộng hơn thứ nó đo (`WF-CLEAN-001` N4).
+- Cách sửa: hai target SHM lấy thẳng macro hợp đồng `KX_SHM_IO_PATH` /
+  `KX_SHM_PLC_PATH` (`contracts/shm/mkddc_shm.h:59-60`); ba target còn lại về
+  đúng `/data/mkddc/programming/retain`,
+  `/data/mkddc/programming/journal/lifecycle.bin`,
+  `/run/mkddc/programming-v1.sock`, mỗi cái kèm comment dẫn `file:line` nguồn
+  chuẩn. Bề mặt probe giữ nguyên 8 đường dẫn + 1 phép thử `AF_UNIX socket`, có
+  `static_assert` canh số lượng. `verify_programming_sim_worker_boundary.py`
+  thêm phép kiểm tĩnh thứ tư chặn tái phát (`--binary` thành tuỳ chọn để cổng
+  tĩnh chạy được trên cây chưa build; `ctest` vẫn truyền `--binary`).
+  Bản ghi `EV-PGM02-R3-CLOSEOUT-001` được **thêm** §7 Đính chính, không sửa dòng
+  cũ.
+- Kiểm chứng (đo tại máy 2026-09-10; CI `NOT_RUN` — #414):
+  - Tái hiện lỗi: cổng tĩnh trên cây chưa sửa FAIL đúng 7 mục, `exit=1`; sau khi
+    sửa `exit=0`.
+  - CMake configure `exit=0`, build `exit=0` (đọc riêng từng exit code);
+    `ctest` **1481/1481 PASS**, 0 fail, 1 skipped, 23.21 s — gồm
+    `programming_sim_worker_symbol_boundary` và `programming_sim_worker_behaviour`.
+  - `--sandbox-probe`: `sandboxApplied=true`, `seccompInstalled=true`,
+    **9/9 denied (errno 13)** với danh sách đã sửa.
+  - `docs_iso_harness.py --expect`: PASS.
+  - `grep '"/dev/shm/'` trong file worker: 0 dòng.
+  - `MKDDC_ENABLE_BACNET=ON`: **NOT_RUN** — egress policy của container chặn
+    (HTTP 403) tarball `bacnet-stack-1.3.8` và không có gói apt thay thế. Không
+    liên quan tới thay đổi này; sim worker không phụ thuộc BACnet.
+  - Đo lại trên bo Foxlinx: **NOT_RUN (cần bo)** — cùng nhóm chặn phần cứng với
+    `T59-706`/#414, không phải điều kiện đóng #605.
+
+### Fixed — Review tính năng Programming: mở lại cổng `layout` và vá 5 lỗi xếp tầng (2026-09-10)
+
+Phạm vi: `REC-PROG-FEATURE-REVIEW-001` trên `main@14538e81`. Review toàn tính
+năng Programming (FE/BE/Core/contracts/docs) phát hiện `main` đang **đỏ cổng
+`layout` của chính nó** với bốn lỗi che nhau, cộng một chỗ UI nói sai về
+capability backend. Tất cả đã sửa trong cùng phiên.
+
+- **`F-REV-001` (Cao) — rule boundary Go chặn đầu gate, che ba lỗi phía sau.**
+  Triệu chứng: `scripts/verify-project.sh --component layout` exit 1 với
+  `apps/web-api/cmd/mkddc-programming-e2e-seed/main.go: package main nằm ngoài
+  cmd/mkddc-web`. Nguyên nhân gốc: `tools/restructure/verify_repository.py` ghim
+  cứng entrypoint duy nhất `cmd/mkddc-web`, trong khi repo có binary thứ hai hợp
+  lệ do `scripts/run_programming_real_e2e_stack.sh` gọi; vì `verify-project.sh`
+  chạy `set -e`, mọi cổng hợp đồng phía sau không bao giờ chạy. Cách sửa: nới rule
+  về đúng bất biến "entrypoint chỉ sống dưới `cmd/<binary>/`" — `package main`
+  ngoài `cmd/` và `cmd/foo.go` đặt trực tiếp vẫn bị từ chối.
+- **`F-REV-002` (Cao) — pin `g1_contract_join_v1.json` lệch 2 contract.** `openapi`
+  pin `56eb241a…`/v1.37.0/43 operation trong khi thực tế `e966fb6f…`/v1.40.0/45;
+  `errors` pin `d4c25c22…`/v1.10.0 trong khi thực tế `555c2887…`/v1.11.0 (manifest
+  `b8eb9899…`→`6266d456…`). Nguyên nhân gốc: pin cập nhật lần cuối ở `9597e4d`,
+  sau đó `496559a`/`f2524bb`/`acff5be` đổi contract mà không re-pin. Đã đối chiếu
+  diff trước khi sửa: thuần additive (+`getProgrammingSignalDependencies`,
+  +`previewProgrammingBinding`, +arg `detailCode` cho 4 public error; 0 xóa), nên
+  re-pin là phục hồi bất biến chứ không nới cổng.
+- **`F-REV-003` (Trung bình) — `pgm02_workspace_v1.json` lệch `pins.openapiSha256`.**
+  Cùng gốc `F-REV-002`; `F-P59-OPENAPI-PIN-001` từng được sửa ở increment R2 và
+  nay **tái diễn** vì cổng chỉ chạy khi có người chạy tay (CI waive vì ngân sách).
+- **`F-REV-004` (Trung bình) — ảnh chụp `catalogVersion` không đi cùng commit.**
+  `tests/integration/test_programming_error_catalog.py` assert `1.10.0` trong khi
+  catalog đã `1.11.0` (do `acff5be`); số mã không đổi (38 public/158 detail). Đây
+  là lần thứ hai đúng chế độ hỏng mà khối chú thích trong chính file đó cảnh báo,
+  và lần này lại bị `F-REV-001` che.
+- **`F-REV-005` (Cao) — UI nói sai capability backend (`PPI-001`).** `EditorPane.tsx`
+  ẩn `FUNCTION`/`FUNCTION_BLOCK` khỏi dropdown *Loại* và khuyên "đổi về PROGRAM
+  trước khi Kiểm tra". Câu này sai kể từ khi user POU hạ cánh:
+  `attachLocalPOUSources()` thu cả `revision.POUObjects` kind khác PROGRAM và
+  PROJECT library entry vào `LinkedPOUs` kèm source, `compilerInputs()` đếm chúng
+  vào `MaxUserPou`, và `PouExplorer` ngay cạnh đã cho tạo Function/Function Block
+  — hai đường tạo POU trong cùng workspace nói hai capability model trái ngược,
+  bản sai lại khuyên người dùng phá chính POU của họ. Cách sửa: hiện đủ ba kind
+  (không nói dối capability) nhưng để **chỉ đọc**, vì kind là identity lúc tạo —
+  mỗi kind có header source riêng (`pouSourceTemplate()`) còn BE không kiểm header
+  khớp kind, nên đổi kind mà không viết lại source sẽ đỏ ở tầng parser. Help text
+  đặt ngoài `<label>` + `aria-describedby` để accessible name của `<select>` không
+  dính câu giải thích. Hai test WP-02 cũ khóa hành vi sai đã được thay bằng hai
+  test `PPI-001` khóa hành vi đúng.
+
+Gap còn mở (cần quyết định thiết kế, **không** sửa trong phiên): `PPI-002` Task
+identity bị dựng từ `projectLibraryRevisionId` và `document.task.name` không bao
+giờ được adapter sinh ra; `PPI-005` `enabled: null` cứng dù API đã có dữ liệu;
+`PPI-003`/`004`/`006`..`011`; `F-REV-006` FBD chỉ tạo được cho `PROGRAM`;
+`F-REV-007` `EditorPane.tsx` 3355 dòng; `F-REV-008` ngân sách bundle chỉ còn
+13.91 KiB. Chi tiết và thứ tự thi hành ở
+[`REC-PROG-FEATURE-REVIEW-001`](docs/07_records/reviews/PROGRAMMING_FEATURE_DESIGN_REVIEW_2026-09-10.md)
+§4-§5.
+
+Kiểm chứng (đo lại trong phiên, không dẫn số cũ): `ctest` **1481/1481 PASS**
+(`MODBUS=ON`, `HMI=ON`, `BACNET=OFF` — tarball bacnet-stack bị network policy trả
+**403**, ghi rõ là nhánh bị chặn, không claim); `go vet ./...` exit 0;
+`go test ./... -count=1` exit 0 (21 package, 8/8 package Programming);
+`tsc --noEmit` exit 0; `npm run lint` exit 0; `vitest` **245 file/3113 test PASS**;
+`npm run build` exit 0 (chunk `programming` 151.09/165.00 KiB gzip);
+`docs_iso_harness.py --expect` PASS; **`--component layout` exit 1 → exit 0**.
+Không sửa file Go hoặc C++ production nào.
+
+### Changed — Triển khai đồng bộ `main@de6b753b` lên Foxlinx và review bản chạy thật (2026-09-10)
+
+- Thay bản phát hành đầy đủ trước đó `8e00e4b1fa4b96d002d1e1df7f70dc82a700b468`
+  bằng `de6b753b223dc23b4a6059b4b267a765b90de492` (`dirty=false`) trên board
+  `SOM-DDC-24-foxlinx`. Lần cài này đồng bộ lại Core, I/O bus, netcfg, Web API,
+  compiler/packager/worker Programming, HMI và static frontend; chấm dứt trạng
+  thái provenance `8e00e4b1` nhưng frontend từng được cập nhật riêng từ WIP ngày
+  2026-09-09.
+- Gói ARM64 11 MiB có SHA-256
+  `4e1db1f6c10e51031d193a6990a35736653f002a97d9728e9a9d03bbf4686ef1`;
+  C++ cần cao nhất `GLIBCXX_3.4.29`, thấp hơn `GLIBCXX_3.4.30` có trên board.
+  Khoá ST ở chế độ `RELEASE`; frontend dựng bằng `build:release` với
+  `VITE_PROGRAMMING_REV_A=1`; `npm audit --omit=dev` ra 0 lỗ hổng production.
+  Installer đã diễn tập trong cây giả và kiểm 8/8 checksum trước khi chạm board.
+- Backup trước khi ghi tại
+  `/var/backups/mkddc/predeploy-de6b753b-20260910T051316Z`; snapshot rollback do
+  installer tạo tại `/var/backups/mkddc/0.1.0-20260910-051317`. Giữ nguyên khoá
+  thiết bị, dữ liệu/config, trạng thái HMI `disabled` và cấu hình lab FakeMCU;
+  không Commission, không ghi output.
+- Kiểm chứng TARGET sau cài: runtime checksum **8/8 PASS**; sáu mẫu health liên
+  tiếp **6/6 `status=ok`** với cả sáu check `core/io_shm/iobus/mcu_connection/
+  plc_shm/web=ok`; `mkddc-fakemcu`, `mkddc-iobus`, `mkddc-core`, `mkddc-netcfg`,
+  `mkddc-web-pi` đều `active`, `NRestarts=0`, không có unit failed hay executable
+  `(deleted)`. `/` trả 200; API system/Programming chưa đăng nhập trả 401; ba API
+  Programming đã đăng nhập trả 200, profile `MK-DDC-24-REV-A`, một Project,
+  runtime `READY/RUNNING`, `missedReleaseCount=0`, `overrunCount=0`.
+- Static `index.html` trên host và bản board phục vụ cùng SHA-256
+  `2c5146ec939f335897f7456c7394f89f194c7ef94c5da2f444d4789acc5e023f`.
+  Playwright/Chromium headless trên chính URL board kiểm desktop 1600×1000 và
+  mobile 390×844: login thật, Project thật, POU/FBD/Inspector render; Console
+  error, page error, request fail và HTTP error đều bằng 0. Chrome DevTools MCP
+  đã cấu hình nhưng không có trong tool surface của phiên, nên không ghi nhận là
+  bằng chứng DevTools.
+- **Verdict triển khai: PASS; verdict review tính năng: FAIL có finding P1.**
+  `F-DEPLOY-20260910-01`: ở desktop 1600 px, grid khai báo Inspector 240 px
+  (`--pgm-inspector-width`) nhưng `aside` FBD thực tế rộng 384 px và bắt đầu tại
+  x=1216 thay vì track x=1347, chồng **125 px** lên Quick Library 196 px và che
+  tay kéo. Nguyên nhân source nằm ở tổ hợp `md:w-[min(24rem,100vw)]` với
+  `min-[1440px]:w-auto` trong `EditorPane.tsx`; E2E hiện chỉ kiểm thứ tự `x` và
+  `width > 0`, chưa kiểm hai cột không giao nhau. Không sửa source trong lượt
+  review/gatekeeper này.
+- `F-DEPLOY-20260910-02` (vận hành, có từ trước deploy): các slave Modbus
+  `CK508-04/05`, `CK509-06/07` không phản hồi, I/O bus báo timeout và alarm
+  `E303` với error rate 100%. Dịch vụ vẫn ổn định và health tổng hợp vẫn xanh,
+  nhưng lần này chỉ là TARGET/FakeMCU; không phải xác nhận RS-485 vật lý, HMI
+  panel, physical HIL hay `RELEASE_READY`.
+- Cổng host trên đúng commit đã đạt C++ Release Modbus/BACnet/HMI **1.482/1.482
+  PASS** (8 skip môi trường), Go `vet` + test `-count=1`, FE **245 tệp / 3.113
+  test**, lint và build. Lần thử chạy từng test ARM64 qua QEMU không dùng làm
+  gate vì độ trễ giả lập phá test timing 5 ms và đường fixture compile-time
+  `/mkddc-src` không tồn tại; dừng sau khi đã xác định đây là sai môi trường,
+  rồi kiểm artifact trực tiếp bằng installer/read-back trên board.
+
+### Fixed — Cổng link tài liệu chỉ quét 22/435 file nên báo `link_missing: 0` sai phạm vi; 26 link hỏng lọt lưới (2026-09-10)
+
+- Phạm vi: `scripts/docs_iso_harness.py`,
+  `docs/superpowers/plans/2026-09-04-fbd-edit-task6-handoff.md`,
+  `docs/07_records/test-evidence/programming/2026-09-03-project-cleanup-foxlinx.md`.
+  Issue #604.
+- Triệu chứng: `python3 scripts/docs_iso_harness.py --expect` in
+  `local link missing : 0` và `PASS`, trong khi `docs/` thật sự có **26** link
+  tương đối trỏ tới file không tồn tại.
+- Nguyên nhân gốc: phép kiểm link (số 2) lấy đầu vào từ danh sách cứng
+  `BASELINE + EXTRA` = **22** file, còn `docs/` có **435** file `.md` — phủ 5%.
+  Vì `link_missing` nằm trong nhóm `hard` phải bằng 0, con số ấy *trông như*
+  một cổng chặn thật, nên người đọc hiểu rộng hơn hẳn thứ nó đo. Mọi hồ sơ
+  thêm sau này đều tự động nằm ngoài phạm vi, nên nợ lớn dần theo tốc độ
+  thêm file.
+- Cách sửa:
+  - Thêm **phép kiểm 8** `docs_link_missing`: quét **mọi** `docs/**/*.md` bằng
+    `os.walk` (không danh sách cứng), đếm link tương đối trỏ đích không tồn
+    tại; có mặt trong `EXPECT` = `0` và trong nhóm `hard`. In kèm số file đã
+    quét để phạm vi tự nói ra thay vì phải tin một con số trần.
+  - Regex riêng `DOCS_LINK_RE` bóc đúng cú pháp ngoặc nhọn `[nhãn](<đường/dẫn>)`.
+    Dùng lại `LINK_RE` cũ sẽ giữ luôn cặp `<>` và sinh **1 báo động giả** tại
+    `PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md:255` (ảnh có thật) — số
+    đúng là 26, không phải 27.
+  - Thêm `--selftest` khoá luật bóc link (10 ca, gồm ngoặc nhọn, đường dẫn có
+    dấu cách, cắt anchor, bỏ qua `http`/`mailto`/`#`/`file:`).
+  - Sửa 25 link trong hồ sơ handoff Task 6: bỏ tiền tố sai `MK-DDC-24/` và quy
+    về đường dẫn tương đối đúng độ sâu (`../../../` từ `docs/superpowers/plans/`).
+    Chỉ đổi target, **không** đổi nhãn link hay bất kỳ văn bản nào khác.
+  - Sửa 1 link ở `2026-09-03-project-cleanup-foxlinx.md:8`: `../../` → `../../../`.
+  - Không đổi ý nghĩa hay giá trị của bất kỳ khoá `EXPECT` nào đang có.
+- Kiểm chứng (đo tại máy 2026-09-10; CI `NOT_RUN` — #414):
+  - Tái hiện trước khi sửa: phép kiểm mới ra **26** trên **435** file, harness
+    `FAIL — docs_link_missing=26`, exit `1`.
+  - Sau khi sửa: `docs/** link missing: 0 (quét 435 file .md)`,
+    `local link missing : 0`, `PASS — mọi phép kiểm bắt buộc đạt`,
+    `EXPECT: khớp toàn bộ ngưỡng`, exit `0`.
+  - Đếm độc lập (không dùng code vừa sửa): **26** → **0**.
+  - `--selftest`: 10/10 đạt. Mutation test: thay bằng regex không bóc ngoặc
+    nhọn ⇒ selftest 7/10 (exit 1) và cổng sinh đúng báo động giả đã dự đoán.
+
+### Added — Routine Clean Code Implementer chạy mỗi giờ, phút `:00` giờ Việt Nam (2026-09-10)
+
+- Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (§8, §8.1a, §8.2, §8.3,
+  §8.4, §5, §9, lịch sử sửa đổi → v1.1), `.claude/skills/ddc-implementer/SKILL.md`
+  và bản gương `.agents/skills/ddc-implementer/SKILL.md`. Không chạm code sản
+  phẩm, không chạm `contracts/`, không chạm `.github/`.
+- Cấu hình ngoài repo đi kèm: trigger `trig_01GqDKDuHc5iV6dKGq86DL93`, bắn vào
+  phiên điều phối `session_01R1Ga52pakcTifHxCmRd3ty`. Mỗi lượt phiên điều phối
+  chỉ kiểm repo, kiểm khoá thực thi rồi `create_session` sinh một phiên
+  Implementer sạch — nó không tự làm việc của vai.
+- Triệu chứng: `§8` khẳng định "KHÔNG có Routine nào đang hoạt động" và `§8.1`
+  kết luận "cách duy nhất còn lại là tạo Routine từ giao diện claude.ai". Cả hai
+  đã sai so với thực tế: Routine Auditor `trig_01Gt1weroASWGntFuTVZWCBK` do một
+  phiên agent tạo đã chạy thật lúc 2026-09-09 23:01:43Z và sinh ra phiên con
+  `session_01Gu2MPNGiCA7yjVY97hixbC`, phiên này mở các Issue #604–#608.
+- Nguyên nhân gốc: ba cơ chế đo ở `§8.1` đều cố làm cho **phiên do Routine sinh
+  ra** tự có repo + MCP, và đó là thứ không làm được. Cơ chế thứ tư tách đôi
+  việc — Routine chỉ đánh thức một phiên bền đã có sẵn repo + connector, phiên
+  đó `create_session` sinh phiên con cho vai. Cảnh báo "this trigger stores no
+  MCP connectors" chỉ nói về `create_new_session_on_fire=true`, nên đọc nó như
+  một kết luận chung là cái bẫy đã khiến bốn Routine bị xoá oan ngày 2026-09-09.
+- Cách sửa: thêm `§8.1a` ghi cơ chế thứ tư kèm bằng chứng đo được và hai ràng
+  buộc phải giữ; thêm `§8.4` đặc tả làn Implementer mỗi giờ (khoá thực thi hai
+  lớp — tag phiên + nhãn `state:in-progress`; nhánh `clean-code/issue-<số>`;
+  báo conflict thay vì sửa song song cùng file); thêm `§8.3` vốn **không tồn
+  tại** dù Routine Auditor đang trỏ tới nó khi đi lấy prompt của vai.
+- Ngoại lệ có chủ đích: làn này **tự squash-merge** PR của nó theo quyết định
+  của chủ sở hữu ngày 2026-09-10. Thi hành bằng nhãn `gate:waived` + comment
+  `GATE-WAIVED:` — cơ chế mà `scripts/workflow_guard.py` đã có sẵn, miễn đúng
+  hai mã `N2-GATE`/`N2-VERDICT` và giữ nguyên `N1-*`, `N3-*`, `WF-STATE`. Không
+  dùng `review:pass`: nhãn đó bịa ra một lần review chưa từng xảy ra, còn
+  `gate:waived` để lại dấu vết PR nào đi đường tắt và ai cho phép.
+- Đo được về lịch: phút của Routine chạy theo giờ bị server neo vào **thời điểm
+  gọi** `create_trigger`/`update_trigger`, không theo trường phút của cron. Tạo
+  lúc `03:06:31Z` với `0 0-23 * * *` → `next_run_at` `04:04:19Z`; `update_trigger`
+  lúc `03:06:56Z` với danh sách 24 giờ viết tường minh → `04:06:44Z`. Lấy đúng
+  phút `:00` phải gọi `update_trigger` trong đúng phút `:00` UTC.
+- Verification (2026-09-10): `python3 scripts/workflow_guard.py --selftest` →
+  **48/48 PASS**, exit 0. `./scripts/verify-project.sh --component layout` →
+  **FAIL, nhưng FAIL sẵn trên cây sạch** (`git stash` rồi chạy lại cho đúng một
+  thông điệp lỗi: `apps/web-api/cmd/mkddc-programming-e2e-seed/main.go: package
+  main nằm ngoài cmd/mkddc-web`) — lỗi có trước, không thuộc thay đổi này.
+  `python3 scripts/docs_iso_harness.py --expect` → **NOT_RUN**: bị chặn bởi
+  classifier quyền hạn của phiên, không phải lỗi tài liệu. Cổng C++/Go/FE
+  **NOT_RUN**: thay đổi chỉ gồm Markdown, không chạm mã nguồn của ba cổng đó.
+
+### Fixed — Ba test hợp đồng Go hết fail-open: `t.Skip` đổi thành `t.Fatalf` khi không thấy `contracts/` (2026-09-09)
+
+- Phạm vi: `apps/web-api/internal/modbusrtu/contract_sync_test.go`,
+  `apps/web-api/internal/app/contract_routes_test.go`,
+  `apps/web-api/internal/app/schedulecontract_test.go`. Không chạm file
+  production, không chạm `contracts/**`. Closes #590.
+- Triệu chứng: ba helper định vị file hợp đồng (`repoRoot`, `openAPIPath`,
+  `scheduleSchemaPath`) đi lên tối đa 8 cấp thư mục, và khi không thấy thì gọi
+  `t.Skip`. Hôm nay ba file hợp đồng đang tồn tại nên test vẫn chạy thật, nhưng
+  hành vi khi chúng biến mất là **fail-open**: cổng canh đồng bộ contract tự
+  tắt mà `go test ./...` vẫn báo `ok`.
+- Nguyên nhân gốc: nhánh "không tìm thấy" bị xử lý như *điều kiện môi trường
+  còn thiếu* (giống các skip hợp lệ cần `root`, cần `linux`, cần
+  `MKDDC_REAL_SCHEDULE_CONF`), trong khi thực chất nó là *lỗi cấu trúc repo* —
+  file hợp đồng luôn phải có mặt. Tái cấu trúc kiểu `PLAN-ARCH-RESTRUCT-002`
+  (`services/` → `apps/`) là đúng lớp sự kiện làm nó kích hoạt.
+- Cách sửa: cả ba nhánh đổi sang `t.Fatalf`, thông điệp nêu đường dẫn đang tìm,
+  số cấp đã đi lên và thư mục xuất phát để đọc log là biết sửa gì. Số cấp 8
+  tách thành hằng số đặt tên (`repoRootMaxParents`, `contractLookupMaxParents`)
+  thay cho số ma thuật lặp ba chỗ. Không đổi contract/API/schema, không đụng
+  logic parse (N6).
+- Verification (đo tại máy 2026-09-09, CI `NOT_RUN` theo #414):
+
+  | Phép đo | Trước | Sau |
+  |---|---|---|
+  | `go vet ./...` (trong `apps/web-api`) | exit 0 | exit 0 |
+  | `go test ./... -count=1` | — | exit 0 — 21 `ok`, 0 `FAIL`, 3 `no test files` |
+  | `--- SKIP` trong `./internal/modbusrtu/ ./internal/app/` (`-count=1 -v`) | 2 | 2 |
+  | `rg -c 't\.Skip' -g '*_test.go' apps/web-api` (tổng) | 33 | 30 |
+  | `rg -n 't\.Skip'` trên ba file sửa | 3 dòng | 0 dòng |
+
+- Hai `--- SKIP` còn lại là skip có điều kiện thật, cố ý giữ nguyên:
+  `TestMigrationAgainstRealBoardConfig` (cần `MKDDC_REAL_SCHEDULE_CONF` trỏ tới
+  bản sao `schedule.conf` của bo lab) và một subtest của
+  `TestTelemetryTraCuuTheoBusVaSlaveTrenMoiEndpoint`. Tổng `t.Skip` giảm đúng 3,
+  toàn bộ nằm trong ba file thuộc phạm vi — không "dọn" nhầm sang skip hợp lệ.
+- 11 test dùng ba helper đều `--- PASS`: `TestGoStructFieldsAreDeclaredInOpenAPI`,
+  `TestOpenAPIDescribesRetrySemanticsAfterDecision05`,
+  `TestOpenAPISeparatesRuntimeRoutesFromRoadmap`,
+  `TestQualityEnumMatchesAcrossContractLayers`,
+  `TestMaxPointsMatchesContractCapacity`, `TestPortAllowlistMatchesOpenAPIEnum`,
+  `TestControlChannelSchemaCoversEveryOperation`, `TestRouteTableMatchesOpenAPI`,
+  `TestRevBSurfacesStayOutOfRevAContract`,
+  `TestScheduleSchemaOneOfBranchesAreDisjoint`,
+  `TestScheduleSchemaAcceptsEveryValueType`.
+- Kiểm chứng fail-close thật (không chỉ đọc mã): tạm đổi tên `contracts/` rồi
+  chạy lại ba test đại diện — cả ba `--- FAIL` với đúng thông điệp mới, `exit 1`
+  thay vì `ok`; `contracts/` khôi phục nguyên vẹn, `git status` sạch.
+### Added — Rà soát Program Property / Inspector để chuẩn bị kế hoạch đại tu (2026-09-09)
+
+- Thêm record `REC-PGM02-PROP-INS-001`, đối chiếu riêng Property của Program và
+  `ContextInspector` với `d.md` G-12..G-21 và authority PGM-02 §9.
+- Kết luận source-backed: Inspector đạt nền context-sensitive nhưng chưa match
+  yêu cầu mở rộng; 0/10 mục G-12..G-21 đạt đầy đủ, còn duplication Property,
+  Task/Enable chưa nối, Interface chưa sửa được và Attributes/DDC Metadata chủ
+  yếu là placeholder.
+- Truy vết FE → web-api → Core/FW-SOM: tận dụng runtime Programs API hiện có;
+  không cần đổi Core/FW-SOM/STM32 cho Rev A; Priority 5 và watchdog độc lập không
+  được biến thành Program property có thể sửa nếu chưa có quyết định kiến trúc.
+- Đăng ký record trong chỉ mục review. Kiểm chứng HOST: Vitest phạm vi
+  Inspector/Draft adapter/workspace **6 file, 98 test PASS**; Chrome DevTools,
+  target và HIL `NOT RUN`, không claim.
+- Kiểm chứng lại trước commit sau khi đồng bộ `origin/main@e3211854` ngày
+  2026-09-10: C++ Release với Modbus/BACnet/HMI **1.482/1.482 PASS** (8 test
+  phụ thuộc môi trường bị skip); Go `vet` + `test -count=1` PASS; FE **245 file,
+  3.113 test PASS** + lint + build PASS; gói Programming **151,08 KiB gzip**
+  dưới ngân sách 165 KiB; harness tài liệu PASS trên 436 file. Cổng
+  `candidate_pin_check.py` vẫn FAIL do `CONTROL.md` đã drift sẵn trên chính
+  `origin/main`, không thuộc ba file của record này.
+### Changed — Không tạo được Routine từ phiên agent: ghi ba lần đo và chuyển sang giao diện Routines (2026-09-09)
+
+- Triệu chứng: mọi lượt Routine đều chết với thông báo *"session chưa được cấp
+  quyền truy cập GitHub cho repo Mekong-HCM/MK-DDC-24"*.
+- Đã thử đủ **ba cơ chế** mà tool cho phép, **cả ba hỏng**, mỗi cái có bằng chứng
+  riêng ghi tại `WF-CLEAN-001` §8.1:
+  1. `create_trigger(create_new_session_on_fire=true)` — phiên sinh ra không repo
+     **và không MCP tool** (`sources: []`, `mcp_servers: []`, `mcp_connections: []`).
+  2. Cơ chế 1 cộng bootstrap `add_repo` trong prompt — **không thể**, vì
+     `add_repo` chính là một MCP tool mà phiên đó không có. Đây là sai lầm thiết
+     kế: bảo phiên gọi một thứ không tồn tại trong chính nó.
+  3. `create_session(source_url=…)` + `create_trigger(persistent_session_id=…)` —
+     phiên bền **có** đủ repo + MCP và chạy tay thành công (gọi thật
+     `list_issues`, trả về 4 Issue `state:ready`), nhưng Routine bắn vào **không
+     đánh thức được nó**: sau khi trigger bắn 09:50:38Z, phiên giữ nguyên
+     `updated_at 09:40:40Z`, `used_tokens 76.931`, `status IDLE`,
+     `connection_status disconnected`, và trigger không ghi `last_run`.
+- Nguyên nhân gốc của việc mất thời gian: `create_trigger` **đã cảnh báo đúng kết
+  luận này ngay lần gọi đầu tiên** (*"the sessions it fires will run without
+  connector tools … ask the user to create it from the claude.ai routines UI"*),
+  nhưng cảnh báo đó bị bỏ qua. Ba lần đo tốn bốn phiên để xác nhận lại một câu
+  đã được nói sẵn.
+- Cách sửa: xoá cả năm trigger đã tạo (bốn Routine vai + một bind phiên bền);
+  `WF-CLEAN-001` §8 ghi rõ **không có Routine nào đang hoạt động** và ba vai chỉ
+  chạy khi kích hoạt tay; §8.1 thay bằng bảng ba cơ chế và bằng chứng từng cái;
+  §8.2 mới cung cấp prompt sẵn dùng để chủ sở hữu tạo Routine từ giao diện
+  Routines trên claude.ai, kèm yêu cầu chọn repo + connector GitHub lúc tạo và
+  **mỗi vai một phiên riêng** (điều kiện của N1/N2).
+- §6.1 sửa lại theo quyết định của chủ sở hữu: GitHub Actions **không bật lại** —
+  đây là quyết định thường trực, không phải sự cố chờ khắc phục. Bảng Verification
+  do Implementer tự đo là lớp kiểm chứng **duy nhất và lâu dài**; vai Reviewer vì
+  thế gánh trách nhiệm nặng hơn thiết kế ban đầu và phải tự chạy lại khi nghi ngờ
+  số đo. File workflow vẫn giữ trong repo vì chi phí bằng không, nhưng giữ chúng
+  **không** hàm ý sẽ bật lại.
+- §9 cập nhật: cổng CI không còn là "mục chờ mở khoá" mà là quyết định đã chốt;
+  thêm mục xoá nhánh remote bị chặn bởi `HTTP 403` (không có tool MCP xoá branch,
+  đã thử `git push --delete` và refspec rỗng từ nhiều phiên).
+- Kiểm chứng HOST: `docs_iso_harness.py --expect` PASS; `workflow_guard.py
+  --selftest` **48/48 PASS**. CI: `NOT_RUN` — không có runner (#414).
+
+
+### Added — Guard cảnh báo khi chuỗi `Implementer-Run` bị chép lại (2026-09-09)
+
+- Thi hành đề xuất của finding #598, do vai Reviewer mở sau khi phát hiện lỗi
+  chép định danh ở vòng sửa lại PR #594.
+- `extract_all_runs()` quét **mọi** dòng khai một trường, khoan dung với hậu tố
+  mô tả mà người viết thật sự dùng (`**Implementer-Run (vòng 2 — sửa lại sau
+  FAIL):** <url>`). `extract_field()` giữ nguyên hành vi chỉ trả dòng đầu, nên
+  N1/N2 không đổi một chút nào — đã có ca self-test khẳng định điều đó.
+- Guard in **ghi nhận** khi có từ hai dòng `Implementer-Run` mà giá trị trùng
+  nhau. Cố ý **không chặn merge**: không cổng nào bị ảnh hưởng (N1 đọc dòng đầu),
+  không có động cơ né cổng, và chặn vì một dòng chữ trong body sẽ tốn một vòng
+  FAIL đắt hơn thứ nó mua — đúng lập luận vai Reviewer đã đưa ra khi quyết định
+  không FAIL PR #594 vì lỗi này.
+- Kiểm chứng HOST: `--selftest` **48/48 PASS** (42 cũ + 6 ca mới: quét được dòng
+  có hậu tố mô tả, `extract_field` vẫn chỉ lấy dòng đầu, dòng trùng sinh cảnh
+  báo, cảnh báo không chặn, hai dòng khác nhau không cảnh báo, một dòng duy nhất
+  không cảnh báo). Chạy thật trên body PR #594: cảnh báo bắn đúng, `GUARD_EXIT=0`.
+  `docs_iso_harness --expect` PASS. CI: `NOT_RUN` (#414).
+
+### Fixed — Agent không biết lấy định danh phiên của chính mình, nên chép lại của phiên trước (2026-09-09)
+
+- Triệu chứng: ở vòng sửa lại PR #594, phiên rework thêm dòng
+  `Implementer-Run (vòng 2)` đúng theo `WF-CLEAN-001` §3.1 — nhưng ghi **session
+  id của phiên vòng 1** thay vì của chính nó. Body PR vì thế có hai dòng
+  `Implementer-Run` trùng khít, và dấu vết ai đã sửa ở vòng 2 biến mất.
+- Vì sao không cổng nào bắt: guard cố ý chỉ đọc dòng `Implementer-Run` **đầu
+  tiên** để kiểm N1 — và dòng đầu đúng, nên `--input` vẫn trả kết quả chính xác.
+  Một dòng thứ hai ghi sai không vi phạm bất kỳ mã lỗi nào. Lớp lỗi này chỉ mất
+  khi có người đọc, và đó chính là lý do phải viết nó thành luật thay vì tin vào
+  sự cẩn thận.
+- Nguyên nhân gốc: cả ba skill đều yêu cầu ghi `<vai>-Run` = "định danh phiên
+  này" nhưng **chưa bao giờ nói cách lấy nó**. Thiếu chỉ dẫn thì nguồn duy nhất
+  trong tầm mắt của agent là các giá trị đã có sẵn trong Issue/PR — tức đúng
+  những giá trị nó không được phép dùng.
+- Cách sửa: ba skill và `WF-CLEAN-001` §7 ghi rõ gọi `get_session` **bỏ trống
+  `session_id`** để lấy chính phiên đang chạy (`ccr.id`), cấm tuyệt đối chép lại
+  định danh có sẵn trong Issue/PR, và cho đường lùi `<vai>-YYYYMMDDThhmmZ` kèm
+  yêu cầu ghi rõ đó là định danh dự phòng. Sự cố PR #594 được dẫn thẳng trong
+  luật làm ví dụ, để người đọc sau biết đây là chuyện đã xảy ra chứ không phải
+  lo xa.
+- Kiểm chứng HOST: `python3 scripts/workflow_guard.py --selftest` **42/42 PASS**;
+  `python3 scripts/docs_iso_harness.py --expect` PASS. Đã xác nhận bằng ca thật
+  rằng `extract_field` vẫn đọc đúng dòng đầu, tức N1 không bị ảnh hưởng bởi lỗi
+  này. CI: `NOT_RUN` — không có runner (#414).
+
+
+### Fixed — Vòng sửa lại sau verdict FAIL: hai lỗi chặn/lọt và luật còn thiếu (2026-09-09)
+
+- Triệu chứng 1 — **deadlock**: Reviewer FAIL (gắn `review:changes-requested`),
+  Implementer sửa, Reviewer PASS (gắn `review:pass`) nhưng không ai gỡ nhãn cũ.
+  Guard kiểm `review:changes-requested` trước và chặn vô điều kiện, nên PR **không
+  bao giờ merge được** dù đã được duyệt. Thông điệp lỗi còn chỉ sai người: nó bảo
+  Implementer đi sửa code, trong khi việc cần làm là Reviewer gỡ một cái nhãn.
+- Triệu chứng 2 — **lọt**: guard lấy `passes[-1]` (verdict PASS gần nhất) thay vì
+  verdict mới nhất. Một PR có PASS ở vòng 1 rồi FAIL ở vòng 2 vẫn merge được nếu
+  nhãn `review:pass` còn sót — tức merge dựa trên một phán quyết đã bị thu hồi.
+  Đây là lỗ hổng nặng hơn deadlock: deadlock làm việc đứng lại, cái này cho mã
+  chưa được duyệt đi vào `main`.
+- Nguyên nhân gốc chung: `WF-CLEAN-001` định nghĩa đường đi khi review PASS,
+  nhưng **chưa từng định nghĩa vòng sửa lại**. Không có luật thì guard được viết
+  theo giả định "mỗi PR review đúng một lần", và cả hai lỗi trên là hệ quả trực
+  tiếp của giả định đó.
+- Cách sửa — guard: xét cặp nhãn trước (hai nhãn `review:*` cùng lúc ⇒ mã mới
+  `N2-LABEL`, nêu đích danh **Reviewer** là người phải gỡ); đọc **verdict mới
+  nhất** thay vì PASS gần nhất, và chặn khi verdict mới nhất là FAIL trong lúc
+  nhãn `review:pass` còn đó; thêm ghi nhận escalate khi PR đã nhận ≥ 3 verdict
+  FAIL. Cảnh báo ba vòng cố ý **không chặn** — chặn ở đó sẽ khoá luôn bản sửa
+  đang đúng.
+- Cách sửa — luật: `WF-CLEAN-001` §3.1 định nghĩa trọn vòng sửa lại — ai nhận lại
+  (Implementer lượt kế tiếp, ưu tiên trên mọi Issue mới), push lên **nhánh cũ**
+  chứ không mở PR mới, `Implementer-Run` **thêm dòng** chứ không ghi đè, Reviewer
+  gỡ nhãn cũ khi PASS, verdict cũ hết hiệu lực, trần ba vòng thì Manager xem lại
+  scope, PR bỏ quên quá 48 giờ thì Manager kéo về, và sai sau khi đã merge thì mở
+  finding mới chứ không sửa ngược vào Issue đã đóng.
+- Ba skill vai cập nhật theo: Reviewer phải gỡ nhãn đối lập trước khi gắn nhãn
+  mới và phải escalate ở vòng FAIL thứ ba; Implementer nhận `state:changes-requested`
+  thì đọc verdict FAIL gần nhất làm phạm vi, dùng lại nhánh cũ, đo lại toàn bộ
+  cổng; Manager thêm bước canh PR treo, PR ba vòng FAIL và Issue `in-progress`
+  không có PR.
+- Kiểm chứng HOST: `python3 scripts/workflow_guard.py --selftest` **42/42 PASS**
+  (34 ca cũ + 8 ca vòng sửa lại: hai nhãn mâu thuẫn ⇒ `N2-LABEL`, thông điệp chỉ
+  đúng người, verdict FAIL mới nhất phủ định PASS cũ, vòng sửa lại đúng cách thì
+  merge được, `state:changes-requested` hợp lệ khi có PR, đang chờ sửa thì chặn,
+  3 vòng FAIL sinh cảnh báo, cảnh báo không chặn merge). Cả hai lỗi đã được tái
+  hiện bằng ca thật **trước** khi sửa. `docs_iso_harness.py --expect` PASS.
+  CI: `NOT_RUN` — không có runner (#414).
+
+### Fixed — HMI `alarm_model` không còn nuốt im lặng khung alarm JSON hỏng (2026-09-09)
+
+- Phạm vi: `apps/hmi/screens/alarm_model.cpp`, `apps/hmi/screens/screen_base.hpp`,
+  `apps/hmi/tests/test_alarm_model.cpp`. Refs: #589.
+- Triệu chứng: `AlarmModel::on_alarm_json()` bọc toàn thân hàm trong
+  `try { … } catch (...) {}` với khối `catch` **rỗng hoàn toàn**. Mỗi khung alarm
+  push mà parser JSON không đọc được — payload cụt do đứt socket, byte rác trên
+  đường IPC, core đổi schema — biến mất không để lại dấu vết: không log, không
+  đếm, không cờ trạng thái. Màn HMI tại chỗ vẫn hiển thị danh sách alarm cũ, nên
+  người vận hành không phân biệt được "không có alarm mới" với "khung alarm đang
+  bị vứt". Trên đường alarm, mất khung là mất cảnh báo an toàn.
+- Nguyên nhân gốc: nhánh lỗi không có đường quan sát nào. Đây là chỗ **duy nhất**
+  trong `apps/hmi/` nuốt exception mà không xử lý — ba site còn lại
+  (`data/point_db.cpp:81`, `screens/network_model.cpp:143`,
+  `api/hmi_api_client.cpp:269`) đều log, trả `false`, hoặc đặt `reason_code`. Nên
+  đây là lệch chuẩn so với chính quy ước của module. Hàm còn một đường thoát im
+  lặng thứ hai: `if (code_s.empty()) return;` — khung parse được nhưng thiếu
+  `code` cũng bị bỏ mà không đếm.
+- Cách sửa: thêm `AlarmModel::drop_frame(const char* reason)` — tăng bộ đếm
+  `dropped_frames_` (`std::atomic<uint64_t>`, vì `on_alarm_json` chạy trên luồng
+  LVGL còn bộ đếm đọc từ nơi khác) và ghi một dòng `ERR   hmi.alarm_model dropped
+  frame: %s` ra stderr theo đúng định dạng `point_db.cpp:81`. `catch (...)` rỗng
+  được tách thành `catch (const std::exception& ex)` (ghi `ex.what()`) và
+  `catch (...)` (ghi `unknown exception`); cả hai đều gọi `drop_frame`. Đường
+  thoát thiếu `code` cũng gọi `drop_frame("missing \"code\" field")`. Phơi bộ
+  đếm ra ngoài bằng `uint64_t dropped_frame_count() const`.
+- Không đổi hành vi công khai: state machine `update_condition()`, payload alarm
+  và contract REST/IPC giữ nguyên; 6 test cũ trong `test_alarm_model.cpp` PASS mà
+  không phải sửa.
+- Kiểm chứng HOST (đo lại trong phiên này, không dẫn số cũ):
+  `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON
+  -DMKDDC_ENABLE_HMI=ON` exit **0**; `cmake --build build/fw --parallel` exit
+  **0**; `ctest -R AlarmModelTest` **9/9 PASS** (6 cũ + 3 mới); `ctest` toàn bộ
+  **1482/1482 PASS, 0 FAIL** (1 skip sẵn có: `RealtimeMemlock.MclFuture…`);
+  `grep -c 'catch (\.\.\.) {}' apps/hmi/screens/alarm_model.cpp` = **0**.
+  CI: `NOT_RUN` — không có runner (#414).
+- Ghi chú môi trường: egress policy của phiên chặn tải tarball/release HTTP từ
+  `github.com` (403), nên `FetchContent` theo `URL` của `googletest`,
+  `nlohmann_json` và `bacnet_stack_src` không chạy được. Đã lấy đúng tag đã ghim
+  bằng `git clone` (giao thức git qua proxy vẫn thông) rồi trỏ
+  `-DFETCHCONTENT_SOURCE_DIR_*`. Đây là chỗ dựng tại máy, **không** đổi file nào
+  trong repo.
+>>>>>>> origin/main
+
 ### Fixed — Routine không có `sources` sinh phiên rỗng; ghi bẫy vào WF-CLEAN-001 §8.1 (2026-09-09)
 
 - Triệu chứng: lượt Manager đầu tiên **không tạo được Issue nào**. Phiên báo
@@ -154,7 +827,120 @@
   GitHub khi nhánh này merge vào `main` (`labels-sync.yml` chạy theo path
   `.github/labels.yml`).
 
+### Added — Rebuild Programming Workspace G-01..G-30 (2026-09-09)
 
+- Dựng workspace PGM-02 bốn cột `POU Explorer | Editor | Thư viện nhanh |
+  Inspector`; ba panel phụ có tay kéo, giới hạn kích thước, thu gọn/mở lại và
+  ghi nhớ chiều rộng cục bộ. Workbench dưới đáy tiếp tục resize/collapse và giữ
+  đủ Vấn đề, Tìm kiếm, Tham chiếu, Watch và Trace.
+- Mở rộng Inspector theo ngữ cảnh thành sáu mục `Thông tin chung`, `Giao diện
+  IEC`, `Thực thi`, `Thuộc tính`, `Metadata DDC`, `Tham chiếu`; hiển thị
+  `VAR_INPUT/VAR_OUTPUT/VAR_IN_OUT`, kiểu trả về FUNCTION, Task/chu kỳ và quan
+  hệ Used by/Uses. Trường chưa có trong Draft v2 nói rõ `không xác định được`,
+  không suy tên Task, priority, watchdog, IEC attribute hay metadata DDC.
+- Bảng Interface đọc trực tiếp buffer ST đang sửa, nên đổi declaration
+  `Name/Direction/Type` phản ánh tức thời trước khi lưu; ba cột Init/Retain/Mô
+  tả giữ `không xác định được` khi Draft v2 chưa công bố dữ liệu.
+- Bổ sung đường nhảy từ Inspector tới cấu hình Task toàn Project; liên kết nội
+  bộ dùng router để không reload và không làm mất buffer chưa lưu.
+
+### Changed — Global Context Bar và tinh gọn editor Programming (2026-09-09)
+
+- Giải xung đột PR #601 với `main@8350c26d`: giữ `ProgramsTab` là facade của
+  refactor mới, đồng thời chuyển điều kiện Quick Library FBD của Task 8 sang
+  đúng owner `EditorPane`. FBD từ 1440 px tiếp tục mount thư viện ở cột thứ ba,
+  dưới 1440 px giữ luồng drawer; các sửa dark-mode, tab POU, status bar và
+  workbench đã merge trên `main` được giữ nguyên.
+- Kiểm chứng sau giải xung đột: test tập trung editor/FBD/tab/workbench **57/57
+  PASS**; toàn FE **245 tệp / 3.113 test PASS**, lint/UI strings và production
+  build PASS; bundle Programming **151,08/165 KiB gzip**. Playwright Google
+  Chrome cho FBD responsive và Quick Library đạt **2/2 PASS**; C++ Release bật
+  Modbus/BACnet/HMI **1.482/1.482 PASS, 8 skip môi trường**; Go `vet` và toàn
+  module test `-count=1` PASS; docs ISO harness **17/17 baseline, 5/5 support**
+  và `git diff --check` PASS. Chrome DevTools MCP đã cấu hình nhưng không được
+  nạp vào tool surface của phiên, nên không claim bằng chứng DevTools.
+- Gộp ba tầng header desktop thành một Global Context Bar 38 px gồm Project,
+  Revision Nháp, Revision đang vận hành, trạng thái bộ điều khiển và hành động
+  Lưu/Kiểm tra/Làm mới/Chi tiết. TopBar toàn hệ thống vẫn được giữ ở mobile để
+  không mất NavDrawer, cảnh báo và tài khoản.
+- Tách monolith `ProgramsTab` thành facade tương thích và các boundary
+  `ProgramsWorkspace`, `EditorPane`, `QuickLibraryPanel`, `EditorToolbar`;
+  shell Programming dùng component `GlobalContextBar` có tên kiến trúc rõ ràng.
+- Cập nhật gate hợp đồng bàn phím ST đọc source authority mới `EditorPane.tsx`
+  cùng facade `ProgramsTab.tsx`, tránh báo mất toàn bộ phím tắt sau refactor.
+- Bỏ badge trạng thái Program lặp khỏi hàng chính; ý định Enable và read-back
+  runtime từng Program chuyển vào `Chi tiết`, vẫn tách hai nguồn và giữ trạng
+  thái loading/error/unknown. Bỏ navigation Programs/Mapping/Execution trùng
+  trong workspace v2, giữ route legacy phía sau feature flag để rollback.
+- Sắp cây POU theo `Programs | Function Blocks | Functions`, thay các nút
+  `ST+/FN+/FB+` bằng menu `Mới`, gom đổi tên/nhân bản/xóa vào menu `…`; giữ
+  chuột phải và đường bàn phím. Thanh công cụ ST được nhóm theo lịch sử, chèn,
+  tìm kiếm, định dạng và Lưu/Kiểm tra; Lưu/Kiểm tra là hành động chính, trạng
+  thái Draft bẩn là pill gọn và EDIT/LIVE/SIMULATE giữ guard bỏ thay đổi.
+- Giảm chữ in hoa/đường viền ở các bề mặt chính, giữ semantic color kèm icon và
+  chữ; Thư viện nhanh không tự cướp tiêu điểm khi mount và chiếm đúng cột được
+  cấp thay vì áp chiều rộng cố định.
+
+### Fixed — Metadata POU legacy trong Inspector (2026-09-09)
+
+- Không còn báo lỗi đỏ hoặc khóa lưu Mô tả/Truy cập chỉ vì tên POU legacy có
+  khoảng trắng; validation tên IEC chỉ kích hoạt khi người dùng thực sự đổi
+  tên, còn backend vẫn là authority khi ghi.
+- Kiểm chứng HOST/no-board: toàn FE **245 tệp / 3.107 test PASS**; TypeScript,
+  lint/UI strings, toàn bộ Programming contract checks và production build
+  PASS. Bundle Programming **150,93/165 KiB gzip**, dư **14,07 KiB**.
+  Playwright trên Google Chrome thật: desktop **10/10 PASS** và mobile
+  **2/2 PASS** (1 case mutation desktop được skip có chủ đích), gồm hành trình
+  ST/FBD, layout 1920×1080, 1280×750, responsive FBD, 4 cột, keyboard/focus,
+  mode guard, workbench và chống tràn ngang 390 px. Đây là bằng chứng mock/host,
+  không phải Core thật, physical HIL, CI hay `RELEASE_READY`; Chrome DevTools
+  MCP không được nạp trong phiên nên không claim bằng chứng DevTools. Docs ISO
+  harness đạt **17/17 baseline, 5/5 support** và `git diff --check` PASS.
+- Cổng pre-commit và phép đo lại sau khi rebase `origin/main` chạy trên đúng
+  worktree: C++ Release bật đồng thời Modbus/BACnet/HMI đạt **1.482/1.482 PASS,
+  8 skip môi trường**; Go `vet` và
+  toàn module test `-count=1` PASS; FE giữ **245 tệp / 3.107 test PASS**, lint,
+  build mặc định và build Forlinx có cut-over v2 đều PASS. Lần Go đầu chạy
+  song song lúc linker đang thay binary compiler làm đỏ một test compiler;
+  chạy độc lập sau khi C++ kết thúc thì package compiler và toàn module PASS.
+  Batch Chrome chọn lọc đạt 9 PASS/8 skip có chủ đích nhưng journey dài timeout
+  một lần khi preview Auto Layout tự hủy; tái chạy độc lập và lặp song song ba
+  lần đều PASS (**4/4**), không tái hiện đổi quyền. Giữ lại phép đo đỏ này để
+  không biến một lần chạy lại thành bằng chứng che flake.
+
+### Changed — Triển khai Programming Workspace v2 lên Forlinx (2026-09-09)
+
+- Build static FE từ worktree cục bộ `main@14872059547caeff470475c39d92d35557cfee3b`
+  bằng `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:foxlinx`, vì profile
+  `build:foxlinx` chỉ bật `VITE_PROGRAMMING_REV_A` và nếu thiếu cờ cut-over thì
+  route vẫn quay về workspace cũ. Đây là artifact từ WIP chưa commit; provenance
+  binary trên board vẫn giữ bản sạch `8e00e4b1fa4b96d002d1e1df7f70dc82a700b468`,
+  không được diễn giải static FE này thành một release từ commit sạch.
+- Đưa gói static 16 tệp SHA-256
+  `10d628947c466136974d8871606c715641a4107a01503497345786927cdcea23` vào
+  `/opt/mkddc-web/dist` bằng staging và đổi tên nguyên tử; chỉ restart
+  `mkddc-web-pi`, không restart Core/I/O bus, không Commission và không ghi
+  output. Backup nguyên trạng trước phiên tại
+  `/var/backups/mkddc/predeploy-local-ui-20260909T092310Z`; backup artifact lần
+  đầu chưa bật cut-over tại
+  `/var/backups/mkddc/predeploy-programs-v2-20260909T092637Z`.
+- Checksum `index.html` trên host, board và URL công khai cùng bằng
+  `998e9a48236d86844bd7286f229a51c1565e51b2cf7d7ad6f573c63ac829404d`;
+  bundle `programming-u53EmmMr.js` trên host/public cùng bằng
+  `44ab127d0bc3aace66ea321c066dbf2857dfd8c279eb4d72f89a3f9efb1e5e90`
+  và trả HTTP 200.
+- Kiểm chứng TARGET tại `http://mekong-fac.ddns.net:8082`: health cách nhau 2 s
+  đạt **6/6 `ok`**; `mkddc-web-pi`, `mkddc-core`, `mkddc-iobus` đều `active`,
+  `NRestarts=0`, không có panic/fatal/segfault/failed mới trong nhật ký Web.
+  Một nhịp health `core=fault` thoáng qua xuất hiện khi bắn nhiều request đồng
+  thời ngay sau restart; Core PID 722 và socket vẫn sống, giao tiếp IPC tiếp tục
+  thành công, sau đó health tự phục hồi mà không restart Core.
+- Google Chrome thật trên chính URL board: hai case LIVE `T59-811` **2/2 PASS**;
+  smoke EDIT desktop 1440×900 thấy đủ bốn cột POU/Editor/Thư viện nhanh/Inspector,
+  mobile 390×844 không tràn ngang; route error, Console error, request fail và
+  response HTTP từ 400 đều bằng 0. Chrome DevTools MCP đã cấu hình nhưng không
+  được nạp vào tool surface của phiên, nên bằng chứng trình duyệt dùng Playwright
+  và không được ghi nhận là DevTools, physical HIL hay `RELEASE_READY`.
 ### Fixed — Cổng Go giữ đúng production tool khi dùng build root tương đối (2026-09-08)
 
 - Sửa `scripts/verify-project.sh --component go --build-root build/verify` báo

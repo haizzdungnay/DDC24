@@ -79,7 +79,7 @@ export interface StReconciliationInput {
    * mục không ghi biến thuộc khối `VAR` nào, và dựng đường phân tích thứ hai ở
    * đây là tạo ra đúng loại trôi mà module này sinh ra để bắt.
    */
-  interfaceVariables: readonly { name: string; type: string; direction: 'INPUT' | 'OUTPUT' }[]
+  interfaceVariables: readonly { name: string; type: string; direction: 'INPUT' | 'OUTPUT' | 'INOUT' }[]
 }
 
 function unverified(reason: string): StReconciliationResult {
@@ -106,7 +106,7 @@ export function reconcileStSymbols(input: StReconciliationInput): StReconciliati
   const compilerByName = new Map<string, ProgrammingCheckSymbol>(
     input.compilerSymbols.map((symbol) => [symbol.name.toUpperCase(), symbol]),
   )
-  const frontendByName = new Map<string, { name: string; type: string; direction: 'INPUT' | 'OUTPUT' }>(
+  const frontendByName = new Map<string, { name: string; type: string; direction: 'INPUT' | 'OUTPUT' | 'INOUT' }>(
     input.interfaceVariables.map((variable) => [variable.name.toUpperCase(), variable]),
   )
 

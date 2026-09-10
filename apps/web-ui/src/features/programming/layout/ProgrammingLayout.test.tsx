@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
@@ -100,17 +100,22 @@ describe('ProgrammingLayout — context sáu workspace', () => {
     })
 
     renderLayout()
-    expect(await screen.findByText('1/1 muốn bật')).toBeInTheDocument()
+    let context = await screen.findByRole('region', { name: 'Ngữ cảnh Lập trình hiện tại' })
+    fireEvent.click(within(context).getByRole('button', { name: 'Chi tiết' }))
+    expect(await screen.findByTestId('programming-context-program-details')).toHaveTextContent('1/1 muốn bật')
+    fireEvent.click(within(context).getByRole('button', { name: 'Chi tiết' }))
     fireEvent.click(screen.getByRole('button', { name: 'Project 2' }))
 
     expect(await screen.findByText('Project Two')).toBeInTheDocument()
     expect(screen.queryByText('1/1 muốn bật')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Đang tải…').length).toBeGreaterThan(0)
+    context = screen.getByRole('region', { name: 'Ngữ cảnh Lập trình hiện tại' })
+    fireEvent.click(within(context).getByRole('button', { name: 'Chi tiết' }))
+    expect(screen.getByTestId('programming-context-program-details')).toHaveTextContent('Đang tải…')
 
     resolveProject2({ items: [
       { programId: 'program-2', desiredEnabled: false, generation: 1, runtimeState: 'DISABLED', updatedBy: 'admin', updatedAtUtcMs: 2 }
     ] })
-    await waitFor(() => expect(screen.getByText('0/1 muốn bật')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('programming-context-program-details')).toHaveTextContent('0/1 muốn bật'))
   })
 
   /* `T59-802`: canonical route mang Project trong query. Khi id đó KHÔNG có

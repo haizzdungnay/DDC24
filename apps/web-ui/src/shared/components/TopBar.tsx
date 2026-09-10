@@ -22,7 +22,7 @@ import { HealthChip, SeverityBadge, healthReasonLabel } from './pa3/StateAtoms'
  *
  * KHÔNG đặt badge CPU/RAM/process ở đây (§2.2 nói thẳng). Chúng ở Diagnostics.
  */
-export function TopBar({ connectionState, alarmCount, unackedCount = 0, annunciating = false, currentUser, onOpenNav }: { connectionState: ConnectionState; alarmCount: number; unackedCount?: number; annunciating?: boolean; currentUser: CurrentUser | null; onOpenNav?: () => void }) {
+export function TopBar({ connectionState, alarmCount, unackedCount = 0, annunciating = false, currentUser, onOpenNav, className }: { connectionState: ConnectionState; alarmCount: number; unackedCount?: number; annunciating?: boolean; currentUser: CurrentUser | null; onOpenNav?: () => void; className?: string }) {
   const [now, setNow] = useState(new Date())
   const location = useLocation()
   const { logout } = useAuth()
@@ -42,7 +42,7 @@ export function TopBar({ connectionState, alarmCount, unackedCount = 0, annuncia
   const snapshot = overview?.data ?? null
   const deviceName = snapshot?.controller.deviceName?.trim()
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b border-[var(--c-border)] bg-[var(--c-surface)] px-3 sm:gap-4 sm:px-5">
+    <header data-testid="app-top-bar" className={cn('sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b border-[var(--c-border)] bg-[var(--c-surface)] px-3 sm:gap-4 sm:px-5', className)}>
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         {/* WEB-UX-010: dưới 1024px `NavRail` bị ẩn (`hidden … lg:flex`) và trước
             đây không có gì thay thế — mở web trên điện thoại là mất sạch điều

@@ -7,10 +7,10 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "56eb241aa16f0868436f5c80659f3f4fe207fa0852907a05a0a15aa90a764588",
+      "sha256": "e966fb6f2022e037610eeee024db7e1cb758a4edf00927df1c76a6c21a4d21b8",
       "major": 1,
-      "version": "1.37.0",
-      "operationCount": 43
+      "version": "1.40.0",
+      "operationCount": 45
     },
     {
       "name": "ipc",
@@ -55,11 +55,11 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "d4c25c227ef3eecadd852d0ddb20d8b4f33b2f4cc1c002809094a3fd1b27abfe",
+      "sha256": "555c28877e22f82997d044db6670222f1e03058dd3a92a4b11d8f3f8b2896bdd",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "b8eb989964391d5a4d503a2306e3d4546fcb250c7260b30173172f098ca82a09",
+      "manifestSha256": "6266d456afa84a09698a00e8653e63438b2322185c5096f7498151b2782692b8",
       "major": 1,
-      "version": "1.10.0",
+      "version": "1.11.0",
       "publicErrorCount": 38,
       "componentDetailCount": 158
     },
@@ -186,5 +186,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh"
 }

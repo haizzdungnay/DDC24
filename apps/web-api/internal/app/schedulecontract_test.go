@@ -30,18 +30,23 @@ import (
 
 func scheduleSchemaPath(t *testing.T) string {
 	t.Helper()
-	dir, err := os.Getwd()
+	start, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 8; i++ {
+	dir := start
+	for i := 0; i < contractLookupMaxParents; i++ {
 		p := filepath.Join(dir, "contracts", "config", "schedule_v3_1.schema.json")
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
 		dir = filepath.Dir(dir)
 	}
-	t.Skip("không tìm thấy contracts/config/ — bỏ qua guard hợp đồng lịch")
+	// Fail-close, cố tình KHÔNG bỏ qua test: xem ghi chú cùng nội dung ở
+	// repoRoot trong internal/modbusrtu/contract_sync_test.go.
+	t.Fatalf("không tìm thấy contracts/config/schedule_v3_1.schema.json sau khi đi lên %d cấp từ %q — "+
+		"kiểm tra contracts/ có bị đổi tên/di chuyển không, hoặc nâng contractLookupMaxParents nếu cây thư mục sâu thêm",
+		contractLookupMaxParents, start)
 	return ""
 }
 

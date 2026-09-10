@@ -14,8 +14,8 @@ BA CHIỀU KIỂM
 2. **Không đụng độ nội bộ** — hai lệnh cùng phím trong cùng ngữ cảnh là một
    hợp đồng tự mâu thuẫn; chỉ một trong hai chạy được, và không ai biết cái nào.
 3. **Đối chiếu với CODE THẬT** — mọi tổ hợp phím hợp đồng khai phải xuất hiện
-   trong `ProgramsTab.tsx`. Đây là chiều quan trọng nhất: một hợp đồng không đối
-   chiếu với code chỉ là một tài liệu, và tài liệu thì trôi.
+   trong source authority của editor. Đây là chiều quan trọng nhất: một hợp
+   đồng không đối chiếu với code chỉ là một tài liệu, và tài liệu thì trôi.
 
 `--self-test` tiêm hợp đồng sai một cách đã biết và đòi validator phải nổ đỏ.
 Một cổng chưa bao giờ được thấy nổ thì không ai biết nó còn nổ hay không.
@@ -41,7 +41,12 @@ if hasattr(sys.stderr, "reconfigure"):
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "contracts/programming/st_keyboard_commands_v1.json"
 SCHEMA_PATH = ROOT / "contracts/programming/st_keyboard_commands_v1.schema.json"
-SOURCE_PATH = ROOT / "apps/web-ui/src/features/programming/design/editor/ProgramsTab.tsx"
+SOURCE_PATHS = (
+    ROOT / "apps/web-ui/src/features/programming/design/editor/EditorPane.tsx",
+    # Facade vẫn nằm trong tập kiểm để một lần đổi ownership sau này không thể
+    # âm thầm làm validator đọc nhầm một tệp không còn được route dùng.
+    ROOT / "apps/web-ui/src/features/programming/design/editor/ProgramsTab.tsx",
+)
 
 
 def read_json(path: Path) -> Any:
@@ -122,7 +127,7 @@ def validate(contract: Any, schema: Any, source: str) -> list[str]:
         if not key_appears_in_source(command["key"], source):
             errors.append(
                 f"lệnh '{cid}' khai phím '{command['key']}' nhưng không tìm thấy đường xử lý nào "
-                f"trong {SOURCE_PATH.name}. Hợp đồng đang mô tả một phím không tồn tại."
+                "trong source authority của editor. Hợp đồng đang mô tả một phím không tồn tại."
             )
 
     return errors
@@ -168,7 +173,7 @@ def main() -> int:
     try:
         contract = read_json(CONTRACT_PATH)
         schema = read_json(SCHEMA_PATH)
-        source = SOURCE_PATH.read_text(encoding="utf-8")
+        source = "\n".join(path.read_text(encoding="utf-8") for path in SOURCE_PATHS)
         errors = validate(contract, schema, source)
         if errors:
             for error in errors:
