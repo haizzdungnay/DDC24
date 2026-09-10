@@ -8,6 +8,25 @@
 
 ## [Unreleased]
 
+### Fixed — Vòng reconcile nền của `RuntimeIntentService` không còn vứt lỗi câm (2026-09-10)
+
+- Phạm vi: `apps/web-api/internal/programming/application/runtime_intent.go`, `runtime_intent_test.go`. Issue #591.
+- Triệu chứng: web-api khởi động lại xong, chương trình hiện "đã bật" trên UI nhưng runtime không chạy, và log web-api hoàn toàn sạch — chẩn đoán phải bắt đầu từ số không.
+- Nguyên nhân gốc: goroutine nền trong `Start()` gọi `_, _ = s.ReconcileOnce(ctx)` mỗi 2 giây. `ReconcileOnce` là đường DUY NHẤT đưa intent bền vững về đúng trạng thái trên Core sau restart; khi nó hỏng lâu dài (Core IPC chết, store lỗi) thì intent không bao giờ hội tụ, và cả số bản ghi lẫn `error` đều bị vứt nên không chỗ nào trong hệ thống nói ra điều đó.
+- Cách sửa:
+  - Tách thân vòng lặp thành `reconcileTick`, ghi lỗi theo đúng quy ước worker sẵn có trong cùng package (`checks.go:520`): `log.Printf("WARN programming_runtime_intent_worker err=%v streak=%d", ...)`.
+  - Chống spam bằng bậc lùi luỹ thừa 2 (tick lỗi thứ 1, 2, 4, 8, 16...): vòng chạy mỗi 2 giây, log mỗi tick sẽ là ~43200 dòng/ngày cho MỘT sự cố đứng yên. Lỗi đổi dạng thì đếm lại chuỗi từ 1 để tin mới không bị nuốt trong quãng im lặng.
+  - Phơi trạng thái đọc được: `LastReconcileError()` và `ConsecutiveReconcileFailures()`, khoá bằng `healthMu` riêng (không dùng chung `intentMu` vốn bị `ReconcileOnce` giữ suốt vòng đẩy IPC).
+  - Lỗi do context bị huỷ khi `Close()` không tính là sự cố — cùng điều kiện `ctx.Err() == nil` mà `checks.go` đang dùng.
+  - Không đổi contract/API/schema: không thêm/sửa route HTTP, không đổi payload, giữ nguyên `intentReconcileInterval` và ngữ nghĩa `Start()`/`Close()`.
+- Kiểm chứng (đo tại máy 2026-09-10):
+  - `go vet ./...` — exit 0.
+  - `go test ./... -count=1` — 21 package `ok`, 0 FAIL.
+  - `go test ./internal/programming/application/ -count=1 -race -run 'RuntimeIntent|Reconcile|...'` — 18/18 PASS, gồm 9 test cũ của `runtime_intent_test.go` không phải sửa và 5 test mới.
+  - `rg -n '_, _ = s\.ReconcileOnce' .../runtime_intent.go` — 0 dòng.
+  - `python3 scripts/docs_iso_harness.py --expect` — PASS.
+  - CI `Build & Test` / `Security Scan`: NOT_RUN (#414 — tổ chức không cấp runner).
+
 ### Added — Cổng đồng bộ ba hằng số SHM chép tay trong Go với `contracts/shm/mkddc_shm.h` (2026-09-10)
 
 - Phạm vi: `apps/web-api/internal/app/shm_contract_sync_test.go` (file mới),

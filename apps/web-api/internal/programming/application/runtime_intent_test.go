@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -329,4 +331,168 @@ func TestRecordRuntimeStateRejectsUnknownState(t *testing.T) {
 		"RUNNING", time.Now()); !errors.Is(err, programmingstore.ErrNotFound) {
 		t.Fatalf("err=%v", err)
 	}
+}
+
+// `ISSUE-591` — vòng reconcile nền từng gọi `_, _ = s.ReconcileOnce(ctx)`: cả số
+// bản ghi lẫn lỗi đều bị vứt. Nhóm test dưới đây canh hợp đồng thay thế: lỗi
+// được ghi lại, được log theo bậc lùi, và biến mất khi vòng lành lại.
+
+// Một sự cố đứng yên (Core chết, store lỗi) lặp lại mỗi 2 giây. Log mỗi tick sẽ
+// chôn mất mọi thứ khác trong log; im hẳn sau dòng đầu thì sự cố kéo dài không
+// còn ai nhắc. Luật là bậc lùi luỹ thừa 2 — test này đếm dòng log thật qua 16
+// tick liên tiếp cùng một lỗi.
+func TestReconcileWorkerBacksOffLogsForRepeatingError(t *testing.T) {
+	service, _, _ := openIntentService(t)
+	stuck := errors.New("store không đọc được")
+	service.reconcileOnce = func(context.Context) (int, error) { return 0, stuck }
+
+	var lines []string
+	service.logf = func(format string, args ...any) {
+		lines = append(lines, fmt.Sprintf(format, args...))
+	}
+
+	const ticks = 16
+	for i := 0; i < ticks; i++ {
+		if _, err := service.reconcileTick(context.Background()); !errors.Is(err, stuck) {
+			t.Fatalf("tick %d trả err=%v, phải là lỗi đã tiêm", i, err)
+		}
+	}
+
+	// 16 tick cùng một lỗi ⇒ log ở tick thứ 1, 2, 4, 8, 16 = 5 dòng, KHÔNG phải 16.
+	if len(lines) != 5 {
+		t.Fatalf("số dòng log=%d (%v), phải là 5 — log không được tăng tuyến tính theo tick", len(lines), lines)
+	}
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "WARN programming_runtime_intent_worker err=") {
+			t.Fatalf("dòng log sai định dạng worker (quy ước checks.go:520): %q", line)
+		}
+	}
+	if !strings.Contains(lines[len(lines)-1], "streak=16") {
+		t.Fatalf("dòng cuối=%q, phải nói rõ đã hỏng liên tiếp 16 lần", lines[len(lines)-1])
+	}
+	if service.ConsecutiveReconcileFailures() != ticks {
+		t.Fatalf("chuỗi lỗi=%d, phải là %d", service.ConsecutiveReconcileFailures(), ticks)
+	}
+	if got := service.LastReconcileError(); !errors.Is(got, stuck) {
+		t.Fatalf("LastReconcileError=%v, phải giữ lỗi vừa xảy ra", got)
+	}
+}
+
+// Lỗi ĐỔI DẠNG là tin mới: nó phải được nói ra ngay ở tick kế tiếp, không bị
+// nuốt vì lỗi cũ đang trong quãng im lặng của bậc lùi.
+func TestReconcileWorkerLogsImmediatelyWhenErrorChanges(t *testing.T) {
+	service, _, _ := openIntentService(t)
+	current := errors.New("core không sẵn sàng")
+	service.reconcileOnce = func(context.Context) (int, error) { return 0, current }
+
+	lines := 0
+	service.logf = func(string, ...any) { lines++ }
+
+	// 3 tick cùng lỗi ⇒ log ở tick 1 và 2, im ở tick 3.
+	for i := 0; i < 3; i++ {
+		service.reconcileTick(context.Background())
+	}
+	if lines != 2 {
+		t.Fatalf("sau 3 tick cùng lỗi, số dòng log=%d, phải là 2", lines)
+	}
+
+	current = errors.New("store trả lỗi khác hẳn")
+	service.reconcileTick(context.Background())
+	if lines != 3 {
+		t.Fatalf("lỗi đổi dạng phải log ngay: số dòng log=%d, phải là 3", lines)
+	}
+	if service.ConsecutiveReconcileFailures() != 1 {
+		t.Fatalf("lỗi đổi dạng phải đếm lại chuỗi từ 1, đang là %d",
+			service.ConsecutiveReconcileFailures())
+	}
+}
+
+// Vòng lành lại phải xoá sạch trạng thái lỗi: giữ lại "lỗi gần nhất" sau khi hệ
+// thống đã hồi phục là cách nhanh nhất để người vận hành đi chữa một sự cố đã hết.
+func TestSuccessfulReconcileClearsFailureState(t *testing.T) {
+	service, _, _ := openIntentService(t)
+	failing := true
+	service.reconcileOnce = func(context.Context) (int, error) {
+		if failing {
+			return 0, errors.New("core không sẵn sàng")
+		}
+		return 2, nil
+	}
+	var lines []string
+	service.logf = func(format string, args ...any) {
+		lines = append(lines, fmt.Sprintf(format, args...))
+	}
+
+	for i := 0; i < 3; i++ {
+		service.reconcileTick(context.Background())
+	}
+	if service.ConsecutiveReconcileFailures() == 0 || service.LastReconcileError() == nil {
+		t.Fatal("chuỗi lỗi phải được ghi lại trước khi kiểm nhánh hồi phục")
+	}
+
+	failing = false
+	replayed, err := service.reconcileTick(context.Background())
+	if err != nil || replayed != 2 {
+		t.Fatalf("tick thành công trả (%d, %v)", replayed, err)
+	}
+	if service.ConsecutiveReconcileFailures() != 0 {
+		t.Fatalf("chuỗi lỗi=%d sau khi lành, phải là 0", service.ConsecutiveReconcileFailures())
+	}
+	if got := service.LastReconcileError(); got != nil {
+		t.Fatalf("LastReconcileError=%v sau khi lành, phải là nil", got)
+	}
+	last := lines[len(lines)-1]
+	if !strings.HasPrefix(last, "INFO programming_runtime_intent_worker recovered_after=3") {
+		t.Fatalf("dòng hồi phục=%q, phải nói rõ vừa lành sau 3 vòng lỗi", last)
+	}
+}
+
+// `Close()` huỷ context rồi mới `wg.Wait()`, nên vòng đang chạy dở gần như luôn
+// trả về một lỗi context. Ghi nó vào trạng thái sức khoẻ sẽ để lại "lỗi gần
+// nhất" là một lỗi tắt máy trên MỌI lần shutdown sạch.
+func TestReconcileTickIgnoresShutdownContextError(t *testing.T) {
+	service, _, _ := openIntentService(t)
+	service.reconcileOnce = func(ctx context.Context) (int, error) { return 0, ctx.Err() }
+	lines := 0
+	service.logf = func(string, ...any) { lines++ }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	service.reconcileTick(ctx)
+
+	if lines != 0 {
+		t.Fatalf("tắt máy không được log như sự cố: số dòng log=%d", lines)
+	}
+	if service.LastReconcileError() != nil || service.ConsecutiveReconcileFailures() != 0 {
+		t.Fatalf("tắt máy không được ghi vào trạng thái sức khoẻ: err=%v streak=%d",
+			service.LastReconcileError(), service.ConsecutiveReconcileFailures())
+	}
+}
+
+// Trạng thái sức khoẻ được goroutine nền ghi và caller ngoài đọc. Test này chạy
+// dưới `-race` để chứng minh cặp đọc/ghi đó có khoá đúng.
+func TestReconcileHealthIsSafeForConcurrentReads(t *testing.T) {
+	service, _, _ := openIntentService(t)
+	service.reconcileOnce = func(context.Context) (int, error) {
+		return 0, errors.New("core không sẵn sàng")
+	}
+	service.logf = func(string, ...any) {}
+
+	if err := service.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(service.Close)
+
+	var wg sync.WaitGroup
+	for reader := 0; reader < 4; reader++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				_ = service.LastReconcileError()
+				_ = service.ConsecutiveReconcileFailures()
+			}
+		}()
+	}
+	wg.Wait()
 }
