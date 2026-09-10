@@ -8,6 +8,128 @@
 
 ## [Unreleased]
 
+### Added — Plan triển khai BACnet Rev A từ tài liệu tới source code và E2E trên bo Forlinx (2026-09-10)
+
+- Phạm vi: `docs/03_implementation/BACNET_DOC_TO_CODE_E2E_PLAN.md` (file mới),
+  liên kết chéo trong `BACNET_REV_A_ASBUILT_REVIEW.md`,
+  `BACNET_REV_A_IMPLEMENTATION_PLAN.md`, `BACNET_OPEN_DECISIONS.md`, `CHANGELOG.md`.
+  **Chỉ tài liệu — PROPOSED, chờ review.** Review OK thì mới tạo Issue theo từng task;
+  chưa dòng mã sản phẩm nào được sửa.
+- Bối cảnh: `PLAN-BACNET-REVA-001` trả lời "sửa gì, thứ tự nào" ở mức Work Package.
+  Plan mới trả lời "làm cụ thể ra sao, chạm file nào, verify trên bo Forlinx bằng cách
+  nào" — chia 40 task/7 Wave, mỗi task giao được cho một người trong một lần ngồi và
+  tương ứng đúng một Issue.
+- Ràng buộc target đã khảo sát từ hồ sơ deploy thật, không suy đoán: bo production là
+  Forlinx OK1126B-S (RV1126B, Cortex-A53), chạy **Buildroot 2024.02 không có
+  apt/dpkg/pip** (`FX-F05`), nên bacnet-stack **bắt buộc link tĩnh** và cross-compile
+  là đường duy nhất. Hai bẫy đã biết được đưa thẳng vào runbook: `gtest_discover_tests`
+  chạy binary aarch64 trên host (`-DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST`)
+  và trần `GLIBCXX_3.4.30` của bo (`-static-libstdc++ -static-libgcc`). Script deploy
+  hiện có `tools/deploy/deploy_board.sh` viết cho Orange Pi (`sudo -n`, `/home/orangepi`)
+  nên **không dùng được** cho Forlinx — tách thành `T-BAC-060`.
+- Ba quyết định thiết kế đáng review nhất:
+  (1) **Thêm tầng bằng chứng `LOOPBACK`** (`T-BAC-013`) — hiện có một hố giữa `HOST`
+  (không chạm mạng) và `TARGET` (cần bo). Chính hố đó là lý do 67 test BACnet PASS mà
+  không ai phát hiện `SERVICE_CONFIRMED_SUBSCRIBE_COV` chưa được đăng ký. Tầng loopback
+  bắt đúng loại lỗi này trên CI trong vài giây, không cần bo.
+  (2) **E2E chia hai tầng** — tầng `TARGET-FAKE` (T1/T3/T5/T7/T8/T9 + T6a) chạy được
+  ngay với `mkddc-fakemcu`, chứng minh chuỗi BMS→BACnet→iobus→core→arbitration→plc_shm
+  trên aarch64/Buildroot; tầng `TARGET-HIL` (T2/T4/T6b) cần MCU thật + tín hiệu + thiết
+  bị đo. Ranh giới ghi bắt buộc vào `board.txt` của evidence qua trường `MCU_MODE` —
+  thiếu trường này chính là cách hồ sơ pre-test 2026-07-01 trở thành bằng chứng gây
+  hiểu lầm.
+  (3) **Tách `T-BAC-063` (bring-up MCU STM32 thật) chạy song song từ ngày đầu** thay vì
+  xếp vào Wave cuối. Bo Forlinx **chưa bao giờ** chạy MCU thật — mọi evidence hiện có
+  đều `MCU_MODE=FAKE` và `T59-703` đã bị defer đúng vì lý do này. Đây là dependency dự
+  án đã tồn tại, không phải rủi ro riêng của BACnet; xếp nó vào W6 sẽ khiến toàn bộ
+  phần code xong xuôi nằm chờ một hạng mục phần cứng có lead time không đoán trước.
+- Ba cổng kiểm bắt buộc trước khi copy binary lên bo, tự động hoá trong `T-BAC-011`:
+  trần GLIBCXX ≤ 3.4.30; không phát sinh `.so` mới mà bo không có; và **có symbol
+  `bip_init` trong binary**. Cổng thứ ba là bài học trực tiếp từ review as-built — thiếu
+  nó thì một bản dựng `BACNET=OFF` vẫn deploy trót lọt và mọi thứ trông như đang chạy.
+- Luật thi hành bổ sung: không task nào sau `T-BAC-030` được đánh `DONE` trước khi
+  `T-BAC-062` có evidence `TARGET-FAKE`, vì mọi task sau đều đứng trên giả định "dữ liệu
+  là thật". Task `GATED` không được bắt đầu tới khi `OD-BAC-*` tương ứng được ký. Thiếu
+  bo hay thiếu MCU là `EVIDENCE_QUEUE`, không phải `BLOCKED` — không dừng các Wave code
+  còn làm được.
+- Verification: `python3 scripts/docs_iso_harness.py` → link missing 0 (quét 441 file
+  .md), anchor missing 0, trailing whitespace 0, code fence lệch 0, duplicate doc ID 0.
+- Refs: `PLAN-BACNET-D2C-001`, `REV-BACNET-ASBUILT-001`, `PLAN-BACNET-REVA-001`,
+  `OD-BAC-SET-001`, `HW-FOXLINX-DEPLOY-001`, `HW-FOXLINX-SPEC-001`, `FX-F05`, `T59-703`.
+
+### Added — Rà soát as-built BACnet Rev A: kế hoạch đóng sản phẩm và tích hợp dữ liệu thật với BMS (2026-09-10)
+
+- Phạm vi: `docs/05_verification/BACNET_REV_A_ASBUILT_REVIEW.md` (file mới),
+  `docs/03_implementation/BACNET_REV_A_IMPLEMENTATION_PLAN.md` (file mới),
+  `docs/00_governance/BACNET_OPEN_DECISIONS.md` (file mới), `CHANGELOG.md`.
+  **Chỉ tài liệu — không chạm một dòng mã sản phẩm nào.** Đây là phiên review theo
+  thứ tự SOURCE REVIEW → PRODUCT DECISION → GAP ANALYSIS → TARGET ARCHITECTURE →
+  IMPLEMENTATION PLAN → ISSUE BREAKDOWN → V&V/HIL GATE; implement chỉ bắt đầu sau
+  khi Owner duyệt.
+- Triệu chứng: mọi tín hiệu quan sát được đều xanh — bộ test host 1440/1440 PASS,
+  hồ sơ BACnet pre-test 14/14 PASS, đèn `bmsLink` trên trang mạng báo `online` —
+  trong khi BMS ngoài **không** lấy được dữ liệu thật của phần lớn object.
+- Nguyên nhân gốc: chuỗi dữ liệu đứt ở lớp `iobus ↔ bacnet-stack`, không phải ở
+  phần cứng hay SHM. Ba đứt gãy chồng nhau, mỗi cái tự nó đã đủ chặn Rev A:
+  (1) `bacnet_server.cpp:228-256` — `sync_stack_inputs()` chỉ đẩy AI và BI, nên
+  64/88 object đăng ký với bacnet-stack không bao giờ được nạp dữ liệu: AV×32,
+  BV×16, MSV×8 trả `0.0` vĩnh viễn, còn AO×4/BO×4 trả giá trị **BACnet đã ghi**
+  chứ không phải giá trị core thực áp — khi core override vì safe-state hay
+  interlock thì BMS vẫn thấy lệnh của mình có hiệu lực, là sai lệch liên quan
+  an toàn;
+  (2) `bacnet_server.cpp:116-127` — không đăng ký `SERVICE_CONFIRMED_SUBSCRIBE_COV`,
+  nên BMS gửi SubscribeCOV bị `handler_unrecognized_service` trả Reject; và
+  `:286-293` gửi COV notification bằng `fprintf` ra stderr thay vì gói tin. COV là
+  capability MUST của Rev A và hiện **không tồn tại trên mạng**;
+  (3) `bacnet_server.cpp:44-60` và `:141-152` — callback ghi gọi thẳng `core_fn_`,
+  bỏ qua `BacnetObjects::write_ao()`, khiến toàn bộ `bacnet_priority.cpp` thành mã
+  chết cùng với kiểm biên `min_pv`/`max_pv` và quy đổi `ao_engineering_to_physical()`.
+- Vì sao không cổng nào bắt được: `apps/iobus/CMakeLists.txt:60-68` biên dịch
+  `BACNET_SOURCES` vô điều kiện và bọc mọi lời gọi bacnet-stack trong
+  `#ifdef MKDDC_ENABLE_BACNET`, nên 67 test mang tên BACnet vẫn PASS với
+  `MKDDC_ENABLE_BACNET=OFF` — không test nào gửi hay nhận một gói UDP. Bộ test đang
+  kiểm các hàm mà sản phẩm không gọi (`BacnetObjects.EngineeringPercentConvertsToPhysicalCurrent` là ví dụ rõ nhất: PASS, nhưng hàm nó kiểm nằm trên đường chết).
+  Hồ sơ pre-test cũng không cứu được: `bacnet.conf` ghi `bind_interface: docker0`,
+  `summary.txt` ghi `Target: 172.17.0.1` — chạy trên container máy build, không phải
+  board; và bài T5 "WriteProperty AV1 readback PASS" chỉ chứng minh bacnet-stack nhớ
+  được giá trị vừa ghi vào chính nó, vì AV không có callback nào tới core.
+- Các finding còn lại đã xác minh bằng mã nguồn: Alarm/Event là placeholder ba tầng
+  (`bacnet_alarm.cpp:93-101` tự ghi "Placeholder", `targets_` rỗng vì `add_target()`
+  không caller, `sockfd_ = -1` vì `open()` không caller); Schedule/Calendar là
+  TEST-ONLY (`BacnetScheduleObjects` không có caller sản phẩm, không object nào
+  register vào stack); Trend Log không có dòng mã nào trong repo; BBMD/Foreign Device
+  là CONFIG-ONLY chết (4 field trong `bacnet_config.hpp:19-22`, 0 field được parse);
+  `bacnet_server.cpp:219` tạo 8 BI vô điều kiện, trái ADR-010/`PRODUCT.md:84`/
+  `mkddc_shm.h:68` vốn nói base SKU không có isolated-DI; `networkapi.go:300-307`
+  map `bip_init()` thành công thẳng thành `bmsLink=online`.
+- Kết quả: **`BACNET_REV_A = NOT READY`** — 0/15 điều kiện Definition of Done đạt
+  trọn vẹn. PICS có 9/14 BIBB khai sai và phải sửa xuống đúng thực trạng, theo đúng
+  nguyên tắc mà chính PICS §4 đã viết ngày 2026-08-07 ("khai sai nguy hiểm hơn khai
+  thiếu"). Kế hoạch sửa chia 10 Work Package và 18 Issue theo dependency, đường găng
+  `WP-01 → 02 → 03 → 04 → 09 → 10`, kèm Hard Release Gate T1..T9 bắt buộc chạy trên
+  board DDC-24 thật với BMS thật và tín hiệu vật lý thật. 11 quyết định cần Owner ký
+  được tách vào `BACNET_OPEN_DECISIONS.md`.
+- Verification (số đo thật đo trong phiên, không dẫn lại số cũ):
+
+  | Bước | Lệnh | Kết quả |
+  |---|---|---|
+  | Configure `BACNET=ON` | `cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` | **exit 1** — FetchContent bacnet-stack 1.3.8 bị egress policy chặn (HTTP 403 từ `github.com`) |
+  | Configure `BACNET=OFF` | cùng lệnh, `-DMKDDC_ENABLE_BACNET=OFF -DMKDDC_ENABLE_HMI=OFF` | exit 0 |
+  | Build | `cmake --build build/fw --parallel` | exit 0 |
+  | Test | `ctest --test-dir build/fw --output-on-failure` | **1440/1440 PASS**, 0 fail, 1 skipped, 23.11s |
+  | Trong đó test tên BACnet | — | **67 test PASS với `BACNET=OFF`** — chính là bằng chứng cho finding về bằng chứng giả |
+  | Cổng tài liệu | `python3 scripts/docs_iso_harness.py` | link missing 0/440 file, anchor missing 0, duplicate doc ID 0 |
+
+- Bị chặn (ghi rõ để khỏi hiểu nhầm là kết luận về mã nguồn): không dựng được bản
+  `BACNET=ON` trong môi trường phiên này vì policy egress chặn tải bacnet-stack từ
+  `github.com`. **Cần để mở khoá:** cho phép host đó trong egress policy, hoặc vendor
+  bacnet-stack 1.3.8 vào artifact nội bộ, hoặc cài `bacnet-stack>=1.3` qua pkg-config
+  trên runner — đã ghi thành `OD-BAC-009`, kèm yêu cầu thêm gate CI dựng `BACNET=ON`
+  để cấu hình `OFF` thôi là đường build duy nhất được kiểm. Mọi finding ở trên đọc
+  trực tiếp từ mã nguồn và không phụ thuộc build này.
+- Refs: `REV-BACNET-ASBUILT-001`, `PLAN-BACNET-REVA-001`, `OD-BAC-SET-001`,
+  `ADR-010`, `ADR-011`, `ADR-012`, `ARCH-R010`, `OD-MBRTU-014`.
+
 ### Fixed — Vòng reconcile nền của `RuntimeIntentService` không còn vứt lỗi câm (2026-09-10)
 
 - Phạm vi: `apps/web-api/internal/programming/application/runtime_intent.go`, `runtime_intent_test.go`. Issue #591.
