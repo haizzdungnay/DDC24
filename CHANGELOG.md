@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Changed — Triển khai đồng bộ `main@de6b753b` lên Foxlinx và review bản chạy thật (2026-09-10)
+
+- Thay bản phát hành đầy đủ trước đó `8e00e4b1fa4b96d002d1e1df7f70dc82a700b468`
+  bằng `de6b753b223dc23b4a6059b4b267a765b90de492` (`dirty=false`) trên board
+  `SOM-DDC-24-foxlinx`. Lần cài này đồng bộ lại Core, I/O bus, netcfg, Web API,
+  compiler/packager/worker Programming, HMI và static frontend; chấm dứt trạng
+  thái provenance `8e00e4b1` nhưng frontend từng được cập nhật riêng từ WIP ngày
+  2026-09-09.
+- Gói ARM64 11 MiB có SHA-256
+  `4e1db1f6c10e51031d193a6990a35736653f002a97d9728e9a9d03bbf4686ef1`;
+  C++ cần cao nhất `GLIBCXX_3.4.29`, thấp hơn `GLIBCXX_3.4.30` có trên board.
+  Khoá ST ở chế độ `RELEASE`; frontend dựng bằng `build:release` với
+  `VITE_PROGRAMMING_REV_A=1`; `npm audit --omit=dev` ra 0 lỗ hổng production.
+  Installer đã diễn tập trong cây giả và kiểm 8/8 checksum trước khi chạm board.
+- Backup trước khi ghi tại
+  `/var/backups/mkddc/predeploy-de6b753b-20260910T051316Z`; snapshot rollback do
+  installer tạo tại `/var/backups/mkddc/0.1.0-20260910-051317`. Giữ nguyên khoá
+  thiết bị, dữ liệu/config, trạng thái HMI `disabled` và cấu hình lab FakeMCU;
+  không Commission, không ghi output.
+- Kiểm chứng TARGET sau cài: runtime checksum **8/8 PASS**; sáu mẫu health liên
+  tiếp **6/6 `status=ok`** với cả sáu check `core/io_shm/iobus/mcu_connection/
+  plc_shm/web=ok`; `mkddc-fakemcu`, `mkddc-iobus`, `mkddc-core`, `mkddc-netcfg`,
+  `mkddc-web-pi` đều `active`, `NRestarts=0`, không có unit failed hay executable
+  `(deleted)`. `/` trả 200; API system/Programming chưa đăng nhập trả 401; ba API
+  Programming đã đăng nhập trả 200, profile `MK-DDC-24-REV-A`, một Project,
+  runtime `READY/RUNNING`, `missedReleaseCount=0`, `overrunCount=0`.
+- Static `index.html` trên host và bản board phục vụ cùng SHA-256
+  `2c5146ec939f335897f7456c7394f89f194c7ef94c5da2f444d4789acc5e023f`.
+  Playwright/Chromium headless trên chính URL board kiểm desktop 1600×1000 và
+  mobile 390×844: login thật, Project thật, POU/FBD/Inspector render; Console
+  error, page error, request fail và HTTP error đều bằng 0. Chrome DevTools MCP
+  đã cấu hình nhưng không có trong tool surface của phiên, nên không ghi nhận là
+  bằng chứng DevTools.
+- **Verdict triển khai: PASS; verdict review tính năng: FAIL có finding P1.**
+  `F-DEPLOY-20260910-01`: ở desktop 1600 px, grid khai báo Inspector 240 px
+  (`--pgm-inspector-width`) nhưng `aside` FBD thực tế rộng 384 px và bắt đầu tại
+  x=1216 thay vì track x=1347, chồng **125 px** lên Quick Library 196 px và che
+  tay kéo. Nguyên nhân source nằm ở tổ hợp `md:w-[min(24rem,100vw)]` với
+  `min-[1440px]:w-auto` trong `EditorPane.tsx`; E2E hiện chỉ kiểm thứ tự `x` và
+  `width > 0`, chưa kiểm hai cột không giao nhau. Không sửa source trong lượt
+  review/gatekeeper này.
+- `F-DEPLOY-20260910-02` (vận hành, có từ trước deploy): các slave Modbus
+  `CK508-04/05`, `CK509-06/07` không phản hồi, I/O bus báo timeout và alarm
+  `E303` với error rate 100%. Dịch vụ vẫn ổn định và health tổng hợp vẫn xanh,
+  nhưng lần này chỉ là TARGET/FakeMCU; không phải xác nhận RS-485 vật lý, HMI
+  panel, physical HIL hay `RELEASE_READY`.
+- Cổng host trên đúng commit đã đạt C++ Release Modbus/BACnet/HMI **1.482/1.482
+  PASS** (8 skip môi trường), Go `vet` + test `-count=1`, FE **245 tệp / 3.113
+  test**, lint và build. Lần thử chạy từng test ARM64 qua QEMU không dùng làm
+  gate vì độ trễ giả lập phá test timing 5 ms và đường fixture compile-time
+  `/mkddc-src` không tồn tại; dừng sau khi đã xác định đây là sai môi trường,
+  rồi kiểm artifact trực tiếp bằng installer/read-back trên board.
+
 ### Fixed — Cổng link tài liệu chỉ quét 22/435 file nên báo `link_missing: 0` sai phạm vi; 26 link hỏng lọt lưới (2026-09-10)
 
 - Phạm vi: `scripts/docs_iso_harness.py`,
