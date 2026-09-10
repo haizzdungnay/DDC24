@@ -8,6 +8,48 @@
 
 ## [Unreleased]
 
+### Added — Cổng đồng bộ ba hằng số SHM chép tay trong Go với `contracts/shm/mkddc_shm.h` (2026-09-10)
+
+- Phạm vi: `apps/web-api/internal/app/shm_contract_sync_test.go` (file mới),
+  `apps/web-api/internal/app/core_client.go` (chỉ comment dẫn nguồn trên khối
+  `const`), `CHANGELOG.md`. Không chạm `contracts/**`.
+- Triệu chứng: `kxShmMagic`, `defaultIOShm`, `defaultPLCShm` là bản sao rời của
+  `KX_SHM_MAGIC`, `KX_SHM_IO_PATH`, `KX_SHM_PLC_PATH`. Hôm nay ba giá trị khớp,
+  nhưng không test nào bắt được khi chúng thôi khớp.
+- Nguyên nhân gốc: 16 chỗ dùng `kxShmMagic` trong package `app`, mọi chỗ trừ một
+  là fixture tự dựng SHM giả rồi **ghi chính hằng số đó** vào header
+  (`core_client_test.go:178`); chỗ còn lại là nơi **đọc** (`shm_reader.go:166`).
+  Test viết bằng hằng số A rồi khẳng định code đọc được hằng số A — luôn đúng
+  với mọi giá trị của A, nên bộ test không thể phân biệt hằng số đúng với hằng
+  số sai. Đường hỏng đã đi qua một lần: `mkddc_shm.h:248-286` ghi lại lần bump
+  magic v5 → v6 (`ISS-PIO-11`). Lần bump sau mà Go không đổi theo thì `go test`
+  vẫn xanh, còn trên thiết bị thật web-api coi SHM là không hợp lệ và Overview
+  mất dữ liệu Point trong khi Core/iobus vẫn chạy.
+- Cách sửa: áp khuôn mẫu sẵn có của `internal/modbusrtu/contract_sync_test.go`
+  sang hợp đồng SHM — `TestShmContractConstantsMatchHeader` đọc **file hợp đồng
+  thật** và so cả ba hằng số. Helper định vị gốc repo fail-close (`t.Fatalf` kèm
+  đường dẫn đang tìm, số cấp đã đi lên và thư mục xuất phát), **không** `t.Skip`
+  — đúng lỗi #590 vừa vá. Phần parse tách hai lớp: hàm thuần trả `error`
+  (`parseShmDefineUint`/`parseShmDefineString`, bóc hậu tố kiểu C `0x4B584406u`
+  và cặp nháy kép) và lớp bọc `t.Fatalf`, nhờ vậy nhánh fail-close kiểm được
+  trực tiếp thay vì tự nó là thứ không ai canh. Ba hằng số trong `core_client.go`
+  nay có comment dẫn `contracts/shm/mkddc_shm.h:59/:60/:65` và tên test canh
+  chúng. Không đổi giá trị hằng số nào, không đổi contract/API/schema, không đổi
+  hành vi runtime.
+- Kiểm chứng (đo tại máy 2026-09-10, CI `NOT_RUN` — #414):
+  - `go vet ./...` — exit 0.
+  - `go test ./... -count=1` — 21 package `ok`, 0 FAIL, 3 package không có test.
+  - `go test ./internal/app/ -count=1 -run ShmContract -v` — 3 test PASS
+    (`TestShmContractConstantsMatchHeader` + 3 subtest,
+    `TestShmContractParserAcceptsCStyleSuffix`,
+    `TestShmContractParserFailsClosed` + 5 subtest).
+  - Số đo drift: sửa tạm `kxShmMagic` → `0x4B584405` và `defaultIOShm` →
+    `/dev/shm/mkddc_io_shm_OLD`, test **FAIL** đúng hai subtest tương ứng, subtest
+    `KX_SHM_PLC_PATH` không đụng vẫn PASS; đã hoàn nguyên.
+  - `rg -n 'mkddc_shm\.h' apps/web-api` — package `app` nay có đường đọc file hợp
+    đồng thật (trước đó chỉ `internal/modbusrtu` đọc, package `app` chỉ nhắc tên
+    file trong comment).
+
 ### Fixed — `--sandbox-probe` dò 5/8 đường dẫn không tồn tại, nên chưa từng đo biên sandbox với SHM/IPC/RETAIN thật (2026-09-10)
 
 - Phạm vi: `apps/core/application/programming/programming_sim_worker_main.cpp`,
