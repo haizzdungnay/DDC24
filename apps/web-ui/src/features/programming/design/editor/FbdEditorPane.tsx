@@ -20,11 +20,11 @@ import { fbdStatusFields } from './editorStatus'
 
 /* Vùng chạm 44px (`min-h-11`) là bắt buộc ở khổ cảm ứng và chỉ rút xuống ở khổ
    ≥1440px — khổ mà ảnh chuẩn PGM-02B mô tả, và cũng là khổ dùng chuột. */
-const TOOLBAR_SELECT_CLASS = 'min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2 min-[1440px]:h-7 min-[1440px]:min-h-0 min-[1440px]:py-0'
+const _TOOLBAR_SELECT_CLASS = 'min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2 min-[1440px]:h-7 min-[1440px]:min-h-0 min-[1440px]:py-0'
 
 /** Kẻ dọc phân tách cụm điều khiển, chỉ hiện ở khổ ≥1440px vì dưới đó thanh
  *  công cụ xuống dòng và một vạch dọc giữa hai hàng đọc thành rác. */
-function ToolbarDivider() {
+function _ToolbarDivider() {
   return <span aria-hidden="true" className="hidden h-5 w-px shrink-0 bg-[var(--c-border)] min-[1440px]:block" />
 }
 
@@ -150,104 +150,19 @@ export function FbdEditorPane({
 
   return (
     <div
-      className="min-w-0 space-y-2 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-1 text-[var(--c-text)]"
+      className="flex min-w-0 flex-1 flex-col gap-2 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-1 text-[var(--c-text)]"
       data-testid="fbd-workspace-shell"
       data-fbd-theme={preferences.theme}
       style={themeStyle}
     >
-      {/* Thanh công cụ phụ, ~46px theo ảnh chuẩn PGM-02B (vùng y≈104..150).
-       *
-       * Vùng chạm 44px (`min-h-11`) giữ nguyên ở khổ dưới 1440px và chỉ rút
-       * xuống ở khổ ≥1440px. Đó là khổ ảnh chuẩn mô tả, và cũng là khổ dùng
-       * chuột; hạ vùng chạm toàn cục sẽ lấy mất 44px trên đúng những tủ có màn
-       * cảm ứng — nơi ngón tay là thiết bị trỏ duy nhất. */}
-      <div
-        className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--c-border)] px-1 py-1.5 min-[1440px]:h-[46px] min-[1440px]:flex-nowrap min-[1440px]:py-0"
-        data-testid="fbd-secondary-toolbar"
-      >
-        <h3 className="shrink-0 text-sm font-semibold text-[var(--c-text)]">{program.name}</h3>
-        <div className="flex flex-wrap items-end gap-2 min-[1440px]:flex-nowrap min-[1440px]:items-center min-[1440px]:gap-3" role="group" aria-label={pick('Tuỳ chọn hiển thị FBD', 'FBD display preferences')}>
-          {/* Cụm 1 — chọn phạm vi đang xem. */}
-          <div className="flex flex-wrap items-end gap-2 min-[1440px]:flex-nowrap min-[1440px]:items-center">
-            <label className="flex flex-col gap-1 text-xs min-[1440px]:flex-row min-[1440px]:items-center min-[1440px]:gap-1.5">
-              {pick('Khung nhìn', 'View')}
-              <select
-                className={TOOLBAR_SELECT_CLASS}
-                value={preferences.networkView}
-                onChange={(event) => updatePreferences({ networkView: event.target.value as FbdPreferences['networkView'] })}
-              >
-                <option value="SELECTED">{pick('Network đang chọn', 'Selected network')}</option>
-                <option value="ALL">{pick('Tất cả network', 'All networks')}</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs min-[1440px]:flex-row min-[1440px]:items-center min-[1440px]:gap-1.5">
-              {pick('Network hoạt động', 'Active network')}
-              <select
-                className={TOOLBAR_SELECT_CLASS}
-                value={activeNetworkId ?? ''}
-                onChange={(event) => {
-                  const next = event.target.value
-                  setActiveNetworkId(next)
-                  onSelectionChange?.({ kind: 'network', networkId: next })
-                }}
-              >
-                {local.networks.map((network) => <option key={network.id} value={network.id}>{network.order + 1}. {network.name}</option>)}
-              </select>
-            </label>
-          </div>
-
-          <ToolbarDivider />
-
-          {/* Cụm 2 — cách canvas vẽ. */}
-          <div className="flex flex-wrap items-end gap-2 min-[1440px]:flex-nowrap min-[1440px]:items-center">
-            <label className="inline-flex min-h-11 items-center gap-2 text-xs min-[1440px]:min-h-0">
-              <input type="checkbox" checked={preferences.gridVisible} onChange={(event) => updatePreferences({ gridVisible: event.target.checked })} />
-              {pick('Lưới', 'Grid')}
-            </label>
-            <label className="inline-flex min-h-11 items-center gap-2 text-xs min-[1440px]:min-h-0">
-              <input type="checkbox" checked={preferences.snapEnabled} onChange={(event) => updatePreferences({ snapEnabled: event.target.checked })} />
-              {pick('Bám lưới', 'Snap')}
-            </label>
-            <label className="flex flex-col gap-1 text-xs min-[1440px]:flex-row min-[1440px]:items-center min-[1440px]:gap-1.5">
-              {pick('Kiểu dây', 'Wire style')}
-              <select
-                className={TOOLBAR_SELECT_CLASS}
-                value={preferences.wireStyle}
-                onChange={(event) => updatePreferences({ wireStyle: event.target.value as FbdPreferences['wireStyle'] })}
-              >
-                <option value="ORTHOGONAL">{pick('Vuông góc', 'Orthogonal')}</option>
-                <option value="BEZIER">Bezier</option>
-              </select>
-            </label>
-          </div>
-
-          <ToolbarDivider />
-
-          {/* Cụm 3 — vỏ giao diện quanh canvas. */}
-          <div className="flex flex-wrap items-end gap-2 min-[1440px]:flex-nowrap min-[1440px]:items-center">
-            <label className="flex flex-col gap-1 text-xs min-[1440px]:flex-row min-[1440px]:items-center min-[1440px]:gap-1.5">
-              {pick('Giao diện FBD', 'FBD theme')}
-              <select
-                className={TOOLBAR_SELECT_CLASS}
-                value={preferences.theme}
-                onChange={(event) => updatePreferences({ theme: event.target.value as FbdThemePreference })}
-              >
-                <option value="FOLLOW_WEB">{pick('Theo giao diện web', 'Follow web')}</option>
-                <option value="LIGHT">{pick('Sáng', 'Light')}</option>
-                <option value="DARK">{pick('Tối', 'Dark')}</option>
-              </select>
-            </label>
-            <label className="inline-flex min-h-11 items-center gap-2 text-xs min-[1440px]:min-h-0">
-              <input
-                type="checkbox"
-                checked={preferences.dock.library}
-                onChange={(event) => updatePreferences({ dock: { ...preferences.dock, library: event.target.checked } })}
-              />
-              {pick('Khay Thư viện', 'Library dock')}
-            </label>
-          </div>
+      {/* Mốc tiêu đề cho trợ năng — ẩn thị giác vì tên POU đã có trên tab bar */}
+      <h3 className="sr-only">{program.name}</h3>
+      {/* ponytail: ẩn thanh công cụ phụ phía trên — program.name đã có trên tab bar và dải trạng thái FBD; các tuỳ chọn hiển thị đã chuyển xuống dải dưới. */}
+      {/*
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] p-1 min-[1440px]:h-[46px] min-[1440px]:flex-nowrap min-[1440px]:py-0">
+          ...
         </div>
-      </div>
+      */}
       <StructuredFbdEditor
         document={local}
         canEdit={canEdit}
@@ -269,21 +184,59 @@ export function FbdEditorPane({
         onNodeEditorTargetChange={onNodeEditorTargetChange}
         focusSelection={focusSelection}
       />
+      {/* Dải trạng thái + tuỳ chọn hiển thị — nằm cùng hàng, cùng kích thước
+       * text-[11px]. Preferences dồn trái, status fields dồn phải. */}
+      <div
+        className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)] min-[1440px]:h-[37px] min-[1440px]:flex-nowrap min-[1440px]:py-0"
+        role="group"
+        aria-label={pick('Tuỳ chọn hiển thị FBD', 'FBD display preferences')}
+        data-testid="fbd-secondary-toolbar"
+      >
+        <label className="inline-flex items-center gap-1">
+          <input type="checkbox" checked={preferences.gridVisible} onChange={(event) => updatePreferences({ gridVisible: event.target.checked })} />
+          {pick('Lưới', 'Grid')}
+        </label>
+        <label className="inline-flex items-center gap-1">
+          <input type="checkbox" checked={preferences.snapEnabled} onChange={(event) => updatePreferences({ snapEnabled: event.target.checked })} />
+          {pick('Bám lưới', 'Snap')}
+        </label>
+        <label className="inline-flex items-center gap-1">
+          {pick('Kiểu dây', 'Wire style')}
+          <select
+            className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-1 py-0.5 text-[11px]"
+            value={preferences.wireStyle}
+            onChange={(event) => updatePreferences({ wireStyle: event.target.value as FbdPreferences['wireStyle'] })}
+          >
+            <option value="ORTHOGONAL">{pick('Vuông góc', 'Orthogonal')}</option>
+            <option value="BEZIER">Bezier</option>
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-1">
+          {pick('Giao diện FBD', 'FBD theme')}
+          <select
+            className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-1 py-0.5 text-[11px]"
+            value={preferences.theme}
+            onChange={(event) => updatePreferences({ theme: event.target.value as FbdThemePreference })}
+          >
+            <option value="FOLLOW_WEB">{pick('Theo giao diện web', 'Follow web')}</option>
+            <option value="LIGHT">{pick('Sáng', 'Light')}</option>
+            <option value="DARK">{pick('Tối', 'Dark')}</option>
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={preferences.dock.library}
+            onChange={(event) => updatePreferences({ dock: { ...preferences.dock, library: event.target.checked } })}
+          />
+          {pick('Khay Thư viện', 'Library dock')}
+        </label>
+      </div>
       <EditorStatusBar
         leading={<span>{pick('Sẵn sàng', 'Ready')}</span>}
         fields={fbdStatusFields({
           language: 'FBD',
           dirty,
-          /* `zoom` và `connection` để trống: canvas chưa công bố tỉ lệ thu phóng
-             ra ngoài, và trạng thái kết nối thiết bị chưa được nối vào tab này.
-             Cả hai hiện `—`. Điền `100%` hay `Trực tuyến` sẽ là khẳng định về
-             thứ chưa ai đo — và `Mất kết nối` cho một thiết bị đang khoẻ còn tệ
-             hơn: nó gọi người trực đêm dậy vì một giá trị FE tự bịa.
-
-             `PGM-02B` vẽ dải này với `(100%)` và `● Online`. Bố cục lấy theo ảnh
-             (cao 37px, `Sẵn sàng` bên trái, các ô dồn phải), nhưng GIÁ TRỊ thì
-             không: một bản vẽ thiết kế không phải phép đo. Khi `StructuredFbdEditor`
-             công bố được tỉ lệ thu phóng thật thì truyền vào `zoom` ở đây. */
         })}
       />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}

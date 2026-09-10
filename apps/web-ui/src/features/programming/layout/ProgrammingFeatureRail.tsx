@@ -1,4 +1,4 @@
-import { Activity, ArrowLeft, Cable, ClipboardCheck, Home, Library, PencilRuler } from 'lucide-react'
+import { Activity, ArrowLeft, Cable, ClipboardCheck, Home, Library, PencilRuler, Play } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { PRODUCT_INFO } from '../../../shared/productInfo'
@@ -59,7 +59,8 @@ export function programmingRailItems(projectId: string | null): RailItem[] {
     { key: 'mapping', label: ['Điểm & Ánh xạ', 'Points & Mapping'], to: projectPath('mapping'), icon: Cable, disabledReason: projectId ? null : needsProject },
     { key: 'library', label: ['Thư viện điều khiển', 'Control Library'], to: projectPath('library'), icon: Library, disabledReason: projectId ? null : needsProject },
     { key: 'commission', label: ['Kiểm tra & Vận hành', 'Check & Commission'], to: projectPath('commission'), icon: ClipboardCheck, disabledReason: projectId ? null : needsProject },
-    { key: 'runtime', label: ['Runtime & Bảo trì', 'Runtime & Service'], to: '/eng/programming/runtime', icon: Activity, disabledReason: null }
+    { key: 'runtime', label: ['Runtime & Bảo trì', 'Runtime & Service'], to: '/eng/programming/runtime', icon: Activity, disabledReason: null },
+    { key: 'execution', label: ['Execution', 'Execution'], to: projectId ? programsWorkspacePath(projectId, { search: 'tab=execution' }) : null, icon: Play, disabledReason: projectId ? null : needsProject }
   ]
 }
 

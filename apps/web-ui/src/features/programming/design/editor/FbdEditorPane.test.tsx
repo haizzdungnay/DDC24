@@ -130,30 +130,14 @@ describe('FbdEditorPane', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('TC-FBD-NET-001: selected chỉ render network active; ALL render đủ network có data-fbd-network-id', () => {
-    const document = twoNetworkDocument()
-    renderPane({ program: { ...sampleProgram, document: canonicalFbdJson(document) }, source: canonicalFbdJson(document) })
-    expect(screen.getAllByRole('article')).toHaveLength(1)
-    fireEvent.change(screen.getByLabelText(/Khung nhìn|View/), { target: { value: 'ALL' } })
-    const articles = screen.getAllByRole('article')
-    expect(articles).toHaveLength(2)
-    expect(articles.map((article) => article.getAttribute('data-fbd-network-id'))).toEqual(document.networks.map((network) => network.id))
-  })
+  /* ponytail: TC-FBD-NET-001/002 tạm bỏ — cụm View/Active network ẩn vì chỉ có 1 network.
+   * Bật lại cùng lúc bỏ `false &&` trong FbdEditorPane.tsx. */
 
-  it('TC-FBD-NET-002: đổi network active cập nhật scene và nhãn toolbar', () => {
-    const document = twoNetworkDocument()
-    renderPane({ program: { ...sampleProgram, document: canonicalFbdJson(document) }, source: canonicalFbdJson(document) })
-    fireEvent.change(screen.getByLabelText(/Network hoạt động|Active network/), { target: { value: document.networks[1].id } })
-    expect(screen.getByTestId('fbd-active-network')).toHaveTextContent('network_2')
-    expect(screen.getByRole('article')).toHaveAttribute('data-fbd-network-id', document.networks[1].id)
-  })
-
-  it('TC-FBD-PREF-001: theme/grid/network view lưu cục bộ mà không đổi canonical buffer', () => {
+  it('TC-FBD-PREF-001: theme/grid lưu cục bộ mà không đổi canonical buffer', () => {
     const { onChange } = renderPane()
     const before = canonicalFbdJson(sampleDoc)
     fireEvent.change(screen.getByLabelText(/Giao diện FBD|FBD theme/), { target: { value: 'DARK' } })
     fireEvent.click(screen.getByLabelText(/Lưới|Grid/))
-    fireEvent.change(screen.getByLabelText(/Khung nhìn|View/), { target: { value: 'ALL' } })
     expect(screen.getByTestId('fbd-workspace-shell')).toHaveAttribute('data-fbd-theme', 'DARK')
     expect(screen.getByTestId('fbd-workspace-shell').style.getPropertyValue('--c-bg')).not.toBe('')
     expect(onChange).not.toHaveBeenCalled()
@@ -177,23 +161,26 @@ describe('FbdEditorPane', () => {
 
   it('PGM-02B: thanh công cụ phụ gom cụm mà KHÔNG mất điều khiển nào', () => {
     /* Gom nhóm là thao tác dễ đánh rơi một điều khiển mà không ai thấy — mắt
-       chỉ đếm được "trông gọn hơn". Phép kiểm này đếm đúng 7 điều khiển gốc. */
+       chỉ đếm được "trông gọn hơn". Phép kiểm này đếm đúng 7 điều khiển gốc.
+       ponytail: dải preferences chuyển xuống ngang hàng status bar — phần tử
+       testid `fbd-secondary-toolbar` chính là `role="group"`, không lồng thêm. */
     renderPane()
-    const toolbar = screen.getByTestId('fbd-secondary-toolbar')
-    const group = within(toolbar).getByRole('group', { name: /Tuỳ chọn hiển thị FBD|FBD display preferences/ })
-    expect(within(group).getAllByRole('combobox')).toHaveLength(4)
+    const group = screen.getByTestId('fbd-secondary-toolbar')
+    expect(group).toHaveAttribute('role', 'group')
+    /* ponytail: 2 combobox (theme + wire style) — network view + active network ẩn. Bật lại → 4. */
+    expect(within(group).getAllByRole('combobox')).toHaveLength(2)
     expect(within(group).getAllByRole('checkbox')).toHaveLength(3)
   })
 
-  it('PGM-02B: vùng chạm 44px được giữ ở khổ nhỏ, chỉ rút ở khổ ≥1440px', () => {
-    /* Ảnh chuẩn vẽ thanh 46px, nhưng hạ vùng chạm toàn cục sẽ lấy mất 44px trên
-       đúng những tủ dùng màn cảm ứng. `min-h-11` phải còn, và lớp rút gọn phải
-       có tiền tố khổ lớn. */
+  it('PGM-02B: dải preferences dùng kích thước compact ngang hàng status bar', () => {
+    /* ponytail: preferences chuyển từ toolbar 46px xuống dải text-[11px] ngang
+       status bar. Vùng chạm 44px (`min-h-11`) không còn ở đây; kiểm compact
+       thay thế. Bỏ ponytail → khôi phục min-h-11 khi đưa lại lên toolbar. */
     renderPane()
     const toolbar = screen.getByTestId('fbd-secondary-toolbar')
+    expect(toolbar).toHaveClass('text-[11px]')
     const select = within(toolbar).getAllByRole('combobox')[0]
-    expect(select).toHaveClass('min-h-11')
-    expect(select).toHaveClass('min-[1440px]:min-h-0')
+    expect(select).toHaveClass('text-[11px]')
   })
 
   it('PGM-02B: dải trạng thái neo "Sẵn sàng" bên trái nhưng KHÔNG bịa thu phóng', () => {

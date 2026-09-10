@@ -239,10 +239,11 @@ describe('StructuredFbdEditor — POU và keyboard/a11y (T59-506)', () => {
   it('Insert vẫn thêm block khi focus đang ở toolbar sau khi Tab tới editor', async () => {
     const onChange = vi.fn()
     renderEditor(golden(), true, onChange)
-    const networkButton = screen.getByRole('button', { name: /^Network$/ })
-    networkButton.focus()
+    /* ponytail: nút "Network" ẩn — dùng "Thêm khối" thay thế vì cùng toolbar. */
+    const addBlockButton = screen.getByRole('button', { name: /Thêm khối|Add block/ })
+    addBlockButton.focus()
 
-    fireEvent.keyDown(networkButton, { key: 'Insert' })
+    fireEvent.keyDown(addBlockButton, { key: 'Insert' })
 
     expect(document.activeElement).toBe(screen.getByRole('region', { name: /Structured FBD editor|Bộ dựng FBD/ }))
     await waitFor(() => expect(onChange).toHaveBeenCalled())

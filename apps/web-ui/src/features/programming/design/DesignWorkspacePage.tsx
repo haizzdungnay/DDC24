@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ClipboardCheck, RefreshCw, Save } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
 import { StateBlock } from '../../../shared/components/StateBlock'
@@ -41,7 +42,7 @@ import { useProgrammingActionAllowed } from '../api/authorization'
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
 
-const TAB_LABEL: Record<DesignTab, [string, string]> = {
+const _TAB_LABEL: Record<DesignTab, [string, string]> = {
   programs: ['Chương trình', 'Programs'],
   mapping: ['Điểm & Ánh xạ', 'Points & Mapping'],
   execution: ['Thực thi', 'Execution']
@@ -132,7 +133,7 @@ export function DesignWorkspacePage({
      nó chỉ poll khi thực sự có phiên sống, nên EDIT/LIVE không sinh tải nào. */
   const simulation = useSimulation()
   const runtime = useProgrammingRuntime()
-  const { setEditingContext } = useProgrammingRuntimeContext()
+  const { setEditingContext, setContextStripSlot } = useProgrammingRuntimeContext()
   const detectedMobileReadOnly = useProgrammingMobileReadOnly()
   const mobileReadOnly = mobileReadOnlyOverride ?? detectedMobileReadOnly
   const { projectId: routeProjectId } = useParams<{ projectId: string }>()
@@ -426,6 +427,73 @@ export function DesignWorkspacePage({
     return () => setEditingContext(null)
   }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.save, workspace.saving, workspace.status])
 
+  /* Đẩy cụm EDIT/LIVE/SIMULATE + Save/Check/Refresh lên ContextStrip. Cùng
+   * pattern `setEditingContext` — workspace đăng ký, layout hiển thị, cleanup
+   * khi unmount. */
+  useEffect(() => {
+    setContextStripSlot(
+      <div className="flex shrink-0 items-center gap-1.5">
+        <ProgramsModeSwitcher
+          mode={workspaceMode}
+          draftDirty={draftDirty}
+          capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
+          onSwitch={switchWorkspaceMode}
+        />
+        {draftDirty && (
+          <span
+            role="status"
+            data-testid="draft-dirty-indicator"
+            className="inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]"
+          >
+            {pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check')}
+          </span>
+        )}
+        {canEdit && (
+          <>
+            <Button
+              size="sm"
+              aria-label={pick('Lưu bản nháp', 'Save the draft')}
+              icon={<Save className="h-4 w-4" aria-hidden="true" />}
+              loading={workspace.saving}
+              disabled={!draftDirty || workspace.saving}
+              title={!draftDirty ? pick('Không có thay đổi nào để lưu.', 'There is nothing to save.') : pick('Lưu bản nháp', 'Save the draft')}
+              onClick={() => { void workspace.save(pendingOperations) }}
+            >
+              {pick('Lưu', 'Save')}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={pick('Kiểm tra gói', 'Check the package')}
+              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+              disabled={draftDirty}
+              title={draftDirty
+                ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
+                       'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
+                : pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
+              onClick={goToCommission}
+            >
+              {pick('Kiểm tra', 'Check')}
+            </Button>
+          </>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="disabled:opacity-100"
+          icon={<RefreshCw className={workspace.status === 'loading' ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />}
+          onClick={workspace.reload}
+          disabled={workspace.status === 'loading'}
+          aria-busy={workspace.status === 'loading'}
+          aria-label={pick('Làm mới', 'Refresh')}
+        >
+          {pick('Làm mới', 'Refresh')}
+        </Button>
+      </div>
+    )
+    return () => setContextStripSlot(null)
+  }, [canEdit, capabilities.data?.workspaceModes?.simulation, draftDirty, goToCommission, pendingOperations, pick, setContextStripSlot, switchWorkspaceMode, workspace.reload, workspace.save, workspace.saving, workspace.status, workspaceMode])
+
   useEffect(() => {
     if (!draftDirty) return undefined
     const warnBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
@@ -624,7 +692,7 @@ export function DesignWorkspacePage({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* F-UX-15 (`REV-FE-UIUX-UC-2026-08-18` §7.1): mỗi màn/tab phải có mốc
           tiêu đề riêng trong cây heading. `<h1>` của route Programming nằm ở
           `ProgrammingLayout` (một và chỉ một), nên ở đây là `<h2>`/`<h3>`.
@@ -639,88 +707,32 @@ export function DesignWorkspacePage({
           role="alert"
           data-testid="programming-compatibility-block"
           data-compatibility-state={compatibility.state}
-          className="rounded-[var(--radius)] border border-[var(--c-danger)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text)]"
+          className="rounded-[var(--radius)] border border-[var(--c-danger)] bg-[var(--c-surface-2)] p-2 text-sm text-[var(--c-text)]"
         >
           {compatibility.reason}
         </p>
       )}
       {mobileReadOnly && (
-        <p role="status" data-testid="programming-mobile-read-only" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
+        <p role="status" data-testid="programming-mobile-read-only" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-sm text-[var(--c-text-dim)]">
           {pick('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ. Hãy dùng màn hình rộng từ 768 px để chỉnh sửa.', 'Small screen — diagram view only. Use a screen at least 768 px wide to edit.')}
         </p>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
-        {PROGRAMS_WORKSPACE_V2_ENABLED ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            data-testid="programming-task-configuration-toggle"
-            aria-pressed={tab === 'execution'}
-            onClick={() => {
-              const query = new URLSearchParams(searchParams)
-              query.delete('tab')
-              if (tab !== 'execution') query.set('tab', 'execution')
-              navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
-            }}
-          >
-            {tab === 'execution'
-              ? pick('Về trình soạn thảo', 'Back to editor')
-              : pick('Cấu hình Task', 'Task configuration')}
-          </Button>
-        ) : (
-          <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
-            {VALID_TABS.map((candidate) => (
-              <button
-                key={candidate}
-                type="button"
-                role="tab"
-                aria-selected={candidate === tab}
-                className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
-                  candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-                }`}
-                onClick={() => {
-                  /* Nhánh legacy giữ route/tab cũ để feature flag vẫn là một
-                   * rollback thực sự; cut-over v2 dùng sidebar product và chỉ
-                   * còn nút Cấu hình Task có ngữ nghĩa cục bộ. */
-                  const query = new URLSearchParams(searchParams)
-                  query.delete('tab')
-                  if (candidate === 'execution') query.set('tab', 'execution')
-                  const target = candidate === 'mapping' ? 'mapping' : 'programs'
-                  const suffix = query.toString()
-                  const destination = target === 'programs'
-                    ? programsWorkspacePath(projectId ?? '', { search: suffix })
-                    : `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`
-                  navigate(destination, { replace: true })
-                }}
-              >
-                {pick(...TAB_LABEL[candidate])}
-              </button>
-            ))}
-          </div>
-        )}
+      {/* ponytail: ẩn thanh chứa tab + mode switcher — cả hai cụm đã chuyển đi. */}
+      {/*
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-1">
+        {PROGRAMS_WORKSPACE_V2_ENABLED ? (...) : (...)}
         <div className="flex flex-wrap items-center gap-2">
-          {/* `T59-807` — trước lát này `?mode=` chỉ đổi được bằng cách GÕ TAY
-              vào URL, và giao diện không nói workspace đang ở chế độ nào. */}
-          <ProgramsModeSwitcher
-            mode={workspaceMode}
-            draftDirty={draftDirty}
-            /* `T59-814` — SIMULATE lấy capability TỪ SERVER. Thiếu
-               `workspaceModes` (server đời cũ) thì `simulation` là undefined và
-               mode ở trạng thái UNAVAILABLE, không phải "chắc là có". */
-            capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
-            onSwitch={switchWorkspaceMode}
-          />
-          {draftDirty && (
-            <span
-              role="status"
-              data-testid="draft-dirty-indicator"
-              className="inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-1 text-xs font-medium text-[var(--c-warn-fg)]"
-            >
-              {pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check')}
-            </span>
-          )}
+          <ProgramsModeSwitcher ... />
         </div>
       </div>
+      */}
+      <span
+        role="status"
+        data-testid="draft-dirty-indicator"
+        className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
+      >
+        {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
+      </span>
 
       {compareOpen && (
         <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[var(--c-bg)]/95 p-3 shadow-2xl sm:max-w-3xl">
@@ -881,6 +893,10 @@ export function DesignWorkspacePage({
               focusFbdSelection={compareFbdFocus}
               onPendingOperationsChange={updateProgramOperations}
               discardVersion={discardVersion}
+              /* `T59-821` — `Kiểm tra` và `So sánh` nằm trong toolbar của
+               * chính trình soạn thảo, đúng `PGM-02A §3`.
+               * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
+               * sang PGM-05, nơi sở hữu trọn vòng seal/run/poll/result. */
               onRunCheck={goToCommission}
               onOpenCompare={() => setCompareOpen(true)}
               checkDisabledReason={draftDirty

@@ -8,6 +8,19 @@
 
 ## [Unreleased]
 
+### Changed — Thu hồi ~14px từ dải dùng chung workspace Thiết kế (Phần 4 plan tối ưu không gian) (2026-09-10)
+
+- Triệu chứng: Dải dùng chung (notification strip và thanh tab) chiếm nhiều diện tích dọc không cần thiết, làm hẹp vùng hiển thị editor POU/ST/FBD.
+- Nguyên nhân gốc: `ProgrammingContextStrip` áp `py-2` và `mb-2` trên container thông báo ngữ cảnh `ContextStateNotice`; header danh sách tab trong `DesignWorkspacePage` áp `pb-2`; khối container `canEdit &&` rỗng dư thừa nằm chắn giữa thanh tab và thanh công cụ.
+- Cách sửa:
+  - `ProgrammingContextStrip.tsx`: giảm đệm `mb-2 py-2` thành `mb-1 py-1`, bảo toàn `role="alert"` / `role="status"` và chuỗi text `"Chưa xác định kết quả — đang đối soát"`.
+  - `DesignWorkspacePage.tsx`: giảm padding bottom header tab `pb-2` thành `pb-1`.
+  - `DesignWorkspacePage.tsx`: xoá khối rỗng `canEdit &&`, chuyển comment `T59-821` gắn kèm các prop `onRunCheck` và `onOpenCompare` trong toolbar editor.
+  - Không thay đổi `PROGRAMMING_CONTEXT_STRIP_HEIGHT_PX`, `data-testid`, `data-context-field` và nút "Chi tiết".
+- Kiểm chứng:
+  - Vitest: 69 test files (985 tests) PASS sạch trong `src/features/programming/layout/` và `src/features/programming/design/`.
+  - Playwright: 13/13 tests PASS (`npx playwright test e2e/st-editor-alignment.spec.ts`).
+
 ### Added — Plan triển khai BACnet Rev A từ tài liệu tới source code và E2E trên bo Forlinx (2026-09-10)
 
 - Phạm vi: `docs/03_implementation/BACNET_DOC_TO_CODE_E2E_PLAN.md` (file mới),
@@ -679,6 +692,7 @@ Không sửa file Go hoặc C++ production nào.
   bằng `git clone` (giao thức git qua proxy vẫn thông) rồi trỏ
   `-DFETCHCONTENT_SOURCE_DIR_*`. Đây là chỗ dựng tại máy, **không** đổi file nào
   trong repo.
+>>>>>>> origin/main
 
 ### Fixed — Routine không có `sources` sinh phiên rỗng; ghi bẫy vào WF-CLEAN-001 §8.1 (2026-09-09)
 

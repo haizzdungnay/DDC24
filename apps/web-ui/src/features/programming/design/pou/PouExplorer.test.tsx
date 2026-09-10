@@ -173,4 +173,65 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     // im lặng: ý định bật/tắt Program sống ở API runtime-intent, không ở Draft.
     expect(within(menu).getByText(/Runtime & Bảo trì/)).toBeInTheDocument()
   })
+
+  it('TC-POU-EXP-244: container có w-[244px] min-w-[244px] max-w-[244px]', () => {
+    const { container } = render(
+      <I18nProvider>
+        <PouExplorer
+          document={baseDocument()}
+          canEdit={true}
+          saving={false}
+          onSelect={vi.fn()}
+          onSave={vi.fn().mockResolvedValue(true)}
+        />
+      </I18nProvider>
+    )
+    const root = container.firstElementChild
+    expect(root).toHaveClass('w-[244px]', 'min-w-[244px]', 'max-w-[244px]')
+  })
+
+  it('TC-POU-EXP-3SEC: render 3 sections Programs, Function Blocks, Functions với badge count', () => {
+    renderExplorer()
+    const programsButton = screen.getByRole('button', { name: /Programs/ })
+    const functionsButton = screen.getByRole('button', { name: /Functions/ })
+    const functionBlocksButton = screen.getByRole('button', { name: /Function Blocks/ })
+
+    expect(programsButton).toBeInTheDocument()
+    expect(functionsButton).toBeInTheDocument()
+    expect(functionBlocksButton).toBeInTheDocument()
+
+    const programsBadge = within(programsButton).getByTestId('pou-section-badge-PROGRAM')
+    const functionsBadge = within(functionsButton).getByTestId('pou-section-badge-FUNCTION')
+    const fbBadge = within(functionBlocksButton).getByTestId('pou-section-badge-FUNCTION_BLOCK')
+
+    expect(programsBadge).toHaveTextContent('1')
+    expect(functionsBadge).toHaveTextContent('1')
+    expect(fbBadge).toHaveTextContent('0')
+  })
+
+  it('TC-POU-EXP-COLLAPSE: collapse/expand từng section độc lập', () => {
+    renderExplorer()
+    const programsButton = screen.getByRole('button', { name: /Programs/ })
+    const functionsButton = screen.getByRole('button', { name: /Functions/ })
+    const functionBlocksButton = screen.getByRole('button', { name: /Function Blocks/ })
+
+    expect(programsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(functionsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(programsButton)
+    expect(programsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(functionsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(functionsButton)
+    expect(programsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(functionsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(programsButton)
+    expect(programsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(functionsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
+  })
 })

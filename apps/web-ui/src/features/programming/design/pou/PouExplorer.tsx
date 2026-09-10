@@ -165,7 +165,7 @@ export function PouExplorer({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 w-[244px] min-w-[244px] max-w-[244px]">
       <div className="flex items-center justify-between gap-2">
         <label className="sr-only" htmlFor="pou-explorer-search">
           {pick('Tìm POU', 'Find a POU')}
@@ -227,6 +227,7 @@ export function PouExplorer({
               <h3>
                 <button
                   type="button"
+                  aria-label={`${pick(...label)} (${group.length})`}
                   aria-expanded={!collapsed}
                   aria-controls={groupId}
                   /* `min-h-7` (28 px) là NGƯỠNG CẢM ỨNG, không phải trang trí:
@@ -244,7 +245,13 @@ export function PouExplorer({
                     aria-hidden="true"
                   />
                   <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  {pick(...label)} ({group.length})
+                  <span className="flex-1 truncate">{pick(...label)}</span>
+                  <span
+                    data-testid={`pou-section-badge-${kind}`}
+                    className="ml-auto rounded-full bg-[var(--c-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--c-text-dim)]"
+                  >
+                    {group.length}
+                  </span>
                 </button>
               </h3>
               {/* Thân nhóm LUÔN có mặt trong DOM và luôn mang `id`, kể cả khi

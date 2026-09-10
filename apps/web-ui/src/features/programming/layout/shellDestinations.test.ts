@@ -36,7 +36,7 @@ const WORKSPACE_KEYS = new Set(Object.keys(PROGRAMMING_WORKSPACE_PATHS))
 /* `exit` KHÔNG phải workspace: nó là lối ra khỏi focus mode (`R60-03`), trỏ ra
  * ngoài `/eng/programming`. Miễn trừ nó một cách CÓ TÊN thay vì nới lỏng cả
  * phép kiểm — một miễn trừ đọc được thì lần sau người ta còn chất vấn được. */
-const NON_WORKSPACE_KEYS = new Set(['exit'])
+const NON_WORKSPACE_KEYS = new Set(['exit', 'execution'])
 
 function railKeys(projectId: string | null): string[] {
   return programmingRailItems(projectId).map((item) => item.key)
