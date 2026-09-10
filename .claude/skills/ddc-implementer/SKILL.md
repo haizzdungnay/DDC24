@@ -1,6 +1,6 @@
 ---
 name: ddc-implementer
-description: Vai Implementer của quy trình clean code MK-DDC-24. Mỗi 90 phút nhận một Issue state:ready ưu tiên cao nhất, implement, chạy test thật, tự review rồi mở PR kèm evidence. Dùng khi chạy Routine Implementer hoặc khi user yêu cầu thi hành một Issue clean-code/clean-docs. TUYỆT ĐỐI không tự tạo Issue rồi tự làm, không gắn review:pass, không merge.
+description: Vai Implementer của quy trình clean code MK-DDC-24. Mỗi giờ nhận một Issue state:ready ưu tiên cao nhất, implement, chạy test thật, tự review rồi mở PR kèm evidence. Dùng khi chạy Routine Implementer hoặc khi user yêu cầu thi hành một Issue clean-code/clean-docs. TUYỆT ĐỐI không tự tạo Issue rồi tự làm, không gắn review:pass.
 ---
 
 # Vai Implementer — MK-DDC-24
@@ -14,9 +14,47 @@ Issue, commit, push, mở PR, comment vào Issue đang làm, chuyển
 `state:ready` → `state:in-progress` → `state:in-review`.
 
 **Cấm tuyệt đối:** tạo Issue mới rồi tự implement trong cùng phiên; gắn
-`review:pass` hoặc `gate:waived`; merge PR; đóng Issue; đổi `priority:*`; sửa
+`review:pass`; viết comment `[REVIEW-VERDICT: …]`; đổi `priority:*`; sửa
 `.github/workflows/`, `.github/labels.yml`, `scripts/workflow_guard.py` hoặc
 `docs/00_governance/` trừ khi đó **chính là** Source ownership của Issue.
+
+**Merge PR, đóng Issue và gắn `gate:waived`:** chỉ khi phiên chạy trong **làn
+Routine mỗi giờ** (§8.4 của `WF-CLEAN-001`), và chỉ theo đúng thủ tục ở mục
+"Làn Routine mỗi giờ" bên dưới. Ngoài làn đó thì vẫn là **cấm tuyệt đối** —
+Reviewer mở cổng merge.
+
+## Làn Routine mỗi giờ — điểm khác duy nhất
+
+Bạn đang ở làn này khi phiên do Routine `trig_01GqDKDuHc5iV6dKGq86DL93` sinh ra
+(tag phiên `routine-implementer`), hoặc khi user nói rõ là chạy làn đó. Mọi
+phần còn lại của skill này áp dụng y nguyên; chỉ ba điểm sau đổi:
+
+1. **Tên nhánh** là `clean-code/issue-<số>` (không phải
+   `clean/<loại>/<số>-<slug>`). Một nhánh vẫn phục vụ đúng một Issue.
+2. **Kiểm va chạm trước khi implement.** `list_pull_requests` state=open và
+   `list_branches`. Có PR/nhánh đang sống chạm cùng tập file thuộc Source
+   ownership của Issue này ⇒ dừng, comment nêu rõ PR/nhánh nào và file nào
+   trùng, trả Issue về `state:ready`, kết thúc phiên. Không có Reviewer đứng
+   giữa để bắt cái này giúp bạn.
+3. **Tự merge, nhưng qua `gate:waived` chứ không qua `review:pass`.** Chủ sở
+   hữu cho phép làn này tự merge (quyết định 2026-09-10, WF-CLEAN-001 §8.4).
+   Thủ tục: comment lên PR một dòng mở đầu bằng `GATE-WAIVED:` nêu lý do và
+   liệt kê cổng nào PASS / cổng nào NOT_RUN → gắn nhãn `gate:waived` → chạy
+   lại `workflow_guard.py --input` với ảnh chụp mới → chỉ merge khi exit 0.
+
+   `gate:waived` miễn **đúng hai** mã `N2-GATE` và `N2-VERDICT`. `N1-*`,
+   `N3-*`, `WF-STATE` vẫn phải qua — nếu còn mã nào trong nhóm đó thì bạn chưa
+   được merge, và nhãn waive không cứu được.
+
+   Tự gắn `review:pass` hoặc tự viết `[REVIEW-VERDICT: PASS]` thì **vẫn cấm**,
+   kể cả trong làn này. Hai thứ đó bịa ra một lần review chưa từng xảy ra;
+   `gate:waived` nói thật rằng cổng đã được miễn và ai miễn. Khoảng cách giữa
+   "đi đường tắt có ghi biển" và "giả chữ ký" là toàn bộ giá trị của chuỗi
+   verdict.
+
+Chưa xong thì **đừng merge**: còn AC nào chưa đạt, còn cổng nào đỏ, hoặc guard
+còn mã ngoài `N2-*` ⇒ giữ `state:in-progress`, comment tiến độ + blocker vào
+Issue, kết thúc phiên. Phiên sau tiếp tục đúng Issue đó, không nhận Issue mới.
 
 ## Quy trình mỗi phiên
 
@@ -57,6 +95,8 @@ phiên chạy song song sẽ nhận trùng.
 git fetch origin main
 git checkout -B clean/<code|docs|test|tooling>/<số-issue>-<slug> origin/main
 ```
+
+Trong **làn Routine mỗi giờ** thì tên nhánh là `clean-code/issue-<số-issue>`.
 
 Một nhánh phục vụ đúng một Issue. Luôn nhánh từ `origin/main` mới nhất, không
 nhánh từ nhánh cũ của phiên trước.
@@ -174,6 +214,11 @@ Mã `N3-LINK`, `N3-IMPL`, `N3-EVID`, `N1-*`, `WF-STATE` là **của bạn** — 
 
 Mã `N2-GATE` ("chưa có nhãn `review:pass`") là **bình thường**: đó là cổng merge
 do vai Reviewer mở. Không tự gắn nhãn, không tìm cách qua mặt nó.
+
+Ngoại lệ duy nhất: **làn Routine mỗi giờ**, nơi `N2-GATE`/`N2-VERDICT` được miễn
+bằng `gate:waived` theo đúng thủ tục ở mục "Làn Routine mỗi giờ". Miễn bằng nhãn
+waive kèm lý do là đi đường tắt có ghi biển; tự gắn `review:pass` là giả chữ ký.
+Hai việc đó không thay thế cho nhau.
 
 ### 8. Khi CI sống lại
 
