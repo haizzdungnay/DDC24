@@ -252,7 +252,7 @@ export function PouExplorer({
                   <span className="flex-1 truncate">{pick(...label)}</span>
                   <span
                     data-testid={`pou-section-badge-${kind}`}
-                    className="ml-auto rounded-full bg-[var(--c-surface-2)] px-1.5 py-0.2 text-[10px] font-medium text-[var(--c-text-dim)]"
+                    className="ml-auto rounded-full bg-[var(--c-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--c-text-dim)]"
                   >
                     {group.length}
                   </span>
