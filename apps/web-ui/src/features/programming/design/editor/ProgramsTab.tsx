@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
+import { AlignLeft, ChevronLeft, ChevronRight, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { FbdEditorPane } from './FbdEditorPane'
@@ -215,6 +215,13 @@ const SLOT_GRID_CLASS = {
   'left-closed': 'lg:grid-cols-[44px_1fr_240px] 2xl:grid-cols-[44px_1fr_308px]',
   'inspector-closed': 'lg:grid-cols-[208px_1fr_44px] 2xl:grid-cols-[280px_1fr_44px]',
   'both-closed': 'lg:grid-cols-[44px_1fr_44px]',
+} as const
+
+const FBD_SLOT_GRID_CLASS = {
+  'both-open': 'md:grid-cols-[208px_minmax(0,1fr)] min-[1440px]:grid-cols-[244px_minmax(0,1fr)_341px]',
+  'left-closed': 'md:grid-cols-[44px_minmax(0,1fr)] min-[1440px]:grid-cols-[44px_minmax(0,1fr)_341px]',
+  'inspector-closed': 'md:grid-cols-[208px_minmax(0,1fr)] min-[1440px]:grid-cols-[244px_minmax(0,1fr)_44px]',
+  'both-closed': 'md:grid-cols-[44px_minmax(0,1fr)] min-[1440px]:grid-cols-[44px_minmax(0,1fr)_44px]',
 } as const
 
 export interface ProgramsSlotState { left: boolean; inspector: boolean }
@@ -703,7 +710,7 @@ export function ProgramsTab({
     <div
       className={`grid min-w-0 gap-4 lg:h-full lg:min-h-0 ${
         selected?.language === 'FBD'
-          ? 'md:grid-cols-[208px_minmax(0,1fr)] min-[1440px]:grid-cols-[244px_minmax(0,1fr)_223px_341px]'
+          ? FBD_SLOT_GRID_CLASS[slotKey(slots)]
           : `md:grid-cols-[280px_1fr] ${SLOT_GRID_CLASS[slotKey(slots)]}`
       }`}
       onKeyDown={(event) => {
@@ -823,12 +830,14 @@ export function ProgramsTab({
         <div className="mb-2 flex justify-end">
           <button
             type="button"
-            className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] shadow-sm transition-colors hover:bg-[var(--c-surface-2)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
             aria-expanded
             aria-controls="programs-slot-left"
+            title={pick('Thu gọn cột trái', 'Collapse left column')}
             onClick={() => setSlots({ ...slots, left: false })}
           >
-            {pick('Thu gọn cột trái', 'Collapse left column')}
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{pick('Thu gọn cột trái', 'Collapse left column')}</span>
           </button>
         </div>
         <div id="programs-slot-left">
@@ -851,15 +860,17 @@ export function ProgramsTab({
         </div>
       </div>
       ) : (
-        <div className="rounded-[var(--radius)] border border-[var(--c-border)] p-1">
+        <div className="flex justify-center rounded-[var(--radius)] border border-[var(--c-border)] p-1">
           <button
             type="button"
-            className="min-h-11 w-full rounded px-1 py-2 text-[10px] leading-tight text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] shadow-sm transition-colors hover:bg-[var(--c-surface-2)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
             aria-expanded={false}
             aria-controls="programs-slot-left"
+            title={pick('Mở cột trái', 'Expand left column')}
             onClick={() => setSlots({ ...slots, left: true })}
           >
-            {pick('Mở cột trái', 'Expand left column')}
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{pick('Mở cột trái', 'Expand left column')}</span>
           </button>
         </div>
       )}
@@ -1062,7 +1073,8 @@ export function ProgramsTab({
           không cần thiết khi ở màn hình nhỏ (theo quyết định #02) và giữ đúng hành vi drawer
           dưới 1440px. Đồng thời vẫn giữ class min-[1440px]:block hidden để đảm bảo
           layout CSS tĩnh của Tailwind. */}
-      {selected?.language === 'FBD' && fbdWideDesktop && canEdit && (
+      {/* ponytail: Quick Library cột trái tạm ẩn — trùng lặp với dock bên phải trong StructuredFbdEditor. Bỏ `false &&` để bật lại. */}
+      {false && selected?.language === 'FBD' && fbdWideDesktop && canEdit && (
         <div className="hidden min-[1440px]:block min-w-0 lg:min-h-0 lg:overflow-y-auto">
           <QuickLibraryHost
             variant="docked"
@@ -1089,12 +1101,13 @@ export function ProgramsTab({
           window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
         }}
       >
-        <div className="mb-2 flex justify-end">
+        <div className={`mb-2 flex ${fbdInspectorOpen ? 'justify-end' : 'justify-center'}`}>
           <button
             type="button"
-            className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] shadow-sm transition-colors hover:bg-[var(--c-surface-2)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
             aria-expanded={fbdInspectorOpen}
             aria-controls="programs-slot-inspector"
+            title={fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}
             onClick={() => {
               const nextOpen = !fbdInspectorOpen
               if (selected?.language === 'FBD' && !fbdWideDesktop) setFbdInspectorDrawerOpen(nextOpen)
@@ -1104,7 +1117,14 @@ export function ProgramsTab({
               }
             }}
           >
-            {fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}
+            {fbdInspectorOpen ? (
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            )}
+            <span className="sr-only">
+              {fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}
+            </span>
           </button>
         </div>
         <div id="programs-slot-inspector" hidden={!fbdInspectorOpen}>

@@ -95,7 +95,8 @@ export function ProgrammingContextStrip({
   onSelectProject,
   draftSequence = null,
   activeSequence = null,
-  activeOwnership = { kind: 'owned', projectId: '' }
+  activeOwnership = { kind: 'owned', projectId: '' },
+  children
 }: {
   projectStatus: ResourceStatus
   runtimeStatus: ResourceStatus
@@ -136,6 +137,8 @@ export function ProgrammingContextStrip({
    * (`ProgrammingLayout`) truyền kết quả của `activeRevisionOwnership`.
    */
   activeOwnership?: ActiveRevisionOwnership
+  /** Slot workspace đẩy điều khiển lên hàng strip (mode switcher, nút Lưu…). */
+  children?: ReactNode
 }) {
   const { pick } = useI18n()
   const notice = contextNotice({
@@ -218,6 +221,8 @@ export function ProgrammingContextStrip({
             editing={editing}
           />
         </ContextField>
+
+        {children}
 
         <button
           ref={detailsButtonRef}
@@ -574,12 +579,15 @@ function ContextStateNotice({ notice }: { notice: ContextNotice }) {
   const role = notice.kind === 'error' || notice.kind === 'offline' || notice.kind === 'unknown' ? 'alert' : 'status'
 
   return (
-    <div role={role} className={`mb-1 flex items-start gap-2 rounded-[var(--radius)] border px-3 py-1 text-xs ${tone}`}>
-      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${notice.kind === 'loading' ? 'animate-spin' : ''}`} aria-hidden="true" />
-      <span>
+    <div
+      role={role}
+      className={`my-0.5 inline-flex max-w-full items-center gap-1.5 rounded-[var(--radius)] border px-2 py-0.5 text-xs leading-tight ${tone}`}
+    >
+      <Icon className={`h-3.5 w-3.5 shrink-0 ${notice.kind === 'loading' ? 'animate-spin' : ''}`} aria-hidden="true" />
+      <div className="inline-flex flex-wrap items-center gap-x-1.5 truncate">
         <strong>{notice.title}</strong>
-        {notice.detail ? <span className="mt-0.5 block">{notice.detail}</span> : null}
-      </span>
+        {notice.detail ? <span className="opacity-90">{notice.detail}</span> : null}
+      </div>
     </div>
   )
 }

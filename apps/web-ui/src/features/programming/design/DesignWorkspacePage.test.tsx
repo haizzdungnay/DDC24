@@ -63,7 +63,7 @@ vi.mock('../api/queries', async (importOriginal) => {
   }
 })
 vi.mock('../layout/ProgrammingLayout', () => ({
-  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn() })
+  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn(), setContextStripSlot: vi.fn() })
 }))
 
 function baseDocument(): ProgrammingDraftDocument {
@@ -198,7 +198,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace('/eng/programming/projects/project-1/design?tab=mapping')
 
-    expect(await screen.findByRole('tab', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('aria-selected', 'true')
+    /* ponytail: tab buttons ẩn — verify qua bảng Published Signal trực tiếp. */
     const table = await screen.findByRole('table', { name: 'Bảng Published Signal của bản nháp' })
     expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('AirHandler')
     expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('5000 ms')
@@ -1280,7 +1280,10 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'searchProgrammingLibraries') {
-        return Promise.resolve({
+        /* Trì hoãn một microtask để trạng thái `loading` thật sự quan sát được
+         * trong assertion dưới. `Promise.resolve()` đồng bộ không bảo đảm
+         * React kịp hiện loading trước khi dữ liệu tới. */
+        return new Promise((resolve) => setTimeout(() => resolve({
           items: [{
             scope: 'SYSTEM', libraryRevisionId: LIBRARY_REVISION, libraryVersion: 'rev-a.1',
             libraryState: 'PUBLISHED', entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON',
@@ -1297,7 +1300,7 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
             dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16,
             ...entryOverrides,
           }]
-        })
+        }), 0))
       }
       throw new Error(`unexpected operation ${operationId}`)
     })

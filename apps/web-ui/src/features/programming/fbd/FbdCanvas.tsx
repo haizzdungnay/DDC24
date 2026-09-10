@@ -160,6 +160,7 @@ export function FbdCanvas({
   const [ghostPosition, setGhostPosition] = useState<FbdPoint | null>(null)
   const [nativeDragEntryId, setNativeDragEntryId] = useState<string | null>(null)
   const [containerHeight, setContainerHeight] = useState<number>(0)
+  const [containerWidth, setContainerWidth] = useState<number>(0)
 
   const surfaceRef = useRef<SVGSVGElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -174,8 +175,10 @@ export function FbdCanvas({
     if (typeof ResizeObserver !== 'undefined') {
       const observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          const next = Math.round(entry.contentRect.height)
-          setContainerHeight((current) => (Math.abs(current - next) < 1 ? current : next))
+          const nextH = Math.round(entry.contentRect.height)
+          const nextW = Math.round(entry.contentRect.width)
+          setContainerHeight((current) => (Math.abs(current - nextH) < 1 ? current : nextH))
+          setContainerWidth((current) => (Math.abs(current - nextW) < 1 ? current : nextW))
         }
       })
       observer.observe(el)
@@ -201,8 +204,12 @@ export function FbdCanvas({
     return map
   }, [geometry.nodes])
 
-  const width = Math.max(geometry.width, 320)
-  const height = Math.max(geometry.height, Math.floor(containerHeight / (viewport.scale || 1)), 200)
+  const width = Math.max(geometry.width, containerWidth ? Math.floor(containerWidth / (viewport.scale || 1)) : 320, 320)
+  const height = Math.max(
+    geometry.height + 600,
+    Math.floor(containerHeight / (viewport.scale || 1)) + 800,
+    1600,
+  )
 
   const { drag, beginDrag, moveDrag, endDrag, cancelDrag } = useFbdNodeDrag({
     canEdit,
@@ -699,12 +706,12 @@ export function FbdCanvas({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label={pick('Thu phóng canvas', 'Canvas zoom')}>
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={pick('Thu phóng canvas', 'Canvas zoom')}>
         <button
           type="button"
           data-fbd-canvas-control="true"
-          className="min-h-11 rounded border border-[var(--c-border)] px-2 py-1 text-xs"
+          className="h-7 rounded border border-[var(--c-border)] px-2 text-xs hover:bg-[var(--c-surface-2)]"
           onClick={() => setViewport((v) => nextViewport(v, { scale: v.scale - ZOOM_STEP }))}
         >
           {pick('Thu nhỏ', 'Zoom out')}
@@ -713,7 +720,7 @@ export function FbdCanvas({
         <button
           type="button"
           data-fbd-canvas-control="true"
-          className="min-h-11 rounded border border-[var(--c-border)] px-2 py-1 text-xs"
+          className="h-7 rounded border border-[var(--c-border)] px-2 text-xs hover:bg-[var(--c-surface-2)]"
           onClick={() => setViewport((v) => nextViewport(v, { scale: v.scale + ZOOM_STEP }))}
         >
           {pick('Phóng to', 'Zoom in')}
@@ -721,7 +728,7 @@ export function FbdCanvas({
         <button
           type="button"
           data-fbd-canvas-control="true"
-          className="min-h-11 rounded border border-[var(--c-border)] px-2 py-1 text-xs"
+          className="h-7 rounded border border-[var(--c-border)] px-2 text-xs hover:bg-[var(--c-surface-2)]"
           onClick={() => setViewport(DEFAULT_VIEWPORT)}
         >
           {pick('Vừa khung', 'Reset zoom')}

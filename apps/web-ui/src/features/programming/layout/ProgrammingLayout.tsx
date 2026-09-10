@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
 import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
@@ -28,6 +28,8 @@ interface ProgrammingRuntimeContextValue {
   /** Revision đang chạy có thuộc `subjectProject` không (`ISS-PGUI-01`). */
   activeOwnership: ActiveRevisionOwnership
   setEditingContext: (context: ProgrammingEditingContext | null) => void
+  /** Slot đẩy ReactNode từ workspace lên ContextStrip (mode switcher, nút…). */
+  setContextStripSlot: (node: ReactNode) => void
 }
 
 export interface ProgrammingEditingContext {
@@ -97,6 +99,7 @@ export function ProgrammingLayout() {
   const runtime = useProgrammingRuntime()
   const projects = useProgrammingProjects()
   const [editingContext, setEditingContext] = useState<ProgrammingEditingContext | null>(null)
+  const [contextStripSlot, setContextStripSlot] = useState<ReactNode>(null)
   const { projectId: pathProjectId } = useParams<{ projectId?: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -180,7 +183,7 @@ export function ProgrammingLayout() {
     programIntents.status === 'loading'
 
   return (
-    <ProgrammingRuntimeContext.Provider value={{ capabilities, runtime, projects, programIntents, subjectProject: listedProject, activeOwnership, setEditingContext }}>
+    <ProgrammingRuntimeContext.Provider value={{ capabilities, runtime, projects, programIntents, subjectProject: listedProject, activeOwnership, setEditingContext, setContextStripSlot }}>
       <div className="flex gap-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
         <ProgrammingFeatureRail projectId={scopedProjectId ?? null} />
         {/* `min-w-0` là bắt buộc: một flex item mặc định `min-width:auto` sẽ
@@ -242,7 +245,9 @@ export function ProgrammingLayout() {
                   ? 'unreadable'
                   : 'readable'
             }}
-          />
+          >
+            {contextStripSlot}
+          </ProgrammingContextStrip>
           <ProgrammingHeader
             actions={visibleEditingContext?.actions}
             refreshing={refreshing}

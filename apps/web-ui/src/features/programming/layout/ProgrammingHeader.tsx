@@ -46,56 +46,62 @@ export function ProgrammingHeader({
 }) {
   const { pick } = useI18n()
   const location = useLocation()
+  const isDesignWorkspace =
+    location.pathname.includes('/programs') ||
+    location.pathname.includes('/mapping') ||
+    location.pathname.includes('/design')
   const mapping = location.pathname.includes('/mapping')
   return (
-    <header className="flex w-full flex-col items-stretch gap-2">
+    <header className={isDesignWorkspace ? 'sr-only' : 'flex w-full flex-col items-stretch gap-2'}>
       <h1 className="sr-only">{pick('Lập trình điều khiển', 'Control programming')}</h1>
-      <div className={`flex w-full flex-wrap items-center justify-end gap-2 ${mapping ? 'border-b border-[var(--c-border)] pb-2' : ''}`}>
-        {actions && (
-          <>
-            {/* Tên truy cập khác nút `Lưu` của thanh công cụ trình soạn thảo,
-                dù nhãn nhìn thấy giống nhau. Hai nút cùng tên trên một màn hình
-                buộc người dùng trình đọc màn hình phải đoán cái nào là cái nào —
-                và nó cũng làm mọi phép chọn theo vai trò trong test thành mơ hồ.
-                Tên đầy đủ CHỨA nhãn nhìn thấy, đúng WCAG 2.5.3. */}
-            <Button
-              size="sm"
-              aria-label={pick('Lưu bản nháp', 'Save the draft')}
-              icon={<Save className="h-4 w-4" aria-hidden="true" />}
-              loading={actions.saving}
-              disabled={actions.saveDisabledReason !== null}
-              /* Nút bị khoá phải NÓI vì sao. Một nút xám im lặng buộc người dùng
-                 đoán, và họ thường đoán là "hỏng". */
-              title={actions.saveDisabledReason ?? pick('Lưu bản nháp', 'Save the draft')}
-              onClick={actions.onSave}
-            >
-              {pick('Lưu', 'Save')}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              aria-label={pick('Kiểm tra gói', 'Check the package')}
-              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
-              disabled={actions.checkDisabledReason !== null}
-              title={actions.checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
-              onClick={actions.onCheck}
-            >
-              {pick('Kiểm tra', 'Check')}
-            </Button>
-          </>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="disabled:opacity-100"
-          icon={<RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />}
-          onClick={onRefresh}
-          disabled={refreshing}
-          aria-busy={refreshing}
-        >
-          {pick('Làm mới', 'Refresh')}
-        </Button>
-      </div>
+      {!isDesignWorkspace && (
+        <div className={`flex w-full flex-wrap items-center justify-end gap-2 ${mapping ? 'border-b border-[var(--c-border)] pb-2' : ''}`}>
+          {actions && (
+            <>
+              {/* Tên truy cập khác nút `Lưu` của thanh công cụ trình soạn thảo,
+                  dù nhãn nhìn thấy giống nhau. Hai nút cùng tên trên một màn hình
+                  buộc người dùng trình đọc màn hình phải đoán cái nào là cái nào —
+                  và nó cũng làm mọi phép chọn theo vai trò trong test thành mơ hồ.
+                  Tên đầy đủ CHỨA nhãn nhìn thấy, đúng WCAG 2.5.3. */}
+              <Button
+                size="sm"
+                aria-label={pick('Lưu bản nháp', 'Save the draft')}
+                icon={<Save className="h-4 w-4" aria-hidden="true" />}
+                loading={actions.saving}
+                disabled={actions.saveDisabledReason !== null}
+                /* Nút bị khoá phải NÓI vì sao. Một nút xám im lặng buộc người dùng
+                   đoán, và họ thường đoán là "hỏng". */
+                title={actions.saveDisabledReason ?? pick('Lưu bản nháp', 'Save the draft')}
+                onClick={actions.onSave}
+              >
+                {pick('Lưu', 'Save')}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label={pick('Kiểm tra gói', 'Check the package')}
+                icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+                disabled={actions.checkDisabledReason !== null}
+                title={actions.checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
+                onClick={actions.onCheck}
+              >
+                {pick('Kiểm tra', 'Check')}
+              </Button>
+            </>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="disabled:opacity-100"
+            icon={<RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />}
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-busy={refreshing}
+          >
+            {pick('Làm mới', 'Refresh')}
+          </Button>
+        </div>
+      )}
     </header>
   )
 }

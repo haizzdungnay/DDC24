@@ -88,7 +88,7 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     expect(screen.getByRole('link', { name: 'Runtime & Bảo trì' })).toHaveAttribute('href', '/eng/programming/runtime')
     expect(screen.queryByRole('link', { name: 'Chương trình' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Điểm & Ánh xạ' })).not.toBeInTheDocument()
-    for (const key of ['programs', 'mapping', 'library', 'commission']) {
+    for (const key of ['programs', 'mapping', 'library', 'commission', 'execution']) {
       const item = railItem(key)
       expect(item).toHaveAttribute('aria-disabled', 'true')
       expect(item).toHaveAttribute('title', 'Cần chọn Project trước khi mở mục này')
@@ -104,11 +104,9 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     expect(screen.getByRole('link', { name: 'Kiểm tra & Vận hành' })).toHaveAttribute('href', '/eng/programming/projects/project-1/commission')
     expect(screen.getByRole('link', { name: 'Tổng quan' })).toHaveAttribute('href', '/eng/programming')
     expect(screen.getByRole('link', { name: 'Runtime & Bảo trì' })).toHaveAttribute('href', '/eng/programming/runtime')
-    /* Sáu đích `PGM-01..06` + lối thoát (thương hiệu) = 7 link.
-     * `PLAN-FE-SHELL-062` KHÔNG đổi con số này: mục `Project Settings` bị gỡ
-     * vốn là `<span role="link">`, không phải `<a>`, nên nó chưa từng được
-     * đếm ở đây. Sửa 7 thành 6 theo phản xạ là làm hỏng phép kiểm. */
-    expect(rail().querySelectorAll('a')).toHaveLength(7)
+    expect(screen.getByRole('link', { name: 'Execution' })).toHaveAttribute('href', '/eng/programming/programs?project=project-1&mode=EDIT&tab=execution')
+    /* Bảy đích (PGM-01..06 + Execution) + lối thoát (thương hiệu) = 8 link. */
+    expect(rail().querySelectorAll('a')).toHaveLength(8)
   })
 
   it('mục đang mở đúng route được đánh dấu active (aria-current)', () => {

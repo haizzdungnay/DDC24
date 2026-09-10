@@ -602,23 +602,39 @@ export function StructuredFbdEditor({
         if (insertStartedFromToolbar) sectionRef.current?.focus()
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold">FBD · {state.document.name}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-[var(--c-border)] pb-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <h2 className="text-xs font-semibold">FBD · {state.document.name}</h2>
           <p id={keyboardHelpId} className="sr-only">
             {pick(
               'Chọn block/POU trong palette; Insert thêm lựa chọn đó · ↑/↓ chọn port · Enter nối · Alt+↑/↓ đổi thứ tự · Delete xóa · Ctrl+Z/Y hoàn tác/làm lại.',
               'Choose a block/POU in the palette; Insert adds the selected block/POU · arrows select port · Enter connects · Alt+arrows reorder · Delete removes · Ctrl+Z/Y undo/redo.',
             )}
           </p>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs" aria-label={pick('Trạng thái FBD', 'FBD status')}>
+            <span className="rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]">{state.document.networks.length}/256 network</span>
+            <span className="rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]">
+              {state.document.networks.reduce((sum, item) => sum + item.nodes.length, 0)}/256 block
+            </span>
+            <span className="rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]">
+              {state.document.networks.reduce((sum, item) => sum + item.wires.length, 0)}/512 wire
+            </span>
+            <span className={issues.length ? 'rounded-full bg-[var(--c-warn-bg)] px-1.5 py-0.5 text-[11px] text-[var(--c-warn-fg)]' : 'rounded-full bg-[var(--c-good-bg)] px-1.5 py-0.5 text-[11px] text-[var(--c-good-fg)]'}>
+              {issues.length ? pick(`${issues.length} lỗi Draft`, `${issues.length} Draft ${issues.length === 1 ? 'issue' : 'issues'}`) : pick('Canonical hợp lệ', 'Canonical valid')}
+            </span>
+            {!canEdit && <span className="rounded-full bg-[var(--c-surface-2)] px-1.5 py-0.5 text-[11px]">{pick('Chỉ đọc', 'Read only')}</span>}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
-          <span className="inline-flex min-h-11 items-center rounded border border-[var(--c-border)] px-2 text-xs" data-testid="fbd-active-network">
+        <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
+          {/* ponytail: ẩn Active network label + nút Add Network — chương trình chỉ có 1 network. Bỏ {false && ...} để bật lại. */}
+          {false && (<>
+          <span className="inline-flex min-h-11 min-[1440px]:min-h-0 items-center rounded border border-[var(--c-border)] px-2 py-0.5 text-xs" data-testid="fbd-active-network">
             {pick('Network đang mở', 'Active network')}: {activeNetwork?.name ?? '—'}
           </span>
           <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('ADD_NETWORK')}>
             {pick('Network', 'Network')}
           </Button>
+          </>)}
           <label className="flex items-center gap-1 text-xs">
             {pick('Khối', 'Block')}
             <select
@@ -813,38 +829,27 @@ export function StructuredFbdEditor({
         </form>
       )}
 
-      <div className="flex flex-wrap gap-2 text-xs" aria-label={pick('Trạng thái FBD', 'FBD status')}>
-        <span className="rounded-full border border-[var(--c-border)] px-2 py-1">{state.document.networks.length}/256 network</span>
-        <span className="rounded-full border border-[var(--c-border)] px-2 py-1">
-          {state.document.networks.reduce((sum, item) => sum + item.nodes.length, 0)}/256 block
-        </span>
-        <span className="rounded-full border border-[var(--c-border)] px-2 py-1">
-          {state.document.networks.reduce((sum, item) => sum + item.wires.length, 0)}/512 wire
-        </span>
-        <span className={issues.length ? 'rounded-full bg-[var(--c-warn-bg)] px-2 py-1 text-[var(--c-warn-fg)]' : 'rounded-full bg-[var(--c-good-bg)] px-2 py-1 text-[var(--c-good-fg)]'}>
-          {issues.length ? pick(`${issues.length} lỗi Draft`, `${issues.length} Draft ${issues.length === 1 ? 'issue' : 'issues'}`) : pick('Canonical hợp lệ', 'Canonical valid')}
-        </span>
-        {!canEdit && <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-1">{pick('Chỉ đọc', 'Read only')}</span>}
-      </div>
-
-      <div className={networkView === 'ALL' ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto' : 'flex min-h-0 flex-1 flex-col gap-3'}>
+      <div className={networkView === 'ALL' ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto' : 'flex min-h-0 flex-1 flex-col gap-2'}>
         {visibleNetworks.map((network) => (
           <article
             key={network.id}
             data-fbd-network-id={network.id}
             className={networkView === 'ALL'
-              ? 'rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3'
-              : 'flex min-h-0 flex-1 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3'}
+              ? 'rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2'
+              : 'flex min-h-0 flex-1 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2'}
           >
+            {/* ponytail: ẩn network title button — chỉ có 1 network. Bỏ {false && ...} để bật lại. */}
+            {false && (
             <button
               type="button"
               data-fbd-canvas-control="true"
-              className="mb-3 min-h-11 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              className="mb-1.5 min-h-11 min-[1440px]:min-h-0 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
               aria-pressed={state.selection?.kind === 'network' && state.selection.networkId === network.id}
               onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'network', networkId: network.id } })}
             >
               {network.order + 1}. {network.name}
             </button>
+            )}
             <FbdCanvas
               network={network}
               document={state.document}
