@@ -143,7 +143,27 @@
 - Kiểm chứng fail-close thật (không chỉ đọc mã): tạm đổi tên `contracts/` rồi
   chạy lại ba test đại diện — cả ba `--- FAIL` với đúng thông điệp mới, `exit 1`
   thay vì `ok`; `contracts/` khôi phục nguyên vẹn, `git status` sạch.
+### Added — Rà soát Program Property / Inspector để chuẩn bị kế hoạch đại tu (2026-09-09)
 
+- Thêm record `REC-PGM02-PROP-INS-001`, đối chiếu riêng Property của Program và
+  `ContextInspector` với `d.md` G-12..G-21 và authority PGM-02 §9.
+- Kết luận source-backed: Inspector đạt nền context-sensitive nhưng chưa match
+  yêu cầu mở rộng; 0/10 mục G-12..G-21 đạt đầy đủ, còn duplication Property,
+  Task/Enable chưa nối, Interface chưa sửa được và Attributes/DDC Metadata chủ
+  yếu là placeholder.
+- Truy vết FE → web-api → Core/FW-SOM: tận dụng runtime Programs API hiện có;
+  không cần đổi Core/FW-SOM/STM32 cho Rev A; Priority 5 và watchdog độc lập không
+  được biến thành Program property có thể sửa nếu chưa có quyết định kiến trúc.
+- Đăng ký record trong chỉ mục review. Kiểm chứng HOST: Vitest phạm vi
+  Inspector/Draft adapter/workspace **6 file, 98 test PASS**; Chrome DevTools,
+  target và HIL `NOT RUN`, không claim.
+- Kiểm chứng lại trước commit sau khi đồng bộ `origin/main@e3211854` ngày
+  2026-09-10: C++ Release với Modbus/BACnet/HMI **1.482/1.482 PASS** (8 test
+  phụ thuộc môi trường bị skip); Go `vet` + `test -count=1` PASS; FE **245 file,
+  3.113 test PASS** + lint + build PASS; gói Programming **151,08 KiB gzip**
+  dưới ngân sách 165 KiB; harness tài liệu PASS trên 436 file. Cổng
+  `candidate_pin_check.py` vẫn FAIL do `CONTROL.md` đã drift sẵn trên chính
+  `origin/main`, không thuộc ba file của record này.
 ### Changed — Không tạo được Routine từ phiên agent: ghi ba lần đo và chuyển sang giao diện Routines (2026-09-09)
 
 - Triệu chứng: mọi lượt Routine đều chết với thông báo *"session chưa được cấp
