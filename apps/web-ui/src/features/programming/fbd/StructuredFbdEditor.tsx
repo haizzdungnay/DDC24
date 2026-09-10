@@ -626,15 +626,15 @@ export function StructuredFbdEditor({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
-          {/* ponytail: ẩn Active network label + nút Add Network — chương trình chỉ có 1 network. Bỏ {false && ...} để bật lại. */}
-          {false && (<>
+          {/* ponytail: ẩn Active network label + nút Add Network — chương trình chỉ có 1 network. */}
+          {/*
           <span className="inline-flex min-h-11 min-[1440px]:min-h-0 items-center rounded border border-[var(--c-border)] px-2 py-0.5 text-xs" data-testid="fbd-active-network">
             {pick('Network đang mở', 'Active network')}: {activeNetwork?.name ?? '—'}
           </span>
           <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('ADD_NETWORK')}>
             {pick('Network', 'Network')}
           </Button>
-          </>)}
+          */}
           <label className="flex items-center gap-1 text-xs">
             {pick('Khối', 'Block')}
             <select
@@ -838,8 +838,8 @@ export function StructuredFbdEditor({
               ? 'rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2'
               : 'flex min-h-0 flex-1 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2'}
           >
-            {/* ponytail: ẩn network title button — chỉ có 1 network. Bỏ {false && ...} để bật lại. */}
-            {false && (
+            {/* ponytail: ẩn network title button — chỉ có 1 network. */}
+            {/*
             <button
               type="button"
               data-fbd-canvas-control="true"
@@ -849,7 +849,7 @@ export function StructuredFbdEditor({
             >
               {network.order + 1}. {network.name}
             </button>
-            )}
+            */}
             <FbdCanvas
               network={network}
               document={state.document}

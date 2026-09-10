@@ -1,6 +1,9 @@
+import type { ReactNode } from 'react'
 import { ProgrammingContextStrip } from './ProgrammingContextStrip'
 
-export type GlobalContextBarProps = Parameters<typeof ProgrammingContextStrip>[0]
+export type GlobalContextBarProps = Parameters<typeof ProgrammingContextStrip>[0] & {
+  children?: ReactNode
+}
 
 /**
  * Tên kiến trúc của dải ngữ cảnh Programming sau khi gộp header.

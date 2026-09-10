@@ -222,7 +222,7 @@ describe('PGM-02 Quick Library (T59-804)', () => {
     // Cung cấp entry có category công khai hợp lệ
     const itemsWithCategory = libraryItems().map((item) => ({
       ...item,
-      category: item.signature?.category ?? null,
+      category: item.signature?.category ?? undefined,
     }))
     renderPanel(paged({ items: itemsWithCategory }))
 

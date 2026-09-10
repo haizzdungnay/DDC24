@@ -257,7 +257,7 @@ export function ProgrammingLayout() {
             }}
           >
             {contextStripSlot}
-          </ProgrammingContextStrip>
+          </GlobalContextBar>
           <Outlet />
         </div>
       </div>
