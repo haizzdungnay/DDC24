@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Fixed — Cổng link tài liệu chỉ quét 22/435 file nên báo `link_missing: 0` sai phạm vi; 26 link hỏng lọt lưới (2026-09-10)
+
+- Phạm vi: `scripts/docs_iso_harness.py`,
+  `docs/superpowers/plans/2026-09-04-fbd-edit-task6-handoff.md`,
+  `docs/07_records/test-evidence/programming/2026-09-03-project-cleanup-foxlinx.md`.
+  Issue #604.
+- Triệu chứng: `python3 scripts/docs_iso_harness.py --expect` in
+  `local link missing : 0` và `PASS`, trong khi `docs/` thật sự có **26** link
+  tương đối trỏ tới file không tồn tại.
+- Nguyên nhân gốc: phép kiểm link (số 2) lấy đầu vào từ danh sách cứng
+  `BASELINE + EXTRA` = **22** file, còn `docs/` có **435** file `.md` — phủ 5%.
+  Vì `link_missing` nằm trong nhóm `hard` phải bằng 0, con số ấy *trông như*
+  một cổng chặn thật, nên người đọc hiểu rộng hơn hẳn thứ nó đo. Mọi hồ sơ
+  thêm sau này đều tự động nằm ngoài phạm vi, nên nợ lớn dần theo tốc độ
+  thêm file.
+- Cách sửa:
+  - Thêm **phép kiểm 8** `docs_link_missing`: quét **mọi** `docs/**/*.md` bằng
+    `os.walk` (không danh sách cứng), đếm link tương đối trỏ đích không tồn
+    tại; có mặt trong `EXPECT` = `0` và trong nhóm `hard`. In kèm số file đã
+    quét để phạm vi tự nói ra thay vì phải tin một con số trần.
+  - Regex riêng `DOCS_LINK_RE` bóc đúng cú pháp ngoặc nhọn `[nhãn](<đường/dẫn>)`.
+    Dùng lại `LINK_RE` cũ sẽ giữ luôn cặp `<>` và sinh **1 báo động giả** tại
+    `PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md:255` (ảnh có thật) — số
+    đúng là 26, không phải 27.
+  - Thêm `--selftest` khoá luật bóc link (10 ca, gồm ngoặc nhọn, đường dẫn có
+    dấu cách, cắt anchor, bỏ qua `http`/`mailto`/`#`/`file:`).
+  - Sửa 25 link trong hồ sơ handoff Task 6: bỏ tiền tố sai `MK-DDC-24/` và quy
+    về đường dẫn tương đối đúng độ sâu (`../../../` từ `docs/superpowers/plans/`).
+    Chỉ đổi target, **không** đổi nhãn link hay bất kỳ văn bản nào khác.
+  - Sửa 1 link ở `2026-09-03-project-cleanup-foxlinx.md:8`: `../../` → `../../../`.
+  - Không đổi ý nghĩa hay giá trị của bất kỳ khoá `EXPECT` nào đang có.
+- Kiểm chứng (đo tại máy 2026-09-10; CI `NOT_RUN` — #414):
+  - Tái hiện trước khi sửa: phép kiểm mới ra **26** trên **435** file, harness
+    `FAIL — docs_link_missing=26`, exit `1`.
+  - Sau khi sửa: `docs/** link missing: 0 (quét 435 file .md)`,
+    `local link missing : 0`, `PASS — mọi phép kiểm bắt buộc đạt`,
+    `EXPECT: khớp toàn bộ ngưỡng`, exit `0`.
+  - Đếm độc lập (không dùng code vừa sửa): **26** → **0**.
+  - `--selftest`: 10/10 đạt. Mutation test: thay bằng regex không bóc ngoặc
+    nhọn ⇒ selftest 7/10 (exit 1) và cổng sinh đúng báo động giả đã dự đoán.
+
 ### Added — Routine Clean Code Implementer chạy mỗi giờ, phút `:00` giờ Việt Nam (2026-09-10)
 
 - Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (§8, §8.1a, §8.2, §8.3,

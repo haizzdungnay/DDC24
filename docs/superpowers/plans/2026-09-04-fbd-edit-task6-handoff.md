@@ -1,12 +1,12 @@
 # SESSION HANDOFF: FBD EDIT TASK 6 COMPLETED & LOCAL STACK RUNNING
 
 ### 1. SESSION OBJECTIVE
-Triển khai tính năng **FBD EDIT** (trình soạn thảo sơ đồ khối Function Block Diagram) cho `apps/web-ui` thuộc dự án MK-DDC-24 theo đặc tả kỹ thuật v0.3 ([docs/superpowers/specs/2026-08-31-fbd-edit-design.md](MK-DDC-24/docs/superpowers/specs/2026-08-31-fbd-edit-design.md)) và kế hoạch 11 task ([docs/superpowers/plans/2026-08-31-fbd-edit.md](MK-DDC-24/docs/superpowers/plans/2026-08-31-fbd-edit.md)).
+Triển khai tính năng **FBD EDIT** (trình soạn thảo sơ đồ khối Function Block Diagram) cho `apps/web-ui` thuộc dự án MK-DDC-24 theo đặc tả kỹ thuật v0.3 ([docs/superpowers/specs/2026-08-31-fbd-edit-design.md](../../../docs/superpowers/specs/2026-08-31-fbd-edit-design.md)) và kế hoạch 11 task ([docs/superpowers/plans/2026-08-31-fbd-edit.md](../../../docs/superpowers/plans/2026-08-31-fbd-edit.md)).
 Trong phiên này, đã hoàn thành trọn vẹn **Task 6: Quick Library placement và typed wiring**, đồng thời giữ vững chuỗi chạy cục bộ no-board (simulator C++ + Web API Go + Web UI React/Vite) để người dùng nghiệm thu trực quan trên trình duyệt trước khi tiếp tục Task 7.
 
 ### 2. USER REQUIREMENTS & HARD CONSTRAINTS
 - **Ngôn ngữ:** Luôn giao tiếp và viết toàn bộ tài liệu (docs, plans, changelog, báo cáo, commit message, PR) bằng tiếng Việt.
-- **Tài liệu và nhật ký:** Mọi thay đổi code/config/tài liệu bắt buộc cập nhật [CHANGELOG.md](MK-DDC-24/CHANGELOG.md) dưới mục `[Unreleased]` trong cùng phiên làm việc kèm ngày, phạm vi và số đo verification thật.
+- **Tài liệu và nhật ký:** Mọi thay đổi code/config/tài liệu bắt buộc cập nhật [CHANGELOG.md](../../../CHANGELOG.md) dưới mục `[Unreleased]` trong cùng phiên làm việc kèm ngày, phạm vi và số đo verification thật.
 - **Bảo toàn workspace & phạm vi:**
   - Giữ thay đổi FE cục bộ làm nguồn chân lý, không ghi đè công việc FE không liên quan.
   - Cấm can thiệp hoặc sửa đổi code ngoài thư mục `apps/web-ui/src/features/programming/**` (không đụng `apps/core/**`, `apps/web-api/**`, `firmware/**`, `contracts/**`, `scripts/**`).
@@ -32,7 +32,7 @@ Trong phiên này, đã hoàn thành trọn vẹn **Task 6: Quick Library placem
    - Chạy lint: `npm run lint`
    - Chạy typecheck: `npm run typecheck`
    - Kiểm tra bundle gate: `npm run check:bundle-budget`
-6. **Báo cáo & Cập nhật CHANGELOG:** Ghi nhận chi tiết thay đổi vào [CHANGELOG.md](MK-DDC-24/CHANGELOG.md) dưới mục `[Unreleased]`.
+6. **Báo cáo & Cập nhật CHANGELOG:** Ghi nhận chi tiết thay đổi vào [CHANGELOG.md](../../../CHANGELOG.md) dưới mục `[Unreleased]`.
 7. **Quy trình Git/PR:**
    - Commit tách nhóm logic, commit message Conventional Commits bằng tiếng Việt nêu rõ: `triệu chứng → nguyên nhân gốc → cách sửa`.
    - Push lên remote branch, tạo PR bằng `gh pr create` kèm bảng số đo kiểm chứng, merge PR và dọn dẹp branch remote.
@@ -74,19 +74,19 @@ Next:              Commit/merge nhánh feat/fbd-edit-task6 và bắt đầu Task
 - Linter: `npm run lint` PASS (0 warning, 0 error, kiểm tra chuỗi tiếng Việt đạt chuẩn).
 - TypeScript: `npm run typecheck` PASS (0 type error).
 - Bundle Budget: `npm run check:bundle-budget` PASS (Chunk `programming` gzip 122.45 KiB, ngân sách 165 KiB / 125 KiB, dư địa 42.55 KiB).
-- [CHANGELOG.md](MK-DDC-24/CHANGELOG.md): Đã ghi nhận mục `[Unreleased]` cho Task 6.
+- [CHANGELOG.md](../../../CHANGELOG.md): Đã ghi nhận mục `[Unreleased]` cho Task 6.
 
 **UNVERIFIED:**
 - Trải nghiệm trực tiếp của người dùng sau khi thử kéo thả / nối dây trên trình duyệt.
 
 ### 7. COMPLETED WORK
 - **Task 6: Quick Library placement và typed wiring:**
-  1. [commands.ts](MK-DDC-24/apps/web-ui/src/features/programming/fbd/commands.ts): Mở rộng `ADD_NODE` hỗ trợ `position?: FbdPoint` tuỳ chọn (snap toạ độ, cập nhật layout trong cùng 1 transaction/undo entry). Bổ sung action `ADD_WIRE` nhận `{ networkId, wire }`. Tách validator thuần `validateFbdWireCandidate` độc lập dùng chung cho cả chuột, touch và bàn phím.
-  2. [palette.ts](MK-DDC-24/apps/web-ui/src/features/programming/fbd/palette.ts) & [userPou.ts](MK-DDC-24/apps/web-ui/src/features/programming/fbd/userPou.ts): Bổ sung trường `featureState` vào `FbdPaletteEntry` truyền từ registry. Reducer `ADD_NODE` từ chối dứt khoát các khối `featureState !== 'AVAILABLE'` với mã `block-review-required`.
-  3. [QuickLibraryPanel.tsx](MK-DDC-24/apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.tsx): Khối PID (`REVIEW_REQUIRED`) bị khóa kéo thả (`draggable={false}`), nút chèn disabled. Bổ sung nút "Thử lại" kích hoạt `refresh` khi gặp sự cố đọc catalog.
-  4. [FbdCanvasLayers.tsx](MK-DDC-24/apps/web-ui/src/features/programming/fbd/FbdCanvasLayers.tsx): Thêm `FbdGhostLayer` (hiển thị khối mờ khi kéo thả / click-to-place) và `FbdWirePreviewLayer` (đường nét đứt xem trước dây nối). Nâng cấp `FbdNodesLayer` cô lập sự kiện port SVG (`stopPropagation`).
-  5. [FbdCanvas.tsx](MK-DDC-24/apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx): Tích hợp HTML5 Drag & Drop với MIME type `application/x-mkddc-library-entry`, click-to-place có ghost bám chuột, điều khiển kéo dây pointer chuột / cảm ứng, Ctrl click-click, Escape / cancel dọn dẹp state tạm.
-  6. [StructuredFbdEditor.tsx](MK-DDC-24/apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx): Nối click-to-place từ QuickLibrary sang Canvas qua `pendingPlacement`.
+  1. [commands.ts](../../../apps/web-ui/src/features/programming/fbd/commands.ts): Mở rộng `ADD_NODE` hỗ trợ `position?: FbdPoint` tuỳ chọn (snap toạ độ, cập nhật layout trong cùng 1 transaction/undo entry). Bổ sung action `ADD_WIRE` nhận `{ networkId, wire }`. Tách validator thuần `validateFbdWireCandidate` độc lập dùng chung cho cả chuột, touch và bàn phím.
+  2. [palette.ts](../../../apps/web-ui/src/features/programming/fbd/palette.ts) & [userPou.ts](../../../apps/web-ui/src/features/programming/fbd/userPou.ts): Bổ sung trường `featureState` vào `FbdPaletteEntry` truyền từ registry. Reducer `ADD_NODE` từ chối dứt khoát các khối `featureState !== 'AVAILABLE'` với mã `block-review-required`.
+  3. [QuickLibraryPanel.tsx](../../../apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.tsx): Khối PID (`REVIEW_REQUIRED`) bị khóa kéo thả (`draggable={false}`), nút chèn disabled. Bổ sung nút "Thử lại" kích hoạt `refresh` khi gặp sự cố đọc catalog.
+  4. [FbdCanvasLayers.tsx](../../../apps/web-ui/src/features/programming/fbd/FbdCanvasLayers.tsx): Thêm `FbdGhostLayer` (hiển thị khối mờ khi kéo thả / click-to-place) và `FbdWirePreviewLayer` (đường nét đứt xem trước dây nối). Nâng cấp `FbdNodesLayer` cô lập sự kiện port SVG (`stopPropagation`).
+  5. [FbdCanvas.tsx](../../../apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx): Tích hợp HTML5 Drag & Drop với MIME type `application/x-mkddc-library-entry`, click-to-place có ghost bám chuột, điều khiển kéo dây pointer chuột / cảm ứng, Ctrl click-click, Escape / cancel dọn dẹp state tạm.
+  6. [StructuredFbdEditor.tsx](../../../apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx): Nối click-to-place từ QuickLibrary sang Canvas qua `pendingPlacement`.
   7. Test suites: Tạo mới `commands.wiring.test.ts` (14 tests), `FbdCanvas.placement.test.tsx` (13 tests); mở rộng `QuickLibraryPanel.test.tsx` và `StructuredFbdEditor.test.tsx`.
 
 ### 8. WORK IN PROGRESS
@@ -103,21 +103,21 @@ Next:              Commit/merge nhánh feat/fbd-edit-task6 và bắt đầu Task
 - **Cô lập sự kiện Port:** Pointer event trên port SVG gọi `stopPropagation()` để không bị nuốt bởi gesture kéo node hoặc pan canvas.
 
 ### 10. RELEVANT FILES & ARTIFACTS
-- [commands.ts](MK-DDC-24/apps/web-ui/src/features/programming/fbd/commands.ts): Reducer FBD, action `ADD_NODE` (kèm position), `ADD_WIRE`, `validateFbdWireCandidate`.
-- [palette.ts](MK-DDC-24/apps/web-ui/src/features/programming/fbd/palette.ts): Palette definition, mang theo `featureState`.
-- [FbdCanvas.tsx](MK-DDC-24/apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx): SVG Canvas chính, HTML5 DnD, click-to-place, pointer wire controller.
-- [FbdCanvasLayers.tsx](MK-DDC-24/apps/web-ui/src/features/programming/fbd/FbdCanvasLayers.tsx): SVG layers (Grid, Wires, Nodes, Marquee, Ghost, WirePreview).
-- [StructuredFbdEditor.tsx](MK-DDC-24/apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx): Editor shell điều phối toolbar, canvas và Quick Library.
-- [QuickLibraryPanel.tsx](MK-DDC-24/apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.tsx): Quick Library panel, khóa PID, nút Thử lại.
-- [commands.wiring.test.ts](MK-DDC-24/apps/web-ui/src/features/programming/fbd/commands.wiring.test.ts): Test suite cho wiring validator và reducer.
-- [FbdCanvas.placement.test.tsx](MK-DDC-24/apps/web-ui/src/features/programming/fbd/FbdCanvas.placement.test.tsx): Test suite cho canvas placement và wire gestures.
-- [CHANGELOG.md](MK-DDC-24/CHANGELOG.md): Nhật ký thay đổi dự án.
+- [commands.ts](../../../apps/web-ui/src/features/programming/fbd/commands.ts): Reducer FBD, action `ADD_NODE` (kèm position), `ADD_WIRE`, `validateFbdWireCandidate`.
+- [palette.ts](../../../apps/web-ui/src/features/programming/fbd/palette.ts): Palette definition, mang theo `featureState`.
+- [FbdCanvas.tsx](../../../apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx): SVG Canvas chính, HTML5 DnD, click-to-place, pointer wire controller.
+- [FbdCanvasLayers.tsx](../../../apps/web-ui/src/features/programming/fbd/FbdCanvasLayers.tsx): SVG layers (Grid, Wires, Nodes, Marquee, Ghost, WirePreview).
+- [StructuredFbdEditor.tsx](../../../apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx): Editor shell điều phối toolbar, canvas và Quick Library.
+- [QuickLibraryPanel.tsx](../../../apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.tsx): Quick Library panel, khóa PID, nút Thử lại.
+- [commands.wiring.test.ts](../../../apps/web-ui/src/features/programming/fbd/commands.wiring.test.ts): Test suite cho wiring validator và reducer.
+- [FbdCanvas.placement.test.tsx](../../../apps/web-ui/src/features/programming/fbd/FbdCanvas.placement.test.tsx): Test suite cho canvas placement và wire gestures.
+- [CHANGELOG.md](../../../CHANGELOG.md): Nhật ký thay đổi dự án.
 
 ### 11. CODE CHANGES
 - Các file sửa đổi và tạo mới đã được liệt kê chi tiết trong git status:
   - `commands.ts`, `palette.ts`, `userPou.ts`, `QuickLibraryPanel.tsx`, `FbdCanvas.tsx`, `FbdCanvasLayers.tsx`, `StructuredFbdEditor.tsx`.
   - Tests: `commands.wiring.test.ts`, `FbdCanvas.placement.test.tsx`, `QuickLibraryPanel.test.tsx`, `StructuredFbdEditor.test.tsx`.
-  - Tài liệu: [CHANGELOG.md](MK-DDC-24/CHANGELOG.md), [docs/superpowers/plans/2026-09-03-fbd-edit-task6-plan.md](MK-DDC-24/docs/superpowers/plans/2026-09-03-fbd-edit-task6-plan.md).
+  - Tài liệu: [CHANGELOG.md](../../../CHANGELOG.md), [docs/superpowers/plans/2026-09-03-fbd-edit-task6-plan.md](../../../docs/superpowers/plans/2026-09-03-fbd-edit-task6-plan.md).
 
 ### 12. COMMANDS RUN
 ```bash
@@ -159,7 +159,7 @@ cd apps/web-ui && npm run check:bundle-budget
    - Commit với message tiếng Việt chuẩn (`feat(programming-ui): them keo tha quick library va typed wiring fbd`).
    - Push lên nhánh `feat/fbd-edit-task6`, tạo PR, merge vào `main` và xóa remote branch.
 2. Bước vào **Task 7: I/O picker, Inspector và node presentation**:
-   - Khảo sát [inspectorContext.ts](MK-DDC-24/apps/web-ui/src/features/programming/design/inspector/inspectorContext.ts) và [ContextInspector.tsx](MK-DDC-24/apps/web-ui/src/features/programming/design/inspector/ContextInspector.tsx).
+   - Khảo sát [inspectorContext.ts](../../../apps/web-ui/src/features/programming/design/inspector/inspectorContext.ts) và [ContextInspector.tsx](../../../apps/web-ui/src/features/programming/design/inspector/ContextInspector.tsx).
    - Lập plan chi tiết theo quy trình 7 pha để tích hợp Inspector FBD và I/O picker.
 
 ### 18. DEFINITION OF DONE

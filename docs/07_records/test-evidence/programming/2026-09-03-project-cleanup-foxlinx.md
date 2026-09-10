@@ -5,7 +5,7 @@
 | Bo | `mekong-fac.ddns.net` (`DDC-24-TANG-1`) |
 | DB | `/data/config/programming/programming-v1.sqlite` |
 | Sao lưu | `programming-backups/programming-v1-before-archive-20260903T060356Z.sqlite` (6 455 296 bytes) |
-| Finding liên quan | `F-SHELL-01` (mở), `F-SHELL-02` (mở) — xem [`PLAN-FE-SHELL-062`](../../03_implementation/62_PROGRAMMING_SHELL_PROJECT_SETTINGS_REMOVAL_PLAN.md) §9 |
+| Finding liên quan | `F-SHELL-01` (mở), `F-SHELL-02` (mở) — xem [`PLAN-FE-SHELL-062`](../../../03_implementation/62_PROGRAMMING_SHELL_PROJECT_SETTINGS_REMOVAL_PLAN.md) §9 |
 
 ## Triệu chứng
 
