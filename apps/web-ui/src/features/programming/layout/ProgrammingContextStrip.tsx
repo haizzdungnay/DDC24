@@ -574,7 +574,7 @@ function ContextStateNotice({ notice }: { notice: ContextNotice }) {
   const role = notice.kind === 'error' || notice.kind === 'offline' || notice.kind === 'unknown' ? 'alert' : 'status'
 
   return (
-    <div role={role} className={`mb-2 flex items-start gap-2 rounded-[var(--radius)] border px-3 py-2 text-xs ${tone}`}>
+    <div role={role} className={`mb-1 flex items-start gap-2 rounded-[var(--radius)] border px-3 py-1 text-xs ${tone}`}>
       <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${notice.kind === 'loading' ? 'animate-spin' : ''}`} aria-hidden="true" />
       <span>
         <strong>{notice.title}</strong>

@@ -585,7 +585,7 @@ export function StructuredFbdEditor({
       tabIndex={-1}
       aria-label={pick('Bộ dựng FBD có cấu trúc', 'Structured FBD editor')}
       aria-describedby={keyboardHelpId}
-      className="space-y-4 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-4"
+      className="flex min-h-0 flex-1 flex-col gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2"
       onKeyDown={(event) => {
         const command = resolveFbdKeyboardCommand(event)
         if (!command || ignoresGraphCommand(event.target, command)) return
@@ -602,22 +602,93 @@ export function StructuredFbdEditor({
         if (insertStartedFromToolbar) sectionRef.current?.focus()
       }}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">FBD · {state.document.name}</h2>
-          <p id={keyboardHelpId} className="text-xs text-[var(--c-text-dim)]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">FBD · {state.document.name}</h2>
+          <p id={keyboardHelpId} className="sr-only">
             {pick(
               'Chọn block/POU trong palette; Insert thêm lựa chọn đó · ↑/↓ chọn port · Enter nối · Alt+↑/↓ đổi thứ tự · Delete xóa · Ctrl+Z/Y hoàn tác/làm lại.',
               'Choose a block/POU in the palette; Insert adds the selected block/POU · arrows select port · Enter connects · Alt+arrows reorder · Delete removes · Ctrl+Z/Y undo/redo.',
             )}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
+        <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
           <span className="inline-flex min-h-11 items-center rounded border border-[var(--c-border)] px-2 text-xs" data-testid="fbd-active-network">
             {pick('Network đang mở', 'Active network')}: {activeNetwork?.name ?? '—'}
           </span>
           <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('ADD_NETWORK')}>
             {pick('Network', 'Network')}
+          </Button>
+          <label className="flex items-center gap-1 text-xs">
+            {pick('Khối', 'Block')}
+            <select
+              className={inputClass}
+              value={paletteTypeRef}
+              disabled={!canEdit || !selectedNetworkId}
+              onChange={(event) => setPaletteTypeRef(event.target.value)}
+            >
+              {FBD_PALETTE_CATEGORY_ORDER.filter((category) => category.id !== 'interface' && category.id !== 'constants').map((category) => (
+                <optgroup key={category.id} label={pick(category.labelVi, category.labelEn)}>
+                  {visiblePaletteEntries.filter((item) => item.category === category.id && !item.id.startsWith('__user__')).map((item) => (
+                    <option key={item.id} value={item.id}>{pick(item.labelVi, item.labelEn)}</option>
+                  ))}
+                </optgroup>
+              ))}
+              {userPouPalette.entries.length > 0 && (
+                <optgroup label={pick('POU dự án / thư viện', 'Project / library POUs')}>
+                  {userPouPalette.entries.filter((entry) => visiblePaletteEntries.includes(entry)).map((entry) => (
+                    <option key={`pou-${entry.id}`} value={entry.id}>
+                      {pick(entry.labelVi, entry.labelEn)} · {entry.kind}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </label>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!canEdit || !selectedNetworkId}
+            aria-pressed={libraryDockOpen}
+            title={pick('Thư viện nhanh — cùng catalog với ST và PGM-04', 'Quick library — same catalog as ST and PGM-04')}
+            onClick={() => setLibraryDockOpen((open) => {
+              onLibraryOpenChange?.(!open)
+              return !open
+            })}
+          >
+            {pick('Thư viện', 'Library')}
+          </Button>
+          {selectedPortType !== null && (
+            <label className="flex items-center gap-1.5 text-xs text-[var(--c-text-dim)]">
+              <input
+                type="checkbox"
+                checked={compatibleFilterOn}
+                onChange={(event) => setCompatibleFilterOn(event.target.checked)}
+              />
+              {pick(
+                `Chỉ khối khớp cổng ${selectedPortType} (${visiblePaletteEntries.length})`,
+                `Only blocks matching the ${selectedPortType} port (${visiblePaletteEntries.length})`
+              )}
+            </label>
+          )}
+          <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId || !selectedPaletteEntry} onClick={addPaletteNode}>
+            {pick('Thêm khối', 'Add block')}
+          </Button>
+          <Button size="sm" variant={creatingKind === 'INPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+            onClick={() => { setCreatingKind(creatingKind === 'INPUT' ? null : 'INPUT'); setCreateError(null) }}>
+            {pick('Input', 'Input')}
+          </Button>
+          <Button size="sm" variant={creatingKind === 'OUTPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+            onClick={() => { setCreatingKind(creatingKind === 'OUTPUT' ? null : 'OUTPUT'); setCreateError(null) }}>
+            {pick('Output', 'Output')}
+          </Button>
+          <Button size="sm" variant={creatingKind === 'CONSTANT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+            onClick={() => {
+              setCreatingKind(creatingKind === 'CONSTANT' ? null : 'CONSTANT')
+              setCreateError(null)
+              setConstantValue(String(defaultConstantLiteral(constantType)))
+            }}>
+            {pick('Constant', 'Constant')}
           </Button>
           <Button size="sm" icon={<ArrowUp className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('MOVE_NODE_UP')} aria-label={pick('Đưa block lên', 'Move block up')} />
           <Button size="sm" icon={<ArrowDown className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('MOVE_NODE_DOWN')} aria-label={pick('Đưa block xuống', 'Move block down')} />
@@ -662,88 +733,6 @@ export function StructuredFbdEditor({
             {pick('Chọn vùng', 'Marquee select')}
           </button>
         </div>
-      </div>
-
-      {layoutStatus && <p role="status" className="text-xs text-[var(--c-text-dim)]">{layoutStatus}</p>}
-
-      <div className="grid min-w-0 gap-4 min-[1440px]:grid-cols-[minmax(0,1fr)_18rem]">
-      <div className="min-w-0 space-y-4">
-      {/* WP-05/06 (FBD_EDITOR_DESIGN.md §1/§2) — palette 9 nhóm + tạo node giao diện */}
-      <div className="flex flex-wrap items-end gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3" role="group" aria-label={pick('Palette FBD', 'FBD palette')}>
-        <label className="flex flex-col gap-1 text-xs">
-          {pick('Khối', 'Block')}
-          <select
-            className={inputClass}
-            value={paletteTypeRef}
-            disabled={!canEdit || !selectedNetworkId}
-            onChange={(event) => setPaletteTypeRef(event.target.value)}
-          >
-            {FBD_PALETTE_CATEGORY_ORDER.filter((category) => category.id !== 'interface' && category.id !== 'constants').map((category) => (
-              <optgroup key={category.id} label={pick(category.labelVi, category.labelEn)}>
-                {visiblePaletteEntries.filter((item) => item.category === category.id && !item.id.startsWith('__user__')).map((item) => (
-                  <option key={item.id} value={item.id}>{pick(item.labelVi, item.labelEn)}</option>
-                ))}
-              </optgroup>
-            ))}
-            {userPouPalette.entries.length > 0 && (
-              <optgroup label={pick('POU dự án / thư viện', 'Project / library POUs')}>
-                {userPouPalette.entries.filter((entry) => visiblePaletteEntries.includes(entry)).map((entry) => (
-                  <option key={`pou-${entry.id}`} value={entry.id}>
-                    {pick(entry.labelVi, entry.labelEn)} · {entry.kind}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        </label>
-        {/* `T59-804`: bộ lọc là LỰA CHỌN, không phải cắt bớt vĩnh viễn — "không
-            khớp cổng này" khác hẳn "không tồn tại". Chỉ hiện khi đang đứng ở
-            một cổng, và nói rõ còn lại bao nhiêu mục. */}
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={!canEdit || !selectedNetworkId}
-          aria-pressed={libraryDockOpen}
-          title={pick('Thư viện nhanh — cùng catalog với ST và PGM-04', 'Quick library — same catalog as ST and PGM-04')}
-          onClick={() => setLibraryDockOpen((open) => {
-            onLibraryOpenChange?.(!open)
-            return !open
-          })}
-        >
-          {pick('Thư viện', 'Library')}
-        </Button>
-        {selectedPortType !== null && (
-          <label className="flex items-center gap-1.5 text-xs text-[var(--c-text-dim)]">
-            <input
-              type="checkbox"
-              checked={compatibleFilterOn}
-              onChange={(event) => setCompatibleFilterOn(event.target.checked)}
-            />
-            {pick(
-              `Chỉ khối khớp cổng ${selectedPortType} (${visiblePaletteEntries.length})`,
-              `Only blocks matching the ${selectedPortType} port (${visiblePaletteEntries.length})`
-            )}
-          </label>
-        )}
-        <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId || !selectedPaletteEntry} onClick={addPaletteNode}>
-          {pick('Thêm khối', 'Add block')}
-        </Button>
-        <Button size="sm" variant={creatingKind === 'INPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
-          onClick={() => { setCreatingKind(creatingKind === 'INPUT' ? null : 'INPUT'); setCreateError(null) }}>
-          {pick('Input', 'Input')}
-        </Button>
-        <Button size="sm" variant={creatingKind === 'OUTPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
-          onClick={() => { setCreatingKind(creatingKind === 'OUTPUT' ? null : 'OUTPUT'); setCreateError(null) }}>
-          {pick('Output', 'Output')}
-        </Button>
-        <Button size="sm" variant={creatingKind === 'CONSTANT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
-          onClick={() => {
-            setCreatingKind(creatingKind === 'CONSTANT' ? null : 'CONSTANT')
-            setCreateError(null)
-            setConstantValue(String(defaultConstantLiteral(constantType)))
-          }}>
-          {pick('Constant', 'Constant')}
-        </Button>
         {selectedPaletteEntry?.warning && (
           <p className="basis-full rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]">
             {pick(selectedPaletteEntry.warning.vi, selectedPaletteEntry.warning.en)}
@@ -761,7 +750,11 @@ export function StructuredFbdEditor({
             </ul>
           </div>
         )}
+        {layoutStatus && <p role="status" className="basis-full text-xs text-[var(--c-text-dim)]">{layoutStatus}</p>}
       </div>
+
+      <div className="grid min-h-0 min-w-0 flex-1 gap-4 min-[1440px]:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
 
       {canEdit && (creatingKind === 'INPUT' || creatingKind === 'OUTPUT') && (
         <form
@@ -834,9 +827,15 @@ export function StructuredFbdEditor({
         {!canEdit && <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-1">{pick('Chỉ đọc', 'Read only')}</span>}
       </div>
 
-      <div className="space-y-3">
+      <div className={networkView === 'ALL' ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto' : 'flex min-h-0 flex-1 flex-col gap-3'}>
         {visibleNetworks.map((network) => (
-          <article key={network.id} data-fbd-network-id={network.id} className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3">
+          <article
+            key={network.id}
+            data-fbd-network-id={network.id}
+            className={networkView === 'ALL'
+              ? 'rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3'
+              : 'flex min-h-0 flex-1 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-3'}
+          >
             <button
               type="button"
               data-fbd-canvas-control="true"

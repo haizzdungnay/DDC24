@@ -874,7 +874,7 @@ export function ProgramsTab({
         data-maximized={maximized ? 'true' : 'false'}
         className={maximized
           ? 'fixed inset-0 z-40 flex min-w-0 flex-col gap-2 bg-[var(--c-bg)] p-3'
-          : 'flex min-w-0 flex-col lg:min-h-0'}
+          : 'flex min-w-0 flex-1 flex-col lg:h-full lg:min-h-0'}
         onKeyDown={(event) => {
           if (!maximized || event.key !== 'Escape') return
           /* `defaultPrevented` là điều kiện then chốt: gợi ý tự động và khay Tìm

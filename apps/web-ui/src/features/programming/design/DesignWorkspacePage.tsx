@@ -645,7 +645,7 @@ export function DesignWorkspacePage({
           {pick('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ. Hãy dùng màn hình rộng từ 768 px để chỉnh sửa.', 'Small screen — diagram view only. Use a screen at least 768 px wide to edit.')}
         </p>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-1">
         <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
           {VALID_TABS.map((candidate) => (
             <button
@@ -699,18 +699,6 @@ export function DesignWorkspacePage({
             onSwitch={switchWorkspaceMode}
           />
         </div>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            {/* `T59-821` — `Kiểm tra` và `So sánh` ĐÃ CHUYỂN vào toolbar của
-             * chính trình soạn thảo, đúng `PGM-02A §3`. Giữ thêm một bản ở đây
-             * sẽ là HAI nút cho cùng một hành động: người dùng phải đoán chúng
-             * có khác nhau không, và một lần sửa điều kiện khoá sẽ chỉ áp cho
-             * một trong hai.
-             *
-             * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
-             * sang PGM-05, nơi sở hữu trọn vòng seal/run/poll/result. */}
-          </div>
-        )}
       </div>
 
       {compareOpen && (
@@ -878,6 +866,10 @@ export function DesignWorkspacePage({
               focusFbdSelection={compareFbdFocus}
               onPendingOperationsChange={updateProgramOperations}
               discardVersion={discardVersion}
+              /* `T59-821` — `Kiểm tra` và `So sánh` nằm trong toolbar của
+               * chính trình soạn thảo, đúng `PGM-02A §3`.
+               * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
+               * sang PGM-05, nơi sở hữu trọn vòng seal/run/poll/result. */
               onRunCheck={goToCommission}
               onOpenCompare={() => setCompareOpen(true)}
               checkDisabledReason={draftDirty

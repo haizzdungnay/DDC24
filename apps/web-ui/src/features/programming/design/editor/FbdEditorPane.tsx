@@ -150,7 +150,7 @@ export function FbdEditorPane({
 
   return (
     <div
-      className="min-w-0 space-y-2 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-1 text-[var(--c-text)]"
+      className="flex min-w-0 flex-1 flex-col gap-2 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-1 text-[var(--c-text)]"
       data-testid="fbd-workspace-shell"
       data-fbd-theme={preferences.theme}
       style={themeStyle}
