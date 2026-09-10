@@ -109,21 +109,31 @@ mà không nêu tiền đề này ⇒ **số đo của review không tái lập 
 Với một bản review lấy "bằng chứng phải tái lập được" làm luận điểm chính, đây là
 khiếm khuyết phải sửa.
 
-### 3.5 Finding MỚI, không có trong review — `F-CTO-BAC-01` · P1
+### 3.5 Một quan sát bổ sung — KHÔNG phải finding mới
+
+> **Đính chính (cùng ngày, trước khi biên bản này được merge).** Bản nháp đầu của mục
+> này ghi việc `dispatch_cov()` quét thiếu kênh là "finding mới `F-CTO-BAC-01`, review
+> không nêu". **Sai.** Review CÓ nêu, ở `REV-BACNET-ASBUILT-001:194` (nằm trong phần
+> G-05), và `PLAN-BACNET-D2C-001:184` đã có task riêng cho nó: `T-BAC-034` —
+> *"`dispatch_cov()` quét đủ 16 UI (hiện 1..8)"*, `HOST`, P1, Dep 030.
+>
+> Sai sót là của CTO, do đọc §3 của review mà không đọc hết đoạn văn xuôi của G-05.
+> Ghi lại ở đây thay vì xoá lặng: một biên bản dựng lên để chống bằng chứng giả thì
+> không được sửa dấu vết sai của chính nó.
+
+Nội dung quan sát, giữ lại vì nó xác nhận độc lập `T-BAC-034` bằng số đo của CTO:
 
 `bacnet_server.cpp:301` quét COV cho AI/BI với `for (uint32_t i = 1; i <= 8; i++)`,
 trong khi `KX_N_UI = 16` (`contracts/shm/mkddc_shm.h:67`) và `register_objects()`
-(`bacnet_server.cpp:218`) tạo **AI×16**.
+(`bacnet_server.cpp:218`) tạo **AI×16**. Hệ quả: AI9…AI16 không bao giờ được kiểm COV,
+kể cả sau khi `T-BAC-044..046` nối COV ra mạng thật.
 
-Hệ quả: **AI9…AI16 không bao giờ được kiểm COV** — kể cả sau khi `T-BAC-044..046` nối
-COV ra mạng thật. Tám kênh analog sẽ im lặng vĩnh viễn với BMS đăng ký COV, và triệu
-chứng là "một nửa số kênh không báo thay đổi" chứ không phải một lỗi build.
-
-Cùng gốc lệch hằng số: `sync_stack_inputs()` (`bacnet_server.cpp:232`) lặp BI tới
-`KX_N_UI` = 16 trong khi chỉ 8 BI tồn tại. Không gây hại (`read_bi` chặn `instance > 8`),
-nhưng là dấu hiệu cùng một hằng số bị dùng cho hai kích thước khác nhau.
-
-Finding này thuộc phạm vi `T-BAC-044..046` (COV), sẽ vào Issue ở đợt 6.
+**Phần thật sự chưa ai ghi:** cùng một gốc lệch hằng số còn ở chỗ thứ hai mà cả review
+lẫn plan đều không nêu — `sync_stack_inputs()` (`bacnet_server.cpp:232`) lặp BI tới
+`KX_N_UI` = 16 trong khi chỉ 8 BI tồn tại. Không gây hại hôm nay (`bacnet_objects.cpp:146`
+chặn `instance > N_BI`), nhưng là cùng một hằng số đang được dùng cho hai kích thước khác
+nhau, và nó sẽ thành lỗi thật nếu `T-BAC-022` (capability gate) đổi số BI. Ghi vào
+`T-BAC-034` khi Issue của task đó được tạo.
 
 ---
 

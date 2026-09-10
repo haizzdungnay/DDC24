@@ -42,9 +42,12 @@
   - CI: `NOT_RUN (#414)` — tổ chức chưa cấp runner.
 - Ghi chú: biên bản §3 ghi bốn sai lệch tìm được **trong chính bản review** (lệnh kiểm chứng G-02
   khớp nhầm `IoCache::write_ao_mode`; số test 67 vs 81; phạm vi `OD-BAC-009` thiếu googletest;
-  số đo §5.1 không tái lập được từ container sạch) và một finding mới `F-CTO-BAC-01`:
-  `bacnet_server.cpp:301` quét COV `i <= 8` trong khi `KX_N_UI = 16` ⇒ AI9…AI16 sẽ không bao giờ
-  được kiểm COV kể cả sau khi COV được nối ra mạng thật.
+  số đo §5.1 không tái lập được từ container sạch).
+- Đính chính trong cùng phiên: bản nháp biên bản ghi việc `dispatch_cov()` quét thiếu kênh là
+  "finding mới `F-CTO-BAC-01`". **Sai** — review đã nêu ở `REV-BACNET-ASBUILT-001:194` và plan đã
+  có `T-BAC-034` cho nó (`PLAN-BACNET-D2C-001:184`). Biên bản §3.5 giữ lại dấu vết đính chính thay
+  vì xoá lặng. Phần thật sự chưa ai ghi là chỗ lệch hằng số thứ hai:
+  `bacnet_server.cpp:232` lặp BI tới `KX_N_UI` = 16 trong khi chỉ 8 BI tồn tại.
 
 ### Changed — Thu hồi ~14px từ dải dùng chung workspace Thiết kế (Phần 4 plan tối ưu không gian) (2026-09-10)
 
