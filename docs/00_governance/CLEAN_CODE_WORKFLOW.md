@@ -211,6 +211,7 @@ Nhãn chủ đề sẵn có (`programming-ui`, `point-io`, `st-editor`, `pgm04`,
 | Clean docs | `clean/docs/<issue-number>-<slug>` |
 | Nợ test | `clean/test/<issue-number>-<slug>` |
 | Tooling/CI | `clean/tooling/<issue-number>-<slug>` |
+| Làn Routine Implementer mỗi giờ (§8.4) | `clean-code/issue-<issue-number>` |
 
 - Nhánh đích luôn là `main`. Không tạo nhánh dài hạn khác.
 - Một nhánh phục vụ **đúng một** Issue.
@@ -392,29 +393,39 @@ session id của phiên vòng 1, làm mất dấu người sửa vòng 2.
 
 ## 8. Lịch chạy
 
-> **Trạng thái 2026-09-09: KHÔNG có Routine nào đang hoạt động.** Bốn Routine
-> tạo bằng `create_trigger` đã bị xoá sau khi đo được rằng chúng không thể chạy
-> (§8.1). Ba vai hiện chỉ chạy khi được kích hoạt tay. Muốn có lịch tự động,
-> chủ sở hữu phải tạo Routine từ **giao diện Routines trên claude.ai** bằng các
-> prompt ở §8.2.
+> **Trạng thái 2026-09-10: hai Routine đang chạy thật.** Kết luận cũ ("không
+> tạo được Routine từ phiên agent", §8.1) chỉ còn đúng cho ba cơ chế đã đo ở
+> đó. Cơ chế thứ tư — **điều phối qua phiên bền** — chạy được và đang chạy
+> (§8.1a).
 
-Lịch mục tiêu khi Routine được dựng lại:
+| Routine | Trigger | Lịch | Phiên điều phối | Prompt |
+|---|---|---|---|---|
+| Clean Code Auditor (Manager) | `trig_01Gt1weroASWGntFuTVZWCBK` | `0 23 * * *` UTC ≈ 06:00 VN | `session_01D1pwCB4f6o6DrcFq88djCc` | §8.3 |
+| Clean Code Implementer | `trig_01GqDKDuHc5iV6dKGq86DL93` | mỗi giờ, phút `:00` VN | `session_01R1Ga52pakcTifHxCmRd3ty` | §8.4 |
 
-| Vai | Nhịp | Cron (UTC) | Giờ Việt Nam |
-|---|---|---|---|
-| Manager/Planner | 1 lần/ngày | `0 3 * * *` | ~10:00 |
-| Implementer A | mỗi 3 giờ | `5 0,3,6,9,12,15,18,21 * * *` | 07:05, 10:05, 13:05, 16:05, 19:05, 22:05, 01:05, 04:05 |
-| Implementer B | mỗi 3 giờ, lệch 90 phút | `35 1,4,7,10,13,16,19,22 * * *` | 08:35, 11:35, 14:35, 17:35, 20:35, 23:35, 02:35, 05:35 |
-| Reviewer/Gatekeeper | 1 lần/ngày | `0 11 * * *` | ~18:00 |
+Vai Reviewer/Gatekeeper **chưa có Routine** — vẫn chạy tay. Lịch mục tiêu khi
+dựng nốt:
 
-Nhịp 90 phút không biểu diễn được bằng một biểu thức cron 5 trường, nên vai
-Implementer dùng **hai** Routine chu kỳ 3 giờ lệch nhau đúng 90 phút: A ở phút
-05 của giờ chia hết cho 3, B ở phút 35 của giờ lệch. Ghép lại được 16 lượt/ngày,
-khoảng cách đều.
+| Vai | Nhịp | Cron (UTC) | Giờ Việt Nam | Trạng thái |
+|---|---|---|---|---|
+| Manager/Auditor | 1 lần/ngày | `0 23 * * *` | ≈06:00 | đang chạy (§8.3) |
+| Implementer | mỗi giờ | `0 * * * *` | phút `:00` mọi giờ | đang chạy (§8.4) |
+| Reviewer/Gatekeeper | 1 lần/ngày | `0 11 * * *` | ≈18:00 | chưa dựng |
 
-Phút của Routine chạy theo giờ có thể được server neo vào phút tạo, nên lịch
-hằng ngày lệch vài phút so với cron ghi ở trên. Hai Routine Implementer dùng phút
-khác 0 nên được lưu nguyên văn và giữ đúng khoảng cách 90 phút.
+Làn Implementer mỗi giờ **thay thế** phương án cũ "hai Routine chu kỳ 3 giờ lệch
+nhau 90 phút". Nhịp 90 phút không biểu diễn được bằng một biểu thức cron 5
+trường nên trước đây phải tách đôi; nhịp 1 giờ biểu diễn được trực tiếp, và
+khoá thực thi (§8.4) mới là thứ chặn hai Implementer chồng nhau, chứ không phải
+khoảng cách trong lịch.
+
+**Phút của Routine chạy theo giờ bị server neo vào thời điểm gọi
+`create_trigger`/`update_trigger`, không phải vào trường phút của cron.** Đo
+2026-09-10: tạo lúc `03:06:31Z` với `0 0-23 * * *` cho `next_run_at`
+`04:04:19Z`; gọi `update_trigger` lúc `03:06:56Z` với danh sách 24 giờ viết
+tường minh cho `04:06:44Z`. Viết `0-23` hay liệt kê đủ 24 giờ đều không né được
+heuristic. Cách duy nhất lấy đúng phút `:00`: gọi `update_trigger` **trong đúng
+phút `:00` UTC** để mốc neo rơi vào phút đó — Việt Nam lệch UTC đúng 7 giờ tròn
+nên phút UTC bằng phút giờ Việt Nam.
 
 **Mỗi vai phải có phiên riêng.** Đó là điều kiện của tách vai: định danh `*-Run`
 lấy từ phiên đang chạy, nên hai vai dùng chung một phiên sẽ cho cùng một định
@@ -457,10 +468,53 @@ chính `create_trigger` trả về ngay lần gọi đầu**:
 
 Cảnh báo đó nói đúng kết luận cuối cùng, ngay từ đầu.
 
-**Cách duy nhất còn lại: tạo Routine từ giao diện Routines trên claude.ai**, nơi
-repo và connector GitHub được chọn lúc tạo. Prompt sẵn dùng ở §8.2.
+Kết luận ghi ngày 2026-09-09 là "cách duy nhất còn lại: tạo Routine từ giao diện
+Routines trên claude.ai". Kết luận đó **quá hẹp** — xem §8.1a.
+
+### 8.1a Cơ chế thứ tư — điều phối qua phiên bền — CHẠY ĐƯỢC
+
+Ba cơ chế ở §8.1 hỏng vì cùng một nguyên nhân: chúng cố làm cho **phiên do
+Routine sinh ra** tự có repo + MCP. Cơ chế thứ tư không cố làm việc đó. Nó tách
+đôi:
+
+1. Một **phiên điều phối** (phiên bền, do người tạo từ claude.ai nên có sẵn repo
+   + connector GitHub + MCP `Claude_Code_Remote`).
+2. Routine `create_trigger(persistent_session_id=<phiên điều phối>)` bắn một
+   lượt vào phiên đó.
+3. Phiên điều phối **không làm việc của vai**. Nó gọi
+   `create_session(source_url=…, source_revision=main, prompt=<prompt của vai>)`
+   rồi kết thúc. Phiên con sinh ra theo đường này **có** repo và **có** MCP.
+
+Điểm khác với cơ chế 3 ở §8.1 (cũng dùng `persistent_session_id` nhưng đo là
+"không đánh thức được phiên"): lần đo đó thất bại thật, nhưng lần đo
+2026-09-09 lúc `23:01:43Z` thì thành công — trigger ghi `last_run` `SUCCEEDED`
+và phiên con `session_01Gu2MPNGiCA7yjVY97hixbC` ("Clean Code Auditor —
+2026-09-10") ra đời lúc `23:04:30Z` với `parent_session_id` đúng bằng phiên điều
+phối, rồi mở thật các Issue #604–#608. Đó là bằng chứng chạy được, không phải suy
+đoán.
+
+**Hai ràng buộc phải giữ, nếu không cơ chế này hỏng lặng lẽ:**
+
+- *Phiên điều phối tuyệt đối không làm việc của vai.* Nó chạy lại mỗi lượt nên
+  tích ngữ cảnh của mọi lượt trước; và định danh `*-Run` lấy từ phiên đang chạy,
+  nên nếu nó tự làm thì mọi lượt sẽ mang **cùng một** định danh và guard chặn
+  bằng `N1-SELF`/`N2-SELF`. Vai thật phải là phiên con, ngữ cảnh sạch, định danh
+  riêng.
+- *Cảnh báo "this trigger stores no MCP connectors" mà `create_trigger` trả về
+  là **không áp dụng** cho cơ chế này.* Cảnh báo đó nói về phiên do Routine tự
+  sinh (`create_new_session_on_fire=true`). Ở đây Routine không sinh phiên nào;
+  nó bắn vào một phiên đã có sẵn connector. Đừng xoá Routine vì đọc nhầm cảnh
+  báo này — đó chính là cái bẫy đã làm bốn Routine bị xoá ngày 2026-09-09.
+
+Giao diện Routines trên claude.ai vẫn dùng được và vẫn là đường đơn giản nhất
+cho người dùng; nó chỉ **không còn là đường duy nhất**.
 
 ### 8.2 Prompt Routine sẵn dùng
+
+Các prompt dưới đây dùng cho **cả hai** đường tạo Routine: giao diện Routines
+trên claude.ai, và cơ chế điều phối qua phiên bền (§8.1a) — ở đường thứ hai,
+prompt của vai là giá trị truyền vào `create_session`, còn Routine chỉ mang
+prompt điều phối (§8.3, §8.4).
 
 Tạo **bốn** Routine trên claude.ai. Với mỗi Routine, khi tạo phải chọn:
 
@@ -513,13 +567,250 @@ Phần riêng của từng vai lấy nguyên từ mục **Việc phải làm** t
 | Implementer B | `ddc-implementer` | `Implementer` | Y hệt A. Hai Routine chỉ khác lịch; chúng tự tránh nhau nhờ nhãn `state:in-progress` gắn trước khi viết dòng code đầu tiên. |
 | Reviewer/Gatekeeper | `ddc-reviewer` | `Reviewer` | PASS thì phải **gỡ** `review:changes-requested` trước khi gắn `review:pass`, rồi chạy `workflow_guard.py --input` từ cây `main` và chỉ merge khi exit 0. |
 
+### 8.3 Prompt Routine điều phối — Clean Code Auditor (Manager), 06:00 VN
+
+Đây là prompt **của Routine** `trig_01Gt1weroASWGntFuTVZWCBK`. Nó chỉ điều phối;
+prompt của vai Manager nằm ở khối `markdown` bên dưới và được truyền vào
+`create_session`.
+
+> Routine hiện hành trỏ tới "§8.3" khi đi lấy prompt của vai. Mục này chính là
+> mục đó — trước 2026-09-10 nó **không tồn tại** trong `main`, nên Routine phải
+> tự xoay xở. Đừng đổi số mục này mà không sửa prompt của Routine.
+
+Prompt của **vai Manager** mà phiên điều phối phải truyền nguyên văn:
+
+```markdown
+## Bước 0 — kiểm môi trường, làm trước mọi thứ
+
+1. `ls docs/00_governance/CLEAN_CODE_WORKFLOW.md .claude/skills/ddc-manager-planner/SKILL.md`
+2. Có tool `mcp__github__list_issues` không?
+
+Thiếu bất kỳ thứ nào ⇒ DỪNG NGAY, báo đúng thứ đang thiếu, kết thúc.
+TUYỆT ĐỐI không đoán, không bịa, không báo đã làm việc chưa làm.
+Báo cáo "không chạy được vì thiếu X" là kết quả đúng và dùng được;
+báo cáo bịa làm hỏng chính chuỗi bằng chứng mà quy trình này bảo vệ.
+
+## Nguồn luật
+
+Gọi skill `ddc-manager-planner` và làm đúng theo nó.
+Authority: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (WF-CLEAN-001).
+Khi skill và prompt này mâu thuẫn, SKILL TRONG REPOSITORY THẮNG.
+
+Định danh `Manager-Run` của bạn: gọi `get_session` BỎ TRỐNG `session_id`,
+URL là `https://claude.ai/code/<ccr.id>`. TUYỆT ĐỐI không chép lại định danh
+có sẵn trong Issue/PR — đó là của phiên khác (§7).
+
+## Hạ tầng — đọc kỹ
+
+GitHub Actions KHÔNG có runner và chủ sở hữu đã quyết định KHÔNG bật lại (#414).
+`Build & Test`, `Security Scan`, `Cổng quy trình clean-code` đều NOT_RUN — lâu dài.
+Một PR không có check đỏ KHÔNG phải PR đã được kiểm.
+KHÔNG chờ CI xanh; chờ một job không bao giờ chạy là treo vĩnh viễn.
+
+## Nhắc riêng cho vai này
+
+Không sửa file, không tạo nhánh, không commit, không mở PR, không merge.
+Thấy lỗi dễ sửa vẫn phải viết thành Issue — người tạo Issue mà tự sửa là vi
+phạm N1, và guard sẽ chặn PR đó bằng `N1-SELF`.
+Canh vòng sửa lại đang treo theo mục 4a của skill.
+```
+
+### 8.4 Prompt Routine điều phối — Clean Code Implementer, mỗi giờ phút :00 VN
+
+Trigger `trig_01GqDKDuHc5iV6dKGq86DL93`, bắn vào phiên điều phối
+`session_01R1Ga52pakcTifHxCmRd3ty`. Mỗi lượt phiên điều phối chỉ làm ba việc:
+kiểm repo, kiểm **khoá thực thi**, rồi `create_session` sinh một phiên
+Implementer sạch mang tag `routine-implementer`.
+
+**Khoá thực thi có hai lớp, cố ý trùng nhau:**
+
+| Lớp | Ai giữ | Chặn được gì |
+|---|---|---|
+| Tag phiên | Phiên điều phối: không sinh phiên mới nếu còn phiên `routine-implementer` đang `SESSION_STATUS_RUNNING` | Hai lượt Routine chồng nhau khi một lượt chạy quá 60 phút |
+| Nhãn Issue | Phiên Implementer: gắn `state:in-progress` **trước** dòng code đầu tiên | Hai Implementer bất kỳ (kể cả chạy tay) nhận trùng Issue |
+
+Lớp tag đủ cho trường hợp thường gặp, nhưng nó đọc trạng thái phiên — một thứ
+có độ trễ. Lớp nhãn mới là lớp đúng đắn, vì nó nằm trên chính đối tượng đang
+tranh chấp. Giữ cả hai.
+
+**Làn này tự merge PR của mình — đây là ngoại lệ có chủ đích, do chủ sở hữu
+quyết định ngày 2026-09-10** ("Chỉ squash merge và đóng issue khi toàn bộ
+acceptance criteria cùng kiểm tra local đều đạt"). Ngoại lệ được thi hành bằng
+đúng cơ chế mà quy trình đã có sẵn cho nó — nhãn `gate:waived` kèm comment
+`GATE-WAIVED:` — chứ **không** bằng cách tự gắn `review:pass`. Khác biệt không
+phải chuyện hình thức:
+
+- `gate:waived` miễn **đúng hai** mã `N2-GATE` và `N2-VERDICT`; mọi ràng buộc
+  truy xuất và tách vai còn lại (`N1-*`, `N3-*`, `WF-STATE`) vẫn phải qua.
+- Nó để lại dấu vết đọc được: PR nào đi đường tắt, vì sao, ai cho phép.
+- Tự gắn `review:pass` thì ngược lại — nó **bịa ra** một lần review chưa từng
+  xảy ra, và làm hỏng đúng thứ mà chuỗi verdict sinh ra để giữ.
+
+Vai Reviewer chạy tay vẫn review lại các PR của làn này khi cần; `gate:waived`
+không xoá quyền đó.
+
+Prompt của **vai Implementer** mà phiên điều phối phải truyền nguyên văn:
+
+```markdown
+## Bước 0 — kiểm môi trường, làm trước mọi thứ
+
+1. `ls docs/00_governance/CLEAN_CODE_WORKFLOW.md .claude/skills/ddc-implementer/SKILL.md`
+2. `git remote -v` phải trỏ `Mekong-HCM/MK-DDC-24`. Nhánh mặc định là `main`.
+3. `git status --porcelain` phải RỖNG.
+4. Có tool `mcp__github__list_issues` không?
+
+Sai repository, hoặc cây làm việc có thay đổi không xác định, hoặc thiếu tool ⇒
+DỪNG NGAY, báo đúng thứ sai, KHÔNG thay đổi repository. TUYỆT ĐỐI không đoán,
+không bịa, không báo đã làm việc chưa làm. Một thay đổi lạ trong cây làm việc là
+dấu hiệu phiên khác đang dùng chung container — dọn nó đi là xoá việc của người
+khác.
+
+## Nguồn luật
+
+Gọi skill `ddc-implementer` và làm đúng theo nó.
+Authority: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (WF-CLEAN-001), mục §8.4
+cho các điểm riêng của làn Routine mỗi giờ này.
+Khi skill và prompt này mâu thuẫn, SKILL TRONG REPOSITORY THẮNG.
+
+Định danh `Implementer-Run` của bạn: gọi `get_session` BỎ TRỐNG `session_id`,
+URL là `https://claude.ai/code/<ccr.id>`. TUYỆT ĐỐI không chép lại định danh
+có sẵn trong Issue/PR — đó là của phiên khác (§7).
+
+## Hạ tầng — đọc kỹ
+
+GitHub Actions KHÔNG có runner và chủ sở hữu đã quyết định KHÔNG bật lại (#414).
+`Build & Test`, `Security Scan`, `Cổng quy trình clean-code` đều NOT_RUN — lâu dài.
+Một PR không có check đỏ KHÔNG phải PR đã được kiểm.
+KHÔNG chờ CI xanh; chờ một job không bao giờ chạy là treo vĩnh viễn.
+Mọi cổng chạy TẠI MÁY, và bảng Verification bạn tự đo là lớp kiểm chứng duy nhất
+trước khi mã vào `main`. Đừng cắt bớt cổng vì "CI sẽ bắt".
+
+## Việc phải làm — đúng MỘT Issue, đúng MỘT PR, mỗi phiên
+
+1. VIỆC DỞ TRƯỚC VIỆC MỚI. `list_issues` nhãn `state:in-progress`. Có Issue nào
+   phiên trước bỏ dở ⇒ TIẾP TỤC ĐÚNG ISSUE ĐÓ, không nhận Issue mới. Đọc comment
+   tiến độ gần nhất trên Issue để biết đang dở ở đâu và blocker là gì.
+
+2. CHỌN ISSUE khi không có việc dở. Lọc Issue mở mang nhãn `state:ready`, sắp
+   theo `priority:critical` → `high` → `medium` → `low`; cùng mức thì lấy Issue
+   CŨ NHẤT. Issue `state:changes-requested` được ưu tiên TRƯỚC mọi Issue mới —
+   một PR đang chờ sửa có giá trị hơn một PR mới mở.
+   Không có Issue phù hợp ⇒ KẾT THÚC PHIÊN, KHÔNG thay đổi repository. Không tự
+   nghĩ ra việc, không tự mở Issue rồi tự làm — đó là vi phạm N1 và guard sẽ
+   chặn PR đó bằng `N1-SELF`.
+
+3. NHẬN VIỆC TRƯỚC KHI VIẾT DÒNG CODE ĐẦU TIÊN. Assign Issue cho chính bạn, gỡ
+   `state:ready`, gắn `state:in-progress`, comment vào Issue nêu `Implementer-Run`
+   của phiên này. Đảo thứ tự bước này là cách nhanh nhất để hai phiên nhận trùng.
+
+4. NHÁNH RIÊNG.
+       git fetch origin main
+       git checkout -B clean-code/issue-<số> origin/main
+   Một nhánh phục vụ đúng một Issue. Luôn nhánh từ `origin/main` mới nhất.
+
+5. KIỂM VA CHẠM. `list_pull_requests` state=open và `list_branches`. Nếu có
+   PR/nhánh đang sống chạm cùng tập file thuộc Source ownership của Issue này ⇒
+   DỪNG: comment vào Issue nêu rõ PR/nhánh nào xung đột và file nào trùng, trả
+   Issue về `state:ready` (gỡ `state:in-progress`, bỏ assign), kết thúc phiên.
+   Sửa song song cùng một file là cách tạo ra conflict mà không ai sở hữu.
+
+6. PHÂN TÍCH NGUYÊN NHÂN GỐC RỒI IMPLEMENT TỐI THIỂU đúng acceptance criteria.
+   Chỉ chạm file trong Source ownership của Issue. Cần chạm file ngoài danh sách
+   ⇒ dừng, comment hỏi Manager mở rộng scope, kết thúc phiên. Không gộp Issue
+   khác, không "tiện tay dọn" thứ ngoài phạm vi.
+   Với `wf:clean-code`: KHÔNG đổi hành vi, contract, API, schema, mã lỗi công khai.
+   Lỗi phát hiện TRONG phạm vi Issue ⇒ sửa luôn trong PR này. Lỗi NGOÀI phạm vi
+   ⇒ mở Issue bằng mẫu `03-finding.yml` ở `state:triage`, KHÔNG tự sửa.
+
+7. BỔ SUNG TEST còn thiếu cho đúng hành vi vừa sửa. Không skip, không disable,
+   không quarantine test để lấy màu xanh. Test đỏ là dữ kiện, không phải chướng
+   ngại.
+
+8. CHẠY CỔNG TẠI MÁY theo phạm vi đã chạm — số đo THẬT, không dẫn lại số cũ.
+   Không chạy CI, không chờ CI.
+       # C++ — bật cả ba option; HMI mặc định OFF nên rất dễ bỏ sót gate
+       cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
+         -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
+       cmake --build build/fw --parallel
+       ctest --test-dir build/fw --output-on-failure
+       # Go — chạy trong module authority, repo không có go.mod ở root
+       (cd apps/web-api && go vet ./... && go test ./... -count=1)
+       # FE — npm test chỉ quét src/, KHÔNG chạy e2e/
+       (cd apps/web-ui && npx vitest --run --environment jsdom src && npm run lint && npm run build)
+       # Tài liệu
+       python3 scripts/docs_iso_harness.py --expect
+   ĐỌC EXIT CODE CỦA CẢ `cmake` CONFIGURE LẪN BUILD. Build dir cũ còn
+   `CMAKE_HOME_DIRECTORY` trỏ `services/` đã xoá sẽ làm configure + build hỏng
+   nhưng `ctest` vẫn chạy binary cũ và báo "pass" — số đo giả, sự cố 2026-08-07.
+   Dùng `-count=1` cho Go: kết quả cache che được hồi quy.
+   Cổng không chạy được ⇒ ghi `NOT_RUN` kèm lý do. KHÔNG BAO GIỜ ghi PASS cho
+   cổng chưa chạy.
+
+9. TỰ REVIEW DIFF rồi ĐỒNG BỘ NHÁNH MẶC ĐỊNH.
+       git diff origin/main...HEAD --stat
+       git diff origin/main...HEAD
+   Đọc lại với con mắt của người sẽ FAIL nó: có file nào ngoài Source ownership
+   không; có đổi hành vi nào không khai không; từng acceptance criteria có bằng
+   chứng chỉ tới được không; có số đo nào chép lại từ phiên trước không.
+   Rồi `git fetch origin main && git merge origin/main`. Conflict thì xử lý an
+   toàn — CHANGELOG conflict thì GIỮ CẢ HAI BÊN, không bên nào đè bên nào.
+   Sau khi merge xong phải CHẠY LẠI toàn bộ cổng ở bước 8. Số đo trước khi merge
+   không còn đúng cho mã sau khi merge.
+
+10. CHANGELOG.md dưới `[Unreleased]`, kèm ngày, phạm vi, số đo, mã Issue.
+
+11. COMMIT, PUSH, PR. Commit tách theo nhóm logic, Conventional Commits, thân bài
+    TIẾNG VIỆT nêu triệu chứng → nguyên nhân gốc → cách sửa, có `Refs:`.
+        git push -u origin clean-code/issue-<số>
+    Mở PR bằng `mcp__github__create_pull_request` (phiên Routine KHÔNG có `gh`
+    CLI). Nội dung theo `.github/pull_request_template.md`, bắt buộc:
+    - `Closes #<số Issue>` — ĐÚNG MỘT Issue. `Refs #N` không tính, guard chặn.
+    - `Implementer-Run:` — định danh phiên NÀY, phải khác `Manager-Run` của Issue.
+    - Bảng Verification điền kết quả thật cho từng cổng.
+    - Mục đối chiếu acceptance criteria: chép từng AC kèm bằng chứng.
+    Chuyển Issue sang `state:in-review`, gỡ `state:in-progress`.
+
+12. CỔNG QUY TRÌNH OFFLINE rồi MERGE. Lấy ảnh chụp PR + Issue + comments bằng
+    GitHub MCP, ghi ra JSON, rồi:
+        python3 scripts/workflow_guard.py --input <ảnh-chụp>.json
+    Mã `N1-*`, `N3-LINK`, `N3-IMPL`, `N3-EVID`, `WF-STATE` là CỦA BẠN — sửa ngay,
+    không đi tiếp khi còn mã nào trong nhóm đó.
+    Còn `N2-GATE` / `N2-VERDICT` là cổng review. Làn Routine mỗi giờ này được chủ
+    sở hữu cho phép tự merge (§8.4), và cách thi hành ĐÚNG là:
+    - comment lên PR đúng một dòng mở đầu
+      `GATE-WAIVED: làn Routine Implementer mỗi giờ, WF-CLEAN-001 §8.4 — chủ sở
+      hữu cho phép tự merge khi mọi acceptance criteria và mọi cổng tại máy đều
+      đạt`, kèm liệt kê cổng nào PASS / cổng nào NOT_RUN;
+    - gắn nhãn `gate:waived`;
+    - chạy lại `workflow_guard.py --input` với ảnh chụp MỚI và chỉ đi tiếp khi
+      exit code = 0.
+    TUYỆT ĐỐI KHÔNG tự gắn `review:pass` và KHÔNG tự viết comment
+    `[REVIEW-VERDICT: PASS]`. Hai thứ đó bịa ra một lần review chưa từng xảy ra;
+    `gate:waived` thì nói thật rằng cổng đã được miễn và ai miễn.
+    Guard exit 0 ⇒ SQUASH MERGE PR (tiêu đề squash giữ `(#<số issue>)`), đóng
+    Issue với `state_reason` phù hợp, gắn `state:done`, gỡ `state:in-review`,
+    comment vào Issue đối chiếu TỪNG acceptance criteria kèm bằng chứng.
+    Xoá nhánh remote sau merge nếu quyền cho phép; không xoá được thì ghi lại,
+    đừng coi là lỗi chặn (§9).
+
+13. CHƯA XONG THÌ ĐỪNG MERGE. Còn bất kỳ acceptance criteria nào chưa đạt, còn
+    cổng nào đỏ, hoặc guard còn mã ngoài `N2-*` ⇒ GIỮ NGUYÊN `state:in-progress`,
+    comment vào Issue: đã làm tới đâu, đang vướng gì, cần gì để mở khoá. Phiên
+    sau tiếp tục đúng Issue đó và KHÔNG nhận Issue mới. Không merge code chưa
+    đạt, không force-push, không bỏ qua test.
+
+14. BÁO CÁO CUỐI PHIÊN — luôn luôn, kể cả khi không làm gì: Issue nào; branch và
+    PR nào; đã thay đổi gì; kết quả từng cổng (PASS/FAIL/NOT_RUN kèm số đo);
+    trạng thái merge; blocker còn lại.
+```
+
 ## 9. Hạng mục bị chặn
 
 | Hạng mục | Bị chặn bởi | Cần gì để mở khoá |
 |---|---|---|
 | Cổng *Require approvals* native của GitHub cho agent | Ba vai dùng chung tài khoản `Mekong-HCM`; GitHub cấm tự approve PR của mình | Cấp machine user hoặc GitHub App riêng cho vai Reviewer, thêm vào repo với quyền `write` |
 | Bật branch protection trên `main` | Cần quyền admin repo qua giao diện `Settings → Branches`; API branch-protection không có trong tool set của phiên agent | Owner bật thủ công theo checklist `§5.1` |
-| Không có Routine nào đang chạy; ba vai chỉ hoạt động khi kích hoạt tay | Từ phiên agent không tạo được Routine chạy được — đã đo đủ ba cơ chế, cả ba hỏng (`§8.1`). Bốn Routine cũ đã bị xoá vì chúng chỉ sinh phiên rỗng | Chủ sở hữu tạo bốn Routine từ **giao diện Routines trên claude.ai**, chọn repo `Mekong-HCM/MK-DDC-24` + connector GitHub lúc tạo. Prompt sẵn dùng ở `§8.2`. |
+| Vai Reviewer/Gatekeeper chưa có Routine, vẫn phải kích hoạt tay | Chưa dựng, không phải không dựng được — cơ chế điều phối ở `§8.1a` đã chạy thật cho hai vai kia | Tạo một phiên bền cho vai Reviewer rồi `create_trigger(persistent_session_id=…)` theo đúng mẫu `§8.4`, prompt vai lấy ở `§8.2` |
 | Xoá nhánh remote sau merge | Credential git của phiên không có quyền xoá ref (`HTTP 403` ở cả `git push --delete` lẫn refspec rỗng, từ nhiều phiên khác nhau); không có tool MCP xoá branch | Bật `Settings → General → Automatically delete head branches`, hoặc xoá tay tại trang Branches |
 | Toàn bộ cổng CI (`Build & Test`, `Security Scan`, job `workflow-guard`) | GitHub Actions không cấp runner (#414), và chủ sở hữu **đã quyết định không bật lại** (2026-09-09) | **Không phải mục chờ mở khoá — là một quyết định đã chốt.** §6.1a chỉ thay được cổng quy trình; cổng biên dịch và test đa nền tảng **không có phần thay thế bằng phần mềm** và sẽ do Implementer tự đo, Reviewer tự kiểm lại. |
 
@@ -530,3 +821,4 @@ Phần riêng của từng vai lấy nguyên từ mục **Việc phải làm** t
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-09 | Thiết lập ban đầu: ba vai, ma trận quyền, workflow state, nhãn, branch/merge rule, quality gate, truy xuất và lịch chạy. |
+| 1.1 | 2026-09-10 | §8: hai Routine đã chạy thật, kèm số hiệu trigger và phiên điều phối. Thêm `§8.1a` (cơ chế điều phối qua phiên bền — cơ chế thứ tư, chạy được) đính chính kết luận "chỉ tạo được từ giao diện claude.ai" của `§8.1`. Thêm `§8.3` (prompt vai Manager — mục mà Routine Auditor vẫn trỏ tới nhưng trước đó không tồn tại) và `§8.4` (làn Routine Implementer mỗi giờ: khoá thực thi hai lớp, nhánh `clean-code/issue-<số>`, tự merge qua `gate:waived`). Ghi lại phép đo neo phút của `create_trigger`/`update_trigger`. Cập nhật `§5` và `§9`. |
