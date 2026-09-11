@@ -1488,12 +1488,12 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
 
     const inspector = page.locator('aside[aria-label="Thuộc tính"]')
     const inspectorOpener = page.getByRole('button', { name: 'Mở Thuộc tính', exact: true }).first()
-    const libraryDock = page.locator('[data-fbd-dock="library"]')
+    const libraryColumn = page.getByTestId('quick-library-column')
     const marquee = page.getByRole('button', { name: 'Chọn vùng', exact: true })
 
-    // ≥1440: Explorer | Canvas + Thư viện nhanh | Inspector cùng hiển thị.
+    // ≥1440: Explorer | Canvas | Thư viện nhanh | Inspector cùng hiển thị.
     await expect(inspector).toBeVisible()
-    await expect(libraryDock).toBeVisible()
+    await expect(libraryColumn).toBeVisible()
     await expect(inspectorOpener).toBeHidden()
     await expect(marquee).toBeHidden()
 
@@ -1501,7 +1501,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
       await page.setViewportSize({ width, height: 820 })
       await expect(shell).toBeVisible()
       await expect(inspector).toBeHidden()
-      await expect(libraryDock).toBeHidden()
+      await expect(libraryColumn).toBeHidden()
       await expect(inspectorOpener).toBeVisible()
       await expect(marquee).toBeHidden()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${width}px không tràn ngang`).toBe(true)

@@ -113,11 +113,9 @@ describe('FbdEditorPane', () => {
     }
   }
 
-  it('TC-FBD-RESP-001: shell có min-width guard và lớp 4 cột nội bộ tại 1440 px', () => {
+  it('TC-FBD-RESP-001: shell có min-width guard và responsive marquee', () => {
     renderPane()
     expect(screen.getByTestId('fbd-workspace-shell')).toHaveClass('min-w-0', 'overflow-x-hidden')
-    const grid = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ }).children[1]
-    expect(grid).toHaveClass('min-[1440px]:grid-cols-[minmax(0,1fr)_18rem]')
     expect(screen.getByRole('button', { name: /Chọn vùng|Marquee select/ })).toHaveClass('md:inline-flex', 'lg:hidden')
   })
 
@@ -169,7 +167,7 @@ describe('FbdEditorPane', () => {
     expect(group).toHaveAttribute('role', 'group')
     /* ponytail: 2 combobox (theme + wire style) — network view + active network ẩn. Bật lại → 4. */
     expect(within(group).getAllByRole('combobox')).toHaveLength(2)
-    expect(within(group).getAllByRole('checkbox')).toHaveLength(3)
+    expect(within(group).getAllByRole('checkbox')).toHaveLength(2)
   })
 
   it('PGM-02B: dải preferences dùng kích thước compact ngang hàng status bar', () => {

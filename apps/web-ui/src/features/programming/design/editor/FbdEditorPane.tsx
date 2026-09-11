@@ -88,17 +88,10 @@ export function FbdEditorPane({
   const dirty = localJson !== committedJson
   const [preferences, setPreferences] = useState(() => readFbdPreferences(userScope, projectId))
   const [activeNetworkId, setActiveNetworkId] = useState(() => local.networks[0]?.id)
-  const [wideDesktop, setWideDesktop] = useState(() => window.innerWidth >= 1440)
 
   useEffect(() => {
     setPreferences(readFbdPreferences(userScope, projectId))
   }, [projectId, userScope])
-
-  useEffect(() => {
-    const update = () => setWideDesktop(window.innerWidth >= 1440)
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [])
 
   useEffect(() => {
     if (local.networks.some((network) => network.id === activeNetworkId)) return
@@ -174,8 +167,6 @@ export function FbdEditorPane({
         gridVisible={preferences.gridVisible}
         snapEnabled={preferences.snapEnabled}
         snapSize={preferences.snapSize}
-        libraryDefaultOpen={preferences.dock.library && wideDesktop}
-        onLibraryOpenChange={(open) => updatePreferences({ dock: { ...preferences.dock, library: open } })}
         onChange={(next) => onChange(canonicalFbdJson(next))}
         onSelectionChange={(selection) => {
           if (selection?.networkId) setActiveNetworkId(selection.networkId)
@@ -222,14 +213,6 @@ export function FbdEditorPane({
             <option value="LIGHT">{pick('Sáng', 'Light')}</option>
             <option value="DARK">{pick('Tối', 'Dark')}</option>
           </select>
-        </label>
-        <label className="inline-flex items-center gap-1">
-          <input
-            type="checkbox"
-            checked={preferences.dock.library}
-            onChange={(event) => updatePreferences({ dock: { ...preferences.dock, library: event.target.checked } })}
-          />
-          {pick('Khay Thư viện', 'Library dock')}
         </label>
       </div>
       <EditorStatusBar
