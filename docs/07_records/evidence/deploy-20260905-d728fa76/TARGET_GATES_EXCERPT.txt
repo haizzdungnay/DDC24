@@ -1,0 +1,33 @@
+Nguồn: build/evidence/deploy-20260905-d728fa76/final-target.log,
+       build/evidence/deploy-20260905-d728fa76/final-deploy.log,
+       build/evidence/deploy-20260905-d728fa76/final-stability.log
+Lớp bằng chứng: TARGET / FAKE-MCU
+
+git_commit=d728fa76020efbbb8f7346052d7e6a4020c60193
+dirty=false
+target_arch=aarch64
+mcu_firmware=not-included
+backup=/opt/mkddc-backups/main-d728fa76-20260905T031344Z
+
+Checksum runtime: 13/13 OK
+  /usr/sbin/mkddc-core
+  /usr/sbin/mkddc-iobus
+  /usr/sbin/mkddc-netcfg
+  /usr/sbin/mkddc-hmi
+  /usr/sbin/mkddc-st-compile
+  /usr/sbin/mkddc-st-validate
+  /usr/sbin/mkddc-schedule-sim
+  /usr/sbin/mkddc-alarm-sim
+  /opt/mkddc-web/mkddc-programming-sim-worker
+  /opt/mkddc-web/mkddc-schedule-sim
+  /opt/mkddc-web/mkddc-alarm-sim
+  /opt/mkddc-web/mkddc-web
+  /usr/sbin/mkddc-st-package
+
+Service: mkddc-core, mkddc-iobus, mkddc-netcfg, mkddc-web-pi,
+         mkddc-fakemcu = 5/5 active; NRestarts=0
+Health: status=ok; core/io_shm/iobus/mcu_connection/plc_shm/web = 6/6 ok
+CLI guard: 2/2 PASS; socket và PID không đổi
+
+Diễn giải kiểm soát: target đang dùng mkddc-fakemcu; bằng chứng này không phải
+physical I/O/HIL, không gồm firmware STM32 và không mở RELEASE_READY.

@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### Changed — Baseline hóa record lịch sử deploy Foxlinx `d728fa76` (2026-09-11)
+
+- Phạm vi docs-only của Issue #639: cập nhật hồ sơ chủ quản Deployment
+  Provenance và chỉ mục review; thêm gói evidence đã làm sạch cho sự kiện
+  2026-09-05. Không đổi code/config/runtime và không deploy lại target.
+- Đối chiếu lại snapshot local **29 file / 2.556.638 byte**; manifest có đúng
+  **29 SHA-256** và kiểm **29/29 OK**. Gói Git giữ **8 file / 12.667 byte**,
+  không đưa ba full host log, script deploy, binary, cấu hình/dữ liệu target
+  hoặc secret.
+- Record giữ đúng lớp bằng chứng: C++ 1.476 pass/1 skip/0 fail; Go 21 package
+  pass trên nền `c253c053` và phần Go không đổi tới `d728fa76`; FE 229 file,
+  2.836/2.836 test, lint/build pass, chunk 137,32/165,00 KiB; cross-build ARM64
+  pass; target checksum 13/13, 5/5 service active, health 6/6; login browser
+  14/14 HTTP 200 và 0 lỗi Console/Network.
+- Đánh dấu rõ đây là record lịch sử đã bị deployment `9b5608d7` supersede về
+  hiện trạng. FakeMCU không phải physical HIL; HMI cuối `UNVERIFIED`; flash
+  STM32, soak/power-cut, rollback exercise, Chrome DevTools MCP và luồng sau
+  đăng nhập đều `NOT_RUN`; không nâng thành commissioning hay `RELEASE_READY`.
+- Verification local mới: `docs_iso_harness.py --expect` **PASS** (17/17
+  baseline, 5/5 support, 444 Markdown; link/anchor/whitespace/fence/path lỗi =
+  0; duplicate ID = 0; trace invariant lỗi = 0; EXPECT khớp); JSON **1/1** parse;
+  `git diff --check` sạch; secret scan **0 hit**. GitHub Actions `NOT_RUN` theo
+  quyết định hạ tầng #414.
+- Refs: Issue #639, PR #534/#535, `WF-CLEAN-001`, `DOC-GOV-001`.
+
 ### Added — `PROD-BACNET-001` + `SYS-REQ-BAC-001..023`: BACnet Rev A có tầng "sản phẩm phải làm gì" (2026-09-11)
 
 - Phạm vi: `docs/01_product/BACNET_PRODUCT_REQUIREMENTS.md` (tạo mới),

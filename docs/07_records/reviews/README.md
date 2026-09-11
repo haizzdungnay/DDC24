@@ -1,8 +1,9 @@
 # Hồ sơ rà soát — chỉ mục
 
 **ID:** REC-REVIEW-INDEX-001
+**Phiên bản:** 1.24
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-09 (thêm rà soát Program Property/Inspector `REC-PGM02-PROP-INS-001`; không đổi authority/runtime/HIL/release gate)
+**Cập nhật:** 2026-09-11 (baseline hóa record lịch sử deployment Foxlinx `d728fa76`; không đổi authority/runtime/HIL/release gate)
 **Chủ quản:** Project Engineering
 
 Thư mục này chứa **record** — biên bản của một lần rà soát, một lần phê duyệt
@@ -83,7 +84,7 @@ Ba điều cần biết trước khi dùng bất kỳ tài liệu nào ở đây
 | [Biên bản join hợp đồng G1 Programming](PROGRAMMING_G1_CONTRACT_REVIEW_20260811.md) | 2026-08-11 | **GO cho P2/P3 implementation** | 6/6 contract cùng hash/major; self-test/order âm/rollback PASS; không bật Commission |
 | [Review triển khai G2 Programming](PROGRAMMING_G2_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **TASK-PROG-200..207 DONE — P2 8/8** | Compiler/Project/Check/bundle/assurance có source host; Test Result giữ 0/32 PASS; bàn giao P3 |
 | [Review triển khai G3 Programming](PROGRAMMING_G3_IMPLEMENTATION_REVIEW_2026-08-11.md) | 2026-08-11 | **TASK-PROG-300 DONE — P3 1/8** | Prepared runtime ngoài scan, boundary/LKG allocation gates và post-link no-parser/compiler PASS; next Task 301; target/release còn BLOCKED |
-| [Deployment Provenance Report](DEPLOYMENT_PROVENANCE_REPORT.md) | 2026-08-03 | Record | Build identity, release manifest, sai khác target |
+| [Deployment Provenance Report](DEPLOYMENT_PROVENANCE_REPORT.md) | 2026-08-03; cập nhật lịch sử 2026-09-05 | Record lịch sử; `d728fa76` đã bị deployment mới hơn supersede về hiện trạng | Build identity, manifest 29 raw artifact, SOURCE/HOST/CROSS-BUILD/TARGET/FAKE-MCU/BROWSER; không mở HIL/rollback/`RELEASE_READY` |
 | [Physical I/O và HIL](PHYSICAL_IO_HIL_REPORT.md) | 2026-08-03 | **Gate còn mở** | Host/fake-MCU **không** được ghi thành HIL vật lý |
 | [Báo cáo build và deploy lên board](BOARD_DEPLOY_REPORT_2026-08-04.md) | 2026-08-04 | Record | 5 service chạy trên Orange Pi 5B, HMI tắt có chủ đích |
 | [RST-205 Closure Review](RST205_CLOSURE_REVIEW_2026-08-04.md) | 2026-08-04 | Đã đóng Plan 46 | Đối chiếu tiêu chí §9, regression, rollback |
@@ -185,3 +186,4 @@ và các bẫy đã biết ghi trong [`CLAUDE.md`](../../../CLAUDE.md).
 | 1.21 | 2026-08-14 | Loại 12 record lịch sử dùng cây source cũ cùng README archive; thay liên kết bằng authority hiện hành và ghim đường phục hồi tại commit `b69fdf1`; không đổi Test Result hay release gate |
 | 1.22 | 2026-09-04 | Đăng ký `REC-PROG-RUNTIME-PERF-COMP-001`: review hiệu năng Programming/runtime, cycle và multi-program tại `main@67f8ca3`; số đo HOST chỉ là exploratory, TARGET/HIL chưa chạy và release giữ `NO-GO` |
 | 1.23 | 2026-09-04 | Nâng `REC-PROG-RUNTIME-PERF-COMP-001` v1.1: ghi benchmark/compiler/runtime live trên Forlinx, bảy finding; TARGET environment `NOT_CONTROLLED`, provenance `PARTIAL`, FakeMCU không phải HIL và release giữ `NO-GO` |
+| 1.24 | 2026-09-11 | Baseline hóa revision lịch sử 2026-09-05 của Deployment Provenance `d728fa76` và manifest 29 raw artifact; ghi quan hệ superseded bởi deployment `9b5608d7`, giữ record tách khỏi design/release authority |

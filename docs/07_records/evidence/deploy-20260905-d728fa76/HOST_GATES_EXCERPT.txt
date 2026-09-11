@@ -1,0 +1,12 @@
+Nguồn: build/evidence/deploy-20260905-d728fa76/final-host.log
+Phạm vi trích: dòng 214, 3022, 3031-3036
+Lớp bằng chứng: HOST
+
+67/1477 Test #1363: core_cli_rejects_invalid_arguments ... Passed 0.27 sec
+1471/1477 Test #114: RealtimeMemlock.MclFutureUnderFiniteLimitIsTheTrapWeGuardAgainst ... Skipped 0.02 sec
+100% tests passed, 0 tests failed out of 1477
+Total Test time (real) = 11.36 sec
+The following tests did not run:
+114 - RealtimeMemlock.MclFutureUnderFiniteLimitIsTheTrapWeGuardAgainst (Skipped)
+
+Diễn giải kiểm soát: 1.477 ca được liệt kê; 1.476 pass, 1 skip, 0 fail.

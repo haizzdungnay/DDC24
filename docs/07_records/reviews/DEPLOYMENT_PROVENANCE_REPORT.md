@@ -1,8 +1,74 @@
 # Báo cáo Deployment Provenance DDC-24
 
 **ID:** DDC24-DEPLOYMENT-PROVENANCE-2026-08-03
+**Phiên bản:** 1.1
+**Trạng thái:** Record lịch sử; không phải release authority
 **Ngày:** 2026-08-03
+**Cập nhật:** 2026-09-11
+**Chủ quản:** Project Engineering
 **Mục tiêu:** binary và target phải truy ngược được về version, Git commit, build time, checksum và toolchain
+
+## Bản ghi lịch sử 2026-09-05 — Foxlinx `main@d728fa76`
+
+Đây là record của phép đo và deployment đã diễn ra ngày 2026-09-05, không phải
+mô tả runtime hiện hành. Source là commit sạch
+`d728fa76020efbbb8f7346052d7e6a4020c60193`, gồm
+[PR #534](https://github.com/Mekong-HCM/MK-DDC-24/pull/534) và
+[PR #535](https://github.com/Mekong-HCM/MK-DDC-24/pull/535). Khi nói về trạng
+thái hiện hành, record này đã bị deployment mới hơn `main@9b5608d7` ngày
+2026-09-10 (ghi bởi commit `d7c67f67`) **supersede**; phần còn lại chỉ dùng để
+truy nguyên sự kiện ngày 2026-09-05.
+
+Manifest 29 raw artifact và các trích đoạn đã làm sạch nằm tại
+[evidence deploy 2026-09-05](../evidence/deploy-20260905-d728fa76/README.md).
+Raw snapshot local `build/evidence/deploy-20260905-d728fa76/` là đầu vào đối
+chiếu, không phải artifact release đã ký.
+
+### Phân lớp bằng chứng
+
+| Lớp | Đối tượng đã đo | Kết quả lịch sử được truy lại | Evidence |
+|---|---|---|---|
+| SOURCE | Git/PR | `d728fa76…0193`, `dirty=false`; PR #534/#535 đã merge | `final-target.log`, `final-deploy.log`; manifest 29/29 |
+| HOST | C++ | 1.477 ca: **1.476 pass / 1 skip memlock / 0 fail** | `final-host.log:3031-3036`; `HOST_GATES_EXCERPT.txt` |
+| HOST | Go | **21 package `ok`** trên nền `c253c053`; diff `apps/web-api` tới `d728fa76` rỗng | `go.log`; `GO_GATES_EXCERPT.txt` |
+| HOST | FE | **229 file, 2.836/2.836 test**; lint và `build:foxlinx` pass; Programming **137,32/165,00 KiB gzip** | `final-fe.log:49-140`; `FE_GATES_EXCERPT.txt` |
+| CROSS-BUILD | ARM64 | configure/generate/build pass; discovery cache đặt `PRE_TEST` | `final-arm64.log`; `ARM64_BUILD_EXCERPT.txt` |
+| TARGET | Buildroot/aarch64 | provenance sạch; checksum **13/13**; 5/5 service active, `NRestarts=0`; health **6/6** check `ok` | `final-target.log`, `final-stability.log`; `TARGET_GATES_EXCERPT.txt` |
+| FAKE-MCU | Kết nối MCU trong health | `mkddc-fakemcu` active; đây không phải MCU/I/O vật lý | `final-target.log`, `final-stability.log` |
+| BROWSER | Chỉ trang login | desktop 1440×900 + mobile 390×844; **14/14 HTTP 200**, 0 Console error/warning, 0 request fail, không tràn ngang | `browser-final.log`; `BROWSER_GATES_EXCERPT.json` |
+
+Go không được mô tả là đã chạy lại trực tiếp toàn bộ tại commit cuối: raw log
+thuộc nền `c253c053`, còn phép đối chiếu Git ngày 2026-09-11 chỉ chứng minh
+`apps/web-api` không đổi từ nền đó tới `d728fa76`. Tương tự, cross-build chỉ
+chứng minh binary ARM64 được build; `PRE_TEST` tránh chạy discovery của binary
+ARM64 trên host x86 và không biến kết quả này thành test ARM64.
+
+### Backup, lỗi đã xử lý và rollback
+
+- Backup của cutover cuối:
+  `/opt/mkddc-backups/main-d728fa76-20260905T031344Z`. Raw `final-deploy.log`
+  ghi `DEPLOY_OK`; checksum runtime và identity được đọc lại sau cài.
+- PR #535 chặn tham số CLI sai trước side effect. Trên target, hai ca CLI sai
+  trả lỗi trong khi socket/PID giữ nguyên (`TARGET_CLI_GUARD=2/2_PASS`).
+- Unit `AgentSvr-agent` sai kiến trúc được mask sau khi giữ bản sao trong backup
+  trước đó. Đây là can thiệp vận hành ngoài runtime MK-DDC; không được suy thành
+  xác nhận an toàn toàn hệ thống.
+- Đường rollback tồn tại trong script và backup tồn tại, nhưng **diễn tập
+  rollback = `NOT_RUN`**. Không ghi đường lùi đã thiết kế thành rollback PASS.
+
+### Giới hạn bắt buộc và điểm chưa xác minh
+
+| Hạng mục | Trạng thái | Ý nghĩa |
+|---|---|---|
+| FakeMCU | TARGET evidence | Có service `mkddc-fakemcu`; không phải physical MCU/HIL |
+| HMI inactive theo ghi chú vận hành WIP | `UNVERIFIED` | 29 raw file không ghi trực tiếp trạng thái HMI cuối; script chỉ bảo toàn trạng thái trước deploy, nên không nâng ghi chú WIP thành TARGET PASS |
+| Flash firmware STM32 | `NOT_RUN` | Manifest runtime ghi `mcu_firmware=not-included` |
+| Physical I/O/HIL | `NOT_RUN` | Không có phép đo vật lý |
+| Soak 24 giờ / power-cut | `NOT_RUN` | Không có evidence |
+| Rollback exercise | `NOT_RUN` | Có backup/đường rollback, chưa diễn tập |
+| Chrome DevTools MCP | `NOT_RUN` | Browser evidence dùng Playwright/Chromium headless |
+| Luồng sau đăng nhập | `NOT_RUN` | 14 request chỉ thuộc trang login |
+| Signed release / commissioning / `RELEASE_READY` | Không được suy ra | Record này không có thẩm quyền mở release gate |
 
 ## As-Built source/package
 
@@ -104,3 +170,10 @@ RELEASE_BUNDLE_COMPLETE = YES
 TARGET_PROVENANCE_VERIFIED = NO
 DEPLOYMENT_PROVENANCE_READY = NO
 ```
+
+## Revision history
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-08-03 | Lập record build identity, release bundle và sai khác target ban đầu |
+| 1.1 | 2026-09-11 | Baseline hóa record lịch sử deployment `d728fa76` ngày 2026-09-05 cùng manifest 29 raw artifact; phân lớp SOURCE/HOST/CROSS-BUILD/TARGET/FAKE-MCU/BROWSER, ghi rõ đã bị deployment `9b5608d7` supersede về hiện trạng và giữ HIL/rollback/release ở đúng giới hạn |

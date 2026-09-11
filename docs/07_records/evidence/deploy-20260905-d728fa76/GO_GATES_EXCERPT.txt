@@ -1,0 +1,22 @@
+Nguồn: build/evidence/deploy-20260905-d728fa76/go.log
+Lớp bằng chứng: HOST, nền source c253c053cde40b019bd79d1dc3dd488e6b96f592
+
+21 package có kết quả ok:
+internal/app, internal/auth, internal/capabilities, internal/config,
+internal/configschema, internal/health, internal/historian, internal/hmi,
+internal/modbusrtu, internal/network, internal/points,
+internal/programming/application, internal/programming/artifact,
+internal/programming/compiler, internal/programming/coreipc,
+internal/programming/domain, internal/programming/simworker,
+internal/programming/store, internal/programming/transport/http,
+internal/router, internal/system.
+
+2 package không có test file:
+cmd/mkddc-web, internal/programming/canonicaljson.
+
+Đối chiếu Git ngày 2026-09-11:
+git diff --exit-code c253c053cde40b019bd79d1dc3dd488e6b96f592 d728fa76020efbbb8f7346052d7e6a4020c60193 -- apps/web-api
+exit = 0
+
+Diễn giải kiểm soát: không ghi kết quả này thành một lần chạy lại trực tiếp trên
+d728fa76; đây là kết quả nền c253c053 kèm bằng chứng phần Go không đổi tới d728fa76.
