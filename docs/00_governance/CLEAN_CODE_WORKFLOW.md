@@ -844,11 +844,32 @@ Thủ tục thay — làm được hoàn toàn từ phiên agent, không cần g
    `prompt` là khối **chờ lệnh** ở dưới. Đừng truyền prompt điều phối vào đây:
    phiên sẽ dispatch ngay lúc sinh, và nếu lượt Routine kế tiếp vẫn bắn vào phiên
    cũ thì có hai lượt dispatch chồng nhau trong vài phút.
-2. `update_trigger(trigger_id=…, persistent_session_id=<id phiên mới>)`.
-3. Xác minh `list_triggers` cho đúng `persistent_session_id` mới.
-4. Để phiên cũ tự nhàn rỗi. **Không `archive_session` ngay** — nếu bước 2 hỏng
-   thì phiên cũ vẫn là đường lui duy nhất. Chỉ archive sau khi đã thấy một lượt
-   Routine chạy thành công trên phiên mới.
+2. **Tạo trigger MỚI** trỏ vào phiên mới: `create_trigger(cron_expression=…,
+   persistent_session_id=<id phiên mới>, prompt=<prompt điều phối>)`.
+
+   > **`update_trigger` KHÔNG đổi được `persistent_session_id`.** Đo
+   > 2026-09-11: tham số đó không có trong schema, gọi vào trả lỗi *"at least
+   > one of name, cron_expression, run_once_at, enabled, model, prompt must be
+   > set"*. Một trigger đã gắn vào phiên nào thì gắn vĩnh viễn vào phiên đó —
+   > thay phiên **bắt buộc** phải tạo trigger mới. Đừng mất thời gian tìm cách
+   > sửa tại chỗ.
+
+3. **Tắt trigger cũ**: `update_trigger(trigger_id=<cũ>, enabled=false)`.
+   Dùng `enabled=false` chứ không `delete_trigger`: xoá có thể bị classifier
+   chặn (`[Modify Shared Resources]`, đo 2026-09-11), và tắt thì vẫn giữ được
+   lịch sử chạy của trigger cũ để đối chiếu. Làm bước này **ngay sau** bước 2 —
+   để hở hai trigger cùng bật thì mỗi giờ có hai lượt dispatch; khoá thực thi
+   chặn được hai Implementer nhưng vẫn tốn một lượt vô ích.
+
+4. Xác minh bằng `list_triggers`: trigger mới `enabled: true` với
+   `persistent_session_id` đúng phiên mới, trigger cũ `enabled: false`.
+
+5. Để phiên cũ tự nhàn rỗi. **Không `archive_session` ngay** — nếu trigger mới
+   hỏng thì bật lại trigger cũ là đường lui duy nhất. Chỉ archive sau khi đã
+   thấy một lượt Routine chạy thành công trên phiên mới.
+
+Lưu ý phút chạy: trigger mới bị neo lại theo thời điểm tạo (`§8`), nên phút chạy
+hằng giờ sẽ khác trigger cũ. Đây là chuyện bình thường, không phải cấu hình sai.
 
 Prompt **chờ lệnh** cho phiên điều phối mới:
 

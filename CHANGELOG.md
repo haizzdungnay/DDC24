@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### Fixed — §8.5 chỉ sai đường thay phiên điều phối: `update_trigger` không đổi được `persistent_session_id` (2026-09-11)
+
+- Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` §8.5 bước 2–5.
+- Triệu chứng: thủ tục thay phiên vừa viết ở §8.5 ghi bước 2 là
+  `update_trigger(trigger_id=…, persistent_session_id=<id mới>)`. Gọi thật thì
+  lỗi: *"at least one of name, cron_expression, run_once_at, enabled, model,
+  prompt must be set"* — `persistent_session_id` **không có** trong schema của
+  `update_trigger`.
+- Nguyên nhân gốc: viết thủ tục theo suy luận (`create_trigger` nhận tham số đó
+  nên đoán `update_trigger` cũng nhận) thay vì thử thật trước khi ghi thành
+  luật. Lỗi bị phát hiện trong vòng vài phút vì bước kế tiếp là thi hành ngay
+  chính thủ tục đó — nếu chỉ viết mà không chạy thì nó đã nằm im trong tài liệu
+  tới lần thay phiên đầu tiên, đúng lúc cần nhất.
+- Cách sửa: bước 2 thành **tạo trigger mới** trỏ phiên mới; bước 3 **tắt**
+  trigger cũ bằng `enabled=false` (không `delete_trigger` — đo được xoá bị
+  classifier chặn `[Modify Shared Resources]`, và tắt còn giữ được lịch sử
+  chạy); thêm bước xác minh và ghi chú phút chạy bị neo lại theo thời điểm tạo.
+- Đã thi hành thật, không chỉ viết: trigger mới `trig_01BZpTNeytLRw938zoUUJrv8`
+  → phiên `session_01GW2npSejaN1CJ42JRJanEy`, chạy phút `:06`; trigger cũ
+  `trig_01GqDKDuHc5iV6dKGq86DL93` đã `enabled: false`.
+- Verification (2026-09-11): `python3 scripts/workflow_guard.py --selftest` →
+  **48/48 PASS**, exit 0. Cổng C++/Go/FE **NOT_RUN**: chỉ đổi Markdown.
+
 ### Added — Quy trình thay phiên điều phối và cách nhận diện chặn tạm thời (2026-09-11)
 
 - Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` — thêm `§8.5`, `§8.6`,
