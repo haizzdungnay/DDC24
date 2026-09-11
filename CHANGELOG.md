@@ -8,6 +8,62 @@
 
 ## [Unreleased]
 
+### Fixed — `#653`: mẫu finding không có ô `Manager-Run`, khiến một lớp Issue không bao giờ merge được (2026-09-11)
+
+- Phạm vi: `.github/ISSUE_TEMPLATE/03-finding.yml`, `scripts/workflow_guard.py`,
+  `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (§1, §3.2 mới, §7, lịch sử sửa
+  đổi), `CHANGELOG.md`. **Không** chạm `.github/workflows/**`,
+  `scripts/verify-project.sh`, `scripts/docs_iso_harness.py`, mã sản phẩm.
+
+- Triệu chứng: `workflow_guard.py` đọc `Manager-Run` từ **body Issue** để chứng
+  minh N1 (người tạo Issue khác người implement). Hai mẫu Issue có trường đó,
+  mẫu `03-finding.yml` thì không. Một finding được Manager triage lên
+  `state:ready` vì vậy vẫn không có chỗ nào mang `Manager-Run`, và PR thực hiện
+  nó bị `N1-MGR` chặn ở **bước cuối** — sau khi code xong, cổng đã xanh, PR đã
+  mở. `#644`/PR `#652` là ca thật.
+
+- Nguyên nhân gốc — hai lớp:
+  1. Mẫu finding thiếu ô để ghi lượt triage. Nhưng ô đó **không** thuộc về
+     người mở finding: trên Issue dạng finding, người *tạo* là người *phát
+     hiện* (Implementer hoặc Reviewer), Manager chỉ triage về sau. Mẫu 01/02
+     gộp hai vai trò đó vào một người nên một trường là đủ; mẫu 03 thì không.
+  2. Vì thế guard cũng chưa bao giờ thi hành đúng câu chữ của N1 trên lớp Issue
+     này: nó chỉ đối chiếu `Manager-Run` với `Implementer-Run`. Một phiên mở
+     finding rồi tự implement nó vẫn đi lọt chừng nào ô `Manager-Run` mang giá
+     trị của người khác. Chỉ thêm ô vào mẫu là hợp thức hoá đúng lỗ hổng đó.
+
+- Cách sửa:
+  - Mẫu `03-finding.yml`: ô người mở đổi nhãn thành `Finder-Run` (nhãn ASCII ổn
+    định, cùng quy ước với `Manager-Run`/`Implementer-Run` để guard đọc được),
+    và thêm ô `Manager-Run` **không bắt buộc**, đặt dưới một mục riêng ghi rõ
+    "do vai Manager điền khi triage". Để trống thì GitHub render `_No response_`
+    và guard vẫn chặn bằng `N1-MGR` — fail-closed, đúng trạng thái của một
+    finding chưa qua tay Manager.
+  - `workflow_guard.py`: thêm mã chặn `N1-FINDER` khi `Finder-Run` trùng
+    `Implementer-Run`, và ghi nhận `CẢNH BÁO triage` (không chặn) khi
+    `Manager-Run` trùng `Finder-Run`. `gate:waived` **không** miễn `N1-FINDER`.
+    Guard đọc cả nhãn cũ `Phát hiện bởi (vai + định danh phiên)` và tự rút định
+    danh phiên khỏi phần mô tả vai (`Implementer — https://…`), nếu không thì
+    mọi finding đã mở nằm ngoài tầm cổng. Việc rút token chỉ áp cho
+    `Finder-Run`; `N1-SELF`/`N2-SELF` so nguyên văn như cũ, không đổi hành vi.
+  - Thêm một ca selftest đọc thẳng `03-finding.yml` và đối chiếu nhãn trường với
+    hằng `FINDER_FIELD_NAMES` của guard: đổi nhãn trong mẫu mà quên đổi guard sẽ
+    làm `--selftest` đỏ thay vì làm `N1-FINDER` mất tác dụng trong im lặng.
+  - `WF-CLEAN-001` §3.2 mới ghi thủ tục triage finding: ai điền trường nào, khi
+    nào, và ba cách làm sai kèm cổng tương ứng.
+
+- Kiểm chứng (HOST, số đo của phiên này):
+  `python3 scripts/workflow_guard.py --selftest` → exit `0`, **68/68 PASS**
+  (trước PR: 48/48). `bash scripts/verify-project.sh --component workflow` →
+  exit `0`. `python3 scripts/docs_iso_harness.py --expect` → exit `0`,
+  `PASS — mọi phép kiểm bắt buộc đạt`, `docs/** link missing: 0`.
+  Chứng minh cổng thật sự đỏ: đổi nhãn `Finder-Run` trong mẫu → `--selftest`
+  exit `1` (61/62 trước khi bổ sung ca run_token); ảnh chụp offline theo hình
+  dạng thật của `#653` → chưa triage `N1-MGR` + `N2-GATE` (exit 1), thêm một
+  dòng `Manager-Run` → chỉ còn `N2-GATE` (exit 1), có `review:pass` + verdict →
+  **exit 0**, và phiên mở finding tự implement → `N1-FINDER` (exit 1) dù đã có
+  `review:pass`.
+
 ### Added — `#593`: `verify-project.sh` có đường chạy cho cổng tài liệu và selftest của cổng tách vai (2026-09-11)
 
 - Phạm vi: `scripts/verify-project.sh`, `docs/00_governance/CLEAN_CODE_WORKFLOW.md`
