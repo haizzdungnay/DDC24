@@ -51,6 +51,67 @@
   `test -e` cho 8 đường dẫn mới → 8 `OK`. Link nội bộ tương đối của năm hồ sơ:
   59 link, **0 hỏng**. File nhóm loại trừ bị chạm: **0**. CI: `NOT_RUN (#414)`.
 
+### Fixed — Hiển thị Quick Library trong FBD trên toàn bộ kích thước màn hình desktop (2026-09-11)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`, `apps/web-ui/src/features/programming/design/editor/ProgramsTab.test.tsx`.
+- Triệu chứng: Bảng Quick Library biến mất hoàn toàn khi mở POU FBD trên màn hình có độ rộng dưới 1440px (ví dụ 1080p với tỉ lệ scale 125%/150% hoặc laptop 1366x768).
+- Nguyên nhân gốc:
+  - Biến `libraryColumnEligible` ghim cứng điều kiện `(selected?.language === 'FBD' && fbdWideDesktop)`, trong đó `fbdWideDesktop` kiểm tra `window.innerWidth >= 1440`.
+  - Khi xóa bảng Quick Library nội bộ trong canvas FBD, FBD dưới 1440px không còn khay Quick Library ở bất kỳ đâu.
+- Cách sửa:
+  - Cho phép FBD hiển thị cột Quick Library trên toàn bộ màn hình desktop: `libraryColumnEligible = canEdit && (selected?.language === 'ST' || selected?.language === 'FBD')`.
+  - Cập nhật breakpoint kiểm tra desktop `fbdWideDesktop` từ `>= 1440` về `>= 1024` (chuẩn `lg:` của Tailwind).
+  - Điều chỉnh responsive classes của `inspector-column` để đồng bộ với breakpoint `lg:`.
+  - Cập nhật test `ProgramsTab.test.tsx` kiểm tra hiển thị Quick Library FBD ở `>= 1024px`.
+- Kiểm chứng:
+  - Vitest: 10/10 tests pass cho `ProgramsTab.test.tsx`, 494/494 tests pass cho toàn bộ thư mục `editor/`.
+  - ESLint: `npm run lint` pass (0 errors, 0 warnings).
+
+### Changed — Đặt Quick Library sát cạnh phải workspace, hoán đổi với cột Inspector (2026-09-11)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/editor/ProgramsWorkspace.tsx`, `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`, `apps/web-ui/src/features/programming/design/editor/ProgramsWorkspace.test.tsx`.
+- Triệu chứng: Bảng Thư viện nhanh (Quick Library) nằm ở track 5, trong khi track 6 và 7 dành cho Inspector. Khi Inspector thu gọn hoặc ở chế độ drawer màn hình nhỏ/FBD, phần không gian bên phải của Quick Library bị trống, không đặt sát mép khung bên phải của workspace.
+- Cách sửa:
+  - Cập nhật grid layout của `ProgramsWorkspace` từ:
+    `lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-library-width)_6px_var(--pgm-inspector-width)]`
+    thành:
+    `lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-inspector-width)_6px_var(--pgm-library-width)]`.
+  - Hoán đổi thứ tự render các slot trong `EditorPane.tsx`: `WorkspaceResizeHandle (inspector)` + `inspector-column` đặt trước `WorkspaceResizeHandle (library)` + `quick-library-column`.
+  - Cột `quick-library-column` nay chiếm track ngoài cùng bên phải, đặt sát khung bên phải mà không còn khoảng trống.
+  - Cập nhật unit test `ProgramsWorkspace.test.tsx` khớp chuỗi grid template mới.
+- Kiểm chứng:
+  - Vitest: 3/3 tests pass cho `ProgramsWorkspace.test.tsx`, 10/10 tests pass cho `ProgramsTab.test.tsx`, 18/18 tests pass cho `ProgrammingFeatureRail.test.tsx`.
+  - ESLint: `npm run lint` pass (0 errors, 0 warnings).
+  - Build: `npm run build` hoàn thành thành công (contracts, tsc, vite, bundle budget PASS).
+
+### Added — Cơ chế thu gọn (collapsible) cho thanh điều hướng bên trái ProgrammingFeatureRail (2026-09-11)
+
+- Phạm vi: `apps/web-ui/src/features/programming/layout/ProgrammingFeatureRail.tsx`, `apps/web-ui/src/features/programming/layout/ProgrammingFeatureRail.test.tsx`.
+- Triệu chứng/Yêu cầu: Thanh navigator bên trái khu vực Lập trình (`ProgrammingFeatureRail`) chiếm 220px cố định trên desktop, không có cơ chế thu gọn khi người dùng cần thêm không gian hiển thị canvas/workspace.
+- Cách sửa:
+  - Bổ sung nút toggle thu gọn/mở rộng ở đầu rail sử dụng icon `PanelLeft` / `PanelLeftClose` từ `lucide-react`.
+  - Quản lý trạng thái `collapsed` và đồng bộ qua `localStorage` (`mkddc:programming-rail-collapsed`).
+  - Khi thu gọn (`collapsed = true`): rail co về kích thước `w-16` (64px) chỉ hiển thị icon, căn giữa các item, ẩn nhãn chữ nhưng giữ nguyên tương tác bàn phím, click link và accessible tooltip (`title`, `aria-label`).
+  - Khi mở rộng (`collapsed = false`): rail mở lại đầy đủ 220px kèm nhãn chữ và thương hiệu như hiện tại.
+  - Bổ sung unit test kiểm tra toggle thu gọn/mở rộng, class width, và khôi phục trạng thái từ localStorage.
+- Kiểm chứng:
+  - Vitest: 18/18 tests pass cho `ProgrammingFeatureRail.test.tsx`.
+  - Build frontend: `npm run build` pass sạch (contracts, type-check, bundle budget PASS).
+
+### Fixed — Xóa bảng Quick Library trùng lặp trong canvas FBD (2026-09-11)
+
+- Phạm vi: `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`, `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx`, `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.test.tsx`, `apps/web-ui/e2e/programming.spec.ts`.
+- Triệu chứng: Bảng "QUICK LIBRARY" hiển thị hai lần trong màn hình POU FBD: một bảng ở cột bên ngoài phía bên phải của workspace 4 cột (`[data-testid="quick-library-column"]`) và một bảng dock thừa chèn trực tiếp bên trong canvas của FBD (`<aside data-fbd-dock="library">`).
+- Nguyên nhân gốc: `StructuredFbdEditor.tsx` tự dựng một khay dock nội bộ `QuickLibraryHost` kèm nút toggle "Thư viện" và chia grid 2 cột `min-[1440px]:grid-cols-[minmax(0,1fr)_18rem]`, trong khi `EditorPane.tsx` đã quản lý cột Quick Library toàn cục độc lập.
+- Cách sửa:
+  - Xóa dock `<aside data-fbd-dock="library">`, nút toggle "Thư viện" trên toolbar FBD và state `libraryDockOpen` trong `StructuredFbdEditor.tsx`.
+  - Đưa canvas container về layout flex toàn chiều rộng `flex min-h-0 min-w-0 flex-1 flex-col gap-4`.
+  - Gỡ checkbox `Khay Thư viện` và prop `libraryDefaultOpen` không còn dùng trong `FbdEditorPane.tsx`.
+  - Cập nhật unit test `FbdEditorPane.test.tsx` và E2E test `e2e/programming.spec.ts` kiểm tra đúng cột `quick-library-column` dùng chung.
+- Kiểm chứng:
+  - Vitest: 134 test files, 2047 tests pass (`npx vitest --run --environment jsdom src/features/programming`).
+  - Build frontend pass sạch: `npm run build` (check contracts, type-check, bundle budget PASS).
+
 ### Fixed — `#633`: bốn `t.Skip` fail-open còn sót trong `apps/web-api` chuyển sang fail-close (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/app/wave3_diagnostics_test.go`,
