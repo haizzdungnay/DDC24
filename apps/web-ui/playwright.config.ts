@@ -1,5 +1,29 @@
 import { defineConfig, devices } from '@playwright/test'
 
+/* Trình duyệt đo — cùng lý do đã ghi ở `playwright.programming-real.config.ts`
+ * và `playwright.board.config.ts`.
+ *
+ * Config này ghim `channel: 'chrome'`, nên trên runner sạch (và trong container
+ * đo của `ISS-PGM03-05`) mọi test đỏ ngay ở `browserType.launch` với
+ * "Chromium distribution 'chrome' is not found at /opt/google/chrome/chrome" —
+ * trước khi chạm được assertion nào. Một cổng không chạy được là một cổng sẽ bị
+ * bỏ qua; lane real-backend đã sửa đúng lỗi này ở #541 và lane mock vẫn còn.
+ *
+ * Mặc định vì thế là chromium đi kèm Playwright. Ai cần đo trên Chrome thật thì
+ * đặt `MKDDC_E2E_CHROME_CHANNEL=chrome` — một quyết định NÓI RA, không phải một
+ * ràng buộc ẩn với máy chạy.
+ */
+const browserChannel = process.env.MKDDC_E2E_CHROME_CHANNEL || undefined
+
+/* Đường dẫn chromium thay thế — giống `playwright.programming-real.config.ts`.
+ * Dành cho máy đo có sẵn browser Playwright ở một build khác với build mà
+ * `@playwright/test` của repo trông đợi (container CI dùng chung cache browser
+ * là ca điển hình: cache có `chromium-1194` trong khi runtime đòi `-1228`).
+ * Không đặt biến thì Playwright tự tìm browser của chính nó như cũ.
+ */
+const chromiumExecutablePath = process.env.MKDDC_E2E_CHROMIUM_PATH || undefined
+const launchOptions = chromiumExecutablePath ? { executablePath: chromiumExecutablePath } : {}
+
 export default defineConfig({
   testDir: './e2e',
   // T59-505/604 — lane real-backend có stack riêng (`playwright.programming-real.config.ts`
@@ -30,17 +54,17 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop-chrome',
-      use: { ...devices['Desktop Chrome'], channel: 'chrome' }
+      use: { ...devices['Desktop Chrome'], channel: browserChannel, launchOptions }
     },
     // TASK-PROG-506: UX-WEB-PROG-001 §14 UX-T-002 đòi hỏi bằng chứng mobile
     // 390×844 thật, không chỉ desktop. Giới hạn `testMatch` vào spec
     // Programming — các spec e2e khác của dự án không đổi hành vi (không
     // tự nhân đôi số lần chạy của công việc FE không liên quan).
-    // `channel: 'chrome'` giữ nguyên Chrome thật cho cả hai project.
+    // Cả hai project dùng cùng một trình duyệt (xem `browserChannel`).
     {
       name: 'mobile-chrome',
       testMatch: /programming.*\.spec\.ts/,
-      use: { ...devices['Pixel 7'], channel: 'chrome' }
+      use: { ...devices['Pixel 7'], channel: browserChannel, launchOptions }
     }
   ],
   // T59-604 — PHỤC VỤ BẢN ĐÃ BUILD, KHÔNG PHẢI DEV SERVER.
