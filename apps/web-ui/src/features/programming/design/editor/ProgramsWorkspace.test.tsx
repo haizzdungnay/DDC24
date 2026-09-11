@@ -12,7 +12,7 @@ describe('ProgramsWorkspace — kích thước panel', () => {
       </ProgramsWorkspace>
     )
     const workspace = screen.getByTestId('programs-workspace')
-    expect(workspace).toHaveClass('lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-library-width)_6px_var(--pgm-inspector-width)]')
+    expect(workspace).toHaveClass('lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-inspector-width)_6px_var(--pgm-library-width)]')
     expect(workspace).toHaveTextContent('Editor slot')
   })
 

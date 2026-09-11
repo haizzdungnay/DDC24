@@ -41,7 +41,6 @@ import {
   type FbdPaletteEntry,
 } from './palette'
 import { userPouPaletteEntry, type UserPouInterface } from './userPou'
-import { QuickLibraryHost } from '../design/library/QuickLibraryPanel'
 import { type FbdNodeEditorChange, type FbdNodeEditorTarget } from './nodeEditor'
 import type { FbdNetworkViewPreference, FbdSnapSizePreference, FbdWireStylePreference } from './fbdPreferences'
 
@@ -75,8 +74,6 @@ export interface StructuredFbdEditorProps {
   gridVisible?: boolean
   snapEnabled?: boolean
   snapSize?: FbdSnapSizePreference
-  libraryDefaultOpen?: boolean
-  onLibraryOpenChange?: (open: boolean) => void
 }
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
@@ -147,7 +144,7 @@ export function StructuredFbdEditor({
   canEdit,
   onChange,
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
-  projectId,
+  projectId: _projectId,
   onSelectionChange,
   onNodeEditorTargetChange,
   focusSelection,
@@ -157,8 +154,6 @@ export function StructuredFbdEditor({
   gridVisible = true,
   snapEnabled = true,
   snapSize = 8,
-  libraryDefaultOpen = false,
-  onLibraryOpenChange,
 }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
@@ -178,7 +173,6 @@ export function StructuredFbdEditor({
   const [constantValue, setConstantValue] = useState('false')
   const [createError, setCreateError] = useState<string | null>(null)
   const [compatibleFilterOn, setCompatibleFilterOn] = useState(true)
-  const [libraryDockOpen, setLibraryDockOpen] = useState(libraryDefaultOpen)
   const [pendingPlacement, setPendingPlacement] = useState<{ entryId: string } | null>(null)
   const [marqueeMode, setMarqueeMode] = useState(false)
   const [layoutPreview, setLayoutPreview] = useState<{
@@ -190,7 +184,6 @@ export function StructuredFbdEditor({
   } | null>(null)
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null)
 
-  useEffect(() => setLibraryDockOpen(libraryDefaultOpen), [libraryDefaultOpen])
   const userPouPalette = useMemo(() => {
     const entries: FbdPaletteEntry[] = []
     const issues: string[] = []
@@ -661,19 +654,6 @@ export function StructuredFbdEditor({
               )}
             </select>
           </label>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!canEdit || !selectedNetworkId}
-            aria-pressed={libraryDockOpen}
-            title={pick('Thư viện nhanh — cùng catalog với ST và PGM-04', 'Quick library — same catalog as ST and PGM-04')}
-            onClick={() => setLibraryDockOpen((open) => {
-              onLibraryOpenChange?.(!open)
-              return !open
-            })}
-          >
-            {pick('Thư viện', 'Library')}
-          </Button>
           {selectedPortType !== null && (
             <label className="flex items-center gap-1.5 text-xs text-[var(--c-text-dim)]">
               <input
@@ -769,7 +749,6 @@ export function StructuredFbdEditor({
         {layoutStatus && <p role="status" className="basis-full text-xs text-[var(--c-text-dim)]">{layoutStatus}</p>}
       </div>
 
-      <div className="grid min-h-0 min-w-0 flex-1 gap-4 min-[1440px]:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
 
       {canEdit && (creatingKind === 'INPUT' || creatingKind === 'OUTPUT') && (
@@ -878,38 +857,6 @@ export function StructuredFbdEditor({
           </article>
         ))}
       </div>
-      </div>
-      {libraryDockOpen && (
-        <aside
-          data-fbd-dock="library"
-          aria-label={pick('Khay Thư viện nhanh FBD', 'FBD Quick Library dock')}
-          className="fixed inset-y-16 right-0 z-40 w-[min(24rem,100vw)] min-w-0 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2 shadow-2xl min-[1440px]:static min-[1440px]:z-auto min-[1440px]:w-auto min-[1440px]:max-h-[44rem] min-[1440px]:shadow-none"
-        >
-          <QuickLibraryHost
-            variant="docked"
-            projectId={projectId}
-            language="FBD"
-            canInsert={(entry) =>
-              paletteEntries.some((item) => item.id === entry.entryId)
-                ? { ok: true }
-                : { ok: false, reason: pick('Chưa vẽ được trên canvas', 'Not drawable on the canvas') }
-            }
-            onInsert={(entry) => {
-              const paletteEntry = paletteEntries.find((item) => item.id === entry.entryId)
-              const network = state.document.networks.find((item) => item.id === selectedNetworkId)
-              if (!canEdit || !paletteEntry || !network) return false
-              setPendingPlacement({ entryId: paletteEntry.id })
-              setLibraryDockOpen(false)
-              onLibraryOpenChange?.(false)
-              return true
-            }}
-            onClose={() => {
-              setLibraryDockOpen(false)
-              onLibraryOpenChange?.(false)
-            }}
-          />
-        </aside>
-      )}
       </div>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{translateFbdAnnouncement(pick, state.announcement)}</p>
     </section>

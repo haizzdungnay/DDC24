@@ -98,16 +98,18 @@ export function ProgramsWorkspace({
   style,
   children,
   onKeyDown,
+  className,
 }: {
   style: CSSProperties
   children: ReactNode
   onKeyDown?: KeyboardEventHandler<HTMLDivElement>
+  className?: string
 }) {
   return (
     <div
       data-testid="programs-workspace"
       style={style}
-      className="grid min-w-0 gap-3 lg:h-full lg:min-h-0 lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-library-width)_6px_var(--pgm-inspector-width)] lg:gap-0"
+      className={className ?? "grid min-w-0 gap-3 lg:h-full lg:min-h-0 lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-inspector-width)_6px_var(--pgm-library-width)] lg:gap-0"}
       onKeyDown={onKeyDown}
     >
       {children}
