@@ -93,6 +93,54 @@
   - Suite e2e đầy đủ: **15 test đỏ** không thuộc phạm vi này — cùng đúng 15 test
     ấy cũng đỏ khi đo nền trên `origin/main` với cùng trình duyệt, nên là nợ có
     sẵn (cần Google Chrome thật hoặc backend thật), không phải hồi quy của #558.
+### Fixed — PICS Rev A khai 9/14 BIBB không tồn tại và tự mâu thuẫn về AO writable (2026-09-11)
+
+- **Hồ sơ đối ngoại.** `ICD-BACNET-MK-DDC-24-VI` là tài liệu giao cho BMS engineer
+  bên thứ ba và dùng cho hồ sơ BTL. **Bên nào đã nhận PICS bản ≤ Rev 1.2 phải được
+  thông báo lại** — ràng buộc do `OD-BAC-001` đặt ra khi CLOSED 2026-09-10.
+- Phạm vi docs-only của Issue #622: `docs/02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md`
+  + `CHANGELOG.md`. **Không chạm** `apps/`, `contracts/`, `firmware/`, `platform/`:
+  Issue sửa hồ sơ **xuống** đúng mã, không sửa mã **lên** cho khớp hồ sơ.
+- §3 — chín trong mười bốn BIBB đổi ✅ → ❌ kèm trạng thái thật: `DS-WPM-B`,
+  `AE-ACK-B`, `DM-DOB-B` (`NOT IMPLEMENTED` — không đăng ký handler tương ứng);
+  `DS-COV-B` (`NOT IMPLEMENTED` — SubscribeCOV bị Reject); `DS-COVU-B`, `AE-N-I-B`
+  (`PLACEHOLDER` — chỉ `fprintf`, không gửi gói, `targets_` rỗng); `SCHED-I-B`
+  (`TEST-ONLY` — có lớp và test host nhưng `register_objects()` tạo 0 object);
+  `T-VMT-I-B` (`NOT IMPLEMENTED` — không một dòng mã Trend Log nào trong repo);
+  `DM-TS-B` (`PARTIAL, sai vai trò` — mã là TS-A/master và không có caller).
+- §3 — **thêm cột `Evidence` bắt buộc `file:line` cho cả 14 dòng**, kể cả 5 dòng
+  còn ✅. Nguyên nhân gốc của lớp lỗi này là bảng cũ không có cột nào bắt người
+  khai phải chỉ ra mã: bản sửa 2026-08-07 đã chỉnh con số Schedule/Calendar mà
+  không kiểm mã, nên hồ sơ vẫn hứa 64 Schedule object chưa từng được tạo.
+- §4 — Trend Log, Schedule, Calendar, Notification Class, Event Enrollment từ
+  **8 / 64 / 16 / 4 / 8** về **0**. Khai ❌ mà vẫn để số lượng là vẫn đang hứa.
+- §4.1 — sửa khai **sai chiều nguy hiểm nhất**: dòng "Không writable qua BACnet"
+  mâu thuẫn với chính hai dòng khác cùng tài liệu (AO `commandable`,
+  `Priority_Array` 16 mức, BMS ghi ở 8). Mã nói AO **writable**: callback ghi được
+  đăng ký và đi tới `core_fn_("ao_setpoint", …, 3)`. Một tích hợp viên đọc dòng cũ
+  sẽ kết luận nhầm rằng DDC không nhận lệnh từ BMS — đúng thứ Rev A tồn tại để làm.
+- §8 — thêm ghi chú COV Rev A: engine phát hiện thay đổi có thật, nhưng đăng ký
+  COV bị Reject và notification chưa gửi gói ⇒ tích hợp viên phải **polling** qua
+  ReadProperty/ReadPropertyMultiple. Khử mâu thuẫn với cột `COV` của bảng §4.
+- Header `Phiên bản:` của tài liệu đang ghi **1.0** trong khi Revision History đã ở
+  **1.2** — lệch có sẵn từ trước. Vì bản này bump Rev lên **1.3**, header được đồng bộ
+  theo cùng lúc; giữ nguyên sẽ để một hồ sơ đối ngoại tự khai sai chính số phiên bản
+  của nó, đúng lớp lỗi mà Issue này tồn tại để diệt. Quy ước repo là header phản ánh
+  phiên bản hiện tại (`CONFIG_SCHEMA` 2.4 = Rev 2.4).
+- **Không nâng lớp bằng chứng.** Không BIBB nào được ghi `VERIFIED`: `ADR-060`
+  chốt `VERIFIED` chỉ cấp cho bằng chứng `TARGET`, và Rev A chưa có `TARGET` nào.
+  Cột Evidence được khai rõ là lớp `HOST` (đọc mã).
+- Verification local: `docs_iso_harness.py` **PASS** exit 0 (17/17 baseline, 5/5
+  support, 444 Markdown; link/anchor/whitespace/fence lỗi = 0; duplicate ID = 0;
+  trace invariant lỗi = 0; code-span `docs/**` không tồn tại = 0; TBD/BLOCKED =
+  **113**, không tăng so với nền 2026-09-10). `test -e` **4/4 OK** cho mọi file
+  trong cột Evidence; **17/17** tham chiếu `file:line` nằm trong phạm vi dòng thật
+  của file. `git diff --name-only origin/main` = đúng 2 file. GitHub Actions
+  `NOT_RUN` theo quyết định hạ tầng #414.
+- Refs: Issue #622, `OD-BAC-001`, `OD-BAC-005`, `OD-BAC-011` (CLOSED 2026-09-10),
+  `ADR-057`, `ADR-060`, `REV-BACNET-ASBUILT-001` §2.2, `PLAN-BACNET-D2C-001`
+  `T-BAC-001`, biên bản `DDC24-BACNET-APPROVAL-2026-09-10`, `WF-CLEAN-001`,
+  `DOC-GOV-001` `DD-03`/`DD-06`.
 
 ### Changed — Baseline hóa record lịch sử deploy Foxlinx `d728fa76` (2026-09-11)
 
