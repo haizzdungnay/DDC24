@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### Added — `PROD-BACNET-001` + `SYS-REQ-BAC-001..023`: BACnet Rev A có tầng "sản phẩm phải làm gì" (2026-09-11)
+
+- Phạm vi: `docs/01_product/BACNET_PRODUCT_REQUIREMENTS.md` (tạo mới),
+  `docs/02_requirements/REQUIREMENTS.md` (thêm mục BACnet/IP Rev A),
+  `docs/README.md` (một dòng chỉ mục). Không chạm code sản phẩm, không chạm PICS.
+- Triệu chứng: BACnet Rev A có PICS, có Design, có Implementation Plan, có
+  As-Built Review, nhưng không tầng nào ban hành **sản phẩm phải làm gì**.
+  Đo được trước khi sửa: `ls docs/01_product/` không có file BACnet nào;
+  `grep -c "SYS-REQ-BAC-" docs/02_requirements/REQUIREMENTS.md` = **0**.
+- Nguyên nhân gốc: 19 capability MUST của Rev A (`M-01`…`M-19` trong
+  `REV-BACNET-ASBUILT-001` §2.1) do Review Lead tự suy ra từ mã và từ PICS, không
+  do một Product Requirement nào ban hành. Hệ quả: không ai bác được nếu có người
+  nói "`M-13` chưa bao giờ nằm trong Rev A", và cổng `RELEASE_READY` không kiểm
+  được "phủ 19 mục MUST" khi 19 mục đó không có mã. Đây là finding `G-10`.
+- Cách sửa: lặp đúng khuôn `PROD-MBRTU-001` (đã qua một vòng phê duyệt thật) —
+  14 Product Capability, 20 Product Requirement, 20 Use Case, ma trận
+  `M-xx → PR-BAC-xxx → SYS-REQ-BAC-xxx` phủ đủ 19 mục, cùng mục trace/rủi ro/
+  sign-off cho `DD-13`. Phạm vi bám bốn ADR vừa ký, **không mở rộng**:
+  Alarm/Event, Schedule, Calendar, Trend Log là **V1.1** (`ADR-057`);
+  catalog `/bacnet/objects` chỉ đọc **trong** Rev A (`ADR-059`); ghi AV/BV/MSV ở
+  **priority 3** qua arbitration **trong** Rev A (`OD-BAC-003`); TimeSync
+  **ngoài** Rev A (`OD-BAC-005`); BACnet MS/TP vẫn ngoài phạm vi (`ARCH-R010`).
+- Không tự nâng lớp bằng chứng: `PROD-BACNET-001` có **0** lần xuất hiện chuỗi
+  `VERIFIED`; dòng duy nhất chứa chuỗi này trong phần BACnet của
+  `REQUIREMENTS.md` là `SYS-REQ-BAC-022`, và nó **cấm** ghi `VERIFIED` cho bằng
+  chứng chưa phải `TARGET` (`ADR-060`). Cột trạng thái của ma trận 19 MUST ghi
+  hiện trạng As-Built, không ghi kết luận nghiệm thu.
+- Verification (2026-09-11, đo tại máy): `python3 scripts/docs_iso_harness.py`
+  → **PASS**, exit 0, `duplicate_doc_id` = 0, `docs/** link missing` = 0 (quét
+  443 file `.md`), `code-span docs/**` không tồn tại = 0, `TBD/BLOCKED` = **113**
+  (không thêm mục mới); `--expect` → *khớp toàn bộ ngưỡng*.
+  `grep -c "SYS-REQ-BAC-" docs/02_requirements/REQUIREMENTS.md` = **25** (trước: 0).
+  `grep -oE "M-(0[1-9]|1[0-9])" docs/01_product/BACNET_PRODUCT_REQUIREMENTS.md |
+  sort -u | wc -l` = **19**, tập đúng `{M-01..M-19}`.
+  Cổng C++/Go/FE **NOT_RUN**: diff chỉ chạm `docs/**`, không có mã sản phẩm.
+- Refs: Issue #621, `T-BAC-003` của `PLAN-BACNET-D2C-001`, `I-03` của
+  `BACNET_REV_A_IMPLEMENTATION_PLAN`, finding `G-10` của `REV-BACNET-ASBUILT-001`,
+  `WF-CLEAN-001`, `DOC-GOV-001` `DD-02`/`DD-13`.
+
 ### Fixed — §8.5 chỉ sai đường thay phiên điều phối: `update_trigger` không đổi được `persistent_session_id` (2026-09-11)
 
 - Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` §8.5 bước 2–5.
