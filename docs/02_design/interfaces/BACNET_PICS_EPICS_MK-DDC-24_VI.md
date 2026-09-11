@@ -2,7 +2,7 @@
 ## Protocol Implementation Conformance Statement — D-3
 
 > **Document ID:** ICD-BACNET-MK-DDC-24-VI
-> **Phiên bản:** 1.3 | 2026-09-11 (§3 bảng BIBB + cột `Evidence`; §4 số lượng object; §4.1 AO writable) · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.4 | 2026-09-11 (DD-10: ánh xạ implementation §4 trỏ `apps/`) · 1.3 | 2026-09-11 (§3 bảng BIBB + cột `Evidence`; §4 số lượng object; §4.1 AO writable) · 📘 [README](../../01_specs/README.md)
 > **Chuẩn:** ASHRAE 135-2020 · **Trace:** `BAC-001..011`, `SRS §5`, `DS §4`
 > **Mục tiêu:** đủ chi tiết để (a) lập trình stack BACnet, (b) nộp BTL, (c) BMS engineer tích hợp.
 
@@ -114,7 +114,7 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 | `KX_REL_CONFIGURATION_ERROR` | `CONFIGURATION_ERROR` | 10 | `type=none` hoặc type không nhận dạng được |
 | `KX_REL_COMMUNICATION_FAILURE` | `COMMUNICATION_FAILURE` | 12 | IOP timeout > 5s; ADC hardware fault |
 
-> **Mapping authority:** ADR-011. Implementation: `services/core/bacnet_objtable.cpp` (BAC-008).
+> **Mapping authority:** ADR-011. Implementation: `apps/core/adapters/bacnet/bacnet_objtable.cpp` (BAC-008).
 > Field `ui_reliability[KX_N_UI]` trong `kx_io_shm_t`; core copy sang
 > `kx_plc_shm_t.ai[].reliability` (`shared/mkddc_shm.h`).
 
@@ -135,7 +135,7 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
   — **không** cấu hình `Present_Value`. Hai việc này không thay thế nhau: cấu hình định nghĩa dải
   và đơn vị của điểm, BACnet ra lệnh giá trị trong dải đó.
 
-> **Config model authority:** ADR-012. Implementation: `services/core/bacnet_objtable.cpp` + `services/iobus/config/iobus_config.*`.
+> **Config model authority:** ADR-012. Implementation: `apps/core/adapters/bacnet/bacnet_objtable.cpp` + `apps/iobus/application/config/iobus_config.{hpp,cpp}`.
 
 ### 4.2 Commandable (AO/BO) — Priority Array
 - Hỗ trợ **Priority_Array 16 mức** + `Relinquish_Default`. PLC ghi ở priority 16 (mặc định), BMS thường ghi 8.
