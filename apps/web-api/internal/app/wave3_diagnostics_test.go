@@ -68,23 +68,35 @@ func TestVirtualPointUsageListsRealReferencesAndDeclaresScope(t *testing.T) {
 
 	resp := serveAuth(t, handler, http.MethodPost, "/api/v1/virtual-points",
 		`{"tag":"VP_TEST","label":"Điểm thử","signalType":"float","enabled":true,"writable":true}`, token)
+	// Fail-close, cố tình KHÔNG bỏ qua test: POST /virtual-points CHÍNH LÀ thứ
+	// test này kiểm. Bỏ qua khi nó trả mã lỗi làm toàn bộ khối khẳng định phía
+	// sau biến mất im lặng trong khi `go test` vẫn báo ok — đúng lớp hồi quy mà
+	// test sinh ra để bắt.
 	if resp.Code != http.StatusCreated && resp.Code != http.StatusOK {
-		t.Skipf("không tạo được điểm ảo trong môi trường test: %d %s", resp.Code, resp.Body.String())
+		t.Fatalf("POST /api/v1/virtual-points = %d, chờ 201/200 — thân phản hồi: %s",
+			resp.Code, resp.Body.String())
 	}
 	var created struct {
 		ID string `json:"id"`
 	}
-	_ = json.Unmarshal(resp.Body.Bytes(), &created)
+	if err := json.Unmarshal(resp.Body.Bytes(), &created); err != nil {
+		t.Fatalf("giải mã phản hồi tạo điểm ảo (%d) thất bại: %v — thân phản hồi: %s",
+			resp.Code, err, resp.Body.String())
+	}
 	if created.ID == "" {
-		t.Skip("phản hồi tạo điểm ảo không có id")
+		t.Fatalf("phản hồi tạo điểm ảo (%d) không có trường `id` — hợp đồng phản hồi đã vỡ; thân phản hồi: %s",
+			resp.Code, resp.Body.String())
 	}
 
 	channel := strings.TrimPrefix(strings.ToUpper(created.ID), "VP")
 	resp = serveAuth(t, handler, http.MethodPut, "/api/v1/alarm-settings",
 		`[{"id":"ALM-VP1","label":"Cảnh báo dùng VP","enabled":false,"alarmType":1,"priority":"medium","clearMode":"auto","delayS":0,`+
 			`"sources":[{"kind":"VP","channel":`+channel+`,"pointId":"`+created.ID+`"}],"params":{"hh":10,"h":8,"l":2,"ll":1}}]`, token)
+	// Fail-close cùng lý do: lưu alarm hỏng thì phần khẳng định usage phía sau
+	// không còn kiểm được gì, và đó là hồi quy chứ không phải thiếu điều kiện.
 	if resp.Code != http.StatusOK {
-		t.Skipf("không lưu được alarm settings: %d %s", resp.Code, resp.Body.String())
+		t.Fatalf("PUT /api/v1/alarm-settings = %d, chờ 200 — thân phản hồi: %s",
+			resp.Code, resp.Body.String())
 	}
 
 	resp = serveAuth(t, handler, http.MethodGet, "/api/v1/virtual-points/"+created.ID+"/usage", ``, token)
