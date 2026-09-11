@@ -76,7 +76,8 @@
 
 - Verification (đo thật 2026-09-11 trên chính cây làm việc này, không dẫn số cũ):
   - C++ `--fresh` MODBUS/BACNET/HMI = ON: configure exit 0, build exit 0,
-    `ctest` **1482/1482 PASS**, 23.76 s (FetchContent trỏ `build/deps-cache/`
+    `ctest` **1482/1482 PASS, 0 FAIL** (1 skip sẵn có: `RealtimeMemlock.MclFuture…`),
+    24.40 s đo lại sau khi merge `origin/main` (FetchContent trỏ `build/deps-cache/`
     vì egress tới codeload github.com trả 403 — cùng blocker đã ghi ở #625).
   - Go: `go vet ./...` exit 0; `go test ./... -count=1` exit 0, **21/21 package ok**.
   - FE: `npx vitest --run --environment jsdom src` **246 file / 3131 test PASS**,
