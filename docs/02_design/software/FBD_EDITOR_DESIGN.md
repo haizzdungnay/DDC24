@@ -1,7 +1,7 @@
 # FBD Editor Design — Palette, Interface Node, Inspector
 
 **Document ID:** DDD-FBD-EDITOR-PROG-001
-**Phiên bản:** 1.0
+**Phiên bản:** 1.1
 **Trạng thái:** Active — mở Document Gate #6 (`PROGRAMMING_DOCUMENT_READINESS_MATRIX.md`)
 **Tác giả:** System Engineering, theo Lệnh triển khai CTO/Owner 2026-08-15 (D-02)
 **Phạm vi:** Bổ sung cho `PROGRAMMING_FE_DESIGN.md` §5 "Structured FBD Rev A" —

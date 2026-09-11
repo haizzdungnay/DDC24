@@ -1,10 +1,10 @@
 # Quy trình Clean Code & Clean Documentation — MK-DDC-24
 
 **ID:** `WF-CLEAN-001`
-**Phiên bản:** 1.0
+**Phiên bản:** 1.3
 **Trạng thái:** Active
 **Chủ quản:** CTO / Project Engineering
-**Cập nhật:** 2026-09-09 (thiết lập ban đầu ba vai Manager/Implementer/Reviewer, quality gate, lịch chạy)
+**Cập nhật:** 2026-09-11 (`§6.1a` + `§6.2`: `docs_iso_harness.py --expect` và `workflow_guard.py --selftest` có đường chạy trong `scripts/verify-project.sh`; xem bảng Lịch sử sửa đổi cuối hồ sơ để biết đầy đủ các bản 1.1–1.3)
 
 Tài liệu này là **authority duy nhất** cho quy trình dọn dẹp mã nguồn và tài liệu
 DDC-24. Khi nội dung ở `AGENTS.md`, `CLAUDE.md` hoặc skill khác nhau, bản này đúng.
