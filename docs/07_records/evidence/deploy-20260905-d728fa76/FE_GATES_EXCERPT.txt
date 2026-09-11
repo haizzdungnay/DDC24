@@ -1,0 +1,20 @@
+Nguồn: build/evidence/deploy-20260905-d728fa76/final-fe.log
+Phạm vi trích: dòng 49-52, 55-56, 108-140
+Lớp bằng chứng: HOST
+
+Test Files  229 passed (229)
+Tests       2836 passed (2836)
+Duration    34.19s
+
+lint: eslint src --max-warnings=0 && npm run check:ui-strings
+build:foxlinx -> build:release -> VITE_PROGRAMMING_REV_A=1 npm run build
+vite: 2440 modules transformed; built in 796ms
+
+chunk      : programming-B8IJj0nj.js
+gzip       : 137.32 KiB (140617 bytes)
+budget     : 165.00 KiB (R3)
+headroom   : 27.68 KiB
+PASS: chunk programming trong ngân sách R3.
+
+Diễn giải kiểm soát: chuỗi lệnh đi tiếp qua lint, build và budget với exit 0;
+đây là HOST gate, không phải kiểm thử target hoặc luồng browser sau đăng nhập.
