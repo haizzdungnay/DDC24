@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Fixed — `#633`: bốn `t.Skip` fail-open còn sót trong `apps/web-api` chuyển sang fail-close (2026-09-11)
+
+- Phạm vi: `apps/web-api/internal/app/wave3_diagnostics_test.go`,
+  `apps/web-api/internal/modbusrtu/fieldbus_contract_test.go`,
+  `apps/web-api/internal/app/rev_findings_2026_08_06_test.go`,
+  `apps/web-api/internal/app/modbustemplates_test.go`. **Không chạm mã sản
+  phẩm** — chỉ mã test.
+
+- Triệu chứng: sáu nhánh `t.Skip`/`t.Skipf` mà **điều kiện kích hoạt chính là
+  hồi quy test đó sinh ra để bắt**. `go test ./... -count=1` in `ok` trong khi
+  cổng đã tự tắt: endpoint `POST /virtual-points` trả `500` ⇒ bỏ qua; file hợp
+  đồng C++ biến mất ⇒ bỏ qua; danh sách mẫu Modbus bị xoá trắng ⇒ bỏ qua. Nặng
+  nhất là `recordModbusEvents gắn đúng device_id với trạng thái`: subtest đó
+  **SKIP mọi lần chạy** kể từ khi ra đời, chưa bao giờ tới được phần khẳng
+  định.
+
+- Nguyên nhân gốc: nhánh "không đạt điều kiện" bị xử lý như *thiếu điều kiện
+  môi trường* — cùng cách với các skip hợp lệ cần `root`, cần `linux`. Thực
+  chất chúng là **lỗi sản phẩm hoặc lỗi cấu trúc repo**: file hợp đồng luôn
+  phải có mặt, endpoint luôn phải trả 201, danh sách dựng sẵn là literal biên
+  dịch cứng. Riêng subtest sự kiện Modbus thì điều kiện `len(state) == 0` là
+  **hệ quả tất yếu của thiết kế**: `modbusEventLog.observe` cố tình im ở lần
+  quan sát đầu, chỉ chuyển trạng thái mới sinh bản ghi, mà test chỉ gọi
+  `recordModbusEvents` đúng một lần. Cùng lớp lỗi #590 đã vá ở ba helper khác
+  (`8270fc9`), chỉ khác file nên nằm ngoài phạm vi bản vá đó.
+
+- Cách sửa: bốn nhánh đổi sang `t.Fatalf` nêu **mã trạng thái + thân phản hồi**
+  (hoặc đường dẫn đang tìm) để đọc log là biết ngay endpoint/file nào hỏng;
+  `json.Unmarshal` bị nuốt lỗi bằng `_ =` cũng được kiểm. Subtest sự kiện
+  Modbus dựng **hai lần quan sát với telemetry đảo chiều** để sinh chuyển trạng
+  thái thật, rồi khẳng định đúng hai bản ghi và mỗi `device_id` mang chuyển
+  trạng thái của chính nó (REV-BE-03/04) — cổng chết thành cổng sống. Không đổi
+  contract/API/schema, không đụng mã sản phẩm (N6).
+
+- Số đo (2026-09-11, đo tại máy):
+  - `t.Skip` trong `apps/web-api`: **31 → 25** (`grep -rn 't\.Skip' apps/web-api
+    --include=*_test.go | wc -l`).
+  - `go vet ./...` exit 0; `go test ./... -count=1` **22/22 package `ok`**,
+    `internal/app` 52.864s, `internal/modbusrtu` 0.121s.
+  - Kiểm chứng fail-close bằng tiêm lỗi thật: đổi tên
+    `apps/iobus/adapters/modbus_rtu/fieldbus_config.cpp` ⇒ `--- FAIL` + exit
+    `1`; trả lại tên cũ ⇒ `ok` + exit `0`.
+  - C++ `NOT_RUN` (không chạm `apps/core/**`, `apps/iobus/**`); FE `NOT_RUN`
+    (không chạm `apps/web-ui/**`); CI `NOT_RUN (#414)`.
+
 ### Changed — `ISS-PGM03-05` (#558): chuẩn hóa row, toolbar, validation và accessibility của tab Ánh xạ (2026-09-11)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/mapping/` —

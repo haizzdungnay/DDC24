@@ -32,8 +32,16 @@ func TestModbusTemplateRejectsEntriesWithoutSource(t *testing.T) {
 }
 
 func TestBuiltinModbusTemplatesAllCiteASource(t *testing.T) {
+	// Fail-close: `builtinModbusTemplates` là literal biên dịch cứng trong
+	// modbustemplates.go, không phải đầu vào môi trường — không có môi trường
+	// nào làm nó rỗng. Rỗng chỉ xảy ra khi ai đó xoá trắng danh sách trong mã
+	// nguồn, và khi đó luật "không bịa thông số" ở đầu file mất cổng canh
+	// trong khi `go test` vẫn báo ok. Xoá danh sách là quyết định sản phẩm,
+	// phải sửa cả test này cùng lúc chứ không được im lặng qua cổng.
 	if len(builtinModbusTemplates) == 0 {
-		t.Skip("chưa có mẫu dựng sẵn nào")
+		t.Fatalf("builtinModbusTemplates rỗng — danh sách mẫu dựng sẵn trong " +
+			"internal/app/modbustemplates.go đã bị xoá trắng; cổng \"mọi mẫu phải dẫn nguồn\" " +
+			"không còn kiểm được gì")
 	}
 	for _, template := range builtinModbusTemplates {
 		if !validModbusTemplate(template) {
