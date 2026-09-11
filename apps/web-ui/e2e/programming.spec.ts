@@ -3413,7 +3413,9 @@ test.describe('ISS-PGM03-05 — Ánh xạ: row, toolbar và a11y', () => {
       name: 'AHU_Main',
       kind: 'PROGRAM',
       language: 'ST',
-      document: 'PROGRAM AHU_Main\nVAR_INPUT\n SupplyTemp : REAL;\nEND_VAR\nVAR_OUTPUT\n FanCmd : BOOL;\nEND_VAR\nEND_PROGRAM\n',
+      /* Tên biến dài cố ý: `AC` đòi chuỗi VI/EN dài KHÔNG che action/status.
+         Một fixture toàn tên ngắn sẽ cho màn hình đẹp mà không chứng minh gì. */
+      document: 'PROGRAM AHU_Main\nVAR_INPUT\n SupplyTemp : REAL;\nNhietDoGioCapSauDanNongTangHaiKhuVucPhiaDongToaNhaA : REAL;\nEND_VAR\nVAR_OUTPUT\n FanCmd : BOOL;\nEND_VAR\nEND_PROGRAM\n',
       executionOrder: 0,
       functionalTags: ['AHU'],
     })
@@ -3490,6 +3492,14 @@ test.describe('ISS-PGM03-05 — Ánh xạ: row, toolbar và a11y', () => {
     await page.getByRole('button', { name: /^AHU_Main · FanCmd ·/ }).click()
     await expect(page.getByTestId('mapping-variable-list').getByText('Chưa map').first()).toBeVisible()
     await expect(page.getByRole('button', { name: 'Mở nguồn' })).toBeVisible()
+
+    // Và với biến mang tên rất dài: trạng thái lẫn hành động vẫn không bị che.
+    await page.getByRole('button', { name: /^AHU_Main · NhietDoGioCap/ }).click()
+    const longRow = page.getByTestId('mapping-variable-list')
+    await expect(longRow.getByText('Chưa map').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Mở nguồn' })).toBeVisible()
+    const listOverflow = await longRow.evaluate((node) => node.scrollWidth - node.clientWidth)
+    expect(listOverflow, 'tên biến dài đẩy danh sách tràn ngang').toBeLessThanOrEqual(1)
 
     const width = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
