@@ -2,7 +2,7 @@
 ## Protocol Implementation Conformance Statement — D-3
 
 > **Document ID:** ICD-BACNET-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.3 | 2026-09-11 (§3 bảng BIBB + cột `Evidence`; §4 số lượng object; §4.1 AO writable) · 📘 [README](../../01_specs/README.md)
 > **Chuẩn:** ASHRAE 135-2020 · **Trace:** `BAC-001..011`, `SRS §5`, `DS §4`
 > **Mục tiêu:** đủ chi tiết để (a) lập trình stack BACnet, (b) nộp BTL, (c) BMS engineer tích hợp.
 
@@ -16,22 +16,43 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 - Lộ trình: B-BC (Building Controller) khi bổ sung đủ scheduling/trending nâng cao.
 
 ## 3. BIBBs hỗ trợ (BACnet Interoperability Building Blocks)
-| BIBB | Tên | Vai trò |
-|------|-----|---------|
-| DS-RP-B | ReadProperty-B | ✅ |
-| DS-RPM-B | ReadPropertyMultiple-B | ✅ |
-| DS-WP-B | WriteProperty-B | ✅ |
-| DS-WPM-B | WritePropertyMultiple-B | ✅ |
-| DS-COV-B | COV-B (subscribe) | ✅ |
-| DS-COVU-B | COV unsolicited | ✅ (cho AI/AO/BI/BO/AV/BV/MSV) |
-| AE-N-I-B | Alarm/Event Notification-Internal | ✅ (Notification Class) |
-| AE-ACK-B | Alarm Acknowledge | ✅ |
-| SCHED-I-B | Scheduling-Internal | ✅ (Schedule object 64 cái, **chỉ đọc** — xem §4) |
-| T-VMT-I-B | Trend Viewing (internal buffer) | ✅ (Trend Log) |
-| DM-DDB-B | Dynamic Device Binding (Who-Is/I-Am) | ✅ |
-| DM-DOB-B | Dynamic Object Binding (Who-Has/I-Have) | ✅ |
-| DM-TS-B | TimeSync-B | ✅ |
-| DM-RD-B | ReinitializeDevice-B | ✅ (warm/cold restart) |
+
+> **Sửa 2026-09-11 — bảng này đã được hạ xuống đúng thực trạng mã.** Chín trong mười bốn
+> dòng trước đây khai ✅ cho năng lực **chưa tồn tại trong mã**. `OD-BAC-001` **CLOSED
+> 2026-09-10** (biên bản `DDC24-BACNET-APPROVAL-2026-09-10`) quyết định sửa hồ sơ xuống
+> đúng thực trạng, áp chính nguyên tắc mà §4 của tài liệu này đã tự viết ngày 2026-08-07:
+> *"với hồ sơ chứng nhận thì khai sai nguy hiểm hơn khai thiếu."*
+>
+> **Cột `Evidence` là bắt buộc cho cả 14 dòng, kể cả các dòng ✅.** Một dòng ✅ không có
+> `file:line` là một dòng không ai kiểm lại được — đó chính là cách chín dòng sai sống sót
+> qua nhiều đợt rà soát trước.
+>
+> **Lớp bằng chứng của bảng này là `HOST` (đọc mã).** Không dòng nào được ghi `VERIFIED`:
+> `ADR-060` chốt `VERIFIED` chỉ cấp cho bằng chứng `TARGET` trên board thật, và Rev A chưa
+> có bằng chứng `TARGET` nào. Cột Evidence dưới đây trỏ vị trí mã, **không** phải kết quả
+> chạy trên thiết bị.
+
+| BIBB | Tên | Rev A | Trạng thái thật trong mã | Evidence (`file:line` — đọc mã 2026-09-11) |
+|------|-----|:-----:|--------------------------|---------------------------------------------|
+| DS-RP-B | ReadProperty-B | ✅ | Có đăng ký handler `SERVICE_CONFIRMED_READ_PROPERTY` | `apps/iobus/adapters/bacnet/bacnet_server.cpp:117-118` |
+| DS-RPM-B | ReadPropertyMultiple-B | ✅ | Có đăng ký handler `SERVICE_CONFIRMED_READ_PROP_MULTIPLE` | `apps/iobus/adapters/bacnet/bacnet_server.cpp:119-120` |
+| DS-WP-B | WriteProperty-B | ✅ | Có đăng ký handler `SERVICE_CONFIRMED_WRITE_PROPERTY`; ghi AO/BO đi qua arbitration của core ở `PRIO_BACNET = 3` | `apps/iobus/adapters/bacnet/bacnet_server.cpp:121-122`, `apps/iobus/adapters/bacnet/bacnet_server.cpp:141-153` |
+| DS-WPM-B | WritePropertyMultiple-B | ❌ | **NOT IMPLEMENTED** — `SERVICE_CONFIRMED_WRITE_PROP_MULTIPLE` không nằm trong danh sách đăng ký; request rơi vào `handler_unrecognized_service` và bị Reject | `apps/iobus/adapters/bacnet/bacnet_server.cpp:116-127` |
+| DS-COV-B | COV-B (subscribe) | ❌ | **NOT IMPLEMENTED** — không có handler `SERVICE_CONFIRMED_SUBSCRIBE_COV`. BMS gửi SubscribeCOV sẽ nhận Reject. Lớp `bacnet_cov.cpp` có engine phát hiện thay đổi nhưng **không** có đường nhận đăng ký qua BACnet. Chuyển **V1.1** (`ADR-057`) | `apps/iobus/adapters/bacnet/bacnet_server.cpp:116`, `apps/iobus/adapters/bacnet/bacnet_server.cpp:116-127` |
+| DS-COVU-B | COV unsolicited | ❌ | **PLACEHOLDER** — vòng phát notification chỉ `std::fprintf` ra stderr kèm comment *"bacnet-stack: Send_COV_Subscribe_Unconfirmed or confirmed COV notification"*; **không có lời gọi gửi gói nào**. Chuyển **V1.1** (`ADR-057`) | `apps/iobus/adapters/bacnet/bacnet_server.cpp:288-293` |
+| AE-N-I-B | Alarm/Event Notification-Internal | ❌ | **PLACEHOLDER** — vòng dispatch chỉ log, comment trong mã ghi rõ *"Placeholder: log the dispatch"*; `targets_` luôn rỗng vì `add_target()` **không có caller nào trong repo**. Không có Notification Class object nào được tạo. Chuyển **V1.1** (`ADR-057`) | `apps/iobus/adapters/bacnet/bacnet_alarm.cpp:95-102`, `apps/iobus/adapters/bacnet/bacnet_alarm.cpp:67-70` |
+| AE-ACK-B | Alarm Acknowledge | ❌ | **NOT IMPLEMENTED** — không có handler `SERVICE_CONFIRMED_ACKNOWLEDGE_ALARM`. Chuyển **V1.1** (`ADR-057`) | `apps/iobus/adapters/bacnet/bacnet_server.cpp:116-127` |
+| SCHED-I-B | Scheduling-Internal | ❌ | **TEST-ONLY — 0 object.** Lớp `BacnetScheduleObjects` có tồn tại và có test host, nhưng `register_objects()` **không tạo Schedule object nào**; lớp này không được nối vào đường phục vụ BACnet. Chuyển **V1.1** (`ADR-057`) | `apps/iobus/adapters/bacnet/bacnet_server.cpp:214-226`, `apps/iobus/adapters/bacnet/bacnet_schedule.hpp:113` |
+| T-VMT-I-B | Trend Viewing (internal buffer) | ❌ | **NOT IMPLEMENTED — 0 object.** Không có một dòng mã Trend Log nào trong `apps/`, `contracts/`, `firmware/`, `platform/`. Chuyển **V1.1** (`ADR-057`) | `apps/iobus/adapters/bacnet/bacnet_server.cpp:214-226` |
+| DM-DDB-B | Dynamic Device Binding (Who-Is/I-Am) | ✅ | Có đăng ký handler `SERVICE_UNCONFIRMED_WHO_IS` (đáp về địa chỉ người gửi) và phát I-Am khi khởi động | `apps/iobus/adapters/bacnet/bacnet_server.cpp:127`, `apps/iobus/adapters/bacnet/bacnet_server.cpp:129` |
+| DM-DOB-B | Dynamic Object Binding (Who-Has/I-Have) | ❌ | **NOT IMPLEMENTED** — không đăng ký `SERVICE_UNCONFIRMED_WHO_HAS`; chỉ `WHO_IS` được đăng ký trong khối handler | `apps/iobus/adapters/bacnet/bacnet_server.cpp:127` |
+| DM-TS-B | TimeSync-B | ❌ | **PARTIAL, SAI VAI TRÒ — hai lý do độc lập.** (1) **Sai vai trò:** mã hiện có gọi `Send_TimeSync_Device()` = vai **master/TS-A (gửi)**, ngược hẳn với `DM-TS-B` (nhận) đang khai. (2) **Không có caller:** `send_time_sync()` không được gọi từ bất kỳ đâu trong repo — mã chết. Bỏ khỏi Rev A theo `OD-BAC-005` (CLOSED 2026-09-10): DDC làm time master trên mạng BMS là thứ tích hợp viên thường cấm. **Đồng hồ Rev A đồng bộ bằng NTP**, không qua BACnet | `apps/iobus/adapters/bacnet/bacnet_server.cpp:334-345` |
+| DM-RD-B | ReinitializeDevice-B | ✅ | Có đăng ký handler `SERVICE_CONFIRMED_REINITIALIZE_DEVICE` (warm/cold restart, cần password — xem §8) | `apps/iobus/adapters/bacnet/bacnet_server.cpp:123-124` |
+
+> **Cảnh báo cho người rà soát tự động.** Phép kiểm code-span của `scripts/docs_iso_harness.py`
+> chỉ xác thực đường dẫn trỏ vào `docs/**`, **không** xác thực đường dẫn trỏ vào `apps/**`.
+> Harness `PASS` **không** chứng minh cột Evidence ở trên còn đúng. Khi mã đổi, phải kiểm lại
+> bảng này bằng `grep`/`sed` trên chính các file được dẫn.
 
 ## 4. Object Types & thuộc tính (EPICS rút gọn)
 
@@ -45,30 +66,36 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 | Binary Output (BO) | 4 | DO1–DO4 relay | Present_Value (commandable) | ✅ |
 | Binary Value (BV) | 16 | biến PLC | Present_Value | ✅ |
 | Multi-state Value (MSV) | 8 | enum PLC | Present_Value | ✅ |
-| Trend Log | 8 | — | config | — |
-| Schedule | **64** | Scheduler Engine v3.1 | **❌ chỉ đọc** | — |
-| Calendar | **16** | Nhóm ngày lễ | **❌ chỉ đọc** | — |
-| Notification Class | 4 | — | ✅ | — |
-| Event Enrollment | 8 | — | ✅ | — |
+| Trend Log | **0** | — | — | — |
+| Schedule | **0** | — | — | — |
+| Calendar | **0** | — | — | — |
+| Notification Class | **0** | — | — | — |
+| Event Enrollment | **0** | — | — | — |
 
-> **Cập nhật 2026-08-07 (Plan 50 P4, ADR-023 QĐ-4).** Hai dòng Schedule/Calendar trước đây khai
-> **8 và 2 đối tượng, đều writable** — cả ba con số đều không khớp bản đã hiện thực, và với hồ sơ
-> chứng nhận thì khai sai nguy hiểm hơn khai thiếu.
+> **Cập nhật 2026-09-11 — năm loại object dưới đây về `0` cho Rev A.** Trend Log, Schedule,
+> Calendar, Notification Class và Event Enrollment trước đây khai lần lượt **8 / 64 / 16 / 4 / 8**
+> đối tượng. Không loại nào trong năm loại đó được tạo: `register_objects()`
+> (`apps/iobus/adapters/bacnet/bacnet_server.cpp:214-226`) chỉ tạo AI×16, BI×8, AO×4, BO×4,
+> AV×32, BV×16, MSV×8 — **không một lời gọi `..._Create()` nào** cho năm loại trên, và Trend Log
+> thì không có một dòng mã nào trong repo.
 >
-> Số thật: **Schedule 64** (bằng trần của Scheduler Engine) và **Calendar 16**.
+> **Khai ❌ mà vẫn để số lượng là vẫn đang hứa.** Vì vậy các con số được đưa về `0` chứ không chỉ
+> đánh dấu chỉ-đọc. Cơ sở: `ADR-057` **Accepted 2026-09-10** — Alarm/Event Notification,
+> Schedule, Calendar và Trend Log **chuyển V1.1**, PICS Rev A khai ❌ cho cả bốn. Đây là quyết
+> định về **phạm vi phát hành**, không phải bỏ tính năng: cả bốn vẫn nằm trong lộ trình V1.1.
+> Xem §3 để biết trạng thái mã của từng BIBB tương ứng kèm `file:line`.
 >
-> **Cả hai CHỈ ĐỌC.** Đây là lựa chọn có chủ ý, không phải hạn chế kỹ thuật: đặc tả §13 bắt mọi
-> thay đổi lịch phải đi qua validate → preview → publish → ACK, có `revision` và nhật ký audit.
-> Cho một BMS ngoài ghi thẳng `Weekly_Schedule` qua BACnet là bỏ qua toàn bộ chuỗi đó và biến
-> nhật ký audit thành thứ không giải thích được. `WriteProperty` trả `WRITE_ACCESS_DENIED` (40)
-> kèm lý do, chứ không nhận rồi lặng lẽ bỏ.
+> **Lịch sử để không lặp lại.** Bản 2026-08-07 (Plan 50 P4, `ADR-023` QĐ-4) đã từng sửa hai dòng
+> Schedule/Calendar từ *"8 và 2 đối tượng, đều writable"* thành *"64 và 16, chỉ đọc"*, kèm nguyên
+> tắc — vẫn đúng và nay được áp lần nữa — rằng *"với hồ sơ chứng nhận thì khai sai nguy hiểm hơn
+> khai thiếu"*. Lần đó sửa con số nhưng **không kiểm lại mã**, nên hồ sơ vẫn hứa 64 Schedule
+> object mà `register_objects()` chưa bao giờ tạo cái nào. Đó là lý do §3 nay bắt buộc cột
+> `Evidence` với `file:line` cho **mọi** dòng, kể cả dòng ✅.
 >
-> `Present_Value` và `Priority_For_Writing` vẫn phản ánh trạng thái thật do controller báo, nên
-> BMS **giám sát** được đầy đủ — chỉ không **sửa** được qua BACnet.
->
-> Hệ quả cho BTL: bài kiểm ghi Schedule sẽ trả `WRITE_ACCESS_DENIED`. Đây là hành vi hợp lệ theo
-> ASHRAE 135 cho đối tượng chỉ đọc, nhưng **phải khai đúng trong PICS** — nếu PICS nói writable
-> mà thiết bị từ chối thì đó là sai lệch PICS, lỗi nặng hơn nhiều.
+> **Khi bốn năng lực này về ở V1.1**, chuỗi validate → preview → publish → ACK của đặc tả §13 vẫn
+> là ràng buộc thiết kế: Schedule/Calendar dự kiến **chỉ đọc qua BACnet**, `WriteProperty` trả
+> `WRITE_ACCESS_DENIED` (40) kèm lý do. Ghi lại ở đây để quyết định thiết kế không bị mất cùng
+> với con số; nó **chưa** phải hành vi của Rev A, vì Rev A không có object nào để ghi.
 
 ### 4.1 Thuộc tính bắt buộc mỗi loại
 
@@ -97,7 +124,16 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 - `Units`: theo `ao[].units` trong `io_config.conf`; auto-derive nếu absent (`0-10V`→volts=5, `4-20mA`→milliamperes=2).
 - `Min_Pres_Value` / `Max_Pres_Value`: theo `ao[].min_pv` / `ao[].max_pv`.
 - `Object_Name`: theo `ao[].name`; default `"AO{n}"`.
-- Không writable qua BACnet — configured via `io_config.conf` (Web UI).
+- **`Present_Value` WRITABLE qua BACnet** ở `PRIO_BACNET = 3`, đi qua arbitration của core —
+  **không** ghi thẳng vào ngõ ra. Đường đi: `Analog_Output_Write_Present_Value_Callback_Set(ao_write_callback)`
+  (`apps/iobus/adapters/bacnet/bacnet_server.cpp:114`) → `ao_write_callback` (`apps/iobus/adapters/bacnet/bacnet_server.cpp:45-51`) →
+  `handle_output_write()` gọi `core_fn_("ao_setpoint", instance-1, value, "bacnet:udp", 3)`
+  (`apps/iobus/adapters/bacnet/bacnet_server.cpp:141-153`). Nhả lệnh (relinquish) đi cùng đường với op `release_ao`.
+  Core có thể **từ chối** lệnh nếu nguồn ưu tiên cao hơn đang giữ điểm; mỗi lần ghi sinh một dòng
+  `AUDIT bacnet_cmd … result=accepted|overridden`.
+- `io_config.conf` (Web UI) cấu hình `Units` / `Min_Pres_Value` / `Max_Pres_Value` / `Object_Name`
+  — **không** cấu hình `Present_Value`. Hai việc này không thay thế nhau: cấu hình định nghĩa dải
+  và đơn vị của điểm, BACnet ra lệnh giá trị trong dải đó.
 
 > **Config model authority:** ADR-012. Implementation: `services/core/bacnet_objtable.cpp` + `services/iobus/config/iobus_config.*`.
 
@@ -147,6 +183,15 @@ UTF-8 (hỗ trợ tiếng Việt cho Object_Name/Description).
 - Failsafe: mất giao tiếp BMS >30s → BI/BO giữ/safe theo cấu hình; sinh alarm (E301).
 - ReinitializeDevice: warmstart (restart service) / coldstart (reboot) — cần password.
 
+> **Trạng thái COV trong Rev A — đọc cùng §3 trước khi cấu hình.** Dòng COV ở trên và cột `COV`
+> của bảng §4 mô tả **thiết kế phát hiện thay đổi**, thứ đã có thật trong mã
+> (`apps/iobus/adapters/bacnet/bacnet_cov.cpp`, `check_and_update`). Nhưng hai đầu còn lại của chuỗi **chưa có trong
+> Rev A**: không có handler `SubscribeCOV` (`DS-COV-B` ❌) và khâu phát notification mới chỉ là
+> `fprintf` chứ chưa gửi gói (`DS-COVU-B` ❌ — `apps/iobus/adapters/bacnet/bacnet_server.cpp:288-293`).
+>
+> **Hệ quả thực tế cho tích hợp viên:** đăng ký COV từ BMS sẽ bị Reject trong Rev A. Hãy
+> **polling** qua ReadProperty / ReadPropertyMultiple. COV đầy đủ chuyển **V1.1** (`ADR-057`).
+
 ## 9. Kế hoạch test BTL
 - Dùng **BACnet Stack Test Tool (BTL)** / Visual Test Shell.
 - Pass 100% test cho B-ASC profile (gate G4, NFR-009) **trước GA**.
@@ -156,6 +201,15 @@ UTF-8 (hỗ trợ tiếng Việt cho Object_Name/Description).
 `BAC-001..011`, `SW-BAC-001..008`, `FR-020/021`, `NFR-009`, `UC-02`.
 
 ---
-**Rev** 1.2 | 2026-06-30 (§4.1: Reliability enum đầy đủ 8 giá trị per ADR-011 — thêm CONFIGURATION_ERROR+COMMUNICATION_FAILURE+UNRELIABLE_OTHER; AO required properties Units/Min_Pres_Value/Max_Pres_Value per ADR-012; §10: trace thêm ADR-011/ADR-012) ·
+**Rev** 1.3 | 2026-09-11 (§3: bảng BIBB hạ xuống đúng thực trạng mã — 9/14 dòng đổi ✅→❌
+(`DS-WPM-B`, `DS-COV-B`, `DS-COVU-B`, `AE-N-I-B`, `AE-ACK-B`, `SCHED-I-B`, `T-VMT-I-B`,
+`DM-DOB-B`, `DM-TS-B`); **thêm cột `Evidence` bắt buộc `file:line` cho cả 14 dòng**, kể cả 5 dòng
+còn ✅; §4: Trend Log/Schedule/Calendar/Notification Class/Event Enrollment về **0** object;
+§4.1: sửa khai sai "AO không writable qua BACnet" — **AO writable ở `PRIO_BACNET = 3`** qua
+arbitration của core; §8: thêm ghi chú COV Rev A bị Reject, dùng polling. Nguồn: `OD-BAC-001`,
+`OD-BAC-005`, `OD-BAC-011` CLOSED 2026-09-10, `ADR-057`, `ADR-060`, biên bản
+`DDC24-BACNET-APPROVAL-2026-09-10`. **Hồ sơ đối ngoại — bên đã nhận bản ≤1.2 phải được thông
+báo lại.**) ·
+1.2 | 2026-06-30 (§4.1: Reliability enum đầy đủ 8 giá trị per ADR-011 — thêm CONFIGURATION_ERROR+COMMUNICATION_FAILURE+UNRELIABLE_OTHER; AO required properties Units/Min_Pres_Value/Max_Pres_Value per ADR-012; §10: trace thêm ADR-011/ADR-012) ·
 1.1 | 2026-06-17 (§7: Vendor_Identifier placeholder = 9999, ghi chú cần đăng ký ASHRAE trước GA) ·
 1.0 | 2026-05-30 · Ký: SW Lead (Protocol) ___
