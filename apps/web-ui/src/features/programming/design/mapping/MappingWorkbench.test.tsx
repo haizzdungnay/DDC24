@@ -68,6 +68,15 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
+/* `ISS-PGM03-05` — Chương trình/Loại Point/Thiết bị/Quyền/Trạng thái nay nằm
+ * trong drawer "Bộ lọc nâng cao" (đóng mặc định) để hàng toolbar chính không
+ * xuống dòng ở 1280×800. Các phép kiểm bộ lọc vì thế phải mở drawer trước —
+ * đúng số thao tác người dùng thật phải làm. */
+function openAdvancedFilters() {
+  fireEvent.click(screen.getByRole('button', { name: /^Bộ lọc nâng cao/ }))
+}
+
+
 describe('Mapping Workbench — truth state', () => {
   it('dựng đúng ba vùng, hiển thị live data và khóa mutation khi thiếu Project', () => {
     const onSave = vi.fn().mockResolvedValue(true)
@@ -128,7 +137,7 @@ describe('Mapping Workbench — truth state', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Lần đọc đầy đủ gần nhất')
     expect(screen.getAllByText('21.4').length).toBeGreaterThan(0)
     expect(screen.getAllByText('STALE').length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: /^Ánh xạ / }).every((button) => button.hasAttribute('disabled'))).toBe(true)
+    expect(screen.getAllByRole('button', { name: /^(Ánh xạ|Đổi ánh xạ) / }).every((button) => button.hasAttribute('disabled'))).toBe(true)
   })
 
   it('lọc Variable/Point theo tìm kiếm và category mà không mất identity', () => {
@@ -139,6 +148,7 @@ describe('Mapping Workbench — truth state', () => {
     expect(screen.queryByRole('button', { name: /SupplyTemp/ })).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Tìm biến hoặc Point' }), { target: { value: '' } })
+    openAdvancedFilters()
     fireEvent.change(screen.getByRole('combobox', { name: 'Loại Point' }), { target: { value: 'MB_RTU' } })
     expect(screen.getByRole('button', { name: /VFD enable.*MODBUS/ })).toBeVisible()
   })
@@ -172,6 +182,7 @@ describe('Mapping Workbench — truth state', () => {
     render(<I18nProvider><MappingTab document={docWithDuplicateVars} saving={false} onSave={vi.fn()} /></I18nProvider>)
 
     // Mặc định là ALL (không lọc sẵn), cả 2 hàng Setpoint đều hiện ra và phân biệt được qua Program + aria-label
+    openAdvancedFilters()
     const programSelect = screen.getByRole('combobox', { name: 'Chương trình' }) as HTMLSelectElement
     expect(programSelect.value).toBe('ALL')
 
@@ -264,7 +275,7 @@ describe('ISS-PGM03-08 — Point ở trang sau vẫn giữ đúng Binding', () =
     expect(screen.queryByText('Point không còn')).not.toBeInTheDocument()
     expect(screen.getByText('PAGING_INCOMPLETE')).toBeVisible()
     expect(screen.getByText('Catalog 1+ · đang tải/chưa đủ')).toBeVisible()
-    expect(screen.getAllByRole('button', { name: /^Ánh xạ / }).every((button) => button.hasAttribute('disabled'))).toBe(true)
+    expect(screen.getAllByRole('button', { name: /^(Ánh xạ|Đổi ánh xạ) / }).every((button) => button.hasAttribute('disabled'))).toBe(true)
 
     catalog.status = 'ready'
     catalog.complete = true

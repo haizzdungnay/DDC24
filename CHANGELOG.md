@@ -8,6 +8,91 @@
 
 ## [Unreleased]
 
+### Changed — `ISS-PGM03-05` (#558): chuẩn hóa row, toolbar, validation và accessibility của tab Ánh xạ (2026-09-11)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/mapping/` —
+  `MappingToolbar.tsx`, `VariableWorklist.tsx`, `MappingInspector.tsx`,
+  `PointCatalogPane.tsx`, `AssignedMappingsTable.tsx`, `MappingTab.tsx`;
+  test đi kèm; `apps/web-ui/e2e/programming.spec.ts`,
+  `apps/web-ui/e2e/helpers/pgm04Skips.ts`, `apps/web-ui/playwright.config.ts`.
+  **Không** đổi hợp đồng `LOCAL/VP/MB_RTU`, không đổi luồng mutation của #555,
+  không đụng bố cục hai pane trên + Assigned Mappings toàn chiều rộng đã khóa ở
+  #556.
+
+- Triệu chứng:
+  1. `VariableWorklist` dựng lưới bảy vùng nhưng **không có tiêu đề cột**, nên
+     người dùng phải đoán vùng nào là kiểu, hướng, ánh xạ hay giá trị; ở khổ
+     card cũng không ô nào tự mang nhãn.
+  2. "Chưa map" chỉ là chữ nhỏ nhạt màu — mất hẳn khi in đen trắng hoặc với
+     người không phân biệt được màu, trái `AC-PGM03-01`.
+  3. Mọi hàng đều in "Mở nguồn" và một nút Map **luôn `disabled`** cho tới khi
+     chính hàng đó được chọn: người dùng bàn phím Tab qua hai control chết ở
+     MỖI biến, và một nút luôn khoá dạy người ta bỏ qua nút đó.
+  4. Toolbar đặt tám control lọc cùng cấp với bốn ô đếm ⇒ hàng lọc xuống dòng ở
+     1280×800, và "Mapped 12" trông như một bộ lọc bấm được.
+  5. Hàng chỉ in **lý do đầu tiên** và không nói còn bao nhiêu lý do nữa; bề mặt
+     Review in mọi issue cùng một kiểu nên `WARNING` trông hệt `ERROR`.
+
+- Nguyên nhân gốc: các bề mặt này lớn dần theo từng issue trước (`ISS-PIO-07`,
+  `-09`, `-10`, `-13`, `#555`), mỗi lần thêm đúng một control/một trường vào
+  chỗ còn trống. Không lần nào sai riêng lẻ, nhưng cộng lại thì thứ bậc thông
+  tin biến mất: mọi thứ đều ngang hàng nhau, nên không gì nổi lên.
+
+- Cách sửa:
+  - Lưới bảy cột dùng **một hằng chung** cho hàng tiêu đề và hàng dữ liệu (hai
+    chuỗi lớp rời nhau sẽ lệch ngay lần sửa đầu, và một tiêu đề nằm sai cột còn
+    tệ hơn không có tiêu đề). Tiêu đề `aria-hidden` để nhìn; mỗi ô mang nhãn
+    `xl:sr-only` nên khổ card đọc được bằng mắt còn desktop đọc được bằng
+    screen reader mà không lặp.
+  - Trạng thái binding thành pill có **ba tín hiệu độc lập**: biểu tượng, chữ,
+    và kiểu viền (`dashed` cho chưa map) — ảnh grayscale vẫn phân biệt được.
+  - "Mở nguồn" và Map/Đổi chỉ render trên **hàng đang chọn**; nút Map vẫn nằm
+    trong hàng để tiêu điểm quay về đúng chỗ sau khi ghi (`MappingMutation`).
+  - Toolbar primary còn Tìm kiếm · Hướng · Kiểu · Gợi ý · Bộ lọc nâng cao; năm
+    bộ lọc còn lại (Chương trình, Loại Point, Thiết bị, Quyền, Trạng thái) vào
+    drawer có **active-count** và **Xóa tất cả bộ lọc**, kèm chip cho từng bộ
+    lọc đang áp gỡ được bằng bàn phím. Cụm đếm tách thành vùng riêng và nói
+    thẳng khi catalog chưa đủ để tin bốn con số đó.
+  - Gợi ý nói trạng thái Bật/Tắt bằng **chữ** (ngoài nút, để tên truy cập giữ
+    nguyên là "Gợi ý") và nêu rõ nó chỉ xếp hạng ứng viên, không tự lưu.
+  - Hàng tóm tắt lý do kèm "+N lý do nữa"; Inspector liệt kê **đủ** mọi lý do;
+    bề mặt Review đánh dấu `Chặn`/`Cảnh báo` theo `issues[].severity` của máy
+    chủ và xếp `ERROR` lên trước.
+  - Trạng thái rỗng của cả hai danh sách **nói ra điều kiện đang áp** thay vì
+    chỉ "không có kết quả".
+  - Nút thao tác trên hàng và trong bảng Ánh xạ đã gán nhận `min-h-11` (44 px)
+    theo `UX-WEB-PROG-001` §8; không sửa primitive `Button` dùng chung.
+
+- Hai lỗi hạ tầng đo phát hiện trong phạm vi và sửa cùng phiên:
+  - `playwright.config.ts` ghim `channel: 'chrome'`, nên trên runner không có
+    Google Chrome **mọi** test lane mock đỏ ở `browserType.launch` trước khi
+    chạm assertion nào — đúng lỗi lane real-backend đã sửa ở #541 mà lane mock
+    còn sót. Mặc định nay là chromium đi kèm Playwright;
+    `MKDDC_E2E_CHROME_CHANNEL` / `MKDDC_E2E_CHROMIUM_PATH` là đường thoát nói ra.
+  - `readPgm04SkipReasons()` cắt spec bằng `slice(start)` — tức "từ khối PGM-04
+    tới **hết tệp**" — nên mọi `test.describe` viết sau PGM-04 bị tính là của
+    PGM-04 và cổng sổ kế toán đỏ với "test.skip chưa khai" trong khi PGM-04
+    không hề đổi. Nay cắt đúng tới `test.describe` cấp cao kế tiếp.
+
+- Verification (đo thật 2026-09-11 trên chính cây làm việc này, không dẫn số cũ):
+  - C++ `--fresh` MODBUS/BACNET/HMI = ON: configure exit 0, build exit 0,
+    `ctest` **1482/1482 PASS, 0 FAIL** (1 skip sẵn có: `RealtimeMemlock.MclFuture…`),
+    26.13 s đo lại sau lần merge `origin/main` gần nhất (`06ee483`; FetchContent trỏ `build/deps-cache/`
+    vì egress tới codeload github.com trả 403 — cùng blocker đã ghi ở #625).
+  - Go: `go vet ./...` exit 0; `go test ./... -count=1` exit 0, **21/21 package ok**.
+  - FE: `npx vitest --run --environment jsdom src` **246 file / 3131 test PASS**,
+    exit 0 (thêm `MappingRowToolbar.test.tsx`, 11 test mới);
+    `npm run lint` exit 0; `npm run build` exit 0; ngân sách bundle R3
+    **153.35 KiB / 165.00 KiB PASS**.
+  - Playwright lane mock (chromium đi kèm, `ISS-PGM03-05`): **6/6 PASS** trên
+    desktop-chrome + mobile-chrome, gồm axe không vi phạm serious/critical ở
+    desktop, mobile 390×844 và 200 % zoom (khung CSS 640×400).
+  - Tài liệu: `python3 scripts/docs_iso_harness.py --expect` **PASS**, exit 0.
+  - Chrome DevTools MCP **NOT_RUN**: phiên không có MCP đó, nên tiêu chí
+    "DevTools snapshot/Console/Network" của #558 chưa được tuyên bố là đạt.
+  - Suite e2e đầy đủ: **15 test đỏ** không thuộc phạm vi này — cùng đúng 15 test
+    ấy cũng đỏ khi đo nền trên `origin/main` với cùng trình duyệt, nên là nợ có
+    sẵn (cần Google Chrome thật hoặc backend thật), không phải hồi quy của #558.
 ### Fixed — PICS Rev A khai 9/14 BIBB không tồn tại và tự mâu thuẫn về AO writable (2026-09-11)
 
 - **Hồ sơ đối ngoại.** `ICD-BACNET-MK-DDC-24-VI` là tài liệu giao cho BMS engineer

@@ -3393,3 +3393,152 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     expect(severe, 'PGM-04: axe serious/critical').toEqual([])
   })
 })
+
+/**
+ * `ISS-PGM03-05` — row, toolbar, validation và accessibility của tab Ánh xạ.
+ *
+ * Bốn phép đo dưới đây chỉ trình duyệt thật trả lời được, và cả bốn đều thuộc
+ * loại "màn hình vẫn chạy nhưng người dùng đọc sai hoặc không thao tác nổi":
+ * hàng toolbar xuống dòng ở khổ máy kỹ thuật, bộ lọc đang áp không gỡ được
+ * bằng bàn phím, và trạng thái/hành động bị che khi phóng 200 %.
+ */
+test.describe('ISS-PGM03-05 — Ánh xạ: row, toolbar và a11y', () => {
+  const MAPPING_VARIABLE_ID = '55555555-5555-4555-8555-555555555555'
+
+  function mappingDraft() {
+    const draft = initialDraft()
+    draft.programs.push({
+      objectId: POU_OBJECT_ID,
+      programId: PROGRAM_ID,
+      name: 'AHU_Main',
+      kind: 'PROGRAM',
+      language: 'ST',
+      /* Tên biến dài cố ý: `AC` đòi chuỗi VI/EN dài KHÔNG che action/status.
+         Một fixture toàn tên ngắn sẽ cho màn hình đẹp mà không chứng minh gì. */
+      document: 'PROGRAM AHU_Main\nVAR_INPUT\n SupplyTemp : REAL;\nNhietDoGioCapSauDanNongTangHaiKhuVucPhiaDongToaNhaA : REAL;\nEND_VAR\nVAR_OUTPUT\n FanCmd : BOOL;\nEND_VAR\nEND_PROGRAM\n',
+      executionOrder: 0,
+      functionalTags: ['AHU'],
+    })
+    draft.variables.push({ variableId: MAPPING_VARIABLE_ID, programId: PROGRAM_ID, name: 'SupplyTemp', type: 'REAL', class: 'INPUT', initialValue: null, retain: false })
+    draft.bindings.push({ bindingId: 'binding-e2e-mapping', variableId: MAPPING_VARIABLE_ID, point: { category: 'LOCAL', pointId: 'UI-01' }, direction: 'READ', dataType: 'REAL', writable: false, qualityPolicy: 'REQUIRE_GOOD' })
+    draft.task.programOrder = [PROGRAM_ID]
+    return draft
+  }
+
+  async function openMapping(page: Page) {
+    const state: MockState = { etagGeneration: 1, draft: mappingDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    await login(page, { lang: 'vi' })
+    await navigate(page, `/eng/programming/projects/${PROJECT_ID}/mapping`)
+    await expect(page.getByRole('heading', { name: 'Biến chương trình' })).toBeVisible()
+    return state
+  }
+
+  /* Tám control cùng cấp làm hàng lọc xuống dòng ở đúng khổ màn hình kỹ thuật
+   * hay dùng nhất. Đo bằng `offsetTop` của từng control chứ không bằng ảnh: một
+   * phép so ảnh sẽ đỏ vì lý do khác mỗi lần đổi font. */
+  test('toolbar primary giữ đúng MỘT hàng ở 1280×800', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'phép đo dành cho khổ desktop')
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await openMapping(page)
+
+    const rows = await page.getByTestId('mapping-toolbar-primary').evaluate((node) => {
+      const tops = Array.from(node.children).map((child) => Math.round((child as HTMLElement).offsetTop))
+      return [...new Set(tops)].length
+    })
+    expect(rows, 'toolbar primary xuống dòng ở 1280×800').toBe(1)
+
+    // Và bộ lọc nâng cao vẫn giữ đủ năng lực đã giao ở #395/#396.
+    await page.getByRole('button', { name: /^Bộ lọc nâng cao/ }).click()
+    await expect(page.getByRole('combobox', { name: 'Loại Point' })).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Quyền truy cập Point' })).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Trạng thái Point' })).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Chương trình' })).toBeVisible()
+  })
+
+  test('bộ lọc đang áp gỡ được chỉ bằng bàn phím', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'đo đường bàn phím một lần ở lane desktop')
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await openMapping(page)
+
+    const search = page.getByRole('searchbox', { name: 'Tìm biến hoặc Point' })
+    // Tới ô tìm kiếm bằng Tab, không bằng chuột.
+    for (let step = 0; step < 40 && !(await search.evaluate((node) => node === document.activeElement)); step += 1) {
+      await page.keyboard.press('Tab')
+    }
+    expect(await search.evaluate((node) => node === document.activeElement), 'không Tab tới được ô tìm kiếm').toBe(true)
+    await page.keyboard.type('FanCmd')
+
+    const chip = page.getByRole('button', { name: 'Xóa bộ lọc Tìm kiếm: FanCmd' })
+    await expect(chip).toBeVisible()
+    for (let step = 0; step < 20 && !(await chip.evaluate((node) => node === document.activeElement)); step += 1) {
+      await page.keyboard.press('Tab')
+    }
+    expect(await chip.evaluate((node) => node === document.activeElement), 'chip bộ lọc không nằm trong thứ tự Tab').toBe(true)
+    await page.keyboard.press('Enter')
+
+    await expect(page.getByRole('button', { name: 'Xóa bộ lọc Tìm kiếm: FanCmd' })).toHaveCount(0)
+    await expect(search).toHaveValue('')
+  })
+
+  /* 200 % zoom ở 1280×800 tương đương khung CSS 640×400. Thứ phải chứng minh
+   * không phải "trang vẫn vẽ" mà là trạng thái và hành động của hàng đang chọn
+   * vẫn NHÌN THẤY được, và trang không tràn ngang. */
+  test('200% zoom không che trạng thái lẫn hành động và không tràn ngang', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'đo zoom một lần ở lane desktop')
+    await page.setViewportSize({ width: 640, height: 400 })
+    await openMapping(page)
+
+    await page.getByRole('button', { name: /^AHU_Main · FanCmd ·/ }).click()
+    await expect(page.getByTestId('mapping-variable-list').getByText('Chưa map').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Mở nguồn' })).toBeVisible()
+
+    // Và với biến mang tên rất dài: trạng thái lẫn hành động vẫn không bị che.
+    await page.getByRole('button', { name: /^AHU_Main · NhietDoGioCap/ }).click()
+    const longRow = page.getByTestId('mapping-variable-list')
+    await expect(longRow.getByText('Chưa map').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Mở nguồn' })).toBeVisible()
+    const listOverflow = await longRow.evaluate((node) => node.scrollWidth - node.clientWidth)
+    expect(listOverflow, 'tên biến dài đẩy danh sách tràn ngang').toBeLessThanOrEqual(1)
+
+    const width = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      document: document.documentElement.scrollWidth,
+      body: document.body.scrollWidth,
+    }))
+    expect(width.document, '200% zoom: document tràn ngang').toBeLessThanOrEqual(width.viewport + 1)
+    expect(width.body, '200% zoom: body tràn ngang').toBeLessThanOrEqual(width.viewport + 1)
+
+    const axe = await new AxeBuilder({ page }).analyze()
+    const severe = axe.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))
+    expect(severe, '200% zoom: axe serious/critical').toEqual([])
+  })
+
+  test('tab Ánh xạ không có vi phạm axe nghiêm trọng', async ({ page }) => {
+    const failures = observeBrowserFailures(page)
+    await openMapping(page)
+
+    const axe = await new AxeBuilder({ page }).analyze()
+    const severe = axe.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))
+    expect(severe, 'Ánh xạ: axe serious/critical').toEqual([])
+
+    const width = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      document: document.documentElement.scrollWidth,
+    }))
+    expect(width.document, 'Ánh xạ: document tràn ngang').toBeLessThanOrEqual(width.viewport + 1)
+    expectNoBrowserFailures(failures, 'ISS-PGM03-05')
+  })
+
+  /* `AC-PGM03-02` — mobile giữ policy read-only, nhưng "Mở nguồn" KHÔNG phải
+   * mutation: cắt nó đi là cắt luôn đường đọc mã của người đang trực. */
+  test('mobile read-only: không control mutation nhưng vẫn mở được nguồn', async ({ page }, testInfo) => {
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) >= AUTHORING_MIN_WIDTH_PX, 'phép đo dành cho lane mobile')
+    await openMapping(page)
+
+    await expect(page.getByRole('button', { name: /^Ánh xạ / })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^Đổi ánh xạ / })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^Gỡ/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Mở nguồn' })).toHaveCount(1)
+  })
+})

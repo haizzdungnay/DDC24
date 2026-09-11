@@ -61,7 +61,17 @@ export function readPgm04SkipReasons(): string[] {
   const source = readFileSync(specPath, 'utf8')
   const start = source.indexOf("test.describe('PGM-04")
   if (start < 0) throw new Error('không tìm thấy khối describe của PGM-04 trong spec')
-  const block = source.slice(start)
+  /* `ISS-PGM03-05` — cắt ĐÚNG khối PGM-04, không phải "từ PGM-04 tới hết tệp".
+   *
+   * Bản trước lấy `source.slice(start)`, nên mọi `test.describe` viết SAU khối
+   * PGM-04 bị tính là của PGM-04: thêm một khối mới ở cuối tệp làm cổng này đỏ
+   * với "test.skip chưa khai trong PGM04_SKIP_LEDGER" trong khi PGM-04 không hề
+   * đổi. Một cổng đỏ vì lý do không thuộc thứ nó canh là một cổng sẽ bị vô hiệu
+   * hoá. Khối kết thúc ở `test.describe` cấp cao kế tiếp (cột 0); describe lồng
+   * bên trong luôn có thụt lề nên không khớp. */
+  const rest = source.slice(start)
+  const end = rest.indexOf('\ntest.describe(', 1)
+  const block = end < 0 ? rest : rest.slice(0, end)
   const reasons: string[] = []
   /* Bắt chuỗi lý do — đối số CUỐI của `test.skip`. Một `test.skip` không kèm lý
      do là thứ bị cấm ở đây: nó không nói được vì sao, nên cũng không đối chiếu

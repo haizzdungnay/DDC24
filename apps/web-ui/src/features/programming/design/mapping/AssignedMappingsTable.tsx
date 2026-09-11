@@ -23,12 +23,15 @@ export function AssignedMappingsTable({ rows, onSelect, canMutate, mutationDisab
         <>
           <div className="h-[34rem] min-h-0 max-h-[calc(100vh-18rem)] flex-1 divide-y divide-[var(--c-border)] overflow-y-scroll [scrollbar-gutter:stable] md:hidden">
             {assigned.map((row) => (
+              /* `ISS-PGM03-05` — thẻ mobile KHÔNG có hàng tiêu đề để dựa vào,
+                 nên mỗi ô phải tự mang nhãn. Bốn ô trần trước đây buộc người
+                 đọc suy ra `READ · REAL` là "hướng và kiểu" từ hình dạng chuỗi. */
               <div key={row.id} className="grid w-full grid-cols-2 gap-2 p-3 text-left text-xs">
-                <button type="button" onClick={() => onSelect(row.id)} className="text-left font-semibold text-[var(--c-accent)] hover:underline">{row.name}</button>
-                <span className="truncate text-right font-mono">{row.point ? `${row.point.category}:${row.point.pointId}` : '—'}</span>
-                <span>{row.direction} · {row.type}</span>
-                <span className="flex justify-end gap-2"><span className="font-mono">{formatMappingValue(row.liveValue, pick)}</span><StatusBadge state={row.liveQuality.toLowerCase() as 'good' | 'uncertain' | 'bad' | 'stale' | 'offline' | 'unknown'} label={row.liveQuality} /></span>
-                {canMutate && <span className="col-span-2 flex justify-end gap-1"><Button size="sm" variant="ghost" disabled={mutationDisabled} icon={<Pencil className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onChange(row)}>{pick('Đổi', 'Change')}</Button><Button size="sm" variant="danger" disabled={mutationDisabled} icon={<Unlink className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onRemove(row)}>{pick('Gỡ ánh xạ', 'Remove mapping')}</Button></span>}
+                <span className="min-w-0"><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">{pick('Biến', 'Variable')}</span><button type="button" onClick={() => onSelect(row.id)} className="text-left font-semibold text-[var(--c-accent)] hover:underline">{row.name}</button></span>
+                <span className="min-w-0 truncate text-right"><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">Point</span><span className="font-mono">{row.point ? `${row.point.category}:${row.point.pointId}` : '—'}</span></span>
+                <span><span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">{pick('Hướng/kiểu', 'Direction/type')}</span>{row.direction} · {row.type}</span>
+                <span className="flex flex-wrap items-center justify-end gap-2"><span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)]">{pick('Giá trị', 'Value')}</span><span className="font-mono">{formatMappingValue(row.liveValue, pick)}</span><StatusBadge state={row.liveQuality.toLowerCase() as 'good' | 'uncertain' | 'bad' | 'stale' | 'offline' | 'unknown'} label={row.liveQuality} /></span>
+                {canMutate && <span className="col-span-2 flex justify-end gap-1"><Button size="sm" className="min-h-11" variant="ghost" disabled={mutationDisabled} icon={<Pencil className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onChange(row)}>{pick('Đổi', 'Change')}</Button><Button size="sm" className="min-h-11" variant="danger" disabled={mutationDisabled} icon={<Unlink className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onRemove(row)}>{pick('Gỡ ánh xạ', 'Remove mapping')}</Button></span>}
               </div>
             ))}
           </div>
@@ -44,7 +47,7 @@ export function AssignedMappingsTable({ rows, onSelect, canMutate, mutationDisab
                     <td className="px-4 py-2 font-mono">{formatMappingValue(row.liveValue, pick)}</td>
                     <td className="px-4 py-2"><StatusBadge state={row.liveQuality.toLowerCase() as 'good' | 'uncertain' | 'bad' | 'stale' | 'offline' | 'unknown'} label={row.liveQuality} /></td>
                     <td className="px-4 py-2 whitespace-nowrap text-[var(--c-text-dim)]">{formatTechnicalDateTime(row.observedAt, locale)}</td>
-                    {canMutate && <td className="px-4 py-2"><span className="flex gap-1"><Button size="sm" variant="ghost" disabled={mutationDisabled} icon={<Pencil className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onChange(row)}>{pick('Đổi', 'Change')}</Button><Button size="sm" variant="danger" disabled={mutationDisabled} icon={<Unlink className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onRemove(row)}>{pick('Gỡ', 'Remove')}</Button></span></td>}
+                    {canMutate && <td className="px-4 py-2"><span className="flex gap-1"><Button size="sm" className="min-h-11" variant="ghost" disabled={mutationDisabled} icon={<Pencil className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onChange(row)}>{pick('Đổi', 'Change')}</Button><Button size="sm" className="min-h-11" variant="danger" disabled={mutationDisabled} icon={<Unlink className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => onRemove(row)}>{pick('Gỡ', 'Remove')}</Button></span></td>}
                   </tr>
                 ))}
               </tbody>

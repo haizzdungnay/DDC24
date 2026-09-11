@@ -3,7 +3,7 @@ import { StatusBadge } from '../../../../shared/components/StatusBadge'
 import { formatTechnicalDateTime } from '../../../../shared/dateTime'
 import { useI18n } from '../../../../shared/i18n'
 import { formatMappingValue, type MappingVariableRow } from './mappingViewModel'
-import { mappingReasonsText } from './mappingReasons'
+import { mappingReasonText } from './mappingReasons'
 
 export function MappingInspector({ row }: { row: MappingVariableRow | null }) {
   const { pick, locale } = useI18n()
@@ -29,7 +29,26 @@ export function MappingInspector({ row }: { row: MappingVariableRow | null }) {
             <ShieldAlert className="mr-1 inline h-4 w-4" aria-hidden="true" /><strong>{pick('Chưa xác minh — chưa chạy preview phía máy chủ', 'Unverified — server preview has not run')}</strong>
             <p className="mt-1">{pick('Owner, xung đột và verdict lưu chỉ lấy từ preview; FE không tự suy đoán.', 'Owner, conflicts, and the save verdict come only from preview; the frontend does not infer them.')}</p>
           </div>
-          {row.compatibility.reasons.length > 0 && <p className="rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-[var(--c-text-dim)]">{mappingReasonsText(row.compatibility.reasons, pick)}</p>}
+          {/* `ISS-PGM03-05` — Inspector là bề mặt review, nên nó phải liệt kê
+            * ĐỦ mọi lý do. Bản trước nối tất cả bằng `·` thành một đoạn văn,
+            * còn hàng worklist chỉ in lý do đầu tiên: một biến vướng ba blocker
+            * trông hệt một biến vướng một, và không chỗ nào đếm ra con số ấy.
+            *
+            * Mọi lý do trong danh sách này đều CHẶN gán — `mappingViewModel`
+            * tính `assignable = reasons.length === 0`. Vì thế nhóm được ghi
+            * thẳng là "chặn", không phân thành cảnh báo mềm; severity mềm/cứng
+            * của server nằm ở bước xem trước (`verdict` + `issues[].severity`),
+            * nơi máy chủ mới là authority. */}
+          {row.compatibility.reasons.length > 0 && (
+            <div className="rounded border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-2 text-[var(--c-warn-fg)]">
+              <strong>{pick(`Chặn ánh xạ · ${row.compatibility.reasons.length} lý do`, `Blocking · ${row.compatibility.reasons.length} reasons`)}</strong>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {row.compatibility.reasons.map((reason, index) => (
+                  <li key={`${reason.kind}-${index}`}>{mappingReasonText(reason, pick)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </aside>
