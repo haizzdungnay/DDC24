@@ -13,7 +13,8 @@ usage() {
     'Dùng: scripts/verify-project.sh [--component NAME] [--profile NAME]' \
     '     scripts/verify-project.sh --wave W0..W8 [--repeat N]' \
     '' \
-    'Component: layout | cpp | go | frontend | e2e | e2e-real | firmware | release | all' \
+    'Component: layout | cpp | go | frontend | e2e | e2e-real | firmware | release |' \
+    '           docs | workflow | all' \
     'Profile C++: baseline | modbus | bacnet | modbus-bacnet | full (mặc định)' \
     'Wave: chạy đúng bộ cổng bắt buộc của một Wave Plan 59 và in bảng tổng kết.' \
     '      Cổng cần CI/board/instrument hiện NOT_RUN kèm runbook, không bao giờ PASS.' \
@@ -295,6 +296,31 @@ run_release() {
   python3 -m unittest "$repo_root/tests/integration/test_release_dryrun.py"
 }
 
+# Hai cổng dưới đây trước 2026-09-11 KHÔNG có mặt ở đâu trong script:
+# `rg 'docs_iso_harness|workflow_guard' scripts/verify-project.sh` trả về RỖNG.
+# Hệ quả: không một lệnh nào chạy được đủ bộ cổng offline, người kiểm trước khi
+# mở PR phải nhớ ba lệnh rời ở ba nơi tài liệu khác nhau — và cái bị quên là cái
+# không ai biết đã bị quên.
+#
+# Cả hai cố ý KHÔNG gọi `require_contract_python_deps`: chúng chỉ dùng thư viện
+# chuẩn (`os`, `re`, `sys`, `collections`; `json`, `urllib`), không `import
+# jsonschema`. Bắt chúng cài `requirements-ci.txt` là dựng một phụ thuộc giả —
+# đúng kiểu lỗi đã làm job "MCU Firmware" đỏ ở `476723a`.
+run_docs() {
+  python3 "$repo_root/scripts/docs_iso_harness.py" --expect
+}
+
+# `--selftest` là bộ kiểm logic của CHÍNH cổng tách vai. Lớp bảo vệ này trước đây
+# tồn tại DUY NHẤT trong `.github/workflows/workflow-guard.yml` (job
+# `guard-selftest`, mà job `workflow-guard` `needs:` nó). Actions của tổ chức
+# không cấp runner (#414), nên từ khi CI ngủ thì `scripts/workflow_guard.py` —
+# file mà N1 và N2 dựa vào — là mã không cổng nào bảo vệ khi nó bị sửa.
+# `WF-CLEAN-001` §6.1a đã chuyển phần *phán quyết* của guard sang chạy offline
+# bằng `--input`, nhưng bỏ quên phần selftest; đây là chỗ bù lại.
+run_workflow() {
+  python3 "$repo_root/scripts/workflow_guard.py" --selftest
+}
+
 # `--wave` là đường đi MỘT LỆNH cho cả ma trận cổng. Nó cố ý KHÔNG dùng `set -e`
 # của script này: runner chạy hết mọi cổng rồi mới kết luận, vì dừng ở cổng hỏng
 # đầu tiên chính là lý do lỗi phía sau nằm im rất lâu.
@@ -341,6 +367,8 @@ case "$component" in
   e2e-real) run_e2e_real ;;
   firmware) run_firmware ;;
   release) run_release ;;
+  docs) run_docs ;;
+  workflow) run_workflow ;;
   all)
     run_layout
     run_cpp
@@ -349,6 +377,12 @@ case "$component" in
     run_e2e
     run_e2e_real
     run_firmware
+    # Hai cổng mới đứng CUỐI một cách có chủ ý. Chèn chúng lên trước sẽ đổi thời
+    # điểm `set -e` cắt mạch, tức bảy component cũ không còn chạy đúng như trước
+    # mỗi khi một trong hai cổng mới đỏ. Tiêu chí chấp nhận của #593 đòi thứ tự
+    # và exit code của bảy component cũ KHÔNG đổi.
+    run_docs
+    run_workflow
     ;;
   *) printf 'LỖI: component không hỗ trợ: %s\n' "$component" >&2; exit 2 ;;
 esac
