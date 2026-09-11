@@ -2,7 +2,7 @@
 ## Protocol Implementation Conformance Statement — D-3
 
 > **Document ID:** ICD-BACNET-MK-DDC-24-VI
-> **Phiên bản:** 1.0 | 2026-05-30 · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 1.3 | 2026-09-11 (§3 bảng BIBB + cột `Evidence`; §4 số lượng object; §4.1 AO writable) · 📘 [README](../../01_specs/README.md)
 > **Chuẩn:** ASHRAE 135-2020 · **Trace:** `BAC-001..011`, `SRS §5`, `DS §4`
 > **Mục tiêu:** đủ chi tiết để (a) lập trình stack BACnet, (b) nộp BTL, (c) BMS engineer tích hợp.
 
@@ -124,7 +124,16 @@ MK-DDC-24 là bộ điều khiển DDC 24 điểm cho HVAC, hỗ trợ **BACnet/
 - `Units`: theo `ao[].units` trong `io_config.conf`; auto-derive nếu absent (`0-10V`→volts=5, `4-20mA`→milliamperes=2).
 - `Min_Pres_Value` / `Max_Pres_Value`: theo `ao[].min_pv` / `ao[].max_pv`.
 - `Object_Name`: theo `ao[].name`; default `"AO{n}"`.
-- Không writable qua BACnet — configured via `io_config.conf` (Web UI).
+- **`Present_Value` WRITABLE qua BACnet** ở `PRIO_BACNET = 3`, đi qua arbitration của core —
+  **không** ghi thẳng vào ngõ ra. Đường đi: `Analog_Output_Write_Present_Value_Callback_Set(ao_write_callback)`
+  (`apps/iobus/adapters/bacnet/bacnet_server.cpp:114`) → `ao_write_callback` (`apps/iobus/adapters/bacnet/bacnet_server.cpp:45-51`) →
+  `handle_output_write()` gọi `core_fn_("ao_setpoint", instance-1, value, "bacnet:udp", 3)`
+  (`apps/iobus/adapters/bacnet/bacnet_server.cpp:141-153`). Nhả lệnh (relinquish) đi cùng đường với op `release_ao`.
+  Core có thể **từ chối** lệnh nếu nguồn ưu tiên cao hơn đang giữ điểm; mỗi lần ghi sinh một dòng
+  `AUDIT bacnet_cmd … result=accepted|overridden`.
+- `io_config.conf` (Web UI) cấu hình `Units` / `Min_Pres_Value` / `Max_Pres_Value` / `Object_Name`
+  — **không** cấu hình `Present_Value`. Hai việc này không thay thế nhau: cấu hình định nghĩa dải
+  và đơn vị của điểm, BACnet ra lệnh giá trị trong dải đó.
 
 > **Config model authority:** ADR-012. Implementation: `services/core/bacnet_objtable.cpp` + `services/iobus/config/iobus_config.*`.
 
