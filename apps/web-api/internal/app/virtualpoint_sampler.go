@@ -153,9 +153,32 @@ func (a *App) sampleVirtualPoints(ctx context.Context, items []VirtualPoint, now
 		}
 		return
 	}
+	pruneVirtualPointRetention(ctx, a.trends, a.logger, items, nowMs)
+}
+
+// virtualPointPruner là bề mặt tối thiểu mà việc thi hành hạn lưu cần, tách ra
+// để đường lỗi của `PruneBefore` kiểm chứng được mà không phải mở một database
+// thật trong test.
+type virtualPointPruner interface {
+	PruneBefore(ctx context.Context, pointID string, beforeTs int64) error
+}
+
+/* `PruneBefore` hỏng lâu dài nghĩa là hạn lưu của Virtual Point không được thi
+ * hành: bảng trend phình quá hạn đã cấu hình và triệu chứng đầu tiên là hết đĩa
+ * chứ không phải một dòng log. Lỗi vì vậy phải được ghi theo đúng quy ước ngay
+ * phía trên, và một item hỏng KHÔNG được cắt hạn lưu của các item còn lại. */
+func pruneVirtualPointRetention(ctx context.Context, pruner virtualPointPruner, logger *log.Logger, items []VirtualPoint, nowMs int64) {
+	if pruner == nil {
+		return
+	}
 	for _, item := range items {
-		if item.RetentionS > 0 {
-			_ = a.trends.PruneBefore(ctx, item.ID, nowMs-int64(item.RetentionS)*1000)
+		if item.RetentionS <= 0 {
+			continue
+		}
+		if err := pruner.PruneBefore(ctx, item.ID, nowMs-int64(item.RetentionS)*1000); err != nil {
+			if logger != nil {
+				logger.Printf("WARN virtual_points.prune err=%v", err)
+			}
 		}
 	}
 }
