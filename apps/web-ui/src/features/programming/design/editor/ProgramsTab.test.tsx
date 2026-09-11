@@ -167,8 +167,8 @@ describe('ProgramsTab — workspace bốn cột', () => {
     expect(within(libraryColumn).getByRole('button', { name: 'Mở Thư viện nhanh' })).toBeInTheDocument()
   })
 
-  it('giữ Quick Library FBD ở cột thứ ba khi desktop rộng sau khi merge Task 8', async () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
+  it('giữ Quick Library FBD ở cột thứ tư khi desktop rộng (>=1024px)', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1024 })
     renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
 
     const libraryColumn = screen.getByTestId('quick-library-column')

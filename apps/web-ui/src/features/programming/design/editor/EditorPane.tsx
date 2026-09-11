@@ -472,10 +472,10 @@ export function EditorPane({
   const libraryDockToggleRef = useRef<HTMLButtonElement | null>(null)
   const fbdInspectorOpenerRef = useRef<HTMLButtonElement | null>(null)
   const [fbdInspectorDrawerOpen, setFbdInspectorDrawerOpen] = useState(false)
-  const [fbdWideDesktop, setFbdWideDesktop] = useState(() => window.innerWidth >= 1440)
+  const [fbdWideDesktop, setFbdWideDesktop] = useState(() => window.innerWidth >= 1024)
 
   useEffect(() => {
-    const update = () => setFbdWideDesktop(window.innerWidth >= 1440)
+    const update = () => setFbdWideDesktop(window.innerWidth >= 1024)
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
   }, [])
@@ -518,13 +518,11 @@ export function EditorPane({
   const fbdInspectorOpen = selected?.language === 'FBD' && !fbdWideDesktop
     ? fbdInspectorDrawerOpen
     : slots.inspector
-  /* Task 8 đã đưa Quick Library FBD thành cột thứ ba ở desktop rộng. Sau khi
-   * tách `ProgramsTab` thành facade, điều kiện mount phải sống tại owner mới
-   * này; nếu chỉ giữ nhánh ST thì merge vẫn sạch cú pháp nhưng làm mất cột FBD
-   * đã có trên `main`. Dưới 1440 px FBD tiếp tục dùng luồng drawer hiện hữu. */
+  /* Task 8 đã đưa Quick Library FBD thành cột trên desktop. Sau khi
+   * tách `ProgramsTab` thành facade, điều kiện mount sống tại owner mới này. */
   const libraryColumnEligible = canEdit && (
     selected?.language === 'ST'
-    || (selected?.language === 'FBD' && fbdWideDesktop)
+    || selected?.language === 'FBD'
   )
   const libraryColumnOpen = libraryColumnEligible && libraryDockOpen
   const workspaceGrid = useProgramsWorkspaceGrid({
@@ -908,7 +906,7 @@ export function EditorPane({
         }}
       >
         {selected?.language === 'FBD' && (
-          <div className="mb-2 flex justify-end min-[1440px]:hidden">
+          <div className="mb-2 flex justify-end lg:hidden">
             <button
               ref={fbdInspectorOpenerRef}
               type="button"
@@ -1078,45 +1076,6 @@ export function EditorPane({
         </div>
       </div>
       <WorkspaceResizeHandle
-        label={pick('Đổi kích thước Thư viện nhanh', 'Resize the quick library')}
-        panel="library"
-        direction={-1}
-        onPointerDown={workspaceGrid.beginResize}
-      />
-      <aside
-        data-testid="quick-library-column"
-        aria-label={pick('Thư viện nhanh', 'Quick library')}
-        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${libraryColumnEligible ? '' : 'hidden lg:flex lg:items-start'}`}
-      >
-        {libraryColumnEligible && libraryDockOpen && selected ? (
-          <QuickLibraryHost
-            variant="docked"
-            projectId={document.project.projectId}
-            language={selected.language}
-            onInsert={(entry) => {
-              if (!canEdit) return false
-              setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
-              return true
-            }}
-            onClose={() => {
-              setLibraryDockOpen(false)
-              window.setTimeout(() => libraryDockToggleRef.current?.focus(), 0)
-            }}
-          />
-        ) : libraryColumnEligible ? (
-          <button
-            ref={libraryDockToggleRef}
-            type="button"
-            className="flex min-h-11 w-full items-center justify-center rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-            aria-expanded={false}
-            onClick={() => setLibraryDockOpen(true)}
-          >
-            <Library className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="ml-2 lg:sr-only">{pick('Mở Thư viện nhanh', 'Open quick library')}</span>
-          </button>
-        ) : null}
-      </aside>
-      <WorkspaceResizeHandle
         label={pick('Đổi kích thước Inspector', 'Resize the inspector')}
         panel="inspector"
         direction={-1}
@@ -1125,11 +1084,11 @@ export function EditorPane({
       <aside
         data-testid="inspector-column"
         className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${selected?.language === 'FBD'
-          ? `${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl min-[1440px]:static min-[1440px]:block min-[1440px]:w-auto min-[1440px]:bg-transparent min-[1440px]:p-0 min-[1440px]:shadow-none`
+          ? `${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl lg:static lg:block lg:w-auto lg:bg-transparent lg:p-0 lg:shadow-none`
           : ''}`}
         aria-label={pick('Thuộc tính', 'Inspector')}
         onKeyDown={(event) => {
-          if (selected?.language !== 'FBD' || event.key !== 'Escape' || window.innerWidth >= 1440) return
+          if (selected?.language !== 'FBD' || event.key !== 'Escape' || window.innerWidth >= 1024) return
           event.preventDefault()
           setFbdInspectorDrawerOpen(false)
           window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
@@ -1283,6 +1242,45 @@ export function EditorPane({
           />
         </details>
         </div>
+      </aside>
+      <WorkspaceResizeHandle
+        label={pick('Đổi kích thước Thư viện nhanh', 'Resize the quick library')}
+        panel="library"
+        direction={-1}
+        onPointerDown={workspaceGrid.beginResize}
+      />
+      <aside
+        data-testid="quick-library-column"
+        aria-label={pick('Thư viện nhanh', 'Quick library')}
+        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${libraryColumnEligible ? '' : 'hidden lg:flex lg:items-start'}`}
+      >
+        {libraryColumnEligible && libraryDockOpen && selected ? (
+          <QuickLibraryHost
+            variant="docked"
+            projectId={document.project.projectId}
+            language={selected.language}
+            onInsert={(entry) => {
+              if (!canEdit) return false
+              setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
+              return true
+            }}
+            onClose={() => {
+              setLibraryDockOpen(false)
+              window.setTimeout(() => libraryDockToggleRef.current?.focus(), 0)
+            }}
+          />
+        ) : libraryColumnEligible ? (
+          <button
+            ref={libraryDockToggleRef}
+            type="button"
+            className="flex min-h-11 w-full items-center justify-center rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            aria-expanded={false}
+            onClick={() => setLibraryDockOpen(true)}
+          >
+            <Library className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="ml-2 lg:sr-only">{pick('Mở Thư viện nhanh', 'Open quick library')}</span>
+          </button>
+        ) : null}
       </aside>
     </ProgramsWorkspace>
   )
