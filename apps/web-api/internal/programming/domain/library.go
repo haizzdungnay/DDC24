@@ -745,12 +745,12 @@ func SystemLibraryEntries() ([]LibraryEntry, error) {
 		var digest [sha256.Size]byte
 		copy(digest[:], digestBytes)
 		entry := LibraryEntry{
-			LibraryRevisionID: SystemLibraryRevisionID,
-			EntryID:           definition.EntryID,
-			Kind:              definition.Kind,
-			Name:              definition.Name,
-			FeatureState:      definition.FeatureState,
-			SignatureJSON:     []byte(definition.SignatureJSON),
+			LibraryRevisionID:  SystemLibraryRevisionID,
+			EntryID:            definition.EntryID,
+			Kind:               definition.Kind,
+			Name:               definition.Name,
+			FeatureState:       definition.FeatureState,
+			SignatureJSON:      []byte(definition.SignatureJSON),
 			ContentSHA256:      digest,
 			Category:           definition.Category,
 			Description:        definition.Description,

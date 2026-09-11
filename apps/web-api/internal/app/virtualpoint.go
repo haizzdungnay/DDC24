@@ -872,7 +872,7 @@ func validVirtualPointSignalType(value string) bool {
 
 func virtualPointLoggableSignalType(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-		/* `multistate` ghi log được: dưới lớp nhãn nó là một số nguyên rời rạc,
+	/* `multistate` ghi log được: dưới lớp nhãn nó là một số nguyên rời rạc,
 	 * và lịch sử chuyển chế độ chính là thứ người vận hành cần nhất khi truy
 	 * nguyên một sự cố. */
 	case virtualPointSignalBoolean, virtualPointSignalInteger, virtualPointSignalFloat, virtualPointSignalMultistate:

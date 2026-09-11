@@ -30,7 +30,7 @@ const (
 Permission — QUYỀN theo NĂNG LỰC, không theo thứ bậc (`WEB-RBAC-001`, port từ
 PR #67 sang layout `apps/`).
 
-VÌ SAO KHÔNG CHỈ THÊM MỘT BẬC VAI
+# VÌ SAO KHÔNG CHỈ THÊM MỘT BẬC VAI
 
 Trước lát này, uỷ quyền chỉ có `Require(min Role)` với thứ hạng tuyến tính. Khai
 báo đó nói "ai đủ lớn", trong khi thứ một route thật sự cần là "việc gì". Hai
