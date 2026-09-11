@@ -279,6 +279,7 @@ type historianSinkStub struct {
 	hot    []HotSample
 	gaps   []HistoryGap
 	hotErr error
+	gapErr error
 }
 
 type blockingHistorianSink struct {
@@ -553,6 +554,9 @@ func (s *historianSinkStub) InsertHotBatch(_ context.Context, rows []HotSample) 
 }
 
 func (s *historianSinkStub) InsertGap(_ context.Context, gap HistoryGap) error {
+	if s.gapErr != nil {
+		return s.gapErr
+	}
 	s.gaps = append(s.gaps, gap)
 	return nil
 }
@@ -826,5 +830,66 @@ func TestHistorianShadowDueInspectionDoesNotBlockOnSlowStorage(t *testing.T) {
 	close(sink.release)
 	if err := <-runDone; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// newHistorianBusyCycleScheduler dựng đúng một chu kỳ CÓ Point đến hạn, kèm một
+// gap tồn đọng chờ ghi — hình dạng mà trước đây nuốt im lỗi của `InsertGap`.
+func newHistorianBusyCycleScheduler(t *testing.T, sink *historianSinkStub) (*HistorianShadowScheduler, *historianSnapshotReaderStub, HistoryGap) {
+	t.Helper()
+	reader := &historianSnapshotReaderStub{snapshot: RuntimePointSnapshot{
+		SnapshotObservedAtUTC: "2026-07-20T10:00:15Z", CapturedMonotonicNs: 15_000_000_000,
+		Points: []RuntimePoint{{ID: "UI-01", Kind: "UI", Value: 3.5, Quality: "GOOD", Source: "io", Generation: 1}},
+	}}
+	config := HistorianConfig{Revision: 5, Points: []HistorianPolicy{{PointID: "UI-01", Generation: 1, DBLoggingEnabled: true, DBInterval: "15s", StartAtUTC: "2026-07-20T09:00:00Z"}}}
+	scheduler, err := NewHistorianShadowScheduler(config, reader, sink, time.Date(2026, 7, 20, 10, 0, 14, 0, time.UTC), 14_000_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := uint64(5)
+	pending := HistoryGap{PointID: "UI-01", Generation: 1, FromUTCMS: time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC).UnixMilli(), ToUTCMS: time.Date(2026, 7, 20, 10, 0, 15, 0, time.UTC).UnixMilli(), Reason: "storage", Detail: "pending_hot_overflow", PolicyRevision: &revision, CreatedAtUTCMS: time.Date(2026, 7, 20, 10, 0, 15, 0, time.UTC).UnixMilli()}
+	scheduler.pendingGaps[historianIdentityKey("UI-01", 1)] = pending
+	return scheduler, reader, pending
+}
+
+func TestHistorianShadowSchedulerReportsPendingGapFailureOnBusyCycle(t *testing.T) {
+	sinkErr := errors.New("gap sink down")
+	sink := &historianSinkStub{gapErr: sinkErr}
+	scheduler, _, pending := newHistorianBusyCycleScheduler(t, sink)
+
+	err := scheduler.RunOnce(context.Background(), time.Date(2026, 7, 20, 10, 0, 15, 0, time.UTC), 15_000_000_000)
+	if !errors.Is(err, sinkErr) {
+		t.Fatalf("chu kỳ bận nuốt lỗi InsertGap: err=%v", err)
+	}
+	// Hành vi lưu trữ không đổi: gap chưa ghi được vẫn nằm lại để thử chu kỳ sau.
+	if got := scheduler.pendingGaps[historianIdentityKey("UI-01", 1)]; got != pending {
+		t.Fatalf("gap tồn đọng bị đổi hoặc bị xoá: got=%+v want=%+v", got, pending)
+	}
+}
+
+func TestHistorianShadowSchedulerStillWritesHotBatchWhenPendingGapFails(t *testing.T) {
+	sinkErr := errors.New("gap sink down")
+	sink := &historianSinkStub{gapErr: sinkErr}
+	scheduler, reader, pending := newHistorianBusyCycleScheduler(t, sink)
+
+	if err := scheduler.RunOnce(context.Background(), time.Date(2026, 7, 20, 10, 0, 15, 0, time.UTC), 15_000_000_000); !errors.Is(err, sinkErr) {
+		t.Fatalf("err=%v", err)
+	}
+	// Lỗi được BÁO mà không cắt việc: chu kỳ vẫn đọc snapshot và ghi hot batch.
+	if reader.reads != 1 || len(sink.hot) != 1 || sink.hot[0].PointID != "UI-01" || sink.hot[0].PolicyRevision != 5 {
+		t.Fatalf("chu kỳ bị cắt sớm: reads=%d hot=%+v", reader.reads, sink.hot)
+	}
+
+	// Sink hồi phục: gap tồn đọng được ghi ở chu kỳ kế và lỗi không còn dính lại.
+	sink.gapErr = nil
+	reader.snapshot = RuntimePointSnapshot{
+		SnapshotObservedAtUTC: "2026-07-20T10:00:30Z", CapturedMonotonicNs: 30_000_000_000,
+		Points: []RuntimePoint{{ID: "UI-01", Kind: "UI", Value: 4.5, Quality: "GOOD", Source: "io", Generation: 1}},
+	}
+	if err := scheduler.RunOnce(context.Background(), time.Date(2026, 7, 20, 10, 0, 30, 0, time.UTC), 30_000_000_000); err != nil {
+		t.Fatalf("chu kỳ sau khi sink hồi phục vẫn lỗi: %v", err)
+	}
+	if len(sink.gaps) != 1 || sink.gaps[0] != pending || len(scheduler.pendingGaps) != 0 {
+		t.Fatalf("gaps=%+v pendingGaps=%+v", sink.gaps, scheduler.pendingGaps)
 	}
 }

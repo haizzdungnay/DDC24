@@ -8,6 +8,57 @@
 
 ## [Unreleased]
 
+### Fixed — `#607`: Historian nuốt lỗi `InsertGap` đúng lúc bận, `PruneBefore` bị vứt lỗi (2026-09-11)
+
+- Phạm vi: `apps/web-api/internal/app/historian_scheduler.go`,
+  `apps/web-api/internal/app/historian_scheduler_test.go`,
+  `apps/web-api/internal/app/virtualpoint_sampler.go`,
+  `apps/web-api/internal/app/virtualpoint_sampler_test.go` (mới). Không chạm
+  `historian_shadow_runtime.go`, `contracts/**`, `internal/programming/**`.
+
+- Triệu chứng: cùng một lời gọi `s.flushPendingGaps(ctx)` được xử lý ngược nhau
+  ở hai dòng cách nhau hai dòng — chu kỳ **rảnh** (`len(due) == 0 && !cacheDue`)
+  trả lỗi lên người gọi, chu kỳ **bận** vứt lỗi bằng `_ =`. Hệ quả: sink gap
+  hỏng chỉ lộ ra trong những chu kỳ không có Point nào đến hạn, tức chiều báo
+  lỗi ngược với chiều rủi ro; một sink hỏng dài hạn chạy hàng giờ không để lại
+  dòng log nào trong khi bản ghi gap không bao giờ bền vững. Song song đó,
+  `_ = a.trends.PruneBefore(...)` trong bộ lấy mẫu Virtual Point vứt lỗi ngay
+  dưới một khối đã có sẵn `a.logger`, nên hạn lưu không được thi hành mà triệu
+  chứng đầu tiên là hết đĩa chứ không phải một dòng log.
+
+- Nguyên nhân gốc: `HistorianShadowScheduler` không có field logger nào, nên
+  đường báo lỗi duy nhất của nó là giá trị trả về của `RunOnce`; nhánh bận lại
+  có nhiều điểm `return` phía sau nên lỗi flush bị bỏ để khỏi cắt ngang chu kỳ.
+  Ở bộ lấy mẫu, vòng prune nằm sau `return` của nhánh `InsertBatch` hỏng nên lỗi
+  từng item không có chỗ nào nhận.
+
+- Cách sửa: `RunOnce` dùng named return + `defer` gộp lỗi flush bằng
+  `errors.Join` (quy ước đã dùng ở `legacy_writers.go:194-200`), nên lỗi đi tới
+  được người gọi đã ghi log sẵn (`historian_shadow_runtime.go:100`) mà chu kỳ
+  **vẫn chạy nốt** — không biến thành `return` sớm. Vòng prune tách thành
+  `pruneVirtualPointRetention` nhận interface `virtualPointPruner`, ghi
+  `WARN virtual_points.prune err=%v` cho mỗi lần hỏng và **chạy hết** các item
+  còn lại. Hành vi lưu trữ không đổi: gap chưa ghi được vẫn nằm lại
+  `s.pendingGaps` để thử chu kỳ sau; không đổi ngưỡng, chu kỳ, contract, API,
+  schema hay mã lỗi công khai. `RunOnce` là method nội bộ của package `app` và
+  chỉ có đúng một người gọi ngoài test (`rg -n 'RunOnce\(' apps/web-api --glob
+  '!*_test.go'`).
+
+- Kiểm chứng (HOST, 2026-09-11, commit của nhánh
+  `claude/issue-607-historian-gap-prune-errors`):
+  `go vet ./...` exit 0; `go test ./... -count=1` (sau `go clean -testcache`)
+  exit 0 — 21 package `ok`, 0 FAIL, 3 package không có test
+  (`internal/app` 33.943s); `go test ./internal/app/ -count=1 -race -run
+  'Historian|VirtualPoint' -v` exit 0 — 235 test cấp cao PASS, 0 FAIL, 15.108s,
+  gồm 5 test mới
+  `ReportsPendingGapFailureOnBusyCycle`, `StillWritesHotBatchWhenPendingGapFails`,
+  `VirtualPointRetentionLogsPruneFailureAndKeepsGoing`,
+  `VirtualPointRetentionStaysSilentWhenPruneSucceeds`,
+  `SampleVirtualPointsAppliesRetentionThroughTrendStore`. Phép thử đột biến:
+  hoàn nguyên `historian_scheduler.go` về `origin/main` làm hai test đầu FAIL
+  (`err=<nil>`), bỏ dòng log prune làm test log FAIL — test không rỗng nghĩa.
+  CI: `NOT_RUN (#414)`.
+
 ### Fixed — `#592`: năm hồ sơ thiết kế đang sống trỏ `services/` và `web/` đã bị xoá (2026-09-11)
 
 - Phạm vi: `docs/02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md`,
