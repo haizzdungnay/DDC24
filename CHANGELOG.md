@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Added — `#593`: `verify-project.sh` có đường chạy cho cổng tài liệu và selftest của cổng tách vai (2026-09-11)
+
+- Phạm vi: `scripts/verify-project.sh`, `docs/00_governance/CLEAN_CODE_WORKFLOW.md`
+  (§6.1a, §6.2, lịch sử sửa đổi), `CHANGELOG.md`. **Không** chạm
+  `scripts/workflow_guard.py`, `scripts/docs_iso_harness.py`, `.github/workflows/**`.
+
+- Triệu chứng: `scripts/verify-project.sh` khai tám component (`layout`, `cpp`,
+  `go`, `frontend`, `e2e`, `e2e-real`, `firmware`, `release`) nhưng hai cổng bắt
+  buộc không có mặt ở đâu trong script — `rg 'docs_iso_harness|workflow_guard'
+  scripts/verify-project.sh` trả về **rỗng**. Không một lệnh nào chạy được đủ bộ
+  cổng offline; người kiểm trước khi mở PR phải nhớ ba lệnh rời ở ba nơi tài
+  liệu khác nhau, và cái bị quên là cái không ai biết đã bị quên.
+
+- Nguyên nhân gốc: lớp bảo vệ cho `scripts/workflow_guard.py` nằm **duy nhất**
+  trong `.github/workflows/workflow-guard.yml` (job `guard-selftest`, mà job
+  `workflow-guard` `needs:` nó). `WF-CLEAN-001` §6.1a đã chuyển phần *phán quyết*
+  của guard sang chạy offline bằng `--input` khi Actions mất runner (`#414`),
+  nhưng **không chuyển phần selftest**. Từ lúc CI ngủ, file mà N1 và N2 dựa vào
+  là mã không cổng nào bảo vệ khi nó bị sửa; `CLAUDE.md` có nhắc chạy
+  `--selftest` nhưng đó là lời dặn cho người đọc, không phải cổng chạy được.
+
+- Cách sửa: thêm hai component `docs` và `workflow` gọi thẳng
+  `python3 scripts/docs_iso_harness.py --expect` và
+  `python3 scripts/workflow_guard.py --selftest`, cập nhật dòng usage, và cho
+  `--component all` gọi thêm cả hai. Hai cổng mới đặt **cuối** danh sách `all`
+  có chủ ý: chèn lên trước sẽ đổi thời điểm `set -e` cắt mạch, khiến bảy
+  component cũ không còn chạy như trước mỗi khi một trong hai cổng mới đỏ. Cả
+  hai cố ý không gọi `require_contract_python_deps` vì chúng chỉ dùng thư viện
+  chuẩn — bắt chúng cài `requirements-ci.txt` là dựng một phụ thuộc giả, đúng
+  kiểu lỗi đã làm job "MCU Firmware" đỏ ở `476723a`.
+
+- Số đo (tại máy, 2026-09-11; CI `NOT_RUN` — `#414`):
+  `--component docs` exit **0** (`KẾT LUẬN: PASS — mọi phép kiểm bắt buộc đạt`,
+  `EXPECT: khớp toàn bộ ngưỡng`); `--component workflow` exit **0**
+  (**48/48 PASS**); `--component bogus` exit **2** (`LỖI: component không hỗ trợ`);
+  `--component layout` exit **0** (không hồi quy); `bash -n` exit **0**.
+  Truyền exit code kiểm bằng repo giả có stub thoát 7 và 3 — script trả đúng
+  **7** và **3**, không quy về 1.
+
+- Lưu ý số đo: tiêu chí chấp nhận của `#593` ghi kỳ vọng `34/34 PASS` theo số đo
+  nền ngày 2026-09-09. Đo lại hôm nay là **48/48 PASS** — selftest của guard đã
+  có thêm phép kiểm từ ngày đó. Ghi số thật, không dẫn lại số cũ.
+
+- Refs: `#593`, `WF-CLEAN-001` §6.1a/§6.2, `DOC-GOV-001` §5, `#414`.
+
 ### Fixed — `#607`: Historian nuốt lỗi `InsertGap` đúng lúc bận, `PruneBefore` bị vứt lỗi (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/app/historian_scheduler.go`,
