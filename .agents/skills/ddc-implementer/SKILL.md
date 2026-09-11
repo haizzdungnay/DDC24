@@ -60,11 +60,22 @@ Issue, kết thúc phiên. Phiên sau tiếp tục đúng Issue đó, không nh�
 
 ### 1. Chọn đúng một Issue
 
-Lọc Issue `state:ready`, sắp theo `priority:critical` → `high` → `medium` → `low`,
-trong cùng mức thì lấy Issue cũ nhất.
+Issue hợp lệ phải thoả **đủ hai** điều kiện: mang `state:ready`, **và** mang ít
+nhất một nhãn trong nhóm làn dọn dẹp — `wf:clean-code`, `wf:clean-docs`,
+`wf:test-debt`, `wf:tooling`.
 
-- Không có Issue `state:ready` nào ⇒ **dừng**. Comment một dòng vào Issue gần
-  nhất hoặc báo lại: backlog rỗng. Không tự nghĩ ra việc, không tự mở Issue rồi
+Thiếu nhãn `wf:*` nào trong bốn nhãn đó thì **không phải việc của vai này**, dù
+có `state:ready`, dù `priority:critical`, dù tiêu đề trông giống việc dọn dẹp.
+Bỏ qua: không assign, không comment, không đổi nhãn của nó. Đây là ranh giới
+vai, không phải bộ lọc cho gọn — `enhancement` và `question` là việc phát triển
+tính năng, có thiết kế và người chủ trì riêng.
+
+Trong tập hợp lệ, sắp theo `priority:critical` → `high` → `medium` → `low`,
+cùng mức thì lấy Issue cũ nhất.
+
+- Không Issue nào thoả cả hai điều kiện ⇒ **dừng**, báo "backlog làn dọn dẹp
+  rỗng" kèm số Issue `state:ready` đã bị loại vì thiếu nhãn `wf:*`. Không hạ
+  tiêu chuẩn để có việc mà làm. Không tự nghĩ ra việc, không tự mở Issue rồi
   làm — đó là vi phạm N1.
 - Issue đã có PR mở hoặc đang `state:in-progress` ⇒ bỏ qua, lấy cái tiếp theo.
 - Issue mang `state:changes-requested` **được ưu tiên trước mọi Issue mới**: PR

@@ -8,6 +8,60 @@
 
 ## [Unreleased]
 
+### Added — Quy trình thay phiên điều phối và cách nhận diện chặn tạm thời (2026-09-11)
+
+- Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` — thêm `§8.5`, `§8.6`,
+  lịch sử sửa đổi lên v1.2. Không chạm code sản phẩm.
+- Triệu chứng `§8.5`: phiên điều phối là phiên bền, mỗi lượt Routine nối thêm
+  vào cùng một hội thoại nên context chỉ tăng. Chạm trần 1M token thì Routine
+  chết hẳn, không có gì tự phục hồi. `§8.1a` trước đó chỉ cảnh báo mặt tách vai,
+  không nói tới trần này.
+- Số đo: phiên `session_01R1Ga52pakcTifHxCmRd3ty` đạt **555_386 / 1_000_000**
+  token sau 23 giờ và 22 lượt bắn — có gánh thêm nhiều lượt trao đổi tay. Một
+  lượt điều phối thuần tuý tốn ~5_000–15_000 token, tức ~240k/ngày ở nhịp một
+  giờ, chạm trần sau ~4 ngày. Chu kỳ thay đặt ở **2–3 ngày** để còn biên.
+- Cách sửa: `§8.5` ghi thủ tục thay bốn bước làm được hoàn toàn từ phiên agent
+  (`create_session` với prompt **chờ lệnh** → `update_trigger` →  xác minh →
+  chỉ archive phiên cũ SAU khi phiên mới chạy thành công một lượt). Prompt chờ
+  lệnh cố ý không dispatch: truyền thẳng prompt điều phối vào phiên mới sẽ gây
+  hai lượt dispatch chồng nhau trong vài phút.
+- `§8.6` ghi lại sự cố chặn tạm thời `create_session` (**đo: chặn liền 17 giờ**,
+  `08:08Z`→`01:07Z`, tự hết) kèm bảng phân biệt ba hiện tượng nhìn giống hệt
+  nhau — chặn tạm thời / bộ lọc Issue sai / backlog rỗng đúng thiết kế. Ghi rõ
+  **không** tạo `.claude/settings.json` để agent tự cấp quyền cho mình: thao tác
+  đó cũng bị chặn và bị chặn là đúng. Ngày 2026-09-10 đã đi nhầm đường này.
+- Verification (2026-09-11): `python3 scripts/workflow_guard.py --selftest` →
+  **48/48 PASS**, exit 0. Cổng C++/Go/FE **NOT_RUN**: chỉ đổi Markdown.
+
+### Fixed — Làn Routine Implementer lọc thiếu nhãn `wf:*`, có thể nhận cả Issue phát triển tính năng (2026-09-11)
+
+- Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` §8.4 bước 2,
+  `.claude/skills/ddc-implementer/SKILL.md` §1 và bản gương `.agents/skills/`.
+  Không chạm code sản phẩm.
+- Triệu chứng: điều kiện chọn Issue của làn Routine mỗi giờ chỉ là `state:ready`.
+  Bất kỳ Issue nào mang nhãn đó đều lọt, kể cả `enhancement` và `question`.
+- Nguyên nhân gốc: yêu cầu của chủ sở hữu là "`[CLEAN-CODE]` + `state:ready`",
+  nhưng khi viết §8.4 vế `[CLEAN-CODE]` bị rơi mất, chỉ còn vế `state:ready`.
+  Lỗi không lộ ra vì Auditor chỉ sinh Issue thuộc nhóm dọn dẹp, nên tại thời
+  điểm viết thì mọi Issue `state:ready` tình cờ đều hợp lệ — bộ lọc sai vẫn cho
+  kết quả đúng. Nó chỉ hỏng khi có người gắn `state:ready` lên một Issue
+  `enhancement`: lúc đó agent tự nhận việc phát triển tính năng rồi tự merge
+  qua `gate:waived`, tức đi ra ngoài phạm vi chủ sở hữu đã cho phép.
+- Cách sửa: điều kiện chọn Issue thành **hai vế bắt buộc** — `state:ready` VÀ ít
+  nhất một nhãn trong `wf:clean-code` / `wf:clean-docs` / `wf:test-debt` /
+  `wf:tooling`. Thiếu nhãn `wf:*` thì bỏ qua hoàn toàn: không assign, không
+  comment, không đổi nhãn. Khi không còn Issue hợp lệ thì phải báo "backlog làn
+  dọn dẹp rỗng" kèm **số Issue `state:ready` đã bị loại vì thiếu nhãn `wf:*`** —
+  để việc backlog rỗng vì hết việc phân biệt được với backlog rỗng vì Manager
+  quên gắn nhãn. Ràng buộc ghi ở cả §8.4 lẫn skill, vì skill thắng prompt.
+- Verification (2026-09-11): `python3 scripts/workflow_guard.py --selftest` →
+  **48/48 PASS**, exit 0. Bản gương `.agents/skills/` `diff -q` sạch. Cổng
+  C++/Go/FE **NOT_RUN**: thay đổi chỉ gồm Markdown.
+- Đối chiếu backlog tại thời điểm sửa: 8 Issue `state:ready` (#634, #633, #622,
+  #621, #607, #593, #592, #608) đều mang `wf:*` hợp lệ nên tập việc không đổi;
+  8 Issue `enhancement`/`question` đang mở (#558, #492, #465, #414, #384, #382,
+  #369, #367) không mang `state:ready` nên trước nay chưa bị nhận nhầm.
+
 ### Fixed — Gỡ conflict PR #620 với `main`; xoá marker `>>>>>>> origin/main` lẻ trong CHANGELOG (2026-09-11)
 
 - Phạm vi: `CHANGELOG.md` duy nhất. Không chạm mã hay tài liệu khác.

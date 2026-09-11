@@ -691,12 +691,28 @@ trước khi mã vào `main`. Đừng cắt bớt cổng vì "CI sẽ bắt".
    phiên trước bỏ dở ⇒ TIẾP TỤC ĐÚNG ISSUE ĐÓ, không nhận Issue mới. Đọc comment
    tiến độ gần nhất trên Issue để biết đang dở ở đâu và blocker là gì.
 
-2. CHỌN ISSUE khi không có việc dở. Lọc Issue mở mang nhãn `state:ready`, sắp
-   theo `priority:critical` → `high` → `medium` → `low`; cùng mức thì lấy Issue
-   CŨ NHẤT. Issue `state:changes-requested` được ưu tiên TRƯỚC mọi Issue mới —
-   một PR đang chờ sửa có giá trị hơn một PR mới mở.
-   Không có Issue phù hợp ⇒ KẾT THÚC PHIÊN, KHÔNG thay đổi repository. Không tự
-   nghĩ ra việc, không tự mở Issue rồi tự làm — đó là vi phạm N1 và guard sẽ
+2. CHỌN ISSUE khi không có việc dở. Issue hợp lệ phải thoả ĐỦ HAI điều kiện:
+   - mang nhãn `state:ready`, VÀ
+   - mang ÍT NHẤT MỘT nhãn trong nhóm làn dọn dẹp:
+     `wf:clean-code`, `wf:clean-docs`, `wf:test-debt`, `wf:tooling`.
+
+   Thiếu nhãn `wf:*` nào trong bốn nhãn trên ⇒ **KHÔNG PHẢI việc của làn này**,
+   dù nó có `state:ready`, dù `priority:critical`, dù tiêu đề trông giống việc
+   dọn dẹp. Bỏ qua, không assign, không comment, không đổi nhãn của nó.
+   Đây là ranh giới làn, không phải bộ lọc cho gọn: làn này chỉ dọn mã và dọn
+   tài liệu. Issue `enhancement`/`question` là việc phát triển tính năng, có
+   thiết kế và người chủ trì riêng; một agent tự nhận rồi tự merge việc như thế
+   là đi ra ngoài thứ chủ sở hữu đã cho phép.
+
+   Trong tập hợp lệ, sắp theo `priority:critical` → `high` → `medium` → `low`;
+   cùng mức thì lấy Issue CŨ NHẤT. Issue `state:changes-requested` (cũng phải
+   mang `wf:*` hợp lệ) được ưu tiên TRƯỚC mọi Issue mới — một PR đang chờ sửa có
+   giá trị hơn một PR mới mở.
+
+   Không có Issue nào thoả cả hai điều kiện ⇒ KẾT THÚC PHIÊN, KHÔNG thay đổi
+   repository, và báo rõ "backlog làn dọn dẹp rỗng" kèm số Issue `state:ready`
+   đã bị loại vì thiếu nhãn `wf:*`. Không hạ tiêu chuẩn để có việc mà làm. Không
+   tự nghĩ ra việc, không tự mở Issue rồi tự làm — đó là vi phạm N1 và guard sẽ
    chặn PR đó bằng `N1-SELF`.
 
 3. NHẬN VIỆC TRƯỚC KHI VIẾT DÒNG CODE ĐẦU TIÊN. Assign Issue cho chính bạn, gỡ
@@ -804,6 +820,87 @@ trước khi mã vào `main`. Đừng cắt bớt cổng vì "CI sẽ bắt".
     trạng thái merge; blocker còn lại.
 ```
 
+### 8.5 Thay phiên điều phối định kỳ — bắt buộc, không phải tuỳ chọn
+
+Phiên điều phối là **phiên bền**: mỗi lượt Routine nối thêm vào cùng một hội
+thoại, không bao giờ bắt đầu lại. Nên context của nó **chỉ tăng, không bao giờ
+giảm**, và khi chạm trần thì Routine chết hẳn — khác hẳn kiểu chặn tạm thời ở
+`§8.6`, vì không có gì tự phục hồi.
+
+**Số đo 2026-09-11**, phiên `session_01R1Ga52pakcTifHxCmRd3ty`: `555_386 /
+1_000_000` token sau 23 giờ và 22 lượt bắn. Con số này **cao hơn** mức một phiên
+điều phối thuần tuý sẽ đạt, vì phiên đó còn gánh nhiều lượt trao đổi tay với chủ
+sở hữu. Một lượt điều phối đơn thuần (đọc thông báo → kiểm khoá → `create_session`
+→ báo một dòng) tốn khoảng `5_000`–`15_000` token, tức **~240k/ngày** ở nhịp một
+giờ. Từ đó: trần 1M chạm sau **khoảng 4 ngày** chạy thuần.
+
+**Chu kỳ thay: 2–3 ngày.** Chọn ngưỡng dưới mức 4 ngày để còn biên an toàn cho
+những ngày có nhiều lượt trao đổi tay.
+
+Thủ tục thay — làm được hoàn toàn từ phiên agent, không cần giao diện claude.ai:
+
+1. `create_session` với `source_url` = repo, `source_revision` = `main`,
+   `tags` = `["role:dispatcher", "wf-clean-001", "routine-dispatcher"]`, và
+   `prompt` là khối **chờ lệnh** ở dưới. Đừng truyền prompt điều phối vào đây:
+   phiên sẽ dispatch ngay lúc sinh, và nếu lượt Routine kế tiếp vẫn bắn vào phiên
+   cũ thì có hai lượt dispatch chồng nhau trong vài phút.
+2. `update_trigger(trigger_id=…, persistent_session_id=<id phiên mới>)`.
+3. Xác minh `list_triggers` cho đúng `persistent_session_id` mới.
+4. Để phiên cũ tự nhàn rỗi. **Không `archive_session` ngay** — nếu bước 2 hỏng
+   thì phiên cũ vẫn là đường lui duy nhất. Chỉ archive sau khi đã thấy một lượt
+   Routine chạy thành công trên phiên mới.
+
+Prompt **chờ lệnh** cho phiên điều phối mới:
+
+```markdown
+Bạn là PHIÊN ĐIỀU PHỐI của Routine Clean Code Implementer (WF-CLEAN-001 §8.4).
+
+Lượt này chỉ để khởi tạo. KHÔNG sinh phiên Implementer, KHÔNG chọn Issue, KHÔNG
+sửa file, KHÔNG commit, KHÔNG mở PR, KHÔNG merge.
+
+Làm đúng bốn việc rồi kết thúc:
+
+1. `git remote -v` — phải trỏ `Mekong-HCM/MK-DDC-24`.
+2. `ls docs/00_governance/CLEAN_CODE_WORKFLOW.md` — phải tồn tại.
+3. Kiểm có tool `mcp__Claude_Code_Remote__create_session`,
+   `mcp__Claude_Code_Remote__list_sessions` và `mcp__github__list_issues`.
+   Thiếu bất kỳ cái nào ⇒ báo đúng thứ thiếu; phiên này KHÔNG dùng được làm
+   phiên điều phối và chủ sở hữu phải biết ngay, đừng chờ tới lượt bắn đầu tiên
+   mới phát hiện.
+4. Gọi `get_session` bỏ trống `session_id`, in ra `ccr.id` của chính bạn.
+
+Rồi báo: "Phiên điều phối sẵn sàng, id = <ccr.id>" và DỪNG.
+
+Từ lượt sau, mỗi giờ bạn sẽ nhận prompt điều phối và làm đúng theo nó.
+```
+
+### 8.6 Chặn tạm thời khi sinh phiên — nhận diện và xử lý
+
+`create_session` có thể bị classifier quyền hạn từ chối khi nhiều lượt sinh phiên
+dồn trong thời gian ngắn. **Đo 2026-09-10/11: chặn liền 17 giờ** (`08:08Z` →
+`01:07Z`), rồi tự hết mà không cần đổi cấu hình gì.
+
+Triệu chứng đặc trưng — nhận ra để khỏi đi sửa nhầm chỗ:
+
+- Trigger vẫn bắn đúng giờ, `last_run` vẫn `SUCCEEDED` (đó chỉ là "đã giao được
+  lượt", không phải "lượt đã làm được việc").
+- Phiên điều phối vẫn thức, vẫn kiểm repo xong.
+- Chỉ đúng lệnh `create_session` bị từ chối. Không phiên con nào ra đời.
+- Backlog **không** rỗng — đây là điểm phân biệt quan trọng nhất.
+
+**Xử lý: đợi rồi thử lại.** Không tạo `.claude/settings.json` để cấp quyền cho
+chính agent — thao tác ghi file phân quyền đó cũng bị chặn, và bị chặn là đúng:
+một agent tự nới quyền cho mình là thứ ranh giới này sinh ra để cản. Ngày
+2026-09-10 đã đi nhầm đường này và mất một ngày backlog đứng yên.
+
+Phân biệt với hai tình huống nhìn giống nhau:
+
+| Hiện tượng | Nguyên nhân | Xử lý |
+|---|---|---|
+| Không phiên con nào ra đời, backlog còn việc | Chặn tạm thời (mục này) | Đợi, thử lại |
+| Phiên con ra đời rồi kết thúc ngay, backlog còn việc | Bộ lọc Issue sai (§8.4 bước 2) | Kiểm nhãn `wf:*` |
+| Phiên con ra đời rồi kết thúc ngay, backlog rỗng | Đúng thiết kế | Chờ Auditor nạp việc |
+
 ## 9. Hạng mục bị chặn
 
 | Hạng mục | Bị chặn bởi | Cần gì để mở khoá |
@@ -821,4 +918,5 @@ trước khi mã vào `main`. Đừng cắt bớt cổng vì "CI sẽ bắt".
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-09 | Thiết lập ban đầu: ba vai, ma trận quyền, workflow state, nhãn, branch/merge rule, quality gate, truy xuất và lịch chạy. |
+| 1.2 | 2026-09-11 | `§8.4` bước 2: điều kiện chọn Issue thành hai vế bắt buộc — `state:ready` VÀ một nhãn `wf:*` thuộc làn dọn dẹp; trước đó chỉ lọc `state:ready` nên Issue `enhancement`/`question` có thể lọt vào làn tự-merge. Thêm `§8.5` (thay phiên điều phối 2–3 ngày một lần, kèm số đo trần context và prompt chờ lệnh) và `§8.6` (nhận diện chặn tạm thời khi sinh phiên, kèm bảng phân biệt ba hiện tượng nhìn giống nhau). |
 | 1.1 | 2026-09-10 | §8: hai Routine đã chạy thật, kèm số hiệu trigger và phiên điều phối. Thêm `§8.1a` (cơ chế điều phối qua phiên bền — cơ chế thứ tư, chạy được) đính chính kết luận "chỉ tạo được từ giao diện claude.ai" của `§8.1`. Thêm `§8.3` (prompt vai Manager — mục mà Routine Auditor vẫn trỏ tới nhưng trước đó không tồn tại) và `§8.4` (làn Routine Implementer mỗi giờ: khoá thực thi hai lớp, nhánh `clean-code/issue-<số>`, tự merge qua `gate:waived`). Ghi lại phép đo neo phút của `create_trigger`/`update_trigger`. Cập nhật `§5` và `§9`. |
