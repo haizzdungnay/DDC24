@@ -1,7 +1,7 @@
 # Typed IR và Artifact Contract — MK-DDC-24 FW SOM Program Runtime
 
 > **Document ID:** SW-IR-ARTIFACT-MK-DDC-24-VI
-> **Phiên bản:** 1.2 | 2026-08-13
+> **Phiên bản:** 1.3 | 2026-09-11 · 1.2 | 2026-08-13
 > **Workstream:** C0.6 (MS-01)
 > **Trạng thái:** Supporting As-Built — source hiện tại tại `apps/core/application/st/`; không phải Target authority Programming v2.2
 > **Nguồn quyết định:** ADR-020; `PROGRAM_SOM_FW_DRAFT_DESIGN` §4, §7.2; quyết định ký gói 2026-07-28
@@ -187,9 +187,19 @@ Loader tính lại và so khớp **trước khi diễn giải bất kỳ section
 
 - Khoá riêng **không nằm trên thiết bị**. Ký thực hiện ở khâu build/release.
 - Khoá công khai **nhúng trong binary** `mkddc-core` lúc biên dịch (mảng 32 byte hằng).
-- Build CI dùng **khoá test riêng** cam kết trong repo tại
-  `services/core/st/testdata/ed25519_test_key.*`; khoá này **chỉ hợp lệ với build test**
-  và không bao giờ được dùng cho release.
+- Bộ test **không** dùng fixture khoá cố định cam kết trong repo. Một fixture như vậy
+  từng được đặc tả ở bản trước (`services/core/st/testdata/ed25519_test_key.*`) nhưng
+  **đã bị bỏ** cùng lúc `services/` bị xoá theo `PLAN-ARCH-RESTRUCT-002`; hôm nay
+  `find . -name 'ed25519*'` trả về rỗng — không còn file nào như thế ở bất kỳ đâu.
+- Cơ chế thay thế đang chạy: khoá ký được **sinh tại chỗ trong tiến trình test** từ một
+  seed cố định qua `crypto_sign_seed_keypair()` (libsodium), ghi dạng hex vào file tạm
+  dưới `/tmp` rồi truyền cho CLI bằng `--key`. Seed cố định giữ tính **tất định** của
+  test mà không phải cam kết vật liệu khoá vào repo, và khoá không bao giờ rời thư mục
+  tạm của tiến trình test. Dẫn chứng:
+  `apps/core/application/st/tests/test_st_compile_cli.cpp:177` (khoá dùng chung cho cả
+  bộ test) và `:779` (khoá riêng của ca ký tường minh).
+- Khoá test theo cơ chế trên **chỉ hợp lệ với build test** và không bao giờ được dùng
+  cho release.
 
 Chính sách xác minh theo `flags` bit 2:
 
@@ -575,3 +585,4 @@ Có symbol → build sai kiến trúc → CI fail.
 | 1.0 | 2026-07-28 | Tạo mới. Đóng workstream C0.6 (MS-01). Chốt định dạng file (magic/version/ABI/profile/section table), SHA-256 + chữ ký Ed25519 với lý do khác GPG của OTA, 6 section bắt buộc + 2 tuỳ chọn, máy thanh ghi 16 byte/lệnh với 33 opcode, quy tắc chỉ nhảy tiến để bảo đảm chấm dứt, quy trình load 22 bước, 15 mã lỗi trả BE kèm cột retry/giữ package, quy tắc tương thích phiên bản, yêu cầu fuzzing và kiểm bất biến "không parser trong runtime". |
 | 1.1 | 2026-08-11 | Amendment As-Built `TASK-PROG-203`: thay mô tả FNV/timestamp cũ bằng SHA-256 canonical, prefix metadata legacy và timestamp zero; authority Target tiếp tục là `IFSPEC-ART-PROG-001` cùng build manifest ngoài artifact |
 | 1.2 | 2026-08-13 | Đồng bộ `TASK-PROG-402`: layout identity canonical v1 ổn định qua thay đổi slot không RETAIN, `record_size` gồm codec FB RETAIN không phụ thuộc ABI, loader kiểm exact section/order/type/offset/size; compiler metadata lên `fwsom-st-1.2.0` nhưng artifact schema major vẫn 1. |
+| 1.3 | 2026-09-11 | DD-03/DD-10: bỏ mô tả fixture khoá cố định `services/core/st/testdata/ed25519_test_key.*` (không còn tồn tại sau PLAN-ARCH-RESTRUCT-002) và thay bằng cơ chế thật — khoá sinh tại chỗ từ seed cố định qua `crypto_sign_seed_keypair()`, dẫn `test_st_compile_cli.cpp:177,779` (#592) |

@@ -227,7 +227,7 @@ slave sau (`ext_offset = ModbusMaster::total_ext_count()`). Một slot ứng v�
 | 5, 6, 15, 16 (FC ghi) | `0` — vòng đọc bỏ qua FC ghi nên đặt trước slot cho chúng chỉ sinh slot rỗng |
 
 Luật này được hiện thực **một lần duy nhất** trong
-`services/iobus/fieldbus/device_profile.{hpp,cpp}`:
+`apps/iobus/adapters/modbus_rtu/device_profile.{hpp,cpp}`:
 
 ```cpp
 bool     point_type_is_32bit(PointType t);
@@ -340,7 +340,7 @@ profile     = "vfd-generic"
 ### 12.3 Module `modbus_tcp` — contract
 
 ```cpp
-// services/iobus/modbus_tcp.hpp
+// apps/iobus/adapters/modbus_rtu/modbus_tcp.hpp
 class ModbusTcp {
 public:
     bool open(const TcpSlaveConfig& cfg);   // modbus_new_tcp() + modbus_connect()
@@ -415,6 +415,7 @@ TCP slave poll chạy trong **cùng fieldbus thread** (hoặc pool) với RTU. K
 ## Revision History
 | Version | Ngày | Người | Thay đổi |
 |---------|------|-------|----------|
+| 1.5 | 2026-09-11 | Implementer | DD-10: ánh xạ repository §10 và §12.3 trỏ `apps/iobus/adapters/modbus_rtu/` thay `services/iobus/` đã xoá theo PLAN-ARCH-RESTRUCT-002 (#592) |
 | 1.4 | 2026-06-26 | Dev SOM | §12: Modbus TCP client design (MOD-013) — DRAFT chờ approve |
 | 1.3 | 2026-06-17 | Dev SOM | §10.3: kx_ext_snapshot_msg_t chuyển vào mkddc_shm.h (gap closed); cập nhật rs485 device config path |
 | 1.2 | 2026-06-16 | Dev SOM | Close FB-Q-001 (libmodbus), FB-Q-002 (expose_bacnet per-profile); thêm §9 ext IPC API |
