@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -130,7 +131,7 @@ func (s *HistorianShadowScheduler) AttachTrendCache(cache *HistorianTrendCache) 
 	s.mu.Unlock()
 }
 
-func (s *HistorianShadowScheduler) RunOnce(ctx context.Context, observedUTC time.Time, monotonicNS uint64) error {
+func (s *HistorianShadowScheduler) RunOnce(ctx context.Context, observedUTC time.Time, monotonicNS uint64) (err error) {
 	if s == nil {
 		return nil
 	}
@@ -168,7 +169,14 @@ func (s *HistorianShadowScheduler) RunOnce(ctx context.Context, observedUTC time
 	if len(due) == 0 && !cacheDue {
 		return s.flushPendingGaps(ctx)
 	}
-	_ = s.flushPendingGaps(ctx)
+	/* Chu kỳ BẬN phải báo lỗi ghi gap tồn đọng y như chu kỳ rảnh ở ngay trên:
+	 * nuốt lỗi tại đây làm một sink hỏng chỉ lộ ra trong những chu kỳ không có
+	 * Point nào đến hạn, tức ngược chiều rủi ro. Nhưng lỗi này KHÔNG được cắt
+	 * ngang chu kỳ — phần còn lại vẫn phải chạy — nên nó được gộp vào giá trị
+	 * trả về bằng `errors.Join`, đúng quy ước ở `legacy_writers.go:194-200`. */
+	if flushErr := s.flushPendingGaps(ctx); flushErr != nil {
+		defer func() { err = errors.Join(flushErr, err) }()
+	}
 	advanceDue := func() {
 		for _, point := range duePoints {
 			schedule := &s.schedules[point.scheduleIndex]
