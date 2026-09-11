@@ -8,6 +8,61 @@
 
 ## [Unreleased]
 
+### Fixed — Gỡ conflict PR #620 với `main`; xoá marker `>>>>>>> origin/main` lẻ trong CHANGELOG (2026-09-11)
+
+- Phạm vi: `CHANGELOG.md` duy nhất. Không chạm mã hay tài liệu khác.
+- Triệu chứng: PR #620 báo `CONFLICTING` / `DIRTY`, không merge được. Đồng thời `CHANGELOG.md`
+  trên `main` còn một dòng `>>>>>>> origin/main` đứng lẻ (không có `<<<<<<<` / `=======` đi kèm),
+  cuối entry sửa `AlarmModel::drop_frame`.
+- Nguyên nhân gốc: `main` nhận thêm entry deploy `9b5608d7` (#623) ở đúng đầu mục `[Unreleased]`
+  nơi nhánh PR cũng chèn entry của mình ⇒ hai khối chèn cùng vị trí. Marker lẻ lọt vào từ lần gỡ
+  conflict dở trong PR #609 (`git log -S'>>>>>>> origin/main' -- CHANGELOG.md` → `9b5608d7`).
+- Cách sửa: merge `origin/main` vào nhánh PR, giữ **cả hai** entry (entry BACnet của PR ở trên,
+  entry deploy của `main` ở dưới), xoá dòng marker lẻ.
+- Kiểm chứng: `grep -c '^<<<<<<<\|^=======$\|^>>>>>>>' CHANGELOG.md` → **0**; `git diff origin/main
+  -- CHANGELOG.md` chỉ gồm entry của PR + entry này và đúng một dòng `-` là marker lẻ.
+
+### Governance — CTO chốt 8/11 quyết định BACnet Rev A; 3 mã `PENDING-HUMAN` (2026-09-10)
+
+- Phạm vi: `docs/00_governance/BACNET_OPEN_DECISIONS.md`, `docs/00_governance/DECISIONS.md`,
+  `docs/07_records/reviews/BACNET_REV_A_APPROVAL_RECORD_2026-09-10.md` (mới). **Không chạm mã**
+  (`apps/`, `firmware/`, `contracts/`, `platform/` giữ nguyên) — phiên này chốt quyết định và
+  tạo Issue, không implement.
+- Triệu chứng: `OD-BAC-SET-001` có 11 quyết định `OPEN`, trong đó `OD-BAC-001` chặn toàn bộ
+  WP-BAC-01 và kéo theo mọi WP sau. Không ai ký ⇒ kế hoạch doc→code→E2E không khởi động được.
+- Nguyên nhân gốc: bản rà soát `REV-BACNET-ASBUILT-001` liệt kê khuyến nghị kỹ thuật nhưng
+  theo đúng thiết kế của nó thì **không tự quyết định thay authority**.
+- Cách sửa:
+  - **8 mã CLOSED** (`-001`, `-002`, `-003`, `-004`, `-005`, `-006`, `-010`, `-011`) — chốt dứt khoát,
+    ghi lý do bằng lời của người ký. `OD-BAC-004` chốt `N = 90 s` với ba trạng thái và ngưỡng nằm
+    trong config, kèm điều kiện đo lại sau `T-BAC-064` — không để trống chỉ vì chưa đo được site thật.
+  - **3 mã `PENDING-HUMAN`** (`-007` thiết bị HIL, `-008` đơn ASHRAE, `-009` egress policy) — là cam kết
+    nguồn lực và thẩm quyền tổ chức, **không** phải phán đoán kỹ thuật. `OD-BAC-SET-001` §4 mới ghi
+    rõ ai ký, cần gì để mở khoá, và hệ quả nếu không duyệt.
+  - Bốn ADR mới: `ADR-057` (Alarm/Schedule/Calendar/Trend Log → V1.1), `ADR-058` (chấp nhận breaking
+    change tập object một lần ở Rev A), `ADR-059` (mở lại `/bacnet/objects` chỉ đọc, đảo quyết định
+    2026-08-20), `ADR-060` (thang bằng chứng BACnet: `HOST` không tính, thêm `LOOPBACK`,
+    `VERIFIED` chỉ cấp cho `TARGET`).
+- Kiểm chứng — số đo THẬT đo lại trong phiên, không dẫn lại số của bản review:
+  - `cmake --fresh … -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` → **exit 1**,
+    `HTTP/1.1 403 Forbidden` tải `bacnet-stack-1.3.8.tar.gz` từ `github.com`.
+  - `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=OFF -DMKDDC_ENABLE_HMI=OFF`
+    → exit 0; `cmake --build --parallel` → exit 0; `ctest` → **1440/1440 PASS**, 0 fail,
+    1 skipped, 22,21 s.
+  - `ctest -N | grep -ci bacnet` → **81** (bản review ghi 67 — sai lệch đã ghi vào biên bản §3.2).
+  - Chỉ **1/1440** test chạm `BacnetServer` (`#151`) — số đo mạnh nhất cho `OD-BAC-010`, bản review
+    không nêu (biên bản §3.3).
+  - `python3 scripts/docs_iso_harness.py` → **exit 0**, `PASS`, `code-span docs/** không tồn tại: 0`.
+  - CI: `NOT_RUN (#414)` — tổ chức chưa cấp runner.
+- Ghi chú: biên bản §3 ghi bốn sai lệch tìm được **trong chính bản review** (lệnh kiểm chứng G-02
+  khớp nhầm `IoCache::write_ao_mode`; số test 67 vs 81; phạm vi `OD-BAC-009` thiếu googletest;
+  số đo §5.1 không tái lập được từ container sạch).
+- Đính chính trong cùng phiên: bản nháp biên bản ghi việc `dispatch_cov()` quét thiếu kênh là
+  "finding mới `F-CTO-BAC-01`". **Sai** — review đã nêu ở `REV-BACNET-ASBUILT-001:194` và plan đã
+  có `T-BAC-034` cho nó (`PLAN-BACNET-D2C-001:184`). Biên bản §3.5 giữ lại dấu vết đính chính thay
+  vì xoá lặng. Phần thật sự chưa ai ghi là chỗ lệch hằng số thứ hai:
+  `bacnet_server.cpp:232` lặp BI tới `KX_N_UI` = 16 trong khi chỉ 8 BI tồn tại.
+
 ### Changed — Triển khai đồng bộ `main@9b5608d7` lên bo Foxlinx (2026-09-10)
 
 - Nâng bản đang chạy từ `de6b753b223dc23b4a6059b4b267a765b90de492` lên
@@ -733,7 +788,6 @@ Không sửa file Go hoặc C++ production nào.
   bằng `git clone` (giao thức git qua proxy vẫn thông) rồi trỏ
   `-DFETCHCONTENT_SOURCE_DIR_*`. Đây là chỗ dựng tại máy, **không** đổi file nào
   trong repo.
->>>>>>> origin/main
 
 ### Fixed — Routine không có `sources` sinh phiên rỗng; ghi bẫy vào WF-CLEAN-001 §8.1 (2026-09-09)
 
