@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+### Fixed — `#592`: năm hồ sơ thiết kế đang sống trỏ `services/` và `web/` đã bị xoá (2026-09-11)
+
+- Phạm vi: `docs/02_design/software/SW_FIELDBUS_DESIGN_MK-DDC-24_VI.md`,
+  `docs/02_design/interfaces/CONFIG_SCHEMA_MK-DDC-24_VI.md`,
+  `docs/02_design/interfaces/BACNET_PICS_EPICS_MK-DDC-24_VI.md`,
+  `docs/02_design/software/TYPED_IR_ARTIFACT_SPEC_MK-DDC-24_VI.md`,
+  `docs/02_design/GETTING_STARTED_DEV.md`. **Chỉ sửa ánh xạ nguồn** (`DD-10`) và
+  một phát biểu As-Built sai (`DD-03`); không đổi kết luận kỹ thuật, không nâng
+  lớp bằng chứng, không chạm `docs/adr/**`, `docs/07_records/**`,
+  `docs/03_implementation/**`.
+
+- Triệu chứng: bảy dòng trong năm hồ sơ **đang sống** vẫn dẫn implementation
+  theo `services/core`, `services/iobus`. Người đọc hồ sơ đi tìm file sẽ không
+  thấy gì. Hai ca nặng: `GETTING_STARTED_DEV.md` tự mâu thuẫn trong cùng một
+  file (phần kiến trúc trỏ `services/core`, trong khi §5 cách đó 102 dòng ghi
+  `services/` đã bị xoá); `TYPED_IR_ARTIFACT_SPEC:191` dẫn fixture khoá ký
+  `ed25519_test_key.*` **không còn tồn tại dưới bất kỳ tên nào**
+  (`find . -name 'ed25519*'` trả về rỗng).
+
+- Nguyên nhân gốc: `PLAN-ARCH-RESTRUCT-002` / ADR-025 xoá `services/` và `web/`
+  nhưng chỉ cập nhật các hồ sơ có bảng đối chiếu; các hồ sơ thiết kế khác không
+  nằm trong checklist di trú. Lớp lỗi này sống sót qua nhiều đợt harness `PASS`
+  vì phép kiểm 7 của `docs_iso_harness.py` **chỉ** xác thực code-span trỏ vào
+  `docs/**`, không xác thực code-span trỏ vào `apps/**` — nên harness xanh không
+  chứng minh gì cho lớp lỗi này. Khoảng trống công cụ đó nằm ngoài phạm vi Issue
+  (N5), không tự mở rộng sang sửa harness.
+
+- Cách sửa: bảy dòng trỏ về đường dẫn thật hôm nay, mỗi đích kiểm bằng `test -e`
+  (8/8 `OK`). Riêng `TYPED_IR:191` không có fixture thật để trỏ nên viết lại
+  theo cơ chế đang chạy: khoá ký **sinh tại chỗ trong tiến trình test** từ seed
+  cố định qua `crypto_sign_seed_keypair()` (libsodium), ghi hex ra file tạm rồi
+  truyền cho CLI bằng `--key`; dẫn chứng
+  `apps/core/application/st/tests/test_st_compile_cli.cpp:177,779`. Dòng thứ bảy
+  (`SW_FIELDBUS:343`, `// services/iobus/modbus_tcp.hpp`) không nằm trong bảng
+  sáu dòng của Issue nhưng thuộc Source ownership và thuộc tiêu chí chấp nhận
+  thứ tư, nên sửa trong cùng PR thay vì để lại.
+
+- Kiểm chứng (đo tại máy 2026-09-11, sau khi merge `origin/main`):
+  `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN: PASS`,
+  `TBD/BLOCKED = 113`, `code-span docs/** không tồn tại = 0` (khớp số nền).
+  `test -e` cho 8 đường dẫn mới → 8 `OK`. Link nội bộ tương đối của năm hồ sơ:
+  59 link, **0 hỏng**. File nhóm loại trừ bị chạm: **0**. CI: `NOT_RUN (#414)`.
+
 ### Fixed — `#633`: bốn `t.Skip` fail-open còn sót trong `apps/web-api` chuyển sang fail-close (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/app/wave3_diagnostics_test.go`,
