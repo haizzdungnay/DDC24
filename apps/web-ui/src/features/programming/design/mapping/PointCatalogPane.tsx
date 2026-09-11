@@ -7,12 +7,14 @@ import { mappingReasonsText } from './mappingReasons'
 
 export type PointKindFilter = 'ALL' | 'UI' | 'AO' | 'DO' | 'VP' | 'MB_RTU'
 
-export function PointCatalogPane({ rows, selectedKey, onSelect, pointKind, onPointKindChange }: {
+export function PointCatalogPane({ rows, selectedKey, onSelect, pointKind, onPointKindChange, filterSummary }: {
   rows: MappingPointRow[]
   selectedKey: string | null
   onSelect: (key: string) => void
   pointKind: PointKindFilter
   onPointKindChange: (value: PointKindFilter) => void
+  /** Điều kiện lọc đang áp, đã dịch. Rỗng = không lọc gì. */
+  filterSummary?: string
 }) {
   /* `ISS-PGUI-02` — bảng này từng viết cứng toàn bộ nhãn bằng tiếng Việt, nên
      giao diện English hiện "Điểm khả dụng", "Chỉ đọc", "Ghi được", "đang
@@ -32,7 +34,14 @@ export function PointCatalogPane({ rows, selectedKey, onSelect, pointKind, onPoi
         <span className="text-xs text-[var(--c-text-dim)]">{pick(`${rows.length} Point đang inspect`, `${rows.length} Points inspected`)}</span>
       </div>
       <div data-testid="mapping-point-list" className="min-h-0 flex-1 divide-y divide-[var(--c-border)] overflow-y-auto [scrollbar-gutter:stable]">
-        {rows.length === 0 ? <p className="p-4 text-sm text-[var(--c-text-dim)]">{pick('Catalog không có Point khớp bộ lọc.', 'No Point in the catalog matches the filter.')}</p> : rows.map((row) => {
+        {rows.length === 0 ? (
+          <div className="p-4 text-sm text-[var(--c-text-dim)]">
+            <p>{pick('Catalog không có Point khớp bộ lọc.', 'No Point in the catalog matches the filter.')}</p>
+            {/* Nói ra ĐIỀU KIỆN đang áp. "Không khớp bộ lọc" mà không kể ra bộ
+              * lọc nào buộc người dùng tự đi dò lại từng ô trên toolbar. */}
+            {filterSummary && <p className="mt-1">{pick(`Đang áp bộ lọc: ${filterSummary}. Xóa bớt bộ lọc để thấy thêm Point.`, `Active filters: ${filterSummary}. Clear some filters to see more Points.`)}</p>}
+          </div>
+        ) : rows.map((row) => {
           const state = row.quality.toLowerCase() as 'good' | 'uncertain' | 'bad' | 'stale' | 'offline' | 'unknown'
           /* ISS-PIO-32 — nhãn KHÔNG được đoán nguyên nhân. Chip cũ ghi cứng
            * "Core chưa hỗ trợ" cho mọi lý do, kể cả những lý do không thuộc về

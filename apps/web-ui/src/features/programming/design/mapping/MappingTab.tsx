@@ -185,6 +185,29 @@ export function MappingTab(props: {
       && matchesAccess(row, access) && matchesPointStatus(row, status, boundKeys)
   })
 
+  /* `ISS-PGM03-05` — "không có kết quả" phải kể ra ĐIỀU KIỆN đang áp. Hai câu
+   * tách riêng vì hai danh sách không chịu cùng tập bộ lọc: `Loại Point`,
+   * `Thiết bị` và `Quyền` không lọc biến, còn `Chương trình` không lọc Point.
+   * Gộp một câu chung sẽ đổ cho người dùng một bộ lọc họ không hề áp lên danh
+   * sách đang rỗng. */
+  const variableFilterSummary = [
+    ...(normalized ? [`${pick('Tìm kiếm', 'Search')}: “${query.trim()}”`] : []),
+    ...(programFilter !== 'ALL' ? [`${pick('Chương trình', 'Program')}: ${programs.find((program) => program.programId === programFilter)?.name ?? programFilter}`] : []),
+    ...(direction !== 'ALL' ? [`${pick('Hướng', 'Direction')}: ${direction}`] : []),
+    ...(dataType !== 'ALL' ? [`${pick('Kiểu', 'Type')}: ${dataType}`] : []),
+    ...(status !== 'ALL' ? [`${pick('Trạng thái', 'Status')}: ${status}`] : []),
+  ].join(' · ')
+  const pointFilterSummary = [
+    ...(normalized ? [`${pick('Tìm kiếm', 'Search')}: “${query.trim()}”`] : []),
+    ...(category !== 'ALL' ? [`${pick('Loại Point', 'Point Category')}: ${category}`] : []),
+    ...(pointKind !== 'ALL' ? [`${pick('Phân loại Point', 'Point category')}: ${pointKind}`] : []),
+    ...(dataType !== 'ALL' ? [`${pick('Kiểu', 'Type')}: ${dataType}`] : []),
+    ...(equipment !== 'ALL' ? [`${pick('Thiết bị', 'Equipment')}: ${equipment}`] : []),
+    ...(access !== 'ALL' ? [`${pick('Quyền', 'Access')}: ${access}`] : []),
+    ...(status !== 'ALL' ? [`${pick('Trạng thái', 'Status')}: ${status}`] : []),
+    ...(suggestionsActive && suggestionsEnabled ? [pick('Gợi ý: Bật', 'Suggestions: On')] : []),
+  ].join(' · ')
+
   const mapped = variableRows.filter((row) => row.bindingStatus === 'MAPPED').length
   const unmapped = variableRows.filter((row) => row.bindingStatus === 'UNMAPPED').length
   const review = variableRows.length - mapped - unmapped
@@ -313,8 +336,8 @@ export function MappingTab(props: {
     {saveError && <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-fault-bg)] p-3 text-sm text-[var(--c-fault-fg)]">{saveError}</p>}
     <MappingToolbar query={query} onQueryChange={setQuery} programFilter={programFilter} programs={programs} onProgramFilterChange={setProgramFilter} category={category} onCategoryChange={setCategory} truth={truth} error={catalog.error} canRetry={catalog.canRetry} onRetry={catalog.retry} onRestart={catalog.restart} direction={direction} onDirectionChange={setDirection} dataType={dataType} dataTypes={[...new Set([...variableRows.map((row) => row.type), ...pointRows.map((row) => row.dataType)])].sort()} onDataTypeChange={setDataType} access={access} onAccessChange={setAccess} status={status} onStatusChange={setStatus} counts={{ variables: variableRows.length, mapped, unmapped, review, catalog: catalog.data?.items.length ?? 0 }} equipment={equipment} equipmentOptions={equipmentChoices} onEquipmentChange={setEquipment} suggestionsEnabled={suggestionsEnabled} suggestionsActive={suggestionsActive && suggestionsEnabled} suggestionsBlockedReason={suggestionsBlockedReason} onToggleSuggestions={() => setSuggestionsActive((value) => !value)} />
     <div className="grid items-start gap-3 2xl:items-stretch 2xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
-      <VariableWorklist rows={visibleVariables} selectedId={selectedVariableId} onSelect={setSelectedVariableId} onOpenSource={(row) => openSource(row.programId)} canMutate={canEdit} mutationDisabled={!mutationReady} onMap={(row) => void beginAssign(row)} />
-      <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} pointKind={pointKind} onPointKindChange={setPointKind} />
+      <VariableWorklist rows={visibleVariables} selectedId={selectedVariableId} onSelect={setSelectedVariableId} onOpenSource={(row) => openSource(row.programId)} canMutate={canEdit} mutationDisabled={!mutationReady} onMap={(row) => void beginAssign(row)} filterSummary={variableFilterSummary} />
+      <PointCatalogPane rows={visiblePoints} selectedKey={selectedPointKey} onSelect={setSelectedPointKey} pointKind={pointKind} onPointKindChange={setPointKind} filterSummary={pointFilterSummary} />
     </div>
     <div className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]"><AssignedMappingsTable rows={visibleVariables} onSelect={setSelectedVariableId} canMutate={canEdit} mutationDisabled={!mutationReady} onChange={(row) => void beginAssign(row)} onRemove={beginRemove} /><MappingInspector row={selectedVariable} /></div>
     {/* `UX-REQ-007` — Published Signal là bề mặt authoring DUY NHẤT của
@@ -351,9 +374,34 @@ export function MappingTab(props: {
         <p><strong>{mutation.row.programName} · {mutation.row.name}</strong></p>
         {mutation.kind === 'assign' && mutation.point && <p className="font-mono text-xs">{mutation.point.category}:{mutation.point.deviceId ? `${mutation.point.deviceId}:` : ''}{mutation.point.pointId}</p>}
         {mutation.phase === 'previewing' && <p role="status">{pick('Đang xin máy chủ xem trước ứng viên…', 'Requesting the server preview…')}</p>}
+        {/* `ISS-PGM03-05` — bề mặt Review phải hiện ĐỦ blocker và warning, theo
+          * severity của MÁY CHỦ. Bản trước in mọi issue cùng một kiểu, nên một
+          * `WARNING` về đơn vị trông hệt một `ERROR` chặn ghi, và ngược lại:
+          * người ký không đọc ra được cái nào thực sự chặn. `severity` là
+          * trường trong hợp đồng (`ProgrammingBindingValidationIssue`), không
+          * phải suy đoán của FE. */}
         {mutation.decision && <div role="status" className="rounded border border-[var(--c-border)] p-2">
           <strong>{mutation.decision.status}</strong>
-          {mutation.decision.issues.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5">{mutation.decision.issues.map((issue, index) => <li key={`${issue.detailCode}-${index}`}><span className="font-mono text-xs">{issue.detailCode}</span> · {issue.field}</li>)}</ul>}
+          {mutation.decision.issues.length > 0 && <>
+            <p className="mt-1 text-xs text-[var(--c-text-dim)]">
+              {pick(
+                `${mutation.decision.issues.filter((issue) => issue.severity === 'ERROR').length} chặn · ${mutation.decision.issues.filter((issue) => issue.severity === 'WARNING').length} cảnh báo`,
+                `${mutation.decision.issues.filter((issue) => issue.severity === 'ERROR').length} blocking · ${mutation.decision.issues.filter((issue) => issue.severity === 'WARNING').length} warnings`,
+              )}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {[...mutation.decision.issues]
+                /* ERROR trước: thứ chặn ghi phải nằm ở chỗ mắt chạm đầu tiên,
+                 * kể cả khi máy chủ trả về theo thứ tự khác. */
+                .sort((left, right) => Number(right.severity === 'ERROR') - Number(left.severity === 'ERROR'))
+                .map((issue, index) => <li key={`${issue.detailCode}-${index}`} className="flex flex-wrap items-center gap-1.5">
+                  <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${issue.severity === 'ERROR' ? 'border-[var(--c-fault)] bg-[var(--c-fault-bg)] text-[var(--c-fault-fg)]' : 'border-[var(--c-warn)] bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)]'}`}>
+                    {issue.severity === 'ERROR' ? pick('Chặn', 'Blocking') : pick('Cảnh báo', 'Warning')}
+                  </span>
+                  <span className="font-mono text-xs">{issue.detailCode}</span> · {issue.field}
+                </li>)}
+            </ul>
+          </>}
           {mutation.decision.reason && <p className="mt-2 text-[var(--c-warn-fg)]">{mutation.decision.reason}</p>}
         </div>}
         {mutation.kind === 'remove' && mutation.phase === 'review' && <p>{pick('Binding chỉ bị gỡ khỏi Draft sau khi máy chủ trả read-back xác nhận.', 'The binding is removed from the Draft only after server-confirmed read-back.')}</p>}
