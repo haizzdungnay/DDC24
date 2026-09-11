@@ -149,7 +149,34 @@ func TestTelemetryTraCuuTheoBusVaSlaveTrenMoiEndpoint(t *testing.T) {
 	})
 
 	t.Run("recordModbusEvents gắn đúng device_id với trạng thái", func(t *testing.T) {
+		// `modbusEventLog.observe` CỐ TÌNH im ở lần quan sát đầu: chỉ CHUYỂN
+		// trạng thái mới sinh bản ghi (`modbus_rtu.go:711`). Gọi
+		// recordModbusEvents đúng một lần thì sổ sự kiện luôn rỗng, nên nhánh
+		// "chưa phát bản ghi nào" của bản cũ là kết quả TẤT YẾU của thiết kế
+		// chứ không phải điều kiện môi trường — subtest này chưa bao giờ chạy
+		// tới phần khẳng định, nó SKIP mọi lần.
+		//
+		// Quan sát lần một chốt trạng thái nền, rồi đảo telemetry để lần hai
+		// sinh đúng hai chuyển trạng thái ngược chiều nhau. Có chuyển trạng
+		// thái thật thì sổ rỗng mới là hồi quy, và mới đỏ được.
 		app.recordModbusEvents(context.Background())
+
+		baseline := app.core
+		t.Cleanup(func() { app.core = baseline })
+		app.core = &telemetryCore{telemetry: FieldbusTelemetry{
+			Published: true,
+			Buses: []BusTelemetry{
+				{ID: 1, State: "RUNNING", TotalErrors: 100},
+				{ID: 2, State: "RUNNING", TotalErrors: 0},
+			},
+			Slaves: []SlaveTelemetry{
+				// Đảo đúng chiều so với fixture: dây 1 chết, dây 2 sống lại.
+				{Addr: 1, BusID: 1, Online: false, TotalPolls: 500, TotalErrors: 45, TimeoutErrors: 40, CRCErrors: 5},
+				{Addr: 1, BusID: 2, Online: true, TotalPolls: 500, TotalErrors: 30, TimeoutErrors: 30, CRCErrors: 0},
+			},
+		}}
+		app.recordModbusEvents(context.Background())
+
 		var events []map[string]any
 		getJSON(t, app, token, "/api/v1/modbus/events", &events)
 		state := map[string]string{}
@@ -158,11 +185,19 @@ func TestTelemetryTraCuuTheoBusVaSlaveTrenMoiEndpoint(t *testing.T) {
 			id, _ := e["device_id"].(string)
 			state[id] = msg
 		}
-		if len(state) == 0 {
-			t.Skip("endpoint sự kiện chưa phát bản ghi nào trong lần quan sát đầu")
+		// Fail-close: hai thiết bị vừa đổi trạng thái thì phải có đúng hai bản
+		// ghi. Sổ rỗng nghĩa là đường phát sự kiện đã đứt — đúng thứ cần đỏ.
+		if len(state) != 2 {
+			t.Fatalf("hai thiết bị vừa đổi trạng thái nhưng /modbus/events cho %d device_id: %+v",
+				len(state), events)
 		}
-		if s := state["VFD-TANG-2"]; s != "" && strings.Contains(s, "ONLINE") && !strings.Contains(s, "OFFLINE") {
-			t.Errorf("VFD-TANG-2 đã chết nhưng sự kiện nói %q", s)
+		// REV-BE-03/04: mỗi device_id phải mang chuyển trạng thái CỦA CHÍNH NÓ.
+		// Tra theo mỗi slave_id thì hai thiết bị đè nhau và hai dòng này đảo chỗ.
+		if s := state["VFD-TANG-2"]; !strings.Contains(s, "OFFLINE -> ONLINE") {
+			t.Errorf("VFD-TANG-2 (dây 2) vừa sống lại, sự kiện phải là \"OFFLINE -> ONLINE\", có %q", s)
+		}
+		if s := state["MTR-TANG-1"]; !strings.Contains(s, "ONLINE -> OFFLINE") {
+			t.Errorf("MTR-TANG-1 (dây 1) vừa chết, sự kiện phải là \"ONLINE -> OFFLINE\", có %q", s)
 		}
 	})
 }
