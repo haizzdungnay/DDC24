@@ -324,6 +324,23 @@ cổng đã chạy khi CI không để lại dấu vết nào.
 > bảo vệ tương đương là: Reviewer chạy guard từ **cây làm việc trên `main`**, không
 > phải từ nhánh PR, và `scripts/workflow_guard.py` nằm trong CODEOWNERS.
 
+**Selftest của guard nay chạy được offline** (từ 2026-09-11, `#593`). Trước đó
+`python3 scripts/workflow_guard.py --selftest` chỉ tồn tại trong job
+`guard-selftest` của `.github/workflows/workflow-guard.yml`, nên khi Actions
+không có runner (`#414`) thì chính `scripts/workflow_guard.py` — file mà N1 và N2
+dựa vào — là mã không cổng nào bảo vệ lúc nó bị sửa. §6.1a trên đây đã chuyển
+phần *phán quyết* sang `--input`, nhưng phần *selftest* bị bỏ quên.
+
+```bash
+scripts/verify-project.sh --component workflow   # == python3 scripts/workflow_guard.py --selftest
+```
+
+**Ai chạm `scripts/workflow_guard.py` thì bắt buộc chạy lệnh này và dán số đo
+vào PR hoặc comment verdict** — Implementer khi sửa guard, Reviewer khi review
+một PR có sửa guard. Đây là thứ thay cho quan hệ `needs: guard-selftest` mà CI
+đang không thi hành được; chạy guard `--input` từ cây `main` vẫn giữ nguyên,
+hai lớp này không thay thế cho nhau.
+
 ### 6.2 Cổng do Implementer chạy tại máy **trước khi** mở PR
 
 Bắt buộc theo phạm vi đã chạm — ghi số đo thật vào PR, **không dẫn lại số cũ**:
@@ -341,9 +358,18 @@ ctest --test-dir build/fw --output-on-failure
 # FE — npm test chỉ quét src/, KHÔNG chạy e2e/
 (cd apps/web-ui && npx vitest --run --environment jsdom src && npm run lint && npm run build)
 
-# Tài liệu
+# Tài liệu — == scripts/verify-project.sh --component docs
 python3 scripts/docs_iso_harness.py --expect
+
+# Logic của chính cổng tách vai — BẮT BUỘC khi PR chạm scripts/workflow_guard.py
+# == scripts/verify-project.sh --component workflow
+python3 scripts/workflow_guard.py --selftest
 ```
+
+Hai cổng cuối có đường chạy qua `scripts/verify-project.sh` từ 2026-09-11
+(`#593`); trước đó `rg 'docs_iso_harness|workflow_guard' scripts/verify-project.sh`
+trả về rỗng, nên không lệnh nào gom đủ bộ cổng offline và người kiểm phải nhớ ba
+lệnh rời ở ba nơi tài liệu khác nhau.
 
 Đọc **exit code của cả configure lẫn build**: build dir cũ còn
 `CMAKE_HOME_DIRECTORY` trỏ `services/` đã xoá sẽ làm configure + build hỏng
@@ -939,5 +965,6 @@ Phân biệt với hai tình huống nhìn giống nhau:
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-09 | Thiết lập ban đầu: ba vai, ma trận quyền, workflow state, nhãn, branch/merge rule, quality gate, truy xuất và lịch chạy. |
+| 1.3 | 2026-09-11 | `§6.1a` + `§6.2`: `python3 scripts/docs_iso_harness.py --expect` và `python3 scripts/workflow_guard.py --selftest` nay có đường chạy trong `scripts/verify-project.sh` (`--component docs`, `--component workflow`). Trước đó selftest của guard chỉ tồn tại trong job `guard-selftest` của Actions, mà Actions không có runner (`#414`) — tức `scripts/workflow_guard.py`, file N1/N2 dựa vào, là mã không cổng nào bảo vệ khi bị sửa. Ghi rõ: ai chạm guard thì bắt buộc chạy selftest và dán số đo. Refs `#593`. |
 | 1.2 | 2026-09-11 | `§8.4` bước 2: điều kiện chọn Issue thành hai vế bắt buộc — `state:ready` VÀ một nhãn `wf:*` thuộc làn dọn dẹp; trước đó chỉ lọc `state:ready` nên Issue `enhancement`/`question` có thể lọt vào làn tự-merge. Thêm `§8.5` (thay phiên điều phối 2–3 ngày một lần, kèm số đo trần context và prompt chờ lệnh) và `§8.6` (nhận diện chặn tạm thời khi sinh phiên, kèm bảng phân biệt ba hiện tượng nhìn giống nhau). |
 | 1.1 | 2026-09-10 | §8: hai Routine đã chạy thật, kèm số hiệu trigger và phiên điều phối. Thêm `§8.1a` (cơ chế điều phối qua phiên bền — cơ chế thứ tư, chạy được) đính chính kết luận "chỉ tạo được từ giao diện claude.ai" của `§8.1`. Thêm `§8.3` (prompt vai Manager — mục mà Routine Auditor vẫn trỏ tới nhưng trước đó không tồn tại) và `§8.4` (làn Routine Implementer mỗi giờ: khoá thực thi hai lớp, nhánh `clean-code/issue-<số>`, tự merge qua `gate:waived`). Ghi lại phép đo neo phút của `create_trigger`/`update_trigger`. Cập nhật `§5` và `§9`. |
