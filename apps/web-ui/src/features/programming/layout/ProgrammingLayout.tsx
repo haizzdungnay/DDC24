@@ -59,6 +59,19 @@ export interface ProgrammingEditingContext {
     /** Lý do đọc được khi chưa Kiểm tra được; `null` = kiểm tra được. */
     checkDisabledReason: string | null
   }
+  /**
+   * Đọc lại dữ liệu RIÊNG của workspace đang mở khi người dùng bấm `Làm mới`.
+   *
+   * Vỏ chỉ biết các read-model của chính nó (capabilities, runtime, danh sách
+   * Project, intent); nó không biết Draft của PGM-02. Trước đây workspace giải
+   * quyết bằng cách tự dựng thêm một nút `Làm mới` thứ hai ngay cạnh nút của
+   * vỏ — hai nút CÙNG TÊN làm HAI việc khác nhau, thứ không ai đọc tên mà
+   * đoán đúng được. Đăng ký ở đây thì `Làm mới` vẫn là MỘT nút và nó làm trọn
+   * việc người dùng nghĩ nó làm.
+   *
+   * `undefined` = workspace không có gì để đọc lại ngoài read-model của vỏ.
+   */
+  onReload?: () => void
 }
 
 const ProgrammingRuntimeContext = createContext<ProgrammingRuntimeContextValue | null>(null)
@@ -220,6 +233,9 @@ export function ProgrammingLayout() {
               runtime.refresh()
               projects.refresh()
               programIntents.refresh()
+              /* Workspace đang mở đọc lại phần dữ liệu mà vỏ không biết (Draft
+                 của PGM-02). Gọi sau cùng và chỉ khi workspace có đăng ký. */
+              routeEditingContext?.onReload?.()
             }}
             details={{
               draftRevisionId: visibleEditingContext?.draftRevisionId ?? null,
