@@ -2,8 +2,11 @@ package modbusrtu
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -165,5 +168,162 @@ func TestValidateConfig_256Points(t *testing.T) {
 	}
 	if !foundLimitError {
 		t.Errorf("expected CAPACITY_EXCEEDED for 257 points, but got: %v", errs)
+	}
+}
+
+// failingRestoreWriter trả về một `FileWriter` ghi thật ở pha ghi xuôi và hỏng ở
+// pha quay về.
+//
+// Mốc chuyển pha là lần ghi `configPath` thành công: đó là lần ghi xuôi CUỐI
+// cùng của `Apply`, nên mọi lần ghi sau nó đều thuộc đường quay về (hoặc ghi bản
+// LKG). Dựng như vậy để tái hiện đúng tình huống thật đáng sợ nhất — đĩa còn chỗ
+// cho bản mới nhưng hết chỗ (hoặc mất quyền) đúng lúc cần quay về — chứ không
+// phải một `Persister` hỏng ngay từ lần ghi đầu.
+func failingRestoreWriter(configPath string, failure error) FileWriter {
+	rollbackPhase := false
+	writer := func(path string, data []byte, mode os.FileMode) error {
+		if rollbackPhase {
+			return failure
+		}
+		if err := os.WriteFile(path, data, mode); err != nil {
+			return err
+		}
+		if path == configPath {
+			rollbackPhase = true
+		}
+		return nil
+	}
+	return writer
+}
+
+// Rollback hỏng phải đi ra ngoài — cả ở lỗi trả về lẫn ở `Reason` của journal.
+//
+// Bản trước vứt lỗi của `WriteFile`/`os.Remove` trong `restore()`, nên khi quay
+// về thất bại `Apply` vẫn báo đúng một thứ: "cấu hình cũ đã được phục hồi", và
+// journal vẫn ghi `ROLLED_BACK`. Cả hai đều sai: `fieldbus.conf` trên đĩa còn là
+// bản MỚI, và lần khởi động sau iobus nạp đúng cấu hình nó vừa từ chối.
+func TestApplyReportsRollbackFailureWhenRestoreFails(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "fieldbus.conf")
+	journalPath := filepath.Join(dir, "journal.json")
+	if err := os.WriteFile(configPath, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writer := failingRestoreWriter(configPath, errors.New("read-only file system"))
+
+	// Không kênh điều khiển và không `Reload` ⇒ Apply đi thẳng vào `failTx`.
+	p := Persister{ConfigDir: dir, ConfigPath: configPath, WriteFile: writer,
+		Journal: Journal{Path: journalPath, WriteFile: os.WriteFile}}
+	_, err := p.Apply(validConfig(), Config{})
+
+	if err == nil {
+		t.Fatal("Apply phải trả lỗi khi không có đường nạp lại cấu hình")
+	}
+	if !errors.Is(err, ErrApply) {
+		t.Fatalf("lỗi trả về phải vẫn bọc ErrApply (tầng HTTP phân loại theo nó): %v", err)
+	}
+	if !strings.Contains(err.Error(), configPath) {
+		t.Fatalf("lỗi trả về KHÔNG nêu đường dẫn không quay về được (%s), người vận hành không biết đĩa đang lai: %v",
+			configPath, err)
+	}
+
+	data, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) == "old\n" {
+		t.Fatal("dựng test sai: rollback đã thành công nên không kiểm được nhánh rollback hỏng")
+	}
+
+	tx, exists, err := Journal{Path: journalPath}.Read()
+	if err != nil || !exists {
+		t.Fatalf("journal = %v/%v", exists, err)
+	}
+	if tx.State != TxRolledBack {
+		t.Fatalf("tx.State = %q, muốn %q", tx.State, TxRolledBack)
+	}
+	if !strings.Contains(tx.Reason, configPath) {
+		t.Fatalf("tx.Reason chỉ nêu nguyên nhân gốc, không nêu rollback hỏng: %q", tx.Reason)
+	}
+	if !strings.Contains(tx.Reason, "không có đường nạp lại cấu hình") {
+		t.Fatalf("tx.Reason mất nguyên nhân gốc: %q", tx.Reason)
+	}
+}
+
+// Đường dự phòng (restart service) có mã quay về riêng, không đi qua `failTx`.
+// Nó phải nói cùng một thứ về cùng một sự cố, nếu không hai đường quay về cho
+// hai lời khai khác nhau về trạng thái đĩa.
+func TestApplyReportsRollbackFailureOnReloadFallback(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "fieldbus.conf")
+	journalPath := filepath.Join(dir, "journal.json")
+	if err := os.WriteFile(configPath, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writer := failingRestoreWriter(configPath, errors.New("no space left on device"))
+	reloads := 0
+
+	p := Persister{ConfigDir: dir, ConfigPath: configPath, WriteFile: writer,
+		Reload:  func() (bool, []string) { reloads++; return false, []string{"restart failed"} },
+		Journal: Journal{Path: journalPath, WriteFile: os.WriteFile}}
+	_, err := p.Apply(validConfig(), Config{})
+
+	if err == nil {
+		t.Fatal("Apply phải trả lỗi khi Reload không áp được cấu hình")
+	}
+	if !errors.Is(err, ErrApply) {
+		t.Fatalf("lỗi trả về phải vẫn bọc ErrApply: %v", err)
+	}
+	if !strings.Contains(err.Error(), configPath) {
+		t.Fatalf("lỗi trả về KHÔNG nêu đường dẫn không quay về được (%s): %v", configPath, err)
+	}
+	if reloads != 2 {
+		t.Fatalf("reloads = %d, muốn 2 (một lần áp bản mới, một lần chạy lại bằng bản cũ)", reloads)
+	}
+
+	tx, exists, readErr := Journal{Path: journalPath}.Read()
+	if readErr != nil || !exists {
+		t.Fatalf("journal = %v/%v", exists, readErr)
+	}
+	if !strings.Contains(tx.Reason, configPath) {
+		t.Fatalf("tx.Reason chỉ nêu nguyên nhân gốc, không nêu rollback hỏng: %q", tx.Reason)
+	}
+	if !strings.Contains(tx.Reason, "restart failed") {
+		t.Fatalf("tx.Reason mất nguyên nhân gốc: %q", tx.Reason)
+	}
+}
+
+// Bản last-known-good vắng mặt là thứ phải biết TRƯỚC khi cần tới nó. Ghi hỏng
+// không làm apply thất bại (cấu hình mới vẫn áp được), nhưng im lặng thì lần sau
+// người vận hành đi tìm `fieldbus.lkg.json` để quay về và không thấy gì.
+func TestApplyWarnsWhenLastKnownGoodWriteFails(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "fieldbus.conf")
+	lkgPath := filepath.Join(dir, "fieldbus.lkg.json")
+
+	p := Persister{ConfigDir: dir, ConfigPath: configPath,
+		WriteFile: func(path string, data []byte, mode os.FileMode) error {
+			if path == lkgPath {
+				return errors.New("read-only file system")
+			}
+			return os.WriteFile(path, data, mode)
+		},
+		Reload: func() (bool, []string) { return true, nil }}
+
+	res, err := p.Apply(validConfig(), Config{Revision: 3})
+	if err != nil {
+		t.Fatalf("ghi LKG hỏng KHÔNG được làm apply thất bại: %v", err)
+	}
+	found := false
+	for _, w := range res.Warnings {
+		if strings.Contains(w, lkgPath) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("không có warning nào nêu %s; warnings = %q", lkgPath, res.Warnings)
+	}
+	if _, statErr := os.Stat(lkgPath); !os.IsNotExist(statErr) {
+		t.Fatalf("dựng test sai: %s vẫn được ghi nên không kiểm được nhánh ghi hỏng (%v)", lkgPath, statErr)
 	}
 }

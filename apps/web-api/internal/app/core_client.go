@@ -929,6 +929,12 @@ const (
 	// chúng buộc phải là hằng biên dịch. Khai báo gốc nay nằm ở gói
 	// `capabilities`; "bo THỰC SỰ có gì" là câu hỏi khác, do `BOARD_CAP_MAP`
 	// trả lời.
+	//
+	// ISS-634: `kxNAV/kxNBV/kxNMSV/kxNEXT` bên dưới là SỐ TRẦN, không đi qua
+	// `capabilities` như bốn hằng đầu. `TestShmPointTableCapacitiesMatchHeader`
+	// (`shm_contract_sync_test.go`) đọc `contracts/shm/mkddc_shm.h` và so cả
+	// TÁM hằng với `KX_N_*`; trước cổng đó một hằng lệch làm mọi offset đứng
+	// sau nó trong chuỗi `offAI→…→offExt` lệch theo mà `go test` vẫn xanh.
 	kxNUI  = capabilities.ABIUniversalInputs
 	kxNDI  = capabilities.ABIDigitalInputs
 	kxNAO  = capabilities.ABIAnalogOutputs

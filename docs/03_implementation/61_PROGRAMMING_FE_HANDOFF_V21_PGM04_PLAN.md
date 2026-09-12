@@ -137,7 +137,7 @@
 | Browser desktop 1680×941 | List/detail/form hiện đúng As-Built; inspector cuộn mất khỏi viewport; chưa có grid/tabs | Bằng chứng UX host. |
 | Browser mobile 390×844 | Có chồng/cắt Context Strip và vẫn lộ mutation | Bằng chứng responsive host. |
 | Console/Network | 0 Console error/warning; không có failed request ngoài fault chủ động | Không chứng minh acceptance Target mới. |
-| Chrome DevTools MCP | Không khởi động vì môi trường thiếu X server; dùng Playwright headless thay thế | Không claim DevTools PASS. |
+| Chrome DevTools MCP | Tại phiên lập plan: không khởi động vì môi trường thiếu X server; dùng Playwright headless thay thế. **Đã gỡ chặn 2026-09-12** — launcher `scripts/chrome-devtools-mcp.sh` tự dựng Xvfb, kiểm lại bằng `scripts/verify-project.sh --component browser` | Không claim DevTools PASS cho các phép đo ĐÃ ghi ở phiên này; lần đo mới phải chạy lại lane. |
 
 ---
 

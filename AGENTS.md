@@ -127,6 +127,16 @@ chỉ ghi vào tài liệu rồi bỏ đó.
   phép; không đưa token/cookie/header bí mật vào báo cáo.
 - Nếu MCP chưa có trong phiên, kiểm tra `codex mcp get chrome-devtools`, báo rõ
   cần restart Codex và không được claim đã kiểm chứng bằng trình duyệt.
+- **X server (đã xử lý 2026-09-12).** `chrome-devtools-mcp` chạy Chrome
+  **headful**; phiên agent trên host không thừa hưởng `DISPLAY` dùng được, nên
+  trước đây mọi tool devtools trả `Missing X server to start the headful browser`
+  và các bảng kiểm chứng ghi `Chrome DevTools MCP = NOT_RUN`. Cả hai cấu hình MCP
+  (`.mcp.json` cho Claude Code, `.codex/config.toml` cho Codex) nay gọi
+  `scripts/chrome-devtools-mcp.sh`; launcher tự dựng Xvfb riêng qua
+  `scripts/ensure-xvfb.sh` (mặc định `:99`, không đụng phiên desktop, không mượn
+  `~/.Xauthority`). **Không** còn được ghi `NOT_RUN` kèm lý do thiếu X server mà
+  chưa chạy `scripts/verify-project.sh --component browser`; cổng đó dựng một
+  phiên MCP thật và đỏ khi lane không chạy được.
 
 ## Quy trình khi user nói "commit" hoặc "merge"
 

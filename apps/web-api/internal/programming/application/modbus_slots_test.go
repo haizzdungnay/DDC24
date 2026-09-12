@@ -549,3 +549,116 @@ func TestPackageManifestAcceptsModbusTargetFields(t *testing.T) {
 		t.Fatalf("manifest mất trường registerType: %s", raw)
 	}
 }
+
+/* `ISS-PIO-38` (#492) — RESTORE cũng activate một artifact, nên phải chịu cùng
+ * phép kiểm slot Modbus như COMMISSION, với một đường thoát TƯỜNG MINH có ghi
+ * audit (phương án 3 của issue). Các test dưới đây phủ đúng ma trận quyết định
+ * mà `begin()` gọi: `modbusSlotMismatches` phát hiện lệch, `resolveSlotGate`
+ * quyết cho qua hay chặn, `validateRestoreAcknowledgements` giữ audit trung thực.
+ *
+ * Cùng khuôn với gate của COMMISSION ở `TestCommissionBlocksWhenSlotKeepsNumber
+ * ButChangesTarget`: kiểm gate ngay tại luật, không dựng cả pipeline. */
+
+func restoreGateFixture(t *testing.T, current ModbusSlot) (*OperationService, programmingstore.Check) {
+	t.Helper()
+	const device, point = "bus-1-slave-2", "PUMP_CMD"
+	service := &OperationService{modbusSlots: stubSlotProvider{
+		snapshot: ModbusSlotSnapshot{Slots: []ModbusSlot{current}}}}
+	check := checkWithManifestBindings(map[string]any{
+		"category": "MB_RTU", "deviceId": device, "pointId": point, "extIndex": 3,
+		"registerType": "holding_register", "address": 40001,
+		"modbusDataType": "uint16", "readWrite": "read_write",
+	})
+	return service, check
+}
+
+func matchingSlot() ModbusSlot {
+	return ModbusSlot{DeviceID: "bus-1-slave-2", PointID: "PUMP_CMD", ExtIndex: 3,
+		RegisterType: "holding_register", Address: 40001, DataType: "uint16", ReadWrite: "read_write"}
+}
+
+func mismatchingSlot() ModbusSlot {
+	slot := matchingSlot()
+	slot.Address = 40007 // slot giữ số nhưng trỏ sang thanh ghi khác
+	return slot
+}
+
+// modbusSlotMismatches phải PHÁT HIỆN được lệch trên đúng đường adapter, và tách
+// bạch "kiểm được và lệch" (danh sách) khỏi "không kiểm được" (lỗi cứng).
+func TestModbusSlotMismatchesDistinguishesMismatchFromHardError(t *testing.T) {
+	t.Run("khớp thì không có lệch", func(t *testing.T) {
+		service, check := restoreGateFixture(t, matchingSlot())
+		mismatches, err := service.modbusSlotMismatches(context.Background(), check)
+		if err != nil || len(mismatches) != 0 {
+			t.Fatalf("khớp mà báo lệch/lỗi: mismatches=%v err=%v", mismatches, err)
+		}
+	})
+	t.Run("lệch thì trả lý do, không trả lỗi", func(t *testing.T) {
+		service, check := restoreGateFixture(t, mismatchingSlot())
+		mismatches, err := service.modbusSlotMismatches(context.Background(), check)
+		if err != nil {
+			t.Fatalf("lệch slot là ca kiểm ĐƯỢC, không phải lỗi cứng: %v", err)
+		}
+		if len(mismatches) != 1 {
+			t.Fatalf("phải có đúng một lý do lệch, nhận %v", mismatches)
+		}
+	})
+	t.Run("không có resolver là lỗi cứng, không phải lệch", func(t *testing.T) {
+		_, check := restoreGateFixture(t, matchingSlot())
+		service := &OperationService{modbusSlots: nil}
+		mismatches, err := service.modbusSlotMismatches(context.Background(), check)
+		if err == nil {
+			t.Fatal("thiếu resolver thì KHÔNG chứng minh được slot khớp — phải là lỗi cứng")
+		}
+		if mismatches != nil {
+			t.Fatalf("lỗi cứng không được kèm danh sách lệch: %v", mismatches)
+		}
+	})
+}
+
+// resolveSlotGate — ma trận quyết định COMMISSION vs RESTORE, có/không xác nhận.
+func TestResolveSlotGateMatrix(t *testing.T) {
+	mismatch := []string{"điểm bus-1-slave-2#PUMP_CMD giữ nguyên slot 3 nhưng đã trỏ sang thứ khác"}
+	override := []string{ackModbusSlotMismatchOverride}
+
+	t.Run("khớp: cả hai đi tiếp, không override", func(t *testing.T) {
+		for _, kind := range []string{"COMMISSION", "RESTORE"} {
+			overridden, err := resolveSlotGate(kind, nil, nil)
+			if err != nil || overridden {
+				t.Fatalf("%s khớp mà bị chặn/override: overridden=%v err=%v", kind, overridden, err)
+			}
+		}
+	})
+	t.Run("COMMISSION lệch: luôn chặn, xác nhận cũng không cứu", func(t *testing.T) {
+		for _, acks := range [][]string{nil, override} {
+			if _, err := resolveSlotGate("COMMISSION", mismatch, acks); err == nil {
+				t.Fatalf("COMMISSION lệch phải chặn bất kể xác nhận (acks=%v)", acks)
+			}
+		}
+	})
+	t.Run("RESTORE lệch thiếu xác nhận: chặn", func(t *testing.T) {
+		if _, err := resolveSlotGate("RESTORE", mismatch, nil); err == nil {
+			t.Fatal("RESTORE lệch mà không xác nhận phải chặn y hệt COMMISSION")
+		}
+	})
+	t.Run("RESTORE lệch có xác nhận: đi tiếp và đánh dấu override", func(t *testing.T) {
+		overridden, err := resolveSlotGate("RESTORE", mismatch, override)
+		if err != nil {
+			t.Fatalf("RESTORE có xác nhận tường minh phải đi tiếp: %v", err)
+		}
+		if !overridden {
+			t.Fatal("đi qua đường thoát mà không đánh dấu override thì audit không ghi lại được")
+		}
+	})
+	t.Run("RESTORE token lạ: ErrAckUnexpected", func(t *testing.T) {
+		if _, err := resolveSlotGate("RESTORE", mismatch, []string{"retain"}); err == nil {
+			t.Fatal("token không phải override phải bị từ chối")
+		}
+	})
+	t.Run("RESTORE xác nhận khi KHÔNG lệch: ErrAckUnexpected", func(t *testing.T) {
+		// Xác nhận một cảnh báo chưa từng được đưa ra làm audit nói dối.
+		if _, err := resolveSlotGate("RESTORE", nil, override); err == nil {
+			t.Fatal("xác nhận lệch slot khi không có lệch phải bị từ chối")
+		}
+	})
+}
