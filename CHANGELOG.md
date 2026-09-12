@@ -8,6 +8,55 @@
 
 ## [Unreleased]
 
+### Fixed — FBD mất block khi thao tác nhanh: tiếng vọng TRỄ của buffer trang ghi đè state đang gõ (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.test.tsx`,
+  `CHANGELOG.md`.
+
+- Triệu chứng: `TC-FBD-NAV-001` (`e2e/programming.spec.ts`) chập chờn — nhấn
+  `Insert` 25 lần nhưng badge chỉ đếm 14/16/24 block. Đo trên chính `origin/main`
+  (`439ad27`) bằng `--repeat-each=40 --workers=4`: **5/40 lần đỏ (12,5%)**. Đây
+  KHÔNG phải hồi quy của `#683`; kết luận trước đó quy lỗi cho `#683` là sai và
+  được sửa lại tại đây. Quan trọng hơn: nó không phải lỗi của test mà là một
+  đường **MẤT DỮ LIỆU thật của người dùng** — mọi thao tác dồn dập (Insert liên
+  tiếp, kéo node) đều có thể mất âm thầm, không báo lỗi, không dấu vết.
+
+- Nguyên nhân gốc: vòng công bố editor ⇄ buffer của trang không tức thời.
+  `StructuredFbdEditor` phát `onChange(document)`; `EditorPane` chỉ giữ chuỗi ấy
+  trong `buffers[programId]` rồi trả lại qua prop `document`. Vòng đó đi qua
+  passive effect của React, tức LUÔN trễ ít nhất một commit. Khi thao tác tới
+  nhanh hơn một vòng effect (dưới tải song song, render canvas nặng), bản quay về
+  là bản CŨ HƠN state hiện tại — mà effect `[document]` lại gọi thẳng
+  `REPLACE_DOCUMENT` vô điều kiện, nên bản cũ ghi đè và các block vừa thêm biến
+  mất. Càng nhiều phím dồn trong một cửa sổ effect thì càng mất nhiều, nên số
+  block đỏ mỗi lần một khác. Hai giả thuyết trước đó đều đã bị bác bỏ bằng đo
+  đạc: (a) focus rơi về `body` — dò `document.activeElement` sau mỗi phím, luôn
+  là `SECTION`; (b) render chậm — hạn assertion 15 s vẫn đỏ, và ảnh chụp lúc đỏ
+  luôn dừng ở số < 25 nên chờ lâu hơn không cứu được.
+
+- Cách sửa: nhận diện tiếng vọng của CHÍNH MÌNH rồi bỏ qua. Editor giữ hàng đợi
+  `pendingEchoes` các canonical đã phát ra nhưng chưa thấy quay về; prop
+  `document` nào khớp một phần tử trong hàng đợi là tiếng vọng (cắt luôn các bản
+  cũ hơn, vì trang có thể gộp `setState` khiến vài bản trung gian không bao giờ
+  quay về) và KHÔNG được `REPLACE_DOCUMENT`. Tài liệu không nằm trong hàng đợi là
+  thay đổi thật từ bên ngoài (Làm mới, đổi POU, draft đồng bộ) và vẫn được áp
+  dụng ngay — đó là chiều thứ hai phải giữ, nếu chỉ khoá cứng prop thì Làm mới sẽ
+  chết lặng. Hai `it` mới trong `StructuredFbdEditor.test.tsx` khoá cả hai chiều
+  một cách tất định (không phụ thuộc timing). Sửa kèm: tiếng vọng cũng thôi huỷ
+  oan `layoutPreview` của auto-layout.
+
+- Số đo (đo lại, không dẫn số cũ):
+  - `TC-FBD-NAV-001` `--repeat-each=40 --workers=4`: `main` **5 failed / 35
+    passed**; sau sửa **0 failed / 40 passed**.
+  - `npx playwright test e2e/programming.spec.ts`: **109 passed / 0 failed /
+    29 skipped** — bằng đúng `main` (109/0/29), số skip không tăng.
+  - `npx vitest --run --environment jsdom src`: **247 files / 3144 passed /
+    0 failed** (thêm 2 test hồi quy).
+  - `npm run lint` PASS, `npm run build` PASS (chunk `programming` 153,48 KiB,
+    ngân sách 165 KiB).
+
+
 ### Fixed — `main` đỏ: ghim hợp đồng OpenAPI còn `1.40.0` sau khi contract lên `1.41.0` (2026-09-12)
 
 - Phạm vi: `apps/web-ui/src/features/programming/api/generated/client.test.ts`,

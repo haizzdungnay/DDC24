@@ -78,6 +78,11 @@ export interface StructuredFbdEditorProps {
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
 
+/* Chặn trên cho hàng đợi tiếng vọng. Bình thường hàng đợi dài 0-2 vì mỗi bản
+ * phát ra đều quay về trong một vòng render; giới hạn chỉ để một trang không
+ * trả lại gì (không phải luồng nào hiện có) không làm ref phình mãi. */
+const PENDING_ECHO_LIMIT = 128
+
 function newUuid(): string {
   return createUuid()
 }
@@ -158,6 +163,17 @@ export function StructuredFbdEditor({
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
+  /* Các canonical editor đã phát ra ngoài nhưng CHƯA thấy quay về qua prop
+   * `document`. Trang chỉ là buffer: nó nhận `onChange` rồi trả lại chính
+   * chuỗi ấy — nhưng trả lại TRỄ. Khi phím tới nhanh hơn một vòng effect của
+   * React (Insert liên tiếp, kéo node), cái quay về là bản CŨ HƠN state hiện
+   * tại; `REPLACE_DOCUMENT` nhận vô điều kiện nên nuốt luôn các thay đổi vừa
+   * làm. Đây là gốc của `TC-FBD-NAV-001` chập chờn (25 lần Insert chỉ còn
+   * 16-22 block) và cũng là một đường MẤT DỮ LIỆU thật của người dùng, không
+   * riêng của test. Nhận diện tiếng vọng của chính mình rồi bỏ qua; thay đổi
+   * thật từ bên ngoài (Làm mới, đổi POU, draft đồng bộ) không nằm trong hàng
+   * đợi này nên vẫn được áp dụng ngay. */
+  const pendingEchoes = useRef<string[]>([])
   /* Port nay là phần tử SVG (`<g role="button">`) chứ không còn là
    * `<button>` HTML — cả hai đều `.focus()` được, nên điều hướng port bằng
    * bàn phím giữ nguyên. */
@@ -215,7 +231,16 @@ export function StructuredFbdEditor({
   }, [canEdit])
 
   useEffect(() => {
-    publishedDocument.current = canonicalFbdJson(document)
+    const incoming = canonicalFbdJson(document)
+    const echoIndex = pendingEchoes.current.indexOf(incoming)
+    if (echoIndex >= 0) {
+      /* Tiếng vọng của chính mình. Cắt luôn các bản cũ hơn: trang có thể gộp
+       * nhiều lần `setState` nên vài bản trung gian không bao giờ quay về. */
+      pendingEchoes.current = pendingEchoes.current.slice(echoIndex + 1)
+      return
+    }
+    pendingEchoes.current = []
+    publishedDocument.current = incoming
     setLayoutPreview(null)
     dispatch({ type: 'REPLACE_DOCUMENT', document })
   }, [document])
@@ -229,6 +254,7 @@ export function StructuredFbdEditor({
     const current = canonicalFbdJson(state.document)
     if (publishedDocument.current !== current) {
       publishedDocument.current = current
+      pendingEchoes.current = [...pendingEchoes.current, current].slice(-PENDING_ECHO_LIMIT)
       onChange(state.document)
     }
   }, [onChange, state.document])
