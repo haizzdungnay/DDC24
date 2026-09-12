@@ -401,6 +401,80 @@
   `apps/web-api/internal/programming/transport/http/{models.go,operations.go}`,
   `contracts/openapi/openapi.yaml`, `contracts/programming/{pgm02_workspace_v1.json,g1_contract_join_v1.json}`,
   cùng test đơn vị/transport tương ứng.
+
+### Added — `#644`: cổng `gofmt` trong `verify-project.sh` và chín file Go trong `apps/web-api` về đúng định dạng (2026-09-11)
+
+- Bổ sung 2026-09-12 khi đồng bộ `origin/main` (`7b46218`) trước lượt merge:
+  `gofmt -l .` trong `apps/web-api` trả thêm **một** file mà `main` mang về sau
+  ngày đo — `internal/programming/application/operations.go` (vào main qua
+  `244d35d`, trước khi cổng này tồn tại). Đã `gofmt -w` file đó trong cùng lượt.
+  Nếu bỏ qua, cổng `require_gofmt_clean` sẽ đỏ ngay trên `main` từ lượt merge
+  đầu tiên. Số đo lại sau khi hợp nhất: `gofmt -l .` **rỗng**, `go vet` exit `0`,
+  `go test ./... -count=1` exit `0` với **21/21 package `ok`**.
+
+- Phạm vi: `scripts/verify-project.sh` (thêm `require_gofmt_clean`, gọi ở đầu
+  `run_go`) và chín file Go lệch `gofmt` trong `apps/web-api/**`:
+  `internal/app/dto.go`, `internal/app/virtualpoint.go`, `internal/auth/audit.go`,
+  `internal/auth/rbac_test.go`, `internal/auth/service.go`,
+  `internal/modbusrtu/flexbool.go`,
+  `internal/programming/application/library_compatibility_test.go`,
+  `internal/programming/application/profile_capacity_test.go`,
+  `internal/programming/domain/library.go`. **Không đổi hành vi** (N6): diff mã
+  thuần khoảng trắng, căn cột struct tag/field và định dạng doc comment — không
+  đổi contract, API, schema, mã lỗi công khai hay một biểu thức nào. Không chạm
+  `docs/00_governance/`, `.github/`, `scripts/workflow_guard.py`, `contracts/`.
+
+- Triệu chứng: `go vet ./...` exit `0` và `go test ./... -count=1` toàn `ok` trong
+  khi chín file mã sản phẩm và test đang lệch `gofmt`. Đo lại trên cây có file
+  lệch cố ý tiêm vào: `go vet ./internal/modbusrtu/...` exit `0`,
+  `go test ./internal/modbusrtu/... -count=1` `ok` — tức **không cổng nào hiện có
+  nhìn thấy lớp lệch này**.
+
+- Nguyên nhân gốc: `go vet` và `go test` đọc **nghĩa** của chương trình, còn
+  khoảng trắng và căn cột thì không đổi nghĩa. Không có phép kiểm nào chạy
+  `gofmt -l`, nên số file lệch chỉ có thể tăng theo thời gian — và bản thân
+  `gofmt -l` **vẫn thoát 0** khi tìm thấy file lệch (nó chỉ in tên), nên cắm nó
+  vào script mà không biến output khác rỗng thành lỗi thì được một cổng chỉ trông
+  như cổng. Hệ quả thật không phải thẩm mỹ: ai sửa một file đang lệch bằng editor
+  có `format on save` sẽ kéo một khối reformat không liên quan vào PR của mình,
+  và Reviewer phải tách thay đổi thật khỏi nhiễu định dạng.
+
+- Cách sửa: `require_gofmt_clean` bắt `gofmt -l .` trong module, in danh sách file
+  lệch kèm lệnh sửa (`gofmt -w .`) rồi `return 1` khi output khác rỗng. Đặt ở
+  **đầu** `run_go`, trước đoạn đòi production tool từ build C++, vì cổng này không
+  cần binary nào: nó chạy được cả khi chưa build `cpp` và đỏ sau vài trăm ms thay
+  vì sau một lượt build đầy đủ.
+
+- Sửa kèm, bắt buộc về nghĩa chứ không phải mở rộng phạm vi: trong
+  `library_compatibility_test.go`, bộ định dạng doc comment của `gofmt` chuyển
+  `''` thành dấu nháy cong, biến đoạn trích mã JS `requiredVersion === ''` thành
+  `requiredVersion === ”` — không còn đọc được như mã. Đổi sang `""` (tương đương
+  trong JS, `gofmt` không đụng) **trước** khi chạy `gofmt -w`, nên bản định dạng
+  không mang theo một comment sai. Đã quét lại toàn bộ dòng thêm vào của diff:
+  không còn ký tự nháy cong nào lọt vào.
+
+- Phạm vi rộng hơn ba file mà `#644` nêu, có lý do: body Issue đo bằng
+  `gofmt -l` trên **hai thư mục** (`internal/app/`, `internal/modbusrtu/`) nên ra
+  ba file; đo trên toàn module tại `b8eed74` cho **chín**. Cổng `gofmt -l` chỉ
+  xanh khi module sạch, nên format ba file rồi cắm cổng là cổng đỏ ngay tại commit
+  đầu tiên. `apps/web-api/go.mod` là module Go duy nhất trong repo, nên chín file
+  này là toàn bộ lớp lệch.
+
+- Số đo (2026-09-11, đo tại máy sau khi merge `origin/main`, không dẫn lại số cũ):
+  - `gofmt -l apps/web-api/` **rỗng** (trước PR: chín file).
+  - Chứng minh cổng thật sự đỏ: tiêm một hàm lệch định dạng vào
+    `internal/modbusrtu/flexbool.go` ⇒ `verify-project.sh --component go` in
+    `LỖI: file Go lệch gofmt trong apps/web-api` + `internal/modbusrtu/flexbool.go`
+    và exit `1`, **trước** khi tới phép kiểm production tool; hoàn nguyên ⇒ cổng
+    gofmt im lặng đi qua. `bash -n scripts/verify-project.sh` exit `0`.
+  - `go vet ./...` exit `0`; `go test ./... -count=1` **21/21 package `ok`**,
+    exit `0` (3 package không có test file), `internal/app` 60.634s,
+    `internal/programming/application` 28.922s.
+  - `verify-project.sh --component docs` exit `0` (PASS toàn bộ phép kiểm);
+    `--component workflow` exit `0`, **48/48 PASS** selftest cổng tách vai.
+  - C++ `NOT_RUN` (không chạm `apps/core/**`, `apps/iobus/**`, `contracts/`);
+    FE `NOT_RUN` (không chạm `apps/web-ui/**`); E2E `NOT_RUN` (không chạm trang
+    mạng); CI `NOT_RUN (#414)`.
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,

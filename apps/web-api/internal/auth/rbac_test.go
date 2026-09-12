@@ -16,7 +16,6 @@ Trọng tâm của bộ này là hai bất biến, cả hai đều là chống-l
     phải sau khi nó hết hạn.
 */
 
-
 func TestRoleHasPermissionMatrix(t *testing.T) {
 	// Bảng viết tay, KHÔNG sinh từ chính hàm đang kiểm: một ma trận suy ra từ
 	// cài đặt thì luôn "đúng" và không phát hiện được gì.
