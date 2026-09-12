@@ -38,6 +38,7 @@ export function ContextInspector({
   editableProgramSlot,
   editableFbdSlot,
   executionTabHref,
+  onOpenExecutionTab,
 }: {
   input: InspectorInput
   /**
@@ -51,6 +52,8 @@ export function ContextInspector({
   editableFbdSlot?: React.ReactNode
   /** Đích cấu hình Task toàn Project; chỉ render ở ngữ cảnh POU. */
   executionTabHref?: string
+  /** Lối vào `Cấu hình chạy` của mục Thực thi; `undefined` ⇒ không render. */
+  onOpenExecutionTab?: () => void
 }) {
   const { pick } = useI18n()
   const context = inspectorContextFor(input)
@@ -81,7 +84,7 @@ export function ContextInspector({
         <div className="mt-2 space-y-2">
           {editableProgramSlot}
           {editableFbdSlot}
-          {renderContext(pick, context, executionTabHref)}
+          {renderContext(pick, context, executionTabHref, onOpenExecutionTab)}
         </div>
       )}
     </section>
@@ -103,6 +106,7 @@ function renderContext(
   pick: (vi: string, en: string) => string,
   context: InspectorContext,
   executionTabHref?: string,
+  onOpenExecutionTab?: () => void,
 ) {
   switch (context.kind) {
     case 'PROGRAM':
@@ -134,7 +138,13 @@ function renderContext(
             </div>
           </details>
           <InterfaceSection parameters={context.parameters} pouKind={context.pouKind} returnType={context.returnType} />
-          <ExecutionSection cycleMs={context.cycleMs} taskName={context.taskName} scheduled={context.scheduled} pouKind={context.pouKind} />
+          <ExecutionSection
+            cycleMs={context.cycleMs}
+            taskName={context.taskName}
+            scheduled={context.scheduled}
+            pouKind={context.pouKind}
+            onOpenExecutionTab={onOpenExecutionTab}
+          />
           <AttributesSection iecAttributes={[]} ddcAttributes={context.attributes} />
           <DdcMetadataSection />
           <ReferencesSection usedBy={context.usedBy} uses={context.uses} executionTabHref={executionTabHref} />

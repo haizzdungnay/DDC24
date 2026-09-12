@@ -6,6 +6,16 @@ export interface ExecutionSectionProps {
   taskName: InspectorField<string>
   scheduled: InspectorField<boolean>
   pouKind: InspectorField<'PROGRAM' | 'FUNCTION' | 'FUNCTION_BLOCK'>
+  /**
+   * Mở màn hình cấu hình chạy (`?tab=execution`).
+   *
+   * `undefined` nghĩa là **không render lối vào nào** — đó là câu trả lời cho
+   * "chế độ này không sửa" (LIVE/SIMULATE, dưới 768 px), đúng luật
+   * `AC-PGM02-006`/`T59-812`: một nút bị vô hiệu hoá vẫn là một nút có mặt trên
+   * màn hình, còn bề mặt chỉ đọc phải đếm bằng 0 lối ghi. Chủ quản của quyết
+   * định ấy là `EditorPane` (nơi biết `canEdit`), không phải component này.
+   */
+  onOpenExecutionTab?: () => void
 }
 
 function formatInterval(periodMs: number): string {
@@ -26,7 +36,7 @@ function UnknownField({ label }: { label: string }) {
  * Context thực thi của POU. Resource/Mode/Priority/Watchdog chưa có trong Draft
  * nên luôn hiện unknown; component tuyệt đối không dựng `CPU_Main`/`Cyclic` giả.
  */
-export function ExecutionSection({ cycleMs, taskName, scheduled, pouKind }: ExecutionSectionProps) {
+export function ExecutionSection({ cycleMs, taskName, scheduled, pouKind, onOpenExecutionTab }: ExecutionSectionProps) {
   const { pick } = useI18n()
   const callable = pouKind.known && pouKind.value !== 'PROGRAM'
 
@@ -61,6 +71,24 @@ export function ExecutionSection({ cycleMs, taskName, scheduled, pouKind }: Exec
                 : pick('Chưa xếp lịch chạy', 'Not scheduled to run')}
         </dd>
       </dl>
+      {/* Lối vào cấu hình chạy nằm ĐÚNG ở mục nói về thực thi. Trước lát này nó
+          chỉ còn một liên kết nằm trong mục `Tham chiếu` — mục đóng sẵn — nên
+          trên thực tế người dùng không có lối vào nào thấy được, và
+          `UJ-PROG-01..08` chờ một nút không còn tồn tại cho tới khi hết giờ.
+
+          Là `<button>` chứ không phải liên kết: đích đến là một tab con của
+          CHÍNH trang này (`?tab=execution`), không phải một địa chỉ khác; và
+          `<button>` nhận cả Enter lẫn Space, đúng thứ `AC-1` đòi. */}
+      {onOpenExecutionTab && (
+        <button
+          type="button"
+          data-testid="execution-open-config"
+          onClick={onOpenExecutionTab}
+          className="mt-2 inline-flex min-h-9 items-center rounded-[var(--radius)] border border-[var(--c-border)] px-2 py-1 text-xs text-[var(--c-accent)] hover:border-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+        >
+          {pick('Cấu hình chạy', 'Run configuration')}
+        </button>
+      )}
     </details>
   )
 }
