@@ -133,7 +133,21 @@ function observeBrowserFailures(page: Page): BrowserFailures {
   page.on('pageerror', (error) => failures.pageErrors.push(error.message))
   page.on('requestfailed', (request) => {
     if (!isProgrammingSurface(request.url())) return
-    failures.requestFailures.push(`${request.method()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText ?? 'unknown'}`)
+    const path = new URL(request.url()).pathname
+    const errorText = request.failure()?.errorText ?? 'unknown'
+    /* `net::ERR_ABORTED` trên một tài nguyên NGOÀI API không phải lỗi ứng dụng:
+     * đó là trình duyệt HUỶ một request còn dở vì điều hướng hoặc `reload` chen
+     * vào trước khi nó xong. `AC-PGM02-001` reload giữa chừng để chứng minh POU
+     * sống sót, nên `GET /favicon.svg` kịp xong hay bị huỷ phụ thuộc vào nhịp
+     * máy — và cổng sẽ đỏ hay xanh theo tải của runner chứ không theo chất
+     * lượng mã. Một cổng đỏ ngẫu nhiên còn tệ hơn một cổng đỏ ổn định: nó dạy
+     * người chạy bỏ qua màu đỏ.
+     *
+     * Tha ĐÚNG cặp "huỷ + ngoài API", không hơn: mọi `ERR_ABORTED` trên
+     * `/api/` vẫn đỏ (huỷ một lời gọi API giữa chừng là dấu hiệu thật của
+     * race trong mã), và mọi mã lỗi khác trên tài nguyên tĩnh cũng vẫn đỏ. */
+    if (errorText === 'net::ERR_ABORTED' && !path.startsWith('/api/')) return
+    failures.requestFailures.push(`${request.method()} ${path}: ${errorText}`)
   })
   page.on('response', (response) => {
     if (response.status() < 500) return
@@ -1553,6 +1567,16 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
   })
 
   test('TC-FBD-NAV-001: Mini Map click/kéo/phím chính xác và không mutate trên Chrome', async ({ page }, testInfo) => {
+    /* Ca này DỰNG tài liệu để có gì mà điều hướng: `createPou` rồi 25 lần
+     * `Insert`. Cả hai là mutation, mà dưới 768 px PGM-02 khoá read-only
+     * (`T59-802`/DDD §7.5) — nên ở lane mobile nó đứng chờ nút `Mới` vốn cố ý
+     * không tồn tại, tới hết 60 giây. Đó là một cổng đỏ vì ĐÒI SAI thứ thiết
+     * kế vừa cấm, không phải vì Mini Map hỏng. Cùng chốt chặn mà mọi ca soạn
+     * thảo khác trong tệp này đã mang. */
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
+      'Mini Map cần dựng tài liệu; màn hẹp read-only không có đường ghi'
+    )
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     const failures = observeBrowserFailures(page)

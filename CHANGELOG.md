@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Fixed — `#672`: cổng e2e Programming thôi đỏ vì lý do ngoài chất lượng mã (2026-09-12)
+
+- Phạm vi: `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`.
+
+- Hai khuyết điểm của chính bộ e2e — không phải lỗi sản phẩm:
+
+  1. **Cổng đỏ theo nhịp máy.** `expectNoBrowserFailures` coi MỌI `requestfailed`
+     trên bề mặt Programming là lỗi, kể cả `net::ERR_ABORTED` — mã này nghĩa là
+     trình duyệt HUỶ một request còn dở, không phải request hỏng. `AC-PGM02-001`
+     gọi `reload` giữa chừng để chứng minh POU sống sót, nên lượt tải
+     `/favicon.svg` kịp xong hay bị huỷ phụ thuộc tải của máy chạy. Đo được: ba
+     lượt đầu ca này xanh, lượt thứ tư đỏ với `GET /favicon.svg:
+     net::ERR_ABORTED`. KHÔNG phải hồi quy của `#660` — `#660` chỉ chạm
+     `ProblemsDrawer`.
+  2. **Ca soạn thảo chạy ở khổ chỉ-đọc.** `TC-FBD-NAV-001` dựng tài liệu bằng
+     `createPou` rồi 25 lần `Insert`. Cả hai là mutation, mà dưới 768 px PGM-02
+     khoá read-only theo `T59-802`/DDD §7.5 — nút `Mới` CỐ Ý không tồn tại ở khổ
+     đó. Nên ở lane `mobile-chrome` nó đứng chờ một phần tử thiết kế vừa cấm, tới
+     hết hạn 60 giây. Mọi ca soạn thảo khác trong tệp đã mang chốt chặn
+     `PROGRAMMING_AUTHORING_MIN_WIDTH_PX`; riêng ca này thiếu.
+
+- Cách sửa: (1) bỏ qua ĐÚNG cặp `net::ERR_ABORTED` + đường ngoài `/api/` — mọi
+  `ERR_ABORTED` trên `/api/` vẫn đỏ vì huỷ một lời gọi API giữa chừng là dấu hiệu
+  race thật, và mọi mã lỗi khác trên tài nguyên tĩnh cũng vẫn đỏ; (2) thêm đúng
+  chốt chặn khổ hẹp mà các ca chị em đã dùng, nên lane mobile thành `skipped` kèm
+  lý do dẫn hợp đồng, còn lane desktop giữ nguyên toàn bộ khẳng định Mini Map.
+
+- Một cổng đỏ ngẫu nhiên tệ hơn một cổng đỏ ổn định: nó dạy người chạy bỏ qua màu
+  đỏ. Đó là lý do hai mục này được vá thay vì để lại.
+
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
