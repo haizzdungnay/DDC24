@@ -57,10 +57,13 @@
 
   | Cổng | Lệnh | Kết quả |
   |---|---|---|
-  | FE unit | `npx vitest --run --environment jsdom src` | PASS — 248 file / 3168 test, 0 failed, 123,51 s, exit 0 |
+  | FE unit | `npx vitest --run --environment jsdom src` | PASS — 248 file / 3171 test, 0 failed, 123,04 s, exit 0 |
   | FE lint | `npm run lint` | PASS — eslint `--max-warnings=0` + `check_ui_strings.py`, exit 0 |
   | FE build | `npm run build` | PASS — exit 0; chunk `programming` 154,90 KiB gzip / ngân sách R3 165 KiB (dư 10,10 KiB) |
   | E2E (MOCK) | `MKDDC_E2E_CHROMIUM_PATH=… npx playwright test e2e/programming.spec.ts` | PASS — 109 passed / 29 skipped, 2,0 min, exit 0 |
+
+  Số đo trên là lần chạy lại **sau khi merge `origin/main`** (`6884e44`, tức đã có `#674`): merge chạm `CHANGELOG.md` (xung đột, giữ nội dung hợp lệ cả hai phía) và `e2e/programming.spec.ts` (tự hoà giải — `#674` sửa `TC-FBD-RESP-001`, việc này sửa `UJ-PROG-04`, hai vùng khác nhau).
+
 
 ### Changed — `#674`: FBD chốt mô hình MỘT canvas — bỏ lối vào nhiều Network, tài liệu nhiều Network mở chỉ đọc với 0 mutation (2026-09-12)
 
