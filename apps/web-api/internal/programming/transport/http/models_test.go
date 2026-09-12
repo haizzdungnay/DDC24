@@ -1,7 +1,10 @@
 package programminghttp
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"mkddc-web/internal/programming/domain"
@@ -162,4 +165,40 @@ func withImpactGroups(base Impact, groups map[ImpactKey]ImpactGroup) Impact {
 		}
 	}
 	return base
+}
+
+// `ISS-PIO-38` (#492) — RestoreRequest phải MANG được acknowledgements qua decoder
+// strict. Đây là chỗ đường thoát lệch slot Modbus dễ thành trang trí nhất: nếu
+// trường bị rớt khỏi struct hay đổi tag, `DisallowUnknownFields` sẽ TỪ CHỐI đúng
+// request mang xác nhận, và RESTORE khi lệch slot thành hard-block không có
+// đường phục hồi — đúng thứ phương án 3 của issue tồn tại để tránh.
+func TestRestoreRequestCarriesModbusSlotOverrideAcknowledgement(t *testing.T) {
+	body := `{"schemaVersion":"1.0","revisionId":"11111111-1111-4111-8111-111111111111",` +
+		`"expectedActiveRevisionId":null,"reason":"khôi phục LKG",` +
+		`"acknowledgements":["modbus-slot-mismatch-override"]}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/programming/operations/restore",
+		strings.NewReader(body))
+	var decoded RestoreRequest
+	if err := decodeStrictRequest(request, &decoded); err != nil {
+		t.Fatalf("decoder strict từ chối acknowledgements của RESTORE — đường thoát #492 không gọi được: %v", err)
+	}
+	if len(decoded.Acknowledgements) != 1 || decoded.Acknowledgements[0] != "modbus-slot-mismatch-override" {
+		t.Fatalf("acknowledgements không tới được service: %+v", decoded.Acknowledgements)
+	}
+}
+
+// Không có acknowledgements vẫn phải decode được: RESTORE không lệch slot thì
+// không cần xác nhận, và trường là optional.
+func TestRestoreRequestWithoutAcknowledgementsStillDecodes(t *testing.T) {
+	body := `{"schemaVersion":"1.0","revisionId":"11111111-1111-4111-8111-111111111111",` +
+		`"expectedActiveRevisionId":null,"reason":"khôi phục LKG"}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/programming/operations/restore",
+		strings.NewReader(body))
+	var decoded RestoreRequest
+	if err := decodeStrictRequest(request, &decoded); err != nil {
+		t.Fatalf("RESTORE không kèm xác nhận phải decode được: %v", err)
+	}
+	if len(decoded.Acknowledgements) != 0 {
+		t.Fatalf("không gửi acknowledgements mà lại có: %+v", decoded.Acknowledgements)
+	}
 }
