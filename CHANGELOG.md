@@ -8,6 +8,61 @@
 
 ## [Unreleased]
 
+### Added — `#675`: mục Thực thi của Inspector có nút `Cấu hình chạy`, mở `?tab=execution` mà không rơi `project`/`pou` (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/inspector/sections/ExecutionSection.tsx`,
+  `apps/web-ui/src/features/programming/design/inspector/ContextInspector.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/src/features/programming/design/inspector/ContextInspector.test.tsx`,
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.test.tsx`,
+  `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`.
+
+- Triệu chứng: `UJ-PROG-01..08` chờ `getByRole('button', { name: 'Cấu hình Task' })`
+  cho tới `Test timeout of 60000ms exceeded`, trong khi chuỗi `Cấu hình Task`
+  không còn tồn tại ở `apps/web-ui/src` — chỉ còn trong chính spec e2e. Đây là
+  tầng lỗi thứ ba của journey, sau `#670` (chỉ báo dirty trùng) và `#671`
+  (axe `dl`).
+
+- Nguyên nhân gốc: lối vào cấu hình chạy bị gỡ cùng thanh tab của workspace ở
+  bản cut-over PGM-02 v2, và thứ thay thế nó — một `<Link>` tên
+  `Mở cấu hình Task toàn cục` — được đặt trong mục `Tham chiếu`, mục dựng bằng
+  `<details>` KHÔNG `open`. Một lối vào chỉ hiện ra sau khi người dùng bấm mở
+  đúng cái mục họ không có lý do gì để mở là một lối vào không tồn tại trên
+  thực tế. Journey được vá tạm bằng cách bấm mục `Execution` của feature rail;
+  rail là lối đi TOÀN CỤC nên nó che luôn việc trong trang không còn đường nào.
+
+- Cách sửa:
+  1. `ExecutionSection` nhận `onOpenExecutionTab`. Có callback thì dựng đúng MỘT
+     `<button type="button">Cấu hình chạy</button>` ngay trong mục Thực thi.
+     Là `<button>` chứ không phải liên kết vì đích đến là tab con của chính
+     trang (`?tab=execution`), và `<button>` nhận cả Enter lẫn Space.
+  2. `DesignWorkspacePage` — nơi SỞ HỮU URL — cấp hành vi điều hướng: ghi đè
+     `tab=execution` lên query của pathname đang đứng, nên `project`, `pou` và
+     `mode` còn nguyên. Địa chỉ cũ mà `EditorPane` tự dựng
+     (`/eng/programming/programs?project=…&mode=EDIT&tab=execution`) **rơi**
+     `pou`; nay không còn nơi thứ hai biết luật canonical. Ý định chèn khối của
+     PGM-04 bị gỡ trước khi ghi vì nó là lệnh dùng một lần.
+  3. Cả hai lối vào (nút mới và liên kết cũ trong `Tham chiếu`) tắt cùng nhau
+     khi `canEdit` sai — dưới 768 px, LIVE, SIMULATE, hoặc vai không đủ quyền.
+     **Vắng mặt**, không phải vô hiệu hoá: `AC-PGM02-006`/`T59-812` đòi bề mặt
+     chỉ đọc đếm bằng 0 lối ghi. Gỡ một lối mà để lối kia là vẫn lộ nguyên đường.
+  4. `UJ-PROG-04` đi qua chính nút mới, bằng bàn phím (`focus` + `Enter`), và
+     khẳng định lại `pathname`/`project`/`pou` sau cú bấm.
+
+- `ExecutionTab` **không bị sửa**: vẫn nhận `document`, `saving`, `onSave`,
+  `onPendingOperationsChange`, `discardVersion`, `forceReadOnly` như cũ.
+
+- Verification (HOST + MOCK browser, đo trên chính commit này):
+
+  | Cổng | Lệnh | Kết quả |
+  |---|---|---|
+  | FE unit | `npx vitest --run --environment jsdom src` | PASS — 248 file / 3167 test, 0 failed, 124,97 s, exit 0 |
+  | FE lint | `npm run lint` | PASS — eslint `--max-warnings=0` + `check_ui_strings.py`, exit 0 |
+  | FE build | `npm run build` | PASS — exit 0; chunk `programming` 154,90 KiB gzip / ngân sách R3 165 KiB (dư 10,10 KiB) |
+  | E2E (MOCK) | `MKDDC_E2E_CHROMIUM_PATH=… npx playwright test e2e/programming.spec.ts` | PASS — 109 passed / 29 skipped, 2,0 min, exit 0 |
+
+
 ### Changed — `#659`: `--component all` nói thẳng là nó KHÔNG gồm `release`, và tài liệu vận hành dẫn đúng cổng thay cho hai lệnh gõ tay (2026-09-12)
 
 - Phạm vi: `scripts/verify-project.sh` (chỉ usage text + chú thích nhánh `all`,
