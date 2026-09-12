@@ -96,8 +96,8 @@ for (const vp of VIEWPORTS) {
       `chỗ gõ ${m.editor}px vs khay ${m.workbench}px + thanh công cụ ${m.toolbar}px`,
     ).toBeGreaterThan(m.workbench + m.toolbar)
 
-    // Khay tra cứu KHÔNG mở sẵn: nó lấy 120 px của chỗ gõ để nói "không có vấn đề nào".
-    expect(m.workbenchOpen, 'khay bàn làm việc phải thu gọn sẵn').toBe(false)
+    const expectedOpen = page.viewportSize() ? page.viewportSize()!.width >= 1440 : false
+    expect(m.workbenchOpen, 'khay bàn làm việc mặc định theo viewport').toBe(expectedOpen)
   })
 }
 

@@ -167,6 +167,7 @@ export function FbdEditorPane({
         gridVisible={preferences.gridVisible}
         snapEnabled={preferences.snapEnabled}
         snapSize={preferences.snapSize}
+        showInlineMinimap={false}
         onChange={(next) => onChange(canonicalFbdJson(next))}
         onSelectionChange={(selection) => {
           if (selection?.networkId) setActiveNetworkId(selection.networkId)

@@ -43,6 +43,7 @@ import {
 import { userPouPaletteEntry, type UserPouInterface } from './userPou'
 import { type FbdNodeEditorChange, type FbdNodeEditorTarget } from './nodeEditor'
 import type { FbdNetworkViewPreference, FbdSnapSizePreference, FbdWireStylePreference } from './fbdPreferences'
+import type { FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
 
 export interface StructuredFbdEditorProps {
   /**
@@ -74,6 +75,8 @@ export interface StructuredFbdEditorProps {
   gridVisible?: boolean
   snapEnabled?: boolean
   snapSize?: FbdSnapSizePreference
+  showInlineMinimap?: boolean
+  onBridgeChange?: (bridge: FbdCanvasBridge | null) => void
 }
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
@@ -154,6 +157,8 @@ export function StructuredFbdEditor({
   gridVisible = true,
   snapEnabled = true,
   snapSize = 8,
+  showInlineMinimap = true,
+  onBridgeChange,
 }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
@@ -853,6 +858,8 @@ export function StructuredFbdEditor({
               layoutPreview={layoutPreview?.networkId === network.id ? layoutPreview.positions : null}
               onCancelPlacement={() => setPendingPlacement(null)}
               onCommitPlacement={() => setPendingPlacement(null)}
+              showInlineMinimap={showInlineMinimap}
+              onBridgeChange={onBridgeChange}
             />
           </article>
         ))}

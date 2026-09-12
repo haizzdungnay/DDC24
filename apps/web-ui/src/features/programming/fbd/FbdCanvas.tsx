@@ -31,6 +31,7 @@ import {
 import { fbdPaletteEntry, FBD_PALETTE, type FbdPaletteEntry } from './palette'
 import { createUuid } from '../../../shared/crypto'
 import { LIBRARY_DRAG_TYPE } from '../design/library/QuickLibraryPanel'
+import { useSetFbdCanvasBridge, type FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
 import { useFbdNodeDrag } from './useFbdNodeDrag'
 
 export { LIBRARY_DRAG_TYPE }
@@ -129,6 +130,8 @@ export interface FbdCanvasProps {
   onCommitPlacement?: () => void
   /** Ghost positions của Auto Layout; không tham gia geometry canonical. */
   layoutPreview?: Readonly<Record<string, FbdPoint>> | null
+  showInlineMinimap?: boolean
+  onBridgeChange?: (bridge: FbdCanvasBridge | null) => void
 }
 
 export function FbdCanvas({
@@ -151,6 +154,8 @@ export function FbdCanvas({
   onCancelPlacement,
   onCommitPlacement,
   layoutPreview,
+  showInlineMinimap = true,
+  onBridgeChange,
 }: FbdCanvasProps) {
   const [viewport, setViewport] = useState<FbdViewport>(DEFAULT_VIEWPORT)
   const [pan, setPan] = useState<PanState | null>(null)
@@ -255,6 +260,71 @@ export function FbdCanvas({
     }
     return { left: 0, top: 0, width, height }
   }
+
+  const setBridge = useSetFbdCanvasBridge()
+
+  useEffect(() => {
+    return () => {
+      setBridge?.(null)
+      onBridgeChange?.(null)
+    }
+  }, [setBridge, onBridgeChange])
+
+  useEffect(() => {
+    const container = scrollRef.current
+    const bridge: FbdCanvasBridge = {
+      nodes: geometry.nodes,
+      width,
+      height,
+      viewport,
+      scale: viewport.scale,
+      scrollPosition: container
+        ? {
+            left: container.scrollLeft,
+            top: container.scrollTop,
+            clientWidth: container.clientWidth,
+            clientHeight: container.clientHeight,
+          }
+        : undefined,
+      selection,
+      onNavigate: (clientX, clientY, element) => navigateFromMinimap(clientX, clientY, element),
+      onStepNavigate: (dx, dy) => {
+        if (!container) return
+        if (dx !== 0) container.scrollLeft += dx
+        if (dy !== 0) container.scrollTop += dy
+      },
+      onZoomIn: () => setViewport((v) => nextViewport(v, { scale: v.scale + ZOOM_STEP })),
+      onZoomOut: () => setViewport((v) => nextViewport(v, { scale: v.scale - ZOOM_STEP })),
+      onResetZoom: () => setViewport(DEFAULT_VIEWPORT),
+    }
+
+    setBridge?.(bridge)
+    onBridgeChange?.(bridge)
+  }, [
+    setBridge,
+    geometry.nodes,
+    height,
+    onBridgeChange,
+    selection,
+    viewport,
+    width,
+  ])
+
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container || (!setBridge && !onBridgeChange)) return
+    const handleScroll = () => {
+      const scrollPos = {
+        left: container.scrollLeft,
+        top: container.scrollTop,
+        clientWidth: container.clientWidth,
+        clientHeight: container.clientHeight,
+      }
+      setBridge?.((prev) => (prev ? { ...prev, scrollPosition: scrollPos } : null))
+    }
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [setBridge, onBridgeChange])
 
   // Cancel any gesture on Escape key
   useEffect(() => {
@@ -817,7 +887,7 @@ export function FbdCanvas({
         </svg>
       </div>
 
-      {geometry.nodes.length > FBD_MINIMAP_NODE_THRESHOLD && (
+      {showInlineMinimap && geometry.nodes.length > FBD_MINIMAP_NODE_THRESHOLD && (
         <svg
           role="group"
           aria-label={pick('Bản đồ thu nhỏ', 'Minimap')}

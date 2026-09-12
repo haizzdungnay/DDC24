@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Added — Task 9: Panel dưới 3 cột và tích hợp Mini Map cho khay làm việc Programming (2026-09-12)
+
+- T9-01: Chuyển grid khay làm việc sang 3 cột (Problems | Runtime Watch | Mini Map) ở desktop >= 1440px, lưu trạng thái mở/đóng và chiều cao vào localStorage `mkddc:programming-workbench:v1`.
+- T9-02: Di dời Mini Map từ canvas vào Cột 3 của panel dưới, giải phóng không gian vẽ, bổ sung nút zoom và fit to view.
+- T9-03: Đồng bộ danh sách tab panel dưới còn 4 tab (Vấn đề, Tìm kiếm, Tham chiếu, Watch), loại bỏ tab Trace không khả dụng.
+
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
@@ -313,7 +319,6 @@
   navigated`; dòng "Cổng tự kiểm" ở trên là bằng chứng nó đỏ đúng chỗ. Bản ghi
   `NOT_RUN` cũ **giữ nguyên** — chúng đúng với thời điểm đo; muốn nâng thì phải
   đo lại qua lane này.
-
 
 ### Fixed — `#658`: e2e Programming lấy breakpoint authoring từ nguồn chân lý thay vì bản chép tay (2026-09-12)
 

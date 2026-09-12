@@ -23,6 +23,7 @@ import { pouInterfaceFromDraft, runtimeOverlayByProgramId, userPouInterfacesFrom
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
+import { FbdCanvasBridgeProvider } from './workbench/WorkbenchMinimapPanel'
 import { projectPendingProgramSources } from './workbench/workbenchDraft'
 import { LiveProgramView } from './LiveProgramView'
 import { SimulateWorkspace } from '../simulation/SimulateWorkspace'
@@ -837,6 +838,7 @@ export function DesignWorkspacePage({
             Sàn giữ trong hook (`minPx`), KHÔNG đặt bằng `lg:min-h-*`: một sàn
             Tailwind lớn hơn ngân sách đo được sẽ thắng và tự tạo lại đúng cú
             tràn dọc của `DEV-PROG-021`. */}
+        <FbdCanvasBridgeProvider>
         <div
           ref={workspaceColumnRef}
           className="flex flex-col"
@@ -954,6 +956,7 @@ export function DesignWorkspacePage({
           onJumpToFbdSelection={jumpToFbdSelection}
         />
         </div>
+        </FbdCanvasBridgeProvider>
       </div>
       <div hidden={tab !== 'mapping'}>
         <MappingTab

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
 import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol } from './ProgrammingWorkbench'
+import type { FbdCanvasBridge } from './WorkbenchMinimapPanel'
 
 const SOURCE = 'PROGRAM P\nVAR\n  FanCmd : BOOL;\nEND_VAR\nFanCmd := TRUE;\nFanCmd := FALSE;\nEND_PROGRAM\n'
 
@@ -13,6 +14,7 @@ function renderWorkbench(overrides: {
   problems?: WorkbenchProblem[]
   symbols?: WorkbenchSymbol[]
   source?: string | null
+  fbdBridge?: FbdCanvasBridge | null
 } = {}) {
   const onJumpToOffset = vi.fn()
   render(
@@ -25,21 +27,39 @@ function renderWorkbench(overrides: {
         source={overrides.source === undefined ? SOURCE : overrides.source}
         onJumpToOffset={onJumpToOffset}
         checkOwnerHref="/eng/programming/projects/p1/commission"
+        fbdBridge={overrides.fbdBridge}
       />
     </I18nProvider>,
   )
   return { onJumpToOffset }
 }
 
+const originalInnerWidth = window.innerWidth
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    writable: true,
+    value: width,
+  })
+  window.dispatchEvent(new Event('resize'))
+}
+
 beforeEach(() => {
+  setViewportWidth(1920)
   localStorage.setItem('mkddc-lang', 'vi')
+  localStorage.removeItem('mkddc:programming-workbench:v1')
   const prototype = Element.prototype as unknown as Record<string, unknown>
   if (typeof prototype.setPointerCapture !== 'function') {
     prototype.setPointerCapture = () => {}
     prototype.releasePointerCapture = () => {}
   }
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  localStorage.removeItem('mkddc:programming-workbench:v1')
+  setViewportWidth(originalInnerWidth)
+})
 
 /* Ảnh chuẩn PGM-02B quy định khay đáy MỞ SẴN khi vào trang với chiều cao
  * mặc định 173 px. Quyết định này thay thế `DEV-PROG-024`. */
@@ -61,18 +81,12 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     expect(screen.getByText('EDIT · Draft · AHU_FanControl')).toBeInTheDocument()
   })
 
-  it('Watch và Trace ở chế độ EDIT GIẢI THÍCH vì sao trống, không hiện danh sách rỗng', () => {
+  it('Watch ở chế độ EDIT GIẢI THÍCH vì sao trống, không hiện danh sách rỗng và không còn tab Trace', () => {
     renderWorkbench()
     fireEvent.click(screen.getByRole('tab', { name: 'Watch (Trực tiếp)' }))
     expect(screen.getByRole('status')).toHaveTextContent(/cần nguồn giá trị runtime/)
     expect(screen.getByRole('status')).toHaveTextContent(/Chế độ EDIT chỉ có Draft/)
-
-    /* Trace KHÔNG cùng lý do với Watch: nó sở hữu một phiên có quota và vòng
-     * đời riêng, nên nó thuộc về đúng một nơi (PGM-06) ở MỌI chế độ. Mở phiên
-     * thứ hai từ workbench là đúng thứ AC "không duplicate concurrent trace
-     * session" cấm. */
-    fireEvent.click(screen.getByRole('tab', { name: 'Trace' }))
-    expect(screen.getByRole('status')).toHaveTextContent(/phiên có quota và vòng đời riêng/)
+    expect(screen.queryByRole('tab', { name: 'Trace' })).toBeNull()
   })
 
   it('khay Vấn đề nhảy tới đúng chỗ, và lỗi không neo được thì nói thẳng', () => {
@@ -325,11 +339,9 @@ describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
     expect(screen.queryByText(/Watch cần nguồn giá trị runtime/)).toBeNull()
   })
 
-  it('Trace vẫn trỏ về nơi sở hữu phiên, kể cả ở LIVE', () => {
+  it('Trace không còn xuất hiện trong khay bàn làm việc ở LIVE (T9-03)', () => {
     renderLiveWatch(rows)
-    fireEvent.click(screen.getByRole('tab', { name: 'Trace' }))
-    expect(screen.getByRole('status')).toHaveTextContent(/phiên có quota và vòng đời riêng/)
-    expect(screen.getByRole('link', { name: /Runtime & Bảo trì/ })).toHaveAttribute('href', '/eng/programming/runtime?tab=watch')
+    expect(screen.queryByRole('tab', { name: 'Trace' })).toBeNull()
   })
 })
 
@@ -384,3 +396,164 @@ describe('ProgrammingWorkbench — DEV-PROG-017', () => {
     expect(onJump).toHaveBeenCalledTimes(1)
   })
 })
+
+/*
+ * Task T9-01 — Panel Dưới 3 Cột + Nhớ Trạng Thái cho FBD Editor.
+ */
+describe('ProgrammingWorkbench — T9-01 (TC-WBENCH-*)', () => {
+  it('TC-WBENCH-3COL: ở viewport desktop >= 1440px mở sẵn và render đủ 3 cột', () => {
+    setViewportWidth(1920)
+    renderWorkbench()
+
+    expect(screen.getByRole('tabpanel')).toBeInTheDocument()
+    expect(screen.getByTestId('workbench-problems-column')).toBeInTheDocument()
+    expect(screen.getByTestId('workbench-watch-column')).toBeInTheDocument()
+    expect(screen.getByTestId('workbench-minimap-column')).toBeInTheDocument()
+  })
+
+  it('TC-WBENCH-NARROW: ở viewport < 1440px mặc định đóng workbench', () => {
+    setViewportWidth(1280)
+    renderWorkbench()
+
+    expect(screen.queryByRole('tabpanel')).toBeNull()
+  })
+
+  it('TC-WBENCH-PERSIST: lưu trạng thái mở/đóng và chiều cao vào localStorage và khôi phục khi render lại', () => {
+    setViewportWidth(1920)
+    const STORAGE_KEY = 'mkddc:programming-workbench:v1'
+
+    // 1. Tương tác đóng/mở và đổi chiều cao phải ghi vào localStorage
+    renderWorkbench()
+    expect(screen.getByRole('tabpanel')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thu gọn' }))
+    expect(screen.queryByRole('tabpanel')).toBeNull()
+    const savedAfterCollapse = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(savedAfterCollapse.open).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mở rộng' }))
+    expect(screen.getByRole('tabpanel')).toBeInTheDocument()
+    const savedAfterExpand = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(savedAfterExpand.open).toBe(true)
+
+    const handle = screen.getByRole('separator')
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    const savedAfterResize = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    expect(savedAfterResize.height).toBe(197)
+
+    cleanup()
+
+    // 2. Khôi phục chiều cao và trạng thái mở từ localStorage
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ open: true, height: 245 }))
+    renderWorkbench()
+    const restoredPanel = screen.getByRole('tabpanel')
+    expect(restoredPanel).toBeInTheDocument()
+    expect(restoredPanel.style.height).toBe('245px')
+
+    cleanup()
+
+    // 3. Khôi phục trạng thái đóng từ localStorage ở màn hình lớn
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ open: false, height: 200 }))
+    renderWorkbench()
+    expect(screen.queryByRole('tabpanel')).toBeNull()
+  })
+})
+
+/*
+ * Task T9-02 — Di dời Mini Map từ Canvas vào Cột 3 của ProgrammingWorkbench (TC-WBENCH-MM-*)
+ */
+describe('ProgrammingWorkbench — T9-02 Mini Map Cột 3 (TC-WBENCH-MM-*)', () => {
+  it('TC-WBENCH-MM-ST: khi mở POU ST hoặc không có fbdBridge, Cột 3 render placeholder giải thích', () => {
+    setViewportWidth(1920)
+    renderWorkbench({ fbdBridge: null })
+
+    const minimapCol = screen.getByTestId('workbench-minimap-column')
+    expect(
+      within(minimapCol).getByText('Bản đồ thu nhỏ chỉ khả dụng cho sơ đồ khối FBD'),
+    ).toBeInTheDocument()
+  })
+
+  it('TC-WBENCH-MM-FBD: khi nhận fbdBridge, Cột 3 render WorkbenchMinimapPanel với đầy đủ tiêu đề và nút điều khiển zoom', () => {
+    setViewportWidth(1920)
+    const onZoomIn = vi.fn()
+    const onZoomOut = vi.fn()
+    const onResetZoom = vi.fn()
+
+    const bridge: FbdCanvasBridge = {
+      nodes: [
+        { id: 'node-1', x: 10, y: 10, width: 168, height: 80, ports: [], auto: false },
+      ],
+      width: 1000,
+      height: 600,
+      viewport: { x: 0, y: 0, scale: 1 },
+      scale: 1,
+      scrollPosition: { left: 0, top: 0, clientWidth: 500, clientHeight: 300 },
+      selection: null,
+      onNavigate: vi.fn(),
+      onStepNavigate: vi.fn(),
+      onZoomIn,
+      onZoomOut,
+      onResetZoom,
+    }
+
+    renderWorkbench({ fbdBridge: bridge })
+
+    const minimapCol = screen.getByTestId('workbench-minimap-column')
+    expect(within(minimapCol).getByText('Bản đồ thu nhỏ')).toBeInTheDocument()
+    expect(within(minimapCol).getByRole('button', { name: 'Thu nhỏ' })).toBeInTheDocument()
+    expect(within(minimapCol).getByRole('button', { name: 'Phóng to' })).toBeInTheDocument()
+    expect(within(minimapCol).getByRole('button', { name: 'Vừa khung' })).toBeInTheDocument()
+  })
+})
+
+/*
+ * Task T9-03 — Đồng bộ danh sách tab panel đáy (TC-WBENCH-TABS-*)
+ * Theo ảnh tham chiếu PGM-02B_FBD_editor_reference.png và issue T9-FBD-PANEL-3COL:
+ * Loại bỏ tab 'trace' không khả dụng, giữ lại đúng 4 tab chuẩn:
+ * 'problems' | 'search' | 'references' | 'watch'.
+ */
+describe('ProgrammingWorkbench — T9-03 Đồng bộ tab panel đáy (TC-WBENCH-TABS-*)', () => {
+  it('TC-WBENCH-TABS-4: khay bàn làm việc có đúng 4 tab (problems, search, references, watch), không còn tab trace', () => {
+    // 1. Kiểm tra ở chế độ EDIT (mặc định)
+    renderWorkbench({ mode: 'EDIT' })
+
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs).toHaveLength(4)
+
+    // Tab trace không còn tồn tại
+    expect(screen.queryByRole('tab', { name: /Trace/i })).toBeNull()
+    expect(document.getElementById('workbench-tab-trace')).toBeNull()
+
+    // 4 tab với accessible name tiếng Việt chuẩn và id tương ứng
+    const problemsTab = screen.getByRole('tab', { name: /Vấn đề/ })
+    expect(problemsTab).toBeInTheDocument()
+    expect(problemsTab).toHaveAttribute('id', 'workbench-tab-problems')
+
+    const searchTab = screen.getByRole('tab', { name: /Tìm kiếm/ })
+    expect(searchTab).toBeInTheDocument()
+    expect(searchTab).toHaveAttribute('id', 'workbench-tab-search')
+
+    const referencesTab = screen.getByRole('tab', { name: /Tham chiếu/ })
+    expect(referencesTab).toBeInTheDocument()
+    expect(referencesTab).toHaveAttribute('id', 'workbench-tab-references')
+
+    const watchLiveTab = screen.getByRole('tab', { name: /Watch \(Trực tiếp\)/ })
+    expect(watchLiveTab).toBeInTheDocument()
+    expect(watchLiveTab).toHaveAttribute('id', 'workbench-tab-watch')
+
+    cleanup()
+
+    // 2. Kiểm tra ở chế độ SIMULATE: nhãn Watch đổi thành Watch (Mô phỏng)
+    renderWorkbench({ mode: 'SIMULATE' })
+
+    const simTabs = screen.getAllByRole('tab')
+    expect(simTabs).toHaveLength(4)
+    expect(screen.queryByRole('tab', { name: /Trace/i })).toBeNull()
+
+    const watchSimTab = screen.getByRole('tab', { name: /Watch \(Mô phỏng\)/ })
+    expect(watchSimTab).toBeInTheDocument()
+    expect(watchSimTab).toHaveAttribute('id', 'workbench-tab-watch')
+  })
+})
+
+
