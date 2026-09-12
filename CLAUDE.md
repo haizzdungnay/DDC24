@@ -45,6 +45,18 @@ Quy tắc cụ thể:
 5. Việc bị chặn thật sự phải ghi rõ **bị chặn bởi cái gì** và **cần gì để mở**,
    không viết chung chung kiểu "nói nếu bạn muốn tôi làm tiếp".
 
+## Kiểm chứng frontend bằng Chrome DevTools MCP
+
+Chi tiết ở `AGENTS.md` §"Kiểm chứng frontend bằng Chrome DevTools MCP".
+
+`chrome-devtools-mcp` chạy Chrome **headful**, mà phiên agent trên host không
+thừa hưởng `DISPLAY` dùng được — đó là nguyên nhân mọi bảng kiểm chứng từng ghi
+`Chrome DevTools MCP = NOT_RUN` với lý do "thiếu X server". Từ 2026-09-12, cả
+`.mcp.json` (Claude Code) lẫn `.codex/config.toml` (Codex) gọi
+`scripts/chrome-devtools-mcp.sh`, launcher tự dựng Xvfb riêng bằng
+`scripts/ensure-xvfb.sh`. Trước khi ghi `NOT_RUN` cho lane này, **bắt buộc** chạy
+`scripts/verify-project.sh --component browser` và dẫn kết quả thật.
+
 ## Quy trình khi user nói "commit" hoặc "merge"
 
 Khi user chỉ nói ngắn gọn **"commit"**, **"merge"**, **"commit đi"**, **"merge đi"** — hiểu là **chạy trọn quy trình dưới đây cho toàn bộ thay đổi hiện có trong cây làm việc**, không hỏi lại từng bước:

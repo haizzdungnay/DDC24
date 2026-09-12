@@ -62,6 +62,64 @@
   | Trả về nguyên trạng | **20 passed**, exit 0 |
 
 
+### Fixed — lane Chrome DevTools MCP không còn `NOT_RUN` vì thiếu X server (2026-09-12)
+
+- Phạm vi: `scripts/ensure-xvfb.sh` (mới), `scripts/chrome-devtools-mcp.sh` (mới),
+  `scripts/verify_chrome_devtools_mcp.mjs` (mới), `.mcp.json` (mới),
+  `scripts/verify-project.sh`, `.codex/config.toml`, `AGENTS.md`, `CLAUDE.md`,
+  `docs/03_implementation/61_PROGRAMMING_FE_HANDOFF_V21_PGM04_PLAN.md` (§2.2),
+  `docs/07_records/test-evidence/2026-09-12-chrome-devtools-mcp-x-server.md` (mới),
+  `artifacts/ui-audit/chrome-devtools-mcp-gate.json`, `CHANGELOG.md`. **Không**
+  chạm mã sản phẩm, không chạm `scripts/run-pgm04-devtools-audit.sh` (lane CDP
+  headless của `T61-505` giữ nguyên), không sửa phán quyết trong các bản ghi cũ.
+
+- Triệu chứng: mọi bảng kiểm chứng gần đây ghi `Chrome DevTools MCP = NOT_RUN`
+  kèm lý do "môi trường thiếu X server" — `DEPLOYMENT_PROVENANCE_REPORT.md:69`,
+  `PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md:88`,
+  plan 61 §2.2. Phiên MCP thật cho thấy `initialize` và `tools/list` **PASS**
+  (29 tool), nhưng tool đầu tiên cần trình duyệt trả `isError: true` với
+  `Missing X server to start the headful browser`.
+
+- Nguyên nhân gốc: `chrome-devtools-mcp` khởi động Chrome **headful** — chính là
+  lý do nó tồn tại bên cạnh Playwright headless — còn phiên agent không thừa
+  hưởng `DISPLAY` dùng được. Host *có* X server (`/tmp/.X11-unix/X0`, `X1` của
+  phiên desktop) nhưng không có `~/.Xauthority`, nên `DISPLAY=:0 xdpyinfo` trả
+  `Authorization required`. Hai hệ quả: phép kiểm "có socket X không" kết luận
+  sai, và lỗi đến trong kết quả tool bình thường nên bất kỳ cổng nào chỉ kiểm
+  `result` tồn tại sẽ báo xanh. Chưa từng có cấu hình MCP nào cho Claude Code
+  (`.mcp.json` không tồn tại); chỉ Codex có, và nó gọi thẳng `npx`.
+
+- Cách sửa: `ensure-xvfb.sh` dựng Xvfb trên display riêng `:99` khi `$DISPLAY`
+  hiện có không mở được — không mượn `~/.Xauthority`, không đụng phiên desktop,
+  `setsid` để sống qua lệnh gọi, idempotent. `chrome-devtools-mcp.sh` bọc
+  `npx chrome-devtools-mcp` và bảo đảm điều kiện đó trước khi `exec`; cả
+  `.mcp.json` lẫn `.codex/config.toml` trỏ vào launcher. Đặt
+  `env = { DISPLAY = ":99" }` trong file cấu hình là **không đủ** — nó giả định
+  đã có ai đó dựng sẵn `:99`. `verify_chrome_devtools_mcp.mjs` biến lane thành
+  một cổng chạy được (component `browser`, có trong `all`), vì `NOT_RUN` không
+  đỏ mà im: lane hỏng nằm yên tới đúng lúc cần bằng chứng Console/Network.
+
+- Số đo (đo tại máy 2026-09-12):
+
+  | Cổng | Kết quả |
+  |---|---|
+  | Tái hiện: phiên MCP `env -u DISPLAY` | `list_pages` `isError=true`, `Missing X server…` |
+  | `env -u DISPLAY scripts/ensure-xvfb.sh` ×2 | in `:99` cả hai lần; `pgrep -c -x Xvfb` = `1` |
+  | `verify-project.sh --component browser` | **PASS 7/7**, exit `0` |
+  | Lane trên FE thật (vite dev `/login`) | **PASS 7/7**, `take_snapshot` 838 ký tự |
+  | Cổng tự kiểm: probe `http://127.0.0.1:1/…` | **FAIL**, exit `1` (`ERR_UNSAFE_PORT`) |
+  | `verify-project.sh --component docs` | PASS |
+  | `verify-project.sh --component workflow` | PASS — 48/48 |
+  | `verify-project.sh --component layout` | PASS |
+
+- Ghi chú kiểm chứng: bản đầu của cổng chỉ kiểm `isError`, và đo được rằng
+  `navigate_page` **không** đặt cờ đó khi điều hướng hỏng — cổng vì thế báo PASS
+  cho một lần điều hướng thất bại. Đã vá để kiểm nội dung `Successfully
+  navigated`; dòng "Cổng tự kiểm" ở trên là bằng chứng nó đỏ đúng chỗ. Bản ghi
+  `NOT_RUN` cũ **giữ nguyên** — chúng đúng với thời điểm đo; muốn nâng thì phải
+  đo lại qua lane này.
+
+
 ### Fixed — `#658`: e2e Programming lấy breakpoint authoring từ nguồn chân lý thay vì bản chép tay (2026-09-12)
 
 - Phạm vi: `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`. **Không** chạm
