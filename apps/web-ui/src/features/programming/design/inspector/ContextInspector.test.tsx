@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
 import { MemoryRouter } from 'react-router-dom'
@@ -374,5 +375,54 @@ describe('ContextInspector — FBD context & editable slots', () => {
     expect(screen.getByText(/→ IN : BOOL/)).toBeInTheDocument()
     expect(screen.getByText(/→ PT : TIME/)).toBeInTheDocument()
     expect(screen.getByText(/← Q : BOOL/)).toBeInTheDocument()
+  })
+})
+
+/**
+ * `#675` — lối vào cấu hình chạy phải nằm ở mục nói về thực thi.
+ *
+ * Trước lát này lối vào duy nhất là một liên kết trong mục `Tham chiếu`, mà mục
+ * đó dựng bằng `<details>` KHÔNG `open` — tức đóng sẵn. Một lối vào chỉ hiện ra
+ * sau khi người dùng bấm mở đúng cái mục họ không có lý do gì để mở là một lối
+ * vào không tồn tại trên thực tế, và `UJ-PROG-01..08` đã chờ nó tới hết 60 s.
+ */
+describe('ContextInspector — lối vào `Cấu hình chạy` ở mục Thực thi (#675)', () => {
+  it('AC-675-1: mục Thực thi có ĐÚNG MỘT nút `Cấu hình chạy`, Tab tới được và Enter kích hoạt', async () => {
+    const onOpenExecutionTab = vi.fn()
+    render(
+      <I18nProvider>
+        <ContextInspector
+          input={{ program, cycleMs: 1000, taskName: 'Control_Main' }}
+          onOpenExecutionTab={onOpenExecutionTab}
+        />
+      </I18nProvider>,
+    )
+
+    // "Đúng một": đếm bằng `getAllBy…`, không phải `getBy…` — `getBy…` cũng ném
+    // khi có hai, nhưng nó ném vì trùng khớp, không vì một khẳng định về số
+    // lượng, nên đọc lại test sau này không thấy điều đang được khoá.
+    expect(screen.getAllByRole('button', { name: 'Cấu hình chạy' })).toHaveLength(1)
+    const button = screen.getByRole('button', { name: 'Cấu hình chạy' })
+    // Nằm TRONG mục Thực thi, không phải một chỗ nào khác trong khay.
+    expect(screen.getByTestId('inspector-execution-section')).toContainElement(button)
+    expect(button).toBeEnabled()
+
+    // Bàn phím đi hết: Tab tới rồi Enter, không giả lập `click()`.
+    await userEvent.tab()
+    for (let i = 0; i < 10 && document.activeElement !== button; i += 1) await userEvent.tab()
+    expect(button).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    expect(onOpenExecutionTab).toHaveBeenCalledTimes(1)
+    // `<button>` nhận cả Space — đó là lý do nó là `<button>` chứ không phải liên kết.
+    await userEvent.keyboard(' ')
+    expect(onOpenExecutionTab).toHaveBeenCalledTimes(2)
+  })
+
+  it('AC-675-4: caller không cấp lối vào ⇒ KHÔNG có nút nào, không phải một nút bấm không được', () => {
+    renderInspector({ program, cycleMs: 1000, taskName: 'Control_Main' })
+    // `AC-PGM02-006`/`T59-812`: bề mặt chỉ đọc đếm bằng 0 lối ghi. Một nút bị
+    // vô hiệu hoá vẫn là một nút có mặt trên màn hình.
+    expect(screen.queryByRole('button', { name: 'Cấu hình chạy' })).toBeNull()
+    expect(screen.getByTestId('inspector-execution-section')).toBeInTheDocument()
   })
 })

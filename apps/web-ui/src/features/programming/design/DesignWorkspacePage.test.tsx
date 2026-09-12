@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { type ReactNode, useEffect, useState } from 'react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
@@ -111,11 +111,21 @@ function baseProject(): ProgrammingProject {
   }
 }
 
+/* Địa chỉ thật mà router đang đứng. `#675` khoá URL chứ không khoá lời hứa của
+ * một handler: "mở `?tab=execution`" chỉ đúng nếu `project` và `pou` còn nguyên
+ * sau cú bấm — rơi một tham số là bắt người dùng chọn lại đúng thứ họ vừa đứng
+ * trong đó, và một `expect(handler).toHaveBeenCalled()` không thấy được điều ấy. */
+function LocationProbe() {
+  const location = useLocation()
+  return <span data-testid="router-location">{`${location.pathname}${location.search}`}</span>
+}
+
 function renderWorkspace(initialPath = '/eng/programming/projects/project-1/design') {
   return render(
     <I18nProvider>
       <ContextStripSlotOutlet />
       <MemoryRouter initialEntries={[initialPath]}>
+        <LocationProbe />
         <Routes>
           <Route path="/eng/programming/projects/:projectId/design" element={<DesignWorkspacePage />} />
           <Route path="/eng/programming/projects/:projectId/commission" element={<div>Check &amp; Commission page</div>} />
@@ -1556,5 +1566,97 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
     renderWorkspace(designPath('tab=design'))
     await screen.findByLabelText(/Mã nguồn ST/)
     expect(screen.queryByTestId('programs-insert-intent')).toBeNull()
+  })
+})
+/**
+ * `#675` — lối vào `Cấu hình chạy` trong mục Thực thi của Inspector.
+ *
+ * Lối vào cấu hình chạy đã biến mất khỏi giao diện (`Cấu hình Task` không còn
+ * chuỗi nào trong `src/`), chỉ còn một liên kết nằm trong mục `Tham chiếu` đóng
+ * sẵn. Ba test dưới đây khoá ba điều khác nhau: nút CÓ ở chế độ sửa được, nó đi
+ * tới đúng địa chỉ và GIỮ ĐƯỢC tham số, và nó VẮNG MẶT ở mọi bề mặt chỉ đọc.
+ */
+describe('DesignWorkspacePage — lối vào `Cấu hình chạy` (#675)', () => {
+  function projectWithStProgram() {
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-1', objectId: 'object-1', name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM AHU_MAIN\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+    return project
+  }
+
+  it('AC-675-2: bấm `Cấu hình chạy` mở `?tab=execution` và GIỮ NGUYÊN `project` lẫn `pou`', async () => {
+    projectWithStProgram()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=EDIT')
+    await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+
+    const button = await screen.findByRole('button', { name: 'Cấu hình chạy' })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      const location = new URL(screen.getByTestId('router-location').textContent ?? '', 'http://x')
+      expect(location.searchParams.get('tab')).toBe('execution')
+      // Route canonical KHÔNG đổi: `execution` là tab con, không phải trang IA.
+      expect(location.pathname).toBe('/eng/programming/projects/project-1/design')
+      // Hai tham số mà `AC-2` gọi tên — rơi một cái là hỏng, kể cả khi tab đúng.
+      expect(location.searchParams.get('pou')).toBe('object-1')
+      expect(location.searchParams.get('mode')).toBe('EDIT')
+    })
+
+    /* `AC-3` — `ExecutionTab` không bị sửa hành vi: nó vẫn là thứ hiện ra, đọc
+       đúng Task của Draft. Nếu prop của nó bị đổi thì màn hình này rỗng.
+       Đo bằng chính tiêu đề của tab (`<h3>` sr-only) chứ không bằng tên POU:
+       tên POU còn nằm trong cây POU của tab Chương trình (tab ẩn chứ không
+       unmount), nên nó không phân biệt được hai màn hình. */
+    const executionHeading = await screen.findByRole('heading', { name: 'Tác vụ thực thi', level: 3 })
+    expect(executionHeading).toBeInTheDocument()
+    expect(executionHeading.closest('[hidden]')).toBeNull()
+  })
+
+  it('AC-675-4: dưới 768 px KHÔNG có lối vào nào tới cấu hình chạy — cả nút lẫn liên kết cũ', async () => {
+    stubMobileViewport()
+    projectWithStProgram()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1')
+    await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+    expect(screen.getByTestId('programming-mobile-read-only')).toBeInTheDocument()
+
+    /* Gỡ nút mà để lại liên kết trong mục `Tham chiếu` là vẫn lộ nguyên đường
+       ghi — hai lối cùng đi tới một chỗ, nên chúng phải tắt cùng nhau. */
+    expect(screen.queryByRole('button', { name: 'Cấu hình chạy' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Mở cấu hình Task toàn cục' })).not.toBeInTheDocument()
+  })
+
+  it('AC-675-4: ở LIVE KHÔNG có lối vào nào tới cấu hình chạy', async () => {
+    const project = projectWithStProgram()
+    project.activeRevisionId = 'revision-active'
+    runtimeMonitor.state = {
+      status: 'ready', error: null, failure: null, producerRestarted: false, refresh: vi.fn(),
+      data: { schemaVersion: '1.0', activeRevisionId: 'revision-active', producer: { capturedMonotonicNs: '1000' }, safeState: false, task: null, items: [] }
+    }
+    const base = client.request.getMockImplementation()!
+    client.request.mockImplementation((operationId: string, ...rest: unknown[]) => {
+      if (operationId === 'getProgrammingRevision') return Promise.resolve({
+        revisionId: 'revision-active',
+        snapshot: { objects: [{
+          objectId: 'object-1', kind: 'PROGRAM',
+          payload: { objectId: 'object-1', kind: 'PROGRAM', name: 'AHU_MAIN', language: 'ST', source: 'PROGRAM ACTIVE\nEND_PROGRAM\n' },
+        }] },
+      })
+      return (base as (id: string, ...args: unknown[]) => unknown)(operationId, ...rest)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=LIVE')
+    await screen.findByLabelText<HTMLTextAreaElement>('Mã nguồn đang chạy')
+
+    expect(screen.queryByRole('button', { name: 'Cấu hình chạy' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Mở cấu hình Task toàn cục' })).not.toBeInTheDocument()
   })
 })

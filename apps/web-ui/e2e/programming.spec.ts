@@ -1023,14 +1023,39 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await page.screenshot({ path: testInfo.outputPath('04-design-mapping.png'), fullPage: true })
 
     // UJ-PROG-04 — Thực thi
-    /* `Thực thi` KHÔNG còn là một nút trong trang. Lối vào cũ là cặp nút
-       `Cấu hình Task` / `Về trình soạn thảo` nằm trên thanh tab của workspace;
-       thanh đó đã gỡ, và lối vào chuyển lên mục `Execution` của feature rail —
-       cùng chỗ với năm workspace kia, đúng như hai bước UJ-PROG ngay trên đây
-       đã đi. Journey vẫn đi qua đúng màn hình `?tab=execution` và vẫn đọc
-       `Control_Main`; chỉ có đường bấm là đổi, nên đây là kỳ vọng lỗi thời của
-       phép đo chứ không phải một chức năng bị mất. */
-    await workspaceRail.getByRole('link', { name: 'Execution' }).click()
+    /* `#675` — journey đi qua ĐÚNG lối vào mà người dùng có trong trang.
+       Lối vào cũ (`Cấu hình Task` trên thanh tab của workspace) đã bị gỡ cùng
+       thanh đó; bản vá tạm sau đó cho journey bấm mục `Execution` của feature
+       rail, nhưng rail là lối đi TOÀN CỤC — nó không chứng minh được rằng
+       người đang đứng trong Inspector của một POU có cách nào mở cấu hình chạy.
+       Trên thực tế họ không có: lối vào duy nhất trong trang là một liên kết
+       nằm trong mục `Tham chiếu`, mà mục đó đóng sẵn.
+
+       Nay mục `Thực thi` của Inspector có nút `Cấu hình chạy`, và journey bấm
+       chính nó — bằng bàn phím, vì `AC-1` đòi Tab tới và Enter kích hoạt. */
+    await workspaceRail.getByRole('link', { name: 'Chương trình' }).click()
+    await page.getByRole('button', { name: 'Mở NewProgram', exact: true }).click()
+    /* Inspector là khay NĂM NGỮ CẢNH: con trỏ gõ đang nằm trên một ký hiệu thì
+       nó nói về ký hiệu đó, và mục `Thực thi` (thuộc ngữ cảnh POU) không dựng.
+       Đưa con trỏ ra sau dấu `;` để khay trở về ngữ cảnh POU — đây là hành vi
+       sẵn có của `ContextInspector`, không phải thứ `#675` đổi. */
+    const stSource = page.getByLabel(/Mã nguồn ST/)
+    await stSource.click()
+    await page.keyboard.press('Control+End')
+    await expect(page.getByTestId('context-inspector')).toHaveAttribute('data-context', 'PROGRAM')
+    const executionEntry = page.getByRole('button', { name: 'Cấu hình chạy', exact: true })
+    /* "Đúng một" là một phần của hợp đồng: hai lối vào cùng tên trong một khay
+       là hai chỗ để luật khoá read-only lệch nhau. */
+    await expect(executionEntry).toHaveCount(1)
+    await executionEntry.focus()
+    await page.keyboard.press('Enter')
+    await page.waitForURL((url) => url.searchParams.get('tab') === 'execution')
+    /* `AC-2` — rơi `project` hay `pou` là bắt người dùng chọn lại đúng thứ họ
+       vừa đứng trong đó; tab đúng mà mất tham số thì vẫn là hỏng. */
+    const executionUrl = new URL(page.url())
+    expect(executionUrl.pathname).toBe(CANONICAL_PROGRAMS_PATH)
+    expect(executionUrl.searchParams.get('project')).toBe(PROJECT_ID)
+    expect(executionUrl.searchParams.get('pou')).not.toBeNull()
     await expect(page.getByText('Control_Main')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('05-design-execution.png'), fullPage: true })
 
