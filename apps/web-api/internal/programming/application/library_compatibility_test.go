@@ -113,7 +113,7 @@ func TestLibraryCompatibilityIsFailClosedWhenEitherSideIsUnmeasured(t *testing.T
 }
 
 // `nil` (chưa đo được) KHÔNG được quy về chuỗi rỗng: chuỗi rỗng đọc như một
-// version đã đo và bằng rỗng, và một client so `requiredVersion === ''` sẽ nghĩ
+// version đã đo và bằng rỗng, và một client so `requiredVersion === ""` sẽ nghĩ
 // mình đang đọc số liệu.
 func TestLibraryCompatibilityKeepsUnmeasuredVersionsNil(t *testing.T) {
 	got := libraryCompatibility(programmingstore.LibraryScopeProject, "X",
