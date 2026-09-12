@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### Fixed — `#683`: hồi quy `TC-FBD-NAV-001` chặn PR hoá ra là lỗi của `main`, đã được `#695` vá (2026-09-12)
+
+- Phạm vi: chỉ hợp nhất `origin/main` (`9b5ae0f`) vào nhánh PR + giải conflict
+  `CHANGELOG.md`. **Không** sửa một dòng mã sản phẩm nào cho việc này.
+
+- Triệu chứng: `TC-FBD-NAV-001` đỏ ngắt quãng ở `25/256 block` khi chạy cùng
+  `programming-workspace-height.spec.ts`, mà `main` thì không. Hai lượt điều tra
+  trước đã loại trừ đúng hai cách hiểu sai — không phải mất phím (sau 8 giây
+  đếm đủ `25/256`, focus vẫn đúng) và không phải chỉ cần chờ lâu hơn (nới hạn
+  lên 15 giây vẫn đỏ 1/2 lượt) — nhưng chưa tìm ra gốc, nên PR bị giữ lại.
+
+- Nguyên nhân gốc: **không nằm trong `T9-01/02/03`.** PR nhánh từ `439ad27`,
+  còn bản vá `#695` (bỏ qua tiếng vọng trễ của buffer trang thay vì
+  `REPLACE_DOCUMENT` vô điều kiện) vào `main` ở `7b46218`, tức **sau** base của
+  PR. `#695` đo đúng lỗi này trên chính `439ad27`: `-g "TC-FBD-NAV-001"
+  --repeat-each=40 --workers=4` cho **5/40 lần đỏ (12,5%)**, và ghi rõ trong
+  thân commit rằng nó *"không phải hồi quy của `#683`"*. Nhánh PR thừa hưởng
+  nguyên lỗi đó vì chưa hợp nhất `main`.
+
+  Đây là lý do mọi phép sửa hiệu năng thử trước đó chỉ giảm tần suất mà không
+  dứt: chúng nhắm vào tần suất re-render, còn lỗi thật là vòng công bố
+  editor ↔ buffer không tức thời.
+
+- Số đo sau khi hợp nhất `main`, dùng **đúng phương pháp của `#695`** để so
+  sánh được:
+
+  | Phép đo | `main` (`9b5ae0f`) | Nhánh PR (`22d8fd4`) |
+  |---|---|---|
+  | `-g "TC-FBD-NAV-001" --repeat-each=40 --workers=4` | **40/40 passed** | **40/40 passed** |
+  | Hai spec cùng lúc, lượt 1 | — | **117 passed / 0 failed** |
+  | Hai spec cùng lúc, lượt 2 | — | **117 passed / 0 failed** |
+
+  Trước khi hợp nhất, cùng phép đo trên base `439ad27` cho 12,5% đỏ. Sau khi
+  hợp nhất, PR **bằng đúng `main`**, không còn chênh lệch nào để quy cho `#683`.
+
+- Các cổng khác đo lại trên cây đã hợp nhất: `npx vitest --run --environment
+  jsdom src` **248 files / 3162 passed / 0 failed** exit `0`; `npm run lint`
+  exit `0`; `npx tsc --noEmit` exit `0`; `npm run build` exit `0` kèm
+  `check:programming-contracts` và bundle budget `PASS` (ngân sách R3 165 KiB).
+
 ### Fixed — `#683`: hai phép kiểm chiều cao workspace đo sai thứ (2026-09-12)
 
 - Phạm vi: `apps/web-ui/e2e/programming-workspace-height.spec.ts`, `CHANGELOG.md`.
