@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"mkddc-web/internal/capabilities"
 )
 
 // ISS-606 — cổng đồng bộ giữa ba hằng số SHM chép tay trong `core_client.go` và
@@ -72,19 +74,29 @@ func shmContractPath(t *testing.T) string {
 	return ""
 }
 
+// shmDefinePattern khớp một dòng `#define <name> <giá trị>`, nhóm 1 là phần đầu
+// dòng (kể cả tên và khoảng trắng sau nó), nhóm 2 là phần giá trị.
+//
+// Dùng chung cho cả bên ĐỌC (parseShmDefineLine) và bên TIÊM LỖI
+// (TestShmPointTableGateFiresOnInjectedMismatch) có chủ đích: hai bên phải hiểu
+// cùng một dạng dòng, nếu mỗi bên giữ regexp riêng thì hợp đồng đổi cách viết sẽ
+// làm bộ tiêm lỗi lặng lẽ không tiêm được gì trong khi test vẫn xanh.
+func shmDefinePattern(name string) *regexp.Regexp {
+	return regexp.MustCompile(`(?m)^([ \t]*#define[ \t]+` + regexp.QuoteMeta(name) + `[ \t]+)(.*)$`)
+}
+
 // parseShmDefineLine trả về phần giá trị của dòng `#define <name> ...` đầu tiên.
 //
 // Trả nguyên phần đuôi (kể cả comment) chứ không chỉ token giá trị, để mọi
 // thông điệp lỗi phía sau trích được đúng thứ đã đọc — người sửa cần thấy dòng
 // thật, không phải suy đoán từ một chuỗi đã bị cắt.
 func parseShmDefineLine(header, name string) (string, error) {
-	pattern := regexp.MustCompile(`(?m)^[ \t]*#define[ \t]+` + regexp.QuoteMeta(name) + `[ \t]+(.*)$`)
-	match := pattern.FindStringSubmatch(header)
+	match := shmDefinePattern(name).FindStringSubmatch(header)
 	if match == nil {
 		return "", fmt.Errorf("không tìm thấy `#define %s` trong %s — hằng số đã bị đổi tên hoặc xoá khỏi hợp đồng",
 			name, shmContractRelPath)
 	}
-	return strings.TrimSpace(match[1]), nil
+	return strings.TrimSpace(match[2]), nil
 }
 
 // parseShmDefineUint đọc giá trị số nguyên của một `#define`, bóc hậu tố kiểu C.
@@ -295,6 +307,139 @@ func TestShmContractParserFailsClosed(t *testing.T) {
 		t.Run("string/"+tc.name, func(t *testing.T) {
 			if got, err := parseShmDefineString(tc.header, tc.symbol); err == nil {
 				t.Fatalf("parseShmDefineString lẽ ra phải trả lỗi (%s) nhưng trả %q", tc.reason, got)
+			}
+		})
+	}
+}
+
+// ISS-634 — cổng đồng bộ cho TÁM hằng số sức chứa bảng point.
+//
+// #606 (phần trên file này) chỉ canh ba hằng: `KX_SHM_MAGIC`, `KX_SHM_IO_PATH`,
+// `KX_SHM_PLC_PATH`. Tám hằng `KX_N_*` cũng là bản sao rời của cùng file hợp
+// đồng và trước Issue này KHÔNG test nào canh, dù chúng nguy hiểm hơn: chuỗi
+// offset cộng dồn `offAI → offBI → … → offExt` (xem `core_client.go`) được dựng
+// từ đúng tám hằng đó, nên MỘT hằng lệch làm MỌI offset đứng sau nó lệch theo.
+// Hệ quả hiện trường không có crash, không có log: web-api đọc BV/MSV/EXT từ
+// sai byte offset và trả giá trị rác hoặc lệch kênh lên Overview trong khi Core
+// và iobus chạy đúng.
+//
+// Bộ test cũ không thể bắt được vì đúng cơ chế tautology đã ghi ở đầu file:
+// fixture tự dựng SHM giả BẰNG CHÍNH các hằng số Go đó rồi khẳng định code đọc
+// lại được — luôn đúng với mọi giá trị. Đổi `kxNAV` thành 99 thì fixture cũng
+// dựng theo 99 và `go test ./... -count=1` vẫn `ok` toàn bộ.
+//
+// Hai bản sao Go nằm ở hai package khác nhau:
+//
+//   - `capabilities.ABI{UniversalInputs,DigitalInputs,AnalogOutputs,DigitalOutputs}`
+//     — khai báo gốc của bốn hằng đầu (`internal/capabilities/board.go`).
+//   - `kxNAV`, `kxNBV`, `kxNMSV`, `kxNEXT` — số trần trong `core_client.go`,
+//     KHÔNG đi qua `capabilities` như bốn cái trên.
+//
+// Cổng đặt ở package `app` chứ không ở `capabilities` vì helper parse
+// (`shmContractPath`, `parseShmDefineUint`) là code test của package `app`: một
+// package khác không import được, và chép thêm một bộ parser thứ hai chính là
+// tái lập đúng lỗi Issue này đang vá. `app` import `capabilities` nên đọc được
+// CẢ HAI bản sao — đây là package duy nhất thấy đủ tám hằng.
+//
+// Bảng dưới cố tình liệt kê cả `kxNUI/kxNDI/kxNAO/kxNDO` (hiện là alias của
+// `capabilities.ABI*`) bên cạnh bản gốc: nếu sau này ai đó thay alias bằng
+// literal thì cổng vẫn canh đúng chỗ thay vì mất tác dụng trong im lặng.
+func TestShmPointTableCapacitiesMatchHeader(t *testing.T) {
+	path := shmContractPath(t)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("đọc %s hỏng: %v", path, err)
+	}
+	header := string(raw)
+
+	for _, tc := range []struct {
+		define  string // tên `#define` trong contracts/shm/mkddc_shm.h
+		goName  string // tên hằng số Go, ghi đủ package + file để đọc log là biết sửa ở đâu
+		goValue uint64
+	}{
+		{"KX_N_UI", "capabilities.ABIUniversalInputs (internal/capabilities/board.go)", uint64(capabilities.ABIUniversalInputs)},
+		{"KX_N_DI", "capabilities.ABIDigitalInputs (internal/capabilities/board.go)", uint64(capabilities.ABIDigitalInputs)},
+		{"KX_N_AO", "capabilities.ABIAnalogOutputs (internal/capabilities/board.go)", uint64(capabilities.ABIAnalogOutputs)},
+		{"KX_N_DO", "capabilities.ABIDigitalOutputs (internal/capabilities/board.go)", uint64(capabilities.ABIDigitalOutputs)},
+		{"KX_N_UI", "kxNUI (internal/app/core_client.go)", uint64(kxNUI)},
+		{"KX_N_DI", "kxNDI (internal/app/core_client.go)", uint64(kxNDI)},
+		{"KX_N_AO", "kxNAO (internal/app/core_client.go)", uint64(kxNAO)},
+		{"KX_N_DO", "kxNDO (internal/app/core_client.go)", uint64(kxNDO)},
+		{"KX_N_AV", "kxNAV (internal/app/core_client.go)", uint64(kxNAV)},
+		{"KX_N_BV", "kxNBV (internal/app/core_client.go)", uint64(kxNBV)},
+		{"KX_N_MSV", "kxNMSV (internal/app/core_client.go)", uint64(kxNMSV)},
+		{"KX_N_EXT", "kxNEXT (internal/app/core_client.go)", uint64(kxNEXT)},
+	} {
+		t.Run(tc.define+"/"+tc.goName, func(t *testing.T) {
+			want := shmContractUint(t, header, tc.define)
+			if tc.goValue != want {
+				t.Fatalf("`#define %s` = %d trong %s nhưng hằng số Go %s = %d — "+
+					"sức chứa bảng point lệch nghĩa là chuỗi offset cộng dồn "+
+					"(offAI→offBI→offAO→offBO→offAV→offBV→offMSV→offExt) lệch từ điểm này trở đi, "+
+					"web-api đọc điểm từ sai byte offset và trả giá trị rác/lệch kênh lên Overview "+
+					"mà không crash, không log; sửa hằng số Go cho khớp hợp đồng "+
+					"(không sửa hợp đồng theo Go — hợp đồng là nguồn chuẩn dùng chung với C++)",
+					tc.define, want, shmContractRelPath, tc.goName, tc.goValue)
+			}
+		})
+	}
+}
+
+// TestShmPointTableGateFiresOnInjectedMismatch là bằng chứng cổng trên THẬT SỰ
+// đọc file hợp đồng chứ không so hằng số Go với chính nó.
+//
+// Cùng khuôn với `TestBoardCapDriftGateFiresOnInjectedMismatch`
+// (`internal/capabilities/board_test.go`): đọc header THẬT, tiêm lỗi vào một bản
+// sao trong bộ nhớ (không sửa file), rồi khẳng định phép so sánh đổi kết quả.
+// Một cổng không có tiêm lỗi đi kèm có thể ngừng kiểm mà vẫn xanh.
+//
+// Hai chi tiết cố ý, đều là chỗ một bản tiêm lỗi cẩu thả sẽ hỏng trong im lặng:
+//
+//   - Khẳng định `mutated != header` TRƯỚC khi so: nếu hợp đồng đổi cách viết
+//     dòng `#define` thì phép thay thế không khớp gì cả, và một test chỉ kiểm
+//     vế sau sẽ báo xanh trong khi thực ra chưa tiêm được gì.
+//   - Giá trị tiêm suy ra từ chính hằng Go (`+1`) chứ không viết cứng: một số
+//     cứng (ví dụ 33) sẽ trùng hằng Go đúng vào ngày ai đó nâng sức chứa hợp
+//     lệ, làm test đỏ vì lý do sai.
+//
+// Chạy cho cả hai bản sao (`capabilities.ABI*` và `kxN*`) để chứng minh cả hai
+// nhánh của cổng đều đang thật sự đối chiếu header.
+func TestShmPointTableGateFiresOnInjectedMismatch(t *testing.T) {
+	path := shmContractPath(t)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("đọc %s hỏng: %v", path, err)
+	}
+	header := string(raw)
+
+	for _, tc := range []struct {
+		define  string
+		goName  string
+		goValue uint64
+	}{
+		{"KX_N_UI", "capabilities.ABIUniversalInputs", uint64(capabilities.ABIUniversalInputs)},
+		{"KX_N_AV", "kxNAV", uint64(kxNAV)},
+	} {
+		t.Run(tc.define+"/"+tc.goName, func(t *testing.T) {
+			injected := tc.goValue + 1
+			mutated := shmDefinePattern(tc.define).ReplaceAllString(header,
+				"${1}"+strconv.FormatUint(injected, 10))
+			if mutated == header {
+				t.Fatalf("không tiêm được lỗi: dòng `#define %s` trong %s đã đổi dạng nên phép thay thế không khớp — "+
+					"bộ tiêm lỗi phải theo được hợp đồng, không được bỏ qua", tc.define, shmContractRelPath)
+			}
+
+			got, err := parseShmDefineUint(mutated, tc.define)
+			if err != nil {
+				t.Fatalf("parse header đã tiêm lỗi hỏng: %v", err)
+			}
+			if got != injected {
+				t.Fatalf("tiêm `#define %s` = %d nhưng parse lại ra %d — bộ tiêm lỗi và bộ parse không hiểu cùng một dạng dòng",
+					tc.define, injected, got)
+			}
+			if got == tc.goValue {
+				t.Fatalf("tiêm `#define %s` = %d rồi mà vẫn khớp hằng Go %s = %d — bộ so sánh đã ngừng đọc header",
+					tc.define, got, tc.goName, tc.goValue)
 			}
 		})
 	}

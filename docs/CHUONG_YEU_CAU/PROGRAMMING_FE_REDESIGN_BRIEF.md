@@ -1,5 +1,24 @@
 # YÊU CẦU THIẾT KẾ MỚI PROGRAMMING SOLUTION — MK-DDC-24
 
+**Mã tài liệu:** DDC24-PRG-FE-REDESIGN-BRIEF-001
+**Sản phẩm:** MK-DDC-24 — BMS Edge Automation Controller
+**Module:** Programming Solution — FE/BE/Compiler/Runtime
+**Trạng thái:** Historical — đầu vào giữ nguyên để truy xuất
+**Ngày:** 2026-08-14 theo `CHANGELOG.md`; vào git tại commit `4fc2c47` (2026-09-06); chuyển vào Document Hub 2026-09-11
+**Baseline nguồn:** tên cũ `Yeucau_FE.md` ở thư mục gốc repo
+**Đã dẫn đường cho:** mục `CHANGELOG.md` `### Added — Lưu hồ sơ brief gốc "Yêu cầu thiết kế mới Programming Solution" (2026-08-14)` và bộ hồ sơ Programming phái sinh
+
+> Đây là **đầu vào yêu cầu, được giữ nguyên từng chữ để truy xuất** — không phải
+> hồ sơ thi hành hiện hành, không phải baseline và không phải acceptance
+> authority. Định nghĩa hoàn thành `READY FOR IMPLEMENTATION` trong brief là yêu
+> cầu đặt ra cho bên nhận việc, không phải kết quả đã kiểm chứng.
+>
+> Product Spec và thiết kế hiện hành nằm tại
+> `docs/01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md` và
+> `docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md`;
+> trạng thái release hiện hành theo
+> `docs/07_records/PROGRAMMING_RELEASE_RECORD_2026-08-23.md` là `NO-GO`.
+
 ## 1. Mục tiêu
 
 Tiến hành **thiết kế lại từ đầu** giải pháp **Programming cho MK-DDC-24**, bao gồm:

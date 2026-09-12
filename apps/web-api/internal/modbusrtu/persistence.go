@@ -13,6 +13,17 @@ import (
 
 var ErrApply = errors.New("không thể áp dụng cấu hình Modbus RTU; cấu hình cũ đã được phục hồi")
 
+// errRollbackIncomplete: quay về cấu hình cũ KHÔNG hoàn tất. Đĩa đang ở trạng
+// thái lai — còn nguyên (một phần) cấu hình mới, thứ mà iobus vừa từ chối hoặc
+// không nạp được, và là thứ nó sẽ đọc ở lần khởi động sau.
+//
+// Vì sao phải có một lỗi riêng thay vì nuốt im như bản cũ: `ErrApply` nói
+// "cấu hình cũ đã được phục hồi" và journal ghi `ROLLED_BACK`. Khi `restore()`
+// hỏng mà không ai thu lỗi, cả hai câu đó đều SAI, và không phép đo nào phát
+// hiện được vì trạng thái journal do chính nhánh lỗi này tự đặt. Người vận hành
+// cần biết ngay tại lúc apply hỏng rằng đĩa không còn khớp với thứ họ được báo.
+var errRollbackIncomplete = errors.New("quay về cấu hình cũ THẤT BẠI: đĩa còn giữ cấu hình mới, lần khởi động sau iobus sẽ nạp đúng thứ vừa bị từ chối")
+
 type FileWriter func(string, []byte, os.FileMode) error
 type ReloadFunc func() (bool, []string)
 
@@ -108,14 +119,35 @@ func (p Persister) Apply(cfg, previous Config) (ApplyResult, error) {
 		exists bool
 	}
 	var snapshots []snapshot
-	restore := func() {
+	// restore trả về lỗi thay vì vứt: đây là TOÀN BỘ cơ chế quay về của Apply,
+	// nên một `WriteFile` hỏng ở đây (đĩa đầy, EROFS, mất quyền trên đường dẫn)
+	// là khác biệt giữa "đã quay về an toàn" và "đĩa đang ở trạng thái lai".
+	// Không dừng ở lỗi đầu tiên: các snapshot còn lại vẫn phải được thử: quay về
+	// được ba trong bốn file vẫn tốt hơn bỏ dở ở file đầu, và báo cáo phải nêu
+	// ĐỦ các đường dẫn không quay về được để người vận hành biết phải sửa ở đâu.
+	restore := func() error {
+		var failed []string
 		for i := len(snapshots) - 1; i >= 0; i-- {
-			if snapshots[i].exists {
-				_ = p.WriteFile(snapshots[i].path, snapshots[i].data, 0o644)
+			snap := snapshots[i]
+			var err error
+			if snap.exists {
+				err = p.WriteFile(snap.path, snap.data, 0o644)
 			} else {
-				_ = os.Remove(snapshots[i].path)
+				// File chưa từng tồn tại trước transaction: quay về nghĩa là xoá.
+				// Vắng mặt sẵn thì đã đúng đích, không phải lỗi.
+				if err = os.Remove(snap.path); os.IsNotExist(err) {
+					err = nil
+				}
+			}
+			if err != nil {
+				failed = append(failed, fmt.Sprintf("%s (%v)", snap.path, err))
 			}
 		}
+		if len(failed) == 0 {
+			return nil
+		}
+		return fmt.Errorf("%w; đường dẫn không quay về được: %s",
+			errRollbackIncomplete, strings.Join(failed, "; "))
 	}
 	write := func(path string, data []byte) error {
 		old, readErr := os.ReadFile(path)
@@ -136,8 +168,25 @@ func (p Persister) Apply(cfg, previous Config) (ApplyResult, error) {
 		}
 		return os.Remove(path)
 	}
+	// withRollback gộp kết quả quay về vào hai thứ mà người khác đọc được: lỗi
+	// trả về cho caller (và qua đó là thông điệp người vận hành thấy) và `Reason`
+	// ghi vào journal. Rollback hỏng phải hiện ở CẢ HAI: chỉ ghi nguyên nhân gốc
+	// thì bản ghi `ROLLED_BACK` vẫn đọc như một lần quay về trót lọt.
+	//
+	// Lỗi rollback đứng TRƯỚC nguyên nhân gốc, ở cả hai chuỗi: `ErrApply` mở đầu
+	// bằng "cấu hình cũ đã được phục hồi", nên đặt nó trước thì người vận hành
+	// đọc câu sai trước rồi mới tới câu đính chính — và có thể dừng ở câu đầu.
+	// Thứ tự bọc `%w` không đổi kết quả `errors.Is`, nên tầng HTTP vẫn phân loại
+	// được theo `ErrApply` như cũ.
+	withRollback := func(reason string, cause error, rollbackErr error) (string, error) {
+		if rollbackErr == nil {
+			return reason, cause
+		}
+		return fmt.Sprintf("%v; nguyên nhân gốc: %s", rollbackErr, reason),
+			fmt.Errorf("%w; nguyên nhân apply hỏng: %w", rollbackErr, cause)
+	}
 	failTx := func(state, reason string, cause error) (ApplyResult, error) {
-		restore()
+		reason, cause = withRollback(reason, cause, restore())
 		if p.Journal.Path != "" {
 			tx.State = state
 			tx.Reason = reason
@@ -173,9 +222,19 @@ func (p Persister) Apply(cfg, previous Config) (ApplyResult, error) {
 
 	// Bản last-known-good: khi apply hỏng ở bước iobus, đây là thứ để quay về
 	// mà không cần dựng lại từ trạng thái trong bộ nhớ của tiến trình web.
+	//
+	// Ghi hỏng KHÔNG làm apply thất bại — cấu hình mới vẫn áp được — nhưng phải
+	// nói ra: bản LKG vắng mặt là thứ người vận hành cần biết TRƯỚC khi cần tới
+	// nó, chứ không phải lúc đang cần quay về và phát hiện không có gì để quay về.
 	if previous.Revision > 0 {
-		if lkg, err := json.MarshalIndent(previous, "", "  "); err == nil {
-			_ = p.WriteFile(filepath.Join(p.ConfigDir, "fieldbus.lkg.json"), append(lkg, '\n'), 0o644)
+		lkgPath := filepath.Join(p.ConfigDir, "fieldbus.lkg.json")
+		lkg, err := json.MarshalIndent(previous, "", "  ")
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf(
+				"không dựng được bản last-known-good %s: %v; lần apply sau nếu hỏng sẽ không có bản cũ trên đĩa để quay về", lkgPath, err))
+		} else if err := p.WriteFile(lkgPath, append(lkg, '\n'), 0o644); err != nil {
+			warnings = append(warnings, fmt.Sprintf(
+				"không ghi được bản last-known-good %s: %v; lần apply sau nếu hỏng sẽ không có bản cũ trên đĩa để quay về", lkgPath, err))
 		}
 	}
 
@@ -217,14 +276,19 @@ func (p Persister) Apply(cfg, previous Config) (ApplyResult, error) {
 	applied, reloadWarnings := p.Reload()
 	warnings = append(warnings, reloadWarnings...)
 	if !applied {
-		restore()
+		// Không gọi `failTx` được ở đây vì journal phải ghi SAU lần restart thứ
+		// hai: trạng thái `ROLLED_BACK` chỉ đúng khi service đã chạy lại bằng
+		// cấu hình cũ. Phần bọc lỗi thì dùng chung, để hai đường quay về không
+		// nói hai thứ khác nhau về cùng một sự cố.
+		reason, cause := withRollback(strings.Join(reloadWarnings, "; "),
+			fmt.Errorf("%w: %s", ErrApply, strings.Join(reloadWarnings, "; ")), restore())
 		_, _ = p.Reload()
 		if p.Journal.Path != "" {
 			tx.State = TxRolledBack
-			tx.Reason = strings.Join(reloadWarnings, "; ")
+			tx.Reason = reason
 			_ = p.Journal.Write(tx)
 		}
-		return ApplyResult{}, fmt.Errorf("%w: %s", ErrApply, strings.Join(reloadWarnings, "; "))
+		return ApplyResult{}, cause
 	}
 	if p.Journal.Path != "" {
 		tx.State = TxCommitted

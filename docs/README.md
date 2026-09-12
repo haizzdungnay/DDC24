@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-25 (PGM-02 v2.2 exact-pinned tại `413a043`; `T59-801`/`T59-802` DONE, `T59-803` READY, `T59-804..817` ORDERED; `F-P59-GHOST-POU-001` đã đóng cả quyết định lẫn implementation; `RELEASE_READY` vẫn `NO-GO`)
+**Cập nhật:** 2026-09-11 (đăng ký `docs/CHUONG_YEU_CAU/` vào register và đưa hai brief đầu vào `d.md`/`Yeucau_FE.md` từ thư mục gốc vào đó; không đổi nội dung nghiệp vụ, không đổi trạng thái hồ sơ nào. Trạng thái kỹ thuật giữ nguyên từ 2026-08-25: PGM-02 v2.2 exact-pinned tại `413a043`; `T59-801`/`T59-802` DONE, `T59-803` READY, `T59-804..817` ORDERED; `F-P59-GHOST-POU-001` đã đóng cả quyết định lẫn implementation; `RELEASE_READY` vẫn `NO-GO`)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -11,6 +11,7 @@
 | [Quy tắc kiểm soát tài liệu](00_governance/DOC_GOVERNANCE.md) | `DOC-GOV-001`: cấu trúc bắt buộc `DD-01..DD-13`, thang `M0..M5`, ba cổng `PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`, harness và quy tắc trung thực |
 | [Quy trình clean code & clean docs](00_governance/CLEAN_CODE_WORKFLOW.md) | `WF-CLEAN-001`: ba vai Manager/Implementer/Reviewer, ma trận quyền, workflow state, nhánh/merge, quality gate, truy xuất Issue→PR→Test→Merge→Close và lịch chạy |
 | [Decision log](00_governance/DECISIONS.md) | quyết định kiến trúc hiện hành, gồm các ADR đã hợp nhất |
+| [Brief yêu cầu đầu vào](CHUONG_YEU_CAU/) | thư mục giữ các brief yêu cầu đầu vào nguyên văn (Programming workspace rebuild, FE redesign, dashboard, scheduler, UX PA3) để truy xuất; **không** phải baseline thi hành, không phải acceptance authority và không chứng minh implementation |
 | [Product](01_product/PRODUCT.md) | định vị và baseline sản phẩm toàn hệ thống |
 | [Product Spec Programming thống nhất](01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | đa Program, POU, Control Library, Published Signal, lifecycle, safety và sáu workspace |
 | [Requirements](02_requirements/REQUIREMENTS.md) | yêu cầu có ID và tiêu chí chấp nhận |

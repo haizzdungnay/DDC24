@@ -14,7 +14,7 @@ usage() {
     '     scripts/verify-project.sh --wave W0..W8 [--repeat N]' \
     '' \
     'Component: layout | cpp | go | frontend | e2e | e2e-real | firmware | release |' \
-    '           docs | workflow | all' \
+    '           docs | workflow | browser | all' \
     'Profile C++: baseline | modbus | bacnet | modbus-bacnet | full (mặc định)' \
     'Wave: chạy đúng bộ cổng bắt buộc của một Wave Plan 59 và in bảng tổng kết.' \
     '      Cổng cần CI/board/instrument hiện NOT_RUN kèm runbook, không bao giờ PASS.' \
@@ -326,6 +326,22 @@ run_release() {
   python3 -m unittest "$repo_root/tests/integration/test_release_dryrun.py"
 }
 
+# Lane BROWSER/DEVTOOLS. Trước 2026-09-12, mọi bảng kiểm chứng trong repo ghi
+# `Chrome DevTools MCP = NOT_RUN` với lý do "môi trường thiếu X server" — và
+# không có lệnh nào để kiểm lại điều đó. `NOT_RUN` không đỏ, nó im: lane hỏng
+# nằm yên cho tới đúng lúc cần bằng chứng Console/Network mà không có gì đưa ra.
+#
+# `scripts/chrome-devtools-mcp.sh` tự dựng Xvfb riêng (`:99`) nên Chrome headful
+# chạy được mà không đụng phiên desktop; cổng dưới đây buộc lane phải chứng minh
+# điều đó bằng một phiên MCP thật, không phải bằng một dòng trong tài liệu.
+#
+# Cổng cố ý KHÔNG gọi `require_contract_python_deps`: nó không chạy script hợp
+# đồng Python nào.
+run_browser() {
+  MKDDC_DEVTOOLS_EVIDENCE="${MKDDC_DEVTOOLS_EVIDENCE:-artifacts/ui-audit/chrome-devtools-mcp-gate.json}" \
+    node "$repo_root/scripts/verify_chrome_devtools_mcp.mjs"
+}
+
 # Hai cổng dưới đây trước 2026-09-11 KHÔNG có mặt ở đâu trong script:
 # `rg 'docs_iso_harness|workflow_guard' scripts/verify-project.sh` trả về RỖNG.
 # Hệ quả: không một lệnh nào chạy được đủ bộ cổng offline, người kiểm trước khi
@@ -399,6 +415,7 @@ case "$component" in
   release) run_release ;;
   docs) run_docs ;;
   workflow) run_workflow ;;
+  browser) run_browser ;;
   all)
     run_layout
     run_cpp
@@ -413,6 +430,9 @@ case "$component" in
     # và exit code của bảy component cũ KHÔNG đổi.
     run_docs
     run_workflow
+    # `browser` đứng SAU hai cổng của #593 vì cùng lý do đã ghi ở trên: chèn lên
+    # trước sẽ đổi thời điểm `set -e` cắt mạch của chín component có sẵn.
+    run_browser
     ;;
   *) printf 'LỖI: component không hỗ trợ: %s\n' "$component" >&2; exit 2 ;;
 esac

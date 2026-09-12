@@ -73,6 +73,359 @@
   - C++ `NOT_RUN` (không chạm `apps/core/**`, `apps/iobus/**`, `contracts/`);
     FE `NOT_RUN` (không chạm `apps/web-ui/**`); E2E `NOT_RUN` (không chạm trang
     mạng); CI `NOT_RUN (#414)`.
+### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
+
+- Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
+  `apps/web-api/internal/modbusrtu/persistence_offline_test.go`, `CHANGELOG.md`.
+  Không chạm `journal.go`, `domain.go`, `control_client.go` hay file nào ngoài
+  `internal/modbusrtu/`. Chữ ký `Persister.Apply` giữ nguyên; `ApplyResult`
+  không thêm field; tập giá trị `TxStaged`/`TxSent`/`TxCommitted`/`TxRolledBack`/
+  `TxUnreachable` giữ nguyên; JSON trả ra của endpoint fieldbus không thêm
+  trường nào (`ConfigPutResult.Warnings` đã có sẵn trong schema).
+
+- Triệu chứng: khi iobus TỪ CHỐI cấu hình mới, `Apply` trả lỗi nói "cấu hình cũ
+  đã được phục hồi" và journal ghi `ROLLED_BACK` — kể cả khi việc phục hồi vừa
+  thất bại. Trên đĩa còn `fieldbus.conf` + `profiles/*.json` của bản MỚI, nên lần
+  khởi động sau iobus nạp đúng cấu hình nó vừa từ chối, trong khi cả API lẫn
+  journal đều đã khai là đã quay về an toàn.
+
+- Nguyên nhân gốc: closure `restore()` — toàn bộ cơ chế quay về của `Apply` — vứt
+  mọi lỗi (`_ = p.WriteFile(...)`, `_ = os.Remove(...)`). Rollback hỏng vì đĩa
+  đầy, EROFS hay mất quyền trên đường dẫn đều đi qua không tiếng động, và trạng
+  thái journal thì do chính nhánh lỗi này tự đặt nên không có số đo nào mâu thuẫn
+  để phát hiện ra. Cùng lớp hồi quy với `#607` (chu kỳ historian nuốt im lỗi ghi
+  gap), lần này ở đường rollback cấu hình fieldbus.
+
+- Cách sửa: `restore()` trả `error`, thu lỗi của từng snapshot và vẫn thử hết các
+  snapshot còn lại (quay về được ba trong bốn file tốt hơn bỏ dở ở file đầu);
+  `os.Remove` trả `ENOENT` không tính là lỗi vì file vắng mặt đã đúng đích.
+  Helper `withRollback` bọc lỗi rollback vào lỗi trả về cho caller và vào
+  `tx.Reason` của journal, dùng chung cho cả `failTx` lẫn nhánh dự phòng
+  `Reload` — hai đường quay về không còn khai hai thứ khác nhau về cùng một sự
+  cố. Lỗi rollback đứng TRƯỚC nguyên nhân gốc trong cả hai chuỗi: `ErrApply` mở
+  đầu bằng "cấu hình cũ đã được phục hồi", đặt nó trước thì người vận hành đọc
+  câu sai trước rồi mới tới câu đính chính. Thứ tự bọc `%w` không đổi kết quả
+  `errors.Is`, nên tầng HTTP vẫn phân loại theo `ErrApply` như cũ.
+
+- Sửa kèm trong cùng nhánh lỗi: ghi `fieldbus.lkg.json` hỏng không còn im lặng —
+  cả lỗi `json.MarshalIndent` lẫn lỗi `WriteFile` đều phát một warning nêu đường
+  dẫn ra `ApplyResult.Warnings`. Apply vẫn thành công (cấu hình mới áp được),
+  nhưng bản last-known-good vắng mặt là thứ người vận hành phải biết TRƯỚC khi
+  cần tới nó. Năm lệnh `_ = p.Journal.Write(tx)` giữ nguyên: journal là đường phụ
+  trợ và lần ghi đầu đã xử lý lỗi đúng cách.
+
+- Số đo (2026-09-11, đo tại máy trên commit của nhánh này; không dẫn lại số cũ):
+  - Chứng minh fail-close bằng tiêm lỗi thật: `git stash` riêng `persistence.go`
+    (giữ nguyên test mới) ⇒ **3/3 test mới FAIL**, exit `1`, thông điệp đỏ là
+    khẳng định thật chứ không phải lỗi biên dịch — test không tham chiếu symbol
+    nào chỉ có ở bản sửa. Trả lại bản sửa ⇒ `ok`, exit `0`.
+  - `go test ./internal/modbusrtu/... -count=1 -v -run 'Persist|RollsBack|Apply'`:
+    **5/5 PASS**, exit `0` — gồm `TestPersisterRollsBackWhenReloadFails` (đường
+    rollback thành công, hành vi không đổi) và ba test mới.
+  - `go vet ./...` exit `0`; `go test ./... -count=1` **21/21 package `ok`**,
+    exit `0` (3 package không có test file); `internal/app` 34.760s,
+    `internal/programming/application` 20.148s, `internal/modbusrtu` 0.079s.
+  - `gofmt -l` trên hai file đã sửa: **rỗng**.
+  - C++ `NOT_RUN` (không chạm `apps/core/**`, `apps/iobus/**`, `contracts/`);
+    FE `NOT_RUN` (không chạm `apps/web-ui/**`); E2E `NOT_RUN` (không chạm trang
+    mạng); Docs `NOT_RUN` (không chạm `docs/**`); CI `NOT_RUN (#414)`.
+### Changed — `#608`: hai brief yêu cầu ở thư mục gốc vào Document Hub, có mã hồ sơ `DD-01` (2026-09-11)
+
+- Phạm vi: `d.md` → `docs/CHUONG_YEU_CAU/PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md`
+  (`git mv`, giữ lịch sử), `Yeucau_FE.md` →
+  `docs/CHUONG_YEU_CAU/PROGRAMMING_FE_REDESIGN_BRIEF.md` (`git mv`),
+  `docs/README.md` (thêm một dòng bảng + dòng `**Cập nhật:**`),
+  `docs/07_records/reviews/PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md`
+  (chỉ đổi đích hai link Markdown), `CHANGELOG.md`. **Không** chạm
+  `gap_analysis_programming_page.md`, `README.md` gốc, `AGENTS.md`, `CLAUDE.md`
+  hay bất kỳ file nào khác trong `docs/CHUONG_YEU_CAU/`.
+
+- **Không đổi một chữ nội dung nghiệp vụ.** `git show origin/main:d.md | diff -`
+  trên đường dẫn mới cho đúng một khối thêm (`0a1,20`) và
+  `git show origin/main:Yeucau_FE.md | diff -` cho đúng một khối thêm
+  (`2a3,21`) — không dòng nào bị sửa hoặc xoá. Bảng GAP `G-01..G-30`, priority
+  `P0/P1` và 14 specification document của brief FE giữ nguyên.
+
+- Triệu chứng: `docs/README.md:9` tuyên bố *"Đây là cổng vào duy nhất cho hồ sơ
+  Markdown đang hiệu lực"*, nhưng hai hồ sơ yêu cầu tổng 1.819 dòng — vừa dẫn
+  đường cho đợt thi hành `Rebuild Programming Workspace G-01..G-30 (2026-09-09)`
+  — lại nằm ở thư mục gốc, không mã hồ sơ, không trạng thái, không ngày, không
+  nguồn, và `rg 'd\.md|Yeucau' docs/README.md` trả về **rỗng**. Riêng tên `d.md`
+  một ký tự thì không tra được và va ngay với thói quen đặt tên file tạm.
+
+- Nguyên nhân gốc: hai file vào repo như **đầu vào thô** của phiên làm việc
+  (`2783ca0` cho `d.md`, `4fc2c47` cho `Yeucau_FE.md`) chứ không qua bước đăng
+  ký hồ sơ, và `docs/CHUONG_YEU_CAU/` — nơi các brief đầu vào khác đang sống
+  (`dashboard.md`, `scheduler.md`, `UX_DESIGN_MK-DDC-24_PA3.md`, hai hồ sơ
+  Programming) — **chưa từng có dòng nào trong register của `docs/README.md`**.
+  Thiếu dòng register nên không có chỗ đúng để trỏ tới, và file ở gốc cứ ở lại
+  gốc.
+
+- Cách sửa: `git mv` hai file vào `docs/CHUONG_YEU_CAU/` với tên nói được nội
+  dung; thêm khối metadata `DD-01` theo khuôn `docs/CHUONG_YEU_CAU/dashboard.md`
+  (mã hồ sơ `DDC24-PRG-WORKSPACE-REBUILD-BRIEF-001` và
+  `DDC24-PRG-FE-REDESIGN-BRIEF-001`, trạng thái `Historical`, ngày, commit
+  nguồn, mục CHANGELOG mà nó đã dẫn đường) kèm banner nói rõ đây là **đầu vào
+  giữ nguyên để truy xuất, không phải baseline và không phải acceptance
+  authority** — với brief workspace thì dẫn thẳng record
+  `PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md` đã
+  kết luận Inspector **chưa** đạt `G-12..G-21`, để không ai lấy 13 dấu `✓` trong
+  Definition of Done của brief làm bằng chứng; thêm một dòng bảng
+  `docs/CHUONG_YEU_CAU/` vào register.
+
+- Sửa kèm, **bắt buộc về mặt kỹ thuật chứ không phải mở rộng phạm vi tự ý**: hai
+  link Markdown trỏ `../../../d.md` ở dòng 22 và 52 của
+  `PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md` trỏ
+  vào file ở gốc. Di chuyển mà không đổi hai đích đó thì phép kiểm 8 của
+  `docs_iso_harness.py` (`docs/** link missing`) tăng từ 0 lên 2 và cổng tài liệu
+  đỏ — đúng thứ tiêu chí chấp nhận của `#608` cấm. Chỉ đổi **đích link**; không
+  sửa kết luận, số đo hay phán quyết nào của record. Các lần nhắc `d.md` dạng
+  văn xuôi trong record lịch sử được giữ nguyên: chúng kể lại tên file tại thời
+  điểm phán quyết, và ánh xạ tên cũ → mới nằm ở chính mục này.
+
+- Ánh xạ đường dẫn để truy nguyên: `d.md` → `docs/CHUONG_YEU_CAU/PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md`;
+  `Yeucau_FE.md` → `docs/CHUONG_YEU_CAU/PROGRAMMING_FE_REDESIGN_BRIEF.md`. Các
+  mục CHANGELOG cũ (dòng 1123 và 16401 tính trên `origin/main` trước PR này) và
+  các record rà soát vẫn gọi tên cũ — đó là tên tại thời điểm viết.
+
+- Kiểm chứng (đo tại máy 2026-09-11, không dẫn lại số cũ; CI `NOT_RUN` theo
+  `#414`): `python3 scripts/docs_iso_harness.py --expect` exit `0`,
+  `duplicate doc ID: 0`, `docs/** link missing: 0 (quét 446 file .md)` — bằng
+  đúng số trước PR là `0` trên 444 file, tức hai file mới vào phạm vi cổng mà
+  không thêm link hỏng; `trailing whitespace: 0`; `code fence lệch: 0`;
+  `ls *.md` ở gốc còn đúng `AGENTS.md`, `CHANGELOG.md`, `CLAUDE.md`, `README.md`,
+  `gap_analysis_programming_page.md`; `git log --follow` trên hai đường dẫn mới
+  vẫn thấy commit gốc `2783ca0` và `4fc2c47`. Cổng C++/Go/FE `NOT_RUN` — diff chỉ
+  gồm file Markdown, không chạm source, build hay config.
+### Added — `#634`: cổng canh tám hằng số sức chứa bảng point ABI giữa `mkddc_shm.h` và hai bản sao Go (2026-09-11)
+
+- Phạm vi: `apps/web-api/internal/app/shm_contract_sync_test.go` (thêm cổng),
+  `apps/web-api/internal/capabilities/board.go` và
+  `apps/web-api/internal/app/core_client.go` (**chỉ thêm chú thích** trỏ tới
+  cổng mới). Không đổi giá trị hằng số nào, không đổi chuỗi offset, không đổi
+  contract/API/schema (N6). `contracts/shm/mkddc_shm.h` **không đổi** — việc sửa
+  `#define` chỉ là tiêm lỗi tạm thời và đã hoàn nguyên, `git status
+  contracts/` sạch.
+
+- Triệu chứng: #606 đã dựng cổng đồng bộ giữa Go và
+  `contracts/shm/mkddc_shm.h` nhưng chỉ canh **đúng ba** hằng
+  (`KX_SHM_MAGIC`, `KX_SHM_IO_PATH`, `KX_SHM_PLC_PATH`). Tám hằng `KX_N_*` —
+  sức chứa bảng point — cũng là bản sao rời của cùng file hợp đồng và **không
+  test nào canh**. Đổi `kxNAV` thành 99 thì `go test ./... -count=1` vẫn `ok`
+  toàn bộ.
+
+- Nguyên nhân gốc: hai lớp xếp lên nhau. Thứ nhất, tám hằng nằm rải ở **hai
+  package** — `capabilities.ABI{UniversalInputs,DigitalInputs,AnalogOutputs,DigitalOutputs}`
+  (`internal/capabilities/board.go`) và `kxNAV/kxNBV/kxNMSV/kxNEXT` là **số
+  trần** trong `core_client.go`, không đi qua `capabilities` như bốn hằng đầu.
+  Thứ hai, đúng cơ chế tautology mà #606 đã ghi lại: fixture test **tự dựng SHM
+  giả bằng chính các hằng số Go đó** rồi khẳng định code đọc lại được — luôn
+  đúng với mọi giá trị. Hệ quả hiện trường không có crash, không có log:
+  `core_client.go` dựng **chuỗi offset cộng dồn**
+  `offAI→offBI→offAO→offBO→offAV→offBV→offMSV→offExt` từ đúng tám hằng đó, nên
+  một hằng lệch làm **mọi offset đứng sau nó lệch theo** và web-api đọc
+  BV/MSV/EXT từ sai byte offset, trả giá trị rác hoặc lệch kênh lên Overview
+  trong khi Core và iobus chạy đúng.
+
+- Cách sửa: thêm `TestShmPointTableCapacitiesMatchHeader` đọc **trực tiếp**
+  `contracts/shm/mkddc_shm.h` và so **12 phép** phủ đủ tám `#define` — bốn hằng
+  đầu so với cả bản gốc `capabilities.ABI*` lẫn alias `kxNUI/kxNDI/kxNAO/kxNDO`,
+  nên nếu sau này ai đó thay alias bằng literal thì cổng vẫn canh đúng chỗ.
+  Thông điệp FAIL nêu **tên `#define`, giá trị đọc từ header, tên + giá trị hằng
+  Go kèm file** nên đọc log là biết sửa gì. Cổng **dùng lại** helper parse sẵn
+  có của #606 (`shmContractPath`, `parseShmDefineLine`, `parseShmDefineUint`,
+  `shmContractUint`) — không chép bộ parser thứ hai, vì nhân bản parser là tái
+  lập đúng lỗi đang vá. Cổng đặt ở package `app` (không ở `capabilities`) vì
+  helper parse là mã test của `app` nên package khác không import được, còn
+  `app` đã import `capabilities` nên là package **duy nhất** đọc được cả hai bản
+  sao. Fail-close khi thiếu header nhờ dùng lại `shmContractPath` (`t.Fatalf`,
+  không `t.Skip`). Kèm `TestShmPointTableGateFiresOnInjectedMismatch` theo khuôn
+  `TestBoardCapDriftGateFiresOnInjectedMismatch`: đọc header thật, tiêm lỗi vào
+  bản sao trong bộ nhớ, khẳng định phép thay thế **đã thật sự khớp** trước khi
+  so (nếu hợp đồng đổi cách viết dòng `#define` thì bộ tiêm lỗi phải đỏ, không
+  được lặng lẽ không tiêm gì), và suy giá trị tiêm từ chính hằng Go (`+1`) thay
+  vì viết cứng để không đỏ vì lý do sai khi ai đó nâng sức chứa hợp lệ. Regexp
+  dòng `#define` tách thành `shmDefinePattern` dùng chung cho cả bên đọc và bên
+  tiêm lỗi, hành vi parse không đổi (các test #606 vẫn xanh).
+
+- Số đo (2026-09-11, đo tại máy, HOST):
+  - `go vet ./...` exit `0`; `go test ./... -count=1` **22/22 package `ok`**,
+    exit `0`, `internal/app` 34.084s, `internal/capabilities` 0.003s.
+  - `go test ./internal/app/... ./internal/capabilities/... -count=1 -v -run
+    'ShmContract|ShmPointTable|BoardCap'` exit `0`:
+    `TestShmPointTableCapacitiesMatchHeader` **12/12 subtest PASS**,
+    `TestShmPointTableGateFiresOnInjectedMismatch` **2/2 PASS**, các test #606
+    và `TestBoardCapBitsMatchContractHeader` vẫn PASS.
+  - Tiêm lỗi thật vào `contracts/shm/mkddc_shm.h`, cả hai bản sao:
+    `KX_N_AV` 32→33 ⇒ `--- FAIL: …/KX_N_AV/kxNAV_(internal/app/core_client.go)`
+    + exit `1`; hoàn nguyên ⇒ `ok` + exit `0`. `KX_N_UI` 16→17 ⇒ `--- FAIL` ở
+    **cả hai** nhánh `capabilities.ABIUniversalInputs` và `kxNUI` + exit `1`;
+    hoàn nguyên ⇒ `ok` + exit `0`. Header sau cùng giống hệt bản gốc
+    (`diff` sạch, `git status contracts/` rỗng).
+  - Fail-close khi thiếu header: ẩn tạm `contracts/shm/mkddc_shm.h` ⇒
+    `--- FAIL … không tìm thấy contracts/shm/mkddc_shm.h sau khi đi lên 8 cấp`
+    + exit `1`, **không** SKIP; trả lại ⇒ `ok`.
+  - C++ `NOT_RUN` (không chạm `apps/core/**`, `apps/iobus/**`, không sửa
+    `contracts/`); FE `NOT_RUN` (không chạm `apps/web-ui/**`); tài liệu
+    `NOT_RUN` (không chạm `docs/**`); CI `NOT_RUN (#414)`.
+### Changed — `#660`: `ProblemsDrawer` gom dải chiều cao `160–320` về một điểm định nghĩa cho mỗi biên (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/shared/ProblemsDrawer.tsx`,
+  `apps/web-ui/src/features/programming/shared/ProblemsDrawer.test.tsx`,
+  `CHANGELOG.md`. **Không** chạm `ProgrammingWorkbench.tsx`, `ProgramsWorkspace.tsx`
+  hay spec e2e nào. Breakpoint Tailwind `min-[1280px]` lặp sáu lần trong cùng tệp
+  được cố ý để nguyên — đó là idiom Tailwind, không phải hợp đồng ARIA.
+
+- Triệu chứng: cùng dải `160–320` khai ở **ba** chỗ rời nhau, không chỗ nào tham
+  chiếu chỗ nào — `:80` (lọc giá trị đọc từ `localStorage`), `:283-284`
+  (`aria-valuemin`/`aria-valuemax` công bố ra công nghệ trợ giúp), `:370`
+  (`clampPanelHeight` quyết định widget thực sự nhận gì).
+
+- Nguyên nhân gốc: `:283-284` là **hợp đồng a11y** còn `:370` là **hành vi thật**,
+  và không phép đo nào buộc chúng bằng nhau. Nới dải ở chỗ tự nhiên nhất
+  (`clampPanelHeight`) sinh ra ba triệu chứng từ một lần sửa một dòng: widget cho
+  kéo tới trần mới; `aria-valuemax` vẫn báo trần cũ nên `aria-valuenow` vượt
+  `aria-valuemax` — trạng thái ARIA tự mâu thuẫn; và `:80` vẫn từ chối giá trị đã
+  lưu trên trần cũ nên chiều cao vừa kéo không được nhớ, không báo gì. `vitest` vẫn
+  xanh cho cả ba. Cùng lớp drift với `#658` (breakpoint e2e) và `#634` (hằng số ABI).
+
+- Cách sửa: khai `PANEL_HEIGHT_MIN_PX` / `PANEL_HEIGHT_MAX_PX` ở đầu tệp và cho cả
+  ba chỗ đọc từ chúng; `export` `clampPanelHeight` để test khẳng định trực tiếp hai
+  biên. Thêm bốn test: cặp `aria-valuemin`/`aria-valuemax` khớp đúng hai hằng số
+  (không chép lại `'160'`/`'320'` — chép lại là dựng lại đúng bản sao vừa xoá); phép
+  kẹp ở cả hai biên kèm ca trong dải để phép kẹp không "đạt" bằng cách trả hằng số
+  cho mọi đầu vào; giá trị `localStorage` ngoài dải bị loại về mặc định còn trong dải
+  thì được nhớ; và một ghim hợp đồng `[MIN, MAX] === [160, 320]` — vì ba test kia đều
+  đọc từ hằng số nên chúng bắt được "một chỗ trôi" nhưng không bắt được việc đổi chính
+  hằng số. Không đổi hành vi: dải vẫn `160–320`, mặc định vẫn `160`, khoá `localStorage`
+  và mọi class Tailwind giữ nguyên.
+
+- Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` theo `#414`):
+
+  | Cổng | Lệnh | Kết quả |
+  |---|---|---|
+  | Trùng lặp hằng số | `rg -n '\b160\b\|\b320\b' ProblemsDrawer.tsx` | 4 dòng (`:80`, `:283`, `:284`, `:370`) → **2 dòng** (`:18`, `:19`, đúng hai dòng khai hằng số) |
+  | Vitest (tệp) | `npx vitest --run --environment jsdom src/features/programming/shared/ProblemsDrawer.test.tsx` | **20 passed** (trước: 16), exit 0 |
+  | Vitest (thư mục) | `… src/features/programming/shared` | **10 files / 117 passed**, exit 0 |
+  | Vitest (toàn `src`) | `… src` | **246 files / 3137 passed / 0 failed**, exit 0 (baseline `#658`: 3133; +4 test mới) |
+  | Lint | `npm run lint` | PASS, exit 0 |
+  | Build | `npm run build` | PASS, exit 0 (chunk `programming` 153.62 KiB gzip, ngân sách R3 165.00 KiB) |
+  | Playwright | `npx playwright test e2e/programming-workspace-height.spec.ts e2e/programming.spec.ts` | **106 passed / 28 skipped / 12 failed**, **trùng khít baseline `origin/main`** đo lại cùng phiên (cùng 12 test, cùng thứ tự) — không hồi quy |
+  | Chrome DevTools MCP | — | `NOT_RUN` — MCP không có trong phiên; thay đổi không đổi DOM/class/hành vi runtime, đã phủ bằng Playwright desktop + mobile |
+
+- Bằng chứng cổng đã đóng (tiêm lỗi rồi trả về nguyên trạng):
+
+  | Tiêm | Kết quả |
+  |---|---|
+  | `clampPanelHeight` trôi khỏi hằng số (`Math.min(480, …)`) — đúng kịch bản Issue mô tả | **1 failed / 19 passed**, exit 1 — `AssertionError: expected 321 to be 320` |
+  | Đổi chính hằng số `PANEL_HEIGHT_MAX_PX = 480` | **1 failed / 19 passed**, exit 1 — `AssertionError: expected [ 160, 480 ] to deeply equal [ 160, 320 ]` |
+  | Trả về nguyên trạng | **20 passed**, exit 0 |
+
+
+### Fixed — lane Chrome DevTools MCP không còn `NOT_RUN` vì thiếu X server (2026-09-12)
+
+- Phạm vi: `scripts/ensure-xvfb.sh` (mới), `scripts/chrome-devtools-mcp.sh` (mới),
+  `scripts/verify_chrome_devtools_mcp.mjs` (mới), `.mcp.json` (mới),
+  `scripts/verify-project.sh`, `.codex/config.toml`, `AGENTS.md`, `CLAUDE.md`,
+  `docs/03_implementation/61_PROGRAMMING_FE_HANDOFF_V21_PGM04_PLAN.md` (§2.2),
+  `docs/07_records/test-evidence/2026-09-12-chrome-devtools-mcp-x-server.md` (mới),
+  `artifacts/ui-audit/chrome-devtools-mcp-gate.json`, `CHANGELOG.md`. **Không**
+  chạm mã sản phẩm, không chạm `scripts/run-pgm04-devtools-audit.sh` (lane CDP
+  headless của `T61-505` giữ nguyên), không sửa phán quyết trong các bản ghi cũ.
+
+- Triệu chứng: mọi bảng kiểm chứng gần đây ghi `Chrome DevTools MCP = NOT_RUN`
+  kèm lý do "môi trường thiếu X server" — `DEPLOYMENT_PROVENANCE_REPORT.md:69`,
+  `PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md:88`,
+  plan 61 §2.2. Phiên MCP thật cho thấy `initialize` và `tools/list` **PASS**
+  (29 tool), nhưng tool đầu tiên cần trình duyệt trả `isError: true` với
+  `Missing X server to start the headful browser`.
+
+- Nguyên nhân gốc: `chrome-devtools-mcp` khởi động Chrome **headful** — chính là
+  lý do nó tồn tại bên cạnh Playwright headless — còn phiên agent không thừa
+  hưởng `DISPLAY` dùng được. Host *có* X server (`/tmp/.X11-unix/X0`, `X1` của
+  phiên desktop) nhưng không có `~/.Xauthority`, nên `DISPLAY=:0 xdpyinfo` trả
+  `Authorization required`. Hai hệ quả: phép kiểm "có socket X không" kết luận
+  sai, và lỗi đến trong kết quả tool bình thường nên bất kỳ cổng nào chỉ kiểm
+  `result` tồn tại sẽ báo xanh. Chưa từng có cấu hình MCP nào cho Claude Code
+  (`.mcp.json` không tồn tại); chỉ Codex có, và nó gọi thẳng `npx`.
+
+- Cách sửa: `ensure-xvfb.sh` dựng Xvfb trên display riêng `:99` khi `$DISPLAY`
+  hiện có không mở được — không mượn `~/.Xauthority`, không đụng phiên desktop,
+  `setsid` để sống qua lệnh gọi, idempotent. `chrome-devtools-mcp.sh` bọc
+  `npx chrome-devtools-mcp` và bảo đảm điều kiện đó trước khi `exec`; cả
+  `.mcp.json` lẫn `.codex/config.toml` trỏ vào launcher. Đặt
+  `env = { DISPLAY = ":99" }` trong file cấu hình là **không đủ** — nó giả định
+  đã có ai đó dựng sẵn `:99`. `verify_chrome_devtools_mcp.mjs` biến lane thành
+  một cổng chạy được (component `browser`, có trong `all`), vì `NOT_RUN` không
+  đỏ mà im: lane hỏng nằm yên tới đúng lúc cần bằng chứng Console/Network.
+
+- Số đo (đo tại máy 2026-09-12):
+
+  | Cổng | Kết quả |
+  |---|---|
+  | Tái hiện: phiên MCP `env -u DISPLAY` | `list_pages` `isError=true`, `Missing X server…` |
+  | `env -u DISPLAY scripts/ensure-xvfb.sh` ×2 | in `:99` cả hai lần; `pgrep -c -x Xvfb` = `1` |
+  | `verify-project.sh --component browser` | **PASS 7/7**, exit `0` |
+  | Lane trên FE thật (vite dev `/login`) | **PASS 7/7**, `take_snapshot` 838 ký tự |
+  | Cổng tự kiểm: probe `http://127.0.0.1:1/…` | **FAIL**, exit `1` (`ERR_UNSAFE_PORT`) |
+  | `verify-project.sh --component docs` | PASS |
+  | `verify-project.sh --component workflow` | PASS — 48/48 |
+  | `verify-project.sh --component layout` | PASS |
+
+- Ghi chú kiểm chứng: bản đầu của cổng chỉ kiểm `isError`, và đo được rằng
+  `navigate_page` **không** đặt cờ đó khi điều hướng hỏng — cổng vì thế báo PASS
+  cho một lần điều hướng thất bại. Đã vá để kiểm nội dung `Successfully
+  navigated`; dòng "Cổng tự kiểm" ở trên là bằng chứng nó đỏ đúng chỗ. Bản ghi
+  `NOT_RUN` cũ **giữ nguyên** — chúng đúng với thời điểm đo; muốn nâng thì phải
+  đo lại qua lane này.
+
+
+### Fixed — `#658`: e2e Programming lấy breakpoint authoring từ nguồn chân lý thay vì bản chép tay (2026-09-12)
+
+- Phạm vi: `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`. **Không** chạm
+  `apps/web-ui/src/features/programming/layout/useProgrammingViewport.ts` (giá trị
+  `768` và tên `PROGRAMMING_AUTHORING_MIN_WIDTH_PX` giữ nguyên), không chạm
+  `playwright.config.ts`, không đổi tên/số lượng project trong ma trận lane.
+
+- Triệu chứng: breakpoint authoring có **hai** định nghĩa —
+  `useProgrammingViewport.ts:3` (`export const PROGRAMMING_AUTHORING_MIN_WIDTH_PX = 768`,
+  nguồn chân lý dựng media query và quyết định lane mobile/desktop) và
+  `programming.spec.ts:25` (`const AUTHORING_MIN_WIDTH_PX = 768`, bản chép tay) —
+  mà không cổng nào buộc chúng bằng nhau.
+
+- Nguyên nhân gốc: bản chép tay được dùng 20 lần để **chọn lane bằng `test.skip()`**.
+  Đổi breakpoint ở src thì e2e vẫn so với hằng số cũ, nên lane cần phủ bị `skip`
+  còn lane không còn tồn tại thì vẫn chạy. Playwright in `skipped`, không in
+  `failed` — bộ e2e báo xanh cho một ma trận lane đã hết đúng. Đây là fail-open,
+  không chỉ là trùng lặp; cùng lớp drift với `#634`. Không có lý do kỹ thuật nào
+  để chép tay: spec đã import trực tiếp từ `src/` ở bốn chỗ (`:5`, `:6`, `:9`, `:10`)
+  và hằng số đã có `export`.
+
+- Cách sửa: xoá dòng `:25`, import `PROGRAMMING_AUTHORING_MIN_WIDTH_PX` từ
+  `../src/features/programming/layout/useProgrammingViewport` theo đúng khuôn
+  import sẵn có, và đổi 20 chỗ tham chiếu sang đúng tên đã export. Không đổi điều
+  kiện lane nào, không đổi hành vi sản phẩm — PR chỉ chạm mã test. Toàn repo còn
+  đúng **một** điểm định nghĩa.
+
+- Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` theo `#414`):
+
+  | Cổng | Kết quả |
+  |---|---|
+  | `rg -n 'AUTHORING_MIN_WIDTH_PX\s*=' apps/web-ui/e2e` | rỗng (exit 1) |
+  | `rg -n 'AUTHORING_MIN_WIDTH_PX\s*=' apps/web-ui` | đúng 1 dòng, ở `src/` |
+  | `rg -c 'AUTHORING_MIN_WIDTH_PX' .../programming.spec.ts` | `21` trước và sau |
+  | `npx tsc --noEmit` | PASS (exit 0) |
+  | `npm run lint` | PASS (exit 0) |
+  | `npx vitest --run --environment jsdom src` | PASS — 246 file, 3133 test |
+  | `npx playwright test e2e/programming.spec.ts` | 102 passed / 28 skipped / 8 failed — **giống hệt baseline trên `main`**, cùng tập test đỏ |
+
+- Ghi chú kiểm chứng: 8 test đỏ nói trên đã đỏ sẵn trên `origin/main` (đo trước
+  khi sửa dòng nào) và không liên quan tới thay đổi này. Bằng chứng cổng đã đóng:
+  tạm đặt src `= 1400` thì lane desktop (1280 px) lật từ 2 passed/1 skipped sang
+  1 passed/2 skipped; đặt lại `768` thì lật về. Giá trị `840` mà Issue đề xuất
+  không lật được gì vì nó không cắt qua khổ nào của hai project (1280 và 412) —
+  chi tiết trong PR.
+
 
 ### Added — `#593`: `verify-project.sh` có đường chạy cho cổng tài liệu và selftest của cổng tách vai (2026-09-11)
 
