@@ -98,6 +98,59 @@
 
 - Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` theo `#414`): xem bảng Verification
   của PR.
+### Changed — `#660`: `ProblemsDrawer` gom dải chiều cao `160–320` về một điểm định nghĩa cho mỗi biên (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/shared/ProblemsDrawer.tsx`,
+  `apps/web-ui/src/features/programming/shared/ProblemsDrawer.test.tsx`,
+  `CHANGELOG.md`. **Không** chạm `ProgrammingWorkbench.tsx`, `ProgramsWorkspace.tsx`
+  hay spec e2e nào. Breakpoint Tailwind `min-[1280px]` lặp sáu lần trong cùng tệp
+  được cố ý để nguyên — đó là idiom Tailwind, không phải hợp đồng ARIA.
+
+- Triệu chứng: cùng dải `160–320` khai ở **ba** chỗ rời nhau, không chỗ nào tham
+  chiếu chỗ nào — `:80` (lọc giá trị đọc từ `localStorage`), `:283-284`
+  (`aria-valuemin`/`aria-valuemax` công bố ra công nghệ trợ giúp), `:370`
+  (`clampPanelHeight` quyết định widget thực sự nhận gì).
+
+- Nguyên nhân gốc: `:283-284` là **hợp đồng a11y** còn `:370` là **hành vi thật**,
+  và không phép đo nào buộc chúng bằng nhau. Nới dải ở chỗ tự nhiên nhất
+  (`clampPanelHeight`) sinh ra ba triệu chứng từ một lần sửa một dòng: widget cho
+  kéo tới trần mới; `aria-valuemax` vẫn báo trần cũ nên `aria-valuenow` vượt
+  `aria-valuemax` — trạng thái ARIA tự mâu thuẫn; và `:80` vẫn từ chối giá trị đã
+  lưu trên trần cũ nên chiều cao vừa kéo không được nhớ, không báo gì. `vitest` vẫn
+  xanh cho cả ba. Cùng lớp drift với `#658` (breakpoint e2e) và `#634` (hằng số ABI).
+
+- Cách sửa: khai `PANEL_HEIGHT_MIN_PX` / `PANEL_HEIGHT_MAX_PX` ở đầu tệp và cho cả
+  ba chỗ đọc từ chúng; `export` `clampPanelHeight` để test khẳng định trực tiếp hai
+  biên. Thêm bốn test: cặp `aria-valuemin`/`aria-valuemax` khớp đúng hai hằng số
+  (không chép lại `'160'`/`'320'` — chép lại là dựng lại đúng bản sao vừa xoá); phép
+  kẹp ở cả hai biên kèm ca trong dải để phép kẹp không "đạt" bằng cách trả hằng số
+  cho mọi đầu vào; giá trị `localStorage` ngoài dải bị loại về mặc định còn trong dải
+  thì được nhớ; và một ghim hợp đồng `[MIN, MAX] === [160, 320]` — vì ba test kia đều
+  đọc từ hằng số nên chúng bắt được "một chỗ trôi" nhưng không bắt được việc đổi chính
+  hằng số. Không đổi hành vi: dải vẫn `160–320`, mặc định vẫn `160`, khoá `localStorage`
+  và mọi class Tailwind giữ nguyên.
+
+- Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` theo `#414`):
+
+  | Cổng | Lệnh | Kết quả |
+  |---|---|---|
+  | Trùng lặp hằng số | `rg -n '\b160\b\|\b320\b' ProblemsDrawer.tsx` | 4 dòng (`:80`, `:283`, `:284`, `:370`) → **2 dòng** (`:18`, `:19`, đúng hai dòng khai hằng số) |
+  | Vitest (tệp) | `npx vitest --run --environment jsdom src/features/programming/shared/ProblemsDrawer.test.tsx` | **20 passed** (trước: 16), exit 0 |
+  | Vitest (thư mục) | `… src/features/programming/shared` | **10 files / 117 passed**, exit 0 |
+  | Vitest (toàn `src`) | `… src` | **246 files / 3137 passed / 0 failed**, exit 0 (baseline `#658`: 3133; +4 test mới) |
+  | Lint | `npm run lint` | PASS, exit 0 |
+  | Build | `npm run build` | PASS, exit 0 (chunk `programming` 153.62 KiB gzip, ngân sách R3 165.00 KiB) |
+  | Playwright | `npx playwright test e2e/programming-workspace-height.spec.ts e2e/programming.spec.ts` | **106 passed / 28 skipped / 12 failed**, **trùng khít baseline `origin/main`** đo lại cùng phiên (cùng 12 test, cùng thứ tự) — không hồi quy |
+  | Chrome DevTools MCP | — | `NOT_RUN` — MCP không có trong phiên; thay đổi không đổi DOM/class/hành vi runtime, đã phủ bằng Playwright desktop + mobile |
+
+- Bằng chứng cổng đã đóng (tiêm lỗi rồi trả về nguyên trạng):
+
+  | Tiêm | Kết quả |
+  |---|---|
+  | `clampPanelHeight` trôi khỏi hằng số (`Math.min(480, …)`) — đúng kịch bản Issue mô tả | **1 failed / 19 passed**, exit 1 — `AssertionError: expected 321 to be 320` |
+  | Đổi chính hằng số `PANEL_HEIGHT_MAX_PX = 480` | **1 failed / 19 passed**, exit 1 — `AssertionError: expected [ 160, 480 ] to deeply equal [ 160, 320 ]` |
+  | Trả về nguyên trạng | **20 passed**, exit 0 |
+
 
 ### Fixed — `#658`: e2e Programming lấy breakpoint authoring từ nguồn chân lý thay vì bản chép tay (2026-09-12)
 
