@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### Fixed — `#671`: `EditorStatusBar` không dùng `dl` làm hộp flex nữa (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/editor/EditorStatusBar.tsx`,
+  `CHANGELOG.md`.
+
+- Triệu chứng: cổng axe trong `UJ-PROG-01..08` đỏ với hai vi phạm mức `serious` —
+  `definition-list` và `only-dlitems` — đều trỏ vào
+  `dl[data-testid="editor-status-bar"]`, kèm `failureSummary: dl element has direct
+  children that are not allowed: div > span`.
+
+- Nguyên nhân gốc: `dl` chỉ được chứa trực tiếp `dt`/`dd`, hoặc `div` gom đúng một
+  cặp `dt`+`dd`. Thanh trạng thái lại dùng chính `dl` làm hộp flex của cả thanh,
+  nên sai ở hai chỗ: khối `leading` là một `div` bọc nội dung tuỳ ý, và ô `position`
+  bọc `dd` BÊN TRONG `button` — con trực tiếp của nhóm thành `button` chứ không phải
+  `dd`. Người dùng trình đọc màn hình nhận một danh sách định nghĩa méo, đúng ở chỗ
+  công bố `Trạng thái trình soạn thảo`.
+
+- Cách sửa: tách vai. Hộp ngoài thành `div role="group"` giữ nguyên `aria-label` và
+  toàn bộ lớp Tailwind (kể cả `min-[1440px]:h-[37px]`, `justify-end`, `mr-auto`), nên
+  bố cục không đổi; ngữ nghĩa "danh sách định nghĩa" thuộc về TỪNG cặp nhãn–giá trị
+  nên mỗi ô là một `dl` riêng với đúng một `dt` và một `dd`; nút `Tới dòng…` chuyển
+  vào TRONG `dd`. Không đổi `data-testid`, không đổi chữ, không đổi hành vi bấm.
+
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
