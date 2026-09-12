@@ -122,7 +122,7 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
       data-testid="programming-feature-rail"
       data-collapsed={collapsed ? 'true' : 'false'}
       className={cn(
-        'sticky top-16 hidden shrink-0 flex-col gap-2 self-stretch rounded-[var(--radius)] bg-[var(--c-rail-bg)] py-2 transition-[width] duration-200 md:flex md:w-16 lg:top-0',
+        'sticky top-16 hidden shrink-0 flex-col gap-2 self-stretch rounded-[var(--radius)] bg-[var(--c-rail-bg)] py-2 motion-safe:transition-[width] motion-safe:duration-200 md:flex md:w-16 lg:top-0',
         collapsed ? 'lg:w-16' : 'lg:w-[220px]'
       )}
     >

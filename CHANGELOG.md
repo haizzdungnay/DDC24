@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### Fixed — `#678`: PGM-04 thôi đỏ ở khổ 768 — nguyên nhân là phép đo đua với transition, không phải lưới (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/layout/ProgrammingFeatureRail.tsx`,
+  `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`. **Không** chạm
+  `LibraryPage.tsx` — xem mục nguyên nhân gốc.
+
+- Triệu chứng: `T61-505` đỏ ở khổ `768` với
+  `trang chừa cột cho khay phủ ở 768 (listWidth=543)`, `expect(225) <= 160`. Con số
+  đỏ ĐỔI GIỮA CÁC LƯỢT: 225, rồi 249, rồi 259.
+
+- Nguyên nhân gốc — KHÔNG phải lưới hai cột của `LibraryPage`. Đo chuỗi tổ tiên ở
+  768 px cho thấy lưới chỉ có MỘT cột (grid và section cùng rộng), còn phần thiếu
+  nằm ở phần tử anh em: `ProgrammingFeatureRail` rộng `183 px` thay vì `64 px` mà
+  `md:w-16` khai. Đo tiếp hai mốc thời gian thì rõ:
+
+  | Mốc | Rail | listWidth |
+  |---|---|---|
+  | ngay sau `setViewportSize` | `183 px` | `519 px` |
+  | sau `500 ms` | **`64 px`** | **`662 px`** |
+
+  Rail có `transition-[width] duration-200` (thêm ở `492cb3e`), còn `T61-505` đổi
+  khung nhìn rồi đo NGAY — nên nó chụp đúng một khung hình giữa chừng của animation.
+  Sản phẩm đúng; phép đo đang đua với transition. Con số đỏ đổi mỗi lượt vì nó phụ
+  thuộc thời điểm chụp, đúng dấu hiệu của một cổng đỏ theo nhịp máy.
+
+- Cách sửa, hai nửa của cùng một việc:
+  1. Rail đổi sang `motion-safe:transition-[width]` — animation chỉ chạy khi người
+     dùng KHÔNG xin giảm chuyển động, đúng ràng buộc `prefers-reduced-motion` mà
+     `docs/superpowers/specs/2026-08-31-fbd-edit-design.md` §7.5 đã khoá.
+  2. `T61-505` gọi `page.emulateMedia({ reducedMotion: 'reduce' })` — sửa ở GỐC thay
+     vì `waitForTimeout` đoán chừng: lát này đo HỢP ĐỒNG BỐ CỤC, không đo animation.
+     Đặt tại chỗ chứ không trong `playwright.config.ts`, để không đổi môi trường của
+     những lát không đo bố cục.
+
+- Số đo sáu khổ sau khi sửa (`[T61-505] PGM-04 layout`):
+  `1440` listWidth=810 dock=352 · `1280` 650/352 · `1024` 426/320 ·
+  `768` **662**, khay phủ 352 · `700` 674, toàn màn 700 · `390` 372, toàn màn 390.
+  Ở `768`: `768 − 662 = 106 ≤ 160`.
+
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,

@@ -2940,6 +2940,20 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
   */
   test('T61-505: PGM-04 không tràn ngang ở bốn khổ đã khoá', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-chrome', 'phép đo này tự đặt khung nhìn')
+    /* Phép đo này đổi khung nhìn rồi đo NGAY. Bất kỳ transition nào chạy theo
+     * khổ màn hình sẽ bị chụp ở khung hình GIỮA CHỪNG: `ProgrammingFeatureRail`
+     * mang `transition-[width] duration-200` (thêm ở `492cb3e`), nên ở 768 px
+     * phép đo bắt được rail rộng 183 px ở lượt này và 149 px ở lượt khác, trong
+     * khi giá trị ĐÃ ỔN ĐỊNH là đúng 64 px như `md:w-16` khai — và `listWidth`
+     * do đó thiếu hơn 100 px. Cổng đỏ theo nhịp máy, với con số đổi mỗi lượt.
+     *
+     * Xin giảm chuyển động là phép sửa ở GỐC, không phải `waitForTimeout` đoán
+     * chừng: lát này đo HỢP ĐỒNG BỐ CỤC, không đo animation. Ứng dụng tôn trọng
+     * tín hiệu đó (`motion-safe:` trên rail) theo đúng `prefers-reduced-motion`
+     * mà `2026-08-31-fbd-edit-design.md` §7.5 khoá. Đặt tại chỗ thay vì trong
+     * `playwright.config.ts` để không đổi môi trường của những lát KHÔNG đo bố
+     * cục. */
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     const lane = libraryLane()
     const failures = observeBrowserFailures(page)
     /* Tab Hệ thống có BA khối; tab Dự án chỉ có một. Đếm cột trên một danh sách
