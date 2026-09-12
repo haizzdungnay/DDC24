@@ -165,8 +165,11 @@ describe('FbdEditorPane', () => {
     renderPane()
     const group = screen.getByTestId('fbd-secondary-toolbar')
     expect(group).toHaveAttribute('role', 'group')
-    /* ponytail: 2 combobox (theme + wire style) — network view + active network ẩn. Bật lại → 4. */
-    expect(within(group).getAllByRole('combobox')).toHaveLength(2)
+    /* 3 combobox: `Khung nhìn` (trả lại theo `TC-FBD-RESP-001` — nó chưa từng
+       được chuyển đi đâu, chỉ bị gỡ), `Kiểu dây`, `Giao diện FBD`. Ô chọn
+       `Network hoạt động` vẫn chưa trả lại: không AC nào đang đòi nó, và badge
+       `fbd-active-network` đã nói network đang mở là cái nào. */
+    expect(within(group).getAllByRole('combobox')).toHaveLength(3)
     expect(within(group).getAllByRole('checkbox')).toHaveLength(2)
   })
 
