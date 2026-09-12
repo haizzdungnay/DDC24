@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
@@ -62,25 +63,31 @@ vi.mock('../api/queries', async (importOriginal) => {
     },
   }
 })
-/* Trang ĐĂNG KÝ ngữ cảnh soạn thảo lên vỏ thay vì tự vẽ cụm lệnh/huy hiệu của
- * mình; huy hiệu `Chưa lưu`, Lưu, Kiểm tra và Làm mới đều do
- * `ProgrammingContextStrip` hiển thị. Mock vì thế phải GIỮ LẠI thứ được đăng ký
- * — nếu chỉ `vi.fn()` thì lớp này không còn khẳng định được gì về hợp đồng mà
- * nó thực sự sở hữu. */
-const shellRegistrations = vi.hoisted(() => ({
-  editing: [] as Array<{ dirty?: boolean } | null>
-}))
-
-function lastEditingContext() {
-  return shellRegistrations.editing[shellRegistrations.editing.length - 1] ?? null
-}
-
+/* `setContextStripSlot` là đường DUY NHẤT trang đưa cụm `EDIT/LIVE/SIMULATE` +
+ * `Lưu`/`Kiểm tra` + chỉ báo `Chưa lưu` ra màn hình — layout thật nhận node đó
+ * làm children của `GlobalContextBar`. Một mock `vi.fn()` NUỐT node ấy, nên
+ * mọi khẳng định về cụm đó lại đi đo một bản dựng khác trong thân trang, và
+ * cây DOM mà unit test nhìn thấy không còn là cây người dùng nhìn thấy. Đúng
+ * khoảng mù đó đã che việc chỉ báo `Chưa lưu` được dựng HAI lần (một ở slot,
+ * một sót lại ở thân trang) cho tới khi Playwright đâm vào `strict mode
+ * violation`. Bắc cầu để harness RENDER slot thật. */
+const slotBridge = vi.hoisted(() => ({ render: null as ((node: ReactNode) => void) | null }))
 vi.mock('../layout/ProgrammingLayout', () => ({
   useProgrammingRuntimeContext: () => ({
-    setEditingContext: (context: { dirty?: boolean } | null) => { shellRegistrations.editing.push(context) },
-    setContextStripSlot: vi.fn()
+    setEditingContext: vi.fn(),
+    setContextStripSlot: (node: ReactNode) => { slotBridge.render?.(node) }
   })
 }))
+
+/** Chỗ đứng của ContextStrip trong harness: nhận node slot và dựng nó thật. */
+function ContextStripSlotOutlet() {
+  const [node, setNode] = useState<ReactNode>(null)
+  useEffect(() => {
+    slotBridge.render = setNode
+    return () => { slotBridge.render = null }
+  }, [])
+  return <>{node}</>
+}
 
 function baseDocument(): ProgrammingDraftDocument {
   return {
@@ -107,6 +114,7 @@ function baseProject(): ProgrammingProject {
 function renderWorkspace(initialPath = '/eng/programming/projects/project-1/design') {
   return render(
     <I18nProvider>
+      <ContextStripSlotOutlet />
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/eng/programming/projects/:projectId/design" element={<DesignWorkspacePage />} />
@@ -141,9 +149,6 @@ beforeEach(() => {
     refresh: vi.fn()
   }
   runtimeMonitor.enabled.mockClear()
-  // Đăng ký lên vỏ là state dùng chung giữa các test; không xóa thì phần tử
-  // cuối là đăng ký của test TRƯỚC, và khẳng định sẽ "đạt" mà không đo gì.
-  shellRegistrations.editing.length = 0
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(() => {
@@ -569,10 +574,14 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
     fireEvent.change(textarea, { target: { value: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;' } })
 
-    /* Trang không còn tự vẽ huy hiệu `Chưa lưu` — nó BÁO dirty lên vỏ, và vỏ
-     * vẽ đúng một huy hiệu. Khẳng định đúng vế mà lớp này sở hữu; vế hiển thị
-     * do `ProgrammingContextStrip` và e2e `UJ-PROG-01..08` canh. */
-    await waitFor(() => expect(lastEditingContext()?.dirty).toBe(true))
+    await waitFor(() => expect(screen.getByTestId('draft-dirty-indicator')).toHaveTextContent(/Chưa lưu/))
+    /* ĐẾM, không chỉ đọc nội dung. `getByTestId` ở trên đã ngầm đòi duy nhất,
+     * nhưng chỉ khi harness thật sự dựng cả slot — mà bản trước mock
+     * `setContextStripSlot` bằng `vi.fn()` nên nó chỉ nhìn thấy bản ở thân
+     * trang và không bao giờ đếm tới hai. Khẳng định tường minh này là chốt
+     * chặn cho đúng lỗi đó: hai vùng `role="status"` cùng câu chữ trên một màn
+     * hình, mà Playwright mới bắt được bằng `strict mode violation`. */
+    expect(screen.queryAllByTestId('draft-dirty-indicator')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeDisabled()
     const unload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unload)

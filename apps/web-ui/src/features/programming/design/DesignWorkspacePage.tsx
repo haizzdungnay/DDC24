@@ -441,15 +441,21 @@ export function DesignWorkspacePage({
           capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
           onSwitch={switchWorkspaceMode}
         />
-        {draftDirty && (
-          <span
-            role="status"
-            data-testid="draft-dirty-indicator"
-            className="inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]"
-          >
-            {pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check')}
-          </span>
-        )}
+        {/* Vùng `role="status"` DUY NHẤT cho trạng thái "chưa lưu", và nó LUÔN
+            có mặt trong DOM — chỉ đổi giữa hiện hình và `sr-only`. Gắn vùng
+            live vào DOM đúng lúc nội dung xuất hiện là cách bỏ lỡ lời thông
+            báo: trình đọc màn hình theo dõi thay đổi BÊN TRONG một vùng đã tồn
+            tại, nên vùng vừa mount cùng lúc với chữ thì không có "thay đổi" nào
+            để đọc. Bản trước đặt đúng vùng luôn-có-mặt này ở THÂN TRANG rồi
+            thêm một bản dựng theo điều kiện ở đây, nên khi Draft bẩn thì có HAI
+            phần tử cùng `data-testid` và cùng câu chữ. */}
+        <span
+          role="status"
+          data-testid="draft-dirty-indicator"
+          className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
+        >
+          {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
+        </span>
         {/* KHÔNG dựng lại Lưu/Kiểm tra/Làm mới ở đây.
          *
          * `DEV-PROG-009` đã nói rõ luật: workspace ĐĂNG KÝ hành động, lớp vỏ
