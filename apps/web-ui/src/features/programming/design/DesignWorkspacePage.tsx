@@ -439,15 +439,21 @@ export function DesignWorkspacePage({
           capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
           onSwitch={switchWorkspaceMode}
         />
-        {draftDirty && (
-          <span
-            role="status"
-            data-testid="draft-dirty-indicator"
-            className="inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]"
-          >
-            {pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check')}
-          </span>
-        )}
+        {/* Vùng `role="status"` DUY NHẤT cho trạng thái "chưa lưu", và nó LUÔN
+            có mặt trong DOM — chỉ đổi giữa hiện hình và `sr-only`. Gắn vùng
+            live vào DOM đúng lúc nội dung xuất hiện là cách bỏ lỡ lời thông
+            báo: trình đọc màn hình theo dõi thay đổi BÊN TRONG một vùng đã tồn
+            tại, nên vùng vừa mount cùng lúc với chữ thì không có "thay đổi" nào
+            để đọc. Bản trước đặt đúng vùng luôn-có-mặt này ở THÂN TRANG rồi
+            thêm một bản dựng theo điều kiện ở đây, nên khi Draft bẩn thì có HAI
+            phần tử cùng `data-testid` và cùng câu chữ. */}
+        <span
+          role="status"
+          data-testid="draft-dirty-indicator"
+          className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
+        >
+          {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
+        </span>
         {canEdit && (
           <>
             <Button
@@ -726,14 +732,10 @@ export function DesignWorkspacePage({
         </div>
       </div>
       */}
-      <span
-        role="status"
-        data-testid="draft-dirty-indicator"
-        className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
-      >
-        {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
-      </span>
-
+      {/* Chỉ báo "Chưa lưu" đã theo cụm mode switcher + Lưu/Kiểm tra lên
+          ContextStrip (xem `setContextStripSlot` phía trên); bản ở thân trang
+          này là phần còn SÓT của lần chuyển đó — cùng `data-testid`, cùng câu
+          chữ, và khi Draft bẩn thì cả hai cùng hiện thành huy hiệu vàng. */}
       {compareOpen && (
         <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[var(--c-bg)]/95 p-3 shadow-2xl sm:max-w-3xl">
           <CompareDrawer

@@ -8,6 +8,34 @@
 
 ## [Unreleased]
 
+### Fixed — `#670`: chỉ báo `Chưa lưu` còn đúng một vùng `role="status"` (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.test.tsx`,
+  `CHANGELOG.md`.
+
+- Triệu chứng: khi Draft bẩn, workspace Thiết kế hiện HAI huy hiệu vàng cùng câu
+  chữ `Chưa lưu — lưu trước khi Kiểm tra`, và công nghệ trợ giúp nghe hai vùng
+  `role="status"` cùng nội dung. `UJ-PROG-01..08` đỏ với `strict mode violation:
+  getByTestId('draft-dirty-indicator') resolved to 2 elements`.
+
+- Nguyên nhân gốc: chỉ báo được dựng ở hai chỗ — một bản theo điều kiện trong node
+  đẩy lên ContextStrip, một bản luôn-có-mặt trong thân trang. Khối bar cũ ngay phía
+  trên bản thân-trang ĐÃ bị comment lại khi cụm công cụ chuyển lên strip, nhưng
+  riêng cái `span` còn nguyên.
+
+  Khoảng mù che lỗi này: harness `DesignWorkspacePage.test.tsx` mock
+  `setContextStripSlot` bằng `vi.fn()`, tức NUỐT node slot. Mọi khẳng định về cụm
+  đó đi đo một cây DOM mà người dùng không bao giờ thấy, nên unit test xanh suốt
+  trong khi DOM thật có hai phần tử.
+
+- Cách sửa: giữ đúng MỘT vùng `role="status"`, đặt trong slot (cùng chỗ với bộ
+  chuyển chế độ, đúng nơi lần chuyển cụm đã nhắm) và **luôn có mặt** trong DOM —
+  chỉ đổi giữa hiện hình và `sr-only`. Vùng live gắn vào DOM đúng lúc nội dung xuất
+  hiện là vùng trình đọc màn hình không đọc, vì nó theo dõi thay đổi BÊN TRONG một
+  vùng đã tồn tại; nên giữ đặc tính tốt của bản cũ thay vì giữ bản dựng theo điều
+  kiện. Harness unit test nay RENDER slot thật thay vì nuốt bằng `vi.fn()`.
+
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
