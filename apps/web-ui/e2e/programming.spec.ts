@@ -1554,12 +1554,22 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await expect(page.getByRole('button', { name: 'Lưu bản nháp', exact: true })).toHaveCount(1)
     await expect(shell.getByRole('button', { name: /^(Lưu|Kiểm tra|Làm mới)$/ })).toHaveCount(0)
 
-    // Hai network chứng minh view SELECTED/ALL bằng chính DOM canvas.
-    await fbdToolbar.getByRole('button', { name: 'Network', exact: true }).click()
+    /* MỘT canvas (`#674`). Bản trước bấm `Network` để có network thứ hai rồi
+     * đối chiếu `SELECTED`/`ALL` = 1/2 article. Quyết định chủ sở hữu
+     * `owner-decision-20260912T0300Z` bỏ hẳn đường tạo network thứ hai, nên
+     * mốc "2 article ở ALL" không còn hợp đồng nào để khoá; thay vào đó khoá
+     * chính điều mới: không còn lối vào nhiều Network, và cả hai khung nhìn
+     * đều cho đúng MỘT article.
+     *
+     * Bằng chứng thay thế cho phần bị bỏ (tài liệu nhiều Network xử lý ra sao)
+     * do lane vitest gánh — `StructuredFbdEditor.test.tsx` `AC-674-4`: tài liệu
+     * 2 Network mở chỉ đọc, giữ đủ 2 article và phát 0 mutation. Lane e2e
+     * không dựng được trạng thái đó nữa vì UI không tạo ra nó. */
+    await expect(fbdToolbar.getByRole('button', { name: 'Network', exact: true })).toHaveCount(0)
+    await expect(shell.getByTestId('fbd-active-network')).toHaveCount(0)
     await expect(shell.locator('article[data-fbd-network-id]')).toHaveCount(1)
     await page.getByLabel('Khung nhìn').selectOption('ALL')
-    await expect(shell.locator('article[data-fbd-network-id]')).toHaveCount(2)
-    await expect(shell.getByTestId('fbd-active-network')).toContainText('Network')
+    await expect(shell.locator('article[data-fbd-network-id]')).toHaveCount(1)
 
     const inspector = page.locator('aside[aria-label="Thuộc tính"]')
     const inspectorOpener = page.getByRole('button', { name: 'Mở Thuộc tính', exact: true }).first()

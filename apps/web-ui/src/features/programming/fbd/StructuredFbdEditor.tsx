@@ -90,10 +90,6 @@ function newUuid(): string {
   return createUuid()
 }
 
-function newNetwork(index: number): FbdNetwork {
-  return { id: newUuid(), name: `NETWORK_${index + 1}`, order: index, nodes: [], wires: [] }
-}
-
 /* WP-06 (FBD_EDITOR_DESIGN.md §2) — INPUT có 1 port OUTPUT (node "xuất" giá
  * trị biến), OUTPUT có 1 port INPUT (node "nhận" giá trị để ghi ra biến);
  * tên port "OUT"/"IN" khớp đúng golden `ahu_fan_enable.json`. */
@@ -149,7 +145,7 @@ function ignoresGraphCommand(target: EventTarget | null, command: FbdKeyboardCom
 
 export function StructuredFbdEditor({
   document,
-  canEdit,
+  canEdit: canEditProp,
   onChange,
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
   projectId: _projectId,
@@ -166,7 +162,19 @@ export function StructuredFbdEditor({
   onBridgeChange,
 }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
-  const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
+  const [state, dispatch] = useReducer(
+    fbdEditorReducer,
+    createFbdEditorState(document, canEditProp && document.networks.length <= 1),
+  )
+  /* Mô hình MỘT canvas (`#674`). Editor chỉ soạn `networks[0]`, nên tài liệu
+   * mang nhiều hơn một Network là tài liệu của mô hình cũ: nó vẫn ĐỌC được,
+   * nhưng mọi đường sửa phải đóng lại. Khóa bằng chính `canEdit` — nguồn duy
+   * nhất mà reducer (`mutationAllowed`), toolbar và canvas cùng hỏi — nên
+   * không có nhánh nào lọt: `mutationAllowed` chặn ở reducer thì `onChange`
+   * không bao giờ được gọi, tức 0 mutation phát ra. Tuyệt đối KHÔNG tự gộp
+   * hay xóa Network thừa: dữ liệu người dùng giữ nguyên từng byte. */
+  const multiNetworkLocked = state.document.networks.length > 1
+  const canEdit = canEditProp && !multiNetworkLocked
   const publishedDocument = useRef(canonicalFbdJson(state.document))
   /* Các canonical editor đã phát ra ngoài nhưng CHƯA thấy quay về qua prop
    * `document`. Trang chỉ là buffer: nó nhận `onChange` rồi trả lại chính
@@ -213,7 +221,7 @@ export function StructuredFbdEditor({
     expectedSelectionKey: string
     expectedDocumentCanonical: string
   } | null>(null)
-  const [layoutStatus, setLayoutStatus] = useState<string | null>(null)
+  const [toolbarStatus, setToolbarStatus] = useState<string | null>(null)
 
   const userPouPalette = useMemo(() => {
     const entries: FbdPaletteEntry[] = []
@@ -409,18 +417,18 @@ export function StructuredFbdEditor({
     if (!layoutPreview) return
     if (!canEdit) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Quyền chỉnh sửa đã đổi; xem trước bị hủy.', 'Edit permission changed; the preview was cancelled.'))
+      setToolbarStatus(pick('Quyền chỉnh sửa đã đổi; xem trước bị hủy.', 'Edit permission changed; the preview was cancelled.'))
       return
     }
     if (layoutPreview.networkId !== selectedNetworkId) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Network hoạt động đã đổi; xem trước bị hủy.', 'The active network changed; the preview was cancelled.'))
+      setToolbarStatus(pick('Network hoạt động đã đổi; xem trước bị hủy.', 'The active network changed; the preview was cancelled.'))
       return
     }
     if (layoutPreview.expectedSelectionKey !== selectionKey ||
         layoutPreview.expectedDocumentCanonical !== documentCanonical) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Vùng chọn hoặc tài liệu đã đổi; xem trước bị hủy.', 'The selection or document changed; the preview was cancelled.'))
+      setToolbarStatus(pick('Vùng chọn hoặc tài liệu đã đổi; xem trước bị hủy.', 'The selection or document changed; the preview was cancelled.'))
     }
   }, [canEdit, documentCanonical, layoutPreview, pick, selectedNetworkId, selectionKey])
 
@@ -446,8 +454,18 @@ export function StructuredFbdEditor({
   function dispatchCommand(command: FbdKeyboardCommand) {
     let action: FbdEditorAction | null = null
     if (command === 'ADD_NETWORK') {
-      action = { type: 'ADD_NETWORK', network: newNetwork(state.document.networks.length) }
-    } else if (command === 'ADD_BLOCK') {
+      /* `#674` chốt mô hình MỘT canvas: không còn đường nào tạo Network thứ
+       * hai. Phím `Control+Shift+n` vẫn nằm trong
+       * `contracts/programming/fbd_keyboard_commands_v1.json`, nên bỏ nhánh
+       * này mà không nói gì sẽ thành một phím hợp đồng im lặng. Trả lời bằng
+       * chính dải trạng thái của thanh công cụ và KHÔNG phát mutation. */
+      setToolbarStatus(pick(
+        'FBD dùng mô hình một canvas: không tạo Network mới.',
+        'FBD uses a single-canvas model: no new network is created.',
+      ))
+      return
+    }
+    if (command === 'ADD_BLOCK') {
       const network = state.document.networks.find((item) => item.id === selectedNetworkId)
       if (network && selectedPaletteEntry) {
         action = { type: 'ADD_NODE', networkId: network.id, node: buildPaletteNode(selectedPaletteEntry) }
@@ -540,7 +558,7 @@ export function StructuredFbdEditor({
     if (!network) return
     if (network.nodes.length < 2) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Cần ít nhất 2 block để tự sắp xếp.', 'Select a network with at least 2 blocks to auto layout.'))
+      setToolbarStatus(pick('Cần ít nhất 2 block để tự sắp xếp.', 'Select a network with at least 2 blocks to auto layout.'))
       return
     }
     const current = networkPositions(network)
@@ -551,11 +569,11 @@ export function StructuredFbdEditor({
       .filter(([nodeId, point]) => point && (point.x !== current[nodeId]?.x || point.y !== current[nodeId]?.y)))
     if (Object.keys(positions).length === 0) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Bố cục hiện tại đã đúng; không có thay đổi để áp dụng.', 'The current layout is already up to date; there is nothing to apply.'))
+      setToolbarStatus(pick('Bố cục hiện tại đã đúng; không có thay đổi để áp dụng.', 'The current layout is already up to date; there is nothing to apply.'))
       return
     }
     createLayoutPreview(network.id, positions)
-    setLayoutStatus(result.warnings.length > 0
+    setToolbarStatus(result.warnings.length > 0
       ? pick(`Xem trước có ${result.warnings.length} cảnh báo; chưa thay đổi Draft.`, `Preview has ${result.warnings.length} warnings; the draft is unchanged.`)
       : pick(`Đang xem trước vị trí mới cho ${Object.keys(positions).length} block; Draft chưa thay đổi.`, `Previewing new positions for ${Object.keys(positions).length} blocks; the draft is unchanged.`))
   }
@@ -570,7 +588,7 @@ export function StructuredFbdEditor({
         : []
     if (selectedIds.length < 2) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Chọn ít nhất 2 block trong cùng network để căn lề.', 'Select at least 2 blocks in the same network to align them.'))
+      setToolbarStatus(pick('Chọn ít nhất 2 block trong cùng network để căn lề.', 'Select at least 2 blocks in the same network to align them.'))
       return
     }
     const current = networkPositions(network)
@@ -581,34 +599,34 @@ export function StructuredFbdEditor({
       .filter(([nodeId, point]) => point && (point.x !== current[nodeId]?.x || point.y !== current[nodeId]?.y)))
     if (Object.keys(positions).length === 0) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Các block đã thẳng hàng; không có thay đổi để áp dụng.', 'The blocks are already aligned; there is nothing to apply.'))
+      setToolbarStatus(pick('Các block đã thẳng hàng; không có thay đổi để áp dụng.', 'The blocks are already aligned; there is nothing to apply.'))
       return
     }
     createLayoutPreview(network.id, positions)
-    setLayoutStatus(pick(`Đang xem trước căn lề ${Object.keys(positions).length} block; Draft chưa thay đổi.`, `Previewing alignment for ${Object.keys(positions).length} blocks; the draft is unchanged.`))
+    setToolbarStatus(pick(`Đang xem trước căn lề ${Object.keys(positions).length} block; Draft chưa thay đổi.`, `Previewing alignment for ${Object.keys(positions).length} blocks; the draft is unchanged.`))
   }
 
   function applyLayoutPreview() {
     if (!layoutPreview) return
     if (!canEdit) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Không có quyền chỉnh sửa; xem trước bị hủy.', 'Editing is not allowed; the preview was cancelled.'))
+      setToolbarStatus(pick('Không có quyền chỉnh sửa; xem trước bị hủy.', 'Editing is not allowed; the preview was cancelled.'))
       return
     }
     if (layoutPreview.networkId !== selectedNetworkId) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Network hoạt động đã đổi; xem trước bị hủy.', 'The active network changed; the preview was cancelled.'))
+      setToolbarStatus(pick('Network hoạt động đã đổi; xem trước bị hủy.', 'The active network changed; the preview was cancelled.'))
       return
     }
     if (layoutPreview.expectedSelectionKey !== selectionKey ||
         layoutPreview.expectedDocumentCanonical !== documentCanonical) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Vùng chọn hoặc tài liệu đã đổi; xem trước bị hủy.', 'The selection or document changed; the preview was cancelled.'))
+      setToolbarStatus(pick('Vùng chọn hoặc tài liệu đã đổi; xem trước bị hủy.', 'The selection or document changed; the preview was cancelled.'))
       return
     }
     if (layoutPreview.expectedSelectionRevision !== state.selectionRevision) {
       setLayoutPreview(null)
-      setLayoutStatus(pick('Vùng chọn đã đổi; xem trước bị hủy để tránh áp sai block.', 'The selection changed; the preview was cancelled to avoid moving the wrong blocks.'))
+      setToolbarStatus(pick('Vùng chọn đã đổi; xem trước bị hủy để tránh áp sai block.', 'The selection changed; the preview was cancelled to avoid moving the wrong blocks.'))
       return
     }
     dispatch({
@@ -617,7 +635,7 @@ export function StructuredFbdEditor({
       positions: layoutPreview.positions,
       expectedSelectionRevision: layoutPreview.expectedSelectionRevision,
     })
-    setLayoutStatus(pick('Đã áp dụng bố cục trong một bước hoàn tác.', 'The layout was applied as one undo step.'))
+    setToolbarStatus(pick('Đã áp dụng bố cục trong một bước hoàn tác.', 'The layout was applied as one undo step.'))
     setLayoutPreview(null)
   }
 
@@ -663,7 +681,6 @@ export function StructuredFbdEditor({
             )}
           </p>
           <div className="flex flex-wrap items-center gap-1.5 text-xs" aria-label={pick('Trạng thái FBD', 'FBD status')}>
-            <span className="rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]">{state.document.networks.length}/256 network</span>
             <span className="rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]">
               {state.document.networks.reduce((sum, item) => sum + item.nodes.length, 0)}/256 block
             </span>
@@ -677,23 +694,6 @@ export function StructuredFbdEditor({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
-          {/* Badge `Network đang mở` + nút thêm Network.
-            *
-            * Hai điều khiển này từng bị comment-out với lý do "chương trình chỉ
-            * có 1 network". Nhưng "hiện chỉ có một" là TRẠNG THÁI DỮ LIỆU, còn
-            * nút thêm Network là ĐƯỜNG DUY NHẤT để có network thứ hai — bỏ nó
-            * đi thì lý do giữ nó biến thành vĩnh viễn đúng. `TC-FBD-RESP-001`
-            * khoá cả hai (bấm `Network` rồi đối chiếu `SELECTED`/`ALL` bằng
-            * chính DOM canvas, và đọc `fbd-active-network`), nên việc gỡ chúng
-            * đã làm đỏ một cổng đang khoá hợp đồng — chỉ là không ai thấy vì
-            * cổng e2e vốn đã đỏ sẵn (`#665`). Ẩn một điều khiển đang có AC là
-            * quyết định sản phẩm, không phải một lần dọn giao diện. */}
-          <span className="inline-flex min-h-11 min-[1440px]:min-h-0 items-center rounded border border-[var(--c-border)] px-2 py-0.5 text-xs" data-testid="fbd-active-network">
-            {pick('Network đang mở', 'Active network')}: {activeNetwork?.name ?? '—'}
-          </span>
-          <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('ADD_NETWORK')}>
-            {pick('Network', 'Network')}
-          </Button>
           <label className="flex items-center gap-1 text-xs">
             {pick('Khối', 'Block')}
             <select
@@ -777,7 +777,7 @@ export function StructuredFbdEditor({
                 variant="secondary"
                 onClick={() => {
                   setLayoutPreview(null)
-                  setLayoutStatus(pick('Đã hủy xem trước; Draft không thay đổi.', 'Preview cancelled; the draft is unchanged.'))
+                  setToolbarStatus(pick('Đã hủy xem trước; Draft không thay đổi.', 'Preview cancelled; the draft is unchanged.'))
                 }}
               >
                 {pick('Hủy xem trước', 'Cancel preview')}
@@ -812,8 +812,21 @@ export function StructuredFbdEditor({
             </ul>
           </div>
         )}
-        {layoutStatus && <p role="status" className="basis-full text-xs text-[var(--c-text-dim)]">{layoutStatus}</p>}
+        {toolbarStatus && <p role="status" className="basis-full text-xs text-[var(--c-text-dim)]">{toolbarStatus}</p>}
       </div>
+
+      {multiNetworkLocked && (
+        <div
+          role="status"
+          data-testid="fbd-multi-network-lock"
+          className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]"
+        >
+          {pick(
+            `Tài liệu này có ${state.document.networks.length} Network, còn FBD đã chốt mô hình một canvas. Bản này vì thế mở ở chế độ chỉ đọc: không thao tác sửa nào được ghi, và không Network nào bị xóa hay gộp. Tách thủ công thành các POU một Network rồi mở lại để sửa tiếp.`,
+            `This document has ${state.document.networks.length} networks while FBD is now a single-canvas model. It therefore opens read-only: no edit is written, and no network is deleted or merged. Split it manually into single-network POUs, then reopen it to keep editing.`,
+          )}
+        </div>
+      )}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
 
@@ -883,18 +896,6 @@ export function StructuredFbdEditor({
               ? 'rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2'
               : 'flex min-h-0 flex-1 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2'}
           >
-            {/* ponytail: ẩn network title button — chỉ có 1 network. */}
-            {/*
-            <button
-              type="button"
-              data-fbd-canvas-control="true"
-              className="mb-1.5 min-h-11 min-[1440px]:min-h-0 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-              aria-pressed={state.selection?.kind === 'network' && state.selection.networkId === network.id}
-              onClick={() => dispatch({ type: 'SELECT', selection: { kind: 'network', networkId: network.id } })}
-            >
-              {network.order + 1}. {network.name}
-            </button>
-            */}
             <FbdCanvas
               network={network}
               document={state.document}

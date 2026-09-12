@@ -62,6 +62,57 @@
   | FE build | `npm run build` | PASS — exit 0; chunk `programming` 154,90 KiB gzip / ngân sách R3 165 KiB (dư 10,10 KiB) |
   | E2E (MOCK) | `MKDDC_E2E_CHROMIUM_PATH=… npx playwright test e2e/programming.spec.ts` | PASS — 109 passed / 29 skipped, 2,0 min, exit 0 |
 
+### Changed — `#674`: FBD chốt mô hình MỘT canvas — bỏ lối vào nhiều Network, tài liệu nhiều Network mở chỉ đọc với 0 mutation (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx`,
+  test đi kèm (`StructuredFbdEditor.test.tsx`, `FbdEditorPane.test.tsx`,
+  `design/workbench/FbdWorkbench.test.tsx`), `apps/web-ui/e2e/programming.spec.ts`,
+  `docs/superpowers/specs/2026-08-31-fbd-edit-design.md` (0.3 → 0.4), `CHANGELOG.md`.
+  **Không đổi** `contracts/programming/fbd_v1.schema.json`,
+  `contracts/programming/fbd_keyboard_commands_v1.json` hay bất kỳ API/mã lỗi nào.
+
+- Triệu chứng: thanh công cụ FBD vừa mời gọi mô hình nhiều Network (badge
+  `x/256 network`, badge `Network đang mở`, nút `Network`) vừa mang những khối
+  UI bị comment-out có dấu `ponytail:` — mã chết được giữ như thể là tài liệu.
+  `TC-FBD-RESP-001` khoá đúng cụm đang bị gỡ/trả đi trả lại, nên mỗi lần đổi ý
+  là một lần cổng e2e đỏ hoặc xanh vì lý do không ai đọc ra.
+
+- Nguyên nhân gốc: sản phẩm chưa từng chốt còn MỘT hay NHIỀU Network. `d12db82`
+  (2026-09-12T02:38Z) trả ba điều khiển về vì "AC vẫn đòi"; quyết định chủ sở hữu
+  `owner-decision-20260912T0300Z` (03:00Z, sau đó 22 phút) chốt ngược lại: một
+  canvas. Không có quyết định thành văn thì mã và test kéo nhau theo hai hướng.
+
+- Cách sửa: bỏ badge đếm network, badge `Network đang mở` và nút thêm `Network`;
+  bỏ hai khối UI comment-out `ponytail:` cùng hai helper chết
+  (`_TOOLBAR_SELECT_CLASS`, `_ToolbarDivider`, `newNetwork`). Phím
+  `Control+Shift+n` vẫn nằm trong contract keyboard v1 nên KHÔNG im lặng: editor
+  trả lời "FBD dùng mô hình một canvas: không tạo Network mới" và không phát
+  mutation. Tài liệu có `networks.length > 1` (mô hình cũ) tắt `canEdit` tại
+  nguồn — cùng nguồn mà reducer `mutationAllowed`, toolbar và canvas cùng hỏi —
+  nên mở được, hiển thị đủ mọi Network, nhưng **0 mutation** phát ra; lý do hiện
+  thành dải đọc được (`data-testid="fbd-multi-network-lock"`). **Không** tự xóa
+  hay gộp Network thừa: dữ liệu người dùng giữ nguyên từng byte.
+
+- Hai mốc nghiệm thu được viết lại thay vì xóa trắng: `TC-FBD-RESP-001` nay khoá
+  "không còn lối vào nhiều Network, cả hai khung nhìn đều đúng một article";
+  `TC-FBD-LAYOUT-001` bỏ nhánh "đổi active network" (không còn dựng được) và giữ
+  hai nhánh fail-closed còn sống (mất quyền sửa; tài liệu nhiều Network). Phần
+  bằng chứng mà lane e2e không dựng được nữa chuyển sang lane vitest
+  (`AC-674-4`).
+
+- Kiểm chứng (HOST/MOCK, commit của PR này):
+  `npx vitest --run --environment jsdom src` → **248 file / 3165 test PASS**,
+  exit 0; `npm run lint` → exit 0; `npm run build` → exit 0 (chunk
+  `programming` 154,87 KiB gzip, ngân sách R3 165 KiB);
+  `MKDDC_E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npx
+  playwright test e2e/programming.spec.ts` → **109 passed / 29 skipped**, exit 0;
+  `python3 scripts/docs_iso_harness.py --expect` → PASS, exit 0;
+  `python3 scripts/workflow_guard.py --selftest` → xem PR.
+
+- Còn lại (finding, ngoài phạm vi PR này): `fbd_keyboard_commands_v1.json` vẫn
+  khai `ADD_NETWORK` với `mutatesDraft: true` trong khi sản phẩm không còn tạo
+  Network — gỡ mục này là đổi contract, cần chủ sở hữu quyết ở bản `v2`.
 
 ### Changed — `#659`: `--component all` nói thẳng là nó KHÔNG gồm `release`, và tài liệu vận hành dẫn đúng cổng thay cho hai lệnh gõ tay (2026-09-12)
 

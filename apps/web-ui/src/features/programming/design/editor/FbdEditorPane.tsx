@@ -19,16 +19,6 @@ import type { ProgrammingDraftOperation, ProgrammingProgram } from '../../model/
 import { EditorStatusBar } from './EditorStatusBar'
 import { fbdStatusFields } from './editorStatus'
 
-/* Vùng chạm 44px (`min-h-11`) là bắt buộc ở khổ cảm ứng và chỉ rút xuống ở khổ
-   ≥1440px — khổ mà ảnh chuẩn PGM-02B mô tả, và cũng là khổ dùng chuột. */
-const _TOOLBAR_SELECT_CLASS = 'min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-2 min-[1440px]:h-7 min-[1440px]:min-h-0 min-[1440px]:py-0'
-
-/** Kẻ dọc phân tách cụm điều khiển, chỉ hiện ở khổ ≥1440px vì dưới đó thanh
- *  công cụ xuống dòng và một vạch dọc giữa hai hàng đọc thành rác. */
-function _ToolbarDivider() {
-  return <span aria-hidden="true" className="hidden h-5 w-px shrink-0 bg-[var(--c-border)] min-[1440px]:block" />
-}
-
 export function parseFbdDocument(raw: unknown, fallbackName: string): FbdDocument {
   if (typeof raw !== 'string') return emptyFbdDocument(fallbackName)
   try {
@@ -156,12 +146,6 @@ export function FbdEditorPane({
     >
       {/* Mốc tiêu đề cho trợ năng — ẩn thị giác vì tên POU đã có trên tab bar */}
       <h3 className="sr-only">{program.name}</h3>
-      {/* ponytail: ẩn thanh công cụ phụ phía trên — program.name đã có trên tab bar và dải trạng thái FBD; các tuỳ chọn hiển thị đã chuyển xuống dải dưới. */}
-      {/*
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] p-1 min-[1440px]:h-[46px] min-[1440px]:flex-nowrap min-[1440px]:py-0">
-          ...
-        </div>
-      */}
       <StructuredFbdEditor
         document={local}
         canEdit={canEdit}

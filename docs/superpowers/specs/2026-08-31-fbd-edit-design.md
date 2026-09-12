@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-PGM02-FBD-EDIT-001` |
-| Phiên bản | 0.3 |
+| Phiên bản | 0.4 |
 | Trạng thái | `M3 — REVIEW READY` (Target, chưa phải As-Built; reviewer độc lập vòng 3 `APPROVED WITH RESIDUALS`) |
 | Ngày | 2026-08-31 |
 | Chủ quản | Programming FE / UX |
@@ -55,7 +55,8 @@ Chuỗi chính:
 - Quick Library dùng toàn bộ entry registry/compiler hiện tại; `PID` hiện nhưng
   `REVIEW_REQUIRED` và disabled.
 - DnD bằng Pointer Events; HTML Drag and Drop chỉ là đường tương thích desktop.
-- Pan/zoom/fit, grid/snap, Orthogonal/Bezier, network view đơn/tất cả.
+- Pan/zoom/fit, grid/snap, Orthogonal/Bezier. `Khung nhìn` đơn/tất cả còn ở
+  giao diện nhưng chỉ còn một Network để hiển thị — xem §5.1.1.
 - Multi-select, marquee, kéo nhóm, copy/paste nội bộ, delete, align/distribute,
   Auto Layout preview → Apply.
 - Inspector dock phải, I/O picker từ nguồn FE hiện có, bottom workbench và Mini Map.
@@ -295,6 +296,24 @@ action mutation phải chạy qua cùng `canEdit`/viewport guard ở adapter và
 validator ở reducer; không có đường bypass từ JSX hoặc thư viện canvas.
 
 ### 5.1.1 Network view `ALL` và hit-test
+
+> **SUPERSEDED 2026-09-12 — mô hình MỘT canvas (`#674`, quyết định chủ sở hữu
+> `owner-decision-20260912T0300Z`).** Phần dưới mô tả bản nhiều Network và giữ
+> lại vì reducer/schema vẫn theo nó; nhưng SẢN PHẨM không còn đường tạo Network
+> thứ hai, nên các tình huống "nhiều scene", "selection trộn network" và "paste
+> từ network khác" hiện KHÔNG ĐẠT TỚI ĐƯỢC qua giao diện. Hợp đồng đang thi
+> hành là §5.1.1a.
+
+#### 5.1.1a Mô hình MỘT canvas — hợp đồng đang thi hành
+
+| Điều | Quy định |
+|---|---|
+| Số Network soạn được | Đúng một: `networks[0]`. Không có badge đếm network, không có badge `Network đang mở`, không có nút thêm Network trên `toolbar` FBD. |
+| Phím `Control+Shift+n` | Vẫn nằm trong `contracts/programming/fbd_keyboard_commands_v1.json` (contract chưa đổi), nhưng editor trả lời "FBD dùng mô hình một canvas: không tạo Network mới" và **không phát mutation**. Bỏ mục này khỏi contract là việc của bản `v2` — cần chủ sở hữu quyết. |
+| Schema và dữ liệu | KHÔNG đổi. `contracts/programming/fbd_v1.schema.json` vẫn cho `networks` 1..256; `data-fbd-network-id` giữ nguyên; canonical JSON giữ nguyên. |
+| Tài liệu có `networks.length > 1` | Mở được, hiển thị đủ mọi Network, nhưng **chỉ đọc**: `canEdit` bị tắt tại nguồn nên `mutationAllowed` chặn mọi action ở reducer ⇒ **0 mutation** phát ra. Editor nêu lý do đọc được (`data-testid="fbd-multi-network-lock"`). |
+| Dữ liệu thừa | **Tuyệt đối không tự xóa hoặc gộp Network.** Người dùng tách thủ công thành các POU một Network rồi mở lại. |
+| Bằng chứng | `StructuredFbdEditor.test.tsx` `AC-674-2`/`AC-674-4` (vitest, HOST); `TC-FBD-RESP-001` trong `apps/web-ui/e2e/programming.spec.ts` khoá "không còn lối vào nhiều Network, cả hai khung nhìn đều đúng một article". Mốc cũ "ALL → 2 article" không còn dựng được qua UI nên chuyển hẳn sang lane vitest. |
 
 Mỗi scene trong chế độ `ALL` mang `data-fbd-network-id` và một geometry origin
 riêng. `pointerdown`, drop và Problems jump lấy `networkId` từ scene DOM đã được
@@ -872,6 +891,7 @@ contract checks.
 | 0.1 | 2026-08-31 | Ghi detailed design FBD EDIT FE-only sau khảo sát repo, ảnh tham chiếu, handoff, contract và nguồn interaction công khai; chưa triển khai code. |
 | 0.2 | 2026-08-31 | Đóng finding review vòng 1: ghim SHA/worktree và số đo local, bổ sung transport/Check contract, token/contrast, state-board asset, mapping error/recovery, trace hai chiều, network ALL hit-test và batch action atomicity. |
 | 0.3 | 2026-08-31 | Reviewer vòng 3 xác nhận `APPROVED WITH RESIDUALS`; bổ sung coverage closure 38/38 scenario, chú thích trace-only/NFR-defensive và chốt residual R1 bundle/timeout/browser/PID/sign-off. |
+| 0.4 | 2026-09-12 | `#674` chốt mô hình MỘT canvas theo quyết định chủ sở hữu `owner-decision-20260912T0300Z`: §1 sửa mô tả `Khung nhìn`, §5.1.1 đánh dấu `SUPERSEDED` và thêm §5.1.1a làm hợp đồng đang thi hành (không có lối vào Network thứ hai; tài liệu nhiều Network mở chỉ đọc với 0 mutation, không xóa/gộp). Schema `fbd_v1` và `fbd_keyboard_commands_v1` KHÔNG đổi. Bằng chứng: vitest `AC-674-2`/`AC-674-4`, e2e `TC-FBD-RESP-001`. |
 
 ### 12.2.1 Review vòng 1 — disposition
 
