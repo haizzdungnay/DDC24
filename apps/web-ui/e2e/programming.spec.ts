@@ -7,6 +7,7 @@ import { PROGRAMMING_ENDPOINTS } from '../src/features/programming/api/generated
 import { PGM04_ROLE_MATRIX, assertMatrixDiscriminates, type Pgm04Role } from './helpers/pgm04RoleMatrix'
 import { PGM04_SKIP_LEDGER, readPgm04SkipReasons } from './helpers/pgm04Skips'
 import { IMPACT_GROUP_ORDER } from '../src/features/programming/commission/impactGroups'
+import { PROGRAMMING_AUTHORING_MIN_WIDTH_PX } from '../src/features/programming/layout/useProgrammingViewport'
 import type { FbdDocument } from '../src/features/programming/fbd/model'
 
 /**
@@ -22,7 +23,6 @@ import type { FbdDocument } from '../src/features/programming/fbd/model'
  */
 
 const CANONICAL_PROGRAMS_PATH = '/eng/programming/programs'
-const AUTHORING_MIN_WIDTH_PX = 768
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const ACTIVE_REVISION_ID = '22222222-2222-4222-8222-222222222222'
 const POU_OBJECT_ID = '44444444-4444-4444-8444-444444444444'
@@ -830,7 +830,7 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     // thảo, nên chạy nó ở lane mobile sẽ là đòi hỏi đúng thứ thiết kế vừa cấm.
     // Bằng chứng mobile nằm ở case read-only riêng phía dưới, không bị bỏ trống.
     test.skip(
-      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'PGM-02 khóa read-only dưới 768 px; journey soạn thảo có lane desktop'
     )
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
@@ -1733,7 +1733,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
 
   test('AC-PGM02-001: MỘT cây POU: ba kind, deep-link theo objectId và reload giữ đúng POU', async ({ page }, testInfo) => {
     test.skip(
-      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'tạo/xóa POU là mutation; màn hẹp read-only có case riêng'
     )
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
@@ -1783,7 +1783,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
 
   test('AC-PGM02-004 / AC-FBD-002: Thư viện nhanh dùng CHUNG catalog và nói thật về mục chưa dùng được', async ({ page }, testInfo) => {
     test.skip(
-      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'chèn khối là mutation; màn hẹp read-only có case riêng'
     )
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
@@ -1843,7 +1843,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
 
   test('bàn phím đi hết vỏ mới: Tab tới cây POU và Enter chọn đúng POU', async ({ page }, testInfo) => {
     test.skip(
-      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'case bàn phím soạn thảo chỉ có nghĩa ở lane desktop'
     )
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
@@ -1904,7 +1904,7 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
   }
 
   test('focus ring dày ít nhất 2 px đúng như hợp đồng pin', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
@@ -1943,7 +1943,7 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
   })
 
   test('AC-PGM02-008: bộ chuyển chế độ đi hết bằng bàn phím và nói rõ vì sao SIMULATE chưa có', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
@@ -1961,7 +1961,7 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
   })
 
   test('workbench đi tới được bằng bàn phím và mỗi tab khai nguồn', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX, 'khổ hẹp là read-only, có case riêng')
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     await login(page)
@@ -1992,7 +1992,7 @@ test.describe('PGM-02 hardening EDIT (T59-808)', () => {
 test.describe('PGM-02 LIVE (T59-811)', () => {
   test('AC-PGM02-006 / AC-ST-008: LIVE hiện nguồn Active, chỉ đọc, và Watch đọc cùng snapshot', async ({ page }, testInfo) => {
     test.skip(
-      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'khổ hẹp là read-only theo cách riêng; LIVE có case desktop'
     )
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
@@ -2026,7 +2026,7 @@ test.describe('PGM-02 LIVE (T59-811)', () => {
 
   test('AC-PGM02-003: đổi EDIT → LIVE khi Draft bẩn phải hỏi trước', async ({ page }, testInfo) => {
     test.skip(
-      (testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'khổ hẹp không sửa được nên không có Draft bẩn'
     )
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
@@ -2092,7 +2092,7 @@ test.describe('PGM-02 hardening LIVE (T59-812)', () => {
   }
 
   test('rời LIVE hủy monitor subscription; EDIT không tiếp tục poll ngầm', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'đo vòng đời một lần ở lane desktop')
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX, 'đo vòng đời một lần ở lane desktop')
     const state: MockState = { etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false, monitorRequests: 0 }
     await installProgrammingMocks(page, state)
     await login(page)
@@ -2730,7 +2730,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
   dùng không dùng tới — đúng phần chiều cao mà danh sách khối đang thiếu.
   */
   test('AC-PGM04-03: form tạo khối chỉ mở khi được gọi', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'khổ hẹp là read-only, có case riêng')
     const lane = libraryLane()
     await openLibrary(page, lane)
@@ -2764,7 +2764,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
    - đường ghi chỉ chạy khi phép kiểm sạch và tới từ bước cuối.
   */
   test('T61-401: wizard 5 bước đi hết bằng bàn phím, Kiểm tra là dry run và Lưu chỉ ghi bản nháp', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'khổ hẹp là read-only, có case riêng')
     const lane = libraryLane()
     const checkCalls: { ifMatch: string | null; body: Record<string, unknown> }[] = []
@@ -2838,7 +2838,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
   draft").
   */
   test('AC-PGM04-06: Chèn hỏi POU đích và không ghi gì vào bản nháp', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'khổ hẹp là read-only, có case riêng')
     const lane = libraryLane()
     const writes: string[] = []
@@ -2907,7 +2907,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
   cách một kỹ thuật viên sửa thư viện trên điện thoại giữa lúc đứng cạnh tủ.
   */
   test('PGM-04 khổ hẹp là chỉ-đọc: không một đường ghi nào bật được', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) >= AUTHORING_MIN_WIDTH_PX,
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) >= PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'case này thuộc khổ hẹp')
     const lane = libraryLane()
     await openLibrary(page, lane, 'PROJECT')
@@ -3089,7 +3089,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     viewer. `mockRoleOf` mở đường ấy, và đây là bốn case dùng nó.
     */
     test(`T61-503: vai ${expectation.role} — đọc được, và đường ghi đúng như hợp đồng`, async ({ page }, testInfo) => {
-      test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+      test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
         'khổ hẹp khoá mọi vai thành chỉ-đọc; ma trận vai đo ở lane desktop')
       const lane = libraryLane()
       const failures = observeBrowserFailures(page)
@@ -3155,7 +3155,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
   tồn tại lúc viết dòng này.
   */
   test('T61-503: Preview, Used-In và Chèn (cả huỷ lẫn bị chặn) phát 0 mutation', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX,
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'khổ hẹp khoá sẵn mọi đường ghi; case chỉ-đọc khổ hẹp đã có riêng')
     const lane = libraryLane()
     const failures = observeBrowserFailures(page)
@@ -3438,7 +3438,7 @@ test.describe('ISS-PGM03-05 — Ánh xạ: row, toolbar và a11y', () => {
    * hay dùng nhất. Đo bằng `offsetTop` của từng control chứ không bằng ảnh: một
    * phép so ảnh sẽ đỏ vì lý do khác mỗi lần đổi font. */
   test('toolbar primary giữ đúng MỘT hàng ở 1280×800', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'phép đo dành cho khổ desktop')
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX, 'phép đo dành cho khổ desktop')
     await page.setViewportSize({ width: 1280, height: 800 })
     await openMapping(page)
 
@@ -3457,7 +3457,7 @@ test.describe('ISS-PGM03-05 — Ánh xạ: row, toolbar và a11y', () => {
   })
 
   test('bộ lọc đang áp gỡ được chỉ bằng bàn phím', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'đo đường bàn phím một lần ở lane desktop')
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX, 'đo đường bàn phím một lần ở lane desktop')
     await page.setViewportSize({ width: 1280, height: 800 })
     await openMapping(page)
 
@@ -3485,7 +3485,7 @@ test.describe('ISS-PGM03-05 — Ánh xạ: row, toolbar và a11y', () => {
    * không phải "trang vẫn vẽ" mà là trạng thái và hành động của hàng đang chọn
    * vẫn NHÌN THẤY được, và trang không tràn ngang. */
   test('200% zoom không che trạng thái lẫn hành động và không tràn ngang', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) < AUTHORING_MIN_WIDTH_PX, 'đo zoom một lần ở lane desktop')
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX, 'đo zoom một lần ở lane desktop')
     await page.setViewportSize({ width: 640, height: 400 })
     await openMapping(page)
 
@@ -3533,7 +3533,7 @@ test.describe('ISS-PGM03-05 — Ánh xạ: row, toolbar và a11y', () => {
   /* `AC-PGM03-02` — mobile giữ policy read-only, nhưng "Mở nguồn" KHÔNG phải
    * mutation: cắt nó đi là cắt luôn đường đọc mã của người đang trực. */
   test('mobile read-only: không control mutation nhưng vẫn mở được nguồn', async ({ page }, testInfo) => {
-    test.skip((testInfo.project.use.viewport?.width ?? 1280) >= AUTHORING_MIN_WIDTH_PX, 'phép đo dành cho lane mobile')
+    test.skip((testInfo.project.use.viewport?.width ?? 1280) >= PROGRAMMING_AUTHORING_MIN_WIDTH_PX, 'phép đo dành cho lane mobile')
     await openMapping(page)
 
     await expect(page.getByRole('button', { name: /^Ánh xạ / })).toHaveCount(0)

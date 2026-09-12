@@ -19,14 +19,19 @@ args = [
 cwd = "/home/chuong/Desktop/DDC-PROJECT"
 env_vars = ["MEKONG_FAC_USER", "MEKONG_FAC_PASS"]
 
+# Gọi qua launcher chứ KHÔNG gọi thẳng `npx`.
+#
+# `chrome-devtools-mcp` khởi động Chrome **headful**; phiên agent trên host này
+# không thừa hưởng `DISPLAY` dùng được, nên mọi tool devtools trước đây trả
+# "Missing X server to start the headful browser" và các bảng kiểm chứng ghi
+# `Chrome DevTools MCP = NOT_RUN`. Một dòng `env = { DISPLAY = ":99" }` ở đây
+# KHÔNG đủ: nó giả định đã có ai đó dựng sẵn `:99`. Launcher tự bảo đảm điều kiện
+# đó (`scripts/ensure-xvfb.sh`) trước khi `exec`, và giữ nguyên bốn cờ cũ
+# (`--isolated`, `--redact-network-headers`, `--no-usage-statistics`,
+# `--no-performance-crux`) làm mặc định.
+#
+# Kiểm lại lane bằng: `scripts/verify-project.sh --component browser`.
 [mcp_servers.chrome-devtools]
-command = "npx"
-args = [
-  "-y",
-  "chrome-devtools-mcp@1.8.0",
-  "--isolated",
-  "--redact-network-headers",
-  "--no-usage-statistics",
-  "--no-performance-crux",
-]
+command = "/home/chuong/Desktop/DDC-PROJECT/scripts/chrome-devtools-mcp.sh"
+args = []
 cwd = "/home/chuong/Desktop/DDC-PROJECT"

@@ -3,7 +3,12 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import { ST_LANGUAGE_PROFILE_VERSION } from '../api/generated/stLanguageProfile'
-import { ProblemsDrawer } from './ProblemsDrawer'
+import {
+  PANEL_HEIGHT_MAX_PX,
+  PANEL_HEIGHT_MIN_PX,
+  ProblemsDrawer,
+  clampPanelHeight
+} from './ProblemsDrawer'
 
 beforeEach(() => {
   localStorage.setItem('mkddc-lang', 'vi')
@@ -62,6 +67,65 @@ describe('ProblemsDrawer', () => {
     expect(within(panel).getByRole('button', { name: 'Mở rộng' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mở rộng' })).toHaveAttribute('aria-expanded', 'false')
     expect(localStorage.getItem('programming.problems.collapsed')).toBe('true')
+  })
+
+  /* ---- Dải chiều cao khay: một điểm định nghĩa cho mỗi biên ---- */
+
+  /** Render rồi trả về chính separator đang mang hợp đồng ARIA của dải. */
+  function renderResizeHandle() {
+    render(<I18nProvider><ProblemsDrawer diagnostics={[]} /></I18nProvider>)
+    return screen.getByRole('separator', { name: 'Đổi chiều cao khay vấn đề' })
+  }
+
+  /* `role="separator"` + `aria-valuemin/max` là thứ khay NÓI với công nghệ trợ
+   * giúp rằng nó nhận giá trị trong khoảng nào. Khẳng định theo đúng hai hằng
+   * số — chép lại `'160'`/`'320'` ở đây là dựng lại đúng bản sao vừa xoá, và
+   * cặp thuộc tính này lại trôi khỏi `clampPanelHeight` một lần nữa. */
+  it('công bố ra AT đúng dải mà widget thực sự nhận', () => {
+    const resize = renderResizeHandle()
+    expect(resize).toHaveAttribute('aria-valuemin', String(PANEL_HEIGHT_MIN_PX))
+    expect(resize).toHaveAttribute('aria-valuemax', String(PANEL_HEIGHT_MAX_PX))
+  })
+
+  it('clampPanelHeight kẹp đúng ở cả hai biên và làm tròn về số nguyên', () => {
+    expect(clampPanelHeight(PANEL_HEIGHT_MIN_PX - 1)).toBe(PANEL_HEIGHT_MIN_PX)
+    expect(clampPanelHeight(0)).toBe(PANEL_HEIGHT_MIN_PX)
+    expect(clampPanelHeight(Number.NEGATIVE_INFINITY)).toBe(PANEL_HEIGHT_MIN_PX)
+    expect(clampPanelHeight(PANEL_HEIGHT_MAX_PX + 1)).toBe(PANEL_HEIGHT_MAX_PX)
+    expect(clampPanelHeight(4000)).toBe(PANEL_HEIGHT_MAX_PX)
+    // Trong dải thì giữ nguyên — nếu không, phép kẹp sẽ "đạt" cả hai biên bằng
+    // cách trả về hằng số cho mọi đầu vào.
+    const inside = PANEL_HEIGHT_MIN_PX + 16
+    expect(clampPanelHeight(inside)).toBe(inside)
+    expect(clampPanelHeight(inside + 0.4)).toBe(inside)
+  })
+
+  it('chiều cao đã lưu ngoài dải bị loại về mặc định, trong dải thì được nhớ', () => {
+    localStorage.setItem('programming.problems.height', String(PANEL_HEIGHT_MAX_PX + 40))
+    expect(renderResizeHandle()).toHaveAttribute('aria-valuenow', String(PANEL_HEIGHT_MIN_PX))
+    cleanup()
+
+    localStorage.setItem('programming.problems.height', String(PANEL_HEIGHT_MIN_PX - 40))
+    expect(renderResizeHandle()).toHaveAttribute('aria-valuenow', String(PANEL_HEIGHT_MIN_PX))
+    cleanup()
+
+    const remembered = PANEL_HEIGHT_MIN_PX + 16
+    localStorage.setItem('programming.problems.height', String(remembered))
+    expect(renderResizeHandle()).toHaveAttribute('aria-valuenow', String(remembered))
+  })
+
+  /* Ba khẳng định trên đều đọc từ hằng số, nên chúng bắt được "một chỗ trôi
+   * khỏi hai chỗ kia" — nhưng KHÔNG bắt được việc đổi chính hằng số, vì khi đó
+   * cả ba chỗ đổi theo và vẫn khớp nhau.
+   *
+   * Dải `160–320` là hợp đồng a11y đang công bố và repo không có hồ sơ nào
+   * khác ghim nó (`rg` toàn bộ `docs/` không ra kết quả), nên ghim số ở đúng
+   * MỘT chỗ — test này — để việc nới dải trở thành một quyết định có ý thức:
+   * người sửa phải đổi kèm dòng này, và Reviewer nhìn diff là thấy dải đã đổi
+   * thay vì thấy một hằng số lặng lẽ mang giá trị khác. Đây là ghim hợp đồng,
+   * không phải bản sao thứ tư của phép kẹp. */
+  it('dải công bố vẫn đúng hợp đồng 160–320 px', () => {
+    expect([PANEL_HEIGHT_MIN_PX, PANEL_HEIGHT_MAX_PX]).toEqual([160, 320])
   })
 
   it('diagnostic severity WARNING hiển thị đúng icon cảnh báo có màu warning', () => {
