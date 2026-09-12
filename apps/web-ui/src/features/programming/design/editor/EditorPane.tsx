@@ -273,6 +273,7 @@ export function EditorPane({
   userScope,
   forceReadOnly = false,
   onWatchVariable,
+  onOpenExecutionTab,
   insertIntent = null,
   onInsertIntentResolved,
 }: {
@@ -341,6 +342,12 @@ export function EditorPane({
   forceReadOnly?: boolean
   /** `DEV-PROG-003` — nháy đúp một ký hiệu trong trình soạn thảo ST để theo dõi. */
   onWatchVariable?: (name: string) => void
+  /**
+   * Mở màn hình cấu hình chạy (`?tab=execution`). Trang cha sở hữu URL nên nó
+   * cũng sở hữu bước điều hướng này: dựng địa chỉ ở đây sẽ là nơi thứ hai biết
+   * luật canonical, và nơi thứ hai luôn là nơi quên cập nhật.
+   */
+  onOpenExecutionTab?: () => void
 }) {
   const { pick } = useI18n()
   const canEdit = useProgrammingActionAllowed('editDraft') && !forceReadOnly
@@ -1177,7 +1184,15 @@ export function EditorPane({
                là Inspector năm ngữ cảnh dùng chung ST↔FBD; phần sửa metadata vẫn
                do `ProgramsTab` sở hữu vì nó gắn với transaction Draft. */
             <ContextInspector
-              executionTabHref={`/eng/programming/programs?project=${encodeURIComponent(document.project.projectId)}&mode=EDIT&tab=execution`}
+              /* Cả hai lối vào cấu hình chạy đều tắt khi workspace không sửa
+                 được (LIVE/SIMULATE, dưới 768 px, vai không đủ quyền): vắng
+                 mặt là câu trả lời cho "chế độ này không sửa", đúng
+                 `AC-PGM02-006`/`T59-812`. Gỡ một lối mà để lối kia là vẫn lộ
+                 nguyên đường ghi. */
+              executionTabHref={canEdit
+                ? `/eng/programming/programs?project=${encodeURIComponent(document.project.projectId)}&mode=EDIT&tab=execution`
+                : undefined}
+              onOpenExecutionTab={canEdit ? onOpenExecutionTab : undefined}
               input={{
                 program: selected,
                 programs: document.programs,

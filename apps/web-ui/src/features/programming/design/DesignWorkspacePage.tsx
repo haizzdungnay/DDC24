@@ -316,6 +316,24 @@ export function DesignWorkspacePage({
     navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
   }, [navigate, projectId, searchParams])
 
+  /* `#675` — lối vào `Cấu hình chạy` của Inspector.
+   *
+   * `execution` là TAB CON, không phải một trong sáu trang IA: địa chỉ duy nhất
+   * của nó là `?tab=execution` trên route canonical hiện tại. Vì thế điều hướng
+   * ở đây ghi ĐÈ query trên chính pathname đang đứng thay vì dựng một URL mới —
+   * dựng lại URL là dựng lại luật canonical ở nơi thứ hai, và rơi `project` hay
+   * `pou` nghĩa là bắt người dùng chọn lại đúng thứ họ vừa đứng trong đó.
+   *
+   * Ý định chèn khối của PGM-04 bị gỡ khỏi query trước khi ghi: nó là lệnh DÙNG
+   * MỘT LẦN, mang nó theo là mời chèn lại cùng một khối ở màn hình kế tiếp. */
+  const openExecutionTab = useCallback(() => {
+    setSearchParams((current) => {
+      const next = clearLibraryInsertIntent(current)
+      next.set('tab', 'execution')
+      return next
+    })
+  }, [setSearchParams])
+
   const closeCompare = useCallback(() => {
     setCompareOpen(false)
     window.requestAnimationFrame(() => compareTriggerRef.current?.focus())
@@ -905,6 +923,7 @@ export function DesignWorkspacePage({
               userScope={session?.username}
               forceReadOnly={mobileReadOnly}
               onWatchVariable={watchVariable}
+              onOpenExecutionTab={openExecutionTab}
             />
           </Suspense>
         )}
