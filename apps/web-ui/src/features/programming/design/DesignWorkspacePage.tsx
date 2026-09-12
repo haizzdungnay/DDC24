@@ -1,6 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ClipboardCheck, RefreshCw, Save } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { useAuth } from '../../auth'
 import { StateBlock } from '../../../shared/components/StateBlock'
@@ -400,6 +399,9 @@ export function DesignWorkspacePage({
       draftRevisionId: workspace.project.draftRevisionId,
       dirty: draftDirty,
       checkState: 'idle',
+      /* `Làm mới` của vỏ phải đọc lại cả Draft, không chỉ read-model của vỏ —
+         nếu không, workspace lại cần một nút `Làm mới` thứ hai của riêng mình. */
+      onReload: workspace.reload,
       /* `DEV-PROG-009` — workspace ĐĂNG KÝ hai hành động của nó để header ở
          trên cùng gọi lại. Header không tự dựng batch operation: luật dirty,
          danh sách operation và đường sang PGM-05 đều thuộc về đây, và hai nơi
@@ -425,9 +427,9 @@ export function DesignWorkspacePage({
       } : {})
     })
     return () => setEditingContext(null)
-  }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.save, workspace.saving, workspace.status])
+  }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.reload, workspace.save, workspace.saving, workspace.status])
 
-  /* Đẩy cụm EDIT/LIVE/SIMULATE + Save/Check/Refresh lên ContextStrip. Cùng
+  /* Đẩy cụm EDIT/LIVE/SIMULATE lên ContextStrip. Cùng
    * pattern `setEditingContext` — workspace đăng ký, layout hiển thị, cleanup
    * khi unmount. */
   useEffect(() => {
@@ -448,51 +450,25 @@ export function DesignWorkspacePage({
             {pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check')}
           </span>
         )}
-        {canEdit && (
-          <>
-            <Button
-              size="sm"
-              aria-label={pick('Lưu bản nháp', 'Save the draft')}
-              icon={<Save className="h-4 w-4" aria-hidden="true" />}
-              loading={workspace.saving}
-              disabled={!draftDirty || workspace.saving}
-              title={!draftDirty ? pick('Không có thay đổi nào để lưu.', 'There is nothing to save.') : pick('Lưu bản nháp', 'Save the draft')}
-              onClick={() => { void workspace.save(pendingOperations) }}
-            >
-              {pick('Lưu', 'Save')}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              aria-label={pick('Kiểm tra gói', 'Check the package')}
-              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
-              disabled={draftDirty}
-              title={draftDirty
-                ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
-                       'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
-                : pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
-              onClick={goToCommission}
-            >
-              {pick('Kiểm tra', 'Check')}
-            </Button>
-          </>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="disabled:opacity-100"
-          icon={<RefreshCw className={workspace.status === 'loading' ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />}
-          onClick={workspace.reload}
-          disabled={workspace.status === 'loading'}
-          aria-busy={workspace.status === 'loading'}
-          aria-label={pick('Làm mới', 'Refresh')}
-        >
-          {pick('Làm mới', 'Refresh')}
-        </Button>
+        {/* KHÔNG dựng lại Lưu/Kiểm tra/Làm mới ở đây.
+         *
+         * `DEV-PROG-009` đã nói rõ luật: workspace ĐĂNG KÝ hành động, lớp vỏ
+         * HIỂN THỊ nó. Slot này từng dựng thêm một bộ Lưu/Kiểm tra/Làm mới của
+         * riêng mình trong khi `ProgrammingContextStrip` vẫn đang hiển thị bộ
+         * đã đăng ký — nên đúng CÙNG một hàng ngữ cảnh có hai nút `Lưu bản
+         * nháp`, hai `Kiểm tra`, hai `Làm mới`. Không phải hai lối vào ở hai
+         * nơi khác nhau như header/toolbar (điều đó là cố ý), mà hai bản sao
+         * cạnh nhau: người dùng trình đọc màn hình nghe cùng một tên hai lần
+         * và không có cách nào biết chúng khác gì nhau — thực tế hai nút
+         * `Làm mới` KHÔNG làm cùng một việc (một đọc lại Draft, một làm mới
+         * read-model của vỏ), và đó mới là lỗi nặng hơn của bản sao.
+         *
+         * Đường chữa: Draft reload đi vào `onReload` của editing context, để
+         * MỘT nút `Làm mới` của strip làm trọn cả hai việc. */}
       </div>
     )
     return () => setContextStripSlot(null)
-  }, [canEdit, capabilities.data?.workspaceModes?.simulation, draftDirty, goToCommission, pendingOperations, pick, setContextStripSlot, switchWorkspaceMode, workspace.reload, workspace.save, workspace.saving, workspace.status, workspaceMode])
+  }, [capabilities.data?.workspaceModes?.simulation, draftDirty, pick, setContextStripSlot, switchWorkspaceMode, workspaceMode])
 
   useEffect(() => {
     if (!draftDirty) return undefined
@@ -726,13 +702,12 @@ export function DesignWorkspacePage({
         </div>
       </div>
       */}
-      <span
-        role="status"
-        data-testid="draft-dirty-indicator"
-        className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
-      >
-        {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
-      </span>
+      {/* Huy hiệu `Chưa lưu` KHÔNG dựng ở đây nữa — nó đã đi cùng cụm mode
+          switcher lên `ProgrammingContextStrip` (xem `setContextStripSlot` phía
+          trên). Bản trong thân trang này là phần còn sót của lần chuyển đó:
+          hai phần tử cùng mang `data-testid="draft-dirty-indicator"` hiện đồng
+          thời, nên người dùng thấy đúng một cảnh báo "Chưa lưu" in hai lần và
+          `role="status"` phát hai lần cho trình đọc màn hình. */}
 
       {compareOpen && (
         <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[var(--c-bg)]/95 p-3 shadow-2xl sm:max-w-3xl">
