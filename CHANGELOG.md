@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Fixed — `#683`: hai phép kiểm chiều cao workspace đo sai thứ (2026-09-12)
+
+- Phạm vi: `apps/web-ui/e2e/programming-workspace-height.spec.ts`, `CHANGELOG.md`.
+
+- **`:69` — bộ dò khay bắt nhầm phần tử.** `workbenchOpen` hỏi
+  `document.querySelector('[role="tabpanel"]')`, mà `AttributesSection` của Inspector
+  cũng dựng một `div role="tabpanel"` không id. Bộ dò vì thế luôn trả `true` bất kể
+  khay mở hay đóng — nó đo một phần tử KHÁC và vẫn "có kết quả". Đo được: ở `1280px`
+  state đã là `{"open":false}` trong `localStorage` mà bộ dò vẫn báo `true`. Sửa: hỏi
+  đúng tabpanel của khay (`[id^="workbench-panel-"]`). Lỗi này có cả trên `main`, nơi
+  spec đang `4 failed / 4 passed`.
+
+- **`:120` — đo TỈ LỆ giữa hai số cùng động.** Phép kiểm khoá `after / before >= 2`.
+  `#683` làm chỗ gõ ở bố cục THƯỜNG cao hơn (333 px), nên tỉ lệ tụt còn `1.84×`
+  trong khi `after` vẫn 614 px — chế độ toàn màn hình không kém đi, chỉ là bố cục
+  thường đã tốt lên. Một phép kiểm phạt việc cải thiện nền là phép kiểm đo sai thứ.
+
+  Sửa theo quyết định của chủ sở hữu (2026-09-12): đo **tuyệt đối**. Chỗ gõ phải ăn
+  gần hết chiều cao viewport, chỉ chừa `FULLSCREEN_CHROME_BUDGET_PX = 220`. Trần này
+  lấy từ số đo thật — `800 − 614 = 186` và `812 − 626 = 186`, trùng khít ở hai
+  viewport vì phần còn lại là chrome CỐ ĐỊNH của panel — nên nó không phụ thuộc bố
+  cục thường, và chỉ đỏ khi chính chế độ toàn màn hình xấu đi. Giữ thêm
+  `after > before` làm phép kiểm tỉnh táo.
+
+- Số đo: `programming-workspace-height.spec.ts` **8 passed / 0 failed** (trên `main`:
+  `4 failed / 4 passed`).
+
 ### Fixed — `#683`: hai hồi quy của khay đáy ba cột, phát hiện khi đưa PR lên nền `main` mới (2026-09-12)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.tsx`,
