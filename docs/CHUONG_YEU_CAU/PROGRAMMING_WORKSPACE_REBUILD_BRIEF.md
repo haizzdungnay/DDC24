@@ -1,3 +1,23 @@
+# BRIEF ĐẦU VÀO — REBUILD WORKSPACE PROGRAMMING / ST EDITOR — MK-DDC-24
+
+**Mã tài liệu:** DDC24-PRG-WORKSPACE-REBUILD-BRIEF-001
+**Sản phẩm:** MK-DDC-24 — BMS Edge Automation Controller
+**Module:** Programming / ST Editor workspace
+**Trạng thái:** Historical — đầu vào giữ nguyên để truy xuất
+**Ngày:** 2026-09-09 (ngày brief vào repo); chuyển vào Document Hub 2026-09-11
+**Baseline nguồn:** tên cũ `d.md` ở thư mục gốc repo, commit `2783ca0`
+**Đã dẫn đường cho:** mục `CHANGELOG.md` `### Added — Rebuild Programming Workspace G-01..G-30 (2026-09-09)`
+
+> Đây là **đầu vào yêu cầu, được giữ nguyên từng chữ để truy xuất** — không phải
+> hồ sơ thi hành hiện hành, không phải baseline và không phải acceptance
+> authority. Định nghĩa hoàn thành tự đánh dấu bên dưới là của brief, không phải
+> bằng chứng kiểm chứng.
+>
+> Trạng thái thi hành và bằng chứng hiện hành nằm tại
+> `docs/02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md` và
+> `docs/07_records/reviews/PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md`;
+> record sau kết luận Inspector **chưa** đạt `G-12..G-21` và cấm dùng các dấu
+> `✓` trong Definition of Done của brief này làm bằng chứng.
 
 > **GOAL — Rebuild DDC-24 Programming / ST Editor workspace theo thiết kế đã phê duyệt, giữ nguyên business logic/runtime API hiện có. Chuẩn hóa workspace theo mô hình IEC 61131-3: POU → Interface → Execution/Task → Attributes → DDC Metadata → References; tổ chức lại editor thành POU Tree + Code Editor + Quick Library + Context Inspector + Diagnostics/Runtime, giảm clutter, tăng không gian lập trình và bảo đảm mọi trạng thái Edit/Check/Save/Run/Live phản ánh rõ ràng, nhất quán.**
 

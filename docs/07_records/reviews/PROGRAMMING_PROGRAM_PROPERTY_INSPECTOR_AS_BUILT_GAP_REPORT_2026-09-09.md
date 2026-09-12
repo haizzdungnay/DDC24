@@ -19,7 +19,7 @@ physical HIL và kết luận `RELEASE_READY`.
 ## 1. Kết luận điều hành
 
 **Kết luận ngắn:** phần Inspector hiện tại **chưa đúng đầy đủ yêu cầu trong
-[`d.md`](../../../d.md)**. Nó đã có nền context-sensitive và trình bày trung thực
+[`PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md`](../../CHUONG_YEU_CAU/PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md)**. Nó đã có nền context-sensitive và trình bày trung thực
 `không xác định được`, nhưng phần Program Property mới ở mức **form metadata cơ
 bản + các section khung**.
 
@@ -49,7 +49,7 @@ hoàn tất: ngay cuối cùng file vẫn còn danh sách “viết/mount/test/i
 
 ### 2.1 Authority và đầu vào
 
-- Yêu cầu làm việc: [`d.md`](../../../d.md), trọng tâm G-12..G-21.
+- Yêu cầu làm việc: [`PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md`](../../CHUONG_YEU_CAU/PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md), trọng tâm G-12..G-21.
 - Authority trực quan đã đăng ký: [PGM-02 Programs FE Handoff v2.2](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md),
   đặc biệt §4 responsive và §9 Shared Inspector.
 - Source FE: [`EditorPane.tsx`](../../../apps/web-ui/src/features/programming/design/editor/EditorPane.tsx),

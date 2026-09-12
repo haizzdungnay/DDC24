@@ -8,6 +8,74 @@
 
 ## [Unreleased]
 
+### Changed — `#608`: hai brief yêu cầu ở thư mục gốc vào Document Hub, có mã hồ sơ `DD-01` (2026-09-11)
+
+- Phạm vi: `d.md` → `docs/CHUONG_YEU_CAU/PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md`
+  (`git mv`, giữ lịch sử), `Yeucau_FE.md` →
+  `docs/CHUONG_YEU_CAU/PROGRAMMING_FE_REDESIGN_BRIEF.md` (`git mv`),
+  `docs/README.md` (thêm một dòng bảng + dòng `**Cập nhật:**`),
+  `docs/07_records/reviews/PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md`
+  (chỉ đổi đích hai link Markdown), `CHANGELOG.md`. **Không** chạm
+  `gap_analysis_programming_page.md`, `README.md` gốc, `AGENTS.md`, `CLAUDE.md`
+  hay bất kỳ file nào khác trong `docs/CHUONG_YEU_CAU/`.
+
+- **Không đổi một chữ nội dung nghiệp vụ.** `git show origin/main:d.md | diff -`
+  trên đường dẫn mới cho đúng một khối thêm (`0a1,20`) và
+  `git show origin/main:Yeucau_FE.md | diff -` cho đúng một khối thêm
+  (`2a3,21`) — không dòng nào bị sửa hoặc xoá. Bảng GAP `G-01..G-30`, priority
+  `P0/P1` và 14 specification document của brief FE giữ nguyên.
+
+- Triệu chứng: `docs/README.md:9` tuyên bố *"Đây là cổng vào duy nhất cho hồ sơ
+  Markdown đang hiệu lực"*, nhưng hai hồ sơ yêu cầu tổng 1.819 dòng — vừa dẫn
+  đường cho đợt thi hành `Rebuild Programming Workspace G-01..G-30 (2026-09-09)`
+  — lại nằm ở thư mục gốc, không mã hồ sơ, không trạng thái, không ngày, không
+  nguồn, và `rg 'd\.md|Yeucau' docs/README.md` trả về **rỗng**. Riêng tên `d.md`
+  một ký tự thì không tra được và va ngay với thói quen đặt tên file tạm.
+
+- Nguyên nhân gốc: hai file vào repo như **đầu vào thô** của phiên làm việc
+  (`2783ca0` cho `d.md`, `4fc2c47` cho `Yeucau_FE.md`) chứ không qua bước đăng
+  ký hồ sơ, và `docs/CHUONG_YEU_CAU/` — nơi các brief đầu vào khác đang sống
+  (`dashboard.md`, `scheduler.md`, `UX_DESIGN_MK-DDC-24_PA3.md`, hai hồ sơ
+  Programming) — **chưa từng có dòng nào trong register của `docs/README.md`**.
+  Thiếu dòng register nên không có chỗ đúng để trỏ tới, và file ở gốc cứ ở lại
+  gốc.
+
+- Cách sửa: `git mv` hai file vào `docs/CHUONG_YEU_CAU/` với tên nói được nội
+  dung; thêm khối metadata `DD-01` theo khuôn `docs/CHUONG_YEU_CAU/dashboard.md`
+  (mã hồ sơ `DDC24-PRG-WORKSPACE-REBUILD-BRIEF-001` và
+  `DDC24-PRG-FE-REDESIGN-BRIEF-001`, trạng thái `Historical`, ngày, commit
+  nguồn, mục CHANGELOG mà nó đã dẫn đường) kèm banner nói rõ đây là **đầu vào
+  giữ nguyên để truy xuất, không phải baseline và không phải acceptance
+  authority** — với brief workspace thì dẫn thẳng record
+  `PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md` đã
+  kết luận Inspector **chưa** đạt `G-12..G-21`, để không ai lấy 13 dấu `✓` trong
+  Definition of Done của brief làm bằng chứng; thêm một dòng bảng
+  `docs/CHUONG_YEU_CAU/` vào register.
+
+- Sửa kèm, **bắt buộc về mặt kỹ thuật chứ không phải mở rộng phạm vi tự ý**: hai
+  link Markdown trỏ `../../../d.md` ở dòng 22 và 52 của
+  `PROGRAMMING_PROGRAM_PROPERTY_INSPECTOR_AS_BUILT_GAP_REPORT_2026-09-09.md` trỏ
+  vào file ở gốc. Di chuyển mà không đổi hai đích đó thì phép kiểm 8 của
+  `docs_iso_harness.py` (`docs/** link missing`) tăng từ 0 lên 2 và cổng tài liệu
+  đỏ — đúng thứ tiêu chí chấp nhận của `#608` cấm. Chỉ đổi **đích link**; không
+  sửa kết luận, số đo hay phán quyết nào của record. Các lần nhắc `d.md` dạng
+  văn xuôi trong record lịch sử được giữ nguyên: chúng kể lại tên file tại thời
+  điểm phán quyết, và ánh xạ tên cũ → mới nằm ở chính mục này.
+
+- Ánh xạ đường dẫn để truy nguyên: `d.md` → `docs/CHUONG_YEU_CAU/PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md`;
+  `Yeucau_FE.md` → `docs/CHUONG_YEU_CAU/PROGRAMMING_FE_REDESIGN_BRIEF.md`. Các
+  mục CHANGELOG cũ (dòng 1123 và 16401 tính trên `origin/main` trước PR này) và
+  các record rà soát vẫn gọi tên cũ — đó là tên tại thời điểm viết.
+
+- Kiểm chứng (đo tại máy 2026-09-11, không dẫn lại số cũ; CI `NOT_RUN` theo
+  `#414`): `python3 scripts/docs_iso_harness.py --expect` exit `0`,
+  `duplicate doc ID: 0`, `docs/** link missing: 0 (quét 446 file .md)` — bằng
+  đúng số trước PR là `0` trên 444 file, tức hai file mới vào phạm vi cổng mà
+  không thêm link hỏng; `trailing whitespace: 0`; `code fence lệch: 0`;
+  `ls *.md` ở gốc còn đúng `AGENTS.md`, `CHANGELOG.md`, `CLAUDE.md`, `README.md`,
+  `gap_analysis_programming_page.md`; `git log --follow` trên hai đường dẫn mới
+  vẫn thấy commit gốc `2783ca0` và `4fc2c47`. Cổng C++/Go/FE `NOT_RUN` — diff chỉ
+  gồm file Markdown, không chạm source, build hay config.
 ### Added — `#634`: cổng canh tám hằng số sức chứa bảng point ABI giữa `mkddc_shm.h` và hai bản sao Go (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/app/shm_contract_sync_test.go` (thêm cổng),
