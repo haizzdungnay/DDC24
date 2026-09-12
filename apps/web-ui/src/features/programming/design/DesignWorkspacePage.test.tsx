@@ -62,8 +62,24 @@ vi.mock('../api/queries', async (importOriginal) => {
     },
   }
 })
+/* Trang ĐĂNG KÝ ngữ cảnh soạn thảo lên vỏ thay vì tự vẽ cụm lệnh/huy hiệu của
+ * mình; huy hiệu `Chưa lưu`, Lưu, Kiểm tra và Làm mới đều do
+ * `ProgrammingContextStrip` hiển thị. Mock vì thế phải GIỮ LẠI thứ được đăng ký
+ * — nếu chỉ `vi.fn()` thì lớp này không còn khẳng định được gì về hợp đồng mà
+ * nó thực sự sở hữu. */
+const shellRegistrations = vi.hoisted(() => ({
+  editing: [] as Array<{ dirty?: boolean } | null>
+}))
+
+function lastEditingContext() {
+  return shellRegistrations.editing[shellRegistrations.editing.length - 1] ?? null
+}
+
 vi.mock('../layout/ProgrammingLayout', () => ({
-  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn(), setContextStripSlot: vi.fn() })
+  useProgrammingRuntimeContext: () => ({
+    setEditingContext: (context: { dirty?: boolean } | null) => { shellRegistrations.editing.push(context) },
+    setContextStripSlot: vi.fn()
+  })
 }))
 
 function baseDocument(): ProgrammingDraftDocument {
@@ -125,6 +141,9 @@ beforeEach(() => {
     refresh: vi.fn()
   }
   runtimeMonitor.enabled.mockClear()
+  // Đăng ký lên vỏ là state dùng chung giữa các test; không xóa thì phần tử
+  // cuối là đăng ký của test TRƯỚC, và khẳng định sẽ "đạt" mà không đo gì.
+  shellRegistrations.editing.length = 0
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(() => {
@@ -550,7 +569,10 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
     fireEvent.change(textarea, { target: { value: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;' } })
 
-    await waitFor(() => expect(screen.getByTestId('draft-dirty-indicator')).toHaveTextContent(/Chưa lưu/))
+    /* Trang không còn tự vẽ huy hiệu `Chưa lưu` — nó BÁO dirty lên vỏ, và vỏ
+     * vẽ đúng một huy hiệu. Khẳng định đúng vế mà lớp này sở hữu; vế hiển thị
+     * do `ProgrammingContextStrip` và e2e `UJ-PROG-01..08` canh. */
+    await waitFor(() => expect(lastEditingContext()?.dirty).toBe(true))
     expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeDisabled()
     const unload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unload)

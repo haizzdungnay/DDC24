@@ -117,6 +117,12 @@ type operationContext struct {
 	GraphBackupID           string          `json:"graphBackupId,omitempty"`
 	Reason                  string          `json:"reason,omitempty"`
 	Role                    string          `json:"role"`
+	// `ISS-PIO-38` (#492) — RESTORE đã đi qua đường thoát lệch slot Modbus.
+	// `SlotMismatchOverride` chỉ bật ở RESTORE và chỉ khi thật sự có lệch;
+	// `SlotMismatchDetail` ghi ĐÚNG những binding nào đã lệch, để audit nói được
+	// người vận hành đã cố ý bỏ qua CÁI GÌ, không chỉ "một điều gì đó".
+	SlotMismatchOverride bool     `json:"slotMismatchOverride,omitempty"`
+	SlotMismatchDetail   []string `json:"slotMismatchDetail,omitempty"`
 }
 
 type stagePayload struct {
@@ -386,17 +392,28 @@ func (s *OperationService) begin(ctx context.Context, actor Actor, kind string, 
 	if err != nil {
 		return OperationAccepted{}, err
 	}
-	if kind == "COMMISSION" {
-		/* `AC-PIO-ID-02` — đối chiếu LẠI ngay trước activation.
-		 *
-		 * Check đã phân giải slot theo danh tính bền, nhưng giữa lúc Check xanh
-		 * và lúc bấm Commission, cấu hình fieldbus vẫn có thể đổi: tắt một
-		 * thiết bị, đổi tên một điểm, thêm một điểm. Package đã PASSED không
-		 * chứng minh được điều gì về cấu hình HIỆN TẠI — và đúng khoảng trống
-		 * đó là nơi lỗi ghi sai thanh ghi đi qua. */
-		if err := s.verifyModbusSlots(ctx, check); err != nil {
-			return OperationAccepted{}, err
-		}
+	/* `AC-PIO-ID-02` — đối chiếu LẠI ngay trước activation, cho CẢ Commission
+	 * LẪN Restore.
+	 *
+	 * Check đã phân giải slot theo danh tính bền, nhưng giữa lúc Check xanh và
+	 * lúc activate, cấu hình fieldbus vẫn có thể đổi: tắt một thiết bị, đổi tên
+	 * một điểm, thêm một điểm. Một artifact đã PASSED không chứng minh được điều
+	 * gì về cấu hình HIỆN TẠI — và đúng khoảng trống đó là nơi lỗi ghi sai thanh
+	 * ghi đi qua.
+	 *
+	 * `ISS-PIO-38` (#492): RESTORE cũng activate một artifact, nên trước bản vá
+	 * này nó là một cửa ghi sai thanh ghi để mở, im lặng — restore một revision
+	 * cũ sau khi cấu hình Modbus đã đổi ghi vào đúng thanh ghi sai mà
+	 * `AC-PIO-ID-02` sinh ra để chặn. Nay RESTORE chịu cùng phép kiểm, nhưng với
+	 * một đường thoát TƯỜNG MINH có ghi audit (phương án 3 của issue): mặc định
+	 * an toàn, mà vẫn không khoá đường phục hồi đúng lúc sự cố. */
+	slotMismatches, err := s.modbusSlotMismatches(ctx, check)
+	if err != nil {
+		return OperationAccepted{}, err
+	}
+	slotMismatchOverridden, err := resolveSlotGate(kind, slotMismatches, command.Acknowledgements)
+	if err != nil {
+		return OperationAccepted{}, err
 	}
 	var commissionImpact *RevisionImpact
 	var overrideInventorySHA [32]byte
@@ -431,6 +448,10 @@ func (s *OperationService) begin(ctx context.Context, actor Actor, kind string, 
 		OverrideInventorySHA256: hex.EncodeToString(overrideInventorySHA[:]),
 		Acknowledgements:        append([]string(nil), command.Acknowledgements...),
 		Cutover:                 command.Cutover, GraphBackupID: command.GraphBackupID, Reason: command.Reason, Role: actor.Role}
+	if slotMismatchOverridden {
+		contextValue.SlotMismatchOverride = true
+		contextValue.SlotMismatchDetail = slotMismatches
+	}
 	contextJSON, _ := json.Marshal(contextValue)
 	operation, err := s.store.BeginOperation(ctx, programmingstore.BeginOperationParams{
 		OperationID: operationID, Kind: kind, ControllerID: s.controllerID,
@@ -914,6 +935,82 @@ func decodeOperationContext(raw []byte) (operationContext, error) {
 var impactAckKeys = map[string]bool{
 	"retain": true, "activeOverrides": true, "cutover": true, "outputMappingChanges": true,
 	"publishedSignals": true, "controlLibrary": true, "programSet": true, "enableIntent": true,
+}
+
+// ackModbusSlotMismatchOverride — token xác nhận đường thoát của RESTORE khi bố
+// cục slot Modbus đã lệch khỏi manifest as-built (`ISS-PIO-38`, #492 phương án
+// 3). Người vận hành gửi token này nghĩa là đã đọc cảnh báo lệch slot và cố ý
+// đi tiếp; nó KHÔNG hợp lệ cho COMMISSION (Commission dùng `impactAckKeys`, và
+// `validateApplicationImpact` từ chối mọi khoá lạ), nên đường thoát không thể
+// vô tình rò sang Commission.
+const ackModbusSlotMismatchOverride = "modbus-slot-mismatch-override"
+
+// resolveSlotGate quyết định một activation có được đi tiếp khi bố cục slot
+// Modbus đã lệch khỏi manifest as-built hay không (`AC-PIO-ID-02`, `ISS-PIO-38`).
+//
+// Tách khỏi `begin()` để kiểm được toàn bộ ma trận quyết định — COMMISSION vs
+// RESTORE, có/không xác nhận, token đúng/sai — mà không phải dựng cả pipeline
+// Check + artifact. `begin()` chỉ còn gọi một hàm và ghi kết quả vào audit.
+//
+// Trả `overridden = true` DUY NHẤT ở ca RESTORE có lệch và có xác nhận hợp lệ;
+// đó là tín hiệu để `begin()` ghi vào context rằng đường thoát đã được dùng, và
+// ghi ĐÚNG những binding nào đã lệch.
+func resolveSlotGate(kind string, mismatches, acknowledgements []string) (overridden bool, err error) {
+	// RESTORE là nơi duy nhất token xác nhận có nghĩa, nên cũng là nơi duy nhất
+	// phải kiểm token hợp lệ. COMMISSION dùng `impactAckKeys` ở đường riêng.
+	if kind == "RESTORE" {
+		if ackErr := validateRestoreAcknowledgements(acknowledgements, len(mismatches) > 0); ackErr != nil {
+			return false, ackErr
+		}
+	}
+	if len(mismatches) == 0 {
+		return false, nil
+	}
+	/* Đường thoát chỉ RESTORE mới có, và chỉ khi người vận hành xác nhận TƯỜNG
+	 * MINH đã đọc cảnh báo lệch slot. Mọi ca khác — COMMISSION lệch, hay RESTORE
+	 * lệch mà thiếu xác nhận — chặn y hệt nhau; không có "mặc định cho qua". */
+	if kind == "RESTORE" && hasAck(acknowledgements, ackModbusSlotMismatchOverride) {
+		return true, nil
+	}
+	return false, publicOperationError(domain.ErrMapIdentity, true)
+}
+
+func hasAck(acknowledgements []string, token string) bool {
+	for _, ack := range acknowledgements {
+		if ack == token {
+			return true
+		}
+	}
+	return false
+}
+
+// validateRestoreAcknowledgements giữ acknowledgement của RESTORE trung thực với
+// audit (`ISS-PIO-38`, #492).
+//
+// RESTORE chỉ chấp nhận đúng một token — `ackModbusSlotMismatchOverride` — và
+// chỉ khi thật sự CÓ lệch slot. Hai ràng buộc, vì audit sẽ ghi "người vận hành
+// đã đọc cảnh báo lệch slot rồi cố ý đi tiếp":
+//   - token lạ ⇒ một xác nhận không ai định nghĩa;
+//   - token override khi KHÔNG có lệch ⇒ xác nhận một cảnh báo chưa từng được
+//     đưa ra, làm dấu vết nói dối.
+// Cả hai đều bị từ chối là `ErrAckUnexpected`, cùng mã Commission dùng cho khoá
+// thừa.
+func validateRestoreAcknowledgements(acknowledgements []string, hasSlotMismatch bool) error {
+	seen := false
+	for _, ack := range acknowledgements {
+		if ack != ackModbusSlotMismatchOverride || seen {
+			value := domain.NewPublicError(domain.ErrAckUnexpected)
+			value.Args = map[string]any{"key": ack}
+			return &OperationPublicError{Public: value}
+		}
+		seen = true
+	}
+	if seen && !hasSlotMismatch {
+		value := domain.NewPublicError(domain.ErrAckUnexpected)
+		value.Args = map[string]any{"key": ackModbusSlotMismatchOverride}
+		return &OperationPublicError{Public: value}
+	}
+	return nil
 }
 
 func validateApplicationImpact(current RevisionImpact, ref string, acknowledgements []string) *domain.PublicError {

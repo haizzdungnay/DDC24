@@ -44,10 +44,22 @@ function readWidths(): Record<ProgramsPanel, number> {
 export function useProgramsWorkspaceGrid({
   explorerOpen,
   libraryOpen,
+  libraryMounted = true,
   inspectorOpen,
 }: {
   explorerOpen: boolean
   libraryOpen: boolean
+  /**
+   * Cột Thư viện nhanh có ĐƯỢC DỰNG ở khổ hiện tại hay không.
+   *
+   * Khác `libraryOpen` (`false` = khay thu về thanh ray 44 px vẫn bấm mở lại
+   * được). `false` ở đây nghĩa là khổ này không có cột Thư viện — `TC-FBD-RESP-001`
+   * khoá điều đó cho FBD dưới `1440 px` — nên track phải về `0`. Giữ `44 px`
+   * cho một cột không tồn tại chính là khoảng trống mép phải mà một lần sửa
+   * trước đã chữa bằng cách hoán vị thứ tự cột, tức chữa triệu chứng ở chỗ
+   * khác và làm vỡ `AC-PGM02-004`.
+   */
+  libraryMounted?: boolean
   inspectorOpen: boolean
 }) {
   const [widths, setWidths] = useState(readWidths)
@@ -60,9 +72,9 @@ export function useProgramsWorkspaceGrid({
 
   const style = useMemo<CSSProperties>(() => ({
     '--pgm-explorer-width': `${explorerOpen ? widths.explorer : 44}px`,
-    '--pgm-library-width': `${libraryOpen ? widths.library : 44}px`,
+    '--pgm-library-width': `${libraryMounted ? (libraryOpen ? widths.library : 44) : 0}px`,
     '--pgm-inspector-width': `${inspectorOpen ? widths.inspector : 44}px`,
-  } as CSSProperties), [explorerOpen, inspectorOpen, libraryOpen, widths])
+  } as CSSProperties), [explorerOpen, inspectorOpen, libraryMounted, libraryOpen, widths])
 
   function beginResize(panel: ProgramsPanel, direction: 1 | -1, event: ReactPointerEvent<HTMLButtonElement>) {
     if (window.innerWidth < 1024) return
@@ -109,7 +121,17 @@ export function ProgramsWorkspace({
     <div
       data-testid="programs-workspace"
       style={style}
-      className={className ?? "grid min-w-0 gap-3 lg:h-full lg:min-h-0 lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-inspector-width)_6px_var(--pgm-library-width)] lg:gap-0"}
+      /* THỨ TỰ TRACK LÀ HỢP ĐỒNG, KHÔNG PHẢI SỞ THÍCH.
+       *
+       * `AC-PGM02-004` khoá bốn cột theo đúng thứ tự trái→phải: POU Explorer →
+       * Editor → Thư viện nhanh → Inspector, và e2e đo bằng TOẠ ĐỘ THẬT chứ
+       * không bằng tên lớp. Một lần hoán vị `inspector`/`library` ở đây để khay
+       * Thư viện chạm mép phải đã làm đỏ đúng tiêu chí ấy — đổi thứ tự đọc của
+       * một màn hình soạn thảo là đổi hợp đồng, nên nó phải đi qua quyết định
+       * sản phẩm chứ không qua một lần chỉnh bố cục. Khoảng trống mép phải khi
+       * Inspector thu gọn là track 44 px của chính nó (thanh ray thu gọn có nút
+       * mở lại), không phải chỗ trống. */
+      className={className ?? "grid min-w-0 gap-3 lg:h-full lg:min-h-0 lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-library-width)_6px_var(--pgm-inspector-width)] lg:gap-0"}
       onKeyDown={onKeyDown}
     >
       {children}
