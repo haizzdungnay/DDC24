@@ -12,6 +12,7 @@ import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 import {
   canonicalProgramsPath,
   isProgramsWorkspaceMode,
+  programsUrlsEquivalent,
   resolveProgramsProject
 } from '../shared/programsRoute'
 import { DesignWorkspacePage } from './DesignWorkspacePage'
@@ -84,7 +85,9 @@ export function ProgramsWorkspaceRoute() {
 
   const canonical = canonicalProgramsPath(resolution.project.projectId, { search: location.search, hash: location.hash })
   const current = `${location.pathname}${location.search}${location.hash}`
-  if (current !== canonical) return <Navigate to={canonical} replace />
+  /* So theo NGHĨA: khác thứ tự query KHÔNG phải lý do để nắn địa chỉ — mỗi lần
+   * nắn là React tháo cả workspace rồi dựng lại. Xem `programsUrlsEquivalent`. */
+  if (!programsUrlsEquivalent(current, canonical)) return <Navigate to={canonical} replace />
 
   const mode = searchParams.get('mode')
   if (!isProgramsWorkspaceMode(mode)) {
