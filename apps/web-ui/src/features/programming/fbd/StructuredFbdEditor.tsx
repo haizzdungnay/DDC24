@@ -78,6 +78,11 @@ export interface StructuredFbdEditorProps {
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
 
+/* Chặn trên cho hàng đợi tiếng vọng. Bình thường hàng đợi dài 0-2 vì mỗi bản
+ * phát ra đều quay về trong một vòng render; giới hạn chỉ để một trang không
+ * trả lại gì (không phải luồng nào hiện có) không làm ref phình mãi. */
+const PENDING_ECHO_LIMIT = 128
+
 function newUuid(): string {
   return createUuid()
 }
@@ -158,6 +163,17 @@ export function StructuredFbdEditor({
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(fbdEditorReducer, createFbdEditorState(document, canEdit))
   const publishedDocument = useRef(canonicalFbdJson(state.document))
+  /* Các canonical editor đã phát ra ngoài nhưng CHƯA thấy quay về qua prop
+   * `document`. Trang chỉ là buffer: nó nhận `onChange` rồi trả lại chính
+   * chuỗi ấy — nhưng trả lại TRỄ. Khi phím tới nhanh hơn một vòng effect của
+   * React (Insert liên tiếp, kéo node), cái quay về là bản CŨ HƠN state hiện
+   * tại; `REPLACE_DOCUMENT` nhận vô điều kiện nên nuốt luôn các thay đổi vừa
+   * làm. Đây là gốc của `TC-FBD-NAV-001` chập chờn (25 lần Insert chỉ còn
+   * 16-22 block) và cũng là một đường MẤT DỮ LIỆU thật của người dùng, không
+   * riêng của test. Nhận diện tiếng vọng của chính mình rồi bỏ qua; thay đổi
+   * thật từ bên ngoài (Làm mới, đổi POU, draft đồng bộ) không nằm trong hàng
+   * đợi này nên vẫn được áp dụng ngay. */
+  const pendingEchoes = useRef<string[]>([])
   /* Port nay là phần tử SVG (`<g role="button">`) chứ không còn là
    * `<button>` HTML — cả hai đều `.focus()` được, nên điều hướng port bằng
    * bàn phím giữ nguyên. */
@@ -215,7 +231,16 @@ export function StructuredFbdEditor({
   }, [canEdit])
 
   useEffect(() => {
-    publishedDocument.current = canonicalFbdJson(document)
+    const incoming = canonicalFbdJson(document)
+    const echoIndex = pendingEchoes.current.indexOf(incoming)
+    if (echoIndex >= 0) {
+      /* Tiếng vọng của chính mình. Cắt luôn các bản cũ hơn: trang có thể gộp
+       * nhiều lần `setState` nên vài bản trung gian không bao giờ quay về. */
+      pendingEchoes.current = pendingEchoes.current.slice(echoIndex + 1)
+      return
+    }
+    pendingEchoes.current = []
+    publishedDocument.current = incoming
     setLayoutPreview(null)
     dispatch({ type: 'REPLACE_DOCUMENT', document })
   }, [document])
@@ -229,6 +254,7 @@ export function StructuredFbdEditor({
     const current = canonicalFbdJson(state.document)
     if (publishedDocument.current !== current) {
       publishedDocument.current = current
+      pendingEchoes.current = [...pendingEchoes.current, current].slice(-PENDING_ECHO_LIMIT)
       onChange(state.document)
     }
   }, [onChange, state.document])
@@ -619,15 +645,23 @@ export function StructuredFbdEditor({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
-          {/* ponytail: ẩn Active network label + nút Add Network — chương trình chỉ có 1 network. */}
-          {/*
+          {/* Badge `Network đang mở` + nút thêm Network.
+            *
+            * Hai điều khiển này từng bị comment-out với lý do "chương trình chỉ
+            * có 1 network". Nhưng "hiện chỉ có một" là TRẠNG THÁI DỮ LIỆU, còn
+            * nút thêm Network là ĐƯỜNG DUY NHẤT để có network thứ hai — bỏ nó
+            * đi thì lý do giữ nó biến thành vĩnh viễn đúng. `TC-FBD-RESP-001`
+            * khoá cả hai (bấm `Network` rồi đối chiếu `SELECTED`/`ALL` bằng
+            * chính DOM canvas, và đọc `fbd-active-network`), nên việc gỡ chúng
+            * đã làm đỏ một cổng đang khoá hợp đồng — chỉ là không ai thấy vì
+            * cổng e2e vốn đã đỏ sẵn (`#665`). Ẩn một điều khiển đang có AC là
+            * quyết định sản phẩm, không phải một lần dọn giao diện. */}
           <span className="inline-flex min-h-11 min-[1440px]:min-h-0 items-center rounded border border-[var(--c-border)] px-2 py-0.5 text-xs" data-testid="fbd-active-network">
             {pick('Network đang mở', 'Active network')}: {activeNetwork?.name ?? '—'}
           </span>
           <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('ADD_NETWORK')}>
             {pick('Network', 'Network')}
           </Button>
-          */}
           <label className="flex items-center gap-1 text-xs">
             {pick('Khối', 'Block')}
             <select

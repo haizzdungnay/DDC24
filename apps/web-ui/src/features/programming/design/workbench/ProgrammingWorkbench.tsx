@@ -341,7 +341,21 @@ export function ProgrammingWorkbench({
            * minimap sẽ lệch khỏi bản gốc ngay lần canvas đổi khung nhìn đầu
            * tiên. Khi `FbdCanvas` công bố được khung nhìn ra ngoài thì mới thêm
            * cột này và trả lưới về ba cột. */}
-          <div className="grid h-full grid-cols-[minmax(0,1fr)_375px] divide-x divide-[var(--c-border)]">
+          {/* `375px` là một con số TUYỆT ĐỐI, nên nó phải có khổ để sống.
+            *
+            * Lưới này trước đây áp dụng ở MỌI bề ngang: trên màn 412 px, cột
+            * Watch một mình đã chiếm 375 px và cột trái (`minmax(0,1fr)`) co
+            * về gần 0 — danh sách Vấn đề vẫn nằm trong DOM nhưng bị chính cột
+            * Watch che, nên mọi cú bấm vào một diagnostic đều rơi vào
+            * `workbench-watch-column` ("intercepts pointer events") cho tới
+            * khi hết giờ. `TC-FBD-DIAG-001` ở lane mobile chết vì đúng lỗi
+            * này, và nó không phải lỗi của phép đo: người dùng thật trên điện
+            * thoại cũng không bấm được vào Vấn đề.
+            *
+            * Dưới `lg` hai vùng xếp chồng — cùng nội dung, cùng thứ tự đọc,
+            * chỉ khác trục — nên không vùng nào phải cạnh tranh bề ngang với
+            * một con số cố định lớn hơn cả màn hình. */}
+          <div className="grid h-full grid-cols-1 divide-y divide-[var(--c-border)] lg:grid-cols-[minmax(0,1fr)_375px] lg:divide-x lg:divide-y-0">
             {/* Cột trái: Nội dung tab đang chọn */}
             <div className="h-full overflow-auto pr-2">
               {tab === 'problems' && (
