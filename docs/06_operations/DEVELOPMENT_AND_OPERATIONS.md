@@ -2,7 +2,7 @@
 
 **ID:** OPS-DEV-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-03
+**Cập nhật:** 2026-09-12
 
 ## Repository map
 
@@ -15,7 +15,8 @@
 
 ## Build và test
 
-Luôn đọc build files hiện hành thay vì sao chép command cũ. Baseline workflow:
+Luôn đọc build files hiện hành thay vì sao chép command cũ. Baseline workflow —
+đủ **mười một** component đang tồn tại trong `scripts/verify-project.sh`:
 
 ```bash
 scripts/verify-project.sh --component layout
@@ -23,10 +24,30 @@ scripts/verify-project.sh --component cpp --profile full
 scripts/verify-project.sh --component go
 scripts/verify-project.sh --component frontend
 scripts/verify-project.sh --component e2e
+scripts/verify-project.sh --component e2e-real
 scripts/verify-project.sh --component firmware
-platform/packaging/build-release.sh
-sha256sum --check build/release/checksums.sha256
+scripts/verify-project.sh --component docs
+scripts/verify-project.sh --component workflow
+scripts/verify-project.sh --component browser
+scripts/verify-project.sh --component release
 ```
+
+Mười component đầu chạy gộp được bằng `scripts/verify-project.sh --component all`.
+**`release` không nằm trong `all`** — lý do kỹ thuật ghi tại nhánh `all` của
+script (cần khoá phát hành ngoài repo, dựng cây build thứ hai, không có đường
+vòng cache khi thiếu egress). Nên khi cần bằng chứng đầy đủ thì chạy hai lệnh:
+
+```bash
+scripts/verify-project.sh --component all
+scripts/verify-project.sh --component release
+```
+
+Bước release phải gọi qua `--component release`, **không** gõ tay
+`platform/packaging/build-release.sh` + `sha256sum --check` như bản trước tài
+liệu này hướng dẫn: hai lệnh đó chỉ là hai bước ĐẦU của cổng. Bước thứ ba —
+`tests/integration/test_release_dryrun.py`, tức diễn tập CÀI MỚI → NÂNG CẤP →
+ROLLBACK (T59-606) — nằm trong `run_release` và sẽ rơi mất với người làm đúng
+theo danh sách gõ tay.
 
 HMI: thêm `-DMKDDC_ENABLE_HMI=ON` và xác minh dependency/target. BACnet: dùng option hiện có trong CMake và chạy protocol smoke phù hợp. Không coi build trên host là thay thế HIL/target test.
 
