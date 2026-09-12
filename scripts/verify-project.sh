@@ -15,6 +15,16 @@ usage() {
     '' \
     'Component: layout | cpp | go | frontend | e2e | e2e-real | firmware | release |' \
     '           docs | workflow | browser | all' \
+    '' \
+    '`all` chạy MƯỜI component và cố ý KHÔNG gồm `release` (lý do kỹ thuật ghi' \
+    'ngay tại nhánh `all` phía dưới). Diễn tập CÀI MỚI → NÂNG CẤP → ROLLBACK' \
+    '(T59-606) nằm trong `release`, nên nó phải được gọi RIÊNG:' \
+    '' \
+    '    scripts/verify-project.sh --component release' \
+    '' \
+    'Một bảng bằng chứng dẫn `--component all` vì thế chưa phủ T59-606; muốn phủ' \
+    'thì phải dẫn thêm lần chạy `--component release` ở trên.' \
+    '' \
     'Profile C++: baseline | modbus | bacnet | modbus-bacnet | full (mặc định)' \
     'Wave: chạy đúng bộ cổng bắt buộc của một Wave Plan 59 và in bảng tổng kết.' \
     '      Cổng cần CI/board/instrument hiện NOT_RUN kèm runbook, không bao giờ PASS.' \
@@ -440,6 +450,26 @@ case "$component" in
     # `browser` đứng SAU hai cổng của #593 vì cùng lý do đã ghi ở trên: chèn lên
     # trước sẽ đổi thời điểm `set -e` cắt mạch của chín component có sẵn.
     run_browser
+    # `release` CỐ Ý KHÔNG có mặt ở đây — loại trừ, không phải sót. Ba lý do kỹ
+    # thuật, đọc được từ chính cây nguồn:
+    #
+    # 1. Nó cần KHOÁ PHÁT HÀNH nằm NGOÀI repo. `build-release.sh` thoát 1 khi
+    #    thiếu `release.pub` (64 hex) trong `$MKDDC_RELEASE_KEY_DIR`, trừ khi đặt
+    #    `MKDDC_ALLOW_TEST_KEY=1` (T59-602). `all` là đường mà bất kỳ ai cũng
+    #    chạy được trên checkout sạch; đưa `release` vào đây làm `all` đỏ với mọi
+    #    người không giữ khoá, và đẩy họ đặt `MKDDC_ALLOW_TEST_KEY=1` để `all`
+    #    xanh trở lại — tức tự tắt đúng cái gác đang canh khoá TEST.
+    # 2. Nó dựng một CÂY BUILD RIÊNG. `run_cpp` dựng ở `$build_root/cpp-$profile`,
+    #    còn `build-release.sh` dựng `build/release/cpp` với MODBUS+BACNET+HMI ON.
+    #    Hai cây Release độc lập nghĩa là `all` biên dịch toàn bộ C++ hai lượt.
+    # 3. Nó không có đường vòng khi máy build thiếu egress. `run_cpp` nhận
+    #    `MKDDC_CMAKE_EXTRA_ARGS` để trỏ `FETCHCONTENT_SOURCE_DIR_*` vào cache
+    #    cục bộ; `build-release.sh` gọi thẳng cmake nên không có lối đó, và hỏng
+    #    ngay ở bước tải bacnet-stack (#625).
+    #
+    # Hệ quả phải nói ra: `--component all` KHÔNG phủ diễn tập CÀI/NÂNG CẤP/
+    # ROLLBACK T59-606. Hồ sơ nào cần T59-606 thì phải dẫn thêm một lần chạy
+    # `--component release` — usage ở đầu file nói đúng điều này.
     ;;
   *) printf 'LỖI: component không hỗ trợ: %s\n' "$component" >&2; exit 2 ;;
 esac
