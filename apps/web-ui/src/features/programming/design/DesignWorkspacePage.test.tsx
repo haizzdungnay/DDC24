@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
@@ -62,9 +63,31 @@ vi.mock('../api/queries', async (importOriginal) => {
     },
   }
 })
+/* `setContextStripSlot` là đường DUY NHẤT trang đưa cụm `EDIT/LIVE/SIMULATE` +
+ * `Lưu`/`Kiểm tra` + chỉ báo `Chưa lưu` ra màn hình — layout thật nhận node đó
+ * làm children của `GlobalContextBar`. Một mock `vi.fn()` NUỐT node ấy, nên
+ * mọi khẳng định về cụm đó lại đi đo một bản dựng khác trong thân trang, và
+ * cây DOM mà unit test nhìn thấy không còn là cây người dùng nhìn thấy. Đúng
+ * khoảng mù đó đã che việc chỉ báo `Chưa lưu` được dựng HAI lần (một ở slot,
+ * một sót lại ở thân trang) cho tới khi Playwright đâm vào `strict mode
+ * violation`. Bắc cầu để harness RENDER slot thật. */
+const slotBridge = vi.hoisted(() => ({ render: null as ((node: ReactNode) => void) | null }))
 vi.mock('../layout/ProgrammingLayout', () => ({
-  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn(), setContextStripSlot: vi.fn() })
+  useProgrammingRuntimeContext: () => ({
+    setEditingContext: vi.fn(),
+    setContextStripSlot: (node: ReactNode) => { slotBridge.render?.(node) }
+  })
 }))
+
+/** Chỗ đứng của ContextStrip trong harness: nhận node slot và dựng nó thật. */
+function ContextStripSlotOutlet() {
+  const [node, setNode] = useState<ReactNode>(null)
+  useEffect(() => {
+    slotBridge.render = setNode
+    return () => { slotBridge.render = null }
+  }, [])
+  return <>{node}</>
+}
 
 function baseDocument(): ProgrammingDraftDocument {
   return {
@@ -91,6 +114,7 @@ function baseProject(): ProgrammingProject {
 function renderWorkspace(initialPath = '/eng/programming/projects/project-1/design') {
   return render(
     <I18nProvider>
+      <ContextStripSlotOutlet />
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/eng/programming/projects/:projectId/design" element={<DesignWorkspacePage />} />

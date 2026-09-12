@@ -399,33 +399,25 @@ export function DesignWorkspacePage({
       projectName: workspace.project.name,
       draftRevisionId: workspace.project.draftRevisionId,
       dirty: draftDirty,
-      checkState: 'idle',
-      /* `DEV-PROG-009` — workspace ĐĂNG KÝ hai hành động của nó để header ở
-         trên cùng gọi lại. Header không tự dựng batch operation: luật dirty,
-         danh sách operation và đường sang PGM-05 đều thuộc về đây, và hai nơi
-         cùng dựng một lệnh là hai nơi để luật khoá lệch nhau.
+      checkState: 'idle'
+      /* `DEV-PROG-009` đăng ký Lưu/Kiểm tra qua `actions` để ContextStrip dựng
+         hộ. Từ khi workspace tự đẩy nguyên cụm `EDIT/LIVE/SIMULATE +
+         Lưu/Kiểm tra/Làm mới` lên strip bằng `setContextStripSlot` (effect ngay
+         dưới), `actions` KHÔNG còn là kênh thứ hai để chọn — nó là kênh thứ
+         hai cùng dựng: `GlobalContextBar` nhận `actions={editing.actions}` VÀ
+         `{contextStripSlot}` làm children, nên cùng một hàng công cụ ra DOM hai
+         lần. Đó là gốc của `strict mode violation` ở `draft-dirty-indicator` và
+         của `Lưu bản nháp` đếm ra 2 — hai nút CÙNG tên truy cập trên một màn
+         hình, đúng thứ chính ghi chú trong `ProgrammingHeader` gọi là buộc người
+         dùng trình đọc màn hình phải đoán.
 
-         KHÔNG đăng ký gì khi không được sửa (LIVE, SIMULATE, dưới 768 px, vai
-         không đủ quyền). Một nút Lưu bị vô hiệu hoá vẫn là một nút Lưu có mặt
-         trên màn hình — và `AC-PGM02-006`/`T59-812` đòi bề mặt LIVE **không lộ
-         mutation**, tức đếm bằng 0, chứ không phải "có nhưng bấm không được".
-         Vô hiệu hoá là câu trả lời cho "chưa lưu được lúc này"; vắng mặt là câu
-         trả lời cho "chế độ này không sửa". */
-      ...(canEdit ? {
-        actions: {
-          onSave: () => { void workspace.save(pendingOperations) },
-          saving: workspace.saving,
-          saveDisabledReason: draftDirty ? null : pick('Không có thay đổi nào để lưu.', 'There is nothing to save.'),
-          onCheck: goToCommission,
-          checkDisabledReason: draftDirty
-            ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
-                   'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
-            : null
-        }
-      } : {})
+         Lần dọn này giữ slot làm nguồn DUY NHẤT (nó mang thêm bộ chuyển chế độ,
+         và luật dirty/operation/đường sang PGM-05 đều nằm ở đây) và thôi đăng ký
+         `actions`. `ProgrammingContextStrip` vẫn dựng `actions` khi có — hợp
+         đồng của nó không đổi, chỉ là trang này không còn cấp trùng. */
     })
     return () => setEditingContext(null)
-  }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.save, workspace.saving, workspace.status])
+  }, [draftDirty, setEditingContext, workspace.project, workspace.status])
 
   /* Đẩy cụm EDIT/LIVE/SIMULATE + Save/Check/Refresh lên ContextStrip. Cùng
    * pattern `setEditingContext` — workspace đăng ký, layout hiển thị, cleanup
@@ -439,15 +431,21 @@ export function DesignWorkspacePage({
           capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
           onSwitch={switchWorkspaceMode}
         />
-        {draftDirty && (
-          <span
-            role="status"
-            data-testid="draft-dirty-indicator"
-            className="inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]"
-          >
-            {pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check')}
-          </span>
-        )}
+        {/* Vùng `role="status"` DUY NHẤT cho trạng thái "chưa lưu", và nó
+            LUÔN có mặt trong DOM — chỉ đổi giữa hiện hình và `sr-only`. Gắn
+            vùng live vào DOM đúng lúc nội dung xuất hiện là cách bỏ lỡ lời
+            thông báo: trình đọc màn hình theo dõi thay đổi BÊN TRONG một vùng
+            đã tồn tại, nên vùng vừa mount cùng lúc với chữ thì không có "thay
+            đổi" nào để đọc. Bản trước đặt đúng vùng luôn-có-mặt này ở thân
+            trang và thêm một bản dựng theo điều kiện ở đây, nên khi bẩn thì có
+            HAI phần tử cùng `data-testid` và cùng câu chữ. */}
+        <span
+          role="status"
+          data-testid="draft-dirty-indicator"
+          className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
+        >
+          {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
+        </span>
         {canEdit && (
           <>
             <Button
@@ -726,14 +724,10 @@ export function DesignWorkspacePage({
         </div>
       </div>
       */}
-      <span
-        role="status"
-        data-testid="draft-dirty-indicator"
-        className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
-      >
-        {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
-      </span>
-
+      {/* Chỉ báo "Chưa lưu" đã theo cụm mode switcher + Lưu/Kiểm tra lên
+          ContextStrip (xem `setContextStripSlot` phía trên); bản ở thân trang
+          này là phần còn sót của lần chuyển đó — cùng `data-testid`, cùng câu
+          chữ, và khi Draft bẩn thì cả hai cùng hiện thành huy hiệu vàng. */}
       {compareOpen && (
         <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[var(--c-bg)]/95 p-3 shadow-2xl sm:max-w-3xl">
           <CompareDrawer
