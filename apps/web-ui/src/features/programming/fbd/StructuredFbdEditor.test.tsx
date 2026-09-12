@@ -341,3 +341,107 @@ describe('StructuredFbdEditor — POU và keyboard/a11y (T59-506)', () => {
     expect(getFilterCount()).toBe(realFilteredCount)
   })
 })
+
+/**
+ * `ISS-FBD-ECHO-001` — vòng công bố editor ⇄ buffer của trang.
+ *
+ * Editor phát `onChange(document)`; trang chỉ giữ chuỗi ấy rồi trả lại qua prop
+ * `document`. Vòng đó KHÔNG tức thời: passive effect của React chạy sau commit,
+ * nên khi thao tác tới nhanh hơn một vòng effect (Insert liên tiếp, kéo node),
+ * cái quay về là bản CŨ HƠN state hiện tại. `REPLACE_DOCUMENT` vốn nhận vô điều
+ * kiện, nên bản cũ ghi đè và các block vừa thêm biến mất — không báo lỗi, không
+ * dấu vết. Triệu chứng ngoài đời là `TC-FBD-NAV-001` chập chờn (25 lần Insert
+ * chỉ còn 16-22 block, ~20% số lần chạy dưới `--workers=4`); nhưng đây là lỗi
+ * MẤT DỮ LIỆU của sản phẩm chứ không phải lỗi của test.
+ *
+ * Hai chiều phải giữ cùng lúc: tiếng vọng của chính mình thì bỏ qua, còn thay
+ * đổi thật từ bên ngoài (Làm mới, đổi POU, draft đồng bộ) thì vẫn phải áp dụng
+ * ngay — nếu chỉ khoá cứng prop `document` thì Làm mới sẽ chết lặng.
+ */
+describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () => {
+  function blockBadge(): string {
+    return screen.getByText(/\/256 block/).textContent ?? ''
+  }
+
+  it('bản CŨ HƠN do chính editor phát ra không được xoá block vừa thêm', () => {
+    const published: FbdDocument[] = []
+    const view = (doc: FbdDocument) => (
+      <I18nProvider>
+        <StructuredFbdEditor document={doc} canEdit onChange={(next) => published.push(next)} />
+      </I18nProvider>
+    )
+    const { rerender } = render(view(golden()))
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    const before = Number(blockBadge().split('/')[0])
+
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(published).toHaveLength(2)
+    expect(blockBadge()).toBe(`${before + 2}/256 block`)
+
+    // Trang mới kịp trả lại bản 1 block; editor đã đi trước một bước.
+    rerender(view(published[0]))
+    expect(blockBadge()).toBe(`${before + 2}/256 block`)
+  })
+
+  it('prop dựng lại cùng nội dung (object mới) không được cuốn theo phím đầu tiên', () => {
+    /* Ngay sau khi tạo POU, draft refetch dựng lại đúng tài liệu ấy thành một
+     * object khác. Effect chạy theo identity của prop, nên nếu không so nội
+     * dung thì `REPLACE_DOCUMENT` cuốn theo thao tác vừa làm mà chưa kịp đi hết
+     * một vòng buffer — đúng triệu chứng badge tụt về `0/256` sau phím đầu. */
+    const base = golden()
+    const view = (doc: FbdDocument) => (
+      <I18nProvider>
+        <StructuredFbdEditor document={doc} canEdit onChange={() => undefined} />
+      </I18nProvider>
+    )
+    const { rerender } = render(view(base))
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    const before = Number(blockBadge().split('/')[0])
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+
+    rerender(view(JSON.parse(JSON.stringify(base)) as FbdDocument))
+    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+  })
+
+  it('gợi ý `activeNetworkId` lạc hậu không được nuốt lệnh Thêm block', () => {
+    /* `FbdEditorPane` sửa `activeNetworkId` bằng passive effect nên nó đi sau
+     * tài liệu đúng một commit. Trong cửa sổ đó gợi ý trỏ một network không còn
+     * tồn tại; tin nó vô điều kiện thì `ADD_BLOCK` rơi vào nhánh `action = null`
+     * và phím bị nuốt lặng lẽ. */
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor
+          document={golden()}
+          canEdit
+          onChange={() => undefined}
+          activeNetworkId="00000000-0000-4000-8000-00000000dead"
+        />
+      </I18nProvider>,
+    )
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    const before = Number(blockBadge().split('/')[0])
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+  })
+
+  it('tài liệu THẬT từ bên ngoài vẫn thay thế được state đang gõ', () => {
+    const published: FbdDocument[] = []
+    const view = (doc: FbdDocument) => (
+      <I18nProvider>
+        <StructuredFbdEditor document={doc} canEdit onChange={(next) => published.push(next)} />
+      </I18nProvider>
+    )
+    const { rerender } = render(view(golden()))
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(published).toHaveLength(1)
+
+    // Làm mới: nguồn canonical trở lại, không phải thứ editor từng phát ra.
+    const fresh = golden()
+    fresh.networks[0].nodes = fresh.networks[0].nodes.slice(0, 1)
+    rerender(view(fresh))
+    expect(blockBadge()).toBe('1/256 block')
+  })
+})

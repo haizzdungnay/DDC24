@@ -5,9 +5,9 @@ Chạy:
     python3 scripts/docs_iso_harness.py            # tóm tắt
     python3 scripts/docs_iso_harness.py -v         # kèm chi tiết từng vi phạm
     python3 scripts/docs_iso_harness.py --expect   # bật cả kiểm ngưỡng, dùng cho CI
-    python3 scripts/docs_iso_harness.py --selftest # kiểm luật bóc link của phép kiểm 8
+    python3 scripts/docs_iso_harness.py --selftest # kiểm luật bóc của phép kiểm 8 và 9
 
-Tám phép kiểm:
+Chín phép kiểm:
   1. Toàn bộ authority baseline thống nhất tồn tại tại đúng đường dẫn chuẩn
   2. Liên kết Markdown nội bộ và anchor phải phân giải được
   3. Trailing whitespace = 0
@@ -18,6 +18,8 @@ Tám phép kiểm:
   8. Link tương đối trên **mọi** file `docs/**/*.md` phải trỏ tới đích có thật
      (`docs_link_missing`). Khác phép kiểm 2 ở phạm vi: phép kiểm 2 chỉ soi
      danh sách cứng `BASELINE + EXTRA`, phép kiểm 8 quét toàn cây `docs/`.
+  9. Khối metadata đầu hồ sơ phải khớp dòng mới nhất của bảng **Lịch sử sửa
+     đổi** trong chính hồ sơ đó (`meta_revision_drift`), trên toàn cây `docs/`.
   Cộng: đường dẫn `docs/**` viết trong code span phải tồn tại; các record P0 và
   template Test Result và manifest ngoài baseline cũng được quét link/ID/format.
 
@@ -50,6 +52,7 @@ EXPECT = {
     "fence_bad": 0,
     "duplicate_doc_id": 0,
     "span_missing": 0,
+    "meta_revision_drift": 0,
     "srs_requirements": 89,
     "trace_rows": 89,
     "trace_violations": 0,
@@ -203,6 +206,81 @@ def selftest():
     return 1 if failed else 0
 
 
+def selftest_meta_revision():
+    """Khoá lại luật bóc của phép kiểm 9.
+
+    Bốn ca dưới đây đều là hình dạng CÓ THẬT trong `docs/`, không phải ca giả
+    định: bảng xếp không theo thứ tự (`WF-CLEAN-001`), phiên bản hai chữ số ở
+    phần minor (`docs/07_records/reviews/README.md` đang ở 1.24, phải lớn hơn
+    1.3), tiêu đề có tiền tố đánh số (`## 6. Lịch sử sửa đổi`), và tiêu đề
+    khớp lỏng mà cổng PHẢI bỏ qua (`## 7. Persistence, revision và migration`).
+    Ai sửa bộ bóc này mà làm hỏng một trong bốn ca sẽ thấy đỏ ngay tại đây,
+    chứ không phải sau khi cổng đã báo sai cho cả cây tài liệu.
+    """
+    unordered = [
+        "**Phiên bản:** 1.3",
+        "**Cập nhật:** 2026-09-11 (ghi chú dài phía sau)",
+        "## Lịch sử sửa đổi",
+        "| Phiên bản | Ngày | Thay đổi |",
+        "|---|---|---|",
+        "| 1.0 | 2026-09-09 | a |",
+        "| 1.3 | 2026-09-11 | b |",
+        "| 1.2 | 2026-09-11 | c |",
+        "| 1.1 | 2026-09-10 | d |",
+    ]
+    two_digit_minor = [
+        "**Phiên bản:** 1.24",
+        "## Revision history",
+        "| 1.3 | 2026-08-11 | a |",
+        "| 1.24 | 2026-09-11 | b |",
+    ]
+    numbered_heading = [
+        "**Phiên bản:** 1.1",
+        "## 6. Lịch sử sửa đổi",
+        "| 1.0 | 2026-08-15 | a |",
+        "| 1.1 | 2026-08-15 | b |",
+    ]
+    decoy_heading = [
+        "**Phiên bản:** 9.9",
+        "## 7. Persistence, revision và migration",
+        "| 1.0 | 2026-08-05 | không phải bảng lịch sử |",
+    ]
+    fenced = [
+        "**Phiên bản:** 1.0",
+        "## Lịch sử sửa đổi",
+        "```",
+        "| 2.0 | 2026-01-01 | ví dụ trong code fence, không được tính |",
+        "```",
+        "| 1.0 | 2026-08-01 | thật |",
+    ]
+    cases = [
+        # (tên, dòng, kỳ vọng (meta_version, meta_updated, top))
+        ("bảng không xếp thứ tự", unordered, ("1.3", "2026-09-11", ("1.3", "2026-09-11"))),
+        ("minor hai chữ số", two_digit_minor, ("1.24", None, ("1.24", "2026-09-11"))),
+        ("tiêu đề có đánh số", numbered_heading, ("1.1", None, ("1.1", "2026-08-15"))),
+        ("tiêu đề khớp lỏng bị bỏ qua", decoy_heading, ("9.9", None, None)),
+        ("dòng trong code fence bị bỏ qua", fenced, ("1.0", None, ("1.0", "2026-08-01"))),
+    ]
+    failed = 0
+    for name, lines, expected in cases:
+        got = parse_meta_revision(lines)
+        if got != expected:
+            failed += 1
+            print(f"  FAIL {name}: kỳ vọng {expected}, thực tế {got}")
+
+    # Chuẩn hoá ô phiên bản: đuôi `<br>`, dấu nhấn mạnh, tiền tố `v`.
+    clean_cases = [("2.3<br>", "2.3"), ("`1.6`", "1.6"), ("v0.2", "0.2"), ("1.0", "1.0")]
+    for raw, expected in clean_cases:
+        got = clean_meta_version(raw)
+        if got != expected:
+            failed += 1
+            print(f"  FAIL clean_meta_version({raw!r}): kỳ vọng {expected!r}, thực tế {got!r}")
+
+    total = len(cases) + len(clean_cases)
+    print(f"selftest phép kiểm 9: {total - failed}/{total} đạt")
+    return 1 if failed else 0
+
+
 def count_docs_md():
     """Số file `.md` dưới `docs/` — in kèm để người đọc thấy ngay phạm vi quét,
     thay vì phải tin một con số không nói mình đo trên bao nhiêu hồ sơ."""
@@ -254,9 +332,156 @@ def scan_docs_links():
     return hits
 
 
+# --- Phép kiểm 9: metadata đầu hồ sơ vs bảng Lịch sử sửa đổi --------------
+#
+# Nền: `WF-CLEAN-001` bị nâng phiên bản ba lần liên tiếp (1.1 → 1.2 → 1.3) mà
+# khối metadata đầu file vẫn đứng ở "1.0 / 2026-09-09". Ba phiên liên tiếp bỏ
+# sót cùng một bước là khoảng trống cổng, không phải ba lần bất cẩn rời rạc:
+# một hồ sơ authority khai sai phiên bản của chính nó thì người đọc không biết
+# mình đang đọc bản nào, đúng lớp lỗi mà `DOC-CTRL-001` sinh ra để chặn.
+#
+# Phạm vi cố ý hẹp: chỉ những hồ sơ **tự khai** cả hai thứ — có dòng
+# `**Phiên bản:**` trong khối metadata VÀ có bảng Lịch sử sửa đổi đọc được ít
+# nhất một dòng. Hồ sơ không có bảng lịch sử thì không khai gì để mà lệch, nên
+# không bị phép kiểm này đụng tới; ràng buộc "phải có revision history" thuộc
+# `DD-01` và không thi hành ở đây.
+META_VERSION_RE = re.compile(r"^\*\*(?:Phiên bản|Version)\:\*\*\s*(.+?)\s*$")
+META_UPDATED_RE = re.compile(r"^\*\*Cập nhật\:\*\*\s*(\d{4}-\d{2}-\d{2})")
+
+# Tiêu đề bảng lịch sử, so khớp CHÍNH XÁC sau khi bỏ tiền tố đánh số. Không
+# dùng "chứa chữ lịch sử/revision": trong `docs/` có `## 7. Persistence,
+# revision và migration`, `## 2. Hồ sơ lịch sử đã loại khỏi cây Markdown` và
+# `## Bản ghi lịch sử 2026-09-05 — …`; khớp lỏng sẽ đọc nhầm bảng khác rồi báo
+# động giả, mà một cổng báo sai ngay lần đầu bật thì lần sau không ai tin nó.
+HISTORY_TITLES = ("lịch sử sửa đổi", "lịch sử", "revision history")
+
+# Ô đầu tiên là số phiên bản dạng chấm (cho phép ``, `v`), ô thứ hai là ngày
+# ISO. Dòng nào không đúng dạng đó — kể cả `1.5-candidate` của `DOC-CTRL-001` —
+# bị bỏ qua: bản candidate không phải mốc mà metadata phải khai.
+HISTORY_ROW_RE = re.compile(
+    r"^\|\s*`?[vV]?(\d+(?:\.\d+)*)`?\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|"
+)
+HEADING_NUM_RE = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s+")
+
+
+def normalize_heading(text):
+    """Bỏ tiền tố đánh số và ký tự nhấn mạnh để so tiêu đề bảng lịch sử.
+
+    `## 6. Lịch sử sửa đổi`, `## 10. Lịch sử sửa đổi` và `## Revision history`
+    đều là cùng một mục; ba cách viết này cùng tồn tại trong `docs/`.
+    """
+    text = HEADING_NUM_RE.sub("", text.strip())
+    return re.sub(r"[`*_]", "", text).strip().lower()
+
+
+def parse_meta_revision(lines):
+    """Bóc (phiên bản metadata, ngày cập nhật metadata, dòng lịch sử mới nhất).
+
+    Dòng mới nhất lấy theo **số phiên bản lớn nhất**, không lấy dòng cuối bảng:
+    bảng của `WF-CLEAN-001` xếp 1.0, 1.3, 1.2, 1.1 — lấy dòng cuối sẽ ra 1.1 và
+    cổng sẽ đòi hạ phiên bản. So sánh theo tuple số nguyên nên 1.24 > 1.3, đúng
+    với `docs/07_records/reviews/README.md` đang ở 1.24.
+
+    Trả về `(meta_version, meta_updated, top_row)`; `top_row` là
+    `(version_str, date_str)` hoặc `None` khi hồ sơ không có bảng lịch sử.
+    """
+    meta_version = None
+    meta_updated = None
+    rows = []
+    history_level = None
+    in_fence = False
+    for ln in lines:
+        if ln.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        head = HEAD_RE.match(ln)
+        if head:
+            level = len(head.group(1))
+            # Ra khỏi mục lịch sử khi gặp tiêu đề cùng cấp hoặc cao hơn.
+            if history_level is not None and level <= history_level:
+                history_level = None
+            if history_level is None and normalize_heading(head.group(2)) in HISTORY_TITLES:
+                history_level = level
+            continue
+        if history_level is None:
+            if meta_version is None:
+                m = META_VERSION_RE.match(ln)
+                if m:
+                    meta_version = m.group(1)
+            if meta_updated is None:
+                m = META_UPDATED_RE.match(ln)
+                if m:
+                    meta_updated = m.group(1)
+        else:
+            m = HISTORY_ROW_RE.match(ln)
+            if m:
+                key = tuple(int(x) for x in m.group(1).split("."))
+                rows.append((key, m.group(1), m.group(2)))
+    if not rows:
+        return meta_version, meta_updated, None
+    top = max(rows)
+    return meta_version, meta_updated, (top[1], top[2])
+
+
+def clean_meta_version(raw):
+    """Chuẩn hoá ô phiên bản ở metadata: bỏ ``, **, `v` đầu và đuôi `<br>`.
+
+    `PGM-02_QUICK_LIBRARY_SIM_LIVE_SPEC_v2_2.md` viết `**Phiên bản:** 2.3<br>`;
+    không bóc đuôi đó thì cổng báo lệch trong khi hồ sơ hoàn toàn đúng.
+    """
+    raw = re.sub(r"<br\s*/?>", "", raw or "")
+    raw = re.sub(r"[`*_]", "", raw).strip()
+    return re.sub(r"^[vV](?=\d)", "", raw)
+
+
+def scan_meta_revision():
+    """Đếm hồ sơ `docs/**/*.md` có metadata lệch bảng Lịch sử sửa đổi.
+
+    Hai phép so:
+      * `**Phiên bản:**` phải bằng số phiên bản của dòng lịch sử mới nhất —
+        bắt buộc với mọi hồ sơ trong phạm vi.
+      * `**Cập nhật:**` phải bằng ngày của chính dòng đó — chỉ áp dụng khi hồ
+        sơ có khai `**Cập nhật:**`. `**Ngày:**` là ngày phát hành bản gốc, cố ý
+        không kéo theo, nếu không mọi hồ sơ Modbus sẽ đỏ vì một trường mang
+        nghĩa khác.
+    """
+    hits = []
+    docs_root = os.path.join(REPO, "docs")
+    for root, dirs, filenames in os.walk(docs_root):
+        dirs[:] = [d for d in dirs if d != "node_modules"]
+        for name in sorted(filenames):
+            if not name.endswith(".md"):
+                continue
+            full = os.path.join(root, name)
+            rel = os.path.relpath(full, REPO)
+            try:
+                with open(full, encoding="utf-8", errors="ignore") as fh:
+                    lines = fh.read().split("\n")
+            except OSError:
+                continue
+            meta_version, meta_updated, top = parse_meta_revision(lines)
+            if meta_version is None or top is None:
+                continue
+            top_version, top_date = top
+            if clean_meta_version(meta_version) != top_version:
+                hits.append(
+                    f"{rel}: metadata Phiên bản={clean_meta_version(meta_version)!r} "
+                    f"nhưng dòng lịch sử mới nhất là {top_version!r}"
+                )
+            if meta_updated and meta_updated != top_date:
+                hits.append(
+                    f"{rel}: metadata Cập nhật={meta_updated} nhưng dòng lịch sử "
+                    f"{top_version} ghi ngày {top_date}"
+                )
+    return hits
+
+
+
 def main():
     if "--selftest" in sys.argv:
-        return selftest()
+        return selftest() | selftest_meta_revision()
 
     problems = collections.defaultdict(list)
     files = [os.path.join(REPO, p) for p in BASELINE + EXTRA]
@@ -458,9 +683,17 @@ def main():
     for item in problems["span"][:20]:
         print(f"  {item}")
 
+    # Phép kiểm 9 — metadata đầu hồ sơ phải khớp dòng lịch sử mới nhất.
+    print("\n=== 8. Metadata vs bảng Lịch sử sửa đổi ===")
+    meta_revision_hits = scan_meta_revision()
+    problems["meta_revision"] = meta_revision_hits
+    print(f"hồ sơ lệch metadata/lịch sử: {len(meta_revision_hits)}")
+    for item in meta_revision_hits[:20]:
+        print(f"  {item}")
+
     if "-v" in sys.argv:
         print("\n=== chi tiết ===")
-        for k in ("link", "docs_link", "anchor", "ws", "span"):
+        for k in ("link", "docs_link", "anchor", "ws", "span", "meta_revision"):
             for item in problems[k][:200]:
                 print(f"  [{k}] {item}")
 
@@ -475,6 +708,7 @@ def main():
         "fence_bad": len(fence_bad),
         "duplicate_doc_id": len(dups),
         "span_missing": span_missing,
+        "meta_revision_drift": len(meta_revision_hits),
         "srs_requirements": len(srs_ids),
         "trace_rows": len(rows),
         "trace_violations": len(bad),
@@ -494,7 +728,8 @@ def main():
     if actual["support_files"] != EXPECT["support_files"]:
         hard.append("thiếu file hỗ trợ Programming")
     for k in ("link_missing", "docs_link_missing", "anchor_missing", "trailing_ws",
-              "fence_bad", "duplicate_doc_id", "span_missing", "trace_violations"):
+              "fence_bad", "duplicate_doc_id", "span_missing", "trace_violations",
+              "meta_revision_drift"):
         if actual[k] != 0:
             hard.append(f"{k}={actual[k]}")
 

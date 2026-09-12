@@ -503,11 +503,11 @@ type PointDTO struct {
 	SignalType    string `json:"signalType,omitempty"`
 	/* `ISS-PIO-17` — danh sách state của điểm `multistate`, chở nguyên vẹn lên
 	 * giao diện để HMI hiện "Auto" thay cho "1". Rỗng ở mọi kiểu khác. */
-	States      []VirtualPointState `json:"states,omitempty"`
-	StateLabel  string              `json:"stateLabel,omitempty"`
-	Writable      bool   `json:"writable,omitempty"`
-	LogEnabled    bool   `json:"logEnabled,omitempty"`
-	LogIntervalMs *int   `json:"logIntervalMs,omitempty"`
+	States        []VirtualPointState `json:"states,omitempty"`
+	StateLabel    string              `json:"stateLabel,omitempty"`
+	Writable      bool                `json:"writable,omitempty"`
+	LogEnabled    bool                `json:"logEnabled,omitempty"`
+	LogIntervalMs *int                `json:"logIntervalMs,omitempty"`
 	// BoundPointID — chỉ đặt cho Kind=="virtual" khi VP đã bind vào slot Core
 	// AV/BV thật (F-PROG-ASBUILT-014); Programming Point Catalog dùng field
 	// này thay cho ID thân thiện ("VP1") khi build binding cho ST Program.

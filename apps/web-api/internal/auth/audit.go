@@ -10,14 +10,14 @@ import (
 // AuditRecord là một sự kiện audit đã chuẩn hoá, đủ để một kho Activity bền
 // vững lưu lại và trả về cho UI (PA3-103/104).
 //
-// VÌ SAO CẦN
+// # VÌ SAO CẦN
 //
 // Trước PA3, mọi vết audit chỉ tồn tại dưới dạng dòng `AUDIT …` trong journal.
 // Muốn biết "ai vừa ép AO-02 và kết quả ra sao" phải SSH vào bo và đọc
 // journalctl — Landing Page không có cách nào hiển thị, và parse journal trong
 // một HTTP request là đường vừa chậm vừa dễ vỡ (PA3-D03).
 //
-// REDACTION
+// # REDACTION
 //
 // Struct này CỐ Ý không có trường `payload` tự do. Mọi trường đều đi qua
 // `SanitizeAudit`/`sanitizeAuditValue` trước khi tới sink, nên không có đường

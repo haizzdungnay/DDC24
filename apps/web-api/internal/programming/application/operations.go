@@ -993,6 +993,7 @@ func hasAck(acknowledgements []string, token string) bool {
 //   - token lạ ⇒ một xác nhận không ai định nghĩa;
 //   - token override khi KHÔNG có lệch ⇒ xác nhận một cảnh báo chưa từng được
 //     đưa ra, làm dấu vết nói dối.
+//
 // Cả hai đều bị từ chối là `ErrAckUnexpected`, cùng mã Commission dùng cho khoá
 // thừa.
 func validateRestoreAcknowledgements(acknowledgements []string, hasSlotMismatch bool) error {

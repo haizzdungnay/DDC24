@@ -42,7 +42,7 @@ func firstDiagnostic(diagnostics []DiagnosticView) *DiagnosticView {
 }
 
 func TestCompilerInputRejectsOneOverProductCapacity(t *testing.T) {
-	_, diagnostics := compilerInputs(snapshotWithPrograms(domain.MaxProgramsTotal + 1), nil, nil)
+	_, diagnostics := compilerInputs(snapshotWithPrograms(domain.MaxProgramsTotal+1), nil, nil)
 	diagnostic := firstDiagnostic(diagnostics)
 	if diagnostic == nil {
 		t.Fatalf("%d Program phải bị từ chối", domain.MaxProgramsTotal+1)

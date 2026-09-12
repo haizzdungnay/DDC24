@@ -101,6 +101,259 @@
 - T9-02: Di dời Mini Map từ canvas vào Cột 3 của panel dưới, giải phóng không gian vẽ, bổ sung nút zoom và fit to view.
 - T9-03: Đồng bộ danh sách tab panel dưới còn 4 tab (Vấn đề, Tìm kiếm, Tham chiếu, Watch), loại bỏ tab Trace không khả dụng.
 
+### Added — `#655`: phép kiểm 9 canh metadata hồ sơ khớp bảng Lịch sử sửa đổi (2026-09-11)
+
+- Bổ sung 2026-09-12 tại lượt merge, sau khi `#654` đã vào `main`: bảng Lịch sử
+  sửa đổi của `WF-CLEAN-001` nay có dòng `1.4`, nên metadata được nâng từ `1.3`
+  lên `1.4` ngay trong lượt hợp nhất. Mô tả PR đã lường trước và ghi rõ bước này;
+  bỏ qua nó thì chính phép kiểm 9 sẽ đỏ trên `main` từ lượt merge đầu tiên. Đây
+  là lần đầu cổng mới làm đúng việc nó sinh ra để làm — trước đó sai lệch cùng
+  loại lọt im lặng ba lần liên tiếp. Số đo sau khi nâng:
+  `docs_iso_harness.py --expect` exit `0`, `hồ sơ lệch metadata/lịch sử: 0`.
+
+- Phạm vi: `scripts/docs_iso_harness.py` (phép kiểm 9 + selftest), `scripts/verify-project.sh`
+  (`run_docs` chạy thêm `--selftest`), `docs/00_governance/CLEAN_CODE_WORKFLOW.md`
+  (khối metadata), `docs/02_design/software/FBD_EDITOR_DESIGN.md` (khối metadata),
+  `CHANGELOG.md`. **Không** chạm `scripts/workflow_guard.py`, `.github/workflows/**`,
+  `apps/**`, `firmware/**`.
+
+- Triệu chứng: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` khai `**Phiên bản:** 1.0`
+  / `**Cập nhật:** 2026-09-09` ở khối metadata đầu file, trong khi bảng **Lịch sử
+  sửa đổi** cuối chính file đó đã có `1.1` (2026-09-10), `1.2` và `1.3` (cả hai
+  2026-09-11). Hồ sơ tự tuyên bố là "authority duy nhất" cho quy trình lại khai
+  sai phiên bản của chính nó: ai đọc khối đầu file sẽ tin mình đang đọc bản
+  2026-09-09, tức không biết `§6.1a`, `§6.2`, `§8.4`, `§8.5`, `§8.6` đã đổi sau
+  đó. `python3 scripts/docs_iso_harness.py --expect` vẫn exit `0` trên cùng cây.
+
+- Nguyên nhân gốc: **khoảng trống cổng**, không phải ba lần bất cẩn rời rạc. Tám
+  phép kiểm của harness canh trùng mã tài liệu, link chết, anchor, whitespace,
+  code fence và code span — không phép kiểm nào đối chiếu khối metadata với bảng
+  revision history. `DOC-GOV-001` §7.2 bắt "cập nhật revision history kèm version
+  mới", nhưng đó là lời dặn cho người viết; ba phiên liên tiếp cùng bỏ sót một
+  bước chỉ có lời dặn canh giữ là kết cục phải xảy ra.
+
+- Cách sửa: thêm **phép kiểm 9** `meta_revision_drift` vào `docs_iso_harness.py`,
+  quét toàn cây `docs/**/*.md` (không dùng danh sách cứng, nên hồ sơ thêm sau này
+  tự động nằm trong phạm vi). Với mỗi hồ sơ tự khai *cả hai* thứ — dòng
+  `**Phiên bản:**` và một bảng Lịch sử sửa đổi đọc được ít nhất một dòng — cổng
+  đòi `**Phiên bản:**` bằng số phiên bản của dòng **mới nhất**, và `**Cập nhật:**`
+  bằng ngày của chính dòng đó khi hồ sơ có khai trường này. Vi phạm được đưa vào
+  danh sách `hard`, nên cổng đỏ chứ không chỉ lệch ngưỡng.
+
+  Bốn quyết định của bộ bóc, mỗi cái đều do một hình dạng có thật trong `docs/`:
+  (a) "mới nhất" lấy theo **số phiên bản lớn nhất**, không lấy dòng cuối bảng —
+  bảng của `WF-CLEAN-001` xếp 1.0, 1.3, 1.2, 1.1; so theo tuple số nguyên nên
+  `1.24` của `docs/07_records/reviews/README.md` lớn hơn `1.3`, đúng ý nghĩa thứ
+  tự phát hành. (b) Tiêu đề bảng so khớp **chính xác** sau khi bỏ tiền tố đánh
+  số, vì `docs/` có `## 6. Lịch sử sửa đổi` lẫn `## Revision history`, mà khớp
+  lỏng sẽ đọc nhầm `## 7. Persistence, revision và migration` rồi báo động giả.
+  (c) `**Ngày:**` cố ý **không** bị kéo vào phép so: đó là ngày phát hành bản
+  gốc, khác nghĩa `**Cập nhật:**`; gộp hai trường sẽ làm cả bộ hồ sơ Modbus đỏ
+  oan. (d) Dòng có hậu tố như `1.5-candidate` (`DOC-CTRL-001`) bị bỏ qua — bản
+  candidate không phải mốc mà metadata phải khai.
+
+- Hai hồ sơ được đồng bộ metadata theo đúng dòng lịch sử sẵn có, **không** thêm
+  dòng revision mới: đây là sửa sai sót ghi chép, không phải thay đổi nội dung,
+  nên cấp một số phiên bản mới sẽ là khai một thay đổi không tồn tại.
+  `CLEAN_CODE_WORKFLOW.md` `1.0`/`2026-09-09` → `1.3`/`2026-09-11`;
+  `FBD_EDITOR_DESIGN.md` `1.0` → `1.1` (dòng `1.1` ngày 2026-08-15 đã có sẵn
+  trong bảng từ trước). Hồ sơ thứ hai nằm ngoài mô tả của `#655` nhưng phải sửa
+  trong cùng lượt: một cổng `hard` không thể bật khi cây tài liệu còn vi phạm nó.
+
+- Selftest: `docs_iso_harness.py --selftest` nay kiểm thêm chín ca cho bộ bóc của
+  phép kiểm 9, và `scripts/verify-project.sh --component docs` chạy `--selftest`
+  **trước** `--expect`. Lý do giống hệt `#593`: một bộ bóc đọc sai trong im lặng
+  vẫn để `--expect` in `PASS`, tức chính lớp lỗi `#655` vừa phát hiện, chỉ dời
+  xuống một tầng.
+
+- Verification (đo tại nhánh `claude/issue-655-doc-metadata-revision-gate`):
+
+  | Lệnh | Kết quả | Exit |
+  |---|---|---|
+  | `python3 scripts/docs_iso_harness.py --selftest` | `selftest phép kiểm 8: 10/10 đạt`, `selftest phép kiểm 9: 9/9 đạt` | `0` |
+  | `python3 scripts/docs_iso_harness.py --expect` (TRƯỚC khi sửa hai hồ sơ) | `FAIL — vi phạm bắt buộc: meta_revision_drift=3` | `1` |
+  | `python3 scripts/docs_iso_harness.py --expect` (SAU khi sửa) | `PASS — mọi phép kiểm bắt buộc đạt`, `EXPECT: khớp toàn bộ ngưỡng`, `hồ sơ lệch metadata/lịch sử: 0` | `0` |
+  | `bash scripts/verify-project.sh --component docs` | selftest + `PASS` | `0` |
+  | `python3 scripts/workflow_guard.py --selftest` | `48/48 PASS` | `0` |
+  | Kiểm đột biến: đổi `top = max(rows)` → `rows[-1]` trên bản sao | selftest `8/9 đạt`, báo đúng ca "bảng không xếp thứ tự" | `1` |
+
+  Lớp bằng chứng: **HOST**. Không chạy build, test, trình duyệt, TARGET hay HIL —
+  đây là cổng tài liệu.
+
+### Fixed — `#653`: mẫu finding không có ô `Manager-Run`, khiến một lớp Issue không bao giờ merge được (2026-09-11)
+
+- Phạm vi: `.github/ISSUE_TEMPLATE/03-finding.yml`, `scripts/workflow_guard.py`,
+  `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (§1, §3.2 mới, §7, lịch sử sửa
+  đổi), `CHANGELOG.md`. **Không** chạm `.github/workflows/**`,
+  `scripts/verify-project.sh`, `scripts/docs_iso_harness.py`, mã sản phẩm.
+
+- Triệu chứng: `workflow_guard.py` đọc `Manager-Run` từ **body Issue** để chứng
+  minh N1 (người tạo Issue khác người implement). Hai mẫu Issue có trường đó,
+  mẫu `03-finding.yml` thì không. Một finding được Manager triage lên
+  `state:ready` vì vậy vẫn không có chỗ nào mang `Manager-Run`, và PR thực hiện
+  nó bị `N1-MGR` chặn ở **bước cuối** — sau khi code xong, cổng đã xanh, PR đã
+  mở. `#644`/PR `#652` là ca thật.
+
+- Nguyên nhân gốc — hai lớp:
+  1. Mẫu finding thiếu ô để ghi lượt triage. Nhưng ô đó **không** thuộc về
+     người mở finding: trên Issue dạng finding, người *tạo* là người *phát
+     hiện* (Implementer hoặc Reviewer), Manager chỉ triage về sau. Mẫu 01/02
+     gộp hai vai trò đó vào một người nên một trường là đủ; mẫu 03 thì không.
+  2. Vì thế guard cũng chưa bao giờ thi hành đúng câu chữ của N1 trên lớp Issue
+     này: nó chỉ đối chiếu `Manager-Run` với `Implementer-Run`. Một phiên mở
+     finding rồi tự implement nó vẫn đi lọt chừng nào ô `Manager-Run` mang giá
+     trị của người khác. Chỉ thêm ô vào mẫu là hợp thức hoá đúng lỗ hổng đó.
+
+- Cách sửa:
+  - Mẫu `03-finding.yml`: ô người mở đổi nhãn thành `Finder-Run` (nhãn ASCII ổn
+    định, cùng quy ước với `Manager-Run`/`Implementer-Run` để guard đọc được),
+    và thêm ô `Manager-Run` **không bắt buộc**, đặt dưới một mục riêng ghi rõ
+    "do vai Manager điền khi triage". Để trống thì GitHub render `_No response_`
+    và guard vẫn chặn bằng `N1-MGR` — fail-closed, đúng trạng thái của một
+    finding chưa qua tay Manager.
+  - `workflow_guard.py`: thêm mã chặn `N1-FINDER` khi `Finder-Run` trùng
+    `Implementer-Run`, và ghi nhận `CẢNH BÁO triage` (không chặn) khi
+    `Manager-Run` trùng `Finder-Run`. `gate:waived` **không** miễn `N1-FINDER`.
+    Guard đọc cả nhãn cũ `Phát hiện bởi (vai + định danh phiên)` và tự rút định
+    danh phiên khỏi phần mô tả vai (`Implementer — https://…`), nếu không thì
+    mọi finding đã mở nằm ngoài tầm cổng. Việc rút token chỉ áp cho
+    `Finder-Run`; `N1-SELF`/`N2-SELF` so nguyên văn như cũ, không đổi hành vi.
+  - Thêm một ca selftest đọc thẳng `03-finding.yml` và đối chiếu nhãn trường với
+    hằng `FINDER_FIELD_NAMES` của guard: đổi nhãn trong mẫu mà quên đổi guard sẽ
+    làm `--selftest` đỏ thay vì làm `N1-FINDER` mất tác dụng trong im lặng.
+  - `WF-CLEAN-001` §3.2 mới ghi thủ tục triage finding: ai điền trường nào, khi
+    nào, và ba cách làm sai kèm cổng tương ứng.
+
+- Kiểm chứng (HOST, số đo của phiên này):
+  `python3 scripts/workflow_guard.py --selftest` → exit `0`, **68/68 PASS**
+  (trước PR: 48/48). `bash scripts/verify-project.sh --component workflow` →
+  exit `0`. `python3 scripts/docs_iso_harness.py --expect` → exit `0`,
+  `PASS — mọi phép kiểm bắt buộc đạt`, `docs/** link missing: 0`.
+  Chứng minh cổng thật sự đỏ: đổi nhãn `Finder-Run` trong mẫu → `--selftest`
+  exit `1` (61/62 trước khi bổ sung ca run_token); ảnh chụp offline theo hình
+  dạng thật của `#653` → chưa triage `N1-MGR` + `N2-GATE` (exit 1), thêm một
+  dòng `Manager-Run` → chỉ còn `N2-GATE` (exit 1), có `review:pass` + verdict →
+  **exit 0**, và phiên mở finding tự implement → `N1-FINDER` (exit 1) dù đã có
+  `review:pass`.
+
+### Fixed — mở một POU là tháo cả workspace: URL chỉ khác THỨ TỰ query cũng bị nắn (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/shared/programsRoute.ts`,
+  `apps/web-ui/src/features/programming/design/ProgramsWorkspaceRoute.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`, test kèm
+  theo, `CHANGELOG.md`. Nối tiếp `#695`.
+
+- Triệu chứng: sau `#695`, `TC-FBD-NAV-001` vẫn đỏ nhưng theo kiểu KHÁC — badge
+  dừng ở `20/256`–`24/256` với dãy đếm **tăng đơn điệu** (không rollback), tức
+  có phím `Insert` không sinh ra block nào. Đo `--repeat-each=160 --workers=4`:
+  **4/160 đỏ**; và đỏ được cả trong lượt chạy tuần tự của chính cổng
+  `npx playwright test e2e/programming.spec.ts`.
+
+- Nguyên nhân gốc (đo bằng instrument tạm trong sản phẩm: đếm `keydown` ở
+  `window`, `focusin`/`focusout`, mount/unmount từng tầng):
+
+  ```
+  IN  SECTION/Bộ dựng FBD
+  ROUTE READY url=…&mode=EDIT&pou=<id>
+  REDIRECT …&mode=EDIT&pou=<id> -> …&pou=<id>&mode=EDIT
+  UNMOUNT-DWP        ← cả DesignWorkspacePage bị tháo
+  WIN BODY           ← phím Insert rơi vào body, mất trắng
+  MOUNT-DWP
+  ```
+
+  Mở một POU ghi `?project=…&mode=EDIT&pou=<id>` (vì `pou` được `set` vào cuối
+  chuỗi có sẵn), còn `canonicalProgramsPath` dựng `?project=…&pou=<id>&mode=EDIT`.
+  Hai địa chỉ **y hệt nhau về nghĩa**, chỉ khác THỨ TỰ tham số — nhưng
+  `ProgramsWorkspaceRoute` so bằng `current !== canonical` nên coi là URL phải
+  nắn và trả `<Navigate replace>`, khiến React tháo toàn bộ workspace rồi dựng
+  lại. Đây không chỉ là test đỏ: **mỗi lần mở một POU** người dùng mất focus bàn
+  phím, mất vị trí cuộn, mọi state tạm của trình soạn thảo bị dựng lại, và phím
+  gõ trong khoảng đó bị nuốt lặng lẽ.
+
+  Trong lúc truy nguyên lộ thêm hai đường mất thao tác cùng họ, cùng được sửa:
+  (a) effect `[document]` chạy theo IDENTITY của prop, nên draft refetch dựng
+  lại đúng tài liệu ấy thành object mới cũng đủ để `REPLACE_DOCUMENT` cuốn theo
+  thao tác chưa kịp đi hết vòng buffer (badge tụt về `0/256` sau phím đầu);
+  (b) `FbdEditorPane` sửa `activeNetworkId` bằng passive effect nên gợi ý đi sau
+  tài liệu một commit — trong cửa sổ đó nó trỏ một network không còn tồn tại và
+  `ADD_BLOCK` rơi vào nhánh `action = null`, phím bị nuốt mà không announcement,
+  không đổi badge, không dấu vết.
+
+- Cách sửa:
+  - `programsUrlsEquivalent()` so URL theo NGHĨA (pathname + hash + tập cặp
+    `key=value` có tính lặp), thay cho `===`. Phép sanitize deep-link giữ nguyên
+    sức: thừa/thiếu/khác giá trị tham số vẫn khác nghĩa nên vẫn bị nắn; chỉ thứ
+    tự là thôi bị tính.
+  - `resolveProgramsProject()` phân biệt "chưa có gì" với "đang làm mới thứ đang
+    hiện": chỉ trả `LOADING` khi thật sự chưa có dữ liệu, và không kết luận
+    `NOT_FOUND` hay điều hướng từ một danh sách đang bị thay thế.
+  - `StructuredFbdEditor` giữ mốc nội dung của prop `document` lần gần nhất
+    (`propBaseline`) — prop dựng lại cùng nội dung không mang thông tin mới nên
+    không `REPLACE_DOCUMENT`; mốc đi lên theo cả tiếng vọng nên `Làm mới` vẫn
+    hoàn tác được.
+  - `activeNetworkId` được coi là GỢI Ý: không giải được trong tài liệu hiện tại
+    thì rơi về `state.selection` rồi `networks[0]`, thay vì biến canvas thành
+    "không có network nào".
+
+- Số đo (đo lại, không dẫn số cũ):
+  - `TC-FBD-NAV-001` `--repeat-each=160 --workers=4`: **0 failed / 160 passed**
+    (trước sửa 4/160; trên `main` trước `#695` là 5/40).
+  - `npx vitest --run --environment jsdom src`: **3151 passed / 0 failed**
+    (thêm 6 test hồi quy).
+  - `npm run lint` PASS, `npm run build` PASS.
+  - `npx playwright test` (toàn bộ): 178 passed / 9 failed / 33 skipped — 9 lỗi
+    này **có sẵn trên `main`**, đo đối chứng cùng lệnh cho ra đúng 9 failed /
+    18 passed ở cả hai phía (4 trong số đó thuộc `programming-workspace-height`
+    và đang được `#683` xử lý).
+
+### Fixed — FBD mất block khi thao tác nhanh: tiếng vọng TRỄ của buffer trang ghi đè state đang gõ (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.test.tsx`,
+  `CHANGELOG.md`.
+
+- Triệu chứng: `TC-FBD-NAV-001` (`e2e/programming.spec.ts`) chập chờn — nhấn
+  `Insert` 25 lần nhưng badge chỉ đếm 14/16/24 block. Đo trên chính `origin/main`
+  (`439ad27`) bằng `--repeat-each=40 --workers=4`: **5/40 lần đỏ (12,5%)**. Đây
+  KHÔNG phải hồi quy của `#683`; kết luận trước đó quy lỗi cho `#683` là sai và
+  được sửa lại tại đây. Quan trọng hơn: nó không phải lỗi của test mà là một
+  đường **MẤT DỮ LIỆU thật của người dùng** — mọi thao tác dồn dập (Insert liên
+  tiếp, kéo node) đều có thể mất âm thầm, không báo lỗi, không dấu vết.
+
+- Nguyên nhân gốc: vòng công bố editor ⇄ buffer của trang không tức thời.
+  `StructuredFbdEditor` phát `onChange(document)`; `EditorPane` chỉ giữ chuỗi ấy
+  trong `buffers[programId]` rồi trả lại qua prop `document`. Vòng đó đi qua
+  passive effect của React, tức LUÔN trễ ít nhất một commit. Khi thao tác tới
+  nhanh hơn một vòng effect (dưới tải song song, render canvas nặng), bản quay về
+  là bản CŨ HƠN state hiện tại — mà effect `[document]` lại gọi thẳng
+  `REPLACE_DOCUMENT` vô điều kiện, nên bản cũ ghi đè và các block vừa thêm biến
+  mất. Càng nhiều phím dồn trong một cửa sổ effect thì càng mất nhiều, nên số
+  block đỏ mỗi lần một khác. Hai giả thuyết trước đó đều đã bị bác bỏ bằng đo
+  đạc: (a) focus rơi về `body` — dò `document.activeElement` sau mỗi phím, luôn
+  là `SECTION`; (b) render chậm — hạn assertion 15 s vẫn đỏ, và ảnh chụp lúc đỏ
+  luôn dừng ở số < 25 nên chờ lâu hơn không cứu được.
+
+- Cách sửa: nhận diện tiếng vọng của CHÍNH MÌNH rồi bỏ qua. Editor giữ hàng đợi
+  `pendingEchoes` các canonical đã phát ra nhưng chưa thấy quay về; prop
+  `document` nào khớp một phần tử trong hàng đợi là tiếng vọng (cắt luôn các bản
+  cũ hơn, vì trang có thể gộp `setState` khiến vài bản trung gian không bao giờ
+  quay về) và KHÔNG được `REPLACE_DOCUMENT`. Tài liệu không nằm trong hàng đợi là
+  thay đổi thật từ bên ngoài (Làm mới, đổi POU, draft đồng bộ) và vẫn được áp
+  dụng ngay — đó là chiều thứ hai phải giữ, nếu chỉ khoá cứng prop thì Làm mới sẽ
+  chết lặng. Hai `it` mới trong `StructuredFbdEditor.test.tsx` khoá cả hai chiều
+  một cách tất định (không phụ thuộc timing). Sửa kèm: tiếng vọng cũng thôi huỷ
+  oan `layoutPreview` của auto-layout.
+
+- Số đo (đo lại, không dẫn số cũ):
+  - `TC-FBD-NAV-001` `--repeat-each=40 --workers=4`: `main` **5 failed / 35
+    passed**; sau sửa **0 failed / 40 passed**.
+  - `npx playwright test e2e/programming.spec.ts`: **109 passed / 0 failed /
+    29 skipped** — bằng đúng `main` (109/0/29), số skip không tăng.
+  - `npx vitest --run --environment jsdom src`: **247 files / 3144 passed /
+    0 failed** (thêm 2 test hồi quy).
+  - `npm run lint` PASS, `npm run build` PASS (chunk `programming` 153,48 KiB,
+    ngân sách 165 KiB).
+
 
 ### Fixed — `main` đỏ: ghim hợp đồng OpenAPI còn `1.40.0` sau khi contract lên `1.41.0` (2026-09-12)
 
@@ -375,6 +628,81 @@
   `apps/web-api/internal/programming/transport/http/{models.go,operations.go}`,
   `contracts/openapi/openapi.yaml`, `contracts/programming/{pgm02_workspace_v1.json,g1_contract_join_v1.json}`,
   cùng test đơn vị/transport tương ứng.
+
+### Added — `#644`: cổng `gofmt` trong `verify-project.sh` và chín file Go trong `apps/web-api` về đúng định dạng (2026-09-11)
+
+- Bổ sung 2026-09-12 khi đồng bộ `origin/main` (`7b46218`) trước lượt merge:
+  `gofmt -l .` trong `apps/web-api` trả thêm **một** file mà `main` mang về sau
+  ngày đo — `internal/programming/application/operations.go` (vào main qua
+  `244d35d`, trước khi cổng này tồn tại). Đã `gofmt -w` file đó trong cùng lượt.
+  Nếu bỏ qua, cổng `require_gofmt_clean` sẽ đỏ ngay trên `main` từ lượt merge
+  đầu tiên. Số đo lại sau khi hợp nhất: `gofmt -l .` **rỗng**, `go vet` exit `0`,
+  `go test ./... -count=1` exit `0` với **21/21 package `ok`**.
+
+- Phạm vi: `scripts/verify-project.sh` (thêm `require_gofmt_clean`, gọi ở đầu
+  `run_go`) và chín file Go lệch `gofmt` trong `apps/web-api/**`:
+  `internal/app/dto.go`, `internal/app/virtualpoint.go`, `internal/auth/audit.go`,
+  `internal/auth/rbac_test.go`, `internal/auth/service.go`,
+  `internal/modbusrtu/flexbool.go`,
+  `internal/programming/application/library_compatibility_test.go`,
+  `internal/programming/application/profile_capacity_test.go`,
+  `internal/programming/domain/library.go`. **Không đổi hành vi** (N6): diff mã
+  thuần khoảng trắng, căn cột struct tag/field và định dạng doc comment — không
+  đổi contract, API, schema, mã lỗi công khai hay một biểu thức nào. Không chạm
+  `docs/00_governance/`, `.github/`, `scripts/workflow_guard.py`, `contracts/`.
+
+- Triệu chứng: `go vet ./...` exit `0` và `go test ./... -count=1` toàn `ok` trong
+  khi chín file mã sản phẩm và test đang lệch `gofmt`. Đo lại trên cây có file
+  lệch cố ý tiêm vào: `go vet ./internal/modbusrtu/...` exit `0`,
+  `go test ./internal/modbusrtu/... -count=1` `ok` — tức **không cổng nào hiện có
+  nhìn thấy lớp lệch này**.
+
+- Nguyên nhân gốc: `go vet` và `go test` đọc **nghĩa** của chương trình, còn
+  khoảng trắng và căn cột thì không đổi nghĩa. Không có phép kiểm nào chạy
+  `gofmt -l`, nên số file lệch chỉ có thể tăng theo thời gian — và bản thân
+  `gofmt -l` **vẫn thoát 0** khi tìm thấy file lệch (nó chỉ in tên), nên cắm nó
+  vào script mà không biến output khác rỗng thành lỗi thì được một cổng chỉ trông
+  như cổng. Hệ quả thật không phải thẩm mỹ: ai sửa một file đang lệch bằng editor
+  có `format on save` sẽ kéo một khối reformat không liên quan vào PR của mình,
+  và Reviewer phải tách thay đổi thật khỏi nhiễu định dạng.
+
+- Cách sửa: `require_gofmt_clean` bắt `gofmt -l .` trong module, in danh sách file
+  lệch kèm lệnh sửa (`gofmt -w .`) rồi `return 1` khi output khác rỗng. Đặt ở
+  **đầu** `run_go`, trước đoạn đòi production tool từ build C++, vì cổng này không
+  cần binary nào: nó chạy được cả khi chưa build `cpp` và đỏ sau vài trăm ms thay
+  vì sau một lượt build đầy đủ.
+
+- Sửa kèm, bắt buộc về nghĩa chứ không phải mở rộng phạm vi: trong
+  `library_compatibility_test.go`, bộ định dạng doc comment của `gofmt` chuyển
+  `''` thành dấu nháy cong, biến đoạn trích mã JS `requiredVersion === ''` thành
+  `requiredVersion === ”` — không còn đọc được như mã. Đổi sang `""` (tương đương
+  trong JS, `gofmt` không đụng) **trước** khi chạy `gofmt -w`, nên bản định dạng
+  không mang theo một comment sai. Đã quét lại toàn bộ dòng thêm vào của diff:
+  không còn ký tự nháy cong nào lọt vào.
+
+- Phạm vi rộng hơn ba file mà `#644` nêu, có lý do: body Issue đo bằng
+  `gofmt -l` trên **hai thư mục** (`internal/app/`, `internal/modbusrtu/`) nên ra
+  ba file; đo trên toàn module tại `b8eed74` cho **chín**. Cổng `gofmt -l` chỉ
+  xanh khi module sạch, nên format ba file rồi cắm cổng là cổng đỏ ngay tại commit
+  đầu tiên. `apps/web-api/go.mod` là module Go duy nhất trong repo, nên chín file
+  này là toàn bộ lớp lệch.
+
+- Số đo (2026-09-11, đo tại máy sau khi merge `origin/main`, không dẫn lại số cũ):
+  - `gofmt -l apps/web-api/` **rỗng** (trước PR: chín file).
+  - Chứng minh cổng thật sự đỏ: tiêm một hàm lệch định dạng vào
+    `internal/modbusrtu/flexbool.go` ⇒ `verify-project.sh --component go` in
+    `LỖI: file Go lệch gofmt trong apps/web-api` + `internal/modbusrtu/flexbool.go`
+    và exit `1`, **trước** khi tới phép kiểm production tool; hoàn nguyên ⇒ cổng
+    gofmt im lặng đi qua. `bash -n scripts/verify-project.sh` exit `0`.
+  - `go vet ./...` exit `0`; `go test ./... -count=1` **21/21 package `ok`**,
+    exit `0` (3 package không có test file), `internal/app` 60.634s,
+    `internal/programming/application` 28.922s.
+  - `verify-project.sh --component docs` exit `0` (PASS toàn bộ phép kiểm);
+    `--component workflow` exit `0`, **48/48 PASS** selftest cổng tách vai.
+  - C++ `NOT_RUN` (không chạm `apps/core/**`, `apps/iobus/**`, `contracts/`);
+    FE `NOT_RUN` (không chạm `apps/web-ui/**`); E2E `NOT_RUN` (không chạm trang
+    mạng); CI `NOT_RUN (#414)`.
+
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
