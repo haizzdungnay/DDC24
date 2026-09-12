@@ -5,6 +5,19 @@ import { programmingErrorCopy } from '../api/errorCopy'
 import type { ProgrammingDiagnostic } from '../model/types'
 import { diagnosticFreshness, type OpenBufferContext, type StaleReason } from './diagnosticFreshness'
 
+/** Dải chiều cao cho phép của khay Vấn đề, tính bằng `px`.
+ *
+ * Ba chỗ phải nói cùng một dải, và trước đây không chỗ nào tham chiếu chỗ nào:
+ * bộ lọc giá trị đọc từ `localStorage`, cặp `aria-valuemin`/`aria-valuemax`
+ * công bố ra công nghệ trợ giúp, và `clampPanelHeight` quyết định widget thực
+ * sự nhận gì. Nới dải ở một chỗ mà quên hai chỗ kia thì trình đọc màn hình
+ * nghe một trần SAI (`aria-valuenow` vượt `aria-valuemax`) còn chiều cao vừa
+ * kéo lại không được nhớ qua lần tải lại — hai triệu chứng khác nhau từ một
+ * lần sửa một dòng, và không phép đo nào đỏ. Giữ đúng MỘT điểm định nghĩa cho
+ * mỗi biên là thứ duy nhất buộc ba chỗ đó bằng nhau. */
+export const PANEL_HEIGHT_MIN_PX = 160
+export const PANEL_HEIGHT_MAX_PX = 320
+
 /** Câu giải thích VÌ SAO một diagnostic không còn nói về buffer đang mở.
  *
  * Mỗi lý do dẫn tới một hành động khác nhau của người dùng, nên chúng không
@@ -77,7 +90,9 @@ export function ProblemsDrawer({
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('programming.problems.collapsed') === 'true')
   const [panelHeight, setPanelHeight] = useState(() => {
     const stored = Number(localStorage.getItem('programming.problems.height'))
-    return Number.isFinite(stored) && stored >= 160 && stored <= 320 ? stored : 160
+    return Number.isFinite(stored) && stored >= PANEL_HEIGHT_MIN_PX && stored <= PANEL_HEIGHT_MAX_PX
+      ? stored
+      : PANEL_HEIGHT_MIN_PX
   })
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -280,8 +295,8 @@ export function ProblemsDrawer({
           role="separator"
           aria-label={pick('Đổi chiều cao khay vấn đề', 'Resize problems tray')}
           aria-orientation="horizontal"
-          aria-valuemin={160}
-          aria-valuemax={320}
+          aria-valuemin={PANEL_HEIGHT_MIN_PX}
+          aria-valuemax={PANEL_HEIGHT_MAX_PX}
           aria-valuenow={panelHeight}
           tabIndex={0}
           className="mt-2 hidden h-3 cursor-row-resize items-center justify-center border-y border-[var(--c-border)] text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] min-[1280px]:flex"
@@ -366,6 +381,6 @@ function problemsEmptyCopy(
   }
 }
 
-function clampPanelHeight(value: number): number {
-  return Math.min(320, Math.max(160, Math.round(value)))
+export function clampPanelHeight(value: number): number {
+  return Math.min(PANEL_HEIGHT_MAX_PX, Math.max(PANEL_HEIGHT_MIN_PX, Math.round(value)))
 }

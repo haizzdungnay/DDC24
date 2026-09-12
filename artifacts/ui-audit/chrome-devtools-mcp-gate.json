@@ -1,0 +1,43 @@
+{
+  "generated_at": "2026-09-12T02:59:28.450Z",
+  "display": "(do launcher tự dựng)",
+  "probe_url": "about:blank",
+  "verdict": "PASS",
+  "checks": [
+    {
+      "name": "initialize",
+      "status": "PASS",
+      "detail": "chrome_devtools@1.8.0"
+    },
+    {
+      "name": "tools/list",
+      "status": "PASS",
+      "detail": "29 tool"
+    },
+    {
+      "name": "list_pages (Chrome headful khởi động)",
+      "status": "PASS",
+      "detail": "## Pages | 1: about:blank [selected]"
+    },
+    {
+      "name": "navigate_page",
+      "status": "PASS",
+      "detail": "about:blank → Successfully navigated to about:blank."
+    },
+    {
+      "name": "take_snapshot",
+      "status": "PASS",
+      "detail": "62 ký tự"
+    },
+    {
+      "name": "list_console_messages",
+      "status": "PASS",
+      "detail": "## Console messages"
+    },
+    {
+      "name": "list_network_requests",
+      "status": "PASS",
+      "detail": "## Network requests"
+    }
+  ]
+}
