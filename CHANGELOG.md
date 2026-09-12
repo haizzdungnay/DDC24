@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+### Fixed — cổng `check:programming-api` đỏ sẵn trên `main`: sinh lại client Programming theo OpenAPI 1.41.0 (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/api/generated/client.ts`.
+- Triệu chứng: `npm run build` của `apps/web-ui` dừng ngay ở `check:programming-api`
+  với `Client Programming đã lệch OpenAPI` — đo được trên chính `origin/main`
+  (`2c56150`), tức mọi PR chạm FE đều không chạy nổi cổng build.
+- Nguyên nhân gốc: `#689` (RESTORE ack) nâng `contracts/openapi/openapi.yaml`
+  lên `1.41.0` nhưng không chạy lại `npm run generate:programming-api`, nên hằng
+  `PROGRAMMING_OPENAPI_VERSION` trong file sinh tự động còn `1.40.0`.
+- Cách sửa: chạy đúng lệnh sinh của repo, không sửa tay file sinh tự động; diff
+  đúng một dòng hằng số.
+- Số đo: sau khi sinh lại, `npm run build` PASS exit 0 — chunk `programming`
+  153.49 KiB gzip / ngân sách R3 165.00 KiB.
+
 ### Fixed — `#672`: cổng e2e Programming thôi đỏ vì lý do ngoài chất lượng mã (2026-09-12)
 
 - Phạm vi: `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`.
