@@ -8,7 +8,7 @@
 
 ## [Unreleased]
 
-### Fixed — `#665`: gỡ ba tầng lỗi làm cổng e2e Programming đỏ sẵn trên `main` (2026-09-12)
+### Fixed — `#665`: gỡ bốn tầng lỗi làm cổng e2e Programming đỏ sẵn trên `main` (2026-09-12)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
   `apps/web-ui/src/features/programming/design/DesignWorkspacePage.test.tsx`,
@@ -16,67 +16,108 @@
   `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`. **Chưa đóng `#665`** —
   xem mục "Còn lại" bên dưới.
 
-- Triệu chứng: `npx playwright test e2e/programming.spec.ts` đỏ sẵn trên `origin/main`
-  (`24095d2`) với `102 passed / 28 skipped / 8 failed`, không phải nhiễu — Issue `#665`
-  đã đo hai lượt cho cùng ba con số. Mỗi phiên chạm FE phải tự đo một lượt nền riêng
-  để phân biệt "đỏ của tôi" với "đỏ có sẵn", và lỗi thứ chín sẽ trốn được.
+- Triệu chứng: `npx playwright test e2e/programming.spec.ts` đỏ sẵn trên
+  `origin/main` (`24095d2`) với `102 passed / 28 skipped / 8 failed`, không phải
+  nhiễu — `#665` đã đo hai lượt cho cùng ba con số. Mọi phiên chạm FE vì thế phải
+  tự đo một lượt nền riêng để phân biệt "đỏ của tôi" với "đỏ có sẵn", và lỗi thứ
+  chín sẽ trốn được.
 
-- Nguyên nhân gốc: KHÔNG phải một lỗi, mà một chồng lỗi độc lập — mỗi lần vá một
-  tầng thì tầng sau mới lộ ra. Ba tầng đã xử lý trong lần này:
+- Nguyên nhân gốc: KHÔNG phải một lỗi, mà một CHỒNG lỗi độc lập — mỗi lần vá một
+  tầng thì tầng sau mới lộ ra. Bốn tầng đã xử lý trong lần này:
 
   1. **Hàng công cụ workspace Thiết kế được dựng HAI lần.** `DesignWorkspacePage`
      đăng ký hành động qua `setEditingContext({ actions })` — kênh mà
-     `ProgrammingContextStrip` dựng thành `programming-global-actions` — VÀ đẩy nguyên
-     cụm `EDIT/LIVE/SIMULATE` + `Lưu`/`Kiểm tra`/`Làm mới` qua `setContextStripSlot`.
-     `GlobalContextBar` nhận cả `actions` lẫn slot làm children, nên cùng một hàng
-     công cụ ra DOM hai lần: `Lưu bản nháp` đếm ra **2** (`toHaveCount(1)` đỏ ở
-     `TC-FBD-RESP-001`) và `Kiểm tra gói` cũng vậy. Lần chuyển cụm lên strip đã thêm
-     kênh mới mà không rút kênh cũ.
-  2. **Chỉ báo `Chưa lưu` còn bản sót ở thân trang.** Cùng lần chuyển đó để lại một
-     `span[data-testid="draft-dirty-indicator"]` trong thân `DesignWorkspacePage` bên
-     cạnh bản mới trong slot, nên khi Draft bẩn thì có HAI huy hiệu vàng cùng chữ →
-     `strict mode violation` ở `UJ-PROG-01..08`.
+     `ProgrammingContextStrip` dựng thành `programming-global-actions` — VÀ đẩy
+     nguyên cụm `EDIT/LIVE/SIMULATE` + `Lưu`/`Kiểm tra`/`Làm mới` qua
+     `setContextStripSlot`. `GlobalContextBar` nhận cả `actions` lẫn slot làm
+     children, nên cùng một hàng công cụ ra DOM hai lần: `Lưu bản nháp` đếm ra
+     **2** (`TC-FBD-RESP-001` đỏ ở `toHaveCount(1)`) và `Kiểm tra gói` cũng vậy.
+     Lần chuyển cụm lên strip đã thêm kênh mới mà không rút kênh cũ.
+  2. **Chỉ báo `Chưa lưu` còn bản sót ở thân trang.** Cùng lần chuyển đó để lại
+     một `span[data-testid="draft-dirty-indicator"]` trong thân
+     `DesignWorkspacePage` bên cạnh bản mới trong slot — khối bar cũ ngay phía
+     trên nó đã bị comment lại, chỉ riêng cái span còn. Khi Draft bẩn thì có HAI
+     huy hiệu vàng cùng chữ → `strict mode violation` ở `UJ-PROG-01..08`.
   3. **`EditorStatusBar` dùng `dl` làm hộp flex.** `dl` chỉ được chứa trực tiếp
-     `dt`/`dd`, nhưng thanh trạng thái còn chứa khối `leading` (một `div` bọc nội dung
-     tuỳ ý) và bọc `dd` BÊN TRONG `button` ở ô `position`. axe bắt `definition-list`
-     và `only-dlitems` mức `serious`, làm cổng a11y của `UJ-PROG-01..08` đỏ.
+     `dt`/`dd`, nhưng thanh trạng thái còn chứa khối `leading` (một `div` bọc nội
+     dung tuỳ ý) và bọc `dd` BÊN TRONG `button` ở ô `position`. axe bắt
+     `definition-list` và `only-dlitems` mức `serious`, làm cổng a11y của
+     `UJ-PROG-01..08` đỏ.
+  4. **Cổng đỏ theo nhịp máy.** `expectNoBrowserFailures` coi MỌI `requestfailed`
+     là lỗi, kể cả `GET /favicon.svg: net::ERR_ABORTED` — trình duyệt huỷ một
+     request còn dở vì `reload` chen vào. `AC-PGM02-001` reload giữa chừng, nên
+     nó đỏ hay xanh tuỳ tải runner. Phát hiện đúng lúc đồng bộ `origin/main`
+     (`9f4f24d`, `#660`): lượt đo sau merge đỏ 8 test thay vì 7, và test thứ tám
+     là ca này — không phải hồi quy của `#660`.
 
 - Cách sửa:
-  1. `DesignWorkspacePage` thôi đăng ký `actions`; slot là nguồn DUY NHẤT của hàng
-     công cụ (nó mang thêm bộ chuyển chế độ, và luật dirty/operation/đường sang PGM-05
-     đều nằm ở trang này). Hợp đồng của `ProgrammingContextStrip` không đổi — nó vẫn
-     dựng `actions` khi được cấp.
-  2. Giữ đúng MỘT vùng `role="status"`, đặt trong slot và **luôn có mặt** trong DOM,
-     chỉ đổi giữa hiện hình và `sr-only`; xoá bản sót ở thân trang. Vùng live gắn vào
-     DOM đúng lúc nội dung xuất hiện là vùng không được đọc.
-  3. Hộp ngoài `EditorStatusBar` thành `div role="group"`, mỗi cặp nhãn–giá trị là một
-     `dl` riêng, nút `Tới dòng…` nằm TRONG `dd`. Bố cục không đổi: lớp Tailwind vẫn
-     nằm trên đúng những hộp cũ.
-  4. `TC-FBD-NAV-001` nhận chốt chặn khổ hẹp mà mọi ca soạn thảo khác trong tệp đã
-     mang — ca này `createPou` rồi 25 lần `Insert`, đều là mutation, mà dưới 768 px
-     PGM-02 khoá read-only, nên ở lane mobile nó đứng chờ nút `Mới` vốn cố ý không tồn
-     tại cho tới hết 60 giây. Đỏ vì ĐÒI SAI thứ thiết kế vừa cấm, không phải vì Mini Map hỏng.
-  5. Harness `DesignWorkspacePage.test.tsx` RENDER slot thật thay vì nuốt bằng
+  1. `DesignWorkspacePage` thôi đăng ký `actions`; slot là nguồn DUY NHẤT của
+     hàng công cụ (nó mang thêm bộ chuyển chế độ, và luật dirty/operation/đường
+     sang PGM-05 đều nằm ở trang này). Hợp đồng `ProgrammingContextStrip` không
+     đổi — nó vẫn dựng `actions` khi được cấp.
+  2. Giữ đúng MỘT vùng `role="status"`, đặt trong slot và **luôn có mặt** trong
+     DOM, chỉ đổi giữa hiện hình và `sr-only`; xoá bản sót ở thân trang. Vùng
+     live gắn vào DOM đúng lúc nội dung xuất hiện là vùng không được đọc, nên
+     giữ đặc tính tốt của bản cũ thay vì giữ bản dựng theo điều kiện.
+  3. Hộp ngoài `EditorStatusBar` thành `div role="group"` giữ nguyên `aria-label`
+     và toàn bộ lớp Tailwind (bố cục không đổi); mỗi cặp nhãn–giá trị thành một
+     `dl` riêng; nút `Tới dòng…` chuyển vào TRONG `dd`.
+  4. Bộ quan sát bỏ qua ĐÚNG cặp "`net::ERR_ABORTED` + đường ngoài `/api/`". Mọi
+     `ERR_ABORTED` trên `/api/` vẫn đỏ (huỷ một lời gọi API giữa chừng là dấu
+     hiệu race thật), mọi mã lỗi khác trên tài nguyên tĩnh cũng vẫn đỏ.
+  5. `TC-FBD-NAV-001` nhận chốt chặn khổ hẹp mà mọi ca soạn thảo khác trong tệp
+     đã mang — ca này `createPou` rồi 25 lần `Insert`, đều là mutation, mà dưới
+     768 px PGM-02 khoá read-only, nên ở lane mobile nó đứng chờ nút `Mới` vốn cố
+     ý không tồn tại cho tới hết 60 giây. Đỏ vì ĐÒI SAI thứ thiết kế vừa cấm.
+  6. Harness `DesignWorkspacePage.test.tsx` RENDER slot thật thay vì nuốt bằng
      `vi.fn()`. Chính khoảng mù đó đã che việc chỉ báo bị dựng hai lần cho tới khi
      Playwright đâm vào `strict mode violation`.
 
-- Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` — tổ chức không cấp runner, `#414`):
+- Số đo (đo tại máy 2026-09-12, **sau khi merge `origin/main` `9f4f24d`**; CI
+  `NOT_RUN` — tổ chức không cấp runner, `#414`):
 
   | Cổng | Lệnh | Kết quả |
   |---|---|---|
-  | Playwright nền (`origin/main` `24095d2`) | `npx playwright test e2e/programming.spec.ts` | **102 passed / 28 skipped / 8 failed** (4.9m), exit 1 |
-  | Playwright sau ba tầng vá | như trên | **102 passed / 29 skipped / 7 failed** (6.6m), exit 1 — `8 → 7` đỏ; ba tầng đã vá KHÔNG còn là điểm chết của test nào, nhưng mỗi test đỏ còn lại bị chặn bởi tầng lỗi tiếp theo nên chưa test nào đổi màu |
-  | Vitest (toàn `src`) | `npx vitest --run --environment jsdom src` | **246 files / 3133 passed / 0 failed**, exit 0 (3 lượt full liên tiếp) |
+  | Playwright nền (`origin/main` `24095d2`, trước mọi thay đổi) | `npx playwright test e2e/programming.spec.ts` | **102 passed / 28 skipped / 8 failed** (4.9m), exit 1 |
+  | Playwright sau vá, sau merge | như trên | **102 passed / 29 skipped / 7 failed** (6.6m), exit 1 |
+  | Vitest (toàn `src`) | `npx vitest --run --environment jsdom src` | **246 files / 3137 passed / 0 failed**, exit 0 |
   | Lint | `npm run lint` | PASS, exit 0 |
   | Build | `npm run build` | PASS, exit 0 (chunk `programming` 153.53 KiB gzip, ngân sách R3 165.00 KiB) |
 
-- Còn lại (chưa sửa, thuộc `#665`): bốn tầng lỗi độc lập nữa đã định vị được nhưng
-  KHÔNG sửa trong lần này vì mỗi tầng cần một quyết định thiết kế có chủ:
-  mất nút `Đổi ngôn ngữ` trên desktop Programming (TopBar `lg:hidden` mà không ai
-  tiếp quản); Quick Library đổi sang cột ngoài cùng bên phải và hiện từ 1024 px
-  (`11d7b33`) trong khi `docs/superpowers/specs/2026-08-31-fbd-edit-design.md` §7.5
-  khoá `1024–1439` là "drawer hoặc gập"; phần tử không bao giờ `stable` trong
-  workspace Programs; và PGM-04 chừa cột cho khay phủ ở khổ 768.
+  `8 → 7` đỏ. Bốn tầng đã vá KHÔNG còn là điểm chết của test nào — `UJ-PROG-01..08`
+  đi từ chết ở `draft-dirty-indicator` sang vượt cả cổng axe rồi mới dừng ở
+  `Cấu hình Task`; `TC-FBD-RESP-001` đi từ chết ở `toHaveCount(1)` sang dừng ở nút
+  `Network`. Nhưng mỗi test đỏ còn lại bị chặn bởi tầng tiếp theo, nên chỉ
+  `TC-FBD-NAV-001` (lane mobile) đổi màu — thành `skipped` đúng hợp đồng read-only.
+
+- Còn lại (thuộc `#665`, CHƯA sửa — mỗi mục cần một quyết định thiết kế có chủ,
+  không phải việc một phiên Implementer tự quyết rồi tự merge):
+  1. **Mất nút `Đổi ngôn ngữ` trên desktop Programming.** Nút chỉ có trong
+     `TopBar`, mà `AppShell` đặt `className={programmingFocus ? 'lg:hidden'}` và
+     không component nào tiếp quản. `ISS-PGUI-03` chờ nút đó tới hết 60 giây. Cần
+     quyết định nơi đặt nút trên desktop (Feature Rail, Context Strip, hay bỏ
+     `lg:hidden`).
+  2. **Một loạt UI bị comment-out với dấu `ponytail:` trong khi hợp đồng e2e vẫn
+     khoá chúng.** `StructuredFbdEditor` ẩn nút `Network` và nhãn
+     `fbd-active-network`; `DesignWorkspacePage` ẩn thanh tab; `FbdEditorPane` ẩn
+     thanh công cụ phụ. `Cấu hình Task` thì KHÔNG còn tồn tại ở `src` — chỉ còn
+     trong spec. `TC-FBD-RESP-001` và `UJ-PROG-01..08` đòi đúng những thứ đó. Cần
+     quyết định: phục hồi, hay viết lại hợp đồng `T59-802`.
+  3. **Quick Library đổi vị trí và ngưỡng hiện (`11d7b33`).** Cột chuyển sang
+     track ngoài cùng bên phải (sau Inspector) và hiện từ `1024 px` thay vì
+     `1440 px`. `AC-PGM02-004` đo toạ độ thật và thấy thứ tự `249, 463, 1711,
+     1465` — không còn tăng dần. `docs/superpowers/specs/2026-08-31-fbd-edit-design.md`
+     §7.5 khoá `1024–1439` là "Library/Inspector drawer hoặc gập", nên hợp đồng
+     và sản phẩm đang nói hai điều khác nhau. Cần quyết định bên nào đúng.
+  4. **Phần tử không bao giờ `stable` trong workspace Programs.** Mini Map
+     (`TC-FBD-NAV-001`, desktop) và tab `Vấn đề` (`TC-FBD-DIAG-001`, mobile) đều
+     chết ở `element is not stable` sau 116–118 lần thử, tức có một vòng đo–đặt
+     lại kích thước không bao giờ hội tụ. Hai nghi phạm có vòng phản hồi
+     `ResizeObserver` với ngưỡng chốt 1 px: `useViewportFillHeight` (quan sát
+     `document.body`, và chính chiều cao nó đặt làm `body` đổi) và `FbdCanvas`.
+     Chưa xác định được phía dao động.
+  5. **PGM-04 chừa cột cho khay phủ ở khổ 768.** `T61-505` đo `listWidth=543` và
+     lệch `225 px` so với trần `160 px`.
 
 ### Changed — `#660`: `ProblemsDrawer` gom dải chiều cao `160–320` về một điểm định nghĩa cho mỗi biên (2026-09-12)
 

@@ -133,7 +133,21 @@ function observeBrowserFailures(page: Page): BrowserFailures {
   page.on('pageerror', (error) => failures.pageErrors.push(error.message))
   page.on('requestfailed', (request) => {
     if (!isProgrammingSurface(request.url())) return
-    failures.requestFailures.push(`${request.method()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText ?? 'unknown'}`)
+    const path = new URL(request.url()).pathname
+    const errorText = request.failure()?.errorText ?? 'unknown'
+    /* `net::ERR_ABORTED` trên một tài nguyên NGOÀI API không phải lỗi ứng dụng:
+     * đó là trình duyệt HUỶ một request còn dở vì điều hướng hoặc `reload` chen
+     * vào trước khi nó xong. `AC-PGM02-001` reload giữa chừng để chứng minh POU
+     * sống sót, nên `GET /favicon.svg` kịp xong hay bị huỷ phụ thuộc vào nhịp
+     * máy — và cổng sẽ đỏ hay xanh theo tải của runner chứ không theo chất
+     * lượng mã. Một cổng đỏ ngẫu nhiên còn tệ hơn một cổng đỏ ổn định: nó dạy
+     * người chạy bỏ qua màu đỏ.
+     *
+     * Tha ĐÚNG cặp "huỷ + ngoài API", không hơn: mọi `ERR_ABORTED` trên
+     * `/api/` vẫn đỏ (huỷ một lời gọi API giữa chừng là dấu hiệu thật của
+     * race trong mã), và mọi mã lỗi khác trên tài nguyên tĩnh cũng vẫn đỏ. */
+    if (errorText === 'net::ERR_ABORTED' && !path.startsWith('/api/')) return
+    failures.requestFailures.push(`${request.method()} ${path}: ${errorText}`)
   })
   page.on('response', (response) => {
     if (response.status() < 500) return
