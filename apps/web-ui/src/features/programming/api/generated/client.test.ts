@@ -159,7 +159,14 @@ describe("Programming API client sinh từ OpenAPI", () => {
   it("khoá hợp đồng bảng Programs sinh từ OpenAPI (T60-013/T60-014)", () => {
     // Bump contract đi kèm thay đổi hình dạng phản hồi; khoá số ở đây để một
     // lần sinh lại quên chạy không lặng lẽ giữ type cũ.
-    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.40.0");
+    //
+    // `1.41.0` — `becd76b` nâng `contracts/openapi/openapi.yaml` khi đưa
+    // acknowledgements của RESTORE vào hợp đồng, và `0de274e` sinh lại client
+    // theo đúng số đó. Ghim này thì không được cập nhật cùng, nên `main` đỏ với
+    // `expected '1.41.0' to be '1.40.0'`: phép kiểm đã làm đúng việc của nó —
+    // báo rằng hai số đã rời nhau — chỉ là lần này bên trôi là chính cái ghim,
+    // không phải client. Cập nhật ghim theo contract, KHÔNG hạ client về số cũ.
+    expect(PROGRAMMING_OPENAPI_VERSION).toBe("1.41.0");
 
     // D-07 — ĐÚNG năm trạng thái. `STARTING`/`STOPPING` không bao giờ xuất hiện:
     // `start()`/`stop()`/`disable()` của Core đổi trạng thái đồng bộ tức thì,

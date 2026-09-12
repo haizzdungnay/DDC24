@@ -8,6 +8,27 @@
 
 ## [Unreleased]
 
+### Fixed — `main` đỏ: ghim hợp đồng OpenAPI còn `1.40.0` sau khi contract lên `1.41.0` (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/api/generated/client.test.ts`,
+  `CHANGELOG.md`.
+
+- Triệu chứng: `npx vitest --run --environment jsdom src` trên `main` (`fabcad5`)
+  đỏ **1 test**: `khoá hợp đồng bảng Programs sinh từ OpenAPI (T60-013/T60-014)` —
+  `AssertionError: expected '1.41.0' to be '1.40.0'`.
+
+- Nguyên nhân gốc: `becd76b` nâng `contracts/openapi/openapi.yaml` lên `1.41.0` khi
+  đưa acknowledgements của RESTORE vào hợp đồng, và `0de274e` sinh lại client theo
+  đúng số đó. Riêng dòng ghim trong test thì không được cập nhật cùng. Phép kiểm đã
+  làm ĐÚNG việc của nó — báo rằng hai số đã rời nhau — chỉ là lần này bên trôi là
+  chính cái ghim, không phải client.
+
+- Cách sửa: cập nhật ghim theo contract (`1.41.0`), **không** hạ client về số cũ, và
+  ghi ngay tại chỗ vì sao con số đổi để lần bump sau người đọc biết phải sửa cả hai.
+
+- Số đo: `vitest` **247 files / 3142 passed / 0 failed**, exit 0 (trước: 1 failed).
+  `lint` PASS, `build` PASS.
+
 ### Fixed — cổng `check:programming-api` đỏ sẵn trên `main`: sinh lại client Programming theo OpenAPI 1.41.0 (2026-09-12)
 
 - Phạm vi: `apps/web-ui/src/features/programming/api/generated/client.ts`.
