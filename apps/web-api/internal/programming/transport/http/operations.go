@@ -53,7 +53,8 @@ func handleOperationRequest(w http.ResponseWriter, r *http.Request, correlationI
 		accepted, err := service.Restore(r.Context(), requestActor(r), programmingapplication.OperationCommand{
 			SchemaVersion: request.SchemaVersion, RevisionID: request.RevisionID,
 			ExpectedActiveRevisionID: expected, Reason: request.Reason, Cutover: "PROGRAM_ONLY",
-			IdempotencyKey: r.Header.Get("X-Idempotency-Key"), CorrelationID: correlationID,
+			Acknowledgements: append([]string(nil), request.Acknowledgements...),
+			IdempotencyKey:   r.Header.Get("X-Idempotency-Key"), CorrelationID: correlationID,
 		})
 		if err != nil {
 			writeMappedError(w, err, correlationID)

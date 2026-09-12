@@ -8,6 +8,47 @@
 
 ## [Unreleased]
 
+### Fixed — `ISS-PIO-38` RESTORE nay chịu cùng phép kiểm slot Modbus như COMMISSION, kèm đường thoát audit (#492, 2026-09-12)
+
+- **Triệu chứng.** `AC-PIO-ID-02` chặn COMMISSION khi fingerprint/config revision Modbus lệch, nhưng
+  phép kiểm ấy **chỉ** áp cho COMMISSION. RESTORE cũng activate một artifact, nên restore một revision
+  cũ sau khi bố cục slot Modbus đã đổi sẽ **ghi vào thanh ghi sai** — đúng ca mà `AC-PIO-ID-02` sinh
+  ra để chặn — mà không một phép kiểm nào cản. Một cửa ghi sai thanh ghi, im lặng.
+- **Nguyên nhân gốc.** Guard slot nằm trong nhánh COMMISSION của `begin()`, gọi `verifyModbusSlots`
+  và trả lỗi thẳng. RESTORE đi qua cùng `begin()` nhưng không chạm guard đó.
+- **Cách sửa — phương án 3 của chủ sở hữu issue: chặn mặc định + đường thoát tường minh.**
+  Tách logic guard thành hàm thuần kiểm được ở tầng đơn vị:
+  - `modbusSlotMismatches` **phân biệt lỗi cứng với lệch mềm**: không resolve được slot (resolver
+    nil, resolve lỗi, manifest không đọc được) là **lỗi cứng** — chặn cả COMMISSION lẫn RESTORE,
+    **không** cho vượt; còn slot verify được mà lệch là **lệch mềm** — ca duy nhất đường thoát áp
+    dụng, và chỉ cho RESTORE.
+  - `resolveSlotGate(kind, mismatches, acks)`: COMMISSION lệch ⇒ **luôn chặn** kể cả có ack;
+    RESTORE lệch + ack `modbus-slot-mismatch-override` ⇒ cho vượt; RESTORE lệch không ack ⇒ chặn.
+  - `validateRestoreAcknowledgements`: token lạ, token trùng, hoặc ack khống (ack mà không có lệch)
+    đều bị `ErrAckUnexpected` — một xác nhận khống không đi lọt.
+  - Khi vượt, ghi `slotMismatchOverride: true` + danh sách lý do lệch vào `operationContext` để
+    **audit** giữ được dấu vết ai đã đi qua cửa và slot nào đang lệch.
+- **Đường thoát phải với tới được, không trang trí.** Handler HTTP `/restore` nay plumb
+  `acknowledgements` từ body vào `OperationCommand`; `RestoreRequest` (Go, `DisallowUnknownFields`)
+  và `ProgrammingRestoreRequest` (OpenAPI, `additionalProperties:false`) đều khai trường
+  `acknowledgements` — thiếu một trong hai thì hoặc request mang ack bị từ chối, hoặc RESTORE bị
+  chặn cứng, tái lập đúng lo ngại ban đầu. Không thêm mã lỗi mới: tái dùng `ErrMapIdentity` và
+  `ErrAckUnexpected`.
+- **Số đo (đo thật 2026-09-12, host container).** `go vet ./internal/programming/...` = 0;
+  `go test ./internal/programming/... -count=1` = tất cả `ok` (application 27.7s, transport/http
+  3.9s); `verify_programming_pgm02_contract.py` = PASS; `verify_programming_g1_contracts.py` =
+  `10/10 PASS`; sha256 `openapi.yaml` = `9254c8…5ecc8e43` khớp pin ở `pgm02_workspace_v1.json` và
+  `g1_contract_join_v1.json` (operationCount giữ 43 — thêm property, không thêm operation).
+- **Bốn phép tiêm lỗi, cả bốn ĐỎ đúng chỗ.** (I1) gate luôn cho vượt ⇒ ca COMMISSION-lệch và
+  RESTORE-lệch-không-ack đỏ; (I2) gate luôn chặn ⇒ ca RESTORE-lệch-có-ack đỏ; (I3) bỏ phát hiện
+  lệch ⇒ ca lệch→một lý do đỏ; (I4) không từ chối ack-khống ⇒ ca `ErrAckUnexpected` đỏ.
+- **Phạm vi để lại (không thuộc lát này).** FE `DangerZone.tsx`/`useRestoreWorkflow.ts` chưa dựng
+  hộp thoại xác nhận gửi token — phạm vi issue là backend + audit; đường thoát đã sẵn ở hợp đồng để
+  FE nối sau.
+- **Phạm vi.** `apps/web-api/internal/programming/application/{modbus_slots.go,operations.go}`,
+  `apps/web-api/internal/programming/transport/http/{models.go,operations.go}`,
+  `contracts/openapi/openapi.yaml`, `contracts/programming/{pgm02_workspace_v1.json,g1_contract_join_v1.json}`,
+  cùng test đơn vị/transport tương ứng.
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
