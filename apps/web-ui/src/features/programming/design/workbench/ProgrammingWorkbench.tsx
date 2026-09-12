@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../../../shared/i18n'
 import type { ProgrammingDiagnostic } from '../../model/types'
 import { ProblemsDrawer } from '../../shared/ProblemsDrawer'
+import { WorkbenchMinimapPanel, type FbdCanvasBridge } from './WorkbenchMinimapPanel'
 import { WorkbenchWatchPanel, type WatchRow } from './WorkbenchWatchPanel'
 
 /**
@@ -97,8 +98,37 @@ const MAX_HEIGHT = 520
    người dùng ở màn hình chật vẫn thu về đúng mức cũ, và chiều cao đó giữ trong
    phiên. */
 const DEFAULT_HEIGHT = 173
+const STORAGE_KEY = 'mkddc:programming-workbench:v1'
 
-type TabId = 'problems' | 'search' | 'references' | 'watch' | 'trace'
+interface StoredWorkbenchState {
+  open?: unknown
+  height?: unknown
+}
+
+function getInitialWorkbenchState(): { open: boolean; height: number } {
+  const isDesktop = typeof window !== 'undefined' ? window.innerWidth >= 1440 : false
+  const fallback = {
+    open: isDesktop,
+    height: isDesktop ? DEFAULT_HEIGHT : MIN_HEIGHT,
+  }
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw) as StoredWorkbenchState
+    if (!parsed || typeof parsed !== 'object') return fallback
+    const validOpen = typeof parsed.open === 'boolean' ? parsed.open : fallback.open
+    const validHeight =
+      typeof parsed.height === 'number' && Number.isFinite(parsed.height)
+        ? Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, parsed.height))
+        : fallback.height
+    return { open: validOpen, height: validHeight }
+  } catch {
+    return fallback
+  }
+}
+
+type TabId = 'problems' | 'search' | 'references' | 'watch'
 
 export function ProgrammingWorkbench({
   mode,
@@ -111,8 +141,9 @@ export function ProgrammingWorkbench({
   onJumpToOffset,
   checkOwnerHref,
   watch,
-  traceOwnerHref,
+  traceOwnerHref: _traceOwnerHref,
   watchAddRequest,
+  fbdBridge,
 }: {
   mode: WorkbenchMode
   /** Nguồn dữ liệu đang hiển thị, ví dụ `Draft · AHU_FanControl`. */
@@ -143,6 +174,8 @@ export function ProgrammingWorkbench({
    * mở lại khay, mà so sánh theo tên thì lần thứ hai không có gì đổi.
    */
   watchAddRequest?: { name: string; nonce: number } | null
+  /** Cầu nối dữ liệu FBD Canvas sang Mini Map (T9-02) */
+  fbdBridge?: FbdCanvasBridge | null
 }) {
   const { pick } = useI18n()
   /* `PGM-02B` — MỞ SẴN. Quyết định này THAY THẾ `DEV-PROG-024`, vốn chốt thu gọn
@@ -158,8 +191,8 @@ export function ProgrammingWorkbench({
    * Ràng buộc từ `DEV-PROG-024` vẫn giữ: dải tab đứng nguyên tại chỗ với đủ số
    * đếm trên nhãn, và người dùng thu gọn được bất cứ lúc nào — chiều cao đó giữ
    * trong phiên. */
-  const [open, setOpen] = useState(true)
-  const [height, setHeight] = useState(DEFAULT_HEIGHT)
+  const [open, setOpen] = useState(() => getInitialWorkbenchState().open)
+  const [height, setHeight] = useState(() => getInitialWorkbenchState().height)
   const [tab, setTab] = useState<TabId>('problems')
   const [query, setQuery] = useState('')
   /** `DEV-PROG-017` — tìm bằng biểu thức chính quy. Tắt theo mặc định: đa số lần
@@ -232,6 +265,14 @@ export function ProgrammingWorkbench({
     setOpen(true)
   }, [watchAddRequest, watch])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ open, height }))
+    } catch {
+      // Bỏ qua lỗi lưu trữ cục bộ (hạn ngạch / chế độ ẩn danh)
+    }
+  }, [open, height])
+
   const modeBadge = (
     <span className="rounded-full bg-[var(--c-surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[var(--c-text-dim)]">
       {mode} · {sourceLabel}
@@ -251,7 +292,6 @@ export function ProgrammingWorkbench({
         ? pick('Watch (Mô phỏng)', 'Watch (Simulation)')
         : pick('Watch (Trực tiếp)', 'Watch (Live)'),
       count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
-    { id: 'trace', label: 'Trace', count: null, available: false },
   ]
 
   return (
@@ -333,31 +373,32 @@ export function ProgrammingWorkbench({
           {/* Ảnh chuẩn PGM-02B chia khay đáy thành 3 cột (x=196..839, x=839..1214, x=1214..1672):
            * Cột trái (~643px, co giãn): dải tab và nội dung tab đang chọn.
            * Cột giữa (~375px): bảng Runtime Watch hiển thị thường trực.
-           * Cột phải (~458px): Mini Map — CHƯA DỰNG.
+           * Cột phải (~458px): Mini Map.
            *
-           * Cột thứ ba cố ý vắng mặt. Logic Mini Map nằm trong `FbdCanvas`; dựng
-           * một ô rỗng ghi "chờ kết nối dữ liệu" ở đây chỉ tạo ra một khoảng
-           * trắng 458px hứa một thứ không tồn tại, và một bản sao thứ hai của
-           * minimap sẽ lệch khỏi bản gốc ngay lần canvas đổi khung nhìn đầu
-           * tiên. Khi `FbdCanvas` công bố được khung nhìn ra ngoài thì mới thêm
-           * cột này và trả lưới về ba cột. */}
-          {/* `375px` là một con số TUYỆT ĐỐI, nên nó phải có khổ để sống.
-            *
-            * Lưới này trước đây áp dụng ở MỌI bề ngang: trên màn 412 px, cột
-            * Watch một mình đã chiếm 375 px và cột trái (`minmax(0,1fr)`) co
-            * về gần 0 — danh sách Vấn đề vẫn nằm trong DOM nhưng bị chính cột
-            * Watch che, nên mọi cú bấm vào một diagnostic đều rơi vào
-            * `workbench-watch-column` ("intercepts pointer events") cho tới
-            * khi hết giờ. `TC-FBD-DIAG-001` ở lane mobile chết vì đúng lỗi
-            * này, và nó không phải lỗi của phép đo: người dùng thật trên điện
-            * thoại cũng không bấm được vào Vấn đề.
-            *
-            * Dưới `lg` hai vùng xếp chồng — cùng nội dung, cùng thứ tự đọc,
-            * chỉ khác trục — nên không vùng nào phải cạnh tranh bề ngang với
-            * một con số cố định lớn hơn cả màn hình. */}
-          <div className="grid h-full grid-cols-1 divide-y divide-[var(--c-border)] lg:grid-cols-[minmax(0,1fr)_375px] lg:divide-x lg:divide-y-0">
+           * Cột thứ ba từng CỐ Ý vắng mặt, với lý do ghi ngay tại đây: logic Mini
+           * Map nằm trong `FbdCanvas`, nên dựng một ô rỗng ở đây chỉ hứa một thứ
+           * không tồn tại, và một bản sao thứ hai của minimap sẽ lệch khỏi bản gốc
+           * ngay lần canvas đổi khung nhìn đầu tiên. Điều kiện để thêm cột cũng đã
+           * ghi sẵn: "khi `FbdCanvas` công bố được khung nhìn ra ngoài". `T9-02`
+           * làm đúng việc đó bằng `FbdCanvasBridge`, nên cột thứ ba nay có nguồn
+           * dữ liệu THẬT — không phải bản sao, mà là cùng một khung nhìn.
+           *
+           * `375px` và `458px` là những con số TUYỆT ĐỐI, nên chúng phải có khổ
+           * để sống. Lưới này trước đây áp dụng ở MỌI bề ngang: trên màn 412 px,
+           * cột Watch một mình đã chiếm 375 px và cột trái (`minmax(0,1fr)`) co về
+           * gần 0 — danh sách Vấn đề vẫn nằm trong DOM nhưng bị chính cột Watch
+           * che, nên mọi cú bấm vào một diagnostic đều rơi vào
+           * `workbench-watch-column` ("intercepts pointer events") cho tới khi hết
+           * giờ. `TC-FBD-DIAG-001` ở lane mobile chết vì đúng lỗi này, và nó không
+           * phải lỗi của phép đo: người dùng thật trên điện thoại cũng không bấm
+           * được vào Vấn đề.
+           *
+           * Nên ba chặng, không phải một: dưới `lg` xếp CHỒNG (cùng nội dung, cùng
+           * thứ tự đọc, chỉ khác trục); từ `lg` hai cột; từ `1440px` — khổ mà ảnh
+           * chuẩn PGM-02B mô tả — đủ chỗ cho cả cột Mini Map. */}
+          <div className="grid h-full grid-cols-1 divide-y divide-[var(--c-border)] lg:grid-cols-[minmax(0,1fr)_375px] lg:divide-x lg:divide-y-0 min-[1440px]:grid-cols-[minmax(0,1fr)_375px_458px]">
             {/* Cột trái: Nội dung tab đang chọn */}
-            <div className="h-full overflow-auto pr-2">
+            <div data-testid="workbench-problems-column" className="h-full overflow-auto pr-2">
               {tab === 'problems' && (
                 <ProblemsPanel
                   problems={problems}
@@ -409,26 +450,6 @@ export function ProgrammingWorkbench({
                   </p>
                 )
               )}
-              {tab === 'trace' && (
-                /* Trace SỞ HỮU một phiên có vòng đời riêng (quota, stop reason,
-                 * ring của Core). Mở một phiên thứ hai từ đây là đúng thứ AC
-                 * "không duplicate concurrent trace session" cấm — nên workbench
-                 * trỏ tới nơi sở hữu nó thay vì tự mở. */
-                <div className="space-y-2">
-                  <Unavailable reason={pick(
-                    'Trace mở một phiên có quota và vòng đời riêng, nên nó thuộc về đúng một nơi.',
-                    'Trace opens a session with its own quota and lifecycle, so it belongs in exactly one place.',
-                  )} />
-                  {traceOwnerHref && (
-                    <a
-                      className="inline-block text-xs text-[var(--c-accent)] underline"
-                      href={traceOwnerHref}
-                    >
-                      {pick('Mở Runtime & Bảo trì', 'Open Runtime & Maintenance')}
-                    </a>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Cột giữa: Runtime Watch thường trực */}
@@ -448,6 +469,11 @@ export function ProgrammingWorkbench({
               ) : (
                 <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
               )}
+            </div>
+
+            {/* Cột phải: Mini Map (T9-02) */}
+            <div data-testid="workbench-minimap-column" className="flex h-full flex-col overflow-auto pl-2">
+              <WorkbenchMinimapPanel bridge={fbdBridge} />
             </div>
           </div>
         </div>

@@ -11,6 +11,7 @@ import { readFbdDocument } from '../../fbd/readDocument'
 import type { FbdSelection } from '../../fbd/commands'
 import type { ProgrammingDiagnostic, ProgrammingDraftDocument } from '../../model/types'
 import { presentStRuntimeValue, type StRuntimeOverlayState, type StRuntimeQuality } from '../editor/StRuntimeValueOverlay'
+import type { FbdCanvasBridge } from './WorkbenchMinimapPanel'
 import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol, type WorkbenchWatchRow } from './ProgrammingWorkbench'
 
 function copyFbdSelection(selection: FbdSelection): FbdSelection {
@@ -60,6 +61,7 @@ export function DesignWorkbench({
   checkRevisionId = null,
   onJumpToDiagnostic,
   onJumpToFbdSelection,
+  fbdBridge,
 }: {
   mode: WorkbenchMode
   document: ProgrammingDraftDocument
@@ -68,6 +70,7 @@ export function DesignWorkbench({
   checkOwnerHref: string
   onSelectProgram: (programId: string | undefined) => void
   onJumpToOffset: (offset: number, length: number) => void
+  fbdBridge?: FbdCanvasBridge | null
   /**
    * Lớp giá trị của POU đang mở, chiếu từ **chính** snapshot trang cha đã poll.
    * `undefined` = chế độ hiện tại không có nguồn giá trị nào (EDIT).
@@ -285,6 +288,7 @@ export function DesignWorkbench({
       source={source}
       onJumpToOffset={onJumpToOffset}
       checkOwnerHref={checkOwnerHref}
+      fbdBridge={fbdBridge}
     />
   )
 }

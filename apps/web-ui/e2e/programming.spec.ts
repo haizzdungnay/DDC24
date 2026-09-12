@@ -1783,7 +1783,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
 
     const tabs = tablist.getByRole('tab')
     const count = await tabs.count()
-    expect(count, 'workbench phải có đủ năm khay').toBe(5)
+    expect(count, 'workbench phải có đủ bốn khay').toBe(4)
     for (let index = 0; index < count; index += 1) {
       const tab = tabs.nth(index)
       const name = (await tab.textContent())?.trim() ?? ''
@@ -2091,9 +2091,8 @@ test.describe('PGM-02 LIVE (T59-811)', () => {
     await page.getByRole('tab', { name: /Watch/ }).click()
     await expect(page.getByText(/Watch cần nguồn giá trị runtime/)).toHaveCount(0)
 
-    // Trace vẫn thuộc về đúng một nơi, kể cả ở LIVE.
-    await page.getByRole('tab', { name: 'Trace' }).click()
-    await expect(page.getByText(/phiên có quota và vòng đời riêng/)).toBeVisible()
+    // Trace không còn là tab trong workbench (T9-03).
+    await expect(page.getByRole('tab', { name: 'Trace' })).toHaveCount(0)
 
     expectNoBrowserFailures(failures, 'LIVE')
   })

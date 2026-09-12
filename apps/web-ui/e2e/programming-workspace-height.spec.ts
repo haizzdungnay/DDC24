@@ -80,7 +80,12 @@ for (const vp of VIEWPORTS) {
         toolbar: height(frame?.parentElement?.firstElementChild ?? null),
         // Khay bàn làm việc: `<section>` bọc cả tay kéo lẫn dải tab.
         workbench: height(document.querySelector('[role="separator"]')?.parentElement ?? null),
-        workbenchOpen: document.querySelector('[role="tabpanel"]') !== null,
+        /* Chỉ tính đúng tabpanel CỦA KHAY. `[role="tabpanel"]` trần bắt nhầm
+           panel của Inspector (`AttributesSection` dựng một `div role="tabpanel"`
+           không id), nên bộ dò cũ luôn trả `true` bất kể khay mở hay đóng — nó
+           đo một phần tử khác và vẫn "có kết quả". Khay dùng
+           `id="workbench-panel-<tab>"`, đó mới là thứ cần hỏi. */
+        workbenchOpen: document.querySelector('[id^="workbench-panel-"]') !== null,
       }
     })
 
@@ -96,10 +101,19 @@ for (const vp of VIEWPORTS) {
       `chỗ gõ ${m.editor}px vs khay ${m.workbench}px + thanh công cụ ${m.toolbar}px`,
     ).toBeGreaterThan(m.workbench + m.toolbar)
 
-    // Khay tra cứu KHÔNG mở sẵn: nó lấy 120 px của chỗ gõ để nói "không có vấn đề nào".
-    expect(m.workbenchOpen, 'khay bàn làm việc phải thu gọn sẵn').toBe(false)
+    const expectedOpen = page.viewportSize() ? page.viewportSize()!.width >= 1440 : false
+    expect(m.workbenchOpen, 'khay bàn làm việc mặc định theo viewport').toBe(expectedOpen)
   })
 }
+
+/** Chrome tối đa còn lại BÊN TRONG chế độ toàn màn hình, tính bằng px.
+ *
+ * Đo thật trên Chrome ở cả hai khổ: `800 − 614 = 186` và `812 − 626 = 186`. Con số
+ * trùng khít ở hai viewport khác nhau vì phần còn lại là chrome CỐ ĐỊNH của chính
+ * panel (hàng lệnh + dải trạng thái), không co giãn theo màn hình. `220` để lại
+ * `34 px` dư địa — đủ cho viền và làm tròn, không đủ để lọt thêm một hàng công cụ.
+ */
+const FULLSCREEN_CHROME_BUDGET_PX = 220
 
 /**
  * `DEV-PROG-026` — YÊU CẦU CỦA CHỦ SỞ HỮU, đo chứ không hứa.
@@ -111,13 +125,29 @@ for (const vp of VIEWPORTS) {
  * CHẾ ĐỘ bật/tắt: nó bỏ được cả chrome trang lẫn khay tra cứu, và chỉ bỏ đúng
  * lúc người ta cần.
  *
- * Test này đo tỉ lệ thật trên Chrome. Nó tồn tại vì `position: fixed` hỏng một
- * cách IM LẶNG: chỉ cần một tổ tiên có `transform`/`filter`/`contain` là panel
- * neo theo tổ tiên đó thay vì theo viewport, và không assertion nào trong jsdom
- * nhìn thấy.
+ * Test này đo trên Chrome thật. Nó tồn tại vì `position: fixed` hỏng một cách IM
+ * LẶNG: chỉ cần một tổ tiên có `transform`/`filter`/`contain` là panel neo theo tổ
+ * tiên đó thay vì theo viewport, và không assertion nào trong jsdom nhìn thấy.
+ *
+ * ĐO TUYỆT ĐỐI, KHÔNG ĐO TỈ LỆ — quyết định của chủ sở hữu ngày 2026-09-12.
+ *
+ * Bản trước khoá `after / before >= 2`. Đó là tỉ lệ giữa HAI SỐ CÙNG ĐỘNG, nên nó
+ * đỏ khi MẪU SỐ được cải thiện: `#683` làm chỗ gõ ở bố cục THƯỜNG cao hơn (333 px),
+ * và tỉ lệ tụt còn `1.84×` trong khi `after` vẫn là 614 px — chế độ toàn màn hình
+ * không hề kém đi, chỉ là bố cục thường đã tốt lên. Một phép kiểm phạt việc cải
+ * thiện nền là một phép kiểm đo sai thứ.
+ *
+ * Thứ người dùng thật cảm nhận là chiều cao TUYỆT ĐỐI của chỗ gõ, nên khoá đúng nó:
+ * panel phải neo theo viewport (`top`/`height` bên dưới), và chỗ gõ phải ăn gần hết
+ * chiều cao đó, chỉ chừa `FULLSCREEN_CHROME_BUDGET_PX`. Trần này KHÔNG phụ thuộc bố
+ * cục thường, nên nó không đổi kết quả khi ai đó nới rộng chỗ gõ ở chế độ bình
+ * thường; nó chỉ đỏ khi chính chế độ toàn màn hình xấu đi.
+ *
+ * `after > before` giữ lại như phép kiểm tỉnh táo: chế độ này phải THÊM chỗ, không
+ * được rút bớt.
  */
 for (const vp of [{ w: 1280, h: 800 }, { w: 1680, h: 812 }]) {
-  test(`chế độ toàn màn hình ${vp.w}x${vp.h}: chỗ gõ cao GẤP ĐÔI trở lên`, async ({ page }) => {
+  test(`chế độ toàn màn hình ${vp.w}x${vp.h}: chỗ gõ ăn gần hết chiều cao viewport`, async ({ page }) => {
     await page.setViewportSize({ width: vp.w, height: vp.h })
     await openEditor(page, 128)
 
@@ -141,7 +171,12 @@ for (const vp of [{ w: 1280, h: 800 }, { w: 1680, h: 812 }]) {
     expect(geometry.top, 'panel phải neo ở mép trên viewport').toBe(0)
     expect(geometry.height).toBe(geometry.viewport)
 
-    expect(after / before, `chỗ gõ ${before}px → ${after}px = ${(after / before).toFixed(2)}×`).toBeGreaterThanOrEqual(2)
+    expect(
+      geometry.viewport - after,
+      `chrome còn lại trong chế độ toàn màn ở ${vp.w}x${vp.h}: `
+      + `viewport ${geometry.viewport}px − chỗ gõ ${after}px = ${geometry.viewport - after}px`,
+    ).toBeLessThanOrEqual(FULLSCREEN_CHROME_BUDGET_PX)
+    expect(after, `chế độ toàn màn phải THÊM chỗ: ${before}px → ${after}px`).toBeGreaterThan(before)
 
     // Esc trả lại bố cục cũ — chế độ này không được là đường một chiều.
     await page.keyboard.press('Escape')
