@@ -8,6 +8,77 @@
 
 ## [Unreleased]
 
+### Added — `#634`: cổng canh tám hằng số sức chứa bảng point ABI giữa `mkddc_shm.h` và hai bản sao Go (2026-09-11)
+
+- Phạm vi: `apps/web-api/internal/app/shm_contract_sync_test.go` (thêm cổng),
+  `apps/web-api/internal/capabilities/board.go` và
+  `apps/web-api/internal/app/core_client.go` (**chỉ thêm chú thích** trỏ tới
+  cổng mới). Không đổi giá trị hằng số nào, không đổi chuỗi offset, không đổi
+  contract/API/schema (N6). `contracts/shm/mkddc_shm.h` **không đổi** — việc sửa
+  `#define` chỉ là tiêm lỗi tạm thời và đã hoàn nguyên, `git status
+  contracts/` sạch.
+
+- Triệu chứng: #606 đã dựng cổng đồng bộ giữa Go và
+  `contracts/shm/mkddc_shm.h` nhưng chỉ canh **đúng ba** hằng
+  (`KX_SHM_MAGIC`, `KX_SHM_IO_PATH`, `KX_SHM_PLC_PATH`). Tám hằng `KX_N_*` —
+  sức chứa bảng point — cũng là bản sao rời của cùng file hợp đồng và **không
+  test nào canh**. Đổi `kxNAV` thành 99 thì `go test ./... -count=1` vẫn `ok`
+  toàn bộ.
+
+- Nguyên nhân gốc: hai lớp xếp lên nhau. Thứ nhất, tám hằng nằm rải ở **hai
+  package** — `capabilities.ABI{UniversalInputs,DigitalInputs,AnalogOutputs,DigitalOutputs}`
+  (`internal/capabilities/board.go`) và `kxNAV/kxNBV/kxNMSV/kxNEXT` là **số
+  trần** trong `core_client.go`, không đi qua `capabilities` như bốn hằng đầu.
+  Thứ hai, đúng cơ chế tautology mà #606 đã ghi lại: fixture test **tự dựng SHM
+  giả bằng chính các hằng số Go đó** rồi khẳng định code đọc lại được — luôn
+  đúng với mọi giá trị. Hệ quả hiện trường không có crash, không có log:
+  `core_client.go` dựng **chuỗi offset cộng dồn**
+  `offAI→offBI→offAO→offBO→offAV→offBV→offMSV→offExt` từ đúng tám hằng đó, nên
+  một hằng lệch làm **mọi offset đứng sau nó lệch theo** và web-api đọc
+  BV/MSV/EXT từ sai byte offset, trả giá trị rác hoặc lệch kênh lên Overview
+  trong khi Core và iobus chạy đúng.
+
+- Cách sửa: thêm `TestShmPointTableCapacitiesMatchHeader` đọc **trực tiếp**
+  `contracts/shm/mkddc_shm.h` và so **12 phép** phủ đủ tám `#define` — bốn hằng
+  đầu so với cả bản gốc `capabilities.ABI*` lẫn alias `kxNUI/kxNDI/kxNAO/kxNDO`,
+  nên nếu sau này ai đó thay alias bằng literal thì cổng vẫn canh đúng chỗ.
+  Thông điệp FAIL nêu **tên `#define`, giá trị đọc từ header, tên + giá trị hằng
+  Go kèm file** nên đọc log là biết sửa gì. Cổng **dùng lại** helper parse sẵn
+  có của #606 (`shmContractPath`, `parseShmDefineLine`, `parseShmDefineUint`,
+  `shmContractUint`) — không chép bộ parser thứ hai, vì nhân bản parser là tái
+  lập đúng lỗi đang vá. Cổng đặt ở package `app` (không ở `capabilities`) vì
+  helper parse là mã test của `app` nên package khác không import được, còn
+  `app` đã import `capabilities` nên là package **duy nhất** đọc được cả hai bản
+  sao. Fail-close khi thiếu header nhờ dùng lại `shmContractPath` (`t.Fatalf`,
+  không `t.Skip`). Kèm `TestShmPointTableGateFiresOnInjectedMismatch` theo khuôn
+  `TestBoardCapDriftGateFiresOnInjectedMismatch`: đọc header thật, tiêm lỗi vào
+  bản sao trong bộ nhớ, khẳng định phép thay thế **đã thật sự khớp** trước khi
+  so (nếu hợp đồng đổi cách viết dòng `#define` thì bộ tiêm lỗi phải đỏ, không
+  được lặng lẽ không tiêm gì), và suy giá trị tiêm từ chính hằng Go (`+1`) thay
+  vì viết cứng để không đỏ vì lý do sai khi ai đó nâng sức chứa hợp lệ. Regexp
+  dòng `#define` tách thành `shmDefinePattern` dùng chung cho cả bên đọc và bên
+  tiêm lỗi, hành vi parse không đổi (các test #606 vẫn xanh).
+
+- Số đo (2026-09-11, đo tại máy, HOST):
+  - `go vet ./...` exit `0`; `go test ./... -count=1` **22/22 package `ok`**,
+    exit `0`, `internal/app` 34.084s, `internal/capabilities` 0.003s.
+  - `go test ./internal/app/... ./internal/capabilities/... -count=1 -v -run
+    'ShmContract|ShmPointTable|BoardCap'` exit `0`:
+    `TestShmPointTableCapacitiesMatchHeader` **12/12 subtest PASS**,
+    `TestShmPointTableGateFiresOnInjectedMismatch` **2/2 PASS**, các test #606
+    và `TestBoardCapBitsMatchContractHeader` vẫn PASS.
+  - Tiêm lỗi thật vào `contracts/shm/mkddc_shm.h`, cả hai bản sao:
+    `KX_N_AV` 32→33 ⇒ `--- FAIL: …/KX_N_AV/kxNAV_(internal/app/core_client.go)`
+    + exit `1`; hoàn nguyên ⇒ `ok` + exit `0`. `KX_N_UI` 16→17 ⇒ `--- FAIL` ở
+    **cả hai** nhánh `capabilities.ABIUniversalInputs` và `kxNUI` + exit `1`;
+    hoàn nguyên ⇒ `ok` + exit `0`. Header sau cùng giống hệt bản gốc
+    (`diff` sạch, `git status contracts/` rỗng).
+  - Fail-close khi thiếu header: ẩn tạm `contracts/shm/mkddc_shm.h` ⇒
+    `--- FAIL … không tìm thấy contracts/shm/mkddc_shm.h sau khi đi lên 8 cấp`
+    + exit `1`, **không** SKIP; trả lại ⇒ `ok`.
+  - C++ `NOT_RUN` (không chạm `apps/core/**`, `apps/iobus/**`, không sửa
+    `contracts/`); FE `NOT_RUN` (không chạm `apps/web-ui/**`); tài liệu
+    `NOT_RUN` (không chạm `docs/**`); CI `NOT_RUN (#414)`.
 ### Changed — `#660`: `ProblemsDrawer` gom dải chiều cao `160–320` về một điểm định nghĩa cho mỗi biên (2026-09-12)
 
 - Phạm vi: `apps/web-ui/src/features/programming/shared/ProblemsDrawer.tsx`,
