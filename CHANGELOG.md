@@ -8,6 +8,97 @@
 
 ## [Unreleased]
 
+### Fixed — `#665`: tám test đỏ sẵn của `e2e/programming.spec.ts` — sửa đúng phía sai, không bịt tín hiệu (2026-09-12)
+
+- Phạm vi: `apps/web-ui/e2e/programming.spec.ts`,
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/EditorStatusBar.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/editor/ProgramsWorkspace.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/editor/ProgramsTab.test.tsx`,
+  `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`,
+  `apps/web-ui/src/features/programming/layout/ProgrammingContextStrip.tsx`,
+  `apps/web-ui/src/features/programming/layout/ProgrammingLayout.tsx` (+ test
+  `ContextDetailsPopover.test.tsx`), `CHANGELOG.md`. **Không** chạm
+  `ProblemsDrawer.tsx` (PR #666 đang giữ), không chạm `playwright.config.ts`,
+  không đổi ma trận lane.
+
+- Triệu chứng: `npx playwright test e2e/programming.spec.ts` trên `origin/main`
+  sạch (`24095d2`) cho `8 failed / 28 skipped / 102 passed`, exit 1 — tái hiện
+  đúng số đo của `#665`. Một bộ e2e đỏ sẵn buộc MỌI phiên chạm FE phải tự
+  chứng minh "đỏ này không phải của tôi", và làm lỗi thứ chín trốn được.
+
+- Nguyên nhân gốc: **không phải một, mà bảy** — và chúng che nhau theo tầng, mỗi
+  lần sửa một tầng lại lộ tầng dưới:
+
+  1. **Cụm lệnh dựng TRÙNG trong cùng một hàng ngữ cảnh.** `DesignWorkspacePage`
+     vừa ĐĂNG KÝ `actions` (để `ProgrammingContextStrip` hiển thị), vừa tự dựng
+     thêm một bộ `Lưu`/`Kiểm tra`/`Làm mới` trong slot của chính nó ⇒ hai nút
+     `Lưu bản nháp`, hai `Kiểm tra`, hai `Làm mới`. Hai nút `Làm mới` còn làm
+     HAI việc khác nhau (đọc lại Draft / làm mới read-model của vỏ) dưới cùng
+     một cái tên. Sửa: slot chỉ giữ mode switcher + huy hiệu dirty; Draft reload
+     đi vào `ProgrammingEditingContext.onReload` để một nút `Làm mới` làm trọn
+     cả hai việc.
+  2. **Huy hiệu `Chưa lưu` còn sót lại trong thân trang** sau khi cụm đó chuyển
+     lên ContextStrip ⇒ hai phần tử `draft-dirty-indicator`, `role="status"`
+     phát hai lần. Sửa: gỡ bản sót; unit test khẳng định trang BÁO dirty lên vỏ
+     thay vì tự vẽ.
+  3. **Mặt vẽ FBD đọc lại chiều cao do chính nó tạo ra.** `FbdCanvas` đặt chiều
+     cao SVG là `containerHeight + 800` với `containerHeight` do `ResizeObserver`
+     đo trên chính khay cuộn chứa SVG đó. Ở bố cục nào khay cao theo nội dung
+     (mobile, hoặc khi một mắt `min-h-0` trong chuỗi cha đứt) thì thành vòng tự
+     nuôi: đo được **+800 px mỗi khung hình**, không hội tụ. Playwright treo ở
+     "element is not stable" tới hết 60 s. Sửa: kẹp số hạng đó bằng chiều cao
+     khung nhìn — giữ nguyên ý đồ "cho pan quá nội dung một màn hình" mà cắt
+     hẳn tính tự tham chiếu.
+  4. **Lưới workbench ghim cứng cột Watch `375px` ở mọi khổ.** Trên màn 412 px,
+     `workbench-watch-column` phủ lên danh sách Vấn đề và nuốt mọi cú bấm
+     ("intercepts pointer events"). Sửa: xếp chồng dưới `lg`.
+  5. **`G-01` ẩn `TopBar` của Programming từ `lg` mà không dời nút `Đổi ngôn
+     ngữ`** ⇒ từ 1024 px trở lên, sáu workspace Lập trình KHÔNG còn đường nào
+     đổi ngôn ngữ. Sửa: đưa nút vào Global Context Bar, chỉ hiện từ `lg` để
+     không trùng với `TopBar` ở khổ hẹp.
+  6. **Ba điều khiển bị comment-out âm thầm trong khi AC vẫn đòi:** badge
+     `fbd-active-network` + nút thêm `Network` (`StructuredFbdEditor`) và ô chọn
+     `Khung nhìn` (`FbdEditorPane`). Không cái nào "đã chuyển đi đâu" — chúng
+     chỉ bị gỡ. Sửa: trả lại, `Khung nhìn` đặt vào dải tuỳ chọn hiển thị hiện
+     hữu theo kiểu compact.
+  7. **Hai lần đổi bố cục làm vỡ hợp đồng đã khoá, không qua quyết định sản
+     phẩm:** thứ tự track `inspector`/`library` bị hoán vị (vỡ `AC-PGM02-004`:
+     Explorer → Editor → Thư viện nhanh → Inspector), và ngưỡng `fbdWideDesktop`
+     bị hạ `1440 → 1024` (vỡ `TC-FBD-RESP-001`: ở `1280`/`1024` cả hai khay phải
+     ĐÓNG). Sửa: trả cả hai về đúng hợp đồng. Triệu chứng thật mà lần hạ ngưỡng
+     định chữa — FBD dưới 1440 px không còn lối vào Thư viện nhanh sau khi dock
+     trong canvas bị gỡ — được ghi thành finding riêng để chọn đường đúng, thay
+     vì để hai thứ cùng sai.
+
+- Hai test đỏ vì **kỳ vọng của phép đo lỗi thời**, sửa phía test và nói rõ vì
+  sao kỳ vọng cũ không còn đúng:
+
+  - `T61-505` đo ngay sau `setViewportSize` trong khi `ProgrammingFeatureRail`
+    có `transition-[width] duration-200`, nên đọc phải bề rộng GIỮA CHỪNG
+    (`183 px` thay vì `64 px` đã ổn định) và quy hụt ~119 px cho "trang chừa cột
+    cho khay phủ". Thêm `settleLayout()` chờ bố cục đứng yên — không nới ngưỡng,
+    vì nới ngưỡng là bịt đúng cái cổng này sinh ra để canh.
+  - `UJ-PROG-01..08` bấm `Cấu hình Task` / `Về trình soạn thảo`; lối vào tab
+    Thực thi đã chuyển lên mục `Execution` của feature rail, cùng chỗ với năm
+    workspace kia. Journey vẫn đi qua đúng màn hình và vẫn đọc `Control_Main`.
+  - `TC-FBD-NAV-001` soạn 25 khối (MUTATION) trên cả lane mobile, nơi PGM-02 là
+    read-only theo `AC-PGM02-010` — nó nằm chờ nút `Mới` tới hết giờ. Đã thử
+    giữ lane mobile bằng Draft nạp sẵn: không giữ được, vì ở 412 px `scrollLeft`
+    hợp lệ bằng `0` nên khẳng định `> 0` vô nghĩa ở đó. Case chạy lane desktop
+    với lý do ghi tại chỗ, cùng cách `TC-FBD-RESP-001` đã làm; Mini Map trên màn
+    hẹp ghi thành finding riêng, không giấu trong một test đỏ.
+
+- **Không** `test.skip`/`fixme`/xoá test nào để lấy màu xanh: mỗi lần đổi phía
+  test đều kèm lý do đo được, và năm trong tám test đỏ được chữa ở phía SẢN PHẨM.
+
+- Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` theo `#414`): xem bảng Verification
+  của PR.
+
 ### Fixed — `#658`: e2e Programming lấy breakpoint authoring từ nguồn chân lý thay vì bản chép tay (2026-09-12)
 
 - Phạm vi: `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`. **Không** chạm
