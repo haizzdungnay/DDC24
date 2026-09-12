@@ -8,6 +8,59 @@
 
 ## [Unreleased]
 
+### Changed — `#659`: `--component all` nói thẳng là nó KHÔNG gồm `release`, và tài liệu vận hành dẫn đúng cổng thay cho hai lệnh gõ tay (2026-09-12)
+
+- Phạm vi: `scripts/verify-project.sh` (chỉ usage text + chú thích nhánh `all`,
+  **không đổi một dòng thực thi nào**), `docs/06_operations/DEVELOPMENT_AND_OPERATIONS.md`,
+  `CHANGELOG.md`.
+
+- Triệu chứng: `case` dispatch khai **mười một** component nhưng nhánh `all` chỉ
+  gọi **mười** — `release` vắng mặt mà không một chữ nào nói vì sao, trong khi
+  nhánh `all` có sẵn chú thích giải thích vị trí của `docs`/`workflow`/`browser`.
+  Người đọc không phân biệt được quyết định với thiếu sót. Hệ quả: hồ sơ đóng
+  review (`RST205_CLOSURE_REVIEW_2026-08-04.md:32`) dẫn `--component all` exit 0
+  làm bằng chứng "đã kiểm toàn bộ", nhưng diễn tập CÀI MỚI → NÂNG CẤP → ROLLBACK
+  (`T59-606`, `tests/integration/test_release_dryrun.py`) chưa từng nằm trong
+  đường chạy đó.
+
+- Nguyên nhân gốc: `run_release` cố ý được tách khỏi `layout` để khỏi thành "một
+  test tự SKIP mãi mãi" (chú thích tại chỗ), nhưng rồi không ai chốt thành hợp
+  đồng đọc được rằng nó cũng đứng ngoài `all`. Loại trừ ngầm và thiếu sót nhìn
+  giống hệt nhau trong mã.
+
+- Cách sửa — **đường B của Issue** (loại trừ có chủ ý, ghi thành hợp đồng), chọn
+  sau khi đo chứ không đoán: `--component release` **BLOCKED tại máy này**, thoát
+  `1` sau `2,4 s` ngay ở bước `FetchContent` tải `bacnet-stack-1.3.8` từ
+  `github.com` (egress bị chặn — đúng `#625`), nên phép đo thời lượng
+  `--component all` trước/sau mà đường A đòi hỏi không thực hiện được.
+
+  Ba lý do kỹ thuật của việc loại trừ, đều đọc được từ cây nguồn và nay đã ghi
+  tại nhánh `all`: (1) `build-release.sh:112-118` thoát `1` khi thiếu khoá phát
+  hành ngoài repo, trừ khi đặt `MKDDC_ALLOW_TEST_KEY=1` — đưa `release` vào `all`
+  sẽ đẩy người ta tự tắt đúng cái gác `T59-602`; (2) nó dựng cây build Release
+  thứ hai (`build/release/cpp`) độc lập với `$build_root/cpp-$profile` của
+  `run_cpp`, tức biên dịch C++ hai lượt; (3) khác `run_cpp`, nó không có
+  `MKDDC_CMAKE_EXTRA_ARGS` để trỏ `FETCHCONTENT_SOURCE_DIR_*` vào cache cục bộ.
+
+  Usage text và `docs/06_operations/DEVELOPMENT_AND_OPERATIONS.md` nay nói rõ
+  `all` không phủ `T59-606` và phải chạy thêm `--component release`. Danh sách
+  "Baseline workflow" trong tài liệu vận hành lên đủ **mười một** component
+  (trước đó thiếu `e2e-real`, `docs`, `workflow`, `browser`), và bước release dẫn
+  `scripts/verify-project.sh --component release` thay cho cặp lệnh gõ tay
+  `build-release.sh` + `sha256sum --check` — cặp đó là hai bước ĐẦU của cổng,
+  bỏ mất đúng bước thứ ba là diễn tập `T59-606`.
+
+- Kiểm chứng (số đo của phiên này, lớp **HOST**): `bash -n` exit 0 ·
+  `--component bogus` exit **2** · `--component workflow` exit 0, **69/69 PASS** ·
+  `--component docs` exit 0 (`EXPECT: khớp toàn bộ ngưỡng`) · `--component layout`
+  exit 0 (`Ran 3 tests … OK`) · truyền nguyên exit code: stub thoát `7` → script
+  thoát **7**, stub thoát `3` → script thoát **3** · `--component release`
+  **BLOCKED** (exit 1 sau 2,4 s, egress `#625`) · `--component all` **BLOCKED**
+  (exit 1 sau 4,5 s: `run_layout` xanh rồi `run_cpp` chết ở cùng bước tải
+  `bacnet-stack`, tức đường gộp bị chặn bởi đúng `#625` chứ không phải bởi thay
+  đổi này).
+
+
 ### Fixed — `#683`: hồi quy `TC-FBD-NAV-001` chặn PR hoá ra là lỗi của `main`, đã được `#695` vá (2026-09-12)
 
 - Phạm vi: chỉ hợp nhất `origin/main` (`9b5ae0f`) vào nhánh PR + giải conflict
