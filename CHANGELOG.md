@@ -333,6 +333,14 @@
 
 ### Added — `#644`: cổng `gofmt` trong `verify-project.sh` và chín file Go trong `apps/web-api` về đúng định dạng (2026-09-11)
 
+- Bổ sung 2026-09-12 khi đồng bộ `origin/main` (`7b46218`) trước lượt merge:
+  `gofmt -l .` trong `apps/web-api` trả thêm **một** file mà `main` mang về sau
+  ngày đo — `internal/programming/application/operations.go` (vào main qua
+  `244d35d`, trước khi cổng này tồn tại). Đã `gofmt -w` file đó trong cùng lượt.
+  Nếu bỏ qua, cổng `require_gofmt_clean` sẽ đỏ ngay trên `main` từ lượt merge
+  đầu tiên. Số đo lại sau khi hợp nhất: `gofmt -l .` **rỗng**, `go vet` exit `0`,
+  `go test ./... -count=1` exit `0` với **21/21 package `ok`**.
+
 - Phạm vi: `scripts/verify-project.sh` (thêm `require_gofmt_clean`, gọi ở đầu
   `run_go`) và chín file Go lệch `gofmt` trong `apps/web-api/**`:
   `internal/app/dto.go`, `internal/app/virtualpoint.go`, `internal/auth/audit.go`,
