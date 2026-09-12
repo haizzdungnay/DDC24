@@ -399,33 +399,25 @@ export function DesignWorkspacePage({
       projectName: workspace.project.name,
       draftRevisionId: workspace.project.draftRevisionId,
       dirty: draftDirty,
-      checkState: 'idle',
-      /* `DEV-PROG-009` — workspace ĐĂNG KÝ hai hành động của nó để header ở
-         trên cùng gọi lại. Header không tự dựng batch operation: luật dirty,
-         danh sách operation và đường sang PGM-05 đều thuộc về đây, và hai nơi
-         cùng dựng một lệnh là hai nơi để luật khoá lệch nhau.
+      checkState: 'idle'
+      /* `DEV-PROG-009` đăng ký `Lưu`/`Kiểm tra` qua `actions` để ContextStrip
+         dựng hộ. Từ khi workspace tự đẩy nguyên cụm `EDIT/LIVE/SIMULATE` +
+         `Lưu`/`Kiểm tra`/`Làm mới` lên strip bằng `setContextStripSlot` (effect
+         ngay dưới), `actions` KHÔNG còn là kênh thứ hai để CHỌN — nó là kênh thứ
+         hai cùng DỰNG: `ProgrammingLayout` truyền `actions={editing.actions}` VÀ
+         đặt `{contextStripSlot}` làm children của cùng một `GlobalContextBar`,
+         nên cùng một hàng công cụ ra DOM hai lần. Hệ quả là hai nút `Lưu bản
+         nháp` và hai nút `Kiểm tra gói` CÙNG tên truy cập trên một màn hình —
+         đúng thứ ghi chú trong `ProgrammingHeader` gọi là buộc người dùng trình
+         đọc màn hình phải đoán cái nào là cái nào.
 
-         KHÔNG đăng ký gì khi không được sửa (LIVE, SIMULATE, dưới 768 px, vai
-         không đủ quyền). Một nút Lưu bị vô hiệu hoá vẫn là một nút Lưu có mặt
-         trên màn hình — và `AC-PGM02-006`/`T59-812` đòi bề mặt LIVE **không lộ
-         mutation**, tức đếm bằng 0, chứ không phải "có nhưng bấm không được".
-         Vô hiệu hoá là câu trả lời cho "chưa lưu được lúc này"; vắng mặt là câu
-         trả lời cho "chế độ này không sửa". */
-      ...(canEdit ? {
-        actions: {
-          onSave: () => { void workspace.save(pendingOperations) },
-          saving: workspace.saving,
-          saveDisabledReason: draftDirty ? null : pick('Không có thay đổi nào để lưu.', 'There is nothing to save.'),
-          onCheck: goToCommission,
-          checkDisabledReason: draftDirty
-            ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
-                   'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
-            : null
-        }
-      } : {})
+         Giữ slot làm nguồn DUY NHẤT: nó mang thêm bộ chuyển chế độ, và luật
+         dirty/operation/đường sang PGM-05 đều thuộc trang này. Hợp đồng của
+         `ProgrammingContextStrip` KHÔNG đổi — nó vẫn dựng `actions` khi được
+         cấp; chỉ là trang này thôi cấp trùng. */
     })
     return () => setEditingContext(null)
-  }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.save, workspace.saving, workspace.status])
+  }, [draftDirty, setEditingContext, workspace.project, workspace.status])
 
   /* Đẩy cụm EDIT/LIVE/SIMULATE + Save/Check/Refresh lên ContextStrip. Cùng
    * pattern `setEditingContext` — workspace đăng ký, layout hiển thị, cleanup

@@ -8,6 +8,31 @@
 
 ## [Unreleased]
 
+### Fixed — `#669`: workspace Thiết kế thôi dựng hàng công cụ hai lần (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `CHANGELOG.md`. **Không** chạm `ProgrammingContextStrip.tsx` hay
+  `ProgrammingLayout.tsx` — hợp đồng của chúng không sai.
+
+- Triệu chứng: trên mọi route workspace Thiết kế có HAI nút `Lưu bản nháp` và HAI
+  nút `Kiểm tra gói`, cùng tên truy cập, trên cùng một màn hình. `TC-FBD-RESP-001`
+  đỏ ở `expect(getByRole('button', { name: 'Lưu bản nháp', exact: true }))
+  .toHaveCount(1)` với `Received: 2`.
+
+- Nguyên nhân gốc: trang đăng ký hành động qua HAI kênh cùng đổ vào một hàng.
+  `setEditingContext({ actions })` là kênh cũ mà `ProgrammingContextStrip` dựng
+  thành `programming-global-actions`; `setContextStripSlot` là kênh mới mang nguyên
+  cụm `EDIT/LIVE/SIMULATE` + `Lưu`/`Kiểm tra`/`Làm mới`. `ProgrammingLayout` truyền
+  `actions={editing.actions}` VÀ đặt `{contextStripSlot}` làm children của cùng một
+  `GlobalContextBar`, nên hàng công cụ ra DOM hai lần. Lần chuyển cụm lên strip đã
+  THÊM kênh mới mà không RÚT kênh cũ.
+
+- Cách sửa: thôi đăng ký `actions`; slot là nguồn duy nhất của hàng công cụ (nó
+  mang thêm bộ chuyển chế độ, và luật dirty/operation/đường sang PGM-05 đều thuộc
+  trang này). Không đổi hành vi bấm: `onSave` vẫn gửi `pendingOperations`, `onCheck`
+  vẫn sang PGM-05, lý do vô hiệu hoá giữ nguyên câu chữ. `ProgrammingContextStrip`
+  vẫn dựng `actions` khi được cấp.
+
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
