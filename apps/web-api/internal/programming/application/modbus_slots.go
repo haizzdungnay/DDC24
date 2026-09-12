@@ -199,29 +199,57 @@ func resolveModbusExtIndex(snapshot *ModbusSlotSnapshot, deviceID, pointID strin
 // Không tự remap ở đây, cũng như ở Check: lệch ⇒ chặn, người vận hành rebind
 // rồi Check lại. Bản LKG đang chạy giữ nguyên (`AC-PIO-ID-03`).
 func (s *OperationService) verifyModbusSlots(ctx context.Context, check programmingstore.Check) error {
-	bindings, err := manifestModbusBindings(check.ResultJSON)
+	mismatches, err := s.modbusSlotMismatches(ctx, check)
 	if err != nil {
 		return err
 	}
+	if len(mismatches) > 0 {
+		return publicOperationError(domain.ErrMapIdentity, true)
+	}
+	return nil
+}
+
+// modbusSlotMismatches đối chiếu manifest as-built với bố cục slot HIỆN TẠI và
+// trả về DANH SÁCH lý do lệch, tách bạch khỏi các lỗi "không kiểm được".
+//
+// Vì sao tách hai loại kết quả (`ISS-PIO-38`, #492):
+//   - `err != nil` là "KHÔNG kiểm được" — manifest không đọc nổi, chưa có
+//     resolver, hoặc cấu hình fieldbus không phân giải được. Không chứng minh
+//     được slot khớp thì cũng không được coi là khớp; ca này CHẶN cả COMMISSION
+//     lẫn RESTORE và KHÔNG có đường thoát, vì đường thoát đòi người vận hành đọc
+//     một cảnh báo cụ thể mà ở đây ta không có gì cụ thể để đưa ra.
+//   - danh sách lệch (`err == nil`, `len > 0`) là "kiểm được, và lệch". Đây mới
+//     là ca `AC-PIO-ID-02` mô tả, và là ca RESTORE được phép đi qua bằng một
+//     xác nhận tường minh có ghi audit (#492 phương án 3).
+//
+// Trả về chuỗi mô tả từng lệch — không phải một cờ bool — để audit của một
+// RESTORE có đường thoát ghi lại ĐÚNG những binding nào đã lệch, chứ không chỉ
+// "đã ghi đè điều gì đó".
+func (s *OperationService) modbusSlotMismatches(ctx context.Context, check programmingstore.Check) ([]string, error) {
+	bindings, err := manifestModbusBindings(check.ResultJSON)
+	if err != nil {
+		return nil, err
+	}
 	if len(bindings) == 0 {
-		return nil
+		return nil, nil
 	}
 	if s.modbusSlots == nil {
-		return publicOperationError(domain.ErrMapIdentity, true)
+		return nil, publicOperationError(domain.ErrMapIdentity, true)
 	}
 	snapshot, err := s.modbusSlots.ResolveModbusSlots(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var mismatches []string
 	for _, binding := range bindings {
 		/* Một hàm, không hai. `VerifyBinding` gom cả hai nửa của
 		 * `AC-PIO-ID-02` — slot còn đúng, và thứ slot trỏ tới còn đúng — nên
 		 * Commission, Check và bộ bằng chứng `5a…5g` không thể trôi khỏi nhau. */
 		if reason := snapshot.VerifyBinding(binding); reason != "" {
-			return publicOperationError(domain.ErrMapIdentity, true)
+			mismatches = append(mismatches, reason)
 		}
 	}
-	return nil
+	return mismatches, nil
 }
 
 // manifestModbusBindings đọc phần binding MB_RTU của manifest as-built.

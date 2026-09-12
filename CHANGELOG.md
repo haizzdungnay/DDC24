@@ -36,6 +36,186 @@
   vùng đã tồn tại; nên giữ đặc tính tốt của bản cũ thay vì giữ bản dựng theo điều
   kiện. Harness unit test nay RENDER slot thật thay vì nuốt bằng `vi.fn()`.
 
+### Fixed — `#671`: `EditorStatusBar` không dùng `dl` làm hộp flex nữa (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/editor/EditorStatusBar.tsx`,
+  `CHANGELOG.md`.
+
+- Triệu chứng: cổng axe trong `UJ-PROG-01..08` đỏ với hai vi phạm mức `serious` —
+  `definition-list` và `only-dlitems` — đều trỏ vào
+  `dl[data-testid="editor-status-bar"]`, kèm `failureSummary: dl element has direct
+  children that are not allowed: div > span`.
+
+- Nguyên nhân gốc: `dl` chỉ được chứa trực tiếp `dt`/`dd`, hoặc `div` gom đúng một
+  cặp `dt`+`dd`. Thanh trạng thái lại dùng chính `dl` làm hộp flex của cả thanh,
+  nên sai ở hai chỗ: khối `leading` là một `div` bọc nội dung tuỳ ý, và ô `position`
+  bọc `dd` BÊN TRONG `button` — con trực tiếp của nhóm thành `button` chứ không phải
+  `dd`. Người dùng trình đọc màn hình nhận một danh sách định nghĩa méo, đúng ở chỗ
+  công bố `Trạng thái trình soạn thảo`.
+
+- Cách sửa: tách vai. Hộp ngoài thành `div role="group"` giữ nguyên `aria-label` và
+  toàn bộ lớp Tailwind (kể cả `min-[1440px]:h-[37px]`, `justify-end`, `mr-auto`), nên
+  bố cục không đổi; ngữ nghĩa "danh sách định nghĩa" thuộc về TỪNG cặp nhãn–giá trị
+  nên mỗi ô là một `dl` riêng với đúng một `dt` và một `dd`; nút `Tới dòng…` chuyển
+  vào TRONG `dd`. Không đổi `data-testid`, không đổi chữ, không đổi hành vi bấm.
+
+### Changed — hợp nhất `#670` với `#665`: vùng `Chưa lưu` giữ dạng luôn-có-mặt của `#670` (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`
+  (+ `DesignWorkspacePage.test.tsx`).
+- Lý do: hai PR cùng gỡ chỉ báo `draft-dirty-indicator` dựng trùng, nhưng giữ
+  lại hai bản khác nhau. `#665` giữ bản dựng theo điều kiện trong slot; `#670`
+  giữ bản LUÔN có mặt trong DOM, chỉ đổi giữa hiện hình và `sr-only`. Chọn bản
+  của `#670`: một vùng `role="status"` gắn vào DOM đúng lúc nội dung xuất hiện
+  thì trình đọc màn hình không có "thay đổi" nào để đọc. Cấu trúc còn lại của
+  slot (một hàng công cụ duy nhất, `onReload` đi qua editing context) theo `#665`.
+- Harness unit lấy bản của `#670`: `ContextStripSlotOutlet` dựng slot THẬT và
+  khẳng định đếm đúng một `draft-dirty-indicator`, thay cho mock `vi.fn()` vốn
+  nuốt node slot — đó chính là khoảng mù đã che lỗi này.
+- Số đo: xem bảng Verification của PR hợp nhất.
+
+### Changed — hợp nhất `#671` với `#665`: `EditorStatusBar` giữ bản vá của `#671` (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/editor/EditorStatusBar.tsx`.
+- Lý do: hai PR cùng chữa một lỗi axe (`definition-list`/`only-dlitems`) theo hai
+  cách khác nhau. `#665` bọc cả dải trong `dl.contents`; `#671` tách mỗi cặp
+  nhãn–giá trị thành một `dl` riêng và giữ hộp ngoài là `div role="group"`.
+  Chọn bản của `#671` vì nó có bốn unit test canh đúng hai luật ấy
+  (`EditorStatusBar.test.tsx`, kèm bảng tiêm lỗi) và vì `aria-label` nằm trên
+  một phần tử được dựng thật thay vì trên một hộp `display: contents`.
+- Số đo: xem bảng Verification của PR hợp nhất.
+
+### Fixed — `#665`: tám test đỏ sẵn của `e2e/programming.spec.ts` — sửa đúng phía sai, không bịt tín hiệu (2026-09-12)
+
+- Phạm vi: `apps/web-ui/e2e/programming.spec.ts`,
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/EditorStatusBar.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/editor/ProgramsWorkspace.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/editor/ProgramsTab.test.tsx`,
+  `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`,
+  `apps/web-ui/src/features/programming/layout/ProgrammingContextStrip.tsx`,
+  `apps/web-ui/src/features/programming/layout/ProgrammingLayout.tsx` (+ test
+  `ContextDetailsPopover.test.tsx`), `CHANGELOG.md`. **Không** chạm
+  `ProblemsDrawer.tsx` (PR #666 đang giữ), không chạm `playwright.config.ts`,
+  không đổi ma trận lane.
+
+- Triệu chứng: `npx playwright test e2e/programming.spec.ts` trên `origin/main`
+  sạch (`24095d2`) cho `8 failed / 28 skipped / 102 passed`, exit 1 — tái hiện
+  đúng số đo của `#665`. Một bộ e2e đỏ sẵn buộc MỌI phiên chạm FE phải tự
+  chứng minh "đỏ này không phải của tôi", và làm lỗi thứ chín trốn được.
+
+- Nguyên nhân gốc: **không phải một, mà bảy** — và chúng che nhau theo tầng, mỗi
+  lần sửa một tầng lại lộ tầng dưới:
+
+  1. **Cụm lệnh dựng TRÙNG trong cùng một hàng ngữ cảnh.** `DesignWorkspacePage`
+     vừa ĐĂNG KÝ `actions` (để `ProgrammingContextStrip` hiển thị), vừa tự dựng
+     thêm một bộ `Lưu`/`Kiểm tra`/`Làm mới` trong slot của chính nó ⇒ hai nút
+     `Lưu bản nháp`, hai `Kiểm tra`, hai `Làm mới`. Hai nút `Làm mới` còn làm
+     HAI việc khác nhau (đọc lại Draft / làm mới read-model của vỏ) dưới cùng
+     một cái tên. Sửa: slot chỉ giữ mode switcher + huy hiệu dirty; Draft reload
+     đi vào `ProgrammingEditingContext.onReload` để một nút `Làm mới` làm trọn
+     cả hai việc.
+  2. **Huy hiệu `Chưa lưu` còn sót lại trong thân trang** sau khi cụm đó chuyển
+     lên ContextStrip ⇒ hai phần tử `draft-dirty-indicator`, `role="status"`
+     phát hai lần. Sửa: gỡ bản sót; unit test khẳng định trang BÁO dirty lên vỏ
+     thay vì tự vẽ.
+  3. **Mặt vẽ FBD đọc lại chiều cao do chính nó tạo ra.** `FbdCanvas` đặt chiều
+     cao SVG là `containerHeight + 800` với `containerHeight` do `ResizeObserver`
+     đo trên chính khay cuộn chứa SVG đó. Ở bố cục nào khay cao theo nội dung
+     (mobile, hoặc khi một mắt `min-h-0` trong chuỗi cha đứt) thì thành vòng tự
+     nuôi: đo được **+800 px mỗi khung hình**, không hội tụ. Playwright treo ở
+     "element is not stable" tới hết 60 s. Sửa: kẹp số hạng đó bằng chiều cao
+     khung nhìn — giữ nguyên ý đồ "cho pan quá nội dung một màn hình" mà cắt
+     hẳn tính tự tham chiếu.
+  4. **Lưới workbench ghim cứng cột Watch `375px` ở mọi khổ.** Trên màn 412 px,
+     `workbench-watch-column` phủ lên danh sách Vấn đề và nuốt mọi cú bấm
+     ("intercepts pointer events"). Sửa: xếp chồng dưới `lg`.
+  5. **`G-01` ẩn `TopBar` của Programming từ `lg` mà không dời nút `Đổi ngôn
+     ngữ`** ⇒ từ 1024 px trở lên, sáu workspace Lập trình KHÔNG còn đường nào
+     đổi ngôn ngữ. Sửa: đưa nút vào Global Context Bar, chỉ hiện từ `lg` để
+     không trùng với `TopBar` ở khổ hẹp.
+  6. **Ba điều khiển bị comment-out âm thầm trong khi AC vẫn đòi:** badge
+     `fbd-active-network` + nút thêm `Network` (`StructuredFbdEditor`) và ô chọn
+     `Khung nhìn` (`FbdEditorPane`). Không cái nào "đã chuyển đi đâu" — chúng
+     chỉ bị gỡ. Sửa: trả lại, `Khung nhìn` đặt vào dải tuỳ chọn hiển thị hiện
+     hữu theo kiểu compact.
+  7. **Hai lần đổi bố cục làm vỡ hợp đồng đã khoá, không qua quyết định sản
+     phẩm:** thứ tự track `inspector`/`library` bị hoán vị (vỡ `AC-PGM02-004`:
+     Explorer → Editor → Thư viện nhanh → Inspector), và ngưỡng `fbdWideDesktop`
+     bị hạ `1440 → 1024` (vỡ `TC-FBD-RESP-001`: ở `1280`/`1024` cả hai khay phải
+     ĐÓNG). Sửa: trả cả hai về đúng hợp đồng. Triệu chứng thật mà lần hạ ngưỡng
+     định chữa — FBD dưới 1440 px không còn lối vào Thư viện nhanh sau khi dock
+     trong canvas bị gỡ — được ghi thành finding riêng để chọn đường đúng, thay
+     vì để hai thứ cùng sai.
+
+- Hai test đỏ vì **kỳ vọng của phép đo lỗi thời**, sửa phía test và nói rõ vì
+  sao kỳ vọng cũ không còn đúng:
+
+  - `T61-505` đo ngay sau `setViewportSize` trong khi `ProgrammingFeatureRail`
+    có `transition-[width] duration-200`, nên đọc phải bề rộng GIỮA CHỪNG
+    (`183 px` thay vì `64 px` đã ổn định) và quy hụt ~119 px cho "trang chừa cột
+    cho khay phủ". Thêm `settleLayout()` chờ bố cục đứng yên — không nới ngưỡng,
+    vì nới ngưỡng là bịt đúng cái cổng này sinh ra để canh.
+  - `UJ-PROG-01..08` bấm `Cấu hình Task` / `Về trình soạn thảo`; lối vào tab
+    Thực thi đã chuyển lên mục `Execution` của feature rail, cùng chỗ với năm
+    workspace kia. Journey vẫn đi qua đúng màn hình và vẫn đọc `Control_Main`.
+  - `TC-FBD-NAV-001` soạn 25 khối (MUTATION) trên cả lane mobile, nơi PGM-02 là
+    read-only theo `AC-PGM02-010` — nó nằm chờ nút `Mới` tới hết giờ. Đã thử
+    giữ lane mobile bằng Draft nạp sẵn: không giữ được, vì ở 412 px `scrollLeft`
+    hợp lệ bằng `0` nên khẳng định `> 0` vô nghĩa ở đó. Case chạy lane desktop
+    với lý do ghi tại chỗ, cùng cách `TC-FBD-RESP-001` đã làm; Mini Map trên màn
+    hẹp ghi thành finding riêng, không giấu trong một test đỏ.
+
+- **Không** `test.skip`/`fixme`/xoá test nào để lấy màu xanh: mỗi lần đổi phía
+  test đều kèm lý do đo được, và năm trong tám test đỏ được chữa ở phía SẢN PHẨM.
+
+- Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` theo `#414`): xem bảng Verification
+  của PR.
+### Fixed — `ISS-PIO-38` RESTORE nay chịu cùng phép kiểm slot Modbus như COMMISSION, kèm đường thoát audit (#492, 2026-09-12)
+
+- **Triệu chứng.** `AC-PIO-ID-02` chặn COMMISSION khi fingerprint/config revision Modbus lệch, nhưng
+  phép kiểm ấy **chỉ** áp cho COMMISSION. RESTORE cũng activate một artifact, nên restore một revision
+  cũ sau khi bố cục slot Modbus đã đổi sẽ **ghi vào thanh ghi sai** — đúng ca mà `AC-PIO-ID-02` sinh
+  ra để chặn — mà không một phép kiểm nào cản. Một cửa ghi sai thanh ghi, im lặng.
+- **Nguyên nhân gốc.** Guard slot nằm trong nhánh COMMISSION của `begin()`, gọi `verifyModbusSlots`
+  và trả lỗi thẳng. RESTORE đi qua cùng `begin()` nhưng không chạm guard đó.
+- **Cách sửa — phương án 3 của chủ sở hữu issue: chặn mặc định + đường thoát tường minh.**
+  Tách logic guard thành hàm thuần kiểm được ở tầng đơn vị:
+  - `modbusSlotMismatches` **phân biệt lỗi cứng với lệch mềm**: không resolve được slot (resolver
+    nil, resolve lỗi, manifest không đọc được) là **lỗi cứng** — chặn cả COMMISSION lẫn RESTORE,
+    **không** cho vượt; còn slot verify được mà lệch là **lệch mềm** — ca duy nhất đường thoát áp
+    dụng, và chỉ cho RESTORE.
+  - `resolveSlotGate(kind, mismatches, acks)`: COMMISSION lệch ⇒ **luôn chặn** kể cả có ack;
+    RESTORE lệch + ack `modbus-slot-mismatch-override` ⇒ cho vượt; RESTORE lệch không ack ⇒ chặn.
+  - `validateRestoreAcknowledgements`: token lạ, token trùng, hoặc ack khống (ack mà không có lệch)
+    đều bị `ErrAckUnexpected` — một xác nhận khống không đi lọt.
+  - Khi vượt, ghi `slotMismatchOverride: true` + danh sách lý do lệch vào `operationContext` để
+    **audit** giữ được dấu vết ai đã đi qua cửa và slot nào đang lệch.
+- **Đường thoát phải với tới được, không trang trí.** Handler HTTP `/restore` nay plumb
+  `acknowledgements` từ body vào `OperationCommand`; `RestoreRequest` (Go, `DisallowUnknownFields`)
+  và `ProgrammingRestoreRequest` (OpenAPI, `additionalProperties:false`) đều khai trường
+  `acknowledgements` — thiếu một trong hai thì hoặc request mang ack bị từ chối, hoặc RESTORE bị
+  chặn cứng, tái lập đúng lo ngại ban đầu. Không thêm mã lỗi mới: tái dùng `ErrMapIdentity` và
+  `ErrAckUnexpected`.
+- **Số đo (đo thật 2026-09-12, host container).** `go vet ./internal/programming/...` = 0;
+  `go test ./internal/programming/... -count=1` = tất cả `ok` (application 27.7s, transport/http
+  3.9s); `verify_programming_pgm02_contract.py` = PASS; `verify_programming_g1_contracts.py` =
+  `10/10 PASS`; sha256 `openapi.yaml` = `9254c8…5ecc8e43` khớp pin ở `pgm02_workspace_v1.json` và
+  `g1_contract_join_v1.json` (operationCount giữ 43 — thêm property, không thêm operation).
+- **Bốn phép tiêm lỗi, cả bốn ĐỎ đúng chỗ.** (I1) gate luôn cho vượt ⇒ ca COMMISSION-lệch và
+  RESTORE-lệch-không-ack đỏ; (I2) gate luôn chặn ⇒ ca RESTORE-lệch-có-ack đỏ; (I3) bỏ phát hiện
+  lệch ⇒ ca lệch→một lý do đỏ; (I4) không từ chối ack-khống ⇒ ca `ErrAckUnexpected` đỏ.
+- **Phạm vi để lại (không thuộc lát này).** FE `DangerZone.tsx`/`useRestoreWorkflow.ts` chưa dựng
+  hộp thoại xác nhận gửi token — phạm vi issue là backend + audit; đường thoát đã sẵn ở hợp đồng để
+  FE nối sau.
+- **Phạm vi.** `apps/web-api/internal/programming/application/{modbus_slots.go,operations.go}`,
+  `apps/web-api/internal/programming/transport/http/{models.go,operations.go}`,
+  `contracts/openapi/openapi.yaml`, `contracts/programming/{pgm02_workspace_v1.json,g1_contract_join_v1.json}`,
+  cùng test đơn vị/transport tương ứng.
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
