@@ -8,6 +8,76 @@
 
 ## [Unreleased]
 
+### Fixed — `#665`: gỡ ba tầng lỗi làm cổng e2e Programming đỏ sẵn trên `main` (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.test.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/EditorStatusBar.tsx`,
+  `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`. **Chưa đóng `#665`** —
+  xem mục "Còn lại" bên dưới.
+
+- Triệu chứng: `npx playwright test e2e/programming.spec.ts` đỏ sẵn trên `origin/main`
+  (`24095d2`) với `102 passed / 28 skipped / 8 failed`, không phải nhiễu — Issue `#665`
+  đã đo hai lượt cho cùng ba con số. Mỗi phiên chạm FE phải tự đo một lượt nền riêng
+  để phân biệt "đỏ của tôi" với "đỏ có sẵn", và lỗi thứ chín sẽ trốn được.
+
+- Nguyên nhân gốc: KHÔNG phải một lỗi, mà một chồng lỗi độc lập — mỗi lần vá một
+  tầng thì tầng sau mới lộ ra. Ba tầng đã xử lý trong lần này:
+
+  1. **Hàng công cụ workspace Thiết kế được dựng HAI lần.** `DesignWorkspacePage`
+     đăng ký hành động qua `setEditingContext({ actions })` — kênh mà
+     `ProgrammingContextStrip` dựng thành `programming-global-actions` — VÀ đẩy nguyên
+     cụm `EDIT/LIVE/SIMULATE` + `Lưu`/`Kiểm tra`/`Làm mới` qua `setContextStripSlot`.
+     `GlobalContextBar` nhận cả `actions` lẫn slot làm children, nên cùng một hàng
+     công cụ ra DOM hai lần: `Lưu bản nháp` đếm ra **2** (`toHaveCount(1)` đỏ ở
+     `TC-FBD-RESP-001`) và `Kiểm tra gói` cũng vậy. Lần chuyển cụm lên strip đã thêm
+     kênh mới mà không rút kênh cũ.
+  2. **Chỉ báo `Chưa lưu` còn bản sót ở thân trang.** Cùng lần chuyển đó để lại một
+     `span[data-testid="draft-dirty-indicator"]` trong thân `DesignWorkspacePage` bên
+     cạnh bản mới trong slot, nên khi Draft bẩn thì có HAI huy hiệu vàng cùng chữ →
+     `strict mode violation` ở `UJ-PROG-01..08`.
+  3. **`EditorStatusBar` dùng `dl` làm hộp flex.** `dl` chỉ được chứa trực tiếp
+     `dt`/`dd`, nhưng thanh trạng thái còn chứa khối `leading` (một `div` bọc nội dung
+     tuỳ ý) và bọc `dd` BÊN TRONG `button` ở ô `position`. axe bắt `definition-list`
+     và `only-dlitems` mức `serious`, làm cổng a11y của `UJ-PROG-01..08` đỏ.
+
+- Cách sửa:
+  1. `DesignWorkspacePage` thôi đăng ký `actions`; slot là nguồn DUY NHẤT của hàng
+     công cụ (nó mang thêm bộ chuyển chế độ, và luật dirty/operation/đường sang PGM-05
+     đều nằm ở trang này). Hợp đồng của `ProgrammingContextStrip` không đổi — nó vẫn
+     dựng `actions` khi được cấp.
+  2. Giữ đúng MỘT vùng `role="status"`, đặt trong slot và **luôn có mặt** trong DOM,
+     chỉ đổi giữa hiện hình và `sr-only`; xoá bản sót ở thân trang. Vùng live gắn vào
+     DOM đúng lúc nội dung xuất hiện là vùng không được đọc.
+  3. Hộp ngoài `EditorStatusBar` thành `div role="group"`, mỗi cặp nhãn–giá trị là một
+     `dl` riêng, nút `Tới dòng…` nằm TRONG `dd`. Bố cục không đổi: lớp Tailwind vẫn
+     nằm trên đúng những hộp cũ.
+  4. `TC-FBD-NAV-001` nhận chốt chặn khổ hẹp mà mọi ca soạn thảo khác trong tệp đã
+     mang — ca này `createPou` rồi 25 lần `Insert`, đều là mutation, mà dưới 768 px
+     PGM-02 khoá read-only, nên ở lane mobile nó đứng chờ nút `Mới` vốn cố ý không tồn
+     tại cho tới hết 60 giây. Đỏ vì ĐÒI SAI thứ thiết kế vừa cấm, không phải vì Mini Map hỏng.
+  5. Harness `DesignWorkspacePage.test.tsx` RENDER slot thật thay vì nuốt bằng
+     `vi.fn()`. Chính khoảng mù đó đã che việc chỉ báo bị dựng hai lần cho tới khi
+     Playwright đâm vào `strict mode violation`.
+
+- Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` — tổ chức không cấp runner, `#414`):
+
+  | Cổng | Lệnh | Kết quả |
+  |---|---|---|
+  | Playwright nền (`origin/main` `24095d2`) | `npx playwright test e2e/programming.spec.ts` | **102 passed / 28 skipped / 8 failed** (4.9m), exit 1 |
+  | Playwright sau ba tầng vá | như trên | **102 passed / 29 skipped / 7 failed** (6.6m), exit 1 — `8 → 7` đỏ; ba tầng đã vá KHÔNG còn là điểm chết của test nào, nhưng mỗi test đỏ còn lại bị chặn bởi tầng lỗi tiếp theo nên chưa test nào đổi màu |
+  | Vitest (toàn `src`) | `npx vitest --run --environment jsdom src` | **246 files / 3133 passed / 0 failed**, exit 0 (3 lượt full liên tiếp) |
+  | Lint | `npm run lint` | PASS, exit 0 |
+  | Build | `npm run build` | PASS, exit 0 (chunk `programming` 153.53 KiB gzip, ngân sách R3 165.00 KiB) |
+
+- Còn lại (chưa sửa, thuộc `#665`): bốn tầng lỗi độc lập nữa đã định vị được nhưng
+  KHÔNG sửa trong lần này vì mỗi tầng cần một quyết định thiết kế có chủ:
+  mất nút `Đổi ngôn ngữ` trên desktop Programming (TopBar `lg:hidden` mà không ai
+  tiếp quản); Quick Library đổi sang cột ngoài cùng bên phải và hiện từ 1024 px
+  (`11d7b33`) trong khi `docs/superpowers/specs/2026-08-31-fbd-edit-design.md` §7.5
+  khoá `1024–1439` là "drawer hoặc gập"; phần tử không bao giờ `stable` trong
+  workspace Programs; và PGM-04 chừa cột cho khay phủ ở khổ 768.
+
 ### Fixed — `#658`: e2e Programming lấy breakpoint authoring từ nguồn chân lý thay vì bản chép tay (2026-09-12)
 
 - Phạm vi: `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`. **Không** chạm
