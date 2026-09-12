@@ -306,6 +306,28 @@ inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-iobus.service" "$UNITDIR/"
 inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-core.service"  "$UNITDIR/"
 inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-netcfg.service" "$UNITDIR/"
 inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-web-pi.service" "$UNITDIR/"
+# Hai helper đặc quyền — BỎ SÓT cho tới 2026-09-13.
+#
+# `mkddc-web` chạy `User=mkddc` với `NoNewPrivileges=true`, nên nó KHÔNG tự
+# restart service và KHÔNG tự ghi cấu hình chrony được. Hai việc đó đi qua hai
+# subcommand của chính binary này, chạy root dưới systemd và phục vụ trên unix
+# socket trong /run/mkddc — xem reloadhelper_linux.go và timehelper_linux.go.
+#
+# Trước bản vá này script cài mọi unit khác nhưng KHÔNG cài hai unit helper, nên
+# trên bo không bao giờ có `/run/mkddc/reload-helper.sock` và
+# `/run/mkddc/time-helper.sock`. Hậu quả quan sát được trên Foxlinx 2026-09-12:
+# lưu cấu hình BACnet/fieldbus hay đổi nguồn NTP đều GHI ĐƯỢC file mà không bao
+# giờ có hiệu lực — đúng lớp triệu chứng của finding F-01 mà reload helper sinh
+# ra để đóng. Không có tín hiệu nào ở tầng systemd vì unit không tồn tại thì
+# cũng không có gì để `failed`.
+inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-reload-helper.service" "$UNITDIR/"
+inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-time-helper.service" "$UNITDIR/"
+# `mkddc-time-helper` có `ProtectSystem=strict` + `ReadWritePaths=/etc/chrony/sources.d`.
+# systemd dựng mount namespace TRƯỚC khi chạy ExecStart, nên ReadWritePaths trỏ
+# vào thư mục chưa tồn tại làm unit chết ngay ở bước setup — helper tự MkdirAll
+# cũng không cứu được vì nó chưa kịp chạy. Tạo sẵn ở đây.
+inst -d -m 0755 "$ETCDIR/chrony"
+inst -d -m 0755 "$ETCDIR/chrony/sources.d"
 inst -d -m 0755 "$LIBEXECDIR" "$SHAREDIR/avahi"
 inst -m 0644 build/release/provenance.json "$SHAREDIR/provenance.json"
 inst -m 0644 build/release/checksums.sha256 "$SHAREDIR/checksums.sha256"
@@ -361,6 +383,9 @@ fi
 sysctl_do daemon-reload
 if [ "$ENABLE" -eq 1 ]; then
     sysctl_do enable mkddc-iobus mkddc-core mkddc-netcfg mkddc-web-pi >/dev/null
+    # Hai helper phải chạy TRƯỚC mkddc-web-pi (cả hai unit đã khai
+    # `Before=mkddc-web-pi.service`); enable ở đây để chúng có mặt sau mỗi lần boot.
+    sysctl_do enable mkddc-reload-helper mkddc-time-helper >/dev/null
     if [ "$FAKE_MCU_INSTALLED" -eq 1 ]; then
         if command -v socat >/dev/null 2>&1; then
             sysctl_do enable mkddc-pty >/dev/null 2>&1 || true
@@ -369,6 +394,11 @@ if [ "$ENABLE" -eq 1 ]; then
         sysctl_do enable mkddc-fakemcu >/dev/null 2>&1 || true
         sysctl_do restart mkddc-fakemcu
     fi
+    # Helper phải sống lại TRƯỚC web: web nối tới socket của chúng lúc xử lý
+    # request, nhưng khởi động lại theo đúng thứ tự này giữ cho lần lưu cấu hình
+    # đầu tiên sau khi cài không rơi vào khoảng trống không có socket.
+    sysctl_do restart mkddc-reload-helper
+    sysctl_do restart mkddc-time-helper
     sysctl_do restart mkddc-iobus
     sysctl_do restart mkddc-core
     sysctl_do restart mkddc-web-pi

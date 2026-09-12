@@ -8,6 +8,69 @@
 
 ## [Unreleased]
 
+### Fixed — deploy Foxlinx: tiến trình web mồ côi chiếm cổng 8081, và `install.sh` chưa bao giờ cài hai unit helper đặc quyền (2026-09-13)
+
+- Phạm vi: `platform/packaging/install.sh`,
+  `tests/integration/test_release_dryrun.py`,
+  `docs/07_records/test-evidence/fw-som/2026-09-13-foxlinx-main-deploy.md`,
+  `docs/07_records/test-evidence/fw-som/2026-09-13-foxlinx-main-deploy-overview.png`,
+  `CHANGELOG.md`.
+
+- Triệu chứng 1 — deploy "xong" nhưng bo vẫn chạy binary cũ: sau khi hoán đổi
+  binary và khởi động lại, `systemctl is-active mkddc-web-pi` trả `active` và
+  `GET /api/v1/health` trả `status: ok`, trong khi journal lặp
+  `serve: listen tcp :8081: bind: address already in use` với
+  `NRestarts` tăng dần. Cả hai tín hiệu "xanh" đều là của MỘT tiến trình khác.
+
+- Nguyên nhân gốc 1: PID 76983 chạy `/opt/mkddc-web/mkddc-web` từ 2026-09-11
+  trong cgroup `sshd.service`, tức được ai đó khởi chạy tay qua SSH chứ không
+  qua systemd, với `PPID=1` sau khi phiên SSH đóng. `systemctl stop` chỉ giết
+  được cgroup của unit nên không đụng tới nó; nó giữ cổng 8081, và bản mới bị
+  systemd khởi động lại vô hạn. `/proc/76983/exe` trỏ
+  `/opt/mkddc-web/mkddc-web (deleted)` — bằng chứng trực tiếp rằng tiến trình
+  đang phục vụ là bản binary ĐÃ BỊ GHI ĐÈ. Health check vì thế xác nhận nhầm
+  một bản build cũ. Cách sửa: `systemctl stop` để cắt vòng restart, `SIGTERM`
+  tiến trình mồ côi, rồi `systemctl start` lại; kiểm chứng bằng
+  `sha256sum /proc/<MainPID>/exe` khớp bản dựng trên host, không chỉ bằng
+  `is-active`.
+
+- Triệu chứng 2 — lưu cấu hình không có hiệu lực mà không có lỗi nào: trên bo
+  không có `/run/mkddc/reload-helper.sock` lẫn `/run/mkddc/time-helper.sock`.
+
+- Nguyên nhân gốc 2: `platform/systemd/` có sẵn `mkddc-reload-helper.service`
+  và `mkddc-time-helper.service`, `apps/web-api` có sẵn hai subcommand phục vụ
+  chúng, nhưng `install.sh` copy mọi unit khác mà bỏ sót đúng hai unit này —
+  chúng chưa bao giờ được cài. `mkddc-web` chạy `User=mkddc` với
+  `NoNewPrivileges=true` nên không tự restart service được; thiếu helper thì
+  lưu BACnet/fieldbus hay đổi nguồn NTP chỉ ghi được file, đúng lớp triệu chứng
+  của finding F-01 mà reload helper sinh ra để đóng. Unit không tồn tại thì
+  cũng không có gì `failed`, nên không có tín hiệu nào ở tầng systemd.
+
+- Cách sửa 2: `install.sh` cài và `enable` cả hai unit, khởi động lại chúng
+  TRƯỚC `mkddc-web-pi`, và tạo sẵn `/etc/chrony/sources.d` — `mkddc-time-helper`
+  có `ProtectSystem=strict` + `ReadWritePaths=/etc/chrony/sources.d`, mà systemd
+  dựng mount namespace trước `ExecStart` nên thư mục chưa tồn tại làm unit chết
+  ngay ở bước setup, helper tự `MkdirAll` cũng không cứu được.
+
+- Gate mới: `INSTALLED_UNITS` trong `test_release_dryrun.py` cùng hai test
+  `test_1_cai_moi_dat_du_unit_systemd` và
+  `test_1_cai_moi_tao_san_thu_muc_chrony_cho_time_helper`. Đối chứng: gỡ bản vá
+  `install.sh` thì cả hai đỏ; giữ bản vá thì xanh.
+
+- Kiểm chứng (bo `SOM-DDC-24-foxlinx`, main `4f00f3c1`): 9/9 checksum binary
+  trên bo khớp bản dựng host; 7/7 service `active`, `NRestarts=0`, 0 unit
+  `failed`; health 6/6 `ok`; 72 point; reload helper chứng minh bằng PID
+  `mkddc-iobus` đổi `167211 → 168392` sau `PUT /api/v1/system/config/bacnet`
+  (`applied:true`, `reload:"restart-iobus"`). UI trên bo: 6/6 trang chính render
+  dữ liệu thật, 0 lỗi console. Host: `24/24` pytest packaging,
+  `verify-project.sh --component layout` `LAYOUT_EXIT=0`, lane Chrome DevTools
+  MCP PASS 7/7.
+
+- Ghi nhận không thuộc phạm vi bản vá: 4 slave Modbus (`CK508-04/05`,
+  `CK509-06/07`) offline là trạng thái sẵn có của bo lab không có RS-485 thật —
+  185.120 dòng lỗi trong ~42 giờ TRƯỚC deploy so với 422 dòng sau; phiên đăng
+  nhập vẫn không sống qua reload trang (vấn đề nhóm B mở từ 2026-08-05).
+
 ### Added — `#675`: mục Thực thi của Inspector có nút `Cấu hình chạy`, mở `?tab=execution` mà không rơi `project`/`pou` (2026-09-12)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/inspector/sections/ExecutionSection.tsx`,

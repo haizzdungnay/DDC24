@@ -42,6 +42,23 @@ INSTALLED_BINARIES = [
     "opt/mkddc-web/mkddc-schedule-sim",
 ]
 
+# Unit systemd bắt buộc có mặt sau khi cài.
+#
+# Hai unit helper từng bị bỏ quên hoàn toàn: `platform/systemd/` có file, code Go
+# có subcommand phục vụ chúng, nhưng `install.sh` không copy — nên trên bo không
+# bao giờ có `/run/mkddc/reload-helper.sock` và `/run/mkddc/time-helper.sock`.
+# Hệ quả quan sát trên Foxlinx 2026-09-12: lưu cấu hình BACnet hay đổi nguồn NTP
+# ghi được file mà KHÔNG BAO GIỜ có hiệu lực, và vì unit không tồn tại nên cũng
+# không có gì `failed` để báo động. Danh sách này là chỗ duy nhất bắt lỗi ấy.
+INSTALLED_UNITS = [
+    "etc/systemd/system/mkddc-iobus.service",
+    "etc/systemd/system/mkddc-core.service",
+    "etc/systemd/system/mkddc-netcfg.service",
+    "etc/systemd/system/mkddc-web-pi.service",
+    "etc/systemd/system/mkddc-reload-helper.service",
+    "etc/systemd/system/mkddc-time-helper.service",
+]
+
 # Binary phải được ROLLBACK khôi phục. Thiếu một dòng ở đây nghĩa là sau khi lùi,
 # bo chạy lẫn hai phiên bản của cùng một tính năng.
 ROLLED_BACK_BINARIES = INSTALLED_BINARIES
@@ -101,6 +118,20 @@ class ReleaseDryRunTest(unittest.TestCase):
                     "usr/share/mkddc/checksums.sha256",
                     "usr/share/mkddc/runtime-checksums.sha256"):
             self.assertTrue((self.root / rel).is_file(), f"cài mới thiếu {rel}")
+
+    def test_1_cai_moi_dat_du_unit_systemd(self) -> None:
+        for rel in INSTALLED_UNITS:
+            self.assertTrue((self.root / rel).is_file(), f"cài mới thiếu unit {rel}")
+
+    def test_1_cai_moi_tao_san_thu_muc_chrony_cho_time_helper(self) -> None:
+        """`mkddc-time-helper` có ProtectSystem=strict + ReadWritePaths=/etc/chrony/sources.d.
+
+        systemd dựng mount namespace TRƯỚC ExecStart, nên thư mục chưa tồn tại làm
+        unit chết ngay ở bước setup — helper tự MkdirAll cũng không cứu được vì nó
+        chưa kịp chạy.
+        """
+        self.assertTrue((self.root / "etc/chrony/sources.d").is_dir(),
+                        "thiếu /etc/chrony/sources.d — mkddc-time-helper sẽ không khởi động được")
 
     def test_1_cai_moi_bat_programming_ca_hai_nua(self) -> None:
         env = (self.root / "etc/mkddc-web.env").read_text(encoding="utf-8")
