@@ -472,10 +472,23 @@ export function EditorPane({
   const libraryDockToggleRef = useRef<HTMLButtonElement | null>(null)
   const fbdInspectorOpenerRef = useRef<HTMLButtonElement | null>(null)
   const [fbdInspectorDrawerOpen, setFbdInspectorDrawerOpen] = useState(false)
-  const [fbdWideDesktop, setFbdWideDesktop] = useState(() => window.innerWidth >= 1024)
+  /* `1440` LÀ NGƯỠNG CỦA HỢP ĐỒNG, KHÔNG PHẢI MỘT LỰA CHỌN THẨM MỸ.
+   *
+   * `TC-FBD-RESP-001` khoá sáu mốc của shell FBD: từ `1440 px` trở lên mới có
+   * đồng thời Explorer | Canvas | Thư viện nhanh | Inspector; ở `1280` và
+   * `1024` cả hai khay phải ĐÓNG và chỉ còn nút mở. Hạ ngưỡng này xuống `1024`
+   * làm hai khay hiện thường trực ở hai mốc mà hợp đồng nói phải đóng — cổng
+   * e2e đỏ ngay, nhưng nó đã đỏ sẵn nên không ai thấy (`#665`).
+   *
+   * Việc hạ ngưỡng nhằm chữa một triệu chứng THẬT: sau khi dock Thư viện trong
+   * canvas bị gỡ, FBD dưới `1440 px` không còn lối vào Thư viện nhanh nào.
+   * Nhưng cách chữa đó đổi hợp đồng bố cục mà không đi qua quyết định sản
+   * phẩm. Khoảng trống ấy được ghi thành finding riêng để chọn đường đúng
+   * (khay/popover có nút mở, hay nới chính AC) thay vì để hai thứ cùng sai. */
+  const [fbdWideDesktop, setFbdWideDesktop] = useState(() => window.innerWidth >= 1440)
 
   useEffect(() => {
-    const update = () => setFbdWideDesktop(window.innerWidth >= 1024)
+    const update = () => setFbdWideDesktop(window.innerWidth >= 1440)
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
   }, [])
@@ -518,16 +531,18 @@ export function EditorPane({
   const fbdInspectorOpen = selected?.language === 'FBD' && !fbdWideDesktop
     ? fbdInspectorDrawerOpen
     : slots.inspector
-  /* Task 8 đã đưa Quick Library FBD thành cột trên desktop. Sau khi
-   * tách `ProgramsTab` thành facade, điều kiện mount sống tại owner mới này. */
+  /* Task 8 đã đưa Quick Library FBD thành cột thứ ba ở desktop RỘNG. Sau khi
+   * tách `ProgramsTab` thành facade, điều kiện mount phải sống tại owner mới
+   * này. Dưới `1440 px` FBD không dựng cột — xem chú thích `fbdWideDesktop`. */
   const libraryColumnEligible = canEdit && (
     selected?.language === 'ST'
-    || selected?.language === 'FBD'
+    || (selected?.language === 'FBD' && fbdWideDesktop)
   )
   const libraryColumnOpen = libraryColumnEligible && libraryDockOpen
   const workspaceGrid = useProgramsWorkspaceGrid({
     explorerOpen: slots.left,
     libraryOpen: libraryColumnOpen,
+    libraryMounted: libraryColumnEligible,
     inspectorOpen: selected?.language === 'FBD' && !fbdWideDesktop ? false : slots.inspector,
   })
 
@@ -906,7 +921,7 @@ export function EditorPane({
         }}
       >
         {selected?.language === 'FBD' && (
-          <div className="mb-2 flex justify-end lg:hidden">
+          <div className="mb-2 flex justify-end min-[1440px]:hidden">
             <button
               ref={fbdInspectorOpenerRef}
               type="button"
@@ -1076,6 +1091,49 @@ export function EditorPane({
         </div>
       </div>
       <WorkspaceResizeHandle
+        label={pick('Đổi kích thước Thư viện nhanh', 'Resize the quick library')}
+        panel="library"
+        direction={-1}
+        onPointerDown={workspaceGrid.beginResize}
+      />
+      <aside
+        data-testid="quick-library-column"
+        aria-label={pick('Thư viện nhanh', 'Quick library')}
+        /* Khổ không dựng cột thì ẩn HẲN, không để lại một thanh ray rỗng:
+           `TC-FBD-RESP-001` đo `quick-library-column` phải khuất ở `1280`/`1024`,
+           và một `aside` rỗng cao hết cột vẫn là "hiện" với cả người dùng lẫn
+           phép đo. Track tương ứng cũng về `0` (xem `libraryMounted`). */
+        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${libraryColumnEligible ? '' : 'hidden'}`}
+      >
+        {libraryColumnEligible && libraryDockOpen && selected ? (
+          <QuickLibraryHost
+            variant="docked"
+            projectId={document.project.projectId}
+            language={selected.language}
+            onInsert={(entry) => {
+              if (!canEdit) return false
+              setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
+              return true
+            }}
+            onClose={() => {
+              setLibraryDockOpen(false)
+              window.setTimeout(() => libraryDockToggleRef.current?.focus(), 0)
+            }}
+          />
+        ) : libraryColumnEligible ? (
+          <button
+            ref={libraryDockToggleRef}
+            type="button"
+            className="flex min-h-11 w-full items-center justify-center rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            aria-expanded={false}
+            onClick={() => setLibraryDockOpen(true)}
+          >
+            <Library className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="ml-2 lg:sr-only">{pick('Mở Thư viện nhanh', 'Open quick library')}</span>
+          </button>
+        ) : null}
+      </aside>
+      <WorkspaceResizeHandle
         label={pick('Đổi kích thước Inspector', 'Resize the inspector')}
         panel="inspector"
         direction={-1}
@@ -1084,7 +1142,7 @@ export function EditorPane({
       <aside
         data-testid="inspector-column"
         className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${selected?.language === 'FBD'
-          ? `${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl lg:static lg:block lg:w-auto lg:bg-transparent lg:p-0 lg:shadow-none`
+          ? `${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl min-[1440px]:static min-[1440px]:block min-[1440px]:w-auto min-[1440px]:bg-transparent min-[1440px]:p-0 min-[1440px]:shadow-none`
           : ''}`}
         aria-label={pick('Thuộc tính', 'Inspector')}
         onKeyDown={(event) => {
@@ -1242,45 +1300,6 @@ export function EditorPane({
           />
         </details>
         </div>
-      </aside>
-      <WorkspaceResizeHandle
-        label={pick('Đổi kích thước Thư viện nhanh', 'Resize the quick library')}
-        panel="library"
-        direction={-1}
-        onPointerDown={workspaceGrid.beginResize}
-      />
-      <aside
-        data-testid="quick-library-column"
-        aria-label={pick('Thư viện nhanh', 'Quick library')}
-        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${libraryColumnEligible ? '' : 'hidden lg:flex lg:items-start'}`}
-      >
-        {libraryColumnEligible && libraryDockOpen && selected ? (
-          <QuickLibraryHost
-            variant="docked"
-            projectId={document.project.projectId}
-            language={selected.language}
-            onInsert={(entry) => {
-              if (!canEdit) return false
-              setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
-              return true
-            }}
-            onClose={() => {
-              setLibraryDockOpen(false)
-              window.setTimeout(() => libraryDockToggleRef.current?.focus(), 0)
-            }}
-          />
-        ) : libraryColumnEligible ? (
-          <button
-            ref={libraryDockToggleRef}
-            type="button"
-            className="flex min-h-11 w-full items-center justify-center rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-            aria-expanded={false}
-            onClick={() => setLibraryDockOpen(true)}
-          >
-            <Library className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="ml-2 lg:sr-only">{pick('Mở Thư viện nhanh', 'Open quick library')}</span>
-          </button>
-        ) : null}
       </aside>
     </ProgramsWorkspace>
   )

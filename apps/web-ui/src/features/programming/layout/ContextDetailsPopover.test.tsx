@@ -173,6 +173,13 @@ describe('T60-103 — bàn phím đi hết đường', () => {
 
     await user.tab()
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ngoài strip' }))
+    /* `Đổi ngôn ngữ` là một chặng THẬT trên strip kể từ khi `G-01` ẩn `TopBar`
+     * của Programming từ `lg` — nút đổi ngôn ngữ phải có chỗ ở đâu đó, và chỗ
+     * đó là đây. Khẳng định nó bằng tên thay vì `tab()` cho đủ số lần: nếu mai
+     * này nó biến mất, test này phải đỏ chứ không được lặng lẽ đếm sang nút
+     * khác. */
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Đổi ngôn ngữ' }))
     await user.tab()
     expect(document.activeElement).toBe(trigger())
     await user.keyboard('{Enter}')
