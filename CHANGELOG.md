@@ -8,6 +8,77 @@
 
 ## [Unreleased]
 
+### Fixed — mở một POU là tháo cả workspace: URL chỉ khác THỨ TỰ query cũng bị nắn (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/shared/programsRoute.ts`,
+  `apps/web-ui/src/features/programming/design/ProgramsWorkspaceRoute.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`, test kèm
+  theo, `CHANGELOG.md`. Nối tiếp `#695`.
+
+- Triệu chứng: sau `#695`, `TC-FBD-NAV-001` vẫn đỏ nhưng theo kiểu KHÁC — badge
+  dừng ở `20/256`–`24/256` với dãy đếm **tăng đơn điệu** (không rollback), tức
+  có phím `Insert` không sinh ra block nào. Đo `--repeat-each=160 --workers=4`:
+  **4/160 đỏ**; và đỏ được cả trong lượt chạy tuần tự của chính cổng
+  `npx playwright test e2e/programming.spec.ts`.
+
+- Nguyên nhân gốc (đo bằng instrument tạm trong sản phẩm: đếm `keydown` ở
+  `window`, `focusin`/`focusout`, mount/unmount từng tầng):
+
+  ```
+  IN  SECTION/Bộ dựng FBD
+  ROUTE READY url=…&mode=EDIT&pou=<id>
+  REDIRECT …&mode=EDIT&pou=<id> -> …&pou=<id>&mode=EDIT
+  UNMOUNT-DWP        ← cả DesignWorkspacePage bị tháo
+  WIN BODY           ← phím Insert rơi vào body, mất trắng
+  MOUNT-DWP
+  ```
+
+  Mở một POU ghi `?project=…&mode=EDIT&pou=<id>` (vì `pou` được `set` vào cuối
+  chuỗi có sẵn), còn `canonicalProgramsPath` dựng `?project=…&pou=<id>&mode=EDIT`.
+  Hai địa chỉ **y hệt nhau về nghĩa**, chỉ khác THỨ TỰ tham số — nhưng
+  `ProgramsWorkspaceRoute` so bằng `current !== canonical` nên coi là URL phải
+  nắn và trả `<Navigate replace>`, khiến React tháo toàn bộ workspace rồi dựng
+  lại. Đây không chỉ là test đỏ: **mỗi lần mở một POU** người dùng mất focus bàn
+  phím, mất vị trí cuộn, mọi state tạm của trình soạn thảo bị dựng lại, và phím
+  gõ trong khoảng đó bị nuốt lặng lẽ.
+
+  Trong lúc truy nguyên lộ thêm hai đường mất thao tác cùng họ, cùng được sửa:
+  (a) effect `[document]` chạy theo IDENTITY của prop, nên draft refetch dựng
+  lại đúng tài liệu ấy thành object mới cũng đủ để `REPLACE_DOCUMENT` cuốn theo
+  thao tác chưa kịp đi hết vòng buffer (badge tụt về `0/256` sau phím đầu);
+  (b) `FbdEditorPane` sửa `activeNetworkId` bằng passive effect nên gợi ý đi sau
+  tài liệu một commit — trong cửa sổ đó nó trỏ một network không còn tồn tại và
+  `ADD_BLOCK` rơi vào nhánh `action = null`, phím bị nuốt mà không announcement,
+  không đổi badge, không dấu vết.
+
+- Cách sửa:
+  - `programsUrlsEquivalent()` so URL theo NGHĨA (pathname + hash + tập cặp
+    `key=value` có tính lặp), thay cho `===`. Phép sanitize deep-link giữ nguyên
+    sức: thừa/thiếu/khác giá trị tham số vẫn khác nghĩa nên vẫn bị nắn; chỉ thứ
+    tự là thôi bị tính.
+  - `resolveProgramsProject()` phân biệt "chưa có gì" với "đang làm mới thứ đang
+    hiện": chỉ trả `LOADING` khi thật sự chưa có dữ liệu, và không kết luận
+    `NOT_FOUND` hay điều hướng từ một danh sách đang bị thay thế.
+  - `StructuredFbdEditor` giữ mốc nội dung của prop `document` lần gần nhất
+    (`propBaseline`) — prop dựng lại cùng nội dung không mang thông tin mới nên
+    không `REPLACE_DOCUMENT`; mốc đi lên theo cả tiếng vọng nên `Làm mới` vẫn
+    hoàn tác được.
+  - `activeNetworkId` được coi là GỢI Ý: không giải được trong tài liệu hiện tại
+    thì rơi về `state.selection` rồi `networks[0]`, thay vì biến canvas thành
+    "không có network nào".
+
+- Số đo (đo lại, không dẫn số cũ):
+  - `TC-FBD-NAV-001` `--repeat-each=160 --workers=4`: **0 failed / 160 passed**
+    (trước sửa 4/160; trên `main` trước `#695` là 5/40).
+  - `npx vitest --run --environment jsdom src`: **3151 passed / 0 failed**
+    (thêm 6 test hồi quy).
+  - `npm run lint` PASS, `npm run build` PASS.
+  - `npx playwright test` (toàn bộ): 178 passed / 9 failed / 33 skipped — 9 lỗi
+    này **có sẵn trên `main`**, đo đối chứng cùng lệnh cho ra đúng 9 failed /
+    18 passed ở cả hai phía (4 trong số đó thuộc `programming-workspace-height`
+    và đang được `#683` xử lý).
+
+
 ### Fixed — FBD mất block khi thao tác nhanh: tiếng vọng TRỄ của buffer trang ghi đè state đang gõ (2026-09-12)
 
 - Phạm vi: `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`,
