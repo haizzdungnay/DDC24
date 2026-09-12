@@ -128,8 +128,11 @@ describe('FbdEditorPane', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  /* ponytail: TC-FBD-NET-001/002 tạm bỏ — cụm View/Active network ẩn vì chỉ có 1 network.
-   * Bật lại cùng lúc bỏ `false &&` trong FbdEditorPane.tsx. */
+  /* `#674` chốt mô hình MỘT canvas: không còn cụm Chọn/Thêm Network để kiểm,
+   * nên `TC-FBD-NET-001/002` bị thay thế chứ không còn "tạm bỏ". Bằng chứng
+   * thay thế nằm ở `StructuredFbdEditor.test.tsx` (`AC-674-2`, `AC-674-4`):
+   * thanh công cụ không còn lối vào nhiều Network, và tài liệu mô hình cũ mở
+   * chỉ đọc với 0 mutation. */
 
   it('TC-FBD-PREF-001: theme/grid lưu cục bộ mà không đổi canonical buffer', () => {
     const { onChange } = renderPane()
@@ -160,23 +163,22 @@ describe('FbdEditorPane', () => {
   it('PGM-02B: thanh công cụ phụ gom cụm mà KHÔNG mất điều khiển nào', () => {
     /* Gom nhóm là thao tác dễ đánh rơi một điều khiển mà không ai thấy — mắt
        chỉ đếm được "trông gọn hơn". Phép kiểm này đếm đúng 7 điều khiển gốc.
-       ponytail: dải preferences chuyển xuống ngang hàng status bar — phần tử
-       testid `fbd-secondary-toolbar` chính là `role="group"`, không lồng thêm. */
+       Dải preferences nằm ngang hàng status bar — phần tử testid
+       `fbd-secondary-toolbar` chính là `role="group"`, không lồng thêm. */
     renderPane()
     const group = screen.getByTestId('fbd-secondary-toolbar')
     expect(group).toHaveAttribute('role', 'group')
-    /* 3 combobox: `Khung nhìn` (trả lại theo `TC-FBD-RESP-001` — nó chưa từng
-       được chuyển đi đâu, chỉ bị gỡ), `Kiểu dây`, `Giao diện FBD`. Ô chọn
-       `Network hoạt động` vẫn chưa trả lại: không AC nào đang đòi nó, và badge
-       `fbd-active-network` đã nói network đang mở là cái nào. */
+    /* 3 combobox: `Khung nhìn`, `Kiểu dây`, `Giao diện FBD`. Không có ô chọn
+       `Network hoạt động` và cũng sẽ không có: `#674` chốt mô hình một canvas,
+       nên `Khung nhìn` chỉ còn là tuỳ chọn hiển thị của đúng một Network. */
     expect(within(group).getAllByRole('combobox')).toHaveLength(3)
     expect(within(group).getAllByRole('checkbox')).toHaveLength(2)
   })
 
   it('PGM-02B: dải preferences dùng kích thước compact ngang hàng status bar', () => {
-    /* ponytail: preferences chuyển từ toolbar 46px xuống dải text-[11px] ngang
-       status bar. Vùng chạm 44px (`min-h-11`) không còn ở đây; kiểm compact
-       thay thế. Bỏ ponytail → khôi phục min-h-11 khi đưa lại lên toolbar. */
+    /* Preferences nằm ở dải text-[11px] ngang status bar, không phải thanh
+       công cụ 46px cũ (thanh ấy đã bị bỏ hẳn ở `#674`). Vùng chạm 44px
+       (`min-h-11`) vì thế không thuộc dải này; kiểm compact thay thế. */
     renderPane()
     const toolbar = screen.getByTestId('fbd-secondary-toolbar')
     expect(toolbar).toHaveClass('text-[11px]')

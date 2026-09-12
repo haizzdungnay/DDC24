@@ -203,7 +203,12 @@ describe('FBD Task 9 — workbench, diagnostics, status và Auto Layout', () => 
     expect(document.querySelector('[data-fbd-layout-preview]')).toBeNull()
   })
 
-  it('TC-FBD-LAYOUT-001: đổi active network hoặc mất quyền thì hủy preview fail-closed', () => {
+  it('TC-FBD-LAYOUT-001: mất quyền sửa hoặc tài liệu nhiều Network thì hủy preview fail-closed', () => {
+    /* Bản cũ chứng minh nhánh "đổi active network" bằng một tài liệu 2 Network.
+     * `#674` chốt mô hình MỘT canvas, nên tài liệu như thế nay mở chỉ đọc và
+     * nhánh ấy không còn tồn tại để kiểm. Hai nhánh fail-closed còn sống được
+     * giữ nguyên ở đây: mất quyền sửa, và tài liệu mô hình cũ (nhiều Network)
+     * làm chính quyền sửa tắt đi. Cả hai đi qua cùng một effect như trước. */
     const source = golden()
     source.layout = {
       schemaVersion: 1,
@@ -212,40 +217,42 @@ describe('FBD Task 9 — workbench, diagnostics, status và Auto Layout', () => 
         { x: 640 + index * 24, y: 400 + index * 16 },
       ])),
     }
-    source.networks.push({
-      id: '90000000-0000-4000-8000-000000000001',
-      name: 'NETWORK_2',
-      order: 1,
-      nodes: [],
-      wires: [],
-    })
-    const firstNetworkId = source.networks[0].id
-    const secondNetworkId = source.networks[1].id
-    const view = (activeNetworkId: string, canEdit: boolean) => (
+    const legacyMultiNetwork = {
+      ...source,
+      networks: [...source.networks, {
+        id: '90000000-0000-4000-8000-000000000001',
+        name: 'NETWORK_2',
+        order: 1,
+        nodes: [],
+        wires: [],
+      }],
+    }
+    const view = (doc: FbdDocument, canEdit: boolean) => (
       <I18nProvider>
         <StructuredFbdEditor
-          document={source}
+          document={doc}
           canEdit={canEdit}
-          activeNetworkId={activeNetworkId}
+          activeNetworkId={doc.networks[0].id}
           networkView="SELECTED"
           onChange={vi.fn()}
         />
       </I18nProvider>
     )
-    const { rerender } = render(view(firstNetworkId, true))
+
+    const { rerender } = render(view(source, true))
     fireEvent.click(screen.getByRole('button', { name: 'Tự sắp xếp' }))
     expect(document.querySelector('[data-fbd-layout-preview]')).not.toBeNull()
-
-    rerender(view(secondNetworkId, true))
+    rerender(view(source, false))
     expect(document.querySelector('[data-fbd-layout-preview]')).toBeNull()
-    expect(screen.getByRole('status')).toHaveTextContent(/Network hoạt động đã đổi/)
+    expect(screen.getByText(/Quyền chỉnh sửa đã đổi/)).toBeInTheDocument()
 
-    rerender(view(firstNetworkId, true))
+    rerender(view(source, true))
     fireEvent.click(screen.getByRole('button', { name: 'Tự sắp xếp' }))
     expect(document.querySelector('[data-fbd-layout-preview]')).not.toBeNull()
-    rerender(view(firstNetworkId, false))
+    rerender(view(legacyMultiNetwork, true))
     expect(document.querySelector('[data-fbd-layout-preview]')).toBeNull()
-    expect(screen.getByRole('status')).toHaveTextContent(/Quyền chỉnh sửa đã đổi/)
+    expect(screen.getByTestId('fbd-multi-network-lock')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tự sắp xếp' })).toBeDisabled()
   })
 
   it('TC-FBD-WATCH-001: EDIT nói không khả dụng và không phát runtime request', () => {

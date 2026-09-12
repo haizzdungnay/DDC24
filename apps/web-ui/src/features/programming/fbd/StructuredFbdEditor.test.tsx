@@ -239,7 +239,8 @@ describe('StructuredFbdEditor — POU và keyboard/a11y (T59-506)', () => {
   it('Insert vẫn thêm block khi focus đang ở toolbar sau khi Tab tới editor', async () => {
     const onChange = vi.fn()
     renderEditor(golden(), true, onChange)
-    /* ponytail: nút "Network" ẩn — dùng "Thêm khối" thay thế vì cùng toolbar. */
+    /* `#674` bỏ hẳn nút "Network"; "Thêm khối" là nút toolbar tương đương để
+       chứng minh focus quay về vùng editor sau khi Insert từ toolbar. */
     const addBlockButton = screen.getByRole('button', { name: /Thêm khối|Add block/ })
     addBlockButton.focus()
 
@@ -443,5 +444,64 @@ describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () =
     fresh.networks[0].nodes = fresh.networks[0].nodes.slice(0, 1)
     rerender(view(fresh))
     expect(blockBadge()).toBe('1/256 block')
+  })
+
+  /* `#674` — FBD chốt mô hình MỘT canvas. Ba phép kiểm dưới đây khoá hợp đồng
+   * mới ở đúng ba mặt: thanh công cụ không còn mời gọi nhiều Network, phím tắt
+   * còn trong contract không lặng lẽ tạo Network thứ hai, và tài liệu của mô
+   * hình cũ mở được mà không ghi gì. */
+
+  it('AC-674-2: thanh công cụ không còn badge network, badge `Network đang mở` hay nút thêm Network', () => {
+    renderEditor(golden())
+    expect(screen.queryByTestId('fbd-active-network')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Network$/ })).toBeNull()
+    expect(screen.queryByText(/\/256 network/)).toBeNull()
+    // Badge block/wire là số đo của chính canvas nên phải còn nguyên.
+    expect(screen.getByText(/\/256 block/)).toBeInTheDocument()
+    expect(screen.getByText(/\/512 wire/)).toBeInTheDocument()
+  })
+
+  it('AC-674-2: `Control+Shift+n` nói rõ mô hình một canvas thay vì thêm Network', () => {
+    const onChange = vi.fn()
+    renderEditor(golden(), true, onChange)
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+
+    fireEvent.keyDown(editor, { key: 'N', ctrlKey: true, shiftKey: true })
+
+    expect(screen.getByText(/FBD dùng mô hình một canvas|single-canvas model/)).toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('AC-674-4: tài liệu nhiều Network mở chỉ đọc kèm lý do và KHÔNG phát mutation nào', () => {
+    const legacy = golden()
+    legacy.networks.push({
+      id: '90000000-0000-4000-8000-000000000002',
+      name: 'NETWORK_2',
+      order: 1,
+      nodes: [],
+      wires: [],
+    })
+    const onChange = vi.fn()
+    renderEditor(legacy, true, onChange)
+
+    // Lý do phải đọc được, không chỉ là một nút bị mờ đi.
+    const notice = screen.getByTestId('fbd-multi-network-lock')
+    expect(notice).toHaveTextContent(/2 Network|2 networks/)
+    expect(notice).toHaveTextContent(/chỉ đọc|read-only/)
+    expect(notice).toHaveTextContent(/không Network nào bị xóa hay gộp|no network is deleted or merged/)
+    expect(screen.getByText(/Chỉ đọc|Read only/)).toBeInTheDocument()
+
+    // Mọi đường sửa đều đóng: nút toolbar, phím tắt thêm block, phím xóa.
+    expect(screen.getByRole('button', { name: /Thêm khối|Add block/ })).toBeDisabled()
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    fireEvent.keyDown(editor, { key: 'N', ctrlKey: true, shiftKey: true })
+    fireEvent.keyDown(editor, { key: 'Delete' })
+
+    // 0 mutation: hợp đồng của AC-4 là số lần gọi, không phải câu chữ trên màn hình.
+    expect(onChange).not.toHaveBeenCalled()
+    // Và dữ liệu người dùng còn nguyên: không gộp, không xóa Network thừa.
+    expect(legacy.networks).toHaveLength(2)
+    expect(screen.getAllByRole('article')).toHaveLength(2)
   })
 })
