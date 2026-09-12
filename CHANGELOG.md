@@ -8,6 +8,62 @@
 
 ## [Unreleased]
 
+### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
+
+- Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
+  `apps/web-api/internal/modbusrtu/persistence_offline_test.go`, `CHANGELOG.md`.
+  Không chạm `journal.go`, `domain.go`, `control_client.go` hay file nào ngoài
+  `internal/modbusrtu/`. Chữ ký `Persister.Apply` giữ nguyên; `ApplyResult`
+  không thêm field; tập giá trị `TxStaged`/`TxSent`/`TxCommitted`/`TxRolledBack`/
+  `TxUnreachable` giữ nguyên; JSON trả ra của endpoint fieldbus không thêm
+  trường nào (`ConfigPutResult.Warnings` đã có sẵn trong schema).
+
+- Triệu chứng: khi iobus TỪ CHỐI cấu hình mới, `Apply` trả lỗi nói "cấu hình cũ
+  đã được phục hồi" và journal ghi `ROLLED_BACK` — kể cả khi việc phục hồi vừa
+  thất bại. Trên đĩa còn `fieldbus.conf` + `profiles/*.json` của bản MỚI, nên lần
+  khởi động sau iobus nạp đúng cấu hình nó vừa từ chối, trong khi cả API lẫn
+  journal đều đã khai là đã quay về an toàn.
+
+- Nguyên nhân gốc: closure `restore()` — toàn bộ cơ chế quay về của `Apply` — vứt
+  mọi lỗi (`_ = p.WriteFile(...)`, `_ = os.Remove(...)`). Rollback hỏng vì đĩa
+  đầy, EROFS hay mất quyền trên đường dẫn đều đi qua không tiếng động, và trạng
+  thái journal thì do chính nhánh lỗi này tự đặt nên không có số đo nào mâu thuẫn
+  để phát hiện ra. Cùng lớp hồi quy với `#607` (chu kỳ historian nuốt im lỗi ghi
+  gap), lần này ở đường rollback cấu hình fieldbus.
+
+- Cách sửa: `restore()` trả `error`, thu lỗi của từng snapshot và vẫn thử hết các
+  snapshot còn lại (quay về được ba trong bốn file tốt hơn bỏ dở ở file đầu);
+  `os.Remove` trả `ENOENT` không tính là lỗi vì file vắng mặt đã đúng đích.
+  Helper `withRollback` bọc lỗi rollback vào lỗi trả về cho caller và vào
+  `tx.Reason` của journal, dùng chung cho cả `failTx` lẫn nhánh dự phòng
+  `Reload` — hai đường quay về không còn khai hai thứ khác nhau về cùng một sự
+  cố. Lỗi rollback đứng TRƯỚC nguyên nhân gốc trong cả hai chuỗi: `ErrApply` mở
+  đầu bằng "cấu hình cũ đã được phục hồi", đặt nó trước thì người vận hành đọc
+  câu sai trước rồi mới tới câu đính chính. Thứ tự bọc `%w` không đổi kết quả
+  `errors.Is`, nên tầng HTTP vẫn phân loại theo `ErrApply` như cũ.
+
+- Sửa kèm trong cùng nhánh lỗi: ghi `fieldbus.lkg.json` hỏng không còn im lặng —
+  cả lỗi `json.MarshalIndent` lẫn lỗi `WriteFile` đều phát một warning nêu đường
+  dẫn ra `ApplyResult.Warnings`. Apply vẫn thành công (cấu hình mới áp được),
+  nhưng bản last-known-good vắng mặt là thứ người vận hành phải biết TRƯỚC khi
+  cần tới nó. Năm lệnh `_ = p.Journal.Write(tx)` giữ nguyên: journal là đường phụ
+  trợ và lần ghi đầu đã xử lý lỗi đúng cách.
+
+- Số đo (2026-09-11, đo tại máy trên commit của nhánh này; không dẫn lại số cũ):
+  - Chứng minh fail-close bằng tiêm lỗi thật: `git stash` riêng `persistence.go`
+    (giữ nguyên test mới) ⇒ **3/3 test mới FAIL**, exit `1`, thông điệp đỏ là
+    khẳng định thật chứ không phải lỗi biên dịch — test không tham chiếu symbol
+    nào chỉ có ở bản sửa. Trả lại bản sửa ⇒ `ok`, exit `0`.
+  - `go test ./internal/modbusrtu/... -count=1 -v -run 'Persist|RollsBack|Apply'`:
+    **5/5 PASS**, exit `0` — gồm `TestPersisterRollsBackWhenReloadFails` (đường
+    rollback thành công, hành vi không đổi) và ba test mới.
+  - `go vet ./...` exit `0`; `go test ./... -count=1` **21/21 package `ok`**,
+    exit `0` (3 package không có test file); `internal/app` 34.760s,
+    `internal/programming/application` 20.148s, `internal/modbusrtu` 0.079s.
+  - `gofmt -l` trên hai file đã sửa: **rỗng**.
+  - C++ `NOT_RUN` (không chạm `apps/core/**`, `apps/iobus/**`, `contracts/`);
+    FE `NOT_RUN` (không chạm `apps/web-ui/**`); E2E `NOT_RUN` (không chạm trang
+    mạng); Docs `NOT_RUN` (không chạm `docs/**`); CI `NOT_RUN (#414)`.
 ### Changed — `#608`: hai brief yêu cầu ở thư mục gốc vào Document Hub, có mã hồ sơ `DD-01` (2026-09-11)
 
 - Phạm vi: `d.md` → `docs/CHUONG_YEU_CAU/PROGRAMMING_WORKSPACE_REBUILD_BRIEF.md`
