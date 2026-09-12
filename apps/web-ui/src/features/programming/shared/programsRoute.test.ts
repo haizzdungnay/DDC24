@@ -4,6 +4,7 @@ import {
   canonicalProgramsPath,
   isProgramsWorkspaceMode,
   programsWorkspacePath,
+  programsUrlsEquivalent,
   resolveProgramsProject
 } from './programsRoute'
 
@@ -84,5 +85,52 @@ describe('PGM-02 v2 — Project resolver fail closed', () => {
     expect(resolveProgramsProject('ready', projects, 'p2')).toEqual({ kind: 'READY', project: projects[1] })
     expect(resolveProgramsProject('ready', projects, 'missing')).toEqual({ kind: 'NOT_FOUND' })
     expect(resolveProgramsProject('ready', projects, '')).toEqual({ kind: 'NOT_FOUND' })
+  })
+
+  /**
+   * Làm mới nền KHÔNG được tháo bề mặt đang mở. `status === 'loading'` mang hai
+   * nghĩa — "chưa có gì" và "đang làm mới thứ đang hiện" — và trả `LOADING` cho
+   * cả hai khiến route đổi nhánh render, React tháo toàn bộ workspace rồi dựng
+   * lại: mất focus bàn phím, mất vị trí cuộn, mất luôn phím gõ trong khoảng đó
+   * (đo được ở `TC-FBD-NAV-001`).
+   */
+  it('đang làm mới danh sách thì giữ nguyên Project đang mở, không tháo workspace', () => {
+    expect(resolveProgramsProject('loading', projects, 'p2')).toEqual({ kind: 'READY', project: projects[1] })
+  })
+
+  it('đang làm mới thì KHÔNG kết luận NOT_FOUND hay điều hướng theo danh sách cũ', () => {
+    // Project vừa tạo có thể chưa vào danh sách — bản cũ không đủ tư cách phủ nhận.
+    expect(resolveProgramsProject('loading', projects, 'missing')).toEqual({ kind: 'LOADING' })
+    // Không có `?project=`: mọi nhánh còn lại đều điều hướng, nên phải chờ.
+    expect(resolveProgramsProject('loading', [projects[0]], null)).toEqual({ kind: 'LOADING' })
+    expect(resolveProgramsProject('loading', projects, null)).toEqual({ kind: 'LOADING' })
+  })
+})
+
+/**
+ * Route canonical so URL hiện tại với bản dựng lại để chặn deep-link rác. So
+ * bằng `===` biến THỨ TỰ query thành một khác biệt, và mỗi khác biệt là một
+ * `<Navigate>` — tức tháo cả workspace rồi dựng lại, mất focus và mất phím
+ * đang gõ. Phép so phải theo nghĩa, nhưng KHÔNG được nới tới mức bỏ sót tham
+ * số lạ (đó mới là việc của nó).
+ */
+describe('programsUrlsEquivalent', () => {
+  const canonical = '/eng/programming/programs?project=p1&pou=u1&mode=EDIT'
+
+  it('khác thứ tự query là CÙNG một địa chỉ', () => {
+    expect(programsUrlsEquivalent('/eng/programming/programs?project=p1&mode=EDIT&pou=u1', canonical)).toBe(true)
+  })
+
+  it('thừa/thiếu/khác giá trị vẫn là địa chỉ KHÁC', () => {
+    expect(programsUrlsEquivalent('/eng/programming/programs?project=p1&pou=u1&mode=EDIT&junk=1', canonical)).toBe(false)
+    expect(programsUrlsEquivalent('/eng/programming/programs?project=p1&mode=EDIT', canonical)).toBe(false)
+    expect(programsUrlsEquivalent('/eng/programming/programs?project=p1&pou=u2&mode=EDIT', canonical)).toBe(false)
+    expect(programsUrlsEquivalent('/eng/programming/projects/p1/programs?project=p1&pou=u1&mode=EDIT', canonical)).toBe(false)
+  })
+
+  it('hash và key lặp đều được tính', () => {
+    expect(programsUrlsEquivalent(`${canonical}#top`, canonical)).toBe(false)
+    expect(programsUrlsEquivalent(`${canonical}&line=1&line=2`, `${canonical}&line=2&line=1`)).toBe(true)
+    expect(programsUrlsEquivalent(`${canonical}&line=1&line=1`, `${canonical}&line=1`)).toBe(false)
   })
 })

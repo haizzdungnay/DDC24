@@ -8,7 +8,7 @@ import (
 
 // FlexBool là boolean đọc được cả `true`/`false` lẫn `1`/`0`.
 //
-// VÌ SAO CẦN
+// # VÌ SAO CẦN
 //
 // `fieldbus.conf` có hai bên đọc, và hai bên từng bất đồng về kiểu của
 // `enabled`: iobus (C++) đọc bằng `strtol` nên chỉ hiểu SỐ, còn BE (Go) khai

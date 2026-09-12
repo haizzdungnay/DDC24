@@ -142,6 +142,52 @@ def extract_all_runs(body: str, name: str) -> list[str]:
     return out
 
 
+# Nhãn của trường "người mở finding" trong `.github/ISSUE_TEMPLATE/03-finding.yml`.
+# Mẫu dùng nhãn `Finder-Run` kể từ #653; các finding mở trước đó mang nhãn tiếng
+# Việt nguyên văn, nên giữ đường đọc ngược thay vì để chúng ra ngoài tầm cổng.
+FINDER_FIELD_NAMES = ("Finder-Run", "Phát hiện bởi (vai + định danh phiên)")
+
+
+# Định danh phiên như WF-CLEAN-001 §7 định nghĩa: URL phiên agent, hoặc
+# `<vai>-YYYYMMDDThhmmZ`.
+RUN_TOKEN = re.compile(r"https?://\S+|[A-Za-zÀ-ỹ]+-\d{8}T\d{4,6}Z")
+
+
+def run_token(value: str | None) -> str | None:
+    """Rút đúng định danh phiên ra khỏi một giá trị có kèm mô tả vai.
+
+    Nhãn cũ của mẫu finding là "Phát hiện bởi (vai + định danh phiên)", nên các
+    finding đã mở ghi cả hai thứ trên một dòng: `Implementer — https://…`.
+    So nguyên văn chuỗi đó với `Implementer-Run` (chỉ có URL) thì không bao giờ
+    khớp, và cổng N1-FINDER sẽ im lặng bỏ qua đúng lớp Issue nó sinh ra để canh.
+
+    Chỉ dùng cho giá trị `Finder-Run`. `Manager-Run`/`Implementer-Run`/
+    `Reviewer-Run` vẫn so nguyên văn như trước để N1-SELF/N2-SELF không đổi
+    hành vi trong PR này.
+    """
+    if value is None:
+        return None
+    match = RUN_TOKEN.search(value)
+    if not match:
+        return value
+    # `\S+` của nhánh URL nuốt cả dấu câu kết câu; bỏ chúng đi, nếu không một
+    # URL viết cuối câu sẽ không bao giờ khớp giá trị `Implementer-Run` sạch.
+    return match.group(0).rstrip(".,;")
+
+
+def extract_finder_run(body: str) -> str | None:
+    """Định danh phiên đã MỞ Issue, khi Issue vào bằng mẫu finding.
+
+    Trả `None` cho Issue không phải finding (mẫu 01/02 không có trường này) —
+    ở đó người tạo Issue chính là Manager và `Manager-Run` đã đủ để kiểm N1.
+    """
+    for name in FINDER_FIELD_NAMES:
+        value = extract_field(body, name)
+        if value is not None:
+            return run_token(value)
+    return None
+
+
 def linked_issues(body: str) -> list[int]:
     """Số hiệu Issue mà PR tuyên bố đóng.
 
@@ -324,7 +370,9 @@ def check(pr: dict, issue: dict | None, comments: list[dict], labels: set[str]) 
                 "N1-MGR",
                 f"Issue #{issue['number']} thiếu trường `Manager-Run`. Không có "
                 "nó thì không chứng minh được người tạo Issue khác người "
-                "implement. Manager phải bổ sung vào body Issue.",
+                "implement. **Vai Manager** bổ sung vào body Issue ở lượt triage; "
+                "Implementer tự điền ô này là bịa ra một lượt triage chưa từng "
+                "xảy ra — cùng loại vi phạm với tự gắn `review:pass`.",
             )
         elif same_run(manager_run, implementer_run):
             report.fail(
@@ -332,6 +380,33 @@ def check(pr: dict, issue: dict | None, comments: list[dict], labels: set[str]) 
                 f"`Manager-Run` của Issue #{issue['number']} trùng "
                 f"`Implementer-Run` của PR (`{manager_run}`). Người tạo Issue "
                 "không được tự implement (WF-CLEAN-001 §1 N1).",
+            )
+
+        # N1 viết nguyên văn "người TẠO Issue không được tự implement". Trên
+        # Issue dạng finding, người tạo là người PHÁT HIỆN — Manager chỉ triage
+        # về sau — nên đối chiếu `Manager-Run` một mình không phủ được câu chữ
+        # đó cho lớp Issue này: một phiên mở finding rồi tự implement nó vẫn đi
+        # lọt chừng nào ô `Manager-Run` mang giá trị của người khác.
+        # Nguồn: finding #653.
+        finder_run = extract_finder_run(issue.get("body") or "")
+        if finder_run is not None and same_run(finder_run, implementer_run):
+            report.fail(
+                "N1-FINDER",
+                f"`Finder-Run` của Issue #{issue['number']} trùng "
+                f"`Implementer-Run` của PR (`{finder_run}`). Người mở finding "
+                "không được tự implement nó (WF-CLEAN-001 §1 N1): finding phải "
+                "qua một lượt Manager triage rồi giao cho phiên khác.",
+            )
+        elif finder_run is not None and same_run(finder_run, run_token(manager_run)):
+            # GHI NHẬN, KHÔNG chặn. N1 vẫn đứng ở đây — nhánh trên đã kiểm người
+            # tạo khác người implement. Thứ không chứng minh được từ dữ liệu chỉ
+            # là đã có một lượt Manager triage thật hay chưa, và chặn merge vì
+            # điều đó sẽ khoá luôn ca hợp lệ: Manager tự phát hiện rồi tự triage.
+            report.note(
+                f"CẢNH BÁO triage: Issue #{issue['number']} có `Manager-Run` "
+                f"trùng `Finder-Run` (`{finder_run}`) — người mở finding tự điền "
+                "ô triage. Reviewer xác nhận bằng tay rằng đã có một lượt Manager "
+                "thật cho scope/AC/priority trước khi merge (WF-CLEAN-001 §2.1)."
             )
 
         issue_states = {lbl for lbl in issue_labels(issue) if lbl in STATE_LABELS}
@@ -866,6 +941,127 @@ def selftest() -> int:
     )
     expect("hai dòng khác nhau ⇒ không cảnh báo", not any("truy xuất" in n for n in distinct.notes))
     expect("một dòng duy nhất ⇒ không cảnh báo", not any("truy xuất" in n for n in passing.notes))
+
+    # --- Issue dạng finding: N1 trên người MỞ finding (finding #653) -------
+    finder_issue = {
+        "number": 10,
+        "body": "### Finder-Run\n\nimpl-1\n\n### Manager-Run\n\nmgr-1\n",
+        "labels": [{"name": "state:in-review"}],
+    }
+    legacy_issue = {
+        **finder_issue,
+        "body": (
+            "### Phát hiện bởi (vai + định danh phiên)\n\nimpl-1\n\n"
+            "Manager-Run: mgr-1\n"
+        ),
+    }
+    expect("run_token rút URL khỏi mô tả vai",
+           run_token("Implementer — https://claude.ai/code/session_A") == "https://claude.ai/code/session_A")
+    expect("run_token rút định danh dạng <vai>-<thời điểm>",
+           run_token("Reviewer — reviewer-20260909T0430Z") == "reviewer-20260909T0430Z")
+    expect("run_token giữ nguyên giá trị không nhận dạng được", run_token("impl-1") == "impl-1")
+    expect("run_token bỏ dấu câu kết câu bám vào URL",
+           run_token("Phát hiện bởi Implementer — https://claude.ai/code/session_A.")
+           == "https://claude.ai/code/session_A")
+
+    expect("run_token None", run_token(None) is None)
+    expect("finder-run đọc được nhãn mới", extract_finder_run(finder_issue["body"]) == "impl-1")
+    expect("finder-run đọc được nhãn cũ", extract_finder_run(legacy_issue["body"]) == "impl-1")
+    expect("issue không phải finding thì không có finder-run",
+           extract_finder_run(good_issue["body"]) is None)
+
+    # Lỗ hổng mà #653 mở ra nếu chỉ thêm ô vào mẫu: người mở finding tự
+    # implement nó, ô `Manager-Run` mang giá trị người khác nên N1-SELF im.
+    self_finding = check(good_pr, finder_issue, [verdict("PASS", "rev-1")], {"review:pass"})
+    expect("N1 bắt người mở finding tự implement",
+           any(e.startswith("N1-FINDER") for e in self_finding.errors))
+    expect("N1-SELF im trên ca này (vì thế mới cần N1-FINDER)",
+           not any(e.startswith("N1-SELF") for e in self_finding.errors))
+    legacy_self = check(good_pr, legacy_issue, [verdict("PASS", "rev-1")], {"review:pass"})
+    expect("N1-FINDER áp cả cho finding mở bằng nhãn cũ",
+           any(e.startswith("N1-FINDER") for e in legacy_self.errors))
+
+    prose_issue = {
+        **finder_issue,
+        "body": (
+            "### Phát hiện bởi (vai + định danh phiên)\n\n"
+            "Implementer — https://claude.ai/code/session_A\n\n"
+            "Manager-Run: mgr-1\n"
+        ),
+    }
+    prose_pr = {
+        "number": 1,
+        "body": (
+            "Closes #10\n- **Implementer-Run:** https://claude.ai/code/session_A\n\n"
+            "## Verification\n\n| Cổng | Lệnh | Kết quả |\n|---|---|---|\n"
+            "| Go | `go test` | 42/42 PASS |\n"
+        ),
+    }
+    prose_self = check(prose_pr, prose_issue, [verdict("PASS", "rev-1")], {"review:pass"})
+    expect("N1-FINDER bắt được cả giá trị có kèm mô tả vai",
+           any(e.startswith("N1-FINDER") for e in prose_self.errors))
+    prose_other = check(
+        {**prose_pr, "body": prose_pr["body"].replace("session_A", "session_B")},
+        prose_issue, [verdict("PASS", "rev-1")], {"review:pass"},
+    )
+    expect("phiên khác implement finding đó thì không chặn", prose_other.errors == [])
+
+    waived_finding = apply_waiver(
+        check(good_pr, finder_issue, [{"body": "GATE-WAIVED: chủ sở hữu duyệt", "user": {"login": "c"}}],
+              {"gate:waived"}),
+        {"gate:waived"},
+        [{"body": "GATE-WAIVED: chủ sở hữu duyệt", "user": {"login": "c"}}],
+    )
+    expect("gate:waived KHÔNG miễn N1-FINDER",
+           any(e.startswith("N1-FINDER") for e in waived_finding.errors))
+
+    ok_finding = check(
+        good_pr,
+        {**finder_issue, "body": "### Finder-Run\n\nfind-9\n\n### Manager-Run\n\nmgr-1\n"},
+        [verdict("PASS", "rev-1")],
+        {"review:pass"},
+    )
+    expect("finding triage đúng cách thì merge được", ok_finding.errors == [])
+
+    # Tự-triage: ghi nhận, KHÔNG chặn — N1 vẫn đứng vì người mở khác người làm.
+    self_triage = check(
+        good_pr,
+        {**finder_issue, "body": "### Finder-Run\n\nfind-9\n\n### Manager-Run\n\nfind-9\n"},
+        [verdict("PASS", "rev-1")],
+        {"review:pass"},
+    )
+    expect("tự-triage ⇒ có cảnh báo triage", any("CẢNH BÁO triage" in n for n in self_triage.notes))
+    expect("cảnh báo triage KHÔNG chặn merge", self_triage.errors == [])
+
+    # Ô `Manager-Run` để trống theo mẫu vẫn phải fail-closed bằng N1-MGR: đó là
+    # trạng thái ĐÚNG của finding chưa được Manager triage.
+    untriaged = check(
+        good_pr,
+        {**finder_issue, "body": "### Finder-Run\n\nfind-9\n\n### Manager-Run\n\n_No response_\n"},
+        [verdict("PASS", "rev-1")],
+        {"review:pass"},
+    )
+    expect("finding chưa triage vẫn chặn bằng N1-MGR",
+           any(e.startswith("N1-MGR") for e in untriaged.errors))
+
+    # Cổng canh drift giữa guard và mẫu Issue: nếu ai đó đổi nhãn trường trong
+    # `03-finding.yml` mà không đổi `FINDER_FIELD_NAMES`, cổng N1-FINDER mất tác
+    # dụng trong im lặng — đúng lớp lỗi mà #653 đang vá.
+    template_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..", ".github", "ISSUE_TEMPLATE", "03-finding.yml",
+    )
+    try:
+        with open(template_path, encoding="utf-8") as handle:
+            template_text = handle.read()
+    except OSError:
+        template_text = ""
+    expect("đọc được 03-finding.yml", bool(template_text))
+    expect("mẫu finding khai nhãn Finder-Run mà guard đang đọc",
+           'label: "Finder-Run"' in template_text
+           and "Finder-Run" in FINDER_FIELD_NAMES)
+    expect("mẫu finding có ô Manager-Run cho bước triage",
+           'id: manager_run' in template_text and 'label: "Manager-Run"' in template_text)
 
     failed = [name for name, ok in cases if not ok]
     for name, ok in cases:

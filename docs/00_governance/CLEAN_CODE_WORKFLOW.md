@@ -1,10 +1,10 @@
 # Quy trình Clean Code & Clean Documentation — MK-DDC-24
 
 **ID:** `WF-CLEAN-001`
-**Phiên bản:** 1.3
+**Phiên bản:** 1.4
 **Trạng thái:** Active
 **Chủ quản:** CTO / Project Engineering
-**Cập nhật:** 2026-09-11 (`§6.1a` + `§6.2`: `docs_iso_harness.py --expect` và `workflow_guard.py --selftest` có đường chạy trong `scripts/verify-project.sh`; xem bảng Lịch sử sửa đổi cuối hồ sơ để biết đầy đủ các bản 1.1–1.3)
+**Cập nhật:** 2026-09-11 (`§1` N1 + `§3.2` + `§7`: mẫu finding có ô `Manager-Run` cho lượt triage, ô người mở đổi nhãn thành `Finder-Run`, guard thêm mã chặn `N1-FINDER`; xem bảng Lịch sử sửa đổi cuối hồ sơ để biết đầy đủ các bản 1.1–1.4)
 
 Tài liệu này là **authority duy nhất** cho quy trình dọn dẹp mã nguồn và tài liệu
 DDC-24. Khi nội dung ở `AGENTS.md`, `CLAUDE.md` hoặc skill khác nhau, bản này đúng.
@@ -19,7 +19,7 @@ liệu) và [`DOC-CTRL-001`](CONTROL.md) (thẩm quyền tài liệu). Hai hồ 
 
 | # | Nguyên tắc | Cách thi hành |
 |---|---|---|
-| N1 | **Người tạo Issue không được tự implement.** | Issue mang `Manager-Run`; PR mang `Implementer-Run`. Guard CI chặn khi hai giá trị trùng nhau. |
+| N1 | **Người tạo Issue không được tự implement.** | Issue mang `Manager-Run`; PR mang `Implementer-Run`. Guard CI chặn khi hai giá trị trùng nhau (`N1-SELF`). Với Issue vào bằng mẫu finding, người **tạo** là người phát hiện chứ không phải Manager, nên Issue mang thêm `Finder-Run` và guard chặn khi nó trùng `Implementer-Run` (`N1-FINDER`). |
 | N2 | **Người implement không được tự merge.** | Merge chỉ mở khi có nhãn `review:pass` do vai Reviewer gắn, kèm comment verdict mang `Reviewer-Run` khác `Implementer-Run`. |
 | N3 | **Mọi thay đổi trace được Issue → PR → Test → Merge → Close.** | Guard CI bắt buộc PR liên kết đúng một Issue bằng `Closes #N`, và bắt buộc khối Evidence có lệnh + số đo thật. |
 | N4 | **Không có bằng chứng thì không có PASS.** | `NOT_RUN`/`BLOCKED` là trạng thái hợp lệ; ghi PASS mà không có số đo là vi phạm nghiêm trọng. |
@@ -182,6 +182,37 @@ Không có ai khác canh việc này.
 bằng `.github/ISSUE_TEMPLATE/03-finding.yml` ở `state:triage`, dẫn PR đã merge
 làm nguồn. Issue đã đóng là bản ghi của một quyết định có ngày; sửa lại nó làm
 mất dấu vết vì sao khi đó mọi người tưởng là xong.
+
+### 3.2 Triage một finding — bước không được quên
+
+Issue vào bằng `.github/ISSUE_TEMPLATE/03-finding.yml` có **hai** định danh
+phiên, thuộc hai người khác nhau:
+
+| Trường | Ai điền | Khi nào |
+|---|---|---|
+| `Finder-Run` | Implementer/Reviewer phát hiện lỗi | lúc mở finding |
+| `Manager-Run` | **Manager** | lúc triage finding lên `state:ready` |
+
+Ô `Manager-Run` của mẫu finding **để trống khi mở**. Manager điền nó ở đúng lượt
+cho scope, acceptance criteria, Source ownership và `priority:*`. Trước lúc đó
+guard chặn mọi PR thực hiện finding bằng `N1-MGR` — đó là trạng thái **đúng**,
+không phải hỏng: một finding chưa qua tay Manager thì chưa có scope để implement.
+
+Ba điều dễ làm sai, cả ba đều có cổng hoặc dấu vết:
+
+1. **Người mở finding tự điền `Manager-Run` của mình.** Đó là bịa ra một lượt
+   triage chưa từng xảy ra, cùng loại với tự gắn `review:pass`. Guard ghi
+   `CẢNH BÁO triage` khi `Manager-Run` trùng `Finder-Run`; cảnh báo này **không**
+   chặn merge (Manager tự phát hiện rồi tự triage là ca hợp lệ), nên Reviewer
+   phải tự xác nhận đã có một lượt Manager thật.
+2. **Người mở finding tự implement nó.** Guard chặn bằng `N1-FINDER`, kể cả khi
+   PR đã có `review:pass` và kể cả khi PR mang `gate:waived` — `gate:waived` chỉ
+   miễn `N2-GATE`/`N2-VERDICT` (§8.4).
+3. **Finding mở trước 2026-09-11** mang nhãn cũ `Phát hiện bởi (vai + định danh
+   phiên)` và thường ghi cả mô tả vai lẫn định danh trên một dòng. Guard đọc
+   được cả nhãn cũ và tự rút định danh phiên ra khỏi phần mô tả, nên các finding
+   đó vẫn nằm trong tầm cổng; Manager vẫn phải thêm một dòng `Manager-Run: <id>`
+   vào body khi triage chúng.
 
 ## 4. Nhãn chuẩn
 
@@ -397,6 +428,7 @@ Mỗi mắt xích là một trường bắt buộc, guard CI kiểm được:
 | Mắt xích | Nơi ghi | Trường |
 |---|---|---|
 | Issue | body Issue | `Manager-Run: <định danh phiên Manager>` |
+| Issue dạng finding | body Issue | thêm `Finder-Run: <định danh phiên đã phát hiện>` — xem §3.2 |
 | PR ↔ Issue | body PR | `Closes #<issue>` |
 | PR ↔ người làm | body PR | `Implementer-Run: <định danh phiên Implementer>` |
 | Test | body PR, mục `## Kiểm chứng` | bảng lệnh + số đo thật |
@@ -965,6 +997,7 @@ Phân biệt với hai tình huống nhìn giống nhau:
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-09 | Thiết lập ban đầu: ba vai, ma trận quyền, workflow state, nhãn, branch/merge rule, quality gate, truy xuất và lịch chạy. |
+| 1.4 | 2026-09-11 | `§1` N1 + `§3.2` mới + `§7`: mẫu `03-finding.yml` không có ô `Manager-Run`, nên mọi finding được triage lên `state:ready` đều bị `N1-MGR` chặn merge ở bước cuối — một lớp Issue không bao giờ merge được, và lối thoát nhanh nhất là Implementer tự bịa một dòng `Manager-Run`. Mẫu nay có ô `Manager-Run` dành riêng cho lượt triage của Manager, và ô người mở đổi nhãn thành `Finder-Run`. Vì trên finding người **tạo** Issue là người phát hiện chứ không phải Manager, guard thêm mã chặn `N1-FINDER` (người mở finding tự implement) và ghi nhận `CẢNH BÁO triage` (tự điền ô triage). Refs `#653`. |
 | 1.3 | 2026-09-11 | `§6.1a` + `§6.2`: `python3 scripts/docs_iso_harness.py --expect` và `python3 scripts/workflow_guard.py --selftest` nay có đường chạy trong `scripts/verify-project.sh` (`--component docs`, `--component workflow`). Trước đó selftest của guard chỉ tồn tại trong job `guard-selftest` của Actions, mà Actions không có runner (`#414`) — tức `scripts/workflow_guard.py`, file N1/N2 dựa vào, là mã không cổng nào bảo vệ khi bị sửa. Ghi rõ: ai chạm guard thì bắt buộc chạy selftest và dán số đo. Refs `#593`. |
 | 1.2 | 2026-09-11 | `§8.4` bước 2: điều kiện chọn Issue thành hai vế bắt buộc — `state:ready` VÀ một nhãn `wf:*` thuộc làn dọn dẹp; trước đó chỉ lọc `state:ready` nên Issue `enhancement`/`question` có thể lọt vào làn tự-merge. Thêm `§8.5` (thay phiên điều phối 2–3 ngày một lần, kèm số đo trần context và prompt chờ lệnh) và `§8.6` (nhận diện chặn tạm thời khi sinh phiên, kèm bảng phân biệt ba hiện tượng nhìn giống nhau). |
 | 1.1 | 2026-09-10 | §8: hai Routine đã chạy thật, kèm số hiệu trigger và phiên điều phối. Thêm `§8.1a` (cơ chế điều phối qua phiên bền — cơ chế thứ tư, chạy được) đính chính kết luận "chỉ tạo được từ giao diện claude.ai" của `§8.1`. Thêm `§8.3` (prompt vai Manager — mục mà Routine Auditor vẫn trỏ tới nhưng trước đó không tồn tại) và `§8.4` (làn Routine Implementer mỗi giờ: khoá thực thi hai lớp, nhánh `clean-code/issue-<số>`, tự merge qua `gate:waived`). Ghi lại phép đo neo phút của `create_trigger`/`update_trigger`. Cập nhật `§5` và `§9`. |

@@ -119,9 +119,39 @@ run_cpp() {
     --parallel "${MKDDC_TEST_JOBS:-4}"
 }
 
+# `gofmt -l` in ra TÊN các file lệch định dạng và vẫn thoát 0, nên nó chỉ thành
+# cổng khi ta tự biến output khác rỗng thành lỗi — đó là việc của hàm này.
+#
+# Vì sao cần một cổng riêng thay vì tin vào `go vet`/`go test`: #644 đo tại
+# `b8eed74` thấy CHÍN file mã sản phẩm và test lệch `gofmt` trong khi cả hai cổng
+# kia xanh; tiêm lại một file lệch để kiểm thì `go vet ./internal/modbusrtu/...`
+# vẫn exit 0 và `go test ./internal/modbusrtu/... -count=1` vẫn `ok`. Hai cổng kia
+# đọc NGHĨA của chương trình, còn khoảng trắng và căn cột thì không đổi nghĩa —
+# nên không cổng nào hiện có nhìn thấy lớp lệch này, và số file lệch chỉ tăng.
+#
+# Hệ quả không phải chuyện thẩm mỹ: ai sửa một file đang lệch bằng editor có
+# `format on save` sẽ kéo theo một khối reformat không liên quan vào PR của mình,
+# và Reviewer phải tách thay đổi thật khỏi nhiễu định dạng — hoặc bỏ qua cả khối.
+#
+# Đặt ở ĐẦU `run_go`, trước phần đòi production tool từ build C++: cổng này không
+# cần binary nào, nên nó chạy được cả khi chưa build `cpp` và đỏ sau vài trăm ms
+# thay vì sau một lượt build đầy đủ.
+require_gofmt_clean() {
+  local go_dir="$1"
+  local drifted
+  drifted="$(cd "$repo_root/$go_dir" && gofmt -l .)"
+  if [ -n "$drifted" ]; then
+    printf 'LỖI: file Go lệch gofmt trong %s:\n' "$go_dir" >&2
+    printf '%s\n' "$drifted" >&2
+    printf '      sửa bằng: (cd %s && gofmt -w .)\n' "$go_dir" >&2
+    return 1
+  fi
+}
+
 run_go() {
   local go_dir
   go_dir="$(active_path web-api)"
+  require_gofmt_clean "$go_dir"
 	local compiler_binary="$build_root/cpp-full/core/mkddc-st-compile"
 	local packager_binary="$build_root/cpp-full/core/mkddc-st-package"
 	# Sim worker cũng là production tool của cổng Go: `client_test.go` spawn ĐÚNG

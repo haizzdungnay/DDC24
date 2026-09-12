@@ -384,6 +384,48 @@ describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () =
     expect(blockBadge()).toBe(`${before + 2}/256 block`)
   })
 
+  it('prop dựng lại cùng nội dung (object mới) không được cuốn theo phím đầu tiên', () => {
+    /* Ngay sau khi tạo POU, draft refetch dựng lại đúng tài liệu ấy thành một
+     * object khác. Effect chạy theo identity của prop, nên nếu không so nội
+     * dung thì `REPLACE_DOCUMENT` cuốn theo thao tác vừa làm mà chưa kịp đi hết
+     * một vòng buffer — đúng triệu chứng badge tụt về `0/256` sau phím đầu. */
+    const base = golden()
+    const view = (doc: FbdDocument) => (
+      <I18nProvider>
+        <StructuredFbdEditor document={doc} canEdit onChange={() => undefined} />
+      </I18nProvider>
+    )
+    const { rerender } = render(view(base))
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    const before = Number(blockBadge().split('/')[0])
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+
+    rerender(view(JSON.parse(JSON.stringify(base)) as FbdDocument))
+    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+  })
+
+  it('gợi ý `activeNetworkId` lạc hậu không được nuốt lệnh Thêm block', () => {
+    /* `FbdEditorPane` sửa `activeNetworkId` bằng passive effect nên nó đi sau
+     * tài liệu đúng một commit. Trong cửa sổ đó gợi ý trỏ một network không còn
+     * tồn tại; tin nó vô điều kiện thì `ADD_BLOCK` rơi vào nhánh `action = null`
+     * và phím bị nuốt lặng lẽ. */
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor
+          document={golden()}
+          canEdit
+          onChange={() => undefined}
+          activeNetworkId="00000000-0000-4000-8000-00000000dead"
+        />
+      </I18nProvider>,
+    )
+    const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
+    const before = Number(blockBadge().split('/')[0])
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+  })
+
   it('tài liệu THẬT từ bên ngoài vẫn thay thế được state đang gõ', () => {
     const published: FbdDocument[] = []
     const view = (doc: FbdDocument) => (

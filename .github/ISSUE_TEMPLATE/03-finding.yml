@@ -14,10 +14,15 @@ body:
         Issue mở bằng mẫu này **không được tự implement ngay**: nó ở
         `state:triage` cho tới khi Manager cho scope, AC và ưu tiên (N1).
 
+        **Hai trường định danh phiên ở mẫu này thuộc hai người khác nhau.**
+        `Finder-Run` là của bạn — người mở finding. `Manager-Run` ở cuối mẫu là
+        của phiên Manager triage về sau; **để trống**, đừng điền hộ.
+
   - type: input
     id: found_by
     attributes:
-      label: "Phát hiện bởi (vai + định danh phiên)"
+      label: "Finder-Run"
+      description: "Định danh phiên ĐANG MỞ finding này, ghi một mình: URL phiên agent, hoặc <vai>-YYYYMMDDThhmmZ. Guard so nguyên văn giá trị này với Implementer-Run của PR để thi hành N1 — phiên ghi ở đây không được là phiên implement finding."
       placeholder: "implementer-20260909T0430Z"
     validations:
       required: true
@@ -44,3 +49,23 @@ body:
       label: "Tác động nếu không sửa"
     validations:
       required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        ### Phần dưới đây do vai Manager điền khi triage
+
+        Người **mở** finding để trống phần này. Guard chặn merge bằng `N1-MGR`
+        chừng nào nó còn trống — đó là trạng thái **đúng** của một finding chưa
+        được triage.
+
+  - type: input
+    id: manager_run
+    attributes:
+      label: "Manager-Run"
+      description: "CHỈ vai Manager điền, ở đúng lượt triage finding này lên state:ready kèm scope, AC và priority. Tự điền phiên của mình vào đây khi không phải Manager là bịa ra một lượt triage chưa từng xảy ra — cùng loại vi phạm với tự gắn review:pass."
+      placeholder: "để trống khi mở finding — Manager điền lúc triage"
+    validations:
+      required: false

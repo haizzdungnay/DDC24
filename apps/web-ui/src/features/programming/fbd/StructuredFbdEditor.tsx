@@ -174,6 +174,16 @@ export function StructuredFbdEditor({
    * thật từ bên ngoài (Làm mới, đổi POU, draft đồng bộ) không nằm trong hàng
    * đợi này nên vẫn được áp dụng ngay. */
   const pendingEchoes = useRef<string[]>([])
+  /* Nội dung của prop `document` mà editor ĐÃ thấy lần gần nhất. Effect dưới
+   * chạy theo IDENTITY của prop, mà trang có thể dựng lại cùng một tài liệu
+   * thành object mới (draft refetch ngay sau khi tạo POU trả về chuỗi khác
+   * nhau về hình thức nhưng giống nhau về nội dung). Không so nội dung thì
+   * `REPLACE_DOCUMENT` coi đó là thay đổi từ bên ngoài và cuốn theo thao tác
+   * vừa làm nhưng chưa kịp đi hết một vòng buffer — đúng triệu chứng phím
+   * `Insert` ĐẦU TIÊN bị nuốt (badge tụt về `0/256`) khi gõ ngay sau khi tạo
+   * POU. Mốc này đi lên theo cả tiếng vọng, nên `Làm mới` vẫn hoàn tác được:
+   * lúc ấy nội dung committed KHÁC nội dung editor vừa phát ra. */
+  const propBaseline = useRef(canonicalFbdJson(document))
   /* Port nay là phần tử SVG (`<g role="button">`) chứ không còn là
    * `<button>` HTML — cả hai đều `.focus()` được, nên điều hướng port bằng
    * bàn phím giữ nguyên. */
@@ -232,6 +242,8 @@ export function StructuredFbdEditor({
 
   useEffect(() => {
     const incoming = canonicalFbdJson(document)
+    if (incoming === propBaseline.current) return
+    propBaseline.current = incoming
     const echoIndex = pendingEchoes.current.indexOf(incoming)
     if (echoIndex >= 0) {
       /* Tiếng vọng của chính mình. Cắt luôn các bản cũ hơn: trang có thể gộp
@@ -364,7 +376,22 @@ export function StructuredFbdEditor({
     setPaletteTypeRef(FBD_PALETTE[0]?.id ?? '')
   }, [paletteEntries, paletteTypeRef])
 
-  const selectedNetworkId = activeNetworkId ?? state.selection?.networkId ?? state.document.networks[0]?.id
+  /* `activeNetworkId` là GỢI Ý từ ngoài, không phải thẩm quyền. `FbdEditorPane`
+   * sửa nó bằng một passive effect nên nó đi SAU tài liệu đúng một commit: ngay
+   * sau khi tạo POU, `document` đã là bản của draft (network mang UUID khác)
+   * trong khi gợi ý còn trỏ network của bản lạc quan trước đó. Nếu tin gợi ý vô
+   * điều kiện thì trong cửa sổ đó canvas coi như KHÔNG có network nào, và lệnh
+   * `ADD_BLOCK` rơi vào nhánh `action = null` — phím bị nuốt lặng lẽ: không
+   * announcement, không đổi badge, không dấu vết. Đó là kênh mất block cuối
+   * cùng của `TC-FBD-NAV-001` (badge dừng ở 24/25, dãy vẫn tăng đơn điệu nên
+   * không phải rollback). Gợi ý không giải được thì rơi về chuỗi cũ. */
+  const hintedNetworkId = activeNetworkId && state.document.networks.some((network) => network.id === activeNetworkId)
+    ? activeNetworkId
+    : undefined
+  const selectionNetworkId = state.selection?.networkId
+  const selectedNetworkId = hintedNetworkId
+    ?? (selectionNetworkId && state.document.networks.some((network) => network.id === selectionNetworkId) ? selectionNetworkId : undefined)
+    ?? state.document.networks[0]?.id
   const visibleNetworks = networkView === 'SELECTED'
     ? state.document.networks.filter((network) => network.id === selectedNetworkId)
     : state.document.networks
