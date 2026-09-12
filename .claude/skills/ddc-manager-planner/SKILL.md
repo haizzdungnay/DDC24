@@ -122,6 +122,15 @@ Issue mở bằng mẫu `03-finding.yml` (finding ngoài phạm vi) là đầu v
 này. Với mỗi cái: xác minh bằng chứng, rồi cho scope + AC + ưu tiên và chuyển
 `state:ready`, hoặc đóng kèm lý do.
 
+**Khi chuyển một finding sang `state:ready`, điền luôn ô `Manager-Run` trong
+body Issue bằng định danh phiên NÀY.** Mẫu finding để ô đó trống khi mở, vì
+người mở finding là người *phát hiện* (`Finder-Run`), không phải bạn. Quên bước
+này thì `workflow_guard.py` chặn mọi PR thực hiện finding bằng `N1-MGR` — và nó
+chặn ở bước cuối, sau khi Implementer đã code xong và mở PR. Finding mở trước
+2026-09-11 không có sẵn ô đó: thêm một dòng `Manager-Run: <định danh phiên>` vào
+body là đủ, guard đọc được cả dạng dòng lẫn dạng heading. Xem `WF-CLEAN-001`
+§3.2. Refs `#653`.
+
 ### 6. Báo cáo
 
 Kết thúc phiên, in bảng: Issue đã tạo (số hiệu, loại, ưu tiên), Issue đã phân
