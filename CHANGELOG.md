@@ -57,7 +57,7 @@
 
   | Cổng | Lệnh | Kết quả |
   |---|---|---|
-  | FE unit | `npx vitest --run --environment jsdom src` | PASS — 248 file / 3167 test, 0 failed, 124,97 s, exit 0 |
+  | FE unit | `npx vitest --run --environment jsdom src` | PASS — 248 file / 3168 test, 0 failed, 123,51 s, exit 0 |
   | FE lint | `npm run lint` | PASS — eslint `--max-warnings=0` + `check_ui_strings.py`, exit 0 |
   | FE build | `npm run build` | PASS — exit 0; chunk `programming` 154,90 KiB gzip / ngân sách R3 165 KiB (dư 10,10 KiB) |
   | E2E (MOCK) | `MKDDC_E2E_CHROMIUM_PATH=… npx playwright test e2e/programming.spec.ts` | PASS — 109 passed / 29 skipped, 2,0 min, exit 0 |

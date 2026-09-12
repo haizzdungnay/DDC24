@@ -1634,6 +1634,18 @@ describe('DesignWorkspacePage — lối vào `Cấu hình chạy` (#675)', () =>
     expect(screen.queryByRole('link', { name: 'Mở cấu hình Task toàn cục' })).not.toBeInTheDocument()
   })
 
+  it('AC-675-4: ở SIMULATE KHÔNG có lối vào nào tới cấu hình chạy', async () => {
+    projectWithStProgram()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=SIMULATE')
+    /* SIMULATE thay HẲN cột soạn thảo bằng `SimulateWorkspace`, nên Inspector —
+       và cùng với nó là lối vào cấu hình chạy — không được mount. Đó là vế
+       "vắng mặt" mà `AC-PGM02-006` đòi, không phải một nút bấm không được. */
+    await screen.findByRole('region', { name: 'Mô phỏng' })
+    expect(screen.queryByTestId('context-inspector')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cấu hình chạy' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Mở cấu hình Task toàn cục' })).not.toBeInTheDocument()
+  })
+
   it('AC-675-4: ở LIVE KHÔNG có lối vào nào tới cấu hình chạy', async () => {
     const project = projectWithStProgram()
     project.activeRevisionId = 'revision-active'
