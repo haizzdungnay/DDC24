@@ -13,6 +13,7 @@ import { useApi } from '../hooks/useApi'
 import { useRealtime } from '../realtime'
 import { useI18n } from '../i18n'
 import { isProgrammingFocusRoute, NavDrawer, NavRail } from './NavRail'
+import { SHELL_DESKTOP_MIN_WIDTH_PX, useMinWidth } from '../useMinWidth'
 import { Breadcrumb } from './pa3/Breadcrumb'
 import { CommandPalette } from './pa3/CommandPalette'
 import { TopBar } from './TopBar'
@@ -31,6 +32,10 @@ export function AppShell() {
   const currentUser = me.data ?? session
   const programmingWorkspace = location.pathname.startsWith('/eng/programming')
   const programmingFocus = isProgrammingFocusRoute(location.pathname)
+  /* `TopBar` bị ẩn bằng `lg:hidden` trên route focus. Nút đổi ngôn ngữ phải RỜI
+     DOM đúng lúc đó, không chỉ bị ẩn — xem `useMinWidth`. */
+  const shellIsWide = useMinWidth(SHELL_DESKTOP_MIN_WIDTH_PX)
+  const topBarOwnsLanguageToggle = !(programmingFocus && shellIsWide)
 
   useEffect(() => {
     const refresh = () => { void alarms.refetch() }
@@ -102,6 +107,7 @@ export function AppShell() {
               cảnh báo và tài khoản là lối vào toàn cục duy nhất ở độ rộng đó. */}
           <TopBar
             className={programmingFocus ? 'lg:hidden' : undefined}
+            showLanguageToggle={topBarOwnsLanguageToggle}
             connectionState={connectionState}
             alarmCount={alarmCount}
             unackedCount={unacked}

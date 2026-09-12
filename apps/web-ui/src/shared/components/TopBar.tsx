@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, CircleHelp, LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react'
+import { Bell, CircleHelp, LogOut, Menu, Moon, Sun, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
@@ -6,6 +6,7 @@ import { prefersReducedMotion } from '../alarms/annunciation'
 import { IS_DEMO } from '../config'
 import { formatTechnicalDate, formatTechnicalTime } from '../dateTime'
 import { useI18n } from '../i18n'
+import { LanguageToggle } from './LanguageToggle'
 import { useOptionalOverview } from '../overview/OverviewProvider'
 import { useTheme } from '../theme/ThemeProvider'
 import type { ConnectionState, CurrentUser } from '../types'
@@ -22,11 +23,19 @@ import { HealthChip, SeverityBadge, healthReasonLabel } from './pa3/StateAtoms'
  *
  * KHÔNG đặt badge CPU/RAM/process ở đây (§2.2 nói thẳng). Chúng ở Diagnostics.
  */
-export function TopBar({ connectionState, alarmCount, unackedCount = 0, annunciating = false, currentUser, onOpenNav, className }: { connectionState: ConnectionState; alarmCount: number; unackedCount?: number; annunciating?: boolean; currentUser: CurrentUser | null; onOpenNav?: () => void; className?: string }) {
+export function TopBar({ connectionState, alarmCount, unackedCount = 0, annunciating = false, currentUser, onOpenNav, className, showLanguageToggle = true }: { connectionState: ConnectionState; alarmCount: number; unackedCount?: number; annunciating?: boolean; currentUser: CurrentUser | null; onOpenNav?: () => void; className?: string;
+  /** Thanh này còn giữ nút đổi ngôn ngữ hay đã nhường cho vỏ khác.
+   *
+   * Mặc định `true`: ở mọi trang bình thường `TopBar` là nơi duy nhất có nút đó.
+   * `AppShell` hạ xuống `false` đúng khi nó ẩn chính `TopBar` (route focus và từ
+   * `lg`), để `ProgrammingContextStrip` tiếp quản — hợp đồng là MỖI KHỔ ĐÚNG MỘT
+   * nút, và "một" phải tính trong DOM chứ không phải "một cái nhìn thấy": một
+   * bản bị `hidden` vẫn bị phép chọn theo vai trò nhìn thấy. */
+  showLanguageToggle?: boolean }) {
   const [now, setNow] = useState(new Date())
   const location = useLocation()
   const { logout } = useAuth()
-  const { lang, locale, setLang, t, pick } = useI18n()
+  const { lang, locale, t, pick } = useI18n()
   const { theme, toggleTheme } = useTheme()
   const overview = useOptionalOverview()
   /* Đọc một lần khi mount: người dùng đổi tuỳ chọn hệ điều hành giữa chừng là
@@ -165,9 +174,7 @@ export function TopBar({ connectionState, alarmCount, unackedCount = 0, annuncia
         >
           {theme === 'dark' ? <Sun className="h-5 w-5" aria-hidden="true" /> : <Moon className="h-5 w-5" aria-hidden="true" />}
         </button>
-        <button className="flex h-10 items-center gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-xs font-semibold sm:px-3" onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')} aria-label={pick("Đổi ngôn ngữ", "Toggle language")}>
-          {lang.toUpperCase()} <ChevronDown className="h-4 w-4" />
-        </button>
+        {showLanguageToggle && <LanguageToggle />}
         <Button
           variant="ghost"
           size="sm"

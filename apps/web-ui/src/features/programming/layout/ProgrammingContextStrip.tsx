@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, ClipboardCheck, Info, Loader2, RefreshCw, Save, ShieldAlert, WifiOff } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
+import { LanguageToggle } from '../../../shared/components/LanguageToggle'
 import { Button } from '../../../shared/components/Button'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { semanticBadgeProps, type SemanticState } from '../shared/semanticState'
@@ -100,7 +101,8 @@ export function ProgrammingContextStrip({
   children,
   actions,
   refreshing = false,
-  onRefresh
+  onRefresh,
+  showLanguageToggle = false
 }: {
   projectStatus: ResourceStatus
   runtimeStatus: ResourceStatus
@@ -146,6 +148,13 @@ export function ProgrammingContextStrip({
   actions?: ProgrammingEditingContext['actions']
   refreshing?: boolean
   onRefresh?: () => void
+  /** Vỏ ngoài đã nhường nút đổi ngôn ngữ cho strip chưa.
+   *
+   * `AppShell` chỉ ẩn `TopBar` trên route focus (`isProgrammingFocusRoute`)
+   * và chỉ từ `lg`. Strip không tự đoán điều đó — `ProgrammingLayout`
+   * tính bằng chính vị từ ấy rồi truyền xuống, nên hai nơi không thể
+   * lệch nhau. Mặc định `false`: không ai nhường thì không dựng. */
+  showLanguageToggle?: boolean
 }) {
   const { pick } = useI18n()
   const notice = contextNotice({
@@ -282,6 +291,25 @@ export function ProgrammingContextStrip({
         >
           {pick('Chi tiết', 'Details')}
         </button>
+
+        {/* Nút đổi ngôn ngữ TIẾP QUẢN từ `TopBar`, và chỉ ở đúng chỗ `TopBar`
+            nhường lại. Hợp đồng phải giữ: MỖI KHỔ ĐÚNG MỘT NÚT.
+
+            Hai điều kiện, vì `TopBar` ẩn theo HAI chiều:
+            - `showLanguageToggle` — chỉ route focus mới bị `AppShell` ẩn
+              `TopBar`. Trang Tổng quan `/eng/programming` KHÔNG phải route
+              focus, `TopBar` vẫn hiện ở đó, nên dựng thêm nút tại đây là tạo
+              ngay hai nút cùng tên truy cập. Giá trị này do `ProgrammingLayout`
+              tính bằng CHÍNH `isProgrammingFocusRoute` mà `AppShell` dùng —
+              một vị từ, không phải hai bản chép.
+            Không dùng lớp `hidden lg:*` cho việc này: ẩn bằng CSS vẫn để nút
+            NẰM TRONG DOM, và phép chọn theo vai trò vẫn thấy cả hai bản — đúng
+            cách `ISS-PGUI-03` đỏ ở lane 390 px với `resolved to 2 elements`.
+
+            ĐẶT SAU nút `Chi tiết`, không phải trước: `T60-103` khoá đường bàn
+            phím "Tab tới `Chi tiết` rồi Enter". Chèn một nút vào trước nó đẩy
+            `Chi tiết` lùi một nấc Tab và làm đỏ đúng phép kiểm đó. */}
+        {showLanguageToggle && <LanguageToggle compact />}
       </div>
       {details && detailsOpen
         ? <ContextDetailsPopover

@@ -409,3 +409,48 @@ describe('D-06 — một ngôn ngữ tại một thời điểm', () => {
     expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument()
   })
 })
+
+/*
+ * `#673` — nút đổi ngôn ngữ trên vỏ Programming.
+ *
+ * `AppShell` đặt `TopBar` thành `lg:hidden` trên route Programming (`G-01`), mà
+ * nút đổi ngôn ngữ chỉ sống trong `TopBar` — nên từ `lg` trở lên, trong toàn bộ
+ * Programming, người dùng mất hẳn đường đổi ngôn ngữ. Strip là vỏ tiếp quản nên
+ * nó gánh nút đó.
+ *
+ * Hợp đồng phải giữ: MỖI KHỔ ĐÚNG MỘT NÚT. jsdom không có CSS nên không đo được
+ * khổ thật — phép đo thật nằm ở `ISS-PGUI-03` (Playwright, bốn khổ). Ở đây khoá
+ * đúng thứ jsdom kiểm được: nút CÓ mặt, và nó mang cặp lớp responsive là nửa
+ * còn lại của hợp đồng. Ai gỡ `hidden` hoặc `lg:inline-flex` sẽ làm đỏ test này
+ * trước khi kịp tạo hai nút cùng tên trên một màn hình.
+ */
+describe('#673 — nút đổi ngôn ngữ trên Global Context Bar', () => {
+  /* Mặc định KHÔNG dựng. `AppShell` chỉ ẩn `TopBar` trên route focus; ở Tổng
+   * quan `/eng/programming` thì `TopBar` vẫn hiện, nên strip mà tự dựng nút là
+   * tạo ngay hai nút cùng tên truy cập — đúng lỗi mà `ISS-PGUI-03` bắt được
+   * bằng `strict mode violation: resolved to 2 elements`. */
+  it('KHÔNG dựng nút khi vỏ ngoài chưa nhường', () => {
+    renderStrip()
+    expect(within(strip()).queryAllByTestId('language-toggle')).toHaveLength(0)
+  })
+
+  it('strip có đúng một nút đổi ngôn ngữ khi được nhường, và không ẩn bằng CSS', () => {
+    renderStrip({ showLanguageToggle: true })
+    const toggles = within(strip()).getAllByTestId('language-toggle')
+    expect(toggles).toHaveLength(1)
+    expect(toggles[0]).toHaveAttribute('aria-label', 'Đổi ngôn ngữ')
+    /* KHÔNG được ẩn bằng CSS: một bản `hidden` vẫn nằm trong DOM và vẫn bị phép
+     * chọn theo vai trò nhìn thấy — đó là cách `ISS-PGUI-03` đỏ với
+     * `resolved to 2 elements`. Việc "có hay không" thuộc về `showLanguageToggle`. */
+    expect(toggles[0].className).not.toContain('hidden')
+  })
+
+  it('bấm nút trên strip đổi ngôn ngữ thật, không chỉ đổi nhãn của chính nó', () => {
+    renderStrip({ showLanguageToggle: true })
+    expect(within(strip()).getByText('Đang vận hành')).toBeInTheDocument()
+    fireEvent.click(within(strip()).getByTestId('language-toggle'))
+    /* Nhãn vùng đổi theo là bằng chứng `setLang` đã chạm tầng i18n dùng chung,
+     * chứ không phải nút tự đổi chữ trên mình nó. */
+    expect(screen.getByRole('region', { name: 'Current Programming context' })).toBeInTheDocument()
+  })
+})

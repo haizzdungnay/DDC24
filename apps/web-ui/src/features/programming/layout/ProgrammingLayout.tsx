@@ -4,6 +4,8 @@ import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammin
 import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
 import { useProgrammingActionAllowed } from '../api/authorization'
 import { GlobalContextBar } from './GlobalContextBar'
+import { isProgrammingFocusRoute } from '../../../shared/components/NavRail'
+import { SHELL_DESKTOP_MIN_WIDTH_PX, useMinWidth } from '../../../shared/useMinWidth'
 import { activeRevisionOwnership, ownedActiveRevisionId, runningProject } from '../shared/activeRevisionOwnership'
 import type { ActiveRevisionOwnership } from '../shared/activeRevisionOwnership'
 import { ProgrammingFeatureRail } from './ProgrammingFeatureRail'
@@ -103,6 +105,9 @@ export function ProgrammingLayout() {
   const [contextStripSlot, setContextStripSlot] = useState<ReactNode>(null)
   const { projectId: pathProjectId } = useParams<{ projectId?: string }>()
   const location = useLocation()
+  /* Nửa còn lại của hợp đồng ở `AppShell`: strip chỉ gánh nút khi `TopBar` thật
+     sự đã rời đi — cùng vị từ route, cùng ngưỡng bề rộng. */
+  const shellIsWide = useMinWidth(SHELL_DESKTOP_MIN_WIDTH_PX)
   const navigate = useNavigate()
   const canonicalProgramsRoute = location.pathname === '/eng/programming/programs'
   const queryProjectId = canonicalProgramsRoute ? new URLSearchParams(location.search).get('project') ?? undefined : undefined
@@ -213,6 +218,13 @@ export function ProgrammingLayout() {
             draftSequence={listedProject?.draftSequence ?? null}
             activeSequence={listedProject?.activeSequence ?? null}
             activeOwnership={activeOwnership}
+            /* `#673` — `AppShell` ẩn `TopBar` (và nút đổi ngôn ngữ trong đó)
+               từ `lg` trên route focus. Strip là vỏ tiếp quản, nên nó gánh nút
+               đó ĐÚNG ở những route ấy. Dùng lại chính `isProgrammingFocusRoute`
+               mà `AppShell` dùng: hai bản chép điều kiện sẽ lệch nhau ngay lần
+               đầu ai đó đổi danh sách route focus, và triệu chứng là hai nút
+               cùng tên truy cập trên một màn hình. */
+            showLanguageToggle={isProgrammingFocusRoute(location.pathname) && shellIsWide}
             actions={visibleEditingContext?.actions}
             refreshing={refreshing}
             onRefresh={() => {

@@ -8,6 +8,51 @@
 
 ## [Unreleased]
 
+### Fixed — `#673`: desktop Programming có lại nút Đổi ngôn ngữ (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/shared/components/LanguageToggle.tsx` (mới),
+  `apps/web-ui/src/shared/components/LanguageToggle.test.tsx` (mới),
+  `apps/web-ui/src/shared/useMinWidth.ts` (mới),
+  `apps/web-ui/src/shared/components/TopBar.tsx`,
+  `apps/web-ui/src/shared/components/AppShell.tsx`,
+  `apps/web-ui/src/features/programming/layout/ProgrammingLayout.tsx`,
+  `apps/web-ui/src/features/programming/layout/ProgrammingContextStrip.tsx`,
+  `apps/web-ui/src/features/programming/layout/ProgrammingContextStrip.test.tsx`,
+  `CHANGELOG.md`.
+
+- Triệu chứng: trên desktop, trong toàn bộ Programming, KHÔNG có cách đổi ngôn ngữ.
+  `ISS-PGUI-03` đỏ với `Test timeout of 60000ms exceeded` khi chờ
+  `getByRole('button', { name: 'Đổi ngôn ngữ' })`.
+
+- Nguyên nhân gốc: nút đó chỉ tồn tại trong `TopBar`, mà `AppShell` đặt
+  `className={programmingFocus ? 'lg:hidden' : undefined}` cho `TopBar` theo `G-01`
+  — và không component nào tiếp quản. Một điều khiển toàn cục biến mất theo route
+  là lỗi, không phải lựa chọn bố cục.
+
+- Cách sửa: tách `LanguageToggle` dùng chung; `TopBar` giữ bản đầy đủ,
+  `ProgrammingContextStrip` gánh bản `compact`. Hợp đồng là **mỗi khổ đúng MỘT
+  nút**, và cả hai vỏ quyết định bằng CÙNG một vị từ route (`isProgrammingFocusRoute`)
+  và CÙNG một ngưỡng bề rộng (`SHELL_DESKTOP_MIN_WIDTH_PX = 1024`, khớp `lg:hidden`
+  mà `AppShell` đang dùng) — hai bản chép điều kiện sẽ lệch nhau ngay lần đầu ai đó
+  đổi danh sách route focus.
+
+- Bài học đã trả giá bằng một lượt đo: **bản đầu ẩn nút bằng `hidden lg:inline-flex`
+  và vẫn SAI.** Ẩn bằng CSS vẫn để phần tử nằm trong DOM, nên `ISS-PGUI-03` đổi từ
+  "không tìm thấy nút" sang `strict mode violation: resolved to 2 elements` ở lane
+  `mobile-chrome` 390 px — nơi bản thứ hai đang bị `hidden`. Với một điều khiển mà
+  hợp đồng là "đúng một", "một" phải tính TRONG DOM. Nay việc dựng là policy runtime
+  (`useMinWidth`), đúng lập luận đã ghi sẵn ở `useProgrammingViewport.ts` cho hình
+  thái Inspector.
+
+- Số đo (đo tại máy 2026-09-12 trên `clean-code/issue-673`, base `origin/main` `2470da1`):
+
+  | Cổng | Kết quả |
+  |---|---|
+  | Vitest (toàn `src`) | **247 files / 3145 passed / 0 failed**, exit 0 (nền 246/3137; +1 file, +8 test mới) |
+  | Lint | PASS, exit 0 |
+  | Build | PASS, exit 0 |
+  | E2E `programming.spec.ts` | **103 passed / 28 skipped / 7 failed**, exit 1 — nền cùng base là `102 / 28 / 8`; `ISS-PGUI-03` xanh ở CẢ hai lane |
+
 ### Fixed — `#657`: rollback cấu hình fieldbus không còn nuốt im lỗi ghi file (2026-09-11)
 
 - Phạm vi: `apps/web-api/internal/modbusrtu/persistence.go`,
