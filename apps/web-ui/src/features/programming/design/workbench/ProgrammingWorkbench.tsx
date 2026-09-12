@@ -373,8 +373,30 @@ export function ProgrammingWorkbench({
           {/* Ảnh chuẩn PGM-02B chia khay đáy thành 3 cột (x=196..839, x=839..1214, x=1214..1672):
            * Cột trái (~643px, co giãn): dải tab và nội dung tab đang chọn.
            * Cột giữa (~375px): bảng Runtime Watch hiển thị thường trực.
-           * Cột phải (~458px): Mini Map (T9-01 / chuẩn bị kết nối dữ liệu canvas ở T9-02). */}
-          <div className="grid h-full min-[1440px]:grid-cols-[minmax(0,1fr)_375px_458px] divide-x divide-[var(--c-border)]">
+           * Cột phải (~458px): Mini Map.
+           *
+           * Cột thứ ba từng CỐ Ý vắng mặt, với lý do ghi ngay tại đây: logic Mini
+           * Map nằm trong `FbdCanvas`, nên dựng một ô rỗng ở đây chỉ hứa một thứ
+           * không tồn tại, và một bản sao thứ hai của minimap sẽ lệch khỏi bản gốc
+           * ngay lần canvas đổi khung nhìn đầu tiên. Điều kiện để thêm cột cũng đã
+           * ghi sẵn: "khi `FbdCanvas` công bố được khung nhìn ra ngoài". `T9-02`
+           * làm đúng việc đó bằng `FbdCanvasBridge`, nên cột thứ ba nay có nguồn
+           * dữ liệu THẬT — không phải bản sao, mà là cùng một khung nhìn.
+           *
+           * `375px` và `458px` là những con số TUYỆT ĐỐI, nên chúng phải có khổ
+           * để sống. Lưới này trước đây áp dụng ở MỌI bề ngang: trên màn 412 px,
+           * cột Watch một mình đã chiếm 375 px và cột trái (`minmax(0,1fr)`) co về
+           * gần 0 — danh sách Vấn đề vẫn nằm trong DOM nhưng bị chính cột Watch
+           * che, nên mọi cú bấm vào một diagnostic đều rơi vào
+           * `workbench-watch-column` ("intercepts pointer events") cho tới khi hết
+           * giờ. `TC-FBD-DIAG-001` ở lane mobile chết vì đúng lỗi này, và nó không
+           * phải lỗi của phép đo: người dùng thật trên điện thoại cũng không bấm
+           * được vào Vấn đề.
+           *
+           * Nên ba chặng, không phải một: dưới `lg` xếp CHỒNG (cùng nội dung, cùng
+           * thứ tự đọc, chỉ khác trục); từ `lg` hai cột; từ `1440px` — khổ mà ảnh
+           * chuẩn PGM-02B mô tả — đủ chỗ cho cả cột Mini Map. */}
+          <div className="grid h-full grid-cols-1 divide-y divide-[var(--c-border)] lg:grid-cols-[minmax(0,1fr)_375px] lg:divide-x lg:divide-y-0 min-[1440px]:grid-cols-[minmax(0,1fr)_375px_458px]">
             {/* Cột trái: Nội dung tab đang chọn */}
             <div data-testid="workbench-problems-column" className="h-full overflow-auto pr-2">
               {tab === 'problems' && (

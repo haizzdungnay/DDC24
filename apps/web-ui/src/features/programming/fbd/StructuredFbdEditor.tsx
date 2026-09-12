@@ -624,15 +624,23 @@ export function StructuredFbdEditor({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label={pick('Lệnh FBD', 'FBD commands')}>
-          {/* ponytail: ẩn Active network label + nút Add Network — chương trình chỉ có 1 network. */}
-          {/*
+          {/* Badge `Network đang mở` + nút thêm Network.
+            *
+            * Hai điều khiển này từng bị comment-out với lý do "chương trình chỉ
+            * có 1 network". Nhưng "hiện chỉ có một" là TRẠNG THÁI DỮ LIỆU, còn
+            * nút thêm Network là ĐƯỜNG DUY NHẤT để có network thứ hai — bỏ nó
+            * đi thì lý do giữ nó biến thành vĩnh viễn đúng. `TC-FBD-RESP-001`
+            * khoá cả hai (bấm `Network` rồi đối chiếu `SELECTED`/`ALL` bằng
+            * chính DOM canvas, và đọc `fbd-active-network`), nên việc gỡ chúng
+            * đã làm đỏ một cổng đang khoá hợp đồng — chỉ là không ai thấy vì
+            * cổng e2e vốn đã đỏ sẵn (`#665`). Ẩn một điều khiển đang có AC là
+            * quyết định sản phẩm, không phải một lần dọn giao diện. */}
           <span className="inline-flex min-h-11 min-[1440px]:min-h-0 items-center rounded border border-[var(--c-border)] px-2 py-0.5 text-xs" data-testid="fbd-active-network">
             {pick('Network đang mở', 'Active network')}: {activeNetwork?.name ?? '—'}
           </span>
           <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('ADD_NETWORK')}>
             {pick('Network', 'Network')}
           </Button>
-          */}
           <label className="flex items-center gap-1 text-xs">
             {pick('Khối', 'Block')}
             <select

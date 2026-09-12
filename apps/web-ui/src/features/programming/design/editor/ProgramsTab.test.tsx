@@ -167,14 +167,30 @@ describe('ProgramsTab — workspace bốn cột', () => {
     expect(within(libraryColumn).getByRole('button', { name: 'Mở Thư viện nhanh' })).toBeInTheDocument()
   })
 
-  it('giữ Quick Library FBD ở cột thứ tư khi desktop rộng (>=1024px)', async () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1024 })
+  /* Ngưỡng là `1440`, không phải `1024`.
+   *
+   * `TC-FBD-RESP-001` khoá sáu mốc của shell FBD: chỉ từ `1440 px` mới có đồng
+   * thời bốn cột; ở `1280`/`1024` khay Thư viện và Inspector phải ĐÓNG, chỉ còn
+   * nút mở. Bản trước của test này ghim `>=1024` — tức ghim đúng hành vi mà AC
+   * cấm — nên nó xanh trong khi cổng e2e đỏ. Hai phép đo nói ngược nhau về cùng
+   * một bố cục thì phép đo mang mã AC là phép đo đúng. */
+  it('giữ Quick Library FBD ở cột thứ tư khi desktop rộng (>=1440px)', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1440 })
     renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
 
     const libraryColumn = screen.getByTestId('quick-library-column')
     const panel = await within(libraryColumn).findByTestId('quick-library-panel')
     expect(panel).toBeVisible()
     expect(screen.getByTestId('programs-workspace').style.getPropertyValue('--pgm-library-width')).not.toBe('44px')
+  })
+
+  it('dưới 1440px FBD KHÔNG dựng cột Thư viện nhanh (TC-FBD-RESP-001)', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 })
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    // Cột vẫn là một ô lưới, nhưng KHÔNG mount panel: đó là khác biệt giữa
+    // "khay đang đóng" và "khay đang mở", thứ mà AC đo ở mốc 1280/1024.
+    expect(within(screen.getByTestId('quick-library-column')).queryByTestId('quick-library-panel')).toBeNull()
   })
 
   it('G-15: bảng Interface bám theo declaration đang sửa trong buffer, không chờ save/read-back', async () => {

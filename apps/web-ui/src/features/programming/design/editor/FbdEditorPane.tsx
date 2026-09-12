@@ -184,6 +184,26 @@ export function FbdEditorPane({
         aria-label={pick('Tuỳ chọn hiển thị FBD', 'FBD display preferences')}
         data-testid="fbd-secondary-toolbar"
       >
+        {/* `Khung nhìn` — chọn xem MỘT network hay TẤT CẢ.
+          *
+          * Điều khiển này biến mất cùng thanh công cụ phụ cũ, nhưng nó không
+          * nằm trong số "các tuỳ chọn hiển thị đã chuyển xuống dải dưới" —
+          * nó không được chuyển đi đâu cả. Với một chương trình nhiều network,
+          * mất nó nghĩa là không còn cách nào xem hết các network cùng lúc, và
+          * `TC-FBD-RESP-001` khoá đúng hành vi đó (`SELECTED` → 1 article,
+          * `ALL` → 2). Trả nó về đúng dải mà các tuỳ chọn hiển thị khác đang ở,
+          * theo cùng kiểu compact, thay vì dựng lại thanh công cụ đã gỡ. */}
+        <label className="inline-flex items-center gap-1">
+          {pick('Khung nhìn', 'View')}
+          <select
+            className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-1 py-0.5 text-[11px]"
+            value={preferences.networkView}
+            onChange={(event) => updatePreferences({ networkView: event.target.value as FbdPreferences['networkView'] })}
+          >
+            <option value="SELECTED">{pick('Network đang chọn', 'Selected network')}</option>
+            <option value="ALL">{pick('Tất cả network', 'All networks')}</option>
+          </select>
+        </label>
         <label className="inline-flex items-center gap-1">
           <input type="checkbox" checked={preferences.gridVisible} onChange={(event) => updatePreferences({ gridVisible: event.target.checked })} />
           {pick('Lưới', 'Grid')}
