@@ -13,6 +13,7 @@ import {
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { readFbdDocument } from '../../fbd/readDocument'
 import { emptyFbdDocument } from '../pou/pouTemplates'
+import { useWorkbenchOwnsMinimap } from '../../layout/useProgrammingViewport'
 import type { UserPouInterface } from '../../fbd/userPou'
 import type { ProgrammingDraftOperation, ProgrammingProgram } from '../../model/types'
 import { EditorStatusBar } from './EditorStatusBar'
@@ -74,6 +75,11 @@ export function FbdEditorPane({
   focusSelection,
 }: FbdEditorPaneProps) {
   const { pick } = useI18n()
+  /* `T9-02` dời Mini Map sang cột 3 của khay đáy, mà cột đó chỉ tồn tại từ
+     `1440px`. Tắt bản nội tuyến vô điều kiện sẽ làm `1280px` không còn Mini
+     Map ở bất kỳ đâu. Hỏi đúng một nguồn: khay giữ từ `1440px`, canvas giữ ở
+     dưới ngưỡng — đúng MỘT bản tại mọi khổ. */
+  const workbenchOwnsMinimap = useWorkbenchOwnsMinimap()
   const committedResult = useMemo(() => readFbdDocument(program.document), [program.document])
   const localResult = useMemo(() => readFbdDocument(source), [source])
   const committedJson = committedResult.ok ? committedResult.canonical : String(program.document ?? '')
@@ -167,7 +173,7 @@ export function FbdEditorPane({
         gridVisible={preferences.gridVisible}
         snapEnabled={preferences.snapEnabled}
         snapSize={preferences.snapSize}
-        showInlineMinimap={false}
+        showInlineMinimap={!workbenchOwnsMinimap}
         onChange={(next) => onChange(canonicalFbdJson(next))}
         onSelectionChange={(selection) => {
           if (selection?.networkId) setActiveNetworkId(selection.networkId)

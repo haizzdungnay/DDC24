@@ -288,7 +288,22 @@ export function FbdCanvas({
     }
   }, [setBridge, onBridgeChange])
 
+  /* CHỈ phát cầu nối khi có người tiêu thụ.
+   *
+   * `setBridge` là setter state của `FbdCanvasBridgeProvider`, nằm CAO hơn cả
+   * workspace — nên mỗi lần phát là một lần re-render cả cây con. Effect này phụ
+   * thuộc `geometry.nodes`, tức nó bắn MỘT LẦN MỖI KHỐI được chèn. Với 25 lần
+   * `Insert` liên tiếp, đó là 25 lượt re-render toàn cây chen vào giữa chuỗi phím;
+   * khi máy bận (cả bộ e2e chạy song song) vài phím rơi mất và `TC-FBD-NAV-001`
+   * đỏ ở `25/256 block` — chạy riêng thì xanh, chạy cả bộ thì không.
+   *
+   * Người tiêu thụ duy nhất là cột Mini Map của khay đáy, và cột đó chỉ tồn tại
+   * khi canvas KHÔNG tự dựng minimap nội tuyến. Dưới ngưỡng đó không ai đọc cầu
+   * nối, nên phát là trả giá re-render cho một giá trị không ai dùng. */
+  const bridgeHasConsumer = !showInlineMinimap
+
   useEffect(() => {
+    if (!bridgeHasConsumer) return
     const container = scrollRef.current
     const bridge: FbdCanvasBridge = {
       nodes: geometry.nodes,
@@ -319,6 +334,7 @@ export function FbdCanvas({
     setBridge?.(bridge)
     onBridgeChange?.(bridge)
   }, [
+    bridgeHasConsumer,
     setBridge,
     geometry.nodes,
     height,
@@ -330,6 +346,7 @@ export function FbdCanvas({
 
   useEffect(() => {
     const container = scrollRef.current
+    if (!bridgeHasConsumer) return
     if (!container || (!setBridge && !onBridgeChange)) return
     const handleScroll = () => {
       const scrollPos = {
@@ -342,7 +359,7 @@ export function FbdCanvas({
     }
     container.addEventListener('scroll', handleScroll, { passive: true })
     return () => container.removeEventListener('scroll', handleScroll)
-  }, [setBridge, onBridgeChange])
+  }, [bridgeHasConsumer, setBridge, onBridgeChange])
 
   // Cancel any gesture on Escape key
   useEffect(() => {

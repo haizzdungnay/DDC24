@@ -8,6 +8,66 @@
 
 ## [Unreleased]
 
+### Fixed — `#683`: hai hồi quy của khay đáy ba cột, phát hiện khi đưa PR lên nền `main` mới (2026-09-12)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/layout/useProgrammingViewport.ts`,
+  `CHANGELOG.md`.
+
+- **Hồi quy 1 — Mini Map biến mất ở `1280px`.** `T9-02` dời Mini Map từ canvas sang
+  cột 3 của khay đáy và đặt `showInlineMinimap={false}` vô điều kiện, nhưng cột 3
+  chỉ tồn tại từ `1440px`. Ở `1280px` — khổ mặc định của lane desktop — không còn
+  Mini Map ở BẤT KỲ đâu: `TC-FBD-NAV-001` đỏ với
+  `locator('[data-fbd-minimap="true"]')` không tìm thấy, và người dùng laptop mất
+  hẳn phương tiện điều hướng trên sơ đồ lớn.
+
+  Sửa: thêm `useWorkbenchOwnsMinimap()` làm nguồn DUY NHẤT cho câu hỏi "ai đang giữ
+  Mini Map" — khay giữ từ `1440px`, canvas giữ ở dưới ngưỡng. Đúng MỘT bản tại mọi
+  khổ; hai bản cùng `data-fbd-minimap="true"` sẽ làm mọi phép chọn theo thuộc tính
+  thành mơ hồ. Hằng số ngưỡng khai cùng chỗ với lưới `min-[1440px]` để hai bên không
+  trôi khỏi nhau.
+
+- **Hồi quy 2 — mất phím khi chèn khối, chỉ lộ khi chạy cả bộ.** `TC-FBD-NAV-001`
+  bấm `Insert` 25 lần rồi chờ `25/256 block`; chạy riêng thì xanh 3/3, chạy cả bộ
+  thì đỏ vì chỉ 14 khối được chèn.
+
+  Nguyên nhân gốc: effect phát `FbdCanvasBridge` phụ thuộc `geometry.nodes`, tức nó
+  bắn MỘT LẦN MỖI KHỐI. `setBridge` là setter state của `FbdCanvasBridgeProvider`
+  nằm cao hơn cả workspace, nên mỗi lần phát là một lượt re-render cả cây con — 25
+  lượt chen vào giữa chuỗi phím, và khi máy bận thì vài phím rơi mất.
+
+  Sửa: chỉ phát cầu nối khi CÓ NGƯỜI TIÊU THỤ (`!showInlineMinimap`). Dưới `1440px`
+  cột Mini Map không tồn tại nên không ai đọc cầu nối; phát ở đó là trả giá
+  re-render cho một giá trị không ai dùng.
+
+- Gộp lưới khay đáy thành **ba chặng** khi đưa lên nền mới: dưới `lg` xếp chồng
+  (giữ nguyên bản sửa của `main` cho lỗi tab `Vấn đề` không bấm được ở màn hẹp), từ
+  `lg` hai cột, từ `1440px` ba cột.
+
+- Số đo (đo tại máy 2026-09-12, sau khi merge `origin/main` `fabcad5`):
+
+  | Cổng | Kết quả |
+  |---|---|
+  | Vitest | **248 files / 3153 passed / 0 failed**, exit 0 |
+  | Lint | PASS, exit 0 |
+  | Build | PASS, exit 0 |
+  | E2E `programming.spec.ts` | **109 passed / 29 skipped / 0 failed**, exit 0 — **hai lượt liên tiếp**, bằng đúng `main` |
+  | E2E `programming-workspace-height.spec.ts` | `4 failed / 4 passed` — `main` cũng `4 failed / 4 passed`, nhưng **tập test đỏ khác nhau**: xem mục dưới |
+
+- **Còn một mục CHƯA giải quyết, cần quyết định của chủ sở hữu.**
+  `programming-workspace-height.spec.ts:120` (`chỗ gõ cao GẤP ĐÔI trở lên`) **xanh
+  trên `main`** và **đỏ dưới `#683`**: `333px → 614px = 1.84×`, đòi `>= 2×`. Bù lại,
+  hai ca `:69` đang đỏ trên `main` thì xanh dưới `#683`.
+
+  Đây không phải lỗi có thể sửa một phía: `after` đã là TOÀN bộ viewport
+  (`height === viewport`, `top === 0` đều đạt), nên đòn bẩy duy nhất là `before` —
+  và `#683` làm chỗ gõ ở bố cục thường CAO HƠN, tức cải thiện. Phép kiểm đo TỈ LỆ
+  giữa hai số cùng động, nên nâng nền lại làm tỉ lệ tụt. Chính ghi chú của test đã
+  ghi trần vật lý `~1,86×`. Hoặc chấp nhận và viết lại phép kiểm theo chiều cao
+  TUYỆT ĐỐI, hoặc từ chối phần đổi chiều cao của `#683` — không tự nới ngưỡng.
+
 ### Added — Task 9: Panel dưới 3 cột và tích hợp Mini Map cho khay làm việc Programming (2026-09-12)
 
 - T9-01: Chuyển grid khay làm việc sang 3 cột (Problems | Runtime Watch | Mini Map) ở desktop >= 1440px, lưu trạng thái mở/đóng và chiều cao vào localStorage `mkddc:programming-workbench:v1`.
