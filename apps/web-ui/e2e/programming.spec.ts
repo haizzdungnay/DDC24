@@ -133,7 +133,21 @@ function observeBrowserFailures(page: Page): BrowserFailures {
   page.on('pageerror', (error) => failures.pageErrors.push(error.message))
   page.on('requestfailed', (request) => {
     if (!isProgrammingSurface(request.url())) return
-    failures.requestFailures.push(`${request.method()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText ?? 'unknown'}`)
+    const path = new URL(request.url()).pathname
+    const errorText = request.failure()?.errorText ?? 'unknown'
+    /* `net::ERR_ABORTED` trên một tài nguyên NGOÀI API không phải lỗi ứng dụng:
+     * đó là trình duyệt HUỶ một request còn dở vì điều hướng hoặc `reload` chen
+     * vào trước khi nó xong. `AC-PGM02-001` reload giữa chừng để chứng minh POU
+     * sống sót, nên `GET /favicon.svg` kịp xong hay bị huỷ phụ thuộc vào nhịp
+     * máy — và cổng sẽ đỏ hay xanh theo tải của runner chứ không theo chất
+     * lượng mã. Một cổng đỏ ngẫu nhiên còn tệ hơn một cổng đỏ ổn định: nó dạy
+     * người chạy bỏ qua màu đỏ.
+     *
+     * Tha ĐÚNG cặp "huỷ + ngoài API", không hơn: mọi `ERR_ABORTED` trên
+     * `/api/` vẫn đỏ (huỷ một lời gọi API giữa chừng là dấu hiệu thật của
+     * race trong mã), và mọi mã lỗi khác trên tài nguyên tĩnh cũng vẫn đỏ. */
+    if (errorText === 'net::ERR_ABORTED' && !path.startsWith('/api/')) return
+    failures.requestFailures.push(`${request.method()} ${path}: ${errorText}`)
   })
   page.on('response', (response) => {
     if (response.status() < 500) return
@@ -141,6 +155,36 @@ function observeBrowserFailures(page: Page): BrowserFailures {
     failures.serverFailures.push(`${response.status()} ${response.request().method()} ${new URL(response.url()).pathname}`)
   })
   return failures
+}
+
+/**
+ * Chờ bố cục ĐỨNG YÊN sau khi đổi khung nhìn, trước khi đo bất kỳ số nào.
+ *
+ * `ProgrammingFeatureRail` có `transition-[width] duration-200`: đổi khung nhìn
+ * qua một breakpoint làm nó CHẠY từ bề rộng cũ sang bề rộng mới trong 200 ms.
+ * Đo ngay sau `setViewportSize` vì thế đọc phải một con số giữa chừng — tại
+ * `768 px` rail đo được `183 px` trong khi bề rộng nó thực sự nhận là `64 px`,
+ * và mọi bề rộng tính từ đó (`listWidth`) lệch theo đúng chừng ấy. Phép đo hụt
+ * ~119 px là vì vậy, không phải vì trang chừa cột cho khay phủ.
+ *
+ * Đây là hạn chế của PHÉP ĐO, không phải của sản phẩm: dải `768–1023 px` sau
+ * khi transition xong đúng là chế độ chỉ-icon `64 px` như hồ sơ rail công bố.
+ * Nên chờ đúng thứ cần chờ, thay vì nới ngưỡng cho tới khi số giữa chừng lọt
+ * qua — nới ngưỡng là bịt đúng cái cổng này sinh ra để canh.
+ */
+async function settleLayout(page: Page) {
+  await expect
+    .poll(
+      () => page.evaluate(async () => {
+        const rail = document.querySelector('[data-testid="programming-feature-rail"]')
+        if (!rail) return 'no-rail'
+        const before = rail.getBoundingClientRect().width
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))))
+        return Math.abs(rail.getBoundingClientRect().width - before) < 0.5 ? 'settled' : 'moving'
+      }),
+      { timeout: 5_000, message: 'bố cục vẫn đang chuyển động sau khi đổi khung nhìn' }
+    )
+    .not.toBe('moving')
 }
 
 /**
@@ -979,14 +1023,20 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await page.screenshot({ path: testInfo.outputPath('04-design-mapping.png'), fullPage: true })
 
     // UJ-PROG-04 — Thực thi
-    await workspaceRail.getByRole('link', { name: 'Chương trình' }).click()
-    await page.getByRole('button', { name: 'Cấu hình Task' }).click()
+    /* `Thực thi` KHÔNG còn là một nút trong trang. Lối vào cũ là cặp nút
+       `Cấu hình Task` / `Về trình soạn thảo` nằm trên thanh tab của workspace;
+       thanh đó đã gỡ, và lối vào chuyển lên mục `Execution` của feature rail —
+       cùng chỗ với năm workspace kia, đúng như hai bước UJ-PROG ngay trên đây
+       đã đi. Journey vẫn đi qua đúng màn hình `?tab=execution` và vẫn đọc
+       `Control_Main`; chỉ có đường bấm là đổi, nên đây là kỳ vọng lỗi thời của
+       phép đo chứ không phải một chức năng bị mất. */
+    await workspaceRail.getByRole('link', { name: 'Execution' }).click()
     await expect(page.getByText('Control_Main')).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('05-design-execution.png'), fullPage: true })
 
     // UJ-PROG-05 — Kiểm tra (D-01: PGM-02 chỉ lưu rồi điều hướng, PGM-03 sở
     // hữu toàn bộ seal/run/poll/result — không còn seal/Check inline ở đây).
-    await page.getByRole('button', { name: 'Về trình soạn thảo' }).click()
+    await workspaceRail.getByRole('link', { name: 'Chương trình' }).click()
     // FBD không lặp lệnh Kiểm tra trong editor; dùng lệnh chung ở header.
     await expect(page.getByRole('button', { name: 'Kiểm tra gói', exact: true })).toBeEnabled()
     await page.getByRole('button', { name: 'Kiểm tra gói', exact: true }).click()
@@ -1553,6 +1603,30 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
   })
 
   test('TC-FBD-NAV-001: Mini Map click/kéo/phím chính xác và không mutate trên Chrome', async ({ page }, testInfo) => {
+    /* LANE DESKTOP, VÀ LÝ DO NÓI RA.
+     *
+     * Case này soạn 25 khối để Mini Map vượt `FBD_MINIMAP_NODE_THRESHOLD` rồi
+     * đo điều hướng. Soạn thảo là MUTATION, mà dưới 768 px PGM-02 là read-only
+     * theo `AC-PGM02-010`/`T59-802` — bản trước của case này vẫn chạy ở lane
+     * mobile và nằm chờ nút `Mới` trên chính màn hình mà thiết kế đã khoá, cho
+     * tới khi hết 60 giây. Đó là kỳ vọng sai của phép đo, không phải lỗi sản
+     * phẩm, và nó là một trong tám test đỏ sẵn của `#665`.
+     *
+     * Đã thử giữ lane mobile bằng cách nạp sẵn Draft đủ khối thay vì soạn.
+     * Không giữ được, và lý do đáng ghi lại: ở khổ 412 px, tài liệu nạp sẵn
+     * cho ra mặt vẽ mà 30% bề ngang Mini Map vẫn nằm trong nửa khung nhìn đầu,
+     * nên `scrollLeft` hợp lệ bằng `0` và khẳng định `> 0` của case này vô
+     * nghĩa ở đó. Ép nó đạt sẽ phải nới chính con số mà case này sinh ra để
+     * canh. Vậy case chạy đúng lane desktop, cùng lý do và cùng cách mà
+     * `TC-FBD-RESP-001` trong chính describe này đã làm.
+     *
+     * Mini Map trên màn hẹp vì thế CHƯA có bằng chứng — một khoảng trống thật,
+     * cần phép đo riêng cho hình thái mobile chứ không phải một dòng chờ hết
+     * giờ. Đã mở finding riêng thay vì giấu nó trong một test đỏ. */
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
+      'soạn 25 khối là mutation; dưới 768 px PGM-02 read-only (AC-PGM02-010)'
+    )
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     const failures = observeBrowserFailures(page)
@@ -2968,6 +3042,7 @@ test.describe('PGM-04 Thư viện điều khiển (T61-503)', () => {
     const measured: string[] = []
     for (const size of sizes) {
       await page.setViewportSize({ width: size.width, height: size.height })
+      await settleLayout(page)
       await expect(libraryCards(page).first()).toBeVisible()
       /* Chọn một khối để Inspector có nội dung: một khay rỗng không tràn được,
          nên đo lúc nó rỗng là đo một thứ không có rủi ro.

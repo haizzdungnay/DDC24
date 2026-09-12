@@ -147,7 +147,7 @@ export function ProgrammingContextStrip({
   refreshing?: boolean
   onRefresh?: () => void
 }) {
-  const { pick } = useI18n()
+  const { pick, lang, setLang } = useI18n()
   const notice = contextNotice({
     pick, projectStatus, runtimeStatus, runtime, intentStatus, intents, intentError, editing, canMutate
   })
@@ -259,6 +259,25 @@ export function ProgrammingContextStrip({
         )}
 
         {children}
+
+        {/* ĐỔI NGÔN NGỮ — `G-01` ẩn `TopBar` của Programming từ `lg`, và nút
+            đổi ngôn ngữ sống trong `TopBar`. Hệ quả không ai đo: từ `1024 px`
+            trở lên, sáu workspace Lập trình KHÔNG còn bất kỳ đường nào đổi
+            ngôn ngữ — người dùng phải rời hẳn khu vực Lập trình để đổi rồi
+            quay lại. Ẩn một thanh là quyết định về CHIỀU CAO, không phải quyết
+            định bỏ một chức năng; nên chức năng ấy phải có chỗ ở thanh thay
+            thế. `lg:inline-flex` vì dưới `lg` `TopBar` vẫn còn và hai nút cùng
+            việc trên một màn hình lại là lỗi vừa sửa ở cụm Lưu/Kiểm tra. */}
+        <button
+          type="button"
+          data-testid="programming-lang-toggle"
+          className="hidden h-7 shrink-0 items-center gap-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-2 text-[11px] font-semibold text-[var(--c-text)] transition hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] lg:inline-flex"
+          aria-label={pick('Đổi ngôn ngữ', 'Toggle language')}
+          title={pick('Đổi ngôn ngữ', 'Toggle language')}
+          onClick={() => setLang(lang === 'vi' ? 'en' : 'vi')}
+        >
+          {lang.toUpperCase()}
+        </button>
 
         <button
           ref={detailsButtonRef}

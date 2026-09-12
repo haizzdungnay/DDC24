@@ -12,7 +12,10 @@ describe('ProgramsWorkspace — kích thước panel', () => {
       </ProgramsWorkspace>
     )
     const workspace = screen.getByTestId('programs-workspace')
-    expect(workspace).toHaveClass('lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-inspector-width)_6px_var(--pgm-library-width)]')
+    /* Thứ tự track phải khớp `AC-PGM02-004`: Explorer → Editor → Thư viện
+     * nhanh → Inspector. jsdom không dựng lưới nên đây là chỗ duy nhất trong
+     * lớp unit ghim được thứ tự; e2e `AC-PGM02-004` đo lại bằng toạ độ thật. */
+    expect(workspace).toHaveClass('lg:grid-cols-[var(--pgm-explorer-width)_6px_minmax(320px,1fr)_6px_var(--pgm-library-width)_6px_var(--pgm-inspector-width)]')
     expect(workspace).toHaveTextContent('Editor slot')
   })
 
