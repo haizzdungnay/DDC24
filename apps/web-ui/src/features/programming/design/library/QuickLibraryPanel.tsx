@@ -114,11 +114,14 @@ export function QuickLibraryPanel({
       setPreferences(value)
       setSyncState(state)
     })
-    window.setTimeout(() => searchRef.current?.focus(), 0)
+    /* Panel cắm sẵn là một cột thường của workspace: tự cướp focus khỏi
+     * editor mỗi lần chọn POU sẽ làm người dùng đang gõ bị bật sang ô tìm.
+     * Chỉ popover do người dùng chủ động mở mới nhận focus ban đầu. */
+    if (variant !== 'docked') window.setTimeout(() => searchRef.current?.focus(), 0)
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [variant])
 
   const entries = useMemo(() => catalogEntriesOf(library.items), [library.items])
   const categories = useMemo(() => catalogCategories(entries), [entries])
@@ -171,7 +174,7 @@ export function QuickLibraryPanel({
       data-testid="quick-library-panel"
       data-variant={variant}
       className={docked
-        ? 'flex w-72 shrink-0 flex-col overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]'
+        ? 'flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius)] bg-[var(--c-surface)]'
         : 'panel-shadow absolute right-0 top-0 z-20 w-80 overflow-hidden rounded-[var(--radius)] border border-[var(--c-line-strong)] bg-[var(--c-surface)]'}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
@@ -214,9 +217,20 @@ export function QuickLibraryPanel({
           <p className="px-3 py-2 text-xs text-[var(--c-text-dim)]">{pick('Đang tải catalog…', 'Loading the catalog…')}</p>
         )}
         {library.status === 'error' && (
-          <p role="alert" className="px-3 py-2 text-xs text-[var(--c-fault-fg)]">
-            {library.error ?? pick('Không đọc được thư viện.', 'Could not read the library.')}
-          </p>
+          <div className="flex flex-col items-start gap-2 px-3 py-2">
+            <p role="alert" className="text-xs text-[var(--c-fault-fg)]">
+              {library.error ?? pick('Không đọc được thư viện.', 'Could not read the library.')}
+            </p>
+            {typeof library.refresh === 'function' && (
+              <button
+                type="button"
+                onClick={() => library.refresh()}
+                className="rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 py-1 text-xs text-[var(--c-text)] hover:bg-[var(--c-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              >
+                {pick('Thử lại', 'Retry')}
+              </button>
+            )}
+          </div>
         )}
 
         {/* `T61-202` — điều kiện vẽ là CÓ NỘI DUNG, không phải `status === 'ready'`.
@@ -416,6 +430,7 @@ function BlockCard({
       onDragStart={(event) => {
         if (!insertable) return
         event.dataTransfer.setData(LIBRARY_DRAG_TYPE, entry.entryId)
+        event.dataTransfer.setData(`${LIBRARY_DRAG_TYPE}/${entry.entryId}`, '')
         event.dataTransfer.effectAllowed = 'copy'
       }}
       className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">

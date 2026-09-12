@@ -3,15 +3,15 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-FE-PGM-061` |
-| Phiên bản | 0.2 |
-| Trạng thái | **ĐÓNG — WP-00…WP-05 `DONE`. `RELEASE_READY` KHÔNG đổi (vẫn `NO-GO`)** |
-| Ngày | 2026-08-28 |
+| Phiên bản | 0.4 |
+| Trạng thái | **T61-506 đã thi hành TARGET, chờ reviewer độc lập; T61-507/#465 closeout còn mở. `RELEASE_READY` vẫn `NO-GO`** |
+| Ngày | 2026-09-08 |
 | Chủ quản | FE Lead + Web API Lead + System Architect |
 | Người review | Product Owner, Controls/Safety, QA, consumer PGM-02 |
 | Người phê duyệt | Product Owner/CTO + System Architect |
 | Baseline As-Built | `main@eecc2f89844a`; các thay đổi code chưa commit đang có trong worktree tại thời điểm lập plan là công việc đồng thời của người dùng, không thuộc baseline và không được plan này ghi đè |
 | Authority sản phẩm | [`PROD-PROG-001`](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md), [`SRS-PROG-001`](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md), [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md), [`DDD-SW-PROG-UNIFIED-001`](../02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) |
-| Đầu vào Target Candidate | [PGM-04 FE Handoff](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-04_LIBRARY_FE_HANDOFF.md) và [ảnh PGM-04](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-04_library.png) |
+| Authority trực quan Target | [PGM-04 FE Handoff](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-04_LIBRARY_FE_HANDOFF.md), [ảnh PGM-04](../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-04_library.png) và HTML visual spec theo `AUTH-UX-PROG-2026-09-08-01` |
 | Quan hệ Plan59 | **Bổ sung, không thay thế.** Plan59 sở hữu lifecycle/contract/runtime/evidence/release; Plan61 sở hữu delta UI, metadata trình bày, Used-In và handoff PGM-04 |
 | Quan hệ Plan60 | Kế thừa shell Programming đã triển khai; không làm lại PGM-01 hoặc mở lại các quyết định shell đã đóng |
 | Phạm vi | FE PGM-04, contract/API cần để render trung thực, generator SYSTEM Library có điều kiện, kiểm chứng browser và deploy Web trên SoM |
@@ -27,7 +27,7 @@
 | Source đang có gì? | Domain/store/API Control Library đã có; FE đã có search/detail/version/mutation nhưng bố cục chưa đạt handoff và thiếu metadata/usage authoritative. |
 | Thay đổi chính? | Mở contract metadata/usage khi cần, tách `LibraryPage`, tạo card grid/inspector/drawer, nối Preview/Used-In/Insert với PGM-02. |
 | Layer nào không đổi? | STM32 firmware, IOP, physical I/O, SHM và HMI native. |
-| Đang bị chặn gì? | Ảnh PGM-04 chưa là visual authority, `User Library` không có domain/API, semantics Used-In chưa khóa, và asset bật Insert cho PID đang `REVIEW_REQUIRED`. |
+| Đang bị chặn gì? | Authority trực quan PGM-04 đã được chủ sở hữu tái xác nhận ngày 2026-09-08; `User Library` không có domain/API, semantics Used-In và PID `REVIEW_REQUIRED` vẫn phải tuân contract/safety trước khi closeout. |
 | Bằng chứng đóng plan là gì? | Contract sync + Go/FE test + E2E real-backend + Chrome desktop/mobile + target browser/read-back; không suy các bằng chứng này thành HIL hay release PASS. |
 
 ### 0.1 Kết luận kiến trúc
@@ -62,7 +62,7 @@
 |---|---|---|
 | Route PGM-04 | `UX-WEB-PROG-001` và source dùng `/eng/programming/projects/:projectId/library` | Giữ route project-scoped; route global trong handoff không được đổi thành canonical ngầm. |
 | Scope library | Product/SRS/OpenAPI chỉ có `SYSTEM` và `PROJECT` | `Core Library → SYSTEM`, `Project Library → PROJECT`; không tạo `USER`. |
-| Visual PGM-04 | Asset SVG Active hiện là list/detail; UX Active nói asset PGM-04 cũ không normative | PNG handoff chỉ là Target Candidate tới khi WP-00 pin revision mới. |
+| Visual PGM-04 | PNG handoff + HTML visual spec là authority trực quan theo `AUTH-UX-PROG-2026-09-08-01`; bộ SVG Programming đã loại | Dùng PNG cho composition và HTML cho state/breakpoint; không phục hồi SVG cũ, không suy asset thành As-Built. |
 | Mutation | OpenAPI/current RBAC cho `engineer` và `admin`; server là authority | FE dùng capability `program.edit`, không dùng ngưỡng `admin` viết tay. |
 | Publish | PROJECT library publish cùng transaction Seal Revision | Wizard chỉ Save Draft; không tạo nút/API Publish độc lập. |
 | PID | SYSTEM PID là `REVIEW_REQUIRED` cho tới khi token hợp lệ | Preview được phép; Insert/Check production bị khóa và phải nêu lý do. |
@@ -77,7 +77,7 @@
 | `D61-03` | Read: viewer/operator/engineer/admin. Mutation: capability `program.edit` (`engineer/admin`). | **LOCKED** bởi contract/server hiện hành; handoff cũ phải được reconcile ở WP-00. |
 | `D61-04` | PID/feature `REVIEW_REQUIRED` luôn có badge; Insert disabled; không có checkbox bypass. | **LOCKED** bởi `T59-205`. |
 | `D61-05` | Save PROJECT entry chỉ tạo/cập nhật Library Draft; publish chỉ khi Seal Revision. | **LOCKED** bởi domain/store Plan59. |
-| `D61-06` | Dùng card grid + inspector + drawer của PNG làm visual Target mới, nhưng phải có desktop/mobile/full-state asset cùng revision. | **BLOCKED** — Product + Architect pin ở `T61-004`. |
+| `D61-06` | Dùng card grid + inspector + drawer của PNG làm visual Target; HTML cùng gói khóa desktop/mobile/full-state. | **LOCKED** bởi `AUTH-UX-PROG-2026-09-08-01`; browser/a11y evidence vẫn là gate triển khai riêng. |
 | `D61-07` | Metadata thiếu render `—/Không khả dụng`; retained stale render có nhãn; không biến thành zero/empty. | **LOCKED** bởi fail-closed baseline. |
 | `D61-08` | Used-In là read model typed từ server; FE không suy toàn bộ lịch sử chỉ từ Draft hiện tại. | **BLOCKED** — Product + BE owner khóa semantics ở `T61-005`. |
 | `D61-09` | Metadata trình bày có hash/revision riêng; sửa mô tả không đổi `contentSha256` của semantics thực thi. | **PROPOSED** — Architect + Compiler owner khóa ở `T61-005`. |
@@ -137,7 +137,7 @@
 | Browser desktop 1680×941 | List/detail/form hiện đúng As-Built; inspector cuộn mất khỏi viewport; chưa có grid/tabs | Bằng chứng UX host. |
 | Browser mobile 390×844 | Có chồng/cắt Context Strip và vẫn lộ mutation | Bằng chứng responsive host. |
 | Console/Network | 0 Console error/warning; không có failed request ngoài fault chủ động | Không chứng minh acceptance Target mới. |
-| Chrome DevTools MCP | Không khởi động vì môi trường thiếu X server; dùng Playwright headless thay thế | Không claim DevTools PASS. |
+| Chrome DevTools MCP | Tại phiên lập plan: không khởi động vì môi trường thiếu X server; dùng Playwright headless thay thế. **Đã gỡ chặn 2026-09-12** — launcher `scripts/chrome-devtools-mcp.sh` tự dựng Xvfb, kiểm lại bằng `scripts/verify-project.sh --component browser` | Không claim DevTools PASS cho các phép đo ĐÃ ghi ở phiên này; lần đo mới phải chạy lại lane. |
 
 ---
 
@@ -945,10 +945,10 @@ dịch, không ai thấy.
 | `T61-501` | P0 | Unit/component tests cho view model, pagination, URL state, card/inspector/drawer/RBAC/full state. | WP-02..04 | `DONE` | 2 nd |
 | `T61-502` | P0 | Contract/Go/generator/registry parity và migration/restart tests. | WP-01 | `DONE` | 1 nd |
 | `T61-503` | P0 | Playwright mock route: desktop/mobile/keyboard/**bốn vai RBAC**/offline/phân trang lỗi trang-N/zero mutation, và sổ kế toán cho mọi `test.skip`. | `T61-501` | `DONE` (sửa lại ở `ISS-PGM04-16`, xem đính chính bên dưới) | 1 nd |
-| `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/usage/deep-link/insert guard; anti-mock guard. | `T61-502/503` | `DONE` | 1,5 nd |
-| `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, scroll/sticky và responsive. | `T61-504` | `DONE` | 0,5 nd |
-| `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `DONE` | 1 nd |
-| `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `DONE` | 0,5 nd |
+| `T61-504` | P0 | Real-backend E2E Project Library create/edit/seal/version/**usage**/deep-link/**compatibility**/insert guard; anti-mock guard. | `T61-502/503` | `DONE` (sửa lại ở `ISS-PGM04-17`, xem đính chính bên dưới) | 1,5 nd |
+| `T61-505` | P0 | Chrome DevTools desktop/tablet/mobile: screenshot, Console, Network, a11y, focus-return, scroll/sticky và responsive. | `T61-504` | `DONE` (sửa lại ở `ISS-PGM04-18`, xem đính chính bên dưới) | 0,5 nd |
+| `T61-506` | P1 | Deploy Web/BE lên Forlinx, read-back version/hash/service/browser; rollback rehearsal. | `T61-504/505` | `TARGET TECHNICAL PASS — REVIEW PENDING` | 1 nd |
+| `T61-507` | P0 | Cập nhật Plan59/trace/risk/CHANGELOG và record evidence thật; không tự tạo Test Result PASS. | `T61-506` | `BLOCKED — #464 reviewer + #465 closeout` | 0,5 nd |
 
 **Đính chính `T61-503` (`ISS-PGM04-16`, đo `2026-09-05`).** Trạng thái `DONE` đã
 được ghi cho một suite **chỉ chạy được vai `admin`**, và cho hai fixture đã cũ đi
@@ -996,6 +996,82 @@ tạo/sửa được khối thư viện nhưng không sửa được POU. Máy c
 trên cả hai. Đây là cùng lớp lỗi `T61-201` đã sửa ở đường RBAC, nhưng nó nằm ở
 tám tệp ngoài PGM-04 và đổi nó là một quyết định sản phẩm về *ai được sửa mã*,
 nên lát này chỉ ghi lại chứ không tự quyết.
+
+**Đính chính `T61-504` (`ISS-PGM04-17`, đo `2026-09-05`).** Trạng thái `DONE` đã
+được ghi cho một lane real-backend **chưa từng gọi `GET /library-usages` lần
+nào**, chưa từng đọc `compatibility`, và chưa từng đi đường Chèn. Lần đầu ba read
+model ấy chạm backend thật, chúng lộ ra **một lỗi sản phẩm nghiêm trọng**:
+
+1. **`compatibility` của mọi entry PROJECT luôn là `UNKNOWN`, trên mọi thiết
+   bị.** `LibraryCompatibilityFacts` xác định Revision đang vận hành bằng
+   `commission_records.result='SUCCEEDED'`. Cột ấy được ghi từ **result code**
+   của operation, và result code của một lần Commission thành công là
+   `COMMITTED` (`application/operations.go`: `transition(operation, "SUCCEEDED",
+   "COMMITTED", "COMMITTED", …)`). Chuỗi `SUCCEEDED` **không bao giờ** nằm ở cột
+   đó, nên điều kiện không bao giờ đúng: `HasActiveRevision` luôn `false`,
+   `PinnedVersions` luôn rỗng. **Toàn bộ read model `T61-101` — cả `COMPATIBLE`
+   lẫn `REQUIRES_MIGRATION` — chưa từng xuất hiện trong sản phẩm**, và guard
+   `REQUIRES_MIGRATION` mà `T61-406` vừa dựng chưa từng có cơ hội kích hoạt.
+2. **`isActive` của Used-In luôn `false`** — cùng một điều kiện sai, ở truy vấn
+   thứ hai. PGM-04 vì thế chưa từng đánh dấu được "bản đang chạy", đúng dấu hiệu
+   người vận hành dùng để biết một khối có đang điều khiển tủ hay không **trước
+   khi** sửa nó.
+3. **Vì sao không test nào bắt được.** `library_compatibility_test.go` dựng
+   `LibraryCompatibilityFacts` **bằng tay**: nó kiểm bộ phân loại, không kiểm câu
+   truy vấn nuôi bộ phân loại. Đó là hình dạng điển hình của một vùng "có test
+   mà không có phủ": mọi nhánh của hàm phân loại đều xanh, trong khi đầu vào của
+   nó không bao giờ khác rỗng ở đời thật.
+4. **Lane real-backend chưa từng chạy được trong container.** `cmake --fresh`
+   xoá cache mỗi lần, nên `FetchContent` đi tải `googletest`/`nlohmann_json` qua
+   HTTP; máy đo không có lối ra Internet thì bước configure chết trước khi chạm
+   assertion nào. Đúng chế độ hỏng mà `playwright.programming-real.config.ts` đã
+   ghi lại một lần: *"một cổng không chạy được là một cổng sẽ bị bỏ qua"*. Nay
+   script tự dùng `build/deps-cache/` khi có, và không đổi gì khi không có.
+
+**Cách sửa (backend).** Cả hai truy vấn nay lọc theo **trạng thái terminal của
+chính operation** (`operations.state='SUCCEEDED'`) thay vì từ vựng result code.
+Đó là nguồn đúng — store chỉ cho ghi `CommissionRecord` cùng lúc operation vào
+terminal — và không cần migration cho dữ liệu đã ghi. Kèm một test store đi qua
+**đúng đường ghi của sản phẩm** (`BeginOperation` → `ClaimOperation` → chuỗi
+`UpdateOperation` tới `SUCCEEDED`), và test ấy khẳng định thẳng rằng giá trị nằm
+trong cột `result` **không** phải `SUCCEEDED` — chính là lý do điều kiện cũ
+trượt, nên nó không thể xanh trên bản mã cũ.
+
+**Đính chính `T61-505` (`ISS-PGM04-18`, đo `2026-09-05`).** Trạng thái `DONE` đã
+được ghi cho bằng chứng **ảnh Playwright**, không phải bằng chứng trình duyệt:
+phiên `2026-09-03` không khởi động được Chrome DevTools vì máy đo thiếu X
+server. Ảnh Playwright không mang Console, không mang Network, và không nói được
+gì về cây `Accessibility` — nên ba trong bốn thứ mà task này tồn tại để đo chưa
+từng được đo.
+
+1. **Môi trường.** `--headless=new` khắc phục đúng chỗ thiếu ấy: Chrome thật, có
+   DevTools Protocol đầy đủ, profile cô lập trong thư mục tạm, **không cần X
+   server**. Lane mới (`scripts/run-pgm04-devtools-audit.sh`) nói CDP trực tiếp,
+   không đi qua Playwright, và chạy trên backend Go thật.
+2. **Trạng thái là trạng thái THẬT.** `offline` dựng bằng
+   `Network.emulateNetworkConditions` — một khả năng của DevTools, không phải
+   một fixture; `permission` là phiên `viewer` thật; `review-required` là `PID`
+   của registry SYSTEM. Không có `page.route` nào.
+3. **Sáu khổ, đo bằng toạ độ.** 3/3/2/2/1/1 cột ở 1440/1280/1024/768/**700**/390,
+   khay 352/352/320 px rồi phủ/toàn màn, không tràn ngang ở khổ nào. Ba khối
+   được gieo chứ không phải một: với một thẻ, số cột luôn bằng 1 ở mọi khổ.
+4. **Lỗi sản phẩm phát hiện được.** `document.activeElement` sau `Esc` là `BODY`:
+   `Modal` ghi nhớ nút mở bằng listener cài lúc mount, nhưng `LibraryAuthoringDrawer`
+   chỉ dựng `Modal` KHI mở (`if (!mode) return null`) — sự kiện của nút mở đã
+   xảy ra trước khi listener tồn tại; và hiệu ứng trả tiêu điểm chỉ chạy khi
+   `open` chuyển sang `false`, còn hộp thoại bị **gỡ khỏi cây** thì nó không bao
+   giờ chạy. `T61-306` ghi "Esc/return-focus drawer" là `DONE`, nhưng phép đo
+   trước đó chưa từng hỏi `document.activeElement` sau khi đóng. Đã sửa ở
+   `Modal.tsx` kèm test dựng đúng hình dạng gây lỗi.
+5. **Bí mật.** Script tự quét chuỗi sắp ghi và **từ chối ghi** nếu thấy
+   `Bearer …`, mật khẩu viewer, hay một header nhạy cảm chưa che — một hàm lọc
+   chỉ đúng khi không ai đi vòng qua nó, và nguồn dữ liệu thứ sáu thêm vào ngày
+   mai sẽ không tự nhớ phải lọc.
+
+**Giới hạn còn lại.** Chrome DevTools **MCP** không có trong phiên đo (`codex`
+không cài trên máy này); lane dùng CDP trực tiếp — cùng giao thức, cùng dữ liệu.
+Ai cần đúng đường MCP vẫn phải cài `codex` + `chrome-devtools-mcp`. Bằng chứng
+đầy đủ: `docs/07_records/reviews/PGM04_DEVTOOLS_AUDIT_2026-09-05.md`.
 
 **Tổng 38 task, khoảng 49 người-ngày.** Đây là ước lượng planning, không phải
 cam kết lịch. Nếu Product bỏ metadata/Used-In/full visual parity, phải change-
@@ -1124,7 +1200,7 @@ và HMI ON theo `AGENTS.md`. Không chạy firmware MCU vì Plan61 không sửa 
 
 | Mã | Rủi ro/blocker | Mức | Owner | Ảnh hưởng/gate | Điều kiện mở/giảm thiểu |
 |---|---|---|---|---|---|
-| `R61-01` | PNG không phải visual authority Active | P0 | Product + Architect | Chặn `PLAN_READY` | Pin desktop/mobile/full-state asset + DDD revision. |
+| `R61-01` | PNG chưa là visual authority Active | P0 | Product + Architect | **CLOSED 2026-09-08** | `AUTH-UX-PROG-2026-09-08-01` pin PNG composition + HTML full-state; browser/a11y evidence vẫn theo task QA. |
 | `R61-02` | `USER` scope trong handoff nhưng không có Product/API/store | P0 | Product | Chặn nếu UI còn tab User | Plan61 loại User; muốn thêm phải mở Product/ADR/contract/plan riêng. |
 | `R61-03` | Asset bật Insert PID review-required | P0 | Controls/Safety + UX | Chặn visual pin | Sửa asset: badge/reason/disabled Insert; test zero mutation. |
 | `R61-04` | Used-In semantics chưa khóa, đặc biệt SYSTEM/history | P0 | Product + BE | Chặn contract/AC-02 | Đóng `D61-08` và OpenAPI typed. |
@@ -1150,13 +1226,13 @@ và HMI ON theo `AGENTS.md`. Không chạy firmware MCU vì Plan61 không sửa 
 - [x] OpenAPI/Go/client/registry exact-sync — `verify_programming_g1_contracts.py`,
       `verify_programming_pgm02_contract.py`, `generate_programming_library_registry.py --check`
       đều PASS sau re-pin `1.31.0 → 1.32.0`. Migration test xanh.
-      **Rollback test: `NOT_RUN` — xem dòng cuối.**
+      Rollback TARGET đã chạy; reviewer độc lập còn `PENDING`.
 - [x] Không có catalog presentation thứ hai: nhãn nhóm và tập giá trị `category`
       đều đọc từ `PROGRAMMING_LIBRARY_CATEGORY_ORDER` của registry; chữ ký đọc
       `signature` của server và **không** parse `interface` ở FE.
 - [x] `AC-PGM04-01..06` có evidence: xem [`EV-PGM04-WP0304-CLOSEOUT-001`](../07_records/reviews/PGM04_WP03_WP04_CLOSEOUT_2026-08-29.md).
-      `VS-PGM04-61-001..013` có evidence; **`VS-PGM04-61-014` một nửa** — nhánh
-      upgrade đã đo trên bo, nhánh rollback `NOT_RUN`.
+      `VS-PGM04-61-001..013` có evidence; phần kỹ thuật TARGET của
+      `VS-PGM04-61-014` PASS, reviewer độc lập còn `PENDING`.
 - [x] Matrix bốn vai được test ở UI (`libraryEntryPermissions`, `LibraryPage.test.tsx`)
       và ở direct API (`security_matrix_test.go`).
 - [x] Desktop/mobile/keyboard/a11y/Console/Network đạt ngưỡng §8: axe
@@ -1164,20 +1240,20 @@ và HMI ON theo `AGENTS.md`. Không chạy firmware MCU vì Plan61 không sửa 
       `expectNoBrowserFailures` = 0 console.error / 0 request lỗi; số đo bố cục
       không tràn ngang ở 1440/1280/1024/768/390 px. Light/dark do
       `contrast.test.ts` canh trên chính token đang dùng.
-- [~] Deploy/read-back Forlinx có artifact hash và raw log
-      ([hồ sơ](../07_records/test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md));
-      **rollback rehearsal `NOT_RUN`**.
+- [~] Deploy/read-back/rollback/redeploy Forlinx có artifact hash, raw log và
+      browser evidence
+      ([hồ sơ](../07_records/test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md#6-bổ-sung-2026-09-06-—-diễn-tập-rollback-thật-iss-pgm04-19));
+      phần kỹ thuật PASS, reviewer độc lập còn `PENDING`.
 - [x] Trace/risk/docs/CHANGELOG cập nhật cùng change-set.
 - [x] Phần chưa chạy được ghi `NOT_RUN`, không nâng release gate.
 
-**`NOT_RUN` — diễn tập rollback trên bo.** Bản sao lưu đã có sẵn trên thiết bị
-(`/opt/mkddc-web/mkddc-web.bak-pgm04-20260829T085228Z` và
-`dist.bak-pgm04-20260829T085228Z`) và các bước đã ghi trong hồ sơ deploy §1,
-nhưng phép diễn tập chưa được thực hiện: lệnh khôi phục bị cơ chế phê duyệt của
-môi trường thi hành từ chối. Cần một lần chạy có phê duyệt để đóng nốt
-`VS-PGM04-61-014`. Không suy diễn tập chưa chạy thành PASS.
+**`TARGET TECHNICAL PASS — REVIEW PENDING`.** Chu kỳ sạch ngày 2026-09-06 chạy
+`candidate → rollback → read-back → redeploy`; lệnh rollback và redeploy đều
+exit 0. DB, Project/Draft, API, browser và checksum đạt; Core/IOBus/FakeMCU giữ
+nguyên PID/NRestarts. Reviewer độc lập phải xác nhận evidence trước khi đóng
+`RSK-PGM04-101`; không suy TARGET/FakeMCU thành HIL hoặc release PASS.
 
-### 11.2 Trạng thái ba cổng tại phiên bản 0.2
+### 11.2 Trạng thái ba cổng tại phiên bản 0.3
 
 | Gate | Verdict | Lý do |
 |---|---|---|
@@ -1219,14 +1295,14 @@ Plan61 là **Implementation Plan**, không thay thế Detailed Design. Bảng d�
 | `DD-05` Data từng field | BLOCKED | §4.1 là proposal; owner Product+BE, chặn WP-01, mở khi `T61-005` ký. |
 | `DD-06` Interface | BLOCKED | Used-In/search contract chưa machine-readable; owner BE+Architect, chặn WP-01. |
 | `DD-07` State/algorithm/timing | PASS cho plan | §3.4 + budget §4.3; chi tiết transaction giữ ở DDD/domain hiện hành. |
-| `DD-08` UX flow | BLOCKED | Component/responsive đã có nhưng visual full-state chưa render/pin; owner UX, chặn `PLAN_READY`. |
+| `DD-08` UX flow | PASS cho plan | PNG composition và HTML full-state/breakpoint đã được pin bởi `AUTH-UX-PROG-2026-09-08-01`; browser/a11y result vẫn là gate triển khai, không phải thiết kế còn thiếu. |
 | `DD-09` Error/safety/security | PASS cho plan | §4.4, PID/RBAC/zero-mutation và rủi ro. |
 | `DD-10` Repository mapping | PASS cho plan | §5. |
 | `DD-11` Verification | PASS cho plan | §8 fixture/expected/target/authority. |
 | `DD-12` Deploy/rollback | PASS cho plan | §9. |
-| `DD-13` Trace/risk/sign-off | BLOCKED | §10–§11; Product/Architect chưa pin/sign; chặn `PLAN_READY`. |
+| `DD-13` Trace/risk/sign-off | BLOCKED | Visual đã được pin; Used-In/metadata semantics, reviewer độc lập và closeout vẫn phải đóng theo §10–§11. |
 
-Maturity hiện hành: **M2 — DRAFT CONTENT**. Chỉ chuyển M3 khi bốn ô BLOCKED
+Maturity hiện hành: **M2 — DRAFT CONTENT**. Chỉ chuyển M3 khi các ô BLOCKED
 được đóng trong authority/DDD, link/harness sạch và self-check được đo lại.
 
 ---
@@ -1235,4 +1311,6 @@ Maturity hiện hành: **M2 — DRAFT CONTENT**. Chỉ chuyển M3 khi bốn ô 
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 0.4 | 2026-09-08 | Ghi `AUTH-UX-PROG-2026-09-08-01`: PNG PGM-04 và HTML visual spec cùng là authority trực quan bổ sung nhau; loại dependency vào bộ SVG Programming sai. Giữ gate contract/Used-In/reviewer/runtime/release trung thực. |
+| 0.3 | 2026-09-06 | Đồng bộ `T61-506` với chu kỳ rollback/redeploy TARGET đã chạy thật; giữ reviewer độc lập, closeout `#465` và `RELEASE_READY` ở trạng thái chưa đạt. |
 | 0.1 | 2026-08-28 | Tạo Plan61 từ audit handoff, source và runtime PGM-04; khóa SYSTEM/PROJECT, project-scoped route, capability RBAC, PID gate, publish-on-Seal; lập 38 task FE/BE/registry/QA và giữ MCU/HIL/release ngoài phạm vi. |

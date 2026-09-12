@@ -1,0 +1,20 @@
+2026-09-05T18:31:42Z
+active
+MainPID=1468376
+NRestarts=0
+Id=mkddc-core.service
+active
+MainPID=1468367
+NRestarts=0
+Id=mkddc-iobus.service
+active
+MainPID=1476298
+NRestarts=0
+Id=mkddc-web-pi.service
+active
+MainPID=1468363
+NRestarts=0
+Id=mkddc-fakemcu.service
+lrwxrwxrwx 1 mkddc mkddc 10 Sep  5 16:15 /tmp/mkddc-iop-a -> /dev/pts/0
+/dev/pts/0
+/usr/sbin/mkddc-iobus --uart /tmp/mkddc-iop-a --fieldbus-config /data/config/fieldbus.conf --fieldbus-sock /run/mkddc/fieldbus.sock --fieldbus-control-sock /run/mkddc/modbus-control.sock

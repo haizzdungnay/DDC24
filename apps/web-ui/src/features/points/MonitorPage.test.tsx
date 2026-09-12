@@ -46,8 +46,8 @@ const uiPoint: Point = {
   source: 'core', updatedAt: new Date().toISOString()
 }
 
-function renderPage() {
-  return render(<MemoryRouter><I18nProvider><ToastProvider><MonitorPage /></ToastProvider></I18nProvider></MemoryRouter>)
+function renderPage(entry = '/') {
+  return render(<MemoryRouter initialEntries={[entry]}><I18nProvider><ToastProvider><MonitorPage /></ToastProvider></I18nProvider></MemoryRouter>)
 }
 
 describe('MonitorPage point metadata recovery', () => {
@@ -86,4 +86,46 @@ describe('MonitorPage point metadata recovery', () => {
     expect(api.updatePointConfig).not.toHaveBeenCalled()
     expect(name).toHaveValue('Recovered Room')
   })
+})
+
+describe('MonitorPage hiển thị point Modbus RTU', () => {
+  const modbusPoint: Point = {
+    id: 'CK50804-DO1',
+    tag: 'CK50804-DO1',
+    name: 'Relay 1',
+    kind: 'modbus_rtu',
+    value: true,
+    unit: '',
+    quality: 'good',
+    source: 'modbus_rtu',
+    updatedAt: '2026-09-05T12:00:00Z',
+    logEnabled: true
+  }
+
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    hookState.points = [uiPoint, modbusPoint]
+    hookState.virtualPoints = []
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it.each(['/monitor?group=modbus', '/monitor?kind=modbus_rtu'])(
+    'render đúng section, row và detail khi lọc %s',
+    (entry) => {
+      renderPage(entry)
+
+      expect(screen.getByText('MODBUS RTU POINTS (1)')).toBeInTheDocument()
+      /* ID xuất hiện ở cả row và panel chi tiết: hai chỗ phải cùng bám kết quả
+         lọc Modbus, không được giữ UI-01 từ inventory đầy đủ. */
+      expect(screen.getAllByText('CK50804-DO1').length).toBeGreaterThanOrEqual(2)
+      expect(screen.getAllByText('Relay 1').length).toBeGreaterThan(0)
+      expect(screen.queryByText('UI-01')).not.toBeInTheDocument()
+      expect(screen.getByText('History is not available for Modbus RTU points yet')).toBeInTheDocument()
+      expect(screen.queryByText('Open in Trends')).not.toBeInTheDocument()
+    }
+  )
 })

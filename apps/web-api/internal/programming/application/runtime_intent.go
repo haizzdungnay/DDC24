@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -74,6 +75,24 @@ type RuntimeIntentService struct {
 	lifecycleMu  sync.Mutex
 	cancel       context.CancelFunc
 	wg           sync.WaitGroup
+
+	// Trạng thái sức khoẻ của vòng reconcile nền. `healthMu` RIÊNG với
+	// `intentMu` có chủ ý: `ReconcileOnce` giữ `intentMu` suốt cả vòng đẩy
+	// xuống Core, nên dùng chung một khoá sẽ biến `LastReconcileError()` thành
+	// lời gọi chặn theo nhịp IPC — đúng thứ một API đọc trạng thái không được làm.
+	healthMu         sync.Mutex
+	lastReconcileErr error
+	reconcileStreak  int
+
+	// `logf` mặc định là `log.Printf`; test tiêm bản đếm để chứng minh luật
+	// chống spam. Không phiên bản sản xuất nào đổi nó.
+	logf func(format string, args ...any)
+
+	// `reconcileOnce` là điểm nối để test tiêm một lỗi lặp lại rồi cho lành lại.
+	// `ReconcileOnce` thật đọc store SQLite, và cách duy nhất bắt nó lỗi trong
+	// test là đóng store — thao tác KHÔNG đảo ngược được, nên không kiểm được
+	// nhánh "thành công sau chuỗi lỗi". Mặc định trỏ thẳng vào `ReconcileOnce`.
+	reconcileOnce func(context.Context) (int, error)
 }
 
 func NewRuntimeIntentService(options RuntimeIntentServiceOptions) (*RuntimeIntentService, error) {
@@ -89,8 +108,11 @@ func NewRuntimeIntentService(options RuntimeIntentServiceOptions) (*RuntimeInten
 	if options.NewID == nil {
 		options.NewID = uuid.NewString
 	}
-	return &RuntimeIntentService{store: options.Store, runtime: options.Runtime,
-		controllerID: options.ControllerID, now: options.Now, newID: options.NewID}, nil
+	service := &RuntimeIntentService{store: options.Store, runtime: options.Runtime,
+		controllerID: options.ControllerID, now: options.Now, newID: options.NewID,
+		logf: log.Printf}
+	service.reconcileOnce = service.ReconcileOnce
+	return service, nil
 }
 
 // SetProgramEnabled ghi intent rồi đẩy xuống Core và ghi lại read-back.
@@ -199,7 +221,7 @@ func (s *RuntimeIntentService) Start(parent context.Context) error {
 		ticker := time.NewTicker(intentReconcileInterval)
 		defer ticker.Stop()
 		for {
-			_, _ = s.ReconcileOnce(ctx)
+			s.reconcileTick(ctx)
 			select {
 			case <-ctx.Done():
 				return
@@ -222,6 +244,93 @@ func (s *RuntimeIntentService) Close() {
 		cancel()
 		s.wg.Wait()
 	}
+}
+
+// reconcileTick chạy đúng một vòng reconcile rồi ghi lại kết quả vào trạng thái
+// sức khoẻ và quyết định có log hay không.
+//
+// Tách khỏi thân goroutine để test chứng minh được luật chống spam mà không phải
+// chờ `time.Ticker` thật: một test dựa trên đồng hồ treo tường để đếm dòng log là
+// một test sẽ đỏ ngẫu nhiên trên máy chậm.
+//
+// Context bị huỷ là đường tắt máy bình thường, KHÔNG phải sự cố: `Close()` huỷ
+// context rồi mới `wg.Wait()`, nên vòng đang chạy dở gần như luôn trả về một lỗi
+// context. Ghi nó vào trạng thái sức khoẻ sẽ để lại "lỗi gần nhất" là một lỗi
+// tắt máy trên mọi lần shutdown sạch — cùng lý do `checks.go:520` kẹp điều kiện
+// `ctx.Err() == nil` trước khi log.
+func (s *RuntimeIntentService) reconcileTick(ctx context.Context) (int, error) {
+	replayed, err := s.reconcileOnce(ctx)
+	if ctx.Err() != nil {
+		return replayed, err
+	}
+	if err == nil {
+		if recovered := s.noteReconcileSuccess(); recovered > 0 {
+			s.logf("INFO programming_runtime_intent_worker recovered_after=%d", recovered)
+		}
+		return replayed, nil
+	}
+	// Bậc lùi theo luỹ thừa 2 (tick lỗi thứ 1, 2, 4, 8, 16...). Vòng này chạy mỗi
+	// 2 giây; log mỗi tick sẽ là 43200 dòng/ngày cho MỘT sự cố đứng yên, và khối
+	// lượng đó chôn mất mọi thứ khác trong log. Chuỗi luỹ thừa 2 giữ số dòng tăng
+	// theo log2 của thời gian hỏng: sự cố vẫn tự nói ra, và vẫn tiếp tục nói ra
+	// đủ thưa để đọc được. `streak` in kèm để một dòng đơn lẻ không bị hiểu nhầm
+	// là "vừa hỏng lần đầu" khi thật ra đã hỏng suốt vài giờ.
+	if streak := s.noteReconcileFailure(err); isPowerOfTwo(streak) {
+		s.logf("WARN programming_runtime_intent_worker err=%v streak=%d", err, streak)
+	}
+	return replayed, err
+}
+
+// noteReconcileFailure cập nhật chuỗi lỗi liên tiếp và trả về độ dài chuỗi sau
+// khi cập nhật. Lỗi ĐỔI DẠNG thì chuỗi đếm lại từ 1 — một lỗi mới là tin mới và
+// phải được nói ra ngay, chứ không bị nuốt vì lỗi cũ đang trong quãng im lặng.
+func (s *RuntimeIntentService) noteReconcileFailure(err error) int {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	if s.lastReconcileErr == nil || s.lastReconcileErr.Error() != err.Error() {
+		s.reconcileStreak = 1
+	} else {
+		s.reconcileStreak++
+	}
+	s.lastReconcileErr = err
+	return s.reconcileStreak
+}
+
+// noteReconcileSuccess xoá trạng thái lỗi và trả về độ dài chuỗi lỗi vừa kết
+// thúc (0 nếu vòng trước đã lành).
+func (s *RuntimeIntentService) noteReconcileSuccess() int {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	streak := s.reconcileStreak
+	s.reconcileStreak = 0
+	s.lastReconcileErr = nil
+	return streak
+}
+
+// LastReconcileError trả về lỗi gần nhất của vòng reconcile nền, hoặc `nil` khi
+// vòng gần nhất thành công. An toàn khi gọi đồng thời với goroutine nền.
+func (s *RuntimeIntentService) LastReconcileError() error {
+	if s == nil {
+		return nil
+	}
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	return s.lastReconcileErr
+}
+
+// ConsecutiveReconcileFailures trả về số vòng reconcile lỗi liên tiếp tính đến
+// hiện tại. An toàn khi gọi đồng thời với goroutine nền.
+func (s *RuntimeIntentService) ConsecutiveReconcileFailures() int {
+	if s == nil {
+		return 0
+	}
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	return s.reconcileStreak
+}
+
+func isPowerOfTwo(n int) bool {
+	return n > 0 && n&(n-1) == 0
 }
 
 // ReconcileOnce chỉ replay hàng UNKNOWN. REJECTED được giữ FAULTED để không

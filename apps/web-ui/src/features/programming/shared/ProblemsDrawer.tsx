@@ -5,6 +5,19 @@ import { programmingErrorCopy } from '../api/errorCopy'
 import type { ProgrammingDiagnostic } from '../model/types'
 import { diagnosticFreshness, type OpenBufferContext, type StaleReason } from './diagnosticFreshness'
 
+/** Dải chiều cao cho phép của khay Vấn đề, tính bằng `px`.
+ *
+ * Ba chỗ phải nói cùng một dải, và trước đây không chỗ nào tham chiếu chỗ nào:
+ * bộ lọc giá trị đọc từ `localStorage`, cặp `aria-valuemin`/`aria-valuemax`
+ * công bố ra công nghệ trợ giúp, và `clampPanelHeight` quyết định widget thực
+ * sự nhận gì. Nới dải ở một chỗ mà quên hai chỗ kia thì trình đọc màn hình
+ * nghe một trần SAI (`aria-valuenow` vượt `aria-valuemax`) còn chiều cao vừa
+ * kéo lại không được nhớ qua lần tải lại — hai triệu chứng khác nhau từ một
+ * lần sửa một dòng, và không phép đo nào đỏ. Giữ đúng MỘT điểm định nghĩa cho
+ * mỗi biên là thứ duy nhất buộc ba chỗ đó bằng nhau. */
+export const PANEL_HEIGHT_MIN_PX = 160
+export const PANEL_HEIGHT_MAX_PX = 320
+
 /** Câu giải thích VÌ SAO một diagnostic không còn nói về buffer đang mở.
  *
  * Mỗi lý do dẫn tới một hành động khác nhau của người dùng, nên chúng không
@@ -31,28 +44,30 @@ function staleCopy(
 }
 
 /**
- * `ProblemsDrawer` — khay Vấn đề của **PGM-03** (`Kiểm tra & Đưa vào vận hành`).
+ * `ProblemsDrawer` — khay Vấn đề của **PGM-05** (`Kiểm tra & Đưa vào vận hành`).
  * Diagnostic canonical đến từ `GET /checks/{checkId}`; đây chỉ hiển thị lại,
  * không tự tính lỗi. Nhiều lỗi không spam toast — luôn gom vào đây (UX §16.2).
  *
- * `ISS-STED-05` — docstring cũ viết *"dùng chung cho ba tab của PGM-02 và cho
- * PGM-03 (DDD-FE-PROG-001 §2)"* trong khi component này **chưa bao giờ** được
- * mount ở PGM-02: khay Vấn đề của PGM-02 là `ProgrammingWorkbench`
- * (`design/workbench/`), một component khác. Câu sai đó khiến người đọc tin
- * rằng PGM-02 đã có khay lỗi dùng chung, nên không ai đi tìm lý do POU ST
- * không hiện lỗi. Nay ghi đúng chỗ nó thật sự sống, và ghi luôn nơi khay của
- * PGM-02 nằm.
+ * `ISS-STED-05` / `TC-FBD-DIAG-001` — danh sách diagnostic dùng chung cho
+ * PGM-05 và tab Vấn đề của `ProgrammingWorkbench`. Biến thể `embedded` chỉ bỏ
+ * chrome drawer; cùng renderer vẫn giữ severity, mã lỗi, provenance và luật
+ * không biến một diagnostic thiếu anchor thành nút nhảy giả.
  */
 export function ProblemsDrawer({
   diagnostics,
   onSelect,
+  isSelectable,
   emptyState = 'no-problems',
   onEmptyAction,
   openBuffer,
-  onRecheck
+  onRecheck,
+  variant = 'tray',
 }: {
   diagnostics: ProgrammingDiagnostic[]
   onSelect?: (diagnostic: ProgrammingDiagnostic) => void
+  /** Cho phép bề mặt nhúng giữ lỗi không có anchor ở dạng văn bản, thay vì
+   * biến mọi dòng thành nút có vẻ sẽ điều hướng được. */
+  isSelectable?: (diagnostic: ProgrammingDiagnostic) => boolean
   /** Rỗng vì chưa có kết quả Check khác với Check đã chạy nhưng không có lỗi. */
   emptyState?: 'not-checked' | 'no-problems' | 'check-failed' | 'checking' | 'unknown'
   onEmptyAction?: () => void
@@ -63,6 +78,9 @@ export function ProblemsDrawer({
   /** Chạy lại Kiểm tra. `ISS-STED-18` yêu cầu mục STALE phải có đường thoát,
    * không chỉ có nhãn. */
   onRecheck?: () => void
+  /** `embedded` chỉ render danh sách dùng chung bên trong workbench đã sở hữu
+   * collapse/resize/tab; không dựng thêm một drawer lồng drawer. */
+  variant?: 'tray' | 'embedded'
 }) {
   const { pick } = useI18n()
   const hasStale =
@@ -72,7 +90,9 @@ export function ProblemsDrawer({
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('programming.problems.collapsed') === 'true')
   const [panelHeight, setPanelHeight] = useState(() => {
     const stored = Number(localStorage.getItem('programming.problems.height'))
-    return Number.isFinite(stored) && stored >= 160 && stored <= 320 ? stored : 160
+    return Number.isFinite(stored) && stored >= PANEL_HEIGHT_MIN_PX && stored <= PANEL_HEIGHT_MAX_PX
+      ? stored
+      : PANEL_HEIGHT_MIN_PX
   })
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -199,13 +219,12 @@ export function ProblemsDrawer({
             : undefined
           const codeText = [diagnostic.code, diagnostic.detailCode].filter(Boolean).join(' · ')
           const messageText = diagnostic.message || programmingErrorCopy(pick, diagnostic.detailCode ?? diagnostic.code)
-          return (
-            <li key={`${diagnostic.code}-${index}`}>
-              <button
-                type="button"
-                className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--c-surface-2)] focus-visible:bg-[var(--c-surface-2)]"
-                onClick={() => onSelect?.(diagnostic)}
-              >
+          /* Mặc định giữ đúng contract lịch sử: mọi diagnostic là một button
+           * kể cả caller chỉ dùng focus/inspection. Bề mặt nhúng phải truyền
+           * `isSelectable` để gỡ button cho lỗi không có anchor. */
+          const selectable = isSelectable?.(diagnostic) ?? true
+          const row = (
+            <>
                 <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
                 <span>
                   <span className="sr-only">{severityLabel}: </span>
@@ -220,13 +239,32 @@ export function ProblemsDrawer({
                   <span className="block font-mono text-xs text-[var(--c-text-dim)]">{codeText}{locationText ? ` · ${locationText}` : ''}</span>
                   <span className="block text-[var(--c-text)]">{messageText}</span>
                 </span>
-              </button>
+            </>
+          )
+          return (
+            <li key={`${diagnostic.code}-${index}`}>
+              {selectable ? (
+                <button
+                  type="button"
+                  className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--c-surface-2)] focus-visible:bg-[var(--c-surface-2)]"
+                  onClick={() => onSelect?.(diagnostic)}
+                >
+                  {row}
+                </button>
+              ) : (
+                <div className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm">
+                  {row}
+                </div>
+              )}
             </li>
           )
         })}
       </ul>
     </div>
   )
+  if (variant === 'embedded') {
+    return <div data-testid="problems-drawer-embedded">{content}</div>
+  }
   return (
     <section className="mt-4 border-t border-[var(--c-line-strong)] bg-[var(--c-surface)] pt-2" aria-label={pick('Khay vấn đề', 'Problems tray')}>
       <div className="flex items-center justify-between">
@@ -257,8 +295,8 @@ export function ProblemsDrawer({
           role="separator"
           aria-label={pick('Đổi chiều cao khay vấn đề', 'Resize problems tray')}
           aria-orientation="horizontal"
-          aria-valuemin={160}
-          aria-valuemax={320}
+          aria-valuemin={PANEL_HEIGHT_MIN_PX}
+          aria-valuemax={PANEL_HEIGHT_MAX_PX}
           aria-valuenow={panelHeight}
           tabIndex={0}
           className="mt-2 hidden h-3 cursor-row-resize items-center justify-center border-y border-[var(--c-border)] text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] min-[1280px]:flex"
@@ -343,6 +381,6 @@ function problemsEmptyCopy(
   }
 }
 
-function clampPanelHeight(value: number): number {
-  return Math.min(320, Math.max(160, Math.round(value)))
+export function clampPanelHeight(value: number): number {
+  return Math.min(PANEL_HEIGHT_MAX_PX, Math.max(PANEL_HEIGHT_MIN_PX, Math.round(value)))
 }

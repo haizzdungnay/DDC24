@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DEC-PROG-REGISTER-001` |
-| Phiên bản | 1.7 |
-| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED; increment R1 và R2 ĐÓNG (`T59-801..813` DONE), R3 mở với `T59-814` READY. **Một quyết định ĐANG MỞ: `UD-PROG-014` (tab đa POU)**; `UD-PROG-013` còn phần dư cần disposition. Status authority của từng task là Plan 59, không phải hồ sơ này** |
-| Ngày | 2026-08-25 |
+| Phiên bản | 1.8 |
+| Trạng thái | **Baseline Active — change request PGM-02 v2.2 APPROVED; `F-P59-GHOST-POU-001` CLOSED; increment R1, R2 và R3 đều ĐÓNG (74/74 task DONE hoặc WAIVED/DEFERRED tường minh). **Hai quyết định ĐANG MỞ: `UD-PROG-015` (ba trường Inspector chưa có nguồn dữ liệu) và `UD-PROG-016` (chỉ mục ký hiệu do compiler sinh)**; `UD-PROG-017` (ngân sách bundle R1) CLOSED 2026-09-05. Status authority của từng task là Plan 59, không phải hồ sơ này** |
+| Ngày | 2026-09-05 (bản 1.8; baseline gốc 2026-08-25) |
 | Chủ quản | Product + System Architecture |
 | Authority | `ADR-050`; `AUTH-PROG-2026-08-20-04`; `AUTH-PROG-2026-08-24-05`; `CR-PROG-PGM02-V22-001` |
 
@@ -56,6 +56,7 @@ viết code; đó là **evidence bắt buộc để mở `RELEASE_READY`**.
 | `UD-PROG-014` | PGM-02 mở **nhiều tab POU** song song (phương án B). | **CLOSED** | Chủ sở hữu cấp ba ảnh render PGM-02 ngày 2026-08-27 kèm chỉ thị thi hành; cả ST lẫn FBD đều thể hiện tab bar |
 | `UD-PROG-016` | Chỉ mục ký hiệu **do compiler sinh** cho hover ST — nửa BE của `PGM02-V22-WP-04`. Hover đã giao ở `T59-820` bằng chỉ mục dựng từ nguồn; nguồn thẩm quyền compiler thì chưa có đường nào tới. | **OPEN — chờ Owner** | Đo 2026-08-27: web-api KHÔNG có đường tới compiler ST (nó nằm ở `apps/core/application/st`, chỉ có IPC vòng đời) |
 | `UD-PROG-015` | Ba trường Inspector trong ảnh (`Access`, `Description`, `Cycle (in Task)` dạng tên Task) **chưa có nguồn dữ liệu** trong Draft v2. | **OPEN — chờ Owner** | Đo tại `ed6fb21`: `upsertProgramConfig` chỉ có `programId`/`objectId`/`periodMs` |
+| `UD-PROG-017` | Mốc ngân sách bundle R1 125 KiB là **mốc lịch sử của increment đã đóng**; cổng thi hành duy nhất là R3 165 KiB, kèm mốc cảnh báo mềm 145 KiB không cài vào script. | **CLOSED** | Product Owner/CTO, 2026-09-05 — đo thật 128,54 KiB; `package.json:28` pin `--increment r3`; Plan 59 dòng 7 R1/R2/R3 đều ĐÓNG |
 
 ### 1.2 `UD-PROG-013` — bề mặt editor ST cho R1
 
@@ -228,6 +229,79 @@ phải sửa cả runtime.
 đúng ảnh. **Tuyệt đối không** hiện `Public` hoặc một tên Task cứng ở FE để cho
 giống ảnh — đó là bịa dữ liệu, vi phạm nguyên tắc số 1 của gói handoff.
 
+### 1.6 `UD-PROG-017` — mốc ngân sách bundle R1 125 KiB (ĐÃ CHỐT: lựa chọn A)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Quyết định | **Lựa chọn A** — R1 125 KiB là **mốc lịch sử của một increment đã đóng**; cổng thi hành duy nhất của repo là **R3 165 KiB** |
+| Trạng thái | **CLOSED** |
+| Ngày | 2026-09-05 |
+| Authority | Product Owner/CTO |
+| Chặn | Không chặn gì. Cổng repo đang PASS |
+| Hồ sơ liên quan | `docs/superpowers/specs/2026-08-31-fbd-edit-design.md` `BLK-FBD-003`; `docs/superpowers/plans/2026-08-31-fbd-edit.md` §0.3 |
+
+**Câu hỏi.** Task 7 của lát FBD EDIT đo được chunk `programming` **128,54 KiB**
+gzip, vượt **3,54 KiB** so với mốc R1 125 KiB mà spec của lát tự đặt. Có phải cắt
+byte cho đủ 125 KiB không?
+
+**Số đo thật** (đo lại trong phiên 2026-09-05, zlib mức 6, 1 KiB = 1024 byte):
+
+| Mục | Giá trị |
+|---|---:|
+| `programming-CEgDVswx.js` raw | 511.152 byte |
+| `programming-CEgDVswx.js` gzip | 131.629 byte = **128,54 KiB** |
+| `fbd-editor-DGrHrJO8.js` gzip | 45.144 byte = 44,09 KiB (đã tách khỏi chunk `programming`) |
+| Cổng repo R3 | 165,00 KiB ⇒ **PASS**, dư **36,46 KiB** |
+| Mốc R1 | 125,00 KiB ⇒ vượt 3,54 KiB |
+
+**Vì sao R1 không phải cổng đang thi hành:**
+
+| Bằng chứng | Nội dung |
+|---|---|
+| `apps/web-ui/package.json:28` | `"check:bundle-budget": "python3 ../../scripts/verify_programming_bundle_budget.py --increment r3"` — cờ pin `r3`, đã như vậy **từ trước** lát FBD EDIT |
+| `apps/web-ui/package.json:8` | `build` kết thúc bằng `npm run check:bundle-budget` |
+| `grep -rn "bundle-budget" .github/` | **0 kết quả** — không có wiring CI nào khác |
+| Plan 59 dòng 7 | increment R1 **ĐÓNG** (`VS-PROG-U13` PASS), R2 ĐÓNG, R3 ĐÓNG; 74/74 task DONE hoặc WAIVED/DEFERRED tường minh |
+
+**Tiền lệ — bốn task R3 liên tiếp vượt 125 KiB, không task nào bị coi là vi phạm**
+(`59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md` dòng 2738/2741/2742/2743):
+
+| Task | Chunk `programming` | Nhãn ngân sách ghi trong plan |
+|---|---:|---|
+| `T59-816` | 153,79 KiB | `/165 KiB (R3)` |
+| `T59-819` | 127,67 KiB | `/165 KiB (R3)` |
+| `T59-820` | 128,97 KiB | `/165 KiB (R3)` |
+| `T59-821` | 132,88 KiB | `/165 KiB (R3)` |
+
+Chunk vượt 125 KiB từ `T59-816` ngày 2026-08-27 — **trước khi lát FBD EDIT bắt
+đầu**. Đây không phải hồi quy do Task 7 gây ra, mà là một tài liệu plan còn tham
+chiếu tới một cổng đã hết hiệu lực.
+
+**Ba lựa chọn đã trình Owner:**
+
+- **(A)** Ghi nhận R1 là mốc lịch sử; cổng thi hành là R3. Không sửa script,
+  không sửa contract, không đổi cờ trong `package.json` (cờ đã là `r3` từ trước
+  lát này). Chỉ đính chính tài liệu plan/spec.
+- **(B)** Giữ 125 KiB làm mục tiêu tự nguyện và mở một task cắt 3,54 KiB có trần
+  một phiên. 3,54/128,54 = **2,75%**, không mở khoá bất kỳ thứ gì đang bị chặn,
+  và mốc 125 sẽ bị vượt lại ở task kế tiếp bất kỳ.
+- **(C)** Nới trần R1 trong `contracts/programming/pgm02_workspace_v1.json` qua
+  change control. Phá SHA-256 pin ở `AUTH-PROG-2026-08-24-05` (§1.2 hồ sơ này),
+  nằm ngoài allowlist FE, và nới một cổng đã hết hiệu lực.
+
+**Owner chọn (A) ngày 2026-09-05.**
+
+**Điều kiện kèm theo — mốc cảnh báo mềm 145 KiB.** Rủi ro thật của (A) là mất áp
+lực chống phình chunk. Vì vậy khi chunk `programming` vượt **145 KiB** gzip (bằng
+mốc R2, còn cách cổng R3 20 KiB), task chạm mốc phải ghi một dòng lý do trong
+`CHANGELOG.md` và cân nhắc tách chunk trước khi đi tiếp. Đây là **quy ước tài
+liệu**, cố ý **không** cài vào `scripts/verify_programming_bundle_budget.py` —
+thêm một cổng cứng thứ hai là mở rộng phạm vi ngoài allowlist FE.
+
+**Không được suy ra từ quyết định này:** đây không phải hạ chuẩn ngân sách, không
+phải giấy phép để chunk phình tự do, và không mở `RELEASE_READY` (vẫn NO-GO).
+Ngân sách R3 165 KiB tiếp tục là cổng cứng chặn `npm run build`.
+
 ### 1.1 `CR-PROG-PGM02-V22-001` — exact baseline được phê duyệt
 
 | Thuộc tính | Giá trị |
@@ -322,12 +396,14 @@ resource, audit và target/HIL truthfulness—được giữ trong Product v3.0/
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
-| 1.5 | 2026-08-25 | Đóng `F-P59-GHOST-POU-001` ở lớp implementation: catalog `1.7.2`, checker/packager/writer fail-closed theo `documentSchemaVersion`, reader giữ tương thích package legacy; affected gate HOST PASS. Ghi `T59-802 DONE (HOST/LOCAL)` và `T59-803 READY`. Không đổi 12 quyết định unified; `RELEASE_READY` giữ NO-GO. |
+| 1.8 | 2026-09-05 | Ghi `UD-PROG-017`: Owner chọn **lựa chọn A** cho mốc ngân sách bundle R1 — 125 KiB là mốc lịch sử của increment đã đóng, cổng thi hành duy nhất là R3 165 KiB (`apps/web-ui/package.json:28` pin `--increment r3`; `.github/` không có wiring nào khác). Kèm mốc cảnh báo mềm 145 KiB dạng quy ước tài liệu, **không** cài vào script. Đính chính bảng này: hai lần sửa cùng mang số 1.5, và bổ sung dòng 1.7 trước đây còn thiếu. Header cập nhật danh sách ĐANG MỞ theo trạng thái thật — `UD-PROG-014` đã CLOSED từ 2026-08-27 nhưng header vẫn khai ĐANG MỞ. |
+| 1.7 | 2026-08-27 | **Dòng bổ sung ngày 2026-09-05 — trước đó thiếu dù header đã khai 1.7.** Gồm hai lần sửa cùng mang số 1.7: `8289aa56` đóng `UD-PROG-014` (phương án B — nhiều tab POU), mở `UD-PROG-015` (ba trường Inspector chưa có nguồn dữ liệu) và đồng bộ ghim baseline/ngưỡng harness; `febac794` đóng `T59-820` và mở `UD-PROG-016` (chỉ mục ký hiệu do compiler sinh) có hạn ký 2026-09-10. |
 | 1.6 | 2026-08-27 | Đồng bộ trạng thái sau khi increment R2 đóng (`T59-813 DONE`): header không còn dừng ở `T59-802`, và `IMPLEMENT_READY[PGM02-R3]` ghi đúng việc `T59-814` đã READY. Không mở hay đóng quyết định nào. |
-| 1.5 | 2026-08-26 | Ghi `UD-PROG-013`: Owner/Architect chọn **lựa chọn A** ở `GATE-PROG-ST-EDITOR-DEP-001` — giữ bề mặt editor ST hiện tại cho R1, không thêm CodeMirror 6. Quyết bằng số đo thật (bộ tối thiểu 110,07 KiB gzip ⇒ nhúng thẳng ≈220,85 KiB, vượt cả ngân sách R3). Cổng CLOSED; `T59-805` đủ điều kiện đóng và `T59-807` mở. |
+| 1.5 | 2026-08-26 | **Đính chính 2026-09-05: dòng này và dòng 1.5 ngày 2026-08-25 cùng mang số 1.5 vì commit `a65eb762` không nâng số phiên bản. Giữ nguyên số theo đúng trạng thái Git, không đánh lại số cho quá khứ.** Ghi `UD-PROG-013`: Owner/Architect chọn **lựa chọn A** ở `GATE-PROG-ST-EDITOR-DEP-001` — giữ bề mặt editor ST hiện tại cho R1, không thêm CodeMirror 6. Quyết bằng số đo thật (bộ tối thiểu 110,07 KiB gzip ⇒ nhúng thẳng ≈220,85 KiB, vượt cả ngân sách R3). Cổng CLOSED; `T59-805` đủ điều kiện đóng và `T59-807` mở. |
+| 1.5 | 2026-08-25 | Đóng `F-P59-GHOST-POU-001` ở lớp implementation: catalog `1.7.2`, checker/packager/writer fail-closed theo `documentSchemaVersion`, reader giữ tương thích package legacy; affected gate HOST PASS. Ghi `T59-802 DONE (HOST/LOCAL)` và `T59-803 READY`. Không đổi 12 quyết định unified; `RELEASE_READY` giữ NO-GO. |
 | 1.4 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`: Product Owner/CTO + System Architect pin exact Candidate commit `413a043748dce3b44d2c5076412de761760ba17a`, mở PLAN_READY và ba IMPLEMENT_READY nhưng giữ scheduler R1→R2→R3, review ngoài owner/architect `WAIVED FOR IMPLEMENTATION` và RELEASE_READY NO-GO. Chuyển T59-801 DONE, T59-802 READY, T59-803..817 ORDERED. Chốt ghost PROGRAM fail-closed bằng `PRG-ERR-CHECK-001`/`ST-POU-005`; implementation closure vẫn PENDING tới khi source/test đạt. |
 | 1.3-candidate | 2026-08-24 | Làm rõ exact pin hai lớp: manifest ghim 17 hồ sơ Markdown authority; record Owner + Architect phải ghi candidate Git commit SHA để khóa contract/schema/ADR/handoff/SVG. Pin check 17/17 một mình không mở `PLAN_READY` hoặc code. |
 | 1.2-candidate | 2026-08-24 | Ghi output `T59-801`: formal DDD/contract/ADR-053/89 requirement/47 scenario/17-file Candidate pin và 16 card `T59-802..817`; chuyển WP-00 sang REVIEW, giữ Architect exact pin và mọi execution R1/R2/R3 NO-GO. |
 | 1.1 | 2026-08-24 | Ghi `CR-PROG-PGM02-V22-001`: Owner mở duy nhất `T59-801`, khóa thứ tự R1 EDIT → R2 LIVE → R3 SIMULATE và Simulation v1 admin-only; System Architect/baseline pin giữ PENDING, code downstream NO-GO. Đăng ký riêng `F-P59-GHOST-POU-001` OPEN thay cho tuyên bố sai 0 Open Decision. |
-| 0.1..0.9 | 2026-08-03..11 | Decision package `OD-PROG-001..017` cho baseline cũ; phục hồi qua Git. |
 | 1.0 | 2026-08-20 | `ADR-050` supersede phạm vi xung đột; đóng 12 quyết định unified; 0 Open Decision/implementation blocker. |
+| 0.1..0.9 | 2026-08-03..11 | Decision package `OD-PROG-001..017` cho baseline cũ; phục hồi qua Git. |

@@ -12,7 +12,7 @@ import { IS_DEMO } from '../config'
 import { useApi } from '../hooks/useApi'
 import { useRealtime } from '../realtime'
 import { useI18n } from '../i18n'
-import { NavDrawer, NavRail } from './NavRail'
+import { isProgrammingFocusRoute, NavDrawer, NavRail } from './NavRail'
 import { Breadcrumb } from './pa3/Breadcrumb'
 import { CommandPalette } from './pa3/CommandPalette'
 import { TopBar } from './TopBar'
@@ -30,6 +30,7 @@ export function AppShell() {
   const alarmCount = alarms.data?.filter((alarm) => (alarm.active ?? (alarm.status === 'active' || alarm.status === 'acked')) || alarm.status === 'unack').length ?? 0
   const currentUser = me.data ?? session
   const programmingWorkspace = location.pathname.startsWith('/eng/programming')
+  const programmingFocus = isProgrammingFocusRoute(location.pathname)
 
   useEffect(() => {
     const refresh = () => { void alarms.refetch() }
@@ -96,9 +97,20 @@ export function AppShell() {
         {/* WEB-UX-010: ngăn kéo thay cho thanh bên khi màn hình dưới 1024px. */}
         <NavDrawer open={navOpen} alarmCount={alarmCount} device={health.data} onClose={() => setNavOpen(false)} />
         <div className="min-w-0 flex-1">
-          <TopBar connectionState={connectionState} alarmCount={alarmCount} unackedCount={unacked} annunciating={annunciating} currentUser={currentUser} onOpenNav={() => setNavOpen(true)} />
+          {/* G-01: trên desktop, Programming đã có Feature Rail và Global
+              Context Bar riêng. Mobile vẫn giữ TopBar vì nút mở NavDrawer,
+              cảnh báo và tài khoản là lối vào toàn cục duy nhất ở độ rộng đó. */}
+          <TopBar
+            className={programmingFocus ? 'lg:hidden' : undefined}
+            connectionState={connectionState}
+            alarmCount={alarmCount}
+            unackedCount={unacked}
+            annunciating={annunciating}
+            currentUser={currentUser}
+            onOpenNav={() => setNavOpen(true)}
+          />
           {connectionState !== 'connected' && (
-            <div data-app-reconnect-banner className="sticky top-16 z-30 border-b border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-5 py-2 text-sm text-[var(--c-warn-fg)]">
+            <div data-app-reconnect-banner className={`sticky top-16 z-30 border-b border-[var(--c-warn)] bg-[var(--c-warn-bg)] px-5 py-2 text-sm text-[var(--c-warn-fg)] ${programmingFocus ? 'lg:top-0' : ''}`}>
               {t('reconnecting')}
             </div>
           )}

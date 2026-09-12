@@ -31,6 +31,7 @@ type packageBinding struct {
 	deviceID   string
 	extIndex   int
 	writable   bool
+	typed      bool
 }
 
 type packageSignal struct {
@@ -160,7 +161,8 @@ func collectPackageObjects(objects []revisionObjectView) ([]packageBinding, []pa
 				variableID: payload.VariableID, variable: payload.Variable,
 				direction: strings.ToUpper(payload.Direction), category: payload.Point.Category,
 				pointID: payload.Point.PointID, deviceID: payload.Point.DeviceID,
-				extIndex: payload.Point.ExtIndex, writable: payload.Writable}
+				extIndex: payload.Point.ExtIndex, writable: payload.Writable,
+				typed: payload.VariableID != "" && payload.Point.Category != ""}
 			// Binding v1 để identity điểm ở cấp gốc; v2 gom vào `point`. Đọc cả
 			// hai để một Revision seal trước khi nâng model vẫn kiểm được.
 			if binding.pointID == "" {
@@ -201,15 +203,22 @@ func collectPackageObjects(objects []revisionObjectView) ([]packageBinding, []pa
 // chấp hành — trọng tài ưu tiên không giải quyết được vì cả hai ở cùng mức.
 func outputOwnerDiagnostics(bindings []packageBinding) []DiagnosticView {
 	owners := make(map[string][]string)
+	legacyKeys := make(map[string]bool)
 	for _, binding := range bindings {
 		if binding.direction != "WRITE" && binding.direction != "OUTPUT" {
 			continue
 		}
-		owners[physicalPointKey(binding)] = appendUnique(owners[physicalPointKey(binding)], binding.programID)
+		key := physicalPointKey(binding)
+		owners[key] = appendUnique(owners[key], binding.programID)
+		legacyKeys[key] = legacyKeys[key] || !binding.typed
 	}
 	keys := make([]string, 0, len(owners))
 	for key := range owners {
-		if len(owners[key]) > 1 {
+		// Cặp binding typed đã được validator server-authoritative báo bằng
+		// PGM-MAP-OWNER-001. Chỉ chạy fallback ST-OWN-001 khi chính Point xung
+		// đột có ít nhất một binding lịch sử, tránh hai diagnostic cho cùng lỗi
+		// chỉ vì package còn một binding legacy không liên quan ở Point khác.
+		if legacyKeys[key] && len(owners[key]) > 1 {
 			keys = append(keys, key)
 		}
 	}

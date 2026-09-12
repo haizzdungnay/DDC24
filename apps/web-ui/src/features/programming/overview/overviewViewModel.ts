@@ -12,6 +12,7 @@ import type {
   ProgrammingTaskState,
   RemoteState
 } from '../model/types'
+import type { ActiveRevisionOwnership } from '../shared/activeRevisionOwnership'
 import type { SemanticState } from '../shared/semanticState'
 import type { ActiveProgramSet, ActiveProgramSetReason } from './activeProgramSet'
 import { resolvePrimaryCta, type PrimaryCtaDecision } from './resolvePrimaryCta'
@@ -240,7 +241,13 @@ function emptyReason({ programsStatus, activeSet }: ProgramsSummaryInput): Progr
   if (programsStatus === 'loading' || activeSet.reason === 'REVISION_LOADING') return 'LOADING'
   if (programsStatus === 'error') return 'UNAVAILABLE'
   if (activeSet.reason === 'REVISION_UNAVAILABLE' || activeSet.reason === 'REVISION_MISMATCH' ||
-      activeSet.reason === 'SNAPSHOT_UNREADABLE') {
+      activeSet.reason === 'SNAPSHOT_UNREADABLE' ||
+      /* `ISS-PGUI-01` — có gói đang chạy mà không quy được về Project nào là
+         "chưa kết luận được", KHÔNG phải "không có Program nào". Ngược lại,
+         `ACTIVE_OTHER_PROJECT` ĐÃ kết luận: gói đang chạy là của Project khác,
+         nên Project này thật sự không có Program đang chạy — nó rơi xuống
+         `NO_PROGRAM` kèm đúng câu giải thích ấy. */
+      activeSet.reason === 'ACTIVE_PROJECT_UNRESOLVED') {
     return 'UNAVAILABLE'
   }
   return 'NO_PROGRAM'
@@ -346,6 +353,20 @@ export interface OverviewViewModelInput {
   programsStatus: ResourceStatus
   programs: ProgrammingProgramsPage | null
   activeSet: ActiveProgramSet
+  /**
+   * `ISS-PGUI-01` — Revision đang chạy có THUỘC Project này không.
+   *
+   * `runtime.activeRevisionId` là của CONTROLLER, không của Project. Đọc nó
+   * thẳng để kết luận "Project này đang vận hành" là cách màn hình khẳng định
+   * `Active: Yes` cho một gói thuộc Project khác. Chỗ gọi phải trả lời câu này
+   * bằng `activeRevisionOwnership`, không bằng `runtime.activeRevisionId !== null`.
+   *
+   * Truyền cả `kind` chứ không phải một cờ nhị phân: "chưa quy được về Project
+   * nào" và "thiết bị chưa Commission" đều làm `present` sai, nhưng thẻ so
+   * sánh phải nói HAI câu khác nhau — nói "controller chưa đưa gói nào vào vận
+   * hành" cho một thiết bị đang chạy là một khẳng định sai.
+   */
+  activeOwnership: ActiveRevisionOwnership['kind']
 }
 
 export interface OverviewViewModel {
@@ -363,8 +384,13 @@ export interface OverviewViewModel {
     /** `Active #12`; `null` khi chưa phân giải được. */
     label: string | null
     sequence: number | null
-    /** `true` khi Core nói có một Active Revision (dù DB Web chưa phân giải được số của nó). */
+    /**
+     * `true` khi Core nói có một Active Revision **và** gói ấy thuộc ĐÚNG
+     * Project này (dù DB Web chưa phân giải được số của nó).
+     */
     present: boolean
+    /** `ISS-PGUI-01` — vì sao `present` sai, để thẻ so sánh nói đúng câu. */
+    ownership: ActiveRevisionOwnership['kind']
     taskState: ProgrammingTaskState | null
   }
   core: {
@@ -399,7 +425,8 @@ export function overviewViewModel(input: OverviewViewModelInput): OverviewViewMo
     active: {
       label: revisionSequenceLabel('active', project?.activeSequence ?? null),
       sequence: project?.activeSequence ?? null,
-      present: runtimeReadable && runtime.activeRevisionId !== null,
+      present: runtimeReadable && runtime.activeRevisionId !== null && input.activeOwnership === 'owned',
+      ownership: input.activeOwnership,
       taskState: runtimeReadable ? runtime.taskState : null
     },
     core: {

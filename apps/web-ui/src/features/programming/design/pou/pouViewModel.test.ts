@@ -90,7 +90,7 @@ describe('PGM-02 POU view model — hai trục định danh', () => {
   it('gom đủ ba nhóm kể cả nhóm rỗng và sắp theo tên', () => {
     const groups = groupPouItems(pouItems(documentWithSplitIdentity()))
     expect(groups.map((group) => [group.kind, group.items.length])).toEqual([
-      ['PROGRAM', 2], ['FUNCTION', 1], ['FUNCTION_BLOCK', 0]
+      ['PROGRAM', 2], ['FUNCTION_BLOCK', 0], ['FUNCTION', 1]
     ])
     expect(groups[0].items.map((item) => item.name)).toEqual(['AHU_MAIN', 'GHOST'])
   })

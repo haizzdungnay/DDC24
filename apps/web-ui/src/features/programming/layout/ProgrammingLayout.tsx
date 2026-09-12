@@ -1,20 +1,35 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useProgrammingCapabilities, useProgrammingProgramIntents, useProgrammingProjects, useProgrammingRuntime } from '../api/queries'
-import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
-import { roleAtLeast, useAuth } from '../../auth'
-import { ProgrammingHeader } from './ProgrammingHeader'
-import { ProgrammingContextStrip } from './ProgrammingContextStrip'
+import type { ProgrammingCapabilities, ProgrammingProgramsPage, ProgrammingProject, ProgrammingProjectPage, ProgrammingRuntime, RemoteState } from '../model/types'
+import { useProgrammingActionAllowed } from '../api/authorization'
+import { GlobalContextBar } from './GlobalContextBar'
+import { activeRevisionOwnership, ownedActiveRevisionId, runningProject } from '../shared/activeRevisionOwnership'
+import type { ActiveRevisionOwnership } from '../shared/activeRevisionOwnership'
 import { ProgrammingFeatureRail } from './ProgrammingFeatureRail'
 import { ProgrammingMobileNav } from './ProgrammingMobileNav'
 import { programsWorkspacePath } from '../shared/programsRoute'
+import { useI18n } from '../../../shared/i18n'
 
 interface ProgrammingRuntimeContextValue {
   capabilities: RemoteState<ProgrammingCapabilities>
   runtime: RemoteState<ProgrammingRuntime>
   projects: RemoteState<ProgrammingProjectPage>
   programIntents: RemoteState<ProgrammingProgramsPage>
+  /**
+   * `ISS-PGUI-01` — Project mà TOÀN BỘ shell đang nói về, phân giải MỘT LẦN.
+   *
+   * `programIntents` bên trên đã được đọc theo đúng Project này. Trang con tự
+   * chọn lại Project từ `projects` là cách bảng Program (đọc theo Project của
+   * shell) bị ghép với gói đang chạy (chọn theo luật của trang) — hai nửa của
+   * một bảng thuộc hai Project khác nhau.
+   */
+  subjectProject: ProgrammingProject | null
+  /** Revision đang chạy có thuộc `subjectProject` không (`ISS-PGUI-01`). */
+  activeOwnership: ActiveRevisionOwnership
   setEditingContext: (context: ProgrammingEditingContext | null) => void
+  /** Slot đẩy ReactNode từ workspace lên ContextStrip (mode switcher, nút…). */
+  setContextStripSlot: (node: ReactNode) => void
 }
 
 export interface ProgrammingEditingContext {
@@ -49,7 +64,7 @@ export interface ProgrammingEditingContext {
 const ProgrammingRuntimeContext = createContext<ProgrammingRuntimeContextValue | null>(null)
 
 /** Sáu workspace dùng chung các read-model ở tầng layout — tránh poll trùng
- * lặp và giữ đúng một nguồn cho `ProgrammingContextStrip`. */
+ * lặp và giữ đúng một nguồn cho `GlobalContextBar`. */
 export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
   const ctx = useContext(ProgrammingRuntimeContext)
   if (!ctx) throw new Error('useProgrammingRuntimeContext phải nằm trong ProgrammingLayout')
@@ -67,8 +82,8 @@ export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
  * BỐ CỤC (README §3 — Feature Rail 220 | Context Strip | workspace):
  *
  * ```text
- * ProgrammingFeatureRail 220px │ ProgrammingContextStrip 38px, sticky
- *                              │ ProgrammingHeader (<h1> sr-only + các nút)
+ * ProgrammingFeatureRail 220px │ GlobalContextBar 38px, sticky
+ *                              │ <h1> sr-only
  *                              │ <Outlet/>
  * ```
  *
@@ -79,11 +94,13 @@ export function useProgrammingRuntimeContext(): ProgrammingRuntimeContextValue {
  * trạng thái nào bị bỏ.
  */
 export function ProgrammingLayout() {
-  const { session } = useAuth()
+  const { pick } = useI18n()
+  const canSetRuntimeIntent = useProgrammingActionAllowed('runtimeIntent')
   const capabilities = useProgrammingCapabilities()
   const runtime = useProgrammingRuntime()
   const projects = useProgrammingProjects()
   const [editingContext, setEditingContext] = useState<ProgrammingEditingContext | null>(null)
+  const [contextStripSlot, setContextStripSlot] = useState<ReactNode>(null)
   const { projectId: pathProjectId } = useParams<{ projectId?: string }>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -97,8 +114,34 @@ export function ProgrammingLayout() {
     // Resolver PGM-02 v2 tự xử lý 0/1/nhiều Project. Shell không được chọn
     // item đầu tiên trước resolver vì context strip/rail sẽ nói sai Project.
     if (canonicalProgramsRoute) return null
-    return projects.data.items[0] ?? null
-  }, [canonicalProgramsRoute, projectId, projects.data, projects.status])
+    /* `ISS-PGUI-01` — route không mang `projectId` (Tổng quan) thì Project
+       ĐANG CHẠY mới là chủ ngữ đúng, không phải Project đầu danh sách.
+
+       Rev A khoá một Project trên mỗi controller nên `items[0]` từng trùng.
+       Danh sách production đã có Project thứ hai, và khi gói đang chạy thuộc
+       Project thứ hai thì `items[0]` biến cả shell thành một câu sai: dải
+       ngữ cảnh nói tên Project A, `GET /projects/A/programs` trả Program của
+       A, còn gói đang chạy là của B. Không phân giải được thì vẫn rơi về
+       `items[0]` — đó là Project người dùng thấy — nhưng lúc ấy
+       `activeOwnership` KHÔNG phải `owned` và mọi khẳng định "đang vận hành"
+       bị khoá. */
+    return runningProject(projects.data.items, runtime.data?.activeRevisionId) ?? projects.data.items[0] ?? null
+  }, [canonicalProgramsRoute, projectId, projects.data, projects.status, runtime.data?.activeRevisionId])
+  /* `ISS-PGUI-01` — Revision đang chạy là của CONTROLLER, không của Project.
+  
+     Strip từng nhận `runtime.activeRevisionId` toàn cục và in `Active: Yes` cho
+     BẤT KỲ Project nào đang mở. Trên production, Project đang mở và gói đang
+     chạy thuộc hai Project khác nhau — nhãn ấy là một khẳng định sai về thiết
+     bị, và nó nằm đúng ở dải người trực ca đọc nhanh nhất. */
+  const activeOwnership = activeRevisionOwnership({
+    runtimeStatus: runtime.status,
+    projectsStatus: projects.status,
+    producerState: runtime.data?.producerState,
+    runtimeActiveRevisionId: runtime.data?.activeRevisionId,
+    projects: projects.data?.items,
+    subjectProjectId: listedProject?.projectId ?? null,
+  })
+
   const routeEditingContext = editingContext && (!projectId || editingContext.projectId === projectId) ? editingContext : null
   const visibleEditingContext = listedProject
     ? {
@@ -141,14 +184,15 @@ export function ProgrammingLayout() {
     programIntents.status === 'loading'
 
   return (
-    <ProgrammingRuntimeContext.Provider value={{ capabilities, runtime, projects, programIntents, setEditingContext }}>
+    <ProgrammingRuntimeContext.Provider value={{ capabilities, runtime, projects, programIntents, subjectProject: listedProject, activeOwnership, setEditingContext, setContextStripSlot }}>
       <div className="flex gap-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
         <ProgrammingFeatureRail projectId={scopedProjectId ?? null} />
         {/* `min-w-0` là bắt buộc: một flex item mặc định `min-width:auto` sẽ
             KHÔNG co lại dưới kích thước nội dung, nên một bảng rộng trong
             workspace sẽ đẩy cả trang tràn ngang thay vì tự cuộn trong ô của nó. */}
         <div className="min-w-0 flex-1 space-y-4">
-          <ProgrammingContextStrip
+          <h1 className="sr-only">{pick('Lập trình điều khiển', 'Control programming')}</h1>
+          <GlobalContextBar
             projectStatus={projects.status}
             runtimeStatus={runtime.status}
             runtime={runtime.data}
@@ -156,7 +200,7 @@ export function ProgrammingLayout() {
             intents={programIntents.data}
             intentError={programIntents.error}
             editing={visibleEditingContext}
-            canMutate={roleAtLeast(session?.role, 'admin')}
+            canMutate={canSetRuntimeIntent}
             /* `DEV-PROG-007` — bộ chọn Project. Danh sách và Project đang mở
                đều lấy từ CÙNG read-model mà shell đã tải; strip không tự gọi
                HTTP (README §5.1/§5.2). */
@@ -168,12 +212,27 @@ export function ProgrammingLayout() {
                không in `r0`. */
             draftSequence={listedProject?.draftSequence ?? null}
             activeSequence={listedProject?.activeSequence ?? null}
+            activeOwnership={activeOwnership}
+            actions={visibleEditingContext?.actions}
+            refreshing={refreshing}
+            onRefresh={() => {
+              capabilities.refresh()
+              runtime.refresh()
+              projects.refresh()
+              programIntents.refresh()
+            }}
             details={{
               draftRevisionId: visibleEditingContext?.draftRevisionId ?? null,
-              activeRevisionId: runtime.data?.activeRevisionId ?? null,
+              /* Chỉ in khi ĐÃ CHỨNG MINH thuộc Project đang mở; ngược lại
+                 `null` để popover nói "chưa đọc được", không mượn id của
+                 Project khác. */
+              activeRevisionId: ownedActiveRevisionId(activeOwnership, runtime.data?.activeRevisionId ?? null),
               lkgRevisionId: runtime.data?.lkgRevisionId ?? null,
               controllerId: runtime.data?.controllerId ?? null,
               observedAt: runtime.data?.observedAt ?? null,
+              /* Vì sao ô `ID Revision đang vận hành` trống: chưa Commission là
+                 một câu, "gói đang chạy là của Project khác" là câu khác. */
+              activeOwnership: activeOwnership.kind,
               /* `contentHash` nằm trong thân Revision (`GET /revisions/{id}`),
                  mà shell KHÔNG tải — và không được tự gọi HTTP ở đây (README
                  §5.1/§5.2: chỉ `api/queries.ts` biết về mạng). Truyền `null`
@@ -196,17 +255,9 @@ export function ProgrammingLayout() {
                   ? 'unreadable'
                   : 'readable'
             }}
-          />
-          <ProgrammingHeader
-            actions={visibleEditingContext?.actions}
-            refreshing={refreshing}
-            onRefresh={() => {
-              capabilities.refresh()
-              runtime.refresh()
-              projects.refresh()
-              programIntents.refresh()
-            }}
-          />
+          >
+            {contextStripSlot}
+          </GlobalContextBar>
           <Outlet />
         </div>
       </div>

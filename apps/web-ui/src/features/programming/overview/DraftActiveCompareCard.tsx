@@ -86,6 +86,15 @@ export type DraftActiveRelationReason =
   | 'SEQUENCE_UNRESOLVED'
   /** Hai `sequence` đọc được và bằng nhau. */
   | 'SAME_REVISION'
+  /**
+   * `ISS-PGUI-01` — thiết bị ĐANG chạy một gói, nhưng gói ấy thuộc Project
+   * khác. Không so được, và cũng KHÔNG được nói "controller chưa đưa gói nào
+   * vào vận hành": đó là câu duy nhất trong nhóm này khẳng định điều gì đó về
+   * thiết bị, và ở đây nó sai.
+   */
+  | 'ACTIVE_OTHER_PROJECT'
+  /** `ISS-PGUI-01` — có gói đang chạy nhưng không Project nào trong danh sách nhận. */
+  | 'ACTIVE_PROJECT_UNRESOLVED'
 
 export interface DraftActiveComparison {
   relation: DraftActiveRelation
@@ -113,7 +122,14 @@ export function draftActiveRelation(
   if (core.semantic === 'unknown' || core.semantic === 'fault') {
     return { relation: 'UNKNOWN', reason: 'RUNTIME_UNAVAILABLE' }
   }
-  if (!active.present) return { relation: 'NO_ACTIVE', reason: 'NO_ACTIVE_REVISION' }
+  if (!active.present) {
+    /* `ISS-PGUI-01` — `present === false` có ba nguyên nhân khác nhau và chỉ
+       MỘT trong ba là "chưa Commission". Gộp cả ba lại là cách thẻ này nói
+       "controller chưa đưa gói nào vào vận hành" trên một thiết bị đang chạy. */
+    if (active.ownership === 'foreign') return { relation: 'NO_ACTIVE', reason: 'ACTIVE_OTHER_PROJECT' }
+    if (active.ownership === 'unresolved') return { relation: 'UNKNOWN', reason: 'ACTIVE_PROJECT_UNRESOLVED' }
+    return { relation: 'NO_ACTIVE', reason: 'NO_ACTIVE_REVISION' }
+  }
   if (draft.dirty === null) return { relation: 'UNKNOWN', reason: 'DIRTY_UNKNOWN' }
   if (draft.sequence === null || active.sequence === null) {
     return { relation: 'UNKNOWN', reason: 'SEQUENCE_UNRESOLVED' }
@@ -280,6 +296,16 @@ function relationReasonLabel(pick: Pick, reason: DraftActiveRelationReason): str
       return pick('Hai bản mang số hiệu khác nhau.', 'The two revisions carry different numbers.')
     case 'SAME_REVISION':
       return pick('Bản nháp trùng đúng bản đang vận hành.', 'The draft matches the running package exactly.')
+    case 'ACTIVE_OTHER_PROJECT':
+      return pick(
+        'Gói đang vận hành trên thiết bị thuộc Project khác nên không so được với bản nháp này.',
+        'The package running on the device belongs to another project, so it cannot be compared with this draft.'
+      )
+    case 'ACTIVE_PROJECT_UNRESOLVED':
+      return pick(
+        'Chưa xác định được gói đang vận hành thuộc Project nào nên chưa so sánh được.',
+        'The running package could not be attributed to a project, so no comparison is possible yet.'
+      )
   }
 }
 

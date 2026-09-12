@@ -11,21 +11,24 @@ describe('roleCan — ma trận vai × năng lực', () => {
   const expected: Record<string, Partial<Record<UserCapability, boolean>>> = {
     viewer: {
       read: true, 'self.manage': true,
-      operate: false, 'settings.manage': false, 'users.manage': false
+      operate: false, 'program.edit': false, 'program.activate': false,
+      'simulation.run': false, 'settings.manage': false, 'users.manage': false
     },
     operator: {
       read: true, operate: true,
       // Thêm vai `engineer` KHÔNG được nới quyền cho vai đang có.
-      'program.edit': false, 'settings.manage': false, 'users.manage': false
+      'program.edit': false, 'program.activate': false, 'simulation.run': false,
+      'settings.manage': false, 'users.manage': false
     },
     engineer: {
       read: true, operate: true, 'program.edit': true, 'program.activate': true,
       'settings.manage': true, 'system.release': true,
       // Hai năng lực engineer KHÔNG có — đây là lý do vai này tồn tại.
-      'users.manage': false, 'database.manage': false
+      'simulation.run': false, 'users.manage': false, 'database.manage': false
     },
     admin: {
-      read: true, operate: true, 'program.activate': true,
+      read: true, operate: true, 'program.edit': true, 'program.activate': true,
+      'simulation.run': true,
       'settings.manage': true, 'users.manage': true, 'database.manage': true
     }
   }

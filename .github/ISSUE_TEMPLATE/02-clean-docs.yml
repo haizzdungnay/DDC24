@@ -1,0 +1,96 @@
+name: "Clean docs — dọn tài liệu"
+description: "Nợ tài liệu theo DOC-GOV-001. Chỉ vai Manager/Planner được tạo."
+title: "[CLEAN-DOCS] "
+labels: ["wf:clean-docs", "role:manager", "state:triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Authority quy trình: [`WF-CLEAN-001`](../blob/main/docs/00_governance/CLEAN_CODE_WORKFLOW.md).
+        Authority nội dung: [`DOC-GOV-001`](../blob/main/docs/00_governance/DOC_GOVERNANCE.md)
+        và [`DOC-CTRL-001`](../blob/main/docs/00_governance/CONTROL.md).
+
+        **Không tạo file Markdown mới** nếu đã có tài liệu chủ quản sở hữu nội dung.
+
+  - type: input
+    id: manager_run
+    attributes:
+      label: "Manager-Run"
+      placeholder: "manager-20260909T0300Z"
+    validations:
+      required: true
+
+  - type: input
+    id: owning_doc
+    attributes:
+      label: "Tài liệu chủ quản"
+      description: "Đường dẫn tài liệu sẽ được sửa. Nếu buộc phải tạo file mới, giải thích ở phần Vấn đề."
+      placeholder: "docs/02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Vấn đề — mâu thuẫn, thiếu hoặc sai lớp thẩm quyền"
+      description: "Trích đúng câu/mục đang sai và nói vì sao sai. Mâu thuẫn nội bộ, evidence sai lớp, trạng thái không khớp source."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: dd_gap
+    attributes:
+      label: "Mục DD-01..DD-13 bị thiếu hoặc sai"
+      multiple: true
+      options:
+        - "DD-01 metadata/quyền tài liệu"
+        - "DD-02 mục tiêu/actor/phạm vi"
+        - "DD-03 As-Built + gap"
+        - "DD-04 thiết kế mục tiêu/ownership"
+        - "DD-05 data model từng field"
+        - "DD-06 interface/contract"
+        - "DD-07 state machine/thuật toán/timing"
+        - "DD-08 FE/UX hoặc operation flow"
+        - "DD-09 error/safety/security"
+        - "DD-10 source mapping"
+        - "DD-11 verification"
+        - "DD-12 compatibility/deploy/rollback"
+        - "DD-13 traceability/risk/sign-off"
+        - "Không thuộc DD-xx (link hỏng, trùng lặp, archive)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: "Tiêu chí chấp nhận"
+      value: |
+        - [ ] 
+        - [ ] Không còn mâu thuẫn nội bộ giữa metadata, trạng thái task và blocker.
+        - [ ] Mọi `TBD/BLOCKED` còn lại có owner, ảnh hưởng, gate và điều kiện mở khoá.
+        - [ ] Không nâng evidence HOST/MOCK thành TARGET/HIL/release.
+        - [ ] `CHANGELOG.md` `[Unreleased]` cập nhật.
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: "Kiểm chứng tối thiểu"
+      value: |
+        - [ ] `python3 scripts/docs_iso_harness.py --expect`
+        - [ ] Kiểm link/anchor nội bộ không hỏng
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Ưu tiên do Manager xếp"
+      options:
+        - "priority:critical — an toàn/bảo mật/chặn release"
+        - "priority:high — làm trong đợt hiện tại"
+        - "priority:medium — làm khi hết P0/P1"
+        - "priority:low — dọn dần"
+    validations:
+      required: true

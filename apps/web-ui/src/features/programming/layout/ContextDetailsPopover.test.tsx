@@ -256,6 +256,14 @@ describe('T60-103 — bàn phím đi hết đường', () => {
 })
 
 describe('T60-103 — bốn nhóm dữ kiện và nút Copy từng dòng', () => {
+  it('G-03 chuyển ý định và runtime Program vào Chi tiết thay vì badge trên hàng chính', () => {
+    renderStrip()
+    fireEvent.click(trigger())
+    const status = screen.getByTestId('programming-context-program-details')
+    expect(status).toHaveTextContent('1/1 muốn bật')
+    expect(status).toHaveTextContent('RUNNING 1')
+  })
+
   it('hiện đủ bảy dòng: cặp Draft, cặp Active, LKG, bộ điều khiển, mốc đọc', () => {
     renderStrip()
     fireEvent.click(trigger())

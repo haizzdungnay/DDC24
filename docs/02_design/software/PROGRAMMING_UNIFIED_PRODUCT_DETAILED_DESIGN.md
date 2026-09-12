@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-SW-PROG-UNIFIED-001` |
-| Phiên bản | 1.3 |
+| Phiên bản | 1.4 |
 | Trạng thái | **Baseline 1.1 Active; PGM-02 v2.2 `M3 — REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`, chưa phải As-Built** |
-| Ngày | 2026-08-24 |
+| Ngày | 2026-09-08 |
 | Chủ quản | System/Runtime Architecture |
 | Reviewer | Compiler, Core, BE, FE, Controls, Security, Verification |
 | Approver implementation | Product Owner/CTO + System Architect theo `AUTH-PROG-2026-08-20-04` và `AUTH-PROG-2026-08-24-05` |
@@ -296,14 +296,18 @@ FB. PGM-04 shows system/user badge, semantic version, signature, use count,
 deprecated/PID-review state. PGM-06 lists enable intent separately from runtime
 state and requires acknowledgement for Disable when active candidates exist.
 
-Visual target:
+Visual target theo `AUTH-UX-PROG-2026-09-08-01`:
 
-- [Programs + POU desktop](../../04_uiux/assets/programming/PGM-02_PROGRAMS_POU_DESKTOP.svg)
-- [Programs + POU mobile](../../04_uiux/assets/programming/PGM-02_PROGRAMS_POU_MOBILE.svg)
-- [Control Library desktop](../../04_uiux/assets/programming/PGM-04_CONTROL_LIBRARY_DESKTOP.svg)
-- [Control Library mobile](../../04_uiux/assets/programming/PGM-04_CONTROL_LIBRARY_MOBILE.svg)
-- Commission/Runtime safety states reuse existing PGM-03/PGM-04 assets until FE
-  route migration; field/action mapping in this section is normative.
+- [Programs](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_programs.png)
+  và [workspace ST/FBD](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02_ST_FBD_annotated_reference.png).
+- [ST editor](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02A_ST_editor_reference.png)
+  và [FBD editor](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.png).
+- [Control Library](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-04_library.png),
+  [Check & Commission](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-05_commission.png)
+  và [Runtime](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-06_runtime.png).
+
+Các asset khóa composition trực quan nhưng không phải runtime evidence;
+field/action/safety mapping trong mục này vẫn normative.
 
 Keyboard: tree arrows, Enter open, Shift+F10 actions, Ctrl+S save, Ctrl+K palette,
 Ctrl+Z/Y bounded history. All async state has loading/empty/error/permission/
@@ -439,6 +443,7 @@ rollback. Residual risk chỉ giảm bằng evidence, không bằng tài liệu 
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.4 | 2026-09-08 | Thay visual target PGM-02/04/05/06 bằng PNG/HTML trong gói FE Handoff theo `AUTH-UX-PROG-2026-09-08-01`; loại link bộ SVG Programming sai. Không đổi contract/runtime/safety hoặc claim evidence. |
 | 1.2-candidate | 2026-08-24 | Thêm overlay PGM-02 v2.2 dẫn formal DDD, khóa ba increment, route/identity/mobile target và `VS-PROG-U13..U15`; giữ baseline 1.1 Active và toàn bộ increment `NO-GO` chờ exact pin. |
 | 1.3 | 2026-08-24 | Ghi `AUTH-PROG-2026-08-24-05`, exact Candidate `413a043748dce3b44d2c5076412de761760ba17a` và mức `M3 REVIEW READY / AUTHORIZED FOR IMPLEMENTATION`; mở R1/R2/R3 theo dependency, chốt Check/Package fail closed `ST-POU-005`; giữ Target chưa As-Built, U13–U15 NOT_RUN và release NO-GO. |
 | 1.1 | 2026-08-21 | `ADR-051` ký TTL hold-last: "expired candidate" ở §7.1 và hàng WCET/exception ở §9 nay có con số — lệnh cuối của Program ngừng publish sống tối đa **60 s** rồi bị rút, resolver/interlock/safe-state chọn giá trị tiếp theo. Không đổi kiến trúc, contract hay capacity. |

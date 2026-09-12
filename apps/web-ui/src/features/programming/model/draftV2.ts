@@ -1,4 +1,75 @@
-import type { ProgrammingDraftDocument, ProgrammingProgram, ProgrammingTaskConfig, ProgrammingVariable } from './types'
+import type { ProgrammingBinding, ProgrammingDraftDocument, ProgrammingProgram, ProgrammingTaskConfig, ProgrammingVariable } from './types'
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const BINDING_DIRECTIONS = new Set<ProgrammingBinding['direction']>(['READ', 'WRITE', 'READ_WRITE'])
+const BINDING_DATA_TYPES = new Set(['BOOL', 'INT', 'DINT', 'UINT', 'REAL', 'TIME'])
+const BINDING_QUALITY_POLICIES = new Set<ProgrammingBinding['qualityPolicy']>(['REQUIRE_GOOD', 'ALLOW_UNCERTAIN', 'FAIL_POLICY'])
+const BINDING_FIELDS = new Set([
+  'bindingId', 'variableId', 'point', 'direction', 'dataType', 'unit', 'writable', 'qualityPolicy',
+  // Hai field owner do backend bổ sung vào document v2. View model Mapping
+  // không cần chúng vì Variable là nguồn owner, nhưng adapter phải nhận biết
+  // tường minh thay vì coi chúng là field lạ rồi làm rơi Binding hợp lệ.
+  'programId', 'variable',
+])
+const POINT_FIELDS = new Set(['category', 'deviceId', 'pointId'])
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function exactFields(value: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
+  return Object.keys(value).every((key) => allowed.has(key))
+}
+
+/**
+ * Thu hẹp collection Binding v2 tại biên đọc. Backend lưu thêm owner
+ * `programId/variable`, còn Mapping chỉ tiêu thụ contract typed bền. Chỉ cần
+ * một phần tử malformed, cả collection fail-closed thành rỗng: không được dựng
+ * một read-back nửa thật/nửa bị bỏ qua rồi báo sai count cho người vận hành.
+ */
+export function programmingBindingsFromV2(value: unknown): ProgrammingBinding[] {
+  if (!Array.isArray(value)) return []
+  const result: ProgrammingBinding[] = []
+  for (const item of value) {
+    const binding = record(item)
+    if (!binding || !exactFields(binding, BINDING_FIELDS)
+      || typeof binding.bindingId !== 'string' || !UUID.test(binding.bindingId)
+      || typeof binding.variableId !== 'string' || !UUID.test(binding.variableId)
+      || typeof binding.direction !== 'string' || !BINDING_DIRECTIONS.has(binding.direction as ProgrammingBinding['direction'])
+      || typeof binding.dataType !== 'string' || !BINDING_DATA_TYPES.has(binding.dataType)
+      || typeof binding.writable !== 'boolean'
+      || typeof binding.qualityPolicy !== 'string' || !BINDING_QUALITY_POLICIES.has(binding.qualityPolicy as ProgrammingBinding['qualityPolicy'])
+      || (binding.unit !== undefined && (typeof binding.unit !== 'string' || binding.unit.length > 32))) {
+      return []
+    }
+    const point = record(binding.point)
+    if (!point || !exactFields(point, POINT_FIELDS)
+      || (point.category !== 'LOCAL' && point.category !== 'VP' && point.category !== 'MB_RTU')
+      || typeof point.pointId !== 'string' || point.pointId.length < 1 || point.pointId.length > 64
+      || (point.category === 'MB_RTU'
+        ? typeof point.deviceId !== 'string' || point.deviceId.length < 1 || point.deviceId.length > 64
+        : point.deviceId !== undefined)) {
+      return []
+    }
+    result.push({
+      bindingId: binding.bindingId,
+      variableId: binding.variableId,
+      point: {
+        category: point.category,
+        pointId: point.pointId,
+        ...(typeof point.deviceId === 'string' ? { deviceId: point.deviceId } : {}),
+      },
+      direction: binding.direction as ProgrammingBinding['direction'],
+      dataType: binding.dataType,
+      ...(typeof binding.unit === 'string' ? { unit: binding.unit } : {}),
+      writable: binding.writable,
+      qualityPolicy: binding.qualityPolicy as ProgrammingBinding['qualityPolicy'],
+    })
+  }
+  return result
+}
 
 /**
  * T59-301 — BE nâng Draft lên document v2: POU nằm ở `objects` (mã nguồn ở
@@ -75,7 +146,7 @@ export function toWorkspaceDocument(draft: ProgrammingDraftDocument): Programmin
     project: draft.project,
     programs,
     variables,
-    bindings: (Array.isArray(source.bindings) ? source.bindings : []) as ProgrammingDraftDocument['bindings'],
+    bindings: programmingBindingsFromV2(source.bindings),
     task: {
       taskId: String(library.projectLibraryRevisionId ?? draft.project.projectId),
       periodMs,

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useAuth } from '../../auth'
 import { API_ORIGIN } from '../../../shared/config'
 import { ProgrammingApiClient } from './generated/client'
+import { useProgrammingAuthorization } from './authorization'
 
 /**
  * `ProgrammingApiClient` sinh tự động không tự gắn `Authorization` — đây là
@@ -11,12 +12,13 @@ import { ProgrammingApiClient } from './generated/client'
  */
 export function useProgrammingApiClient(): ProgrammingApiClient {
   const { getAuthHeader } = useAuth()
+  const { revoke } = useProgrammingAuthorization()
   return useMemo(() => {
     const authenticatedFetch: typeof fetch = (input, init) => {
       const headers = new Headers(init?.headers)
       for (const [key, value] of Object.entries(getAuthHeader())) headers.set(key, value)
       return fetch(input, { ...init, headers })
     }
-    return new ProgrammingApiClient(API_ORIGIN, authenticatedFetch)
-  }, [getAuthHeader])
+    return new ProgrammingApiClient(API_ORIGIN, authenticatedFetch, revoke)
+  }, [getAuthHeader, revoke])
 }

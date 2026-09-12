@@ -1,0 +1,14 @@
+{
+  "source": "build/evidence/deploy-20260905-d728fa76/browser-final.log",
+  "evidenceClass": "BROWSER",
+  "tool": "Playwright with headless Chromium",
+  "scope": "login page only",
+  "viewports": [
+    {"label": "desktop", "width": 1440, "height": 900, "overflow": false},
+    {"label": "mobile", "width": 390, "height": 844, "overflow": false}
+  ],
+  "responses": {"total": 14, "http200": 14},
+  "console": {"errors": 0, "warnings": 0},
+  "network": {"failed": 0},
+  "notRun": ["authenticated flows", "Chrome DevTools MCP"]
+}

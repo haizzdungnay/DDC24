@@ -2,7 +2,7 @@
 
 **ID:** SYS-REQSET-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-04 (thêm `SWR-REQ-MBRTU-010/011` và `NFR-REQ-MBRTU-004`)
+**Cập nhật:** 2026-09-11 (thêm mục BACnet/IP Rev A `SYS-REQ-BAC-001..023`, nguồn `PROD-BACNET-001`). Trước đó: 2026-08-04 (thêm `SWR-REQ-MBRTU-010/011` và `NFR-REQ-MBRTU-004`)
 
 `Phải` là bắt buộc cho Rev A. Mỗi yêu cầu cần Verification Requirement trong
 [Verification](../05_verification/VERIFICATION.md) và ánh xạ tại
@@ -84,6 +84,48 @@ Toàn bộ hồ sơ đó đang `In Review` và **không** tự đóng requiremen
 | NFR-REQ-MBRTU-001 | Non-functional | Rev A phải support/verify tối thiểu 16 device trên bus và **tối thiểu 256 Modbus RTU Point tổng** (quyết định Đ-07 ngày 2026-08-04, nâng từ 64); vượt capacity phải reject rõ, không truncate hoặc báo online giả. Việc nâng capacity phải đi kèm đo lại kích thước snapshot IPC và thời gian copy mỗi vòng scan trên target. |
 | NFR-REQ-MBRTU-002 | Non-functional | Production acceptance phải chạy trên hai RS485 transceiver/cổng thật, với slave thật hoặc thiết bị kiểm thử độc lập, gồm CRC/timeout/mất dây/reboot/power-cycle/crash/soak; simulator/host chỉ là supporting evidence. |
 | NFR-REQ-MBRTU-003 | Non-functional | Binary/config đang chạy phải truy được version, Git commit, build time, checksum, toolchain và active config revision/checksum; deployment contract/ABI phải được nâng cấp đồng bộ và rollback được. |
+
+## BACnet/IP Rev A — yêu cầu theo layer
+
+Nhóm requirement này phân rã `SYS-REQ-004` (dòng duy nhất từng nói về BACnet/IP
+trong hồ sơ này) và phủ đủ 19 capability MUST của Rev A.
+
+Product Requirement và use case nguồn nằm tại
+[PROD-BACNET-001](../01_product/BACNET_PRODUCT_REQUIREMENTS.md); ma trận
+`M-01`…`M-19` → `SYS-REQ-BAC-*` nằm ở §8 của tài liệu đó. Hiện trạng source nằm
+tại [BACnet Rev A As-Built Review](../05_verification/BACNET_REV_A_ASBUILT_REVIEW.md)
+và **không** tự đóng requirement nào bên dưới. Phạm vi bám `ADR-057`…`ADR-060`
+cùng `OD-BAC-003`/`OD-BAC-005`
+([BACNET_OPEN_DECISIONS](../00_governance/BACNET_OPEN_DECISIONS.md)).
+
+Theo `ADR-060`, bộ test host **không** là bằng chứng BACnet: không requirement
+nào dưới đây được kết luận đạt bằng kết quả chạy trên host.
+
+| ID | Layer | Yêu cầu / tiêu chí chấp nhận |
+|---|---|---|
+| SYS-REQ-BAC-001 | System | DDC phải hoạt động như BACnet/IP server northbound trên Ethernet với UDP transport thật và port cấu hình được; lỗi BACnet ở mọi mức không được làm dừng core control, IOP hoặc Modbus RTU master. Không được cung cấp BACnet MS/TP và vai trò client/master. |
+| SYS-REQ-BAC-002 | System | Thiết bị phải công bố Device Object mang định danh thật gồm Device ID, tên thiết bị và thông tin nhà sản xuất; không được công bố giá trị placeholder như định danh sản phẩm. |
+| SYS-REQ-BAC-003 | System | Thiết bị phải trả lời dò tìm của BMS bằng thông báo hiện diện, với cả yêu cầu broadcast và unicast, để BMS nhận dạng được thiết bị mà không cần khai địa chỉ tay. |
+| SYS-REQ-BAC-004 | Software | Thiết bị phải phục vụ đọc từng property cho mọi object đang công bố, trả giá trị và metadata lấy từ authority runtime. |
+| SYS-REQ-BAC-005 | Software | Thiết bị phải phục vụ đọc nhiều property trong một yêu cầu, cho kết quả nhất quán với đọc từng property; lỗi một phần phải được báo theo từng property, không làm hỏng cả yêu cầu. |
+| SYS-REQ-BAC-006 | Software | Thiết bị phải xử lý ghi property lên object commandable sao cho giá trị tới được control path thật, hoặc phải từ chối tường minh bằng mã lỗi BACnet. Nhận lệnh ghi, trả thành công rồi không tác động tới control path phải bị coi là lỗi. Ghi từ BACnet lên biến AV/BV/MSV phải vào arbitration ở priority 3, cùng đường với output AO/BO. |
+| SYS-REQ-BAC-007 | Software | Object output commandable phải công bố và cưỡng chế 16 mức ưu tiên lệnh; mức ưu tiên mà thiết bị dùng để phân xử phải là mức mà object công bố ra ngoài, không phải một tập ưu tiên song song không có hiệu lực. |
+| SYS-REQ-BAC-008 | Software | Object output commandable phải cho nhả quyền điều khiển ở từng mức ưu tiên và phải trở về hành vi mặc định đã công bố khi không còn lệnh ở mức nào; giá trị mặc định phải quan sát được từ BMS. |
+| SYS-REQ-BAC-009 | Software | Object analog và multi-state phải công bố đơn vị đo đúng với đại lượng vật lý của điểm; không được công bố đơn vị suy diễn cho object không mang đơn vị hợp lệ. |
+| SYS-REQ-BAC-010 | Software | Mọi object đang công bố phải công bố độ tin cậy của điểm đo được bảo toàn xuyên suốt I/O → SHM → BACnet theo `ADR-011`; thiếu số đo phải báo không xác định, không báo tin cậy. |
+| SYS-REQ-BAC-011 | Software | Mọi object đang công bố phải công bố trạng thái điểm và cờ tách khỏi vận hành đủ để BMS phân biệt dữ liệu tốt, dữ liệu lỗi và điểm đang bị tách; trạng thái phải lấy từ authority runtime. |
+| SYS-REQ-BAC-012 | Software | Mọi object thiết bị công bố phải có nguồn dữ liệu runtime thật. Object chưa nối nguồn dữ liệu không được công bố; công bố một object luôn trả giá trị khởi tạo là lỗi, không phải giá trị mặc định hợp lệ. |
+| SYS-REQ-BAC-013 | Software | Thiết bị phải nhận và quản lý vòng đời đăng ký nhận thông báo thay đổi giá trị từ BMS, gồm chấp nhận, gia hạn, hết hạn và huỷ; đăng ký không được phục vụ phải bị từ chối tường minh. |
+| SYS-REQ-BAC-014 | Software | Khi giá trị hoặc trạng thái của object đã có đăng ký thay đổi, thiết bị phải phát thông báo **thành gói tin trên mạng** tới đúng bên đã đăng ký; ghi nhật ký cục bộ không được tính là đã thông báo. |
+| SYS-REQ-BAC-015 | Software | Định danh object phải bền vững qua restart tiến trình, power-cycle và đổi tên object; định danh phải được cấp từ identity ổn định của điểm, và thêm/bớt một điểm không được làm dịch định danh của điểm khác. |
+| SYS-REQ-BAC-016 | Software | Thiết bị phải cung cấp diagnostics runtime BACnet đủ để phân biệt ba tình trạng liên kết BMS: có giao tiếp, mất giao tiếp và chưa đo được, kèm thời điểm giao tiếp gần nhất. Ngưỡng thời gian xác định mất giao tiếp phải nằm trong cấu hình. Thiếu telemetry phải báo chưa đo được; không được quy về mất giao tiếp và không được suy ra có giao tiếp từ việc mở socket thành công. |
+| SYS-REQ-BAC-017 | Software | Cấu hình BACnet gồm Device ID, tên thiết bị và port phải sửa được qua giao diện có phân quyền và phải đọc lại được giá trị **đang chạy thật**; không được trình bày giá trị trong file cấu hình như trạng thái đang chạy. |
+| SYS-REQ-BAC-018 | Security | Mọi mutation cấu hình BACnet và mọi lệnh ghi đến từ BMS phải sinh audit record gồm nguồn lệnh, thời điểm, object, giá trị cũ, giá trị mới và kết quả. Sửa cấu hình BACnet phải yêu cầu quyền Admin; đường đọc phải theo đúng phân quyền đọc của sản phẩm. |
+| SYS-REQ-BAC-019 | Non-functional | Nghiệm thu BACnet phải chạy trên board thật với BMS hoặc thiết bị kiểm thử BACnet độc lập, gồm đọc/ghi, nhả quyền, thông báo thay đổi giá trị, restart, power-cycle và mất mạng. Bằng chứng chạy trên host hoặc trên interface ảo của máy build không được dùng để kết luận nghiệm thu. |
+| SYS-REQ-BAC-020 | System | Phạm vi BACnet Rev A phải loại trừ Alarm/Event Notification, Alarm Acknowledge, Schedule, Calendar, Trend Log, Notification Class và Event Enrollment (`ADR-057`, chuyển V1.1); TimeSync ở cả hai vai trò (`OD-BAC-005`); BACnet MS/TP (`ARCH-R010`); WritePropertyMultiple, Who-Has/I-Have và BBMD/Foreign Device. Hồ sơ năng lực công bố ra ngoài phải khai đúng các mục này là không hỗ trợ ở Rev A. |
+| SYS-REQ-BAC-021 | Software | Thiết bị phải cung cấp một đường **chỉ đọc** liệt kê các object đang công bố, trong đó mỗi object nêu rõ **nguồn dữ liệu** của nó — đã nối authority runtime hay chưa. Danh sách liệt kê object như thể mọi object đều có dữ liệu là lỗi. Đường này không được mở thao tác ghi (`ADR-059`). |
+| SYS-REQ-BAC-022 | Non-functional | Thang bằng chứng BACnet phải phân biệt ba tầng: chạy trên host (**không tính** là bằng chứng BACnet), chạy `LOOPBACK` với UDP thật trên cùng máy, và chạy `TARGET` trên board thật. Kết quả `LOOPBACK` phải được ghi là `VERIFIED-LOOPBACK` và không được ghi là `VERIFIED`; chỉ bằng chứng `TARGET` mới cho phép ghi `VERIFIED`. Cấu hình build tắt BACnet không được là đường build duy nhất được kiểm (`ADR-060`). |
+| SYS-REQ-BAC-023 | Non-functional | Thay đổi tập object BACnet của Rev A phải được thực hiện **một lần** và phải kèm release note nêu rõ đây là breaking change, cùng một bảng object mới xuất ra được để nạp lại cấu hình BMS tại site. Thiếu bảng object xuất được thì không được thi hành thay đổi tập object (`ADR-058`). |
 
 ## Yêu cầu product-wide và subsystem khác
 

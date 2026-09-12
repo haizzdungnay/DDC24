@@ -1,7 +1,8 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ClipboardCheck, RefreshCw, Save } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../auth'
+import { useAuth } from '../../auth'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
 import { useDraftWorkspace } from './useDraftWorkspace'
@@ -18,10 +19,11 @@ import { draftSignals } from '../model/signals'
 import { PouExplorer } from './pou/PouExplorer'
 import { programmingCompatibility } from '../shared/programmingCompatibility'
 import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison, useProgrammingCheck } from '../api/queries'
-import { runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
+import { pouInterfaceFromDraft, runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
+import { projectPendingProgramSources } from './workbench/workbenchDraft'
 import { LiveProgramView } from './LiveProgramView'
 import { SimulateWorkspace } from '../simulation/SimulateWorkspace'
 import { useSimulation } from '../simulation/useSimulation'
@@ -35,11 +37,12 @@ import { CompareDrawer } from './compare/CompareDrawer'
 import { compareGateFor, type CompareEntry } from './compare/compareModel'
 import type { FbdSelection } from '../fbd/commands'
 import type { FbdDocument } from '../fbd/model'
+import { useProgrammingActionAllowed } from '../api/authorization'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
 type DesignTab = (typeof VALID_TABS)[number]
 
-const TAB_LABEL: Record<DesignTab, [string, string]> = {
+const _TAB_LABEL: Record<DesignTab, [string, string]> = {
   programs: ['Chương trình', 'Programs'],
   mapping: ['Điểm & Ánh xạ', 'Points & Mapping'],
   execution: ['Thực thi', 'Execution']
@@ -88,7 +91,7 @@ function fbdSelectionForCompare(
 
 /**
  * PGM-02 Thiết kế — `UJ-PROG-02/03/04` (TASK-PROG-501..503). Một workspace,
- * ba tab, một context Draft/ETag. D-01: Check/Problems giờ ở PGM-03
+ * ba tab, một context Draft/ETag. D-01: Check/Problems giờ ở PGM-05
  * (`CheckCommissionPage`) — trang này chỉ lưu rồi điều hướng, có dirty guard
  * (DDD-FE-PROG-001 §0.1). Tab là trạng thái URL, đọc/ghi bằng `replace`
  * trong `useEffect` (không setState lúc render).
@@ -130,7 +133,7 @@ export function DesignWorkspacePage({
      nó chỉ poll khi thực sự có phiên sống, nên EDIT/LIVE không sinh tải nào. */
   const simulation = useSimulation()
   const runtime = useProgrammingRuntime()
-  const { setEditingContext } = useProgrammingRuntimeContext()
+  const { setEditingContext, setContextStripSlot } = useProgrammingRuntimeContext()
   const detectedMobileReadOnly = useProgrammingMobileReadOnly()
   const mobileReadOnly = mobileReadOnlyOverride ?? detectedMobileReadOnly
   const { projectId: routeProjectId } = useParams<{ projectId: string }>()
@@ -160,10 +163,11 @@ export function DesignWorkspacePage({
     capabilities.status === 'loading' && !capabilities.data,
   )
   const canEdit =
-    roleAtLeast(session?.role, 'admin') &&
+    useProgrammingActionAllowed('editDraft') &&
     !mobileReadOnly &&
     workspaceMode === 'EDIT' &&
     compatibility.editingAllowed
+  const canSimulate = useProgrammingActionAllowed('simulation')
   /* `DEV-PROG-024` — xem khối chú thích ở chỗ dùng, phía dưới. Sàn `24rem`
    * (384 px) cố ý NHỎ hơn ngân sách của khổ 800 px: sàn lớn hơn ngân sách chính
    * là cách `DEV-PROG-021` tạo ra tràn dọc. */
@@ -176,7 +180,7 @@ export function DesignWorkspacePage({
   /* `execution` là tab con, không phải trang IA: nó chỉ có địa chỉ dưới dạng
    * `?tab=execution` trên route `programs`. Mọi giá trị khác thì route thắng. */
   const tab: DesignTab = requested === 'execution' ? 'execution' : (route ?? fromQuery)
-  // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-03
+  // BUG-007 — cho phép deep-link `?program=<id>` từ ProblemsDrawer của PGM-05
   // (Check) chọn sẵn đúng Program bị lỗi khi mở workspace Thiết kế.
   /*
    * `T61-405` / `ISS-PGM04-14` — ý định chèn khối do PGM-04 gửi sang.
@@ -197,7 +201,7 @@ export function DesignWorkspacePage({
    *
    * Trước `T59-803`, `selectedPouId` chỉ đọc query MỘT LẦN lúc mount. Điều đó
    * còn chạy được khi mỗi Project có route riêng — đi tới đó là remount. Sau
-   * cut-over PGM-02, một cú nhảy chẩn đoán từ PGM-03 chỉ đổi QUERY trên cùng
+   * cut-over PGM-02, một cú nhảy chẩn đoán từ PGM-05 chỉ đổi QUERY trên cùng
    * route, nên workspace giữ nguyên POU cũ và người dùng bấm vào lỗi mà không
    * có gì mở ra. Effect này nhận thay đổi query; chọn POU trong ứng dụng thì
    * ghi ngược lại query (bằng `replace`) để reload giữ đúng POU đang mở. */
@@ -205,13 +209,13 @@ export function DesignWorkspacePage({
     if (queryPouId === undefined || queryPouId === selectedPouId) return
     setSelectedPouId(queryPouId)
   }, [queryPouId, selectedPouId])
-  /* D-01/F-PROG-ASBUILT-003: PGM-03 giờ sở hữu Check/Problems (không phải ở
+  /* D-01/F-PROG-ASBUILT-003: PGM-05 giờ sở hữu Check/Problems (không phải ở
    * đây nữa) — khi người dùng bấm một diagnostic ở đó, nó điều hướng sang đây
    * kèm `line/column/length` trong query string thay vì state cùng trang.
    * Đọc một lần lúc mount, đúng pattern `selectedProgramId` ở trên.
    *
    * `T59-807`: setter được mở lại — KHÔNG phải để trang tự chạy Check (D-01 vẫn
-   * giữ nguyên: PGM-03 sở hữu Check), mà để workbench nhảy tới một vị trí trong
+   * giữ nguyên: PGM-05 sở hữu Check), mà để workbench nhảy tới một vị trí trong
    * POU đang mở. Dùng lại đúng cơ chế neo `line/column/length` đã có thay vì
    * dựng đường nhảy thứ hai. */
   const [focusDiagnostic, setFocusDiagnostic] = useState<ProgrammingDiagnostic | null>(() => {
@@ -327,7 +331,7 @@ export function DesignWorkspacePage({
   const simulateRevisionId = latestCheck && latestCheck.state === 'PASSED' ? latestCheck.revisionId : null
   /* `ISS-STED-04` — nối lại đường ĐỌC kết quả Check gần nhất về trang soạn thảo.
    *
-   * `D-01` chuyển quyền SỞ HỮU Check sang PGM-03 (một luồng seal/run/poll duy
+   * `D-01` chuyển quyền SỞ HỮU Check sang PGM-05 (một luồng seal/run/poll duy
    * nhất) và đó vẫn đúng — đây chỉ là đường đọc, KHÔNG dựng bộ kiểm thứ hai ở
    * FE và KHÔNG biến thành check-as-you-type. Khi gỡ Check khỏi PGM-02 thì
    * đường đọc này bị bỏ quên, nên toàn bộ hạ tầng gạch lỗi trong `SourceEditor`
@@ -386,7 +390,7 @@ export function DesignWorkspacePage({
   }, [canEdit, draftDirty, navigate, projectId])
 
   /* D-01: PGM-02 không còn tự chạy Check nên không có `checkState` thật để
-   * báo — Check/Commission (PGM-03) là nơi duy nhất cập nhật giá trị này giờ
+   * báo — Check/Commission (PGM-05) là nơi duy nhất cập nhật giá trị này giờ
    * (`CheckCommissionPage`). Giữ nguyên `idle` ở đây thay vì suy đoán. */
   useEffect(() => {
     if (workspace.status !== 'ready' || !workspace.project) return
@@ -398,7 +402,7 @@ export function DesignWorkspacePage({
       checkState: 'idle',
       /* `DEV-PROG-009` — workspace ĐĂNG KÝ hai hành động của nó để header ở
          trên cùng gọi lại. Header không tự dựng batch operation: luật dirty,
-         danh sách operation và đường sang PGM-03 đều thuộc về đây, và hai nơi
+         danh sách operation và đường sang PGM-05 đều thuộc về đây, và hai nơi
          cùng dựng một lệnh là hai nơi để luật khoá lệch nhau.
 
          KHÔNG đăng ký gì khi không được sửa (LIVE, SIMULATE, dưới 768 px, vai
@@ -422,6 +426,73 @@ export function DesignWorkspacePage({
     })
     return () => setEditingContext(null)
   }, [canEdit, draftDirty, goToCommission, pendingOperations, pick, setEditingContext, workspace.project, workspace.save, workspace.saving, workspace.status])
+
+  /* Đẩy cụm EDIT/LIVE/SIMULATE + Save/Check/Refresh lên ContextStrip. Cùng
+   * pattern `setEditingContext` — workspace đăng ký, layout hiển thị, cleanup
+   * khi unmount. */
+  useEffect(() => {
+    setContextStripSlot(
+      <div className="flex shrink-0 items-center gap-1.5">
+        <ProgramsModeSwitcher
+          mode={workspaceMode}
+          draftDirty={draftDirty}
+          capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
+          onSwitch={switchWorkspaceMode}
+        />
+        {draftDirty && (
+          <span
+            role="status"
+            data-testid="draft-dirty-indicator"
+            className="inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]"
+          >
+            {pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check')}
+          </span>
+        )}
+        {canEdit && (
+          <>
+            <Button
+              size="sm"
+              aria-label={pick('Lưu bản nháp', 'Save the draft')}
+              icon={<Save className="h-4 w-4" aria-hidden="true" />}
+              loading={workspace.saving}
+              disabled={!draftDirty || workspace.saving}
+              title={!draftDirty ? pick('Không có thay đổi nào để lưu.', 'There is nothing to save.') : pick('Lưu bản nháp', 'Save the draft')}
+              onClick={() => { void workspace.save(pendingOperations) }}
+            >
+              {pick('Lưu', 'Save')}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={pick('Kiểm tra gói', 'Check the package')}
+              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+              disabled={draftDirty}
+              title={draftDirty
+                ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
+                       'Save the draft before checking — Check runs on a sealed revision, not on the buffer being typed.')
+                : pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
+              onClick={goToCommission}
+            >
+              {pick('Kiểm tra', 'Check')}
+            </Button>
+          </>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="disabled:opacity-100"
+          icon={<RefreshCw className={workspace.status === 'loading' ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />}
+          onClick={workspace.reload}
+          disabled={workspace.status === 'loading'}
+          aria-busy={workspace.status === 'loading'}
+          aria-label={pick('Làm mới', 'Refresh')}
+        >
+          {pick('Làm mới', 'Refresh')}
+        </Button>
+      </div>
+    )
+    return () => setContextStripSlot(null)
+  }, [canEdit, capabilities.data?.workspaceModes?.simulation, draftDirty, goToCommission, pendingOperations, pick, setContextStripSlot, switchWorkspaceMode, workspace.reload, workspace.save, workspace.saving, workspace.status, workspaceMode])
 
   useEffect(() => {
     if (!draftDirty) return undefined
@@ -453,6 +524,11 @@ export function DesignWorkspacePage({
   }
   // T59-301: BE trả document v2; adapter chiếu về view model của bốn tab.
   const document = workspaceDocument as NonNullable<typeof workspaceDocument>
+  /* Bottom workbench phải đọc buffer đang chỉnh, không phải chỉ bản Draft đã
+   * read-back. `programOperations` là ảnh chiếu local do ProgramsTab sở hữu;
+   * chiếu nó vào một document chỉ-đọc giúp Problems cập nhật trước Save mà
+   * không biến local state thành authority transport. */
+  const workbenchDraftDocument = projectPendingProgramSources(document, programOperations)
   /* Route v2 chọn POU bằng `objectId`; editor cũ vẫn nhận `programId`. Adapter
    * hẹp này chỉ nối hai định danh khi cùng một record Draft khai cả hai, không
    * suy theo tên/index và không dùng objectId làm mutation target sai. */
@@ -490,8 +566,9 @@ export function DesignWorkspacePage({
    * Nguồn văn bản chỉ có với POU ngôn ngữ ST; POU FBD trả `null` để tab Tìm
    * kiếm nói thẳng "không phải mã nguồn văn bản" thay vì hiện một ô nhập vô
    * nghĩa. */
-  const draftSource = selectedProgram?.language === 'ST' && typeof selectedProgram.document === 'string'
-    ? selectedProgram.document
+  const workbenchSelectedProgram = workbenchDraftDocument.programs.find((program) => program.programId === selectedProgramId)
+  const draftSource = workbenchSelectedProgram?.language === 'ST' && typeof workbenchSelectedProgram.document === 'string'
+    ? workbenchSelectedProgram.document
     : null
 
   /* `T59-816` — workbench phải đọc ĐÚNG tài liệu của chế độ đang mở.
@@ -534,7 +611,7 @@ export function DesignWorkspacePage({
              `Running · ${selectedProgram?.name ?? 'no POU selected'}`)
 
   /** Nhảy tới một offset trong POU đang mở, dùng lại đúng cơ chế neo
-   *  `line/column/length` mà PGM-03 đã dùng — không dựng đường nhảy thứ hai. */
+   *  `line/column/length` mà PGM-05 đã dùng — không dựng đường nhảy thứ hai. */
   const jumpToSourceOffset = (offset: number, length: number) => {
     if (!selectedProgramId || workbenchSource === null) return
     const before = workbenchSource.slice(0, offset)
@@ -552,7 +629,7 @@ export function DesignWorkspacePage({
 
   /** `ISS-STED-05` — nhảy tới một diagnostic từ khay Vấn đề của workbench.
    *
-   * Chọn đúng POU RỒI neo dòng/cột, dùng lại chính `focusDiagnostic` mà PGM-03
+   * Chọn đúng POU RỒI neo dòng/cột, dùng lại chính `focusDiagnostic` mà PGM-05
    * và khay So sánh đã dùng — không mở đường nhảy thứ hai. Hai đường nhảy song
    * song sẽ lệch nhau đúng lúc một trong hai được sửa. */
   const jumpToDiagnostic = (diagnostic: ProgrammingDiagnostic) => {
@@ -563,6 +640,17 @@ export function DesignWorkspacePage({
     setFocusDiagnostic(diagnostic)
   }
 
+  /** `TC-FBD-DIAG-001` — workbench đã phân giải JSON path thành canonical
+   * selection; trang chỉ chọn đúng POU và chuyển nguyên anchor đó xuống editor.
+   * Không tìm gần đúng theo tên/index ở đây. */
+  const jumpToFbdSelection = (programId: string, selection: FbdSelection) => {
+    const program = document.programs.find((candidate) => candidate.programId === programId)
+    if (!program || program.language !== 'FBD') return
+    selectPou(program.objectId ?? program.programId)
+    setFocusDiagnostic(null)
+    setCompareFbdFocus({ programId, selection })
+  }
+
   /* `signals[]` KHÔNG đi qua `toWorkspaceDocument`, nên phải đọc từ draft THÔ.
    * Explorer cần nó để biết POU nào đang publish — điều kiện backend dùng để
    * từ chối `removeProgram`. */
@@ -570,6 +658,10 @@ export function DesignWorkspacePage({
   const simulationWatch = simulationWatchRows(simulation.slice.frame)
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
   const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
+  const selectedPouInterface = pouInterfaceFromDraft(
+    workspace.project.draft,
+    selectedProgram?.objectId ?? selectedProgram?.programId,
+  )
   const pouNameByObjectId = new Map(
     document.programs.map((program) => [program.objectId ?? program.programId, program.name] as const),
   )
@@ -600,7 +692,7 @@ export function DesignWorkspacePage({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* F-UX-15 (`REV-FE-UIUX-UC-2026-08-18` §7.1): mỗi màn/tab phải có mốc
           tiêu đề riêng trong cây heading. `<h1>` của route Programming nằm ở
           `ProgrammingLayout` (một và chỉ một), nên ở đây là `<h2>`/`<h3>`.
@@ -615,83 +707,32 @@ export function DesignWorkspacePage({
           role="alert"
           data-testid="programming-compatibility-block"
           data-compatibility-state={compatibility.state}
-          className="rounded-[var(--radius)] border border-[var(--c-danger)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text)]"
+          className="rounded-[var(--radius)] border border-[var(--c-danger)] bg-[var(--c-surface-2)] p-2 text-sm text-[var(--c-text)]"
         >
           {compatibility.reason}
         </p>
       )}
       {mobileReadOnly && (
-        <p role="status" data-testid="programming-mobile-read-only" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-3 text-sm text-[var(--c-text-dim)]">
-          {pick('Dưới 768 px, workspace chỉ cho xem; hãy dùng màn hình rộng hơn để chỉnh sửa.', 'Below 768 px, the workspace is read-only; use a wider screen to edit.')}
+        <p role="status" data-testid="programming-mobile-read-only" className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-sm text-[var(--c-text-dim)]">
+          {pick('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ. Hãy dùng màn hình rộng từ 768 px để chỉnh sửa.', 'Small screen — diagram view only. Use a screen at least 768 px wide to edit.')}
         </p>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
-        <div role="tablist" aria-label={pick('Tab workspace Thiết kế', 'Design workspace tabs')} className="flex gap-1">
-          {VALID_TABS.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              role="tab"
-              aria-selected={candidate === tab}
-              className={`rounded-t-[var(--radius)] border-b-2 px-3 py-1.5 text-sm font-medium ${
-                candidate === tab ? 'border-[var(--c-accent)] text-[var(--c-accent)]' : 'border-transparent text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
-              }`}
-              onClick={() => {
-                /* Điều hướng sang ROUTE của IA thay vì chỉ ghi `?tab=`: trên
-                 * `/programs` và `/mapping`, query bị `route` ghi đè nên ghi
-                 * query là bấm vào chỗ không có gì xảy ra. */
-                const query = new URLSearchParams(searchParams)
-                query.delete('tab')
-                if (PROGRAMS_WORKSPACE_V2_ENABLED) {
-                  /* Cut-over BẬT: cả ba tab ở LẠI route canonical và chỉ đổi
-                   * query. Cho tab Ánh xạ nhảy sang `/projects/:id/mapping` sẽ
-                   * unmount workspace — và cùng với nó là buffer ST chưa lưu
-                   * của người dùng. Trước khi siết chỗ này, journey "đổi tab
-                   * không mất nội dung đang gõ" mất trắng nội dung, vì hai địa
-                   * chỉ mount hai cây component khác nhau. */
-                  if (candidate !== 'programs') query.set('tab', candidate)
-                  navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
-                  return
-                }
-                if (candidate === 'execution') query.set('tab', 'execution')
-                const target = candidate === 'mapping' ? 'mapping' : 'programs'
-                const suffix = query.toString()
-                const destination = target === 'programs'
-                  ? programsWorkspacePath(projectId ?? '', { search: suffix })
-                  : `/eng/programming/projects/${projectId}/${target}${suffix ? `?${suffix}` : ''}`
-                navigate(destination, { replace: true })
-              }}
-            >
-              {pick(...TAB_LABEL[candidate])}
-            </button>
-          ))}
-        </div>
+      {/* ponytail: ẩn thanh chứa tab + mode switcher — cả hai cụm đã chuyển đi. */}
+      {/*
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-1">
+        {PROGRAMS_WORKSPACE_V2_ENABLED ? (...) : (...)}
         <div className="flex flex-wrap items-center gap-2">
-          {/* `T59-807` — trước lát này `?mode=` chỉ đổi được bằng cách GÕ TAY
-              vào URL, và giao diện không nói workspace đang ở chế độ nào. */}
-          <ProgramsModeSwitcher
-            mode={workspaceMode}
-            draftDirty={draftDirty}
-            /* `T59-814` — SIMULATE lấy capability TỪ SERVER. Thiếu
-               `workspaceModes` (server đời cũ) thì `simulation` là undefined và
-               mode ở trạng thái UNAVAILABLE, không phải "chắc là có". */
-            capabilities={programsModeCapabilities(pick, capabilities.data?.workspaceModes?.simulation)}
-            onSwitch={switchWorkspaceMode}
-          />
+          <ProgramsModeSwitcher ... />
         </div>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            {/* `T59-821` — `Kiểm tra` và `So sánh` ĐÃ CHUYỂN vào toolbar của
-             * chính trình soạn thảo, đúng `PGM-02A §3`. Giữ thêm một bản ở đây
-             * sẽ là HAI nút cho cùng một hành động: người dùng phải đoán chúng
-             * có khác nhau không, và một lần sửa điều kiện khoá sẽ chỉ áp cho
-             * một trong hai.
-             *
-             * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
-             * sang PGM-03, nơi sở hữu trọn vòng seal/run/poll/result. */}
-          </div>
-        )}
       </div>
+      */}
+      <span
+        role="status"
+        data-testid="draft-dirty-indicator"
+        className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
+      >
+        {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
+      </span>
 
       {compareOpen && (
         <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-[var(--c-bg)]/95 p-3 shadow-2xl sm:max-w-3xl">
@@ -727,12 +768,6 @@ export function DesignWorkspacePage({
           </div>
         </div>
       )}
-      {draftDirty && (
-        <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
-          {pick('Draft có thay đổi chưa lưu. Hãy lưu trước khi Kiểm tra.', 'The draft has unsaved changes. Save before running Check.')}
-        </div>
-      )}
-
       {/* Cả ba tab luôn MOUNTED, chỉ ẩn bằng CSS (không unmount/remount theo
           `tab`). Bắt buộc: unmount xoá state cục bộ của `SourceEditor`/
           `FbdEditorPane` (buffer đang gõ, chưa lưu), nên đổi tab rồi quay lại
@@ -820,6 +855,7 @@ export function DesignWorkspacePage({
             objectId={selectedObjectId}
             draftDirty={draftDirty}
             draftRevisionId={simulateRevisionId}
+            allowMutation={canSimulate}
             onStart={startSimulation}
             onAction={simulation.act}
             onSetInput={simulation.setInput}
@@ -857,6 +893,10 @@ export function DesignWorkspacePage({
               focusFbdSelection={compareFbdFocus}
               onPendingOperationsChange={updateProgramOperations}
               discardVersion={discardVersion}
+              /* `T59-821` — `Kiểm tra` và `So sánh` nằm trong toolbar của
+               * chính trình soạn thảo, đúng `PGM-02A §3`.
+               * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
+               * sang PGM-05, nơi sở hữu trọn vòng seal/run/poll/result. */
               onRunCheck={goToCommission}
               onOpenCompare={() => setCompareOpen(true)}
               checkDisabledReason={draftDirty
@@ -878,6 +918,8 @@ export function DesignWorkspacePage({
                 </div>
               )}
               userPouInterfaces={userPouInterfaces}
+              selectedPouInterface={selectedPouInterface}
+              userScope={session?.username}
               forceReadOnly={mobileReadOnly}
               onWatchVariable={watchVariable}
             />
@@ -899,7 +941,7 @@ export function DesignWorkspacePage({
             : {})}
           traceOwnerHref="/eng/programming/runtime?tab=watch"
           watchAddRequest={watchAddRequest}
-          document={document}
+          document={workspaceMode === 'EDIT' ? workbenchDraftDocument : document}
           source={workbenchSource}
           sourceLabel={workbenchSourceLabel}
           checkOwnerHref={`/eng/programming/projects/${projectId}/commission`}
@@ -909,13 +951,17 @@ export function DesignWorkspacePage({
           hasCheckResult={hasCheckResult}
           checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
           onJumpToDiagnostic={jumpToDiagnostic}
+          onJumpToFbdSelection={jumpToFbdSelection}
         />
         </div>
       </div>
       <div hidden={tab !== 'mapping'}>
         <MappingTab
+          active={tab === 'mapping'}
           draft={workspace.project.draft}
           document={document}
+          project={workspace.project}
+          projectId={projectId}
           saving={workspace.saving}
           onSave={workspace.save}
           forceReadOnly={mobileReadOnly}

@@ -22,6 +22,7 @@ import type {
   RemoteState,
   ProgrammingLibraryUsage,
   ProgrammingLibraryEntry,
+  ProgrammingSignalDependencies,
 } from '../model/types'
 
 type PickCopy = (vi: string, en: string) => string
@@ -39,8 +40,10 @@ function programmingResourceErrorMessage(pick: PickCopy, reason: unknown): strin
  * `useModbusConfig` sẵn có trong repo (không dùng react-query, dự án này
  * chưa có dependency đó và không cần thêm cho một tập hook đọc/poll đơn
  * giản). `intervalMs` mặc định `0` = chỉ đọc lúc mount + khi gọi `refresh()`.
+ *
+ * ISS-#565: thêm `enabled` để tắt fetch + poll khi tab không active.
  */
-function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): RemoteState<T> {
+function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0, enabled = true): RemoteState<T> {
   const { pick } = useI18n()
   const [status, setStatus] = useState<RemoteState<T>['status']>('loading')
   const [data, setData] = useState<T | null>(null)
@@ -48,38 +51,76 @@ function useProgrammingResource<T>(load: () => Promise<T>, intervalMs = 0): Remo
   const loadRef = useRef(load)
   loadRef.current = load
   const generation = useRef(0)
+  const inFlight = useRef(false)
+  const rerunAfterFlight = useRef(false)
+  const active = useRef(false)
+  const runRef = useRef<() => void>(() => {})
 
   const run = useCallback(() => {
-    const myGeneration = ++generation.current
+    if (!active.current) return
+    /* Đổi định danh tài nguyên hoặc gọi refresh trong lúc request cũ còn bay
+       không được làm mất lượt đọc mới. Coalesce thành đúng một lượt kế tiếp:
+       không mở request chồng nhau, nhưng cũng không kẹt mãi ở dữ liệu cũ. */
+    if (inFlight.current) {
+      rerunAfterFlight.current = true
+      return
+    }
+    inFlight.current = true
+    const myGeneration = generation.current
+    const finish = () => {
+      inFlight.current = false
+      if (!active.current || !rerunAfterFlight.current) return
+      rerunAfterFlight.current = false
+      queueMicrotask(() => runRef.current())
+    }
     // Một client validator hoặc test double có thể ném đồng bộ trước khi trả
     // Promise. Chuẩn hoá cả hai đường vào cùng RemoteState error; nếu không một
     // endpoint context mới đủ làm sập toàn bộ sáu-workspace layout.
     Promise.resolve().then(() => loadRef.current()).then(
       (value) => {
-        if (myGeneration !== generation.current) return
-        setData(value)
-        setError(null)
-        setStatus('ready')
+        if (myGeneration === generation.current) {
+          setData(value)
+          setError(null)
+          setStatus('ready')
+        }
+        finish()
       },
       (reason: unknown) => {
-        if (myGeneration !== generation.current) return
-        setError(programmingResourceErrorMessage(pick, reason))
-        setStatus('error')
+        if (myGeneration === generation.current) {
+          setError(programmingResourceErrorMessage(pick, reason))
+          setStatus('error')
+        }
+        finish()
       }
     )
   }, [pick])
+  runRef.current = run
 
   useEffect(() => {
+    active.current = enabled
+    generation.current += 1
+    rerunAfterFlight.current = false
+    if (!enabled) {
+      return () => {
+        active.current = false
+        generation.current += 1
+        rerunAfterFlight.current = false
+      }
+    }
     run()
-    if (intervalMs <= 0) return undefined
-    const timer = window.setInterval(run, intervalMs)
-    return () => window.clearInterval(timer)
+    const timer = intervalMs > 0 ? window.setInterval(run, intervalMs) : null
+    return () => {
+      active.current = false
+      generation.current += 1
+      rerunAfterFlight.current = false
+      if (timer !== null) window.clearInterval(timer)
+    }
     // `load` cố ý nằm trong deps dù `run()` luôn đọc qua `loadRef` (giá trị
     // mới nhất) — thiếu nó, đổi định danh tài nguyên (vd `checkId` từ
     // `undefined` sang giá trị thật sau một `navigate` cùng trang, xem D-01/
     // `CheckCommissionPage`) sẽ không tự fetch lại, chỉ đọc mãi kết quả rỗng
     // của lần mount đầu tới khi ai đó gọi `refresh()` thủ công.
-  }, [run, load, intervalMs])
+  }, [run, load, intervalMs, enabled])
 
   return { status, data, error, refresh: run }
 }
@@ -178,12 +219,267 @@ export function useProgrammingRevision(revisionId: string | null | undefined): R
   return useProgrammingResource(load, 0)
 }
 
+export type ProgrammingPointCatalogFailure = 'REQUEST_FAILED' | 'INVALID_PAGE' | 'REPEATED_CURSOR'
+
+/** Snapshot Point Catalog tích luỹ qua nhiều trang.
+ *
+ * `status=ready` và `complete=true` chỉ xuất hiện cùng nhau sau khi máy chủ trả
+ * trang cuối (`nextCursor=null`). Khi trang sau lỗi, `data.items` vẫn chứa phần
+ * đã đọc để inspect nhưng toàn bộ snapshot tiếp tục fail-closed. */
+export interface ProgrammingPointCatalogState extends RemoteState<ProgrammingPointCatalogPage> {
+  complete: boolean
+  failure: ProgrammingPointCatalogFailure | null
+  canRetry: boolean
+  /** Thử lại đúng cursor vừa lỗi, không bỏ phần đã tải của generation hiện tại. */
+  retry: () => void
+  /** Bỏ generation hiện tại và bắt đầu lại từ trang đầu không mang cursor. */
+  restart: () => void
+}
+
+const programmingPointCatalogPageLimit = 500
+const programmingPointCatalogMaxPages = 1000
+
+interface PointCatalogGeneration {
+  controller: AbortController
+  items: Map<string, ProgrammingPointCatalogPage['items'][number]>
+  consumedCursors: Set<string>
+  inFlight: boolean
+  retryCursor: string | null | undefined
+  pages: number
+}
+
+function programmingPointCatalogKey(entry: ProgrammingPointCatalogPage['items'][number]): string | null {
+  if (!entry || !['LOCAL', 'VP', 'MB_RTU'].includes(entry.category)) return null
+  if (typeof entry.pointId !== 'string' || entry.pointId.trim() === '') return null
+  if (entry.deviceId !== undefined && typeof entry.deviceId !== 'string') return null
+  if (entry.category === 'MB_RTU' && (!entry.deviceId || entry.deviceId.trim() === '')) return null
+  if (entry.category !== 'MB_RTU' && entry.deviceId !== undefined && entry.deviceId !== '') return null
+  return JSON.stringify([entry.category, entry.deviceId ?? '', entry.pointId])
+}
+
+function normalizeProgrammingPointCatalogPage(value: unknown): ProgrammingPointCatalogPage | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as { items?: unknown; nextCursor?: unknown }
+  if (!Array.isArray(candidate.items)) return null
+  if (candidate.nextCursor !== undefined && candidate.nextCursor !== null
+      && (typeof candidate.nextCursor !== 'string' || candidate.nextCursor.trim().length === 0 || candidate.nextCursor.length > 1024)) {
+    return null
+  }
+  for (const item of candidate.items) {
+    if (programmingPointCatalogKey(item as ProgrammingPointCatalogPage['items'][number]) === null) return null
+  }
+  return {
+    items: candidate.items as ProgrammingPointCatalogPage['items'],
+    nextCursor: candidate.nextCursor === undefined ? null : candidate.nextCursor as string | null,
+  }
+}
+
 /** `GET /point-catalog` — tab Điểm & Ánh xạ có nhịp làm mới riêng (UX §0.1
- * ràng buộc 3: `usePointCatalogQuery` tách khỏi `useDraftQuery`). */
-export function useProgrammingPointCatalog(): RemoteState<ProgrammingPointCatalogPage> {
+ * ràng buộc 3: `usePointCatalogQuery` tách khỏi `useDraftQuery`).
+ *
+ * `ISS-PGM03-08`: mỗi lượt refresh là một generation độc lập. Hook tự rút cạn
+ * tuần tự mọi trang, ghép theo canonical identity `(category, deviceId,
+ * pointId)`, giữ partial snapshot khi trang sau lỗi và chặn cursor lặp/hỏng.
+ * `scopeKey` là định danh route/Project: đổi nó trong lúc request cũ còn bay sẽ
+ * bỏ response cũ và đọc lại từ trang đầu, dù endpoint catalog là global.
+ *
+ * `ISS-#565`: `enabled=false` tắt fetch + poll khi tab không active.
+ */
+export function useProgrammingPointCatalog(enabled = true, scopeKey?: string): ProgrammingPointCatalogState {
+  const { pick } = useI18n()
   const client = useProgrammingApiClient()
-  const load = useCallback(() => client.request<ProgrammingPointCatalogPage>('getProgrammingPointCatalog'), [client])
-  return useProgrammingResource(load, 10000)
+  const requestedScope = scopeKey ?? ''
+  const active = useRef(false)
+  const activeScope = useRef<string | null>(null)
+  const current = useRef<PointCatalogGeneration | null>(null)
+  const lastCompleteItems = useRef<ProgrammingPointCatalogPage['items']>([])
+  const lastSuccessAt = useRef<number | null>(null)
+  const [state, setState] = useState<Omit<ProgrammingPointCatalogState, 'refresh' | 'retry' | 'restart'>>({
+    status: 'loading',
+    data: null,
+    error: null,
+    lastSuccessAt: null,
+    complete: false,
+    failure: null,
+    canRetry: false,
+  })
+
+  const visibleItems = useCallback((generation: PointCatalogGeneration) => (
+    generation.items.size > 0 ? [...generation.items.values()] : lastCompleteItems.current
+  ), [])
+
+  const publishFailure = useCallback((generation: PointCatalogGeneration, error: string,
+    failure: ProgrammingPointCatalogFailure, retryCursor?: string | null) => {
+    if (!active.current || current.current !== generation) return
+    generation.retryCursor = retryCursor
+    setState({
+      status: 'error',
+      data: { items: visibleItems(generation), nextCursor: retryCursor ?? null },
+      error,
+      lastSuccessAt: lastSuccessAt.current,
+      complete: false,
+      failure,
+      canRetry: retryCursor !== undefined,
+    })
+  }, [visibleItems])
+
+  const loadPages = useCallback(async (generation: PointCatalogGeneration, initialCursor: string | null) => {
+    if (generation.inFlight || !active.current || current.current !== generation) return
+    generation.inFlight = true
+    generation.retryCursor = undefined
+    let cursor = initialCursor
+    try {
+      while (active.current && current.current === generation) {
+        setState({
+          status: 'loading',
+          data: { items: visibleItems(generation), nextCursor: cursor },
+          error: null,
+          lastSuccessAt: lastSuccessAt.current,
+          complete: false,
+          failure: null,
+          canRetry: false,
+        })
+
+        let rawPage: unknown
+        try {
+          rawPage = await client.request<unknown>('getProgrammingPointCatalog', {
+            query: cursor === null
+              ? { limit: programmingPointCatalogPageLimit }
+              : { limit: programmingPointCatalogPageLimit, cursor },
+            signal: generation.controller.signal,
+          })
+        } catch (reason: unknown) {
+          if (!active.current || current.current !== generation || generation.controller.signal.aborted) return
+          publishFailure(generation, programmingResourceErrorMessage(pick, reason), 'REQUEST_FAILED', cursor)
+          return
+        }
+
+        if (!active.current || current.current !== generation) return
+        const page = normalizeProgrammingPointCatalogPage(rawPage)
+        if (!page || page.items.length > programmingPointCatalogPageLimit) {
+          publishFailure(
+            generation,
+            pick('Phản hồi Point Catalog không hợp lệ. Hãy đọc lại từ trang đầu.', 'The Point Catalog response is invalid. Restart from the first page.'),
+            'INVALID_PAGE',
+          )
+          return
+        }
+
+        const sizeBefore = generation.items.size
+        for (const item of page.items) {
+          generation.items.set(programmingPointCatalogKey(item) as string, item)
+        }
+        generation.pages += 1
+
+        const nextCursor = page.nextCursor ?? null
+        if (nextCursor === null) {
+          const items = [...generation.items.values()]
+          const completedAt = Date.now()
+          lastCompleteItems.current = items
+          lastSuccessAt.current = completedAt
+          generation.retryCursor = undefined
+          setState({
+            status: 'ready',
+            data: { items, nextCursor: null },
+            error: null,
+            lastSuccessAt: completedAt,
+            complete: true,
+            failure: null,
+            canRetry: false,
+          })
+          return
+        }
+
+        /* Một trang có `nextCursor` nhưng không thêm canonical identity nào sẽ
+         * không bao giờ tiến tới snapshot đáng tin. Dừng ồn ào thay vì quay vô
+         * hạn qua các cursor khác nhau mà cùng trả một lát dữ liệu. */
+        const noProgress = generation.items.size === sizeBefore
+        const repeated = nextCursor === cursor || generation.consumedCursors.has(nextCursor)
+        const tooManyPages = generation.pages >= programmingPointCatalogMaxPages
+        if (noProgress || repeated || tooManyPages) {
+          publishFailure(
+            generation,
+            pick('Cursor Point Catalog bị lặp hoặc không tiến triển. Hãy đọc lại từ trang đầu.', 'The Point Catalog cursor repeated or made no progress. Restart from the first page.'),
+            'REPEATED_CURSOR',
+          )
+          return
+        }
+        if (cursor !== null) generation.consumedCursors.add(cursor)
+        cursor = nextCursor
+      }
+    } finally {
+      generation.inFlight = false
+    }
+  }, [client, pick, publishFailure, visibleItems])
+
+  const restart = useCallback(() => {
+    if (!active.current) return
+    current.current?.controller.abort()
+    const generation: PointCatalogGeneration = {
+      controller: new AbortController(),
+      items: new Map(),
+      consumedCursors: new Set(),
+      inFlight: false,
+      retryCursor: undefined,
+      pages: 0,
+    }
+    current.current = generation
+    void loadPages(generation, null)
+  }, [loadPages])
+
+  const retry = useCallback(() => {
+    const generation = current.current
+    if (!active.current || !generation || generation.inFlight || generation.retryCursor === undefined) return
+    const cursor = generation.retryCursor
+    void loadPages(generation, cursor)
+  }, [loadPages])
+
+  useEffect(() => {
+    active.current = enabled
+    if (!enabled) {
+      current.current?.controller.abort()
+      current.current = null
+      activeScope.current = null
+      return () => {
+        active.current = false
+        current.current?.controller.abort()
+        current.current = null
+        activeScope.current = null
+      }
+    }
+    // Effect chạy sau render. Ghi scope trước khi tạo request và xóa snapshot
+    // hoàn chỉnh của route cũ để generation mới không dùng nó làm partial.
+    if (activeScope.current !== requestedScope) {
+      lastCompleteItems.current = []
+      lastSuccessAt.current = null
+    }
+    activeScope.current = requestedScope
+    restart()
+    const timer = window.setInterval(() => {
+      if (!current.current?.inFlight) restart()
+    }, 10000)
+    return () => {
+      active.current = false
+      window.clearInterval(timer)
+      current.current?.controller.abort()
+      current.current = null
+      activeScope.current = null
+    }
+    // `scopeKey` cố ý là dependency dù không đi lên API: nó chia generation
+    // theo route/Project và loại response của route cũ đang bay.
+  }, [enabled, requestedScope, restart])
+
+  /* Khi route/Project đổi, effect tạo generation mới chỉ chạy sau render. Che
+   * snapshot của scope cũ ngay ở render hiện tại để không có một frame nào
+   * công bố `complete=true` và cho phép hành động trên dữ liệu cũ. */
+  if (!enabled || activeScope.current !== requestedScope) {
+    return {
+      status: 'loading', data: null, error: null, lastSuccessAt: null,
+      complete: false, failure: null, canRetry: false,
+      refresh: restart, retry, restart,
+    }
+  }
+  return { ...state, refresh: restart, retry, restart }
 }
 
 export interface LazyPointCatalogState {
@@ -284,7 +580,7 @@ export function useLazyProgrammingLibraryCatalog(projectId: string | undefined):
 }
 
 /** `GET /checks/{checkId}` — dùng lại độc lập với `useCheckWorkflow` để
- * PGM-03 luôn đọc trạng thái mới nhất kể cả khi vào thẳng bằng navigation
+ * PGM-05 luôn đọc trạng thái mới nhất kể cả khi vào thẳng bằng navigation
  * state (không phải vừa chạy Check trong cùng phiên). */
 export function useProgrammingCheck(checkId: string | undefined): RemoteState<ProgrammingCheck> {
   const client = useProgrammingApiClient()
@@ -293,6 +589,20 @@ export function useProgrammingCheck(checkId: string | undefined): RemoteState<Pr
     return client.request<ProgrammingCheck>('getProgrammingCheck', { path: { checkId } })
   }, [client, checkId])
   return useProgrammingResource(load, 0)
+}
+
+/** Publisher/consumer do compiler xác nhận, neo vào đúng Draft/Revision/Check. */
+export function useProgrammingSignalDependencies(
+  projectId: string | undefined,
+  enabled = true,
+  draftVersion?: string,
+): RemoteState<ProgrammingSignalDependencies> {
+  const client = useProgrammingApiClient()
+  const load = useCallback(() => {
+    if (!projectId) return Promise.reject(new Error('projectId is required'))
+    return client.request<ProgrammingSignalDependencies>('getProgrammingSignalDependencies', { path: { projectId } })
+  }, [client, projectId, draftVersion])
+  return useProgrammingResource(load, 0, enabled && Boolean(projectId))
 }
 
 /** `GET /revisions/{from}/changes/{to}` — thay đổi có cấu trúc + impact bốn
@@ -509,7 +819,7 @@ export function useProgrammingRecentAudit(limit = 5): RemoteState<ProgrammingAud
   return useProgrammingResource(load, 0)
 }
 
-/** `GET /audit` — bản đầy đủ cho tab "Phiên bản & Bảo trì" của PGM-04. */
+/** `GET /audit` — bản đầy đủ cho tab "Phiên bản & Bảo trì" của PGM-06. */
 export function useProgrammingAudit(limit = 50): RemoteState<ProgrammingAuditPage> {
   const client = useProgrammingApiClient()
   const load = useCallback(

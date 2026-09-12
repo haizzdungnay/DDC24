@@ -329,7 +329,8 @@ describe('overviewViewModel — hợp nhất cả trang', () => {
       projectStatus: 'ready', project,
       runtimeStatus: 'ready', runtime,
       programsStatus: 'ready', programs: page([item()]),
-      activeSet: activeSet()
+      activeSet: activeSet(),
+      activeOwnership: 'owned'
     })
     expect(vm.projectName).toBe('AHU-01')
     expect(vm.draft.label).toBe('Draft #14')
@@ -341,12 +342,38 @@ describe('overviewViewModel — hợp nhất cả trang', () => {
     expect(vm.programs.rows).toHaveLength(1)
   })
 
+  /**
+   * `ISS-PGUI-01` — `active.present` trả lời "PROJECT NÀY có đang vận hành
+   * không", không phải "thiết bị có đang chạy gì không".
+   *
+   * `runtime.activeRevisionId` là read model của controller. Bản trước đọc
+   * thẳng nó, nên `present` bật lên cho mọi Project — kể cả Project không hề
+   * liên quan tới gói đang chạy.
+   */
+  it.each([
+    ['gói của Project khác', 'foreign' as const],
+    ['không quy được về Project nào', 'unresolved' as const]
+  ])('%s ⇒ present là false dù runtime đọc được và có activeRevisionId', (_name, ownership) => {
+    const vm = overviewViewModel({
+      projectStatus: 'ready', project,
+      runtimeStatus: 'ready', runtime,
+      programsStatus: 'ready', programs: page([item()]),
+      activeSet: activeSet(),
+      activeOwnership: ownership
+    })
+    expect(runtime.activeRevisionId).not.toBeNull()
+    expect(vm.active.present).toBe(false)
+    // Lý do đi kèm để thẻ so sánh nói đúng câu, không gộp về "chưa Commission".
+    expect(vm.active.ownership).toBe(ownership)
+  })
+
   it('runtime chưa đọc được ⇒ safeState là null chứ không phải false', () => {
     const vm = overviewViewModel({
       projectStatus: 'ready', project,
       runtimeStatus: 'error', runtime: null,
       programsStatus: 'ready', programs: page([]),
-      activeSet: activeSet({ programs: [], reason: 'REVISION_UNAVAILABLE' })
+      activeSet: activeSet({ programs: [], reason: 'REVISION_UNAVAILABLE' }),
+      activeOwnership: 'owned'
     })
     expect(vm.safeState.active).toBeNull()
     expect(vm.active.taskState).toBeNull()
@@ -361,7 +388,8 @@ describe('overviewViewModel — hợp nhất cả trang', () => {
       project: { ...project, draftSequence: null, activeSequence: null },
       runtimeStatus: 'ready', runtime,
       programsStatus: 'ready', programs: page([item()]),
-      activeSet: activeSet()
+      activeSet: activeSet(),
+      activeOwnership: 'owned'
     })
     expect(vm.draft.label).toBeNull()
     expect(vm.active.label).toBeNull()
@@ -375,7 +403,8 @@ describe('overviewViewModel — hợp nhất cả trang', () => {
       projectStatus: 'ready', project: null,
       runtimeStatus: 'ready', runtime,
       programsStatus: 'ready', programs: page([]),
-      activeSet: activeSet({ programs: [], reason: 'NO_ACTIVE_REVISION' })
+      activeSet: activeSet({ programs: [], reason: 'NO_ACTIVE_REVISION' }),
+      activeOwnership: 'owned'
     })
     expect(vm.projectName).toBeNull()
     expect(vm.draft.dirty).toBeNull()
@@ -387,12 +416,14 @@ describe('overviewViewModel — hợp nhất cả trang', () => {
     const gentle = overviewViewModel({
       projectStatus: 'ready', project,
       runtimeStatus: 'ready', runtime: { ...runtime, safeState: true, safeStateNoControllerOnly: true },
-      programsStatus: 'ready', programs: page([item()]), activeSet: activeSet()
+      programsStatus: 'ready', programs: page([item()]), activeSet: activeSet(),
+      activeOwnership: 'owned'
     })
     const severe = overviewViewModel({
       projectStatus: 'ready', project,
       runtimeStatus: 'ready', runtime: { ...runtime, safeState: true, safeStateNoControllerOnly: false },
-      programsStatus: 'ready', programs: page([item()]), activeSet: activeSet()
+      programsStatus: 'ready', programs: page([item()]), activeSet: activeSet(),
+      activeOwnership: 'owned'
     })
     expect(gentle.safeState).toEqual({ active: true, noControllerOnly: true })
     expect(severe.safeState).toEqual({ active: true, noControllerOnly: false })

@@ -1,4 +1,5 @@
 import { Clock } from 'lucide-react'
+import { formatTechnicalDateTime, type HmiLocale } from '../../../shared/dateTime'
 import { useI18n } from '../../../shared/i18n'
 import { Panel } from '../../../shared/components/Panel'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
@@ -246,11 +247,9 @@ function safeStateNote(pick: PickFn, facts: SafeStateFacts): string | null {
       )
 }
 
-/** Mốc authority gần nhất. Chuỗi không phân giải được thì giữ nguyên chứ không bịa. */
-export function formatAuthorityTimestamp(value: string): string {
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return `${parsed.toLocaleTimeString()} · ${parsed.toLocaleDateString()}`
+/** Mốc authority gần nhất; dữ liệu không phân giải được phải fail-closed thành `—`. */
+export function formatAuthorityTimestamp(value: string, locale: HmiLocale = 'vi-VN'): string {
+  return formatTechnicalDateTime(value, locale)
 }
 
 /* ------------------------------------------------------------------ *
@@ -371,7 +370,7 @@ function HealthRow({ id, term, state, label, note }: {
  * đối không rơi về `0`, về giờ máy trạm, hay về một mốc cũ không nói rõ là cũ.
  */
 function AuthorityTimestampRow({ observedAt, runtimeStatus }: { observedAt: string | null; runtimeStatus: ResourceStatus }) {
-  const { pick } = useI18n()
+  const { pick, locale } = useI18n()
   return (
     <div data-health-row="observed-at" className="flex items-start justify-between gap-3">
       <dt className="flex items-center gap-1.5 text-[var(--c-text-dim)]">
@@ -389,7 +388,7 @@ function AuthorityTimestampRow({ observedAt, runtimeStatus }: { observedAt: stri
             </span>
           </>
         ) : (
-          <span className="font-mono text-xs text-[var(--c-text)]">{formatAuthorityTimestamp(observedAt)}</span>
+          <span className="font-mono text-xs text-[var(--c-text)]">{formatAuthorityTimestamp(observedAt, locale)}</span>
         )}
       </dd>
     </div>

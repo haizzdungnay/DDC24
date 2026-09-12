@@ -1,4 +1,5 @@
 import { useI18n } from '../../../shared/i18n'
+import { formatTechnicalDateTime } from '../../../shared/dateTime'
 import { Panel } from '../../../shared/components/Panel'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
@@ -6,7 +7,7 @@ import { useProgrammingAudit, useProgrammingOperations } from '../api/queries'
 import type { ProgrammingRuntime } from '../model/types'
 
 /**
- * Tab "Phiên bản & Bảo trì" của PGM-04 (`UJ-PROG-08`) — `PreviousVersionsDrawer`
+ * Tab "Phiên bản & Bảo trì" của PGM-06 (`UJ-PROG-08`) — `PreviousVersionsDrawer`
  * + `AuditTimeline`. Rev A không có route "liệt kê mọi Revision của Project"
  * trong hợp đồng hiện hành (chỉ `GET /revisions/{id}` đơn lẻ) nên danh sách
  * "bản trước" ở đây giới hạn đúng những gì có AUTHORITY thật: Active + LKG từ
@@ -14,7 +15,7 @@ import type { ProgrammingRuntime } from '../model/types'
  * kỳ để khôi phục (ngoài LKG) là khoảng hở BE cần route mới, ghi ở CHANGELOG.
  */
 export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null }) {
-  const { pick } = useI18n()
+  const { pick, locale } = useI18n()
   const operations = useProgrammingOperations(20)
   const audit = useProgrammingAudit(50)
 
@@ -55,7 +56,7 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
                 </div>
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
                   <dt className="text-[var(--c-text-dim)]">{pick('Bản đích', 'Target')}</dt><dd className="font-mono">{(operation.requestedRevisionId ?? '—').slice(0, 8)}</dd>
-                  <dt className="text-[var(--c-text-dim)]">{pick('Cập nhật', 'Updated')}</dt><dd>{new Date(operation.updatedAt).toLocaleString()}</dd>
+                  <dt className="text-[var(--c-text-dim)]">{pick('Cập nhật', 'Updated')}</dt><dd>{formatTechnicalDateTime(operation.updatedAt, locale)}</dd>
                 </dl>
               </li>
             ))}
@@ -77,7 +78,7 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
                     <StatusBadge state={operation.state === 'SUCCEEDED' ? 'online' : operation.state === 'FAILED' || operation.state === 'ROLLED_BACK' ? 'fault' : 'unknown'} label={operation.state} />
                   </td>
                   <td className="py-1 pr-3 font-mono text-xs">{(operation.requestedRevisionId ?? '—').slice(0, 8)}</td>
-                  <td className="py-1 text-[var(--c-text-dim)]">{new Date(operation.updatedAt).toLocaleString()}</td>
+                  <td className="py-1 whitespace-nowrap text-[var(--c-text-dim)]">{formatTechnicalDateTime(operation.updatedAt, locale)}</td>
                 </tr>
               ))}
             </tbody>
@@ -99,7 +100,7 @@ export function VersionsTab({ runtime }: { runtime: ProgrammingRuntime | null })
               <li key={entry.auditId} className="flex items-center justify-between gap-2">
                 <span className="text-[var(--c-text)]">{entry.action}</span>
                 <span className="text-[var(--c-text-dim)]">
-                  {entry.actorId} · {new Date(entry.occurredAt).toLocaleString()}
+                  {entry.actorId} · {formatTechnicalDateTime(entry.occurredAt, locale)}
                 </span>
               </li>
             ))}

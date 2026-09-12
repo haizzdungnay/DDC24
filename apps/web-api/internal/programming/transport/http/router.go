@@ -19,8 +19,9 @@ const maxMutationBodyBytes int64 = 1 << 20
 const maxBundleMutationBodyBytes int64 = 6 << 20
 
 type routeDefinition struct {
-	method string
-	path   string
+	operationID string
+	method      string
+	path        string
 	/*
 	   `WEB-RBAC-001` — route khai QUYỀN, không khai ngưỡng vai.
 
@@ -28,11 +29,12 @@ type routeDefinition struct {
 	   cho một kỹ sư vận hành sửa Draft mà không đồng thời trao cho họ quyền tạo
 	   tài khoản. Nay chia làm hai mức:
 
-	     - `program.edit`     sửa Draft, thư viện, phiên mô phỏng, trace —
+	     - `program.edit`     sửa Draft, thư viện, Check, trace và export —
 	                          chưa chạm tới thiết bị đang chạy;
 	     - `program.activate` Commission / Restore / reset RETAIN / recovery
 	                          reset / intent Enable / import bundle — đây là lúc
-	                          chương trình BẮT ĐẦU điều khiển thiết bị thật.
+	                          chương trình BẮT ĐẦU điều khiển thiết bị thật;
+	     - `simulation.run`   tạo và điều khiển sandbox mô phỏng, admin-only.
 
 	   Bất biến của `security_matrix_test.go` giữ nguyên: handler KHÔNG được
 	   chạy khi thiếu quyền, nên một vai không đủ quyền không tạo ra side effect
@@ -61,67 +63,70 @@ type routeDefinition struct {
 }
 
 var routeDefinitions = []routeDefinition{
-	{method: "GET", path: "/api/v1/programming/capabilities", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/projects", permission: auth.PermissionRead},
-	{method: "POST", path: "/api/v1/programming/projects", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/projects/{projectId}", permission: auth.PermissionRead},
-	{method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "GET", path: "/api/v1/programming/revisions/{revisionId}", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", permission: auth.PermissionRead},
-	{method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/checks/{checkId}", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/libraries", permission: auth.PermissionRead},
+	{operationID: "getProgrammingCapabilities", method: "GET", path: "/api/v1/programming/capabilities", permission: auth.PermissionRead},
+	{operationID: "listProgrammingProjects", method: "GET", path: "/api/v1/programming/projects", permission: auth.PermissionRead},
+	{operationID: "createProgrammingProject", method: "POST", path: "/api/v1/programming/projects", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{operationID: "getProgrammingProject", method: "GET", path: "/api/v1/programming/projects/{projectId}", permission: auth.PermissionRead},
+	{operationID: "getProgrammingSignalDependencies", method: "GET", path: "/api/v1/programming/projects/{projectId}/signal-dependencies", permission: auth.PermissionRead},
+	{operationID: "updateProgrammingDraft", method: "PATCH", path: "/api/v1/programming/projects/{projectId}/draft", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{operationID: "previewProgrammingBinding", method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/bindings/preview", permission: auth.PermissionProgramEdit, readOnly: true, bodyRequired: true, ifMatchRequired: true},
+	{operationID: "createProgrammingRevision", method: "POST", path: "/api/v1/programming/projects/{projectId}/draft/revisions", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{operationID: "getProgrammingRevision", method: "GET", path: "/api/v1/programming/revisions/{revisionId}", permission: auth.PermissionRead},
+	{operationID: "compareProgrammingRevisions", method: "GET", path: "/api/v1/programming/revisions/{from}/changes/{to}", permission: auth.PermissionRead},
+	{operationID: "createProgrammingCheck", method: "POST", path: "/api/v1/programming/revisions/{revisionId}/checks", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{operationID: "getProgrammingCheck", method: "GET", path: "/api/v1/programming/checks/{checkId}", permission: auth.PermissionRead},
+	{operationID: "searchProgrammingLibraries", method: "GET", path: "/api/v1/programming/libraries", permission: auth.PermissionRead},
 	/* `T61-105` — Used-In là đường ĐỌC. Người ta cần biết khối nào đang được
 	   dùng TRƯỚC khi quyết định có sửa hay không; chặn nó lại làm người vận
 	   hành phải đoán. */
-	{method: "GET", path: "/api/v1/programming/library-usages", permission: auth.PermissionRead},
+	{operationID: "listProgrammingLibraryUsages", method: "GET", path: "/api/v1/programming/library-usages", permission: auth.PermissionRead},
 	/* `T61-404` — đọc mã nguồn của một entry theo ĐÚNG một cặp (revision, entry).
 	   Đường dẫn phẳng, hai định danh ở query: revision id của SYSTEM là một chuỗi
 	   có dấu hai chấm, nhét vào path segment sẽ đẻ ra lỗi encoding. */
-	{method: "GET", path: "/api/v1/programming/library-entry-source", permission: auth.PermissionRead},
-	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
+	{operationID: "getProgrammingLibraryEntrySource", method: "GET", path: "/api/v1/programming/library-entry-source", permission: auth.PermissionRead},
+	{operationID: "upsertProgrammingLibraryEntry", method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
 	/* `T61-401` — Check là DRY RUN của cùng payload: không `If-Match`, không
 	   idempotency key, không ghi. Bắt nó mang `If-Match` sẽ tiêu ETag Draft cho
 	   một lần bấm "Kiểm tra"; bắt nó mang idempotency key sẽ biến hai lần kiểm
 	   giống hệt nhau thành một xung đột. Quyền vẫn là `program.edit` vì nó đọc
 	   được cấu trúc Draft library của Project. */
-	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries/check",
+	{operationID: "checkProgrammingLibraryEntry", method: "POST", path: "/api/v1/programming/projects/{projectId}/library/entries/check",
 		permission: auth.PermissionProgramEdit, readOnly: true, bodyRequired: true},
-	{method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", permission: auth.PermissionProgramEdit, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
+	{operationID: "deleteProgrammingLibraryEntry", method: "DELETE", path: "/api/v1/programming/projects/{projectId}/library/entries/{entryId}", permission: auth.PermissionProgramEdit, idempotencyRequired: true, ifMatchRequired: true},
+	{operationID: "deprecateProgrammingLibraryRevision", method: "POST", path: "/api/v1/programming/projects/{projectId}/library/revisions/{libraryRevisionId}/deprecate",
 		permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "GET", path: "/api/v1/programming/point-catalog", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/runtime", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/runtime/monitor", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/runtime/signals", permission: auth.PermissionRead},
-	{method: "POST", path: "/api/v1/programming/runtime/traces", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", permission: auth.PermissionRead},
-	{method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", permission: auth.PermissionProgramEdit},
-	{method: "POST", path: "/api/v1/programming/operations/commission", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
-	{method: "POST", path: "/api/v1/programming/operations/restore", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/operations/{operationId}", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/operations", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/overrides", permission: auth.PermissionRead},
-	{method: "POST", path: "/api/v1/programming/bundles/export", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
-	{method: "POST", path: "/api/v1/programming/bundles/import", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true, maxBodyBytes: maxBundleMutationBodyBytes},
-	{method: "POST", path: "/api/v1/programming/retain/reset", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
+	{operationID: "getProgrammingPointCatalog", method: "GET", path: "/api/v1/programming/point-catalog", permission: auth.PermissionRead},
+	{operationID: "getProgrammingRuntime", method: "GET", path: "/api/v1/programming/runtime", permission: auth.PermissionRead},
+	{operationID: "getProgrammingRuntimeMonitor", method: "GET", path: "/api/v1/programming/runtime/monitor", permission: auth.PermissionRead},
+	{operationID: "getProgrammingRuntimeSignals", method: "GET", path: "/api/v1/programming/runtime/signals", permission: auth.PermissionRead},
+	{operationID: "createProgrammingTrace", method: "POST", path: "/api/v1/programming/runtime/traces", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{operationID: "getProgrammingTrace", method: "GET", path: "/api/v1/programming/runtime/traces/{traceId}", permission: auth.PermissionRead},
+	{operationID: "stopProgrammingTrace", method: "DELETE", path: "/api/v1/programming/runtime/traces/{traceId}", permission: auth.PermissionProgramEdit},
+	{operationID: "commissionProgrammingRevision", method: "POST", path: "/api/v1/programming/operations/commission", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
+	{operationID: "restoreProgrammingRevision", method: "POST", path: "/api/v1/programming/operations/restore", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
+	{operationID: "getProgrammingOperation", method: "GET", path: "/api/v1/programming/operations/{operationId}", permission: auth.PermissionRead},
+	{operationID: "listProgrammingOperations", method: "GET", path: "/api/v1/programming/operations", permission: auth.PermissionRead},
+	{operationID: "listProgrammingOverrides", method: "GET", path: "/api/v1/programming/overrides", permission: auth.PermissionRead},
+	{operationID: "exportProgrammingBundle", method: "POST", path: "/api/v1/programming/bundles/export", permission: auth.PermissionProgramEdit, bodyRequired: true, idempotencyRequired: true},
+	{operationID: "importProgrammingBundle", method: "POST", path: "/api/v1/programming/bundles/import", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true, maxBodyBytes: maxBundleMutationBodyBytes},
+	{operationID: "resetProgrammingRetain", method: "POST", path: "/api/v1/programming/retain/reset", permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
 	// T59-405 — intent Enable/Disable. `PUT` chứ không phải hai route
 	// `enable`/`disable`: intent là một TRẠNG THÁI mong muốn, và hai động từ
 	// riêng sẽ làm việc "đặt lại đúng thứ đang có" trở thành hai request khác
 	// nhau tuỳ giá trị hiện tại.
-	{method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", permission: auth.PermissionRead},
-	{method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
+	{operationID: "listProgrammingProgramIntents", method: "GET", path: "/api/v1/programming/projects/{projectId}/programs", permission: auth.PermissionRead},
+	{operationID: "setProgrammingProgramIntent", method: "PUT", path: "/api/v1/programming/projects/{projectId}/programs/{programId}/runtime-intent",
 		permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/audit", permission: auth.PermissionRead},
-	// T59-702 — lối ra tường minh khỏi `RECOVERY_REQUIRED`. Admin, có
+	{operationID: "listProgrammingAudit", method: "GET", path: "/api/v1/programming/audit", permission: auth.PermissionRead},
+	// T59-702 — lối ra tường minh khỏi `RECOVERY_REQUIRED` với
+	// `program.activate`, có
 	// idempotency key và body bắt buộc: một lệnh gỡ khoá vận hành phải nêu lý do.
-	{method: "POST", path: "/api/v1/programming/runtime/recovery-reset",
+	{operationID: "resetProgrammingRecovery", method: "POST", path: "/api/v1/programming/runtime/recovery-reset",
 		permission: auth.PermissionProgramActivate, bodyRequired: true, idempotencyRequired: true},
 
 	// T59-814 / ADR-053 — Simulation R3.
 	//
-	// Mọi route mutation khai `RoleAdmin` ở ĐÂY, không chỉ ở lớp application:
+	// Mọi route mutation khai `PermissionSimulationRun` ở ĐÂY, không chỉ ở lớp application:
 	// bất biến của repo (xem `security_matrix_test.go`) là handler KHÔNG được
 	// chạy khi thiếu quyền. Nhờ vậy một vai không đủ quyền không tạo ra side
 	// effect nào, kể cả một lần đọc làm lộ sự tồn tại của phiên.
@@ -129,17 +134,17 @@ var routeDefinitions = []routeDefinition{
 	// `SET_INPUT` đi bằng PUT trên resource input và `STOP` đi bằng DELETE trên
 	// resource session: chúng là hành động sản phẩm nhưng cần identity và
 	// idempotency riêng (`DDD-SW-PGM02-WORKSPACE-001` §5.4).
-	{method: "POST", path: "/api/v1/programming/simulation/sessions",
+	{operationID: "createProgrammingSimulationSession", method: "POST", path: "/api/v1/programming/simulation/sessions",
 		permission: auth.PermissionSimulationRun, bodyRequired: true, idempotencyRequired: true},
-	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", permission: auth.PermissionRead},
-	{method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}",
+	{operationID: "getProgrammingSimulationSession", method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}", permission: auth.PermissionRead},
+	{operationID: "stopProgrammingSimulationSession", method: "DELETE", path: "/api/v1/programming/simulation/sessions/{sessionId}",
 		permission: auth.PermissionSimulationRun, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions",
+	{operationID: "actProgrammingSimulationSession", method: "POST", path: "/api/v1/programming/simulation/sessions/{sessionId}/actions",
 		permission: auth.PermissionSimulationRun, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}",
+	{operationID: "setProgrammingSimulationInput", method: "PUT", path: "/api/v1/programming/simulation/sessions/{sessionId}/inputs/{observationId}",
 		permission: auth.PermissionSimulationRun, bodyRequired: true, idempotencyRequired: true, ifMatchRequired: true},
-	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", permission: auth.PermissionRead},
-	{method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", permission: auth.PermissionRead},
+	{operationID: "listProgrammingSimulationObservations", method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/observations", permission: auth.PermissionRead},
+	{operationID: "listProgrammingSimulationTrace", method: "GET", path: "/api/v1/programming/simulation/sessions/{sessionId}/trace", permission: auth.PermissionRead},
 }
 
 // RegisterProgrammingRoutes chỉ mount contract khi flag bật. Khi flag tắt,

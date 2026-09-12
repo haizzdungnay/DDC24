@@ -1,20 +1,37 @@
 # PGM-03 — Points & Mapping — FE Handoff
 
-**Route:** `/eng/programming/mapping`  
-**Reference:** `assets/PGM-03_mapping.png`  
+> **AUTHORITY TRỰC QUAN từ 2026-09-08.** Theo quyết định trực tiếp của chủ sở
+> hữu sản phẩm, bố cục và thứ bậc thông tin của màn hình này lấy từ ảnh
+> [`assets/PGM-03_mapping.png`](assets/PGM-03_mapping.png). Bộ SVG Programming
+> song song trước đây đã bị loại vì không đúng thiết kế mong muốn. Nội dung
+> nghiệp vụ, safety, contract và `AC-PGM03-*` trong hồ sơ này cùng
+> [`UX-WEB-PROG-001`](../PROGRAMMING_UI_UX_DESIGN.md) tiếp tục là ràng buộc;
+> ảnh không phải bằng chứng As-Built/runtime.
+
+**Route canonical:** `/eng/programming/projects/:id/mapping`
+
+**Reference chuẩn:** [`assets/PGM-03_mapping.png`](assets/PGM-03_mapping.png)
+
+**Quyết định thay thế:** `AUTH-UX-PROG-2026-09-08-01`; issue `#556` đóng
+`NOT_PLANNED` vì xuất phát từ bố cục SVG không còn hợp lệ.
 **Primary goal:** Map logical Program variables to canonical controller/network points quickly and safely, with live value and quality visible.
 
 ## 1. Layout
 
-Top toolbar:
-`Direction | Type | Search | Suggestions toggle | Actions`
+Bố cục desktop chuẩn là **hai vùng trên + một bảng toàn chiều rộng phía dưới**:
 
-Main split:
-- left: `Program Variables`
-- right: `Available Points`
+1. `Program Variables` ở nửa trên bên trái;
+2. `Available Points` ở nửa trên bên phải;
+3. `Assigned Mappings` chạy toàn chiều rộng bên dưới hai vùng trên.
 
-Bottom:
-- `Assigned Mappings`
+Feature rail, context strip, tiêu đề `PGM-03 Points & Mapping`, toolbar và status
+bar phải giữ đúng thứ bậc của ảnh chuẩn. Inspector chi tiết binding/output owner
+chỉ mở theo selection bằng drawer/panel theo ngữ cảnh; không được chiếm một cột
+thứ ba thường trực và làm biến dạng bố cục `2 + 1`. Published Signal vẫn phải
+truy cập được bằng tab/action theo ngữ cảnh nhưng không thay bảng Assigned
+Mappings. Row density, split ratio và responsive state được chốt trong bước
+triển khai/browser review từ chính ảnh chuẩn và các quy tắc a11y của
+`UX-WEB-PROG-001`.
 
 The page should feel like a mapping workspace, not a generic CRUD table.
 
@@ -146,3 +163,32 @@ admin:
 - Live value/quality subscription.
 - Deep-link from variable to PGM-02 source.
 - E2E: successful map, incompatible map, offline catalogue, permission denied.
+
+## 12. Ánh xạ acceptance hiện hành
+
+Các AC này không tự chứng minh implementation đã đạt. Test hiện có chỉ là bằng
+chứng HOST hỗ trợ; các issue mở ở cột cuối là gate phải đóng.
+
+| AC cũ | Requirement/use case authority | Test/source hiện có | Trạng thái và gate |
+|---|---|---|---|
+| `AC-PGM03-01` | `UX-REQ-020/022`, `UJ-PROG-05` | `MappingWorkbench.test.tsx` | As-Built một phần; `#558` phải khóa trạng thái không phụ thuộc màu |
+| `AC-PGM03-02` | `UX-REQ-022`, `UJ-PROG-05` | `MappingTab.test.tsx`, `MappingWorkbench.test.tsx` | Target; `#555` phải có mutation keyboard/click và read-back |
+| `AC-PGM03-03` | `UX-REQ-006`, `UJ-PROG-05` | `mappingViewModel.test.ts`, `MappingTab.test.tsx` | Target; `#554` phải chứng minh server preview/write/check cùng luật |
+| `AC-PGM03-04` | `UX-REQ-005/020`, `UJ-PROG-05` | `mappingViewModel.test.ts` | As-Built một phần; `#558` phải giữ unknown/stale fail-closed |
+| `AC-PGM03-05` | `UX-REQ-006/020`, `UJ-PROG-05` | `MappingTab.test.tsx` | Target; `#555` phải refetch authoritative state sau mutation |
+| `AC-PGM03-06` | `UX-REQ-020/022`, `UJ-PROG-05` | `pointSourceLabels.test.ts`, `MappingWorkbench.test.tsx` | As-Built một phần; `#558` phải khóa copy/icon/focus/a11y |
+| `AC-PGM03-07` | `UX-REQ-006`, `UJ-PROG-05` | `mappingViewModel.test.ts` | Target; `#554` phải khóa canonical identity và không dựng address |
+
+## 13. Gate và điều kiện mở khóa
+
+| Issue | Owner | Ảnh hưởng khi còn mở | Gate | Điều kiện mở khóa |
+|---|---|---|---|---|
+| `#554` | BE + FE + Compiler | Mutation không có một authority fail-closed | Preview/write/Check parity | OpenAPI ổn định, test positive/negative/fault cùng mã lỗi |
+| `#555` | FE + BE | Người dùng chưa thể map/remove an toàn | Phụ thuộc `#554` | Mutation ETag/idempotency, read-back và E2E permission/conflict |
+| `#557` | BE + Compiler + FE | Published Signal chưa có source authority | Typed read model | Provenance/freshness/consumer và Check diagnostic cùng contract |
+| `#558` | FE + QA | Row/toolbar/focus/a11y chưa đạt | Phụ thuộc `#555`; visual theo authority mới | Interaction test, keyboard/focus và a11y evidence PASS trên bố cục `2 + 1` |
+
+`#556` không còn là gate: issue đã đóng `NOT_PLANNED` ngày 2026-09-08 vì yêu
+cầu bố cục ba cột dựa trên asset sai. Nếu cần triển khai visual parity mới, task
+phải dẫn `AUTH-UX-PROG-2026-09-08-01` và ảnh `PGM-03_mapping.png`, không khôi
+phục asset SVG đã loại.

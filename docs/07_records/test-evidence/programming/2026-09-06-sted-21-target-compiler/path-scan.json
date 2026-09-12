@@ -1,0 +1,16 @@
+{
+  "needles": {
+    "/tmp/": 0,
+    "/home/": 0,
+    "/mnt/": 0,
+    "mkddc-iss414": 0,
+    "chuong": 0,
+    "a9xqEf": 0
+  },
+  "assertions": {
+    "ok_true": true,
+    "warning_exact": true,
+    "artifact_sha_present": true,
+    "path_leak_count": 0
+  }
+}

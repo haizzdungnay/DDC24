@@ -130,6 +130,10 @@ type CheckServiceOptions struct {
 	 * xác minh thì không có gì bảo chứng cho binding, và cho qua im lặng chính
 	 * là thứ Check sinh ra để tránh. */
 	PointFacts PointBindingFactsProvider
+	// Catalog là authority dùng chung với preview và cửa ghi binding. Nếu một
+	// Revision có binding mà nguồn này vắng/lỗi, Check kết thúc FAILED thay vì
+	// biên dịch trên metadata do client gửi.
+	Catalog PointCatalogProvider
 }
 
 type CheckService struct {
@@ -144,6 +148,7 @@ type CheckService struct {
 	workerID      string
 	modbusSlots   ModbusSlotProvider
 	pointFacts    PointBindingFactsProvider
+	catalog       PointCatalogProvider
 	wake          chan struct{}
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
@@ -170,6 +175,7 @@ func NewCheckService(options CheckServiceOptions) (*CheckService, error) {
 		artifacts: options.Artifacts, targetID: options.TargetID, leaseDuration: options.LeaseDuration, now: options.Now, newID: options.NewID,
 		modbusSlots: options.ModbusSlots,
 		pointFacts:  options.PointFacts,
+		catalog:     options.Catalog,
 		workerID:    "check-worker-" + options.NewID(), wake: make(chan struct{}, 1)}, nil
 }
 
@@ -304,6 +310,15 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	// sạch hay không, và biên dịch 32 Program rồi mới báo là lãng phí đúng thứ
 	// người dùng đang chờ. Gộp cùng scope diagnostics để một lần Check nói hết.
 	objectViews := revisionObjectViews(revision)
+	bindingDiagnostics := bindingDiagnosticsForRevision(ctx, objectViews, s.catalog)
+	bindingWarnings := make([]DiagnosticView, 0)
+	for _, diagnostic := range bindingDiagnostics {
+		if diagnostic.Severity == "ERROR" {
+			scopeDiagnostics = append(scopeDiagnostics, diagnostic)
+		} else {
+			bindingWarnings = append(bindingWarnings, diagnostic)
+		}
+	}
 	topology, budget := packageTopology(revision.Revision.DocumentSchemaVersion, objectViews)
 	scopeDiagnostics = append(scopeDiagnostics, packageTopologyDiagnostics(topology)...)
 	scopeDiagnostics = append(scopeDiagnostics, packageInvariantDiagnostics(objectViews)...)
@@ -317,7 +332,8 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	}
 	// Biên dịch TỪNG Program và gộp kết quả. Một Program hỏng không dừng phần
 	// còn lại: người dùng phải thấy hết lỗi của package trong MỘT lần Check.
-	diagnostics := make([]DiagnosticView, 0)
+	diagnostics := make([]DiagnosticView, 0, len(bindingWarnings))
+	diagnostics = append(diagnostics, bindingWarnings...)
 	// ISS-STED-02: quyết định FAILED bám SEVERITY, không bám "có diagnostic hay
 	// không". Trước đây `len(diagnostics) > 0` là tiêu chí, nên ngay khi
 	// compiler bắt đầu phát WARNING thì mọi chương trình hợp lệ có một biến
@@ -427,7 +443,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		Artifacts: artifacts, ProgramManifests: programManifestsOf(results),
 		Topology: topology, Budget: budget,
 		PouGraph: packagePouGraph(objectViews),
-		Signals:  packageManifestSignals(objectViews), Bindings: packageManifestBindings(objectViews, slots),
+		Signals:  packageManifestSignals(objectViews, inputs, results, topology), Bindings: packageManifestBindings(objectViews, slots),
 		LibraryLock:   manifestLibraryLock,
 		IntegrityMode: results[0].IntegrityMode,
 	}

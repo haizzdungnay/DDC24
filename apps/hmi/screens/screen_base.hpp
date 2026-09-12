@@ -2,6 +2,7 @@
 #define HMI_SCREEN_BASE_HPP
 
 #include <cstdint>
+#include <atomic>
 #include <mutex>
 #include <array>
 #include <string>
@@ -130,6 +131,10 @@ public:
     int unacked_count()  const;   /* ACTIVE_UNACK + CLEARED_UNACK */
     int critical_count() const;   /* FAULT severity + ACTIVE_* */
 
+    /* Số khung alarm bị loại: JSON không parse được, hoặc parse được nhưng
+     * thiếu "code". Mỗi khung bị loại cũng ghi một dòng ERR ra stderr. */
+    uint64_t dropped_frame_count() const;
+
 private:
     mutable std::mutex mtx_;
     AlarmEntry ring_[RING]{};
@@ -141,8 +146,12 @@ private:
     std::future<ApiReply> api_pending_;
     bool ack_pending_ = false;
     bool hydrated_ = false;
+    std::atomic<uint64_t> dropped_frames_{0};
 
     int find_code(const char* code);   /* returns idx or -1 */
+
+    /* Ghi một dòng ERR ra stderr và tăng bộ đếm khung bị loại. */
+    void drop_frame(const char* reason);
 };
 
 } // namespace hmi

@@ -1,0 +1,19 @@
+Nguồn chính: build/evidence/deploy-20260905-d728fa76/final-arm64.log
+Nguồn bổ trợ local: /tmp/mkddc-deploy-c253c053/build/arm64/CMakeCache.txt:175
+Lớp bằng chứng: CROSS-BUILD
+
+CMAKE_C_COMPILER_VERSION=13.3.0
+CMAKE_CXX_COMPILER_VERSION=13.3.0
+CMAKE_BUILD_TYPE=Release
+BACDL_BIP=ON
+Configuring done (1.3s)
+Generating done (0.2s)
+[100%] Built target mkddc-core
+[100%] Built target mkddc-alarm-sim
+[100%] Built target mkddc-programming-sim-worker
+
+CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE:UNINITIALIZED=PRE_TEST
+
+Diễn giải kiểm soát: cross-build aarch64 hoàn tất. PRE_TEST ngăn discovery chạy
+binary ARM64 trong lúc build trên host x86; không ghi đây là test ARM64 đã chạy.
+Cache bổ trợ không thuộc manifest 29 raw file và vì thế không có cùng mức ghim.

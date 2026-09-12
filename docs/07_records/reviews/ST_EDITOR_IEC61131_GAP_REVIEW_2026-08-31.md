@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `REV-STED-IEC-001` |
-| Phiên bản | 1.2 |
+| Phiên bản | 1.4 |
 | Ngày | 2026-08-31 |
 | Trạng thái | **APPROVED WITH CONDITIONS (2026-08-31)**, phạm vi ngôn ngữ đã ký bằng `ADR-054` cùng ngày (xem §10) — chủ sở hữu duyệt bảng §8 kèm điều kiện bổ sung `ISS-STED-18/19/20`; đã bổ sung ở bản 1.1 và **đã tạo issue trên repo** (xem §8.2) |
 | Baseline | `main` @ `661a714` (Merge PR #346) |
@@ -123,7 +123,7 @@ BE ghi cứng `Severity: "ERROR"` và bỏ `Message`.
 | `ST-UC-05` | Chèn Function Block | **PASS** | `FbInstancePicker` + tách khai báo/lời gọi |
 | `ST-UC-06` | Lưu Draft, Active không đổi | **PASS** | — |
 | `ST-UC-07` | Kiểm tra → diagnostic đúng range | **PARTIAL** | Range đúng nhưng **một lỗi mỗi lần** và message chung chung. → F-STED-002/004 |
-| `ST-UC-08` | Bấm lỗi → tới đúng nguồn | **PARTIAL** | Có deep-link `?program&line&column&length` từ PGM-03 sang PGM-02 và có tự cuộn (`scrollTopForLine`). Nhưng sang tới nơi thì **không có dấu lỗi nào trên mã** — chỉ có vùng chọn. |
+| `ST-UC-08` | Bấm lỗi → tới đúng nguồn | **PARTIAL** | Có deep-link `?program&line&column&length` từ PGM-05 sang PGM-02 và có tự cuộn (`scrollTopForLine`). Nhưng sang tới nơi thì **không có dấu lỗi nào trên mã** — chỉ có vùng chọn. |
 | `ST-UC-09` | Tìm tham chiếu | **PASS (có điều kiện)** | `StCrossReferencePanel` + `stReferenceIndex` tách READ/WRITE, tự khai "không xác định được" thay vì đoán. Nguồn là regex FE, không phải bảng ký hiệu compiler. |
 | `ST-UC-10` | Mô phỏng | **PASS** | Sandbox worker riêng tiến trình; capability đọc từ server, không đoán; không bao giờ chạm output vật lý. |
 | `ST-UC-11` | Giám sát LIVE | **PASS** | Chỉ đọc với mọi vai, kể cả admin. |
@@ -141,7 +141,7 @@ Quy ước mức: **High** = chặn tuyên bố "trình soạn thảo dùng đư
 ### `F-STED-001` — **High** — PGM-02 không hiển thị bất kỳ chẩn đoán ST nào
 
 **Triệu chứng.** Trong chế độ `EDIT`, người dùng gõ ST sai cú pháp hay sai kiểu đều **không thấy
-gì**: không gạch chân, không khay Vấn đề, không đếm lỗi. Phải Lưu → sang PGM-03 → chạy Kiểm tra
+gì**: không gạch chân, không khay Vấn đề, không đếm lỗi. Phải Lưu → sang PGM-05 → chạy Kiểm tra
 mới biết.
 
 **Bằng chứng.**
@@ -152,8 +152,8 @@ mới biết.
 - `apps/web-ui/src/features/programming/design/workbench/DesignWorkbench.tsx:110`:
   `if (program.language !== 'FBD') continue` — khay Vấn đề của workbench **bỏ qua mọi POU ST**.
   POU FBD được validate phía FE (`validateFbdDocument`), POU ST thì không có gì.
-- `ProblemsDrawer` chỉ được mount ở `CheckCommissionPage.tsx:261` (PGM-03), dù chính docstring của
-  nó (`ProblemsDrawer.tsx:8`) viết *"dùng chung cho ba tab của PGM-02 và cho PGM-03
+- `ProblemsDrawer` chỉ được mount ở `CheckCommissionPage.tsx:261` (PGM-05), dù chính docstring của
+  nó (`ProblemsDrawer.tsx:8`) viết *"dùng chung cho ba tab của PGM-02 và cho PGM-05
   (DDD-FE-PROG-001 §2)"*.
 
 **Hệ quả kéo theo — mã chết.** Toàn bộ hạ tầng hiển thị lỗi đã viết trong `SourceEditor` **không
@@ -161,7 +161,7 @@ mới biết.
 `code (detailCode)` (`ProgramsTab.tsx:2042`), dòng `aria-describedby` đếm diagnostic
 (`ProgramsTab.tsx:2428`). Chúng chỉ sống trong test.
 
-**Nguyên nhân gốc.** Quyết định `D-01` chuyển quyền sở hữu Check sang PGM-03 là đúng (một luồng
+**Nguyên nhân gốc.** Quyết định `D-01` chuyển quyền sở hữu Check sang PGM-05 là đúng (một luồng
 seal/run/poll duy nhất), nhưng khi gỡ Check khỏi PGM-02 thì **không ai nối lại đường đọc kết quả
 Check gần nhất** về trang soạn thảo. Đó là bỏ sót, không phải thiết kế.
 
@@ -411,7 +411,7 @@ Bảng dưới là **đề xuất nội dung** cho issue `ISS-STED-09`.
 | Giá trị runtime nội tuyến | **UX sản phẩm** | Có, đúng chuẩn quality/freshness |
 | Ba chế độ EDIT/SIMULATE/LIVE | **Thiết kế sản phẩm Mekong** | Có |
 | Context Inspector | **Mekong UX** | Có, thiếu 4 trường |
-| Khay Vấn đề dưới màn hình | **Mekong UX** | Có ở PGM-03; **không** cho ST ở PGM-02 |
+| Khay Vấn đề dưới màn hình | **Mekong UX** | Có ở PGM-05; **không** cho ST ở PGM-02 |
 
 ---
 
@@ -641,6 +641,7 @@ Chủ sở hữu đã ghi nhận đúng điểm này khi duyệt: 292 test FE **
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.4 | 2026-09-06 | `ISS-PGM03-06`/`#559`: đổi các dẫn chiếu Check/Problems từ PGM-03 cũ sang PGM-05 theo IA hiện hành; không đổi finding hay phán quyết ST. |
 | 1.0 | 2026-08-31 | Bản đầu. 15 finding, chấm 18 gate + 12 UC, 17 issue đề xuất chờ duyệt. |
 | 1.3 | 2026-09-05 | Thêm §8.3 hoà giải điều kiện của `ISS-STED-20` với phạm vi phát hành V1.0 (`ADR-056`). Chủ sở hữu phân loại `ISS-STED-16` (#367) là `V1-DEFER` ngày 2026-09-04, trong khi câu "chỉ chạy được khi các nhánh trên đã vào `main`" ở §8.1 được viết TRƯỚC khi V1 chốt phạm vi — hai câu đó mâu thuẫn nhau và làm cổng không bao giờ đóng được cho V1. §8.3 nêu rõ ba ràng buộc để việc hoãn có hiệu lực với cổng, trong đó hồ sơ ký đóng phải LIỆT KÊ TÊN từng mã được hoãn. `ADR-054` không bị đảo. |
 | 1.2 | 2026-08-31 | Chủ sở hữu ra nguyên tắc phạm vi ngôn ngữ ("IEC có thì giữ, không có thì bỏ") và ký `ADR-054`. Viết lại §10 thành 10.1 Đã ký / 10.2 Còn lại; ghi chú cập nhật vào `F-STED-005`; sửa §0 câu 3. Đã sửa `DDD-LANG-PROG-001` lên 1.2 (§4.1 + §4.3 luật WCET của `CASE`) ⇒ đóng #356; #367 đổi từ "quyết định" sang "thi hành". |

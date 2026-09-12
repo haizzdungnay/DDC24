@@ -1,14 +1,21 @@
-import keyboardRegistryJson from '../../../../../../contracts/programming/fbd_keyboard_commands_v1.json'
+import type { FbdAnnouncement } from './announcements'
+import { FBD_HISTORY_LIMIT } from './keyboard'
+
+export { translateFbdAnnouncement } from './announcements'
+export type { FbdAnnouncement } from './announcements'
+export { normalizeFbdShortcut, resolveFbdKeyboardCommand, FBD_KEYBOARD_REGISTRY, FBD_HISTORY_LIMIT } from './keyboard'
+export type { FbdKeyboardCommand, FbdKeyboardEventLike } from './keyboard'
 
 import {
   FBD_DATA_TYPES,
   FBD_MAX_BLOCKS,
+  FBD_MAX_LAYOUT_COORDINATE,
+  FBD_MAX_LAYOUT_NODES,
   FBD_MAX_NETWORKS,
   FBD_MAX_WIRES,
   canonicalFbdJson,
   canonicalizeFbdDocument,
   cloneFbdDocument,
-  FBD_MAX_LAYOUT_COORDINATE,
   findFbdPort,
   isCanonicalFbdUuid,
   isFbdIdentifier,
@@ -23,37 +30,6 @@ import {
 import { fbdPaletteEntry, isValidConstantLiteral } from './palette'
 
 export type { FbdPoint, FbdDocument } from './model'
-
-export type FbdKeyboardCommand =
-  | 'ADD_NETWORK'
-  | 'ADD_BLOCK'
-  | 'SELECT_NEXT_PORT'
-  | 'SELECT_PREVIOUS_PORT'
-  | 'BEGIN_OR_COMMIT_CONNECTION'
-  | 'CANCEL_CONNECTION'
-  | 'DELETE_SELECTION'
-  | 'MOVE_NODE_UP'
-  | 'MOVE_NODE_DOWN'
-  | 'UNDO'
-  | 'REDO'
-
-interface KeyboardCommandEntry {
-  id: FbdKeyboardCommand
-  key: string
-  mutatesDraft: boolean
-  requiresSelection: boolean
-  messageKey: string
-}
-
-interface KeyboardRegistry {
-  contractId: 'PROGRAMMING-FBD-KEYBOARD-V1'
-  version: 1
-  historyLimit: 50
-  commands: KeyboardCommandEntry[]
-}
-
-export const FBD_KEYBOARD_REGISTRY = keyboardRegistryJson as KeyboardRegistry
-export const FBD_HISTORY_LIMIT = FBD_KEYBOARD_REGISTRY.historyLimit
 
 export type FbdSelection =
   | { kind: 'network'; networkId: string }
@@ -81,17 +57,6 @@ export function areSelectionsEqual(a: FbdSelection | null, b: FbdSelection | nul
   return false
 }
 
-/**
- * BUG-012 — bản cũ ghi thẳng câu tiếng Việt vào `announcement`, nên vùng
- * `aria-live` (đọc bởi screen reader) luôn tiếng Việt bất kể locale UI đang
- * chọn. Reducer là hàm thuần, không gọi được `useI18n()`, nên chỉ lưu MÃ +
- * tham số ở đây; dịch xảy ra lúc render qua `translateFbdAnnouncement`.
- */
-export interface FbdAnnouncement {
-  code: string
-  params?: Record<string, string | number>
-}
-
 export interface FbdEditorState {
   document: FbdDocument
   selection: FbdSelection | null
@@ -103,15 +68,8 @@ export interface FbdEditorState {
   announcement: FbdAnnouncement
 }
 
-/**
- * Toạ độ hợp lệ theo đúng trần của hợp đồng (`fbd_v1.schema.json` §layout).
- *
- * Làm tròn về số nguyên: một pixel lẻ 0,333 không có ý nghĩa hiển thị nào
- * nhưng đủ để làm byte tài liệu đổi mỗi lần kéo, tức mỗi lần kéo là một Draft
- * "bẩn" khác. `null` = ngoài trần hoặc không phải số hữu hạn, và đó là TỪ CHỐI
- * chứ không phải kẹp về biên — kẹp âm thầm sẽ đặt block vào chỗ người dùng
- * không hề chọn.
- */
+/** Toạ độ theo trần `fbd_v1.schema.json` §layout. Làm tròn để pixel lẻ không
+ * tạo Draft "bẩn"; trả `null` để từ chối giá trị ngoài trần/không hữu hạn. */
 function clampLayoutCoordinate(value: number): number | null {
   if (!Number.isFinite(value)) return null
   const rounded = Math.round(value)
@@ -125,7 +83,8 @@ export type FbdEditorAction =
   | { type: 'SELECT'; selection: FbdSelection | null }
   | { type: 'SELECT_PORT_OFFSET'; offset: -1 | 1 }
   | { type: 'ADD_NETWORK'; network: FbdNetwork }
-  | { type: 'ADD_NODE'; networkId: string; node: FbdNode }
+  | { type: 'ADD_NODE'; networkId: string; node: FbdNode; position?: FbdPoint }
+  | { type: 'ADD_WIRE'; networkId: string; wire: FbdWire }
   | { type: 'BEGIN_OR_COMMIT_CONNECTION'; portId: string; wire?: FbdWire }
   | { type: 'CANCEL_CONNECTION' }
   | { type: 'DELETE_SELECTION' }
@@ -155,6 +114,8 @@ export type FbdEditorAction =
   | { type: 'SET_NODE_VALUE'; networkId: string; nodeId: string; value: FbdParameterValue }
   | { type: 'SET_NODE_TYPE'; networkId: string; nodeId: string; dataType: FbdDataType }
   | { type: 'SET_NODE_FB_PARAMS'; networkId: string; nodeId: string; instance: string | null; retained: boolean }
+  | { type: 'UPDATE_NODE_ATTRIBUTES'; networkId: string; nodeId: string; dataType?: FbdDataType;
+      variable?: string; unit?: string | null; value?: FbdParameterValue; instance?: string | null; retained?: boolean }
   | { type: 'UNDO' }
   | { type: 'REDO' }
 
@@ -282,6 +243,71 @@ function deleteSelection(document: FbdDocument, selection: FbdSelection): boolea
   return node.ports.length !== before
 }
 
+export type FbdWireRejection =
+  | 'port-not-found'
+  | 'select-output-port'
+  | 'connect-incompatible'
+  | 'wire-mismatch'
+  | 'wire-uuid-invalid'
+  | 'connect-reverse-order'
+  | 'input-has-driver-or-limit'
+
+export function validateFbdWireCandidate(
+  document: FbdDocument,
+  sourcePortId: string,
+  targetPortId: string,
+  wire: FbdWire | undefined,
+): { ok: true } | { ok: false; code: FbdWireRejection } {
+  const target = findFbdPort(document, targetPortId)
+  if (!target) return { ok: false, code: 'port-not-found' }
+  const source = findFbdPort(document, sourcePortId)
+  if (!source) return { ok: false, code: 'port-not-found' }
+
+  if (source.port.direction !== 'OUTPUT') {
+    return { ok: false, code: 'select-output-port' }
+  }
+
+  if (
+    target.port.direction !== 'INPUT' ||
+    source.network.id !== target.network.id ||
+    source.port.dataType !== target.port.dataType ||
+    source.port.unit !== target.port.unit
+  ) {
+    return { ok: false, code: 'connect-incompatible' }
+  }
+
+  if (
+    !wire ||
+    wire.from.portId !== source.port.id ||
+    wire.from.nodeId !== source.node.id ||
+    wire.to.portId !== target.port.id ||
+    wire.to.nodeId !== target.node.id
+  ) {
+    return { ok: false, code: 'wire-mismatch' }
+  }
+
+  if (!identitiesAreNew(document, [wire.id])) {
+    return { ok: false, code: 'wire-uuid-invalid' }
+  }
+
+  if (
+    source.node.kind !== 'FUNCTION_BLOCK' &&
+    target.node.kind !== 'FUNCTION_BLOCK' &&
+    source.node.executionOrder >= target.node.executionOrder
+  ) {
+    return { ok: false, code: 'connect-reverse-order' }
+  }
+
+  if (
+    wireCount(document) >= FBD_MAX_WIRES ||
+    target.network.wires.some((item) => item.to.portId === target.port.id)
+  ) {
+    return { ok: false, code: 'input-has-driver-or-limit' }
+  }
+
+  return { ok: true }
+}
+
 function connect(
   state: FbdEditorState,
   targetPortId: string,
@@ -294,32 +320,20 @@ function connect(
     return { ...state, connectionFromPortId: targetPortId, announcement: { code: 'source-selected', params: { port: target.port.name } } }
   }
   const source = findFbdPort(state.document, state.connectionFromPortId)
-  if (!source || target.port.direction !== 'INPUT' || source.network.id !== target.network.id ||
-      source.port.dataType !== target.port.dataType || source.port.unit !== target.port.unit) {
-    return reject(state, { code: 'connect-incompatible' })
-  }
-  if (!wire || wire.from.portId !== source.port.id || wire.from.nodeId !== source.node.id ||
-      wire.to.portId !== target.port.id || wire.to.nodeId !== target.node.id) {
-    return reject(state, { code: 'wire-mismatch' })
-  }
-  if (!identitiesAreNew(state.document, [wire.id])) return reject(state, { code: 'wire-uuid-invalid' })
-  if (source.node.kind !== 'FUNCTION_BLOCK' && target.node.kind !== 'FUNCTION_BLOCK' &&
-      source.node.executionOrder >= target.node.executionOrder) {
-    return reject(state, { code: 'connect-reverse-order' })
-  }
-  if (wireCount(state.document) >= FBD_MAX_WIRES || target.network.wires.some((item) => item.to.portId === target.port.id)) {
-    return reject(state, { code: 'input-has-driver-or-limit' })
-  }
+  if (!source) return reject(state, { code: 'port-not-found' })
+
+  const validation = validateFbdWireCandidate(state.document, state.connectionFromPortId, targetPortId, wire)
+  if (!validation.ok) return reject(state, { code: validation.code })
+
   const document = cloneFbdDocument(state.document)
   const network = document.networks.find((item) => item.id === target.network.id)
   if (!network) return reject(state, { code: 'network-missing' })
-  network.wires.push(wire)
+  network.wires.push(wire!)
   return commit(state, document, { code: 'wire-connected', params: { from: source.port.name, to: target.port.name } })
 }
 
-/* WP-05..07 (FBD_EDITOR_DESIGN.md §3.1): đổi kiểu toán hạng T cho node đa
- * hình phải giữ nguyên id/order từng port (wire trỏ theo portId, không theo
- * tên) — chỉ ghi đè `dataType` cho các port khớp tên với `entry.buildPorts`. */
+/* WP-05..07: đổi kiểu toán hạng T phải giữ id/order của port; chỉ cập nhật
+ * `dataType` cho port khớp tên với registry. */
 function applyOperandType(node: FbdNode, dataType: FbdDataType): void {
   const entry = fbdPaletteEntry(node.typeRef)
   if (!entry) return
@@ -373,7 +387,12 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const next = current < 0
         ? (action.offset > 0 ? 0 : ports.length - 1)
         : (current + action.offset + ports.length) % ports.length
-      return { ...state, selection: ports[next], announcement: { code: 'port-selected', params: { index: next + 1, total: ports.length } } }
+      return {
+        ...state,
+        selection: ports[next],
+        selectionRevision: state.selectionRevision + 1,
+        announcement: { code: 'port-selected', params: { index: next + 1, total: ports.length } },
+      }
     }
     case 'ADD_NETWORK': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
@@ -391,18 +410,64 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
     }
     case 'ADD_NODE': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const entry = fbdPaletteEntry(action.node.typeRef)
+      if (entry && entry.featureState !== 'AVAILABLE') {
+        return reject(state, { code: 'block-review-required' })
+      }
       if (nodeCount(state.document) >= FBD_MAX_BLOCKS) return reject(state, { code: 'block-limit-reached' })
       if (!identitiesAreNew(state.document, [action.node.id, ...action.node.ports.map((port) => port.id)])) {
         return reject(state, { code: 'block-uuid-invalid' })
+      }
+      let positionToSet: FbdPoint | null = null
+      if (action.position) {
+        const x = clampLayoutCoordinate(action.position.x)
+        const y = clampLayoutCoordinate(action.position.y)
+        if (x === null || y === null) return reject(state, { code: 'invalid-position' })
+        const currentLayoutNodes = state.document.layout?.nodes ?? {}
+        if (!currentLayoutNodes[action.node.id] && Object.keys(currentLayoutNodes).length >= FBD_MAX_LAYOUT_NODES) {
+          return reject(state, { code: 'invalid-position' })
+        }
+        positionToSet = { x, y }
       }
       const document = cloneFbdDocument(state.document)
       const network = document.networks.find((item) => item.id === action.networkId)
       if (!network) return reject(state, { code: 'network-not-found' })
       const node = { ...action.node, executionOrder: network.nodes.length }
       network.nodes.push(node)
+      if (positionToSet) {
+        const layout = document.layout ?? { schemaVersion: 1 as const, nodes: {} }
+        document.layout = { schemaVersion: 1, nodes: { ...layout.nodes, [node.id]: positionToSet } }
+      }
       return commit(state, document, { code: 'block-added', params: { type: node.typeRef } }, {
         kind: 'node', networkId: network.id, nodeId: node.id,
       })
+    }
+    case 'ADD_WIRE': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const network = state.document.networks.find((item) => item.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+      const source = findFbdPort(state.document, action.wire.from.portId)
+      const target = findFbdPort(state.document, action.wire.to.portId)
+      if (!source || !target) return reject(state, { code: 'port-not-found' })
+      if (source.network.id !== action.networkId || target.network.id !== action.networkId) {
+        return reject(state, { code: 'connect-incompatible' })
+      }
+      const validation = validateFbdWireCandidate(
+        state.document,
+        action.wire.from.portId,
+        action.wire.to.portId,
+        action.wire,
+      )
+      if (!validation.ok) return reject(state, { code: validation.code })
+      const document = cloneFbdDocument(state.document)
+      const targetNetwork = document.networks.find((item) => item.id === action.networkId)
+      if (!targetNetwork) return reject(state, { code: 'network-not-found' })
+      targetNetwork.wires.push(action.wire)
+      return commit(
+        state,
+        document,
+        { code: 'wire-connected', params: { from: source.port.name, to: target.port.name } },
+      )
     }
     case 'BEGIN_OR_COMMIT_CONNECTION':
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
@@ -631,12 +696,96 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       found.node.parameters = parameters
       return commit(state, document, { code: 'node-fb-params-set' })
     }
+    case 'UPDATE_NODE_ATTRIBUTES': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const document = cloneFbdDocument(state.document)
+      const found = findNode(document, action.networkId, action.nodeId)
+      if (!found) return reject(state, { code: 'node-not-found' })
+      const { node } = found
+      const { variable, unit, value, instance, retained } = action
+      const hasVariable = variable !== undefined
+      const hasUnit = unit !== undefined
+      const hasValue = value !== undefined
+      const hasInstance = instance !== undefined
+      const hasRetained = retained !== undefined
+      const entry = fbdPaletteEntry(node.typeRef)
+      const hasWrongKindAttribute =
+        node.kind === 'INPUT' || node.kind === 'OUTPUT'
+          ? hasValue || hasInstance || hasRetained
+          : node.kind === 'CONSTANT'
+            ? hasVariable || hasUnit || hasInstance || hasRetained
+            : node.kind === 'FUNCTION_BLOCK'
+              ? action.dataType !== undefined || hasVariable || hasUnit || hasValue
+              : hasVariable || hasUnit || hasValue || hasInstance || hasRetained ||
+                (action.dataType !== undefined && !entry?.polymorphic)
+      if (hasWrongKindAttribute) return reject(state, { code: 'invalid-node-attributes' })
+
+      if (action.dataType !== undefined) {
+        if (!FBD_DATA_TYPES.includes(action.dataType)) return reject(state, { code: 'invalid-data-type' })
+        if (node.kind !== 'INPUT' && node.kind !== 'OUTPUT' && node.kind !== 'CONSTANT') {
+          if (!entry || !entry.polymorphic || !entry.allowedTypes.includes(action.dataType)) {
+            return reject(state, { code: 'invalid-data-type' })
+          }
+        }
+      }
+      const effectiveType = (action.dataType ?? node.typeRef) as FbdDataType
+      if (variable !== undefined) {
+        if (node.kind !== 'INPUT' && node.kind !== 'OUTPUT') return reject(state, { code: 'node-not-found' })
+        if (!isFbdIdentifier(variable)) return reject(state, { code: 'invalid-variable-name' })
+      }
+      if (unit !== undefined && unit !== null) {
+        if (unit.length < 1 || unit.length > 32) return reject(state, { code: 'invalid-unit' })
+      }
+      if (value !== undefined) {
+        if (node.kind !== 'CONSTANT') return reject(state, { code: 'node-not-found' })
+        if (!isValidConstantLiteral(effectiveType, value)) return reject(state, { code: 'invalid-constant-value' })
+      }
+      if (instance !== undefined && instance !== null) {
+        if (node.kind !== 'FUNCTION_BLOCK') return reject(state, { code: 'node-not-found' })
+        if (!isFbdIdentifier(instance)) return reject(state, { code: 'invalid-instance-name' })
+      }
+      if (action.dataType !== undefined && action.dataType !== node.typeRef) {
+        if (node.kind === 'INPUT' || node.kind === 'OUTPUT' || node.kind === 'CONSTANT') {
+          node.typeRef = action.dataType
+          node.ports = node.ports.map((port) => ({ ...port, dataType: action.dataType! }))
+          if (node.kind === 'CONSTANT' && action.value === undefined && !isValidConstantLiteral(action.dataType, node.parameters.value)) {
+            node.parameters = { ...node.parameters, value: action.dataType === 'BOOL' ? false : action.dataType === 'TIME' ? 'T#0s' : 0 }
+          }
+        } else {
+          applyOperandType(node, action.dataType)
+        }
+      }
+      if (variable !== undefined) {
+        node.parameters = { ...node.parameters, variable }
+      }
+      if (unit !== undefined && node.ports[0]) {
+        node.ports[0].unit = unit
+      }
+      if (value !== undefined) {
+        node.parameters = { ...node.parameters, value }
+      }
+      if (hasInstance || hasRetained) {
+        const nextParams = { ...node.parameters }
+        if (instance !== undefined) {
+          if (instance !== null) nextParams.instance = instance
+          else delete nextParams.instance
+        }
+        if (retained !== undefined) {
+          if (retained) nextParams.retained = true
+          else delete nextParams.retained
+        }
+        node.parameters = nextParams
+      }
+      if (canonicalFbdJson(document) === canonicalFbdJson(state.document)) return state
+      return commit(state, document, { code: 'node-attributes-updated' })
+    }
     case 'UNDO': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
       const previous = state.past[state.past.length - 1]
       if (!previous) return reject(state, { code: 'nothing-to-undo' })
       return {
-        ...state, document: previous, selection: null, connectionFromPortId: null,
+        ...state, document: previous, selection: null,
+        selectionRevision: state.selectionRevision + 1, connectionFromPortId: null,
         past: state.past.slice(0, -1), future: [state.document, ...state.future].slice(0, FBD_HISTORY_LIMIT),
         announcement: { code: 'undone' },
       }
@@ -646,96 +795,11 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const [next, ...future] = state.future
       if (!next) return reject(state, { code: 'nothing-to-redo' })
       return {
-        ...state, document: next, selection: null, connectionFromPortId: null,
+        ...state, document: next, selection: null,
+        selectionRevision: state.selectionRevision + 1, connectionFromPortId: null,
         past: [...state.past, state.document].slice(-FBD_HISTORY_LIMIT), future,
         announcement: { code: 'redone' },
       }
     }
   }
-}
-
-/** Dịch `announcement` sang locale hiện tại lúc render (component gọi
- *  `useI18n().pick`) — reducer ở trên chỉ lưu mã, không quyết định ngôn ngữ. */
-export function translateFbdAnnouncement(pick: (vi: string, en: string) => string, announcement: FbdAnnouncement): string {
-  const p = announcement.params ?? {}
-  switch (announcement.code) {
-    case 'idle': return ''
-    case 'port-not-found': return pick('Không tìm thấy port được chọn', 'Selected port not found')
-    case 'select-output-port': return pick('Hãy chọn port OUTPUT để bắt đầu nối', 'Select an OUTPUT port to start connecting')
-    case 'source-selected': return pick(`Đã chọn nguồn ${p.port}`, `Selected source ${p.port}`)
-    case 'connect-incompatible': return pick('Không thể nối: port phải cùng network, đúng hướng, type và unit', 'Cannot connect: ports must share network, direction, type and unit')
-    case 'wire-mismatch': return pick('Payload wire không khớp hai port đã chọn', 'Wire payload does not match the two selected ports')
-    case 'wire-uuid-invalid': return pick('UUID wire không canonical hoặc bị trùng', 'Wire UUID is not canonical or is duplicated')
-    case 'connect-reverse-order': return pick('Không thể nối ngược thứ tự thực thi combinational', 'Cannot connect against combinational execution order')
-    case 'input-has-driver-or-limit': return pick('Input đã có driver hoặc graph đã đạt giới hạn wire', 'Input already has a driver, or the graph reached the wire limit')
-    case 'network-missing': return pick('Network không còn tồn tại', 'Network no longer exists')
-    case 'wire-connected': return pick(`Đã nối ${p.from} tới ${p.to}`, `Connected ${p.from} to ${p.to}`)
-    case 'draft-synced-external': return pick('Draft đã được đồng bộ từ nguồn ngoài', 'Draft synced from an external source')
-    case 'edit-enabled': return pick('Đã bật quyền sửa', 'Edit mode enabled')
-    case 'read-only-mode': return pick('Chế độ chỉ đọc', 'Read-only mode')
-    case 'selection-changed': return pick('Đã đổi vùng chọn', 'Selection changed')
-    case 'selection-cleared': return pick('Đã bỏ chọn', 'Selection cleared')
-    case 'no-ports': return pick('Graph không có port', 'Graph has no ports')
-    case 'port-selected': return pick(`Đã chọn port ${p.index}/${p.total}`, `Selected port ${p.index}/${p.total}`)
-    case 'no-edit-permission': return pick('Không có quyền sửa Draft', 'No permission to edit the Draft')
-    case 'network-limit-reached': return pick('Đã đạt giới hạn network', 'Reached the network limit')
-    case 'network-uuid-invalid': return pick('UUID network/node/port/wire không canonical hoặc bị trùng', 'Network/node/port/wire UUID is not canonical or is duplicated')
-    case 'network-added': return pick(`Đã thêm network ${p.name}`, `Added network ${p.name}`)
-    case 'block-limit-reached': return pick('Đã đạt giới hạn 256 block', 'Reached the 256-block limit')
-    case 'block-uuid-invalid': return pick('UUID block/port không canonical hoặc bị trùng', 'Block/port UUID is not canonical or is duplicated')
-    case 'network-not-found': return pick('Không tìm thấy network', 'Network not found')
-    case 'block-added': return pick(`Đã thêm block ${p.type}`, `Added block ${p.type}`)
-    case 'connection-cancelled': return pick('Đã hủy thao tác nối', 'Connection cancelled')
-    case 'no-selection': return pick('Chưa chọn phần tử cần xóa', 'No element selected to delete')
-    case 'cannot-delete-selection': return pick('Không thể xóa phần tử đã chọn', 'Cannot delete the selected element')
-    case 'selection-deleted': return pick('Đã xóa phần tử và các wire liên quan', 'Deleted the element and its related wires')
-    case 'select-block-to-reorder': return pick('Hãy chọn block cần đổi thứ tự', 'Select a block to reorder')
-    case 'reorder-at-boundary': return pick('Block đã ở biên thứ tự', 'Block is already at the order boundary')
-    case 'block-reordered': return pick('Đã đổi thứ tự thực thi block', 'Block execution order changed')
-    case 'block-moved': return pick('Đã đổi vị trí block trên canvas', 'Block moved on the canvas')
-    case 'invalid-position': return pick('Vị trí ngoài phạm vi canvas cho phép', 'Position is outside the allowed canvas range')
-    case 'node-not-found': return pick('Không tìm thấy node đã chọn', 'Selected node not found')
-    case 'invalid-variable-name': return pick('Tên biến không hợp lệ', 'Invalid variable name')
-    case 'invalid-unit': return pick('Đơn vị không hợp lệ (1-32 ký tự)', 'Invalid unit (1-32 characters)')
-    case 'node-variable-set': return pick(`Đã đặt biến ${p.variable}`, `Set variable ${p.variable}`)
-    case 'invalid-constant-value': return pick('Giá trị hằng số không hợp lệ với kiểu đã chọn', 'Constant value is not valid for the selected type')
-    case 'node-value-set': return pick('Đã cập nhật giá trị hằng số', 'Constant value updated')
-    case 'invalid-data-type': return pick('Kiểu dữ liệu không hợp lệ cho node này', 'Data type is not valid for this node')
-    case 'node-type-set': return pick(`Đã đổi kiểu sang ${p.type}`, `Type changed to ${p.type}`)
-    case 'invalid-instance-name': return pick('Tên instance không hợp lệ', 'Invalid instance name')
-    case 'node-fb-params-set': return pick('Đã cập nhật tham số function block', 'Function block parameters updated')
-    case 'selection-revision-mismatch': return pick('Phiên bản vùng chọn không khớp', 'Selection revision mismatch')
-    case 'wire-limit-reached': return pick('Đã đạt giới hạn wire', 'Reached wire limit')
-    case 'blocks-moved': return pick('Đã đổi vị trí các block trên canvas', 'Blocks moved on canvas')
-    case 'subgraph-pasted': return pick('Đã dán subgraph vào canvas', 'Subgraph pasted to canvas')
-    case 'nothing-to-undo': return pick('Không còn thay đổi để hoàn tác', 'No more changes to undo')
-    case 'undone': return pick('Đã hoàn tác', 'Undone')
-    case 'nothing-to-redo': return pick('Không còn thay đổi để làm lại', 'No more changes to redo')
-    case 'redone': return pick('Đã làm lại', 'Redone')
-    default: return ''
-  }
-}
-
-export interface FbdKeyboardEventLike {
-  key: string
-  ctrlKey?: boolean
-  altKey?: boolean
-  shiftKey?: boolean
-  metaKey?: boolean
-}
-
-export function normalizeFbdShortcut(event: FbdKeyboardEventLike): string {
-  const parts: string[] = []
-  if (event.ctrlKey) parts.push('Control')
-  if (event.altKey) parts.push('Alt')
-  if (event.shiftKey) parts.push('Shift')
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
-  parts.push(key)
-  return parts.join('+')
-}
-
-export function resolveFbdKeyboardCommand(event: FbdKeyboardEventLike): FbdKeyboardCommand | null {
-  if (event.metaKey) return null
-  const shortcut = normalizeFbdShortcut(event)
-  return FBD_KEYBOARD_REGISTRY.commands.find((command) => command.key === shortcut)?.id ?? null
 }

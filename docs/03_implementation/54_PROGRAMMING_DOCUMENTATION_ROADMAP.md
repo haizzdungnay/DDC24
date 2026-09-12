@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `PLAN-PROG-DOC-054` |
-| Phiên bản | 3.37 |
+| Phiên bản | 3.38 |
 | Trạng thái | **Superseded 2026-08-20 — snapshot roadmap hồ sơ cũ; Plan59 là authority hiện hành** |
 | Ngày baseline | 2026-08-14 |
 | Chủ quản | System Engineering + Document Control |
@@ -174,7 +174,7 @@ lý do và revision history trước khi tính lại.
 | 8 | [`IFSPEC-ART-PROG-001`](../02_design/interfaces/PROGRAMMING_ARTIFACT_LOADER_SPEC.md) | Detailed Design | Compiler + Core / Security + Ops | `M3` 60 | P0 | v0.7; loader/type/manifest/source map ST/FBD host; production stage/swap/target evidence còn mở |
 | 9 | [`DDD-CTRL-PROG-001`](../02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md) | Detailed Design | Controls + Core / Safety + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-004/012/013` + Safety review) |
 | 10 | [`DDD-LIFE-PROG-001`](../02_design/software/PROGRAMMING_RUNTIME_LIFECYCLE_DESIGN.md) | Detailed Design | Core + BE + Ops / Architect + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-009/010`) |
-| 11 | [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | Detailed Design | UX / FE + Product + QA | `M3` 60 | P1 | IA bốn workspace + tám journey + migration 17 UC; SVG render được cho `PGM-01..04` gồm desktop/mobile, modal Commission và drawer Restore; mapping vùng→API/state/action/RBAC/copy; cây component, token và rollout; 1 BLOCKED (`OD-PROG-016` + 6 vai trò ký) |
+| 11 | [`UX-WEB-PROG-001`](../04_uiux/PROGRAMMING_UI_UX_DESIGN.md) | Detailed Design | UX / FE + Product + QA | `M3` 60 | P1 | Handoff PNG/HTML PGM-01..06 là authority trực quan theo `AUTH-UX-PROG-2026-09-08-01`; UX-WEB giữ mapping vùng→API/state/action/RBAC/copy, cây component, token, safety và rollout; asset không phải runtime evidence |
 | 12 | [`DDD-FE-PROG-001`](../02_design/software/PROGRAMMING_FE_DESIGN.md) | Detailed Design | FE Lead / UX + BE + QA | `M3` 60 | P1 | v0.8; FBD typed model/reducer/history 50/keyboard component có 15 test; route/API/browser workspace còn mở |
 | 13 | [`DDD-BE-PROG-001`](../02_design/software/PROGRAMMING_BE_DESIGN.md) | Detailed Design | BE Lead / Core + Security + QA | `M3` 60 | P0 | v1.1; bundle/compiler/audit assurance Task 207 As-Built; operation/Core còn mở |
 | 14 | [`DDD-FWSOM-PROG-001`](../02_design/software/PROGRAMMING_FW_SOM_DESIGN.md) | Detailed Design | Core/FW-SOM Lead / Controls + QA | `M3` 60 | P0 | Đọc nhanh + bảng `DD-01..DD-13`; 1 BLOCKED (`OD-PROG-009/012/013`, chưa có evidence target) |
@@ -421,7 +421,7 @@ lại để tài liệu trông đồng đều.
 | 8 | `IFSPEC-ART-PROG-001` Artifact/Loader | `REVIEWED — NO CHANGE` | Layout artifact và loader không thấy tầng UI |
 | 9 | `DDD-CTRL-PROG-001` Control Semantics | `REVIEWED — NO CHANGE` | Không đổi scan order, arbitration, PID, hold-last hay overrun |
 | 10 | `DDD-LIFE-PROG-001` Runtime Lifecycle | `REVIEWED — NO CHANGE` | Máy trạng thái Check/Commission/Restore giữ nguyên. Xác nhận theo rủi ro là quy tắc trình bày; số ô xác nhận không phải guard của state machine |
-| 11 | `UX-WEB-PROG-001` UI/UX | **IMPACTED** | Trọng tâm: IA bốn workspace, tám journey, migration 17 UC, route + chuyển hướng, ba SVG mới, cây component, API theo workspace, `UX-T-006` |
+| 11 | `UX-WEB-PROG-001` UI/UX | **IMPACTED** | Hiện hành: IA sáu workspace, handoff PNG/HTML PGM-01..06 làm authority trực quan; bộ SVG cũ đã loại. Nội dung lịch sử bốn workspace/tám journey trong roadmap này không được dùng ghi đè authority mới. |
 | 12 | `DDD-FE-PROG-001` FE Design | **IMPACTED** | §0.1 cây thư mục và route bốn workspace; ba ràng buộc tab/Draft/truy vấn dùng chung; năm chuyển hướng |
 | 13 | `DDD-BE-PROG-001` BE Design | **IMPACTED** | §0.1 nhịp gọi `GET /overrides` từ ba màn hình và yêu cầu impact ba nhánh. Không đổi persistence/worker/RBAC |
 | 14 | `DDD-FWSOM-PROG-001` FW-SOM | `REVIEWED — NO CHANGE` | Runtime trên SOM không biết tầng UI |
@@ -520,6 +520,7 @@ chứng minh sản phẩm đã implement, đạt HIL, đạt IEC/ISO hay sẵn s
 
 | Phiên bản | Ngày | Nội dung | Người sửa |
 |---|---|---|---|
+| 3.38 | 2026-09-08 | Gắn ghi chú history với authority trực quan FE Handoff hiện hành và loại mô tả bộ SVG cũ khỏi tiêu chí hiện hành; roadmap vẫn Superseded, không nhận lại quyền task. | Document Control |
 | 1.0 | 2026-08-09 | Tạo baseline 22 hồ sơ, thang M0..M5, master tracker, dependency gate và checklist | System Engineering |
 | 1.1 | 2026-08-09 | Hoàn tất R0, đăng ký baseline vào CONTROL và mở công việc R1 theo chỉ đạo triển khai | System Engineering |
 | 1.2 | 2026-08-09 | R1 technical complete: 4 hồ sơ M3; giữ approval blocker và bắt đầu R2 theo TARGET-PENDING | System Engineering |

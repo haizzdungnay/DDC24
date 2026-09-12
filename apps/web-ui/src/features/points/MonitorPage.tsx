@@ -304,7 +304,6 @@ export function MonitorPage() {
     ...rawPoints.map((point) => ({ id: point.id, name: point.name, kind: point.kind })),
     ...(virtualState.data ?? []).map((point) => ({ id: canonicalVirtualPointId(point.id), name: point.name ?? point.label, kind: 'virtual' }))
   ]), [rawPoints, virtualState.data])
-  const selected = points.find((point) => point.id === selectedId) ?? points.find((point) => point.id === 'UI-01') ?? points[0]
   const modalPoint = pointModalId ? points.find((point) => point.id === pointModalId) : null
   const offline = realtime.connectionState !== 'connected'
 
@@ -319,6 +318,11 @@ export function MonitorPage() {
       || (equipment === '__unassigned__' ? !point.equipment : point.equipment === equipment)
     return matchesKind && matchesQuality && matchesGroupFilter(point, group) && matchesStateFilter(point, stateFilter) && matchesEquipment && haystack.includes(query.toLowerCase())
   }).sort((a, b) => a.id.localeCompare(b.id)), [equipment, group, kind, points, quality, query, stateFilter])
+
+  /* Điểm trong khung chi tiết phải thuộc chính tập đang hiển thị. Trước đây
+     chọn nguồn/nhóm Modbus vẫn giữ UI-01 ở panel bên phải dù bốn bảng bên trái
+     đều rỗng, khiến người vận hành tưởng bộ lọc đã trả một điểm local. */
+  const selected = filtered.find((point) => point.id === selectedId) ?? filtered[0]
 
   /* Danh sách thiết bị dựng TỪ DỮ LIỆU chứ không từ một bảng cấu hình riêng:
      `ADR-042` cố ý không tạo thực thể thiết bị, nên nguồn duy nhất là chính các
@@ -351,7 +355,8 @@ export function MonitorPage() {
     UI: filtered.filter((point) => point.kind === 'UI'),
     DO: filtered.filter((point) => point.kind === 'DO'),
     AO: filtered.filter((point) => point.kind === 'AO'),
-    Virtual: filtered.filter((point) => point.kind === 'virtual')
+    Virtual: filtered.filter((point) => point.kind === 'virtual'),
+    Modbus: filtered.filter((point) => point.kind === 'modbus_rtu')
   }), [filtered])
 
   const analogPoints = points.filter((point) => point.kind === 'UI' || point.kind === 'AO' || point.kind === 'virtual')
@@ -697,6 +702,7 @@ export function MonitorPage() {
           <AnalogSection title="UI - UNIVERSAL INPUT" rows={groups.UI} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} bulkSelection={canForce ? bulkSelection : null} onBulkToggle={toggleBulkSelection} />
           <AnalogSection title="AO - ANALOG OUTPUT" rows={groups.AO} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={requestForce} bulkSelection={canForce ? bulkSelection : null} onBulkToggle={toggleBulkSelection} />
           <AnalogSection title="VIRTUAL POINTS" rows={groups.Virtual} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} onForce={requestForce} bulkSelection={canForce ? bulkSelection : null} onBulkToggle={toggleBulkSelection} />
+          <AnalogSection title="MODBUS RTU POINTS" rows={groups.Modbus} selectedId={selected?.id} conflicts={nameConflicts} onSelect={setSelectedId} onOpenDetails={openPointModal} bulkSelection={canForce ? bulkSelection : null} onBulkToggle={toggleBulkSelection} />
         </div>
         {selected && <DetailPanel
           point={selected}
@@ -1810,10 +1816,19 @@ function DetailPanel({
  */
 function PointHistoryPanel({ point }: { point: Point }) {
   const { pick } = useI18n()
-  const [state, setState] = useState<{ status: 'loading' | 'ready' | 'error' | 'disabled'; rows: HistorySample[]; message?: string }>({ status: 'loading', rows: [] })
+  const [state, setState] = useState<{ status: 'loading' | 'ready' | 'error' | 'disabled' | 'unsupported'; rows: HistorySample[]; message?: string }>({ status: 'loading', rows: [] })
 
   useEffect(() => {
     let cancelled = false
+    /* Historian hiện chỉ nhận ID canonical UI/AO/DO/VP. ID ổn định của
+       Modbus RTU (ví dụ CK50804-DO1) là hợp lệ trong Point Catalog nhưng chưa
+       thuộc contract `/history`; gọi thẳng sẽ tạo một lỗi validation ngay
+       trong browser và đưa người vận hành tới Trends vốn cũng không đọc được.
+       Hiển thị ranh giới khả dụng rõ ràng, không đổi ID hay bịa mẫu thay thế. */
+    if (point.kind === 'modbus_rtu') {
+      setState({ status: 'unsupported', rows: [] })
+      return () => { cancelled = true }
+    }
     if (point.logEnabled === false) {
       setState({ status: 'disabled', rows: [] })
       return () => { cancelled = true }
@@ -1845,6 +1860,13 @@ function PointHistoryPanel({ point }: { point: Point }) {
           detail={pick('Bật ghi lịch sử trong cấu hình điểm để có dữ liệu ở đây.', 'Enable logging in the point configuration to collect data here.')}
         />
       )}
+      {state.status === 'unsupported' && (
+        <StateBlock
+          state="empty"
+          title={pick('Lịch sử chưa hỗ trợ point Modbus RTU', 'History is not available for Modbus RTU points yet')}
+          detail={pick('Dữ liệu hiện thời vẫn được đọc từ Point Catalog; không có mẫu lịch sử nào được suy đoán.', 'The current value still comes from the Point Catalog; no history samples are inferred.')}
+        />
+      )}
       {state.status === 'error' && (
         <StateBlock state="error" title={pick('Không đọc được lịch sử', 'History unavailable')} detail={state.message} />
       )}
@@ -1865,9 +1887,11 @@ function PointHistoryPanel({ point }: { point: Point }) {
           ))}
         </div>
       )}
-      <Link to={`/trends?points=${encodeURIComponent(point.id)}`} className="mt-3 inline-block text-xs font-semibold text-[var(--c-accent)]">
-        {pick('Mở trong Trends', 'Open in Trends')} →
-      </Link>
+      {state.status !== 'unsupported' && (
+        <Link to={`/trends?points=${encodeURIComponent(point.id)}`} className="mt-3 inline-block text-xs font-semibold text-[var(--c-accent)]">
+          {pick('Mở trong Trends', 'Open in Trends')} →
+        </Link>
+      )}
     </Panel>
   )
 }

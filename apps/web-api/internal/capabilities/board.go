@@ -23,6 +23,13 @@ import "fmt"
 // Sức chứa của bảng point trong `contracts/shm/mkddc_shm.h`. KHÔNG phải "bo có
 // bấy nhiêu kênh" — chỉ là "ABI dành sẵn bấy nhiêu ô". Mọi offset SHM phía Go
 // được tính từ đúng bốn hằng này, nên chúng là hằng biên dịch.
+//
+// ISS-634: `TestShmPointTableCapacitiesMatchHeader`
+// (`internal/app/shm_contract_sync_test.go`) đọc chính `mkddc_shm.h` và so bốn
+// hằng này với `KX_N_UI/KX_N_DI/KX_N_AO/KX_N_DO`, nên hợp đồng đổi mà đây quên
+// đổi là lỗi test chứ không phải lỗi hiện trường. Cổng đặt ở package `app` vì
+// helper parse header là code test của package đó và `app` import được
+// `capabilities`; đừng chép một bộ parser thứ hai vào đây.
 const (
 	ABIUniversalInputs = 16
 	ABIDigitalInputs   = 8

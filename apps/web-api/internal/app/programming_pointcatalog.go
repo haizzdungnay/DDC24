@@ -9,7 +9,8 @@ import (
 )
 
 // programmingPointCatalogAdapter chiếu `PointDTO` (authority Point hiện hữu
-// của toàn hệ thống — LOCAL qua SHM Core, VP qua `overlayVirtualPoints`,
+// của toàn hệ thống — capability LOCAL qua SHM Core và runtime truth qua
+// end-scan snapshot của Programming Core, VP qua `overlayVirtualPoints`,
 // Modbus RTU qua `EXT_PHYSICAL`) sang `PointCatalogEntry` của Programming.
 // Đặt ở `internal/app` (không phải `internal/programming/application`) vì
 // hướng phụ thuộc chỉ được một chiều: `app` đã import `programming/*`, chiều
@@ -66,10 +67,51 @@ func (adapter programmingPointCatalogAdapter) ListPointCatalog(ctx context.Conte
 		if entry.Category == "MB_RTU" {
 			entry.ExtIndex = slotOf[modbusCatalogKey(entry.DeviceID, entry.PointID)]
 		}
-		identity.apply(&entry)
 		entries = append(entries, entry)
 	}
+	entries = adapter.overlayCatalogRuntimeTruth(ctx, entries)
+	for index := range entries {
+		identity.apply(&entries[index])
+	}
 	return entries, nil
+}
+
+// overlayCatalogRuntimeTruth dùng end-scan snapshot của chính Core đang phục vụ
+// Programming cho value/quality LOCAL. PLC SHM vẫn giữ capability và toàn bộ
+// catalog; snapshot chỉ thay các field runtime của Point trùng identity.
+//
+// Trên target hai nguồn do cùng mkddc-core phát. Trên lane host, Core simulator
+// có thể chạy cạnh chuỗi no-board chỉ để cấp catalog vật lý; nếu giữ quality từ
+// SHM của tiến trình khác thì preview sẽ bác một Point mà Check/runtime đang đọc
+// GOOD. Không có snapshot hoặc snapshot lỗi thì giữ nguyên SHM truth, không bịa.
+func (adapter programmingPointCatalogAdapter) overlayCatalogRuntimeTruth(ctx context.Context,
+	entries []programmingapplication.PointCatalogEntry) []programmingapplication.PointCatalogEntry {
+	reader, ok := adapter.app.core.(historianSnapshotReader)
+	if !ok {
+		return entries
+	}
+	snapshot, err := reader.ReadPointSnapshot(ctx)
+	if err != nil {
+		return entries
+	}
+	local := make(map[string]RuntimePoint, len(snapshot.Points))
+	for _, point := range snapshot.Points {
+		local[point.ID] = point
+	}
+	for index := range entries {
+		entry := &entries[index]
+		point, exists := local[entry.PointID]
+		if entry.Category != "LOCAL" || !exists {
+			continue
+		}
+		entry.Value = point.Value
+		entry.Quality = pointCatalogQuality(PointDTO{Quality: point.Quality})
+		entry.ObservedAt = snapshot.SnapshotObservedAtUTC
+		if point.Unit != "" {
+			entry.Unit = point.Unit
+		}
+	}
+	return entries
 }
 
 // modbusCatalogKey ghép danh tính bền `(deviceId, pointId)` thành khoá tra.

@@ -261,6 +261,13 @@ struct StIrSignalRef {
     StType type = StType::REAL;
     bool read = false;
     bool publish = false;
+    /* Vị trí chỉ phục vụ provenance của kết quả compiler/Check. Chúng không
+     * đi vào artifact v1: loader có thể để 0 và runtime không được phép dựa
+     * vào metadata source này. */
+    uint16_t read_line = 0;
+    uint16_t read_column = 0;
+    uint16_t publish_line = 0;
+    uint16_t publish_column = 0;
     int16_t runtime_index = -1;
 };
 

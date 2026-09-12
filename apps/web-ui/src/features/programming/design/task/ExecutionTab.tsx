@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Save } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
+import { useProgrammingActionAllowed } from '../../api/authorization'
 import type { ProgrammingDraftDocument, ProgrammingDraftOperation } from '../../model/types'
 
 const ALLOWED_PERIODS = [1000, 5000, 30000] as const
@@ -52,8 +52,7 @@ export function ExecutionTab({
   forceReadOnly?: boolean
 }) {
   const { pick } = useI18n()
-  const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
+  const canEdit = useProgrammingActionAllowed('execution') && !forceReadOnly
   const [period, setPeriod] = useState<number>(document.task.periodMs)
   const [order, setOrder] = useState<string[]>(document.task.programOrder)
   const previousCommittedTask = useRef(document.task)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -160,7 +161,8 @@ func TestCheckServiceResolvesIoMapFromVariablesAndBindings(t *testing.T) {
 	}
 	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: &fakePackager{},
 		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
-		Now: func() time.Time { return time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC) }})
+		Catalog: standardBindingCatalog(),
+		Now:     func() time.Time { return time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,45 +221,15 @@ func TestCheckServiceFailsClosedWhenBindingReferencesNonIoVariableClass(t *testi
 	binding, _ := json.Marshal(map[string]any{"op": "upsertBinding", "binding": map[string]any{"bindingId": bindID, "variableId": varID,
 		"point": map[string]any{"category": "LOCAL", "pointId": "DO-01"}, "direction": "WRITE", "dataType": "BOOL", "writable": true, "qualityPolicy": "REQUIRE_GOOD"}})
 	task, _ := json.Marshal(map[string]any{"op": "setTask", "task": map[string]any{"taskId": taskID, "periodMs": 1000, "programOrder": []string{programID}}})
-	saved, err := projects.SaveDraft(context.Background(), actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
+	_, err = projects.SaveDraft(context.Background(), actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
 		Operations: []json.RawMessage{program, variable, binding, task}, IfMatch: created.ETag, IdempotencyKey: "30000000-0000-4000-8000-000000000202", CorrelationID: testCorrelationID})
-	if err != nil {
-		t.Fatal(err)
+	var publicErr *OperationPublicError
+	if !errors.As(err, &publicErr) || publicErr.Public.Code != domain.ErrMapIdentity {
+		t.Fatalf("SaveDraft phải chặn class LOCAL bằng validator binding, err=%v", err)
 	}
-	sealed, err := projects.SealRevision(context.Background(), actor, SealRevisionCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
-		Label: "Bad class", IfMatch: saved.ETag, IdempotencyKey: "30000000-0000-4000-8000-000000000203", CorrelationID: testCorrelationID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	revisionID := sealed.Resource["revisionId"].(string)
-
-	runner := &fakeCheckRunner{result: programmingcompiler.Result{OK: true}}
-	artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	checks, err := NewCheckService(CheckServiceOptions{Store: store, Runner: runner, Packager: &fakePackager{},
-		Artifacts: artifacts, TargetID: "controller-local", LeaseDuration: time.Minute,
-		Now: func() time.Time { return time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC) }})
-	if err != nil {
-		t.Fatal(err)
-	}
-	command := RequestCheckCommand{RevisionID: revisionID, SchemaVersion: "1.0", TargetProfile: checkTargetProfile,
-		IdempotencyKey: "30000000-0000-4000-8000-000000000204", CorrelationID: testCorrelationID}
-	accepted, err := checks.RequestCheck(context.Background(), actor, command)
-	if err != nil {
-		t.Fatal(err)
-	}
-	processed, err := checks.ProcessNext(context.Background())
-	if err != nil || !processed {
-		t.Fatalf("processed=%v err=%v", processed, err)
-	}
-	view, err := checks.GetCheck(context.Background(), accepted.CheckID)
-	if err != nil || view.State != "FAILED" || len(view.Diagnostics) == 0 || view.Diagnostics[0].Code != "PRG-ERR-SCOPE-001" {
-		t.Fatalf("view=%+v err=%v", view, err)
-	}
-	if runner.input.SourceID != "" {
-		t.Fatalf("compiler đáng lẽ không được gọi: input=%+v", runner.input)
+	draft, readErr := store.GetDraft(context.Background(), draftID)
+	if readErr != nil || draft.ETag != 1 {
+		t.Fatalf("Draft đổi dù binding bị chặn: draft=%+v err=%v", draft, readErr)
 	}
 }
 

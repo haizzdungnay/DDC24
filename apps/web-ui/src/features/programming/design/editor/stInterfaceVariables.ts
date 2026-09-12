@@ -1,10 +1,10 @@
 export interface StInterfaceVariable {
   name: string
   type: string
-  direction: 'INPUT' | 'OUTPUT'
+  direction: 'INPUT' | 'OUTPUT' | 'INOUT'
 }
 
-const ST_INTERFACE_BLOCK_START = /\b(VAR_INPUT|VAR_OUTPUT)\b/gi
+const ST_INTERFACE_BLOCK_START = /\b(VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT)\b/gi
 const ST_INTERFACE_DECLARATION =
   /([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(BOOL|INT|DINT|UINT|REAL|TIME)\b/gi
 
@@ -16,8 +16,10 @@ export function collectStInterfaceVariables(source: string): StInterfaceVariable
   const blockStart = new RegExp(ST_INTERFACE_BLOCK_START.source, ST_INTERFACE_BLOCK_START.flags)
   let block: RegExpExecArray | null
   while ((block = blockStart.exec(source)) !== null) {
-    const direction: 'INPUT' | 'OUTPUT' =
-      block[1].toUpperCase() === 'VAR_INPUT' ? 'INPUT' : 'OUTPUT'
+    const keyword = block[1].toUpperCase()
+    const direction: StInterfaceVariable['direction'] = keyword === 'VAR_INPUT'
+      ? 'INPUT'
+      : keyword === 'VAR_OUTPUT' ? 'OUTPUT' : 'INOUT'
     const bodyStart = block.index + block[0].length
     const relativeEnd = source.slice(bodyStart).search(/\bEND_VAR\b/i)
     const body =
@@ -34,4 +36,10 @@ export function collectStInterfaceVariables(source: string): StInterfaceVariable
     }
   }
   return output
+}
+
+/** Kiểu trả về FUNCTION lấy từ header ST; null khi source không công bố/không hợp lệ. */
+export function collectStFunctionReturnType(source: string): string | null {
+  const match = /^\s*FUNCTION\s+[A-Za-z_][A-Za-z0-9_]*\s*:\s*(BOOL|INT|DINT|UINT|REAL|TIME)\b/im.exec(source)
+  return match ? match[1].toUpperCase() : null
 }

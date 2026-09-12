@@ -1,0 +1,65 @@
+# Đồng bộ nhãn workflow từ .github/labels.yml lên GitHub.
+#
+# Nhãn là hợp đồng giữa ba vai: `state:*` quyết định ai được phép làm gì tiếp
+# theo, `review:pass` là cổng merge. Gõ tay thì sớm muộn cũng lệch tên hoặc
+# lệch màu giữa các Issue, nên nguồn chuẩn nằm trong repository và được đồng bộ
+# bằng máy.
+#
+# Workflow CỐ Ý không xoá nhãn ngoài danh sách: repo còn nhãn chủ đề đang dùng
+# (programming-ui, point-io, st-editor, pgm04...) và xoá chúng sẽ mất phân loại
+# của hàng trăm Issue cũ.
+
+name: Đồng bộ nhãn workflow
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/labels.yml'
+      - '.github/workflows/labels-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    name: Tạo/cập nhật nhãn
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Đồng bộ
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY' > "${RUNNER_TEMP}/labels.tsv"
+          import re
+          # Không dùng pyyaml: runner không chắc có sẵn, và cấu trúc file là một
+          # danh sách phẳng name/color/description nên parse trực tiếp an toàn hơn
+          # là thêm một phụ thuộc cài lúc chạy.
+          entries, current = [], None
+          for line in open('.github/labels.yml', encoding='utf-8'):
+              line = line.rstrip('\n')
+              if line.startswith('- name:'):
+                  if current:
+                      entries.append(current)
+                  current = {'name': line.split(':', 1)[1].strip().strip('"')}
+              elif current is not None and re.match(r'^\s+(color|description):', line):
+                  key, value = line.strip().split(':', 1)
+                  current[key] = value.strip().strip('"')
+          if current:
+              entries.append(current)
+          for e in entries:
+              print(f"{e['name']}\t{e.get('color','ededed')}\t{e.get('description','')}")
+          PY
+
+          count=0
+          while IFS=$'\t' read -r name color description; do
+            [ -n "$name" ] || continue
+            # `gh label create --force` cập nhật nếu đã tồn tại, tạo nếu chưa.
+            gh label create "$name" --color "$color" --description "$description" --force
+            count=$((count + 1))
+          done < "${RUNNER_TEMP}/labels.tsv"
+          echo "Đã đồng bộ $count nhãn." >> "$GITHUB_STEP_SUMMARY"

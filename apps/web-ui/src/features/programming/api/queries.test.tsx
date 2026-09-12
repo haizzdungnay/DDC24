@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   useLazyProgrammingLibraryCatalog,
   useProgrammingLibraryPaged,
+  useProgrammingRevision,
   useProgrammingRevisionComparison,
   useProgrammingRuntimeMonitor,
 } from './queries'
@@ -34,6 +35,30 @@ function deferred<T>() {
   })
   return { promise, resolve, reject }
 }
+
+describe('useProgrammingResource — không làm rơi lượt đọc khi định danh đổi', () => {
+  beforeEach(() => { client.request.mockReset() })
+
+  it('Revision đổi khi request cũ còn bay: bỏ response cũ và đọc đúng Revision mới', async () => {
+    const first = deferred<{ revisionId: string }>()
+    client.request
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({ revisionId: 'rev-b' })
+
+    const { result, rerender } = renderHook(
+      ({ revisionId }: { revisionId: string }) => useProgrammingRevision(revisionId),
+      { initialProps: { revisionId: 'rev-a' } },
+    )
+    await waitFor(() => expect(client.request).toHaveBeenCalledTimes(1))
+
+    rerender({ revisionId: 'rev-b' })
+    await act(async () => first.resolve({ revisionId: 'rev-a' }))
+
+    await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(result.current.data).toEqual({ revisionId: 'rev-b' }))
+    expect(client.request.mock.calls[1][1]).toEqual({ path: { revisionId: 'rev-b' } })
+  })
+})
 
 describe('useProgrammingRuntimeMonitor — vòng đời LIVE T59-812', () => {
   /* Thân KHỐI, không phải biểu thức: `mockReset()` trả về CHÍNH mock, và
@@ -457,6 +482,47 @@ describe('useLazyProgrammingLibraryCatalog — nạp trễ nhưng ĐẦY ĐỦ T
     await waitFor(() => expect(result.current.items).toHaveLength(100))
     // Số TUYỆT ĐỐI: hai lần gọi = trang đầu + đúng một lần thử trang hai.
     await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
+    await act(async () => { await Promise.resolve() })
+    expect(client.request).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('useProgrammingPointCatalog — enabled flag ISS-#565', () => {
+  beforeEach(() => { client.request.mockReset() })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('enabled=false không fetch và không poll', async () => {
+    const { useProgrammingPointCatalog } = await import('./queries')
+    client.request.mockResolvedValue({ schemaVersion: '1.0', items: [] })
+    const { result } = renderHook(() => useProgrammingPointCatalog(false))
+    await waitFor(() => expect(result.current.status).toBe('loading'))
+    expect(client.request).not.toHaveBeenCalled()
+  })
+
+  it('enabled=true fetch ngay', async () => {
+    const { useProgrammingPointCatalog } = await import('./queries')
+    client.request.mockResolvedValue({ schemaVersion: '1.0', items: [] })
+    const { result } = renderHook(() => useProgrammingPointCatalog(true))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(client.request).toHaveBeenCalledWith('getProgrammingPointCatalog', expect.objectContaining({
+      query: { limit: 500 },
+      signal: expect.any(AbortSignal),
+    }))
+  })
+
+  it('chống chồng request', async () => {
+    const { useProgrammingPointCatalog } = await import('./queries')
+    const first = deferred<{ schemaVersion: string; items: unknown[] }>()
+    client.request.mockReturnValue(first.promise)
+    const { result } = renderHook(() => useProgrammingPointCatalog(true))
+    await waitFor(() => expect(client.request).toHaveBeenCalledTimes(1))
+    
+    const firstSignal = client.request.mock.calls[0][1].signal as AbortSignal
+    act(() => { result.current.refresh() })
+    await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
+    expect(firstSignal.aborted).toBe(true)
+
+    first.resolve({ schemaVersion: '1.0', items: [] })
     await act(async () => { await Promise.resolve() })
     expect(client.request).toHaveBeenCalledTimes(2)
   })

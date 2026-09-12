@@ -7,9 +7,17 @@ import { useI18n } from '../../../../shared/i18n'
 import { buildStReferenceIndex } from '../editor/stReferenceIndex'
 import { fbdIssueTargets } from '../../fbd/issueTargets'
 import { validateFbdDocument, type FbdDocument } from '../../fbd/model'
+import { readFbdDocument } from '../../fbd/readDocument'
+import type { FbdSelection } from '../../fbd/commands'
 import type { ProgrammingDiagnostic, ProgrammingDraftDocument } from '../../model/types'
 import { presentStRuntimeValue, type StRuntimeOverlayState, type StRuntimeQuality } from '../editor/StRuntimeValueOverlay'
 import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol, type WorkbenchWatchRow } from './ProgrammingWorkbench'
+
+function copyFbdSelection(selection: FbdSelection): FbdSelection {
+  return selection.kind === 'multi-node'
+    ? { ...selection, nodeIds: [...selection.nodeIds] }
+    : { ...selection }
+}
 
 /**
  * `T59-807` — chỗ dựng dữ liệu cho workbench của PGM-02.
@@ -51,6 +59,7 @@ export function DesignWorkbench({
   hasCheckResult = false,
   checkRevisionId = null,
   onJumpToDiagnostic,
+  onJumpToFbdSelection,
 }: {
   mode: WorkbenchMode
   document: ProgrammingDraftDocument
@@ -90,6 +99,9 @@ export function DesignWorkbench({
   checkRevisionId?: string | null
   /** Nhảy tới một diagnostic: chọn đúng POU RỒI neo đúng dòng/cột. */
   onJumpToDiagnostic?: (diagnostic: ProgrammingDiagnostic) => void
+  /** Chỉ được cấp khi caller có thể chọn đúng POU rồi truyền exact canonical
+   * selection xuống canvas; thiếu callback thì diagnostic FBD giữ dạng text. */
+  onJumpToFbdSelection?: (programId: string, selection: FbdSelection) => void
 }) {
   const { pick } = useI18n()
 
@@ -149,42 +161,50 @@ export function DesignWorkbench({
             id: `${program.programId}:${diagnostic.detailCode ?? diagnostic.code}:${line ?? 0}:${column ?? 0}`,
             code: diagnostic.detailCode ?? diagnostic.code,
             detail: diagnostic.message ?? position,
+            severity: diagnostic.severity,
             jumpLabel: `${program.name} › ${position}`,
             onJump: onJumpToDiagnostic ? () => onJumpToDiagnostic(diagnostic) : undefined,
           })
         }
         continue
       }
-      let parsed: FbdDocument | null = null
-      try {
-        parsed = typeof program.document === 'string' ? (JSON.parse(program.document) as FbdDocument) : null
-      } catch {
-        parsed = null
-      }
-      if (!parsed || !Array.isArray(parsed.networks)) {
+      const parsedResult = readFbdDocument(program.document)
+      if (!parsedResult.ok) {
         output.push({
           id: `${program.programId}:parse`,
           code: 'FBD-SCHEMA-JSON-001',
           detail: pick('Tài liệu FBD không đọc được.', 'The FBD document cannot be parsed.'),
-          jumpLabel: program.name,
-          onJump: () => onSelectProgram(program.programId),
+          /* Không có graph hợp lệ để neo. Gắn tên POU vào `jumpLabel` sẽ làm
+           * ProblemsDrawer trình bày mục này như một điều khiển có thể nhảy,
+           * dù không có callback và không có đích chính xác. */
+          jumpLabel: null,
         })
         continue
       }
+      const parsed: FbdDocument = parsedResult.document
       for (const target of fbdIssueTargets(parsed, validateFbdDocument(parsed))) {
+        const selection = target.selection
+        const jumpToSelection = onJumpToFbdSelection
+        const onJump = selection && jumpToSelection
+          ? () => {
+              onSelectProgram(program.programId)
+              /* Mỗi lần click phải là một focus request mới. Nếu tái dùng
+               * object từ memo, chuỗi A → người dùng chọn B → click lại A sẽ
+               * không kích hoạt effect `[focusSelection]` của editor. */
+              jumpToSelection(program.programId, copyFbdSelection(selection))
+            }
+          : undefined
         output.push({
           id: `${program.programId}:${target.issue.code}:${target.issue.path}`,
           code: target.issue.code,
           detail: target.issue.path,
-          jumpLabel: target.label ? `${program.name} › ${target.label}` : program.name,
-          onJump: () => onSelectProgram(program.programId),
+          jumpLabel: onJump && target.label ? `${program.name} › ${target.label}` : null,
+          onJump,
         })
       }
     }
     return output
-    /* `onSelectProgram` không nằm trong deps vì cùng lý do như trên; nó chỉ
-     * chuyển hướng theo `programId` đã chốt lúc dựng danh sách. */
-  }, [document.programs, pick, checkDiagnostics, onJumpToDiagnostic])
+  }, [document.programs, pick, checkDiagnostics, onJumpToDiagnostic, onJumpToFbdSelection, onSelectProgram])
 
   /* Kiểu dữ liệu của biến KHÔNG có trong snapshot runtime — Core trả giá trị,
    * không trả khai báo. Tra từ chính chỉ mục ký hiệu của POU đang mở là đọc từ

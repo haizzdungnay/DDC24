@@ -2,7 +2,7 @@
 ## D-5 — cấu hình `/data/config/*.conf` (JSON)
 
 > **Document ID:** ICD-CONFIG-MK-DDC-24-VI
-> **Phiên bản:** 2.4 | 2026-07-28 (ADR-017: Ethernet IPv4/DNS transaction authority, management hostname read-only) · 2.3 | 2026-07-22 (desired `network.conf` tách khỏi active kernel state; historian/time/namespace updates 2.2..1.9 retained) · 📘 [README](../../01_specs/README.md)
+> **Phiên bản:** 2.5 | 2026-09-11 (DD-10: loader safe-state trỏ `apps/core/adapters/config/`) · 2.4 | 2026-07-28 (ADR-017: Ethernet IPv4/DNS transaction authority, management hostname read-only) · 2.3 | 2026-07-22 (desired `network.conf` tách khỏi active kernel state; historian/time/namespace updates 2.2..1.9 retained) · 📘 [README](../../01_specs/README.md)
 > **Trace:** `SW_ARCH §5`, `SW-IDE-010..015`, `IDE-020..025`
 
 > Tất cả file cấu hình là **JSON**, nằm ở `/data/config/`, do `mkddc-web` ghi, các service đọc. Mỗi file có **JSON Schema** (validate khi ghi). Dưới đây: schema rút gọn + **ví dụ thật**.
@@ -203,7 +203,7 @@ local-panel scope.
 > **Quan hệ chốt (2026-06-12):** file này cấu hình **relinquish default mức 6** của
 > priority resolver (07 §4). Safety ACTION khi fault/stale (07 §5.3) CỐ ĐỊNH 0V/4mA/open
 > ở cả 3 lớp (MCU/iobus/core), KHÔNG đổi theo file này — config sai không thể làm
-> hệ mất đường về safe. Loader: `services/core/safe_state_config.*` (fail-fast khi JSON hỏng).
+> hệ mất đường về safe. Loader: `apps/core/adapters/config/safe_state_config.{hpp,cpp}` (fail-fast khi JSON hỏng).
 
 ## 4. `virtual_points.conf` — backend-owned Virtual Points
 

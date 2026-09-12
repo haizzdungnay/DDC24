@@ -1,15 +1,16 @@
 import { useI18n } from '../../../shared/i18n'
+import { formatTechnicalDateTime } from '../../../shared/dateTime'
 import { Panel } from '../../../shared/components/Panel'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import type { ProgrammingRuntime } from '../model/types'
 
 /**
- * Tab "Runtime" của PGM-04 (`UJ-PROG-07`) — `RuntimeSummary` + `TaskRuntimeTable`
+ * Tab "Runtime" của PGM-06 (`UJ-PROG-07`) — `RuntimeSummary` + `TaskRuntimeTable`
  * + `CoreConnectionPanel`. Metric Task được chụp cùng point snapshot ở cuối
  * scan; thiếu snapshot giữ `—`, không suy ra từ nhịp poll của trình duyệt.
  */
 export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | null; status: 'loading' | 'ready' | 'error' }) {
-  const { pick } = useI18n()
+  const { pick, locale } = useI18n()
   const coreState = status === 'error' || !runtime || runtime.producerState === 'UNAVAILABLE' ? 'disconnected' : runtime.producerState === 'DEGRADED' ? 'degraded' : 'connected'
   const coreLabel =
     status === 'error' || !runtime || runtime.producerState === 'UNAVAILABLE'
@@ -41,7 +42,7 @@ export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | 
           </div>
           <div className="flex items-center justify-between">
             <dt className="text-[var(--c-text-dim)]">{pick('Cập nhật lúc', 'Observed at')}</dt>
-            <dd className="text-[var(--c-text-dim)]">{runtime ? new Date(runtime.observedAt).toLocaleString() : '—'}</dd>
+            <dd className="whitespace-nowrap text-[var(--c-text-dim)]">{formatTechnicalDateTime(runtime?.observedAt, locale)}</dd>
           </div>
         </dl>
         {runtime?.safeState && (

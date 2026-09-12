@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Quy trình clean code & clean docs (WF-CLEAN-001)"
+    url: https://github.com/Mekong-HCM/MK-DDC-24/blob/main/docs/00_governance/CLEAN_CODE_WORKFLOW.md
+    about: "Ba vai, ma trận quyền, workflow state, quality gate và lịch chạy. Đọc trước khi tạo Issue."
+  - name: "Quy tắc kiểm soát tài liệu (DOC-GOV-001)"
+    url: https://github.com/Mekong-HCM/MK-DDC-24/blob/main/docs/00_governance/DOC_GOVERNANCE.md
+    about: "Checklist DD-01..DD-13, thang M0..M5 và ba cổng thẩm quyền."

@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useState } from 'react'
 
 import { I18nProvider } from '../i18n'
 import { Modal } from './Modal'
@@ -65,5 +66,54 @@ describe('Modal — vòng Tab', () => {
   it('tiêu đề vẫn nhận tiêu điểm BAN ĐẦU — bỏ nó khỏi vòng Tab không được làm mất vai trò đó', () => {
     const { heading } = renderModal()
     expect(heading).toHaveFocus()
+  })
+})
+
+/**
+ * `T61-505` / `ISS-PGM04-18` — TRẢ TIÊU ĐIỂM khi hộp thoại chỉ dựng lúc mở.
+ *
+ * Nhiều chỗ gọi không giữ `Modal` trong cây khi đóng; chúng `return null` và chỉ
+ * dựng nó lúc mở (`LibraryAuthoringDrawer`: `if (!mode) return null`). Với hình
+ * dạng ấy, `focusin`/`pointerdown` của nút mở đã xảy ra TRƯỚC khi listener của
+ * `Modal` tồn tại — nên bản trước không ghi nhớ được nút nào, và `Esc` trả tiêu
+ * điểm về `document.body`.
+ *
+ * Đó không phải một chi tiết: người dùng bàn phím mở drawer soạn thảo, bấm `Esc`,
+ * và bị thả ở đầu tài liệu — phải Tab lại từ đầu để về đúng nút họ vừa rời. Lỗi
+ * này lộ ra ở lane BROWSER (`artifacts/ui-audit/pgm04`), nơi
+ * `document.activeElement` sau `Esc` đọc được là `BODY`.
+ */
+describe('Modal — trả tiêu điểm về nút mở', () => {
+  function OpenOnDemand() {
+    const [open, setOpen] = useState(false)
+    return (
+      <I18nProvider>
+        <button type="button" onClick={() => setOpen(true)}>Mở hộp thoại</button>
+        {/* CHÍNH hình dạng gây lỗi: hộp thoại không tồn tại cho tới khi mở. */}
+        {open && (
+          <Modal open title="Khối PROJECT mới" onClose={() => setOpen(false)}>
+            <input aria-label="Tên khối" />
+          </Modal>
+        )}
+      </I18nProvider>
+    )
+  }
+
+  it('hộp thoại dựng LÚC MỞ vẫn trả tiêu điểm về đúng nút vừa rời', () => {
+    render(<OpenOnDemand />)
+    const opener = screen.getByRole('button', { name: 'Mở hộp thoại' })
+    /* Đặt tiêu điểm TRƯỚC khi bấm: người dùng thật tới nút bằng bàn phím hoặc
+       chuột, và cả hai đều đặt tiêu điểm lên nó. Bấm mà không focus là đo phép
+       đo của chính mình. */
+    opener.focus()
+    fireEvent.click(opener)
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(opener).toHaveFocus()
+    /* Vế đối chứng: `body` là câu trả lời SAI, và là câu bản trước đưa ra. */
+    expect(document.activeElement).not.toBe(document.body)
   })
 })

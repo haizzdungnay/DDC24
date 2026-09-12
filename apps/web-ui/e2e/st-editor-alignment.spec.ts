@@ -4,7 +4,7 @@ import { login } from './helpers/session'
 /**
  * FE-ST-001..006/010 — báo cáo trực tiếp 2026-08-17 kèm ảnh chụp cho thấy
  * lưới kẻ dòng CẮT XUYÊN chữ, không phải lệch nhẹ. Gốc lỗi thật (xem
- * `ProgramsTab.tsx`, chỗ khai báo `EDITOR_TEXT_METRICS`): `styles.css` có
+ * `EditorPane.tsx`, chỗ khai báo `EDITOR_TEXT_METRICS`): `styles.css` có
  * rule `button, input, select, textarea { font: inherit }` KHÔNG nằm trong
  * `@layer` nào — luôn thắng `text-sm`/`leading-5` (Tailwind, có layer) CHỈ
  * trên `<textarea>`, khiến textarea render chữ theo font-size/line-height
@@ -308,7 +308,7 @@ test.describe('ST Editor — căn chỉnh pixel gutter/overlay/textarea (FE-ST-0
  * CŨ trong khi con trỏ DOM thật của textarea bị React đặt lại (quan sát
  * được: về offset 0) khi `.value` đổi toàn bộ mà không ai ghi đè selection.
  * Sửa bằng `mapOffsetByNonWhitespaceCount`/`mapOffsetAcrossReplaceAll`
- * (`ProgramsTab.tsx`) đi qua `applyEditRange` như mọi đường sửa nội dung
+ * (`EditorPane.tsx`) đi qua `applyEditRange` như mọi đường sửa nội dung
  * khác. Test bằng Chrome thật vì đây là hành vi tương tác con trỏ DOM thật,
  * không phải điều jsdom mô phỏng chính xác được.
  */

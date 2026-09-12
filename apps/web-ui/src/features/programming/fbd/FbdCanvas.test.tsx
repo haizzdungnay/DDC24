@@ -1,10 +1,11 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
 import { I18nProvider } from '../../../shared/i18n'
 import { StructuredFbdEditor } from './StructuredFbdEditor'
+import { minimapClientToGraph } from './FbdCanvas'
 import type { FbdDocument } from './model'
 
 function golden(): FbdDocument {
@@ -144,7 +145,7 @@ describe('FbdCanvas — canvas node-edge thật (T59-806)', () => {
  * nhưng UI chỉ hiện một con số "3 lỗi Draft". Người dùng có toạ độ lỗi trong
  * tay mà vẫn phải tự đi tìm.
  */
-describe('FBD Problems — nhảy tới đúng block/dây (T59-806 / AC-FBD-007)', () => {
+describe('FBD Problems — một danh sách dùng chung ở bottom workbench', () => {
   function brokenDocument(): FbdDocument {
     const document = golden()
     // typeRef không khớp kind ⇒ FBD-SEM-TYPE-REF-001 neo vào đúng node
@@ -152,36 +153,14 @@ describe('FBD Problems — nhảy tới đúng block/dây (T59-806 / AC-FBD-007)
     return document
   }
 
-  it('mỗi lỗi neo được là một nút nhảy tới đúng block', () => {
+  it('editor chỉ đánh dấu block lỗi, không dựng danh sách Problems thứ hai', () => {
     render(
       <I18nProvider>
         <StructuredFbdEditor document={brokenDocument()} canEdit onChange={vi.fn()} />
       </I18nProvider>,
     )
-    const problems = screen.getByRole('group', { name: 'Vấn đề FBD' })
-    const jump = within(problems).getByRole('button', { name: /FBD-SEM-TYPE-REF-001/ })
-    fireEvent.click(jump)
-
-    const block = screen.getByRole('button', { name: /#2 · BOOL/ })
-    expect(block).toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('lỗi không neo được vào phần tử nào thì nói thẳng, không đưa tới block gần đúng', () => {
-    const document = golden()
-    document.profileId = 'attacker-profile' as FbdDocument['profileId']
-    render(
-      <I18nProvider>
-        <StructuredFbdEditor document={document} canEdit onChange={vi.fn()} />
-      </I18nProvider>,
-    )
-    const problems = screen.getByRole('group', { name: 'Vấn đề FBD' })
-    expect(within(problems).getByText(/không neo vào block nào/)).toBeInTheDocument()
-    expect(within(problems).queryByRole('button', { name: /FBD-SCHEMA-ROOT-001/ })).toBeNull()
-  })
-
-  it('tài liệu hợp lệ thì không có khay Vấn đề nào', () => {
-    renderEditor()
     expect(screen.queryByRole('group', { name: 'Vấn đề FBD' })).toBeNull()
+    expect(screen.getByRole('button', { name: /#2 · BOOL/ })).toHaveAccessibleName(/Có lỗi chẩn đoán/)
   })
 })
 
@@ -223,9 +202,82 @@ describe('FbdCanvas — minimap theo ngưỡng kích thước (AC-FBD-012)', () 
       </I18nProvider>,
     )
     const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    expect(minimap).toHaveAttribute('tabindex', '0')
+    expect(minimap).toHaveAttribute('aria-keyshortcuts', expect.stringContaining('ArrowRight'))
     expect(minimap.querySelectorAll('rect')).toHaveLength(30)
     // minimap dùng CHUNG hệ toạ độ với canvas chính, không phải một phép xếp thứ hai
     const surface = screen.getByRole('group', { name: /Sơ đồ ENABLE_LOGIC/ })
     expect(minimap.getAttribute('viewBox')).toBe(surface.getAttribute('viewBox'))
+  })
+
+  it('TC-FBD-NAV-001: bàn phím điều hướng Mini Map mà không mutate canonical', () => {
+    const onChange = vi.fn()
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor document={documentWithNodes(30)} canEdit onChange={onChange} />
+      </I18nProvider>,
+    )
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    const surface = screen.getByRole('group', { name: /Sơ đồ ENABLE_LOGIC/ })
+    const viewport = surface.parentElement as HTMLDivElement
+    minimap.focus()
+    fireEvent.keyDown(minimap, { key: 'ArrowRight' })
+    fireEvent.keyDown(minimap, { key: 'ArrowDown' })
+    expect(viewport.scrollLeft).toBe(32)
+    expect(viewport.scrollTop).toBe(32)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('TC-FBD-NAV-001: phép đổi toạ độ loại phần letterbox của xMidYMid meet', () => {
+    const point = minimapClientToGraph(
+      { x: 88, y: 43.2 },
+      { left: 0, top: 0, width: 176, height: 104 },
+      1_000,
+      100,
+    )
+    expect(point?.x).toBeCloseTo(500, 6)
+    expect(point?.y).toBeCloseTo(0, 6)
+  })
+
+  it('TC-FBD-NAV-001: kéo trên minimap đổi viewport nhưng không mutate canonical', () => {
+    const onChange = vi.fn()
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor document={documentWithNodes(30)} canEdit onChange={onChange} />
+      </I18nProvider>,
+    )
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' }) as unknown as SVGSVGElement
+    minimap.getBoundingClientRect = () => ({
+      left: 0, top: 0, width: 176, height: 104, right: 176, bottom: 104, x: 0, y: 0,
+      toJSON: () => {},
+    })
+    const surface = screen.getByRole('group', { name: /Sơ đồ ENABLE_LOGIC/ })
+    const viewport = surface.parentElement as HTMLDivElement
+    Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 })
+    Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 100 })
+
+    const background = surface.querySelector('[data-fbd-canvas-bg="true"]') as SVGRectElement
+    fireEvent.pointerDown(background, { pointerId: 3, button: 1, clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(background, { pointerId: 3, button: 1, clientX: 40, clientY: 24 })
+    fireEvent.pointerUp(background, { pointerId: 3, button: 1, clientX: 40, clientY: 24 })
+    fireEvent.click(screen.getByRole('button', { name: 'Phóng to' }))
+
+    fireEvent.pointerDown(minimap, { pointerId: 9, clientX: 88, clientY: 52 })
+    const firstTop = viewport.scrollTop
+    fireEvent.pointerMove(minimap, { pointerId: 9, clientX: 88, clientY: 96 })
+    fireEvent.pointerUp(minimap, { pointerId: 9, clientX: 88, clientY: 96 })
+
+    expect(viewport.scrollTop).toBeGreaterThan(firstTop)
+    const [, , graphWidth, graphHeight] = (minimap.getAttribute('viewBox') ?? '').split(/\s+/).map(Number)
+    const target = minimapClientToGraph(
+      { x: 88, y: 96 },
+      { left: 0, top: 0, width: 176, height: 104 },
+      graphWidth,
+      graphHeight,
+    )
+    expect(target).not.toBeNull()
+    expect(Math.abs((viewport.scrollLeft + viewport.clientWidth / 2) - (40 + target!.x * 1.2))).toBeLessThanOrEqual(8)
+    expect(Math.abs((viewport.scrollTop + viewport.clientHeight / 2) - (24 + target!.y * 1.2))).toBeLessThanOrEqual(8)
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

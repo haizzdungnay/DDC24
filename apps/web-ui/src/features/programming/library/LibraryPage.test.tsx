@@ -971,3 +971,50 @@ describe('LibraryPage — returnTo và tab Inspector', () => {
     expect(screen.queryByRole('link', { name: /Quay lại chỗ đang làm/ })).not.toBeInTheDocument()
   })
 })
+
+
+/**
+ * `ISS-PGUI-02` / `PC-005` — thẻ phạm vi hiện "Hệ thống" ngay giữa giao diện
+ * English.
+ *
+ * Nguyên nhân là chữ ký `scopeLabel(scope, english: boolean)`: cả hai chỗ gọi
+ * (thẻ khối và Inspector) truyền hằng `false`. Chữ ký mới nhận `pick`, nên
+ * không còn tham số nào để truyền hằng vào.
+ */
+describe('LibraryPage — ISS-PGUI-02: phạm vi theo đúng ngôn ngữ đang chọn', () => {
+  function stubTwoScopes() {
+    stub(() => Promise.resolve({ items: [
+      entry(),
+      entry({ scope: 'SYSTEM', entryId: 'TON', name: 'TON', kind: 'FUNCTION_BLOCK', libraryRevisionId: 'system', libraryState: 'PUBLISHED', stateLayoutKnown: true, stateSizeBytes: 16 }),
+    ] }))
+  }
+
+  it('giao diện English: thẻ khối và Inspector đều nói "System"/"Project"', async () => {
+    localStorage.setItem('mkddc-lang', 'en')
+    stubTwoScopes()
+    renderPage()
+
+    const systemCard = await waitFor(() => cardFor('TON'))
+    expect(within(systemCard).getByText('System')).toBeInTheDocument()
+    expect(systemCard.textContent).not.toContain('Hệ thống')
+
+    fireEvent.click(systemCard)
+    // Inspector là chỗ gọi thứ hai, và nó truyền hằng `false` y hệt thẻ khối.
+    const scopeRow = await waitFor(() => {
+      const label = screen.getByText('Scope')
+      const row = label.parentElement
+      if (!row) throw new Error('không tìm được hàng Phạm vi trong Inspector')
+      return row
+    })
+    expect(scopeRow.textContent).toContain('System')
+    expect(scopeRow.textContent).not.toContain('Hệ thống')
+  })
+
+  it('giao diện tiếng Việt vẫn nói "Hệ thống"/"Dự án"', async () => {
+    stubTwoScopes()
+    renderPage()
+    const systemCard = await waitFor(() => cardFor('TON'))
+    expect(within(systemCard).getByText('Hệ thống')).toBeInTheDocument()
+    expect(within(cardFor('SCALE_LIN')).getByText('Dự án')).toBeInTheDocument()
+  })
+})

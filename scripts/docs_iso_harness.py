@@ -5,8 +5,9 @@ Chạy:
     python3 scripts/docs_iso_harness.py            # tóm tắt
     python3 scripts/docs_iso_harness.py -v         # kèm chi tiết từng vi phạm
     python3 scripts/docs_iso_harness.py --expect   # bật cả kiểm ngưỡng, dùng cho CI
+    python3 scripts/docs_iso_harness.py --selftest # kiểm luật bóc link của phép kiểm 8
 
-Bảy phép kiểm:
+Tám phép kiểm:
   1. Toàn bộ authority baseline thống nhất tồn tại tại đúng đường dẫn chuẩn
   2. Liên kết Markdown nội bộ và anchor phải phân giải được
   3. Trailing whitespace = 0
@@ -14,6 +15,9 @@ Bảy phép kiểm:
   5. Không trùng Document ID
   6. Đếm ID theo họ: requirement / VS-PROG / RSK / UC / UJ / UX-REQ / OD
   7. Bất biến ma trận trace: không có `P=Y khi T=N`, không có `R=Y khi P=N`
+  8. Link tương đối trên **mọi** file `docs/**/*.md` phải trỏ tới đích có thật
+     (`docs_link_missing`). Khác phép kiểm 2 ở phạm vi: phép kiểm 2 chỉ soi
+     danh sách cứng `BASELINE + EXTRA`, phép kiểm 8 quét toàn cây `docs/`.
   Cộng: đường dẫn `docs/**` viết trong code span phải tồn tại; các record P0 và
   template Test Result và manifest ngoài baseline cũng được quét link/ID/format.
 
@@ -40,6 +44,7 @@ EXPECT = {
     "baseline_files": 17,
     "support_files": 5,
     "link_missing": 0,
+    "docs_link_missing": 0,
     "anchor_missing": 0,
     "trailing_ws": 0,
     "fence_bad": 0,
@@ -50,11 +55,11 @@ EXPECT = {
     "trace_violations": 0,
     "vs_prog": 47,
     "rsk_prog": 23,
-    "od_prog": 16,
+    "od_prog": 17,
     "uc_prog": 17,
     "uj_prog": 8,
-    "ux_req": 27,
-    "svg_assets": 14,
+    "ux_req": 29,
+    "programming_visual_assets": 10,
 }
 
 BASELINE = [
@@ -85,6 +90,21 @@ EXTRA = [
 ]
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+
+# Phép kiểm link toàn `docs/**` (phép kiểm 8) dùng regex RIÊNG, không dùng
+# `LINK_RE`: `LINK_RE` không bóc được cú pháp ngoặc nhọn hợp lệ của Markdown
+# `[nhãn](<đường/dẫn>)`, nên nó giữ luôn cặp `<>` trong đường dẫn và báo một
+# mục không tồn tại ở
+# `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/reviews/PGM02_ST_FBD_REDESIGN_IMPLEMENTATION_REVIEW.md:255`
+# trong khi file ảnh đó có thật. Một cổng mà lần đầu bật đã báo sai một mục
+# thì lần sau không ai tin nó — nên nhánh `<...>` phải được bóc riêng.
+# Nhánh 1 `<...>`: cho phép dấu cách bên trong. Nhánh 2: đường dẫn trần.
+DOCS_LINK_RE = re.compile(r"\[[^\]]*\]\(\s*(?:<([^>\n]*)>|([^()\s]*))\s*\)")
+
+# Scheme không phải đường dẫn cục bộ nên không kiểm tồn tại. `file:` giữ
+# nguyên hành vi của phép kiểm cũ.
+LINK_SKIP_PREFIX = ("http://", "https://", "mailto:", "#", "file:")
+
 HEAD_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
 
 
@@ -124,7 +144,120 @@ def anchors_of(path):
     return res
 
 
+def extract_link_targets(line):
+    """Bóc các link cục bộ cần kiểm tồn tại trong một dòng Markdown.
+
+    Trả về danh sách `(target gốc, phần đường dẫn đã cắt anchor)`. Link ngoài
+    (`http`, `mailto`, …), anchor thuần `#muc` và scheme `file:` bị bỏ qua —
+    chúng không phải đường dẫn cục bộ.
+
+    Tách riêng khỏi `scan_docs_links` để `--selftest` kiểm được luật bóc mà
+    không cần dựng cây thư mục thật.
+    """
+    out = []
+    for m in DOCS_LINK_RE.finditer(line):
+        raw = m.group(1) if m.group(1) is not None else m.group(2)
+        target = (raw or "").strip()
+        if not target or target.startswith(LINK_SKIP_PREFIX):
+            continue
+        # Cắt anchor trước khi kiểm tồn tại: `a.md#muc` trỏ file `a.md`.
+        path_part = target.split("#", 1)[0]
+        if not path_part:
+            continue
+        out.append((target, path_part))
+    return out
+
+
+def selftest():
+    """Khoá lại luật bóc link của phép kiểm 8.
+
+    Ca quan trọng nhất là cú pháp ngoặc nhọn `[nhãn](<đường/dẫn>)`: regex cũ
+    `LINK_RE` giữ luôn cặp `<>` trong đường dẫn và biến một link ĐÚNG thành
+    một báo động giả. Nếu ai đó gộp hai regex làm một trong tương lai, ca này
+    phải đỏ ngay tại đây chứ không phải sau khi cổng đã báo sai cho cả repo.
+    """
+    cases = [
+        # (dòng, danh sách path_part kỳ vọng)
+        ("[a](<../assets/x.png>)", ["../assets/x.png"]),
+        ("[a](<../assets/co dau cach.png>)", ["../assets/co dau cach.png"]),
+        ("[a](./b.md)", ["./b.md"]),
+        ("[a](./b.md#muc-1)", ["./b.md"]),
+        ("[a](#chi-anchor)", []),
+        ("[a](https://x/y) [b](http://x) [c](mailto:a@b)", []),
+        ("[a](file:///C:/tmp/x.md)", []),
+        ("[a](x.md) và [b](<y.md>)", ["x.md", "y.md"]),
+        ("khong co link", []),
+    ]
+    failed = 0
+    for line, expected in cases:
+        got = [path for _, path in extract_link_targets(line)]
+        if got != expected:
+            failed += 1
+            print(f"  FAIL {line!r}: kỳ vọng {expected}, thực tế {got}")
+    # Anchor phải được giữ nguyên trong target gốc để thông báo lỗi đọc được.
+    targets = extract_link_targets("[a](./b.md#muc-1)")
+    if targets and targets[0][0] != "./b.md#muc-1":
+        failed += 1
+        print(f"  FAIL target gốc mất anchor: {targets[0][0]!r}")
+    print(f"selftest phép kiểm 8: {len(cases) + 1 - failed}/{len(cases) + 1} đạt")
+    return 1 if failed else 0
+
+
+def count_docs_md():
+    """Số file `.md` dưới `docs/` — in kèm để người đọc thấy ngay phạm vi quét,
+    thay vì phải tin một con số không nói mình đo trên bao nhiêu hồ sơ."""
+    total = 0
+    for root, dirs, filenames in os.walk(os.path.join(REPO, "docs")):
+        dirs[:] = [d for d in dirs if d != "node_modules"]
+        total += sum(1 for name in filenames if name.endswith(".md"))
+    return total
+
+
+def scan_docs_links():
+    """Đếm link tương đối trỏ tới đường dẫn không tồn tại trên MỌI file
+    `docs/**/*.md`.
+
+    Phép kiểm `link_missing` (số 2) chỉ quét danh sách cứng `BASELINE + EXTRA`
+    = 22 file, trong khi `docs/` có hơn 400 file `.md`. Nó in `0` và người đọc
+    hiểu là "link trong docs/ đã được canh" — rộng hơn hẳn thứ nó thật sự đo.
+    Phép kiểm này đóng đúng khoảng cách đó, và vì không dùng danh sách cứng
+    nên mọi hồ sơ thêm sau này đều tự động nằm trong phạm vi.
+
+    Cố ý CHỈ kiểm sự tồn tại của đích. Không mở rộng anchor/whitespace/fence
+    sang tập rộng: chúng sẽ báo hàng nghìn mục và làm cổng mất tác dụng.
+    """
+    hits = []
+    docs_root = os.path.join(REPO, "docs")
+    for root, dirs, filenames in os.walk(docs_root):
+        dirs[:] = [d for d in dirs if d != "node_modules"]
+        for name in sorted(filenames):
+            if not name.endswith(".md"):
+                continue
+            full = os.path.join(root, name)
+            rel = os.path.relpath(full, REPO)
+            try:
+                with open(full, encoding="utf-8", errors="ignore") as fh:
+                    lines = fh.read().split("\n")
+            except OSError:
+                continue
+            in_fence = False
+            for i, ln in enumerate(lines, 1):
+                if ln.lstrip().startswith("```"):
+                    in_fence = not in_fence
+                    continue
+                if in_fence:
+                    continue
+                for target, path_part in extract_link_targets(ln):
+                    dest = os.path.normpath(os.path.join(root, path_part))
+                    if not os.path.exists(dest):
+                        hits.append(f"{rel}:{i} -> {target}")
+    return hits
+
+
 def main():
+    if "--selftest" in sys.argv:
+        return selftest()
+
     problems = collections.defaultdict(list)
     files = [os.path.join(REPO, p) for p in BASELINE + EXTRA]
 
@@ -204,6 +337,14 @@ def main():
     print(f"trailing whitespace: {trailing_ws}")
     print(f"code fence lệch    : {len(fence_bad)} {fence_bad}")
 
+    # Phép kiểm 8 — link trên TOÀN BỘ `docs/**`, không dùng danh sách cứng.
+    docs_md_total = count_docs_md()
+    docs_link_hits = scan_docs_links()
+    problems["docs_link"] = docs_link_hits
+    print(f"docs/** link missing: {len(docs_link_hits)} (quét {docs_md_total} file .md)")
+    for item in docs_link_hits[:20]:
+        print(f"  {item}")
+
     print("\n=== 3. Duplicate document ID ===")
     dups = {k: v for k, v in doc_ids.items() if len(v) > 1}
     print(f"duplicate doc ID: {len(dups)}")
@@ -250,10 +391,16 @@ def main():
     print(f"UJ-PROG trong Product Spec: {len(sorted(set(uj_re.findall(prod))))}")
     print(f"UJ-PROG trong Trace: {len(sorted(set(uj_re.findall(trace_txt))))}")
 
-    # SVG assets
+    # Asset trực quan Programming theo gói FE Handoff được chủ sở hữu duyệt.
     import glob as _g
-    svgs = _g.glob(os.path.join(REPO, "docs/04_uiux/assets/programming/*.svg"))
-    print(f"SVG asset: {len(svgs)}")
+    handoff_assets_dir = os.path.join(
+        REPO, "docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets"
+    )
+    programming_visual_assets = [
+        path for path in _g.glob(os.path.join(handoff_assets_dir, "*"))
+        if os.path.splitext(path)[1].lower() in {".png", ".html"}
+    ]
+    print(f"Asset trực quan Programming: {len(programming_visual_assets)}")
 
     uxr_re = re.compile(r"`?(UX-REQ-\d{3})`?")
     uxr = sorted(set(uxr_re.findall(ux_txt)))
@@ -313,7 +460,7 @@ def main():
 
     if "-v" in sys.argv:
         print("\n=== chi tiết ===")
-        for k in ("link", "anchor", "ws", "span"):
+        for k in ("link", "docs_link", "anchor", "ws", "span"):
             for item in problems[k][:200]:
                 print(f"  [{k}] {item}")
 
@@ -322,6 +469,7 @@ def main():
         "baseline_files": len(BASELINE) - len(missing_files),
         "support_files": len(EXTRA) - len(missing_extra),
         "link_missing": link_missing,
+        "docs_link_missing": len(docs_link_hits),
         "anchor_missing": anchor_missing,
         "trailing_ws": trailing_ws,
         "fence_bad": len(fence_bad),
@@ -336,7 +484,7 @@ def main():
         "uc_prog": len(uc),
         "uj_prog": len(sorted(set(uj_re.findall(ux_txt)))),
         "ux_req": len(uxr),
-        "svg_assets": len(svgs),
+        "programming_visual_assets": len(programming_visual_assets),
     }
 
     # Vi phạm bắt buộc: các phép kiểm phải bằng 0 hoặc đủ file baseline.
@@ -345,8 +493,8 @@ def main():
         hard.append("thiếu file baseline")
     if actual["support_files"] != EXPECT["support_files"]:
         hard.append("thiếu file hỗ trợ Programming")
-    for k in ("link_missing", "anchor_missing", "trailing_ws", "fence_bad",
-              "duplicate_doc_id", "span_missing", "trace_violations"):
+    for k in ("link_missing", "docs_link_missing", "anchor_missing", "trailing_ws",
+              "fence_bad", "duplicate_doc_id", "span_missing", "trace_violations"):
         if actual[k] != 0:
             hard.append(f"{k}={actual[k]}")
 

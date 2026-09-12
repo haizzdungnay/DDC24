@@ -4,7 +4,7 @@
 |---|---|
 | ID | `PROG-P0-CONSUMER-REVIEW-2026-08-10` |
 | Loại | Biên bản consumer review; hồ sơ hỗ trợ, không phải hồ sơ thứ 23 của baseline |
-| Phiên bản | 1.6 |
+| Phiên bản | 1.7 |
 | Ngày | 2026-08-11 |
 | Phạm vi | 22 hồ sơ baseline; điều kiện “consumer review liên chức năng” của `PLAN_READY` |
 | Chủ quản | Dev Lead (tổ chức review) |
@@ -13,6 +13,15 @@
 | Candidate **đầu vào** của vòng review | `e3e9fb26f61b39df8f805916333fc03b51f07f5f` — nay đã **`SUPERSEDED`** |
 | Candidate **hiện hành** | Candidate v2.8: **22 SHA-256** tại [`PROG-P0-CANDIDATE-MANIFEST-2026-08-10`](PROGRAMMING_P0_CANDIDATE_MANIFEST_2026-08-10.md) §2; kiểm bằng `python3 scripts/candidate_pin_check.py` |
 | Gói chủ quản | [`PROG-P0-GATE-2026-08-10`](PROGRAMMING_P0_GATE_REVIEW_PACKAGE_2026-08-10.md) |
+
+
+> **Ghi chú authority ngày 2026-09-06:** Đây là biên bản lịch sử dùng IA bốn
+> workspace tại thời điểm lập. Các nhãn Check/Commission=PGM-03 và
+> Runtime/Bảo trì=PGM-04 bên dưới chỉ mô tả baseline cũ, đã **SUPERSEDED**.
+> Authority hiện hành là UX-WEB-PROG-001 §2:
+> PGM-03 Mapping, PGM-04 Control Library, PGM-05 Check/Commission,
+> PGM-06 Runtime. Không dùng số PGM lịch sử trong file này làm route hoặc
+> acceptance authority mới.
 
 ## 0. Đọc nhanh
 
@@ -399,6 +408,7 @@ baseline implement, chạy `python3 scripts/candidate_pin_check.py`.
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
+| 1.7 | 2026-09-06 | Thêm banner authority phân biệt số PGM của candidate lịch sử với IA sáu workspace hiện hành; không đổi disposition hoặc chữ ký/waiver của review. |
 | 1.0 | 2026-08-10 | Thực hiện vòng consumer review kỹ thuật trên candidate `e3e9fb2`: 22 hồ sơ theo cặp producer→consumer, kiểm As-Built với source thật, kiểm truy vết hai chiều bằng máy; mở và đóng 9 finding `F-CR-01..09`; giữ `M4` `0/22` và `PLAN_READY` `BLOCKED` vì chữ ký người thật còn thiếu |
 | 1.1 | 2026-08-10 | Sửa số đếm sai của chính biên bản này: **9/22** hồ sơ đổi chứ không phải 7 — `PROG-DOCSET-001` và `PLAN-PROG-053` cũng thuộc mẫu số 22 và đã đổi khi đồng bộ tracker. Ghi nhận candidate mới đã được ghim bằng 22 SHA-256 (manifest v2.1); chuyển việc “phát hành manifest mới” sang đã xong |
 | 1.2 | 2026-08-10 | Đóng `F-CR-10`: tách rõ candidate **đầu vào** của vòng review (`e3e9fb2`, nay `SUPERSEDED`) khỏi candidate **để ký** (22 SHA-256); thêm §2.6 bảng số đo **cuối cùng** để không ai đọc nhầm số `FAIL` trung gian ở §2.1 làm trạng thái hiện hành; thêm bảng đối chiếu hai phát biểu “review kỹ thuật xong” và “authority đã ký” |

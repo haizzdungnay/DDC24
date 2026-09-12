@@ -1,7 +1,16 @@
 import type { FbdNode, FbdPoint } from './model'
-import type { FbdNodeGeometry, FbdWireGeometry } from './geometry'
-import { FBD_NODE_HEADER_HEIGHT, FBD_NODE_WIDTH } from './geometry'
+import type { FbdNodeGeometry, FbdPortGeometry, FbdWireGeometry } from './geometry'
+import {
+  FBD_NODE_HEADER_HEIGHT,
+  FBD_NODE_PADDING_BOTTOM,
+  FBD_NODE_WIDTH,
+  FBD_PORT_ROW_HEIGHT,
+  fbdWirePathBezier,
+  fbdWirePathOrthogonal,
+} from './geometry'
 import type { FbdSelection } from './commands'
+import { fbdPaletteEntry } from './palette'
+import { formatNodeParameterSummary, formatPortLabel } from './nodeLabel'
 
 export interface FbdGridPatternProps {
   networkId: string
@@ -84,12 +93,17 @@ export interface FbdNodesLayerProps {
   canEdit: boolean
   networkId: string
   tempPositions: Map<string, FbdPoint> | null
+  issueNodeIds?: ReadonlySet<string>
+  pick?: (vi: string, en: string) => string
   select: (next: FbdSelection) => void
   beginDrag: (event: React.PointerEvent<SVGGElement>, node: FbdNode) => void
   moveDrag: (event: React.PointerEvent<SVGGElement>) => void
   endDrag: (event: React.PointerEvent<SVGGElement>) => void
   cancelDrag: () => void
   registerPort: (portId: string, element: SVGGElement | null) => void
+  onPortPointerDown?: (event: React.PointerEvent<SVGGElement>, port: FbdPortGeometry) => void
+  onPortPointerUp?: (event: React.PointerEvent<SVGGElement>, port: FbdPortGeometry) => void
+  onPortClick?: (event: React.MouseEvent<SVGGElement>, port: FbdPortGeometry) => void
 }
 
 export function FbdNodesLayer({
@@ -100,12 +114,17 @@ export function FbdNodesLayer({
   canEdit,
   networkId,
   tempPositions,
+  issueNodeIds,
+  pick,
   select,
   beginDrag,
   moveDrag,
   endDrag,
   cancelDrag,
   registerPort,
+  onPortPointerDown,
+  onPortPointerUp,
+  onPortClick,
 }: FbdNodesLayerProps) {
   return (
     <>
@@ -121,12 +140,25 @@ export function FbdNodesLayer({
           (selection?.kind === 'node' && selection.nodeId === placed.id) ||
           (selection?.kind === 'multi-node' && selection.nodeIds.includes(placed.id))
 
+        const hasIssue = issueNodeIds?.has(placed.id) === true
+        const issueNotice = hasIssue
+          ? pick
+            ? pick(' · Có lỗi chẩn đoán', ' · Has diagnostic issue')
+            : ' · Có lỗi chẩn đoán'
+          : ''
+
+        const paramSummary = formatNodeParameterSummary(node.kind, node.parameters)
+
         return (
-          <g key={placed.id} transform={dx !== 0 || dy !== 0 ? `translate(${dx}, ${dy})` : undefined}>
+          <g
+            key={placed.id}
+            data-fbd-node-id={placed.id}
+            transform={dx !== 0 || dy !== 0 ? `translate(${dx}, ${dy})` : undefined}
+          >
             <g
               role="button"
               tabIndex={0}
-              aria-label={`#${node.executionOrder} · ${node.typeRef} · ${node.kind}`}
+              aria-label={`#${node.executionOrder} · ${node.typeRef} · ${node.kind}${issueNotice}`}
               aria-pressed={isSelected}
               className={
                 canEdit
@@ -157,15 +189,47 @@ export function FbdNodesLayer({
                 height={placed.height}
                 rx={6}
                 fill="var(--c-surface-2)"
-                stroke={isSelected ? 'var(--c-accent)' : 'var(--c-border)'}
-                strokeWidth={isSelected ? 2 : 1}
+                stroke={
+                  isSelected
+                    ? 'var(--c-accent)'
+                    : hasIssue
+                    ? 'var(--c-warn-fg)'
+                    : 'var(--c-border)'
+                }
+                strokeWidth={isSelected || hasIssue ? 2 : 1}
               />
-              <text x={placed.x + 10} y={placed.y + 18} className="text-[11px]" fill="var(--c-text)">
+              {hasIssue && (
+                <circle
+                  cx={placed.x + placed.width - 12}
+                  cy={placed.y + 12}
+                  r={4}
+                  fill="var(--c-warn-fg)"
+                  data-fbd-node-issue="true"
+                  aria-hidden="true"
+                />
+              )}
+              <text x={placed.x + 10} y={placed.y + 16} className="text-[11px]" fill="var(--c-text)">
                 #{node.executionOrder} · {node.typeRef}
               </text>
-              <text x={placed.x + 10} y={placed.y + 32} className="text-[10px]" fill="var(--c-text-dim)">
+              <text
+                x={placed.x + 10}
+                y={placed.y + (paramSummary ? 26 : 30)}
+                className="text-[9px]"
+                fill="var(--c-text-dim)"
+              >
                 {node.kind}
               </text>
+              {paramSummary && (
+                <text
+                  x={placed.x + 10}
+                  y={placed.y + 35}
+                  data-fbd-node-param="true"
+                  className="text-[9px] font-mono"
+                  fill="var(--c-text)"
+                >
+                  {paramSummary}
+                </text>
+              )}
               <line
                 x1={placed.x}
                 y1={placed.y + FBD_NODE_HEADER_HEIGHT - 4}
@@ -189,7 +253,23 @@ export function FbdNodesLayer({
                   aria-label={`${node.typeRef} ${definition.direction} ${definition.name} ${definition.dataType}${definition.unit ? ` ${definition.unit}` : ''}`}
                   aria-pressed={selected}
                   className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-                  onClick={() => select({ kind: 'port', networkId, nodeId: placed.id, portId: port.id })}
+                  onPointerDown={(event) => {
+                    // Ngăn node drag nuốt cử chỉ wire (G4)
+                    event.stopPropagation()
+                    onPortPointerDown?.(event, port)
+                  }}
+                  onPointerUp={(event) => {
+                    event.stopPropagation()
+                    onPortPointerUp?.(event, port)
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (onPortClick) {
+                      onPortClick(event, port)
+                    } else {
+                      select({ kind: 'port', networkId, nodeId: placed.id, portId: port.id })
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
@@ -211,8 +291,9 @@ export function FbdNodesLayer({
                     textAnchor={port.direction === 'INPUT' ? 'start' : 'end'}
                     className="text-[10px]"
                     fill="var(--c-text-dim)"
+                    data-fbd-port-text="true"
                   >
-                    {definition.name}
+                    {formatPortLabel(definition.name, definition.dataType, definition.unit)}
                   </text>
                 </g>
               )
@@ -221,6 +302,45 @@ export function FbdNodesLayer({
         )
       })}
     </>
+  )
+}
+
+/** `TC-FBD-LAYOUT-001` — lớp ghost chỉ đọc. Vị trí xem trước không thay thế
+ * geometry canonical và không nhận pointer/focus, nên Cancel luôn là 0 diff. */
+export function FbdLayoutPreviewLayer({
+  nodes,
+  positions,
+}: {
+  nodes: readonly FbdNodeGeometry[]
+  positions: Readonly<Record<string, FbdPoint>> | null
+}) {
+  if (!positions) return null
+  return (
+    <g data-fbd-layout-preview="true" aria-hidden="true" pointerEvents="none">
+      {nodes.map((node) => {
+        const point = positions[node.id]
+        if (!point) return null
+        return (
+          <g key={node.id} data-fbd-layout-preview-node={node.id}>
+            <rect
+              x={point.x}
+              y={point.y}
+              width={node.width}
+              height={node.height}
+              rx={6}
+              fill="var(--c-accent-bg)"
+              fillOpacity={0.45}
+              stroke="var(--c-accent)"
+              strokeWidth={2}
+              strokeDasharray="7 4"
+            />
+            <text x={point.x + 8} y={point.y + 16} className="text-[10px]" fill="var(--c-accent)">
+              #{node.id.slice(0, 8)}
+            </text>
+          </g>
+        )
+      })}
+    </g>
   )
 }
 
@@ -254,5 +374,107 @@ export function FbdMarqueeLayer({ marquee }: FbdMarqueeLayerProps) {
       strokeDasharray="4 2"
       pointerEvents="none"
     />
+  )
+}
+
+export interface FbdWirePreviewLayerProps {
+  preview: {
+    from: FbdPoint
+    to: FbdPoint
+  } | null
+  wireStyle?: 'ORTHOGONAL' | 'BEZIER'
+}
+
+export function FbdWirePreviewLayer({ preview, wireStyle = 'BEZIER' }: FbdWirePreviewLayerProps) {
+  if (!preview) return null
+
+  const d =
+    wireStyle === 'ORTHOGONAL'
+      ? fbdWirePathOrthogonal(preview.from, preview.to)
+      : fbdWirePathBezier(preview.from, preview.to)
+
+  return (
+    <g data-fbd-wire-preview="true" pointerEvents="none" aria-hidden="true">
+      {/* Shadow path */}
+      <path
+        d={d}
+        fill="none"
+        stroke="var(--c-bg)"
+        strokeWidth={5}
+      />
+      {/* Dashed preview line */}
+      <path
+        d={d}
+        fill="none"
+        stroke="var(--c-accent)"
+        strokeWidth={2}
+        strokeDasharray="6 4"
+      />
+      {/* End circle */}
+      <circle
+        cx={preview.to.x}
+        cy={preview.to.y}
+        r={4}
+        fill="var(--c-accent)"
+      />
+    </g>
+  )
+}
+
+export interface FbdGhostLayerProps {
+  ghost: {
+    typeRef: string
+    x: number
+    y: number
+  } | null
+}
+
+export function FbdGhostLayer({ ghost }: FbdGhostLayerProps) {
+  if (!ghost) return null
+
+  const entry = fbdPaletteEntry(ghost.typeRef)
+  const dummyPorts = entry ? entry.buildPorts(entry.defaultType) : []
+  const inputs = dummyPorts.filter((p) => p.direction === 'INPUT').length
+  const outputs = dummyPorts.filter((p) => p.direction === 'OUTPUT').length
+  const rows = Math.max(inputs, outputs, 1)
+  const height = FBD_NODE_HEADER_HEIGHT + rows * FBD_PORT_ROW_HEIGHT + FBD_NODE_PADDING_BOTTOM
+  const width = FBD_NODE_WIDTH
+
+  return (
+    <g
+      data-fbd-ghost="true"
+      transform={`translate(${ghost.x}, ${ghost.y})`}
+      pointerEvents="none"
+      aria-hidden="true"
+      opacity={0.65}
+    >
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        rx={6}
+        fill="var(--c-surface-2)"
+        stroke="var(--c-accent)"
+        strokeWidth={2}
+        strokeDasharray="4 3"
+      />
+      <text x={10} y={18} className="text-[11px]" fill="var(--c-text)">
+        {ghost.typeRef}
+      </text>
+      {entry && (
+        <text x={10} y={32} className="text-[10px]" fill="var(--c-text-dim)">
+          {entry.kind}
+        </text>
+      )}
+      <line
+        x1={0}
+        y1={FBD_NODE_HEADER_HEIGHT - 4}
+        x2={width}
+        y2={FBD_NODE_HEADER_HEIGHT - 4}
+        stroke="var(--c-border)"
+        strokeWidth={1}
+      />
+    </g>
   )
 }

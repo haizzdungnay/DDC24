@@ -940,5 +940,5 @@ Gate production vẫn `RED`.
 
 | Mã | Mô tả | Ảnh hưởng | Trạng thái |
 |---|---|---|---|
-| `RSK-PGM04-101` | Diễn tập rollback trên Forlinx **chưa chạy**: bản sao lưu đã nằm trên thiết bị và các bước đã ghi, nhưng chưa ai thực hiện một lần khôi phục thật | Đường lùi của lát deploy này là đường **chưa được kiểm**; một sự cố sẽ là lần đầu tiên nó được dùng | `OPEN` — cần một lần chạy có phê duyệt để đóng `VS-PGM04-61-014` |
+| `RSK-PGM04-101` | Đường rollback PGM-04 trên Forlinx | Chu kỳ TARGET `backup → candidate → rollback → read-back → redeploy` ngày 2026-09-06 đã giữ nguyên Project/Draft, Core/IOBus/FakeMCU và trả API/browser về trạng thái đọc được | `TREATMENT EXECUTED — REVIEW PENDING`: phần kỹ thuật `VS-PGM04-61-014` PASS; giữ chưa `CLOSED` tới khi reviewer độc lập xác nhận [evidence](test-evidence/fw-som/2026-08-29-foxlinx-pgm04-library-deploy.md#6-bổ-sung-2026-09-06-—-diễn-tập-rollback-thật-iss-pgm04-19) |
 | `RSK-PGM04-102` | Lane `programming-real.spec.ts` nằm ngoài suite mock mặc định, nên khẳng định của nó lạc hậu mà không ai thấy — lát này tìm thấy **hai** khẳng định đã hỏng từ các PR trước | Một cổng không chạy cùng vòng với thay đổi làm nó đỏ là một cổng chỉ báo động khi đã muộn | `OPEN` — cần đưa lane real vào cùng vòng chạy với suite mock, hoặc một lịch chạy bắt buộc trước khi đóng mỗi work package |

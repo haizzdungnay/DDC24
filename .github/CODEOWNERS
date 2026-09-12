@@ -1,0 +1,22 @@
+# Chủ sở hữu review theo vùng — bổ trợ cho WF-CLEAN-001, không thay thế cổng
+# `workflow-guard`. CODEOWNERS chỉ có hiệu lực chặn khi bật "Require review
+# from Code Owners" trong branch protection của `main` (xem WF-CLEAN-001 §5.1).
+
+# Mặc định
+*                                   @Mekong-HCM
+
+# Quản trị quy trình và tài liệu — đổi ở đây là đổi luật chơi của cả ba vai
+/docs/00_governance/                @Mekong-HCM
+/AGENTS.md                          @Mekong-HCM
+/CLAUDE.md                          @Mekong-HCM
+
+# Cổng chất lượng: sửa được CI là vô hiệu hoá được mọi cổng còn lại
+/.github/workflows/                 @Mekong-HCM
+/.github/labels.yml                 @Mekong-HCM
+/.github/ISSUE_TEMPLATE/            @Mekong-HCM
+/.github/pull_request_template.md   @Mekong-HCM
+/scripts/workflow_guard.py          @Mekong-HCM
+/scripts/verify-project.sh          @Mekong-HCM
+
+# Hợp đồng liên tiến trình — đổi là phá tương thích giữa MCU/iobus/core/web
+/contracts/                         @Mekong-HCM

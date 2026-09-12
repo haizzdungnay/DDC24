@@ -8,6 +8,19 @@ File này được Claude Code tự động nạp vào mỗi phiên làm việc 
 - Không được bỏ qua CHANGELOG trừ khi user nói rõ là không cần cập nhật.
 - Giữ thay đổi FE cục bộ (local) làm nguồn chân lý; không ghi đè công việc FE cục bộ không liên quan.
 
+## Quy trình clean code & clean docs
+
+Authority: **`docs/00_governance/CLEAN_CODE_WORKFLOW.md`** (`WF-CLEAN-001`).
+
+Ba vai tách biệt, mỗi vai một skill trong `.claude/skills/`:
+`ddc-manager-planner` (1 lần/ngày, tạo Issue), `ddc-implementer` (mỗi 1h30,
+implement + PR), `ddc-reviewer` (1 lần/ngày, review + merge).
+
+Ràng buộc thi hành bằng `scripts/workflow_guard.py`: người tạo Issue không tự
+implement, người implement không tự merge, mọi PR phải `Closes` đúng một Issue
+kèm bảng Verification có số đo thật. Chạy `python3 scripts/workflow_guard.py
+--selftest` để kiểm logic cổng khi sửa nó.
+
 ## Làm hết việc, không chừa lại
 
 Khi user giao việc, **làm trọn tới nơi**. Không được báo cáo giữa chừng rồi để lại
@@ -31,6 +44,18 @@ Quy tắc cụ thể:
    thật chưa. Nếu còn mục nào chưa làm mà không bị chặn thì **chưa được báo xong**.
 5. Việc bị chặn thật sự phải ghi rõ **bị chặn bởi cái gì** và **cần gì để mở**,
    không viết chung chung kiểu "nói nếu bạn muốn tôi làm tiếp".
+
+## Kiểm chứng frontend bằng Chrome DevTools MCP
+
+Chi tiết ở `AGENTS.md` §"Kiểm chứng frontend bằng Chrome DevTools MCP".
+
+`chrome-devtools-mcp` chạy Chrome **headful**, mà phiên agent trên host không
+thừa hưởng `DISPLAY` dùng được — đó là nguyên nhân mọi bảng kiểm chứng từng ghi
+`Chrome DevTools MCP = NOT_RUN` với lý do "thiếu X server". Từ 2026-09-12, cả
+`.mcp.json` (Claude Code) lẫn `.codex/config.toml` (Codex) gọi
+`scripts/chrome-devtools-mcp.sh`, launcher tự dựng Xvfb riêng bằng
+`scripts/ensure-xvfb.sh`. Trước khi ghi `NOT_RUN` cho lane này, **bắt buộc** chạy
+`scripts/verify-project.sh --component browser` và dẫn kết quả thật.
 
 ## Quy trình khi user nói "commit" hoặc "merge"
 

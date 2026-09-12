@@ -1,0 +1,17 @@
+git_commit=ad8c322ea46de0ac0da8a7c24004b3683856b3da
+git_status=0 tracked-change(s) before record
+aarch64-linux-gnu-g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+cmake version 3.28.3
+configure=cmake --fresh -S . -B build/iss414-arm64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=platform/cmake/toolchain-aarch64-linux-gnu.cmake -DCORE_BUILD_TESTS=OFF -DIOBUS_BUILD_TESTS=OFF -DNETCFG_BUILD_TESTS=OFF -DMKDDC_ENABLE_FW_HOSTCHECK=OFF -DMKDDC_ENABLE_MODBUS=OFF -DMKDDC_ENABLE_BACNET=OFF -DMKDDC_ENABLE_HMI=OFF -DFETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON=<repo-cache>
+build=cmake --build build/iss414-arm64 --target mkddc-st-compile --parallel
+CMAKE_BUILD_TYPE:STRING=Release
+CMAKE_TOOLCHAIN_FILE:FILEPATH=<worktree>/platform/cmake/toolchain-aarch64-linux-gnu.cmake
+CORE_BUILD_TESTS:BOOL=OFF
+IOBUS_BUILD_TESTS:BOOL=OFF
+MKDDC_ENABLE_BACNET:BOOL=OFF
+MKDDC_ENABLE_FW_HOSTCHECK:BOOL=OFF
+MKDDC_ENABLE_HMI:BOOL=OFF
+MKDDC_ENABLE_MODBUS:BOOL=OFF
+NETCFG_BUILD_TESTS:BOOL=OFF
+<worktree>/build/iss414-arm64/core/mkddc-st-compile: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (GNU/Linux), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=d84d5d234b85afc7f57559003f5e478a952a574e, for GNU/Linux 3.7.0, not stripped
+20aa68d0189e1a256132f54f49d2d51c82663dca5865207e547f28e1e049ba25  <worktree>/build/iss414-arm64/core/mkddc-st-compile

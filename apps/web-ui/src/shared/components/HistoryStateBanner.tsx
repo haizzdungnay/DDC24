@@ -99,7 +99,7 @@ export function HistoryStateBanner({ state, gaps = [], title, detail, onRetry, c
             <div className={cn('text-[11px] font-bold uppercase tracking-[0.12em]', copy.labelClassName)}>{copy.label}</div>
             <h3 id={titleId} className="mt-0.5 text-sm font-semibold">{title ?? copy.title}</h3>
             <p id={detailId} className="mt-1 text-xs leading-5 text-[var(--c-text-dim)]">{detail ?? copy.detail}</p>
-            {showGapEvidence && <p className="mt-1 text-xs font-semibold">{gaps.length} history gaps reported.</p>}
+            {showGapEvidence && <p className="mt-1 text-xs font-semibold">{gaps.length} history {gaps.length === 1 ? 'gap' : 'gaps'} reported.</p>}
           </div>
         </div>
         {state === 'unavailable' && onRetry && (

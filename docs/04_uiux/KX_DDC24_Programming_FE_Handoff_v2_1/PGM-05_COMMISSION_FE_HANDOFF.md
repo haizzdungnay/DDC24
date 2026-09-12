@@ -1,7 +1,8 @@
 # PGM-05 — Check & Commission — FE Handoff
 
-**Route:** `/eng/programming/commission`  
-**Reference:** `assets/PGM-05_commission.png`  
+**Route canonical:** `/eng/programming/projects/:projectId/commission`<br>
+**Authority trực quan:** [`assets/PGM-05_commission.png`](assets/PGM-05_commission.png) theo `AUTH-UX-PROG-2026-09-08-01`<br>
+**Giới hạn bằng chứng:** Target visual; không phải As-Built/runtime evidence.<br>
 **Primary goal:** Safe release gate: validate Draft, review impact/diff, commission it, then verify the authoritative runtime state.
 
 ## 1. Workflow

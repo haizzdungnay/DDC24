@@ -63,7 +63,7 @@ vi.mock('../api/queries', async (importOriginal) => {
   }
 })
 vi.mock('../layout/ProgrammingLayout', () => ({
-  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn() })
+  useProgrammingRuntimeContext: () => ({ setEditingContext: vi.fn(), setContextStripSlot: vi.fn() })
 }))
 
 function baseDocument(): ProgrammingDraftDocument {
@@ -147,7 +147,25 @@ function pouInTree(name: string) {
   return screen.findByRole('button', { name: `Mở ${name}` })
 }
 
+function createPou(label: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Mới' }))
+  fireEvent.click(within(screen.getByRole('menu', { name: 'Tạo POU mới' })).getByRole('menuitem', { name: label }))
+}
+
+function pouAction(name: string, action: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Thao tác với ${name}` }))
+  fireEvent.click(within(screen.getByRole('menu', { name: `Thao tác với ${name}` })).getByRole('menuitem', { name: action }))
+}
+
 describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
+  it('TC-FBD-STATE-001: khi Draft chưa tải xong chỉ hiện skeleton và chưa mount control mutation', () => {
+    client.request.mockReturnValue(new Promise(() => {}))
+    renderWorkspace()
+    expect(screen.getByText('Đang tải Draft…')).toBeInTheDocument()
+    expect(screen.queryByTestId('fbd-workspace-shell')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Thêm khối/ })).toBeNull()
+  })
+
   it('mount Published Signals trên route Mapping bằng raw Draft v2, không qua adapter làm mất signals[]', async () => {
     const project = baseProject()
     project.draft = {
@@ -190,7 +208,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace('/eng/programming/projects/project-1/design?tab=mapping')
 
-    expect(await screen.findByRole('tab', { name: 'Điểm & Ánh xạ' })).toHaveAttribute('aria-selected', 'true')
+    /* ponytail: tab buttons ẩn — verify qua bảng Published Signal trực tiếp. */
     const table = await screen.findByRole('table', { name: 'Bảng Published Signal của bản nháp' })
     expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('AirHandler')
     expect(within(table).getByRole('row', { name: /SupplyTemp/ })).toHaveTextContent('5000 ms')
@@ -218,9 +236,9 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByText('Chưa có chương trình. Bấm + để tạo.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Chưa có chương trình. Bấm Mới để tạo.')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByTitle('Thêm chương trình ST'))
+    createPou('Program · ST')
 
     await waitFor(() => {
       const call = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')
@@ -294,6 +312,43 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     }])
   })
 
+  it('không báo lỗi tên legacy chưa sửa và vẫn cho lưu mô tả độc lập', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-1', objectId: 'object-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', description: '',
+      document: 'PROGRAM AHU_MAIN\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: project.draft },
+          etag: '"draft-1:2"', auditId: 'audit-1', correlationId: 'corr-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace()
+    fireEvent.click(await pouInTree('Điều khiển AHU'))
+    const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
+    const nameInput = within(inspector).getByLabelText('Tên')
+    expect(nameInput).not.toHaveAttribute('aria-invalid')
+    expect(within(inspector).queryByText(/Tên phải bắt đầu bằng chữ/)).not.toBeInTheDocument()
+
+    fireEvent.change(within(inspector).getByLabelText('Mô tả'), { target: { value: 'Điều khiển AHU tầng 1' } })
+    const save = within(inspector).getByRole('button', { name: 'Lưu thuộc tính' })
+    expect(save).toBeEnabled()
+    fireEvent.click(save)
+
+    await waitFor(() => expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(true))
+    const [, options] = client.request.mock.calls.find(([operationId]) => operationId === 'updateProgrammingDraft')!
+    expect(options.body.operations).toEqual([{ op: 'annotateObject', objectId: 'object-1', description: 'Điều khiển AHU tầng 1' }])
+  })
+
   it('WP-11: bố cục 3 cột (Cây/Editor/Inspector) theo UX §16.2 — Inspector là cột riêng, không nằm dưới editor', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
@@ -325,7 +380,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(within(inspector).getByLabelText('Loại')).toHaveValue('PROGRAM')
   })
 
-  it('WP-02 (CTO/Owner approval 2026-08-15 §1): dropdown Loại chỉ expose PROGRAM, không tự hiện lại FUNCTION/FUNCTION_BLOCK', async () => {
+  it('PPI-001: Loại là identity chỉ đọc, hiện đủ ba kind và KHÔNG còn cảnh báo "chưa được Kiểm tra hỗ trợ"', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
     project.draft!.task.programOrder = ['program-1']
@@ -344,14 +399,17 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
     const kindSelect = within(inspector).getByLabelText('Loại') as HTMLSelectElement
     const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
-    expect(options).toEqual(['PROGRAM'])
-    expect(options).not.toContain('FUNCTION')
-    expect(options).not.toContain('FUNCTION_BLOCK')
+    // Backend (`attachLocalPOUSources`/`compilerInputs`) biên dịch cả ba kind,
+    // nên UI không được nói ngược lại bằng cách ẩn hai lựa chọn.
+    expect(options).toEqual(['PROGRAM', 'FUNCTION', 'FUNCTION_BLOCK'])
     expect(kindSelect).toHaveValue('PROGRAM')
+    // Kind cố định lúc tạo: mỗi kind có header source riêng và BE không kiểm
+    // header khớp kind, nên đổi tại đây là đường dẫn tới Check đỏ.
+    expect(kindSelect).toBeDisabled()
     expect(within(inspector).queryByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).not.toBeInTheDocument()
   })
 
-  it('WP-02: Program có kind khác PROGRAM sẵn từ trước (import bundle) vẫn hiện đúng giá trị thật kèm cảnh báo, không bị ẩn/mất dữ liệu', async () => {
+  it('PPI-001: POU kind FUNCTION_BLOCK hiện đúng giá trị thật, không bị ẩn và không bị khuyên "đổi về PROGRAM"', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'FB cũ từ bundle', kind: 'FUNCTION_BLOCK', language: 'ST', document: 'FUNCTION_BLOCK X\nEND_FUNCTION_BLOCK' })
     project.draft!.task.programOrder = ['program-1']
@@ -368,17 +426,11 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await screen.findByLabelText(/Mã nguồn ST/)
 
     const inspector = await screen.findByRole('complementary', { name: 'Thuộc tính' })
-    // Accessible name của <select> nuốt luôn text cảnh báo trong cùng <label>
-    // khi kind khác PROGRAM (span warning render bên trong label bao ngoài) —
-    // dùng regex bắt đầu bằng "Loại" thay vì so khớp tuyệt đối.
-    const kindSelect = within(inspector).getByLabelText(/^Loại/) as HTMLSelectElement
-    const options = within(kindSelect).getAllByRole('option').map((option) => (option as HTMLOptionElement).value)
-    // Chỉ đúng 2 lựa chọn: PROGRAM (luôn có) + giá trị thật hiện tại của Program
-    // (FUNCTION_BLOCK) — không tự thêm lựa chọn thứ ba (FUNCTION) chưa từng
-    // được backend hỗ trợ.
-    expect(options.sort()).toEqual(['FUNCTION_BLOCK', 'PROGRAM'].sort())
+    const kindSelect = within(inspector).getByLabelText('Loại') as HTMLSelectElement
     expect(kindSelect).toHaveValue('FUNCTION_BLOCK')
-    expect(within(inspector).getByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).toBeInTheDocument()
+    expect(kindSelect).toBeDisabled()
+    expect(within(inspector).queryByText(/chưa được Kiểm tra hỗ trợ biên dịch/)).not.toBeInTheDocument()
+    expect(within(inspector).queryByText(/đổi về PROGRAM/)).not.toBeInTheDocument()
   })
 
   it('409 giữ nguyên buffer đang gõ và hiện banner reload/merge (UX §9)', async () => {
@@ -413,7 +465,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(textarea).toHaveValue('X := 2; (* chưa lưu *)')
   })
 
-  it('thêm chương trình FBD mount StructuredFbdEditor thật, không placeholder (TASK-PROG-502)', async () => {
+  it('TC-FBD-UX-001: + FBD tạo canonical POU và mount StructuredFbdEditor thật', async () => {
     client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; program?: { programId: string; name: string; document: unknown } }> } }) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
       if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
@@ -429,15 +481,15 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     })
 
     renderWorkspace()
-    await waitFor(() => expect(screen.getByTitle('Thêm chương trình FBD')).toBeInTheDocument())
-    fireEvent.click(screen.getByTitle('Thêm chương trình FBD'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mới' })).toBeInTheDocument())
+    createPou('Program · FBD')
 
     // StructuredFbdEditor render toolbar lệnh thật — không phải chữ placeholder cũ.
     await waitFor(() => expect(screen.queryByText(/mount ở TASK-PROG-502/)).not.toBeInTheDocument())
     await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Lệnh FBD' })).toBeInTheDocument())
   })
 
-  it('AC-PGM02-009 / AC-ST-004: nút Kiểm tra điều hướng sang PGM-03, không tự seal/check nên Active không đổi (D-01)', async () => {
+  it('AC-PGM02-009 / AC-ST-004: nút Kiểm tra điều hướng sang PGM-05, không tự seal/check nên Active không đổi (D-01)', async () => {
     const project = baseProject()
     client.request.mockImplementation((operationId: string) => {
       if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
@@ -451,12 +503,12 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra' }))
 
     await waitFor(() => expect(screen.getByText('Check & Commission page')).toBeInTheDocument())
-    // D-01: PGM-02 không được tự gọi seal/Check — đó là việc của PGM-03 giờ.
+    // D-01: PGM-02 không được tự gọi seal/Check — đó là việc của PGM-05 giờ.
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingRevision')).toBe(false)
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'createProgrammingCheck')).toBe(false)
   })
 
-  it('URL mang line/column/length (điều hướng từ Problems ở PGM-03) nhảy đúng vùng chọn trong ST editor (F-PROG-ASBUILT-003)', async () => {
+  it('URL mang line/column/length (điều hướng từ Problems ở PGM-05) nhảy đúng vùng chọn trong ST editor (F-PROG-ASBUILT-003)', async () => {
     const source = 'PROGRAM P\nVAR_OUTPUT X : BOOL; END_VAR\nX := ;\nEND_PROGRAM\n'
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: source })
@@ -498,7 +550,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const textarea = await screen.findByLabelText(/Mã nguồn ST/)
     fireEvent.change(textarea, { target: { value: 'VAR\n  Supply : REAL;\nEND_VAR\nSupply := 2;' } })
 
-    await waitFor(() => expect(screen.getByText(/Draft có thay đổi chưa lưu/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('draft-dirty-indicator')).toHaveTextContent(/Chưa lưu/))
     expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeDisabled()
     const unload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unload)
@@ -537,7 +589,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await pouInTree('Điều khiển AHU')
     expect(screen.queryByText('Xóa chương trình?')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByTitle(/^Xóa /))
+    pouAction('Điều khiển AHU', 'Xóa')
     const dialog = screen.getByRole('dialog', { name: 'Xóa POU?' })
     expect(within(dialog).getByText(/Điều khiển AHU/)).toHaveTextContent('Không thể hoàn tác sau khi lưu.')
 
@@ -585,7 +637,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await pouInTree('SCALE_LIN')
-    fireEvent.click(screen.getByTitle(/^Xóa /))
+    pouAction('SCALE_LIN', 'Xóa')
     const dialog = screen.getByRole('dialog', { name: 'Xóa POU?' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xóa' }))
 
@@ -623,7 +675,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
 
     renderWorkspace()
     await pouInTree('AHU_MasterSequence')
-    fireEvent.click(screen.getByTitle(/^Xóa /))
+    pouAction('AHU_MasterSequence', 'Xóa')
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Xóa POU?' })).getByRole('button', { name: 'Xóa' }))
 
     await waitFor(() => {
@@ -695,7 +747,7 @@ describe('DesignWorkspacePage — ST Editor Quick Control (đã duyệt, decisio
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
   })
 
-  it('Bảng lệnh nhanh: mục "Kiểm tra" điều hướng sang PGM-03 giống hệt nút Kiểm tra (D-01) — chỉ khi người dùng chủ động chọn', async () => {
+  it('Bảng lệnh nhanh: mục "Kiểm tra" điều hướng sang PGM-05 giống hệt nút Kiểm tra (D-01) — chỉ khi người dùng chủ động chọn', async () => {
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', document: 'PROGRAM P\nEND_PROGRAM\n' })
     project.draft!.task.programOrder = ['program-1']
@@ -900,8 +952,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
 
     /* Những control này nằm NGOÀI LiveProgramView; trước T59-812 admin vẫn
      * sửa Draft từ chúng dù màn hình tự nhận là LIVE. */
-    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Thêm chương trình FBD')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mới' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kiểm tra' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Lưu$/ })).not.toBeInTheDocument()
     fireEvent.keyDown(source, { key: 's', ctrlKey: true })
@@ -950,8 +1001,15 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     // Nhãn khay phải nói nguồn, không được ghi "Draft" khi đang chiếu bản chạy.
     expect(screen.getByText(/LIVE · Đang chạy · Điều khiển AHU/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('tab', { name: /Tìm kiếm/ }))
-    fireEvent.change(screen.getByLabelText('Tìm trong POU đang mở'),
+    /* `LiveProgramView` và workbench hiện đọc cùng Revision qua hai hook riêng.
+       Textarea sẵn sàng chỉ chứng minh lượt đọc của view; đợi số đếm `(0)`
+       chứng minh workbench cũng đã nhận nguồn Active trước khi tương tác. */
+    const searchTab = await screen.findByRole('tab', { name: 'Tìm kiếm (0)' })
+    fireEvent.click(searchTab)
+    expect(searchTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel')).toHaveAccessibleName(/Tìm kiếm/)
+    const search = screen.getByLabelText('Tìm trong POU đang mở')
+    fireEvent.change(search,
       { target: { value: 'CHI_CO_TRONG' } })
     /* Đọc TRONG khay kết quả: chuỗi này cũng nằm trong textarea chiếu nguồn,
        nên tìm ở phạm vi toàn trang sẽ khớp cả hai và không chứng minh được
@@ -1020,8 +1078,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     const textarea = await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
     expect(screen.getByTestId('programming-mobile-read-only')).toBeInTheDocument()
     expect(textarea).toHaveAttribute('readonly')
-    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Thêm chương trình FBD')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mới' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kiểm tra' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Lưu' })).not.toBeInTheDocument()
 
@@ -1035,7 +1092,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     expect(within(palette).queryByRole('option', { name: /Định dạng/ })).not.toBeInTheDocument()
   })
 
-  it('T59-802: dưới 768 px FBD nhận canEdit=false và Insert không đổi graph', async () => {
+  it('TC-FBD-RESP-003 / TC-FBD-STATE-004: dưới 768 px hiện banner, FBD khóa mutation và không gửi write API', async () => {
     stubMobileViewport()
     const fbd = JSON.stringify({
       $schema: '../../fbd_v1.schema.json',
@@ -1060,6 +1117,7 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     renderWorkspace('/eng/programming/projects/project-1/design?pou=object-fbd')
 
     const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
+    expect(screen.getByTestId('programming-mobile-read-only')).toHaveTextContent('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ')
     expect(within(editor).getByText('Chỉ đọc')).toBeInTheDocument()
     expect(within(editor).getByRole('button', { name: 'Thêm khối' })).toBeDisabled()
     expect(within(editor).getByText('0/256 block')).toBeInTheDocument()
@@ -1199,7 +1257,7 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
     expect(alert.textContent).toContain(BUNDLE_COMPATIBILITY.libraryRegistryVersion)
     expect(alert.textContent).toContain(deviceLibraryVersion)
     // Không tự hạ cấp: cổng soạn thảo phải đóng, không chỉ hiện cảnh báo.
-    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mới' })).not.toBeInTheDocument()
   })
 
   it('thiết bị không công bố bộ ba thì chặn (thiếu bằng chứng không phải bằng chứng khớp)', async () => {
@@ -1222,7 +1280,7 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
 
     const alert = await screen.findByTestId('programming-compatibility-block')
     expect(alert).toHaveAttribute('data-compatibility-state', 'UNVERIFIABLE')
-    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mới' })).not.toBeInTheDocument()
   })
 
   it('thiết bị cùng phiên bản thì không hiện cảnh báo và vẫn soạn thảo được', async () => {
@@ -1235,7 +1293,7 @@ describe('PGM-02 — nguồn và tên thù địch hiện thành CHỮ, không t
 
     renderWorkspace()
 
-    expect(await screen.findByTitle('Thêm chương trình ST')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Mới' })).toBeInTheDocument()
     expect(screen.queryByTestId('programming-compatibility-block')).not.toBeInTheDocument()
   })
 })
@@ -1264,7 +1322,10 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
       if (operationId === 'getProgrammingProject') return Promise.resolve(project)
       if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
       if (operationId === 'searchProgrammingLibraries') {
-        return Promise.resolve({
+        /* Trì hoãn một microtask để trạng thái `loading` thật sự quan sát được
+         * trong assertion dưới. `Promise.resolve()` đồng bộ không bảo đảm
+         * React kịp hiện loading trước khi dữ liệu tới. */
+        return new Promise((resolve) => setTimeout(() => resolve({
           items: [{
             scope: 'SYSTEM', libraryRevisionId: LIBRARY_REVISION, libraryVersion: 'rev-a.1',
             libraryState: 'PUBLISHED', entryId: 'TON', kind: 'FUNCTION_BLOCK', name: 'TON',
@@ -1281,7 +1342,7 @@ describe('PGM-02 tiếp nhận ý định chèn khối từ Thư viện (T61-405
             dependencies: [], stateLayoutKnown: true, stateSizeBytes: 16,
             ...entryOverrides,
           }]
-        })
+        }), 0))
       }
       throw new Error(`unexpected operation ${operationId}`)
     })

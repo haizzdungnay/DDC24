@@ -36,7 +36,13 @@ func cppBusKeys(t *testing.T) map[string]bool {
 	path := filepath.Join(root, "apps", "iobus", "adapters", "modbus_rtu", "fieldbus_config.cpp")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Skipf("không đọc được %s: %v", path, err)
+		// Fail-close, cố tình KHÔNG bỏ qua test: xem ghi chú cùng nội dung ở
+		// repoRoot trong contract_sync_test.go. Nặng hơn ở chỗ chính test này
+		// tồn tại để chống fail-open (ghi chú đầu file) — bỏ qua ở đây làm cổng
+		// hợp đồng fieldbus tự biến mất trong khi go test vẫn báo ok.
+		t.Fatalf("không đọc được %s: %v — kiểm tra apps/iobus/adapters/modbus_rtu/ "+
+			"có bị đổi tên/di chuyển không (PLAN-ARCH-RESTRUCT-002 đã đổi services/ → apps/ một lần)",
+			path, err)
 	}
 	source := string(data)
 

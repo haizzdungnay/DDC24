@@ -44,6 +44,8 @@
 #include <array>
 #include <fstream>
 
+#include "mkddc_shm.h"
+
 #include "sanitizer_build.hpp"
 #include "programming/simulation/sim_error.hpp"
 #include "programming/simulation/sim_sandbox.hpp"
@@ -257,16 +259,37 @@ int run_sandbox_probe()
     const bool applied = core::programming::sim::apply_sandbox(kAddressSpaceBytes, &report, &error);
 
     json probes = json::array();
+    /* Tám target dưới đây phải là ĐƯỜNG DẪN SẢN PHẨM THẬT, không phải tên gần
+     * giống. Hàng rào từ chối ở lớp syscall TRƯỚC khi phân giải đường dẫn, nên
+     * một đường dẫn không tồn tại vẫn trả `EACCES` y hệt một đường dẫn tồn tại:
+     * cổng errno ở `scripts/verify_programming_sim_worker.py` sẽ vẫn xanh trong
+     * khi thứ cần chứng minh chưa từng được thử. Trước `#605` có năm trong tám
+     * cái tên đã trôi khỏi nguồn chuẩn theo đúng kiểu đó.
+     *
+     * Vì vậy: SHM lấy thẳng macro của hợp đồng, ba đường dẫn còn lại ghi kèm
+     * `file:line` của nơi sản phẩm dựng chúng. Cổng tĩnh trong
+     * `scripts/verify_programming_sim_worker_boundary.py` canh danh sách này. */
     const char* paths[] = {
-        "/dev/shm/mkddc_io_cache",
-        "/dev/shm/mkddc_plc",
+        /* `contracts/shm/mkddc_shm.h:59` — không chép chuỗi, lấy đúng macro. */
+        KX_SHM_IO_PATH,
+        /* `contracts/shm/mkddc_shm.h:60` */
+        KX_SHM_PLC_PATH,
         "/dev/mem",
         "/dev/ttyS0",
-        "/data/mkddc/programming/retain.bin",
-        "/data/mkddc/programming/journal.bin",
-        "/run/mkddc/program_ipc.sock",
+        /* RETAIN là THƯ MỤC chứ không phải một file `.bin`:
+         * `apps/core/bootstrap/main.cpp:470` dựng `programming_state + "/retain"`. */
+        "/data/mkddc/programming/retain",
+        /* `apps/core/bootstrap/main.cpp:500` —
+         * `programming_state + "/journal/lifecycle.bin"`. */
+        "/data/mkddc/programming/journal/lifecycle.bin",
+        /* `apps/core/bootstrap/main.cpp:119` và
+         * `contracts/ipc/programming_v1/README.md:7`. */
+        "/run/mkddc/programming-v1.sock",
         "/etc/shadow",
     };
+    static_assert(sizeof(paths) / sizeof(paths[0]) == 8,
+                  "Bề mặt probe cố định 8 đường dẫn + 1 phép thử AF_UNIX socket; "
+                  "mở rộng bề mặt là thay đổi phạm vi bằng chứng, không phải sửa lỗi.");
     for (const char* path : paths) {
         errno = 0;
         const int fd = ::open(path, O_RDONLY);

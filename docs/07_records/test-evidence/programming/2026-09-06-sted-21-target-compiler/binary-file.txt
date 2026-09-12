@@ -1,0 +1,1 @@
+/tmp/iss414-target-compiler-20260906/mkddc-st-compile: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (GNU/Linux), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=d84d5d234b85afc7f57559003f5e478a952a574e, for GNU/Linux 3.7.0, not stripped

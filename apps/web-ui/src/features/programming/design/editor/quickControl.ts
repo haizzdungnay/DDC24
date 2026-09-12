@@ -88,7 +88,7 @@ export function wrapInBlock(source: string, start: number, end: number, kind: Wr
 /** Một mục trong Bảng lệnh nhanh (`CommandPalette`) — ba loại đúng phạm vi đã
  *  duyệt. KHÔNG có loại "diagnostic": `DesignWorkspacePage` (D-01) không còn
  *  truyền diagnostic thật nào vào `ProgramsTab` nữa — Check/Problems đã
- *  chuyển hẳn sang PGM-03 (`CheckCommissionPage`); một mục Bảng lệnh chỉ để
+ *  chuyển hẳn sang PGM-05 (`CheckCommissionPage`); một mục Bảng lệnh chỉ để
  *  hiển thị danh sách LUÔN RỖNG là tính năng giả, không phải thu hẹp phạm vi
  *  một cách an toàn. */
 export interface PaletteProgramEntry {

@@ -158,30 +158,21 @@ beforeEach(() => localStorage.setItem('mkddc-lang', 'vi'))
 afterEach(cleanup)
 
 describe('ProgrammingContextStrip — T60-102 (giữ nguyên ngữ nghĩa của T59-503)', () => {
-  it('tách Draft, Active, desired intent và runtime read-back; không suy Enabled thành RUNNING', () => {
+  it('tách Draft/Active và không suy ý định Enable thành RUNNING trên thanh chính', () => {
     renderStrip()
-    // Bốn dữ kiện, bốn ô riêng — không ô nào trả lời thay ô nào.
     expect(within(field('draft')).getByText('Chưa lưu · Kiểm tra đạt')).toBeInTheDocument()
     expect(within(field('active')).getByText('Có')).toBeInTheDocument()
-    expect(within(field('health')).getByText('1/2 muốn bật')).toBeInTheDocument()
-    /* `DEV-PROG-014` — hàng 38 px chỉ hiện trạng thái NẶNG NHẤT kèm `+N`; bản
-       đầy đủ ở `title`. Bản cũ nối tất cả trạng thái, và một Project mười
-       Program hỏng cho ra một chuỗi dài hơn cả tên Project — đẩy chính tên
-       Project ra khỏi hàng. Khẳng định gốc không đổi: ý định Enable và runtime
-       thực tế vẫn là HAI nhãn nói hai điều khác nhau. */
-    expect(within(field('health')).getByText('UNKNOWN 1 · +1')).toBeInTheDocument()
-    expect(within(field('health')).getByTitle('UNKNOWN 1 · RUNNING 1')).toBeInTheDocument()
+    expect(strip().querySelector('[data-context-field="health"]')).not.toBeInTheDocument()
     expect(within(strip()).getByRole('alert')).toHaveTextContent('Chưa xác định kết quả — đang đối soát')
     expect(within(strip()).getByRole('alert')).toHaveTextContent('không tự suy Program đang chạy')
   })
 
-  it('một Program muốn bật nhưng Core báo DISABLED vẫn hiện DISABLED, không hiện RUNNING', () => {
+  it('một Program muốn bật nhưng Core báo DISABLED không tạo badge RUNNING giả', () => {
     renderStrip({
       intents: { ...intents, items: [{ ...intents.items[0], desiredEnabled: true, runtimeState: 'DISABLED' }] }
     })
-    expect(within(field('health')).getByText('1/1 muốn bật')).toBeInTheDocument()
-    expect(within(field('health')).getByText('DISABLED 1')).toBeInTheDocument()
     expect(within(strip()).queryByText(/RUNNING/)).not.toBeInTheDocument()
+    expect(strip().querySelector('[data-context-field="health"]')).not.toBeInTheDocument()
   })
 
   it.each([
@@ -211,6 +202,48 @@ describe('ProgrammingContextStrip — T60-102 (giữ nguyên ngữ nghĩa của 
   })
 })
 
+/**
+ * `ISS-PGUI-01` — `runtime.activeRevisionId` là read model của CONTROLLER.
+ *
+ * Ba case dưới đây khoá đúng chỗ strip từng nói sai: nó kết luận `Có` chỉ từ
+ * con số toàn cục ấy, nên mở BẤT KỲ Project nào cũng thấy "thiết bị đang chạy
+ * gói của bạn". Trên production, Project đang mở là `AHU-MASTER-SEQUENCE` còn
+ * gói đang chạy thuộc `SOAK-10P-20260824-172521` (`PC-001`).
+ */
+describe('ProgrammingContextStrip — ISS-PGUI-01: Active phải thuộc đúng Project đang mở', () => {
+  it('gói đang chạy thuộc Project khác ⇒ KHÔNG nói "Có", và nói rõ chủ thật', () => {
+    renderStrip({
+      activeSequence: null,
+      activeOwnership: { kind: 'foreign', ownerProjectId: 'p-2', ownerName: 'SOAK-10P-20260824-172521' }
+    })
+    expect(within(field('active')).queryByText('Có')).not.toBeInTheDocument()
+    expect(within(field('active')).getByText('Gói đang chạy thuộc SOAK-10P-20260824-172521')).toBeInTheDocument()
+  })
+
+  /* Biết id mà chưa biết tên vẫn KHÔNG được rơi về "Có": thiếu tên là thiếu
+     một chi tiết, không phải bằng chứng gói ấy là của Project này. */
+  it('không đọc được tên Project chủ vẫn không rơi về "Có"', () => {
+    renderStrip({
+      activeSequence: null,
+      activeOwnership: { kind: 'foreign', ownerProjectId: 'p-2', ownerName: null }
+    })
+    expect(within(field('active')).getByText('Gói đang chạy thuộc Project khác')).toBeInTheDocument()
+  })
+
+  it('không quy được gói đang chạy về Project nào ⇒ nói chưa xác định, không nói "Có"', () => {
+    renderStrip({ activeSequence: null, activeOwnership: { kind: 'unresolved' } })
+    expect(within(field('active')).queryByText('Có')).not.toBeInTheDocument()
+    expect(within(field('active')).getByText('Chưa xác định được Project của gói đang chạy')).toBeInTheDocument()
+  })
+
+  /* Chốt chặn ngược: `owned` phải giữ NGUYÊN hành vi cũ, nếu không ba case
+     trên chỉ chứng minh rằng strip đã ngừng nói "Có" với mọi thứ. */
+  it('gói đang chạy đúng là của Project này ⇒ vẫn hiện số hiệu như cũ', () => {
+    renderStrip({ activeSequence: 12, activeOwnership: { kind: 'owned', projectId: 'p-1' } })
+    expect(within(field('active')).getByText('r12 · Có')).toBeInTheDocument()
+  })
+})
+
 describe('ProgrammingContextStrip — bố cục README §3', () => {
   it('là một hàng cao 36–40 px và dính theo trang', () => {
     renderStrip()
@@ -219,35 +252,60 @@ describe('ProgrammingContextStrip — bố cục README §3', () => {
     const row = screen.getByTestId('programming-context-strip-row')
     expect(row.style.height).toBe(`${PROGRAMMING_CONTEXT_STRIP_HEIGHT_PX}px`)
     expect(strip().className).toContain('sticky')
-    // `TopBar` cao 64 px và cũng sticky: strip phải dính DƯỚI nó, không phải
-    // ở `top-0` (nếu không nó trượt xuống dưới TopBar và biến mất khi cuộn).
+    // Mobile giữ TopBar nên dùng top-16; desktop Programming ẩn TopBar theo
+    // G-01 nên strip trở về top-0, không chừa khoảng trống 64 px.
     expect(strip().className).toContain('top-16')
+    expect(strip().className).toContain('lg:top-0')
   })
 
-  it('mang đủ năm dữ kiện bắt buộc của README §3 trên cùng một hàng', () => {
+  it('chỉ giữ bốn dữ kiện chính của G-03 trên cùng một hàng', () => {
     renderStrip()
-    for (const name of ['project', 'draft', 'active', 'core', 'health']) {
+    for (const name of ['project', 'draft', 'active', 'core']) {
       expect(field(name)).toBeInTheDocument()
     }
+    expect(screen.queryByText('Chương trình')).not.toBeInTheDocument()
   })
 
-  it('R60-05 — thứ tự rút gọn là Core → Active → Draft; Project và sức khoẻ không bao giờ bị cắt', () => {
+  it('R60-05 — thứ tự rút gọn là Controller → Running → Editing; Project luôn còn', () => {
     renderStrip()
     expect([...CONTEXT_STRIP_TRIM_ORDER]).toEqual(['core', 'active', 'draft'])
     // Cắt trước ⇒ cần màn RỘNG HƠN mới hiện lại, nên breakpoint phải giảm dần.
-    expect(field('core').className).toContain('2xl:flex')
-    expect(field('active').className).toContain('xl:flex')
-    expect(field('draft').className).toContain('lg:flex')
-    for (const name of ['project', 'health']) {
-      expect(field(name).className).not.toContain('hidden')
-    }
+    expect(field('core').className).toContain('lg:flex')
+    expect(field('active').className).toContain('md:flex')
+    expect(field('draft').className).toContain('sm:flex')
+    expect(field('project').className).not.toContain('hidden')
   })
 
-  it.each(['draft', 'active', 'core', 'health'])('dữ kiện %s có cả icon lẫn chữ — màu không phải tín hiệu duy nhất', (name) => {
+  it.each(['draft', 'active', 'core'])('dữ kiện %s có cả icon lẫn chữ — màu không phải tín hiệu duy nhất', (name) => {
     renderStrip()
     const element = field(name)
     expect(element.querySelectorAll('svg').length).toBeGreaterThan(0)
     expect(element.textContent?.trim().length ?? 0).toBeGreaterThan(0)
+  })
+
+  it('đặt Lưu/Kiểm tra/Làm mới trong chính hàng ngữ cảnh và gọi đúng action', () => {
+    const onSave = vi.fn()
+    const onCheck = vi.fn()
+    const onRefresh = vi.fn()
+    renderStrip({
+      actions: {
+        onSave,
+        saving: false,
+        saveDisabledReason: null,
+        onCheck,
+        checkDisabledReason: null,
+      },
+      onRefresh,
+    })
+
+    const row = screen.getByTestId('programming-context-strip-row')
+    const actions = within(row).getByTestId('programming-global-actions')
+    fireEvent.click(within(actions).getByRole('button', { name: 'Lưu bản nháp' }))
+    fireEvent.click(within(actions).getByRole('button', { name: 'Kiểm tra gói' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Làm mới' }))
+    expect(onSave).toHaveBeenCalledTimes(1)
+    expect(onCheck).toHaveBeenCalledTimes(1)
+    expect(onRefresh).toHaveBeenCalledTimes(1)
   })
 })
 

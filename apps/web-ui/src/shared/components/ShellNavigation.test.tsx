@@ -208,6 +208,11 @@ describe('mobile navigation drawer', () => {
 })
 
 describe('DEV-PROG-013 — thanh trên cùng gộp tên và trạng thái thiết bị', () => {
+  it('nhận lớp responsive để AppShell ẩn trên desktop Programming theo G-01', () => {
+    renderNavigation(<TopBar className="lg:hidden" connectionState="connected" alarmCount={0} currentUser={{ username: 'admin', role: 'admin' }} />)
+    expect(screen.getByRole('banner')).toHaveClass('lg:hidden')
+  })
+
   it('một badge duy nhất mang cả hai, không phải hai phần tử rời', () => {
     // Tên thiết bị và trạng thái của nó là MỘT dữ kiện. Tách làm hai phần tử
     // chiếm hai khoảng trên một hàng 64 px vốn đã phải nhường chỗ cho chuông,

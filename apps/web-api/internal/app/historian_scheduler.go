@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -130,7 +131,7 @@ func (s *HistorianShadowScheduler) AttachTrendCache(cache *HistorianTrendCache) 
 	s.mu.Unlock()
 }
 
-func (s *HistorianShadowScheduler) RunOnce(ctx context.Context, observedUTC time.Time, monotonicNS uint64) error {
+func (s *HistorianShadowScheduler) RunOnce(ctx context.Context, observedUTC time.Time, monotonicNS uint64) (err error) {
 	if s == nil {
 		return nil
 	}
@@ -168,7 +169,14 @@ func (s *HistorianShadowScheduler) RunOnce(ctx context.Context, observedUTC time
 	if len(due) == 0 && !cacheDue {
 		return s.flushPendingGaps(ctx)
 	}
-	_ = s.flushPendingGaps(ctx)
+	/* Chu kỳ BẬN phải báo lỗi ghi gap tồn đọng y như chu kỳ rảnh ở ngay trên:
+	 * nuốt lỗi tại đây làm một sink hỏng chỉ lộ ra trong những chu kỳ không có
+	 * Point nào đến hạn, tức ngược chiều rủi ro. Nhưng lỗi này KHÔNG được cắt
+	 * ngang chu kỳ — phần còn lại vẫn phải chạy — nên nó được gộp vào giá trị
+	 * trả về bằng `errors.Join`, đúng quy ước ở `legacy_writers.go:194-200`. */
+	if flushErr := s.flushPendingGaps(ctx); flushErr != nil {
+		defer func() { err = errors.Join(flushErr, err) }()
+	}
 	advanceDue := func() {
 		for _, point := range duePoints {
 			schedule := &s.schedules[point.scheduleIndex]
@@ -511,6 +519,20 @@ func (s *HistorianShadowScheduler) RecordQueueOverflow(ctx context.Context, from
 	return nil
 }
 
+// PrepareRestartGaps ghi bằng chứng cho phần lịch sử trôi qua trong lúc tiến
+// trình không chạy, và ĐÓNG NỐT bucket đang mở khi tiến trình sống lại bên
+// trong chính bucket đó.
+//
+// Bản trước tuyên bố mất trắng mọi thứ từ frontier tới biên kế tiếp. Đo trên bo
+// (2026-09-05): dịch vụ dừng 11:07:33, lên lại 11:07:47 — tức là bên trong
+// bucket 11:07:45 — nhưng lịch đặt mốc kế tiếp ở 11:08:00 rồi ghi gap
+// [11:07:45, 11:08:00). Bucket ấy vẫn đang mở và core vẫn còn số đo để đóng nó,
+// nên gap đó nói quá: trang Trends treo cờ PARTIAL cho một khoảng thật ra lấy
+// được, và mỗi lần nâng cấp lại thêm một vệt cảnh báo vĩnh viễn.
+//
+// Mẫu phục hồi KHÔNG bị ép về biên: `last_sample_utc_ms` giữ đúng thời điểm core
+// quan sát (11:07:47), nên bản ghi vẫn nói thật rằng bucket này được đóng muộn.
+// Phần thật sự trôi qua trọn vẹn vẫn ra gap như cũ.
 func (s *HistorianShadowScheduler) PrepareRestartGaps(ctx context.Context, frontier historianFrontierReader, restartUTCMS int64) error {
 	if s == nil || frontier == nil || restartUTCMS <= 0 {
 		return nil
@@ -518,25 +540,127 @@ func (s *HistorianShadowScheduler) PrepareRestartGaps(ctx context.Context, front
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	defer s.publishSchedulesLocked()
-	for _, schedule := range s.schedules {
+
+	type restartHole struct {
+		index           int
+		fromUTCMS       int64
+		toUTCMS         int64
+		openBucketUTCMS int64
+	}
+	holes := make([]restartHole, 0, len(s.schedules))
+	candidates := make(map[int]int64, len(s.schedules))
+	for i := range s.schedules {
+		// Con trỏ, không phải bản sao: bản trước dùng biến vòng lặp value nên
+		// mọi lần gán `durableUntilUTCMS` ở đây đều rơi vào bản sao rồi mất, và
+		// sau khởi động lại frontier bền vững tụt về 0.
+		schedule := &s.schedules[i]
 		last, ok, err := frontier.LastHotBucket(ctx, schedule.pointID, schedule.generation)
 		if err != nil {
 			return err
 		}
+		if ok {
+			schedule.durableUntilUTCMS = last + 15000
+		}
 		if !ok || last+schedule.intervalMS >= schedule.nextUTCMS {
-			if ok {
-				schedule.durableUntilUTCMS = last + 15000
-			}
 			continue
 		}
-		schedule.durableUntilUTCMS = last + 15000
+		hole := restartHole{index: i, fromUTCMS: last + schedule.intervalMS, toUTCMS: schedule.nextUTCMS}
+		// Chỉ đóng được bucket đang mở khi biên gần nhất trước lúc khởi động lại
+		// trùng đúng một bucket hot 15 giây. Với chu kỳ 30s trở lên biên rơi
+		// giữa hai bucket, mẫu phục hồi sẽ mang nhãn không thuộc lịch của điểm,
+		// nên trường hợp đó giữ nguyên gap.
+		current := floorHistorianBoundary(restartUTCMS, schedule.intervalMS)
+		if current > last && current < schedule.nextUTCMS && current == floorHistorianBoundary(restartUTCMS, 15000) {
+			hole.openBucketUTCMS = current
+			candidates[i] = current
+		}
+		holes = append(holes, hole)
+	}
+	if len(holes) == 0 {
+		return nil
+	}
+
+	filled := s.recoverRestartOpenBuckets(ctx, candidates)
+	for _, hole := range holes {
+		toUTCMS := hole.toUTCMS
+		if filled[hole.index] {
+			toUTCMS = hole.openBucketUTCMS
+		}
+		if toUTCMS <= hole.fromUTCMS {
+			continue
+		}
+		schedule := &s.schedules[hole.index]
 		revision := s.policyRevision
-		gap := HistoryGap{PointID: schedule.pointID, Generation: schedule.generation, FromUTCMS: last + schedule.intervalMS, ToUTCMS: schedule.nextUTCMS, Reason: "restart", Detail: "scheduler_restart_no_backfill", PolicyRevision: &revision, CreatedAtUTCMS: restartUTCMS}
+		gap := HistoryGap{PointID: schedule.pointID, Generation: schedule.generation, FromUTCMS: hole.fromUTCMS, ToUTCMS: toUTCMS, Reason: "restart", Detail: "scheduler_restart_no_backfill", PolicyRevision: &revision, CreatedAtUTCMS: restartUTCMS}
 		if err := s.sink.InsertGap(ctx, gap); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// recoverRestartOpenBuckets đóng các bucket còn mở bằng số đo hiện tại của core.
+// Trả về tập chỉ số lịch đã đóng được; mọi trục trặc (không đọc nổi snapshot,
+// snapshot đã trôi sang bucket khác, ghi hỏng) đều trả về rỗng để nơi gọi ghi
+// gap đầy đủ như cũ — thà báo thiếu còn hơn báo có một bucket không có thật.
+func (s *HistorianShadowScheduler) recoverRestartOpenBuckets(ctx context.Context, candidates map[int]int64) map[int]bool {
+	if len(candidates) == 0 || s.reader == nil {
+		return nil
+	}
+	snapshot, err := s.reader.ReadPointSnapshot(ctx)
+	if err != nil {
+		return nil
+	}
+	observedAt, err := time.Parse(time.RFC3339Nano, snapshot.SnapshotObservedAtUTC)
+	if err != nil {
+		return nil
+	}
+	observedUTCMS := observedAt.UTC().UnixMilli()
+	policies := make([]HistorianPolicy, 0, len(candidates))
+	wanted := make(map[string]int, len(candidates))
+	for index, bucket := range candidates {
+		if floorHistorianBoundary(observedUTCMS, 15000) != bucket {
+			continue
+		}
+		schedule := &s.schedules[index]
+		interval := historianIntervalName(schedule.intervalMS)
+		if interval == "" {
+			continue
+		}
+		policies = append(policies, HistorianPolicy{PointID: schedule.pointID, Generation: schedule.generation, DBLoggingEnabled: true, DBInterval: interval, StartAtUTC: observedAt.UTC().Format(time.RFC3339Nano)})
+		wanted[historianIdentityKey(schedule.pointID, schedule.generation)] = index
+	}
+	if len(policies) == 0 {
+		return nil
+	}
+	// `dueMonotonicNS` = 0: mẫu phục hồi không gắn với một tick đã đến hạn nào,
+	// nó chỉ cần là số đo hợp lệ nằm trong bucket đang mở.
+	samples, _, err := collectHistorianSnapshotSamples(snapshot, policies, s.policyRevision, 0)
+	if err != nil || len(samples) == 0 {
+		return nil
+	}
+	rows := make([]HotSample, 0, len(samples))
+	filled := make(map[int]bool, len(samples))
+	for _, sample := range samples {
+		index, ok := wanted[historianIdentityKey(sample.PointID, sample.Generation)]
+		if !ok {
+			continue
+		}
+		row, err := foldHistorianHot([]HistorianRawSample{sample}, s.policyRevision)
+		if err != nil {
+			continue
+		}
+		rows = append(rows, row)
+		filled[index] = true
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	if err := s.sink.InsertHotBatch(ctx, rows); err != nil {
+		return nil
+	}
+	s.applyDurableFrontiers(rows)
+	return filled
 }
 
 func historianIntervalName(intervalMS int64) string {

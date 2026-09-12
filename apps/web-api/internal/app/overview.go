@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"mkddc-web/internal/capabilities"
+	webModbus "mkddc-web/internal/modbusrtu"
 )
 
 // OverviewSchemaVersion tăng khi hình dạng `OverviewResponse` đổi theo cách phá
@@ -47,8 +48,20 @@ type OverviewDomainHealth struct {
 	ReasonCode string `json:"reasonCode"`
 	Source     string `json:"source"`
 	ObservedAt string `json:"observedAt"`
-	Detail     string `json:"detail,omitempty"`
-	Link       string `json:"link,omitempty"`
+	// Detail CHỈ mang giá trị KHÔNG phụ thuộc ngôn ngữ (địa chỉ IP, định danh).
+	//
+	// `ISS-PGUI-02`: trường này từng chứa câu tiếng Việt dựng sẵn ("Chưa cấu
+	// hình thiết bị Modbus RTU", "{n} điểm đang ghi"), và Dashboard in thẳng nó
+	// ra — nên giao diện English hiện tiếng Việt (`pm-014`). Máy chủ không biết
+	// người dùng đang xem bằng ngôn ngữ nào, nên nó không phải nơi viết câu:
+	// nó phát `reasonCode` (mã đóng) kèm `DetailCount` (tham số typed), còn
+	// client dựng câu theo locale của chính nó.
+	Detail string `json:"detail,omitempty"`
+	// DetailCount là tham số của `reasonCode` khi mã ấy đếm được (số điểm BAD,
+	// số bus không mở, số thiết bị offline, số điểm đang ghi). `nil` = mã này
+	// không có tham số đếm — KHÁC với 0, vốn là một con số thật.
+	DetailCount *int   `json:"detailCount,omitempty"`
+	Link        string `json:"link,omitempty"`
 }
 
 type OverviewAlarmCounts struct {
@@ -89,15 +102,41 @@ type OverviewPointSummary struct {
 // OverviewAttentionItem là một dòng của Attention Panel. `targetType`/`targetId`
 // đi qua resolver ở FE (PA3-D06) — backend KHÔNG trả URL tuỳ ý.
 type OverviewAttentionItem struct {
-	ID         string `json:"id"`
-	Severity   string `json:"severity"` // critical|high|medium|low|info
-	Category   string `json:"category"` // alarm|communication|quality|forced
-	Title      string `json:"title"`
-	Detail     string `json:"detail,omitempty"`
-	TargetType string `json:"targetType"` // point|alarm|modbus_device|bus|subsystem
-	TargetID   string `json:"targetId"`
-	ObservedAt string `json:"observedAt,omitempty"`
+	ID       string `json:"id"`
+	Severity string `json:"severity"` // critical|high|medium|low|info
+	Category string `json:"category"` // alarm|communication|quality|forced
+	// Title/Detail là DIAGNOSTIC FALLBACK cho client đời cũ (`ISS-PGUI-02`).
+	//
+	// Client biết `titleCode`/`detailCode` PHẢI dựng câu từ mã + tham số bên
+	// dưới. Hai trường này giữ nguyên hình dạng cũ để không phá client đã phát
+	// hành, nhưng chúng là tiếng Việt và không được coi là copy chính.
+	Title  string `json:"title"`
+	Detail string `json:"detail,omitempty"`
+	// TitleCode là mã ổn định của dòng tiêu đề. Rỗng nghĩa là `Title` đến từ
+	// một authority thượng nguồn (thông điệp alarm của Core) và là văn bản ĐỤC:
+	// client hiển thị nguyên văn, không dịch, không diễn giải.
+	TitleCode string `json:"titleCode,omitempty"`
+	// Subject là TÊN/ĐỊNH DANH cần chèn vào câu (tên điểm, tên thiết bị). Không
+	// dịch: đây là thứ người dùng tra trong tủ và trong cấu hình.
+	Subject string `json:"subject,omitempty"`
+	// DetailCode là mã ổn định của dòng chi tiết; rỗng ⇒ `Detail` là văn bản đục.
+	DetailCode   string                 `json:"detailCode,omitempty"`
+	DetailParams *AttentionDetailParams `json:"detailParams,omitempty"`
+	TargetType   string                 `json:"targetType"` // point|alarm|modbus_device|bus|subsystem
+	TargetID     string                 `json:"targetId"`
+	ObservedAt   string                 `json:"observedAt,omitempty"`
 }
+
+// AttentionDetailParams là tham số TYPED của `detailCode`. Mỗi trường `nil` khi
+// mã hiện tại không dùng tới nó — `nil` khác 0, và 0 là một giá trị thật (bus 0,
+// còn 0 giây).
+type AttentionDetailParams struct {
+	BusID      *int `json:"busId,omitempty"`
+	SlaveAddr  *int `json:"slaveAddr,omitempty"`
+	ExpiresInS *int `json:"expiresInS,omitempty"`
+}
+
+func overviewIntPtr(value int) *int { return &value }
 
 type OverviewResponse struct {
 	SchemaVersion     int                     `json:"schemaVersion"`
@@ -213,6 +252,10 @@ type modbusHealthInput struct {
 	slaves     []SlaveTelemetry
 	buses      []BusTelemetry
 	configured int
+	// enabledBuses là tập bus được bật trong cấu hình đang chạy. Telemetry vẫn
+	// publish bus disabled ở trạng thái CLOSED để API chẩn đoán nói đúng hiện
+	// trạng, nhưng CLOSED có chủ ý không phải fault vận hành.
+	enabledBuses map[uint8]bool
 	// deviceIDFor tra `bus:slave` → deviceID đã cấu hình, và nameFor tra
 	// deviceID → tên hiển thị. Attention cần cả hai: drill-down đi theo ID,
 	// còn người đọc cần tên.
@@ -225,11 +268,26 @@ func overviewSlaveKey(busID, addr uint8) string {
 }
 
 func (a *App) readModbusHealthInput(ctx context.Context) (modbusHealthInput, bool) {
-	input := modbusHealthInput{deviceIDFor: map[string]string{}, nameFor: map[string]string{}}
+	input := modbusHealthInput{
+		deviceIDFor:  map[string]string{},
+		nameFor:      map[string]string{},
+		enabledBuses: map[uint8]bool{},
+	}
 	cfg, _ := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
-	input.configured = len(cfg.Devices)
+	buses, _ := webModbus.MigrateBuses(cfg)
+	enabledBusNames := map[string]bool{}
+	for _, bus := range buses {
+		id := bus.NumericID()
+		if bool(bus.Enabled) && id >= 1 && id <= 255 {
+			input.enabledBuses[uint8(id)] = true
+			enabledBusNames[strings.ToLower(strings.TrimSpace(bus.BusID))] = true
+		}
+	}
 	index := newModbusDeviceIndex(cfg.Devices)
 	for _, device := range cfg.Devices {
+		if bool(device.Enabled) && enabledBusNames[strings.ToLower(strings.TrimSpace(modbusDeviceBus(device)))] {
+			input.configured++
+		}
 		if strings.TrimSpace(device.DisplayName) != "" {
 			input.nameFor[device.DeviceID] = device.DisplayName
 		}
@@ -445,11 +503,11 @@ func (a *App) overviewHealth(nowIso string, core CoreStatus, coreErr, pointsErr 
 		case bad > 0:
 			localIO.State = HealthFault
 			localIO.ReasonCode = "bad_quality_points"
-			localIO.Detail = plural(bad, "điểm chất lượng bad")
+			localIO.DetailCount = overviewIntPtr(bad)
 		case stale > 0:
 			localIO.State = HealthDegraded
 			localIO.ReasonCode = "stale_points"
-			localIO.Detail = plural(stale, "điểm stale/offline")
+			localIO.DetailCount = overviewIntPtr(stale)
 		default:
 			localIO.State = HealthGood
 			localIO.ReasonCode = "ok"
@@ -462,7 +520,6 @@ func (a *App) overviewHealth(nowIso string, core CoreStatus, coreErr, pointsErr 
 	case modbus.configured == 0:
 		modbusHealth.State = HealthUnknown
 		modbusHealth.ReasonCode = "not_configured"
-		modbusHealth.Detail = "Chưa cấu hình thiết bị Modbus RTU"
 	case !modbusOK:
 		modbusHealth.State = HealthUnknown
 		modbusHealth.ReasonCode = "telemetry_unpublished"
@@ -475,7 +532,14 @@ func (a *App) overviewHealth(nowIso string, core CoreStatus, coreErr, pointsErr 
 		}
 		busFault := 0
 		for _, bus := range modbus.buses {
-			if bus.State != "" && !strings.EqualFold(bus.State, "open") && !strings.EqualFold(bus.State, "ok") {
+			// IOBus phát RUNNING cho bus đã mở và CLOSED cho bus disabled.
+			// Bản cũ chỉ coi OPEN/OK là khoẻ, đồng thời đếm cả bus disabled,
+			// nên cấu hình live 1 bus chạy + 1 bus tắt bị báo sai 2 fault.
+			if modbus.enabledBuses != nil && !modbus.enabledBuses[bus.ID] {
+				continue
+			}
+			if bus.State != "" && !strings.EqualFold(bus.State, "running") &&
+				!strings.EqualFold(bus.State, "open") && !strings.EqualFold(bus.State, "ok") {
 				busFault++
 			}
 		}
@@ -483,11 +547,11 @@ func (a *App) overviewHealth(nowIso string, core CoreStatus, coreErr, pointsErr 
 		case busFault > 0:
 			modbusHealth.State = HealthFault
 			modbusHealth.ReasonCode = "bus_not_open"
-			modbusHealth.Detail = plural(busFault, "bus không mở được")
+			modbusHealth.DetailCount = overviewIntPtr(busFault)
 		case offline > 0:
 			modbusHealth.State = HealthDegraded
 			modbusHealth.ReasonCode = "slave_offline"
-			modbusHealth.Detail = plural(offline, "thiết bị offline")
+			modbusHealth.DetailCount = overviewIntPtr(offline)
 		default:
 			modbusHealth.State = HealthGood
 			modbusHealth.ReasonCode = "ok"
@@ -532,15 +596,14 @@ func (a *App) overviewHealth(nowIso string, core CoreStatus, coreErr, pointsErr 
 			case enabled == 0:
 				historian.State = HealthUnknown
 				historian.ReasonCode = "no_logged_points"
-				historian.Detail = "Chưa bật ghi lịch sử cho điểm nào"
 			case failing > 0:
 				historian.State = HealthDegraded
 				historian.ReasonCode = "policy_unhealthy"
-				historian.Detail = plural(failing, "điểm ghi lỗi")
+				historian.DetailCount = overviewIntPtr(failing)
 			default:
 				historian.State = HealthGood
 				historian.ReasonCode = "ok"
-				historian.Detail = plural(enabled, "điểm đang ghi")
+				historian.DetailCount = overviewIntPtr(enabled)
 			}
 		}
 	}
@@ -595,6 +658,9 @@ func buildAttention(alarms []AlarmDTO, points []PointDTO, modbus modbusHealthInp
 		if severity == "low" || severity == "info" {
 			continue
 		}
+		// `ISS-PGUI-02` — thông điệp alarm do authority thượng nguồn (Core) dựng.
+		// Không có `titleCode`/`detailCode`: mã hoá lại một câu mà tầng này không
+		// kiểm soát là bịa ra một phân loại không có thật.
 		items = append(items, OverviewAttentionItem{
 			ID:         "alarm:" + alarm.ID,
 			Severity:   severity,
@@ -628,11 +694,21 @@ func buildAttention(alarms []AlarmDTO, points []PointDTO, modbus modbusHealthInp
 			targetID = itoaInt(int(slave.BusID))
 		}
 		items = append(items, OverviewAttentionItem{
-			ID:         "modbus:" + overviewSlaveKey(slave.BusID, slave.Addr),
-			Severity:   "high",
-			Category:   "communication",
-			Title:      title,
-			Detail:     "Bus " + itoaInt(int(slave.BusID)) + " · Slave " + itoaInt(int(slave.Addr)),
+			ID:       "modbus:" + overviewSlaveKey(slave.BusID, slave.Addr),
+			Severity: "high",
+			Category: "communication",
+			Title:    title,
+			Detail:   "Bus " + itoaInt(int(slave.BusID)) + " · Slave " + itoaInt(int(slave.Addr)),
+			// `subject` rỗng khi thiết bị chưa có tên trong cấu hình: client dựng
+			// câu chung ("A Modbus device lost contact") thay vì chèn một khoảng
+			// trắng vào giữa câu.
+			TitleCode:  "modbus_device_offline",
+			Subject:    modbus.nameFor[deviceID],
+			DetailCode: "modbus_bus_slave",
+			DetailParams: &AttentionDetailParams{
+				BusID:     overviewIntPtr(int(slave.BusID)),
+				SlaveAddr: overviewIntPtr(int(slave.Addr)),
+			},
 			TargetType: targetType,
 			TargetID:   targetID,
 		})
@@ -644,23 +720,29 @@ func buildAttention(alarms []AlarmDTO, points []PointDTO, modbus modbusHealthInp
 		case "bad":
 			items = append(items, OverviewAttentionItem{
 				ID: "point:" + point.ID, Severity: "high", Category: "quality",
-				Title:      point.Name + " — chất lượng BAD",
-				Detail:     attentionPointDetail(point),
+				Title:     point.Name + " — chất lượng BAD",
+				Detail:    attentionPointDetail(point),
+				TitleCode: "point_quality_bad", Subject: point.Name,
+				DetailCode: "", DetailParams: attentionPointDetailParams(point),
 				TargetType: "point", TargetID: point.ID, ObservedAt: point.UpdatedAt,
 			})
 		case "offline":
 			items = append(items, OverviewAttentionItem{
 				ID: "point:" + point.ID, Severity: "high", Category: "communication",
-				Title:      point.Name + " — OFFLINE",
-				Detail:     attentionPointDetail(point),
-				TargetType: "point", TargetID: point.ID, ObservedAt: point.UpdatedAt,
+				Title:     point.Name + " — OFFLINE",
+				Detail:    attentionPointDetail(point),
+				TitleCode: "point_offline", Subject: point.Name,
+				DetailParams: attentionPointDetailParams(point),
+				TargetType:   "point", TargetID: point.ID, ObservedAt: point.UpdatedAt,
 			})
 		case "stale":
 			items = append(items, OverviewAttentionItem{
 				ID: "point:" + point.ID, Severity: "medium", Category: "quality",
-				Title:      point.Name + " — STALE",
-				Detail:     attentionPointDetail(point),
-				TargetType: "point", TargetID: point.ID, ObservedAt: point.UpdatedAt,
+				Title:     point.Name + " — STALE",
+				Detail:    attentionPointDetail(point),
+				TitleCode: "point_stale", Subject: point.Name,
+				DetailParams: attentionPointDetailParams(point),
+				TargetType:   "point", TargetID: point.ID, ObservedAt: point.UpdatedAt,
 			})
 		}
 		if point.Forced {
@@ -668,6 +750,12 @@ func buildAttention(alarms []AlarmDTO, points []PointDTO, modbus modbusHealthInp
 				ID: "forced:" + point.ID, Severity: "medium", Category: "forced",
 				Title:      point.Name + " — đang ép tay",
 				Detail:     forcedDetail(point),
+				TitleCode:  "point_forced",
+				Subject:    point.Name,
+				DetailCode: forcedDetailCode(point),
+				DetailParams: &AttentionDetailParams{
+					ExpiresInS: forcedExpiresInS(point),
+				},
 				TargetType: "point", TargetID: point.ID, ObservedAt: point.UpdatedAt,
 			})
 		}
@@ -694,6 +782,35 @@ func attentionPointDetail(point PointDTO) string {
 		parts = append(parts, point.ID)
 	}
 	return strings.Join(parts, " · ")
+}
+
+// attentionPointDetailParams — điểm chất lượng xấu chỉ có tham số Modbus khi nó
+// thật sự là điểm Modbus. Phần còn lại của `attentionPointDetail` (lý do chất
+// lượng do Core trả, hoặc `pointID`) là văn bản ĐỤC, đi qua `detail` nguyên văn.
+func attentionPointDetailParams(point PointDTO) *AttentionDetailParams {
+	if point.Kind != "modbus_rtu" || point.BusID <= 0 {
+		return nil
+	}
+	return &AttentionDetailParams{
+		BusID:     overviewIntPtr(int(point.BusID)),
+		SlaveAddr: overviewIntPtr(int(point.SlaveAddr)),
+	}
+}
+
+// forcedDetailCode phân biệt "còn N giây" với "không có thời hạn tự nhả". Hai
+// câu này nói hai điều rất khác nhau về rủi ro vận hành, nên chúng là hai mã.
+func forcedDetailCode(point PointDTO) string {
+	if point.OverrideExpiresInS != nil && *point.OverrideExpiresInS > 0 {
+		return "forced_expires_in"
+	}
+	return "forced_no_expiry"
+}
+
+func forcedExpiresInS(point PointDTO) *int {
+	if point.OverrideExpiresInS == nil || *point.OverrideExpiresInS <= 0 {
+		return nil
+	}
+	return overviewIntPtr(int(*point.OverrideExpiresInS))
 }
 
 func forcedDetail(point PointDTO) string {

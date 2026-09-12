@@ -11,11 +11,22 @@ const outputPath = resolve(
   repositoryRoot,
   "apps/web-ui/src/features/programming/api/generated/client.ts",
 );
+const rbacManifestPath = resolve(
+  repositoryRoot,
+  "contracts/programming/programming_rbac_manifest.json",
+);
 const checkOnly = process.argv.includes("--check");
 
 const document = parse(await readFile(sourcePath, "utf8"));
 const errorCatalog = JSON.parse(await readFile(errorCatalogPath, "utf8"));
 const supportedMethods = ["get", "post", "put", "patch", "delete"];
+const supportedPermissions = ["read", "program.edit", "program.activate", "simulation.run"];
+const rolesByPermission = {
+  read: ["viewer", "operator", "engineer", "admin"],
+  "program.edit": ["engineer", "admin"],
+  "program.activate": ["engineer", "admin"],
+  "simulation.run": ["admin"],
+};
 const endpoints = [];
 
 for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
@@ -23,14 +34,23 @@ for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
   for (const method of supportedMethods) {
     const operation = pathItem?.[method];
     if (!operation) continue;
-    if (!operation.operationId || !Array.isArray(operation["x-rbac"])) {
-      throw new Error(`${method.toUpperCase()} ${path} thiếu operationId hoặc x-rbac`);
+    const permission = operation["x-permission"];
+    if (!operation.operationId || !Array.isArray(operation["x-rbac"]) || !supportedPermissions.includes(permission)) {
+      throw new Error(`${method.toUpperCase()} ${path} thiếu operationId, x-rbac hoặc x-permission hợp lệ`);
+    }
+    const expectedRoles = rolesByPermission[permission];
+    if (JSON.stringify(operation["x-rbac"]) !== JSON.stringify(expectedRoles)) {
+      throw new Error(
+        `${method.toUpperCase()} ${path}: x-rbac ${JSON.stringify(operation["x-rbac"])} lệch ` +
+        `x-permission ${permission} (${JSON.stringify(expectedRoles)})`,
+      );
     }
     endpoints.push({
       operationId: operation.operationId,
       method: method.toUpperCase(),
       path: `/api/v1${path}`,
       roles: operation["x-rbac"],
+      permission,
     });
   }
 }
@@ -38,11 +58,12 @@ for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
 endpoints.sort((left, right) => left.operationId.localeCompare(right.operationId));
 // 33 operation Rev A/R1-R2 + 7 operation Simulation R3 (T59-814)
 // + 1 operation Used-In (T61-105) + 1 operation Check entry Library (T61-401)
-// + 1 operation đọc mã nguồn entry (T61-404). Con số là contract: thêm endpoint
+// + 1 operation đọc mã nguồn entry (T61-404) + 1 preview binding (ISS-PGM03-01).
+// Con số là contract: thêm endpoint
 // mà quên sinh lại client sẽ đỏ ở đây thay vì lộ ra dưới dạng một hàm thiếu
 // trong FE.
-if (endpoints.length !== 43) {
-  throw new Error(`Programming OpenAPI phải có 43 operation, thực tế ${endpoints.length}`);
+if (endpoints.length !== 45) {
+  throw new Error(`Programming OpenAPI phải có 45 operation, thực tế ${endpoints.length}`);
 }
 if (new Set(endpoints.map(({ operationId }) => operationId)).size !== endpoints.length) {
   throw new Error("Programming OpenAPI có operationId trùng");
@@ -83,6 +104,11 @@ const quotedUnion = (items) => items.map((item) => JSON.stringify(item)).join(" 
 // đó cố ý chặt — nó biến một vòng tham chiếu thành lỗi lúc sinh, thay vì thành
 // một type `any` ngầm ở phía dùng.
 const generatedTypeSchemas = [
+  "ProgrammingBindingPointIdentity",
+  "ProgrammingBindingCandidate",
+  "ProgrammingBindingPreviewRequest",
+  "ProgrammingBindingValidationIssue",
+  "ProgrammingBindingPreview",
   "ProgrammingProgramRuntimeState",
   "ProgrammingProgramRuntimeStateSource",
   "ProgrammingProgramHealth",
@@ -167,10 +193,15 @@ for (const name of generatedTypeSchemas) {
 const schemaTypes = schemaTypeBlocks.join("\n\n");
 const endpointLines = endpoints
   .map(
-    ({ operationId, method, path, roles }) =>
-      `  ${JSON.stringify(operationId)}: { method: ${JSON.stringify(method)}, path: ${JSON.stringify(path)}, roles: ${JSON.stringify(roles)} },`,
+    ({ operationId, method, path, roles, permission }) =>
+      `  ${JSON.stringify(operationId)}: { method: ${JSON.stringify(method)}, path: ${JSON.stringify(path)}, roles: ${JSON.stringify(roles)}, permission: ${JSON.stringify(permission)} },`,
   )
   .join("\n");
+
+const rbacManifest = `${JSON.stringify({
+  schemaVersion: "1.0",
+  operations: endpoints,
+}, null, 2)}\n`;
 
 const generated = `// Tệp sinh tự động từ contracts/openapi/openapi.yaml. Không sửa bằng tay.
 // Chạy: npm run generate:programming-api
@@ -185,6 +216,7 @@ export type { ProgrammingErrorCode } from "./errors";
 export const PROGRAMMING_OPENAPI_VERSION = ${JSON.stringify(document.info.version)} as const;
 export const PROGRAMMING_SCHEMA_VERSION = ${JSON.stringify(schemaVersion)} as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
+export type ProgrammingPermission = ${quotedUnion(supportedPermissions)};
 export type ProgrammingHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type ProgrammingImpactStatus = ${quotedUnion(impactStatuses)};
 export type ProgrammingImpactKey = ${quotedUnion(impactKeys)};
@@ -294,6 +326,7 @@ ${endpointLines}
   method: ProgrammingHttpMethod;
   path: string;
   roles: readonly ProgrammingRole[];
+  permission: ProgrammingPermission;
 }>;
 
 export type ProgrammingOperationId = keyof typeof PROGRAMMING_ENDPOINTS;
@@ -366,6 +399,7 @@ export class ProgrammingApiClient {
   constructor(
     private readonly origin = "",
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly onForbidden?: (permission: ProgrammingPermission, operationId: ProgrammingOperationId) => void,
   ) {}
 
   async request<TResponse, TBody = unknown>(
@@ -418,6 +452,9 @@ export class ProgrammingApiClient {
     if (!response.ok) {
       const payload = await response.json().catch(() => undefined);
       const envelope = normalizeProgrammingErrorEnvelope(payload, response.status);
+      /* ISS-PGM-RBAC-01: 403 là bằng chứng quyền đã bị thu hồi sau mount.
+         Báo đúng capability của operation cho provider; không tự retry mutation. */
+      if (response.status === 403) this.onForbidden?.(endpoint.permission, operationId);
       throw new ProgrammingApiError(response.status, envelope);
     }
     if (response.status === 204) return undefined as TResponse;
@@ -431,9 +468,15 @@ if (checkOnly) {
   if (current !== generated) {
     throw new Error("Client Programming đã lệch OpenAPI; chạy npm run generate:programming-api");
   }
+  const currentManifest = await readFile(rbacManifestPath, "utf8").catch(() => "");
+  if (currentManifest !== rbacManifest) {
+    throw new Error("Manifest RBAC Programming đã lệch OpenAPI; chạy npm run generate:programming-api");
+  }
   console.log(`Programming API client đồng bộ: ${endpoints.length} operation`);
 } else {
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, generated);
-  console.log(`Đã sinh ${outputPath} từ ${endpoints.length} operation`);
+  await mkdir(dirname(rbacManifestPath), { recursive: true });
+  await writeFile(rbacManifestPath, rbacManifest);
+  console.log(`Đã sinh client và manifest RBAC từ ${endpoints.length} operation`);
 }

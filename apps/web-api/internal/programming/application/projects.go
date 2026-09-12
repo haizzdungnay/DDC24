@@ -157,6 +157,7 @@ type ProjectService struct {
 	newID         func() string
 	cursorSecret  []byte
 	runtimeImpact RuntimeImpactProvider
+	catalog       PointCatalogProvider
 }
 
 type RuntimeImpactSnapshot struct {
@@ -256,6 +257,11 @@ func (s *ProjectService) SaveDraft(ctx context.Context, actor Actor, command Sav
 	content, err := applyDraftOperations(snapshot.Draft.ContentJSON, command.Operations)
 	if err != nil {
 		return MutationResult{}, err
+	}
+	if draftOperationsContain(command.Operations, "upsertBinding") {
+		if err := s.validateDraftBindings(ctx, content, command.Operations); err != nil {
+			return MutationResult{}, err
+		}
 	}
 	auditID := s.newID()
 	draft, err := s.store.SaveDraft(ctx, programmingstore.SaveDraftParams{

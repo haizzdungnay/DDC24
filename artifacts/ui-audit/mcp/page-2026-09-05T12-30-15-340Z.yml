@@ -1,0 +1,628 @@
+- generic [ref=f1e3] [box=0,0,780,4149]:
+  - link "Skip navigation, go to main content" [ref=f1e4] [cursor=pointer] [box=-1,-1,1,1]:
+    - /url: "#main-content"
+  - generic [ref=f1e6] [box=1,0,778,4149]:
+    - banner [ref=f1e7] [box=1,0,778,64]:
+      - generic [ref=f1e8] [box=21,12,345,40]:
+        - button "Open navigation" [active] [ref=f1e9] [box=21,12,40,40]
+        - generic [ref=f1e11] [box=73,19,131,25]: "Device: OFFLINE"
+        - generic [ref=f1e18] [box=216,20,66,24]: LIVE
+        - 'link "Status good: fixture_read_only. Open Diagnostics." [ref=f1e186] [cursor=pointer] [box=293,20,73,23]':
+          - /url: /diagnostics
+          - generic "fixture_read_only" [ref=f1e187] [box=293,20,73,23]: GOOD
+      - generic [ref=f1e24] [box=383,12,376,40]:
+        - link "Alarms" [ref=f1e25] [cursor=pointer] [box=383,12,40,40]:
+          - /url: /alarms
+        - link "Help" [ref=f1e29] [cursor=pointer] [box=435,12,40,40]:
+          - /url: /help?topic=%2Fmonitor
+        - link "User" [ref=f1e33] [cursor=pointer] [box=487,12,40,40]:
+          - /url: /me
+        - button "Switch to dark theme" [ref=f1e37] [box=539,12,40,40]
+        - button "Toggle language" [ref=f1e40] [box=591,12,66,40]: EN
+        - button "Logout" [ref=f1e43] [box=669,16,90,32]
+    - generic [ref=f1e48] [box=1,64,778,37]: WebSocket lost. Reconnecting; displayed data is stale.
+    - main [ref=f1e49] [box=1,101,778,4048]:
+      - generic [ref=f1e331] [box=21,121,738,4008]:
+        - generic [ref=f1e332] [box=21,121,738,41]:
+          - heading "Monitor I/O" [level=1] [ref=f1e333] [box=21,121,738,25]
+          - paragraph [ref=f1e334] [box=21,146,738,16]: Monitor I/O point states
+        - generic [ref=f1e335] [box=21,174,738,143]:
+          - generic [ref=f1e336] [box=21,174,176,143]:
+            - generic [ref=f1e337] [box=38,191,142,17]: Total points
+            - generic [ref=f1e338] [box=38,220,142,40]: "49"
+            - generic [ref=f1e339] [box=38,268,142,16]: UI 1 | DO 0 | AO 0
+          - generic [ref=f1e341] [box=209,174,176,143]:
+            - generic [ref=f1e342] [box=226,191,142,17]: Binary points ON
+            - generic [ref=f1e343] [box=226,220,142,40]: "24"
+            - generic [ref=f1e344] [box=226,268,142,16]: 24/48 · 50%
+          - generic [ref=f1e346] [box=396,174,176,143]:
+            - generic [ref=f1e347] [box=413,191,142,17]: Normal UI/AO points
+            - generic [ref=f1e348] [box=413,220,142,40]: "1"
+            - generic [ref=f1e349] [box=413,268,142,16]: 100%
+          - generic [ref=f1e351] [box=584,174,176,143]:
+            - generic [ref=f1e352] [box=601,191,142,33]: Fault / signal-loss points
+            - generic [ref=f1e353] [box=601,236,142,40]: "0"
+            - generic [ref=f1e354] [box=601,284,142,16]: 0%
+        - generic [ref=f1e356] [box=21,329,738,57]:
+          - generic [ref=f1e357] [box=21,329,225,32]:
+            - text: Saved view
+            - combobox "Saved views" [ref=f1e358] [box=91,329,155,32]:
+              - option "— No saved views —" [selected] [box=0,0,0,0]
+          - button "Save view" [ref=f1e359] [box=254,329,104,32]
+          - button "Rename" [disabled] [ref=f1e362] [box=366,329,96,32]
+          - button "Delete" [disabled] [ref=f1e366] [box=471,329,87,32]
+          - generic [ref=f1e370] [box=21,369,257,17]: Stored on the device under the signed-in account.
+        - generic [ref=f1e371] [box=21,398,738,40]:
+          - combobox "Filter by point source" [ref=f1e372] [box=21,398,170,40]:
+            - option "Source - All" [selected] [box=0,0,0,0]
+            - option "Local I/O" [box=0,0,0,0]
+            - option "Virtual" [box=0,0,0,0]
+            - option "Modbus RTU" [box=0,0,0,0]
+          - combobox "Filter by equipment" [ref=f1e373] [box=203,398,170,40]:
+            - option "Equipment - All" [selected] [box=0,0,0,0]
+            - option "Unassigned (49)" [box=0,0,0,0]
+          - combobox "Filter by I/O group" [ref=f1e374] [box=385,398,170,40]:
+            - option "I/O group - All" [selected] [box=0,0,0,0]
+            - option "UI" [box=0,0,0,0]
+            - option "DO" [box=0,0,0,0]
+            - option "AO" [box=0,0,0,0]
+            - option "Virtual" [box=0,0,0,0]
+            - option "Modbus RTU" [box=0,0,0,0]
+          - combobox "Filter by quality" [ref=f1e375] [box=567,398,170,40]:
+            - option "Quality - All" [selected] [box=0,0,0,0]
+            - option "Good" [box=0,0,0,0]
+            - option "Uncertain" [box=0,0,0,0]
+            - option "Bad" [box=0,0,0,0]
+            - option "Stale" [box=0,0,0,0]
+            - option "Offline" [box=0,0,0,0]
+          - combobox "Filter by operating state" [ref=f1e376] [box=749,398,190,40]:
+            - option "State - All" [selected] [box=0,0,0,0]
+            - option "Forced" [box=0,0,0,0]
+            - option "Fault" [box=0,0,0,0]
+            - option "Offline" [box=0,0,0,0]
+            - option "Writable" [box=0,0,0,0]
+            - option "Logging" [box=0,0,0,0]
+          - textbox [ref=f1e378] [box=964,408,10,20]:
+            - /placeholder: Search id, tag, name, source...
+          - button "Refresh" [ref=f1e382] [box=1013,398,132,40]
+        - generic [ref=f1e388] [box=21,450,738,3679]:
+          - generic [ref=f1e389] [box=21,450,738,2778]:
+            - generic [ref=f1e390] [box=21,450,738,67]:
+              - generic [ref=f1e391] [box=22,451,736,33]: DO - DIGITAL OUTPUT (0)
+              - generic [ref=f1e395] [box=64,492,634,15]:
+                - generic [ref=f1e396] [box=64,492,70,15]: Point
+                - generic [ref=f1e397] [box=134,492,220,15]: Point name
+                - generic [ref=f1e398] [box=354,492,112,15]: Status
+                - generic [ref=f1e399] [box=466,492,128,15]: Updated at
+                - generic [ref=f1e400] [box=594,492,104,15]: Remaining
+            - generic [ref=f1e402] [box=21,529,738,111]:
+              - generic [ref=f1e403] [box=22,530,736,33]: UI - UNIVERSAL INPUT (1)
+              - generic [ref=f1e404] [box=22,563,736,76]:
+                - generic [ref=f1e407] [box=64,571,606,15]:
+                  - generic [ref=f1e408] [box=64,571,70,15]: Point
+                  - generic [ref=f1e409] [box=134,571,150,15]: Point name
+                  - generic [ref=f1e410] [box=284,571,70,15]: Value
+                  - generic [ref=f1e411] [box=354,571,60,15]: Unit
+                  - generic [ref=f1e412] [box=414,571,120,15]: Status
+                  - generic [ref=f1e413] [box=534,571,90,15]: Trend
+                  - generic [ref=f1e414] [box=624,571,84,15]: Updated
+                  - generic [ref=f1e415] [box=708,571,104,15]: Remaining
+                - generic [ref=f1e417] [box=22,595,736,44]:
+                  - checkbox "Select UI-01 — Supply Air Temperature for bulk override" [disabled] [ref=f1e419] [box=41,609,16,16]
+                  - button "UI-01 Supply Air Temperature 22.4 degC Normal 19:27:00" [ref=f1e420] [box=64,595,606,44]:
+                    - generic [ref=f1e421] [box=64,609,70,16]: UI-01
+                    - generic [ref=f1e422] [box=134,609,150,16]: Supply Air Temperature
+                    - generic [ref=f1e423] [box=284,609,70,16]: "22.4"
+                    - generic [ref=f1e424] [box=354,609,60,16]: degC
+                    - generic [ref=f1e425] [box=414,609,120,16]: Normal
+                    - generic [ref=f1e430] [box=624,609,84,16]: 19:27:00
+            - generic [ref=f1e431] [box=21,652,738,67]:
+              - generic [ref=f1e432] [box=22,653,736,33]: AO - ANALOG OUTPUT (0)
+              - generic [ref=f1e436] [box=64,694,606,15]:
+                - generic [ref=f1e437] [box=64,694,70,15]: Point
+                - generic [ref=f1e438] [box=134,694,150,15]: Point name
+                - generic [ref=f1e439] [box=284,694,70,15]: Value
+                - generic [ref=f1e440] [box=354,694,60,15]: Unit
+                - generic [ref=f1e441] [box=414,694,120,15]: Status
+                - generic [ref=f1e442] [box=534,694,90,15]: Trend
+                - generic [ref=f1e443] [box=624,694,84,15]: Updated
+                - generic [ref=f1e444] [box=708,694,104,15]: Remaining
+            - generic [ref=f1e446] [box=21,731,738,67]:
+              - generic [ref=f1e447] [box=22,732,736,33]: VIRTUAL POINTS (0)
+              - generic [ref=f1e451] [box=64,773,606,15]:
+                - generic [ref=f1e452] [box=64,773,70,15]: Point
+                - generic [ref=f1e453] [box=134,773,150,15]: Point name
+                - generic [ref=f1e454] [box=284,773,70,15]: Value
+                - generic [ref=f1e455] [box=354,773,60,15]: Unit
+                - generic [ref=f1e456] [box=414,773,120,15]: Status
+                - generic [ref=f1e457] [box=534,773,90,15]: Trend
+                - generic [ref=f1e458] [box=624,773,84,15]: Updated
+                - generic [ref=f1e459] [box=708,773,104,15]: Remaining
+            - generic [ref=f1e461] [box=21,810,738,2418]:
+              - generic [ref=f1e462] [box=22,811,736,33]: MODBUS RTU POINTS (48)
+              - generic [ref=f1e463] [box=22,844,736,2383]:
+                - generic [ref=f1e466] [box=64,852,606,15]:
+                  - generic [ref=f1e467] [box=64,852,70,15]: Point
+                  - generic [ref=f1e468] [box=134,852,150,15]: Point name
+                  - generic [ref=f1e469] [box=284,852,70,15]: Value
+                  - generic [ref=f1e470] [box=354,852,60,15]: Unit
+                  - generic [ref=f1e471] [box=414,852,120,15]: Status
+                  - generic [ref=f1e472] [box=534,852,90,15]: Trend
+                  - generic [ref=f1e473] [box=624,852,84,15]: Updated
+                  - generic [ref=f1e474] [box=708,852,104,15]: Remaining
+                - generic [ref=f1e476] [box=22,876,736,49]:
+                  - checkbox "Select CK50804-DO1 — Modbus Relay 1 for bulk override" [disabled] [ref=f1e478] [box=41,892,16,16]
+                  - button "CK50804-DO1 Modbus Relay 1 ON - Normal 19:27:00" [ref=f1e479] [box=64,876,606,48]:
+                    - generic [ref=f1e480] [box=64,884,70,32]: CK50804-DO1
+                    - generic [ref=f1e481] [box=134,892,150,16]: Modbus Relay 1
+                    - generic [ref=f1e482] [box=284,892,70,16]: "ON"
+                    - generic [ref=f1e483] [box=354,892,60,16]: "-"
+                    - generic [ref=f1e484] [box=414,892,120,16]: Normal
+                    - generic [ref=f1e489] [box=624,892,84,16]: 19:27:00
+                - generic [ref=f1e490] [box=22,925,736,49]:
+                  - checkbox "Select CK50804-DO2 — Modbus Relay 2 for bulk override" [disabled] [ref=f1e492] [box=41,941,16,16]
+                  - button "CK50804-DO2 Modbus Relay 2 OFF - Normal 19:27:00" [ref=f1e493] [box=64,925,606,48]:
+                    - generic [ref=f1e494] [box=64,933,70,32]: CK50804-DO2
+                    - generic [ref=f1e495] [box=134,941,150,16]: Modbus Relay 2
+                    - generic [ref=f1e496] [box=284,941,70,16]: "OFF"
+                    - generic [ref=f1e497] [box=354,941,60,16]: "-"
+                    - generic [ref=f1e498] [box=414,941,120,16]: Normal
+                    - generic [ref=f1e503] [box=624,941,84,16]: 19:27:00
+                - generic [ref=f1e504] [box=22,974,736,49]:
+                  - checkbox "Select CK50804-DO3 — Modbus Relay 3 for bulk override" [disabled] [ref=f1e506] [box=41,990,16,16]
+                  - button "CK50804-DO3 Modbus Relay 3 ON - Normal 19:27:00" [ref=f1e507] [box=64,974,606,48]:
+                    - generic [ref=f1e508] [box=64,982,70,32]: CK50804-DO3
+                    - generic [ref=f1e509] [box=134,990,150,16]: Modbus Relay 3
+                    - generic [ref=f1e510] [box=284,990,70,16]: "ON"
+                    - generic [ref=f1e511] [box=354,990,60,16]: "-"
+                    - generic [ref=f1e512] [box=414,990,120,16]: Normal
+                    - generic [ref=f1e517] [box=624,990,84,16]: 19:27:00
+                - generic [ref=f1e518] [box=22,1023,736,49]:
+                  - checkbox "Select CK50804-DO4 — Modbus Relay 4 for bulk override" [disabled] [ref=f1e520] [box=41,1039,16,16]
+                  - button "CK50804-DO4 Modbus Relay 4 OFF - Normal 19:27:00" [ref=f1e521] [box=64,1023,606,48]:
+                    - generic [ref=f1e522] [box=64,1031,70,32]: CK50804-DO4
+                    - generic [ref=f1e523] [box=134,1039,150,16]: Modbus Relay 4
+                    - generic [ref=f1e524] [box=284,1039,70,16]: "OFF"
+                    - generic [ref=f1e525] [box=354,1039,60,16]: "-"
+                    - generic [ref=f1e526] [box=414,1039,120,16]: Normal
+                    - generic [ref=f1e531] [box=624,1039,84,16]: 19:27:00
+                - generic [ref=f1e532] [box=22,1072,736,49]:
+                  - checkbox "Select CK50804-DO5 — Modbus Relay 5 for bulk override" [disabled] [ref=f1e534] [box=41,1088,16,16]
+                  - button "CK50804-DO5 Modbus Relay 5 ON - Normal 19:27:00" [ref=f1e535] [box=64,1072,606,48]:
+                    - generic [ref=f1e536] [box=64,1080,70,32]: CK50804-DO5
+                    - generic [ref=f1e537] [box=134,1088,150,16]: Modbus Relay 5
+                    - generic [ref=f1e538] [box=284,1088,70,16]: "ON"
+                    - generic [ref=f1e539] [box=354,1088,60,16]: "-"
+                    - generic [ref=f1e540] [box=414,1088,120,16]: Normal
+                    - generic [ref=f1e545] [box=624,1088,84,16]: 19:27:00
+                - generic [ref=f1e546] [box=22,1121,736,49]:
+                  - checkbox "Select CK50804-DO6 — Modbus Relay 6 for bulk override" [disabled] [ref=f1e548] [box=41,1137,16,16]
+                  - button "CK50804-DO6 Modbus Relay 6 OFF - Normal 19:27:00" [ref=f1e549] [box=64,1121,606,48]:
+                    - generic [ref=f1e550] [box=64,1129,70,32]: CK50804-DO6
+                    - generic [ref=f1e551] [box=134,1137,150,16]: Modbus Relay 6
+                    - generic [ref=f1e552] [box=284,1137,70,16]: "OFF"
+                    - generic [ref=f1e553] [box=354,1137,60,16]: "-"
+                    - generic [ref=f1e554] [box=414,1137,120,16]: Normal
+                    - generic [ref=f1e559] [box=624,1137,84,16]: 19:27:00
+                - generic [ref=f1e560] [box=22,1170,736,49]:
+                  - checkbox "Select CK50804-DO7 — Modbus Relay 7 for bulk override" [disabled] [ref=f1e562] [box=41,1186,16,16]
+                  - button "CK50804-DO7 Modbus Relay 7 ON - Normal 19:27:00" [ref=f1e563] [box=64,1170,606,48]:
+                    - generic [ref=f1e564] [box=64,1178,70,32]: CK50804-DO7
+                    - generic [ref=f1e565] [box=134,1186,150,16]: Modbus Relay 7
+                    - generic [ref=f1e566] [box=284,1186,70,16]: "ON"
+                    - generic [ref=f1e567] [box=354,1186,60,16]: "-"
+                    - generic [ref=f1e568] [box=414,1186,120,16]: Normal
+                    - generic [ref=f1e573] [box=624,1186,84,16]: 19:27:00
+                - generic [ref=f1e574] [box=22,1219,736,49]:
+                  - checkbox "Select CK50804-DO8 — Modbus Relay 8 for bulk override" [disabled] [ref=f1e576] [box=41,1235,16,16]
+                  - button "CK50804-DO8 Modbus Relay 8 OFF - Normal 19:27:00" [ref=f1e577] [box=64,1219,606,48]:
+                    - generic [ref=f1e578] [box=64,1227,70,32]: CK50804-DO8
+                    - generic [ref=f1e579] [box=134,1235,150,16]: Modbus Relay 8
+                    - generic [ref=f1e580] [box=284,1235,70,16]: "OFF"
+                    - generic [ref=f1e581] [box=354,1235,60,16]: "-"
+                    - generic [ref=f1e582] [box=414,1235,120,16]: Normal
+                    - generic [ref=f1e587] [box=624,1235,84,16]: 19:27:00
+                - generic [ref=f1e588] [box=22,1268,736,49]:
+                  - checkbox "Select CK50805-DO1 — Modbus Relay 9 for bulk override" [disabled] [ref=f1e590] [box=41,1284,16,16]
+                  - button "CK50805-DO1 Modbus Relay 9 ON - Normal 19:27:00" [ref=f1e591] [box=64,1268,606,48]:
+                    - generic [ref=f1e592] [box=64,1276,70,32]: CK50805-DO1
+                    - generic [ref=f1e593] [box=134,1284,150,16]: Modbus Relay 9
+                    - generic [ref=f1e594] [box=284,1284,70,16]: "ON"
+                    - generic [ref=f1e595] [box=354,1284,60,16]: "-"
+                    - generic [ref=f1e596] [box=414,1284,120,16]: Normal
+                    - generic [ref=f1e601] [box=624,1284,84,16]: 19:27:00
+                - generic [ref=f1e602] [box=22,1317,736,49]:
+                  - checkbox "Select CK50805-DO10 — Modbus Relay 18 for bulk override" [disabled] [ref=f1e604] [box=41,1333,16,16]
+                  - button "CK50805-DO10 Modbus Relay 18 OFF - Normal 19:27:00" [ref=f1e605] [box=64,1317,606,48]:
+                    - generic [ref=f1e606] [box=64,1325,70,32]: CK50805-DO10
+                    - generic [ref=f1e607] [box=134,1333,150,16]: Modbus Relay 18
+                    - generic [ref=f1e608] [box=284,1333,70,16]: "OFF"
+                    - generic [ref=f1e609] [box=354,1333,60,16]: "-"
+                    - generic [ref=f1e610] [box=414,1333,120,16]: Normal
+                    - generic [ref=f1e615] [box=624,1333,84,16]: 19:27:00
+                - generic [ref=f1e616] [box=22,1366,736,49]:
+                  - checkbox "Select CK50805-DO11 — Modbus Relay 19 for bulk override" [disabled] [ref=f1e618] [box=41,1382,16,16]
+                  - button "CK50805-DO11 Modbus Relay 19 ON - Normal 19:27:00" [ref=f1e619] [box=64,1366,606,48]:
+                    - generic [ref=f1e620] [box=64,1374,70,32]: CK50805-DO11
+                    - generic [ref=f1e621] [box=134,1382,150,16]: Modbus Relay 19
+                    - generic [ref=f1e622] [box=284,1382,70,16]: "ON"
+                    - generic [ref=f1e623] [box=354,1382,60,16]: "-"
+                    - generic [ref=f1e624] [box=414,1382,120,16]: Normal
+                    - generic [ref=f1e629] [box=624,1382,84,16]: 19:27:00
+                - generic [ref=f1e630] [box=22,1415,736,49]:
+                  - checkbox "Select CK50805-DO12 — Modbus Relay 20 for bulk override" [disabled] [ref=f1e632] [box=41,1431,16,16]
+                  - button "CK50805-DO12 Modbus Relay 20 OFF - Normal 19:27:00" [ref=f1e633] [box=64,1415,606,48]:
+                    - generic [ref=f1e634] [box=64,1423,70,32]: CK50805-DO12
+                    - generic [ref=f1e635] [box=134,1431,150,16]: Modbus Relay 20
+                    - generic [ref=f1e636] [box=284,1431,70,16]: "OFF"
+                    - generic [ref=f1e637] [box=354,1431,60,16]: "-"
+                    - generic [ref=f1e638] [box=414,1431,120,16]: Normal
+                    - generic [ref=f1e643] [box=624,1431,84,16]: 19:27:00
+                - generic [ref=f1e644] [box=22,1464,736,49]:
+                  - checkbox "Select CK50805-DO13 — Modbus Relay 21 for bulk override" [disabled] [ref=f1e646] [box=41,1480,16,16]
+                  - button "CK50805-DO13 Modbus Relay 21 ON - Normal 19:27:00" [ref=f1e647] [box=64,1464,606,48]:
+                    - generic [ref=f1e648] [box=64,1472,70,32]: CK50805-DO13
+                    - generic [ref=f1e649] [box=134,1480,150,16]: Modbus Relay 21
+                    - generic [ref=f1e650] [box=284,1480,70,16]: "ON"
+                    - generic [ref=f1e651] [box=354,1480,60,16]: "-"
+                    - generic [ref=f1e652] [box=414,1480,120,16]: Normal
+                    - generic [ref=f1e657] [box=624,1480,84,16]: 19:27:00
+                - generic [ref=f1e658] [box=22,1513,736,49]:
+                  - checkbox "Select CK50805-DO14 — Modbus Relay 22 for bulk override" [disabled] [ref=f1e660] [box=41,1529,16,16]
+                  - button "CK50805-DO14 Modbus Relay 22 OFF - Normal 19:27:00" [ref=f1e661] [box=64,1513,606,48]:
+                    - generic [ref=f1e662] [box=64,1521,70,32]: CK50805-DO14
+                    - generic [ref=f1e663] [box=134,1529,150,16]: Modbus Relay 22
+                    - generic [ref=f1e664] [box=284,1529,70,16]: "OFF"
+                    - generic [ref=f1e665] [box=354,1529,60,16]: "-"
+                    - generic [ref=f1e666] [box=414,1529,120,16]: Normal
+                    - generic [ref=f1e671] [box=624,1529,84,16]: 19:27:00
+                - generic [ref=f1e672] [box=22,1562,736,49]:
+                  - checkbox "Select CK50805-DO15 — Modbus Relay 23 for bulk override" [disabled] [ref=f1e674] [box=41,1578,16,16]
+                  - button "CK50805-DO15 Modbus Relay 23 ON - Normal 19:27:00" [ref=f1e675] [box=64,1562,606,48]:
+                    - generic [ref=f1e676] [box=64,1570,70,32]: CK50805-DO15
+                    - generic [ref=f1e677] [box=134,1578,150,16]: Modbus Relay 23
+                    - generic [ref=f1e678] [box=284,1578,70,16]: "ON"
+                    - generic [ref=f1e679] [box=354,1578,60,16]: "-"
+                    - generic [ref=f1e680] [box=414,1578,120,16]: Normal
+                    - generic [ref=f1e685] [box=624,1578,84,16]: 19:27:00
+                - generic [ref=f1e686] [box=22,1611,736,49]:
+                  - checkbox "Select CK50805-DO16 — Modbus Relay 24 for bulk override" [disabled] [ref=f1e688] [box=41,1627,16,16]
+                  - button "CK50805-DO16 Modbus Relay 24 OFF - Normal 19:27:00" [ref=f1e689] [box=64,1611,606,48]:
+                    - generic [ref=f1e690] [box=64,1619,70,32]: CK50805-DO16
+                    - generic [ref=f1e691] [box=134,1627,150,16]: Modbus Relay 24
+                    - generic [ref=f1e692] [box=284,1627,70,16]: "OFF"
+                    - generic [ref=f1e693] [box=354,1627,60,16]: "-"
+                    - generic [ref=f1e694] [box=414,1627,120,16]: Normal
+                    - generic [ref=f1e699] [box=624,1627,84,16]: 19:27:00
+                - generic [ref=f1e700] [box=22,1660,736,49]:
+                  - checkbox "Select CK50805-DO17 — Modbus Relay 25 for bulk override" [disabled] [ref=f1e702] [box=41,1676,16,16]
+                  - button "CK50805-DO17 Modbus Relay 25 ON - Normal 19:27:00" [ref=f1e703] [box=64,1660,606,48]:
+                    - generic [ref=f1e704] [box=64,1668,70,32]: CK50805-DO17
+                    - generic [ref=f1e705] [box=134,1676,150,16]: Modbus Relay 25
+                    - generic [ref=f1e706] [box=284,1676,70,16]: "ON"
+                    - generic [ref=f1e707] [box=354,1676,60,16]: "-"
+                    - generic [ref=f1e708] [box=414,1676,120,16]: Normal
+                    - generic [ref=f1e713] [box=624,1676,84,16]: 19:27:00
+                - generic [ref=f1e714] [box=22,1709,736,49]:
+                  - checkbox "Select CK50805-DO18 — Modbus Relay 26 for bulk override" [disabled] [ref=f1e716] [box=41,1725,16,16]
+                  - button "CK50805-DO18 Modbus Relay 26 OFF - Normal 19:27:00" [ref=f1e717] [box=64,1709,606,48]:
+                    - generic [ref=f1e718] [box=64,1717,70,32]: CK50805-DO18
+                    - generic [ref=f1e719] [box=134,1725,150,16]: Modbus Relay 26
+                    - generic [ref=f1e720] [box=284,1725,70,16]: "OFF"
+                    - generic [ref=f1e721] [box=354,1725,60,16]: "-"
+                    - generic [ref=f1e722] [box=414,1725,120,16]: Normal
+                    - generic [ref=f1e727] [box=624,1725,84,16]: 19:27:00
+                - generic [ref=f1e728] [box=22,1758,736,49]:
+                  - checkbox "Select CK50805-DO19 — Modbus Relay 27 for bulk override" [disabled] [ref=f1e730] [box=41,1774,16,16]
+                  - button "CK50805-DO19 Modbus Relay 27 ON - Normal 19:27:00" [ref=f1e731] [box=64,1758,606,48]:
+                    - generic [ref=f1e732] [box=64,1766,70,32]: CK50805-DO19
+                    - generic [ref=f1e733] [box=134,1774,150,16]: Modbus Relay 27
+                    - generic [ref=f1e734] [box=284,1774,70,16]: "ON"
+                    - generic [ref=f1e735] [box=354,1774,60,16]: "-"
+                    - generic [ref=f1e736] [box=414,1774,120,16]: Normal
+                    - generic [ref=f1e741] [box=624,1774,84,16]: 19:27:00
+                - generic [ref=f1e742] [box=22,1807,736,49]:
+                  - checkbox "Select CK50805-DO2 — Modbus Relay 10 for bulk override" [disabled] [ref=f1e744] [box=41,1823,16,16]
+                  - button "CK50805-DO2 Modbus Relay 10 OFF - Normal 19:27:00" [ref=f1e745] [box=64,1807,606,48]:
+                    - generic [ref=f1e746] [box=64,1815,70,32]: CK50805-DO2
+                    - generic [ref=f1e747] [box=134,1823,150,16]: Modbus Relay 10
+                    - generic [ref=f1e748] [box=284,1823,70,16]: "OFF"
+                    - generic [ref=f1e749] [box=354,1823,60,16]: "-"
+                    - generic [ref=f1e750] [box=414,1823,120,16]: Normal
+                    - generic [ref=f1e755] [box=624,1823,84,16]: 19:27:00
+                - generic [ref=f1e756] [box=22,1856,736,49]:
+                  - checkbox "Select CK50805-DO20 — Modbus Relay 28 for bulk override" [disabled] [ref=f1e758] [box=41,1872,16,16]
+                  - button "CK50805-DO20 Modbus Relay 28 OFF - Normal 19:27:00" [ref=f1e759] [box=64,1856,606,48]:
+                    - generic [ref=f1e760] [box=64,1864,70,32]: CK50805-DO20
+                    - generic [ref=f1e761] [box=134,1872,150,16]: Modbus Relay 28
+                    - generic [ref=f1e762] [box=284,1872,70,16]: "OFF"
+                    - generic [ref=f1e763] [box=354,1872,60,16]: "-"
+                    - generic [ref=f1e764] [box=414,1872,120,16]: Normal
+                    - generic [ref=f1e769] [box=624,1872,84,16]: 19:27:00
+                - generic [ref=f1e770] [box=22,1905,736,49]:
+                  - checkbox "Select CK50805-DO21 — Modbus Relay 29 for bulk override" [disabled] [ref=f1e772] [box=41,1921,16,16]
+                  - button "CK50805-DO21 Modbus Relay 29 ON - Normal 19:27:00" [ref=f1e773] [box=64,1905,606,48]:
+                    - generic [ref=f1e774] [box=64,1913,70,32]: CK50805-DO21
+                    - generic [ref=f1e775] [box=134,1921,150,16]: Modbus Relay 29
+                    - generic [ref=f1e776] [box=284,1921,70,16]: "ON"
+                    - generic [ref=f1e777] [box=354,1921,60,16]: "-"
+                    - generic [ref=f1e778] [box=414,1921,120,16]: Normal
+                    - generic [ref=f1e783] [box=624,1921,84,16]: 19:27:00
+                - generic [ref=f1e784] [box=22,1954,736,49]:
+                  - checkbox "Select CK50805-DO22 — Modbus Relay 30 for bulk override" [disabled] [ref=f1e786] [box=41,1970,16,16]
+                  - button "CK50805-DO22 Modbus Relay 30 OFF - Normal 19:27:00" [ref=f1e787] [box=64,1954,606,48]:
+                    - generic [ref=f1e788] [box=64,1962,70,32]: CK50805-DO22
+                    - generic [ref=f1e789] [box=134,1970,150,16]: Modbus Relay 30
+                    - generic [ref=f1e790] [box=284,1970,70,16]: "OFF"
+                    - generic [ref=f1e791] [box=354,1970,60,16]: "-"
+                    - generic [ref=f1e792] [box=414,1970,120,16]: Normal
+                    - generic [ref=f1e797] [box=624,1970,84,16]: 19:27:00
+                - generic [ref=f1e798] [box=22,2003,736,49]:
+                  - checkbox "Select CK50805-DO23 — Modbus Relay 31 for bulk override" [disabled] [ref=f1e800] [box=41,2019,16,16]
+                  - button "CK50805-DO23 Modbus Relay 31 ON - Normal 19:27:00" [ref=f1e801] [box=64,2003,606,48]:
+                    - generic [ref=f1e802] [box=64,2011,70,32]: CK50805-DO23
+                    - generic [ref=f1e803] [box=134,2019,150,16]: Modbus Relay 31
+                    - generic [ref=f1e804] [box=284,2019,70,16]: "ON"
+                    - generic [ref=f1e805] [box=354,2019,60,16]: "-"
+                    - generic [ref=f1e806] [box=414,2019,120,16]: Normal
+                    - generic [ref=f1e811] [box=624,2019,84,16]: 19:27:00
+                - generic [ref=f1e812] [box=22,2052,736,49]:
+                  - checkbox "Select CK50805-DO24 — Modbus Relay 32 for bulk override" [disabled] [ref=f1e814] [box=41,2068,16,16]
+                  - button "CK50805-DO24 Modbus Relay 32 OFF - Normal 19:27:00" [ref=f1e815] [box=64,2052,606,48]:
+                    - generic [ref=f1e816] [box=64,2060,70,32]: CK50805-DO24
+                    - generic [ref=f1e817] [box=134,2068,150,16]: Modbus Relay 32
+                    - generic [ref=f1e818] [box=284,2068,70,16]: "OFF"
+                    - generic [ref=f1e819] [box=354,2068,60,16]: "-"
+                    - generic [ref=f1e820] [box=414,2068,120,16]: Normal
+                    - generic [ref=f1e825] [box=624,2068,84,16]: 19:27:00
+                - generic [ref=f1e826] [box=22,2101,736,49]:
+                  - checkbox "Select CK50805-DO25 — Modbus Relay 33 for bulk override" [disabled] [ref=f1e828] [box=41,2117,16,16]
+                  - button "CK50805-DO25 Modbus Relay 33 ON - Normal 19:27:00" [ref=f1e829] [box=64,2101,606,48]:
+                    - generic [ref=f1e830] [box=64,2109,70,32]: CK50805-DO25
+                    - generic [ref=f1e831] [box=134,2117,150,16]: Modbus Relay 33
+                    - generic [ref=f1e832] [box=284,2117,70,16]: "ON"
+                    - generic [ref=f1e833] [box=354,2117,60,16]: "-"
+                    - generic [ref=f1e834] [box=414,2117,120,16]: Normal
+                    - generic [ref=f1e839] [box=624,2117,84,16]: 19:27:00
+                - generic [ref=f1e840] [box=22,2150,736,49]:
+                  - checkbox "Select CK50805-DO26 — Modbus Relay 34 for bulk override" [disabled] [ref=f1e842] [box=41,2166,16,16]
+                  - button "CK50805-DO26 Modbus Relay 34 OFF - Normal 19:27:00" [ref=f1e843] [box=64,2150,606,48]:
+                    - generic [ref=f1e844] [box=64,2158,70,32]: CK50805-DO26
+                    - generic [ref=f1e845] [box=134,2166,150,16]: Modbus Relay 34
+                    - generic [ref=f1e846] [box=284,2166,70,16]: "OFF"
+                    - generic [ref=f1e847] [box=354,2166,60,16]: "-"
+                    - generic [ref=f1e848] [box=414,2166,120,16]: Normal
+                    - generic [ref=f1e853] [box=624,2166,84,16]: 19:27:00
+                - generic [ref=f1e854] [box=22,2199,736,49]:
+                  - checkbox "Select CK50805-DO27 — Modbus Relay 35 for bulk override" [disabled] [ref=f1e856] [box=41,2215,16,16]
+                  - button "CK50805-DO27 Modbus Relay 35 ON - Normal 19:27:00" [ref=f1e857] [box=64,2199,606,48]:
+                    - generic [ref=f1e858] [box=64,2207,70,32]: CK50805-DO27
+                    - generic [ref=f1e859] [box=134,2215,150,16]: Modbus Relay 35
+                    - generic [ref=f1e860] [box=284,2215,70,16]: "ON"
+                    - generic [ref=f1e861] [box=354,2215,60,16]: "-"
+                    - generic [ref=f1e862] [box=414,2215,120,16]: Normal
+                    - generic [ref=f1e867] [box=624,2215,84,16]: 19:27:00
+                - generic [ref=f1e868] [box=22,2248,736,49]:
+                  - checkbox "Select CK50805-DO28 — Modbus Relay 36 for bulk override" [disabled] [ref=f1e870] [box=41,2264,16,16]
+                  - button "CK50805-DO28 Modbus Relay 36 OFF - Normal 19:27:00" [ref=f1e871] [box=64,2248,606,48]:
+                    - generic [ref=f1e872] [box=64,2256,70,32]: CK50805-DO28
+                    - generic [ref=f1e873] [box=134,2264,150,16]: Modbus Relay 36
+                    - generic [ref=f1e874] [box=284,2264,70,16]: "OFF"
+                    - generic [ref=f1e875] [box=354,2264,60,16]: "-"
+                    - generic [ref=f1e876] [box=414,2264,120,16]: Normal
+                    - generic [ref=f1e881] [box=624,2264,84,16]: 19:27:00
+                - generic [ref=f1e882] [box=22,2297,736,49]:
+                  - checkbox "Select CK50805-DO29 — Modbus Relay 37 for bulk override" [disabled] [ref=f1e884] [box=41,2313,16,16]
+                  - button "CK50805-DO29 Modbus Relay 37 ON - Normal 19:27:00" [ref=f1e885] [box=64,2297,606,48]:
+                    - generic [ref=f1e886] [box=64,2305,70,32]: CK50805-DO29
+                    - generic [ref=f1e887] [box=134,2313,150,16]: Modbus Relay 37
+                    - generic [ref=f1e888] [box=284,2313,70,16]: "ON"
+                    - generic [ref=f1e889] [box=354,2313,60,16]: "-"
+                    - generic [ref=f1e890] [box=414,2313,120,16]: Normal
+                    - generic [ref=f1e895] [box=624,2313,84,16]: 19:27:00
+                - generic [ref=f1e896] [box=22,2346,736,49]:
+                  - checkbox "Select CK50805-DO3 — Modbus Relay 11 for bulk override" [disabled] [ref=f1e898] [box=41,2362,16,16]
+                  - button "CK50805-DO3 Modbus Relay 11 ON - Normal 19:27:00" [ref=f1e899] [box=64,2346,606,48]:
+                    - generic [ref=f1e900] [box=64,2354,70,32]: CK50805-DO3
+                    - generic [ref=f1e901] [box=134,2362,150,16]: Modbus Relay 11
+                    - generic [ref=f1e902] [box=284,2362,70,16]: "ON"
+                    - generic [ref=f1e903] [box=354,2362,60,16]: "-"
+                    - generic [ref=f1e904] [box=414,2362,120,16]: Normal
+                    - generic [ref=f1e909] [box=624,2362,84,16]: 19:27:00
+                - generic [ref=f1e910] [box=22,2395,736,49]:
+                  - checkbox "Select CK50805-DO30 — Modbus Relay 38 for bulk override" [disabled] [ref=f1e912] [box=41,2411,16,16]
+                  - button "CK50805-DO30 Modbus Relay 38 OFF - Normal 19:27:00" [ref=f1e913] [box=64,2395,606,48]:
+                    - generic [ref=f1e914] [box=64,2403,70,32]: CK50805-DO30
+                    - generic [ref=f1e915] [box=134,2411,150,16]: Modbus Relay 38
+                    - generic [ref=f1e916] [box=284,2411,70,16]: "OFF"
+                    - generic [ref=f1e917] [box=354,2411,60,16]: "-"
+                    - generic [ref=f1e918] [box=414,2411,120,16]: Normal
+                    - generic [ref=f1e923] [box=624,2411,84,16]: 19:27:00
+                - generic [ref=f1e924] [box=22,2444,736,49]:
+                  - checkbox "Select CK50805-DO31 — Modbus Relay 39 for bulk override" [disabled] [ref=f1e926] [box=41,2460,16,16]
+                  - button "CK50805-DO31 Modbus Relay 39 ON - Normal 19:27:00" [ref=f1e927] [box=64,2444,606,48]:
+                    - generic [ref=f1e928] [box=64,2452,70,32]: CK50805-DO31
+                    - generic [ref=f1e929] [box=134,2460,150,16]: Modbus Relay 39
+                    - generic [ref=f1e930] [box=284,2460,70,16]: "ON"
+                    - generic [ref=f1e931] [box=354,2460,60,16]: "-"
+                    - generic [ref=f1e932] [box=414,2460,120,16]: Normal
+                    - generic [ref=f1e937] [box=624,2460,84,16]: 19:27:00
+                - generic [ref=f1e938] [box=22,2493,736,49]:
+                  - checkbox "Select CK50805-DO32 — Modbus Relay 40 for bulk override" [disabled] [ref=f1e940] [box=41,2509,16,16]
+                  - button "CK50805-DO32 Modbus Relay 40 OFF - Normal 19:27:00" [ref=f1e941] [box=64,2493,606,48]:
+                    - generic [ref=f1e942] [box=64,2501,70,32]: CK50805-DO32
+                    - generic [ref=f1e943] [box=134,2509,150,16]: Modbus Relay 40
+                    - generic [ref=f1e944] [box=284,2509,70,16]: "OFF"
+                    - generic [ref=f1e945] [box=354,2509,60,16]: "-"
+                    - generic [ref=f1e946] [box=414,2509,120,16]: Normal
+                    - generic [ref=f1e951] [box=624,2509,84,16]: 19:27:00
+                - generic [ref=f1e952] [box=22,2542,736,49]:
+                  - checkbox "Select CK50805-DO33 — Modbus Relay 41 for bulk override" [disabled] [ref=f1e954] [box=41,2558,16,16]
+                  - button "CK50805-DO33 Modbus Relay 41 ON - Normal 19:27:00" [ref=f1e955] [box=64,2542,606,48]:
+                    - generic [ref=f1e956] [box=64,2550,70,32]: CK50805-DO33
+                    - generic [ref=f1e957] [box=134,2558,150,16]: Modbus Relay 41
+                    - generic [ref=f1e958] [box=284,2558,70,16]: "ON"
+                    - generic [ref=f1e959] [box=354,2558,60,16]: "-"
+                    - generic [ref=f1e960] [box=414,2558,120,16]: Normal
+                    - generic [ref=f1e965] [box=624,2558,84,16]: 19:27:00
+                - generic [ref=f1e966] [box=22,2591,736,49]:
+                  - checkbox "Select CK50805-DO34 — Modbus Relay 42 for bulk override" [disabled] [ref=f1e968] [box=41,2607,16,16]
+                  - button "CK50805-DO34 Modbus Relay 42 OFF - Normal 19:27:00" [ref=f1e969] [box=64,2591,606,48]:
+                    - generic [ref=f1e970] [box=64,2599,70,32]: CK50805-DO34
+                    - generic [ref=f1e971] [box=134,2607,150,16]: Modbus Relay 42
+                    - generic [ref=f1e972] [box=284,2607,70,16]: "OFF"
+                    - generic [ref=f1e973] [box=354,2607,60,16]: "-"
+                    - generic [ref=f1e974] [box=414,2607,120,16]: Normal
+                    - generic [ref=f1e979] [box=624,2607,84,16]: 19:27:00
+                - generic [ref=f1e980] [box=22,2640,736,49]:
+                  - checkbox "Select CK50805-DO35 — Modbus Relay 43 for bulk override" [disabled] [ref=f1e982] [box=41,2656,16,16]
+                  - button "CK50805-DO35 Modbus Relay 43 ON - Normal 19:27:00" [ref=f1e983] [box=64,2640,606,48]:
+                    - generic [ref=f1e984] [box=64,2648,70,32]: CK50805-DO35
+                    - generic [ref=f1e985] [box=134,2656,150,16]: Modbus Relay 43
+                    - generic [ref=f1e986] [box=284,2656,70,16]: "ON"
+                    - generic [ref=f1e987] [box=354,2656,60,16]: "-"
+                    - generic [ref=f1e988] [box=414,2656,120,16]: Normal
+                    - generic [ref=f1e993] [box=624,2656,84,16]: 19:27:00
+                - generic [ref=f1e994] [box=22,2689,736,49]:
+                  - checkbox "Select CK50805-DO36 — Modbus Relay 44 for bulk override" [disabled] [ref=f1e996] [box=41,2705,16,16]
+                  - button "CK50805-DO36 Modbus Relay 44 OFF - Normal 19:27:00" [ref=f1e997] [box=64,2689,606,48]:
+                    - generic [ref=f1e998] [box=64,2697,70,32]: CK50805-DO36
+                    - generic [ref=f1e999] [box=134,2705,150,16]: Modbus Relay 44
+                    - generic [ref=f1e1000] [box=284,2705,70,16]: "OFF"
+                    - generic [ref=f1e1001] [box=354,2705,60,16]: "-"
+                    - generic [ref=f1e1002] [box=414,2705,120,16]: Normal
+                    - generic [ref=f1e1007] [box=624,2705,84,16]: 19:27:00
+                - generic [ref=f1e1008] [box=22,2738,736,49]:
+                  - checkbox "Select CK50805-DO37 — Modbus Relay 45 for bulk override" [disabled] [ref=f1e1010] [box=41,2754,16,16]
+                  - button "CK50805-DO37 Modbus Relay 45 ON - Normal 19:27:00" [ref=f1e1011] [box=64,2738,606,48]:
+                    - generic [ref=f1e1012] [box=64,2746,70,32]: CK50805-DO37
+                    - generic [ref=f1e1013] [box=134,2754,150,16]: Modbus Relay 45
+                    - generic [ref=f1e1014] [box=284,2754,70,16]: "ON"
+                    - generic [ref=f1e1015] [box=354,2754,60,16]: "-"
+                    - generic [ref=f1e1016] [box=414,2754,120,16]: Normal
+                    - generic [ref=f1e1021] [box=624,2754,84,16]: 19:27:00
+                - generic [ref=f1e1022] [box=22,2787,736,49]:
+                  - checkbox "Select CK50805-DO38 — Modbus Relay 46 for bulk override" [disabled] [ref=f1e1024] [box=41,2803,16,16]
+                  - button "CK50805-DO38 Modbus Relay 46 OFF - Normal 19:27:00" [ref=f1e1025] [box=64,2787,606,48]:
+                    - generic [ref=f1e1026] [box=64,2795,70,32]: CK50805-DO38
+                    - generic [ref=f1e1027] [box=134,2803,150,16]: Modbus Relay 46
+                    - generic [ref=f1e1028] [box=284,2803,70,16]: "OFF"
+                    - generic [ref=f1e1029] [box=354,2803,60,16]: "-"
+                    - generic [ref=f1e1030] [box=414,2803,120,16]: Normal
+                    - generic [ref=f1e1035] [box=624,2803,84,16]: 19:27:00
+                - generic [ref=f1e1036] [box=22,2836,736,49]:
+                  - checkbox "Select CK50805-DO39 — Modbus Relay 47 for bulk override" [disabled] [ref=f1e1038] [box=41,2852,16,16]
+                  - button "CK50805-DO39 Modbus Relay 47 ON - Normal 19:27:00" [ref=f1e1039] [box=64,2836,606,48]:
+                    - generic [ref=f1e1040] [box=64,2844,70,32]: CK50805-DO39
+                    - generic [ref=f1e1041] [box=134,2852,150,16]: Modbus Relay 47
+                    - generic [ref=f1e1042] [box=284,2852,70,16]: "ON"
+                    - generic [ref=f1e1043] [box=354,2852,60,16]: "-"
+                    - generic [ref=f1e1044] [box=414,2852,120,16]: Normal
+                    - generic [ref=f1e1049] [box=624,2852,84,16]: 19:27:00
+                - generic [ref=f1e1050] [box=22,2885,736,49]:
+                  - checkbox "Select CK50805-DO4 — Modbus Relay 12 for bulk override" [disabled] [ref=f1e1052] [box=41,2901,16,16]
+                  - button "CK50805-DO4 Modbus Relay 12 OFF - Normal 19:27:00" [ref=f1e1053] [box=64,2885,606,48]:
+                    - generic [ref=f1e1054] [box=64,2893,70,32]: CK50805-DO4
+                    - generic [ref=f1e1055] [box=134,2901,150,16]: Modbus Relay 12
+                    - generic [ref=f1e1056] [box=284,2901,70,16]: "OFF"
+                    - generic [ref=f1e1057] [box=354,2901,60,16]: "-"
+                    - generic [ref=f1e1058] [box=414,2901,120,16]: Normal
+                    - generic [ref=f1e1063] [box=624,2901,84,16]: 19:27:00
+                - generic [ref=f1e1064] [box=22,2934,736,49]:
+                  - checkbox "Select CK50805-DO40 — Modbus Relay 48 for bulk override" [disabled] [ref=f1e1066] [box=41,2950,16,16]
+                  - button "CK50805-DO40 Modbus Relay 48 OFF - Normal 19:27:00" [ref=f1e1067] [box=64,2934,606,48]:
+                    - generic [ref=f1e1068] [box=64,2942,70,32]: CK50805-DO40
+                    - generic [ref=f1e1069] [box=134,2950,150,16]: Modbus Relay 48
+                    - generic [ref=f1e1070] [box=284,2950,70,16]: "OFF"
+                    - generic [ref=f1e1071] [box=354,2950,60,16]: "-"
+                    - generic [ref=f1e1072] [box=414,2950,120,16]: Normal
+                    - generic [ref=f1e1077] [box=624,2950,84,16]: 19:27:00
+                - generic [ref=f1e1078] [box=22,2983,736,49]:
+                  - checkbox "Select CK50805-DO5 — Modbus Relay 13 for bulk override" [disabled] [ref=f1e1080] [box=41,2999,16,16]
+                  - button "CK50805-DO5 Modbus Relay 13 ON - Normal 19:27:00" [ref=f1e1081] [box=64,2983,606,48]:
+                    - generic [ref=f1e1082] [box=64,2991,70,32]: CK50805-DO5
+                    - generic [ref=f1e1083] [box=134,2999,150,16]: Modbus Relay 13
+                    - generic [ref=f1e1084] [box=284,2999,70,16]: "ON"
+                    - generic [ref=f1e1085] [box=354,2999,60,16]: "-"
+                    - generic [ref=f1e1086] [box=414,2999,120,16]: Normal
+                    - generic [ref=f1e1091] [box=624,2999,84,16]: 19:27:00
+                - generic [ref=f1e1092] [box=22,3032,736,49]:
+                  - checkbox "Select CK50805-DO6 — Modbus Relay 14 for bulk override" [disabled] [ref=f1e1094] [box=41,3048,16,16]
+                  - button "CK50805-DO6 Modbus Relay 14 OFF - Normal 19:27:00" [ref=f1e1095] [box=64,3032,606,48]:
+                    - generic [ref=f1e1096] [box=64,3040,70,32]: CK50805-DO6
+                    - generic [ref=f1e1097] [box=134,3048,150,16]: Modbus Relay 14
+                    - generic [ref=f1e1098] [box=284,3048,70,16]: "OFF"
+                    - generic [ref=f1e1099] [box=354,3048,60,16]: "-"
+                    - generic [ref=f1e1100] [box=414,3048,120,16]: Normal
+                    - generic [ref=f1e1105] [box=624,3048,84,16]: 19:27:00
+                - generic [ref=f1e1106] [box=22,3081,736,49]:
+                  - checkbox "Select CK50805-DO7 — Modbus Relay 15 for bulk override" [disabled] [ref=f1e1108] [box=41,3097,16,16]
+                  - button "CK50805-DO7 Modbus Relay 15 ON - Normal 19:27:00" [ref=f1e1109] [box=64,3081,606,48]:
+                    - generic [ref=f1e1110] [box=64,3089,70,32]: CK50805-DO7
+                    - generic [ref=f1e1111] [box=134,3097,150,16]: Modbus Relay 15
+                    - generic [ref=f1e1112] [box=284,3097,70,16]: "ON"
+                    - generic [ref=f1e1113] [box=354,3097,60,16]: "-"
+                    - generic [ref=f1e1114] [box=414,3097,120,16]: Normal
+                    - generic [ref=f1e1119] [box=624,3097,84,16]: 19:27:00
+                - generic [ref=f1e1120] [box=22,3130,736,49]:
+                  - checkbox "Select CK50805-DO8 — Modbus Relay 16 for bulk override" [disabled] [ref=f1e1122] [box=41,3146,16,16]
+                  - button "CK50805-DO8 Modbus Relay 16 OFF - Normal 19:27:00" [ref=f1e1123] [box=64,3130,606,48]:
+                    - generic [ref=f1e1124] [box=64,3138,70,32]: CK50805-DO8
+                    - generic [ref=f1e1125] [box=134,3146,150,16]: Modbus Relay 16
+                    - generic [ref=f1e1126] [box=284,3146,70,16]: "OFF"
+                    - generic [ref=f1e1127] [box=354,3146,60,16]: "-"
+                    - generic [ref=f1e1128] [box=414,3146,120,16]: Normal
+                    - generic [ref=f1e1133] [box=624,3146,84,16]: 19:27:00
+                - generic [ref=f1e1134] [box=22,3179,736,48]:
+                  - checkbox "Select CK50805-DO9 — Modbus Relay 17 for bulk override" [disabled] [ref=f1e1136] [box=41,3195,16,16]
+                  - button "CK50805-DO9 Modbus Relay 17 ON - Normal 19:27:00" [ref=f1e1137] [box=64,3179,606,48]:
+                    - generic [ref=f1e1138] [box=64,3187,70,32]: CK50805-DO9
+                    - generic [ref=f1e1139] [box=134,3195,150,16]: Modbus Relay 17
+                    - generic [ref=f1e1140] [box=284,3195,70,16]: "ON"
+                    - generic [ref=f1e1141] [box=354,3195,60,16]: "-"
+                    - generic [ref=f1e1142] [box=414,3195,120,16]: Normal
+                    - generic [ref=f1e1147] [box=624,3195,84,16]: 19:27:00
+          - generic [ref=f1e1148] [box=21,3240,738,889]:
+            - generic [ref=f1e1149] [box=21,3240,738,597]:
+              - heading "Point details" [level=2] [ref=f1e1152] [box=38,3257,88,20]
+              - generic [ref=f1e1156] [box=38,3293,704,527]:
+                - generic [ref=f1e1157] [box=38,3293,704,56]:
+                  - generic [ref=f1e1158] [box=38,3293,704,32]: CK50804-DO1
+                  - generic [ref=f1e1159] [box=38,3329,704,20]:
+                    - generic [ref=f1e1160] [box=38,3329,109,20]: Modbus Relay 1
+                    - button "Rename" [ref=f1e1161] [box=155,3331,16,16]
+                - generic [ref=f1e1165] [box=38,3365,704,86]:
+                  - generic [ref=f1e1166] [box=55,3382,670,32]: "ON"
+                  - generic [ref=f1e1167] [box=55,3418,670,16]: Active
+                - generic [ref=f1e1169] [box=38,3467,704,273]:
+                  - term [ref=f1e1170] [box=38,3467,118,16]: I/O group
+                  - definition [ref=f1e1171] [box=156,3467,586,16]: modbus_rtu - MODBUS RTU
+                  - term [ref=f1e1172] [box=38,3495,118,16]: Signal type
+                  - definition [ref=f1e1173] [box=156,3495,586,16]: —
+                  - term [ref=f1e1174] [box=38,3523,118,21]: Quality
+                  - definition [ref=f1e1175] [box=156,3523,586,21]:
+                    - generic [ref=f1e1176] [box=156,3523,73,21]: GOOD
+                  - term [ref=f1e1181] [box=38,3556,118,16]: Current status
+                  - definition [ref=f1e1182] [box=156,3556,586,16]: ON (Active)
+                  - term [ref=f1e1183] [box=38,3584,118,16]: Source
+                  - definition [ref=f1e1184] [box=156,3584,586,16]: modbus_rtu
+                  - term [ref=f1e1185] [box=38,3612,118,16]: Priority owner
+                  - definition [ref=f1e1186] [box=156,3612,586,16]: —
+                  - term [ref=f1e1187] [box=38,3640,118,16]: Updated at
+                  - definition [ref=f1e1188] [box=156,3640,586,16]: 19:27:00 5/9/2026
+                  - term [ref=f1e1189] [box=38,3668,118,16]: Bus / Slave
+                  - definition [ref=f1e1190] [box=156,3668,586,16]: —
+                  - term [ref=f1e1191] [box=38,3696,118,16]: Online
+                  - definition [ref=f1e1192] [box=156,3696,586,16]: —
+                  - term [ref=f1e1193] [box=38,3724,118,16]: Description
+                  - definition [ref=f1e1194] [box=156,3724,586,16]: Modbus Relay 1
+                - generic [ref=f1e1195] [box=38,3756,704,24]: GOOD
+                - link "View audit trail for this point →" [ref=f1e1201] [cursor=pointer] [box=38,3802,188,16]:
+                  - /url: /activity?objectId=CK50804-DO1
+            - generic [ref=f1e1202] [box=21,3849,738,280]:
+              - heading "Last 60 minutes" [level=2] [ref=f1e1205] [box=38,3866,110,20]
+              - generic [ref=f1e1207] [box=251,3950,279,84]:
+                - heading "History unavailable" [level=3] [ref=f1e1210] [box=251,3994,279,20]
+                - paragraph [ref=f1e1211] [box=251,4018,279,16]: "History point ID must be canonical: CK50804-DO1"
+              - link "Open in Trends →" [ref=f1e1212] [cursor=pointer] [box=38,4094,105,16]:
+                - /url: /trends?points=CK50804-DO1

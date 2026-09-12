@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Square, TimerReset } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
+import { formatTechnicalDateTime, type HmiLocale } from '../../../shared/dateTime'
 import { createUuid } from '../../../shared/crypto'
 import { Panel } from '../../../shared/components/Panel'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { Button } from '../../../shared/components/Button'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
-import { useAuth, roleAtLeast } from '../../auth'
 import { useProgrammingApiClient } from '../api/authClient'
+import { useProgrammingActionAllowed } from '../api/authorization'
 import { useProgrammingRuntimeMonitor, useProgrammingRuntimeSignals } from '../api/queries'
 import type {
   ProgrammingMonitorPage,
@@ -26,14 +27,13 @@ type CategoryFilter = 'ALL' | ProgrammingPointCategory
 
 const CATEGORIES: ProgrammingPointCategory[] = ['LOCAL', 'VP', 'MB_RTU']
 
-/** PGM-04/UJ-PROG-07, T59-504 — monitor 1 Hz chỉ đọc và trace bounded. Mọi
+/** PGM-06/UJ-PROG-07, T59-504 — monitor 1 Hz chỉ đọc và trace bounded. Mọi
  * candidate, actual, quality, freshness, priority và TTL đều đến từ snapshot
  * Core/BE. `null`/giá trị không hợp lệ luôn hiển thị là chưa có dữ liệu, không
  * bị đổi thành 0. */
 export function WatchTab() {
   const { pick } = useI18n()
-  const { session } = useAuth()
-  const canTrace = roleAtLeast(session?.role, 'admin')
+  const canTrace = useProgrammingActionAllowed('trace')
   const client = useProgrammingApiClient()
   const monitor = useProgrammingRuntimeMonitor()
   const signals = useProgrammingRuntimeSignals()
@@ -216,7 +216,7 @@ export function WatchTab() {
         </div>
         {!canTrace && (
           <p role="note" className="mt-2 text-xs text-[var(--c-text-dim)]">
-            {pick('Bạn có quyền xem monitor; chỉ admin được chọn biến, tạo hoặc dừng trace.', 'You may view the monitor; only an admin can select variables or start and stop a trace.')}
+            {pick('Bạn có quyền xem monitor; cần quyền sửa Programming để chọn biến, tạo hoặc dừng trace.', 'You may view the monitor; Programming edit permission is required to select variables or start and stop a trace.')}
           </p>
         )}
         {traceError && <p role="alert" className="mt-3 text-sm text-[var(--c-fault-fg)]">{traceError}</p>}
@@ -535,7 +535,7 @@ function shortId(value: string): string {
 }
 
 function formatObservedAt(value: string, pick: PickCopy): { valid: boolean; text: string } {
-  const timestamp = new Date(value)
-  if (Number.isNaN(timestamp.getTime())) return { valid: false, text: pick('Không rõ', 'Unknown') }
-  return { valid: true, text: timestamp.toLocaleString() }
+  const locale = pick('vi-VN', 'en-US') as HmiLocale
+  const text = formatTechnicalDateTime(value, locale)
+  return text === '—' ? { valid: false, text: pick('Không rõ', 'Unknown') } : { valid: true, text }
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.37.0"
+  version: "1.41.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-08-27"
-  note: "v1.30.0 (T59-819) mở rộng ADDITIVE change manifest bằng stHunks[]/fbdChanges[] tất định, có bounded payload + truncated + cursor; diff không đi vào impactRef nên mọi acknowledgement Commission đã cấp vẫn còn hiệu lực."
+  date: "2026-09-07"
+  note: "v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -1969,6 +1969,7 @@ paths:
       operationId: getProgrammingCapabilities
       summary: Đọc profile và giới hạn Programming Rev A
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-500
       responses:
         "200":
@@ -1984,6 +1985,7 @@ paths:
       operationId: listProgrammingProjects
       summary: Liệt kê Project Programming
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-204
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2001,6 +2003,7 @@ paths:
       operationId: createProgrammingProject
       summary: Tạo Project và Draft đầu tiên trong một transaction
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: task-prog-204
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2030,6 +2033,7 @@ paths:
       operationId: getProgrammingProject
       summary: Đọc Project, Draft và Revision đang active
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-204
       responses:
         "200":
@@ -2043,6 +2047,31 @@ paths:
         "403": { $ref: "#/components/responses/ProgrammingError" }
         "404": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/signal-dependencies:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    get:
+      operationId: getProgrammingSignalDependencies
+      summary: Đọc publisher và consumer Published Signal do compiler xác nhận
+      description: >-
+        Kết quả neo vào Project, Draft hash, Revision và Check. Chỉ trạng thái
+        AUTHORITATIVE cho phép đọc mảng rỗng là không có consumer; Draft đổi sau
+        Check trả STALE, thiếu Check trả PENDING_CHECK, còn Check lỗi hoặc hợp
+        đồng đời cũ trả UNAVAILABLE.
+      x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
+      x-implementation-status: ISS-PGM03-04
+      responses:
+        "200":
+          description: Dependency cùng trạng thái provenance hiện hành
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingSignalDependencies" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/projects/{projectId}/draft:
     parameters:
       - { $ref: "#/components/parameters/ProgrammingProjectId" }
@@ -2050,6 +2079,7 @@ paths:
       operationId: updateProgrammingDraft
       summary: Áp dụng lô mutation Draft theo nguyên tắc all-or-nothing
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: task-prog-204
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2075,6 +2105,41 @@ paths:
         "422": { $ref: "#/components/responses/ProgrammingError" }
         "428": { $ref: "#/components/responses/ProgrammingError" }
         "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
+  /programming/projects/{projectId}/draft/bindings/preview:
+    parameters:
+      - { $ref: "#/components/parameters/ProgrammingProjectId" }
+    post:
+      operationId: previewProgrammingBinding
+      summary: Kiểm tra một binding trên đúng Draft mà không ghi dữ liệu
+      description: >
+        Dùng cùng validator server với PATCH Draft và Check. If-Match cùng
+        baseRevisionId khóa preview vào đúng ảnh Draft; catalog thiếu hoặc lỗi
+        trả 503, không suy đoán từ payload client.
+      x-rbac: [engineer, admin]
+      x-permission: program.edit
+      x-implementation-status: ISS-PGM03-01
+      parameters:
+        - { $ref: "#/components/parameters/ProgrammingIfMatch" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProgrammingBindingPreviewRequest" }
+      responses:
+        "200":
+          description: Quyết định ALLOW/WARN/BLOCK và toàn bộ lý do ổn định
+          headers:
+            ETag: { $ref: "#/components/headers/ProgrammingETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgrammingBindingPreview" }
+        "400": { $ref: "#/components/responses/ProgrammingError" }
+        "401": { $ref: "#/components/responses/ProgrammingError" }
+        "403": { $ref: "#/components/responses/ProgrammingError" }
+        "404": { $ref: "#/components/responses/ProgrammingError" }
+        "409": { $ref: "#/components/responses/ProgrammingError" }
+        "428": { $ref: "#/components/responses/ProgrammingError" }
+        "503": { $ref: "#/components/responses/ProgrammingUnavailable" }
   /programming/projects/{projectId}/draft/revisions:
     parameters:
       - { $ref: "#/components/parameters/ProgrammingProjectId" }
@@ -2082,6 +2147,7 @@ paths:
       operationId: createProgrammingRevision
       summary: Đóng Draft thành Revision bất biến
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: task-prog-204
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2112,6 +2178,7 @@ paths:
       operationId: getProgrammingRevision
       summary: Đọc metadata và snapshot Revision
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-204
       responses:
         "200":
@@ -2141,6 +2208,7 @@ paths:
       operationId: compareProgrammingRevisions
       summary: Đọc change manifest giữa hai Revision
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-206
       parameters:
         - name: cursor
@@ -2167,6 +2235,7 @@ paths:
       operationId: createProgrammingCheck
       summary: Tạo Check job không tác động runtime
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: task-prog-205
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2198,6 +2267,7 @@ paths:
       operationId: getProgrammingCheck
       summary: Đọc trạng thái và diagnostic của Check
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-205
       responses:
         "200":
@@ -2214,6 +2284,7 @@ paths:
       operationId: searchProgrammingLibraries
       summary: Tìm entry Control Library SYSTEM và PROJECT
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: t59-202
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2273,6 +2344,7 @@ paths:
         được". Trả 0 khi đang không đo được là cách một khối bị gỡ trong khi nó
         đang điều khiển tủ.
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: t61-105
       parameters:
         - name: libraryRevisionId
@@ -2330,6 +2402,7 @@ paths:
         LẠI băm nội dung từ chính dữ liệu vừa đọc và chỉ trả `source` khi băm
         khớp `contentSha256` đã lưu.
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: t61-404
       parameters:
         - name: libraryRevisionId
@@ -2358,6 +2431,7 @@ paths:
       operationId: upsertProgrammingLibraryEntry
       summary: Tạo hoặc sửa Function/FB người dùng trong PROJECT Library Draft
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: t59-202
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2398,6 +2472,7 @@ paths:
         Trả `200` kể cả khi có lỗi chặn — chẩn đoán là NỘI DUNG của câu trả lời,
         không phải một sự cố.
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: t61-401
       requestBody:
         required: true
@@ -2423,6 +2498,7 @@ paths:
       operationId: deleteProgrammingLibraryEntry
       summary: Xoá entry Control Library; từ chối khi còn tham chiếu
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: t59-202
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2453,6 +2529,7 @@ paths:
         library; publish vẫn nằm trong cùng transaction với Seal Revision để
         không tiêu version mà chưa có Revision bất biến pin tới.
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: f-p59-ui-001
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2497,6 +2574,7 @@ paths:
         từ Core. Core im ⇒ `UNAVAILABLE` + `runtimeState = UNKNOWN` + mọi số đo
         `null`, tuyệt đối không trả giá trị cũ như thể đang sống.
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: t60-013
       responses:
         "200":
@@ -2527,6 +2605,7 @@ paths:
         cả khi Core chưa sẵn sàng; `runtimeState` khi đó là `UNKNOWN` chứ không
         phải trạng thái mong muốn.
       x-rbac: [engineer, admin]
+      x-permission: program.activate
       x-implementation-status: t59-405
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2552,6 +2631,7 @@ paths:
       operationId: getProgrammingPointCatalog
       summary: Đọc projection Point canonical phục vụ binding
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-503
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2570,6 +2650,7 @@ paths:
       operationId: getProgrammingRuntime
       summary: Đọc Revision active/LKG và trạng thái Core authoritative
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-500
       responses:
         "200":
@@ -2585,6 +2666,7 @@ paths:
       operationId: getProgrammingRuntimeMonitor
       summary: Đọc mẫu runtime bounded kèm quality và freshness
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-509
       responses:
         "200":
@@ -2604,6 +2686,7 @@ paths:
         do Core chụp từ StSignalBus. Signal invalid luôn có value=null;
         CORE_ONLY, REVISION_ONLY hoặc MISMATCH phải hiển fail-closed.
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: t59-504
       responses:
         "200":
@@ -2619,6 +2702,7 @@ paths:
       operationId: createProgrammingTrace
       summary: Tạo trace session read-only có quota
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: task-prog-509
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2650,6 +2734,7 @@ paths:
       operationId: getProgrammingTrace
       summary: Đọc mẫu và stop reason của trace session
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-509
       responses:
         "200":
@@ -2665,6 +2750,7 @@ paths:
       operationId: stopProgrammingTrace
       summary: Dừng capture nhưng giữ metadata và audit
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: task-prog-509
       responses:
         "204": { description: Trace đã dừng hoặc đã ở trạng thái kết thúc }
@@ -2677,6 +2763,7 @@ paths:
       operationId: commissionProgrammingRevision
       summary: Tạo transaction Commission có impact acknowledgement
       x-rbac: [engineer, admin]
+      x-permission: program.activate
       x-implementation-status: task-prog-403
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2703,6 +2790,7 @@ paths:
       operationId: restoreProgrammingRevision
       summary: Restore Revision/LKG qua cùng verify path với Commission
       x-rbac: [engineer, admin]
+      x-permission: program.activate
       x-implementation-status: task-prog-403
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2731,6 +2819,7 @@ paths:
       operationId: getProgrammingOperation
       summary: Đọc tiến trình và read-back authoritative của Operation
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-403
       responses:
         "200":
@@ -2747,6 +2836,7 @@ paths:
       operationId: listProgrammingOperations
       summary: Liệt kê lịch sử Operation
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-505
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2765,6 +2855,7 @@ paths:
       operationId: listProgrammingOverrides
       summary: Đọc inventory override và authority hiện hành
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-504
       parameters:
         - name: activeOnly
@@ -2786,6 +2877,7 @@ paths:
       operationId: exportProgrammingBundle
       summary: Tạo bundle source-only có manifest và hash
       x-rbac: [engineer, admin]
+      x-permission: program.edit
       x-implementation-status: task-prog-206
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2812,6 +2904,7 @@ paths:
       operationId: importProgrammingBundle
       summary: Kiểm bundle inline trước khi tạo Project/Draft mới
       x-rbac: [engineer, admin]
+      x-permission: program.activate
       x-implementation-status: task-prog-206
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2838,6 +2931,7 @@ paths:
       operationId: resetProgrammingRetain
       summary: Tạo operation reset RETAIN với strong confirmation
       x-rbac: [engineer, admin]
+      x-permission: program.activate
       x-implementation-status: contract-only
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2870,6 +2964,7 @@ paths:
         giữ safe-state. Phải Commission lại sau đó; không gói nào tự sống lại.
         Gọi khi Core không ở `RECOVERY_REQUIRED` trả `409`.
       x-rbac: [engineer, admin]
+      x-permission: program.activate
       x-implementation-status: implemented
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2898,6 +2993,7 @@ paths:
       operationId: listProgrammingAudit
       summary: Đọc timeline Programming đã sanitize theo role
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: task-prog-500
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -2921,6 +3017,7 @@ paths:
       operationId: createProgrammingSimulationSession
       summary: Mở phiên Simulation từ Revision đã Check
       x-rbac: [admin]
+      x-permission: simulation.run
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2953,6 +3050,7 @@ paths:
       operationId: getProgrammingSimulationSession
       summary: Đọc trạng thái phiên Simulation
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: t59-814
       responses:
         "200":
@@ -2969,6 +3067,7 @@ paths:
       operationId: stopProgrammingSimulationSession
       summary: Dừng phiên Simulation (materialize của hành động STOP)
       x-rbac: [admin]
+      x-permission: simulation.run
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -2996,6 +3095,7 @@ paths:
       operationId: actProgrammingSimulationSession
       summary: RUN/PAUSE/STEP_CYCLE/RESET/SET_SPEED trên phiên
       x-rbac: [admin]
+      x-permission: simulation.run
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -3035,6 +3135,7 @@ paths:
       operationId: setProgrammingSimulationInput
       summary: Ghi một virtual input trong allowlist của manifest
       x-rbac: [admin]
+      x-permission: simulation.run
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingIdempotencyKey" }
@@ -3071,6 +3172,7 @@ paths:
       operationId: listProgrammingSimulationObservations
       summary: Đọc ảnh chụp observation của phiên
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: t59-814
       responses:
         "200":
@@ -3092,6 +3194,7 @@ paths:
       operationId: listProgrammingSimulationTrace
       summary: Đọc trang mẫu trace có biên của phiên
       x-rbac: [viewer, operator, engineer, admin]
+      x-permission: read
       x-implementation-status: t59-814
       parameters:
         - { $ref: "#/components/parameters/ProgrammingCursor" }
@@ -3300,6 +3403,71 @@ components:
           type: boolean
           description: Chỉ true khi producer có invariant/read-back chứng minh; false nghĩa là chưa được xác nhận và client phải query operation/runtime.
         correlationId: { type: string, pattern: "^[A-Za-z0-9._-]{16,64}$" }
+    ProgrammingBindingPointIdentity:
+      type: object
+      additionalProperties: false
+      required: [category, pointId]
+      properties:
+        category: { type: string, enum: [LOCAL, VP, MB_RTU] }
+        pointId: { type: string, minLength: 1, maxLength: 64 }
+        deviceId: { type: string, minLength: 1, maxLength: 64 }
+    ProgrammingBindingCandidate:
+      type: object
+      additionalProperties: false
+      required: [bindingId, variableId, point, direction, dataType, writable, qualityPolicy]
+      properties:
+        bindingId: { type: string, format: uuid }
+        variableId: { type: string, format: uuid }
+        point: { $ref: "#/components/schemas/ProgrammingBindingPointIdentity" }
+        direction: { type: string, enum: [READ, WRITE] }
+        dataType: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        unit: { type: string, maxLength: 32 }
+        writable: { type: boolean }
+        qualityPolicy: { type: string, enum: [REQUIRE_GOOD, ALLOW_UNCERTAIN, FAIL_POLICY] }
+    ProgrammingBindingPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, baseRevisionId, binding]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        baseRevisionId: { type: string, format: uuid }
+        binding: { $ref: "#/components/schemas/ProgrammingBindingCandidate" }
+    ProgrammingBindingValidationIssue:
+      type: object
+      additionalProperties: false
+      required: [code, detailCode, severity, field]
+      properties:
+        code:
+          type: string
+          enum: [PRG-ERR-REQ-001, PRG-ERR-MAP-003, PRG-ERR-MAP-004, PRG-ERR-OUTPUT-OWNER-001]
+        detailCode: { type: string, pattern: "^PGM-MAP-[A-Z-]+-[0-9]{3}$" }
+        severity: { type: string, enum: [WARNING, ERROR] }
+        field: { type: string, minLength: 1, maxLength: 128 }
+        bindingId: { type: string, format: uuid }
+        variableId: { type: string, format: uuid }
+        programId: { type: string, format: uuid }
+        ownerProgramId: { type: string, format: uuid }
+        conflictProgramId: { type: string, format: uuid }
+        category: { type: string, enum: [LOCAL, VP, MB_RTU] }
+        deviceId: { type: string }
+        pointId: { type: string }
+        expected: { type: string }
+        actual: { type: string }
+    ProgrammingBindingPreview:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, verdict, issues, projectId, draftRevisionId, baseRevisionId, etag]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        verdict: { type: string, enum: [ALLOW, WARN, BLOCK] }
+        issues:
+          type: array
+          maxItems: 32
+          items: { $ref: "#/components/schemas/ProgrammingBindingValidationIssue" }
+        projectId: { type: string, format: uuid }
+        draftRevisionId: { type: string, format: uuid }
+        baseRevisionId: { type: string, format: uuid }
+        etag: { type: string }
     ProgrammingCapabilities:
       type: object
       additionalProperties: false
@@ -3481,6 +3649,77 @@ components:
         state: { type: string, enum: [QUEUED, RUNNING, PASSED, FAILED, TIMED_OUT] }
         createdAt: { type: string, format: date-time }
         completedAt: { type: [string, "null"], format: date-time }
+    ProgrammingSignalDependencyLocation:
+      type: object
+      additionalProperties: false
+      required: [line, column, length]
+      properties:
+        line: { type: integer, minimum: 1, maximum: 65535 }
+        column: { type: integer, minimum: 1, maximum: 65535 }
+        length: { type: integer, minimum: 1, maximum: 64 }
+    ProgrammingSignalDependencyReference:
+      type: object
+      additionalProperties: false
+      required: [programId, objectId, name, language, location]
+      properties:
+        programId: { type: string, format: uuid }
+        objectId: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        language: { type: string, enum: [ST, FBD] }
+        location:
+          oneOf:
+            - { $ref: "#/components/schemas/ProgrammingSignalDependencyLocation" }
+            - { type: "null" }
+    ProgrammingSignalDependency:
+      type: object
+      additionalProperties: false
+      required: [signalId, name, type, unit, publisherProgramId, freshnessMs,
+                 stalePolicy, fallbackValue, publisher, consumers]
+      properties:
+        signalId: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        type: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
+        unit: { type: [string, "null"], minLength: 1, maxLength: 32 }
+        publisherProgramId: { type: string, format: uuid }
+        freshnessMs: { type: integer, minimum: 1000, maximum: 90000 }
+        stalePolicy: { type: string, enum: [HOLD_LAST, USE_FALLBACK, WAIT] }
+        fallbackValue: { type: [number, "null"] }
+        publisher: { $ref: "#/components/schemas/ProgrammingSignalDependencyReference" }
+        consumers:
+          type: array
+          maxItems: 32
+          items: { $ref: "#/components/schemas/ProgrammingSignalDependencyReference" }
+    ProgrammingSignalDependencies:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, status, reasonCode, projectId, draftRevisionId,
+                 draftSha256, baseRevisionId, checkedDraftSha256, checkId,
+                 checkRevisionId, checkInputSha256, dependencies]
+      properties:
+        schemaVersion: { type: string, const: "1.0" }
+        status: { type: string, enum: [AUTHORITATIVE, STALE, PENDING_CHECK, UNAVAILABLE] }
+        reasonCode:
+          type: string
+          enum: [VERIFIED, DRAFT_CHANGED, NO_SEALED_REVISION, NO_CHECK,
+                 CHECK_IN_PROGRESS, CHECK_FAILED, CHECK_TIMED_OUT,
+                 CHECK_RESULT_UNAVAILABLE, DEPENDENCY_CONTRACT_UNAVAILABLE]
+        projectId: { type: string, format: uuid }
+        draftRevisionId: { type: string, format: uuid }
+        draftSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        baseRevisionId: { type: [string, "null"], format: uuid }
+        checkedDraftSha256: { type: [string, "null"], pattern: "^[a-f0-9]{64}$" }
+        checkId: { type: [string, "null"], format: uuid }
+        checkRevisionId: { type: [string, "null"], format: uuid }
+        checkInputSha256: { type: [string, "null"], pattern: "^[a-f0-9]{64}$" }
+        dependencies:
+          description: >-
+            null khi chưa có dependency đáng tin; mảng rỗng chỉ mang nghĩa
+            không có signal khi status là AUTHORITATIVE.
+          oneOf:
+            - type: array
+              maxItems: 64
+              items: { $ref: "#/components/schemas/ProgrammingSignalDependency" }
+            - { type: "null" }
     ProgrammingProjectPage:
       type: object
       additionalProperties: false
@@ -4909,7 +5148,18 @@ components:
               reasonCode: { type: string }
               source: { type: string, description: "Nguon do that, vi du plc_shm hay iobus_telemetry." }
               observedAt: { type: string, format: date-time }
-              detail: { type: string }
+              detail:
+                type: string
+                description: >
+                  ISS-PGUI-02: CHI mang gia tri KHONG phu thuoc ngon ngu (dia chi IP,
+                  dinh danh). May chu khong biet client dang hien thi bang ngon ngu nao,
+                  nen no phat `reasonCode` + `detailCount` va client tu dung cau.
+              detailCount:
+                type: integer
+                description: >
+                  ISS-PGUI-02: tham so typed cua `reasonCode` khi ma ay dem duoc
+                  (so diem BAD, so bus khong mo, so thiet bi offline, so diem dang ghi).
+                  Vang truong = ma nay khong co tham so dem; KHAC 0, von la mot so that.
               link: { type: string, description: "Goi y dieu huong; client PHAI kiem qua allowlist route." }
         attention:
           type: array
@@ -4920,8 +5170,40 @@ components:
               id: { type: string }
               severity: { type: string, enum: [critical, high, medium, low, info] }
               category: { type: string, enum: [alarm, communication, quality, forced] }
-              title: { type: string }
-              detail: { type: string }
+              title:
+                type: string
+                description: >
+                  ISS-PGUI-02: DIAGNOSTIC FALLBACK cho client doi cu. Client biet
+                  `titleCode` PHAI dung cau tu ma + `subject`.
+              detail:
+                type: string
+                description: "ISS-PGUI-02: diagnostic fallback; xem `detailCode`."
+              titleCode:
+                type: string
+                description: >
+                  ISS-PGUI-02: ma on dinh cua dong tieu de. Vang/rong = `title` den tu
+                  authority thuong nguon (thong diep alarm cua Core) va la van ban DUC:
+                  hien thi nguyen van, khong dich.
+                enum: [modbus_device_offline, point_quality_bad, point_offline, point_stale, point_forced]
+              subject:
+                type: string
+                description: >
+                  Ten/dinh danh can chen vao cau (ten diem, ten thiet bi). KHONG dich.
+                  Rong = chua co ten trong cau hinh; client dung cau chung thay vi chen
+                  mot khoang trang vao giua cau.
+              detailCode:
+                type: string
+                description: "ISS-PGUI-02: ma on dinh cua dong chi tiet; vang/rong = `detail` la van ban duc."
+                enum: [modbus_bus_slave, forced_expires_in, forced_no_expiry]
+              detailParams:
+                type: object
+                description: >
+                  Tham so TYPED cua `detailCode`. Truong vang = ma hien tai khong dung
+                  toi no; KHAC 0, vi 0 la mot gia tri that (bus 0, con 0 giay).
+                properties:
+                  busId: { type: integer }
+                  slaveAddr: { type: integer }
+                  expiresInS: { type: integer }
               targetType:
                 type: string
                 enum: [point, alarm, modbus_device, bus, subsystem]

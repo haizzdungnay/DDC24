@@ -90,6 +90,6 @@ chỉ bằng một test xanh.
 | Task | Trạng thái | Điều kiện |
 |---|---|---|
 | `T61-505` | `ORDERED` | Chrome DevTools desktop/tablet/mobile — số đo thủ công |
-| `T61-506` | đang chạy | Deploy Forlinx + read-back |
-| `T61-507` | đang chạy | Cập nhật trace/risk sau deploy |
+| `T61-506` | `TARGET TECHNICAL PASS — REVIEW PENDING` | Chu kỳ rollback/redeploy thật đã chạy 2026-09-06; reviewer độc lập chưa ký |
+| `T61-507` | chờ `#464/#465` | Trace/risk đã đồng bộ evidence kỹ thuật; closeout và sign-off vẫn thuộc `ISS-PGM04-20` |
 | `B-PGM04-04` | mở | `tags` và `compatibility` đã khoá hợp đồng, chưa thi hành |

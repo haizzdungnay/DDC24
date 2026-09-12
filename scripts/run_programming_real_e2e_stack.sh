@@ -13,6 +13,10 @@ runtime_root="$(mktemp -d "${TMPDIR:-/tmp}/mkddc-programming-real.XXXXXX")"
 core_pid=""
 backend_pid=""
 noboard_started=0
+full_catalog_fixture="${PROGRAMMING_REAL_FULL_CATALOG:-0}"
+demo_suffix="-programming-real"
+demo_fieldbus_socket="${runtime_root}/fieldbus.sock"
+demo_fieldbus_config=""
 
 cleanup() {
   local exit_code=$?
@@ -30,7 +34,10 @@ cleanup() {
     wait "${core_pid}" 2>/dev/null || true
   fi
   if [[ "${noboard_started}" == "1" ]]; then
-    MKDDC_CPP_BUILD_ROOT="${build_root}/cpp" "${repository_root}/tools/run_noboard_demo.sh" stop \
+    MKDDC_CPP_BUILD_ROOT="${build_root}/cpp" \
+      MKDDC_DEMO_SUFFIX="${demo_suffix}" \
+      MKDDC_DEMO_FIELDBUS_SOCK="${demo_fieldbus_socket}" \
+      "${repository_root}/tools/run_noboard_demo.sh" stop \
       >/dev/null 2>&1 || true
   fi
   rm -rf -- "${runtime_root}"
@@ -59,14 +66,189 @@ mkdir -p "${build_root}" "${runtime_root}/config" "${runtime_root}/core/staging"
 # SHM mồ côi. Giữ nó lại là tự lừa mình rằng tiền điều kiện đã có, rồi đọc số
 # liệu chết của lần chạy trước. Không có tiến trình `mkddc-core` nào bám vào thì
 # xoá và dựng lại.
-if [[ -e /dev/shm/mkddc_plc_shm ]] && ! pgrep -f 'mkddc-core --sock' >/dev/null 2>&1; then
+core_is_running() {
+  pgrep -x mkddc-core >/dev/null 2>&1
+}
+
+if [[ "${full_catalog_fixture}" == "1" ]] && core_is_running; then
+  echo "LỖI: fixture Catalog đầy đủ cần sở hữu PLC SHM nhưng đang có mkddc-core khác chạy." >&2
+  echo "     Dừng lane no-board kia trước khi chạy Playwright real-backend." >&2
+  exit 1
+fi
+
+if [[ -e /dev/shm/mkddc_plc_shm ]] && ! core_is_running; then
   echo "PLC SHM mồ côi (không tiến trình mkddc-core nào ghi) — dựng lại chuỗi no-board." >&2
   rm -f /dev/shm/mkddc_plc_shm
 fi
 
 NOBOARD_NEEDED=0
-if [[ ! -e /dev/shm/mkddc_plc_shm ]]; then
+if [[ "${full_catalog_fixture}" == "1" || ! -e /dev/shm/mkddc_plc_shm ]]; then
   NOBOARD_NEEDED=1
+fi
+
+# `ISS-PGM03-08` — fixture hợp lệ ở sát trần sản phẩm: 24 LOCAL từ chuỗi
+# no-board + 464 VP + 16 MB_RTU = 504 mục. Hai nguồn cấu hình được ghi vào
+# runtime tạm; iobus thật đọc profile và khai danh tính EXT trước lần poll đầu,
+# nên thiết bị serial cố ý không tồn tại vẫn cho một catalog fail-closed có
+# quality BAD thay vì mock dữ liệu qua route trình duyệt.
+if [[ "${full_catalog_fixture}" == "1" ]]; then
+  demo_fieldbus_config="${runtime_root}/config/fieldbus.conf"
+  python3 - "${runtime_root}" <<'PY'
+import json
+import pathlib
+import sys
+
+runtime_root = pathlib.Path(sys.argv[1])
+config_dir = runtime_root / "config"
+profiles_dir = config_dir / "profiles"
+profiles_dir.mkdir(parents=True, exist_ok=True)
+
+virtual_points = []
+for index in range(1, 465):
+    point = {
+        "id": f"VP{index}",
+        "tag": f"catalog_vp_{index:03d}",
+        "label": f"Catalog VP {index:03d}",
+        "signalType": "float",
+        "enabled": True,
+        "writable": True,
+        "value": float(index),
+        "logEnabled": index > 256,
+    }
+    if index > 448:
+        point["logIntervalMs"] = 10
+    elif index > 384:
+        point["logIntervalMs"] = 100
+    elif index > 256:
+        point["logIntervalMs"] = 1000
+    virtual_points.append(point)
+(config_dir / "virtual_points.conf").write_text(
+    json.dumps({"items": virtual_points}, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+profile_points = []
+fieldbus_points = []
+for index in range(1, 17):
+    point_id = f"REG_{index:03d}"
+    profile_points.append({
+        "name": point_id,
+        "fc": 3,
+        "addr": index - 1,
+        "count": 1,
+        "type": "uint16",
+        "byte_order": "AB",
+        "scale": 1,
+        "offset": 0,
+    })
+    fieldbus_points.append({
+        "point_id": point_id,
+        "device_id": "bus-1-slave-2",
+        "tag_name": f"catalog_mb_{index:03d}",
+        "display_name": f"Catalog Modbus {index:03d}",
+        "register_type": "holding_register",
+        "address": index - 1,
+        "data_type": "uint16",
+        "byte_order": "big",
+        "word_order": "high_low",
+        "scale": 1,
+        "offset": 0,
+        "read_write": "read",
+        "enabled": True,
+    })
+
+profile_path = profiles_dir / "bus-1-slave-2.json"
+profile_path.write_text(
+    json.dumps({
+        "profile_id": "bus-1-slave-2",
+        "vendor": "e2e",
+        "description": "Fixture Catalog đầy đủ",
+        "default_baud": 19200,
+        "points": profile_points,
+    }, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+missing_port = str(runtime_root / "missing-rs485")
+fieldbus = {
+    "rs485": {
+        "device": missing_port,
+        "baud": 19200,
+        "parity": "N",
+        "stop": 1,
+        "offline_probe_ms": 1000,
+    },
+    "buses": [{
+        "bus_id": "rs485-1",
+        "display_name": "Dây fixture E2E",
+        "port": missing_port,
+        "baud": 19200,
+        "parity": "N",
+        "stop_bits": 1,
+        "data_bits": 8,
+        "offline_probe_ms": 1000,
+        "enabled": True,
+    }],
+    "poll_default_ms": 10000,
+    "slaves": [{
+        "addr": 2,
+        "bus_id": 1,
+        "profile": str(profile_path),
+        "name": "bus-1-slave-2",
+        "poll_ms": 10000,
+        "timeout_ms": 20,
+        "retry": 0,
+        "offline_after_errors": 1,
+    }],
+    "devices": [{
+        "device_id": "bus-1-slave-2",
+        "display_name": "Thiết bị fixture E2E",
+        "enabled": True,
+        "rs485_port": missing_port,
+        "baud": 19200,
+        "parity": "N",
+        "stop_bits": 1,
+        "slave_id": 2,
+        "poll_ms": 10000,
+        "timeout_ms": 20,
+        "retry": 0,
+        "offline_after_errors": 1,
+        "bus_id": "rs485-1",
+    }],
+    "points": fieldbus_points,
+}
+(config_dir / "fieldbus.conf").write_text(
+    json.dumps(fieldbus, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
+fi
+
+# `T61-504` — NGUỒN PHỤ THUỘC ĐỌC TỪ ĐĨA khi có sẵn, thay vì tải về.
+#
+# `cmake --fresh` xoá cache, nên mỗi lần chạy lane này là một lần `FetchContent`
+# đi tải `googletest`/`nlohmann_json` qua HTTP. Trên máy đo không có lối ra
+# Internet — container CI là ca điển hình — bước configure chết ngay ở
+# `googletest-populate-download`, TRƯỚC khi chạm được assertion nào. Đó đúng chế
+# độ hỏng mà `playwright.programming-real.config.ts` đã ghi lại một lần:
+# "một cổng không chạy được là một cổng sẽ bị bỏ qua".
+#
+# `build/deps-cache/<tên>` là quy ước sẵn có của repo (clone bằng git, đã nằm
+# trong `.gitignore`). Có thư mục nào thì trỏ `FETCHCONTENT_SOURCE_DIR_*` vào
+# đó; không có thì KHÔNG truyền gì và hành vi giữ nguyên như trước. Đây là một
+# đường thoát cho môi trường, không phải một thay đổi cách đo: mã nguồn phụ
+# thuộc vẫn đúng tag mà `CMakeLists.txt` khai.
+deps_cache="${PROGRAMMING_REAL_DEPS_CACHE:-${repository_root}/build/deps-cache}"
+deps_args=()
+for dep in nlohmann_json:NLOHMANN_JSON googletest:GOOGLETEST \
+           bacnet_stack_src:BACNET_STACK_SRC lvgl:LVGL; do
+  dep_dir="${deps_cache}/${dep%%:*}"
+  if [[ -d "${dep_dir}" ]]; then
+    deps_args+=("-DFETCHCONTENT_SOURCE_DIR_${dep##*:}=${dep_dir}")
+  fi
+done
+if (( ${#deps_args[@]} > 0 )); then
+  echo "Dùng nguồn phụ thuộc có sẵn ở ${deps_cache}: ${deps_args[*]}" >&2
 fi
 
 if [[ "${PROGRAMMING_REAL_SKIP_BUILD:-0}" != "1" ]]; then
@@ -75,7 +257,8 @@ if [[ "${PROGRAMMING_REAL_SKIP_BUILD:-0}" != "1" ]]; then
     -DCORE_BUILD_TESTS=OFF \
     -DIOBUS_BUILD_TESTS=OFF \
     -DMKDDC_ENABLE_FW_HOSTCHECK=OFF \
-    -DMKDDC_ENABLE_HMI=OFF
+    -DMKDDC_ENABLE_HMI=OFF \
+    ${deps_args[@]+"${deps_args[@]}"}
   noboard_targets=()
   if [[ "${NOBOARD_NEEDED}" == "1" ]]; then
     # Chuỗi no-board là thứ ghi PLC SHM thật; chỉ build khi thật sự cần.
@@ -99,9 +282,15 @@ if [[ "${NOBOARD_NEEDED}" == "1" ]]; then
     echo "     cài bằng: sudo apt-get install -y socat" >&2
     exit 1
   fi
-  MKDDC_CPP_BUILD_ROOT="${build_root}/cpp" \
-    "${repository_root}/tools/run_noboard_demo.sh" start
+  # Đánh dấu trước khi gọi: nếu script con chết giữa lúc đã dựng socat/iobus,
+  # trap vẫn phải dọn toàn bộ producer vừa sinh thay vì để lại SHM mồ côi.
   noboard_started=1
+  MKDDC_CPP_BUILD_ROOT="${build_root}/cpp" \
+    MKDDC_DEMO_SUFFIX="${demo_suffix}" \
+    MKDDC_PROGRAMMING_STATE_DIR="${runtime_root}/noboard-programming" \
+    MKDDC_DEMO_FIELDBUS_CONFIG="${demo_fieldbus_config}" \
+    MKDDC_DEMO_FIELDBUS_SOCK="${demo_fieldbus_socket}" \
+    "${repository_root}/tools/run_noboard_demo.sh" start
 fi
 
 # T59-607 — lane này phải đi ĐÚNG đường ký của bản thật: backend ký bằng khoá
@@ -146,6 +335,27 @@ fi
 # khoản thật rơi vào file được commit — kèm bcrypt hash của một mật khẩu ai cũng
 # biết. Chín tài khoản như vậy đã lọt vào repo trước khi phát hiện.
 cp "${repository_root}/apps/web-api/config/users.conf" "${runtime_root}/config/users.conf"
+
+# Check không chỉ đọc Point Catalog sống; nó đối chiếu binding LOCAL với
+# `io_config.conf` đang chạy. Lane dựng PLC SHM từ cấu hình đóng gói nhưng trước
+# đây để CONFIG_DIR của web-api rỗng, nên cùng UI-01 vừa có trong catalog lại bị
+# Check kết luận "không có trong cấu hình". Sao chép đúng baseline đóng gói vào
+# runtime tạm để hai bề mặt nói về cùng một cấu hình; không ghi vào `/data`.
+cp "${repository_root}/platform/packaging/io_config.conf" "${runtime_root}/config/io_config.conf"
+
+# `ISS-PGM03-07` — public API tạo Draft v2 ngay từ đầu, nên lane E2E không thể
+# chạm đường nâng dữ liệu v1 bằng request thông thường. Seed một Project v1 vào
+# CHÍNH SQLite tạm trước khi backend mở DB; browser sau đó PATCH qua HTTP thật,
+# reload và Check. Tool không được build/deploy cùng sản phẩm và chỉ chạy khi
+# cấu hình Playwright yêu cầu tường minh.
+if [[ "${PROGRAMMING_REAL_SEED_LEGACY_V1:-0}" == "1" ]]; then
+  (
+    cd "${repository_root}/apps/web-api"
+    go run ./cmd/mkddc-programming-e2e-seed \
+      --db "${runtime_root}/programming/programming.sqlite" \
+      --backup-dir "${runtime_root}/programming/backups"
+  )
+fi
 
 env \
   PORT="${backend_port}" \

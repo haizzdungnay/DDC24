@@ -3,10 +3,13 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
+import { MemoryRouter } from 'react-router-dom'
 import { ContextInspector } from './ContextInspector'
 import type { InspectorInput } from './inspectorContext'
 import type { ProgrammingProgram } from '../../model/types'
 import type { StRuntimeOverlayState } from '../editor/StRuntimeValueOverlay'
+import type { FbdDocument } from '../../fbd/model'
+import { FBD_PROFILE_ID, FBD_SCHEMA_VERSION } from '../../fbd/model'
 
 /**
  * `TC-PGM02-INS-01/03` ở lớp hiển thị.
@@ -82,7 +85,50 @@ describe('ContextInspector — "không xác định được" là một kết qu
 
   it('DEV-PROG-004: chu kỳ đi kèm TÊN Task khi Draft có tên đó', () => {
     renderInspector({ program, cycleMs: 1000, taskName: 'Control_Main' })
-    expect(screen.getByText('Control_Main (1 s)')).toBeInTheDocument()
+    expect(screen.getByText('Control_Main')).toBeInTheDocument()
+    expect(screen.getByText('1 s')).toBeInTheDocument()
+  })
+
+  it('G-14/G-16/G-18/G-19/G-20: Program có đủ năm section, không bịa Resource hay Mode', () => {
+    const dependency: ProgrammingProgram = {
+      programId: 'p-2', objectId: 'obj-2', name: 'LIMIT_FN', kind: 'FUNCTION', language: 'ST',
+      document: '', dependencies: [],
+    }
+    renderInspector({
+      program: { ...program, objectId: 'obj-1', dependencies: ['obj-2'] },
+      programs: [{ ...program, objectId: 'obj-1', dependencies: ['obj-2'] }, dependency],
+      cycleMs: 100,
+      taskName: 'Control_Main',
+      parameters: [
+        { name: 'temp_sp', direction: 'INPUT', dataType: 'REAL' },
+        { name: 'command', direction: 'OUTPUT', dataType: 'BOOL' },
+      ],
+    })
+    expect(screen.getByTestId('inspector-interface-section')).toHaveTextContent('VAR_INPUT')
+    expect(screen.getByTestId('inspector-interface-section')).toHaveTextContent('temp_sp')
+    expect(screen.getByTestId('inspector-execution-section')).toHaveTextContent('100 ms')
+    expect(screen.getByTestId('inspector-attributes-section')).toBeInTheDocument()
+    expect(screen.getByTestId('inspector-ddc-metadata-section')).toBeInTheDocument()
+    expect(screen.getByTestId('inspector-references-section')).toHaveTextContent('LIMIT_FN')
+    expect(screen.queryByText('CPU_Main')).toBeNull()
+    expect(screen.queryByText('Cyclic')).toBeNull()
+  })
+
+  it('G-20: References có lối tới cấu hình Task toàn Project khi caller cung cấp', () => {
+    render(
+      <MemoryRouter>
+        <I18nProvider>
+          <ContextInspector
+            executionTabHref="/eng/programming/programs?project=p-1&mode=EDIT&tab=execution"
+            input={{ program: { ...program, dependencies: [] }, programs: [program], parameters: [] }}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Mở cấu hình Task toàn cục' })).toHaveAttribute(
+      'href',
+      '/eng/programming/programs?project=p-1&mode=EDIT&tab=execution',
+    )
   })
 })
 
@@ -181,5 +227,152 @@ describe('ContextInspector — ISS-STED-12: năm trường mới của ký hiệ
     // Ba trường phụ thuộc Draft đều phải nói thẳng là không tra được.
     expect(panel.textContent?.match(/không xác định được/g)?.length ?? 0).toBeGreaterThanOrEqual(3)
     expect(panel).not.toHaveTextContent('VAR_INPUT')
+  })
+})
+
+describe('ContextInspector — FBD context & editable slots', () => {
+  it('A-T6: Chọn wire ⇒ dock hiện FBD_CONNECTION chỉ đọc, không có form mutation', () => {
+    const fbdDoc: FbdDocument = {
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: FBD_SCHEMA_VERSION,
+      profileId: FBD_PROFILE_ID,
+      graphId: 'g-1',
+      name: 'FBD_MAIN',
+      networks: [
+        {
+          id: 'net-1',
+          name: 'Network 1',
+          order: 1,
+          nodes: [
+            {
+              id: 'node-1',
+              kind: 'INPUT' as const,
+              typeRef: 'BOOL',
+              executionOrder: 1,
+              parameters: { variable: 'Start' },
+              ports: [{ id: 'p1', name: 'OUT', direction: 'OUTPUT' as const, dataType: 'BOOL', unit: null, order: 1 }],
+            },
+            {
+              id: 'node-2',
+              kind: 'OUTPUT' as const,
+              typeRef: 'BOOL',
+              executionOrder: 2,
+              parameters: { variable: 'Motor' },
+              ports: [{ id: 'p2', name: 'IN', direction: 'INPUT' as const, dataType: 'BOOL', unit: null, order: 1 }],
+            },
+          ],
+          wires: [
+            {
+              id: 'wire-1',
+              from: { nodeId: 'node-1', portId: 'p1' },
+              to: { nodeId: 'node-2', portId: 'p2' },
+            },
+          ],
+        },
+      ],
+    }
+
+    render(
+      <I18nProvider>
+        <ContextInspector
+          input={{
+            fbd: {
+              document: fbdDoc,
+              selection: { kind: 'wire', networkId: 'net-1', wireId: 'wire-1' },
+            },
+          }}
+        />
+      </I18nProvider>
+    )
+
+    expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'FBD_CONNECTION')
+    expect(screen.getByText('wire-1')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Lưu|Save/ })).toBeNull()
+  })
+
+  it('CB-1: Khi không có useful context và không có slot nào ⇒ thu gọn', () => {
+    render(
+      <I18nProvider>
+        <ContextInspector input={{}} />
+      </I18nProvider>
+    )
+    expect(screen.getByTestId('inspector-collapsed')).toBeInTheDocument()
+  })
+
+  it('CB-1: Khi có editableFbdSlot ⇒ nở ra và hiển thị slot', () => {
+    render(
+      <I18nProvider>
+        <ContextInspector
+          input={{}}
+          editableFbdSlot={<div data-testid="test-fbd-slot">FBD Slot Content</div>}
+        />
+      </I18nProvider>
+    )
+    expect(screen.queryByTestId('inspector-collapsed')).toBeNull()
+    expect(screen.getByTestId('test-fbd-slot')).toBeInTheDocument()
+  })
+
+  it('TC-INSP-341: Inspector hiển thị với đúng data-testid="context-inspector" và nhãn aria-label hợp lệ', () => {
+    renderInspector({})
+    const inspector = screen.getByTestId('context-inspector')
+    expect(inspector).toBeInTheDocument()
+    expect(inspector).toHaveAttribute('aria-label', 'Thuộc tính')
+  })
+
+  it('TC-INSP-COLLAPSE: Thu gọn khi không có ngữ cảnh hữu ích và hiện thông báo inspector-collapsed', () => {
+    renderInspector({})
+    const collapsed = screen.getByTestId('inspector-collapsed')
+    expect(collapsed).toBeInTheDocument()
+    expect(collapsed).toHaveTextContent('Chưa có ngữ cảnh nào để xem. Chọn một POU, một ký hiệu hoặc một khối.')
+    expect(screen.getByTestId('context-inspector')).toHaveAttribute('data-context', 'EMPTY')
+  })
+
+  it('TC-INSP-FBD-BLOCK: Inspector hiển thị ngữ cảnh FBD_BLOCK với instance ID, kiểu và danh sách cổng', () => {
+    const fbdDoc: FbdDocument = {
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: FBD_SCHEMA_VERSION,
+      profileId: FBD_PROFILE_ID,
+      graphId: 'g-1',
+      name: 'FBD_TEST',
+      networks: [
+        {
+          id: 'net-1',
+          name: 'Network 1',
+          order: 1,
+          nodes: [
+            {
+              id: 'node-ton-1',
+              kind: 'FUNCTION_BLOCK' as const,
+              typeRef: 'TON',
+              executionOrder: 1,
+              parameters: { PT: 'T#10s' },
+              ports: [
+                { id: 'p-in', name: 'IN', direction: 'INPUT' as const, dataType: 'BOOL', unit: null, order: 1 },
+                { id: 'p-pt', name: 'PT', direction: 'INPUT' as const, dataType: 'TIME', unit: null, order: 2 },
+                { id: 'p-q', name: 'Q', direction: 'OUTPUT' as const, dataType: 'BOOL', unit: null, order: 3 },
+              ],
+            },
+          ],
+          wires: [],
+        },
+      ],
+    }
+
+    renderInspector({
+      fbd: {
+        document: fbdDoc,
+        selection: { kind: 'node', networkId: 'net-1', nodeId: 'node-ton-1' },
+      },
+    })
+
+    const inspector = screen.getByTestId('context-inspector')
+    expect(inspector).toHaveAttribute('data-context', 'FBD_BLOCK')
+    expect(screen.queryByTestId('inspector-collapsed')).toBeNull()
+    expect(screen.getByText('node-ton-1')).toBeInTheDocument()
+    expect(screen.getByText('TON')).toBeInTheDocument()
+    expect(screen.getByText(/→ IN : BOOL/)).toBeInTheDocument()
+    expect(screen.getByText(/→ PT : TIME/)).toBeInTheDocument()
+    expect(screen.getByText(/← Q : BOOL/)).toBeInTheDocument()
   })
 })

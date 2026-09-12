@@ -26,14 +26,26 @@ export function pointSourceKind(row: Pick<MappingPointRow, 'category' | 'pointId
   return prefix === 'UI' || prefix === 'AO' || prefix === 'DO' ? prefix : 'UNKNOWN'
 }
 
-/** Nhãn hiển thị của nhóm kênh. `AO` → `UO` theo quyết định của chủ sở hữu. */
-export function pointKindLabel(kind: PointSourceKind | 'ALL'): string {
-  if (kind === 'ALL') return 'Tất cả'
+/**
+ * Nhãn hiển thị của nhóm kênh. `AO` → `UO` theo quyết định của chủ sở hữu.
+ *
+ * `ISS-PGUI-02` — chỉ `ALL` là chữ dành cho người đọc, nên chỉ nó cần `pick`.
+ * `UI`/`UO`/`DO`/`MB_RTU` là ĐỊNH DANH kỹ thuật: dịch chúng sẽ làm nhãn trên
+ * màn hình không còn khớp với thứ người dùng tra trong tài liệu và API.
+ */
+export function pointKindLabel(
+  kind: PointSourceKind | 'ALL',
+  pick: (vi: string, en: string) => string,
+): string {
+  if (kind === 'ALL') return pick('Tất cả', 'All')
   if (kind === 'AO') return 'UO'
   if (kind === 'MB_RTU') return 'MB_RTU'
   if (kind === 'UNKNOWN') return '—'
   return kind
 }
+
+/** Vế nào cũng như nhau vì chỗ gọi duy nhất chỉ đi qua các nhánh định danh. */
+const identity = (vi: string, _en: string) => vi
 
 /** Nhãn nguồn của hàng: `PHYSICAL · UO`, `VIRTUAL`, `MODBUS · CK508-04`.
  *
@@ -46,7 +58,10 @@ export function pointSourceLabel(row: Pick<MappingPointRow, 'category' | 'pointI
     return row.deviceLabel ? `MODBUS · ${row.deviceLabel}` : 'MODBUS'
   }
   const kind = pointSourceKind(row)
-  return kind === 'UNKNOWN' ? 'PHYSICAL' : `PHYSICAL · ${pointKindLabel(kind)}`
+  /* `pointSourceLabel` chỉ ghép ĐỊNH DANH (`PHYSICAL`/`VIRTUAL`/`MODBUS` +
+     nhóm kênh), không có chữ nào dành cho người đọc — nên nó không cần `pick`.
+     `identity` ở đây là một `pick` không bao giờ được gọi tới vế nào khác. */
+  return kind === 'UNKNOWN' ? 'PHYSICAL' : `PHYSICAL · ${pointKindLabel(kind, identity)}`
 }
 
 /** Định danh ngắn hiện đầu hàng. Máy chủ chưa dựng được thì quay về `pointId` —

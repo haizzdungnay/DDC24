@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../features/auth'
 import { prefersReducedMotion } from '../alarms/annunciation'
 import { IS_DEMO } from '../config'
+import { formatTechnicalDate, formatTechnicalTime } from '../dateTime'
 import { useI18n } from '../i18n'
 import { useOptionalOverview } from '../overview/OverviewProvider'
 import { useTheme } from '../theme/ThemeProvider'
@@ -21,7 +22,7 @@ import { HealthChip, SeverityBadge, healthReasonLabel } from './pa3/StateAtoms'
  *
  * KHÔNG đặt badge CPU/RAM/process ở đây (§2.2 nói thẳng). Chúng ở Diagnostics.
  */
-export function TopBar({ connectionState, alarmCount, unackedCount = 0, annunciating = false, currentUser, onOpenNav }: { connectionState: ConnectionState; alarmCount: number; unackedCount?: number; annunciating?: boolean; currentUser: CurrentUser | null; onOpenNav?: () => void }) {
+export function TopBar({ connectionState, alarmCount, unackedCount = 0, annunciating = false, currentUser, onOpenNav, className }: { connectionState: ConnectionState; alarmCount: number; unackedCount?: number; annunciating?: boolean; currentUser: CurrentUser | null; onOpenNav?: () => void; className?: string }) {
   const [now, setNow] = useState(new Date())
   const location = useLocation()
   const { logout } = useAuth()
@@ -41,7 +42,7 @@ export function TopBar({ connectionState, alarmCount, unackedCount = 0, annuncia
   const snapshot = overview?.data ?? null
   const deviceName = snapshot?.controller.deviceName?.trim()
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b border-[var(--c-border)] bg-[var(--c-surface)] px-3 sm:gap-4 sm:px-5">
+    <header data-testid="app-top-bar" className={cn('sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b border-[var(--c-border)] bg-[var(--c-surface)] px-3 sm:gap-4 sm:px-5', className)}>
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         {/* WEB-UX-010: dưới 1024px `NavRail` bị ẩn (`hidden … lg:flex`) và trước
             đây không có gì thay thế — mở web trên điện thoại là mất sạch điều
@@ -92,7 +93,7 @@ export function TopBar({ connectionState, alarmCount, unackedCount = 0, annuncia
                 phải biết mình đang nhìn dữ liệu bao nhiêu giây tuổi. `—` khi
                 không point nào có mốc thời gian thật (PA3-F04). */}
             <span className="mono hidden text-xs text-[var(--c-text-dim)] lg:inline" title={pick('Tuổi dữ liệu mới nhất', 'Age of the newest data')}>
-              {pick('Dữ liệu', 'Data')} {formatDataAge(snapshot.lastDataAt)}
+              {pick('Dữ liệu', 'Data')} {formatDataAge(snapshot.lastDataAt, now.getTime())}
             </span>
           </>
         )}
@@ -114,8 +115,8 @@ export function TopBar({ connectionState, alarmCount, unackedCount = 0, annuncia
             xuống `xl:` để nhường chỗ cho badge sức khoẻ — thứ operator cần
             thấy ngay ở độ rộng máy tính bảng. */}
         <div className="hidden border-r border-[var(--c-border)] pr-6 text-right xl:block">
-          <div className="mono text-sm font-semibold">{now.toLocaleTimeString(locale, { hour12: false })}</div>
-          <div className="text-xs text-[var(--c-text-dim)]">{now.toLocaleDateString(locale)}</div>
+          <div className="mono whitespace-nowrap text-sm font-semibold">{formatTechnicalTime(now, locale)}</div>
+          <div className="text-xs text-[var(--c-text-dim)]">{formatTechnicalDate(now, locale)}</div>
         </div>
         {/* T57-1.5 / `ADR-034` — lớp NHÌN của annunciation.
             `annunciating` bật khi số cảnh báo chưa xác nhận vừa TĂNG. Hai thứ

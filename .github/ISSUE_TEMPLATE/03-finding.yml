@@ -1,0 +1,46 @@
+name: "Finding ngoài phạm vi"
+description: "Lỗi Implementer hoặc Reviewer phát hiện NGOÀI phạm vi Issue đang làm. Vào state:triage, chờ Manager phân loại."
+title: "[FINDING] "
+labels: ["state:triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dùng mẫu này khi phát hiện lỗi **ngoài** phạm vi Issue đang thi hành.
+
+        Lỗi **trong** phạm vi Issue đang làm thì **sửa luôn trong cùng PR**
+        (`AGENTS.md` — "Làm hết việc, không chừa lại"), không mở Issue mới.
+
+        Issue mở bằng mẫu này **không được tự implement ngay**: nó ở
+        `state:triage` cho tới khi Manager cho scope, AC và ưu tiên (N1).
+
+  - type: input
+    id: found_by
+    attributes:
+      label: "Phát hiện bởi (vai + định danh phiên)"
+      placeholder: "implementer-20260909T0430Z"
+    validations:
+      required: true
+
+  - type: input
+    id: origin
+    attributes:
+      label: "Phát hiện trong lúc làm Issue/PR nào"
+      placeholder: "#601 / PR #612"
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: "Bằng chứng"
+      description: "file:line, log, số đo, hoặc lệnh tái hiện. Không mô tả cảm tính."
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: "Tác động nếu không sửa"
+    validations:
+      required: true

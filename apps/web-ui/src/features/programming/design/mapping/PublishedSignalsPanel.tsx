@@ -1,10 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Plus, Radio, Save, Trash2 } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
-import { useAuth, roleAtLeast } from '../../../auth'
 import { Button } from '../../../../shared/components/Button'
+import { Modal } from '../../../../shared/components/Modal'
+import { useProgrammingActionAllowed } from '../../api/authorization'
 import { StateBlock } from '../../../../shared/components/StateBlock'
 import { createUuid } from '../../../../shared/crypto'
+import { programsWorkspacePath } from '../../shared/programsRoute'
 import {
   SIGNAL_FRESHNESS_MAX_MS,
   SIGNAL_FRESHNESS_MIN_MS,
@@ -15,7 +17,6 @@ import {
   draftSignals,
   emptySignalForm,
   isDraftV2,
-  signalConsumerReferences,
   signalFormFrom,
   stalePolicyFromWire,
   toSignalDraftInput,
@@ -30,7 +31,11 @@ import type {
   ProgrammingDraftOperation,
   ProgrammingPublishedSignal,
   ProgrammingSignalStalePolicy,
-  ProgrammingSignalType
+  ProgrammingSignalType,
+  ProgrammingSignalDependencies,
+  ProgrammingSignalDependency,
+  ProgrammingSignalDependencyReference,
+  RemoteState
 } from '../../model/types'
 
 /**
@@ -49,16 +54,22 @@ export function PublishedSignalsPanel({
   draft,
   saving,
   onSave,
-  forceReadOnly = false
+  forceReadOnly = false,
+  dependencies,
+  projectId
 }: {
   draft: ProgrammingDraftDocument
   saving: boolean
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
   forceReadOnly?: boolean
+  dependencies?: RemoteState<ProgrammingSignalDependencies>
+  projectId?: string
 }) {
   const { pick } = useI18n()
-  const { session } = useAuth()
-  const canEdit = roleAtLeast(session?.role, 'admin') && !forceReadOnly
+  const canEdit = useProgrammingActionAllowed('publishedSignal') && !forceReadOnly
+  const dependencyState: RemoteState<ProgrammingSignalDependencies> = dependencies ?? {
+    status: 'loading', data: null, error: null, refresh: () => {},
+  }
 
   const supported = isDraftV2(draft)
   const signals = useMemo(() => (supported ? draftSignals(draft) : []), [draft, supported])
@@ -69,6 +80,7 @@ export function PublishedSignalsPanel({
   const [submitted, setSubmitted] = useState(false)
   const [readBack, setReadBack] = useState<{ signalId: string; action: 'save' | 'delete'; state: 'reading' | 'done' } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<ProgrammingPublishedSignal | null>(null)
   const readBackRef = useRef(readBack)
   readBackRef.current = readBack
 
@@ -171,8 +183,9 @@ export function PublishedSignalsPanel({
       )}
       {readBack && <SignalReadBackNotice readBack={readBack} signals={signals} />}
 
+      <DependencyStatus state={dependencyState} />
+
       <SignalTable
-        draft={draft}
         signals={signals}
         producerById={producerById}
         canEdit={canEdit}
@@ -182,7 +195,23 @@ export function PublishedSignalsPanel({
           setFailure(null)
           setForm(signalFormFrom(signal))
         }}
-        onDelete={remove}
+        dependencies={dependencyState.data}
+        projectId={projectId}
+        onDelete={setPendingDelete}
+      />
+
+      <DeleteSignalModal
+        signal={pendingDelete}
+        dependency={dependencyState.data?.dependencies?.find((item) => item.signalId === pendingDelete?.signalId)}
+        dependencyStatus={dependencyState.data?.status ?? (dependencyState.status === 'error' ? 'UNAVAILABLE' : 'PENDING_CHECK')}
+        saving={saving}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (!pendingDelete) return
+          const signal = pendingDelete
+          setPendingDelete(null)
+          void remove(signal)
+        }}
       />
 
       {canEdit && form && (
@@ -247,19 +276,21 @@ function SignalReadBackNotice({
 }
 
 function SignalTable({
-  draft,
   signals,
   producerById,
   canEdit,
   saving,
+  dependencies,
+  projectId,
   onEdit,
   onDelete
 }: {
-  draft: ProgrammingDraftDocument
   signals: ProgrammingPublishedSignal[]
   producerById: Map<string, DraftProducerOption>
   canEdit: boolean
   saving: boolean
+  dependencies: ProgrammingSignalDependencies | null
+  projectId?: string
   onEdit: (signal: ProgrammingPublishedSignal) => void
   onDelete: (signal: ProgrammingPublishedSignal) => void
 }) {
@@ -289,14 +320,17 @@ function SignalTable({
             <th scope="col" className="py-1.5 pr-3">{pick('Hạn tươi', 'Freshness')}</th>
             <th scope="col" className="py-1.5 pr-3">{pick('Khi quá hạn', 'When stale')}</th>
             <th scope="col" className="py-1.5 pr-3">{pick('Giá trị dự phòng', 'Fallback')}</th>
-            <th scope="col" className="py-1.5 pr-3">{pick('POU nhắc tên', 'POUs naming it')}</th>
+            <th scope="col" className="py-1.5 pr-3">{pick('Consumer đã kiểm', 'Verified consumers')}</th>
             {canEdit && <th scope="col" className="py-1.5">{pick('Thao tác', 'Actions')}</th>}
           </tr>
         </thead>
         <tbody>
           {signals.map((signal) => {
             const producer = producerById.get(signal.publisherProgramId)
-            const consumers = signalConsumerReferences(draft, signal.name, producer?.objectId ?? '')
+            const dependency = dependencies?.dependencies?.find((item) => item.signalId === signal.signalId)
+            const publisherName = dependencies?.status === 'AUTHORITATIVE' && dependency
+              ? dependency.publisher.name
+              : producer?.name
             const policy = stalePolicyFromWire(signal.stalePolicy)
             return (
               <tr key={signal.signalId} className="border-b border-[var(--c-border)]">
@@ -304,8 +338,8 @@ function SignalTable({
                 <td className="py-1.5 pr-3">{signal.type}</td>
                 <td className="py-1.5 pr-3">{signal.unit ?? '—'}</td>
                 <td className="py-1.5 pr-3">
-                  {producer
-                    ? producer.name
+                  {publisherName
+                    ? publisherName
                     : pick('Không xác định — Program đã bị gỡ', 'Unresolved — the program was removed')}
                 </td>
                 <td className="py-1.5 pr-3">{signal.freshnessMs} ms</td>
@@ -318,7 +352,7 @@ function SignalTable({
                     : pick('Không áp dụng', 'Not applicable')}
                 </td>
                 <td className="py-1.5 pr-3">
-                  {consumers.length === 0 ? pick('Chưa có', 'None') : consumers.map((item) => item.name).join(', ')}
+                  <SignalConsumers dependency={dependency} status={dependencies?.status} projectId={projectId} />
                 </td>
                 {canEdit && (
                   <td className="py-1.5">
@@ -345,12 +379,82 @@ function SignalTable({
       </table>
       <p className="mt-1 text-xs text-[var(--c-text-dim)]">
         {pick(
-          'Cột “POU nhắc tên” là kết quả dò văn bản trên mã nguồn bản nháp (đã bỏ chú thích), không phải danh sách consumer chính thức — danh sách đó do Kiểm tra dựng khi biên dịch.',
-          'The “POUs naming it” column is a text scan over the draft sources (comments stripped), not the authoritative consumer list — that list is built by Check at compile time.'
+          'Publisher và consumer lấy từ compiler trong Check. Trạng thái phía trên cho biết dữ liệu có còn khớp bản nháp hiện tại hay không.',
+          'Publishers and consumers come from the compiler Check. The status above states whether they still match the current draft.'
         )}
       </p>
     </div>
   )
+}
+
+function DependencyStatus({ state }: { state: RemoteState<ProgrammingSignalDependencies> }) {
+  const { pick } = useI18n()
+  if (state.status === 'loading') return <p role="status" className="text-xs text-[var(--c-text-dim)]">{pick('Đang đọc dependency từ Check…', 'Loading dependencies from Check…')}</p>
+  if (state.status === 'error' || !state.data) return <p role="alert" className="text-xs text-[var(--c-fault-fg)]">{pick('Không đọc được dependency authoritative.', 'Authoritative dependencies are unavailable.')}</p>
+  const labels = {
+    AUTHORITATIVE: pick('Đã kiểm chứng — khớp bản nháp hiện tại', 'Verified — matches the current draft'),
+    STALE: pick('Đã cũ — bản nháp đã đổi sau Check', 'Stale — the draft changed after Check'),
+    PENDING_CHECK: pick('Chưa kiểm chứng — cần chạy Check', 'Unverified — run Check'),
+    UNAVAILABLE: pick('Không khả dụng — Check lỗi hoặc contract cũ', 'Unavailable — Check failed or uses an older contract'),
+  }
+  const tone = state.data.status === 'AUTHORITATIVE' ? 'text-[var(--c-ok-fg)]' : 'text-[var(--c-warn-fg)]'
+  return <p role="status" className={`text-xs font-medium ${tone}`}>{labels[state.data.status]} · {state.data.reasonCode}</p>
+}
+
+function SignalConsumers({ dependency, status, projectId }: {
+  dependency?: ProgrammingSignalDependency
+  status?: ProgrammingSignalDependencies['status']
+  projectId?: string
+}) {
+  const { pick } = useI18n()
+  if (!dependency || status !== 'AUTHORITATIVE') {
+    return <span className="text-[var(--c-warn-fg)]">{status === 'STALE' ? pick('Đã cũ', 'Stale') : pick('Chưa kiểm chứng', 'Unverified')}</span>
+  }
+  if (dependency.consumers.length === 0) return <span>{pick('Đã kiểm: không có', 'Verified: none')}</span>
+  return <span className="flex flex-wrap gap-1">{dependency.consumers.map((consumer) => (
+    <button key={consumer.objectId} type="button" className="underline decoration-dotted underline-offset-2"
+      onClick={() => openSignalSource(projectId, consumer)}>{consumer.name}</button>
+  ))}</span>
+}
+
+function openSignalSource(projectId: string | undefined, reference: ProgrammingSignalDependencyReference) {
+  if (!projectId) return
+  const query = new URLSearchParams({ program: reference.objectId })
+  if (reference.location) {
+    query.set('line', String(reference.location.line))
+    query.set('column', String(reference.location.column))
+    query.set('length', String(reference.location.length))
+  }
+  globalThis.history.pushState({}, '', programsWorkspacePath(projectId, {
+    pou: reference.objectId,
+    mode: 'EDIT',
+    search: query,
+  }))
+  globalThis.dispatchEvent(new PopStateEvent('popstate'))
+}
+
+function DeleteSignalModal({ signal, dependency, dependencyStatus, saving, onClose, onConfirm }: {
+  signal: ProgrammingPublishedSignal | null
+  dependency?: ProgrammingSignalDependency
+  dependencyStatus: ProgrammingSignalDependencies['status']
+  saving: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const { pick } = useI18n()
+  const count = dependency?.consumers.length ?? null
+  return <Modal open={signal !== null} title={pick('Xác nhận xoá Published Signal', 'Confirm published signal removal')}
+    confirmLabel={pick('Xoá khỏi Draft', 'Remove from Draft')} cancelLabel={pick('Giữ signal', 'Keep signal')}
+    danger confirmLoading={saving} onClose={onClose} onConfirm={onConfirm}>
+    <div className="space-y-2 text-sm">
+      <p>{pick(`Signal ${signal?.name ?? ''} sẽ bị xoá khỏi Draft. Thao tác không Commission và chỉ hoàn tất sau read-back từ máy chủ.`,
+        `Signal ${signal?.name ?? ''} will be removed from the Draft. This does not Commission and completes only after server read-back.`)}</p>
+      {dependencyStatus === 'AUTHORITATIVE' && count !== null
+        ? <p className={count > 0 ? 'text-[var(--c-fault-fg)]' : ''}>{pick(`Check xác nhận ${count} consumer bị ảnh hưởng.`, `Check confirms ${count} affected consumers.`)}</p>
+        : <p className="text-[var(--c-warn-fg)]">{pick('Impact chưa được kiểm chứng cho bản nháp hiện tại.', 'Impact is unverified for the current draft.')}</p>}
+      {dependency?.consumers.map((consumer) => <p key={consumer.objectId} className="font-mono text-xs">{consumer.name} · {consumer.language}{consumer.location ? `:${consumer.location.line}:${consumer.location.column}` : ''}</p>)}
+    </div>
+  </Modal>
 }
 
 function stalePolicyLabel(pick: (vi: string, en: string) => string, policy: ProgrammingSignalStalePolicy): string {

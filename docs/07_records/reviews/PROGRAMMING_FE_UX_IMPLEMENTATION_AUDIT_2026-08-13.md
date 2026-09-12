@@ -4,7 +4,7 @@
 |---|---|
 | ID | `REV-PROG-FE-UX-2026-08-13` |
 | Phạm vi | Plan 53 P5; bốn workspace `PGM-01..04`; `UJ-PROG-01..08`; `UC-PROG-01..17` áp dụng Rev A |
-| Revision audit | 1.4 |
+| Revision audit | 1.5 |
 | Ngày | 2026-08-14 |
 | Người thực hiện | Dev Lead / agent kỹ thuật theo quyền `AUTH-PROG-2026-08-11-03` |
 | Phán quyết | **Solution hiện tại chỉ là bản tạm để review: UC-PROG-03 KHÔNG ĐẠT từ bước 2; vòng Check FAILED → sửa → lưu bị 409. `RELEASE_READY BLOCKED`.** |
@@ -16,6 +16,17 @@
 > bắt đầu bằng source rỗng; seal làm ETag/base phía FE cũ; diagnostic không có
 > dòng/cột. Tái hiện và trạng thái Draft đã hoàn nguyên nằm tại mục 11; báo cáo
 > PM/CTO là [`REV-PROG-ASBUILT-GAP-2026-08-14`](PROGRAMMING_AS_BUILT_GAP_REPORT_2026-08-14.md).
+
+
+> **Ghi chú authority ngày 2026-09-06:** Đây là biên bản lịch sử dùng IA bốn
+> workspace tại thời điểm lập. Các nhãn Check/Commission=PGM-03 và
+> Runtime/Bảo trì=PGM-04 bên dưới chỉ mô tả baseline cũ, đã **SUPERSEDED**.
+> Route/contract hiện hành nằm ở UX-WEB-PROG-001 §2; composition trực quan hiện
+> hành nằm trong `KX_DDC24_Programming_FE_Handoff_v2_1` theo
+> `AUTH-UX-PROG-2026-09-08-01`:
+> PGM-03 Mapping, PGM-04 Control Library, PGM-05 Check/Commission,
+> PGM-06 Runtime. Không dùng số PGM lịch sử trong file này làm route hoặc
+> acceptance authority mới hoặc phục hồi bộ SVG Programming đã loại.
 
 ## 1. Kết luận trước hành động
 
@@ -264,6 +275,7 @@ Root cause source và bảng 12 finding được chốt tại
 
 | Revision | Ngày | Nội dung |
 |---|---|---|
+| 1.5 | 2026-09-06 | Thêm banner authority phân biệt PGM-03/04 của baseline bốn workspace với PGM-03/04/05/06 hiện hành; không đổi phán quyết hoặc evidence lịch sử. |
 | 1.0 | 2026-08-13 | Audit baseline, mở 508..510 và ghi corrective source/host ban đầu; target còn bị chặn SSH. |
 | 1.1 | 2026-08-13 | Ghi full gate host, deploy/read-back/rollback Foxlinx, Chrome desktop/mobile và axe 8/8 scan sạch; đóng blocker SSH/tool accessibility, giữ đúng blocker merge, positive binding target, usability và Test Result độc lập. |
 | 1.2 | 2026-08-13 | Kiểm tra lại live trên endpoint Product Owner chỉ định, đủ 17 UC ở desktop/mobile; ghi 12 UC không đạt, ba UC chưa đủ, hai UC roadmap đúng ranh giới và tám finding live; hạ phán quyết target về `RELEASE_READY BLOCKED`. |

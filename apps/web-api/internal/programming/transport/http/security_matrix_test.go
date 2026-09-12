@@ -1,9 +1,13 @@
 package programminghttp
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -11,6 +15,104 @@ import (
 	"mkddc-web/internal/auth"
 	webrouter "mkddc-web/internal/router"
 )
+
+type programmingRBACManifest struct {
+	SchemaVersion string `json:"schemaVersion"`
+	Operations    []struct {
+		OperationID string   `json:"operationId"`
+		Method      string   `json:"method"`
+		Path        string   `json:"path"`
+		Roles       []string `json:"roles"`
+		Permission  string   `json:"permission"`
+	} `json:"operations"`
+}
+
+// ISS-PGM-RBAC-01 — OpenAPI là contract công khai, routeDefinitions là hàng
+// rào server và roleCan là hàng rào trình bày. Manifest được sinh từ OpenAPI;
+// test này khóa hai nguồn đầu theo từng operation, thay vì chỉ so vài route
+// mẫu hoặc một tổng đếm vẫn có thể xanh khi hai quyền bị đổi chéo cho nhau.
+func TestProgrammingRBACManifestMatchesEveryServerRoute(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("không xác định được đường dẫn security_matrix_test.go")
+	}
+	manifestPath := filepath.Clean(filepath.Join(filepath.Dir(thisFile),
+		"../../../../../..", "contracts/programming/programming_rbac_manifest.json"))
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("đọc manifest RBAC Programming: %v", err)
+	}
+	var manifest programmingRBACManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatalf("parse manifest RBAC Programming: %v", err)
+	}
+	if manifest.SchemaVersion != "1.0" {
+		t.Fatalf("schemaVersion manifest = %q; want 1.0", manifest.SchemaVersion)
+	}
+	if len(manifest.Operations) != len(routeDefinitions) {
+		t.Fatalf("manifest có %d operation; routeDefinitions có %d", len(manifest.Operations), len(routeDefinitions))
+	}
+
+	byRoute := make(map[string]struct {
+		operationID string
+		permission  string
+		roles       []string
+	}, len(manifest.Operations))
+	operationIDs := make(map[string]struct{}, len(manifest.Operations))
+	for _, operation := range manifest.Operations {
+		key := operation.Method + " " + operation.Path
+		if _, exists := byRoute[key]; exists {
+			t.Fatalf("manifest trùng route %s", key)
+		}
+		if operation.OperationID == "" {
+			t.Fatalf("manifest thiếu operationId cho %s", key)
+		}
+		if _, exists := operationIDs[operation.OperationID]; exists {
+			t.Fatalf("manifest trùng operationId %s", operation.OperationID)
+		}
+		operationIDs[operation.OperationID] = struct{}{}
+		byRoute[key] = struct {
+			operationID string
+			permission  string
+			roles       []string
+		}{operation.OperationID, operation.Permission, operation.Roles}
+	}
+
+	for _, definition := range routeDefinitions {
+		key := definition.method + " " + definition.path
+		declared, exists := byRoute[key]
+		if !exists {
+			t.Errorf("route server %s thiếu trong manifest OpenAPI", key)
+			continue
+		}
+		if declared.operationID != definition.operationID {
+			t.Errorf("%s: manifest operationId=%q; server=%q",
+				key, declared.operationID, definition.operationID)
+		}
+		if declared.permission != string(definition.permission) {
+			t.Errorf("%s (%s): manifest permission=%q; server=%q",
+				key, declared.operationID, declared.permission, definition.permission)
+		}
+		serverRoles := auth.RolesWithPermission(definition.permission)
+		wantRoles := make([]string, len(serverRoles))
+		for index, role := range serverRoles {
+			wantRoles[index] = string(role)
+		}
+		if strings.Join(declared.roles, ",") != strings.Join(wantRoles, ",") {
+			t.Errorf("%s (%s): manifest roles=%v; server roles=%v",
+				key, declared.operationID, declared.roles, wantRoles)
+		}
+		delete(byRoute, key)
+	}
+	if len(byRoute) != 0 {
+		extra := make([]string, 0, len(byRoute))
+		for key := range byRoute {
+			extra = append(extra, key)
+		}
+		sort.Strings(extra)
+		t.Fatalf("manifest có route không tồn tại ở server: %v", extra)
+	}
+}
 
 // T59-603 — ma trận security cho TOÀN BỘ route Programming.
 //
@@ -126,6 +228,7 @@ lượng thôi thì không đủ — đổi cờ từ route này sang route khá
 */
 func TestReadOnlyPostsAreEnumeratedAndDoNotWrite(t *testing.T) {
 	expected := []string{
+		"POST /api/v1/programming/projects/{projectId}/draft/bindings/preview",
 		"POST /api/v1/programming/projects/{projectId}/library/entries/check",
 	}
 	actual := make([]string, 0, len(expected))
@@ -143,9 +246,11 @@ func TestReadOnlyPostsAreEnumeratedAndDoNotWrite(t *testing.T) {
 		if !definition.readOnly {
 			continue
 		}
-		// Một route không ghi thì không có gì để bảo vệ bằng ETag: đòi
-		// `If-Match` sẽ tiêu ETag Draft cho một thao tác chỉ đọc.
-		if definition.ifMatchRequired || definition.idempotencyRequired {
+		// Preview binding không ghi nhưng phải khóa vào đúng ảnh Draft; vì vậy nó
+		// là ngoại lệ duy nhất được đòi If-Match. Dry run library không phụ thuộc
+		// toàn bộ Draft nên vẫn không được đòi header này.
+		preview := definition.path == "/api/v1/programming/projects/{projectId}/draft/bindings/preview"
+		if (!preview && definition.ifMatchRequired) || definition.idempotencyRequired {
 			t.Errorf("%s %s: route readOnly không được đòi If-Match/idempotency",
 				definition.method, definition.path)
 		}

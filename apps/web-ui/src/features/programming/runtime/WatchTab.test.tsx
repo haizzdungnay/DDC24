@@ -216,7 +216,7 @@ describe('WatchTab — T59-504', () => {
     state.monitor = ready(monitorPage([sample()]))
     renderWatch()
 
-    expect(screen.getByText(/Bạn có quyền xem monitor; chỉ admin/)).toBeInTheDocument()
+    expect(screen.getByText(/cần quyền sửa Programming/)).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Trace SupplySetpoint' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Bắt đầu trace' })).not.toBeInTheDocument()
   })

@@ -1,7 +1,8 @@
 # PGM-01 — Overview — FE Handoff
 
-**Route:** `/eng/programming`  
-**Reference:** `assets/PGM-01_overview.png`  
+**Route:** `/eng/programming`<br>
+**Authority trực quan:** [`assets/PGM-01_overview.png`](assets/PGM-01_overview.png) theo `AUTH-UX-PROG-2026-09-08-01`<br>
+**Giới hạn bằng chứng:** Target visual; không phải As-Built/runtime evidence.<br>
 **Primary goal:** In ≤5 seconds, the engineer knows system health, Draft vs Active, which Programs run, what blocks progress, and the next action.
 
 ## 1. Page composition

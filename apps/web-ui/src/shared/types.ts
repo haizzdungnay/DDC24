@@ -459,7 +459,18 @@ export interface OverviewDomainHealth {
   reasonCode: string
   source: string
   observedAt: string
+  /**
+   * `ISS-PGUI-02` — CHỈ mang giá trị KHÔNG phụ thuộc ngôn ngữ (địa chỉ IP,
+   * định danh). Trước đây trường này chứa câu tiếng Việt do máy chủ dựng sẵn
+   * và Dashboard in thẳng ra, nên giao diện English hiện tiếng Việt
+   * (`pm-014`). Câu chữ dựng ở client từ `reasonCode` + `detailCount`.
+   */
   detail?: string
+  /**
+   * Tham số typed của `reasonCode` khi mã ấy đếm được. `undefined` = mã này
+   * không có tham số đếm — KHÁC `0`, vốn là một con số thật.
+   */
+  detailCount?: number
   link?: string
 }
 
@@ -495,12 +506,42 @@ export interface OverviewPointSummary {
   groups: OverviewPointGroup[]
 }
 
+/** `ISS-PGUI-02` — mã ổn định của dòng tiêu đề một mục Attention. */
+export type AttentionTitleCode =
+  | 'modbus_device_offline'
+  | 'point_quality_bad'
+  | 'point_offline'
+  | 'point_stale'
+  | 'point_forced'
+
+/** `ISS-PGUI-02` — mã ổn định của dòng chi tiết một mục Attention. */
+export type AttentionDetailCode = 'modbus_bus_slave' | 'forced_expires_in' | 'forced_no_expiry'
+
+export interface AttentionDetailParams {
+  busId?: number
+  slaveAddr?: number
+  expiresInS?: number
+}
+
 export interface OverviewAttentionItem {
   id: string
   severity: AttentionSeverity
   category: AttentionCategory
+  /**
+   * `ISS-PGUI-02` — DIAGNOSTIC FALLBACK. Khi có `titleCode`, giao diện PHẢI
+   * dựng câu từ mã + `subject`; `title` là tiếng Việt do máy chủ dựng.
+   */
   title: string
   detail?: string
+  /**
+   * Rỗng/vắng ⇒ `title` đến từ authority thượng nguồn (thông điệp alarm của
+   * Core) và là văn bản ĐỤC: hiển thị nguyên văn, không dịch.
+   */
+  titleCode?: AttentionTitleCode | string
+  /** Tên/định danh chèn vào câu. KHÔNG dịch. */
+  subject?: string
+  detailCode?: AttentionDetailCode | string
+  detailParams?: AttentionDetailParams
   targetType: AttentionTargetType
   targetId: string
   observedAt?: string

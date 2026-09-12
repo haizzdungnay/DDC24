@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { formatStDocument } from './stFormat'
 import {
-  collectStInterfaceVariables, collectStSymbols, isDuplicateProgramName, isValidPouName,
+  collectStFunctionReturnType, collectStInterfaceVariables, collectStSymbols, isDuplicateProgramName, isValidPouName,
   mapOffsetAcrossReplaceAll, mapOffsetByNonWhitespaceCount, uniqueProgramName
 } from './ProgramsTab'
 import type { ProgrammingProgram } from '../../model/types'
@@ -149,6 +149,17 @@ END_PROGRAM`
 
   it('rỗng khi chương trình không khai báo VAR_INPUT/VAR_OUTPUT', () => {
     expect(collectStInterfaceVariables('PROGRAM t VAR x : BOOL; END_VAR END_PROGRAM')).toEqual([])
+  })
+
+  it('đọc VAR_IN_OUT cho Inspector nhưng không biến nó thành INPUT/OUTPUT', () => {
+    expect(collectStInterfaceVariables('FUNCTION_BLOCK Valve VAR_IN_OUT Position : REAL; END_VAR END_FUNCTION_BLOCK')).toEqual([
+      { name: 'Position', type: 'REAL', direction: 'INOUT' }
+    ])
+  })
+
+  it('đọc kiểu trả về FUNCTION từ header và không đoán cho PROGRAM', () => {
+    expect(collectStFunctionReturnType('FUNCTION LimitValue : REAL\nEND_FUNCTION')).toBe('REAL')
+    expect(collectStFunctionReturnType('PROGRAM Main\nEND_PROGRAM')).toBeNull()
   })
 })
 

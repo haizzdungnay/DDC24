@@ -61,3 +61,13 @@ logs/*
 # Bộ hồ sơ bàn giao auditor — bản sao chụp tài liệu đã có sẵn trong docs/,
 # giữ cục bộ để gửi ra ngoài, không đẩy lên GitHub tránh trùng lặp nội dung.
 /audit-handover-*/
+
+# Artifacts và công cụ phát triển cục bộ (local dev, không commit)
+# Tránh vô tình commit biến môi trường cá nhân, ảnh chụp màn hình debug UI,
+# script test thủ công, scratch worktrees và script khởi chạy cục bộ chứa đường dẫn máy riêng.
+apps/web-ui/.env.local
+apps/web-ui/screenshot-*.png
+.claude/worktrees/
+apps/web-ui/test-fbd-edit-manual.mjs
+tools/run_local_web_fg.sh
+tools/start_local_web.sh

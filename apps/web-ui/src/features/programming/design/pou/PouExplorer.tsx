@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Boxes, ChevronDown, Copy, FileCode2, FilePlus, FunctionSquare, Pencil, Trash2 } from 'lucide-react'
+import { Boxes, ChevronDown, FileCode2, FunctionSquare, MoreHorizontal, Plus } from 'lucide-react'
 import { Modal } from '../../../../shared/components/Modal'
 import { createUuid } from '../../../../shared/crypto'
 import { useI18n } from '../../../../shared/i18n'
@@ -30,8 +30,8 @@ import { filterPouItems, groupPouItems, pouItems, resolvePouSelection, type PouI
  */
 const GROUP_META: Record<PouKind, { label: [string, string]; icon: typeof FileCode2 }> = {
   PROGRAM: { label: ['Programs', 'Programs'], icon: FileCode2 },
-  FUNCTION: { label: ['Functions', 'Functions'], icon: FunctionSquare },
-  FUNCTION_BLOCK: { label: ['Function Blocks', 'Function Blocks'], icon: Boxes }
+  FUNCTION_BLOCK: { label: ['Function Blocks', 'Function Blocks'], icon: Boxes },
+  FUNCTION: { label: ['Functions', 'Functions'], icon: FunctionSquare }
 }
 
 const NAME_ERROR_COPY: Record<'EMPTY' | 'PATTERN' | 'DUPLICATE', [string, string]> = {
@@ -69,14 +69,14 @@ export function PouExplorer({
   const [renamingObjectId, setRenamingObjectId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [pendingDeleteObjectId, setPendingDeleteObjectId] = useState<string | null>(null)
+  const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
   /* `DEV-PROG-006` — nhóm gập được. Mặc định MỞ cả ba: một cây mặc định đóng
    * bắt người dùng bấm thêm một lần cho việc họ luôn làm (tìm POU để mở). */
   const [collapsedGroups, setCollapsedGroups] = useState<readonly PouKind[]>([])
-  /* Menu ngữ cảnh (chuột phải). Nó KHÔNG phải đường duy nhất tới các thao tác:
-   * ba nút Đổi tên/Nhân bản/Xoá vẫn nằm trên hàng và đi được bằng bàn phím. Một
-   * thao tác chỉ tới được bằng chuột phải là một thao tác người dùng bàn phím
-   * không có. */
+  /* Menu ngữ cảnh dùng chung cho chuột phải và nút `…` có accessible name.
+   * Vì vậy các thao tác vẫn tới được bằng bàn phím mà không phải bày ba icon
+   * thường trực trên mọi hàng POU. */
   const [menu, setMenu] = useState<{ objectId: string; x: number; y: number } | null>(null)
 
   const items = useMemo(() => pouItems(document), [document])
@@ -103,6 +103,7 @@ export function PouExplorer({
       setRenamingObjectId(null)
       setPendingDeleteObjectId(null)
       setMenu(null)
+      setCreateMenuOpen(false)
     }
   }, [canEdit])
 
@@ -119,6 +120,15 @@ export function PouExplorer({
       window.removeEventListener('keydown', onKey)
     }
   }, [menu])
+
+  useEffect(() => {
+    if (!createMenuOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCreateMenuOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [createMenuOpen])
 
   const renameError = renamingObjectId ? validatePouName(items, renameDraft, renamingObjectId) : null
 
@@ -155,7 +165,7 @@ export function PouExplorer({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 w-[244px] min-w-[244px] max-w-[244px]">
       <div className="flex items-center justify-between gap-2">
         <label className="sr-only" htmlFor="pou-explorer-search">
           {pick('Tìm POU', 'Find a POU')}
@@ -169,51 +179,37 @@ export function PouExplorer({
           className="min-w-0 flex-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
         />
         {canEdit && (
-          <span className="flex shrink-0 gap-1">
-            {/* Giữ NGUYÊN nhãn của hai nút cũ: chúng là hợp đồng của test bàn
-                phím và E2E, và đổi nhãn chỉ vì nút đổi chỗ là làm hỏng bằng
-                chứng mà không đổi hành vi. */}
+          <div className="relative shrink-0">
             <button
               type="button"
-              className="grid h-7 w-7 place-items-center rounded text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-              title={pick('Thêm chương trình FBD', 'Add FBD program')}
-              onClick={() => create('PROGRAM', 'FBD')}
+              aria-haspopup="menu"
+              aria-expanded={createMenuOpen}
+              className="inline-flex min-h-9 items-center gap-1 rounded-[var(--radius)] bg-[var(--c-accent-bg)] px-2 text-xs font-semibold text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              onClick={() => setCreateMenuOpen((open) => !open)}
             >
-              <FilePlus className="h-4 w-4" aria-hidden="true" />
-              <span className="sr-only">{pick('Thêm chương trình FBD', 'Add FBD program')}</span>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              {pick('Mới', 'New')}
             </button>
-            <button
-              type="button"
-              className="grid h-7 min-w-7 place-items-center rounded text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-              title={pick('Thêm chương trình ST', 'Add ST program')}
-              onClick={() => create('PROGRAM', 'ST')}
-            >
-              ST+
-            </button>
-            <button
-              type="button"
-              className="grid h-7 min-w-7 place-items-center rounded text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-              title={pick('Thêm FUNCTION', 'Add FUNCTION')}
-              onClick={() => create('FUNCTION', 'ST')}
-            >
-              FN+
-            </button>
-            <button
-              type="button"
-              className="grid h-7 min-w-7 place-items-center rounded text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-              title={pick('Thêm FUNCTION_BLOCK', 'Add FUNCTION_BLOCK')}
-              onClick={() => create('FUNCTION_BLOCK', 'ST')}
-            >
-              FB+
-            </button>
-          </span>
+            {createMenuOpen && (
+              <div
+                role="menu"
+                aria-label={pick('Tạo POU mới', 'Create a new POU')}
+                className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] py-1 shadow-lg"
+              >
+                <MenuItem label={pick('Program · ST', 'Program · ST')} onClick={() => { setCreateMenuOpen(false); create('PROGRAM', 'ST') }} />
+                <MenuItem label={pick('Program · FBD', 'Program · FBD')} onClick={() => { setCreateMenuOpen(false); create('PROGRAM', 'FBD') }} />
+                <MenuItem label={pick('Function · ST', 'Function · ST')} onClick={() => { setCreateMenuOpen(false); create('FUNCTION', 'ST') }} />
+                <MenuItem label={pick('Function Block · ST', 'Function Block · ST')} onClick={() => { setCreateMenuOpen(false); create('FUNCTION_BLOCK', 'ST') }} />
+              </div>
+            )}
+          </div>
         )}
       </div>
 
       {items.length === 0 && (
         <p className="px-1 text-sm text-[var(--c-text-dim)]">
           {canEdit
-            ? pick('Chưa có chương trình. Bấm + để tạo.', 'No programs yet. Click + to create one.')
+            ? pick('Chưa có chương trình. Bấm Mới để tạo.', 'No programs yet. Select New to create one.')
             : pick('Chưa có chương trình.', 'No programs yet.')}
         </p>
       )}
@@ -231,6 +227,7 @@ export function PouExplorer({
               <h3>
                 <button
                   type="button"
+                  aria-label={`${pick(...label)} (${group.length})`}
                   aria-expanded={!collapsed}
                   aria-controls={groupId}
                   /* `min-h-7` (28 px) là NGƯỠNG CẢM ỨNG, không phải trang trí:
@@ -238,7 +235,7 @@ export function PouExplorer({
                      nút này khi reset form của `styles.css` chuyển vào
                      `@layer base` — lúc đó `text-xs` của Tailwind mới thật sự
                      áp lên nút và chiều cao tụt xuống dưới ngưỡng. */
-                  className="flex min-h-7 w-full items-center gap-1.5 rounded px-0.5 text-left text-xs font-semibold uppercase text-[var(--c-text-dim)] hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                  className="flex min-h-7 w-full items-center gap-1.5 rounded px-0.5 text-left text-xs font-semibold text-[var(--c-text-dim)] hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
                   onClick={() => setCollapsedGroups((current) => (
                     current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]
                   ))}
@@ -248,7 +245,13 @@ export function PouExplorer({
                     aria-hidden="true"
                   />
                   <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  {pick(...label)} ({group.length})
+                  <span className="flex-1 truncate">{pick(...label)}</span>
+                  <span
+                    data-testid={`pou-section-badge-${kind}`}
+                    className="ml-auto rounded-full bg-[var(--c-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--c-text-dim)]"
+                  >
+                    {group.length}
+                  </span>
                 </button>
               </h3>
               {/* Thân nhóm LUÔN có mặt trong DOM và luôn mang `id`, kể cả khi
@@ -323,35 +326,19 @@ export function PouExplorer({
                             <span className="ml-2 text-xs text-[var(--c-text-dim)]">{item.language}</span>
                           </button>
                           {canEdit && (
-                            <>
-                              <button
-                                type="button"
-                                className="grid h-7 w-7 shrink-0 place-items-center rounded text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-                                title={pick(`Đổi tên ${item.name}`, `Rename ${item.name}`)}
-                                onClick={() => {
-                                  setRenamingObjectId(item.objectId)
-                                  setRenameDraft(item.name)
-                                }}
-                              >
-                                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                className="grid h-7 w-7 shrink-0 place-items-center rounded text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
-                                title={pick(`Nhân bản ${item.name}`, `Duplicate ${item.name}`)}
-                                onClick={() => duplicate(item)}
-                              >
-                                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                className="grid h-7 w-7 shrink-0 place-items-center rounded text-[var(--c-text-dim)] hover:text-[var(--c-fault-fg)]"
-                                title={pick(`Xóa ${item.name}`, `Delete ${item.name}`)}
-                                onClick={() => setPendingDeleteObjectId(item.objectId)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
-                            </>
+                            <button
+                              type="button"
+                              aria-haspopup="menu"
+                              aria-expanded={menu?.objectId === item.objectId}
+                              aria-label={pick(`Thao tác với ${item.name}`, `Actions for ${item.name}`)}
+                              className="grid h-7 w-7 shrink-0 place-items-center rounded text-[var(--c-text-dim)] opacity-70 hover:bg-[var(--c-surface-2)] hover:text-[var(--c-accent)] focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                              onClick={(event) => {
+                                const rect = event.currentTarget.getBoundingClientRect()
+                                setMenu({ objectId: item.objectId, x: Math.max(8, rect.right - 160), y: rect.bottom + 4 })
+                              }}
+                            >
+                              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                            </button>
                           )}
                         </>
                       )}
@@ -394,7 +381,7 @@ export function PouExplorer({
             />
             {/* "Đặt làm Active" của đề bài KHÔNG có ở đây, và im lặng bỏ nó đi
                 sẽ để người dùng đi tìm. Ý định bật/tắt Program sống ở API
-                runtime-intent (PGM-05), không ở Draft — đặt một mục cùng tên tại
+                runtime-intent (PGM-06), không ở Draft — đặt một mục cùng tên tại
                 đây sẽ hứa một thao tác mà cây POU không thực hiện được. */}
             <p className="border-t border-[var(--c-border)] px-3 pt-1 text-[10px] text-[var(--c-text-dim)]">
               {pick('Bật/tắt Program ở trang Runtime & Bảo trì.', 'Enable/disable a program in Runtime & Maintenance.')}

@@ -12,7 +12,7 @@
 | Nguồn | `PGM02-V22-WP-05`, `T59-806`, PGM-02B FE Handoff v2.2, DDD PGM-02, Node-RED/Blockly/React Flow/Rete docs |
 | Requirement | `AC-FBD-001..012`, `AC-PGM02-001..010`, `DDO-PGM02-007`, `DDO-PGM02-015` |
 | Phạm vi | FBD `EDIT`, FE-only trong `apps/web-ui`; chưa triển khai LIVE/SIMULATE, BE, Core, firmware |
-| Increment/NFR gate | `R1_EDIT`; Programming chunk target ≤125 KiB gzip (R2/R3 figures are context only) |
+| Increment/NFR gate | Cổng thi hành: **R3 165 KiB gzip** (`apps/web-ui/package.json:28` pin `--increment r3`). Mốc R1 125 KiB là **mốc lịch sử của increment đã đóng**, không phải cổng chặn — `UD-PROG-017` CLOSED 2026-09-05. Mốc cảnh báo mềm 145 KiB là quy ước tài liệu, không cài vào script |
 
 ## 0. Đọc nhanh
 
@@ -80,7 +80,8 @@ Chuỗi chính:
 - Invalid wire/drop zero mutation; graph thiếu vẫn có thể Save Draft.
 - Không thay đổi `executionOrder` khi kéo hoặc căn chỉnh hình học.
 - Không trộn Draft với Active/LIVE; không khẳng định runtime khi nguồn vắng.
-- `pointerToPaintP95Ms ≤ 32 ms`, bundle không vượt gate `R1_EDIT` (125 KiB gzip),
+- `pointerToPaintP95Ms ≤ 32 ms`, bundle không vượt cổng thi hành R3 (165 KiB
+  gzip; mốc R1 125 KiB là mốc lịch sử — `UD-PROG-017` CLOSED 2026-09-05),
   fixture tối đa `256 nodes/512 wires` không tràn hoặc crash.
 
 ## 2. As-Built và khoảng trống — `DD-03`
@@ -106,7 +107,7 @@ SHA commit đó phải thay thế snapshot này trong revision kế tiếp.
 | Inspector | `design/inspector/ContextInspector.tsx` có context `FBD_BLOCK`/`FBD_CONNECTION`, đọc selection từ `ProgramsTab`. | FBD parameter form còn nằm inline trong `StructuredFbdEditor`; cần một đường selection/inspection không nhân bản state. |
 | Workspace | `design/editor/ProgramsTab.tsx` có `FbdEditorPane`, `PouTabBar`, shared right Inspector và `DesignWorkbench`. | FBD pane chưa đạt ảnh mục tiêu; cần slot/dock responsive và bottom states rõ ràng. |
 | Contract/design authority | `PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md`, `PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md`, `PGM02_ST_FBD_IMPLEMENTATION_PLAN.md`. | Handoff là target, không phải bằng chứng as-built; phải giữ nhãn evidence class. |
-| NFR | `contracts/programming/pgm02_workspace_v1.json` pin `256/512`, pointer p95 32 ms, bundle budgets R1 125/R2 145/R3 165 KiB. | Số release đã ghi ở `CHANGELOG.md` là 162.37/165 KiB. Phép đo local riêng tại snapshot trên bằng `npx vite build` + verifier là 157.20 KiB (R3 dư 7.80; **R1 vượt 32.20**). Hai số khác build mode/worktree nên không thay thế nhau; mọi lát phải đo lại bằng build release/candidate sạch. R1 budget đang là blocker, không được gọi FBD EDIT “đạt gate” nếu chưa có xử lý/decision. |
+| NFR | `contracts/programming/pgm02_workspace_v1.json` pin `256/512`, pointer p95 32 ms, bundle budgets R1 125/R2 145/R3 165 KiB. | Số release đã ghi ở `CHANGELOG.md` là 162.37/165 KiB. Phép đo local riêng tại snapshot trên bằng `npx vite build` + verifier là 157.20 KiB (R3 dư 7.80; **R1 vượt 32.20**). Hai số khác build mode/worktree nên không thay thế nhau; mọi lát phải đo lại bằng build release/candidate sạch. **Cập nhật 2026-09-05 (`UD-PROG-017` CLOSED):** cổng thi hành là R3 165 KiB; R1 125 KiB là mốc lịch sử của increment đã đóng, không còn là blocker. Số đo cuối của lát: 128,54 KiB ⇒ R3 PASS, dư 36,46 KiB. |
 
 ### 2.1 Snapshot phép đo local
 
@@ -363,6 +364,12 @@ cancel thì channel kia bị vô hiệu trong cùng frame, tránh chèn block ha
 snap/bounds; không dùng tọa độ page toàn document.
 
 ### 5.4 Spike dependency gate
+
+> **Ghi chú 2026-09-05.** Spike này **đã đóng bằng SVG-first** theo mục 6 bên
+> dưới; không dependency nào được thêm. Vì vậy toàn bộ điều kiện 1–5 là tiêu chí
+> lịch sử của một spike **không thực hiện** — con số 125 KiB ở mục 5 giữ nguyên
+> làm bằng chứng truy nguyên, **không** phải cổng đang thi hành. Cổng thi hành
+> của repo là R3 165 KiB (`UD-PROG-017` CLOSED).
 
 Spike `@xyflow/react` (nếu thực hiện) phải nằm ngoài product dependency trước khi
 đạt tất cả điều kiện:
@@ -835,7 +842,7 @@ contract checks.
 |---|---|---|---|---|
 | `BLK-FBD-001` `variableId` chưa có trong FBD v1 | BE/Compiler architect | I/O picker chỉ chứng minh name/type/unit, không claim stable variable identity | `IMPLEMENT_READY` cho semantic picker | Decision additive schema/API + generated client + round-trip test; tới lúc đó giữ picker theo nguồn hiện có hoặc báo unknown |
 | `BLK-FBD-002` React Flow/Rete bundle/perf chưa chứng minh | FE architect | Không được thêm dependency vào product | spike gate | Isolated measurement đạt license/adapter/a11y/256-512/budget; nếu không, đóng bằng SVG-first |
-| `BLK-FBD-003` R1 bundle budget hiện vượt | FE architect + Product | FBD EDIT (R1) không thể tuyên `IMPLEMENT_READY` khi chunk 157.20 KiB >125 KiB | R1 NFR gate | Tách chunk/lazy-load hoặc decision budget được Owner ký; đo lại trên candidate sạch |
+| `BLK-FBD-003` R1 bundle budget hiện vượt — **CLOSED 2026-09-05** | FE architect + Product | Đã gỡ. Cổng thi hành là R3 165 KiB, không phải R1 | R1 NFR gate — hết hiệu lực | **ĐÃ ĐÓNG.** Task 1.5 lazy-load `ProgramsTab` cắt 28,66 KiB (157,20 → 128,54 KiB); Owner ký `UD-PROG-017` chọn lựa chọn A; đo lại trên build sạch: R3 PASS, dư 36,46 KiB |
 | `BLK-FBD-004` Browser DevTools MCP chưa xác nhận trong phiên | QA/Tooling | Chưa có evidence browser MCP cho layout/runtime | `M3→M4` evidence gate | MCP khả dụng hoặc Playwright/browser evidence được review; không claim đã có nếu chưa chạy |
 | `BLK-FBD-005` PID Controls+Safety approval | Controls + Safety | PID card phải disabled; không insertion | library feature gate | Approval record chính thức cập nhật registry/policy; FE không tự mở |
 | `BLK-FBD-006` Generated programming client chưa có timeout policy | FE platform/API owner | Save/Check request có thể treo vô hạn; không được tự hứa SLA trong FBD | transport readiness gate | Thêm timeout/cancel semantics qua decision API hoặc chấp thuận explicit no-timeout residual; test abort/read-back |
@@ -886,7 +893,7 @@ contract checks.
 
 | Kết quả | Phạm vi | Residual được giữ |
 |---|---|---|
-| `APPROVED WITH RESIDUALS` | Reviewer FE/architecture độc lập, kiểm `DD-01..DD-13`, links, assets, trace 38/38 scenario | `BLK-FBD-003` R1 chunk vượt 125 KiB; `BLK-FBD-006` timeout transport; `BLK-FBD-004/005/007` browser evidence/PID approval/baseline sign-off; §10 vẫn `PLANNED`, chưa là implementation/target/HIL evidence |
+| `APPROVED WITH RESIDUALS` | Reviewer FE/architecture độc lập, kiểm `DD-01..DD-13`, links, assets, trace 38/38 scenario | `BLK-FBD-006` timeout transport; `BLK-FBD-004/005/007` browser evidence/PID approval/baseline sign-off; §10 vẫn `PLANNED`, chưa là implementation/target/HIL evidence. (`BLK-FBD-003` R1 chunk đã **CLOSED 2026-09-05** theo `UD-PROG-017` — không còn là residual) |
 
 ### 12.3 Sign-off
 

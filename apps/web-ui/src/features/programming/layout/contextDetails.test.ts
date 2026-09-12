@@ -124,6 +124,32 @@ describe('contextDetailRows — lý do đúng nguồn gốc, không suy diễn',
     expect(rows.get('lkgRevisionId')?.missingReason).toBe('Chưa có bản tốt gần nhất (LKG)')
   })
 
+  /**
+   * `ISS-PGUI-01` — thiết bị ĐANG chạy một gói, chỉ là gói của Project khác.
+   *
+   * Ô này là thứ người vận hành chép vào phiếu sự cố trước khi cân nhắc
+   * rollback. "Chưa Commission gói nào lên thiết bị" ở đây không phải một câu
+   * thận trọng mà là một câu sai về thiết bị.
+   */
+  it('gói đang vận hành thuộc Project khác: nói đúng chủ, không nói "chưa Commission"', () => {
+    const rows = rowsOf({ ...full, activeRevisionId: null, activeContentHash: null, activeOwnership: 'foreign' })
+    expect(rows.get('activeRevisionId')?.missingReason).toBe('Gói đang vận hành thuộc Project khác')
+    expect(rows.get('activeContentHash')?.missingReason).toBe('Gói đang vận hành thuộc Project khác')
+  })
+
+  it('không quy được gói đang vận hành về Project nào: nói chưa xác định', () => {
+    const rows = rowsOf({ ...full, activeRevisionId: null, activeContentHash: null, activeOwnership: 'unresolved' })
+    expect(rows.get('activeRevisionId')?.missingReason)
+      .toBe('Chưa xác định được gói đang vận hành thuộc Project nào')
+  })
+
+  /* Core im vẫn THẮNG mọi lý do quyền sở hữu: không đọc được runtime thì cũng
+     không có cơ sở nói gói đang chạy là của ai. */
+  it('Core im thắng lý do quyền sở hữu', () => {
+    const rows = rowsOf({ ...empty, coreStatus: 'unreadable', activeOwnership: 'foreign' })
+    expect(rows.get('activeRevisionId')?.missingReason).toBe('Không đọc được từ Core')
+  })
+
   it('chưa có Draft: cả ID lẫn contentHash của Draft cùng nói "chưa có bản nháp"', () => {
     const rows = rowsOf({ ...full, draftRevisionId: null, draftContentHash: null })
     expect(rows.get('draftRevisionId')?.missingReason).toBe('Chưa có bản nháp cho Project này')

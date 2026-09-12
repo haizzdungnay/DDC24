@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toWorkspaceDocument } from './draftV2'
+import { programmingBindingsFromV2, toWorkspaceDocument } from './draftV2'
 import type { ProgrammingDraftDocument } from './types'
 
 const V2 = {
@@ -27,7 +27,13 @@ const V2 = {
     { programId: '22222222-2222-4222-8222-222222222222', objectId: '22222222-2222-4222-8222-222222222222', periodMs: 5000 }
   ],
   signals: [],
-  bindings: [{ bindingId: '55555555-5555-4555-8555-555555555555', pointId: 'BO-1', direction: 'WRITE' }],
+  bindings: [{
+    bindingId: '55555555-5555-4555-8555-555555555555',
+    variableId: '33333333-3333-4333-8333-333333333333',
+    point: { category: 'LOCAL', pointId: 'DO-01' },
+    direction: 'WRITE', dataType: 'BOOL', writable: true, qualityPolicy: 'REQUIRE_GOOD',
+    programId: '22222222-2222-4222-8222-222222222222', variable: 'Fan',
+  }],
   library: { systemProfile: 'revA-1t-1-5-30', systemVersion: 'rev-a.1', projectLibraryRevisionId: null },
   execution: { profileId: 'revA-1t-1-5-30', maxProgramsEnabled: 16 }
 } as unknown as ProgrammingDraftDocument
@@ -42,6 +48,12 @@ describe('adapter document v2 -> view model Design', () => {
     // Mapping sẽ không tìm thấy biến nào để gán điểm.
     expect(view.variables).toHaveLength(1)
     expect(view.variables[0].programId).toBe('22222222-2222-4222-8222-222222222222')
+    expect(view.bindings).toEqual([{
+      bindingId: '55555555-5555-4555-8555-555555555555',
+      variableId: '33333333-3333-4333-8333-333333333333',
+      point: { category: 'LOCAL', pointId: 'DO-01' },
+      direction: 'WRITE', dataType: 'BOOL', writable: true, qualityPolicy: 'REQUIRE_GOOD',
+    }])
     expect(view.task.periodMs).toBe(5000)
   })
 
@@ -86,5 +98,31 @@ describe('adapter document v2 -> view model Design', () => {
   it('document v1 đi qua nguyên trạng', () => {
     const v1 = { schemaVersion: 1, project: V2.project, programs: [], variables: [], bindings: [], task: { taskId: 't', periodMs: 1000, programOrder: [] }, library: { profile: 'CORE_REVA', version: '1' } } as unknown as ProgrammingDraftDocument
     expect(toWorkspaceDocument(v1)).toBe(v1)
+  })
+
+  it('giữ canonical identity LOCAL, VP và MB_RTU; không đưa owner nội bộ vào view model', () => {
+    const common = {
+      direction: 'READ', dataType: 'REAL', writable: false, qualityPolicy: 'REQUIRE_GOOD',
+      programId: '22222222-2222-4222-8222-222222222222', variable: 'Temperature',
+    }
+    const bindings = [
+      { ...common, bindingId: '51111111-1111-4111-8111-111111111111', variableId: '61111111-1111-4111-8111-111111111111', point: { category: 'LOCAL', pointId: 'UI-01' } },
+      { ...common, bindingId: '52222222-2222-4222-8222-222222222222', variableId: '62222222-2222-4222-8222-222222222222', point: { category: 'VP', pointId: 'VP_SUPPLY_TEMP' } },
+      { ...common, bindingId: '53333333-3333-4333-8333-333333333333', variableId: '63333333-3333-4333-8333-333333333333', point: { category: 'MB_RTU', deviceId: 'bus-1-slave-4', pointId: 'TEMP' } },
+    ]
+    expect(programmingBindingsFromV2(bindings)).toEqual(bindings.map(({ programId: _programId, variable: _variable, ...binding }) => binding))
+  })
+
+  it('fail-closed cả collection khi có binding malformed, mixed hoặc runtime handle', () => {
+    const valid = (V2 as unknown as { bindings: unknown[] }).bindings[0]
+    const malformed = [
+      { ...valid as object, point: { category: 'MB_RTU', pointId: 'RUN' } },
+      { ...valid as object, pointId: 'DO-02' },
+      { ...valid as object, point: { category: 'LOCAL', pointId: 'DO-01', extIndex: 14 } },
+      { ...valid as object, writable: 'yes' },
+    ]
+    for (const candidate of malformed) {
+      expect(programmingBindingsFromV2([valid, candidate])).toEqual([])
+    }
   })
 })

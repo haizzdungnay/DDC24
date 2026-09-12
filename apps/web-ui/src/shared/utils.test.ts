@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Point } from './types'
-import { NO_DATA, formatValue, isChannelNotConfigured, pointNumber } from './utils'
+import { NO_DATA, formatDataAge, formatValue, isChannelNotConfigured, pointNumber } from './utils'
 
 
 // REV-FE-04: nơi hiển thị và nơi tính toán phải phân biệt "chưa có số đo" với 0.
@@ -38,5 +38,13 @@ describe('isChannelNotConfigured', () => {
     expect(isChannelNotConfigured({ signalType: '0-10V' })).toBe(false)
     expect(isChannelNotConfigured({ signalType: undefined })).toBe(false)
     expect(isChannelNotConfigured({ signalType: '' })).toBe(false)
+  })
+})
+
+describe('formatDataAge', () => {
+  it('dùng clock được truyền vào để kết quả tuyệt đối và tương đối không flake', () => {
+    const now = Date.parse('2026-09-05T12:00:30Z')
+    expect(formatDataAge('2026-09-05T12:00:00Z', now)).toBe('30s')
+    expect(formatDataAge('không-phải-thời-gian', now)).toBe(NO_DATA)
   })
 })

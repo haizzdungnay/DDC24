@@ -177,25 +177,14 @@ describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', ()
       ] })
     })
     renderOverview('vi')
-    expect(await screen.findAllByText('1/2 muốn bật')).not.toHaveLength(0)
-    /* SELECTOR ĐỔI VÌ BỐ CỤC ĐỔI (`T60-207`), khẳng định giữ nguyên.
-     *
-     * Trước đây con số tổng hợp này xuất hiện HAI lần: một ở
-     * `ProgrammingContextStrip` (tầng layout) và một ở panel "Ứng dụng đang vận
-     * hành" mà `OverviewPage` tự vẽ. Handoff v2.1 §1 chốt sáu khối cho PGM-01
-     * và KHÔNG có khối tổng hợp thứ hai — bảng Programs nói trạng thái theo
-     * TỪNG Program, còn con số gộp là việc của context strip. Nhân đôi cùng một
-     * con số ở hai chỗ chỉ tạo thêm một nguồn có thể trôi lệch.
-     *
-     * Khẳng định gốc — "ý định Enable là một dữ kiện, runtime thực tế là dữ kiện
-     * KHÁC" — vẫn nguyên vẹn: hai nhãn vẫn cùng hiện và vẫn nói hai điều khác
-     * nhau (`1/2 muốn bật` ≠ `FAULTED 1 · +1`). Case ngay dưới khoá lại
-     * cùng khẳng định đó ở mức từng Program, chặt hơn mức gộp.
-     *
-     * `DEV-PROG-014` rút gọn nhãn gộp còn trạng thái NẶNG NHẤT kèm `+N`; bản
-     * đầy đủ nằm ở `title`. */
-    expect(screen.getAllByText('FAULTED 1 · +1')).toHaveLength(1)
-    expect(screen.getAllByTitle('FAULTED 1 · RUNNING 1')).toHaveLength(1)
+    const context = await screen.findByRole('region', { name: 'Ngữ cảnh Lập trình hiện tại' })
+    // G-03: tổng hợp theo Program rời khỏi hàng chính để giảm nhiễu, nhưng vẫn
+    // phải tra được trong Chi tiết và vẫn tách ý định khỏi read-back runtime.
+    expect(within(context).queryByText('1/2 muốn bật')).not.toBeInTheDocument()
+    fireEvent.click(within(context).getByRole('button', { name: 'Chi tiết' }))
+    const details = await screen.findByTestId('programming-context-program-details')
+    expect(details).toHaveTextContent('1/2 muốn bật')
+    expect(details).toHaveTextContent('FAULTED 1 · RUNNING 1')
   })
 
   it('T60-207: ý định Enable và runtime thực tế tách nhau ở MỨC TỪNG Program trong bảng', async () => {
@@ -219,9 +208,9 @@ describe('OverviewPage — Việc cần chú ý (TR-MKDDC24-P2-20260814-02)', ()
     expect(faulted[3]).toHaveTextContent('Lỗi')
     const running = within(table.getByRole('row', { name: /VAV_Zone/ })).getAllByRole('cell')
     expect(running[3]).toHaveTextContent('Đang chạy')
-    // Ý định gộp vẫn nói `1/2 muốn bật` — con số đó KHÔNG được dùng để suy ra
-    // Program nào đang chạy.
-    expect(screen.getAllByText('1/2 muốn bật').length).toBeGreaterThan(0)
+    const context = screen.getByRole('region', { name: 'Ngữ cảnh Lập trình hiện tại' })
+    fireEvent.click(within(context).getByRole('button', { name: 'Chi tiết' }))
+    expect(screen.getByTestId('programming-context-program-details')).toHaveTextContent('1/2 muốn bật')
   })
 
   it('BUG-018: phạm vi PRG-SAFE-ACTIVE không rò tiếng Việt cứng khi ở chế độ EN', async () => {
@@ -687,5 +676,163 @@ describe('OverviewPage — responsive <768 px (T60-208)', () => {
     expect(screen.queryByTestId('programs-compact')).not.toBeInTheDocument()
     // Lối tạo Program chỉ hiện với người đủ quyền (handoff §6 nhánh 2).
     expect(screen.getByTestId('create-program')).toBeInTheDocument()
+  })
+})
+
+
+/* ------------------------------------------------------------------ *
+ * `ISS-PGUI-01` — Active Revision toàn cục KHÔNG được ghép vào sai     *
+ * Project (nguồn: PC-001, PC-002, PM-011)                             *
+ * ------------------------------------------------------------------ */
+
+/**
+ * `GET /runtime` là read model của CONTROLLER: đúng một `activeRevisionId` cho
+ * cả thiết bị. Bản trước chọn `projects.items[0]` rồi ghép con số toàn cục ấy
+ * vào, nên khi gói đang chạy thuộc Project THỨ HAI, màn hình đồng thời hiện
+ * `Active: Yes`, `Running`, và "active revision number is unresolved" — ba câu
+ * không thể cùng đúng — rồi gọi `GET /revisions/{active}/changes/{base}` với
+ * hai Revision khác Project và ăn `400 PRG-ERR-REQ-001`.
+ *
+ * Fixture dưới đây là đúng hình dạng ấy: Project đứng đầu KHÔNG phải Project
+ * đang chạy.
+ */
+const RUNNER_ID = '55555555-5555-4555-8555-555555555555'
+const RUNNER_BASE_ID = '66666666-6666-4666-8666-666666666666'
+const IDLE_BASE_ID = '77777777-7777-4777-8777-777777777777'
+
+/** Project đứng ĐẦU danh sách nhưng KHÔNG chạy gói nào. */
+function idleFirstProject(overrides: Record<string, unknown> = {}) {
+  return projectItem({
+    projectId: 'project-idle',
+    name: 'AHU-MASTER-SEQUENCE',
+    activeRevisionId: null,
+    draftRevisionId: IDLE_BASE_ID,
+    baseRevisionId: IDLE_BASE_ID,
+    draftSequence: 3,
+    activeSequence: null,
+    ...overrides
+  })
+}
+
+/** Project đứng SAU nhưng chính là gói đang chạy trên thiết bị. */
+function runningSecondProject(overrides: Record<string, unknown> = {}) {
+  return projectItem({
+    projectId: 'project-running',
+    name: 'SOAK-10P-20260824-172521',
+    activeRevisionId: RUNNER_ID,
+    draftRevisionId: RUNNER_BASE_ID,
+    baseRevisionId: RUNNER_BASE_ID,
+    draftSequence: 21,
+    activeSequence: 20,
+    ...overrides
+  })
+}
+
+function runnerRevisionBody() {
+  return {
+    revisionId: RUNNER_ID,
+    snapshot: {
+      objects: [
+        { objectId: OBJECT_1, kind: 'PROGRAM', payload: { objectId: OBJECT_1, name: 'SOAK_Loop', language: 'ST', programConfig: { programId: 'program-1', periodMs: 1000 } } }
+      ]
+    }
+  }
+}
+
+/** Mọi lần gọi `compareProgrammingRevisions` đã phát ra, dưới dạng cặp `{from,to}`. */
+function comparePairs(): Array<{ from: unknown; to: unknown }> {
+  return client.request.mock.calls
+    .filter((call: unknown[]) => call[0] === 'compareProgrammingRevisions')
+    .map((call: unknown[]) => (call[1] as { path: { from: unknown; to: unknown } }).path)
+}
+
+function revisionReads(): unknown[] {
+  return client.request.mock.calls
+    .filter((call: unknown[]) => call[0] === 'getProgrammingRevision')
+    .map((call: unknown[]) => (call[1] as { path: { revisionId: unknown } }).path.revisionId)
+}
+
+describe('ISS-PGUI-01: Overview không ghép Active Revision toàn cục vào sai Project', () => {
+  it('Active Revision thuộc Project KHÔNG đứng đầu ⇒ Overview chọn đúng Project và đúng sequence', async () => {
+    stubDefaultEndpoints({
+      getProgrammingRuntime: () => Promise.resolve({
+        schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY',
+        activeRevisionId: RUNNER_ID, lkgRevisionId: LKG_ID, taskState: 'RUNNING', safeState: false,
+        observedAt: '2026-09-03T00:00:00Z'
+      }),
+      listProgrammingProjects: () => Promise.resolve({ items: [idleFirstProject(), runningSecondProject()] }),
+      getProgrammingRevision: () => Promise.resolve(runnerRevisionBody()),
+      compareProgrammingRevisions: () => Promise.resolve({ schemaVersion: '1.0', changes: [] }),
+      listProgrammingProgramIntents: () => Promise.resolve(liveProgramsPage([
+        { programId: 'program-1', desiredEnabled: true, generation: 1, runtimeState: 'RUNNING', runtimeStateSource: 'CORE_LIVE', periodMs: 1000, health: 'HEALTHY', lastRunAtUtc: '2026-09-03T00:00:00Z', lastRunAgeMs: 100, updatedBy: 'admin', updatedAtUtcMs: 1 }
+      ]))
+    })
+    const { container } = renderOverview('vi')
+
+    // Chủ ngữ của cả shell là Project ĐANG CHẠY, không phải Project đầu danh sách.
+    const select = await screen.findByTestId('programming-project-select')
+    expect((select as HTMLSelectElement).value).toBe('project-running')
+
+    // Số hiệu đọc từ chính Project ấy: `r21` / `r20`, không phải `r3` của Project đầu.
+    const strip = container.querySelector('[data-testid="programming-context-strip-row"]')!
+    expect(strip.textContent).toContain('r21')
+    expect(strip.textContent).toContain('r20')
+    expect(strip.textContent).not.toContain('r3 ')
+
+    // Program đang chạy đọc từ gói của ĐÚNG Project ấy.
+    const table = within(await screen.findByTestId('programs-desktop'))
+    expect(table.getByRole('row', { name: /SOAK_Loop/ })).toBeInTheDocument()
+
+    /* Cặp so sánh phải cùng một Project. `IDLE_BASE_ID` là Draft nền của
+       Project đầu — nó xuất hiện ở đây nghĩa là FE lại ghép chéo Project, đúng
+       request mà backend BẮT BUỘC trả 400 `PRG-ERR-REQ-001`. */
+    expect(revisionReads()).toEqual([RUNNER_ID])
+    expect(comparePairs().length).toBeGreaterThan(0)
+    for (const pair of comparePairs()) {
+      expect(pair).toEqual({ from: RUNNER_ID, to: RUNNER_BASE_ID })
+    }
+  })
+
+  it('gói đang chạy KHÔNG quy được về Project nào ⇒ không "Có", không phát request compare', async () => {
+    stubDefaultEndpoints({
+      getProgrammingRuntime: () => Promise.resolve({
+        schemaVersion: '1.0', controllerId: 'controller-local', producerState: 'READY',
+        // Gói đang chạy không thuộc Project nào trong danh sách (danh sách đã cắt trang, hoặc dữ liệu lệch).
+        activeRevisionId: 'aaaaaaaa-9999-4aaa-8aaa-aaaaaaaaaaaa',
+        lkgRevisionId: LKG_ID, taskState: 'RUNNING', safeState: false, observedAt: '2026-09-03T00:00:00Z'
+      }),
+      listProgrammingProjects: () => Promise.resolve({ items: [idleFirstProject(), runningSecondProject()] }),
+      listProgrammingProgramIntents: () => Promise.resolve(liveProgramsPage([]))
+    })
+    const { container } = renderOverview('vi')
+
+    await screen.findByTestId('programming-context-strip-row')
+    const active = container.querySelector('[data-context-field="active"]')!
+    expect(active.textContent).toContain('Chưa xác định được Project của gói đang chạy')
+    expect(active.textContent).not.toContain('Có')
+
+    /* `retryable=false`: cặp Revision chưa chứng minh cùng Project thì KHÔNG
+       được hỏi lần nào — không có request để mà thử lại. */
+    expect(comparePairs()).toEqual([])
+    expect(revisionReads()).toEqual([])
+
+    /* Bảng Program VÀ thẻ so sánh cùng nói LÝ DO, không nói "không có Program
+       nào" và không nói "controller chưa đưa gói nào vào vận hành". */
+    expect((await screen.findAllByText(/Chưa xác định được gói đang vận hành thuộc Project nào/)).length)
+      .toBeGreaterThanOrEqual(2)
+    expect(screen.queryByText(/Controller này chưa đưa gói nào vào vận hành/)).not.toBeInTheDocument()
+  })
+
+  it('runtime không đọc được ⇒ giữ fail-closed, không biến thành "chưa vận hành gói nào"', async () => {
+    stubDefaultEndpoints({
+      getProgrammingRuntime: () => Promise.reject(new Error('503 unavailable')),
+      listProgrammingProjects: () => Promise.resolve({ items: [idleFirstProject(), runningSecondProject()] }),
+      listProgrammingProgramIntents: () => Promise.resolve(liveProgramsPage([]))
+    })
+    renderOverview('vi')
+
+    expect(await screen.findByText(/Không đọc được gói đang vận hành/)).toBeInTheDocument()
+    expect(screen.queryByText(/Thiết bị chưa vận hành gói nào/)).not.toBeInTheDocument()
+    expect(comparePairs()).toEqual([])
   })
 })

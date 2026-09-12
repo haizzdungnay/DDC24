@@ -193,3 +193,67 @@ describe('Trend preview', () => {
     await waitFor(() => expect(JSON.parse(localStorage.getItem('mkddc:v1:landing-trend-points') ?? '[]')).toEqual(['UI-01', 'UI-02', 'AO-01']))
   })
 })
+
+
+/**
+ * `ISS-PGUI-02` — giao diện English KHÔNG được lọt tiếng Việt do máy chủ nối
+ * sẵn (`PC-005`, `PM-006`, `pm-006`, `pm-014`).
+ *
+ * Fixture dưới đây dựng đúng hình dạng đã tái hiện trên production: máy chủ vẫn
+ * gửi `detail`/`title` tiếng Việt (hợp đồng giữ chúng làm diagnostic fallback),
+ * và giao diện phải dựng câu của chính nó từ `reasonCode`/`titleCode` + tham số
+ * typed.
+ */
+const VI_DIACRITICS = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i
+
+describe('ISS-PGUI-02 — Dashboard không trộn EN/VI', () => {
+  beforeEach(() => {
+    localStorage.setItem('mkddc-lang', 'en')
+    const overview = baseOverview()
+    overview.health = [
+      { domain: 'local_io', state: 'fault', reasonCode: 'bad_quality_points', source: 'plc_shm', observedAt: '2026-08-08T03:00:05Z', detailCount: 3, detail: '3 điểm chất lượng bad' },
+      { domain: 'modbus', state: 'unknown', reasonCode: 'not_configured', source: 'iobus_telemetry', observedAt: '2026-08-08T03:00:05Z', detail: 'Chưa cấu hình thiết bị Modbus RTU' },
+      { domain: 'network', state: 'good', reasonCode: 'ok', source: 'kernel_interfaces', observedAt: '2026-08-08T03:00:05Z', detail: '10.0.0.9' },
+      { domain: 'historian', state: 'good', reasonCode: 'ok', source: 'historian_policy', observedAt: '2026-08-08T03:00:05Z', detailCount: 12, detail: '12 điểm đang ghi' },
+    ]
+    overview.attention = [
+      { id: 'alarm:A1', severity: 'high', category: 'alarm', title: 'Pump-02 communication failure', detail: 'Bus 1 · Slave 12', targetType: 'alarm', targetId: 'A1', observedAt: '2026-08-08T03:00:00Z' },
+      { id: 'modbus:1-12', severity: 'high', category: 'communication', title: 'Thiết bị Modbus mất liên lạc', titleCode: 'modbus_device_offline', subject: '', detailCode: 'modbus_bus_slave', detailParams: { busId: 1, slaveAddr: 12 }, detail: 'Bus 1 · Slave 12', targetType: 'bus', targetId: '1' },
+      { id: 'forced:AO-01', severity: 'medium', category: 'forced', title: 'Van cấp — đang ép tay', titleCode: 'point_forced', subject: 'Van cap', detailCode: 'forced_no_expiry', detail: 'AO-01 · không có thời hạn tự nhả', targetType: 'point', targetId: 'AO-01' },
+    ]
+    overviewState = { data: overview, status: 'ready', error: null, receivedAt: Date.now(), refresh: vi.fn(async () => {}) }
+  })
+
+  it('Health Strip không còn chữ tiếng Việt của máy chủ khi giao diện là English', () => {
+    renderDashboard()
+    const strip = screen.getByLabelText('Subsystem health')
+    expect(strip).toHaveTextContent('3 points with BAD quality')
+    expect(strip).toHaveTextContent('Not configured')
+    expect(strip).toHaveTextContent('12 points being logged')
+    // Địa chỉ IP là ĐỊNH DANH — giữ nguyên, không dịch và không thay bằng nhãn.
+    expect(strip).toHaveTextContent('10.0.0.9')
+    expect(strip.textContent ?? '').not.toMatch(VI_DIACRITICS)
+  })
+
+  it('Việc cần chú ý dựng câu từ mã; thông điệp alarm của Core giữ nguyên văn', () => {
+    renderDashboard()
+    expect(screen.getByText('A Modbus device lost contact')).toBeInTheDocument()
+    expect(screen.getByText('Van cap — manually forced')).toBeInTheDocument()
+    expect(screen.getByText(/No automatic release deadline/)).toBeInTheDocument()
+    // `titleCode` rỗng ⇒ văn bản đục của authority thượng nguồn, in nguyên văn.
+    expect(screen.getByText('Pump-02 communication failure')).toBeInTheDocument()
+    expect(screen.queryByText(/Thiết bị Modbus mất liên lạc/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/không có thời hạn tự nhả/)).not.toBeInTheDocument()
+  })
+
+  it('cùng fixture ở tiếng Việt thì mọi câu tương ứng là tiếng Việt', () => {
+    localStorage.setItem('mkddc-lang', 'vi')
+    renderDashboard()
+    const strip = screen.getByLabelText('Sức khoẻ phân hệ')
+    expect(strip).toHaveTextContent('3 điểm chất lượng BAD')
+    expect(strip).toHaveTextContent('Chưa cấu hình')
+    expect(strip).toHaveTextContent('12 điểm đang ghi')
+    expect(screen.getByText('Thiết bị Modbus mất liên lạc')).toBeInTheDocument()
+    expect(screen.getByText('Van cap — đang ép tay')).toBeInTheDocument()
+  })
+})

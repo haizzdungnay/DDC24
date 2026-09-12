@@ -2,12 +2,15 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"mkddc-web/internal/programming/domain"
+	programmingstore "mkddc-web/internal/programming/store"
 )
 
 func op(value map[string]any) json.RawMessage {
@@ -249,7 +252,7 @@ func TestMigrateDraftToV2IsDeterministicAndKeepsIdentity(t *testing.T) {
 			{"variableId":"70000003-0000-4000-8000-000000000003","programId":"70000001-0000-4000-8000-000000000001","name":"Fan","type":"BOOL","retain":true}
 		],
 		"bindings":[
-			{"bindingId":"70000004-0000-4000-8000-000000000004","variableId":"70000003-0000-4000-8000-000000000003","pointId":"BO-1","direction":"WRITE"}
+			{"bindingId":"70000004-0000-4000-8000-000000000004","variableId":"70000003-0000-4000-8000-000000000003","point":{"category":"MB_RTU","deviceId":"bus-1-slave-4","pointId":"PUMP_CMD"},"direction":"WRITE","dataType":"BOOL","unit":"","writable":true,"qualityPolicy":"REQUIRE_GOOD"}
 		],
 		"task":{"taskId":"70000005-0000-4000-8000-000000000005","periodMs":5000,"programOrder":["70000001-0000-4000-8000-000000000001","70000002-0000-4000-8000-000000000002"]},
 		"library":{"profile":"CORE_REVA","version":"1"}
@@ -304,10 +307,20 @@ func TestMigrateDraftToV2IsDeterministicAndKeepsIdentity(t *testing.T) {
 	if len(locals) != 1 {
 		t.Fatalf("biến v1 bị mất: %+v", owner)
 	}
-	// Binding v1 được nối lại với Program và tên biến.
+	// Binding canonical v1 được nối lại với Program/tên biến mà KHÔNG mất bất
+	// kỳ metadata bền nào. `deviceId` là phần identity của MB_RTU; làm rơi nó
+	// sẽ khiến cùng `pointId` có thể trỏ sang thiết bị khác sau reload.
 	binding := findByID(first, "bindings", "bindingId", "70000004-0000-4000-8000-000000000004")
 	if binding == nil || binding["programId"] != "70000001-0000-4000-8000-000000000001" || binding["variable"] != "Fan" {
 		t.Fatalf("binding không được nối lại: %+v", binding)
+	}
+	if binding["variableId"] != "70000003-0000-4000-8000-000000000003" || binding["dataType"] != "BOOL" ||
+		binding["unit"] != "" || binding["writable"] != true || binding["qualityPolicy"] != "REQUIRE_GOOD" {
+		t.Fatalf("binding mất metadata typed: %+v", binding)
+	}
+	point, _ := binding["point"].(map[string]any)
+	if point["category"] != "MB_RTU" || point["deviceId"] != "bus-1-slave-4" || point["pointId"] != "PUMP_CMD" {
+		t.Fatalf("binding mất canonical Point identity: %+v", point)
 	}
 	// v2 bỏ hẳn Task và `variables`.
 	if _, present := first["task"]; present {
@@ -315,6 +328,296 @@ func TestMigrateDraftToV2IsDeterministicAndKeepsIdentity(t *testing.T) {
 	}
 	if _, present := first["variables"]; present {
 		t.Fatal("v2 vẫn còn collection variables")
+	}
+}
+
+func TestMigrateDraftToV2KeepsLocalVpAndModbusCanonicalIdentity(t *testing.T) {
+	programID := "70000001-0000-4000-8000-000000000001"
+	variableIDs := []string{
+		"70000003-0000-4000-8000-000000000001",
+		"70000003-0000-4000-8000-000000000002",
+		"70000003-0000-4000-8000-000000000003",
+	}
+	bindings := []any{
+		map[string]any{"bindingId": "70000004-0000-4000-8000-000000000001", "variableId": variableIDs[0],
+			"point": map[string]any{"category": "LOCAL", "pointId": "UI-01"}, "direction": "READ",
+			"dataType": "REAL", "unit": "degC", "writable": false, "qualityPolicy": "REQUIRE_GOOD"},
+		map[string]any{"bindingId": "70000004-0000-4000-8000-000000000002", "variableId": variableIDs[1],
+			"point": map[string]any{"category": "VP", "pointId": "VP_SUPPLY_SP"}, "direction": "WRITE",
+			"dataType": "REAL", "writable": true, "qualityPolicy": "ALLOW_UNCERTAIN"},
+		map[string]any{"bindingId": "70000004-0000-4000-8000-000000000003", "variableId": variableIDs[2],
+			"point": map[string]any{"category": "MB_RTU", "deviceId": "bus-1-slave-9", "pointId": "RUN_CMD"}, "direction": "WRITE",
+			"dataType": "BOOL", "writable": true, "qualityPolicy": "FAIL_POLICY"},
+	}
+	document := map[string]any{
+		"schemaVersion": float64(1),
+		"project":       map[string]any{"projectId": "11111111-1111-4111-8111-111111111111", "name": "AHU", "functionalTags": []any{}},
+		"programs":      []any{map[string]any{"programId": programID, "name": "AHU", "kind": "PROGRAM", "language": "ST", "document": "PROGRAM AHU\nEND_PROGRAM\n"}},
+		"variables": []any{
+			map[string]any{"variableId": variableIDs[0], "programId": programID, "name": "Supply", "type": "REAL", "class": "INPUT", "retain": false},
+			map[string]any{"variableId": variableIDs[1], "programId": programID, "name": "Setpoint", "type": "REAL", "class": "OUTPUT", "retain": false},
+			map[string]any{"variableId": variableIDs[2], "programId": programID, "name": "Run", "type": "BOOL", "class": "OUTPUT", "retain": false},
+		},
+		"bindings": bindings,
+		"task":     map[string]any{"taskId": "70000005-0000-4000-8000-000000000005", "periodMs": float64(1000), "programOrder": []any{programID}},
+		"library":  map[string]any{"profile": "CORE_REVA", "version": "1"},
+	}
+
+	beforeCandidates := bindingCandidatesFromDocument(document)
+	beforeVariables := bindingVariablesFromDocument(document)
+	if err := migrateDraftToV2(document); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateDraftDocumentV2(document); err != nil {
+		t.Fatal(err)
+	}
+	afterCandidates := bindingCandidatesFromDocument(document)
+	if !reflect.DeepEqual(beforeCandidates, afterCandidates) {
+		t.Fatalf("candidate đổi nghĩa sau migration:\ntrước=%+v\nsau=%+v", beforeCandidates, afterCandidates)
+	}
+	if !reflect.DeepEqual(beforeVariables, bindingVariablesFromDocument(document)) {
+		t.Fatalf("owner/Variable đổi nghĩa sau migration")
+	}
+	// Check dùng đúng hai projection trên. So quyết định validator trước/sau để
+	// tránh một migration giữ đủ JSON nhưng đổi nghĩa ở cổng Check.
+	catalog := standardBindingCatalog().entries
+	validate := func(candidates []BindingCandidate, variables map[string]bindingVariable) []BindingValidationResult {
+		results := make([]BindingValidationResult, 0, len(candidates))
+		for _, candidate := range candidates {
+			results = append(results, ValidateBindingCandidate(candidate, variables, candidates, catalog))
+		}
+		return results
+	}
+	beforeValidation := validate(beforeCandidates, beforeVariables)
+	afterValidation := validate(afterCandidates, bindingVariablesFromDocument(document))
+	if !reflect.DeepEqual(beforeValidation, afterValidation) {
+		t.Fatalf("Check đổi nghĩa sau migration:\ntrước=%+v\nsau=%+v", beforeValidation, afterValidation)
+	}
+	for index, expected := range bindings {
+		want := expected.(map[string]any)
+		got := findByID(document, "bindings", "bindingId", want["bindingId"].(string))
+		for _, field := range []string{"bindingId", "variableId", "direction", "dataType", "writable", "qualityPolicy"} {
+			if !reflect.DeepEqual(got[field], want[field]) {
+				t.Fatalf("binding[%d].%s đổi: got=%v want=%v", index, field, got[field], want[field])
+			}
+		}
+		if !reflect.DeepEqual(got["point"], want["point"]) {
+			t.Fatalf("binding[%d].point đổi: got=%v want=%v", index, got["point"], want["point"])
+		}
+	}
+}
+
+func TestMigrateDraftToV2FlatLegacyDoesNotInventPointMetadata(t *testing.T) {
+	document := legacyDraftWithBinding(t, map[string]any{
+		"bindingId":  "70000004-0000-4000-8000-000000000004",
+		"variableId": "70000003-0000-4000-8000-000000000003",
+		"pointId":    "BO-1", "direction": "WRITE",
+	})
+	if err := migrateDraftToV2(document); err != nil {
+		t.Fatal(err)
+	}
+	binding := collectionOf(document, "bindings")[0]
+	if binding["variableId"] != "70000003-0000-4000-8000-000000000003" || binding["pointId"] != "BO-1" {
+		t.Fatalf("flat legacy mất identity có thật: %+v", binding)
+	}
+	for _, invented := range []string{"point", "category", "deviceId", "dataType", "unit", "writable", "qualityPolicy"} {
+		if _, present := binding[invented]; present {
+			t.Fatalf("migration tự bịa %s cho flat legacy: %+v", invented, binding)
+		}
+	}
+}
+
+func TestMigrateDraftToV2RejectsMixedMalformedAndRuntimeHandleBindings(t *testing.T) {
+	base := map[string]any{
+		"bindingId":  "70000004-0000-4000-8000-000000000004",
+		"variableId": "70000003-0000-4000-8000-000000000003",
+		"point":      map[string]any{"category": "MB_RTU", "deviceId": "bus-1-slave-4", "pointId": "PUMP_CMD"},
+		"direction":  "WRITE", "dataType": "BOOL", "writable": true, "qualityPolicy": "REQUIRE_GOOD",
+	}
+	cases := map[string]func(map[string]any){
+		"mixed nested và flat":       func(binding map[string]any) { binding["pointId"] = "DO-01" },
+		"MB_RTU thiếu deviceId":      func(binding map[string]any) { delete(binding["point"].(map[string]any), "deviceId") },
+		"runtime handle trong point": func(binding map[string]any) { binding["point"].(map[string]any)["extIndex"] = float64(14) },
+		"thiếu quality policy":       func(binding map[string]any) { delete(binding, "qualityPolicy") },
+		"Variable không tồn tại":     func(binding map[string]any) { binding["variableId"] = "79999999-9999-4999-8999-999999999999" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			raw, _ := json.Marshal(base)
+			var binding map[string]any
+			if err := json.Unmarshal(raw, &binding); err != nil {
+				t.Fatal(err)
+			}
+			mutate(binding)
+			document := legacyDraftWithBinding(t, binding)
+			original, _ := json.Marshal(document)
+			if err := migrateDraftToV2(document); !errors.Is(err, ErrInvalidRequest) {
+				t.Fatalf("payload malformed không bị chặn: %v", err)
+			}
+			// Lỗi xảy ra trước khi document chuyển sang schema v2; caller chỉ có
+			// thể ghi Store sau khi migration thành công, nên ETag/content giữ nguyên.
+			if current, _ := json.Marshal(document); string(current) != string(original) {
+				t.Fatalf("migration lỗi đã sửa dở document: %s", current)
+			}
+		})
+	}
+}
+
+// F-PROG-CREATE-FBD-EXTINDEX-001 — dữ liệu thật trên Foxlinx từng lưu
+// `point.extIndex` trước AC-PIO-ID-01. Từ khi validator cấm runtime handle,
+// field tồn dư đó làm mọi PATCH kế tiếp trả PRG-ERR-REQ-001 dù operation tạo
+// FBD hoàn toàn hợp lệ. Mutation thành công phải đồng thời nâng binding về
+// identity bền và tuyệt đối không đổi `(deviceId, pointId)`.
+func TestCreateFbdRepairsPersistedRuntimeHandleWithoutLaunderingNewInput(t *testing.T) {
+	projectID := "11111111-1111-4111-8111-111111111111"
+	existingID := "70000001-0000-4000-8000-000000000001"
+	variableID := "70000003-0000-4000-8000-000000000003"
+	document := newDraftDocumentV2(projectID, "Foxlinx")
+	document["objects"] = []any{map[string]any{
+		"objectId": existingID, "kind": "PROGRAM", "name": "RelayPattern32",
+		"language": "ST", "source": "PROGRAM RelayPattern32\nEND_PROGRAM\n",
+		"locals": []any{map[string]any{
+			"variableId": variableID, "programId": existingID, "name": "Relay1",
+			"type": "BOOL", "class": "OUTPUT", "retain": false,
+		}},
+	}}
+	document["programs"] = []any{map[string]any{
+		"programId": existingID, "objectId": existingID, "periodMs": float64(1000),
+	}}
+	document["bindings"] = []any{map[string]any{
+		"bindingId":  "70000004-0000-4000-8000-000000000004",
+		"variableId": variableID, "programId": existingID, "variable": "Relay1",
+		"point": map[string]any{
+			"category": "MB_RTU", "deviceId": "bus-1-slave-4",
+			"pointId": "CK50804-DO1", "extIndex": float64(1),
+		},
+		"direction": "WRITE", "dataType": "BOOL", "unit": "bool",
+		"writable": true, "qualityPolicy": "REQUIRE_GOOD",
+	}}
+	if err := validateDraftDocumentV2(document); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("fixture phải tái hiện Draft bị chặn bởi extIndex, nhận %v", err)
+	}
+
+	before, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newID := "70000002-0000-4000-8000-000000000002"
+	result, err := applyDraftOperations(before, []json.RawMessage{
+		op(map[string]any{"op": "upsertProgram", "program": map[string]any{
+			"programId": newID, "name": "NewFbdProgram", "kind": "PROGRAM",
+			"language": "FBD", "document": `{"schemaVersion":"1.0","networks":[]}`,
+		}}),
+		op(map[string]any{"op": "setTask", "task": map[string]any{
+			"taskId": projectID, "periodMs": 1000, "programOrder": []string{existingID, newID},
+		}}),
+	})
+	if err != nil {
+		t.Fatalf("tạo FBD trên Draft có extIndex tồn dư: %v", err)
+	}
+
+	var repaired map[string]any
+	if err := json.Unmarshal(result, &repaired); err != nil {
+		t.Fatal(err)
+	}
+	if findByID(repaired, "objects", "objectId", newID) == nil || findByID(repaired, "programs", "programId", newID) == nil {
+		t.Fatal("batch thành công nhưng thiếu Program FBD mới")
+	}
+	binding := findByID(repaired, "bindings", "bindingId", "70000004-0000-4000-8000-000000000004")
+	point, _ := binding["point"].(map[string]any)
+	if bindingCarriesRuntimeSlotHandle(binding) {
+		t.Fatalf("runtime handle vẫn còn sau repair: %+v", binding)
+	}
+	if point["deviceId"] != "bus-1-slave-4" || point["pointId"] != "CK50804-DO1" {
+		t.Fatalf("repair làm đổi identity bền: %+v", point)
+	}
+
+	// Cầu nâng cấp chỉ áp lên snapshot cũ; cửa ghi mới vẫn fail-closed.
+	if err := upsertBindingCompat(repaired, bindingOp(t, durableBinding(nil, map[string]any{"extIndex": 7}))); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("request mới mang extIndex phải bị từ chối, nhận %v", err)
+	}
+}
+
+func legacyDraftWithBinding(t *testing.T, binding map[string]any) map[string]any {
+	t.Helper()
+	programID := "70000001-0000-4000-8000-000000000001"
+	return map[string]any{
+		"schemaVersion": float64(1),
+		"project":       map[string]any{"projectId": "11111111-1111-4111-8111-111111111111", "name": "AHU", "functionalTags": []any{}},
+		"programs":      []any{map[string]any{"programId": programID, "name": "AHU", "kind": "PROGRAM", "language": "ST", "document": "PROGRAM AHU\nEND_PROGRAM\n"}},
+		"variables":     []any{map[string]any{"variableId": "70000003-0000-4000-8000-000000000003", "programId": programID, "name": "Fan", "type": "BOOL", "class": "OUTPUT", "retain": false}},
+		"bindings":      []any{binding},
+		"task":          map[string]any{"taskId": "70000005-0000-4000-8000-000000000005", "periodMs": float64(1000), "programOrder": []any{programID}},
+		"library":       map[string]any{"profile": "CORE_REVA", "version": "1"},
+	}
+}
+
+func TestSaveDraftMigratesCanonicalBindingAndMalformedInputIsAtomic(t *testing.T) {
+	service, store := openProjectService(t)
+	actor := Actor{ID: testActorID, Role: "admin"}
+	created, err := service.CreateProject(context.Background(), actor, CreateProjectCommand{
+		SchemaVersion: "1.0", Name: "Migration fixture",
+		IdempotencyKey: "71000000-0000-4000-8000-000000000001", CorrelationID: testCorrelationID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectID := created.Resource["projectId"].(string)
+	draftID := created.Resource["draftRevisionId"].(string)
+	binding := map[string]any{
+		"bindingId": "70000004-0000-4000-8000-000000000004", "variableId": "70000003-0000-4000-8000-000000000003",
+		"point":     map[string]any{"category": "MB_RTU", "deviceId": "bus-1-slave-4", "pointId": "PUMP_CMD"},
+		"direction": "WRITE", "dataType": "BOOL", "writable": true, "qualityPolicy": "REQUIRE_GOOD",
+	}
+	legacy := legacyDraftWithBinding(t, binding)
+	legacy["project"].(map[string]any)["projectId"] = projectID
+	inject := func(content map[string]any, expectedETag int64, suffix string) programmingstore.Draft {
+		t.Helper()
+		raw, marshalErr := json.Marshal(content)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		key := sha256.Sum256([]byte("migration-key-" + suffix))
+		request := sha256.Sum256([]byte("migration-request-" + suffix))
+		stored, saveErr := store.SaveDraft(context.Background(), programmingstore.SaveDraftParams{
+			DraftID: draftID, ExpectedETag: expectedETag, ContentJSON: raw,
+			ActorID: actor.ID, Role: actor.Role, AuditID: "71111111-1111-4111-8111-" + suffix,
+			CorrelationID: testCorrelationID, At: service.now(), IdempotencyKeySHA256: key, RequestSHA256: request,
+		})
+		if saveErr != nil {
+			t.Fatal(saveErr)
+		}
+		return stored
+	}
+
+	injected := inject(legacy, 1, "000000000001")
+	_, err = saveOps(t, service, projectID, draftID, FormatDraftETag(draftID, injected.ETag),
+		"71000000-0000-4000-8000-000000000002", op(map[string]any{"op": "setFunctionalTags", "tags": []string{"migrated"}}))
+	if err != nil {
+		t.Fatalf("lưu đầu tiên không migrate được canonical binding: %v", err)
+	}
+	after := draftDocument(t, service, projectID)
+	storedBinding := findByID(after, "bindings", "bindingId", binding["bindingId"].(string))
+	if storedBinding == nil || !reflect.DeepEqual(storedBinding["point"], binding["point"]) || storedBinding["variableId"] != binding["variableId"] {
+		t.Fatalf("read-back sau Save mất binding: %+v", storedBinding)
+	}
+
+	malformed := legacyDraftWithBinding(t, map[string]any{
+		"bindingId": "70000004-0000-4000-8000-000000000004", "variableId": "70000003-0000-4000-8000-000000000003",
+		"point":     map[string]any{"category": "MB_RTU", "pointId": "PUMP_CMD"},
+		"direction": "WRITE", "dataType": "BOOL", "writable": true, "qualityPolicy": "REQUIRE_GOOD",
+	})
+	malformed["project"].(map[string]any)["projectId"] = projectID
+	badDraft := inject(malformed, injected.ETag+1, "000000000002")
+	baseline := append([]byte(nil), badDraft.ContentJSON...)
+	_, err = saveOps(t, service, projectID, draftID, FormatDraftETag(draftID, badDraft.ETag),
+		"71000000-0000-4000-8000-000000000003", op(map[string]any{"op": "setFunctionalTags", "tags": []string{"must-not-save"}}))
+	if !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("migration malformed không bị từ chối: %v", err)
+	}
+	readBack, readErr := store.GetDraft(context.Background(), draftID)
+	if readErr != nil || readBack.ETag != badDraft.ETag || !reflect.DeepEqual(readBack.ContentJSON, baseline) {
+		t.Fatalf("Draft/ETag đổi sau migration lỗi: draft=%+v err=%v", readBack, readErr)
 	}
 }
 

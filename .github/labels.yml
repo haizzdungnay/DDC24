@@ -1,0 +1,81 @@
+# Nhãn chuẩn cho quy trình clean code & clean docs — authority: WF-CLEAN-001
+# (docs/00_governance/CLEAN_CODE_WORKFLOW.md §4)
+#
+# Workflow .github/workflows/labels-sync.yml tạo/cập nhật các nhãn dưới đây.
+# Nó KHÔNG xoá nhãn ngoài danh sách: nhãn chủ đề sẵn có (programming-ui,
+# point-io, st-editor, pgm04, ...) vẫn được dùng bổ sung.
+
+# --- Vai trò ---------------------------------------------------------------
+- name: "role:manager"
+  color: "5319E7"
+  description: "Do vai Manager/Planner tạo hoặc phân loại"
+- name: "role:implementer"
+  color: "1D76DB"
+  description: "Đang do vai Implementer thi hành"
+- name: "role:reviewer"
+  color: "0E8A16"
+  description: "Đang ở tay vai Reviewer/Merge Gatekeeper"
+
+# --- Trạng thái workflow (một Issue chỉ mang ĐÚNG MỘT nhãn state:*) --------
+- name: "state:triage"
+  color: "D4C5F9"
+  description: "Chưa đủ scope/AC — chờ Manager làm rõ"
+- name: "state:ready"
+  color: "0E8A16"
+  description: "Đủ scope + acceptance criteria; Implementer được phép nhận"
+- name: "state:in-progress"
+  color: "FBCA04"
+  description: "Implementer đang thi hành"
+- name: "state:in-review"
+  color: "F9D0C4"
+  description: "PR đã mở, chờ Reviewer"
+- name: "state:changes-requested"
+  color: "E99695"
+  description: "Reviewer FAIL — trả lại cho Implementer sửa"
+- name: "state:blocked"
+  color: "B60205"
+  description: "Bị chặn: phải ghi rõ chặn bởi gì và cần gì để mở khoá"
+- name: "state:done"
+  color: "006B75"
+  description: "PR đã merge và Issue đã đóng bằng evidence"
+
+# --- Loại việc -------------------------------------------------------------
+- name: "wf:clean-code"
+  color: "C2E0C6"
+  description: "Dọn mã nguồn — KHÔNG được đổi contract/API/schema/hành vi"
+- name: "wf:clean-docs"
+  color: "BFD4F2"
+  description: "Dọn tài liệu theo DOC-GOV-001"
+- name: "wf:test-debt"
+  color: "FEF2C0"
+  description: "Nợ kiểm chứng: test thiếu, bị skip, hoặc evidence sai lớp"
+- name: "wf:tooling"
+  color: "D4C5F9"
+  description: "CI, script, harness và công cụ phát triển"
+
+# --- Ưu tiên ---------------------------------------------------------------
+- name: "priority:critical"
+  color: "B60205"
+  description: "P0 — an toàn, bảo mật hoặc chặn release"
+- name: "priority:high"
+  color: "D93F0B"
+  description: "P1 — làm trong đợt hiện tại"
+- name: "priority:medium"
+  color: "FBCA04"
+  description: "P2 — làm khi hết P0/P1"
+- name: "priority:low"
+  color: "C5DEF5"
+  description: "P3 — dọn dần"
+
+# --- Cổng review -----------------------------------------------------------
+- name: "review:pass"
+  color: "0E8A16"
+  description: "Reviewer duyệt — điều kiện bắt buộc để merge"
+- name: "review:changes-requested"
+  color: "E99695"
+  description: "Reviewer trả lại kèm danh sách sửa cụ thể"
+
+# --- Ngoại lệ --------------------------------------------------------------
+- name: "gate:waived"
+  color: "5319E7"
+  description: "CTO miễn một cổng quy trình — bắt buộc kèm lý do trong comment"

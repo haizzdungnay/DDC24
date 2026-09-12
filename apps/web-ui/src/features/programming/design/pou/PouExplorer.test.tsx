@@ -43,6 +43,16 @@ function renderExplorer(overrides: Partial<Parameters<typeof PouExplorer>[0]> = 
   return { onSave, onSelect }
 }
 
+function createPou(label: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Mới' }))
+  fireEvent.click(within(screen.getByRole('menu', { name: 'Tạo POU mới' })).getByRole('menuitem', { name: label }))
+}
+
+function pouAction(name: string, action: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Thao tác với ${name}` }))
+  fireEvent.click(within(screen.getByRole('menu', { name: `Thao tác với ${name}` })).getByRole('menuitem', { name: action }))
+}
+
 beforeEach(() => localStorage.setItem('mkddc-lang', 'vi'))
 afterEach(cleanup)
 
@@ -71,7 +81,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('tạo FUNCTION gửi đúng một upsertObject và không xếp lịch', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Thêm FUNCTION'))
+    createPou('Function · ST')
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const operations = onSave.mock.calls[0][0] as ProgrammingDraftOperation[]
     expect(operations.map((operation) => operation.op)).toEqual(['upsertObject'])
@@ -79,7 +89,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('tạo Program ST gửi upsertProgram + setTask', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Thêm chương trình ST'))
+    createPou('Program · ST')
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const operations = onSave.mock.calls[0][0] as ProgrammingDraftOperation[]
     expect(operations.map((operation) => operation.op)).toEqual(['upsertProgram', 'setTask'])
@@ -87,7 +97,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('đổi tên trùng bị chặn kèm lý do và không gửi gì lên server', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Đổi tên AHU_MAIN'))
+    pouAction('AHU_MAIN', 'Đổi tên')
     const input = screen.getByLabelText('Tên POU mới')
     fireEvent.change(input, { target: { value: 'SCALE_LIN' } })
     expect(await screen.findByRole('alert')).toHaveTextContent('đã tồn tại')
@@ -97,7 +107,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('đổi tên hợp lệ gửi renameObject', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Đổi tên AHU_MAIN'))
+    pouAction('AHU_MAIN', 'Đổi tên')
     const input = screen.getByLabelText('Tên POU mới')
     fireEvent.change(input, { target: { value: 'AHU_MAIN_V2' } })
     fireEvent.submit(input)
@@ -108,7 +118,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('xóa POU còn người gọi bị chặn ở hộp thoại, nút Xóa không bấm được', async () => {
     const { onSave } = renderExplorer()
-    fireEvent.click(screen.getByTitle('Xóa SCALE_LIN'))
+    pouAction('SCALE_LIN', 'Xóa')
     const dialog = await screen.findByRole('dialog', { name: 'Xóa POU?' })
     expect(within(dialog).getByRole('alert')).toHaveTextContent('AHU_MAIN')
     expect(within(dialog).getByRole('button', { name: 'Xóa' })).toBeDisabled()
@@ -118,10 +128,8 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
 
   it('vai chỉ đọc không thấy bất kỳ lối tạo/đổi tên/xóa nào', () => {
     renderExplorer({ canEdit: false })
-    expect(screen.queryByTitle('Thêm chương trình ST')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Thêm FUNCTION')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Đổi tên AHU_MAIN')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Xóa AHU_MAIN')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mới' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Thao tác với AHU_MAIN' })).not.toBeInTheDocument()
     // Vẫn đọc được cây và inspector.
     expect(screen.getByRole('navigation', { name: 'Cây POU' })).toBeInTheDocument()
   })
@@ -164,5 +172,66 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     // "Đặt làm Active" không có ở đây, và menu NÓI RA nơi thực hiện nó thay vì
     // im lặng: ý định bật/tắt Program sống ở API runtime-intent, không ở Draft.
     expect(within(menu).getByText(/Runtime & Bảo trì/)).toBeInTheDocument()
+  })
+
+  it('TC-POU-EXP-244: container có w-[244px] min-w-[244px] max-w-[244px]', () => {
+    const { container } = render(
+      <I18nProvider>
+        <PouExplorer
+          document={baseDocument()}
+          canEdit={true}
+          saving={false}
+          onSelect={vi.fn()}
+          onSave={vi.fn().mockResolvedValue(true)}
+        />
+      </I18nProvider>
+    )
+    const root = container.firstElementChild
+    expect(root).toHaveClass('w-[244px]', 'min-w-[244px]', 'max-w-[244px]')
+  })
+
+  it('TC-POU-EXP-3SEC: render 3 sections Programs, Function Blocks, Functions với badge count', () => {
+    renderExplorer()
+    const programsButton = screen.getByRole('button', { name: /Programs/ })
+    const functionsButton = screen.getByRole('button', { name: /Functions/ })
+    const functionBlocksButton = screen.getByRole('button', { name: /Function Blocks/ })
+
+    expect(programsButton).toBeInTheDocument()
+    expect(functionsButton).toBeInTheDocument()
+    expect(functionBlocksButton).toBeInTheDocument()
+
+    const programsBadge = within(programsButton).getByTestId('pou-section-badge-PROGRAM')
+    const functionsBadge = within(functionsButton).getByTestId('pou-section-badge-FUNCTION')
+    const fbBadge = within(functionBlocksButton).getByTestId('pou-section-badge-FUNCTION_BLOCK')
+
+    expect(programsBadge).toHaveTextContent('1')
+    expect(functionsBadge).toHaveTextContent('1')
+    expect(fbBadge).toHaveTextContent('0')
+  })
+
+  it('TC-POU-EXP-COLLAPSE: collapse/expand từng section độc lập', () => {
+    renderExplorer()
+    const programsButton = screen.getByRole('button', { name: /Programs/ })
+    const functionsButton = screen.getByRole('button', { name: /Functions/ })
+    const functionBlocksButton = screen.getByRole('button', { name: /Function Blocks/ })
+
+    expect(programsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(functionsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(programsButton)
+    expect(programsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(functionsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(functionsButton)
+    expect(programsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(functionsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(programsButton)
+    expect(programsButton).toHaveAttribute('aria-expanded', 'true')
+    expect(functionsButton).toHaveAttribute('aria-expanded', 'false')
+    expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
   })
 })

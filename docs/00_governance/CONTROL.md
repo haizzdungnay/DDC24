@@ -57,6 +57,7 @@ Không áp dụng mục tiêu giảm số file cho tài liệu thiết kế cầ
 | Hồ sơ | Lớp/trách nhiệm |
 |---|---|
 | [DDC24 Programming Product Spec](../01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | `PROD-PROG-001` v3.2 Active; PGM-02 R1/R2/R3 exact-pinned cho implementation bởi `AUTH-PROG-2026-08-24-05` |
+| [Quy trình clean code & clean docs](CLEAN_CODE_WORKFLOW.md) | `WF-CLEAN-001` v1.0 Active — ba vai tách biệt, ma trận quyền, workflow state, branch/merge rule, quality gate, truy xuất và lịch chạy; thi hành bằng `scripts/workflow_guard.py` |
 | [Quy tắc kiểm soát tài liệu](DOC_GOVERNANCE.md) | `DOC-GOV-001` Active — ISO-aligned, `DD-01..DD-13`, thang `M0..M5`, ba cổng quyền hạn, harness và bảy quy tắc trung thực |
 | [Programming Decision Register](PROGRAMMING_OPEN_DECISIONS.md) | `DEC-PROG-REGISTER-001` v1.4 — 12 quyết định unified CLOSED; change request/exact pin CLOSED; ghost-POU policy RESOLVED nhưng corrective implementation còn PENDING; `ADR-053` Accepted |
 | [Programming Requirements Specification](../02_requirements/PROGRAMMING_REQUIREMENTS_SPEC.md) | `SRS-PROG-001` v1.2 Active cho implementation: 82 baseline + 7 PGM-02 = 89 requirement; evidence vẫn theo VVP |

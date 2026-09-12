@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type APIRequestContext, type APIResponse, type Page } from '@playwright/test'
 import { PROGRAMMING_LIBRARY_ENTRIES } from '../src/features/programming/api/generated/library_registry'
@@ -14,6 +16,7 @@ import { catalogEntries, catalogParity } from '../src/features/programming/desig
 const PROGRAM_ID = '81111111-1111-4111-8111-111111111111'
 const SIGNAL_ID = '82222222-2222-4222-8222-222222222222'
 const VARIABLE_ID = '83333333-3333-4333-8333-333333333333'
+const FAN_VARIABLE_ID = '83333333-3333-4333-8333-333333333334'
 const BINDING_ID = '84444444-4444-4444-8444-444444444444'
 const LIBRARY_ENTRY_ID = '85555555-5555-4555-8555-555555555555'
 const LIBRARY_INTERFACE = { inputs: [{ name: 'X', type: 'REAL' }], returnType: 'REAL' }
@@ -94,10 +97,15 @@ function readHeaders(token: string): Record<string, string> {
 async function openWorkspaceRoute(page: Page, url: string): Promise<void> {
   await page.goto(url)
   const boundary = page.getByTestId('route-error-boundary')
-  if (await boundary.isVisible().catch(() => false)) {
+  const rootChild = page.locator('#root > *').first()
+  const mounted = await rootChild.waitFor({ state: 'attached', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false)
+  if (!mounted || await boundary.isVisible().catch(() => false)) {
     await page.reload()
   }
   await expect(boundary, 'route vẫn hỏng sau một lần nạp lại').toHaveCount(0)
+  await expect(rootChild, 'ứng dụng vẫn chưa mount sau một lần nạp lại').toBeAttached()
 }
 
 async function loginAPI(request: APIRequestContext): Promise<string> {
@@ -239,7 +247,8 @@ async function commission(
   fromRevisionID: string,
   revisionID: string,
   checkID: string,
-  expectedPresent: string[] = []
+  expectedPresent: string[] = [],
+  expectedActiveFromRevisionID: string = fromRevisionID
 ): Promise<JsonObject> {
   const changesResponse = await request.get(
     `/api/v1/programming/revisions/${fromRevisionID}/changes/${revisionID}`,
@@ -266,7 +275,9 @@ async function commission(
   })
   for (const key of expectedPresent) expect(acknowledgements).toContain(key)
 
-  const expectedActiveRevisionId = fromRevisionID === 'none' ? null : fromRevisionID
+  const expectedActiveRevisionId = expectedActiveFromRevisionID === 'none'
+    ? null
+    : expectedActiveFromRevisionID
   const acceptedResponse = await request.post('/api/v1/programming/operations/commission', {
     headers: mutationHeaders(token),
     data: {
@@ -287,9 +298,346 @@ async function commission(
   return operation
 }
 
-test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến invalid thành 0', async ({ page, request }) => {
+test('ISS-PGM03-04: dependency Signal neo Check, mở đúng POU và thành stale ngay khi Draft đổi', async ({ page, request }) => {
   test.setTimeout(120_000)
   const token = await loginAPI(request)
+  const publisherID = '86111111-1111-4111-8111-111111111111'
+  const consumerID = '86222222-2222-4222-8222-222222222222'
+  const signalID = '86333333-3333-4333-8333-333333333333'
+  const publisherSource = `PROGRAM SIGNAL_PUBLISHER
+VAR
+  Value : REAL;
+END_VAR
+Value := 21.5;
+SIGNAL_PUBLISH(SUPPLY_TEMP, Value);
+END_PROGRAM
+`
+  const consumerSource = `PROGRAM SIGNAL_CONSUMER
+VAR
+  Observed : REAL;
+END_VAR
+Observed := SIGNAL_READ(SUPPLY_TEMP);
+END_PROGRAM
+`
+
+  const created = await responseJSON(await request.post('/api/v1/programming/projects', {
+    headers: mutationHeaders(token),
+    data: { schemaVersion: '1.0', name: 'ISS-PGM03-04 dependency provenance', description: 'Real backend, host/no-board' }
+  }), 201)
+  const resource = created.resource as JsonObject
+  const projectID = resource.projectId as string
+  const draftID = resource.draftRevisionId as string
+  const saved = await responseJSON(await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': created.etag as string }),
+    data: {
+      schemaVersion: '1.0', baseRevisionId: draftID,
+      operations: [
+        { op: 'upsertProgram', program: { programId: publisherID, name: 'SIGNAL_PUBLISHER', kind: 'PROGRAM', language: 'ST', document: publisherSource } },
+        { op: 'upsertProgram', program: { programId: consumerID, name: 'SIGNAL_CONSUMER', kind: 'PROGRAM', language: 'ST', document: consumerSource } },
+        { op: 'upsertSignal', signal: { signalId: signalID, name: 'SUPPLY_TEMP', type: 'REAL', unit: 'degC', publisherProgramId: publisherID, freshnessMs: 5000, stalePolicy: 'HOLD_LAST' } }
+      ]
+    }
+  }), 200)
+  const checked = await sealAndCheck(request, token, projectID, draftID, saved.etag as string, 'Dependency provenance')
+  const dependencyResponse = await request.get(
+    `/api/v1/programming/projects/${projectID}/signal-dependencies`, { headers: readHeaders(token) })
+  const dependency = await responseJSON(dependencyResponse, 200)
+  expect(dependency).toMatchObject({
+    schemaVersion: '1.0', status: 'AUTHORITATIVE', reasonCode: 'VERIFIED', projectId: projectID,
+    baseRevisionId: checked.revisionID, checkId: checked.checkID, checkRevisionId: checked.revisionID
+  })
+  expect(dependency.draftSha256).toMatch(/^[a-f0-9]{64}$/)
+  expect(dependency.checkedDraftSha256).toBe(dependency.draftSha256)
+  expect(dependency.checkInputSha256).toMatch(/^[a-f0-9]{64}$/)
+  expect(dependency.dependencies).toEqual([
+    expect.objectContaining({
+      signalId: signalID, name: 'SUPPLY_TEMP', publisherProgramId: publisherID, stalePolicy: 'HOLD_LAST',
+      publisher: expect.objectContaining({ programId: publisherID, objectId: publisherID, name: 'SIGNAL_PUBLISHER', language: 'ST', location: expect.objectContaining({ line: 6 }) }),
+      consumers: [expect.objectContaining({ programId: consumerID, objectId: consumerID, name: 'SIGNAL_CONSUMER', language: 'ST', location: expect.objectContaining({ line: 5 }) })]
+    })
+  ])
+
+  const consoleErrors: string[] = []
+  const failedRequests: string[] = []
+  const serverErrors: string[] = []
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
+  page.on('requestfailed', (failed) => {
+    const errorText = failed.failure()?.errorText ?? 'unknown'
+    if (errorText.includes('ERR_ABORTED')) return
+    failedRequests.push(`${new URL(failed.url()).pathname}: ${errorText}`)
+  })
+  page.on('response', (response) => { if (response.status() >= 500) serverErrors.push(`${response.status()} ${new URL(response.url()).pathname}`) })
+  await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(page.getByText('Đã kiểm chứng — khớp bản nháp hiện tại')).toBeVisible()
+  const signalRow = page.getByRole('row', { name: /SUPPLY_TEMP/ })
+  await expect(signalRow).toContainText('SIGNAL_PUBLISHER')
+  const consumerLink = signalRow.getByRole('button', { name: 'SIGNAL_CONSUMER' })
+  await expect(consumerLink).toBeVisible()
+  await consumerLink.click()
+  await expect.poll(() => {
+    const url = new URL(page.url())
+    return {
+      path: url.pathname,
+      project: url.searchParams.get('project'),
+      pou: url.searchParams.get('pou'),
+      line: url.searchParams.get('line'),
+      column: url.searchParams.get('column'),
+      length: url.searchParams.get('length')
+    }
+  }).toEqual({ path: '/eng/programming/programs', project: projectID, pou: consumerID, line: '5', column: '13', length: '11' })
+
+  await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  const refreshedRow = page.getByRole('row', { name: /SUPPLY_TEMP/ })
+  await refreshedRow.getByRole('button', { name: 'Sửa' }).click()
+  const form = page.getByRole('form', { name: 'Biểu mẫu Published Signal' })
+  await form.getByLabel('Đơn vị').fill('°C')
+  const staleResponse = page.waitForResponse((response) => response.request().method() === 'GET' &&
+    new URL(response.url()).pathname === `/api/v1/programming/projects/${projectID}/signal-dependencies` && response.status() === 200)
+  await form.getByRole('button', { name: 'Lưu Published Signal' }).click()
+  await staleResponse
+  await expect(page.getByText('Đã cũ — bản nháp đã đổi sau Check')).toBeVisible()
+  await expect(refreshedRow).toContainText('Đã cũ')
+
+  await refreshedRow.getByRole('button', { name: 'Xoá' }).click()
+  const deleteDialog = page.getByRole('dialog', { name: 'Xác nhận xoá Published Signal' })
+  await expect(deleteDialog.getByText('Impact chưa được kiểm chứng cho bản nháp hiện tại.')).toBeVisible()
+  await expect(deleteDialog).toContainText('không Commission')
+  await deleteDialog.getByRole('button', { name: 'Giữ signal' }).click()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await assertMobileSurface(page, 'Published Signal dependency provenance')
+  expect(consoleErrors).toEqual([])
+  expect(failedRequests).toEqual([])
+  expect(serverErrors).toEqual([])
+})
+
+test('ISS-PGM03-07: Draft v1 LOCAL+MB_RTU migrate qua HTTP, reload giữ đủ Binding và Check không bỏ qua', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  const token = await loginAPI(request)
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(token) }), 200)
+  const seeded = (projects.items as JsonObject[]).find((item) => item.name === 'ISS-PGM03-07 legacy migration')
+  expect(seeded, 'stack real-backend chưa seed fixture Draft v1').toBeTruthy()
+  const projectID = seeded!.projectId as string
+
+  const before = await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200)
+  expect((before.draft as JsonObject).schemaVersion).toBe(1)
+  const draftID = before.draftRevisionId as string
+  const saved = await responseJSON(await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': before.etag as string }),
+    data: {
+      schemaVersion: '1.0', baseRevisionId: before.baseRevisionId,
+      operations: [{ op: 'setFunctionalTags', tags: ['e2e-migrated'] }]
+    }
+  }), 200)
+  const migrated = (saved.resource as JsonObject).content as JsonObject
+  expect(migrated.schemaVersion).toBe(2)
+  expect(migrated.bindings).toEqual([
+    expect.objectContaining({
+      bindingId: '70666666-6666-4666-8666-666666666666',
+      variableId: '70555555-5555-4555-8555-555555555555',
+      programId: '70444444-4444-4444-8444-444444444444', variable: 'SupplyTemp',
+      point: { category: 'LOCAL', pointId: 'UI-01' },
+      direction: 'READ', dataType: 'REAL', unit: 'V', writable: false, qualityPolicy: 'REQUIRE_GOOD'
+    }),
+    expect.objectContaining({
+      bindingId: '70666666-6666-4666-8666-666666666667',
+      variableId: '70555555-5555-4555-8555-555555555556',
+      programId: '70444444-4444-4444-8444-444444444444', variable: 'PumpReady',
+      point: { category: 'MB_RTU', deviceId: 'bus-1-slave-4', pointId: 'PUMP_CMD' },
+      direction: 'READ', dataType: 'BOOL', writable: false, qualityPolicy: 'REQUIRE_GOOD'
+    })
+  ])
+
+  const consoleErrors: string[] = []
+  const failedRequests: string[] = []
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
+  page.on('requestfailed', (failed) => failedRequests.push(new URL(failed.url()).pathname))
+  await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
+  await expect(page).toHaveURL(/\/login$/)
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  const localRow = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })
+  const modbusRow = page.getByRole('row', { name: /PumpReady\s+MB_RTU:bus-1-slave-4:PUMP_CMD\s+INPUT\s+·\s+BOOL/ })
+  await expect(localRow).toBeVisible()
+  await expect(modbusRow).toBeVisible()
+  await expect(page.getByText('2 binding', { exact: true })).toBeVisible()
+  await page.reload()
+  // JWT của AuthProvider chỉ sống trong memory theo chủ ý; reload toàn tài
+  // liệu vì thế phải đăng nhập lại. Sau login mở lại đúng deep-link để phép
+  // đo vẫn là GET Draft mới từ backend, không phải state React còn giữ.
+  const loginAfterReload = page.getByLabel(/Tên đăng nhập|Username/i)
+  if (await loginAfterReload.isVisible().catch(() => false)) {
+    await loginAfterReload.fill('admin')
+    await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+    await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  }
+  await page.evaluate((path) => {
+    window.history.pushState({}, '', path)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }, `/eng/programming/projects/${projectID}/mapping`)
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(localRow).toBeVisible()
+  await expect(modbusRow).toBeVisible()
+  await expect(page.getByText('2 binding', { exact: true })).toBeVisible()
+  // Reload có thể hủy request của document cũ trong lúc context điều hướng.
+  // Bắt đầu ngân sách Console/Network ở snapshot production-preview đã ổn
+  // định; lỗi sau mốc này vẫn làm test đỏ và không bị lọc theo chuỗi.
+  consoleErrors.length = 0
+  failedRequests.length = 0
+
+  const readBack = await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200)
+  expect((readBack.draft as JsonObject).bindings).toEqual(migrated.bindings)
+  // Lane HOST này không dựng slave Modbus nên Check phải fail-closed cho đúng
+  // PUMP_CMD. Việc diagnostic còn mang chính identity MB_RTU chứng minh Check
+  // đã đọc Binding sau migration, không âm thầm làm rơi rồi PASS giả.
+  const sealedResponse = await request.post(`/api/v1/programming/projects/${projectID}/draft/revisions`, {
+    headers: mutationHeaders(token, { 'if-match': saved.etag as string }),
+    data: { schemaVersion: '1.0', baseRevisionId: draftID, label: 'ISS-PGM03-07 migrated', comment: 'GATE562-A' }
+  })
+  const sealed = await responseJSON(sealedResponse, 201)
+  const revisionID = (sealed.resource as JsonObject).revisionId as string
+  const accepted = await responseJSON(await request.post(`/api/v1/programming/revisions/${revisionID}/checks`, {
+    headers: mutationHeaders(token),
+    data: { schemaVersion: '1.0', targetProfile: 'MK-DDC-24-REV-A' }
+  }), 202)
+  let checked: JsonObject | undefined
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    checked = await responseJSON(await request.get(`/api/v1/programming/checks/${accepted.checkId as string}`, {
+      headers: readHeaders(token)
+    }), 200)
+    if (['FAILED', 'PASSED', 'TIMED_OUT'].includes(String(checked.state))) break
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  expect(checked?.state).toBe('FAILED')
+  const diagnostics = JSON.stringify(checked?.diagnostics)
+  expect(diagnostics).toContain('PIO-SLOT-003')
+  expect(diagnostics).toContain('PUMP_CMD')
+  expect(diagnostics).toContain('PumpReady')
+  expect(consoleErrors).toEqual([])
+  expect(failedRequests).toEqual([])
+})
+
+test('ISS-PGM03-08: UI rút cạn Catalog 504 mục qua đúng hai request và chọn được mục thứ 501', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  const token = await loginAPI(request)
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(token) }), 200)
+  const seeded = (projects.items as JsonObject[]).find((item) => item.name === 'ISS-PGM03-07 legacy migration')
+  expect(seeded, 'stack real-backend chưa seed Project dùng cho Mapping').toBeTruthy()
+  const projectID = seeded!.projectId as string
+
+  // Cho phép chạy riêng test này: nếu case #562 chưa chạy trước thì nâng fixture
+  // v1 bằng đúng public API; không sửa thẳng SQLite hoặc dựng Project giả.
+  const projectResponse = await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200)
+  if ((projectResponse.draft as JsonObject).schemaVersion === 1) {
+    await responseJSON(await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+      headers: mutationHeaders(token, { 'if-match': projectResponse.etag as string }),
+      data: {
+        schemaVersion: '1.0',
+        baseRevisionId: projectResponse.baseRevisionId,
+        operations: [{ op: 'setFunctionalTags', tags: ['e2e-pagination'] }]
+      }
+    }), 200)
+  }
+
+  const catalogResponses: Array<{ url: string; body: JsonObject }> = []
+  const consoleErrors: string[] = []
+  const failedRequests: string[] = []
+  const serverErrors: string[] = []
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
+  page.on('requestfailed', (failed) => failedRequests.push(new URL(failed.url()).pathname))
+  page.on('response', (response) => {
+    const url = new URL(response.url())
+    if (response.status() >= 500) serverErrors.push(`${response.status()} ${url.pathname}`)
+    if (url.pathname !== '/api/v1/programming/point-catalog' || response.status() !== 200) return
+    void response.json().then((body: JsonObject) => {
+      catalogResponses.push({ url: response.url(), body })
+    })
+  })
+
+  await openWorkspaceRoute(page, `/eng/programming/projects/${projectID}/mapping`)
+  const usernameField = page.getByLabel(/Tên đăng nhập|Username/i)
+  if (await usernameField.isVisible().catch(() => false)) {
+    await usernameField.fill('admin')
+    await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+    await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  }
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(page.getByText('Catalog 504 · đã đủ', { exact: true })).toBeVisible()
+  await expect.poll(() => catalogResponses.length, {
+    message: 'UI phải đọc đúng hai trang trước khi công bố complete'
+  }).toBe(2)
+
+  const first = catalogResponses.find((entry) => !new URL(entry.url).searchParams.has('cursor'))
+  const second = catalogResponses.find((entry) => new URL(entry.url).searchParams.has('cursor'))
+  expect(first, 'thiếu request trang đầu không mang cursor').toBeTruthy()
+  expect(second, 'thiếu request trang sau').toBeTruthy()
+  const firstURL = new URL(first!.url)
+  const secondURL = new URL(second!.url)
+  expect(firstURL.searchParams.get('limit')).toBe('500')
+  expect(firstURL.searchParams.has('cursor')).toBe(false)
+  expect(secondURL.searchParams.get('limit')).toBe('500')
+  expect(secondURL.searchParams.get('cursor')).toBe(first!.body.nextCursor)
+
+  const firstItems = first!.body.items as JsonObject[]
+  const secondItems = second!.body.items as JsonObject[]
+  expect(firstItems).toHaveLength(500)
+  expect(secondItems).toHaveLength(4)
+  expect(second!.body.nextCursor ?? null).toBeNull()
+  const allItems = [...firstItems, ...secondItems]
+  const keys = new Set(allItems.map((item) =>
+    `${String(item.category)}\u0000${String(item.deviceId ?? '')}\u0000${String(item.pointId)}`))
+  expect(keys.size).toBe(504)
+
+  // `secondItems[0]` nằm đúng vị trí 501 của snapshot đã sắp xếp phía server.
+  // Tìm và chọn nó trên UI chứng minh consumer không chỉ đếm đủ rồi bỏ dữ liệu
+  // trang sau; title của chip là verdict compatibility mà server phát.
+  const latePointID = String(secondItems[0].pointId)
+  await page.getByRole('searchbox', { name: /Tìm biến hoặc Point|Search variable or Point/i }).fill(latePointID)
+  const latePoint = page.getByTestId('mapping-point-list').getByRole('button', {
+    name: new RegExp(`\\b${latePointID}\\b`)
+  })
+  await expect(latePoint).toBeVisible()
+  await latePoint.click()
+  await expect(latePoint).toHaveAttribute('aria-pressed', 'true')
+  await expect(latePoint.locator('[title]').first()).toHaveAttribute('title', /AV\/BV\/MSV/)
+
+  expect(consoleErrors).toEqual([])
+  expect(failedRequests).toEqual([])
+  expect(serverErrors).toEqual([])
+})
+
+test('T59-505/ISS-PGM-RBAC-01: engineer chạy lifecycle thật, Mapping và Trace theo capability', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  const adminToken = await loginAPI(request)
+  const engineerName = `pgmeng${Date.now().toString(36)}`
+  const engineerPassword = 'Engineer#2026'
+  const engineerCreated = await request.post('/api/v1/users', {
+    headers: mutationHeaders(adminToken),
+    data: { username: engineerName, role: 'engineer', password: engineerPassword }
+  })
+  expect(engineerCreated.status(), await engineerCreated.text()).toBe(201)
+  const engineerLogin = await responseJSON(await request.post('/api/v1/auth/login', {
+    data: { username: engineerName, password: engineerPassword }
+  }), 200)
+  expect(engineerLogin.role).toBe('engineer')
+  const token = engineerLogin.token as string
+
+  try {
 
   const createdResponse = await request.post('/api/v1/programming/projects', {
     headers: mutationHeaders(token),
@@ -415,6 +763,18 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
           }
         },
         {
+          op: 'upsertVariable',
+          variable: {
+            variableId: FAN_VARIABLE_ID,
+            programId: PROGRAM_ID,
+            name: 'Fan',
+            type: 'BOOL',
+            class: 'OUTPUT',
+            initialValue: false,
+            retain: false
+          }
+        },
+        {
           op: 'upsertBinding',
           binding: {
             bindingId: BINDING_ID,
@@ -422,6 +782,7 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
             point: { category: 'LOCAL', pointId: 'UI-01' },
             direction: 'READ',
             dataType: 'REAL',
+            unit: 'V',
             writable: false,
             qualityPolicy: 'REQUIRE_GOOD'
           }
@@ -431,10 +792,51 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   })
   const savedR1 = await responseJSON(savedR1Response, 200)
 
+  // ISS-PGM03-01: preview và cửa PATCH phải dùng cùng authority. Candidate
+  // hợp lệ được server xác nhận trên đúng ETag/base Revision; client bỏ qua
+  // preview rồi gửi type giả vẫn bị chặn và Draft không đổi một byte logic.
+  const validBinding = {
+    bindingId: BINDING_ID,
+    variableId: VARIABLE_ID,
+    point: { category: 'LOCAL', pointId: 'UI-01' },
+    direction: 'READ',
+    dataType: 'REAL',
+    unit: 'V',
+    writable: false,
+    qualityPolicy: 'REQUIRE_GOOD'
+  }
+  const previewResponse = await request.post(
+    `/api/v1/programming/projects/${projectID}/draft/bindings/preview`,
+    {
+      headers: { ...readHeaders(token), 'if-match': savedR1.etag as string },
+      data: { schemaVersion: '1.0', baseRevisionId: draftID, binding: validBinding }
+    }
+  )
+  const preview = await responseJSON(previewResponse, 200)
+  expect(preview).toMatchObject({ schemaVersion: '1.0', verdict: 'ALLOW', issues: [],
+    projectId: projectID, draftRevisionId: draftID, baseRevisionId: draftID, etag: savedR1.etag })
+  expect(previewResponse.headers().etag).toBe(savedR1.etag)
+
+  const rejectedBindingResponse = await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+    headers: mutationHeaders(token, { 'if-match': savedR1.etag as string }),
+    data: {
+      schemaVersion: '1.0',
+      baseRevisionId: draftID,
+      operations: [{ op: 'upsertBinding', binding: { ...validBinding, dataType: 'BOOL' } }]
+    }
+  })
+  const rejectedBinding = await responseJSON(rejectedBindingResponse, 422)
+  expect(rejectedBinding.error).toMatchObject({
+    code: 'PRG-ERR-MAP-004',
+    field: 'binding.dataType',
+    args: { detailCode: 'PGM-MAP-TYPE-001', expected: 'REAL', actual: 'BOOL' }
+  })
+
   const projectReadbackResponse = await request.get(`/api/v1/programming/projects/${projectID}`, {
     headers: readHeaders(token)
   })
   const projectReadback = await responseJSON(projectReadbackResponse, 200)
+  expect(projectReadback.etag).toBe(savedR1.etag)
   const draft = projectReadback.draft as JsonObject
   const draftProgram = (draft.objects as JsonObject[]).find((candidate) => candidate.objectId === PROGRAM_ID)
   expect((draftProgram?.locals as JsonObject[])).toContainEqual(expect.objectContaining({
@@ -553,7 +955,13 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
       serverFailures.push(`${response.status()} ${url.pathname}`)
     }
   })
-  page.on('requestfailed', (requestFailed) => failedRequests.push(new URL(requestFailed.url()).pathname))
+  page.on('requestfailed', (requestFailed) => {
+    const errorText = requestFailed.failure()?.errorText ?? 'unknown'
+    // Hai lần reload bên dưới chủ ý hủy các poll của document cũ. Chỉ bỏ đúng
+    // ERR_ABORTED đó; mọi lỗi mạng khác vẫn làm gate đỏ với cả path và lý do.
+    if (errorText.includes('ERR_ABORTED')) return
+    failedRequests.push(`${new URL(requestFailed.url()).pathname}: ${errorText}`)
+  })
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
@@ -562,8 +970,8 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   // route sau login, không được dựa vào token của APIRequestContext phía trên.
   await page.goto('/eng/programming/runtime?tab=watch')
   await expect(page).toHaveURL(/\/login$/)
-  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
-  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill(engineerName)
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill(engineerPassword)
   await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
   await expect(page).toHaveURL(/\/eng\/programming\/runtime\?tab=watch$/)
 
@@ -597,6 +1005,26 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   await expect(watchRow).toContainText('GOOD')
   // Binding là READ: cột đề xuất đầu ra mức 5 KHÔNG được bịa ra một số.
   await expect(watchRow).toContainText('Không áp dụng')
+
+  // ISS-PGM-RBAC-01: Trace là `program.edit`, vì vậy engineer phải thấy và
+  // chạy được action thật. Khóa cả request POST/DELETE để tránh xanh giả chỉ
+  // vì nút hiện trong DOM nhưng backend vẫn từ chối.
+  await watchRow.getByRole('checkbox', { name: 'Trace SupplyTemp' }).check()
+  const traceAcceptedResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/programming/runtime/traces')
+  await page.getByRole('button', { name: 'Bắt đầu trace' }).click()
+  const traceAccepted = await traceAcceptedResponse
+  expect(traceAccepted.status(), await traceAccepted.text()).toBe(202)
+  expect(traceAccepted.request().postDataJSON()).toMatchObject({
+    schemaVersion: '1.0', variableIds: [VARIABLE_ID]
+  })
+  const stopTrace = page.getByRole('button', { name: 'Dừng trace' })
+  await expect(stopTrace).toBeVisible()
+  const traceStoppedResponse = page.waitForResponse((response) =>
+    response.request().method() === 'DELETE' && /\/api\/v1\/programming\/runtime\/traces\/[0-9a-f-]+$/.test(new URL(response.url()).pathname))
+  await stopTrace.click()
+  const traceStopped = await traceStoppedResponse
+  expect(traceStopped.status()).toBe(204)
 
   // VS-PROG-U10: API setup ở trên chưa đủ. Ba workspace chỉnh sửa phải tự đọc
   // lại đúng dữ liệu từ backend thật sau điều hướng client-side (giữ JWT thật),
@@ -688,15 +1116,26 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   // canonical mà GET /libraries trả về — thay nó bằng `{inputs:[]}` làm mất
   // contract POU khỏi content hash dù người dùng chỉ sửa source.
   await page.getByRole('button', { name: 'Sửa — tạo phiên bản mới' }).click()
+  const libraryWizard = page.getByRole('dialog', { name: 'Sửa khối PROJECT' })
+  await libraryWizard.getByRole('button', { name: 'Tiếp' }).click()
+  await expect(libraryWizard.getByRole('heading', { name: 'Giao diện' })).toBeFocused()
+  await libraryWizard.getByRole('button', { name: 'Tiếp' }).click()
+  await expect(libraryWizard.getByRole('heading', { name: 'Hiện thực' })).toBeFocused()
   const editedLibrarySource =
     'FUNCTION SCALE_LIN : REAL\nVAR_INPUT X : REAL; END_VAR\nSCALE_LIN := X + 1.0;\nEND_FUNCTION\n'
-  await page.getByLabel('Mã nguồn ST').fill(editedLibrarySource)
+  await libraryWizard.getByLabel('Mã nguồn ST').fill(editedLibrarySource)
+  await libraryWizard.getByRole('button', { name: 'Tiếp' }).click()
+  await expect(libraryWizard.getByRole('heading', { name: 'Kiểm tra' })).toBeFocused()
+  await libraryWizard.getByRole('button', { name: 'Chạy kiểm tra trên máy chủ' }).click()
+  await expect(libraryWizard.getByTestId('library-wizard-check-result')).toBeVisible()
+  await libraryWizard.getByRole('button', { name: 'Tiếp' }).click()
+  await expect(libraryWizard.getByRole('heading', { name: 'Xem lại và lưu' })).toBeFocused()
   const uiLibraryMutationResponse = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return response.request().method() === 'POST' &&
       url.pathname === `/api/v1/programming/projects/${projectID}/library/entries`
   })
-  await page.getByRole('button', { name: 'Lưu vào bản nháp thư viện' }).click()
+  await libraryWizard.getByRole('button', { name: 'Lưu vào bản nháp thư viện' }).click()
   const uiLibraryMutation = await uiLibraryMutationResponse
   expect(uiLibraryMutation.status(), await uiLibraryMutation.text()).toBe(200)
   const uiLibraryMutationResult = await uiLibraryMutation.json() as JsonObject
@@ -785,6 +1224,72 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   const mappingRow = page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })
   await expect(mappingRow).toBeVisible()
 
+  // ISS-PGM03-02: engineer gán output chưa map vào Point canonical, qua preview
+  // server-authoritative, rồi reload để chứng minh Draft read-back bền vững.
+  await expect(page.getByText('Catalog 504 · đã đủ', { exact: true })).toBeVisible()
+  const fanVariable = page.getByTestId('mapping-variable-list').getByRole('button', { name: /AHU_MAIN · Fan · Chưa map/ })
+  await fanVariable.click()
+  const do01Point = page.getByTestId('mapping-point-list').getByRole('button', { name: /\bDO-01\b/ })
+  await do01Point.click()
+  const mappingPreviewResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' &&
+    new URL(response.url()).pathname === `/api/v1/programming/projects/${projectID}/draft/bindings/preview`)
+  await page.getByRole('button', { name: 'Ánh xạ AHU_MAIN · Fan' }).click()
+  const mappingPreview = await mappingPreviewResponse
+  expect(mappingPreview.status(), await mappingPreview.text()).toBe(200)
+  const previewBody = mappingPreview.request().postDataJSON() as JsonObject
+  expect(previewBody).toMatchObject({
+    schemaVersion: '1.0',
+    binding: {
+      bindingId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      variableId: FAN_VARIABLE_ID,
+      point: { category: 'LOCAL', pointId: 'DO-01' },
+      direction: 'WRITE', dataType: 'BOOL', writable: true
+    }
+  })
+  expect(JSON.stringify(previewBody)).not.toContain('extIndex')
+  const changeDialog = page.getByRole('dialog', { name: 'Xem trước ánh xạ' })
+  await expect(changeDialog.getByText('ALLOW', { exact: true })).toBeVisible()
+  const mappingChangeResponse = page.waitForResponse((response) =>
+    response.request().method() === 'PATCH' &&
+    new URL(response.url()).pathname === `/api/v1/programming/projects/${projectID}/draft`)
+  await changeDialog.getByRole('button', { name: 'Ghi vào Draft' }).click()
+  const mappingChange = await mappingChangeResponse
+  expect(mappingChange.status(), await mappingChange.text()).toBe(200)
+  await expect(changeDialog.getByText('Read-back xác nhận Draft đã đổi.')).toBeVisible()
+  await changeDialog.getByRole('button', { name: 'Đóng' }).click()
+  await expect(page.getByRole('row', { name: /Fan\s+LOCAL:DO-01\s+OUTPUT\s+·\s+BOOL/ })).toBeVisible()
+  await expect(page.getByText('2 binding', { exact: true })).toBeVisible()
+
+  await page.reload()
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill(engineerName)
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill(engineerPassword)
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  const assignedFanRow = page.getByRole('row', { name: /Fan\s+LOCAL:DO-01\s+OUTPUT\s+·\s+BOOL/ })
+  await expect(assignedFanRow).toBeVisible()
+
+  // Remove chỉ hoàn tất khi response server và read-back trên UI đều mất
+  // binding; reload lần hai khóa việc component tự xóa optimistic.
+  await assignedFanRow.getByRole('button', { name: 'Gỡ', exact: true }).click()
+  const removeDialog = page.getByRole('dialog', { name: 'Xác nhận gỡ ánh xạ' })
+  const mappingRemoveResponse = page.waitForResponse((response) =>
+    response.request().method() === 'PATCH' &&
+    new URL(response.url()).pathname === `/api/v1/programming/projects/${projectID}/draft`)
+  await removeDialog.getByRole('button', { name: 'Gỡ ánh xạ' }).click()
+  const mappingRemove = await mappingRemoveResponse
+  expect(mappingRemove.status(), await mappingRemove.text()).toBe(200)
+  await expect(removeDialog.getByText('Read-back xác nhận Draft đã đổi.')).toBeVisible()
+  await removeDialog.getByRole('button', { name: 'Đóng' }).click()
+  await expect(page.getByText('1 binding', { exact: true })).toBeVisible()
+  await page.reload()
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill(engineerName)
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill(engineerPassword)
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+  await expect(page.getByText('1 binding', { exact: true })).toBeVisible()
+  await expect(page.getByRole('row', { name: /SupplyTemp\s+LOCAL:UI-01\s+INPUT\s+·\s+REAL/ })).toBeVisible()
+
   // F-P59-UI-001: Published Signal được tạo bằng UI, không phải chỉ seed API.
   // Assert cả payload trên dây và Draft server trả lại để khoá mapping tên
   // policy UI (`USE_FALLBACK`) cùng fallback số, không chấp nhận optimistic UI.
@@ -867,6 +1372,9 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
   await page.getByTestId('programming-mobile-more').getByRole('link', { name: 'Điểm & Ánh xạ' }).click()
   await expect(page).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
   await expect(page.getByRole('row', { name: /RETURN_AIR_TEMP/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^(Ánh xạ|Đổi ánh xạ) / })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^(Đổi|Gỡ|Gỡ ánh xạ)$/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Khai Published Signal' })).toHaveCount(0)
   await assertMobileSurface(page, 'Mapping + Published Signal')
 
   console.info(
@@ -874,6 +1382,62 @@ test('T59-505: lifecycle thật đến Restore và UI fail-closed không biến 
     `(${[...new Set(serverFailures)].join(', ')}); requestfailed=${failedRequests.length}; ` +
     `console.error=${consoleErrors.length} (expected 0)`
   )
+  } finally {
+    const removed = await request.delete(`/api/v1/users/${engineerName}`, {
+      headers: mutationHeaders(adminToken)
+    })
+    expect([200, 204], `không dọn được engineer tạm ${engineerName}`).toContain(removed.status())
+  }
+})
+
+test('ISS-PGM-RBAC-01: viewer và operator thấy Mapping read-only nhưng có zero mutation', async ({ browser, request }, testInfo) => {
+  test.setTimeout(120_000)
+  const adminToken = await loginAPI(request)
+  const projects = await responseJSON(
+    await request.get('/api/v1/programming/projects?limit=100', { headers: readHeaders(adminToken) }), 200)
+  const seeded = (projects.items as JsonObject[]).find((item) => item.name === 'ISS-PGM03-07 legacy migration')
+  expect(seeded, 'stack real-backend chưa seed Project dùng cho phép đo RBAC Mapping').toBeTruthy()
+  const projectID = seeded!.projectId as string
+  const suffix = Date.now().toString(36)
+  const password = 'ReadOnly#2026'
+  const accounts = [
+    { username: `pgmview${suffix}`, role: 'viewer' },
+    { username: `pgmop${suffix}`, role: 'operator' },
+  ] as const
+  const created: string[] = []
+
+  try {
+    for (const account of accounts) {
+      const response = await request.post('/api/v1/users', {
+        headers: mutationHeaders(adminToken),
+        data: { username: account.username, role: account.role, password }
+      })
+      expect(response.status(), await response.text()).toBe(201)
+      created.push(account.username)
+
+      const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL, locale: 'vi-VN' })
+      try {
+        const rolePage = await context.newPage()
+        await openWorkspaceRoute(rolePage, `/eng/programming/projects/${projectID}/mapping`)
+        await rolePage.getByLabel(/Tên đăng nhập|Username/i).fill(account.username)
+        await rolePage.getByLabel(/^Mật khẩu$|^Password$/i).fill(password)
+        await rolePage.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+        await expect(rolePage).toHaveURL(new RegExp(`/eng/programming/projects/${projectID}/mapping$`))
+        await expect(rolePage.getByText('READ-ONLY', { exact: true })).toBeVisible()
+        await expect(rolePage.getByText(/binding$/).first()).toBeVisible()
+        await expect(rolePage.getByRole('button', { name: /^(Ánh xạ|Đổi ánh xạ) / })).toHaveCount(0)
+        await expect(rolePage.getByRole('button', { name: /^(Đổi|Gỡ|Gỡ ánh xạ)$/ })).toHaveCount(0)
+        await expect(rolePage.getByRole('button', { name: 'Khai Published Signal' })).toHaveCount(0)
+      } finally {
+        await context.close()
+      }
+    }
+  } finally {
+    for (const username of created) {
+      const removed = await request.delete(`/api/v1/users/${username}`, { headers: mutationHeaders(adminToken) })
+      expect([200, 204], `không dọn được tài khoản tạm ${username}`).toContain(removed.status())
+    }
+  }
 })
 
 /**
@@ -1764,4 +2328,447 @@ test('T59-817: viewer/operator/engineer đều không mở được phiên mô p
       expect([200, 204], `không dọn được tài khoản tạm ${username}`).toContain(removed.status())
     }
   }
+})
+
+/* ==================================================================== *
+ * `T61-504` / `ISS-PGM04-17` — vòng đời PGM-04 trên BACKEND THẬT.       *
+ *                                                                      *
+ * Lane `T59-505` trước lát này đã phủ create/edit/seal/version/         *
+ * deprecate, nhưng **không gọi `/programming/library-usages` lần nào**, *
+ * không đọc `compatibility`, và không đi đường Chèn. Ba thứ ấy là ba    *
+ * read model mà `T61-101`/`T61-104`/`T61-406` dựng lên, và cho tới đây  *
+ * chúng chỉ từng chạy trên fixture của FE — tức chưa ai biết máy chủ    *
+ * thật trả gì.                                                         *
+ * ==================================================================== */
+
+const PGM04_ENTRY_ID = '86666666-6666-4666-8666-666666666666'
+const PGM04_OBJECT_ID = '87777777-7777-4777-8777-777777777777'
+
+/**
+ * `interface` mang CẢ HAI hình dạng, và đó là chủ ý.
+ *
+ * Compiler đọc `inputs`/`returnType`; lớp HTTP phân giải chữ ký hiển thị từ
+ * `dispatch`/`category`/`ports` (`parseLibrarySignature`). Gửi thiếu vế thứ hai
+ * thì entry PROJECT về tới FE **không có** `signature`, và cả màn hình rơi vào
+ * `SIGNATURE_UNAVAILABLE` — lúc ấy mọi khẳng định về đường Chèn đo một khối
+ * không chèn được, tức đo nhầm thứ.
+ */
+const PGM04_INTERFACE = {
+  inputs: [{ name: 'X', type: 'REAL' }],
+  returnType: 'REAL',
+  dispatch: 'FUNC_TABLE',
+  polymorphic: false,
+  typedPortNames: [],
+  category: 'math',
+  labelVi: 'Tỉ lệ tuyến tính',
+  labelEn: 'Linear scale',
+  allowedTypes: ['REAL'],
+  defaultType: 'REAL',
+  ports: [
+    { name: 'X', direction: 'INPUT', dataType: 'REAL' },
+    { name: 'OUT', direction: 'OUTPUT', dataType: 'REAL' }
+  ]
+}
+
+const PGM04_ENTRY_SOURCE = `FUNCTION SCALE_PGM04 : REAL
+VAR_INPUT
+  X : REAL;
+END_VAR
+SCALE_PGM04 := X * 2.0;
+END_FUNCTION
+`
+
+const PGM04_OBJECT_SOURCE = `PROGRAM AHU_SCALE
+VAR
+  Y : REAL;
+END_VAR
+Y := SCALE_PGM04(1.0);
+END_PROGRAM
+`
+
+/**
+ * Mọi hàng PROJECT của entry, ĐÚNG như `GET /libraries` trả về.
+ *
+ * Route này trả **mọi library revision** của Project (DRAFT + PUBLISHED +
+ * DEPRECATED), nên sau một lần lên version sẽ có hai hàng cùng `entryId`. Gộp
+ * chúng là việc của lớp trình bày (`groupLibraryEntries`); ở đây phải nhìn thấy
+ * nguyên trạng, nếu không một khẳng định "đúng một hàng" sẽ đỏ vì lý do sai.
+ */
+async function readProjectEntries(
+  request: APIRequestContext, token: string, projectID: string
+): Promise<JsonObject[]> {
+  const page = await responseJSON(
+    await request.get(
+      `/api/v1/programming/libraries?projectId=${projectID}&scope=PROJECT&q=SCALE_PGM04`,
+      { headers: readHeaders(token) }
+    ),
+    200
+  )
+  const items = page.items as JsonObject[]
+  expect(items.length, `thư viện PROJECT không có entry nào: ${JSON.stringify(page)}`).toBeGreaterThan(0)
+  return items
+}
+
+/** Lấy đúng MỘT hàng — dùng khi entry mới chỉ có một version. */
+async function readProjectEntry(
+  request: APIRequestContext, token: string, projectID: string
+): Promise<JsonObject> {
+  const items = await readProjectEntries(request, token, projectID)
+  expect(items, 'entry PROJECT có nhiều hơn một version ở bước này').toHaveLength(1)
+  return items[0]
+}
+
+test('T61-504: PGM-04 trên backend thật — thẻ, Used-In, ba trạng thái tương thích, guard Chèn và 0 mutation', async ({ page, request }) => {
+  test.setTimeout(180_000)
+  const startedAt = Date.now()
+  const token = await loginAPI(request)
+
+  const created = await responseJSON(
+    await request.post('/api/v1/programming/projects', {
+      headers: mutationHeaders(token),
+      data: { schemaVersion: '1.0', name: 'AHU T61-504 real', description: 'PGM-04 lifecycle real-backend' }
+    }),
+    201
+  )
+  const projectID = (created.resource as JsonObject).projectId as string
+  const draftID = (created.resource as JsonObject).draftRevisionId as string
+
+  /* ---- 1) Tạo entry PROJECT kèm metadata VÀ THẺ ---------------------- */
+  const upsert = await responseJSON(
+    await request.post(`/api/v1/programming/projects/${projectID}/library/entries`, {
+      headers: mutationHeaders(token, { 'if-match': created.etag as string }),
+      data: {
+        schemaVersion: '1.0', entryId: PGM04_ENTRY_ID, kind: 'FUNCTION', name: 'SCALE_PGM04',
+        language: 'ST', source: PGM04_ENTRY_SOURCE, interface: PGM04_INTERFACE, dependencies: [],
+        category: 'math', description: 'Khối tỉ lệ của dự án',
+        /* Cố ý gửi bẩn: hoa/thường lẫn lộn, khoảng trắng thừa, trùng lặp, sai
+           thứ tự. Máy chủ CHUẨN HOÁ (`NormalizeLibraryTags`), nên kết quả đọc
+           lại là bằng chứng phép chuẩn hoá ấy CHẠY THẬT — một fixture FE trả
+           đúng mảng vừa gửi sẽ không phân biệt được. */
+        tags: ['AHU', '  Tỉ   Lệ  ', 'ahu']
+      }
+    }),
+    200
+  )
+  expect(upsert.etag).not.toBe(created.etag)
+
+  const draftEntry = await readProjectEntry(request, token, projectID)
+  expect(draftEntry.tags, 'máy chủ không chuẩn hoá thẻ').toEqual(['ahu', 'tỉ lệ'])
+  expect(draftEntry.category).toBe('math')
+  expect(draftEntry.libraryState).toBe('DRAFT')
+  /* Chữ ký PHẢI phân giải được, nếu không mọi khẳng định về đường Chèn phía
+     dưới đang đo một khối bị chặn vì lý do khác. */
+  expect(draftEntry.signature, 'chữ ký không phân giải được từ `interface`').toBeTruthy()
+
+  /* ---- 2) Tương thích: UNKNOWN khi chưa Commission gì --------------- */
+  /* `openapi.yaml` ghi `UNKNOWN` là giá trị MẶC ĐỊNH, không phải lỗi: chưa có
+     Revision vận hành nào thì không có gì để so, và nói "tương thích" lúc ấy là
+     một khẳng định không có cơ sở. */
+  expect(draftEntry.compatibility).toEqual({
+    state: 'UNKNOWN',
+    requiredVersion: null,
+    availableVersion: null,
+    reason: expect.stringContaining('Chưa có Revision vận hành nào pin')
+  })
+
+  /* ---- 3) POU dùng entry, seal, check, commission -------------------- */
+  const savedDraft = await responseJSON(
+    await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+      headers: mutationHeaders(token, { 'if-match': upsert.etag as string }),
+      data: {
+        schemaVersion: '1.0', baseRevisionId: draftID,
+        operations: [
+          {
+            op: 'upsertObject',
+            object: {
+              objectId: PGM04_OBJECT_ID, kind: 'PROGRAM', name: 'AHU_SCALE', language: 'ST',
+              source: PGM04_OBJECT_SOURCE,
+              /* CHÍNH mảng này là nguồn của `library_usages`: đường Seal đổi nó
+                 thành bản ghi usage. Không khai thì Used-In rỗng và cả case
+                 dưới đo một bảng trống. */
+              dependencies: [PGM04_ENTRY_ID]
+            }
+          },
+          { op: 'upsertProgram', program: { programId: PGM04_OBJECT_ID, objectId: PGM04_OBJECT_ID, periodMs: 1000 } }
+        ]
+      }
+    }),
+    200
+  )
+
+  const sealed = await sealAndCheck(request, token, projectID, draftID, savedDraft.etag as string, 'T61-504 R1')
+
+  const publishedEntry = await readProjectEntry(request, token, projectID)
+  expect(publishedEntry.libraryState, 'Seal phải publish library DRAFT cùng transaction').toBe('PUBLISHED')
+  const libraryRevisionID = publishedEntry.libraryRevisionId as string
+  const publishedVersion = publishedEntry.libraryVersion as string
+
+  /* Hai nhóm ảnh hưởng do chính Revision này tạo ra phải CÓ MẶT:
+     `programSet` (thêm chương trình) và `controlLibrary` (pin thư viện mới).
+     `cutover` phụ thuộc producer mode toàn cục trước test: nếu một case trước đã
+     chuyển sang PROGRAM_ONLY thì nhóm này đúng là NONE. Project này không công
+     bố Signal nào nên `publishedSignals` cũng vắng. Đọc current Active ngay
+     trước Commission để CAS không phụ thuộc test này chạy riêng hay sau T59-505;
+     backend sẽ chiếu diff khác Project về đúng ngữ nghĩa thay mới toàn bộ. */
+  const runtimeBeforeCommission = await responseJSON(
+    await request.get('/api/v1/programming/runtime', { headers: readHeaders(token) }), 200)
+  const fromRevisionID = (runtimeBeforeCommission.activeRevisionId as string | null) ?? 'none'
+  await commission(request, token, 'none', sealed.revisionID, sealed.checkID,
+    ['programSet', 'controlLibrary'], fromRevisionID)
+
+  /* ---- 4) Used-In đọc từ store THẬT --------------------------------- */
+  /* `isActive` suy từ `commission_records.result='SUCCEEDED'` — một bản ghi được
+     ghi trên đường Commission, KHÔNG cùng lúc với phản hồi của operation. Đọc
+     một phát rồi khẳng định là đua với chính đường ghi ấy, nên chờ có điều
+     kiện. Ngưỡng hữu hạn: nếu nó không bao giờ thành `true` thì đó là lỗi thật
+     và test phải đỏ, không được nới thành "đọc sao cũng được". */
+  let usage: JsonObject = {}
+  await expect.poll(async () => {
+    usage = await responseJSON(
+      await request.get(
+        `/api/v1/programming/library-usages?libraryRevisionId=${libraryRevisionID}`
+        + `&entryId=${PGM04_ENTRY_ID}&scope=PROJECT`,
+        { headers: readHeaders(token) }
+      ),
+      200
+    )
+    const items = (usage.sealed as JsonObject).items as JsonObject[]
+    return items.length === 1 && items[0].isActive === true
+  }, {
+    message: 'Used-In không đánh dấu Revision vừa Commission là bản đang chạy',
+    timeout: 20_000
+  }).toBe(true)
+  /* `availability` là trường quyết định của read model này: `UNAVAILABLE` nghĩa
+     là CHƯA ĐO ĐƯỢC, và một bề mặt in `0` cho nó là cách một khối bị gỡ trong
+     khi nó đang điều khiển tủ. Ở đây máy chủ đo được, nên phải nói ra. */
+  expect(usage.availability).not.toBe('UNAVAILABLE')
+  const sealedUsage = usage.sealed as JsonObject
+  expect(sealedUsage.count, `Used-In không thấy POU vừa seal: ${JSON.stringify(usage)}`).toBe(1)
+  expect(sealedUsage.truncated).toBe(false)
+  expect(sealedUsage.items).toEqual([
+    expect.objectContaining({
+      projectId: projectID,
+      revisionId: sealed.revisionID,
+      objectId: PGM04_OBJECT_ID,
+      requiredVersion: publishedVersion,
+      usageKind: 'CALL',
+      isActive: true
+    })
+  ])
+
+  /* ---- 5) Tương thích: COMPATIBLE khi pin == PUBLISHED mới nhất ------ */
+  const compatibleEntry = await readProjectEntry(request, token, projectID)
+  expect(compatibleEntry.compatibility).toEqual({
+    state: 'COMPATIBLE',
+    requiredVersion: publishedVersion,
+    availableVersion: publishedVersion,
+    reason: null
+  })
+
+  /* ---- 6) Tương thích: REQUIRES_MIGRATION sau khi publish version mới */
+  /* Sửa entry sinh version DRAFT mới; Seal kế tiếp publish nó. KHÔNG Commission
+     bản mới, nên Revision đang vận hành vẫn pin version cũ — đúng tình huống mà
+     `REQUIRES_MIGRATION` mô tả. */
+  const editEtag = (await responseJSON(
+    await request.get(`/api/v1/programming/projects/${projectID}`, { headers: readHeaders(token) }), 200
+  )).etag as string
+  const upsertV2 = await responseJSON(
+    await request.post(`/api/v1/programming/projects/${projectID}/library/entries`, {
+      headers: mutationHeaders(token, { 'if-match': editEtag }),
+      data: {
+        schemaVersion: '1.0', entryId: PGM04_ENTRY_ID, kind: 'FUNCTION', name: 'SCALE_PGM04',
+        language: 'ST', source: PGM04_ENTRY_SOURCE.replace('X * 2.0', 'X * 3.0'),
+        interface: PGM04_INTERFACE, dependencies: [],
+        category: 'math', description: 'Khối tỉ lệ của dự án (bản 2)', tags: ['ahu', 'tỉ lệ']
+      }
+    }),
+    200
+  )
+  const savedDraftV2 = await responseJSON(
+    await request.patch(`/api/v1/programming/projects/${projectID}/draft`, {
+      headers: mutationHeaders(token, { 'if-match': upsertV2.etag as string }),
+      data: {
+        schemaVersion: '1.0', baseRevisionId: sealed.revisionID,
+        operations: [
+          {
+            op: 'upsertObject',
+            object: {
+              objectId: PGM04_OBJECT_ID, kind: 'PROGRAM', name: 'AHU_SCALE', language: 'ST',
+              source: PGM04_OBJECT_SOURCE.replace('1.0', '2.0'),
+              dependencies: [PGM04_ENTRY_ID]
+            }
+          }
+        ]
+      }
+    }),
+    200
+  )
+  await sealAndCheck(request, token, projectID, sealed.revisionID, savedDraftV2.etag as string, 'T61-504 R2')
+
+  /* Nay có HAI hàng cùng `entryId` (1.0.0 đang chạy và bản mới vừa publish).
+     `compatibility` là thuộc tính của ENTRY chứ không của từng hàng, nên cả hai
+     phải nói cùng một câu — kiểm điều đó luôn, vì hai hàng bất đồng về mức
+     tương thích là đúng thứ làm người đọc không biết tin hàng nào. */
+  const migratingRows = await readProjectEntries(request, token, projectID)
+  expect(migratingRows.length, 'lên version không sinh hàng thứ hai').toBe(2)
+  const migratingEntry = migratingRows.find((row) => row.libraryVersion !== publishedVersion)!
+  expect(migratingEntry, `không thấy version mới ngoài ${publishedVersion}`).toBeTruthy()
+  expect(migratingRows.map((row) => (row.compatibility as JsonObject).state))
+    .toEqual(['REQUIRES_MIGRATION', 'REQUIRES_MIGRATION'])
+  const migratingCompatibility = migratingEntry.compatibility as JsonObject
+  expect(migratingCompatibility.state,
+    `tương thích không chuyển sang REQUIRES_MIGRATION: ${JSON.stringify(migratingCompatibility)}`)
+    .toBe('REQUIRES_MIGRATION')
+  expect(migratingCompatibility.requiredVersion).toBe(publishedVersion)
+  expect(migratingCompatibility.availableVersion).not.toBe(publishedVersion)
+  /* Lý do phải nói ra CẢ HAI version: "cần migrate" mà không nói từ đâu sang
+     đâu là một câu người vận hành không hành động được. */
+  expect(String(migratingCompatibility.reason)).toContain(String(migratingCompatibility.requiredVersion))
+  expect(String(migratingCompatibility.reason)).toContain(String(migratingCompatibility.availableVersion))
+
+  /* ---- 7) Giao diện: đọc thật, và KHÔNG ghi gì ----------------------- */
+  const serverFailures: string[] = []
+  const failedRequests: string[] = []
+  const consoleErrors: string[] = []
+  const programmingWrites: string[] = []
+  page.on('response', (response) => {
+    if (response.status() >= 500) {
+      serverFailures.push(`${response.status()} ${new URL(response.url()).pathname}`)
+    }
+  })
+  page.on('requestfailed', (failed) => failedRequests.push(new URL(failed.url()).pathname))
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('request', (outgoing) => {
+    const url = new URL(outgoing.url())
+    if (!url.pathname.startsWith('/api/v1/programming')) return
+    if (outgoing.method() === 'GET') return
+    programmingWrites.push(`${outgoing.method()} ${url.pathname}`)
+  })
+
+  await page.goto(`/eng/programming/projects/${projectID}/library?scope=PROJECT`)
+  await expect(page).toHaveURL(/\/login$/)
+  await page.getByLabel(/Tên đăng nhập|Username/i).fill('admin')
+  await page.getByLabel(/^Mật khẩu$|^Password$/i).fill('admin123')
+  await page.getByRole('button', { name: /Đăng nhập|Sign in/i }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectID}/library`))
+
+  /* ANTI-MOCK, vế dữ liệu: khối hiện trên màn hình mang `projectId` do máy chủ
+     sinh trong CHÍNH lần chạy này. Một route bị chặn không thể biết trước giá
+     trị ấy, nên khẳng định này không thể xanh trên dữ liệu dựng sẵn. */
+  const card = page.getByTestId('library-block-card').filter({ hasText: 'SCALE_PGM04' })
+  await expect(card).toHaveCount(1)
+  await card.click()
+
+  /* Used-In trên giao diện, lấy từ cùng read model vừa kiểm qua API. */
+  await page.getByRole('tab', { name: 'Nơi sử dụng' }).click()
+  const usagePanel = page.getByRole('region', { name: 'Nơi sử dụng' })
+  await expect(usagePanel.getByText('1 nơi dùng')).toBeVisible()
+  /* Khay này có HAI mục cho cùng một POU, và đó là đúng: một mục ĐÃ NIÊM PHONG
+     (mang tên Project ở đầu, vì nó có thể thuộc Project khác) và một mục trong
+     BẢN NHÁP đang mở. Gộp hai mục ấy lại sẽ giấu mất khác biệt "đang chạy" với
+     "mới sửa, chưa Seal" — đúng khác biệt người vận hành cần trước khi sửa một
+     khối. Nên phải hỏi ĐÍCH DANH từng mục. */
+  const sealedLink = usagePanel.getByRole('link', { name: `AHU T61-504 real › AHU_SCALE` })
+  const draftLink = usagePanel.getByRole('link', { name: 'AHU_SCALE', exact: true })
+  await expect(sealedLink).toBeVisible()
+  await expect(draftLink).toBeVisible()
+  /* Deep-link phải mang ĐÚNG `objectId`, không phải "POU đầu tiên": một liên
+     kết trỏ gần đúng đưa người vận hành tới một chương trình khác. */
+  await expect(sealedLink).toHaveAttribute('href', new RegExp(PGM04_OBJECT_ID))
+  await expect(draftLink).toHaveAttribute('href', new RegExp(PGM04_OBJECT_ID))
+
+  /* `T61-406` — guard Chèn trên DỮ LIỆU THẬT: gói đang vận hành pin version cũ,
+     nên Chèn phải bị khoá và nói ra đúng version cần migrate. Đây là lần đầu
+     luật ấy được đo trên trạng thái do máy chủ tính, không phải fixture. */
+  await page.getByRole('tab', { name: 'Chi tiết' }).click()
+  const insert = page.getByRole('button', { name: /Chèn vào POU/ })
+  await expect(insert).toBeDisabled()
+  await expect(page.getByTestId('library-insert-reason'))
+    .toHaveAttribute('data-block', 'REQUIRES_MIGRATION')
+  await expect(page.getByTestId('library-insert-reason')).toContainText(publishedVersion)
+
+  /* ZERO MUTATION: cả phiên duyệt PGM-04 ở trên không phát một lệnh ghi nào. */
+  expect(programmingWrites, 'PGM-04 phát lệnh ghi trên đường chỉ đọc').toEqual([])
+  expect([...new Set(serverFailures)].sort(), 'HTTP 5xx trên lane real').toEqual([])
+  expect([...new Set(failedRequests)].sort(), 'request thất bại trên lane real').toEqual([])
+  expect(consoleErrors, 'console.error trên lane real').toEqual([])
+
+  /* Bằng chứng phải ĐỌC ĐƯỢC trong bản ghi lần chạy: lớp evidence, cấu hình và
+     thời lượng. Một dòng "PASS" không nói nó pass trên cái gì là một dòng không
+     dùng được để ký. */
+  console.log(
+    `[T61-504] evidence=HOST/REAL-BACKEND project=${projectID} libraryRevision=${libraryRevisionID}`
+    + ` pinned=${publishedVersion} available=${String(migratingCompatibility.availableVersion)}`
+    + ` duration=${Date.now() - startedAt}ms`
+  )
+})
+
+/**
+ * Bỏ chú thích, giữ lại phần MÃ.
+ *
+ * Chỉ bỏ khối `/* … *\/` và những dòng mà ký tự đầu tiên (sau thụt lề) là `//`
+ * hay `*`. Cố ý KHÔNG bỏ `//` ở giữa dòng: một `'http://…'` hay một regex
+ * `/\/login$/` sẽ làm phép bỏ ấy nuốt nốt phần còn lại của dòng, và một lời gọi
+ * nằm sau đó sẽ biến mất khỏi tầm quét — tức cổng tự nới chính nó.
+ */
+function codeOnly(source: string): string {
+  const withoutBlocks = source.replace(/\/\*[\s\S]*?\*\//g, ' ')
+  return withoutBlocks
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trimStart()
+      return !trimmed.startsWith('//') && !trimmed.startsWith('*')
+    })
+    .join('\n')
+}
+
+/*
+`T61-504` / `ISS-PGM04-17` — "fail test nếu route PGM-04 bị intercept/mocked".
+
+Lane này là lane BACKEND THẬT: giá trị duy nhất của nó là mọi phản hồi đến từ Go
++ Core simulator production. Một `page.route(...)` lọt vào đây không làm test đỏ
+— nó làm test **xanh vì lý do sai**, và không có dấu hiệu nào trên bản ghi lần
+chạy để người ký nhận ra. Một dòng chú thích "spec này tuyệt đối không mock"
+không phải một cổng; nó là một lời hứa.
+
+Case này đọc THẲNG tệp spec và cấm mọi API chặn request của Playwright. Nó bổ
+sung — không thay thế — vế dữ liệu ở case trên: khối hiện trên màn hình mang
+`projectId` do máy chủ sinh trong chính lần chạy ấy, thứ một route dựng sẵn
+không thể biết trước.
+*/
+test('T61-504: lane real-backend không được chặn request ở bất kỳ đâu', async ({}, testInfo) => {
+  const specPath = fileURLToPath(new URL('./programming-real.spec.ts', import.meta.url))
+  const source = codeOnly(readFileSync(specPath, 'utf8'))
+  /* Ghép chuỗi lúc chạy chứ không viết nguyên văn, và quét trên phần MÃ đã bỏ
+     chú thích.
+  
+     Bản đầu viết thẳng `'page' + '.route('` vào mảng và quét cả tệp, nên chính
+     case này làm mình đỏ — hai lần: một vì mảng, một vì đoạn chú thích nói về
+     nó. Bài học không phải "viết khéo hơn": phép quét phải nói về **lời gọi**,
+     không về sự có mặt của một dãy ký tự. Một chú thích nhắc tên API không chặn
+     request nào cả. */
+  const call = '('
+  const forbidden = [
+    `page.route${call}`, `page.routeFromHAR${call}`,
+    `page.routeWebSocket${call}`, `context.route${call}`
+  ]
+  const found = forbidden.filter((api) => source.includes(api))
+  expect(found, 'lane real-backend có API chặn request — bằng chứng không còn là bằng chứng').toEqual([])
+
+  /* Và neo chống-tautology: danh sách trên phải nói về những API CÓ THẬT. Nếu
+     một ngày ai đó gõ sai tên hàm thì `found` vẫn rỗng và case này xanh mà
+     không cấm gì. `playwright.config.ts` của lane MOCK dùng đúng những API ấy,
+     nên nó là vế đối chứng sẵn có. */
+  const mockSpec = codeOnly(
+    readFileSync(fileURLToPath(new URL('./programming.spec.ts', import.meta.url)), 'utf8')
+  )
+  expect(forbidden.some((api) => mockSpec.includes(api)),
+    'không API nào trong danh sách cấm còn tồn tại — danh sách đã lỗi thời').toBe(true)
+
+  await testInfo.attach('t61-504-anti-mock', {
+    body: `evidence=HOST/REAL-BACKEND\nforbiddenApis=${forbidden.join(',')}\nfound=${found.join(',') || '(none)'}`,
+    contentType: 'text/plain'
+  })
 })

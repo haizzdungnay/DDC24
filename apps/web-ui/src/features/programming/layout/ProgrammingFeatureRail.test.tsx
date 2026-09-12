@@ -1,11 +1,12 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import { NAV_GROUPS, NavRail, isProgrammingFocusRoute } from '../../../shared/components/NavRail'
 import {
   PROGRAMMING_FEATURE_RAIL_WIDTH_PX,
+  PROGRAMMING_RAIL_COLLAPSED_KEY,
   ProgrammingFeatureRail,
   programmingRailItems
 } from './ProgrammingFeatureRail'
@@ -88,7 +89,7 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     expect(screen.getByRole('link', { name: 'Runtime & Bảo trì' })).toHaveAttribute('href', '/eng/programming/runtime')
     expect(screen.queryByRole('link', { name: 'Chương trình' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Điểm & Ánh xạ' })).not.toBeInTheDocument()
-    for (const key of ['programs', 'mapping', 'library', 'commission']) {
+    for (const key of ['programs', 'mapping', 'library', 'commission', 'execution']) {
       const item = railItem(key)
       expect(item).toHaveAttribute('aria-disabled', 'true')
       expect(item).toHaveAttribute('title', 'Cần chọn Project trước khi mở mục này')
@@ -104,11 +105,9 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     expect(screen.getByRole('link', { name: 'Kiểm tra & Vận hành' })).toHaveAttribute('href', '/eng/programming/projects/project-1/commission')
     expect(screen.getByRole('link', { name: 'Tổng quan' })).toHaveAttribute('href', '/eng/programming')
     expect(screen.getByRole('link', { name: 'Runtime & Bảo trì' })).toHaveAttribute('href', '/eng/programming/runtime')
-    /* Sáu đích `PGM-01..06` + lối thoát (thương hiệu) = 7 link.
-     * `PLAN-FE-SHELL-062` KHÔNG đổi con số này: mục `Project Settings` bị gỡ
-     * vốn là `<span role="link">`, không phải `<a>`, nên nó chưa từng được
-     * đếm ở đây. Sửa 7 thành 6 theo phản xạ là làm hỏng phép kiểm. */
-    expect(rail().querySelectorAll('a')).toHaveLength(7)
+    expect(screen.getByRole('link', { name: 'Execution' })).toHaveAttribute('href', '/eng/programming/programs?project=project-1&mode=EDIT&tab=execution')
+    /* Bảy đích (PGM-01..06 + Execution) + lối thoát (thương hiệu) = 8 link. */
+    expect(rail().querySelectorAll('a')).toHaveLength(8)
   })
 
   it('mục đang mở đúng route được đánh dấu active (aria-current)', () => {
@@ -143,6 +142,47 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     for (const item of programmingRailItems('project-1')) {
       expect(railItem(item.key).querySelectorAll('svg').length).toBeGreaterThan(0)
     }
+  })
+
+  it('cơ chế thu gọn trên desktop: bấm toggle chuyển sang icon-only (lg:w-16), lưu localStorage và vẫn tương tác được', () => {
+    localStorage.removeItem(PROGRAMMING_RAIL_COLLAPSED_KEY)
+    renderRail('project-1')
+    const aside = screen.getByTestId('programming-feature-rail')
+    const toggle = screen.getByTestId('programming-rail-toggle')
+
+    // Trạng thái mở mặc định
+    expect(aside).toHaveAttribute('data-collapsed', 'false')
+    expect(aside.className).toContain('lg:w-[220px]')
+    expect(screen.getByText('Chương trình')).toBeInTheDocument()
+
+    // Bấm nút thu gọn
+    fireEvent.click(toggle)
+    expect(aside).toHaveAttribute('data-collapsed', 'true')
+    expect(aside.className).toContain('lg:w-16')
+    expect(screen.queryByText('Chương trình')).toBeNull()
+    expect(localStorage.getItem(PROGRAMMING_RAIL_COLLAPSED_KEY)).toBe('true')
+
+    // Các liên kết vẫn đầy đủ và click/tương tác được
+    const link = screen.getByRole('link', { name: 'Chương trình' })
+    expect(link).toHaveAttribute('href', '/eng/programming/programs?project=project-1&mode=EDIT')
+    expect(link).toHaveAttribute('title', 'Chương trình')
+    expect(rail().querySelectorAll('a')).toHaveLength(8)
+
+    // Bấm mở lại
+    fireEvent.click(toggle)
+    expect(aside).toHaveAttribute('data-collapsed', 'false')
+    expect(aside.className).toContain('lg:w-[220px]')
+    expect(screen.getByText('Chương trình')).toBeInTheDocument()
+    expect(localStorage.getItem(PROGRAMMING_RAIL_COLLAPSED_KEY)).toBe('false')
+  })
+
+  it('khôi phục trạng thái thu gọn từ localStorage khi khởi tạo', () => {
+    localStorage.setItem(PROGRAMMING_RAIL_COLLAPSED_KEY, 'true')
+    renderRail('project-1')
+    const aside = screen.getByTestId('programming-feature-rail')
+    expect(aside).toHaveAttribute('data-collapsed', 'true')
+    expect(aside.className).toContain('lg:w-16')
+    expect(screen.queryByText('Chương trình')).toBeNull()
   })
 })
 

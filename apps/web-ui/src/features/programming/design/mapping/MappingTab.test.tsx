@@ -63,16 +63,25 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-describe('MappingTab Phase 1A — regression boundaries', () => {
-  it('không gọi onSave và khóa toàn bộ Map/Remove với admin', async () => {
+/* `ISS-PGM03-05` — Chương trình/Loại Point/Thiết bị/Quyền/Trạng thái nay nằm
+ * trong drawer "Bộ lọc nâng cao" (đóng mặc định) để hàng toolbar chính không
+ * xuống dòng ở 1280×800. Các phép kiểm bộ lọc vì thế phải mở drawer trước —
+ * đúng số thao tác người dùng thật phải làm. */
+function openAdvancedFilters() {
+  fireEvent.click(screen.getByRole('button', { name: /^Bộ lọc nâng cao/ }))
+}
+
+
+describe('MappingTab — regression boundaries', () => {
+  it('khóa Map/Remove khi thiếu context Project', async () => {
     const onSave = vi.fn().mockResolvedValue(true)
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={onSave} /></I18nProvider>)
 
-    const mutationButtons = screen.getAllByRole('button', { name: /^Ánh xạ / })
+    const mutationButtons = screen.getAllByRole('button', { name: /^(Ánh xạ|Đổi ánh xạ) / })
     expect(mutationButtons.length).toBeGreaterThan(0)
     expect(mutationButtons.every((button) => button.hasAttribute('disabled'))).toBe(true)
-    expect(screen.queryByRole('button', { name: /Gỡ ánh xạ/ })).not.toBeInTheDocument()
-    /* Phase 1A khoá Map/Remove, nhưng KHÔNG khoá Published Signal: đó là bề mặt
+    expect(screen.getAllByRole('button', { name: /Gỡ/ }).every((button) => button.hasAttribute('disabled'))).toBe(true)
+    /* Thiếu context Project khoá Map/Remove, nhưng KHÔNG khoá Published Signal: đó là bề mặt
      * authoring riêng của `upsertSignal`/`removeSignal` (`UX-REQ-007`). Khẳng
      * định "không được mount" ở đây từng che một hồi quy thật. */
     expect(await screen.findByRole('heading', { name: /Published Signal/ })).toBeInTheDocument()
@@ -128,6 +137,7 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
   it('lọc Point theo Quyền: READ_WRITE lọt vào cả Đọc lẫn Ghi', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
 
+    openAdvancedFilters()
     fireEvent.change(screen.getByRole('combobox', { name: 'Quyền truy cập Point' }), { target: { value: 'WRITE' } })
     expect(screen.getByRole('button', { name: /VFD Enable/ })).toBeVisible()
     expect(screen.getByRole('button', { name: /Supply Valve/ })).toBeVisible()
@@ -141,6 +151,7 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
 
   it('lọc Point theo Trạng thái Offline mà KHÔNG nuốt STALE', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    openAdvancedFilters()
     fireEvent.change(screen.getByRole('combobox', { name: 'Trạng thái Point' }), { target: { value: 'OFFLINE' } })
 
     expect(screen.getByRole('button', { name: /Return Temp/ })).toBeVisible()
@@ -150,6 +161,7 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
 
   it('lọc Trạng thái Good chỉ giữ đúng chất lượng GOOD', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    openAdvancedFilters()
     fireEvent.change(screen.getByRole('combobox', { name: 'Trạng thái Point' }), { target: { value: 'GOOD' } })
 
     expect(screen.getByRole('button', { name: /Supply Temp/ })).toBeVisible()
@@ -162,6 +174,7 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
    * map trong khi cột phải chỉ còn điểm chưa map. */
   it('lọc Trạng thái Chưa map thu hẹp CẢ danh sách Point lẫn worklist Variable', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    openAdvancedFilters()
     fireEvent.change(screen.getByRole('combobox', { name: 'Trạng thái Point' }), { target: { value: 'UNMAPPED' } })
 
     // `UI-01` đang có binding ⇒ biến mất khỏi cột Point.
@@ -179,7 +192,7 @@ describe('MappingTab Phase 1A — regression boundaries', () => {
   it('viewer chỉ inspect và không có control Map', () => {
     auth.role = 'viewer'
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
-    expect(screen.getByText('Viewer · read-only')).toBeVisible()
-    expect(screen.getAllByRole('button', { name: /^Ánh xạ / }).every((button) => button.hasAttribute('disabled'))).toBe(true)
+    expect(screen.getAllByText('Chỉ đọc').length).toBeGreaterThan(0)
+    expect(screen.queryAllByRole('button', { name: /^(Ánh xạ|Đổi ánh xạ|Gỡ)/ })).toHaveLength(0)
   })
 })

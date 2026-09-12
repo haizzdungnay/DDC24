@@ -75,6 +75,13 @@ function row(equipment?: string): MappingPointRow {
   }
 }
 
+/* `ISS-PGM03-05` — bộ lọc Thiết bị nay nằm trong drawer "Bộ lọc nâng cao"
+ * (đóng mặc định) để hàng toolbar chính không xuống dòng ở 1280×800. Mở drawer
+ * trước là đúng số thao tác người dùng thật phải làm. */
+function openAdvancedFilters() {
+  fireEvent.click(screen.getByRole('button', { name: /^Bộ lọc nâng cao/ }))
+}
+
 describe('bộ lọc thiết bị ở tab Ánh xạ (ISS-PIO-07)', () => {
   // "Chưa gán" là một nhóm CÓ THẬT mà người dùng cần lọc tới, khác hẳn "không
   // lọc" — nên nó là một lựa chọn riêng, không phải chuỗi rỗng.
@@ -100,6 +107,7 @@ describe('bộ lọc thiết bị ở tab Ánh xạ (ISS-PIO-07)', () => {
     expect(screen.getByRole('button', { name: /Supply air temperature/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Return air temperature/ })).toBeInTheDocument()
 
+    openAdvancedFilters()
     fireEvent.change(screen.getByRole('combobox', { name: 'Thiết bị' }), { target: { value: 'AHU-01' } })
 
     expect(screen.getByRole('button', { name: /Supply air temperature/ })).toBeInTheDocument()
@@ -109,6 +117,7 @@ describe('bộ lọc thiết bị ở tab Ánh xạ (ISS-PIO-07)', () => {
 
   it('lọc được nhóm chưa gán', () => {
     render(<I18nProvider><MappingTab document={documentFixture()} saving={false} onSave={vi.fn()} /></I18nProvider>)
+    openAdvancedFilters()
     fireEvent.change(screen.getByRole('combobox', { name: 'Thiết bị' }), { target: { value: UNASSIGNED_EQUIPMENT } })
 
     expect(screen.getByRole('button', { name: /Spare channel/ })).toBeInTheDocument()

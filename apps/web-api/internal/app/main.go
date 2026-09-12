@@ -113,6 +113,8 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming Project service: %w", serviceErr)
 		}
+		pointCatalog := app.programmingPointCatalog()
+		projects.SetPointCatalogProvider(pointCatalog)
 		artifacts, artifactErr := programmingartifact.NewStore(cfg.ProgrammingArtifactDir)
 		if artifactErr != nil {
 			_ = store.Close()
@@ -132,6 +134,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			// này là làm cả nhóm phép kiểm biến mất trong im lặng, nên có test
 			// khẳng định nó luôn được nối.
 			PointFacts: app.programmingPointFacts(),
+			Catalog:    pointCatalog,
 		})
 		if checkErr != nil {
 			_ = store.Close()
@@ -172,9 +175,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		runtimeService, runtimeErr := programmingapplication.NewRuntimeService(programmingapplication.RuntimeServiceOptions{
 			Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
 			Store:        store,
-			Catalog:      app.programmingPointCatalog(),
-			Monitor:      app.programmingPointCatalog(),
-			Overrides:    app.programmingPointCatalog(),
+			Catalog:      pointCatalog,
+			Monitor:      pointCatalog,
+			Overrides:    pointCatalog,
 			ControllerID: cfg.ProgrammingTargetID,
 			CursorSecret: []byte(cfg.JWTSecret),
 			WorkspaceModes: func() programmingapplication.WorkspaceModesView {

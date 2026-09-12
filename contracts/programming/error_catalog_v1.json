@@ -1,7 +1,7 @@
 {
   "$schema": "./error_catalog_v1.schema.json",
   "schemaVersion": 1,
-  "catalogVersion": "1.10.0",
+  "catalogVersion": "1.11.0",
   "unknownFallbackCode": "PRG-ERR-UNAVAILABLE-001",
   "publicErrors": [
     {
@@ -20,7 +20,8 @@
       "allowedArgs": [
         "actual",
         "supportedMajor",
-        "maxBytes"
+        "maxBytes",
+        "detailCode"
       ]
     },
     {
@@ -84,7 +85,8 @@
         "pointId",
         "variable",
         "expected",
-        "actual"
+        "actual",
+        "detailCode"
       ]
     },
     {
@@ -102,7 +104,8 @@
         "pointId",
         "variable",
         "expected",
-        "actual"
+        "actual",
+        "detailCode"
       ]
     },
     {
@@ -347,7 +350,8 @@
       "allowedArgs": [
         "pointId",
         "ownerProgramId",
-        "conflictProgramId"
+        "conflictProgramId",
+        "detailCode"
       ]
     },
     {

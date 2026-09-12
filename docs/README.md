@@ -1,7 +1,7 @@
 # MK-DDC-24 Document Hub
 
 **Trạng thái:** Active
-**Cập nhật:** 2026-08-25 (PGM-02 v2.2 exact-pinned tại `413a043`; `T59-801`/`T59-802` DONE, `T59-803` READY, `T59-804..817` ORDERED; `F-P59-GHOST-POU-001` đã đóng cả quyết định lẫn implementation; `RELEASE_READY` vẫn `NO-GO`)
+**Cập nhật:** 2026-09-11 (đăng ký `docs/CHUONG_YEU_CAU/` vào register và đưa hai brief đầu vào `d.md`/`Yeucau_FE.md` từ thư mục gốc vào đó; không đổi nội dung nghiệp vụ, không đổi trạng thái hồ sơ nào. Trạng thái kỹ thuật giữ nguyên từ 2026-08-25: PGM-02 v2.2 exact-pinned tại `413a043`; `T59-801`/`T59-802` DONE, `T59-803` READY, `T59-804..817` ORDERED; `F-P59-GHOST-POU-001` đã đóng cả quyết định lẫn implementation; `RELEASE_READY` vẫn `NO-GO`)
 
 Đây là cổng vào duy nhất cho hồ sơ Markdown đang hiệu lực. Mỗi chủ đề chỉ có một tài liệu chủ quản; không tạo file Markdown mới nếu nội dung có thể cập nhật vào hồ sơ bên dưới.
 
@@ -9,7 +9,9 @@
 |---|---|
 | [Control](00_governance/CONTROL.md) | quản trị, thẩm quyền, trạng thái và quy tắc thay đổi |
 | [Quy tắc kiểm soát tài liệu](00_governance/DOC_GOVERNANCE.md) | `DOC-GOV-001`: cấu trúc bắt buộc `DD-01..DD-13`, thang `M0..M5`, ba cổng `PLAN_READY`/`IMPLEMENT_READY`/`RELEASE_READY`, harness và quy tắc trung thực |
+| [Quy trình clean code & clean docs](00_governance/CLEAN_CODE_WORKFLOW.md) | `WF-CLEAN-001`: ba vai Manager/Implementer/Reviewer, ma trận quyền, workflow state, nhánh/merge, quality gate, truy xuất Issue→PR→Test→Merge→Close và lịch chạy |
 | [Decision log](00_governance/DECISIONS.md) | quyết định kiến trúc hiện hành, gồm các ADR đã hợp nhất |
+| [Brief yêu cầu đầu vào](CHUONG_YEU_CAU/) | thư mục giữ các brief yêu cầu đầu vào nguyên văn (Programming workspace rebuild, FE redesign, dashboard, scheduler, UX PA3) để truy xuất; **không** phải baseline thi hành, không phải acceptance authority và không chứng minh implementation |
 | [Product](01_product/PRODUCT.md) | định vị và baseline sản phẩm toàn hệ thống |
 | [Product Spec Programming thống nhất](01_product/DDC24_PROGRAMMING_PRODUCT_SPEC.md) | đa Program, POU, Control Library, Published Signal, lifecycle, safety và sáu workspace |
 | [Requirements](02_requirements/REQUIREMENTS.md) | yêu cầu có ID và tiêu chí chấp nhận |
@@ -26,6 +28,7 @@
 | [Programming Decision Register](00_governance/PROGRAMMING_OPEN_DECISIONS.md) | 12 quyết định unified đã khóa; `CR-PROG-PGM02-V22-001` Owner + Architect approved (`AUTH-PROG-2026-08-24-05`), `ADR-053` Accepted và `F-P59-GHOST-POU-001` `CLOSED` (quyết định + implementation); `T59-801`/`T59-802` DONE, `T59-803` READY |
 | [Programming Design Index](02_design/PROGRAMMING_DESIGN_INDEX.md) | cổng vào Product/SRS/Unified DDD/UX/VVP/Trace/Risk/Plan authority |
 | [Programming Unified Detailed Design](02_design/software/PROGRAMMING_UNIFIED_PRODUCT_DETAILED_DESIGN.md) | data/contract/state/algorithm/error/source/test/deploy/rollback đủ DD-01..DD-13 |
+| [Programming FE Handoff PGM-01..06](04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/README_FE_HANDOFF.md) | authority trực quan PNG/HTML theo `AUTH-UX-PROG-2026-09-08-01`; `UX-WEB-PROG-001` giữ requirement/safety/contract companion; asset không phải As-Built/runtime evidence |
 | [PGM-02 Workspace ST/FBD Detailed Design](02_design/software/PROGRAMMING_PGM02_WORKSPACE_DETAILED_DESIGN.md) | Target Candidate chi tiết route/identity/EDIT/LIVE/SIMULATE/worker/NFR/test/rollback; exact pin pending |
 | [Programming Plan 59](03_implementation/59_PROGRAMMING_DOC_TO_CODE_IMPLEMENTATION_PLAN.md) | 53 authority + 16 Candidate card/9 Wave; `T59-801` REVIEW, downstream NO EXECUTION; tách implementation close, target MCU FAKE và release NO-GO |
 | [Prompt tự động Plan59](03_implementation/PROMPT_PLAN59_AUTONOMOUS_EXECUTION.md) | hướng dẫn agent chọn task, implement, test, cập nhật tracker và commit/PR sạch |
@@ -37,6 +40,7 @@
 | [Modbus RTU Point Detailed Design](02_design/software/DDC24_MODBUS_RTU_POINT_DETAILED_DESIGN.md) | design In Review: Bus/Device/Point, typed runtime, quality, atomic apply, write result và HIL gate |
 | [Modbus RTU Point Design Review Proposal](07_records/reviews/MODBUS_RTU_POINT_DESIGN_REVIEW_PROPOSAL.md) | báo cáo phương án, finding P0 và chín quyết định cần reviewer duyệt |
 | [Modbus RTU Product Requirements](01_product/MODBUS_RTU_PRODUCT_REQUIREMENTS.md) | capability, product requirement và 18 use case Modbus RTU |
+| [BACnet Product Requirements](01_product/BACNET_PRODUCT_REQUIREMENTS.md) | `PROD-BACNET-001`: capability, product requirement, 20 use case và ma trận phủ 19 capability MUST của BACnet/IP Rev A |
 | [Modbus RTU Data Model](02_design/software/MODBUS_RTU_DATA_MODEL.md) | mô hình canonical Bus/Device/Point, quality, persistence/revision, import/export |
 | [Modbus RTU UI/UX Design](04_uiux/MODBUS_RTU_UI_UX_DESIGN.md) | năm page Web, wireframe, validation, state và ma trận quyền |
 | [Modbus RTU FE Design](02_design/software/MODBUS_RTU_FE_DESIGN.md) | cấu trúc feature, state model, vòng đời candidate |

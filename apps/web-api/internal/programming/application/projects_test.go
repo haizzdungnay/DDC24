@@ -17,6 +17,21 @@ const (
 	testCorrelationID = "task-prog-204-test-0001"
 )
 
+func supportedMapEligibility() PointMapEligibility {
+	return PointMapEligibility{Input: supported(), Output: supported()}
+}
+
+func standardBindingCatalog() *stubCatalogProvider {
+	return &stubCatalogProvider{entries: []PointCatalogEntry{
+		{Category: "LOCAL", PointID: "UI-01", Name: "UI-01", DataType: "REAL", Direction: "READ", Quality: "GOOD", Mapping: PointMapEligibility{Input: supported(), Output: blocked(MapEligibilityIncompatible, "input-only")}},
+		{Category: "LOCAL", PointID: "DI-01", Name: "DI-01", DataType: "BOOL", Direction: "READ", Quality: "GOOD", Mapping: PointMapEligibility{Input: supported(), Output: blocked(MapEligibilityIncompatible, "input-only")}},
+		{Category: "LOCAL", PointID: "DO-01", Name: "DO-01", DataType: "BOOL", Direction: "READ_WRITE", Writable: true, Quality: "GOOD", Mapping: supportedMapEligibility()},
+		{Category: "VP", PointID: "VP-07", Name: "VP-07", DataType: "BOOL", Direction: "READ_WRITE", Writable: true, Quality: "GOOD", Mapping: supportedMapEligibility()},
+		{Category: "VP", PointID: "VP-09", Name: "VP-09", DataType: "BOOL", Direction: "READ_WRITE", Writable: true, Quality: "GOOD", Mapping: supportedMapEligibility()},
+		{Category: "MB_RTU", DeviceID: e2eDeviceID, PointID: e2ePointID, Name: e2ePointID, DataType: "BOOL", Direction: "READ_WRITE", Writable: true, Quality: "GOOD", ExtIndex: 3, Mapping: supportedMapEligibility()},
+	}}
+}
+
 func openProjectService(t *testing.T) (*ProjectService, *programmingstore.Store) {
 	t.Helper()
 	/* Store.now mặc định time.Now() thật; nếu không ghim khớp với service.now
@@ -36,6 +51,7 @@ func openProjectService(t *testing.T) (*ProjectService, *programmingstore.Store)
 	if err != nil {
 		t.Fatal(err)
 	}
+	service.SetPointCatalogProvider(standardBindingCatalog())
 	ids := []string{
 		"11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222",
 		"33333333-3333-4333-8333-333333333333", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",

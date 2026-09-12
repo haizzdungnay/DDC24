@@ -1,0 +1,81 @@
+# Cổng quy trình clean-code — thi hành WF-CLEAN-001 trên mỗi pull request.
+#
+# Job `workflow-guard` là required status check của `main`. Nó CHẶN merge khi:
+#   - PR không liên kết đúng một Issue bằng `Closes #N`            (N3)
+#   - PR thiếu `Implementer-Run` hoặc bảng Verification bỏ trống   (N3)
+#   - `Manager-Run` của Issue trùng `Implementer-Run` của PR       (N1)
+#   - chưa có nhãn `review:pass` + comment `[REVIEW-VERDICT: PASS]` (N2)
+#   - `Reviewer-Run` trùng `Implementer-Run` hoặc `Manager-Run`    (N2)
+#
+# Vì sao không dùng cổng "Require approvals" của GitHub: cả ba vai agent chạy
+# dưới cùng một tài khoản `Mekong-HCM`, mà GitHub cấm một tài khoản approve PR
+# do chính nó tạo — cổng đó sẽ khoá cứng thay vì tách vai. Chi tiết và điều
+# kiện gỡ bỏ giới hạn: WF-CLEAN-001 §5.1 và §9.
+#
+# `labeled`/`unlabeled` nằm trong trigger để Reviewer gắn `review:pass` là job
+# chạy lại ngay, không phải đợi Implementer push thêm commit.
+
+name: Cổng quy trình clean-code
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+  issue_comment:
+    types: [created, edited]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  # Logic parse của guard tự nó là mã sản phẩm: một regex sai làm cổng xanh giả.
+  # Self-test chạy offline nên không tốn quota API và không phụ thuộc trạng thái PR.
+  #
+  # Job NÀY cố ý chạy bản guard CỦA PR: một PR sửa guard phải chứng minh bản sửa
+  # còn đúng trước khi được merge.
+  guard-selftest:
+    name: Self-test của guard
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kiểm logic parse và ma trận tách vai
+        run: python3 scripts/workflow_guard.py --selftest
+
+  workflow-guard:
+    name: Cổng quy trình clean-code
+    runs-on: ubuntu-22.04
+    needs: guard-selftest
+    # issue_comment bắn cho cả issue lẫn PR; chỉ chạy khi là comment trên PR
+    # (Reviewer post verdict bằng comment, và verdict là đầu vào của cổng N2).
+    if: github.event_name == 'pull_request' || github.event.issue.pull_request
+    steps:
+      # Cổng THI HÀNH chạy bản guard trên nhánh mặc định, KHÔNG phải bản trong
+      # PR. Nếu lấy bản của PR thì một PR chỉ cần sửa `workflow_guard.py` thành
+      # `return 0` là tự mở cổng cho chính nó — cổng tự vô hiệu hoá được thì
+      # không phải cổng. Bản sửa guard vẫn được kiểm, nhưng ở job
+      # `guard-selftest` phía trên.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      # issue_comment không mang payload `pull_request`; dựng lại payload tối
+      # thiểu mà guard cần để một comment verdict cũng kích hoạt được cổng.
+      - name: Chuẩn hoá payload cho sự kiện comment
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+            --jq '{pull_request: .}' > "${RUNNER_TEMP}/pr-event.json"
+          echo "GITHUB_EVENT_PATH=${RUNNER_TEMP}/pr-event.json" >> "$GITHUB_ENV"
+
+      - name: Kiểm truy xuất, tách vai và cổng merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/workflow_guard.py

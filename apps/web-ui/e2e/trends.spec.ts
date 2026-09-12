@@ -27,7 +27,7 @@ test('routes every preset to cache and Custom to database for UI/AO/DO/VP', asyn
 
   await expect.poll(() => requests.some((url) => url.searchParams.get('source') === 'cache')).toBe(true)
   await expect(page.getByRole('alert')).toContainText('History is partial')
-  await expect(page.getByRole('alert')).toContainText('1 history gaps reported')
+  await expect(page.getByRole('alert')).toContainText('1 history gap reported')
 
   const addTrend = page.getByRole('button', { name: 'Add trend' })
   await addTrend.click()

@@ -1,14 +1,14 @@
 # Getting Started — Hướng dẫn cho Developer mới
 ## MK-DDC-24 — "đọc là làm được"
 
-> **Phiên bản:** 1.3 | 2026-07-22 (ADR-016 local limited-operator HMI) · 1.2 | 2026-06-13 · 1.1 | 2026-06-08 · 📘 [README](../01_specs/README.md) · [README](README.md)
+> **Phiên bản:** 1.4 | 2026-09-11 (DD-10: phần kiến trúc Rev A không còn trỏ `services/core` đã bị xoá, hết mâu thuẫn với §5) · 1.3 | 2026-07-22 (ADR-016 local limited-operator HMI) · 1.2 | 2026-06-13 · 1.1 | 2026-06-08 · 📘 [README](../01_specs/README.md) · [README](README.md)
 > **Mục tiêu:** một người mới (kể cả chưa quen dự án) đọc xong là cài được môi trường, build, chạy, và biết bắt đầu sửa code ở đâu.
 
 > ℹ️ **Kiến trúc Rev A (canonical).** Lớp SOM Rev A là **3 process `mkddc-*`** (core C++
 > chạy **component-graph** hôm nay; web **Go**, không Python/Svelte). **Cập nhật
 > 2026-07-23 (ADR-020):** roadmap Rev A.0 bổ sung Program Runtime Mekong-owned, IEC
-> 61131-3-aligned (ST+FBD), đang C0 — không phải code hiện có trong `services/core` hôm
-> nay, xem `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` trước khi bắt đầu làm phần Program.
+> 61131-3-aligned (ST+FBD), đang C0 — không phải code graph engine hiện có trong
+> `apps/core/` hôm nay, xem `PROGRAM_SOM_FW_DRAFT_DESIGN_MK-DDC-24_VI.md` trước khi bắt đầu làm phần Program.
 > Nguồn-chuẩn: [PRODUCT_DEFINITION](../01_specs/PRODUCT_DEFINITION_MK-DDC-24_VI.md),
 > [REVA_SCOPE](../01_specs/REVA_SCOPE_ROADMAP_MK-DDC-24_VI.md), [ADR-004..008](../adr/),
 > [ADR-020](../adr/ADR-020-mekong-owned-iec-aligned-program-runtime.md). Mọi tên
