@@ -1,10 +1,10 @@
 # Quy trình Clean Code & Clean Documentation — MK-DDC-24
 
 **ID:** `WF-CLEAN-001`
-**Phiên bản:** 1.0
+**Phiên bản:** 1.4
 **Trạng thái:** Active
 **Chủ quản:** CTO / Project Engineering
-**Cập nhật:** 2026-09-09 (thiết lập ban đầu ba vai Manager/Implementer/Reviewer, quality gate, lịch chạy)
+**Cập nhật:** 2026-09-11 (`§1` N1 + `§3.2` + `§7`: mẫu finding có ô `Manager-Run` cho lượt triage, ô người mở đổi nhãn thành `Finder-Run`, guard thêm mã chặn `N1-FINDER`; xem bảng Lịch sử sửa đổi cuối hồ sơ để biết đầy đủ các bản 1.1–1.4)
 
 Tài liệu này là **authority duy nhất** cho quy trình dọn dẹp mã nguồn và tài liệu
 DDC-24. Khi nội dung ở `AGENTS.md`, `CLAUDE.md` hoặc skill khác nhau, bản này đúng.

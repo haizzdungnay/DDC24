@@ -352,7 +352,14 @@ run_browser() {
 # chuẩn (`os`, `re`, `sys`, `collections`; `json`, `urllib`), không `import
 # jsonschema`. Bắt chúng cài `requirements-ci.txt` là dựng một phụ thuộc giả —
 # đúng kiểu lỗi đã làm job "MCU Firmware" đỏ ở `476723a`.
+# `--selftest` chạy TRƯỚC `--expect` cùng lý do đã viết cho `run_workflow` phía
+# dưới: bộ bóc dữ liệu của phép kiểm 8 (link) và phép kiểm 9 (metadata vs bảng
+# Lịch sử sửa đổi) là mã quyết định cổng đỏ hay xanh, mà trước đây chỉ chạy khi
+# có người gõ tay `--selftest`. Một cổng mà bộ bóc của nó im lặng đọc sai thì
+# `--expect` vẫn in `PASS` — đúng lớp lỗi mà `#655` phát hiện, chỉ dời sang
+# tầng dưới. Đặt trước để phán quyết `--expect` chỉ được tin khi bộ bóc còn đúng.
 run_docs() {
+  python3 "$repo_root/scripts/docs_iso_harness.py" --selftest
   python3 "$repo_root/scripts/docs_iso_harness.py" --expect
 }
 

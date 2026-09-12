@@ -8,6 +8,85 @@
 
 ## [Unreleased]
 
+### Added — `#655`: phép kiểm 9 canh metadata hồ sơ khớp bảng Lịch sử sửa đổi (2026-09-11)
+
+- Bổ sung 2026-09-12 tại lượt merge, sau khi `#654` đã vào `main`: bảng Lịch sử
+  sửa đổi của `WF-CLEAN-001` nay có dòng `1.4`, nên metadata được nâng từ `1.3`
+  lên `1.4` ngay trong lượt hợp nhất. Mô tả PR đã lường trước và ghi rõ bước này;
+  bỏ qua nó thì chính phép kiểm 9 sẽ đỏ trên `main` từ lượt merge đầu tiên. Đây
+  là lần đầu cổng mới làm đúng việc nó sinh ra để làm — trước đó sai lệch cùng
+  loại lọt im lặng ba lần liên tiếp. Số đo sau khi nâng:
+  `docs_iso_harness.py --expect` exit `0`, `hồ sơ lệch metadata/lịch sử: 0`.
+
+- Phạm vi: `scripts/docs_iso_harness.py` (phép kiểm 9 + selftest), `scripts/verify-project.sh`
+  (`run_docs` chạy thêm `--selftest`), `docs/00_governance/CLEAN_CODE_WORKFLOW.md`
+  (khối metadata), `docs/02_design/software/FBD_EDITOR_DESIGN.md` (khối metadata),
+  `CHANGELOG.md`. **Không** chạm `scripts/workflow_guard.py`, `.github/workflows/**`,
+  `apps/**`, `firmware/**`.
+
+- Triệu chứng: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` khai `**Phiên bản:** 1.0`
+  / `**Cập nhật:** 2026-09-09` ở khối metadata đầu file, trong khi bảng **Lịch sử
+  sửa đổi** cuối chính file đó đã có `1.1` (2026-09-10), `1.2` và `1.3` (cả hai
+  2026-09-11). Hồ sơ tự tuyên bố là "authority duy nhất" cho quy trình lại khai
+  sai phiên bản của chính nó: ai đọc khối đầu file sẽ tin mình đang đọc bản
+  2026-09-09, tức không biết `§6.1a`, `§6.2`, `§8.4`, `§8.5`, `§8.6` đã đổi sau
+  đó. `python3 scripts/docs_iso_harness.py --expect` vẫn exit `0` trên cùng cây.
+
+- Nguyên nhân gốc: **khoảng trống cổng**, không phải ba lần bất cẩn rời rạc. Tám
+  phép kiểm của harness canh trùng mã tài liệu, link chết, anchor, whitespace,
+  code fence và code span — không phép kiểm nào đối chiếu khối metadata với bảng
+  revision history. `DOC-GOV-001` §7.2 bắt "cập nhật revision history kèm version
+  mới", nhưng đó là lời dặn cho người viết; ba phiên liên tiếp cùng bỏ sót một
+  bước chỉ có lời dặn canh giữ là kết cục phải xảy ra.
+
+- Cách sửa: thêm **phép kiểm 9** `meta_revision_drift` vào `docs_iso_harness.py`,
+  quét toàn cây `docs/**/*.md` (không dùng danh sách cứng, nên hồ sơ thêm sau này
+  tự động nằm trong phạm vi). Với mỗi hồ sơ tự khai *cả hai* thứ — dòng
+  `**Phiên bản:**` và một bảng Lịch sử sửa đổi đọc được ít nhất một dòng — cổng
+  đòi `**Phiên bản:**` bằng số phiên bản của dòng **mới nhất**, và `**Cập nhật:**`
+  bằng ngày của chính dòng đó khi hồ sơ có khai trường này. Vi phạm được đưa vào
+  danh sách `hard`, nên cổng đỏ chứ không chỉ lệch ngưỡng.
+
+  Bốn quyết định của bộ bóc, mỗi cái đều do một hình dạng có thật trong `docs/`:
+  (a) "mới nhất" lấy theo **số phiên bản lớn nhất**, không lấy dòng cuối bảng —
+  bảng của `WF-CLEAN-001` xếp 1.0, 1.3, 1.2, 1.1; so theo tuple số nguyên nên
+  `1.24` của `docs/07_records/reviews/README.md` lớn hơn `1.3`, đúng ý nghĩa thứ
+  tự phát hành. (b) Tiêu đề bảng so khớp **chính xác** sau khi bỏ tiền tố đánh
+  số, vì `docs/` có `## 6. Lịch sử sửa đổi` lẫn `## Revision history`, mà khớp
+  lỏng sẽ đọc nhầm `## 7. Persistence, revision và migration` rồi báo động giả.
+  (c) `**Ngày:**` cố ý **không** bị kéo vào phép so: đó là ngày phát hành bản
+  gốc, khác nghĩa `**Cập nhật:**`; gộp hai trường sẽ làm cả bộ hồ sơ Modbus đỏ
+  oan. (d) Dòng có hậu tố như `1.5-candidate` (`DOC-CTRL-001`) bị bỏ qua — bản
+  candidate không phải mốc mà metadata phải khai.
+
+- Hai hồ sơ được đồng bộ metadata theo đúng dòng lịch sử sẵn có, **không** thêm
+  dòng revision mới: đây là sửa sai sót ghi chép, không phải thay đổi nội dung,
+  nên cấp một số phiên bản mới sẽ là khai một thay đổi không tồn tại.
+  `CLEAN_CODE_WORKFLOW.md` `1.0`/`2026-09-09` → `1.3`/`2026-09-11`;
+  `FBD_EDITOR_DESIGN.md` `1.0` → `1.1` (dòng `1.1` ngày 2026-08-15 đã có sẵn
+  trong bảng từ trước). Hồ sơ thứ hai nằm ngoài mô tả của `#655` nhưng phải sửa
+  trong cùng lượt: một cổng `hard` không thể bật khi cây tài liệu còn vi phạm nó.
+
+- Selftest: `docs_iso_harness.py --selftest` nay kiểm thêm chín ca cho bộ bóc của
+  phép kiểm 9, và `scripts/verify-project.sh --component docs` chạy `--selftest`
+  **trước** `--expect`. Lý do giống hệt `#593`: một bộ bóc đọc sai trong im lặng
+  vẫn để `--expect` in `PASS`, tức chính lớp lỗi `#655` vừa phát hiện, chỉ dời
+  xuống một tầng.
+
+- Verification (đo tại nhánh `claude/issue-655-doc-metadata-revision-gate`):
+
+  | Lệnh | Kết quả | Exit |
+  |---|---|---|
+  | `python3 scripts/docs_iso_harness.py --selftest` | `selftest phép kiểm 8: 10/10 đạt`, `selftest phép kiểm 9: 9/9 đạt` | `0` |
+  | `python3 scripts/docs_iso_harness.py --expect` (TRƯỚC khi sửa hai hồ sơ) | `FAIL — vi phạm bắt buộc: meta_revision_drift=3` | `1` |
+  | `python3 scripts/docs_iso_harness.py --expect` (SAU khi sửa) | `PASS — mọi phép kiểm bắt buộc đạt`, `EXPECT: khớp toàn bộ ngưỡng`, `hồ sơ lệch metadata/lịch sử: 0` | `0` |
+  | `bash scripts/verify-project.sh --component docs` | selftest + `PASS` | `0` |
+  | `python3 scripts/workflow_guard.py --selftest` | `48/48 PASS` | `0` |
+  | Kiểm đột biến: đổi `top = max(rows)` → `rows[-1]` trên bản sao | selftest `8/9 đạt`, báo đúng ca "bảng không xếp thứ tự" | `1` |
+
+  Lớp bằng chứng: **HOST**. Không chạy build, test, trình duyệt, TARGET hay HIL —
+  đây là cổng tài liệu.
+
 ### Fixed — `#653`: mẫu finding không có ô `Manager-Run`, khiến một lớp Issue không bao giờ merge được (2026-09-11)
 
 - Phạm vi: `.github/ISSUE_TEMPLATE/03-finding.yml`, `scripts/workflow_guard.py`,
