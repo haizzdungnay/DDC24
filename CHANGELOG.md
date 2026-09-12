@@ -10,6 +10,14 @@
 
 ### Added — `#655`: phép kiểm 9 canh metadata hồ sơ khớp bảng Lịch sử sửa đổi (2026-09-11)
 
+- Bổ sung 2026-09-12 tại lượt merge, sau khi `#654` đã vào `main`: bảng Lịch sử
+  sửa đổi của `WF-CLEAN-001` nay có dòng `1.4`, nên metadata được nâng từ `1.3`
+  lên `1.4` ngay trong lượt hợp nhất. Mô tả PR đã lường trước và ghi rõ bước này;
+  bỏ qua nó thì chính phép kiểm 9 sẽ đỏ trên `main` từ lượt merge đầu tiên. Đây
+  là lần đầu cổng mới làm đúng việc nó sinh ra để làm — trước đó sai lệch cùng
+  loại lọt im lặng ba lần liên tiếp. Số đo sau khi nâng:
+  `docs_iso_harness.py --expect` exit `0`, `hồ sơ lệch metadata/lịch sử: 0`.
+
 - Phạm vi: `scripts/docs_iso_harness.py` (phép kiểm 9 + selftest), `scripts/verify-project.sh`
   (`run_docs` chạy thêm `--selftest`), `docs/00_governance/CLEAN_CODE_WORKFLOW.md`
   (khối metadata), `docs/02_design/software/FBD_EDITOR_DESIGN.md` (khối metadata),
