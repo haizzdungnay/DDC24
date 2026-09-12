@@ -38,7 +38,7 @@
   "pins": {
     "productProfileSha256": "d2866c41065e2a51fba88460068df453d63b6e95b30879eba292f4b667b49ede",
     "libraryRegistrySha256": "e79442f2cd781084fd6a0e34b3f7028a51d13b53af945202e0f8e5cc7fbf91b0",
-    "openapiSha256": "29d316c42f374f15289296f405ef3fa1d1826d372ee45e51427c9375d9c68516",
+    "openapiSha256": "9254c8ceccf87e75fdbed8696dcadfe033dde8dd5612365beee297be5ecc8e43",
     "programmingIpcSha256": "2284771450c531485b1acd5fedbaf85c9640b2795dbe9b7fc106302f17f48917"
   },
   "route": {
