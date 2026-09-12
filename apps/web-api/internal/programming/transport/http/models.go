@@ -93,6 +93,12 @@ type RestoreRequest struct {
 	RevisionID               string  `json:"revisionId"`
 	ExpectedActiveRevisionID *string `json:"expectedActiveRevisionId"`
 	Reason                   string  `json:"reason"`
+	// Acknowledgements — `ISS-PIO-38` (#492). RESTORE chịu cùng phép kiểm slot
+	// Modbus như COMMISSION; khi bố cục slot đã lệch, đây là đường thoát TƯỜNG
+	// MINH: người vận hành gửi token `modbus-slot-mismatch-override` để xác nhận
+	// đã đọc cảnh báo lệch slot. Optional — RESTORE không lệch slot thì không
+	// cần, và một xác nhận khống bị server từ chối.
+	Acknowledgements []string `json:"acknowledgements,omitempty"`
 }
 
 // RetainResetRequest (WP-12). `ExpectedActiveRevisionID` bắt buộc (không như

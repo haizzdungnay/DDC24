@@ -205,9 +205,27 @@ export function FbdCanvas({
   }, [geometry.nodes])
 
   const width = Math.max(geometry.width, containerWidth ? Math.floor(containerWidth / (viewport.scale || 1)) : 320, 320)
+  /* CHIỀU CAO MẶT VẼ KHÔNG ĐƯỢC ĐỌC LẠI CHIỀU CAO DO CHÍNH NÓ TẠO RA.
+   *
+   * `containerHeight` là số `ResizeObserver` đo trên khay cuộn — mà mặt vẽ này
+   * chính là nội dung của khay đó. Khi khay bị khung nhìn chặn (bố cục desktop
+   * có chuỗi `min-h-0` đầy đủ) thì hai số độc lập nhau và công thức cũ chạy
+   * đúng. Nhưng ở BẤT KỲ bố cục nào khay cao theo nội dung — mobile, và bất kỳ
+   * lần nào một mắt `min-h-0` trong chuỗi cha bị đứt — thì nó thành vòng tự
+   * nuôi: mặt vẽ cao `containerHeight + 800` ⇒ khay cao thêm 800 ⇒ vòng sau mặt
+   * vẽ lại cao thêm 800, đo được đúng +800 px MỖI khung hình và không bao giờ
+   * hội tụ. Trang không "giật" thấy được, nhưng mọi thao tác chờ bố cục đứng
+   * yên đều treo — `TC-FBD-NAV-001`/`TC-FBD-DIAG-001` chết vì hết 60 s ở
+   * "element is not stable", trên đúng lane mobile không có chuỗi chặn ấy.
+   *
+   * Ý đồ của số hạng này là "cho pan quá nội dung chừng một màn hình", nên đại
+   * lượng đúng để lấy là CHIỀU CAO NHÌN THẤY, không phải chiều cao khay. Kẹp
+   * bằng khung nhìn khiến công thức không còn tự tham chiếu: khi khay bị chặn,
+   * giá trị y hệt trước; khi khay không bị chặn, vòng lặp mất hẳn. */
+  const visibleHeight = Math.min(containerHeight || window.innerHeight, window.innerHeight)
   const height = Math.max(
     geometry.height + 600,
-    Math.floor(containerHeight / (viewport.scale || 1)) + 800,
+    Math.floor(visibleHeight / (viewport.scale || 1)) + 800,
     1600,
   )
 
