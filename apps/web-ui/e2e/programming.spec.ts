@@ -1553,6 +1553,16 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
   })
 
   test('TC-FBD-NAV-001: Mini Map click/kéo/phím chính xác và không mutate trên Chrome', async ({ page }, testInfo) => {
+    /* Ca này DỰNG tài liệu để có gì mà điều hướng: `createPou` rồi 25 lần
+     * `Insert`. Cả hai là mutation, mà dưới 768 px PGM-02 khoá read-only
+     * (`T59-802`/DDD §7.5) — nên ở lane mobile nó đứng chờ nút `Mới` vốn cố ý
+     * không tồn tại, tới hết 60 giây. Đó là một cổng đỏ vì ĐÒI SAI thứ thiết
+     * kế vừa cấm, không phải vì Mini Map hỏng. Cùng chốt chặn mà mọi ca soạn
+     * thảo khác trong tệp này đã mang. */
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
+      'Mini Map cần dựng tài liệu; màn hẹp read-only không có đường ghi'
+    )
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     const failures = observeBrowserFailures(page)
