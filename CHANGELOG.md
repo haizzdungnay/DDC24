@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### Fixed — `#658`: e2e Programming lấy breakpoint authoring từ nguồn chân lý thay vì bản chép tay (2026-09-12)
+
+- Phạm vi: `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`. **Không** chạm
+  `apps/web-ui/src/features/programming/layout/useProgrammingViewport.ts` (giá trị
+  `768` và tên `PROGRAMMING_AUTHORING_MIN_WIDTH_PX` giữ nguyên), không chạm
+  `playwright.config.ts`, không đổi tên/số lượng project trong ma trận lane.
+
+- Triệu chứng: breakpoint authoring có **hai** định nghĩa —
+  `useProgrammingViewport.ts:3` (`export const PROGRAMMING_AUTHORING_MIN_WIDTH_PX = 768`,
+  nguồn chân lý dựng media query và quyết định lane mobile/desktop) và
+  `programming.spec.ts:25` (`const AUTHORING_MIN_WIDTH_PX = 768`, bản chép tay) —
+  mà không cổng nào buộc chúng bằng nhau.
+
+- Nguyên nhân gốc: bản chép tay được dùng 20 lần để **chọn lane bằng `test.skip()`**.
+  Đổi breakpoint ở src thì e2e vẫn so với hằng số cũ, nên lane cần phủ bị `skip`
+  còn lane không còn tồn tại thì vẫn chạy. Playwright in `skipped`, không in
+  `failed` — bộ e2e báo xanh cho một ma trận lane đã hết đúng. Đây là fail-open,
+  không chỉ là trùng lặp; cùng lớp drift với `#634`. Không có lý do kỹ thuật nào
+  để chép tay: spec đã import trực tiếp từ `src/` ở bốn chỗ (`:5`, `:6`, `:9`, `:10`)
+  và hằng số đã có `export`.
+
+- Cách sửa: xoá dòng `:25`, import `PROGRAMMING_AUTHORING_MIN_WIDTH_PX` từ
+  `../src/features/programming/layout/useProgrammingViewport` theo đúng khuôn
+  import sẵn có, và đổi 20 chỗ tham chiếu sang đúng tên đã export. Không đổi điều
+  kiện lane nào, không đổi hành vi sản phẩm — PR chỉ chạm mã test. Toàn repo còn
+  đúng **một** điểm định nghĩa.
+
+- Số đo (đo tại máy 2026-09-12; CI `NOT_RUN` theo `#414`):
+
+  | Cổng | Kết quả |
+  |---|---|
+  | `rg -n 'AUTHORING_MIN_WIDTH_PX\s*=' apps/web-ui/e2e` | rỗng (exit 1) |
+  | `rg -n 'AUTHORING_MIN_WIDTH_PX\s*=' apps/web-ui` | đúng 1 dòng, ở `src/` |
+  | `rg -c 'AUTHORING_MIN_WIDTH_PX' .../programming.spec.ts` | `21` trước và sau |
+  | `npx tsc --noEmit` | PASS (exit 0) |
+  | `npm run lint` | PASS (exit 0) |
+  | `npx vitest --run --environment jsdom src` | PASS — 246 file, 3133 test |
+  | `npx playwright test e2e/programming.spec.ts` | 102 passed / 28 skipped / 8 failed — **giống hệt baseline trên `main`**, cùng tập test đỏ |
+
+- Ghi chú kiểm chứng: 8 test đỏ nói trên đã đỏ sẵn trên `origin/main` (đo trước
+  khi sửa dòng nào) và không liên quan tới thay đổi này. Bằng chứng cổng đã đóng:
+  tạm đặt src `= 1400` thì lane desktop (1280 px) lật từ 2 passed/1 skipped sang
+  1 passed/2 skipped; đặt lại `768` thì lật về. Giá trị `840` mà Issue đề xuất
+  không lật được gì vì nó không cắt qua khổ nào của hai project (1280 và 412) —
+  chi tiết trong PR.
+
+
 ### Added — `#593`: `verify-project.sh` có đường chạy cho cổng tài liệu và selftest của cổng tách vai (2026-09-11)
 
 - Phạm vi: `scripts/verify-project.sh`, `docs/00_governance/CLEAN_CODE_WORKFLOW.md`
