@@ -1161,10 +1161,10 @@ describe('DesignWorkspacePage — nối runtime/POU T59-506', () => {
     expect(screen.getByTestId('programming-mobile-read-only')).toHaveTextContent('Màn hình nhỏ — chỉ hỗ trợ xem sơ đồ')
     expect(within(editor).getByText('Chỉ đọc')).toBeInTheDocument()
     expect(within(editor).getByRole('button', { name: 'Thêm khối' })).toBeDisabled()
-    expect(within(editor).getByText('0/256 block')).toBeInTheDocument()
+    expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('0/256')
 
     fireEvent.keyDown(editor, { key: 'Insert' })
-    expect(within(editor).getByText('0/256 block')).toBeInTheDocument()
+    expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('0/256')
     expect(client.request.mock.calls.some(([operationId]) => operationId === 'updateProgrammingDraft')).toBe(false)
   })
 })

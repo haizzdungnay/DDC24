@@ -1,5 +1,8 @@
-import { ArrowDown, ArrowUp, BoxSelect, Plus, Redo2, RotateCcw, Trash2, Undo2 } from 'lucide-react'
-import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react'
+import {
+  AlignHorizontalJustifyStart, AlignVerticalJustifyStart, ArrowDown, ArrowUp, BoxSelect,
+  CircleDot, LayoutGrid, Plus, Redo2, RotateCcw, SquareDashed, Trash2, Undo2,
+} from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '../../../shared/components/Button'
 import { useI18n } from '../../../shared/i18n'
@@ -44,6 +47,7 @@ import { userPouPaletteEntry, type UserPouInterface } from './userPou'
 import { type FbdNodeEditorChange, type FbdNodeEditorTarget } from './nodeEditor'
 import type { FbdNetworkViewPreference, FbdSnapSizePreference, FbdWireStylePreference } from './fbdPreferences'
 import type { FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
+import type { FbdRuntimeOverlay } from './runtimeOverlay'
 
 export interface StructuredFbdEditorProps {
   /**
@@ -76,6 +80,19 @@ export interface StructuredFbdEditorProps {
   snapEnabled?: boolean
   snapSize?: FbdSnapSizePreference
   showInlineMinimap?: boolean
+  /** Giá trị runtime chiếu lên canvas (LIVE/SIMULATE); `null` ở EDIT. */
+  runtime?: FbdRuntimeOverlay | null
+  /**
+   * Điều khiển của tầng gọi, ghim vào CUỐI thanh công cụ canvas.
+   *
+   * Dùng cho những tuỳ chọn mà editor không sở hữu state (lưới, bám lưới, kiểu
+   * dây, giao diện FBD, khung nhìn — tất cả thuộc `FbdEditorPane`). Trước đây
+   * chúng nằm ở một dải riêng dưới canvas, tức một hàng 37 px lấy khỏi chỗ vẽ ở
+   * mọi lúc, kể cả khi không ai đụng tới chúng. Gom vào một nút bánh răng của
+   * thanh công cụ giữ nguyên quyền sở hữu state mà trả lại chiều cao ấy cho
+   * canvas — đúng bố cục của ảnh chuẩn `PGM-02B`.
+   */
+  toolbarExtras?: ReactNode
   onBridgeChange?: (bridge: FbdCanvasBridge | null) => void
 }
 
@@ -159,6 +176,8 @@ export function StructuredFbdEditor({
   snapEnabled = true,
   snapSize = 8,
   showInlineMinimap = true,
+  runtime,
+  toolbarExtras,
   onBridgeChange,
 }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
@@ -334,6 +353,13 @@ export function StructuredFbdEditor({
           nodeId: node.id,
           instance: change.instance,
           retained: change.retained,
+        })
+      } else if (change.kind === 'parameters') {
+        dispatch({
+          type: 'SET_NODE_PARAMETERS',
+          networkId,
+          nodeId: node.id,
+          parameters: change.parameters,
         })
       } else if (change.kind === 'attributes') {
         dispatch({
@@ -673,7 +699,10 @@ export function StructuredFbdEditor({
     >
       <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-[var(--c-border)] pb-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <h2 className="text-xs font-semibold">FBD · {state.document.name}</h2>
+          {/* Tên POU đã nằm trên thanh tab ngay phía trên, nên hiện nó lần
+              thứ hai chỉ lấy mất chiều ngang của thanh công cụ và đẩy nó xuống
+              thành ba hàng. Giữ làm mốc trợ năng, bỏ khỏi thị giác. */}
+          <h2 className="sr-only">FBD · {state.document.name}</h2>
           <p id={keyboardHelpId} className="sr-only">
             {pick(
               'Chọn block/POU trong palette; Insert thêm lựa chọn đó · ↑/↓ chọn port · Enter nối · Alt+↑/↓ đổi thứ tự · Delete xóa · Ctrl+Z/Y hoàn tác/làm lại.',
@@ -681,11 +710,26 @@ export function StructuredFbdEditor({
             )}
           </p>
           <div className="flex flex-wrap items-center gap-1.5 text-xs" aria-label={pick('Trạng thái FBD', 'FBD status')}>
-            <span className="rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]">
-              {state.document.networks.reduce((sum, item) => sum + item.nodes.length, 0)}/256 block
+            {/* Số đếm giữ nguyên ý nghĩa nhưng bỏ chữ `block`/`wire`: hai từ
+                ấy chiếm ~90 px của một thanh công cụ vốn đã phải xuống ba hàng,
+                trong khi biểu tượng + `title` nói đúng cùng một điều. */}
+            <span
+              data-testid="fbd-block-count"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]"
+              title={pick('Số khối trên tổng số khối tối đa', 'Blocks used of the maximum')}
+            >
+              <SquareDashed className="h-3 w-3" aria-hidden="true" />
+              <span className="sr-only">{pick('Khối', 'Blocks')}</span>
+              {state.document.networks.reduce((sum, item) => sum + item.nodes.length, 0)}/256
             </span>
-            <span className="rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]">
-              {state.document.networks.reduce((sum, item) => sum + item.wires.length, 0)}/512 wire
+            <span
+              data-testid="fbd-wire-count"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--c-border)] px-1.5 py-0.5 text-[11px]"
+              title={pick('Số dây nối trên tổng số dây tối đa', 'Wires used of the maximum')}
+            >
+              <CircleDot className="h-3 w-3" aria-hidden="true" />
+              <span className="sr-only">{pick('Dây nối', 'Wires')}</span>
+              {state.document.networks.reduce((sum, item) => sum + item.wires.length, 0)}/512
             </span>
             <span className={issues.length ? 'rounded-full bg-[var(--c-warn-bg)] px-1.5 py-0.5 text-[11px] text-[var(--c-warn-fg)]' : 'rounded-full bg-[var(--c-good-bg)] px-1.5 py-0.5 text-[11px] text-[var(--c-good-fg)]'}>
               {issues.length ? pick(`${issues.length} lỗi Draft`, `${issues.length} Draft ${issues.length === 1 ? 'issue' : 'issues'}`) : pick('Canonical hợp lệ', 'Canonical valid')}
@@ -697,7 +741,7 @@ export function StructuredFbdEditor({
           <label className="flex items-center gap-1 text-xs">
             {pick('Khối', 'Block')}
             <select
-              className={inputClass}
+              className={`${inputClass} max-w-[8.5rem]`}
               value={paletteTypeRef}
               disabled={!canEdit || !selectedNetworkId}
               onChange={(event) => setPaletteTypeRef(event.target.value)}
@@ -733,18 +777,23 @@ export function StructuredFbdEditor({
               )}
             </label>
           )}
-          <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId || !selectedPaletteEntry} onClick={addPaletteNode}>
-            {pick('Thêm khối', 'Add block')}
-          </Button>
+          <Button size="sm" icon={<Plus className="h-4 w-4" />} disabled={!canEdit || !selectedNetworkId || !selectedPaletteEntry} onClick={addPaletteNode}
+            aria-label={pick('Thêm khối', 'Add block')} title={pick('Thêm khối', 'Add block')} />
           <Button size="sm" variant={creatingKind === 'INPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+            className="px-2 font-mono"
+            title={pick('Thêm biến vào (INPUT)', 'Add an input variable')}
             onClick={() => { setCreatingKind(creatingKind === 'INPUT' ? null : 'INPUT'); setCreateError(null) }}>
             {pick('Input', 'Input')}
           </Button>
           <Button size="sm" variant={creatingKind === 'OUTPUT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+            className="px-2 font-mono"
+            title={pick('Thêm biến ra (OUTPUT)', 'Add an output variable')}
             onClick={() => { setCreatingKind(creatingKind === 'OUTPUT' ? null : 'OUTPUT'); setCreateError(null) }}>
             {pick('Output', 'Output')}
           </Button>
           <Button size="sm" variant={creatingKind === 'CONSTANT' ? 'primary' : 'secondary'} disabled={!canEdit || !selectedNetworkId}
+            className="px-2 font-mono"
+            title={pick('Thêm hằng số', 'Add a constant')}
             onClick={() => {
               setCreatingKind(creatingKind === 'CONSTANT' ? null : 'CONSTANT')
               setCreateError(null)
@@ -757,18 +806,14 @@ export function StructuredFbdEditor({
           <Button size="sm" icon={<Trash2 className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('DELETE_SELECTION')} aria-label={pick('Xóa vùng chọn', 'Delete selection')} />
           <Button size="sm" icon={<Undo2 className="h-4 w-4" />} disabled={!canEdit || state.past.length === 0} onClick={() => dispatchCommand('UNDO')} aria-label={pick('Hoàn tác', 'Undo')} />
           <Button size="sm" icon={<Redo2 className="h-4 w-4" />} disabled={!canEdit || state.future.length === 0} onClick={() => dispatchCommand('REDO')} aria-label={pick('Làm lại', 'Redo')} />
-          <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} disabled={!state.connectionFromPortId} onClick={() => dispatchCommand('CANCEL_CONNECTION')}>
-            {pick('Hủy nối', 'Cancel wire')}
-          </Button>
-          <Button size="sm" disabled={!canEdit || !activeNetwork} onClick={previewAutoLayout}>
-            {pick('Tự sắp xếp', 'Auto layout')}
-          </Button>
-          <Button size="sm" variant="secondary" disabled={!canEdit || !activeNetwork} onClick={() => previewAlignment('LEFT')}>
-            {pick('Căn trái', 'Align left')}
-          </Button>
-          <Button size="sm" variant="secondary" disabled={!canEdit || !activeNetwork} onClick={() => previewAlignment('TOP')}>
-            {pick('Căn trên', 'Align top')}
-          </Button>
+          <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} disabled={!state.connectionFromPortId} onClick={() => dispatchCommand('CANCEL_CONNECTION')}
+            aria-label={pick('Hủy nối', 'Cancel wire')} title={pick('Hủy nối', 'Cancel wire')} />
+          <Button size="sm" icon={<LayoutGrid className="h-4 w-4" />} disabled={!canEdit || !activeNetwork} onClick={previewAutoLayout}
+            aria-label={pick('Tự sắp xếp', 'Auto layout')} title={pick('Tự sắp xếp', 'Auto layout')} />
+          <Button size="sm" variant="secondary" icon={<AlignHorizontalJustifyStart className="h-4 w-4" />} disabled={!canEdit || !activeNetwork} onClick={() => previewAlignment('LEFT')}
+            aria-label={pick('Căn trái', 'Align left')} title={pick('Căn trái', 'Align left')} />
+          <Button size="sm" variant="secondary" icon={<AlignVerticalJustifyStart className="h-4 w-4" />} disabled={!canEdit || !activeNetwork} onClick={() => previewAlignment('TOP')}
+            aria-label={pick('Căn trên', 'Align top')} title={pick('Căn trên', 'Align top')} />
           {layoutPreview && (
             <>
               <Button size="sm" disabled={!canEdit} onClick={applyLayoutPreview}>{pick('Áp dụng bố cục', 'Apply layout')}</Button>
@@ -794,6 +839,7 @@ export function StructuredFbdEditor({
             <BoxSelect className="h-4 w-4" aria-hidden="true" />
             {pick('Chọn vùng', 'Marquee select')}
           </button>
+          {toolbarExtras}
         </div>
         {selectedPaletteEntry?.warning && (
           <p className="basis-full rounded bg-[var(--c-warn-bg)] px-2 py-1 text-xs text-[var(--c-warn-fg)]">
@@ -921,6 +967,7 @@ export function StructuredFbdEditor({
               onCancelPlacement={() => setPendingPlacement(null)}
               onCommitPlacement={() => setPendingPlacement(null)}
               showInlineMinimap={showInlineMinimap}
+              runtime={runtime}
               onBridgeChange={onBridgeChange}
             />
           </article>

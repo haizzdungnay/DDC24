@@ -90,10 +90,73 @@ export function useProgrammingInspectorMode(): ProgrammingInspectorMode {
 /**
  * `T9-02` — ngưỡng mà khay đáy đủ chỗ cho CỘT Mini Map.
  *
- * Cùng con số với `min-[1440px]:grid-cols-[…_458px]` trong `ProgrammingWorkbench`:
+ * Cùng con số với `wide:grid-cols-[…_458px]` trong `ProgrammingWorkbench`:
  * khai một chỗ để lưới và quyết định runtime không trôi khỏi nhau. Dưới ngưỡng
  * này khay chỉ có hai cột (hoặc xếp chồng), nên KHÔNG có Mini Map trong khay.
  */
+/**
+ * Ngưỡng khay đáy chuyển từ XẾP CHỒNG sang HAI CỘT — bằng đúng `lg` của Tailwind.
+ *
+ * Khai ở đây vì từ `2026-09-13` số cột của khay do JavaScript quyết, không do
+ * utility quyết: xem chú thích dài trong `ProgrammingWorkbench`. Hằng số và
+ * breakpoint phải bằng nhau, nên chúng nằm cạnh nhau và cùng một chỗ để sửa.
+ */
+export const PROGRAMMING_WORKBENCH_COLUMNS_MIN_WIDTH_PX = 1024
+
+/**
+ * Hook nền cho mọi quyết định bố cục theo bề rộng của trang Lập trình.
+ *
+ * VÌ SAO KHÔNG DÙNG BIẾN THỂ TAILWIND CHO NHỮNG QUYẾT ĐỊNH NÀY
+ *
+ * Tailwind v4 gom mọi biến thể breakpoint không-mặc-định (`min-[…]` arbitrary
+ * và cả breakpoint tự khai trong `@theme`) vào một cụm đứng TRƯỚC
+ * `sm/md/lg/xl`. Khi hai utility cùng khớp ở khổ rộng, bản `md:`/`lg:` đứng sau
+ * sẽ thắng — ngược hẳn ý định "từ 1440 px thì đổi". Đo được 2026-09-13: cụm tự
+ * khai ở thứ tự 765, `sm` 779, `md` 813, `lg` 848.
+ *
+ * Nên: mọi ngưỡng KHÔNG nằm trong thang mặc định đều đi qua hook này, và kết
+ * quả được áp bằng style nội tuyến hoặc bằng hai nhánh class loại trừ nhau.
+ * Không rule nào chen vào trước một style nội tuyến được.
+ */
+export function useMinWidth(minWidthPx: number): boolean {
+  const query = `(min-width: ${minWidthPx}px)`
+  const read = () => {
+    if (typeof window === 'undefined') return false
+    if (typeof window.matchMedia === 'function') return window.matchMedia(query).matches
+    return window.innerWidth >= minWidthPx
+  }
+  const [matches, setMatches] = useState(read)
+
+  useEffect(() => {
+    if (typeof window.matchMedia === 'function') {
+      const list = window.matchMedia(query)
+      const sync = (event: MediaQueryListEvent) => setMatches(event.matches)
+      setMatches(list.matches)
+      list.addEventListener('change', sync)
+      return () => list.removeEventListener('change', sync)
+    }
+    const sync = () => setMatches(window.innerWidth >= minWidthPx)
+    sync()
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+    // `query` suy ra từ `minWidthPx`, nên một phụ thuộc là đủ và không tạo
+    // vòng đăng ký lại thừa mỗi render.
+  }, [minWidthPx, query])
+
+  return matches
+}
+
+/**
+ * `TC-FBD-RESP-001` — ngưỡng mà shell FBD dựng đủ BỐN cột
+ * (Explorer │ Canvas │ Thư viện nhanh │ Inspector).
+ *
+ * Dưới ngưỡng này Inspector là KHAY NỔI chứ không phải cột, và Thư viện nhanh
+ * không được dựng. Đây là ngưỡng của hợp đồng bố cục, không phải lựa chọn thẩm
+ * mỹ: hạ nó xuống `1024` làm hai khay hiện thường trực ở hai mốc mà hợp đồng
+ * nói phải đóng.
+ */
+export const PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX = 1440
+
 export const PROGRAMMING_WORKBENCH_MINIMAP_MIN_WIDTH_PX = 1440
 const WORKBENCH_MINIMAP_QUERY = `(min-width: ${PROGRAMMING_WORKBENCH_MINIMAP_MIN_WIDTH_PX}px)`
 

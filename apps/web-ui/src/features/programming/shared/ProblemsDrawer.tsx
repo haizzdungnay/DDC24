@@ -277,7 +277,7 @@ export function ProblemsDrawer({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="hidden min-h-9 items-center gap-1 rounded border border-[var(--c-border)] px-2 py-1 text-xs text-[var(--c-text)] hover:bg-[var(--c-surface-2)] min-[1280px]:flex"
+            className="hidden min-h-9 items-center gap-1 rounded border border-[var(--c-border)] px-2 py-1 text-xs text-[var(--c-text)] hover:bg-[var(--c-surface-2)] xl:flex"
             aria-controls="programming-problems-panel"
             aria-expanded={!collapsed}
             onClick={() => setCollapsed((current) => !current)}
@@ -285,7 +285,7 @@ export function ProblemsDrawer({
             {collapsed ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
             {collapsed ? pick('Mở rộng', 'Expand') : pick('Thu gọn', 'Collapse')}
           </button>
-          <button ref={triggerRef} type="button" className="min-h-10 rounded border border-[var(--c-border)] px-3 py-2 text-xs text-[var(--c-text)] hover:bg-[var(--c-surface-2)] min-[1280px]:hidden" onClick={() => setOpen(true)} aria-expanded={open}>
+          <button ref={triggerRef} type="button" className="min-h-10 rounded border border-[var(--c-border)] px-3 py-2 text-xs text-[var(--c-text)] hover:bg-[var(--c-surface-2)] xl:hidden" onClick={() => setOpen(true)} aria-expanded={open}>
             {pick('Mở khay', 'Open tray')}
           </button>
         </div>
@@ -299,7 +299,7 @@ export function ProblemsDrawer({
           aria-valuemax={PANEL_HEIGHT_MAX_PX}
           aria-valuenow={panelHeight}
           tabIndex={0}
-          className="mt-2 hidden h-3 cursor-row-resize items-center justify-center border-y border-[var(--c-border)] text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] min-[1280px]:flex"
+          className="mt-2 hidden h-3 cursor-row-resize items-center justify-center border-y border-[var(--c-border)] text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] xl:flex"
           onPointerDown={(event) => {
             resizeRef.current = { startY: event.clientY, startHeight: panelHeight }
             document.body.style.cursor = 'row-resize'
@@ -316,14 +316,14 @@ export function ProblemsDrawer({
       )}
       <div
         id="programming-problems-panel"
-        className={`mt-2 hidden overflow-auto min-[1280px]:block ${collapsed ? 'h-0' : ''}`}
+        className={`mt-2 hidden overflow-auto xl:block ${collapsed ? 'h-0' : ''}`}
         style={collapsed ? undefined : { height: panelHeight }}
         hidden={collapsed}
       >
         {content}
       </div>
       {open && (
-        <div className="fixed inset-0 z-50 min-[1280px]:hidden" role="presentation">
+        <div className="fixed inset-0 z-50 xl:hidden" role="presentation">
           <button type="button" className="absolute inset-0 bg-black/40" aria-label={pick('Đóng khay vấn đề', 'Close problems tray')} onClick={() => { setOpen(false); triggerRef.current?.focus() }} />
           <div ref={panelRef} role="dialog" aria-modal="true" aria-label={pick('Danh sách lỗi', 'Problems list')} tabIndex={-1} onKeyDown={(event) => {
             if (event.key !== 'Tab' || !panelRef.current) return

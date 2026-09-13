@@ -8,6 +8,92 @@
 
 ## [Unreleased]
 
+### Fixed — Programming PGM-02: nửa phải màn hình hỏng vì thứ tự tầng CSS, canvas bị cắt, và sơ đồ FBD không có giá trị runtime (2026-09-13)
+
+- Phạm vi: `apps/web-ui/src/shared/styles.css`,
+  `apps/web-ui/src/features/programming/layout/useProgrammingViewport.ts` (+ test),
+  `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/ProgramsWorkspace.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/src/features/programming/design/LiveProgramView.tsx`,
+  `apps/web-ui/src/features/programming/design/LiveFbdView.tsx`,
+  `apps/web-ui/src/features/programming/design/inspector/ContextInspector.tsx`,
+  `apps/web-ui/src/features/programming/design/inspector/inspectorContext.ts`,
+  `apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.tsx` (+ test),
+  `apps/web-ui/src/features/programming/library/libraryParity.test.tsx`,
+  `apps/web-ui/src/features/programming/fbd/runtimeOverlay.ts` (mới) + test (mới),
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvasLayers.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx` (+ test),
+  `apps/web-ui/src/features/programming/fbd/FbdNodeInspector.tsx`,
+  `apps/web-ui/src/features/programming/fbd/commands.ts` (+ test),
+  `apps/web-ui/src/features/programming/fbd/nodeEditor.ts`,
+  `apps/web-ui/src/features/programming/fbd/announcements.ts`,
+  `apps/web-ui/e2e/programming.spec.ts`,
+  `scripts/check_tailwind_breakpoints.py` (mới),
+  `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/reviews/PGM-02_FE_REFACTOR_GAP_PLAN_2026-09-13.md` (mới)
+  + ảnh chứng cứ, `CHANGELOG.md`.
+
+- **Triệu chứng.** Trên mọi khổ desktop: cột Inspector nổi đè lên thanh hành động
+  header nên nút `LIVE`/`SIMULATE`/`Chi tiết` không bấm được; một mảng trắng 240 px
+  ở mép phải; Thư viện nhanh chỉ còn ~60 px đọc được; khay Mini Map là một thanh
+  placeholder kéo ngang; sơ đồ FBD bị cắt mất hai phần ba; và ở chế độ LIVE sơ đồ
+  không hiện một con số nào.
+
+- **Nguyên nhân gốc 1 — thứ tự tầng CSS, không phải bố cục.** Hai chỗ viết
+  `md:fixed … <biến thể 1440>:static` và `lg:grid-cols-… <biến thể 1440>:grid-cols-…`.
+  Tailwind v4 gom MỌI breakpoint không-mặc-định (arbitrary lẫn tự khai trong
+  `@theme`) vào một cụm đứng TRƯỚC thang `sm/md/lg/xl`. Đo thứ tự xuất:
+  cụm tự khai **765**, `sm` **779**, `md` **813**, `lg` **848**, `xl` **894**. Hai rule
+  cùng khớp ở ≥1440 px và cùng độ đặc hiệu, nên bản `md:`/`lg:` đứng sau THẮNG —
+  ngược hẳn ý định. Đo tại 1680 px: `inspector-column` `position: fixed`, rect
+  `x=1296 y=64 w=384 h=813`; khay đáy `grid-template-columns: 1025px 375px`.
+  Khai breakpoint có tên **không** chữa được (đã thử và đo lại).
+  Cách sửa: ngưỡng do JavaScript quyết (`useMinWidth`), áp bằng style nội tuyến
+  hoặc hai nhánh class loại trừ nhau; `scripts/check_tailwind_breakpoints.py`
+  (`--selftest` 9/9) chặn cả hai hình dạng tái phát.
+
+- **Nguyên nhân gốc 2 — ba chỗ đứt chuỗi flex.** `EditorPane`, `FbdEditorPane` và
+  `DesignWorkspacePage` có ô mang `flex-1`/`min-h-0` nhưng bản thân là khối
+  `display:block`, nên con của chúng cao bằng nội dung rồi tràn. Đo: vỏ FBD cao
+  **2023 px** trong khung 495 px (EDIT); sơ đồ LIVE cao **1741 px** trong cột 520 px.
+
+- **Nguyên nhân gốc 3 — `SET_NODE_FB_PARAMS` xoá sạch tham số chỉnh định.** Reducer
+  dựng một object `parameters` RỖNG rồi chỉ gán lại `instance`/`retained`, nên mỗi
+  lần đổi tên thực thể hay bật RETAIN là một lần xoá `Kp/Ki/Kd/Ts/ManualOut` của
+  vòng PID — không cảnh báo, Draft vẫn lưu thành công.
+
+- **Nguyên nhân gốc 4 — Inspector tra runtime bằng sai khoá.**
+  `runtimeFor(input.runtime, node.id)` hỏi một bảng khoá theo TÊN BIẾN bằng một
+  UUID canonical, nên mục Trạng thái của MỌI khối luôn hiện "không xác định được"
+  kể cả khi thiết bị đang phát đúng giá trị.
+
+- **Thêm mới.** `fbd/runtimeOverlay.ts` chiếu snapshot runtime lên sơ đồ theo danh
+  tính đã khai trong tài liệu (`parameters.variable`, `instance.PORT`), fail-closed
+  khi overlay chưa `ready`, và gọi lại `presentStRuntimeValue` thay vì diễn giải
+  lần hai. Lệnh `SET_NODE_PARAMETERS` cho phép sửa tham số chỉnh định. Inspector
+  khối FBD gom thành 5 mục `Chung / Tham số / Vào-Ra / Trạng thái / Thuộc tính`.
+  Thư viện nhanh chuyển sang danh sách gọn theo nhóm danh mục.
+
+- **Số đo sau khi sửa (1680×941, cùng bàn đo).** Inspector `static` trong track;
+  khay đáy `567px 375px 458px` (3 cột); vỏ FBD 495 px; vùng vẽ EDIT 730×267 →
+  604×319; vùng vẽ LIVE 73 px → **340 px**; 5 ô giá trị runtime trên sơ đồ
+  (`23.4 °C`, `24 °C`, `42.3 %`, `42.3 %`, `TRUE`); một khối Thư viện nhanh
+  92 px → **32 px**, 7 nhóm danh mục; tràn ngang **0 px** ở 1280/1440/1680/1920.
+
+- Kiểm chứng: `tsc --noEmit` sạch · `npm run lint` sạch (`--max-warnings=0`) ·
+  `npx vitest --run --environment jsdom src` **252 file / 3215 test PASS** ·
+  `npx playwright test e2e/programming.spec.ts` **67 PASS / 2 skipped**
+  (desktop-chrome) và **42 PASS / 27 skipped** (mobile-chrome) ·
+  `npm run build` PASS, ngân sách bundle R3 còn dư **7,83 KiB**.
+
+- Còn mở (ghi rõ trong `REV-PGM02-FE-REFACTOR-2026-09-13` §8): header chưa hiện số
+  hiệu Revision đang sửa/đang chạy và chưa gom `More`; Problems chưa tách 5 cột;
+  thanh công cụ FBD còn 2 hàng; LIVE chưa có cột Inspector.
+
+
 ### Changed — Points & Mapping: tách danh mục điểm khỏi giá trị sống, bỏ vòng đọc lại `point-catalog` mỗi 10 giây (2026-09-13)
 
 - Phạm vi: `apps/web-ui/src/features/programming/api/queries.ts`,

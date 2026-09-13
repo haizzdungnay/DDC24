@@ -244,8 +244,11 @@ describe('PGM-02 Quick Library (T59-804)', () => {
       expect(chip).toHaveAttribute('aria-pressed', 'false')
     }
 
-    // Khi click chọn một phân loại khác (ví dụ "math")
-    const mathChip = screen.getByRole('button', { name: 'math' })
+    /* Khi click chọn một phân loại khác (ví dụ Toán học).
+       Chip hiện NHÃN người đọc chứ không hiện mã máy chủ (`math`): nhóm danh
+       mục bên dưới đã dùng `categoryLabel`, và hai chỗ gọi cùng một danh mục
+       bằng hai cái tên là một chỗ để người dùng tưởng đó là hai thứ. */
+    const mathChip = screen.getByRole('button', { name: 'Toán học' })
     fireEvent.click(mathChip)
 
     // Chip "math" chuyển sang aria-pressed="true", còn "Tất cả" chuyển sang aria-pressed="false"
@@ -288,7 +291,12 @@ describe('T59-804 — dock dùng chung: bề mặt tự nói mục nào chưa nh
   it('DEV-PROG-002: thẻ khối vẽ sơ đồ chân từ chữ ký backend, không tự bịa', async () => {
     renderPanel()
     const limit = within(await waitFor(() => cardFor('LIMIT')))
-    // LIMIT có ba chân vào (MN/IN/MX) và một chân ra (OUT) trong chữ ký fixture.
+    /* LIMIT có ba chân vào (MN/IN/MX) và một chân ra (OUT) trong chữ ký fixture.
+       Sơ đồ chân nằm trong khay chi tiết kể từ khi danh sách chuyển sang dạng
+       gọn (`PGM-02B §4`): hàng mặc định chỉ hiện tên khối. Mở khay rồi kiểm
+       ĐÚNG những chân cũ — điều cần khoá là "không mất thông tin nào", không
+       phải "mọi thứ hiện cùng lúc". */
+    fireEvent.click(limit.getByRole('button', { name: /Chi tiết LIMIT/ }))
     expect(limit.getByText('→ MN')).toBeInTheDocument()
     expect(limit.getByText('→ IN')).toBeInTheDocument()
     expect(limit.getByText('→ MX')).toBeInTheDocument()

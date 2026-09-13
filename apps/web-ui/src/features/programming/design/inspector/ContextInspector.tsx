@@ -83,8 +83,10 @@ export function ContextInspector({
       ) : (
         <div className="mt-2 space-y-2">
           {editableProgramSlot}
-          {editableFbdSlot}
-          {renderContext(pick, context, executionTabHref, onOpenExecutionTab)}
+          {/* Ngữ cảnh khối FBD tự đặt khay sửa vào đúng mục `Tham số`; mọi ngữ
+              cảnh khác vẫn nhận nó ở đầu khay như cũ. */}
+          {context.kind !== 'FBD_BLOCK' && editableFbdSlot}
+          {renderContext(pick, context, executionTabHref, onOpenExecutionTab, editableFbdSlot)}
         </div>
       )}
     </section>
@@ -107,6 +109,10 @@ function renderContext(
   context: InspectorContext,
   executionTabHref?: string,
   onOpenExecutionTab?: () => void,
+  /* Khay sửa node FBD. Với ngữ cảnh `FBD_BLOCK` nó nằm TRONG mục `Tham số`, nên
+     nó đi xuống đây thay vì render ở trên — hai chỗ cùng render sẽ cho hai bản
+     form chồng nhau. */
+  editableFbdSlot?: React.ReactNode,
 ) {
   switch (context.kind) {
     case 'PROGRAM':
@@ -223,47 +229,87 @@ function renderContext(
         </FieldList>
       )
     case 'FBD_BLOCK':
+      /* NĂM MỤC, theo đúng thứ tự của ảnh chuẩn `PGM-02B §9`:
+         Chung → Tham số → Vào/Ra → Trạng thái → Thuộc tính.
+         Bản trước là MỘT danh sách phẳng trộn lẫn cả năm nhóm, nên một khối PID
+         có mười mấy dòng liền nhau mà người đọc phải tự phân loại bằng mắt. */
       return (
-        <FieldList>
-          {/* `nodeId` canonical hiện nguyên vẹn: nó là thứ diagnostic và
-              round-trip bám vào, không phải nhãn hiển thị. */}
-          <Row label={pick('Thực thể', 'Instance')} value={context.instanceId} mono />
-          <Row label={pick('Kiểu', 'Type')} value={context.typeRef} />
-          <Field label={pick('Chữ ký', 'Signature')} field={context.signature} pick={pick} />
-          <Field
-            label={pick('Giữ trạng thái', 'Retained')}
-            field={mapField(context.retained, (value) => value ? pick('Có', 'Yes') : pick('Không', 'No'))}
-            pick={pick}
-          />
-          <RuntimeRow label={pick('Giá trị', 'Value')} runtime={context.runtime} pick={pick} />
-          <div className="col-span-2">
-            <p className="text-xs text-[var(--c-text-dim)]">{pick('Tham số', 'Parameters')}</p>
+        <div className="space-y-2">
+          <InspectorSection title={pick('Chung', 'General')} testId="inspector-fbd-general" defaultOpen>
+            <FieldList>
+              <Row label={pick('Loại khối', 'Block type')} value={context.typeRef} />
+              <Row
+                label={pick('Tên thực thể', 'Instance name')}
+                value={context.instanceName ?? pick('chưa đặt', 'not set')}
+                mono={context.instanceName !== null}
+              />
+              <Field label={pick('Chữ ký', 'Signature')} field={context.signature} pick={pick} />
+            </FieldList>
+          </InspectorSection>
+
+          <InspectorSection title={pick('Tham số', 'Parameters')} testId="inspector-fbd-parameters" defaultOpen>
+            {/* Khay SỬA nằm ngay trong mục này (`editableFbdSlot`), nên số đọc
+                được và số sửa được là cùng một chỗ — không phải hai bảng ở hai
+                nơi có thể nói khác nhau. */}
+            {editableFbdSlot}
             {context.parameters.length === 0 ? (
               <p className="text-xs text-[var(--c-text-dim)]">{pick('Không có', 'None')}</p>
             ) : (
-              <ul className="mt-0.5 space-y-0.5">
+              <ul className="mt-1 space-y-0.5">
                 {context.parameters.map((parameter) => (
-                  <li key={parameter.name} className="font-mono text-[11px] text-[var(--c-text)]">
-                    {parameter.name} = {parameter.value}
+                  <li key={parameter.name} className="flex justify-between gap-2 font-mono text-[11px]">
+                    <span className="text-[var(--c-text-dim)]">{parameter.name}</span>
+                    <span className="text-[var(--c-text)]">{parameter.value}</span>
                   </li>
                 ))}
               </ul>
             )}
-          </div>
-          <div className="col-span-2">
-            <p className="text-xs text-[var(--c-text-dim)]">{pick('Cổng vào/ra', 'I/O')}</p>
-            <ul className="mt-0.5 space-y-0.5">
+          </InspectorSection>
+
+          <InspectorSection title={pick('Vào/Ra', 'I/O')} testId="inspector-fbd-io" defaultOpen>
+            <ul className="space-y-0.5">
               {/* Thứ tự giữ NGUYÊN như đã khai; sắp lại sẽ làm Inspector không
                   còn khớp sơ đồ trên canvas. */}
-              {context.ports.map((port) => (
-                <li key={port.portId} className="font-mono text-[11px] text-[var(--c-text)]">
-                  {port.direction === 'INPUT' ? '→' : '←'} {port.name} : {port.dataType}
-                  {port.unit ? ` (${port.unit})` : ''}
-                </li>
-              ))}
+              {context.ports.map((port) => {
+                const reading = context.portRuntime[port.portId]
+                return (
+                  <li key={port.portId} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="min-w-0 truncate font-mono text-[var(--c-text)]">
+                      {port.direction === 'INPUT' ? '→' : '←'} {port.name} : {port.dataType}
+                      {port.unit ? ` (${port.unit})` : ''}
+                    </span>
+                    {reading && <RuntimePortValue runtime={reading} unit={port.unit} />}
+                  </li>
+                )
+              })}
             </ul>
-          </div>
-        </FieldList>
+          </InspectorSection>
+
+          <InspectorSection title={pick('Trạng thái', 'Status')} testId="inspector-fbd-status" defaultOpen>
+            <FieldList>
+              <RuntimeRow label={pick('Giá trị ra', 'Output value')} runtime={context.runtime} pick={pick} />
+              <Row
+                label={pick('Nguồn', 'Source')}
+                value={context.runtime.status === 'ready'
+                  ? pick('Thiết bị (trực tiếp)', 'Controller (live)')
+                  : pick('không xác định được', 'not determinable')}
+              />
+            </FieldList>
+          </InspectorSection>
+
+          <InspectorSection title={pick('Thuộc tính', 'Attributes')} testId="inspector-fbd-attributes">
+            <FieldList>
+              {/* `nodeId` canonical hiện nguyên vẹn: nó là thứ diagnostic và
+                  round-trip bám vào, không phải nhãn hiển thị. */}
+              <Row label={pick('Định danh node', 'Node id')} value={context.instanceId} mono />
+              <Field
+                label={pick('Giữ trạng thái', 'Retained')}
+                field={mapField(context.retained, (value) => value ? pick('Có', 'Yes') : pick('Không', 'No'))}
+                pick={pick}
+              />
+            </FieldList>
+          </InspectorSection>
+        </div>
       )
     case 'FBD_CONNECTION':
       return (
@@ -313,6 +359,46 @@ function Field({
         {field.known ? field.value : pick('không xác định được', 'not determinable')}
       </dd>
     </>
+  )
+}
+
+/**
+ * Một mục gập được của Inspector.
+ *
+ * `<details>` native chứ không phải state React: hành vi đóng/mở, phím
+ * Enter/Space và ngữ nghĩa cho trình đọc màn hình đã có sẵn và đúng; dựng tay
+ * lại chỉ thêm một bản có thể lệch.
+ */
+function InspectorSection({ title, testId, defaultOpen, children }: {
+  title: string
+  testId: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <details open={defaultOpen} data-testid={testId} className="rounded-[var(--radius)] border border-[var(--c-border)]">
+      <summary className="cursor-pointer list-none px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)] hover:text-[var(--c-text)]">
+        {title}
+      </summary>
+      <div className="px-2 pb-2">{children}</div>
+    </details>
+  )
+}
+
+/** Giá trị runtime của MỘT CHÂN, hiện cạnh chân ấy trong mục Vào/Ra. */
+function RuntimePortValue({ runtime, unit }: { runtime: InspectorRuntimeValue; unit: string | null }) {
+  if (runtime.status !== 'ready' || !runtime.item) return null
+  const presentation = presentStRuntimeValue(runtime.item)
+  const tone = presentation.state === 'live'
+    ? 'border-[var(--c-good-fg)] bg-[var(--c-good-bg)] text-[var(--c-good-fg)]'
+    : presentation.state === 'invalid'
+      ? 'border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'
+      : 'border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)]'
+  return (
+    <span data-testid="inspector-port-runtime" className={`shrink-0 rounded-full border px-1.5 font-mono ${tone}`}>
+      {/* Đơn vị chỉ đi kèm một giá trị THẬT — `— °C` đọc như một phép đo. */}
+      {presentation.displayValue}{presentation.state !== 'invalid' && unit ? ` ${unit}` : ''}
+    </span>
   )
 }
 

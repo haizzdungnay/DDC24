@@ -955,12 +955,15 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     // trong toolbar), không thay cho thao tác nghiệp vụ nào bên dưới.
     await fbdToolbar.getByRole('button').first().focus()
     await page.keyboard.press('Insert') // ADD_BLOCK — block AND #1 (network_1 có sẵn từ emptyFbdDocument)
-    await expect(page.getByText('1/256 block')).toBeVisible()
+    /* Chip đếm khối bám `data-testid`: nó bỏ chữ `block` để thanh công cụ gọn
+       lại (nhãn cho trình đọc màn hình vẫn còn), và câu chữ hiển thị không
+       phải mỏ neo ổn định cho một phép đo về SỐ LƯỢNG. */
+    await expect(page.getByTestId('fbd-block-count')).toContainText('1/256')
     // Problems là sibling của editor nhưng phải đọc buffer local chưa Save:
     // network rỗng có 1 lỗi; thêm block hợp lệ phải xóa lỗi ngay trước read-back.
     await expect(page.getByRole('tab', { name: 'Vấn đề (0)', exact: true })).toBeVisible()
     await page.keyboard.press('Insert') // ADD_BLOCK — block AND #2
-    await expect(page.getByText('2/256 block')).toBeVisible()
+    await expect(page.getByTestId('fbd-block-count')).toContainText('2/256')
 
     // TASK-9-FBD-EDIT: làm lệch một block để Auto Layout có delta thật, rồi
     // đo cả hai nhánh Cancel/Apply trên Chrome. Ghost preview là transient:
@@ -994,11 +997,12 @@ test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {
     await page.keyboard.press('Enter') // bắt đầu nối từ #1.OUT
     await page.keyboard.press('ArrowDown') // chọn port #2.IN1 — đích nối
     await page.keyboard.press('Enter') // hoàn tất nối #1.OUT → #2.IN1
-    await expect(page.getByText('1/512 wire')).toBeVisible()
+    /* Cùng lý do như chip đếm khối: bám `data-testid`, không bám câu chữ. */
+    await expect(page.getByTestId('fbd-wire-count')).toContainText('1/512')
     await page.keyboard.press('Delete') // xóa vùng chọn (port đích) — kéo theo wire vừa nối
-    await expect(page.getByText('0/512 wire')).toBeVisible()
+    await expect(page.getByTestId('fbd-wire-count')).toContainText('0/512')
     await page.keyboard.press('Control+z') // hoàn tác — wire khôi phục
-    await expect(page.getByText('1/512 wire')).toBeVisible()
+    await expect(page.getByTestId('fbd-wire-count')).toContainText('1/512')
     // `T59-806` — canvas node–edge mới phải qua chính bộ quét a11y của dự án.
     // Bộ quét cũ chỉ chạy trên workspace mặc định (chương trình ST), nên trước
     // lát này CHƯA lần nào FBD editor bị soi thật.
@@ -1568,6 +1572,12 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     await expect(fbdToolbar.getByRole('button', { name: 'Network', exact: true })).toHaveCount(0)
     await expect(shell.getByTestId('fbd-active-network')).toHaveCount(0)
     await expect(shell.locator('article[data-fbd-network-id]')).toHaveCount(1)
+    /* Tuỳ chọn hiển thị (Khung nhìn / Lưới / Bám lưới / Kiểu dây / Giao diện
+       FBD) nay nằm sau nút bánh răng của thanh công cụ canvas, không còn là một
+       dải thường trực chiếm 37 px chiều cao ở mọi lúc. Mở khay ra rồi thao tác
+       — trình duyệt thật từ chối thao tác trên phần tử ẩn, và đó đúng là điều
+       cần: một điều khiển không nhìn thấy thì người dùng cũng không bấm được. */
+    await page.getByTestId('fbd-display-settings-toggle').click()
     await page.getByLabel('Khung nhìn').selectOption('ALL')
     await expect(shell.locator('article[data-fbd-network-id]')).toHaveCount(1)
 
@@ -1672,7 +1682,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     const editor = page.locator('section[aria-label="Bộ dựng FBD có cấu trúc"]')
     await editor.focus()
     for (let index = 0; index < 25; index += 1) await page.keyboard.press('Insert')
-    await expect(page.getByText('25/256 block')).toBeVisible()
+    await expect(page.getByTestId('fbd-block-count')).toContainText('25/256')
     await expect.poll(() => writes.length).toBeGreaterThan(0)
     writes.splice(0, writes.length)
 

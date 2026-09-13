@@ -381,9 +381,13 @@ describe('ProgramsTab — Luồng A: FBD Node Inspector & Slot Integration', () 
     const [portButton] = screen.getAllByRole('button', { name: 'BOOL OUTPUT OUT BOOL' })
     fireEvent.click(portButton!)
 
-    // 1. Dock hiện ngữ cảnh FBD_BLOCK của node cha: có mục "Cổng vào/ra" liệt kê dòng port đó
-    expect(screen.getByText('Cổng vào/ra')).toBeInTheDocument()
-    expect(screen.getByText('← OUT : BOOL')).toBeInTheDocument()
+    /* 1. Dock hiện ngữ cảnh FBD_BLOCK của node cha: mục Vào/Ra liệt kê dòng port đó.
+       Bám `data-testid` cho phần MỤC, vì tiêu đề mục là câu chữ mà thiết kế được
+       phép đổi (`Cổng vào/ra` → `Vào/Ra` khi Inspector gom thành năm mục theo
+       `PGM-02B §9`). Nội dung dòng port thì vẫn kiểm bằng text — đó mới là dữ
+       liệu, không phải nhãn trang trí. */
+    const ioSection = screen.getByTestId('inspector-fbd-io')
+    expect(within(ioSection).getByText('← OUT : BOOL')).toBeInTheDocument()
 
     // 2. Dock hiện form sửa của node cha: ô "Tên biến" mang giá trị "Start" của node #1
     const varInput = screen.getByLabelText(/Tên biến/i) as HTMLInputElement

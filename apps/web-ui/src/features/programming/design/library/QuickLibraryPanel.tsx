@@ -11,6 +11,7 @@ import {
   type CatalogEntry
 } from './libraryCatalog'
 import { categoryLabel } from '../../library/libraryPresentation'
+import { PROGRAMMING_LIBRARY_CATEGORY_ORDER } from '../../api/generated/library_registry'
 import {
   pullLibraryPreferences,
   pushLibraryPreferences,
@@ -129,6 +130,34 @@ export function QuickLibraryPanel({
     () => filterCatalog(entries, { query, category: category || undefined, language }),
     [entries, query, category, language]
   )
+  const groupedCatalog = useMemo(() => {
+    const byCategory = new Map<string, CatalogEntry[]>()
+    for (const entry of filtered) {
+      const key = entry.category ?? ''
+      const bucket = byCategory.get(key)
+      if (bucket) bucket.push(entry)
+      else byCategory.set(key, [entry])
+    }
+    const groups: { id: string; title: string; entries: CatalogEntry[] }[] = []
+    for (const known of PROGRAMMING_LIBRARY_CATEGORY_ORDER) {
+      const bucket = byCategory.get(known.id)
+      if (!bucket) continue
+      groups.push({ id: known.id, title: categoryLabel(known.id, pick), entries: bucket })
+      byCategory.delete(known.id)
+    }
+    /* Danh mục máy chủ công bố mà bundle này chưa biết tên: hiện NGUYÊN mã
+       thay vì gộp im lặng vào "khác" — người đọc phải thấy được rằng thiết bị
+       đang nói một thứ giao diện chưa dịch. */
+    for (const [id, bucket] of byCategory) {
+      if (id === '') continue
+      groups.push({ id, title: id, entries: bucket })
+    }
+    const uncategorised = byCategory.get('')
+    if (uncategorised) {
+      groups.push({ id: '__none__', title: pick('Chưa phân loại', 'Not categorised'), entries: uncategorised })
+    }
+    return groups
+  }, [filtered, pick])
   /* `T61-203` — tra theo KHOÁ ĐỊNH DANH (`scope/entryId`), không theo `entryId`
      trần. `GET /libraries` trả mọi library revision, nên một `Map` khoá bằng
      `entryId` giữ lại bản gặp sau cùng — tức một version tuỳ ý, và sau lần
@@ -208,7 +237,12 @@ export function QuickLibraryPanel({
       <div className="flex flex-wrap gap-1 border-b border-[var(--c-border)] px-2 py-1.5">
         <CategoryChip label={pick('Tất cả', 'All')} active={category === ''} onClick={() => setCategory('')} />
         {categories.map((item) => (
-          <CategoryChip key={item} label={item} active={category === item} onClick={() => setCategory(item)} />
+          /* Nhãn người đọc, không phải mã máy chủ. Chip trước đây hiện thẳng
+             `compare`/`conversion`/`trigger` — tiếng Anh, chữ thường, giữa một
+             giao diện tiếng Việt — trong khi `categoryLabel` đã có sẵn đúng bản
+             dịch mà nhóm bên dưới đang dùng. Hai chỗ nói về cùng một danh mục
+             bằng hai cái tên là một chỗ để người dùng tưởng đó là hai thứ. */
+          <CategoryChip key={item} label={categoryLabel(item, pick)} active={category === item} onClick={() => setCategory(item)} />
         ))}
       </div>
 
@@ -243,22 +277,46 @@ export function QuickLibraryPanel({
         {showList && recent.length > 0 && (
           <Section title={pick('Gần đây', 'Recent')} entries={recent} favorites={preferences.favorites} onInsert={insert} onStar={star} surfaceBlock={surfaceBlock} />
         )}
-        {showList && (
-          <Section
-            title={pick('Catalog', 'Catalog')}
-            entries={filtered}
-            favorites={preferences.favorites}
-            onInsert={insert}
-            onStar={star}
-            surfaceBlock={surfaceBlock}
-            emptyLabel={library.hasMore
+        {/* CATALOG NHÓM THEO DANH MỤC, mỗi nhóm gập được.
+         *
+         * Một danh sách phẳng 46 mục trong cột 216 px buộc người dùng cuộn để
+         * biết thư viện có những gì — trong khi câu hỏi thật của họ luôn là
+         * "khối định thời nằm ở đâu". Chip lọc phía trên vẫn còn và vẫn lọc;
+         * nhóm là thứ trả lời khi người ta CHƯA biết mình cần lọc gì.
+         *
+         * Thứ tự nhóm lấy từ `PROGRAMMING_LIBRARY_CATEGORY_ORDER` (tệp sinh),
+         * không phải một danh sách chép tay ở FE — thêm danh mục mới ở thiết bị
+         * thì nó tự xuất hiện đúng chỗ. Mục mà máy chủ KHÔNG phân loại rơi vào
+         * một nhóm nói thẳng điều đó, thay vì bị giấu. */}
+        {showList && groupedCatalog.length === 0 && (
+          <p className="px-3 py-2 text-xs text-[var(--c-text-dim)]">
+            {library.hasMore
               ? pick(
                 'Không khớp mục nào trong phần đã tải — còn khối chưa tải.',
                 'No entry matches what has been loaded — more blocks remain.'
               )
               : pick('Không khớp mục nào.', 'No entry matches.')}
-          />
+          </p>
         )}
+        {showList && groupedCatalog.map((group) => (
+          <details key={group.id} open data-testid="quick-library-group" data-category={group.id}>
+            <summary className="cursor-pointer list-none px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)] hover:text-[var(--c-text)]">
+              {group.title} ({group.entries.length})
+            </summary>
+            <ul aria-label={group.title} className="flex flex-col gap-1 px-1 pb-1">
+              {group.entries.map((entry) => (
+                <BlockCard
+                  key={entry.key}
+                  entry={entry}
+                  favorite={preferences.favorites.includes(entry.key)}
+                  blocked={surfaceBlock(entry)}
+                  onInsert={insert}
+                  onStar={star}
+                />
+              ))}
+            </ul>
+          </details>
+        ))}
 
         {/* `T61-202` — đường đi tới khối thứ 101 trở đi.
             Không có nút này thì "danh sách đã cắt" và "thư viện chỉ có ngần ấy"
@@ -410,6 +468,7 @@ function BlockCard({
       : entry.compatibility.kind === 'unknown'
         ? pick('Chưa đo được tương thích', 'Compatibility not measured')
         : null
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const inputs = entry.ports.filter((port) => port.direction === 'INPUT')
   const outputs = entry.ports.filter((port) => port.direction === 'OUTPUT')
   const label = pick(entry.labelVi, entry.labelEn)
@@ -434,7 +493,7 @@ function BlockCard({
         event.dataTransfer.effectAllowed = 'copy'
       }}
       className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">
-      <div className="flex items-center gap-1 border-b border-[var(--c-border)] px-1.5 py-1">
+      <div className="flex items-center gap-1 px-1.5 py-0.5">
         <span className="mono shrink-0 rounded bg-[var(--c-surface-2)] px-1 text-[10px] text-[var(--c-text-dim)]">
           {entry.scope === 'SYSTEM' ? 'SYS' : 'PRJ'}
         </span>
@@ -462,7 +521,7 @@ function BlockCard({
           /* Nhãn tường minh vì hai nút bên cạnh cũng mang tên mục; nhãn vẫn
              CHỨA tên đang hiện (WCAG 2.5.3). */
           aria-label={pick(`Chèn ${entry.name}`, `Insert ${entry.name}`)}
-          title={reason ?? pick(`Chèn ${entry.name}`, `Insert ${entry.name}`)}
+          title={reason ?? `${label} — ${pick(`Chèn ${entry.name}`, `Insert ${entry.name}`)}`}
           onClick={() => onInsert(entry)}
           className="mono min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left text-xs font-semibold text-[var(--c-text)] hover:bg-[var(--c-surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -477,41 +536,60 @@ function BlockCard({
         >
           <Star className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
+        {/* Mở chi tiết nằm CÙNG HÀNG với tên khối, không phải một dòng riêng
+            bên dưới: một dòng `Chi tiết` cho mỗi khối là ~14 px nhân với số
+            khối, và nó hiện ra kể cả khi không ai định mở. */}
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((open) => !open)}
+          aria-expanded={detailsOpen}
+          aria-label={pick(`Chi tiết ${entry.name}`, `Details for ${entry.name}`)}
+          title={pick(`Chi tiết ${entry.name}`, `Details for ${entry.name}`)}
+          className="shrink-0 rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)]"
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       </div>
-      <div className="px-1.5 py-1">
-        {label !== entry.name && <p className="truncate text-[11px] text-[var(--c-text-dim)]">{label}</p>}
-        {entry.ports.length === 0 ? (
-          <p className="text-[10px] text-[var(--c-warn-fg)]">
-            {pick('Thiết bị không công bố chân của khối này.', 'The device does not publish this block\u2019s pins.')}
-          </p>
-        ) : (
-          <ul className="mt-0.5 flex flex-col gap-0.5" aria-label={pick(`Chân của ${entry.name}`, `Pins of ${entry.name}`)}>
-            {Array.from({ length: rows }, (_, index) => (
-              <li key={index} className="flex items-center justify-between gap-2 text-[10px]">
-                <span className="mono min-w-0 truncate text-[var(--c-text-dim)]">
-                  {inputs[index] ? `\u2192 ${inputs[index].name}` : ''}
-                </span>
-                <span className="mono min-w-0 truncate text-right text-[var(--c-text-dim)]">
-                  {outputs[index] ? `${outputs[index].name} \u2192` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {reason && <p className="mt-0.5 text-[10px] text-[var(--c-warn-fg)]">{reason}</p>}
+      {/* THÂN THẺ CHỈ HIỆN KHI CÓ ĐIỀU CẦN NÓI.
+       *
+       * Bản trước luôn vẽ nhãn, bảng chân và một khay `Chi tiết` cho MỌI mục,
+       * nên mỗi khối chiếm ~92 px trong một cột rộng 216 px — sáu khối đã hết
+       * màn hình, và người dùng cuộn qua một danh sách mà mình chưa tìm được gì
+       * trong đó. Ảnh chuẩn `PGM-02B §4` mô tả một danh sách GỌN: mỗi khối một
+       * hàng, chi tiết mở theo yêu cầu.
+       *
+       * Cái KHÔNG được gọn đi là lời cảnh báo: `reason` (chờ review / ngừng
+       * dùng / thiếu chữ ký) và `compatibilityNote` phải hiện thường trực, vì
+       * chúng là lý do một khối trông bình thường lại không dùng được. */}
+      <div className="px-1.5 pb-1">
+        {reason && <p className="text-[10px] text-[var(--c-warn-fg)]">{reason}</p>}
         {compatibilityNote && (
-          <p data-testid="quick-library-compatibility" className="mt-0.5 text-[10px] text-[var(--c-text-dim)]">
+          <p data-testid="quick-library-compatibility" className="text-[10px] text-[var(--c-text-dim)]">
             {compatibilityNote}
           </p>
         )}
-        <details className="mt-0.5">
-          <summary
-            className="flex cursor-pointer items-center gap-1 text-[10px] text-[var(--c-text-dim)] hover:text-[var(--c-text)]"
-            aria-label={pick(`Chi tiết ${entry.name}`, `Details for ${entry.name}`)}
-          >
-            <MoreHorizontal className="h-3 w-3" aria-hidden="true" />
-            {pick('Chi tiết', 'Details')}
-          </summary>
+        {entry.ports.length === 0 && (
+          <p className="text-[10px] text-[var(--c-warn-fg)]">
+            {pick('Thiết bị không công bố chân của khối này.', 'The device does not publish this block\u2019s pins.')}
+          </p>
+        )}
+        {detailsOpen && (
+        <div className="mt-0.5">
+          {label !== entry.name && <p className="truncate text-[10px] text-[var(--c-text-dim)]">{label}</p>}
+          {entry.ports.length > 0 && (
+            <ul className="mt-0.5 flex flex-col gap-0.5" aria-label={pick(`Chân của ${entry.name}`, `Pins of ${entry.name}`)}>
+              {Array.from({ length: rows }, (_, index) => (
+                <li key={index} className="flex items-center justify-between gap-2 text-[10px]">
+                  <span className="mono min-w-0 truncate text-[var(--c-text-dim)]">
+                    {inputs[index] ? `\u2192 ${inputs[index].name}` : ''}
+                  </span>
+                  <span className="mono min-w-0 truncate text-right text-[var(--c-text-dim)]">
+                    {outputs[index] ? `${outputs[index].name} \u2192` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <dl className="mt-0.5 flex flex-col gap-0.5 text-[10px]">
             <DetailRow label={pick('Loại', 'Kind')} value={entry.kind} />
             <DetailRow
@@ -531,7 +609,8 @@ function BlockCard({
               />
             ))}
           </dl>
-        </details>
+        </div>
+        )}
       </div>
     </li>
   )

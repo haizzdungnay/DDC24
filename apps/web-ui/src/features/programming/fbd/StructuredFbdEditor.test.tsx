@@ -132,7 +132,11 @@ describe('StructuredFbdEditor — Palette (WP-05)', () => {
     const addNode = changed.networks[0].nodes.find((node) => node.typeRef === 'ADD')
     expect(addNode?.ports.every((port) => port.dataType === 'REAL')).toBe(true)
 
-    fireEvent.click(screen.getByText(`#${addNode!.executionOrder} · ADD`))
+    /* Chọn theo TÊN TRỢ NĂNG của khối, không theo chuỗi hiển thị. Nhãn vẽ trên
+       khối nay tách danh tính (`ADD`) khỏi thứ tự thực thi (`#5`) — xem
+       `fbdNodeIdentity` — nên một phép chọn bám chuỗi ghép sẽ đỏ mỗi lần thiết
+       kế đổi cách trình bày, dù hành vi không đổi. `aria-label` mới là hợp đồng. */
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^#${addNode!.executionOrder} · ADD · FUNCTION`) }))
     fireEvent.change(screen.getByLabelText(/Operand type|Kiểu toán hạng/), { target: { value: 'DINT' } })
     fireEvent.click(screen.getByRole('button', { name: /^Save$|^Lưu$/ }))
     await waitFor(() => {
@@ -196,7 +200,7 @@ describe('StructuredFbdEditor — Palette (WP-05)', () => {
       ],
     })
     const { onChange } = renderEditor(document)
-    fireEvent.click(screen.getByText('#4 · TON'))
+    fireEvent.click(screen.getByRole('button', { name: /^#4 · TON · FUNCTION_BLOCK/ }))
     fireEvent.change(screen.getByLabelText(/Instance name|Tên instance/), { target: { value: 'FanDelay' } })
     fireEvent.click(screen.getByLabelText(/RETAIN/))
     fireEvent.click(screen.getByRole('button', { name: /^Save$|^Lưu$/ }))
@@ -361,7 +365,16 @@ describe('StructuredFbdEditor — POU và keyboard/a11y (T59-506)', () => {
  */
 describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () => {
   function blockBadge(): string {
-    return screen.getByText(/\/256 block/).textContent ?? ''
+    /* Bám `data-testid`, KHÔNG bám câu chữ. Chip này từng đọc là `10/256 block`;
+       bỏ chữ `block` để thanh công cụ gọn lại đã làm đỏ năm phép đo vốn chỉ cần
+       một mỏ neo ổn định — mà câu chữ hiển thị thì không phải mỏ neo ổn định,
+       nó là thứ thiết kế được phép đổi. Nhãn cho trình đọc màn hình vẫn còn
+       (`sr-only`), và chính nó mới là hợp đồng trợ năng. */
+    /* Lấy đúng phần `N/256`. `textContent` còn kèm nhãn `sr-only` (`Khối` /
+       `Blocks`) — nhãn ấy là hợp đồng trợ năng nên phải có, nhưng nó không phải
+       thứ phép đo này quan tâm. */
+    const text = screen.getByTestId('fbd-block-count').textContent ?? ''
+    return text.match(/\d+\/256/)?.[0] ?? text.trim()
   }
 
   it('bản CŨ HƠN do chính editor phát ra không được xoá block vừa thêm', () => {
@@ -378,11 +391,11 @@ describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () =
     fireEvent.keyDown(editor, { key: 'Insert' })
     fireEvent.keyDown(editor, { key: 'Insert' })
     expect(published).toHaveLength(2)
-    expect(blockBadge()).toBe(`${before + 2}/256 block`)
+    expect(blockBadge()).toBe(`${before + 2}/256`)
 
     // Trang mới kịp trả lại bản 1 block; editor đã đi trước một bước.
     rerender(view(published[0]))
-    expect(blockBadge()).toBe(`${before + 2}/256 block`)
+    expect(blockBadge()).toBe(`${before + 2}/256`)
   })
 
   it('prop dựng lại cùng nội dung (object mới) không được cuốn theo phím đầu tiên', () => {
@@ -400,10 +413,10 @@ describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () =
     const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
     const before = Number(blockBadge().split('/')[0])
     fireEvent.keyDown(editor, { key: 'Insert' })
-    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+    expect(blockBadge()).toBe(`${before + 1}/256`)
 
     rerender(view(JSON.parse(JSON.stringify(base)) as FbdDocument))
-    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+    expect(blockBadge()).toBe(`${before + 1}/256`)
   })
 
   it('gợi ý `activeNetworkId` lạc hậu không được nuốt lệnh Thêm block', () => {
@@ -424,7 +437,7 @@ describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () =
     const editor = screen.getByRole('region', { name: /Bộ dựng FBD|Structured FBD editor/ })
     const before = Number(blockBadge().split('/')[0])
     fireEvent.keyDown(editor, { key: 'Insert' })
-    expect(blockBadge()).toBe(`${before + 1}/256 block`)
+    expect(blockBadge()).toBe(`${before + 1}/256`)
   })
 
   it('tài liệu THẬT từ bên ngoài vẫn thay thế được state đang gõ', () => {
@@ -443,7 +456,7 @@ describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () =
     const fresh = golden()
     fresh.networks[0].nodes = fresh.networks[0].nodes.slice(0, 1)
     rerender(view(fresh))
-    expect(blockBadge()).toBe('1/256 block')
+    expect(blockBadge()).toBe('1/256')
   })
 
   /* `#674` — FBD chốt mô hình MỘT canvas. Ba phép kiểm dưới đây khoá hợp đồng
@@ -457,8 +470,8 @@ describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () =
     expect(screen.queryByRole('button', { name: /^Network$/ })).toBeNull()
     expect(screen.queryByText(/\/256 network/)).toBeNull()
     // Badge block/wire là số đo của chính canvas nên phải còn nguyên.
-    expect(screen.getByText(/\/256 block/)).toBeInTheDocument()
-    expect(screen.getByText(/\/512 wire/)).toBeInTheDocument()
+    expect(screen.getByTestId('fbd-block-count')).toBeInTheDocument()
+    expect(screen.getByTestId('fbd-wire-count')).toBeInTheDocument()
   })
 
   it('AC-674-2: `Control+Shift+n` nói rõ mô hình một canvas thay vì thêm Network', () => {

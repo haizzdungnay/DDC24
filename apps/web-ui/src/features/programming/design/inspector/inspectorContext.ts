@@ -2,6 +2,7 @@ import type { CatalogEntry } from '../library/libraryCatalog'
 import type { StCursorSymbol } from '../editor/stReferenceIndex'
 import type { StRuntimeOverlayItem, StRuntimeOverlayState } from '../editor/StRuntimeValueOverlay'
 import type { FbdDocument, FbdNode, FbdPort, FbdWire } from '../../fbd/model'
+import { fbdNodeRuntimeName } from '../../fbd/runtimeOverlay'
 import type { FbdSelection } from '../../fbd/commands'
 import type { ProgrammingBinding, ProgrammingProgram, ProgrammingVariable } from '../../model/types'
 
@@ -144,6 +145,8 @@ export interface InspectorFbdBlockContext {
   kind: 'FBD_BLOCK'
   /** `nodeId` canonical — KHÔNG thay bằng nhãn hiển thị. */
   instanceId: string
+  /** Tên thực thể do người dùng đặt (`FB_PID_01`); `null` khi chưa đặt. */
+  instanceName: string | null
   typeRef: string
   parameters: readonly { name: string; value: string }[]
   /** Model FBD chưa mang cờ retained ⇒ `unknown`, không phải `false`. */
@@ -151,6 +154,8 @@ export interface InspectorFbdBlockContext {
   ports: readonly InspectorFbdPortView[]
   signature: InspectorField<string>
   runtime: InspectorRuntimeValue
+  /** Giá trị runtime theo TỪNG CHÂN, khoá là `portId`. */
+  portRuntime: Readonly<Record<string, InspectorRuntimeValue>>
 }
 
 export interface InspectorFbdConnectionContext {
@@ -466,9 +471,37 @@ function fbdContextFor(input: InspectorInput): InspectorContext | null {
   if (selection.kind === 'node' || selection.kind === 'port') {
     const node = findNode(fbd.document, selection.nodeId)
     if (!node) return null
+    /* `nodeId` là UUID canonical của tài liệu; snapshot runtime thì khoá theo
+       TÊN BIẾN mà Core công bố. Bản trước tra `runtimeFor(input.runtime, node.id)`,
+       tức hỏi một bảng tên bằng một UUID — không bao giờ khớp, nên mục trạng
+       thái của MỌI khối luôn hiện `không xác định được` kể cả khi thiết bị đang
+       phát đúng giá trị ấy. Danh tính đúng là `parameters.instance` cho khối
+       hàm (và `instance.PORT` cho từng chân), `parameters.variable` cho nút
+       vào/ra — cùng quy tắc mà lớp giá trị trên canvas dùng. */
+    const identity = fbdNodeRuntimeName(node)
+    const portRuntime: Record<string, InspectorRuntimeValue> = {}
+    if (identity !== null) {
+      for (const port of node.ports) {
+        const name = node.kind === 'FUNCTION_BLOCK' ? `${identity}.${port.name}` : identity
+        const reading = runtimeFor(input.runtime, name)
+        if (reading.status === 'ready') portRuntime[port.id] = reading
+      }
+    }
+    /* Giá trị đại diện của khối là giá trị CHÂN RA đầu tiên đọc được — trả lời
+       "khối này đang cho ra bao nhiêu", không phải "nó đang nhận vào gì". */
+    const representativePort = node.ports.find(
+      (port) => port.direction === 'OUTPUT' && portRuntime[port.id]?.status === 'ready',
+    )
+    const blockRuntime: InspectorRuntimeValue = representativePort
+      ? portRuntime[representativePort.id]!
+      : identity !== null && node.kind !== 'FUNCTION_BLOCK'
+        ? runtimeFor(input.runtime, identity)
+        : { item: null, status: 'unavailable' }
+
     return {
       kind: 'FBD_BLOCK',
       instanceId: node.id,
+      instanceName: identity,
       typeRef: node.typeRef,
       parameters: Object.entries(node.parameters).map(([name, value]) => ({
         name, value: formatParameter(value),
@@ -485,7 +518,8 @@ function fbdContextFor(input: InspectorInput): InspectorContext | null {
         dataType: port.dataType, unit: port.unit, order: port.order,
       })),
       signature: signatureOfType(input.catalog, node.typeRef),
-      runtime: runtimeFor(input.runtime, node.id),
+      runtime: blockRuntime,
+      portRuntime,
     }
   }
 

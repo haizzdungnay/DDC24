@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import { LibraryBlockCard } from './LibraryBlockCard'
@@ -144,6 +144,10 @@ describe('T61-203 — một mô hình trình bày cho PGM-04 và Quick Library',
     renderQuickLibrary(items)
     // Cùng ba chân, cùng thứ tự — dựng từ cùng `signature.ports`.
     const card = within(screen.getByTestId('quick-library-card'))
+    /* Sơ đồ chân của Quick Library nằm trong khay chi tiết kể từ khi danh sách
+       chuyển sang dạng gọn (`PGM-02B §4`). Mở khay rồi so — bộ này khoá việc
+       hai bề mặt nói CÙNG một chữ ký, không phải việc chúng bày nó cùng lúc. */
+    fireEvent.click(card.getByRole('button', { name: /Chi tiết TON/ }))
     expect(card.getByText('→ IN')).toBeInTheDocument()
     expect(card.getByText('→ PT')).toBeInTheDocument()
     expect(card.getByText('Q →')).toBeInTheDocument()

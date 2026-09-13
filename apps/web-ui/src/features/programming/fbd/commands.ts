@@ -114,6 +114,16 @@ export type FbdEditorAction =
   | { type: 'SET_NODE_VALUE'; networkId: string; nodeId: string; value: FbdParameterValue }
   | { type: 'SET_NODE_TYPE'; networkId: string; nodeId: string; dataType: FbdDataType }
   | { type: 'SET_NODE_FB_PARAMS'; networkId: string; nodeId: string; instance: string | null; retained: boolean }
+  /**
+   * Sửa THAM SỐ CHỈNH ĐỊNH của một khối (Kp/Ki/Kd/Ts/ManualOut của PID, PT của
+   * TON…). Tách khỏi `SET_NODE_FB_PARAMS` vì hai thứ khác hẳn nhau về vòng đời:
+   * `instance`/`retained` là danh tính và chính sách lưu trạng thái, còn các
+   * tham số này là số liệu chỉnh định mà người vận hành đổi thường xuyên.
+   *
+   * Payload chỉ mang những khoá được đổi. Khoá không có trong payload giữ
+   * NGUYÊN giá trị cũ; `null` mới là lệnh xoá khoá đó.
+   */
+  | { type: 'SET_NODE_PARAMETERS'; networkId: string; nodeId: string; parameters: Record<string, FbdParameterValue | null> }
   | { type: 'UPDATE_NODE_ATTRIBUTES'; networkId: string; nodeId: string; dataType?: FbdDataType;
       variable?: string; unit?: string | null; value?: FbdParameterValue; instance?: string | null; retained?: boolean }
   | { type: 'UNDO' }
@@ -690,11 +700,46 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const found = findNode(document, action.networkId, action.nodeId)
       if (!found || found.node.kind !== 'FUNCTION_BLOCK') return reject(state, { code: 'node-not-found' })
       if (action.instance !== null && !isFbdIdentifier(action.instance)) return reject(state, { code: 'invalid-instance-name' })
-      const parameters: Record<string, FbdParameterValue> = {}
+      /* GIỮ mọi tham số khác. Bản trước dựng một object RỖNG rồi gán đè, nên
+         mỗi lần đổi tên instance hay bật/tắt RETAIN là một lần **xoá sạch** các
+         tham số chỉnh định của khối — Kp/Ki/Kd/Ts/ManualOut của một vòng PID
+         biến mất mà không có cảnh báo nào, và Draft vẫn lưu thành công. Lệnh
+         này chỉ sở hữu hai khoá `instance` và `retained`; những khoá còn lại
+         thuộc về `SET_NODE_PARAMETERS`. */
+      const parameters: Record<string, FbdParameterValue> = { ...found.node.parameters }
       if (action.instance !== null) parameters.instance = action.instance
+      else delete parameters.instance
       if (action.retained) parameters.retained = true
+      else delete parameters.retained
       found.node.parameters = parameters
       return commit(state, document, { code: 'node-fb-params-set' })
+    }
+    case 'SET_NODE_PARAMETERS': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const document = cloneFbdDocument(state.document)
+      const found = findNode(document, action.networkId, action.nodeId)
+      if (!found) return reject(state, { code: 'node-not-found' })
+      /* Hai khoá này có lệnh riêng và có kiểm tra riêng (`isFbdIdentifier` cho
+         `instance`). Cho chúng đi qua đường này là mở một cửa sau bỏ qua kiểm
+         tra ấy, nên từ chối thẳng thay vì im lặng bỏ qua. */
+      if ('instance' in action.parameters || 'retained' in action.parameters) {
+        return reject(state, { code: 'invalid-node-attributes' })
+      }
+      const next: Record<string, FbdParameterValue> = { ...found.node.parameters }
+      for (const [name, value] of Object.entries(action.parameters)) {
+        if (!isFbdIdentifier(name)) return reject(state, { code: 'invalid-parameter-name' })
+        if (value === null) { delete next[name]; continue }
+        /* Số không hữu hạn (`NaN`, `Infinity`) KHÔNG canonical hoá được sang
+           JSON và sẽ thành `null` trong artifact — tức một tham số chỉnh định
+           biến mất trên đường xuống thiết bị. Chặn tại đây. */
+        if (typeof value === 'number' && !Number.isFinite(value)) {
+          return reject(state, { code: 'invalid-parameter-value' })
+        }
+        next[name] = value
+      }
+      found.node.parameters = next
+      if (canonicalFbdJson(document) === canonicalFbdJson(state.document)) return state
+      return commit(state, document, { code: 'node-parameters-set' })
     }
     case 'UPDATE_NODE_ATTRIBUTES': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })

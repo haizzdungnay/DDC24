@@ -795,19 +795,6 @@ export function DesignWorkspacePage({
             Điều kiện dưới đây phải LOẠI TRỪ NHAU: `AC-PGM02-001` đòi đúng MỘT
             cây POU trong DOM, và hai bản cùng lúc là chính lỗi `T59-803` đã
             phải đi sửa một lần. */}
-        {workspaceMode !== 'EDIT' && (
-          <div className="mb-3 rounded border border-[var(--c-border)] p-3">
-            <PouExplorer
-              document={document}
-              publishedSignals={publishedSignals}
-              canEdit={canEdit}
-              saving={workspace.saving}
-              selectedObjectId={selectedObjectId}
-              onSelect={selectPou}
-              onSave={workspace.save}
-            />
-          </div>
-        )}
         {/* `T59-811` — LIVE KHÔNG phải "editor với nút Lưu bị khoá". Nó là một
             tài liệu khác: nguồn của gói ĐANG CHẠY. Dùng lại đúng component
             editor rồi tắt sửa là cách chắc chắn nhất để một hôm nào đó Draft rò
@@ -843,7 +830,40 @@ export function DesignWorkspacePage({
           className="flex flex-col"
           style={workspaceColumnHeight === null ? undefined : { height: workspaceColumnHeight }}
         >
-        <div className="min-h-0 lg:flex-1 lg:overflow-hidden">
+        {/* `flex flex-col` là điều kiện để `flex-1` của ba bề mặt bên trong
+            (EDIT / LIVE / SIMULATE) có ngữ cảnh mà bám vào. Thiếu nó, ô này là
+            khối `display:block` và bề mặt con cao bằng nội dung rồi tràn ra
+            ngoài: đo 2026-09-13 ở chế độ LIVE, sơ đồ đang chạy cao 1741 px
+            trong một cột 520 px — hai phần ba nằm ngoài màn hình mà không có
+            thanh cuộn nào chỉ ra. */}
+        <div className="flex min-h-0 flex-col gap-3 lg:flex-1 lg:flex-row lg:overflow-hidden">
+        {/* Cây POU của LIVE/SIMULATE là CỘT TRÁI, không phải một dải ngang.
+         *
+         * Bản trước đặt nó thành một khối kéo hết bề ngang, NGOÀI cột bị giới
+         * hạn chiều cao, với lý do ghi tại chỗ rằng "hai chế độ đó ít chrome hơn
+         * hẳn và không có ngân sách chiều cao bị ép". Phép đo 2026-09-13 nói
+         * ngược lại: ở LIVE 1680×941, dải ấy chiếm ~270 px và vùng vẽ sơ đồ
+         * đang chạy chỉ còn **73 px** — người vận hành nhìn thấy một lát cắt
+         * ngang của sơ đồ chứ không phải sơ đồ.
+         *
+         * Cột trái cũng là điều `PGM-02B §2` yêu cầu: cùng một trật tự đọc
+         * `POU │ nội dung` ở MỌI chế độ, thay vì đổi hẳn bố cục mỗi lần đổi chế
+         * độ. `AC-PGM02-001` vẫn nguyên — đúng MỘT cây POU trong DOM, vì nhánh
+         * EDIT dựng cây của nó qua `explorerSlot`. */}
+        {workspaceMode !== 'EDIT' && (
+          <div className="shrink-0 rounded border border-[var(--c-border)] p-3 lg:min-h-0 lg:w-52 lg:overflow-y-auto">
+            <PouExplorer
+              document={document}
+              publishedSignals={publishedSignals}
+              canEdit={canEdit}
+              saving={workspace.saving}
+              selectedObjectId={selectedObjectId}
+              onSelect={selectPou}
+              onSave={workspace.save}
+            />
+          </div>
+        )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {workspaceMode === 'SIMULATE' ? (
           /* `T59-815` — SIMULATE cũng KHÔNG phải editor bị khoá: nó là bản đã
              lưu và đã Kiểm tra mà phiên đang chạy, pin theo Revision của phiên
@@ -927,6 +947,7 @@ export function DesignWorkspacePage({
             />
           </Suspense>
         )}
+        </div>
         {/* `T59-807` / `WP-06-R1` — MỘT workbench dùng chung. Trước đây mỗi
             loại thông tin sống ở một chỗ và theo một luật khác nhau: lỗi Draft
             FBD nằm trong editor FBD, tham chiếu ST nằm trong editor ST, tìm

@@ -10,7 +10,100 @@ import {
 } from './geometry'
 import type { FbdSelection } from './commands'
 import { fbdPaletteEntry } from './palette'
-import { formatNodeParameterSummary, formatPortLabel } from './nodeLabel'
+import { formatNodeParameterSummary, formatPortLabel, truncateText } from './nodeLabel'
+import type { FbdRuntimeOverlay, FbdRuntimeReading } from './runtimeOverlay'
+
+/**
+ * Danh tính hiển thị của một khối — thứ người đọc sơ đồ tìm TRƯỚC TIÊN.
+ *
+ * Bản trước lấy `#<thứ tự thực thi> · <typeRef>` làm nhãn chính, nên một nút
+ * vào tên `AI_Temp_SAT` hiện ra là `#0 · REAL`: hai thông tin đúng nhưng không
+ * phải thứ ai cũng cần đọc đầu tiên, còn TÊN BIẾN — thứ duy nhất nói khối này
+ * là gì — bị đẩy xuống dòng thứ ba cỡ 9 px. Ảnh chuẩn `PGM-02B` làm ngược lại,
+ * và nó đúng: danh tính lên trước, phân loại xuống sau.
+ *
+ * Thứ tự thực thi KHÔNG mất đi — nó chuyển thành huy hiệu nhỏ ở góc, và vẫn
+ * nguyên trong `aria-label` để mọi phép chọn theo tên không đổi.
+ */
+export function fbdNodeIdentity(node: FbdNode): { primary: string; secondary: string | null } {
+  const parameter = formatNodeParameterSummary(node.kind, node.parameters)
+  switch (node.kind) {
+    case 'INPUT':
+    case 'OUTPUT':
+    case 'SIGNAL_READ':
+    case 'SIGNAL_PUBLISH':
+      /* Chưa đặt tên biến thì nói thẳng là chưa đặt, không mượn tạm `typeRef`
+         làm tên — một khối tên `REAL` trông y như một khối đã cấu hình xong. */
+      return { primary: parameter ?? node.typeRef, secondary: parameter ? node.typeRef : null }
+    case 'CONSTANT':
+      return { primary: parameter ?? node.typeRef, secondary: node.typeRef }
+    case 'FUNCTION_BLOCK':
+      /* Loại đứng trước (PID), tên thực thể đứng sau (FB_PID_01) — đúng thứ tự
+         ảnh chuẩn, và đúng thứ tự người ta hỏi: "khối gì" rồi mới "khối nào". */
+      return { primary: node.typeRef, secondary: parameter }
+    default:
+      return { primary: node.typeRef, secondary: null }
+  }
+}
+
+const RUNTIME_CHIP_FILL: Record<FbdRuntimeReading['state'], string> = {
+  live: 'var(--c-good-bg)',
+  uncertain: 'var(--c-warn-bg)',
+  stale: 'var(--c-warn-bg)',
+  invalid: 'var(--c-surface-2)',
+}
+const RUNTIME_CHIP_TEXT: Record<FbdRuntimeReading['state'], string> = {
+  live: 'var(--c-good-fg)',
+  uncertain: 'var(--c-warn-fg)',
+  stale: 'var(--c-warn-fg)',
+  invalid: 'var(--c-text-dim)',
+}
+
+export function fbdRuntimeChipText(reading: FbdRuntimeReading): string {
+  return reading.unit ? `${reading.display} ${reading.unit}` : reading.display
+}
+
+/**
+ * Ô giá trị runtime vẽ trên khối.
+ *
+ * Bề rộng tính theo SỐ KÝ TỰ chứ không đo DOM: một ô đổi bề rộng theo từng giá
+ * trị sẽ làm sơ đồ nhảy mỗi nhịp cập nhật, mà yêu cầu số 7 cấm đúng điều đó.
+ * `minWidth` giữ ô không co lại khi giá trị ngắn đi (`TRUE` → `9.1`).
+ */
+function FbdRuntimeChip({ x, y, anchor, reading }: {
+  x: number
+  y: number
+  anchor: 'start' | 'end'
+  reading: FbdRuntimeReading
+}) {
+  const text = truncateText(fbdRuntimeChipText(reading), 12)
+  const width = Math.max(46, text.length * 6.2 + 10)
+  const left = anchor === 'end' ? x - width : x
+  return (
+    <g data-fbd-runtime-chip="true" data-fbd-runtime-state={reading.state} pointerEvents="none">
+      <title>{`${reading.name}: ${fbdRuntimeChipText(reading)}`}</title>
+      <rect
+        x={left}
+        y={y}
+        width={width}
+        height={16}
+        rx={8}
+        fill={RUNTIME_CHIP_FILL[reading.state]}
+        stroke={RUNTIME_CHIP_TEXT[reading.state]}
+        strokeWidth={1}
+      />
+      <text
+        x={left + width / 2}
+        y={y + 11.5}
+        textAnchor="middle"
+        className="text-[10px] font-semibold"
+        fill={RUNTIME_CHIP_TEXT[reading.state]}
+      >
+        {text}
+      </text>
+    </g>
+  )
+}
 
 export interface FbdGridPatternProps {
   networkId: string
@@ -94,6 +187,8 @@ export interface FbdNodesLayerProps {
   networkId: string
   tempPositions: Map<string, FbdPoint> | null
   issueNodeIds?: ReadonlySet<string>
+  /** Giá trị runtime đã trình bày xong; `null` = chế độ này không có nguồn. */
+  runtime?: FbdRuntimeOverlay | null
   pick?: (vi: string, en: string) => string
   select: (next: FbdSelection) => void
   beginDrag: (event: React.PointerEvent<SVGGElement>, node: FbdNode) => void
@@ -115,6 +210,7 @@ export function FbdNodesLayer({
   networkId,
   tempPositions,
   issueNodeIds,
+  runtime,
   pick,
   select,
   beginDrag,
@@ -148,6 +244,8 @@ export function FbdNodesLayer({
           : ''
 
         const paramSummary = formatNodeParameterSummary(node.kind, node.parameters)
+        const identity = fbdNodeIdentity(node)
+        const nodeReading = runtime?.byNodeId.get(placed.id) ?? null
 
         return (
           <g
@@ -208,28 +306,40 @@ export function FbdNodesLayer({
                   aria-hidden="true"
                 />
               )}
-              <text x={placed.x + 10} y={placed.y + 16} className="text-[11px]" fill="var(--c-text)">
-                #{node.executionOrder} · {node.typeRef}
-              </text>
+              {/* Nhãn CHÍNH là danh tính của khối (tên biến / loại khối), không
+                  phải thứ tự thực thi. Xem `fbdNodeIdentity`. */}
               <text
                 x={placed.x + 10}
-                y={placed.y + (paramSummary ? 26 : 30)}
-                className="text-[9px]"
-                fill="var(--c-text-dim)"
+                y={placed.y + 15}
+                className="text-[11px] font-semibold"
+                fill="var(--c-text)"
+                {...(identity.primary === paramSummary ? { 'data-fbd-node-param': 'true' } : {})}
               >
-                {node.kind}
+                {truncateText(identity.primary)}
               </text>
-              {paramSummary && (
+              {identity.secondary && (
                 <text
                   x={placed.x + 10}
-                  y={placed.y + 35}
-                  data-fbd-node-param="true"
+                  y={placed.y + 27}
                   className="text-[9px] font-mono"
-                  fill="var(--c-text)"
+                  fill="var(--c-text-dim)"
+                  {...(identity.secondary === paramSummary ? { 'data-fbd-node-param': 'true' } : {})}
                 >
-                  {paramSummary}
+                  {truncateText(identity.secondary)}
                 </text>
               )}
+              {/* Thứ tự thực thi giữ nguyên ý nghĩa nhưng lui về huy hiệu góc:
+                  nó quyết định chương trình chạy thế nào nên không được bỏ, mà
+                  cũng không phải thứ đọc trước tiên. */}
+              <text
+                x={placed.x + placed.width - (hasIssue ? 22 : 8)}
+                y={placed.y + 13}
+                textAnchor="end"
+                className="text-[9px] tabular-nums"
+                fill="var(--c-text-dim)"
+              >
+                #{node.executionOrder}
+              </text>
               <line
                 x1={placed.x}
                 y1={placed.y + FBD_NODE_HEADER_HEIGHT - 4}
@@ -238,10 +348,23 @@ export function FbdNodesLayer({
                 stroke="var(--c-border)"
                 strokeWidth={1}
               />
+              {/* Giá trị runtime của cả khối. Vẽ NGOÀI mép dưới chứ không chen
+                  vào giữa các hàng chân: chen vào sẽ đổi chiều cao khối theo
+                  việc có hay không có giá trị, tức topology nhảy mỗi lần thiết
+                  bị mất/khôi phục kết nối. */}
+              {nodeReading && (
+                <FbdRuntimeChip
+                  x={placed.x + placed.width - 6}
+                  y={placed.y + placed.height - 8}
+                  anchor="end"
+                  reading={nodeReading}
+                />
+              )}
             </g>
             {placed.ports.map((port) => {
               const definition = node.ports.find((item) => item.id === port.id)
               if (!definition) return null
+              const portReading = runtime?.byPortId.get(port.id) ?? null
               const selected = selection?.kind === 'port' && selection.portId === port.id
               const isSource = connectionFromPortId === port.id
               return (
@@ -295,6 +418,17 @@ export function FbdNodesLayer({
                   >
                     {formatPortLabel(definition.name, definition.dataType, definition.unit)}
                   </text>
+                  {/* Giá trị tại CHÂN, vẽ bên ngoài khối để không đè nhãn chân.
+                      Chỉ vẽ khi nó KHÁC giá trị đại diện của khối — nếu không,
+                      cùng một con số hiện hai lần cạnh nhau. */}
+                  {portReading && portReading !== nodeReading && (
+                    <FbdRuntimeChip
+                      x={port.direction === 'INPUT' ? port.cx - 8 : port.cx + 8}
+                      y={port.cy - 8}
+                      anchor={port.direction === 'INPUT' ? 'end' : 'start'}
+                      reading={portReading}
+                    />
+                  )}
                 </g>
               )
             })}

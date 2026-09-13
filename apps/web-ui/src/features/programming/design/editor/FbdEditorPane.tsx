@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Settings2 } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { THEMES, TOKEN_NAMES } from '../../../../shared/theme/tokens'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
@@ -84,6 +85,8 @@ export function FbdEditorPane({
   const dirty = localJson !== committedJson
   const [preferences, setPreferences] = useState(() => readFbdPreferences(userScope, projectId))
   const [activeNetworkId, setActiveNetworkId] = useState(() => local.networks[0]?.id)
+  const settingsRef = useRef<HTMLDetailsElement | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     setPreferences(readFbdPreferences(userScope, projectId))
@@ -102,6 +105,33 @@ export function FbdEditorPane({
     onSelectionChange?.(null)
     onNodeEditorTargetChange?.(null)
   }, [localResult.ok, onNodeEditorTargetChange, onSelectionChange])
+
+  /* Bấm ra ngoài thì đóng popover. `<details>` native KHÔNG tự đóng, nên nếu
+     thiếu hiệu ứng này thì khay tuỳ chọn nằm đè lên canvas cho tới khi người
+     dùng bấm lại đúng nút bánh răng — đúng kiểu "panel chồng nhau" mà lát này
+     dọn đi. */
+  useEffect(() => {
+    if (!settingsOpen) return undefined
+    const closeOnOutside = (event: MouseEvent) => {
+      const element = settingsRef.current
+      if (!element || event.target instanceof Node && element.contains(event.target)) return
+      element.open = false
+      setSettingsOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const element = settingsRef.current
+      if (!element) return
+      element.open = false
+      setSettingsOpen(false)
+    }
+    window.addEventListener('pointerdown', closeOnOutside)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('pointerdown', closeOnOutside)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [settingsOpen])
 
   function updatePreferences(patch: Partial<FbdPreferences>) {
     setPreferences(writeFbdPreferences(patch, userScope, projectId))
@@ -137,43 +167,38 @@ export function FbdEditorPane({
     )
   }
 
-  return (
-    <div
-      className="flex min-w-0 flex-1 flex-col gap-2 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-1 text-[var(--c-text)]"
-      data-testid="fbd-workspace-shell"
-      data-fbd-theme={preferences.theme}
-      style={themeStyle}
-    >
-      {/* Mốc tiêu đề cho trợ năng — ẩn thị giác vì tên POU đã có trên tab bar */}
-      <h3 className="sr-only">{program.name}</h3>
-      <StructuredFbdEditor
-        document={local}
-        canEdit={canEdit}
-        userPouInterfaces={userPouInterfaces}
-        projectId={projectId}
-        networkView={preferences.networkView}
-        activeNetworkId={activeNetworkId}
-        wireStyle={preferences.wireStyle}
-        gridVisible={preferences.gridVisible}
-        snapEnabled={preferences.snapEnabled}
-        snapSize={preferences.snapSize}
-        showInlineMinimap={!workbenchOwnsMinimap}
-        onChange={(next) => onChange(canonicalFbdJson(next))}
-        onSelectionChange={(selection) => {
-          if (selection?.networkId) setActiveNetworkId(selection.networkId)
-          onSelectionChange?.(selection)
-        }}
-        onNodeEditorTargetChange={onNodeEditorTargetChange}
-        focusSelection={focusSelection}
-      />
-      {/* Dải trạng thái + tuỳ chọn hiển thị — nằm cùng hàng, cùng kích thước
-       * text-[11px]. Preferences dồn trái, status fields dồn phải. */}
-      <div
-        className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)] min-[1440px]:h-[37px] min-[1440px]:flex-nowrap min-[1440px]:py-0"
-        role="group"
-        aria-label={pick('Tuỳ chọn hiển thị FBD', 'FBD display preferences')}
-        data-testid="fbd-secondary-toolbar"
+  /* Tuỳ chọn hiển thị — popover, KHÔNG phải một dải thường trực.
+   *
+   * Năm điều khiển này (khung nhìn, lưới, bám lưới, kiểu dây, giao diện FBD)
+   * được đặt một lần rồi hầu như không đụng lại, nhưng dải chứa chúng chiếm
+   * 37 px chiều cao ở MỌI thời điểm — lấy đúng từ chỗ vẽ, vốn là thứ khan
+   * hiếm nhất của trang này. Ảnh chuẩn `PGM-02B` đặt chúng sau một nút bánh
+   * răng trên thanh công cụ; đây là bản dựng đúng như vậy.
+       *
+   * `<details>` chứ không phải state React: nó cho hành vi đóng/mở, phím
+   * Enter/Space và ngữ nghĩa `aria-expanded` sẵn có của trình duyệt, nên
+   * không có bản dựng tay nào để lệch. Quyền sở hữu state của preferences
+   * không đổi — vẫn ở component này. */
+  const displaySettings = (
+      <details
+        ref={settingsRef}
+        className="relative"
+        onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
       >
+        <summary
+          data-testid="fbd-display-settings-toggle"
+          className="inline-flex h-8 cursor-pointer list-none items-center gap-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 text-xs text-[var(--c-text)] marker:content-none hover:border-[var(--c-accent)]"
+          title={pick('Tuỳ chọn hiển thị FBD', 'FBD display preferences')}
+        >
+          <Settings2 className="h-4 w-4" aria-hidden="true" />
+          <span className="sr-only">{pick('Tuỳ chọn hiển thị FBD', 'FBD display preferences')}</span>
+        </summary>
+        <div
+          className="absolute right-0 z-30 mt-1 flex w-64 flex-col gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2 text-[11px] text-[var(--c-text-dim)] shadow-lg"
+          role="group"
+          aria-label={pick('Tuỳ chọn hiển thị FBD', 'FBD display preferences')}
+          data-testid="fbd-secondary-toolbar"
+        >
         {/* `Khung nhìn` — chọn xem MỘT network hay TẤT CẢ.
           *
           * Điều khiển này biến mất cùng thanh công cụ phụ cũ, nhưng nó không
@@ -225,7 +250,44 @@ export function FbdEditorPane({
             <option value="DARK">{pick('Tối', 'Dark')}</option>
           </select>
         </label>
-      </div>
+        </div>
+      </details>
+  )
+
+  return (
+    <div
+      /* `min-h-0` ngang hàng quan trọng với `min-w-0`: thiếu nó, vỏ này là một
+         flex item với `min-height:auto`, nên nó cao bằng cảnh canvas (tối thiểu
+         1600 px theo công thức pan của `FbdCanvas`) thay vì nhận đúng phần chiều
+         cao còn lại và để canvas tự cuộn bên trong. */
+      className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-1 text-[var(--c-text)]"
+      data-testid="fbd-workspace-shell"
+      data-fbd-theme={preferences.theme}
+      style={themeStyle}
+    >
+      {/* Mốc tiêu đề cho trợ năng — ẩn thị giác vì tên POU đã có trên tab bar */}
+      <h3 className="sr-only">{program.name}</h3>
+      <StructuredFbdEditor
+        document={local}
+        canEdit={canEdit}
+        userPouInterfaces={userPouInterfaces}
+        projectId={projectId}
+        networkView={preferences.networkView}
+        activeNetworkId={activeNetworkId}
+        wireStyle={preferences.wireStyle}
+        gridVisible={preferences.gridVisible}
+        snapEnabled={preferences.snapEnabled}
+        snapSize={preferences.snapSize}
+        showInlineMinimap={!workbenchOwnsMinimap}
+        toolbarExtras={displaySettings}
+        onChange={(next) => onChange(canonicalFbdJson(next))}
+        onSelectionChange={(selection) => {
+          if (selection?.networkId) setActiveNetworkId(selection.networkId)
+          onSelectionChange?.(selection)
+        }}
+        onNodeEditorTargetChange={onNodeEditorTargetChange}
+        focusSelection={focusSelection}
+      />
       <EditorStatusBar
         leading={<span>{pick('Sẵn sàng', 'Ready')}</span>}
         fields={fbdStatusFields({

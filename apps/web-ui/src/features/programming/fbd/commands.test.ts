@@ -283,6 +283,92 @@ describe('SET_NODE_* (WP-05/06/07, FBD_EDITOR_DESIGN.md §3)', () => {
     })
     expect(state.announcement.code).toBe('node-not-found')
   })
+
+  /* Khối PID mang tham số chỉnh định — đúng hình dạng mà `PGM-02B §9` yêu cầu
+     Inspector phải sửa được. */
+  function pidDocument(): FbdDocument {
+    const document = golden()
+    document.networks[0].nodes.push({
+      id: '20000000-0000-4000-8000-0000000000a1', kind: 'FUNCTION_BLOCK', typeRef: 'PID', executionOrder: 4,
+      parameters: { instance: 'FB_PID_01', Kp: 2, Ki: 0.5, Kd: 0, Ts: 1, ManualOut: 0 },
+      ports: [
+        { id: '20000000-0000-4000-8000-0000000000a2', name: 'SP', direction: 'INPUT', dataType: 'REAL', unit: null, order: 0 },
+        { id: '20000000-0000-4000-8000-0000000000a3', name: 'PV', direction: 'INPUT', dataType: 'REAL', unit: null, order: 1 },
+        { id: '20000000-0000-4000-8000-0000000000a4', name: 'OUT', direction: 'OUTPUT', dataType: 'REAL', unit: null, order: 2 },
+      ],
+    })
+    return document
+  }
+  const PID_NODE_ID = '20000000-0000-4000-8000-0000000000a1'
+
+  it('SET_NODE_FB_PARAMS GIỮ tham số chỉnh định — đổi tên instance không được xoá Kp/Ki/Kd', () => {
+    /* HỒI QUY. Bản trước dựng một object parameters RỖNG rồi chỉ gán lại
+       `instance`/`retained`, nên mỗi lần đổi tên thực thể hay bật RETAIN là một
+       lần xoá sạch tham số chỉnh định của vòng điều khiển — không cảnh báo, và
+       Draft vẫn lưu thành công. */
+    let state = createFbdEditorState(pidDocument())
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_FB_PARAMS', networkId, nodeId: PID_NODE_ID, instance: 'FB_PID_02', retained: true,
+    })
+    const pid = state.document.networks[0].nodes.find((node) => node.id === PID_NODE_ID)
+    expect(pid?.parameters).toEqual({
+      instance: 'FB_PID_02', retained: true, Kp: 2, Ki: 0.5, Kd: 0, Ts: 1, ManualOut: 0,
+    })
+  })
+
+  it('SET_NODE_PARAMETERS sửa đúng khoá được truyền, giữ nguyên khoá còn lại', () => {
+    let state = createFbdEditorState(pidDocument())
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_PARAMETERS', networkId, nodeId: PID_NODE_ID, parameters: { Kp: 3.5, Ki: 0.25 },
+    })
+    const pid = state.document.networks[0].nodes.find((node) => node.id === PID_NODE_ID)
+    expect(pid?.parameters).toEqual({
+      instance: 'FB_PID_01', Kp: 3.5, Ki: 0.25, Kd: 0, Ts: 1, ManualOut: 0,
+    })
+    expect(state.announcement.code).toBe('node-parameters-set')
+  })
+
+  it('SET_NODE_PARAMETERS: `null` là lệnh XOÁ khoá, khác hẳn việc bỏ khoá khỏi payload', () => {
+    let state = createFbdEditorState(pidDocument())
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_PARAMETERS', networkId, nodeId: PID_NODE_ID, parameters: { ManualOut: null },
+    })
+    const pid = state.document.networks[0].nodes.find((node) => node.id === PID_NODE_ID)
+    expect(pid?.parameters).not.toHaveProperty('ManualOut')
+    expect(pid?.parameters).toMatchObject({ Kp: 2 })
+  })
+
+  it('SET_NODE_PARAMETERS từ chối `instance`/`retained` — hai khoá đó có lệnh và kiểm tra riêng', () => {
+    let state = createFbdEditorState(pidDocument())
+    const before = canonicalFbdJson(state.document)
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_PARAMETERS', networkId, nodeId: PID_NODE_ID, parameters: { instance: '1-bad' },
+    })
+    expect(state.announcement.code).toBe('invalid-node-attributes')
+    expect(canonicalFbdJson(state.document)).toBe(before)
+  })
+
+  it('SET_NODE_PARAMETERS từ chối số không hữu hạn — nó sẽ thành `null` trong artifact', () => {
+    /* `NaN`/`Infinity` không canonical hoá được sang JSON, nên một tham số
+       chỉnh định như vậy biến mất trên đường xuống thiết bị. */
+    let state = createFbdEditorState(pidDocument())
+    const before = canonicalFbdJson(state.document)
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_PARAMETERS', networkId, nodeId: PID_NODE_ID, parameters: { Kp: Number.NaN },
+    })
+    expect(state.announcement.code).toBe('invalid-parameter-value')
+    expect(canonicalFbdJson(state.document)).toBe(before)
+  })
+
+  it('SET_NODE_PARAMETERS không có quyền sửa thì không ghi gì', () => {
+    let state = createFbdEditorState(pidDocument(), false)
+    const before = canonicalFbdJson(state.document)
+    state = fbdEditorReducer(state, {
+      type: 'SET_NODE_PARAMETERS', networkId, nodeId: PID_NODE_ID, parameters: { Kp: 9 },
+    })
+    expect(state.announcement.code).toBe('no-edit-permission')
+    expect(canonicalFbdJson(state.document)).toBe(before)
+  })
 })
 
 describe('translateFbdAnnouncement (BUG-012)', () => {

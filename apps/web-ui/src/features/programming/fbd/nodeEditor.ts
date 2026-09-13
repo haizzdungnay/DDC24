@@ -14,6 +14,11 @@ export type FbdNodeEditorChange =
   | { kind: 'value'; value: FbdParameterValue }
   | { kind: 'dataType'; dataType: FbdDataType }
   | { kind: 'fbParams'; instance: string | null; retained: boolean }
+  /**
+   * Tham số chỉnh định của khối. Chỉ mang những khoá ĐƯỢC ĐỔI; khoá vắng mặt
+   * giữ nguyên, `null` là lệnh xoá.
+   */
+  | { kind: 'parameters'; parameters: Record<string, FbdParameterValue | null> }
   | {
       kind: 'attributes'
       dataType?: FbdDataType

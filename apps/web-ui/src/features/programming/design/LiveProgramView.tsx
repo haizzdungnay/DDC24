@@ -74,7 +74,12 @@ export function LiveProgramView({
   )
 
   return (
-    <section className="space-y-3" aria-label={pick('Chương trình đang chạy', 'Running program')}>
+    /* `flex min-h-0 flex-1 flex-col` chứ không phải `space-y-3`: LIVE dùng chung
+       ngân sách chiều cao với EDIT, và một vỏ `display:block` để sơ đồ cao bằng
+       nội dung rồi tràn khỏi khung — đo được 2026-09-13: `article` cao 1741 px
+       trong một cột 520 px, tức hai phần ba sơ đồ đang chạy nằm ngoài màn hình
+       mà không có thanh cuộn nào chỉ ra điều đó. */
+    <section className="flex min-h-0 flex-1 flex-col gap-3" aria-label={pick('Chương trình đang chạy', 'Running program')}>
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2">
         <div className="text-xs text-[var(--c-text)]">
           <span className="font-semibold uppercase">{pick('Đang chạy', 'Running')}</span>
@@ -143,7 +148,10 @@ export function LiveProgramView({
             {pick('Sơ đồ FBD của gói đang chạy không đọc được.', 'The running package’s FBD diagram cannot be read.')}
           </p>
         ) : (
-          <LiveFbdView document={liveFbdDocument} />
+          <LiveFbdView
+            document={liveFbdDocument}
+            runtime={program ? overlays[program.programId] ?? null : null}
+          />
         )
       ) : (
         <div className="space-y-2">

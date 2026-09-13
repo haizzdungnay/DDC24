@@ -47,6 +47,10 @@ import { StRuntimeValueOverlay, type StRuntimeOverlayState } from './StRuntimeVa
 import { CommandPalette } from './CommandPalette'
 import { InsertPointVariablePanel } from './InsertPointVariablePanel'
 import { LIBRARY_DRAG_TYPE, QuickLibraryHost } from '../library/QuickLibraryPanel'
+import {
+  PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX,
+  useMinWidth,
+} from '../../layout/useProgrammingViewport'
 import { catalogEntriesOf, type CatalogEntry } from '../library/libraryCatalog'
 import { insertCompatibilityStatement } from '../../library/libraryPresentation'
 import { resolveLibraryInsertIntent, type LibraryInsertIntent } from '../../shared/libraryInsertIntent'
@@ -492,13 +496,7 @@ export function EditorPane({
    * Nhưng cách chữa đó đổi hợp đồng bố cục mà không đi qua quyết định sản
    * phẩm. Khoảng trống ấy được ghi thành finding riêng để chọn đường đúng
    * (khay/popover có nút mở, hay nới chính AC) thay vì để hai thứ cùng sai. */
-  const [fbdWideDesktop, setFbdWideDesktop] = useState(() => window.innerWidth >= 1440)
-
-  useEffect(() => {
-    const update = () => setFbdWideDesktop(window.innerWidth >= 1440)
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [])
+  const fbdWideDesktop = useMinWidth(PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX)
   /* Bản đồ mã là ĐIỀU HƯỚNG trong POU đang mở, nên nó thuộc cột trái cùng cây
    * POU — không phải một khay nữa chồng dưới chỗ gõ. Mặc định mở: nó là cách
    * nhanh nhất để đi trong một POU 400 dòng. */
@@ -535,9 +533,11 @@ export function EditorPane({
    * (D-01) — không viết thêm một prop/hiệu ứng thứ hai cho cùng việc "chọn
    * vùng theo line/column sau khi Program mới mount". */
   const [paletteJumpTarget, setPaletteJumpTarget] = useState<ProgrammingDiagnostic | null>(null)
-  const fbdInspectorOpen = selected?.language === 'FBD' && !fbdWideDesktop
-    ? fbdInspectorDrawerOpen
-    : slots.inspector
+  /* POU FBD dưới ngưỡng bốn cột: Inspector là KHAY NỔI, không phải cột. Một
+     biến duy nhất cho câu hỏi đó, dùng lại ở cả class, nút mở và hành vi Escape
+     — ba nơi tự suy lấy là ba nơi có thể lệch nhau. */
+  const inspectorAsDrawer = selected?.language === 'FBD' && !fbdWideDesktop
+  const fbdInspectorOpen = inspectorAsDrawer ? fbdInspectorDrawerOpen : slots.inspector
   /* Task 8 đã đưa Quick Library FBD thành cột thứ ba ở desktop RỘNG. Sau khi
    * tách `ProgramsTab` thành facade, điều kiện mount phải sống tại owner mới
    * này. Dưới `1440 px` FBD không dựng cột — xem chú thích `fbdWideDesktop`. */
@@ -550,7 +550,7 @@ export function EditorPane({
     explorerOpen: slots.left,
     libraryOpen: libraryColumnOpen,
     libraryMounted: libraryColumnEligible,
-    inspectorOpen: selected?.language === 'FBD' && !fbdWideDesktop ? false : slots.inspector,
+    inspectorOpen: inspectorAsDrawer ? false : slots.inspector,
   })
 
   useEffect(() => {
@@ -927,8 +927,8 @@ export function EditorPane({
           setMaximized(false)
         }}
       >
-        {selected?.language === 'FBD' && (
-          <div className="mb-2 flex justify-end min-[1440px]:hidden">
+        {inspectorAsDrawer && (
+          <div className="mb-2 flex justify-end">
             <button
               ref={fbdInspectorOpenerRef}
               type="button"
@@ -1002,8 +1002,15 @@ export function EditorPane({
         )}
 
         {/* Ô này nhận TOÀN BỘ chiều cao còn lại của cột giữa; `min-h-0` là bắt
-            buộc để con của nó được phép cuộn thay vì phình ra (DEV-PROG-001). */}
-        <div className="min-h-0 flex-1">
+            buộc để con của nó được phép cuộn thay vì phình ra (DEV-PROG-001).
+            `flex flex-col` cũng bắt buộc, và đây là chỗ nó từng thiếu: ô này là
+            FLEX ITEM của cột (nên `flex-1`/`min-h-0` giới hạn được CHÍNH nó),
+            nhưng nó lại là khối `display:block` với con của nó. `flex-1` của vỏ
+            FBD bên trong vì thế không có ngữ cảnh flex nào để bám, nên vỏ ấy cao
+            bằng nội dung và tràn ra ngoài. Đo tại 1680×941 trước khi sửa: ô cao
+            495 px, `fbd-workspace-shell` bên trong cao 2023 px — canvas bị cắt
+            mất hai phần ba, còn dải trạng thái bị đẩy hẳn khỏi màn hình. */}
+        <div className="flex min-h-0 flex-1 flex-col">
         {!selected ? (
           /* `Kiểm tra` và `So sánh` có phạm vi GÓI, không phải POU. Toolbar của
              trình soạn thảo là chỗ của chúng khi đang soạn (`PGM-02A §3`),
@@ -1148,12 +1155,34 @@ export function EditorPane({
       />
       <aside
         data-testid="inspector-column"
-        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${selected?.language === 'FBD'
-          ? `${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl min-[1440px]:static min-[1440px]:block min-[1440px]:w-auto min-[1440px]:bg-transparent min-[1440px]:p-0 min-[1440px]:shadow-none`
-          : ''}`}
+        /* HAI NHÁNH LOẠI TRỪ NHAU, KHÔNG PHẢI MỘT CHUỖI CHỒNG BIẾN THỂ.
+         *
+         * TRIỆU CHỨNG. Ở mọi khổ desktop, cột này nổi đè lên thanh hành động
+         * header — nút `LIVE`/`SIMULATE`/`Details` không bấm được — và track
+         * lưới 240 px dành cho nó bỏ trống thành một mảng trắng mép phải. Nó
+         * cũng đè luôn lên cột Thư viện nhanh, làm Thư viện chỉ còn ~60 px đọc
+         * được.
+         *
+         * NGUYÊN NHÂN GỐC. Bản trước viết `md:fixed` cạnh một biến thể
+         * arbitrary cho 1440 px, tin
+         * rằng biến thể có ngưỡng cao hơn sẽ thắng. Tailwind v4 xuất MỌI biến
+         * thể breakpoint không-mặc-định (arbitrary `min-[…]` lẫn breakpoint tự
+         * khai trong `@theme`) vào một cụm đứng TRƯỚC `sm/md/lg/xl` — đo được
+         * 2026-09-13: cụm ấy ở thứ tự 765, `md` ở 813. Hai rule cùng khớp ở
+         * ≥1440 px và cùng độ đặc hiệu, nên `md:fixed` đứng sau thắng. Đo tại
+         * 1680 px: `position: fixed`, rect `x=1296 y=64 w=384 h=813`. Đổi thứ
+         * tự chữ trong `className` không cứu được — CSS không đọc thứ tự ấy.
+         *
+         * CÁCH SỬA. Một biến JavaScript quyết chế độ, rồi mỗi chế độ có MỘT bộ
+         * class không giao nhau: nhánh cột không chứa `md:` nào, nhánh khay
+         * không chứa gì cho khổ ≥1440 vì nó không bao giờ chạy ở đó. Không có
+         * hai rule cùng khớp thì không có gì để thua. */
+        className={inspectorAsDrawer
+          ? `min-w-0 ${fbdInspectorOpen ? 'md:fixed' : 'md:hidden'} md:inset-y-16 md:right-0 md:z-40 md:w-[min(24rem,100vw)] md:overflow-y-auto md:bg-[var(--c-bg)] md:p-3 md:shadow-2xl`
+          : 'min-w-0 lg:min-h-0 lg:overflow-y-auto'}
         aria-label={pick('Thuộc tính', 'Inspector')}
         onKeyDown={(event) => {
-          if (selected?.language !== 'FBD' || event.key !== 'Escape' || window.innerWidth >= 1024) return
+          if (!inspectorAsDrawer || event.key !== 'Escape') return
           event.preventDefault()
           setFbdInspectorDrawerOpen(false)
           window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
@@ -1167,9 +1196,9 @@ export function EditorPane({
             aria-controls="programs-slot-inspector"
             onClick={() => {
               const nextOpen = !fbdInspectorOpen
-              if (selected?.language === 'FBD' && !fbdWideDesktop) setFbdInspectorDrawerOpen(nextOpen)
+              if (inspectorAsDrawer) setFbdInspectorDrawerOpen(nextOpen)
               else setSlots({ ...slots, inspector: nextOpen })
-              if (!nextOpen && selected?.language === 'FBD' && !fbdWideDesktop) {
+              if (!nextOpen && inspectorAsDrawer) {
                 window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
               }
             }}

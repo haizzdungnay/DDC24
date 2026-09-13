@@ -1,3 +1,5 @@
+import { Maximize, ZoomIn, ZoomOut } from 'lucide-react'
+import type { FbdRuntimeOverlay } from './runtimeOverlay'
 import { useEffect, useMemo, useRef, useState, type Dispatch } from 'react'
 import type { FbdEditorAction, FbdSelection } from './commands'
 import {
@@ -114,6 +116,8 @@ export interface FbdCanvasProps {
   layout: FbdDocument['layout']
   selection: FbdSelection | null
   issueNodeIds?: ReadonlySet<string>
+  /** Giá trị runtime đã trình bày xong; `null` = chế độ này không có nguồn. */
+  runtime?: FbdRuntimeOverlay | null
   connectionFromPortId: string | null
   canEdit: boolean
   dispatch: Dispatch<FbdEditorAction>
@@ -139,6 +143,7 @@ export function FbdCanvas({
   layout,
   selection,
   issueNodeIds,
+  runtime,
   connectionFromPortId,
   canEdit,
   dispatch,
@@ -810,40 +815,62 @@ export function FbdCanvas({
     })
   }
 
+  /* Cụm thu phóng NỔI TRÊN canvas, không phải một hàng riêng phía trên nó.
+   *
+   * Là một hàng riêng, nó lấy 36 px chiều cao ở mọi thời điểm — trên một trang
+   * mà chỗ vẽ đã là tài nguyên khan hiếm nhất (đo 2026-09-13 tại 1680×941:
+   * canvas chỉ còn 312 px trên tổng 941). Nổi ở góc canvas là mẫu quen của mọi
+   * IDE sơ đồ, và ảnh chuẩn `PGM-02B` cũng đặt nó như vậy.
+   *
+   * Nhãn giữ NGUYÊN chuỗi cũ qua `aria-label`: đây là ba nút mà cả test đơn vị
+   * lẫn e2e chọn theo tên, và đổi tên để "gọn hơn" là đổi hợp đồng trợ năng. */
+  const zoomButtonClass = 'inline-flex h-7 w-7 items-center justify-center rounded border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text)] hover:bg-[var(--c-surface-2)]'
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={pick('Thu phóng canvas', 'Canvas zoom')}>
-        <button
-          type="button"
-          data-fbd-canvas-control="true"
-          className="h-7 rounded border border-[var(--c-border)] px-2 text-xs hover:bg-[var(--c-surface-2)]"
-          onClick={() => setViewport((v) => nextViewport(v, { scale: v.scale - ZOOM_STEP }))}
-        >
-          {pick('Thu nhỏ', 'Zoom out')}
-        </button>
-        <span className="text-xs text-[var(--c-text-dim)]">{Math.round(viewport.scale * 100)}%</span>
-        <button
-          type="button"
-          data-fbd-canvas-control="true"
-          className="h-7 rounded border border-[var(--c-border)] px-2 text-xs hover:bg-[var(--c-surface-2)]"
-          onClick={() => setViewport((v) => nextViewport(v, { scale: v.scale + ZOOM_STEP }))}
-        >
-          {pick('Phóng to', 'Zoom in')}
-        </button>
-        <button
-          type="button"
-          data-fbd-canvas-control="true"
-          className="h-7 rounded border border-[var(--c-border)] px-2 text-xs hover:bg-[var(--c-surface-2)]"
-          onClick={() => setViewport(DEFAULT_VIEWPORT)}
-        >
-          {pick('Vừa khung', 'Reset zoom')}
-        </button>
-      </div>
-
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]"
+        className="relative min-h-0 flex-1 overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]"
       >
+        <div
+          className="pointer-events-none sticky top-0 z-10 flex h-0 items-start justify-end"
+          role="group"
+          aria-label={pick('Thu phóng canvas', 'Canvas zoom')}
+        >
+          <div className="pointer-events-auto m-1.5 flex items-center gap-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]/95 p-1 shadow-sm">
+            <button
+              type="button"
+              data-fbd-canvas-control="true"
+              aria-label={pick('Thu nhỏ', 'Zoom out')}
+              title={pick('Thu nhỏ', 'Zoom out')}
+              className={zoomButtonClass}
+              onClick={() => setViewport((v) => nextViewport(v, { scale: v.scale - ZOOM_STEP }))}
+            >
+              <ZoomOut className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <span className="min-w-[3ch] text-center text-xs tabular-nums text-[var(--c-text-dim)]">{Math.round(viewport.scale * 100)}%</span>
+            <button
+              type="button"
+              data-fbd-canvas-control="true"
+              aria-label={pick('Phóng to', 'Zoom in')}
+              title={pick('Phóng to', 'Zoom in')}
+              className={zoomButtonClass}
+              onClick={() => setViewport((v) => nextViewport(v, { scale: v.scale + ZOOM_STEP }))}
+            >
+              <ZoomIn className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              data-fbd-canvas-control="true"
+              aria-label={pick('Vừa khung', 'Reset zoom')}
+              title={pick('Vừa khung', 'Reset zoom')}
+              className={zoomButtonClass}
+              onClick={() => setViewport(DEFAULT_VIEWPORT)}
+            >
+              <Maximize className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
         <svg
           ref={surfaceRef}
           role="group"
@@ -895,6 +922,7 @@ export function FbdCanvas({
               nodesById={nodesById}
               selection={selection}
               issueNodeIds={issueNodeIds}
+              runtime={runtime}
               pick={pick}
               connectionFromPortId={connectionFromPortId}
               canEdit={canEdit}

@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../../../shared/i18n'
 import type { ProgrammingDiagnostic } from '../../model/types'
 import { ProblemsDrawer } from '../../shared/ProblemsDrawer'
+import {
+  PROGRAMMING_WORKBENCH_COLUMNS_MIN_WIDTH_PX,
+  useMinWidth,
+  useWorkbenchOwnsMinimap,
+} from '../../layout/useProgrammingViewport'
 import { WorkbenchMinimapPanel, type FbdCanvasBridge } from './WorkbenchMinimapPanel'
 import { WorkbenchWatchPanel, type WatchRow } from './WorkbenchWatchPanel'
 
@@ -178,6 +183,11 @@ export function ProgrammingWorkbench({
   fbdBridge?: FbdCanvasBridge | null
 }) {
   const { pick } = useI18n()
+  /* Số cột của khay đáy do JAVASCRIPT quyết, không do utility quyết — lý do đầy
+     đủ ở chú thích cạnh chính cái lưới bên dưới. Hai hook, hai ngưỡng: `lg`
+     (1024) mở hai cột, `1440` mở cột Mini Map. */
+  const workbenchOwnsMinimap = useWorkbenchOwnsMinimap()
+  const twoColumnGrid = useMinWidth(PROGRAMMING_WORKBENCH_COLUMNS_MIN_WIDTH_PX)
   /* `PGM-02B` — MỞ SẴN. Quyết định này THAY THẾ `DEV-PROG-024`, vốn chốt thu gọn
    * sẵn.
    *
@@ -395,8 +405,34 @@ export function ProgrammingWorkbench({
            *
            * Nên ba chặng, không phải một: dưới `lg` xếp CHỒNG (cùng nội dung, cùng
            * thứ tự đọc, chỉ khác trục); từ `lg` hai cột; từ `1440px` — khổ mà ảnh
-           * chuẩn PGM-02B mô tả — đủ chỗ cho cả cột Mini Map. */}
-          <div className="grid h-full grid-cols-1 divide-y divide-[var(--c-border)] lg:grid-cols-[minmax(0,1fr)_375px] lg:divide-x lg:divide-y-0 min-[1440px]:grid-cols-[minmax(0,1fr)_375px_458px]">
+           * chuẩn PGM-02B mô tả — đủ chỗ cho cả cột Mini Map.
+           *
+           * CHẶNG THỨ BA PHẢI ĐI QUA JAVASCRIPT, KHÔNG QUA MỘT UTILITY THỨ HAI.
+           *
+           * Bản trước viết `lg:grid-cols-[…375px]` cạnh một biến thể arbitrary
+           * cho 1440 px dựng `grid-cols-[…458px]`.
+           * Tailwind v4 xuất mọi biến thể breakpoint KHÔNG-mặc-định — cả
+           * `min-[…]` arbitrary lẫn breakpoint tự khai trong `@theme` — vào một
+           * cụm nằm TRƯỚC `sm/md/lg/xl` (đo được 2026-09-13: cụm tự khai ở thứ
+           * tự 765, `sm` ở 779, `lg` ở 848). Hai rule cùng khớp ở ≥1440 px, cùng
+           * độ đặc hiệu, nên bản `lg:` — đứng sau — thắng. Kết quả đo tại
+           * 1680 px: `grid-template-columns: 1025px 375px`, tức cột Mini Map
+           * KHÔNG BAO GIỜ tồn tại và khay Mini Map rơi xuống một hàng riêng kéo
+           * hết bề ngang — đúng "thanh placeholder" mà người dùng nhìn thấy.
+           *
+           * `useWorkbenchOwnsMinimap()` đã là nguồn sự thật DUY NHẤT cho câu hỏi
+           * "ai giữ Mini Map ở khổ này" (canvas giữ dưới 1440, khay giữ từ 1440).
+           * Cho chính nó quyết luôn số cột thì lưới và nội dung không thể lệch
+           * nhau, và một style nội tuyến thì không có rule nào chen vào trước
+           * được. */}
+          <div
+            className="grid h-full grid-cols-1 divide-y divide-[var(--c-border)] lg:divide-x lg:divide-y-0"
+            style={workbenchOwnsMinimap
+              ? { gridTemplateColumns: 'minmax(0,1fr) 375px 458px' }
+              : twoColumnGrid
+                ? { gridTemplateColumns: 'minmax(0,1fr) 375px' }
+                : undefined}
+          >
             {/* Cột trái: Nội dung tab đang chọn */}
             <div data-testid="workbench-problems-column" className="h-full overflow-auto pr-2">
               {tab === 'problems' && (
@@ -471,10 +507,15 @@ export function ProgrammingWorkbench({
               )}
             </div>
 
-            {/* Cột phải: Mini Map (T9-02) */}
-            <div data-testid="workbench-minimap-column" className="flex h-full flex-col overflow-auto pl-2">
-              <WorkbenchMinimapPanel bridge={fbdBridge} />
-            </div>
+            {/* Cột phải: Mini Map (T9-02).
+             * Chỉ dựng khi khay SỞ HỮU Mini Map. Dưới `1440px` chủ sở hữu là
+             * canvas (`FbdEditorPane`), nên dựng thêm một ô ở đây sẽ vừa tạo một
+             * hàng chồng thừa, vừa đặt hai bản cùng vai trò trong cùng một DOM. */}
+            {workbenchOwnsMinimap && (
+              <div data-testid="workbench-minimap-column" className="flex h-full flex-col overflow-auto pl-2">
+                <WorkbenchMinimapPanel bridge={fbdBridge} />
+              </div>
+            )}
           </div>
         </div>
       )}

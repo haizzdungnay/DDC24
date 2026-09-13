@@ -76,10 +76,10 @@ export function EditorStatusBar({
       role="group"
       aria-label={pick('Trạng thái trình soạn thảo', 'Editor status')}
       className={leading
-        ? 'flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)] min-[1440px]:h-[37px] min-[1440px]:flex-nowrap min-[1440px]:justify-end min-[1440px]:py-0'
+        ? 'flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)] wide:h-[37px] wide:flex-nowrap wide:justify-end wide:py-0'
         : 'flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--c-border)] px-2 py-1 text-[11px] text-[var(--c-text-dim)]'}
     >
-      {leading && <div className="min-[1440px]:mr-auto">{leading}</div>}
+      {leading && <div className="wide:mr-auto">{leading}</div>}
       {fields.map((field) => (
         <dl key={field.id} className="flex items-center gap-1" data-testid={`editor-status-${field.id}`}>
           <dt>{label(field.id)}</dt>

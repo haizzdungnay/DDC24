@@ -23,7 +23,9 @@ describe('ProgramsWorkspace — kích thước panel', () => {
     expect(clampPanelWidth('explorer', 20)).toBe(168)
     expect(clampPanelWidth('library', 999)).toBe(320)
     expect(clampPanelWidth('inspector', 271.6)).toBe(272)
-    expect(clampPanelWidth('library', Number.NaN)).toBe(196)
+    /* `NaN` rơi về MẶC ĐỊNH của panel, không rơi về sàn. Con số ở đây đi theo
+       `DEFAULT_WIDTHS`, vốn đã được chỉnh lại theo ảnh chuẩn `PGM-02B`. */
+    expect(clampPanelWidth('library', Number.NaN)).toBe(216)
   })
 
   it('resize handle có tên truy cập và chuyển đúng panel/hướng', () => {
