@@ -1,11 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useProgrammingPointCatalog, useProgrammingSignalDependencies } from '../../api/queries'
 import { useProgrammingActionAllowed } from '../../api/authorization'
 import { useProgrammingApiClient } from '../../api/authClient'
 import { ProgrammingApiError, ProgrammingNoResponseError, type ProgrammingBindingCandidate, type ProgrammingBindingPreview } from '../../api/generated/client'
 import { createUuid } from '../../../../shared/crypto'
 import { Modal } from '../../../../shared/components/Modal'
-import type { ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingProject } from '../../model/types'
+import type { ProgrammingDraftDocument, ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProject } from '../../model/types'
+import type { Point } from '../../../../shared/types'
 import { draftSignals, isDraftV2 } from '../../model/signals'
 import { AssignedMappingsTable } from './AssignedMappingsTable'
 import { MappingInspector } from './MappingInspector'
@@ -24,6 +25,8 @@ import { useI18n } from '../../../../shared/i18n'
 import { boardChannelConfirmed, fetchSystemCapabilities, type SystemCapabilities } from '../../../../shared/api/capabilities'
 import { VariableWorklist } from './VariableWorklist'
 import { boundPointKeys, buildMappingVariableRows, buildPointRows, equipmentOptions, matchesAccess, matchesEquipment, matchesPointStatus, matchesVariableStatus, rankPointRows, type AccessFilter, type CatalogTruthState, type MappingPointRow, type MappingVariableRow, type StatusFilter } from './mappingViewModel'
+import { catalogIdentitiesDiverged, indexLivePoints, mergeCatalogWithLive } from './liveCatalog'
+import { useOptionalRealtime } from '../../../../shared/realtime'
 import { bindingPreviewDecision, type BindingPreviewDecision } from './bindingPreviewModel'
 
 type PointCategoryFilter = 'ALL' | 'LOCAL' | 'VP' | 'MB_RTU'
@@ -42,6 +45,12 @@ interface MappingMutation {
 }
 
 const BINDING_DATA_TYPES = new Set<ProgrammingBindingCandidate['dataType']>(['BOOL', 'INT', 'DINT', 'UINT', 'REAL', 'TIME'])
+
+/* Một mảng rỗng DÙNG CHUNG: `catalog.data?.items ?? []` viết thẳng trong thân
+ * component sinh mảng mới mỗi lần render, đủ để mọi `useMemo` phụ thuộc nó tính
+ * lại — đúng thứ thay đổi này đang gỡ bỏ. */
+const EMPTY_CATALOG_ITEMS: ProgrammingPointCatalogEntry[] = []
+const EMPTY_LIVE_POINTS: Point[] = []
 
 /** PGM-03: xem trước server-authoritative rồi mới ghi Assign/Change/Remove vào Draft. */
 export function MappingTab(props: {
@@ -121,7 +130,55 @@ export function MappingTab(props: {
     lastSuccessAt: catalog.lastSuccessAt,
     complete: catalog.complete ?? (catalog.status === 'ready' && !catalog.data?.nextCursor),
   }), [catalog.complete, catalog.data?.nextCursor, catalog.lastSuccessAt, catalog.status])
-  const variableRows = useMemo(() => buildMappingVariableRows(document, catalog.data?.items ?? [], truth), [catalog.data?.items, document, truth])
+
+  /* `SW-PGM03-LIVE-001` — DANH MỤC và GIÁ TRỊ SỐNG là hai kênh khác nhau.
+   *
+   * `point-catalog` giữ phần metadata (định danh, kiểu, hướng, eligibility do
+   * máy chủ quyết), còn `value`/`quality`/`observedAt` đến từ WebSocket
+   * `/api/v1/ws/monitor` — kênh đã có sẵn cho toàn ứng dụng và chỉ đẩy khi tập
+   * điểm thật sự đổi. Trước đây cả hai đi chung một lượt đọc lặp mỗi 10 giây:
+   * 38,9 KiB mỗi lần cho 72 điểm, 86% trong đó là metadata không đổi, và
+   * `observedAt` (mốc ĐỌC, không phải mốc giá trị đổi) nhích ở 72/72 điểm nên
+   * mọi lớp memo hoá đều vô hiệu. */
+  const realtime = useOptionalRealtime()
+  const livePoints = realtime?.allPoints ?? EMPTY_LIVE_POINTS
+  const liveById = useMemo(() => indexLivePoints(livePoints), [livePoints])
+  /* Kênh sống đứt mà vẫn vẽ số cuối cùng như số đang sống là dối trá không ai
+   * kiểm được; chỉ đánh dấu sau khi ĐÃ từng nhận gói, để lần vào trang đầu
+   * tiên (WS còn đang bắt tay) không bôi STALE lên dữ liệu vừa đọc thật. */
+  const liveDisconnected = realtime !== null
+    && realtime.connectionState !== 'connected'
+    && realtime.lastPointEventAt !== null
+  const catalogItems = catalog.data?.items ?? EMPTY_CATALOG_ITEMS
+  const liveItems = useMemo(
+    () => mergeCatalogWithLive(catalogItems, liveById, { stale: liveDisconnected }),
+    [catalogItems, liveById, liveDisconnected],
+  )
+
+  /* Tín hiệu revalidate CHÍNH XÁC thay cho nhịp poll ngắn: người vận hành thêm
+   * hoặc bớt một điểm thì WS biết ngay, danh mục thì không. Lệch tập định danh
+   * ⇒ đọc lại danh mục ĐÚNG MỘT LẦN cho mỗi tập định danh.
+   *
+   * `refreshedForLiveIds` là thứ chặn vòng lặp: máy chủ hoàn toàn có thể trả
+   * lại đúng danh mục cũ (điểm mới chưa kịp vào catalog), và khi ấy điều kiện
+   * lệch vẫn đúng ở lần render kế tiếp. Không ghi nhớ đã hỏi cho tập nào thì
+   * mỗi phản hồi lại kích hoạt một lần đọc nữa — một vòng lặp đọc vô hạn đánh
+   * thẳng vào máy chủ, tệ hơn nhiều so với nhịp poll vừa gỡ bỏ. */
+  const refreshCatalog = catalog.refresh
+  const refreshedForLiveIds = useRef<string | null>(null)
+  useEffect(() => {
+    if (!active || catalog.status !== 'ready' || !catalog.complete) return
+    if (!catalogIdentitiesDiverged(catalogItems, liveById)) {
+      refreshedForLiveIds.current = null
+      return
+    }
+    const signature = [...liveById.keys()].sort().join('\u0000')
+    if (refreshedForLiveIds.current === signature) return
+    refreshedForLiveIds.current = signature
+    refreshCatalog()
+  }, [active, catalog.complete, catalog.status, catalogItems, liveById, refreshCatalog])
+
+  const variableRows = useMemo(() => buildMappingVariableRows(document, liveItems, truth), [document, liveItems, truth])
 
   useEffect(() => {
     if (!selectedVariableId || !variableRows.some((row) => row.id === selectedVariableId)) setSelectedVariableId(variableRows[0]?.id ?? null)
@@ -129,9 +186,9 @@ export function MappingTab(props: {
 
   const selectedVariable = variableRows.find((row) => row.id === selectedVariableId) ?? null
   const pointRows = useMemo(() => {
-    const rows = buildPointRows(catalog.data?.items ?? [], selectedVariable ?? undefined, truth)
+    const rows = buildPointRows(liveItems, selectedVariable ?? undefined, truth)
     return selectedVariable ? rankPointRows(rows, selectedVariable) : rows
-  }, [catalog.data?.items, selectedVariable, truth])
+  }, [liveItems, selectedVariable, truth])
 
   /* Gợi ý = "chỉ hiện ứng viên đáng bấm". Hai điều kiện, và điều kiện thứ hai
    * chính là lý do tính năng này phải chờ capability:

@@ -8,6 +8,86 @@
 
 ## [Unreleased]
 
+### Changed — Points & Mapping: tách danh mục điểm khỏi giá trị sống, bỏ vòng đọc lại `point-catalog` mỗi 10 giây (2026-09-13)
+
+- Phạm vi: `apps/web-ui/src/features/programming/api/queries.ts`,
+  `apps/web-ui/src/features/programming/design/mapping/MappingTab.tsx`,
+  `apps/web-ui/src/features/programming/design/mapping/liveCatalog.ts` (mới),
+  `apps/web-ui/src/features/programming/design/mapping/liveCatalog.test.ts` (mới),
+  `apps/web-ui/src/features/programming/design/mapping/MappingLiveData.test.tsx` (mới),
+  `apps/web-ui/src/shared/realtime.tsx`,
+  `docs/02_design/software/SW_MAPPING_LIVE_DATA_DESIGN_MK-DDC-24_VI.md` (mới),
+  `CHANGELOG.md`.
+
+- Triệu chứng: workbench Ánh xạ gọi `GET /programming/point-catalog?limit=500`
+  không ngừng, và mỗi lượt gọi lại vẽ lại cả trang.
+
+- Số đo trước khi sửa (bo Foxlinx, 72 điểm): nhịp **10 giây**, **38,9 KiB** mỗi
+  lượt (≈233 KiB/phút cho mỗi tab), không `ETag`, **86%** payload là metadata
+  không đổi lần nào, và `setState` hai lần mỗi chu kỳ.
+
+- Nguyên nhân gốc 1 — `observedAt` là mốc **ĐỌC**, không phải mốc giá trị đổi:
+  nó nhích ở **72/72** điểm mỗi lượt trong khi chỉ **9/72** điểm đổi
+  `value`/`quality`. Mọi phép so sánh nội dung vì thế đều ra "khác" và không một
+  lớp memo hoá nào sống sót.
+
+- Nguyên nhân gốc 2 — danh mục và giá trị đi chung một kênh, nên 86% payload gần
+  như bất biến bị kéo lại mỗi 10 giây chỉ để lấy 14% giá trị sống.
+
+- Cách sửa (`SW-PGM03-LIVE-001`, chủ sở hữu chốt phương án P3): metadata tiếp
+  tục đến từ `point-catalog` nhưng **không poll nhịp ngắn** (lưới an toàn 5 phút
+  + nạp lại khi tab quay lại + nạp lại khi tập định danh của WS lệch danh mục);
+  `value`/`quality`/`observedAt` đến từ WebSocket `/api/v1/ws/monitor` — kênh
+  **đã có sẵn**, chỉ đẩy khi tập điểm thật sự đổi. `mergeCatalogWithLive` giữ
+  nguyên reference của mọi item không đổi, nên một điểm đổi giá trị chỉ làm hàng
+  của chính nó vẽ lại. Poll nền không còn hạ `status` xuống `loading`: thêm cờ
+  `revalidating` riêng.
+
+- Điều kiện tiên quyết đã đo trước khi làm: WS phủ **72/72** điểm của danh mục,
+  `points[].id` khớp 1-1 `catalog.pointId` và duy nhất toàn cục ở cả hai phía
+  (gồm 48 điểm `MB_RTU` trên 4 slave); `quality` lệch chữ hoa/thường giữa hai
+  nguồn nên được chuẩn hoá khi hợp nhất. Không có thay đổi backend nào.
+
+- Mất kênh sống không bị vẽ như dữ liệu tươi: giá trị **cuối cùng đọc được** vẫn
+  hiện nhưng mang nhãn `STALE`, không lùi về số của lần đọc danh mục.
+
+- Kiểm chứng: vitest **251 file · 3193/3193 PASS**; lint PASS; `build:foxlinx`
+  PASS (chunk `programming` 155,66 KiB gzip / ngân sách R3 165,00 KiB). Đo lại
+  **trên bo sau khi deploy**: mở trang Ánh xạ và để yên 75 giây ⇒ journal
+  `mkddc-web-pi` ghi nhận **0** request `point-catalog` (trước: ~7), trong khi
+  giá trị `UI-01` vẫn trôi thật (23,920258 → 23,895899) và
+  `performance.getEntriesByType('resource')` của chính trang đếm được **1** lần
+  gọi `point-catalog` kể từ lúc vào trang.
+
+### Changed — deploy sạch FE + BE + FW SOM lên bo Foxlinx (2026-09-13)
+
+- Phạm vi: `docs/07_records/test-evidence/fw-som/2026-09-13-foxlinx-full-deploy.md`,
+  `docs/07_records/test-evidence/fw-som/2026-09-13-foxlinx-full-deploy-mapping.png`,
+  `CHANGELOG.md`.
+
+- Nội dung: dựng lại toàn bộ artifact từ `152411fb` (cross-compile aarch64 cho
+  `mkddc-core/iobus/netcfg/hmi/fake-mcu/schedule-sim/alarm-sim/st-compile`, Go
+  `mkddc-web` arm64, FE `npm run build:foxlinx`), backup bản đang chạy, cài và
+  khởi động lại cả sáu unit.
+
+- Hai cái bẫy gặp và cách xử lý, ghi lại để lần sau không mất thời gian:
+  1. Lane cross **không** build target `all`: `gtest_discover_tests` chạy binary
+     aarch64 trên host ở bước post-build và hỏng (`libstdc++.so.6: cannot open
+     shared object file`), làm cả build đỏ dù binary phát hành đã dựng xong.
+     Chỉ định danh sách target phát hành là cách đúng.
+  2. Hai helper đặc quyền mang tên unit `mkddc-reload-helper` /
+     `mkddc-time-helper`, **không** có tiền tố `mkddc-web-`. Dừng nhầm tên thì
+     chúng vẫn giữ binary cũ đang mở trong khi ta ghi đè file.
+
+- Kiểm chứng: ctest host 1482/1482 PASS (1 skipped); `go vet` sạch + 21 package
+  `ok`; vitest 3177/3177; lint PASS; `build:foxlinx` PASS trong ngân sách R3 với
+  guard `REVA_SCOPE_ROADMAP` = 0. Sau deploy: sáu unit `active`, `NRestarts=0`,
+  và `sha256(/proc/MainPID/exe)` của core/iobus/netcfg/web **khớp từng bit** với
+  bản dựng trên host — không còn khả năng "health xanh của một tiến trình khác".
+  `/api/v1/health` ok toàn bộ check; 11 trang giao diện lên sạch, 0 lỗi console;
+  ABI kiểm trước khi copy: binary mới cần tối đa `GLIBCXX_3.4.29`, bo có tới
+  `3.4.30`.
+
 ### Fixed — Points & Mapping: đổi biến đang chọn chỉ ăn ở cột tên, và nút Đổi/Gỡ thao tác lệch với biến đang chọn (2026-09-13)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/mapping/VariableWorklist.tsx`,

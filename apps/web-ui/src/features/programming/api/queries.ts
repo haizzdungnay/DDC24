@@ -230,6 +230,14 @@ export interface ProgrammingPointCatalogState extends RemoteState<ProgrammingPoi
   complete: boolean
   failure: ProgrammingPointCatalogFailure | null
   canRetry: boolean
+  /** `SW-PGM03-LIVE-001` — đang đọc lại danh mục trong khi VẪN có snapshot đủ.
+   *
+   *  Tách khỏi `status='loading'` vì hai thứ này nói hai điều khác nhau:
+   *  `loading` là "chưa có gì để tin", còn cờ này là "đang đối chiếu lại bản đã
+   *  có". Gộp chúng làm một buộc mọi lần revalidate im lặng phải công bố hai
+   *  lần đổi trạng thái, và cả workbench vẽ lại hai lượt cho một thao tác mà
+   *  người dùng không hề yêu cầu. */
+  revalidating: boolean
   /** Thử lại đúng cursor vừa lỗi, không bỏ phần đã tải của generation hiện tại. */
   retry: () => void
   /** Bỏ generation hiện tại và bắt đầu lại từ trang đầu không mang cursor. */
@@ -238,6 +246,18 @@ export interface ProgrammingPointCatalogState extends RemoteState<ProgrammingPoi
 
 const programmingPointCatalogPageLimit = 500
 const programmingPointCatalogMaxPages = 1000
+
+/* `SW-PGM03-LIVE-001` — nhịp nền để bắt thay đổi CẤU HÌNH điểm, không phải để
+ * lấy giá trị.
+ *
+ * Bản trước đặt nhịp này ở 10 giây vì danh mục là nguồn duy nhất của cả
+ * `value` lẫn `quality`. Giá trị sống nay đến từ WebSocket `/api/v1/ws/monitor`
+ * (đã có sẵn, chỉ đẩy khi tập điểm thật sự đổi), nên đọc lại 38,9 KiB metadata
+ * mỗi 10 giây chỉ còn là lãng phí: số đo trên bo cho thấy 86% payload không đổi
+ * lần nào. Năm phút là lưới an toàn cho trường hợp người khác đổi cấu hình mà
+ * tín hiệu lệch định danh không bắt được; tín hiệu chính xác nằm ở
+ * `catalogIdentitiesDiverged` phía workbench. */
+const programmingPointCatalogRevalidateMs = 300_000
 
 interface PointCatalogGeneration {
   controller: AbortController
@@ -255,6 +275,38 @@ function programmingPointCatalogKey(entry: ProgrammingPointCatalogPage['items'][
   if (entry.category === 'MB_RTU' && (!entry.deviceId || entry.deviceId.trim() === '')) return null
   if (entry.category !== 'MB_RTU' && entry.deviceId !== undefined && entry.deviceId !== '') return null
   return JSON.stringify([entry.category, entry.deviceId ?? '', entry.pointId])
+}
+
+/* `SW-PGM03-LIVE-001` — hai snapshot danh mục có cùng NỘI DUNG không.
+ *
+ * So sánh nông theo từng trường thay vì `JSON.stringify` cả mảng: thứ tự khoá
+ * của một object do thứ tự gán quyết định, nên hai entry giống hệt nhau về nội
+ * dung vẫn có thể sinh hai chuỗi JSON khác nhau — một phép so sánh im lặng cho
+ * kết quả sai mà không ai thấy. `mapping` là object lồng nên vẫn dùng JSON cho
+ * riêng nó; nó nhỏ và hình dạng do máy chủ sinh, ổn định theo thứ tự khoá.
+ */
+function sameCatalogEntry(a: ProgrammingPointCatalogPage['items'][number], b: ProgrammingPointCatalogPage['items'][number]): boolean {
+  if (a === b) return true
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof typeof a>
+  for (const key of keys) {
+    const left = a[key]
+    const right = b[key]
+    if (Object.is(left, right)) continue
+    if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object') {
+      if (JSON.stringify(left) === JSON.stringify(right)) continue
+    }
+    return false
+  }
+  return true
+}
+
+function sameCatalogItems(
+  previous: ProgrammingPointCatalogPage['items'] | undefined,
+  next: ProgrammingPointCatalogPage['items'],
+): boolean {
+  if (previous === next) return true
+  if (!previous || previous.length !== next.length) return false
+  return previous.every((entry, index) => sameCatalogEntry(entry, next[index]))
 }
 
 function normalizeProgrammingPointCatalogPage(value: unknown): ProgrammingPointCatalogPage | null {
@@ -302,6 +354,7 @@ export function useProgrammingPointCatalog(enabled = true, scopeKey?: string): P
     complete: false,
     failure: null,
     canRetry: false,
+    revalidating: false,
   })
 
   const visibleItems = useCallback((generation: PointCatalogGeneration) => (
@@ -320,6 +373,7 @@ export function useProgrammingPointCatalog(enabled = true, scopeKey?: string): P
       complete: false,
       failure,
       canRetry: retryCursor !== undefined,
+      revalidating: false,
     })
   }, [visibleItems])
 
@@ -330,15 +384,24 @@ export function useProgrammingPointCatalog(enabled = true, scopeKey?: string): P
     let cursor = initialCursor
     try {
       while (active.current && current.current === generation) {
-        setState({
-          status: 'loading',
-          data: { items: visibleItems(generation), nextCursor: cursor },
-          error: null,
-          lastSuccessAt: lastSuccessAt.current,
-          complete: false,
-          failure: null,
-          canRetry: false,
-        })
+        /* Còn giữ một snapshot ĐỦ của lần trước ⇒ đây là revalidate, không phải
+         * lần nạp đầu: giữ nguyên `ready` + dữ liệu cũ và chỉ bật cờ
+         * `revalidating`. Hạ xuống `loading` ở đây sẽ xoá bảng đang hiển thị
+         * rồi vẽ lại y nguyên, và khoá mọi nút mutation trong khoảnh khắc đó
+         * dù không có gì đáng ngờ về dữ liệu. */
+        const revalidating = lastCompleteItems.current.length > 0
+        setState((previous) => (revalidating
+          ? (previous.revalidating ? previous : { ...previous, revalidating: true })
+          : {
+            status: 'loading',
+            data: { items: visibleItems(generation), nextCursor: cursor },
+            error: null,
+            lastSuccessAt: lastSuccessAt.current,
+            complete: false,
+            failure: null,
+            canRetry: false,
+            revalidating: false,
+          }))
 
         let rawPage: unknown
         try {
@@ -378,15 +441,23 @@ export function useProgrammingPointCatalog(enabled = true, scopeKey?: string): P
           lastCompleteItems.current = items
           lastSuccessAt.current = completedAt
           generation.retryCursor = undefined
-          setState({
-            status: 'ready',
-            data: { items, nextCursor: null },
-            error: null,
-            lastSuccessAt: completedAt,
-            complete: true,
-            failure: null,
-            canRetry: false,
-          })
+          /* Danh mục y hệt lần trước ⇒ giữ NGUYÊN reference `data` cũ. Đây là
+           * trường hợp thường gặp nhất (86% payload là metadata không đổi), và
+           * trả về một mảng mới ở đây là đủ để mọi `useMemo` phía dưới tính
+           * lại và cả workbench vẽ lại dù không có gì thay đổi. */
+          setState((previous) => (previous.status === 'ready' && previous.complete
+            && sameCatalogItems(previous.data?.items, items)
+            ? { ...previous, lastSuccessAt: completedAt, revalidating: false }
+            : {
+              status: 'ready',
+              data: { items, nextCursor: null },
+              error: null,
+              lastSuccessAt: completedAt,
+              complete: true,
+              failure: null,
+              canRetry: false,
+              revalidating: false,
+            }))
           return
         }
 
@@ -457,10 +528,20 @@ export function useProgrammingPointCatalog(enabled = true, scopeKey?: string): P
     restart()
     const timer = window.setInterval(() => {
       if (!current.current?.inFlight) restart()
-    }, 10000)
+    }, programmingPointCatalogRevalidateMs)
+    /* Tab bị ẩn thì không có ai đọc màn hình, nhưng lúc quay lại thì snapshot
+     * có thể đã cũ hơn cả nhịp nền. Nạp lại đúng một lần ở thời điểm quay lại
+     * là rẻ hơn và đúng hơn là rút ngắn nhịp cho mọi tab. */
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      const age = lastSuccessAt.current === null ? Infinity : Date.now() - lastSuccessAt.current
+      if (age >= programmingPointCatalogRevalidateMs && !current.current?.inFlight) restart()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       active.current = false
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
       current.current?.controller.abort()
       current.current = null
       activeScope.current = null
@@ -475,7 +556,7 @@ export function useProgrammingPointCatalog(enabled = true, scopeKey?: string): P
   if (!enabled || activeScope.current !== requestedScope) {
     return {
       status: 'loading', data: null, error: null, lastSuccessAt: null,
-      complete: false, failure: null, canRetry: false,
+      complete: false, failure: null, canRetry: false, revalidating: false,
       refresh: restart, retry, restart,
     }
   }
