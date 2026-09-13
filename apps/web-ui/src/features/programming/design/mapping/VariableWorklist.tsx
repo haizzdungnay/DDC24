@@ -87,7 +87,20 @@ export function VariableWorklist({ rows, selectedId, onSelect, onOpenSource, can
           const statusText = row.bindingStatus === 'UNMAPPED' ? pick('Chưa map', 'Unmapped') : row.bindingStatus === 'POINT_UNAVAILABLE' ? pick('Point không còn', 'Point unavailable') : row.bindingStatus === 'INCOMPATIBLE' ? pick('Không tương thích', 'Incompatible') : row.eligibility === 'UNSUPPORTED_BY_CORE' ? pick('Core chưa hỗ trợ', 'Unsupported by Core') : row.eligibility === 'UNSUPPORTED_DIRECTION' ? pick('Hướng chưa hỗ trợ', 'Unsupported direction') : pick('Đã map', 'Mapped')
           const [firstReason, ...restReasons] = row.compatibility.reasons
           return (
-            <div key={row.id} className={`grid gap-2 border-l-4 p-3 transition hover:bg-[var(--c-surface-2)] ${ROW_GRID} ${selected ? 'border-l-[var(--c-accent)] bg-[var(--c-accent-bg)]' : 'border-l-transparent'}`}>
+            /* `ISS-PGM03-11` — CẢ HÀNG bắt click, không chỉ ô tên biến.
+              *
+              * Bản trước chỉ đặt handler lên nút tên ở cột đầu: sáu cột còn lại
+              * (kiểu, hướng, ánh xạ, giá trị, quality, thao tác) chiếm gần hết
+              * bề ngang nhưng bấm vào không có gì xảy ra. Người dùng bấm giữa
+              * hàng để đổi biến, thấy Inspector vẫn đứng ở biến cũ và kết luận
+              * "không đổi được biến đang chọn" — trong khi trạng thái FE hoàn
+              * toàn đúng, chỉ là vùng bấm quá hẹp. Nút tên vẫn giữ nguyên để
+              * điều hướng bàn phím có một control thật với `aria-pressed`. */
+            <div
+              key={row.id}
+              onClick={() => onSelect(row.id)}
+              className={`grid cursor-pointer gap-2 border-l-4 p-3 transition hover:bg-[var(--c-surface-2)] ${ROW_GRID} ${selected ? 'border-l-[var(--c-accent)] bg-[var(--c-accent-bg)]' : 'border-l-transparent'}`}
+            >
               <button type="button" aria-pressed={selected} aria-label={`${row.programName} · ${row.name} · ${statusText}`} onClick={() => onSelect(row.id)} className="min-w-0 rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]">
                 <span className="flex items-center gap-2"><span className="font-semibold text-[var(--c-text)]">{row.name}</span>{row.bindingStatus === 'POINT_UNAVAILABLE' && <CircleAlert className="h-4 w-4 text-[var(--c-warn-fg)]" aria-label={pick('Point không còn', 'Point unavailable')} />}</span>
                 {/* Program và định danh canonical là THỨ CẤP: giữ trên hàng để

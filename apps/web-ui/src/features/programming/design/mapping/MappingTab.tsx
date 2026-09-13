@@ -229,7 +229,21 @@ export function MappingTab(props: {
     return pick('Không xem trước được ánh xạ. Không có thay đổi nào được ghi.', 'Could not preview the mapping. No change was written.')
   }
 
+  /* `ISS-PGM03-11` — mọi lối vào mutation phải KÉO selection về đúng biến bị
+   * thao tác trước khi dựng candidate.
+   *
+   * Nút "Đổi"/"Gỡ" của bảng "Ánh xạ đã gán" nhận `row` của chính hàng bấm,
+   * trong khi Inspector, khay Điểm khả dụng và thứ hạng gợi ý vẫn đứng ở biến
+   * được chọn trước đó. Payload khi ấy vẫn đúng biến, nhưng người dùng review
+   * một màn hình nói về biến KHÁC với biến sắp bị ghi — đúng kiểu sai lệch dẫn
+   * tới gán Point nhầm biến. Đồng bộ ở đây giữ bất biến "chỉ có một biến đang
+   * chọn, và thao tác luôn chạy trên chính nó". */
+  function focusVariable(row: MappingVariableRow) {
+    setSelectedVariableId((current) => (current === row.id ? current : row.id))
+  }
+
   async function beginAssign(row: MappingVariableRow) {
+    focusVariable(row)
     if (!canEdit || !projectId || !project?.draft || !selectedPoint || !mutationReady) return
     if (!BINDING_DATA_TYPES.has(row.type as ProgrammingBindingCandidate['dataType'])) {
       setMutation({ requestId: createUuid(), kind: 'assign', row, point: selectedPoint, phase: 'error', message: pick('Kiểu dữ liệu của biến chưa được hợp đồng Binding hỗ trợ.', 'The variable data type is not supported by the Binding contract.') })
@@ -276,6 +290,7 @@ export function MappingTab(props: {
   }
 
   function beginRemove(row: MappingVariableRow) {
+    focusVariable(row)
     if (!canEdit || !projectId || !project?.draft || saving || !row.bindingId) return
     setMutation({ requestId: createUuid(), kind: 'remove', row, phase: 'review' })
   }

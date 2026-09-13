@@ -8,6 +8,45 @@
 
 ## [Unreleased]
 
+### Fixed — Points & Mapping: đổi biến đang chọn chỉ ăn ở cột tên, và nút Đổi/Gỡ thao tác lệch với biến đang chọn (2026-09-13)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/mapping/VariableWorklist.tsx`,
+  `apps/web-ui/src/features/programming/design/mapping/MappingTab.tsx`,
+  `apps/web-ui/src/features/programming/design/mapping/MappingSelection.test.tsx` (mới),
+  `CHANGELOG.md`.
+
+- Triệu chứng: trong bảng "Biến chương trình" của PGM-03, bấm sang biến khác
+  (`R50804_DO2`, `R50804_DO6`, …) thì Binding Inspector vẫn đứng ở biến cũ và
+  hàng không đổi highlight, nên người dùng kết luận "không đổi được biến đang
+  chọn".
+
+- Nguyên nhân gốc 1: hàng worklist có BẢY cột nhưng chỉ cột đầu (tên biến) mang
+  handler chọn. Sáu cột còn lại — kiểu, hướng, ánh xạ, giá trị, quality, thao
+  tác — chiếm gần hết bề ngang hàng và trơ hoàn toàn với chuột. Trạng thái FE
+  vốn đúng (`selectedVariableId` dùng `variableId` bền của Draft, không dùng
+  index; effect chỉ reset khi biến không còn tồn tại), lỗi nằm ở vùng bấm quá
+  hẹp. Cách sửa: cả hàng bắt `onClick`, nút tên giữ nguyên làm control bàn phím
+  với `aria-pressed`.
+
+- Nguyên nhân gốc 2 (phát hiện khi rà theo cùng phạm vi): nút "Đổi"/"Gỡ" của
+  bảng "Ánh xạ đã gán" gọi mutation với `row` của chính hàng bấm, trong khi
+  Inspector, khay "Điểm khả dụng" và thứ hạng gợi ý vẫn đứng ở biến được chọn
+  trước đó. Payload vẫn đúng biến, nhưng người dùng xem trước một màn hình nói
+  về biến KHÁC với biến sắp ghi — đúng kiểu sai lệch dẫn tới gán Point nhầm
+  biến. Cách sửa: `beginAssign`/`beginRemove` kéo selection về đúng biến bị thao
+  tác trước khi dựng candidate, giữ bất biến "chỉ một biến đang chọn và mọi
+  thao tác chạy trên chính nó".
+
+- Kiểm chứng (đo lại trong phiên 2026-09-13):
+
+  | Cổng | Lệnh | Kết quả |
+  |---|---|---|
+  | Bộ kiểm mới | `npx vitest --run --environment jsdom src/features/programming/design/mapping/MappingSelection.test.tsx` | 6/6 PASS; chạy trên mã CHƯA vá thì 2 ca đỏ đúng chỗ (click thân hàng, nút "Đổi") |
+  | Vitest toàn FE | `npx vitest --run --environment jsdom src` | 249 file · 3177/3177 PASS |
+  | Lint | `npm run lint` | PASS (eslint + `check_ui_strings.py`) |
+  | Build | `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release` | PASS, chunk `programming` 154.94 KiB gzip / ngân sách 165.00 KiB (R3) |
+  | Chrome DevTools MCP trên Draft thật của bo Foxlinx | `vite preview` + tunnel SSH tới `mkddc-web` cổng 8081 | Bấm ô Quality hàng `R50804_DO6` → Inspector đổi đúng; chuỗi `DO2 → DO7 → R50907_DO8 → DO1` đổi đúng, luôn đúng 1 hàng `aria-pressed`; bấm "Đổi" ở hàng `R50804_DO4` kéo selection về đúng hàng đó, modal xem trước ghi `RelayPattern32 · R50804_DO4` (đã Huỷ, không ghi Draft) |
+
 ### Fixed — deploy Foxlinx: tiến trình web mồ côi chiếm cổng 8081, và `install.sh` chưa bao giờ cài hai unit helper đặc quyền (2026-09-13)
 
 - Phạm vi: `platform/packaging/install.sh`,
