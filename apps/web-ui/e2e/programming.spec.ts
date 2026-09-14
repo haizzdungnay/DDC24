@@ -1737,6 +1737,129 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     expectNoBrowserFailures(failures, 'FBD Mini Map')
   })
 
+  test('TC-FBD-USABLE-001: dựng INPUT → AND → TIMER → OUTPUT bằng wiring trực tiếp rồi sửa bằng chuột và bàn phím', async ({ page }, testInfo) => {
+    test.skip(
+      (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
+      'dưới 768 px PGM-02 là chế độ chỉ đọc theo AC-PGM02-010',
+    )
+    const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
+    await installProgrammingMocks(page, state)
+    const failures = observeBrowserFailures(page)
+    await login(page)
+    await navigate(page, `${CANONICAL_PROGRAMS_PATH}?project=${PROJECT_ID}&mode=EDIT`)
+    await createPou(page, 'Program · FBD')
+
+    const toolbar = page.getByRole('toolbar', { name: 'Lệnh FBD' })
+    await toolbar.getByRole('button', { name: 'Input', exact: true }).click()
+    await page.getByLabel('Tên biến').fill('START_CMD')
+    await page.getByRole('button', { name: 'Tạo', exact: true }).click()
+
+    const palette = toolbar.locator('select').first()
+    await palette.selectOption('AND')
+    await toolbar.getByRole('button', { name: 'Thêm khối', exact: true }).click()
+    await palette.selectOption('TON')
+    await toolbar.getByRole('button', { name: 'Thêm khối', exact: true }).click()
+
+    await toolbar.getByRole('button', { name: 'Output', exact: true }).click()
+    await page.getByLabel('Tên biến').fill('FAN_ENABLE')
+    await page.getByRole('button', { name: 'Tạo', exact: true }).click()
+    await expect(page.getByTestId('fbd-block-count')).toContainText('4/256')
+
+    const blocks = page.locator('g[data-fbd-node-id]')
+    await expect(blocks).toHaveCount(4)
+    const input = blocks.nth(0)
+    const andBlock = blocks.nth(1)
+    const timer = blocks.nth(2)
+    const output = blocks.nth(3)
+
+    async function wire(from: ReturnType<typeof page.locator>, to: ReturnType<typeof page.locator>) {
+      const source = await from.boundingBox()
+      const target = await to.boundingBox()
+      expect(source, 'cổng nguồn phải có hình học').not.toBeNull()
+      expect(target, 'cổng đích phải có hình học').not.toBeNull()
+      await page.mouse.move(source!.x + source!.width / 2, source!.y + source!.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height / 2, { steps: 5 })
+      await page.mouse.up()
+    }
+
+    await wire(
+      input.getByRole('button', { name: /BOOL OUTPUT OUT BOOL/ }),
+      andBlock.getByRole('button', { name: /AND INPUT IN1 BOOL/ }),
+    )
+    await expect(page.getByTestId('fbd-wire-count')).toContainText('1/512')
+    await wire(
+      andBlock.getByRole('button', { name: /AND OUTPUT OUT BOOL/ }),
+      timer.getByRole('button', { name: /TON INPUT IN BOOL/ }),
+    )
+    await expect(page.getByTestId('fbd-wire-count')).toContainText('2/512')
+    await wire(
+      timer.getByRole('button', { name: /TON OUTPUT Q BOOL/ }),
+      output.getByRole('button', { name: /BOOL INPUT IN BOOL/ }),
+    )
+    await expect(page.getByTestId('fbd-wire-count')).toContainText('3/512')
+
+    const editor = page.locator('section[aria-label="Bộ dựng FBD có cấu trúc"]')
+    const andNodeButton = andBlock.getByRole('button', { name: /#1 · AND · FUNCTION/ })
+    await andNodeButton.click()
+    const beforeNudge = await andBlock.boundingBox()
+    await page.keyboard.press('Shift+ArrowRight')
+    await expect.poll(async () => (await andBlock.boundingBox())?.x ?? 0).toBeGreaterThan((beforeNudge?.x ?? 0) + 4)
+
+    await page.keyboard.press('Control+c')
+    await page.keyboard.press('Control+v')
+    await expect(page.getByTestId('fbd-block-count')).toContainText('5/256')
+    await page.keyboard.press('Control+z')
+    await expect(page.getByTestId('fbd-block-count')).toContainText('4/256')
+
+    await andNodeButton.click()
+    await page.keyboard.press('Control+d')
+    await expect(page.getByTestId('fbd-block-count')).toContainText('5/256')
+    await page.keyboard.press('Control+z')
+    await expect(page.getByTestId('fbd-block-count')).toContainText('4/256')
+
+    await andNodeButton.click()
+    await page.keyboard.press('Delete')
+    await expect(page.getByTestId('fbd-block-count')).toContainText('3/256')
+    await expect(page.getByTestId('fbd-wire-count')).toContainText('1/512')
+    await page.keyboard.press('Control+z')
+    await expect(page.getByTestId('fbd-block-count')).toContainText('4/256')
+    await expect(page.getByTestId('fbd-wire-count')).toContainText('3/512')
+
+    const surface = page.locator('svg[data-fbd-network-id]').first()
+    const zoom = page.getByRole('button', { name: 'Thu phóng 100%', exact: true })
+    await expect(zoom).toContainText('100%')
+    const surfaceBox = await surface.boundingBox()
+    expect(surfaceBox).not.toBeNull()
+    await page.mouse.move(surfaceBox!.x + surfaceBox!.width / 2, surfaceBox!.y + surfaceBox!.height / 2)
+    /* Playwright/CDP headless không chuyển Ctrl+mouseWheel vào DOM trên lane
+       này (capture listener ở window nhận 0 event). Phát WheelEvent tại chính
+       SVG vẫn chạy qua browser runtime và native non-passive listener của sản
+       phẩm; wiring và middle-pan ở trên/dưới vẫn dùng input chuột CDP thật. */
+    await surface.dispatchEvent('wheel', {
+      ctrlKey: true,
+      clientX: surfaceBox!.x + surfaceBox!.width / 2,
+      clientY: surfaceBox!.y + surfaceBox!.height / 2,
+      deltaY: -120,
+      bubbles: true,
+      cancelable: true,
+    })
+    await expect(zoom).not.toContainText('100%')
+
+    const scene = surface.locator('[data-fbd-scene="true"]')
+    const transformBeforePan = await scene.getAttribute('transform')
+    await page.mouse.move(surfaceBox!.x + 80, surfaceBox!.y + 80)
+    await page.mouse.down({ button: 'middle' })
+    await page.mouse.move(surfaceBox!.x + 140, surfaceBox!.y + 120, { steps: 4 })
+    await page.mouse.up({ button: 'middle' })
+    await expect.poll(() => scene.getAttribute('transform')).not.toBe(transformBeforePan)
+
+    await editor.focus()
+    await page.keyboard.press('Control+a')
+    await page.keyboard.press('Escape')
+    expectNoBrowserFailures(failures, 'FBD usable direct-manipulation flow')
+  })
+
   test('TC-FBD-STATE-006: Watch OFFLINE giữ badge và không biến null thành 0 trên Chrome', async ({ page }) => {
     const state: MockState = {
       etagGeneration: 1, draft: draftWithProgram(), checkState: 'PASSED', commissionCount: 0,

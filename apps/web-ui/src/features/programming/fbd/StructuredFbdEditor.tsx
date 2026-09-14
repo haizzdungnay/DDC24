@@ -30,8 +30,20 @@ import {
   type FbdPoint,
   type FbdWire,
 } from './model'
-import { FbdCanvas, buildPaletteNode } from './FbdCanvas'
+import {
+  FbdCanvas,
+  buildPaletteNode,
+  type FbdCanvasClipboard,
+  type FbdViewCommands,
+} from './FbdCanvas'
 import { buildFbdNetworkGeometry } from './geometry'
+import { extractSubgraph, FBD_PASTE_OFFSET, remapSubgraph, type FbdSubgraph } from './clipboard'
+import {
+  FBD_SHORTCUT_MUTATES,
+  nudgeDelta,
+  resolveFbdEditorShortcut,
+  type FbdEditorShortcut,
+} from './fbdShortcuts'
 import { fbdIssueTargets } from './issueTargets'
 import { alignNodes, computeAutoLayout } from './layout'
 import { snapPoint } from './viewport'
@@ -160,6 +172,26 @@ function ignoresGraphCommand(target: EventTarget | null, command: FbdKeyboardCom
   )
 }
 
+function ignoresEditorShortcut(target: EventTarget | null, shortcut: FbdEditorShortcut): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable || target.closest('input, select, textarea, [role="menuitem"]')) return true
+  const button = target.closest('button')
+  return Boolean(button && (
+    shortcut === 'DELETE_SELECTION' ||
+    shortcut === 'NUDGE_LEFT' ||
+    shortcut === 'NUDGE_RIGHT' ||
+    shortcut === 'NUDGE_UP' ||
+    shortcut === 'NUDGE_DOWN'
+  ))
+}
+
+function selectedNodeIds(selection: FbdSelection | null): string[] {
+  if (!selection) return []
+  if (selection.kind === 'node' || selection.kind === 'port') return [selection.nodeId]
+  if (selection.kind === 'multi-node') return [...selection.nodeIds]
+  return []
+}
+
 export function StructuredFbdEditor({
   document,
   canEdit: canEditProp,
@@ -221,6 +253,7 @@ export function StructuredFbdEditor({
    * bàn phím giữ nguyên. */
   const portButtons = useRef(new Map<string, SVGGElement>())
   const sectionRef = useRef<HTMLElement>(null)
+  const viewCommandsRef = useRef<FbdViewCommands | null>(null)
   const keyboardHelpId = useId()
   const [paletteTypeRef, setPaletteTypeRef] = useState(FBD_PALETTE[0]?.id ?? '')
   const [creatingKind, setCreatingKind] = useState<'INPUT' | 'OUTPUT' | 'CONSTANT' | null>(null)
@@ -241,6 +274,7 @@ export function StructuredFbdEditor({
     expectedDocumentCanonical: string
   } | null>(null)
   const [toolbarStatus, setToolbarStatus] = useState<string | null>(null)
+  const [clipboardSubgraph, setClipboardSubgraph] = useState<FbdSubgraph | null>(null)
 
   const userPouPalette = useMemo(() => {
     const entries: FbdPaletteEntry[] = []
@@ -439,6 +473,118 @@ export function StructuredFbdEditor({
   const selectionKey = JSON.stringify(state.selection)
   const documentCanonical = canonicalFbdJson(state.document)
 
+  function extractNodes(network: FbdNetwork, nodeIds: readonly string[]): FbdSubgraph | null {
+    const geometry = buildFbdNetworkGeometry(network, state.document.layout, { wireStyle })
+    return extractSubgraph(network, nodeIds, geometry.byNodeId)
+  }
+
+  function copyNodes(network: FbdNetwork, nodeIds: readonly string[]): FbdSubgraph | null {
+    const subgraph = extractNodes(network, nodeIds)
+    if (!subgraph) return null
+    setClipboardSubgraph(subgraph)
+    setToolbarStatus(pick(
+      `Đã sao chép ${subgraph.nodes.length} khối${subgraph.wires.length ? ` và ${subgraph.wires.length} dây nội bộ` : ''}.`,
+      `Copied ${subgraph.nodes.length} ${subgraph.nodes.length === 1 ? 'block' : 'blocks'}${subgraph.wires.length ? ` and ${subgraph.wires.length} internal wires` : ''}.`,
+    ))
+    return subgraph
+  }
+
+  function selectAndDelete(network: FbdNetwork, nodeIds: readonly string[]) {
+    if (nodeIds.length === 0) return
+    dispatch({
+      type: 'SELECT',
+      selection: nodeIds.length === 1
+        ? { kind: 'node', networkId: network.id, nodeId: nodeIds[0] }
+        : { kind: 'multi-node', networkId: network.id, nodeIds: [...nodeIds] },
+    })
+    dispatch({ type: 'DELETE_SELECTION' })
+  }
+
+  function cutNodes(network: FbdNetwork, nodeIds: readonly string[]) {
+    if (!canEdit) return
+    const subgraph = copyNodes(network, nodeIds)
+    if (!subgraph) return
+    selectAndDelete(network, subgraph.nodes.map((node) => node.id))
+  }
+
+  function pasteNodes(network: FbdNetwork, at: FbdPoint | null) {
+    if (!canEdit || !clipboardSubgraph) return
+    const subgraph = remapSubgraph(clipboardSubgraph, {
+      newId: newUuid,
+      ...(at ? { origin: snapPoint(at, snapEnabled ? snapSize : 0) } : { offset: FBD_PASTE_OFFSET }),
+    })
+    dispatch({
+      type: 'PASTE_SUBGRAPH',
+      targetNetworkId: network.id,
+      nodes: [...subgraph.nodes],
+      wires: [...subgraph.wires],
+      layoutNodes: { ...subgraph.layout },
+    })
+  }
+
+  function duplicateNodes(network: FbdNetwork, nodeIds: readonly string[]) {
+    if (!canEdit) return
+    const source = extractNodes(network, nodeIds)
+    if (!source) return
+    const subgraph = remapSubgraph(source, { newId: newUuid, offset: FBD_PASTE_OFFSET })
+    dispatch({
+      type: 'PASTE_SUBGRAPH',
+      targetNetworkId: network.id,
+      nodes: [...subgraph.nodes],
+      wires: [...subgraph.wires],
+      layoutNodes: { ...subgraph.layout },
+    })
+  }
+
+  function clipboardFor(network: FbdNetwork): FbdCanvasClipboard {
+    return {
+      hasContent: clipboardSubgraph !== null,
+      copy: (nodeIds) => { copyNodes(network, nodeIds) },
+      cut: (nodeIds) => cutNodes(network, nodeIds),
+      paste: (at) => pasteNodes(network, at),
+      duplicate: (nodeIds) => duplicateNodes(network, nodeIds),
+    }
+  }
+
+  function dispatchEditorShortcut(shortcut: FbdEditorShortcut) {
+    if (FBD_SHORTCUT_MUTATES[shortcut] && !canEdit) return
+    const network = activeNetwork
+    const nodeIds = selectedNodeIds(state.selection)
+    switch (shortcut) {
+      case 'DELETE_SELECTION': dispatch({ type: 'DELETE_SELECTION' }); return
+      case 'COPY': if (network) copyNodes(network, nodeIds); return
+      case 'CUT': if (network) cutNodes(network, nodeIds); return
+      case 'PASTE': if (network) pasteNodes(network, null); return
+      case 'DUPLICATE': if (network) duplicateNodes(network, nodeIds); return
+      case 'SELECT_ALL':
+        if (network) dispatch({
+          type: 'SELECT',
+          selection: network.nodes.length === 0
+            ? null
+            : network.nodes.length === 1
+              ? { kind: 'node', networkId: network.id, nodeId: network.nodes[0].id }
+              : { kind: 'multi-node', networkId: network.id, nodeIds: network.nodes.map((node) => node.id) },
+        })
+        return
+      case 'UNDO': dispatch({ type: 'UNDO' }); return
+      case 'REDO': dispatch({ type: 'REDO' }); return
+      case 'ZOOM_100': viewCommandsRef.current?.zoom100(); return
+      case 'FIT_ALL': viewCommandsRef.current?.fitAll(); return
+      case 'FIT_SELECTION': viewCommandsRef.current?.fitSelection(); return
+      default: {
+        if (!network || nodeIds.length === 0) return
+        const delta = nudgeDelta(shortcut, snapEnabled ? snapSize : 1)
+        if (!delta) return
+        const geometry = buildFbdNetworkGeometry(network, state.document.layout, { wireStyle })
+        const moves = nodeIds.flatMap((nodeId) => {
+          const node = geometry.byNodeId.get(nodeId)
+          return node ? [{ nodeId, x: node.x + delta.dx, y: node.y + delta.dy }] : []
+        })
+        if (moves.length > 0) dispatch({ type: 'MULTI_MOVE', networkId: network.id, moves })
+      }
+    }
+  }
+
   useEffect(() => {
     if (!layoutPreview) return
     if (!canEdit) {
@@ -513,6 +659,7 @@ export function StructuredFbdEditor({
       }
     } else if (command === 'CANCEL_CONNECTION') {
       action = { type: 'CANCEL_CONNECTION' }
+      dispatch({ type: 'SELECT', selection: null })
     } else if (command === 'DELETE_SELECTION') {
       action = { type: 'DELETE_SELECTION' }
     } else if (command === 'MOVE_NODE_UP') {
@@ -683,7 +830,14 @@ export function StructuredFbdEditor({
       className="flex min-h-0 flex-1 flex-col gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2"
       onKeyDown={(event) => {
         const command = resolveFbdKeyboardCommand(event)
-        if (!command || ignoresGraphCommand(event.target, command)) return
+        if (!command) {
+          const shortcut = resolveFbdEditorShortcut(event)
+          if (!shortcut || ignoresEditorShortcut(event.target, shortcut)) return
+          event.preventDefault()
+          dispatchEditorShortcut(shortcut)
+          return
+        }
+        if (ignoresGraphCommand(event.target, command)) return
         const insertStartedFromToolbar =
           command === 'ADD_BLOCK' &&
           event.target instanceof HTMLElement &&
@@ -705,8 +859,8 @@ export function StructuredFbdEditor({
           <h2 className="sr-only">FBD · {state.document.name}</h2>
           <p id={keyboardHelpId} className="sr-only">
             {pick(
-              'Chọn block/POU trong palette; Insert thêm lựa chọn đó · ↑/↓ chọn port · Enter nối · Alt+↑/↓ đổi thứ tự · Delete xóa · Ctrl+Z/Y hoàn tác/làm lại.',
-              'Choose a block/POU in the palette; Insert adds the selected block/POU · arrows select port · Enter connects · Alt+arrows reorder · Delete removes · Ctrl+Z/Y undo/redo.',
+              'Chọn block/POU trong palette; Insert thêm lựa chọn đó · ↑/↓ chọn port · Enter nối · Ctrl+click hoặc kéo vùng để chọn nhiều · Shift+mũi tên dịch khối · Delete/Backspace xóa · Ctrl+C/X/V/D sao chép, cắt, dán, nhân đôi · Ctrl+Z/Y hoàn tác/làm lại.',
+              'Choose a block/POU in the palette; Insert adds it · arrows select ports · Enter wires · Ctrl+click or box-drag selects multiple blocks · Shift+arrows nudges blocks · Delete/Backspace removes · Ctrl+C/X/V/D copies, cuts, pastes, or duplicates · Ctrl+Z/Y undoes/redoes.',
             )}
           </p>
           <div className="flex flex-wrap items-center gap-1.5 text-xs" aria-label={pick('Trạng thái FBD', 'FBD status')}>
@@ -969,6 +1123,16 @@ export function StructuredFbdEditor({
               showInlineMinimap={showInlineMinimap}
               runtime={runtime}
               onBridgeChange={onBridgeChange}
+              clipboard={clipboardFor(network)}
+              viewCommandsRef={network.id === selectedNetworkId ? viewCommandsRef : undefined}
+              onAddBlockAt={canEdit && selectedPaletteEntry?.featureState === 'AVAILABLE'
+                ? (at) => dispatch({
+                    type: 'ADD_NODE',
+                    networkId: network.id,
+                    node: buildPaletteNode(selectedPaletteEntry),
+                    position: snapPoint(at, snapEnabled ? snapSize : 0),
+                  })
+                : undefined}
             />
           </article>
         ))}

@@ -404,3 +404,51 @@ describe('ADD_WIRE — nối một nhịp dùng chung validator với BEGIN_OR_C
     expect(after.document.networks[0].wires).toHaveLength(wiresBefore)
   })
 })
+
+describe('RECONNECT_WIRE — giữ wire identity và thay đầu nối theo một transaction', () => {
+  it('đổi đầu đích, giữ nguyên nguồn/id và undo trả lại đúng dây cũ', () => {
+    const source = node('AND', [{ name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL' }])
+    const firstTarget = node('OR', [{ name: 'IN1', direction: 'INPUT', dataType: 'BOOL' }])
+    const nextTarget = node('XOR', [{ name: 'IN1', direction: 'INPUT', dataType: 'BOOL' }])
+    const { state: initial, networkId } = stateWith(source, firstTarget, nextTarget)
+    const original = wire(source, 'OUT', firstTarget, 'IN1', 81)
+    const connected = fbdEditorReducer(initial, { type: 'ADD_WIRE', networkId, wire: original })
+    const replacement = { ...wire(source, 'OUT', nextTarget, 'IN1', 81), id: original.id }
+
+    const reconnected = fbdEditorReducer(connected, {
+      type: 'RECONNECT_WIRE', networkId, wireId: original.id, wire: replacement,
+    })
+
+    expect(reconnected.document.networks[0].wires.filter((item) => item.id === original.id)).toEqual([replacement])
+    expect(reconnected.past).toHaveLength(2)
+    expect(reconnected.selection).toEqual({ kind: 'wire', networkId, wireId: original.id })
+    expect(reconnected.announcement.code).toBe('wire-reconnected')
+
+    const undone = fbdEditorReducer(reconnected, { type: 'UNDO' })
+    expect(undone.document.networks[0].wires.find((item) => item.id === original.id)).toEqual(original)
+  })
+
+  it('ứng viên sai bị từ chối atomic: dây cũ và history giữ nguyên', () => {
+    const source = node('AND', [{ name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL' }])
+    const firstTarget = node('OR', [{ name: 'IN1', direction: 'INPUT', dataType: 'BOOL' }])
+    const otherSource = node('GE', [{ name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL' }])
+    const occupiedTarget = node('XOR', [{ name: 'IN1', direction: 'INPUT', dataType: 'BOOL' }])
+    const { state: initial, networkId } = stateWith(source, firstTarget, otherSource, occupiedTarget)
+    const original = wire(source, 'OUT', firstTarget, 'IN1', 82)
+    const occupied = wire(otherSource, 'OUT', occupiedTarget, 'IN1', 83)
+    let connected = fbdEditorReducer(initial, { type: 'ADD_WIRE', networkId, wire: original })
+    connected = fbdEditorReducer(connected, { type: 'ADD_WIRE', networkId, wire: occupied })
+    const beforeDocument = connected.document
+
+    const rejected = fbdEditorReducer(connected, {
+      type: 'RECONNECT_WIRE',
+      networkId,
+      wireId: original.id,
+      wire: { ...wire(source, 'OUT', occupiedTarget, 'IN1', 82), id: original.id },
+    })
+
+    expect(rejected.announcement.code).toBe('input-has-driver-or-limit')
+    expect(rejected.document).toBe(beforeDocument)
+    expect(rejected.past).toHaveLength(2)
+  })
+})

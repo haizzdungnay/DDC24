@@ -134,9 +134,30 @@ export interface FbdWiresLayerProps {
   networkId: string
   pick: (vi: string, en: string) => string
   select: (next: FbdSelection) => void
+  /** Dây đang dưới con trỏ, do canvas bắt theo toạ độ. */
+  hoverWireId?: string | null
+  onWireHover?: (wireId: string | null) => void
+  onWireContextMenu?: (event: React.MouseEvent<SVGPathElement>, wireId: string) => void
 }
 
-export function FbdWiresLayer({ wires, selection, networkId, pick, select }: FbdWiresLayerProps) {
+/** Bề dày vùng BẮT CHUỘT của một dây.
+ *
+ * Dây vẽ 1.5 px. Một mục tiêu 1.5 px là mục tiêu không bấm được bằng chuột:
+ * yêu cầu "wire phải selectable, click/right-click để disconnect" không thể
+ * đạt nếu người dùng phải trúng đúng một pixel rưỡi. Đường bắt là một `path`
+ * trong suốt vẽ trùng đường thật, dày hơn một bậc độ lớn. */
+export const FBD_WIRE_HIT_WIDTH = 14
+
+export function FbdWiresLayer({
+  wires,
+  selection,
+  networkId,
+  pick,
+  select,
+  hoverWireId,
+  onWireHover,
+  onWireContextMenu,
+}: FbdWiresLayerProps) {
   return (
     <>
       <g aria-hidden="true">
@@ -152,19 +173,30 @@ export function FbdWiresLayer({ wires, selection, networkId, pick, select }: Fbd
       </g>
       {wires.map((wire) => {
         const active = selection?.kind === 'wire' && selection.wireId === wire.id
+        const hovered = hoverWireId === wire.id
         return (
           <path
             key={wire.id}
+            data-fbd-wire-id={wire.id}
             role="button"
             tabIndex={0}
             aria-label={pick(`Dây nối tới ${wire.to.x},${wire.to.y}`, `Wire to ${wire.to.x},${wire.to.y}`)}
             aria-pressed={active}
             d={wire.path}
             fill="none"
-            stroke={active ? 'var(--c-accent)' : 'var(--c-text-dim)'}
-            strokeWidth={active ? 2.5 : 1.5}
+            stroke={active ? 'var(--c-accent)' : hovered ? 'var(--c-text)' : 'var(--c-text-dim)'}
+            strokeWidth={active ? 2.5 : hovered ? 2.5 : 1.5}
+            /* Vùng bắt rộng nằm ở CHÍNH phần tử tương tác, qua
+               `strokeLinecap`/`paint-order` không đủ — dùng `stroke` vô hình
+               thứ hai bên dưới sẽ tách tiêu điểm bàn phím khỏi hình vẽ. Đặt
+               `pointerEvents="stroke"` cùng một `strokeWidth` lớn cho một
+               `path` chị em trong suốt là cách giữ MỘT phần tử tương tác duy
+               nhất cho mỗi dây. */
             className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            onMouseEnter={() => onWireHover?.(wire.id)}
+            onMouseLeave={() => onWireHover?.(null)}
             onClick={() => select({ kind: 'wire', networkId, wireId: wire.id })}
+            onContextMenu={(event) => onWireContextMenu?.(event, wire.id)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault()
@@ -174,6 +206,28 @@ export function FbdWiresLayer({ wires, selection, networkId, pick, select }: Fbd
           />
         )
       })}
+      {/* Lớp bắt chuột: trong suốt, không nhận tiêu điểm, chỉ để chuột trúng
+          dây dễ hơn. Vẽ SAU đường thật nên nó nằm trên và nhận sự kiện trước;
+          nó chuyển tiếp thao tác về cùng một lệnh chọn/menu như đường thật. */}
+      <g aria-hidden="true">
+        {wires.map((wire) => (
+          <path
+            key={`hit-${wire.id}`}
+            data-fbd-wire-hit={wire.id}
+            d={wire.path}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={FBD_WIRE_HIT_WIDTH}
+            strokeLinecap="round"
+            pointerEvents="stroke"
+            className="cursor-pointer"
+            onMouseEnter={() => onWireHover?.(wire.id)}
+            onMouseLeave={() => onWireHover?.(null)}
+            onClick={() => select({ kind: 'wire', networkId, wireId: wire.id })}
+            onContextMenu={(event) => onWireContextMenu?.(event, wire.id)}
+          />
+        ))}
+      </g>
     </>
   )
 }
@@ -199,7 +253,31 @@ export interface FbdNodesLayerProps {
   onPortPointerDown?: (event: React.PointerEvent<SVGGElement>, port: FbdPortGeometry) => void
   onPortPointerUp?: (event: React.PointerEvent<SVGGElement>, port: FbdPortGeometry) => void
   onPortClick?: (event: React.MouseEvent<SVGGElement>, port: FbdPortGeometry) => void
+  /** Chọn khối qua chuột. Nhận cả event để `Ctrl`/`Shift+Click` cộng/trừ vùng
+   * chọn thay vì luôn thay thế nó. */
+  onNodeClick?: (event: React.MouseEvent<SVGGElement>, nodeId: string) => void
+  onNodeContextMenu?: (event: React.MouseEvent<SVGGElement>, nodeId: string) => void
+  onPortContextMenu?: (event: React.MouseEvent<SVGGElement>, port: FbdPortGeometry) => void
+  /** Khối / cổng / dây đang dưới con trỏ — canvas bắt theo toạ độ graph nên
+   * vùng hover khớp đúng vùng bắt chuột, không khớp hình vẽ. */
+  hoverNodeId?: string | null
+  hoverPortId?: string | null
+  /** Cổng nguồn của cử chỉ kéo dây đang diễn ra. */
+  wiringSourcePortId?: string | null
+  /** Cổng đích mà cử chỉ kéo dây đang bám vào, kèm phán quyết hợp lệ. */
+  candidatePortId?: string | null
+  candidateOk?: boolean
+  /** Khối mà cử chỉ kéo dây đang trỏ vào (bắt đích qua thân khối). */
+  dropTargetNodeId?: string | null
 }
+
+/** Bán kính vùng BẮT CHUỘT của một cổng, theo đơn vị graph.
+ *
+ * Cổng vẽ `r=4`. Kéo dây trước đây đòi nhả chuột trúng đúng hình tròn 8 px ấy,
+ * nên "kéo từ OUT sang IN" gần như không làm được bằng tay. Vòng bắt trong
+ * suốt này là mục tiêu thật của con trỏ; `FBD_PORT_HIT_RADIUS` trong
+ * `wiring.ts` là cùng một con số ở phía tính toán. */
+export const FBD_PORT_HIT_RADIUS_PX = 13
 
 export function FbdNodesLayer({
   nodes,
@@ -221,6 +299,15 @@ export function FbdNodesLayer({
   onPortPointerDown,
   onPortPointerUp,
   onPortClick,
+  onNodeClick,
+  onNodeContextMenu,
+  onPortContextMenu,
+  hoverNodeId,
+  hoverPortId,
+  wiringSourcePortId,
+  candidatePortId,
+  candidateOk = true,
+  dropTargetNodeId,
 }: FbdNodesLayerProps) {
   return (
     <>
@@ -246,6 +333,9 @@ export function FbdNodesLayer({
         const paramSummary = formatNodeParameterSummary(node.kind, node.parameters)
         const identity = fbdNodeIdentity(node)
         const nodeReading = runtime?.byNodeId.get(placed.id) ?? null
+        const isHovered = hoverNodeId === placed.id
+        const isDropTarget = dropTargetNodeId === placed.id
+        const dropStroke = candidateOk ? 'var(--c-good-fg)' : 'var(--c-danger-fg)'
 
         return (
           <g
@@ -263,12 +353,12 @@ export function FbdNodesLayer({
                   ? 'cursor-move focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]'
                   : 'cursor-pointer'
               }
-              onClick={(e) => {
-                // If ctrl or shift is pressed, allow multi-selection handled elsewhere or default to single
-                if (!e.defaultPrevented) {
-                  select({ kind: 'node', networkId, nodeId: placed.id })
-                }
+              onClick={(event) => {
+                if (event.defaultPrevented) return
+                if (onNodeClick) onNodeClick(event, placed.id)
+                else select({ kind: 'node', networkId, nodeId: placed.id })
               }}
+              onContextMenu={(event) => onNodeContextMenu?.(event, placed.id)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
@@ -288,13 +378,18 @@ export function FbdNodesLayer({
                 rx={6}
                 fill="var(--c-surface-2)"
                 stroke={
-                  isSelected
+                  isDropTarget
+                    ? dropStroke
+                    : isSelected
                     ? 'var(--c-accent)'
                     : hasIssue
                     ? 'var(--c-warn-fg)'
+                    : isHovered
+                    ? 'var(--c-text-dim)'
                     : 'var(--c-border)'
                 }
-                strokeWidth={isSelected || hasIssue ? 2 : 1}
+                strokeWidth={isDropTarget ? 2.5 : isSelected || hasIssue ? 2 : 1}
+                strokeDasharray={isDropTarget ? '6 3' : undefined}
               />
               {hasIssue && (
                 <circle
@@ -366,7 +461,26 @@ export function FbdNodesLayer({
               if (!definition) return null
               const portReading = runtime?.byPortId.get(port.id) ?? null
               const selected = selection?.kind === 'port' && selection.portId === port.id
-              const isSource = connectionFromPortId === port.id
+              const isSource = connectionFromPortId === port.id || wiringSourcePortId === port.id
+              const isHoveredPort = hoverPortId === port.id
+              const isCandidate = candidatePortId === port.id
+              /* Ba trạng thái thị giác xếp theo độ ưu tiên, không trộn nhau:
+                 đích của cử chỉ kéo (xanh/đỏ theo phán quyết) > nguồn/đang
+                 chọn (màu nhấn) > đang hover (viền đậm). Người dùng phải đọc
+                 được "hệ thống đang nhận thao tác gì" chỉ bằng màu. */
+              const emphasised = isCandidate || selected || isSource || isHoveredPort
+              const portFill = isCandidate
+                ? (candidateOk ? 'var(--c-good-fg)' : 'var(--c-danger-fg)')
+                : selected || isSource
+                  ? 'var(--c-accent)'
+                  : isHoveredPort
+                    ? 'var(--c-accent-bg)'
+                    : 'var(--c-surface)'
+              const portStroke = isCandidate
+                ? (candidateOk ? 'var(--c-good-fg)' : 'var(--c-danger-fg)')
+                : selected || isSource || isHoveredPort
+                  ? 'var(--c-accent)'
+                  : 'var(--c-border)'
               return (
                 <g
                   key={port.id}
@@ -375,7 +489,11 @@ export function FbdNodesLayer({
                   tabIndex={0}
                   aria-label={`${node.typeRef} ${definition.direction} ${definition.name} ${definition.dataType}${definition.unit ? ` ${definition.unit}` : ''}`}
                   aria-pressed={selected}
-                  className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                  className={
+                    canEdit
+                      ? 'cursor-crosshair focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]'
+                      : 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]'
+                  }
                   onPointerDown={(event) => {
                     // Ngăn node drag nuốt cử chỉ wire (G4)
                     event.stopPropagation()
@@ -393,6 +511,7 @@ export function FbdNodesLayer({
                       select({ kind: 'port', networkId, nodeId: placed.id, portId: port.id })
                     }
                   }}
+                  onContextMenu={(event) => onPortContextMenu?.(event, port)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
@@ -400,12 +519,36 @@ export function FbdNodesLayer({
                     }
                   }}
                 >
+                  {/* Vùng bắt chuột — trong suốt và vẽ TRƯỚC hình cổng, nên nó
+                      mở rộng mục tiêu mà không phủ lên hình. Không có nó thì
+                      mọi cử chỉ kéo dây phải trúng một hình tròn 8 px. */}
+                  <circle
+                    data-fbd-port-hit={port.id}
+                    cx={port.cx}
+                    cy={port.cy}
+                    r={FBD_PORT_HIT_RADIUS_PX}
+                    fill="transparent"
+                    stroke="none"
+                  />
+                  {/* Vành sáng chỉ ra cổng đang được cử chỉ nhắm tới. */}
+                  {isCandidate && (
+                    <circle
+                      data-fbd-port-candidate={port.id}
+                      cx={port.cx}
+                      cy={port.cy}
+                      r={11}
+                      fill="none"
+                      stroke={candidateOk ? 'var(--c-good-fg)' : 'var(--c-danger-fg)'}
+                      strokeWidth={2}
+                      strokeDasharray="4 3"
+                    />
+                  )}
                   <circle
                     cx={port.cx}
                     cy={port.cy}
-                    r={selected || isSource ? 6 : 4}
-                    fill={selected || isSource ? 'var(--c-accent)' : 'var(--c-surface)'}
-                    stroke={selected || isSource ? 'var(--c-accent)' : 'var(--c-border)'}
+                    r={emphasised ? 6 : 4}
+                    fill={portFill}
+                    stroke={portStroke}
                     strokeWidth={1.5}
                   />
                   <text

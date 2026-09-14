@@ -124,15 +124,52 @@ describe('FbdCanvas — Task 5 Viewport, Layering & Interaction', () => {
       expect(sceneGroup?.getAttribute('transform')).toContain('translate(50, 30)')
     })
 
-    it('pans viewport with right click drag (button === 2)', () => {
+    it('right click mở menu ngữ cảnh và không chiếm cử chỉ pan', () => {
       const { surface } = renderCanvas()
       const bg = surface.querySelector('[data-fbd-canvas-bg="true"]') || surface
-      fireEvent.pointerDown(bg, { pointerId: 1, button: 2, clientX: 100, clientY: 100 })
-      fireEvent.pointerMove(bg, { pointerId: 1, clientX: 80, clientY: 90 })
-      fireEvent.pointerUp(bg, { pointerId: 1, clientX: 80, clientY: 90 })
+      fireEvent.contextMenu(bg, { clientX: 100, clientY: 100 })
 
       const sceneGroup = surface.querySelector('[data-fbd-scene="true"]')
-      expect(sceneGroup?.getAttribute('transform')).toContain('translate(-20, -10)')
+      expect(sceneGroup?.getAttribute('transform')).toBeNull()
+      expect(screen.getByRole('menu', { name: 'Mặt vẽ' })).toBeInTheDocument()
+    })
+
+    it('right click dây mở đúng workflow Ngắt dây', () => {
+      const { surface, dispatch, network } = renderCanvas()
+      const wireHit = surface.querySelector<SVGPathElement>('[data-fbd-wire-hit]')!
+      const wireId = wireHit.getAttribute('data-fbd-wire-hit')!
+
+      fireEvent.contextMenu(wireHit, { clientX: 200, clientY: 100 })
+      fireEvent.click(screen.getByRole('menuitem', { name: /Ngắt dây/ }))
+
+      expect(dispatch).toHaveBeenCalledWith({
+        type: 'DELETE_WIRES',
+        networkId: network.id,
+        wireIds: [wireId],
+      })
+    })
+
+    it('right click dây cho nối lại đầu đích và giữ nguyên wire id', () => {
+      const { surface, dispatch, network } = renderCanvas()
+      const wireHit = surface.querySelector<SVGPathElement>('[data-fbd-wire-hit]')!
+      const wireId = wireHit.getAttribute('data-fbd-wire-hit')!
+      const wire = network.wires.find((item) => item.id === wireId)!
+      const targetHit = surface.querySelector<SVGCircleElement>(`[data-fbd-port-hit="${wire.to.portId}"]`)!
+      const targetGroup = targetHit.closest('g')!
+
+      fireEvent.contextMenu(wireHit, { clientX: 200, clientY: 100 })
+      fireEvent.click(screen.getByRole('menuitem', { name: /Nối lại đầu đích/ }))
+      expect(surface.querySelector('[data-fbd-wire-preview="true"]')).toBeInTheDocument()
+
+      fireEvent.pointerDown(targetGroup, { pointerId: 41, button: 0, clientX: 300, clientY: 100 })
+      fireEvent.pointerUp(targetGroup, { pointerId: 41, button: 0, clientX: 300, clientY: 100 })
+      fireEvent.click(targetGroup)
+      expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'RECONNECT_WIRE',
+        networkId: network.id,
+        wireId,
+        wire: expect.objectContaining({ id: wireId }),
+      }))
     })
   })
 
@@ -152,14 +189,16 @@ describe('FbdCanvas — Task 5 Viewport, Layering & Interaction', () => {
         toJSON: () => ({}),
       })
 
-      fireEvent.wheel(surface, { deltaY: -100, clientX: 200, clientY: 150 })
+      fireEvent.wheel(surface, { deltaY: -100, clientX: 200, clientY: 150, ctrlKey: true })
       const sceneGroup = surface.querySelector('[data-fbd-scene="true"]')
       expect(sceneGroup).toBeInTheDocument()
       const transform = sceneGroup?.getAttribute('transform') || ''
       const translated = transform.match(/translate\(([-\d.]+), ([-\d.]+)\)/)
       expect(translated).not.toBeNull()
-      expect(Number(translated![1]) * 1.15).toBeCloseTo(-30)
-      expect(Number(translated![2]) * 1.15).toBeCloseTo(-22)
+      // translate nằm trong hệ user-unit của SVG nên được chia cho scale 1.12;
+      // sau khi SVG scale, điểm graph dưới con trỏ vẫn đứng nguyên trên màn hình.
+      expect(Number(translated![1])).toBeCloseTo(-24 / 1.12)
+      expect(Number(translated![2])).toBeCloseTo(-18 / 1.12)
     })
   })
 

@@ -85,6 +85,15 @@ function getPortElement(surface: HTMLElement, direction: 'INPUT' | 'OUTPUT'): SV
   return el
 }
 
+function getPortCenter(port: SVGGElement): { x: number; y: number } {
+  const hit = port.querySelector<SVGCircleElement>('[data-fbd-port-hit]')
+  if (!hit) throw new Error('Port hit target not found')
+  return {
+    x: Number(hit.getAttribute('cx')),
+    y: Number(hit.getAttribute('cy')),
+  }
+}
+
 beforeEach(() => {
   const prototype = Element.prototype as unknown as Record<string, unknown>
   if (typeof prototype.setPointerCapture !== 'function') {
@@ -285,7 +294,9 @@ describe('FbdCanvas — Task 6 Placement & Wiring Interaction Tests', () => {
 
   describe('TC-FBD-WIRE-001 & TC-FBD-WIRE-003: Pointer Wire Drag & Typed Wiring', () => {
     it('kéo pointer từ OUTPUT sang INPUT tạo action ADD_WIRE hợp lệ với preview layer', () => {
-      const { surface, dispatch, network } = renderCanvas()
+      const doc = golden()
+      doc.networks[0].wires = []
+      const { surface, dispatch, network } = renderCanvas({ document: doc })
 
       const outputPortG = getPortElement(surface, 'OUTPUT')
       expect(outputPortG).toBeInTheDocument()
@@ -293,18 +304,21 @@ describe('FbdCanvas — Task 6 Placement & Wiring Interaction Tests', () => {
       const inputPortG = getPortElement(surface, 'INPUT')
       expect(inputPortG).toBeInTheDocument()
 
+      const output = getPortCenter(outputPortG)
+      const input = getPortCenter(inputPortG)
+
       // 1. pointerdown trên OUTPUT port -> bắt đầu wire drag
-      fireEvent.pointerDown(outputPortG, { pointerId: 5, button: 0, clientX: 100, clientY: 100 })
+      fireEvent.pointerDown(outputPortG, { pointerId: 5, button: 0, clientX: output.x, clientY: output.y })
 
       // Preview layer xuất hiện
       const preview = surface.querySelector('[data-fbd-wire-preview="true"]')
       expect(preview).toBeInTheDocument()
 
       // 2. pointermove trên window -> preview cập nhật
-      fireEvent.pointerMove(window, { pointerId: 5, clientX: 150, clientY: 120 })
+      fireEvent.pointerMove(window, { pointerId: 5, clientX: input.x, clientY: input.y })
 
-      // 3. pointerup trên INPUT port -> dispatch ADD_WIRE
-      fireEvent.pointerUp(inputPortG, { pointerId: 5 })
+      // 3. Nhả đúng trên INPUT phải commit dù port chặn event khỏi node cha.
+      fireEvent.pointerUp(inputPortG, { pointerId: 5, clientX: input.x, clientY: input.y })
 
       expect(dispatch).toHaveBeenCalledTimes(1)
       const action = dispatch.mock.calls[0][0]
@@ -320,16 +334,36 @@ describe('FbdCanvas — Task 6 Placement & Wiring Interaction Tests', () => {
       expect(surface.querySelector('[data-fbd-wire-preview="true"]')).toBeNull()
     })
 
-    it('chặn nối sai hướng: kéo từ INPUT port không bắt đầu wire drag preview', () => {
-      const { surface } = renderCanvas()
+    it('kéo ngược từ INPUT về OUTPUT vẫn tạo dây canonical OUTPUT → INPUT', () => {
+      const doc = golden()
+      doc.networks[0].wires = []
+      const { surface, dispatch } = renderCanvas({ document: doc })
       const inputPortG = getPortElement(surface, 'INPUT')
+      const outputPortG = getPortElement(surface, 'OUTPUT')
+      const input = getPortCenter(inputPortG)
+      const output = getPortCenter(outputPortG)
+      const inputId = inputPortG.querySelector('[data-fbd-port-hit]')?.getAttribute('data-fbd-port-hit')
+      const outputId = outputPortG.querySelector('[data-fbd-port-hit]')?.getAttribute('data-fbd-port-hit')
 
-      fireEvent.pointerDown(inputPortG, { pointerId: 5, button: 0, clientX: 100, clientY: 100 })
-      expect(surface.querySelector('[data-fbd-wire-preview="true"]')).toBeNull()
+      fireEvent.pointerDown(inputPortG, { pointerId: 5, button: 0, clientX: input.x, clientY: input.y })
+      expect(surface.querySelector('[data-fbd-wire-preview="true"]')).toBeInTheDocument()
+      fireEvent.pointerMove(window, { pointerId: 5, clientX: output.x, clientY: output.y })
+      fireEvent.pointerUp(outputPortG, { pointerId: 5, clientX: output.x, clientY: output.y })
+
+      expect(dispatch).toHaveBeenCalledTimes(1)
+      expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'ADD_WIRE',
+        wire: expect.objectContaining({
+          from: expect.objectContaining({ portId: outputId }),
+          to: expect.objectContaining({ portId: inputId }),
+        }),
+      }))
     })
 
     it('Ctrl + click: nhịp 1 chọn OUTPUT port, nhịp 2 click INPUT port dispatch ADD_WIRE', () => {
-      const { surface, dispatch, network } = renderCanvas()
+      const doc = golden()
+      doc.networks[0].wires = []
+      const { surface, dispatch, network } = renderCanvas({ document: doc })
       const outputPortG = getPortElement(surface, 'OUTPUT')
       const inputPortG = getPortElement(surface, 'INPUT')
 
@@ -345,6 +379,26 @@ describe('FbdCanvas — Task 6 Placement & Wiring Interaction Tests', () => {
       if (addWireAction.type === 'ADD_WIRE') {
         expect(addWireAction.networkId).toBe(network.id)
       }
+    })
+
+    it('chuỗi pointerdown/up/click thật không để wire-drag nuốt mất chế độ nối hai click', () => {
+      const doc = golden()
+      doc.networks[0].wires = []
+      const { surface, dispatch } = renderCanvas({ document: doc })
+      const outputPortG = getPortElement(surface, 'OUTPUT')
+      const inputPortG = getPortElement(surface, 'INPUT')
+      const output = getPortCenter(outputPortG)
+      const input = getPortCenter(inputPortG)
+
+      fireEvent.pointerDown(outputPortG, { pointerId: 31, button: 0, clientX: output.x, clientY: output.y })
+      fireEvent.pointerUp(outputPortG, { pointerId: 31, button: 0, clientX: output.x, clientY: output.y })
+      fireEvent.click(outputPortG)
+
+      fireEvent.pointerDown(inputPortG, { pointerId: 32, button: 0, clientX: input.x, clientY: input.y })
+      fireEvent.pointerUp(inputPortG, { pointerId: 32, button: 0, clientX: input.x, clientY: input.y })
+      fireEvent.click(inputPortG)
+
+      expect(dispatch.mock.calls.filter((call) => call[0].type === 'ADD_WIRE')).toHaveLength(1)
     })
 
     it('pointercancel trong lúc kéo dây dọn dẹp preview layer (0 mutation)', () => {

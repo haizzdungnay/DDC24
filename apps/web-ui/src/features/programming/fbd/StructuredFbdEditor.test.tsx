@@ -7,6 +7,7 @@ import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_f
 import { I18nProvider, useI18n } from '../../../shared/i18n'
 import { StructuredFbdEditor } from './StructuredFbdEditor'
 import { FbdNodeInspector } from './FbdNodeInspector'
+import { buildFbdNetworkGeometry } from './geometry'
 import type { FbdNodeEditorTarget } from './nodeEditor'
 import type { FbdDocument } from './model'
 import type { UserPouInterface } from './userPou'
@@ -98,6 +99,44 @@ describe('StructuredFbdEditor', () => {
     const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
     expect(changed.networks[0].nodes).toHaveLength(3)
     expect(changed.networks[0].wires).toHaveLength(0)
+  })
+
+  it('Ctrl+A/C/V sao chép cả subgraph, Backspace xóa và Ctrl+Z hoàn tác', () => {
+    renderEditor(golden())
+    const editor = screen.getByRole('region', { name: /Structured FBD editor|Bộ dựng FBD/ })
+
+    fireEvent.keyDown(editor, { key: 'a', ctrlKey: true })
+    fireEvent.keyDown(editor, { key: 'c', ctrlKey: true })
+    fireEvent.keyDown(editor, { key: 'v', ctrlKey: true })
+
+    expect(screen.getByTestId('fbd-block-count')).toHaveTextContent('8/256')
+    expect(screen.getByTestId('fbd-wire-count')).toHaveTextContent('6/512')
+
+    fireEvent.keyDown(editor, { key: 'Backspace' })
+    expect(screen.getByTestId('fbd-block-count')).toHaveTextContent('4/256')
+    expect(screen.getByTestId('fbd-wire-count')).toHaveTextContent('3/512')
+
+    fireEvent.keyDown(editor, { key: 'z', ctrlKey: true })
+    expect(screen.getByTestId('fbd-block-count')).toHaveTextContent('8/256')
+    expect(screen.getByTestId('fbd-wire-count')).toHaveTextContent('6/512')
+  })
+
+  it('Ctrl+D nhân đôi khối đang chọn và Shift+mũi tên dịch khối theo lưới', async () => {
+    const document = golden()
+    const andNode = document.networks[0].nodes.find((node) => node.typeRef === 'AND')!
+    const beforeX = buildFbdNetworkGeometry(document.networks[0], document.layout).byNodeId.get(andNode.id)!.x
+    const { onChange } = renderEditor(document)
+    const editor = screen.getByRole('region', { name: /Structured FBD editor|Bộ dựng FBD/ })
+
+    fireEvent.click(screen.getByRole('button', { name: /#2 · AND/ }))
+    fireEvent.keyDown(editor, { key: 'ArrowRight', shiftKey: true })
+    await waitFor(() => {
+      const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+      expect(changed.layout?.nodes[andNode.id].x).toBe(beforeX + 8)
+    })
+
+    fireEvent.keyDown(editor, { key: 'd', ctrlKey: true })
+    expect(screen.getByTestId('fbd-block-count')).toHaveTextContent('5/256')
   })
 
   it('AC-PGM02-010 / AC-FBD-009: chế độ chỉ đọc chặn cả toolbar và shortcut mutation', () => {

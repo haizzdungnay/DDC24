@@ -85,9 +85,22 @@ export type FbdEditorAction =
   | { type: 'ADD_NETWORK'; network: FbdNetwork }
   | { type: 'ADD_NODE'; networkId: string; node: FbdNode; position?: FbdPoint }
   | { type: 'ADD_WIRE'; networkId: string; wire: FbdWire }
+  /** Đổi một đầu dây nhưng giữ nguyên đầu còn lại và `wire.id`. Dây cũ chỉ bị
+   * thay sau khi ứng viên mới qua validator, nên một lần nối lại sai không làm
+   * mất kết nối đang chạy dở và toàn thao tác chỉ chiếm một bước hoàn tác. */
+  | { type: 'RECONNECT_WIRE'; networkId: string; wireId: string; wire: FbdWire }
   | { type: 'BEGIN_OR_COMMIT_CONNECTION'; portId: string; wire?: FbdWire }
   | { type: 'CANCEL_CONNECTION' }
   | { type: 'DELETE_SELECTION' }
+  /**
+   * Ngắt một tập dây trong MỘT bước hoàn tác.
+   *
+   * `DELETE_SELECTION` chỉ xoá được đúng một dây đang chọn, nên "ngắt hết dây
+   * của khối này" trước đây phải là N lần xoá — N bước hoàn tác, và giữa mỗi
+   * bước vùng chọn lại đổi nên không có cách nào gọi liên tiếp cho chắc. Menu
+   * chuột phải cần đúng một lệnh.
+   */
+  | { type: 'DELETE_WIRES'; networkId: string; wireIds: readonly string[] }
   | { type: 'MOVE_NODE'; delta: -1 | 1 }
   | { type: 'SET_NODE_POSITION'; networkId: string; nodeId: string; x: number; y: number }
   | {
@@ -479,6 +492,48 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
         { code: 'wire-connected', params: { from: source.port.name, to: target.port.name } },
       )
     }
+    case 'RECONNECT_WIRE': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      if (action.wire.id !== action.wireId) return reject(state, { code: 'wire-mismatch' })
+      const currentNetwork = state.document.networks.find((item) => item.id === action.networkId)
+      const currentWire = currentNetwork?.wires.find((item) => item.id === action.wireId)
+      if (!currentNetwork || !currentWire) return reject(state, { code: 'wire-not-found' })
+      if (
+        currentWire.from.portId === action.wire.from.portId &&
+        currentWire.to.portId === action.wire.to.portId
+      ) {
+        return reject(state, { code: 'wire-unchanged' })
+      }
+
+      /* Validator đòi `wire.id` chưa tồn tại và cổng INPUT chưa có driver.
+       * Xét ứng viên trên bản sao đã gỡ CHÍNH dây đang nối lại để hai luật đó
+       * vẫn đúng, trong khi state gốc còn nguyên nếu phép kiểm thất bại. */
+      const document = cloneFbdDocument(state.document)
+      const network = document.networks.find((item) => item.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+      network.wires = network.wires.filter((item) => item.id !== action.wireId)
+
+      const source = findFbdPort(document, action.wire.from.portId)
+      const target = findFbdPort(document, action.wire.to.portId)
+      if (!source || !target) return reject(state, { code: 'port-not-found' })
+      if (source.network.id !== action.networkId || target.network.id !== action.networkId) {
+        return reject(state, { code: 'connect-incompatible' })
+      }
+      const validation = validateFbdWireCandidate(
+        document,
+        action.wire.from.portId,
+        action.wire.to.portId,
+        action.wire,
+      )
+      if (!validation.ok) return reject(state, { code: validation.code })
+      network.wires.push(action.wire)
+      return commit(
+        state,
+        document,
+        { code: 'wire-reconnected', params: { from: source.port.name, to: target.port.name } },
+        { kind: 'wire', networkId: network.id, wireId: action.wireId },
+      )
+    }
     case 'BEGIN_OR_COMMIT_CONNECTION':
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
       return connect(state, action.portId, action.wire)
@@ -490,6 +545,25 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const document = cloneFbdDocument(state.document)
       if (!deleteSelection(document, state.selection)) return reject(state, { code: 'cannot-delete-selection' })
       return commit(state, document, { code: 'selection-deleted' }, null)
+    }
+    case 'DELETE_WIRES': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const wanted = new Set(action.wireIds)
+      if (wanted.size === 0) return reject(state, { code: 'no-wires-to-disconnect' })
+      const document = cloneFbdDocument(state.document)
+      const network = document.networks.find((item) => item.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+      const before = network.wires.length
+      network.wires = network.wires.filter((wire) => !wanted.has(wire.id))
+      const removed = before - network.wires.length
+      if (removed === 0) return reject(state, { code: 'no-wires-to-disconnect' })
+      /* Vùng chọn trỏ vào một dây vừa bị ngắt thì phải rơi về `null`: giữ lại
+       * một lựa chọn trỏ vào phần tử không còn tồn tại là cách để lệnh kế tiếp
+       * (Delete, Thuộc tính) chạy trên hư không. */
+      const selection = state.selection?.kind === 'wire' && wanted.has(state.selection.wireId)
+        ? null
+        : state.selection
+      return commit(state, document, { code: 'wires-disconnected', params: { count: removed } }, selection)
     }
     case 'MOVE_NODE': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })

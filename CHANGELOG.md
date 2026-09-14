@@ -8,6 +8,39 @@
 
 ## [Unreleased]
 
+### Fixed — FBD Canvas: wiring trực tiếp và bộ thao tác editor desktop (2026-09-14)
+
+- Phạm vi: `apps/web-ui/src/features/programming/fbd/` (canvas, layer SVG,
+  reducer, menu ngữ cảnh, clipboard, phím tắt, hình học fit/zoom và test),
+  `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`.
+- Sửa gốc lỗi wiring: bắt đích theo tọa độ với vùng hit 13 px, cho phép kéo
+  `OUT → IN` hoặc `IN → OUT` rồi chuẩn hóa về dây canonical, commit tại đúng
+  tọa độ `pointerup`, hỗ trợ thả lên thân khối và giữ listener `window` khi nhả
+  ngoài phần tử. Cổng nguồn, đích hợp lệ/không hợp lệ và preview wire có phản
+  hồi riêng; lỗi type/unit/thứ tự/driver được hiển thị ngay trên canvas.
+- Hoàn thiện selection và thao tác trực tiếp: `Ctrl/Shift+click`, box-select,
+  click nền/Escape bỏ chọn, kéo nhiều khối, chọn dây bằng vùng hit 14 px, menu
+  chuột phải riêng cho khối/cổng/dây/canvas, nối lại từng đầu dây mà giữ đầu
+  còn lại cùng `wire.id`, và ngắt nhiều dây trong một bước hoàn tác. Phép nối
+  lại chỉ thay dây cũ sau khi ứng viên mới hợp lệ nên lỗi không làm mất dây.
+- Thêm `Backspace`, `Ctrl/Cmd+C/X/V/D/A`, `Ctrl/Cmd+Shift+Z`, `Ctrl+0/1/2`,
+  `Shift+mũi tên`; copy/paste giữ dây nội bộ, cấp lại toàn bộ UUID và dịch bản
+  dán khỏi bản gốc. Inspector tiếp tục nhận selection từ reducer duy nhất.
+- Chuẩn hóa điều hướng: wheel cuộn dọc, `Shift+wheel` cuộn ngang,
+  `Ctrl/Cmd+wheel` zoom quanh con trỏ qua native listener non-passive, nút giữa
+  hoặc `Space+kéo` để pan; thêm Fit All, Fit Selection, 100% và giữ Mini Map.
+- Kiểm chứng mới: Vitest FBD `19 file / 303 test PASS`, toàn FE
+  `252 file / 3222 test PASS`; typecheck, lint và production build PASS;
+  bundle Programming `115.24 KiB / 165.00 KiB` (dư `49.76 KiB`);
+  `TC-FBD-USABLE-001` trên Chromium desktop PASS với luồng
+  `INPUT → AND → TON → OUTPUT`, 3 dây kéo trực tiếp, nudge/copy/paste/duplicate/
+  delete/undo, zoom và middle-pan; cổng Chrome DevTools MCP `7/7 PASS`.
+  Wheel zoom trong Playwright dùng `WheelEvent` tại SVG vì CDP headless không
+  phát sự kiện Ctrl+mouseWheel vào DOM; wiring và middle-pan dùng input chuột
+  thật của browser.
+  Bộ E2E responsive hiện hữu cũng PASS tại 1440/1280/1024/820/768/390 px;
+  mobile giữ chế độ chỉ đọc và không phát sinh tràn ngang.
+
 ### Changed — Deploy PGM-02 refactor lên bo Forlinx, kèm một lần bật cờ cut-over có chủ ý (2026-09-14)
 
 - Phạm vi: `docs/07_records/test-evidence/fw-som/2026-09-14-forlinx-pgm02-fe-refactor-deploy.md` (mới)
