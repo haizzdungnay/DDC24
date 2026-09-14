@@ -8,6 +8,48 @@
 
 ## [Unreleased]
 
+### Changed — Deploy PGM-02 refactor lên bo Forlinx, kèm một lần bật cờ cut-over có chủ ý (2026-09-14)
+
+- Phạm vi: `docs/07_records/test-evidence/fw-som/2026-09-14-forlinx-pgm02-fe-refactor-deploy.md` (mới)
+  + hai ảnh chứng cứ trên bo, `CHANGELOG.md`.
+
+- Bo `OK1126B-buildroot`. Gói dựng từ nhánh `fix/pgm02-fe-refactor-2026-09-13`
+  @ `dcfddc1f` (PR #704, **chưa merge**).
+
+- **Đo trước khi deploy:** bản đang chạy KHÔNG bake `VITE_PROGRAMS_WORKSPACE_V2`
+  — `/eng/programming/programs` redirect về `/eng/programming` và
+  `programs-workspace` không tồn tại trong DOM. Nghĩa là deploy bằng
+  `npm run build:release` trần sẽ đẩy lên một gói mà **toàn bộ workspace v2
+  không tồn tại**, tức không thấy được gì của PR này.
+
+- **Quyết định đã lấy, ghi ra chứ không làm im lặng:** gói lần này dựng bằng
+  `VITE_PROGRAMS_WORKSPACE_V2=1 npm run build:release`. Đây là một lần bật cờ
+  cut-over trên bo lab và nó KHÁC bản trước; `DDD-SW-PGM02-WORKSPACE-001 §11`
+  cấm cut-over trong im lặng nên nó nằm ở đây và ở §1 của hồ sơ deploy. Đường
+  lùi giữ nguyên tại `/opt/mkddc-web/dist.prev`.
+
+- Bằng chứng cờ có hiệu lực: cùng cây mã, build không cờ ra
+  `programming-opm7OGkl.js`, build có cờ ra `programming-CXIvZ_OD.js`.
+
+- **Kiểm chứng dịch vụ:** `is-active=active`, `NRestarts=0`, `MainPID=26184`,
+  `/proc/26184/exe → /opt/mkddc-web/mkddc-web` (không có `(deleted)`),
+  `netstat` `:::8081 LISTEN 26184`, journal ghi
+  `GET /assets/programming-CXIvZ_OD.js → 200` — tức chunk phục vụ qua HTTP đúng
+  là chunk vừa dựng, không kết luận bằng cách đọc đĩa.
+
+- **Kiểm chứng giao diện trên bo** (Chrome thật qua tunnel SSH, 1680×941,
+  Project thật `AHU-MASTER-SEQUENCE` r24): route `programs` giữ nguyên;
+  workspace `216px 6px 648px 6px 216px 6px 320px` (4 cột);
+  `inspector-column` `position: static`; khay đáy `567px 375px 458px` (3 cột,
+  có cột Mini Map); Thư viện nhanh 49 khối chia 8 nhóm danh mục; tràn ngang
+  **0 px**; **0 lỗi console**.
+
+- **KHÔNG tuyên bố PASS** cho lớp giá trị runtime trên sơ đồ: bo trả lời đúng
+  rằng POU đang mở *"chưa có trong gói đang chạy"* (chỉ tồn tại ở Draft, Active
+  là revision `8bc583eb…`), nên lớp giá trị fail-closed và không vẽ số nào —
+  đúng `AC-FBD-010`. Hạng mục này mới chỉ nghiệm thu trên bàn đo cục bộ; muốn đo
+  trên phần cứng cần một POU FBD **đã Commission và có biến ánh xạ**.
+
 ### Fixed — Programming PGM-02: nửa phải màn hình hỏng vì thứ tự tầng CSS, canvas bị cắt, và sơ đồ FBD không có giá trị runtime (2026-09-13)
 
 - Phạm vi: `apps/web-ui/src/shared/styles.css`,
