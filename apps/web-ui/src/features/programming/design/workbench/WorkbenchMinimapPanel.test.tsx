@@ -157,4 +157,162 @@ describe('WorkbenchMinimapPanel (Task T9-02)', () => {
     fireEvent.keyDown(minimap, { key: 'ArrowDown' })
     expect(onStepNavigate).toHaveBeenCalledWith(0, expect.any(Number))
   })
+
+  it('viewBox bám theo bounding box của nodes kèm padding thay vì toàn bộ canvas width/height', () => {
+    const smallNodes: FbdNodeGeometry[] = [
+      { id: 'and-1', x: 24, y: 24, width: 168, height: 28, ports: [], auto: false },
+      { id: 'and-2', x: 24, y: 56, width: 168, height: 28, ports: [], auto: false },
+      { id: 'and-3', x: 24, y: 88, width: 168, height: 28, ports: [], auto: false },
+    ]
+
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={createMockBridge({
+            nodes: smallNodes,
+            width: 1200,
+            height: 1600,
+          })}
+        />
+      </I18nProvider>,
+    )
+
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    const viewBox = minimap.getAttribute('viewBox')
+    expect(viewBox).not.toBe('0 0 1200 1600')
+    expect(viewBox).toBe('0 0 216 140')
+  })
+
+  it('xử lý an toàn trường hợp biên bbox suy biến (width/height = 0)', () => {
+    const degenerateNodes: FbdNodeGeometry[] = [
+      { id: 'dot-1', x: 50, y: 50, width: 0, height: 0, ports: [], auto: false },
+    ]
+
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={createMockBridge({
+            nodes: degenerateNodes,
+            width: 1200,
+            height: 1600,
+          })}
+        />
+      </I18nProvider>,
+    )
+
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    const viewBox = minimap.getAttribute('viewBox')
+    expect(viewBox).toBe('26 26 112 112')
+  })
+
+  it('điều hướng chuột trên minimap ánh xạ đúng toạ độ graph theo viewBox mới', () => {
+    const onNavigate = vi.fn()
+    const smallNodes: FbdNodeGeometry[] = [
+      { id: 'and-1', x: 24, y: 24, width: 168, height: 28, ports: [], auto: false },
+      { id: 'and-2', x: 24, y: 56, width: 168, height: 28, ports: [], auto: false },
+      { id: 'and-3', x: 24, y: 88, width: 168, height: 28, ports: [], auto: false },
+    ]
+
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={createMockBridge({
+            nodes: smallNodes,
+            width: 1200,
+            height: 1600,
+            onNavigate,
+          })}
+        />
+      </I18nProvider>,
+    )
+
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' }) as unknown as SVGSVGElement
+    minimap.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 216,
+      height: 140,
+      right: 216,
+      bottom: 140,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    })
+
+    // Click ở tâm minimap (108, 70), tương ứng graph point (108, 70) trong viewBox 0 0 216 140
+    fireEvent.pointerDown(minimap, { pointerId: 1, clientX: 108, clientY: 70 })
+    expect(onNavigate).toHaveBeenCalledTimes(1)
+  })
+
+  it('khi zoom out xa: indicator co về vừa khít viewBox, không vượt quá biên bbox', () => {
+    const smallNodes: FbdNodeGeometry[] = [
+      { id: 'and-1', x: 24, y: 24, width: 168, height: 28, ports: [], auto: false },
+    ]
+
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={createMockBridge({
+            nodes: smallNodes,
+            scale: 0.1,
+            viewport: { x: 0, y: 0, scale: 0.1 },
+            scrollPosition: { left: 0, top: 0, clientWidth: 1200, clientHeight: 800 },
+          })}
+        />
+      </I18nProvider>,
+    )
+
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    const viewBoxAttr = minimap.getAttribute('viewBox')
+    expect(viewBoxAttr).toBe('0 0 216 112')
+
+    const indicator = minimap.querySelector('[data-testid="minimap-viewport-indicator"]')
+    expect(indicator).toBeInTheDocument()
+
+    const x = Number(indicator?.getAttribute('x'))
+    const y = Number(indicator?.getAttribute('y'))
+    const width = Number(indicator?.getAttribute('width'))
+    const height = Number(indicator?.getAttribute('height'))
+
+    // Khi viewport (12000x8000) lớn hơn viewBox (216x112), indicator phải co về vừa khít viewBox
+    expect(x).toBe(0)
+    expect(y).toBe(0)
+    expect(width).toBe(216)
+    expect(height).toBe(112)
+    expect(x + width).toBeLessThanOrEqual(216)
+    expect(y + height).toBeLessThanOrEqual(112)
+  })
+
+  it('hồi quy: khi viewport nhỏ hơn viewBox, vị trí và kích thước indicator giữ nguyên không bị lệch', () => {
+    const smallNodes: FbdNodeGeometry[] = [
+      { id: 'and-1', x: 24, y: 24, width: 168, height: 28, ports: [], auto: false },
+    ]
+
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={createMockBridge({
+            nodes: smallNodes,
+            scale: 1,
+            viewport: { x: 0, y: 0, scale: 1 },
+            scrollPosition: { left: 30, top: 20, clientWidth: 80, clientHeight: 50 },
+          })}
+        />
+      </I18nProvider>,
+    )
+
+    const indicator = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' }).querySelector('[data-testid="minimap-viewport-indicator"]')
+    expect(indicator).toBeInTheDocument()
+
+    const x = Number(indicator?.getAttribute('x'))
+    const y = Number(indicator?.getAttribute('y'))
+    const width = Number(indicator?.getAttribute('width'))
+    const height = Number(indicator?.getAttribute('height'))
+
+    // Giữ nguyên đúng giá trị viewport tính từ scrollPosition / scale
+    expect(x).toBe(30)
+    expect(y).toBe(20)
+    expect(width).toBe(80)
+    expect(height).toBe(50)
+  })
 })
