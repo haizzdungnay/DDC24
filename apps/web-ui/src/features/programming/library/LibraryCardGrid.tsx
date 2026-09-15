@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Library } from 'lucide-react'
 import { Button } from '../../../shared/components/Button'
 import { StateBlock } from '../../../shared/components/StateBlock'
 import { useI18n } from '../../../shared/i18n'
 import { LibraryBlockCard } from './LibraryBlockCard'
 import type { LibraryEntryGroup } from '../model/library'
 import type { LibraryViewAction, LibraryViewStatus } from './libraryViewState'
+import { userPouPaletteEntry, type UserPouInterface } from '../fbd/userPou'
+import { LIBRARY_DRAG_TYPE } from '../design/library/QuickLibraryPanel'
 
 /**
  * `T61-303`/`T61-306` — lưới thẻ khối và bàn phím của nó.
@@ -43,6 +46,7 @@ export const LIBRARY_GRID_COLUMNS_CLASS = 'grid gap-3 md:grid-cols-2 xl:grid-col
 export function LibraryCardGrid({
   state,
   groups,
+  pous = [],
   errorMessage,
   action,
   stale,
@@ -62,6 +66,7 @@ export function LibraryCardGrid({
 }: {
   state: LibraryViewStatus
   groups: LibraryEntryGroup[]
+  pous?: readonly UserPouInterface[]
   errorMessage: string | null
   action: LibraryViewAction
   stale: boolean
@@ -93,6 +98,12 @@ export function LibraryCardGrid({
   const listRef = useRef<HTMLUListElement | null>(null)
   const cardRefs = useRef(new Map<string, HTMLButtonElement>())
 
+  const allKeys = useMemo(() => [
+    ...pous.map((pou) => `POU/${pou.name}`),
+    ...groups.map((group) => group.key),
+  ], [pous, groups])
+  const hasItems = allKeys.length > 0
+
   const registerCard = useCallback((key: string) => (element: HTMLButtonElement | null) => {
     if (element) cardRefs.current.set(key, element)
     else cardRefs.current.delete(key)
@@ -104,8 +115,8 @@ export function LibraryCardGrid({
      cuối một thư viện 200 khối sẽ bắn 200 request cho những khối không ai định
      xem. */
   const [focusKey, setFocusKey] = useState<string | null>(null)
-  const focusIndex = focusKey === null ? -1 : groups.findIndex((group) => group.key === focusKey)
-  const selectedIndex = groups.findIndex((group) => group.key === selectedKey)
+  const focusIndex = focusKey === null ? -1 : allKeys.indexOf(focusKey)
+  const selectedIndex = allKeys.findIndex((k) => k === selectedKey || k === `POU/${selectedKey}`)
   // Thẻ mang `tabIndex=0`: nơi tiêu điểm đang ở, nếu không thì thẻ đang chọn,
   // nếu không nữa thì thẻ đầu. Danh sách ngắn lại làm chỉ số cũ hết hiệu lực,
   // và `findIndex` trả `-1` đã tự xử lý điều đó.
@@ -115,16 +126,17 @@ export function LibraryCardGrid({
     if (!focusCardRef) return undefined
     focusCardRef.current = (key: string) => {
       setFocusKey(key)
-      cardRefs.current.get(key)?.focus()
+      const el = cardRefs.current.get(key) ?? cardRefs.current.get(`POU/${key}`)
+      el?.focus()
     }
     return () => { focusCardRef.current = null }
   }, [focusCardRef])
 
   useEffect(() => {
     // Danh sách ngắn lại thì bỏ ref của thẻ đã biến mất, nếu không map cứ phình.
-    const alive = new Set(groups.map((group) => group.key))
+    const alive = new Set(allKeys)
     for (const key of [...cardRefs.current.keys()]) if (!alive.has(key)) cardRefs.current.delete(key)
-  }, [groups])
+  }, [allKeys])
 
   function columnCount(): number {
     const list = listRef.current
@@ -140,15 +152,15 @@ export function LibraryCardGrid({
   }
 
   function focusCard(index: number) {
-    const clamped = Math.min(Math.max(index, 0), groups.length - 1)
-    const group = groups[clamped]
-    if (!group) return
-    setFocusKey(group.key)
-    cardRefs.current.get(group.key)?.focus()
+    const clamped = Math.min(Math.max(index, 0), allKeys.length - 1)
+    const key = allKeys[clamped]
+    if (!key) return
+    setFocusKey(key)
+    cardRefs.current.get(key)?.focus()
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLUListElement>) {
-    if (groups.length === 0) return
+    if (allKeys.length === 0) return
     const columns = columnCount()
     switch (event.key) {
       case 'ArrowRight':
@@ -173,14 +185,14 @@ export function LibraryCardGrid({
         break
       case 'End':
         event.preventDefault()
-        focusCard(groups.length - 1)
+        focusCard(allKeys.length - 1)
         break
       default:
         break
     }
   }
 
-  if (state === 'loading') {
+  if (state === 'loading' && !hasItems) {
     /* Skeleton khớp HÌNH HỌC thẻ thật (`SPEC-PGM04-VISUAL-001` §3): cùng số
        dòng, cùng chiều cao. Một spinner giữa màn hình trống làm bố cục nhảy một
        nhịp khi dữ liệu về, và cú nhảy ấy rơi đúng lúc người dùng vừa đưa chuột
@@ -209,7 +221,7 @@ export function LibraryCardGrid({
       />
     )
   }
-  if (state === 'offline' && groups.length === 0) {
+  if (state === 'offline' && !hasItems) {
     return (
       <StateBlock
         state="error"
@@ -223,7 +235,7 @@ export function LibraryCardGrid({
       />
     )
   }
-  if (state === 'error' && groups.length === 0) {
+  if (state === 'error' && !hasItems) {
     return (
       <StateBlock
         state="error"
@@ -249,7 +261,7 @@ export function LibraryCardGrid({
       />
     )
   }
-  if (state === 'empty-filter') {
+  if (state === 'empty-filter' && !hasItems) {
     return (
       <div className="flex flex-col items-start gap-3">
         <StateBlock state="empty" title={pick('Không có khối nào khớp bộ lọc.', 'No blocks match the filters.')} />
@@ -260,7 +272,7 @@ export function LibraryCardGrid({
       </div>
     )
   }
-  if (state === 'empty-project') {
+  if (state === 'empty-project' && !hasItems) {
     return (
       <div className="flex flex-col items-start gap-3">
         <StateBlock
@@ -290,6 +302,20 @@ export function LibraryCardGrid({
         aria-label={pick('Danh sách khối Thư viện điều khiển', 'Control Library blocks')}
         className={LIBRARY_GRID_COLUMNS_CLASS}
       >
+        {pous.map((pou, index) => (
+          <li key={`POU/${pou.name}`} className="flex min-w-0">
+            <PouBlockCard
+              pou={pou}
+              selected={`POU/${pou.name}` === selectedKey || pou.name === selectedKey}
+              tabIndex={index === activeIndex ? 0 : -1}
+              cardRef={registerCard(`POU/${pou.name}`)}
+              onSelect={() => {
+                setFocusKey(`POU/${pou.name}`)
+                onSelect(`POU/${pou.name}`)
+              }}
+            />
+          </li>
+        ))}
         {groups.map((group, index) => (
           <li key={group.key} className="flex min-w-0">
             <LibraryBlockCard
@@ -298,7 +324,7 @@ export function LibraryCardGrid({
               usage={{ draftCount: draftUsageCount(group) }}
               favorite={isFavorite(group)}
               onToggleFavorite={() => onToggleFavorite(group)}
-              tabIndex={index === activeIndex ? 0 : -1}
+              tabIndex={pous.length + index === activeIndex ? 0 : -1}
               cardRef={registerCard(group.key)}
               onSelect={() => {
                 setFocusKey(group.key)
@@ -322,6 +348,92 @@ export function LibraryCardGrid({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function PouBlockCard({
+  pou,
+  selected,
+  tabIndex,
+  onSelect,
+  cardRef,
+}: {
+  pou: UserPouInterface
+  selected: boolean
+  tabIndex: number
+  onSelect: () => void
+  cardRef?: (element: HTMLButtonElement | null) => void
+}) {
+  const { pick } = useI18n()
+  let validityReason: string | null = null
+  try {
+    userPouPaletteEntry(pou)
+  } catch (err) {
+    validityReason = err instanceof Error ? err.message : 'POU không hợp lệ'
+  }
+  const isDraggable = validityReason === null
+  const pouKey = `POU/${pou.name}`
+  const inputsStr = pou.inputs.map((i) => `${i.name}: ${i.dataType}`).join(', ')
+  const signature = pou.kind === 'FUNCTION'
+    ? `(${inputsStr})${pou.returnType ? ` -> ${pou.returnType}` : ''}`
+    : `(${inputsStr})${pou.outputs && pou.outputs.length > 0 ? ` -> (${pou.outputs.map((o) => `${o.name}: ${o.dataType}`).join(', ')})` : ''}`
+
+  return (
+    <div className="relative flex min-w-0 flex-1">
+      <button
+        type="button"
+        ref={cardRef}
+        aria-current={selected ? 'true' : undefined}
+        tabIndex={tabIndex}
+        data-testid="library-block-card"
+        data-entry={pouKey}
+        onClick={onSelect}
+        draggable={isDraggable}
+        onDragStart={isDraggable ? (event) => {
+          event.dataTransfer.setData(LIBRARY_DRAG_TYPE, `pou:${pou.name}`)
+          event.dataTransfer.effectAllowed = 'copy'
+        } : undefined}
+        title={validityReason ?? undefined}
+        className={`flex min-w-0 flex-1 flex-col gap-1.5 rounded-[var(--radius)] border p-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${
+          selected
+            ? 'border-[var(--c-accent)] bg-[var(--c-accent-bg)]'
+            : 'border-[var(--c-border)] bg-[var(--c-surface-2)] hover:border-[var(--c-line-strong)]'
+        } ${!isDraggable ? 'opacity-60 cursor-not-allowed' : ''}`}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <Library className="h-4 w-4 shrink-0 text-[var(--c-text-dim)]" aria-hidden="true" />
+          <span className="truncate font-semibold text-[var(--c-text)]">{pou.name}</span>
+          <span
+            data-testid="library-pou-badge"
+            className="mono shrink-0 rounded bg-[var(--c-accent-bg)] px-1 text-[10px] font-medium text-[var(--c-accent)]"
+            title={pick('POU trong bản nháp của Project', 'POU in project draft')}
+          >
+            POU
+          </span>
+        </span>
+
+        <span className="flex flex-wrap items-center gap-1 text-xs">
+          <span className="rounded border border-[var(--c-border)] px-1.5 py-0.5 text-[var(--c-text-dim)]">{pou.kind}</span>
+          <span className="rounded bg-[var(--c-surface)] px-1.5 py-0.5 text-[var(--c-text-dim)]">
+            {pick('Dự án', 'Project')}
+          </span>
+        </span>
+
+        <span className="truncate font-mono text-xs text-[var(--c-text)]" title={signature}>
+          {signature}
+        </span>
+
+        <span className="line-clamp-2 text-xs text-[var(--c-text-dim)]">
+          {pick('POU bản nháp — chỉ đọc trong Thư viện', 'Draft POU — read-only in Library')}
+        </span>
+
+        {validityReason && (
+          <span data-testid="pou-card-error" className="text-xs text-[var(--c-fault-fg)]">
+            {validityReason}
+          </span>
+        )}
+      </button>
     </div>
   )
 }

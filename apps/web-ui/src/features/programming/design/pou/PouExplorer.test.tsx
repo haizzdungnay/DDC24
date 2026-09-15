@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { ProgrammingDraftDocument, ProgrammingDraftOperation } from '../../model/types'
+import { LIBRARY_DRAG_TYPE } from '../library/QuickLibraryPanel'
 import { PouExplorer } from './PouExplorer'
 
 function baseDocument(): ProgrammingDraftDocument {
@@ -101,6 +102,16 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     const input = screen.getByLabelText('Tên POU mới')
     fireEvent.change(input, { target: { value: 'SCALE_LIN' } })
     expect(await screen.findByRole('alert')).toHaveTextContent('đã tồn tại')
+    fireEvent.submit(input)
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('[LỖI #8] đổi tên trùng với khối FBD hệ thống bị chặn với thông báo tiếng Việt', async () => {
+    const { onSave } = renderExplorer()
+    pouAction('AHU_MAIN', 'Đổi tên')
+    const input = screen.getByLabelText('Tên POU mới')
+    fireEvent.change(input, { target: { value: 'TON' } })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tên POU trùng với khối thư viện hệ thống.')
     fireEvent.submit(input)
     expect(onSave).not.toHaveBeenCalled()
   })
@@ -233,5 +244,100 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     expect(programsButton).toHaveAttribute('aria-expanded', 'true')
     expect(functionsButton).toHaveAttribute('aria-expanded', 'false')
     expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('(a) menu + New có đúng 5 mục, trong đó có Function Block · FBD', () => {
+    renderExplorer()
+    fireEvent.click(screen.getByRole('button', { name: 'Mới' }))
+    const menu = screen.getByRole('menu', { name: 'Tạo POU mới' })
+    const items = within(menu).getAllByRole('menuitem')
+    expect(items).toHaveLength(5)
+    expect(within(menu).getByRole('menuitem', { name: 'Function Block · FBD' })).toBeInTheDocument()
+  })
+
+  it('(b) FB body FBD có draggable và onDragStart set đúng MIME + payload pou:<tên>', () => {
+    const doc = baseDocument()
+    doc.programs.push({
+      programId: 'fb-fbd-1',
+      objectId: 'fb-fbd-1',
+      hasRuntimeConfig: false,
+      name: 'MY_FB_FBD',
+      kind: 'FUNCTION_BLOCK',
+      language: 'FBD',
+      document: '',
+    })
+    renderExplorer({ document: doc })
+    const button = screen.getByRole('button', { name: 'Mở MY_FB_FBD' })
+    const item = button.closest('li')!
+    expect(item).toHaveAttribute('draggable', 'true')
+
+    const setData = vi.fn()
+    const dataTransfer = { setData, effectAllowed: 'none' }
+    fireEvent.dragStart(item, { dataTransfer })
+    expect(setData).toHaveBeenCalledWith(LIBRARY_DRAG_TYPE, 'pou:MY_FB_FBD')
+  })
+
+  it('(c) FB body ST có draggable', () => {
+    const doc = baseDocument()
+    doc.programs.push({
+      programId: 'fb-st-1',
+      objectId: 'fb-st-1',
+      hasRuntimeConfig: false,
+      name: 'MY_FB_ST',
+      kind: 'FUNCTION_BLOCK',
+      language: 'ST',
+      document: '',
+    })
+    renderExplorer({ document: doc })
+    const button = screen.getByRole('button', { name: 'Mở MY_FB_ST' })
+    const item = button.closest('li')!
+    expect(item).toHaveAttribute('draggable', 'true')
+  })
+
+  it('(d) FUNCTION có draggable và PROGRAM không có draggable', () => {
+    renderExplorer()
+    const funcButton = screen.getByRole('button', { name: 'Mở SCALE_LIN' })
+    const funcItem = funcButton.closest('li')!
+    expect(funcItem).toHaveAttribute('draggable', 'true')
+
+    const setData = vi.fn()
+    const dataTransfer = { setData, effectAllowed: 'none' }
+    fireEvent.dragStart(funcItem, { dataTransfer })
+    expect(setData).toHaveBeenCalledWith(LIBRARY_DRAG_TYPE, 'pou:SCALE_LIN')
+
+    const progButton = screen.getByRole('button', { name: 'Mở AHU_MAIN' })
+    const progItem = progButton.closest('li')!
+    expect(progItem).toHaveAttribute('draggable', 'false')
+  })
+
+  it('[LỖI #1] FB thiếu outputs trong document.objects thì draggable="false" và hiện chú thích lỗi', () => {
+    const doc = baseDocument()
+    ;(doc as unknown as Record<string, unknown>).objects = [
+      {
+        objectId: 'fb-empty-1',
+        kind: 'FUNCTION_BLOCK',
+        name: 'EMPTY_FB',
+        language: 'FBD',
+        source: '',
+        interface: {
+          inputs: [],
+        },
+      },
+    ]
+    doc.programs.push({
+      programId: 'fb-empty-1',
+      objectId: 'fb-empty-1',
+      hasRuntimeConfig: false,
+      name: 'EMPTY_FB',
+      kind: 'FUNCTION_BLOCK',
+      language: 'FBD',
+      document: '',
+    })
+    renderExplorer({ document: doc })
+    const button = screen.getByRole('button', { name: 'Mở EMPTY_FB' })
+    const item = button.closest('li')!
+    expect(item).toBeInTheDocument()
+    expect(item).toHaveAttribute('draggable', 'false')
+    expect(within(item).getByText(/phải có ít nhất một đầu ra/)).toBeInTheDocument()
   })
 })

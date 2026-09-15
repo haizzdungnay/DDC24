@@ -5,6 +5,7 @@ import { ProgrammingApiError, ProgrammingNoResponseError } from '../api/generate
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../shared/i18n'
 import type { UserRole } from '../../../shared/types'
+import { LIBRARY_DRAG_TYPE } from '../design/library/QuickLibraryPanel'
 import { LibraryPage } from './LibraryPage'
 
 const auth = vi.hoisted(() => ({ role: 'admin' as UserRole }))
@@ -1018,3 +1019,159 @@ describe('LibraryPage — ISS-PGUI-02: phạm vi theo đúng ngôn ngữ đang c
     expect(within(cardFor('SCALE_LIN')).getByText('Dự án')).toBeInTheDocument()
   })
 })
+
+describe('LibraryPage — POU FUNCTION và FUNCTION_BLOCK từ draft', () => {
+  const POU_FB = {
+    objectId: 'pou-fb-1',
+    kind: 'FUNCTION_BLOCK',
+    name: 'MY_CUSTOM_FB',
+    language: 'ST',
+    source: '',
+    interface: {
+      inputs: [{ name: 'IN1', type: 'BOOL' }],
+      outputs: [{ name: 'OUT1', type: 'BOOL' }],
+    },
+  }
+
+  const POU_FN = {
+    objectId: 'pou-fn-1',
+    kind: 'FUNCTION',
+    name: 'MY_CUSTOM_FN',
+    language: 'ST',
+    source: '',
+    interface: {
+      inputs: [{ name: 'A', type: 'REAL' }, { name: 'B', type: 'REAL' }],
+      returnType: 'REAL',
+    },
+  }
+
+  function stubWithDraft(libraryItems: unknown[], objects: Record<string, unknown>[] = []) {
+    stub(() => Promise.resolve({ items: libraryItems }), {
+      getProgrammingProject: () => Promise.resolve({
+        projectId: PROJECT_ID,
+        name: 'AHU',
+        etag: PROJECT_ETAG,
+        activeRevisionId: null,
+        draftRevisionId: '22222222-2222-4222-8222-222222222222',
+        baseRevisionId: '22222222-2222-4222-8222-222222222222',
+        updatedAt: '2026-08-20T00:00:00Z',
+        draft: {
+          schemaVersion: 2,
+          objects,
+          programs: [],
+          tasks: [],
+        },
+      }),
+    })
+  }
+
+  it('có POU trong draft: tab Project hiện thẻ POU với đúng tên và đứng trước PROJECT block', async () => {
+    stubWithDraft([entry({ name: 'SCALE_LIN' })], [POU_FB, POU_FN])
+    renderPage()
+
+    expect(await waitFor(() => cardFor('MY_CUSTOM_FB'))).toBeInTheDocument()
+    expect(cardFor('MY_CUSTOM_FN')).toBeInTheDocument()
+    expect(cardFor('SCALE_LIN')).toBeInTheDocument()
+
+    const allCards = [...document.querySelectorAll<HTMLElement>('[data-testid="library-block-card"]')]
+    const fbIndex = allCards.findIndex((c) => c.textContent?.includes('MY_CUSTOM_FB'))
+    const fnIndex = allCards.findIndex((c) => c.textContent?.includes('MY_CUSTOM_FN'))
+    const libIndex = allCards.findIndex((c) => c.textContent?.includes('SCALE_LIN'))
+    expect(fbIndex).toBeLessThan(libIndex)
+    expect(fnIndex).toBeLessThan(libIndex)
+  })
+
+  it('thẻ POU có nhãn phân biệt, chỉ đọc không có nút sửa xoá', async () => {
+    stubWithDraft([], [POU_FB])
+    renderPage()
+
+    const card = await waitFor(() => cardFor('MY_CUSTOM_FB'))
+    expect(within(card).getByTestId('library-pou-badge')).toBeInTheDocument()
+    expect(within(card).getByTestId('library-pou-badge')).toHaveTextContent('POU')
+
+    fireEvent.click(card)
+
+    expect(await screen.findByText('Khối đang chọn')).toBeInTheDocument()
+    const inspectorPanel = screen.getByText('Khối đang chọn').closest('section')!
+    expect(within(inspectorPanel).getByText('MY_CUSTOM_FB')).toBeInTheDocument()
+    expect(within(inspectorPanel).getByText('FUNCTION_BLOCK')).toBeInTheDocument()
+    expect(within(inspectorPanel).getByText('IN1')).toBeInTheDocument()
+    expect(within(inspectorPanel).getByText('OUT1')).toBeInTheDocument()
+
+    expect(within(inspectorPanel).queryByRole('button', { name: /Sửa/ })).not.toBeInTheDocument()
+    expect(within(inspectorPanel).queryByRole('button', { name: /Xoá/ })).not.toBeInTheDocument()
+  })
+
+  it('chỉ có POU không có PROJECT block: KHÔNG hiện thông báo rỗng', async () => {
+    stubWithDraft([], [POU_FB])
+    renderPage()
+
+    expect(await waitFor(() => cardFor('MY_CUSTOM_FB'))).toBeInTheDocument()
+    expect(screen.queryByText(/Thư viện của Project này chưa có khối nào/)).not.toBeInTheDocument()
+  })
+
+  it('không POU không PROJECT block: VẪN hiện thông báo rỗng như cũ', async () => {
+    stubWithDraft([], [])
+    renderPage()
+
+    expect(await screen.findByText(/Thư viện của Project này chưa có khối nào/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tạo khối PROJECT/ })).toBeInTheDocument()
+  })
+
+  it('tìm kiếm theo tên lọc đúng thẻ POU', async () => {
+    stubWithDraft([], [POU_FB, POU_FN])
+    renderPage()
+
+    expect(await waitFor(() => cardFor('MY_CUSTOM_FB'))).toBeInTheDocument()
+    expect(cardFor('MY_CUSTOM_FN')).toBeInTheDocument()
+
+    const searchInput = screen.getByLabelText(/Tìm theo tên/)
+    fireEvent.change(searchInput, { target: { value: 'CUSTOM_FB' } })
+
+    await waitFor(() => {
+      expect(cardFor('MY_CUSTOM_FB')).toBeInTheDocument()
+      expect(queryCard('MY_CUSTOM_FN')).not.toBeInTheDocument()
+    })
+
+    fireEvent.change(searchInput, { target: { value: 'KHONG_TON_TAI' } })
+    expect(await screen.findByText(/Không có khối nào khớp bộ lọc/)).toBeInTheDocument()
+  })
+
+  it('[LỖI #1] thẻ POU FB thiếu outputs thì hiện nhưng khoá kéo draggable="false" và có chú thích lỗi', async () => {
+    const POU_EMPTY_FB = {
+      objectId: 'pou-empty-fb',
+      kind: 'FUNCTION_BLOCK',
+      name: 'EMPTY_FB',
+      language: 'FBD',
+      source: '',
+      interface: {
+        inputs: [],
+      },
+    }
+    stubWithDraft([], [POU_FB, POU_EMPTY_FB])
+    renderPage()
+
+    const emptyCard = await waitFor(() => cardFor('EMPTY_FB'))
+    expect(emptyCard).toBeInTheDocument()
+    expect(emptyCard).toHaveAttribute('draggable', 'false')
+    expect(within(emptyCard).getByText(/phải có ít nhất một đầu ra/)).toBeInTheDocument()
+
+    const validCard = cardFor('MY_CUSTOM_FB')
+    expect(validCard).toHaveAttribute('draggable', 'true')
+  })
+
+  it('[LỖI #2] thẻ POU ở trang Control Library kéo thả được với đúng MIME và payload', async () => {
+    stubWithDraft([], [POU_FB])
+    renderPage()
+
+    const card = await waitFor(() => cardFor('MY_CUSTOM_FB'))
+    expect(card).toHaveAttribute('draggable', 'true')
+
+    const setData = vi.fn()
+    const dataTransfer = { setData, effectAllowed: 'none' }
+    fireEvent.dragStart(card, { dataTransfer })
+    expect(setData).toHaveBeenCalledWith(LIBRARY_DRAG_TYPE, 'pou:MY_CUSTOM_FB')
+    expect(dataTransfer.effectAllowed).toBe('copy')
+  })
+})
+

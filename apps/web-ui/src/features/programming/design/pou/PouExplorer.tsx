@@ -4,6 +4,9 @@ import { Modal } from '../../../../shared/components/Modal'
 import { createUuid } from '../../../../shared/crypto'
 import { useI18n } from '../../../../shared/i18n'
 import type { ProgrammingDraftDocument, ProgrammingDraftOperation } from '../../model/types'
+import { LIBRARY_DRAG_TYPE } from '../library/QuickLibraryPanel'
+import { userPouPaletteEntry } from '../../fbd/userPou'
+import { userPouInterfacesFromDraft } from '../editor/workspaceAdapters'
 import {
   createPouOperations,
   deletePouOperations,
@@ -34,13 +37,14 @@ const GROUP_META: Record<PouKind, { label: [string, string]; icon: typeof FileCo
   FUNCTION: { label: ['Functions', 'Functions'], icon: FunctionSquare }
 }
 
-const NAME_ERROR_COPY: Record<'EMPTY' | 'PATTERN' | 'DUPLICATE', [string, string]> = {
+const NAME_ERROR_COPY: Record<'EMPTY' | 'PATTERN' | 'DUPLICATE' | 'SYSTEM_BLOCK', [string, string]> = {
   EMPTY: ['Tên POU không được để trống.', 'The POU name cannot be empty.'],
   PATTERN: [
     'Tên POU chỉ nhận chữ, số và gạch dưới, và không bắt đầu bằng số.',
     'A POU name accepts letters, digits, and underscores, and cannot start with a digit.'
   ],
-  DUPLICATE: ['Tên POU đã tồn tại trong Project.', 'That POU name already exists in this project.']
+  DUPLICATE: ['Tên POU đã tồn tại trong Project.', 'That POU name already exists in this project.'],
+  SYSTEM_BLOCK: ['Tên POU trùng với khối thư viện hệ thống.', 'The POU name collides with a system library block.']
 }
 
 export function PouExplorer({
@@ -84,6 +88,10 @@ export function PouExplorer({
    * editor bị đổi tệp là mất nội dung đang soạn. */
   const visible = useMemo(() => filterPouItems(items, query), [items, query])
   const groups = useMemo(() => groupPouItems(visible), [visible])
+  const userPouMap = useMemo(() => {
+    const pous = userPouInterfacesFromDraft(document)
+    return new Map(pous.map((p) => [p.name, p]))
+  }, [document])
   const pendingDelete = resolvePouSelection(items, pendingDeleteObjectId ?? undefined)
   const deleteBlockers = pendingDelete ? pouDeleteBlockers(items, pendingDelete.objectId) : []
   /* Chặn thứ hai, độc lập: POU đang publish một tín hiệu thì backend từ chối
@@ -200,6 +208,7 @@ export function PouExplorer({
                 <MenuItem label={pick('Program · FBD', 'Program · FBD')} onClick={() => { setCreateMenuOpen(false); create('PROGRAM', 'FBD') }} />
                 <MenuItem label={pick('Function · ST', 'Function · ST')} onClick={() => { setCreateMenuOpen(false); create('FUNCTION', 'ST') }} />
                 <MenuItem label={pick('Function Block · ST', 'Function Block · ST')} onClick={() => { setCreateMenuOpen(false); create('FUNCTION_BLOCK', 'ST') }} />
+                <MenuItem label={pick('Function Block · FBD', 'Function Block · FBD')} onClick={() => { setCreateMenuOpen(false); create('FUNCTION_BLOCK', 'FBD') }} />
               </div>
             )}
           </div>
@@ -266,16 +275,33 @@ export function PouExplorer({
                 </p>
               ) : (
                 <ul aria-label={pick(...label)} className="flex flex-col">
-                  {group.map((item) => (
-                    <li
-                      key={item.objectId}
-                      className="flex items-center gap-1"
-                      onContextMenu={(event) => {
-                        if (!canEdit) return
-                        event.preventDefault()
-                        setMenu({ objectId: item.objectId, x: event.clientX, y: event.clientY })
-                      }}
-                    >
+                  {group.map((item) => {
+                    let validityReason: string | null = null
+                    const pouInterface = userPouMap.get(item.name)
+                    if (pouInterface) {
+                      try {
+                        userPouPaletteEntry(pouInterface)
+                      } catch (err) {
+                        validityReason = err instanceof Error ? err.message : 'POU không hợp lệ'
+                      }
+                    }
+                    const isDraggable = (item.kind === 'FUNCTION_BLOCK' || item.kind === 'FUNCTION') && validityReason === null
+                    return (
+                      <li
+                        key={item.objectId}
+                        className={`flex items-center gap-1 ${!isDraggable && (item.kind === 'FUNCTION_BLOCK' || item.kind === 'FUNCTION') ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        draggable={isDraggable}
+                        onDragStart={isDraggable ? (event) => {
+                          event.dataTransfer.setData(LIBRARY_DRAG_TYPE, `pou:${item.name}`)
+                          event.dataTransfer.effectAllowed = 'copy'
+                        } : undefined}
+                        title={validityReason ?? undefined}
+                        onContextMenu={(event) => {
+                          if (!canEdit) return
+                          event.preventDefault()
+                          setMenu({ objectId: item.objectId, x: event.clientX, y: event.clientY })
+                        }}
+                      >
                       {renamingObjectId === item.objectId ? (
                         <form
                           className="flex min-w-0 flex-1 flex-col gap-1 px-5 py-1"
@@ -311,6 +337,7 @@ export function PouExplorer({
                                vẫn CHỨA tên đang hiện (WCAG 2.5.3). */
                             aria-label={pick(`Mở ${item.name}`, `Open ${item.name}`)}
                             aria-current={item.objectId === selectedObjectId ? 'true' : undefined}
+                            title={validityReason ?? undefined}
                             className={`flex min-h-7 min-w-0 flex-1 items-center gap-1 truncate px-1 text-left text-sm ${
                               item.objectId === selectedObjectId ? 'text-[var(--c-accent)]' : ''
                             }`}
@@ -324,6 +351,11 @@ export function PouExplorer({
                             )}
                             {item.name}
                             <span className="ml-2 text-xs text-[var(--c-text-dim)]">{item.language}</span>
+                            {validityReason && (
+                              <span data-testid="pou-explorer-error" className="ml-2 truncate text-[10px] text-[var(--c-fault-fg)]" title={validityReason}>
+                                {validityReason}
+                              </span>
+                            )}
                           </button>
                           {canEdit && (
                             <button
@@ -343,7 +375,8 @@ export function PouExplorer({
                         </>
                       )}
                     </li>
-                  ))}
+                    )
+                  })}
                 </ul>
               )}
               </div>

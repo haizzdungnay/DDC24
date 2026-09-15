@@ -2,11 +2,12 @@ import { createContext, useContext, useRef, useState, type Dispatch, type ReactN
 
 import { useI18n } from '../../../../shared/i18n'
 import type { FbdSelection } from '../../fbd/commands'
-import type { FbdNodeGeometry } from '../../fbd/geometry'
+import type { FbdNodeGeometry, FbdWireGeometry } from '../../fbd/geometry'
 import type { FbdViewport } from '../../fbd/viewport'
 
 export interface FbdCanvasBridge {
   nodes: readonly FbdNodeGeometry[]
+  wires?: readonly FbdWireGeometry[]
   width: number
   height: number
   viewport: FbdViewport
@@ -129,6 +130,7 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
   const contextBridge = useFbdCanvasBridge()
   const bridge = propBridge !== undefined ? propBridge : contextBridge
   const pointerIdRef = useRef<number | null>(null)
+  const [minimapZoom, setMinimapZoom] = useState(1)
 
   if (!bridge || bridge.nodes.length === 0) {
     return (
@@ -148,7 +150,15 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
   }
 
   const activeBridge = bridge
-  const viewBox = computeMinimapViewBox(activeBridge.nodes)
+  const base = computeMinimapViewBox(activeBridge.nodes)
+  const w = base.width / minimapZoom
+  const h = base.height / minimapZoom
+  const effectiveViewBox = {
+    x: Math.round(base.x + (base.width - w) / 2),
+    y: Math.round(base.y + (base.height - h) / 2),
+    width: Math.round(w),
+    height: Math.round(h),
+  }
   const scroll = activeBridge.scrollPosition
   const scale = activeBridge.scale || activeBridge.viewport?.scale || 1
   const vpX = scroll ? (scroll.left - (activeBridge.viewport?.x ?? 0)) / scale : 0
@@ -156,10 +166,10 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
   const vpW = scroll ? scroll.clientWidth / scale : activeBridge.width
   const vpH = scroll ? scroll.clientHeight / scale : activeBridge.height
 
-  const indicatorW = Math.min(viewBox.width, Math.max(10, vpW))
-  const indicatorH = Math.min(viewBox.height, Math.max(10, vpH))
-  const indicatorX = Math.max(viewBox.x, Math.min(viewBox.x + viewBox.width - indicatorW, vpX))
-  const indicatorY = Math.max(viewBox.y, Math.min(viewBox.y + viewBox.height - indicatorH, vpY))
+  const indicatorW = Math.min(base.width, Math.max(10, vpW))
+  const indicatorH = Math.min(base.height, Math.max(10, vpH))
+  const indicatorX = Math.max(base.x, Math.min(base.x + base.width - indicatorW, vpX))
+  const indicatorY = Math.max(base.y, Math.min(base.y + base.height - indicatorH, vpY))
 
   function handleNavigate(clientX: number, clientY: number, element: SVGSVGElement) {
     const rect = element.getBoundingClientRect()
@@ -171,7 +181,7 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
     const graphPoint = minimapClientToGraphCoordinates(
       { x: clientX, y: clientY },
       rect,
-      viewBox,
+      effectiveViewBox,
     )
     if (!graphPoint) {
       activeBridge.onNavigate?.(clientX, clientY, element)
@@ -210,12 +220,12 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
             aria-label={pick('Thu nhỏ', 'Zoom out')}
             title={pick('Thu nhỏ', 'Zoom out')}
             className="flex h-5 w-5 items-center justify-center rounded border border-[var(--c-border)] text-xs hover:bg-[var(--c-surface-2)]"
-            onClick={() => activeBridge.onZoomOut?.()}
+            onClick={() => setMinimapZoom((z) => Math.max(0.4, Number((z - 0.2).toFixed(1))))}
           >
             -
           </button>
           <span className="text-[11px] text-[var(--c-text-dim)]">
-            {Math.round(scale * 100)}%
+            {Math.round(minimapZoom * 100)}%
           </span>
           <button
             type="button"
@@ -223,7 +233,7 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
             aria-label={pick('Phóng to', 'Zoom in')}
             title={pick('Phóng to', 'Zoom in')}
             className="flex h-5 w-5 items-center justify-center rounded border border-[var(--c-border)] text-xs hover:bg-[var(--c-surface-2)]"
-            onClick={() => activeBridge.onZoomIn?.()}
+            onClick={() => setMinimapZoom((z) => Math.min(2.5, Number((z + 0.2).toFixed(1))))}
           >
             +
           </button>
@@ -233,7 +243,7 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
             aria-label={pick('Vừa khung', 'Reset zoom')}
             title={pick('Vừa khung', 'Reset zoom')}
             className="flex h-5 items-center justify-center rounded border border-[var(--c-border)] px-1 text-[10px] hover:bg-[var(--c-surface-2)]"
-            onClick={() => activeBridge.onResetZoom?.()}
+            onClick={() => setMinimapZoom(1)}
           >
             {pick('Vừa khung', 'Fit')}
           </button>
@@ -249,7 +259,7 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
           data-fbd-minimap="true"
           width="100%"
           height="100%"
-          viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
+          viewBox={`${effectiveViewBox.x} ${effectiveViewBox.y} ${effectiveViewBox.width} ${effectiveViewBox.height}`}
           preserveAspectRatio="xMidYMid meet"
           className="max-h-full max-w-full rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]"
           onPointerDown={(event) => {
@@ -295,6 +305,17 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
             }
           }}
         >
+          {activeBridge.wires?.map((wire) => (
+            <path
+              key={wire.id}
+              data-fbd-minimap-wire="true"
+              d={wire.path}
+              fill="none"
+              stroke="var(--c-text-dim)"
+              strokeWidth={1}
+              aria-hidden="true"
+            />
+          ))}
           {activeBridge.nodes.map((placed) => (
             <rect
               key={placed.id}

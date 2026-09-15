@@ -269,6 +269,14 @@ export interface FbdNodesLayerProps {
   candidateOk?: boolean
   /** Khối mà cử chỉ kéo dây đang trỏ vào (bắt đích qua thân khối). */
   dropTargetNodeId?: string | null
+  /** Khối đang hiển thị tooltip (nếu có). */
+  activeTooltipNodeId?: string | null
+  /** Id của tooltip để liên kết aria-describedby. */
+  tooltipId?: string
+  onNodePointerEnter?: (event: React.PointerEvent<SVGGElement>, nodeId: string) => void
+  onNodePointerLeave?: (event: React.PointerEvent<SVGGElement>, nodeId: string) => void
+  onNodeFocus?: (event: React.FocusEvent<SVGGElement>, nodeId: string) => void
+  onNodeBlur?: (event: React.FocusEvent<SVGGElement>, nodeId: string) => void
 }
 
 /** Bán kính vùng BẮT CHUỘT của một cổng, theo đơn vị graph.
@@ -308,6 +316,12 @@ export function FbdNodesLayer({
   candidatePortId,
   candidateOk = true,
   dropTargetNodeId,
+  activeTooltipNodeId,
+  tooltipId,
+  onNodePointerEnter,
+  onNodePointerLeave,
+  onNodeFocus,
+  onNodeBlur,
 }: FbdNodesLayerProps) {
   return (
     <>
@@ -347,6 +361,7 @@ export function FbdNodesLayer({
               role="button"
               tabIndex={0}
               aria-label={`#${node.executionOrder} · ${node.typeRef} · ${node.kind}${issueNotice}`}
+              aria-describedby={activeTooltipNodeId === placed.id ? tooltipId : undefined}
               aria-pressed={isSelected}
               className={
                 canEdit
@@ -369,6 +384,10 @@ export function FbdNodesLayer({
               onPointerMove={moveDrag}
               onPointerUp={endDrag}
               onPointerCancel={cancelDrag}
+              onPointerEnter={(event) => onNodePointerEnter?.(event, placed.id)}
+              onPointerLeave={(event) => onNodePointerLeave?.(event, placed.id)}
+              onFocus={(event) => onNodeFocus?.(event, placed.id)}
+              onBlur={(event) => onNodeBlur?.(event, placed.id)}
             >
               <rect
                 x={placed.x}

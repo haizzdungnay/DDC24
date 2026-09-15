@@ -20,6 +20,7 @@ import {
   toggleFavorite,
   type LibraryPreferences
 } from './libraryPreferences'
+import { userPouPaletteEntry, type UserPouInterface } from '../../fbd/userPou'
 
 /**
  * `T59-804` (`PGM02-V22-WP-03`) — Quick Library của PGM-02.
@@ -69,7 +70,8 @@ export function QuickLibraryPanel({
   canInsert,
   onClose,
   variant = 'popover',
-  projectId
+  projectId,
+  userPouInterfaces,
 }: {
   library: ProgrammingLibraryPagedState
   /** Ngôn ngữ POU đang mở — mục ràng buộc ngôn ngữ khác bị loại. */
@@ -87,6 +89,8 @@ export function QuickLibraryPanel({
   /** Đích của "Xem thêm khối…" (Control Library, PGM-04). Không có Project thì
    *  không có đích thật ⇒ liên kết không hiện, không trỏ vào chỗ trống. */
   projectId?: string
+  /** POU của người dùng / dự án để kéo thả vào FBD. */
+  userPouInterfaces?: readonly UserPouInterface[]
   /**
    * Chèn mục vào bề mặt đang mở. Panel KHÔNG biết cách chèn: ST dựng đoạn mã
    * tại con trỏ, FBD thêm node vào canvas. Trả `true` khi chèn thật sự xảy ra —
@@ -130,6 +134,13 @@ export function QuickLibraryPanel({
     () => filterCatalog(entries, { query, category: category || undefined, language }),
     [entries, query, category, language]
   )
+  const filteredPous = useMemo(() => {
+    if (language !== 'FBD' || !userPouInterfaces || userPouInterfaces.length === 0) return []
+    if (category !== '') return []
+    const q = query.trim().toLowerCase()
+    if (!q) return userPouInterfaces
+    return userPouInterfaces.filter((p) => p.name.toLowerCase().includes(q))
+  }, [language, userPouInterfaces, category, query])
   const groupedCatalog = useMemo(() => {
     const byCategory = new Map<string, CatalogEntry[]>()
     for (const entry of filtered) {
@@ -288,7 +299,7 @@ export function QuickLibraryPanel({
          * không phải một danh sách chép tay ở FE — thêm danh mục mới ở thiết bị
          * thì nó tự xuất hiện đúng chỗ. Mục mà máy chủ KHÔNG phân loại rơi vào
          * một nhóm nói thẳng điều đó, thay vì bị giấu. */}
-        {showList && groupedCatalog.length === 0 && (
+        {showList && groupedCatalog.length === 0 && filteredPous.length === 0 && (
           <p className="px-3 py-2 text-xs text-[var(--c-text-dim)]">
             {library.hasMore
               ? pick(
@@ -297,6 +308,18 @@ export function QuickLibraryPanel({
               )
               : pick('Không khớp mục nào.', 'No entry matches.')}
           </p>
+        )}
+        {filteredPous.length > 0 && (
+          <details open data-testid="quick-library-group" data-category="project">
+            <summary className="cursor-pointer list-none px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--c-text-dim)] hover:text-[var(--c-text)]">
+              {pick('Khối của dự án', 'Project blocks')} ({filteredPous.length})
+            </summary>
+            <ul aria-label={pick('Khối của dự án', 'Project blocks')} className="flex flex-col gap-1 px-1 pb-1">
+              {filteredPous.map((pou) => (
+                <PouCard key={pou.name} pou={pou} />
+              ))}
+            </ul>
+          </details>
         )}
         {showList && groupedCatalog.map((group) => (
           <details key={group.id} open data-testid="quick-library-group" data-category={group.id}>
@@ -437,6 +460,68 @@ function Section({
  * trình duyệt: đã có sẵn ngữ nghĩa mở/đóng cho trình đọc màn hình và đi được
  * bằng bàn phím.
  */
+function PouCard({ pou }: { pou: UserPouInterface }) {
+  const { pick } = useI18n()
+  let validityReason: string | null = null
+  try {
+    userPouPaletteEntry(pou)
+  } catch (err) {
+    validityReason = err instanceof Error ? err.message : 'POU không hợp lệ'
+  }
+  const isDraggable = validityReason === null
+  const inCount = pou.inputs.length
+  const outCount = pou.kind === 'FUNCTION' ? 1 : (pou.outputs?.length ?? 0)
+  const portSummary = pick(`${inCount} vào · ${outCount} ra`, `${inCount} in · ${outCount} out`)
+  const errorId = `pou-card-error-${pou.name}`
+
+  return (
+    <li
+      data-testid="quick-library-card"
+      data-entry={pou.name}
+      draggable={isDraggable}
+      onDragStart={isDraggable ? (event) => {
+        event.dataTransfer.setData(LIBRARY_DRAG_TYPE, `pou:${pou.name}`)
+        event.dataTransfer.effectAllowed = 'copy'
+      } : undefined}
+      title={validityReason ?? undefined}
+      className={`rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] ${
+        !isDraggable ? 'opacity-60 cursor-not-allowed' : ''
+      }`}
+    >
+      <div className="flex items-center justify-between gap-1 px-1.5 py-0.5">
+        <button
+          type="button"
+          disabled={!isDraggable}
+          aria-disabled={!isDraggable}
+          aria-label={pick(`Chèn ${pou.name}`, `Insert ${pou.name}`)}
+          aria-describedby={validityReason ? errorId : undefined}
+          title={validityReason ?? pick(`Chèn ${pou.name}`, `Insert ${pou.name}`)}
+          draggable={isDraggable}
+          onDragStart={isDraggable ? (event) => {
+            event.dataTransfer.setData(LIBRARY_DRAG_TYPE, `pou:${pou.name}`)
+            event.dataTransfer.effectAllowed = 'copy'
+          } : undefined}
+          className="mono min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left text-xs font-semibold text-[var(--c-text)] hover:bg-[var(--c-surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {pou.name}
+        </button>
+        <span className="mono shrink-0 text-[10px] text-[var(--c-text-dim)]">
+          {portSummary}
+        </span>
+      </div>
+      {validityReason ? (
+        <p id={errorId} role="alert" data-testid="pou-card-error" className="px-2 pb-1 text-[10px] text-[var(--c-fault-fg)]">
+          {validityReason}
+        </p>
+      ) : pou.warning ? (
+        <p className="px-2 pb-1 text-[10px] text-[var(--c-warn-fg)]">
+          {pick(pou.warning.vi, pou.warning.en)}
+        </p>
+      ) : null}
+    </li>
+  )
+}
+
 function BlockCard({
   entry, favorite, blocked, onInsert, onStar,
 }: {
@@ -642,6 +727,7 @@ export function QuickLibraryHost(props: {
   canInsert?: (entry: CatalogEntry) => { ok: true } | { ok: false; reason: string }
   onClose: () => void
   variant?: 'popover' | 'docked'
+  userPouInterfaces?: readonly UserPouInterface[]
 }) {
   const library = useProgrammingLibraryPaged({ projectId: props.projectId })
   return (
@@ -653,6 +739,7 @@ export function QuickLibraryHost(props: {
       onClose={props.onClose}
       variant={props.variant}
       projectId={props.projectId}
+      userPouInterfaces={props.userPouInterfaces}
     />
   )
 }

@@ -38,6 +38,8 @@ import {
   FbdGhostLayer,
 } from './FbdCanvasLayers'
 import { fbdPaletteEntry, FBD_PALETTE, type FbdPaletteEntry } from './palette'
+import { userPouPaletteEntry, type UserPouInterface } from './userPou'
+import { FbdNodeHoverCard } from './FbdNodeHoverCard'
 import { createUuid } from '../../../shared/crypto'
 import { LIBRARY_DRAG_TYPE } from '../design/library/QuickLibraryPanel'
 import { useSetFbdCanvasBridge, type FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
@@ -90,6 +92,7 @@ export function minimapClientToGraph(
   rect: ViewportRect,
   graphWidth: number,
   graphHeight: number,
+  viewBoxOrigin?: FbdPoint,
 ): FbdPoint | null {
   if (rect.width <= 0 || rect.height <= 0 || graphWidth <= 0 || graphHeight <= 0) return null
   const scale = Math.min(rect.width / graphWidth, rect.height / graphHeight)
@@ -98,9 +101,11 @@ export function minimapClientToGraph(
   const renderedHeight = graphHeight * scale
   const offsetX = (rect.width - renderedWidth) / 2
   const offsetY = (rect.height - renderedHeight) / 2
+  const ox = viewBoxOrigin?.x ?? 0
+  const oy = viewBoxOrigin?.y ?? 0
   return {
-    x: Math.min(graphWidth, Math.max(0, (client.x - rect.left - offsetX) / scale)),
-    y: Math.min(graphHeight, Math.max(0, (client.y - rect.top - offsetY) / scale)),
+    x: ox + Math.min(graphWidth, Math.max(0, (client.x - rect.left - offsetX) / scale)),
+    y: oy + Math.min(graphHeight, Math.max(0, (client.y - rect.top - offsetY) / scale)),
   }
 }
 
@@ -208,6 +213,7 @@ export interface FbdCanvasProps {
   viewCommandsRef?: MutableRefObject<FbdViewCommands | null>
   /** Thêm khối tại một điểm graph (menu "Thêm khối tại đây"). */
   onAddBlockAt?: (at: FbdPoint) => void
+  userPouInterfaces?: readonly UserPouInterface[]
 }
 
 export function FbdCanvas({
@@ -237,6 +243,7 @@ export function FbdCanvas({
   clipboard,
   viewCommandsRef,
   onAddBlockAt,
+  userPouInterfaces,
 }: FbdCanvasProps) {
   const [viewport, setViewport] = useState<FbdViewport>(DEFAULT_VIEWPORT)
   const [pan, setPan] = useState<PanState | null>(null)
@@ -253,6 +260,10 @@ export function FbdCanvas({
   const [hover, setHover] = useState<{ nodeId: string | null; portId: string | null; wireId: string | null }>(
     { nodeId: null, portId: null, wireId: null },
   )
+  const [hoverTooltip, setHoverTooltip] = useState<{
+    nodeId: string
+    position: { x: number; y: number }
+  } | null>(null)
   const [spaceHeld, setSpaceHeld] = useState(false)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   /** Câu phản hồi hiện trên mặt vẽ (lý do từ chối nối, kết quả fit…). Vùng
@@ -413,11 +424,18 @@ export function FbdCanvas({
   function navigateFromMinimap(clientX: number, clientY: number, element: SVGSVGElement) {
     const container = scrollRef.current
     if (!container) return
+    const vbAttr = element.getAttribute('viewBox')?.trim()
+    const parts = vbAttr ? vbAttr.split(/\s+/).map(Number) : []
+    const [vx, vy, vw, vh] =
+      parts.length === 4 && parts.every((n) => Number.isFinite(n) && !Number.isNaN(n))
+        ? parts
+        : [0, 0, width, height]
     const point = minimapClientToGraph(
       { x: clientX, y: clientY },
       element.getBoundingClientRect(),
-      width,
-      height,
+      vw,
+      vh,
+      { x: vx, y: vy },
     )
     if (!point) return
     /* Scene có thể đã được pan bằng translate pixel. Mini Map phải đưa chính
@@ -442,6 +460,61 @@ export function FbdCanvas({
   function toGraph(clientX: number, clientY: number): FbdPoint {
     return screenToGraph({ x: clientX, y: clientY }, viewport, getSceneRect())
   }
+
+  const isGestureActive = Boolean(
+    drag || pan || marquee || wireDrag || clickSourcePort || contextMenu || pendingPlacement
+  )
+  const tooltipId = 'fbd-node-hover-card'
+  const hoverTooltipNode = hoverTooltip ? nodesById.get(hoverTooltip.nodeId) ?? null : null
+  const hoverTooltipGeometry = hoverTooltip ? geometry.byNodeId.get(hoverTooltip.nodeId) ?? null : null
+
+  const getNodeScreenPosition = useCallback((nodeId: string, element?: Element | null): { x: number; y: number } | null => {
+    if (element && typeof element.getBoundingClientRect === 'function') {
+      const rect = element.getBoundingClientRect()
+      if (rect && (rect.width > 0 || rect.height > 0 || rect.x > 0 || rect.y > 0)) {
+        return { x: rect.right, y: rect.top }
+      }
+    }
+    const placed = geometry.nodes.find((n) => n.id === nodeId)
+    if (placed) {
+      const sceneRect = getSceneRect()
+      return {
+        x: sceneRect.left + viewport.x + (placed.x + placed.width) * viewport.scale,
+        y: sceneRect.top + viewport.y + placed.y * viewport.scale,
+      }
+    }
+    return null
+  }, [geometry.nodes, viewport])
+
+  const handleNodePointerEnter = useCallback((event: React.PointerEvent<SVGGElement>, nodeId: string) => {
+    if (isGestureActive) return
+    const hasClientCoords = typeof event.clientX === 'number' && Number.isFinite(event.clientX) && (event.clientX !== 0 || event.clientY !== 0)
+    const pos = hasClientCoords
+      ? { x: event.clientX, y: event.clientY }
+      : getNodeScreenPosition(nodeId, event.currentTarget)
+    if (!pos) return
+    setHoverTooltip({ nodeId, position: pos })
+  }, [isGestureActive, getNodeScreenPosition])
+
+  const handleNodePointerLeave = useCallback((_event: React.PointerEvent<SVGGElement>, nodeId: string) => {
+    setHoverTooltip((current) => (current?.nodeId === nodeId ? null : current))
+  }, [])
+
+  const handleNodeFocus = useCallback((event: React.FocusEvent<SVGGElement>, nodeId: string) => {
+    if (isGestureActive) return
+    const pos = getNodeScreenPosition(nodeId, event.currentTarget)
+    if (!pos) return
+    setHoverTooltip({ nodeId, position: pos })
+  }, [isGestureActive, getNodeScreenPosition])
+
+  const handleNodeBlur = useCallback((_event: React.FocusEvent<SVGGElement>, nodeId: string) => {
+    setHoverTooltip((current) => (current?.nodeId === nodeId ? null : current))
+  }, [])
+
+  const handleBeginDrag = useCallback((event: React.PointerEvent<SVGGElement>, node: FbdNode) => {
+    setHoverTooltip(null)
+    beginDrag(event, node)
+  }, [beginDrag])
 
   /* ------------------------------------------------------------------ *
    * Điều hướng nhanh: Fit All / Fit Selection / 100% / zoom quanh tâm.
@@ -549,6 +622,7 @@ export function FbdCanvas({
     const container = scrollRef.current
     const bridge: FbdCanvasBridge = {
       nodes: geometry.nodes,
+      wires: geometry.wires,
       width,
       height,
       viewport,
@@ -579,6 +653,7 @@ export function FbdCanvas({
     bridgeHasConsumer,
     setBridge,
     geometry.nodes,
+    geometry.wires,
     height,
     onBridgeChange,
     selection,
@@ -607,6 +682,7 @@ export function FbdCanvas({
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        setHoverTooltip(null)
         setPan(null)
         cancelDrag()
         setMarquee(null)
@@ -818,6 +894,7 @@ export function FbdCanvas({
 
   // Viewport Pan / Marquee on Canvas Background
   function handleBgPointerDown(event: React.PointerEvent<SVGRectElement>) {
+    setHoverTooltip(null)
     if (pendingPlacement) return
     if (contextMenu) setContextMenu(null)
     activePointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
@@ -919,6 +996,7 @@ export function FbdCanvas({
 
   function handleBgPointerCancel(event: React.PointerEvent<SVGRectElement>) {
     activePointersRef.current.delete(event.pointerId)
+    setHoverTooltip(null)
     setPan(null)
     setMarquee(null)
     setWireDrag(null)
@@ -948,6 +1026,7 @@ export function FbdCanvas({
     }
     function handleCancel(event: PointerEvent) {
       activePointersRef.current.delete(event.pointerId)
+      setHoverTooltip(null)
       setPan(null)
       setMarquee(null)
       setWireDrag(null)
@@ -974,6 +1053,7 @@ export function FbdCanvas({
    * dùng hơn chiếm chỗ.
    * ------------------------------------------------------------------ */
   function handleWheel(event: Pick<WheelEvent, 'ctrlKey' | 'metaKey' | 'shiftKey' | 'deltaX' | 'deltaY' | 'deltaMode' | 'clientX' | 'clientY' | 'preventDefault'>) {
+    setHoverTooltip(null)
     const container = scrollRef.current
 
     if (event.ctrlKey || event.metaKey) {
@@ -1028,6 +1108,7 @@ export function FbdCanvas({
 
   function handlePortPointerDown(event: React.PointerEvent<SVGGElement>, port: FbdPortGeometry) {
     if (!canEdit || event.button !== 0) return
+    setHoverTooltip(null)
     if (contextMenu) setContextMenu(null)
     /* Khi đã có đầu cố định (nối bằng hai click hoặc reconnect), pointerdown
      * trên cổng thứ hai thuộc về nhịp click hoàn tất. Không được khởi động một
@@ -1063,6 +1144,7 @@ export function FbdCanvas({
   }
 
   function handlePortClick(event: React.MouseEvent<SVGGElement>, port: FbdPortGeometry) {
+    setHoverTooltip(null)
     if (!canEdit) {
       select({ kind: 'port', networkId: network.id, nodeId: port.nodeId, portId: port.id })
       return
@@ -1132,6 +1214,7 @@ export function FbdCanvas({
    * Chọn khối: `Ctrl`/`Shift + Click` cộng/trừ vùng chọn.
    * ------------------------------------------------------------------ */
   function handleNodeClick(event: React.MouseEvent<SVGGElement>, nodeId: string) {
+    setHoverTooltip(null)
     const additive = event.ctrlKey || event.metaKey || event.shiftKey
     if (!additive) {
       select({ kind: 'node', networkId: network.id, nodeId })
@@ -1150,6 +1233,7 @@ export function FbdCanvas({
   function openContextMenu(event: React.MouseEvent, target: FbdContextTarget) {
     event.preventDefault()
     event.stopPropagation()
+    setHoverTooltip(null)
     setPan(null)
     setMarquee(null)
     setWireDrag(null)
@@ -1412,14 +1496,28 @@ export function FbdCanvas({
 
   function handleDrop(event: React.DragEvent<SVGSVGElement>) {
     if (!canEdit) return
-    const entryId = event.dataTransfer.getData(LIBRARY_DRAG_TYPE) || extractDragEntryId(event)
-    if (!entryId) return
+    const rawPayload = event.dataTransfer.getData(LIBRARY_DRAG_TYPE) || extractDragEntryId(event)
+    if (!rawPayload) return
     event.preventDefault()
 
     setNativeDragEntryId(null)
     setGhostPosition(null)
 
-    const entry = fbdPaletteEntry(entryId)
+    let entry: FbdPaletteEntry | undefined
+    if (rawPayload.startsWith('pou:')) {
+      const pouName = rawPayload.slice('pou:'.length)
+      const pou = userPouInterfaces?.find((p) => p.name === pouName)
+      if (!pou) return
+      try {
+        entry = userPouPaletteEntry(pou)
+      } catch (err) {
+        showFlash(err instanceof Error ? err.message : pick('Không thể dùng khối này', 'Cannot use this block'), 'error')
+        return
+      }
+    } else {
+      entry = fbdPaletteEntry(rawPayload)
+    }
+
     if (!entry || entry.featureState !== 'AVAILABLE') return
 
     const rawClientX = (event as unknown as { clientX?: number }).clientX ?? (event as unknown as { pageX?: number }).pageX
@@ -1571,6 +1669,7 @@ export function FbdCanvas({
             pointerInsideRef.current = false
             setSpaceHeld(false)
             setHover({ nodeId: null, portId: null, wireId: null })
+            setHoverTooltip(null)
           }}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -1623,7 +1722,7 @@ export function FbdCanvas({
               networkId={network.id}
               tempPositions={drag?.currentPositions ?? null}
               select={select}
-              beginDrag={beginDrag}
+              beginDrag={handleBeginDrag}
               moveDrag={moveDrag}
               endDrag={endDrag}
               cancelDrag={cancelDrag}
@@ -1638,6 +1737,12 @@ export function FbdCanvas({
               }
               hoverNodeId={hover.nodeId}
               hoverPortId={hover.portId}
+              activeTooltipNodeId={!isGestureActive ? hoverTooltip?.nodeId ?? null : null}
+              tooltipId={tooltipId}
+              onNodePointerEnter={handleNodePointerEnter}
+              onNodePointerLeave={handleNodePointerLeave}
+              onNodeFocus={handleNodeFocus}
+              onNodeBlur={handleNodeBlur}
               wiringSourcePortId={wireDrag?.sourcePort.id ?? clickSourcePort?.id ?? null}
               candidatePortId={wireDrag?.candidate?.port.id ?? clickCandidate?.port.id ?? null}
               candidateOk={wireDrag?.candidate?.ok ?? clickCandidate?.ok ?? true}
@@ -1730,6 +1835,16 @@ export function FbdCanvas({
         <p className="text-sm text-[var(--c-text-dim)]">
           {pick('Network trống — thêm block để bắt đầu.', 'Empty network — add a block to begin.')}
         </p>
+      )}
+
+      {hoverTooltip && !isGestureActive && hoverTooltipNode && hoverTooltipGeometry && (
+        <FbdNodeHoverCard
+          id={tooltipId}
+          node={hoverTooltipNode}
+          nodeGeometry={hoverTooltipGeometry}
+          runtimeReading={runtime?.byNodeId.get(hoverTooltipNode.id) ?? null}
+          position={hoverTooltip.position}
+        />
       )}
     </div>
   )

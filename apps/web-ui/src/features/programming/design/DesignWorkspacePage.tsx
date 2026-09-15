@@ -19,6 +19,7 @@ import { PouExplorer } from './pou/PouExplorer'
 import { programmingCompatibility } from '../shared/programmingCompatibility'
 import { useProgrammingRuntimeMonitor, useProgrammingCapabilities, useProgrammingRuntime, useProgrammingRevision, useProgrammingRevisionComparison, useProgrammingCheck } from '../api/queries'
 import { pouInterfaceFromDraft, runtimeOverlayByProgramId, userPouInterfacesFromDraft } from './editor/workspaceAdapters'
+import type { UserPouInterface } from '../fbd/userPou'
 import { programsWorkspacePath } from '../shared/programsRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
@@ -88,6 +89,8 @@ function fbdSelectionForCompare(
   }
   return null
 }
+
+const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
 
 /**
  * PGM-02 Thiết kế — `UJ-PROG-02/03/04` (TASK-PROG-501..503). Một workspace,
@@ -291,6 +294,22 @@ export function DesignWorkspacePage({
   const workspaceDocument = useMemo(
     () => workspace.project?.draft ? toWorkspaceDocument(workspace.project.draft) : null,
     [workspace.project?.draft]
+  )
+  /* Route v2 chọn POU bằng `objectId`; editor cũ vẫn nhận `programId`. Adapter
+   * hẹp này chỉ nối hai định danh khi cùng một record Draft khai cả hai, không
+   * suy theo tên/index và không dùng objectId làm mutation target sai. */
+  const selectedProgram = workspaceDocument?.programs.find((program) => (program.objectId ?? program.programId) === selectedPouId)
+    ?? (searchParams.has('program') ? workspaceDocument?.programs.find((program) => program.programId === searchParams.get('program')) : undefined)
+  const selectedProgramId = selectedProgram?.programId
+  const selectedObjectId = selectedProgram ? (selectedProgram.objectId ?? selectedProgram.programId) : selectedPouId
+
+  const userPouInterfaces = useMemo(
+    () => workspace.project?.draft ? userPouInterfacesFromDraft(workspace.project.draft, selectedObjectId) : EMPTY_USER_POU_INTERFACES,
+    [workspace.project?.draft, selectedObjectId],
+  )
+  const selectedPouInterface = useMemo(
+    () => workspace.project?.draft ? pouInterfaceFromDraft(workspace.project.draft, selectedObjectId) : null,
+    [workspace.project?.draft, selectedObjectId],
   )
   const pendingOperations = useMemo(() => [...programOperations, ...executionOperations], [executionOperations, programOperations])
   const draftDirty = pendingOperations.length > 0
@@ -530,13 +549,6 @@ export function DesignWorkspacePage({
    * chiếu nó vào một document chỉ-đọc giúp Problems cập nhật trước Save mà
    * không biến local state thành authority transport. */
   const workbenchDraftDocument = projectPendingProgramSources(document, programOperations)
-  /* Route v2 chọn POU bằng `objectId`; editor cũ vẫn nhận `programId`. Adapter
-   * hẹp này chỉ nối hai định danh khi cùng một record Draft khai cả hai, không
-   * suy theo tên/index và không dùng objectId làm mutation target sai. */
-  const selectedProgram = document.programs.find((program) => (program.objectId ?? program.programId) === selectedPouId)
-    ?? (searchParams.has('program') ? document.programs.find((program) => program.programId === searchParams.get('program')) : undefined)
-  const selectedProgramId = selectedProgram?.programId
-  const selectedObjectId = selectedProgram ? (selectedProgram.objectId ?? selectedProgram.programId) : selectedPouId
   const selectPou = (objectId: string | undefined) => {
     setSelectedPouId(objectId)
     /* Chỉ ghi vào URL khi route canonical đang sở hữu địa chỉ; trên route cũ,
@@ -658,11 +670,6 @@ export function DesignWorkspacePage({
   const publishedSignals = draftSignals(workspace.project.draft)
   const simulationWatch = simulationWatchRows(simulation.slice.frame)
   const runtimeOverlays = runtimeOverlayByProgramId(document.programs, monitor, workspace.project.activeRevisionId)
-  const userPouInterfaces = userPouInterfacesFromDraft(workspace.project.draft, selectedProgramId)
-  const selectedPouInterface = pouInterfaceFromDraft(
-    workspace.project.draft,
-    selectedProgram?.objectId ?? selectedProgram?.programId,
-  )
   const pouNameByObjectId = new Map(
     document.programs.map((program) => [program.objectId ?? program.programId, program.name] as const),
   )

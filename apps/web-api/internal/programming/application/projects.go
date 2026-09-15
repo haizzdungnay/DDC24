@@ -272,8 +272,9 @@ func (s *ProjectService) SaveDraft(ctx context.Context, actor Actor, command Sav
 	if err != nil {
 		return MutationResult{}, err
 	}
+	enrichedContent := enrichDraftInterfaces(content)
 	var contentValue any
-	if unmarshalErr := json.Unmarshal(content, &contentValue); unmarshalErr != nil {
+	if unmarshalErr := json.Unmarshal(enrichedContent, &contentValue); unmarshalErr != nil {
 		return MutationResult{}, unmarshalErr
 	}
 	return MutationResult{Resource: map[string]any{"projectId": command.ProjectID, "draftRevisionId": draft.DraftID,
@@ -384,7 +385,7 @@ func (s *ProjectService) GetProject(ctx context.Context, projectID string) (Proj
 		return ProjectView{}, err
 	}
 	view := projectView(snapshot)
-	view.DraftContentJSON = snapshot.Draft.ContentJSON
+	view.DraftContentJSON = enrichDraftInterfaces(snapshot.Draft.ContentJSON)
 	latestCheck, err := s.latestCheckView(ctx, snapshot.Draft.BaseRevisionID)
 	if err != nil {
 		return ProjectView{}, err

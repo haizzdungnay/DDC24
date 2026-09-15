@@ -49,6 +49,17 @@ vi.mock('../../auth', async (importOriginal) => {
 
 const client = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('../api/authClient', () => ({ useProgrammingApiClient: () => client }))
+const userPouInterfacesSpy = vi.hoisted(() => vi.fn())
+vi.mock('./editor/workspaceAdapters', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./editor/workspaceAdapters')>()
+  return {
+    ...actual,
+    userPouInterfacesFromDraft: vi.fn((...args: Parameters<typeof actual.userPouInterfacesFromDraft>) => {
+      userPouInterfacesSpy(...args)
+      return actual.userPouInterfacesFromDraft(...args)
+    }),
+  }
+})
 const runtimeMonitor = vi.hoisted(() => ({
   state: null as unknown as ProgrammingRuntimeMonitorState,
   enabled: vi.fn(),
@@ -159,6 +170,7 @@ beforeEach(() => {
     refresh: vi.fn()
   }
   runtimeMonitor.enabled.mockClear()
+  userPouInterfacesSpy.mockClear()
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(() => {
@@ -1672,3 +1684,78 @@ describe('DesignWorkspacePage — lối vào `Cấu hình chạy` (#675)', () =>
     expect(screen.queryByRole('link', { name: 'Mở cấu hình Task toàn cục' })).not.toBeInTheDocument()
   })
 })
+
+describe('LỖI #5 & #6 — userPouInterfaces memoization & objectId exclusion', () => {
+  it('[LỖI #6] truyền đúng selectedObjectId vào excludedObjectId của userPouInterfacesFromDraft thay vì selectedProgramId', async () => {
+    const project = baseProject()
+    project.draft = {
+      schemaVersion: 2,
+      project: { projectId: 'project-1', name: 'AHU-01', functionalTags: [] },
+      objects: [
+        {
+          objectId: 'fb-object-uuid-1',
+          kind: 'FUNCTION_BLOCK',
+          name: 'MyFb',
+          language: 'ST',
+          source: 'FUNCTION_BLOCK MyFb\nEND_FUNCTION_BLOCK\n',
+          interface: { inputs: [{ name: 'In', type: 'REAL' }], outputs: [{ name: 'Out', type: 'REAL' }] },
+          locals: []
+        }
+      ],
+      programs: [
+        {
+          programId: 'fb-runtime-task-uuid-2',
+          objectId: 'fb-object-uuid-1',
+          periodMs: 1000
+        }
+      ],
+      signals: [],
+      bindings: [],
+      library: {},
+      execution: {}
+    } as unknown as ProgrammingDraftDocument
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=fb-object-uuid-1')
+    await waitFor(() => {
+      expect(userPouInterfacesSpy).toHaveBeenCalledWith(expect.anything(), 'fb-object-uuid-1')
+    })
+    expect(userPouInterfacesSpy).not.toHaveBeenCalledWith(expect.anything(), 'fb-runtime-task-uuid-2')
+  })
+
+  it('[LỖI #5] bọc useMemo cho userPouInterfacesFromDraft để không sinh mảng mới mỗi lần render', async () => {
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-1', objectId: 'object-1', name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST',
+      document: 'PROGRAM AHU_MAIN\nEND_PROGRAM\n'
+    })
+    project.draft!.task.programOrder = ['program-1']
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=EDIT')
+    await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+
+    const initialCalls = userPouInterfacesSpy.mock.calls.length
+    expect(initialCalls).toBeGreaterThan(0)
+
+    const button = await screen.findByRole('button', { name: 'Cấu hình chạy' })
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('router-location').textContent).toContain('tab=execution')
+    })
+
+    expect(userPouInterfacesSpy.mock.calls.length).toBe(initialCalls)
+  })
+})
+

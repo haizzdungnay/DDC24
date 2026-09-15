@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ProgrammingDraftDocument } from '../../model/types'
+import { isFbdIdentifier, type FbdDocument } from '../../fbd/model'
+import { userPouPaletteEntry } from '../../fbd/userPou'
 import {
   createPouOperations,
   deletePouOperations,
@@ -82,6 +84,56 @@ describe('PGM-02 lệnh vòng đời POU', () => {
     expect(fbSource).toContain('END_FUNCTION_BLOCK')
   })
 
+  it('FUNCTION_BLOCK FBD sinh mẫu có ít nhất một node OUTPUT hợp lệ, qua được userPouPaletteEntry; PROGRAM FBD vẫn rỗng', () => {
+    const items = pouItems(baseDocument())
+    const fbRes = createPouOperations(items, {
+      kind: 'FUNCTION_BLOCK',
+      language: 'FBD',
+      objectId: 'fb-fbd-1',
+      task: baseDocument().task,
+    })
+    const fbOp = fbRes.operations[0] as { op: 'upsertObject'; object: { source: string; name: string } }
+    expect(fbOp.op).toBe('upsertObject')
+    const fbDoc = JSON.parse(fbOp.object.source) as FbdDocument
+    expect(fbDoc.networks).toHaveLength(1)
+    const outputNodes = fbDoc.networks[0].nodes.filter((n) => n.kind === 'OUTPUT')
+    expect(outputNodes.length).toBeGreaterThanOrEqual(1)
+    const outNode = outputNodes[0]
+    expect(typeof outNode.parameters.variable).toBe('string')
+    expect(isFbdIdentifier(outNode.parameters.variable as string)).toBe(true)
+    expect(outNode.typeRef).toBe('BOOL')
+    expect(outNode.ports.length).toBeGreaterThanOrEqual(1)
+    expect(outNode.ports[0].direction).toBe('INPUT')
+    expect(outNode.ports[0].dataType).toBe('BOOL')
+    expect(fbDoc.layout?.nodes[outNode.id]).toBeDefined()
+    expect(fbDoc.layout?.nodes[outNode.id].x).toBeGreaterThan(0)
+    expect(fbDoc.layout?.nodes[outNode.id].y).toBeGreaterThan(0)
+
+    const extractedOutputs = outputNodes.map((n) => ({
+      name: n.parameters.variable as string,
+      dataType: n.typeRef as 'BOOL',
+    }))
+    expect(() =>
+      userPouPaletteEntry({
+        name: fbOp.object.name,
+        kind: 'FUNCTION_BLOCK',
+        inputs: [],
+        outputs: extractedOutputs,
+      })
+    ).not.toThrow()
+
+    const progRes = createPouOperations(items, {
+      kind: 'PROGRAM',
+      language: 'FBD',
+      objectId: 'prog-fbd-1',
+      task: baseDocument().task,
+    })
+    const progOp = progRes.operations[0] as { op: 'upsertProgram'; program: { document: string } }
+    expect(progOp.op).toBe('upsertProgram')
+    const progDoc = JSON.parse(progOp.program.document) as FbdDocument
+    expect(progDoc.networks[0].nodes).toEqual([])
+  })
+
   it('tên mới không trùng, kể cả trùng với POU khác kind', () => {
     const items = pouItems(baseDocument())
     expect(uniquePouName(items, 'AHU_MAIN')).toBe('AHU_MAIN_2')
@@ -99,6 +151,17 @@ describe('PGM-02 lệnh vòng đời POU', () => {
     // Đổi tên chính nó về chính nó không phải trùng.
     expect(validatePouName(items, 'SCALE_LIN', 'obj-2')).toBeNull()
     expect(validatePouName(items, 'NewName')).toBeNull()
+  })
+
+  it('[LỖI #8] tên POU trùng với khối FBD hệ thống bị chặn và tự sinh tên không trùng', () => {
+    const items = pouItems(baseDocument())
+    expect(validatePouName(items, 'AND')).toBe('SYSTEM_BLOCK')
+    expect(validatePouName(items, 'and')).toBe('SYSTEM_BLOCK')
+    expect(validatePouName(items, 'TON')).toBe('SYSTEM_BLOCK')
+    expect(validatePouName(items, 'pid')).toBe('SYSTEM_BLOCK')
+    expect(validatePouName(items, 'SEL')).toBe('SYSTEM_BLOCK')
+    expect(uniquePouName(items, 'AND')).toBe('AND_2')
+    expect(uniquePouName(items, 'ton')).toBe('ton_2')
   })
 
   it('đổi tên chỉ gửi renameObject, không gửi lại mã nguồn', () => {

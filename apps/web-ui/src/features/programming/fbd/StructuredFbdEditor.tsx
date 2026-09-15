@@ -1133,6 +1133,7 @@ export function StructuredFbdEditor({
                     position: snapPoint(at, snapEnabled ? snapSize : 0),
                   })
                 : undefined}
+              userPouInterfaces={userPouInterfaces}
             />
           </article>
         ))}

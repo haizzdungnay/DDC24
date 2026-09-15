@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
 import type { FbdDocument, FbdNetwork } from './model'
 import type { FbdEditorAction, FbdSelection } from './commands'
+import type { UserPouInterface } from './userPou'
 import { FbdCanvas, LIBRARY_DRAG_TYPE } from './FbdCanvas'
 
 function golden(): FbdDocument {
@@ -27,6 +28,7 @@ interface RenderCanvasOptions {
   pendingPlacement?: { entryId: string } | null
   onCancelPlacement?: () => void
   onCommitPlacement?: () => void
+  userPouInterfaces?: readonly UserPouInterface[]
 }
 
 function renderCanvas(options: RenderCanvasOptions = {}) {
@@ -57,6 +59,7 @@ function renderCanvas(options: RenderCanvasOptions = {}) {
       pendingPlacement={options.pendingPlacement ?? null}
       onCancelPlacement={onCancelPlacement}
       onCommitPlacement={onCommitPlacement}
+      userPouInterfaces={options.userPouInterfaces}
     />
   )
 
@@ -151,6 +154,30 @@ describe('FbdCanvas — Task 6 Placement & Wiring Interaction Tests', () => {
       expect(dispatch).not.toHaveBeenCalled()
     })
 
+    it('thả user POU không hợp lệ báo lỗi qua flash thông báo và không dispatch', () => {
+      const invalidPou: UserPouInterface = {
+        name: 'INVALID_FB',
+        kind: 'FUNCTION_BLOCK',
+        inputs: [],
+        outputs: [],
+      }
+      const { surface, dispatch } = renderCanvas({ userPouInterfaces: [invalidPou] })
+
+      const dataTransfer = {
+        types: [LIBRARY_DRAG_TYPE],
+        getData: (type: string) => (type === LIBRARY_DRAG_TYPE ? 'pou:INVALID_FB' : ''),
+        dropEffect: 'none',
+      }
+
+      const dropEvent = new Event('drop', { bubbles: true, cancelable: true })
+      Object.assign(dropEvent, { dataTransfer, clientX: 200, clientY: 100 })
+      fireEvent(surface, dropEvent)
+
+      expect(dispatch).not.toHaveBeenCalled()
+      expect(screen.getByRole('status')).toHaveTextContent("FUNCTION_BLOCK 'INVALID_FB' phải có ít nhất một đầu ra")
+      expect(screen.getByRole('status')).toHaveAttribute('data-fbd-canvas-flash', 'error')
+    })
+
     it('chặn thả khối khi canEdit = false (chế độ chỉ đọc)', () => {
       const { surface, dispatch } = renderCanvas({ canEdit: false })
 
@@ -212,6 +239,62 @@ describe('FbdCanvas — Task 6 Placement & Wiring Interaction Tests', () => {
       fireEvent(surface, dropEvent)
 
       expect(surface.querySelector('[data-fbd-ghost="true"]')).not.toBeInTheDocument()
+    })
+
+    it('(d) drop pou:<tên hợp lệ> tạo node đúng số chân vào/ra', () => {
+      const userPouInterfaces: UserPouInterface[] = [
+        {
+          name: 'CUSTOM_BLOCK',
+          kind: 'FUNCTION_BLOCK',
+          inputs: [
+            { name: 'IN_VAL', dataType: 'REAL' },
+            { name: 'ENABLE', dataType: 'BOOL' },
+          ],
+          outputs: [
+            { name: 'OUT_VAL', dataType: 'REAL' },
+            { name: 'READY', dataType: 'BOOL' },
+          ],
+        },
+      ]
+      const { surface, dispatch, network } = renderCanvas({ userPouInterfaces })
+
+      const dataTransfer = {
+        types: [LIBRARY_DRAG_TYPE],
+        getData: (type: string) => (type === LIBRARY_DRAG_TYPE ? 'pou:CUSTOM_BLOCK' : ''),
+        dropEffect: 'none',
+      }
+
+      const dropEvent = new Event('drop', { bubbles: true, cancelable: true })
+      Object.assign(dropEvent, { dataTransfer, clientX: 200, clientY: 100 })
+      surface.dispatchEvent(dropEvent)
+
+      expect(dispatch).toHaveBeenCalledTimes(1)
+      const action = dispatch.mock.calls[0][0]
+      expect(action.type).toBe('ADD_NODE')
+      if (action.type === 'ADD_NODE') {
+        expect(action.networkId).toBe(network.id)
+        expect(action.node.kind).toBe('FUNCTION_BLOCK')
+        expect(action.node.typeRef).toBe('CUSTOM_BLOCK')
+        expect(action.node.ports).toHaveLength(4)
+        expect(action.node.ports.filter((p) => p.direction === 'INPUT')).toHaveLength(2)
+        expect(action.node.ports.filter((p) => p.direction === 'OUTPUT')).toHaveLength(2)
+      }
+    })
+
+    it('(e) drop pou:<tên không tồn tại> không tạo node, không crash', () => {
+      const { surface, dispatch } = renderCanvas({ userPouInterfaces: [] })
+
+      const dataTransfer = {
+        types: [LIBRARY_DRAG_TYPE],
+        getData: (type: string) => (type === LIBRARY_DRAG_TYPE ? 'pou:NON_EXISTENT' : ''),
+        dropEffect: 'none',
+      }
+
+      const dropEvent = new Event('drop', { bubbles: true, cancelable: true })
+      Object.assign(dropEvent, { dataTransfer, clientX: 200, clientY: 100 })
+      expect(() => surface.dispatchEvent(dropEvent)).not.toThrow()
+
+      expect(dispatch).not.toHaveBeenCalled()
     })
   })
 

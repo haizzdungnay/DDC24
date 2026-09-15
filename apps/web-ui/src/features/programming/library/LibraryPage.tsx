@@ -38,6 +38,8 @@ import {
 } from '../api/queries'
 import { useProgrammingLibraryEntryMutations, type LibraryEntryDraft } from '../api/mutations'
 import { useDraftWorkspace } from '../design/useDraftWorkspace'
+import { userPouInterfacesFromDraft } from '../design/editor/workspaceAdapters'
+import type { UserPouInterface } from '../fbd/userPou'
 import { useProgrammingInspectorMode, useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 import { LibraryInspectorSurface } from './LibraryInspectorSurface'
 import { canonicalProgramsPath } from '../shared/programsRoute'
@@ -240,6 +242,20 @@ export function LibraryPage() {
      đi kèm cờ `stale`. `view.groups` đã gom sẵn theo entry và đã áp cả hai. */
   const groups = view.groups
   const selected = groups.find((group) => group.key === selectedKey) ?? null
+  const filteredPous = useMemo<readonly UserPouInterface[]>(() => {
+    if (scope !== 'PROJECT' || !workspace.project?.draft) return []
+    const allPous = userPouInterfacesFromDraft(workspace.project.draft)
+    return allPous.filter((pou) => {
+      if (kind !== '' && pou.kind !== kind) return false
+      if (category !== '') return false
+      if (query.trim() !== '' && !pou.name.toLowerCase().includes(query.trim().toLowerCase())) return false
+      return true
+    })
+  }, [scope, workspace.project?.draft, kind, category, query])
+  const selectedPou = useMemo(() => {
+    if (scope !== 'PROJECT' || !selectedKey) return null
+    return filteredPous.find((pou) => `POU/${pou.name}` === selectedKey || pou.name === selectedKey) ?? null
+  }, [scope, selectedKey, filteredPous])
   /* `T61-105` — Used-In của gói ĐÃ NIÊM PHONG, đọc từ server. Chỉ gọi khi có
      entry đang chọn: gọi với chuỗi rỗng sẽ nhận 400, và một lỗi 400 hiện lên
      màn hình vì FE gọi sớm là lỗi FE mặc áo lỗi server. */
@@ -584,6 +600,7 @@ export function LibraryPage() {
           <LibraryCardGrid
             state={view.status}
             groups={groups}
+            pous={filteredPous}
             errorMessage={view.message}
             action={view.action}
             stale={view.stale}
@@ -626,7 +643,7 @@ export function LibraryPage() {
               phải NÓI RA. Trước lát này Inspector chỉ hiện "Chọn một khối" —
               cùng câu với lúc chưa chọn gì — nên người nhận link kết luận khối
               đã bị xoá, trong khi nó chỉ đang bị lọc ra. */}
-          {selectedKey && !selected && view.status !== 'loading' && (
+          {selectedKey && !selected && !selectedPou && view.status !== 'loading' && (
             <div className="mb-3 flex flex-col items-start gap-2 rounded border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-2 text-sm text-[var(--c-warn-fg)]">
               <p>
                 {hasFilters
@@ -640,47 +657,51 @@ export function LibraryPage() {
               )}
             </div>
           )}
-          <LibraryInspector
-            group={selected}
-            usages={selected ? usages.get(selected.entryId.toUpperCase()) ?? [] : []}
-            usageSource={workspace.status}
-            sealedUsage={sealedUsage.data ?? null}
-            sealedUsageLoading={sealedUsage.status === 'loading'}
-            tab={inspectorTab}
-            onTab={setInspectorTab}
-            dependents={dependents}
-            permissions={permissions}
-            /* `T61-402` — khoá luôn mọi hành động ghi khi kết quả lần ghi
-               trước CHƯA NGÃ NGŨ. Mở cho bấm tiếp lúc này là để người dùng
-               chồng một mutation thứ hai lên một mutation có thể đã chạy —
-               đúng lớp hỏng mà lát này sinh ra để chặn. */
-            pending={pending || reconciling !== null || unknownOutcome !== null}
-            canDeprecate={canEdit && Boolean(projectId)}
-            canInsert={Boolean(projectId) && !mobileReadOnly}
-            usedInHref={usedInHref}
-            onEdit={(group) => {
-              const permission = libraryEntryPermissions(group, {
-                canEdit,
-                hasProject: Boolean(projectId),
-                dependents: libraryDependents(group, entries)
-              })
-              if (!permission.canSave) {
-                setBlocked(permission.saveBlock)
-                return
-              }
-              setBlocked(null)
-              setEditor({ kind: 'edit', entry: group.current, savesNewVersion: permission.savesNewVersion })
-            }}
-            onDelete={handleDelete}
-            onDeprecate={(revision) => {
-              setBlocked(null)
-              setDeprecationCandidate(revision)
-            }}
-            onInsert={(group) => {
-              setBlocked(null)
-              setInsertCandidate(group)
-            }}
-          />
+          {selectedPou ? (
+            <PouInspector pou={selectedPou} />
+          ) : (
+            <LibraryInspector
+              group={selected}
+              usages={selected ? usages.get(selected.entryId.toUpperCase()) ?? [] : []}
+              usageSource={workspace.status}
+              sealedUsage={sealedUsage.data ?? null}
+              sealedUsageLoading={sealedUsage.status === 'loading'}
+              tab={inspectorTab}
+              onTab={setInspectorTab}
+              dependents={dependents}
+              permissions={permissions}
+              /* `T61-402` — khoá luôn mọi hành động ghi khi kết quả lần ghi
+                 trước CHƯA NGÃ NGŨ. Mở cho bấm tiếp lúc này là để người dùng
+                 chồng một mutation thứ hai lên một mutation có thể đã chạy —
+                 đúng lớp hỏng mà lát này sinh ra để chặn. */
+              pending={pending || reconciling !== null || unknownOutcome !== null}
+              canDeprecate={canEdit && Boolean(projectId)}
+              canInsert={Boolean(projectId) && !mobileReadOnly}
+              usedInHref={usedInHref}
+              onEdit={(group) => {
+                const permission = libraryEntryPermissions(group, {
+                  canEdit,
+                  hasProject: Boolean(projectId),
+                  dependents: libraryDependents(group, entries)
+                })
+                if (!permission.canSave) {
+                  setBlocked(permission.saveBlock)
+                  return
+                }
+                setBlocked(null)
+                setEditor({ kind: 'edit', entry: group.current, savesNewVersion: permission.savesNewVersion })
+              }}
+              onDelete={handleDelete}
+              onDeprecate={(revision) => {
+                setBlocked(null)
+                setDeprecationCandidate(revision)
+              }}
+              onInsert={(group) => {
+                setBlocked(null)
+                setInsertCandidate(group)
+              }}
+            />
+          )}
         </LibraryInspectorSurface>
       </div>
 
@@ -956,6 +977,72 @@ function LibraryFilters({
             kết quả ấy như thể nó phủ cả thư viện. Thẻ vẫn tìm được: `q` đã bao
             cả `tags` ở phía store (`T61-101`). */}
       </div>
+    </div>
+  )
+}
+
+function PouInspector({ pou }: { pou: UserPouInterface }) {
+  const { pick } = useI18n()
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-1 border-b border-[var(--c-border)] pb-3">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-base font-bold text-[var(--c-text)]">{pou.name}</span>
+          <span
+            data-testid="library-pou-badge"
+            className="rounded bg-[var(--c-accent-bg)] px-1.5 py-0.5 text-xs font-medium text-[var(--c-accent)]"
+          >
+            POU
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-[var(--c-text-dim)]">
+          <span className="rounded border border-[var(--c-border)] px-1.5 py-0.5">{pou.kind}</span>
+          <span>{pick('Khối POU bản nháp (chỉ đọc)', 'Draft POU block (read-only)')}</span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h4 className="font-medium text-[var(--c-text)]">{pick('Chân đầu vào (Inputs)', 'Inputs')}</h4>
+        {pou.inputs.length === 0 ? (
+          <p className="text-xs text-[var(--c-text-dim)]">{pick('— không có', '— none')}</p>
+        ) : (
+          <ul className="flex flex-col gap-1 text-xs">
+            {pou.inputs.map((pin) => (
+              <li key={pin.name} className="flex items-center justify-between rounded bg-[var(--c-surface-2)] px-2 py-1">
+                <span className="font-mono font-medium text-[var(--c-text)]">{pin.name}</span>
+                <span className="font-mono text-[var(--c-text-dim)]">{pin.dataType}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {pou.kind === 'FUNCTION' && pou.returnType && (
+        <div className="flex flex-col gap-2">
+          <h4 className="font-medium text-[var(--c-text)]">{pick('Giá trị trả về (Return type)', 'Return type')}</h4>
+          <div className="flex items-center justify-between rounded bg-[var(--c-surface-2)] px-2 py-1 text-xs">
+            <span className="font-mono text-[var(--c-text)]">{pou.returnType}</span>
+          </div>
+        </div>
+      )}
+
+      {pou.kind === 'FUNCTION_BLOCK' && (
+        <div className="flex flex-col gap-2">
+          <h4 className="font-medium text-[var(--c-text)]">{pick('Chân đầu ra (Outputs)', 'Outputs')}</h4>
+          {!pou.outputs || pou.outputs.length === 0 ? (
+            <p className="text-xs text-[var(--c-text-dim)]">{pick('— không có', '— none')}</p>
+          ) : (
+            <ul className="flex flex-col gap-1 text-xs">
+              {pou.outputs.map((pin) => (
+                <li key={pin.name} className="flex items-center justify-between rounded bg-[var(--c-surface-2)] px-2 py-1">
+                  <span className="font-mono font-medium text-[var(--c-text)]">{pin.name}</span>
+                  <span className="font-mono text-[var(--c-text-dim)]">{pin.dataType}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }

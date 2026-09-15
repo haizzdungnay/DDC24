@@ -1124,6 +1124,7 @@ export function EditorPane({
             variant="docked"
             projectId={document.project.projectId}
             language={selected.language}
+            userPouInterfaces={userPouInterfaces}
             onInsert={(entry) => {
               if (!canEdit) return false
               setLibraryInsertRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))

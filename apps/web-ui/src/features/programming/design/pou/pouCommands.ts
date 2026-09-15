@@ -3,6 +3,7 @@ import type {
   ProgrammingDraftOperation,
   ProgrammingTaskConfig
 } from '../../model/types'
+import { FBD_PALETTE } from '../../fbd/palette'
 import { defaultPouName, pouSourceTemplate } from './pouTemplates'
 import type { PouItem, PouKind, PouLanguage } from './pouViewModel'
 
@@ -16,6 +17,11 @@ import type { PouItem, PouKind, PouLanguage } from './pouViewModel'
  * do đọc được.
  */
 
+function isSystemBlockName(name: string): boolean {
+  const normalized = name.trim().toLocaleLowerCase()
+  return FBD_PALETTE.some((entry) => entry.id.toLocaleLowerCase() === normalized)
+}
+
 /** Tên đã dùng (không phân biệt hoa thường) — POU name là token duy nhất trong
  *  Project, kể cả giữa hai kind khác nhau. */
 function nameTaken(items: readonly PouItem[], name: string, exceptObjectId?: string): boolean {
@@ -26,9 +32,10 @@ function nameTaken(items: readonly PouItem[], name: string, exceptObjectId?: str
 }
 
 export function uniquePouName(items: readonly PouItem[], baseName: string): string {
-  if (!nameTaken(items, baseName)) return baseName
+  const isTaken = (candidate: string) => nameTaken(items, candidate) || isSystemBlockName(candidate)
+  if (!isTaken(baseName)) return baseName
   let suffix = 2
-  while (nameTaken(items, `${baseName}_${suffix}`)) suffix += 1
+  while (isTaken(`${baseName}_${suffix}`)) suffix += 1
   return `${baseName}_${suffix}`
 }
 
@@ -36,7 +43,7 @@ export function uniquePouName(items: readonly PouItem[], baseName: string): stri
  *  Kiểm ở FE để nói ra lý do ngay, KHÔNG thay cho kiểm của backend. */
 const POU_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-export type PouNameError = 'EMPTY' | 'PATTERN' | 'DUPLICATE' | null
+export type PouNameError = 'EMPTY' | 'PATTERN' | 'DUPLICATE' | 'SYSTEM_BLOCK' | null
 
 export function validatePouName(
   items: readonly PouItem[],
@@ -46,6 +53,7 @@ export function validatePouName(
   const trimmed = name.trim()
   if (trimmed === '') return 'EMPTY'
   if (!POU_NAME_PATTERN.test(trimmed)) return 'PATTERN'
+  if (isSystemBlockName(trimmed)) return 'SYSTEM_BLOCK'
   if (nameTaken(items, trimmed, exceptObjectId)) return 'DUPLICATE'
   return null
 }

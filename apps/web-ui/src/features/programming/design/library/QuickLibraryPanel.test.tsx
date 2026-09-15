@@ -7,7 +7,8 @@ import type { ProgrammingLibraryEntry } from '../../model/types'
 import type { ProgrammingLibraryPagedState } from '../../api/queries'
 import { type CatalogEntry } from './libraryCatalog'
 import { stCallStatement } from '../editor/stInstanceInsertion'
-import { QuickLibraryPanel } from './QuickLibraryPanel'
+import { QuickLibraryPanel, LIBRARY_DRAG_TYPE } from './QuickLibraryPanel'
+import type { UserPouInterface } from '../../fbd/userPou'
 
 const preferences = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 vi.mock('../../../../shared/api/client', () => ({
@@ -476,3 +477,236 @@ describe('T61-202 — Quick Library đọc chung engine phân trang của PGM-04
     expect(button).toHaveTextContent('Đang tải thêm…')
   })
 })
+
+const samplePous: UserPouInterface[] = [
+  {
+    name: 'MY_CUSTOM_FB',
+    kind: 'FUNCTION_BLOCK',
+    inputs: [
+      { name: 'IN1', dataType: 'BOOL' },
+      { name: 'IN2', dataType: 'BOOL' },
+      { name: 'IN3', dataType: 'REAL' },
+    ],
+    outputs: [{ name: 'OUT1', dataType: 'REAL' }],
+  },
+  {
+    name: 'MY_CUSTOM_FN',
+    kind: 'FUNCTION',
+    inputs: [{ name: 'VAL', dataType: 'REAL' }],
+    returnType: 'REAL',
+  },
+]
+
+describe('userPouInterfaces in QuickLibraryPanel', () => {
+  it('khi truyền userPouInterfaces và language="FBD" thì hiện nhóm "Khối của dự án" với đúng số thẻ và số chân', async () => {
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          userPouInterfaces={samplePous}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    expect(await screen.findByText(/Khối của dự án/)).toBeInTheDocument()
+    expect(screen.getByText('MY_CUSTOM_FB')).toBeInTheDocument()
+    expect(screen.getByText('3 vào · 1 ra')).toBeInTheDocument()
+
+    expect(screen.getByText('MY_CUSTOM_FN')).toBeInTheDocument()
+    expect(screen.getByText('1 vào · 1 ra')).toBeInTheDocument()
+  })
+
+  it('thẻ POU có draggable="true" và onDragStart set payload pou:<tên> qua LIBRARY_DRAG_TYPE', async () => {
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          userPouInterfaces={samplePous}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    const fbText = await screen.findByText('MY_CUSTOM_FB')
+    const card = fbText.closest('li')!
+    expect(card).toHaveAttribute('draggable', 'true')
+
+    const setData = vi.fn()
+    const dataTransfer = { setData, effectAllowed: 'none' }
+    fireEvent.dragStart(card, { dataTransfer })
+    expect(setData).toHaveBeenCalledWith(LIBRARY_DRAG_TYPE, 'pou:MY_CUSTOM_FB')
+  })
+
+  it('khi language="ST" thì KHÔNG hiện nhóm Khối của dự án', () => {
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="ST"
+          userPouInterfaces={samplePous}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    expect(screen.queryByText(/Khối của dự án/)).toBeNull()
+    expect(screen.queryByText('MY_CUSTOM_FB')).toBeNull()
+  })
+
+  it('khi danh sách POU rỗng hoặc undefined thì KHÔNG hiện nhóm Khối của dự án', () => {
+    const { rerender } = render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          userPouInterfaces={[]}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+    expect(screen.queryByText(/Khối của dự án/)).toBeNull()
+
+    rerender(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          userPouInterfaces={undefined}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+    expect(screen.queryByText(/Khối của dự án/)).toBeNull()
+  })
+
+  it('[LỖI #1] POU FUNCTION_BLOCK thiếu outputs thì thẻ hiện nhưng khoá kéo draggable="false" kèm chú thích lỗi', async () => {
+    const invalidFb: UserPouInterface = {
+      name: 'INVALID_FB',
+      kind: 'FUNCTION_BLOCK',
+      inputs: [],
+    }
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          userPouInterfaces={[...samplePous, invalidFb]}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    const invalidCard = (await screen.findByText('INVALID_FB')).closest('li')!
+    expect(invalidCard).toBeInTheDocument()
+    expect(invalidCard).toHaveAttribute('draggable', 'false')
+    expect(within(invalidCard).getByText(/phải có ít nhất một đầu ra/)).toBeInTheDocument()
+
+    const validCard = (await screen.findByText('MY_CUSTOM_FB')).closest('li')!
+    expect(validCard).toHaveAttribute('draggable', 'true')
+  })
+
+  it('[LỖI #3] library.status="loading" và có userPouInterfaces thì nhóm Khối của dự án VẪN hiện và hiện thông báo tải', async () => {
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={paged({ status: 'loading', items: [] })}
+          language="FBD"
+          userPouInterfaces={samplePous}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    expect(await screen.findByText(/Khối của dự án/)).toBeInTheDocument()
+    expect(screen.getByText('MY_CUSTOM_FB')).toBeInTheDocument()
+    expect(screen.getByText('Đang tải catalog…')).toBeInTheDocument()
+  })
+
+  it('[LỖI #3] library.status="error" và có userPouInterfaces thì nhóm Khối của dự án VẪN hiện và hiện thông báo lỗi', async () => {
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={paged({ status: 'error', items: [], error: 'Lỗi mạng' })}
+          language="FBD"
+          userPouInterfaces={samplePous}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    expect(await screen.findByText(/Khối của dự án/)).toBeInTheDocument()
+    expect(screen.getByText('MY_CUSTOM_FB')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Lỗi mạng')
+  })
+
+  it('[LỖI #7] PouCard có button tương đương BlockCard, hỗ trợ keyboard accessibility và screen reader thông báo lý do khóa', async () => {
+    const invalidFb: UserPouInterface = {
+      name: 'INVALID_FB',
+      kind: 'FUNCTION_BLOCK',
+      inputs: [],
+    }
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          userPouInterfaces={[...samplePous, invalidFb]}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    // Thẻ POU hợp lệ có button accessible, focus được bằng bàn phím
+    const validButton = await screen.findByRole('button', { name: 'Chèn MY_CUSTOM_FB' })
+    expect(validButton).toBeInTheDocument()
+    expect(validButton).not.toBeDisabled()
+    expect(validButton).toHaveAttribute('type', 'button')
+
+    // Thẻ POU không hợp lệ có button bị khóa disabled/aria-disabled và gắn aria-describedby tới thông báo lỗi có role="alert"
+    const invalidButton = screen.getByRole('button', { name: 'Chèn INVALID_FB' })
+    expect(invalidButton).toBeInTheDocument()
+    expect(invalidButton).toBeDisabled()
+    expect(invalidButton).toHaveAttribute('aria-disabled', 'true')
+    const errorDescId = invalidButton.getAttribute('aria-describedby')
+    expect(errorDescId).toBeTruthy()
+    const errorEl = document.getElementById(errorDescId!)
+    expect(errorEl).toBeInTheDocument()
+    expect(errorEl).toHaveAttribute('role', 'alert')
+    expect(errorEl).toHaveTextContent(/phải có ít nhất một đầu ra/)
+  })
+
+  it('thẻ POU đặt draggable="true" và onDragStart trên chính phần tử button tương tác mà người dùng chạm vào', async () => {
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="FBD"
+          userPouInterfaces={samplePous}
+          onInsert={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    const button = await screen.findByRole('button', { name: 'Chèn MY_CUSTOM_FB' })
+    expect(button).toHaveAttribute('draggable', 'true')
+
+    const setData = vi.fn()
+    const dataTransfer = { setData, effectAllowed: 'none' }
+    fireEvent.dragStart(button, { dataTransfer })
+    expect(setData).toHaveBeenCalledWith(LIBRARY_DRAG_TYPE, 'pou:MY_CUSTOM_FB')
+  })
+})
+

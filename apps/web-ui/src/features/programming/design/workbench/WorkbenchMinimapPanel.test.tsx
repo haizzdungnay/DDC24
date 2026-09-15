@@ -3,14 +3,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
-import type { FbdNodeGeometry } from '../../fbd/geometry'
+import type { FbdNodeGeometry, FbdWireGeometry } from '../../fbd/geometry'
 import {
   WorkbenchMinimapPanel,
   minimapClientToGraphCoordinates,
   type FbdCanvasBridge,
 } from './WorkbenchMinimapPanel'
 
-function createMockBridge(overrides: Partial<FbdCanvasBridge> = {}): FbdCanvasBridge {
+function createMockBridge(overrides: Partial<FbdCanvasBridge & { wires?: readonly FbdWireGeometry[] }> = {}): FbdCanvasBridge {
   const nodes: FbdNodeGeometry[] = Array.from({ length: 30 }, (_, i) => ({
     id: `node-${i + 1}`,
     x: (i % 5) * 200 + 40,
@@ -105,7 +105,41 @@ describe('WorkbenchMinimapPanel (Task T9-02)', () => {
     expect(viewportIndicator).toBeInTheDocument()
   })
 
-  it('click nút phóng to / thu nhỏ / fit gọi callback tương ứng', () => {
+  it('render danh sách đường nối (wires) dưới các khối', () => {
+    const wires: FbdWireGeometry[] = [
+      { id: 'wire-1', path: 'M 10 10 L 100 100', from: { x: 10, y: 10 }, to: { x: 100, y: 100 } },
+      { id: 'wire-2', path: 'M 20 20 L 200 200', from: { x: 20, y: 20 }, to: { x: 200, y: 200 } },
+    ]
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel bridge={createMockBridge({ wires })} />
+      </I18nProvider>,
+    )
+
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    const wirePaths = minimap.querySelectorAll('path[data-fbd-minimap-wire="true"]')
+    expect(wirePaths.length).toBe(2)
+    expect(wirePaths[0]).toHaveAttribute('d', 'M 10 10 L 100 100')
+    expect(wirePaths[1]).toHaveAttribute('d', 'M 20 20 L 200 200')
+
+    const firstWire = wirePaths[0]
+    const firstNode = minimap.querySelector('rect[data-fbd-minimap-node="true"]')
+    expect(firstWire.compareDocumentPosition(firstNode!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('khi bridge không có wires: render 0 path wire mà không crash', () => {
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel bridge={createMockBridge({ wires: undefined })} />
+      </I18nProvider>,
+    )
+
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    const wirePaths = minimap.querySelectorAll('path[data-fbd-minimap-wire="true"]')
+    expect(wirePaths.length).toBe(0)
+  })
+
+  it('tách zoom minimap khỏi canvas: đổi viewBox minimap, không gọi callback bridge', () => {
     const onZoomIn = vi.fn()
     const onZoomOut = vi.fn()
     const onResetZoom = vi.fn()
@@ -123,16 +157,49 @@ describe('WorkbenchMinimapPanel (Task T9-02)', () => {
       </I18nProvider>,
     )
 
-    expect(screen.getByText('120%')).toBeInTheDocument()
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    expect(screen.getByText('100%')).toBeInTheDocument()
+    expect(minimap).toHaveAttribute('viewBox', '-37 -37 1122 834')
 
+    // 1. Phóng to: đổi nhãn 120%, đổi viewBox "57 33 935 695", KHÔNG gọi callback bridge
     fireEvent.click(screen.getByRole('button', { name: 'Phóng to' }))
-    expect(onZoomIn).toHaveBeenCalledTimes(1)
+    expect(onZoomIn).not.toHaveBeenCalled()
+    expect(onZoomOut).not.toHaveBeenCalled()
+    expect(onResetZoom).not.toHaveBeenCalled()
+    expect(screen.getByText('120%')).toBeInTheDocument()
+    expect(minimap).toHaveAttribute('viewBox', '57 33 935 695')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Thu nhỏ' }))
-    expect(onZoomOut).toHaveBeenCalledTimes(1)
-
+    // 2. Vừa khung: reset về 100% và viewBox gốc, KHÔNG gọi callback bridge
     fireEvent.click(screen.getByRole('button', { name: 'Vừa khung' }))
-    expect(onResetZoom).toHaveBeenCalledTimes(1)
+    expect(onResetZoom).not.toHaveBeenCalled()
+    expect(screen.getByText('100%')).toBeInTheDocument()
+    expect(minimap).toHaveAttribute('viewBox', '-37 -37 1122 834')
+  })
+
+  it('chặn biên zoom minimap: tối đa 250% (2.5) và tối thiểu 40% (0.4)', () => {
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel bridge={createMockBridge()} />
+      </I18nProvider>,
+    )
+
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' })
+    const zoomInBtn = screen.getByRole('button', { name: 'Phóng to' })
+    const zoomOutBtn = screen.getByRole('button', { name: 'Thu nhỏ' })
+
+    // Bấm phóng to nhiều lần (10 lần) kẹp tại 250%
+    for (let i = 0; i < 10; i++) {
+      fireEvent.click(zoomInBtn)
+    }
+    expect(screen.getByText('250%')).toBeInTheDocument()
+    expect(minimap).toHaveAttribute('viewBox', '300 213 449 334')
+
+    // Bấm thu nhỏ nhiều lần (15 lần) kẹp tại 40%
+    for (let i = 0; i < 15; i++) {
+      fireEvent.click(zoomOutBtn)
+    }
+    expect(screen.getByText('40%')).toBeInTheDocument()
+    expect(minimap).toHaveAttribute('viewBox', '-878 -662 2805 2085')
   })
 
   it('TC-FBD-NAV-001: tương tác chuột và phím trên minimap gọi onNavigate và onStepNavigate', () => {

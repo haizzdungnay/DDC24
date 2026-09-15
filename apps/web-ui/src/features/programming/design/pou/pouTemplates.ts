@@ -7,14 +7,56 @@ import type { PouKind, PouLanguage } from './pouViewModel'
  * tạo (`F-PROG-ASBUILT-001`/D-02), nên mỗi kind phải ra đời với khung tối thiểu
  * hợp lệ theo grammar mà `parse_st_pou` chấp nhận — không phải chuỗi rỗng.
  */
-export function emptyFbdDocument(name: string): FbdDocument {
+export function emptyFbdDocument(name: string, kind?: PouKind): FbdDocument {
+  const isFb = kind === 'FUNCTION_BLOCK'
+  const outputNodeId = createUuid()
+  // ponytail: FB FBD cần sẵn ít nhất một đầu ra 'q' : BOOL để kéo thả được ngay; nâng cấp thêm port cấu hình khi mở rộng wizard tạo POU.
+  const networks = [
+    {
+      id: createUuid(),
+      name: 'network_1',
+      order: 0,
+      nodes: isFb
+        ? [
+            {
+              id: outputNodeId,
+              kind: 'OUTPUT' as const,
+              typeRef: 'BOOL',
+              executionOrder: 0,
+              parameters: { variable: 'q' },
+              ports: [
+                {
+                  id: createUuid(),
+                  name: 'IN',
+                  direction: 'INPUT' as const,
+                  dataType: 'BOOL' as const,
+                  unit: null,
+                  order: 0,
+                },
+              ],
+            },
+          ]
+        : [],
+      wires: [],
+    },
+  ]
   return {
     $schema: '../../fbd_v1.schema.json',
     schemaVersion: FBD_SCHEMA_VERSION,
     profileId: FBD_PROFILE_ID,
     graphId: createUuid(),
     name,
-    networks: [{ id: createUuid(), name: 'network_1', order: 0, nodes: [], wires: [] }]
+    networks,
+    ...(isFb
+      ? {
+          layout: {
+            schemaVersion: 1 as const,
+            nodes: {
+              [outputNodeId]: { x: 240, y: 80 },
+            },
+          },
+        }
+      : {}),
   }
 }
 
@@ -22,7 +64,7 @@ export function emptyFbdDocument(name: string): FbdDocument {
  * phải có ít nhất một cổng để còn gọi được. Đây là khung nhỏ nhất mà compiler
  * nhận, không phải ví dụ dạy học. */
 export function pouSourceTemplate(kind: PouKind, language: PouLanguage, name: string): string {
-  if (language === 'FBD') return canonicalFbdJson(emptyFbdDocument(name))
+  if (language === 'FBD') return canonicalFbdJson(emptyFbdDocument(name, kind))
   if (kind === 'FUNCTION') {
     return `FUNCTION ${name} : REAL\nVAR_INPUT value : REAL; END_VAR\n${name} := value;\nEND_FUNCTION\n`
   }
