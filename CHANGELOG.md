@@ -8,6 +8,25 @@
 
 ## [Unreleased]
 
+### Fixed — `#706`: Mini Map giữ đúng tâm điều hướng với viewBox theo bbox (2026-09-14)
+
+- Phạm vi: `WorkbenchMinimapPanel.tsx` và unit test, ca E2E
+  `TC-FBD-NAV-001` trong `apps/web-ui/e2e/programming.spec.ts`, `CHANGELOG.md`.
+- Sửa phép kiểm E2E xanh giả ở 1280 px: khổ đó dùng Mini Map nội tuyến nên không
+  chạm component Cột 3 của PR. Ca kiểm nay tự đặt 1920×1080, xác nhận Mini Map
+  nằm trong `workbench-minimap-column` và tính tâm graph kèm gốc `viewBox.x`;
+  trước sửa assertion lệch đúng 192 px dù điều hướng runtime đã đúng.
+- Unit test điều hướng nay kiểm chính xác client coordinate truyền qua bridge
+  thay vì chỉ kiểm callback được gọi. Bbox nhỏ hơn sàn 64 px được mở đều hai
+  phía và làm tròn theo hai biên, giữ block đơn ở giữa và không cắt node có tọa
+  độ thập phân.
+- Kiểm chứng trên nền `main` `bd996e61`: Workbench Vitest **10/10 PASS**, toàn FE
+  **252 file / 3227 test PASS**; lint và production build PASS; bundle Programming
+  **115.24 KiB / 165.00 KiB**; `TC-FBD-NAV-001` **1/1 PASS** tại 1920×1080.
+  Chrome DevTools MCP trên harness React kiểm `viewBox="376 176 216 140"`, click
+  giữa trả graph point `(484, 246)`; mọi module liên quan HTTP 200, chỉ favicon
+  không thuộc phạm vi trả 404.
+
 ### Fixed — FBD Canvas: wiring trực tiếp và bộ thao tác editor desktop (2026-09-14)
 
 - Phạm vi: `apps/web-ui/src/features/programming/fbd/` (canvas, layer SVG,

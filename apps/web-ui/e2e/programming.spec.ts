@@ -1672,6 +1672,10 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
       (testInfo.project.use.viewport?.width ?? 1280) < PROGRAMMING_AUTHORING_MIN_WIDTH_PX,
       'soạn 25 khối là mutation; dưới 768 px PGM-02 read-only (AC-PGM02-010)'
     )
+    /* Cột Mini Map của Workbench chỉ sở hữu component từ 1440 px. Viewport
+     * mặc định 1280 px của project desktop chỉ kiểm nhánh inline trong
+     * FbdCanvas và từng cho kết quả xanh giả đối với thay đổi ở Cột 3. */
+    await page.setViewportSize({ width: 1920, height: 1080 })
     const state: MockState = { etagGeneration: 1, draft: initialDraft(), checkState: 'PASSED', commissionCount: 0, restoreCount: 0, retainResetCount: 0, traceCount: 0, traceRunning: false }
     await installProgrammingMocks(page, state)
     const failures = observeBrowserFailures(page)
@@ -1688,6 +1692,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
 
     const minimap = page.locator('[data-fbd-minimap="true"]')
     await expect(minimap).toBeVisible()
+    await expect(page.getByTestId('workbench-minimap-column').locator('[data-fbd-minimap="true"]')).toHaveCount(1)
     await minimap.scrollIntoViewIfNeeded()
     const surface = page.locator('svg[data-fbd-network-id]').first()
     const transformsBefore = await surface.locator('[data-fbd-node-id]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('transform')))
@@ -1708,7 +1713,11 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
       const viewBox = svg.viewBox.baseVal
       const scale = Math.min(rect.width / viewBox.width, rect.height / viewBox.height)
       const offsetX = (rect.width - viewBox.width * scale) / 2
-      const graphX = Math.min(viewBox.width, Math.max(0, (rect.width * ratio - offsetX) / scale))
+      const localGraphX = (rect.width * ratio - offsetX) / scale
+      const graphX = Math.min(
+        viewBox.x + viewBox.width,
+        Math.max(viewBox.x, viewBox.x + localGraphX),
+      )
       const surfaceElement = document.querySelector<SVGSVGElement>('svg[data-fbd-network-id]')
       const scroller = surfaceElement?.parentElement
       if (!scroller) throw new Error('Thiếu viewport FBD')
@@ -1718,6 +1727,7 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
         scrollLeft: scroller.scrollLeft,
         scrollWidth: scroller.scrollWidth,
         graphX,
+        viewBoxX: viewBox.x,
         viewBoxWidth: viewBox.width,
       }
     }, 0.7)
