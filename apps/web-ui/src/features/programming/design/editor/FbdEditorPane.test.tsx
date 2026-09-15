@@ -100,7 +100,6 @@ describe('FbdEditorPane', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'FBD_Sample' })).toBeInTheDocument()
     const toolbar = screen.getByRole('toolbar', { name: /Lệnh FBD|FBD commands/ })
     expect(within(toolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check|So sánh|Compare|Làm mới|Refresh/ })).toBeNull()
-    expect(screen.getByTestId('editor-status-bar')).toBeInTheDocument()
   })
 
   function twoNetworkDocument(): FbdDocument {
@@ -186,15 +185,8 @@ describe('FbdEditorPane', () => {
     expect(select).toHaveClass('text-[11px]')
   })
 
-  it('PGM-02B: dải trạng thái neo "Sẵn sàng" bên trái nhưng KHÔNG bịa thu phóng', () => {
-    /* Ảnh chuẩn vẽ `(100%)` và `● Online`. Bố cục lấy theo ảnh; giá trị thì
-       không — canvas chưa công bố tỉ lệ thu phóng, và tab chưa nối trạng thái
-       kết nối. Cả hai phải còn là `—`. */
+  it('PGM-02B: canvas FBD không còn dải trạng thái dưới chân', () => {
     renderPane()
-    const bar = screen.getByTestId('editor-status-bar')
-    expect(within(bar).getByText(/Sẵn sàng|Ready/)).toBeInTheDocument()
-    expect(within(screen.getByTestId('editor-status-zoom')).getByText('—')).toBeInTheDocument()
-    expect(within(screen.getByTestId('editor-status-connection')).getByText('—')).toBeInTheDocument()
-    expect(within(bar).queryByText('100%')).toBeNull()
+    expect(screen.queryByTestId('editor-status-bar')).toBeNull()
   })
 })

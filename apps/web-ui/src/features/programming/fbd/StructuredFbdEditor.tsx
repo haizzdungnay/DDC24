@@ -827,7 +827,7 @@ export function StructuredFbdEditor({
       tabIndex={-1}
       aria-label={pick('Bộ dựng FBD có cấu trúc', 'Structured FBD editor')}
       aria-describedby={keyboardHelpId}
-      className="flex min-h-0 flex-1 flex-col gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2"
+      className="flex min-h-0 flex-1 flex-col gap-2"
       onKeyDown={(event) => {
         const command = resolveFbdKeyboardCommand(event)
         if (!command) {

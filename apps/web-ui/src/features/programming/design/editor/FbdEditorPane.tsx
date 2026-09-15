@@ -260,7 +260,7 @@ export function FbdEditorPane({
          flex item với `min-height:auto`, nên nó cao bằng cảnh canvas (tối thiểu
          1600 px theo công thức pan của `FbdCanvas`) thay vì nhận đúng phần chiều
          cao còn lại và để canvas tự cuộn bên trong. */
-      className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-x-hidden rounded-[var(--radius)] bg-[var(--c-bg)] p-1 text-[var(--c-text)]"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden text-[var(--c-text)]"
       data-testid="fbd-workspace-shell"
       data-fbd-theme={preferences.theme}
       style={themeStyle}
@@ -287,13 +287,6 @@ export function FbdEditorPane({
         }}
         onNodeEditorTargetChange={onNodeEditorTargetChange}
         focusSelection={focusSelection}
-      />
-      <EditorStatusBar
-        leading={<span>{pick('Sẵn sàng', 'Ready')}</span>}
-        fields={fbdStatusFields({
-          language: 'FBD',
-          dirty,
-        })}
       />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
     </div>

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import type { ProgrammingDiagnostic } from '../../model/types'
 import { ProblemsDrawer } from '../../shared/ProblemsDrawer'
@@ -338,49 +339,71 @@ export function ProgrammingWorkbench({
           if (event.key === 'ArrowDown') { event.preventDefault(); setHeight((current) => Math.max(MIN_HEIGHT, current - 24)) }
         }}
       />
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--c-border)] px-2 py-1">
-        <button
-          type="button"
-          className="min-h-11 rounded px-2 py-1 text-xs text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-          aria-expanded={open}
-          onClick={() => setOpen((current) => !current)}
-        >
-          {open ? pick('Thu gọn', 'Collapse') : pick('Mở rộng', 'Expand')}
-        </button>
-        <div role="tablist" aria-label={pick('Khay bàn làm việc', 'Workbench panels')} className="flex flex-wrap gap-1">
-          {tabs.map((item) => (
+      {/* Dải tab nằm TRONG cột 1, không phải một hàng trải hết bề ngang.
+        *
+        * Trải hết bề ngang thì nó ăn mất một hàng của CẢ khay, nên Watch và Mini
+        * Map bắt đầu thấp hơn dải tab đúng chiều cao dải đó — chỗ trống duy nhất
+        * còn lại của khay bị bỏ không ở hai cột phải. Dải tab chỉ điều khiển nội
+        * dung cột 1, nên nó thuộc về cột 1; hai cột kia khi đó kéo trọn chiều cao
+        * khay theo `align-items: stretch` mặc định của grid. */}
+      <div
+        className="grid grid-cols-1 divide-y divide-[var(--c-border)] lg:divide-x lg:divide-y-0"
+        style={!open
+          ? undefined
+          : workbenchOwnsMinimap
+            ? { gridTemplateColumns: 'minmax(0,1fr) 375px 458px' }
+            : twoColumnGrid
+              ? { gridTemplateColumns: 'minmax(0,1fr) 375px' }
+              : undefined}
+      >
+        <div className="flex min-w-0 flex-col">
+          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--c-border)] px-2 py-1">
             <button
-              key={item.id}
               type="button"
-              role="tab"
-              id={`workbench-tab-${item.id}`}
-              aria-selected={tab === item.id}
-              /* `aria-controls` CHỈ khi khay đang mở và đây là tab đang chọn.
-               * Khay thu gọn thì `<div role="tabpanel">` không có trong cây, nên
-               * một `aria-controls` trỏ vào `id` không tồn tại là vi phạm
-               * `aria-valid-attr-value` thật — axe bắt đúng, và trình đọc màn
-               * hình thì hứa với người dùng một vùng không có ở đó. */
-              aria-controls={open && tab === item.id ? `workbench-panel-${item.id}` : undefined}
-              className={`min-h-11 rounded px-2 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${
-                tab === item.id ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent)]' : 'text-[var(--c-text-dim)]'
-              }`}
-              onClick={() => { setTab(item.id); setOpen(true) }}
+              className="min-h-11 rounded px-2 py-1 text-xs text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              aria-expanded={open}
+              onClick={() => setOpen((current) => !current)}
             >
-              {item.label}{item.count === null ? '' : ` (${item.count})`}
+              {open
+                ? <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                : <ChevronUp className="h-4 w-4" aria-hidden="true" />}
+              <span className="sr-only">{open ? pick('Thu gọn', 'Collapse') : pick('Mở rộng', 'Expand')}</span>
             </button>
-          ))}
-        </div>
-        <span className="ml-auto">{modeBadge}</span>
-      </div>
-      {open && (
-        <div
-          role="tabpanel"
-          id={`workbench-panel-${tab}`}
-          aria-labelledby={`workbench-tab-${tab}`}
-          className="overflow-auto p-2"
-          style={{ height }}
-        >
-          {/* Ảnh chuẩn PGM-02B chia khay đáy thành 3 cột (x=196..839, x=839..1214, x=1214..1672):
+            <div role="tablist" aria-label={pick('Khay bàn làm việc', 'Workbench panels')} className="flex flex-wrap gap-1">
+              {tabs.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  id={`workbench-tab-${item.id}`}
+                  aria-selected={tab === item.id}
+                  /* `aria-controls` CHỈ khi khay đang mở và đây là tab đang chọn.
+                   * Khay thu gọn thì `<div role="tabpanel">` không có trong cây, nên
+                   * một `aria-controls` trỏ vào `id` không tồn tại là vi phạm
+                   * `aria-valid-attr-value` thật — axe bắt đúng, và trình đọc màn
+                   * hình thì hứa với người dùng một vùng không có ở đó. */
+                  aria-controls={open && tab === item.id ? `workbench-panel-${item.id}` : undefined}
+                  className={`min-h-11 rounded px-2 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${
+                    tab === item.id ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent)]' : 'text-[var(--c-text-dim)]'
+                  }`}
+                  onClick={() => { setTab(item.id); setOpen(true) }}
+                >
+                  {item.label}{item.count === null ? '' : ` (${item.count})`}
+                </button>
+              ))}
+            </div>
+            <span className="ml-auto">{modeBadge}</span>
+          </div>
+          {open && (
+            <div
+              role="tabpanel"
+              id={`workbench-panel-${tab}`}
+              aria-labelledby={`workbench-tab-${tab}`}
+              data-testid="workbench-problems-column"
+              className="overflow-auto p-2"
+              style={{ height }}
+            >
+              {/* Ảnh chuẩn PGM-02B chia khay đáy thành 3 cột (x=196..839, x=839..1214, x=1214..1672):
            * Cột trái (~643px, co giãn): dải tab và nội dung tab đang chọn.
            * Cột giữa (~375px): bảng Runtime Watch hiển thị thường trực.
            * Cột phải (~458px): Mini Map.
@@ -425,16 +448,6 @@ export function ProgrammingWorkbench({
            * Cho chính nó quyết luôn số cột thì lưới và nội dung không thể lệch
            * nhau, và một style nội tuyến thì không có rule nào chen vào trước
            * được. */}
-          <div
-            className="grid h-full grid-cols-1 divide-y divide-[var(--c-border)] lg:divide-x lg:divide-y-0"
-            style={workbenchOwnsMinimap
-              ? { gridTemplateColumns: 'minmax(0,1fr) 375px 458px' }
-              : twoColumnGrid
-                ? { gridTemplateColumns: 'minmax(0,1fr) 375px' }
-                : undefined}
-          >
-            {/* Cột trái: Nội dung tab đang chọn */}
-            <div data-testid="workbench-problems-column" className="h-full overflow-auto pr-2">
               {tab === 'problems' && (
                 <ProblemsPanel
                   problems={problems}
@@ -487,39 +500,59 @@ export function ProgrammingWorkbench({
                 )
               )}
             </div>
-
-            {/* Cột giữa: Runtime Watch thường trực */}
-            <div data-testid="workbench-watch-column" className="flex h-full flex-col overflow-auto px-2">
-              <div className="mb-1 text-xs font-semibold text-[var(--c-text-dim)]">
-                {mode === 'SIMULATE'
-                  ? pick('Watch (Mô phỏng)', 'Watch (Simulation)')
-                  : pick('Watch (Trực tiếp)', 'Watch (Live)')}
-              </div>
-              {watch === null || watch === undefined ? (
-                <p className="text-xs text-[var(--c-text-dim)]">
-                  {pick(
-                    'Chưa có nguồn giá trị runtime cho chế độ này.',
-                    'No runtime watch source available for this mode.',
-                  )}
-                </p>
-              ) : (
-                <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
-              )}
-            </div>
-
-            {/* Cột phải: Mini Map (T9-02).
-             * Chỉ dựng khi khay SỞ HỮU Mini Map. Dưới `1440px` chủ sở hữu là
-             * canvas (`FbdEditorPane`), nên dựng thêm một ô ở đây sẽ vừa tạo một
-             * hàng chồng thừa, vừa đặt hai bản cùng vai trò trong cùng một DOM. */}
-            {workbenchOwnsMinimap && (
-              <div data-testid="workbench-minimap-column" className="flex h-full flex-col overflow-auto pl-2">
-                <WorkbenchMinimapPanel bridge={fbdBridge} />
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      )}
+
+        {/* Cột giữa: Runtime Watch thường trực */}
+        {open && (
+          <Stretched testId="workbench-watch-column">
+            <div className="mb-1 text-xs font-semibold text-[var(--c-text-dim)]">
+              {mode === 'SIMULATE'
+                ? pick('Watch (Mô phỏng)', 'Watch (Simulation)')
+                : pick('Watch (Trực tiếp)', 'Watch (Live)')}
+            </div>
+            {watch === null || watch === undefined ? (
+              <p className="text-xs text-[var(--c-text-dim)]">
+                {pick(
+                  'Chưa có nguồn giá trị runtime cho chế độ này.',
+                  'No runtime watch source available for this mode.',
+                )}
+              </p>
+            ) : (
+              <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
+            )}
+          </Stretched>
+        )}
+
+        {/* Cột phải: Mini Map (T9-02).
+         * Chỉ dựng khi khay SỞ HỮU Mini Map. Dưới `1440px` chủ sở hữu là
+         * canvas (`FbdEditorPane`), nên dựng thêm một ô ở đây sẽ vừa tạo một
+         * hàng chồng thừa, vừa đặt hai bản cùng vai trò trong cùng một DOM. */}
+        {open && workbenchOwnsMinimap && (
+          <Stretched testId="workbench-minimap-column">
+            <WorkbenchMinimapPanel bridge={fbdBridge} />
+          </Stretched>
+        )}
+      </div>
     </section>
+  )
+}
+
+/**
+ * Ô lưới kéo trọn chiều cao hàng mà KHÔNG tự nới hàng ra.
+ *
+ * Chiều cao hàng do cột 1 quyết (dải tab + `height` người dùng kéo). Một ô
+ * `overflow-auto` bình thường vẫn đóng góp max-content vào track `auto`, nên một
+ * bảng Watch dài sẽ kéo cả khay cao lên thay vì tự cuộn. Lớp `absolute inset-0`
+ * tách nội dung khỏi phép đo track: hàng giữ nguyên, nội dung cuộn bên trong.
+ */
+function Stretched({ testId, children }: { testId: string; children: ReactNode }) {
+  return (
+    <div className="relative min-h-0">
+      <div data-testid={testId} className="absolute inset-0 flex flex-col overflow-auto p-2">
+        {children}
+      </div>
+    </div>
   )
 }
 
