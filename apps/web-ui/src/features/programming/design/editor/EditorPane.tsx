@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
+import { AlignLeft, ChevronLeft, ChevronRight, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PanelLeftClose, PanelRightClose, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { FbdEditorPane } from './FbdEditorPane'
@@ -860,10 +860,11 @@ export function EditorPane({
             type="button"
             className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
             aria-expanded
-            aria-controls="programs-slot-left"
+           aria-controls="programs-slot-left"
             onClick={() => setSlots({ ...slots, left: false })}
           >
-            {pick('Thu gọn cột trái', 'Collapse left column')}
+            <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{pick('Thu gọn cột trái', 'Collapse left column')}</span>
           </button>
         </div>
         <div id="programs-slot-left">
@@ -1204,7 +1205,10 @@ export function EditorPane({
               }
             }}
           >
-            {fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}
+            {fbdInspectorOpen
+              ? <PanelRightClose className="h-4 w-4" aria-hidden="true" />
+              : <ChevronLeft className="h-4 w-4" aria-hidden="true" />}
+            <span className="sr-only">{fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}</span>
           </button>
         </div>
         <div id="programs-slot-inspector" hidden={!fbdInspectorOpen}>

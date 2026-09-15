@@ -303,8 +303,9 @@ describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
 
   it('hiện giá trị đã trình bày sẵn, và KHÔNG thêm đơn vị vào ô không hợp lệ', () => {
     renderLiveWatch(rows)
-    fireEvent.click(screen.getByRole('tab', { name: /Watch/ }))
-    const panel = screen.getByRole('tabpanel')
+    /* Bảng Watch sống ở cột 2 — một cột lưới riêng, KHÔNG nằm trong `tabpanel`
+       của cột 1 nữa. Soi đúng cột đó thay vì khay tab. */
+    const panel = screen.getByTestId('workbench-watch-column')
     expect(within(panel).getByText('21.5 degC')).toBeInTheDocument()
     // `—` là "không có dữ liệu"; gắn đơn vị vào đó làm nó trông như một số đo.
     // `DEV-PROG-003` thêm cột Mốc đọc, cũng hiện `—` khi không có mốc — nên
@@ -555,5 +556,4 @@ describe('ProgrammingWorkbench — T9-03 Đồng bộ tab panel đáy (TC-WBENCH
     expect(watchSimTab).toHaveAttribute('id', 'workbench-tab-watch')
   })
 })
-
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MoreHorizontal, Star } from 'lucide-react'
+import { MoreHorizontal, Star, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useI18n } from '../../../../shared/i18n'
 import { useProgrammingLibraryPaged, type ProgrammingLibraryPagedState } from '../../api/queries'
@@ -233,7 +233,8 @@ export function QuickLibraryPanel({
             className="rounded px-1.5 py-0.5 text-[11px] text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
             onClick={onClose}
           >
-            {pick('Thu gọn', 'Collapse')}
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="sr-only">{pick('Thu gọn', 'Collapse')}</span>
           </button>
         </div>
       )}
