@@ -193,6 +193,159 @@ describe('ProgramsTab — workspace bốn cột', () => {
     expect(within(screen.getByTestId('quick-library-column')).queryByTestId('quick-library-panel')).toBeNull()
   })
 
+  /* ===================================================================
+   * `#676` AC-2/AC-3 — BA hình thái của Thư viện nhanh khi soạn FBD.
+   *
+   * Hồi quy được chặn ở đây là chuỗi `5fa334b` → `11d7b33` → PR `#685`: mỗi
+   * lần chữa triệu chứng của lần trước, và điểm dừng lại là dải hẹp KHÔNG có
+   * lối vào Thư viện nào. `TC-FBD-RESP-001` cấm cột THƯỜNG TRỰC dưới `1440`,
+   * không cấm dock/khay có nút mở — các ca dưới đây khoá đúng khoảng hở đó.
+   *
+   * Đo bằng HÌNH THÁI (track lưới có/không, panel mount hay chưa, nút mở nằm
+   * trong hay ngoài khay), không bằng sự có mặt của một lớp Tailwind: một lớp
+   * sai ngưỡng vẫn "có mặt" trong `className`. Phép đo toạ độ thật nằm ở lane
+   * e2e (`TC-FBD-RESP-001`), nơi có layout engine.
+   * =================================================================== */
+
+  const setViewportWidth = (value: number) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value })
+  }
+  const libraryTrackWidth = () =>
+    screen.getByTestId('programs-workspace').style.getPropertyValue('--pgm-library-width')
+
+  it('AC-676-1: FBD ≥1440 là CỘT — track lưới rộng và panel mở sẵn', async () => {
+    setViewportWidth(1440)
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    const column = screen.getByTestId('quick-library-column')
+    expect(column).toHaveAttribute('data-library-presentation', 'column')
+    expect(await within(column).findByTestId('quick-library-panel')).toBeVisible()
+    expect(libraryTrackWidth()).not.toBe('0px')
+    expect(libraryTrackWidth()).not.toBe('44px')
+  })
+
+  it('AC-676-2: FBD 1366×768 là DOCK — có track ray 44px và mở được từ chính cột', async () => {
+    /* Đúng khổ mà AC-3 đòi bằng chứng: `1366×768` là laptop phổ thông, và cũng
+       là 1080p ở scale 125/150%. Trước `#676` khổ này không có đường nào mở
+       Thư viện khi soạn FBD — không phải "khó tìm" mà là không tồn tại. */
+    setViewportWidth(1366)
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    const column = screen.getByTestId('quick-library-column')
+    expect(column).toHaveAttribute('data-library-presentation', 'dock')
+    // Dock nằm TRONG luồng lưới: track tồn tại, thu về ray 44px khi đóng.
+    expect(libraryTrackWidth()).toBe('44px')
+    // Không mount panel khi đóng ⇒ không phải cột thường trực (TC-FBD-RESP-001).
+    expect(within(column).queryByTestId('quick-library-panel')).toBeNull()
+
+    // Và nó TỚI ĐƯỢC: nút mở nằm ngay trong cột, bấm là có panel.
+    fireEvent.click(within(column).getByRole('button', { name: 'Mở Thư viện nhanh' }))
+    const panel = await within(column).findByTestId('quick-library-panel')
+    expect(panel).toBeVisible()
+    // Mở dock thì track nở ra — canvas hẹp lại thật, đây là khác biệt đo được
+    // với drawer (drawer `fixed`, track giữ `0px`).
+    expect(libraryTrackWidth()).not.toBe('44px')
+    expect(libraryTrackWidth()).not.toBe('0px')
+  })
+
+  it('AC-676-3: FBD <1280 là DRAWER — không chiếm track, mở từ nút ngoài khay', async () => {
+    setViewportWidth(1024)
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    const column = screen.getByTestId('quick-library-column')
+    expect(column).toHaveAttribute('data-library-presentation', 'drawer')
+    // KHÔNG chiếm chỗ vẽ: ở khổ hẹp chỗ vẽ là thứ đắt nhất.
+    expect(libraryTrackWidth()).toBe('0px')
+    expect(within(column).queryByTestId('quick-library-panel')).toBeNull()
+    /* Khay đóng thì RỖNG — không thanh ray, không nút, không gì cả.
+     *
+     * Không khẳng định `.not.toBeVisible()` ở đây, và đó là chủ ý: jsdom không
+     * nạp stylesheet Tailwind nên `class="hidden"` KHÔNG thành `display:none`,
+     * phép đo ấy sẽ đo sự có mặt của một chuỗi ký tự chứ không đo hình thái —
+     * đúng thứ `AC-2` cấm. Phép đo khuất/hiện thật thuộc lane e2e, nơi có
+     * layout engine; ở đây đo thứ jsdom đo được thật: cây con rỗng. */
+    expect(column).toBeEmptyDOMElement()
+
+    // Nút mở nằm NGOÀI khay, trên đầu cột soạn thảo — vì khay không có ray.
+    const editorColumn = screen.getByTestId('programming-editor-column')
+    const opener = within(editorColumn).getByRole('button', { name: 'Mở Thư viện nhanh' })
+    expect(opener).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(opener)
+
+    expect(await within(column).findByTestId('quick-library-panel')).toBeVisible()
+    expect(opener).toHaveAttribute('aria-expanded', 'true')
+    // Vẫn không lấy track lưới khi đã mở: drawer phủ lên canvas, không đẩy nó.
+    expect(libraryTrackWidth()).toBe('0px')
+    // Phủ lên nội dung ⇒ phải khai là `dialog`, khác hẳn bản `docked`.
+    expect(within(column).getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('AC-676-4: Escape đóng drawer Thư viện nhanh và trả focus về nút mở', async () => {
+    setViewportWidth(1024)
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    const column = screen.getByTestId('quick-library-column')
+    const opener = within(screen.getByTestId('programming-editor-column'))
+      .getByRole('button', { name: 'Mở Thư viện nhanh' })
+    fireEvent.click(opener)
+    await within(column).findByTestId('quick-library-panel')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(within(column).queryByTestId('quick-library-panel')).toBeNull())
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+
+  it('AC-676-5: đổi khổ không rò trạng thái — mở khay ở dải hẹp không mở sẵn cột ở dải rộng', async () => {
+    /* Hai dải dùng hai trạng thái tách nhau. Gộp lại thì một lần mở khay ở
+       `1366` sẽ làm cột ở `1920` tự mở theo, và ngược lại — hai khổ không liên
+       quan gì tới nhau lại kéo nhau. */
+    setViewportWidth(1440)
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    const column = screen.getByTestId('quick-library-column')
+    const panel = await within(column).findByTestId('quick-library-panel')
+    fireEvent.click(within(panel).getByRole('button', { name: 'Thu gọn' }))
+    await waitFor(() => expect(within(column).queryByTestId('quick-library-panel')).toBeNull())
+    // Cột đã thu về ray — trạng thái này là của `column`, không phải của dock.
+    expect(libraryTrackWidth()).toBe('44px')
+    expect(within(column).getByRole('button', { name: 'Mở Thư viện nhanh' })).toBeInTheDocument()
+  })
+
+  it('AC-676-7: dock đang mở mà thu cửa sổ xuống <1280 thì drawer KHÔNG tự bung ra', async () => {
+    /* Hồi quy thật, `TC-FBD-RESP-001` bắt được ở mốc `1279` khi `dock` và
+     * `drawer` còn dùng chung một biến mở/đóng: người dùng mở dock ở `1366`
+     * rồi thu cửa sổ, trạng thái mở đi theo, và drawer là tấm `fixed` cao hết
+     * màn phủ 24rem mép phải — nó tự bung ra đè lên canvas mà không ai bấm gì,
+     * đúng lúc màn hình đã hẹp nhất. Dock đẩy chỗ nên mở sẵn vô hại; drawer
+     * phủ chỗ nên mở sẵn là cướp mặt vẽ. */
+    setViewportWidth(1366)
+    renderProgramsTab({ selectedProgramId: 'prog-fbd-1' })
+
+    const column = screen.getByTestId('quick-library-column')
+    fireEvent.click(within(column).getByRole('button', { name: 'Mở Thư viện nhanh' }))
+    await within(column).findByTestId('quick-library-panel')
+
+    // Thu cửa sổ qua biên 1280 — `useMinWidth` nghe `resize` khi không có matchMedia.
+    setViewportWidth(1279)
+    fireEvent(window, new Event('resize'))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('quick-library-column'))
+        .toHaveAttribute('data-library-presentation', 'drawer'))
+    expect(within(screen.getByTestId('quick-library-column')).queryByTestId('quick-library-panel'))
+      .toBeNull()
+    expect(libraryTrackWidth()).toBe('0px')
+  })
+
+  it('AC-676-6: ST giữ CỘT ở mọi khổ — §7.5 chỉ nói về FBD', async () => {
+    setViewportWidth(1024)
+    renderProgramsTab({ selectedProgramId: 'prog-st-1' })
+
+    const column = screen.getByTestId('quick-library-column')
+    expect(column).toHaveAttribute('data-library-presentation', 'column')
+    expect(await within(column).findByTestId('quick-library-panel')).toBeVisible()
+  })
+
   it('G-15: bảng Interface bám theo declaration đang sửa trong buffer, không chờ save/read-back', async () => {
     const source = 'PROGRAM ST_PROG\nVAR_INPUT\n  Sensor : BOOL;\nEND_VAR\nEND_PROGRAM'
     renderProgramsTab({

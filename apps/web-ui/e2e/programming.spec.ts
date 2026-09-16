@@ -1586,23 +1586,124 @@ test.describe('PGM-02 v2 — vỏ, route canonical và mobile read-only (T59-802
     const libraryColumn = page.getByTestId('quick-library-column')
     const marquee = page.getByRole('button', { name: 'Chọn vùng', exact: true })
 
+    /* BA NGƯỠNG CỦA THƯ VIỆN NHANH (`#676`, hợp đồng §7.5), đo bằng HÌNH THÁI
+     * THẬT chứ không bằng sự có mặt của lớp CSS — một lớp Tailwind sai ngưỡng
+     * vẫn "có mặt" trong `className` và vẫn cho test xanh (`AC-2`).
+     *
+     * Phép đo phân biệt ba hình thái là `position` + bề rộng track + bề rộng
+     * canvas, không phải tên lớp:
+     *   - `column` (`≥1440`)     : trong luồng, mở sẵn, là cột thứ ba của lưới;
+     *   - `dock`   (`1280–1439`) : trong luồng, thu về ray; MỞ RA THÌ CANVAS HẸP LẠI;
+     *   - `drawer` (`<1280`)     : `position: fixed`, phủ lên canvas, canvas GIỮ NGUYÊN.
+     *
+     * Vì sao dải hẹp phải có lối vào: `TC-FBD-RESP-001` cấm cột THƯỜNG TRỰC
+     * dưới `1440`, không cấm dock/khay có nút mở. Bản trước đọc nhầm điều đó
+     * thành "dưới 1440 thì không có Thư viện", và đó là chuỗi `5fa334b` →
+     * `11d7b33` → PR `#685`, mỗi bước chữa triệu chứng của bước trước. */
+    const libraryMorphology = () => page.evaluate(() => {
+      const node = document.querySelector<HTMLElement>('[data-testid="quick-library-column"]')
+      const canvas = document.querySelector<HTMLElement>('[data-testid="programming-editor-column"]')
+      const box = node?.getBoundingClientRect()
+      const style = node ? window.getComputedStyle(node) : null
+      return {
+        presentation: node?.dataset.libraryPresentation ?? 'missing',
+        position: style?.position ?? 'missing',
+        display: style?.display ?? 'missing',
+        width: Math.round(box?.width ?? 0),
+        canvasWidth: Math.round(canvas?.getBoundingClientRect().width ?? 0),
+      }
+    })
+
     // ≥1440: Explorer | Canvas | Thư viện nhanh | Inspector cùng hiển thị.
     await expect(inspector).toBeVisible()
     await expect(libraryColumn).toBeVisible()
     await expect(inspectorOpener).toBeHidden()
     await expect(marquee).toBeHidden()
+    const wide = await libraryMorphology()
+    expect(wide.presentation, JSON.stringify(wide)).toBe('column')
+    // Cột thật: nằm trong luồng và rộng hơn một thanh ray.
+    expect(wide.position, JSON.stringify(wide)).not.toBe('fixed')
+    expect(wide.width, JSON.stringify(wide)).toBeGreaterThan(100)
+    // AC-5: `1440×900` là mốc đầu của bốn khổ phải không tràn ngang.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), '1440px không tràn ngang').toBe(true)
 
-    for (const width of [1280, 1024]) {
+    /* `1366×768` — khổ mà `AC-3` đòi bằng chứng đích danh: laptop phổ thông, và
+     * cũng là 1080p ở scale 125/150%. Trước `#676`, soạn FBD ở đây KHÔNG có
+     * đường nào mở Thư viện nhanh; không phải "khó tìm" mà là không tồn tại. */
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await expect(shell).toBeVisible()
+    await expect(inspector).toBeHidden()
+    await expect(inspectorOpener).toBeVisible()
+    const dockClosed = await libraryMorphology()
+    expect(dockClosed.presentation, JSON.stringify(dockClosed)).toBe('dock')
+    expect(dockClosed.position, JSON.stringify(dockClosed)).not.toBe('fixed')
+    // Thu về ray: hiện, bấm được, nhưng KHÔNG phải cột thường trực.
+    expect(dockClosed.width, JSON.stringify(dockClosed)).toBeGreaterThan(0)
+    expect(dockClosed.width, JSON.stringify(dockClosed)).toBeLessThan(100)
+
+    // AC-3: Thư viện TỚI ĐƯỢC ở khổ này — mở từ chính thanh ray trong cột.
+    await libraryColumn.getByRole('button', { name: 'Mở Thư viện nhanh' }).click()
+    await expect(libraryColumn.getByRole('region', { name: 'Thư viện nhanh' })).toBeVisible()
+    const dockOpen = await libraryMorphology()
+    // Dock nằm TRONG luồng ⇒ mở ra thì canvas hẹp lại thật. Đây là phép đo
+    // phân biệt dock với drawer, và nó không đọc một lớp CSS nào.
+    expect(dockOpen.width, JSON.stringify(dockOpen)).toBeGreaterThan(dockClosed.width)
+    expect(dockOpen.canvasWidth, JSON.stringify({ dockOpen, dockClosed }))
+      .toBeLessThan(dockClosed.canvasWidth)
+    expect(dockOpen.position, JSON.stringify(dockOpen)).not.toBe('fixed')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), '1366px không tràn ngang').toBe(true)
+
+    /* `1280` là BIÊN DƯỚI của dải dock — mốc dễ trượt nhất, nên khoá đích danh.
+     * Cột vẫn phải khuất theo `TC-FBD-RESP-001` (không cột thường trực), nhưng
+     * hình thái là `dock` chứ không phải `drawer`. */
+    await page.setViewportSize({ width: 1280, height: 820 })
+    await expect(shell).toBeVisible()
+    const dockLowerBound = await libraryMorphology()
+    expect(dockLowerBound.presentation, JSON.stringify(dockLowerBound)).toBe('dock')
+    expect(dockLowerBound.position, JSON.stringify(dockLowerBound)).not.toBe('fixed')
+    // AC-5: `1280×820`.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), '1280px không tràn ngang').toBe(true)
+
+    /* `<1280`: drawer. `1024` giữ nguyên mốc cũ của `TC-FBD-RESP-001` — cột
+     * phải KHUẤT khi chưa mở, và ở đây nó khuất hẳn (`display: none`) chứ
+     * không phải thu về ray: khổ này chỗ vẽ đắt nhất, một ray 44px thường trực
+     * là lấy chỗ vẽ đổi lấy thứ đã có nút mở ở đầu cột soạn thảo. */
+    for (const width of [1279, 1024]) {
       await page.setViewportSize({ width, height: 820 })
       await expect(shell).toBeVisible()
       await expect(inspector).toBeHidden()
       await expect(libraryColumn).toBeHidden()
       await expect(inspectorOpener).toBeVisible()
       await expect(marquee).toBeHidden()
+      const drawerClosed = await libraryMorphology()
+      expect(drawerClosed.presentation, JSON.stringify(drawerClosed)).toBe('drawer')
+      // Không chiếm chỗ vẽ khi đóng: khác hẳn ray 44px của dock.
+      expect(drawerClosed.width, JSON.stringify(drawerClosed)).toBe(0)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${width}px không tràn ngang`).toBe(true)
     }
 
-    // Drawer trả focus sau Escape ở dải desktop hẹp.
+    /* AC-3 ở dải drawer: vẫn TỚI ĐƯỢC, qua nút nằm NGOÀI khay (khay không có
+     * ray để bấm), và mở ra thì PHỦ LÊN canvas chứ không đẩy canvas. */
+    await page.setViewportSize({ width: 1024, height: 820 })
+    const libraryOpener = page.getByRole('button', { name: 'Mở Thư viện nhanh', exact: true }).first()
+    await expect(libraryOpener).toBeVisible()
+    const canvasBeforeDrawer = (await libraryMorphology()).canvasWidth
+    await libraryOpener.click()
+    await expect(libraryColumn).toBeVisible()
+    const drawerOpen = await libraryMorphology()
+    expect(drawerOpen.position, JSON.stringify(drawerOpen)).toBe('fixed')
+    expect(drawerOpen.width, JSON.stringify(drawerOpen)).toBeGreaterThan(100)
+    // Phủ lên, KHÔNG đẩy: canvas giữ nguyên bề rộng — ngược hẳn với dock.
+    expect(drawerOpen.canvasWidth, JSON.stringify({ drawerOpen, canvasBeforeDrawer }))
+      .toBe(canvasBeforeDrawer)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), '1024px mở khay không tràn ngang').toBe(true)
+
+    // Escape đóng khay Thư viện và trả focus về đúng nút đã mở nó.
+    await page.keyboard.press('Escape')
+    await expect(libraryColumn).toBeHidden()
+    await expect(libraryOpener).toBeFocused()
+
+    // Drawer Inspector trả focus sau Escape ở dải desktop hẹp.
     await page.setViewportSize({ width: 1280, height: 820 })
     await inspectorOpener.click()
     await expect(inspector).toBeVisible()
