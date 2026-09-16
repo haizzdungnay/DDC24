@@ -1102,9 +1102,12 @@ export function EditorPane({
             onOpenCompare={onOpenCompare}
             checkDisabledReason={checkDisabledReason}
             compareDisabledReason={compareDisabledReason}
+            pointCatalogItems={pointCatalog.data?.items ?? []}
+            pointCatalogLoading={pointCatalog.status === 'loading'}
+            onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
           />
         )}
-        </div>
+      </div>
       </div>
       <WorkspaceResizeHandle
         label={pick('Đổi kích thước Thư viện nhanh', 'Resize the quick library')}

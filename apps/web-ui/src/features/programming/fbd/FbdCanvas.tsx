@@ -214,6 +214,8 @@ export interface FbdCanvasProps {
   /** Thêm khối tại một điểm graph (menu "Thêm khối tại đây"). */
   onAddBlockAt?: (at: FbdPoint) => void
   userPouInterfaces?: readonly UserPouInterface[]
+  /** Yêu cầu mở picker ánh xạ điểm cho một cổng. */
+  onRequestPortMapping?: (info: { nodeId: string; portId: string; portName: string; nodeName: string; portDirection: 'INPUT' | 'OUTPUT'; portDataType: string }) => void
 }
 
 export function FbdCanvas({
@@ -244,6 +246,7 @@ export function FbdCanvas({
   viewCommandsRef,
   onAddBlockAt,
   userPouInterfaces,
+  onRequestPortMapping,
 }: FbdCanvasProps) {
   const [viewport, setViewport] = useState<FbdViewport>(DEFAULT_VIEWPORT)
   const [pan, setPan] = useState<PanState | null>(null)
@@ -1364,6 +1367,25 @@ export function FbdCanvas({
         { id: 'disconnect', label: pick('Ngắt dây tại cổng này', 'Disconnect this port'), disabled: !canEdit, run: () => disconnect(wiresOfPort(portId)) },
         { id: 'properties', label: pick('Thuộc tính khối', 'Block properties'), run: () => select({ kind: 'node', networkId: network.id, nodeId }) },
       )
+      if (onRequestPortMapping) {
+        const node = nodesById.get(nodeId)
+        const portDef = node?.ports.find((p) => p.id === portId)
+        if (node && portDef) {
+          items.push({
+            id: 'map-point',
+            label: pick('Ánh xạ điểm…', 'Map point…'),
+            disabled: !canEdit,
+            run: () => onRequestPortMapping({
+              nodeId,
+              portId,
+              portName: portDef.name,
+              nodeName: node.typeRef ?? node.kind,
+              portDirection: direction,
+              portDataType: portDef.dataType,
+            }),
+          })
+        }
+      }
       return { title: pick('Cổng', 'Port'), items }
     }
 

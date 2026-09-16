@@ -106,6 +106,8 @@ export interface StructuredFbdEditorProps {
    */
   toolbarExtras?: ReactNode
   onBridgeChange?: (bridge: FbdCanvasBridge | null) => void
+  /** Yêu cầu mở picker ánh xạ điểm cho một cổng. */
+  onRequestPortMapping?: (info: { nodeId: string; portId: string; portName: string; nodeName: string; portDirection: 'INPUT' | 'OUTPUT'; portDataType: string }) => void
 }
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
@@ -211,6 +213,7 @@ export function StructuredFbdEditor({
   runtime,
   toolbarExtras,
   onBridgeChange,
+  onRequestPortMapping,
 }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(
@@ -1134,6 +1137,7 @@ export function StructuredFbdEditor({
                   })
                 : undefined}
               userPouInterfaces={userPouInterfaces}
+              onRequestPortMapping={onRequestPortMapping}
             />
           </article>
         ))}
