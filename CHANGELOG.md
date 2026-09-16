@@ -8,6 +8,54 @@
 
 ## [Unreleased]
 
+### Fixed — `#635` (`F-CTO-BAC-01`): AI9..AI16 không bao giờ được kiểm COV; bảy hằng số lượng object ra khỏi `private:` (2026-09-16)
+
+- Phạm vi: `apps/iobus/adapters/bacnet/bacnet_objects.hpp`,
+  `apps/iobus/adapters/bacnet/bacnet_server.cpp`,
+  `apps/iobus/adapters/bacnet/tests/test_bacnet_cov.cpp`, `CHANGELOG.md`.
+- **Triệu chứng:** `dispatch_cov()` quét AI và BI bằng **chung một cận `8`**,
+  trong khi `register_objects()` tạo 16 AI và `sync_stack_inputs()` nạp giá trị
+  cho cả 16. Bất đối xứng nằm gọn trong một file: nạp 16, soi 8.
+- **Nguyên nhân gốc:** bảy hằng `N_AI…N_MSV` đã khai đủ trong
+  `bacnet_objects.hpp` nhưng nằm **sau `private:`**, nên `bacnet_server.cpp`
+  không dùng được và phải chép lại — **12** số trần đếm được trong file. Chép
+  lại thì chép sai: cận `8` đúng cho `N_BI` và cắt mất một nửa `N_AI`. Gộp hai
+  loại object có số lượng khác nhau vào một vòng là chỗ hỏng thật sự.
+- **Hệ quả nếu không vá:** hôm nay `dispatch_cov` mới chỉ `fprintf` chứ chưa
+  gửi gói, nên lỗi chưa lộ. Ngay khi `T-BAC-044..046` nối COV ra mạng thật,
+  tám kênh UI cuối sẽ **im lặng không thông báo** — BMS treo giá trị cũ mà
+  không có lỗi nào để lần ra. Rất đắt để chẩn đoán tại site.
+- **Cách sửa:** đưa bảy hằng lên vùng `public:` làm **điểm định nghĩa duy nhất**
+  (giá trị không đổi), neo từng hằng vào `contracts/shm/mkddc_shm.h` bằng
+  `static_assert` cộng một assert giá trị tuyệt đối; thay toàn bộ số trần trong
+  `bacnet_server.cpp` bằng `BacnetObjects::N_*`; tách vòng quét COV thành
+  `scan_cov_objects()` với **mỗi loại object một cận riêng**, và tách luôn hai
+  vòng AI/BI gộp trong `sync_stack_inputs()`.
+- **Đổi hành vi có chủ ý (khai báo theo N6):** AI9..AI16 bắt đầu được kiểm COV
+  — đây là **vá khiếm khuyết**, không phải tính năng mới. Thứ tự gọi `check()`
+  đổi từ xen kẽ (AI1,BI1,AI2,BI2…) sang theo lô từng loại (AI1..AI16, rồi
+  BI1..BI8, …); trạng thái COV là độc lập theo `(type, instance)` nên kết quả
+  không đổi, chỉ thứ tự dòng log `bacnet_cov.notify` đổi. Tập object **không
+  đổi** (AI1..AI16 vốn đã được `register_objects()` tạo từ trước), OpenAPI /
+  schema / SHM **không đổi**.
+- **Số đo thật (2026-09-16, tại `origin/main@46764ba` + nhánh này):**
+  - Số trần đếm object trong `bacnet_server.cpp`:
+    `grep -cE 'i (<|<=) (4|8|16|32)\b'` → nền **12** → sau **0**.
+  - `BACNET=ON` (`MODBUS=ON`, `HMI=ON`): configure `exit=0`, build `exit=0`,
+    `ctest` **1493/1493 PASS**, 0 FAIL, 26,01 s. Nền trước sửa: 1488 test.
+  - Test BACnet: nền **88** → sau **93** (`ctest -N | grep -ci bacnet`).
+  - `BACNET=OFF` đối chứng: configure `exit=0`, build `exit=0`,
+    `ctest` **1487/1487 PASS**, 0 FAIL — `scan_cov_objects()` nằm ngoài
+    `#ifdef MKDDC_ENABLE_BACNET` nên cả hai đường build đều kiểm được nó.
+  - `nm -C build/fw/iobus/mkddc-iobus | grep -c bip_init` = **1** (stack thật).
+  - **Phép thử ngược:** ép cận AI về `N_BI` (lỗi cũ) → **4/5** test
+    `BacnetCovScan` FAIL, trong đó `ScansAnalogInputUpToN_AI` báo đúng
+    "AI16 không được quét"; khôi phục → 5/5 PASS. Mutant không nằm trong diff.
+- **Lớp bằng chứng `HOST`** (`ADR-060`): các test trên kiểm **logic quét COV**,
+  không kiểm gói COV có ra tới BMS hay không — việc đó thuộc tầng `LOOPBACK`
+  (#626) và `HIL`. Không nâng lớp bằng chứng.
+
+
 ### Added — `#627` (`T-BAC-011`): cross-build aarch64 với `BACNET=ON` + ba cổng kiểm binary (2026-09-16)
 
 - Phạm vi: `scripts/cross_build_aarch64_bacnet.sh` (mới),
