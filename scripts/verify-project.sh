@@ -14,7 +14,13 @@ usage() {
     '     scripts/verify-project.sh --wave W0..W8 [--repeat N]' \
     '' \
     'Component: layout | cpp | go | frontend | e2e | e2e-real | firmware | release |' \
-    '           docs | workflow | browser | all' \
+    '           docs | workflow | browser | bacnet | all' \
+    '' \
+    '`bacnet` là cổng thi hành ADR-060 (4): dựng BACNET=ON host + cross aarch64,' \
+    'khẳng định binary có mã BACnet thật và tầng LOOPBACK chạy thật. Nó KHÔNG' \
+    'nằm trong `all` vì tầng cross đòi toolchain cài riêng; gọi đích danh:' \
+    '' \
+    '    scripts/verify-project.sh --component bacnet' \
     '' \
     '`all` chạy MƯỜI component và cố ý KHÔNG gồm `release` (lý do kỹ thuật ghi' \
     'ngay tại nhánh `all` phía dưới). Diễn tập CÀI MỚI → NÂNG CẤP → ROLLBACK' \
@@ -406,6 +412,140 @@ run_workflow() {
   python3 "$repo_root/scripts/workflow_guard.py" --selftest
 }
 
+# Cổng `BACNET=ON` — bản thi hành duy nhất của `ADR-060` điều (4):
+# *"cấu hình `BACNET=OFF` KHÔNG được là đường build duy nhất được kiểm"*.
+#
+# Vì sao nó phải tồn tại, đo được chứ không phải suy đoán: ngày 2026-09-10 bộ
+# cổng báo **1440/1440 PASS** trong khi bacnet-stack không hề được biên dịch
+# vào, `SubscribeCOV` chưa đăng ký handler, và 64/88 object không có dữ liệu.
+# Một bộ cổng xanh trọn vẹn trên một sản phẩm không chạy. Nguyên nhân gốc không
+# nằm ở test nào cả: CI chỉ dựng `BACNET=OFF`, nên mọi lời gọi bacnet-stack —
+# vốn nằm gọn trong `#ifdef MKDDC_ENABLE_BACNET` — bị tiền xử lý cắt bỏ trước
+# khi có test nào nhìn thấy chúng. Không test nào bắt được mã không được biên
+# dịch; chỉ một cổng dựng đúng cấu hình mới bắt được.
+#
+# `T-BAC-012` (#628) chọn ĐƯỜNG B của Issue: cổng chạy tại máy trước, job CI là
+# bản sao. Lý do là ràng buộc thật chứ không phải tiện tay — Actions của tổ chức
+# không cấp runner (#414) và chủ sở hữu đã quyết định không bật lại, nên một cổng
+# chỉ sống trong `.github/workflows/**` là một cổng không bao giờ chạy: đúng loại
+# bằng chứng giả mà `ADR-060` vừa cấm. Job tương ứng trong `build-and-test.yml`
+# khai lại đúng bốn tầng dưới đây để khi #414 mở thì nó chạy đúng thứ đã kiểm
+# offline — nhưng trạng thái của nó là `NOT_RUN (#414)`, không bao giờ là PASS.
+#
+# BỐN TẦNG, và không tầng nào thay được tầng khác:
+#
+#   Tầng 1 — HOST `BACNET=ON`: dựng + chạy TOÀN BỘ bộ test. Gọi lại `run_cpp`
+#   thay vì chép lệnh `cmake`: cổng này phải dựng bằng ĐÚNG lệnh mà cổng C++
+#   dùng, nếu không hai bên sẽ trôi khỏi nhau và cổng kiểm một thứ không ai
+#   deploy.
+#
+#   Tầng 2 — symbol `bip_init` phải CÓ trong binary host. Đây là tầng duy nhất
+#   phân biệt được "dựng với BACnet" và "dựng không BACnet" khi nhìn vào sản
+#   phẩm: nhánh `#else` của `BacnetServer::start()` chỉ in một dòng INFO rồi trả
+#   `false`, nên một bản `BACNET=OFF` vẫn dựng trót lọt, vẫn xanh, log vẫn trông
+#   bình thường. Cùng ý tưởng với cổng 3 của `gate_bacnet_aarch64_binary.sh`
+#   (#627), áp cho binary host.
+#
+#   Tầng 3 — tầng test `LOOPBACK` (#626) phải CHẠY THẬT. Nó đọc output của
+#   chính binary gtest chứ không đọc phán quyết của `ctest`, và đó là điểm mấu
+#   chốt: khi `BACNET=OFF`, `test_bacnet_loopback.cpp` đăng ký đúng một ca
+#   `GTEST_SKIP()`, mà một ca SKIP vẫn làm binary thoát 0 và vẫn hiện `Passed`
+#   trong bảng `ctest`. Tin vào `ctest` ở đây là tái tạo lại đúng lỗi 1440/1440.
+#
+#   Tầng 4 — CROSS aarch64 `BACNET=ON` + ba cổng kiểm binary, bằng cách gọi lại
+#   `scripts/cross_build_aarch64_bacnet.sh` của #627. Gọi lại chứ KHÔNG chép:
+#   ba cổng GLIBCXX / NEEDED / `bip_init` có một chủ sở hữu, và một bản chép thứ
+#   hai là một bản sẽ lạc hậu mà không ai biết.
+#
+# Tầng 4 đứng CUỐI có chủ ý: nó là tầng duy nhất đòi cross toolchain, nên khi
+# máy thiếu toolchain thì ba tầng trên đã in kết quả xong rồi mới tới chỗ hỏng.
+# Thiếu toolchain là cổng ĐỎ (mã 2 của script #627 kèm lệnh `apt-get` phải chạy),
+# KHÔNG phải cổng bỏ qua im lặng — một tầng tự tàng hình khi thiếu công cụ là
+# đúng thứ `ADR-060` cấm.
+#
+# Cổng cố ý KHÔNG có mặt trong `--component all`, cùng dạng loại trừ với
+# `release` và vì lý do cùng loại: tầng 4 đòi một cross toolchain phải cài riêng
+# (`g++-aarch64-linux-gnu`, `libmodbus-dev:arm64`, `libsodium-dev:arm64`), nên
+# nhét nó vào `all` sẽ làm `all` đỏ trên mọi máy chưa cài — tức đổi hành vi của
+# chín component đang có. Cổng này được gọi ĐÍCH DANH, và `WF-CLEAN-001` §6.2
+# quy định PR nào chạm `apps/iobus/adapters/bacnet/**` thì phải gọi.
+run_bacnet() {
+  # Profile phải thật sự bật BACNET. `--component bacnet --profile baseline` là
+  # một câu tự mâu thuẫn, và nếu im lặng chấp nhận thì cổng sẽ dựng `BACNET=OFF`
+  # rồi báo xanh — đúng cái nó sinh ra để chặn. Từ chối ngay tại cửa.
+  case "$profile" in
+    bacnet|modbus-bacnet|full) ;;
+    *)
+      printf 'LỖI: --component bacnet cần profile bật BACNET (bacnet | modbus-bacnet | full), nhận: %s\n' \
+        "$profile" >&2
+      printf '      ADR-060 (4): BACNET=OFF không được là đường build duy nhất được kiểm.\n' >&2
+      exit 2
+      ;;
+  esac
+
+  local cpp_build="$build_root/cpp-$profile"
+
+  printf '\n=== Tầng 1/4: HOST BACNET=ON (profile %s) ===\n' "$profile"
+  run_cpp
+
+  printf '\n=== Tầng 2/4: binary host phải chứa mã BACnet/IP thật ===\n'
+  local iobus_bin="$cpp_build/iobus/mkddc-iobus"
+  if [ ! -f "$iobus_bin" ]; then
+    printf 'LỖI: không thấy %s — bước dựng báo thành công nhưng không ra binary.\n' \
+      "$iobus_bin" >&2
+    exit 1
+  fi
+  local bip_hits
+  bip_hits="$(nm -C "$iobus_bin" | grep -c 'bip_init' || true)"
+  if [ "$bip_hits" -lt 1 ]; then
+    printf 'LỖI: không thấy symbol `bip_init` trong %s\n' "$iobus_bin" >&2
+    printf '      Binary được dựng KHÔNG có bacnet-stack. Mọi lời gọi BACnet nằm\n' >&2
+    printf '      trong #ifdef MKDDC_ENABLE_BACNET nên bản này vẫn chạy, vẫn xanh,\n' >&2
+    printf '      và không có BACnet — ADR-060 (4).\n' >&2
+    exit 1
+  fi
+  printf 'OK  : số symbol khớp `bip_init` = %s\n' "$bip_hits"
+
+  printf '\n=== Tầng 3/4: tầng LOOPBACK (#626) phải chạy thật, không SKIP ===\n'
+  local test_bin="$cpp_build/iobus/iobus_tests"
+  if [ ! -f "$test_bin" ]; then
+    printf 'LỖI: không thấy %s — bộ test iobus không được dựng.\n' "$test_bin" >&2
+    exit 1
+  fi
+  local loopback_log="$cpp_build/bacnet-loopback.log"
+  # Chạy THẲNG binary gtest, không qua `ctest`: xem khối chú thích của tầng 3
+  # phía trên — `ctest` không phân biệt được SKIP với PASS ở đây.
+  if ! "$test_bin" --gtest_filter='BacnetLoopback.*' > "$loopback_log" 2>&1; then
+    printf 'LỖI: tầng LOOPBACK đỏ. Output đầy đủ: %s\n' "$loopback_log" >&2
+    tail -40 "$loopback_log" >&2
+    exit 1
+  fi
+  if grep -q '\[  SKIPPED \]' "$loopback_log"; then
+    printf 'LỖI: tầng LOOPBACK bị SKIP — bacnet-stack không được biên dịch vào.\n' >&2
+    printf '      Một ca SKIP vẫn làm binary thoát 0 và vẫn hiện `Passed` trong\n' >&2
+    printf '      bảng ctest; đó là lý do cổng này đọc output gtest (ADR-060).\n' >&2
+    grep '\[  SKIPPED \]' "$loopback_log" >&2
+    exit 1
+  fi
+  local loopback_passed
+  loopback_passed="$(sed -n 's/^\[  PASSED  \] \([0-9]\{1,\}\) test.*/\1/p' "$loopback_log" | tail -1)"
+  # Sàn 6 = số ca `LOOPBACK` thật khi #626 vào `main` (2026-09-16). Là SÀN chứ
+  # không phải đẳng thức: `T-BAC-044` sẽ thêm ca, và cổng không được đỏ vì có
+  # thêm bằng chứng. Ngược lại, XOÁ ca thì cổng đỏ — đó là điều cần giữ.
+  local loopback_floor=6
+  if [ -z "$loopback_passed" ] || [ "$loopback_passed" -lt "$loopback_floor" ]; then
+    printf 'LỖI: tầng LOOPBACK chỉ chạy %s ca, sàn là %s ca (#626).\n' \
+      "${loopback_passed:-0}" "$loopback_floor" >&2
+    printf '      Ca bị xoá hay bị lọc mất thì cổng phải đỏ, không im lặng.\n' >&2
+    exit 1
+  fi
+  printf 'OK  : %s ca LOOPBACK chạy thật và đạt (sàn %s), không ca nào SKIP\n' \
+    "$loopback_passed" "$loopback_floor"
+
+  printf '\n=== Tầng 4/4: CROSS aarch64 BACNET=ON + ba cổng kiểm binary (#627) ===\n'
+  "$repo_root/scripts/cross_build_aarch64_bacnet.sh" --bacnet on
+}
+
 # `--wave` là đường đi MỘT LỆNH cho cả ma trận cổng. Nó cố ý KHÔNG dùng `set -e`
 # của script này: runner chạy hết mọi cổng rồi mới kết luận, vì dừng ở cổng hỏng
 # đầu tiên chính là lý do lỗi phía sau nằm im rất lâu.
@@ -455,6 +595,7 @@ case "$component" in
   docs) run_docs ;;
   workflow) run_workflow ;;
   browser) run_browser ;;
+  bacnet) run_bacnet ;;
   all)
     run_layout
     run_cpp
@@ -492,6 +633,17 @@ case "$component" in
     # Hệ quả phải nói ra: `--component all` KHÔNG phủ diễn tập CÀI/NÂNG CẤP/
     # ROLLBACK T59-606. Hồ sơ nào cần T59-606 thì phải dẫn thêm một lần chạy
     # `--component release` — usage ở đầu file nói đúng điều này.
+    #
+    # `bacnet` (#628, ADR-060 điều 4) cũng CỐ Ý không có mặt ở đây, cùng dạng
+    # loại trừ và cùng loại lý do: tầng cross của nó đòi `g++-aarch64-linux-gnu`,
+    # `libmodbus-dev:arm64` và `libsodium-dev:arm64` — ba gói phải cài riêng,
+    # không có trên checkout sạch. Nhét vào `all` sẽ làm `all` đỏ trên mọi máy
+    # chưa cài, tức đổi hành vi của chín component đang có; mà hạ tầng 4 xuống
+    # "bỏ qua nếu thiếu toolchain" thì đúng bằng việc dựng lại một cổng tự tàng
+    # hình. Hệ quả phải nói ra y như trên: `--component all` KHÔNG phủ cổng
+    # `BACNET=ON`. `WF-CLEAN-001` §6.2 quy định PR chạm
+    # `apps/iobus/adapters/bacnet/**` phải dẫn thêm một lần chạy
+    # `--component bacnet`.
     ;;
   *) printf 'LỖI: component không hỗ trợ: %s\n' "$component" >&2; exit 2 ;;
 esac
