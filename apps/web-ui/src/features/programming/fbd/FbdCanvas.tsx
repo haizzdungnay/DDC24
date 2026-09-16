@@ -40,10 +40,17 @@ import {
 import { fbdPaletteEntry, FBD_PALETTE, type FbdPaletteEntry } from './palette'
 import { userPouPaletteEntry, type UserPouInterface } from './userPou'
 import { FbdNodeHoverCard } from './FbdNodeHoverCard'
+import { FbdBlockPropertiesModal } from './FbdBlockPropertiesModal'
 import { createUuid } from '../../../shared/crypto'
 import { LIBRARY_DRAG_TYPE } from '../design/library/QuickLibraryPanel'
 import { useSetFbdCanvasBridge, type FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
 import { useFbdNodeDrag } from './useFbdNodeDrag'
+import type {
+  ProgrammingBinding,
+  ProgrammingPointCatalogEntry,
+  ProgrammingProgram,
+  ProgrammingVariable,
+} from '../model/types'
 import {
   describeWireRejection,
   evaluateWireCandidate,
@@ -216,6 +223,10 @@ export interface FbdCanvasProps {
   userPouInterfaces?: readonly UserPouInterface[]
   /** Yêu cầu mở picker ánh xạ điểm cho một cổng. */
   onRequestPortMapping?: (info: { nodeId: string; portId: string; portName: string; nodeName: string; portDirection: 'INPUT' | 'OUTPUT'; portDataType: string }) => void
+  bindings?: readonly ProgrammingBinding[]
+  variables?: readonly ProgrammingVariable[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
+  programs?: readonly ProgrammingProgram[]
 }
 
 export function FbdCanvas({
@@ -247,7 +258,12 @@ export function FbdCanvas({
   onAddBlockAt,
   userPouInterfaces,
   onRequestPortMapping,
+  bindings,
+  variables,
+  pointCatalogItems,
+  programs,
 }: FbdCanvasProps) {
+  const [propertiesModalNodeId, setPropertiesModalNodeId] = useState<string | null>(null)
   const [viewport, setViewport] = useState<FbdViewport>(DEFAULT_VIEWPORT)
   const [pan, setPan] = useState<PanState | null>(null)
   const [marquee, setMarquee] = useState<MarqueeState | null>(null)
@@ -1334,7 +1350,14 @@ export function FbdCanvas({
         ? pick(`${targetIds.length} khối đang chọn`, `${targetIds.length} selected blocks`)
         : pick('Khối', 'Block')
       items.push(
-        { id: 'properties', label: pick('Thuộc tính', 'Properties'), run: () => select({ kind: 'node', networkId: network.id, nodeId }) },
+        {
+          id: 'properties',
+          label: pick('Thuộc tính', 'Properties'),
+          run: () => {
+            select({ kind: 'node', networkId: network.id, nodeId })
+            setPropertiesModalNodeId(nodeId)
+          },
+        },
         { id: 'copy', label: pick('Sao chép', 'Copy'), shortcut: 'Ctrl+C', disabled: !clipboard, run: () => clipboard?.copy(targetIds) },
         { id: 'cut', label: pick('Cắt', 'Cut'), shortcut: 'Ctrl+X', disabled: !clipboard || !canEdit, run: () => clipboard?.cut(targetIds) },
         { id: 'duplicate', label: pick('Nhân đôi', 'Duplicate'), shortcut: 'Ctrl+D', disabled: !clipboard || !canEdit, run: () => clipboard?.duplicate(targetIds) },
@@ -1365,7 +1388,6 @@ export function FbdCanvas({
       }
       items.push(
         { id: 'disconnect', label: pick('Ngắt dây tại cổng này', 'Disconnect this port'), disabled: !canEdit, run: () => disconnect(wiresOfPort(portId)) },
-        { id: 'properties', label: pick('Thuộc tính khối', 'Block properties'), run: () => select({ kind: 'node', networkId: network.id, nodeId }) },
       )
       if (onRequestPortMapping) {
         const node = nodesById.get(nodeId)
@@ -1761,6 +1783,9 @@ export function FbdCanvas({
               hoverPortId={hover.portId}
               activeTooltipNodeId={!isGestureActive ? hoverTooltip?.nodeId ?? null : null}
               tooltipId={tooltipId}
+              bindings={bindings}
+              variables={variables}
+              pointCatalogItems={pointCatalogItems}
               onNodePointerEnter={handleNodePointerEnter}
               onNodePointerLeave={handleNodePointerLeave}
               onNodeFocus={handleNodeFocus}
@@ -1865,7 +1890,28 @@ export function FbdCanvas({
           node={hoverTooltipNode}
           nodeGeometry={hoverTooltipGeometry}
           runtimeReading={runtime?.byNodeId.get(hoverTooltipNode.id) ?? null}
+          portReadings={runtime?.byPortId}
+          bindings={bindings}
+          variables={variables}
+          pointCatalogItems={pointCatalogItems}
           position={hoverTooltip.position}
+        />
+      )}
+
+      {propertiesModalNodeId && nodesById.get(propertiesModalNodeId) && (
+        <FbdBlockPropertiesModal
+          node={nodesById.get(propertiesModalNodeId)!}
+          nodeGeometry={geometry.byNodeId.get(propertiesModalNodeId)}
+          network={network}
+          document={fbdDocument}
+          programs={programs}
+          bindings={bindings}
+          variables={variables}
+          pointCatalogItems={pointCatalogItems}
+          runtime={runtime}
+          issueNodeIds={issueNodeIds}
+          onClose={() => setPropertiesModalNodeId(null)}
+          onRequestPortMapping={onRequestPortMapping}
         />
       )}
     </div>

@@ -8,12 +8,18 @@ import { StructuredFbdEditor } from './StructuredFbdEditor'
 import type { FbdDocument } from './model'
 import { buildFbdRuntimeOverlay, type FbdRuntimeOverlay } from './runtimeOverlay'
 import type { StRuntimeOverlayState } from '../design/editor/StRuntimeValueOverlay'
+import type { ProgrammingBinding, ProgrammingPointCatalogEntry } from '../model/types'
 
 function golden(): FbdDocument {
   return JSON.parse(JSON.stringify(goldenJson)) as FbdDocument
 }
 
-function renderEditor(canEdit = true, runtime?: FbdRuntimeOverlay | null) {
+function renderEditor(
+  canEdit = true,
+  runtime?: FbdRuntimeOverlay | null,
+  bindings?: readonly ProgrammingBinding[],
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[],
+) {
   const onChange = vi.fn()
   render(
     <I18nProvider>
@@ -22,6 +28,8 @@ function renderEditor(canEdit = true, runtime?: FbdRuntimeOverlay | null) {
         canEdit={canEdit}
         onChange={onChange}
         runtime={runtime}
+        bindings={bindings}
+        pointCatalogItems={pointCatalogItems}
       />
     </I18nProvider>,
   )
@@ -149,5 +157,67 @@ describe('FbdCanvas hover tooltip (Task 2)', () => {
 
     // Thả chuột giữa
     fireEvent.pointerUp(bg, { pointerId: 2, clientX: 50, clientY: 50 })
+  })
+
+  it('khi chân đã mapping điểm: tooltip hiện tên điểm đã map và giá trị realtime (ví dụ AO-01: 5V)', () => {
+    const bindings: ProgrammingBinding[] = [
+      {
+        bindingId: 'b-out',
+        variableId: '40000000-0000-4000-8000-000000000005',
+        point: { category: 'LOCAL', pointId: 'AO-01' },
+        direction: 'WRITE',
+        dataType: 'REAL',
+        unit: 'V',
+        writable: true,
+        qualityPolicy: 'REQUIRE_GOOD',
+      },
+      {
+        bindingId: 'b-in1',
+        variableId: '40000000-0000-4000-8000-000000000003',
+        point: { category: 'LOCAL', pointId: 'UI-01' },
+        direction: 'READ',
+        dataType: 'REAL',
+        unit: 'degC',
+        writable: false,
+        qualityPolicy: 'REQUIRE_GOOD',
+      },
+    ]
+
+    const pointCatalogItems: ProgrammingPointCatalogEntry[] = [
+      {
+        category: 'LOCAL',
+        pointId: 'AO-01',
+        displayId: 'AO-01',
+        name: 'Fan Speed Command',
+        dataType: 'REAL',
+        unit: 'V',
+        direction: 'WRITE',
+        writable: true,
+        quality: 'GOOD',
+        value: 5,
+      },
+      {
+        category: 'LOCAL',
+        pointId: 'UI-01',
+        displayId: 'UI-01',
+        name: 'Room Temperature',
+        dataType: 'REAL',
+        unit: 'degC',
+        direction: 'READ',
+        writable: false,
+        quality: 'GOOD',
+        value: 21.5,
+      },
+    ]
+
+    renderEditor(true, null, bindings, pointCatalogItems)
+    const block = screen.getByRole('button', { name: /#2 · AND/ })
+    fireEvent.pointerEnter(block, { clientX: 120, clientY: 180 })
+
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip).toHaveTextContent('AO-01: 5V')
+    expect(tooltip).toHaveTextContent('UI-01: 21.5 degC')
+    // Chân IN2 chưa map vẫn hiện tên port gốc
+    expect(tooltip).toHaveTextContent('IN2')
   })
 })
