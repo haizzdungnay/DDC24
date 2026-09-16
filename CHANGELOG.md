@@ -8,6 +8,57 @@
 
 ## [Unreleased]
 
+### Fixed — `#625` / `T-BAC-010`: vendor bacnet-stack 1.3.8 vào repo, `BACNET=ON` dựng được lần đầu (2026-09-16)
+
+- Phạm vi: `apps/iobus/CMakeLists.txt`, `third_party/bacnet-stack/**` (mới),
+  `scripts/vendor_bacnet_stack.sh` (mới), `scripts/verify_vendor_bacnet_stack.sh` (mới),
+  `docs/02_design/GETTING_STARTED_DEV.md`, `CHANGELOG.md`.
+- **Triệu chứng:** `cmake -DMKDDC_ENABLE_BACNET=ON` hỏng ở configure với `HTTP 403`.
+  `BACNET=ON` **chưa từng dựng thành công lần nào** trong repo, nên 82 test mang tên
+  BACnet chưa bao giờ được kiểm ở cấu hình có stack thật, và `ADR-060` điều (4)
+  không thi hành được.
+- **Nguyên nhân gốc:** `FetchContent_Declare(bacnet_stack_src URL …tar.gz)` tải
+  tarball qua HTTP từ kho công cộng. Egress policy chặn **tarball** nhưng **không
+  chặn giao thức git** — đo trong phiên: `curl …tar.gz` → `HTTP 403`,
+  `git clone --depth 1 --branch bacnet-stack-1.3.8` → `exit 0`. Sự chặn không đồng
+  đều này chưa từng vào hồ sơ, nên mỗi phiên lại tự đâm vào 403 rồi kết luận
+  "không làm được".
+- **Cách sửa:** vendor nguồn vào `third_party/bacnet-stack/` theo `OD-BAC-009`
+  phương án (a); `apps/iobus/CMakeLists.txt` dùng `add_subdirectory` thay
+  `FetchContent`. Build nay **không cần mạng**.
+- **Cây vendor sinh bằng máy, không chép tay** — đó là cách giữ ràng buộc "nguyên
+  từng byte" của `OD-BAC-009` khi vendor tập con: `scripts/vendor_bacnet_stack.sh`
+  ghim theo **commit** `3e0370ee` (không chỉ theo tag — tag dời được), lọc theo
+  danh sách `KEEP` có ghi lý do từng mục, sinh `MANIFEST.sha256`. Nâng version =
+  đổi tag + SHA rồi chạy lại, không có bước phán đoán của con người.
+- **Tập con Linux:** 441 file / 5,8 MB (upstream: 2004 file / 35 MB). Bỏ 16 nền
+  `ports/` không được cấu hình Linux tham chiếu (22 MB), `apps/`, `test/`, `zephyr/`.
+  **Thu hẹp có chủ ý:** `BACNET=ON` nay chỉ dựng được trên Linux. Bo đích là Forlinx
+  aarch64; MinGW vốn đã hỏng từ trước ở `apps/iobus/CMakeLists.txt:51`.
+- `scripts/verify_vendor_bacnet_stack.sh` chạy **offline**, ba lớp, mã thoát phân
+  biệt: `3` nội dung lệch băm, `4` thừa/thiếu file, `2` thiếu cây/manifest. Lớp `4`
+  bịt đúng chỗ `sha256sum -c` mù — thêm file lạ thì băm file cũ vẫn đúng.
+- googletest trong iobus: bỏ đường tải, thiếu GTest nay là `FATAL_ERROR` nói thẳng
+  cách cài. Nhánh cũ **không phải fallback đang chạy được** — nó cũng nhận 403, chỉ
+  trông như còn sống vì `find_package` phía trên thành công trên máy có `libgtest-dev`.
+- **Đính chính số đo đã công bố:** comment đầu trên `#625` ghi `BACNET=ON` thêm
+  **42 test**. Sai — con số đó so với nền `1440` đo ngày 2026-09-10, trong khi `main`
+  đã tiến 186 commit. So cùng commit: `BACNET=ON` **1482**, `BACNET=OFF` **1481** —
+  thêm đúng **1** test (`BacnetServer.AppliesAiAndAoPropertiesToBacnetStack`).
+  Điều đó làm luận điểm của `#626` **mạnh hơn**, không yếu đi: 82 test mang tên
+  BACnet mà chỉ 1 cái cần `BACNET=ON` mới tồn tại.
+- Số đo (đo lại trong phiên, cây sạch, không `FETCHCONTENT_SOURCE_DIR` cho bacnet):
+  configure `exit 0` · build `exit 0` · `nm -C mkddc-iobus | grep -c bip_init` = **1**
+  · `ctest` **1482/1482 PASS**, `exit 0`. Hồi quy `BACNET=OFF`: configure/build/ctest
+  `exit 0`, **1481/1481 PASS**, `bip_init` = **0**.
+  `grep -c 'github.com' apps/iobus/CMakeLists.txt` = **0** (nền: 2).
+  Phép tiêm: sửa nội dung → `exit 3`; thêm file lạ → `exit 4`; xoá cây vendor →
+  configure `exit 1` kèm thông điệp chỉ đúng cách sửa.
+- Tiền điều kiện container sạch, đo lại: `libmodbus-dev`, `libsodium-dev`,
+  `libgtest-dev`, **`libdrm-dev`** và **`jsonschema`** — hai mục sau chưa có trong
+  danh sách đang lưu hành.
+- Refs: `#625`, `T-BAC-010`, `OD-BAC-009`, `ADR-060`, `#626`, `#627`, `#628`, `#635`, `#714`.
+
 ### Added — `#664`: bật cổng typecheck + lint cho `apps/web-ui/e2e/**` (2026-09-16)
 
 - Phạm vi: `apps/web-ui/tsconfig.e2e.json` (tạo mới), `apps/web-ui/tsconfig.json`,
