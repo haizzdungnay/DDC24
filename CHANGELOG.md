@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### Added — `#626` / `T-BAC-013`: tầng test `LOOPBACK` — UDP thật trên loopback cho BACnet/IP (2026-09-16)
+
+- Phạm vi: `apps/iobus/adapters/bacnet/tests/test_bacnet_loopback.cpp` (mới),
+  `apps/iobus/CMakeLists.txt`, `docs/05_verification/VERIFICATION.md`,
+  `CHANGELOG.md`.
+- **Triệu chứng:** PICS khai `DS-COV-B`, nhưng `grep -n "SUBSCRIBE_COV"
+  bacnet_server.cpp` → **0 dòng**. Một BMS gửi SubscribeCOV nhận về Reject, và
+  toàn bộ bộ test vẫn xanh. Không cổng nào trong repo bắt được điều đó.
+- **Nguyên nhân gốc:** giữa `HOST` (gọi thẳng lớp C++, không mở socket) và
+  `TARGET` (cần bo thật, `OD-BAC-007` `PENDING-HUMAN`) không có tầng nào kiểm
+  **bảng handler của bacnet-stack**. Thứ nằm giữa `bacnet_server.cpp` và
+  datalink — `apdu_set_confirmed_handler` — chưa bao giờ được thực thi trong
+  test. Đo lại hôm nay tại `main@d7d7fb6` xác nhận hố đó là thật: gỡ tạm
+  `apdu_set_confirmed_handler(SERVICE_CONFIRMED_READ_PROPERTY, …)` khỏi mã sản
+  phẩm thì **1482/1482 test `HOST` vẫn PASS**.
+- **Cách sửa:** thêm tầng `LOOPBACK` thi hành `ADR-060` điều (1). Dựng
+  `BacnetServer` thật, `bip_init` mở socket UDP thật trên `lo`, một socket client
+  riêng gửi/nhận khung BACnet/IP thật; mọi khẳng định đặt trên **gói nhận được**,
+  không trên trạng thái nội bộ. Sáu ca: socket thật đã mở, Who-Is→I-Am,
+  ReadProperty AI1 khớp `plc_shm`, WriteProperty AO1 prio 8 → đúng một lệnh
+  xuống core với `prio=3`, service lạ → Reject đúng chuẩn, và SubscribeCOV.
+- **Cổng UDP xin lúc chạy**, không ghim 47808 (bind `0.0.0.0:0` rồi
+  `getsockname`), nên hai lần `ctest` song song và một `mkddc-iobus` đang chạy
+  không đụng nhau. Mỗi ca có timeout hữu hạn **3000 ms**; không đường nào treo.
+  Không cần `sudo`, không cần capability mạng, không cần bo.
+- **Nợ ghi có hẹn trả:** ca SubscribeCOV đánh dấu kỳ vọng-thất-bại bằng
+  `EXPECT_NONFATAL_FAILURE` — không `DISABLED_`, không `GTEST_SKIP()`, không xoá.
+  Ca vẫn chạy thật, vẫn gửi gói thật, và **tự chuyển đỏ ngay khi `T-BAC-044` gắn
+  handler vào**, buộc người sửa quay lại lật nó thành khẳng định thẳng.
+- Số đo (đo lại sau khi merge `origin/main`, `main@d7d7fb6`):
+  `BACNET=ON` configure exit **0**, build exit **0**, `ctest` **1488/1488 PASS**,
+  `ctest -R BacnetLoopback` **6/6 PASS**, `nm … grep -c bip_init` = **1**.
+  `BACNET=OFF` **1482/1482 PASS** và ca `LOOPBACK` báo `***Skipped` hiện rõ trong
+  output `ctest` (`ADR-060` điều (4)), không im lặng biến mất.
+  Phép thử gỡ handler: `LOOPBACK` **đỏ** (`ReadPropertyAnalogInput…` FAILED),
+  `HOST` **1482/1482 vẫn PASS** — thay đổi tạm đã khôi phục, không nằm trong diff.
+  `strace` bắt được `bind(127.0.0.1)`, `bind(127.255.255.255)`, `sendto`,
+  `recvfrom` với byte `\201\n` (BVLL `0x81` + Original-Unicast `0x0A`).
+  `docs_iso_harness.py --expect` exit **0**.
+- **Không chạm mã sản phẩm**: `apps/iobus/adapters/bacnet/*.{hpp,cpp}` ngoài
+  `tests/` không đổi một dòng. Không đổi contract/API/schema, không đổi hành vi
+  runtime (N6).
+- Thang bằng chứng: tầng này PASS ghi là **`VERIFIED-LOOPBACK`**, **không** được
+  ghi `VERIFIED` (`ADR-060` điều (2)).
+- Refs: `#626`, `T-BAC-013`, `T-BAC-044`, `ADR-060`, `PLAN-BACNET-D2C-001` Wave W1,
+  `VVP-001`, `#414`.
+
 ### Added — `WF-CLEAN-001` §8.7: prompt Routine điều phối cho vai Reviewer (2026-09-16)
 
 - Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md`, `CHANGELOG.md`.
