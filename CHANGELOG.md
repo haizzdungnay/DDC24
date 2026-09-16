@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Changed — `OD-BAC-009` đã ký: vendor bacnet-stack 1.3.8 vào nguồn nội bộ (2026-09-16)
+
+- Phạm vi: `docs/00_governance/BACNET_OPEN_DECISIONS.md`, `CHANGELOG.md`.
+- **Triệu chứng:** `cmake -DMKDDC_ENABLE_BACNET=ON` hỏng ở configure vì `FetchContent`
+  tải tarball từ `github.com` bị egress policy chặn (`HTTP 403`). Không dựng được bản
+  có BACnet ⇒ không có tầng `LOOPBACK`, không có `TARGET`, `ADR-060` điều (4) không thi
+  hành được. Đồng thời `1440/1440 PASS` với `BACNET=OFF` che mất chính vấn đề đó.
+- **Nguyên nhân gốc:** đường lấy phụ thuộc vào chính sách egress của bên khác, và quyết
+  định chọn đường nào nằm ngoài thẩm quyền kỹ thuật nên treo ở `PENDING-HUMAN` từ
+  2026-09-10.
+- **Cách sửa:** chủ sở hữu ký chọn **phương án (a)** — vendor vào nguồn nội bộ, bỏ
+  `FetchContent` từ `github.com`. Ghi rõ vì sao loại (b) (đổi rủi ro dựng lấy rủi ro bảo
+  mật, vẫn phụ thuộc bên khác) và (c) (pkg-config không ghim được đúng 1.3.8), kèm bốn
+  ràng buộc thi hành: giữ nguyên từng byte 1.3.8, ghim bằng sha/checksum, `BACNET=OFF`
+  không hồi quy, không đổi contract/runtime.
+- **Phạm vi rộng hơn mô tả ban đầu của quyết định:** đo lại tại `main@2e63a99` ngày
+  2026-09-16 — `grep -n 'github.com' apps/iobus/CMakeLists.txt` → **2 dòng** (`:37`
+  bacnet-stack, `:183` googletest). googletest chỉ sống nhờ fallback
+  `find_package(GTest QUIET)`; máy sạch thì cả hai đứt. Tiêu chí thi hành xong là
+  grep đó **về 0 dòng**, không phải chỉ xử lý bacnet-stack.
+- Tách hai vế của `OD-BAC-007` để vế không tốn tiền (tên người vận hành + cửa sổ giữ bo)
+  không bị vế ngân sách giữ lại. Ghi chú này **không** gỡ `state:blocked` của `#624`.
+- Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` → exit **0**,
+  `KẾT LUẬN: PASS`, `hồ sơ lệch metadata/lịch sử: 0`, `code-span docs/** không tồn tại: 0`.
+- Refs: `OD-BAC-009`, `ADR-060`, `#625`, `#626`, `#627`, `#628`, `#635`, `#624`.
+
 ### Fixed — `#706`: Mini Map giữ đúng tâm điều hướng với viewBox theo bbox (2026-09-14)
 
 - Phạm vi: `WorkbenchMinimapPanel.tsx` và unit test, ca E2E
