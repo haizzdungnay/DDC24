@@ -8,6 +8,54 @@
 
 ## [Unreleased]
 
+### Added — `#627` (`T-BAC-011`): cross-build aarch64 với `BACNET=ON` + ba cổng kiểm binary (2026-09-16)
+
+- Phạm vi: `scripts/cross_build_aarch64_bacnet.sh` (mới),
+  `scripts/gate_bacnet_aarch64_binary.sh` (mới),
+  `platform/cmake/toolchain-aarch64-linux-gnu.cmake`,
+  `docs/06_operations/DEVELOPMENT_AND_OPERATIONS.md`, `CHANGELOG.md`.
+- **Vấn đề:** bo đích là Forlinx aarch64, nhưng chưa từng có bản cross-build nào
+  với `BACNET=ON` — vì `BACNET=ON` chưa dựng được ở đâu cả cho tới khi #625 đưa
+  nguồn bacnet-stack vào `third_party/`. `R-BAC-02` xếp rủi ro 🟡: cross-build
+  có thể phát sinh `.so` hoặc symbol vượt trần GLIBCXX. Cả hai kiểu hỏng **không
+  lộ ra lúc build** — chúng lộ ra lúc bật máy cạnh tủ điện.
+- **Điểm nguy hiểm nhất không phải hai cái đó.** Mọi lời gọi bacnet-stack trong
+  `bacnet_server.cpp` nằm trong `#ifdef MKDDC_ENABLE_BACNET`, và nhánh `#else`
+  của `start()` chỉ in `INFO bacnet_server.start (MKDDC_ENABLE_BACNET=OFF,
+  no-op)` rồi trả `false`. Một bản `OFF` deploy lên bo sẽ chạy, log trông bình
+  thường, và không có BACnet. Không có cổng nào phân biệt được hai bản đó.
+- **Cách sửa:** hai script chạy được, trả exit code, không phải lệnh chép trong
+  tài liệu. `gate_bacnet_aarch64_binary.sh <binary>` nhận đường dẫn binary làm
+  tham số nên `T-BAC-012` và quy trình deploy gọi lại được mà không chép logic;
+  `cross_build_aarch64_bacnet.sh` dựng rồi gọi cổng, in cả `cfg_exit`,
+  `build_exit` lẫn `gate_exit`. Cổng là phép kiểm **tĩnh** (`objdump`/`nm`),
+  chạy trên máy dev x86_64, không chạy binary aarch64 — `ADR-060` cấm nâng bằng
+  chứng tĩnh thành bằng chứng runtime; chạy thật trên bo là `T-BAC-060..062`.
+- **Số đo cross-build (2026-09-16, GCC 13.3.0 aarch64-linux-gnu):**
+  `cfg_exit=0`, `build_exit=0`, `gate_exit=0`.
+  - Cổng 1 — GLIBCXX cao nhất `GLIBCXX_3.4.29` ≤ trần `3.4.30`.
+  - Cổng 2 — `NEEDED` = `ld-linux-aarch64.so.1 libc.so.6 libgcc_s.so.1 libm.so.6
+    libmodbus.so.5 libstdc++.so.6`; chênh lệch so với bản `BACNET=OFF` là
+    **rỗng**; không có `libbacnet*.so` (bacnet-stack link tĩnh).
+  - Cổng 3 — `nm -C | grep -c bip_init` = **1**.
+- **Phép thử ngược (cổng phải biết đỏ):** cùng script với `--bacnet off` →
+  `gate_exit=5`, đỏ đúng cổng 3 với `bip_init`=0. Đã thử thêm ba nhánh hỏng
+  khác: hạ trần xuống 3.4.20 → exit 3; `--baseline` thiếu `libmodbus.so.5` →
+  exit 4; binary x86_64 của host → exit 2 (chặn trước khi kiểm, để cổng không
+  báo xanh trên nhầm binary).
+- **Không hồi quy:** build native đủ ba option
+  (`MODBUS=ON BACNET=ON HMI=ON`) — configure 0, build 0,
+  **1488/1488 PASS** (1 skipped), 23.46 s. Cổng tài liệu
+  `docs_iso_harness.py --expect` PASS.
+- **Không đổi hành vi runtime, không đổi contract/API/schema** (N6):
+  `apps/iobus/CMakeLists.txt` **không cần sửa** — bacnet-stack đã link tĩnh sẵn
+  qua target `bacnet-stack::bacnet-stack`, cổng 2 xác nhận điều đó bằng số đo
+  chứ không bằng phỏng đoán.
+- **Bẫy đã ghi lại vào toolchain file:** `dpkg --add-architecture arm64` là chưa
+  đủ — kho arm64 của Ubuntu nằm ở `ports.ubuntu.com`, nên thiếu khai báo kho
+  ports thì `apt-get install libmodbus-dev:arm64` báo "Unable to locate package",
+  một thông điệp trông y hệt "gói không tồn tại".
+
 - 2026-09-16 — docs(programming-ui): kế hoạch Task 10 FBD bản v2 tại `docs/superpowers/plans/2026-09-16-fbd-task10-save-check-stale.md` (Issue #718); khảo sát phát hiện nhánh FBD bị chặn nhận chẩn đoán server tại `DesignWorkbench.tsx:154` (ISS-STED-05) và trường `location` rụng 2 lần trước khi tới `ProblemsDrawer`, nên tách Task 10 thành 10a (ranh giới Save/Check, ~70% xong) và 10b (nhãn chẩn đoán cũ, ~15% xong).
 
 ### Fixed — `#718`: ánh xạ điểm từ canvas FBD bị máy chủ từ chối vì `variableId` không phải UUID (2026-09-16)
