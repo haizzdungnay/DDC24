@@ -210,6 +210,28 @@ run_go() {
   fi
 }
 
+# Cổng tĩnh cho `apps/web-ui/e2e/**` — bật ở #664, CHƯA nối vào chuỗi chặn.
+#
+#   (cd apps/web-ui && npm run typecheck:e2e)   # tsc -p tsconfig.e2e.json
+#   (cd apps/web-ui && npm run lint:e2e)        # eslint e2e --max-warnings=0
+#
+# Trước #664, `e2e/` là vùng mã DUY NHẤT của web-ui không cổng tĩnh nào canh:
+# `tsconfig.json` chỉ `include` `["src", "vite.config.ts"]`, còn script `lint`
+# chỉ quét `src`. Hệ quả đã xảy ra thật — một mock lệch kiểu (`labelVi` không
+# còn trong shape response) vẫn để test xanh, cùng lớp fail-open với #658.
+#
+# Vì sao CHƯA nối vào `run_frontend`: hai cổng này đang ĐỎ theo thiết kế, trên
+# nền lỗi tồn đọng của `e2e/` do #712 sở hữu. Nối bây giờ thì component `fe`
+# đỏ ngay, và không ai phân biệt được "cổng mới bắt đúng" với "mã vừa bị sửa
+# cho vừa cổng" (ràng buộc chính của #664, AC-4 đường (a)).
+#
+# Số đo nền tại #664 (nhánh `clean-code/issue-664`, `origin/main@b41daa6`):
+#   typecheck:e2e → exit 2, 6 lỗi TS   (27 trước khi thêm `@types/node`)
+#   lint:e2e      → exit 1, 3 finding
+#
+# KHI #712 ĐÓNG (cả hai về 0): thêm `npm run typecheck:e2e && npm run lint:e2e`
+# vào chuỗi `run_frontend` ngay dưới đây, rồi cập nhật `WF-CLEAN-001` §6.2 —
+# dòng "# FE — npm test chỉ quét src/, KHÔNG chạy e2e/" khi đó mới hết đúng.
 run_frontend() {
   require_contract_python_deps
   local frontend_dir

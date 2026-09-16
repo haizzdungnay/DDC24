@@ -8,6 +8,54 @@
 
 ## [Unreleased]
 
+### Added — `#664`: bật cổng typecheck + lint cho `apps/web-ui/e2e/**` (2026-09-16)
+
+- Phạm vi: `apps/web-ui/tsconfig.e2e.json` (tạo mới), `apps/web-ui/tsconfig.json`,
+  `apps/web-ui/package.json`, `apps/web-ui/package-lock.json`,
+  `apps/web-ui/eslint.config.js`, `scripts/verify-project.sh`, `CHANGELOG.md`.
+  Issue #664, bàn giao số đo nền cho #712.
+- **Triệu chứng:** `apps/web-ui/e2e/**` là vùng mã **duy nhất** của web-ui không cổng
+  tĩnh nào canh. Đo tại `main@b41daa6`: `tsconfig.json:19` chỉ `include`
+  `["src", "vite.config.ts"]`, còn `package.json` script `lint` chỉ
+  `eslint src --max-warnings=0`. Không có `apps/web-ui/e2e/tsconfig.json`. Hệ quả đã
+  xảy ra thật — `programming.spec.ts` khai `labelVi` trong một object literal mà shape
+  response không còn trường đó (`TS2353`), nhưng test vẫn xanh: một mock lệch kiểu
+  đang nghiệm thu một hợp đồng không tồn tại, cùng lớp fail-open với #658.
+- **Nguyên nhân gốc:** cả hai cổng FE đều được định nghĩa theo thư mục `src`, và
+  `e2e/` chưa bao giờ được thêm vào diện kiểm khi nó ra đời. Không phải cổng hỏng —
+  là cổng chưa từng bao phủ vùng mã đó.
+- **Cách sửa:**
+  - `tsconfig.e2e.json` mới: `extends ./tsconfig.json` (giữ **nguyên** bộ cờ, để số đo
+    nói đúng về mã `e2e/` chứ không về một bộ cờ dễ hơn), `include: ["e2e"]`,
+    `types: ["node"]` — mã `e2e/` chạy trên Node, `src/` chạy trên trình duyệt.
+  - `eslint.config.js`: thêm khối `files: ['e2e/**/*.{ts,tsx}']`, globals là hợp của
+    `node` và `browser` (thân test chạy Node, thân `page.evaluate()` chạy trình duyệt;
+    chỉ khai một phía thì phía kia thành `no-undef` giả).
+  - `package.json`: thêm `typecheck:e2e` và `lint:e2e` là script **riêng**, **chưa**
+    nối vào `lint`/`build` — cho phép #664 merge độc lập trong khi `e2e/` còn lỗi tồn
+    đọng thuộc #712 (AC-4 đường (a)). Thêm `@types/node` vào `devDependencies`.
+  - `tsconfig.json`: ghim `types: []`. Mặc định TypeScript nạp **mọi** gói trong
+    `node_modules/@types` vào phạm vi toàn cục, nên chỉ riêng việc cài `@types/node`
+    cho cổng `e2e/` đã âm thầm cấp `process`/`Buffer`/`__dirname` cho `src/` — tức
+    **nới** cổng `src` ra mà không ai khai. Ghim `[]` giữ cổng `src` đúng như trước.
+  - `scripts/verify-project.sh`: ghi lại đường chạy hai cổng mới, số đo nền, lý do
+    chưa nối vào chuỗi chặn, và điều kiện để nối (khi #712 đóng).
+- **Số đo thật** (nhánh `clean-code/issue-664`, nền `origin/main@b41daa6`):
+
+  | Cổng | Trước | Sau | Ghi chú |
+  |---|---|---|---|
+  | `typecheck:e2e` | không tồn tại | exit 2, **6 lỗi TS** | 27 lỗi khi chưa có `@types/node`; 17 lỗi là do thiếu types (7×`TS2307`, 10×`TS2580`), 4×`TS2550` hết theo lib mà `@types/node` kéo vào |
+  | `lint:e2e` | không tồn tại | exit 1, **3 finding** | 1×`no-unused-vars`, 2×`no-empty-pattern` |
+  | `tsc --noEmit` (src) | exit 0 | exit 0 | không đổi |
+  | `npm run lint` | exit 1, 1 lỗi | exit 1, **đúng 1 lỗi đó** | đỏ sẵn trên `main`, ngoài phạm vi #664 — xem finding kèm theo |
+  | `npm run build` | exit 0 | exit 0 | không đổi |
+  | `docs_iso_harness.py --expect` | — | PASS | không đổi |
+
+- **Phép thử ngược (cổng có thật sự bắt):** chèn tạm một lỗi kiểu + biến không dùng vào
+  `e2e/scheduler.spec.ts` → `typecheck:e2e` 6→**7** lỗi, `lint:e2e` 3→**4** finding; gỡ ra
+  → trở lại đúng 6 và 3. Thay đổi tạm **không** nằm trong diff cuối.
+- **Bàn giao #712:** 6 lỗi TS và 3 finding lint ở trên là số nền để #712 đo "đã hết".
+
 ### Added — `ARCH-BACNET-001`: thiết kế Export Registry, object identity bền vững và capability gate BACnet (2026-09-16)
 
 - Phạm vi: `docs/03_architecture/BACNET_ARCHITECTURE_DESIGN_MK-DDC-24_VI.md` (tạo mới),

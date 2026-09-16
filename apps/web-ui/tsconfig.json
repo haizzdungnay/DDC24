@@ -14,7 +14,17 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    /* Ghim danh sách @types nạp toàn cục về RỖNG.
+     *
+     * Mặc định TypeScript tự nạp MỌI gói trong `node_modules/@types` vào phạm
+     * vi toàn cục. `src/` chạy trên trình duyệt và không cần gói nào như vậy —
+     * mọi kiểu nó dùng đều tới qua `import` tường minh. Để mặc định thì việc
+     * thêm `@types/node` cho cổng `e2e/` (Issue #664) sẽ âm thầm cấp luôn
+     * `process`, `Buffer`, `__dirname`… cho `src/`, tức là NỚI cổng `src` ra mà
+     * không ai khai. Ghim `[]` giữ cổng `src` đúng như trước; `tsconfig.e2e.json`
+     * tự khai `types: ["node"]` cho riêng nó. */
+    "types": []
   },
   "include": ["src", "vite.config.ts"]
 }
