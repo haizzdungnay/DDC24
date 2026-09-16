@@ -980,6 +980,125 @@ Phân biệt với hai tình huống nhìn giống nhau:
 | Phiên con ra đời rồi kết thúc ngay, backlog còn việc | Bộ lọc Issue sai (§8.4 bước 2) | Kiểm nhãn `wf:*` |
 | Phiên con ra đời rồi kết thúc ngay, backlog rỗng | Đúng thiết kế | Chờ Auditor nạp việc |
 
+### 8.7 Prompt Routine điều phối — Clean Code Reviewer, mỗi ngày 04:00 VN
+
+Trigger bắn vào phiên điều phối; mỗi lượt phiên điều phối chỉ kiểm repo rồi
+`create_session` sinh một phiên Reviewer sạch mang tag `routine-reviewer`.
+
+**Vì sao mục này tồn tại — số đo, không phải dự cảm.** Trong hai ngày
+2026-09-10 và 2026-09-11, làn Implementer chạy mỗi giờ và mở PR đều đặn, nhưng
+số PR `state:in-review` chỉ **tăng**: 3 → 4 → 5, không lượt nào rút xuống. Mười
+ba lượt Implementer liên tiếp báo "backlog rỗng" trong khi năm PR nằm chờ. Nguyên
+nhân không nằm ở Implementer: `list_triggers(enabled=true)` ngày 2026-09-11 cho
+đúng **hai** Routine bật — Implementer mỗi giờ và Auditor hằng ngày. Skill
+`ddc-reviewer` có trong repo từ đầu nhưng **chưa bao giờ được xếp lịch**. Một vai
+có skill mà không có lịch thì không tồn tại.
+
+Hệ quả dây chuyền, cũng đo được: lượt Implementer 2026-09-12T01:08Z nhận #659 và
+#661 rồi phải dừng ở bước kiểm va chạm vì cả hai chạm cùng tập file với ba PR
+đang mở `#652`, `#654`, `#656`. PR tồn đọng không chỉ nằm im — nó **chặn Issue
+kế tiếp**. Đó là vòng tự khoá: Implementer mở PR → PR nằm chờ → PR chặn Issue
+sau → Implementer hết việc.
+
+**Cơ chế bắt buộc: điều phối qua phiên bền (`§8.1a`).** Không dùng
+`create_trigger(create_new_session_on_fire=true)` — `§8.1` đã đo: phiên do Routine
+tự sinh **không có repo và không có MCP tool**, nên nó không đọc được Issue,
+không chạy được guard, không merge được gì. Routine Reviewer phải bắn vào một
+phiên điều phối đã có sẵn repo + connector.
+
+**Giờ chạy đặt trước Auditor, có chủ đích.** Auditor chạy 23:00Z; Reviewer chạy
+21:00Z (04:00 VN). Hai tiếng chênh để bản kiểm kê hằng ngày của Auditor nhìn thấy
+hàng đợi **đã rút**, chứ không đếm lại đúng những PR mà Reviewer vừa merge xong.
+
+**Hai ranh giới mà lượt Reviewer không được vượt:**
+
+- *Không đụng PR mà Issue của nó đang `state:in-progress`.* Issue ở trạng thái đó
+  nghĩa là một Implementer đang cầm nó; review một PR đang bị sửa dở là review
+  một cái đích di động.
+- *Không merge PR mà chính phiên này đã implement.* Ở làn Routine điều đó không
+  xảy ra tự nhiên vì Reviewer là phiên riêng, nhưng ràng buộc vẫn phải ghi —
+  `workflow_guard.py` chặn bằng `N2-SELF` và thông điệp lỗi sẽ khó hiểu nếu
+  người đọc không biết luật này có từ đâu.
+
+PR mang nhãn `gate:waived` do làn Implementer tự merge (`§8.4`) đã nằm trong
+`main`, không còn là việc của Reviewer. Nhưng `gate:waived` **không** xoá quyền
+review lại: thấy một PR đã waived mà số đo đáng ngờ thì mở finding
+`03-finding.yml` ở `state:triage`, đừng im lặng.
+
+Prompt của **vai Reviewer** mà phiên điều phối phải truyền nguyên văn:
+
+```markdown
+## Bước 0 — kiểm môi trường, làm trước mọi thứ
+
+1. `ls docs/00_governance/CLEAN_CODE_WORKFLOW.md .claude/skills/ddc-reviewer/SKILL.md`
+2. `git remote -v` phải trỏ `Mekong-HCM/MK-DDC-24`. Nhánh mặc định là `main`.
+3. `git status --porcelain` phải RỖNG.
+4. Có tool `mcp__github__list_pull_requests` và `mcp__github__merge_pull_request` không?
+
+Sai repository, hoặc cây làm việc có thay đổi không xác định, hoặc thiếu tool ⇒
+DỪNG NGAY, báo đúng thứ sai, KHÔNG thay đổi repository. TUYỆT ĐỐI không đoán,
+không bịa, không báo đã làm việc chưa làm.
+
+## Nguồn luật
+
+Gọi skill `ddc-reviewer` và làm đúng theo nó — bảy phép kiểm, thứ tự gắn nhãn,
+cách post verdict, trần ba vòng, đều nằm ở đó.
+Authority: `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (WF-CLEAN-001), mục §8.7
+cho các điểm riêng của làn Routine này.
+Khi skill và prompt này mâu thuẫn, SKILL TRONG REPOSITORY THẮNG.
+
+Định danh `Reviewer-Run` của bạn: gọi `get_session` BỎ TRỐNG `session_id`,
+URL là `https://claude.ai/code/<ccr.id>`. TUYỆT ĐỐI không chép lại định danh
+có sẵn trong Issue/PR — đó là của phiên khác (§7). `Reviewer-Run` phải KHÁC
+`Implementer-Run` và `Manager-Run`, nếu không guard chặn bằng N2.
+
+## Hạ tầng — đọc kỹ
+
+GitHub Actions KHÔNG có runner và chủ sở hữu đã quyết định KHÔNG bật lại (#414).
+`Build & Test`, `Security Scan`, `Cổng quy trình clean-code` đều NOT_RUN — lâu dài.
+Một PR không có check đỏ KHÔNG phải PR đã được kiểm.
+KHÔNG chờ CI xanh; chờ một job không bao giờ chạy là treo vĩnh viễn.
+Cổng thay thế là `workflow_guard.py --input`, chạy từ cây làm việc trên `main`
+chứ KHÔNG phải từ nhánh PR — chạy bản guard nằm trong PR thì một PR sửa guard
+sẽ tự mở cổng cho chính nó.
+Phiên Routine KHÔNG có `gh` CLI; mọi thao tác GitHub đi qua `mcp__github__*`.
+
+## Việc phải làm — duyệt HẾT hàng đợi, không hẹn lượt sau
+
+1. LIỆT KÊ. `list_pull_requests` state=open. Giữ lại PR có Issue liên kết ở
+   `state:in-review`. Xử lý từng cái, CŨ TRƯỚC.
+
+   BỎ QUA, không đụng tới: PR mà Issue của nó đang `state:in-progress` (một
+   Implementer đang cầm — review cái đích di động là vô nghĩa); PR `draft`.
+   Ghi rõ trong báo cáo là đã bỏ qua cái nào và vì sao.
+
+   Hàng đợi rỗng ⇒ KẾT THÚC PHIÊN, không thay đổi repository, báo "không có PR
+   nào ở state:in-review". Không đi tìm việc khác để làm.
+
+2. VỚI MỖI PR — bảy phép kiểm theo skill `ddc-reviewer` mục 2, dừng ở phép kiểm
+   đầu tiên FAIL. Nghi ngờ số đo nào thì TỰ CHẠY LẠI cổng đó trên cây làm việc;
+   đó là nguồn sự thật duy nhất còn lại khi CI ngủ. Không tin bảng Verification
+   chỉ vì nó được điền đầy đủ.
+
+3. TUYỆT ĐỐI KHÔNG TỰ SỬA CODE TRONG PR ĐANG REVIEW. Sửa hộ là mất luôn lớp
+   kiểm tra độc lập. Trả lại cho Implementer kèm danh sách sửa hành động được.
+
+4. VERDICT + MERGE theo đúng thứ tự ở skill mục 3–4: post verdict → gỡ nhãn
+   `review:*` của vòng trước → gắn nhãn mới → chạy `workflow_guard.py --input`
+   với ảnh chụp MỚI → dán nguyên văn output vào verdict → chỉ merge khi exit 0.
+   Merge trước khi chạy guard là bỏ qua chính cổng mình đang gác.
+   Squash merge, rồi xoá nhánh remote nếu quyền cho phép; không xoá được thì
+   ghi lại, đừng coi là lỗi chặn (§9).
+
+5. FINDING NGOÀI PHẠM VI ⇒ mở Issue `03-finding.yml` ở `state:triage`. Không
+   nhét vào danh sách "phải sửa" của PR đang review — làm vậy là biến review
+   thành cửa mở rộng phạm vi.
+
+6. BÁO CÁO CUỐI PHIÊN — luôn luôn, kể cả khi không làm gì: từng PR đã review và
+   verdict; lý do FAIL nếu có; PR đã merge; Issue đã đóng; PR đã bỏ qua kèm lý
+   do; finding mới mở; output guard của từng lần merge.
+```
+
 ## 9. Hạng mục bị chặn
 
 | Hạng mục | Bị chặn bởi | Cần gì để mở khoá |

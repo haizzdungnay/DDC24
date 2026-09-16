@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Added — `WF-CLEAN-001` §8.7: prompt Routine điều phối cho vai Reviewer (2026-09-16)
+
+- Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md`, `CHANGELOG.md`.
+- **Triệu chứng:** số PR `state:in-review` chỉ tăng, không bao giờ rút — đo
+  2026-09-10 → 2026-09-11: 3 → 4 → 5. Mười ba lượt Implementer liên tiếp báo
+  "backlog rỗng" trong khi năm PR nằm chờ.
+- **Nguyên nhân gốc:** `list_triggers(enabled=true)` ngày 2026-09-11 cho đúng
+  **hai** Routine bật — Implementer và Auditor. Skill `ddc-reviewer` có trong
+  repo từ đầu nhưng **chưa bao giờ được xếp lịch**. Một vai có skill mà không có
+  lịch thì không tồn tại. Hệ quả dây chuyền đo được ở lượt 2026-09-12T01:08Z:
+  #659 và #661 phải dừng ở bước kiểm va chạm vì chạm cùng tập file với `#652`,
+  `#654`, `#656` — PR tồn đọng không nằm im mà **chặn Issue kế tiếp**.
+- **Cách sửa:** thêm §8.7 — prompt vai Reviewer sống trong repo để đi qua PR,
+  đúng nguyên tắc của chính tài liệu này, thay vì nằm trong cấu hình Routine mà
+  một người sửa lặng lẽ được. Cơ chế bắt buộc là điều phối qua phiên bền (§8.1a);
+  §8.1 đã đo `create_new_session_on_fire=true` sinh ra phiên **không repo, không
+  MCP tool**.
+- **Đánh số §8.7 chứ không phải §8.4a — có lý do kỹ thuật.** Phiên điều phối
+  trích prompt bằng `grep '^### 8\.4'`; một mục tên `### 8.4a` sẽ khớp **cả hai**
+  dòng, biến biến `S` thành hai dòng và làm lượt điều phối hỏng lặng lẽ. Đã đo
+  sau khi chèn: `grep -c '^### 8\.4'` = **1**, `grep -c '^### 8\.7'` = **1**.
+- Số đo: trích fence động §8.7 → **69 dòng / 4.259 ký tự**, 0 marker sót; trích
+  lại §8.4 → **166 dòng / 10.989 ký tự**, `diff` với bản trước khi sửa: **không
+  đổi**. `docs_iso_harness.py --expect` exit 0; `workflow_guard.py --selftest`
+  69/69 PASS.
+- Refs: `WF-CLEAN-001` §8.1, §8.1a, §8.4, §8.7, `#414`.
+
 ### Fixed — `#625` / `T-BAC-010`: vendor bacnet-stack 1.3.8 vào repo, `BACNET=ON` dựng được lần đầu (2026-09-16)
 
 - Phạm vi: `apps/iobus/CMakeLists.txt`, `third_party/bacnet-stack/**` (mới),
