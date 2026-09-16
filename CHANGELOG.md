@@ -59,6 +59,101 @@
   danh sách đang lưu hành.
 - Refs: `#625`, `T-BAC-010`, `OD-BAC-009`, `ADR-060`, `#626`, `#627`, `#628`, `#635`, `#714`.
 
+### Added — `#664`: bật cổng typecheck + lint cho `apps/web-ui/e2e/**` (2026-09-16)
+
+- Phạm vi: `apps/web-ui/tsconfig.e2e.json` (tạo mới), `apps/web-ui/tsconfig.json`,
+  `apps/web-ui/package.json`, `apps/web-ui/package-lock.json`,
+  `apps/web-ui/eslint.config.js`, `scripts/verify-project.sh`, `CHANGELOG.md`.
+  Issue #664, bàn giao số đo nền cho #712.
+- **Triệu chứng:** `apps/web-ui/e2e/**` là vùng mã **duy nhất** của web-ui không cổng
+  tĩnh nào canh. Đo tại `main@b41daa6`: `tsconfig.json:19` chỉ `include`
+  `["src", "vite.config.ts"]`, còn `package.json` script `lint` chỉ
+  `eslint src --max-warnings=0`. Không có `apps/web-ui/e2e/tsconfig.json`. Hệ quả đã
+  xảy ra thật — `programming.spec.ts` khai `labelVi` trong một object literal mà shape
+  response không còn trường đó (`TS2353`), nhưng test vẫn xanh: một mock lệch kiểu
+  đang nghiệm thu một hợp đồng không tồn tại, cùng lớp fail-open với #658.
+- **Nguyên nhân gốc:** cả hai cổng FE đều được định nghĩa theo thư mục `src`, và
+  `e2e/` chưa bao giờ được thêm vào diện kiểm khi nó ra đời. Không phải cổng hỏng —
+  là cổng chưa từng bao phủ vùng mã đó.
+- **Cách sửa:**
+  - `tsconfig.e2e.json` mới: `extends ./tsconfig.json` (giữ **nguyên** bộ cờ, để số đo
+    nói đúng về mã `e2e/` chứ không về một bộ cờ dễ hơn), `include: ["e2e"]`,
+    `types: ["node"]` — mã `e2e/` chạy trên Node, `src/` chạy trên trình duyệt.
+  - `eslint.config.js`: thêm khối `files: ['e2e/**/*.{ts,tsx}']`, globals là hợp của
+    `node` và `browser` (thân test chạy Node, thân `page.evaluate()` chạy trình duyệt;
+    chỉ khai một phía thì phía kia thành `no-undef` giả).
+  - `package.json`: thêm `typecheck:e2e` và `lint:e2e` là script **riêng**, **chưa**
+    nối vào `lint`/`build` — cho phép #664 merge độc lập trong khi `e2e/` còn lỗi tồn
+    đọng thuộc #712 (AC-4 đường (a)). Thêm `@types/node` vào `devDependencies`.
+  - `tsconfig.json`: ghim `types: []`. Mặc định TypeScript nạp **mọi** gói trong
+    `node_modules/@types` vào phạm vi toàn cục, nên chỉ riêng việc cài `@types/node`
+    cho cổng `e2e/` đã âm thầm cấp `process`/`Buffer`/`__dirname` cho `src/` — tức
+    **nới** cổng `src` ra mà không ai khai. Ghim `[]` giữ cổng `src` đúng như trước.
+  - `scripts/verify-project.sh`: ghi lại đường chạy hai cổng mới, số đo nền, lý do
+    chưa nối vào chuỗi chặn, và điều kiện để nối (khi #712 đóng).
+- **Số đo thật** (nhánh `clean-code/issue-664`, nền `origin/main@b41daa6`):
+
+  | Cổng | Trước | Sau | Ghi chú |
+  |---|---|---|---|
+  | `typecheck:e2e` | không tồn tại | exit 2, **6 lỗi TS** | 27 lỗi khi chưa có `@types/node`; 17 lỗi là do thiếu types (7×`TS2307`, 10×`TS2580`), 4×`TS2550` hết theo lib mà `@types/node` kéo vào |
+  | `lint:e2e` | không tồn tại | exit 1, **3 finding** | 1×`no-unused-vars`, 2×`no-empty-pattern` |
+  | `tsc --noEmit` (src) | exit 0 | exit 0 | không đổi |
+  | `npm run lint` | exit 1, 1 lỗi | exit 1, **đúng 1 lỗi đó** | đỏ sẵn trên `main`, ngoài phạm vi #664 — xem finding kèm theo |
+  | `npm run build` | exit 0 | exit 0 | không đổi |
+  | `docs_iso_harness.py --expect` | — | PASS | không đổi |
+
+- **Phép thử ngược (cổng có thật sự bắt):** chèn tạm một lỗi kiểu + biến không dùng vào
+  `e2e/scheduler.spec.ts` → `typecheck:e2e` 6→**7** lỗi, `lint:e2e` 3→**4** finding; gỡ ra
+  → trở lại đúng 6 và 3. Thay đổi tạm **không** nằm trong diff cuối.
+- **Bàn giao #712:** 6 lỗi TS và 3 finding lint ở trên là số nền để #712 đo "đã hết".
+
+### Added — `ARCH-BACNET-001`: thiết kế Export Registry, object identity bền vững và capability gate BACnet (2026-09-16)
+
+- Phạm vi: `docs/03_architecture/BACNET_ARCHITECTURE_DESIGN_MK-DDC-24_VI.md` (tạo mới),
+  `docs/README.md`, `CHANGELOG.md`. Issue #629 (`T-BAC-004`).
+- **Triệu chứng:** ba khái niệm mà cả Wave W2 (`T-BAC-021`/`022`/`023`) sẽ implement đều
+  không được thiết kế ở đâu. Đo được tại `main@0ba2fce`: object BACnet sinh bằng bảy vòng
+  `for` hằng số cứng (`apps/iobus/adapters/bacnet/bacnet_server.cpp:218-224`, tổng **88
+  object**); `objectInstance` là `i + 1`, tức chỉ số mảng nội bộ bị phơi ra làm định danh
+  đối ngoại; `register_objects()` (`:214`) tạo **8 BI vô điều kiện** (`:219`) trong khi
+  `IOP_BOARD_CAP_REV_A` (`contracts/iop/iop_protocol.h:112`) không chứa
+  `IOP_BOARD_CAP_DI_8` — tức base SKU Rev A không có DI mà thiết bị vẫn công bố 8 Binary
+  Input cho BMS.
+- **Nguyên nhân gốc:** không có tài liệu chủ quản cho kiến trúc BACnet.
+  `SW_BACNET_DESIGN_MK-DDC-24_VI` mô tả bản **đang có**, nên ba cơ chế **chưa tồn tại
+  trong mã** không có hồ sơ nào sở hữu. Thiếu chủ quản thì chúng sẽ được quyết trong lúc
+  code, từng cái một, không ai đối chiếu.
+- **Cách sửa:** tạo `ARCH-BACNET-001` ở `docs/03_architecture/`, phạm vi `DD-04` + `DD-07`:
+  - **Export Registry (§3):** 8 trường bắt buộc của một bản ghi export, mỗi trường có kiểu,
+    nguồn dữ liệu là `file:line` thật, và hành vi khi nguồn thiếu. Sáu trong tám trường
+    thiếu ⇒ **loại bản ghi**, không điền mặc định — bám `SYS-REQ-BAC-012`.
+  - **Object identity (§4):** `objectInstance` là **hàm thuần** của `pointStableId`; bảng
+    **9 biến cố** với kết luận đổi/không đổi, không ô nào để "tuỳ". Ghi rõ vì sao từ chối
+    phương án bộ đếm có lưu (mất bảng ⇒ tự gây breaking change, mâu thuẫn `ADR-058`).
+  - **Capability gate (§5):** ánh xạ đủ **5 bit** `IOP_BOARD_CAP_*` → loại object bị gate;
+    `IOP_BOARD_CAP_RTD` không gate object nào (nó gate `sensor_type`, nguồn
+    `contracts/openapi/openapi.yaml:787`). Với `board_cap_valid = 0` chọn **fail-closed có
+    phân biệt**: không công bố object phần cứng, vẫn công bố Device Object + I-Am + object
+    phần mềm, dựng lại Registry khi `0 → 1`. Đây không phải lựa chọn tự do — hợp đồng SHM
+    (`contracts/shm/mkddc_shm.h:265` và chú giải từ `:243`) đã quy định consumer phải
+    fail-closed khi `valid = 0`.
+- **Không nâng lớp bằng chứng:** không dòng nào khai capability là `VERIFIED`; cả ba cơ chế
+  ghi lớp `DESIGN-ONLY` theo `ADR-060` và `SYS-REQ-BAC-022`.
+- **Số đo kiểm chứng (đo tại máy 2026-09-16, CI `NOT_RUN` #414):**
+  - `python3 scripts/docs_iso_harness.py --expect` → `exit=0`, `KẾT LUẬN: PASS`,
+    `EXPECT: khớp toàn bộ ngưỡng`; `duplicate_doc_id = 0`, `TBD/BLOCKED = 113`,
+    `code-span docs/** không tồn tại = 0`, `hồ sơ lệch metadata/lịch sử = 0`.
+  - `grep -c "SYS-REQ-BAC-"` trên tài liệu mới → **40** (17 mã riêng biệt), kỳ vọng > 0.
+  - Mã hồ sơ trùng, đếm tay toàn repo → **0**.
+  - 27/27 `file:line` viện dẫn trong tài liệu: `test -e` OK và `sed -n '<line>p'` in ra
+    đúng nội dung tài liệu mô tả.
+- **Finding ngoài phạm vi, đã mở #716 ở `state:triage`, không tự sửa:**
+  `scripts/docs_iso_harness.py:487` chỉ quét `BASELINE + EXTRA` = **22/466** tài liệu
+  (≈ 4,7 %). `PROD-BACNET-001` lẫn `ARCH-BACNET-001` đều **không** nằm trong tập đó, nên
+  harness xanh **không** chứng minh mã hồ sơ không trùng cho hai file này — đó là lý do số
+  đo trùng mã ở trên được đếm tay chứ không dẫn kết luận của harness.
+
+
 ### Changed — `OD-BAC-009` đã ký: vendor bacnet-stack 1.3.8 vào nguồn nội bộ (2026-09-16)
 
 - Phạm vi: `docs/00_governance/BACNET_OPEN_DECISIONS.md`, `CHANGELOG.md`.
