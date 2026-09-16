@@ -44,6 +44,38 @@ using CovNotifyFn = std::function<void(BacnetObjectType obj_type,
  */
 class BacnetObjects {
 public:
+    /* Số lượng object BACnet theo hợp đồng SHM — ĐIỂM ĐỊNH NGHĨA DUY NHẤT.
+     *
+     * Bảy hằng này từng nằm sau `private:`, nên `bacnet_server.cpp` không dùng
+     * được và phải chép lại bằng số trần. Chép lại thì chép sai: vòng quét COV
+     * gộp AI và BI vào chung cận `8`, đúng cho BI (8) và cắt mất một nửa AI
+     * (16) — AI9..AI16 không bao giờ được kiểm COV (F-CTO-BAC-01, #635).
+     *
+     * Ai thêm/bớt object thì sửa ĐÚNG ở đây, không viết số vào vòng lặp.
+     * `static_assert` bên dưới neo từng hằng vào `contracts/shm/mkddc_shm.h`,
+     * nên đổi lệch một bên là lỗi biên dịch chứ không phải drift im lặng. */
+    static constexpr int N_AI  = KX_N_UI;  /* ADR-010: 16 UI → 16 AI */
+    static constexpr int N_BI  = KX_N_DI;
+    static constexpr int N_AO  = KX_N_AO;
+    static constexpr int N_BO  = KX_N_DO;
+    static constexpr int N_AV  = KX_N_AV;
+    static constexpr int N_BV  = KX_N_BV;
+    static constexpr int N_MSV = KX_N_MSV;
+
+    static_assert(N_AI  == KX_N_UI,  "N_AI lệch KX_N_UI (ADR-010)");
+    static_assert(N_BI  == KX_N_DI,  "N_BI lệch KX_N_DI");
+    static_assert(N_AO  == KX_N_AO,  "N_AO lệch KX_N_AO");
+    static_assert(N_BO  == KX_N_DO,  "N_BO lệch KX_N_DO");
+    static_assert(N_AV  == KX_N_AV,  "N_AV lệch KX_N_AV");
+    static_assert(N_BV  == KX_N_BV,  "N_BV lệch KX_N_BV");
+    static_assert(N_MSV == KX_N_MSV, "N_MSV lệch KX_N_MSV");
+
+    /* Giá trị tuyệt đối, ghim lại để một lần đổi KX_N_* ngoài ý muốn không đi
+     * lọt qua cả bảy static_assert trên. */
+    static_assert(N_AI == 16 && N_BI == 8 && N_AO == 4 && N_BO == 4 &&
+                  N_AV == 32 && N_BV == 16 && N_MSV == 8,
+                  "Tập object BACnet đổi — đây là thay đổi hợp đồng, không phải dọn mã");
+
     BacnetObjects();
 
     /** Initialize from config (device name, IDs). */
@@ -136,14 +168,6 @@ private:
     BacnetConfig   cfg_;
     BacnetPriority priority_;
     BacnetCov      cov_;
-
-    static constexpr int N_AI  = KX_N_UI;  /* ADR-010: 16 UI → 16 AI */
-    static constexpr int N_BI  = 8;
-    static constexpr int N_AO  = 4;
-    static constexpr int N_BO  = 4;
-    static constexpr int N_AV  = 32;
-    static constexpr int N_BV  = 16;
-    static constexpr int N_MSV = 8;
 
     std::string ai_names_[N_AI];
     std::string bi_names_[N_BI];
