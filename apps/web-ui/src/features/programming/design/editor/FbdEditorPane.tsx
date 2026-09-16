@@ -16,8 +16,91 @@ import { readFbdDocument } from '../../fbd/readDocument'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import { useWorkbenchOwnsMinimap } from '../../layout/useProgrammingViewport'
 import type { UserPouInterface } from '../../fbd/userPou'
-import type { ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
+import type {
+  ProgrammingBinding,
+  ProgrammingDraftOperation,
+  ProgrammingPointCatalogEntry,
+  ProgrammingProgram,
+  ProgrammingVariable,
+} from '../../model/types'
 import { PortMappingPicker } from '../../fbd/PortMappingPicker'
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function resolvePortVariableInfo(
+  mappingRequest: {
+    nodeId: string
+    portId: string
+    portName: string
+    nodeName: string
+    portDirection: 'INPUT' | 'OUTPUT'
+    portDataType: string
+  },
+  programId: string,
+  variables?: readonly ProgrammingVariable[],
+  bindings?: readonly ProgrammingBinding[],
+) {
+  const rawName = `${mappingRequest.nodeName}_${mappingRequest.portName}`.replace(/[^a-zA-Z0-9_]/g, '_')
+  const varName = /^[a-zA-Z_]/.test(rawName) ? rawName : `v_${rawName}`
+
+  const existingVar = variables?.find(
+    (v) =>
+      v.programId === programId &&
+      (v.variableId === mappingRequest.portId || v.name === mappingRequest.portName || v.name === varName),
+  )
+
+  const targetVariableId =
+    existingVar && UUID_REGEX.test(existingVar.variableId)
+      ? existingVar.variableId
+      : UUID_REGEX.test(mappingRequest.portId)
+        ? mappingRequest.portId
+        : crypto.randomUUID()
+
+  const variable: ProgrammingVariable = {
+    variableId: targetVariableId,
+    programId,
+    name: existingVar?.name || varName,
+    type: mappingRequest.portDataType,
+    class: mappingRequest.portDirection === 'INPUT' ? 'INPUT' : 'OUTPUT',
+    initialValue: null,
+    retain: false,
+  }
+
+  const matchingBindings =
+    bindings?.filter((b) => {
+      if (b.variableId === targetVariableId) return true
+      if (b.variableId === mappingRequest.portId) return true
+      if (b.variableId === mappingRequest.portName) return true
+      const anyB = b as unknown as Record<string, unknown>
+      const bVar = typeof anyB.variable === 'string' ? anyB.variable : null
+      if (
+        bVar &&
+        (bVar === mappingRequest.portName ||
+          bVar === varName ||
+          bVar === `${mappingRequest.nodeName}_${mappingRequest.portName}` ||
+          bVar.endsWith(`_${mappingRequest.portName}`))
+      ) {
+        return true
+      }
+      if (variables) {
+        const v = variables.find((item) => item.variableId === b.variableId)
+        if (
+          v &&
+          (v.name === mappingRequest.portName ||
+            v.name === varName ||
+            v.name === `${mappingRequest.nodeName}_${mappingRequest.portName}` ||
+            v.name.endsWith(`_${mappingRequest.portName}`))
+        ) {
+          return true
+        }
+      }
+      return false
+    }) ?? []
+
+  const oldBindingIds = Array.from(new Set(matchingBindings.map((b) => b.bindingId)))
+
+  return { varName, targetVariableId, variable, matchingBindings, oldBindingIds }
+}
 import { EditorStatusBar } from './EditorStatusBar'
 import { fbdStatusFields } from './editorStatus'
 
@@ -56,6 +139,9 @@ export interface FbdEditorPaneProps {
   pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
   pointCatalogLoading?: boolean
   onEnsurePointCatalogLoaded?: () => void
+  bindings?: readonly ProgrammingBinding[]
+  variables?: readonly ProgrammingVariable[]
+  programs?: readonly ProgrammingProgram[]
 }
 
 export function FbdEditorPane({
@@ -73,12 +159,19 @@ export function FbdEditorPane({
   pointCatalogLoading,
   onEnsurePointCatalogLoaded,
   onSave,
+  bindings,
+  variables,
+  programs,
 }: FbdEditorPaneProps) {
   const { pick } = useI18n()
   const [mappingRequest, setMappingRequest] = useState<{
     nodeId: string; portId: string; portName: string; nodeName: string
     portDirection: 'INPUT' | 'OUTPUT'; portDataType: string
   } | null>(null)
+
+  useEffect(() => {
+    onEnsurePointCatalogLoaded?.()
+  }, [onEnsurePointCatalogLoaded])
   /* `T9-02` dời Mini Map sang cột 3 của khay đáy, mà cột đó chỉ tồn tại từ
      `1440px`. Tắt bản nội tuyến vô điều kiện sẽ làm `1280px` không còn Mini
      Map ở bất kỳ đâu. Hỏi đúng một nguồn: khay giữ từ `1440px`, canvas giữ ở
@@ -304,32 +397,103 @@ export function FbdEditorPane({
           onEnsurePointCatalogLoaded?.()
           setMappingRequest(info)
         }}
+        bindings={bindings}
+        variables={variables}
+        pointCatalogItems={pointCatalogItems}
+        programs={programs}
       />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
       {mappingRequest && (
         <PortMappingPicker
+          portId={mappingRequest.portId}
           portDirection={mappingRequest.portDirection}
           portDataType={mappingRequest.portDataType}
           portName={mappingRequest.portName}
           nodeName={mappingRequest.nodeName}
           points={pointCatalogItems ?? []}
           loading={pointCatalogLoading}
+          bindings={bindings}
+          variables={variables}
           onClose={() => setMappingRequest(null)}
           onSelect={async (point) => {
-            /* ponytail: simplified binding — skip previewProgrammingBinding call.
-               Add server-side preview validation when UX is confirmed. */
-            const binding = {
-              bindingId: crypto.randomUUID(),
-              variableId: mappingRequest.portId,
-              point: { category: point.category, pointId: point.pointId, ...(point.deviceId ? { deviceId: point.deviceId } : {}) },
-              direction: mappingRequest.portDirection === 'INPUT' ? 'READ' as const : 'WRITE' as const,
-              dataType: mappingRequest.portDataType,
-              ...(point.unit ? { unit: point.unit } : {}),
-              writable: point.writable,
-              qualityPolicy: 'REQUIRE_GOOD' as const,
+            try {
+              const { variable, targetVariableId, oldBindingIds } = resolvePortVariableInfo(
+                mappingRequest,
+                program.programId,
+                variables,
+                bindings,
+              )
+
+              const binding = {
+                bindingId: oldBindingIds[0] ?? crypto.randomUUID(),
+                variableId: targetVariableId,
+                point: {
+                  category: point.category,
+                  pointId: point.pointId,
+                  ...(point.deviceId ? { deviceId: point.deviceId } : {}),
+                },
+                direction: mappingRequest.portDirection === 'INPUT' ? ('READ' as const) : ('WRITE' as const),
+                dataType: mappingRequest.portDataType,
+                ...(point.unit ? { unit: point.unit } : {}),
+                writable: point.writable,
+                qualityPolicy: 'REQUIRE_GOOD' as const,
+              }
+
+              // Gỡ bỏ các binding cũ thừa nếu từng map nhiều lần
+              const removeOps = oldBindingIds.slice(1).map((bindingId) => ({
+                op: 'removeBinding' as const,
+                bindingId,
+              }))
+
+              const ok = await onSave([
+                { op: 'upsertVariable', variable },
+                ...removeOps,
+                { op: 'upsertBinding', binding },
+              ])
+              if (!ok) {
+                return {
+                  ok: false,
+                  error: pick('Máy chủ từ chối lưu thay đổi Draft.', 'Server rejected saving the draft change.'),
+                }
+              }
+              return { ok: true }
+            } catch (err) {
+              return {
+                ok: false,
+                error: pick('Đã xảy ra lỗi khi lưu ánh xạ điểm.', 'An error occurred while saving point mapping.'),
+                detail: err instanceof Error ? err.message : String(err),
+              }
             }
-            await onSave([{ op: 'upsertBinding', binding }])
-            setMappingRequest(null)
+          }}
+          onUnmap={async () => {
+            try {
+              const { oldBindingIds } = resolvePortVariableInfo(
+                mappingRequest,
+                program.programId,
+                variables,
+                bindings,
+              )
+              if (oldBindingIds.length === 0) return { ok: true }
+
+              const ops = oldBindingIds.map((bindingId) => ({
+                op: 'removeBinding' as const,
+                bindingId,
+              }))
+              const ok = await onSave(ops)
+              if (!ok) {
+                return {
+                  ok: false,
+                  error: pick('Máy chủ từ chối hủy ánh xạ Draft.', 'Server rejected unmapping draft.'),
+                }
+              }
+              return { ok: true }
+            } catch (err) {
+              return {
+                ok: false,
+                error: pick('Đã xảy ra lỗi khi hủy ánh xạ điểm.', 'An error occurred while unmapping point.'),
+                detail: err instanceof Error ? err.message : String(err),
+              }
+            }
           }}
         />
       )}

@@ -67,6 +67,8 @@ export function MappingTab(props: {
 }) {
   const { draft, document, saving, onSave, projectId, project, saveError, active = true, forceReadOnly = false, onOpenSource } = props
   const { pick } = useI18n()
+  const projectRef = useRef(project)
+  useEffect(() => { projectRef.current = project }, [project])
   const canEdit = useProgrammingActionAllowed('mapping') && !forceReadOnly
   const client = useProgrammingApiClient()
   const catalog = useProgrammingPointCatalog(active, projectId)
@@ -306,10 +308,59 @@ export function MappingTab(props: {
       setMutation({ requestId: createUuid(), kind: 'assign', row, point: selectedPoint, phase: 'error', message: pick('Kiểu dữ liệu của biến chưa được hợp đồng Binding hỗ trợ.', 'The variable data type is not supported by the Binding contract.') })
       return
     }
-    const existing = document.bindings.find((binding) => binding.variableId === row.id)
+
+    let targetVariableId = row.id
+    if (row.id.includes(':') || !document.variables.some((v) => v.variableId === row.id)) {
+      const targetProgram = document.programs.find((p) => p.programId === row.programId)
+      const isTargetScheduled = targetProgram?.kind === 'PROGRAM' || targetProgram?.hasRuntimeConfig
+      const effectiveProgramId = isTargetScheduled
+        ? row.programId
+        : (document.programs.find((p) => p.kind === 'PROGRAM' || p.hasRuntimeConfig)?.programId ?? row.programId)
+
+      const existingInDoc = document.variables.find(
+        (v) => v.programId === effectiveProgramId && v.name === row.name,
+      )
+
+      if (existingInDoc) {
+        targetVariableId = existingInDoc.variableId
+      } else {
+        const newVariableId = createUuid()
+        const rawName = row.name.replace(/[^a-zA-Z0-9_]/g, '_')
+        const varName = /^[a-zA-Z_]/.test(rawName) ? rawName : `v_${rawName}`
+        const varOp: ProgrammingDraftOperation = {
+          op: 'upsertVariable',
+          variable: {
+            variableId: newVariableId,
+            programId: effectiveProgramId,
+            name: varName,
+            type: row.type,
+            class: row.direction === 'OUTPUT' ? 'OUTPUT' : 'INPUT',
+            initialValue: null,
+            retain: false,
+          },
+        }
+        const saved = await onSave([varOp])
+        if (!saved) {
+          setMutation({
+            requestId: createUuid(),
+            kind: 'assign',
+            row,
+            point: selectedPoint,
+            phase: 'error',
+            message: pick('Không thể đăng ký biến vào bản nháp.', 'Failed to register variable in draft.'),
+          })
+          return
+        }
+        targetVariableId = newVariableId
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    }
+
+    const existing = document.bindings.find((binding) => binding.variableId === targetVariableId || binding.variableId === row.id)
+    const currentProject = projectRef.current ?? project
     const candidate: ProgrammingBindingCandidate = {
       bindingId: existing?.bindingId ?? createUuid(),
-      variableId: row.id,
+      variableId: targetVariableId,
       point: {
         category: selectedPoint.category,
         pointId: selectedPoint.pointId,
@@ -326,15 +377,15 @@ export function MappingTab(props: {
     try {
       const preview = await client.request<ProgrammingBindingPreview, { schemaVersion: '1.0'; baseRevisionId: string; binding: ProgrammingBindingCandidate }>('previewProgrammingBinding', {
         path: { projectId },
-        body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId, binding: candidate },
-        ifMatch: project.etag,
+        body: { schemaVersion: '1.0', baseRevisionId: currentProject.baseRevisionId, binding: candidate },
+        ifMatch: currentProject.etag,
         correlationId: createUuid(),
       })
       const decision = bindingPreviewDecision(preview, {
         projectId,
-        draftRevisionId: project.draftRevisionId,
-        baseRevisionId: project.baseRevisionId,
-        etag: project.etag,
+        draftRevisionId: currentProject.draftRevisionId,
+        baseRevisionId: currentProject.baseRevisionId,
+        etag: currentProject.etag,
       })
       setMutation((current) => current?.requestId === requestId
         ? { ...current, phase: 'review', decision }
