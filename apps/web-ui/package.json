@@ -17,6 +17,7 @@
     "generate:programming-api": "node scripts/generate-programming-client.mjs",
     "check:programming-api": "node scripts/generate-programming-client.mjs --check",
     "lint": "eslint src --max-warnings=0 && npm run check:ui-strings",
+    "lint:e2e": "eslint e2e --max-warnings=0",
     "check:ui-strings": "python3 ../../scripts/check_ui_strings.py",
     "test": "vitest --run --environment jsdom src",
     "test:e2e": "playwright test",
