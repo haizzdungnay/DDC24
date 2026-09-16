@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+### Added — `ARCH-BACNET-001`: thiết kế Export Registry, object identity bền vững và capability gate BACnet (2026-09-16)
+
+- Phạm vi: `docs/03_architecture/BACNET_ARCHITECTURE_DESIGN_MK-DDC-24_VI.md` (tạo mới),
+  `docs/README.md`, `CHANGELOG.md`. Issue #629 (`T-BAC-004`).
+- **Triệu chứng:** ba khái niệm mà cả Wave W2 (`T-BAC-021`/`022`/`023`) sẽ implement đều
+  không được thiết kế ở đâu. Đo được tại `main@0ba2fce`: object BACnet sinh bằng bảy vòng
+  `for` hằng số cứng (`apps/iobus/adapters/bacnet/bacnet_server.cpp:218-224`, tổng **88
+  object**); `objectInstance` là `i + 1`, tức chỉ số mảng nội bộ bị phơi ra làm định danh
+  đối ngoại; `register_objects()` (`:214`) tạo **8 BI vô điều kiện** (`:219`) trong khi
+  `IOP_BOARD_CAP_REV_A` (`contracts/iop/iop_protocol.h:112`) không chứa
+  `IOP_BOARD_CAP_DI_8` — tức base SKU Rev A không có DI mà thiết bị vẫn công bố 8 Binary
+  Input cho BMS.
+- **Nguyên nhân gốc:** không có tài liệu chủ quản cho kiến trúc BACnet.
+  `SW_BACNET_DESIGN_MK-DDC-24_VI` mô tả bản **đang có**, nên ba cơ chế **chưa tồn tại
+  trong mã** không có hồ sơ nào sở hữu. Thiếu chủ quản thì chúng sẽ được quyết trong lúc
+  code, từng cái một, không ai đối chiếu.
+- **Cách sửa:** tạo `ARCH-BACNET-001` ở `docs/03_architecture/`, phạm vi `DD-04` + `DD-07`:
+  - **Export Registry (§3):** 8 trường bắt buộc của một bản ghi export, mỗi trường có kiểu,
+    nguồn dữ liệu là `file:line` thật, và hành vi khi nguồn thiếu. Sáu trong tám trường
+    thiếu ⇒ **loại bản ghi**, không điền mặc định — bám `SYS-REQ-BAC-012`.
+  - **Object identity (§4):** `objectInstance` là **hàm thuần** của `pointStableId`; bảng
+    **9 biến cố** với kết luận đổi/không đổi, không ô nào để "tuỳ". Ghi rõ vì sao từ chối
+    phương án bộ đếm có lưu (mất bảng ⇒ tự gây breaking change, mâu thuẫn `ADR-058`).
+  - **Capability gate (§5):** ánh xạ đủ **5 bit** `IOP_BOARD_CAP_*` → loại object bị gate;
+    `IOP_BOARD_CAP_RTD` không gate object nào (nó gate `sensor_type`, nguồn
+    `contracts/openapi/openapi.yaml:787`). Với `board_cap_valid = 0` chọn **fail-closed có
+    phân biệt**: không công bố object phần cứng, vẫn công bố Device Object + I-Am + object
+    phần mềm, dựng lại Registry khi `0 → 1`. Đây không phải lựa chọn tự do — hợp đồng SHM
+    (`contracts/shm/mkddc_shm.h:265` và chú giải từ `:243`) đã quy định consumer phải
+    fail-closed khi `valid = 0`.
+- **Không nâng lớp bằng chứng:** không dòng nào khai capability là `VERIFIED`; cả ba cơ chế
+  ghi lớp `DESIGN-ONLY` theo `ADR-060` và `SYS-REQ-BAC-022`.
+- **Số đo kiểm chứng (đo tại máy 2026-09-16, CI `NOT_RUN` #414):**
+  - `python3 scripts/docs_iso_harness.py --expect` → `exit=0`, `KẾT LUẬN: PASS`,
+    `EXPECT: khớp toàn bộ ngưỡng`; `duplicate_doc_id = 0`, `TBD/BLOCKED = 113`,
+    `code-span docs/** không tồn tại = 0`, `hồ sơ lệch metadata/lịch sử = 0`.
+  - `grep -c "SYS-REQ-BAC-"` trên tài liệu mới → **40** (17 mã riêng biệt), kỳ vọng > 0.
+  - Mã hồ sơ trùng, đếm tay toàn repo → **0**.
+  - 27/27 `file:line` viện dẫn trong tài liệu: `test -e` OK và `sed -n '<line>p'` in ra
+    đúng nội dung tài liệu mô tả.
+- **Finding ngoài phạm vi, đã mở #716 ở `state:triage`, không tự sửa:**
+  `scripts/docs_iso_harness.py:487` chỉ quét `BASELINE + EXTRA` = **22/466** tài liệu
+  (≈ 4,7 %). `PROD-BACNET-001` lẫn `ARCH-BACNET-001` đều **không** nằm trong tập đó, nên
+  harness xanh **không** chứng minh mã hồ sơ không trùng cho hai file này — đó là lý do số
+  đo trùng mã ở trên được đếm tay chứ không dẫn kết luận của harness.
+
+
 ### Changed — `OD-BAC-009` đã ký: vendor bacnet-stack 1.3.8 vào nguồn nội bộ (2026-09-16)
 
 - Phạm vi: `docs/00_governance/BACNET_OPEN_DECISIONS.md`, `CHANGELOG.md`.
