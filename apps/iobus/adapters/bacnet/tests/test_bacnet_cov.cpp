@@ -4,8 +4,25 @@
  */
 #include <gtest/gtest.h>
 #include "bacnet_cov.hpp"
+#include "bacnet_objects.hpp"
+
+#include <map>
+#include <memory>
+#include <utility>
+#include <vector>
 
 using namespace iobus::bacnet;
+
+namespace iobus::bacnet {
+/* F-CTO-BAC-01 (#635): vòng quét COV, tách khỏi BacnetServer::dispatch_cov để
+ * kiểm được phạm vi quét mà không cần mở socket BACnet.
+ *
+ * Khai báo ở đây chứ không ở `bacnet_server.hpp` vì Source ownership của #635
+ * không mở file header đó. Chữ ký được trình liên kết kiểm: lệch chữ ký là lỗi
+ * link lúc dựng, không phải hỏng im lặng lúc chạy. */
+void scan_cov_objects(const BacnetObjects& objects, const kx_plc_shm_t* shm,
+                      const CovNotifyFn& check);
+}  // namespace iobus::bacnet
 
 static CovSubscription make_sub(uint32_t pid, BacnetObjectType t, uint32_t inst)
 {
@@ -117,4 +134,166 @@ TEST(BacnetCov, UpdateExistingSub)
     /* Subscribe again with same pid+obj → update, not add */
     cov.subscribe(make_sub(1, BacnetObjectType::ANALOG_INPUT, 1));
     EXPECT_EQ(cov.sub_count(), 1u);
+}
+
+/* ===================================================================
+ * F-CTO-BAC-01 (#635): phạm vi quét COV phải phủ ĐỦ số object của từng loại.
+ *
+ * Hồi quy được chặn ở đây: bản cũ quét AI và BI bằng chung cận `8`, nên
+ * AI9..AI16 có giá trị sống trong SHM mà không bao giờ được kiểm COV. Khi COV
+ * nối ra mạng thật (T-BAC-044..046), tám kênh UI cuối sẽ im lặng không báo
+ * đổi giá trị và BMS treo số cũ mà không có lỗi nào lần ra được.
+ * =================================================================== */
+
+namespace {
+
+/* kx_plc_shm_t lớn (256 điểm ext) — cấp phát trên heap, không để trên stack. */
+std::unique_ptr<kx_plc_shm_t> make_shm()
+{
+    auto shm = std::make_unique<kx_plc_shm_t>();
+    *shm = kx_plc_shm_t{};   /* seq = 0 (chẵn) ⇒ seqlock đọc được ngay */
+    return shm;
+}
+
+/* Ghi lại mọi lần `check(...)` được gọi, theo đúng thứ tự. */
+struct ScanSpy {
+    std::vector<std::pair<BacnetObjectType, uint32_t>> calls;
+    std::map<std::pair<uint16_t, uint32_t>, float>     values;
+
+    CovNotifyFn fn()
+    {
+        return [this](BacnetObjectType t, uint32_t inst, float v, uint8_t) {
+            calls.emplace_back(t, inst);
+            values[{static_cast<uint16_t>(t), inst}] = v;
+        };
+    }
+
+    size_t count_of(BacnetObjectType t) const
+    {
+        size_t n = 0;
+        for (const auto& c : calls)
+            if (c.first == t) ++n;
+        return n;
+    }
+
+    bool saw(BacnetObjectType t, uint32_t inst) const
+    {
+        for (const auto& c : calls)
+            if (c.first == t && c.second == inst) return true;
+        return false;
+    }
+};
+
+}  // namespace
+
+TEST(BacnetCovScan, ScansAnalogInputUpToN_AI)
+{
+    /* Chính là lỗi F-CTO-BAC-01: AI16 phải được soi, không dừng ở AI8. */
+    auto shm = make_shm();
+    BacnetObjects obj;
+    ScanSpy spy;
+
+    scan_cov_objects(obj, shm.get(), spy.fn());
+
+    EXPECT_TRUE(spy.saw(BacnetObjectType::ANALOG_INPUT, 16))
+        << "AI16 không được quét — vòng COV lại bị cắt ở cận của BI";
+    for (uint32_t i = 9; i <= 16; ++i)
+        EXPECT_TRUE(spy.saw(BacnetObjectType::ANALOG_INPUT, i))
+            << "AI" << i << " nằm ngoài phạm vi quét COV";
+
+    EXPECT_EQ(spy.count_of(BacnetObjectType::ANALOG_INPUT),
+              static_cast<size_t>(BacnetObjects::N_AI));
+    EXPECT_FALSE(spy.saw(BacnetObjectType::ANALOG_INPUT, 17));
+}
+
+TEST(BacnetCovScan, ReportsChangedValueOnHighAnalogInputChannel)
+{
+    /* AC-5: đặt giá trị ở một kênh trong AI9..AI16, khẳng định check() nhận
+     * đúng kênh đó kèm đúng giá trị. */
+    auto shm = make_shm();
+    shm->ai[12].value = 42.5f;          /* AI13 — nằm trong vùng từng bị bỏ sót */
+    BacnetObjects obj;
+    ScanSpy spy;
+
+    scan_cov_objects(obj, shm.get(), spy.fn());
+
+    ASSERT_TRUE(spy.saw(BacnetObjectType::ANALOG_INPUT, 13));
+    EXPECT_FLOAT_EQ(
+        spy.values.at({static_cast<uint16_t>(BacnetObjectType::ANALOG_INPUT), 13}),
+        42.5f);
+}
+
+TEST(BacnetCovScan, HighAnalogInputChannelNotifiesSubscriber)
+{
+    /* Nối trọn đường: quét → check_and_update → subscriber được báo.
+     * Đây là thứ thực sự đứt trước bản sửa, không chỉ là con số cận vòng lặp. */
+    auto shm = make_shm();
+    BacnetObjects obj;
+    BacnetCov cov;
+
+    CovSubscription sub;
+    sub.subscriber_process_id = 7;
+    sub.obj_type     = BacnetObjectType::ANALOG_INPUT;
+    sub.obj_instance = 16;
+    sub.active       = true;
+    cov.subscribe(sub);
+    cov.set_cov_increment(BacnetObjectType::ANALOG_INPUT, 16, 0.5f);
+
+    size_t notified = 0;
+    auto check = [&](BacnetObjectType t, uint32_t inst, float v, uint8_t sf) {
+        notified += cov.check_and_update(t, inst, v, sf).size();
+    };
+
+    shm->ai[15].value = 10.0f;          /* AI16: mẫu đầu — luôn kích hoạt */
+    scan_cov_objects(obj, shm.get(), check);
+    EXPECT_EQ(notified, 1u) << "AI16 không phát COV lần đầu";
+
+    notified = 0;
+    shm->ai[15].value = 10.1f;          /* dưới ngưỡng 0.5 — không phát */
+    scan_cov_objects(obj, shm.get(), check);
+    EXPECT_EQ(notified, 0u);
+
+    notified = 0;
+    shm->ai[15].value = 11.0f;          /* vượt ngưỡng — phải phát */
+    scan_cov_objects(obj, shm.get(), check);
+    EXPECT_EQ(notified, 1u) << "AI16 đổi giá trị mà subscriber không được báo";
+}
+
+TEST(BacnetCovScan, EachObjectTypeScannedToItsOwnBound)
+{
+    /* Cận của mỗi loại phải độc lập — gộp hai loại vào một vòng chính là
+     * nguyên nhân gốc. Khoá luôn sáu loại còn lại để lần sửa sau không kéo
+     * nhầm loại nào về chung cận. */
+    auto shm = make_shm();
+    BacnetObjects obj;
+    ScanSpy spy;
+
+    scan_cov_objects(obj, shm.get(), spy.fn());
+
+    EXPECT_EQ(spy.count_of(BacnetObjectType::ANALOG_INPUT),
+              static_cast<size_t>(BacnetObjects::N_AI));
+    EXPECT_EQ(spy.count_of(BacnetObjectType::BINARY_INPUT),
+              static_cast<size_t>(BacnetObjects::N_BI));
+    EXPECT_EQ(spy.count_of(BacnetObjectType::ANALOG_OUTPUT),
+              static_cast<size_t>(BacnetObjects::N_AO));
+    EXPECT_EQ(spy.count_of(BacnetObjectType::BINARY_OUTPUT),
+              static_cast<size_t>(BacnetObjects::N_BO));
+    EXPECT_EQ(spy.count_of(BacnetObjectType::ANALOG_VALUE),
+              static_cast<size_t>(BacnetObjects::N_AV));
+    EXPECT_EQ(spy.count_of(BacnetObjectType::BINARY_VALUE),
+              static_cast<size_t>(BacnetObjects::N_BV));
+    EXPECT_EQ(spy.count_of(BacnetObjectType::MULTI_STATE_VALUE),
+              static_cast<size_t>(BacnetObjects::N_MSV));
+
+    /* AI nhiều gấp đôi BI: nếu ai đó gộp lại một vòng, đẳng thức này vỡ. */
+    EXPECT_NE(spy.count_of(BacnetObjectType::ANALOG_INPUT),
+              spy.count_of(BacnetObjectType::BINARY_INPUT));
+}
+
+TEST(BacnetCovScan, NullShmIsNoOp)
+{
+    BacnetObjects obj;
+    ScanSpy spy;
+    scan_cov_objects(obj, nullptr, spy.fn());
+    EXPECT_TRUE(spy.calls.empty());
 }
