@@ -6,6 +6,11 @@ import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_f
 import type { FbdDocument, FbdNetwork, FbdNode } from './model'
 import type { FbdEditorAction, FbdSelection } from './commands'
 import { FbdCanvas } from './FbdCanvas'
+import type {
+  ProgrammingBinding,
+  ProgrammingPointCatalogEntry,
+  ProgrammingVariable,
+} from '../model/types'
 
 function golden(): FbdDocument {
   return JSON.parse(JSON.stringify(goldenJson)) as FbdDocument
@@ -23,6 +28,9 @@ interface RenderCanvasOptions {
   issueNodeIds?: ReadonlySet<string>
   connectionFromPortId?: string | null
   canEdit?: boolean
+  bindings?: readonly ProgrammingBinding[]
+  variables?: readonly ProgrammingVariable[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
 }
 
 function renderPresentationCanvas(options: RenderCanvasOptions = {}) {
@@ -47,6 +55,9 @@ function renderPresentationCanvas(options: RenderCanvasOptions = {}) {
       dispatch={dispatch}
       pick={mockPick}
       registerPort={registerPort}
+      bindings={options.bindings}
+      variables={options.variables}
+      pointCatalogItems={options.pointCatalogItems}
     />
   )
 
@@ -95,6 +106,52 @@ describe('FbdCanvas — Luồng C: Presentation tests (C-T1..C-T7)', () => {
     const portText = surface.querySelector('text[data-fbd-port-text="true"]')
     expect(portText).not.toBeNull()
     expect(portText?.textContent).toBe('TEMP : REAL (degC)')
+  })
+
+  it('khi chân cổng đã mapping: canvas hiển thị tên điểm đã map kèm giá trị realtime', () => {
+    const doc = golden()
+    const net = doc.networks[0]
+    // Node 2 (AND) có port IN1 (id: 40000000-0000-4000-8000-000000000003)
+    const targetPortId = '40000000-0000-4000-8000-000000000003'
+
+    const bindings: ProgrammingBinding[] = [
+      {
+        bindingId: 'b-in1',
+        variableId: targetPortId,
+        point: { category: 'LOCAL', pointId: 'AO-01' },
+        direction: 'READ',
+        dataType: 'REAL',
+        unit: 'V',
+        writable: true,
+        qualityPolicy: 'REQUIRE_GOOD',
+      },
+    ]
+
+    const pointCatalogItems: ProgrammingPointCatalogEntry[] = [
+      {
+        category: 'LOCAL',
+        pointId: 'AO-01',
+        displayId: 'AO-01',
+        name: 'Fan Speed',
+        dataType: 'REAL',
+        unit: 'V',
+        direction: 'READ_WRITE',
+        writable: true,
+        quality: 'GOOD',
+        value: 5,
+      },
+    ]
+
+    const { surface } = renderPresentationCanvas({
+      document: doc,
+      network: net,
+      bindings,
+      pointCatalogItems,
+    })
+
+    const mappedText = surface.querySelector('text[data-fbd-port-mapped="true"]')
+    expect(mappedText).not.toBeNull()
+    expect(mappedText?.textContent).toBe('AO-01: 5V')
   })
 
   it('C-T2: Node INPUT có parameters.variable — canvas hiện tên biến', () => {

@@ -8,6 +8,83 @@
 
 ## [Unreleased]
 
+- 2026-09-16 — docs(programming-ui): kế hoạch Task 10 FBD bản v2 tại `docs/superpowers/plans/2026-09-16-fbd-task10-save-check-stale.md` (Issue #718); khảo sát phát hiện nhánh FBD bị chặn nhận chẩn đoán server tại `DesignWorkbench.tsx:154` (ISS-STED-05) và trường `location` rụng 2 lần trước khi tới `ProblemsDrawer`, nên tách Task 10 thành 10a (ranh giới Save/Check, ~70% xong) và 10b (nhãn chẩn đoán cũ, ~15% xong).
+
+### Fixed — `#718`: ánh xạ điểm từ canvas FBD bị máy chủ từ chối vì `variableId` không phải UUID (2026-09-16)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/mapping/MappingTab.tsx`,
+  `apps/web-ui/src/features/programming/fbd/PortMappingPicker.tsx`, `CHANGELOG.md`.
+- **Triệu chứng:** chuột phải một cổng trên canvas FBD → "Ánh xạ điểm…" → chọn
+  điểm → máy chủ trả **400 Bad Request**. Trên tab Mapping, Preview trả `BLOCK`
+  kèm mã `PGM-MAP-VARIABLE-001`. Không thao tác ánh xạ nào lưu được, cả hai lối
+  vào đều hỏng.
+- **Nguyên nhân gốc:** hợp đồng Draft v2 của backend (`draft_v2.go`,
+  `binding_validation.go`) buộc mỗi `Binding` trỏ tới một `variableId` là **UUID
+  v4 hợp lệ đã đăng ký trong `object.locals`** của POU. Hai lối vào đều vi phạm
+  theo hai cách khác nhau: tab Mapping sinh `variableId` dạng
+  `${programId}:${name}` — dấu `:` làm `isUUID` trả false; canvas FBD gửi thẳng
+  `portId`, mà cổng không nằm trong `object.locals` nên backend không phân giải
+  được `programId` sở hữu và từ chối ghi.
+- **Cách sửa:** FE tự đăng ký biến trước khi ghi binding. `FbdEditorPane.tsx`
+  sinh `variableId` chuẩn UUID và gửi kèm operation `upsertVariable` **cùng một
+  batch** với `upsertBinding`; backend nhận biến vào `locals` trước rồi ghi
+  binding → 200 OK. `MappingTab.tsx` phát hiện biến chưa có UUID hợp lệ trong
+  `document.variables` thì đăng ký qua `upsertVariable` trước khi gọi
+  `previewProgrammingBinding` → Preview trả `ALLOW`. Sửa thuần FE, không đổi
+  hợp đồng backend.
+- **Chặn lỗi phía trước:** `PortMappingPicker.tsx` kiểm chất lượng điểm và xếp
+  các điểm không `GOOD` vào nhóm "Không thể map" kèm lý do, thay vì để người
+  dùng bấm rồi nhận lỗi từ chối. Thiết bị hiện trường hiện có `AO-01..AO-04` là
+  `GOOD`; các điểm `UI-*` và `DO-*` là `BAD` do chưa cắm phần cứng I/O vật lý,
+  backend chặn khi `qualityPolicy = REQUIRE_GOOD`.
+- Kiểm chứng: `npx tsc --noEmit` **0 lỗi**; `npm run lint` **PASS** +
+  `check_ui_strings` OK; Vitest phạm vi `programming/fbd` + `programming/design`
+  **1308/1308 PASS** (90 file); Vitest toàn `src` **3287/3288 PASS** (đỏ duy
+  nhất `ShellNavigation.test.tsx` do `.env.local` bật `VITE_PROGRAMMING_REV_A=1`,
+  lỗi môi trường cục bộ biết trước, không thuộc phạm vi thay đổi);
+  `npm run build` **PASS**, ngân sách R3 **116.83/165.00 KiB**.
+- Refs: `#718`, `ISS-STED-05`, `PGM-MAP-VARIABLE-001`,
+  `docs/superpowers/plans/2026-09-16-fbd-port-mapping-properties-handoff.md`.
+
+### Added — `#718`: hộp thoại ánh xạ điểm tại cổng và bảng thuộc tính khối FBD (2026-09-16)
+
+- Phạm vi: `PortMappingPicker.tsx` (+ test mới), `FbdBlockPropertiesModal.tsx`
+  (mới + test mới), `FbdCanvas.tsx`, `FbdCanvasLayers.tsx`, `FbdNodeHoverCard.tsx`,
+  `StructuredFbdEditor.tsx`, `EditorPane.tsx`, `FbdEditorPane.tsx`, `CHANGELOG.md`.
+- **Ánh xạ điểm ngay tại cổng:** chuột phải một cổng `INPUT`/`OUTPUT` → "Ánh xạ
+  điểm…" mở `PortMappingPicker`. Tìm nhanh theo tên/displayId/pointId/equipment,
+  lọc theo danh mục nguồn (Tất cả / I/O / VP / Modbus) và hai nút lọc nhanh
+  "Có thể map" / "Không thể map". Mỗi dòng hiện giá trị đo realtime hoặc catalog
+  kèm huy hiệu chất lượng (`GOOD`/`UNCERTAIN`/`STALE`/`OFFLINE`).
+- **Hộp thoại không tự đóng sau khi map** — người dùng ánh xạ nhiều cổng liên
+  tiếp không phải mở lại. Điểm map xong chuyển trạng thái "✓ Đã map"; kết quả
+  báo bằng banner xanh (thành công) hoặc đỏ kèm lỗi máy chủ (thất bại). Đóng chủ
+  động bằng nút X, nút Đóng, click ra ngoài hoặc phím Esc.
+- **Bảng thuộc tính khối** (`FbdBlockPropertiesModal.tsx`, mới): chuột phải khối
+  → "Thuộc tính". Sáu mục: thuộc tính POU (tên, loại, instance, thứ tự thực thi,
+  cờ retained, số cổng); quyền truy cập và mô tả; tham số chỉnh định (`Kp`, `Ki`,
+  `Ts`…); danh sách cổng vào/ra kèm kiểu, điểm đã map, giá trị realtime, huy hiệu
+  chất lượng và nút "Ánh xạ / Đổi map"; trạng thái kiểm tra hợp lệ và giá trị
+  runtime; toạ độ, kích thước, danh sách dây nối. Mục "Thuộc tính khối" đã gỡ
+  khỏi menu ngữ cảnh của **cổng**, chỉ còn trên menu của **khối**.
+- **Thông tin điểm hiện ngay trên canvas:** chân cổng đã ánh xạ hiển thị nhãn
+  `AO-01: 0V` màu accent, title tooltip đầy đủ dạng `pv : REAL → Fan Speed
+  (AO-01)`. Thẻ hover khối liệt kê tên điểm và giá trị realtime từng chân.
+  `resolvePortMappingInfo` trong `FbdNodeHoverCard.tsx` hỗ trợ phân giải theo tên
+  biến v2.
+- **Nạp danh mục điểm tự động:** thêm `ensurePointCatalogLoaded()` vào
+  `EditorPane.tsx` và `FbdEditorPane.tsx`, gọi khi mở FBD hoặc khi có `bindings`.
+  Trước đó canvas rơi về fallback vì catalog chưa nạp nên không phân giải nổi
+  giá trị realtime.
+- **Dọn giao diện:** gỡ viền lồng nhau quanh canvas ở `StructuredFbdEditor.tsx`,
+  canvas nằm phẳng không còn khung trong khung.
+- Test mới: `PortMappingPicker.test.tsx` (lọc, map thành công, báo lỗi máy chủ,
+  ca không map được) và `FbdBlockPropertiesModal.test.tsx`.
+- Kiểm chứng: dùng chung số đo của mục `Fixed — #718` phía trên.
+- Refs: `#718`,
+  `docs/superpowers/plans/2026-09-16-fbd-port-mapping-properties-handoff.md`.
+
 ### Added — `#626` / `T-BAC-013`: tầng test `LOOPBACK` — UDP thật trên loopback cho BACnet/IP (2026-09-16)
 
 - Phạm vi: `apps/iobus/adapters/bacnet/tests/test_bacnet_loopback.cpp` (mới),
@@ -253,6 +330,53 @@
 - Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` → exit **0**,
   `KẾT LUẬN: PASS`, `hồ sơ lệch metadata/lịch sử: 0`, `code-span docs/** không tồn tại: 0`.
 - Refs: `OD-BAC-009`, `ADR-060`, `#625`, `#626`, `#627`, `#628`, `#635`, `#624`.
+
+### Fixed — Vitest flaky test: bật isolate triệt race condition lazy import (2026-09-16)
+
+- Phạm vi: `apps/web-ui/vite.config.ts` (test block), `CHANGELOG.md`.
+- Triệu chứng: chạy full suite 253 file, ~43% lần chạy có 1-2 test đỏ ngẫu nhiên
+  (`MappingTab.test.tsx`, `DesignWorkspacePage.test.tsx`, `LibraryPage.test.tsx`).
+  Chạy riêng từng file luôn PASS. File đỏ thay đổi mỗi lần — không phải bug logic.
+- Nguyên nhân gốc: Vitest 4.x mặc định `isolate: false` (chia sẻ module cache
+  giữa các test file song song). Component lazy-loaded qua `React.lazy` bị race
+  khi resolve import đồng thời → `findByRole`/`waitFor` timeout ngẫu nhiên.
+- Cách sửa: thêm `isolate: true` trong block `test` của `vite.config.ts`.
+  Giữ nguyên threads pool (nhanh), chỉ reset module cache mỗi file.
+- Kiểm chứng: chạy 5 lần full suite sau sửa → 5/5 lần đạt 252 xanh / 1 đỏ
+  (đỏ duy nhất = `ShellNavigation.test.tsx` do `.env.local`, lỗi biết trước).
+  3 file flaky cũ không xuất hiện lại lần nào.
+
+### Added — `#709`: kéo thả POU vào FBD, hover tooltip, minimap wires (Refs #667, 2026-09-15)
+
+- Phạm vi: 40 file, +8408/−126 dòng. PR #709 merged vào `main` @ `fcec8a5c`.
+- **Tính năng 1 — Function Block cho FBD:** thêm mục `Function Block · FBD` vào menu
+  `+ New` trong POU Explorer; cả `FUNCTION_BLOCK` lẫn `FUNCTION` (ST hoặc FBD) kéo
+  thả được vào canvas FBD. FB viết bằng ST cũng được: backend suy ra interface từ
+  mã nguồn ST (`pou_interface.go`, 307 dòng). POU tự tạo hiện trong Quick Library
+  và trang Control Library, kéo thả được từ cả hai nơi.
+- **Tính năng 2 — Hover tooltip:** rê chuột vào khối trên canvas FBD hiện thông
+  tin khối (tên, phân loại, thứ tự thực thi, danh sách chân vào/ra kèm kiểu,
+  giá trị runtime khi ở chế độ Live/Simulate). `FbdNodeHoverCard.tsx` (140 dòng).
+- **Tính năng 3 — Minimap vẽ đường nối:** minimap render wires dạng `<path>`
+  trước danh sách `<rect>` khối (dây nằm dưới khối).
+- **Tính năng 4 — Tách zoom minimap:** 3 nút zoom trong panel minimap chỉ đổi
+  thumbnail, không đổi viewport canvas chính. State cục bộ `minimapZoom`.
+- **Backend:** `pou_interface.go` trích interface từ mã ST (regex RE2, thời gian
+  tuyến tính) hoặc FBD (parse JSON). Vá vào `SaveDraft` + `GetProject` — chỉ
+  trên đường đọc/phản hồi, không đóng băng vào Revision.
+- Kiểm chứng: Vitest 252/1 đỏ, tsc 0 lỗi, go build + go test OK, ngân sách
+  R3 116.50/165.00 KiB, check_ui_strings OK. User đã kiểm chứng kéo thả trên
+  trình duyệt thật.
+
+### Fixed — `#710`: polish FBD programming workspace layout (2026-09-15)
+
+- Phạm vi: 7 file. PR #710 merged vào `main` @ `2e63a991`.
+- Tách grid 3 cột (Problems/Watch/Minimap) ra ngoài tabpanel — Watch và Minimap
+  kéo trọn chiều cao khay thay vì bị dải tab ăn mất một hàng.
+- Thêm component `Stretched` (absolute inset-0) để nội dung cuộn bên trong mà
+  không nới hàng grid. Nút Thu gọn/Mở rộng đổi sang icon ChevronDown/ChevronUp.
+- Bỏ `editor-status-bar` khỏi FbdEditorPane (canvas FBD không còn dải trạng
+  thái dưới chân).
 
 ### Fixed — `#706`: Mini Map giữ đúng tâm điều hướng với viewBox theo bbox (2026-09-14)
 

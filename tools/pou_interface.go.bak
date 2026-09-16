@@ -1,0 +1,209 @@
+package application
+
+import (
+	"encoding/json"
+	"regexp"
+	"strings"
+)
+
+// ponytail: pattern scanner for flat VAR_INPUT/VAR_OUTPUT; skipped: arrays, structs, VAR_IN_OUT, UDT; upgrade path: switch to mkddc-st-compile output when full IEC 61131-3 type system needed.
+// Bộ quét theo mẫu, không phải trình biên dịch ST. Chỉ xử lý khai báo VAR_INPUT/VAR_OUTPUT dạng phẳng;
+// chưa xử lý mảng, struct, VAR_IN_OUT, kiểu do người dùng định nghĩa; khi cần đủ thì chuyển sang dùng output của mkddc-st-compile.
+
+var (
+	stFuncHeaderRegex = regexp.MustCompile(`(?i)\bFUNCTION\s+[a-zA-Z_][a-zA-Z0-9_]*\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)`)
+	stVarInputRegex   = regexp.MustCompile(`(?is)\bVAR_INPUT\b(.*?)\bEND_VAR\b`)
+	stVarOutputRegex  = regexp.MustCompile(`(?is)\bVAR_OUTPUT\b(.*?)\bEND_VAR\b`)
+)
+
+type pouInterfacePin struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type pouInterface struct {
+	Inputs     []pouInterfacePin `json:"inputs"`
+	Outputs    []pouInterfacePin `json:"outputs,omitempty"`
+	ReturnType string            `json:"returnType,omitempty"`
+}
+
+func emptyPouInterface() pouInterface {
+	return pouInterface{
+		Inputs: []pouInterfacePin{},
+	}
+}
+
+func stripStComments(src string) string {
+	var b strings.Builder
+	b.Grow(len(src))
+	i := 0
+	n := len(src)
+	for i < n {
+		if i+1 < n && src[i] == '(' && src[i+1] == '*' {
+			i += 2
+			for i < n {
+				if i+1 < n && src[i] == '*' && src[i+1] == ')' {
+					i += 2
+					break
+				}
+				i++
+			}
+			b.WriteByte(' ')
+			continue
+		}
+		if i+1 < n && src[i] == '/' && src[i+1] == '/' {
+			i += 2
+			for i < n && src[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		b.WriteByte(src[i])
+		i++
+	}
+	return b.String()
+}
+
+func parseStVarDecls(block string) []pouInterfacePin {
+	var pins []pouInterfacePin
+	seen := make(map[string]struct{})
+	statements := strings.Split(block, ";")
+	for _, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		decl := strings.SplitN(stmt, ":=", 2)[0]
+		parts := strings.SplitN(decl, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		typeRef := strings.TrimSpace(parts[1])
+		if typeRef == "" {
+			continue
+		}
+		names := strings.Split(parts[0], ",")
+		for _, rawName := range names {
+			name := strings.TrimSpace(rawName)
+			if name == "" {
+				continue
+			}
+			if _, exists := seen[name]; exists {
+				continue
+			}
+			seen[name] = struct{}{}
+			pins = append(pins, pouInterfacePin{
+				Name: name,
+				Type: typeRef,
+			})
+		}
+	}
+	return pins
+}
+
+func extractStInterface(kind, source string) pouInterface {
+	clean := stripStComments(source)
+	result := emptyPouInterface()
+
+	if kind == "FUNCTION" {
+		if matches := stFuncHeaderRegex.FindStringSubmatch(clean); len(matches) > 1 {
+			result.ReturnType = strings.TrimSpace(matches[1])
+		}
+	}
+
+	seenInputs := make(map[string]struct{})
+	for _, match := range stVarInputRegex.FindAllStringSubmatch(clean, -1) {
+		pins := parseStVarDecls(match[1])
+		for _, pin := range pins {
+			if _, exists := seenInputs[pin.Name]; !exists {
+				seenInputs[pin.Name] = struct{}{}
+				result.Inputs = append(result.Inputs, pin)
+			}
+		}
+	}
+
+	seenOutputs := make(map[string]struct{})
+	for _, match := range stVarOutputRegex.FindAllStringSubmatch(clean, -1) {
+		pins := parseStVarDecls(match[1])
+		for _, pin := range pins {
+			if _, exists := seenOutputs[pin.Name]; !exists {
+				seenOutputs[pin.Name] = struct{}{}
+				result.Outputs = append(result.Outputs, pin)
+			}
+		}
+	}
+
+	return result
+}
+
+type fbdSourceNode struct {
+	Kind       string `json:"kind"`
+	TypeRef    string `json:"typeRef"`
+	Parameters struct {
+		Variable string `json:"variable"`
+	} `json:"parameters"`
+}
+
+type fbdSourceNetwork struct {
+	Nodes []fbdSourceNode `json:"nodes"`
+}
+
+type fbdSourceDoc struct {
+	Networks []fbdSourceNetwork `json:"networks"`
+}
+
+func extractFbdInterface(source string) pouInterface {
+	result := emptyPouInterface()
+	if strings.TrimSpace(source) == "" {
+		return result
+	}
+
+	var doc fbdSourceDoc
+	if err := json.Unmarshal([]byte(source), &doc); err != nil {
+		return result
+	}
+
+	seenInputs := make(map[string]struct{})
+	seenOutputs := make(map[string]struct{})
+
+	for _, net := range doc.Networks {
+		for _, node := range net.Nodes {
+			varName := strings.TrimSpace(node.Parameters.Variable)
+			typeRef := strings.TrimSpace(node.TypeRef)
+			if varName == "" || typeRef == "" {
+				continue
+			}
+
+			if strings.EqualFold(node.Kind, "INPUT") {
+				if _, exists := seenInputs[varName]; !exists {
+					seenInputs[varName] = struct{}{}
+					result.Inputs = append(result.Inputs, pouInterfacePin{
+						Name: varName,
+						Type: typeRef,
+					})
+				}
+			} else if strings.EqualFold(node.Kind, "OUTPUT") {
+				if _, exists := seenOutputs[varName]; !exists {
+					seenOutputs[varName] = struct{}{}
+					result.Outputs = append(result.Outputs, pouInterfacePin{
+						Name: varName,
+						Type: typeRef,
+					})
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+func extractPouInterface(kind, language, source string) pouInterface {
+	switch language {
+	case "ST":
+		return extractStInterface(kind, source)
+	case "FBD":
+		return extractFbdInterface(source)
+	default:
+		return emptyPouInterface()
+	}
+}

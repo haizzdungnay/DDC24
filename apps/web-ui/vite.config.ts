@@ -84,7 +84,8 @@ export default defineConfig(({ mode }) => {
     // suite đang đỏ.
     test: {
       environment: 'jsdom',
-      include: ['src/**/*.{test,spec}.{ts,tsx}']
+      include: ['src/**/*.{test,spec}.{ts,tsx}'],
+      isolate: true,
     }
   }
 })

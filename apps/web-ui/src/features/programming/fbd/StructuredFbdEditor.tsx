@@ -60,6 +60,12 @@ import { type FbdNodeEditorChange, type FbdNodeEditorTarget } from './nodeEditor
 import type { FbdNetworkViewPreference, FbdSnapSizePreference, FbdWireStylePreference } from './fbdPreferences'
 import type { FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
 import type { FbdRuntimeOverlay } from './runtimeOverlay'
+import type {
+  ProgrammingBinding,
+  ProgrammingPointCatalogEntry,
+  ProgrammingProgram,
+  ProgrammingVariable,
+} from '../model/types'
 
 export interface StructuredFbdEditorProps {
   /**
@@ -106,6 +112,12 @@ export interface StructuredFbdEditorProps {
    */
   toolbarExtras?: ReactNode
   onBridgeChange?: (bridge: FbdCanvasBridge | null) => void
+  /** Yêu cầu mở picker ánh xạ điểm cho một cổng. */
+  onRequestPortMapping?: (info: { nodeId: string; portId: string; portName: string; nodeName: string; portDirection: 'INPUT' | 'OUTPUT'; portDataType: string }) => void
+  bindings?: readonly ProgrammingBinding[]
+  variables?: readonly ProgrammingVariable[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
+  programs?: readonly ProgrammingProgram[]
 }
 
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
@@ -211,6 +223,11 @@ export function StructuredFbdEditor({
   runtime,
   toolbarExtras,
   onBridgeChange,
+  onRequestPortMapping,
+  bindings,
+  variables,
+  pointCatalogItems,
+  programs,
 }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(
@@ -1093,8 +1110,8 @@ export function StructuredFbdEditor({
             key={network.id}
             data-fbd-network-id={network.id}
             className={networkView === 'ALL'
-              ? 'rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2'
-              : 'flex min-h-0 flex-1 flex-col rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2'}
+              ? ''
+              : 'flex min-h-0 flex-1 flex-col'}
           >
             <FbdCanvas
               network={network}
@@ -1134,6 +1151,11 @@ export function StructuredFbdEditor({
                   })
                 : undefined}
               userPouInterfaces={userPouInterfaces}
+              onRequestPortMapping={onRequestPortMapping}
+              bindings={bindings}
+              variables={variables}
+              pointCatalogItems={pointCatalogItems}
+              programs={programs}
             />
           </article>
         ))}

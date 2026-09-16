@@ -1,0 +1,332 @@
+package application
+
+import (
+	"encoding/json"
+	"reflect"
+	"testing"
+)
+
+func TestExtractPouInterface_ST_Basic(t *testing.T) {
+	source := `
+VAR_INPUT
+    pv : REAL;
+END_VAR
+VAR_OUTPUT
+    out : BOOL;
+END_VAR
+`
+	got := extractPouInterface("FUNCTION_BLOCK", "ST", source)
+	want := pouInterface{
+		Inputs:  []pouInterfacePin{{Name: "pv", Type: "REAL"}},
+		Outputs: []pouInterfacePin{{Name: "out", Type: "BOOL"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractPouInterface() = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractPouInterface_ST_MultipleNames(t *testing.T) {
+	source := `
+VAR_INPUT
+    a, b, c : REAL;
+END_VAR
+`
+	got := extractPouInterface("PROGRAM", "ST", source)
+	want := pouInterface{
+		Inputs: []pouInterfacePin{
+			{Name: "a", Type: "REAL"},
+			{Name: "b", Type: "REAL"},
+			{Name: "c", Type: "REAL"},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractPouInterface() = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractPouInterface_ST_InitialValue(t *testing.T) {
+	source := `
+VAR_INPUT
+    pv : REAL := 0.0;
+    threshold : REAL := 100.5;
+END_VAR
+VAR_OUTPUT
+    alarm : BOOL := FALSE;
+END_VAR
+`
+	got := extractPouInterface("FUNCTION_BLOCK", "ST", source)
+	want := pouInterface{
+		Inputs: []pouInterfacePin{
+			{Name: "pv", Type: "REAL"},
+			{Name: "threshold", Type: "REAL"},
+		},
+		Outputs: []pouInterfacePin{
+			{Name: "alarm", Type: "BOOL"},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractPouInterface() = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractPouInterface_ST_Comments(t *testing.T) {
+	source := `
+(* Header comment
+   spanning multiple lines *)
+// Line comment before block
+VAR_INPUT
+    (* comment inside *)
+    pv : REAL; // inline comment
+    (* multi
+       line
+       comment *)
+    sp : REAL;
+END_VAR
+VAR_OUTPUT
+    out : BOOL; // comment after
+END_VAR
+`
+	got := extractPouInterface("FUNCTION_BLOCK", "ST", source)
+	want := pouInterface{
+		Inputs: []pouInterfacePin{
+			{Name: "pv", Type: "REAL"},
+			{Name: "sp", Type: "REAL"},
+		},
+		Outputs: []pouInterfacePin{
+			{Name: "out", Type: "BOOL"},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractPouInterface() = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractPouInterface_ST_FunctionReturnType(t *testing.T) {
+	source := `
+FUNCTION CalculateFlow : REAL
+VAR_INPUT
+    diff_press : REAL;
+END_VAR
+CalculateFlow := diff_press * 2.0;
+END_FUNCTION
+`
+	got := extractPouInterface("FUNCTION", "ST", source)
+	want := pouInterface{
+		Inputs: []pouInterfacePin{
+			{Name: "diff_press", Type: "REAL"},
+		},
+		ReturnType: "REAL",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractPouInterface() = %+v, want %+v", got, want)
+	}
+
+	// When kind != "FUNCTION", returnType must NOT be set even if source has FUNCTION header
+	gotFB := extractPouInterface("FUNCTION_BLOCK", "ST", source)
+	if gotFB.ReturnType != "" {
+		t.Fatalf("expected empty returnType for FUNCTION_BLOCK, got %q", gotFB.ReturnType)
+	}
+}
+
+func TestExtractPouInterface_FBD_Basic(t *testing.T) {
+	source := `{
+  "schemaVersion": 1,
+  "networks": [
+    {
+      "nodes": [
+        {"kind": "INPUT", "typeRef": "BOOL", "parameters": {"variable": "OCCUPIED"}},
+        {"kind": "INPUT", "typeRef": "REAL", "parameters": {"variable": "TEMP"}},
+        {"kind": "INPUT", "typeRef": "BOOL", "parameters": {"variable": "OCCUPIED"}},
+        {"kind": "OUTPUT", "typeRef": "BOOL", "parameters": {"variable": "COOLING_REQ"}},
+        {"kind": "OUTPUT", "typeRef": "BOOL", "parameters": {"variable": "COOLING_REQ"}},
+        {"kind": "OUTPUT", "typeRef": "REAL", "parameters": {"variable": "VALVE_POS"}}
+      ]
+    }
+  ]
+}`
+	got := extractPouInterface("PROGRAM", "FBD", source)
+	want := pouInterface{
+		Inputs: []pouInterfacePin{
+			{Name: "OCCUPIED", Type: "BOOL"},
+			{Name: "TEMP", Type: "REAL"},
+		},
+		Outputs: []pouInterfacePin{
+			{Name: "COOLING_REQ", Type: "BOOL"},
+			{Name: "VALVE_POS", Type: "REAL"},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractPouInterface() = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractPouInterface_FBD_MalformedJSON(t *testing.T) {
+	source := `{"schemaVersion": 1, networks: [ broken json `
+	got := extractPouInterface("PROGRAM", "FBD", source)
+	if got.Inputs == nil || len(got.Inputs) != 0 || len(got.Outputs) != 0 || got.ReturnType != "" {
+		t.Fatalf("expected empty interface with non-nil inputs, got %+v", got)
+	}
+}
+
+func TestExtractPouInterface_EmptySource(t *testing.T) {
+	got := extractPouInterface("PROGRAM", "ST", "")
+	if got.Inputs == nil || len(got.Inputs) != 0 || len(got.Outputs) != 0 || got.ReturnType != "" {
+		t.Fatalf("expected empty interface for empty source, got %+v", got)
+	}
+}
+
+func TestExtractPouInterface_CaseInsensitive(t *testing.T) {
+	source := `
+function my_calc : real
+var_input
+    in1 : bool;
+end_var
+var_output
+    out1 : bool;
+end_var
+end_function
+`
+	got := extractPouInterface("FUNCTION", "ST", source)
+	want := pouInterface{
+		Inputs: []pouInterfacePin{
+			{Name: "in1", Type: "bool"},
+		},
+		Outputs: []pouInterfacePin{
+			{Name: "out1", Type: "bool"},
+		},
+		ReturnType: "real",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractPouInterface() = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractPouInterface_ST_IgnoreOtherVars(t *testing.T) {
+	source := `
+VAR
+    internal_cnt : INT;
+END_VAR
+VAR_TEMP
+    tmp : REAL;
+END_VAR
+VAR_IN_OUT
+    inout_var : REAL;
+END_VAR
+VAR_INPUT
+    valid_in : BOOL;
+END_VAR
+`
+	got := extractPouInterface("PROGRAM", "ST", source)
+	want := pouInterface{
+		Inputs: []pouInterfacePin{
+			{Name: "valid_in", Type: "BOOL"},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractPouInterface() = %+v, want %+v", got, want)
+	}
+}
+
+func TestExtractPouInterface_JSONShape(t *testing.T) {
+	// 1. Empty inputs -> {"inputs":[]}
+	empty := pouInterface{Inputs: []pouInterfacePin{}}
+	rawEmpty, err := json.Marshal(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(rawEmpty) != `{"inputs":[]}` {
+		t.Fatalf("marshal empty = %s, want %s", string(rawEmpty), `{"inputs":[]}`)
+	}
+
+	// 2. Full interface
+	full := pouInterface{
+		Inputs:     []pouInterfacePin{{Name: "pv", Type: "REAL"}},
+		Outputs:    []pouInterfacePin{{Name: "out", Type: "BOOL"}},
+		ReturnType: "REAL",
+	}
+	rawFull, err := json.Marshal(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFull := `{"inputs":[{"name":"pv","type":"REAL"}],"outputs":[{"name":"out","type":"BOOL"}],"returnType":"REAL"}`
+	if string(rawFull) != wantFull {
+		t.Fatalf("marshal full = %s, want %s", string(rawFull), wantFull)
+	}
+}
+
+func TestDraftV2_UpsertPouObject_AutoExtractsInterface(t *testing.T) {
+	service, projectID, draftID, etag := newV2Project(t)
+	objectID := objectUUID(1)
+
+	// Upsert POU without client interface
+	stSource := "FUNCTION_BLOCK FB_Test\nVAR_INPUT\n    pv : REAL;\nEND_VAR\nVAR_OUTPUT\n    alarm : BOOL;\nEND_VAR\nEND_FUNCTION_BLOCK\n"
+	opWithoutInterface := op(map[string]any{
+		"op": "upsertObject",
+		"object": map[string]any{
+			"objectId": objectID,
+			"kind":     "FUNCTION_BLOCK",
+			"name":     "FB_Test",
+			"language": "ST",
+			"source":   stSource,
+		},
+	})
+
+	result, err := saveOps(t, service, projectID, draftID, etag, "70000000-0000-4000-8000-000000000099", opWithoutInterface)
+	if err != nil {
+		t.Fatalf("saveOps without interface failed: %v", err)
+	}
+
+	doc := draftDocument(t, service, projectID)
+	objects := collectionOf(doc, "objects")
+	if len(objects) != 1 {
+		t.Fatalf("expected 1 object, got %d", len(objects))
+	}
+	iface, ok := objects[0]["interface"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected object.interface map, got: %T (%+v)", objects[0]["interface"], objects[0]["interface"])
+	}
+	inputs, ok := iface["inputs"].([]any)
+	if !ok || len(inputs) != 1 {
+		t.Fatalf("expected 1 input, got: %+v", iface["inputs"])
+	}
+	firstIn := inputs[0].(map[string]any)
+	if firstIn["name"] != "pv" || firstIn["type"] != "REAL" {
+		t.Fatalf("expected input pv:REAL, got: %+v", firstIn)
+	}
+	outputs, ok := iface["outputs"].([]any)
+	if !ok || len(outputs) != 1 {
+		t.Fatalf("expected 1 output, got: %+v", iface["outputs"])
+	}
+	firstOut := outputs[0].(map[string]any)
+	if firstOut["name"] != "alarm" || firstOut["type"] != "BOOL" {
+		t.Fatalf("expected output alarm:BOOL, got: %+v", firstOut)
+	}
+
+	// Upsert POU WITH client interface -> client interface must be preserved
+	clientIface := map[string]any{
+		"inputs": []map[string]any{{"name": "override_pin", "type": "INT"}},
+	}
+	opWithInterface := op(map[string]any{
+		"op": "upsertObject",
+		"object": map[string]any{
+			"objectId":  objectID,
+			"kind":      "FUNCTION_BLOCK",
+			"name":      "FB_Test",
+			"language":  "ST",
+			"source":    stSource,
+			"interface": clientIface,
+		},
+	})
+	_, err = saveOps(t, service, projectID, draftID, result.ETag, "70000000-0000-4000-8000-000000000100", opWithInterface)
+	if err != nil {
+		t.Fatalf("saveOps with interface failed: %v", err)
+	}
+
+	doc2 := draftDocument(t, service, projectID)
+	objects2 := collectionOf(doc2, "objects")
+	iface2 := objects2[0]["interface"].(map[string]any)
+	inputs2 := iface2["inputs"].([]any)
+	if len(inputs2) != 1 || inputs2[0].(map[string]any)["name"] != "override_pin" {
+		t.Fatalf("expected client-provided interface preserved, got: %+v", iface2)
+	}
+}
