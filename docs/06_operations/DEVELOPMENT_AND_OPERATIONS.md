@@ -2,7 +2,7 @@
 
 **ID:** OPS-DEV-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-12
+**Cập nhật:** 2026-09-16
 
 ## Repository map
 
@@ -50,6 +50,73 @@ ROLLBACK (T59-606) — nằm trong `run_release` và sẽ rơi mất với ngư�
 theo danh sách gõ tay.
 
 HMI: thêm `-DMKDDC_ENABLE_HMI=ON` và xác minh dependency/target. BACnet: dùng option hiện có trong CMake và chạy protocol smoke phù hợp. Không coi build trên host là thay thế HIL/target test.
+
+## Cross-build aarch64 cho Forlinx, và ba cổng kiểm binary
+
+`T-BAC-011` (#627). Đường build được `ADR-022` ưu tiên vẫn là build native trên
+bo; cross-build ở đây là đường phụ cho máy phát triển x86_64, và là cách duy
+nhất hiện có để kiểm một bản `BACNET=ON` trước khi mang lên tủ điện.
+
+Chuẩn bị **một lần** trên máy build:
+
+```bash
+sudo dpkg --add-architecture arm64
+# Kho arm64 của Ubuntu nằm ở ports.ubuntu.com, KHÔNG phải archive.ubuntu.com.
+# Thiếu bước này thì `apt-get install libmodbus-dev:arm64` báo "Unable to locate
+# package" dù gói có thật.
+sudo apt-get update
+sudo apt-get install -y g++-aarch64-linux-gnu libmodbus-dev:arm64 libsodium-dev:arm64
+python3 -m pip install -r requirements-ci.txt   # cổng hợp đồng của apps/core
+```
+
+Dựng và kiểm:
+
+```bash
+scripts/cross_build_aarch64_bacnet.sh --bacnet on
+```
+
+Script in `cfg_exit`, `build_exit`, `gate_exit` — **đọc cả ba**. Log đầy đủ nằm
+ở `logs/cross-arm64-bacnet-on-{configure,build}.log`.
+
+### Ba cổng kiểm binary
+
+`scripts/gate_bacnet_aarch64_binary.sh <binary>` chạy độc lập trên một binary
+bất kỳ, nên `T-BAC-012` (CI) và quy trình deploy gọi lại được mà không chép
+logic. Đây là phép kiểm **tĩnh** (`objdump`/`nm`), không chạy binary aarch64 —
+chạy được trên máy dev x86_64. Bằng chứng runtime trên bo thuộc `T-BAC-060..062`;
+`ADR-060` cấm nâng bằng chứng tĩnh thành bằng chứng runtime.
+
+| Cổng | Kiểm gì | Vì sao | Mã thoát khi đỏ |
+|---|---|---|---|
+| 1 | Trần `GLIBCXX ≤ 3.4.30` | Symbol libstdc++ mới hơn rootfs bo không hỏng lúc build; nó hỏng lúc khởi động trên bo | `3` |
+| 2 | Danh sách `NEEDED` | `.so` mới mà rootfs bo không có cũng chỉ lộ ra lúc chạy; riêng `libbacnet*.so` thì luôn sai — bacnet-stack phải link tĩnh | `4` |
+| 3 | Có symbol `bip_init` | Một bản `BACNET=OFF` vẫn deploy trót lọt và log trông bình thường, nhưng không có BACnet | `5` |
+
+Cổng 3 nghiêm trọng nhất vì nó là thứ duy nhất phân biệt được hai bản đó từ
+binary: mọi lời gọi bacnet-stack trong `apps/iobus/adapters/bacnet/bacnet_server.cpp`
+nằm trong `#ifdef MKDDC_ENABLE_BACNET`, và nhánh `#else` của `start()` chỉ in
+`INFO bacnet_server.start (MKDDC_ENABLE_BACNET=OFF, no-op)` rồi trả `false`.
+
+Cổng 2 không hỏi "thư viện này có trên bo không" — không kiểm được điều đó từ
+máy dev. Nó hỏi câu kiểm được: *bản `BACNET=ON` có đòi thêm `.so` nào mà bản
+đang deploy không đòi?* Đối chiếu trực tiếp với một binary tham chiếu:
+
+```bash
+scripts/cross_build_aarch64_bacnet.sh --bacnet off      # bản đối chứng
+scripts/gate_bacnet_aarch64_binary.sh \
+  build/cross-arm64-bacnet-on/iobus/mkddc-iobus \
+  --baseline build/cross-arm64-bacnet-off/iobus/mkddc-iobus
+```
+
+**Phép thử ngược — chạy lại mỗi khi sửa cổng.** `--bacnet off` phải làm script
+đỏ ở **cổng 3** với `gate_exit=5`. Một cổng chưa bao giờ đỏ là một cổng chưa
+biết mình có chạy hay không.
+
+Cấu hình cross tắt test C++ (`IOBUS_BUILD_TESTS`, `CORE_BUILD_TESTS`,
+`NETCFG_BUILD_TESTS`, `MKDDC_ENABLE_FW_HOSTCHECK`): binary aarch64 không chạy
+được trên máy build x86_64, và `gtest_discover_tests` vốn CHẠY binary ngay sau
+khi link nên build sẽ đứt ở bước post-link. Bộ test đầy đủ vẫn phải chạy ở build
+native — cross-build không thay thế nó.
 
 ## Chạy local full-stack no-board (không SSH board)
 

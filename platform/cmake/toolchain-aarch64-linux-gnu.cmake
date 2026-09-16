@@ -15,12 +15,31 @@
 # bản amd64 và ld báo `cannot find -lmodbus`. Chuẩn bị một lần trên máy build:
 #
 #   sudo dpkg --add-architecture arm64
+#   # `dpkg --add-architecture` KHÔNG đủ: kho arm64 của Ubuntu nằm ở
+#   # ports.ubuntu.com, còn archive.ubuntu.com chỉ có amd64/i386. Thiếu bước
+#   # khai báo kho ports, `apt-get install libmodbus-dev:arm64` báo "Unable to
+#   # locate package" — thông điệp trông y như gói không tồn tại, nên rất dễ
+#   # kết luận nhầm là phải build tay libmodbus (đã mất thời gian vì nó
+#   # 2026-09-16). Thêm một file nguồn cho arm64, và giới hạn nguồn cũ về amd64
+#   # để apt không đi hỏi archive.ubuntu.com những gói arm64 mà nó không có:
+#   #   /etc/apt/sources.list.d/ubuntu-ports.sources
+#   #     Types: deb
+#   #     URIs: http://ports.ubuntu.com/ubuntu-ports/
+#   #     Suites: noble noble-updates noble-backports noble-security
+#   #     Components: main universe restricted multiverse
+#   #     Architectures: arm64
+#   #     Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 #   sudo apt-get update
 #   sudo apt-get install -y g++-aarch64-linux-gnu \
 #       libmodbus-dev:arm64 libsodium-dev:arm64
 #   export PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig
 #
 # `MKDDC_ENABLE_HMI=ON` cần thêm `libdrm-dev:arm64` và `libfreetype-dev:arm64`.
+#
+# Cross-build `mkddc-iobus` với BACnet, kèm ba cổng kiểm binary (GLIBCXX,
+# NEEDED, symbol `bip_init`): dùng `scripts/cross_build_aarch64_bacnet.sh`
+# thay vì gõ tay chuỗi lệnh trên — xem `docs/06_operations/DEVELOPMENT_AND_OPERATIONS.md`
+# §"Cross-build aarch64 cho Forlinx" (T-BAC-011, #627).
 #
 # Đường build được ADR-022 ưu tiên vẫn là build native trên self-hosted runner
 # của board. Cross-build ở đây là đường phụ cho máy phát triển x86_64.
