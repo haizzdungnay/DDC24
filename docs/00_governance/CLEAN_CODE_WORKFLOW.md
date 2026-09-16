@@ -1,10 +1,10 @@
 # Quy trình Clean Code & Clean Documentation — MK-DDC-24
 
 **ID:** `WF-CLEAN-001`
-**Phiên bản:** 1.4
+**Phiên bản:** 1.5
 **Trạng thái:** Active
 **Chủ quản:** CTO / Project Engineering
-**Cập nhật:** 2026-09-11 (`§1` N1 + `§3.2` + `§7`: mẫu finding có ô `Manager-Run` cho lượt triage, ô người mở đổi nhãn thành `Finder-Run`, guard thêm mã chặn `N1-FINDER`; xem bảng Lịch sử sửa đổi cuối hồ sơ để biết đầy đủ các bản 1.1–1.4)
+**Cập nhật:** 2026-09-16 (`§6.2`: thêm cổng `scripts/verify-project.sh --component bacnet` — bản thi hành `ADR-060` điều (4), bắt buộc cho PR chạm `apps/iobus/adapters/bacnet/**`; xem bảng Lịch sử sửa đổi cuối hồ sơ để biết đầy đủ các bản 1.1–1.5)
 
 Tài liệu này là **authority duy nhất** cho quy trình dọn dẹp mã nguồn và tài liệu
 DDC-24. Khi nội dung ở `AGENTS.md`, `CLAUDE.md` hoặc skill khác nhau, bản này đúng.
@@ -395,12 +395,55 @@ python3 scripts/docs_iso_harness.py --expect
 # Logic của chính cổng tách vai — BẮT BUỘC khi PR chạm scripts/workflow_guard.py
 # == scripts/verify-project.sh --component workflow
 python3 scripts/workflow_guard.py --selftest
+
+# BACnet — BẮT BUỘC khi PR chạm apps/iobus/adapters/bacnet/** (ADR-060 điều 4)
+scripts/verify-project.sh --component bacnet
 ```
 
-Hai cổng cuối có đường chạy qua `scripts/verify-project.sh` từ 2026-09-11
-(`#593`); trước đó `rg 'docs_iso_harness|workflow_guard' scripts/verify-project.sh`
-trả về rỗng, nên không lệnh nào gom đủ bộ cổng offline và người kiểm phải nhớ ba
-lệnh rời ở ba nơi tài liệu khác nhau.
+Hai cổng `docs` và `workflow` có đường chạy qua `scripts/verify-project.sh` từ
+2026-09-11 (`#593`); trước đó `rg 'docs_iso_harness|workflow_guard'
+scripts/verify-project.sh` trả về rỗng, nên không lệnh nào gom đủ bộ cổng offline
+và người kiểm phải nhớ ba lệnh rời ở ba nơi tài liệu khác nhau.
+
+**Cổng `bacnet` (`#628`, `T-BAC-012`) là bản thi hành của `ADR-060` điều (4):**
+*"cấu hình `BACNET=OFF` không được là đường build duy nhất được kiểm"*. PR nào
+chạm `apps/iobus/adapters/bacnet/**` **bắt buộc** dẫn số đo của lệnh này; khối
+`cmake`/`ctest` ở đầu mục này **không thay thế được** nó, vì nó chỉ dựng host và
+không khẳng định điều gì về việc bacnet-stack có thật sự được biên dịch vào hay
+không.
+
+Cổng chạy bốn tầng, mỗi tầng bịt một lỗ mà ba tầng kia không thấy:
+
+| Tầng | Kiểm cái gì | Bắt được điều gì mà tầng khác không bắt |
+|---|---|---|
+| 1 | HOST `BACNET=ON`: dựng + toàn bộ `ctest` (gọi lại `--component cpp --profile full`) | hồi quy hành vi thường |
+| 2 | symbol `bip_init` phải có trong `mkddc-iobus` host | bản `BACNET=OFF` dựng trót lọt, xanh trọn vẹn, và **không có BACnet** |
+| 3 | tầng `LOOPBACK` (`#626`) phải chạy thật, không `SKIP` | `ctest` báo `Passed` cho một ca `GTEST_SKIP()` — SKIP không phân biệt được với PASS trong bảng kết quả |
+| 4 | cross aarch64 `BACNET=ON` + ba cổng kiểm binary (gọi lại `scripts/cross_build_aarch64_bacnet.sh` của `#627`) | GLIBCXX vượt trần / `NEEDED` lạ — hai lỗi chỉ lộ ra lúc bo khởi động |
+
+Vì sao tầng 2 và tầng 3 không phải là cẩn thận thừa, đo được ngày 2026-09-16:
+tiêm một mutant gỡ `target_compile_definitions(... MKDDC_ENABLE_BACNET)` rồi chạy
+lại cổng thì tầng 1 báo **1482/1482 PASS** trên một sản phẩm hoàn toàn không có
+BACnet — đúng sự cố 1440/1440 ngày 2026-09-10 — và **tầng 2 là thứ duy nhất bắt
+được** (`exit=1`, "không thấy symbol `bip_init`").
+
+Hai điều kiện để chạy cổng này, nói rõ vì chúng là lý do nó **không** nằm trong
+`--component all`:
+
+```bash
+# một lần trên máy build x86_64 — tầng 4 cần cross toolchain aarch64
+sudo dpkg --add-architecture arm64      # kho arm64 ở ports.ubuntu.com
+sudo apt-get update
+sudo apt-get install -y g++-aarch64-linux-gnu libmodbus-dev:arm64 libsodium-dev:arm64
+```
+
+Thiếu toolchain thì cổng **đỏ** kèm đúng lệnh phải chạy, **không** bỏ qua im
+lặng: một tầng tự tàng hình khi thiếu công cụ tái tạo đúng vấn đề `ADR-060` cấm.
+
+Job `bacnet-on-gate` trong `.github/workflows/build-and-test.yml` khai lại đúng
+các bước này, nhưng trạng thái của nó là `NOT_RUN (#414)` — tổ chức không cấp
+runner. **Lệnh tại máy ở trên là lớp thi hành duy nhất**; không ghi `PASS` cho
+job CI đó trong bất kỳ bảng Verification nào.
 
 Đọc **exit code của cả configure lẫn build**: build dir cũ còn
 `CMAKE_HOME_DIRECTORY` trỏ `services/` đã xoá sẽ làm configure + build hỏng
@@ -1115,6 +1158,7 @@ Phiên Routine KHÔNG có `gh` CLI; mọi thao tác GitHub đi qua `mcp__github_
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.5 | 2026-09-16 | `§6.2`: thêm cổng `scripts/verify-project.sh --component bacnet` — bản thi hành `ADR-060` điều (4) (*`BACNET=OFF` không được là đường build duy nhất được kiểm*). Trước đó §6.2 chỉ có khối `cmake`/`ctest` dựng host, không khẳng định gì về việc bacnet-stack có thật sự được biên dịch vào: ngày 2026-09-10 bộ cổng báo **1440/1440 PASS** trong khi `SubscribeCOV` chưa đăng ký và 64/88 object không có dữ liệu. Cổng mới chạy bốn tầng (host `BACNET=ON` → symbol `bip_init` → tầng `LOOPBACK` `#626` chạy thật, không `SKIP` → cross aarch64 + ba cổng kiểm binary `#627`) và ghi rõ hai gói toolchain phải cài, lý do cổng **không** nằm trong `--component all`, cùng trạng thái `NOT_RUN (#414)` của job CI tương ứng. Refs `#628` (`T-BAC-012`). |
 | 1.0 | 2026-09-09 | Thiết lập ban đầu: ba vai, ma trận quyền, workflow state, nhãn, branch/merge rule, quality gate, truy xuất và lịch chạy. |
 | 1.4 | 2026-09-11 | `§1` N1 + `§3.2` mới + `§7`: mẫu `03-finding.yml` không có ô `Manager-Run`, nên mọi finding được triage lên `state:ready` đều bị `N1-MGR` chặn merge ở bước cuối — một lớp Issue không bao giờ merge được, và lối thoát nhanh nhất là Implementer tự bịa một dòng `Manager-Run`. Mẫu nay có ô `Manager-Run` dành riêng cho lượt triage của Manager, và ô người mở đổi nhãn thành `Finder-Run`. Vì trên finding người **tạo** Issue là người phát hiện chứ không phải Manager, guard thêm mã chặn `N1-FINDER` (người mở finding tự implement) và ghi nhận `CẢNH BÁO triage` (tự điền ô triage). Refs `#653`. |
 | 1.3 | 2026-09-11 | `§6.1a` + `§6.2`: `python3 scripts/docs_iso_harness.py --expect` và `python3 scripts/workflow_guard.py --selftest` nay có đường chạy trong `scripts/verify-project.sh` (`--component docs`, `--component workflow`). Trước đó selftest của guard chỉ tồn tại trong job `guard-selftest` của Actions, mà Actions không có runner (`#414`) — tức `scripts/workflow_guard.py`, file N1/N2 dựa vào, là mã không cổng nào bảo vệ khi bị sửa. Ghi rõ: ai chạm guard thì bắt buộc chạy selftest và dán số đo. Refs `#593`. |
