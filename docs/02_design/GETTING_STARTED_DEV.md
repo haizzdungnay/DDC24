@@ -72,13 +72,60 @@ Mục tiêu đầu tiên nên làm: **trả lời được 1 frame IOP**. Khi SO
 ## 2. Nhánh SOFTWARE (SOM Debian)
 
 ### 2.1 Cần cài gì (trên máy dev + trên SOM)
+
 ```bash
-# Trên máy dev (Ubuntu/Debian)
-sudo apt install build-essential cmake g++ libmodbus-dev   # mkddc-core / mkddc-iobus (C++17)
-sudo apt install golang-go nodejs npm                      # mkddc-web (Go) + ui (React)
-# BACnet stack
-git clone https://github.com/bacnet-stack/bacnet-stack
+# Trên máy dev (Ubuntu/Debian) — `apt-get update` TRƯỚC là bắt buộc:
+# chỉ mục đóng sẵn trong image trỏ một bản `libdrm` đã bị gỡ khỏi mirror và trả 404.
+sudo apt-get update
+sudo apt-get install -y build-essential cmake g++ \
+     libmodbus-dev libsodium-dev libgtest-dev libdrm-dev
+sudo apt-get install -y golang-go nodejs npm     # mkddc-web (Go) + ui (React)
+
+# Cổng hợp đồng của `mkddc-core` THI HÀNH schema chứ không chỉ băm nó, nên thiếu
+# `jsonschema` sẽ làm configure FAIL ở apps/core/CMakeLists.txt:330.
+python3 -m pip install -r requirements-ci.txt
 ```
+
+Bốn gói C++ ứng với bốn chỗ configure hỏng **theo thứ tự khác nhau**, nên cài thiếu
+một cái sẽ ra một thông điệp lỗi trông không liên quan gì tới cái đang thiếu:
+
+| Gói | Cần cho | Thiếu thì hỏng ở |
+|---|---|---|
+| `libmodbus-dev` | `MKDDC_ENABLE_MODBUS=ON` | `apps/iobus/CMakeLists.txt` — `pkg_check_modules(... REQUIRED)` |
+| `libsodium-dev` | ký artifact ST | `apps/core` |
+| `libgtest-dev` | `IOBUS_BUILD_TESTS=ON` (mặc định ON) | `apps/iobus` — nay là `FATAL_ERROR` nói thẳng, xem §2.1a |
+| `libdrm-dev` | `MKDDC_ENABLE_HMI=ON` | `apps/hmi` |
+
+### 2.1a BACnet stack — nằm TRONG repo, không tải lúc dựng
+
+**Không clone bacnet-stack bằng tay nữa.** Từ `OD-BAC-009` (ký 2026-09-16, phương án
+(a)), nguồn `bacnet-stack 1.3.8` được vendor sẵn trong `third_party/bacnet-stack/`.
+`cmake -DMKDDC_ENABLE_BACNET=ON` dùng thẳng cây đó và **không cần mạng**.
+
+```bash
+scripts/verify_vendor_bacnet_stack.sh    # kiểm toàn vẹn, chạy offline
+```
+
+Script trả `0` khi sạch, `2` khi thiếu cây/manifest, `3` khi nội dung lệch băm, `4`
+khi thừa/thiếu file. Lớp `4` là lớp mà `sha256sum -c` mù: thêm một file lạ vào cây
+vendor thì băm của mọi file cũ vẫn đúng.
+
+Cây vendor là **tập con Linux** của upstream (441 file / 5,8 MB, từ 2004 file / 35 MB):
+chỉ giữ `src/`, `ports/linux/`, `cmake/`, `CMakeLists.txt`, `license/`. Hệ quả phải
+biết trước: **`MKDDC_ENABLE_BACNET=ON` chỉ dựng được trên Linux** — macOS cần
+`ports/bsd`, Windows cần `ports/win32`, cả hai không có trong cây. Lý do và cách mở
+lại nằm trong biến `KEEP` của `scripts/vendor_bacnet_stack.sh`.
+
+Nâng version: sửa `MKDDC_BACNET_TAG` + `MKDDC_BACNET_SHA` trong script rồi chạy
+`scripts/vendor_bacnet_stack.sh` (bước duy nhất cần mạng). Không sửa tay file nào
+trong `third_party/bacnet-stack/`.
+
+> **Bẫy egress đã cắn nhiều phiên.** Trong môi trường có egress policy, tải tarball
+> từ kho công cộng (`/archive/refs/tags/*.tar.gz`) trả **HTTP 403**, nhưng **giao
+> thức git thì không bị chặn**. Đó là lý do `git clone --depth 1 --branch <tag>`
+> chạy được trong khi `FetchContent(URL ...)` hỏng. Ba dependency còn lại của repo
+> (`nlohmann_json`, `googletest`, `lvgl`) **vẫn dùng đường tải** — xem `#714`; máy
+> sạch không có egress hiện mới chỉ dựng được `apps/iobus`, chưa dựng được cả repo.
 
 ### 2.2 Chạy thử — local trước, board sau
 
