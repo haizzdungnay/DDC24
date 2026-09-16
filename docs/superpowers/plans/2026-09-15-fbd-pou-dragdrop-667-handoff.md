@@ -2,7 +2,9 @@
 
 Ngày: 2026-09-15
 Nhánh: `feat/fbd-pou-dragdrop-667`
-PR: #709 (OPEN, chưa merge)
+PR: #709 (MERGED @ fcec8a5c), #710 (MERGED @ 2e63a991)
+Ngày cập nhật: 2026-09-16 (bản gốc: 2026-09-15)
+Nhánh: main
 
 ---
 
@@ -121,12 +123,12 @@ Workflow:          A. Triển khai 4 tính năng
                  → E. Tạo PR vào main (KHÔNG merge)
                  → F. [CHỜ USER] merge / đóng issue / dọn dữ liệu
 
-Completed:         A → B → C → D → E
+Completed:         A → B → C → D → E → F (PR #709 + #710 MERGED) → G (flaky fix + changelog)
 Currently working: (không có việc đang dở)
-Next:              F — toàn bộ chờ user quyết
+Next:              Chờ user commit/push flaky fix, quyết dọn dẹp
 ```
 
-Phiên dừng ở trạng thái **sạch**: PR #709 mở, chưa merge, cây làm việc không có file modified.
+Phiên dừng ở trạng thái: nhánh main, HEAD = 2e63a991, 2 file modified (vite.config.ts + CHANGELOG.md), chưa commit.
 
 ---
 
@@ -136,8 +138,8 @@ Phiên dừng ở trạng thái **sạch**: PR #709 mở, chưa merge, cây làm
 |---|---|
 | Thư mục làm việc | `E:\TuanDuong\INTERN\DDC24_project\MK-DDC-24` |
 | Repo GitHub | `Mekong-HCM/MK-DDC-24` |
-| Nhánh hiện tại | `feat/fbd-pou-dragdrop-667` |
-| Base | `main` (`937c3286`) |
+| Nhánh hiện tại | `main` |
+| HEAD | `2e63a991` (= `origin/main`) |
 | Frontend | React + TypeScript 5.6 + Vite/Rolldown v8.2.0 + Vitest 4.1.10 + Tailwind CSS v4 + Playwright |
 | Backend | Go 1.22.2 (`apps/web-api`) |
 | Lõi | C++ qua CMake (`apps/core`) |
@@ -183,7 +185,8 @@ Thiếu bất kỳ biến nào trong 4 biến trên → đăng nhập hỏng ho�
 - Diff so với `origin/main`: **40 file, +8408 / −126**
 
 **PR** (`gh pr view 709`):
-- #709 — `OPEN`, `MERGEABLE`, `main` ← `feat/fbd-pou-dragdrop-667`
+- #709 — `MERGED` @ 2026-09-15T09:59:02Z
+- #710 — `MERGED` @ 2026-09-15T10:15:53Z (polish layout)
 - https://github.com/Mekong-HCM/MK-DDC-24/pull/709
 - Không có PR mở nào khác.
 
@@ -300,7 +303,11 @@ Thêm: `FbdCanvas.tsx` thay chỗ nuốt lỗi im lặng (`catch { return }`) b�
 
 ## 8. WORK IN PROGRESS
 
-**Không có việc đang dở.** Phiên dừng ở trạng thái sạch:
+**2 file modified chưa commit:**
+- apps/web-ui/vite.config.ts (isolate: true triệt flaky test)
+- CHANGELOG.md (thêm 3 mục mới)
+
+Phiên dừng ở trạng thái:
 - Cây làm việc không có file modified/staged.
 - PR #709 mở, chưa merge, `MERGEABLE`.
 - Toàn bộ nghiệm thu đã chạy và xanh.
@@ -674,7 +681,10 @@ Issue đang `CLOSED` dù user cấm tự đóng. Báo user và hỏi có muốn 
 
 `Control application` có 5 object, 3 trong đó (`NewFunctionBlock_2`, `_3`, `_4`) do subagent tạo sai phép. Hỏi xoá cái nào. **KHÔNG tự xoá.** `objectId` xem mục 14.
 
-### F3. Chờ review + merge PR #709
+### F3. PR #709 + #710 ĐÃ MERGED
+
+- #709 merged lúc 09:59 UTC
+- #710 merged lúc 10:15 UTC
 
 **TUYỆT ĐỐI KHÔNG merge khi user chưa yêu cầu.** User đã nói "chưa merge" hai lần.
 
@@ -723,7 +733,10 @@ Task được coi là hoàn thành khi **tất cả** điều kiện sau đúng:
 
 ### Chưa đạt ⏳ (chờ user)
 
-- [ ] PR #709 được review và merge — **chờ user**
+- [x] PR #709 đã merge vào main @ fcec8a5c
+- [x] PR #710 đã merge vào main @ 2e63a991
+- [x] Triệt flaky test Vitest bằng isolate: true trong vite.config.ts (5/5 PASS 252/1)
+- [x] Cập nhật CHANGELOG.md với đầy đủ 3 mục mới
 - [ ] Issue #667 ở trạng thái đúng ý user — hiện `CLOSED` ngoài ý muốn
 - [ ] Dữ liệu dự án `Control application` được dọn theo ý user
 - [ ] Hover tooltip / minimap wires / tách zoom kiểm chứng trên trình duyệt thật — tuỳ chọn
