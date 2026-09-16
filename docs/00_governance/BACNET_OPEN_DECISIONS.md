@@ -78,7 +78,7 @@
 | Trước WP-02 | `OD-BAC-002` | ✅ CLOSED 2026-09-10 |
 | Trước WP-04 | `OD-BAC-003` | ✅ CLOSED 2026-09-10 |
 | Trước WP-06/08 | `OD-BAC-004`, `OD-BAC-006` | ✅ CLOSED 2026-09-10 |
-| Trước phát hành | `OD-BAC-008` | ❌ **CÒN CHỜ NGƯỜI** — xem §4 |
+| Trước phát hành | `OD-BAC-008` | ❌ **CÒN CHỜ NGƯỜI** — xem §4.3 |
 
 Toàn bộ nhánh tài liệu và nhánh mã (WP-01…WP-08) nay **không còn bị chặn bởi quyết định
 kỹ thuật**. Sau 2026-09-16, còn **hai** cam kết tổ chức ở §4: `OD-BAC-007` (chặn DoD) và
