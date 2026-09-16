@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <tuple>
 
 #ifdef MKDDC_ENABLE_BACNET
 #include <bacnet/bacdef.h>
@@ -164,7 +165,7 @@ void BacnetServer::apply_ai_units()
         if (std::strcmp(s, "%") == 0)    return UNITS_PERCENT;
         return UNITS_NO_UNITS;
     };
-    for (int i = 0; i < KX_N_UI; i++) {
+    for (int i = 0; i < BacnetObjects::N_AI; i++) {
         Analog_Input_Units_Set(static_cast<uint32_t>(i + 1),
                                unit_code(objects_->ai_unit(static_cast<uint32_t>(i + 1)).c_str()));
     }
@@ -175,7 +176,10 @@ void BacnetServer::apply_ao_config()
 {
 #ifdef MKDDC_ENABLE_BACNET
     if (!objects_) return;
-    for (uint32_t i = 1; i <= 4; i++) {
+    static_assert(std::tuple_size<decltype(ao_name_storage_)>::value ==
+                      static_cast<size_t>(BacnetObjects::N_AO),
+                  "ao_name_storage_ không đủ chỗ cho N_AO kênh AO");
+    for (uint32_t i = 1; i <= BacnetObjects::N_AO; i++) {
         auto& name_buf = ao_name_storage_[i - 1];
         std::strncpy(name_buf.data(), objects_->ao_name(i).c_str(), name_buf.size() - 1);
         name_buf.back() = '\0';
@@ -214,14 +218,16 @@ bool BacnetServer::rebind()
 void BacnetServer::register_objects()
 {
 #ifdef MKDDC_ENABLE_BACNET
-    /* BAC-003: AI×16 (ADR-010: KX_N_UI=16), BI×8, AO×4, BO×4, AV×32, BV×16, MSV×8 */
-    for (int i = 0; i < KX_N_UI; i++) Analog_Input_Create(i + 1);
-    for (int i = 0; i < 8;  i++) Binary_Input_Create(i + 1);
-    for (int i = 0; i < 4;  i++) Analog_Output_Create(i + 1);
-    for (int i = 0; i < 4;  i++) Binary_Output_Create(i + 1);
-    for (int i = 0; i < 32; i++) Analog_Value_Create(i + 1);
-    for (int i = 0; i < 16; i++) Binary_Value_Create(i + 1);
-    for (int i = 0; i < 8;  i++) Multistate_Value_Create(i + 1);
+    /* BAC-003: số lượng lấy từ BacnetObjects::N_* — không viết số vào đây.
+     * Mỗi loại một cận riêng: gộp hai loại khác số lượng vào chung một vòng
+     * chính là nguyên nhân gốc của F-CTO-BAC-01 (#635). */
+    for (int i = 0; i < BacnetObjects::N_AI;  i++) Analog_Input_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_BI;  i++) Binary_Input_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_AO;  i++) Analog_Output_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_BO;  i++) Binary_Output_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_AV;  i++) Analog_Value_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_BV;  i++) Binary_Value_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_MSV; i++) Multistate_Value_Create(i + 1);
 #endif
 }
 
@@ -229,7 +235,11 @@ void BacnetServer::sync_stack_inputs(const kx_plc_shm_t* shm)
 {
 #ifdef MKDDC_ENABLE_BACNET
     if (!objects_ || !shm) return;
-    for (uint32_t instance = 1; instance <= KX_N_UI; ++instance) {
+    /* AI và BI có SỐ LƯỢNG KHÁC NHAU (16 vs 8) nên phải là hai vòng riêng.
+     * Bản cũ chạy chung một vòng tới KX_N_UI: read_bi() tự chặn instance > N_BI
+     * nên không sai kết quả, nhưng nó che mất việc hai loại không cùng cận —
+     * và đúng chỗ gộp đó ở dispatch_cov() thì sai thật. */
+    for (uint32_t instance = 1; instance <= BacnetObjects::N_AI; ++instance) {
         float value = 0.0f;
         uint8_t status_flags = 0;
         uint8_t reliability = 0;
@@ -240,6 +250,11 @@ void BacnetServer::sync_stack_inputs(const kx_plc_shm_t* shm)
             Analog_Input_Out_Of_Service_Set(instance,
                                              objects_->oos_ai(instance));
         }
+    }
+    for (uint32_t instance = 1; instance <= BacnetObjects::N_BI; ++instance) {
+        float value = 0.0f;
+        uint8_t status_flags = 0;
+        uint8_t reliability = 0;
         if (objects_->read_bi(instance, &value, &status_flags, &reliability, shm)) {
             Binary_Input_Present_Value_Set(
                 instance, value != 0.0f ? BINARY_ACTIVE : BINARY_INACTIVE);
@@ -277,58 +292,73 @@ void BacnetServer::process_bacnet_packet(uint64_t now_ms, const kx_plc_shm_t* sh
 #endif
 }
 
+/* Quét mọi object có giá trị đọc được và gọi `check` cho từng cái.
+ *
+ * Tách khỏi BacnetServer::dispatch_cov() để kiểm được phạm vi quét mà không
+ * cần mở socket BACnet: `dispatch_cov` là private và `tick()` thoát sớm khi
+ * chưa `start()`, nên không có đường nào khẳng định "AI16 có được soi không"
+ * từ bên ngoài. Hàm này chỉ đọc, không đụng trạng thái COV — phần đó nằm
+ * trong `check` do phía gọi cung cấp.
+ *
+ * MỖI LOẠI OBJECT MỘT VÒNG RIÊNG, cận lấy từ BacnetObjects::N_*. Bản cũ gộp
+ * AI và BI vào chung cận `8`: đúng cho BI (N_BI=8), sai cho AI (N_AI=16), nên
+ * AI9..AI16 có giá trị sống trong SHM mà không bao giờ được kiểm COV
+ * (F-CTO-BAC-01, #635). Đừng gộp lại, kể cả khi hai loại tình cờ bằng nhau. */
+void scan_cov_objects(const BacnetObjects& objects, const kx_plc_shm_t* shm,
+                      const CovNotifyFn& check)
+{
+    if (!shm || !check) return;
+    float v; uint8_t sf, rel;
+
+    for (uint32_t i = 1; i <= BacnetObjects::N_AI; i++)
+        if (objects.read_ai(i, &v, &sf, &rel, shm))
+            check(BacnetObjectType::ANALOG_INPUT, i, v, sf);
+
+    for (uint32_t i = 1; i <= BacnetObjects::N_BI; i++)
+        if (objects.read_bi(i, &v, &sf, &rel, shm))
+            check(BacnetObjectType::BINARY_INPUT, i, v, sf);
+
+    for (uint32_t i = 1; i <= BacnetObjects::N_AO; i++)
+        if (objects.read_ao(i, &v, &sf, &rel, shm))
+            check(BacnetObjectType::ANALOG_OUTPUT, i, v, sf);
+
+    for (uint32_t i = 1; i <= BacnetObjects::N_BO; i++)
+        if (objects.read_bo(i, &v, &sf, &rel, shm))
+            check(BacnetObjectType::BINARY_OUTPUT, i, v, sf);
+
+    for (uint32_t i = 1; i <= BacnetObjects::N_AV; i++)
+        if (objects.read_av(i, &v, &sf, shm))
+            check(BacnetObjectType::ANALOG_VALUE, i, v, sf);
+
+    for (uint32_t i = 1; i <= BacnetObjects::N_BV; i++)
+        if (objects.read_bv(i, &v, &sf, shm))
+            check(BacnetObjectType::BINARY_VALUE, i, v, sf);
+
+    for (uint32_t i = 1; i <= BacnetObjects::N_MSV; i++)
+        if (objects.read_msv(i, &v, &sf, shm))
+            check(BacnetObjectType::MULTI_STATE_VALUE, i, v, sf);
+}
+
 void BacnetServer::dispatch_cov(uint64_t now_ms, const kx_plc_shm_t* shm)
 {
     (void)now_ms;
     if (!objects_ || !shm) return;
 
-    auto check = [&](BacnetObjectType obj_type, uint32_t instance, float value, uint8_t sf) {
-        auto subs = objects_->cov().check_and_update(obj_type, instance, value, sf);
+    scan_cov_objects(*objects_, shm,
+        [&](BacnetObjectType obj_type, uint32_t instance, float value, uint8_t sf) {
+            auto subs = objects_->cov().check_and_update(obj_type, instance, value, sf);
 #ifdef MKDDC_ENABLE_BACNET
-        for (const auto* sub : subs) {
-            (void)sub;
-            /* bacnet-stack: Send_COV_Subscribe_Unconfirmed or confirmed COV notification */
-            std::fprintf(stderr, "INFO  bacnet_cov.notify obj_type=%u inst=%u val=%.3f sf=%02x\n",
-                         static_cast<uint16_t>(obj_type), instance, value, sf);
-        }
+            for (const auto* sub : subs) {
+                (void)sub;
+                /* bacnet-stack: Send_COV_Subscribe_Unconfirmed or confirmed COV notification */
+                std::fprintf(stderr, "INFO  bacnet_cov.notify obj_type=%u inst=%u val=%.3f sf=%02x\n",
+                             static_cast<uint16_t>(obj_type), instance, value, sf);
+            }
 #else
-        for (const auto* sub : subs)
-            (void)sub;
+            for (const auto* sub : subs)
+                (void)sub;
 #endif
-    };
-
-    /* Scan AI/BI */
-    for (uint32_t i = 1; i <= 8; i++) {
-        float v; uint8_t sf, rel;
-        if (objects_->read_ai(i, &v, &sf, &rel, shm))
-            check(BacnetObjectType::ANALOG_INPUT, i, v, sf);
-        if (objects_->read_bi(i, &v, &sf, &rel, shm))
-            check(BacnetObjectType::BINARY_INPUT, i, v, sf);
-    }
-    /* AO/BO */
-    for (uint32_t i = 1; i <= 4; i++) {
-        float v; uint8_t sf, rel;
-        if (objects_->read_ao(i, &v, &sf, &rel, shm))
-            check(BacnetObjectType::ANALOG_OUTPUT, i, v, sf);
-        if (objects_->read_bo(i, &v, &sf, &rel, shm))
-            check(BacnetObjectType::BINARY_OUTPUT, i, v, sf);
-    }
-    /* AV/BV/MSV */
-    for (uint32_t i = 1; i <= 32; i++) {
-        float v; uint8_t sf;
-        if (objects_->read_av(i, &v, &sf, shm))
-            check(BacnetObjectType::ANALOG_VALUE, i, v, sf);
-    }
-    for (uint32_t i = 1; i <= 16; i++) {
-        float v; uint8_t sf;
-        if (objects_->read_bv(i, &v, &sf, shm))
-            check(BacnetObjectType::BINARY_VALUE, i, v, sf);
-    }
-    for (uint32_t i = 1; i <= 8; i++) {
-        float v; uint8_t sf;
-        if (objects_->read_msv(i, &v, &sf, shm))
-            check(BacnetObjectType::MULTI_STATE_VALUE, i, v, sf);
-    }
+        });
 }
 
 void BacnetServer::send_time_sync(uint64_t now_ms)
