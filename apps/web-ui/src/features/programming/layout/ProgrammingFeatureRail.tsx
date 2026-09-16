@@ -165,7 +165,7 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
           )}
         >
           <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className={cn('lg:hidden', collapsed && 'lg:inline')}>{PRODUCT_INFO.code}</span>
+          <span className="lg:hidden">{PRODUCT_INFO.code}</span>
           {!collapsed && (
             <span className="hidden truncate lg:inline">{PRODUCT_INFO.name} {pick('Lập trình', 'Programming')}</span>
           )}

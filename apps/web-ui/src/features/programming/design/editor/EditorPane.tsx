@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ChevronLeft, ChevronRight, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PanelLeftClose, PanelRightClose, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
+import { AlignLeft, ChevronLeft, ChevronRight, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PanelLeft, PanelLeftClose, PanelRightClose, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { FbdEditorPane } from './FbdEditorPane'
@@ -893,9 +893,10 @@ export function EditorPane({
             className="min-h-11 w-full rounded px-1 py-2 text-[10px] leading-tight text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
             aria-expanded={false}
             aria-controls="programs-slot-left"
-            onClick={() => setSlots({ ...slots, left: true })}
+           onClick={() => setSlots({ ...slots, left: true })}
           >
-            {pick('Mở cột trái', 'Expand left column')}
+            <PanelLeft className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{pick('Mở cột trái', 'Expand left column')}</span>
           </button>
         </div>
       )}
@@ -1101,9 +1102,12 @@ export function EditorPane({
             onOpenCompare={onOpenCompare}
             checkDisabledReason={checkDisabledReason}
             compareDisabledReason={compareDisabledReason}
+            pointCatalogItems={pointCatalog.data?.items ?? []}
+            pointCatalogLoading={pointCatalog.status === 'loading'}
+            onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
           />
         )}
-        </div>
+      </div>
       </div>
       <WorkspaceResizeHandle
         label={pick('Đổi kích thước Thư viện nhanh', 'Resize the quick library')}

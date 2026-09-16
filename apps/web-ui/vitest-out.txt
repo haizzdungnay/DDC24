@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 E:/TuanDuong/INTERN/DDC24_project/MK-DDC-24/apps/web-ui
+
+
+ Test Files  142 passed (142)
+      Tests  2193 passed (2193)
+   Start at  15:56:13
+   Duration  77.47s (transform 26.59s, setup 0ms, import 112.93s, tests 183.22s, environment 409.05s)
+

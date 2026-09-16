@@ -16,7 +16,8 @@ import { readFbdDocument } from '../../fbd/readDocument'
 import { emptyFbdDocument } from '../pou/pouTemplates'
 import { useWorkbenchOwnsMinimap } from '../../layout/useProgrammingViewport'
 import type { UserPouInterface } from '../../fbd/userPou'
-import type { ProgrammingDraftOperation, ProgrammingProgram } from '../../model/types'
+import type { ProgrammingDraftOperation, ProgrammingPointCatalogEntry, ProgrammingProgram } from '../../model/types'
+import { PortMappingPicker } from '../../fbd/PortMappingPicker'
 import { EditorStatusBar } from './EditorStatusBar'
 import { fbdStatusFields } from './editorStatus'
 
@@ -51,6 +52,10 @@ export interface FbdEditorPaneProps {
   onOpenCompare?: () => void
   checkDisabledReason?: string | null
   compareDisabledReason?: string | null
+  /** Point catalog items for inline port mapping. */
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
+  pointCatalogLoading?: boolean
+  onEnsurePointCatalogLoaded?: () => void
 }
 
 export function FbdEditorPane({
@@ -64,8 +69,16 @@ export function FbdEditorPane({
   onSelectionChange,
   onNodeEditorTargetChange,
   focusSelection,
+  pointCatalogItems,
+  pointCatalogLoading,
+  onEnsurePointCatalogLoaded,
+  onSave,
 }: FbdEditorPaneProps) {
   const { pick } = useI18n()
+  const [mappingRequest, setMappingRequest] = useState<{
+    nodeId: string; portId: string; portName: string; nodeName: string
+    portDirection: 'INPUT' | 'OUTPUT'; portDataType: string
+  } | null>(null)
   /* `T9-02` dời Mini Map sang cột 3 của khay đáy, mà cột đó chỉ tồn tại từ
      `1440px`. Tắt bản nội tuyến vô điều kiện sẽ làm `1280px` không còn Mini
      Map ở bất kỳ đâu. Hỏi đúng một nguồn: khay giữ từ `1440px`, canvas giữ ở
@@ -287,8 +300,39 @@ export function FbdEditorPane({
         }}
         onNodeEditorTargetChange={onNodeEditorTargetChange}
         focusSelection={focusSelection}
+        onRequestPortMapping={(info) => {
+          onEnsurePointCatalogLoaded?.()
+          setMappingRequest(info)
+        }}
       />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
+      {mappingRequest && (
+        <PortMappingPicker
+          portDirection={mappingRequest.portDirection}
+          portDataType={mappingRequest.portDataType}
+          portName={mappingRequest.portName}
+          nodeName={mappingRequest.nodeName}
+          points={pointCatalogItems ?? []}
+          loading={pointCatalogLoading}
+          onClose={() => setMappingRequest(null)}
+          onSelect={async (point) => {
+            /* ponytail: simplified binding — skip previewProgrammingBinding call.
+               Add server-side preview validation when UX is confirmed. */
+            const binding = {
+              bindingId: crypto.randomUUID(),
+              variableId: mappingRequest.portId,
+              point: { category: point.category, pointId: point.pointId, ...(point.deviceId ? { deviceId: point.deviceId } : {}) },
+              direction: mappingRequest.portDirection === 'INPUT' ? 'READ' as const : 'WRITE' as const,
+              dataType: mappingRequest.portDataType,
+              ...(point.unit ? { unit: point.unit } : {}),
+              writable: point.writable,
+              qualityPolicy: 'REQUIRE_GOOD' as const,
+            }
+            await onSave([{ op: 'upsertBinding', binding }])
+            setMappingRequest(null)
+          }}
+        />
+      )}
     </div>
   )
 }
