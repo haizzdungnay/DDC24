@@ -1,14 +1,23 @@
-import type { FbdNode } from './model'
+import type { FbdNode, FbdPort } from './model'
 import type { FbdNodeGeometry } from './geometry'
 import type { FbdRuntimeReading } from './runtimeOverlay'
 import { fbdNodeIdentity } from './FbdCanvasLayers'
 import { formatPortLabel } from './nodeLabel'
 import { useI18n } from '../../../shared/i18n'
+import type {
+  ProgrammingBinding,
+  ProgrammingPointCatalogEntry,
+  ProgrammingVariable,
+} from '../model/types'
 
 export interface FbdNodeHoverCardProps {
   node: FbdNode
   nodeGeometry: FbdNodeGeometry
   runtimeReading?: FbdRuntimeReading | null
+  portReadings?: ReadonlyMap<string, FbdRuntimeReading> | null
+  bindings?: readonly ProgrammingBinding[]
+  variables?: readonly ProgrammingVariable[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
   position: { x: number; y: number }
   id: string
 }
@@ -40,9 +49,127 @@ const RUNTIME_STATE_MAP: Record<
   invalid: { labelVi: 'Không hợp lệ', labelEn: 'Invalid', bg: 'var(--c-surface-2)', fg: 'var(--c-text-dim)' },
 }
 
+/**
+ * Trình bày giá trị realtime/catalog của điểm.
+ * Ví dụ: 5V, 21.5 degC, TRUE.
+ */
+export function formatPointRuntimeValue(value: unknown, unit?: string | null): string | null {
+  if (value === undefined || value === null) return null
+  let valStr: string
+  if (typeof value === 'boolean') {
+    valStr = value ? 'TRUE' : 'FALSE'
+  } else if (typeof value === 'number') {
+    valStr = Number.isInteger(value) ? String(value) : value.toFixed(1)
+  } else if (typeof value === 'string') {
+    valStr = value.trim()
+  } else {
+    valStr = String(value)
+  }
+  if (!valStr) return null
+  const cleanUnit = unit?.trim()
+  if (!cleanUnit) return valStr
+  return cleanUnit.length === 1 || cleanUnit === '%' || cleanUnit.startsWith('°')
+    ? `${valStr}${cleanUnit}`
+    : `${valStr} ${cleanUnit}`
+}
+
+export interface PortMappingDisplayInfo {
+  display: string
+  title?: string
+  isMapped: boolean
+}
+
+export function resolvePortMappingInfo(
+  port: FbdPort,
+  node: FbdNode,
+  bindings?: readonly ProgrammingBinding[],
+  variables?: readonly ProgrammingVariable[],
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[],
+  portReadings?: ReadonlyMap<string, FbdRuntimeReading> | null,
+): PortMappingDisplayInfo {
+  const binding = bindings?.find((b) => {
+    if (b.variableId === port.id || b.variableId === port.name) return true
+    const anyB = b as unknown as Record<string, unknown>
+    const bVar = typeof anyB.variable === 'string' ? anyB.variable : null
+    if (
+      bVar &&
+      (bVar === port.name ||
+        bVar === `${node.typeRef}_${port.name}` ||
+        bVar === `${node.kind}_${port.name}` ||
+        bVar.endsWith(`_${port.name}`))
+    ) {
+      return true
+    }
+    const nodeVar = node.parameters?.variable
+    if (nodeVar && typeof nodeVar === 'string' && b.variableId === nodeVar.trim()) return true
+    if (variables) {
+      const v = variables.find((item) => item.variableId === b.variableId)
+      if (
+        v &&
+        (v.name === port.name ||
+          v.name === `${node.typeRef}_${port.name}` ||
+          v.name === `${node.kind}_${port.name}` ||
+          v.name.endsWith(`_${port.name}`) ||
+          (nodeVar && v.name === String(nodeVar).trim()))
+      ) {
+        return true
+      }
+    }
+    return false
+  })
+
+  if (!binding) {
+    return {
+      display: formatPortLabel(port.name, port.dataType, port.unit),
+      isMapped: false,
+    }
+  }
+
+  const point = pointCatalogItems?.find(
+    (pt) =>
+      pt.category === binding.point.category &&
+      pt.pointId === binding.point.pointId &&
+      (pt.deviceId ?? '') === (binding.point.deviceId ?? ''),
+  )
+
+  const pointLabel = point?.displayId || point?.name || binding.point.pointId
+
+  const reading = portReadings?.get(port.id)
+  let valueText: string | null = null
+
+  if (reading?.display && reading.display !== '—') {
+    const u = reading.unit?.trim()
+    valueText = u
+      ? (u.length === 1 || u === '%' || u.startsWith('°') ? `${reading.display}${u}` : `${reading.display} ${u}`)
+      : reading.display
+  } else if (point?.value !== undefined && point?.value !== null) {
+    valueText = formatPointRuntimeValue(point.value, point.unit ?? binding.unit)
+  }
+
+  const title = `${port.name} : ${port.dataType} → ${point?.name ? `${point.name} (${pointLabel})` : pointLabel}`
+
+  if (valueText !== null && valueText !== '') {
+    return {
+      display: `${pointLabel}: ${valueText}`,
+      title,
+      isMapped: true,
+    }
+  }
+
+  return {
+    display: `${pointLabel} : ${port.dataType}`,
+    title,
+    isMapped: true,
+  }
+}
+
 export function FbdNodeHoverCard({
   node,
   runtimeReading,
+  portReadings,
+  bindings,
+  variables,
+  pointCatalogItems,
   position,
   id,
 }: FbdNodeHoverCardProps) {
@@ -89,9 +216,25 @@ export function FbdNodeHoverCard({
                 {pick('Đầu vào', 'Inputs')}:
               </div>
               <ul className="mt-0.5 space-y-0.5 pl-2 font-mono text-[11px]">
-                {inputPorts.map((p) => (
-                  <li key={p.id}>{formatPortLabel(p.name, p.dataType, p.unit)}</li>
-                ))}
+                {inputPorts.map((p) => {
+                  const info = resolvePortMappingInfo(
+                    p,
+                    node,
+                    bindings,
+                    variables,
+                    pointCatalogItems,
+                    portReadings,
+                  )
+                  return (
+                    <li
+                      key={p.id}
+                      title={info.title}
+                      className={info.isMapped ? 'font-semibold text-[var(--c-accent)]' : undefined}
+                    >
+                      {info.display}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )}
@@ -101,9 +244,25 @@ export function FbdNodeHoverCard({
                 {pick('Đầu ra', 'Outputs')}:
               </div>
               <ul className="mt-0.5 space-y-0.5 pl-2 font-mono text-[11px]">
-                {outputPorts.map((p) => (
-                  <li key={p.id}>{formatPortLabel(p.name, p.dataType, p.unit)}</li>
-                ))}
+                {outputPorts.map((p) => {
+                  const info = resolvePortMappingInfo(
+                    p,
+                    node,
+                    bindings,
+                    variables,
+                    pointCatalogItems,
+                    portReadings,
+                  )
+                  return (
+                    <li
+                      key={p.id}
+                      title={info.title}
+                      className={info.isMapped ? 'font-semibold text-[var(--c-accent)]' : undefined}
+                    >
+                      {info.display}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )}

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ChevronLeft, ChevronRight, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PanelLeft, PanelLeftClose, PanelRightClose, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
+import { AlignLeft, ChevronLeft, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PanelLeft, PanelLeftClose, PanelRightClose, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { FbdEditorPane } from './FbdEditorPane'
@@ -459,6 +459,13 @@ export function EditorPane({
    * fetch `GET /point-catalog` khi mở tab Chương trình; sống ở đây (cha của
    * `SourceEditor`) để cache còn nguyên khi đổi Program đang chọn. */
   const pointCatalog = useLazyProgrammingPointCatalog()
+  const { ensureLoaded: ensurePointCatalogLoaded } = pointCatalog
+  useEffect(() => {
+    // Nạp catalog điểm khi có binding hoặc khi mở FBD để canvas giải mã được nhãn và giá trị của điểm đã map
+    if (document.bindings.length > 0 || selected?.language === 'FBD') {
+      ensurePointCatalogLoaded()
+    }
+  }, [document.bindings.length, selected?.language, ensurePointCatalogLoaded])
   /* `T59-820` — cùng luật nạp trễ với `pointCatalog`, và cùng sống ở cha để
    * cache không mất khi đổi POU đang chọn. Chữ ký khối trong Inspector (§9) và
    * trong tooltip hover đọc CHUNG catalog này. */
@@ -1105,6 +1112,9 @@ export function EditorPane({
             pointCatalogItems={pointCatalog.data?.items ?? []}
             pointCatalogLoading={pointCatalog.status === 'loading'}
             onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
+            bindings={document.bindings}
+            variables={document.variables}
+            programs={document.programs}
           />
         )}
       </div>

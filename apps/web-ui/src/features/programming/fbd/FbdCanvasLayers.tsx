@@ -10,8 +10,14 @@ import {
 } from './geometry'
 import type { FbdSelection } from './commands'
 import { fbdPaletteEntry } from './palette'
-import { formatNodeParameterSummary, formatPortLabel, truncateText } from './nodeLabel'
+import { FBD_LABEL_MAX_CHARS, formatNodeParameterSummary, formatPortLabel, truncateText } from './nodeLabel'
 import type { FbdRuntimeOverlay, FbdRuntimeReading } from './runtimeOverlay'
+import { resolvePortMappingInfo } from './FbdNodeHoverCard'
+import type {
+  ProgrammingBinding,
+  ProgrammingPointCatalogEntry,
+  ProgrammingVariable,
+} from '../model/types'
 
 /**
  * Danh tính hiển thị của một khối — thứ người đọc sơ đồ tìm TRƯỚC TIÊN.
@@ -273,6 +279,9 @@ export interface FbdNodesLayerProps {
   activeTooltipNodeId?: string | null
   /** Id của tooltip để liên kết aria-describedby. */
   tooltipId?: string
+  bindings?: readonly ProgrammingBinding[]
+  variables?: readonly ProgrammingVariable[]
+  pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
   onNodePointerEnter?: (event: React.PointerEvent<SVGGElement>, nodeId: string) => void
   onNodePointerLeave?: (event: React.PointerEvent<SVGGElement>, nodeId: string) => void
   onNodeFocus?: (event: React.FocusEvent<SVGGElement>, nodeId: string) => void
@@ -318,6 +327,9 @@ export function FbdNodesLayer({
   dropTargetNodeId,
   activeTooltipNodeId,
   tooltipId,
+  bindings,
+  variables,
+  pointCatalogItems,
   onNodePointerEnter,
   onNodePointerLeave,
   onNodeFocus,
@@ -570,20 +582,35 @@ export function FbdNodesLayer({
                     stroke={portStroke}
                     strokeWidth={1.5}
                   />
+                  {(() => {
+                    const mappingInfo = resolvePortMappingInfo(
+                      definition,
+                      node,
+                      bindings,
+                      variables,
+                      pointCatalogItems,
+                      runtime?.byPortId,
+                    )
+                    return (
+                      <>
+                  {mappingInfo.title && <title>{mappingInfo.title}</title>}
                   <text
                     x={port.direction === 'INPUT' ? port.cx + 10 : port.cx - 10}
                     y={port.cy + 3}
                     textAnchor={port.direction === 'INPUT' ? 'start' : 'end'}
-                    className="text-[10px]"
-                    fill="var(--c-text-dim)"
+                    className={mappingInfo.isMapped ? "text-[10px] font-semibold" : "text-[10px]"}
+                    fill={mappingInfo.isMapped ? "var(--c-accent)" : "var(--c-text-dim)"}
                     data-fbd-port-text="true"
+                    data-fbd-port-mapped={mappingInfo.isMapped ? "true" : undefined}
                   >
-                    {formatPortLabel(definition.name, definition.dataType, definition.unit)}
+                    {mappingInfo.isMapped
+                      ? truncateText(mappingInfo.display, FBD_LABEL_MAX_CHARS)
+                      : formatPortLabel(definition.name, definition.dataType, definition.unit)}
                   </text>
                   {/* Giá trị tại CHÂN, vẽ bên ngoài khối để không đè nhãn chân.
                       Chỉ vẽ khi nó KHÁC giá trị đại diện của khối — nếu không,
                       cùng một con số hiện hai lần cạnh nhau. */}
-                  {portReading && portReading !== nodeReading && (
+                  {portReading && portReading !== nodeReading && !mappingInfo.isMapped && (
                     <FbdRuntimeChip
                       x={port.direction === 'INPUT' ? port.cx - 8 : port.cx + 8}
                       y={port.cy - 8}
@@ -591,6 +618,9 @@ export function FbdNodesLayer({
                       reading={portReading}
                     />
                   )}
+                      </>
+                    )
+                  })()}
                 </g>
               )
             })}
