@@ -28,15 +28,35 @@ if(MKDDC_ENABLE_BACNET)
     pkg_check_modules(BACNET_STACK bacnet-stack>=1.3 QUIET)
   endif()
   if(NOT BACNET_STACK_FOUND)
-    include(FetchContent)
+    # OD-BAC-009 (ký 2026-09-16, phương án (a)): nguồn bacnet-stack nằm TRONG
+    # repo, không tải lúc dựng. Trước đó đây là `FetchContent` tải tarball từ
+    # kho công cộng trên GitHub, và hỏng HTTP 403 ở mọi môi trường có egress
+    # policy — tức `BACNET=ON` không dựng được ở đâu cả, và `1440/1440 PASS`
+    # của cấu hình
+    # `BACNET=OFF` che mất điều đó (ADR-060 điều 4).
+    #
+    # Cây vendor do `scripts/vendor_bacnet_stack.sh` sinh, ghim theo commit
+    # (không chỉ theo tag — tag dời được), kiểm toàn vẹn bằng
+    # `scripts/verify_vendor_bacnet_stack.sh` chạy offline.
+    set(MKDDC_BACNET_STACK_DIR "${MKDDC_REPOSITORY_ROOT}/third_party/bacnet-stack")
+    if(NOT EXISTS "${MKDDC_BACNET_STACK_DIR}/CMakeLists.txt")
+      message(FATAL_ERROR
+        "MKDDC_ENABLE_BACNET=ON nhưng không thấy cây vendor bacnet-stack ở\n"
+        "  ${MKDDC_BACNET_STACK_DIR}\n"
+        "Cây này phải nằm trong repo (OD-BAC-009). Nếu thiếu thì hoặc checkout\n"
+        "chưa đầy đủ, hoặc ai đó đã xoá nó. Dựng lại bằng:\n"
+        "  scripts/vendor_bacnet_stack.sh      (cần mạng MỘT lần)\n"
+        "Kiểm bằng:\n"
+        "  scripts/verify_vendor_bacnet_stack.sh   (offline)")
+    endif()
     set(BACNET_STACK_BUILD_APPS OFF CACHE BOOL "" FORCE)
     set(BACDL_BIP ON CACHE BOOL "" FORCE)
     set(BACDL_BIP6 OFF CACHE BOOL "" FORCE)
     set(BAC_ROUTING OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(bacnet_stack_src
-      URL https://github.com/bacnet-stack/bacnet-stack/archive/refs/tags/bacnet-stack-1.3.8.tar.gz
-      DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-    FetchContent_MakeAvailable(bacnet_stack_src)
+    # EXCLUDE_FROM_ALL: chỉ dựng phần iobus thật sự link tới, không kéo theo
+    # target install/export của upstream vào `all`.
+    add_subdirectory("${MKDDC_BACNET_STACK_DIR}"
+                     "${CMAKE_CURRENT_BINARY_DIR}/_bacnet_stack" EXCLUDE_FROM_ALL)
     # GCC 12 (Debian Bookworm) false-positive array-bounds in bacnet-stack 1.3.8 h_cov.c
     if(TARGET bacnet-stack)
       target_compile_options(bacnet-stack PRIVATE -Wno-error=array-bounds)
@@ -176,12 +196,23 @@ target_link_libraries(shm_dump_io PRIVATE rt)
 # ---- tests (GoogleTest — ưu tiên bản hệ thống, fallback FetchContent) ----
 option(IOBUS_BUILD_TESTS "Build iobus unit tests" ON)
 if(IOBUS_BUILD_TESTS)
+  # OD-BAC-009: bỏ đường tải googletest từ kho công cộng. Nhánh `FetchContent` cũ
+  # KHÔNG phải một fallback đang chạy được — nó tải tarball qua HTTP và nhận 403
+  # ở mọi môi trường có egress policy. Nó chỉ trông như còn sống vì
+  # `find_package` phía trên thành công trên máy có `libgtest-dev`; máy sạch thì
+  # nó đứt, và thông điệp lỗi của `FetchContent` không nói được nguyên nhân.
+  #
+  # Nay thiếu GTest là FATAL_ERROR nói thẳng cách sửa. Vendor googletest nằm
+  # ngoài phạm vi Issue này (4/9 khai báo `FetchContent` googletest nằm ở
+  # apps/core, apps/hmi, apps/netcfg) — xem #714.
   find_package(GTest QUIET)
   if(NOT GTest_FOUND)
-    include(FetchContent)
-    FetchContent_Declare(googletest
-      URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip)
-    FetchContent_MakeAvailable(googletest)
+    message(FATAL_ERROR
+      "IOBUS_BUILD_TESTS=ON nhưng không tìm thấy GoogleTest.\n"
+      "Cài gói hệ thống:\n"
+      "  apt-get update && apt-get install -y libgtest-dev\n"
+      "Hoặc tắt test của iobus: -DIOBUS_BUILD_TESTS=OFF\n"
+      "Không có đường tải tự động: OD-BAC-009 cấm phụ thuộc egress lúc dựng.")
   endif()
   enable_testing()
   add_executable(iobus_tests
