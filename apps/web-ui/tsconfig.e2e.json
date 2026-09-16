@@ -1,0 +1,20 @@
+{
+  /* Cổng typecheck riêng cho `e2e/**` (Issue #664).
+   *
+   * Vì sao là một file riêng chứ không thêm "e2e" vào `include` của
+   * `tsconfig.json`: `tsconfig.json` là cổng mà `npm run build` chạy. Kéo
+   * `e2e/` vào đó thì mọi lỗi tồn đọng của `e2e/` lập tức chặn build, trong
+   * khi việc dọn số lỗi đó thuộc Issue #712. Tách file cho phép bật cổng
+   * trước, dọn mã sau — xem AC-4 của #664.
+   *
+   * Giữ NGUYÊN bộ cờ của `tsconfig.json` (kế thừa qua `extends`) để số đo của
+   * cổng này nói đúng về mã `e2e/`, không phải về một bộ cờ dễ hơn. Khác biệt
+   * duy nhất là `types: ["node"]`: mã `e2e/` chạy trên Node (đọc file, dùng
+   * `process`, `Buffer`), còn `src/` chạy trên trình duyệt.
+   */
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["e2e"]
+}
