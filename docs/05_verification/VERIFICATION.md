@@ -2,7 +2,7 @@
 
 **ID:** VVP-001
 **Trạng thái:** Active — hardware gate RED; Programming Rev A production gate RED
-**Cập nhật:** 2026-08-20 (đồng bộ lại lý do gate Modbus RTU với mã nguồn thật; đóng `OD-MBRTU-005/014/016/019`)
+**Cập nhật:** 2026-09-16 (ghi tầng `LOOPBACK` vào thang bằng chứng BACnet — `T-BAC-013`, thi hành `ADR-060`)
 
 ## Chiến lược
 
@@ -16,6 +16,50 @@
 | Release | package, security, hardware/manufacturing gates | signed checklist + artifact hashes |
 
 Không dùng số test pass lịch sử làm evidence hiện hành. Mỗi release record phải ghi commit, toolchain, target, command, result và artifact/evidence location.
+
+## Thang bằng chứng BACnet — `HOST` / `LOOPBACK` / `TARGET`
+
+Thi hành `ADR-060` (Accepted 2026-09-10). Ba tầng dưới đây **không thay thế được
+cho nhau**, và nhãn bằng chứng của mỗi tầng là cố định:
+
+| Tầng | Chạy ở đâu | Bắt được gì | Nhãn được phép ghi |
+|---|---|---|---|
+| `HOST` | Bất kỳ máy nào, kể cả `MKDDC_ENABLE_BACNET=OFF` | Logic thuần trong lớp C++. **Không byte nào ra card mạng** | Không phải bằng chứng BACnet |
+| `LOOPBACK` | Cùng máy, UDP thật trên `127.0.0.1`, cần `BACNET=ON` | Lỗi nằm giữa `bacnet_server.cpp` và datalink: thiếu `apdu_set_confirmed_handler`, sai mã hoá APDU, không đáp ứng | **`VERIFIED-LOOPBACK`** — **không** được ghi `VERIFIED` |
+| `TARGET` | Board thật + thiết bị/BMS thật | Liên thông thật, định thời thật, hạ tầng mạng thật | `VERIFIED` |
+
+**Vì sao `HOST` không tính.** Với `BACNET=OFF`, bacnet-stack không được biên dịch
+vào binary, nên mọi lời gọi API của nó nằm ngoài `#ifdef`. Bộ `HOST` vẫn xanh
+toàn bộ. Số đo 2026-09-16 tại `main@550e420` cho thấy khoảng cách giữa hai cấu
+hình đúng **một** test, trong khi có 82 test mang tên BACnet.
+
+**Tầng `LOOPBACK` nằm ở đâu.**
+[`apps/iobus/adapters/bacnet/tests/test_bacnet_loopback.cpp`](../../apps/iobus/adapters/bacnet/tests/test_bacnet_loopback.cpp).
+Nó dựng `BacnetServer` thật, `bip_init` mở socket UDP thật trên `lo`, và một
+socket client riêng gửi/nhận khung BACnet/IP thật. Mọi khẳng định đặt trên **gói
+nhận được**, không trên trạng thái nội bộ. Cổng UDP xin lúc chạy, không ghim
+47808, nên chạy song song được. Mỗi ca có timeout hữu hạn 3000 ms.
+
+Chạy tầng này:
+
+```
+cmake --fresh -S . -B build/fw -DCMAKE_BUILD_TYPE=Release \
+  -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON
+cmake --build build/fw --parallel
+ctest --test-dir build/fw -R BacnetLoopback --output-on-failure
+```
+
+Với `BACNET=OFF`, tầng này báo `SKIPPED` trong output `ctest` chứ **không** biến
+mất khỏi danh sách — `ADR-060` điều (4) cấm để `BACNET=OFF` thành đường build duy
+nhất được kiểm, và một tầng test tự tàng hình khi tắt cờ sẽ tái tạo đúng vấn đề
+đó.
+
+**Nợ đã ghi, chưa trả.** Ca `SubscribeCov…ExpectedFailureUntilTBac044` được đánh
+dấu kỳ vọng-thất-bại bằng `EXPECT_NONFATAL_FAILURE`: PICS khai `DS-COV-B` nhưng
+`bacnet_server.cpp` chưa đăng ký handler `SERVICE_CONFIRMED_SUBSCRIBE_COV`, nên
+một BMS gửi SubscribeCOV hôm nay nhận về Reject. `T-BAC-044` sẽ gắn handler; khi
+đó khẳng định bên trong hết thất bại và chính ca này chuyển đỏ, buộc người sửa
+quay lại lật nó thành khẳng định thẳng.
 
 ## Gate architecture conformance của repository
 

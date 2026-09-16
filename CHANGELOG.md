@@ -8,6 +8,252 @@
 
 ## [Unreleased]
 
+### Added — `#626` / `T-BAC-013`: tầng test `LOOPBACK` — UDP thật trên loopback cho BACnet/IP (2026-09-16)
+
+- Phạm vi: `apps/iobus/adapters/bacnet/tests/test_bacnet_loopback.cpp` (mới),
+  `apps/iobus/CMakeLists.txt`, `docs/05_verification/VERIFICATION.md`,
+  `CHANGELOG.md`.
+- **Triệu chứng:** PICS khai `DS-COV-B`, nhưng `grep -n "SUBSCRIBE_COV"
+  bacnet_server.cpp` → **0 dòng**. Một BMS gửi SubscribeCOV nhận về Reject, và
+  toàn bộ bộ test vẫn xanh. Không cổng nào trong repo bắt được điều đó.
+- **Nguyên nhân gốc:** giữa `HOST` (gọi thẳng lớp C++, không mở socket) và
+  `TARGET` (cần bo thật, `OD-BAC-007` `PENDING-HUMAN`) không có tầng nào kiểm
+  **bảng handler của bacnet-stack**. Thứ nằm giữa `bacnet_server.cpp` và
+  datalink — `apdu_set_confirmed_handler` — chưa bao giờ được thực thi trong
+  test. Đo lại hôm nay tại `main@d7d7fb6` xác nhận hố đó là thật: gỡ tạm
+  `apdu_set_confirmed_handler(SERVICE_CONFIRMED_READ_PROPERTY, …)` khỏi mã sản
+  phẩm thì **1482/1482 test `HOST` vẫn PASS**.
+- **Cách sửa:** thêm tầng `LOOPBACK` thi hành `ADR-060` điều (1). Dựng
+  `BacnetServer` thật, `bip_init` mở socket UDP thật trên `lo`, một socket client
+  riêng gửi/nhận khung BACnet/IP thật; mọi khẳng định đặt trên **gói nhận được**,
+  không trên trạng thái nội bộ. Sáu ca: socket thật đã mở, Who-Is→I-Am,
+  ReadProperty AI1 khớp `plc_shm`, WriteProperty AO1 prio 8 → đúng một lệnh
+  xuống core với `prio=3`, service lạ → Reject đúng chuẩn, và SubscribeCOV.
+- **Cổng UDP xin lúc chạy**, không ghim 47808 (bind `0.0.0.0:0` rồi
+  `getsockname`), nên hai lần `ctest` song song và một `mkddc-iobus` đang chạy
+  không đụng nhau. Mỗi ca có timeout hữu hạn **3000 ms**; không đường nào treo.
+  Không cần `sudo`, không cần capability mạng, không cần bo.
+- **Nợ ghi có hẹn trả:** ca SubscribeCOV đánh dấu kỳ vọng-thất-bại bằng
+  `EXPECT_NONFATAL_FAILURE` — không `DISABLED_`, không `GTEST_SKIP()`, không xoá.
+  Ca vẫn chạy thật, vẫn gửi gói thật, và **tự chuyển đỏ ngay khi `T-BAC-044` gắn
+  handler vào**, buộc người sửa quay lại lật nó thành khẳng định thẳng.
+- Số đo (đo lại sau khi merge `origin/main`, `main@d7d7fb6`):
+  `BACNET=ON` configure exit **0**, build exit **0**, `ctest` **1488/1488 PASS**,
+  `ctest -R BacnetLoopback` **6/6 PASS**, `nm … grep -c bip_init` = **1**.
+  `BACNET=OFF` **1482/1482 PASS** và ca `LOOPBACK` báo `***Skipped` hiện rõ trong
+  output `ctest` (`ADR-060` điều (4)), không im lặng biến mất.
+  Phép thử gỡ handler: `LOOPBACK` **đỏ** (`ReadPropertyAnalogInput…` FAILED),
+  `HOST` **1482/1482 vẫn PASS** — thay đổi tạm đã khôi phục, không nằm trong diff.
+  `strace` bắt được `bind(127.0.0.1)`, `bind(127.255.255.255)`, `sendto`,
+  `recvfrom` với byte `\201\n` (BVLL `0x81` + Original-Unicast `0x0A`).
+  `docs_iso_harness.py --expect` exit **0**.
+- **Không chạm mã sản phẩm**: `apps/iobus/adapters/bacnet/*.{hpp,cpp}` ngoài
+  `tests/` không đổi một dòng. Không đổi contract/API/schema, không đổi hành vi
+  runtime (N6).
+- Thang bằng chứng: tầng này PASS ghi là **`VERIFIED-LOOPBACK`**, **không** được
+  ghi `VERIFIED` (`ADR-060` điều (2)).
+- Refs: `#626`, `T-BAC-013`, `T-BAC-044`, `ADR-060`, `PLAN-BACNET-D2C-001` Wave W1,
+  `VVP-001`, `#414`.
+
+### Added — `WF-CLEAN-001` §8.7: prompt Routine điều phối cho vai Reviewer (2026-09-16)
+
+- Phạm vi: `docs/00_governance/CLEAN_CODE_WORKFLOW.md`, `CHANGELOG.md`.
+- **Triệu chứng:** số PR `state:in-review` chỉ tăng, không bao giờ rút — đo
+  2026-09-10 → 2026-09-11: 3 → 4 → 5. Mười ba lượt Implementer liên tiếp báo
+  "backlog rỗng" trong khi năm PR nằm chờ.
+- **Nguyên nhân gốc:** `list_triggers(enabled=true)` ngày 2026-09-11 cho đúng
+  **hai** Routine bật — Implementer và Auditor. Skill `ddc-reviewer` có trong
+  repo từ đầu nhưng **chưa bao giờ được xếp lịch**. Một vai có skill mà không có
+  lịch thì không tồn tại. Hệ quả dây chuyền đo được ở lượt 2026-09-12T01:08Z:
+  #659 và #661 phải dừng ở bước kiểm va chạm vì chạm cùng tập file với `#652`,
+  `#654`, `#656` — PR tồn đọng không nằm im mà **chặn Issue kế tiếp**.
+- **Cách sửa:** thêm §8.7 — prompt vai Reviewer sống trong repo để đi qua PR,
+  đúng nguyên tắc của chính tài liệu này, thay vì nằm trong cấu hình Routine mà
+  một người sửa lặng lẽ được. Cơ chế bắt buộc là điều phối qua phiên bền (§8.1a);
+  §8.1 đã đo `create_new_session_on_fire=true` sinh ra phiên **không repo, không
+  MCP tool**.
+- **Đánh số §8.7 chứ không phải §8.4a — có lý do kỹ thuật.** Phiên điều phối
+  trích prompt bằng `grep '^### 8\.4'`; một mục tên `### 8.4a` sẽ khớp **cả hai**
+  dòng, biến biến `S` thành hai dòng và làm lượt điều phối hỏng lặng lẽ. Đã đo
+  sau khi chèn: `grep -c '^### 8\.4'` = **1**, `grep -c '^### 8\.7'` = **1**.
+- Số đo: trích fence động §8.7 → **69 dòng / 4.259 ký tự**, 0 marker sót; trích
+  lại §8.4 → **166 dòng / 10.989 ký tự**, `diff` với bản trước khi sửa: **không
+  đổi**. `docs_iso_harness.py --expect` exit 0; `workflow_guard.py --selftest`
+  69/69 PASS.
+- Refs: `WF-CLEAN-001` §8.1, §8.1a, §8.4, §8.7, `#414`.
+
+### Fixed — `#625` / `T-BAC-010`: vendor bacnet-stack 1.3.8 vào repo, `BACNET=ON` dựng được lần đầu (2026-09-16)
+
+- Phạm vi: `apps/iobus/CMakeLists.txt`, `third_party/bacnet-stack/**` (mới),
+  `scripts/vendor_bacnet_stack.sh` (mới), `scripts/verify_vendor_bacnet_stack.sh` (mới),
+  `docs/02_design/GETTING_STARTED_DEV.md`, `CHANGELOG.md`.
+- **Triệu chứng:** `cmake -DMKDDC_ENABLE_BACNET=ON` hỏng ở configure với `HTTP 403`.
+  `BACNET=ON` **chưa từng dựng thành công lần nào** trong repo, nên 82 test mang tên
+  BACnet chưa bao giờ được kiểm ở cấu hình có stack thật, và `ADR-060` điều (4)
+  không thi hành được.
+- **Nguyên nhân gốc:** `FetchContent_Declare(bacnet_stack_src URL …tar.gz)` tải
+  tarball qua HTTP từ kho công cộng. Egress policy chặn **tarball** nhưng **không
+  chặn giao thức git** — đo trong phiên: `curl …tar.gz` → `HTTP 403`,
+  `git clone --depth 1 --branch bacnet-stack-1.3.8` → `exit 0`. Sự chặn không đồng
+  đều này chưa từng vào hồ sơ, nên mỗi phiên lại tự đâm vào 403 rồi kết luận
+  "không làm được".
+- **Cách sửa:** vendor nguồn vào `third_party/bacnet-stack/` theo `OD-BAC-009`
+  phương án (a); `apps/iobus/CMakeLists.txt` dùng `add_subdirectory` thay
+  `FetchContent`. Build nay **không cần mạng**.
+- **Cây vendor sinh bằng máy, không chép tay** — đó là cách giữ ràng buộc "nguyên
+  từng byte" của `OD-BAC-009` khi vendor tập con: `scripts/vendor_bacnet_stack.sh`
+  ghim theo **commit** `3e0370ee` (không chỉ theo tag — tag dời được), lọc theo
+  danh sách `KEEP` có ghi lý do từng mục, sinh `MANIFEST.sha256`. Nâng version =
+  đổi tag + SHA rồi chạy lại, không có bước phán đoán của con người.
+- **Tập con Linux:** 441 file / 5,8 MB (upstream: 2004 file / 35 MB). Bỏ 16 nền
+  `ports/` không được cấu hình Linux tham chiếu (22 MB), `apps/`, `test/`, `zephyr/`.
+  **Thu hẹp có chủ ý:** `BACNET=ON` nay chỉ dựng được trên Linux. Bo đích là Forlinx
+  aarch64; MinGW vốn đã hỏng từ trước ở `apps/iobus/CMakeLists.txt:51`.
+- `scripts/verify_vendor_bacnet_stack.sh` chạy **offline**, ba lớp, mã thoát phân
+  biệt: `3` nội dung lệch băm, `4` thừa/thiếu file, `2` thiếu cây/manifest. Lớp `4`
+  bịt đúng chỗ `sha256sum -c` mù — thêm file lạ thì băm file cũ vẫn đúng.
+- googletest trong iobus: bỏ đường tải, thiếu GTest nay là `FATAL_ERROR` nói thẳng
+  cách cài. Nhánh cũ **không phải fallback đang chạy được** — nó cũng nhận 403, chỉ
+  trông như còn sống vì `find_package` phía trên thành công trên máy có `libgtest-dev`.
+- **Đính chính số đo đã công bố:** comment đầu trên `#625` ghi `BACNET=ON` thêm
+  **42 test**. Sai — con số đó so với nền `1440` đo ngày 2026-09-10, trong khi `main`
+  đã tiến 186 commit. So cùng commit: `BACNET=ON` **1482**, `BACNET=OFF` **1481** —
+  thêm đúng **1** test (`BacnetServer.AppliesAiAndAoPropertiesToBacnetStack`).
+  Điều đó làm luận điểm của `#626` **mạnh hơn**, không yếu đi: 82 test mang tên
+  BACnet mà chỉ 1 cái cần `BACNET=ON` mới tồn tại.
+- Số đo (đo lại trong phiên, cây sạch, không `FETCHCONTENT_SOURCE_DIR` cho bacnet):
+  configure `exit 0` · build `exit 0` · `nm -C mkddc-iobus | grep -c bip_init` = **1**
+  · `ctest` **1482/1482 PASS**, `exit 0`. Hồi quy `BACNET=OFF`: configure/build/ctest
+  `exit 0`, **1481/1481 PASS**, `bip_init` = **0**.
+  `grep -c 'github.com' apps/iobus/CMakeLists.txt` = **0** (nền: 2).
+  Phép tiêm: sửa nội dung → `exit 3`; thêm file lạ → `exit 4`; xoá cây vendor →
+  configure `exit 1` kèm thông điệp chỉ đúng cách sửa.
+- Tiền điều kiện container sạch, đo lại: `libmodbus-dev`, `libsodium-dev`,
+  `libgtest-dev`, **`libdrm-dev`** và **`jsonschema`** — hai mục sau chưa có trong
+  danh sách đang lưu hành.
+- Refs: `#625`, `T-BAC-010`, `OD-BAC-009`, `ADR-060`, `#626`, `#627`, `#628`, `#635`, `#714`.
+
+### Added — `#664`: bật cổng typecheck + lint cho `apps/web-ui/e2e/**` (2026-09-16)
+
+- Phạm vi: `apps/web-ui/tsconfig.e2e.json` (tạo mới), `apps/web-ui/tsconfig.json`,
+  `apps/web-ui/package.json`, `apps/web-ui/package-lock.json`,
+  `apps/web-ui/eslint.config.js`, `scripts/verify-project.sh`, `CHANGELOG.md`.
+  Issue #664, bàn giao số đo nền cho #712.
+- **Triệu chứng:** `apps/web-ui/e2e/**` là vùng mã **duy nhất** của web-ui không cổng
+  tĩnh nào canh. Đo tại `main@b41daa6`: `tsconfig.json:19` chỉ `include`
+  `["src", "vite.config.ts"]`, còn `package.json` script `lint` chỉ
+  `eslint src --max-warnings=0`. Không có `apps/web-ui/e2e/tsconfig.json`. Hệ quả đã
+  xảy ra thật — `programming.spec.ts` khai `labelVi` trong một object literal mà shape
+  response không còn trường đó (`TS2353`), nhưng test vẫn xanh: một mock lệch kiểu
+  đang nghiệm thu một hợp đồng không tồn tại, cùng lớp fail-open với #658.
+- **Nguyên nhân gốc:** cả hai cổng FE đều được định nghĩa theo thư mục `src`, và
+  `e2e/` chưa bao giờ được thêm vào diện kiểm khi nó ra đời. Không phải cổng hỏng —
+  là cổng chưa từng bao phủ vùng mã đó.
+- **Cách sửa:**
+  - `tsconfig.e2e.json` mới: `extends ./tsconfig.json` (giữ **nguyên** bộ cờ, để số đo
+    nói đúng về mã `e2e/` chứ không về một bộ cờ dễ hơn), `include: ["e2e"]`,
+    `types: ["node"]` — mã `e2e/` chạy trên Node, `src/` chạy trên trình duyệt.
+  - `eslint.config.js`: thêm khối `files: ['e2e/**/*.{ts,tsx}']`, globals là hợp của
+    `node` và `browser` (thân test chạy Node, thân `page.evaluate()` chạy trình duyệt;
+    chỉ khai một phía thì phía kia thành `no-undef` giả).
+  - `package.json`: thêm `typecheck:e2e` và `lint:e2e` là script **riêng**, **chưa**
+    nối vào `lint`/`build` — cho phép #664 merge độc lập trong khi `e2e/` còn lỗi tồn
+    đọng thuộc #712 (AC-4 đường (a)). Thêm `@types/node` vào `devDependencies`.
+  - `tsconfig.json`: ghim `types: []`. Mặc định TypeScript nạp **mọi** gói trong
+    `node_modules/@types` vào phạm vi toàn cục, nên chỉ riêng việc cài `@types/node`
+    cho cổng `e2e/` đã âm thầm cấp `process`/`Buffer`/`__dirname` cho `src/` — tức
+    **nới** cổng `src` ra mà không ai khai. Ghim `[]` giữ cổng `src` đúng như trước.
+  - `scripts/verify-project.sh`: ghi lại đường chạy hai cổng mới, số đo nền, lý do
+    chưa nối vào chuỗi chặn, và điều kiện để nối (khi #712 đóng).
+- **Số đo thật** (nhánh `clean-code/issue-664`, nền `origin/main@b41daa6`):
+
+  | Cổng | Trước | Sau | Ghi chú |
+  |---|---|---|---|
+  | `typecheck:e2e` | không tồn tại | exit 2, **6 lỗi TS** | 27 lỗi khi chưa có `@types/node`; 17 lỗi là do thiếu types (7×`TS2307`, 10×`TS2580`), 4×`TS2550` hết theo lib mà `@types/node` kéo vào |
+  | `lint:e2e` | không tồn tại | exit 1, **3 finding** | 1×`no-unused-vars`, 2×`no-empty-pattern` |
+  | `tsc --noEmit` (src) | exit 0 | exit 0 | không đổi |
+  | `npm run lint` | exit 1, 1 lỗi | exit 1, **đúng 1 lỗi đó** | đỏ sẵn trên `main`, ngoài phạm vi #664 — xem finding kèm theo |
+  | `npm run build` | exit 0 | exit 0 | không đổi |
+  | `docs_iso_harness.py --expect` | — | PASS | không đổi |
+
+- **Phép thử ngược (cổng có thật sự bắt):** chèn tạm một lỗi kiểu + biến không dùng vào
+  `e2e/scheduler.spec.ts` → `typecheck:e2e` 6→**7** lỗi, `lint:e2e` 3→**4** finding; gỡ ra
+  → trở lại đúng 6 và 3. Thay đổi tạm **không** nằm trong diff cuối.
+- **Bàn giao #712:** 6 lỗi TS và 3 finding lint ở trên là số nền để #712 đo "đã hết".
+
+### Added — `ARCH-BACNET-001`: thiết kế Export Registry, object identity bền vững và capability gate BACnet (2026-09-16)
+
+- Phạm vi: `docs/03_architecture/BACNET_ARCHITECTURE_DESIGN_MK-DDC-24_VI.md` (tạo mới),
+  `docs/README.md`, `CHANGELOG.md`. Issue #629 (`T-BAC-004`).
+- **Triệu chứng:** ba khái niệm mà cả Wave W2 (`T-BAC-021`/`022`/`023`) sẽ implement đều
+  không được thiết kế ở đâu. Đo được tại `main@0ba2fce`: object BACnet sinh bằng bảy vòng
+  `for` hằng số cứng (`apps/iobus/adapters/bacnet/bacnet_server.cpp:218-224`, tổng **88
+  object**); `objectInstance` là `i + 1`, tức chỉ số mảng nội bộ bị phơi ra làm định danh
+  đối ngoại; `register_objects()` (`:214`) tạo **8 BI vô điều kiện** (`:219`) trong khi
+  `IOP_BOARD_CAP_REV_A` (`contracts/iop/iop_protocol.h:112`) không chứa
+  `IOP_BOARD_CAP_DI_8` — tức base SKU Rev A không có DI mà thiết bị vẫn công bố 8 Binary
+  Input cho BMS.
+- **Nguyên nhân gốc:** không có tài liệu chủ quản cho kiến trúc BACnet.
+  `SW_BACNET_DESIGN_MK-DDC-24_VI` mô tả bản **đang có**, nên ba cơ chế **chưa tồn tại
+  trong mã** không có hồ sơ nào sở hữu. Thiếu chủ quản thì chúng sẽ được quyết trong lúc
+  code, từng cái một, không ai đối chiếu.
+- **Cách sửa:** tạo `ARCH-BACNET-001` ở `docs/03_architecture/`, phạm vi `DD-04` + `DD-07`:
+  - **Export Registry (§3):** 8 trường bắt buộc của một bản ghi export, mỗi trường có kiểu,
+    nguồn dữ liệu là `file:line` thật, và hành vi khi nguồn thiếu. Sáu trong tám trường
+    thiếu ⇒ **loại bản ghi**, không điền mặc định — bám `SYS-REQ-BAC-012`.
+  - **Object identity (§4):** `objectInstance` là **hàm thuần** của `pointStableId`; bảng
+    **9 biến cố** với kết luận đổi/không đổi, không ô nào để "tuỳ". Ghi rõ vì sao từ chối
+    phương án bộ đếm có lưu (mất bảng ⇒ tự gây breaking change, mâu thuẫn `ADR-058`).
+  - **Capability gate (§5):** ánh xạ đủ **5 bit** `IOP_BOARD_CAP_*` → loại object bị gate;
+    `IOP_BOARD_CAP_RTD` không gate object nào (nó gate `sensor_type`, nguồn
+    `contracts/openapi/openapi.yaml:787`). Với `board_cap_valid = 0` chọn **fail-closed có
+    phân biệt**: không công bố object phần cứng, vẫn công bố Device Object + I-Am + object
+    phần mềm, dựng lại Registry khi `0 → 1`. Đây không phải lựa chọn tự do — hợp đồng SHM
+    (`contracts/shm/mkddc_shm.h:265` và chú giải từ `:243`) đã quy định consumer phải
+    fail-closed khi `valid = 0`.
+- **Không nâng lớp bằng chứng:** không dòng nào khai capability là `VERIFIED`; cả ba cơ chế
+  ghi lớp `DESIGN-ONLY` theo `ADR-060` và `SYS-REQ-BAC-022`.
+- **Số đo kiểm chứng (đo tại máy 2026-09-16, CI `NOT_RUN` #414):**
+  - `python3 scripts/docs_iso_harness.py --expect` → `exit=0`, `KẾT LUẬN: PASS`,
+    `EXPECT: khớp toàn bộ ngưỡng`; `duplicate_doc_id = 0`, `TBD/BLOCKED = 113`,
+    `code-span docs/** không tồn tại = 0`, `hồ sơ lệch metadata/lịch sử = 0`.
+  - `grep -c "SYS-REQ-BAC-"` trên tài liệu mới → **40** (17 mã riêng biệt), kỳ vọng > 0.
+  - Mã hồ sơ trùng, đếm tay toàn repo → **0**.
+  - 27/27 `file:line` viện dẫn trong tài liệu: `test -e` OK và `sed -n '<line>p'` in ra
+    đúng nội dung tài liệu mô tả.
+- **Finding ngoài phạm vi, đã mở #716 ở `state:triage`, không tự sửa:**
+  `scripts/docs_iso_harness.py:487` chỉ quét `BASELINE + EXTRA` = **22/466** tài liệu
+  (≈ 4,7 %). `PROD-BACNET-001` lẫn `ARCH-BACNET-001` đều **không** nằm trong tập đó, nên
+  harness xanh **không** chứng minh mã hồ sơ không trùng cho hai file này — đó là lý do số
+  đo trùng mã ở trên được đếm tay chứ không dẫn kết luận của harness.
+
+
+### Changed — `OD-BAC-009` đã ký: vendor bacnet-stack 1.3.8 vào nguồn nội bộ (2026-09-16)
+
+- Phạm vi: `docs/00_governance/BACNET_OPEN_DECISIONS.md`, `CHANGELOG.md`.
+- **Triệu chứng:** `cmake -DMKDDC_ENABLE_BACNET=ON` hỏng ở configure vì `FetchContent`
+  tải tarball từ `github.com` bị egress policy chặn (`HTTP 403`). Không dựng được bản
+  có BACnet ⇒ không có tầng `LOOPBACK`, không có `TARGET`, `ADR-060` điều (4) không thi
+  hành được. Đồng thời `1440/1440 PASS` với `BACNET=OFF` che mất chính vấn đề đó.
+- **Nguyên nhân gốc:** đường lấy phụ thuộc vào chính sách egress của bên khác, và quyết
+  định chọn đường nào nằm ngoài thẩm quyền kỹ thuật nên treo ở `PENDING-HUMAN` từ
+  2026-09-10.
+- **Cách sửa:** chủ sở hữu ký chọn **phương án (a)** — vendor vào nguồn nội bộ, bỏ
+  `FetchContent` từ `github.com`. Ghi rõ vì sao loại (b) (đổi rủi ro dựng lấy rủi ro bảo
+  mật, vẫn phụ thuộc bên khác) và (c) (pkg-config không ghim được đúng 1.3.8), kèm bốn
+  ràng buộc thi hành: giữ nguyên từng byte 1.3.8, ghim bằng sha/checksum, `BACNET=OFF`
+  không hồi quy, không đổi contract/runtime.
+- **Phạm vi rộng hơn mô tả ban đầu của quyết định:** đo lại tại `main@2e63a99` ngày
+  2026-09-16 — `grep -n 'github.com' apps/iobus/CMakeLists.txt` → **2 dòng** (`:37`
+  bacnet-stack, `:183` googletest). googletest chỉ sống nhờ fallback
+  `find_package(GTest QUIET)`; máy sạch thì cả hai đứt. Tiêu chí thi hành xong là
+  grep đó **về 0 dòng**, không phải chỉ xử lý bacnet-stack.
+- Tách hai vế của `OD-BAC-007` để vế không tốn tiền (tên người vận hành + cửa sổ giữ bo)
+  không bị vế ngân sách giữ lại. Ghi chú này **không** gỡ `state:blocked` của `#624`.
+- Kiểm chứng: `python3 scripts/docs_iso_harness.py --expect` → exit **0**,
+  `KẾT LUẬN: PASS`, `hồ sơ lệch metadata/lịch sử: 0`, `code-span docs/** không tồn tại: 0`.
+- Refs: `OD-BAC-009`, `ADR-060`, `#625`, `#626`, `#627`, `#628`, `#635`, `#624`.
+
 ### Fixed — `#706`: Mini Map giữ đúng tâm điều hướng với viewBox theo bbox (2026-09-14)
 
 - Phạm vi: `WorkbenchMinimapPanel.tsx` và unit test, ca E2E

@@ -2,8 +2,12 @@
 
 **ID:** OD-BAC-SET-001
 **Trạng thái:** Active (danh mục vấn đề mở, không phải Design)
-**Ngày:** 2026-09-10 (cập nhật cùng ngày sau phê duyệt CTO)
+**Ngày:** 2026-09-16 (cập nhật sau chữ ký chủ sở hữu cho `OD-BAC-009`)
 **Chủ quản:** Project Engineering
+
+> **CẬP NHẬT 2026-09-16 — `OD-BAC-009` ĐÃ KÝ, chọn phương án (a) vendor vào nguồn nội bộ.**
+> 9/11 quyết định đã đóng; còn 2 mã `PENDING-HUMAN` là `OD-BAC-007` và `OD-BAC-008`.
+> Xem §4.2 để biết phạm vi thi hành chính xác.
 
 > **CẬP NHẬT 2026-09-10 — 8/11 quyết định đã được CTO ký; 3 quyết định KHÔNG thuộc
 > thẩm quyền kỹ thuật.** Xem [Biên bản phê duyệt](../07_records/reviews/BACNET_REV_A_APPROVAL_RECORD_2026-09-10.md).
@@ -17,9 +21,9 @@
 >
 > **Còn chặn — cần chữ ký người thật, không phải quyết định kỹ thuật:**
 > `OD-BAC-007` (cấp thiết bị HIL + chỉ định người chạy T1..T9) ·
-> `OD-BAC-008` (nộp đơn ASHRAE lấy `Vendor_Identifier`) ·
-> `OD-BAC-009` (egress policy / mirror nội bộ cho bacnet-stack).
-> Ba mục này là **cam kết nguồn lực và thẩm quyền tổ chức**; CTO ghi khuyến nghị nhưng
+> `OD-BAC-008` (nộp đơn ASHRAE lấy `Vendor_Identifier`).
+> ~~`OD-BAC-009`~~ **đã ký 2026-09-16** — xem §4.2.
+> Hai mục còn lại là **cam kết nguồn lực và thẩm quyền tổ chức**; CTO ghi khuyến nghị nhưng
 > **không** ký thay. Không có chúng thì Rev A **không thể** đánh `DONE` (xem §4).
 
 **Đọc cùng:** [As-Built Review](../05_verification/BACNET_REV_A_ASBUILT_REVIEW.md) ·
@@ -31,8 +35,9 @@
 > Product/CTO. Không được coi khuyến nghị ở đây là quyết định đã duyệt.
 >
 > **Ràng buộc thi hành:** WP-BAC-01 nay đã được gỡ chặn (`OD-BAC-001` CLOSED).
-> Các WP còn lại phụ thuộc từng quyết định như ghi ở cột "Chặn WP"; WP-09/WP-10 vẫn
-> bị chặn cứng bởi `OD-BAC-007` và `OD-BAC-009`.
+> Các WP còn lại phụ thuộc từng quyết định như ghi ở cột "Chặn WP". Sau chữ ký
+> `OD-BAC-009` ngày 2026-09-16, WP-09/WP-10 **chỉ còn bị chặn cứng bởi `OD-BAC-007`**
+> (thiết bị HIL và người vận hành). `OD-BAC-008` chặn phát hành, không chặn verify.
 
 ---
 
@@ -48,7 +53,7 @@
 | **OD-BAC-006** | **`/bacnet/objects` (object catalog) mở lại ở Rev A hay giữ Rev B?** Endpoint này đã bị **gỡ khỏi contract Rev A** theo quyết định 2026-08-20 (xem `contract_routes_test.go:48`). Nhưng yêu cầu WP-BAC-08 của Owner lại đòi "FE object catalog". | Hai nguồn authority mâu thuẫn. Chưa quyết ⇒ WP-BAC-08 không biết làm theo cái nào. | Product | **Mở lại ở Rev A, chỉ đọc.** Sau WP-BAC-02, registry đã có sẵn đủ 8 trường; phơi ra một endpoint đọc là chi phí thấp và là công cụ chẩn đoán tích hợp có giá trị cao. Không mở đường ghi. | 08 | **CLOSED 2026-09-10 — Mở lại `/bacnet/objects` ở Rev A, CHỈ ĐỌC, RBAC như endpoint đọc khác** (ADR-059, đảo quyết định 2026-08-20). Bối cảnh đã đổi: nay đã biết 64/88 object không có dữ liệu thật, và catalog đọc là cách rẻ nhất để tích hợp viên tự phát hiện điều đó trước khi ra site. **Ràng buộc:** phải phơi cả **nguồn dữ liệu** từng object (có/không nối core) — một catalog nói dối tệ hơn không có. Không mở đường ghi. |
 | **OD-BAC-007** | **Cấp tài nguyên HIL.** Cần: board DDC-24 thật, BMS hoặc BACnet test client, nguồn tín hiệu vật lý cho UI1, thiết bị đo đầu ra AO/BO, LAN. | **Không có thì Rev A không thể đánh DONE** — theo định nghĩa của chính Owner, simulator/mock không được tính là bằng chứng. | Product + Lab/QA | Cấp thiết bị và chỉ định owner chạy T1..T9. Đây là hạng mục có lead time dài nhất trong kế hoạch — nên khởi động **song song** với WP-01, không đợi đến WP-09. | 09 (chặn DoD) | **PENDING-HUMAN — ngoài thẩm quyền CTO.** Đây là chi tiêu và phân công người thật, không phải phán đoán kỹ thuật. **Cần ký:** Product Owner (ngân sách) + Trưởng Lab/QA (chỉ định người chạy T1..T9). **Cần gì để mở:** 1 board DDC-24 Rev A + STM32G0B1 trên `/dev/ttyS2`; 1 BMS hoặc BACnet test client; nguồn tín hiệu vật lý cho UI1; thiết bị đo đầu ra AO/BO; LAN dùng chung; tên người + cửa sổ thời gian bo. **Hệ quả nếu không duyệt:** Rev A đóng ở mức `TARGET-FAKE` và **phải ghi NOT READY** — không hạ tiêu chí. *Khuyến nghị CTO: cấp ngay, lead time dài nhất toàn kế hoạch; khởi động song song WP-01, không đợi WP-09.* |
 | **OD-BAC-008** | **`Vendor_Identifier = 9999` đi tiếp tới đâu?** Là placeholder chờ ASHRAE cấp số. | Ra site với `9999` thì hai thiết bị khác hãng có thể trùng vendor id. | Product + CTO | Nộp đơn ASHRAE **ngay** (lead time nhiều tuần). Nếu Rev A phát hành trước khi có số, ghi rõ trong release record là hạn chế đã biết. | 10 | **PENDING-HUMAN — ngoài thẩm quyền CTO.** Nộp đơn ASHRAE là hành vi pháp lý/hành chính với bên thứ ba. **Cần ký:** Product Owner + đại diện pháp nhân công ty (đơn ASHRAE yêu cầu pháp nhân, không phải cá nhân kỹ thuật). **Cần gì để mở:** tên pháp nhân, địa chỉ, đầu mối liên hệ, phí đăng ký, người ký đơn. **Hệ quả nếu không duyệt:** ra site với `Vendor_Identifier = 9999` (`bacnet_server.cpp:98`) — hai thiết bị khác hãng có thể trùng vendor id. *Khuyến nghị CTO: nộp ngay (lead time nhiều tuần); nếu Rev A phát hành trước khi có số thì ghi `9999` là hạn chế đã biết trong release record, không giấu.* |
-| **OD-BAC-009** | **Đường lấy bacnet-stack 1.3.8 cho build và CI.** Build `BACNET=ON` hiện **hỏng** trong môi trường agent: FetchContent tải tarball từ `github.com` bị egress policy chặn (HTTP 403). | Không dựng được bản có BACnet ⇒ không test được, không phát hành được. Đồng thời điều này đang che giấu vấn đề: bộ test host vẫn PASS 1440/1440 với `BACNET=OFF`. | Platform + Security | Vendor bacnet-stack 1.3.8 vào artifact nội bộ hoặc mirror, và **thêm một gate CI dựng `BACNET=ON`**. Không được để cấu hình `OFF` là đường build mặc định duy nhất được kiểm. | 09, 10 | **PENDING-HUMAN — ngoài thẩm quyền CTO.** Egress policy do tổ chức kiểm soát, không do dự án. **Cần ký:** Platform/IT + Security. **Cần gì để mở:** hoặc mirror nội bộ / artifact repo chứa `bacnet-stack 1.3.8`, hoặc cho phép `github.com` trong egress, hoặc gói `bacnet-stack>=1.3` qua pkg-config trên runner. **Đo lại 2026-09-10:** `cmake -DMKDDC_ENABLE_BACNET=ON` → **exit 1**, `HTTP/1.1 403 Forbidden` khi tải `bacnet-stack-1.3.8.tar.gz`. **Phạm vi RỘNG HƠN mô tả cũ:** googletest (`apps/iobus/CMakeLists.txt:182-184`) cũng 403 — chỉ sống nhờ fallback `find_package(GTest QUIET)`. **Hệ quả nếu không duyệt:** không dựng được bản có BACnet ⇒ không có `LOOPBACK`, không có `TARGET`, không phát hành được. *Khuyến nghị CTO: vendor vào artifact nội bộ — đường không phụ thuộc egress policy của bên khác.* |
+| **OD-BAC-009** | **Đường lấy bacnet-stack 1.3.8 cho build và CI.** Build `BACNET=ON` hiện **hỏng** trong môi trường agent: FetchContent tải tarball từ `github.com` bị egress policy chặn (HTTP 403). | Không dựng được bản có BACnet ⇒ không test được, không phát hành được. Đồng thời điều này đang che giấu vấn đề: bộ test host vẫn PASS 1440/1440 với `BACNET=OFF`. | Platform + Security | Vendor bacnet-stack 1.3.8 vào artifact nội bộ hoặc mirror, và **thêm một gate CI dựng `BACNET=ON`**. Không được để cấu hình `OFF` là đường build mặc định duy nhất được kiểm. | 09, 10 | **CLOSED 2026-09-16 — chọn phương án (a): vendor `bacnet-stack 1.3.8` vào nguồn nội bộ, bỏ `FetchContent` từ `github.com`.** Ký bởi chủ sở hữu (kimlam2010). Lý do chọn (a) thay vì (b)/(c): (b) mở egress `github.com` là đổi một rủi ro dựng lấy một rủi ro bảo mật và vẫn phụ thuộc chính sách của bên khác; (c) pkg-config không ghim được **đúng** 1.3.8. **Phạm vi bắt buộc — cả hai, không chỉ bacnet-stack:** `apps/iobus/CMakeLists.txt:37` (bacnet-stack) **và** `:183` (googletest). Xác minh lại 2026-09-16 tại `main@2e63a99`: `grep -n 'github.com' apps/iobus/CMakeLists.txt` → **2 dòng**, cả hai còn nguyên. googletest hiện chỉ sống nhờ fallback `find_package(GTest QUIET)`; máy sạch thì cả hai đứt. **Ràng buộc:** giữ nguyên từng byte bản 1.3.8 (patch phải tách commit riêng có lý do); ghim bằng sha/checksum, không `latest`, không nhánh; `BACNET=OFF` vẫn phải dựng và test được như trước. Thi hành ở #625. |
 | **OD-BAC-010** | **Bộ test host có được tính là bằng chứng BACnet không?** 67 test tên BACnet đang PASS với `MKDDC_ENABLE_BACNET=OFF` — không test nào gửi/nhận một gói UDP. | Chưa quyết ⇒ tiếp tục dùng "1440/1440 PASS" như thể nó chứng minh BACnet chạy. | QA + CTO | **Không.** Đặt quy tắc: capability BACnet chỉ được đánh VERIFIED khi có bằng chứng **target**. Bổ sung một tầng test tích hợp loopback UDP (chạy được trên CI) làm bước trung gian, nhưng nó vẫn không thay thế HIL. | 09, 10 | **CLOSED 2026-09-10 — KHÔNG. Test host không phải bằng chứng BACnet** (ADR-060). Số CTO tự đo 2026-09-10: `1440/1440 PASS` với `MKDDC_ENABLE_BACNET=OFF`, trong đó **81** test mang tên BACnet nhưng **chỉ 1** test chạm `BacnetServer` (`#151 BacnetServer.OutputCallbackMapsWriteAndReleaseToCore`); không test nào mở socket. Luật chốt: capability BACnet chỉ `VERIFIED` khi có bằng chứng `TARGET`; thêm tầng `LOOPBACK` (UDP thật, cùng máy) làm cổng bắt buộc cho mọi PR chạm `adapters/bacnet/**`; `LOOPBACK` PASS ghi là `VERIFIED-LOOPBACK`, **không** được ghi `VERIFIED`. |
 | **OD-BAC-011** | **Alarm/Event, Schedule, Calendar, Trend Log chuyển V1.1 — xác nhận?** Cả bốn đều thiếu ít nhất một trong: source / runtime wiring / network / target test. | Nếu giữ trong Rev A thì scope phình ~3× và ngày phát hành trượt. | Product | **Chuyển V1.1** và sửa PICS thành ❌. Trend Log thậm chí không có dòng mã nào trong repo — giữ nó trong Rev A là không thực tế. | 01 | **CLOSED 2026-09-10 — Alarm/Event, Schedule, Calendar, Trend Log chuyển V1.1; PICS khai ❌** (ADR-057). Trend Log không có một dòng mã nào trong repo; Schedule/Calendar có object nhưng `register_objects()` (`bacnet_server.cpp:214-226`) không tạo cái nào; Alarm là placeholder với `targets_` rỗng. Giữ trong Rev A làm scope phình ~3× mà không đổi được sự thật là chúng chưa tồn tại. |
 
@@ -67,22 +72,25 @@
 
 | Bậc | Mã | Trạng thái |
 |---|---|---|
-| **Ngay** | `OD-BAC-007`, `OD-BAC-009` | ❌ **CÒN CHỜ NGƯỜI** — xem §4 |
+| **Ngay** | `OD-BAC-009` | ✅ **CLOSED 2026-09-16** — phương án (a), vendor nội bộ |
+| **Ngay** | `OD-BAC-007` | ❌ **CÒN CHỜ NGƯỜI** — xem §4.1 |
 | Trước WP-01 | `OD-BAC-001`, `OD-BAC-011`, `OD-BAC-005`, `OD-BAC-010` | ✅ CLOSED 2026-09-10 |
 | Trước WP-02 | `OD-BAC-002` | ✅ CLOSED 2026-09-10 |
 | Trước WP-04 | `OD-BAC-003` | ✅ CLOSED 2026-09-10 |
 | Trước WP-06/08 | `OD-BAC-004`, `OD-BAC-006` | ✅ CLOSED 2026-09-10 |
-| Trước phát hành | `OD-BAC-008` | ❌ **CÒN CHỜ NGƯỜI** — xem §4 |
+| Trước phát hành | `OD-BAC-008` | ❌ **CÒN CHỜ NGƯỜI** — xem §4.3 |
 
 Toàn bộ nhánh tài liệu và nhánh mã (WP-01…WP-08) nay **không còn bị chặn bởi quyết định
-kỹ thuật**. Thứ duy nhất còn chặn là ba cam kết tổ chức ở §4.
+kỹ thuật**. Sau 2026-09-16, còn **hai** cam kết tổ chức ở §4: `OD-BAC-007` (chặn DoD) và
+`OD-BAC-008` (chặn phát hành).
 
 ---
 
-## 4. Ba việc chỉ người thật làm được — xếp theo lead time, dài nhất trước
+## 4. Việc chỉ người thật làm được — xếp theo lead time, dài nhất trước
 
-Ba mục này **không** phải quyết định kỹ thuật. CTO không ký thay được; ghi ở đây để
-người có thẩm quyền thấy chính xác cần gì.
+Các mục này **không** phải quyết định kỹ thuật. CTO không ký thay được; ghi ở đây để
+người có thẩm quyền thấy chính xác cần gì. `OD-BAC-009` đã được ký ngày 2026-09-16 và
+giữ lại ở §4.2 làm hồ sơ quyết định, không còn là mục chờ.
 
 ### 4.1 `OD-BAC-007` — Cấp tài nguyên HIL · lead time DÀI NHẤT
 
@@ -96,21 +104,49 @@ người có thẩm quyền thấy chính xác cần gì.
   tiêu chí để đóng sổ.
 - **Khuyến nghị CTO:** cấp ngay và khởi động song song với WP-01. Đợi tới WP-09 mới xin
   thiết bị là tự đẩy lead time dài nhất vào cuối đường găng.
+- **Ghi chú 2026-09-16 — tách hai vế để lead time bắt đầu chạy trước ngân sách.** Chủ sở
+  hữu xác nhận chưa chốt được vế ngân sách. Quyết định này có **hai** vế và chỉ một vế
+  cần tiền: (1) **ngân sách thiết bị** — còn chờ; (2) **tên người vận hành + cửa sổ giữ
+  bo** — không tốn tiền và là vế quyết định lead time. Đề nghị chốt vế (2) trước và ghi
+  vào [#624](https://github.com/Mekong-HCM/MK-DDC-24/issues/624), vì bo DDC-24 hiện có
+  đang chạy `MCU_MODE=FAKE` và phần lớn công việc bring-up là nạp firmware + dựng đường
+  IOP, không phải mua sắm. `state:blocked` của #624 **chỉ được gỡ khi đủ cả hai vế** —
+  ghi chú này không gỡ chặn, nó chỉ tách để vế không tốn tiền khỏi bị vế tốn tiền giữ lại.
 
-### 4.2 `OD-BAC-009` — Đường lấy bacnet-stack · chặn MỌI verify
+### 4.2 `OD-BAC-009` — Đường lấy bacnet-stack · ✅ ĐÃ KÝ 2026-09-16
 
-- **Ai ký:** Platform/IT + Security.
-- **Cần gì:** một trong ba — (a) mirror/artifact nội bộ chứa `bacnet-stack 1.3.8`;
-  (b) cho phép `github.com` trong egress policy; (c) gói `bacnet-stack>=1.3` cài qua
-  pkg-config sẵn trên runner.
-- **Số đo 2026-09-10 (CTO tự chạy):** `cmake --fresh -DMKDDC_ENABLE_BACNET=ON` → **exit 1**;
-  `HTTP/1.1 403 Forbidden` cho `bacnet-stack-1.3.8.tar.gz`. **Phạm vi rộng hơn mô tả cũ:**
-  googletest (`apps/iobus/CMakeLists.txt:182-184`) cũng 403 — hiện chỉ sống nhờ fallback
-  `find_package(GTest QUIET)` khi máy có `libgtest-dev`. Máy sạch thì cả hai đứt.
-- **Không có thì sao:** không dựng được bản `BACNET=ON` ⇒ không có tầng `LOOPBACK`, không
-  có `TARGET`, `OD-BAC-010` không thi hành được, không phát hành được.
-- **Khuyến nghị CTO:** chọn (a). Nó là đường duy nhất không phụ thuộc chính sách của bên
-  khác, và nó cũng sửa luôn lỗ hổng googletest.
+- **Quyết định:** **phương án (a)** — vendor `bacnet-stack 1.3.8` vào nguồn nội bộ, bỏ
+  `FetchContent` từ `github.com`.
+- **Ai ký:** chủ sở hữu (kimlam2010), 2026-09-16. Khuyến nghị CTO ngày 2026-09-10 cũng là (a).
+- **Vì sao không chọn (b) hoặc (c):** (b) mở egress `github.com` đổi một rủi ro dựng lấy
+  một rủi ro bảo mật, và vẫn để đường dựng phụ thuộc chính sách của bên khác — tức không
+  thật sự đóng được vấn đề. (c) gói qua pkg-config **không ghim được đúng 1.3.8**, nên
+  bản dựng trên hai máy có thể khác nhau mà không ai biết.
+- **Phạm vi thi hành — hai nguồn, không phải một.** Mô tả ban đầu của quyết định chỉ nói
+  bacnet-stack; phạm vi thật rộng hơn và đã đo lại **2026-09-16 tại `main@2e63a99`**:
+
+  ```
+  grep -n 'github.com' apps/iobus/CMakeLists.txt
+  37:      URL https://github.com/bacnet-stack/bacnet-stack/archive/refs/tags/bacnet-stack-1.3.8.tar.gz
+  183:      URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip)
+  ```
+
+  googletest hiện **chỉ sống nhờ fallback** `find_package(GTest QUIET)` ở dòng 179 khi máy
+  có sẵn `libgtest-dev`. Máy sạch thì cả hai đứt, và một bản vá chỉ xử lý bacnet-stack sẽ
+  để nguyên nửa còn lại — nên `grep -n "github.com" apps/iobus/CMakeLists.txt` **phải về 0
+  dòng** mới coi là thi hành xong.
+- **Ràng buộc kèm theo chữ ký:**
+  1. Giữ **nguyên từng byte** bản 1.3.8. Cần patch thì tách commit riêng có ghi lý do, để
+     lần nâng version sau còn rebase được.
+  2. Ghim bằng **commit sha / checksum / tag cố định** — không `latest`, không nhánh — và
+     ghi cách kiểm lại tính toàn vẹn.
+  3. `BACNET=OFF` **vẫn phải dựng và test được như trước**; không đánh đổi đường build cũ.
+  4. Không đổi contract/API/schema, không đổi hành vi runtime — đây là hạ tầng dựng.
+- **Số đo nền 2026-09-10 (CTO tự chạy), giữ để đối chiếu:**
+  `cmake --fresh -DMKDDC_ENABLE_BACNET=ON` → **exit 1**; `HTTP/1.1 403 Forbidden` cho
+  `bacnet-stack-1.3.8.tar.gz`.
+- **Thi hành ở:** [#625](https://github.com/Mekong-HCM/MK-DDC-24/issues/625) (`T-BAC-010`).
+  Chữ ký này gỡ `state:blocked` cho #625; #626/#627/#628/#635 vẫn chờ #625 `DONE`.
 
 ### 4.3 `OD-BAC-008` — `Vendor_Identifier` từ ASHRAE
 
@@ -123,6 +159,8 @@ người có thẩm quyền thấy chính xác cần gì.
   chọn một số khác.
 
 ---
+**Rev** 1.2 | 2026-09-16 — Chủ sở hữu ký `OD-BAC-009` (phương án (a), vendor nội bộ); 9/11 đóng, còn `-007` và `-008` `PENDING-HUMAN`.
 **Rev** 1.1 | 2026-09-10 — CTO chốt 8/11; 3 mã `PENDING-HUMAN`.
 Ký (kỹ thuật): CTO, 2026-09-10 — xem [Biên bản phê duyệt](../07_records/reviews/BACNET_REV_A_APPROVAL_RECORD_2026-09-10.md).
-Ký (nguồn lực `-007`/`-008`/`-009`): ___
+Ký (nguồn lực `-009`): chủ sở hữu (kimlam2010), 2026-09-16 — phương án (a); phạm vi gồm cả googletest, xem §4.2.
+Ký (nguồn lực `-007`/`-008`): ___
