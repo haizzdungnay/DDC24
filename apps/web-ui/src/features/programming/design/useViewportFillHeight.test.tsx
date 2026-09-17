@@ -557,3 +557,105 @@ describe('useViewportFillHeight — bố cục LƯỠNG ỔN phải dừng hẳn
     expect(settled.at(-1)).toBe(900 - 300 - 24)
   })
 })
+
+describe('useViewportFillHeight — chốt lưỡng ổn không được đóng nhầm vào thao tác ĐỔI CỠ CỬA SỔ', () => {
+  /* Khiếm khuyết thứ năm do chính #677 sinh ra, phát hiện ngày 2026-09-17.
+   *
+   * Lớp chốt ở khối trên phân biệt "bố cục lưỡng ổn" với "thao tác người dùng"
+   * bằng HÌNH DẠNG của chuỗi giá trị: hai chu kỳ "bị chặn rồi vẫn đổi" liên
+   * tiếp thì chốt. Nhưng hai tình huống ấy cho CÙNG một hình dạng — chuỗi giá
+   * trị không mang thông tin nào phân biệt được chúng. Ca "một thao tác người
+   * dùng RỒI DỪNG vẫn tới nơi" ở trên không lộ ra điều đó vì nó chỉ đảo chiều
+   * MỘT lần, tức đúng một chu kỳ, tức ngay dưới ngưỡng. Kéo qua lại thêm một
+   * nhịp nữa là chạm ngưỡng, và bộ đếm còn cộng dồn qua cả những khoảng im
+   * lặng hàng giờ vì không có gì làm nó hết hạn.
+   *
+   * Thứ phân biệt hai tình huống nằm ở NGUỒN của phép đo, không ở chuỗi giá
+   * trị: bố cục lưỡng ổn tự lật mà không có đầu vào nào từ ngoài, còn đổi cỡ
+   * cửa sổ thì phát `resize` — sự kiện mà bố cục không tự tạo ra được. */
+  function startClock() {
+    const clock = { nowMs: 1_000 }
+    vi.spyOn(performance, 'now').mockImplementation(() => clock.nowMs)
+    vi.useFakeTimers()
+    return clock
+  }
+
+  it('hai đợt kéo cửa sổ cách nhau hàng giờ không cộng dồn thành một bố cục lưỡng ổn', () => {
+    const heights: (number | null)[] = []
+    render(<Harness onHeight={(h) => heights.push(h)} />)
+    const clock = startClock()
+    const drag = (viewportHeight: number, dtMs = 10) => {
+      clock.nowMs += dtMs
+      setViewport(1440, viewportHeight)
+      act(() => { vi.advanceTimersByTime(dtMs); window.dispatchEvent(new Event('resize')) })
+    }
+    const flush = (ms: number) => act(() => { clock.nowMs += ms; vi.advanceTimersByTime(ms) })
+
+    /* Đợt 1 — kéo qua lại rồi dừng lại ĐÚNG chỗ đã xuất phát. Chuỗi này để
+     * lại trạng thái chẩn đoán mà bản trước không bao giờ dọn: phép đo cuối
+     * trùng giá trị đang giữ nên nó thoát sớm, và cờ "vừa bị chặn" nằm lại. */
+    drag(800)
+    drag(900)
+    drag(800)
+    flush(400)
+
+    /* Một giờ trôi qua. Mọi suy luận về bập bênh của đợt 1 đã phải hết hiệu
+     * lực từ lâu — nhưng bản trước không có gì làm chúng hết hạn.
+     *
+     * Chỉ ĐỒNG HỒ tiến, không đẩy hẹn giờ: hook không còn hẹn giờ nào đang
+     * chờ ở đây (đã `flush` ngay trên), và `advanceTimersByTime(3_600_000)`
+     * sẽ bắn hết mọi hẹn giờ của MỌI module trong cùng môi trường — đo được
+     * ngày 2026-09-17: nó làm `LibraryPage.test.tsx` gọi máy chủ và đỏ một ca
+     * hoàn toàn không liên quan, trong khi chạy riêng thì xanh. Thứ ca này
+     * cần là `performance.now()` đã đi xa, chứ không phải một giờ hẹn giờ
+     * được thực thi. */
+    clock.nowMs += 3_600_000
+
+    /* Đợt 2 — một thao tác kéo qua lại bình thường khác, rồi dừng ở 900 px. */
+    drag(900)
+    drag(800)
+    flush(400)
+    drag(900, 16)
+    flush(400)
+
+    /* Cột phải theo đúng cửa sổ cuối. Bản trước cộng dồn chu kỳ của đợt 1 vào
+     * đợt 2, chạm ngưỡng chốt, rồi kẹp cột vào giá trị NHỎ hơn của cặp: đo
+     * được 476 px trong một cửa sổ 900 px đáng cho 576 px — mất 100 px chỗ gõ,
+     * đúng cú `DEV-PROG-021` mà `AC-4` cấm. */
+    expect(heights.at(-1)).toBe(900 - 300 - 24)
+  })
+
+  it('đã chốt vì lưỡng ổn THẬT, một lần đổi cỡ cửa sổ vẫn gỡ chốt dù giá trị mới THUỘC cặp', () => {
+    /* Ca "giá trị NGOÀI cặp gỡ chốt" ở khối trên không với tới tình huống này:
+     * ở đó giá trị mới tự nó đã nằm ngoài cặp nên chốt không chặn. Còn khi
+     * người dùng kéo cửa sổ về đúng một giá trị THUỘC cặp, chuỗi giá trị
+     * không phân biệt được họ với bố cục đang lật — chỉ nguồn phép đo phân
+     * biệt được. */
+    const settled: (number | null)[] = []
+    const { getByTestId } = render(
+      <Harness onHeight={(h) => { if (settled.at(-1) !== h) settled.push(h) }} />,
+    )
+    const clock = { nowMs: 1_000 }
+    vi.spyOn(performance, 'now').mockImplementation(() => clock.nowMs)
+    vi.useFakeTimers()
+
+    /* Lưỡng ổn thật: chỉ `ResizeObserver` bắn, không `resize` nào. */
+    for (let i = 0; i < 200; i += 1) {
+      const columnHeight = 900 - topPx - 24
+      topPx = columnHeight > 560 ? 340 : 300
+      act(() => {
+        clock.nowMs += 16
+        vi.advanceTimersByTime(16)
+        FakeResizeObserver.fire(getByTestId('app-header'))
+        FakeResizeObserver.fire(getByTestId('context-strip'))
+      })
+    }
+    expect(settled.at(-1)).toBe(536)
+
+    /* Người dùng đổi cỡ cửa sổ, và giá trị mới rơi đúng vào GIÁ TRỊ KIA của
+     * cặp đang chốt. Đây là đầu vào từ ngoài, nên nó phải được nhận. */
+    topPx = 300
+    act(() => { clock.nowMs += 16; vi.advanceTimersByTime(16); window.dispatchEvent(new Event('resize')) })
+    expect(settled.at(-1)).toBe(576)
+  })
+})

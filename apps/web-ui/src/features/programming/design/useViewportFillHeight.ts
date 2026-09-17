@@ -291,6 +291,36 @@ export function useViewportFillHeight<T extends HTMLElement>(
     setHeight(applied)
   }, [bottomGapPx, minPx, minViewportWidthPx])
 
+  /* Đổi cỡ VIEWPORT là đầu vào TỪ NGOÀI, nên nó xoá sạch mọi suy luận về bập
+   * bênh đang tích luỹ.
+   *
+   * VÌ SAO CẦN (#677, 2026-09-17). Lớp chốt phân biệt "bố cục lưỡng ổn" với
+   * "thao tác người dùng" bằng HÌNH DẠNG của chuỗi giá trị: hai chu kỳ "bị
+   * chặn rồi vẫn đổi" liên tiếp thì chốt. Nhưng hai tình huống ấy cho CÙNG
+   * một hình dạng — người dùng kéo mép cửa sổ qua lại vài nhịp cũng sinh đúng
+   * hai chu kỳ. Đo được: kéo 900 → 800 → 900, mỗi nhịp cách nhau vài chục ms,
+   * đủ cho bộ đếm chạm ngưỡng; chốt đóng vào cặp `{476, 576}` và kẹp cột ở
+   * 476 px trong khi cửa sổ 900 px đáng cho 576 px. Người dùng mất đúng 100 px
+   * chỗ gõ và không có cách nào lấy lại trừ khi kéo ra một giá trị thứ ba —
+   * đúng cú `DEV-PROG-021` mà `AC-4` cấm, lần này do chính lớp chống lưỡng ổn
+   * của `#677` gây ra trên một trang KHÔNG hề lưỡng ổn.
+   *
+   * Thứ phân biệt hai tình huống không nằm trong chuỗi giá trị mà ở NGUỒN của
+   * phép đo. Bố cục lưỡng ổn tự lật: không sự kiện nào từ ngoài, chỉ
+   * `ResizeObserver` bắn vì chính chiều cao ta vừa đặt. Người dùng đổi cỡ cửa
+   * sổ thì có `resize` của `window` — một đầu vào mà bố cục không tự tạo ra
+   * được. Nên phép đo đến từ đường ấy đặt lại bộ đếm và gỡ chốt: mọi suy luận
+   * tích luỹ trước đó nói về một viewport đã không còn.
+   *
+   * Lớp chốt không vì thế yếu đi: một bố cục thật sự lưỡng ổn không phát
+   * `resize` bao giờ, nên nó vẫn bị chốt sau đúng hai chu kỳ như cũ. */
+  const measureFromViewportChange = useCallback(() => {
+    latchRef.current = null
+    oscillationCyclesRef.current = 0
+    blockedSinceApplyRef.current = false
+    measure()
+  }, [measure])
+
   const observerRef = useRef<ResizeObserver | null>(null)
   /* Người nghe CẤU TRÚC chuỗi cha, và `observeChrome` mới nhất để nó gọi lại.
    * Phải đi qua `ref` vì callback của nó tham chiếu chính `observeChrome`. */
@@ -352,9 +382,9 @@ export function useViewportFillHeight<T extends HTMLElement>(
     /* Node đã gắn từ lần render trước (callback ref không chạy lại), hoặc
      * `measure` vừa đổi vì options đổi — cả hai đều cần một observer mới. */
     observeChrome(nodeRef.current)
-    window.addEventListener('resize', measure)
+    window.addEventListener('resize', measureFromViewportChange)
     return () => {
-      window.removeEventListener('resize', measure)
+      window.removeEventListener('resize', measureFromViewportChange)
       observerRef.current?.disconnect()
       observerRef.current = null
       structureRef.current?.disconnect()
@@ -367,7 +397,7 @@ export function useViewportFillHeight<T extends HTMLElement>(
       oscillationCyclesRef.current = 0
       blockedSinceApplyRef.current = false
     }
-  }, [measure, observeChrome])
+  }, [measure, measureFromViewportChange, observeChrome])
 
   return [attach, height]
 }
