@@ -8,7 +8,7 @@ import type { ProgrammingLibraryPagedState } from '../../api/queries'
 import { type CatalogEntry } from './libraryCatalog'
 import { stCallStatement } from '../editor/stInstanceInsertion'
 import { QuickLibraryPanel, LIBRARY_DRAG_TYPE } from './QuickLibraryPanel'
-import type { UserPouInterface } from '../../fbd/userPou'
+import { userPouCatalogEntry, type UserPouInterface } from '../../fbd/userPou'
 
 const preferences = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 vi.mock('../../../../shared/api/client', () => ({
@@ -542,7 +542,23 @@ describe('userPouInterfaces in QuickLibraryPanel', () => {
     expect(setData).toHaveBeenCalledWith(LIBRARY_DRAG_TYPE, 'pou:MY_CUSTOM_FB')
   })
 
-  it('khi language="ST" thì KHÔNG hiện nhóm Khối của dự án', () => {
+  /**
+   * `#733` — hai ca dưới đây khoá nhánh ST của "Khối của dự án".
+   *
+   * Ca đầu trước kia khẳng định điều NGƯỢC LẠI: `khi language="ST" thì KHÔNG
+   * hiện nhóm Khối của dự án`. `a26cbd2` gỡ điều kiện `language !== 'FBD'` ở
+   * `QuickLibraryPanel.tsx` để mở mục này cho cả ST lẫn FBD — đổi hành vi có
+   * chủ ý, ghi rõ trong thân commit và `CHANGELOG.md` — nhưng không cập nhật ca
+   * test, nên ca bị bỏ lại sau lưng bản đổi và làm cổng FE unit ĐỎ SẴN trên
+   * `main`. Nguồn chân lý là mã; ca được VIẾT LẠI chứ không xoá, vì xoá là mất
+   * luôn chỗ canh cho vùng mã đó.
+   *
+   * Ca thứ hai phủ nhánh mà `a26cbd2` mới mở nhưng chưa ai canh: nhấp một POU ở
+   * chế độ ST phải gọi `onInsert` với đúng `userPouCatalogEntry(pou)`. Không có
+   * nó thì mục "Khối của dự án" ở ST chỉ được chứng minh là HIỆN RA, chứ không
+   * phải là BẤM ĐƯỢC.
+   */
+  it('khi language="ST" thì VẪN hiện nhóm Khối của dự án — mục này mở cho cả ST lẫn FBD (#733)', async () => {
     render(
       <I18nProvider>
         <QuickLibraryPanel
@@ -555,8 +571,29 @@ describe('userPouInterfaces in QuickLibraryPanel', () => {
       </I18nProvider>
     )
 
-    expect(screen.queryByText(/Khối của dự án/)).toBeNull()
-    expect(screen.queryByText('MY_CUSTOM_FB')).toBeNull()
+    expect(await screen.findByText(/Khối của dự án/)).toBeInTheDocument()
+    expect(screen.getByText('MY_CUSTOM_FB')).toBeInTheDocument()
+    expect(screen.getByText('MY_CUSTOM_FN')).toBeInTheDocument()
+  })
+
+  it('khi language="ST" thì nhấp một POU gọi onInsert với đúng userPouCatalogEntry(pou) (#733)', async () => {
+    const onInsert = vi.fn().mockReturnValue(true)
+    render(
+      <I18nProvider>
+        <QuickLibraryPanel
+          library={ready()}
+          language="ST"
+          userPouInterfaces={samplePous}
+          onInsert={onInsert}
+          onClose={vi.fn()}
+        />
+      </I18nProvider>
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Chèn MY_CUSTOM_FB' }))
+
+    expect(onInsert).toHaveBeenCalledTimes(1)
+    expect(onInsert).toHaveBeenCalledWith(userPouCatalogEntry(samplePous[0]))
   })
 
   it('khi danh sách POU rỗng hoặc undefined thì KHÔNG hiện nhóm Khối của dự án', () => {
