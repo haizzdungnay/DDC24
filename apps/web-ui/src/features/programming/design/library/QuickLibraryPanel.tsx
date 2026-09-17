@@ -20,7 +20,7 @@ import {
   toggleFavorite,
   type LibraryPreferences
 } from './libraryPreferences'
-import { userPouPaletteEntry, type UserPouInterface } from '../../fbd/userPou'
+import { userPouCatalogEntry, userPouPaletteEntry, type UserPouInterface } from '../../fbd/userPou'
 
 /**
  * `T59-804` (`PGM02-V22-WP-03`) — Quick Library của PGM-02.
@@ -135,12 +135,12 @@ export function QuickLibraryPanel({
     [entries, query, category, language]
   )
   const filteredPous = useMemo(() => {
-    if (language !== 'FBD' || !userPouInterfaces || userPouInterfaces.length === 0) return []
+    if (!userPouInterfaces || userPouInterfaces.length === 0) return []
     if (category !== '') return []
     const q = query.trim().toLowerCase()
     if (!q) return userPouInterfaces
     return userPouInterfaces.filter((p) => p.name.toLowerCase().includes(q))
-  }, [language, userPouInterfaces, category, query])
+  }, [userPouInterfaces, category, query])
   const groupedCatalog = useMemo(() => {
     const byCategory = new Map<string, CatalogEntry[]>()
     for (const entry of filtered) {
@@ -317,7 +317,7 @@ export function QuickLibraryPanel({
             </summary>
             <ul aria-label={pick('Khối của dự án', 'Project blocks')} className="flex flex-col gap-1 px-1 pb-1">
               {filteredPous.map((pou) => (
-                <PouCard key={pou.name} pou={pou} />
+                <PouCard key={pou.name} pou={pou} onInsert={insert} />
               ))}
             </ul>
           </details>
@@ -461,7 +461,7 @@ function Section({
  * trình duyệt: đã có sẵn ngữ nghĩa mở/đóng cho trình đọc màn hình và đi được
  * bằng bàn phím.
  */
-function PouCard({ pou }: { pou: UserPouInterface }) {
+function PouCard({ pou, onInsert }: { pou: UserPouInterface; onInsert?: (entry: CatalogEntry) => void }) {
   const { pick } = useI18n()
   let validityReason: string | null = null
   try {
@@ -502,6 +502,14 @@ function PouCard({ pou }: { pou: UserPouInterface }) {
             event.dataTransfer.setData(LIBRARY_DRAG_TYPE, `pou:${pou.name}`)
             event.dataTransfer.effectAllowed = 'copy'
           } : undefined}
+          onClick={() => {
+            if (!isDraggable || !onInsert) return
+            try {
+              onInsert(userPouCatalogEntry(pou))
+            } catch {
+              // ignore
+            }
+          }}
           className="mono min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left text-xs font-semibold text-[var(--c-text)] hover:bg-[var(--c-surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pou.name}

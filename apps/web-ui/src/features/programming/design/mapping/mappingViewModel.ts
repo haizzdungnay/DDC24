@@ -108,6 +108,9 @@ function pointKey(point: ProgrammingPointIdentity | ProgrammingPointCatalogEntry
 }
 
 function declaredVariables(program: ProgrammingProgram): DeclaredVariable[] {
+  // Chỉ các POU kiểu PROGRAM mới có biến giao diện để mapping ra Point ngoài.
+  // Function Block và Function là các hàm/khối thuật toán cục bộ, không bao giờ xuất hiện ở Mapping.
+  if (program.kind && program.kind !== 'PROGRAM') return []
   if (program.language === 'ST') {
     return collectStInterfaceVariables(typeof program.document === 'string' ? program.document : '').map((variable) => ({
       ...variable,
@@ -130,12 +133,22 @@ function declaredVariables(program: ProgrammingProgram): DeclaredVariable[] {
 function draftVariables(document: ProgrammingDraftDocument): Array<DeclaredVariable & { variableId: string; class: ProgrammingVariable['class'] }> {
   const byName = new Map<string, DeclaredVariable & { variableId: string; class: ProgrammingVariable['class'] }>()
   for (const program of document.programs) {
+    if (program.kind && program.kind !== 'PROGRAM') continue
     for (const variable of declaredVariables(program)) {
       byName.set(`${variable.programId}:${variable.name}`, { ...variable, variableId: `${variable.programId}:${variable.name}`, class: variable.direction })
     }
   }
   for (const variable of document.variables) {
     const program = document.programs.find((candidate) => candidate.programId === variable.programId)
+    if (program && program.kind && program.kind !== 'PROGRAM') continue
+    // Với chương trình FBD, biến chỉ hợp lệ khi tồn tại trong sơ đồ FBD (INPUT hoặc OUTPUT block)
+    if (program && program.language === 'FBD') {
+      const existing = byName.get(`${variable.programId}:${variable.name}`)
+      if (existing) {
+        existing.variableId = variable.variableId
+      }
+      continue
+    }
     const direction = variable.class === 'OUTPUT' ? 'OUTPUT' : variable.class === 'INOUT' ? 'INOUT' : 'INPUT'
     byName.set(`${variable.programId}:${variable.name}`, {
       variableId: variable.variableId,

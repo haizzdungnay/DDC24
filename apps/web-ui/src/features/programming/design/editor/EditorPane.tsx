@@ -11,7 +11,7 @@ import { ContextInspector } from '../inspector/ContextInspector'
 import { stSymbolContextFor } from '../inspector/inspectorContext'
 import { hashBufferSource } from '../../shared/diagnosticFreshness'
 import { stCheckProvenance, type StCheckProvenanceState } from './stCheckProvenance'
-import type { UserPouInterface } from '../../fbd/userPou'
+import { userPouCatalogEntry, type UserPouInterface } from '../../fbd/userPou'
 import { useLazyProgrammingLibraryCatalog, useLazyProgrammingPointCatalog } from '../../api/queries'
 import type {
   ProgrammingCheckSymbol,
@@ -1230,6 +1230,7 @@ export function EditorPane({
             onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
             runtimeOverlay={runtimeOverlayByProgramId?.[selected.programId]}
             formatRequest={formatRequest?.programId === selected.programId ? formatRequest : undefined}
+            userPouInterfaces={userPouInterfaces}
           />
         ) : (
           <FbdEditorPane
@@ -1706,6 +1707,7 @@ export function SourceEditor({
   onOpenCompare,
   checkDisabledReason,
   compareDisabledReason,
+  userPouInterfaces,
 }: {
   program: ProgrammingProgram
   source: string
@@ -1763,6 +1765,7 @@ export function SourceEditor({
   onOpenCompare?: () => void
   checkDisabledReason?: string | null
   compareDisabledReason?: string | null
+  userPouInterfaces?: readonly UserPouInterface[]
 }) {
   const { pick } = useI18n()
   const committed = typeof program.document === 'string' ? program.document : ''
@@ -2972,7 +2975,19 @@ export function SourceEditor({
               if (!canEdit || !event.dataTransfer.types.includes(LIBRARY_DRAG_TYPE)) return
               event.preventDefault()
               const entryId = event.dataTransfer.getData(LIBRARY_DRAG_TYPE)
-              const entry = libraryEntries?.find((candidate) => candidate.entryId === entryId)
+              let entry = libraryEntries?.find((candidate) => candidate.entryId === entryId)
+              if (!entry && entryId.startsWith('pou:')) {
+                const pouName = entryId.slice('pou:'.length)
+                if (pouName === program.name) return
+                const pou = userPouInterfaces?.find((p) => p.name === pouName)
+                if (pou) {
+                  try {
+                    entry = userPouCatalogEntry(pou)
+                  } catch {
+                    return
+                  }
+                }
+              }
               /* Không tìm thấy mục ⇒ không làm gì. Catalog có thể đã tải lại
                  giữa lúc kéo, và chèn "một khối nào đó" thay cho khối người
                  dùng chọn còn tệ hơn không chèn. */

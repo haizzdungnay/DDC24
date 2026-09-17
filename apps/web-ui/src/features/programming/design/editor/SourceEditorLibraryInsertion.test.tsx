@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../../../shared/i18n'
 import type { ProgrammingLibraryPage, ProgrammingProgram } from '../../model/types'
 import { SourceEditor } from './ProgramsTab'
-import { QuickLibraryHost } from '../library/QuickLibraryPanel'
+import { QuickLibraryHost, LIBRARY_DRAG_TYPE } from '../library/QuickLibraryPanel'
+import type { UserPouInterface } from '../../fbd/userPou'
 import type { CatalogEntry } from '../library/libraryCatalog'
 
 const preferences = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
@@ -60,7 +61,7 @@ function program(document: string): ProgrammingProgram {
  *  ĐÚNG cách nối đó thay vì gọi thẳng hàm chèn: bộ test này tồn tại để khoá
  *  đường đi thật từ lúc bấm một khối tới lúc buffer đổi, nên tắt đoạn giữa sẽ
  *  bỏ qua chính chỗ dễ hỏng. */
-function renderEditor(initial: string) {
+function renderEditor(initial: string, userPouInterfaces?: readonly UserPouInterface[]) {
   function Harness() {
     const [source, setSource] = useState(initial)
     const [libraryOpen, setLibraryOpen] = useState(false)
@@ -83,11 +84,13 @@ function renderEditor(initial: string) {
           libraryOpen={libraryOpen}
           onToggleLibrary={() => setLibraryOpen((open) => !open)}
           libraryInsertRequest={request}
+          userPouInterfaces={userPouInterfaces}
         />
         {libraryOpen && (
           <QuickLibraryHost
             variant="docked"
             language="ST"
+            userPouInterfaces={userPouInterfaces}
             onInsert={(entry) => {
               setRequest((current) => ({ entry, nonce: (current?.nonce ?? 0) + 1 }))
               return true
@@ -189,5 +192,50 @@ describe('SourceEditor — chèn FB có trạng thái từ Quick Library (T59-80
 
     await waitFor(() => expect(textarea.value).toContain('TON_2(IN := IN, PT := PT);'))
     expect(textarea.value).toContain('  TON_1 : TON;\n  TON_2 : TON;\nEND_VAR')
+  })
+
+  it('kéo thả FUNCTION_BLOCK tự tạo (pou:...) vào ST Editor tự khai báo VAR và chèn lời gọi', async () => {
+    const userPous: UserPouInterface[] = [
+      {
+        name: 'NewFunctionBlock',
+        kind: 'FUNCTION_BLOCK',
+        inputs: [{ name: 'pv', dataType: 'REAL' }],
+        outputs: [{ name: 'q', dataType: 'BOOL' }],
+      },
+    ]
+
+    const { textarea } = renderEditor(['PROGRAM P', 'VAR', '  A : INT;', 'END_VAR', 'A := 1;', 'END_PROGRAM', ''].join('\n'), userPous)
+    const dropIndex = textarea.value.indexOf('A := 1;') + 7
+    textarea.setSelectionRange(dropIndex, dropIndex)
+
+    fireEvent.drop(textarea, {
+      dataTransfer: {
+        types: [LIBRARY_DRAG_TYPE],
+        getData: (type: string) => type === LIBRARY_DRAG_TYPE ? 'pou:NewFunctionBlock' : '',
+      },
+    })
+
+    await waitFor(() => expect(textarea.value).toContain('NewFunctionBlock_1(pv := pv);'))
+    expect(textarea.value).toContain('NewFunctionBlock_1 : NewFunctionBlock;')
+    expect(textarea.value.indexOf('NewFunctionBlock_1 : NewFunctionBlock;')).toBeLessThan(textarea.value.indexOf('END_VAR'))
+  })
+
+  it('click vào FUNCTION_BLOCK tự tạo trong Quick Library chèn vào ST Editor', async () => {
+    const userPous: UserPouInterface[] = [
+      {
+        name: 'CustomFB',
+        kind: 'FUNCTION_BLOCK',
+        inputs: [{ name: 'run', dataType: 'BOOL' }],
+        outputs: [{ name: 'done', dataType: 'BOOL' }],
+      },
+    ]
+
+    const { textarea } = renderEditor(['PROGRAM P', 'VAR', 'END_VAR', 'END_PROGRAM', ''].join('\n'), userPous)
+    const panel = await openLibrary()
+    const pouCard = await within(panel).findByRole('button', { name: 'Chèn CustomFB' })
+    fireEvent.click(pouCard)
+
+    await waitFor(() => expect(textarea.value).toContain('CustomFB_1(run := run);'))
+    expect(textarea.value).toContain('CustomFB_1 : CustomFB;')
   })
 })

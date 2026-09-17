@@ -162,18 +162,8 @@ describe('FbdCanvas hover tooltip (Task 2)', () => {
   it('khi chân đã mapping điểm: tooltip hiện tên điểm đã map và giá trị realtime (ví dụ AO-01: 5V)', () => {
     const bindings: ProgrammingBinding[] = [
       {
-        bindingId: 'b-out',
-        variableId: '40000000-0000-4000-8000-000000000005',
-        point: { category: 'LOCAL', pointId: 'AO-01' },
-        direction: 'WRITE',
-        dataType: 'REAL',
-        unit: 'V',
-        writable: true,
-        qualityPolicy: 'REQUIRE_GOOD',
-      },
-      {
         bindingId: 'b-in1',
-        variableId: '40000000-0000-4000-8000-000000000003',
+        variableId: 'OCCUPIED',
         point: { category: 'LOCAL', pointId: 'UI-01' },
         direction: 'READ',
         dataType: 'REAL',
@@ -184,18 +174,6 @@ describe('FbdCanvas hover tooltip (Task 2)', () => {
     ]
 
     const pointCatalogItems: ProgrammingPointCatalogEntry[] = [
-      {
-        category: 'LOCAL',
-        pointId: 'AO-01',
-        displayId: 'AO-01',
-        name: 'Fan Speed Command',
-        dataType: 'REAL',
-        unit: 'V',
-        direction: 'WRITE',
-        writable: true,
-        quality: 'GOOD',
-        value: 5,
-      },
       {
         category: 'LOCAL',
         pointId: 'UI-01',
@@ -211,13 +189,18 @@ describe('FbdCanvas hover tooltip (Task 2)', () => {
     ]
 
     renderEditor(true, null, bindings, pointCatalogItems)
-    const block = screen.getByRole('button', { name: /#2 · AND/ })
-    fireEvent.pointerEnter(block, { clientX: 120, clientY: 180 })
+    const inputBlock = screen.getByRole('button', { name: /#0 · BOOL · INPUT/ })
+    fireEvent.pointerEnter(inputBlock, { clientX: 120, clientY: 180 })
 
     const tooltip = screen.getByRole('tooltip')
-    expect(tooltip).toHaveTextContent('AO-01: 5V')
     expect(tooltip).toHaveTextContent('UI-01: 21.5 degC')
-    // Chân IN2 chưa map vẫn hiện tên port gốc
-    expect(tooltip).toHaveTextContent('IN2')
+
+    // Khối FUNCTION (AND) không phải interface node nên không mapping
+    fireEvent.pointerLeave(inputBlock)
+    const andBlock = screen.getByRole('button', { name: /#2 · AND/ })
+    fireEvent.pointerEnter(andBlock, { clientX: 120, clientY: 180 })
+    const andTooltip = screen.getByRole('tooltip')
+    expect(andTooltip).toHaveTextContent('IN1 : BOOL')
+    expect(andTooltip).not.toHaveTextContent('UI-01')
   })
 })

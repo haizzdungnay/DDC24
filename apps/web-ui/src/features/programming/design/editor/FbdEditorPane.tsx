@@ -24,6 +24,7 @@ import type {
   ProgrammingVariable,
 } from '../../model/types'
 import { PortMappingPicker } from '../../fbd/PortMappingPicker'
+import { createUuid } from '../../../../shared/crypto'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -40,7 +41,7 @@ function resolvePortVariableInfo(
   variables?: readonly ProgrammingVariable[],
   bindings?: readonly ProgrammingBinding[],
 ) {
-  const rawName = `${mappingRequest.nodeName}_${mappingRequest.portName}`.replace(/[^a-zA-Z0-9_]/g, '_')
+  const rawName = (mappingRequest.portName || mappingRequest.nodeName).replace(/[^a-zA-Z0-9_]/g, '_')
   const varName = /^[a-zA-Z_]/.test(rawName) ? rawName : `v_${rawName}`
 
   const existingVar = variables?.find(
@@ -54,7 +55,7 @@ function resolvePortVariableInfo(
       ? existingVar.variableId
       : UUID_REGEX.test(mappingRequest.portId)
         ? mappingRequest.portId
-        : crypto.randomUUID()
+        : createUuid()
 
   const variable: ProgrammingVariable = {
     variableId: targetVariableId,
@@ -425,7 +426,7 @@ export function FbdEditorPane({
               )
 
               const binding = {
-                bindingId: oldBindingIds[0] ?? crypto.randomUUID(),
+                bindingId: oldBindingIds[0] ?? createUuid(),
                 variableId: targetVariableId,
                 point: {
                   category: point.category,

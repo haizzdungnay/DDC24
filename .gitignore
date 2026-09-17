@@ -71,3 +71,4 @@ apps/web-ui/screenshot-*.png
 apps/web-ui/test-fbd-edit-manual.mjs
 tools/run_local_web_fg.sh
 tools/start_local_web.sh
+/HUONG_DAN_SSH_DEPLOY_FOXLINX.md

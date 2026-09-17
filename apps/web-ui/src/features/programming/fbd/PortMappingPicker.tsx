@@ -47,7 +47,7 @@ export function findBoundPointKeyForPort(
   variables?: readonly ProgrammingVariable[],
 ): string | null {
   if (!bindings || bindings.length === 0) return null
-  const rawName = `${nodeName}_${portName}`.replace(/[^a-zA-Z0-9_]/g, '_')
+  const rawName = (portName || nodeName).replace(/[^a-zA-Z0-9_]/g, '_')
   const varName = /^[a-zA-Z_]/.test(rawName) ? rawName : `v_${rawName}`
 
   const matching = bindings.filter((b) => {

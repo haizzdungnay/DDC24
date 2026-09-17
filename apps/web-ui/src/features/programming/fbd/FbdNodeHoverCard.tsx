@@ -87,33 +87,31 @@ export function resolvePortMappingInfo(
   pointCatalogItems?: readonly ProgrammingPointCatalogEntry[],
   portReadings?: ReadonlyMap<string, FbdRuntimeReading> | null,
 ): PortMappingDisplayInfo {
+  // Chỉ các block INPUT và OUTPUT mới là biến giao diện được ánh xạ trực tiếp tới Point
+  if (node.kind !== 'INPUT' && node.kind !== 'OUTPUT') {
+    return {
+      display: formatPortLabel(port.name, port.dataType, port.unit),
+      isMapped: false,
+    }
+  }
+
+  const varName = typeof node.parameters?.variable === 'string' ? node.parameters.variable.trim() : ''
+  if (!varName) {
+    return {
+      display: formatPortLabel(port.name, port.dataType, port.unit),
+      isMapped: false,
+    }
+  }
+
   const binding = bindings?.find((b) => {
-    if (b.variableId === port.id || b.variableId === port.name) return true
+    if (b.variableId === varName) return true
+    if (b.variableId === port.id || b.variableId === node.id) return true
     const anyB = b as unknown as Record<string, unknown>
     const bVar = typeof anyB.variable === 'string' ? anyB.variable : null
-    if (
-      bVar &&
-      (bVar === port.name ||
-        bVar === `${node.typeRef}_${port.name}` ||
-        bVar === `${node.kind}_${port.name}` ||
-        bVar.endsWith(`_${port.name}`))
-    ) {
-      return true
-    }
-    const nodeVar = node.parameters?.variable
-    if (nodeVar && typeof nodeVar === 'string' && b.variableId === nodeVar.trim()) return true
+    if (bVar === varName) return true
     if (variables) {
       const v = variables.find((item) => item.variableId === b.variableId)
-      if (
-        v &&
-        (v.name === port.name ||
-          v.name === `${node.typeRef}_${port.name}` ||
-          v.name === `${node.kind}_${port.name}` ||
-          v.name.endsWith(`_${port.name}`) ||
-          (nodeVar && v.name === String(nodeVar).trim()))
-      ) {
-        return true
-      }
+      if (v && v.name === varName) return true
     }
     return false
   })
@@ -146,7 +144,7 @@ export function resolvePortMappingInfo(
     valueText = formatPointRuntimeValue(point.value, point.unit ?? binding.unit)
   }
 
-  const title = `${port.name} : ${port.dataType} → ${point?.name ? `${point.name} (${pointLabel})` : pointLabel}`
+  const title = `${varName} (${node.kind}) : ${port.dataType} → ${point?.name ? `${point.name} (${pointLabel})` : pointLabel}`
 
   if (valueText !== null && valueText !== '') {
     return {

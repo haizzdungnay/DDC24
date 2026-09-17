@@ -1354,10 +1354,29 @@ export function FbdCanvas({
 
     if (state.target.kind === 'node') {
       const nodeId = state.target.nodeId
+      const node = nodesById.get(nodeId)
       const targetIds = selectedNodeIds.includes(nodeId) ? selectedNodeIds : [nodeId]
       const label = targetIds.length > 1
         ? pick(`${targetIds.length} khối đang chọn`, `${targetIds.length} selected blocks`)
         : pick('Khối', 'Block')
+
+      if (node && (node.kind === 'INPUT' || node.kind === 'OUTPUT') && targetIds.length === 1 && onRequestPortMapping) {
+        const varName = typeof node.parameters?.variable === 'string' ? node.parameters.variable.trim() : ''
+        const portDef = node.ports[0]
+        items.push({
+          id: 'map-point',
+          label: pick('Ánh xạ điểm…', 'Map point…'),
+          disabled: !canEdit || !varName,
+          run: () => onRequestPortMapping({
+            nodeId,
+            portId: portDef?.id ?? node.id,
+            portName: varName || node.typeRef,
+            nodeName: varName || node.kind,
+            portDirection: node.kind === 'INPUT' ? 'INPUT' : 'OUTPUT',
+            portDataType: node.typeRef,
+          }),
+        })
+      }
       items.push(
         {
           id: 'properties',
@@ -1401,18 +1420,19 @@ export function FbdCanvas({
       if (onRequestPortMapping) {
         const node = nodesById.get(nodeId)
         const portDef = node?.ports.find((p) => p.id === portId)
-        if (node && portDef) {
+        if (node && portDef && (node.kind === 'INPUT' || node.kind === 'OUTPUT')) {
+          const varName = typeof node.parameters?.variable === 'string' ? node.parameters.variable.trim() : ''
           items.push({
             id: 'map-point',
             label: pick('Ánh xạ điểm…', 'Map point…'),
-            disabled: !canEdit,
+            disabled: !canEdit || !varName,
             run: () => onRequestPortMapping({
               nodeId,
-              portId,
-              portName: portDef.name,
-              nodeName: node.typeRef ?? node.kind,
-              portDirection: direction,
-              portDataType: portDef.dataType,
+              portId: portDef.id,
+              portName: varName || portDef.name,
+              nodeName: varName || node.typeRef,
+              portDirection: node.kind === 'INPUT' ? 'INPUT' : 'OUTPUT',
+              portDataType: node.typeRef,
             }),
           })
         }
