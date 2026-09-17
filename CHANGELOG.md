@@ -183,6 +183,47 @@
       phiên này chứ không dẫn lại, vì phiên này có đổi mã sản phẩm.
       `element is not stable`: **0 lần** ở cả nhánh lẫn `main`.
     - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
+- **Hồi quy thứ ba tự gây ra, tìm và vá 2026-09-17T19:00Z — chrome MỚI xuất hiện
+  phía trên không được bám theo:** bản cũ `observe(document.body)` bắt được mọi
+  kiểu chrome đổi, vì bất kỳ dải nào chèn thêm phía trên cũng làm `body` cao lên.
+  Bản sửa thu hẹp tập quan sát xuống `chromeAbove(node)` — đúng để cắt vòng phản
+  hồi — nhưng tập ấy chỉ được tính **một lần** lúc gắn node và không bao giờ tính
+  lại: options của `DesignWorkspacePage` là ba số nguyên, nên `measure`,
+  `observeChrome` và `attach` giữ nguyên danh tính qua mọi lần render, callback
+  ref không chạy lại và `useLayoutEffect` cũng không. Một banner xuất hiện giữa
+  chừng như phần tử **mới** vì thế không được ai nghe, các dải cũ thì không đổi
+  kích thước, nên **không phép đo nào chạy**: cột giữ chiều cao tính theo mép
+  trên cũ và dài quá đáy đúng bằng banner. Đo ở ca jsdom: mép trên 360 px, cột
+  kẹt **576 px** thay vì 516 px ⇒ tài liệu 936 px trong viewport 900 px, **tràn
+  dọc 36 px** — lại đúng cú `DEV-PROG-021` mà `AC-4` cấm, và lần này nó ăn mất
+  chính năng lực `DEV-PROG-024` mà hook sinh ra để có. Chú thích cũ ở
+  `chromeAbove` khẳng định quan sát chrome phía trên "vẫn bắt được một banner
+  xuất hiện giữa chừng"; câu ấy chỉ đúng khi banner làm một phần tử **đã** quan
+  sát cao lên, nên bản vá đính chính nó **tại chỗ** chứ không chỉ sửa mã.
+  **Cách sửa:** nghe `childList` trên chuỗi cha (`ancestorsOf`) — không
+  `subtree`, không `attributes` — rồi tính lại tập chrome và đo lại. Thêm/bớt
+  bên trong cột (gõ chữ, thêm khối FBD) và việc đặt `style.height` của chính
+  phép đo đều không kích hoạt gì, nên vòng phản hồi vẫn hở.
+- **Số đo thật (2026-09-17T19:00Z, nhánh `clean-code/issue-677` trên
+  `origin/main@1515a72`, phiên `session_01Ro52KZtetXjbLYcg5PTWSo`):**
+  - `npx vitest --run --environment jsdom src` → **256 file / 3320 test**,
+    **3/4 lượt exit 0**. Lượt đỏ duy nhất là **một** ca của
+    `LibraryPage.test.tsx` (ngoài Source ownership), nhận request bay muộn của
+    ca trước — finding `#737`; `origin/main@1515a72` xanh 3/3 lượt, và phép tách
+    biến `612cc43` + chỉ thêm ca test (không đổi mã sản phẩm) cho ca ấy **xanh**.
+  - Phép thử ngược của bản vá: gỡ `MutationObserver` ⇒ **2/18 ca đỏ**
+    (nhận 576, mong đợi 516; tập quan sát chỉ còn `[<header>]`). Mutant
+    `subtree: true` ⇒ **1/18 ca đỏ** — ca khoá chiều ngược lại có răng thật.
+  - `npm run lint` → **exit 0**. `npm run build` → **exit 0**, chunk
+    `programming` **121,03 KiB gzip** (trần R3 165 KiB, dư địa 43,97 KiB); cùng
+    container, `612cc43` cho **120,94 KiB** ⇒ bản vá thêm **+0,09 KiB**.
+  - `npx playwright test e2e/programming-workspace-height.spec.ts` →
+    **16/16 PASS**, exit 0, 23,0 s.
+  - `npx playwright test e2e/programming.spec.ts` → **103 PASS / 7 FAIL /
+    30 skip**, hai lượt trên nhánh trùng khít; baseline worktree sạch tại
+    `origin/main@1515a72` **đo lại ở phiên này** cũng **103 / 7 / 30**, `diff`
+    tập đỏ **rỗng cả ba chiều**. `element is not stable`: **0 lần** cả hai bên.
+  - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
 
 ### Fixed — `#733`: cổng FE unit đỏ sẵn trên `main` — ca test khoá hành vi mà `a26cbd2` đã thay thế (2026-09-17)
 
