@@ -171,6 +171,82 @@ jobs:
             build/verify/cpp-full/core/mkddc-programming-sim-worker
           retention-days: 1
 
+  # Cổng BACNET=ON — ADR-060 điều (4), T-BAC-012 (#628).
+  #
+  # ĐỌC TRƯỚC KHI TIN JOB NÀY: Actions của tổ chức KHÔNG cấp runner (#414) và
+  # chủ sở hữu đã quyết định không bật lại, nên job này hiện `NOT_RUN` — không
+  # phải PASS, và một PR không có check đỏ KHÔNG phải một PR đã được kiểm. Lớp
+  # thi hành THẬT của `ADR-060` (4) là `scripts/verify-project.sh --component
+  # bacnet` chạy tại máy Implementer/Reviewer; job này khai lại đúng cùng các
+  # bước để khi #414 mở thì nó chạy đúng thứ đã được kiểm offline, không phải
+  # một biến thể thứ hai trôi dần khỏi bản gốc.
+  #
+  # Vì sao là job RIÊNG chứ không thêm một leg vào ma trận `som-services`: ma
+  # trận đó chỉ cần gói host, còn cổng này cần thêm cross toolchain aarch64 và
+  # ba gói `:arm64`. Nhét vào ma trận sẽ bắt cả năm leg cài chúng.
+  bacnet-on-gate:
+    name: Cổng BACNET=ON (host + cross aarch64)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Kho arm64 của Ubuntu KHÔNG nằm ở archive.ubuntu.com mà ở
+      # ports.ubuntu.com. Không ghim kho hiện có về amd64 trước thì `apt-get
+      # update` sẽ thử tải index arm64 từ archive và thất bại 404 trên mọi dòng
+      # — job chết ở bước cài, không liên quan gì tới mã.
+      - name: Bật kiến trúc arm64 và kho ports
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
+          sudo dpkg --add-architecture arm64
+          sudo sed -i 's|^deb http|deb [arch=amd64] http|' /etc/apt/sources.list
+          printf '%s\n' \
+            'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main universe' \
+            'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main universe' \
+            | sudo tee /etc/apt/sources.list.d/ubuntu-ports-arm64.list >/dev/null
+          sudo apt-get update -qq
+
+      # Hai nhóm gói, hai mục đích, cố ý liệt kê tách nhau:
+      #   - nhóm host  → tầng 1..3 (dựng + test + LOOPBACK trên runner x86_64)
+      #   - nhóm arm64 → tầng 4 (cross-build cho bo Forlinx)
+      # `libdrm-dev`/`libfreetype-dev` nằm ở nhóm host vì cổng dùng profile
+      # `full` (MODBUS+BACNET+HMI), đúng profile mà leg `modbus+bacnet+hmi` của
+      # `som-services` dùng — hai chỗ phải cùng một tổ hợp, nếu không cổng BACnet
+      # sẽ kiểm một cấu hình không ai khác kiểm.
+      - name: Cài gói host và cross toolchain aarch64
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ ninja-build pkg-config \
+            libgtest-dev libgmock-dev libmodbus-dev libsodium-dev \
+            libdrm-dev libfreetype-dev \
+            g++-aarch64-linux-gnu \
+            libmodbus-dev:arm64 libsodium-dev:arm64
+
+      - name: Cài phụ thuộc Python cho cổng hợp đồng
+        run: python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
+
+      # MỘT lệnh, đúng lệnh mà Implementer và Reviewer chạy tại máy. Bốn tầng
+      # (host BACNET=ON → symbol bip_init → LOOPBACK chạy thật → cross aarch64 +
+      # ba cổng kiểm binary) nằm trong script, không trải ra thành các step YAML:
+      # trải ra là tạo bản sao thứ hai của logic cổng, và bản sao đó sẽ lạc hậu.
+      - name: Cổng BACNET=ON (bốn tầng)
+        run: scripts/verify-project.sh --component bacnet
+
+      - name: Upload log khi đỏ
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bacnet-on-gate-logs
+          path: |
+            build/verify/cpp-full/Testing/
+            build/verify/cpp-full/bacnet-loopback.log
+            logs/cross-arm64-bacnet-on-configure.log
+            logs/cross-arm64-bacnet-on-build.log
+          retention-days: 7
+
   web-backend:
     name: Go Web Backend
     runs-on: ubuntu-22.04

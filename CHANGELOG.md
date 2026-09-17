@@ -98,6 +98,69 @@
   `.mcp.json` ghim đường dẫn tuyệt đối của một máy khác (`#684`), server báo
   `ENOENT` ngay lúc khởi động trong container Routine. Bằng chứng bốn khổ do lane
   e2e Playwright gánh thay. CI GitHub Actions = **`NOT_RUN (#414)`**.
+### Added — `#628` (`T-BAC-012`): cổng `BACNET=ON` chạy được tại máy — thi hành `ADR-060` điều (4) (2026-09-16)
+
+- Phạm vi: `scripts/verify-project.sh` (component `bacnet` mới),
+  `.github/workflows/build-and-test.yml` (job `bacnet-on-gate` mới),
+  `docs/00_governance/CLEAN_CODE_WORKFLOW.md` (`§6.2`, bản 1.4 → 1.5),
+  `CHANGELOG.md`.
+- **Triệu chứng:** ngày 2026-09-10 bộ cổng báo **1440/1440 PASS** trong khi
+  bacnet-stack không được biên dịch vào, `SubscribeCOV` chưa đăng ký handler và
+  64/88 object không có dữ liệu. Một bộ cổng xanh trọn vẹn trên một sản phẩm
+  không chạy.
+- **Nguyên nhân gốc:** không nằm ở test nào cả. CI và `§6.2` chỉ dựng một đường
+  `BACNET=OFF`, mà mọi lời gọi bacnet-stack nằm gọn trong
+  `#ifdef MKDDC_ENABLE_BACNET` — tiền xử lý cắt bỏ chúng trước khi có test nào
+  nhìn thấy. **Không test nào bắt được mã không được biên dịch;** chỉ một cổng
+  dựng đúng cấu hình mới bắt được. `ADR-060` điều (4) chốt luật này, nhưng luật
+  chỉ nằm trong tài liệu và không có cổng nào thi hành.
+- **Cách sửa:** thêm `scripts/verify-project.sh --component bacnet`, chạy bốn
+  tầng, mỗi tầng bịt một lỗ ba tầng kia không thấy:
+  1. HOST `BACNET=ON` — **gọi lại `run_cpp`**, không chép lệnh `cmake`, để cổng
+     dựng bằng đúng lệnh cổng C++ dùng và hai bên không trôi khỏi nhau.
+  2. symbol `bip_init` phải có trong `mkddc-iobus` host — tầng duy nhất phân biệt
+     được "dựng có BACnet" với "dựng không BACnet" khi nhìn vào sản phẩm.
+  3. tầng `LOOPBACK` (`#626`) phải chạy thật: đọc output binary gtest chứ **không**
+     đọc phán quyết `ctest`, vì một ca `GTEST_SKIP()` vẫn làm binary thoát 0 và
+     vẫn hiện `Passed` trong bảng `ctest`.
+  4. cross aarch64 `BACNET=ON` — **gọi lại `scripts/cross_build_aarch64_bacnet.sh`**
+     của `#627`, không chép ba cổng GLIBCXX / NEEDED / `bip_init`.
+- **Đường đi đã chọn (Issue cho hai lựa chọn):** đường B trước, rồi A. Actions
+  của tổ chức không cấp runner (`#414`) và chủ sở hữu đã quyết định không bật
+  lại, nên một cổng chỉ sống trong `.github/workflows/**` là cổng không bao giờ
+  chạy — đúng loại bằng chứng giả `ADR-060` vừa cấm. Job `bacnet-on-gate` khai
+  lại đúng bốn tầng để chạy khi `#414` mở; trạng thái của nó là **`NOT_RUN (#414)`,
+  không phải PASS**.
+- **Không đổi hành vi (N6):** chín component cũ giữ nguyên lệnh, thứ tự và exit
+  code; `run_cpp` không bị sửa một dòng nào. Component `bacnet` **cố ý không nằm
+  trong `--component all`**, cùng dạng loại trừ với `release` và cùng loại lý do:
+  tầng 4 đòi cross toolchain phải cài riêng, nhét vào `all` sẽ làm `all` đỏ trên
+  mọi máy chưa cài.
+- **Số đo thật (2026-09-16, nhánh `clean-code/issue-628` trên `origin/main@46764ba`):**
+  - `scripts/verify-project.sh --component bacnet` → **exit 0**, 34,7 s (cây build
+    ấm); tầng 1 `ctest` **1488/1488 PASS**, 0 FAIL; tầng 2 `bip_init` = **1**;
+    tầng 3 **6/6 ca `LOOPBACK`** chạy thật, 0 SKIP; tầng 4 `cfg_exit=0`,
+    `build_exit=0`, `gate_exit=0` (GLIBCXX cao nhất `3.4.29` ≤ trần `3.4.30`;
+    NEEDED không có mục lạ; `bip_init` hiện diện trong binary aarch64).
+  - Đối chứng N6 `BACNET=OFF`: `--component cpp --profile baseline` → **exit 0**,
+    **1421/1421 PASS**, 2 m 34 s — không đổi.
+  - `--component bogus` → **exit 2**, in `LỖI: component không hỗ trợ: bogus`.
+  - `--component layout` → **exit 0**; `--component workflow` → **exit 0**,
+    **69/69 PASS**; `--component docs` → **exit 0**, `KẾT LUẬN PASS`.
+  - `bash -n scripts/verify-project.sh` → **exit 0**; YAML workflow parse bằng
+    `yaml.safe_load` → hợp lệ, 9 job.
+  - **Phép thử ngược — ba lượt, cổng phải biết đỏ:**
+    - ép `BACNET=OFF` qua `--profile baseline` → **exit 2**, cổng từ chối ngay tại
+      cửa kèm trích dẫn `ADR-060` (4).
+    - gỡ `apdu_set_confirmed_handler(SERVICE_CONFIRMED_WRITE_PROPERTY, …)` →
+      **exit 8**, `BacnetLoopback.WritePropertyAnalogOutputReachesCoreExactlyOnce`
+      FAIL.
+    - gỡ `target_compile_definitions(… MKDDC_ENABLE_BACNET)` (ép `BACNET=OFF` ở
+      tầng biên dịch) → tầng 1 báo **1482/1482 PASS** trên một sản phẩm hoàn toàn
+      không có BACnet — **đúng sự cố 1440/1440 tái hiện** — và **tầng 2 là thứ duy
+      nhất bắt được**: `exit=1`, "không thấy symbol `bip_init`".
+    - Cả ba mutant đã khôi phục; `git status --porcelain` sau đó chỉ còn bốn file
+      thuộc Source ownership, `apps/**` sạch.
 
 ### Added — `#627` (`T-BAC-011`): cross-build aarch64 với `BACNET=ON` + ba cổng kiểm binary (2026-09-16)
 
