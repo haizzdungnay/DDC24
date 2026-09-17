@@ -83,6 +83,11 @@ export function useViewportFillHeight<T extends HTMLElement>(
    * chẩn đoán của phép đo, render lại vì nó thì đúng bằng việc tự tạo thêm một
    * vòng nữa. */
   const historyRef = useRef<{ previous: number | null; atMs: number }>({ previous: null, atMs: 0 })
+  /* Hẹn giờ của phép đo bị hoãn (xem lớp chặn bập bênh dưới), và `measure` mới
+   * nhất để hẹn giờ ấy gọi lại. Phải đi qua `ref` vì `measure` tham chiếu chính
+   * nó, và vì `measure` đổi danh tính mỗi khi options đổi. */
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const measureRef = useRef<(() => void) | null>(null)
 
   const measure = useCallback(() => {
     const node = nodeRef.current
@@ -107,10 +112,40 @@ export function useViewportFillHeight<T extends HTMLElement>(
      * phản hồi bố cục khép lại trong vài mili giây; người dùng mở rồi đóng một
      * banner thì cách nhau hàng trăm. Nên chỉ chặn khi giá trị cũ quay lại
      * NGAY, và sau `OSCILLATION_WINDOW_MS` thì mọi giá trị lại được nhận bình
-     * thường — không có trạng thái khoá vĩnh viễn nào để rơi vào. */
+     * thường.
+     *
+     * Bản đầu của lớp này viết thêm ở đây rằng "không có trạng thái khoá vĩnh
+     * viễn nào để rơi vào". Câu ấy đúng về LỚP CHẶN và sai về GIÁ TRỊ, và chỗ
+     * hiểu lẫn đó đã để lọt một cú tràn dọc 100 px — xem khối dưới. Giữ lại
+     * đính chính này ở đây thay vì chỉ sửa mã: câu trấn an cũ mới là thứ làm
+     * người đọc sau không đi kiểm. */
     const history = historyRef.current
     const now = performance.now()
-    if (next === history.previous && now - history.atMs < OSCILLATION_WINDOW_MS) return
+    if (next === history.previous && now - history.atMs < OSCILLATION_WINDOW_MS) {
+      /* CHẶN thì đúng, nhưng BỎ RƠI thì sai — và bản đầu của lớp này `return`
+       * thẳng, tức bỏ rơi.
+       *
+       * Trong một dao động thật, bỏ rơi vô hại: nhịp sau tới ngay. Nhưng
+       * `A → B → A` cũng là hình dạng của một THAO TÁC THẬT rồi DỪNG — người
+       * dùng kéo mép cửa sổ ra, kéo trả lại trong vài chục ms, rồi thả tay.
+       * Lúc ấy phép đo bị chặn là phép đo ĐÚNG và CUỐI CÙNG: không sự kiện nào
+       * tới sau nó, nên cột giữ mãi chiều cao trung gian. Đo được ở ca jsdom:
+       * cột 676 px trong viewport 900 px bắt đầu ở mép 300 px — tài liệu
+       * 1000 px, tràn dọc 100 px, đúng cú `DEV-PROG-021` mà hook này sinh ra
+       * để chặn.
+       *
+       * Nên hoãn chứ đừng bỏ: hẹn đo lại đúng lúc cửa sổ khép. Dao động thật
+       * không vì thế mà sống lại — lúc hẹn giờ chạy, nó chỉ đọc trạng thái DOM
+       * tại thời điểm đó và vẫn đi qua đúng lớp chặn này, nên nhịp đổi giá trị
+       * vẫn bị giữ ở mức một lần mỗi cửa sổ. */
+      if (retryRef.current === null) {
+        retryRef.current = setTimeout(() => {
+          retryRef.current = null
+          measureRef.current?.()
+        }, OSCILLATION_WINDOW_MS - (now - history.atMs))
+      }
+      return
+    }
 
     /* So sánh BẰNG trên số đã làm tròn, không phải ngưỡng `< 1`.
      *
@@ -159,6 +194,7 @@ export function useViewportFillHeight<T extends HTMLElement>(
   }, [measure, observeChrome])
 
   useLayoutEffect(() => {
+    measureRef.current = measure
     measure()
     /* Node đã gắn từ lần render trước (callback ref không chạy lại), hoặc
      * `measure` vừa đổi vì options đổi — cả hai đều cần một observer mới. */
@@ -168,6 +204,10 @@ export function useViewportFillHeight<T extends HTMLElement>(
       window.removeEventListener('resize', measure)
       observerRef.current?.disconnect()
       observerRef.current = null
+      if (retryRef.current !== null) {
+        clearTimeout(retryRef.current)
+        retryRef.current = null
+      }
     }
   }, [measure, observeChrome])
 

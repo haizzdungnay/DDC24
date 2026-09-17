@@ -83,6 +83,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  /* Ca nào bật hẹn giờ giả phải trả lại đồng hồ thật, nếu không ca sau treo. */
+  vi.useRealTimers()
   /* `globals: false` trong `vite.config.ts` nên RTL KHÔNG tự dọn giữa các ca;
    * thiếu dòng này thì cây DOM của ca trước còn nguyên và `getByTestId` gặp
    * nhiều phần tử trùng tên. */
@@ -274,5 +276,65 @@ describe('useViewportFillHeight — observer phải gắn được khi node xu�
     topPx = 360
     act(() => { FakeResizeObserver.fire(getByTestId('late-header')) })
     expect(heights.at(-1)).toBe(900 - 360 - 24)
+  })
+})
+
+describe('useViewportFillHeight — phép đo bị lớp chống bập bênh chặn KHÔNG được bỏ rơi', () => {
+  /* Khiếm khuyết do chính #677 sinh ra, phát hiện ngày 2026-09-17.
+   *
+   * Lớp chặn chuỗi `A → B → A` là đúng và cần thiết, nhưng bản đầu của nó
+   * `return` thẳng: phép đo bị chặn biến mất hẳn thay vì được hoãn. Trong một
+   * dao động thật thì không sao — sự kiện tiếp theo tới ngay sau đó. Vấn đề là
+   * khi `A → B → A` là THAO TÁC THẬT rồi DỪNG: người dùng kéo mép cửa sổ ra
+   * rồi kéo trả lại trong vài chục ms và thả tay. Giá trị đúng cuối cùng bị
+   * chặn, không sự kiện nào tới nữa, và cột giữ mãi chiều cao trung gian —
+   * đúng cú tràn dọc `DEV-PROG-021` mà AC-4 cấm, chỉ khác là nay do lớp sửa
+   * của #677 gây ra chứ không do hằng số đoán.
+   *
+   * Cửa sổ thời gian là thứ phân biệt hai tình huống, nên bản sửa giữ nguyên
+   * việc CHẶN và chỉ bỏ việc BỎ RƠI: hẹn đo lại đúng lúc cửa sổ khép. */
+  it('cửa sổ chặn khép thì giá trị đúng vẫn phải tới nơi', () => {
+    const heights: (number | null)[] = []
+    render(<Harness onHeight={(h) => heights.push(h)} />)
+    expect(heights.at(-1)).toBe(900 - 300 - 24)
+
+    let nowMs = 1_000
+    vi.spyOn(performance, 'now').mockImplementation(() => nowMs)
+    vi.useFakeTimers()
+
+    /* Kéo cửa sổ cao lên. */
+    nowMs += 10
+    setViewport(1440, 1000)
+    act(() => { window.dispatchEvent(new Event('resize')) })
+    expect(heights.at(-1)).toBe(1000 - 300 - 24)
+
+    /* Kéo trả lại NGAY — chuỗi `A → B → A` trong cùng cửa sổ. */
+    nowMs += 10
+    setViewport(1440, 900)
+    act(() => { window.dispatchEvent(new Event('resize')) })
+    /* Bị chặn ở đúng thời điểm này là HÀNH VI ĐÚNG: hook chưa phân biệt được
+     * bập bênh với thao tác thật, và chặn là phía an toàn. */
+    expect(heights.at(-1)).toBe(1000 - 300 - 24)
+
+    /* Rồi người dùng thả tay: không còn sự kiện nào. Khi cửa sổ khép, phép đo
+     * bị hoãn phải tới nơi — nếu không, cột cao 676 px trong viewport 900 px
+     * bắt đầu ở mép 300 px, tức tài liệu 1000 px: tràn dọc 100 px. */
+    act(() => {
+      nowMs += 400
+      vi.advanceTimersByTime(400)
+    })
+    expect(heights.at(-1)).toBe(900 - 300 - 24)
+  })
+
+  it('không tự sinh vòng đo vô hạn khi không có gì bị chặn', () => {
+    const heights: (number | null)[] = []
+    render(<Harness onHeight={(h) => heights.push(h)} />)
+    const rendersAfterMount = heights.length
+
+    vi.useFakeTimers()
+    act(() => { vi.advanceTimersByTime(5_000) })
+
+    /* Không có phép đo nào bị hoãn thì không có hẹn giờ nào được đặt. */
+    expect(heights.length).toBe(rendersAfterMount)
   })
 })
