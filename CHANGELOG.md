@@ -8,6 +8,66 @@
 
 ## [Unreleased]
 
+### Fixed — `#677`: Mini Map và tab Vấn đề không bao giờ `stable` — bỏ `ResizeObserver(document.body)` trong `useViewportFillHeight` (2026-09-17)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/useViewportFillHeight.ts`,
+  `apps/web-ui/src/features/programming/design/useViewportFillHeight.test.tsx` (mới),
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.presentation.test.tsx`,
+  `CHANGELOG.md`.
+- **Triệu chứng:** `TC-FBD-NAV-001` (desktop) và `TC-FBD-DIAG-001` (mobile) chết ở
+  `element is not stable` sau 116–118 lần thử — Playwright chờ bố cục đứng yên
+  trên một bố cục không bao giờ đứng yên.
+- **Nguyên nhân gốc:** `useViewportFillHeight` tạo `ResizeObserver(() => measure())`
+  rồi `observe(document.body)` — **quan sát đúng phần tử mà kết quả của phép đo
+  làm thay đổi**. `measure()` đặt chiều cao cho cột workspace ⇒ `body` cao theo ⇒
+  observer gọi lại `measure()`. Ngưỡng `Math.abs(current - next) < 1` trong hook
+  chỉ chặn được trôi dần, không chặn được **dao động**: thanh cuộn dọc hiện lên
+  làm viewport hẹp đi, nội dung phía trên xuống dòng, mép trên tụt, cột thấp lại,
+  thanh cuộn biến mất, vòng quay lại từ đầu với biên độ lớn hơn 1 px.
+- **Cách sửa:** hook quan sát **chrome phía trên** (mọi anh-chị-em đứng trước
+  `node` trên đường lên `<body>`) thay cho `document.body` — tập phần tử quyết
+  định mép trên mà không phần tử nào bị chiều cao ta đặt tác động, nên vẫn bám
+  được banner xuất hiện giữa chừng (`DEV-PROG-024`) mà không khép kín vòng phản
+  hồi. Thêm một lớp chặn chuỗi `A → B → A` trong cửa sổ 250 ms cho đường dao động
+  đi vòng qua thanh cuộn. `FbdCanvas` giữ nguyên việc chỉ quan sát khung cuộn và
+  đổi ngưỡng `< 1` thành so sánh bằng trên số đã làm tròn.
+- **Hồi quy tự gây ra và đã vá trong cùng PR (2026-09-17):** bản sửa đầu gắn
+  observer trong `useLayoutEffect`, đúng chỗ bản cũ gắn `observe(document.body)`.
+  Chỗ ấy vô hại với `body` (luôn sẵn có) nhưng sai với node: effect của lần mount
+  chạy **trước** callback ref, nên `nodeRef.current === null` và observer không
+  bao giờ được tạo. Hook đo đúng một lần lúc chrome chưa dựng xong
+  (`top=93.5` ⇒ cột 963 px), chrome dựng xong đẩy `top` lên 139.5, và trang tràn
+  dọc 43 px ở 1920×1080 — `e2e/programming-workspace-height.spec.ts` bắt được
+  (8/8 PASS trên `main`, 7/8 trên bản lỗi). Observer nay gắn trong callback ref.
+- **Số đo thật (2026-09-17, nhánh `clean-code/issue-677` trên `origin/main@9d8832b`):**
+  - `npx vitest --run --environment jsdom src` → **256 file / 3309 test PASS**,
+    0 FAIL, 138,54 s. Nền `main` là **3295**: PR thêm 14 ca (13 ca của
+    `useViewportFillHeight.test.tsx` + 1 ca của `FbdCanvas.presentation.test.tsx`).
+    Nền này suy ra nhất quán từ hai lần chạy thật của chính phiên: 3307 khi file
+    hook mới có 11 ca (3307 − 12 = 3295) và 3309 khi có 13 ca (3309 − 14 = 3295).
+  - `npm run lint` → exit 0; `npm run build` → exit 0, chunk `programming`
+    116,97 KiB gzip trong ngân sách R3 (trần 165 KiB).
+  - `npx playwright test e2e/programming-workspace-height.spec.ts` → **8/8 PASS**
+    (bằng baseline `main`); đây là cổng bắt được hồi quy tràn dọc nói trên.
+  - `npx playwright test e2e/programming.spec.ts` → 103 PASS / 7 FAIL / 30 skip,
+    **hai lượt cho danh sách đỏ giống hệt nhau và giống hệt baseline `origin/main`**
+    (diff rỗng cả ba chiều) — không hồi quy.
+  - `python3 scripts/docs_iso_harness.py --expect` → exit 0, `KẾT LUẬN PASS`.
+  - **Phép thử ngược:** khôi phục `observe(document.body)` + ngưỡng `< 1` → **6/11**
+    ca đỏ, trong đó ca hội tụ báo **202 lần đổi giá trị trên 200 nhịp reflow**;
+    khôi phục việc gắn observer trong effect → **2/13** ca đỏ. Cả hai mutant đã
+    khôi phục, `git status --porcelain` sau đó chỉ còn file thuộc Source ownership.
+- **Còn lại, không thuộc Source ownership của Issue:** `TC-FBD-NAV-001` vẫn đỏ, và
+  **không còn vì `element is not stable`** — nó chạy hết rồi đỏ ở phép so
+  `scrollLeft + clientWidth/2` (pixel scene) với `graphX` (toạ độ graph). Đo tại
+  r=0.3 → `scrollLeft=1265` và r=0.7 → `scrollLeft=4044` cho
+  `viewport.scale ≈ 1,0994`, `viewport.x ≈ -165,4`, nhất quán ở cả hai điểm với
+  sai số 0: sản phẩm điều hướng đúng, phép đo sai đơn vị vì giả định
+  `scale=1, viewport.x=0`. Đỏ này có sẵn trên `main` với **cùng số đo
+  `centerError=255`**. Đã mở finding riêng; `e2e/programming.spec.ts` nằm ngoài
+  Source ownership của `#677` nên không sửa trong PR này.
+
 ### Fixed — `#676`: Thư viện nhanh FBD có lối vào ở MỌI khổ desktop — ba ngưỡng `1440 / 1280–1439 / <1280` (2026-09-16)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
