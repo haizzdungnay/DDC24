@@ -14,6 +14,7 @@
   `apps/web-ui/src/features/programming/design/useViewportFillHeight.test.tsx` (mới),
   `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
   `apps/web-ui/src/features/programming/fbd/FbdCanvas.presentation.test.tsx`,
+  `apps/web-ui/e2e/programming-workspace-height.spec.ts`,
   `CHANGELOG.md`.
 - **Triệu chứng:** `TC-FBD-NAV-001` (desktop) và `TC-FBD-DIAG-001` (mobile) chết ở
   `element is not stable` sau 116–118 lần thử — Playwright chờ bố cục đứng yên
@@ -58,6 +59,24 @@
     ca đỏ, trong đó ca hội tụ báo **202 lần đổi giá trị trên 200 nhịp reflow**;
     khôi phục việc gắn observer trong effect → **2/13** ca đỏ. Cả hai mutant đã
     khôi phục, `git status --porcelain` sau đó chỉ còn file thuộc Source ownership.
+- **`AC-6` chuyển từ probe tạm sang cổng cố định (2026-09-17, phiên
+  `session_01K3H7F2ai4mTAfDTP1b7CH8`):** bằng chứng bốn khổ danh nghĩa của hai
+  vòng trước lấy bằng một probe Playwright tạm, chạy xong thì gỡ — bảng số đúng
+  nhưng người đọc sau không chạy lại được, và không cổng nào giữ cho kết quả ấy
+  còn đúng ở lần sửa bố cục tiếp theo. Nay khoá bằng bốn ca cố định trong
+  `e2e/programming-workspace-height.spec.ts`: không tràn **ngang** ở cả bốn khổ
+  `1440×900 / 1280×820 / 768×1024 / 390×844`, và không tràn **dọc** từ
+  `minViewportWidthPx = 1024` trở lên — dưới ngưỡng đó hook trả `null` có chủ ý
+  để trang tự cuộn, nên ràng buộc "không cuộn" ở khổ hẹp sẽ là ràng buộc một
+  hành vi mà sản phẩm cố ý không có.
+  - Số đo: `npx playwright test e2e/programming-workspace-height.spec.ts` →
+    **16/16 PASS**, exit 0, 23,5 s (8 ca × 2 project `desktop-chrome` +
+    `mobile-chrome`; trước PR là 8/8).
+  - **Phép thử ngược:** áp lại đúng hồi quy đã xảy ra ở vòng trước (observer chỉ
+    gắn trong `useLayoutEffect`, không gắn theo node) → ca AC-6 `1280×820` **đỏ**
+    với `tài liệu 883px trên viewport 820px` (tràn dọc 63 px), cùng ca
+    `1920×1080` sẵn có. Ca mới có răng, không phải ca luôn xanh. Mutant đã khôi
+    phục; `git diff` sau đó chỉ còn file spec.
 - **Còn lại, không thuộc Source ownership của Issue:** `TC-FBD-NAV-001` vẫn đỏ, và
   **không còn vì `element is not stable`** — nó chạy hết rồi đỏ ở phép so
   `scrollLeft + clientWidth/2` (pixel scene) với `graphX` (toạ độ graph). Đo tại
