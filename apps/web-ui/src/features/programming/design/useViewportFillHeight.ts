@@ -122,6 +122,14 @@ export function useViewportFillHeight<T extends HTMLElement>(
   const { bottomGapPx, minPx, minViewportWidthPx } = options
   const nodeRef = useRef<T | null>(null)
   const [height, setHeight] = useState<number | null>(null)
+  /* Bản sao của `height` đọc được NGAY trong `measure`.
+   * Bản trước lấy giá trị hiện hành bằng dạng updater của `setHeight` rồi ghi
+   * `historyRef` bên trong updater ấy. Updater của React phải THUẦN — nó có
+   * thể được gọi lại (StrictMode gọi hai lần, render bị huỷ thì gọi lại) — nên
+   * mọi phép ghi đặt trong đó phải là phép gán luỹ đẳng mới an toàn. Phép đếm
+   * `oscillationCyclesRef` dưới đây KHÔNG luỹ đẳng, nên toàn bộ phần quyết định
+   * chuyển ra ngoài và chỉ hook này ghi `height`, nhờ đó bản sao không lệch. */
+  const heightRef = useRef<number | null>(null)
   /* Giá trị NGAY TRƯỚC giá trị đang giữ, kèm thời điểm đổi — hai dữ kiện đủ để
    * nhận ra chuỗi `A → B → A`. Là `ref` chứ không phải state: nó là dữ liệu
    * chẩn đoán của phép đo, render lại vì nó thì đúng bằng việc tự tạo thêm một
@@ -132,12 +140,31 @@ export function useViewportFillHeight<T extends HTMLElement>(
    * nó, và vì `measure` đổi danh tính mỗi khi options đổi. */
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const measureRef = useRef<(() => void) | null>(null)
+  /* Số chu kỳ LIÊN TIẾP "bị lớp chặn chặn, rồi vẫn đổi giá trị". Đây là thứ
+   * phân biệt hai tình huống mà lớp chặn không phân biệt được tại thời điểm
+   * chặn: một thao tác người dùng kết thúc cho đúng MỘT chu kỳ, còn một bố cục
+   * LƯỠNG ỔN cho vô hạn — xem `latchRef`. */
+  const oscillationCyclesRef = useRef(0)
+  /* Bật khi lớp chặn dưới vừa chặn một phép đo, tắt lại ở lần áp dụng kế tiếp.
+   * Đây mới là tín hiệu đúng, và bản đầu của lớp chốt này đã khoá nhầm vào
+   * một tín hiệu khác — "phép đo TỚI TỪ hẹn giờ mà áp dụng được" — rồi không
+   * chốt được gì: khi hẹn giờ chạy, giá trị thường CHƯA đổi nên nó thoát sớm,
+   * còn lần đổi thật lại tới từ nhịp thường ngay sau khi cửa sổ hết hạn. Đo
+   * được: bộ đếm đứng yên ở 0 suốt 200 nhịp. Cái đáng đếm là "đã bị chặn rồi
+   * sau đó vẫn đổi", bất kể ai mang giá trị mới tới. */
+  const blockedSinceApplyRef = useRef(false)
+  /* Chốt cho bố cục lưỡng ổn: cặp hai giá trị thay nhau, giá trị đã chốt, và
+   * lần cuối cặp ấy còn hoạt động. `null` là chưa chốt. */
+  const latchRef = useRef<{ pair: readonly [number, number]; atMs: number } | null>(null)
 
   const measure = useCallback(() => {
     const node = nodeRef.current
     if (!node) return
     if (window.innerWidth < minViewportWidthPx) {
-      setHeight((current) => (current === null ? current : null))
+      if (heightRef.current !== null) {
+        heightRef.current = null
+        setHeight(null)
+      }
       return
     }
     /* Toạ độ TÀI LIỆU (`rect.top + scrollY`), không phải toạ độ viewport: đọc
@@ -165,6 +192,44 @@ export function useViewportFillHeight<T extends HTMLElement>(
      * người đọc sau không đi kiểm. */
     const history = historyRef.current
     const now = performance.now()
+
+    /* CHỐT bố cục lưỡng ổn — lớp sau cùng, cho trường hợp KHÔNG CÓ điểm bất
+     * động nào để hội tụ về.
+     *
+     * Lớp hoãn ngay dưới sửa đúng việc bỏ rơi phép đo, nhưng nó không làm cho
+     * một bố cục lưỡng ổn dừng lại: mỗi lần cửa sổ khép, giá trị đối diện được
+     * nhận, bố cục lật lại, rồi chặn tiếp. Đo được ngày 2026-09-17 với thời
+     * gian chạy thật: 200 nhịp reflow trong 3200 ms cho 14 lần đổi giá trị —
+     * chuỗi `576 ↔ 536` đều đặn một lần mỗi cửa sổ, KHÔNG BAO GIỜ DỪNG. Ca
+     * hội tụ `AC-2` không thấy điều này vì nó chạy đồng bộ, nên hẹn giờ hoãn
+     * không bao giờ bắn trong ca đó — khẳng định "50 nhịp cuối không đổi gì
+     * nữa" của nó là tính chất của harness, không phải của mã.
+     *
+     * Khi hai giá trị thay nhau mà không giá trị nào là điểm bất động, cách
+     * duy nhất để dừng là CHỌN một giá trị. Chọn giá trị NHỎ HƠN: nó là giá
+     * trị không tràn: cột thấp hơn phần còn lại của viewport thì thừa một dải
+     * trống dưới đáy, còn cột cao hơn thì đẩy tài liệu dài quá đáy — đúng cú
+     * `DEV-PROG-021` mà `AC-4` cấm. Giữa hai bề mặt hỏng, dải trống là bề mặt
+     * hỏng an toàn.
+     *
+     * Chốt chỉ giữ khi cặp ấy CÒN hoạt động. Mỗi phép đo bị chốt chặn sẽ làm
+     * mới `atMs`, nên trong lúc bố cục còn lật thì chốt còn nóng; khi bố cục
+     * đứng yên thì không sự kiện nào tới nữa và chốt nguội sau một cửa sổ. Một
+     * giá trị NGOÀI cặp — người dùng đổi cỡ cửa sổ thật — gỡ chốt ngay. Nhờ
+     * hai lối ra đó, chốt không phải trạng thái khoá vĩnh viễn: đây đúng là
+     * câu mà bản đầu của lớp chặn dưới đã nói sai một lần, nên lần này nó được
+     * bảo đảm bằng hai ca test chứ không bằng một câu trấn an. */
+    const latch = latchRef.current
+    if (latch) {
+      const inPair = next === latch.pair[0] || next === latch.pair[1]
+      if (inPair && now - latch.atMs < OSCILLATION_WINDOW_MS) {
+        latchRef.current = { pair: latch.pair, atMs: now }
+        return
+      }
+      latchRef.current = null
+      oscillationCyclesRef.current = 0
+    }
+
     if (next === history.previous && now - history.atMs < OSCILLATION_WINDOW_MS) {
       /* CHẶN thì đúng, nhưng BỎ RƠI thì sai — và bản đầu của lớp này `return`
        * thẳng, tức bỏ rơi.
@@ -182,6 +247,7 @@ export function useViewportFillHeight<T extends HTMLElement>(
        * không vì thế mà sống lại — lúc hẹn giờ chạy, nó chỉ đọc trạng thái DOM
        * tại thời điểm đó và vẫn đi qua đúng lớp chặn này, nên nhịp đổi giá trị
        * vẫn bị giữ ở mức một lần mỗi cửa sổ. */
+      blockedSinceApplyRef.current = true
       if (retryRef.current === null) {
         retryRef.current = setTimeout(() => {
           retryRef.current = null
@@ -199,11 +265,30 @@ export function useViewportFillHeight<T extends HTMLElement>(
      * khác — hook không còn quan sát thứ do chính nó thay đổi (`chromeAbove`),
      * và chuỗi `A → B → A` bị chặn ngay trên. Giữ lại một ngưỡng trông-như-van
      * chỉ mời lần sửa sau quan sát `body` trở lại và tin rằng đã có gì đó đỡ. */
-    setHeight((current) => {
-      if (current === next) return current
-      historyRef.current = { previous: current, atMs: now }
-      return next
-    })
+    const current = heightRef.current
+    if (current === next) return
+
+    /* Đếm NGOÀI updater, vì lý do ghi ở `heightRef`. Một phép đo tới từ đường
+     * hoãn mà lại áp dụng được nghĩa là cửa sổ đã khép mà bố cục vẫn đổi;
+     * hai lần LIÊN TIẾP như thế là bố cục đang lật qua lật lại chứ không phải
+     * một thao tác đã kết thúc. Bất kỳ phép đo thường nào cũng đặt lại bộ đếm,
+     * nên chỉ chuỗi liên tiếp mới chốt. */
+    /* Một chu kỳ "bị chặn rồi vẫn đổi" = một lần bố cục lật qua lớp chặn. Một
+     * thao tác người dùng kết thúc cho đúng MỘT chu kỳ rồi im; bố cục lưỡng ổn
+     * cho vô hạn. Một lần đổi KHÔNG qua chặn đặt lại bộ đếm, nên chỉ chuỗi
+     * liên tiếp mới chốt. */
+    oscillationCyclesRef.current = blockedSinceApplyRef.current ? oscillationCyclesRef.current + 1 : 0
+    blockedSinceApplyRef.current = false
+
+    let applied = next
+    if (oscillationCyclesRef.current >= 2 && current !== null) {
+      latchRef.current = { pair: [current, next] as const, atMs: now }
+      applied = Math.min(current, next)
+    }
+
+    historyRef.current = { previous: current, atMs: now }
+    heightRef.current = applied
+    setHeight(applied)
   }, [bottomGapPx, minPx, minViewportWidthPx])
 
   const observerRef = useRef<ResizeObserver | null>(null)
@@ -278,6 +363,9 @@ export function useViewportFillHeight<T extends HTMLElement>(
         clearTimeout(retryRef.current)
         retryRef.current = null
       }
+      latchRef.current = null
+      oscillationCyclesRef.current = 0
+      blockedSinceApplyRef.current = false
     }
   }, [measure, observeChrome])
 

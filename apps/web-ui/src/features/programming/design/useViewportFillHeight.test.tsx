@@ -432,3 +432,128 @@ describe('useViewportFillHeight — chrome MỚI xuất hiện phía trên phả
     expect(heights.length).toBe(rendersAfterMount)
   })
 })
+
+describe('useViewportFillHeight — bố cục LƯỠNG ỔN phải dừng hẳn, không chỉ chậm lại', () => {
+  /* Khiếm khuyết thứ tư do chính #677 sinh ra, phát hiện ngày 2026-09-17.
+   *
+   * Ca hội tụ `AC-2` ở trên chạy ĐỒNG BỘ: nó không đẩy hẹn giờ và không cho
+   * `performance.now()` tiến, nên lớp hoãn của lớp chặn bập bênh không bao giờ
+   * chạy trong ca đó. Khẳng định mạnh nhất của nó — "50 nhịp cuối không đổi gì
+   * nữa" — vì thế là tính chất của HARNESS, không phải của mã.
+   *
+   * Cho thời gian chạy thật thì lộ ra: 200 nhịp reflow trong 3200 ms cho 14
+   * lần đổi giá trị, chuỗi `576 ↔ 536` đều đặn một lần mỗi cửa sổ 250 ms và
+   * KHÔNG BAO GIỜ DỪNG. Tức `AC-2` ("số lần đổi state là hữu hạn và nhỏ") chỉ
+   * đúng trong test chứ không đúng trên trình duyệt: bố cục vẫn rung, chỉ chậm
+   * hơn 60 lần. Nguyên nhân là bố cục lưỡng ổn KHÔNG CÓ điểm bất động để hội
+   * tụ về, nên mọi lớp "đo lại cho đúng" đều chỉ đổi nhịp rung chứ không dừng
+   * được — phải CHỌN một giá trị mới dừng.
+   *
+   * Các ca dưới đây đẩy thời gian thật và khoá cả ba mặt: dừng hẳn, chọn đúng
+   * giá trị không tràn, và không nuốt mất thao tác thật của người dùng. */
+  function runOscillation(
+    settled: (number | null)[],
+    getByTestId: (id: string) => HTMLElement,
+    ticks: number,
+    clock: { nowMs: number },
+  ) {
+    for (let i = 0; i < ticks; i += 1) {
+      const columnHeight = 900 - topPx - 24
+      topPx = columnHeight > 560 ? 340 : 300
+      act(() => {
+        clock.nowMs += 16
+        vi.advanceTimersByTime(16)
+        FakeResizeObserver.fire(document.body)
+        FakeResizeObserver.fire(getByTestId('app-header'))
+        FakeResizeObserver.fire(getByTestId('context-strip'))
+      })
+    }
+  }
+
+  function startClock() {
+    const clock = { nowMs: 1_000 }
+    vi.spyOn(performance, 'now').mockImplementation(() => clock.nowMs)
+    vi.useFakeTimers()
+    return clock
+  }
+
+  it('dừng HẲN khi thời gian chạy thật, và chốt vào giá trị KHÔNG TRÀN', () => {
+    const settled: (number | null)[] = []
+    const { getByTestId } = render(
+      <Harness onHeight={(h) => { if (settled.at(-1) !== h) settled.push(h) }} />,
+    )
+    const clock = startClock()
+
+    runOscillation(settled, getByTestId, 200, clock)
+    const afterOscillation = settled.length
+    expect(afterOscillation).toBeLessThan(6)
+
+    /* Không chỉ ít — phải HẾT. Bản chưa chốt cho 14 lần đổi ở đây và vẫn tăng
+     * đều; 100 nhịp nữa mà không thêm lần nào mới là dừng thật. */
+    runOscillation(settled, getByTestId, 100, clock)
+    expect(settled.length).toBe(afterOscillation)
+
+    /* Và phải dừng ở giá trị THẤP hơn trong cặp. Cột thấp hơn phần còn lại của
+     * viewport chỉ để thừa một dải trống; cột cao hơn thì đẩy tài liệu dài quá
+     * đáy — cú `DEV-PROG-021` mà `AC-4` cấm. */
+    expect(settled.at(-1)).toBe(536)
+  })
+
+  it('một thao tác người dùng RỒI DỪNG vẫn tới nơi — chốt không nuốt mất nó', () => {
+    /* Chiều ngược lại của ca trên. `A → B → A` rồi im cũng đi qua lớp chặn
+     * đúng một lần, nên nếu chốt kích hoạt ngay chu kỳ đầu thì nó sẽ nuốt mất
+     * giá trị cuối của người dùng — đúng khiếm khuyết mà lớp hoãn sinh ra để
+     * sửa. Chốt vì thế đòi HAI chu kỳ liên tiếp, và ca này khoá con số đó. */
+    const heights: (number | null)[] = []
+    render(<Harness onHeight={(h) => heights.push(h)} />)
+    const clock = startClock()
+
+    /* Kéo cửa sổ NHỎ LẠI rồi TO LẠI — chiều này mới phân biệt được ngưỡng.
+     * Chốt luôn chọn giá trị nhỏ hơn trong cặp, nên nếu thao tác đi theo chiều
+     * to-rồi-nhỏ thì giá trị đúng TÌNH CỜ trùng với giá trị chốt và ca không
+     * canh được gì. Đi theo chiều nhỏ-rồi-to thì giá trị đúng là giá trị LỚN
+     * hơn, và một cái chốt kích hoạt sớm sẽ kẹp người dùng xuống 476 px —
+     * cột ngắn hơn 100 px so với chỗ họ vừa kéo tới. */
+    clock.nowMs += 10
+    setViewport(1440, 800)
+    act(() => { window.dispatchEvent(new Event('resize')) })
+    expect(heights.at(-1)).toBe(800 - 300 - 24)
+
+    clock.nowMs += 10
+    setViewport(1440, 900)
+    act(() => { window.dispatchEvent(new Event('resize')) })
+
+    act(() => { clock.nowMs += 400; vi.advanceTimersByTime(400) })
+    expect(heights.at(-1)).toBe(900 - 300 - 24)
+  })
+
+  it('đã chốt rồi, một giá trị NGOÀI cặp vẫn gỡ chốt — người dùng đổi cỡ cửa sổ không bị kẹt', () => {
+    /* Chốt là trạng thái, và mọi trạng thái đều phải có lối ra. Bản đầu của
+     * lớp chặn bập bênh từng khẳng định suông rằng "không có trạng thái khoá
+     * vĩnh viễn nào để rơi vào" và câu đó đã sai một lần rồi, nên lần này lối
+     * ra được khoá bằng ca test. */
+    const settled: (number | null)[] = []
+    const { getByTestId } = render(
+      <Harness onHeight={(h) => { if (settled.at(-1) !== h) settled.push(h) }} />,
+    )
+    const clock = startClock()
+    runOscillation(settled, getByTestId, 200, clock)
+    expect(settled.at(-1)).toBe(536)
+
+    /* Người dùng kéo cửa sổ thấp hẳn xuống: giá trị mới không thuộc cặp đang
+     * chốt, nên nó phải được nhận. */
+    topPx = 300
+    setViewport(1440, 800)
+    act(() => { clock.nowMs += 16; vi.advanceTimersByTime(16); window.dispatchEvent(new Event('resize')) })
+    /* 476 — ngoài cặp `{576, 536}` và vẫn trên sàn 384, nên nó đo đúng việc gỡ
+     * chốt chứ không lẫn với phép kẹp sàn. */
+    expect(settled.at(-1)).toBe(800 - 300 - 24)
+
+    /* Và đây mới là chỗ chốt PHẢI được gỡ chứ không chỉ bị bỏ qua: người dùng
+     * kéo tiếp về đúng một giá trị THUỘC cặp cũ, ngay trong cửa sổ 250 ms. Nếu
+     * chốt còn sống thì giá trị này bị nuốt và cửa sổ của họ kẹt ở 476 px. */
+    setViewport(1440, 900)
+    act(() => { clock.nowMs += 16; vi.advanceTimersByTime(16); window.dispatchEvent(new Event('resize')) })
+    expect(settled.at(-1)).toBe(900 - 300 - 24)
+  })
+})
