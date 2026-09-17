@@ -8,6 +8,32 @@
 
 ## [Unreleased]
 
+### Fixed — `#733`: cổng FE unit đỏ sẵn trên `main` — ca test khoá hành vi mà `a26cbd2` đã thay thế (2026-09-17)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.test.tsx`.
+- **Triệu chứng.** `npx vitest --run --environment jsdom src` trả **exit 1** trên
+  chính `main@a2c52ff`: `1 failed | 3299 passed (3300)`, ca đỏ là
+  `khi language="ST" thì KHÔNG hiện nhóm Khối của dự án`.
+- **Nguyên nhân gốc.** `a26cbd2` gỡ điều kiện `language !== 'FBD'` ở
+  `QuickLibraryPanel.tsx:138` để mở mục "Khối của dự án" cho cả ST lẫn FBD —
+  **đổi hành vi có chủ ý**, ghi rõ trong thân commit và trong CHANGELOG — nhưng
+  commit đó không chạm `QuickLibraryPanel.test.tsx`, nên ca khoá hành vi **cũ**
+  bị bỏ lại sau lưng bản đổi. Commit vào `main` thẳng, không qua PR, nên không có
+  lượt chạy cổng nào đứng giữa.
+- **Cách sửa.** Ca được **viết lại**, không xoá: nay khẳng định ở `language="ST"`
+  nhóm "Khối của dự án" **có** hiện khi `userPouInterfaces` không rỗng. Bổ sung
+  một ca cho nhánh mà `a26cbd2` mới mở nhưng chưa ai canh: nhấp một POU ở chế độ
+  ST gọi `onInsert` với đúng `userPouCatalogEntry(pou)`. Không chạm mã sản phẩm.
+- Số đo (2026-09-17, nhánh `clean-code/issue-733`):
+  - FE unit toàn bộ: **exit 0** — 255/255 file, **3301/3301** test, 0 FAIL, 157,18 s
+    (nền `main@a2c52ff`: exit 1, 254/255 file, 3299/3300, 1 FAIL).
+  - Phép thử ngược: khôi phục `language !== 'FBD'` (mutant) → **2/30 ca đỏ**, đúng
+    hai ca trên; khôi phục mutant xong `git status --porcelain` chỉ còn file test.
+  - FE lint **exit 0**; FE build **exit 0**, chunk `programming` 120,69 KiB gzip;
+    `docs_iso_harness.py --expect` **exit 0**.
+- Refs: `#733`, `WF-CLEAN-001`.
+
+
 ### Added — Kéo thả Function Block vào ST Editor & Chuẩn hoá ánh xạ điểm FBD/Mapping (2026-09-17)
 
 - Phạm vi: `apps/web-ui/src/features/programming/fbd/userPou.ts`,
