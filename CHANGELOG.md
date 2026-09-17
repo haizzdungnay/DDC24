@@ -225,6 +225,64 @@
     tập đỏ **rỗng cả ba chiều**. `element is not stable`: **0 lần** cả hai bên.
   - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
 
+- **Hồi quy thứ tư tự gây ra, tìm và vá 2026-09-17T21:00Z — bố cục LƯỠNG ỔN chỉ
+  bị tiết lưu chứ không dừng, nên `AC-2` không đúng trên trình duyệt thật
+  (phiên `session_017joGNAKXo2uYU5vackR3cg`):**
+  - **Triệu chứng.** Với một bố cục lưỡng ổn (cột cao ⇒ có thanh cuộn ⇒ mép trên
+    tụt ⇒ cột thấp ⇒ mất thanh cuộn ⇒ lặp), chiều cao cột **không bao giờ đứng
+    yên**: đo được **14 lần đổi giá trị trong 3200 ms**, chuỗi `576 ↔ 536` đều
+    đặn đúng một lần mỗi cửa sổ 250 ms. Tức trang vẫn rung — chỉ chậm hơn bản
+    trước khoảng 60 lần — và `AC-2` của chính Issue này ("số lần đổi state là
+    hữu hạn và nhỏ") **không đạt** trên trình duyệt.
+  - **Nguyên nhân gốc.** Bố cục lưỡng ổn **không có điểm bất động** để hội tụ về:
+    mỗi giá trị, khi được áp dụng, tự sinh ra điều kiện cho giá trị kia. Lớp
+    hoãn của bản vá trước (hồi quy thứ hai) sửa đúng việc *bỏ rơi* phép đo,
+    nhưng mỗi lần cửa sổ khép nó lại nhận giá trị đối diện và mồi lại vòng lật.
+    Không lớp "đo lại cho đúng" nào dừng được việc này; phải **chọn** một giá
+    trị mới dừng.
+  - **Vì sao ba vòng đọc lại trước không thấy.** Ca hội tụ `AC-2` chạy **đồng
+    bộ**: nó không đẩy hẹn giờ và không cho `performance.now()` tiến, nên lớp
+    hoãn không bao giờ chạy trong ca đó. Khẳng định mạnh nhất của nó — "50 nhịp
+    cuối không đổi gì nữa" — là tính chất của **harness**, không phải của mã. Hồ
+    sơ vòng trước còn ghi thẳng rằng ca ấy "giữ nguyên kết quả… vì hẹn giờ không
+    chạy trong một chuỗi reflow đồng bộ": đó là **lần thứ tư** trong PR này một
+    câu trấn an đúng-về-chi-tiết là thứ giữ cho lỗi không bị đi kiểm.
+  - **Cách sửa.** Khi phát hiện **hai chu kỳ liên tiếp** "bị lớp chặn chặn rồi
+    vẫn đổi giá trị" — dấu hiệu của lật kéo dài, khác hẳn một thao tác người
+    dùng kết thúc (đúng một chu kỳ) — hook **chốt** vào giá trị **nhỏ hơn** của
+    cặp. Giữa hai bề mặt hỏng, dải trống dưới đáy là bề mặt an toàn; giá trị lớn
+    hơn đẩy tài liệu dài quá đáy, đúng cú `DEV-PROG-021` mà `AC-4` cấm. Chốt có
+    hai lối ra nên không phải trạng thái khoá vĩnh viễn: một giá trị **ngoài
+    cặp** gỡ chốt ngay, và chốt **nguội** sau một cửa sổ không còn sự kiện.
+  - Bản vá cũng đưa phần quyết định **ra ngoài** updater của `setHeight` (thêm
+    `heightRef` phản chiếu `height`). Updater của React phải thuần và có thể
+    được gọi lại; phép **đếm** chu kỳ đặt trong đó sẽ đếm đôi dưới StrictMode.
+  - **Phép thử ngược — bốn mutant độc lập, cả bốn đều làm ca mới đỏ:**
+
+    | Mutant | Kết quả |
+    |---|---|
+    | Bỏ hẳn việc chốt (giữ mọi lớp khác) | **2/21 ca đỏ** |
+    | Chốt ngay chu kỳ ĐẦU (`>= 1` thay vì `>= 2`) | **1/21 ca đỏ** — nuốt mất thao tác thật của người dùng |
+    | Không bao giờ gỡ chốt khi gặp giá trị ngoài cặp | **1/21 ca đỏ** |
+    | Chốt vào giá trị LỚN (`Math.max`) | **2/21 ca đỏ** |
+
+    Hai mutant giữa **ban đầu sống sót**: bộ ca đầu tiên phiên này viết ra không
+    canh được ngưỡng `>= 2` (vì thao tác thử đi theo chiều to-rồi-nhỏ, ở đó giá
+    trị đúng tình cờ **trùng** giá trị chốt) và không đi qua đường gỡ chốt. Hai
+    ca đó đã được **viết lại** cho tới khi mutant chết, chứ không giữ nguyên:
+    một ca sống sót qua mutant của chính nó không phải bằng chứng.
+  - **Số đo cổng của phiên này** (nhánh `clean-code/issue-677` trên
+    `origin/main@1515a72`; exit code đọc trực tiếp từ chính lệnh đo):
+    - `npx vitest --run --environment jsdom src` → **exit 0**; **256 file /
+      3323 test PASS**, 0 FAIL. Nền đo cùng container trước bản vá: 3320 ⇒ đúng
+      3 ca phiên này thêm vào.
+    - `npm run lint` → **exit 0**. `npm run build` → **exit 0**.
+    - `npx playwright test e2e/programming-workspace-height.spec.ts` →
+      **16/16 PASS**, exit 0 — cổng AC-4 + AC-6 vẫn xanh sau bản vá.
+    - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
+  - **AC-1 vẫn chưa đạt** và vẫn vì `#732`; xem mục riêng trong PR #730.
+
+
 ### Fixed — `#733`: cổng FE unit đỏ sẵn trên `main` — ca test khoá hành vi mà `a26cbd2` đã thay thế (2026-09-17)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.test.tsx`.
