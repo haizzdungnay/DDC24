@@ -183,3 +183,57 @@ for (const vp of [{ w: 1280, h: 800 }, { w: 1680, h: 812 }]) {
     expect(await editorHeight()).toBe(before)
   })
 }
+
+/** Ngưỡng bề rộng của `useViewportFillHeight` ở `DesignWorkspacePage`
+ * (`minViewportWidthPx: 1024`). Từ đây trở lên hook chốt chiều cao cột theo
+ * viewport; hẹp hơn thì nó trả `null` CÓ CHỦ Ý và để trang tự cuộn — một cửa sổ
+ * quá hẹp không có ngân sách dọc để chia, và bóp tiếp chỉ tạo ra một khe soạn
+ * thảo hai dòng.
+ */
+const FILL_HEIGHT_MIN_VIEWPORT_WIDTH_PX = 1024
+
+/**
+ * `AC-6` của #677 — bốn khổ DANH NGHĨA, đo tại chỗ chứ không đo bằng probe rồi gỡ.
+ *
+ * Vì sao ca này tồn tại thay vì một bảng số trong mô tả PR: bằng chứng AC-6 của
+ * hai vòng trước lấy bằng một probe Playwright tạm, chạy xong thì gỡ. Bảng số ấy
+ * đúng, nhưng người đọc sau không chạy lại được nó, và không cổng nào giữ cho
+ * kết quả ấy còn đúng ở lần sửa bố cục tiếp theo. Một phép đo không tái lập được
+ * thì không khác một lời hứa.
+ *
+ * Phép kiểm tách làm hai vì hai chiều có bản chất khác nhau:
+ *
+ *  - NGANG: không khổ nào được tràn. Không có ngoại lệ nào hợp lệ — tràn ngang ở
+ *    khổ hẹp nghĩa là có thứ gì đó chốt cứng bề rộng theo desktop.
+ *  - DỌC: chỉ ràng buộc từ `minViewportWidthPx` trở lên, vì đó đúng là vùng hook
+ *    nhận trách nhiệm. Dưới ngưỡng, trang cuộn dọc là hành vi đã khoá bằng ca
+ *    "trả null dưới ngưỡng bề rộng"; ràng buộc "không cuộn" ở đó sẽ là ràng buộc
+ *    một hành vi mà sản phẩm cố ý không có.
+ */
+for (const vp of [{ w: 1440, h: 900 }, { w: 1280, h: 820 }, { w: 768, h: 1024 }, { w: 390, h: 844 }]) {
+  const fillsHeight = vp.w >= FILL_HEIGHT_MIN_VIEWPORT_WIDTH_PX
+  test(`workspace Thiết kế ${vp.w}x${vp.h} (AC-6): không tràn ngang${fillsHeight ? ', không tràn dọc' : ''}`, async ({ page }) => {
+    await page.setViewportSize({ width: vp.w, height: vp.h })
+    await openEditor(page, 128)
+
+    const m = await page.evaluate(() => ({
+      docWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      docHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+    }))
+
+    // Dung sai 1 px cho làm tròn của trình duyệt, KHÔNG hơn — như ca `DEV-PROG-021`.
+    expect(
+      m.docWidth,
+      `tràn NGANG ở ${vp.w}x${vp.h}: tài liệu ${m.docWidth}px trên viewport ${m.viewportWidth}px`,
+    ).toBeLessThanOrEqual(m.viewportWidth + 1)
+
+    if (fillsHeight) {
+      expect(
+        m.docHeight,
+        `tràn DỌC ở ${vp.w}x${vp.h}: tài liệu ${m.docHeight}px trên viewport ${m.viewportHeight}px`,
+      ).toBeLessThanOrEqual(m.viewportHeight + 1)
+    }
+  })
+}
