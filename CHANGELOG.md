@@ -86,6 +86,36 @@
   `scale=1, viewport.x=0`. Đỏ này có sẵn trên `main` với **cùng số đo
   `centerError=255`**. Đã mở finding riêng; `e2e/programming.spec.ts` nằm ngoài
   Source ownership của `#677` nên không sửa trong PR này.
+- **Đồng bộ `origin/main@a2c52ff` và đo lại toàn bộ cổng (2026-09-17, phiên
+  `session_017awmJuADScTxBVPHyBqYjH`):** `main` tiến 2 commit kể từ lúc đo trước
+  (`9d8832b`), trong đó `a26cbd2` chạm **đúng hai file thuộc Source ownership của
+  `#677`** mà PR này cũng sửa — `FbdCanvas.tsx` và `FbdCanvas.presentation.test.tsx`.
+  Số đo cũ vì thế không còn đúng cho mã sau khi merge. Đã `git merge origin/main`
+  (conflict duy nhất ở `CHANGELOG.md`, **giữ cả hai bên**), soi lại vùng auto-merge
+  của `FbdCanvas.tsx` để chắc hai phía không đè nhau: 34 dòng `main` thêm vào
+  (`map-point` trong context menu, thu hẹp `onRequestPortMapping` về `INPUT`/`OUTPUT`)
+  nằm ở `@@ -1354` và `@@ -1401`, phần `#677` nằm ở `@@ -317`, hai vùng rời nhau.
+  - `npx vitest --run --environment jsdom src` → **exit 1**; 256 file / 3314 test,
+    **1 FAIL**. Ca đỏ là `khi language="ST" thì KHÔNG hiện nhóm Khối của dự án`
+    (`QuickLibraryPanel.test.tsx:545`) — **đỏ có sẵn trên `main`**, không do PR
+    này: worktree sạch tại `origin/main@a2c52ff` cho 255 file / 3300 test,
+    **cùng đúng 1 FAIL đó**, `diff` hai tập ca đỏ **rỗng**. Chênh 14 test là 14
+    ca PR này thêm vào. Nguyên nhân: `a26cbd2` gỡ điều kiện `language !== 'FBD'`
+    trong `QuickLibraryPanel.tsx:138` có chủ ý nhưng không cập nhật ca test khoá
+    hành vi cũ. Ngoài Source ownership của `#677` ⇒ đã mở finding `#733` ở
+    `state:triage`, **không tự sửa**.
+  - `npm run lint` → **exit 0**. `npm run build` → **exit 0**, chunk `programming`
+    **117,08 KiB gzip** (trần R3 165 KiB, dư địa 47,9 KiB).
+  - `npx playwright test e2e/programming-workspace-height.spec.ts` → **16/16 PASS**,
+    exit 0, 19,2 s — cổng AC-4 + AC-6 vẫn xanh sau khi nhận mã mới của `main`.
+  - `npx playwright test e2e/programming.spec.ts` → 103 PASS / **7 FAIL** / 30 skip,
+    **hai lượt** trên nhánh cho tập đỏ giống hệt nhau, và giống hệt baseline
+    `origin/main@a2c52ff` (cũng 103/7/30) — `diff` rỗng cả ba chiều, không hồi quy.
+    `element is not stable`: **0 lần** ở cả nhánh lẫn `main`.
+  - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
+  - Ghi lại một số đo giả suýt lọt: notification của trình chạy nền báo
+    "exit code 0" cho lượt vitest, nhưng đó là exit của `tail` cuối wrapper —
+    `VITEST_EXIT` thật là **1**. Exit code phải đọc trực tiếp từ chính lệnh đo.
 
 ### Added — Kéo thả Function Block vào ST Editor & Chuẩn hoá ánh xạ điểm FBD/Mapping (2026-09-17)
 
