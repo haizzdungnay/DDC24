@@ -51,10 +51,18 @@ export interface ViewportFillOptions {
  * đứng yên trên một bố cục không bao giờ đứng yên.
  *
  * Chrome phía TRÊN thì khác về bản chất: chiều cao của nó không phụ thuộc
- * chiều cao ta đặt cho `node`, nên quan sát nó vẫn bắt được một banner xuất
- * hiện giữa chừng — thứ `DEV-PROG-024` sinh ra để bám theo — mà không khép
- * kín vòng phản hồi. Phần tử nằm DƯỚI hoặc BÊN TRONG `node` cố ý không có mặt
- * ở đây: chúng là hệ quả của phép đo, không phải đầu vào của nó.
+ * chiều cao ta đặt cho `node`, nên quan sát nó không khép kín vòng phản hồi.
+ * Phần tử nằm DƯỚI hoặc BÊN TRONG `node` cố ý không có mặt ở đây: chúng là hệ
+ * quả của phép đo, không phải đầu vào của nó.
+ *
+ * ĐÍNH CHÍNH (2026-09-17). Bản đầu của chú thích này viết thêm rằng quan sát
+ * chrome phía trên "vẫn bắt được một banner xuất hiện giữa chừng — thứ
+ * `DEV-PROG-024` sinh ra để bám theo". Câu ấy chỉ đúng khi banner làm một phần
+ * tử ĐÃ có trong tập này cao lên, và SAI khi banner là một phần tử MỚI: tập
+ * trả về đây được chốt một lần lúc gắn node và không tự tính lại. Bản cũ
+ * `observe(document.body)` không có chỗ hở đó, vì mọi dải chèn thêm đều làm
+ * `body` cao lên. Khoảng hở được bịt bằng `ancestorsOf` ngay dưới — không phải
+ * bằng việc nới tập này rộng ra, vì nới rộng là nối lại đúng vòng phản hồi.
  */
 function chromeAbove(node: Element): Element[] {
   const above: Element[] = []
@@ -67,6 +75,42 @@ function chromeAbove(node: Element): Element[] {
     current = current.parentElement
   }
   return above
+}
+
+/**
+ * Các phần tử mà việc thêm/bớt CON TRỰC TIẾP có thể chèn một dải chrome mới
+ * vào phía trên `node`: chuỗi cha của nó, tính cả `<body>`.
+ *
+ * VÌ SAO CẦN (#677). `chromeAbove` cho biết tập phần tử phải NGHE KÍCH THƯỚC,
+ * nhưng chính tập ấy có thể đổi — và nó chỉ được tính lúc gắn node. Options
+ * của `DesignWorkspacePage` là ba số nguyên, nên `measure`, `observeChrome` và
+ * `attach` giữ nguyên danh tính qua mọi lần render: callback ref không chạy
+ * lại, `useLayoutEffect` cũng không, và tập quan sát đứng yên suốt vòng đời
+ * trang. Một banner xuất hiện giữa chừng như phần tử MỚI vì thế không được ai
+ * nghe, các dải cũ thì không đổi kích thước, và hook không đo lại: cột giữ
+ * chiều cao tính theo mép trên CŨ và dài quá đáy đúng bằng banner. Đo được ở
+ * ca jsdom: mép trên 360 px, cột kẹt ở 576 px thay vì 516 px ⇒ tài liệu
+ * 936 px trong viewport 900 px, tràn dọc 36 px — cú `DEV-PROG-021` mà `AC-4`
+ * cấm, ăn mất đúng năng lực `DEV-PROG-024` mà hook sinh ra để có.
+ *
+ * Nghe `childList` trên chuỗi cha là phép vá HẸP NHẤT bịt được chỗ đó:
+ *
+ *  - KHÔNG `subtree`, nên thêm/bớt bên trong `node` — gõ chữ, thêm khối FBD —
+ *    không kích hoạt gì. Nghe `subtree` mới là nối lại vòng phản hồi.
+ *  - KHÔNG nghe `attributes`, nên việc đặt `style.height` của chính phép đo
+ *    không tự gọi lại mình.
+ *
+ * Cha thì cao lên theo chiều cao ta đặt, nên chúng cố ý CHỈ được nghe về cấu
+ * trúc, không bao giờ về kích thước.
+ */
+function ancestorsOf(node: Element): Element[] {
+  const chain: Element[] = []
+  const root = node.ownerDocument?.body ?? null
+  for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+    chain.push(parent)
+    if (parent === root) break
+  }
+  return chain
 }
 
 /** Bập bênh bố cục khép vòng trong vài ms; thao tác người dùng thì không. */
@@ -163,6 +207,10 @@ export function useViewportFillHeight<T extends HTMLElement>(
   }, [bottomGapPx, minPx, minViewportWidthPx])
 
   const observerRef = useRef<ResizeObserver | null>(null)
+  /* Người nghe CẤU TRÚC chuỗi cha, và `observeChrome` mới nhất để nó gọi lại.
+   * Phải đi qua `ref` vì callback của nó tham chiếu chính `observeChrome`. */
+  const structureRef = useRef<MutationObserver | null>(null)
+  const observeChromeRef = useRef<((node: T | null) => void) | null>(null)
 
   /* Gắn observer phải đi theo NODE, không theo effect.
    *
@@ -178,13 +226,32 @@ export function useViewportFillHeight<T extends HTMLElement>(
   const observeChrome = useCallback((node: T | null) => {
     observerRef.current?.disconnect()
     observerRef.current = null
+    structureRef.current?.disconnect()
+    structureRef.current = null
+    if (!node) return
+
     /* jsdom và các môi trường cũ không có `ResizeObserver`. Thiếu nó thì hook
      * vẫn đúng ở lần đo đầu và khi đổi cỡ cửa sổ — chỉ mất khả năng bám theo
-     * một banner xuất hiện giữa chừng. */
-    if (!node || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => measure())
-    for (const element of chromeAbove(node)) observer.observe(element)
-    observerRef.current = observer
+     * chrome phía trên đổi chiều cao tại chỗ. */
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => measure())
+      for (const element of chromeAbove(node)) observer.observe(element)
+      observerRef.current = observer
+    }
+
+    /* Tập `chromeAbove` đổi khi cây phía trên đổi, nên phải tính LẠI chứ không
+     * chỉ đo lại: một banner mới vừa đẩy mép trên xuống, vừa là phần tử mà lần
+     * sau nó cao lên ta cũng phải nghe. Gọi lại chính hàm này làm đúng cả hai,
+     * và việc nó `disconnect()` người nghe hiện tại — kể cả người nghe vừa gọi
+     * nó — là có chủ ý: mọi bản ghi còn chờ đều thành thừa sau khi đo lại. */
+    if (typeof MutationObserver !== 'undefined') {
+      const structure = new MutationObserver(() => {
+        observeChromeRef.current?.(nodeRef.current)
+        measure()
+      })
+      for (const parent of ancestorsOf(node)) structure.observe(parent, { childList: true })
+      structureRef.current = structure
+    }
   }, [measure])
 
   const attach = useCallback((node: T | null) => {
@@ -195,6 +262,7 @@ export function useViewportFillHeight<T extends HTMLElement>(
 
   useLayoutEffect(() => {
     measureRef.current = measure
+    observeChromeRef.current = observeChrome
     measure()
     /* Node đã gắn từ lần render trước (callback ref không chạy lại), hoặc
      * `measure` vừa đổi vì options đổi — cả hai đều cần một observer mới. */
@@ -204,6 +272,8 @@ export function useViewportFillHeight<T extends HTMLElement>(
       window.removeEventListener('resize', measure)
       observerRef.current?.disconnect()
       observerRef.current = null
+      structureRef.current?.disconnect()
+      structureRef.current = null
       if (retryRef.current !== null) {
         clearTimeout(retryRef.current)
         retryRef.current = null

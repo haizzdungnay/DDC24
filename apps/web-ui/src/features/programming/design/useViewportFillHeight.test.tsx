@@ -338,3 +338,97 @@ describe('useViewportFillHeight — phép đo bị lớp chống bập bênh ch�
     expect(heights.length).toBe(rendersAfterMount)
   })
 })
+
+describe('useViewportFillHeight — chrome MỚI xuất hiện phía trên phải được bám theo', () => {
+  /* Khiếm khuyết do chính #677 sinh ra, phát hiện ngày 2026-09-17.
+   *
+   * Bản cũ `observe(document.body)` bám được MỌI kiểu chrome đổi, vì bất kỳ
+   * dải nào chèn thêm phía trên cũng làm `body` cao lên. Bản sửa thu hẹp tập
+   * quan sát xuống `chromeAbove(node)` — đúng để cắt vòng phản hồi, nhưng tập
+   * ấy được chốt MỘT LẦN lúc gắn node và không bao giờ tính lại: options của
+   * `DesignWorkspacePage` là ba số nguyên, nên `measure`/`observeChrome`/
+   * `attach` giữ nguyên danh tính qua mọi lần render, callback ref không chạy
+   * lại, và `useLayoutEffect` cũng không.
+   *
+   * Hệ quả: một banner xuất hiện GIỮA CHỪNG như một phần tử MỚI phía trên cột
+   * không nằm trong tập quan sát, và các dải chrome cũ thì không đổi kích
+   * thước — nên không phép đo nào chạy. Cột giữ nguyên chiều cao tính theo mép
+   * trên CŨ, dài quá đáy đúng bằng chiều cao banner: lại là cú tràn dọc
+   * `DEV-PROG-021` mà AC-4 cấm, và lần này nó ăn mất đúng năng lực
+   * `DEV-PROG-024` mà hook sinh ra để có.
+   *
+   * Chú thích cũ ở `chromeAbove` khẳng định quan sát chrome phía trên "vẫn bắt
+   * được một banner xuất hiện giữa chừng". Câu ấy chỉ đúng khi banner làm một
+   * phần tử ĐÃ quan sát cao lên, và sai khi banner là phần tử MỚI — nên bản vá
+   * đính chính nó tại chỗ chứ không chỉ sửa mã.
+   *
+   * Cách sửa: nghe THÊM/BỚT CON TRỰC TIẾP trên các phần tử cha, rồi tính lại
+   * tập chrome và đo lại. Không `subtree`, nên mọi thay đổi bên TRONG cột —
+   * gõ chữ, thêm khối FBD — không kích hoạt gì; và đặt chiều cao là một đổi
+   * thuộc tính `style`, cũng không kích hoạt gì. Vòng phản hồi vẫn hở. */
+  function BannerHarness({
+    withBanner,
+    onHeight,
+  }: {
+    withBanner: boolean
+    onHeight?: (h: number | null) => void
+  }) {
+    const [attach, height] = useViewportFillHeight<HTMLDivElement>(WORKSPACE_OPTIONS)
+    onHeight?.(height)
+    return (
+      <div data-testid="banner-shell">
+        <header data-testid="banner-header" />
+        {withBanner ? <div data-testid="late-banner" /> : null}
+        <div data-testid="banner-column" ref={attach} style={height === null ? undefined : { height }}>
+          <div data-testid="banner-column-child" />
+        </div>
+      </div>
+    )
+  }
+
+  it('banner chèn thêm sau khi mount thì chiều cao được đo lại', async () => {
+    const heights: (number | null)[] = []
+    const record = (h: number | null) => heights.push(h)
+    const { rerender } = render(<BannerHarness withBanner={false} onHeight={record} />)
+    expect(heights.at(-1)).toBe(900 - 300 - 24)
+
+    /* Banner cao 60 px chen vào giữa chrome cũ và cột: mép trên tụt xuống.
+     * Không đo lại thì cột vẫn 576 px trên mép 360 px — tài liệu 936 px trong
+     * viewport 900 px, tràn dọc đúng 36 px. */
+    topPx = 360
+    await act(async () => {
+      rerender(<BannerHarness withBanner onHeight={record} />)
+    })
+    expect(heights.at(-1)).toBe(900 - 360 - 24)
+  })
+
+  it('banner mới rồi cũng được quan sát, nên nó cao lên tiếp vẫn bám được', async () => {
+    const heights: (number | null)[] = []
+    const record = (h: number | null) => heights.push(h)
+    const { rerender, getByTestId } = render(<BannerHarness withBanner={false} onHeight={record} />)
+
+    topPx = 360
+    await act(async () => {
+      rerender(<BannerHarness withBanner onHeight={record} />)
+    })
+    expect(FakeResizeObserver.allTargets()).toContain(getByTestId('late-banner'))
+
+    topPx = 420
+    act(() => { FakeResizeObserver.fire(getByTestId('late-banner')) })
+    expect(heights.at(-1)).toBe(900 - 420 - 24)
+  })
+
+  it('thêm/bớt phần tử BÊN TRONG cột không kích hoạt đo lại — vòng phản hồi vẫn hở', async () => {
+    const heights: (number | null)[] = []
+    const { getByTestId } = render(<BannerHarness withBanner={false} onHeight={(h) => heights.push(h)} />)
+    const rendersAfterMount = heights.length
+
+    /* Đúng thứ hook KHÔNG được phản ứng: nội dung bên trong phần tử mà chính
+     * nó đặt chiều cao. Nghe `subtree` ở đây là nối lại vòng phản hồi mà #677
+     * sinh ra để cắt. */
+    await act(async () => {
+      getByTestId('banner-column').appendChild(document.createElement('div'))
+    })
+    expect(heights.length).toBe(rendersAfterMount)
+  })
+})
