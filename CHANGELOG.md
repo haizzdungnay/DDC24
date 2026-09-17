@@ -116,6 +116,31 @@
   - Ghi lại một số đo giả suýt lọt: notification của trình chạy nền báo
     "exit code 0" cho lượt vitest, nhưng đó là exit của `tail` cuối wrapper —
     `VITEST_EXIT` thật là **1**. Exit code phải đọc trực tiếp từ chính lệnh đo.
+- **Đồng bộ `origin/main@1515a72` và đo lại toàn bộ cổng (2026-09-17, phiên
+  `session_01VM4Xd7vp5XYCvMB3UFSgHP`):** `main` tiến thêm `1515a72` kể từ lượt đo
+  trước (`a2c52ff`). Commit đó là bản sửa của `#733` — đúng ca test đang làm cổng
+  FE unit của PR này phải khai **FAIL** kèm bảng baseline. Số đo cũ vì thế không
+  còn đúng, và lần này cổng có cơ sở để trở lại exit 0 thay vì phải giải thích một
+  màu đỏ đi mượn. Đã `git merge origin/main` — conflict duy nhất ở `CHANGELOG.md`,
+  xử lý theo quy tắc **giữ cả hai bên**; không file mã nguồn nào xung đột, và diện
+  tích PR vẫn đúng 6 file thuộc Source ownership.
+  - `npx vitest --run --environment jsdom src` → **exit 0**; **256 file / 3315 test
+    PASS**, 0 FAIL, 188,10 s. Nền `main@1515a72` là 3301 ca ⇒ đúng 14 ca PR này
+    thêm vào. Màu đỏ `QuickLibraryPanel` của lượt đo trước đã biến mất đúng như dự
+    đoán khi `#733` vào `main`.
+  - `npm run lint` → **exit 0**. `npm run build` → **exit 0**, chunk `programming`
+    **117,08 KiB gzip** (trần R3 165 KiB, dư địa 47,92 KiB).
+  - `npx playwright test e2e/programming-workspace-height.spec.ts` → **16/16 PASS**,
+    exit 0, 27,6 s — cổng AC-4 + AC-6 vẫn xanh sau khi nhận mã mới của `main`.
+  - `npx playwright test e2e/programming.spec.ts` → 103 PASS / **7 FAIL** / 30 skip,
+    **hai lượt** trên nhánh cho tập đỏ giống hệt nhau; baseline dựng bằng worktree
+    sạch tại `origin/main@1515a72` cũng **103 / 7 / 30** với tập đỏ trùng khít —
+    `diff` **rỗng cả ba chiều**, không hồi quy. `element is not stable`: **0 lần**
+    ở cả nhánh lẫn `main`.
+  - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
+  - **AC-1 vẫn chưa đạt:** `TC-FBD-NAV-001` còn đỏ trên cả nhánh lẫn `main`. Mắt
+    xích chặn là `#732` (PR #735 mở, chưa merge) — nằm ngoài Source ownership của
+    Issue này và ngoài cả làn dọn dẹp, nên phiên này không chạm tới.
 
 ### Fixed — `#733`: cổng FE unit đỏ sẵn trên `main` — ca test khoá hành vi mà `a26cbd2` đã thay thế (2026-09-17)
 
