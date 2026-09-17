@@ -281,6 +281,74 @@
       **16/16 PASS**, exit 0 — cổng AC-4 + AC-6 vẫn xanh sau bản vá.
     - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
   - **AC-1 vẫn chưa đạt** và vẫn vì `#732`; xem mục riêng trong PR #730.
+- **Hồi quy tự gây ra thứ năm, vá trong cùng PR (2026-09-17, phiên
+  `session_01JPYN6AJW2dVmXpMYYiaBv1`):** lớp chốt lưỡng ổn của vòng trước **đóng
+  nhầm vào thao tác đổi cỡ cửa sổ của người dùng**.
+  - **Triệu chứng.** Kéo mép cửa sổ qua lại vài nhịp rồi dừng thì cột workspace
+    bị kẹp vào giá trị **nhỏ hơn** của cặp và không trả lại. Đo được ở ca jsdom:
+    cửa sổ 900 px, mép trên 300 px ⇒ đáng 576 px, nhưng cột giữ **476 px** —
+    người dùng mất đúng **100 px** chỗ gõ, và chỉ lấy lại được nếu kéo ra một
+    giá trị thứ ba. Đúng cú `DEV-PROG-021` mà `AC-4` cấm, lần này do chính lớp
+    chống lưỡng ổn của `#677` gây ra trên một trang **không hề** lưỡng ổn.
+  - **Nguyên nhân gốc.** Lớp chốt phân biệt "bố cục lưỡng ổn" với "thao tác
+    người dùng" bằng **hình dạng của chuỗi giá trị**: hai chu kỳ "bị chặn rồi
+    vẫn đổi" liên tiếp thì chốt. Nhưng hai tình huống ấy cho **cùng một hình
+    dạng** — chuỗi giá trị không mang thông tin nào phân biệt được chúng. Thêm
+    nữa, bộ đếm và cờ "vừa bị chặn" là trạng thái **không bao giờ hết hạn**: khi
+    phép đo kế tiếp thoát sớm ở `current === next`, cờ nằm lại `true` vô thời
+    hạn, nên hai đợt kéo cửa sổ **cách nhau một giờ** vẫn được cộng dồn thành
+    chu kỳ thứ hai và chốt kích hoạt.
+  - **Vì sao bốn vòng đọc lại trước không thấy.** Ca "một thao tác người dùng
+    RỒI DỪNG vẫn tới nơi" chỉ đảo chiều **một** lần, tức đúng một chu kỳ, tức
+    ngay **dưới** ngưỡng — nó khoá đúng cái ngưỡng ấy và vì thế không bao giờ
+    chạm tới phía bên kia. Lần thứ năm liên tiếp trong PR này, thứ che lỗi là
+    một ca test đúng-về-điều-nó-khẳng-định.
+  - **Cách sửa.** Phân biệt bằng **nguồn** của phép đo thay vì hình dạng chuỗi:
+    bố cục lưỡng ổn tự lật mà không có đầu vào nào từ ngoài, còn đổi cỡ cửa sổ
+    thì phát `resize` của `window` — sự kiện bố cục không tự tạo ra được. Phép
+    đo đến từ đường ấy đặt lại bộ đếm và gỡ chốt. Lớp chốt **không yếu đi**:
+    một bố cục thật sự lưỡng ổn không phát `resize` bao giờ, nên nó vẫn bị chốt
+    sau đúng hai chu kỳ như cũ.
+  - **Phép thử ngược.**
+
+    | Mutant | Kết quả |
+    |---|---|
+    | Gỡ hẳn bản vá (`resize` lại dùng `measure` trần) | **2/23 ca đỏ** |
+    | Đặt lại ở **mọi** phép đo, kể cả `ResizeObserver` | **3/23 ca đỏ** — lớp chốt lưỡng ổn mất tác dụng |
+    | Chỉ gỡ chốt, **không** đặt lại bộ đếm | **1/23 ca đỏ** |
+
+    Mutant giữa là ca canh chiều ngược lại: bản vá không được phép "sửa" bằng
+    cách vô hiệu hoá lớp chốt. Mọi mutant đã khôi phục, `git status --porcelain`
+    sau đó chỉ còn đúng hai file thuộc Source ownership.
+  - **Một số đo giả đã bị bắt trong chính phiên này.** Lượt `vitest` đầu tiên
+    sau bản vá cho **exit 1**, đỏ một ca ở `LibraryPage.test.tsx` — file phiên
+    này **không chạm**. Nền nhánh trước bản vá là 3323/3323 **exit 0**, nên
+    không thể đổ cho "đỏ có sẵn". Truy ra: ca test **mới viết** gọi
+    `vi.advanceTimersByTime(3_600_000)`, và một giờ hẹn giờ ảo ấy bắn luôn mọi
+    hẹn giờ của module khác trong cùng môi trường, khiến `LibraryPage` gọi máy
+    chủ. Thứ ca đó cần là `performance.now()` đã đi xa, **không** phải một giờ
+    hẹn giờ được thực thi — đã sửa **ca test**, không sửa mã sản phẩm, và mutant
+    chạy lại sau đó vẫn chết đủ ba.
+  - **Số đo cổng của phiên này** (nhánh `clean-code/issue-677` trên
+    `origin/main@1515a72`; exit code đọc trực tiếp từ chính lệnh đo):
+    - `npx vitest --run --environment jsdom src` → **exit 0**; **256 file /
+      3325 test PASS**, 0 FAIL, 176,89 s. Nền đo cùng container trước bản vá:
+      3323 ⇒ đúng **2** ca phiên này thêm vào.
+    - `npm run lint` → **exit 0**. `npm run build` → **exit 0**, chunk
+      `programming` **117,39 KiB gzip** (trần R3 165 KiB).
+    - `npx playwright test e2e/programming-workspace-height.spec.ts` →
+      **16/16 PASS**, exit 0, 22,6 s — cổng AC-4 + AC-6 vẫn xanh sau bản vá.
+    - `npx playwright test e2e/programming.spec.ts` → 103 PASS / **7 FAIL** /
+      30 skip, **hai lượt** trên nhánh trùng khít; baseline `git worktree` sạch
+      tại `origin/main@1515a72` **đo lại phiên này** cũng **103/7/30**, `diff`
+      tập đỏ **rỗng cả ba chiều**. `element is not stable`: **0 lần** cả hai bên.
+    - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
+    - `scripts/verify-project.sh --component browser` → **FAIL**, `hết giờ chờ
+      initialize` (bằng chứng: `artifacts/ui-audit/chrome-devtools-mcp-gate.json`).
+      Lần này lane **có chạy thật** — Xvfb dựng được — nên lý do không còn là
+      "thiếu X server" như các bảng cũ ghi. Hạ tầng, ngoài Source ownership.
+  - **AC-1 vẫn chưa đạt** và vẫn vì `#732`: `TC-FBD-NAV-001` đỏ trên **cả** nhánh
+    lẫn `origin/main@1515a72`; `TC-FBD-DIAG-001` xanh; `element is not stable` 0 lần.
 
 
 ### Fixed — `#733`: cổng FE unit đỏ sẵn trên `main` — ca test khoá hành vi mà `a26cbd2` đã thay thế (2026-09-17)
