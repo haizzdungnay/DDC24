@@ -256,3 +256,44 @@ describe('FbdCanvas — Luồng C: Presentation tests (C-T1..C-T7)', () => {
     expect(node.executionOrder).toBe(originalOrder)
   })
 })
+
+/* `#677` — mặt vẽ không được nuôi lại phép đo của chính nó. */
+describe('FbdCanvas — phạm vi quan sát kích thước', () => {
+  class FakeResizeObserver {
+    static instances: FakeResizeObserver[] = []
+    targets: Element[] = []
+    constructor(public readonly callback: ResizeObserverCallback) {
+      FakeResizeObserver.instances.push(this)
+    }
+    observe(target: Element) { this.targets.push(target) }
+    unobserve(target: Element) { this.targets = this.targets.filter((t) => t !== target) }
+    disconnect() { this.targets = [] }
+    static allTargets(): Element[] {
+      return FakeResizeObserver.instances.flatMap((i) => i.targets)
+    }
+  }
+
+  beforeEach(() => {
+    FakeResizeObserver.instances = []
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('quan sát ĐÚNG khung cuộn, không quan sát body hay mặt vẽ', () => {
+    const { surface } = renderPresentationCanvas()
+    const targets = FakeResizeObserver.allTargets()
+
+    expect(targets).toHaveLength(1)
+    const observed = targets[0] as HTMLElement
+    expect(observed.className).toContain('overflow-auto')
+
+    /* Mặt vẽ là NỘI DUNG của khay: chiều cao của nó tính từ `containerHeight`,
+     * nên quan sát nó khép kín vòng và bố cục không bao giờ đứng yên. */
+    expect(targets).not.toContain(surface)
+    expect(targets).not.toContain(document.body)
+    expect(observed.contains(surface)).toBe(true)
+  })
+})
