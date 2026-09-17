@@ -8,6 +8,67 @@
 
 ## [Unreleased]
 
+### Fixed — `#732`: Mini Map cuộn tới đúng điểm được bấm — xoá vòng dịch toạ độ thừa (2026-09-17)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/workbench/WorkbenchMinimapPanel.tsx`,
+  `apps/web-ui/src/features/programming/design/workbench/WorkbenchMinimapPanel.test.tsx`,
+  `CHANGELOG.md`.
+- **Triệu chứng:** bấm một điểm trên Mini Map **không** đưa điểm đó vào tâm khung
+  nhìn mà lệch `255 px` graph, và độ lệch tỉ lệ với khoảng cách tới gốc `viewBox`
+  nên sơ đồ càng lớn càng sai. `TC-FBD-NAV-001` đỏ với `centerError = 255`.
+- **Nguyên nhân gốc:** một cú bấm đi qua **ba tầng** đổi toạ độ, tầng giữa dùng
+  sai hệ quy chiếu. `handleNavigate` đổi con trỏ sang toạ độ graph bằng
+  `effectiveViewBox` (tầng 1), rồi chiếu ngược ra một "client ảo" bằng
+  `activeBridge.width/height` (tầng 2), trong khi `FbdCanvas.navigateFromMinimap`
+  giải mã lại bằng thuộc tính `viewBox` của phần tử — tức hệ của **tầng 1**. Hai
+  hệ chỉ trùng khi `effectiveViewBox` đúng bằng `(0, 0, bridge.width,
+  bridge.height)`; ngoài ra chúng lệch đúng tỉ số hai bề rộng, đo được
+  `6320 / 5716 = 1,105668`.
+- **Cách sửa:** xoá **cả tầng 1 lẫn tầng 2**. Vòng mã hoá–giải mã ấy lẽ ra là
+  phép đồng nhất — phép đổi phía canvas nhận cùng phần tử, cùng `rect`, cùng
+  `viewBox` (thuộc tính render từ chính `effectiveViewBox`) và kẹp vào cùng biên
+  — nên bỏ hẳn vòng đó đúng tầng hơn là chỉnh cho hai đầu khớp nhau: còn vòng thì
+  còn chỗ để hai hệ lệch lại về sau. Ba nhánh dự phòng của bản cũ vốn đã chuyển
+  thẳng toạ độ con trỏ thật, và chúng là những nhánh cho kết quả **đúng**; nay
+  mọi lối đi dùng chung một đường. `minimapClientToGraphCoordinates` không còn
+  ai dùng nên xoá luôn. **Không chạm `FbdCanvas.tsx`** — phép đổi phía canvas
+  vốn đã đúng.
+- **Test:** ca *"điều hướng chuột truyền đúng toạ độ khi viewBox có gốc khác 0"*
+  trước đây **khoá chính hành vi sai** — nó khẳng định `97,85 / 21,525`, tái dựng
+  đúng tầng 2, và tự ghi chú là "mã hoá … dùng viewBox toàn canvas cũ". Nay ca
+  ấy khẳng định panel chuyển thẳng con trỏ, rồi **giải mã ở đầu kia** bằng đúng
+  hàm và đúng `viewBox` mà canvas dùng, phải ra lại điểm dưới con trỏ. Thêm một
+  ca chạy ở trạng thái **đã pan và đã zoom** (`viewport.x = −165,4`,
+  `scale = 1,25`), vì ở `viewport.x = 0`, `scale = 1` thì mọi phép quy đổi sai
+  đơn vị vẫn cho kết quả đúng và ca sẽ không canh được gì.
+- **Số đo thật (2026-09-17, nhánh `clean-code/issue-732` trên `origin/main@a2c52ff`):**
+  - `npx playwright test e2e/programming.spec.ts -g "TC-FBD-NAV-001"` → **1 passed**,
+    exit 0, 3,2 s. **Spec giữ nguyên trạng, không sửa một ký tự** — `git diff`
+    không có `programming.spec.ts`.
+  - `npx playwright test e2e/programming.spec.ts` → **104 PASS / 6 FAIL / 30 skip**,
+    hai lượt cho tập ca đỏ **giống hệt nhau**. Baseline `origin/main@a2c52ff`:
+    103 / 7 / 30. `diff` hai tập đỏ theo tên ca: khác biệt **duy nhất** là
+    `TC-FBD-NAV-001` chuyển xanh; **không ca xanh nào chuyển đỏ**.
+  - `npx vitest --run --environment jsdom src` → exit 1; 255 file / **3301 test**,
+    **1 FAIL**. Ca đỏ là `khi language="ST" thì KHÔNG hiện nhóm Khối của dự án` —
+    **đỏ có sẵn trên `main`** (finding `#733`), không do PR này: baseline `main`
+    cho 3300 test với **cùng đúng ca đó**, `diff` tập đỏ rỗng; chênh 1 test là ca
+    mới của PR.
+  - `npm run lint` → exit 0. `npm run build` → exit 0, chunk `programming`
+    **116,91 KiB gzip** (trần R3 165 KiB).
+  - **Phép thử ngược (tầng panel):** khôi phục nguyên bản `handleNavigate` cũ →
+    **2/14 ca đỏ**, đúng hai ca khoá hành vi điều hướng. Mutant đã khôi phục;
+    `git status --porcelain` sau đó rỗng.
+  - **Phép thử ngược (tầng canvas) — KHÔNG đạt, và đã mở finding `#734`:**
+    hai mutant trên `navigateFromMinimap` mà `#732` AC-2 yêu cầu — (a) bỏ
+    `viewport.x`, (b) bỏ nhân `viewport.scale` — **đều SỐNG SÓT** qua
+    `TC-FBD-NAV-001` (1 passed, exit 0, cả hai lượt). Lý do: ca đó chạy ở
+    `viewport.x = 0`, `viewport.scale = 1`, nên bỏ `viewport.x` là cộng thêm 0 và
+    bỏ `* viewport.scale` là nhân với 1 — hai phép vô hiệu, không đổi một pixel
+    nào. Đây là khoảng trống của **ca e2e**, không phải của bản sửa; phần xử lý
+    pan/zoom trong `navigateFromMinimap` hiện không có ca nào canh. Nằm ngoài
+    Source ownership của `#732` nên không tự sửa.
+
 ### Added — Kéo thả Function Block vào ST Editor & Chuẩn hoá ánh xạ điểm FBD/Mapping (2026-09-17)
 
 - Phạm vi: `apps/web-ui/src/features/programming/fbd/userPou.ts`,
