@@ -1,5 +1,6 @@
 import { isFbdIdentifier, type FbdDataType, type FbdNodeKind, type FbdPort } from './model'
 import type { FbdPaletteEntry, FbdPalettePortTemplate } from './palette'
+import type { CatalogEntry } from '../design/library/libraryCatalog'
 
 /**
  * T59-105 — sinh pin cho node FBD trỏ một POU do người dùng hoặc Control Library
@@ -142,5 +143,39 @@ export function userPouNode(
     executionOrder: options.executionOrder,
     parameters: {},
     ports,
+  }
+}
+
+/**
+ * Chuyển đổi một POU người dùng sang CatalogEntry để dùng cho ST Editor chèn/kéo-thả.
+ */
+export function userPouCatalogEntry(pou: UserPouInterface): CatalogEntry {
+  const ports = userPouPorts(pou).map((port) => ({
+    name: port.name,
+    direction: port.direction,
+    dataType: port.dataType,
+  }))
+  return {
+    key: `pou:${pou.name}`,
+    scope: 'PROJECT',
+    entryId: `pou:${pou.name}`,
+    name: pou.name,
+    kind: pou.kind,
+    labelVi: pou.fromLibrary ? `${pou.name} (thư viện)` : pou.name,
+    labelEn: pou.fromLibrary ? `${pou.name} (library)` : pou.name,
+    category: null,
+    description: null,
+    tags: [],
+    libraryRevisionId: '',
+    libraryVersion: '1.0.0',
+    libraryState: 'DRAFT',
+    contentSha256: '',
+    signature: { kind: 'ready', text: pou.name },
+    ports,
+    allowedTypes: [],
+    usability: { kind: 'AVAILABLE' },
+    compatibility: { kind: 'compatible' },
+    iecClassification: null,
+    stateful: pou.kind === 'FUNCTION_BLOCK',
   }
 }

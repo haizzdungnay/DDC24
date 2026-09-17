@@ -41,6 +41,26 @@ const mockNode: FbdNode = {
   ],
 }
 
+const mockInputNode: FbdNode = {
+  id: 'node-in-1',
+  kind: 'INPUT',
+  typeRef: 'REAL',
+  executionOrder: 0,
+  parameters: {
+    variable: 'DEMO_1',
+  },
+  ports: [
+    {
+      id: 'port-out',
+      name: 'OUT',
+      direction: 'OUTPUT',
+      dataType: 'REAL',
+      unit: 'V',
+      order: 0,
+    },
+  ],
+}
+
 const mockNetwork: FbdNetwork = {
   id: 'net-1',
   name: 'network_1',
@@ -156,16 +176,37 @@ describe('FbdBlockPropertiesModal', () => {
     expect(screen.getByText('0.1')).toBeInTheDocument()
   })
 
-  it('hiển thị cổng I/O kèm thông tin điểm đã mapping và giá trị realtime (AO-01: 5V)', () => {
+  it('khối FUNCTION_BLOCK chỉ hiện danh sách cổng và vai trò, không có nút Ánh xạ', () => {
     renderModal()
 
-    expect(screen.getByText('Cổng I/O & Ánh xạ điểm (I/O & Mappings)')).toBeInTheDocument()
+    expect(screen.getByText('Danh sách cổng (I/O Ports)')).toBeInTheDocument()
     expect(screen.getByText('pv')).toBeInTheDocument()
-    expect(screen.getByText('AO-01: 5V')).toBeInTheDocument()
-
-    // Cổng q chưa map
+    expect(screen.getByText('Cổng đầu vào')).toBeInTheDocument()
     expect(screen.getByText('q')).toBeInTheDocument()
-    expect(screen.getByText('Chưa ánh xạ')).toBeInTheDocument()
+    expect(screen.getByText('Cổng đầu ra')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ánh xạ|Map/ })).toBeNull()
+  })
+
+  it('khối INPUT/OUTPUT hiển thị Cổng I/O & Ánh xạ điểm kèm giá trị realtime', () => {
+    renderModal({
+      node: mockInputNode,
+      bindings: [
+        {
+          bindingId: 'b-demo1',
+          variableId: 'DEMO_1',
+          point: { category: 'LOCAL', pointId: 'AO-01' },
+          direction: 'READ',
+          dataType: 'REAL',
+          unit: 'V',
+          writable: true,
+          qualityPolicy: 'REQUIRE_GOOD',
+        },
+      ],
+    })
+
+    expect(screen.getByText('Cổng I/O & Ánh xạ điểm (I/O & Mappings)')).toBeInTheDocument()
+    expect(screen.getByText('OUT')).toBeInTheDocument()
+    expect(screen.getByText('AO-01: 5V')).toBeInTheDocument()
   })
 
   it('hiển thị Trạng thái (Validation) và Thuộc tính mở rộng kèm Dây nối', () => {
@@ -193,8 +234,11 @@ describe('FbdBlockPropertiesModal', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 
-  it('nút Ánh xạ trên cổng gọi onRequestPortMapping và đóng modal properties', () => {
-    const { onClose, onRequestPortMapping } = renderModal()
+  it('nút Ánh xạ trên khối INPUT gọi onRequestPortMapping và đóng modal properties', () => {
+    const { onClose, onRequestPortMapping } = renderModal({
+      node: mockInputNode,
+      bindings: [],
+    })
 
     const mapBtn = screen.getByRole('button', { name: 'Ánh xạ' })
     fireEvent.click(mapBtn)
@@ -202,12 +246,12 @@ describe('FbdBlockPropertiesModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(onRequestPortMapping).toHaveBeenCalledTimes(1)
     expect(onRequestPortMapping).toHaveBeenCalledWith({
-      nodeId: 'node-fb-1',
-      portId: 'port-q',
-      portName: 'q',
-      nodeName: 'NewFunctionBlock',
-      portDirection: 'OUTPUT',
-      portDataType: 'BOOL',
+      nodeId: 'node-in-1',
+      portId: 'port-out',
+      portName: 'DEMO_1',
+      nodeName: 'DEMO_1',
+      portDirection: 'INPUT',
+      portDataType: 'REAL',
     })
   })
 })

@@ -11,7 +11,7 @@ import { ContextInspector } from '../inspector/ContextInspector'
 import { stSymbolContextFor } from '../inspector/inspectorContext'
 import { hashBufferSource } from '../../shared/diagnosticFreshness'
 import { stCheckProvenance, type StCheckProvenanceState } from './stCheckProvenance'
-import type { UserPouInterface } from '../../fbd/userPou'
+import { userPouCatalogEntry, type UserPouInterface } from '../../fbd/userPou'
 import { useLazyProgrammingLibraryCatalog, useLazyProgrammingPointCatalog } from '../../api/queries'
 import type {
   ProgrammingCheckSymbol,
@@ -109,6 +109,52 @@ const EDITOR_PAD_X_PX = 12
 const EDITOR_GUTTER_PAD_X_PX = 8
 const EDITOR_TAB_SIZE = 2
 const EMPTY_USER_POU_INTERFACES: readonly UserPouInterface[] = []
+
+/**
+ * Ngưỡng dưới của dải DOCK cho Thư viện nhanh khi soạn FBD.
+ *
+ * Hợp đồng `2026-08-31-fbd-edit-design.md` §7.5 khoá BA hình thái, không phải
+ * hai: `≥1440` cột thường trực, `1280–1439` dock mở theo yêu cầu, `<1280` khay
+ * nổi. Hằng này là biên giữa hai hình thái sau; biên trên là
+ * `PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX`.
+ *
+ * VÌ SAO NÓ PHẢI TỒN TẠI, chứ không phải "FBD hẹp thì thôi không có Thư viện":
+ * đó đúng là chuỗi ba lần sửa mà mỗi lần chữa triệu chứng của lần trước —
+ * `5fa334b` gỡ dock trùng lặp trong canvas ⇒ FBD dưới `1440` mất hẳn lối vào
+ * Thư viện; `11d7b33` hạ ngưỡng bốn cột `1440 → 1024` để chữa ⇒ vỡ
+ * `TC-FBD-RESP-001`; PR `#685` trả ngưỡng về `1440` để test xanh ⇒ triệu
+ * chứng đầu lộ lại. Vòng lặp chỉ dừng khi dải hẹp có lối vào RIÊNG thay vì đi
+ * mượn ngưỡng của cột (`#676`).
+ *
+ * `TC-FBD-RESP-001` cấm **cột thường trực** dưới `1440`, KHÔNG cấm dock/khay
+ * có nút mở — đó là chỗ hợp lệ để dải hẹp đi qua.
+ *
+ * Hằng đặt tại đây chứ không cạnh `PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX`
+ * trong `layout/useProgrammingViewport.ts` vì Source ownership của `#676`
+ * không mở file đó; `EditorPane` là owner của quyết định mount (xem chú thích
+ * `libraryPresentation`), nên hằng sống cùng chỗ ra quyết định.
+ */
+export const PROGRAMMING_FBD_LIBRARY_DOCK_MIN_WIDTH_PX = 1280
+
+/**
+ * Thư viện nhanh hiện dưới hình thái nào tại khổ màn hình đang có.
+ *
+ * Bốn giá trị LOẠI TRỪ NHAU, và mỗi giá trị đo được bằng hình thái thật chứ
+ * không bằng sự có mặt của một lớp CSS:
+ *
+ * | Giá trị    | Khổ            | Track lưới | Vị trí                 |
+ * |------------|----------------|------------|------------------------|
+ * | `column`   | ST, hoặc FBD `≥1440` | có, mở sẵn | trong luồng, cột thứ ba |
+ * | `dock`     | FBD `1280–1439`      | có, thu về ray 44px | trong luồng, mở thì đẩy canvas hẹp lại |
+ * | `drawer`   | FBD `<1280`          | KHÔNG (0px) | `position: fixed`, phủ lên canvas |
+ * | `none`     | không sửa được       | KHÔNG      | không dựng              |
+ *
+ * Khác biệt `dock` ↔ `drawer` là khác biệt ĐO ĐƯỢC, không phải cách gọi tên:
+ * dock nằm trong luồng nên mở nó làm canvas hẹp lại; drawer `fixed` nên canvas
+ * giữ nguyên bề rộng. Một phép đo `getBoundingClientRect()` phân biệt được hai
+ * thứ đó, còn `className.includes('...')` thì không — `AC-2` đòi đúng điều này.
+ */
+type LibraryPresentation = 'none' | 'column' | 'dock' | 'drawer'
 
 /* `T59-820` — mẫu đo bề rộng ký tự cho hover. Chuỗi đủ dài để sai số làm tròn
  * của một ký tự không nhân lên thành lệch cột ở cuối dòng dài. */
@@ -490,6 +536,26 @@ export function EditorPane({
   const libraryDockToggleRef = useRef<HTMLButtonElement | null>(null)
   const fbdInspectorOpenerRef = useRef<HTMLButtonElement | null>(null)
   const [fbdInspectorDrawerOpen, setFbdInspectorDrawerOpen] = useState(false)
+  /* MỖI HÌNH THÁI MỘT TRẠNG THÁI MỞ/ĐÓNG RIÊNG — ba biến, không phải một.
+   *
+   * `libraryDockOpen` ở trên là của `column` (mặc định MỞ, cột thường trực).
+   * Hai biến dưới đây là của `dock` và `drawer`, cùng mặc định ĐÓNG vì mở
+   * thường trực ở dải hẹp đúng là thứ `TC-FBD-RESP-001` cấm.
+   *
+   * VÌ SAO KHÔNG GỘP `dock` VÀ `drawer` VÀO MỘT BIẾN, đo được chứ không phải
+   * suy đoán: bản gộp cho `TC-FBD-RESP-001` đỏ ở mốc `1279` với khay đang MỞ.
+   * Nguyên nhân là người dùng mở dock ở `1366` rồi thu cửa sổ xuống dưới
+   * `1280`; trạng thái mở đi theo, và drawer là một tấm `fixed` cao hết màn
+   * phủ 24rem mép phải — nó TỰ BUNG RA đè lên canvas mà không ai bấm gì, đúng
+   * lúc màn hình đã hẹp nhất. Dock đẩy chỗ nên mở sẵn thì vô hại; drawer phủ
+   * chỗ nên mở sẵn thì cướp mặt vẽ. Hai hình thái không chia sẻ được một câu
+   * trả lời "đang mở hay không" vì hậu quả của việc mở khác hẳn nhau.
+   *
+   * Tách ra thì ý định của người dùng vẫn được giữ TRONG từng hình thái: quay
+   * lại `1366` là dock mở lại đúng như lúc rời đi. */
+  const [fbdLibraryDockOpen, setFbdLibraryDockOpen] = useState(false)
+  const [fbdLibraryDrawerOpen, setFbdLibraryDrawerOpen] = useState(false)
+  const fbdLibraryOpenerRef = useRef<HTMLButtonElement | null>(null)
   /* `1440` LÀ NGƯỠNG CỦA HỢP ĐỒNG, KHÔNG PHẢI MỘT LỰA CHỌN THẨM MỸ.
    *
    * `TC-FBD-RESP-001` khoá sáu mốc của shell FBD: từ `1440 px` trở lên mới có
@@ -504,6 +570,7 @@ export function EditorPane({
    * phẩm. Khoảng trống ấy được ghi thành finding riêng để chọn đường đúng
    * (khay/popover có nút mở, hay nới chính AC) thay vì để hai thứ cùng sai. */
   const fbdWideDesktop = useMinWidth(PROGRAMMING_FBD_FOUR_COLUMN_MIN_WIDTH_PX)
+  const fbdLibraryDockDesktop = useMinWidth(PROGRAMMING_FBD_LIBRARY_DOCK_MIN_WIDTH_PX)
   /* Bản đồ mã là ĐIỀU HƯỚNG trong POU đang mở, nên nó thuộc cột trái cùng cây
    * POU — không phải một khay nữa chồng dưới chỗ gõ. Mặc định mở: nó là cách
    * nhanh nhất để đi trong một POU 400 dòng. */
@@ -547,16 +614,53 @@ export function EditorPane({
   const fbdInspectorOpen = inspectorAsDrawer ? fbdInspectorDrawerOpen : slots.inspector
   /* Task 8 đã đưa Quick Library FBD thành cột thứ ba ở desktop RỘNG. Sau khi
    * tách `ProgramsTab` thành facade, điều kiện mount phải sống tại owner mới
-   * này. Dưới `1440 px` FBD không dựng cột — xem chú thích `fbdWideDesktop`. */
-  const libraryColumnEligible = canEdit && (
-    selected?.language === 'ST'
-    || (selected?.language === 'FBD' && fbdWideDesktop)
-  )
-  const libraryColumnOpen = libraryColumnEligible && libraryDockOpen
+   * này — đây là owner của quyết định hình thái (`LibraryPresentation`).
+   *
+   * Ba dải của §7.5 đọc từ TRÊN XUỐNG, mỗi dải một hình thái và không dải nào
+   * rơi qua khe: `≥1440` cột, `1280–1439` dock, còn lại drawer. Bản trước chỉ
+   * có hai nhánh (`fbdWideDesktop` hoặc không gì cả), nên FBD dưới `1440` đơn
+   * giản là KHÔNG có Thư viện nhanh — không phải "khó tìm" mà là không tồn tại
+   * (`#676` AC-3). ST giữ nguyên cột ở mọi khổ: nó không nằm trong §7.5. */
+  const libraryPresentation: LibraryPresentation = !canEdit
+    ? 'none'
+    : selected?.language === 'ST'
+      ? 'column'
+      : selected?.language !== 'FBD'
+        ? 'none'
+        : fbdWideDesktop
+          ? 'column'
+          : fbdLibraryDockDesktop
+            ? 'dock'
+            : 'drawer'
+  const libraryInGrid = libraryPresentation === 'column' || libraryPresentation === 'dock'
+  const libraryOpen = libraryPresentation === 'column'
+    ? libraryDockOpen
+    : libraryPresentation === 'dock'
+      ? fbdLibraryDockOpen
+      : libraryPresentation === 'drawer'
+        ? fbdLibraryDrawerOpen
+        : false
+  const setLibraryOpen = (next: boolean) => {
+    if (libraryPresentation === 'drawer') setFbdLibraryDrawerOpen(next)
+    else if (libraryPresentation === 'dock') setFbdLibraryDockOpen(next)
+    else setLibraryDockOpen(next)
+  }
+  /* Trả focus về đúng nút đã mở khay: ở `drawer` nút nằm trên đầu cột soạn
+   * thảo, ở `column`/`dock` nút là chính thanh ray trong cột. Trả nhầm chỗ thì
+   * người dùng bàn phím rơi về đầu trang sau mỗi lần đóng. */
+  const focusLibraryOpener = () => {
+    window.setTimeout(() => {
+      if (libraryPresentation === 'drawer') fbdLibraryOpenerRef.current?.focus()
+      else libraryDockToggleRef.current?.focus()
+    }, 0)
+  }
   const workspaceGrid = useProgramsWorkspaceGrid({
     explorerOpen: slots.left,
-    libraryOpen: libraryColumnOpen,
-    libraryMounted: libraryColumnEligible,
+    /* `drawer` KHÔNG chiếm track: nó `fixed` phủ lên canvas, nên để lại một
+       track 44px cho nó là lấy mất chỗ vẽ để đổi lấy một thanh ray không ai
+       bấm — chính khổ hẹp là nơi chỗ vẽ đắt nhất. */
+    libraryOpen: libraryInGrid && libraryOpen,
+    libraryMounted: libraryInGrid,
     inspectorOpen: inspectorAsDrawer ? false : slots.inspector,
   })
 
@@ -571,6 +675,23 @@ export function EditorPane({
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [fbdInspectorDrawerOpen, fbdWideDesktop, selected?.language])
+
+  /* Escape đóng khay Thư viện nhanh ở dải `<1280` và trả focus về nút mở.
+   *
+   * Chỉ gắn cho `drawer`, KHÔNG gắn cho `dock`: dock nằm trong luồng và không
+   * bẫy sự chú ý của người dùng, nên nuốt Escape ở đó sẽ cướp phím tắt của
+   * canvas (huỷ chọn, thoát chế độ nối dây) để đóng một panel không hề che gì. */
+  useEffect(() => {
+    if (libraryPresentation !== 'drawer' || !fbdLibraryDrawerOpen) return undefined
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setFbdLibraryDrawerOpen(false)
+      window.setTimeout(() => fbdLibraryOpenerRef.current?.focus(), 0)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [fbdLibraryDrawerOpen, libraryPresentation])
 
   /**
    * Đưa con trỏ tới một offset trong POU ĐANG MỞ, từ một khay nằm ngoài trình
@@ -936,18 +1057,37 @@ export function EditorPane({
           setMaximized(false)
         }}
       >
-        {inspectorAsDrawer && (
-          <div className="mb-2 flex justify-end">
-            <button
-              ref={fbdInspectorOpenerRef}
-              type="button"
-              className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-xs"
-              aria-expanded={fbdInspectorDrawerOpen}
-              aria-controls="programs-slot-inspector"
-              onClick={() => setFbdInspectorDrawerOpen(true)}
-            >
-              {pick('Mở Thuộc tính', 'Open inspector')}
-            </button>
+        {(inspectorAsDrawer || libraryPresentation === 'drawer') && (
+          <div className="mb-2 flex justify-end gap-2">
+            {/* Dải `<1280`: Thư viện nhanh KHÔNG có track lưới, nên không có
+                thanh ray nào để bấm — nút mở phải nằm ngoài khay. Thiếu đúng
+                nút này là toàn bộ nội dung `AC-3`: sau `5fa334b` người dùng
+                `1366×768` và 1080p ở scale 125/150% không còn đường nào mở
+                Thư viện khi soạn FBD. */}
+            {libraryPresentation === 'drawer' && (
+              <button
+                ref={fbdLibraryOpenerRef}
+                type="button"
+                className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-xs"
+                aria-expanded={fbdLibraryDrawerOpen}
+                aria-controls="programs-slot-quick-library"
+                onClick={() => setFbdLibraryDrawerOpen(true)}
+              >
+                {pick('Mở Thư viện nhanh', 'Open quick library')}
+              </button>
+            )}
+            {inspectorAsDrawer && (
+              <button
+                ref={fbdInspectorOpenerRef}
+                type="button"
+                className="min-h-11 rounded border border-[var(--c-border)] bg-[var(--c-surface-2)] px-3 text-xs"
+                aria-expanded={fbdInspectorDrawerOpen}
+                aria-controls="programs-slot-inspector"
+                onClick={() => setFbdInspectorDrawerOpen(true)}
+              >
+                {pick('Mở Thuộc tính', 'Open inspector')}
+              </button>
+            )}
           </div>
         )}
         <PouTabBar
@@ -1090,6 +1230,7 @@ export function EditorPane({
             onEnsurePointCatalogLoaded={pointCatalog.ensureLoaded}
             runtimeOverlay={runtimeOverlayByProgramId?.[selected.programId]}
             formatRequest={formatRequest?.programId === selected.programId ? formatRequest : undefined}
+            userPouInterfaces={userPouInterfaces}
           />
         ) : (
           <FbdEditorPane
@@ -1126,17 +1267,36 @@ export function EditorPane({
         onPointerDown={workspaceGrid.beginResize}
       />
       <aside
+        id="programs-slot-quick-library"
         data-testid="quick-library-column"
+        data-library-presentation={libraryPresentation}
         aria-label={pick('Thư viện nhanh', 'Quick library')}
-        /* Khổ không dựng cột thì ẩn HẲN, không để lại một thanh ray rỗng:
-           `TC-FBD-RESP-001` đo `quick-library-column` phải khuất ở `1280`/`1024`,
-           và một `aside` rỗng cao hết cột vẫn là "hiện" với cả người dùng lẫn
-           phép đo. Track tương ứng cũng về `0` (xem `libraryMounted`). */
-        className={`min-w-0 lg:min-h-0 lg:overflow-y-auto ${libraryColumnEligible ? '' : 'hidden'}`}
+        /* BA HÌNH THÁI, BA BỘ CLASS KHÔNG GIAO NHAU — cùng bài học đã trả giá ở
+           `inspector-column` ngay bên dưới: khi hai rule breakpoint cùng khớp,
+           thứ tự xuất của Tailwind v4 quyết định bên thắng, và thứ tự ấy không
+           đọc được từ `className`.
+
+           Nhánh `drawer` KHÔNG mang biến thể breakpoint nào vì nó chỉ chạy dưới
+           `1280` — không có gì để tranh với nhánh cột. Nhánh `column`/`dock`
+           nằm trong luồng lưới, nên `dock` mở ra thì canvas hẹp lại thật; đó
+           chính là khác biệt đo được với `drawer` (`AC-2`).
+
+           `none` và `drawer` lúc đóng thì ẩn HẲN: một `aside` rỗng cao hết cột
+           vẫn là "hiện" với cả người dùng lẫn phép đo, và `TC-FBD-RESP-001` đo
+           `quick-library-column` phải khuất ở `1024`. */
+        className={libraryPresentation === 'drawer'
+          ? (fbdLibraryDrawerOpen
+              ? 'fixed inset-y-16 right-0 z-40 w-[min(24rem,100vw)] min-w-0 overflow-y-auto bg-[var(--c-bg)] p-3 shadow-2xl'
+              : 'hidden')
+          : `min-w-0 lg:min-h-0 lg:overflow-y-auto ${libraryInGrid ? '' : 'hidden'}`}
       >
-        {libraryColumnEligible && libraryDockOpen && selected ? (
+        {libraryPresentation !== 'none' && libraryOpen && selected ? (
           <QuickLibraryHost
-            variant="docked"
+            /* `drawer` phủ lên nội dung và bẫy Escape ⇒ phải là `popover`
+               (`role="dialog"`). `dock` đẩy chỗ chứ không phủ ⇒ `docked`, khai
+               `dialog` ở đó sẽ nói với trình đọc màn hình rằng phần còn lại
+               đang bị chặn trong khi không hề. */
+            variant={libraryPresentation === 'drawer' ? 'popover' : 'docked'}
             projectId={document.project.projectId}
             language={selected.language}
             userPouInterfaces={userPouInterfaces}
@@ -1146,17 +1306,17 @@ export function EditorPane({
               return true
             }}
             onClose={() => {
-              setLibraryDockOpen(false)
-              window.setTimeout(() => libraryDockToggleRef.current?.focus(), 0)
+              setLibraryOpen(false)
+              focusLibraryOpener()
             }}
           />
-        ) : libraryColumnEligible ? (
+        ) : libraryInGrid ? (
           <button
             ref={libraryDockToggleRef}
             type="button"
             className="flex min-h-11 w-full items-center justify-center rounded-[var(--radius)] border border-[var(--c-border)] p-2 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
             aria-expanded={false}
-            onClick={() => setLibraryDockOpen(true)}
+            onClick={() => setLibraryOpen(true)}
           >
             <Library className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span className="ml-2 lg:sr-only">{pick('Mở Thư viện nhanh', 'Open quick library')}</span>
@@ -1547,6 +1707,7 @@ export function SourceEditor({
   onOpenCompare,
   checkDisabledReason,
   compareDisabledReason,
+  userPouInterfaces,
 }: {
   program: ProgrammingProgram
   source: string
@@ -1604,6 +1765,7 @@ export function SourceEditor({
   onOpenCompare?: () => void
   checkDisabledReason?: string | null
   compareDisabledReason?: string | null
+  userPouInterfaces?: readonly UserPouInterface[]
 }) {
   const { pick } = useI18n()
   const committed = typeof program.document === 'string' ? program.document : ''
@@ -2813,7 +2975,19 @@ export function SourceEditor({
               if (!canEdit || !event.dataTransfer.types.includes(LIBRARY_DRAG_TYPE)) return
               event.preventDefault()
               const entryId = event.dataTransfer.getData(LIBRARY_DRAG_TYPE)
-              const entry = libraryEntries?.find((candidate) => candidate.entryId === entryId)
+              let entry = libraryEntries?.find((candidate) => candidate.entryId === entryId)
+              if (!entry && entryId.startsWith('pou:')) {
+                const pouName = entryId.slice('pou:'.length)
+                if (pouName === program.name) return
+                const pou = userPouInterfaces?.find((p) => p.name === pouName)
+                if (pou) {
+                  try {
+                    entry = userPouCatalogEntry(pou)
+                  } catch {
+                    return
+                  }
+                }
+              }
               /* Không tìm thấy mục ⇒ không làm gì. Catalog có thể đã tải lại
                  giữa lúc kéo, và chèn "một khối nào đó" thay cho khối người
                  dùng chọn còn tệ hơn không chèn. */

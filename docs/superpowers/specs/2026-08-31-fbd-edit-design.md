@@ -3,7 +3,7 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID tài liệu | `DDD-PGM02-FBD-EDIT-001` |
-| Phiên bản | 0.4 |
+| Phiên bản | 0.5 |
 | Trạng thái | `M3 — REVIEW READY` (Target, chưa phải As-Built; reviewer độc lập vòng 3 `APPROVED WITH RESIDUALS`) |
 | Ngày | 2026-08-31 |
 | Chủ quản | Programming FE / UX |
@@ -620,13 +620,51 @@ này trong hồ sơ; bảng §7.3 ánh xạ từng vùng tới test. Không dùn
 
 ### 7.5 Responsive và accessibility
 
-- `≥1440`: Explorer + Canvas + Library + Inspector cùng lúc.
-- `1024–1439`: Explorer + Canvas chính, Library/Inspector drawer hoặc gập.
+- `≥1440`: Explorer + Canvas + Library + Inspector cùng lúc, theo ĐÚNG thứ tự
+  `pou-explorer-column` → `programming-editor-column` → `quick-library-column` →
+  `inspector-column` (toạ độ `x` tăng dần).
+- `1280–1439`: Explorer + Canvas chính; Inspector là khay nổi; Thư viện nhanh ở
+  hình thái **dock** — giữ track lưới nhưng thu về thanh ray, mở theo yêu cầu và
+  khi mở thì ĐẨY canvas hẹp lại.
+- `<1280` (tới `1024`): Thư viện nhanh ở hình thái **drawer** — không giữ track
+  lưới, mở từ nút nằm trên đầu cột soạn thảo, và khi mở thì PHỦ LÊN canvas
+  (`position: fixed`) chứ không đẩy.
 - `768–1023`: tablet edit, touch/stylus, nút `Chọn vùng`.
 - `<768`: read-only; không kéo/nối/xóa/lưu.
 - Drawer có focus trap, Escape đóng, trả focus về opener; target touch ≥44 px.
 - SVG node/port/wire có role/name/focus; keyboard parity không phụ thuộc chuột.
 - `prefers-reduced-motion` tắt animation không cần thiết; không animate wire.
+
+**Ba ngưỡng `1440 / 1280–1439 / <1280` là hợp đồng, không phải gợi ý thẩm mỹ**
+(`#676`, quyết định chủ sở hữu `owner-decision-20260912T0300Z`). Bản 0.4 của mục
+này ghi hai ngưỡng `≥1440` và `1024–1439`, và khoảng mờ ấy đã đẻ ra một vòng lặp
+ba bước mà mỗi bước chữa triệu chứng của bước trước:
+
+| Bước | Thay đổi | Hệ quả |
+|---|---|---|
+| 1 | `5fa334b` xoá dock Thư viện trùng lặp trong canvas | FBD dưới `1440` **mất hẳn lối vào Thư viện** |
+| 2 | `11d7b33` hạ ngưỡng bốn cột `1440 → 1024` | Chữa được (1), nhưng **vỡ `TC-FBD-RESP-001`** |
+| 3 | PR `#685` trả ngưỡng về `1440` | `TC-FBD-RESP-001` xanh ⇒ **triệu chứng (1) lộ lại** |
+
+Vòng lặp chỉ dừng khi dải hẹp có lối vào RIÊNG thay vì đi mượn ngưỡng của cột.
+`TC-FBD-RESP-001` cấm **cột thường trực** dưới `1440`; nó KHÔNG cấm dock/khay có
+nút mở — đó là chỗ hợp lệ để hai dải hẹp đi qua, và là lý do §7.5 tách `dock`
+khỏi `drawer` thay vì gộp cả dải `1024–1439` như bản cũ.
+
+Ba hình thái phải phân biệt được bằng **phép đo hình thái thật**, không bằng sự
+có mặt của một lớp CSS — một lớp Tailwind sai ngưỡng vẫn "có mặt" trong
+`className` và vẫn cho test xanh:
+
+| Hình thái | Track lưới | `position` | Mở ra thì canvas |
+|---|---|---|---|
+| `column` (`≥1440`) | có, mở sẵn | không `fixed` | — (mở sẵn) |
+| `dock` (`1280–1439`) | có, ray 44 px | không `fixed` | **hẹp lại** |
+| `drawer` (`<1280`) | không (`0px`) | `fixed` | **giữ nguyên** |
+
+`dock` và `drawer` giữ trạng thái mở/đóng RIÊNG. Dùng chung một trạng thái thì
+người dùng mở dock ở `1366` rồi thu cửa sổ xuống dưới `1280` sẽ thấy khay `fixed`
+tự bung ra đè lên canvas mà không bấm gì — dock đẩy chỗ nên mở sẵn vô hại, drawer
+phủ chỗ nên mở sẵn là cướp mặt vẽ.
 
 ## 8. Error, safety và security — `DD-09`
 
@@ -891,6 +929,7 @@ contract checks.
 | 0.1 | 2026-08-31 | Ghi detailed design FBD EDIT FE-only sau khảo sát repo, ảnh tham chiếu, handoff, contract và nguồn interaction công khai; chưa triển khai code. |
 | 0.2 | 2026-08-31 | Đóng finding review vòng 1: ghim SHA/worktree và số đo local, bổ sung transport/Check contract, token/contrast, state-board asset, mapping error/recovery, trace hai chiều, network ALL hit-test và batch action atomicity. |
 | 0.3 | 2026-08-31 | Reviewer vòng 3 xác nhận `APPROVED WITH RESIDUALS`; bổ sung coverage closure 38/38 scenario, chú thích trace-only/NFR-defensive và chốt residual R1 bundle/timeout/browser/PID/sign-off. |
+| 0.5 | 2026-09-16 | `#676` làm rõ §7.5 thành BA ngưỡng `1440 / 1280–1439 / <1280` theo quyết định `owner-decision-20260912T0300Z`. Bản 0.4 ghi hai ngưỡng (`≥1440`, `1024–1439`), và khoảng mờ đó đẻ ra vòng lặp ba bước `5fa334b` → `11d7b33` → PR `#685`, mỗi bước chữa triệu chứng của bước trước, kết cục là FBD dưới `1440` **không có lối vào Thư viện nhanh nào**. §7.5 nay tách `dock` (`1280–1439`, giữ track, mở thì đẩy canvas) khỏi `drawer` (`<1280`, không track, `fixed`, phủ lên canvas), quy định hai hình thái giữ trạng thái mở/đóng riêng, và đòi phân biệt bằng phép đo hình thái thật chứ không bằng sự có mặt của lớp CSS. Schema `fbd_v1` và `fbd_keyboard_commands_v1` KHÔNG đổi. Bằng chứng: vitest `AC-676-1..7`, e2e `TC-FBD-RESP-001` (toạ độ + `position` + bề rộng canvas ở `1440`/`1366`/`1280`/`1279`/`1024`), `AC-PGM02-004`. |
 | 0.4 | 2026-09-12 | `#674` chốt mô hình MỘT canvas theo quyết định chủ sở hữu `owner-decision-20260912T0300Z`: §1 sửa mô tả `Khung nhìn`, §5.1.1 đánh dấu `SUPERSEDED` và thêm §5.1.1a làm hợp đồng đang thi hành (không có lối vào Network thứ hai; tài liệu nhiều Network mở chỉ đọc với 0 mutation, không xóa/gộp). Schema `fbd_v1` và `fbd_keyboard_commands_v1` KHÔNG đổi. Bằng chứng: vitest `AC-674-2`/`AC-674-4`, e2e `TC-FBD-RESP-001`. |
 
 ### 12.2.1 Review vòng 1 — disposition

@@ -8,6 +8,7 @@ import {
   USER_POU_RETURN_PORT,
   UserPouInterfaceError,
   userPouNode,
+  userPouCatalogEntry,
   userPouPaletteEntry,
   userPouPorts,
   type UserPouInterface,
@@ -53,6 +54,22 @@ describe('sinh pin cho POU người dùng (T59-105)', () => {
     expect(ports.map((port) => port.name)).toEqual(['A', 'B', 'RATIO', USER_POU_RETURN_PORT])
     expect(ports.map((port) => port.direction)).toEqual(['INPUT', 'INPUT', 'INPUT', 'OUTPUT'])
     expect(ports.every((port) => port.dataType === 'REAL')).toBe(true)
+  })
+
+  it('userPouCatalogEntry: chuyển đổi POU sang CatalogEntry đúng chuẩn ST editor', () => {
+    const fbEntry = userPouCatalogEntry(hysteresis)
+    expect(fbEntry.stateful).toBe(true)
+    expect(fbEntry.kind).toBe('FUNCTION_BLOCK')
+    expect(fbEntry.name).toBe('Hysteresis')
+    expect(fbEntry.entryId).toBe('pou:Hysteresis')
+    expect(fbEntry.ports.filter((p) => p.direction === 'INPUT').map((p) => p.name)).toEqual(['PV', 'SP'])
+    expect(fbEntry.ports.filter((p) => p.direction === 'OUTPUT').map((p) => p.name)).toEqual(['Q', 'ERR'])
+
+    const funcEntry = userPouCatalogEntry(blend)
+    expect(funcEntry.stateful).toBe(false)
+    expect(funcEntry.kind).toBe('FUNCTION')
+    expect(funcEntry.name).toBe('Blend')
+    expect(funcEntry.ports.find((p) => p.direction === 'OUTPUT')?.name).toBe(USER_POU_RETURN_PORT)
   })
 
   it('FUNCTION_BLOCK: giữ đủ pin ra đã khai, không ép thành một giá trị trả về', () => {

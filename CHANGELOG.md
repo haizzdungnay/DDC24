@@ -8,6 +8,96 @@
 
 ## [Unreleased]
 
+### Added — Kéo thả Function Block vào ST Editor & Chuẩn hoá ánh xạ điểm FBD/Mapping (2026-09-17)
+
+- Phạm vi: `apps/web-ui/src/features/programming/fbd/userPou.ts`,
+  `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.tsx`,
+  `apps/web-ui/src/features/programming/design/mapping/mappingViewModel.ts`,
+  `apps/web-ui/src/features/programming/fbd/PortMappingPicker.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdBlockPropertiesModal.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdNodeHoverCard.tsx`.
+- **Kéo thả Function Block vào ST:** Hỗ trợ kéo thả POU người dùng tự tạo
+  (`FUNCTION_BLOCK`, `FUNCTION`) từ POU Explorer và Quick Library vào trình soạn
+  thảo ngôn ngữ ST.
+  - Tự động sinh khai báo instance `FB_1 : FB_Type;` trong khối `VAR ... END_VAR`.
+  - Tự động sinh lời gọi hàm `FB_1(inputs := inputs);` tại vị trí con trỏ/thả chuột.
+  - Hỗ trợ chọn tái sử dụng instance cũ hoặc tạo mới qua `<FbInstancePicker>`.
+  - Mục "Khối của dự án" trong Quick Library mở rộng hiển thị ở cả chế độ ST lẫn
+    FBD, hỗ trợ nhấp chuột chèn thẳng vào con trỏ ST.
+- **Chuẩn hoá logic ánh xạ điểm FBD và Mapping:**
+  - Mỗi cổng FBD chỉ map với 1 point duy nhất; khi map sang point mới, point cũ
+    tự động trả về trạng thái Map. Bổ sung nút "Hủy map" (Unmap) gỡ binding trên
+    Draft.
+  - Khắc phục lỗi `crypto.randomUUID is not a function` khi truy cập qua HTTP
+    (thay bằng `createUuid` có fallback `getRandomValues`).
+  - Chuẩn hoá ranh giới POU: chỉ các khối `INPUT` và `OUTPUT` trên FBD (tương
+    ứng với biến ngoài của `PROGRAM`) mới cho phép ánh xạ ra Point ngoài. Loại bỏ
+    hoàn toàn các biến nội bộ của `FUNCTION_BLOCK` và `FUNCTION` khỏi tab
+    Mapping.
+
+
+### Fixed — `#676`: Thư viện nhanh FBD có lối vào ở MỌI khổ desktop — ba ngưỡng `1440 / 1280–1439 / <1280` (2026-09-16)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/ProgramsTab.test.tsx`,
+  `apps/web-ui/e2e/programming.spec.ts`,
+  `docs/superpowers/specs/2026-08-31-fbd-edit-design.md` (0.4 → 0.5), `CHANGELOG.md`.
+- **Triệu chứng:** soạn FBD ở `1366×768` (laptop phổ thông, và cũng là 1080p ở
+  scale 125/150%) KHÔNG có đường nào mở Thư viện nhanh. Không phải "khó tìm" —
+  không tồn tại.
+- **Nguyên nhân gốc:** không nằm ở một commit hỏng nào, mà ở một khoảng mờ
+  trong hợp đồng. §7.5 bản 0.4 ghi hai ngưỡng (`≥1440` bốn cột, `1024–1439`
+  "drawer hoặc gập") mà không nói dải hẹp lấy lối vào Thư viện ở đâu, nên
+  `EditorPane` chỉ dựng hai nhánh: `fbdWideDesktop` hoặc không gì cả. Khoảng mờ
+  đó đẻ ra một vòng lặp ba bước, mỗi bước chữa triệu chứng của bước trước:
+  `5fa334b` xoá dock trùng lặp trong canvas ⇒ mất lối vào; `11d7b33` hạ ngưỡng
+  bốn cột `1440 → 1024` để chữa ⇒ vỡ `TC-FBD-RESP-001`; PR `#685` trả ngưỡng về
+  `1440` để test xanh ⇒ triệu chứng đầu lộ lại. Vòng lặp chỉ dừng khi dải hẹp có
+  lối vào RIÊNG thay vì đi mượn ngưỡng của cột.
+- **Cách sửa:** một biến `LibraryPresentation` quyết bốn hình thái loại trừ nhau
+  (`column` / `dock` / `drawer` / `none`), mỗi hình thái một bộ class không giao
+  nhau — cùng bài học đã trả giá ở `inspector-column`, nơi hai rule breakpoint
+  cùng khớp thì thứ tự xuất của Tailwind v4 quyết định bên thắng và thứ tự ấy
+  không đọc được từ `className`. `dock` giữ track lưới và thu về ray 44 px (mở
+  thì ĐẨY canvas hẹp lại); `drawer` không giữ track, mở từ nút trên đầu cột soạn
+  thảo và PHỦ LÊN canvas (`position: fixed`), Escape đóng + trả focus.
+  `TC-FBD-RESP-001` cấm **cột thường trực** dưới `1440`, không cấm dock/khay có
+  nút mở — đó là chỗ hợp lệ để hai dải hẹp đi qua.
+- **Một lỗi phát sinh, cổng e2e tự bắt trong lúc làm:** bản đầu cho `dock` và
+  `drawer` dùng CHUNG một trạng thái mở/đóng. `TC-FBD-RESP-001` đỏ ở mốc `1279`
+  với khay đang mở — người dùng mở dock ở `1366` rồi thu cửa sổ, trạng thái mở
+  đi theo, và drawer là tấm `fixed` cao hết màn phủ 24 rem mép phải nên nó tự
+  bung ra đè lên canvas mà không ai bấm gì, đúng lúc màn hình đã hẹp nhất. Sửa
+  sản phẩm (tách hai trạng thái) chứ không sửa phép đo; `AC-676-7` khoá lại.
+- **Không đổi hành vi ngoài phạm vi:** ST giữ cột ở mọi khổ (§7.5 chỉ nói về
+  FBD); `≥1440` giữ nguyên bốn cột và thứ tự cũ; không đổi contract/API/schema.
+  `fbd_v1` và `fbd_keyboard_commands_v1` KHÔNG đổi.
+- **Số đo thật (2026-09-16, nhánh `clean-code/issue-676` trên `origin/main@46764ba`):**
+  - `npx vitest --run --environment jsdom src` → **255 file / 3294 test PASS**, 0 FAIL, 143,30 s.
+  - `ProgramsTab.test.tsx` riêng: **18/18 PASS** (nền 13 + 5 ca mới `AC-676-1..7`).
+  - `npm run lint` → **exit 0**; `npm run build` → **exit 0**, chunk `programming`
+    116,83 KiB gzip ≤ ngân sách R3 165,00 KiB (dư địa 48,17 KiB).
+  - `npx playwright test e2e/programming.spec.ts` → **103 PASS / 7 FAIL / 30 skip**.
+    Bảy FAIL là **đỏ sẵn của `main`**, đo đối chứng trong cùng phiên bằng worktree
+    tại `origin/main@46764ba`: **cùng 103 PASS / 7 FAIL, trùng khít tên test**
+    (`TC-FBD-NAV-001`, `TC-FBD-STATE-006` ×2, `compact dock (1024px)` ×2,
+    `SIMULATE` ×2). Thay đổi này thêm **0** test đỏ.
+  - `TC-FBD-RESP-001` riêng → **PASS** (2,9 s), nay đo `position` + bề rộng track
+    + bề rộng canvas ở `1440` / `1366` / `1280` / `1279` / `1024`.
+  - `AC-PGM02-004` → **PASS** (2,0 s): bốn cột toạ độ `x` tăng dần — AC-1 xác nhận.
+  - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`,
+    mục 8 (metadata vs Lịch sử sửa đổi) **0 hồ sơ lệch**.
+  - **Phép thử ngược — ba mutant, cổng phải biết đỏ:** bỏ dải `dock` → `AC-676-2`
+    + `AC-676-7` FAIL; gộp `dock`/`drawer` về chung một trạng thái → `AC-676-7`
+    FAIL; gỡ nút mở khay ở dải `drawer` → `AC-676-3` + `AC-676-4` FAIL. Cả ba
+    mutant đã khôi phục; `git diff --stat` sau đó trùng khít trạng thái trước khi
+    tiêm.
+- **Lane chưa chạy:** `Chrome DevTools MCP` (bốn khổ qua `#668`) = **`NOT_RUN`** —
+  `.mcp.json` ghim đường dẫn tuyệt đối của một máy khác (`#684`), server báo
+  `ENOENT` ngay lúc khởi động trong container Routine. Bằng chứng bốn khổ do lane
+  e2e Playwright gánh thay. CI GitHub Actions = **`NOT_RUN (#414)`**.
 ### Added — `#628` (`T-BAC-012`): cổng `BACNET=ON` chạy được tại máy — thi hành `ADR-060` điều (4) (2026-09-16)
 
 - Phạm vi: `scripts/verify-project.sh` (component `bacnet` mới),
@@ -120,7 +210,7 @@
   ports thì `apt-get install libmodbus-dev:arm64` báo "Unable to locate package",
   một thông điệp trông y hệt "gói không tồn tại".
 
-- 2026-09-16 — docs(programming-ui): kế hoạch Task 10 FBD bản v2 tại `docs/superpowers/plans/2026-09-16-fbd-task10-save-check-stale.md` (Issue #718); khảo sát phát hiện nhánh FBD bị chặn nhận chẩn đoán server tại `DesignWorkbench.tsx:154` (ISS-STED-05) và trường `location` rụng 2 lần trước khi tới `ProblemsDrawer`, nên tách Task 10 thành 10a (ranh giới Save/Check, ~70% xong) và 10b (nhãn chẩn đoán cũ, ~15% xong).
+- 2026-09-17 — docs(programming-ui): kế hoạch Task 10 FBD nâng lên bản v5 tại `docs/superpowers/plans/2026-09-16-fbd-task10-save-check-stale.md`; đã đối chiếu ảnh chủ sở hữu PGM-02B, phát hiện bản v4 không đủ đạt `TC-FBD-HEADER-003` vì thiếu dấu trên canvas, và 10b mở rộng sang dấu chẩn đoán trên khối.
 
 ### Fixed — `#718`: ánh xạ điểm từ canvas FBD bị máy chủ từ chối vì `variableId` không phải UUID (2026-09-16)
 

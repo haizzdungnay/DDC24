@@ -261,7 +261,11 @@ export function FbdBlockPropertiesModal({
             <div className="flex items-center justify-between border-b border-[var(--c-border)]/60 pb-1.5">
               <div className="flex items-center gap-2 font-semibold text-xs text-[var(--c-text)]">
                 <MapPin className="h-4 w-4 text-[var(--c-accent)]" />
-                <span>{pick('Cổng I/O & Ánh xạ điểm (I/O & Mappings)', 'I/O & Mappings')}</span>
+                <span>
+                  {node.kind === 'INPUT' || node.kind === 'OUTPUT'
+                    ? pick('Cổng I/O & Ánh xạ điểm (I/O & Mappings)', 'I/O & Mappings')
+                    : pick('Danh sách cổng (I/O Ports)', 'I/O Ports')}
+                </span>
               </div>
               <span className="text-[11px] text-[var(--c-text-dim)]">
                 {inputPorts.length} {pick('vào', 'in')} · {outputPorts.length} {pick('ra', 'out')}
@@ -456,6 +460,9 @@ function PortRowItem({
   }) => void
   onClose: () => void
 }) {
+  const isInterfaceNode = node.kind === 'INPUT' || node.kind === 'OUTPUT'
+  const varName = typeof node.parameters?.variable === 'string' ? node.parameters.variable.trim() : ''
+
   const mappingInfo = resolvePortMappingInfo(
     port,
     node,
@@ -474,37 +481,45 @@ function PortRowItem({
       </div>
 
       <div className="flex items-center gap-2">
-        {mappingInfo.isMapped ? (
-          <div className="flex items-center gap-1.5 font-mono">
-            <span className="flex items-center gap-1 rounded bg-emerald-950/50 border border-emerald-800/60 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-              <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-              {mappingInfo.display}
-            </span>
-          </div>
-        ) : (
-          <span className="rounded bg-[var(--c-bg)] px-2 py-0.5 text-[10px] text-[var(--c-text-dim)] italic">
-            {pick('Chưa ánh xạ', 'Not mapped')}
-          </span>
-        )}
+        {isInterfaceNode ? (
+          <>
+            {mappingInfo.isMapped ? (
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="flex items-center gap-1 rounded bg-emerald-950/50 border border-emerald-800/60 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                  {mappingInfo.display}
+                </span>
+              </div>
+            ) : (
+              <span className="rounded bg-[var(--c-bg)] px-2 py-0.5 text-[10px] text-[var(--c-text-dim)] italic">
+                {pick('Chưa ánh xạ', 'Not mapped')}
+              </span>
+            )}
 
-        {onRequestPortMapping && (
-          <button
-            type="button"
-            onClick={() => {
-              onClose()
-              onRequestPortMapping({
-                nodeId: node.id,
-                portId: port.id,
-                portName: port.name,
-                nodeName: node.typeRef ?? node.kind,
-                portDirection: port.direction,
-                portDataType: port.dataType,
-              })
-            }}
-            className="rounded bg-[var(--c-surface)] hover:bg-[var(--c-accent)] hover:text-white border border-[var(--c-border)] px-2 py-0.5 text-[10px] font-medium transition"
-          >
-            {mappingInfo.isMapped ? pick('Đổi map', 'Remap') : pick('Ánh xạ', 'Map')}
-          </button>
+            {onRequestPortMapping && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onRequestPortMapping({
+                    nodeId: node.id,
+                    portId: port.id,
+                    portName: varName || port.name,
+                    nodeName: varName || node.typeRef,
+                    portDirection: node.kind === 'INPUT' ? 'INPUT' : 'OUTPUT',
+                    portDataType: node.typeRef,
+                  })
+                }}
+                className="rounded bg-[var(--c-surface)] hover:bg-[var(--c-accent)] hover:text-white border border-[var(--c-border)] px-2 py-0.5 text-[10px] font-medium transition"
+              >
+                {mappingInfo.isMapped ? pick('Đổi map', 'Remap') : pick('Ánh xạ', 'Map')}
+              </button>
+            )}
+          </>
+        ) : (
+          <span className="text-[10px] text-[var(--c-text-dim)]">
+            {port.direction === 'INPUT' ? pick('Cổng đầu vào', 'Input port') : pick('Cổng đầu ra', 'Output port')}
+          </span>
         )}
       </div>
     </div>
