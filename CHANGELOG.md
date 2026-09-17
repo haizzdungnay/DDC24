@@ -141,6 +141,48 @@
   - **AC-1 vẫn chưa đạt:** `TC-FBD-NAV-001` còn đỏ trên cả nhánh lẫn `main`. Mắt
     xích chặn là `#732` (PR #735 mở, chưa merge) — nằm ngoài Source ownership của
     Issue này và ngoài cả làn dọn dẹp, nên phiên này không chạm tới.
+- **Vá một khiếm khuyết do chính PR này sinh ra: lớp chặn bập bênh BỎ RƠI phép đo
+  bị chặn (2026-09-17, phiên `session_0166rqxp8bH6r7PfZyFhjDkG`):**
+  - **Triệu chứng.** Kéo mép cửa sổ ra rồi kéo trả lại trong vài chục ms rồi thả
+    tay thì cột workspace giữ mãi chiều cao TRUNG GIAN. Ca jsdom đo được: viewport
+    900 px, mép trên 300 px, cột kẹt ở **676 px** thay vì 576 px ⇒ tài liệu
+    1000 px ⇒ **tràn dọc 100 px** — đúng cú `DEV-PROG-021` mà hook này sinh ra để
+    chặn, chỉ khác là nay do lớp sửa của `#677` gây ra chứ không do hằng số đoán.
+  - **Nguyên nhân gốc.** Lớp chặn chuỗi `A → B → A` trong cửa sổ 250 ms `return`
+    thẳng, tức **bỏ rơi hẳn** phép đo bị chặn. Trong một dao động thật thì vô hại
+    vì nhịp sau tới ngay; nhưng `A → B → A` cũng đúng là hình dạng của một **thao
+    tác người dùng thật rồi DỪNG**, và khi ấy phép đo bị chặn chính là phép đo
+    đúng và cuối cùng — không sự kiện nào tới sau nó để sửa lại. Chú thích cũ
+    trong hook khẳng định "không có trạng thái khoá vĩnh viễn nào để rơi vào";
+    điều đó đúng với *lớp chặn*, nhưng *giá trị* thì kẹt vô thời hạn.
+  - **Cách sửa.** Giữ nguyên việc **chặn** (đó vẫn là phía an toàn khi hook chưa
+    phân biệt được hai tình huống), chỉ bỏ việc **bỏ rơi**: hẹn đo lại đúng lúc
+    cửa sổ khép, một hẹn giờ duy nhất tại một thời điểm, huỷ khi unmount. Dao
+    động thật không vì thế sống lại — lúc hẹn giờ chạy, nó đọc trạng thái DOM tại
+    thời điểm đó và vẫn đi qua đúng lớp chặn ấy, nên nhịp đổi giá trị vẫn bị giữ
+    ở mức một lần mỗi cửa sổ.
+  - **Phép thử ngược.** Khôi phục `return` thẳng ⇒ **đúng 1/15 ca đỏ** (`cửa sổ
+    chặn khép thì giá trị đúng vẫn phải tới nơi`: nhận 676, mong đợi 576). Mutant
+    đã khôi phục. Ca thứ hai đi kèm khẳng định chiều ngược lại — không có phép đo
+    nào bị hoãn thì không hẹn giờ nào được đặt, nên bản vá không tự sinh vòng đo.
+  - Ca hội tụ `AC-2` **giữ nguyên kết quả** sau bản vá: hẹn giờ không chạy trong
+    một chuỗi reflow đồng bộ, nên số lần đổi giá trị trên 200 nhịp vẫn `< 6`.
+  - **Số đo cổng của phiên này** (nhánh `clean-code/issue-677` trên
+    `origin/main@1515a72`; mọi exit code đọc trực tiếp từ chính lệnh đo):
+    - `npx vitest --run --environment jsdom src` → **exit 0**; **256 file /
+      3317 test PASS**, 0 FAIL, 146,58 s. Nền lượt trước là 3315 ⇒ đúng 2 ca
+      phiên này thêm vào.
+    - `npm run lint` → **exit 0**. `npm run build` → **exit 0**, chunk
+      `programming` **117,14 KiB gzip** (trần R3 165 KiB, dư địa 47,86 KiB).
+    - `npx playwright test e2e/programming-workspace-height.spec.ts` →
+      **16/16 PASS**, exit 0, 20,3 s — cổng AC-4 + AC-6 vẫn xanh sau bản vá.
+    - `npx playwright test e2e/programming.spec.ts` → **103 PASS / 7 FAIL /
+      30 skip**, hai lượt trên nhánh cho tập đỏ giống hệt nhau; baseline dựng
+      bằng worktree sạch tại `origin/main@1515a72` **cũng 103 / 7 / 30** với
+      tập đỏ trùng khít — `diff` **rỗng cả ba chiều**. Baseline được đo LẠI ở
+      phiên này chứ không dẫn lại, vì phiên này có đổi mã sản phẩm.
+      `element is not stable`: **0 lần** ở cả nhánh lẫn `main`.
+    - `python3 scripts/docs_iso_harness.py --expect` → **exit 0**, `KẾT LUẬN PASS`.
 
 ### Fixed — `#733`: cổng FE unit đỏ sẵn trên `main` — ca test khoá hành vi mà `a26cbd2` đã thay thế (2026-09-17)
 
