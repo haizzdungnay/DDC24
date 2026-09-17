@@ -1,3 +1,4 @@
+import { emptyFbdDocument } from '../pou/pouTemplates'
 import { describe, expect, it } from 'vitest'
 import type {
   ProgrammingDraftDocument,
@@ -218,6 +219,77 @@ describe('mappingViewModel — Phase 1A truth model', () => {
 
     const rows = buildMappingVariableRows(document, [point()], { status: 'ready', lastSuccessAt: 100 })
     expect(rows.find((row) => row.bindingId === 'binding-supply')?.observedAt).toBe('2026-08-24T09:00:00Z')
+  })
+
+  it('loại trừ biến từ FUNCTION_BLOCK và FUNCTION, và loại trừ biến ma của FBD không có trên sơ đồ', () => {
+    const document = baseDocument()
+    // Thêm 1 Function Block ST có VAR_INPUT pv, VAR_OUTPUT q
+    document.programs.push({
+      programId: 'fb-1',
+      name: 'NewFunctionBlock_2',
+      kind: 'FUNCTION_BLOCK',
+      language: 'ST',
+      document: [
+        'FUNCTION_BLOCK NewFunctionBlock_2',
+        'VAR_INPUT pv : REAL; END_VAR',
+        'VAR_OUTPUT q : BOOL; END_VAR',
+        'END_FUNCTION_BLOCK',
+      ].join('\n'),
+    })
+
+    // Thêm 1 Program FBD có node INPUT DEMO_1
+    const fbdDoc = emptyFbdDocument('FbdProg')
+    fbdDoc.networks = [
+      {
+        id: 'net-1',
+        name: 'Network 1',
+        order: 0,
+        nodes: [
+          {
+            id: 'node-demo-1',
+            kind: 'INPUT',
+            typeRef: 'BOOL',
+            executionOrder: 0,
+            parameters: { variable: 'DEMO_1' },
+            ports: [{ id: 'p-1', name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL', unit: null, order: 0 }],
+          },
+        ],
+        wires: [],
+      },
+    ]
+
+    document.programs.push({
+      programId: 'fbd-prog-1',
+      name: 'NewFbdProgram',
+      kind: 'PROGRAM',
+      language: 'FBD',
+      document: JSON.stringify(fbdDoc),
+    })
+
+    // Variables trong document có chứa:
+    // 1. Biến hợp lệ của FBD: DEMO_1
+    // 2. Biến ma của FBD không có trên sơ đồ: NewFunctionBlock_pv
+    // 3. Biến của Function Block: pv
+    document.variables.push(
+      { variableId: 'v-demo1', programId: 'fbd-prog-1', name: 'DEMO_1', type: 'BOOL', class: 'INPUT', initialValue: null, retain: false },
+      { variableId: 'v-ghost', programId: 'fbd-prog-1', name: 'NewFunctionBlock_pv', type: 'REAL', class: 'INPUT', initialValue: null, retain: false },
+      { variableId: 'v-fb-pv', programId: 'fb-1', name: 'pv', type: 'REAL', class: 'INPUT', initialValue: null, retain: false },
+    )
+
+    const rows = buildMappingVariableRows(document, [point()], { status: 'ready', lastSuccessAt: 100 })
+    const names = rows.map((r) => r.name)
+
+    // Biến của program ST (AHU_Main) và FBD (NewFbdProgram) được hiện
+    expect(names).toContain('SupplyTemp')
+    expect(names).toContain('FanCmd')
+    expect(names).toContain('DEMO_1')
+
+    // Biến của Function Block hoàn toàn KHÔNG xuất hiện
+    expect(names).not.toContain('pv')
+    expect(names).not.toContain('q')
+
+    // Biến ma FBD không tồn tại trên sơ đồ hoàn toàn KHÔNG xuất hiện
+    expect(names).not.toContain('NewFunctionBlock_pv')
   })
 
   it('không biến null thành zero nhưng giữ zero/false thật', () => {

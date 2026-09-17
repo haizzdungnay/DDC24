@@ -93,6 +93,7 @@ export function MappingTab(props: {
   const programs = useMemo(() => {
     const map = new Map<string, string>()
     for (const prog of document.programs) {
+      if (prog.kind && prog.kind !== 'PROGRAM') continue
       if (prog.programId && !map.has(prog.programId)) {
         map.set(prog.programId, prog.name)
       }

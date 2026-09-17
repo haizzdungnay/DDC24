@@ -111,8 +111,8 @@ describe('FbdCanvas — Luồng C: Presentation tests (C-T1..C-T7)', () => {
   it('khi chân cổng đã mapping: canvas hiển thị tên điểm đã map kèm giá trị realtime', () => {
     const doc = golden()
     const net = doc.networks[0]
-    // Node 2 (AND) có port IN1 (id: 40000000-0000-4000-8000-000000000003)
-    const targetPortId = '40000000-0000-4000-8000-000000000003'
+    // Node 0 là INPUT có parameters.variable: "OCCUPIED"
+    const targetPortId = "OCCUPIED"
 
     const bindings: ProgrammingBinding[] = [
       {

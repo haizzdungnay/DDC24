@@ -8,6 +8,36 @@
 
 ## [Unreleased]
 
+### Added — Kéo thả Function Block vào ST Editor & Chuẩn hoá ánh xạ điểm FBD/Mapping (2026-09-17)
+
+- Phạm vi: `apps/web-ui/src/features/programming/fbd/userPou.ts`,
+  `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.tsx`,
+  `apps/web-ui/src/features/programming/design/mapping/mappingViewModel.ts`,
+  `apps/web-ui/src/features/programming/fbd/PortMappingPicker.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdBlockPropertiesModal.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdNodeHoverCard.tsx`.
+- **Kéo thả Function Block vào ST:** Hỗ trợ kéo thả POU người dùng tự tạo
+  (`FUNCTION_BLOCK`, `FUNCTION`) từ POU Explorer và Quick Library vào trình soạn
+  thảo ngôn ngữ ST.
+  - Tự động sinh khai báo instance `FB_1 : FB_Type;` trong khối `VAR ... END_VAR`.
+  - Tự động sinh lời gọi hàm `FB_1(inputs := inputs);` tại vị trí con trỏ/thả chuột.
+  - Hỗ trợ chọn tái sử dụng instance cũ hoặc tạo mới qua `<FbInstancePicker>`.
+  - Mục "Khối của dự án" trong Quick Library mở rộng hiển thị ở cả chế độ ST lẫn
+    FBD, hỗ trợ nhấp chuột chèn thẳng vào con trỏ ST.
+- **Chuẩn hoá logic ánh xạ điểm FBD và Mapping:**
+  - Mỗi cổng FBD chỉ map với 1 point duy nhất; khi map sang point mới, point cũ
+    tự động trả về trạng thái Map. Bổ sung nút "Hủy map" (Unmap) gỡ binding trên
+    Draft.
+  - Khắc phục lỗi `crypto.randomUUID is not a function` khi truy cập qua HTTP
+    (thay bằng `createUuid` có fallback `getRandomValues`).
+  - Chuẩn hoá ranh giới POU: chỉ các khối `INPUT` và `OUTPUT` trên FBD (tương
+    ứng với biến ngoài của `PROGRAM`) mới cho phép ánh xạ ra Point ngoài. Loại bỏ
+    hoàn toàn các biến nội bộ của `FUNCTION_BLOCK` và `FUNCTION` khỏi tab
+    Mapping.
+
+
 ### Fixed — `#676`: Thư viện nhanh FBD có lối vào ở MỌI khổ desktop — ba ngưỡng `1440 / 1280–1439 / <1280` (2026-09-16)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
@@ -117,7 +147,7 @@
   ports thì `apt-get install libmodbus-dev:arm64` báo "Unable to locate package",
   một thông điệp trông y hệt "gói không tồn tại".
 
-- 2026-09-16 — docs(programming-ui): kế hoạch Task 10 FBD bản v2 tại `docs/superpowers/plans/2026-09-16-fbd-task10-save-check-stale.md` (Issue #718); khảo sát phát hiện nhánh FBD bị chặn nhận chẩn đoán server tại `DesignWorkbench.tsx:154` (ISS-STED-05) và trường `location` rụng 2 lần trước khi tới `ProblemsDrawer`, nên tách Task 10 thành 10a (ranh giới Save/Check, ~70% xong) và 10b (nhãn chẩn đoán cũ, ~15% xong).
+- 2026-09-17 — docs(programming-ui): kế hoạch Task 10 FBD nâng lên bản v5 tại `docs/superpowers/plans/2026-09-16-fbd-task10-save-check-stale.md`; đã đối chiếu ảnh chủ sở hữu PGM-02B, phát hiện bản v4 không đủ đạt `TC-FBD-HEADER-003` vì thiếu dấu trên canvas, và 10b mở rộng sang dấu chẩn đoán trên khối.
 
 ### Fixed — `#718`: ánh xạ điểm từ canvas FBD bị máy chủ từ chối vì `variableId` không phải UUID (2026-09-16)
 

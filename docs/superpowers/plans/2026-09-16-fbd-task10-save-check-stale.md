@@ -1,7 +1,7 @@
 # Task 10 — Ranh giới Save/Check và xử lý chẩn đoán cũ (FBD)
 
-- Ngày: 2026-09-16 (bản v3 — CH-4 và CH-5 đã giải, RR-1 đã gỡ)
-- Issue: #718
+- Ngày: 2026-09-17 (bản v5 — đối chiếu ảnh chủ sở hữu PGM-02B; 10b mở rộng sang dấu chẩn đoán trên khối canvas)
+- Issue: #718 (hiện CLOSED do PR #724 dùng trùng số — cần quyết định mở lại hoặc tạo mới)
 - Nguồn đặc tả: `docs/superpowers/plans/2026-08-31-fbd-edit.md` §10 (dòng 700–740)
 - Ca chấp nhận: `docs/superpowers/specs/2026-08-31-fbd-edit-design.md` (dòng 675–707)
 - Tiền nhiệm: Task 8 & 9 (Issue #667, đóng 2026-09-15)
@@ -30,6 +30,105 @@ Trường `location` còn bị **xoá hai lần** trên đường tới `Problem
 
 Hệ quả: hiện FBD không có gì để gán nhãn cũ. Chẩn đoán cục bộ luôn tính lại từ buffer hiện tại nên luôn tươi theo định nghĩa.
 
+## §0.1. Khảo sát lại sau khi kéo code mới (2026-09-17)
+
+Sau khi kéo code mới từ GitHub, trạng thái kho hiện tại:
+- Nhánh `main`, đồng bộ `origin/main`, ahead 0 / behind 0, cây làm việc **SẠCH**.
+- 11 file sửa + 2 file chưa theo dõi trước đây ĐÃ được gom và commit hết vào `154a9ef3` (PR #724).
+- 9 commit mới so với mốc `2e63a991`.
+- KHÔNG commit nào chạm: `diagnosticFreshness.ts`, `ProblemsDrawer.tsx`, `DesignWorkbench.tsx`, `ProgrammingWorkbench.tsx`, `DesignWorkspacePage.tsx`, `useDraftWorkspace.ts`, hay bất kỳ file nào trong `apps/web-api/internal/programming/`.
+- CÓ chạm: `FbdEditorPane.tsx` (do `154a9ef3` — thêm modal thuộc tính khối + context menu map điểm) và `EditorPane.tsx` (do `154a9ef3` nạp pointCatalog, `9d8832bb` layout thư viện 3 ngưỡng).
+- Nhánh mới xuất hiện: `feat/fbd-port-mapping-properties-718`, `feat/fbd-edit-task8-redo`, `origin/clean-code/issue-677`, `origin/clean-code/issue-678`, `origin/fix/fbd-quick-library-layout-sync`.
+
+| Commit | Có chạm vùng Task 10? |
+|---|---|
+| `0ba2fce7` (docs OD-BAC-009 #713) | Không |
+| `b41daa69` (docs ARCH-BACNET-001 #629) | Không |
+| `9a8e94de` (build web-ui typecheck+lint e2e #664) | Không |
+| `550e420e` (build iobus vendor bacnet-stack 1.3.8 #625) | Không |
+| `d7d7fb67` (docs WF-CLEAN-001 §8.7 #721) | Không |
+| `be292128` (test bacnet LOOPBACK UDP #626) | Không |
+| `154a9ef3` (feat programming-ui map point FBD + block properties, PR #724) | Không (chỉ chạm `FbdEditorPane.tsx` và `EditorPane.tsx`, không chạm đường chẩn đoán) |
+| `46764ba5` (feat tooling cross-build aarch64 #627) | Không |
+| `9d8832bb` (fix programming-ui thư viện nhanh FBD 3 ngưỡng desktop #676) | Không (chỉ chạm `EditorPane.tsx` layout thư viện 3 ngưỡng, không chạm đường chẩn đoán) |
+
+**Mọi phán quyết CH-1…CH-5 của bản v3 VẪN CÒN HIỆU LỰC vì không commit nào chạm đường dữ liệu chẩn đoán.**
+
+### Mốc dòng đã dịch
+
+| Vị trí | Dòng cũ | Dòng mới | Nguyên nhân |
+|---|---|---|---|
+| `DesignWorkbench.tsx` — khối type props | `:47-85` | `:65-108` | Dịch chuyển dòng do các thay đổi trước đó trong file |
+| `ProgrammingWorkbench.tsx` — chỗ render `<ProblemsPanel` | `:453` | `:452` | Dịch chuyển dòng nhẹ trong file |
+| `ProgrammingWorkbench.tsx` — định nghĩa hàm `ProblemsPanel` | `:564-575` | `:563-575` | Dịch chuyển dòng nhẹ trong file |
+| `FbdEditorPane.tsx` — 5 prop chưa dùng | `:69-86` | Rải ở `:124` (`saving`) và `:134-137` (`onRunCheck`, `onOpenCompare`, `checkDisabledReason`, `compareDisabledReason`) | `154a9ef3` chèn các hàm helper ánh xạ điểm ở đầu file, đẩy file từ 366 lên 503 dòng. Vẫn chưa prop nào được dùng trong thân component, và vẫn chưa có chú thích giải thích |
+| `DesignWorkspacePage.tsx` — khối cảnh báo xung đột | `:765-775` | `:765-777` | Khối cảnh báo xung đột mở rộng thêm 2 dòng |
+
+## §0.2. Đối chiếu ảnh chủ sở hữu PGM-02B (2026-09-17)
+
+### Vì sao mục này tồn tại
+
+- `docs/superpowers/plans/2026-08-31-fbd-edit.md:5` — mục tiêu 11 task: `Nâng bề mặt FBD EDIT thành workspace kéo-thả node-edge theo target PGM-02B...`
+- `docs/superpowers/specs/2026-08-31-fbd-edit-design.md:529` — `- Ảnh chủ sở hữu: [PGM-02B FBD editor reference](../../04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/assets/PGM-02B_FBD_editor_reference.png).`
+- Các plan Task 6, 8, 9 đều viện dẫn ảnh này. Plan Task 10 hiện KHÔNG viện dẫn — đây là thiếu sót cần vá. Ảnh là thẩm quyền hình ảnh của cả 11 task FBD.
+
+### Ảnh vẽ gì ở khay Problems
+
+Tab `Problems` hiển thị một dòng lỗi gồm: chip mức độ `Warning` · mã `PRG.W.3101` · thông điệp `Integral term is Zero` · vị trí `ln 1, Col 1`.
+
+Suy luận có căn cứ: mã dạng `PRG.W.####` kèm dòng/cột là chẩn đoán trình biên dịch từ máy chủ. Bộ kiểm cục bộ FBD sinh mã dạng `FBD-SCHEMA-JSON-001` và không có dòng/cột (`DesignWorkbench.tsx:176`). Vậy ảnh minh họa vẽ khay Problems của FBD ĐANG hiển thị chẩn đoán Check từ máy chủ.
+
+Ảnh KHÔNG chứa nhãn chữ `STALE`/`CŨ` nào — ảnh vẽ trạng thái bình thường, không vẽ trạng thái cũ.
+
+### Điều khoản handoff trúng phạm vi
+
+| Nguồn | Nguyên văn | Trúng phần nào của Task 10 |
+|---|---|---|
+| `PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md:53` | `- diagnostic markers on nodes/wires` | 10b (dấu chẩn đoán trên canvas) |
+| `PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md:148` | `- Check diagnostics visible on canvas + Problems.` | 10b (hiển thị chẩn đoán Check) |
+| `PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md:237` | `3. click Problems → focus/select canvas entity.` | 10b (nhảy từ khay tới entity) |
+| `PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md:36` | `- Edit ≠ Save ≠ Check ≠ Commission ≠ Running.` | 10a (ranh giới Save/Check) |
+| `PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md:37` | `- Save Draft SHALL NOT modify Active runtime.` | 10a (lưu draft độc lập runtime) |
+| `PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md:40` | `- Missing/stale/offline data SHALL be Unknown / Stale / —, never fabricated zero.` | 10a (trạng thái UNKNOWN) & 10b (nhãn STALE) |
+| `PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md:229` | `| Problems | Draft diagnostics | Draft + sim runtime diagnostics | Active runtime diagnostics |` | 10b (nguồn chẩn đoán khay Problems) |
+| `PGM-02_PROGRAMS_FE_HANDOFF_v2_2.md:369` | `- AC-PGM02-009 Save/Check do not change Active.` | 10a (Save/Check không đổi Active) |
+
+### Bảy mã TC truy nguyên về đâu
+
+Ánh xạ gốc tại `docs/superpowers/specs/2026-08-31-fbd-edit-design.md` §10.1.1, dòng 806-816:
+
+| Mã TC | Nguồn truy nguyên |
+|---|---|
+| `TC-FBD-SAVE-001` | `DDO-PGM02-007`, `AC-PGM02-001..010` |
+| `TC-FBD-CONFLICT-001` | `AC-PGM02-001..010`, `PRG-ERR-CONFLICT-001` |
+| `TC-FBD-HEADER-001` | `AC-PGM02-001..010` |
+| `TC-FBD-HEADER-002` | `BLK-FBD-006` / NFR-defensive (transport readiness) |
+| `TC-FBD-HEADER-003` | `DDO-PGM02-015`, diagnostic freshness |
+| `TC-FBD-STATE-003` | `DDO-PGM02-015`, defensive fail-closed |
+| `TC-FBD-STATE-004` | `AC-PGM02-001..010`, viewport/RBAC |
+
+**KHÔNG mã nào truy về `AC-FBD-###`. Nghĩa là phần 10a (ranh giới Save/Check) KHÔNG bị ảnh minh họa ảnh hưởng — đó là bài toán hành vi, không phải bố cục. Chỉ 10b bị ảnh hưởng.**
+
+## §0.3. Lỗ hổng của bản v4 và phạm vi 10b sau điều chỉnh
+
+Định nghĩa gốc `TC-FBD-HEADER-003` tại `docs/superpowers/specs/2026-08-31-fbd-edit-design.md:741`:
+
+`| TC-FBD-HEADER-003 | stale server diagnostic + changed buffer | sửa graph sau Check | **marker cũ mang STALE DIAGNOSTIC**, không gạch như lỗi mới | HOST component | FE + compiler consumer |`
+
+Chữ **marker** nghĩa là dấu TRÊN CANVAS, không phải dòng trong khay Problems. Plan v4 chỉ nối `location` xuống `ProblemsDrawer` để hiện chip `CŨ` trong khay, KHÔNG chạm canvas. Làm theo plan v4 nguyên trạng thì `TC-FBD-HEADER-003` KHÔNG THỂ ĐẠT.
+
+### Hiện trạng dấu lỗi trên canvas
+
+- Khối lỗi ĐÃ có dấu: thuộc tính `data-fbd-node-issue="true"`, viền vàng + chấm tròn cảnh báo dùng biến màu `var(--c-warn-fg)`. Bằng chứng: `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx:834-840` và `apps/web-ui/src/features/programming/fbd/FbdCanvasLayers.tsx:416-434`.
+- Nguồn lỗi hiện CHỈ từ bộ kiểm cục bộ FE, không từ Check máy chủ.
+- Dây nối (wire) CHƯA có dấu lỗi nào trên canvas.
+
+### Phạm vi 10b sau điều chỉnh
+
+- **GIỮ**: trọn 10 vị trí / 3 file của plan v4 (nối `location` xuống `ProblemsDrawer` để hiện chip `CŨ`).
+- **THÊM**: đưa chẩn đoán Check từ máy chủ ra dấu trên KHỐI canvas, và dấu đó phải mang được trạng thái cũ (`STALE`) — tận dụng hạ tầng `data-fbd-node-issue` sẵn có ở `StructuredFbdEditor.tsx:834-840` / `FbdCanvasLayers.tsx:416-434`, không dựng lại từ đầu.
+- **KHÔNG LÀM**: không làm dấu lỗi trên DÂY NỐI trong Task 10. Phần đó tách thành một issue riêng để phủ nốt `PGM-02B:53` (`markers on nodes/wires`). Đây là việc tồn đọng có chủ ý, kèm lý do: dây chưa từng có dấu nên là tính năng mới, và có rủi ro trượt ngân sách bundle R3 (165.00 KiB gzip).
+
 ## 1. Phạm vi và cách chia
 
 Chủ dự án chốt ngày 2026-09-16: **làm trọn cả hai phần**.
@@ -52,7 +151,7 @@ Thứ tự thi hành bắt buộc: **10a xong và xanh trước, rồi mới san
 | `ProgrammingWorkbench` nhận `openBuffer` | **CHƯA CÓ** | không có prop |
 | Check khoá khi dirty | ĐÃ CÓ | `DesignWorkspacePage.tsx:460-463` |
 | `If-Match` + bắt 409 | ĐÃ CÓ | `useDraftWorkspace.ts:101`, `:119-121` |
-| Xung đột giữ buffer + Tải lại / Giữ bản đang gõ | ĐÃ CÓ | `DesignWorkspacePage.tsx:765-775` |
+| Xung đột giữ buffer + Tải lại / Giữ bản đang gõ | ĐÃ CÓ | `DesignWorkspacePage.tsx:765-777` |
 | Trạng thái UNKNOWN khi Save treo | **CHƯA CÓ** | không tìm thấy |
 | `TC-FBD-STATE-003` | ĐÃ CÓ | `FbdWorkbench.test.tsx:309,330,353` |
 | `TC-FBD-STATE-004` | ĐÃ CÓ | `DesignWorkspacePage.test.tsx:1148`, `FbdEditorPane.test.tsx:148` |
@@ -73,7 +172,7 @@ Lợi ích phụ: tránh hẳn file đang có phiên song song sửa.
 
 ### CH-2 — 5 prop trống của `FbdEditorPane` có phải thiếu sót? → KHÔNG
 
-`saving`, `onRunCheck`, `onOpenCompare`, `checkDisabledReason`, `compareDisabledReason` (`FbdEditorPane.tsx:69-86`) cố ý để trống. Bất biến `2026-08-31-fbd-edit-design.md:360,581` yêu cầu **đúng 1 bề mặt Save/Check** ở header dùng chung; toolbar FBD **cấm nhân bản nút**.
+`saving`, `onRunCheck`, `onOpenCompare`, `checkDisabledReason`, `compareDisabledReason` (nằm rải ở `FbdEditorPane.tsx:124` cho `saving` và `:134-137` cho `onRunCheck`, `onOpenCompare`, `checkDisabledReason`, `compareDisabledReason`) cố ý để trống. Nguyên nhân mốc dòng dịch: `154a9ef3` chèn các hàm helper ánh xạ điểm ở đầu file, đẩy file từ 366 lên 503 dòng. Vẫn chưa prop nào được dùng trong thân component, và vẫn chưa có chú thích giải thích. Bất biến `2026-08-31-fbd-edit-design.md:360,581` yêu cầu **đúng 1 bề mặt Save/Check** ở header dùng chung; toolbar FBD **cấm nhân bản nút**.
 
 Hành động: chỉ thêm chú thích mã dẫn `TC-FBD-HEADER-001`. Tuyệt đối không render nút Save/Check trong toolbar FBD.
 
@@ -199,17 +298,17 @@ Chỉ phục vụ `TC-FBD-HEADER-003`. **Chỉ bắt đầu khi 10a đã xanh.**
 
 `ProgrammingWorkbench` chỉ được render ở đúng một chỗ (`DesignWorkbench.tsx:278`), ngoài ra chỉ có trong 2 file test. Chuỗi prop thẳng, không phân nhánh.
 
-Chuỗi truyền `openBuffer`: `DesignWorkspacePage.tsx:964` → `DesignWorkbench.tsx:278` → `ProgrammingWorkbench.tsx:453` → `ProblemsPanel:564` → `ProblemsDrawer:604`. Mỗi chặng thêm đúng 1 prop `openBuffer?: OpenBufferContext`; `ProblemsDrawer` đã sẵn prop này.
+Chuỗi truyền `openBuffer`: `DesignWorkspacePage.tsx:964` → `DesignWorkbench.tsx:278` → `ProgrammingWorkbench.tsx:452` → `ProblemsPanel:563` → `ProblemsDrawer:604`. Mỗi chặng thêm đúng 1 prop `openBuffer?: OpenBufferContext`; `ProblemsDrawer` đã sẵn prop này.
 
 | # | Vị trí | Việc | Ảnh hưởng |
 |---|---|---|---|
 | 1 | `ProgrammingWorkbench.tsx:35-43` | Thêm `location?: ProgrammingDiagnostic['location']` vào `WorkbenchProblem` | chung |
 | 2 | `ProgrammingWorkbench.tsx:139-184` | Thêm prop `openBuffer?` vào `ProgrammingWorkbench` | chung |
-| 3 | `ProgrammingWorkbench.tsx:453` | Truyền `openBuffer` vào `ProblemsPanel` | chung |
-| 4 | `ProgrammingWorkbench.tsx:564-575` | `ProblemsPanel` nhận `openBuffer` | chung |
+| 3 | `ProgrammingWorkbench.tsx:452` | Truyền `openBuffer` vào `ProblemsPanel` | chung |
+| 4 | `ProgrammingWorkbench.tsx:563-575` | `ProblemsPanel` nhận `openBuffer` | chung |
 | 5 | `ProgrammingWorkbench.tsx:576-584` | Gán `location: problem.location` khi dựng `ProgrammingDiagnostic` | chung |
 | 6 | `ProgrammingWorkbench.tsx:604-614` | Truyền `openBuffer={openBuffer}` vào `ProblemsDrawer` | chung |
-| 7 | `DesignWorkbench.tsx:47-85` | Thêm prop `openBuffer?` vào `DesignWorkbench` | chung |
+| 7 | `DesignWorkbench.tsx:65-108` | Thêm prop `openBuffer?` vào `DesignWorkbench` | chung |
 | 8 | `DesignWorkbench.tsx:163-170` | Gán `location: diagnostic.location` trong `output.push` | **ST** |
 | 9 | `DesignWorkbench.tsx:278-293` | Truyền `openBuffer` xuống | chung |
 | 10 | `DesignWorkspacePage.tsx:964-985` | Dựng `OpenBufferContext`, truyền xuống | **ST** |
@@ -270,6 +369,14 @@ cd ../..
 
 Đối chiếu số ca ST trước/sau. Bất kỳ ca ST nào chuyển đỏ ⇒ **lùi 10b**, giữ 10a.
 
+### Bước 7 — Dấu chẩn đoán server trên khối canvas
+
+- **Mục tiêu**: Khối canvas hiện dấu lỗi đến từ Check máy chủ, và dấu đó phân biệt được lỗi mới với lỗi cũ.
+- **Điểm chạm dự kiến**: `fbd/StructuredFbdEditor.tsx` (quanh `:834-840`) và `fbd/FbdCanvasLayers.tsx` (quanh `:416-434`).
+- **Ràng buộc**: Tận dụng thuộc tính `data-fbd-node-issue` sẵn có, KHÔNG dựng lớp vẽ mới; kiểu hiển thị trạng thái cũ phải khác biệt rõ với lỗi mới nhưng KHÔNG được gạch như lỗi mới (theo nguyên văn `TC-FBD-HEADER-003`).
+- **Tiêu chí đạt**: `TC-FBD-HEADER-003`.
+- **Ghi chú quan trọng**: Đây là bước dự kiến, các con số dòng là mốc tham chiếu hiện tại, KHÔNG phải cam kết vị trí sửa.
+
 ## 7. Kiểm chứng chung trước khi commit
 
 ```bash
@@ -288,21 +395,28 @@ python3 scripts/check_ui_strings.py
 
 ## 8. Trạng thái git và quy trình
 
-### Git tại 2026-09-16
+### Git tại 2026-09-17
 
-- Đang ở `main`, **ahead 4 / behind 0**. 4 commit chưa đẩy, đỉnh là `06691fa2 Merge branch 'feat/fbd-pou-dragdrop-667'`.
-- Cây làm việc: 11 file sửa + 2 file chưa theo dõi. Trong đó 5 file sửa + 1 file chưa theo dõi thuộc `programming/fbd/` — **công việc của phiên song song, không đụng**.
-- PR #711 (`feat/fbd-pou-dragdrop-667` → `main`) báo `CONFLICTING` / `DIRTY`. Nguyên nhân: nhánh đó đã merge vào `main` **cục bộ** nhưng 4 commit chưa đẩy. Đẩy `main` là fast-forward, không cần force ⇒ #711 tự hết xung đột hoặc đóng được sạch.
+- Đang ở nhánh `main`, đồng bộ `origin/main`, **ahead 0 / behind 0**, cây làm việc **SẠCH**.
+- 11 file sửa + 2 file chưa theo dõi trước đây ĐÃ được gom và commit hết vào `154a9ef3` (PR #724).
+- PR #711 hiện **CLOSED** (không còn cần xử lý xung đột).
+- PR đang mở: #730 (`clean-code/issue-677`, MERGEABLE), #727 (`clean-code/issue-628`, CONFLICTING), #726 (`clean-code/issue-635`, CONFLICTING) — đều KHÔNG liên quan Task 10.
+- Nhánh mới xuất hiện: `feat/fbd-port-mapping-properties-718`, `feat/fbd-edit-task8-redo`, `origin/clean-code/issue-677`, `origin/clean-code/issue-678`, `origin/fix/fbd-quick-library-layout-sync`.
 - `feat/fbd-edit` (nhánh §10 nhắc tới) chỉ tồn tại **local**, chưa từng đẩy, **chưa merge** vào `main`. **Không dùng lại.**
 - Nhánh cho Task 10: cắt mới `feat/fbd-task10-save-check` từ `main`. **Không commit thẳng lên `main`.**
-- `git add` theo đường dẫn tường minh. **Cấm `git add -A` và `git add .`** (sẽ nuốt `tools/*.bak` và công việc phiên song song).
+- `git add` theo đường dẫn tường minh. **Cấm `git add -A` và `git add .`**.
 
-### Cổng `scripts/workflow_guard.py`
+### Cảnh báo Issue #718 và Cổng `scripts/workflow_guard.py`
 
-Chạy qua `.github/workflows/workflow-guard.yml`, trigger trên `pull_request` và `issue_comment`. **Không** nghe sự kiện `issues` ⇒ Issue #718 thiếu trường không bị chặn ngay, chỉ chặn khi mở PR.
+**CẢNH BÁO QUAN TRỌNG VỀ ISSUE #718:**
+- Issue #718 (vốn là issue của Task 10) hiện đã **CLOSED**.
+- **Nguyên nhân:** PR #724 có tiêu đề `feat(programming-ui) map point FBD + block properties (#718)` nên GitHub tự động đóng. `CHANGELOG.md` cũng đã có 2 entry `#718` nói về ánh xạ điểm / bảng thuộc tính khối — tức số hiệu #718 đã bị công việc khác dùng trùng.
+- **Hệ quả:** **Task 10 hiện KHÔNG còn issue mở.** Cần chủ dự án quyết định mở lại #718 hay tạo issue mới trước khi bắt tay viết mã. **Tuyệt đối KHÔNG tự thực hiện hành động nào trên GitHub** (không tự mở lại issue, không tự tạo issue mới).
 
-Điều kiện PR qua cổng:
-- `N3-LINK`: đóng đúng 1 Issue bằng `Closes #718`.
+Chạy qua `.github/workflows/workflow-guard.yml`, trigger trên `pull_request` và `issue_comment`. **Không** nghe sự kiện `issues` ⇒ Issue thiếu trường không bị chặn ngay, chỉ chặn khi mở PR.
+
+Điều kiện PR qua cổng (áp dụng cho Issue #718 nếu mở lại hoặc số issue mới nếu được tạo):
+- `N3-LINK`: đóng đúng 1 Issue bằng `Closes #718` (hoặc số issue mới tương ứng).
 - `N3-IMPL`: body PR có trường `Implementer-Run`.
 - `N3-EVID`: bảng `## Verification` điền số đo thật, cấm để trống.
 - `N1-MGR`: Issue có trường `Manager-Run`.
@@ -320,13 +434,13 @@ Chạy qua `.github/workflows/workflow-guard.yml`, trigger trên `pull_request` 
 | `TC-FBD-CONFLICT-001` | 10a | `DesignWorkspacePage.test.tsx`, `useDraftWorkspace.test.tsx` | MỚI |
 | `TC-FBD-HEADER-001` | 10a | `FbdEditorPane.test.tsx:98` | MỘT PHẦN — bổ sung |
 | `TC-FBD-HEADER-002` | 10a | `DesignWorkspacePage.test.tsx` | MỚI |
-| `TC-FBD-HEADER-003` | 10b | `DesignWorkspacePage.test.tsx` | MỚI — cốt lõi |
+| `TC-FBD-HEADER-003` | 10b | `DesignWorkspacePage.test.tsx` | MỚI — cốt lõi (khay Problems: Bước 1–5; dấu khối canvas: Bước 7) |
 | `TC-FBD-STATE-003` | — | `FbdWorkbench.test.tsx:309,330,353` | ĐÃ CÓ |
 | `TC-FBD-STATE-004` | — | `DesignWorkspacePage.test.tsx:1148`, `FbdEditorPane.test.tsx:148` | ĐÃ CÓ |
 
 ## 10. Rủi ro
 
-- **RR-1 — Phiên song song: ĐÃ GỠ.** Chủ dự án xác nhận 2026-09-16 đã dừng mọi agent ở phiên khác. Vẫn giữ nguyên tắc: phạm vi Task 10 không chạm `apps/web-ui/src/features/programming/fbd/` vì không có nhu cầu kỹ thuật, không phải vì tránh va chạm. Cây làm việc còn 5 file sửa + 1 file chưa theo dõi trong `fbd/` — **không commit kèm** vào nhánh Task 10.
+- **RR-1 — Phiên song song: ĐÃ GỠ.** Toàn bộ 11 file sửa + 2 file chưa theo dõi trước đây đã được gom và commit hết vào `154a9ef3` (PR #724), cây làm việc hiện sạch. Vẫn giữ nguyên tắc: phạm vi Task 10 không chạm `apps/web-ui/src/features/programming/fbd/` vì không có nhu cầu kỹ thuật, không phải vì tránh va chạm.
 - **RR-2 — Hồi quy ST (10b): rủi ro thấp hơn dự phòng.** Chỉ 2/10 vị trí chạm ST (`DesignWorkbench.tsx:163-170`, `DesignWorkspacePage.tsx:964-985`). `WorkbenchProblem` chỉ dùng ở 3 file; trường `location?` tuỳ chọn nên ST không đổi hành vi khi chưa truyền `openBuffer`. Vẫn bắt buộc chạy lại toàn bộ test programming và đối chiếu số ca; ca ST chuyển đỏ ⇒ lùi 10b, giữ 10a.
 - **RR-3 — `PROFILE_CHANGED` giả: ĐÃ LOẠI.** Backend điền `stLanguageProfileVersion = "1.0.0"` vô điều kiện (`checks.go:1098`), khớp hằng FE. Xem CH-5.
 - **RR-4 — Chẩn đoán cục bộ bị dán nhãn cũ sai: ĐÃ LOẠI.** `location` rỗng cho ra `UNVERIFIABLE` (`diagnosticFreshness.ts:68-70`), không hiện nhãn (`ProblemsDrawer.tsx:204,231`). Xem CH-4.
@@ -334,7 +448,9 @@ Chạy qua `.github/workflows/workflow-guard.yml`, trigger trên `pull_request` 
 - **RR-6 — Ngân sách gói.** 10b thêm mã vào nhánh programming. Đo lại cổng R3 sau `npm run build`.
 - **RR-7 — Cổng chuỗi tiếng Việt.** `scripts/check_ui_strings.py` bắt buộc chuỗi tiếng Việt **có dấu**. Dùng `pick(vi, en)`.
 - **RR-9 — Vùng sửa của 10b chưa có test bảo vệ.** Không ca nào trong `DesignWorkbench.test.tsx`, `ProgrammingWorkbench.test.tsx`, `FbdWorkbench.test.tsx` khẳng định trường `location`. Phải tự thêm khẳng định `location` sống sót cho **cả ST lẫn FBD** khi sửa, nếu không hồi quy sẽ lọt.
-- **RR-8 — Vai trò quy trình.** `N1-SELF` cấm `Manager-Run` trùng `Implementer-Run`. Issue #718 do phiên điều phối tạo; khi mở PR phải khai `Implementer-Run` khác token `Manager-Run`.
+- **RR-8 — Vai trò quy trình.** `N1-SELF` cấm `Manager-Run` trùng `Implementer-Run`. Khi mở PR phải khai `Implementer-Run` khác token `Manager-Run` của issue tương ứng (lưu ý Issue #718 hiện đã bị đóng do trùng số với PR #724, cần quyết định mở lại hoặc tạo issue mới).
+- **RR-10 — Sửa `StructuredFbdEditor.tsx` và `FbdCanvasLayers.tsx` chạm lớp vẽ canvas.** Sửa `StructuredFbdEditor.tsx` và `FbdCanvasLayers.tsx` là chạm lớp vẽ canvas, có thể làm tăng kích thước gói `programming-*.js`; cổng R3 giới hạn 165.00 KiB gzip; bắt buộc chạy `npm run build` trước `scripts/verify_programming_bundle_budget.py`.
+- **RR-11 — Dấu lỗi trên DÂY NỐI chưa làm.** Dấu lỗi trên DÂY NỐI chưa làm nên `PGM-02B:53` (`markers on nodes/wires`) chỉ phủ được vế `nodes`; đây là nợ kỹ thuật có chủ ý, cần một issue riêng; nếu Task 11 nghiệm thu theo handoff thì phải biết trước điều này.
 
 ## 11. Ràng buộc cứng
 
@@ -343,6 +459,16 @@ Chạy qua `.github/workflows/workflow-guard.yml`, trigger trên `pull_request` 
 - Cấm thêm gói npm mới.
 - Cấm `.skip` / `.only` / `.todo`; cấm xoá test, làm yếu matcher, sửa khẳng định để ép xanh. Test đỏ ⇒ sửa nguồn; không sửa được ⇒ DỪNG và báo cáo.
 - Cấm `git push --force`, `git checkout -f`, `git stash`, `git reset --hard`, `git restore` khi checkout cảnh báo ghi đè.
-- Cấm `Closes #667` trên PR mới — Issue #667 đã đóng. Dùng `Closes #718`.
+- Cấm `Closes #667` trên PR mới — Issue #667 đã đóng. Dùng `Closes #718` (hoặc số issue mới tương ứng nếu được cấp).
 - Không chạm dữ liệu dự án thật; chỉ tạo dự án nháp riêng để kiểm chứng.
 - Kiểm chứng mạng chạy từ Windows PowerShell, không từ WSL.
+
+## §12. Ghi nhận ngoài phạm vi Task 10
+
+Đối chiếu 12 tiêu chí AC-FBD (nguồn `docs/04_uiux/KX_DDC24_Programming_FE_Handoff_v2_1/PGM-02B_FBD_EDITOR_FE_HANDOFF_v2_2.md`): đạt 10/12.
+
+Hai mục chưa đạt, CẢ HAI ĐỀU NGOÀI phạm vi Task 10 (chỉ ghi nhận để chủ dự án biết, KHÔNG gộp vào Task 10):
+- `AC-FBD-003` (`PGM-02B:271`) — `selected-port insertion filters compatible blocks`: chưa đạt, thuộc Task 6. Bằng chứng: `design/library/QuickLibraryPanel.tsx:66-105` không nhận prop chân đang chọn; `design/editor/EditorPane.tsx:1293-1311` không chuyển ngữ cảnh chân.
+- `AC-FBD-008` (`PGM-02B:276`) — `SIMULATE displays Draft runtime with no physical outputs`: một phần. Chạy draft không xuất tín hiệu thật (`simulation/SimulateWorkspace.tsx:118-170`) nhưng FBD chỉ hiện qua textarea chuỗi nguồn thô, chưa có lớp phủ canvas.
+
+Mười mục còn lại ĐẠT. Riêng `AC-FBD-007` (`Problems jump to exact block/wire`) đã đạt qua `fbd/issueTargets.ts:26-61` và `design/workbench/DesignWorkbench.tsx:191-198`.
