@@ -289,6 +289,7 @@ export function DesignWorkbench({
       onJumpToOffset={onJumpToOffset}
       checkOwnerHref={checkOwnerHref}
       fbdBridge={fbdBridge}
+      stMinimap={Boolean(source)}
     />
   )
 }

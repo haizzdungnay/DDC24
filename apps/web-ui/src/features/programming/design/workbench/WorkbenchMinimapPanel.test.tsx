@@ -403,4 +403,42 @@ describe('WorkbenchMinimapPanel (Task T9-02)', () => {
     expect(width).toBe(80)
     expect(height).toBe(50)
   })
+
+  it('render ST Mini Map khi có stSource và gọi onJumpToOffset khi click dòng/outline', () => {
+    const onJumpToOffset = vi.fn()
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={null}
+          stSource={'PROGRAM P\nVAR\n  FanCmd : BOOL;\nEND_VAR\nFanCmd := TRUE;\nEND_PROGRAM\n'}
+          onJumpToOffset={onJumpToOffset}
+        />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByRole('region', { name: 'Bản đồ mã nguồn ST' })).toBeInTheDocument()
+    expect(screen.getByText('ST')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /PROGRAM P/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /VAR/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /PROGRAM P/ }))
+    expect(onJumpToOffset).toHaveBeenCalledWith(0, 1)
+  })
+
+  it('nút thu gọn gọi onCollapse khi được truyền', () => {
+    const onCollapse = vi.fn()
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={createMockBridge()}
+          onCollapse={onCollapse}
+        />
+      </I18nProvider>,
+    )
+
+    const collapseBtn = screen.getByRole('button', { name: 'Thu gọn Bản đồ' })
+    expect(collapseBtn).toBeInTheDocument()
+    fireEvent.click(collapseBtn)
+    expect(onCollapse).toHaveBeenCalledTimes(1)
+  })
 })

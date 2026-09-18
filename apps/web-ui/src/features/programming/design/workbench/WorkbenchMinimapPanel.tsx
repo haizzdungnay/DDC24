@@ -1,4 +1,6 @@
-import { createContext, useContext, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import { createContext, useContext, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import { PanelRightClose } from 'lucide-react'
+import { stCodeMapEntries } from '../editor/StCodeMap'
 
 import { useI18n } from '../../../../shared/i18n'
 import type { FbdSelection } from '../../fbd/commands'
@@ -113,6 +115,169 @@ export function FbdCanvasBridgeProvider({ children }: { children: ReactNode }) {
   )
 }
 
+function StMinimapContent({
+  source,
+  onNavigate,
+  onCollapse,
+}: {
+  source: string
+  onNavigate: (offset: number) => void
+  onCollapse?: () => void
+}) {
+  const { pick } = useI18n()
+  const [tab, setTab] = useState<'outline' | 'map'>('outline')
+  const entries = useMemo(() => stCodeMapEntries(source), [source])
+  const lines = useMemo(() => {
+    const raw = source.split('\n')
+    let offset = 0
+    return raw.map((text, idx) => {
+      /* Chốt offset ĐẦU dòng trước khi cộng dồn: trả thẳng `offset` sau phép
+       * cộng là trả vị trí dòng KẾ TIẾP, khiến click dòng N nhảy xuống N+1. */
+      const lineOffset = offset
+      offset += text.length + 1
+      return { line: idx + 1, text, offset: lineOffset }
+    })
+  }, [source])
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Header bar with title, tabs, and collapse button */}
+      <div className="mb-1.5 flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-[var(--c-text-dim)]">
+            {pick('Bản đồ thu nhỏ', 'Mini Map')}
+          </span>
+          <span className="rounded bg-[var(--c-surface-2)] px-1.5 py-0.2 font-mono text-[10px] font-semibold text-[var(--c-accent)]">
+            ST
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {/* Tabs: Dàn ý (Hàm / Cấu trúc) vs Bản đồ mã */}
+          <div className="flex items-center rounded-lg border border-[var(--c-border)] bg-[var(--c-bg)] p-0.5" role="tablist" aria-label={pick('Chế độ xem bản đồ', 'Map view mode')}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'outline'}
+              className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
+                tab === 'outline'
+                  ? 'bg-[var(--c-accent)] text-white shadow-sm'
+                  : 'text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+              }`}
+              onClick={() => setTab('outline')}
+            >
+              {pick('Dàn ý & Hàm', 'Outline')} ({entries.length})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'map'}
+              className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
+                tab === 'map'
+                  ? 'bg-[var(--c-accent)] text-white shadow-sm'
+                  : 'text-[var(--c-text-dim)] hover:text-[var(--c-text)]'
+              }`}
+              onClick={() => setTab('map')}
+            >
+              {pick('Bản đồ mã', 'Code map')} ({lines.length})
+            </button>
+          </div>
+
+          {onCollapse && (
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded border border-[var(--c-border)] text-xs text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)] transition"
+              onClick={onCollapse}
+              aria-label={pick('Thu gọn Bản đồ', 'Collapse Mini Map')}
+              title={pick('Thu gọn Bản đồ', 'Collapse Mini Map')}
+            >
+              <PanelRightClose className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div
+        role="region"
+        aria-label={pick('Bản đồ mã nguồn ST', 'ST code map')}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--c-border)] bg-[var(--c-surface-2)]/60 text-xs"
+      >
+        {tab === 'outline' ? (
+          /* Tab Dàn ý & Hàm: danh sách cuộn dọc có thanh trượt riêng */
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-1">
+            {entries.length === 0 ? (
+              <p className="p-3 text-center text-xs text-[var(--c-text-dim)]">
+                {pick('Không tìm thấy cấu trúc POU, VAR hay khối lệnh điều khiển nào.', 'No POU, VAR, or control structures found.')}
+              </p>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1 space-y-1" tabIndex={0} role="list">
+                {entries.map((entry) => {
+                  let kindBadge = 'bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'
+                  let kindLabel: string = entry.kind
+                  if (entry.kind === 'POU') {
+                    kindBadge = 'bg-sky-950/60 text-sky-300 border border-sky-800/60'
+                    kindLabel = 'POU'
+                  } else if (entry.kind === 'VAR_BLOCK') {
+                    kindBadge = 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                    kindLabel = 'VAR'
+                  } else if (entry.kind === 'BRANCH') {
+                    kindBadge = 'bg-amber-950/60 text-amber-300 border border-amber-800/60'
+                    kindLabel = 'BRANCH'
+                  } else if (entry.kind === 'LOOP') {
+                    kindBadge = 'bg-purple-950/60 text-purple-300 border border-purple-800/60'
+                    kindLabel = 'LOOP'
+                  }
+
+                  return (
+                    <div key={`${entry.line}-${entry.offset}`} role="listitem">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 rounded border border-transparent px-2 py-1.5 text-left transition hover:border-[var(--c-border)] hover:bg-[var(--c-surface)] group"
+                        onClick={() => onNavigate(entry.offset)}
+                        title={`Line ${entry.line}: ${entry.label}`}
+                      >
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="w-8 shrink-0 text-right font-mono text-[11px] font-bold text-[var(--c-accent)]">
+                          {entry.line}
+                        </span>
+                        <span className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-mono font-semibold ${kindBadge}`}>
+                          {kindLabel}
+                        </span>
+                        <span className="min-w-0 truncate font-mono text-[11px] text-[var(--c-text)] group-hover:text-[var(--c-accent)]">
+                          {entry.label}
+                        </span>
+                      </div>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Tab Bản đồ mã: hiển thị toàn bộ các dòng mã thu nhỏ, cuộn dọc */
+          <div className="min-h-0 flex-1 overflow-y-auto p-1 font-mono text-[10px]" tabIndex={0} role="list">
+            {lines.map((l) => (
+              <div
+                key={l.line}
+                role="listitem"
+                tabIndex={0}
+                onClick={() => onNavigate(l.offset)}
+                onKeyDown={(e) => { if (e.key === 'Enter') onNavigate(l.offset) }}
+                className="flex cursor-pointer items-baseline gap-2 rounded px-1.5 py-0.5 leading-tight text-[var(--c-text-dim)] transition hover:bg-[var(--c-surface)] hover:text-[var(--c-text)]"
+              >
+                <span className="w-8 shrink-0 text-right opacity-50 select-none">{l.line}</span>
+                <span className="min-w-0 truncate">{l.text || ' '}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function useFbdCanvasBridge(): FbdCanvasBridge | null {
   return useContext(FbdCanvasBridgeContext)
 }
@@ -123,9 +288,12 @@ export function useSetFbdCanvasBridge(): Dispatch<SetStateAction<FbdCanvasBridge
 
 export interface WorkbenchMinimapPanelProps {
   bridge?: FbdCanvasBridge | null
+  stSource?: string | null
+  onJumpToOffset?: ((offset: number, length: number) => void) | null
+  onCollapse?: () => void
 }
 
-export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPanelProps) {
+export function WorkbenchMinimapPanel({ bridge: propBridge, stSource, onJumpToOffset, onCollapse }: WorkbenchMinimapPanelProps) {
   const { pick } = useI18n()
   const contextBridge = useFbdCanvasBridge()
   const bridge = propBridge !== undefined ? propBridge : contextBridge
@@ -133,10 +301,33 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
   const [minimapZoom, setMinimapZoom] = useState(1)
 
   if (!bridge || bridge.nodes.length === 0) {
+    if (stSource) {
+      return (
+        <StMinimapContent
+          source={stSource}
+          onNavigate={(offset) => onJumpToOffset?.(offset, 1)}
+          onCollapse={onCollapse}
+        />
+      )
+    }
+
     return (
       <div className="flex h-full flex-col">
-        <div className="mb-1 text-xs font-semibold text-[var(--c-text-dim)]">
-          {pick('Bản đồ thu nhỏ', 'Mini Map')}
+        <div className="mb-1 flex items-center justify-between gap-1">
+          <span className="text-xs font-semibold text-[var(--c-text-dim)]">
+            {pick('Bản đồ thu nhỏ', 'Mini Map')}
+          </span>
+          {onCollapse && (
+            <button
+              type="button"
+              className="flex h-5 w-5 items-center justify-center rounded border border-[var(--c-border)] text-xs text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]"
+              onClick={onCollapse}
+              aria-label={pick('Thu gọn Bản đồ', 'Collapse Mini Map')}
+              title={pick('Thu gọn Bản đồ', 'Collapse Mini Map')}
+            >
+              <PanelRightClose className="h-3 w-3" aria-hidden="true" />
+            </button>
+          )}
         </div>
         <div
           role="region"
@@ -247,6 +438,17 @@ export function WorkbenchMinimapPanel({ bridge: propBridge }: WorkbenchMinimapPa
           >
             {pick('Vừa khung', 'Fit')}
           </button>
+          {onCollapse && (
+            <button
+              type="button"
+              className="flex h-5 w-5 items-center justify-center rounded border border-[var(--c-border)] text-xs text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]"
+              onClick={onCollapse}
+              aria-label={pick('Thu gọn Bản đồ', 'Collapse Mini Map')}
+              title={pick('Thu gọn Bản đồ', 'Collapse Mini Map')}
+            >
+              <PanelRightClose className="h-3 w-3" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
