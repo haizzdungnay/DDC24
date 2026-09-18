@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+### Added — Bản đồ mã ST ở cột 3, thu gọn cột Watch/Mini Map, logo ảnh cho nav rail (2026-09-18)
+
+- Phạm vi: `apps/web-ui/index.html`,
+  `apps/web-ui/public/{favicon,logo1,logo2}.png`,
+  `apps/web-ui/src/shared/components/NavRail.tsx`,
+  `apps/web-ui/src/features/programming/layout/ProgrammingFeatureRail.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/workbench/{ProgrammingWorkbench,WorkbenchMinimapPanel,DesignWorkbench}.tsx` (+ test),
+  `apps/web-ui/src/features/programming/design/{DesignWorkspacePage,editor/EditorPane,editor/FbInstancePicker,editor/ProgramsWorkspace,pou/PouExplorer}.tsx`,
+  `CHANGELOG.md`.
+- **Bản đồ mã cho ST.** Trước đây cột 3 chỉ có Mini Map cho FBD; soạn ST thì cột
+  bỏ trống. Nay `StMinimapContent` dựng hai tab — "Dàn ý & Hàm" (đọc
+  `stCodeMapEntries`, badge POU/VAR/BRANCH/LOOP) và "Bản đồ mã" (mọi dòng) — nhấp
+  một mục gọi `onJumpToOffset(offset, 1)` để nhảy tới đúng vị trí trong nguồn.
+- **Thu gọn cột Watch và Mini Map.** Hai cột nay thu về ray `44px` có nút mở lại,
+  trạng thái giữ qua `localStorage`; `gridTemplateColumns` tính bằng `useMemo`
+  theo trạng thái thay vì chuỗi cứng.
+- **Logo ảnh.** Nav rail mở dùng `logo1.png`, thu gọn dùng `logo2.png`, favicon
+  chuyển sang ảnh. Tên sản phẩm giữ ở `sr-only` nên screen reader không mất nhãn.
+- **Bố cục.** `PouExplorer` nhận `className` thay bề rộng cứng `244px`; nới trần
+  explorer/inspector `360/420 → 480`; máng số dòng `3.5rem → 2.5rem`;
+  `FbInstancePicker` từ panel inline thành modal `aria-modal="true"` đóng được
+  bằng backdrop.
+- Số đo (2026-09-18, nhánh `feat/programming-ui-workbench-st-minimap`):
+  - FE lint: **exit 0** (`eslint src --max-warnings=0`).
+  - FE build: **exit 0**, chunk `programming` gzip **117,47 KiB** / ngân sách R3
+    165 KiB — còn dư 47,53 KiB.
+  - FE unit: 255 file, **3305/3306** test xanh, 115,31 s. Một ca đỏ là
+    `ShellNavigation.test.tsx > does not expose the legacy Programming demo`,
+    **đỏ sẵn trên nền `main@1515a72`** — kiểm chứng bằng cách hoàn nguyên riêng
+    `NavRail.tsx` về bản `HEAD` rồi chạy lại: vẫn đỏ y nguyên. Không nằm trong
+    phạm vi thay đổi này.
+
+### Fixed — Mini Map ST nhảy sai một dòng khi nhấp vào mục bản đồ (2026-09-18)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/workbench/WorkbenchMinimapPanel.tsx`.
+- **Triệu chứng.** Nhấp dòng `N` trên bản đồ mã đưa con trỏ tới đầu dòng `N+1`.
+- **Nguyên nhân gốc.** Vòng dựng `lines` cộng dồn `offset` **trước** khi trả về
+  phần tử, nên mỗi dòng mang offset của dòng kế tiếp. Biến `lineOffset` đã chốt
+  đúng vị trí đầu dòng nhưng không được dùng — lint chỉ thấy "biến thừa", còn hệ
+  quả thật là điều hướng sai đích.
+- **Cách sửa.** Trả `offset: lineOffset`. Kèm chú thích nêu rõ vì sao không được
+  trả thẳng `offset` sau phép cộng.
+
 ### Fixed — `#733`: cổng FE unit đỏ sẵn trên `main` — ca test khoá hành vi mà `a26cbd2` đã thay thế (2026-09-17)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/library/QuickLibraryPanel.test.tsx`.
