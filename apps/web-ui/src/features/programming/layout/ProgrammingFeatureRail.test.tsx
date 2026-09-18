@@ -150,16 +150,19 @@ describe('ProgrammingFeatureRail — T60-101 (D-01 focus mode)', () => {
     const aside = screen.getByTestId('programming-feature-rail')
     const toggle = screen.getByTestId('programming-rail-toggle')
 
-    // Trạng thái mở mặc định
+    // Trạng thái mở mặc định (hiện logo 1)
     expect(aside).toHaveAttribute('data-collapsed', 'false')
     expect(aside.className).toContain('lg:w-[220px]')
     expect(screen.getByText('Chương trình')).toBeInTheDocument()
+    const exitLink = screen.getByRole('link', { name: 'Thoát Lập trình — về Bảng điều khiển' })
+    expect(exitLink.querySelector('img')?.getAttribute('src')).toBe('/logo1.png')
 
-    // Bấm nút thu gọn
+    // Bấm nút thu gọn (chuyển sang logo 2)
     fireEvent.click(toggle)
     expect(aside).toHaveAttribute('data-collapsed', 'true')
     expect(aside.className).toContain('lg:w-16')
     expect(screen.queryByText('Chương trình')).toBeNull()
+    expect(exitLink.querySelector('img')?.getAttribute('src')).toBe('/logo2.png')
     expect(localStorage.getItem(PROGRAMMING_RAIL_COLLAPSED_KEY)).toBe('true')
 
     // Các liên kết vẫn đầy đủ và click/tương tác được

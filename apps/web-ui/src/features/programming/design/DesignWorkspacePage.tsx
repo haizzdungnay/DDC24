@@ -860,6 +860,7 @@ export function DesignWorkspacePage({
         {workspaceMode !== 'EDIT' && (
           <div className="shrink-0 rounded border border-[var(--c-border)] p-3 lg:min-h-0 lg:w-52 lg:overflow-y-auto">
             <PouExplorer
+              className="w-full min-w-0 max-w-full"
               document={document}
               publishedSignals={publishedSignals}
               canEdit={canEdit}
@@ -933,8 +934,9 @@ export function DesignWorkspacePage({
                 : null}
               compareDisabledReason={null}
               explorerSlot={(
-                <div className="mb-3">
+                <div className="mb-3 w-full min-w-0">
                   <PouExplorer
+                    className="w-full min-w-0 max-w-full"
                     document={document}
                     publishedSignals={publishedSignals}
                     canEdit={canEdit}

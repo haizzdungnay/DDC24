@@ -45,7 +45,7 @@ function defaultWidths(): Record<ProgramsPanel, number> {
    hỏng sẽ kẹp ra hai kết quả khác nhau trên hai máy. */
 const DEFAULT_WIDTHS: Record<ProgramsPanel, number> = DEFAULT_WIDTHS_REFERENCE
 const MIN_WIDTHS: Record<ProgramsPanel, number> = { explorer: 168, library: 168, inspector: 208 }
-const MAX_WIDTHS: Record<ProgramsPanel, number> = { explorer: 360, library: 320, inspector: 420 }
+const MAX_WIDTHS: Record<ProgramsPanel, number> = { explorer: 480, library: 320, inspector: 480 }
 
 export function clampPanelWidth(panel: ProgramsPanel, width: number): number {
   if (!Number.isFinite(width)) return DEFAULT_WIDTHS[panel]

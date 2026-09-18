@@ -15,6 +15,7 @@ function renderWorkbench(overrides: {
   symbols?: WorkbenchSymbol[]
   source?: string | null
   fbdBridge?: FbdCanvasBridge | null
+  stMinimap?: boolean
 } = {}) {
   const onJumpToOffset = vi.fn()
   render(
@@ -28,6 +29,7 @@ function renderWorkbench(overrides: {
         onJumpToOffset={onJumpToOffset}
         checkOwnerHref="/eng/programming/projects/p1/commission"
         fbdBridge={overrides.fbdBridge}
+        stMinimap={overrides.stMinimap}
       />
     </I18nProvider>,
   )
@@ -504,6 +506,49 @@ describe('ProgrammingWorkbench — T9-02 Mini Map Cột 3 (TC-WBENCH-MM-*)', () 
     expect(within(minimapCol).getByRole('button', { name: 'Thu nhỏ' })).toBeInTheDocument()
     expect(within(minimapCol).getByRole('button', { name: 'Phóng to' })).toBeInTheDocument()
     expect(within(minimapCol).getByRole('button', { name: 'Vừa khung' })).toBeInTheDocument()
+  })
+
+  it('khi bật stMinimap: Cột 3 render ST code map', () => {
+    setViewportWidth(1920)
+    renderWorkbench({ fbdBridge: null, stMinimap: true, source: 'PROGRAM P\nVAR\nEND_VAR\nEND_PROGRAM' })
+
+    const minimapCol = screen.getByTestId('workbench-minimap-column')
+    expect(within(minimapCol).getByRole('region', { name: 'Bản đồ mã nguồn ST' })).toBeInTheDocument()
+    expect(within(minimapCol).getByRole('button', { name: /PROGRAM P/ })).toBeInTheDocument()
+  })
+
+  it('thu gọn và mở rộng cột Watch', () => {
+    setViewportWidth(1920)
+    renderWorkbench()
+
+    // Bấm nút Thu gọn Watch
+    const collapseWatchBtn = screen.getByRole('button', { name: 'Thu gọn Watch' })
+    fireEvent.click(collapseWatchBtn)
+
+    // Cột Watch chuyển thành dạng rail thu gọn với nút Mở rộng
+    const expandWatchBtn = screen.getByRole('button', { name: 'Mở rộng Watch' })
+    expect(expandWatchBtn).toBeInTheDocument()
+
+    // Bấm Mở rộng Watch
+    fireEvent.click(expandWatchBtn)
+    expect(screen.getByRole('button', { name: 'Thu gọn Watch' })).toBeInTheDocument()
+  })
+
+  it('thu gọn và mở rộng cột Mini Map', () => {
+    setViewportWidth(1920)
+    renderWorkbench()
+
+    // Bấm nút Thu gọn Bản đồ
+    const collapseMmBtn = screen.getByRole('button', { name: 'Thu gọn Bản đồ' })
+    fireEvent.click(collapseMmBtn)
+
+    // Cột Mini Map chuyển thành rail thu gọn với nút Mở rộng
+    const expandMmBtn = screen.getByRole('button', { name: 'Mở rộng Bản đồ thu nhỏ' })
+    expect(expandMmBtn).toBeInTheDocument()
+
+    // Bấm Mở rộng Bản đồ
+    fireEvent.click(expandMmBtn)
+    expect(screen.getByRole('button', { name: 'Thu gọn Bản đồ' })).toBeInTheDocument()
   })
 })
 

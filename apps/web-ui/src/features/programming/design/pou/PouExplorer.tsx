@@ -54,8 +54,10 @@ export function PouExplorer({
   saving,
   selectedObjectId,
   onSelect,
-  onSave
+  onSave,
+  className = 'w-[244px] min-w-[244px] max-w-[244px]'
 }: {
+  className?: string
   document: ProgrammingDraftDocument
   /**
    * Tín hiệu công bố của Draft. Đọc từ draft THÔ ở trang cha: `signals[]` không
@@ -173,8 +175,8 @@ export function PouExplorer({
   }
 
   return (
-    <div className="flex flex-col gap-3 w-[244px] min-w-[244px] max-w-[244px]">
-      <div className="flex items-center justify-between gap-2">
+    <div className={`flex flex-col gap-3 ${className}`}>
+      <div className="flex w-full min-w-0 items-center justify-between gap-2">
         <label className="sr-only" htmlFor="pou-explorer-search">
           {pick('Tìm POU', 'Find a POU')}
         </label>
@@ -274,7 +276,7 @@ export function PouExplorer({
                   {query.trim() === '' ? pick('Chưa có', 'None yet') : pick('Không khớp', 'No match')}
                 </p>
               ) : (
-                <ul aria-label={pick(...label)} className="flex flex-col">
+                <ul aria-label={pick(...label)} className="flex w-full min-w-0 flex-col">
                   {group.map((item) => {
                     let validityReason: string | null = null
                     const pouInterface = userPouMap.get(item.name)
@@ -289,7 +291,7 @@ export function PouExplorer({
                     return (
                       <li
                         key={item.objectId}
-                        className={`flex items-center gap-1 ${!isDraggable && (item.kind === 'FUNCTION_BLOCK' || item.kind === 'FUNCTION') ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`flex w-full min-w-0 items-center gap-1 ${!isDraggable && (item.kind === 'FUNCTION_BLOCK' || item.kind === 'FUNCTION') ? 'opacity-60 cursor-not-allowed' : ''}`}
                         draggable={isDraggable}
                         onDragStart={isDraggable ? (event) => {
                           event.dataTransfer.setData(LIBRARY_DRAG_TYPE, `pou:${item.name}`)
@@ -338,7 +340,7 @@ export function PouExplorer({
                             aria-label={pick(`Mở ${item.name}`, `Open ${item.name}`)}
                             aria-current={item.objectId === selectedObjectId ? 'true' : undefined}
                             title={validityReason ?? undefined}
-                            className={`flex min-h-7 min-w-0 flex-1 items-center gap-1 truncate px-1 text-left text-sm ${
+                            className={`flex min-h-7 min-w-0 flex-1 items-center gap-1.5 overflow-hidden px-1 text-left text-sm ${
                               item.objectId === selectedObjectId ? 'text-[var(--c-accent)]' : ''
                             }`}
                           >
@@ -349,8 +351,8 @@ export function PouExplorer({
                             {item.objectId === selectedObjectId && (
                               <span className="sr-only">{pick('Đang mở: ', 'Open: ')}</span>
                             )}
-                            {item.name}
-                            <span className="ml-2 text-xs text-[var(--c-text-dim)]">{item.language}</span>
+                            <span className="min-w-0 truncate font-medium">{item.name}</span>
+                            <span className="ml-auto shrink-0 text-xs text-[var(--c-text-dim)]">{item.language}</span>
                             {validityReason && (
                               <span data-testid="pou-explorer-error" className="ml-2 truncate text-[10px] text-[var(--c-fault-fg)]" title={validityReason}>
                                 {validityReason}

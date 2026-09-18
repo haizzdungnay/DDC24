@@ -251,7 +251,13 @@ export function NavRail({ alarmCount, device }: { alarmCount: number; device: He
         <ToggleIcon className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
       <div className="border-b border-[var(--c-border)] p-5">
-        <div className="truncate text-2xl font-black leading-none text-[var(--c-text)]" title={deviceTitle}>{collapsed ? PRODUCT_INFO.code : deviceTitle}</div>
+        <div className="flex items-center justify-center text-[var(--c-text)]" title={deviceTitle}>
+          {collapsed ? (
+            <img src="/logo2.png" alt={PRODUCT_INFO.code} className="h-8 w-auto object-contain" />
+          ) : (
+            <img src="/logo1.png" alt={deviceTitle} className="h-8 w-auto max-w-[180px] object-contain" />
+          )}
+        </div>
       </div>
       <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3" aria-label="Main navigation">
         <NavGroups alarmCount={alarmCount} collapsed={collapsed} role={session?.role} />
