@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, PanelRight, PanelRightClose } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import type { ProgrammingDiagnostic } from '../../model/types'
 import { ProblemsDrawer } from '../../shared/ProblemsDrawer'
@@ -150,6 +150,7 @@ export function ProgrammingWorkbench({
   traceOwnerHref: _traceOwnerHref,
   watchAddRequest,
   fbdBridge,
+  stMinimap = false,
 }: {
   mode: WorkbenchMode
   /** Nguồn dữ liệu đang hiển thị, ví dụ `Draft · AHU_FanControl`. */
@@ -182,6 +183,7 @@ export function ProgrammingWorkbench({
   watchAddRequest?: { name: string; nonce: number } | null
   /** Cầu nối dữ liệu FBD Canvas sang Mini Map (T9-02) */
   fbdBridge?: FbdCanvasBridge | null
+  stMinimap?: boolean
 }) {
   const { pick } = useI18n()
   /* Số cột của khay đáy do JAVASCRIPT quyết, không do utility quyết — lý do đầy
@@ -206,6 +208,42 @@ export function ProgrammingWorkbench({
   const [height, setHeight] = useState(() => getInitialWorkbenchState().height)
   const [tab, setTab] = useState<TabId>('problems')
   const [query, setQuery] = useState('')
+  const [watchCollapsed, setWatchCollapsed] = useState(() => {
+    try { return localStorage.getItem('mkddc-workbench-watch-collapsed') === 'true' } catch { return false }
+  })
+  const [minimapCollapsed, setMinimapCollapsed] = useState(() => {
+    try { return localStorage.getItem('mkddc-workbench-minimap-collapsed') === 'true' } catch { return false }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('mkddc-workbench-watch-collapsed', String(watchCollapsed))
+    } catch {
+      // Bỏ qua lỗi lưu trữ cục bộ (hạn ngạch / chế độ ẩn danh)
+    }
+  }, [watchCollapsed])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('mkddc-workbench-minimap-collapsed', String(minimapCollapsed))
+    } catch {
+      // Bỏ qua lỗi lưu trữ cục bộ (hạn ngạch / chế độ ẩn danh)
+    }
+  }, [minimapCollapsed])
+
+  const watchWidth = watchCollapsed ? '44px' : '375px'
+  const minimapWidth = minimapCollapsed ? '44px' : '458px'
+
+  const gridStyle = useMemo(() => {
+    if (!open) return undefined
+    if (workbenchOwnsMinimap) {
+      return { gridTemplateColumns: `minmax(0,1fr) ${watchWidth} ${minimapWidth}` }
+    }
+    if (twoColumnGrid) {
+      return { gridTemplateColumns: `minmax(0,1fr) ${watchWidth}` }
+    }
+    return undefined
+  }, [open, workbenchOwnsMinimap, twoColumnGrid, watchWidth, minimapWidth])
   /** `DEV-PROG-017` — tìm bằng biểu thức chính quy. Tắt theo mặc định: đa số lần
    *  tìm là tìm một cái tên, và `.` hay `(` trong tên sẽ đổi nghĩa nếu luôn bật. */
   const [regex, setRegex] = useState(false)
@@ -348,13 +386,7 @@ export function ProgrammingWorkbench({
         * khay theo `align-items: stretch` mặc định của grid. */}
       <div
         className="grid grid-cols-1 divide-y divide-[var(--c-border)] lg:divide-x lg:divide-y-0"
-        style={!open
-          ? undefined
-          : workbenchOwnsMinimap
-            ? { gridTemplateColumns: 'minmax(0,1fr) 375px 458px' }
-            : twoColumnGrid
-              ? { gridTemplateColumns: 'minmax(0,1fr) 375px' }
-              : undefined}
+        style={gridStyle}
       >
         <div className="flex min-w-0 flex-col">
           <div className="flex flex-wrap items-center gap-2 border-b border-[var(--c-border)] px-2 py-1">
@@ -505,23 +537,51 @@ export function ProgrammingWorkbench({
 
         {/* Cột giữa: Runtime Watch thường trực */}
         {open && (
-          <Stretched testId="workbench-watch-column">
-            <div className="mb-1 text-xs font-semibold text-[var(--c-text-dim)]">
-              {mode === 'SIMULATE'
-                ? pick('Watch (Mô phỏng)', 'Watch (Simulation)')
-                : pick('Watch (Trực tiếp)', 'Watch (Live)')}
+          watchCollapsed ? (
+            <div data-testid="workbench-watch-column" className="relative flex h-full w-[44px] min-w-[44px] flex-col items-center border-l border-[var(--c-border)] p-1">
+              <button
+                type="button"
+                className="flex h-full w-full flex-col items-center justify-start gap-2 py-2 text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                aria-label={pick('Mở rộng Watch', 'Expand Watch')}
+                title={pick('Mở rộng Watch', 'Expand Watch')}
+                onClick={() => setWatchCollapsed(false)}
+              >
+                <PanelRight className="h-4 w-4 rotate-180" aria-hidden="true" />
+                <span className="[writing-mode:vertical-lr] text-[10px] font-semibold uppercase tracking-wider">
+                  Watch
+                </span>
+              </button>
             </div>
-            {watch === null || watch === undefined ? (
-              <p className="text-xs text-[var(--c-text-dim)]">
-                {pick(
-                  'Chưa có nguồn giá trị runtime cho chế độ này.',
-                  'No runtime watch source available for this mode.',
-                )}
-              </p>
-            ) : (
-              <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
-            )}
-          </Stretched>
+          ) : (
+            <Stretched testId="workbench-watch-column">
+              <div className="mb-1 flex items-center justify-between gap-1 text-xs font-semibold text-[var(--c-text-dim)]">
+                <span>
+                  {mode === 'SIMULATE'
+                    ? pick('Watch (Mô phỏng)', 'Watch (Simulation)')
+                    : pick('Watch (Trực tiếp)', 'Watch (Live)')}
+                </span>
+                <button
+                  type="button"
+                  className="rounded p-1 text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                  aria-label={pick('Thu gọn Watch', 'Collapse Watch')}
+                  title={pick('Thu gọn Watch', 'Collapse Watch')}
+                  onClick={() => setWatchCollapsed(true)}
+                >
+                  <PanelRightClose className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+              {watch === null || watch === undefined ? (
+                <p className="text-xs text-[var(--c-text-dim)]">
+                  {pick(
+                    'Chưa có nguồn giá trị runtime cho chế độ này.',
+                    'No runtime watch source available for this mode.',
+                  )}
+                </p>
+              ) : (
+                <WorkbenchWatchPanel rows={watch} addRequest={watchAddRequest} />
+              )}
+            </Stretched>
+          )
         )}
 
         {/* Cột phải: Mini Map (T9-02).
@@ -529,9 +589,31 @@ export function ProgrammingWorkbench({
          * canvas (`FbdEditorPane`), nên dựng thêm một ô ở đây sẽ vừa tạo một
          * hàng chồng thừa, vừa đặt hai bản cùng vai trò trong cùng một DOM. */}
         {open && workbenchOwnsMinimap && (
-          <Stretched testId="workbench-minimap-column">
-            <WorkbenchMinimapPanel bridge={fbdBridge} />
-          </Stretched>
+          minimapCollapsed ? (
+            <div data-testid="workbench-minimap-column" className="relative flex h-full w-[44px] min-w-[44px] flex-col items-center border-l border-[var(--c-border)] p-1">
+              <button
+                type="button"
+                className="flex h-full w-full flex-col items-center justify-start gap-2 py-2 text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                aria-label={pick('Mở rộng Bản đồ thu nhỏ', 'Expand Mini Map')}
+                title={pick('Mở rộng Bản đồ thu nhỏ', 'Expand Mini Map')}
+                onClick={() => setMinimapCollapsed(false)}
+              >
+                <PanelRight className="h-4 w-4 rotate-180" aria-hidden="true" />
+                <span className="[writing-mode:vertical-lr] text-[10px] font-semibold uppercase tracking-wider">
+                  {pick('Bản đồ', 'Mini Map')}
+                </span>
+              </button>
+            </div>
+          ) : (
+            <Stretched testId="workbench-minimap-column">
+              <WorkbenchMinimapPanel
+                bridge={fbdBridge}
+                stSource={stMinimap ? source : null}
+                onJumpToOffset={onJumpToOffset}
+                onCollapse={() => setMinimapCollapsed(true)}
+              />
+            </Stretched>
+          )
         )}
       </div>
     </section>
