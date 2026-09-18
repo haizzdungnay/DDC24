@@ -164,10 +164,14 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
             collapsed ? 'lg:justify-center' : 'lg:justify-start'
           )}
         >
-          <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="lg:hidden">{PRODUCT_INFO.code}</span>
-          {!collapsed && (
-            <span className="hidden truncate lg:inline">{PRODUCT_INFO.name} {pick('Lập trình', 'Programming')}</span>
+          {collapsed ? (
+            <img src="/logo2.png" alt={PRODUCT_INFO.code} className="h-7 w-auto object-contain" />
+          ) : (
+            <div className="flex items-center gap-2 overflow-hidden">
+              <ArrowLeft className="h-4 w-4 shrink-0 text-[var(--c-rail-text-dim)]" aria-hidden="true" />
+              <img src="/logo1.png" alt={`${PRODUCT_INFO.name} ${pick('Lập trình', 'Programming')}`} className="h-7 w-auto max-w-[145px] object-contain" />
+              <span className="sr-only">{PRODUCT_INFO.name} {pick('Lập trình', 'Programming')}</span>
+            </div>
           )}
         </NavLink>
 
