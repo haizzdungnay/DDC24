@@ -982,7 +982,7 @@ export function EditorPane({
           trong DOM). Ở đây chỉ còn thứ thuộc về Project chứ không thuộc về cây:
           nhãn chức năng và lối vào Bảng lệnh nhanh. */}
       {slots.left ? (
-      <div data-testid="pou-explorer-column" className="rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:min-h-0 lg:overflow-y-auto">
+      <div data-testid="pou-explorer-column" className="min-w-0 overflow-x-hidden rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:min-h-0 lg:overflow-y-auto">
         <div className="mb-2 flex justify-end">
           <button
             type="button"
@@ -995,7 +995,7 @@ export function EditorPane({
             <span className="sr-only">{pick('Thu gọn cột trái', 'Collapse left column')}</span>
           </button>
         </div>
-        <div id="programs-slot-left">
+        <div id="programs-slot-left" className="min-w-0">
         {explorerSlot}
         {/* `DEV-PROG-011` — `ProjectTagsEditor` đã rời khỏi đây. Nhãn chức năng
             thuộc về PROJECT chứ không thuộc về cây POU, và để nó dưới cây làm
@@ -2681,7 +2681,7 @@ export function SourceEditor({
           `min-w-0` trên khung mã là bắt buộc: thiếu nó, `flex` để textarea nở
           theo nội dung và dải bản đồ bị đẩy khỏi màn hình. */}
       <div className={`flex ${EDITOR_FRAME_CLASS} min-h-0 gap-2`}>
-      <div className={`relative grid min-w-0 flex-1 grid-cols-[3.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
+      <div className={`relative grid min-w-0 flex-1 grid-cols-[2.5rem_1fr] overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] focus-within:border-[var(--c-accent)]`}>
         {/* Con trỏ lệch dòng (báo trực tiếp trên board, 2026-08-15 và
          * 2026-08-17 — ảnh chụp cho thấy lưới kẻ cắt xuyên chữ, không phải
          * chỉ lệch nhẹ): tắt word-wrap (`whitespace-pre` + `wrap="off"`) đã
