@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Added — Tinh chỉnh thanh rail, bố cục Inspector, chế độ Live/Simulate và kéo giãn cột workbench (2026-09-19)
+
+- Phạm vi:
+  `apps/web-ui/src/features/programming/layout/ProgrammingFeatureRail.tsx`,
+  `apps/web-ui/src/features/programming/shared/programsRoute.ts` (+ test),
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/inspector/ContextInspector.tsx`,
+  `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.tsx` (+ test),
+  `CHANGELOG.md`.
+- **Tương phản logo & nút toggle rail.** Logo trên rail có viền và nền sáng tăng tương phản; nút thu gọn rail chuyển thành ô vuông nhỏ ở mép viền ngang hàng với logo.
+- **Chế độ LIVE & SIMULATE.** Sửa `programsWorkspacePath` giữ tham số `mode` khi chuyển chế độ trên route hiện hành; lưu giữ POU đang chọn khi đổi mode.
+- **Gọn gàng Inspector.** Bỏ dòng mô tả thừa dưới ô Loại (Kind); đưa nút thu gọn `[PanelRightClose]` xuống cùng hàng với tiêu đề Thuộc tính, bỏ hàng trống phía trên.
+- **Kéo giãn cột workbench & gỡ tab Watch trùng.** Thêm tay kéo viền `ColumnResizeHandle` cho phép kéo thay đổi chiều rộng cột Watch và Mini Map trên trục Ox (lưu `localStorage`); gỡ tab Watch ở cột 1 vì đã có cột Watch hiển thị thường trực ở giữa.
+
 ### Added — Bản đồ mã ST ở cột 3, thu gọn cột Watch/Mini Map, logo ảnh cho nav rail (2026-09-18)
 
 - Phạm vi: `apps/web-ui/index.html`,

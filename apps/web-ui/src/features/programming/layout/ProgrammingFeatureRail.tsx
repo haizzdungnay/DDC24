@@ -122,22 +122,20 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
       data-testid="programming-feature-rail"
       data-collapsed={collapsed ? 'true' : 'false'}
       className={cn(
-        'sticky top-16 hidden shrink-0 flex-col gap-2 self-stretch rounded-[var(--radius)] bg-[var(--c-rail-bg)] py-2 transition-[width] duration-200 md:flex md:w-16 lg:top-0',
+        'relative sticky top-16 hidden shrink-0 flex-col gap-2 self-stretch rounded-[var(--radius)] bg-[var(--c-rail-bg)] py-2 transition-[width] duration-200 md:flex md:w-16 lg:top-0',
         collapsed ? 'lg:w-16' : 'lg:w-[220px]'
       )}
     >
-      <div className="hidden px-2 lg:flex lg:justify-end">
-        <button
-          type="button"
-          data-testid="programming-rail-toggle"
-          onClick={handleToggle}
-          aria-label={collapsed ? t('expand-sidebar') : t('collapse-sidebar')}
-          title={collapsed ? t('expand-sidebar') : t('collapse-sidebar')}
-          className="flex h-8 w-8 items-center justify-center rounded-[var(--radius)] text-[var(--c-rail-text-dim)] transition hover:bg-[var(--c-rail-active-bg)] hover:text-[var(--c-rail-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--c-accent)]"
-        >
-          <ToggleIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-        </button>
-      </div>
+      <button
+        type="button"
+        data-testid="programming-rail-toggle"
+        onClick={handleToggle}
+        aria-label={collapsed ? t('expand-sidebar') : t('collapse-sidebar')}
+        title={collapsed ? t('expand-sidebar') : t('collapse-sidebar')}
+        className="absolute -right-3 top-[18px] z-40 hidden h-6 w-6 place-items-center rounded-md border border-[var(--c-border)] bg-[var(--c-surface-2)] text-[var(--c-text-dim)] shadow-sm transition hover:bg-[var(--c-surface)] hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--c-accent)] lg:grid"
+      >
+        <ToggleIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      </button>
 
       {/* `DEV-PROG-010` — LOGO LÀ LỐI RA.
         *
@@ -165,11 +163,11 @@ export function ProgrammingFeatureRail({ projectId }: { projectId: string | null
           )}
         >
           {collapsed ? (
-            <img src="/logo2.png" alt={PRODUCT_INFO.code} className="h-7 w-auto object-contain" />
+            <img src="/logo2.png" alt={PRODUCT_INFO.code} className="h-7 w-auto rounded-md border border-white/20 bg-white p-1 object-contain shadow-sm" />
           ) : (
             <div className="flex items-center gap-2 overflow-hidden">
               <ArrowLeft className="h-4 w-4 shrink-0 text-[var(--c-rail-text-dim)]" aria-hidden="true" />
-              <img src="/logo1.png" alt={`${PRODUCT_INFO.name} ${pick('Lập trình', 'Programming')}`} className="h-7 w-auto max-w-[145px] object-contain" />
+              <img src="/logo1.png" alt={`${PRODUCT_INFO.name} ${pick('Lập trình', 'Programming')}`} className="h-7 w-auto max-w-[140px] rounded-md border border-white/20 bg-white px-2 py-0.5 object-contain shadow-sm" />
               <span className="sr-only">{PRODUCT_INFO.name} {pick('Lập trình', 'Programming')}</span>
             </div>
           )}

@@ -332,8 +332,11 @@ export function DesignWorkspacePage({
     setCompareOpen(false)
     const query = new URLSearchParams(searchParams)
     query.set('mode', next)
-    navigate(programsWorkspacePath(projectId ?? '', { search: query.toString() }), { replace: true })
-  }, [navigate, projectId, searchParams])
+    if (selectedObjectId) {
+      query.set(PROGRAMS_WORKSPACE_V2_ENABLED ? 'pou' : 'program', selectedObjectId)
+    }
+    navigate(programsWorkspacePath(projectId ?? '', { search: query.toString(), pou: selectedObjectId }), { replace: true })
+  }, [navigate, projectId, searchParams, selectedObjectId])
 
   /* `#675` — lối vào `Cấu hình chạy` của Inspector.
    *

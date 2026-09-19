@@ -860,6 +860,28 @@ export function EditorPane({
     return () => { window.document.body.style.overflow = previous }
   }, [maximized])
 
+const inspectorToggleButton = (
+    <button
+      type="button"
+      className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+      aria-expanded={fbdInspectorOpen}
+      aria-controls="programs-slot-inspector"
+      onClick={() => {
+        const nextOpen = !fbdInspectorOpen
+        if (inspectorAsDrawer) setFbdInspectorDrawerOpen(nextOpen)
+        else setSlots({ ...slots, inspector: nextOpen })
+        if (!nextOpen && inspectorAsDrawer) {
+          window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
+        }
+      }}
+    >
+      {fbdInspectorOpen
+        ? <PanelRightClose className="h-4 w-4" aria-hidden="true" />
+        : <ChevronLeft className="h-4 w-4" aria-hidden="true" />}
+      <span className="sr-only">{fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}</span>
+    </button>
+  )
+
   return (
     /* `DEV-PROG-001` — lưới ba cột nay cao đúng bằng ô mà `DesignWorkspacePage`
        cấp cho nó (`lg:h-full`), và MỖI cột tự cuộn trong lòng nó
@@ -983,12 +1005,13 @@ export function EditorPane({
           nhãn chức năng và lối vào Bảng lệnh nhanh. */}
       {slots.left ? (
       <div data-testid="pou-explorer-column" className="min-w-0 overflow-x-hidden rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:min-h-0 lg:overflow-y-auto">
-        <div className="mb-2 flex justify-end">
+        <div className="mb-2 flex items-center justify-between px-1">
+          <span className="text-xs font-bold tracking-wider text-[var(--c-text-dim)]">DDC 24</span>
           <button
             type="button"
             className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
             aria-expanded
-           aria-controls="programs-slot-left"
+            aria-controls="programs-slot-left"
             onClick={() => setSlots({ ...slots, left: false })}
           >
             <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
@@ -1364,27 +1387,11 @@ export function EditorPane({
           window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
         }}
       >
-        <div className="mb-2 flex justify-end">
-          <button
-            type="button"
-            className="rounded px-2 py-1 text-xs text-[var(--c-text-dim)] hover:text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-            aria-expanded={fbdInspectorOpen}
-            aria-controls="programs-slot-inspector"
-            onClick={() => {
-              const nextOpen = !fbdInspectorOpen
-              if (inspectorAsDrawer) setFbdInspectorDrawerOpen(nextOpen)
-              else setSlots({ ...slots, inspector: nextOpen })
-              if (!nextOpen && inspectorAsDrawer) {
-                window.setTimeout(() => fbdInspectorOpenerRef.current?.focus(), 0)
-              }
-            }}
-          >
-            {fbdInspectorOpen
-              ? <PanelRightClose className="h-4 w-4" aria-hidden="true" />
-              : <ChevronLeft className="h-4 w-4" aria-hidden="true" />}
-            <span className="sr-only">{fbdInspectorOpen ? pick('Thu gọn Thuộc tính', 'Collapse inspector') : pick('Mở Thuộc tính', 'Expand inspector')}</span>
-          </button>
-        </div>
+        {!fbdInspectorOpen && (
+          <div className="flex justify-center p-1">
+            {inspectorToggleButton}
+          </div>
+        )}
         <div id="programs-slot-inspector" hidden={!fbdInspectorOpen}>
         {selected ? (
             /* `T59-818` — khay này TỪNG có đúng hai trường (`Tên`, `Loại`), tức
@@ -1392,6 +1399,7 @@ export function EditorPane({
                là Inspector năm ngữ cảnh dùng chung ST↔FBD; phần sửa metadata vẫn
                do `ProgramsTab` sở hữu vì nó gắn với transaction Draft. */
             <ContextInspector
+              headerAction={inspectorToggleButton}
               /* Cả hai lối vào cấu hình chạy đều tắt khi workspace không sửa
                  được (LIVE/SIMULATE, dưới 768 px, vai không đủ quyền): vắng
                  mặt là câu trả lời cho "chế độ này không sửa", đúng
@@ -1490,7 +1498,10 @@ export function EditorPane({
             />
         ) : (
           <section className="rounded-[var(--radius)] bg-[var(--c-surface-2)] p-3">
-            <h3 className="text-xs font-semibold text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold text-[var(--c-text-dim)]">{pick('Thuộc tính', 'Inspector')}</h3>
+              {inspectorToggleButton}
+            </div>
             <p className="mt-2 text-xs text-[var(--c-text-dim)]">
               {pick('Chọn một chương trình để xem thuộc tính.', 'Select a program to see its properties.')}
             </p>
@@ -3416,7 +3427,6 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
   const nameHelpId = `program-name-help-${program.programId}`
   const nameInputId = `program-name-${program.programId}`
   const kindInputId = `program-kind-${program.programId}`
-  const kindHelpId = `program-kind-help-${program.programId}`
   const accessInputId = `program-access-${program.programId}`
   const descriptionInputId = `program-description-${program.programId}`
   return (
@@ -3463,15 +3473,13 @@ function ProgramInspector({ program, programs, draft, canEdit, saving, onChange,
            * không nói gì về nguyên nhân. Vì vậy hiện đúng giá trị thật ở dạng
            * chỉ đọc và chỉ tay tới đường tạo POU, thay vì mở một dropdown dẫn
            * tới trạng thái không biên dịch được. */}
-          <select id={kindInputId} className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)] disabled:opacity-100" value={draft.kind} disabled aria-describedby={kindHelpId}>
+          <select id={kindInputId} className="mt-1 w-full rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)] disabled:opacity-100" value={draft.kind} disabled>
             <option value="PROGRAM">PROGRAM</option>
             <option value="FUNCTION">FUNCTION</option>
             <option value="FUNCTION_BLOCK">FUNCTION_BLOCK</option>
             {!['PROGRAM', 'FUNCTION', 'FUNCTION_BLOCK'].includes(draft.kind) && <option value={draft.kind}>{draft.kind}</option>}
           </select>
-          <span id={kindHelpId} className="mt-1 block text-xs font-normal normal-case text-[var(--c-text-dim)]">
-            {pick('Loại được đặt khi tạo POU và không đổi được ở đây — mỗi loại có khung mã nguồn riêng. Tạo POU mới trong cây POU nếu cần loại khác.', 'Kind is set when the POU is created and cannot be changed here — each kind has its own source skeleton. Create a new POU in the POU tree if you need a different kind.')}
-          </span>
+
         </div>
       </div>
       {/* `DEV-PROG-004` — Mô tả (nhiều dòng) và Truy cập (một dòng). Hai ô này

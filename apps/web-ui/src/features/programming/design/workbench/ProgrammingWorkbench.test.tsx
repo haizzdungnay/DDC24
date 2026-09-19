@@ -83,11 +83,11 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     expect(screen.getByText('EDIT · Draft · AHU_FanControl')).toBeInTheDocument()
   })
 
-  it('Watch ở chế độ EDIT GIẢI THÍCH vì sao trống, không hiện danh sách rỗng và không còn tab Trace', () => {
+  it('Watch ở chế độ EDIT GIẢI THÍCH vì sao trống, hiển thị ở cột giữa và không còn tab Watch/Trace ở thanh tab', () => {
     renderWorkbench()
-    fireEvent.click(screen.getByRole('tab', { name: 'Watch (Trực tiếp)' }))
-    expect(screen.getByRole('status')).toHaveTextContent(/cần nguồn giá trị runtime/)
-    expect(screen.getByRole('status')).toHaveTextContent(/Chế độ EDIT chỉ có Draft/)
+    const watchCol = screen.getByTestId('workbench-watch-column')
+    expect(within(watchCol).getByText(/Chưa có nguồn giá trị runtime cho chế độ này/)).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /Watch/ })).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Trace' })).toBeNull()
   })
 
@@ -317,9 +317,10 @@ describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
     expect(within(panel).queryByText('— degC')).toBeNull()
   })
 
-  it('tab Watch đếm đúng số biến đang theo dõi', () => {
+  it('cột Watch hiển thị đúng số biến đang theo dõi', () => {
     renderLiveWatch(rows)
-    expect(screen.getByRole('tab', { name: 'Watch (Trực tiếp) (2)' })).toBeInTheDocument()
+    const watchColumn = screen.getByTestId('workbench-watch-column')
+    expect(within(watchColumn).getAllByTestId('workbench-watch-row')).toHaveLength(2)
   })
 
   it('cột Runtime Watch hiện THƯỜNG TRỰC, không nằm sau một cú bấm tab', () => {
@@ -334,12 +335,10 @@ describe('ProgrammingWorkbench — Watch ở LIVE (T59-811)', () => {
     expect(screen.getByRole('tab', { name: /Vấn đề/, selected: true })).toBeInTheDocument()
   })
 
-  it('có nguồn nhưng POU không có biến ánh xạ ⇒ nói đúng vế đó', () => {
+  it('có nguồn nhưng POU không có biến ánh xạ ⇒ nói đúng vế đó ở cột Watch', () => {
     renderLiveWatch([])
-    fireEvent.click(screen.getByRole('tab', { name: /Watch/ }))
-    // KHÁC HẲN "chế độ này không có nguồn giá trị".
-    expect(screen.getByRole('status')).toHaveTextContent(/không có biến runtime nào được ánh xạ/)
-    expect(screen.queryByText(/Watch cần nguồn giá trị runtime/)).toBeNull()
+    const watchColumn = screen.getByTestId('workbench-watch-column')
+    expect(within(watchColumn).getByRole('status')).toHaveTextContent(/không có biến runtime nào được ánh xạ/)
   })
 
   it('Trace không còn xuất hiện trong khay bàn làm việc ở LIVE (T9-03)', () => {
@@ -559,18 +558,20 @@ describe('ProgrammingWorkbench — T9-02 Mini Map Cột 3 (TC-WBENCH-MM-*)', () 
  * 'problems' | 'search' | 'references' | 'watch'.
  */
 describe('ProgrammingWorkbench — T9-03 Đồng bộ tab panel đáy (TC-WBENCH-TABS-*)', () => {
-  it('TC-WBENCH-TABS-4: khay bàn làm việc có đúng 4 tab (problems, search, references, watch), không còn tab trace', () => {
+  it('TC-WBENCH-TABS-3: khay bàn làm việc có đúng 3 tab nghiệp vụ (problems, search, references), không còn tab watch và trace', () => {
     // 1. Kiểm tra ở chế độ EDIT (mặc định)
     renderWorkbench({ mode: 'EDIT' })
 
     const tabs = screen.getAllByRole('tab')
-    expect(tabs).toHaveLength(4)
+    expect(tabs).toHaveLength(3)
 
-    // Tab trace không còn tồn tại
+    // Tab trace và watch không còn nằm trong dải tab của cột 1
     expect(screen.queryByRole('tab', { name: /Trace/i })).toBeNull()
     expect(document.getElementById('workbench-tab-trace')).toBeNull()
+    expect(screen.queryByRole('tab', { name: /Watch/i })).toBeNull()
+    expect(document.getElementById('workbench-tab-watch')).toBeNull()
 
-    // 4 tab với accessible name tiếng Việt chuẩn và id tương ứng
+    // 3 tab với accessible name tiếng Việt chuẩn và id tương ứng
     const problemsTab = screen.getByRole('tab', { name: /Vấn đề/ })
     expect(problemsTab).toBeInTheDocument()
     expect(problemsTab).toHaveAttribute('id', 'workbench-tab-problems')
@@ -583,22 +584,35 @@ describe('ProgrammingWorkbench — T9-03 Đồng bộ tab panel đáy (TC-WBENCH
     expect(referencesTab).toBeInTheDocument()
     expect(referencesTab).toHaveAttribute('id', 'workbench-tab-references')
 
-    const watchLiveTab = screen.getByRole('tab', { name: /Watch \(Trực tiếp\)/ })
-    expect(watchLiveTab).toBeInTheDocument()
-    expect(watchLiveTab).toHaveAttribute('id', 'workbench-tab-watch')
-
     cleanup()
 
-    // 2. Kiểm tra ở chế độ SIMULATE: nhãn Watch đổi thành Watch (Mô phỏng)
+    // 2. Kiểm tra ở chế độ SIMULATE: vẫn có 3 tab, Watch nằm thường trực ở cột riêng
     renderWorkbench({ mode: 'SIMULATE' })
 
     const simTabs = screen.getAllByRole('tab')
-    expect(simTabs).toHaveLength(4)
-    expect(screen.queryByRole('tab', { name: /Trace/i })).toBeNull()
+    expect(simTabs).toHaveLength(3)
+    expect(screen.queryByRole('tab', { name: /Watch/i })).toBeNull()
+    expect(within(screen.getByTestId('workbench-watch-column')).getByText(/Watch \(Mô phỏng\)/)).toBeInTheDocument()
+  })
 
-    const watchSimTab = screen.getByRole('tab', { name: /Watch \(Mô phỏng\)/ })
-    expect(watchSimTab).toBeInTheDocument()
-    expect(watchSimTab).toHaveAttribute('id', 'workbench-tab-watch')
+  it('hỗ trợ kéo tay viền để đổi chiều rộng cột Watch và Mini Map trên trục ox', () => {
+    localStorage.removeItem('mkddc-workbench-watch-width')
+    localStorage.removeItem('mkddc-workbench-minimap-width')
+    renderWorkbench()
+
+    const watchHandle = screen.getByTestId('workbench-resize-watch')
+    expect(watchHandle).toHaveAttribute('aria-valuenow', '375')
+
+    // Bấm phím mũi tên để thay đổi chiều rộng
+    fireEvent.keyDown(watchHandle, { key: 'ArrowLeft' })
+    expect(watchHandle).toHaveAttribute('aria-valuenow', '399')
+    expect(localStorage.getItem('mkddc-workbench-watch-width')).toBe('399')
+
+    const minimapHandle = screen.getByTestId('workbench-resize-minimap')
+    expect(minimapHandle).toHaveAttribute('aria-valuenow', '458')
+    fireEvent.keyDown(minimapHandle, { key: 'ArrowRight' })
+    expect(minimapHandle).toHaveAttribute('aria-valuenow', '434')
+    expect(localStorage.getItem('mkddc-workbench-minimap-width')).toBe('434')
   })
 })
 

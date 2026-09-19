@@ -134,7 +134,7 @@ function getInitialWorkbenchState(): { open: boolean; height: number } {
   }
 }
 
-type TabId = 'problems' | 'search' | 'references' | 'watch'
+type TabId = 'problems' | 'search' | 'references'
 
 export function ProgrammingWorkbench({
   mode,
@@ -231,8 +231,32 @@ export function ProgrammingWorkbench({
     }
   }, [minimapCollapsed])
 
-  const watchWidth = watchCollapsed ? '44px' : '375px'
-  const minimapWidth = minimapCollapsed ? '44px' : '458px'
+  const [watchWidthPx, setWatchWidthPx] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem('mkddc-workbench-watch-width'))
+      if (Number.isFinite(v) && v >= 200 && v <= 700) return v
+    } catch { /* Bỏ qua lỗi lưu trữ cục bộ (hạn ngạch / chế độ ẩn danh) */ }
+    return 375
+  })
+
+  const [minimapWidthPx, setMinimapWidthPx] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem('mkddc-workbench-minimap-width'))
+      if (Number.isFinite(v) && v >= 200 && v <= 800) return v
+    } catch { /* Bỏ qua lỗi lưu trữ cục bộ (hạn ngạch / chế độ ẩn danh) */ }
+    return 458
+  })
+
+  useEffect(() => {
+    try { localStorage.setItem('mkddc-workbench-watch-width', String(watchWidthPx)) } catch { /* Bỏ qua lỗi lưu trữ cục bộ (hạn ngạch / chế độ ẩn danh) */ }
+  }, [watchWidthPx])
+
+  useEffect(() => {
+    try { localStorage.setItem('mkddc-workbench-minimap-width', String(minimapWidthPx)) } catch { /* Bỏ qua lỗi lưu trữ cục bộ (hạn ngạch / chế độ ẩn danh) */ }
+  }, [minimapWidthPx])
+
+  const watchWidth = watchCollapsed ? '44px' : String(watchWidthPx) + 'px'
+  const minimapWidth = minimapCollapsed ? '44px' : String(minimapWidthPx) + 'px'
 
   const gridStyle = useMemo(() => {
     if (!open) return undefined
@@ -310,7 +334,7 @@ export function ProgrammingWorkbench({
    * điểm của người đang gõ. */
   useEffect(() => {
     if (!watchAddRequest || watch === null || watch === undefined) return
-    setTab('watch')
+    setWatchCollapsed(false)
     setOpen(true)
   }, [watchAddRequest, watch])
 
@@ -336,11 +360,6 @@ export function ProgrammingWorkbench({
        từ worker mô phỏng chứ không từ tủ; gọi chúng là "Trực tiếp" là cách
        nhanh nhất để một người trực ca đọc một giá trị mô phỏng như thể thiết bị
        đang cho ra nó. */
-    { id: 'watch',
-      label: mode === 'SIMULATE'
-        ? pick('Watch (Mô phỏng)', 'Watch (Simulation)')
-        : pick('Watch (Trực tiếp)', 'Watch (Live)'),
-      count: watch ? watch.length : null, available: watch !== null && watch !== undefined },
   ]
 
   return (
@@ -513,24 +532,6 @@ export function ProgrammingWorkbench({
                   <ReferencesPanel symbols={symbols} pick={pick} />
                 )
               )}
-              {tab === 'watch' && (
-                /* AC: "unavailable tab giải thích capability". Hiện một danh sách
-                 * rỗng sẽ đọc như "không có giá trị nào", trong khi sự thật là
-                 * "chế độ này không có nguồn giá trị runtime nào cả". */
-                watch === null || watch === undefined ? (
-                  <Unavailable reason={pick(
-                    'Watch cần nguồn giá trị runtime. Chế độ EDIT chỉ có Draft, không có giá trị nào để hiện — chuyển sang LIVE để xem gói đang chạy.',
-                    'Watch needs a runtime value source. EDIT mode only has the draft, so there is nothing to show — switch to LIVE to see the running package.',
-                  )} />
-                ) : (
-                  <p className="text-xs text-[var(--c-text-dim)]">
-                    {pick(
-                      'Bảng Runtime Watch đang hiển thị thường trực ở cột giữa.',
-                      'Runtime Watch panel is permanently displayed in the middle column.',
-                    )}
-                  </p>
-                )
-              )}
             </div>
           )}
         </div>
@@ -553,7 +554,19 @@ export function ProgrammingWorkbench({
               </button>
             </div>
           ) : (
-            <Stretched testId="workbench-watch-column">
+            <Stretched
+              testId="workbench-watch-column"
+              resizeHandle={
+                <ColumnResizeHandle
+                  label={pick('Kéo để đổi chiều rộng cột Watch', 'Drag to resize the Watch column')}
+                  testId="workbench-resize-watch"
+                  value={watchWidthPx}
+                  min={200}
+                  max={700}
+                  onResize={setWatchWidthPx}
+                />
+              }
+            >
               <div className="mb-1 flex items-center justify-between gap-1 text-xs font-semibold text-[var(--c-text-dim)]">
                 <span>
                   {mode === 'SIMULATE'
@@ -605,7 +618,19 @@ export function ProgrammingWorkbench({
               </button>
             </div>
           ) : (
-            <Stretched testId="workbench-minimap-column">
+            <Stretched
+              testId="workbench-minimap-column"
+              resizeHandle={
+                <ColumnResizeHandle
+                  label={pick('Kéo để đổi chiều rộng cột Bản đồ thu nhỏ', 'Drag to resize the Mini Map column')}
+                  testId="workbench-resize-minimap"
+                  value={minimapWidthPx}
+                  min={200}
+                  max={800}
+                  onResize={setMinimapWidthPx}
+                />
+              }
+            >
               <WorkbenchMinimapPanel
                 bridge={fbdBridge}
                 stSource={stMinimap ? source : null}
@@ -628,9 +653,66 @@ export function ProgrammingWorkbench({
  * bảng Watch dài sẽ kéo cả khay cao lên thay vì tự cuộn. Lớp `absolute inset-0`
  * tách nội dung khỏi phép đo track: hàng giữ nguyên, nội dung cuộn bên trong.
  */
-function Stretched({ testId, children }: { testId: string; children: ReactNode }) {
+function ColumnResizeHandle({
+  label,
+  testId,
+  value,
+  min,
+  max,
+  onResize,
+}: {
+  label: string
+  testId: string
+  value: number
+  min: number
+  max: number
+  onResize: (nextWidth: number) => void
+}) {
+  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
+
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      aria-label={label}
+      aria-valuenow={value}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      className="group absolute -left-[5px] top-0 bottom-0 z-30 hidden w-[10px] cursor-col-resize items-center justify-center touch-none lg:flex focus-visible:outline-none"
+      onPointerDown={(event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+        resizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: value }
+      }}
+      onPointerMove={(event) => {
+        const state = resizeRef.current
+        if (!state || state.pointerId !== event.pointerId) return
+        const dx = event.clientX - state.startX
+        const next = Math.min(max, Math.max(min, Math.round(state.startWidth - dx)))
+        onResize(next)
+      }}
+      onPointerUp={() => { resizeRef.current = null }}
+      onPointerCancel={() => { resizeRef.current = null }}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault()
+          onResize(Math.min(max, value + 24))
+        } else if (event.key === 'ArrowRight') {
+          event.preventDefault()
+          onResize(Math.max(min, value - 24))
+        }
+      }}
+    >
+      <span className="h-full w-1 rounded-full bg-transparent transition-colors group-hover:bg-[var(--c-accent)] group-focus-visible:bg-[var(--c-accent)]" />
+    </button>
+  )
+}
+
+function Stretched({ testId, children, resizeHandle }: { testId: string; children: ReactNode; resizeHandle?: ReactNode }) {
   return (
     <div className="relative min-h-0">
+      {resizeHandle}
       <div data-testid={testId} className="absolute inset-0 flex flex-col overflow-auto p-2">
         {children}
       </div>

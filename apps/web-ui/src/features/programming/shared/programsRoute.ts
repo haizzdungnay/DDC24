@@ -98,6 +98,8 @@ export function programsWorkspacePath(
   const query = new URLSearchParams()
   const selectedPou = options.pou ?? source.get('pou') ?? source.get('program')
   if (selectedPou) query.set('program', selectedPou)
+  const mode = options.mode ?? (source.get('mode') as ProgramsWorkspaceMode | null)
+  if (mode && isProgramsWorkspaceMode(mode)) query.set('mode', mode)
   for (const key of ['line', 'column', 'length', 'node', 'port', 'edge', 'returnTo', 'tab'] as const) {
     for (const value of source.getAll(key)) query.append(key, value)
   }

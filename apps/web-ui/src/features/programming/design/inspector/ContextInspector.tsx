@@ -39,6 +39,7 @@ export function ContextInspector({
   editableFbdSlot,
   executionTabHref,
   onOpenExecutionTab,
+  headerAction,
 }: {
   input: InspectorInput
   /**
@@ -54,6 +55,7 @@ export function ContextInspector({
   executionTabHref?: string
   /** Lối vào `Cấu hình chạy` của mục Thực thi; `undefined` ⇒ không render. */
   onOpenExecutionTab?: () => void
+  headerAction?: React.ReactNode
 }) {
   const { pick } = useI18n()
   const context = inspectorContextFor(input)
@@ -66,12 +68,15 @@ export function ContextInspector({
       data-testid="context-inspector"
       data-context={context.kind}
     >
-      <h3 className="text-xs font-semibold text-[var(--c-text-dim)]">
-        {pick('Thuộc tính', 'Inspector')}
-        <span className="ml-2 font-normal normal-case text-[var(--c-text-dim)]">
-          {contextLabel(pick, context.kind)}
-        </span>
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-[var(--c-text-dim)]">
+          {pick('Thuộc tính', 'Inspector')}
+          <span className="ml-2 font-normal normal-case text-[var(--c-text-dim)]">
+            {contextLabel(pick, context.kind)}
+          </span>
+        </h3>
+        {headerAction}
+      </div>
 
       {!useful && editableProgramSlot === undefined && editableFbdSlot === undefined ? (
         /* Thu gọn: một dòng, không chiếm chỗ. Đây là vế còn lại của luật §9 —

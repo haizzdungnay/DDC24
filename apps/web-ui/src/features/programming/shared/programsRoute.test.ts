@@ -58,6 +58,15 @@ describe('PGM-02 v2 — URL canonical và rollback', () => {
       .toBe('/eng/programming/projects/project-1/programs?program=object-1&line=7')
   })
 
+  it('giữ mode khi đổi chế độ trên route cũ', () => {
+    expect(programsWorkspacePath('project-1', { mode: 'LIVE' }, false))
+      .toBe('/eng/programming/projects/project-1/programs?mode=LIVE')
+    expect(programsWorkspacePath('project-1', { mode: 'SIMULATE' }, false))
+      .toBe('/eng/programming/projects/project-1/programs?mode=SIMULATE')
+    expect(programsWorkspacePath('project-1', { search: '?mode=LIVE' }, false))
+      .toBe('/eng/programming/projects/project-1/programs?mode=LIVE')
+  })
+
   it.each([
     ['EDIT', true],
     ['LIVE', true],
