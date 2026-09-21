@@ -76,31 +76,6 @@ export function computeMinimapViewBox(nodes: readonly FbdNodeGeometry[]): Minima
   }
 }
 
-export function minimapClientToGraphCoordinates(
-  client: { x: number; y: number },
-  rect: { left: number; top: number; width: number; height: number },
-  viewBox: MinimapViewBox,
-): { x: number; y: number } | null {
-  if (rect.width <= 0 || rect.height <= 0 || viewBox.width <= 0 || viewBox.height <= 0) {
-    return null
-  }
-  const scale = Math.min(rect.width / viewBox.width, rect.height / viewBox.height)
-  if (!Number.isFinite(scale) || scale <= 0) return null
-
-  const renderedWidth = viewBox.width * scale
-  const renderedHeight = viewBox.height * scale
-  const offsetX = (rect.width - renderedWidth) / 2
-  const offsetY = (rect.height - renderedHeight) / 2
-
-  const localX = (client.x - rect.left - offsetX) / scale
-  const localY = (client.y - rect.top - offsetY) / scale
-
-  return {
-    x: Math.min(viewBox.x + viewBox.width, Math.max(viewBox.x, viewBox.x + localX)),
-    y: Math.min(viewBox.y + viewBox.height, Math.max(viewBox.y, viewBox.y + localY)),
-  }
-}
-
 const FbdCanvasBridgeContext = createContext<FbdCanvasBridge | null>(null)
 const FbdCanvasSetBridgeContext = createContext<Dispatch<SetStateAction<FbdCanvasBridge | null>> | null>(null)
 
@@ -362,40 +337,28 @@ export function WorkbenchMinimapPanel({ bridge: propBridge, stSource, onJumpToOf
   const indicatorX = Math.max(base.x, Math.min(base.x + base.width - indicatorW, vpX))
   const indicatorY = Math.max(base.y, Math.min(base.y + base.height - indicatorH, vpY))
 
+  /* `#732` — chuyển THẲNG toạ độ con trỏ thật cho canvas, không dịch gì ở đây.
+   *
+   * Bản trước đổi con trỏ sang toạ độ graph bằng `effectiveViewBox`, rồi chiếu
+   * ngược ra một "client ảo" bằng `activeBridge.width/height` để canvas giải mã
+   * lại. Canvas (`FbdCanvas.navigateFromMinimap`) giải mã bằng thuộc tính
+   * `viewBox` của chính phần tử này — tức hệ của bước ĐẦU, không phải hệ của
+   * bước chiếu ngược. Hai hệ chỉ trùng khi `effectiveViewBox` đúng bằng
+   * `(0, 0, bridge.width, bridge.height)`; ngoài ra chúng lệch nhau đúng tỉ số
+   * hai bề rộng, đo được là `6320 / 5716 = 1,105668` ⇒ bấm Mini Map đưa khung
+   * nhìn tới điểm cách chỗ bấm 255 px graph, càng xa gốc `viewBox` càng lệch.
+   *
+   * Cả vòng mã hoá–giải mã ấy lẽ ra là phép đồng nhất: phép đổi ở canvas nhận
+   * cùng phần tử, cùng `rect`, cùng `viewBox` (thuộc tính `viewBox` dưới đây
+   * render từ chính `effectiveViewBox`) và kẹp vào cùng biên. Nên cách sửa
+   * đúng tầng là bỏ hẳn vòng đó đi, không phải chỉnh cho hai đầu khớp nhau —
+   * còn vòng thì còn chỗ để hai hệ lệch lại.
+   *
+   * Ba nhánh dự phòng của bản cũ vốn đã chuyển thẳng `clientX/clientY` như
+   * dòng dưới, và chúng là những nhánh cho kết quả ĐÚNG. Nay mọi lối đi đều
+   * dùng chung đúng một đường. */
   function handleNavigate(clientX: number, clientY: number, element: SVGSVGElement) {
-    const rect = element.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0 || activeBridge.width <= 0 || activeBridge.height <= 0) {
-      activeBridge.onNavigate?.(clientX, clientY, element)
-      return
-    }
-
-    const graphPoint = minimapClientToGraphCoordinates(
-      { x: clientX, y: clientY },
-      rect,
-      effectiveViewBox,
-    )
-    if (!graphPoint) {
-      activeBridge.onNavigate?.(clientX, clientY, element)
-      return
-    }
-
-    const origScale = Math.min(rect.width / activeBridge.width, rect.height / activeBridge.height)
-    if (!Number.isFinite(origScale) || origScale <= 0) {
-      activeBridge.onNavigate?.(clientX, clientY, element)
-      return
-    }
-    const renderedW = activeBridge.width * origScale
-    const renderedH = activeBridge.height * origScale
-    const origOffsetX = (rect.width - renderedW) / 2
-    const origOffsetY = (rect.height - renderedH) / 2
-
-    const clampedX = Math.min(activeBridge.width, Math.max(0, graphPoint.x))
-    const clampedY = Math.min(activeBridge.height, Math.max(0, graphPoint.y))
-
-    const virtualClientX = rect.left + origOffsetX + clampedX * origScale
-    const virtualClientY = rect.top + origOffsetY + clampedY * origScale
-
-    activeBridge.onNavigate?.(virtualClientX, virtualClientY, element)
+    activeBridge.onNavigate?.(clientX, clientY, element)
   }
 
   return (

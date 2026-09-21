@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### Fixed — `#732`: Mini Map cuộn tới đúng điểm được bấm — xoá vòng dịch toạ độ thừa (2026-09-21)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/workbench/WorkbenchMinimapPanel.tsx`,
+  `apps/web-ui/src/features/programming/design/workbench/WorkbenchMinimapPanel.test.tsx`,
+  `CHANGELOG.md`.
+- **Triệu chứng.** Bấm chuột vào Bản đồ thu nhỏ (Mini Map) đưa khung nhìn canvas tới vị trí lệch so với điểm được bấm (lệch khoảng 255 px graph trong E2E test `TC-FBD-NAV-001`, càng xa gốc `viewBox` càng lệch).
+- **Nguyên nhân gốc.** Trong `WorkbenchMinimapPanel.handleNavigate`, toạ độ pointer trải qua 3 tầng biến đổi không đồng nhất: Tầng 1 đổi con trỏ sang graph bằng `effectiveViewBox`; Tầng 2 chiếu ngược ra "client ảo" bằng `activeBridge.width/height` (toàn bộ kích thước canvas); Tầng 3 ở `FbdCanvas.navigateFromMinimap` lại giải mã toạ độ "client ảo" đó bằng `viewBox` của SVG (hệ của Tầng 1). Khi `effectiveViewBox` khác `(0, 0, bridge.width, bridge.height)`, toạ độ bị trôi dạt theo tỉ lệ giữa hai bề rộng (đo được `6320 / 5716 = 1,105668`).
+- **Cách sửa.** Xoá bỏ vòng mã hoá/chiếu ngược thừa (Tầng 1 & Tầng 2) trong `handleNavigate`, chuyển thẳng toạ độ pointer thực `(clientX, clientY, element)` sang `activeBridge.onNavigate`. Phía `FbdCanvas.navigateFromMinimap` đã có `rect` và `viewBox` của SVG nên giải mã trực tiếp một bước đồng nhất. Xoá helper nội bộ không còn sử dụng `minimapClientToGraphCoordinates`. Cập nhật unit test và thêm ca kiểm chứng điểm cuộn tới khớp chính xác điểm dưới con trỏ khi scene đã pan và zoom.
+- Refs: `#732`, `#735`.
+
 ### Fixed — `#677`: Cắt vòng phản hồi ResizeObserver(document.body) trong useViewportFillHeight (2026-09-21)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/useViewportFillHeight.ts`,
