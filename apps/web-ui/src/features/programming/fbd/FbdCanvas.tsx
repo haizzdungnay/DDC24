@@ -317,10 +317,19 @@ export function FbdCanvas({
         for (const entry of entries) {
           const nextH = Math.round(entry.contentRect.height)
           const nextW = Math.round(entry.contentRect.width)
-          setContainerHeight((current) => (Math.abs(current - nextH) < 1 ? current : nextH))
-          setContainerWidth((current) => (Math.abs(current - nextW) < 1 ? current : nextW))
+          /* So sánh BẰNG trên số đã làm tròn (#677). Hai vế là số nguyên nên
+           * kết quả y hệt ngưỡng `Math.abs(...) < 1` dùng trước đây; khác nhau
+           * ở chỗ ngưỡng ấy đọc như một van chống vòng lặp và đã được tin cậy
+           * đúng như thế ở `useViewportFillHeight`, nơi nó không cứu nổi một
+           * dao động lớn hơn 1 px. Cái giữ cho chỗ này không lặp là dòng
+           * `observer.observe(el)` ngay dưới: `el` là KHUNG CUỘN, không phải
+           * mặt vẽ mà chiều cao của nó do chính `containerHeight` sinh ra. */
+          setContainerHeight((current) => (current === nextH ? current : nextH))
+          setContainerWidth((current) => (current === nextW ? current : nextW))
         }
       })
+      /* CHỈ khung cuộn. Quan sát mặt vẽ (nội dung của khay này) hay
+       * `document.body` là quan sát chính kết quả của phép đo — xem #677. */
       observer.observe(el)
       return () => observer.disconnect()
     }

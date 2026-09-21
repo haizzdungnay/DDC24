@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Fixed — `#677`: Cắt vòng phản hồi ResizeObserver(document.body) trong useViewportFillHeight (2026-09-21)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/useViewportFillHeight.ts`,
+  `apps/web-ui/src/features/programming/design/useViewportFillHeight.test.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.presentation.test.tsx`,
+  `apps/web-ui/e2e/programming-workspace-height.spec.ts`, `CHANGELOG.md`.
+- **Triệu chứng.** `ResizeObserver loop completed with undelivered notifications`, lỗi `element is not stable` trong E2E test khi render màn hình Programming/FBD, dao động giật cục thanh cuộn dọc (scrollbar oscillation).
+- **Nguyên nhân gốc.** Hook `useViewportFillHeight` gọi `observe(document.body)`. Khi đo và gán `style.height` cho cột workspace, `document.body` thay đổi chiều cao làm kích hoạt lại observer lặp vô tận. Ngoài ra khi thanh cuộn dọc xuất hiện/biến mất làm dịch chuyển chiều rộng viewport ~15px, text xuống dòng đẩy `top` xuống làm giảm chiều cao workspace, ẩn thanh cuộn và dao động lặp lại (bi-stable oscillation).
+- **Cách sửa.** Bỏ `observe(document.body)`. Dùng `chromeAbove(node)` chỉ theo dõi các phần tử giao diện bên trên workspace không bị ảnh hưởng bởi chiều cao workspace; kết hợp `MutationObserver` trên `ancestorsOf(node)` để phát hiện banner xuất hiện; thêm cơ chế bi-stable latching và cửa sổ chống dao động `OSCILLATION_WINDOW_MS = 250ms`, chốt chặn ở chiều cao nhỏ hơn `Math.min(current, next)` khi xảy ra dao động 2 chu kỳ; trong `FbdCanvas` chỉ quan sát phần tử cuộn chứa canvas thay vì canvas hoặc body.
+- Refs: `#677`, `#730`.
+
 ### Fixed — `#635`: AI9..AI16 không bao giờ được kiểm COV — tách cận quét theo từng loại object (2026-09-21)
 
 - Phạm vi: `apps/iobus/adapters/bacnet/bacnet_objects.hpp`,
