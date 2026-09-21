@@ -3202,7 +3202,7 @@ export function SourceEditor({
       {referenceNote && (
         <p role="status" className="text-xs text-[var(--c-warn-fg)]">{referenceNote}</p>
       )}
-      {runtimeOverlay && <StRuntimeValueOverlay state={runtimeOverlay} />}
+      {runtimeOverlay && <StRuntimeValueOverlay state={runtimeOverlay} programId={program.programId} />}
       </div>
       {/* Thanh trạng thái GHIM ở đáy cột, ngoài vùng cuộn: nó phải đọc được mà
           không phải cuộn đi tìm — đúng vai trò của một status bar. */}

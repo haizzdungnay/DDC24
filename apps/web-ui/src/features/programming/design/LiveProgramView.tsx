@@ -169,7 +169,7 @@ export function LiveProgramView({
         </div>
       )}
 
-      {program && <StRuntimeValueOverlay state={overlays[program.programId] ?? { status: 'unavailable' }} />}
+      {program && <StRuntimeValueOverlay state={overlays[program.programId] ?? { status: 'unavailable' }} programId={program.programId} />}
     </section>
   )
 }

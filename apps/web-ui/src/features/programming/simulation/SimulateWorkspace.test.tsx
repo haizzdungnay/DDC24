@@ -109,7 +109,10 @@ beforeEach(() => {
   localStorage.setItem('mkddc-lang', 'vi')
   state.revision = sealedRevision()
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  localStorage.clear()
+})
 
 describe('SIMULATE — capability là điều kiện tiên quyết', () => {
   it('AC-PGM02-008: thiết bị không công bố khả năng ⇒ không mở phiên và KHÔNG hiện giá trị mẫu nào', () => {
@@ -230,6 +233,27 @@ describe('SIMULATE — giá trị luôn nói rõ nguồn và chất lượng', (
     // nguy hiểm nhất ở màn hình này.
     expect(screen.getByText('—')).toBeInTheDocument()
     expect(screen.getAllByText('MÔ PHỎNG')).toHaveLength(2)
+  })
+
+  it('hỗ trợ tìm kiếm và lọc biến quan sát trong chế độ mô phỏng', () => {
+    let slice = acceptSession(initialSimulationSlice, session())
+    slice = acceptFrame(slice, {
+      virtualTimeMs: 2000, snapshotSequence: 2, resetEpoch: 0,
+      observations: [
+        { observationId: 'AHU.Fan', programId: 'AHU', variable: 'Fan', kind: 'OUTPUT', dataType: 'BOOL', quality: 'GOOD', value: true },
+        { observationId: 'AHU.Temp', programId: 'AHU', variable: 'Temp', kind: 'OUTPUT', dataType: 'REAL', quality: 'GOOD', value: 24.5 },
+      ],
+    })
+    renderWorkspace({ slice })
+
+    expect(screen.getByText('AHU.Fan')).toBeInTheDocument()
+    expect(screen.getByText('AHU.Temp')).toBeInTheDocument()
+
+    const searchInput = screen.getByPlaceholderText('Tìm biến…')
+    fireEvent.change(searchInput, { target: { value: 'Fan' } })
+
+    expect(screen.getByText('AHU.Fan')).toBeInTheDocument()
+    expect(screen.queryByText('AHU.Temp')).not.toBeInTheDocument()
   })
 
   it('băng "KHÔNG CÓ NGÕ RA THẬT" hiện ở mọi trạng thái', () => {
