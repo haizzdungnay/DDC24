@@ -105,7 +105,7 @@ private:
     BacnetAlarm    alarm_;
     bool           running_    = false;
     uint64_t       last_timesync_ms_ = 0;
-    std::array<std::array<char, 65>, 4> ao_name_storage_{};
+    std::array<std::array<char, 65>, BacnetObjects::N_AO> ao_name_storage_{};
 
     void register_objects();
     void sync_stack_inputs(const kx_plc_shm_t* shm);

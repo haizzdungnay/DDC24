@@ -118,3 +118,16 @@ TEST(BacnetCov, UpdateExistingSub)
     cov.subscribe(make_sub(1, BacnetObjectType::ANALOG_INPUT, 1));
     EXPECT_EQ(cov.sub_count(), 1u);
 }
+
+TEST(BacnetCov, AnalogTriggerOnIncrement_HigherAiInstancesCovered)
+{
+    /* Issue #635: AI9..AI16 must receive and trigger COV notifications correctly */
+    BacnetCov cov;
+    for (uint32_t inst = 9; inst <= 16; inst++) {
+        cov.set_cov_increment(BacnetObjectType::ANALOG_INPUT, inst, 0.2f);
+        EXPECT_TRUE(cov.subscribe(make_sub(inst, BacnetObjectType::ANALOG_INPUT, inst)));
+        auto subs = cov.check_and_update(BacnetObjectType::ANALOG_INPUT, inst, 25.0f, 0);
+        EXPECT_EQ(subs.size(), 1u);
+    }
+}
+

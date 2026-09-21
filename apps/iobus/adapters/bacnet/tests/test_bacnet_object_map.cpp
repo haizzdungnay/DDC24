@@ -34,6 +34,19 @@ struct WriteSpy {
     }
 };
 
+TEST(BacnetObjects, ObjectCountConstants)
+{
+    /* AC-1 + AC-4 (Issue #635): Seven object counts are public and N_AI matches KX_N_UI */
+    static_assert(BacnetObjects::N_AI == KX_N_UI, "N_AI must match KX_N_UI");
+    EXPECT_EQ(BacnetObjects::N_AI, 16);
+    EXPECT_EQ(BacnetObjects::N_BI, 8);
+    EXPECT_EQ(BacnetObjects::N_AO, 4);
+    EXPECT_EQ(BacnetObjects::N_BO, 4);
+    EXPECT_EQ(BacnetObjects::N_AV, 32);
+    EXPECT_EQ(BacnetObjects::N_BV, 16);
+    EXPECT_EQ(BacnetObjects::N_MSV, 8);
+}
+
 TEST(BacnetObjects, DefaultNames)
 {
     BacnetObjects obj;
