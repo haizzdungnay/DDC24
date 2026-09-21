@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -83,9 +83,28 @@ vi.mock('../api/queries', async (importOriginal) => {
  * một sót lại ở thân trang) cho tới khi Playwright đâm vào `strict mode
  * violation`. Bắc cầu để harness RENDER slot thật. */
 const slotBridge = vi.hoisted(() => ({ render: null as ((node: ReactNode) => void) | null }))
+const editingContextBridge = vi.hoisted(() => ({
+  current: null as {
+    projectId?: string
+    projectName?: string
+    draftRevisionId?: string
+    dirty?: boolean
+    checkState?: string
+    onReload?: () => void
+    actions?: {
+      onSave: () => void
+      saving: boolean
+      saveDisabledReason: string | null
+      onCheck: () => void
+      checkDisabledReason: string | null
+    }
+  } | null,
+}))
 vi.mock('../layout/ProgrammingLayout', () => ({
   useProgrammingRuntimeContext: () => ({
-    setEditingContext: vi.fn(),
+    setEditingContext: (ctx: any) => {
+      editingContextBridge.current = ctx
+    },
     setContextStripSlot: (node: ReactNode) => { slotBridge.render?.(node) }
   })
 }))
@@ -171,6 +190,7 @@ beforeEach(() => {
   }
   runtimeMonitor.enabled.mockClear()
   userPouInterfacesSpy.mockClear()
+  editingContextBridge.current = null
   localStorage.setItem('mkddc-lang', 'vi')
 })
 afterEach(() => {
@@ -509,6 +529,270 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     await waitFor(() => expect(screen.getByText('Bản nháp đã thay đổi ở phiên khác.')).toBeInTheDocument())
     // 409: buffer đang gõ KHÔNG được xoá.
     expect(textarea).toHaveValue('X := 2; (* chưa lưu *)')
+  })
+
+  it('TC-FBD-SAVE-001: Draft FBD hợp lệ và chưa hoàn tất (incomplete) đều lưu được; round-trip sau tải lại', async () => {
+    const fbdInitial = JSON.stringify({
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: 1,
+      profileId: 'revA-1t-1-5-30',
+      graphId: '10000000-0000-4000-8000-000000000001',
+      name: 'FbdSaveProgram',
+      networks: [{ id: '20000000-0000-4000-8000-000000000001', name: 'Main', order: 0, nodes: [], wires: [] }]
+    })
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-fbd',
+      objectId: 'object-fbd',
+      name: 'FbdSaveProgram',
+      kind: 'PROGRAM',
+      language: 'FBD',
+      document: fbdInitial
+    })
+    project.draft!.task.programOrder = ['program-fbd']
+
+    let savedSource: string | null = null
+    client.request.mockImplementation((operationId: string, options?: { body?: { operations: Array<{ op: string; programId?: string; source?: string }> } }) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') {
+        const currentProject = structuredClone(project)
+        if (savedSource) {
+          currentProject.draft!.programs[0].document = savedSource
+        }
+        return Promise.resolve(currentProject)
+      }
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        const replaceOp = options?.body?.operations.find((op) => op.op === 'replaceProgramSource')
+        if (replaceOp?.source) {
+          savedSource = replaceOp.source
+        }
+        const updated = structuredClone(project)
+        if (savedSource) {
+          updated.draft!.programs[0].document = savedSource
+        }
+        updated.etag = '"draft-1:2"'
+        return Promise.resolve({
+          resource: { projectId: 'project-1', draftRevisionId: 'draft-1', content: updated.draft },
+          etag: updated.etag,
+          auditId: 'audit-save-1',
+          correlationId: 'corr-save-1'
+        })
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-fbd')
+
+    const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
+    expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('0/256')
+
+    // Thêm khối chưa hoàn tất (incomplete - chưa nối dây)
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    await waitFor(() => expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('1/256'))
+
+    // Khi dirty, draft-dirty-indicator hiển thị và Save được kích hoạt
+    await waitFor(() => expect(screen.getByTestId('draft-dirty-indicator')).toHaveTextContent(/Chưa lưu/))
+    expect(editingContextBridge.current?.actions?.saveDisabledReason).toBeNull()
+
+    // Lưu bản nháp chưa hoàn tất
+    await act(async () => {
+      editingContextBridge.current?.actions?.onSave()
+    })
+
+    await waitFor(() => {
+      expect(client.request.mock.calls.some(([op]) => op === 'updateProgrammingDraft')).toBe(true)
+    })
+    expect(savedSource).toBeDefined()
+    const parsed = JSON.parse(savedSource!)
+    expect(parsed.networks[0].nodes.length).toBeGreaterThan(0)
+
+    // Sau khi lưu xong: Check được kích hoạt, Save khoá vì sạch
+    await waitFor(() => {
+      expect(editingContextBridge.current?.actions?.checkDisabledReason).toBeNull()
+    })
+  })
+
+  it('TC-FBD-CONFLICT-001: 409 xung đột ETag khi lưu FBD giữ nguyên buffer đồ thị và hiện rõ Tải lại / Giữ bản đang gõ', async () => {
+    const fbdInitial = JSON.stringify({
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: 1,
+      profileId: 'revA-1t-1-5-30',
+      graphId: '10000000-0000-4000-8000-000000000001',
+      name: 'FbdConflictProgram',
+      networks: [{ id: '20000000-0000-4000-8000-000000000001', name: 'Main', order: 0, nodes: [], wires: [] }]
+    })
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-fbd',
+      objectId: 'object-fbd',
+      name: 'FbdConflictProgram',
+      kind: 'PROGRAM',
+      language: 'FBD',
+      document: fbdInitial
+    })
+    project.draft!.task.programOrder = ['program-fbd']
+
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.reject(
+          new ProgrammingApiError(409, {
+            error: {
+              code: 'PRG-ERR-CONFLICT-001',
+              messageKey: 'programming.conflict.revision',
+              retryable: false,
+              keepsRunningRevision: true,
+              correlationId: 'corr-1',
+              args: { expected: '"draft-1:1"', actual: '"draft-1:5"' }
+            }
+          })
+        )
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-fbd')
+
+    const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
+    expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('0/256')
+
+    // Thêm khối để tạo dirty buffer
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    await waitFor(() => expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('1/256'))
+
+    // Kích hoạt Save gặp lỗi 409
+    await act(async () => {
+      editingContextBridge.current?.actions?.onSave()
+    })
+
+    // Hiện thông báo xung đột
+    await waitFor(() => expect(screen.getByText('Bản nháp đã thay đổi ở phiên khác.')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Tải lại' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Giữ bản đang gõ' })).toBeInTheDocument()
+
+    // 409: buffer đang vẽ KHÔNG bị xoá (vẫn giữ nguyên 1 khối)
+    expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('1/256')
+
+    // Bấm Giữ bản đang gõ đóng cảnh báo nhưng giữ nguyên buffer
+    fireEvent.click(screen.getByRole('button', { name: 'Giữ bản đang gõ' }))
+    await waitFor(() => expect(screen.queryByText('Bản nháp đã thay đổi ở phiên khác.')).not.toBeInTheDocument())
+    expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('1/256')
+  })
+
+  it('TC-FBD-HEADER-001: Save/Check chỉ ở bề mặt dùng chung, canvas FBD không có nút Save/Check, dirty thì Check bị disabled', async () => {
+    const fbdInitial = JSON.stringify({
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: 1,
+      profileId: 'revA-1t-1-5-30',
+      graphId: '10000000-0000-4000-8000-000000000001',
+      name: 'FbdHeaderProgram',
+      networks: [{ id: '20000000-0000-4000-8000-000000000001', name: 'Main', order: 0, nodes: [], wires: [] }]
+    })
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-fbd',
+      objectId: 'object-fbd',
+      name: 'FbdHeaderProgram',
+      kind: 'PROGRAM',
+      language: 'FBD',
+      document: fbdInitial
+    })
+    project.draft!.task.programOrder = ['program-fbd']
+
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-fbd')
+
+    const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
+    const fbdToolbar = screen.getByRole('toolbar', { name: 'Lệnh FBD' })
+
+    // 1. Toolbar FBD tuyệt đối KHÔNG có nút Save hoặc Check
+    expect(within(fbdToolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check/ })).toBeNull()
+
+    // 2. Trạng thái clean ban đầu: Check được phép, Save bị khoá vì không có thay đổi
+    await waitFor(() => expect(editingContextBridge.current?.actions).toBeDefined())
+    expect(editingContextBridge.current?.actions?.saveDisabledReason).toContain('Không có thay đổi nào để lưu')
+    expect(editingContextBridge.current?.actions?.checkDisabledReason).toBeNull()
+    expect(screen.getByTestId('draft-dirty-indicator')).toHaveAttribute('data-save-status', 'clean')
+
+    // 3. Thay đổi đồ thị FBD để trở thành dirty
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    await waitFor(() => expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('1/256'))
+
+    // 4. Khi dirty: Check bị disabled với lý do rõ ràng, Save được mở
+    await waitFor(() => {
+      expect(editingContextBridge.current?.actions?.checkDisabledReason).toContain('Lưu bản nháp trước khi Kiểm tra')
+    })
+    expect(editingContextBridge.current?.actions?.saveDisabledReason).toBeNull()
+    expect(screen.getByTestId('draft-dirty-indicator')).toHaveAttribute('data-save-status', 'dirty')
+    expect(screen.getByTestId('draft-dirty-indicator')).toHaveTextContent(/Chưa lưu/)
+
+    // Toolbar FBD vẫn không có nút Save/Check lặp lại
+    expect(within(fbdToolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check/ })).toBeNull()
+  })
+
+  it('TC-FBD-HEADER-002: Save timeout/treo không tự retry (0 lần gửi lại), trạng thái UNKNOWN, buffer nguyên vẹn', async () => {
+    const fbdInitial = JSON.stringify({
+      $schema: '../../fbd_v1.schema.json',
+      schemaVersion: 1,
+      profileId: 'revA-1t-1-5-30',
+      graphId: '10000000-0000-4000-8000-000000000001',
+      name: 'FbdTimeoutProgram',
+      networks: [{ id: '20000000-0000-4000-8000-000000000001', name: 'Main', order: 0, nodes: [], wires: [] }]
+    })
+    const project = baseProject()
+    project.draft!.programs.push({
+      programId: 'program-fbd',
+      objectId: 'object-fbd',
+      name: 'FbdTimeoutProgram',
+      kind: 'PROGRAM',
+      language: 'FBD',
+      document: fbdInitial
+    })
+    project.draft!.task.programOrder = ['program-fbd']
+
+    let saveCalls = 0
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      if (operationId === 'updateProgrammingDraft') {
+        saveCalls++
+        return new Promise(() => {})
+      }
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-fbd')
+
+    const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
+    fireEvent.keyDown(editor, { key: 'Insert' })
+    await waitFor(() => expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('1/256'))
+
+    // Kích hoạt Save khi request không bao giờ giải
+    act(() => {
+      editingContextBridge.current?.actions?.onSave()
+    })
+
+    // 1 request gửi đi, trạng thái là UNKNOWN / đang chờ xác nhận
+    await waitFor(() => expect(saveCalls).toBe(1))
+    expect(editingContextBridge.current?.actions?.saving).toBe(true)
+    const indicator = screen.getByTestId('draft-dirty-indicator')
+    expect(indicator).toHaveAttribute('data-save-status', 'unknown')
+    expect(indicator).toHaveTextContent(/Đang lưu — đang chờ xác nhận/)
+
+    // Không tự động retry (0 lần gửi lại ngầm)
+    expect(saveCalls).toBe(1)
+    // Buffer FBD nguyên vẹn (vẫn đủ 1 khối)
+    expect(within(editor).getByTestId('fbd-block-count')).toHaveTextContent('1/256')
   })
 
   it('TC-FBD-UX-001: + FBD tạo canonical POU và mount StructuredFbdEditor thật', async () => {

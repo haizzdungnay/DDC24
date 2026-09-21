@@ -18,11 +18,13 @@ import { useWorkbenchOwnsMinimap } from '../../layout/useProgrammingViewport'
 import type { UserPouInterface } from '../../fbd/userPou'
 import type {
   ProgrammingBinding,
+  ProgrammingDiagnostic,
   ProgrammingDraftOperation,
   ProgrammingPointCatalogEntry,
   ProgrammingProgram,
   ProgrammingVariable,
 } from '../../model/types'
+import type { OpenBufferContext } from '../../shared/diagnosticFreshness'
 import { PortMappingPicker } from '../../fbd/PortMappingPicker'
 import { createUuid } from '../../../../shared/crypto'
 
@@ -122,6 +124,11 @@ export interface FbdEditorPaneProps {
   program: ProgrammingProgram
   source: string
   canEdit: boolean
+  /**
+   * Bất biến "1 bề mặt Save/Check" (2026-08-31-fbd-edit-design.md:360,581 / TC-FBD-HEADER-001):
+   * `saving` được nhận từ contract chung của EditorPane nhưng toolbar FBD cố ý không
+   * hiển thị nút Lưu/spinner riêng nhằm tránh nhân bản điều khiển.
+   */
   saving: boolean
   onChange: (source: string) => void
   onSave: (operations: ProgrammingDraftOperation[]) => Promise<boolean>
@@ -132,6 +139,12 @@ export interface FbdEditorPaneProps {
   onSelectionChange?: (selection: FbdSelection | null) => void
   onNodeEditorTargetChange?: (target: FbdNodeEditorTarget | null) => void
   focusSelection?: FbdSelection | null
+  /**
+   * Bất biến "1 bề mặt Save/Check" (2026-08-31-fbd-edit-design.md:360,581 / TC-FBD-HEADER-001):
+   * Các callback và lý do khoá của Check/Compare (`onRunCheck`, `onOpenCompare`,
+   * `checkDisabledReason`, `compareDisabledReason`) chỉ thuộc về header dùng chung
+   * (GlobalContextBar). Toolbar canvas FBD cố ý không nhân bản các nút này.
+   */
   onRunCheck?: () => void
   onOpenCompare?: () => void
   checkDisabledReason?: string | null
@@ -143,6 +156,9 @@ export interface FbdEditorPaneProps {
   bindings?: readonly ProgrammingBinding[]
   variables?: readonly ProgrammingVariable[]
   programs?: readonly ProgrammingProgram[]
+  diagnostics?: readonly ProgrammingDiagnostic[]
+  checkRevisionId?: string | null
+  openBuffer?: OpenBufferContext
 }
 
 export function FbdEditorPane({
@@ -163,6 +179,9 @@ export function FbdEditorPane({
   bindings,
   variables,
   programs,
+  diagnostics,
+  checkRevisionId,
+  openBuffer,
 }: FbdEditorPaneProps) {
   const { pick } = useI18n()
   const [mappingRequest, setMappingRequest] = useState<{
@@ -402,6 +421,9 @@ export function FbdEditorPane({
         variables={variables}
         pointCatalogItems={pointCatalogItems}
         programs={programs}
+        diagnostics={diagnostics}
+        checkRevisionId={checkRevisionId}
+        openBuffer={openBuffer}
       />
       {dirty && <p className="text-xs text-[var(--c-warn-fg)]">{pick('Chưa lưu.', 'Not saved.')}</p>}
       {mappingRequest && (

@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### Added — Task 10b: Chuỗi dữ liệu Provenance và Marker chẩn đoán STALE cho FBD (2026-09-21)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.tsx`,
+  `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.test.tsx`,
+  `apps/web-ui/src/features/programming/design/workbench/DesignWorkbench.tsx`,
+  `apps/web-ui/src/features/programming/design/workbench/DesignWorkbench.test.tsx`,
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/EditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.test.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvasLayers.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.presentation.test.tsx`,
+  `apps/web-ui/src/features/programming/fbd/issueTargets.ts`,
+  `CHANGELOG.md`.
+- **Mô tả.** Triển khai trọn vẹn Task 10b theo Plan v5 (`docs/superpowers/plans/2026-09-16-fbd-task10-save-check-stale.md` §6):
+  + Bảo toàn `location` chẩn đoán qua `WorkbenchProblem` và chuyển `openBuffer` từ `DesignWorkspacePage` xuống `DesignWorkbench`, `ProgrammingWorkbench` và `ProblemsDrawer` để đánh giá độ tươi (`diagnosticFreshness`).
+  + Mở khóa chẩn đoán Check từ server cho POU FBD trong `DesignWorkbench` đồng thời giữ nguyên các lỗi FE validator cục bộ (`UNVERIFIABLE`).
+  + Triển khai marker STALE chẩn đoán trên canvas FBD (`TC-FBD-HEADER-003`): khi buffer FBD bị sửa đổi sau Check, marker mang thuộc tính `data-fbd-node-issue="stale"`, `aria-label` chứa `' · STALE DIAGNOSTIC'`, viền chuẩn không gạch cảnh báo; khay Problems hiển thị chip `CŨ`/`STALE`.
+  + Bổ sung hàm tiện ích `extractDiagnosticNodeId` trong `issueTargets.ts` để phân giải vị trí node từ thuộc tính chẩn đoán.
+  + Thêm các ca kiểm thử unit test cho `TC-FBD-HEADER-003` và luồng truyền `openBuffer` trong `DesignWorkbench.test.tsx`, `ProgrammingWorkbench.test.tsx`, `StructuredFbdEditor.test.tsx` và `FbdCanvas.presentation.test.tsx`.
+- Refs: Task 10b, `2026-09-16-fbd-task10-save-check-stale.md` §6, `ISS-STED-18`, `TC-FBD-HEADER-003`.
+
+### Added — Task 10a: Bổ sung ca kiểm thử ranh giới Save/Check và xung đột 409 cho FBD (2026-09-21)
+
+- Phạm vi: `apps/web-ui/src/features/programming/design/DesignWorkspacePage.test.tsx`,
+  `apps/web-ui/src/features/programming/design/DesignWorkspacePage.tsx`,
+  `apps/web-ui/src/features/programming/design/useDraftWorkspace.test.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.tsx`,
+  `apps/web-ui/src/features/programming/design/editor/FbdEditorPane.test.tsx`,
+  `CHANGELOG.md`.
+- **Mô tả.** Triển khai Task 10a theo Plan v5 (`2026-09-16-fbd-task10-save-check-stale.md` §5):
+  + Bổ sung ca kiểm thử `TC-FBD-CONFLICT-001` trong `useDraftWorkspace.test.tsx` và `DesignWorkspacePage.test.tsx` xác minh bắt lỗi HTTP 409 `ProgrammingApiError`, cập nhật `conflict` với ETag expected/actual, không ném ngoại lệ và giữ nguyên buffer đang soạn.
+  + Bổ sung ca kiểm thử `TC-FBD-SAVE-001` xác minh draft FBD hợp lệ và chưa hoàn tất (incomplete) đều lưu thành công, round-trip sau khi tải lại.
+  + Bổ sung ca kiểm thử `TC-FBD-HEADER-001` xác minh bất biến "1 bề mặt Save/Check": canvas toolbar FBD không nhân bản nút Save/Check/Compare; khi draft dirty thì Check bị vô hiệu hóa kèm thông báo lý do rõ ràng.
+  + Bổ sung ca kiểm thử `TC-FBD-HEADER-002` xác minh khi Save treo/timeout (network hang) hệ thống không tự retry (0 retries ngầm), trạng thái hiển thị UNKNOWN ("Đang lưu — đang chờ xác nhận…") và giữ nguyên buffer.
+  + Thêm chú thích JSDoc giải thích bất biến "1 bề mặt Save/Check" cho 5 prop chưa dùng trong `FbdEditorPane.tsx` (`saving`, `onRunCheck`, `onOpenCompare`, `checkDisabledReason`, `compareDisabledReason`).
+- Refs: Task 10a, `2026-09-16-fbd-task10-save-check-stale.md` §5.
+
 ### Fixed — `#732`: Mini Map cuộn tới đúng điểm được bấm — xoá vòng dịch toạ độ thừa (2026-09-21)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/workbench/WorkbenchMinimapPanel.tsx`,

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
+import type { OpenBufferContext } from '../../shared/diagnosticFreshness'
 import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol } from './ProgrammingWorkbench'
 import type { FbdCanvasBridge } from './WorkbenchMinimapPanel'
 
@@ -16,6 +17,7 @@ function renderWorkbench(overrides: {
   source?: string | null
   fbdBridge?: FbdCanvasBridge | null
   stMinimap?: boolean
+  openBuffer?: OpenBufferContext
 } = {}) {
   const onJumpToOffset = vi.fn()
   render(
@@ -30,6 +32,7 @@ function renderWorkbench(overrides: {
         checkOwnerHref="/eng/programming/projects/p1/commission"
         fbdBridge={overrides.fbdBridge}
         stMinimap={overrides.stMinimap}
+        openBuffer={overrides.openBuffer}
       />
     </I18nProvider>,
   )
@@ -119,6 +122,32 @@ describe('ProgrammingWorkbench (T59-807 / WP-06-R1)', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Vấn đề/ }))
     expect(screen.getByText('Cảnh báo:')).toBeInTheDocument()
     expect(screen.queryByText('Lỗi:')).toBeNull()
+  })
+
+  it('bảo toàn location và truyền openBuffer xuống ProblemsDrawer hiển thị chip CŨ', () => {
+    renderWorkbench({
+      problems: [{
+        id: 'stale-1',
+        code: 'FBD-SEM-001',
+        detail: 'Kiểu không tương thích',
+        severity: 'ERROR',
+        jumpLabel: 'MAIN › #1',
+        location: {
+          programId: 'P1',
+          revisionId: 'rev-1',
+          pouId: 'P1',
+          sourceSha256: 'old-sha256',
+          stLanguageProfileVersion: '1.0.0',
+        },
+      }],
+      openBuffer: {
+        revisionId: 'rev-1',
+        pouId: 'P1',
+        sourceSha256: 'new-sha256',
+      },
+    })
+    fireEvent.click(screen.getByRole('tab', { name: /Vấn đề/ }))
+    expect(screen.getByText(/CŨ/)).toBeInTheDocument()
   })
 
   it('nói đích danh nơi sở hữu kết quả Kiểm tra, không để người dùng tưởng khay này là toàn bộ sự thật', () => {

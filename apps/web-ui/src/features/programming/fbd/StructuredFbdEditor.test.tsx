@@ -11,6 +11,7 @@ import { buildFbdNetworkGeometry } from './geometry'
 import type { FbdNodeEditorTarget } from './nodeEditor'
 import type { FbdDocument } from './model'
 import type { UserPouInterface } from './userPou'
+import type { ProgrammingDiagnostic } from '../model/types'
 
 function golden(): FbdDocument {
   return JSON.parse(JSON.stringify(goldenJson)) as FbdDocument
@@ -555,5 +556,93 @@ describe('StructuredFbdEditor — tiếng vọng trễ của buffer trang', () =
     // Và dữ liệu người dùng còn nguyên: không gộp, không xóa Network thừa.
     expect(legacy.networks).toHaveLength(2)
     expect(screen.getAllByRole('article')).toHaveLength(2)
+  })
+})
+
+describe('StructuredFbdEditor — TC-FBD-HEADER-003: Chẩn đoán stale trên Canvas', () => {
+  it('chẩn đoán cũ (STALE) hiển thị marker stale và aria-label STALE DIAGNOSTIC', () => {
+    const doc = golden()
+    const targetNode = doc.networks[0].nodes[0]
+    const pouId = 'P_ahu'
+    const diagnostic: ProgrammingDiagnostic = {
+      code: 'PRG-ERR-CHECK-001',
+      detailCode: 'FBD-SEM-001',
+      severity: 'ERROR',
+      message: 'signal mismatch',
+      messageKey: 'programming.error.check',
+      location: {
+        programId: pouId,
+        pouId,
+        revisionId: 'rev-1',
+        nodeId: targetNode.id,
+        sourceSha256: 'old-sha256',
+        stLanguageProfileVersion: '1.0.0',
+      },
+    }
+
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor
+          document={doc}
+          canEdit
+          onChange={() => undefined}
+          diagnostics={[diagnostic]}
+          openBuffer={{
+            revisionId: 'rev-1',
+            pouId,
+            sourceSha256: 'new-sha256',
+          }}
+        />
+      </I18nProvider>,
+    )
+
+    const staleMarker = document.querySelector(`[data-fbd-node-issue="stale"]`)
+    expect(staleMarker).not.toBeNull()
+
+    const nodeBtn = document.querySelector(`g[data-fbd-node-id="${targetNode.id}"] [role="button"]`)
+    expect(nodeBtn?.getAttribute('aria-label')).toContain('STALE DIAGNOSTIC')
+  })
+
+  it('chẩn đoán mới (FRESH) hiển thị marker lỗi cảnh báo bình thường', () => {
+    const doc = golden()
+    const targetNode = doc.networks[0].nodes[0]
+    const pouId = 'P_ahu'
+    const diagnostic: ProgrammingDiagnostic = {
+      code: 'PRG-ERR-CHECK-001',
+      detailCode: 'FBD-SEM-001',
+      severity: 'ERROR',
+      message: 'signal mismatch',
+      messageKey: 'programming.error.check',
+      location: {
+        programId: pouId,
+        pouId,
+        revisionId: 'rev-1',
+        nodeId: targetNode.id,
+        sourceSha256: 'matching-sha256',
+        stLanguageProfileVersion: '1.0.0',
+      },
+    }
+
+    render(
+      <I18nProvider>
+        <StructuredFbdEditor
+          document={doc}
+          canEdit
+          onChange={() => undefined}
+          diagnostics={[diagnostic]}
+          openBuffer={{
+            revisionId: 'rev-1',
+            pouId,
+            sourceSha256: 'matching-sha256',
+          }}
+        />
+      </I18nProvider>,
+    )
+
+    const issueMarker = document.querySelector(`[data-fbd-node-issue="true"]`)
+    expect(issueMarker).not.toBeNull()
+
+    const staleMarker = document.querySelector(`[data-fbd-node-issue="stale"]`)
+    expect(staleMarker).toBeNull()
   })
 })

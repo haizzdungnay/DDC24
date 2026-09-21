@@ -44,9 +44,10 @@ import {
   resolveFbdEditorShortcut,
   type FbdEditorShortcut,
 } from './fbdShortcuts'
-import { fbdIssueTargets } from './issueTargets'
+import { extractDiagnosticNodeId, fbdIssueTargets } from './issueTargets'
 import { alignNodes, computeAutoLayout } from './layout'
 import { snapPoint } from './viewport'
+import { hashBufferSource, type OpenBufferContext, diagnosticFreshness } from '../shared/diagnosticFreshness'
 import {
   FBD_PALETTE,
   FBD_PALETTE_CATEGORY_ORDER,
@@ -62,12 +63,16 @@ import type { FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
 import type { FbdRuntimeOverlay } from './runtimeOverlay'
 import type {
   ProgrammingBinding,
+  ProgrammingDiagnostic,
   ProgrammingPointCatalogEntry,
   ProgrammingProgram,
   ProgrammingVariable,
 } from '../model/types'
 
 export interface StructuredFbdEditorProps {
+  diagnostics?: readonly ProgrammingDiagnostic[]
+  checkRevisionId?: string | null
+  openBuffer?: OpenBufferContext
   /**
    * `T59-818` — nâng lựa chọn canvas lên cho `ContextInspector` dùng chung.
    *
@@ -228,6 +233,9 @@ export function StructuredFbdEditor({
   variables,
   pointCatalogItems,
   programs,
+  diagnostics,
+  checkRevisionId,
+  openBuffer,
 }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
   const [state, dispatch] = useReducer(
@@ -829,15 +837,68 @@ export function StructuredFbdEditor({
     setLayoutPreview(null)
   }
 
+  const [localSha256, setLocalSha256] = useState<string | undefined>(undefined)
+  const canonicalSource = useMemo(() => {
+    try {
+      return canonicalFbdJson(state.document)
+    } catch {
+      return ''
+    }
+  }, [state.document])
+
+  useEffect(() => {
+    let cancelled = false
+    hashBufferSource(canonicalSource)
+      .then((h) => { if (!cancelled) setLocalSha256(h) })
+      .catch(() => { if (!cancelled) setLocalSha256(undefined) })
+    return () => { cancelled = true }
+  }, [canonicalSource])
+
+  const activeBuffer: OpenBufferContext | undefined = useMemo(() => {
+    if (openBuffer) {
+      return {
+        ...openBuffer,
+        sourceSha256: localSha256 ?? openBuffer.sourceSha256,
+      }
+    }
+    if (checkRevisionId) {
+      return {
+        revisionId: checkRevisionId,
+        sourceSha256: localSha256,
+      }
+    }
+    return undefined
+  }, [openBuffer, checkRevisionId, localSha256])
+
   const issues = validateFbdDocument(state.document)
   const issueTargets = useMemo(() => fbdIssueTargets(state.document, issues), [state.document, issues])
-  const issueNodeIds = useMemo(() => {
-    const ids = new Set<string>()
+  const { issueNodeIds, staleNodeIds } = useMemo(() => {
+    const freshIds = new Set<string>()
+    const staleIds = new Set<string>()
+
     for (const target of issueTargets) {
-      if (target.selection?.kind === 'node') ids.add(target.selection.nodeId)
+      if (target.selection?.kind === 'node') freshIds.add(target.selection.nodeId)
     }
-    return ids
-  }, [issueTargets])
+
+    if (diagnostics && activeBuffer) {
+      for (const diag of diagnostics) {
+        const nodeId = extractDiagnosticNodeId(diag, state.document)
+        if (!nodeId) continue
+        const freshness = diagnosticFreshness(diag, activeBuffer)
+        if (freshness.freshness === 'FRESH') {
+          freshIds.add(nodeId)
+        } else if (freshness.freshness === 'STALE') {
+          staleIds.add(nodeId)
+        }
+      }
+    }
+
+    for (const id of freshIds) {
+      staleIds.delete(id)
+    }
+
+    return { issueNodeIds: freshIds, staleNodeIds: staleIds }
+  }, [issueTargets, diagnostics, activeBuffer, state.document])
   return (
     <section
       ref={sectionRef}
@@ -1119,6 +1180,7 @@ export function StructuredFbdEditor({
               layout={state.document.layout}
               selection={state.selection}
               issueNodeIds={issueNodeIds}
+              staleNodeIds={staleNodeIds}
               connectionFromPortId={state.connectionFromPortId}
               canEdit={canEdit}
               wireStyle={wireStyle}

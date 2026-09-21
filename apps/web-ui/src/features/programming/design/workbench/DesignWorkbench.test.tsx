@@ -163,4 +163,33 @@ describe('DesignWorkbench — khay Vấn đề (ISS-STED-05)', () => {
     openProblems()
     expect(panelText()).toContain('Kiểm tra revision rev-7: không có vấn đề nào.')
   })
+
+  it('chẩn đoán FBD từ server hiển thị chip CŨ / STALE khi buffer bị sửa', () => {
+    const diagnostic: ProgrammingDiagnostic = {
+      code: 'PRG-ERR-CHECK-001',
+      detailCode: 'FBD-SEM-001',
+      severity: 'ERROR',
+      message: 'signal type mismatch',
+      messageKey: 'programming.error.check',
+      location: {
+        programId: 'P_fbd',
+        revisionId: 'rev-1',
+        pouId: 'P_fbd',
+        sourceSha256: 'old-sha256',
+        stLanguageProfileVersion: '1.0.0',
+      },
+    }
+    renderWorkbench({
+      checkDiagnostics: [diagnostic],
+      hasCheckResult: true,
+      openBuffer: {
+        revisionId: 'rev-1',
+        pouId: 'P_fbd',
+        sourceSha256: 'new-sha256',
+      },
+    })
+    openProblems()
+    expect(panelText()).toContain('FBD-SEM-001')
+    expect(panelText()).toContain('CŨ')
+  })
 })

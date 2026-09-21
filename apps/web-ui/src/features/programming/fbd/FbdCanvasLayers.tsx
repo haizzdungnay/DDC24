@@ -247,6 +247,7 @@ export interface FbdNodesLayerProps {
   networkId: string
   tempPositions: Map<string, FbdPoint> | null
   issueNodeIds?: ReadonlySet<string>
+  staleNodeIds?: ReadonlySet<string>
   /** Giá trị runtime đã trình bày xong; `null` = chế độ này không có nguồn. */
   runtime?: FbdRuntimeOverlay | null
   pick?: (vi: string, en: string) => string
@@ -305,6 +306,7 @@ export function FbdNodesLayer({
   networkId,
   tempPositions,
   issueNodeIds,
+  staleNodeIds,
   runtime,
   pick,
   select,
@@ -350,10 +352,15 @@ export function FbdNodesLayer({
           (selection?.kind === 'multi-node' && selection.nodeIds.includes(placed.id))
 
         const hasIssue = issueNodeIds?.has(placed.id) === true
+        const isStale = !hasIssue && staleNodeIds?.has(placed.id) === true
         const issueNotice = hasIssue
           ? pick
             ? pick(' · Có lỗi chẩn đoán', ' · Has diagnostic issue')
             : ' · Có lỗi chẩn đoán'
+          : isStale
+          ? pick
+            ? pick(' · STALE DIAGNOSTIC', ' · STALE DIAGNOSTIC')
+            : ' · STALE DIAGNOSTIC'
           : ''
 
         const paramSummary = formatNodeParameterSummary(node.kind, node.parameters)
@@ -422,13 +429,13 @@ export function FbdNodesLayer({
                 strokeWidth={isDropTarget ? 2.5 : isSelected || hasIssue ? 2 : 1}
                 strokeDasharray={isDropTarget ? '6 3' : undefined}
               />
-              {hasIssue && (
+              {(hasIssue || isStale) && (
                 <circle
                   cx={placed.x + placed.width - 12}
                   cy={placed.y + 12}
                   r={4}
-                  fill="var(--c-warn-fg)"
-                  data-fbd-node-issue="true"
+                  fill={hasIssue ? 'var(--c-warn-fg)' : 'var(--c-text-dim)'}
+                  data-fbd-node-issue={hasIssue ? 'true' : 'stale'}
                   aria-hidden="true"
                 />
               )}
