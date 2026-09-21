@@ -208,6 +208,7 @@ function QualityBadge({ quality }: { quality: StRuntimeQuality }) {
     STALE: pick('Cũ', 'Stale'),
     OFFLINE: pick('Mất kết nối', 'Offline'),
     UNKNOWN: pick('Chưa rõ', 'Unknown'),
+    UNAVAILABLE: pick('Không khả dụng', 'Unavailable'),
   }
   const tone = quality === 'GOOD'
     ? 'border-[var(--c-good-fg)] text-[var(--c-good-fg)]'

@@ -1,14 +1,16 @@
+import { lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ProgrammingLayout } from './layout/ProgrammingLayout'
 import { OverviewPage } from './overview/OverviewPage'
 import { DesignWorkspacePage } from './design/DesignWorkspacePage'
-import { CheckCommissionPage } from './commission/CheckCommissionPage'
-import { RuntimeServicePage } from './runtime/RuntimeServicePage'
-import { LibraryPage } from './library/LibraryPage'
 import { LegacyDesignRedirect, LegacyProgramsRedirect, LegacyTabRedirect } from './shared/LegacyTabRedirect'
 import { ProgramsWorkspaceRoute } from './design/ProgramsWorkspaceRoute'
 import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../shared/config'
 import { ProgrammingAuthorizationProvider } from './api/authorization'
+
+const CheckCommissionPage = lazy(() => import('./commission/CheckCommissionPage').then((m) => ({ default: m.CheckCommissionPage })))
+const RuntimeServicePage = lazy(() => import('./runtime/RuntimeServicePage').then((m) => ({ default: m.RuntimeServicePage })))
+const LibraryPage = lazy(() => import('./library/LibraryPage').then((m) => ({ default: m.LibraryPage })))
 
 /** Route tương đối canonical của đúng sáu workspace theo UX-WEB-PROG-001 §2. */
 export const PROGRAMMING_WORKSPACE_PATHS = {

@@ -1,13 +1,14 @@
+import { useMemo } from 'react'
 import { useI18n } from '../../../shared/i18n'
 import { useProgrammingRevision } from '../api/queries'
 import { activeProgramSource } from '../overview/activeProgramSet'
 import { SimulationControls } from './SimulationControls'
 import { VirtualInputs } from './VirtualInputs'
+import { StRuntimeValueOverlay, type StRuntimeOverlayItem, type StRuntimeOverlayState } from '../design/editor/StRuntimeValueOverlay'
 import {
   canControlSimulation,
   currentSession,
   isSimulationSupported,
-  simulationValuesByObservation,
   type SimulationAction,
   type SimulationInputDescriptor,
   type SimulationSlice,
@@ -68,7 +69,30 @@ export function SimulateWorkspace({
     revision: revision.data,
     objectId: objectId ?? null,
   })
-  const values = simulationValuesByObservation(slice.frame)
+
+  const simulationOverlayState: StRuntimeOverlayState = useMemo(() => {
+    if (slice.frame === null) {
+      return {
+        status: 'unavailable',
+        reason: pick(
+          'Chưa có nhịp nào chạy — nhấn Chạy hoặc Nhịp để bắt đầu.',
+          'No tick has run yet — press Run or Step to start.',
+        ),
+      }
+    }
+    const items: StRuntimeOverlayItem[] = slice.frame.observations.map((obs) => ({
+      variableId: obs.observationId,
+      variableName: obs.observationId,
+      value: obs.value,
+      valid: obs.quality !== 'UNAVAILABLE',
+      quality: obs.quality === 'GOOD' ? 'GOOD' : obs.quality === 'UNCERTAIN' ? 'UNCERTAIN' : 'BAD',
+      freshness: 'SIMULATION',
+    }))
+    return {
+      status: 'ready',
+      items,
+    }
+  }, [slice.frame, pick])
 
   if (!supported) {
     /* Thiết bị không công bố khả năng mô phỏng. Nói ra và DỪNG — không dựng
@@ -140,42 +164,18 @@ export function SimulateWorkspace({
             </label>
           )}
 
-          <section aria-label={pick('Lớp giá trị mô phỏng', 'Simulation value layer')} className="space-y-1">
-            <h3 className="text-xs font-semibold uppercase text-[var(--c-text)]">
-              {pick('Giá trị quan sát', 'Observations')}
-            </h3>
-            {slice.frame === null ? (
-              <p className="text-[11px] text-[var(--c-text-dim)]">
-                {pick('Chưa có nhịp nào chạy, nên chưa có giá trị nào để hiện.',
-                      'No tick has run yet, so there is nothing to show.')}
-              </p>
-            ) : (
-              <ul className="space-y-0.5">
-                {Object.values(values).map((value) => (
-                  <li key={value.observationId} className="flex flex-wrap items-baseline gap-2 text-[11px]">
-                    <span className="font-mono text-[var(--c-text)]">{value.observationId}</span>
-                    <span className="font-mono">
-                      {value.value === null || value.value === undefined
-                        ? '—'
-                        : typeof value.value === 'boolean' ? (value.value ? 'TRUE' : 'FALSE') : String(value.value)}
-                    </span>
-                    <span className="text-[var(--c-text-dim)]">{value.quality}</span>
-                    {/* Nguồn hiện tường minh trên MỖI dòng: giá trị mô phỏng và
-                        giá trị của gói đang chạy trông giống hệt nhau. */}
-                    <span className="rounded-full border border-[var(--c-border)] px-1 text-[10px] text-[var(--c-text-dim)]">
-                      {pick('MÔ PHỎNG', 'SIMULATION')}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
         </div>
 
         <aside className="rounded-[var(--radius)] border border-[var(--c-border)] p-2">
           <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
         </aside>
       </div>
+
+      <StRuntimeValueOverlay
+        state={simulationOverlayState}
+        programId={objectId ?? session?.sourceDraftRevisionId ?? session?.sessionId}
+        mode="SIMULATION"
+      />
     </section>
   )
 }

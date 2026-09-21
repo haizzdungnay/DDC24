@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
@@ -102,5 +102,118 @@ describe('StRuntimeValueOverlay — Core khởi động lại (T59-810)', () => 
       </I18nProvider>,
     )
     expect(screen.queryByText(/Core đã khởi động lại/)).toBeNull()
+  })
+})
+
+describe('StRuntimeValueOverlay — Bộ lọc và chọn biến hiển thị', () => {
+  const items = [
+    item({ variableId: 'v1', variableName: 'SupplyTemp', value: 24.5 }),
+    item({ variableId: 'v2', variableName: 'ReturnTemp', value: 28.0 }),
+    item({ variableId: 'v3', variableName: 'FanSpeed', value: 75 }),
+  ]
+
+  beforeEach(() => {
+    localStorage.clear()
+    localStorage.setItem('mkddc-lang', 'vi')
+  })
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('lọc danh sách biến theo ô tìm kiếm', () => {
+    render(
+      <I18nProvider>
+        <StRuntimeValueOverlay state={{ status: 'ready', items }} programId="pou-ah01" />
+      </I18nProvider>,
+    )
+    expect(screen.getByText('SupplyTemp')).toBeInTheDocument()
+    expect(screen.getByText('ReturnTemp')).toBeInTheDocument()
+    expect(screen.getByText('FanSpeed')).toBeInTheDocument()
+
+    const searchInput = screen.getByPlaceholderText('Tìm biến…')
+    fireEvent.change(searchInput, { target: { value: 'fan' } })
+
+    expect(screen.queryByText('SupplyTemp')).not.toBeInTheDocument()
+    expect(screen.queryByText('ReturnTemp')).not.toBeInTheDocument()
+    expect(screen.getByText('FanSpeed')).toBeInTheDocument()
+
+    // Xoá tìm kiếm bằng nút Clear
+    const clearBtn = screen.getByLabelText('Xoá tìm kiếm')
+    fireEvent.click(clearBtn)
+    expect(screen.getByText('SupplyTemp')).toBeInTheDocument()
+    expect(screen.getByText('FanSpeed')).toBeInTheDocument()
+  })
+
+  it('mở panel chọn biến, ẩn biến qua checkbox và lưu vào localStorage theo programId', () => {
+    render(
+      <I18nProvider>
+        <StRuntimeValueOverlay state={{ status: 'ready', items }} programId="pou-ah01" />
+      </I18nProvider>,
+    )
+
+    const togglePickerBtn = screen.getByTitle('Chọn biến hiển thị')
+    fireEvent.click(togglePickerBtn)
+
+    expect(screen.getByTestId('runtime-variable-picker')).toBeInTheDocument()
+
+    // Bỏ chọn biến ReturnTemp
+    const returnTempCheckbox = screen.getByRole('checkbox', { name: 'ReturnTemp' })
+    expect(returnTempCheckbox).toBeChecked()
+    fireEvent.click(returnTempCheckbox)
+    expect(returnTempCheckbox).not.toBeChecked()
+
+    // Biến ReturnTemp bị ẩn khỏi danh sách overlay
+    const list = screen.getByRole('list', { name: 'Giá trị runtime theo biến' })
+    expect(within(list).getByText('SupplyTemp')).toBeInTheDocument()
+    expect(within(list).queryByText('ReturnTemp')).not.toBeInTheDocument()
+    expect(screen.queryByText('28 degC')).not.toBeInTheDocument()
+
+    // Kiểm tra localStorage
+    const saved = JSON.parse(localStorage.getItem('mkddc.programming.runtimeOverlay.hidden.pou-ah01') || '[]')
+    expect(saved).toContain('ReturnTemp')
+  })
+
+  it('hỗ trợ nút Bỏ chọn tất cả và Hiện tất cả', () => {
+    render(
+      <I18nProvider>
+        <StRuntimeValueOverlay state={{ status: 'ready', items }} programId="pou-ah01" />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByTitle('Chọn biến hiển thị'))
+
+    // Bỏ chọn tất cả
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ chọn tất cả' }))
+    expect(screen.getByText('Không có biến nào khớp với bộ lọc.')).toBeInTheDocument()
+
+    // Nút Hiện tất cả biến ở trạng thái rỗng
+    fireEvent.click(screen.getByRole('button', { name: 'Hiện tất cả biến' }))
+    const list = screen.getByRole('list', { name: 'Giá trị runtime theo biến' })
+    expect(within(list).getByText('SupplyTemp')).toBeInTheDocument()
+    expect(within(list).getByText('ReturnTemp')).toBeInTheDocument()
+    expect(within(list).getByText('FanSpeed')).toBeInTheDocument()
+  })
+
+  it('hỗ trợ mode SIMULATION với tiêu đề và storageKey riêng biệt', () => {
+    render(
+      <I18nProvider>
+        <StRuntimeValueOverlay
+          state={{ status: 'ready', items }}
+          programId="sim-01"
+          mode="SIMULATION"
+        />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByRole('heading', { level: 4 })).toHaveTextContent('Giá trị quan sát')
+    expect(screen.getByText('Mô phỏng')).toBeInTheDocument()
+
+    // Bỏ chọn biến SupplyTemp
+    fireEvent.click(screen.getByTitle('Chọn biến hiển thị'))
+    const supplyTempCheckbox = screen.getByRole('checkbox', { name: 'SupplyTemp' })
+    fireEvent.click(supplyTempCheckbox)
+
+    const saved = JSON.parse(localStorage.getItem('mkddc.programming.runtimeOverlay.hidden.sim.sim-01') || '[]')
+    expect(saved).toContain('SupplyTemp')
   })
 })

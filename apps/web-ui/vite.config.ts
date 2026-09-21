@@ -64,6 +64,9 @@ export default defineConfig(({ mode }) => {
             if (id.includes('node_modules/lucide-react')) {
               return 'icons'
             }
+            if (id.includes('node_modules/@noble/hashes')) {
+              return 'crypto'
+            }
           }
         }
       }
