@@ -44,6 +44,16 @@ using CovNotifyFn = std::function<void(BacnetObjectType obj_type,
  */
 class BacnetObjects {
 public:
+    static constexpr int N_AI  = KX_N_UI;  /* ADR-010: 16 UI → 16 AI */
+    static constexpr int N_BI  = 8;
+    static constexpr int N_AO  = 4;
+    static constexpr int N_BO  = 4;
+    static constexpr int N_AV  = 32;
+    static constexpr int N_BV  = 16;
+    static constexpr int N_MSV = 8;
+
+    static_assert(N_AI == KX_N_UI, "N_AI must match KX_N_UI per ADR-010");
+
     BacnetObjects();
 
     /** Initialize from config (device name, IDs). */
@@ -136,14 +146,6 @@ private:
     BacnetConfig   cfg_;
     BacnetPriority priority_;
     BacnetCov      cov_;
-
-    static constexpr int N_AI  = KX_N_UI;  /* ADR-010: 16 UI → 16 AI */
-    static constexpr int N_BI  = 8;
-    static constexpr int N_AO  = 4;
-    static constexpr int N_BO  = 4;
-    static constexpr int N_AV  = 32;
-    static constexpr int N_BV  = 16;
-    static constexpr int N_MSV = 8;
 
     std::string ai_names_[N_AI];
     std::string bi_names_[N_BI];

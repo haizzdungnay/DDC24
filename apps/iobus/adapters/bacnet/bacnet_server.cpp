@@ -164,7 +164,7 @@ void BacnetServer::apply_ai_units()
         if (std::strcmp(s, "%") == 0)    return UNITS_PERCENT;
         return UNITS_NO_UNITS;
     };
-    for (int i = 0; i < KX_N_UI; i++) {
+    for (int i = 0; i < BacnetObjects::N_AI; i++) {
         Analog_Input_Units_Set(static_cast<uint32_t>(i + 1),
                                unit_code(objects_->ai_unit(static_cast<uint32_t>(i + 1)).c_str()));
     }
@@ -175,7 +175,7 @@ void BacnetServer::apply_ao_config()
 {
 #ifdef MKDDC_ENABLE_BACNET
     if (!objects_) return;
-    for (uint32_t i = 1; i <= 4; i++) {
+    for (uint32_t i = 1; i <= BacnetObjects::N_AO; i++) {
         auto& name_buf = ao_name_storage_[i - 1];
         std::strncpy(name_buf.data(), objects_->ao_name(i).c_str(), name_buf.size() - 1);
         name_buf.back() = '\0';
@@ -214,14 +214,14 @@ bool BacnetServer::rebind()
 void BacnetServer::register_objects()
 {
 #ifdef MKDDC_ENABLE_BACNET
-    /* BAC-003: AI×16 (ADR-010: KX_N_UI=16), BI×8, AO×4, BO×4, AV×32, BV×16, MSV×8 */
-    for (int i = 0; i < KX_N_UI; i++) Analog_Input_Create(i + 1);
-    for (int i = 0; i < 8;  i++) Binary_Input_Create(i + 1);
-    for (int i = 0; i < 4;  i++) Analog_Output_Create(i + 1);
-    for (int i = 0; i < 4;  i++) Binary_Output_Create(i + 1);
-    for (int i = 0; i < 32; i++) Analog_Value_Create(i + 1);
-    for (int i = 0; i < 16; i++) Binary_Value_Create(i + 1);
-    for (int i = 0; i < 8;  i++) Multistate_Value_Create(i + 1);
+    /* BAC-003: AI×N_AI, BI×N_BI, AO×N_AO, BO×N_BO, AV×N_AV, BV×N_BV, MSV×N_MSV */
+    for (int i = 0; i < BacnetObjects::N_AI; i++) Analog_Input_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_BI; i++) Binary_Input_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_AO; i++) Analog_Output_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_BO; i++) Binary_Output_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_AV; i++) Analog_Value_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_BV; i++) Binary_Value_Create(i + 1);
+    for (int i = 0; i < BacnetObjects::N_MSV; i++) Multistate_Value_Create(i + 1);
 #endif
 }
 
@@ -229,7 +229,7 @@ void BacnetServer::sync_stack_inputs(const kx_plc_shm_t* shm)
 {
 #ifdef MKDDC_ENABLE_BACNET
     if (!objects_ || !shm) return;
-    for (uint32_t instance = 1; instance <= KX_N_UI; ++instance) {
+    for (uint32_t instance = 1; instance <= BacnetObjects::N_AI; ++instance) {
         float value = 0.0f;
         uint8_t status_flags = 0;
         uint8_t reliability = 0;
@@ -240,6 +240,11 @@ void BacnetServer::sync_stack_inputs(const kx_plc_shm_t* shm)
             Analog_Input_Out_Of_Service_Set(instance,
                                              objects_->oos_ai(instance));
         }
+    }
+    for (uint32_t instance = 1; instance <= BacnetObjects::N_BI; ++instance) {
+        float value = 0.0f;
+        uint8_t status_flags = 0;
+        uint8_t reliability = 0;
         if (objects_->read_bi(instance, &value, &status_flags, &reliability, shm)) {
             Binary_Input_Present_Value_Set(
                 instance, value != 0.0f ? BINARY_ACTIVE : BINARY_INACTIVE);
@@ -297,34 +302,41 @@ void BacnetServer::dispatch_cov(uint64_t now_ms, const kx_plc_shm_t* shm)
 #endif
     };
 
-    /* Scan AI/BI */
-    for (uint32_t i = 1; i <= 8; i++) {
+    /* Scan AI (ADR-010: 16 UI -> 16 AI, Issue #635) */
+    for (uint32_t i = 1; i <= BacnetObjects::N_AI; i++) {
         float v; uint8_t sf, rel;
         if (objects_->read_ai(i, &v, &sf, &rel, shm))
             check(BacnetObjectType::ANALOG_INPUT, i, v, sf);
+    }
+    /* Scan BI */
+    for (uint32_t i = 1; i <= BacnetObjects::N_BI; i++) {
+        float v; uint8_t sf, rel;
         if (objects_->read_bi(i, &v, &sf, &rel, shm))
             check(BacnetObjectType::BINARY_INPUT, i, v, sf);
     }
     /* AO/BO */
-    for (uint32_t i = 1; i <= 4; i++) {
+    for (uint32_t i = 1; i <= BacnetObjects::N_AO; i++) {
         float v; uint8_t sf, rel;
         if (objects_->read_ao(i, &v, &sf, &rel, shm))
             check(BacnetObjectType::ANALOG_OUTPUT, i, v, sf);
+    }
+    for (uint32_t i = 1; i <= BacnetObjects::N_BO; i++) {
+        float v; uint8_t sf, rel;
         if (objects_->read_bo(i, &v, &sf, &rel, shm))
             check(BacnetObjectType::BINARY_OUTPUT, i, v, sf);
     }
     /* AV/BV/MSV */
-    for (uint32_t i = 1; i <= 32; i++) {
+    for (uint32_t i = 1; i <= BacnetObjects::N_AV; i++) {
         float v; uint8_t sf;
         if (objects_->read_av(i, &v, &sf, shm))
             check(BacnetObjectType::ANALOG_VALUE, i, v, sf);
     }
-    for (uint32_t i = 1; i <= 16; i++) {
+    for (uint32_t i = 1; i <= BacnetObjects::N_BV; i++) {
         float v; uint8_t sf;
         if (objects_->read_bv(i, &v, &sf, shm))
             check(BacnetObjectType::BINARY_VALUE, i, v, sf);
     }
-    for (uint32_t i = 1; i <= 8; i++) {
+    for (uint32_t i = 1; i <= BacnetObjects::N_MSV; i++) {
         float v; uint8_t sf;
         if (objects_->read_msv(i, &v, &sf, shm))
             check(BacnetObjectType::MULTI_STATE_VALUE, i, v, sf);

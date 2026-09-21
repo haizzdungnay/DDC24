@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Fixed — `#635`: AI9..AI16 không bao giờ được kiểm COV — tách cận quét theo từng loại object (2026-09-21)
+
+- Phạm vi: `apps/iobus/adapters/bacnet/bacnet_objects.hpp`,
+  `apps/iobus/adapters/bacnet/bacnet_server.hpp`,
+  `apps/iobus/adapters/bacnet/bacnet_server.cpp`,
+  `apps/iobus/adapters/bacnet/tests/test_bacnet_cov.cpp`,
+  `apps/iobus/adapters/bacnet/tests/test_bacnet_object_map.cpp`, `CHANGELOG.md`.
+- **Triệu chứng.** Các kênh AI từ 9 đến 16 thay đổi giá trị nhưng không bao giờ phát sinh thông báo COV (Change of Value).
+- **Nguyên nhân gốc.** Trong `BacnetServer::dispatch_cov()`, AI và BI quét chung trong một vòng lặp `for (uint32_t i = 1; i <= 8; i++)`. Do BI chỉ có 8 kênh nhưng AI có 16 kênh (`KX_N_UI` theo ADR-010), cận trên 8 khiến `AI9..AI16` bị bỏ qua không quét. Ngoài ra các hằng số `N_*` bị giấu sau `private:` khiến `bacnet_server.cpp` chép cứng 12 số trần.
+- **Cách sửa.** Đưa 7 hằng số `N_AI..N_MSV` ra `public:` trong `BacnetObjects`, xóa toàn bộ 12 số trần trong `bacnet_server.cpp` (về 0 số trần); tách vòng lặp quét AI chạy độc lập `1..BacnetObjects::N_AI` (16) và BI chạy `1..BacnetObjects::N_BI` (8) trong cả `dispatch_cov()` lẫn `sync_stack_inputs()`; thêm `static_assert(N_AI == KX_N_UI)`; bổ sung unit test kiểm tra COV cho các kênh `AI9..AI16` và test khóa hằng số object.
+- Refs: `#635`, `#726`.
+
 ### Added — Tinh chỉnh thanh rail, bố cục Inspector, chế độ Live/Simulate và kéo giãn cột workbench (2026-09-19)
 
 - Phạm vi:
