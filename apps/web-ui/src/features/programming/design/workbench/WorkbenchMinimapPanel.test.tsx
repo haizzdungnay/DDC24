@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
 import type { FbdNodeGeometry, FbdWireGeometry } from '../../fbd/geometry'
+import { minimapClientToGraph } from '../../fbd/FbdCanvas'
 import {
   WorkbenchMinimapPanel,
-  minimapClientToGraphCoordinates,
   type FbdCanvasBridge,
 } from './WorkbenchMinimapPanel'
 
@@ -316,20 +316,110 @@ describe('WorkbenchMinimapPanel (Task T9-02)', () => {
 
     expect(minimap).toHaveAttribute('viewBox', '376 176 216 140')
 
-    // Tâm khung SVG phải thành tâm graph (484, 246), sau đó được mã hoá về
-    // client coordinate của callback bridge dùng viewBox toàn canvas cũ.
+    // Tâm khung SVG phải thành tâm graph (484, 246).
+    /* `#732` — panel KHÔNG dịch toạ độ nữa: nó chuyển thẳng con trỏ thật, và
+     * canvas giải mã bằng `viewBox` của chính phần tử này.
+     *
+     * Ca này có răng vì `viewBox` (`376 176 216 140`) KHÁC hẳn khung canvas
+     * đầy đủ (`0 0 1200 1600`) cả ở gốc lẫn ở tỉ lệ. Bản cũ chiếu ngược bằng
+     * khung đầy đủ nên truyền `(97.85, 21.525)`; giải mã lại bằng `viewBox`
+     * cho `x = 376 + 97.85 = 473.85`, lệch `10.15` so với điểm thật `484`. */
     fireEvent.pointerDown(minimap, { pointerId: 1, clientX: 108, clientY: 70 })
     expect(onNavigate).toHaveBeenCalledTimes(1)
-    const [virtualClientX, virtualClientY, element] = onNavigate.mock.calls[0]
-    expect(virtualClientX).toBeCloseTo(97.85, 5)
-    expect(virtualClientY).toBeCloseTo(21.525, 5)
+    const [passedClientX, passedClientY, element] = onNavigate.mock.calls[0]
+    expect(passedClientX).toBe(108)
+    expect(passedClientY).toBe(70)
     expect(element).toBe(minimap)
 
-    expect(minimapClientToGraphCoordinates(
-      { x: 108, y: 70 },
+    /* Phép kiểm thật nằm ở ĐẦU KIA: giải mã thứ panel vừa truyền, bằng đúng
+     * hàm và đúng `viewBox` mà canvas dùng, phải ra lại điểm dưới con trỏ. */
+    expect(minimapClientToGraph(
+      { x: passedClientX, y: passedClientY },
       { left: 0, top: 0, width: 216, height: 140 },
-      { x: 376, y: 176, width: 216, height: 140 },
+      216,
+      140,
+      { x: 376, y: 176 },
     )).toEqual({ x: 484, y: 246 })
+  })
+
+  it('`#732` — điểm canvas cuộn tới đúng là điểm dưới con trỏ, kể cả khi scene đã pan và đã zoom', () => {
+    const onNavigate = vi.fn()
+    const smallNodes: FbdNodeGeometry[] = [
+      { id: 'and-1', x: 400, y: 200, width: 168, height: 28, ports: [], auto: false },
+      { id: 'and-2', x: 400, y: 232, width: 168, height: 28, ports: [], auto: false },
+      { id: 'and-3', x: 400, y: 264, width: 168, height: 28, ports: [], auto: false },
+    ]
+
+    /* Pan và zoom đều KHÁC trạng thái gốc. Đây là ràng buộc quan trọng nhất của
+     * Issue: ở `viewport.x = 0`, `viewport.scale = 1` thì mọi phép quy đổi sai
+     * đơn vị vẫn cho kết quả đúng, nên một ca chỉ chạy ở trạng thái gốc sẽ xanh
+     * trên cả bản đúng lẫn bản sai và không canh được gì. */
+    const viewport = { x: -165.4, y: -40, scale: 1.25 }
+
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={createMockBridge({
+            nodes: smallNodes,
+            width: 1200,
+            height: 1600,
+            viewport,
+            scale: viewport.scale,
+            onNavigate,
+          })}
+        />
+      </I18nProvider>,
+    )
+
+    const minimap = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' }) as unknown as SVGSVGElement
+    const rect = { left: 0, top: 0, width: 216, height: 140 }
+    minimap.getBoundingClientRect = () => ({
+      ...rect,
+      right: rect.width,
+      bottom: rect.height,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    })
+
+    const [vbX, vbY, vbW, vbH] = (minimap.getAttribute('viewBox') ?? '').split(/\s+/).map(Number)
+    expect(vbW).toBeGreaterThan(0)
+    /* Tiền đề của ca: `viewBox` phải khác khung canvas đầy đủ, nếu không hai hệ
+     * quy chiếu trùng nhau và lỗi trở nên vô hình. */
+    expect([vbX, vbY, vbW, vbH]).not.toEqual([0, 0, 1200, 1600])
+
+    fireEvent.pointerDown(minimap, { pointerId: 1, clientX: 150, clientY: 96 })
+    expect(onNavigate).toHaveBeenCalledTimes(1)
+    const [passedClientX, passedClientY] = onNavigate.mock.calls[0]
+
+    /* Dựng lại đúng chuỗi phía canvas: giải mã → công thức cuộn của
+     * `FbdCanvas.navigateFromMinimap`, rồi hỏi ngược "tâm khung nhìn rơi vào
+     * điểm graph nào". Điểm đó phải là điểm dưới con trỏ. */
+    const clientWidth = 886
+    const clientHeight = 500
+    const decoded = minimapClientToGraph(
+      { x: passedClientX, y: passedClientY },
+      rect,
+      vbW,
+      vbH,
+      { x: vbX, y: vbY },
+    )!
+    const scrollLeft = viewport.x + decoded.x * viewport.scale - clientWidth / 2
+    const scrollTop = viewport.y + decoded.y * viewport.scale - clientHeight / 2
+
+    const centeredGraphX = (scrollLeft + clientWidth / 2 - viewport.x) / viewport.scale
+    const centeredGraphY = (scrollTop + clientHeight / 2 - viewport.y) / viewport.scale
+
+    const pointerGraph = minimapClientToGraph(
+      { x: 150, y: 96 },
+      rect,
+      vbW,
+      vbH,
+      { x: vbX, y: vbY },
+    )!
+
+    expect(Math.abs(centeredGraphX - pointerGraph.x)).toBeLessThanOrEqual(8)
+    expect(Math.abs(centeredGraphY - pointerGraph.y)).toBeLessThanOrEqual(8)
   })
 
   it('khi zoom out xa: indicator co về vừa khít viewBox, không vượt quá biên bbox', () => {
