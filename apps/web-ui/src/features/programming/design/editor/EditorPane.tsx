@@ -1279,6 +1279,8 @@ const inspectorToggleButton = (
             bindings={document.bindings}
             variables={document.variables}
             programs={document.programs}
+            diagnostics={diagnostics.filter((item) => item.location?.programId === selected.programId)}
+            checkRevisionId={checkRevisionId}
           />
         )}
       </div>

@@ -194,6 +194,7 @@ export interface FbdCanvasProps {
   layout: FbdDocument['layout']
   selection: FbdSelection | null
   issueNodeIds?: ReadonlySet<string>
+  staleNodeIds?: ReadonlySet<string>
   /** Giá trị runtime đã trình bày xong; `null` = chế độ này không có nguồn. */
   runtime?: FbdRuntimeOverlay | null
   connectionFromPortId: string | null
@@ -235,6 +236,7 @@ export function FbdCanvas({
   layout,
   selection,
   issueNodeIds,
+  staleNodeIds,
   runtime,
   connectionFromPortId,
   canEdit,
@@ -1788,6 +1790,7 @@ export function FbdCanvas({
               nodesById={nodesById}
               selection={selection}
               issueNodeIds={issueNodeIds}
+              staleNodeIds={staleNodeIds}
               runtime={runtime}
               pick={pick}
               connectionFromPortId={connectionFromPortId}

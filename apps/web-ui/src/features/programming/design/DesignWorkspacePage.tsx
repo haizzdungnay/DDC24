@@ -37,7 +37,8 @@ import { useProgrammingMobileReadOnly } from '../layout/useProgrammingViewport'
 import { CompareDrawer } from './compare/CompareDrawer'
 import { compareGateFor, type CompareEntry } from './compare/compareModel'
 import type { FbdSelection } from '../fbd/commands'
-import type { FbdDocument } from '../fbd/model'
+import { hashBufferSource, type OpenBufferContext } from '../shared/diagnosticFreshness'
+import { canonicalFbdJson, type FbdDocument } from '../fbd/model'
 import { useProgrammingActionAllowed } from '../api/authorization'
 
 const VALID_TABS = ['programs', 'mapping', 'execution'] as const
@@ -493,9 +494,12 @@ export function DesignWorkspacePage({
         <span
           role="status"
           data-testid="draft-dirty-indicator"
-          className={draftDirty ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
+          data-save-status={workspace.saving ? 'unknown' : (draftDirty ? 'dirty' : 'clean')}
+          className={(draftDirty || workspace.saving) ? 'inline-flex items-center rounded-full bg-[var(--c-warn-bg)] px-2 py-0.5 text-xs font-medium text-[var(--c-warn-fg)]' : 'sr-only'}
         >
-          {draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : ''}
+          {workspace.saving
+            ? pick('Đang lưu — đang chờ xác nhận…', 'Saving — awaiting confirmation…')
+            : (draftDirty ? pick('Chưa lưu — lưu trước khi Kiểm tra', 'Unsaved — save before Check') : '')}
         </span>
         {/* KHÔNG dựng lại Lưu/Kiểm tra/Làm mới ở đây.
          *
@@ -538,6 +542,59 @@ export function DesignWorkspacePage({
       globalThis.document.removeEventListener('click', interceptInternalLink, true)
     }
   }, [draftDirty])
+
+  const checkRevisionId = latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null
+
+  const currentBufferSource = useMemo(() => {
+    if (!workspaceDocument || !selectedProgram) return null
+    if (workspaceMode === 'EDIT') {
+      const pendingDoc = projectPendingProgramSources(workspaceDocument, programOperations)
+      const prog = pendingDoc.programs.find((p) => p.programId === selectedProgramId)
+      if (!prog) return null
+      if (typeof prog.document === 'string') return prog.document
+      if (prog.document && typeof prog.document === 'object') {
+        try {
+          return canonicalFbdJson(prog.document as FbdDocument)
+        } catch {
+          return JSON.stringify(prog.document)
+        }
+      }
+      return null
+    }
+    if (typeof selectedProgram.document === 'string') return selectedProgram.document
+    if (selectedProgram.document && typeof selectedProgram.document === 'object') {
+      try {
+        return canonicalFbdJson(selectedProgram.document as FbdDocument)
+      } catch {
+        return JSON.stringify(selectedProgram.document)
+      }
+    }
+    return null
+  }, [workspaceDocument, selectedProgram, workspaceMode, programOperations, selectedProgramId])
+
+  const [bufferSha256, setBufferSha256] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    let cancelled = false
+    if (currentBufferSource === null) {
+      setBufferSha256(undefined)
+      return
+    }
+    hashBufferSource(currentBufferSource)
+      .then((hash) => { if (!cancelled) setBufferSha256(hash) })
+      .catch(() => { if (!cancelled) setBufferSha256(undefined) })
+    return () => { cancelled = true }
+  }, [currentBufferSource])
+
+  const openBuffer = useMemo<OpenBufferContext | undefined>(() => {
+    if (!selectedProgramId) return undefined
+    return {
+      revisionId: checkRevisionId ?? undefined,
+      /* pouId neo theo selectedProgramId vì programId trên location chẩn đoán từ
+       * server ứng với programId của POU (checks.go:1092-1094). */
+      pouId: selectedProgramId,
+      sourceSha256: bufferSha256,
+    }
+  }, [checkRevisionId, selectedProgramId, bufferSha256])
 
   if (workspace.status === 'loading') {
     return <StateBlock state="loading" title={pick('Đang tải Draft…', 'Loading draft…')} />
@@ -987,6 +1044,7 @@ export function DesignWorkspacePage({
           checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
           onJumpToDiagnostic={jumpToDiagnostic}
           onJumpToFbdSelection={jumpToFbdSelection}
+          openBuffer={openBuffer}
         />
         </div>
         </FbdCanvasBridgeProvider>

@@ -10,6 +10,7 @@ import { validateFbdDocument, type FbdDocument } from '../../fbd/model'
 import { readFbdDocument } from '../../fbd/readDocument'
 import type { FbdSelection } from '../../fbd/commands'
 import type { ProgrammingDiagnostic, ProgrammingDraftDocument } from '../../model/types'
+import type { OpenBufferContext } from '../../shared/diagnosticFreshness'
 import { presentStRuntimeValue, type StRuntimeOverlayState, type StRuntimeQuality } from '../editor/StRuntimeValueOverlay'
 import type { FbdCanvasBridge } from './WorkbenchMinimapPanel'
 import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol, type WorkbenchWatchRow } from './ProgrammingWorkbench'
@@ -62,6 +63,7 @@ export function DesignWorkbench({
   onJumpToDiagnostic,
   onJumpToFbdSelection,
   fbdBridge,
+  openBuffer,
 }: {
   mode: WorkbenchMode
   document: ProgrammingDraftDocument
@@ -105,6 +107,7 @@ export function DesignWorkbench({
   /** Chỉ được cấp khi caller có thể chọn đúng POU rồi truyền exact canonical
    * selection xuống canvas; thiếu callback thì diagnostic FBD giữ dạng text. */
   onJumpToFbdSelection?: (programId: string, selection: FbdSelection) => void
+  openBuffer?: OpenBufferContext
 }) {
   const { pick } = useI18n()
 
@@ -150,25 +153,30 @@ export function DesignWorkbench({
        * kết luận sai mà giao diện không cho họ cách nào phát hiện.
        *
        * Nguồn cho ST là diagnostic Check (ISS-STED-04), KHÔNG phải một bộ kiểm
-       * thứ hai ở FE. */
+       * thứ hai ở FE.
+       *
+       * 2026-09-21 (Task 10b / TC-FBD-HEADER-003): Gỡ chặn language !== 'FBD' để
+       * POU FBD cũng nhận checkDiagnostics từ server (mang provenance location để
+       * đánh giá freshness). Validator cục bộ của FBD vẫn chạy song song. */
+      for (const diagnostic of checkDiagnostics) {
+        if (diagnostic.location?.programId !== program.programId) continue
+        const line = diagnostic.location?.line
+        const column = diagnostic.location?.column
+        const position = typeof line === 'number'
+          ? pick(`dòng ${line}${typeof column === 'number' ? `, cột ${column}` : ''}`,
+                 `line ${line}${typeof column === 'number' ? `, col ${column}` : ''}`)
+          : pick('không rõ vị trí', 'position unknown')
+        output.push({
+          id: `${program.programId}:${diagnostic.detailCode ?? diagnostic.code}:${line ?? 0}:${column ?? 0}`,
+          code: diagnostic.detailCode ?? diagnostic.code,
+          detail: diagnostic.message ?? position,
+          severity: diagnostic.severity,
+          jumpLabel: `${program.name} › ${position}`,
+          onJump: onJumpToDiagnostic ? () => onJumpToDiagnostic(diagnostic) : undefined,
+          location: diagnostic.location,
+        })
+      }
       if (program.language !== 'FBD') {
-        for (const diagnostic of checkDiagnostics) {
-          if (diagnostic.location?.programId !== program.programId) continue
-          const line = diagnostic.location?.line
-          const column = diagnostic.location?.column
-          const position = typeof line === 'number'
-            ? pick(`dòng ${line}${typeof column === 'number' ? `, cột ${column}` : ''}`,
-                   `line ${line}${typeof column === 'number' ? `, col ${column}` : ''}`)
-            : pick('không rõ vị trí', 'position unknown')
-          output.push({
-            id: `${program.programId}:${diagnostic.detailCode ?? diagnostic.code}:${line ?? 0}:${column ?? 0}`,
-            code: diagnostic.detailCode ?? diagnostic.code,
-            detail: diagnostic.message ?? position,
-            severity: diagnostic.severity,
-            jumpLabel: `${program.name} › ${position}`,
-            onJump: onJumpToDiagnostic ? () => onJumpToDiagnostic(diagnostic) : undefined,
-          })
-        }
         continue
       }
       const parsedResult = readFbdDocument(program.document)
@@ -290,6 +298,7 @@ export function DesignWorkbench({
       checkOwnerHref={checkOwnerHref}
       fbdBridge={fbdBridge}
       stMinimap={Boolean(source)}
+      openBuffer={openBuffer}
     />
   )
 }

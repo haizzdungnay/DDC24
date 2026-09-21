@@ -26,6 +26,7 @@ interface RenderCanvasOptions {
   layout?: FbdDocument['layout']
   selection?: FbdSelection | null
   issueNodeIds?: ReadonlySet<string>
+  staleNodeIds?: ReadonlySet<string>
   connectionFromPortId?: string | null
   canEdit?: boolean
   bindings?: readonly ProgrammingBinding[]
@@ -50,6 +51,7 @@ function renderPresentationCanvas(options: RenderCanvasOptions = {}) {
       layout={layout}
       selection={selection}
       issueNodeIds={options.issueNodeIds}
+      staleNodeIds={options.staleNodeIds}
       connectionFromPortId={connectionFromPortId}
       canEdit={canEdit}
       dispatch={dispatch}
@@ -226,6 +228,31 @@ describe('FbdCanvas — Luồng C: Presentation tests (C-T1..C-T7)', () => {
 
     const issueMarker = surface.querySelector(`g[data-fbd-node-id="${targetNode.id}"] [data-fbd-node-issue="true"]`)
     expect(issueMarker).not.toBeNull()
+  })
+
+  it('TC-FBD-HEADER-003: Node nằm trong staleNodeIds — có marker stale, aria-label STALE DIAGNOSTIC, không gạch viền lỗi mới', () => {
+    const doc = golden()
+    const net = doc.networks[0]
+    const targetNode = net.nodes[0]
+    const staleNodeIds = new Set<string>([targetNode.id])
+
+    const { surface } = renderPresentationCanvas({
+      document: doc,
+      network: net,
+      staleNodeIds,
+    })
+
+    const nodeBtn = surface.querySelector(`g[data-fbd-node-id="${targetNode.id}"] [role="button"]`)
+    expect(nodeBtn).not.toBeNull()
+    expect(nodeBtn?.getAttribute('aria-label')).toContain('STALE DIAGNOSTIC')
+
+    const staleMarker = surface.querySelector(`g[data-fbd-node-id="${targetNode.id}"] [data-fbd-node-issue="stale"]`)
+    expect(staleMarker).not.toBeNull()
+    expect(staleMarker?.getAttribute('fill')).toBe('var(--c-text-dim)')
+
+    const borderRect = nodeBtn?.querySelector('rect')
+    expect(borderRect?.getAttribute('stroke')).toBe('var(--c-border)')
+    expect(borderRect?.getAttribute('stroke-width')).toBe('1')
   })
 
   it('C-T6: Chế độ EDIT — 0 giá trị runtime trên node (R-02)', () => {

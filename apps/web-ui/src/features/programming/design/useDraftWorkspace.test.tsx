@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ProgrammingApiError } from '../api/generated/client'
 import { useDraftWorkspace } from './useDraftWorkspace'
 
 const client = vi.hoisted(() => ({ request: vi.fn() }))
@@ -80,5 +81,44 @@ describe('save() — batch rỗng là không-việc-gì-cả, không phải mộ
       body: { schemaVersion: '1.0', baseRevisionId: project.baseRevisionId },
       ifMatch: '"etag:1"',
     })
+  })
+
+  it('TC-FBD-CONFLICT-001: 409 ProgrammingApiError ⇒ setConflict đúng expected/actual, không throw và giữ trạng thái', async () => {
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'updateProgrammingDraft') {
+        return Promise.reject(
+          new ProgrammingApiError(409, {
+            error: {
+              code: 'PRG-ERR-CONFLICT-001',
+              messageKey: 'programming.conflict.revision',
+              retryable: false,
+              keepsRunningRevision: true,
+              correlationId: 'corr-1',
+              args: { expected: '"etag:1"', actual: '"etag:2"' },
+            },
+          }),
+        )
+      }
+      return Promise.reject(new Error(`unexpected ${operationId}`))
+    })
+
+    const { result } = renderHook(() => useDraftWorkspace('project-1'))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    let saved: boolean | undefined
+    await act(async () => {
+      saved = await result.current.save([{ op: 'setFunctionalTags', tags: ['x'] }] as never)
+    })
+
+    expect(saved).toBe(false)
+    expect(result.current.saving).toBe(false)
+    expect(result.current.conflict).toEqual({ expected: '"etag:1"', actual: '"etag:2"' })
+    expect(result.current.error).toBeNull()
+
+    act(() => {
+      result.current.dismissConflict()
+    })
+    expect(result.current.conflict).toBeNull()
   })
 })

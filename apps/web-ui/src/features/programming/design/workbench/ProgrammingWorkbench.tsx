@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp, PanelRight, PanelRightClose } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import type { ProgrammingDiagnostic } from '../../model/types'
+import type { OpenBufferContext } from '../../shared/diagnosticFreshness'
 import { ProblemsDrawer } from '../../shared/ProblemsDrawer'
 import {
   PROGRAMMING_WORKBENCH_COLUMNS_MIN_WIDTH_PX,
@@ -40,6 +41,7 @@ export interface WorkbenchProblem {
   /** `null` = lỗi không neo vào vị trí nào; nút nhảy sẽ không hiện. */
   jumpLabel: string | null
   onJump?: () => void
+  location?: ProgrammingDiagnostic['location']
 }
 
 export interface WorkbenchSymbol {
@@ -151,6 +153,7 @@ export function ProgrammingWorkbench({
   watchAddRequest,
   fbdBridge,
   stMinimap = false,
+  openBuffer,
 }: {
   mode: WorkbenchMode
   /** Nguồn dữ liệu đang hiển thị, ví dụ `Draft · AHU_FanControl`. */
@@ -184,6 +187,7 @@ export function ProgrammingWorkbench({
   /** Cầu nối dữ liệu FBD Canvas sang Mini Map (T9-02) */
   fbdBridge?: FbdCanvasBridge | null
   stMinimap?: boolean
+  openBuffer?: OpenBufferContext
 }) {
   const { pick } = useI18n()
   /* Số cột của khay đáy do JAVASCRIPT quyết, không do utility quyết — lý do đầy
@@ -506,6 +510,7 @@ export function ProgrammingWorkbench({
                   revisionId={problemsRevisionId}
                   checkOwnerHref={checkOwnerHref}
                   pick={pick}
+                  openBuffer={openBuffer}
                 />
               )}
               {tab === 'search' && (
@@ -730,12 +735,14 @@ function ProblemsPanel({
   revisionId,
   checkOwnerHref,
   pick,
+  openBuffer,
 }: {
   problems: readonly WorkbenchProblem[]
   emptyState: 'not-checked' | 'no-problems'
   revisionId: string | null
   checkOwnerHref: string
   pick: (vi: string, en: string) => string
+  openBuffer?: OpenBufferContext
 }) {
   const diagnostics = useMemo<ProgrammingDiagnostic[]>(() => problems.map((problem) => ({
     code: problem.code,
@@ -745,6 +752,7 @@ function ProblemsPanel({
       ? `${problem.jumpLabel} · ${problem.detail}`
       : `${pick('không neo vào vị trí nào', 'not anchored to a location')} · ${problem.detail}`,
     args: { workbenchProblemId: problem.id },
+    location: problem.location,
   })), [pick, problems])
 
   const problemFor = (diagnostic: ProgrammingDiagnostic) => {
@@ -769,6 +777,7 @@ function ProblemsPanel({
           variant="embedded"
           diagnostics={diagnostics}
           emptyState={emptyState}
+          openBuffer={openBuffer}
           isSelectable={(diagnostic) => {
             const problem = problemFor(diagnostic)
             return Boolean(problem?.onJump && problem.jumpLabel)

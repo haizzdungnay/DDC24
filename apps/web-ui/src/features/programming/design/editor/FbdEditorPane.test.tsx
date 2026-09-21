@@ -154,9 +154,15 @@ describe('FbdEditorPane', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('dirty vẫn được công bố để header chung khoá Check theo pending operations', () => {
-    renderPane({ source: canonicalFbdJson(twoNetworkDocument()) })
+  it('TC-FBD-HEADER-001 (bổ sung): dirty vẫn được công bố để header chung khoá Check theo pending operations, không tự nhân bản nút', () => {
+    const { onRunCheck } = renderPane({
+      source: canonicalFbdJson(twoNetworkDocument()),
+      checkDisabledReason: 'Lưu bản nháp trước khi Kiểm tra',
+    })
     expect(screen.getByText(/Chưa lưu|Not saved/)).toBeInTheDocument()
+    const toolbar = screen.getByRole('toolbar', { name: /Lệnh FBD|FBD commands/ })
+    expect(within(toolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check/ })).toBeNull()
+    expect(onRunCheck).not.toHaveBeenCalled()
   })
 
   it('PGM-02B: thanh công cụ phụ gom cụm mà KHÔNG mất điều khiển nào', () => {
