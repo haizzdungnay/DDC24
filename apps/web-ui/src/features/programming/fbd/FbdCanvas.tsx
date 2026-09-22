@@ -7,6 +7,7 @@ import {
   FBD_MINIMAP_HEIGHT,
   FBD_MINIMAP_NODE_THRESHOLD,
   FBD_MINIMAP_WIDTH,
+  FBD_NODE_WIDTH,
   type FbdPortGeometry,
 } from './geometry'
 import {
@@ -122,6 +123,7 @@ interface PanState {
   startY: number
   originX: number
   originY: number
+  isRightButton?: boolean
 }
 
 interface MarqueeState {
@@ -177,6 +179,7 @@ export interface FbdViewCommands {
   zoom100: () => void
   zoomIn: () => void
   zoomOut: () => void
+  getViewportCenter: () => FbdPoint
 }
 
 /** Thao tác clipboard do editor sở hữu (nó giữ vùng đệm và biết network đích). */
@@ -299,6 +302,7 @@ export function FbdCanvas({
   const pinchStartViewportRef = useRef<FbdViewport | null>(null)
   const minimapPointerRef = useRef<number | null>(null)
   const pointerInsideRef = useRef(false)
+  const hasDraggedRightRef = useRef(false)
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const showFlash = useCallback((text: string, tone: 'info' | 'error' = 'info') => {
@@ -385,31 +389,6 @@ export function FbdCanvas({
     }
   }, [validationDocument, network.id, reconnectWireId])
 
-  const width = Math.max(geometry.width, containerWidth ? Math.floor(containerWidth / (viewport.scale || 1)) : 320, 320)
-  /* CHIỀU CAO MẶT VẼ KHÔNG ĐƯỢC ĐỌC LẠI CHIỀU CAO DO CHÍNH NÓ TẠO RA.
-   *
-   * `containerHeight` là số `ResizeObserver` đo trên khay cuộn — mà mặt vẽ này
-   * chính là nội dung của khay đó. Khi khay bị khung nhìn chặn (bố cục desktop
-   * có chuỗi `min-h-0` đầy đủ) thì hai số độc lập nhau và công thức cũ chạy
-   * đúng. Nhưng ở BẤT KỲ bố cục nào khay cao theo nội dung — mobile, và bất kỳ
-   * lần nào một mắt `min-h-0` trong chuỗi cha bị đứt — thì nó thành vòng tự
-   * nuôi: mặt vẽ cao `containerHeight + 800` ⇒ khay cao thêm 800 ⇒ vòng sau mặt
-   * vẽ lại cao thêm 800, đo được đúng +800 px MỖI khung hình và không bao giờ
-   * hội tụ. Trang không "giật" thấy được, nhưng mọi thao tác chờ bố cục đứng
-   * yên đều treo — `TC-FBD-NAV-001`/`TC-FBD-DIAG-001` chết vì hết 60 s ở
-   * "element is not stable", trên đúng lane mobile không có chuỗi chặn ấy.
-   *
-   * Ý đồ của số hạng này là "cho pan quá nội dung chừng một màn hình", nên đại
-   * lượng đúng để lấy là CHIỀU CAO NHÌN THẤY, không phải chiều cao khay. Kẹp
-   * bằng khung nhìn khiến công thức không còn tự tham chiếu: khi khay bị chặn,
-   * giá trị y hệt trước; khi khay không bị chặn, vòng lặp mất hẳn. */
-  const visibleHeight = Math.min(containerHeight || window.innerHeight, window.innerHeight)
-  const height = Math.max(
-    geometry.height + 600,
-    Math.floor(visibleHeight / (viewport.scale || 1)) + 800,
-    1600,
-  )
-
   const { drag, beginDrag, moveDrag, endDrag, cancelDrag } = useFbdNodeDrag({
     canEdit,
     viewport,
@@ -421,6 +400,42 @@ export function FbdCanvas({
     networkId: network.id,
     dispatch,
   })
+
+  let minX = geometry.minX ?? 0
+  let minY = geometry.minY ?? 0
+  let maxX = geometry.width
+  let maxY = geometry.height
+
+  if (drag) {
+    for (const [nodeId, pos] of drag.currentPositions) {
+      const nodeGeom = geometry.byNodeId.get(nodeId)
+      const w = nodeGeom?.width ?? FBD_NODE_WIDTH
+      const h = nodeGeom?.height ?? 80
+      minX = Math.min(minX, pos.x)
+      minY = Math.min(minY, pos.y)
+      maxX = Math.max(maxX, pos.x + w)
+      maxY = Math.max(maxY, pos.y + h)
+    }
+  }
+
+  const viewBoxX = Math.min(0, Math.floor(minX))
+  const viewBoxY = Math.min(0, Math.floor(minY))
+  const contentWidth = Math.max(maxX - viewBoxX, geometry.width)
+  const contentHeight = Math.max(maxY - viewBoxY, geometry.height)
+
+  const visibleWidth = Math.min(containerWidth || window.innerWidth, window.innerWidth)
+  const visibleHeight = Math.min(containerHeight || window.innerHeight, window.innerHeight)
+
+  const width = Math.max(
+    contentWidth + 800,
+    Math.floor(visibleWidth / (viewport.scale || 1)) + 800,
+    2000,
+  )
+  const height = Math.max(
+    contentHeight + 600,
+    Math.floor(visibleHeight / (viewport.scale || 1)) + 800,
+    1600,
+  )
 
   function select(next: FbdSelection) {
     dispatch({ type: 'SELECT', selection: next })
@@ -470,8 +485,8 @@ export function FbdCanvas({
     if (!point) return
     /* Scene có thể đã được pan bằng translate pixel. Mini Map phải đưa chính
      * graph point về tâm vùng nhìn của scene hiện tại, không được giả x/y=0. */
-    container.scrollLeft = viewport.x + point.x * viewport.scale - container.clientWidth / 2
-    container.scrollTop = viewport.y + point.y * viewport.scale - container.clientHeight / 2
+    container.scrollLeft = viewport.x + (point.x - viewBoxX) * viewport.scale - container.clientWidth / 2
+    container.scrollTop = viewport.y + (point.y - viewBoxY) * viewport.scale - container.clientHeight / 2
   }
 
   function getSceneRect(): ViewportRect {
@@ -488,7 +503,11 @@ export function FbdCanvas({
   }
 
   function toGraph(clientX: number, clientY: number): FbdPoint {
-    return screenToGraph({ x: clientX, y: clientY }, viewport, getSceneRect())
+    const pt = screenToGraph({ x: clientX, y: clientY }, viewport, getSceneRect())
+    return {
+      x: pt.x + viewBoxX,
+      y: pt.y + viewBoxY,
+    }
   }
 
   const isGestureActive = Boolean(
@@ -509,12 +528,12 @@ export function FbdCanvas({
     if (placed) {
       const sceneRect = getSceneRect()
       return {
-        x: sceneRect.left + viewport.x + (placed.x + placed.width) * viewport.scale,
-        y: sceneRect.top + viewport.y + placed.y * viewport.scale,
+        x: sceneRect.left + viewport.x + (placed.x + placed.width - viewBoxX) * viewport.scale,
+        y: sceneRect.top + viewport.y + (placed.y - viewBoxY) * viewport.scale,
       }
     }
     return null
-  }, [geometry.nodes, viewport])
+  }, [geometry.nodes, viewport, viewBoxX, viewBoxY])
 
   const handleNodePointerEnter = useCallback((event: React.PointerEvent<SVGGElement>, nodeId: string) => {
     if (isGestureActive) return
@@ -608,6 +627,26 @@ export function FbdCanvas({
     )
   }
 
+  const getViewportCenter = useCallback((): FbdPoint => {
+    const container = scrollRef.current
+    const scale = viewport.scale || 1
+    if (container) {
+      const rect = container.getBoundingClientRect()
+      const cw = rect.width > 0 ? rect.width : (container.clientWidth > 0 ? container.clientWidth : 800)
+      const ch = rect.height > 0 ? rect.height : (container.clientHeight > 0 ? container.clientHeight : 600)
+      const scrollLeft = container.scrollLeft || 0
+      const scrollTop = container.scrollTop || 0
+
+      const graphX = (scrollLeft + cw / 2 - viewport.x) / scale + viewBoxX
+      const graphY = (scrollTop + ch / 2 - viewport.y) / scale + viewBoxY
+      return { x: graphX, y: graphY }
+    }
+    return {
+      x: (400 - viewport.x) / scale + viewBoxX,
+      y: (300 - viewport.y) / scale + viewBoxY,
+    }
+  }, [viewport, viewBoxX, viewBoxY])
+
   /* Ghi lệnh khung nhìn cho tầng gọi. `ref` chứ không state: phím tắt chỉ cần
    * đọc lệnh mới nhất, và phát nó ra ngoài sẽ kéo cả cây render theo mỗi pan. */
   useEffect(() => {
@@ -618,6 +657,7 @@ export function FbdCanvas({
       zoom100,
       zoomIn: () => zoomBy(ZOOM_STEP),
       zoomOut: () => zoomBy(-ZOOM_STEP),
+      getViewportCenter,
     }
     return () => {
       viewCommandsRef.current = null
@@ -712,6 +752,7 @@ export function FbdCanvas({
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        hasDraggedRightRef.current = false
         setHoverTooltip(null)
         setPan(null)
         cancelDrag()
@@ -788,7 +829,16 @@ export function FbdCanvas({
     }
 
     if (pan) {
-      setViewport((v) => nextViewport(v, { x: pan.originX + (clientX - pan.startX), y: pan.originY + (clientY - pan.startY) }))
+      const dx = clientX - pan.startX
+      const dy = clientY - pan.startY
+      if (pan.isRightButton) {
+        if (hasDraggedRightRef.current || Math.hypot(dx, dy) > 3) {
+          hasDraggedRightRef.current = true
+          setViewport((v) => nextViewport(v, { x: pan.originX + dx, y: pan.originY + dy }))
+        }
+      } else {
+        setViewport((v) => nextViewport(v, { x: pan.originX + dx, y: pan.originY + dy }))
+      }
       return
     }
 
@@ -939,16 +989,16 @@ export function FbdCanvas({
       return
     }
 
-    /* Pan = nút giữa, hoặc `Space` + nút trái. KHÔNG còn nhận nút phải (nút
-     * phải nay mở menu ngữ cảnh) và KHÔNG còn nhận `Shift` + nút trái
-     * (`Shift`/`Ctrl` + kéo nay là chọn vùng CỘNG THÊM). Đó là bộ quy ước của
-     * editor desktop mà yêu cầu đòi, và hai phím cũ đã chiếm mất hai cử chỉ
-     * phổ biến hơn hẳn. */
+    /* Pan = nút phải (kèm ngưỡng kéo), nút giữa, hoặc `Space` + nút trái. */
+    const isRight = event.button === 2
     const isMiddle = event.button === 1
     const isSpacePan = event.button === 0 && spaceHeld
     const isTouchPan = event.pointerType === 'touch' && !marqueeMode && event.button === 0
 
-    if (isMiddle || isSpacePan || isTouchPan) {
+    if (isRight || isMiddle || isSpacePan || isTouchPan) {
+      if (isRight) {
+        hasDraggedRightRef.current = false
+      }
       event.currentTarget.setPointerCapture(event.pointerId)
       setPan({
         pointerId: event.pointerId,
@@ -956,6 +1006,7 @@ export function FbdCanvas({
         startY: event.clientY,
         originX: viewport.x,
         originY: viewport.y,
+        isRightButton: isRight,
       })
       return
     }
@@ -1002,6 +1053,9 @@ export function FbdCanvas({
    * bị phát hai lần với cùng một UUID và lần thứ hai sinh một thông báo từ
    * chối vô cớ. */
   function handleBgPointerUp(event: React.PointerEvent<SVGRectElement>) {
+    if (pan && pan.pointerId === event.pointerId) {
+      setPan(null)
+    }
     if (pendingPlacement) {
       activePointersRef.current.delete(event.pointerId)
       const entry = fbdPaletteEntry(pendingPlacement.entryId)
@@ -1026,6 +1080,7 @@ export function FbdCanvas({
 
   function handleBgPointerCancel(event: React.PointerEvent<SVGRectElement>) {
     activePointersRef.current.delete(event.pointerId)
+    hasDraggedRightRef.current = false
     setHoverTooltip(null)
     setPan(null)
     setMarquee(null)
@@ -1056,6 +1111,7 @@ export function FbdCanvas({
     }
     function handleCancel(event: PointerEvent) {
       activePointersRef.current.delete(event.pointerId)
+      hasDraggedRightRef.current = false
       setHoverTooltip(null)
       setPan(null)
       setMarquee(null)
@@ -1261,6 +1317,12 @@ export function FbdCanvas({
    * ------------------------------------------------------------------ */
 
   function openContextMenu(event: React.MouseEvent, target: FbdContextTarget) {
+    if (hasDraggedRightRef.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      hasDraggedRightRef.current = false
+      return
+    }
     event.preventDefault()
     event.stopPropagation()
     setHoverTooltip(null)
@@ -1281,6 +1343,12 @@ export function FbdCanvas({
      * chuột phải vào VÙNG BẮT (rộng hơn hình vẽ) của một cổng cũng ra menu
      * cổng. */
     if (event.defaultPrevented) return
+    if (hasDraggedRightRef.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      hasDraggedRightRef.current = false
+      return
+    }
     const graph = toGraph(event.clientX, event.clientY)
     const port = portAtPoint(geometry.nodes, graph)
     if (port) {
@@ -1735,7 +1803,7 @@ export function FbdCanvas({
           data-fbd-network-id={network.id}
           width={width * viewport.scale}
           height={height * viewport.scale}
-          viewBox={`0 0 ${width} ${height}`}
+          viewBox={`${viewBoxX} ${viewBoxY} ${width} ${height}`}
           className={`block touch-none ${surfaceCursor}`}
           onContextMenu={handleSurfaceContextMenu}
           onPointerMove={handleSurfacePointerMove}
@@ -1756,8 +1824,8 @@ export function FbdCanvas({
           {/* Background rect for Pan and Marquee */}
           <rect
             data-fbd-canvas-bg="true"
-            x={0}
-            y={0}
+            x={viewBoxX}
+            y={viewBoxY}
             width={width}
             height={height}
             fill={gridVisible ? `url(#fbd-grid-${network.id})` : 'transparent'}

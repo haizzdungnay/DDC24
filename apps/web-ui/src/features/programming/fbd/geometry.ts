@@ -65,6 +65,8 @@ export interface FbdNetworkGeometry {
   wires: readonly FbdWireGeometry[]
   width: number
   height: number
+  minX: number
+  minY: number
 }
 
 export function fbdNodeHeight(node: FbdNode): number {
@@ -227,7 +229,26 @@ export function buildFbdNetworkGeometry(
     wires.push({ id: wire.id, path: fbdWirePath(start, end, wireStyle), from: start, to: end })
   }
 
-  const width = nodes.reduce((max, node) => Math.max(max, node.x + node.width), 0) + FBD_CANVAS_MARGIN
-  const height = nodes.reduce((max, node) => Math.max(max, node.y + node.height), 0) + FBD_CANVAS_MARGIN
-  return { nodes, byNodeId, byPortId, wires, width, height }
+  let minX = 0
+  let minY = 0
+  let maxX = 0
+  let maxY = 0
+
+  for (const node of nodes) {
+    minX = Math.min(minX, node.x)
+    minY = Math.min(minY, node.y)
+    maxX = Math.max(maxX, node.x + node.width)
+    maxY = Math.max(maxY, node.y + node.height)
+  }
+
+  for (const wire of wires) {
+    minX = Math.min(minX, wire.from.x, wire.to.x)
+    minY = Math.min(minY, wire.from.y, wire.to.y)
+    maxX = Math.max(maxX, wire.from.x, wire.to.x)
+    maxY = Math.max(maxY, wire.from.y, wire.to.y)
+  }
+
+  const width = Math.max(maxX - minX, 0) + FBD_CANVAS_MARGIN
+  const height = Math.max(maxY - minY, 0) + FBD_CANVAS_MARGIN
+  return { nodes, byNodeId, byPortId, wires, width, height, minX, minY }
 }

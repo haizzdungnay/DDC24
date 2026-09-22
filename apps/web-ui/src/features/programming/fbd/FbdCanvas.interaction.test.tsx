@@ -134,6 +134,35 @@ describe('FbdCanvas — Task 5 Viewport, Layering & Interaction', () => {
       expect(screen.getByRole('menu', { name: 'Mặt vẽ' })).toBeInTheDocument()
     })
 
+    it('right click drag vượt ngưỡng 3px kích hoạt pan và chặn menu ngữ cảnh', () => {
+      const { surface } = renderCanvas()
+      const bg = surface.querySelector('[data-fbd-canvas-bg="true"]') || surface
+      fireEvent.pointerDown(bg, { pointerId: 1, button: 2, clientX: 100, clientY: 100 })
+      fireEvent.pointerMove(bg, { pointerId: 1, clientX: 150, clientY: 130 })
+      fireEvent.pointerUp(bg, { pointerId: 1, clientX: 150, clientY: 130 })
+
+      const sceneGroup = surface.querySelector('[data-fbd-scene="true"]')
+      expect(sceneGroup).toBeInTheDocument()
+      expect(sceneGroup?.getAttribute('transform')).toContain('translate(50, 30)')
+
+      fireEvent.contextMenu(bg, { clientX: 150, clientY: 130 })
+      expect(screen.queryByRole('menu', { name: 'Mặt vẽ' })).toBeNull()
+    })
+
+    it('click chuột phải tại chỗ (hoặc di chuyển <= 3px) vẫn mở menu ngữ cảnh', () => {
+      const { surface } = renderCanvas()
+      const bg = surface.querySelector('[data-fbd-canvas-bg="true"]') || surface
+      fireEvent.pointerDown(bg, { pointerId: 1, button: 2, clientX: 100, clientY: 100 })
+      fireEvent.pointerMove(bg, { pointerId: 1, clientX: 101, clientY: 101 })
+      fireEvent.pointerUp(bg, { pointerId: 1, clientX: 101, clientY: 101 })
+
+      const sceneGroup = surface.querySelector('[data-fbd-scene="true"]')
+      expect(sceneGroup?.getAttribute('transform')).toBeNull()
+
+      fireEvent.contextMenu(bg, { clientX: 101, clientY: 101 })
+      expect(screen.getByRole('menu', { name: 'Mặt vẽ' })).toBeInTheDocument()
+    })
+
     it('right click dây mở đúng workflow Ngắt dây', () => {
       const { surface, dispatch, network } = renderCanvas()
       const wireHit = surface.querySelector<SVGPathElement>('[data-fbd-wire-hit]')!

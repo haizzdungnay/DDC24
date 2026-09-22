@@ -228,6 +228,22 @@ describe('StructuredFbdEditor — Palette (WP-05)', () => {
     expect(created?.parameters.value).toBe(21.5)
   })
 
+  it('thêm node mới có toạ độ hợp lệ theo viewport thay vì rơi vào auto layout (48, 48)', async () => {
+    const { onChange } = renderEditor(golden())
+    fireEvent.change(screen.getByLabelText(/^Block$|^Khối$/), { target: { value: 'OR' } })
+    fireEvent.click(screen.getByRole('button', { name: /Add block|Thêm khối/ }))
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    const orNode = changed.networks[0].nodes.find((node) => node.typeRef === 'OR')!
+    expect(orNode).toBeDefined()
+    const pos = changed.layout?.nodes[orNode.id]
+    expect(pos).toBeDefined()
+    expect(pos!.x % 16).toBe(0)
+    expect(pos!.y % 16).toBe(0)
+    expect(pos!.x).toBeGreaterThanOrEqual(24)
+    expect(pos!.y).toBeGreaterThanOrEqual(24)
+  })
+
   it('Inspector FUNCTION_BLOCK cho sửa instance + RETAIN', async () => {
     const document = golden()
     document.networks[0].nodes.push({
