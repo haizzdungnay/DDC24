@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+### Fixed — Khắc phục tương tác canvas FBD: Pan chuột phải, vị trí khối mới và vùng cuộn (2026-09-22)
+
+- Phạm vi: `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,
+  `apps/web-ui/src/features/programming/fbd/FbdCanvas.interaction.test.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.tsx`,
+  `apps/web-ui/src/features/programming/fbd/StructuredFbdEditor.test.tsx`,
+  `apps/web-ui/src/features/programming/fbd/geometry.ts`,
+  `CHANGELOG.md`.
+- **Mô tả.** Khắc phục các vấn đề tương tác trên canvas FBD:
+  + Pan chuột phải (>3px) không bị mở context menu nhầm: bổ sung ngưỡng kéo 3px cho chuột phải, kích hoạt pan khi vượt ngưỡng và chặn sự kiện context menu sau khi kết thúc kéo.
+  + Khối mới khởi tạo theo tâm viewport hiện tại (`getViewportCenter`) snap grid 16px: tính toán toạ độ đặt khối mới dựa trên tâm vùng nhìn hiện tại của canvas FBD thay vì rơi vào vị trí mặc định/auto layout cố định.
+  + Mở rộng bounding box và lề ngang canvas SVG để thanh trượt cuộn hết sơ đồ: hỗ trợ toạ độ âm (`minX`, `minY`, `viewBoxX`, `viewBoxY`), mở rộng biên nội dung và lề ngang canvas SVG để thanh cuộn bao quát toàn bộ sơ đồ.
+- Refs: `fix/fbd-canvas-interactions`.
+
 ### Added — Task 10b: Chuỗi dữ liệu Provenance và Marker chẩn đoán STALE cho FBD (2026-09-21)
 
 - Phạm vi: `apps/web-ui/src/features/programming/design/workbench/ProgrammingWorkbench.tsx`,
