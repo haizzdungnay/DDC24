@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Boxes, ChevronDown, FileCode2, FunctionSquare, MoreHorizontal, Plus } from 'lucide-react'
+import { Boxes, ChevronDown, Download, FileCode2, FunctionSquare, MoreHorizontal, Plus, Upload } from 'lucide-react'
+import { buildPouBackup, parsePouBackup, planImportPouOperations, serializePouBackup, type CollisionStrategy, type PouBackupFile } from './pouBackup'
 import { Modal } from '../../../../shared/components/Modal'
 import { createUuid } from '../../../../shared/crypto'
 import { useI18n } from '../../../../shared/i18n'
@@ -14,6 +15,7 @@ import {
   pouDeleteBlockers,
   pouPublishedSignalBlockers,
   renamePouOperations,
+  uniquePouName,
   validatePouName
 } from './pouCommands'
 import { filterPouItems, groupPouItems, pouItems, resolvePouSelection, type PouItem, type PouKind, type PouLanguage } from './pouViewModel'
@@ -76,7 +78,19 @@ export function PouExplorer({
   const [renameDraft, setRenameDraft] = useState('')
   const [pendingDeleteObjectId, setPendingDeleteObjectId] = useState<string | null>(null)
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
+  const [creatingPou, setCreatingPou] = useState<{ kind: PouKind; language: PouLanguage } | null>(null)
+  const [createName, setCreateName] = useState('')
   const renameInputRef = useRef<HTMLInputElement | null>(null)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set())
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  const [importBackupData, setImportBackupData] = useState<PouBackupFile | null>(null)
+  const [importSelectedIndices, setImportSelectedIndices] = useState<Set<number>>(new Set())
+  const [importStrategy, setImportStrategy] = useState<CollisionStrategy>('RENAME')
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const importFileInputRef = useRef<HTMLInputElement | null>(null)
+  const createInputRef = useRef<HTMLInputElement | null>(null)
   /* `DEV-PROG-006` — nhóm gập được. Mặc định MỞ cả ba: một cây mặc định đóng
    * bắt người dùng bấm thêm một lần cho việc họ luôn làm (tìm POU để mở). */
   const [collapsedGroups, setCollapsedGroups] = useState<readonly PouKind[]>([])
@@ -109,9 +123,15 @@ export function PouExplorer({
   }, [renamingObjectId])
 
   useEffect(() => {
+    if (creatingPou && createInputRef.current) createInputRef.current.focus()
+  }, [creatingPou])
+
+  useEffect(() => {
     if (!canEdit) {
       setRenamingObjectId(null)
       setPendingDeleteObjectId(null)
+      setCreatingPou(null)
+      setCreateName('')
       setMenu(null)
       setCreateMenuOpen(false)
     }
@@ -141,12 +161,108 @@ export function PouExplorer({
   }, [createMenuOpen])
 
   const renameError = renamingObjectId ? validatePouName(items, renameDraft, renamingObjectId) : null
+  const createError = creatingPou ? validatePouName(items, createName) : null
 
-  function create(kind: PouKind, language: PouLanguage) {
-    const result = createPouOperations(items, { kind, language, objectId: createUuid(), task: document.task })
-    void onSave(result.operations).then((ok) => {
-      if (ok) onSelect(result.objectId)
+  function confirmCreate() {
+    if (!creatingPou || createName.trim() === '' || createError) return
+    const target = creatingPou
+    const name = createName.trim()
+    const result = createPouOperations(items, {
+      kind: target.kind,
+      language: target.language,
+      objectId: createUuid(),
+      task: document.task,
+      name,
     })
+    void onSave(result.operations).then((ok) => {
+      if (ok) {
+        setCreatingPou(null)
+        setCreateName('')
+        onSelect(result.objectId)
+      }
+    })
+  }
+
+  function openExportModal(targetObjectId?: string) {
+    if (targetObjectId) {
+      setExportSelectedIds(new Set([targetObjectId]))
+    } else {
+      setExportSelectedIds(new Set(items.map((i) => i.objectId)))
+    }
+    setExportModalOpen(true)
+  }
+
+  function handleExportConfirm() {
+    if (exportSelectedIds.size === 0) return
+    const backup = buildPouBackup(document, Array.from(exportSelectedIds))
+    const jsonStr = serializePouBackup(backup)
+    const blob = new Blob([jsonStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = globalThis.document.createElement('a')
+    anchor.href = url
+    const safeProjectName = (document.project?.name || 'pous').replace(/[^a-zA-Z0-9_-]/g, '_')
+    const dateStr = new Date().toISOString().slice(0, 10)
+    anchor.download = 'mkddc-backup-' + safeProjectName + '-' + dateStr + '.json'
+    anchor.click()
+    URL.revokeObjectURL(url)
+    setExportModalOpen(false)
+  }
+
+  async function handleImportFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const parseResult = parsePouBackup(text)
+      if (!parseResult.ok) {
+        setImportError(parseResult.error)
+        return
+      }
+      setImportBackupData(parseResult.backup)
+      setImportSelectedIndices(new Set(parseResult.backup.pous.map((_, idx) => idx)))
+      setImportStrategy('RENAME')
+      setImportModalOpen(true)
+      setImportError(null)
+    } catch (err) {
+      setImportError(
+        err instanceof Error ? err.message : pick('Không thể đọc tệp sao lưu.', 'Could not read backup file.')
+      )
+    } finally {
+      if (importFileInputRef.current) {
+        importFileInputRef.current.value = ''
+      }
+    }
+  }
+
+  async function handleImportConfirm() {
+    if (!importBackupData || importSelectedIndices.size === 0) return
+    setImporting(true)
+    try {
+      const selectedPous = importBackupData.pous.filter((_, idx) => importSelectedIndices.has(idx))
+      const plan = planImportPouOperations({
+        document,
+        itemsToImport: selectedPous,
+        strategy: importStrategy,
+        newObjectIdFactory: createUuid
+      })
+
+      if (plan.operations.length === 0) {
+        setImportModalOpen(false)
+        setImportBackupData(null)
+        return
+      }
+
+      const ok = await onSave(plan.operations)
+      if (ok) {
+        setImportModalOpen(false)
+        setImportBackupData(null)
+        if (plan.importedObjectIds.length > 0) {
+          onSelect(plan.importedObjectIds[0])
+        }
+      }
+    } finally {
+      setImporting(false)
+    }
   }
 
   function duplicate(item: PouItem) {
@@ -186,35 +302,85 @@ export function PouExplorer({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={pick('Tìm POU…', 'Find a POU…')}
-          className="min-w-0 flex-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-sm text-[var(--c-text)]"
+          className="min-w-0 flex-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-xs text-[var(--c-text)]"
         />
-        {canEdit && (
-          <div className="relative shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            aria-label={pick('Sao lưu POU', 'Backup POUs')}
+            title={pick('Sao lưu POU…', 'Backup POUs…')}
+            disabled={items.length === 0}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] hover:text-[var(--c-text)] hover:bg-[var(--c-surface-2)] disabled:opacity-40 disabled:pointer-events-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            onClick={() => openExportModal()}
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          {canEdit && (
             <button
               type="button"
-              aria-haspopup="menu"
-              aria-expanded={createMenuOpen}
-              className="inline-flex min-h-9 items-center gap-1 rounded-[var(--radius)] bg-[var(--c-accent-bg)] px-2 text-xs font-semibold text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-              onClick={() => setCreateMenuOpen((open) => !open)}
+              aria-label={pick('Nhập POU', 'Import POUs')}
+              title={pick('Nhập POU từ tệp…', 'Import POUs from file…')}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text-dim)] hover:text-[var(--c-text)] hover:bg-[var(--c-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              onClick={() => importFileInputRef.current?.click()}
             >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              {pick('Mới', 'New')}
+              <Upload className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
+          )}
+          {canEdit && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={createMenuOpen}
+                className="inline-flex min-h-8 items-center gap-1 rounded-[var(--radius)] bg-[var(--c-accent-bg)] px-2 text-xs font-semibold text-[var(--c-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+                onClick={() => setCreateMenuOpen((open) => !open)}
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                {pick('Mới', 'New')}
+              </button>
             {createMenuOpen && (
               <div
                 role="menu"
                 aria-label={pick('Tạo POU mới', 'Create a new POU')}
                 className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] py-1 shadow-lg"
               >
-                <MenuItem label={pick('Program · ST', 'Program · ST')} onClick={() => { setCreateMenuOpen(false); create('PROGRAM', 'ST') }} />
-                <MenuItem label={pick('Program · FBD', 'Program · FBD')} onClick={() => { setCreateMenuOpen(false); create('PROGRAM', 'FBD') }} />
-                <MenuItem label={pick('Function · ST', 'Function · ST')} onClick={() => { setCreateMenuOpen(false); create('FUNCTION', 'ST') }} />
-                <MenuItem label={pick('Function Block · ST', 'Function Block · ST')} onClick={() => { setCreateMenuOpen(false); create('FUNCTION_BLOCK', 'ST') }} />
-                <MenuItem label={pick('Function Block · FBD', 'Function Block · FBD')} onClick={() => { setCreateMenuOpen(false); create('FUNCTION_BLOCK', 'FBD') }} />
+                <MenuItem
+                  label={pick('Program · ST', 'Program · ST')}
+                  onClick={() => {
+                    setCreateMenuOpen(false)
+                    setCreatingPou({ kind: 'PROGRAM', language: 'ST' })
+                    setCreateName('')
+                  }}
+                />
+                <MenuItem
+                  label={pick('Program · FBD', 'Program · FBD')}
+                  onClick={() => {
+                    setCreateMenuOpen(false)
+                    setCreatingPou({ kind: 'PROGRAM', language: 'FBD' })
+                    setCreateName('')
+                  }}
+                />
+                <MenuItem
+                  label={pick('Function · ST', 'Function · ST')}
+                  onClick={() => {
+                    setCreateMenuOpen(false)
+                    setCreatingPou({ kind: 'FUNCTION', language: 'ST' })
+                    setCreateName('')
+                  }}
+                />
+                <MenuItem
+                  label={pick('Function Block · ST', 'Function Block · ST')}
+                  onClick={() => {
+                    setCreateMenuOpen(false)
+                    setCreatingPou({ kind: 'FUNCTION_BLOCK', language: 'ST' })
+                    setCreateName('')
+                  }}
+                />
               </div>
             )}
           </div>
         )}
+        </div>
       </div>
 
       {items.length === 0 && (
@@ -410,6 +576,10 @@ export function PouExplorer({
             />
             <MenuItem label={pick('Nhân bản', 'Duplicate')} onClick={() => { duplicate(item); setMenu(null) }} />
             <MenuItem
+              label={pick('Sao lưu POU này…', 'Backup this POU…')}
+              onClick={() => { openExportModal(item.objectId); setMenu(null) }}
+            />
+            <MenuItem
               label={pick('Xóa', 'Delete')}
               danger
               onClick={() => { setPendingDeleteObjectId(item.objectId); setMenu(null) }}
@@ -459,6 +629,295 @@ export function PouExplorer({
             )}
           </p>
         )}
+      </Modal>
+
+      <Modal
+        open={canEdit && creatingPou !== null}
+        title={
+          creatingPou
+            ? creatingPou.kind === 'PROGRAM'
+              ? pick('Tạo chương trình mới', 'Create new Program')
+              : creatingPou.kind === 'FUNCTION'
+                ? pick('Tạo hàm mới', 'Create new Function')
+                : pick('Tạo khối hàm mới', 'Create new Function Block')
+            : ''
+        }
+        confirmLabel={pick('Tạo', 'Create')}
+        cancelLabel={pick('Hủy', 'Cancel')}
+        confirmLoading={saving}
+        confirmDisabled={createName.trim() === '' || createError !== null}
+        onConfirm={confirmCreate}
+        onClose={() => {
+          setCreatingPou(null)
+          setCreateName('')
+        }}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            confirmCreate()
+          }}
+          className="flex flex-col gap-2"
+        >
+          <label htmlFor="create-pou-name" className="text-xs font-semibold text-[var(--c-text-dim)]">
+            {pick('Tên POU', 'POU name')}
+          </label>
+          <input
+            ref={createInputRef}
+            id="create-pou-name"
+            data-modal-initial-focus="true"
+            autoFocus
+            type="text"
+            value={createName}
+            onChange={(event) => setCreateName(event.target.value)}
+            placeholder={pick('Nhập tên POU…', 'Enter POU name…')}
+            className="w-full rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2.5 py-1.5 text-sm text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+          />
+          {createError && createName.trim() !== '' ? (
+            <span role="alert" className="text-xs text-[var(--c-fault-fg)]">
+              {pick(...NAME_ERROR_COPY[createError])}
+            </span>
+          ) : (
+            <span className="text-xs text-[var(--c-text-dim)]">
+              {pick('Bắt buộc nhập tên và không được để trống.', 'Name is required and cannot be empty.')}
+            </span>
+          )}
+        </form>
+      </Modal>
+
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="sr-only"
+        id="pou-backup-file-input"
+        aria-label={pick('Tệp sao lưu POU để nhập', 'POU backup file to import')}
+        onChange={(event) => { void handleImportFileChange(event) }}
+      />
+
+      <Modal
+        open={exportModalOpen}
+        title={pick('Sao lưu chương trình', 'Backup programs')}
+        confirmLabel={pick('Tải về tệp sao lưu', 'Download backup file')}
+        cancelLabel={pick('Hủy', 'Cancel')}
+        confirmDisabled={exportSelectedIds.size === 0}
+        onConfirm={handleExportConfirm}
+        onClose={() => setExportModalOpen(false)}
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-[var(--c-text-dim)]">
+            {pick(
+              'Chọn các chương trình và hàm cần lưu về máy tính làm bản sao lưu dữ liệu.',
+              'Select programs and functions to save to your device as a data backup.'
+            )}
+          </p>
+          <div className="flex items-center justify-between border-b border-[var(--c-border)] pb-2 text-xs font-medium text-[var(--c-text)]">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={items.length > 0 && exportSelectedIds.size === items.length}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setExportSelectedIds(new Set(items.map((i) => i.objectId)))
+                  } else {
+                    setExportSelectedIds(new Set())
+                  }
+                }}
+              />
+              <span>
+                {pick('Chọn tất cả', 'Select all')} ({exportSelectedIds.size}/{items.length})
+              </span>
+            </label>
+          </div>
+          <div className="max-h-60 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1 space-y-1">
+            {items.map((item) => {
+              const checked = exportSelectedIds.has(item.objectId)
+              return (
+                <label
+                  key={item.objectId}
+                  className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-xs hover:bg-[var(--c-surface-2)] cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = new Set(exportSelectedIds)
+                        if (e.target.checked) next.add(item.objectId)
+                        else next.delete(item.objectId)
+                        setExportSelectedIds(next)
+                      }}
+                    />
+                    <span className="truncate font-medium text-[var(--c-text)]">{item.name}</span>
+                  </div>
+                  <span className="shrink-0 rounded bg-[var(--c-surface)] px-1.5 py-0.5 text-[10px] text-[var(--c-text-dim)] font-mono">
+                    {item.kind} · {item.language}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={importModalOpen && importBackupData !== null}
+        title={pick('Nhập chương trình từ tệp sao lưu', 'Import programs from backup file')}
+        confirmLabel={pick('Nhập POU đã chọn', 'Import selected POUs')}
+        cancelLabel={pick('Hủy', 'Cancel')}
+        confirmLoading={importing || saving}
+        confirmDisabled={importSelectedIndices.size === 0 || importing || saving}
+        onConfirm={() => { void handleImportConfirm() }}
+        onClose={() => {
+          if (!importing) {
+            setImportModalOpen(false)
+            setImportBackupData(null)
+          }
+        }}
+      >
+        {importBackupData && (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] bg-[var(--c-surface-2)] p-2 text-xs text-[var(--c-text-dim)]">
+              <span>
+                {pick('Dự án gốc:', 'Source project:')}{' '}
+                <strong className="text-[var(--c-text)]">{importBackupData.projectName || '—'}</strong>
+              </span>
+              <span>
+                {pick('Tổng số POU:', 'Total POUs:')}{' '}
+                <strong className="text-[var(--c-text)]">{importBackupData.pous.length}</strong>
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-[var(--c-text-dim)]">
+                {pick('Xử lý khi trùng tên:', 'When names collide:')}
+              </span>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="import-collision-strategy"
+                    value="RENAME"
+                    checked={importStrategy === 'RENAME'}
+                    onChange={() => setImportStrategy('RENAME')}
+                  />
+                  <span>{pick('Đổi tên mới', 'Auto-rename')}</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="import-collision-strategy"
+                    value="OVERWRITE"
+                    checked={importStrategy === 'OVERWRITE'}
+                    onChange={() => setImportStrategy('OVERWRITE')}
+                  />
+                  <span>{pick('Ghi đè', 'Overwrite')}</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="import-collision-strategy"
+                    value="SKIP"
+                    checked={importStrategy === 'SKIP'}
+                    onChange={() => setImportStrategy('SKIP')}
+                  />
+                  <span>{pick('Bỏ qua', 'Skip')}</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-b border-[var(--c-border)] pb-2 text-xs font-medium text-[var(--c-text)]">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={
+                    importBackupData.pous.length > 0 &&
+                    importSelectedIndices.size === importBackupData.pous.length
+                  }
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setImportSelectedIndices(new Set(importBackupData.pous.map((_, idx) => idx)))
+                    } else {
+                      setImportSelectedIndices(new Set())
+                    }
+                  }}
+                />
+                <span>
+                  {pick('Chọn tất cả', 'Select all')} ({importSelectedIndices.size}/{importBackupData.pous.length})
+                </span>
+              </label>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1 space-y-1">
+              {importBackupData.pous.map((pou, index) => {
+                const checked = importSelectedIndices.has(index)
+                const collision = items.some((it) => it.name.toLocaleLowerCase() === pou.name.toLocaleLowerCase())
+                const collisionBadgeClass = importStrategy === 'OVERWRITE'
+                  ? 'bg-[var(--c-warn-bg)] text-[var(--c-warn-fg)]'
+                  : importStrategy === 'SKIP'
+                    ? 'bg-[var(--c-surface-2)] text-[var(--c-text-dim)]'
+                    : 'bg-[var(--c-accent-bg)] text-[var(--c-accent)]'
+                return (
+                  <label
+                    key={index}
+                    className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-xs hover:bg-[var(--c-surface-2)] cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = new Set(importSelectedIndices)
+                          if (e.target.checked) next.add(index)
+                          else next.delete(index)
+                          setImportSelectedIndices(next)
+                        }}
+                      />
+                      <span className="truncate font-medium text-[var(--c-text)]">
+                        {pou.name}
+                        {collision && importStrategy === 'RENAME' && (
+                          <span className="text-[var(--c-text-dim)] font-normal ml-1">
+                            → {uniquePouName(items, pou.name)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {collision ? (
+                        <span
+                          className={'rounded px-1.5 py-0.5 text-[10px] font-medium ' + collisionBadgeClass}
+                        >
+                          {importStrategy === 'OVERWRITE'
+                            ? pick('Ghi đè', 'Overwrite')
+                            : importStrategy === 'SKIP'
+                              ? pick('Bỏ qua', 'Skip')
+                              : pick('Đổi tên', 'Rename')}
+                        </span>
+                      ) : (
+                        <span className="rounded bg-[var(--c-good-bg)] px-1.5 py-0.5 text-[10px] text-[var(--c-good-fg)] font-medium">
+                          {pick('Mới', 'New')}
+                        </span>
+                      )}
+                      <span className="rounded bg-[var(--c-surface)] px-1.5 py-0.5 text-[10px] text-[var(--c-text-dim)] font-mono">
+                        {pou.kind} · {pou.language}
+                      </span>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={importError !== null}
+        title={pick('Lỗi nhập tệp sao lưu', 'Backup file import error')}
+        confirmLabel={pick('Đã hiểu', 'Got it')}
+        onConfirm={() => setImportError(null)}
+        onClose={() => setImportError(null)}
+      >
+        <p className="text-sm text-[var(--c-fault-fg)]">{importError}</p>
       </Modal>
     </div>
   )

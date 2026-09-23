@@ -494,6 +494,46 @@ describe('WorkbenchMinimapPanel (Task T9-02)', () => {
     expect(height).toBe(50)
   })
 
+  it('hiển thị chính xác góc nhìn thực tế của canvas chính khi zoom vào toạ độ có viewBoxX/viewBoxY âm', () => {
+    const nodes: FbdNodeGeometry[] = [
+      { id: 'node-0', x: 24, y: 24, width: 168, height: 70, ports: [], auto: false },
+      { id: 'node-4', x: 440, y: 100, width: 168, height: 70, ports: [], auto: false },
+    ]
+
+    render(
+      <I18nProvider>
+        <WorkbenchMinimapPanel
+          bridge={createMockBridge({
+            nodes,
+            scale: 2.5,
+            viewport: { x: -250, y: -100, scale: 2.5 },
+            viewBoxX: -140,
+            viewBoxY: -80,
+            scrollPosition: { left: 500, top: 250, clientWidth: 1000, clientHeight: 500 },
+          })}
+        />
+      </I18nProvider>,
+    )
+
+    const indicator = screen.getByRole('group', { name: 'Bản đồ thu nhỏ' }).querySelector('[data-testid="minimap-viewport-indicator"]')
+    expect(indicator).toBeInTheDocument()
+
+    const x = Number(indicator?.getAttribute('x'))
+    const y = Number(indicator?.getAttribute('y'))
+    const width = Number(indicator?.getAttribute('width'))
+    const height = Number(indicator?.getAttribute('height'))
+
+    // vpX = (500 - (-250)) / 2.5 + (-140) = 750 / 2.5 - 140 = 300 - 140 = 160
+    // vpY = (250 - (-100)) / 2.5 + (-80) = 350 / 2.5 - 80 = 140 - 80 = 60
+    // vpW = 1000 / 2.5 = 400
+    // vpH = 500 / 2.5 = 200
+    expect(x).toBe(160)
+    expect(y).toBe(60)
+    expect(width).toBe(400)
+    expect(height).toBe(200)
+    expect(indicator).toHaveAttribute('vector-effect', 'non-scaling-stroke')
+  })
+
   it('render ST Mini Map khi có stSource và gọi onJumpToOffset khi click dòng/outline', () => {
     const onJumpToOffset = vi.fn()
     render(

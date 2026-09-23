@@ -102,8 +102,8 @@ const editingContextBridge = vi.hoisted(() => ({
 }))
 vi.mock('../layout/ProgrammingLayout', () => ({
   useProgrammingRuntimeContext: () => ({
-    setEditingContext: (ctx: any) => {
-      editingContextBridge.current = ctx
+    setEditingContext: (ctx: unknown) => {
+      editingContextBridge.current = ctx as typeof editingContextBridge.current
     },
     setContextStripSlot: (node: ReactNode) => { slotBridge.render?.(node) }
   })
@@ -213,9 +213,13 @@ function pouInTree(name: string) {
   return screen.findByRole('button', { name: `Mở ${name}` })
 }
 
-function createPou(label: string) {
+function createPou(label: string, name?: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Mới' }))
   fireEvent.click(within(screen.getByRole('menu', { name: 'Tạo POU mới' })).getByRole('menuitem', { name: label }))
+  const pouName = name || (label.includes('Function Block') ? 'NewFunctionBlock' : label.includes('Function') ? 'NewFunction' : label.includes('FBD') ? 'NewFbdProgram' : 'NewProgram')
+  const input = screen.getByLabelText('Tên POU')
+  fireEvent.change(input, { target: { value: pouName } })
+  fireEvent.click(screen.getByRole('button', { name: 'Tạo' }))
 }
 
 function pouAction(name: string, action: string) {

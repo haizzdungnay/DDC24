@@ -36,12 +36,13 @@ export function formatPortLabel(
   unit?: string | null,
   maxChars: number = FBD_LABEL_MAX_CHARS,
 ): string {
-  if (!dataType) return name
+  if (!dataType) return truncateText(name, maxChars)
   const cleanUnit = unit?.trim()
   const suffix = cleanUnit ? ` : ${dataType} (${cleanUnit})` : ` : ${dataType}`
   const full = `${name}${suffix}`
   if (full.length <= maxChars) return full
-  return `${name}…`
+  if (name.length + 1 <= maxChars) return `${name}…`
+  return truncateText(name, maxChars)
 }
 
 /**

@@ -44,9 +44,13 @@ function renderExplorer(overrides: Partial<Parameters<typeof PouExplorer>[0]> = 
   return { onSave, onSelect }
 }
 
-function createPou(label: string) {
+function createPou(label: string, name?: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Mới' }))
   fireEvent.click(within(screen.getByRole('menu', { name: 'Tạo POU mới' })).getByRole('menuitem', { name: label }))
+  const pouName = name || (label.includes('Function Block') ? 'NewFunctionBlock' : label.includes('Function') ? 'NewFunction' : label.includes('FBD') ? 'NewFbdProgram' : 'NewProgram')
+  const input = screen.getByLabelText('Tên POU')
+  fireEvent.change(input, { target: { value: pouName } })
+  fireEvent.click(screen.getByRole('button', { name: 'Tạo' }))
 }
 
 function pouAction(name: string, action: string) {
@@ -177,7 +181,7 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     renderExplorer({ selectedObjectId: 'obj-1' })
     fireEvent.contextMenu(screen.getByRole('button', { name: 'Mở AHU_MAIN' }))
     const menu = screen.getByTestId('pou-context-menu')
-    for (const label of ['Mở', 'Đổi tên', 'Nhân bản', 'Xóa']) {
+    for (const label of ['Mở', 'Đổi tên', 'Nhân bản', 'Sao lưu POU này…', 'Xóa']) {
       expect(within(menu).getByRole('menuitem', { name: label })).toBeInTheDocument()
     }
     // "Đặt làm Active" không có ở đây, và menu NÓI RA nơi thực hiện nó thay vì
@@ -246,13 +250,13 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     expect(functionBlocksButton).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('(a) menu + New có đúng 5 mục, trong đó có Function Block · FBD', () => {
+  it('(a) menu + New có đúng 4 mục (đã bỏ Function Block · FBD)', () => {
     renderExplorer()
     fireEvent.click(screen.getByRole('button', { name: 'Mới' }))
     const menu = screen.getByRole('menu', { name: 'Tạo POU mới' })
     const items = within(menu).getAllByRole('menuitem')
-    expect(items).toHaveLength(5)
-    expect(within(menu).getByRole('menuitem', { name: 'Function Block · FBD' })).toBeInTheDocument()
+    expect(items).toHaveLength(4)
+    expect(within(menu).queryByRole('menuitem', { name: 'Function Block · FBD' })).not.toBeInTheDocument()
   })
 
   it('(b) FB body FBD có draggable và onDragStart set đúng MIME + payload pou:<tên>', () => {
@@ -339,5 +343,122 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     expect(item).toBeInTheDocument()
     expect(item).toHaveAttribute('draggable', 'false')
     expect(within(item).getByText(/phải có ít nhất một đầu ra/)).toBeInTheDocument()
+  })
+  it('hộp thoại tạo POU yêu cầu nhập tên và chặn khi tên trống hoặc trùng', async () => {
+    const { onSave } = renderExplorer()
+    fireEvent.click(screen.getByRole('button', { name: 'Mới' }))
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Tạo POU mới' })).getByRole('menuitem', { name: 'Program · ST' }))
+
+    const input = screen.getByLabelText('Tên POU')
+    const submitBtn = screen.getByRole('button', { name: 'Tạo' })
+    expect(submitBtn).toBeDisabled()
+
+    // Trùng tên hiện có
+    fireEvent.change(input, { target: { value: 'AHU_MAIN' } })
+    expect(submitBtn).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('đã tồn tại')
+
+    // Tên hợp lệ
+    fireEvent.change(input, { target: { value: 'CUSTOM_PROG' } })
+    expect(submitBtn).toBeEnabled()
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const operations = onSave.mock.calls[0][0] as ProgrammingDraftOperation[]
+    expect(operations[0]).toMatchObject({
+      op: 'upsertProgram',
+      program: expect.objectContaining({ name: 'CUSTOM_PROG' }),
+    })
+  })
+
+  it('nút Sao lưu POU mở hộp thoại sao lưu và cho phép chọn các POU để tải về', () => {
+    const createObjectURLMock = vi.fn().mockReturnValue('blob:mock-url')
+    const revokeObjectURLMock = vi.fn()
+    globalThis.URL.createObjectURL = createObjectURLMock
+    globalThis.URL.revokeObjectURL = revokeObjectURLMock
+
+    renderExplorer()
+    const backupButton = screen.getByRole('button', { name: 'Sao lưu POU' })
+    expect(backupButton).toBeInTheDocument()
+    fireEvent.click(backupButton)
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('Sao lưu chương trình')).toBeInTheDocument()
+    expect(within(dialog).getByText('AHU_MAIN')).toBeInTheDocument()
+    expect(within(dialog).getByText('SCALE_LIN')).toBeInTheDocument()
+
+    const downloadBtn = screen.getByRole('button', { name: 'Tải về tệp sao lưu' })
+    expect(downloadBtn).toBeEnabled()
+
+    fireEvent.click(downloadBtn)
+    expect(createObjectURLMock).toHaveBeenCalled()
+    expect(revokeObjectURLMock).toHaveBeenCalled()
+  })
+
+  it('chọn Sao lưu POU này từ menu ngữ cảnh mở hộp thoại chỉ chọn POU đó', () => {
+    renderExplorer({ selectedObjectId: 'obj-1' })
+    pouAction('SCALE_LIN', 'Sao lưu POU này…')
+
+    expect(screen.getByText('Sao lưu chương trình')).toBeInTheDocument()
+    const downloadBtn = screen.getByRole('button', { name: 'Tải về tệp sao lưu' })
+    expect(downloadBtn).toBeEnabled()
+  })
+
+  it('nhập tệp sao lưu hợp lệ mở modal và gọi onSave khi xác nhận', async () => {
+    const { onSave } = renderExplorer()
+    const fileInput = screen.getByLabelText('Tệp sao lưu POU để nhập') as HTMLInputElement
+
+    const validBackupJson = JSON.stringify({
+      schemaVersion: 'mkddc-pou-backup-v1',
+      exportedAt: new Date().toISOString(),
+      projectName: 'TestBackup',
+      pous: [
+        {
+          name: 'IMPORT_PROG',
+          kind: 'PROGRAM',
+          language: 'ST',
+          document: 'PROGRAM IMPORT_PROG\nEND_PROGRAM'
+        }
+      ]
+    })
+
+    const file = new File([validBackupJson], 'backup.json', { type: 'application/json' })
+    Object.defineProperty(file, 'text', {
+      value: async () => validBackupJson
+    })
+
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('Nhập chương trình từ tệp sao lưu')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('IMPORT_PROG')).toBeInTheDocument()
+    const confirmBtn = screen.getByRole('button', { name: 'Nhập POU đã chọn' })
+    expect(confirmBtn).toBeEnabled()
+
+    fireEvent.click(confirmBtn)
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const ops = onSave.mock.calls[0][0]
+    expect(ops.some((op: ProgrammingDraftOperation) => op.op === 'upsertProgram' && op.program.name === 'IMPORT_PROG')).toBe(true)
+  })
+
+  it('nhập tệp sao lưu hỏng hiển thị thông báo lỗi', async () => {
+    renderExplorer()
+    const fileInput = screen.getByLabelText('Tệp sao lưu POU để nhập') as HTMLInputElement
+
+    const invalidJson = 'not json content'
+    const file = new File([invalidJson], 'corrupt.json', { type: 'application/json' })
+    Object.defineProperty(file, 'text', {
+      value: async () => invalidJson
+    })
+
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('Lỗi nhập tệp sao lưu')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Đã hiểu' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Đã hiểu' }))
   })
 })

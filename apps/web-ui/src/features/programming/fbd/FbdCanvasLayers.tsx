@@ -10,7 +10,8 @@ import {
 } from './geometry'
 import type { FbdSelection } from './commands'
 import { fbdPaletteEntry } from './palette'
-import { FBD_LABEL_MAX_CHARS, formatNodeParameterSummary, formatPortLabel, truncateText } from './nodeLabel'
+import { FBD_LABEL_APPROX_CHAR_WIDTH, formatNodeParameterSummary, formatPortLabel, truncateText } from './nodeLabel'
+import type { FbdResizeMode } from './useFbdNodeResize'
 import type { FbdRuntimeOverlay, FbdRuntimeReading } from './runtimeOverlay'
 import { resolvePortMappingInfo } from './FbdNodeHoverCard'
 import type {
@@ -115,9 +116,10 @@ export interface FbdGridPatternProps {
   networkId: string
   snapSize: number
   gridVisible: boolean
+  transform?: string
 }
 
-export function FbdGridPattern({ networkId, snapSize, gridVisible }: FbdGridPatternProps) {
+export function FbdGridPattern({ networkId, snapSize, gridVisible, transform }: FbdGridPatternProps) {
   if (!gridVisible) return null
   const patternId = `fbd-grid-${networkId}`
   return (
@@ -127,6 +129,7 @@ export function FbdGridPattern({ networkId, snapSize, gridVisible }: FbdGridPatt
         width={snapSize * 2}
         height={snapSize * 2}
         patternUnits="userSpaceOnUse"
+        patternTransform={transform}
       >
         <circle cx={snapSize} cy={snapSize} r={1} fill="var(--c-border)" opacity={0.6} />
       </pattern>
@@ -287,6 +290,17 @@ export interface FbdNodesLayerProps {
   onNodePointerLeave?: (event: React.PointerEvent<SVGGElement>, nodeId: string) => void
   onNodeFocus?: (event: React.FocusEvent<SVGGElement>, nodeId: string) => void
   onNodeBlur?: (event: React.FocusEvent<SVGGElement>, nodeId: string) => void
+  onBeginResize?: (
+    event: React.PointerEvent<SVGElement>,
+    nodeId: string,
+    mode: FbdResizeMode,
+    currentWidth: number,
+    currentHeight: number,
+  ) => void
+  onMoveResize?: (event: React.PointerEvent<SVGElement>) => void
+  onEndResize?: (event: React.PointerEvent<SVGElement>) => void
+  onCancelResize?: () => void
+  onResetNodeSize?: (nodeId: string) => void
 }
 
 /** Bán kính vùng BẮT CHUỘT của một cổng, theo đơn vị graph.
@@ -336,6 +350,11 @@ export function FbdNodesLayer({
   onNodePointerLeave,
   onNodeFocus,
   onNodeBlur,
+  onBeginResize,
+  onMoveResize,
+  onEndResize,
+  onCancelResize,
+  onResetNodeSize,
 }: FbdNodesLayerProps) {
   return (
     <>
@@ -476,7 +495,7 @@ export function FbdNodesLayer({
               <line
                 x1={placed.x}
                 y1={placed.y + FBD_NODE_HEADER_HEIGHT - 4}
-                x2={placed.x + FBD_NODE_WIDTH}
+                x2={placed.x + placed.width}
                 y2={placed.y + FBD_NODE_HEADER_HEIGHT - 4}
                 stroke="var(--c-border)"
                 strokeWidth={1}
@@ -590,6 +609,28 @@ export function FbdNodesLayer({
                     strokeWidth={1.5}
                   />
                   {(() => {
+                    const isInput = port.direction === 'INPUT'
+                    const inputPorts = node.ports.filter((p) => p.direction === 'INPUT').sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+                    const outputPorts = node.ports.filter((p) => p.direction === 'OUTPUT').sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+                    const rowIndex = isInput
+                      ? inputPorts.findIndex((p) => p.id === port.id)
+                      : outputPorts.findIndex((p) => p.id === port.id)
+                    const hasOpposite = isInput
+                      ? Boolean(outputPorts[rowIndex])
+                      : Boolean(inputPorts[rowIndex])
+
+                    let portMaxChars: number
+                    if (hasOpposite) {
+                      const usable = Math.max(16, placed.width - 36)
+                      const half = usable / 2
+                      portMaxChars = Math.max(4, Math.floor(half / FBD_LABEL_APPROX_CHAR_WIDTH))
+                    } else {
+                      const usable = Math.max(20, placed.width - 28)
+                      portMaxChars = Math.max(6, Math.floor(usable / FBD_LABEL_APPROX_CHAR_WIDTH))
+                    }
+
+                    const fullPortTitle = formatPortLabel(definition.name, definition.dataType, definition.unit, 300)
+
                     const mappingInfo = resolvePortMappingInfo(
                       definition,
                       node,
@@ -600,7 +641,11 @@ export function FbdNodesLayer({
                     )
                     return (
                       <>
-                  {mappingInfo.title && <title>{mappingInfo.title}</title>}
+                  {mappingInfo.title ? (
+                    <title>{mappingInfo.title}</title>
+                  ) : (
+                    <title>{fullPortTitle}</title>
+                  )}
                   <text
                     x={port.direction === 'INPUT' ? port.cx + 10 : port.cx - 10}
                     y={port.cy + 3}
@@ -611,8 +656,8 @@ export function FbdNodesLayer({
                     data-fbd-port-mapped={mappingInfo.isMapped ? "true" : undefined}
                   >
                     {mappingInfo.isMapped
-                      ? truncateText(mappingInfo.display, FBD_LABEL_MAX_CHARS)
-                      : formatPortLabel(definition.name, definition.dataType, definition.unit)}
+                      ? truncateText(mappingInfo.display, portMaxChars)
+                      : formatPortLabel(definition.name, definition.dataType, definition.unit, portMaxChars)}
                   </text>
                   {/* Giá trị tại CHÂN, vẽ bên ngoài khối để không đè nhãn chân.
                       Chỉ vẽ khi nó KHÁC giá trị đại diện của khối — nếu không,
@@ -631,6 +676,80 @@ export function FbdNodesLayer({
                 </g>
               )
             })}
+            {canEdit && isSelected && (
+              <g data-fbd-node-resize-group={placed.id}>
+                {/* Header right edge: resizes width only */}
+                <rect
+                  data-fbd-resize-handle-width={placed.id}
+                  aria-label={pick ? pick('Kéo để đổi bề rộng khối', 'Drag to resize block width') : 'Kéo để đổi bề rộng khối'}
+                  x={placed.x + placed.width - 5}
+                  y={placed.y + 4}
+                  width={8}
+                  height={FBD_NODE_HEADER_HEIGHT - 8}
+                  fill="transparent"
+                  className="cursor-ew-resize touch-none"
+                  onPointerDown={(e) => onBeginResize?.(e, placed.id, 'WIDTH', placed.width, placed.height)}
+                  onPointerMove={onMoveResize}
+                  onPointerUp={onEndResize}
+                  onPointerCancel={onCancelResize}
+                />
+                {/* Bottom edge: resizes height only */}
+                <rect
+                  data-fbd-resize-handle-height={placed.id}
+                  aria-label={pick ? pick('Kéo để đổi chiều cao khối', 'Drag to resize block height') : 'Kéo để đổi chiều cao khối'}
+                  x={placed.x + 12}
+                  y={placed.y + placed.height - 5}
+                  width={Math.max(10, placed.width - 28)}
+                  height={8}
+                  fill="transparent"
+                  className="cursor-ns-resize touch-none"
+                  onPointerDown={(e) => onBeginResize?.(e, placed.id, 'HEIGHT', placed.width, placed.height)}
+                  onPointerMove={onMoveResize}
+                  onPointerUp={onEndResize}
+                  onPointerCancel={onCancelResize}
+                />
+                {/* Bottom-right corner: resizes both width and height */}
+                <g
+                  data-fbd-resize-handle={placed.id}
+                  aria-label={pick ? pick('Kéo để đổi kích thước khối (nhấp đúp để đặt lại)', 'Drag to resize block (double click to reset)') : 'Kéo để đổi kích thước khối (nhấp đúp để đặt lại)'}
+                  className="cursor-se-resize touch-none"
+                  onPointerDown={(e) => onBeginResize?.(e, placed.id, 'BOTH', placed.width, placed.height)}
+                  onPointerMove={onMoveResize}
+                  onPointerUp={onEndResize}
+                  onPointerCancel={onCancelResize}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    onResetNodeSize?.(placed.id)
+                  }}
+                >
+                  <rect
+                    x={placed.x + placed.width - 14}
+                    y={placed.y + placed.height - 14}
+                    width={14}
+                    height={14}
+                    fill="transparent"
+                  />
+                  <line
+                    x1={placed.x + placed.width - 10}
+                    y1={placed.y + placed.height - 3}
+                    x2={placed.x + placed.width - 3}
+                    y2={placed.y + placed.height - 10}
+                    stroke="var(--c-accent)"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                  />
+                  <line
+                    x1={placed.x + placed.width - 6}
+                    y1={placed.y + placed.height - 3}
+                    x2={placed.x + placed.width - 3}
+                    y2={placed.y + placed.height - 6}
+                    stroke="var(--c-accent)"
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                  />
+                </g>
+              </g>
+            )}
           </g>
         )
       })}

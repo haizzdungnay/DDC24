@@ -349,7 +349,7 @@ describe('ADD_WIRE — nối một nhịp dùng chung validator với BEGIN_OR_C
     expect(after.document).toEqual(state.document)
   })
 
-  it('chặn nối ngược thứ tự thực thi combinational (TC-FBD-WIRE-002)', () => {
+  it('cho phép nối ngược thứ tự tạo khối (late -> early) và tự động sắp xếp executionOrder theo luồng dữ liệu', () => {
     const early = node('AND', [
       { name: 'IN1', direction: 'INPUT', dataType: 'BOOL' },
       { name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL' },
@@ -361,7 +361,7 @@ describe('ADD_WIRE — nối một nhịp dùng chung validator với BEGIN_OR_C
     const { state: before, networkId } = stateWith(early, late)
     const wiresBefore = before.document.networks[0].wires.length
 
-    // Thử nối từ late (executionOrder lớn hơn) sang early (executionOrder nhỏ hơn)
+    // Thử nối từ late (tạo sau, executionOrder lớn hơn) sang early (tạo trước, executionOrder nhỏ hơn)
     const candidate = wire(late, 'OUT', early, 'IN1')
     const after = fbdEditorReducer(before, {
       type: 'ADD_WIRE',
@@ -369,8 +369,42 @@ describe('ADD_WIRE — nối một nhịp dùng chung validator với BEGIN_OR_C
       wire: candidate,
     })
 
+    expect(after.announcement.code).toBe('wire-connected')
+    expect(after.past).toHaveLength(1)
+    expect(after.document.networks[0].wires).toHaveLength(wiresBefore + 1)
+    const nodeLate = after.document.networks[0].nodes.find((n) => n.id === late.id)!
+    const nodeEarly = after.document.networks[0].nodes.find((n) => n.id === early.id)!
+    expect(nodeLate.executionOrder).toBeLessThan(nodeEarly.executionOrder)
+  })
+
+  it('chặn nối ngược thứ tự thực thi tạo chu trình combinational (TC-FBD-WIRE-002)', () => {
+    const early = node('AND', [
+      { name: 'IN1', direction: 'INPUT', dataType: 'BOOL' },
+      { name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL' },
+    ])
+    const late = node('OR', [
+      { name: 'IN1', direction: 'INPUT', dataType: 'BOOL' },
+      { name: 'OUT', direction: 'OUTPUT', dataType: 'BOOL' },
+    ])
+    const { state: before, networkId } = stateWith(early, late)
+    // Đã có dây thuận từ early -> late
+    const withForwardWire = fbdEditorReducer(before, {
+      type: 'ADD_WIRE',
+      networkId,
+      wire: wire(early, 'OUT', late, 'IN1', 1),
+    })
+    const wiresBefore = withForwardWire.document.networks[0].wires.length
+
+    // Thử nối ngược lại từ late sang early -> tạo chu trình lặp tổ hợp (cycle)
+    const cycleCandidate = wire(late, 'OUT', early, 'IN1', 2)
+    const after = fbdEditorReducer(withForwardWire, {
+      type: 'ADD_WIRE',
+      networkId,
+      wire: cycleCandidate,
+    })
+
     expect(after.announcement.code).toBe('connect-reverse-order')
-    expect(after.past).toHaveLength(0)
+    expect(after.past).toHaveLength(1)
     expect(after.document.networks[0].wires).toHaveLength(wiresBefore)
   })
 

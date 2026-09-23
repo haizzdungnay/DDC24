@@ -808,9 +808,12 @@ async function navigate(page: Page, path: string) {
   await page.waitForLoadState('networkidle').catch(() => undefined)
 }
 
-async function createPou(page: Page, label: 'Program · ST' | 'Program · FBD' | 'Function · ST' | 'Function Block · ST') {
+async function createPou(page: Page, label: 'Program · ST' | 'Program · FBD' | 'Function · ST' | 'Function Block · ST', name?: string) {
   await page.getByRole('button', { name: 'Mới', exact: true }).click()
   await page.getByRole('menu', { name: 'Tạo POU mới' }).getByRole('menuitem', { name: label }).click()
+  const pouName = name || (label.includes('Function Block') ? 'NewFunctionBlock' : label.includes('Function') ? 'NewFunction' : label.includes('FBD') ? 'NewFbdProgram' : 'NewProgram')
+  await page.getByLabel('Tên POU').fill(pouName)
+  await page.getByRole('button', { name: 'Tạo' }).click()
 }
 
 test.describe('Programming — sáu workspace, tám journey (T59-503)', () => {

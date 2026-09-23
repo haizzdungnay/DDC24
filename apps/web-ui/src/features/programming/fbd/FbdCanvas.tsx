@@ -8,6 +8,8 @@ import {
   FBD_MINIMAP_NODE_THRESHOLD,
   FBD_MINIMAP_WIDTH,
   FBD_NODE_WIDTH,
+  fbdNodeHeight,
+  fbdNodeMinWidth,
   type FbdPortGeometry,
 } from './geometry'
 import {
@@ -46,6 +48,7 @@ import { createUuid } from '../../../shared/crypto'
 import { LIBRARY_DRAG_TYPE } from '../design/library/QuickLibraryPanel'
 import { useSetFbdCanvasBridge, type FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
 import { useFbdNodeDrag } from './useFbdNodeDrag'
+import { useFbdNodeResize } from './useFbdNodeResize'
 import type {
   ProgrammingBinding,
   ProgrammingPointCatalogEntry,
@@ -341,14 +344,112 @@ export function FbdCanvas({
     }
   }, [])
 
+  const nodeSizesKey = fbdDocument && fbdDocument.graphId
+    ? ('mkddc:fbd-node-sizes:v1:' + fbdDocument.graphId)
+    : ('mkddc:fbd-node-sizes:v1:' + network.id)
+
+  const [nodeSizes, setNodeSizes] = useState<Record<string, { width?: number; height?: number }>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const raw = localStorage.getItem(nodeSizesKey)
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = localStorage.getItem(nodeSizesKey)
+      setNodeSizes(raw ? JSON.parse(raw) : {})
+    } catch {
+      setNodeSizes({})
+    }
+  }, [nodeSizesKey])
+
+  const [activeResizeState, setActiveResizeState] = useState<{
+    nodeId: string
+    currentWidth: number
+    currentHeight: number
+  } | null>(null)
+
+  const effectiveSizes = useMemo(() => {
+    if (!activeResizeState) return nodeSizes
+    return {
+      ...nodeSizes,
+      [activeResizeState.nodeId]: {
+        width: activeResizeState.currentWidth,
+        height: activeResizeState.currentHeight,
+      },
+    }
+  }, [nodeSizes, activeResizeState])
+
   const geometry = useMemo(
-    () => buildFbdNetworkGeometry(network, layout, { wireStyle }),
-    [network, layout, wireStyle]
+    () => buildFbdNetworkGeometry(network, layout, { wireStyle, nodeSizes: effectiveSizes }),
+    [network, layout, wireStyle, effectiveSizes]
   )
   const nodesById = useMemo(
     () => new Map(network.nodes.map((node) => [node.id, node])),
     [network.nodes]
   )
+
+  const { resize, beginResize, moveResize, endResize, cancelResize } = useFbdNodeResize({
+    canEdit,
+    viewport,
+    snapEnabled: snapEnabled ?? true,
+    snapSize: snapSize ?? 8,
+    minWidth: (nodeId) => {
+      const node = nodesById.get(nodeId)
+      return node ? fbdNodeMinWidth(node) : 120
+    },
+    minHeight: (nodeId) => {
+      const node = nodesById.get(nodeId)
+      return node ? fbdNodeHeight(node) : 60
+    },
+    onResizeEnd: (nodeId, w, h) => {
+      setActiveResizeState(null)
+      setNodeSizes((prev) => {
+        const next = { ...prev, [nodeId]: { width: w, height: h } }
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(nodeSizesKey, JSON.stringify(next))
+          } catch {
+            // Ignore storage write failure
+          }
+        }
+        return next
+      })
+    },
+  })
+
+  useEffect(() => {
+    if (resize) {
+      setActiveResizeState({
+        nodeId: resize.nodeId,
+        currentWidth: resize.currentWidth,
+        currentHeight: resize.currentHeight,
+      })
+    } else {
+      setActiveResizeState(null)
+    }
+  }, [resize])
+
+  const handleResetNodeSize = useCallback((nodeId: string) => {
+    setActiveResizeState(null)
+    setNodeSizes((prev) => {
+      const next = { ...prev }
+      delete next[nodeId]
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(nodeSizesKey, JSON.stringify(next))
+        } catch {
+          // Ignore storage write failure
+        }
+      }
+      return next
+    })
+  }, [nodeSizesKey])
   const portsById = useMemo(() => {
     const map = new Map<string, FbdPortGeometry>()
     for (const node of geometry.nodes) {
@@ -401,7 +502,8 @@ export function FbdCanvas({
     dispatch,
   })
 
-  let minX = geometry.minX ?? 0
+  const scale = viewport.scale || 1
+let minX = geometry.minX ?? 0
   let minY = geometry.minY ?? 0
   let maxX = geometry.width
   let maxY = geometry.height
@@ -418,22 +520,23 @@ export function FbdCanvas({
     }
   }
 
-  const viewBoxX = Math.min(0, Math.floor(minX))
-  const viewBoxY = Math.min(0, Math.floor(minY))
-  const contentWidth = Math.max(maxX - viewBoxX, geometry.width)
-  const contentHeight = Math.max(maxY - viewBoxY, geometry.height)
+  const CANVAS_EDGE_PADDING = 40
+  const viewBoxX = minX < 0 ? Math.floor(minX) - CANVAS_EDGE_PADDING : 0
+  const viewBoxY = minY < 0 ? Math.floor(minY) - CANVAS_EDGE_PADDING : 0
+  const contentWidth = Math.max(maxX - viewBoxX + CANVAS_EDGE_PADDING, geometry.width)
+  const contentHeight = Math.max(maxY - viewBoxY + CANVAS_EDGE_PADDING, geometry.height)
 
   const visibleWidth = Math.min(containerWidth || window.innerWidth, window.innerWidth)
   const visibleHeight = Math.min(containerHeight || window.innerHeight, window.innerHeight)
 
   const width = Math.max(
     contentWidth + 800,
-    Math.floor(visibleWidth / (viewport.scale || 1)) + 800,
+    Math.floor(visibleWidth / scale) + 800,
     2000,
   )
   const height = Math.max(
     contentHeight + 600,
-    Math.floor(visibleHeight / (viewport.scale || 1)) + 800,
+    Math.floor(visibleHeight / scale) + 800,
     1600,
   )
 
@@ -697,6 +800,8 @@ export function FbdCanvas({
       height,
       viewport,
       scale: viewport.scale,
+      viewBoxX,
+      viewBoxY,
       scrollPosition: container
         ? {
             left: container.scrollLeft,
@@ -729,6 +834,8 @@ export function FbdCanvas({
     selection,
     viewport,
     width,
+    viewBoxX,
+    viewBoxY,
   ])
 
   useEffect(() => {
@@ -742,11 +849,11 @@ export function FbdCanvas({
         clientWidth: container.clientWidth,
         clientHeight: container.clientHeight,
       }
-      setBridge?.((prev) => (prev ? { ...prev, scrollPosition: scrollPos } : null))
+      setBridge?.((prev) => (prev ? { ...prev, scrollPosition: scrollPos, viewBoxX, viewBoxY } : null))
     }
     container.addEventListener('scroll', handleScroll, { passive: true })
     return () => container.removeEventListener('scroll', handleScroll)
-  }, [bridgeHasConsumer, setBridge, onBridgeChange])
+  }, [bridgeHasConsumer, setBridge, onBridgeChange, viewBoxX, viewBoxY])
 
   // Cancel any gesture on Escape key
   useEffect(() => {
@@ -1029,6 +1136,10 @@ export function FbdCanvas({
   }
 
   function handleSurfacePointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    if (resize) {
+      moveResize(event)
+      return
+    }
     if (activePointersRef.current.has(event.pointerId)) {
       activePointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
     }
@@ -1700,18 +1811,143 @@ export function FbdCanvas({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-      <div
-        ref={scrollRef}
-        className="relative min-h-0 flex-1 overflow-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]"
-      >
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)]">
         <div
-          className="pointer-events-none sticky top-0 z-10 flex h-0 items-start justify-between"
+          ref={scrollRef}
+          className="h-full w-full overflow-auto"
+        >
+        <svg
+          ref={surfaceRef}
+          role="group"
+          aria-label={pick(`Sơ đồ ${network.name}`, `${network.name} diagram`)}
+          data-fbd-network-id={network.id}
+          width={width * viewport.scale}
+          height={height * viewport.scale}
+          viewBox={`${viewBoxX} ${viewBoxY} ${width} ${height}`}
+          className={`block touch-none ${surfaceCursor}`}
+          onContextMenu={handleSurfaceContextMenu}
+          onPointerDown={(event) => {
+            if (event.button === 2 || event.button === 1) {
+              handleBgPointerDown(event as unknown as React.PointerEvent<SVGRectElement>)
+            }
+          }}
+          onPointerMove={handleSurfacePointerMove}
+          onPointerEnter={() => { pointerInsideRef.current = true }}
+          onPointerLeave={() => {
+            pointerInsideRef.current = false
+            setSpaceHeld(false)
+            setHover({ nodeId: null, portId: null, wireId: null })
+            setHoverTooltip(null)
+          }}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <FbdGridPattern networkId={network.id} snapSize={snapSize} gridVisible={gridVisible} transform={viewportSceneTransform(viewport)} />
+
+          {/* Background rect for Pan and Marquee */}
+          <rect
+            data-fbd-canvas-bg="true"
+            x={viewBoxX - 2000}
+            y={viewBoxY - 2000}
+            width={width + 4000}
+            height={height + 4000}
+            fill={gridVisible ? `url(#fbd-grid-${network.id})` : 'transparent'}
+            onPointerDown={handleBgPointerDown}
+            onPointerUp={handleBgPointerUp}
+            onPointerCancel={handleBgPointerCancel}
+          />
+
+          {/* Scene Transform Group */}
+          <g
+            data-fbd-scene="true"
+            data-fbd-network-id={network.id}
+            transform={viewportSceneTransform(viewport)}
+          >
+            <FbdWiresLayer
+              wires={geometry.wires}
+              selection={selection}
+              networkId={network.id}
+              pick={pick}
+              select={select}
+              hoverWireId={hover.wireId}
+              onWireHover={(wireId) =>
+                setHover((current) => (current.wireId === wireId ? current : { ...current, wireId }))
+              }
+              onWireContextMenu={(event, wireId) => openContextMenu(event, { kind: 'wire', wireId })}
+            />
+
+            <FbdNodesLayer
+              nodes={geometry.nodes}
+              nodesById={nodesById}
+              selection={selection}
+              issueNodeIds={issueNodeIds}
+              staleNodeIds={staleNodeIds}
+              runtime={runtime}
+              pick={pick}
+              connectionFromPortId={connectionFromPortId}
+              canEdit={canEdit}
+              networkId={network.id}
+              tempPositions={drag?.currentPositions ?? null}
+              select={select}
+              beginDrag={handleBeginDrag}
+              moveDrag={moveDrag}
+              endDrag={endDrag}
+              cancelDrag={cancelDrag}
+              registerPort={registerPort}
+              onPortPointerDown={handlePortPointerDown}
+              onPortPointerUp={handlePortPointerUp}
+              onPortClick={handlePortClick}
+              onNodeClick={handleNodeClick}
+              onNodeContextMenu={(event, nodeId) => openContextMenu(event, { kind: 'node', nodeId })}
+              onPortContextMenu={(event, port) =>
+                openContextMenu(event, { kind: 'port', nodeId: port.nodeId, portId: port.id, direction: port.direction })
+              }
+              hoverNodeId={hover.nodeId}
+              hoverPortId={hover.portId}
+              activeTooltipNodeId={!isGestureActive ? hoverTooltip?.nodeId ?? null : null}
+              tooltipId={tooltipId}
+              bindings={bindings}
+              variables={variables}
+              pointCatalogItems={pointCatalogItems}
+              onNodePointerEnter={handleNodePointerEnter}
+              onNodePointerLeave={handleNodePointerLeave}
+              onNodeFocus={handleNodeFocus}
+              onNodeBlur={handleNodeBlur}
+              wiringSourcePortId={wireDrag?.sourcePort.id ?? clickSourcePort?.id ?? null}
+              candidatePortId={wireDrag?.candidate?.port.id ?? clickCandidate?.port.id ?? null}
+              candidateOk={wireDrag?.candidate?.ok ?? clickCandidate?.ok ?? true}
+              dropTargetNodeId={(wireDrag?.candidate ?? clickCandidate)?.via === 'node'
+                ? (wireDrag?.candidate ?? clickCandidate)?.port.nodeId ?? null
+                : null}
+              onBeginResize={beginResize}
+              onMoveResize={moveResize}
+              onEndResize={endResize}
+              onCancelResize={cancelResize}
+              onResetNodeSize={handleResetNodeSize}
+            />
+
+            <FbdLayoutPreviewLayer nodes={geometry.nodes} positions={layoutPreview ?? null} />
+
+            <FbdWirePreviewLayer preview={wirePreview} wireStyle={wireStyle} />
+
+            <FbdGhostLayer ghost={ghost} />
+
+            <FbdMarqueeLayer marquee={marquee} />
+          </g>
+        </svg>
+
+        </div>
+
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-1.5"
           role="group"
           aria-label={pick('Thu phóng canvas', 'Canvas zoom')}
         >
           {/* Dải phản hồi thao tác. Nằm cùng hàng nổi với cụm thu phóng để
               không lấy thêm chiều cao của mặt vẽ. */}
-          <div className="m-1.5 max-w-[60%]">
+          <div className="max-w-[60%]">
             {flash && (
               <p
                 role="status"
@@ -1726,7 +1962,7 @@ export function FbdCanvas({
               </p>
             )}
           </div>
-          <div className="pointer-events-auto m-1.5 flex items-center gap-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]/95 p-1 shadow-sm">
+          <div className="pointer-events-auto flex items-center gap-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)]/95 p-1 shadow-sm">
             <button
               type="button"
               data-fbd-canvas-control="true"
@@ -1796,117 +2032,6 @@ export function FbdCanvas({
             </span>
           </div>
         </div>
-        <svg
-          ref={surfaceRef}
-          role="group"
-          aria-label={pick(`Sơ đồ ${network.name}`, `${network.name} diagram`)}
-          data-fbd-network-id={network.id}
-          width={width * viewport.scale}
-          height={height * viewport.scale}
-          viewBox={`${viewBoxX} ${viewBoxY} ${width} ${height}`}
-          className={`block touch-none ${surfaceCursor}`}
-          onContextMenu={handleSurfaceContextMenu}
-          onPointerMove={handleSurfacePointerMove}
-          onPointerEnter={() => { pointerInsideRef.current = true }}
-          onPointerLeave={() => {
-            pointerInsideRef.current = false
-            setSpaceHeld(false)
-            setHover({ nodeId: null, portId: null, wireId: null })
-            setHoverTooltip(null)
-          }}
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <FbdGridPattern networkId={network.id} snapSize={snapSize} gridVisible={gridVisible} />
-
-          {/* Background rect for Pan and Marquee */}
-          <rect
-            data-fbd-canvas-bg="true"
-            x={viewBoxX}
-            y={viewBoxY}
-            width={width}
-            height={height}
-            fill={gridVisible ? `url(#fbd-grid-${network.id})` : 'transparent'}
-            onPointerDown={handleBgPointerDown}
-            onPointerUp={handleBgPointerUp}
-            onPointerCancel={handleBgPointerCancel}
-          />
-
-          {/* Scene Transform Group */}
-          <g
-            data-fbd-scene="true"
-            data-fbd-network-id={network.id}
-            transform={viewportSceneTransform(viewport)}
-          >
-            <FbdWiresLayer
-              wires={geometry.wires}
-              selection={selection}
-              networkId={network.id}
-              pick={pick}
-              select={select}
-              hoverWireId={hover.wireId}
-              onWireHover={(wireId) =>
-                setHover((current) => (current.wireId === wireId ? current : { ...current, wireId }))
-              }
-              onWireContextMenu={(event, wireId) => openContextMenu(event, { kind: 'wire', wireId })}
-            />
-
-            <FbdNodesLayer
-              nodes={geometry.nodes}
-              nodesById={nodesById}
-              selection={selection}
-              issueNodeIds={issueNodeIds}
-              staleNodeIds={staleNodeIds}
-              runtime={runtime}
-              pick={pick}
-              connectionFromPortId={connectionFromPortId}
-              canEdit={canEdit}
-              networkId={network.id}
-              tempPositions={drag?.currentPositions ?? null}
-              select={select}
-              beginDrag={handleBeginDrag}
-              moveDrag={moveDrag}
-              endDrag={endDrag}
-              cancelDrag={cancelDrag}
-              registerPort={registerPort}
-              onPortPointerDown={handlePortPointerDown}
-              onPortPointerUp={handlePortPointerUp}
-              onPortClick={handlePortClick}
-              onNodeClick={handleNodeClick}
-              onNodeContextMenu={(event, nodeId) => openContextMenu(event, { kind: 'node', nodeId })}
-              onPortContextMenu={(event, port) =>
-                openContextMenu(event, { kind: 'port', nodeId: port.nodeId, portId: port.id, direction: port.direction })
-              }
-              hoverNodeId={hover.nodeId}
-              hoverPortId={hover.portId}
-              activeTooltipNodeId={!isGestureActive ? hoverTooltip?.nodeId ?? null : null}
-              tooltipId={tooltipId}
-              bindings={bindings}
-              variables={variables}
-              pointCatalogItems={pointCatalogItems}
-              onNodePointerEnter={handleNodePointerEnter}
-              onNodePointerLeave={handleNodePointerLeave}
-              onNodeFocus={handleNodeFocus}
-              onNodeBlur={handleNodeBlur}
-              wiringSourcePortId={wireDrag?.sourcePort.id ?? clickSourcePort?.id ?? null}
-              candidatePortId={wireDrag?.candidate?.port.id ?? clickCandidate?.port.id ?? null}
-              candidateOk={wireDrag?.candidate?.ok ?? clickCandidate?.ok ?? true}
-              dropTargetNodeId={(wireDrag?.candidate ?? clickCandidate)?.via === 'node'
-                ? (wireDrag?.candidate ?? clickCandidate)?.port.nodeId ?? null
-                : null}
-            />
-
-            <FbdLayoutPreviewLayer nodes={geometry.nodes} positions={layoutPreview ?? null} />
-
-            <FbdWirePreviewLayer preview={wirePreview} wireStyle={wireStyle} />
-
-            <FbdGhostLayer ghost={ghost} />
-
-            <FbdMarqueeLayer marquee={marquee} />
-          </g>
-        </svg>
       </div>
 
       {contextMenu && contextMenuModel && (

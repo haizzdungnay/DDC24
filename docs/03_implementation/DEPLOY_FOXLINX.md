@@ -4,15 +4,19 @@
 
 | Trường | Giá trị |
 |---|---|
-| Hostname | `mekong-fac.ddns.net` |
-| Port SSH | `2223` |
+| Hostname | `192.168.1.16` (LAN) / `mekong-fac.ddns.net` (WAN) |
+| Port SSH | `22` (LAN) / `2222` (WAN) |
 | User | `root` |
 | SSH key | `~/.ssh/mkddc24_som` |
 | CPU | Rockchip RV1126B (Quad core Cortex A53) — `aarch64` |
 | OS | Buildroot |
 
 ```text
-ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net
+# LAN:
+ssh -p 22 -i ~/.ssh/mkddc24_som root@192.168.1.16
+
+# WAN (DDNS):
+ssh -p 2222 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net
 ```
 
 > **Bảo mật:** SSH dùng key `~/.ssh/mkddc24_som`; không ghi hoặc truyền password
@@ -32,7 +36,7 @@ ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net
 | `/run/mkddc/core.sock` | Core IPC socket |
 | `/run/mkddc/programming-v1.sock` | Programming IPC socket |
 
-Process chạy dưới user `mkddc`. Port listen: **8081**.
+Process chạy dưới user `mkddc`. Port listen: **8082**.
 
 ## Quy trình deploy
 
@@ -59,7 +63,10 @@ tại `build/web-ui/dist/`.
 
 ```bash
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net "
+FOXLINX="root@192.168.1.16"
+SSH="ssh -p 22 -i ~/.ssh/mkddc24_som -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+$SSH $FOXLINX "
   cp /opt/mkddc-web/mkddc-web /opt/mkddc-web/mkddc-web.bak-${TIMESTAMP}
   mv /opt/mkddc-web/dist /opt/mkddc-web/dist.bak-${TIMESTAMP} 2>/dev/null || true
 "
@@ -68,8 +75,9 @@ ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net "
 ### Bước 4: Dừng web API
 
 ```bash
-ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net "
-  pkill -x mkddc-web 2>/dev/null || true
+$SSH $FOXLINX "
+  systemctl stop mkddc-web-pi mkddc-reload-helper mkddc-time-helper 2>/dev/null || true
+  pkill -9 -x mkddc-web 2>/dev/null || true
   sleep 1
   pgrep -x mkddc-web && echo STILL_RUNNING || echo STOPPED
 "
@@ -80,17 +88,16 @@ Kỳ vọng: `STOPPED`.
 ### Bước 5: Copy artifacts lên board
 
 ```bash
-scp -P 2223 -i ~/.ssh/mkddc24_som \
-  /tmp/mkddc-web-foxlinx root@mekong-fac.ddns.net:/opt/mkddc-web/mkddc-web
+SCP="scp -P 22 -i ~/.ssh/mkddc24_som -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
-scp -P 2223 -i ~/.ssh/mkddc24_som -r \
-  build/web-ui/dist root@mekong-fac.ddns.net:/opt/mkddc-web/dist
+$SCP /tmp/mkddc-web-foxlinx ${FOXLINX}:/opt/mkddc-web/mkddc-web
+$SCP -r build/web-ui/dist ${FOXLINX}:/opt/mkddc-web/dist
 ```
 
 ### Bước 6: Phân quyền và khởi động lại
 
 ```bash
-ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net '
+$SSH $FOXLINX '
   chmod +x /opt/mkddc-web/mkddc-web
   chown mkddc:mkddc /opt/mkddc-web/mkddc-web
   chown -R mkddc:mkddc /opt/mkddc-web/dist
@@ -109,7 +116,7 @@ ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net '
     PROGRAMMING_SIM_WORKER=/opt/mkddc-web/mkddc-programming-sim-worker \
     PROGRAMMING_COMPILER=/usr/sbin/mkddc-st-compile \
     PROGRAMMING_PACKAGER=/usr/sbin/mkddc-st-package \
-    PORT=8081 \
+    PORT=8082 \
     WEB_UI_DIR=/opt/mkddc-web/dist \
     /opt/mkddc-web/mkddc-web \
   " > /tmp/mkddc-web-deploy.log 2>&1 &
@@ -126,25 +133,26 @@ Kỳ vọng: `PROCESS_OK`.
 Board Buildroot không có `curl` — dùng `wget` (busybox):
 
 ```bash
-ssh -p 2223 -i ~/.ssh/mkddc24_som root@mekong-fac.ddns.net '
+# LAN:
+ssh -p 22 -i ~/.ssh/mkddc24_som root@192.168.1.16 '
   # Health
-  wget -q -O - http://127.0.0.1:8081/api/v1/health
+  wget -q -O - http://127.0.0.1:8082/api/v1/health
   echo ""
 
   # Login
   wget -q -O /tmp/login.json \
     --post-data="{\"username\":\"admin\",\"password\":\"admin123\"}" \
     --header="Content-Type: application/json" \
-    http://127.0.0.1:8081/api/v1/auth/login
+    http://127.0.0.1:8082/api/v1/auth/login
   TOKEN=$(sed "s/.*\"token\":\"\([^\"]*\)\".*/\1/" /tmp/login.json)
 
   # Programming capabilities
   wget -q -O - --header="Authorization: Bearer $TOKEN" \
-    http://127.0.0.1:8081/api/v1/programming/capabilities
+    http://127.0.0.1:8082/api/v1/programming/capabilities
   echo ""
 
   # FE static
-  wget -q -O - http://127.0.0.1:8081/ | head -c 100
+  wget -q -O - http://127.0.0.1:8082/ | head -c 100
   echo ""
 '
 ```

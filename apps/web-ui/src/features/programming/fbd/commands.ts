@@ -266,6 +266,119 @@ function deleteSelection(document: FbdDocument, selection: FbdSelection): boolea
   return node.ports.length !== before
 }
 
+/**
+ * Tính toán lại thứ tự thực thi tô-pô cho tất cả node trong network.
+ *
+ * Đối với các khối tổ hợp (combinational, kind !== 'FUNCTION_BLOCK'), mọi dây nối
+ * từ source sang target đòi hỏi: source phải chạy trước target (source.executionOrder < target.executionOrder).
+ * Nếu đồ thị giữa các khối tổ hợp không có chu trình (DAG), trả về Map<nodeId, newExecutionOrder>
+ * trong đó các giá trị là dãy liên tục từ 0 đến N-1, bảo toàn tối đa thứ tự tương đối ban đầu.
+ * Nếu phát hiện chu trình tổ hợp (cycle), trả về null để báo lỗi 'connect-reverse-order'.
+ */
+export function computeTopologicalExecutionOrders(
+  network: FbdNetwork,
+  candidateWire?: FbdWire,
+  excludedWireId?: string,
+): Map<string, number> | null {
+  if (network.nodes.length === 0) return new Map()
+
+  const nodeById = new Map<string, FbdNode>(network.nodes.map((n) => [n.id, n]))
+  const portToNodeId = new Map<string, string>()
+  for (const node of network.nodes) {
+    for (const port of node.ports) {
+      portToNodeId.set(port.id, node.id)
+    }
+  }
+
+  const allWires = network.wires.filter((w) => w.id !== excludedWireId)
+  if (candidateWire) {
+    allWires.push(candidateWire)
+  }
+
+  const inDegree = new Map<string, number>()
+  const adj = new Map<string, Set<string>>()
+  for (const node of network.nodes) {
+    inDegree.set(node.id, 0)
+    adj.set(node.id, new Set())
+  }
+
+  for (const wire of allWires) {
+    const sourceId = wire.from.nodeId || portToNodeId.get(wire.from.portId)
+    const targetId = wire.to.nodeId || portToNodeId.get(wire.to.portId)
+    if (!sourceId || !targetId) continue
+    const sourceNode = nodeById.get(sourceId)
+    const targetNode = nodeById.get(targetId)
+    if (!sourceNode || !targetNode) continue
+
+    // Chỉ ràng buộc thứ tự thực thi với các khối combinational (không phải FUNCTION_BLOCK).
+    // FUNCTION_BLOCK có bộ nhớ/trạng thái nội tại, cho phép feedback loop trong điều khiển.
+    if (sourceNode.kind !== 'FUNCTION_BLOCK' && targetNode.kind !== 'FUNCTION_BLOCK') {
+      if (sourceId === targetId) {
+        // Tự nối vào chính mình ở khối combinational -> chu trình ngay lập tức
+        return null
+      }
+      const outgoing = adj.get(sourceId)!
+      if (!outgoing.has(targetId)) {
+        outgoing.add(targetId)
+        inDegree.set(targetId, (inDegree.get(targetId) ?? 0) + 1)
+      }
+    }
+  }
+
+  const compareNodes = (a: FbdNode, b: FbdNode) =>
+    a.executionOrder - b.executionOrder || a.id.localeCompare(b.id)
+
+  const available: FbdNode[] = network.nodes.filter((n) => (inDegree.get(n.id) ?? 0) === 0)
+  available.sort(compareNodes)
+
+  const ordered: string[] = []
+  while (available.length > 0) {
+    const current = available.shift()!
+    ordered.push(current.id)
+
+    const outgoing = adj.get(current.id)
+    if (outgoing) {
+      for (const targetId of outgoing) {
+        const deg = (inDegree.get(targetId) ?? 1) - 1
+        inDegree.set(targetId, deg)
+        if (deg === 0) {
+          const targetNode = nodeById.get(targetId)!
+          let insertIndex = 0
+          while (
+            insertIndex < available.length &&
+            compareNodes(available[insertIndex], targetNode) < 0
+          ) {
+            insertIndex++
+          }
+          available.splice(insertIndex, 0, targetNode)
+        }
+      }
+    }
+  }
+
+  if (ordered.length !== network.nodes.length) {
+    return null
+  }
+
+  const result = new Map<string, number>()
+  ordered.forEach((nodeId, index) => {
+    result.set(nodeId, index)
+  })
+  return result
+}
+
+export function applyTopologicalExecutionOrders(network: FbdNetwork): void {
+  const topoOrders = computeTopologicalExecutionOrders(network)
+  if (topoOrders) {
+    for (const node of network.nodes) {
+      const order = topoOrders.get(node.id)
+      if (order !== undefined) {
+        node.executionOrder = order
+      }
+    }
+  }
+}
+
 export type FbdWireRejection =
   | 'port-not-found'
   | 'select-output-port'
@@ -314,18 +427,20 @@ export function validateFbdWireCandidate(
   }
 
   if (
-    source.node.kind !== 'FUNCTION_BLOCK' &&
-    target.node.kind !== 'FUNCTION_BLOCK' &&
-    source.node.executionOrder >= target.node.executionOrder
-  ) {
-    return { ok: false, code: 'connect-reverse-order' }
-  }
-
-  if (
     wireCount(document) >= FBD_MAX_WIRES ||
     target.network.wires.some((item) => item.to.portId === target.port.id)
   ) {
     return { ok: false, code: 'input-has-driver-or-limit' }
+  }
+
+  if (
+    source.node.kind !== 'FUNCTION_BLOCK' &&
+    target.node.kind !== 'FUNCTION_BLOCK'
+  ) {
+    const topoOrders = computeTopologicalExecutionOrders(source.network, wire)
+    if (!topoOrders) {
+      return { ok: false, code: 'connect-reverse-order' }
+    }
   }
 
   return { ok: true }
@@ -352,6 +467,7 @@ function connect(
   const network = document.networks.find((item) => item.id === target.network.id)
   if (!network) return reject(state, { code: 'network-missing' })
   network.wires.push(wire!)
+  applyTopologicalExecutionOrders(network)
   return commit(state, document, { code: 'wire-connected', params: { from: source.port.name, to: target.port.name } })
 }
 
@@ -486,6 +602,7 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       const targetNetwork = document.networks.find((item) => item.id === action.networkId)
       if (!targetNetwork) return reject(state, { code: 'network-not-found' })
       targetNetwork.wires.push(action.wire)
+      applyTopologicalExecutionOrders(targetNetwork)
       return commit(
         state,
         document,
@@ -527,6 +644,7 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       )
       if (!validation.ok) return reject(state, { code: validation.code })
       network.wires.push(action.wire)
+      applyTopologicalExecutionOrders(network)
       return commit(
         state,
         document,
@@ -706,6 +824,7 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       }))
       network.nodes.push(...nodesToAdd)
       network.wires.push(...action.wires)
+      applyTopologicalExecutionOrders(network)
 
       if (action.layoutNodes && Object.keys(action.layoutNodes).length > 0) {
         const layout = document.layout ?? { schemaVersion: 1 as const, nodes: {} }

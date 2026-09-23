@@ -324,3 +324,26 @@ describe('FbdCanvas — phạm vi quan sát kích thước', () => {
     expect(observed.contains(surface)).toBe(true)
   })
 })
+
+describe('Canvas scroll bounds và viewBox (chống cắt mép trái khi zoom/pan)', () => {
+  it('viewBoxX và contentWidth tự động bao phủ các khối khi toạ độ âm', () => {
+    // Tạo document với node ở vị trí x âm hoặc bị kéo sang trái
+    const doc = golden()
+    const target = doc.networks[0].nodes[0]
+    const { surface } = renderPresentationCanvas({
+      document: doc,
+      layout: {
+        schemaVersion: 1,
+        nodes: { [target.id]: { x: -80, y: 50 } },
+      },
+    })
+
+    const viewBox = surface.getAttribute('viewBox')
+    expect(viewBox).not.toBeNull()
+    const [vx, , vw] = viewBox!.split(' ').map(Number)
+    // viewBoxX phải mở rộng về phía âm (<= -80) để bao trọn node ở x = -80
+    expect(vx).toBeLessThanOrEqual(-80)
+    // vw phải đủ lớn để bao trọn toàn bộ canvas từ viewBoxX
+    expect(vw).toBeGreaterThan(1000)
+  })
+})

@@ -15,6 +15,8 @@ export interface FbdCanvasBridge {
   viewport: FbdViewport
   scale: number
   scrollPosition?: { left: number; top: number; clientWidth: number; clientHeight: number }
+  viewBoxX?: number
+  viewBoxY?: number
   selection?: FbdSelection | null
   onNavigate?: (clientX: number, clientY: number, element: SVGSVGElement) => void
   onStepNavigate?: (dx: number, dy: number) => void
@@ -327,15 +329,26 @@ export function WorkbenchMinimapPanel({ bridge: propBridge, stSource, onJumpToOf
   }
   const scroll = activeBridge.scrollPosition
   const scale = activeBridge.scale || activeBridge.viewport?.scale || 1
-  const vpX = scroll ? (scroll.left - (activeBridge.viewport?.x ?? 0)) / scale : 0
-  const vpY = scroll ? (scroll.top - (activeBridge.viewport?.y ?? 0)) / scale : 0
+  const viewBoxX = activeBridge.viewBoxX ?? 0
+  const viewBoxY = activeBridge.viewBoxY ?? 0
+
+  const vpX = scroll
+    ? (scroll.left - (activeBridge.viewport?.x ?? 0)) / scale + viewBoxX
+    : 0
+  const vpY = scroll
+    ? (scroll.top - (activeBridge.viewport?.y ?? 0)) / scale + viewBoxY
+    : 0
   const vpW = scroll ? scroll.clientWidth / scale : activeBridge.width
   const vpH = scroll ? scroll.clientHeight / scale : activeBridge.height
 
   const indicatorW = Math.min(base.width, Math.max(10, vpW))
   const indicatorH = Math.min(base.height, Math.max(10, vpH))
-  const indicatorX = Math.max(base.x, Math.min(base.x + base.width - indicatorW, vpX))
-  const indicatorY = Math.max(base.y, Math.min(base.y + base.height - indicatorH, vpY))
+  const indicatorX = vpW >= base.width
+    ? base.x
+    : Math.max(base.x - base.width * 0.5, Math.min(base.x + base.width - indicatorW * 0.5, vpX))
+  const indicatorY = vpH >= base.height
+    ? base.y
+    : Math.max(base.y - base.height * 0.5, Math.min(base.y + base.height - indicatorH * 0.5, vpY))
 
   /* `#732` — chuyển THẲNG toạ độ con trỏ thật cho canvas, không dịch gì ở đây.
    *
@@ -505,9 +518,10 @@ export function WorkbenchMinimapPanel({ bridge: propBridge, stSource, onJumpToOf
             width={indicatorW}
             height={indicatorH}
             fill="var(--c-accent)"
-            fillOpacity={0.12}
+            fillOpacity={0.2}
             stroke="var(--c-accent)"
-            strokeWidth={1.5}
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
             className="pointer-events-none"
           />
         </svg>

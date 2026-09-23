@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_fan_enable.json'
-import type { FbdDocument, FbdNetwork } from './model'
+import type { FbdDocument, FbdNetwork, FbdNode } from './model'
 import {
   FBD_NODE_WIDTH,
   buildFbdNetworkGeometry,
+  fbdNodeAutoWidth,
+  fbdNodeMinWidth,
   fbdNodeHeight,
   fbdWirePath,
   fbdWirePathBezier,
@@ -210,5 +212,54 @@ describe('buildFbdNetworkGeometry — fixture lớn nhất hợp đồng cho ph�
 
     const seen = new Set(geometry.nodes.map((node) => `${node.x}:${node.y}`))
     expect(seen.size).toBe(geometry.nodes.length)
+  })
+})
+
+describe('fbdNodeAutoWidth & fbdNodeMinWidth & custom nodeSizes', () => {
+  it('fbdNodeAutoWidth trả về FBD_NODE_WIDTH cho block có port ngắn', () => {
+    const document = golden()
+    for (const node of document.networks[0].nodes) {
+      expect(fbdNodeAutoWidth(node)).toBe(FBD_NODE_WIDTH)
+    }
+  })
+
+  it('fbdNodeAutoWidth tự động mở rộng khi port name dài để chữ không đè nhau', () => {
+    const nodeWithLongNames: FbdNode = {
+      id: 'long-node',
+      kind: 'FUNCTION',
+      typeRef: 'CALCULATE',
+      executionOrder: 0,
+      parameters: {},
+      ports: [
+        { id: 'p1', name: 'LONG_INPUT_VARIABLE_NAME', direction: 'INPUT', dataType: 'REAL', unit: null, order: 0 },
+        { id: 'p2', name: 'LONG_OUTPUT_RESULT_NAME', direction: 'OUTPUT', dataType: 'REAL', unit: null, order: 1 },
+      ],
+    }
+    const autoW = fbdNodeAutoWidth(nodeWithLongNames)
+    expect(autoW).toBeGreaterThan(FBD_NODE_WIDTH)
+    // Tự động mở rộng ít nhất để đủ chứa cả 2 chuỗi
+    expect(autoW).toBeGreaterThanOrEqual(300)
+  })
+
+  it('fbdNodeMinWidth trả về cận dưới an toàn 120px', () => {
+    expect(fbdNodeMinWidth()).toBe(120)
+  })
+
+  it('buildFbdNetworkGeometry nhận custom nodeSizes cho width và height', () => {
+    const document = golden()
+    const target = document.networks[0].nodes[0]
+    const geometry = buildFbdNetworkGeometry(document.networks[0], undefined, {
+      nodeSizes: {
+        [target.id]: { width: 320, height: 180 },
+      },
+    })
+    const placed = geometry.byNodeId.get(target.id)!
+    expect(placed.width).toBe(320)
+    expect(placed.height).toBe(180)
+    // OUTPUT port cx nằm ở cạnh phải node.x + 320
+    const outPort = placed.ports.find((p) => p.direction === 'OUTPUT')
+    if (outPort) {
+      expect(outPort.cx).toBe(placed.x + 320)
+    }
   })
 })

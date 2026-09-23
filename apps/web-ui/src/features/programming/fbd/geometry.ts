@@ -69,11 +69,61 @@ export interface FbdNetworkGeometry {
   minY: number
 }
 
-export function fbdNodeHeight(node: FbdNode): number {
+export function fbdNodeHeight(node: FbdNode, customHeight?: number): number {
   const inputs = node.ports.filter((port) => port.direction === 'INPUT').length
   const outputs = node.ports.filter((port) => port.direction === 'OUTPUT').length
   const rows = Math.max(inputs, outputs, 1)
-  return FBD_NODE_HEADER_HEIGHT + rows * FBD_PORT_ROW_HEIGHT + FBD_NODE_PADDING_BOTTOM
+  const naturalHeight = FBD_NODE_HEADER_HEIGHT + rows * FBD_PORT_ROW_HEIGHT + FBD_NODE_PADDING_BOTTOM
+  return typeof customHeight === 'number' && customHeight > naturalHeight ? customHeight : naturalHeight
+}
+
+export function fbdNodeMinWidth(_node?: FbdNode): number {
+  return 120
+}
+
+function approxPortLabelLength(name: string, dataType?: string | null, unit?: string | null): number {
+  let len = name.length
+  if (dataType) {
+    len += 3 + dataType.length
+    if (unit && unit.trim()) {
+      len += 3 + unit.trim().length
+    }
+  }
+  return len
+}
+
+export function fbdNodeAutoWidth(node: FbdNode): number {
+  let requiredWidth = FBD_NODE_WIDTH
+  const sorted = [...node.ports].sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
+  const inputs = sorted.filter((port) => port.direction === 'INPUT')
+  const outputs = sorted.filter((port) => port.direction === 'OUTPUT')
+  const rows = Math.max(inputs.length, outputs.length)
+
+  for (let i = 0; i < rows; i++) {
+    const inp = inputs[i]
+    const out = outputs[i]
+    if (inp && out) {
+      const inpLen = approxPortLabelLength(inp.name, inp.dataType, inp.unit)
+      const outLen = approxPortLabelLength(out.name, out.dataType, out.unit)
+      const needed = Math.ceil((inpLen + outLen) * 6.5 + 38)
+      if (needed > requiredWidth) requiredWidth = needed
+    } else if (inp) {
+      const inpLen = approxPortLabelLength(inp.name, inp.dataType, inp.unit)
+      const needed = Math.ceil(inpLen * 6.5 + 28)
+      if (needed > requiredWidth) requiredWidth = needed
+    } else if (out) {
+      const outLen = approxPortLabelLength(out.name, out.dataType, out.unit)
+      const needed = Math.ceil(outLen * 6.5 + 28)
+      if (needed > requiredWidth) requiredWidth = needed
+    }
+  }
+
+  const param = node.parameters?.variable ?? node.parameters?.instance ?? node.parameters?.value
+  const primaryText = typeof param === 'string' && param.trim() ? param.trim() : node.typeRef
+  const headerNeeded = Math.ceil(primaryText.length * 7.5 + 40)
+  if (headerNeeded > requiredWidth) requiredWidth = headerNeeded
+
+  return Math.ceil(requiredWidth / 8) * 8
 }
 
 /**
@@ -103,7 +153,7 @@ function autoPositions(network: FbdNetwork): Map<string, FbdPoint> {
   return positions
 }
 
-function portGeometry(node: FbdNode, origin: FbdPoint): FbdPortGeometry[] {
+function portGeometry(node: FbdNode, origin: FbdPoint, nodeWidth: number = FBD_NODE_WIDTH): FbdPortGeometry[] {
   const sorted = [...node.ports].sort((left, right) => left.order - right.order || left.id.localeCompare(right.id))
   const inputs = sorted.filter((port) => port.direction === 'INPUT')
   const outputs = sorted.filter((port) => port.direction === 'OUTPUT')
@@ -122,7 +172,7 @@ function portGeometry(node: FbdNode, origin: FbdPoint): FbdPortGeometry[] {
       id: port.id,
       nodeId: node.id,
       direction: 'OUTPUT' as const,
-      cx: origin.x + FBD_NODE_WIDTH,
+      cx: origin.x + nodeWidth,
       cy: rowCenter(index),
     })),
   ]
@@ -187,6 +237,7 @@ export function fbdWirePath(
 
 export interface BuildFbdNetworkGeometryOptions {
   wireStyle?: 'ORTHOGONAL' | 'BEZIER'
+  nodeSizes?: Readonly<Record<string, { width?: number; height?: number }>>
 }
 
 export function buildFbdNetworkGeometry(
@@ -198,16 +249,24 @@ export function buildFbdNetworkGeometry(
   const stored = layout?.nodes ?? {}
   const wireStyle = options?.wireStyle ?? 'BEZIER'
 
+  const nodeSizes = options?.nodeSizes
+
   const nodes: FbdNodeGeometry[] = network.nodes.map((node) => {
     const saved = stored[node.id]
     const origin = saved ?? auto.get(node.id) ?? { x: FBD_CANVAS_MARGIN, y: FBD_CANVAS_MARGIN }
+    const customSize = nodeSizes?.[node.id]
+    const width =
+      typeof customSize?.width === 'number' && customSize.width > 0
+        ? customSize.width
+        : fbdNodeAutoWidth(node)
+    const height = fbdNodeHeight(node, customSize?.height)
     return {
       id: node.id,
       x: origin.x,
       y: origin.y,
-      width: FBD_NODE_WIDTH,
-      height: fbdNodeHeight(node),
-      ports: portGeometry(node, origin),
+      width,
+      height,
+      ports: portGeometry(node, origin, width),
       auto: saved === undefined,
     }
   })
