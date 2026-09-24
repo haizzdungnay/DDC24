@@ -390,6 +390,17 @@ describe('PGM-02 POU Explorer (T59-803)', () => {
     const downloadBtn = screen.getByRole('button', { name: 'Tải về tệp sao lưu' })
     expect(downloadBtn).toBeEnabled()
 
+    const nameInput = within(dialog).getByLabelText('Tên bản sao lưu') as HTMLInputElement
+    expect(nameInput).toBeInTheDocument()
+    expect(nameInput.value).toMatch(/^mkddc-backup-/)
+    expect(within(dialog).getByText(/Dung lượng lưu trữ:/)).toBeInTheDocument()
+
+    fireEvent.change(nameInput, { target: { value: '   ' } })
+    expect(downloadBtn).toBeDisabled()
+
+    fireEvent.change(nameInput, { target: { value: 'my-custom-backup' } })
+    expect(downloadBtn).toBeEnabled()
+
     fireEvent.click(downloadBtn)
     expect(createObjectURLMock).toHaveBeenCalled()
     expect(revokeObjectURLMock).toHaveBeenCalled()

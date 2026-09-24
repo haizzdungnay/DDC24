@@ -1,5 +1,6 @@
 export type FbdThemePreference = 'FOLLOW_WEB' | 'LIGHT' | 'DARK'
 export type FbdWireStylePreference = 'ORTHOGONAL' | 'BEZIER'
+export type FbdFlowPreviewPreference = 'OFF' | 'ALL' | 'SELECTED_BLOCKS' | 'HOVER'
 export type FbdSnapSizePreference = 4 | 8 | 16 | 32
 export type FbdNetworkViewPreference = 'SELECTED' | 'ALL'
 
@@ -14,6 +15,7 @@ export interface FbdPreferences {
   schemaVersion: 1
   theme: FbdThemePreference
   wireStyle: FbdWireStylePreference
+  flowPreview: FbdFlowPreviewPreference
   gridVisible: boolean
   snapEnabled: boolean
   snapSize: FbdSnapSizePreference
@@ -32,6 +34,7 @@ const DEFAULT_PREFERENCES: FbdPreferences = {
   schemaVersion: 1,
   theme: 'FOLLOW_WEB',
   wireStyle: 'ORTHOGONAL',
+  flowPreview: 'HOVER',
   gridVisible: true,
   snapEnabled: true,
   snapSize: 8,
@@ -41,6 +44,7 @@ const DEFAULT_PREFERENCES: FbdPreferences = {
 
 const VALID_THEMES = new Set<FbdThemePreference>(['FOLLOW_WEB', 'LIGHT', 'DARK'])
 const VALID_WIRE_STYLES = new Set<FbdWireStylePreference>(['ORTHOGONAL', 'BEZIER'])
+const VALID_FLOW_PREVIEWS = new Set<FbdFlowPreviewPreference>(['OFF', 'ALL', 'SELECTED_BLOCKS', 'HOVER'])
 const VALID_SNAP_SIZES = new Set<FbdSnapSizePreference>([4, 8, 16, 32])
 const VALID_NETWORK_VIEWS = new Set<FbdNetworkViewPreference>(['SELECTED', 'ALL'])
 
@@ -83,6 +87,11 @@ function sanitizePreferences(raw: unknown): FbdPreferences {
       ? (bag.wireStyle as FbdWireStylePreference)
       : defaults.wireStyle
 
+  const flowPreview: FbdFlowPreviewPreference =
+    typeof bag.flowPreview === 'string' && VALID_FLOW_PREVIEWS.has(bag.flowPreview as FbdFlowPreviewPreference)
+      ? (bag.flowPreview as FbdFlowPreviewPreference)
+      : defaults.flowPreview
+
   const gridVisible = typeof bag.gridVisible === 'boolean' ? bag.gridVisible : defaults.gridVisible
   const snapEnabled = typeof bag.snapEnabled === 'boolean' ? bag.snapEnabled : defaults.snapEnabled
 
@@ -108,6 +117,7 @@ function sanitizePreferences(raw: unknown): FbdPreferences {
     schemaVersion: 1,
     theme,
     wireStyle,
+    flowPreview,
     gridVisible,
     snapEnabled,
     snapSize,

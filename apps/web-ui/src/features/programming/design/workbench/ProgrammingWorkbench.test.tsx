@@ -587,12 +587,12 @@ describe('ProgrammingWorkbench — T9-02 Mini Map Cột 3 (TC-WBENCH-MM-*)', () 
  * 'problems' | 'search' | 'references' | 'watch'.
  */
 describe('ProgrammingWorkbench — T9-03 Đồng bộ tab panel đáy (TC-WBENCH-TABS-*)', () => {
-  it('TC-WBENCH-TABS-3: khay bàn làm việc có đúng 3 tab nghiệp vụ (problems, search, references), không còn tab watch và trace', () => {
+  it('TC-WBENCH-TABS-3: khay bàn làm việc có đúng 5 tab nghiệp vụ (problems, status, logs, search, references), không còn tab watch và trace', () => {
     // 1. Kiểm tra ở chế độ EDIT (mặc định)
     renderWorkbench({ mode: 'EDIT' })
 
     const tabs = screen.getAllByRole('tab')
-    expect(tabs).toHaveLength(3)
+    expect(tabs).toHaveLength(5)
 
     // Tab trace và watch không còn nằm trong dải tab của cột 1
     expect(screen.queryByRole('tab', { name: /Trace/i })).toBeNull()
@@ -600,10 +600,18 @@ describe('ProgrammingWorkbench — T9-03 Đồng bộ tab panel đáy (TC-WBENCH
     expect(screen.queryByRole('tab', { name: /Watch/i })).toBeNull()
     expect(document.getElementById('workbench-tab-watch')).toBeNull()
 
-    // 3 tab với accessible name tiếng Việt chuẩn và id tương ứng
+    // 5 tab với accessible name tiếng Việt chuẩn và id tương ứng
     const problemsTab = screen.getByRole('tab', { name: /Vấn đề/ })
     expect(problemsTab).toBeInTheDocument()
     expect(problemsTab).toHaveAttribute('id', 'workbench-tab-problems')
+
+    const statusTab = screen.getByRole('tab', { name: /Trạng thái/ })
+    expect(statusTab).toBeInTheDocument()
+    expect(statusTab).toHaveAttribute('id', 'workbench-tab-status')
+
+    const logsTab = screen.getByRole('tab', { name: /Log & Output/ })
+    expect(logsTab).toBeInTheDocument()
+    expect(logsTab).toHaveAttribute('id', 'workbench-tab-logs')
 
     const searchTab = screen.getByRole('tab', { name: /Tìm kiếm/ })
     expect(searchTab).toBeInTheDocument()
@@ -615,11 +623,11 @@ describe('ProgrammingWorkbench — T9-03 Đồng bộ tab panel đáy (TC-WBENCH
 
     cleanup()
 
-    // 2. Kiểm tra ở chế độ SIMULATE: vẫn có 3 tab, Watch nằm thường trực ở cột riêng
+    // 2. Kiểm tra ở chế độ SIMULATE: vẫn có 5 tab, Watch nằm thường trực ở cột riêng
     renderWorkbench({ mode: 'SIMULATE' })
 
     const simTabs = screen.getAllByRole('tab')
-    expect(simTabs).toHaveLength(3)
+    expect(simTabs).toHaveLength(5)
     expect(screen.queryByRole('tab', { name: /Watch/i })).toBeNull()
     expect(within(screen.getByTestId('workbench-watch-column')).getByText(/Watch \(Mô phỏng\)/)).toBeInTheDocument()
   })
@@ -643,5 +651,94 @@ describe('ProgrammingWorkbench — T9-03 Đồng bộ tab panel đáy (TC-WBENCH
     expect(minimapHandle).toHaveAttribute('aria-valuenow', '434')
     expect(localStorage.getItem('mkddc-workbench-minimap-width')).toBe('434')
   })
-})
+  it('tab Trạng thái hiển thị danh sách thông báo và cảnh báo bất chợt', () => {
+    const statusItems = [
+      {
+        id: 'notice-1',
+        kind: 'warn' as const,
+        title: 'Chưa xác định kết quả — đang đối soát',
+        detail: 'Ý định Enable được giữ riêng; không tự suy Program đang chạy.',
+        timestamp: '15:30:00',
+      },
+      {
+        id: 'draft-1',
+        kind: 'info' as const,
+        title: 'Bản nháp có thay đổi chưa lưu',
+        detail: 'Các sửa đổi POU đang được lưu tạm trên buffer.',
+        timestamp: '15:30:05',
+      },
+    ]
+
+    render(
+      <I18nProvider>
+        <ProgrammingWorkbench
+          mode="EDIT"
+          sourceLabel="Draft · AHU"
+          problems={[]}
+          symbols={[]}
+          source={null}
+          onJumpToOffset={vi.fn()}
+          checkOwnerHref="/x"
+          statusItems={statusItems}
+        />
+      </I18nProvider>,
+    )
+
+    const statusTab = screen.getByRole('tab', { name: /Trạng thái \(2\)/ })
+    expect(statusTab).toBeInTheDocument()
+    fireEvent.click(statusTab)
+
+    expect(screen.getByTestId('workbench-status-panel')).toBeInTheDocument()
+    expect(screen.getByText('Chưa xác định kết quả — đang đối soát')).toBeInTheDocument()
+    expect(screen.getByText(/Ý định Enable được giữ riêng/)).toBeInTheDocument()
+    expect(screen.getByText('Bản nháp có thay đổi chưa lưu')).toBeInTheDocument()
+  })
+
+  it('tab Log & Output hiển thị nhật ký và véc-tơ thử nghiệm và cho phép xóa log', () => {
+    const onClearLogs = vi.fn()
+    const logs = [
+      {
+        id: 'log-1',
+        timestamp: '15:30:01',
+        level: 'INFO' as const,
+        message: '[TIẾN TRÌNH] Bắt đầu kiểm tra logic...',
+      },
+      {
+        id: 'log-2',
+        timestamp: '15:30:02',
+        level: 'TEST' as const,
+        message: '[VÉC-TƠ KIỂM THỬ] Variable ENABLE (BOOL): 1 (TRUE)',
+      },
+    ]
+
+    render(
+      <I18nProvider>
+        <ProgrammingWorkbench
+          mode="EDIT"
+          sourceLabel="Draft · AHU"
+          problems={[]}
+          symbols={[]}
+          source={null}
+          onJumpToOffset={vi.fn()}
+          checkOwnerHref="/x"
+          logs={logs}
+          onClearLogs={onClearLogs}
+        />
+      </I18nProvider>,
+    )
+
+    const logsTab = screen.getByRole('tab', { name: /Log & Output \(2\)/ })
+    expect(logsTab).toBeInTheDocument()
+    fireEvent.click(logsTab)
+
+    expect(screen.getByTestId('workbench-logs-panel')).toBeInTheDocument()
+    expect(screen.getByText(/Bắt đầu kiểm tra logic/)).toBeInTheDocument()
+    expect(screen.getByText(/Variable ENABLE/)).toBeInTheDocument()
+
+    const clearBtn = screen.getByRole('button', { name: 'Xóa log' })
+    fireEvent.click(clearBtn)
+    expect(onClearLogs).toHaveBeenCalledTimes(1)
+  })
+});
+
 

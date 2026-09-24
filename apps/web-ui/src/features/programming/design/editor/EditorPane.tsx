@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { AlignLeft, ChevronLeft, ClipboardCheck, Command, GitCompare, Library, Maximize2, Minimize2, PanelLeft, PanelLeftClose, PanelRightClose, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
+import { AlignLeft, ChevronLeft, ClipboardCheck, Command, FileCheck, GitCompare, Library, Loader2, Maximize2, Minimize2, PanelLeft, PanelLeftClose, PanelRightClose, PlusSquare, Redo2, Save, Search, Undo2, X } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import { Button } from '../../../../shared/components/Button'
 import { FbdEditorPane } from './FbdEditorPane'
@@ -313,6 +313,8 @@ export function EditorPane({
   onPendingOperationsChange,
   discardVersion,
   onRunCheck,
+  onRunLocalCheck,
+  localChecking = false,
   onOpenCompare,
   checkDisabledReason,
   compareDisabledReason,
@@ -350,6 +352,7 @@ export function EditorPane({
    *  "Kiểm tra" ở `DesignWorkspacePage`, nên nhận callback thay vì tự `useNavigate`
    *  (giữ `ProgramsTab` không phụ thuộc router, đúng ranh giới hiện có). */
   onRunCheck: () => void
+  onRunLocalCheck?: () => void
   /** `T59-821` — mở khay So sánh (`T59-819`). `undefined` ⇒ nút nêu lý do khoá. */
   onOpenCompare?: () => void
   /** Lý do `Kiểm tra`/`So sánh` đang khoá. Nút disabled phải nêu lý do đọc được. */
@@ -1233,9 +1236,10 @@ const inspectorToggleButton = (
             libraryInsertRequest={libraryInsertRequest}
             libraryEntries={libraryEntries}
             onEnsureLibraryLoaded={libraryCatalog.ensureLoaded}
-            onRunCheck={onRunCheck}
+            onRunCheck={onRunLocalCheck ?? onRunCheck}
+            localChecking={localChecking}
             onOpenCompare={onOpenCompare}
-            checkDisabledReason={checkDisabledReason}
+            checkDisabledReason={onRunLocalCheck ? null : checkDisabledReason}
             compareDisabledReason={compareDisabledReason}
             diagnostics={diagnostics.filter((item) => item.location?.programId === selected.programId)}
             hasCheckResult={hasCheckResult}
@@ -1269,9 +1273,10 @@ const inspectorToggleButton = (
             onSelectionChange={setFbdSelection}
             onNodeEditorTargetChange={setFbdNodeEditorTarget}
             focusSelection={focusFbdSelection?.programId === selected.programId ? focusFbdSelection.selection : null}
-            onRunCheck={onRunCheck}
+            onRunCheck={onRunLocalCheck ?? onRunCheck}
+            localChecking={localChecking}
             onOpenCompare={onOpenCompare}
-            checkDisabledReason={checkDisabledReason}
+            checkDisabledReason={onRunLocalCheck ? null : checkDisabledReason}
             compareDisabledReason={compareDisabledReason}
             pointCatalogItems={pointCatalog.data?.items ?? []}
             pointCatalogLoading={pointCatalog.status === 'loading'}
@@ -1717,6 +1722,7 @@ export function SourceEditor({
   libraryEntries,
   onEnsureLibraryLoaded,
   onRunCheck,
+  localChecking = false,
   onOpenCompare,
   checkDisabledReason,
   compareDisabledReason,
@@ -1775,6 +1781,7 @@ export function SourceEditor({
   /** `T59-821` — `Kiểm tra` đi thẳng sang PGM-05, nơi SỞ HỮU `useCheckWorkflow`.
    *  Không dựng luồng seal/run/poll thứ hai ở đây (D-01). */
   onRunCheck?: () => void
+  localChecking?: boolean
   onOpenCompare?: () => void
   checkDisabledReason?: string | null
   compareDisabledReason?: string | null
@@ -2583,12 +2590,12 @@ export function SourceEditor({
                 <Button
                   size="sm"
                   variant="secondary"
-                  icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
-                  disabled={!onRunCheck || Boolean(checkDisabledReason)}
-                  title={checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
+                  icon={localChecking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck className="h-4 w-4" aria-hidden="true" />}
+                  disabled={localChecking || !onRunCheck || Boolean(checkDisabledReason)}
+                  title={localChecking ? pick('Đang kiểm tra dữ liệu và logic…', 'Checking data and logic…') : (checkDisabledReason ?? pick('Kiểm tra dữ liệu, hàm và logic của POU đang mở (gồm các block/hàm được gọi)', 'Check data, functions, and logic of open POU (including called blocks/functions)'))}
                   onClick={() => onRunCheck?.()}
                 >
-                  {pick('Kiểm tra', 'Check')}
+                  {localChecking ? pick('Đang kiểm tra…', 'Checking…') : pick('Kiểm tra', 'Check')}
                 </Button>
               </span>
               <Button

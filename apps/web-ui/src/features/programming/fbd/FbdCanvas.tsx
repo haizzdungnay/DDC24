@@ -39,8 +39,10 @@ import {
   FbdWiresLayer,
   FbdWirePreviewLayer,
   FbdGhostLayer,
+  FbdPortReorderPreviewLayer,
 } from './FbdCanvasLayers'
 import { fbdPaletteEntry, FBD_PALETTE, type FbdPaletteEntry } from './palette'
+import type { FbdFlowPreviewPreference } from './fbdPreferences'
 import { userPouPaletteEntry, type UserPouInterface } from './userPou'
 import { FbdNodeHoverCard } from './FbdNodeHoverCard'
 import { FbdBlockPropertiesModal } from './FbdBlockPropertiesModal'
@@ -66,6 +68,11 @@ import {
 } from './wiring'
 import { fbdNodesBounds, fitViewport, zoomAroundCenter, zoomAroundPoint } from './fitView'
 import { FbdContextMenu, type FbdContextMenuItem } from './FbdContextMenu'
+import { computeReferenceGeometry } from './referenceGeometry'
+import { FbdReferenceLayer } from './FbdReferenceLayer'
+import { FbdReferenceHoverCard } from './FbdReferenceHoverCard'
+import type { FbdWireReferenceMap } from './wireReferences'
+import { validateSignalName } from './wireReferences'
 
 export { LIBRARY_DRAG_TYPE }
 
@@ -163,6 +170,8 @@ type FbdContextTarget =
   | { kind: 'node'; nodeId: string }
   | { kind: 'port'; nodeId: string; portId: string; direction: 'INPUT' | 'OUTPUT' }
   | { kind: 'wire'; wireId: string }
+  | { kind: 'reference-source'; networkId: string; nodeId: string; portId: string; wireIds: readonly string[]; offset: number }
+  | { kind: 'reference-sink'; networkId: string; wireId: string; offset: number }
 
 interface ContextMenuState {
   clientX: number
@@ -209,6 +218,7 @@ export interface FbdCanvasProps {
   pick: (vi: string, en: string) => string
   registerPort: (portId: string, element: SVGGElement | null) => void
   wireStyle?: 'ORTHOGONAL' | 'BEZIER'
+  flowPreviewMode?: FbdFlowPreviewPreference
   gridVisible?: boolean
   snapEnabled?: boolean
   snapSize?: 4 | 8 | 16 | 32
@@ -227,6 +237,8 @@ export interface FbdCanvasProps {
   viewCommandsRef?: MutableRefObject<FbdViewCommands | null>
   /** Thêm khối tại một điểm graph (menu "Thêm khối tại đây"). */
   onAddBlockAt?: (at: FbdPoint) => void
+  /** Tự động sắp xếp và gỡ rối layout khối và dây. */
+  onAutoLayout?: () => void
   userPouInterfaces?: readonly UserPouInterface[]
   /** Yêu cầu mở picker ánh xạ điểm cho một cổng. */
   onRequestPortMapping?: (info: { nodeId: string; portId: string; portName: string; nodeName: string; portDirection: 'INPUT' | 'OUTPUT'; portDataType: string }) => void
@@ -234,6 +246,7 @@ export interface FbdCanvasProps {
   variables?: readonly ProgrammingVariable[]
   pointCatalogItems?: readonly ProgrammingPointCatalogEntry[]
   programs?: readonly ProgrammingProgram[]
+  wireReferences?: FbdWireReferenceMap
 }
 
 export function FbdCanvas({
@@ -250,6 +263,7 @@ export function FbdCanvas({
   pick,
   registerPort,
   wireStyle = 'BEZIER',
+  flowPreviewMode = 'HOVER',
   gridVisible = true,
   snapEnabled = true,
   snapSize = 8,
@@ -264,18 +278,52 @@ export function FbdCanvas({
   clipboard,
   viewCommandsRef,
   onAddBlockAt,
+  onAutoLayout,
   userPouInterfaces,
   onRequestPortMapping,
   bindings,
   variables,
   pointCatalogItems,
   programs,
+  wireReferences,
 }: FbdCanvasProps) {
+  const [hoverStub, setHoverStub] = useState<{ kind: 'source' | 'sink'; wireId?: string; portId?: string; nodeId?: string } | null>(null)
+  const [peekWireId, setPeekWireId] = useState<string | null>(null)
+  const [inlineRename, setInlineRename] = useState<{
+    wireId: string
+    initialName: string
+    clientX: number
+    clientY: number
+  } | null>(null)
+  const [referenceHoverTooltip, setReferenceHoverTooltip] = useState<{
+    kind: 'source' | 'sink'
+    wireId: string
+    position: { x: number; y: number }
+  } | null>(null)
+  const [offsetDrag, setOffsetDrag] = useState<{
+    pointerId: number
+    kind: 'source' | 'sink'
+    wireId: string
+    initialOffset: number
+    startClientX: number
+    currentOffset: number
+  } | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
   const [propertiesModalNodeId, setPropertiesModalNodeId] = useState<string | null>(null)
   const [viewport, setViewport] = useState<FbdViewport>(DEFAULT_VIEWPORT)
   const [pan, setPan] = useState<PanState | null>(null)
   const [marquee, setMarquee] = useState<MarqueeState | null>(null)
   const [wireDrag, setWireDrag] = useState<WireDragState | null>(null)
+  const [portReorderDrag, setPortReorderDrag] = useState<{
+    pointerId: number
+    sourcePort: FbdPortGeometry
+    startClientX: number
+    startClientY: number
+    currentGraph: FbdPoint
+    targetPort: FbdPortGeometry | null
+    dragged: boolean
+  } | null>(null)
   const [clickSourcePort, setClickSourcePort] = useState<FbdPortGeometry | null>(null)
   const [clickWireId, setClickWireId] = useState<string | null>(null)
   const [clickCandidate, setClickCandidate] = useState<FbdWireCandidate | null>(null)
@@ -393,6 +441,41 @@ export function FbdCanvas({
     () => new Map(network.nodes.map((node) => [node.id, node])),
     [network.nodes]
   )
+  const tempOffsets = useMemo(() => {
+    if (!offsetDrag) return undefined
+    if (offsetDrag.kind === 'source') {
+      const wire = network.wires.find((w) => w.id === offsetDrag.wireId)
+      if (!wire) return undefined
+      const key = `${wire.from.nodeId}:${wire.from.portId}`
+      return {
+        sources: new Map([[key, offsetDrag.currentOffset]]),
+      }
+    } else {
+      return {
+        sinks: new Map([[offsetDrag.wireId, offsetDrag.currentOffset]]),
+      }
+    }
+  }, [offsetDrag, network.wires])
+
+  const referenceGeometry = useMemo(() => {
+    return computeReferenceGeometry(network, geometry, wireReferences ?? {}, tempOffsets)
+  }, [network, geometry, wireReferences, tempOffsets])
+
+  function panToNode(nodeId: string) {
+    const node = geometry.byNodeId.get(nodeId)
+    if (!node) return
+    const container = scrollRef.current
+    const cw = container?.clientWidth || 800
+    const ch = container?.clientHeight || 600
+    const scale = viewport.scale || 1
+    const cx = node.x + node.width / 2
+    const cy = node.y + node.height / 2
+    setViewport({
+      scale,
+      x: Math.round(cw / 2 - cx * scale),
+      y: Math.round(ch / 2 - cy * scale),
+    })
+  }
 
   const { resize, beginResize, moveResize, endResize, cancelResize } = useFbdNodeResize({
     canEdit,
@@ -614,7 +697,7 @@ let minX = geometry.minX ?? 0
   }
 
   const isGestureActive = Boolean(
-    drag || pan || marquee || wireDrag || clickSourcePort || contextMenu || pendingPlacement
+    drag || pan || marquee || wireDrag || portReorderDrag || clickSourcePort || contextMenu || pendingPlacement
   )
   const tooltipId = 'fbd-node-hover-card'
   const hoverTooltipNode = hoverTooltip ? nodesById.get(hoverTooltip.nodeId) ?? null : null
@@ -855,6 +938,51 @@ let minX = geometry.minX ?? 0
     return () => container.removeEventListener('scroll', handleScroll)
   }, [bridgeHasConsumer, setBridge, onBridgeChange, viewBoxX, viewBoxY])
 
+  useEffect(() => {
+    function handleReferenceShortcuts(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key === 'F2') {
+        if (!canEdit) return
+        if (selection?.kind === 'wire' && wireReferences?.[selection.wireId]) {
+          e.preventDefault()
+          const item = wireReferences[selection.wireId]
+          const container = scrollRef.current
+          const rect = container?.getBoundingClientRect()
+          setInlineRename({
+            wireId: selection.wireId,
+            initialName: item.signalName,
+            clientX: (rect?.left || 0) + (rect?.width || 800) / 2,
+            clientY: (rect?.top || 0) + (rect?.height || 600) / 2,
+          })
+          setRenameValue(item.signalName)
+          setRenameError(null)
+        }
+      } else if (e.altKey && e.shiftKey && (e.key === 'j' || e.key === 'J')) {
+        if (!canEdit) return
+        if (selection?.kind === 'wire' && wireReferences?.[selection.wireId]) {
+          e.preventDefault()
+          const wire = network.wires.find((w) => w.id === selection.wireId)
+          if (wire) {
+            const sameSourceWires = network.wires.filter(
+              (w) => w.from.nodeId === wire.from.nodeId && w.from.portId === wire.from.portId && wireReferences[w.id]
+            )
+            for (const w of sameSourceWires) {
+              dispatch({ type: 'JOIN_WIRE', networkId: network.id, wireId: w.id })
+            }
+          }
+        }
+      } else if (e.altKey && !e.shiftKey && (e.key === 'j' || e.key === 'J')) {
+        if (!canEdit) return
+        if (selection?.kind === 'wire' && wireReferences?.[selection.wireId]) {
+          e.preventDefault()
+          dispatch({ type: 'JOIN_WIRE', networkId: network.id, wireId: selection.wireId })
+        }
+      }
+    }
+    window.addEventListener('keydown', handleReferenceShortcuts)
+    return () => window.removeEventListener('keydown', handleReferenceShortcuts)
+  }, [selection, wireReferences, canEdit, dispatch, network.id])
+
   // Cancel any gesture on Escape key
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -954,6 +1082,32 @@ let minX = geometry.minX ?? 0
       return
     }
 
+    if (portReorderDrag) {
+      const dist = Math.hypot(clientX - portReorderDrag.startClientX, clientY - portReorderDrag.startClientY)
+      const dragged = portReorderDrag.dragged || dist >= 4
+      if (dragged) {
+        hasDraggedRightRef.current = true
+      }
+
+      let candidate: FbdPortGeometry | null = null
+      let bestDist = Infinity
+      const nodeGeom = geometry.nodes.find((n) => n.id === portReorderDrag.sourcePort.nodeId)
+      for (const p of nodeGeom?.ports ?? []) {
+        if (p.id === portReorderDrag.sourcePort.id) continue
+        if (p.direction !== portReorderDrag.sourcePort.direction) continue
+        const d = Math.abs(graph.y - p.cy)
+        if (d < bestDist && d <= 32) {
+          bestDist = d
+          candidate = p
+        }
+      }
+
+      setPortReorderDrag((current) =>
+        current ? { ...current, currentGraph: graph, targetPort: candidate, dragged } : null,
+      )
+      return
+    }
+
     if (wireDrag) {
       const candidate = resolveWireDropTarget({
         document: validationDocument,
@@ -1031,6 +1185,24 @@ let minX = geometry.minX ?? 0
     if (activePointersRef.current.size < 2) {
       pinchStartDistRef.current = null
       pinchStartViewportRef.current = null
+    }
+
+    if (portReorderDrag && portReorderDrag.pointerId === pointerId) {
+      if (portReorderDrag.dragged) {
+        hasDraggedRightRef.current = true
+        if (portReorderDrag.targetPort) {
+          dispatch({
+            type: 'REORDER_PORTS',
+            networkId: network.id,
+            nodeId: portReorderDrag.sourcePort.nodeId,
+            sourcePortId: portReorderDrag.sourcePort.id,
+            targetPortId: portReorderDrag.targetPort.id,
+          })
+          showFlash(pick('Đã đổi vị trí cổng thành công.', 'Port position reordered successfully.'), 'info')
+        }
+      }
+      setPortReorderDrag(null)
+      return
     }
 
     if (wireDrag && wireDrag.pointerId === pointerId) {
@@ -1196,6 +1368,7 @@ let minX = geometry.minX ?? 0
     setPan(null)
     setMarquee(null)
     setWireDrag(null)
+    setPortReorderDrag(null)
     setClickSourcePort(null)
     setClickWireId(null)
     setClickCandidate(null)
@@ -1213,11 +1386,36 @@ let minX = geometry.minX ?? 0
    * panel bên, ngoài cửa sổ. Nghe trên `window` trong lúc có cử chỉ là cách duy
    * nhất để không bỏ rơi nó (và là chỗ cử chỉ kéo dây trước đây chết). */
   useEffect(() => {
-    if (!pan && !marquee && !wireDrag) return
+    if (!pan && !marquee && !wireDrag && !portReorderDrag && !offsetDrag) return
     function handleMove(event: PointerEvent) {
+      if (offsetDrag && offsetDrag.pointerId === event.pointerId) {
+        const currentScale = viewport.scale || 1
+        const dx = (event.clientX - offsetDrag.startClientX) / currentScale
+        let nextOffset = offsetDrag.initialOffset
+        if (offsetDrag.kind === 'source') {
+          nextOffset = Math.max(8, Math.min(800, offsetDrag.initialOffset + dx))
+        } else {
+          nextOffset = Math.max(8, Math.min(800, offsetDrag.initialOffset - dx))
+        }
+        setOffsetDrag((cur) => (cur ? { ...cur, currentOffset: Math.round(nextOffset) } : null))
+        return
+      }
       processPointerMove(event.clientX, event.clientY, event.altKey)
     }
     function handleUp(event: PointerEvent) {
+      if (offsetDrag && offsetDrag.pointerId === event.pointerId) {
+        if (offsetDrag.currentOffset !== offsetDrag.initialOffset) {
+          dispatch({
+            type: 'SET_REFERENCE_OFFSET',
+            networkId: network.id,
+            wireId: offsetDrag.wireId,
+            target: offsetDrag.kind,
+            offset: offsetDrag.currentOffset,
+          })
+        }
+        setOffsetDrag(null)
+        return
+      }
       finishGesture(event.clientX, event.clientY, event.pointerId)
     }
     function handleCancel(event: PointerEvent) {
@@ -1227,6 +1425,9 @@ let minX = geometry.minX ?? 0
       setPan(null)
       setMarquee(null)
       setWireDrag(null)
+      setPortReorderDrag(null)
+      setOffsetDrag(null)
+      setReferenceHoverTooltip(null)
     }
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
@@ -1304,9 +1505,26 @@ let minX = geometry.minX ?? 0
    * ------------------------------------------------------------------ */
 
   function handlePortPointerDown(event: React.PointerEvent<SVGGElement>, port: FbdPortGeometry) {
-    if (!canEdit || event.button !== 0) return
+    if (!canEdit) return
     setHoverTooltip(null)
     if (contextMenu) setContextMenu(null)
+
+    if (event.button === 2) {
+      hasDraggedRightRef.current = false
+      const pt = toGraph(event.clientX, event.clientY)
+      setPortReorderDrag({
+        pointerId: event.pointerId,
+        sourcePort: port,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        currentGraph: pt,
+        targetPort: null,
+        dragged: false,
+      })
+      return
+    }
+
+    if (event.button !== 0) return
     /* Khi đã có đầu cố định (nối bằng hai click hoặc reconnect), pointerdown
      * trên cổng thứ hai thuộc về nhịp click hoàn tất. Không được khởi động một
      * wire-drag mới rồi xoá mất đầu đang giữ trước khi sự kiện `click` tới. */
@@ -1558,7 +1776,28 @@ let minX = geometry.minX ?? 0
           }),
         })
       }
+      const orderedNodes = [...network.nodes].sort((a, b) => a.executionOrder - b.executionOrder)
+      const nodeIndex = orderedNodes.findIndex((item) => item.id === nodeId)
+
       items.push(
+        {
+          id: 'move-node-up',
+          label: pick('Đưa block lên (thứ tự)', 'Move block up (order)'),
+          disabled: !canEdit || nodeIndex <= 0,
+          run: () => {
+            select({ kind: 'node', networkId: network.id, nodeId })
+            dispatch({ type: 'MOVE_NODE', delta: -1 })
+          },
+        },
+        {
+          id: 'move-node-down',
+          label: pick('Đưa block xuống (thứ tự)', 'Move block down (order)'),
+          disabled: !canEdit || nodeIndex < 0 || nodeIndex >= orderedNodes.length - 1,
+          run: () => {
+            select({ kind: 'node', networkId: network.id, nodeId })
+            dispatch({ type: 'MOVE_NODE', delta: 1 })
+          },
+        },
         {
           id: 'properties',
           label: pick('Thuộc tính', 'Properties'),
@@ -1579,9 +1818,53 @@ let minX = geometry.minX ?? 0
 
     if (state.target.kind === 'port') {
       const { portId, nodeId, direction } = state.target
+      const node = nodesById.get(nodeId)
+      const sameDirPorts = node
+        ? [...node.ports]
+            .filter((p) => p.direction === direction)
+            .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+        : []
+      const portIndex = sameDirPorts.findIndex((p) => p.id === portId)
+
       items.push(
         { id: 'select-port', label: pick('Chọn cổng', 'Select port'), run: () => select({ kind: 'port', networkId: network.id, nodeId, portId }) },
       )
+      if (sameDirPorts.length > 1 && canEdit && portIndex >= 0) {
+        if (portIndex > 0) {
+          const prevPort = sameDirPorts[portIndex - 1]
+          items.push({
+            id: 'move-port-up',
+            label: pick('Chuyển cổng lên trên', 'Move port up'),
+            run: () => {
+              dispatch({
+                type: 'REORDER_PORTS',
+                networkId: network.id,
+                nodeId,
+                sourcePortId: portId,
+                targetPortId: prevPort.id,
+              })
+              showFlash(pick('Đã chuyển cổng lên trên.', 'Moved port up.'), 'info')
+            },
+          })
+        }
+        if (portIndex < sameDirPorts.length - 1) {
+          const nextPort = sameDirPorts[portIndex + 1]
+          items.push({
+            id: 'move-port-down',
+            label: pick('Chuyển cổng xuống dưới', 'Move port down'),
+            run: () => {
+              dispatch({
+                type: 'REORDER_PORTS',
+                networkId: network.id,
+                nodeId,
+                sourcePortId: portId,
+                targetPortId: nextPort.id,
+              })
+              showFlash(pick('Đã chuyển cổng xuống dưới.', 'Moved port down.'), 'info')
+            },
+          })
+        }
+      }
       if (direction === 'OUTPUT') {
         items.push({
           id: 'begin-connection',
@@ -1625,6 +1908,7 @@ let minX = geometry.minX ?? 0
       const wireId = state.target.wireId
       items.push(
         { id: 'select-wire', label: pick('Chọn dây', 'Select wire'), run: () => select({ kind: 'wire', networkId: network.id, wireId }) },
+        { id: 'cut-to-reference', label: pick('Chuyển thành tham chiếu', 'Convert to reference'), shortcut: 'Alt+C', disabled: !canEdit, run: () => dispatch({ type: 'CUT_WIRE', networkId: network.id, wireId }) },
         { id: 'reconnect-target', label: pick('Nối lại đầu đích (giữ OUT)', 'Reconnect target (keep OUT)'), disabled: !canEdit, run: () => beginReconnect(wireId, 'source') },
         { id: 'reconnect-source', label: pick('Nối lại đầu nguồn (giữ IN)', 'Reconnect source (keep IN)'), disabled: !canEdit, run: () => beginReconnect(wireId, 'target') },
         { id: 'disconnect', label: pick('Ngắt dây', 'Disconnect'), shortcut: 'Delete', danger: true, disabled: !canEdit, run: () => disconnect([wireId]) },
@@ -1632,9 +1916,64 @@ let minX = geometry.minX ?? 0
       return { title: pick('Dây nối', 'Wire'), items }
     }
 
+    if (state.target.kind === 'reference-sink') {
+      const wireId = state.target.wireId
+      const refWire = network.wires.find((w) => w.id === wireId)
+      const currentOffset = state.target.offset || 8
+      items.push(
+        { id: 'join-wire', label: pick('Nối lại thành dây', 'Join to wire'), shortcut: 'Alt+J', disabled: !canEdit, run: () => dispatch({ type: 'JOIN_WIRE', networkId: network.id, wireId }) },
+        { id: 'go-to-source', label: pick('Đi tới khối nguồn', 'Go to source'), shortcut: 'DblClick', run: () => { if (refWire) panToNode(refWire.from.nodeId) } },
+        { id: 'extend-wire', label: pick('Kéo dài dây nối (+32px)', 'Extend wire (+32px)'), disabled: !canEdit, run: () => dispatch({ type: 'SET_REFERENCE_OFFSET', networkId: network.id, wireId, target: 'sink', offset: currentOffset + 32 }) },
+        { id: 'shorten-wire', label: pick('Thu ngắn dây nối (-32px)', 'Shorten wire (-32px)'), disabled: !canEdit || currentOffset <= 8, run: () => dispatch({ type: 'SET_REFERENCE_OFFSET', networkId: network.id, wireId, target: 'sink', offset: Math.max(8, currentOffset - 32) }) },
+        { id: 'reset-wire', label: pick('Độ dài mặc định', 'Default wire length'), disabled: !canEdit, run: () => dispatch({ type: 'SET_REFERENCE_OFFSET', networkId: network.id, wireId, target: 'sink', offset: 8 }) },
+        { id: 'rename-signal', label: pick('Đổi tên tín hiệu', 'Rename signal'), shortcut: 'F2', disabled: !canEdit, run: () => {
+          const item = wireReferences?.[wireId]
+          if (item) {
+            setInlineRename({ wireId, initialName: item.signalName, clientX: state.clientX, clientY: state.clientY })
+            setRenameValue(item.signalName)
+            setRenameError(null)
+          }
+        } },
+        { id: 'delete-wire', label: pick('Xóa kết nối', 'Delete connection'), shortcut: 'Delete', danger: true, disabled: !canEdit, run: () => disconnect([wireId]) },
+      )
+      return { title: pick('Đầu nhận tham chiếu', 'Sink reference'), items }
+    }
+
+    if (state.target.kind === 'reference-source') {
+      const { wireIds, offset } = state.target
+      const currentOffset = offset || 8
+      items.push(
+        { id: 'join-all-wires', label: pick('Nối lại toàn bộ thành dây', 'Join all wires'), shortcut: 'Alt+Shift+J', disabled: !canEdit, run: () => {
+          for (const wId of wireIds) {
+            dispatch({ type: 'JOIN_WIRE', networkId: network.id, wireId: wId })
+          }
+        } },
+        { id: 'extend-wire', label: pick('Kéo dài dây nối (+32px)', 'Extend wire (+32px)'), disabled: !canEdit, run: () => {
+          if (wireIds[0]) dispatch({ type: 'SET_REFERENCE_OFFSET', networkId: network.id, wireId: wireIds[0], target: 'source', offset: currentOffset + 32 })
+        } },
+        { id: 'shorten-wire', label: pick('Thu ngắn dây nối (-32px)', 'Shorten wire (-32px)'), disabled: !canEdit || currentOffset <= 8, run: () => {
+          if (wireIds[0]) dispatch({ type: 'SET_REFERENCE_OFFSET', networkId: network.id, wireId: wireIds[0], target: 'source', offset: Math.max(8, currentOffset - 32) })
+        } },
+        { id: 'reset-wire', label: pick('Độ dài mặc định', 'Default wire length'), disabled: !canEdit, run: () => {
+          if (wireIds[0]) dispatch({ type: 'SET_REFERENCE_OFFSET', networkId: network.id, wireId: wireIds[0], target: 'source', offset: 8 })
+        } },
+        { id: 'rename-signal', label: pick('Đổi tên tín hiệu', 'Rename signal'), shortcut: 'F2', disabled: !canEdit, run: () => {
+          const firstId = wireIds[0]
+          const item = firstId ? wireReferences?.[firstId] : null
+          if (firstId && item) {
+            setInlineRename({ wireId: firstId, initialName: item.signalName, clientX: state.clientX, clientY: state.clientY })
+            setRenameValue(item.signalName)
+            setRenameError(null)
+          }
+        } },
+      )
+      return { title: pick('Đầu phát tham chiếu', 'Source reference'), items }
+    }
+
     items.push(
       { id: 'paste', label: pick('Dán tại đây', 'Paste here'), shortcut: 'Ctrl+V', disabled: !clipboard?.hasContent || !canEdit, run: () => clipboard?.paste(state.graph) },
       { id: 'add-block', label: pick('Thêm khối tại đây', 'Add block here'), shortcut: 'Insert', disabled: !onAddBlockAt || !canEdit, run: () => onAddBlockAt?.(state.graph) },
+      { id: 'auto-layout', label: pick('Tự sắp xếp & gỡ rối sơ đồ', 'Auto arrange & untangle'), disabled: !canEdit || !onAutoLayout, run: () => onAutoLayout?.() },
       { id: 'select-all', label: pick('Chọn tất cả', 'Select all'), shortcut: 'Ctrl+A', disabled: geometry.nodes.length === 0, run: () => selectNodes(geometry.nodes.map((node) => node.id)) },
       { id: 'deselect', label: pick('Bỏ chọn', 'Deselect'), shortcut: 'Esc', disabled: !selection, run: () => dispatch({ type: 'SELECT', selection: null }) },
       ...viewItems,
@@ -1876,6 +2215,10 @@ let minX = geometry.minX ?? 0
                 setHover((current) => (current.wireId === wireId ? current : { ...current, wireId }))
               }
               onWireContextMenu={(event, wireId) => openContextMenu(event, { kind: 'wire', wireId })}
+              flowPreviewMode={flowPreviewMode}
+              selectedNodeIds={selectedNodeIds}
+              networkWires={network.wires}
+              wireReferences={wireReferences}
             />
 
             <FbdNodesLayer
@@ -1928,6 +2271,47 @@ let minX = geometry.minX ?? 0
               onResetNodeSize={handleResetNodeSize}
             />
 
+            <FbdReferenceLayer
+              networkId={network.id}
+              geometry={referenceGeometry}
+              selection={selection}
+              hoverWireId={hover.wireId}
+              hoverStub={hoverStub}
+              peekWireId={peekWireId}
+              onHoverStub={(target) => {
+                setHoverStub(target)
+                setPeekWireId(target?.wireId ?? null)
+                if (target && target.wireId) {
+                  setReferenceHoverTooltip({
+                    kind: target.kind,
+                    wireId: target.wireId,
+                    position: { x: target.clientX, y: target.clientY },
+                  })
+                } else {
+                  setReferenceHoverTooltip(null)
+                }
+              }}
+              onStartOffsetDrag={(e, kind, wireId, initialOffset) => {
+                if (!canEdit || e.button !== 0) return
+                e.stopPropagation()
+                setReferenceHoverTooltip(null)
+                setOffsetDrag({
+                  pointerId: e.pointerId,
+                  kind,
+                  wireId,
+                  initialOffset,
+                  startClientX: e.clientX,
+                  currentOffset: initialOffset,
+                })
+              }}
+              onSelectWire={(wId) => select({ kind: 'wire', networkId: network.id, wireId: wId })}
+              onContextMenuStub={(e, target) => openContextMenu(e, target)}
+              onDoubleClickSink={(sourceNodeId) => panToNode(sourceNodeId)}
+              onDoubleClickSource={(sinkNodeId) => panToNode(sinkNodeId)}
+              pick={pick}
+              runtime={runtime}
+            />
+
             <FbdLayoutPreviewLayer nodes={geometry.nodes} positions={layoutPreview ?? null} />
 
             <FbdWirePreviewLayer preview={wirePreview} wireStyle={wireStyle} />
@@ -1935,6 +2319,15 @@ let minX = geometry.minX ?? 0
             <FbdGhostLayer ghost={ghost} />
 
             <FbdMarqueeLayer marquee={marquee} />
+
+            {portReorderDrag && portReorderDrag.dragged && (
+              <FbdPortReorderPreviewLayer
+                sourcePort={portReorderDrag.sourcePort}
+                targetPort={portReorderDrag.targetPort}
+                currentGraph={portReorderDrag.currentGraph}
+                pick={pick}
+              />
+            )}
           </g>
         </svg>
 
@@ -2034,6 +2427,56 @@ let minX = geometry.minX ?? 0
         </div>
       </div>
 
+      {inlineRename && (
+        <div
+          data-testid="fbd-inline-rename-overlay"
+          className="fixed z-50 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] p-2.5 shadow-xl"
+          style={{ left: Math.max(16, inlineRename.clientX - 100), top: Math.max(16, inlineRename.clientY - 20) }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold text-[var(--c-text-dim)]">
+              {pick('Đổi tên tín hiệu tham chiếu', 'Rename reference signal')}
+            </span>
+            <input
+              type="text"
+              autoFocus
+              data-testid="fbd-inline-rename-input"
+              value={renameValue}
+              onChange={(e) => {
+                setRenameValue(e.target.value)
+                setRenameError(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation()
+                  setInlineRename(null)
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const trimmed = renameValue.trim()
+                  const val = validateSignalName(trimmed)
+                  if (!val.valid) {
+                    setRenameError(val.error || pick('Tên tín hiệu không hợp lệ', 'Invalid signal name'))
+                    return
+                  }
+                  dispatch({
+                    type: 'RENAME_REFERENCE',
+                    networkId: network.id,
+                    wireId: inlineRename.wireId,
+                    newSignalName: trimmed,
+                  })
+                  setInlineRename(null)
+                }
+              }}
+              className="rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1 text-xs font-mono text-[var(--c-text)] focus:outline focus:outline-2 focus:outline-[var(--c-accent)]"
+            />
+            {renameError && (
+              <span className="text-[10px] text-red-500 font-medium">{renameError}</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {contextMenu && contextMenuModel && (
         <FbdContextMenu
           x={contextMenu.clientX}
@@ -2120,6 +2563,19 @@ let minX = geometry.minX ?? 0
           variables={variables}
           pointCatalogItems={pointCatalogItems}
           position={hoverTooltip.position}
+        />
+      )}
+
+      {referenceHoverTooltip && !isGestureActive && !offsetDrag && (
+        <FbdReferenceHoverCard
+          network={network}
+          nodesById={nodesById}
+          wireReferences={wireReferences ?? {}}
+          wireId={referenceHoverTooltip.wireId}
+          kind={referenceHoverTooltip.kind}
+          position={referenceHoverTooltip.position}
+          runtime={runtime}
+          pick={pick}
         />
       )}
 

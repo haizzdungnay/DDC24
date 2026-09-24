@@ -156,6 +156,37 @@ describe('buildFbdNetworkGeometry', () => {
       expect(path.startsWith('M 200 100')).toBe(true)
       expect(path.endsWith('H 100')).toBe(true)
     })
+
+    it('né khối chắn ở giữa đường nối: không cắt ngang qua thân khối', () => {
+      // Nguồn ở (100, 50), đích ở (400, 150), midX chuẩn = 250
+      // Đặt khối chắn tại x=[200..300], y=[30..170] -> midX=250 bị chặn
+      const obstacle = { id: 'obs-1', x: 200, y: 30, width: 100, height: 140 }
+      const path = fbdWirePathOrthogonal({ x: 100, y: 50 }, { x: 400, y: 150 }, 0, [obstacle])
+      // Dây phải đi vòng qua kênh khác hoặc qua đỉnh/đáy, không dùng H 250 V 150
+      expect(path).not.toBe('M 100 50 H 250 V 150 H 400')
+      expect(path.startsWith('M 100 50')).toBe(true)
+      expect(path.endsWith('H 400')).toBe(true)
+    })
+
+    it('dây nối ngược vòng ngoài khối không xuyên qua thân khối', () => {
+      const source = { id: 'src', x: 300, y: 50, width: 160, height: 100 }
+      const target = { id: 'tgt', x: 50, y: 50, width: 160, height: 100 }
+      // from port ở (460, 80), to port ở (50, 80)
+      const path = fbdWirePathOrthogonal(
+        { x: 460, y: 80 },
+        { x: 50, y: 80 },
+        0,
+        [],
+        source,
+        target,
+      )
+      expect(path.startsWith('M 460 80')).toBe(true)
+      expect(path.endsWith('H 50')).toBe(true)
+      // Y của hành lang vòng ngoài phải nằm ngoài vùng y=[50..150] của khối
+      const vMatch = path.match(/V (-?\d+(?:\.\d+)?)/)
+      const corridorY = vMatch ? Number(vMatch[1]) : 0
+      expect(corridorY < 50 || corridorY > 150).toBe(true)
+    })
   })
 
   it('buildFbdNetworkGeometry nhận options wireStyle', () => {

@@ -206,6 +206,7 @@ export function ProgrammingLayout() {
         <div className="min-w-0 flex-1 space-y-4">
           <h1 className="sr-only">{pick('Lập trình điều khiển', 'Control programming')}</h1>
           <GlobalContextBar
+            hideNoticeBanner={true}
             projectStatus={projects.status}
             runtimeStatus={runtime.status}
             runtime={runtime.data}

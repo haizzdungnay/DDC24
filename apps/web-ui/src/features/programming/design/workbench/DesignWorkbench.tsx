@@ -13,7 +13,7 @@ import type { ProgrammingDiagnostic, ProgrammingDraftDocument } from '../../mode
 import type { OpenBufferContext } from '../../shared/diagnosticFreshness'
 import { presentStRuntimeValue, type StRuntimeOverlayState, type StRuntimeQuality } from '../editor/StRuntimeValueOverlay'
 import type { FbdCanvasBridge } from './WorkbenchMinimapPanel'
-import { ProgrammingWorkbench, type WorkbenchMode, type WorkbenchProblem, type WorkbenchSymbol, type WorkbenchWatchRow } from './ProgrammingWorkbench'
+import { ProgrammingWorkbench, type WorkbenchLogEntry, type WorkbenchMode, type WorkbenchProblem, type WorkbenchStatusItem, type WorkbenchSymbol, type WorkbenchWatchRow } from './ProgrammingWorkbench'
 
 function copyFbdSelection(selection: FbdSelection): FbdSelection {
   return selection.kind === 'multi-node'
@@ -64,7 +64,17 @@ export function DesignWorkbench({
   onJumpToFbdSelection,
   fbdBridge,
   openBuffer,
+  statusItems,
+  logs,
+  onClearLogs,
+  activeTab,
+  onTabChange,
 }: {
+  statusItems?: readonly WorkbenchStatusItem[]
+  logs?: readonly WorkbenchLogEntry[]
+  onClearLogs?: () => void
+  activeTab?: 'problems' | 'status' | 'logs' | 'search' | 'references'
+  onTabChange?: (tab: 'problems' | 'status' | 'logs' | 'search' | 'references') => void
   mode: WorkbenchMode
   document: ProgrammingDraftDocument
   source: string | null
@@ -299,6 +309,11 @@ export function DesignWorkbench({
       fbdBridge={fbdBridge}
       stMinimap={Boolean(source)}
       openBuffer={openBuffer}
+      statusItems={statusItems}
+      logs={logs}
+      onClearLogs={onClearLogs}
+      activeTab={activeTab}
+      onTabChange={onTabChange}
     />
   )
 }

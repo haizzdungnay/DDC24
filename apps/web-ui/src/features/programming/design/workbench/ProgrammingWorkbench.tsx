@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronUp, PanelRight, PanelRightClose } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Info, PanelRight, PanelRightClose, Terminal, Trash2 } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import type { ProgrammingDiagnostic } from '../../model/types'
 import type { OpenBufferContext } from '../../shared/diagnosticFreshness'
@@ -42,6 +42,21 @@ export interface WorkbenchProblem {
   jumpLabel: string | null
   onJump?: () => void
   location?: ProgrammingDiagnostic['location']
+}
+
+export interface WorkbenchStatusItem {
+  id: string
+  kind: 'alert' | 'warn' | 'info' | 'success'
+  title: string
+  detail?: string
+  timestamp?: string
+}
+
+export interface WorkbenchLogEntry {
+  id: string
+  timestamp: string
+  level: 'INFO' | 'SUCCESS' | 'WARN' | 'ERROR' | 'TEST'
+  message: string
 }
 
 export interface WorkbenchSymbol {
@@ -136,7 +151,7 @@ function getInitialWorkbenchState(): { open: boolean; height: number } {
   }
 }
 
-type TabId = 'problems' | 'search' | 'references'
+type TabId = 'problems' | 'status' | 'logs' | 'search' | 'references'
 
 export function ProgrammingWorkbench({
   mode,
@@ -154,7 +169,17 @@ export function ProgrammingWorkbench({
   fbdBridge,
   stMinimap = false,
   openBuffer,
+  statusItems = [],
+  logs = [],
+  onClearLogs,
+  activeTab,
+  onTabChange,
 }: {
+  statusItems?: readonly WorkbenchStatusItem[]
+  logs?: readonly WorkbenchLogEntry[]
+  onClearLogs?: () => void
+  activeTab?: TabId
+  onTabChange?: (tab: TabId) => void
   mode: WorkbenchMode
   /** Nguồn dữ liệu đang hiển thị, ví dụ `Draft · AHU_FanControl`. */
   sourceLabel: string
@@ -210,7 +235,14 @@ export function ProgrammingWorkbench({
    * trong phiên. */
   const [open, setOpen] = useState(() => getInitialWorkbenchState().open)
   const [height, setHeight] = useState(() => getInitialWorkbenchState().height)
-  const [tab, setTab] = useState<TabId>('problems')
+  const [tab, setTab] = useState<TabId>(() => activeTab ?? 'problems')
+
+  useEffect(() => {
+    if (activeTab && activeTab !== tab) {
+      setTab(activeTab)
+      setOpen(true)
+    }
+  }, [activeTab])
   const [query, setQuery] = useState('')
   const [watchCollapsed, setWatchCollapsed] = useState(() => {
     try { return localStorage.getItem('mkddc-workbench-watch-collapsed') === 'true' } catch { return false }
@@ -358,12 +390,10 @@ export function ProgrammingWorkbench({
 
   const tabs: Array<{ id: TabId; label: string; count: number | null; available: boolean }> = [
     { id: 'problems', label: pick('Vấn đề', 'Problems'), count: problems.length, available: true },
+    { id: 'status', label: pick('Trạng thái', 'Status'), count: statusItems.length > 0 ? statusItems.length : null, available: true },
+    { id: 'logs', label: pick('Log & Output', 'Log & Output'), count: logs.length > 0 ? logs.length : null, available: true },
     { id: 'search', label: pick('Tìm kiếm', 'Search'), count: source ? hits.length : null, available: source !== null },
     { id: 'references', label: pick('Tham chiếu', 'Cross reference'), count: symbols.length, available: symbols.length > 0 || source !== null },
-    /* `T59-816` — nhãn khay phải nói ĐÚNG nguồn. Ở SIMULATE các con số này đến
-       từ worker mô phỏng chứ không từ tủ; gọi chúng là "Trực tiếp" là cách
-       nhanh nhất để một người trực ca đọc một giá trị mô phỏng như thể thiết bị
-       đang cho ra nó. */
   ]
 
   return (
@@ -441,7 +471,7 @@ export function ProgrammingWorkbench({
                   className={`min-h-11 rounded px-2 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)] ${
                     tab === item.id ? 'bg-[var(--c-accent-bg)] text-[var(--c-accent)]' : 'text-[var(--c-text-dim)]'
                   }`}
-                  onClick={() => { setTab(item.id); setOpen(true) }}
+                  onClick={() => { setTab(item.id); setOpen(true); onTabChange?.(item.id) }}
                 >
                   {item.label}{item.count === null ? '' : ` (${item.count})`}
                 </button>
@@ -512,6 +542,12 @@ export function ProgrammingWorkbench({
                   pick={pick}
                   openBuffer={openBuffer}
                 />
+              )}
+              {tab === 'status' && (
+                <StatusPanel statusItems={statusItems} pick={pick} />
+              )}
+              {tab === 'logs' && (
+                <LogsPanel logs={logs} onClearLogs={onClearLogs} pick={pick} />
               )}
               {tab === 'search' && (
                 source === null ? (
@@ -727,6 +763,134 @@ function Stretched({ testId, children, resizeHandle }: { testId: string; childre
 
 function Unavailable({ reason }: { reason: string }) {
   return <p role="status" className="text-xs text-[var(--c-text-dim)]">{reason}</p>
+}
+
+function StatusPanel({
+  statusItems,
+  pick,
+}: {
+  statusItems?: readonly WorkbenchStatusItem[]
+  pick: (vi: string, en: string) => string
+}) {
+  const items = statusItems ?? []
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center text-xs text-[var(--c-text-dim)]" data-testid="workbench-status-empty">
+        <CheckCircle2 className="mb-2 h-6 w-6 text-green-500 opacity-80" aria-hidden="true" />
+        <p className="font-medium text-[var(--c-text)]">{pick('Hệ thống bình thường', 'System normal')}</p>
+        <p className="mt-1">{pick('Không có thông báo hoặc cảnh báo trạng thái nào tại thời điểm này.', 'No status notices or alerts at this time.')}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2 p-1" data-testid="workbench-status-panel">
+      <div className="flex items-center justify-between pb-1 text-xs text-[var(--c-text-dim)] border-b border-[var(--c-border)]">
+        <span>{pick(`Ghi nhận ${items.length} trạng thái & thông báo`, `${items.length} status events recorded`)}</span>
+      </div>
+      <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+        {items.map((item) => {
+          const isAlert = item.kind === 'alert'
+          const isWarn = item.kind === 'warn'
+          const isSuccess = item.kind === 'success'
+          const Icon = isAlert ? AlertTriangle : isWarn ? AlertTriangle : isSuccess ? CheckCircle2 : Info
+          const borderColor = isAlert
+            ? 'border-red-500/40 bg-red-500/10'
+            : isWarn
+              ? 'border-amber-500/40 bg-amber-500/10'
+              : isSuccess
+                ? 'border-green-500/40 bg-green-500/10'
+                : 'border-[var(--c-border)] bg-[var(--c-bg)]'
+          const iconColor = isAlert ? 'text-red-400' : isWarn ? 'text-amber-400' : isSuccess ? 'text-green-400' : 'text-blue-400'
+
+          return (
+            <div
+              key={item.id}
+              className={`rounded-[var(--radius)] border p-2 text-xs flex items-start gap-2.5 ${borderColor}`}
+            >
+              <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${iconColor}`} aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-[var(--c-text)]">{item.title}</span>
+                  {item.timestamp && (
+                    <span className="shrink-0 font-mono text-[10px] text-[var(--c-text-dim)]">{item.timestamp}</span>
+                  )}
+                </div>
+                {item.detail && (
+                  <p className="mt-0.5 text-[11px] text-[var(--c-text-dim)] leading-relaxed">{item.detail}</p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function LogsPanel({
+  logs,
+  onClearLogs,
+  pick,
+}: {
+  logs?: readonly WorkbenchLogEntry[]
+  onClearLogs?: () => void
+  pick: (vi: string, en: string) => string
+}) {
+  const items = logs ?? []
+
+  return (
+    <div className="flex flex-col h-full space-y-2 p-1" data-testid="workbench-logs-panel">
+      <div className="flex items-center justify-between pb-1 border-b border-[var(--c-border)] text-xs text-[var(--c-text-dim)]">
+        <span className="font-medium text-[var(--c-text)]">
+          {pick('Nhật ký kiểm tra & Đầu ra tiến trình', 'Check Logs & Process Output')}
+          {items.length > 0 && <span className="ml-1.5 font-mono text-[11px] text-[var(--c-text-dim)]">({items.length} bản ghi)</span>}
+        </span>
+        {items.length > 0 && onClearLogs && (
+          <button
+            type="button"
+            className="rounded px-2 py-0.5 text-xs text-[var(--c-text-dim)] hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+            onClick={onClearLogs}
+          >
+            {pick('Xóa log', 'Clear logs')}
+          </button>
+        )}
+      </div>
+
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-8 text-center text-xs text-[var(--c-text-dim)]">
+          <Terminal className="mb-2 h-6 w-6 opacity-40" aria-hidden="true" />
+          <p>{pick('Chưa có nhật ký nào.', 'No logs yet.')}</p>
+          <p className="mt-1 text-[11px]">
+            {pick('Bấm nút "Kiểm tra" trên thanh công cụ để chạy phân tích logic và sinh véc-tơ thử nghiệm.',
+                  'Click "Check" on the toolbar to run logic analysis and generate test vectors.')}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-2 font-mono text-[11px] space-y-1 overflow-y-auto max-h-[300px] select-text">
+          {items.map((log) => {
+            const levelColor =
+              log.level === 'ERROR'
+                ? 'text-red-400 font-semibold'
+                : log.level === 'WARN'
+                  ? 'text-amber-400 font-semibold'
+                  : log.level === 'SUCCESS'
+                    ? 'text-green-400 font-semibold'
+                    : log.level === 'TEST'
+                      ? 'text-cyan-400'
+                      : 'text-[var(--c-text-dim)]'
+
+            return (
+              <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+                <span className="shrink-0 text-[10px] text-[var(--c-text-dim)] opacity-60">[{log.timestamp}]</span>
+                <span className={`min-w-0 flex-1 break-words ${levelColor}`}>{log.message}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function ProblemsPanel({

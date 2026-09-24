@@ -114,6 +114,13 @@ describe('nút khoá phải nêu lý do đọc được', () => {
     expect(save).toBeDisabled()
     expect(save).toHaveAttribute('title', 'Không có thay đổi để lưu')
   })
+
+  it('khi đang kiểm tra (localChecking = true) ⇒ nút hiện Đang kiểm tra… và bị disabled', () => {
+    renderToolbar({ localChecking: true })
+    const check = screen.getByRole('button', { name: 'Đang kiểm tra…' })
+    expect(check).toBeInTheDocument()
+    expect(check).toBeDisabled()
+  })
 })
 
 describe('vai chỉ đọc', () => {

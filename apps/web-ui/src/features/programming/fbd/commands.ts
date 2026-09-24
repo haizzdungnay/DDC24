@@ -28,6 +28,15 @@ import {
   type FbdWire,
 } from './model'
 import { fbdPaletteEntry, isValidConstantLiteral } from './palette'
+import {
+  generateDefaultSignalName,
+  normalizeWireReferences,
+  validateSignalName,
+  type FbdWireReferenceItem,
+  type FbdWireReferenceMap,
+} from './wireReferences'
+
+export type { FbdWireReferenceItem, FbdWireReferenceMap } from './wireReferences'
 
 export type { FbdPoint, FbdDocument } from './model'
 
@@ -57,13 +66,19 @@ export function areSelectionsEqual(a: FbdSelection | null, b: FbdSelection | nul
   return false
 }
 
+export interface FbdHistoryEntry {
+  document: FbdDocument
+  wireReferences: FbdWireReferenceMap
+}
+
 export interface FbdEditorState {
   document: FbdDocument
+  wireReferences: FbdWireReferenceMap
   selection: FbdSelection | null
   selectionRevision: number
   connectionFromPortId: string | null
-  past: FbdDocument[]
-  future: FbdDocument[]
+  past: FbdHistoryEntry[]
+  future: FbdHistoryEntry[]
   canEdit: boolean
   announcement: FbdAnnouncement
 }
@@ -139,12 +154,116 @@ export type FbdEditorAction =
   | { type: 'SET_NODE_PARAMETERS'; networkId: string; nodeId: string; parameters: Record<string, FbdParameterValue | null> }
   | { type: 'UPDATE_NODE_ATTRIBUTES'; networkId: string; nodeId: string; dataType?: FbdDataType;
       variable?: string; unit?: string | null; value?: FbdParameterValue; instance?: string | null; retained?: boolean }
+  | {
+      type: 'CUT_WIRE'
+      networkId: string
+      wireId: string
+      customSignalName?: string
+    }
+  | {
+      type: 'CONVERT_WIRE_TO_REFERENCE'
+      networkId: string
+      wireId: string
+      customSignalName?: string
+    }
+  | {
+      type: 'JOIN_WIRE'
+      networkId: string
+      wireId: string
+    }
+  | {
+      type: 'CONVERT_REFERENCE_TO_WIRE'
+      networkId: string
+      wireId: string
+    }
+  | {
+      type: 'RENAME_REFERENCE'
+      networkId: string
+      wireId: string
+      newSignalName: string
+    }
+  | {
+      type: 'RENAME_REFERENCE_SIGNAL'
+      networkId: string
+      wireId: string
+      newSignalName: string
+    }
+  | {
+      type: 'BATCH_CUT_NODE_WIRES'
+      networkId: string
+      nodeId: string
+      direction?: 'INPUT' | 'OUTPUT' | 'ALL'
+    }
+  | {
+      type: 'BATCH_JOIN_NODE_WIRES'
+      networkId: string
+      nodeId: string
+      direction?: 'INPUT' | 'OUTPUT' | 'ALL'
+    }
+  | {
+      type: 'SET_WIRE_REFERENCES'
+      wireReferences: FbdWireReferenceMap
+    }
+  | {
+      type: 'SET_REFERENCE_OFFSET'
+      networkId: string
+      wireId: string
+      target: 'source' | 'sink'
+      offset: number
+    }
+  | {
+      type: 'REORDER_PORTS'
+      networkId: string
+      nodeId: string
+      sourcePortId: string
+      targetPortId: string
+    }
   | { type: 'UNDO' }
   | { type: 'REDO' }
 
-export function createFbdEditorState(document: FbdDocument, canEdit = true): FbdEditorState {
+export function healNodePortOrders(document: FbdDocument): void {
+  for (const network of document.networks) {
+    for (const node of network.nodes) {
+      const seen = new Set<number>()
+      let hasIssue = false
+      for (const p of node.ports) {
+        if (seen.has(p.order) || p.order < 0 || p.order > 15) {
+          hasIssue = true
+          break
+        }
+        seen.add(p.order)
+      }
+      if (hasIssue) {
+        const inputs = node.ports
+          .filter((p) => p.direction === 'INPUT')
+          .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+        const outputs = node.ports
+          .filter((p) => p.direction === 'OUTPUT')
+          .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+        inputs.forEach((p, idx) => {
+          p.order = idx
+        })
+        outputs.forEach((p, idx) => {
+          p.order = inputs.length + idx
+        })
+        node.ports = [...inputs, ...outputs].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+      }
+    }
+  }
+}
+
+export function createFbdEditorState(
+  document: FbdDocument,
+  canEdit = true,
+  initialWireReferences?: FbdWireReferenceMap
+): FbdEditorState {
+  const doc = canonicalizeFbdDocument(document)
+  healNodePortOrders(doc)
+  const allWires = doc.networks.flatMap((n) => n.wires)
+  const wireReferences = normalizeWireReferences(allWires, initialWireReferences ?? {})
   return {
-    document: canonicalizeFbdDocument(document),
+    document: doc,
+    wireReferences,
     selection: null,
     selectionRevision: 0,
     connectionFromPortId: null,
@@ -164,11 +283,19 @@ function commit(
   document: FbdDocument,
   announcement: FbdAnnouncement,
   selection: FbdSelection | null = state.selection,
+  wireReferences: FbdWireReferenceMap = state.wireReferences,
 ): FbdEditorState {
-  const past = [...state.past, state.document].slice(-FBD_HISTORY_LIMIT)
+  const doc = canonicalizeFbdDocument(document)
+  const allWires = doc.networks.flatMap((n) => n.wires)
+  const normalizedRefs = normalizeWireReferences(allWires, wireReferences)
+  const past: FbdHistoryEntry[] = [
+    ...state.past,
+    { document: state.document, wireReferences: state.wireReferences },
+  ].slice(-FBD_HISTORY_LIMIT)
   return {
     ...state,
-    document: canonicalizeFbdDocument(document),
+    document: doc,
+    wireReferences: normalizedRefs,
     selection,
     selectionRevision: state.selectionRevision + 1,
     connectionFromPortId: null,
@@ -491,17 +618,22 @@ function findNode(document: FbdDocument, networkId: string, nodeId: string): { n
 
 export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction): FbdEditorState {
   switch (action.type) {
-    case 'REPLACE_DOCUMENT':
+    case 'REPLACE_DOCUMENT': {
       if (canonicalFbdJson(action.document) === canonicalFbdJson(state.document)) return state
+      const doc = canonicalizeFbdDocument(action.document)
+      healNodePortOrders(doc)
+      const allWires = doc.networks.flatMap((n) => n.wires)
       return {
         ...state,
-        document: canonicalizeFbdDocument(action.document),
+        document: doc,
+        wireReferences: normalizeWireReferences(allWires, state.wireReferences),
         selection: null,
         connectionFromPortId: null,
         past: [],
         future: [],
         announcement: { code: 'draft-synced-external' },
       }
+    }
     case 'SET_CAN_EDIT':
       return { ...state, canEdit: action.canEdit, announcement: { code: action.canEdit ? 'edit-enabled' : 'read-only-mode' } }
     case 'SELECT': {
@@ -645,11 +777,44 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       if (!validation.ok) return reject(state, { code: validation.code })
       network.wires.push(action.wire)
       applyTopologicalExecutionOrders(network)
+      let nextWireReferences = state.wireReferences
+      if (state.wireReferences[action.wireId]) {
+        const sourceChanged =
+          currentWire.from.nodeId !== action.wire.from.nodeId ||
+          currentWire.from.portId !== action.wire.from.portId
+        if (sourceChanged) {
+          let signalName = ''
+          for (const [wId, refItem] of Object.entries(state.wireReferences)) {
+            const ew = network.wires.find((w) => w.id === wId)
+            if (
+              ew &&
+              ew.from.nodeId === action.wire.from.nodeId &&
+              ew.from.portId === action.wire.from.portId
+            ) {
+              signalName = refItem.signalName
+              break
+            }
+          }
+          if (!signalName) {
+            const existingNames = new Set(Object.values(state.wireReferences).map((r) => r.signalName))
+            signalName = generateDefaultSignalName(source.node, source.port, existingNames)
+          }
+          nextWireReferences = {
+            ...state.wireReferences,
+            [action.wireId]: {
+              ...state.wireReferences[action.wireId],
+              signalName,
+              createdAt: Date.now(),
+            },
+          }
+        }
+      }
       return commit(
         state,
         document,
         { code: 'wire-reconnected', params: { from: source.port.name, to: target.port.name } },
         { kind: 'wire', networkId: network.id, wireId: action.wireId },
+        nextWireReferences,
       )
     }
     case 'BEGIN_OR_COMMIT_CONNECTION':
@@ -1017,14 +1182,258 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       if (canonicalFbdJson(document) === canonicalFbdJson(state.document)) return state
       return commit(state, document, { code: 'node-attributes-updated' })
     }
+    case 'CUT_WIRE':
+    case 'CONVERT_WIRE_TO_REFERENCE': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const network = state.document.networks.find((n) => n.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+      const wire = network.wires.find((w) => w.id === action.wireId)
+      if (!wire) return reject(state, { code: 'wire-not-found' })
+      const sourceNode = network.nodes.find((n) => n.id === wire.from.nodeId)
+      const sourcePort = sourceNode?.ports.find((p) => p.id === wire.from.portId)
+      if (!sourceNode || !sourcePort) return reject(state, { code: 'port-not-found' })
+
+      let signalName = ''
+      for (const [wId, refItem] of Object.entries(state.wireReferences)) {
+        const existingWire = network.wires.find((w) => w.id === wId)
+        if (
+          existingWire &&
+          existingWire.from.nodeId === wire.from.nodeId &&
+          existingWire.from.portId === wire.from.portId
+        ) {
+          signalName = refItem.signalName
+          break
+        }
+      }
+
+      if (!signalName) {
+        if (action.customSignalName?.trim()) {
+          const val = validateSignalName(action.customSignalName)
+          if (!val.valid) return reject(state, { code: 'invalid-reference-signal-name' })
+          signalName = action.customSignalName.trim()
+        } else {
+          const existingNames = new Set(Object.values(state.wireReferences).map((r) => r.signalName))
+          signalName = generateDefaultSignalName(sourceNode, sourcePort, existingNames)
+        }
+      }
+
+      const nextRefs = {
+        ...state.wireReferences,
+        [action.wireId]: {
+          wireId: action.wireId,
+          signalName,
+          ...(action.customSignalName ? { customLabel: action.customSignalName.trim() } : {}),
+          createdAt: Date.now(),
+        },
+      }
+      return commit(state, state.document, { code: 'wire-cut-to-reference' }, state.selection, nextRefs)
+    }
+    case 'JOIN_WIRE':
+    case 'CONVERT_REFERENCE_TO_WIRE': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      if (!state.wireReferences[action.wireId]) {
+        return reject(state, { code: 'wire-not-in-reference' })
+      }
+      const nextRefs = { ...state.wireReferences }
+      delete nextRefs[action.wireId]
+      return commit(state, state.document, { code: 'reference-joined-to-wire' }, state.selection, nextRefs)
+    }
+    case 'RENAME_REFERENCE':
+    case 'RENAME_REFERENCE_SIGNAL': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const val = validateSignalName(action.newSignalName)
+      if (!val.valid) return reject(state, { code: 'invalid-reference-signal-name' })
+      const cleanName = action.newSignalName.trim()
+
+      let targetSourceNodeId: string | null = null
+      let targetSourcePortId: string | null = null
+      for (const network of state.document.networks) {
+        const wire = network.wires.find((w) => w.id === action.wireId)
+        if (wire) {
+          targetSourceNodeId = wire.from.nodeId
+          targetSourcePortId = wire.from.portId
+          break
+        }
+      }
+      if (!targetSourceNodeId || !targetSourcePortId) {
+        return reject(state, { code: 'wire-not-found' })
+      }
+
+      const nextRefs = { ...state.wireReferences }
+      for (const network of state.document.networks) {
+        for (const wire of network.wires) {
+          if (
+            wire.from.nodeId === targetSourceNodeId &&
+            wire.from.portId === targetSourcePortId &&
+            nextRefs[wire.id]
+          ) {
+            nextRefs[wire.id] = {
+              ...nextRefs[wire.id],
+              signalName: cleanName,
+              customLabel: cleanName,
+            }
+          }
+        }
+      }
+      return commit(state, state.document, { code: 'reference-renamed' }, state.selection, nextRefs)
+    }
+    case 'BATCH_CUT_NODE_WIRES': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const network = state.document.networks.find((n) => n.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+      const dir = action.direction ?? 'ALL'
+      const targetWires = network.wires.filter((w) => {
+        if (dir === 'INPUT') return w.to.nodeId === action.nodeId
+        if (dir === 'OUTPUT') return w.from.nodeId === action.nodeId
+        return w.from.nodeId === action.nodeId || w.to.nodeId === action.nodeId
+      })
+      if (targetWires.length === 0) return state
+
+      const nextRefs = { ...state.wireReferences }
+      let added = false
+      const existingNames = new Set(Object.values(nextRefs).map((r) => r.signalName))
+
+      for (const wire of targetWires) {
+        if (nextRefs[wire.id]) continue
+        const sourceNode = network.nodes.find((n) => n.id === wire.from.nodeId)
+        const sourcePort = sourceNode?.ports.find((p) => p.id === wire.from.portId)
+        if (!sourceNode || !sourcePort) continue
+
+        let signalName = ''
+        for (const [wId, refItem] of Object.entries(nextRefs)) {
+          const ew = network.wires.find((w) => w.id === wId)
+          if (ew && ew.from.nodeId === wire.from.nodeId && ew.from.portId === wire.from.portId) {
+            signalName = refItem.signalName
+            break
+          }
+        }
+        if (!signalName) {
+          signalName = generateDefaultSignalName(sourceNode, sourcePort, existingNames)
+          existingNames.add(signalName)
+        }
+        nextRefs[wire.id] = {
+          wireId: wire.id,
+          signalName,
+          createdAt: Date.now(),
+        }
+        added = true
+      }
+      if (!added) return state
+      return commit(state, state.document, { code: 'references-batch-cut' }, state.selection, nextRefs)
+    }
+    case 'BATCH_JOIN_NODE_WIRES': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const network = state.document.networks.find((n) => n.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+      const dir = action.direction ?? 'ALL'
+      const targetWires = network.wires.filter((w) => {
+        if (dir === 'INPUT') return w.to.nodeId === action.nodeId
+        if (dir === 'OUTPUT') return w.from.nodeId === action.nodeId
+        return w.from.nodeId === action.nodeId || w.to.nodeId === action.nodeId
+      })
+      const nextRefs = { ...state.wireReferences }
+      let removed = false
+      for (const wire of targetWires) {
+        if (nextRefs[wire.id]) {
+          delete nextRefs[wire.id]
+          removed = true
+        }
+      }
+      if (!removed) return state
+      return commit(state, state.document, { code: 'references-batch-joined' }, state.selection, nextRefs)
+    }
+    case 'REORDER_PORTS': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const network = state.document.networks.find((n) => n.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+      const node = network.nodes.find((n) => n.id === action.nodeId)
+      if (!node) return reject(state, { code: 'node-not-found' })
+      const p1 = node.ports.find((p) => p.id === action.sourcePortId)
+      const p2 = node.ports.find((p) => p.id === action.targetPortId)
+      if (!p1 || !p2 || p1.direction !== p2.direction) return state
+
+      const document = cloneFbdDocument(state.document)
+      const targetNet = document.networks.find((n) => n.id === action.networkId)!
+      const targetNode = targetNet.nodes.find((n) => n.id === action.nodeId)!
+      const tp1 = targetNode.ports.find((p) => p.id === action.sourcePortId)!
+      const tp2 = targetNode.ports.find((p) => p.id === action.targetPortId)!
+
+      const tmp = tp1.order
+      tp1.order = tp2.order
+      tp2.order = tmp
+      targetNode.ports.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+
+      return commit(state, document, { code: 'node-attributes-updated' })
+    }
+    case 'SET_WIRE_REFERENCES': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const allWires = state.document.networks.flatMap((n) => n.wires)
+      const normalized = normalizeWireReferences(allWires, action.wireReferences)
+      const nameBySourcePort = new Map<string, string>()
+      const reconciled: Record<string, FbdWireReferenceItem> = { ...normalized }
+      for (const wire of allWires) {
+        const ref = reconciled[wire.id]
+        if (!ref) continue
+        const key = `${wire.from.nodeId}:${wire.from.portId}`
+        if (!nameBySourcePort.has(key)) {
+          nameBySourcePort.set(key, ref.signalName)
+        } else {
+          reconciled[wire.id] = {
+            ...ref,
+            signalName: nameBySourcePort.get(key)!,
+          }
+        }
+      }
+      return commit(state, state.document, { code: 'wire-cut-to-reference' }, state.selection, reconciled)
+    }
+    case 'SET_REFERENCE_OFFSET': {
+      if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
+      const network = state.document.networks.find((n) => n.id === action.networkId)
+      if (!network) return reject(state, { code: 'network-not-found' })
+      const wire = network.wires.find((w) => w.id === action.wireId)
+      if (!wire) return reject(state, { code: 'wire-not-found' })
+      const cleanOffset = Math.max(8, Math.min(800, Math.round(action.offset)))
+      const nextRefs = { ...state.wireReferences }
+      if (action.target === 'source') {
+        for (const net of state.document.networks) {
+          for (const w of net.wires) {
+            if (
+              w.from.nodeId === wire.from.nodeId &&
+              w.from.portId === wire.from.portId &&
+              nextRefs[w.id]
+            ) {
+              nextRefs[w.id] = {
+                ...nextRefs[w.id],
+                sourceOffset: cleanOffset,
+              }
+            }
+          }
+        }
+      } else {
+        if (nextRefs[wire.id]) {
+          nextRefs[wire.id] = {
+            ...nextRefs[wire.id],
+            sinkOffset: cleanOffset,
+          }
+        }
+      }
+      return commit(state, state.document, { code: 'reference-offset-updated' }, state.selection, nextRefs)
+    }
     case 'UNDO': {
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
       const previous = state.past[state.past.length - 1]
       if (!previous) return reject(state, { code: 'nothing-to-undo' })
+      const prevDoc = 'document' in previous ? previous.document : (previous as unknown as FbdDocument)
+      const prevRefs = 'wireReferences' in previous ? previous.wireReferences : {}
       return {
-        ...state, document: previous, selection: null,
-        selectionRevision: state.selectionRevision + 1, connectionFromPortId: null,
-        past: state.past.slice(0, -1), future: [state.document, ...state.future].slice(0, FBD_HISTORY_LIMIT),
+        ...state,
+        document: prevDoc,
+        wireReferences: prevRefs,
+        selection: null,
+        selectionRevision: state.selectionRevision + 1,
+        connectionFromPortId: null,
+        past: state.past.slice(0, -1),
+        future: [{ document: state.document, wireReferences: state.wireReferences }, ...state.future].slice(0, FBD_HISTORY_LIMIT),
         announcement: { code: 'undone' },
       }
     }
@@ -1032,10 +1441,17 @@ export function fbdEditorReducer(state: FbdEditorState, action: FbdEditorAction)
       if (!mutationAllowed(state)) return reject(state, { code: 'no-edit-permission' })
       const [next, ...future] = state.future
       if (!next) return reject(state, { code: 'nothing-to-redo' })
+      const nextDoc = 'document' in next ? next.document : (next as unknown as FbdDocument)
+      const nextRefs = 'wireReferences' in next ? next.wireReferences : {}
       return {
-        ...state, document: next, selection: null,
-        selectionRevision: state.selectionRevision + 1, connectionFromPortId: null,
-        past: [...state.past, state.document].slice(-FBD_HISTORY_LIMIT), future,
+        ...state,
+        document: nextDoc,
+        wireReferences: nextRefs,
+        selection: null,
+        selectionRevision: state.selectionRevision + 1,
+        connectionFromPortId: null,
+        past: [...state.past, { document: state.document, wireReferences: state.wireReferences }].slice(-FBD_HISTORY_LIMIT),
+        future,
         announcement: { code: 'redone' },
       }
     }

@@ -9,7 +9,7 @@ import {
   resolveFbdKeyboardCommand,
   translateFbdAnnouncement,
 } from './commands'
-import { canonicalFbdJson } from './model'
+import { canonicalFbdJson, validateFbdDocument } from './model'
 import type { FbdDocument, FbdNetwork, FbdWire } from './model'
 
 function golden(): FbdDocument {
@@ -160,6 +160,105 @@ describe('command reducer FBD', () => {
     })
     expect(state.document.networks).toHaveLength(1)
     expect(state.announcement.code).toBe('network-uuid-invalid')
+  })
+
+  it('REORDER_PORTS: đổi vị trí cổng trong cùng khối và cùng direction, hỗ trợ Undo', () => {
+    let state = createFbdEditorState(golden(), true)
+    const netId = state.document.networks[0].id
+    const andNode = state.document.networks[0].nodes.find((n) => n.typeRef === 'AND')!
+    const input0 = andNode.ports[0].id
+    const input1 = andNode.ports[1].id
+    const initialOrder0 = andNode.ports[0].order
+    const initialOrder1 = andNode.ports[1].order
+
+    state = fbdEditorReducer(state, {
+      type: 'REORDER_PORTS',
+      networkId: netId,
+      nodeId: andNode.id,
+      sourcePortId: input0,
+      targetPortId: input1,
+    })
+
+    const afterNode = state.document.networks[0].nodes.find((n) => n.id === andNode.id)!
+    const after0 = afterNode.ports.find((p) => p.id === input0)!
+    const after1 = afterNode.ports.find((p) => p.id === input1)!
+    expect(after0.order).toBe(initialOrder1)
+    expect(after1.order).toBe(initialOrder0)
+    expect(validateFbdDocument(state.document)).toEqual([])
+
+    // Undo
+    state = fbdEditorReducer(state, { type: 'UNDO' })
+    const undoneNode = state.document.networks[0].nodes.find((n) => n.id === andNode.id)!
+    expect(undoneNode.ports.find((p) => p.id === input0)!.order).toBe(initialOrder0)
+    expect(undoneNode.ports.find((p) => p.id === input1)!.order).toBe(initialOrder1)
+    expect(validateFbdDocument(state.document)).toEqual([])
+  })
+
+  it('REORDER_PORTS: đổi vị trí cổng OUTPUT không đè lên order của INPUT, giữ nguyên tính hợp lệ', () => {
+    const doc = golden()
+    const netId = doc.networks[0].id
+    // Tạo node có 2 input (order 0, 1) và 2 output (order 2, 3)
+    const multiOutNode = {
+      id: '20000000-0000-4000-8000-0000000000f9',
+      kind: 'FUNCTION_BLOCK' as const,
+      typeRef: 'TON',
+      executionOrder: 10,
+      parameters: {},
+      ports: [
+        { id: '40000000-0000-4000-8000-000000000010', name: 'IN', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 0 },
+        { id: '40000000-0000-4000-8000-000000000011', name: 'PT', direction: 'INPUT' as const, dataType: 'TIME' as const, unit: null, order: 1 },
+        { id: '40000000-0000-4000-8000-000000000012', name: 'Q', direction: 'OUTPUT' as const, dataType: 'BOOL' as const, unit: null, order: 2 },
+        { id: '40000000-0000-4000-8000-000000000013', name: 'ET', direction: 'OUTPUT' as const, dataType: 'TIME' as const, unit: null, order: 3 },
+      ],
+    }
+    doc.networks[0].nodes.push(multiOutNode)
+    let state = createFbdEditorState(doc, true)
+
+    state = fbdEditorReducer(state, {
+      type: 'REORDER_PORTS',
+      networkId: netId,
+      nodeId: multiOutNode.id,
+      sourcePortId: '40000000-0000-4000-8000-000000000012',
+      targetPortId: '40000000-0000-4000-8000-000000000013',
+    })
+
+    const n = state.document.networks[0].nodes.find((item) => item.id === multiOutNode.id)!
+    const q = n.ports.find((p) => p.name === 'Q')!
+    const et = n.ports.find((p) => p.name === 'ET')!
+    // Q và ET hoán đổi order 2 và 3, INPUT vẫn giữ nguyên 0 và 1
+    expect(q.order).toBe(3)
+    expect(et.order).toBe(2)
+    expect(n.ports.find((p) => p.name === 'IN')!.order).toBe(0)
+    expect(n.ports.find((p) => p.name === 'PT')!.order).toBe(1)
+   // Không có lỗi trùng order FBD-SEM-PORT-001
+   expect(validateFbdDocument(state.document)).toEqual([])
+ })
+
+  it('healNodePortOrders: tự động chữa lành khối có các cổng bị trùng order (FBD-SEM-PORT-001)', () => {
+    const doc = golden()
+    const corruptedNode = {
+      id: '20000000-0000-4000-8000-0000000000fa',
+      kind: 'FUNCTION_BLOCK' as const,
+      typeRef: 'FB_CORRUPTED',
+      executionOrder: 11,
+      parameters: {},
+      ports: [
+        { id: '40000000-0000-4000-8000-000000000020', name: 'IN1', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 0 },
+        { id: '40000000-0000-4000-8000-000000000021', name: 'IN2', direction: 'INPUT' as const, dataType: 'BOOL' as const, unit: null, order: 1 },
+        { id: '40000000-0000-4000-8000-000000000022', name: 'OUT1', direction: 'OUTPUT' as const, dataType: 'BOOL' as const, unit: null, order: 0 }, // Trùng order 0
+        { id: '40000000-0000-4000-8000-000000000023', name: 'OUT2', direction: 'OUTPUT' as const, dataType: 'BOOL' as const, unit: null, order: 1 }, // Trùng order 1
+      ],
+    }
+    doc.networks[0].nodes.push(corruptedNode)
+    // Khi chưa tạo state, validate phát hiện trùng order
+    expect(validateFbdDocument(doc).some((i) => i.code === 'FBD-SEM-PORT-001')).toBe(true)
+
+    // Khi tải vào editor state, tự động chữa lành
+    const state = createFbdEditorState(doc, true)
+    const fixedNode = state.document.networks[0].nodes.find((n) => n.id === corruptedNode.id)!
+    const orders = fixedNode.ports.map((p) => p.order)
+    expect(orders).toEqual([0, 1, 2, 3])
+    expect(validateFbdDocument(state.document)).toEqual([])
   })
 })
 

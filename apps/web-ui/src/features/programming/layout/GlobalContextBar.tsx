@@ -3,6 +3,7 @@ import { ProgrammingContextStrip } from './ProgrammingContextStrip'
 
 export type GlobalContextBarProps = Parameters<typeof ProgrammingContextStrip>[0] & {
   children?: ReactNode
+  hideNoticeBanner?: boolean
 }
 
 /**

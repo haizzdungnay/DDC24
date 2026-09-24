@@ -78,6 +78,15 @@ export function translateFbdAnnouncement(pick: (vi: string, en: string) => strin
     case 'undone': return pick('Đã hoàn tác', 'Undone')
     case 'nothing-to-redo': return pick('Không còn thay đổi để làm lại', 'No more changes to redo')
     case 'redone': return pick('Đã làm lại', 'Redone')
+    case 'wire-cut-to-reference': return pick('Đã chuyển dây thành tham chiếu', 'Converted wire to reference')
+    case 'reference-joined-to-wire': return pick('Đã nối lại thành dây', 'Joined reference to wire')
+    case 'reference-renamed': return pick('Đã đổi tên tín hiệu tham chiếu', 'Reference signal renamed')
+    case 'reference-offset-updated': return pick('Đã điều chỉnh độ dài dây nối', 'Wire length adjusted')
+    case 'references-batch-cut': return pick('Đã chuyển các dây thành tham chiếu', 'Converted wires to references')
+    case 'references-batch-joined': return pick('Đã nối lại các dây', 'Joined references to wires')
+    case 'invalid-reference-signal-name': return pick('Tên tín hiệu không hợp lệ', 'Invalid reference signal name')
+    case 'wire-not-in-reference': return pick('Dây không ở chế độ tham chiếu', 'Wire is not a reference')
+    case 'reference-not-found': return pick('Không tìm thấy tham chiếu', 'Reference not found')
     default: return ''
   }
 }
