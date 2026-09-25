@@ -1,7 +1,7 @@
 # Hoạt động Modbus RTU trên bo Forlinx — log, số đo và kiểm chứng sau deploy
 
 **ID:** REC-MBA-BOARD-001
-**Phiên bản:** 1.0
+**Phiên bản:** 1.1
 **Trạng thái:** Record (TARGET/runtime trên bo lab — **không** phải physical HIL, **không** phải `RELEASE_READY`)
 **Ngày đo:** 2026-09-25 11:27–12:30 UTC
 **Bo:** `OK1126B-buildroot` (Forlinx OK1126B-S / RV1126B, 4 × Cortex-A53, Linux 6.1.141 aarch64, Buildroot), truy cập `mekong-fac.ddns.net:2223`
@@ -184,17 +184,18 @@ Sao lưu: `/opt/mkddc-backups/modbus-audit-20260925T120056Z/` gồm `mkddc-core`
 | 3 | iobus, trong khi core vẫn giữ 32 slot `dirty=1` | `2840392f` | `c68a3ac2…` | `write_baseline seeded=32`, **0** sự kiện ghi sau khởi động, so với 171 lần khởi động trước (**MBA-FW-02 ✅**). Thread Modbus/publish/control là SCHED_OTHER (**MBA-FW-01 ✅**) |
 | 4 | core | `2840392f` | `7b09dbaa…` | scan FIFO 80; `prog-ipc`, `st-retain` là SCHED_OTHER; `core.ready`; iobus 0 sự kiện ghi |
 | 5 | iobus bản cuối (thêm `MBA-FW-09`) | `efb3e4ae` | `a4e62291…` | profile nạp đủ 8/16/16/8 điểm; `write_baseline seeded=0`; 0 sự kiện ghi |
+| 6 | web bản cuối, 13:01 UTC (sau khi bo rảnh 10 phút) | `34312fa1` (merge PR #747) | `8707e9ed…` | nghe `:8082` lúc 13:01:50; 4/4 online; 0 lỗi trong 2.165 lượt poll kể từ bước 5; 4 unit `active` |
 
 Trạng thái sau deploy (12:10–12:30): 4/4 online, bus RUNNING, 0 lỗi kể từ khởi động
 lại, utilization 16,01 %. Frame Monitor chỉ có FC01/FC02, tức không có lệnh ghi nào lên
 dây. Relay `CK50804-DO1`/`DO3` vẫn = 1 (GOOD), trạng thái vật lý không đổi. Cả 4 unit đều
 `active`.
 
-**Chưa deploy:** web bản `efb3e4ae`, chỉ khác `2840392f` ở luật validator chặn
-`read_write` cho Point `bit_index`. Lý do: từ 12:10 có người dùng đang sửa draft
-Programming trên bo (PATCH lúc 12:22:39, đăng nhập lại lúc 12:13 và 12:22). Khởi động lại
-web sẽ làm gián đoạn họ. Không có Point nào trên bo dùng `bit_index`, và iobus bản cuối
-đã từ chối cấu hình đó theo kiểu fail-closed. Cần deploy web khi bo rảnh.
+Web bản cuối (bước 6) được hoãn từ 12:25 tới 13:01 vì có người dùng đang sửa draft
+Programming trên bo (PATCH lúc 12:22–12:56). Chỉ deploy sau khi journal web cho thấy
+10 phút liền không có request nào khác `GET`. Trong khoảng hoãn, iobus bản cuối đã từ
+chối cấu hình Point bit `read_write` theo kiểu fail-closed. Sao lưu web `2840392f`:
+`mkddc-web.2840392f` cùng thư mục backup.
 
 `MBA-FW-03/04/05/06/07/09` không có tình huống kích hoạt trên cấu hình hiện tại của bo:
 không có exception, không ghi dồn, không có bus 2, không có Point bit. Bằng chứng của
@@ -214,3 +215,4 @@ chúng là test host với slave libmodbus thật trên PTY (báo cáo finding �
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 2026-09-25 | Tạo mới: log 5 lần boot, số đo runtime, lập lịch thread, deploy và kiểm chứng bản sửa |
+| 1.1 | 2026-09-25 | Ghi nhận bước 6: deploy web `34312fa1` lúc 13:01 sau khi bo rảnh |

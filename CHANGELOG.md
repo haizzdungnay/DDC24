@@ -27,7 +27,7 @@
   + `MBA-BE-01`: `/modbus/diagnostics` trả đủ `write_failed`, `write_dropped`, `last_exception`.
   + `MBA-FW-06`: Frame Monitor ghi cả giao dịch ghi và phân loại `exception`.
   + `MBA-FW-07`: op `write` của kênh điều khiển định tuyến theo `bus_id`, từ chối khi địa chỉ trùng trên nhiều dây.
-- **Kiểm chứng.** C++ `cmake --fresh` MODBUS+BACNET+HMI: configure 0, build 0, ctest **1501/1501** (mốc `36c1a863`: 1489/1490). `go vet` 0; `go test ./... -count=1`: `app`, `modbusrtu` xanh, còn 4 test Programming đỏ **có sẵn trên `main`** (PR #746, ngoài phạm vi). Deploy bo Forlinx `2840392f` (web, core, iobus) + `efb3e4ae` (iobus): API chẩn đoán trả 41/12 khớp SHM; `PUT` Point Modbus 200; `write_baseline seeded=32`, 0 lần ghi sau khởi động (trước: 171); thread Modbus là SCHED_OTHER. Web `efb3e4ae` chưa deploy vì có người dùng đang sửa draft Programming trên bo.
+- **Kiểm chứng.** C++ `cmake --fresh` MODBUS+BACNET+HMI: configure 0, build 0, ctest **1501/1501** (mốc `36c1a863`: 1489/1490). `go vet` 0; `go test ./... -count=1`: `app`, `modbusrtu` xanh, còn 4 test Programming đỏ **có sẵn trên `main`** (PR #746, ngoài phạm vi). Deploy bo Forlinx `2840392f` (web, core, iobus) + `efb3e4ae` (iobus): API chẩn đoán trả 41/12 khớp SHM; `PUT` Point Modbus 200; `write_baseline seeded=32`, 0 lần ghi sau khởi động (trước: 171); thread Modbus là SCHED_OTHER. Web bản cuối `34312fa1` (sha `8707e9ed…`) deploy lúc 13:01 UTC, sau khi bo rảnh 10 phút; 4/4 thiết bị online, 0 lỗi trong 2.165 lượt poll.
 - Refs: `REC-MBA-GAP-001`, `REC-MBA-BOARD-001`, `REC-MBA-SRC-001`, FW_SOM_DESIGN §2 §4.3 §6.1 §10 §12.3, OD-MBRTU-005.
 
 ### Added — Bộ ba hồ sơ audit Modbus RTU (2026-09-25)

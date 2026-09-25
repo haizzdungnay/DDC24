@@ -274,7 +274,7 @@ không đổi ngữ nghĩa. Thứ tự đề xuất: **A1 → A3 → A4** (đón
 | Go | `go vet ./...` | exit 0 |
 | Go | `go test ./... -count=1` | `app`, `modbusrtu` xanh; 19 package ok; **4 test đỏ trong `programming/application` và `programming/store` — đỏ y hệt trên `main` khi chưa có thay đổi của phiên** (PR #746: publish FB tự gán layout, điều kiện pin library khi seal). Ngoài phạm vi Modbus, cần nhóm Programming quyết định test hay code là đúng |
 | FE | — | Không đổi mã FE; trang Chẩn đoán hiển thị sẵn các cột `write_failed`/`write_dropped` nay có số thật |
-| Target | deploy + đo trên bo | xem [báo cáo bo §6](MODBUS_AUDIT_2026-09-25_BOARD_OPERATION_REPORT.md) |
+| Target | deploy + đo trên bo (iobus `efb3e4ae`, core `2840392f`, web `34312fa1`) | xem [báo cáo bo §6](MODBUS_AUDIT_2026-09-25_BOARD_OPERATION_REPORT.md) |
 
 ## Revision history
 
