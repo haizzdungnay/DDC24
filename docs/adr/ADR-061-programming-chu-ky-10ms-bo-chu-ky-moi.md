@@ -52,6 +52,7 @@ Như `PROGRAMMING_CONTROL_SEMANTICS` §6 (F06): instance đã publish bị rút 
 | 4.11 | Nền RT | **Bị chặn** chờ BSP Forlinx OK1126B-S (kernel 6.1.141) để build PREEMPT_RT. Trong lúc chờ: `CPUAffinity=3` cho `mkddc-core`, các service khác ghim `0-2`, IRQ dời sang CPU0–2; đo lại C4. | F03: không có mã nguồn kernel trên máy dev |
 | 4.12 | Mã lỗi C1 | Chu kỳ ngoài tập có mã chẩn đoán riêng, không dùng lại `ST-LIM-009`. | X17 |
 | 4.13 | FE | Danh sách chu kỳ lấy từ capabilities, hiển thị ms khi < 1000 ms; không ép giá trị lạ về 1000. | X12 |
+| 4.14 | Tương thích nâng cấp (chu kỳ cũ 30000 ms) | Core vẫn **nạp và chạy** artifact đã commission trước đây có chu kỳ thuộc tập cũ {1000, 5000, 30000}: 30000 là "legacy period", chạy đúng 30 s trên base 10 ms, có WARN khi activate. Restore về revision cũ đã PASSED không bị chặn. Check/API cho revision **mới** vẫn từ chối 30000 (`ST-SCHED-001`). FE hiện "30 s — không còn hợp lệ" thay vì ép giá trị. | Active #52 trên Foxlinx dùng 30000 ms. Từ chối nạp khi nâng cấp đồng nghĩa bộ điều khiển đang chạy mất chương trình, tức lỗi an toàn. C1 áp cho cấu hình mới; gói cũ migrate bằng Commission lại |
 
 ## Hệ quả
 
