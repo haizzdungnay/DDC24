@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### Fixed — Audit Modbus RTU FE/BE/FW SOM: 10 lỗi đường ghi, lập lịch, đồng thời và chẩn đoán (2026-09-25)
+
+- Phạm vi: `apps/iobus/adapters/modbus_rtu/**`, `apps/iobus/bootstrap/main.cpp`,
+  `apps/iobus/CMakeLists.txt`, `apps/core/adapters/bacnet/bacnet_objtable.cpp`,
+  `apps/core/application/runtime/thread_policy.hpp`, `apps/core/application/st/st_retain.cpp`,
+  `apps/core/bootstrap/main.cpp`, `apps/web-api/internal/app/{modbus_rtu,points}.go`,
+  `apps/web-api/internal/modbusrtu/{domain,validate}.go`, test tương ứng;
+  `docs/superpowers/specs/2026-09-23-fbd-reference-connector.md` (câu vi phạm chính sách IEC làm đỏ `iec_claim_policy`).
+- **Mô tả.** Mỗi lỗi có test đỏ trên `36c1a863` và xanh sau bản sửa:
+  + `MBA-FW-02` (P0): iobus khởi động lại không phát lại setpoint cũ (lượt mốc); iobus kiểm tên slot trong `plc_shm` trước khi ghi; core xoá `setpoint/dirty` khi slot đổi danh tính.
+  + `MBA-FW-04` (P0): lệnh ghi mới chen vào giữa giao dịch ghi cùng register không còn bị nuốt (hợp nhất theo `seq`, cờ `in_flight`).
+  + `MBA-FW-09` (P0): `bit_index`, `min_value`, `max_value` có tác dụng ở iobus; Point bit không được khai ghi (FC06 đè cả register); mẫu BAD giữ value/timestamp cũ.
+  + `MBA-BE-02` (P0): `PUT /api/v1/points/{id}` ghi được Point Modbus (đổi sang `EXT<n>` theo runtime); `point_id` Modbus không được trùng dạng tên điểm hệ thống (`DO3`, `EXT5`…).
+  + `MBA-FW-03`: `FieldbusMetrics` có khoá — mã cũ làm hỏng heap (test abort 3/3).
+  + `MBA-FW-05`: exception chỉ làm BAD block của nó, thiết bị vẫn ONLINE.
+  + `MBA-FW-01`: thread phụ của iobus (`mb-bus*`, `fb-publish`, `fb-control`, `bacnet`) và core (`prog-ipc`, `st-retain`) hạ về SCHED_OTHER và có tên; chỉ vòng IOP/scan còn SCHED_FIFO.
+  + `MBA-BE-01`: `/modbus/diagnostics` trả đủ `write_failed`, `write_dropped`, `last_exception`.
+  + `MBA-FW-06`: Frame Monitor ghi cả giao dịch ghi và phân loại `exception`.
+  + `MBA-FW-07`: op `write` của kênh điều khiển định tuyến theo `bus_id`, từ chối khi địa chỉ trùng trên nhiều dây.
+- **Kiểm chứng.** C++ `cmake --fresh` MODBUS+BACNET+HMI: configure 0, build 0, ctest **1501/1501** (mốc `36c1a863`: 1489/1490). `go vet` 0; `go test ./... -count=1`: `app`, `modbusrtu` xanh, còn 4 test Programming đỏ **có sẵn trên `main`** (PR #746, ngoài phạm vi). Deploy bo Forlinx `2840392f` (web, core, iobus) + `efb3e4ae` (iobus): API chẩn đoán trả 41/12 khớp SHM; `PUT` Point Modbus 200; `write_baseline seeded=32`, 0 lần ghi sau khởi động (trước: 171); thread Modbus là SCHED_OTHER. Web `efb3e4ae` chưa deploy vì có người dùng đang sửa draft Programming trên bo.
+- Refs: `REC-MBA-GAP-001`, `REC-MBA-BOARD-001`, `REC-MBA-SRC-001`, FW_SOM_DESIGN §2 §4.3 §6.1 §10 §12.3, OD-MBRTU-005.
+
+### Added — Bộ ba hồ sơ audit Modbus RTU (2026-09-25)
+
+- Phạm vi: `docs/07_records/reviews/MODBUS_AUDIT_2026-09-25_{SOURCE_STATUS,BOARD_OPERATION_REPORT,FINDINGS_GAP_SOLUTIONS}.md`,
+  `docs/07_records/reviews/README.md` (v1.25), `docs/02_design/software/MODBUS_RTU_FW_SOM_DESIGN.md` (§12.3).
+- **Mô tả.** Hiện trạng mã nguồn FE/BE/FW SOM; log 5 lần boot và số đo runtime trên bo Forlinx; 10 finding đã sửa, `MBA-FW-08` P0 còn mở (lệnh bị bỏ được tạo lại vô hạn — ghi mù khi thiết bị có điện lại), 9 gap; logic tìm lỗi dùng lại được; hai phương án cải tiến (A tiến hoá tại chỗ 5–7 tuần-người, B dịch vụ fieldbus độc lập 12–16 tuần-người) kèm 9 tiêu chí nghiệm thu và 6 quyết định cần chốt.
+- Refs: `REC-MBA-SRC-001`, `REC-MBA-BOARD-001`, `REC-MBA-GAP-001`.
+
 ### Added — FBD Reference Connector & Kiểm tra Logic POU Cục bộ (2026-09-24)
 
 - Phạm vi: `apps/web-ui/src/features/programming/**`.
