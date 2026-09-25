@@ -56,6 +56,9 @@ type RuntimeService struct {
 	now          func() time.Time
 	newID        func() string
 	traces       *runtimeTraceStore
+	// monotonicNow đọc CLOCK_MONOTONIC cùng đồng hồ Core dùng để đóng dấu mẫu
+	// trace; nil ⇒ `coreipc.MonotonicNowNS`. Test tiêm bản tất định.
+	monotonicNow func() (uint64, error)
 
 	workspaceModesFn func() WorkspaceModesView
 }

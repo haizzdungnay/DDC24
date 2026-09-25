@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Fixed — Mẫu trace mang thời điểm Core lấy mẫu (F05c, 2026-09-26)
+
+- Phạm vi: `apps/web-api/internal/programming/application/{trace.go,runtime.go,monitor_trace_test.go}`.
+- Triệu chứng: sau khi trace đã tới được Core (F05), 12 mẫu cách nhau 1 s trên Foxlinx vẫn mang cùng một `observedAt` (lệch nhau vài µs). Nguyên nhân gốc: `applyCoreTraceSamples` gán cho mọi mẫu thời điểm web đọc ring. Cách sửa: đổi dấu CLOCK_MONOTONIC của Core sang giờ tường bằng độ lệch so với đồng hồ đơn điệu hiện tại của cùng máy; dấu ở tương lai hoặc lỗi đồng hồ thì giữ thời điểm đọc.
+- Kiểm chứng: test mới `TestTraceSampleWallTimeFollowsCoreMonotonicStamp`; `go vet ./...` và `go test ./... -count=1` PASS (21 package).
+
 ### Fixed — Trace lên được Core, intent được đối chiếu với trạng thái sống, Program chưa triển khai không bị ghi FAULTED (F04/F05/F07, 2026-09-26)
 
 - Phạm vi: `apps/web-api/internal/programming/application/{trace.go,runtime_intent.go,programs.go}` và test tương ứng; `apps/web-api/internal/app/{core_client.go,programming_pointcatalog.go,main.go}` và test.
