@@ -8,6 +8,14 @@
 
 ## [Unreleased]
 
+### Fixed — Mức log tới được journald; chẩn đoán FBD `ST-IOMAP-001` nói rõ nguyên nhân (F08, F10, 2026-09-26)
+
+- Phạm vi: `apps/core/bootstrap/main.cpp`, `apps/iobus/bootstrap/main.cpp`, `apps/web-api/internal/app/{journal_level.go,journal_level_test.go,main.go}`, `apps/core/application/st/st_io_map.cpp`, `apps/core/application/st/tests/test_st_resolve_io_bindings.cpp`; hồ sơ `EV-PROG-FBD-ST-MB-20260925`.
+- F08: cả ba binary in mức log bằng chữ, nên journald gán priority info cho mọi dòng và `journalctl -p warning` bỏ sót `WARN health degraded`. Dòng log nay được gắn tiền tố `<N>` theo token mức, chỉ khi fd thật sự là stream journald (so `dev:inode` của `JOURNAL_STREAM`). Core/iobus dùng `fopencookie` với buffer tĩnh (không cấp phát ở đường RT).
+- F10: binding tới biến FBD đã khai trong bảng biến nhưng không có khối INPUT/OUTPUT nhận thông điệp "not declared in VAR_INPUT/VAR_OUTPUT" mà không biết sửa ở đâu; thông điệp nay chỉ ra nguyên nhân phía FBD.
+- Hồ sơ audit: lượt 2 trên target cho F04/F05/F05c/F06 (DO2/DO4 về safe 0 trong ≤ 1,2 s sau Disable); F09 kết luận không phải lỗi.
+- Kiểm chứng: cmake --fresh Release MODBUS/BACNET/HMI, ctest 1524/1524 PASS (9 skipped); go vet + go test ./... -count=1 PASS (21 package).
+
 ### Fixed — Disable/Stop Program đưa DO Modbus về `safe_value` (F06, 2026-09-26)
 
 - Phạm vi: `apps/core/domain/graph/point_writer.{hpp,cpp}`, `apps/core/application/st/st_process_image.{hpp,cpp}`, `apps/core/application/runtime/scan_loop.cpp`, `apps/iobus/adapters/modbus_rtu/{device_profile.hpp,device_profile.cpp,modbus_master.cpp}`, `apps/web-api/internal/modbusrtu/persistence.go`, test tương ứng; `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` §6.
