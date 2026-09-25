@@ -8,6 +8,46 @@
 
 ## [Unreleased]
 
+### Fixed — Program/Task không còn mất release khi tick có jitter nhỏ hơn tick neo (F01, 2026-09-25)
+
+- Phạm vi: `apps/core/application/st/st_scheduler.{hpp,cpp}`, `apps/core/bootstrap/main.cpp`, `apps/core/application/st/tests/test_st_program_release.cpp`.
+- Triệu chứng trên Foxlinx: hai Program 1000 ms (FBD + ST, DO Modbus) mất 23 và 30 release trong 144 chu kỳ (24/32 chu kỳ không có FC05), trong khi `health=HEALTHY`. Nguyên nhân gốc: mốc release neo vào thời điểm quét thật (đã mang jitter), còn phép so hạn `now >= next` là so chặt; tick sau có jitter nhỏ hơn bị coi là "chưa tới hạn". `StTask::due` cũng dính khi Task được bật lại.
+- Cách sửa: so hạn với dung sai nửa tick (`st_release_tolerance_ns`); Program dùng nửa chu kỳ Task, Task dùng nửa min(chu kỳ Task, base step thật do `main` truyền vào qua `StScheduler::set_base_step_ns`). Lỡ thật vẫn được đếm. Test mới khoá jitter 19–127 µs ở 1 s và bộ chu kỳ 10/50/100/500/1000/5000/10000/50000 ms trên base 10 ms.
+- F01b: Program đi STOPPED/DISABLED rồi quay lại RUNNING nay neo release mới (`st_program_reset_release`), nên thời gian tắt có chủ ý không bị cộng vào `missed_release_count`.
+- Kiểm chứng: cmake --fresh Release MODBUS/BACNET/HMI; ctest 1520/1520 PASS (9 skipped: IoCache ×7, RealtimeMemlock ×1, MbaThreadPolicy ×1); go vet + go test ./... -count=1 PASS; FE Vitest 3440/3440, lint, build PASS; verify-project.sh --component layout exit 0.
+- Kèm theo: `gofmt` cho `bundles_library_test.go` để cổng layout xanh lại.
+
+### Fixed — Programming hiển thị đúng phạm vi safe-state và mở lại cổng FE (2026-09-25)
+
+- Phạm vi: Overview, Runtime, Check & Commission, test FE; kiểu Node tối thiểu cho test, kiểu dữ liệu của sao lưu POU và import không dùng trong Programming.
+- UI trước đây nói “chưa có output vật lý” khi `safeStateNoControllerOnly=true` dù DO Modbus mở rộng vẫn có FC05 ACK. Câu chữ mới giới hạn kết luận vào AO/DO cục bộ, yêu cầu kiểm readback DO Modbus riêng. Sửa lỗi lint/typecheck có sẵn trong các tệp Programming để build FE cho Foxlinx; đồng bộ test cột Watch hiện hành.
+- `useProgrammingCheck` không còn tạo `NETWORK_ERROR` giả khi trang Check & Commission mở mà chưa có `checkId` (không có request mạng nào được gửi).
+- Kiểm chứng: FE Vitest 3439/3439 PASS trước sửa `checkId`, test tập trung sau sửa 31/31 PASS; lint/build Foxlinx PASS. Deploy FE hai lượt với `index.html` SHA256 cuối `8e86b065…`; Chrome Overview, Runtime và Check & Commission nạp 200, Console 0, Error log sau sửa “No errors recorded”. Bằng chứng tại `EV-PROG-FBD-ST-MB-20260925`.
+
+### Fixed — Fixture kiểm chứng Project Library khớp hợp đồng seal/publish (2026-09-25)
+
+- Phạm vi: `apps/web-api/internal/programming/{application/bundles_library_test.go,store/library_test.go}`.
+- Fixture bundle dùng POU tham chiếu Library thật để Revision pin đúng; test publish kiểm layout 0 byte authoritative của Function Block stateless. Bốn test đỏ trước đó nay PASS; `go vet ./...` và `go test ./... -count=1` PASS toàn bộ package.
+
+### Fixed — Lệnh DO Modbus hết hạn không tự phát lại (2026-09-25)
+
+- Phạm vi: `contracts/shm/mkddc_shm.h`, Core PointWriter/GraphRuntime/BACnet slot, iobus ModbusMaster, hằng SHM Web API, test liên quan; hồ sơ audit `EV-PROG-FBD-ST-MB-20260925` ghi giới hạn bản vá.
+- Sửa `MBA-FW-08`: cấp `ext_cmd_seq` cho intent EXT mới; lệnh đã drop không được tạo lại từ cờ `dirty` còn bật, còn lệnh mới cùng giá trị được nhận. Đổi magic SHM v6→v7 nên phải triển khai đồng bộ core, iobus và web.
+- Kiểm chứng source/host: Release MODBUS/BACNET/HMI build PASS, CTest 1513/1513 PASS (2 skipped), cross build ARM ba binary PASS; Go vet PASS. Triển khai ba service lên Foxlinx 15:38 UTC với rollback lưu tại `/data/mkddc/deploy-backups/2026-09-25T1537Z-mbafw08/`; `/proc/MainPID/exe` khớp ba SHA256 bản mới, health 6/6 `ok`. Bốn test Programming hiện đỏ và đang điều tra. Bằng chứng target được bổ sung theo từng đợt tại `EV-PROG-FBD-ST-MB-20260925`.
+
+### Added — Audit FBD/ST → DO Modbus: tiêu chí spec "cycle 10 ms", tách lớp I/O mở rộng, finding F01–F10 (2026-09-25)
+
+- Phạm vi: `docs/07_records/test-evidence/programming/2026-09-25-fbd-st-modbus-do-audit.md` và `fixtures/` (tóm tắt lượt đo, mã nguồn FB/FBD/ST thử nghiệm). Chỉ tài liệu, không đổi mã.
+- Tiêu chí chủ sở hữu chốt: chu kỳ cơ sở 10 ms, không Task nào < 10 ms, overrun = 0, missed release = 0, jitter ≤ 100 µs; vi phạm là lỗi. I/O mở rộng (Modbus/BACnet) có spec riêng theo giao thức và baud.
+- Kết quả target: FBD và ST dùng chung FB qua Check (0,64 s), Commission (1,64 s), Enable và Restore; FC05 234/234 ACK, 29 ms mỗi lệnh. C1/C3/C4 FAIL: base step 1000 ms; Program lỡ 16,7–22,2% release do neo mốc release vào thời điểm có jitter (F01, P1); `cyclictest` 10 ms ghim lõi tối đa 470 µs trên kernel non-RT. Thêm F04 (Restore không chạy lại Program), F05 (Trace rơi về poll ~2 s), F06 (Disable giữ DO Modbus ở giá trị cuối) và giải pháp G1–G7.
+- Khôi phục bo: Active #52 RUNNING, DO về giá trị ban đầu, nội dung Draft WIP trùng canonical; 3 service giữ SHA256, `NRestarts=0`.
+
+### Added — Nhật ký audit FBD/ST Function Block → DO Modbus trên Foxlinx (2026-09-25)
+
+- Phạm vi: `docs/07_records/test-evidence/programming/2026-09-25-fbd-st-modbus-do-audit.md`.
+- Ghi preflight target, cấu hình Programming/Modbus và các cổng kiểm chứng theo từng lớp. Profile Rev A hiện chỉ cho Task 1000/5000/30000 ms; tiêu chí 10–100 ms chưa đạt và chưa có bằng chứng ghi DO.
+- Kiểm chứng ban đầu: health 6/6 `ok`, 3 service active và `NRestarts=0`, 4/4 slave online; đây chỉ là baseline trước thử nghiệm.
+
 ### Fixed — Audit Modbus RTU FE/BE/FW SOM: 10 lỗi đường ghi, lập lịch, đồng thời và chẩn đoán (2026-09-25)
 
 - Phạm vi: `apps/iobus/adapters/modbus_rtu/**`, `apps/iobus/bootstrap/main.cpp`,

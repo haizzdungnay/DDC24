@@ -1,0 +1,120 @@
+{
+  "$schema": "../../fbd_v1.schema.json",
+  "schemaVersion": 1,
+  "profileId": "revA-1t-1-5-30",
+  "graphId": "0330580e-ae1d-471d-8d96-508903f49764",
+  "name": "AUDIT_FBD_DO",
+  "networks": [
+    {
+      "id": "79ca90d0-a6a7-4d3d-9fb3-df094f7911fa",
+      "name": "network_1",
+      "order": 0,
+      "nodes": [
+        {
+          "id": "6a7b55e6-2df2-4b53-ad82-a535e4cc0954",
+          "kind": "CONSTANT",
+          "typeRef": "BOOL",
+          "executionOrder": 0,
+          "parameters": {
+            "value": true
+          },
+          "ports": [
+            {
+              "id": "6cc9f222-6662-42ff-bf57-1306ec9e5957",
+              "name": "OUT",
+              "direction": "OUTPUT",
+              "dataType": "BOOL",
+              "unit": null,
+              "order": 0
+            }
+          ]
+        },
+        {
+          "id": "46dd286a-e75f-4d32-b5ca-7d6ade0b8bb5",
+          "kind": "FUNCTION_BLOCK",
+          "typeRef": "FB_AUDIT_TOGGLE",
+          "executionOrder": 1,
+          "parameters": {},
+          "ports": [
+            {
+              "id": "0a65a4f7-0810-4771-a864-42a1b60e65d1",
+              "name": "EN_IN",
+              "direction": "INPUT",
+              "dataType": "BOOL",
+              "unit": null,
+              "order": 0
+            },
+            {
+              "id": "d0ae1a09-95ec-425a-accc-76705f730337",
+              "name": "Q",
+              "direction": "OUTPUT",
+              "dataType": "BOOL",
+              "unit": null,
+              "order": 1
+            }
+          ]
+        },
+        {
+          "id": "d51a4a02-43a8-444c-9b72-b7ca859784fb",
+          "kind": "OUTPUT",
+          "typeRef": "BOOL",
+          "executionOrder": 2,
+          "parameters": {
+            "variable": "AUD_FBD_DO2"
+          },
+          "ports": [
+            {
+              "id": "28a147c5-9da0-46fc-b103-d981fd51f87a",
+              "name": "IN",
+              "direction": "INPUT",
+              "dataType": "BOOL",
+              "unit": null,
+              "order": 0
+            }
+          ]
+        }
+      ],
+      "wires": [
+        {
+          "id": "590a4e45-2809-407d-a858-0c87ce6df7e6",
+          "from": {
+            "nodeId": "6a7b55e6-2df2-4b53-ad82-a535e4cc0954",
+            "portId": "6cc9f222-6662-42ff-bf57-1306ec9e5957"
+          },
+          "to": {
+            "nodeId": "46dd286a-e75f-4d32-b5ca-7d6ade0b8bb5",
+            "portId": "0a65a4f7-0810-4771-a864-42a1b60e65d1"
+          }
+        },
+        {
+          "id": "9f21a753-db91-4093-a1ea-7f9e6f431060",
+          "from": {
+            "nodeId": "46dd286a-e75f-4d32-b5ca-7d6ade0b8bb5",
+            "portId": "d0ae1a09-95ec-425a-accc-76705f730337"
+          },
+          "to": {
+            "nodeId": "d51a4a02-43a8-444c-9b72-b7ca859784fb",
+            "portId": "28a147c5-9da0-46fc-b103-d981fd51f87a"
+          }
+        }
+      ]
+    }
+  ],
+  "layout": {
+    "schemaVersion": 1,
+    "nodes": {
+      "6a7b55e6-2df2-4b53-ad82-a535e4cc0954": {
+        "x": 120,
+        "y": 40
+      },
+      "46dd286a-e75f-4d32-b5ca-7d6ade0b8bb5": {
+        "x": 400,
+        "y": 40
+      },
+      "d51a4a02-43a8-444c-9b72-b7ca859784fb": {
+        "x": 720,
+        "y": 60
+      }
+    }
+  }
+}

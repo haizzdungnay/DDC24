@@ -1,0 +1,124 @@
+{
+  "$schema": "../../fbd_v1.schema.json",
+  "schemaVersion": 1,
+  "profileId": "revA-1t-1-5-30",
+  "graphId": "4dcf7eb5-068b-4c70-9db6-cfa6239ff1ec",
+  "name": "DO_Blink100ms",
+  "networks": [
+    {
+      "id": "88ee52b1-591e-4e61-b6a0-732947830a3f",
+      "name": "network_1",
+      "order": 0,
+      "nodes": [
+        {
+          "id": "bb7cd8b6-bd5c-4fb4-9475-c3e61b90735a",
+          "kind": "FUNCTION_BLOCK",
+          "typeRef": "FB_DO_BLINK_100MS_V1",
+          "executionOrder": 0,
+          "parameters": {},
+          "ports": [
+            {
+              "id": "c6607a16-68a3-4913-a06e-65a17dc1f35d",
+              "name": "DUMMY",
+              "direction": "INPUT",
+              "dataType": "BOOL",
+              "unit": null,
+              "order": 0
+            },
+            {
+              "id": "3bb7b4d7-fc2a-40e8-8b4a-e82038e7d195",
+              "name": "Q",
+              "direction": "OUTPUT",
+              "dataType": "BOOL",
+              "unit": null,
+              "order": 1
+            }
+          ]
+        },
+        {
+          "id": "0aae0d15-832e-400c-b8c5-b3e276c0d64d",
+          "kind": "OUTPUT",
+          "typeRef": "BOOL",
+          "executionOrder": 1,
+          "parameters": {
+            "variable": "R50804_DO1"
+          },
+          "ports": [
+            {
+              "id": "902f4466-a675-41e6-86cd-c71e9b40125c",
+              "name": "IN",
+              "direction": "INPUT",
+              "dataType": "BOOL",
+              "unit": null,
+              "order": 0
+            }
+          ]
+        },
+        {
+          "id": "c30f31e7-a958-45ee-8c9b-5b1d0ada7d79",
+          "kind": "CONSTANT",
+          "typeRef": "BOOL",
+          "executionOrder": 2,
+          "parameters": {
+            "value": true
+          },
+          "ports": [
+            {
+              "id": "43dc99cd-be26-4105-93c9-ca86d16da85d",
+              "name": "OUT",
+              "direction": "OUTPUT",
+              "dataType": "BOOL",
+              "unit": null,
+              "order": 0
+            }
+          ]
+        }
+      ],
+      "wires": [
+        {
+          "id": "3ce1b524-c918-4ebc-898e-8da7f50abb85",
+          "from": {
+            "nodeId": "c30f31e7-a958-45ee-8c9b-5b1d0ada7d79",
+            "portId": "43dc99cd-be26-4105-93c9-ca86d16da85d"
+          },
+          "to": {
+            "nodeId": "bb7cd8b6-bd5c-4fb4-9475-c3e61b90735a",
+            "portId": "c6607a16-68a3-4913-a06e-65a17dc1f35d"
+          }
+        },
+        {
+          "id": "da40f692-001b-42f3-a065-634eb3de2caf",
+          "from": {
+            "nodeId": "bb7cd8b6-bd5c-4fb4-9475-c3e61b90735a",
+            "portId": "3bb7b4d7-fc2a-40e8-8b4a-e82038e7d195"
+          },
+          "to": {
+            "nodeId": "0aae0d15-832e-400c-b8c5-b3e276c0d64d",
+            "portId": "902f4466-a675-41e6-86cd-c71e9b40125c"
+          }
+        }
+      ]
+    }
+  ],
+  "layout": {
+    "schemaVersion": 1,
+    "nodes": {
+      "0aae0d15-832e-400c-b8c5-b3e276c0d64d": {
+        "x": 784,
+        "y": 144
+      },
+      "bb7cd8b6-bd5c-4fb4-9475-c3e61b90735a": {
+        "x": 420,
+        "y": 120
+      },
+      "c30f31e7-a958-45ee-8c9b-5b1d0ada7d79": {
+        "x": 152,
+        "y": 0
+      },
+      "ec89a87e-ad16-4ff1-8763-3bd7082592bd": {
+        "x": 120,
+        "y": 160
+      }
+    }
+  }
+}
