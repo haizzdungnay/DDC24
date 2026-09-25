@@ -6,7 +6,7 @@
 
 TEST(ShmLayout, IoShmV5OffsetsMatchWebAndTools)
 {
-    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584406u);
+    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584407u);
     EXPECT_EQ(offsetof(kx_io_shm_t, ui_raw), static_cast<std::size_t>(80));
     EXPECT_EQ(offsetof(kx_io_shm_t, ui_reliability), static_cast<std::size_t>(160));
     EXPECT_EQ(offsetof(kx_io_shm_t, ui_raw_unit), static_cast<std::size_t>(304));
@@ -23,7 +23,7 @@ TEST(ShmLayout, IoShmV5OffsetsMatchWebAndTools)
  * uint64, và đó là lý do magic đi từ v4 lên v5. */
 TEST(ShmLayout, FieldbusTelemetryIsAppendedWithoutMovingLegacyFields)
 {
-    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584406u);
+    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584407u);
     EXPECT_EQ(offsetof(kx_io_shm_t, bacnet_udp_port), static_cast<std::size_t>(524));
     EXPECT_EQ(offsetof(kx_io_shm_t, bacnet_bound), static_cast<std::size_t>(526));
     EXPECT_EQ(offsetof(kx_io_shm_t, fb_slave_count), static_cast<std::size_t>(527));
@@ -123,7 +123,8 @@ TEST(ShmLayoutV2, PlcShmOffsetsAfterExtMatchGoConstants)
     EXPECT_EQ(offsetof(kx_plc_shm_t, ext_count), static_cast<std::size_t>(23088));
     EXPECT_EQ(offsetof(kx_plc_shm_t, scan_count), static_cast<std::size_t>(23092));
     EXPECT_EQ(offsetof(kx_plc_shm_t, scan_overrun), static_cast<std::size_t>(23096));
-    EXPECT_EQ(sizeof(kx_plc_shm_t), static_cast<std::size_t>(23104));
+    EXPECT_EQ(offsetof(kx_plc_shm_t, ext_cmd_seq), static_cast<std::size_t>(23104));
+    EXPECT_EQ(sizeof(kx_plc_shm_t), static_cast<std::size_t>(24128));
 }
 
 TEST(ShmLayoutV2, SnapshotV2HeaderCarriesProvenanceFields)
@@ -175,7 +176,7 @@ TEST(ShmLayoutV2, QualityEnumHasFiveLevelsAndTenReasons)
  */
 TEST(ShmLayout, BoardCapabilityFieldsExistAndMagicIsV6)
 {
-    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584406u)
+    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584407u)
         << "thêm trường vào io_shm mà không bump magic thì binary cũ đọc lệch trong im lặng";
 
     kx_io_shm_t shm{};

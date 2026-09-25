@@ -35,7 +35,7 @@ import (
 // core_client_test.go / shm_reader_test.go KHÔNG canh được việc này: chúng ghi
 // và đọc cùng một hằng số nên luôn đúng với mọi giá trị.
 const (
-	kxShmMagic    = 0x4B584406
+	kxShmMagic    = 0x4B584407
 	defaultIOShm  = "/dev/shm/mkddc_io_shm"
 	defaultPLCShm = "/dev/shm/mkddc_plc_shm"
 )

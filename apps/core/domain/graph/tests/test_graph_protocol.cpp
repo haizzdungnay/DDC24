@@ -233,6 +233,10 @@ TEST(GraphProtocol, ModbusRtuWriteAppliesSetpoint)
 
     EXPECT_FLOAT_EQ(shm.ext[0].setpoint, 50.0f);
     EXPECT_EQ(shm.ext[0].dirty, 1u);
+    EXPECT_EQ(shm.ext_cmd_seq[0], 1u);
+    g.apply_ext_writes(&shm);
+    EXPECT_EQ(shm.ext_cmd_seq[0], 1u)
+        << "Graph giữ nguyên setpoint không được biến thành lệnh mới mỗi scan";
 }
 
 /* ---- T7: Modbus_TCP_Read → same ext snapshot path as RTU ---- */

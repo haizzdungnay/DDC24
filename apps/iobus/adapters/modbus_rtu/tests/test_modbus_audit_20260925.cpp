@@ -356,6 +356,7 @@ TEST(MbaWriteBaseline, KhoiDongLaiKhongPhatLaiLenhCu)
     std::strncpy(shm->ext[0].name, "sp", sizeof(shm->ext[0].name) - 1);
     shm->ext[0].dirty    = 1;
     shm->ext[0].setpoint = 50.0;   /* lệnh ra từ trước khi iobus khởi động */
+    shm->ext_cmd_seq[0] = 1;
 
     master.drain_ext_writes(shm.get(), 1000);
     EXPECT_EQ(master.bus(0).pending_write_count(), 0u)
@@ -363,6 +364,7 @@ TEST(MbaWriteBaseline, KhoiDongLaiKhongPhatLaiLenhCu)
 
     /* Lệnh MỚI sau khởi động vẫn phải đi. */
     shm->ext[0].setpoint = 60.0;
+    shm->ext_cmd_seq[0] = 2;
     master.drain_ext_writes(shm.get(), 1100);
     EXPECT_EQ(master.bus(0).pending_write_count(), 1u);
 
@@ -392,6 +394,7 @@ TEST(MbaWriteBaseline, SlotLechDanhTinhThiKhongPhat)
     std::strncpy(shm->ext[0].name, "point-cu", sizeof(shm->ext[0].name) - 1);
     shm->ext[0].dirty    = 1;
     shm->ext[0].setpoint = 5.0;
+    shm->ext_cmd_seq[0] = 1;
     master.drain_ext_writes(shm.get(), 1100);
     EXPECT_EQ(master.bus(0).pending_write_count(), 0u)
         << "giá trị của Point cũ bị ghi xuống register của Point mới";
@@ -399,6 +402,10 @@ TEST(MbaWriteBaseline, SlotLechDanhTinhThiKhongPhat)
     std::memset(shm->ext[0].name, 0, sizeof(shm->ext[0].name));
     std::strncpy(shm->ext[0].name, "sp", sizeof(shm->ext[0].name) - 1);
     master.drain_ext_writes(shm.get(), 1200);
+    EXPECT_EQ(master.bus(0).pending_write_count(), 0u)
+        << "lệnh của Point cũ không được sống lại sau khi tên slot khớp";
+    shm->ext_cmd_seq[0] = 2; /* Core phát intent MỚI cho Point đúng. */
+    master.drain_ext_writes(shm.get(), 1300);
     EXPECT_EQ(master.bus(0).pending_write_count(), 1u);
 
     master.close();

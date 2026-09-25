@@ -62,7 +62,7 @@
  * quality_reason + sample timestamp. Đây là ABI change THẬT — stride của
  * plc_shm.ext[] đổi từ 40 lên 64 byte nên MỌI offset sau ext[] dịch chỗ.
  * Magic phải đổi để binary cũ FAIL RÕ thay vì đọc lệch trường trong im lặng. */
-#define KX_SHM_MAGIC      0x4B584406u   /* "KXD\6" v6: io_shm chở BOARD_CAP_MAP (ISS-PIO-11) */
+#define KX_SHM_MAGIC      0x4B584407u   /* "KXD\7" v7: plc_shm chở ext_cmd_seq (MBA-FW-08) */
 
 #define KX_N_UI   16   /* v2: Rev A 16 UI analog (ADR-010) */
 #define KX_N_DI   8    /* reserved: DI optional SKU; base SKU stays 0 in SHM */
@@ -379,6 +379,10 @@ typedef struct {
     uint8_t  rt_sched_priority;  /* ưu tiên RT thật đang chạy; 0 khi không phải RT   */
     uint8_t  rt_mlock_ok;        /* 1 = mlockall thành công                          */
     uint8_t  rt_degraded;        /* 1 = KHÔNG đạt cấu hình RT mong đợi -> cảnh báo   */
+    /* MBA-FW-08: danh tính lệnh ghi EXT; 0 = chưa có lệnh. Core tăng khi có
+     * intent mới, iobus chỉ đọc. Cờ dirty là cờ mức, không nhận diện lệnh.
+     * Nối cuối để giữ mọi offset cũ; magic v7 chặn binary không tương thích. */
+    uint32_t ext_cmd_seq[KX_N_EXT];
 } kx_plc_shm_t;
 
 /* ---- seqlock helpers (single-writer / multi-reader) ---- */
