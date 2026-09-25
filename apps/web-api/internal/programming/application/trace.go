@@ -414,6 +414,12 @@ func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadRe
 		return false
 	}
 	samples := make([]TraceSampleView, 0, len(reply.Samples))
+	wallNow := s.now().UTC()
+	monotonicNow := s.monotonicNow
+	if monotonicNow == nil {
+		monotonicNow = coreipc.MonotonicNowNS
+	}
+	monoNow, monoErr := monotonicNow()
 	for index, incoming := range reply.Samples {
 		if len(samples) >= session.maxSamples {
 			break
@@ -426,7 +432,7 @@ func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadRe
 		}
 		sample := TraceSampleView{
 			Sequence:   int64(index + 1),
-			ObservedAt: s.now().UTC().Add(-time.Duration(0)).Format(time.RFC3339Nano),
+			ObservedAt: traceSampleWallTime(wallNow, monoNow, monoErr, incoming.TimestampNS).Format(time.RFC3339Nano),
 			Values:     make([]TraceValueView, 0, len(incoming.Values)),
 		}
 		for position, cell := range incoming.Values {
@@ -458,6 +464,19 @@ func (s *RuntimeService) applyCoreTraceSamples(traceID string, reply traceReadRe
 		return false
 	}
 	return len(session.view.Samples) < session.maxSamples
+}
+
+// traceSampleWallTime — F05c (EV-PROG-FBD-ST-MB-20260925). Core đóng dấu mỗi mẫu
+// bằng CLOCK_MONOTONIC tại ranh giới quét; bản cũ gán cho MỌI mẫu thời điểm web
+// ĐỌC ring, nên trên bo 12 mẫu cách nhau 1 s hiện cùng một `observedAt`, lệch
+// nhau vài µs. Đổi sang giờ tường bằng độ lệch so với đồng hồ đơn điệu hiện tại
+// của cùng máy. Không đọc được đồng hồ, hoặc dấu nằm ở tương lai (Core và web
+// không cùng máy), thì giữ thời điểm đọc thay vì bịa một mốc.
+func traceSampleWallTime(wallNow time.Time, monoNow uint64, monoErr error, sampleNS uint64) time.Time {
+	if monoErr != nil || sampleNS == 0 || sampleNS > monoNow {
+		return wallNow
+	}
+	return wallNow.Add(-time.Duration(monoNow - sampleNS))
 }
 
 func (s *RuntimeService) captureTraceSample(traceID string, monitor MonitorPageView) bool {

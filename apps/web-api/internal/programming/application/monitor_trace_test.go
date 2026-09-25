@@ -502,3 +502,25 @@ func TestTraceFallsBackToPollingWhenCoreRejectsSession(t *testing.T) {
 		t.Fatal("đường dự phòng poll monitor không chạy khi Core từ chối")
 	}
 }
+
+// F05c: mẫu từ ring Core phải mang thời điểm Core lấy mẫu, không phải thời
+// điểm web đọc ring. Hai mẫu cách nhau 1 s trên đồng hồ đơn điệu phải cách nhau
+// đúng 1 s trên `observedAt`.
+func TestTraceSampleWallTimeFollowsCoreMonotonicStamp(t *testing.T) {
+	wallNow := time.Date(2026, 9, 25, 17, 25, 15, 0, time.UTC)
+	const monoNow = uint64(500_000_000_000)
+	first := traceSampleWallTime(wallNow, monoNow, nil, monoNow-2_000_000_000)
+	second := traceSampleWallTime(wallNow, monoNow, nil, monoNow-1_000_000_000)
+	if got := second.Sub(first); got != time.Second {
+		t.Fatalf("khoảng cách hai mẫu = %v, muốn 1s", got)
+	}
+	if !first.Equal(wallNow.Add(-2 * time.Second)) {
+		t.Fatalf("mẫu đầu = %v", first)
+	}
+	if got := traceSampleWallTime(wallNow, monoNow, nil, monoNow+5); !got.Equal(wallNow) {
+		t.Fatalf("dấu ở tương lai phải giữ thời điểm đọc, nhận %v", got)
+	}
+	if got := traceSampleWallTime(wallNow, 0, errors.New("clock"), 1); !got.Equal(wallNow) {
+		t.Fatalf("lỗi đồng hồ phải giữ thời điểm đọc, nhận %v", got)
+	}
+}
