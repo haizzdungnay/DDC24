@@ -3,6 +3,7 @@
  * @brief MBR-B105/B106/B108: hiện thực kênh điều khiển UDS.
  */
 #include "control_channel.hpp"
+#include "thread_policy.hpp"
 
 #include <cerrno>
 #include <cstdio>
@@ -278,6 +279,9 @@ void ControlChannel::stop()
 
 void ControlChannel::serve()
 {
+    /* `MBA-FW-01`: kênh điều khiển không phải đường thời gian thực — hạ khỏi
+     * SCHED_FIFO thừa hưởng từ `main`. */
+    demote_to_normal_sched("fb-control");
     while (!stop_.load()) {
         struct pollfd pfd {listen_fd_, POLLIN, 0};
         const int rc = ::poll(&pfd, 1, 200);

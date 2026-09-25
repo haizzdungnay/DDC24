@@ -33,6 +33,7 @@
 #include "config/safe_state_config.hpp"
 #include "schedule/schedule_runtime.hpp"
 #include "runtime/scan_loop.hpp"
+#include "runtime/thread_policy.hpp"
 #include "persistence/state_snapshot.hpp"
 #include "ipc/program_ipc_unix.hpp"
 #include "programming/programming_cutover.hpp"
@@ -514,6 +515,9 @@ int main(int argc, char** argv)
             return 1;
         }
         programming_ipc_thread = std::thread([&] {
+            /* `MBA-FW-01`: IPC Programming phục vụ web (Check/Commission/Simulate)
+             * — hạ khỏi SCHED_FIFO 80 thừa hưởng từ vòng scan. */
+            core::demote_to_normal_sched("prog-ipc");
             programming_ipc_endpoint->run(programming_ipc_server.get(), &g_shutdown);
         });
         std::fprintf(stderr, "INFO  programming.ipc_ready path=%s\n",

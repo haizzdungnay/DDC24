@@ -5,6 +5,7 @@
  */
 #include "bus_worker.hpp"
 #include "poll_group.hpp"
+#include "thread_policy.hpp"
 #include "write_verify.hpp"
 #include "fieldbus_time.hpp"
 #include "register_codec.hpp"
@@ -1035,6 +1036,13 @@ void BusWorker::poll_once(uint64_t now_ms, ExtCache& cache, FieldbusMetrics& met
 
 void BusWorker::run_loop(const std::atomic<bool>& stop, ExtCache& cache, FieldbusMetrics& metrics)
 {
+    /* `MBA-FW-01`: thread này được tạo từ `main` đang ở SCHED_FIFO và thừa hưởng
+     * nó — hạ về SCHED_OTHER trước I/O đầu tiên (FW_SOM_DESIGN §2). */
+    {
+        char name[16];
+        std::snprintf(name, sizeof(name), "mb-bus%u", static_cast<unsigned>(bus_.id));
+        demote_to_normal_sched(name);
+    }
     metrics.set_bus_state(bus_.id, bus_state_name(state_));
     while (!stop.load(std::memory_order_relaxed)) {
         const uint64_t now = monotonic_ms();
