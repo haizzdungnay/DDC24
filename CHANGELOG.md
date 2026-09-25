@@ -8,6 +8,14 @@
 
 ## [Unreleased]
 
+### Fixed — Trace lên được Core, intent được đối chiếu với trạng thái sống, Program chưa triển khai không bị ghi FAULTED (F04/F05/F07, 2026-09-26)
+
+- Phạm vi: `apps/web-api/internal/programming/application/{trace.go,runtime_intent.go,programs.go}` và test tương ứng; `apps/web-api/internal/app/{core_client.go,programming_pointcatalog.go,main.go}` và test.
+- F05: TRACE_START/READ/STOP trước đây gửi actor và correlation rỗng, nên `ValidateRequest` chặn ngay tại web-api: không phiên trace nào từng tới Core, và trên bo mẫu cách nhau ~2 s với `programValue` null. Envelope nay mang actor và correlation của phiên. Bản giả trong test cũng chạy `ValidateRequest` (test đỏ khi chưa sửa, xanh khi đã sửa). Monitor lấy `programValue` của điểm Modbus từ `setpoint` của slot `ext` khi slot có lệnh.
+- F04: sau Restore/Commission hoặc khi Core khởi động lại, Core nạp Program ở DISABLED trong khi intent vẫn là `true`. Vòng reconcile 2 s trước đây chỉ replay hàng UNKNOWN. Nay nó đối chiếu MỨC với snapshot sống: Program lệch intent ở trạng thái nghỉ thì được đẩy lại, Program FAULTED/ROLLED_BACK không bao giờ tự bật lại.
+- F07: Program không có trong gói đang chạy không còn nhận lệnh replay; Core trả `IPC-UNKNOWN-INSTANCE` cũng không còn bị ghi thành FAULTED.
+- Kiểm chứng: `go vet ./...` và `go test ./... -count=1` PASS (21 package); 5 test mới cho F04/F07 và 1 test cho `programValue` EXT.
+
 ### Fixed — Program/Task không còn mất release khi tick có jitter nhỏ hơn tick neo (F01, 2026-09-25)
 
 - Phạm vi: `apps/core/application/st/st_scheduler.{hpp,cpp}`, `apps/core/bootstrap/main.cpp`, `apps/core/application/st/tests/test_st_program_release.cpp`.

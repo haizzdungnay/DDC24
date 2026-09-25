@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -523,7 +524,7 @@ func (s *RuntimeService) startCoreTrace(ctx context.Context, traceID string, req
 	if err != nil {
 		return false
 	}
-	response, ok := s.callCoreTrace(ctx, coreipc.ActionTraceStart, payload)
+	response, ok := s.callCoreTrace(ctx, traceID, coreipc.ActionTraceStart, payload)
 	if !ok || response.Result != coreipc.ResultAccepted {
 		// Core không nhận phiên: KHÔNG ghi thứ tự biến. `coreVariableIDs` rỗng
 		// là tín hiệu cho vòng lấy mẫu dùng đường dự phòng — đoán rằng Core đang
@@ -554,13 +555,14 @@ func (s *RuntimeService) stopCoreTrace(ctx context.Context, traceID string) {
 	if err != nil {
 		return
 	}
-	_, _ = s.callCoreTrace(ctx, coreipc.ActionTraceStop, payload)
+	_, _ = s.callCoreTrace(ctx, traceID, coreipc.ActionTraceStop, payload)
 }
 
-func (s *RuntimeService) callCoreTrace(ctx context.Context, action coreipc.Action,
+func (s *RuntimeService) callCoreTrace(ctx context.Context, traceID string, action coreipc.Action,
 	payload []byte) (coreipc.Response, bool) {
+	actorID, correlationID := s.traceEnvelopeIdentity(traceID)
 	request := coreipc.NewRequest(action, uuidBytes(s.newID()), uuidBytes(s.newID()),
-		s.controllerID, "", "", coreipc.FutureDeadline(traceCallTimeout), payload)
+		s.controllerID, actorID, correlationID, coreipc.FutureDeadline(traceCallTimeout), payload)
 	callCtx, cancel := context.WithTimeout(ctx, traceCallTimeout)
 	defer cancel()
 	response, err := s.runtime.Call(callCtx, request)
@@ -568,6 +570,26 @@ func (s *RuntimeService) callCoreTrace(ctx context.Context, action coreipc.Actio
 		return coreipc.Response{}, false
 	}
 	return response, true
+}
+
+// traceEnvelopeIdentity — F05 (EV-PROG-FBD-ST-MB-20260925). Envelope IPC của
+// TRACE_* phải mang actor thật và correlation hợp lệ: `Client.Call` chạy
+// `ValidateRequest` trước khi mở socket, và TRACE_START/STOP là mutation nên
+// thiếu actor bị chặn NGAY TẠI web-api. Bản cũ gửi actor/correlation rỗng, nên
+// không phiên trace nào từng tới Core — mọi đồ thị trace trên bo đều là đường
+// dự phòng poll monitor (~2 s/mẫu, `programValue` rỗng) mà không ai biết.
+func (s *RuntimeService) traceEnvelopeIdentity(traceID string) (string, string) {
+	s.traces.mu.RLock()
+	var actorID, correlationID string
+	if session := s.traces.sessions[traceID]; session != nil {
+		actorID, correlationID = session.actor.ID, session.correlationID
+	}
+	s.traces.mu.RUnlock()
+	if len(correlationID) < 16 || len(correlationID) > coreipc.MaxCorrelationID ||
+		strings.ContainsAny(correlationID, " \t\r\n") {
+		correlationID = s.newID()
+	}
+	return actorID, correlationID
 }
 
 // readCoreTrace rút mẫu từ ring của Core.
@@ -593,7 +615,7 @@ func (s *RuntimeService) readCoreTrace(ctx context.Context, traceID string) (tra
 	if err != nil {
 		return traceReadReply{}, false
 	}
-	response, ok := s.callCoreTrace(ctx, coreipc.ActionTraceRead, payload)
+	response, ok := s.callCoreTrace(ctx, traceID, coreipc.ActionTraceRead, payload)
 	if !ok || response.Result != coreipc.ResultOK {
 		return traceReadReply{}, false
 	}

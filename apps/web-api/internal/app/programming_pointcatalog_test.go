@@ -326,3 +326,46 @@ func TestReadProgrammingMonitorSnapshotUsesBoundPointIdForVirtual(t *testing.T) 
 }
 
 func uint32Ptr(value uint32) *uint32 { return &value }
+
+// programmingMonitorExtCore thêm bố cục slot `ext` của `plc_shm` vào core giả.
+type programmingMonitorExtCore struct {
+	*programmingMonitorCore
+	slots []ExtSlotRef
+}
+
+func (c *programmingMonitorExtCore) ReadExtCatalog() ([]ExtSlotRef, error) { return c.slots, nil }
+
+// F05 (EV-PROG-FBD-ST-MB-20260925): binding WRITE tới DO Modbus phải có
+// `programValue` = lệnh Core đặt trong slot `ext`, để monitor tách được "Program
+// ra lệnh gì" khỏi "coil đọc lại là gì". Slot chưa từng có lệnh thì để null.
+func TestProgrammingMonitorExposesExtCommandAsProgramValue(t *testing.T) {
+	app, _ := newTestAppWithAdmin(t)
+	app.core = &programmingMonitorExtCore{
+		programmingMonitorCore: &programmingMonitorCore{
+			pointsCore: &pointsCore{points: []PointDTO{
+				{ID: "CK50804-DO2", Kind: "modbus_rtu", BusID: 1, SlaveAddr: 4, Value: 0, Quality: "good", Source: "modbus_rtu", UpdatedAt: "2026-09-25T17:14:40Z"},
+				{ID: "CK50804-DO4", Kind: "modbus_rtu", BusID: 1, SlaveAddr: 4, Value: 0, Quality: "good", Source: "modbus_rtu", UpdatedAt: "2026-09-25T17:14:40Z"},
+			}},
+			snapshot: RuntimePointSnapshot{SnapshotObservedAtUTC: "2026-09-25T17:14:41Z"},
+		},
+		slots: []ExtSlotRef{
+			{ExtIndex: 2, PointID: "CK50804-DO2", Writable: true, Online: true, Setpoint: 1, Dirty: true},
+			{ExtIndex: 4, PointID: "CK50804-DO4", Writable: true, Online: true, Setpoint: 0, Dirty: false},
+		},
+	}
+	truth, err := app.programmingPointCatalog().ReadProgrammingMonitorSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("ReadProgrammingMonitorSnapshot: %v", err)
+	}
+	byID := map[string]int{}
+	for index, point := range truth.Points {
+		byID[point.PointID] = index
+	}
+	commanded := truth.Points[byID["CK50804-DO2"]]
+	if commanded.ProgramValue == nil || *commanded.ProgramValue != 1 || commanded.ActualValue != 0 {
+		t.Fatalf("DO2 phải có programValue=1 (lệnh) cạnh actualValue=0 (readback): %+v", commanded)
+	}
+	if idle := truth.Points[byID["CK50804-DO4"]]; idle.ProgramValue != nil {
+		t.Fatalf("slot chưa có lệnh không được bịa programValue: %+v", idle)
+	}
+}

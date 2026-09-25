@@ -216,6 +216,7 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 	if adapter.app.overrides != nil {
 		trackedOverrides = adapter.app.overrides.Snapshot()
 	}
+	extCommands := adapter.extCommandsByPoint()
 	for _, point := range points {
 		category, deviceID := pointCatalogCategory(point)
 		// Cùng bug F-PROG-ASBUILT-014 lộ lại ở Monitor: Binding trong Revision
@@ -240,6 +241,14 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 				truth.Unit = sample.Unit
 			}
 		}
+		if command, exists := extCommands[strings.ToUpper(point.ID)]; category == "MB_RTU" && exists {
+			// F05 (EV-PROG-FBD-ST-MB-20260925): điểm Modbus không có dòng trong
+			// snapshot Core, nên `programValue` của binding WRITE luôn null — không
+			// tách được "Program đã ra lệnh gì" khỏi "coil đọc lại là gì". Lệnh nằm
+			// ngay trong slot `ext` của `plc_shm`.
+			setpoint := command
+			truth.ProgramValue = &setpoint
+		}
 		if point.OverrideExpiresInS != nil {
 			remaining := int64(*point.OverrideExpiresInS)
 			truth.OverrideRemainingS = &remaining
@@ -252,6 +261,27 @@ func (adapter programmingPointCatalogAdapter) ReadProgrammingMonitorSnapshot(ctx
 		result.Points = append(result.Points, truth)
 	}
 	return result, nil
+}
+
+// extCommandsByPoint trả lệnh ghi hiện hành của mọi slot `ext` ĐÃ có lệnh, khoá
+// theo `point_id` viết hoa. Không đọc được SHM thì trả rỗng: thiếu `programValue`
+// là câu trả lời đúng, bịa 0 thì không.
+func (adapter programmingPointCatalogAdapter) extCommandsByPoint() map[string]float64 {
+	reader, ok := adapter.app.core.(extCatalogReader)
+	if !ok {
+		return nil
+	}
+	slots, err := reader.ReadExtCatalog()
+	if err != nil {
+		return nil
+	}
+	commands := make(map[string]float64, len(slots))
+	for _, slot := range slots {
+		if slot.Dirty && slot.PointID != "" {
+			commands[strings.ToUpper(slot.PointID)] = slot.Setpoint
+		}
+	}
+	return commands
 }
 
 // ListActiveOverrides — TASK-PROG-504. Chỉ những Point đang thật sự bị force

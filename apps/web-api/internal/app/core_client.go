@@ -987,6 +987,7 @@ const (
 	offExtBusID         = 60
 	offExtOnline        = 61
 	offExtWritable      = 62
+	offExtDirty         = 63
 	offExtCount         = offExt + kxNEXT*kxExtPointSize
 
 	// kx_point_t field offsets within a point (76 bytes):
@@ -1284,6 +1285,10 @@ type ExtSlotRef struct {
 	PointID  string
 	Writable bool
 	Online   bool
+	// Setpoint/Dirty — lệnh ghi Core đặt vào slot (`PointWriter`). `Dirty=false`
+	// nghĩa là chưa từng có lệnh, và khi đó Setpoint không mang nghĩa gì.
+	Setpoint float64
+	Dirty    bool
 }
 
 // ReadExtCatalog trả bản đồ slot `ext` ĐANG chạy, đọc thẳng từ `plc_shm`.
@@ -1323,6 +1328,8 @@ func (c *CoreClient) ReadExtCatalog() ([]ExtSlotRef, error) {
 			PointID:  string(nameBytes[:end]),
 			Writable: data[base+offExtWritable] == 1,
 			Online:   data[base+offExtOnline] == 1,
+			Setpoint: math.Float64frombits(binary.LittleEndian.Uint64(data[base+offExtSetpoint : base+offExtSetpoint+8])),
+			Dirty:    data[base+offExtDirty] == 1,
 		})
 	}
 	return out, nil

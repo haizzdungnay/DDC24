@@ -63,6 +63,9 @@ type RuntimeIntentServiceOptions struct {
 	ControllerID string
 	Now          func() time.Time
 	NewID        func() string
+	// LivePrograms đọc trạng thái SỐNG của từng Program ở Core (snapshot
+	// monitor). Nil ⇒ vòng reconcile chỉ replay hàng UNKNOWN như trước.
+	LivePrograms func(context.Context) (map[string]ProgramMetricsView, bool)
 }
 
 type RuntimeIntentService struct {
@@ -71,6 +74,7 @@ type RuntimeIntentService struct {
 	controllerID string
 	now          func() time.Time
 	newID        func() string
+	livePrograms func(context.Context) (map[string]ProgramMetricsView, bool)
 	intentMu     sync.Mutex
 	lifecycleMu  sync.Mutex
 	cancel       context.CancelFunc
@@ -110,7 +114,7 @@ func NewRuntimeIntentService(options RuntimeIntentServiceOptions) (*RuntimeInten
 	}
 	service := &RuntimeIntentService{store: options.Store, runtime: options.Runtime,
 		controllerID: options.ControllerID, now: options.Now, newID: options.NewID,
-		logf: log.Printf}
+		livePrograms: options.LivePrograms, logf: log.Printf}
 	service.reconcileOnce = service.ReconcileOnce
 	return service, nil
 }
@@ -338,6 +342,13 @@ func isPowerOfTwo(n int) bool {
 // ở tick sau. Hàm public để target harness có thể chứng minh restart mà không
 // phải chờ sleep.
 func (s *RuntimeIntentService) ReconcileOnce(ctx context.Context) (int, error) {
+	// Đọc snapshot NGOÀI khoá: một lần đọc monitor có thể mất tới một scan của
+	// Core, và giữ `intentMu` suốt quãng đó sẽ chặn mọi PUT intent của người dùng.
+	var live map[string]ProgramMetricsView
+	hasLive := false
+	if s.livePrograms != nil {
+		live, hasLive = s.livePrograms(ctx)
+	}
 	s.intentMu.Lock()
 	defer s.intentMu.Unlock()
 	intents, err := s.store.ListAllProgramRuntimeIntents(ctx)
@@ -346,7 +357,19 @@ func (s *RuntimeIntentService) ReconcileOnce(ctx context.Context) (int, error) {
 	}
 	replayed := 0
 	for _, intent := range intents {
-		if intent.RuntimeState != "UNKNOWN" {
+		metrics, inLive := live[intent.ProgramID]
+		if hasLive && !inLive {
+			// F07 (EV-PROG-FBD-ST-MB-20260925): Program không thuộc gói Core đang
+			// chạy. Đẩy intent xuống chỉ nhận `IPC-UNKNOWN-INSTANCE`, và bản cũ ghi
+			// đó thành FAULTED — một Program chưa từng chạy hiện là "hỏng". Intent
+			// vẫn được giữ và sẽ được replay khi Program quay lại gói.
+			continue
+		}
+		// F04: sau Commission/Restore, hoặc sau khi Core khởi động lại, Core
+		// nạp Program ở DISABLED trong khi intent vẫn là `true` và read-back cũ
+		// vẫn là RUNNING — hàng không phải UNKNOWN nên bản cũ không bao giờ
+		// replay. Đối chiếu MỨC với trạng thái sống thay vì chỉ tin read-back.
+		if intent.RuntimeState != "UNKNOWN" && !(hasLive && intentDriftedFromCore(intent, metrics)) {
 			continue
 		}
 		command := SetProgramIntentCommand{SchemaVersion: "1.0", ProjectID: intent.ProjectID,
@@ -399,7 +422,27 @@ func (s *RuntimeIntentService) pushToCore(ctx context.Context, command SetProgra
 			state = "DISABLED"
 		}
 	case coreipc.ResultRejected:
+		// Instance không có trong gói đang chạy là "chưa triển khai", không phải
+		// Program hỏng (F07): giữ UNKNOWN để hàng được replay khi Program quay lại.
+		if response.DetailCode != nil && *response.DetailCode == "IPC-UNKNOWN-INSTANCE" {
+			return
+		}
 		state = "FAULTED"
+	}
+}
+
+// intentDriftedFromCore — Core đang ở trạng thái NGHỈ ngược với intent. Chỉ
+// các trạng thái mà lệnh Enable/Disable của Core nhận sạch mới được replay;
+// FAULTED/ROLLED_BACK/REJECTED là quyết định của người vận hành, tự bật lại là
+// tự khởi động lại vô hạn một Program lỗi.
+func intentDriftedFromCore(intent programmingstore.ProgramRuntimeIntent, metrics ProgramMetricsView) bool {
+	switch metrics.State {
+	case "RUNNING", "WAITING":
+		return !intent.DesiredEnabled
+	case "DISABLED", "STOPPED", "ACTIVE":
+		return intent.DesiredEnabled
+	default:
+		return false
 	}
 }
 

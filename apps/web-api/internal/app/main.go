@@ -203,6 +203,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 				Store:        store,
 				Runtime:      programmingcoreipc.NewClient(cfg.ProgrammingSocket, cfg.ProgrammingCoreUID),
 				ControllerID: cfg.ProgrammingTargetID,
+				LivePrograms: runtimeService.LiveProgramStates,
 			})
 		if intentErr != nil {
 			_ = store.Close()
