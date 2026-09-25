@@ -427,12 +427,17 @@ bool BusWorker::enqueue_write(const PendingWrite& w)
 {
     std::lock_guard<std::mutex> lock(queue_mu_);
     for (auto& pending : pending_writes_) {
-        if (!pending.submitted && pending.slave_addr == w.slave_addr &&
+        /* `MBA-FW-04`: KHÔNG coalesce vào mục đang bay — xem `in_flight`. Lệnh
+         * mới đi thành mục riêng, đứng SAU mục đang bay trong hàng đợi, nên thứ
+         * tự trên dây vẫn là cũ rồi mới. */
+        if (!pending.submitted && !pending.in_flight && pending.slave_addr == w.slave_addr &&
             pending.fc == w.fc && pending.reg_addr == w.reg_addr) {
             /* Coalesce: setpoint mới thay setpoint cũ chưa gửi. Giá trị cũ
              * không còn ai muốn ghi, giữ lại nó chỉ để phát ra dây là sai. */
             const std::string superseded = pending.request_id;
             pending = w;
+            pending.seq       = next_write_seq_++;
+            pending.in_flight = false;
             if (!superseded.empty() && superseded != w.request_id)
                 emit_result(superseded, "rejected", "superseded_by_newer_setpoint", 0);
             return true;
@@ -446,6 +451,8 @@ bool BusWorker::enqueue_write(const PendingWrite& w)
         return false;
     }
     pending_writes_.push_back(w);
+    pending_writes_.back().seq       = next_write_seq_++;
+    pending_writes_.back().in_flight = false;
     return true;
 }
 
@@ -491,8 +498,6 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
     modbus_set_response_timeout(ctx, sc.timeout_ms / 1000u, (sc.timeout_ms % 1000u) * 1000u);
 
     bool slave_ok = true;
-    uint8_t exception_code = 0;
-    kx_ext_quality_reason_t fail_reason = KX_EXTR_TIMEOUT;
 
     /* `ISS-PIO-22` — chỉ đọc block ĐẾN HẠN theo nhóm poll của chính nó.
      *
@@ -510,6 +515,9 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
         std::vector<uint8_t> bits;
         if (block.fc == 1 || block.fc == 2) bits.assign(block.count, 0u);
         int rc = -1;
+        /* Theo TỪNG block: lý do lỗi của block trước không được rò sang block sau. */
+        uint8_t exception_code = 0;
+        kx_ext_quality_reason_t fail_reason = KX_EXTR_TIMEOUT;
 
         /* D-05: phát lại THẬT khi giao dịch lỗi. `sc.retry` là số lần phát LẠI,
          * nên tổng số lần phát là retry + 1. Nhiễu thoáng qua trên RS-485 là
@@ -548,15 +556,8 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
                 frame.elapsed_us = elapsed_us;
                 frame.attempt = static_cast<uint8_t>(attempt);
                 frame.ok = rc >= 0;
-                const char* reason = "ok";
-                if (rc < 0) {
-                    if (saved_errno == ETIMEDOUT) reason = "timeout";
-#ifdef EMBBADCRC
-                    else if (saved_errno == EMBBADCRC) reason = "crc";
-#endif
-                    else reason = "error";
-                }
-                std::snprintf(frame.reason, sizeof(frame.reason), "%s", reason);
+                std::snprintf(frame.reason, sizeof(frame.reason), "%s",
+                              frame_reason(rc, saved_errno));
                 metrics.frames().record(frame);
             }
 
@@ -580,6 +581,11 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
                 exception_code = static_cast<uint8_t>(saved_errno - MODBUS_ENOBASE);
                 fail_reason = KX_EXTR_DEVICE_EXCEPTION;
                 metrics.record_exception(binding.global_idx, exception_code);
+                /* 0x01 ILLEGAL FUNCTION / 0x02 ILLEGAL DATA ADDRESS / 0x03
+                 * ILLEGAL DATA VALUE là từ chối XÁC ĐỊNH: phát lại chỉ tốn thêm
+                 * dây và cho đúng câu trả lời cũ — dừng thử lại ngay. BUSY (0x06),
+                 * ACKNOWLEDGE (0x05)… là thoáng qua nên vẫn được phát lại. */
+                if (exception_code >= 0x01 && exception_code <= 0x03) break;
             }
             if (errno_is_port_failure(saved_errno)) {
                 fail_reason = KX_EXTR_PORT_DOWN;
@@ -598,6 +604,38 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
             }
         }
 
+        if (rc < 0 && fail_reason == KX_EXTR_DEVICE_EXCEPTION) {
+            /* `MBA-FW-05` (audit Modbus 2026-09-25): exception là lỗi của BLOCK.
+             *
+             * Bản trước đi chung nhánh với timeout: cả DẢI slot của slave bị hạ
+             * STALE rồi BAD, lượt poll bị tính là lỗi, và sau `offline_after_errors`
+             * lượt thì CẢ thiết bị OFFLINE — chỉ vì MỘT Point khai sai địa chỉ.
+             * Người vận hành thấy cả tủ mất liên lạc trong khi dây và thiết bị
+             * đều tốt; các Point đúng cũng mất giá trị theo. FW_SOM_DESIGN §6.1
+             * yêu cầu exception ⇒ BAD ở cấp Point, không phải OFFLINE thiết bị.
+             *
+             * Nay: chỉ các Point của block này mang BAD/DEVICE_EXCEPTION (kèm mã
+             * gốc), các block khác vẫn được đọc, và thiết bị vẫn là ONLINE vì nó
+             * đang trả lời. */
+            if (!block.exception_active || block.exception_code != exception_code) {
+                std::fprintf(stderr, "WARN  modbus.block_exception bus=%u slave=%s addr=%u fc=%u"
+                             " reg=%u count=%u exception=0x%02x — chỉ các Point của block này BAD,"
+                             " thiết bị vẫn ONLINE\n",
+                             bus_.id, sc.name.c_str(), sc.addr, block.fc, block.addr, block.count,
+                             exception_code);
+            }
+            block.exception_active = true;
+            block.exception_code   = exception_code;
+            for (const auto& member : block.members) {
+                const uint16_t slots = ext_slots_for_point(*member.point);
+                if (slots == 0) continue;
+                cache.mark_range_quality(member.ext_index, slots, KX_EXTQ_BAD,
+                                         KX_EXTR_DEVICE_EXCEPTION, true);
+                cache.mark_range_exception(member.ext_index, slots, exception_code);
+            }
+            continue;
+        }
+
         if (rc < 0) {
             slave_ok = false;
             /* Hết lượt phát lại ⇒ tính là MỘT lượt poll thất bại.
@@ -614,9 +652,14 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
                 cache.mark_range_quality(binding.ext_base, binding.ext_count,
                                          KX_EXTQ_STALE, fail_reason, true);
             }
-            if (exception_code)
-                cache.mark_range_exception(binding.ext_base, binding.ext_count, exception_code);
             break;
+        }
+
+        if (block.exception_active) {
+            std::fprintf(stderr, "INFO  modbus.block_exception_cleared bus=%u slave=%s fc=%u reg=%u\n",
+                         bus_.id, sc.name.c_str(), block.fc, block.addr);
+            block.exception_active = false;
+            block.exception_code   = 0;
         }
 
         /* Decode từng điểm trong khối đã gộp. */
@@ -678,7 +721,7 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
         /* Chỉ ghi mốc "đọc thật thành công" cho các block VỪA đọc trong lượt
          * này; block chưa đến hạn giữ nguyên mốc cũ và tiếp tục già đi. */
         for (auto& block : binding.blocks) {
-            if (block.last_poll_ms == now_ms) block.last_ok_ms = now_ms;
+            if (block.last_poll_ms == now_ms && !block.exception_active) block.last_ok_ms = now_ms;
         }
         on_poll_ok(&state, now_ms);
         metrics.update(binding.global_idx, true, now_ms, sc.offline_after_errors);
@@ -719,6 +762,8 @@ void BusWorker::sweep_stale_blocks(uint64_t now_ms, ExtCache& cache)
              * và ghi đè bằng STALE sẽ làm mất lý do cụ thể hơn. */
             if (block.last_ok_ms == 0) continue;
             if (now_ms < block.last_ok_ms) continue; /* đồng hồ lùi */
+            /* BAD/DEVICE_EXCEPTION là sự thật cụ thể hơn STALE/TIMEOUT. */
+            if (block.exception_active) continue;
 
             const uint32_t interval = group_interval_ms(block.poll_group, sc.poll_ms,
                                                         sc.poll_fast_ms, sc.poll_slow_ms);
@@ -744,6 +789,23 @@ void BusWorker::note_dropped_write_slot(uint16_t ext_idx)
     dropped_write_slots_.push_back(ext_idx);
 }
 
+void BusWorker::record_write_frame(const PendingWrite& w, uint8_t slave, int rc, int saved_errno,
+                                   uint32_t elapsed_us, FieldbusMetrics& metrics)
+{
+    FrameRecord frame;
+    frame.at_ms      = frame_wall_clock_ms();
+    frame.bus        = bus_.id;
+    frame.slave      = slave;
+    frame.fc         = w.fc;
+    frame.addr       = w.reg_addr;
+    frame.count      = (w.fc == 16) ? 2u : 1u;
+    frame.elapsed_us = elapsed_us;
+    frame.attempt    = w.attempts;
+    frame.ok         = rc >= 0;
+    std::snprintf(frame.reason, sizeof(frame.reason), "%s", frame_reason(rc, saved_errno));
+    metrics.frames().record(frame);
+}
+
 void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metrics)
 {
 #ifndef MKDDC_ENABLE_MODBUS
@@ -760,7 +822,14 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
     std::vector<PendingWrite> batch;
     {
         std::lock_guard<std::mutex> lock(queue_mu_);
-        batch = pending_writes_;
+        /* `MBA-FW-04`: chỉ chụp mục của slave này, và ĐÁNH DẤU chúng đang bay
+         * ngay trong vùng khoá. Từ đây tới lúc hợp nhất, `enqueue_write` không
+         * được ghi đè chúng — lệnh mới cho cùng register thành mục riêng. */
+        for (auto& live : pending_writes_) {
+            if (live.submitted || live.slave_addr != sc.addr) continue;
+            live.in_flight = true;
+            batch.push_back(live);
+        }
     }
 
     for (auto& w : batch) {
@@ -831,10 +900,11 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
             else /* fc==16 */    rc = modbus_write_registers(ctx, w.reg_addr, 2, regs);
         }
         const int saved_errno = errno;
-        metrics.record_bus_transaction(
-            bus_.id, static_cast<uint32_t>((monotonic_ns() - t0) / 1000), rc >= 0);
+        const uint32_t write_elapsed_us = static_cast<uint32_t>((monotonic_ns() - t0) / 1000);
+        metrics.record_bus_transaction(bus_.id, write_elapsed_us, rc >= 0);
 
         w.attempts++;
+        record_write_frame(w, sc.addr, rc, saved_errno, write_elapsed_us, metrics);
 
         if (rc < 0) {
             metrics.record_write_failed(binding.global_idx);
@@ -935,17 +1005,38 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
 
     /* Hợp nhất lại: chép trạng thái đã xử lý về hàng đợi thật rồi xoá phần đã
      * xong. Request mới do control thread thêm trong lúc flush KHÔNG bị mất vì
-     * chúng không nằm trong `batch` và được giữ nguyên. */
+     * chúng không nằm trong `batch` và được giữ nguyên.
+     *
+     * `MBA-FW-04`: khớp theo `seq`, KHÔNG theo `(slave, fc, reg, request_id)`.
+     * Khoá cũ trùng nhau cho hai lệnh ghi cùng register trên đường cờ `dirty`
+     * (request_id rỗng), nên lệnh MỚI thêm trong lúc flush bị đánh "đã gửi" và
+     * xoá — setpoint cuối cùng của một chuỗi thay đổi biến mất im lặng, còn dedup
+     * `last_written_` ở `ModbusMaster` chặn luôn việc phát lại nó. */
+    std::vector<std::string> superseded_ids;
     {
         std::lock_guard<std::mutex> lock(queue_mu_);
         for (const auto& done : batch) {
             for (auto& live : pending_writes_) {
-                if (live.submitted) continue;
-                if (live.slave_addr == done.slave_addr && live.fc == done.fc &&
-                    live.reg_addr == done.reg_addr && live.request_id == done.request_id) {
-                    live.attempts    = done.attempts;
-                    live.submitted   = done.submitted;
-                    live.enqueued_ms = done.enqueued_ms;
+                if (live.seq != done.seq) continue;
+                live.attempts    = done.attempts;
+                live.submitted   = done.submitted;
+                live.enqueued_ms = done.enqueued_ms;
+                live.in_flight   = false;
+                break;
+            }
+        }
+        /* Mục phát lỗi còn chờ thử lại mà đã có lệnh MỚI HƠN cho cùng register ⇒
+         * bỏ mục cũ: phát lại nó sau đó chỉ để lệnh mới ghi đè ngay là vô nghĩa,
+         * và nếu lệnh mới lỗi thì thiết bị sẽ bị kéo về giá trị cũ. */
+        for (auto& old_write : pending_writes_) {
+            if (old_write.submitted || old_write.in_flight) continue;
+            for (const auto& newer : pending_writes_) {
+                if (newer.submitted || newer.seq <= old_write.seq) continue;
+                if (newer.slave_addr == old_write.slave_addr && newer.fc == old_write.fc &&
+                    newer.reg_addr == old_write.reg_addr) {
+                    old_write.submitted = true;
+                    if (!old_write.request_id.empty() && old_write.request_id != newer.request_id)
+                        superseded_ids.push_back(old_write.request_id);
                     break;
                 }
             }
@@ -956,6 +1047,8 @@ void BusWorker::flush_pending(size_t i, uint64_t now_ms, FieldbusMetrics& metric
             else ++it;
         }
     }
+    for (const auto& id : superseded_ids)
+        emit_result(id, "rejected", "superseded_by_newer_setpoint", 0);
 #endif
 }
 
