@@ -174,6 +174,31 @@ instance publish thành công trở lại (restart sau `reset_fault`/`start`). I
 CHƯA từng publish (`output_commit_now_ns == 0`) không bị rút và không vào sổ
 candidate.
 
+**Output I/O mở rộng (EXT: Modbus RTU/TCP) khi bị rút — chủ sở hữu chốt
+2026-09-26 (`EV-PROG-FBD-ST-MB-20260925` F06).** EXT không đi qua
+`PriorityResolver`, nên trước quyết định này "withdraw" không làm gì cả: coil
+Modbus giữ giá trị cuối vô thời hạn. Trên Foxlinx, DO2 kẹt ở 1 suốt 18 phút sau
+Disable. Chính sách mới:
+
+- Instance **đã từng publish** trong đời tiến trình hiện tại bị rút (DISABLED/
+  STOPPED, WAITING vì signal bị chặn, hoặc lệnh cũ quá `holdTtl`): Core gọi
+  `PointWriter::release_ext_command()`. Hàm này nhả source trong point table và
+  đặt slot `ext` về `dirty=0` kèm một `ext_cmd_seq` MỚI.
+- iobus coi `dirty=0` + seq mới là sự kiện NHẢ. Nó ghi `safe_value` của điểm
+  (BE sinh `safe_value` vào device profile, bool đổi thành 0/1). Điểm không
+  khai `safe_value` thì **giữ giá trị cuối** và log
+  `WARN modbus_master.ext_release_hold` đúng một lần mỗi lần nhả, không bịa
+  giá trị 0.
+- Instance **chưa từng publish** (ví dụ mọi Program lúc Core khởi động ở
+  DISABLED) KHÔNG nhả EXT. Nếu nhả ở đó, mọi DO Modbus sẽ bị giật về safe ở
+  mỗi lần Core khởi động lại, trước khi intent kịp bật Program trở lại.
+- iobus khởi động lại lấy mọi seq đang có làm mốc, kể cả slot đang ở trạng
+  thái nhả, nên không phát lại một lần nhả cũ.
+- Chưa thuộc phạm vi: Program bị **bỏ khỏi gói** bởi Commission/Restore (khác
+  với Disable) vẫn để EXT ở giá trị cuối. Operator đã ack
+  `outputMappingChanges`/`writableOutputsAffected` ở bước Commission; muốn
+  đưa trường hợp này về safe thì cần một quyết định riêng.
+
 ## 7. PID và anti-windup
 
 PID state thuộc instance, có stable ID/layout version và có thể RETAIN theo policy.
