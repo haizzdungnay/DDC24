@@ -412,7 +412,8 @@ bool st_apply_all_outputs(StScheduler* scheduler, PriorityResolver* resolver, Po
     return st_apply_all_outputs(scheduler, resolver, &writer, stats);
 }
 
-bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityResolver* resolver)
+bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityResolver* resolver,
+                                  PointWriter* writer)
 {
     if (!resolver) return false;
     const StLoadedProgram* program = instance.runtime.program();
@@ -425,7 +426,14 @@ bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityRes
         switch (id.kind) {
         case PointKind::AO: resolver->release_ao(PRIO_LOCAL_LOGIC, id.idx); break;
         case PointKind::BO: resolver->release_do(PRIO_LOCAL_LOGIC, id.idx); break;
-        default: break; /* AV/BV/MSV/EXT không qua PriorityResolver (§6) */
+        case PointKind::EXT:
+            /* F06: EXT không qua PriorityResolver nên "rút" trước đây là không
+             * làm gì, và coil Modbus giữ giá trị cuối vô hạn. Chỉ nhả khi
+             * instance đã thật sự publish (xem st_withdraw_stale_outputs). */
+            if (writer != nullptr && instance.output_commit_now_ns > 0)
+                (void)writer->release_ext_command(id);
+            break;
+        default: break; /* AV/BV/MSV không qua PriorityResolver (§6) */
         }
     }
     return true;
@@ -461,6 +469,14 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
                                    uint64_t hold_ttl_ns,
                                    programming::ProgramCandidateRegistry* registry,
                                    StIoBridgeStats* stats)
+{
+    return st_withdraw_stale_outputs(scheduler, resolver, hold_ttl_ns, registry, nullptr, stats);
+}
+
+uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
+                                   uint64_t hold_ttl_ns,
+                                   programming::ProgramCandidateRegistry* registry,
+                                   PointWriter* writer, StIoBridgeStats* stats)
 {
     if (!scheduler || !resolver) return 0;
     const uint64_t generation = scheduler->base_step_count();
@@ -508,7 +524,7 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
             }
             if (!should_withdraw) continue;
 
-            if (st_withdraw_instance_outputs(p, resolver)) {
+            if (st_withdraw_instance_outputs(p, resolver, writer)) {
                 p.outputs_withdrawn = true;
                 withdrawn++;
                 /* Ghi LÝ DO, không chỉ ghi "đã rút": người vận hành cần phân

@@ -290,6 +290,11 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                     if (is32 && k + 1 >= pt.count) break;
 
                     bool eligible = pt.writable && ext_idx < snapshot.ext_count;
+                    /* F06 (EV-PROG-FBD-ST-MB-20260925): `dirty=0` đi cùng một
+                     * `ext_cmd_seq` MỚI là Core NHẢ quyền ghi (Program Disable/
+                     * Stop, hoặc lệnh cũ quá hold TTL). Chủ sở hữu chốt
+                     * 2026-09-26: khi đó thiết bị về `safe_value` của điểm. */
+                    bool release = false;
                     if (eligible) {
                         const kx_ext_point_t& slot = snapshot.ext[ext_idx];
                         /* `MBA-FW-02` — DANH TÍNH TRƯỚC, GIÁ TRỊ SAU. Slot `ext_idx`
@@ -307,15 +312,30 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                             last_command_seq_[ext_idx] = snapshot.ext_cmd_seq[ext_idx];
                             if (slot.dirty) identity_skipped++;
                             eligible = false;
-                        } else if (!slot.dirty) {
-                            eligible = false;
                         } else if (baseline) {
+                            /* Mốc cho CẢ slot đang nhả: iobus khởi động lại
+                             * không được đọc một lần nhả cũ thành lệnh mới rồi
+                             * ghi `safe_value` lên thiết bị đang chạy. */
                             last_command_seq_[ext_idx] = snapshot.ext_cmd_seq[ext_idx];
-                            seeded++;
+                            if (slot.dirty) seeded++;
                             eligible = false;
+                        } else if (!slot.dirty) {
+                            release = true;
                         }
                     }
 
+                    if (eligible && release && snapshot.ext_cmd_seq[ext_idx] != 0 &&
+                        snapshot.ext_cmd_seq[ext_idx] != last_command_seq_[ext_idx] &&
+                        !pt.has_safe_value) {
+                        /* Không khai `safe_value` ⇒ giữ giá trị cuối, nói ra
+                         * đúng một lần cho mỗi lần nhả. */
+                        std::fprintf(stderr, "WARN  modbus_master.ext_release_hold slave=%s point=%s"
+                                     " — Program nhả quyền ghi nhưng điểm không khai safe_value;"
+                                     " thiết bị GIỮ giá trị cuối\n",
+                                     sc.name.c_str(), pt.name.c_str());
+                        last_command_seq_[ext_idx] = snapshot.ext_cmd_seq[ext_idx];
+                        eligible = false;
+                    }
                     if (eligible && snapshot.ext_cmd_seq[ext_idx] != 0 &&
                         snapshot.ext_cmd_seq[ext_idx] != last_command_seq_[ext_idx]) {
                         uint8_t wfc = 0;
@@ -331,7 +351,8 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                             w.slave_addr  = sc.addr;
                             w.fc          = wfc;
                             w.reg_addr    = static_cast<uint16_t>(pt.addr + k);
-                            w.value       = static_cast<float>(snapshot.ext[ext_idx].setpoint);
+                            w.value       = static_cast<float>(release ? pt.safe_value
+                                                                       : snapshot.ext[ext_idx].setpoint);
                             w.type        = pt.type;
                             w.byte_order  = pt.byte_order;
                             w.scale       = pt.scale;
@@ -339,6 +360,10 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                             w.enqueued_ms = now_ms;
                             if (worker->enqueue_write(w)) {
                                 last_command_seq_[ext_idx] = snapshot.ext_cmd_seq[ext_idx];
+                                if (release)
+                                    std::fprintf(stderr, "INFO  modbus_master.ext_release_safe slave=%s"
+                                                 " point=%s safe_value=%g\n",
+                                                 sc.name.c_str(), pt.name.c_str(), pt.safe_value);
                             }
                         }
                     }

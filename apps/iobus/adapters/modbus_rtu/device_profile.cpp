@@ -269,6 +269,22 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
         pt->has_max   = true;
         pt->max_value = limit;
     }
+    /* F06: `safe_value` chỉ có nghĩa với điểm ghi được; BE ghi dạng số (bool
+     * đã đổi sang 0/1), nhận thêm bool để profile viết tay vẫn đúng. */
+    double safe = 0.0;
+    bool safe_bool = false;
+    if (jget_num(obj, "safe_value", &safe) && std::isfinite(safe)) {
+        pt->has_safe_value = true;
+        pt->safe_value     = safe;
+    } else if (jget_bool(obj, "safe_value", &safe_bool)) {
+        pt->has_safe_value = true;
+        pt->safe_value     = safe_bool ? 1.0 : 0.0;
+    }
+    if (pt->has_safe_value && !pt->writable) {
+        std::fprintf(stderr, "WARN  profile.safe_value_ignored name=%s — điểm read-only\n",
+                     pt->name.c_str());
+        pt->has_safe_value = false;
+    }
     if (pt->has_min && pt->has_max && pt->min_value > pt->max_value) {
         std::fprintf(stderr, "ERROR profile.min_gt_max name=%s min=%g max=%g — skip\n",
                      pt->name.c_str(), pt->min_value, pt->max_value);

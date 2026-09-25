@@ -223,7 +223,7 @@ void ScanLoop::step()
          * vừa publish thành công đã reset outputs_withdrawn ở trên, nên
          * instance vẫn đang chạy tốt không bị rút nhầm. */
         st_withdraw_stale_outputs(d_.st_sched, d_.resolver, d_.program_hold_ttl_ns,
-                                  d_.candidate_registry, &st_io_stats_);
+                                  d_.candidate_registry, &program_writer, &st_io_stats_);
         /* Lấy mẫu SAU khi Program đã chạy và output đã publish trong chu kỳ này:
          * mẫu phải là trạng thái đã ổn định của chu kỳ, không phải trạng thái
          * giữa chừng. */
