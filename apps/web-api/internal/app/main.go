@@ -448,7 +448,9 @@ func Main() {
 		}
 		return
 	}
-	logger := log.New(os.Stdout, "mkddc-web ", log.LstdFlags|log.LUTC)
+	// F08: mức log phải tới được journald (`journalctl -p warning`).
+	log.SetOutput(journalAwareOutput(os.Stderr))
+	logger := log.New(journalAwareOutput(os.Stdout), "mkddc-web ", log.LstdFlags|log.LUTC)
 	cfg, err := LoadConfig()
 	if err != nil {
 		logger.Fatalf("config: %v", err)
