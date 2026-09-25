@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### Added — ADR-061: chu kỳ bộ điều khiển 10 ms và bộ chu kỳ Program mới (2026-09-26)
+
+- Phạm vi: `docs/adr/ADR-061-programming-chu-ky-10ms-bo-chu-ky-moi.md`, `docs/00_governance/DECISIONS.md`, `docs/adr/README.md`.
+- Chủ sở hữu chốt: base step 10 ms, tập chu kỳ {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms, tiêu chí C1–C4 (vi phạm = lỗi), I/O mở rộng có spec riêng. Có 13 quyết định kỹ thuật triển khai; nền RT (PREEMPT_RT) bị chặn chờ BSP Forlinx.
+
 ### Fixed — Mức log tới được journald; chẩn đoán FBD `ST-IOMAP-001` nói rõ nguyên nhân (F08, F10, 2026-09-26)
 
 - Phạm vi: `apps/core/bootstrap/main.cpp`, `apps/iobus/bootstrap/main.cpp`, `apps/web-api/internal/app/{journal_level.go,journal_level_test.go,main.go}`, `apps/core/application/st/st_io_map.cpp`, `apps/core/application/st/tests/test_st_resolve_io_bindings.cpp`; hồ sơ `EV-PROG-FBD-ST-MB-20260925`.
