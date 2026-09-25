@@ -28,8 +28,16 @@ bool PointWriter::write(PointId id, float value, PointSource source)
     /* Điểm mở rộng chỉ thật sự tới thiết bị khi iobus thấy cờ dirty. Thiếu bước
      * này thì point table đúng mà thiết bị vẫn giữ giá trị cũ — sai lặng lẽ,
      * kiểu sai tệ nhất vì không ai đi tìm. */
+    KX_WRITE_BEGIN(shm_);
+    const bool new_command = source == PointSource::WEB ||
+        !shm_->ext[id.idx].dirty || shm_->ext[id.idx].setpoint != value;
     shm_->ext[id.idx].setpoint = value;
     shm_->ext[id.idx].dirty = 1;
+    if (new_command) {
+        uint32_t& seq = shm_->ext_cmd_seq[id.idx];
+        if (++seq == 0) ++seq; /* 0 dành cho "chưa có lệnh" kể cả khi wrap. */
+    }
+    KX_WRITE_END(shm_);
     return true;
 }
 

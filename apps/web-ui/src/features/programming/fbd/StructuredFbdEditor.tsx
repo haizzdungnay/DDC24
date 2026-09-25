@@ -1,5 +1,5 @@
 import {
-  AlignHorizontalJustifyStart, AlignVerticalJustifyStart, ArrowDown, ArrowUp, BoxSelect,
+  AlignHorizontalJustifyStart, AlignVerticalJustifyStart, BoxSelect,
   CircleDot, LayoutGrid, Plus, Redo2, RotateCcw, SquareDashed, Trash2, Undo2,
 } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'

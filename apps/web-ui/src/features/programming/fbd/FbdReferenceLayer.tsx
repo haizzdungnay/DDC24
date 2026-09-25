@@ -54,7 +54,6 @@ export function FbdReferenceLayer({
   onDoubleClickSink,
   onDoubleClickSource,
   pick,
-  runtime,
 }: FbdReferenceLayerProps) {
   const { sources, sinks, byWireId } = geometry
   if (sources.length === 0 && sinks.length === 0) return null

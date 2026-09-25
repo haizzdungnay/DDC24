@@ -219,7 +219,7 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
 
     // Banner giải thích — không phải banner chặn.
-    await waitFor(() => expect(screen.getByText(/Core đang ở trạng thái an toàn vì chưa có Program nào điều khiển output/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Core đang giữ AO\/DO cục bộ ở safe-state/)).toBeInTheDocument())
     expect(screen.queryByText(/Đưa vào vận hành bị chặn/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeDisabled()
   })

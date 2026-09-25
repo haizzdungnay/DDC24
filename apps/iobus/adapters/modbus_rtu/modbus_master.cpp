@@ -244,22 +244,11 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
     std::lock_guard<std::mutex> lock(workers_mu_);
     if (!shm || workers_.empty()) return;
 
-    /* OD-MBRTU-005: lệnh ghi có vòng đời HỮU HẠN — 30 s TTL hoặc 3 lần phát,
-     * điều kiện nào tới trước thì kết thúc. Khi nó kết thúc mà KHÔNG áp được,
-     * dấu vết chống-phát-trùng phải bị xoá, nếu không lệnh mới mang đúng giá trị
-     * cũ sẽ bị coi là trùng và không bao giờ xuống dây.
-     *
-     * Kịch bản thật: kỹ thuật viên đặt setpoint 50.0 lúc thiết bị mất điện ⇒
-     * lệnh bị bỏ sau TTL. Thiết bị có điện lại, họ đặt LẠI 50.0 — và trước bản
-     * sửa này, `last_written_` vẫn giữ 50.0 nên lệnh thứ hai bị nuốt im lặng.
-     * Người vận hành thấy UI nhận lệnh, thiết bị thì không bao giờ nhận.
-     *
-     * Lưu ý ranh giới: TTL là tuổi thọ của LỆNH ĐANG CHỜ, không phải hẹn giờ
-     * hoàn tác. Slave đã ACK ⇒ lệnh hoàn tất, giá trị nằm lại trên thiết bị. */
+    /* MBA-FW-08: lệnh đã bỏ KHÔNG được tạo lại chỉ vì cờ dirty vẫn là 1.
+     * BusWorker giữ danh sách slot bỏ để chẩn đoán, nhưng chỉ ext_cmd_seq do
+     * Core tăng mới chứng minh có intent mới. Không xoá dấu dedup khi drop. */
     for (auto& worker : workers_) {
-        for (uint16_t ext_idx : worker->take_dropped_write_slots()) {
-            if (ext_idx < KX_N_EXT) has_last_written_[ext_idx] = false;
-        }
+        (void)worker->take_dropped_write_slots();
     }
 
     kx_plc_shm_t snapshot{};
@@ -278,7 +267,7 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
 
     /* `MBA-FW-02`: lượt mốc — xem `write_baseline_pending_`. */
     const bool baseline = write_baseline_pending_;
-    if (baseline) has_last_written_.fill(false);
+    if (baseline) last_command_seq_.fill(0);
     size_t seeded = 0;
     size_t identity_skipped = 0;
 
@@ -313,25 +302,22 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                         char expected[24];
                         ext_point_name(expected, sc, pt, logical);
                         if (std::strncmp(slot.name, expected, sizeof(slot.name)) != 0) {
-                            has_last_written_[ext_idx] = false;
+                            /* Tiêu command mang danh tính Point cũ. Khi tên
+                             * slot khớp lại, sequence cũ vẫn không được ghi. */
+                            last_command_seq_[ext_idx] = snapshot.ext_cmd_seq[ext_idx];
                             if (slot.dirty) identity_skipped++;
                             eligible = false;
                         } else if (!slot.dirty) {
-                            /* Chưa có lệnh nào ⇒ dedup không mang nghĩa gì. */
-                            has_last_written_[ext_idx] = false;
                             eligible = false;
                         } else if (baseline) {
-                            last_written_[ext_idx]     = static_cast<float>(slot.setpoint);
-                            has_last_written_[ext_idx] = true;
+                            last_command_seq_[ext_idx] = snapshot.ext_cmd_seq[ext_idx];
                             seeded++;
                             eligible = false;
                         }
                     }
 
-                    if (eligible &&
-                        (!has_last_written_[ext_idx] ||
-                         last_written_[ext_idx] !=
-                             static_cast<float>(snapshot.ext[ext_idx].setpoint))) {
+                    if (eligible && snapshot.ext_cmd_seq[ext_idx] != 0 &&
+                        snapshot.ext_cmd_seq[ext_idx] != last_command_seq_[ext_idx]) {
                         uint8_t wfc = 0;
                         if (pt.fc == 1) {
                             wfc = 5;   /* coil → FC05 write single coil */
@@ -352,8 +338,7 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                             w.offset      = pt.offset;
                             w.enqueued_ms = now_ms;
                             if (worker->enqueue_write(w)) {
-                                last_written_[ext_idx]     = w.value;
-                                has_last_written_[ext_idx] = true;
+                                last_command_seq_[ext_idx] = snapshot.ext_cmd_seq[ext_idx];
                             }
                         }
                     }

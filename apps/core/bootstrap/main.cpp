@@ -421,6 +421,9 @@ int main(int argc, char** argv)
      * ở `rebuild_signal_bus()` vì scheduler bootstrap chưa hề được gắn bus. */
     StSignalBus programming_signal_bus;
     programming_scheduler.set_signal_bus(&programming_signal_bus);
+    /* F01 (EV-PROG-FBD-ST-MB-20260925): dung sai so hạn của Task không được
+     * vượt nửa base step thật của ScanLoop. */
+    programming_scheduler.set_base_step_ns(base_step_ns);
     /* ADR-052: tập khoá tin cậy phải được đặt TRƯỚC khi bất kỳ artifact nào được
      * nạp — đặt sau nghĩa là gói đầu tiên (thường là gói đang chạy, phục hồi sau
      * reboot) đi qua bằng chính sách cũ. */

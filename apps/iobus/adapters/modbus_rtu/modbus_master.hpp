@@ -141,11 +141,10 @@ private:
     FieldbusConfig           cfg_;
     SnapshotProvenance       prov_{};
     WriteResultSink          result_sink_;
-    /* Dedup setpoint: chỉ ghi khi giá trị THẬT SỰ đổi so với lần ghi trước.
-     * Không có bước này, một node logic giữ nguyên setpoint sẽ phát lệnh ghi ở
-     * mọi vòng poll và chiếm trọn băng thông dây. */
-    std::array<float, KX_N_EXT> last_written_{};
-    std::array<bool, KX_N_EXT>  has_last_written_{};
+    /* Mỗi lệnh từ Core có sequence riêng. Giá trị không đủ làm danh tính:
+     * lệnh cũ bị drop vẫn giữ dirty=1, trong khi lệnh Web mới có thể cùng giá
+     * trị. Chỉ sequence mới phân biệt được hai trường hợp đó. */
+    std::array<uint32_t, KX_N_EXT> last_command_seq_{};
     /* `MBA-FW-02` (audit Modbus 2026-09-25): lượt `drain_ext_writes` ĐẦU TIÊN
      * sau `open`/`apply_config` chỉ GHI NHẬN setpoint đang có trong plc_shm làm
      * mốc, không phát. Cờ `dirty` là cờ MỨC — Core đặt và không ai xoá — nên

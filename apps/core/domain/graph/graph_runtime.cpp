@@ -469,8 +469,13 @@ void GraphRuntime::apply_ext_writes(kx_plc_shm_t* shm) const
         if (n.proto_ext_idx < 0 || n.proto_ext_idx >= shm->ext_count) continue;
         const auto it = n.outputs.find("_setpoint");
         if (it == n.outputs.end()) continue;
-        shm->ext[n.proto_ext_idx].setpoint = it->second;
-        shm->ext[n.proto_ext_idx].dirty    = 1;
+        kx_ext_point_t& slot = shm->ext[n.proto_ext_idx];
+        if (!slot.dirty || slot.setpoint != it->second) {
+            uint32_t& seq = shm->ext_cmd_seq[n.proto_ext_idx];
+            if (++seq == 0) ++seq;
+        }
+        slot.setpoint = it->second;
+        slot.dirty    = 1;
     }
     KX_WRITE_END(shm);
 }

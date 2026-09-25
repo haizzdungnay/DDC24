@@ -48,9 +48,9 @@ export function RuntimeTab({ runtime, status }: { runtime: ProgrammingRuntime | 
         {runtime?.safeState && (
           runtime.safeStateNoControllerOnly ? (
             <div role="status" className="mt-3 rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
-              <p className="font-semibold">PRG-SAFE-ACTIVE — {pick('Chưa có output vật lý do Program điều khiển', 'No physical output is Program-controlled yet')}</p>
+              <p className="font-semibold">PRG-SAFE-ACTIVE — {pick('AO/DO cục bộ đang ở safe-state', 'Local AO/DO is in safe state')}</p>
               <p className="mt-1 text-xs">
-                {pick('Nguyên nhân: chưa Program nào ghi AO/DO vật lý ở mức trên Default — bình thường nếu logic chỉ dùng Virtual Point.', 'Reason: no Program is writing physical AO/DO above the Default level yet — expected if this logic only uses Virtual Points.')} · {pick('Phạm vi', 'Scope')}: {task?.taskId ?? 'Control_Main'} / {pick('các output do Program điều khiển', 'Program-controlled outputs')}.
+                {pick('Nguyên nhân: chưa có nguồn điều khiển AO/DO cục bộ hợp lệ trên mức Default. DO Modbus mở rộng cần kiểm tra riêng.', 'Reason: no valid local AO/DO controller is active above Default. Check extended Modbus DO separately.')} · {pick('Phạm vi', 'Scope')}: {task?.taskId ?? 'Control_Main'} / {pick('AO/DO cục bộ', 'local AO/DO')}.
               </p>
               <p className="mt-1 text-xs">{pick('Đưa vào vận hành và Khôi phục KHÔNG bị khóa vì lý do này.', 'Commission and Restore are NOT locked because of this.')}</p>
             </div>

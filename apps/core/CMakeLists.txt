@@ -365,6 +365,7 @@ if(CORE_BUILD_TESTS)
       application/programming/tests/test_program_error_catalog.cpp
       application/programming/tests/test_programming_sim_session.cpp
       adapters/ipc/tests/test_web_ipc.cpp domain/graph/tests/test_graph_runtime.cpp
+      domain/graph/tests/test_graph_protocol.cpp
       adapters/config/test_safe_state_config.cpp
       adapters/ipc/tests/test_config_reload.cpp adapters/persistence/test_state_snapshot.cpp
       adapters/bacnet/tests/test_bacnet_objtable.cpp

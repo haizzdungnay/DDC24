@@ -445,8 +445,8 @@ export function CheckCommissionPage() {
       {coreReady && runtime.data?.safeState === true && runtime.data.safeStateNoControllerOnly === true && (
         <div role="status" className="rounded-[var(--radius)] border border-[var(--c-warn)] bg-[var(--c-warn-bg)] p-3 text-sm text-[var(--c-warn-fg)]">
           {pick(
-            'Core đang ở trạng thái an toàn vì chưa có Program nào điều khiển output — Đưa vào vận hành Program này sẽ tự giải quyết.',
-            'Core is in safe state because no Program is currently controlling outputs — commissioning this Program will resolve it.'
+            'Core đang giữ AO/DO cục bộ ở safe-state vì chưa có nguồn điều khiển hợp lệ trên mức Default. Vẫn có thể Đưa vào vận hành; kiểm tra DO Modbus mở rộng riêng.',
+            'Core holds local AO/DO in safe state because no valid controller is active above Default. Commission remains available; check extended Modbus DO separately.'
           )}
         </div>
       )}

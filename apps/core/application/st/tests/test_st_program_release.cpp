@@ -268,3 +268,135 @@ TEST(StProgramRelease, TaskInheritedPeriodNeverAccumulatesAMissedChain)
     EXPECT_EQ(program->consecutive_missed_release, 0u);
     EXPECT_EQ(program->missed_release_count, 0u);
 }
+
+/* ===================================================================
+ * F01 (EV-PROG-FBD-ST-MB-20260925) — jitter nhỏ hơn tick neo KHÔNG được làm
+ * mất release.
+ *
+ * Trên bo Foxlinx, hai Program 1000 ms trên base 1000 ms mất 23 và 30 release
+ * trong 144 chu kỳ: release đầu được neo ở thời điểm quét thật (jitter 120 µs),
+ * và mọi tick sau có jitter nhỏ hơn bị so chặt là "chưa tới hạn".
+ * =================================================================== */
+namespace {
+
+constexpr uint64_t kUs = 1000ull;
+
+/* Jitter đo được trên bo (19–127 µs), tick neo là tick có jitter lớn nhất. */
+uint64_t board_jitter_ns(uint64_t tick)
+{
+    static const uint64_t pattern_us[] = {120, 20, 33, 127, 19, 61, 45, 110, 28, 90, 22, 74};
+    return pattern_us[tick % (sizeof(pattern_us) / sizeof(pattern_us[0]))] * kUs;
+}
+
+struct ReleaseTally {
+    uint32_t releases = 0;
+    uint32_t missed = 0;
+};
+
+ReleaseTally run_jittered(StProgramInstance* program, uint32_t task_period_ms, uint64_t ticks,
+                          uint64_t tick_ns)
+{
+    const uint64_t tolerance =
+        st_release_tolerance_ns(static_cast<uint64_t>(task_period_ms) * kMs);
+    ReleaseTally tally;
+    for (uint64_t tick = 0; tick < ticks; ++tick) {
+        const uint64_t now = tick * tick_ns + board_jitter_ns(tick);
+        if (!st_program_due(*program, task_period_ms, now)) continue;
+        ++tally.releases;
+        st_program_mark_released(program, now, tolerance);
+    }
+    tally.missed = program->missed_release_count;
+    return tally;
+}
+
+} // namespace
+
+TEST(StProgramReleaseJitter, JitterBelowAnchorNeverDropsAReleaseAtOneSecond)
+{
+    auto program = make_program("fbd_do", 1000, 0);
+    const ReleaseTally tally = run_jittered(program.get(), 1000, 144, 1000 * kMs);
+    EXPECT_EQ(tally.releases, 144u) << "mỗi tick 1 s phải release đúng một lần";
+    EXPECT_EQ(tally.missed, 0u);
+    EXPECT_EQ(program->consecutive_missed_release, 0u);
+}
+
+/* Bộ chu kỳ chủ sở hữu chốt 2026-09-25 trên base step 10 ms: số release của mỗi
+ * lớp phải đúng lý thuyết, kể cả khi mọi tick mang jitter. */
+TEST(StProgramReleaseJitter, OwnerPeriodSetOnTenMsBaseReleasesExactly)
+{
+    const uint32_t periods[] = {10, 50, 100, 500, 1000, 5000, 10000, 50000};
+    constexpr uint64_t kTicks = 10000;   /* 100 s trên base 10 ms */
+    for (const uint32_t period : periods) {
+        auto program = make_program("p" + std::to_string(period), period, 0);
+        const ReleaseTally tally = run_jittered(program.get(), 10, kTicks, 10 * kMs);
+        const uint32_t expected = static_cast<uint32_t>((kTicks - 1) * 10 / period + 1);
+        EXPECT_EQ(tally.releases, expected) << "period " << period << " ms";
+        EXPECT_EQ(tally.missed, 0u) << "period " << period << " ms";
+    }
+}
+
+/* Dung sai chỉ nuốt jitter, không cho chạy sớm trọn một tick. */
+TEST(StProgramReleaseJitter, ToleranceNeverAdvancesAReleaseByAWholeTick)
+{
+    auto program = make_program("p50", 50, 0);
+    st_program_mark_released(program.get(), 0);
+    ASSERT_EQ(program->next_release_ns, 50 * kMs);
+    /* Task 10 ms: tick 40 ms (sớm đúng một tick) chưa tới hạn; tick 50 ms trừ
+     * jitter âm vẫn là đúng hạn. */
+    EXPECT_FALSE(st_program_due(*program, 10, 40 * kMs + 120 * kUs));
+    EXPECT_TRUE(st_program_due(*program, 10, 50 * kMs - 100 * kUs));
+}
+
+/* Lỡ thật (một tick biến mất) vẫn phải được đếm, kể cả khi tick kế đến sớm hơn
+ * tick neo. Dung sai không được biến một lần lỡ thành "đúng hạn". */
+TEST(StProgramReleaseJitter, RealMissIsStillCountedWhenNextTickIsEarly)
+{
+    auto program = make_program("p1000", 1000, 0);
+    const uint64_t tolerance = st_release_tolerance_ns(1000 * kMs);
+    st_program_mark_released(program.get(), 120 * kUs, tolerance);          /* neo */
+    ASSERT_TRUE(st_program_due(*program, 1000, 1000 * kMs + 20 * kUs));
+    st_program_mark_released(program.get(), 1000 * kMs + 20 * kUs, tolerance);
+    /* Tick 2000 ms mất hẳn (overrun); tick 3000 ms đến với jitter 19 µs. */
+    ASSERT_TRUE(st_program_due(*program, 1000, 3000 * kMs + 19 * kUs));
+    st_program_mark_released(program.get(), 3000 * kMs + 19 * kUs, tolerance);
+    EXPECT_EQ(program->missed_release_count, 1u);
+    EXPECT_EQ(program->consecutive_missed_release, 1u);
+}
+
+/* Task bật lại ở một tick có jitter (ví dụ sau Restore) không được bỏ tick kế
+ * có jitter nhỏ hơn: runCount phải bằng số tick. */
+TEST(StProgramReleaseJitter, TaskReanchoredOnJitteredTickKeepsEveryTick)
+{
+    StTaskConfig cfg;
+    cfg.id = "main";
+    cfg.period_ms = 1000;
+    cfg.budget_ms = 199;
+    StTask task(cfg);
+    task.set_base_step_ns(1000 * kMs);
+    uint32_t runs = 0;
+    for (uint64_t tick = 0; tick < 144; ++tick) {
+        const uint64_t now = tick * 1000 * kMs + board_jitter_ns(tick);
+        if (!task.due(now)) continue;
+        ++runs;
+        task.mark_ran(now);
+    }
+    EXPECT_EQ(runs, 144u);
+    EXPECT_EQ(task.stats().missed_release_count, 0u);
+}
+
+/* Task 100 ms trên base 10 ms: dung sai bị chặn ở nửa BASE STEP, nên tick sớm
+ * một base step không được chạy Task. */
+TEST(StProgramReleaseJitter, TaskToleranceIsBoundedByBaseStep)
+{
+    StTaskConfig cfg;
+    cfg.id = "fast";
+    cfg.period_ms = 100;
+    cfg.budget_ms = 19;
+    StTask task(cfg);
+    task.set_base_step_ns(10 * kMs);
+    EXPECT_EQ(task.release_tolerance_ns(), 5 * kMs);
+    ASSERT_TRUE(task.due(0));
+    task.mark_ran(120 * kUs);
+    EXPECT_FALSE(task.due(90 * kMs + 20 * kUs));
+    EXPECT_TRUE(task.due(100 * kMs + 20 * kUs));
+}

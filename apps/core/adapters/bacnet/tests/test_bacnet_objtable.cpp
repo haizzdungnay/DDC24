@@ -244,7 +244,8 @@ TEST(BacnetObjTableAbi, OffsetsMatchGoConstantsAfterExtV2)
     EXPECT_EQ(offsetof(kx_plc_shm_t, ext), 6704u);
     EXPECT_EQ(offsetof(kx_plc_shm_t, scan_count), 23092u);
     EXPECT_EQ(offsetof(kx_plc_shm_t, scan_overrun), 23096u);
-    EXPECT_EQ(sizeof(kx_plc_shm_t), 23104u);
+    EXPECT_EQ(offsetof(kx_plc_shm_t, ext_cmd_seq), 23104u);
+    EXPECT_EQ(sizeof(kx_plc_shm_t), 24128u);
 }
 
 TEST(BacnetObjTableAbi, RtHealthFieldsComeAfterLegacyRegion)
@@ -258,7 +259,8 @@ TEST(BacnetObjTableAbi, MagicBumpedSoStaleReadersFailLoudly)
     /* Layout của ext[] đổi thứ tự/kiểu/kích thước ⇒ magic BẮT BUỘC phải đổi.
      * Giữ nguyên magic ở đây nghĩa là một web binary cũ vẫn chấp nhận SHM mới
      * và đọc lệch trường trong im lặng — sai kiểu tệ nhất. */
-    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584406u);
+    EXPECT_EQ(KX_SHM_MAGIC, 0x4B584407u);
+    EXPECT_NE(KX_SHM_MAGIC, 0x4B584406u);
     EXPECT_NE(KX_SHM_MAGIC, 0x4B584405u);
     EXPECT_NE(KX_SHM_MAGIC, 0x4B584404u);
 }

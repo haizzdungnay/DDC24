@@ -194,13 +194,13 @@ export function buildAttentionItems(pick: Pick, { vm, taskId }: AttentionInput):
           // ra để chữa.
           owner: 'mapping',
           message: pick(
-            'Safe-state đang tác động vì chưa Program nào ghi output vật lý ở mức trên Default — bình thường nếu logic chỉ dùng Virtual Point.',
-            'Safe-state is active because no Program is writing physical output above Default yet — expected if this logic only uses Virtual Points.'
+            'Core giữ AO/DO cục bộ ở safe-state vì chưa có nguồn điều khiển hợp lệ trên mức Default; DO Modbus mở rộng có trạng thái riêng.',
+            'Core holds local AO/DO in safe state because no valid controller is active above Default; extended Modbus DO has separate state.'
           ),
           entity: safeStateEntity,
           action: pick(
-            'Không chặn Đưa vào vận hành/Khôi phục. Mở Điểm & Ánh xạ nếu mong đợi có output vật lý.',
-            'Does not block Commission/Restore. Open Points & Mapping if you expect a physical output.'
+            'Không chặn Đưa vào vận hành/Khôi phục. Kiểm tra Điểm & Ánh xạ và readback DO Modbus riêng.',
+            'Does not block Commission/Restore. Check Points & Mapping and Modbus DO readback separately.'
           ),
           projectId,
           pick

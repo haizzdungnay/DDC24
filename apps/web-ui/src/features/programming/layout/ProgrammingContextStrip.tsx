@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, ClipboardCheck, Hammer, Info, Loader2, RefreshCw, Save, ShieldAlert, WifiOff } from 'lucide-react'
+import { AlertTriangle, Hammer, Info, Loader2, RefreshCw, Save, ShieldAlert, WifiOff } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { Button } from '../../../shared/components/Button'
 import { StatusBadge } from '../../../shared/components/StatusBadge'

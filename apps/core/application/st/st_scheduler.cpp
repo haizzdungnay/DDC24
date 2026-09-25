@@ -73,12 +73,33 @@ void StTask::set_enabled(bool e)
     }
 }
 
+uint64_t StTask::release_tolerance_ns() const
+{
+    const uint64_t period_ns = static_cast<uint64_t>(cfg_.period_ms) * 1000000ull;
+    const uint64_t tick_ns = base_step_ns_ != 0 && base_step_ns_ < period_ns ? base_step_ns_ : period_ns;
+    return st_release_tolerance_ns(tick_ns);
+}
+
 bool StTask::due(uint64_t now_ns) const
 {
     if (!cfg_.enabled) return false;
     if (!started_) return true;   /* lần đầu: chạy ngay tick đầu tiên */
     const uint64_t period_ns = static_cast<uint64_t>(cfg_.period_ms) * 1000000ull;
-    return now_ns >= last_run_ns_ + period_ns;
+    /* F01: Task bật lại (ví dụ sau Restore) neo `last_run_ns_` vào một tick có
+     * jitter; so chặt thì tick sau có jitter nhỏ hơn bị bỏ trọn một chu kỳ. */
+    return now_ns + release_tolerance_ns() >= last_run_ns_ + period_ns;
+}
+
+uint64_t st_release_tolerance_ns(uint64_t tick_period_ns)
+{
+    return tick_period_ns / 2u;
+}
+
+void st_program_reset_release(StProgramInstance* program)
+{
+    program->release_started = false;
+    program->next_release_ns = 0;
+    program->consecutive_missed_release = 0;
 }
 
 /* T59-402 — release theo Program. `period_ms == 0` nghĩa là "theo chu kỳ Task":
@@ -86,12 +107,16 @@ bool StTask::due(uint64_t now_ns) const
 bool st_program_due(const StProgramInstance& program, uint32_t task_period_ms, uint64_t now_ns)
 {
     if (program.period_ms == 0) return true; /* Task đã quyết định thời điểm. */
-    (void)task_period_ms;
     if (!program.release_started) return true;
-    return now_ns >= program.next_release_ns;
+    /* F01 (EV-PROG-FBD-ST-MB-20260925): Program chỉ được xét tại tick của Task,
+     * nên dung sai là nửa chu kỳ Task. So chặt từng làm hai Program 1 s trên
+     * base 1 s mất 16,7–22,2% release trên bo Foxlinx. */
+    const uint64_t tolerance_ns =
+        st_release_tolerance_ns(static_cast<uint64_t>(task_period_ms) * 1000000ull);
+    return now_ns + tolerance_ns >= program.next_release_ns;
 }
 
-void st_program_mark_released(StProgramInstance* program, uint64_t now_ns)
+void st_program_mark_released(StProgramInstance* program, uint64_t now_ns, uint64_t tolerance_ns)
 {
     if (program->period_ms == 0) return;
     const uint64_t period_ns = static_cast<uint64_t>(program->period_ms) * 1000000ull;
@@ -103,9 +128,10 @@ void st_program_mark_released(StProgramInstance* program, uint64_t now_ns)
     }
     /* Bù trôi theo mốc LÝ THUYẾT. Bám thời điểm chạy thật sẽ làm một tick trễ
      * đẩy mọi deadline sau đó trôi theo, và Program 1 s không còn chạy đúng
-     * một lần mỗi giây. */
-    if (now_ns >= program->next_release_ns) {
-        const uint64_t late = now_ns - program->next_release_ns;
+     * một lần mỗi giây. Tick tới SỚM hơn mốc trong biên dung sai (jitter nhỏ
+     * hơn tick neo) là release ĐÚNG HẠN, không phải "gọi trước hạn". */
+    if (now_ns + tolerance_ns >= program->next_release_ns) {
+        const uint64_t late = now_ns + tolerance_ns - program->next_release_ns;
         const uint64_t missed = late / period_ns;
         if (missed > 0) {
             const uint64_t room = UINT32_MAX - program->missed_release_count;
@@ -146,7 +172,7 @@ void StTask::mark_ran(uint64_t now_ns)
     }
     /* Bù trôi: cộng theo mốc LÝ THUYẾT, không theo thời điểm chạy thật, để
      * task 100 ms chạy đúng 10 lần mỗi giây kể cả khi có tick bị trễ. */
-    const uint64_t releases_due = (now_ns - last_run_ns_) / period_ns;
+    const uint64_t releases_due = (now_ns + release_tolerance_ns() - last_run_ns_) / period_ns;
     if (releases_due > 1) {
         const uint64_t missed = releases_due - 1;
         const uint64_t room = UINT32_MAX - stats_.missed_release_count;
@@ -159,6 +185,12 @@ void StTask::mark_ran(uint64_t now_ns)
 }
 
 /* ---- StScheduler: cấu hình ---- */
+
+void StScheduler::set_base_step_ns(uint64_t ns)
+{
+    base_step_ns_ = ns;
+    for (auto& task : tasks_) task->set_base_step_ns(ns);
+}
 
 bool StScheduler::add_task(const StTaskConfig& cfg, std::string* error)
 {
@@ -206,6 +238,7 @@ bool StScheduler::add_task(const StTaskConfig& cfg, std::string* error)
     }
 
     tasks_.push_back(std::make_unique<StTask>(cfg));
+    tasks_.back()->set_base_step_ns(base_step_ns_);
     /* Giữ bảng task sắp theo ưu tiên TĂNG DẦN (0 = cao nhất) ngay khi thêm,
      * để tick() không phải sắp lại mỗi lần chạy. */
     std::sort(tasks_.begin(), tasks_.end(),
@@ -594,6 +627,8 @@ bool StScheduler::start(const std::string& instance_id, std::string* error)
             return false;
         }
     }
+    if (p->state != StProgramState::RUNNING && p->state != StProgramState::WAITING)
+        st_program_reset_release(p);
     p->state = StProgramState::RUNNING;
     p->enabled = true;
     return true;
@@ -744,6 +779,7 @@ void StScheduler::apply_pending_enable_requests(StTask& task) noexcept
                 /* DISABLED -> RUNNING đi thẳng: bước STOPPED trung gian của
                  * đường cũ không quan sát được từ ngoài boundary, và tách hai
                  * bước ra mới là thứ tạo ra trạng thái nửa vời khi bước sau hỏng. */
+                st_program_reset_release(p.get());
                 p->enabled = true;
                 p->state = StProgramState::RUNNING;
             }
@@ -1028,7 +1064,9 @@ void StScheduler::run_task(StTask& task, uint64_t now_ns, StSchedulerTickResult*
         /* Deadline RIÊNG của Program: một package 3 lớp chu kỳ chạy trong cùng
          * một Task, nên Task đến hạn KHÔNG có nghĩa mọi Program đến hạn. */
         if (!st_program_due(program, task.config().period_ms, now_ns)) continue;
-        st_program_mark_released(&program, now_ns);
+        st_program_mark_released(&program, now_ns,
+                                 st_release_tolerance_ns(
+                                     static_cast<uint64_t>(task.config().period_ms) * 1000000ull));
 
         const std::size_t lane = program.lane < kMaxLanes ? program.lane : 0;
         LaneWork& work = lane_work_[lane];

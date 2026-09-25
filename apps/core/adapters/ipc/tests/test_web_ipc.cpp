@@ -1130,5 +1130,15 @@ TEST(WebIpc, ExtPointWriteCommandAccepted)
     if (f.bacnet.shm()) {
         EXPECT_FLOAT_EQ(f.bacnet.shm()->ext[0].setpoint, 100.5f);
         EXPECT_EQ(f.bacnet.shm()->ext[0].dirty, 1u);
+        EXPECT_EQ(f.bacnet.shm()->ext_cmd_seq[0], 1u);
     }
+
+    /* Cùng giá trị nhưng request Web MỚI phải có danh tính mới: sau một lệnh
+     * Modbus hết TTL, người vận hành vẫn có thể chủ động gửi lại. */
+    c.send_line(R"({"id":201,"op":"write","point":"EXT1","value":100.5,"source":"manual","user":"admin"})");
+    usleep(50000);
+    f.scan();
+    const std::string second = c.recv_line();
+    EXPECT_NE(second.find("accepted"), std::string::npos) << second;
+    EXPECT_EQ(f.bacnet.shm()->ext_cmd_seq[0], 2u);
 }

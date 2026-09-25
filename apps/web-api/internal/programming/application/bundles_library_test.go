@@ -77,13 +77,17 @@ func seedRevisionWithLibrary(t *testing.T, service *ProjectService, store *progr
 	// library Draft cùng transaction, nên bundle export ra là bundle thật.
 	programID := "6a666666-6666-4666-8666-666666666666"
 	taskID := "6a777777-7777-4777-8777-777777777777"
-	program, _ := json.Marshal(map[string]any{"op": "upsertProgram", "program": map[string]any{
-		"programId": programID, "name": "AHU", "kind": "PROGRAM", "language": "ST",
-		"document": "PROGRAM AHU\nVAR_OUTPUT Fan : BOOL; END_VAR\nFan := TRUE;\nEND_PROGRAM\n"}})
+	objectID := "6a888888-8888-4888-8888-888888888888"
+	object := op(map[string]any{"op": "upsertObject", "object": map[string]any{
+		"objectId": objectID, "kind": "PROGRAM", "name": "AHU", "language": "ST",
+		"source":       "PROGRAM AHU\nVAR_OUTPUT Fan : REAL; END_VAR\nFan := SCALE_LIN(1.0);\nEND_PROGRAM\n",
+		"dependencies": []string{bundleLibraryEntryID},
+	}})
+	program := programOp(programID, objectID, 1000)
 	task, _ := json.Marshal(map[string]any{"op": "setTask", "task": map[string]any{
 		"taskId": taskID, "periodMs": 1000, "programOrder": []string{programID}}})
 	saved, err := service.SaveDraft(ctx, actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0",
-		BaseRevisionID: draftID, Operations: []json.RawMessage{program, task},
+		BaseRevisionID: draftID, Operations: []json.RawMessage{object, program, task},
 		IfMatch:        FormatDraftETag(draftID, second.DraftETag),
 		IdempotencyKey: "61000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID})
 	if err != nil {

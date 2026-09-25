@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '../../../../shared/i18n'
@@ -39,6 +39,13 @@ function renderWorkbench(props: Partial<Parameters<typeof DesignWorkbench>[0]>) 
   )
 }
 
+function watchColumn() {
+  const column = screen.getByTestId('workbench-watch-column')
+  const expand = within(column).queryByRole('button', { name: /Mở rộng Watch|Expand Watch/ })
+  if (expand) fireEvent.click(expand)
+  return screen.getByTestId('workbench-watch-column')
+}
+
 afterEach(cleanup)
 
 describe('workbench ở SIMULATE', () => {
@@ -65,26 +72,28 @@ describe('workbench ở SIMULATE', () => {
         { observationId: 'Fast.Runs', name: 'Runs', value: null, quality: 'UNAVAILABLE', dataType: 'DINT' },
       ],
     })
-    fireEvent.click(screen.getByRole('tab', { name: /Watch/ }))
-    expect(screen.getByText('21.5')).toBeInTheDocument()
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
-    expect(screen.queryByText('0')).not.toBeInTheDocument()
+    const column = watchColumn()
+    expect(within(column).getByText('21.5')).toBeInTheDocument()
+    expect(within(column).getAllByText('—').length).toBeGreaterThan(0)
+    expect(within(column).queryByText('0')).not.toBeInTheDocument()
   })
 
   it('nhãn khay Watch nói nguồn là MÔ PHỎNG, không phải trực tiếp', () => {
     // Giá trị mô phỏng và giá trị của tủ trông giống hệt nhau. Nhãn là chỗ duy
     // nhất phân biệt, nên nó phải đổi theo chế độ.
     renderWorkbench({ simulationWatch: [] })
-    expect(screen.getByRole('tab', { name: /Watch \((Mô phỏng|Simulation)\)/ })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /Watch \((Trực tiếp|Live)\)/ })).not.toBeInTheDocument()
+    const column = watchColumn()
+    expect(within(column).getByText(/Watch \((Mô phỏng|Simulation)\)/)).toBeInTheDocument()
+    expect(within(column).queryByText(/Watch \((Trực tiếp|Live)\)/)).not.toBeInTheDocument()
   })
 
   it('chưa mở phiên thì khay Watch GIẢI THÍCH thay vì hiện danh sách rỗng', () => {
     // Rỗng đọc như "không có gì đang chạy"; đúng sự thật là "chưa mở phiên".
     // Hai câu đó dẫn tới hai hành động khác nhau.
     renderWorkbench({ simulationWatch: null })
-    fireEvent.click(screen.getByRole('tab', { name: /Watch/ }))
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    const column = watchColumn()
+    expect(within(column).queryByRole('table')).not.toBeInTheDocument()
+    expect(within(column).getByText(/Chưa có nguồn giá trị runtime|No runtime watch source/)).toBeInTheDocument()
   })
 })
 

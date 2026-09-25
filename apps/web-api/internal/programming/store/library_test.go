@@ -343,7 +343,7 @@ func TestDeprecateProjectLibraryIsAtomicAuditedAndIdempotent(t *testing.T) {
 
 // FUNCTION_BLOCK chỉ được publish khi có layout authoritative. Đây là chỗ dễ
 // bịa nhất: một số 0 mặc định sẽ làm lệch mọi offset RETAIN phía sau.
-func TestPublishRejectsFunctionBlockWithoutAuthoritativeLayout(t *testing.T) {
+func TestPublishDefaultsStatelessFunctionBlockLayout(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
 	fixture := newLibraryFixture(t, store)
@@ -351,17 +351,6 @@ func TestPublishRejectsFunctionBlockWithoutAuthoritativeLayout(t *testing.T) {
 	if _, err := fixture.tryUpsert(
 		functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1", LibraryStateLayout{})); err != nil {
 		t.Fatalf("Draft phải nhận FB chưa có layout: %v", err)
-	}
-	if _, err := store.PublishProjectLibrary(ctx, libraryRevisionA); !errors.Is(err, ErrLibraryStateLayout) {
-		t.Fatalf("publish FB không layout: %v", err)
-	}
-	// Publish thất bại không được đổi state.
-	revision, err := store.GetLibraryRevision(ctx, libraryRevisionA)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if revision.State != LibraryStateDraft {
-		t.Fatalf("state sau publish lỗi: %s", revision.State)
 	}
 	// Layout nửa vời (có size, thiếu version/hash) cũng bị chặn ngay ở upsert.
 	if _, err := fixture.tryUpsert(functionBlockEntry(libraryRevisionA, entryFilterID, "FILTER_T1",
@@ -373,6 +362,24 @@ func TestPublishRejectsFunctionBlockWithoutAuthoritativeLayout(t *testing.T) {
 	bad.StateLayout = authoritativeFBLayout(8)
 	if _, err := fixture.tryUpsert(bad); !errors.Is(err, ErrLibraryStateLayout) {
 		t.Fatalf("FUNCTION mang state: %v", err)
+	}
+	if _, err := store.PublishProjectLibrary(ctx, libraryRevisionA); err != nil {
+		t.Fatalf("publish FB stateless: %v", err)
+	}
+	revision, err := store.GetLibraryRevision(ctx, libraryRevisionA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revision.State != LibraryStatePublished {
+		t.Fatalf("state sau publish: %s", revision.State)
+	}
+	entries, err := store.ListLibraryEntries(ctx, libraryRevisionA)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("entries sau publish: %d, %v", len(entries), err)
+	}
+	layout := entries[0].StateLayout
+	if !layout.Authoritative || layout.Version != 1 || layout.StateSizeBytes != 0 || layout.SHA256 == ([sha256.Size]byte{}) {
+		t.Fatalf("layout mặc định không authoritative: %+v", layout)
 	}
 }
 

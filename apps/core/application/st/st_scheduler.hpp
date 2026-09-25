@@ -359,7 +359,21 @@ struct StTaskConfig {
 /* T59-402 — release theo Program. Đặt ở đây (không ẩn trong .cpp) để test khoá
  * được luật deadline mà không phải dựng cả một scan loop. */
 bool st_program_due(const StProgramInstance& program, uint32_t task_period_ms, uint64_t now_ns);
-void st_program_mark_released(StProgramInstance* program, uint64_t now_ns);
+/* `tolerance_ns` phải là CÙNG dung sai `st_program_due` đã dùng để quyết định
+ * release này (xem `st_release_tolerance_ns`); mặc định 0 chỉ dành cho caller
+ * gọi đúng mốc lý thuyết. */
+void st_program_mark_released(StProgramInstance* program, uint64_t now_ns,
+                              uint64_t tolerance_ns = 0);
+/* EV-PROG-FBD-ST-MB-20260925 F01 — dung sai so hạn = nửa chu kỳ của nhịp đánh
+ * giá (tick). Mốc release được neo ở thời điểm quét THẬT, vốn đã mang jitter
+ * vài chục µs; so chặt `now >= next` thì mọi tick có jitter nhỏ hơn tick neo bị
+ * coi là "chưa tới hạn" và Program mất trọn một chu kỳ. Nửa tick là biên duy
+ * nhất vừa nuốt được jitter vừa không bao giờ cho chạy sớm một tick. */
+uint64_t st_release_tolerance_ns(uint64_t tick_period_ns);
+/* F01 — Program vừa (bật lại) vào RUNNING phải neo release MỚI. Giữ mốc của lần
+ * chạy trước làm khoảng thời gian bị tắt có chủ ý bị đếm thành lỡ nhịp. Bộ đếm
+ * tích luỹ `missed_release_count` giữ nguyên. */
+void st_program_reset_release(StProgramInstance* program);
 
 struct StTaskStats {
     uint32_t run_count = 0;
@@ -392,12 +406,20 @@ public:
     /* Cập nhật mốc chạy kế tiếp theo mốc LÝ THUYẾT (bù trôi, SPEC §4). */
     void mark_ran(uint64_t now_ns);
 
+    /* Base step của nền tảng; 0 = chưa biết (Task period được coi là base
+     * step, đúng cho Rev A). Chỉ dùng để giới hạn dung sai so hạn: Task 100 ms
+     * trên base 10 ms không được chạy sớm tới 50 ms. */
+    void set_base_step_ns(uint64_t ns) { base_step_ns_ = ns; }
+    /* Dung sai so hạn của Task: nửa min(Task period, base step). */
+    uint64_t release_tolerance_ns() const;
+
 private:
     StTaskConfig   cfg_;
     OverrunMonitor monitor_;
     StTaskStats    stats_;
     std::vector<std::unique_ptr<StProgramInstance>> programs_;
     uint64_t last_run_ns_ = 0;
+    uint64_t base_step_ns_ = 0;
     bool     started_ = false;
     uint64_t last_dispatch_base_step_ = 0;
     bool     last_dispatch_succeeded_ = false;
@@ -433,7 +455,14 @@ public:
      * Đường production Rev A bắt buộc khởi tạo tường minh REV_A; TASK-PROG-306
      * sẽ là điểm bootstrap duy nhất làm việc đó. */
     explicit StScheduler(StSchedulerProfile profile = StSchedulerProfile::SUPPORTING_AS_BUILT)
-        : profile_(profile) {}
+        : profile_(profile),
+          /* F01: chưa ai báo base step thật thì lấy tick NHỎ NHẤT profile cho
+           * phép — dung sai suy ra từ đó không bao giờ cho Task chạy sớm trọn
+           * một tick. `main` ghi đè bằng base step thật. */
+          base_step_ns_(static_cast<uint64_t>(profile == StSchedulerProfile::REV_A
+                                                  ? st_base_step::kMinMs
+                                                  : st_sched_limits::kBaseTickMs) *
+                        1000000ull) {}
     /* Worker phải dừng TRƯỚC khi mọi thứ chúng đọc bị huỷ. Để mặc định huỷ là
      * để lại một luồng đang đọc bộ nhớ vừa được giải phóng. */
     ~StScheduler();
@@ -442,6 +471,9 @@ public:
 
     StSchedulerProfile profile() const { return profile_; }
     uint64_t base_step_count() const { return base_step_count_; }
+    /* Base step thật của ScanLoop; truyền xuống mọi Task (kể cả Task thêm sau)
+     * để dung sai so hạn không vượt nửa base step. Gọi ngoài RT. */
+    void set_base_step_ns(uint64_t ns);
 
     /* Đồng hồ của tick gần nhất (ns), đúng giá trị caller truyền vào
      * `on_base_step()`. Chính sách tính theo THỜI GIAN (hold TTL ADR-051) đọc ở
@@ -625,6 +657,7 @@ public:
 private:
     StSchedulerProfile profile_ = StSchedulerProfile::SUPPORTING_AS_BUILT;
     uint64_t base_step_count_ = 0;
+    uint64_t base_step_ns_;
     uint64_t last_tick_now_ns_ = 0;
     std::vector<std::unique_ptr<StTask>> tasks_;
     StLoaderOptions loader_opts_;

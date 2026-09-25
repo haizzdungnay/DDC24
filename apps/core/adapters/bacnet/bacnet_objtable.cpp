@@ -248,6 +248,7 @@ void BacnetObjTable::read_ext(int sockfd)
          * Point đã bị xoá khỏi cấu hình. */
         for (uint16_t i = cnt; i < KX_N_EXT; i++) {
             shm_->ext[i] = kx_ext_point_t{};
+            shm_->ext_cmd_seq[i] = 0;
             shm_->ext[i].quality        = KX_EXTQ_BAD;
             shm_->ext[i].quality_reason = KX_EXTR_NOT_INITIALIZED;
         }
@@ -264,6 +265,7 @@ void BacnetObjTable::read_ext(int sockfd)
         if (std::strncmp(shm_->ext[i].name, msg.samples[i].point_id, sizeof(shm_->ext[i].name)) != 0) {
             shm_->ext[i].setpoint = 0.0;
             shm_->ext[i].dirty    = 0;
+            shm_->ext_cmd_seq[i]  = 0;
         }
         shm_->ext[i].value          = msg.samples[i].value;
         shm_->ext[i].quality        = msg.samples[i].quality;

@@ -666,6 +666,7 @@ TEST(ModbusMasterWriteLifecycle, DroppedWriteAllowsResendOfSameValue)
     h.master.drain_ext_writes(shm.get(), 999);
     shm->ext[0].dirty    = 1;
     shm->ext[0].setpoint = 50.0;
+    shm->ext_cmd_seq[0] = 1;
 
     uint64_t now = 1000;
     h.master.drain_ext_writes(shm.get(), now);
@@ -677,9 +678,18 @@ TEST(ModbusMasterWriteLifecycle, DroppedWriteAllowsResendOfSameValue)
     ASSERT_EQ(metrics.get(0).write_dropped, 1u)
         << "lệnh thứ nhất phải kết thúc trước khi kiểm lệnh thứ hai";
 
+    /* dirty vẫn là 1 sau TTL. Nhiều lượt drain không được tạo lại lệnh cũ. */
+    for (int i = 0; i < 3; ++i) {
+        h.master.drain_ext_writes(shm.get(), now + i);
+        h.master.poll_once(now + i, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+    }
+    EXPECT_EQ(metrics.get(0).write_dropped, 1u)
+        << "MBA-FW-08: lệnh cũ bị tạo lại dù Core không phát command mới";
+
     /* Lệnh MỚI, cùng giá trị. Đây là một command mới theo đúng nghĩa của
      * OD-MBRTU-005 và bắt buộc phải được phát. */
     shm->ext[0].dirty = 1;
+    shm->ext_cmd_seq[0] = 2;
     h.master.drain_ext_writes(shm.get(), now);
     now += 1;
     h.master.poll_once(now, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");

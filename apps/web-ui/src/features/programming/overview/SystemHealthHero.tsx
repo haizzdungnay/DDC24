@@ -223,7 +223,7 @@ function safeStateLabel(pick: PickFn, facts: SafeStateFacts): string {
   if (facts.active === null) return pick('Chưa rõ', 'Unknown')
   if (!facts.active) return pick('Không tác động', 'Not active')
   return facts.noControllerOnly
-    ? pick('Đang tác động — chưa có output vật lý', 'Active — no physical output yet')
+    ? pick('Đang tác động với AO/DO cục bộ', 'Active for local AO/DO')
     : pick('Đang tác động do lỗi', 'Active due to a fault')
 }
 
@@ -238,8 +238,8 @@ function safeStateNote(pick: PickFn, facts: SafeStateFacts): string | null {
   if (!facts.active) return null
   return facts.noControllerOnly
     ? pick(
-        'Safe-state đang tác động vì chưa Program nào ghi output vật lý ở mức trên Default — bình thường nếu logic chỉ dùng Virtual Point. Không chặn Đưa vào vận hành/Khôi phục.',
-        'Safe-state is active because no Program is writing physical output above Default yet — expected if this logic only uses Virtual Points. It does not block Commission/Restore.'
+        'Core giữ AO/DO cục bộ ở safe-state vì chưa có nguồn điều khiển hợp lệ trên mức Default. Trạng thái này không xác nhận DO Modbus mở rộng đang tắt. Không chặn Đưa vào vận hành/Khôi phục.',
+        'Core holds local AO/DO in safe state because no valid controller is active above Default. This does not confirm that extended Modbus DO is off. It does not block Commission/Restore.'
       )
     : pick(
         'Safe-state đang tác động do lỗi thật (I/O, dữ liệu cũ hoặc quá giờ). Giữ Đưa vào vận hành/Khôi phục bị khoá; kiểm tra Core, I/O và alarm trước khi phục hồi.',

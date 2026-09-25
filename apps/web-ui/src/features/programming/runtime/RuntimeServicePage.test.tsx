@@ -258,7 +258,7 @@ describe('RuntimeServicePage — S5-D (TASK-PROG-505)', () => {
     })
     renderPage()
     expect(await screen.findByText(/PRG-SAFE-ACTIVE/)).toBeInTheDocument()
-    expect(screen.getByText(/chưa Program nào ghi AO\/DO vật lý/)).toBeInTheDocument()
+    expect(screen.getByText(/DO Modbus mở rộng cần kiểm tra riêng/)).toBeInTheDocument()
     expect(screen.getByText(/KHÔNG bị khóa vì lý do này/)).toBeInTheDocument()
     expect(screen.queryByText(/giữ Commission\/Restore bị khóa/)).not.toBeInTheDocument()
   })

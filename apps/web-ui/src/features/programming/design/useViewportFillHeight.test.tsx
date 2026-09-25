@@ -6,8 +6,10 @@
  * ca dưới đây đếm số lần đổi state và soi tập phần tử được quan sát, chứ không
  * chỉ so một con số.
  */
+/// <reference lib="es2022.array" />
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { cwd } from 'node:process'
 import { useEffect, useState } from 'react'
 import { cleanup, render, act } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -215,7 +217,7 @@ describe('useViewportFillHeight — hành vi DEV-PROG-024/021 giữ nguyên (AC-
 
 describe('AC-3 — không còn observe(document.body) trong features/programming', () => {
   it('quét toàn bộ mã nguồn', () => {
-    const root = join(__dirname, '..')
+    const root = join(cwd(), 'src/features/programming')
     const offenders: string[] = []
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir)) {

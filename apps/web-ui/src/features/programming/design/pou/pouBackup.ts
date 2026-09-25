@@ -67,8 +67,8 @@ export function buildPouBackup(
       const id = prog.objectId ?? prog.programId
       let refs = loadWireReferencesFromStorage(document.project?.projectId, id)
       if (!refs || Object.keys(refs).length === 0) {
-        if (doc && typeof doc === 'object' && 'graphId' in doc && typeof (doc as any).graphId === 'string') {
-          refs = loadWireReferencesFromStorage(document.project?.projectId, (doc as any).graphId)
+        if (doc && typeof doc === 'object' && 'graphId' in doc && typeof doc.graphId === 'string') {
+          refs = loadWireReferencesFromStorage(document.project?.projectId, doc.graphId)
         }
       }
       if (refs && Object.keys(refs).length > 0) {
@@ -154,9 +154,12 @@ export function parsePouBackup(raw: string): ParseBackupResult {
       }
 
       let presentation: { wireReferences?: FbdWireReferenceMap } | undefined = undefined
-      if (rec.presentation && typeof rec.presentation === 'object' && typeof (rec.presentation as any).wireReferences === 'object') {
+      const rawPresentation = rec.presentation
+      if (rawPresentation && typeof rawPresentation === 'object' &&
+          'wireReferences' in rawPresentation && rawPresentation.wireReferences &&
+          typeof rawPresentation.wireReferences === 'object') {
         presentation = {
-          wireReferences: (rec.presentation as any).wireReferences as FbdWireReferenceMap
+          wireReferences: rawPresentation.wireReferences as FbdWireReferenceMap
         }
       }
 
@@ -322,8 +325,8 @@ export function planImportPouOperations(input: ImportPlanInput): ImportPlanResul
 
     if (item.presentation?.wireReferences) {
       saveWireReferencesToStorage(item.presentation.wireReferences, document.project?.projectId, targetObjectId)
-      if (item.document && typeof item.document === 'object' && 'graphId' in item.document && typeof (item.document as any).graphId === 'string') {
-        saveWireReferencesToStorage(item.presentation.wireReferences, document.project?.projectId, (item.document as any).graphId)
+      if (item.document && typeof item.document === 'object' && 'graphId' in item.document && typeof item.document.graphId === 'string') {
+        saveWireReferencesToStorage(item.presentation.wireReferences, document.project?.projectId, item.document.graphId)
       }
     }
     importedObjectIds.push(targetObjectId)

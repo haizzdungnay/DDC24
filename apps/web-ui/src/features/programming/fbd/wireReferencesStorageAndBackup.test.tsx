@@ -100,7 +100,7 @@ describe('Module E & B: Storage Isolation & Backup Envelope', () => {
       return mockStorage.getItem(key)
     })
 
-    const draftDoc: any = {
+    const draftDoc = {
       schemaVersion: 1,
       project: { projectId: 'proj-1', name: 'Demo Project', functionalTags: [] },
       programs: [
@@ -113,7 +113,7 @@ describe('Module E & B: Storage Isolation & Backup Envelope', () => {
           document: '{"networks":[]}'
         }
       ]
-    }
+    } as unknown as ProgrammingDraftDocument
 
     const backup = buildPouBackup(draftDoc)
     expect(backup.pous).toHaveLength(1)
@@ -146,11 +146,11 @@ describe('Module E & B: Storage Isolation & Backup Envelope', () => {
 
     expect(parsed.backup.pous[0].presentation).toBeUndefined()
 
-    const draftDoc: any = {
+    const draftDoc = {
       schemaVersion: 1,
       project: { projectId: 'proj-1', name: 'Demo Project', functionalTags: [] },
       programs: []
-    }
+    } as unknown as ProgrammingDraftDocument
 
     const plan = planImportPouOperations({
       document: draftDoc,
@@ -199,7 +199,7 @@ describe('Module E & B: Storage Isolation & Backup Envelope', () => {
     const getItemSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation((key) => mockStorage.getItem(key))
     const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation((key, val) => mockStorage.setItem(key, val))
 
-    const draftDoc: any = {
+    const draftDoc = {
       schemaVersion: 1,
       project: { projectId: "proj-1", name: "P1", functionalTags: [] },
       programs: [
@@ -212,14 +212,14 @@ describe('Module E & B: Storage Isolation & Backup Envelope', () => {
           document: { graphId: "graph-1", networks: [] }
         }
       ]
-    }
+    } as unknown as ProgrammingDraftDocument
 
     // 2. Export
     const backup = buildPouBackup(draftDoc)
     expect(backup.pous[0].presentation?.wireReferences?.["w-orig"]).toBeDefined()
 
     // 3. Import vao project moi voi strategy RENAME -> sinh objectId moi "new-pou-id"
-    const newDraftDoc: any = {
+    const newDraftDoc = {
       schemaVersion: 1,
       project: { projectId: "proj-2", name: "P2", functionalTags: [] },
       programs: [
@@ -232,7 +232,7 @@ describe('Module E & B: Storage Isolation & Backup Envelope', () => {
           document: "{}"
         }
       ]
-    }
+    } as unknown as ProgrammingDraftDocument
 
     const plan = planImportPouOperations({
       document: newDraftDoc,
