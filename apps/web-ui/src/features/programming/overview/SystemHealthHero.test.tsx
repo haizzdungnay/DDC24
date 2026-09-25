@@ -140,11 +140,12 @@ describe('formatAuthorityTimestamp', () => {
  * ------------------------------------------------------------------ */
 
 describe('SystemHealthHero — safeStateNoControllerOnly là CẢNH BÁO NHẸ', () => {
-  it('nói rõ nguyên nhân là chưa có output vật lý và KHÔNG chặn Đưa vào vận hành', () => {
+  it('nói rõ phạm vi AO/DO cục bộ và KHÔNG chặn Đưa vào vận hành', () => {
     renderHero({ safeState: { active: true, noControllerOnly: true } })
     const safe = row('safe-state')
     expect(safe).toHaveAttribute('data-health-state', 'warning')
-    expect(safe.textContent).toContain('chưa có output vật lý')
+    expect(safe.textContent).toContain('AO/DO cục bộ')
+    expect(safe.textContent).toContain('DO Modbus mở rộng')
     expect(safe.textContent).toContain('Không chặn Đưa vào vận hành')
     // Không được dùng chữ của nhánh nghiêm trọng.
     expect(safe.textContent).not.toContain('do lỗi thật')
@@ -283,7 +284,7 @@ describe('SystemHealthHero — luật chung', () => {
   it('D-06: chế độ EN không rò tiếng Việt', () => {
     renderHero({ safeState: { active: true, noControllerOnly: true } }, 'en')
     const hero = screen.getByTestId('system-health-hero')
-    expect(hero.textContent).toContain('no physical output yet')
+    expect(hero.textContent).toContain('Active for local AO/DO')
     expect(hero.textContent).toContain('Core connection')
     expect(hero.textContent ?? '').not.toMatch(/[àáảãạăâđêôơư]/i)
   })
