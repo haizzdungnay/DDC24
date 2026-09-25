@@ -353,6 +353,7 @@ export function EditorPane({
    *  (giữ `ProgramsTab` không phụ thuộc router, đúng ranh giới hiện có). */
   onRunCheck: () => void
   onRunLocalCheck?: () => void
+  localChecking?: boolean
   /** `T59-821` — mở khay So sánh (`T59-819`). `undefined` ⇒ nút nêu lý do khoá. */
   onOpenCompare?: () => void
   /** Lý do `Kiểm tra`/`So sánh` đang khoá. Nút disabled phải nêu lý do đọc được. */

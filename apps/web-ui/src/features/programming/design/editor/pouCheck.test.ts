@@ -7,7 +7,7 @@ import { canonicalFbdJson } from '../../fbd/model'
 describe('pouCheck', () => {
   const dummyDoc: ProgrammingDraftDocument = {
     schemaVersion: 1,
-    project: { projectId: 'p-1', name: 'Test' },
+    project: { projectId: 'p-1', name: 'Test', functionalTags: [] },
     programs: [
       {
         programId: 'prog-main',
@@ -54,6 +54,8 @@ END_PROGRAM`,
     ],
     variables: [],
     bindings: [],
+    task: { taskId: 'task-main', periodMs: 1000, programOrder: ['prog-main'] },
+    library: { profile: 'CORE_REVA', version: '1' },
   }
 
   it('tìm đúng dependency chuyển tiếp (transitive)', () => {
@@ -76,6 +78,7 @@ END_PROGRAM`,
 
     expect(Number(real1.raw)).toBeGreaterThanOrEqual(1.0)
     expect(Number(real1.raw)).toBeLessThanOrEqual(5.0)
+    expect(Number(real2.raw)).toBeGreaterThanOrEqual(1.0)
     expect(typeof boolVal.raw).toBe('boolean')
   })
 

@@ -193,7 +193,15 @@ export type CheckWorkflowState =
   | { phase: 'sealing' }
   | { phase: 'checking'; checkId: string }
   | { phase: 'done'; check: ProgrammingCheck }
-  | { phase: 'error'; message: string }
+  | {
+      phase: 'error'
+      message: string
+      code?: string
+      stage?: 'sealing' | 'checking'
+      correlationId?: string
+      args?: Record<string, unknown>
+      raw?: string
+    }
 
 /**
  * `UJ-PROG-05` — Kiểm tra: niêm phong Draft thành Revision bất biến rồi tạo
@@ -221,9 +229,21 @@ export function useCheckWorkflow(projectId: string | undefined) {
             setState({ phase: 'done', check })
           },
           (reason: unknown) => {
+            let code: string | undefined
+            let correlationId: string | undefined
+            let message = pick('Kiểm tra thất bại.', 'Check failed.')
+            if (reason instanceof ProgrammingApiError) {
+              code = reason.envelope.error.code
+              correlationId = reason.envelope.error.correlationId
+              message = programmingErrorCopy(pick, reason.envelope.error.code)
+            }
             setState({
               phase: 'error',
-              message: reason instanceof ProgrammingApiError ? programmingErrorCopy(pick, reason.envelope.error.code) : pick('Kiểm tra thất bại.', 'Check failed.')
+              stage: 'checking',
+              message,
+              code,
+              correlationId,
+              raw: reason instanceof Error ? reason.message : String(reason)
             })
           }
         )
@@ -262,9 +282,24 @@ export function useCheckWorkflow(projectId: string | undefined) {
         setState({ phase: 'checking', checkId: accepted.checkId })
         pollCheck(accepted.checkId)
       } catch (reason) {
+        let code: string | undefined
+        let correlationId: string | undefined
+        let args: Record<string, unknown> | undefined
+        let message = pick('Không tạo được Kiểm tra.', 'Could not start the check.')
+        if (reason instanceof ProgrammingApiError) {
+          code = reason.envelope.error.code
+          correlationId = reason.envelope.error.correlationId
+          args = reason.envelope.error.args
+          message = programmingErrorCopy(pick, reason.envelope.error.code)
+        }
         setState({
           phase: 'error',
-          message: reason instanceof ProgrammingApiError ? programmingErrorCopy(pick, reason.envelope.error.code) : pick('Không tạo được Kiểm tra.', 'Could not start the check.')
+          stage: 'sealing',
+          message,
+          code,
+          correlationId,
+          args,
+          raw: reason instanceof Error ? reason.message : String(reason)
         })
       }
     },

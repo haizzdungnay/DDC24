@@ -689,7 +689,7 @@ export function DesignWorkspacePage({
       })
     }
 
-    if (checkState === 'failed') {
+    if (checkState === 'FAILED') {
       items.push({
         id: 'check-failed',
         kind: 'alert',
@@ -697,7 +697,7 @@ export function DesignWorkspacePage({
         detail: pick('Đã phát hiện lỗi biên dịch khi kiểm tra toàn diện gói.', 'Compilation errors found in comprehensive check.'),
         timestamp: now,
       })
-    } else if (checkState === 'passed') {
+    } else if (checkState === 'PASSED') {
       items.push({
         id: 'check-passed',
         kind: 'success',

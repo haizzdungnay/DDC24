@@ -123,14 +123,32 @@ export function SimulateWorkspace({
                   'The draft has unsaved changes. Save it (and run Check) before simulating — simulation always runs the saved version.')}
           </p>
         ) : (
-          <button
-            type="button"
-            disabled={!canControl || draftRevisionId === null || slice.pending !== null}
-            onClick={onStart}
-            className="rounded-[var(--radius)] border border-[var(--c-border)] px-3 py-1 text-xs text-[var(--c-text)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {pick('Mở phiên mô phỏng', 'Start simulation session')}
-          </button>
+          <>
+            {draftRevisionId === null && (
+              <div role="status" className="space-y-1 rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
+                <p className="font-semibold">
+                  {pick(
+                    'Chưa thể mở phiên mô phỏng: Cần có kết quả Kiểm tra (Check) đạt PASSED.',
+                    'Cannot start simulation session: A PASSED Check result is required.'
+                  )}
+                </p>
+                <p className="text-[var(--c-text-dim)]">
+                  {pick(
+                    'Mô phỏng chạy trên artifact biên dịch từ bản Check gần nhất. Hãy sửa các lỗi trong khay Vấn đề và chạy Kiểm tra trong tab Check & Commission.',
+                    'Simulation runs on compiled artifacts from the latest Check. Please resolve issues in the Problems tray and run Check in the Check & Commission workspace.'
+                  )}
+                </p>
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={!canControl || draftRevisionId === null || slice.pending !== null}
+              onClick={onStart}
+              className="rounded-[var(--radius)] border border-[var(--c-border)] px-3 py-1 text-xs text-[var(--c-text)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pick('Mở phiên mô phỏng', 'Start simulation session')}
+            </button>
+          </>
         )}
         {slice.status.kind === 'ERROR' && (
           <p role="alert" className="text-xs text-[var(--c-danger-fg)]">{slice.status.message}</p>

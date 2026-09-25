@@ -313,4 +313,29 @@ describe('CheckCommissionPage — S5-C (TASK-PROG-504)', () => {
     expect(screen.queryByRole('button', { name: 'Đưa vào vận hành…' })).not.toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'Tiến trình Kiểm tra và Đưa vào vận hành' })).toBeInTheDocument()
   })
+
+  it('hien thi muc Log loi khi Check hoac niem phong co loi', async () => {
+    client.request.mockImplementation((operationId) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve({ permissions: { read: true, programEdit: true, programActivate: true, timeWrite: true } })
+      if (operationId === 'getProgrammingRuntime') return Promise.resolve({ activeRevisionId: 'old-rev', lkgRevisionId: 'old-rev', producerState: 'READY' })
+      if (operationId === 'listProgrammingProjects') return Promise.resolve({ items: [{ projectId: 'project-1', name: 'AHU-01', draftRevisionId: REVISION_ID }] })
+      if (operationId === 'listProgrammingProgramIntents') return Promise.resolve({ items: [] })
+      if (operationId === 'getProgrammingProject') return Promise.resolve(baseProject())
+      if (operationId === 'getProgrammingCheck') return Promise.resolve({
+        checkId: CHECK_ID, revisionId: REVISION_ID, state: 'FAILED',
+        diagnostics: [{ code: 'PRG-ERR-POU-KIND-001', detailCode: 'ST-POU-001', severity: 'ERROR', message: 'Loi cau truc POU', messageKey: '' }],
+        symbols: [], createdAt: '2026-08-13T00:00:00Z', attemptCount: 1
+      })
+      if (operationId === 'compareProgrammingRevisions') return Promise.resolve(changesWithTwoPresentGroups())
+      if (operationId === 'listProgrammingOverrides') return Promise.resolve({ items: [] })
+      throw new Error('unexpected operation ' + operationId)
+    })
+
+    renderPage(true)
+    await screen.findByText('FAILED')
+    expect(screen.getByText('Log lỗi')).toBeInTheDocument()
+    expect(screen.getByText('PRG-ERR-POU-KIND-001')).toBeInTheDocument()
+    expect(screen.getAllByText('Loi cau truc POU').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByRole('button', { name: 'Sao chép log' })).toBeInTheDocument()
+  })
 })

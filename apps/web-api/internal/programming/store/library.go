@@ -750,11 +750,20 @@ func publishProjectLibraryTx(ctx context.Context, tx *sql.Tx, libraryRevisionID 
 	}
 	canonicalEntries := make([]LibraryEntry, 0, len(entries))
 	for _, entry := range entries {
+		layout := entry.StateLayout
+		if entry.Kind == LibraryKindFunctionBlock && !layout.Authoritative {
+			layout = LibraryStateLayout{
+				Authoritative:  true,
+				Version:        1,
+				StateSizeBytes: 0,
+				SHA256:         entry.ContentSHA256,
+			}
+		}
 		canonical, err := prepareProjectLibraryEntry(UpsertProjectLibraryEntryParams{
 			LibraryRevisionID: entry.LibraryRevisionID, EntryID: entry.EntryID, Kind: entry.Kind,
 			Name: entry.Name, Language: entry.Language, FeatureState: entry.FeatureState,
 			Source: entry.Source, InterfaceJSON: entry.InterfaceJSON, Dependencies: entry.Dependencies,
-			StateLayout: entry.StateLayout,
+			StateLayout: layout,
 			/* `T61-103` — metadata TRÌNH BÀY phải đi cùng.
 			 *
 			 * Không phải để đổi hash: `contentSha256` cố ý không phụ thuộc ba

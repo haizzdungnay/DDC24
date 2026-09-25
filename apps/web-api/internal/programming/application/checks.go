@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	canonicaljson "mkddc-web/internal/programming/canonicaljson"
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
 	"mkddc-web/internal/programming/domain"
@@ -719,7 +720,16 @@ func (s *CheckService) attachPOULinkInputs(ctx context.Context,
 		}
 		// Source canonical thắng payload UI; hai bản lệch nhau là hỏng snapshot,
 		// không được âm thầm compile bản tiện đọc hơn.
-		if inputs[index].Language != root.Language || !bytes.Equal(inputs[index].Source, root.SourceBlob) {
+		sourceMatches := inputs[index].Language == root.Language && bytes.Equal(inputs[index].Source, root.SourceBlob)
+		if !sourceMatches && inputs[index].Language == "FBD" && root.Language == "FBD" {
+			c1, err1 := canonicaljson.Object(inputs[index].Source, 65536)
+			c2, err2 := canonicaljson.Object(root.SourceBlob, 65536)
+			if err1 == nil && err2 == nil && bytes.Equal(c1, c2) {
+				sourceMatches = true
+				inputs[index].Source = c2
+			}
+		}
+		if !sourceMatches {
 			return nil, fmt.Errorf("Program %s lệch revision_objects/pou_objects", root.ObjectID)
 		}
 		inputs[index].LinkedPOUs = append([]programmingcompiler.LinkedPOUSource(nil), localSources...)
@@ -768,6 +778,11 @@ func programCompilerInput(revision programmingstore.RevisionSnapshot,
 	} else {
 		diagnostic := scopeDiagnostic(programID, 0)
 		return programmingcompiler.Input{}, []DiagnosticView{diagnostic}
+	}
+	if language == "FBD" {
+		if canonical, err := canonicaljson.Object(source, 65536); err == nil {
+			source = canonical
+		}
 	}
 	if len(source) == 0 || len(source) > domain.MaxSourceBytes {
 		diagnostic := scopeDiagnostic(programID, domain.MaxSourceBytes)

@@ -14,7 +14,14 @@ export type CommissionWorkflowState =
   | { phase: 'polling'; operationId: string; operation?: ProgrammingOperationView }
   | { phase: 'unknown'; operationId: string }
   | { phase: 'terminal'; operation: ProgrammingOperationView }
-  | { phase: 'error'; message: string }
+  | {
+      phase: 'error'
+      message: string
+      code?: string
+      correlationId?: string
+      args?: Record<string, unknown>
+      raw?: string
+    }
 
 interface SubmitArgs {
   revisionId: string
@@ -109,9 +116,23 @@ export function useCommissionWorkflow() {
         setState({ phase: 'polling', operationId: accepted.operationId })
         pollOperation(accepted.operationId)
       } catch (reason) {
+        let code: string | undefined
+        let correlationId: string | undefined
+        let args: Record<string, unknown> | undefined
+        let message = pick('Không gửi được lệnh Đưa vào vận hành.', 'Could not submit the commission command.')
+        if (reason instanceof ProgrammingApiError) {
+          code = reason.envelope.error.code
+          correlationId = reason.envelope.error.correlationId
+          args = reason.envelope.error.args
+          message = programmingErrorCopy(pick, reason.envelope.error.code)
+        }
         setState({
           phase: 'error',
-          message: reason instanceof ProgrammingApiError ? programmingErrorCopy(pick, reason.envelope.error.code) : pick('Không gửi được lệnh Đưa vào vận hành.', 'Could not submit the commission command.')
+          message,
+          code,
+          correlationId,
+          args,
+          raw: reason instanceof Error ? reason.message : String(reason)
         })
       }
     },
