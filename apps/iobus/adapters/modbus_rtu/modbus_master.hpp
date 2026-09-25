@@ -74,8 +74,13 @@ public:
     void drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms);
 
     /* Đưa một lệnh ghi có danh tính request vào đúng bus (MBR-B107).
-     * Trả false nếu không tìm được slave hoặc hàng đợi đầy. */
-    bool submit_write(const PendingWrite& w);
+     * Trả false nếu không tìm được slave hoặc hàng đợi đầy.
+     *
+     * `MBA-FW-07`: `bus_id` ≠ 0 ⇒ chỉ tìm slave TRÊN BUS ĐÓ. `bus_id` = 0 chỉ
+     * được chấp nhận khi địa chỉ slave là duy nhất trên mọi bus — validator cho
+     * phép cùng `slave_id` trên hai dây khác nhau, nên "lấy slave đầu tiên khớp
+     * địa chỉ" là ghi nhầm sang thiết bị của dây kia. */
+    bool submit_write(const PendingWrite& w, uint8_t bus_id = 0);
     void set_write_result_sink(const WriteResultSink& sink);
 
     /* Tính số ms nên sleep trước khi poll_once() kế. 0 = có slave đến hạn ngay. */

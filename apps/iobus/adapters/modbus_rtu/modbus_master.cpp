@@ -208,20 +208,34 @@ void ModbusMaster::publish(ExtCache& cache, FieldbusMetrics& metrics,
     cache.push_snapshot(fieldbus_sock_path);
 }
 
-bool ModbusMaster::submit_write(const PendingWrite& w)
+bool ModbusMaster::submit_write(const PendingWrite& w, uint8_t bus_id)
 {
     /* Giữ khoá suốt cả tìm-worker lẫn enqueue: `apply_config` có thể thay tập
      * worker giữa hai bước đó, và khi ấy con trỏ trả về đã trỏ vào worker vừa
      * bị huỷ. */
     std::lock_guard<std::mutex> lock(workers_mu_);
+    const SlaveConfig* target = nullptr;
+    size_t matches = 0;
     for (const auto& slave : cfg_.slaves) {
         if (slave.addr != w.slave_addr) continue;
-        BusWorker* worker = bus_by_id(slave.bus_id);
-        if (!worker) break;
-        return worker->enqueue_write(w);
+        if (bus_id != 0 && slave.bus_id != bus_id) continue;
+        if (target == nullptr) target = &slave;
+        matches++;
     }
-    std::fprintf(stderr, "ERROR modbus_master.write_slave_not_found addr=%u reg=%u\n",
-                 w.slave_addr, w.reg_addr);
+    if (matches > 1) {
+        /* `MBA-FW-07`: cùng địa chỉ trên nhiều dây mà người gọi không nói dây
+         * nào ⇒ TỪ CHỐI. Đoán ở đây là ghi xuống thiết bị của người khác. */
+        std::fprintf(stderr, "ERROR modbus_master.write_ambiguous_slave addr=%u reg=%u buses=%zu"
+                     " — cần bus_id, TỪ CHỐI lệnh ghi\n",
+                     w.slave_addr, w.reg_addr, matches);
+        return false;
+    }
+    if (target != nullptr) {
+        BusWorker* worker = bus_by_id(target->bus_id);
+        if (worker) return worker->enqueue_write(w);
+    }
+    std::fprintf(stderr, "ERROR modbus_master.write_slave_not_found bus=%u addr=%u reg=%u\n",
+                 bus_id, w.slave_addr, w.reg_addr);
     return false;
 }
 

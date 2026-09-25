@@ -439,8 +439,11 @@ int main(int argc, char** argv)
             w.enqueued_ms = now_ms();
             w.deadline_ms = req.deadline_ms ? now_ms() + req.deadline_ms : 0;
             w.readback    = req.readback;
-            if (!modbus.submit_write(w)) {
-                if (reason) *reason = "queue_full_or_slave_not_found";
+            /* `MBA-FW-07`: chuyển `bus_id` của request xuống — trước bản này
+             * nó được parse rồi bỏ, và lệnh đi tới slave ĐẦU TIÊN khớp địa chỉ
+             * trên bất kỳ dây nào. */
+            if (!modbus.submit_write(w, req.bus_id)) {
+                if (reason) *reason = "queue_full_or_slave_not_found_or_ambiguous_bus";
                 return false;
             }
             return true;
