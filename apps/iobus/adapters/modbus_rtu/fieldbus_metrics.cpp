@@ -29,6 +29,7 @@ void FieldbusMetrics::init(const std::vector<std::string>& names,
                             const std::vector<uint8_t>& addrs,
                             const std::vector<uint8_t>& bus_ids)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     metrics_.resize(names.size());
     for (size_t i = 0; i < names.size(); i++) {
         metrics_[i].name = names[i];
@@ -46,6 +47,7 @@ BusMetrics* FieldbusMetrics::find_bus(uint8_t bus_id)
 
 void FieldbusMetrics::record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us, bool ok)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     BusMetrics* bus = find_bus(bus_id);
     if (!bus) return;
     bus->total_transactions++;
@@ -65,16 +67,19 @@ void FieldbusMetrics::record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us
 
 void FieldbusMetrics::set_bus_state(uint8_t bus_id, const char* state)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (BusMetrics* bus = find_bus(bus_id)) bus->state = state;
 }
 
 void FieldbusMetrics::record_bus_reopen(uint8_t bus_id)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (BusMetrics* bus = find_bus(bus_id)) bus->port_reopens++;
 }
 
 void FieldbusMetrics::roll_bus_window(uint8_t bus_id, uint64_t window_us)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (latency_window_.size() < buses_.size()) latency_window_.resize(buses_.size());
     for (size_t i = 0; i < buses_.size(); i++) {
         if (buses_[i].id != bus_id) continue;
@@ -122,11 +127,13 @@ void FieldbusMetrics::roll_bus_window(uint8_t bus_id, uint64_t window_us)
 
 void FieldbusMetrics::record_exception(uint8_t slave_idx, uint8_t exception_code)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (slave_idx < metrics_.size()) metrics_[slave_idx].last_exception = exception_code;
 }
 
 void FieldbusMetrics::update(uint8_t idx, bool ok, uint64_t now_ms, uint8_t retry_limit)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx >= metrics_.size()) return;
     SlaveMetrics& m = metrics_[idx];
     m.total_polls++;
@@ -152,31 +159,37 @@ void FieldbusMetrics::update(uint8_t idx, bool ok, uint64_t now_ms, uint8_t retr
 
 void FieldbusMetrics::record_timeout(uint8_t idx)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx < metrics_.size()) metrics_[idx].timeout_errors++;
 }
 
 void FieldbusMetrics::record_crc_error(uint8_t idx)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx < metrics_.size()) metrics_[idx].crc_errors++;
 }
 
 void FieldbusMetrics::record_retry(uint8_t idx)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx < metrics_.size()) metrics_[idx].retry_attempts++;
 }
 
 void FieldbusMetrics::record_write_failed(uint8_t idx)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx < metrics_.size()) metrics_[idx].write_failed++;
 }
 
 void FieldbusMetrics::record_write_dropped(uint8_t idx)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx < metrics_.size()) metrics_[idx].write_dropped++;
 }
 
 bool FieldbusMetrics::check_e302(uint8_t idx, uint8_t retry_limit)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx >= metrics_.size()) return false;
     SlaveMetrics& m = metrics_[idx];
     if (retry_limit == 0) retry_limit = 1;
@@ -189,6 +202,7 @@ bool FieldbusMetrics::check_e302(uint8_t idx, uint8_t retry_limit)
 
 bool FieldbusMetrics::check_e303(uint8_t idx)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx >= metrics_.size()) return false;
     SlaveMetrics& m = metrics_[idx];
     /* D-12: dùng CỬA SỔ TRƯỢT thay cho tỷ lệ tích luỹ từ lúc khởi động.
@@ -220,6 +234,7 @@ bool FieldbusMetrics::check_e303(uint8_t idx)
 
 void FieldbusMetrics::reset_alarms(uint8_t idx)
 {
+    std::lock_guard<std::mutex> lock(mu_);
     if (idx >= metrics_.size()) return;
     metrics_[idx].e302_triggered = false;
     metrics_[idx].e303_triggered = false;

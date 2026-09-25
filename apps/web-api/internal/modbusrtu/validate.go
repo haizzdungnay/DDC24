@@ -246,6 +246,10 @@ func validatePoints(cfg Config, devices map[string]Device, opts ValidateOptions,
 		if !ValidStableID(point.PointID) {
 			add(base+".point_id", CodeInvalidFormat,
 				"phải dài 1..23 ký tự ASCII, bắt đầu bằng chữ và không đổi khi rename")
+		} else if ReservedCorePointName(point.PointID) {
+			add(base+".point_id", CodeInvalidFormat,
+				"trùng dạng tên điểm hệ thống (AI/BI/DI/UI/AO/BO/DO/AV/BV/MSV/EXT/MB + số); "+
+					"đặt tên khác để lệnh ghi không rơi nhầm vào điểm cục bộ")
 		}
 		idKey := strings.ToLower(point.PointID)
 		if owner, exists := pointIDs[idKey]; exists {
@@ -345,6 +349,14 @@ func validatePoints(cfg Config, devices map[string]Device, opts ValidateOptions,
 			if point.RegisterType != "holding_register" && point.RegisterType != "input_register" {
 				add(base+".bit_index", CodeUnsupported,
 					"chỉ dùng được với Holding/Input Register")
+			}
+			/* `MBA-FW-09` (audit Modbus 2026-09-25): ghi một điểm bit bằng
+			 * FC06 là ghi đè CẢ register — xoá mọi bit khác của một control
+			 * word. Chưa có FC22/read-modify-write thì điểm bit chỉ đọc; iobus
+			 * cũng từ chối profile như vậy (fail-closed ở cả hai đầu). */
+			if point.ReadWrite == "read_write" {
+				add(base+".read_write", CodeUnsupported,
+					"Point có bit_index chưa ghi được: ghi FC06 sẽ đè cả register (cần FC22/read-modify-write)")
 			}
 		}
 	}

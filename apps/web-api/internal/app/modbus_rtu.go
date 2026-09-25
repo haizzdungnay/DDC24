@@ -125,11 +125,13 @@ func (a *App) handleModbusDiagnostics(w http.ResponseWriter, r *http.Request) {
 	byBusSlave := newModbusDeviceIndex(cfg.Devices)
 	out := make([]ModbusRTUDiagnostics, 0, len(telemetry.Slaves))
 	for _, item := range telemetry.Slaves {
-		deviceID := byBusSlave.lookup(int(item.BusID), int(item.Addr))
-		out = append(out, ModbusRTUDiagnostics{DeviceID: deviceID, SlaveID: int(item.Addr),
-			BusID: item.BusID, Online: item.Online,
-			TotalPolls: item.TotalPolls, TotalErrors: item.TotalErrors, TimeoutErrors: item.TimeoutErrors,
-			CRCErrors: item.CRCErrors, RetryAttempts: item.RetryAttempts, ConsecutiveErrors: item.ConsecutiveErrors, LastSeenMS: item.LastSeenMS})
+		/* `MBA-BE-01` (audit Modbus 2026-09-25): đi qua `modbusDiagnosticsFrom`,
+		 * KHÔNG tự dựng struct tại chỗ. Bản dựng tại chỗ trước đây bỏ sót
+		 * `WriteFailed`, `WriteDropped`, `LastException`, nên API luôn trả 0 cho
+		 * đúng ba bộ đếm trả lời câu hỏi "lệnh ghi của tôi có tới thiết bị
+		 * không". Đo trên bo Forlinx: SHM ghi write_failed=41, write_dropped=12
+		 * cho CK508-04 trong khi `/modbus/diagnostics` báo 0/0. */
+		out = append(out, modbusDiagnosticsFrom(item, byBusSlave.lookup(int(item.BusID), int(item.Addr))))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -235,6 +237,49 @@ func (a *App) resolveExtSlot(pointID string) (ExtSlotRef, error) {
 	return ExtSlotRef{}, fmt.Errorf(
 		"lỗi ghi thử: `%s` chưa có slot EXT nào trong runtime — iobus chưa nạp cấu hình, hoặc điểm/thiết bị đang tắt",
 		pointID)
+}
+
+// modbusCommandTarget quy đổi `point_id` Modbus RTU sang tên điểm mà Core hiểu
+// (`EXT<n>`), dùng cho đường ghi CHUNG `PUT /api/v1/points/{id}`.
+//
+// `MBA-BE-02` (audit Modbus 2026-09-25). Trước bản này chỉ `write-test` biết
+// quy đổi; đường ghi chung gửi nguyên `CK50804-DO1` xuống Core, `parse_point_name`
+// trả false và người vận hành nhận `409 point force rejected` — log bo Forlinx
+// 2026-09-25 09:45:32 ghi đúng ca đó. Tệ hơn, một `point_id` Modbus tình cờ có
+// dạng `DO3` sẽ parse THÀNH CÔNG và ghi xuống ngõ ra cục bộ DO3 — sai thiết bị
+// mà không có lỗi nào.
+//
+// `handled=false` nghĩa là `id` không phải Point Modbus đã khai; nơi gọi đi tiếp
+// đường cũ. `handled=true` kèm `err` là lỗi đã có mã HTTP để trả thẳng.
+func (a *App) modbusCommandTarget(id string) (target string, handled bool, status int, err error) {
+	cfg, readErr := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	if readErr != nil {
+		return "", false, 0, nil
+	}
+	var found *ModbusRTUPoint
+	for i := range cfg.Points {
+		if strings.EqualFold(cfg.Points[i].PointID, id) {
+			found = &cfg.Points[i]
+			break
+		}
+	}
+	if found == nil {
+		return "", false, 0, nil
+	}
+	if found.ReadWrite != "read_write" {
+		return "", true, http.StatusConflict,
+			fmt.Errorf("`%s` là Point Modbus RTU chỉ-đọc; chỉ Point read_write mới ghi được", found.PointID)
+	}
+	slot, err := a.resolveExtSlot(found.PointID)
+	if err != nil {
+		return "", true, http.StatusServiceUnavailable, err
+	}
+	if !slot.Writable {
+		return "", true, http.StatusConflict,
+			fmt.Errorf("slot EXT%d của `%s` đang là read-only trong runtime — iobus chưa nạp cấu hình mới",
+				slot.ExtIndex, found.PointID)
+	}
+	return fmt.Sprintf("EXT%d", slot.ExtIndex), true, 0, nil
 }
 
 func (a *App) handleModbusWriteTest(w http.ResponseWriter, r *http.Request) {

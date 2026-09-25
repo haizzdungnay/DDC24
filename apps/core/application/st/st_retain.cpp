@@ -1,4 +1,5 @@
 #include "st/st_retain.hpp"
+#include "runtime/thread_policy.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -920,6 +921,9 @@ void StRetainService::flush(bool force)
 
 void StRetainService::worker_loop()
 {
+    /* `MBA-FW-01`: ghi RETAIN xuống đĩa không phải việc thời gian thực — không
+     * được đứng trên vòng IOP của iobus chỉ vì thừa hưởng SCHED_FIFO của scan. */
+    demote_to_normal_sched("st-retain");
     while (!stop_.load(std::memory_order_acquire)) {
         std::unique_lock<std::mutex> lock(wake_mutex_);
         wake_cv_.wait_for(lock, std::chrono::seconds(1));

@@ -659,6 +659,11 @@ TEST(ModbusMasterWriteLifecycle, DroppedWriteAllowsResendOfSameValue)
     shm->magic     = KX_SHM_MAGIC;
     shm->seq       = 2;
     shm->ext_count = 1;
+    /* `MBA-FW-02`: slot phải mang đúng danh tính Point mà worker gắn vào nó, và
+     * lượt drain đầu sau `open` chỉ lấy mốc — nên lượt đó chạy khi CHƯA có lệnh,
+     * rồi lệnh mới được ra như một command thật. */
+    std::strncpy(shm->ext[0].name, "sp", sizeof(shm->ext[0].name) - 1);
+    h.master.drain_ext_writes(shm.get(), 999);
     shm->ext[0].dirty    = 1;
     shm->ext[0].setpoint = 50.0;
 

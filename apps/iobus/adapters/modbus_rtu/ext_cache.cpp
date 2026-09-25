@@ -107,6 +107,15 @@ void ExtCache::mark_slave_stale(uint16_t start_idx, uint16_t count, uint8_t /*sl
     mark_range_quality(start_idx, count, KX_EXTQ_STALE, KX_EXTR_TIMEOUT, true);
 }
 
+void ExtCache::mark_bad_sample(uint16_t idx, kx_ext_quality_reason_t reason)
+{
+    std::lock_guard<std::mutex> lock(mu_);
+    if (idx >= KX_N_EXT) return;
+    samples_[idx].quality        = KX_EXTQ_BAD;
+    samples_[idx].quality_reason = static_cast<uint8_t>(reason);
+    samples_[idx].online         = 1u;
+}
+
 void ExtCache::mark_range_exception(uint16_t start_idx, uint16_t count, uint8_t exception_code)
 {
     std::lock_guard<std::mutex> lock(mu_);

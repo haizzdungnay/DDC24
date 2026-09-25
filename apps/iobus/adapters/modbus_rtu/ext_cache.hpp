@@ -57,6 +57,12 @@ public:
     void mark_slave_offline(uint16_t start_idx, uint16_t count, uint8_t slave_addr);
     void mark_slave_stale(uint16_t start_idx, uint16_t count, uint8_t slave_addr);
 
+    /* `MBA-FW-09`: thiết bị ĐÃ trả lời nhưng mẫu không dùng được (ngoài biên kỹ
+     * thuật, decode không hữu hạn). BAD kèm đúng lý do, KHÔNG đụng value/mốc
+     * thời gian — kể cả khi điểm chưa từng có mẫu tốt: "NOT_INITIALIZED" ở đây
+     * sẽ giấu mất việc thiết bị đang gửi số vô lý. */
+    void mark_bad_sample(uint16_t idx, kx_ext_quality_reason_t reason);
+
     /* Gắn mã exception Modbus gốc cho một dải slot (reason DEVICE_EXCEPTION). */
     void mark_range_exception(uint16_t start_idx, uint16_t count, uint8_t exception_code);
 

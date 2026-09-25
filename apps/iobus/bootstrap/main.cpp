@@ -39,6 +39,7 @@
 #include "modbus_rtu/bus_worker.hpp"
 #include "modbus_rtu/modbus_master.hpp"
 #include "modbus_rtu/modbus_tcp.hpp"
+#include "modbus_rtu/thread_policy.hpp"
 #include "bacnet/bacnet_config.hpp"
 #include "bacnet/bacnet_objects.hpp"
 #include "bacnet/bacnet_server.hpp"
@@ -438,8 +439,11 @@ int main(int argc, char** argv)
             w.enqueued_ms = now_ms();
             w.deadline_ms = req.deadline_ms ? now_ms() + req.deadline_ms : 0;
             w.readback    = req.readback;
-            if (!modbus.submit_write(w)) {
-                if (reason) *reason = "queue_full_or_slave_not_found";
+            /* `MBA-FW-07`: chuyển `bus_id` của request xuống — trước bản này
+             * nó được parse rồi bỏ, và lệnh đi tới slave ĐẦU TIÊN khớp địa chỉ
+             * trên bất kỳ dây nào. */
+            if (!modbus.submit_write(w, req.bus_id)) {
+                if (reason) *reason = "queue_full_or_slave_not_found_or_ambiguous_bus";
                 return false;
             }
             return true;
@@ -494,6 +498,8 @@ int main(int argc, char** argv)
     {
         if (rtu_configured) modbus.start_workers(ext_cache, fieldbus_metrics);
         fieldbus_thread = std::thread([&]() {
+            /* `MBA-FW-01`: publisher + cầu nối ghi KHÔNG thuộc vòng IOP. */
+            fieldbus::demote_to_normal_sched("fb-publish");
             uint64_t last_publish_ms = now_ms();
             while (!g_shutdown.load()) {
                 const uint64_t poll_now = now_ms();
@@ -569,6 +575,8 @@ int main(int argc, char** argv)
             bacnet_objects.update_ao_config(cfg.ao_channels);
             bacnet_server.apply_ao_config();
             bacnet_thread = std::thread([&]() {
+                /* `MBA-FW-01`: FW_SOM_DESIGN §2 — thread bacnet là SCHED_OTHER. */
+                fieldbus::demote_to_normal_sched("bacnet");
                 const kx_plc_shm_t* plc_shm = nullptr;
                 std::string address_signature = ipv4_address_signature(bacnet_cfg.bip.bind_interface);
                 uint64_t next_address_check_ms = 0;

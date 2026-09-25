@@ -93,6 +93,16 @@ struct PendingWrite {
      * ngược lại thành 23.400000572, và một phép so bằng tuyệt đối sẽ báo lệch
      * cho mọi lệnh ghi đúng. */
     double   readback_tolerance = 0.0;
+    /* `MBA-FW-04` (audit Modbus 2026-09-25) — danh tính NỘI BỘ của một mục trong
+     * hàng đợi, cấp lúc enqueue. `flush_pending` hợp nhất kết quả về hàng đợi
+     * thật theo `seq` chứ không theo `(slave, fc, reg, request_id)`: đường ghi
+     * cũ qua cờ `dirty` có `request_id` RỖNG, nên hai lệnh khác giá trị cho cùng
+     * một register trùng khoá và lệnh MỚI bị đánh dấu "đã gửi" thay cho lệnh cũ. */
+    uint64_t seq         = 0;
+    /* Đang được `flush_pending` phát (đã chụp vào batch). Mục đang bay KHÔNG được
+     * coalesce: ghi đè giá trị của nó chỉ đổi bản trong hàng đợi, còn bản trong
+     * batch vẫn phát giá trị cũ — và lệnh mới biến mất khi hợp nhất. */
+    bool     in_flight   = false;
 };
 
 /* Kết quả một lệnh ghi (MBR-B107). `applied` CHỈ được dùng khi slave đã trả
@@ -135,6 +145,13 @@ struct ReadBlock {
      * Tách khỏi `last_poll_ms`: "lần cuối ta thử hỏi" khác "lần cuối thiết bị
      * nói thật", và chỉ cái sau mới trả lời được câu hỏi dữ liệu còn tươi không. */
     uint64_t last_ok_ms = 0;
+    /* `MBA-FW-05` — slave TRẢ LỜI block này bằng exception (địa chỉ không tồn
+     * tại, hàm không hỗ trợ…). Đó là lỗi của BLOCK, không phải của thiết bị:
+     * các block khác vẫn đọc được và thiết bị vẫn đang nói chuyện. Cờ này giữ
+     * quality BAD/DEVICE_EXCEPTION của block khỏi bị lượt quét stale ghi đè
+     * thành STALE/TIMEOUT — một lý do sai dẫn người vận hành đi kiểm dây. */
+    bool     exception_active = false;
+    uint8_t  exception_code   = 0;
     /* Các điểm thuộc khối, kèm offset (đơn vị register/bit) trong khối. */
     struct Member {
         const ProfilePoint* point;
@@ -261,6 +278,10 @@ private:
      * `queue_mu_`; chỉ được gọi từ `flush_pending` ở đoạn ĐÃ nhả khoá. */
     void note_dropped_write_slot(uint16_t ext_idx);
     void mark_bus_down(ExtCache& cache, FieldbusMetrics& metrics);
+    /* `MBA-FW-06` — ghi một giao dịch GHI vào vòng nhớ khung, cùng hình dạng
+     * với giao dịch đọc, để Frame Monitor thấy được lệnh ghi. */
+    void record_write_frame(const PendingWrite& w, uint8_t slave, int rc, int saved_errno,
+                            uint32_t elapsed_us, FieldbusMetrics& metrics);
     void emit_result(const std::string& request_id, const char* status,
                      const char* reason, uint8_t exception_code);
     /* Cổng chết ⇒ PORT_ERROR + backoff. Trả true nếu errno chỉ ra lỗi CỔNG chứ
@@ -290,6 +311,7 @@ private:
     BusConfig                    bus_{};
     std::vector<BusSlaveBinding> slaves_;
     std::vector<PendingWrite>    pending_writes_;
+    uint64_t                     next_write_seq_ = 1;   /* bảo vệ bởi queue_mu_ */
     /* ext slot của các lệnh ghi kết thúc mà không áp được; xem
      * `take_dropped_write_slots()`. Bảo vệ bởi `queue_mu_`. */
     std::vector<uint16_t>        dropped_write_slots_;
@@ -306,6 +328,17 @@ private:
  * Không thử lại tức thời: mở lại một cổng đang lỗi ở nhịp mili-giây chỉ tạo
  * bão syscall và làm ngập journal, không làm cổng sống lại nhanh hơn. */
 uint32_t port_backoff_ms(uint8_t step);
+
+/* Tên Point của một ext slot — NGUỒN DUY NHẤT cho cả đường publish (BusWorker)
+ * lẫn đường ghi (`ModbusMaster::drain_ext_writes` so danh tính slot trước khi
+ * phát, `MBA-FW-02`). Điểm một slot mang đúng `point.name`; mảng nhiều slot
+ * mang `<slave>.<point>[i]`. */
+void ext_point_name(char out[24], const SlaveConfig& slave, const ProfilePoint& point,
+                    uint16_t logical_index);
+
+/* Phân loại kết quả một giao dịch cho vòng nhớ khung:
+ * `ok` · `timeout` · `crc` · `exception` · `error`. */
+const char* frame_reason(int rc, int saved_errno);
 
 } // namespace iobus::fieldbus
 

@@ -403,6 +403,26 @@ profile / hết slot **không** được báo ONLINE, có alarm E302) là hành 
 phải được giữ nguyên trong thiết kế mới; `ext_slots_for_point()` là nguồn chân lý
 duy nhất cho việc đếm slot; fieldbus chạy priority thường và không chặn IOP.
 
+### 12.3 Đối chiếu As-Built — audit Modbus 2026-09-25
+
+> Ghi nhận hiện trạng, **không** đổi nội dung thiết kế ở trên. Chi tiết và bằng chứng:
+> [REC-MBA-GAP-001](../../07_records/reviews/MODBUS_AUDIT_2026-09-25_FINDINGS_GAP_SOLUTIONS.md),
+> [REC-MBA-SRC-001](../../07_records/reviews/MODBUS_AUDIT_2026-09-25_SOURCE_STATUS.md),
+> [REC-MBA-BOARD-001](../../07_records/reviews/MODBUS_AUDIT_2026-09-25_BOARD_OPERATION_REPORT.md).
+
+| Mục thiết kế | As-Built trước audit (`36c1a863`) | Sau bản sửa (`efb3e4ae`) |
+|---|---|---|
+| §2 "Modbus không bao giờ chạy SCHED_FIFO" | **Vi phạm trên target**: mọi thread iobus thừa hưởng FIFO 70 của `main` | ĐÓNG (`MBA-FW-01`): thread phụ hạ về SCHED_OTHER, có tên |
+| §4.3 / §10 không replay sau restart (F-FW-07) | ◐ phát lại mọi slot `dirty=1` khi iobus khởi động | ĐÓNG phần restart (`MBA-FW-02`); **MỞ** phần lệnh bị bỏ được tạo lại vô hạn (`MBA-FW-08`, cần hợp đồng lệnh mới) |
+| §4.3 coalesce không mất lệnh | lệnh mới chen giữa giao dịch bị nuốt | ĐÓNG (`MBA-FW-04`) |
+| §6.1 exception ⇒ BAD ở cấp Point | exception kéo cả thiết bị OFFLINE | ĐÓNG (`MBA-FW-05`) |
+| §6.1 BAD không cập nhật value, giữ timestamp | decode lỗi ghi NaN kèm mốc mới | ĐÓNG (`MBA-FW-09`) |
+| F-FW-12 `bit_index`, F-FW-14 `min/max` | BE sinh khoá, iobus không đọc; Point bit ghi FC06 đè cả register | ĐÓNG phần đọc; ghi bit bị chặn fail-closed (FC22/RMW là quyết định mở) |
+| F-FW-16 slot ổn định | ST/graph ghi theo index | ◐ iobus từ chối phát khi tên slot lệch; binding theo danh tính vẫn **MỞ** (`MBA-GAP-02`) |
+| F-FW-06 / F-FW-15 request/result, readback | có mã, không nối | **MỞ** (`MBA-GAP-01`) |
+| F-FW-17 `deadline_miss`/`poll_duration` | chưa có | **MỞ** (`MBA-GAP-04`) |
+| Đồng thời `FieldbusMetrics` | không khoá — test abort 3/3 | ĐÓNG (`MBA-FW-03`) |
+
 ## 13. Test FW-SOM bắt buộc
 
 Cột **Hiện trạng** đối chiếu với test thật trong repo tại `eade4e5`.
@@ -437,3 +457,4 @@ Host/simulator pass **không** đóng gate phần cứng thật (`VR-MBRTU-011`)
 |---|---|---|---|
 | 0.1 | 2026-08-04 | In Review | Tạo FW-SOM runtime design: ownership, thread model, scheduler, codec, quality, write path, reload, capacity và 16 gap As-Built |
 | 0.2 | 2026-08-05 | In Review | Đối chiếu lại với `eade4e5` sau Track A. **Thay thế:** (a) §2 hai BusWorker → Rev A một worker, giữ kiến trúc *n* worker (Đ-01); (b) §4.1 thêm nhãn As-Built cho EDF/probe/retry và §4.1a tách `retry_count` khỏi `offline_after_errors` (Đ-05); (c) §4.3 thêm luật vòng đời write hữu hạn 3 lần/30 s và hai counter `write_failed`/`write_dropped`; (d) §11 capacity: 1 bus, mục tiêu ≥256 Point kèm bảng tác động ABI (Đ-07), bỏ tham chiếu sai board RK3566; (e) §12 tách thành 12.1 gap còn lại và 12.2 bảy nhóm đã đóng — hạ F-FW-01 xuống P2, hạ F-FW-07 xuống P1 (đóng một phần), thêm F-FW-17..F-FW-20; (f) §13 gắn từng TW-MBRTU với test thật trong repo, thêm TW-MBRTU-18/19 |
+| 0.2 (+§12.3) | 2026-09-25 | Active | Thêm §12.3 đối chiếu As-Built theo audit Modbus 2026-09-25; không đổi nội dung thiết kế đã duyệt |

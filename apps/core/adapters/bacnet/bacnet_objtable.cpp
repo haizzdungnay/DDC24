@@ -254,6 +254,17 @@ void BacnetObjTable::read_ext(int sockfd)
     }
     shm_->ext_count = cnt;
     for (uint16_t i = 0; i < cnt; i++) {
+        /* `MBA-FW-02` (audit Modbus 2026-09-25): slot đổi DANH TÍNH ⇒ lệnh ghi
+         * đang treo ở slot đó là của Point CŨ. Trước bản này setpoint/dirty được
+         * giữ nguyên qua generation swap, nên Point mới thừa hưởng setpoint của
+         * Point cũ và chỉ cần iobus khởi động lại (hoặc dedup bị xoá) là giá trị
+         * đó được phát xuống register của Point mới — sai thiết bị. Xoá ngay
+         * trong cùng vùng ghi với lúc đổi tên, để không consumer nào thấy tên
+         * mới đi cùng lệnh cũ. */
+        if (std::strncmp(shm_->ext[i].name, msg.samples[i].point_id, sizeof(shm_->ext[i].name)) != 0) {
+            shm_->ext[i].setpoint = 0.0;
+            shm_->ext[i].dirty    = 0;
+        }
         shm_->ext[i].value          = msg.samples[i].value;
         shm_->ext[i].quality        = msg.samples[i].quality;
         shm_->ext[i].quality_reason = msg.samples[i].quality_reason;
