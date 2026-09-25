@@ -669,7 +669,11 @@ export function useProgrammingCheck(checkId: string | undefined): RemoteState<Pr
     if (!checkId) return Promise.reject(new Error('checkId is required'))
     return client.request<ProgrammingCheck>('getProgrammingCheck', { path: { checkId } })
   }, [client, checkId])
-  return useProgrammingResource(load, 0)
+  const result = useProgrammingResource(load, 0, Boolean(checkId))
+  // Mở PGM-05 trực tiếp chưa có checkId là trạng thái DRAFT hợp lệ. Đừng báo
+  // NETWORK_ERROR cho một request chưa từng được gửi; khi bỏ deep-link cũ cũng
+  // không giữ lỗi/dữ liệu Check cũ trong khay log.
+  return checkId ? result : { ...result, status: 'loading', data: null, error: null }
 }
 
 /** Publisher/consumer do compiler xác nhận, neo vào đúng Draft/Revision/Check. */

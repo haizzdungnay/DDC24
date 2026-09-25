@@ -5,6 +5,7 @@ import {
   useProgrammingLibraryPaged,
   useProgrammingRevision,
   useProgrammingRevisionComparison,
+  useProgrammingCheck,
   useProgrammingRuntimeMonitor,
 } from './queries'
 
@@ -57,6 +58,29 @@ describe('useProgrammingResource — không làm rơi lượt đọc khi định
     await waitFor(() => expect(client.request).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(result.current.data).toEqual({ revisionId: 'rev-b' }))
     expect(client.request.mock.calls[1][1]).toEqual({ path: { revisionId: 'rev-b' } })
+  })
+})
+
+describe('useProgrammingCheck — deep-link chưa có Check', () => {
+  beforeEach(() => { client.request.mockReset() })
+
+  it('không gửi request và không báo lỗi khi thiếu checkId; đọc khi ID xuất hiện', async () => {
+    client.request.mockResolvedValue({ checkId: 'check-1', state: 'FAILED' })
+    const { result, rerender } = renderHook(
+      ({ checkId }: { checkId?: string }) => useProgrammingCheck(checkId),
+      { initialProps: { checkId: undefined as string | undefined } },
+    )
+    expect(result.current.status).toBe('loading')
+    expect(result.current.error).toBeNull()
+    expect(client.request).not.toHaveBeenCalled()
+
+    rerender({ checkId: 'check-1' })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(client.request).toHaveBeenCalledWith('getProgrammingCheck', { path: { checkId: 'check-1' } })
+
+    rerender({ checkId: undefined })
+    expect(result.current.data).toBeNull()
+    expect(result.current.error).toBeNull()
   })
 })
 
