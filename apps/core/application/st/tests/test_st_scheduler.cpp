@@ -730,4 +730,34 @@ TEST(StScheduler, TwoInstancesOfSameArtifactHaveIndependentState)
         << "hai instance phải có trạng thái hoàn toàn tách biệt";
 }
 
+
+/* F01 (EV-PROG-FBD-ST-MB-20260925) — tắt có chủ ý rồi bật lại KHÔNG phải lỡ
+ * nhịp: khoảng thời gian STOPPED không được cộng vào `missed_release_count`,
+ * và Program phải chạy ngay tick đầu sau khi start. */
+TEST(StSchedulerRevA, RestartedProgramDoesNotCountStoppedTimeAsMissed)
+{
+    StScheduler s(StSchedulerProfile::REV_A);
+    std::string err;
+    ASSERT_TRUE(s.add_task(task_cfg("Control_Main", 0, 1000, 100), &err)) << err;
+    ASSERT_TRUE(s.add_program("Control_Main", "program-main", 0, &err)) << err;
+    deploy(s, "program-main", counter_program(), 0);
+    StProgramInstance* program = s.find_program("program-main");
+    program->period_ms = 1000;
+
+    for (uint64_t second = 1; second <= 5; ++second) s.on_base_step(second * 1000 * kMs);
+    ASSERT_TRUE(s.stop("program-main", &err)) << err;
+    for (uint64_t second = 6; second <= 35; ++second) s.on_base_step(second * 1000 * kMs);
+    ASSERT_TRUE(s.start("program-main", &err)) << err;
+
+    const int32_t before = counter_of(s, "program-main");
+    for (uint64_t second = 36; second <= 40; ++second) {
+        const StSchedulerTickResult r = s.on_base_step(second * 1000 * kMs + 40000ull);
+        EXPECT_EQ(r.programs_run, 1u) << "giây " << second;
+    }
+    EXPECT_EQ(counter_of(s, "program-main"), before + 5);
+    EXPECT_EQ(program->missed_release_count, 0u)
+        << "30 s STOPPED có chủ ý bị đếm thành lỡ nhịp";
+    EXPECT_EQ(program->consecutive_missed_release, 0u);
+}
+
 } // namespace core

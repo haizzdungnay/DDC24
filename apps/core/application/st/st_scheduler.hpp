@@ -370,6 +370,10 @@ void st_program_mark_released(StProgramInstance* program, uint64_t now_ns,
  * coi là "chưa tới hạn" và Program mất trọn một chu kỳ. Nửa tick là biên duy
  * nhất vừa nuốt được jitter vừa không bao giờ cho chạy sớm một tick. */
 uint64_t st_release_tolerance_ns(uint64_t tick_period_ns);
+/* F01 — Program vừa (bật lại) vào RUNNING phải neo release MỚI. Giữ mốc của lần
+ * chạy trước làm khoảng thời gian bị tắt có chủ ý bị đếm thành lỡ nhịp. Bộ đếm
+ * tích luỹ `missed_release_count` giữ nguyên. */
+void st_program_reset_release(StProgramInstance* program);
 
 struct StTaskStats {
     uint32_t run_count = 0;

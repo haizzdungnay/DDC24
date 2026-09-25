@@ -95,6 +95,13 @@ uint64_t st_release_tolerance_ns(uint64_t tick_period_ns)
     return tick_period_ns / 2u;
 }
 
+void st_program_reset_release(StProgramInstance* program)
+{
+    program->release_started = false;
+    program->next_release_ns = 0;
+    program->consecutive_missed_release = 0;
+}
+
 /* T59-402 — release theo Program. `period_ms == 0` nghĩa là "theo chu kỳ Task":
  * giữ nguyên hành vi cho mọi cấu hình chưa khai chu kỳ riêng. */
 bool st_program_due(const StProgramInstance& program, uint32_t task_period_ms, uint64_t now_ns)
@@ -620,6 +627,8 @@ bool StScheduler::start(const std::string& instance_id, std::string* error)
             return false;
         }
     }
+    if (p->state != StProgramState::RUNNING && p->state != StProgramState::WAITING)
+        st_program_reset_release(p);
     p->state = StProgramState::RUNNING;
     p->enabled = true;
     return true;
@@ -770,6 +779,7 @@ void StScheduler::apply_pending_enable_requests(StTask& task) noexcept
                 /* DISABLED -> RUNNING đi thẳng: bước STOPPED trung gian của
                  * đường cũ không quan sát được từ ngoài boundary, và tách hai
                  * bước ra mới là thứ tạo ra trạng thái nửa vời khi bước sau hỏng. */
+                st_program_reset_release(p.get());
                 p->enabled = true;
                 p->state = StProgramState::RUNNING;
             }
