@@ -52,3 +52,4 @@ ADR lưu lại các quyết định kiến trúc quan trọng. Mỗi ADR có: Co
 | [ADR-040](ADR-040-easyset-parity-config-surfaces.md) | EasySet Parity Config Surfaces (trước đây phát hành nhầm là `ADR-010`) | Accepted |
 | [ADR-041](ADR-041-ui-raw-live-data-shm.md) | UI Raw Live Data In Shared Memory (trước đây phát hành nhầm là `ADR-011`) | Accepted |
 | [ADR-051](ADR-051-programming-ttl-hold-last-60s.md) | TTL hold-last Program = 60 s đồng hồ (đóng blocker `DDD-CTRL-PROG-001` §15) | Accepted |
+| [ADR-061](ADR-061-programming-chu-ky-10ms-bo-chu-ky-moi.md) | Chu kỳ bộ điều khiển 10 ms, bộ chu kỳ Program {10…50000} ms, I/O mở rộng spec riêng | Accepted |

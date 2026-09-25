@@ -2,11 +2,15 @@
 
 **ID:** ADR-LOG-001
 **Trạng thái:** Active
-**Cập nhật:** 2026-09-10 (`ADR-057`…`ADR-060` **Accepted** — vòng phê duyệt BACnet
+**Cập nhật:** 2026-09-26 (`ADR-061` **Accepted** — chu kỳ bộ điều khiển 10 ms, bộ chu kỳ
+Program {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms, tiêu chí C1–C4 (vi phạm = lỗi),
+I/O mở rộng có spec riêng; supersede một phần `ADR-050` mục 3 và `ADR-051`. Hồ sơ
+[`ADR-061`](../adr/ADR-061-programming-chu-ky-10ms-bo-chu-ky-moi.md). `ADR-062` là số trống kế tiếp.
+Trước đó: 2026-09-10 (`ADR-057`…`ADR-060` **Accepted** — vòng phê duyệt BACnet
 Rev A của CTO: phạm vi V1.1 cho Alarm/Schedule/Calendar/Trend Log, chấp nhận breaking
 change tập object một lần, mở lại `/bacnet/objects` chỉ đọc, và thang bằng chứng BACnet
 (`HOST` không tính, thêm `LOOPBACK`). Nguồn `REV-BACNET-ASBUILT-001`; biên bản
-`DDC24-BACNET-APPROVAL-2026-09-10`. `ADR-061` là số trống kế tiếp. Trước đó:
+`DDC24-BACNET-APPROVAL-2026-09-10`.) Trước đó:
 2026-09-05 — `ADR-056` **Accepted** — `ISS-STED-16` là `V1-DEFER`
 và cổng `ISS-STED-20` đọc phụ thuộc theo phạm vi phát hành. Cùng ngày: `ADR-055` **Accepted** — Modbus TCP là năng lực ẩn có
 chủ ý, capability-gated, không phải mã chết; nguồn finding `REV-PIO-3SRC-001`,
@@ -1635,6 +1639,7 @@ ngữ ST bám IEC 61131-3) và
 
 | Ngày | Nội dung |
 |---|---|
+| 2026-09-26 | Cấp `ADR-061` **Accepted**: base step 10 ms; tập chu kỳ đúng bằng {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms; C1 tập chu kỳ, C2 overrun = 0, C3 missed release = 0, C4 jitter ≤ 100 µs (vi phạm = lỗi); I/O mở rộng spec riêng theo giao thức/baud; EXT về `safe_value` khi rút. Quyết định kỹ thuật 4.1–4.13 (giữ profileId, budget µs, TTL = max(60 s, 2×chu kỳ), freshness 10–150000 ms, metric C4, nền RT chờ BSP). Nguồn `EV-PROG-FBD-ST-MB-20260925` |
 | 2026-09-05 | Cấp `ADR-056` **Accepted**: `ISS-STED-16` (#367) là **`V1-DEFER`** — `VAR_IN_OUT`/`ARRAY`/`STRUCT` không thuộc tập bắt buộc mở `RELEASE_READY` V1. Cổng `ISS-STED-20` (#369) đọc phụ thuộc theo **phạm vi phát hành**, không theo "mọi mã 01..19"; hồ sơ ký đóng V1 phải liệt kê tên từng mã được hoãn. `ADR-054` không bị đảo — đây là quyết định về thời điểm, không phải phạm vi ngôn ngữ. Nguồn: phân loại lane phát hành của chủ sở hữu 2026-09-04 tại #367. Số trống kế tiếp `ADR-057`. |
 | 2026-09-05 | Cấp `ADR-055` **Accepted**: Modbus TCP là năng lực **ẩn có chủ ý (capability-gated)**, không phải mã chết bị bỏ quên. `modbus_tcp.{hpp,cpp}` tồn tại và được `register_codec` dùng, nhưng không có route/schema/trang — đúng đề bài §19 (*"Rev A chưa hỗ trợ thì không hiện tab này"*). Xoá để "dọn dẹp" là hồi quy; mở tab là quyết định sản phẩm Rev B. Nguồn: `REV-PIO-3SRC-001`, `F-PIO-024`, đóng #410. Số trống kế tiếp `ADR-056`. |
 | 2026-08-31 | Cấp `ADR-054` **Accepted**: phạm vi ngôn ngữ ST bám IEC 61131-3 — nguyên tắc áp cho cú pháp, `CASE` giữ (kèm luật WCET), `PID`/`HYSTERESIS`/`SCALE`/`DEADBAND` giữ nhưng phải đánh dấu là mở rộng nhà sản xuất, vòng lặp giữ loại trừ vì `P1`, hệ kiểu làm theo đợt (`VAR_IN_OUT`+`ARRAY`+`STRUCT` trước). Nguồn: `REV-STED-IEC-001`. Số trống kế tiếp `ADR-055`. |
