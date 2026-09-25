@@ -3,6 +3,10 @@
  * @brief Entry: init → config → shm → UART → handshake → poll 100Hz → signal → sd_notify.
  *        Startup sequence đúng bảng 06 §13. State machine 05 §13.
  */
+#include <sys/stat.h>
+#include <sys/uio.h>
+#include <algorithm>
+#include <cstdlib>
 #include <atomic>
 #include <csignal>
 #include <cstdio>
@@ -248,8 +252,134 @@ void publish_fieldbus_metrics(iobus::IoCache& cache,
 
 } // namespace
 
+
+/* EV-PROG-FBD-ST-MB-20260925 F08 — mức log tới được journald.
+ *
+ * Binary in mọi dòng ra stderr với mức ở dạng CHỮ ("WARN  …", "ERROR …"), còn
+ * journald chỉ hiểu tiền tố `<N>` đứng đầu dòng. Thiếu tiền tố thì mọi dòng là
+ * priority info, và `journalctl -p warning` trả "No entries" trong lúc dịch vụ
+ * đang cảnh báo — đúng cách baseline audit 2026-09-25 báo "0 cảnh báo" sai.
+ * Chỉ bật khi chạy dưới systemd (`JOURNAL_STREAM`); buffer TĨNH, không cấp phát
+ * trong đường ghi vì luồng quét RT cũng in log. Bản sao cùng nội dung nằm ở
+ * `main.cpp` của binary kia (Core/iobus không có thư viện dùng chung). */
+namespace {
+namespace journal_level {
+
+struct Sink {
+    int    fd = -1;
+    char   carry[4096];
+    size_t used = 0;
+};
+
+Sink g_sink;
+
+int level_of(const char* line, size_t n)
+{
+    auto starts = [&](const char* token) {
+        const size_t k = std::strlen(token);
+        return n >= k && std::memcmp(line, token, k) == 0;
+    };
+    if (starts("ERROR") || starts("ALARM") || starts("FATAL")) return 3;
+    if (starts("WARN")) return 4;
+    if (starts("INFO") || starts("AUDIT")) return 6;
+    if (starts("DEBUG")) return 7;
+    return -1;
+}
+
+void write_all(int fd, const char* data, size_t n)
+{
+    while (n > 0) {
+        const ssize_t written = ::write(fd, data, n);
+        if (written < 0) {
+            if (errno == EINTR) continue;
+            return;
+        }
+        data += written;
+        n -= static_cast<size_t>(written);
+    }
+}
+
+void emit_line(Sink* sink, const char* line, size_t n)
+{
+    const int level = level_of(line, n);
+    if (level >= 0) {
+        char prefix[3] = {'<', static_cast<char>('0' + level), '>'};
+        struct iovec parts[2] = {{prefix, sizeof(prefix)}, {const_cast<char*>(line), n}};
+        /* Một syscall ⇒ tiền tố không tách khỏi dòng. Hỏng thì ghi nguyên văn:
+         * mất tiền tố còn hơn mất dòng log. */
+        if (::writev(sink->fd, parts, 2) < 0) write_all(sink->fd, line, n);
+    } else {
+        write_all(sink->fd, line, n);
+    }
+}
+
+ssize_t cookie_write(void* cookie, const char* buf, size_t size)
+{
+    auto* sink = static_cast<Sink*>(cookie);
+    size_t start = 0;
+    for (size_t i = 0; i < size; ++i) {
+        if (buf[i] != '\n') continue;
+        if (sink->used > 0) {
+            /* Ghép phần dở của lần ghi trước với phần đầu lần này. */
+            const size_t take = std::min(i + 1 - start, sizeof(sink->carry) - sink->used);
+            std::memcpy(sink->carry + sink->used, buf + start, take);
+            emit_line(sink, sink->carry, sink->used + take);
+            sink->used = 0;
+        } else {
+            emit_line(sink, buf + start, i + 1 - start);
+        }
+        start = i + 1;
+    }
+    if (start < size) {
+        const size_t rest = size - start;
+        if (sink->used + rest > sizeof(sink->carry)) {
+            /* Dòng dài bất thường: xả nguyên văn thay vì cắt mất dữ liệu. */
+            write_all(sink->fd, sink->carry, sink->used);
+            write_all(sink->fd, buf + start, rest);
+            sink->used = 0;
+        } else {
+            std::memcpy(sink->carry + sink->used, buf + start, rest);
+            sink->used += rest;
+        }
+    }
+    return static_cast<ssize_t>(size);
+}
+
+/* `JOURNAL_STREAM` = "dev:inode" của stream journald mà systemd nối vào
+ * stdout/stderr. Chỉ tin nó khi stderr THẬT SỰ là stream đó: tiến trình con
+ * thừa hưởng biến môi trường trong khi stderr đã bị chuyển sang pipe/file
+ * (test bắt stderr) thì không được gắn tiền tố. */
+bool stderr_is_journal_stream()
+{
+    const char* value = std::getenv("JOURNAL_STREAM");
+    if (value == nullptr) return false;
+    unsigned long long dev = 0, ino = 0;
+    if (std::sscanf(value, "%llu:%llu", &dev, &ino) != 2) return false;
+    struct stat st {};
+    if (::fstat(STDERR_FILENO, &st) != 0) return false;
+    return static_cast<unsigned long long>(st.st_dev) == dev &&
+           static_cast<unsigned long long>(st.st_ino) == ino;
+}
+
+void install_if_journald()
+{
+    if (!stderr_is_journal_stream()) return;
+    g_sink.fd = ::dup(STDERR_FILENO);
+    if (g_sink.fd < 0) return;
+    cookie_io_functions_t io{};
+    io.write = cookie_write;
+    FILE* stream = ::fopencookie(&g_sink, "w", io);
+    if (stream == nullptr) return;
+    std::setvbuf(stream, nullptr, _IOLBF, 0);
+    stderr = stream;
+}
+
+} // namespace journal_level
+} // namespace
+
 int main(int argc, char** argv)
 {
+    journal_level::install_if_journald();
     using namespace iobus;
 
     std::string config_path = "/data/config/io_config.conf";
