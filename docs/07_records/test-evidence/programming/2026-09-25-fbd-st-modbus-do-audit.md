@@ -108,13 +108,65 @@ Lượt 1 ghi nhận finding khi chưa được sửa mã. Từ lượt 2, mỗi
 | F01 | **P1** | Program bỏ release ngẫu nhiên khi chu kỳ Program bằng base step; health vẫn báo HEALTHY, task không đếm missed. Vi phạm C3 và `PROGRAM_TASK_SCHEDULER_SPEC` §4 ("Task 100 ms chạy đúng 10 lần mỗi giây kể cả khi có tick bị trễ"). | 23/30 missed trong 144 chu kỳ; 24/32 chu kỳ thiếu FC05; readback DO đứng yên 2 s | `st_program_mark_released` neo release đầu vào thời điểm chạy thật đã có jitter (`st_scheduler.cpp:100`: `now_ns + period_ns`), còn `st_program_due` so sánh chặt (`:91`). Tick sau có jitter nhỏ hơn tick neo thì bị coi là chưa đến hạn. Program có chu kỳ dài hơn base step cũng có thể chạy trễ thêm một base step. **ĐÃ SỬA `aa016695`**: so hạn với dung sai nửa tick; Program dùng nửa chu kỳ Task, Task dùng nửa min(chu kỳ Task, base step thật). Thêm 6 test (jitter 19–127 µs, bộ chu kỳ mới trên base 10 ms, lỡ thật vẫn đếm). ctest 1519/1519 PASS. Deploy + đo lại trên target: xem lượt 2 |
 | F02 | **P1** so với spec | Profile Rev A: base step 1000 ms, `taskPeriodsMs=[1000,5000,30000]`, 1 Task | Log `core.base_step_ms=1000`; capabilities | Quyết định hợp đồng Rev A | Profile Rev B (G3, G4) |
 | F03 | **P1** so với spec | Kernel non-RT không giữ được jitter ≤ 100 µs | `core.jitter` 105–268 µs; `cyclictest` tối đa 470 µs (10 ms ghim lõi), 3 200 µs (`-S`) | `PREEMPT_VOLUNTARY`, IRQ và tiến trình khác dùng chung lõi, governor `schedutil` | Nền RT (G2) |
-| F04 | P2 | Sau Restore, Program của Revision được khôi phục không chạy dù `desiredEnabled=true`; phải PUT intent lại | 16:17:38 task STOPPED; 16:35 PUT intent → RUNNING | Restore không áp lại intent Enable đã lưu (cần đọc mã để chốt) | Restore phải áp intent hiện hành ở cùng safe boundary; test e2e Restore → RUNNING |
-| F05 | P2 | Trace không lên Core: yêu cầu 100 ms nhưng mẫu ~2 s, `programValue` luôn null; monitor mất ~2 s | Trace `1c5cc23f…`; log web `runtime/monitor dur_ms=1972` | `TRACE_START` bị từ chối hoặc lỗi IPC nên rơi về poll; lý do không được log. IPC web chỉ được phục vụ mỗi lần quét (1 s) | Log `detailCode` khi Core từ chối; lộ nguồn trace (CORE/POLL) cho người dùng; phục vụ IPC ngoài luồng quét RT |
+| F04 | P2 | Sau Restore, Program của Revision được khôi phục không chạy dù `desiredEnabled=true`; phải PUT intent lại | 16:17:38 task STOPPED; 16:35 PUT intent → RUNNING | Restore không áp lại intent Enable đã lưu (cần đọc mã để chốt) | **ĐÃ SỬA `a1a976dd`**: vòng reconcile 2 s đối chiếu MỨC với snapshot sống; Program đang nghỉ ngược intent được replay, FAULTED/ROLLED_BACK không tự bật lại. 5 test mới. Deploy web + Restore trên target: xem lượt 2 |
+| F05 | P2 | Trace không lên Core: yêu cầu 100 ms nhưng mẫu ~2 s, `programValue` luôn null; monitor mất ~2 s | Trace `1c5cc23f…`; log web `runtime/monitor dur_ms=1972` | `TRACE_START` bị từ chối hoặc lỗi IPC nên rơi về poll; lý do không được log. IPC web chỉ được phục vụ mỗi lần quét (1 s) | **ĐÃ SỬA `aa3f6a57`**: envelope TRACE_* mang actor + correlation của phiên (bản giả trong test chạy `ValidateRequest`; đỏ trên mã cũ, xanh trên mã mới); monitor lấy `programValue` của DO Modbus từ `setpoint` slot `ext`. Còn mở: IPC web chỉ được phục vụ mỗi scan (hết khi base step 10 ms, G3), khoá cho `StValueTrace` (G3) |
 | F06 | P2, cần quyết định | Disable Program có output EXT Modbus để DO giữ giá trị cuối vô thời hạn | DO2 giữ 1 từ 16:17:01 tới khi write-test 16:35 | `PROGRAMMING_CONTROL_SEMANTICS` §6: withdraw rồi "tầng dưới quyết định", nhưng EXT không có resolver/relinquish nên không có tầng dưới | Chủ sở hữu chọn: về `safe_value` khi withdraw, hoặc giữ nguyên kèm cảnh báo hiển thị rõ |
-| F07 | P3 | Danh sách intent hiện RUNNING/FAULTED (`LAST_KNOWN`) cho Program không thuộc Active Revision | `136d8ab2…` hiện "RUNNING" khi đã bị thay; `5619efde…`/`9f1887fe…` FAULTED | Ghép intent lưu trữ với trạng thái cuối, không lọc theo Active | Program ngoài Active hiện NOT_DEPLOYED |
+| F07 | P3 | Danh sách intent hiện RUNNING/FAULTED (`LAST_KNOWN`) cho Program không thuộc Active Revision | `136d8ab2…` hiện "RUNNING" khi đã bị thay; `5619efde…`/`9f1887fe…` FAULTED | Ghép intent lưu trữ với trạng thái cuối, không lọc theo Active | **ĐÃ SỬA `a1a976dd`**: Program vắng trong gói đang chạy không nhận replay; `IPC-UNKNOWN-INSTANCE` giữ UNKNOWN, không ghi FAULTED. Hiển thị `LAST_KNOWN` giữ đúng hợp đồng OpenAPI |
 | F08 | P3 | `journalctl -p warning` không bắt được dòng WARN/ERROR của ứng dụng; baseline "0 dòng" trước đây bị mù | 16:13:46 web in `WARN health degraded err=shm /dev/shm/mkddc_io_shm: không đọc được snapshot nhất quán` nhưng `-p warning` trả "No entries" | Ứng dụng in ra stderr, journald gán mức info | Dùng `SyslogLevelPrefix`/`sd_journal` hoặc tiền tố `<4>`; cổng audit phải grep nội dung |
 | F09 | P3 | `Draft.latestCheck` trỏ tới Check PASSED của Revision thử nghiệm trong khi nội dung Draft là WIP chưa Check (`dirty=true`) | `GET /projects` sau khôi phục | Check gắn với base revision | UI không được hiển thị nó như kết quả Check của Draft đang sửa |
 | F10 | P3 | Chẩn đoán FBD gây hiểu nhầm: biến đã khai trong bảng locals (OUTPUT) nhưng không có khối OUTPUT thì báo "not declared in VAR_INPUT/VAR_OUTPUT" | Check `f90e1433…` của Draft WIP | Bộ biên dịch FBD chỉ khai VAR_OUTPUT từ khối OUTPUT (`st_fbd_compile.cpp:275`) | Thông điệp nêu rõ "biến không có khối OUTPUT trên sơ đồ" hoặc bỏ binding mồ côi |
+
+## Audit lượt 2 (2026-09-25 17:08 UTC trở đi) — sau khi sửa F01
+
+| Thời điểm (UTC) | Bước | Kết quả / bằng chứng | Trạng thái |
+|---|---|---|---|
+| 17:08 | Deploy Core từ `main@d217f6b7` (PR #749) | Cross-build ARM từ cây sạch (`git_commit=d217f6b7…`, cần tối đa GLIBCXX_3.4.29 và GLIBC_2.38). Sao lưu `/data/mkddc/deploy-backups/2026-09-25T1708Z-f01/`. `/proc/MainPID/exe` = `ee42f0a4…` khớp bản build, `NRestarts=0`, không có `(deleted)`; health 6/6 `ok`; Active #52 RUNNING, task `missedReleaseCount=0` | PASS deploy |
+| 17:09:34 | Commission lại Revision `cfe17ec5…` (Check `9e2848b1…` PASSED sẵn, Draft WIP không bị đụng) | Operation `208cc3e5…` SUCCEEDED | PASS |
+| 17:09:38–17:10:46 | Cửa sổ 1 (68 s) | FC05 DO2 68/68, DO4 68/68, khoảng cách 994–1006 ms (lượt 1: 666–2334 ms); `missedReleaseCount` 0/0 | **PASS C3 ở 1 s** |
+| 17:10:46–17:11:32 | Disable 46 s rồi Enable lại (kiểm F01b) | Enable lại không cộng thời gian tắt vào missed | PASS |
+| 17:11:33–17:14:43 | Cửa sổ 2 (190 s) | FC05 DO2 190/190, DO4 189/190, khoảng cách 997–1003 ms; `missedReleaseCount` 0/0, `consecutive` 0; task `missedReleaseCount` 0, overrun 0, `maxExecNs` 18 085 | **PASS C3 ở 1 s** |
+
+Kết luận lượt 2 đến thời điểm này: F01 đã khỏi trên target. Logic 1 s nay ra đúng một lệnh FC05 mỗi giây, lệch tối đa 6 ms. C1 và C4 vẫn FAIL vì đó là bài toán nền tảng: G2–G4.
+
+### Bản đồ gap Rev B cho bộ chu kỳ {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms
+
+Rà toàn repo (chỉ đọc) cho ra các xung đột phải giải quyết trong ADR mới, trước khi code:
+
+| Mã | Xung đột | Nơi |
+|---|---|---|
+| X1 | Hold TTL 60 s < 2 × 50 000 ms; `static_assert(TTL ≥ 2×max period)` sẽ làm build gãy | `st_scheduler.hpp`, ADR-051 |
+| X2 | 10 ms nằm ngoài dải base step 500–2000 ms (cả `st_base_step` lẫn `graph.scan_ms`); profile supporting có sàn 50 ms | `st_scheduler.hpp`, `graph_runtime.cpp` |
+| X3 | Task `main` cứng 1000 ms nên Program 10–500 ms chỉ được xét mỗi 1 s. Đổi Task sang 10 ms thì luật budget tính bằng ms (`budget·100 < period·20`) chỉ còn cho 1 ms | `main.cpp`, `st_scheduler.cpp` |
+| X4 | Mô hình ngân sách: Go cấp 20% chu kỳ cho TỪNG Program, Core chỉ đo cả Task. Khi mọi chu kỳ trùng nhịp (t = 50 s) tổng budget ≈ 13,3 s, gấp rất nhiều lần base 10 ms | `checks_topology.go`, `st_scheduler.cpp` |
+| X5 | Go chấp nhận ≤ 20%, Core đòi < 20% | như trên |
+| X6 | Overrun thứ 1–2 chỉ là cảnh báo, lần 3 mới FAULT, trong khi C2 đòi 0 | ADR-029, `main.cpp` |
+| X7 | Missed release chỉ đếm khi trễ ≥ trọn chu kỳ; ScanLoop không đếm base step bị lỡ | `st_scheduler.cpp`, `scan_loop.cpp` |
+| X8 | C4 không có metric: jitter chỉ log stderr mỗi 60 s | `scan_loop.cpp` |
+| X9 | Freshness Published Signal 1000–90 000 ms (lặp ở 9 chỗ) không hợp với chu kỳ 10–500 ms và 50 000 ms | Core, Go, store SQL, OpenAPI, FE |
+| X10 | Trace tối thiểu 100 ms; trần 10 000 ô | `st_value_trace.hpp`, `trace.go` |
+| X11 | Capabilities chép cứng `[1000,5000,30000]`, `Tasks: 1` (profile đã là 3) | `runtime.go`, `program_ipc_server.cpp` |
+| X12 | FE ép mọi chu kỳ lạ về 1000 ms, nên có thể âm thầm đổi Program 10 ms thành 1000 ms | `draftV2.ts`, `ExecutionTab.tsx` |
+| X13 | Simulation ở tick 10 ms: 100 IPC + 100 lần ghi SQLite mỗi giây cho mỗi phiên | `simulation.go` |
+| X14–X15 | RETAIN notify 100 lần/s; watchdog 100 lần/s, `WatchdogSec=6` tính theo base 2000 ms | `st_retain.cpp`, `main.cpp` |
+| X16 | profileId `revA-1t-1-5-30` mang nghĩa "1-5-30"; đổi id thì FBD doc/manifest/draft cũ bị từ chối, giữ id thì sha vẫn đổi và phải re-pin | contracts, `st_fbd_model.cpp`, `draft_v2.go` |
+| X17 | Chu kỳ sai dùng lại `ST-LIM-009` (quá nhiều Program); C1 chưa có mã lỗi riêng | `st_diagnostic.hpp` |
+| X18 | Stale sau 3 scan co còn 30 ms | `point_quality.hpp` |
+| X19 | BACnet, ext writes, web IPC, alarm, schedule đều chạy trong cùng step, trái yêu cầu "I/O mở rộng không tính vào chu kỳ" | `scan_loop.cpp` |
+| X20 | VS-PROG-009 đòi 10 000 cycle cho mỗi chu kỳ: riêng 50 000 ms ≈ 5,8 ngày | kế hoạch kiểm chứng |
+
+Quy mô: 43 file test ghim giá trị cũ (Core 18, Go 9, FE 13, E2E 3). Phải re-pin `g1_contract_join_v1.json`, `programming_store_v1.manifest.json`, `fbd/manifest.json`, `pgm02_workspace_v1.json` và `error_catalog_v1.manifest.json`, cùng migration store mới cho dải freshness.
+
+Thứ tự bắt buộc:
+1. ADR mới supersede ADR-026/027/028/029/050.3/051 (base step 10 ms, mô hình budget bằng µs theo tổng WCET mỗi base step, TTL ≥ 100 s, overrun = lỗi, dải freshness/trace, định nghĩa missed release và jitter).
+2. Hợp đồng và re-pin.
+3. Sinh mã.
+4. Core.
+5. Go.
+6. FE.
+7. Test.
+8. Tài liệu.
+
+Việc này đổi hợp đồng sản phẩm nên đi theo quy tắc "doc trước, code sau": ADR phải được duyệt trước khi code.
 
 ## Giải pháp tối ưu để spec sản phẩm ghi "cycle 10 ms"
 
