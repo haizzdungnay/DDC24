@@ -136,6 +136,10 @@ Lượt 1 ghi nhận finding khi chưa được sửa mã. Từ lượt 2, mỗi
 | 17:47:35–17:47:46 | Kiểm F06 trên target | Enable → DO2/DO4 = 1; Disable 17:47:35,9 → iobus `ext_release_safe` DO2 (17:47:36) và DO4 (17:47:37), FC05 addr 1 ở +1195 ms, addr 3 ở +2196 ms; readback DO2 = DO4 = 0 từ 17:47:43 | **PASS F06** |
 | 17:48:05 | Restore về #52 | SUCCEEDED; Program #52 RUNNING ngay lần đọc đầu | PASS |
 
+| 17:58 | Deploy core + iobus + web `910b571c` (PR #753: F08, F10) | Sao lưu `…T1758Z-f08f10/`; exe core `9fedbc30…`, iobus `448716a5…`, web `05d09b81…`, `NRestarts=0`. `journalctl -p warning` nay trả đúng các dòng WARN/ERROR (trước: "No entries"). Sau khởi động 40 s không còn cảnh báo nào; các cảnh báo lúc khởi động là cấu hình sẵn có của bo (`alarm_cfg.missing` = alarm đang tắt trên bo lab, `bind_interface_empty`, `uart_device`) và 22 dòng `sendto_fail` khi iobus chờ Core lên | **PASS F08** |
+| 17:51:47 | Quan sát (không thuộc phiên audit) | Actor `admin` từ một phiên khác (không có trong log HTTP của harness) seal Draft WIP thành revision `0b511c3f…` rồi Check `b08fb8ab…` FAILED. Phiên audit không đụng Draft kể từ 16:35 | Ghi nhận |
+| 18:0x | G2 tạm (ADR-061 4.11): dời 64 IRQ khỏi CPU3 (20 IRQ per-CPU không dời được), dừng `irqbalance` | `cyclictest` 10 ms CPU3: rảnh tối đa 173 µs (trước 470 µs), 9/6000 > 100 µs; có tải tối đa 212 µs (trước 251 µs), 16/6000 > 100 µs. IRQ eMMC `dw-mci` (69 triệu ngắt trên CPU3) không còn chạm CPU3. Đã trả affinity và bật lại `irqbalance` | C4 vẫn **FAIL**: kernel non-RT là giới hạn, cần PREEMPT_RT (chờ BSP Forlinx) |
+
 Bo sau lượt 2: Active #52 RUNNING; DO2 = DO4 = 0, DO3 = 1 như baseline đầu phiên (DO1 do #52 điều khiển); Draft WIP không bị đụng kể từ lần khôi phục 16:35; override rỗng. DO2/DO4 từng kẹt ở 1 từ 17:14 tới 17:47 do lượt 2 Disable trên mã cũ, và chính F06 đã đưa chúng về 0.
 
 Kết luận lượt 2 đến thời điểm này: F01 đã khỏi trên target. Logic 1 s nay ra đúng một lệnh FC05 mỗi giây, lệch tối đa 6 ms. C1 và C4 vẫn FAIL vì đó là bài toán nền tảng: G2–G4.
