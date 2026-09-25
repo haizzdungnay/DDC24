@@ -326,9 +326,11 @@ type traceCoreReader struct {
 	readCalls   int
 	stopCalls   int
 	rejectStart bool
-	samples     []traceReadSample
-	state       string
-	dropped     uint32
+	// envelopeErrors đếm request bị `coreipc.ValidateRequest` từ chối (F05).
+	envelopeErrors int
+	samples        []traceReadSample
+	state          string
+	dropped        uint32
 }
 
 // counts trả về ảnh chụp nhất quán của ba bộ đếm. Đọc từng trường rời rạc sẽ
@@ -349,6 +351,13 @@ func readerStopCalls(f *traceCoreReader) int { _, _, s := f.counts(); return s }
 func (f *traceCoreReader) Call(ctx context.Context, request coreipc.Request) (coreipc.Response, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// F05: bản giả phải chặn envelope y như `coreipc.Client.Call` thật. Thiếu
+	// phép kiểm này, bản cũ gửi actor/correlation rỗng vẫn xanh ở đây trong khi
+	// trên bo không phiên trace nào từng rời khỏi web-api.
+	if err := coreipc.ValidateRequest(request); err != nil {
+		f.envelopeErrors++
+		return coreipc.Response{}, err
+	}
 	switch request.Action {
 	case coreipc.ActionTraceStart:
 		f.started++
