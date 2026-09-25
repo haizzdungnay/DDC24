@@ -25,6 +25,8 @@ import { PROGRAMS_WORKSPACE_V2_ENABLED } from '../../../shared/config'
 import { DesignWorkbench } from './workbench/DesignWorkbench'
 import { FbdCanvasBridgeProvider } from './workbench/WorkbenchMinimapPanel'
 import { projectPendingProgramSources } from './workbench/workbenchDraft'
+import { checkPouAndDependencies, type PouCheckLog, type PouCheckResult } from './editor/pouCheck'
+import { contextNotice } from '../layout/ProgrammingContextStrip'
 import { LiveProgramView } from './LiveProgramView'
 import { SimulateWorkspace } from '../simulation/SimulateWorkspace'
 import { useSimulation } from '../simulation/useSimulation'
@@ -137,7 +139,8 @@ export function DesignWorkspacePage({
      nó chỉ poll khi thực sự có phiên sống, nên EDIT/LIVE không sinh tải nào. */
   const simulation = useSimulation()
   const runtime = useProgrammingRuntime()
-  const { setEditingContext, setContextStripSlot } = useProgrammingRuntimeContext()
+  const runtimeContext = useProgrammingRuntimeContext()
+  const { setEditingContext, setContextStripSlot } = runtimeContext
   const detectedMobileReadOnly = useProgrammingMobileReadOnly()
   const mobileReadOnly = mobileReadOnlyOverride ?? detectedMobileReadOnly
   const { projectId: routeProjectId } = useParams<{ projectId: string }>()
@@ -596,6 +599,138 @@ export function DesignWorkspacePage({
     }
   }, [checkRevisionId, selectedProgramId, bufferSha256])
 
+  const [localCheckResult, setLocalCheckResult] = useState<PouCheckResult | null>(null)
+  const [localChecking, setLocalChecking] = useState<boolean>(false)
+  const [localCheckLogs, setLocalCheckLogs] = useState<PouCheckLog[]>([])
+  const [workbenchTab, setWorkbenchTab] = useState<'problems' | 'status' | 'logs' | 'search' | 'references' | undefined>(undefined)
+  const localCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (localCheckTimerRef.current) {
+        clearTimeout(localCheckTimerRef.current)
+        localCheckTimerRef.current = null
+      }
+    }
+  }, [])
+
+  const handleRunLocalCheck = useCallback(() => {
+    if (!selectedProgramId || !workspaceDocument) return
+    setLocalChecking(true)
+    setWorkbenchTab('logs')
+
+    const currentDoc = workspaceMode === 'EDIT'
+      ? projectPendingProgramSources(workspaceDocument, programOperations)
+      : workspaceDocument
+    const result = checkPouAndDependencies(selectedProgramId, currentDoc)
+
+    if (localCheckTimerRef.current) clearTimeout(localCheckTimerRef.current)
+    localCheckTimerRef.current = setTimeout(() => {
+      setLocalCheckResult(result)
+      setLocalCheckLogs(result.logs)
+      setLocalChecking(false)
+      localCheckTimerRef.current = null
+    }, 400)
+  }, [selectedProgramId, workspaceMode, workspaceDocument, programOperations])
+
+  const ambientNotice = useMemo(() => {
+    try {
+      return contextNotice({
+        pick,
+        canMutate: canEdit,
+        projectStatus: workspace.status === 'ready' ? 'ready' : workspace.status === 'error' ? 'error' : 'loading',
+        runtimeStatus: runtime.status,
+        runtime: runtime.data ?? null,
+        intentStatus: runtimeContext?.programIntents?.status ?? 'ready',
+        intents: runtimeContext?.programIntents?.data ?? null,
+        intentError: runtimeContext?.programIntents?.error ?? null,
+        editing: {
+          projectId: projectId ?? '',
+          projectName: workspace.project?.name || '',
+          draftRevisionId: workspace.project?.draftRevisionId || '',
+          dirty: draftDirty,
+          checkState: (checkState as 'idle' | 'checking' | 'passed' | 'failed' | 'unknown') || 'idle',
+        },
+      })
+    } catch {
+      return null
+    }
+  }, [pick, canEdit, workspace.status, workspace.project, runtime.status, runtime.data, runtimeContext, projectId, draftDirty, checkState])
+
+  const statusItems = useMemo(() => {
+    const items: Array<{ id: string; kind: 'alert' | 'warn' | 'info' | 'success'; title: string; detail?: string; timestamp?: string }> = []
+    const now = new Date().toLocaleTimeString()
+
+    if (ambientNotice) {
+      items.push({
+        id: 'ambient-notice',
+        kind: ambientNotice.kind === 'error' ? 'alert' : ambientNotice.kind === 'stale' || ambientNotice.kind === 'unknown' ? 'warn' : 'info',
+        title: ambientNotice.title,
+        detail: ambientNotice.detail,
+        timestamp: now,
+      })
+    }
+
+    if (draftDirty) {
+      items.push({
+        id: 'draft-dirty',
+        kind: 'warn',
+        title: pick('Bản nháp có thay đổi chưa lưu', 'Draft has unsaved changes'),
+        detail: pick('Các sửa đổi POU đang được lưu tạm trên buffer, chưa niêm phong vào máy chủ.', 'Changes in editor buffer are not yet sealed to server.'),
+        timestamp: now,
+      })
+    } else {
+      items.push({
+        id: 'draft-clean',
+        kind: 'info',
+        title: pick('Bản nháp đã đồng bộ', 'Draft is synchronized'),
+        detail: pick('Bản nháp khớp với phiên bản máy chủ.', 'Draft matches server revision.'),
+        timestamp: now,
+      })
+    }
+
+    if (checkState === 'FAILED') {
+      items.push({
+        id: 'check-failed',
+        kind: 'alert',
+        title: pick('Kiểm tra gói gần nhất: Thất bại', 'Latest check: Failed'),
+        detail: pick('Đã phát hiện lỗi biên dịch khi kiểm tra toàn diện gói.', 'Compilation errors found in comprehensive check.'),
+        timestamp: now,
+      })
+    } else if (checkState === 'PASSED') {
+      items.push({
+        id: 'check-passed',
+        kind: 'success',
+        title: pick('Kiểm tra gói gần nhất: Đạt', 'Latest check: Passed'),
+        detail: pick('Revision đã niêm phong hợp lệ.', 'Sealed revision passed verification.'),
+        timestamp: now,
+      })
+    }
+
+    if (localCheckResult) {
+      items.push({
+        id: 'local-check-res',
+        kind: localCheckResult.diagnostics.length > 0 ? 'alert' : 'success',
+        title: localCheckResult.diagnostics.length > 0
+          ? pick(`Kiểm tra POU: Phát hiện ${localCheckResult.diagnostics.length} vấn đề`, `POU check: Found ${localCheckResult.diagnostics.length} issues`)
+          : pick('Kiểm tra POU: Hợp lệ', 'POU check: Passed'),
+        detail: pick(`Đã kiểm tra logic và phụ thuộc (${localCheckResult.checkedProgramNames.join(', ')}).`, `Checked logic & dependencies (${localCheckResult.checkedProgramNames.join(', ')}).`),
+        timestamp: now,
+      })
+    }
+
+    return items
+  }, [ambientNotice, draftDirty, checkState, localCheckResult, pick])
+
+  const effectiveDiagnostics = useMemo(() => {
+    if (!localCheckResult) return checkDiagnostics
+    const checkedSet = new Set(localCheckResult.checkedProgramIds)
+    return [
+      ...checkDiagnostics.filter((d) => !checkedSet.has(d.location?.programId || '')),
+      ...localCheckResult.diagnostics,
+    ]
+  }, [checkDiagnostics, localCheckResult])
+
   if (workspace.status === 'loading') {
     return <StateBlock state="loading" title={pick('Đang tải Draft…', 'Loading draft…')} />
   }
@@ -973,20 +1108,18 @@ export function DesignWorkspacePage({
               selectedProgramId={selectedProgramId}
               onSelectProgram={selectProgram}
               onSave={workspace.save}
-              diagnostics={checkDiagnostics}
+              diagnostics={effectiveDiagnostics}
               checkSymbols={checkSymbols}
               checkState={checkState}
-              hasCheckResult={hasCheckResult}
+              hasCheckResult={hasCheckResult || localCheckResult !== null}
               checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
               focusDiagnostic={focusDiagnostic}
               focusFbdSelection={compareFbdFocus}
               onPendingOperationsChange={updateProgramOperations}
               discardVersion={discardVersion}
-              /* `T59-821` — `Kiểm tra` và `So sánh` nằm trong toolbar của
-               * chính trình soạn thảo, đúng `PGM-02A §3`.
-               * D-01 vẫn nguyên: PGM-02 không tự seal/run Check: nó điều hướng
-               * sang PGM-05, nơi sở hữu trọn vòng seal/run/poll/result. */
               onRunCheck={goToCommission}
+              onRunLocalCheck={handleRunLocalCheck}
+              localChecking={localChecking}
               onOpenCompare={() => setCompareOpen(true)}
               checkDisabledReason={draftDirty
                 ? pick('Lưu bản nháp trước khi Kiểm tra — Kiểm tra chạy trên Revision đã niêm phong, không chạy trên buffer đang gõ.',
@@ -1039,12 +1172,17 @@ export function DesignWorkspacePage({
           checkOwnerHref={`/eng/programming/projects/${projectId}/commission`}
           onSelectProgram={selectProgram}
           onJumpToOffset={jumpToSourceOffset}
-          checkDiagnostics={checkDiagnostics}
-          hasCheckResult={hasCheckResult}
+          checkDiagnostics={effectiveDiagnostics}
+          hasCheckResult={hasCheckResult || localCheckResult !== null}
           checkRevisionId={latestCheckResult.data?.revisionId ?? latestCheck?.revisionId ?? null}
           onJumpToDiagnostic={jumpToDiagnostic}
           onJumpToFbdSelection={jumpToFbdSelection}
           openBuffer={openBuffer}
+          statusItems={statusItems}
+          logs={localCheckLogs}
+          onClearLogs={() => setLocalCheckLogs([])}
+          activeTab={workbenchTab}
+          onTabChange={setWorkbenchTab}
         />
         </div>
         </FbdCanvasBridgeProvider>

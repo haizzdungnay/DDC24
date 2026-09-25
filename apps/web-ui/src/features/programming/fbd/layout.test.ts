@@ -156,6 +156,53 @@ describe('computeAutoLayout', () => {
     expect(result.warnings.length).toBeGreaterThan(0)
     expect(result.positions['n1']).toEqual({ x: 10, y: 20 })
   })
+
+  it('xếp đa tầng DAG theo dây nối: In -> F1 -> F2 -> Out qua các cột riêng biệt', () => {
+    const nodeIn = makeTestNode('in-1', 'INPUT', 0, 0, 1)
+    const nodeF1 = makeTestNode('fn-1', 'FUNCTION', 1, 1, 1)
+    const nodeF2 = makeTestNode('fn-2', 'FUNCTION', 2, 1, 1)
+    const nodeOut = makeTestNode('out-1', 'OUTPUT', 3, 1, 0)
+
+    const network: FbdNetwork = {
+      id: 'net-dag',
+      name: 'NET_DAG',
+      order: 0,
+      nodes: [nodeOut, nodeF2, nodeF1, nodeIn],
+      wires: [
+        { id: 'w1', from: { nodeId: 'in-1', portId: 'in-1-out-0' }, to: { nodeId: 'fn-1', portId: 'fn-1-in-0' } },
+        { id: 'w2', from: { nodeId: 'fn-1', portId: 'fn-1-out-0' }, to: { nodeId: 'fn-2', portId: 'fn-2-in-0' } },
+        { id: 'w3', from: { nodeId: 'fn-2', portId: 'fn-2-out-0' }, to: { nodeId: 'out-1', portId: 'out-1-in-0' } },
+      ],
+    }
+
+    const { positions } = computeAutoLayout(network)
+    expect(positions['in-1'].x).toBeLessThan(positions['fn-1'].x)
+    expect(positions['fn-1'].x).toBeLessThan(positions['fn-2'].x)
+    expect(positions['fn-2'].x).toBeLessThan(positions['out-1'].x)
+  })
+
+  it('đẩy cột kế tiếp khi có khối rộng tùy chỉnh tránh chồng lấn', () => {
+    const nodeA = makeTestNode('n-wide', 'INPUT', 0)
+    const nodeB = makeTestNode('n-next', 'FUNCTION', 1)
+    const network: FbdNetwork = {
+      id: 'net-wide',
+      name: 'NET_WIDE',
+      order: 0,
+      nodes: [nodeA, nodeB],
+      wires: [
+        { id: 'w1', from: { nodeId: 'n-wide', portId: 'n-wide-out-0' }, to: { nodeId: 'n-next', portId: 'n-next-in-0' } },
+      ],
+    }
+
+    const { positions } = computeAutoLayout(network, {}, {
+      margin: 40,
+      nodeSizes: { 'n-wide': { width: 300 } },
+    })
+
+    // nodeA tại x=40, rộng 300 -> nodeB phải cách ít nhất 40 + 300 = 340
+    expect(positions['n-wide'].x).toBe(40)
+    expect(positions['n-next'].x).toBeGreaterThanOrEqual(340)
+  })
 })
 
 describe('alignNodes', () => {

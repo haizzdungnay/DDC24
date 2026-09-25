@@ -6,6 +6,11 @@ import type {
 import { canonicalFbdJson, type FbdDocument } from '../../fbd/model'
 import { uniquePouName } from './pouCommands'
 import type { PouItem, PouKind, PouLanguage } from './pouViewModel'
+import {
+  loadWireReferencesFromStorage,
+  saveWireReferencesToStorage,
+  type FbdWireReferenceMap
+} from '../../fbd/wireReferences'
 
 export interface PouBackupItem {
   name: string
@@ -15,6 +20,9 @@ export interface PouBackupItem {
   description?: string
   access?: string
   periodMs?: number
+  presentation?: {
+    wireReferences?: FbdWireReferenceMap
+  }
 }
 
 export interface PouBackupFile {
@@ -54,7 +62,18 @@ export function buildPouBackup(
 
   const pous: PouBackupItem[] = programs.map((prog) => {
     let doc = prog.document
+    let presentation: { wireReferences?: FbdWireReferenceMap } | undefined = undefined
     if (prog.language === 'FBD') {
+      const id = prog.objectId ?? prog.programId
+      let refs = loadWireReferencesFromStorage(document.project?.projectId, id)
+      if (!refs || Object.keys(refs).length === 0) {
+        if (doc && typeof doc === 'object' && 'graphId' in doc && typeof (doc as any).graphId === 'string') {
+          refs = loadWireReferencesFromStorage(document.project?.projectId, (doc as any).graphId)
+        }
+      }
+      if (refs && Object.keys(refs).length > 0) {
+        presentation = { wireReferences: refs }
+      }
       if (typeof doc === 'string') {
         try {
           doc = JSON.parse(doc)
@@ -70,7 +89,8 @@ export function buildPouBackup(
       document: doc,
       ...(prog.description !== undefined ? { description: prog.description } : {}),
       ...(prog.access !== undefined ? { access: prog.access } : {}),
-      ...(prog.periodMs !== undefined ? { periodMs: prog.periodMs } : {})
+      ...(prog.periodMs !== undefined ? { periodMs: prog.periodMs } : {}),
+      ...(presentation ? { presentation } : {})
     }
   })
 
@@ -133,6 +153,13 @@ export function parsePouBackup(raw: string): ParseBackupResult {
         return { ok: false, error: 'Muc ' + name + ' thiếu nội dung mã nguồn.' }
       }
 
+      let presentation: { wireReferences?: FbdWireReferenceMap } | undefined = undefined
+      if (rec.presentation && typeof rec.presentation === 'object' && typeof (rec.presentation as any).wireReferences === 'object') {
+        presentation = {
+          wireReferences: (rec.presentation as any).wireReferences as FbdWireReferenceMap
+        }
+      }
+
       pous.push({
         name,
         kind,
@@ -140,7 +167,8 @@ export function parsePouBackup(raw: string): ParseBackupResult {
         document: rec.document,
         ...(typeof rec.description === 'string' ? { description: rec.description } : {}),
         ...(typeof rec.access === 'string' ? { access: rec.access } : {}),
-        ...(typeof rec.periodMs === 'number' ? { periodMs: rec.periodMs } : {})
+        ...(typeof rec.periodMs === 'number' ? { periodMs: rec.periodMs } : {}),
+        ...(presentation ? { presentation } : {})
       })
     }
 
@@ -292,6 +320,12 @@ export function planImportPouOperations(input: ImportPlanInput): ImportPlanResul
       })
     }
 
+    if (item.presentation?.wireReferences) {
+      saveWireReferencesToStorage(item.presentation.wireReferences, document.project?.projectId, targetObjectId)
+      if (item.document && typeof item.document === 'object' && 'graphId' in item.document && typeof (item.document as any).graphId === 'string') {
+        saveWireReferencesToStorage(item.presentation.wireReferences, document.project?.projectId, (item.document as any).graphId)
+      }
+    }
     importedObjectIds.push(targetObjectId)
 
     if (!isOverwrite) {

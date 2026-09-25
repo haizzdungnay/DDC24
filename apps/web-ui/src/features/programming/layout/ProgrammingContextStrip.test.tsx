@@ -301,7 +301,7 @@ describe('ProgrammingContextStrip — bố cục README §3', () => {
     const row = screen.getByTestId('programming-context-strip-row')
     const actions = within(row).getByTestId('programming-global-actions')
     fireEvent.click(within(actions).getByRole('button', { name: 'Lưu bản nháp' }))
-    fireEvent.click(within(actions).getByRole('button', { name: 'Kiểm tra gói' }))
+    fireEvent.click(within(actions).getByRole('button', { name: /Build/ }))
     fireEvent.click(within(row).getByRole('button', { name: 'Làm mới' }))
     expect(onSave).toHaveBeenCalledTimes(1)
     expect(onCheck).toHaveBeenCalledTimes(1)

@@ -8,6 +8,27 @@
 
 ## [Unreleased]
 
+### Added — FBD Reference Connector & Kiểm tra Logic POU Cục bộ (2026-09-24)
+
+- Phạm vi: `apps/web-ui/src/features/programming/**`.
+- **Mô tả.**
+  + Triển khai tính năng FBD Reference Connector (Cut/Join presentation mode) theo đặc tả `SPEC-FBD-REF-CONN-001`, bảo toàn 4 bất biến I1-I4 và lịch sử Undo/Redo.
+  + Bổ sung ô đặt tên bản sao lưu POU và tính toán hiển thị dung lượng thực tế trước khi tải về trong `PouExplorer`.
+  + Tách biệt nút "Build" (thanh điều hướng toàn cục, icon Hammer) và nút "Kiểm tra" (toolbar editor ST & FBD, icon FileCheck) phục vụ kiểm tra dữ liệu, hàm và logic POU đang mở cùng phụ thuộc.
+  + Thêm cơ chế sinh véc-tơ thử nghiệm ngẫu nhiên độc lập cho từng biến đầu vào (REAL: 1.0–5.0, BOOL: 0/1, INT: 1–20) và đánh giá logic.
+  + Bổ sung tab "Trạng thái" và "Log & Output" tại khay bàn làm việc đáy, di dời nút đổi thứ tự block [↑][↓] vào menu chuột phải.
+
+### Added — Đặc tả Kỹ thuật FBD Reference Connector (Cut/Join Presentation Mode) (2026-09-23)
+
+- Phạm vi: `docs/superpowers/specs/2026-09-23-fbd-reference-connector.md`, `CHANGELOG.md`.
+- **Mô tả.** Ban hành đặc tả kỹ thuật chi tiết (`SPEC-FBD-REF-CONN-001`) cho tính năng Reference Connector (Cut/Join presentation mode) trên canvas FBD:
+  + Phần 1: Mô hình dữ liệu `wireReferences`, bảo toàn 4 bất biến I1-I4 (toàn vẹn tham chiếu, pure presentation không đổi AST/canonical model, signal identity/fan-out, bidirectional pairing), reducer actions/normalizer, LocalStorage isolation `projectId:objectId` và Backup Wrapper Envelope JSON.
+  + Phần 2: Công thức toạ độ hình học SVG cho Source Full Cut stub, Source Partial Cut stub, Destination Sink stub (chevron), thuật toán chống va chạm và tích hợp Value Chip online runtime.
+  + Phần 3: Luồng tương tác người dùng gồm Context Menu (Cut/Join/Rename), điều hướng đối tác nhấp đúp kèm hiệu ứng pulse highlight, Peek Wire nét đứt chạy luồng khi hover, máy trạng thái đổi tên inline (F2/Esc/Enter), dọn dẹp dangling references và chuẩn WCAG 2.2 accessibility.
+  + Phần 4: Ma trận kiểm thử tự động 6 module: M (Model & Invariants), R (Reducer & Undo/Redo), G (Geometry & SVG Paths), C (Canvas & Shortcuts), E & B (Storage & Envelope), X (Playwright E2E full lifecycle).
+  + Phần 5: Kế hoạch triển khai 5 giai đoạn (Foundation -> Geometry -> Interaction -> Persistence/A11y -> E2E Polish).
+- Refs: `SPEC-FBD-REF-CONN-001`, `AC-FBD-REF-001..015`, `DDO-PGM02-FBD-009`.
+
 ### Fixed — Khắc phục tương tác canvas FBD: Pan chuột phải, vị trí khối mới và vùng cuộn (2026-09-22)
 
 - Phạm vi: `apps/web-ui/src/features/programming/fbd/FbdCanvas.tsx`,

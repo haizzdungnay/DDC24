@@ -349,6 +349,25 @@ func (s *ProjectService) SealRevision(ctx context.Context, actor Actor, command 
 	if err != nil {
 		return MutationResult{}, err
 	}
+	hasProjectLibraryUsage := false
+	for _, pou := range pous {
+		if len(pou.Dependencies) > 0 {
+			hasProjectLibraryUsage = true
+			break
+		}
+	}
+	var draftDoc map[string]any
+	if err := json.Unmarshal(snapshot.Draft.ContentJSON, &draftDoc); err == nil {
+		if draftLib, ok := draftDoc["library"].(map[string]any); ok {
+			if id, ok := draftLib["projectLibraryRevisionId"].(string); ok && id != "" {
+				hasProjectLibraryUsage = true
+			}
+		}
+	}
+	if !hasProjectLibraryUsage {
+		libraryRevisionID = ""
+		publishLibraryRevisionID = ""
+	}
 	revisionID, auditID := s.newID(), s.newID()
 	libraryRevisionIDResolved, documentSchemaVersion := libraryRevisionID, 1
 	programCount := 1

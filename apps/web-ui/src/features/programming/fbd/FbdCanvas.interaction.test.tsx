@@ -200,6 +200,19 @@ describe('FbdCanvas — Task 5 Viewport, Layering & Interaction', () => {
         wire: expect.objectContaining({ id: wireId }),
       }))
     })
+
+    it('right click vào block mở menu ngữ cảnh có mục Đưa block lên và Đưa block xuống', () => {
+      const { dispatch } = renderCanvas()
+      const nodeButton = screen.getByRole('button', { name: /#0 · BOOL · INPUT/ })
+
+      fireEvent.contextMenu(nodeButton, { clientX: 100, clientY: 100 })
+      expect(screen.getByRole('menu', { name: 'Khối' })).toBeInTheDocument()
+
+      const moveDownItem = screen.getByRole('menuitem', { name: /Đưa block xuống/ })
+      expect(moveDownItem).toBeInTheDocument()
+      fireEvent.click(moveDownItem)
+      expect(dispatch).toHaveBeenCalledWith({ type: 'MOVE_NODE', delta: 1 })
+    })
   })
 
   describe('Wheel Zoom', () => {
@@ -367,6 +380,68 @@ describe('FbdCanvas — Task 5 Viewport, Layering & Interaction', () => {
       fireEvent.pointerCancel(node, { pointerId: 1 })
 
       expect(dispatch).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Port Reordering (Drag & Drop + Context Menu)', () => {
+    it('right-click mở menu có tùy chọn Chuyển cổng xuống dưới cho cổng đầu tiên', () => {
+      const { dispatch, network } = renderCanvas()
+      const andNode = network.nodes.find((n) => n.typeRef === 'AND')!
+      const port0 = andNode.ports[0]
+      const portElement = screen.getByRole('button', { name: new RegExp(`AND INPUT ${port0.name}`) })
+
+      fireEvent.contextMenu(portElement, { clientX: 100, clientY: 100 })
+      const moveDownBtn = screen.getByRole('menuitem', { name: 'Chuyển cổng xuống dưới' })
+      expect(moveDownBtn).toBeInTheDocument()
+
+      fireEvent.click(moveDownBtn)
+      expect(dispatch).toHaveBeenCalledWith({
+        type: 'REORDER_PORTS',
+        networkId: network.id,
+        nodeId: andNode.id,
+        sourcePortId: port0.id,
+        targetPortId: andNode.ports[1].id,
+      })
+    })
+
+    it('kéo thả chuột phải từ cổng này sang cổng khác của cùng khối đổi vị trí cổng', () => {
+      const { surface, dispatch, network } = renderCanvas()
+      surface.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 1000,
+        height: 800,
+        bottom: 800,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      })
+      const andNode = network.nodes.find((n) => n.typeRef === 'AND')!
+      const port0 = andNode.ports[0]
+      const port1 = andNode.ports[1]
+      const port0El = screen.getByRole('button', { name: new RegExp(`AND INPUT ${port0.name}`) })
+
+      // Bắt đầu kéo chuột phải (button = 2) từ port 0
+      fireEvent.pointerDown(port0El, { pointerId: 2, button: 2, clientX: 50, clientY: 50 })
+      // Rê chuột tới vị trí y của port 1
+      fireEvent.pointerMove(surface, { pointerId: 2, clientX: 50, clientY: 80 })
+      expect(surface.querySelector('[data-fbd-port-reorder-preview="true"]')).toBeInTheDocument()
+
+      // Nhả chuột hoàn tất
+      fireEvent.pointerUp(window, { pointerId: 2, clientX: 50, clientY: 80 })
+
+      expect(dispatch).toHaveBeenCalledWith({
+        type: 'REORDER_PORTS',
+        networkId: network.id,
+        nodeId: andNode.id,
+        sourcePortId: port0.id,
+        targetPortId: port1.id,
+      })
+
+      // Context menu bị chặn sau khi kéo
+      fireEvent.contextMenu(port0El, { clientX: 50, clientY: 80 })
+      expect(screen.queryByRole('menu')).toBeNull()
     })
   })
 })

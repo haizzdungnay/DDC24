@@ -7,6 +7,7 @@ import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState, t
 import { Button } from '../../../shared/components/Button'
 import { useI18n } from '../../../shared/i18n'
 import { createUuid } from '../../../shared/crypto'
+import { loadWireReferencesFromStorage, saveWireReferencesToStorage } from './wireReferences'
 import {
   createFbdEditorState,
   fbdEditorReducer,
@@ -58,7 +59,7 @@ import {
 } from './palette'
 import { userPouPaletteEntry, type UserPouInterface } from './userPou'
 import { type FbdNodeEditorChange, type FbdNodeEditorTarget } from './nodeEditor'
-import type { FbdNetworkViewPreference, FbdSnapSizePreference, FbdWireStylePreference } from './fbdPreferences'
+import type { FbdFlowPreviewPreference, FbdNetworkViewPreference, FbdSnapSizePreference, FbdWireStylePreference } from './fbdPreferences'
 import type { FbdCanvasBridge } from '../design/workbench/WorkbenchMinimapPanel'
 import type { FbdRuntimeOverlay } from './runtimeOverlay'
 import type {
@@ -96,9 +97,12 @@ export interface StructuredFbdEditorProps {
   /** `T59-804`: Quick Library dùng chung đọc catalog theo Project. Vắng thì dock
    *  vẫn mở được và chỉ thấy SYSTEM entry. */
   projectId?: string
+  objectId?: string
   networkView?: FbdNetworkViewPreference
   activeNetworkId?: string
   wireStyle?: FbdWireStylePreference
+  flowPreviewMode?: FbdFlowPreviewPreference
+  onFlowPreviewModeChange?: (mode: FbdFlowPreviewPreference) => void
   gridVisible?: boolean
   snapEnabled?: boolean
   snapSize?: FbdSnapSizePreference
@@ -215,12 +219,15 @@ export function StructuredFbdEditor({
   onChange,
   userPouInterfaces = EMPTY_USER_POU_INTERFACES,
   projectId: _projectId,
+  objectId,
   onSelectionChange,
   onNodeEditorTargetChange,
   focusSelection,
   networkView = 'ALL',
   activeNetworkId,
   wireStyle = 'BEZIER',
+  flowPreviewMode: flowPreviewModeProp,
+  onFlowPreviewModeChange,
   gridVisible = true,
   snapEnabled = true,
   snapSize = 8,
@@ -238,10 +245,39 @@ export function StructuredFbdEditor({
   openBuffer,
 }: StructuredFbdEditorProps) {
   const { pick } = useI18n()
+  const [localFlowPreviewMode, setLocalFlowPreviewMode] = useState<FbdFlowPreviewPreference>('HOVER')
+  const effectiveFlowPreview = flowPreviewModeProp ?? localFlowPreviewMode
   const [state, dispatch] = useReducer(
     fbdEditorReducer,
-    createFbdEditorState(document, canEditProp && document.networks.length <= 1),
+    null,
+    () => {
+      const primaryKey = objectId ?? document.graphId
+      const primaryRefs = loadWireReferencesFromStorage(_projectId, primaryKey)
+      if (primaryRefs && Object.keys(primaryRefs).length > 0) {
+        return createFbdEditorState(
+          document,
+          canEditProp && document.networks.length <= 1,
+          primaryRefs,
+        )
+      }
+      const fallbackRefs = objectId && objectId !== document.graphId
+        ? loadWireReferencesFromStorage(_projectId, document.graphId)
+        : {}
+      return createFbdEditorState(
+        document,
+        canEditProp && document.networks.length <= 1,
+        fallbackRefs,
+      )
+    },
   )
+
+  useEffect(() => {
+    const primaryKey = objectId ?? state.document.graphId
+    saveWireReferencesToStorage(state.wireReferences, _projectId, primaryKey)
+    if (objectId && objectId !== state.document.graphId) {
+      saveWireReferencesToStorage(state.wireReferences, _projectId, state.document.graphId)
+    }
+  }, [state.wireReferences, _projectId, objectId, state.document.graphId])
   /* Mô hình MỘT canvas (`#674`). Editor chỉ soạn `networks[0]`, nên tài liệu
    * mang nhiều hơn một Network là tài liệu của mô hình cũ: nó vẫn ĐỌC được,
    * nhưng mọi đường sửa phải đóng lại. Khóa bằng chính `canEdit` — nguồn duy
@@ -787,7 +823,17 @@ export function StructuredFbdEditor({
       return
     }
     const current = networkPositions(network)
-    const result = computeAutoLayout(network, current)
+    let nodeSizes: Record<string, { width?: number; height?: number }> | undefined
+    try {
+      const nodeSizesKey = state.document.graphId
+        ? 'mkddc_fbd_node_sizes_' + state.document.graphId
+        : 'mkddc_fbd_node_sizes_default'
+      const raw = localStorage.getItem(nodeSizesKey)
+      if (raw) nodeSizes = JSON.parse(raw)
+    } catch {
+      // ignore localStorage parse error
+    }
+    const result = computeAutoLayout(network, current, { nodeSizes })
     const snapped = snapLayoutPositions(result.positions)
     const positions = Object.fromEntries(network.nodes
       .map((node) => [node.id, snapped[node.id]] as const)
@@ -1060,15 +1106,14 @@ export function StructuredFbdEditor({
             }}>
             {pick('Constant', 'Constant')}
           </Button>
-          <Button size="sm" icon={<ArrowUp className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('MOVE_NODE_UP')} aria-label={pick('Đưa block lên', 'Move block up')} />
-          <Button size="sm" icon={<ArrowDown className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('MOVE_NODE_DOWN')} aria-label={pick('Đưa block xuống', 'Move block down')} />
+
           <Button size="sm" icon={<Trash2 className="h-4 w-4" />} disabled={!canEdit} onClick={() => dispatchCommand('DELETE_SELECTION')} aria-label={pick('Xóa vùng chọn', 'Delete selection')} />
           <Button size="sm" icon={<Undo2 className="h-4 w-4" />} disabled={!canEdit || state.past.length === 0} onClick={() => dispatchCommand('UNDO')} aria-label={pick('Hoàn tác', 'Undo')} />
           <Button size="sm" icon={<Redo2 className="h-4 w-4" />} disabled={!canEdit || state.future.length === 0} onClick={() => dispatchCommand('REDO')} aria-label={pick('Làm lại', 'Redo')} />
           <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} disabled={!state.connectionFromPortId} onClick={() => dispatchCommand('CANCEL_CONNECTION')}
             aria-label={pick('Hủy nối', 'Cancel wire')} title={pick('Hủy nối', 'Cancel wire')} />
           <Button size="sm" icon={<LayoutGrid className="h-4 w-4" />} disabled={!canEdit || !activeNetwork} onClick={previewAutoLayout}
-            aria-label={pick('Tự sắp xếp', 'Auto layout')} title={pick('Tự sắp xếp', 'Auto layout')} />
+            aria-label={pick('Tự sắp xếp', 'Auto layout')} title={pick('Tự sắp xếp & gỡ rối dây', 'Auto arrange & untangle')} />
           <Button size="sm" variant="secondary" icon={<AlignHorizontalJustifyStart className="h-4 w-4" />} disabled={!canEdit || !activeNetwork} onClick={() => previewAlignment('LEFT')}
             aria-label={pick('Căn trái', 'Align left')} title={pick('Căn trái', 'Align left')} />
           <Button size="sm" variant="secondary" icon={<AlignVerticalJustifyStart className="h-4 w-4" />} disabled={!canEdit || !activeNetwork} onClick={() => previewAlignment('TOP')}
@@ -1098,6 +1143,24 @@ export function StructuredFbdEditor({
             <BoxSelect className="h-4 w-4" aria-hidden="true" />
             {pick('Chọn vùng', 'Marquee select')}
           </button>
+          <div className="relative inline-flex items-center">
+            <select
+              data-testid="fbd-flow-preview-select"
+              aria-label={pick('Xem trước luồng dữ liệu', 'Data flow preview')}
+              value={effectiveFlowPreview}
+              onChange={(e) => {
+                const mode = e.target.value as FbdFlowPreviewPreference
+                setLocalFlowPreviewMode(mode)
+                onFlowPreviewModeChange?.(mode)
+              }}
+              className="h-8 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] px-2 text-xs font-medium text-[var(--c-text)] hover:border-[var(--c-accent)] focus:outline-none"
+            >
+              <option value="OFF">{pick('Luồng: Tắt', 'Flow: Off')}</option>
+              <option value="ALL">{pick('Luồng: Toàn bộ', 'Flow: All')}</option>
+              <option value="SELECTED_BLOCKS">{pick('Luồng: Khối chọn', 'Flow: Selected')}</option>
+              <option value="HOVER">{pick('Luồng: Rê chuột', 'Flow: Hover')}</option>
+            </select>
+          </div>
           {toolbarExtras}
         </div>
         {selectedPaletteEntry?.warning && (
@@ -1205,12 +1268,14 @@ export function StructuredFbdEditor({
               network={network}
               document={state.document}
               layout={state.document.layout}
+              wireReferences={state.wireReferences}
               selection={state.selection}
               issueNodeIds={issueNodeIds}
               staleNodeIds={staleNodeIds}
               connectionFromPortId={state.connectionFromPortId}
               canEdit={canEdit}
               wireStyle={wireStyle}
+              flowPreviewMode={effectiveFlowPreview}
               gridVisible={gridVisible}
               snapEnabled={snapEnabled}
               snapSize={snapSize}
@@ -1239,6 +1304,7 @@ export function StructuredFbdEditor({
                     position: snapPoint(at, snapEnabled ? snapSize : 0),
                   })
                 : undefined}
+              onAutoLayout={previewAutoLayout}
               userPouInterfaces={userPouInterfaces}
               onRequestPortMapping={onRequestPortMapping}
               bindings={bindings}

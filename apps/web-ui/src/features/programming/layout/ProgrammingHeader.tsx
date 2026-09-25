@@ -1,4 +1,4 @@
-import { ClipboardCheck, RefreshCw, Save } from 'lucide-react'
+import { ClipboardCheck, Hammer, RefreshCw, Save } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { Button } from '../../../shared/components/Button'
@@ -79,13 +79,13 @@ export function ProgrammingHeader({
               <Button
                 size="sm"
                 variant="secondary"
-                aria-label={pick('Kiểm tra gói', 'Check the package')}
-                icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+                aria-label={pick('Build', 'Build')}
+                icon={<Hammer className="h-4 w-4" aria-hidden="true" />}
                 disabled={actions.checkDisabledReason !== null}
-                title={actions.checkDisabledReason ?? pick('Kiểm tra gói (mở PGM-05)', 'Check the package (opens PGM-05)')}
+                title={actions.checkDisabledReason ?? pick('Build gói (mở PGM-05)', 'Build package (opens PGM-05)')}
                 onClick={actions.onCheck}
               >
-                {pick('Kiểm tra', 'Check')}
+                Build
               </Button>
             </>
           )}

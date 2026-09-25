@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Settings2 } from 'lucide-react'
+import { FileCheck, Loader2, Settings2 } from 'lucide-react'
+import { Button } from '../../../../shared/components/Button'
 import { useI18n } from '../../../../shared/i18n'
 import { THEMES, TOKEN_NAMES } from '../../../../shared/theme/tokens'
 import { StructuredFbdEditor } from '../../fbd/StructuredFbdEditor'
@@ -146,6 +147,7 @@ export interface FbdEditorPaneProps {
    * (GlobalContextBar). Toolbar canvas FBD cố ý không nhân bản các nút này.
    */
   onRunCheck?: () => void
+  localChecking?: boolean
   onOpenCompare?: () => void
   checkDisabledReason?: string | null
   compareDisabledReason?: string | null
@@ -176,6 +178,9 @@ export function FbdEditorPane({
   pointCatalogLoading,
   onEnsurePointCatalogLoaded,
   onSave,
+  onRunCheck,
+  localChecking = false,
+  checkDisabledReason,
   bindings,
   variables,
   programs,
@@ -365,6 +370,19 @@ export function FbdEditorPane({
           </select>
         </label>
         <label className="inline-flex items-center gap-1">
+          {pick('Xem trước luồng', 'Flow preview')}
+          <select
+            className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-1 py-0.5 text-[11px]"
+            value={preferences.flowPreview}
+            onChange={(event) => updatePreferences({ flowPreview: event.target.value as FbdPreferences['flowPreview'] })}
+          >
+            <option value="OFF">{pick('Tắt', 'Off')}</option>
+            <option value="ALL">{pick('Toàn bộ luồng', 'All data flow')}</option>
+            <option value="SELECTED_BLOCKS">{pick('Theo khối chọn', 'Selected blocks')}</option>
+            <option value="HOVER">{pick('Khi rê chuột vào dây', 'On wire hover')}</option>
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-1">
           {pick('Giao diện FBD', 'FBD theme')}
           <select
             className="rounded border border-[var(--c-border)] bg-[var(--c-surface)] px-1 py-0.5 text-[11px]"
@@ -398,14 +416,33 @@ export function FbdEditorPane({
         canEdit={canEdit}
         userPouInterfaces={userPouInterfaces}
         projectId={projectId}
+        objectId={program.objectId ?? program.programId}
         networkView={preferences.networkView}
         activeNetworkId={activeNetworkId}
         wireStyle={preferences.wireStyle}
+        flowPreviewMode={preferences.flowPreview}
+        onFlowPreviewModeChange={(flowPreview) => updatePreferences({ flowPreview })}
         gridVisible={preferences.gridVisible}
         snapEnabled={preferences.snapEnabled}
         snapSize={preferences.snapSize}
         showInlineMinimap={!workbenchOwnsMinimap}
-        toolbarExtras={displaySettings}
+        toolbarExtras={(
+          <div className="flex items-center gap-1.5">
+            {onRunCheck && (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={localChecking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileCheck className="h-4 w-4" aria-hidden="true" />}
+                disabled={localChecking || Boolean(checkDisabledReason)}
+                title={localChecking ? pick('Đang kiểm tra dữ liệu và logic…', 'Checking data and logic…') : (checkDisabledReason ?? pick('Kiểm tra dữ liệu, hàm và logic của POU đang mở (gồm các block/hàm được gọi)', 'Check data, functions, and logic of open POU (including called blocks/functions)'))}
+                onClick={() => onRunCheck()}
+              >
+                {localChecking ? pick('Đang kiểm tra…', 'Checking…') : pick('Kiểm tra', 'Check')}
+              </Button>
+            )}
+            {displaySettings}
+          </div>
+        )}
         onChange={(next) => onChange(canonicalFbdJson(next))}
         onSelectionChange={(selection) => {
           if (selection?.networkId) setActiveNetworkId(selection.networkId)

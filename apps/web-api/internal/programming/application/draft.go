@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	canonicaljson "mkddc-web/internal/programming/canonicaljson"
 	programmingstore "mkddc-web/internal/programming/store"
 )
 
@@ -440,6 +441,12 @@ func revisionPayload(content []byte, projectID, label, comment, projectLibraryVe
 				dependencies = append(dependencies, programmingstore.LibraryDependency{
 					EntryID: id, Version: projectLibraryVersion,
 				})
+			}
+		}
+		if language == "FBD" && len(source) > 0 {
+			if canonical, err := canonicaljson.Object([]byte(source), 65536); err == nil {
+				source = string(canonical)
+				payload["source"] = source
 			}
 		}
 		pous = append(pous, programmingstore.POUObjectInput{

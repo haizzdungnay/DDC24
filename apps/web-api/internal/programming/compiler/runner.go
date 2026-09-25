@@ -24,7 +24,7 @@ import (
 const (
 	// MaxArtifactBytes phải bằng trần artifact trong profile machine-readable.
 	MaxArtifactBytes = domain.MaxProfileArtifactBytes
-	maxManifestBytes = 256 << 10
+	maxManifestBytes = 1 << 20
 	maxStdoutBytes   = 2 << 20
 	maxStderrBytes   = 64 << 10
 )

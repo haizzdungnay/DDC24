@@ -1,4 +1,5 @@
-import type { FbdNode, FbdPoint } from './model'
+import { useMemo } from 'react'
+import type { FbdNode, FbdPoint, FbdWire } from './model'
 import type { FbdNodeGeometry, FbdPortGeometry, FbdWireGeometry } from './geometry'
 import {
   FBD_NODE_HEADER_HEIGHT,
@@ -10,6 +11,8 @@ import {
 } from './geometry'
 import type { FbdSelection } from './commands'
 import { fbdPaletteEntry } from './palette'
+import type { FbdFlowPreviewPreference } from './fbdPreferences'
+import type { FbdWireReferenceMap } from './wireReferences'
 import { FBD_LABEL_APPROX_CHAR_WIDTH, formatNodeParameterSummary, formatPortLabel, truncateText } from './nodeLabel'
 import type { FbdResizeMode } from './useFbdNodeResize'
 import type { FbdRuntimeOverlay, FbdRuntimeReading } from './runtimeOverlay'
@@ -147,6 +150,10 @@ export interface FbdWiresLayerProps {
   hoverWireId?: string | null
   onWireHover?: (wireId: string | null) => void
   onWireContextMenu?: (event: React.MouseEvent<SVGPathElement>, wireId: string) => void
+  flowPreviewMode?: FbdFlowPreviewPreference
+  selectedNodeIds?: readonly string[]
+  networkWires?: readonly FbdWire[]
+  wireReferences?: FbdWireReferenceMap
 }
 
 /** Bề dày vùng BẮT CHUỘT của một dây.
@@ -156,6 +163,7 @@ export interface FbdWiresLayerProps {
  * đạt nếu người dùng phải trúng đúng một pixel rưỡi. Đường bắt là một `path`
  * trong suốt vẽ trùng đường thật, dày hơn một bậc độ lớn. */
 export const FBD_WIRE_HIT_WIDTH = 14
+export const FBD_WIRE_HOVER_COLOR = '#1d4ed8'
 
 export function FbdWiresLayer({
   wires,
@@ -166,60 +174,123 @@ export function FbdWiresLayer({
   hoverWireId,
   onWireHover,
   onWireContextMenu,
+  flowPreviewMode = 'HOVER',
+  selectedNodeIds = [],
+  networkWires = [],
+  wireReferences,
 }: FbdWiresLayerProps) {
+  const visibleWires = useMemo(() => {
+    if (!wireReferences || Object.keys(wireReferences).length === 0) return wires
+    return wires.filter((w) => !wireReferences[w.id])
+  }, [wires, wireReferences])
+  const wiresById = useMemo(() => {
+    const map = new Map<string, FbdWire>()
+    for (const w of networkWires) {
+      map.set(w.id, w)
+    }
+    return map
+  }, [networkWires])
+
+  const selectedNodeSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds])
+
   return (
     <>
-      <g aria-hidden="true">
-        {wires.map((wire) => (
-          <path
-            key={`shadow-${wire.id}`}
-            d={wire.path}
-            fill="none"
-            stroke="var(--c-bg)"
-            strokeWidth={5}
-          />
-        ))}
-      </g>
-      {wires.map((wire) => {
-        const active = selection?.kind === 'wire' && selection.wireId === wire.id
-        const hovered = hoverWireId === wire.id
-        return (
-          <path
-            key={wire.id}
-            data-fbd-wire-id={wire.id}
-            role="button"
-            tabIndex={0}
-            aria-label={pick(`Dây nối tới ${wire.to.x},${wire.to.y}`, `Wire to ${wire.to.x},${wire.to.y}`)}
-            aria-pressed={active}
-            d={wire.path}
-            fill="none"
-            stroke={active ? 'var(--c-accent)' : hovered ? 'var(--c-text)' : 'var(--c-text-dim)'}
-            strokeWidth={active ? 2.5 : hovered ? 2.5 : 1.5}
-            /* Vùng bắt rộng nằm ở CHÍNH phần tử tương tác, qua
-               `strokeLinecap`/`paint-order` không đủ — dùng `stroke` vô hình
-               thứ hai bên dưới sẽ tách tiêu điểm bàn phím khỏi hình vẽ. Đặt
-               `pointerEvents="stroke"` cùng một `strokeWidth` lớn cho một
-               `path` chị em trong suốt là cách giữ MỘT phần tử tương tác duy
-               nhất cho mỗi dây. */
-            className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
-            onMouseEnter={() => onWireHover?.(wire.id)}
-            onMouseLeave={() => onWireHover?.(null)}
-            onClick={() => select({ kind: 'wire', networkId, wireId: wire.id })}
-            onContextMenu={(event) => onWireContextMenu?.(event, wire.id)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                select({ kind: 'wire', networkId, wireId: wire.id })
-              }
-            }}
-          />
-        )
-      })}
+     <g aria-hidden="true">
+       {visibleWires.map((wire) => (
+         <g key={`shadow-${wire.id}`}>
+           <path
+             d={wire.path}
+             fill="none"
+             stroke="var(--c-bg)"
+             strokeWidth={5}
+           />
+           <path
+             d={`M ${wire.to.x - 9.5} ${wire.to.y - 4.5} L ${wire.to.x - 2.5} ${wire.to.y} L ${wire.to.x - 9.5} ${wire.to.y + 4.5} Z`}
+             fill="var(--c-bg)"
+             stroke="var(--c-bg)"
+             strokeWidth={2}
+           />
+         </g>
+       ))}
+     </g>
+     {visibleWires.map((wire) => {
+       const active = selection?.kind === 'wire' && selection.wireId === wire.id
+       const hovered = hoverWireId === wire.id
+       const isFlowActive = (() => {
+         if (flowPreviewMode === 'OFF') return false
+         if (flowPreviewMode === 'ALL') return true
+         if (flowPreviewMode === 'HOVER') return hovered
+         if (flowPreviewMode === 'SELECTED_BLOCKS') {
+           if (selectedNodeSet.size === 0) return false
+           const rawWire = wiresById.get(wire.id)
+           if (!rawWire) return false
+           return selectedNodeSet.has(rawWire.from.nodeId) || selectedNodeSet.has(rawWire.to.nodeId)
+         }
+         return false
+       })()
+
+       const color = active
+         ? 'var(--c-accent)'
+         : hovered
+           ? FBD_WIRE_HOVER_COLOR
+           : 'var(--c-text-dim)'
+       return (
+         <g key={wire.id}>
+           <path
+             data-fbd-wire-id={wire.id}
+             role="button"
+             tabIndex={0}
+             aria-label={pick(`Dây nối tới ${wire.to.x},${wire.to.y}`, `Wire to ${wire.to.x},${wire.to.y}`)}
+             aria-pressed={active}
+             d={wire.path}
+             fill="none"
+             stroke={color}
+             strokeWidth={active ? 2.5 : hovered ? 2.5 : 1.5}
+             /* Vùng bắt rộng nằm ở CHÍNH phần tử tương tác, qua
+                `strokeLinecap`/`paint-order` không đủ — dùng `stroke` vô hình
+                thứ hai bên dưới sẽ tách tiêu điểm bàn phím khỏi hình vẽ. Đặt
+                `pointerEvents="stroke"` cùng một `strokeWidth` lớn cho một
+                `path` chị em trong suốt là cách giữ MỘT phần tử tương tác duy
+                nhất cho mỗi dây. */
+             className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+             onMouseEnter={() => onWireHover?.(wire.id)}
+             onMouseLeave={() => onWireHover?.(null)}
+             onClick={() => select({ kind: 'wire', networkId, wireId: wire.id })}
+             onContextMenu={(event) => onWireContextMenu?.(event, wire.id)}
+             onKeyDown={(event) => {
+               if (event.key === 'Enter' || event.key === ' ') {
+                 event.preventDefault()
+                 select({ kind: 'wire', networkId, wireId: wire.id })
+               }
+             }}
+           />
+           {isFlowActive && (
+             <path
+               key={`flow-${wire.id}`}
+               data-fbd-wire-flow={wire.id}
+               d={wire.path}
+               fill="none"
+               stroke="#10b981"
+               strokeWidth={2.5}
+               strokeDasharray="8 4 2 4"
+               strokeLinecap="round"
+               className="pointer-events-none fbd-flow-animated"
+             />
+           )}
+           <path
+             data-fbd-wire-arrow={wire.id}
+             d={`M ${wire.to.x - 9} ${wire.to.y - 3.5} L ${wire.to.x - 3} ${wire.to.y} L ${wire.to.x - 9} ${wire.to.y + 3.5} Z`}
+             fill={isFlowActive ? '#10b981' : color}
+             className="pointer-events-none"
+           />
+         </g>
+       )
+     })}
       {/* Lớp bắt chuột: trong suốt, không nhận tiêu điểm, chỉ để chuột trúng
           dây dễ hơn. Vẽ SAU đường thật nên nó nằm trên và nhận sự kiện trước;
           nó chuyển tiếp thao tác về cùng một lệnh chọn/menu như đường thật. */}
       <g aria-hidden="true">
-        {wires.map((wire) => (
+        {visibleWires.map((wire) => (
           <path
             key={`hit-${wire.id}`}
             data-fbd-wire-hit={wire.id}
@@ -862,13 +933,86 @@ export function FbdWirePreviewLayer({ preview, wireStyle = 'BEZIER' }: FbdWirePr
         strokeWidth={2}
         strokeDasharray="6 4"
       />
-      {/* End circle */}
+     {/* End circle */}
+     <circle
+       cx={preview.to.x}
+       cy={preview.to.y}
+       r={4}
+       fill="var(--c-accent)"
+     />
+     {/* End arrow pointing to input port */}
+     <path
+       data-fbd-wire-preview-arrow="true"
+       d={`M ${preview.to.x - 9} ${preview.to.y - 3.5} L ${preview.to.x - 3} ${preview.to.y} L ${preview.to.x - 9} ${preview.to.y + 3.5} Z`}
+       fill="var(--c-accent)"
+     />
+   </g>
+ )
+}
+
+export interface FbdPortReorderPreviewProps {
+  sourcePort: FbdPortGeometry
+  targetPort: FbdPortGeometry | null
+  currentGraph: FbdPoint
+  pick: (vi: string, en: string) => string
+}
+
+export function FbdPortReorderPreviewLayer({
+  sourcePort,
+  targetPort,
+  currentGraph,
+  pick,
+}: FbdPortReorderPreviewProps) {
+  const destX = targetPort ? targetPort.cx : currentGraph.x
+  const destY = targetPort ? targetPort.cy : currentGraph.y
+
+  return (
+    <g data-fbd-port-reorder-preview="true" pointerEvents="none" aria-hidden="true">
+      {/* Halo quanh cổng nguồn */}
       <circle
-        cx={preview.to.x}
-        cy={preview.to.y}
-        r={4}
-        fill="var(--c-accent)"
+        cx={sourcePort.cx}
+        cy={sourcePort.cy}
+        r={12}
+        fill="none"
+        stroke="var(--c-accent)"
+        strokeWidth={2}
+        strokeDasharray="3 3"
       />
+      {/* Đường nối nét đứt */}
+      <line
+        x1={sourcePort.cx}
+        y1={sourcePort.cy}
+        x2={destX}
+        y2={destY}
+        stroke="var(--c-accent)"
+        strokeWidth={2}
+        strokeDasharray="4 3"
+      />
+      {/* Đích đến */}
+      {targetPort && (
+        <g transform={`translate(${targetPort.cx}, ${targetPort.cy})`}>
+          <circle
+            r={14}
+            fill="none"
+            stroke="var(--c-good-fg)"
+            strokeWidth={2.5}
+            strokeDasharray="4 2"
+          />
+          <circle
+            r={6}
+            fill="var(--c-good-fg)"
+            opacity={0.3}
+          />
+          <text
+            x={targetPort.direction === 'INPUT' ? 18 : -18}
+            y={4}
+            textAnchor={targetPort.direction === 'INPUT' ? 'start' : 'end'}
+            className="fill-[var(--c-accent)] font-semibold text-[11px]"
+          >
+            {pick('Đổi vị trí', 'Swap')} ⇅
+          </text>
+        </g>
+      )}
     </g>
   )
 }

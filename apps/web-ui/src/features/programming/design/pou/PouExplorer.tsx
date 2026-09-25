@@ -49,6 +49,15 @@ const NAME_ERROR_COPY: Record<'EMPTY' | 'PATTERN' | 'DUPLICATE' | 'SYSTEM_BLOCK'
   SYSTEM_BLOCK: ['Tên POU trùng với khối thư viện hệ thống.', 'The POU name collides with a system library block.']
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B'
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  const mb = kb / 1024
+  return `${mb.toFixed(2)} MB`
+}
+
 export function PouExplorer({
   document,
   publishedSignals,
@@ -83,6 +92,7 @@ export function PouExplorer({
   const renameInputRef = useRef<HTMLInputElement | null>(null)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(new Set())
+  const [exportFileName, setExportFileName] = useState('')
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importBackupData, setImportBackupData] = useState<PouBackupFile | null>(null)
   const [importSelectedIndices, setImportSelectedIndices] = useState<Set<number>>(new Set())
@@ -103,6 +113,17 @@ export function PouExplorer({
   /* Lọc CHỈ đổi thứ được vẽ, không đổi POU đang chọn: gõ vào ô tìm kiếm mà
    * editor bị đổi tệp là mất nội dung đang soạn. */
   const visible = useMemo(() => filterPouItems(items, query), [items, query])
+
+  const exportBackupSize = useMemo(() => {
+    if (exportSelectedIds.size === 0) return 0
+    try {
+      const backup = buildPouBackup(document, Array.from(exportSelectedIds))
+      const jsonStr = serializePouBackup(backup)
+      return new TextEncoder().encode(jsonStr).length
+    } catch {
+      return 0
+    }
+  }, [document, exportSelectedIds])
   const groups = useMemo(() => groupPouItems(visible), [visible])
   const userPouMap = useMemo(() => {
     const pous = userPouInterfacesFromDraft(document)
@@ -189,6 +210,9 @@ export function PouExplorer({
     } else {
       setExportSelectedIds(new Set(items.map((i) => i.objectId)))
     }
+    const safeProjectName = (document.project?.name || 'pous').replace(/[^a-zA-Z0-9_-]/g, '_')
+    const dateStr = new Date().toISOString().slice(0, 10)
+    setExportFileName(`mkddc-backup-${safeProjectName}-${dateStr}`)
     setExportModalOpen(true)
   }
 
@@ -202,7 +226,8 @@ export function PouExplorer({
     anchor.href = url
     const safeProjectName = (document.project?.name || 'pous').replace(/[^a-zA-Z0-9_-]/g, '_')
     const dateStr = new Date().toISOString().slice(0, 10)
-    anchor.download = 'mkddc-backup-' + safeProjectName + '-' + dateStr + '.json'
+    const rawName = exportFileName.trim() || `mkddc-backup-${safeProjectName}-${dateStr}`
+    anchor.download = rawName.toLowerCase().endsWith('.json') ? rawName : `${rawName}.json`
     anchor.click()
     URL.revokeObjectURL(url)
     setExportModalOpen(false)
@@ -700,7 +725,7 @@ export function PouExplorer({
         title={pick('Sao lưu chương trình', 'Backup programs')}
         confirmLabel={pick('Tải về tệp sao lưu', 'Download backup file')}
         cancelLabel={pick('Hủy', 'Cancel')}
-        confirmDisabled={exportSelectedIds.size === 0}
+        confirmDisabled={exportSelectedIds.size === 0 || !exportFileName.trim()}
         onConfirm={handleExportConfirm}
         onClose={() => setExportModalOpen(false)}
       >
@@ -711,6 +736,22 @@ export function PouExplorer({
               'Select programs and functions to save to your device as a data backup.'
             )}
           </p>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="export-backup-name" className="text-xs font-medium text-[var(--c-text-dim)]">
+              {pick('Tên bản sao lưu', 'Backup name')}
+            </label>
+            <div className="flex items-center gap-1.5">
+              <input
+                id="export-backup-name"
+                type="text"
+                value={exportFileName}
+                onChange={(e) => setExportFileName(e.target.value)}
+                placeholder={pick('Nhập tên bản sao lưu…', 'Enter backup name…')}
+                className="min-w-0 flex-1 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] px-2.5 py-1.5 text-xs text-[var(--c-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--c-accent)]"
+              />
+              <span className="shrink-0 text-xs font-mono text-[var(--c-text-dim)]">.json</span>
+            </div>
+          </div>
           <div className="flex items-center justify-between border-b border-[var(--c-border)] pb-2 text-xs font-medium text-[var(--c-text)]">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -728,6 +769,12 @@ export function PouExplorer({
                 {pick('Chọn tất cả', 'Select all')} ({exportSelectedIds.size}/{items.length})
               </span>
             </label>
+            <span className="text-xs text-[var(--c-text-dim)]">
+              {pick('Dung lượng lưu trữ: ', 'Storage size: ')}
+              <span className="font-mono font-medium text-[var(--c-text)]">
+                {formatBytes(exportBackupSize)}
+              </span>
+            </span>
           </div>
           <div className="max-h-60 overflow-y-auto rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-bg)] p-1 space-y-1">
             {items.map((item) => {

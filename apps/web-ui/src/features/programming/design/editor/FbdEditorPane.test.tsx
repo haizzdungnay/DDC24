@@ -59,6 +59,7 @@ describe('FbdEditorPane', () => {
     onChange?: (source: string) => void
     onSave?: (ops: ProgrammingDraftOperation[]) => Promise<boolean>
     onRunCheck?: () => void
+    localChecking?: boolean
     onOpenCompare?: () => void
     checkDisabledReason?: string | null
     compareDisabledReason?: string | null
@@ -79,6 +80,7 @@ describe('FbdEditorPane', () => {
           onSave={onSave}
           userPouInterfaces={[]}
           onRunCheck={onRunCheck}
+          localChecking={props?.localChecking}
           onOpenCompare={onOpenCompare}
           checkDisabledReason={props?.checkDisabledReason}
           compareDisabledReason={props?.compareDisabledReason}
@@ -95,11 +97,12 @@ describe('FbdEditorPane', () => {
     }
   }
 
-  it('TC-FBD-HEADER-001: shell chỉ giữ lệnh canvas, không lặp Lưu/Kiểm tra/So sánh của header chung', () => {
+  it('TC-FBD-HEADER-001: shell giữ lệnh canvas và nút Kiểm tra POU cục bộ, không lặp nút của header chung', () => {
     renderPane()
     expect(screen.getByRole('heading', { level: 3, name: 'FBD_Sample' })).toBeInTheDocument()
     const toolbar = screen.getByRole('toolbar', { name: /Lệnh FBD|FBD commands/ })
-    expect(within(toolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check|So sánh|Compare|Làm mới|Refresh/ })).toBeNull()
+    expect(within(toolbar).getByRole('button', { name: /Kiểm tra|Check/ })).toBeInTheDocument()
+    expect(within(toolbar).queryByRole('button', { name: /Lưu|Save|So sánh|Compare|Làm mới|Refresh/ })).toBeNull()
   })
 
   function twoNetworkDocument(): FbdDocument {
@@ -154,15 +157,24 @@ describe('FbdEditorPane', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('TC-FBD-HEADER-001 (bổ sung): dirty vẫn được công bố để header chung khoá Check theo pending operations, không tự nhân bản nút', () => {
+  it('TC-FBD-HEADER-001 (bổ sung): dirty vẫn được công bố và nút Kiểm tra cục bộ gọi onRunCheck', () => {
     const { onRunCheck } = renderPane({
       source: canonicalFbdJson(twoNetworkDocument()),
-      checkDisabledReason: 'Lưu bản nháp trước khi Kiểm tra',
+      checkDisabledReason: null,
     })
     expect(screen.getByText(/Chưa lưu|Not saved/)).toBeInTheDocument()
     const toolbar = screen.getByRole('toolbar', { name: /Lệnh FBD|FBD commands/ })
-    expect(within(toolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check/ })).toBeNull()
-    expect(onRunCheck).not.toHaveBeenCalled()
+    const checkBtn = within(toolbar).getByRole('button', { name: /Kiểm tra|Check/ })
+    expect(checkBtn).toBeInTheDocument()
+    fireEvent.click(checkBtn)
+    expect(onRunCheck).toHaveBeenCalled()
+  })
+
+  it('khi localChecking = true: nút Kiểm tra trên FBD đổi thành Đang kiểm tra… và bị disabled', () => {
+    renderPane({ localChecking: true })
+    const checkBtn = screen.getByRole('button', { name: /Checking|Đang kiểm tra/ })
+    expect(checkBtn).toBeInTheDocument()
+    expect(checkBtn).toBeDisabled()
   })
 
   it('PGM-02B: thanh công cụ phụ gom cụm mà KHÔNG mất điều khiển nào', () => {
@@ -176,7 +188,7 @@ describe('FbdEditorPane', () => {
     /* 3 combobox: `Khung nhìn`, `Kiểu dây`, `Giao diện FBD`. Không có ô chọn
        `Network hoạt động` và cũng sẽ không có: `#674` chốt mô hình một canvas,
        nên `Khung nhìn` chỉ còn là tuỳ chọn hiển thị của đúng một Network. */
-    expect(within(group).getAllByRole('combobox')).toHaveLength(3)
+    expect(within(group).getAllByRole('combobox')).toHaveLength(4)
     expect(within(group).getAllByRole('checkbox')).toHaveLength(2)
   })
 

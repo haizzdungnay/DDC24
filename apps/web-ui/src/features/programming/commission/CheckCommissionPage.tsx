@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ClipboardCheck, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Check, ClipboardCheck, Copy, ShieldCheck } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { Panel } from '../../../shared/components/Panel'
 import { Button } from '../../../shared/components/Button'
@@ -13,7 +13,7 @@ import { useProgrammingCheck, useProgrammingOverrides, useProgrammingRevisionCha
 import { useDraftWorkspace, useCheckWorkflow } from '../design/useDraftWorkspace'
 import { useCommissionWorkflow, type CommissionWorkflowState } from './useCommissionWorkflow'
 import type { ProgrammingImpactKey } from '../api/generated/client'
-import type { ProgrammingCheck } from '../model/types'
+import type { ProgrammingCheck, ProgrammingDiagnostic } from '../model/types'
 import { ProblemsDrawer } from '../shared/ProblemsDrawer'
 import { useProgrammingActionAllowed } from '../api/authorization'
 
@@ -175,6 +175,65 @@ export function CheckCommissionPage() {
     return () => setEditingContext(null)
   }, [checkWorkflow.state, check.data, check.status, projectId, setEditingContext])
 
+  const errorLogItems = useMemo(() => {
+    const list: ErrorLogItem[] = []
+    if (checkWorkflow.state.phase === 'error') {
+      list.push({
+        id: 'check-workflow-error',
+        stage: checkWorkflow.state.stage === 'sealing'
+          ? pick('Niêm phong Revision', 'Sealing Revision')
+          : pick('Kiểm tra & Biên dịch', 'Check & Compilation'),
+        title: checkWorkflow.state.message,
+        code: checkWorkflow.state.code,
+        correlationId: checkWorkflow.state.correlationId,
+        args: checkWorkflow.state.args,
+        raw: checkWorkflow.state.raw
+      })
+    }
+    if (check.data && (check.data.state === 'FAILED' || check.data.state === 'TIMED_OUT')) {
+      list.push({
+        id: 'check-failed',
+        stage: pick('Biên dịch & Kiểm tra', 'Compilation & Check'),
+        title: check.data.state === 'TIMED_OUT'
+          ? pick('Kiểm tra quá thời gian quy định (Timeout).', 'Check timed out.')
+          : pick('Kiểm tra gói chương trình thất bại.', 'Program package check failed.'),
+        code: check.data.state,
+        diagnostics: check.data.diagnostics,
+        raw: check.data.diagnostics && check.data.diagnostics.length > 0
+          ? JSON.stringify(check.data.diagnostics, null, 2)
+          : undefined
+      })
+    } else if (check.status === 'error') {
+      list.push({
+        id: 'check-query-error',
+        stage: pick('Tải dữ liệu Kiểm tra', 'Loading Check Data'),
+        title: pick('Không tải được thông tin Kiểm tra từ máy chủ.', 'Could not load check information from server.'),
+        code: 'NETWORK_ERROR'
+      })
+    }
+    if (commission.state.phase === 'error') {
+      list.push({
+        id: 'commission-error',
+        stage: pick('Đưa vào vận hành', 'Commissioning'),
+        title: commission.state.message,
+        code: commission.state.code,
+        correlationId: commission.state.correlationId,
+        args: commission.state.args,
+        raw: commission.state.raw
+      })
+    } else if (commission.state.phase === 'terminal' && commission.state.operation.state === 'FAILED') {
+      list.push({
+        id: 'commission-op-failed',
+        stage: pick('Đưa vào vận hành', 'Commissioning'),
+        title: pick('Lệnh Đưa vào vận hành thất bại.', 'Commission operation failed.'),
+        code: commission.state.operation.step || commission.state.operation.state,
+        correlationId: commission.state.operation.operationId,
+        raw: JSON.stringify(commission.state.operation, null, 2)
+      })
+    }
+    return list
+  }, [checkWorkflow.state, check.data, check.status, commission.state, pick])
+
   if (!navState?.revisionId || !navState?.checkId) {
     const phase = checkWorkflow.state.phase
     const running = phase === 'sealing' || phase === 'checking'
@@ -224,6 +283,7 @@ export function CheckCommissionPage() {
             </Link>
           </div>
         )}
+        <ErrorLogPanel items={errorLogItems} />
       </div>
     )
   }
@@ -509,6 +569,7 @@ export function CheckCommissionPage() {
           />
         </div>
       </Modal>
+      <ErrorLogPanel items={errorLogItems} />
     </div>
   )
 }
@@ -591,5 +652,142 @@ function ReadOnlyCommissionNotice() {
         {pick('Kết quả Check, impact và read-back vẫn hiển thị ở chế độ chỉ đọc.', 'Check results, impact, and read-back remain visible in read-only mode.')}
       </span>
     </div>
+  )
+}
+
+interface ErrorLogItem {
+  id: string
+  stage: string
+  title: string
+  code?: string
+  correlationId?: string
+  diagnostics?: ProgrammingDiagnostic[]
+  args?: Record<string, unknown>
+  raw?: string
+}
+
+function ErrorLogPanel({ items }: { items: ErrorLogItem[] }) {
+  const { pick } = useI18n()
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  const handleCopy = (item: ErrorLogItem) => {
+    const text = JSON.stringify(item, null, 2)
+    void navigator.clipboard?.writeText(text)
+    setCopiedId(item.id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  return (
+    <Panel
+      title={pick('Log lỗi', 'Error log')}
+      subtitle={pick(
+        'Chi tiết kỹ thuật về lỗi gặp phải trong quá trình Kiểm tra hoặc Đưa vào vận hành (nếu có)',
+        'Technical details of errors encountered during Check or Commission (if any)'
+      )}
+    >
+      {items.length === 0 ? (
+        <p className="text-sm text-[var(--c-text-dim)]">
+          {pick('Không có lỗi nào được ghi nhận.', 'No errors recorded.')}
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="space-y-3 rounded-[var(--radius)] border border-[var(--c-fault)] bg-[var(--c-surface-2)] p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--c-border)] pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-[var(--c-fault)] px-2 py-0.5 text-xs font-semibold text-white">
+                    {item.stage}
+                  </span>
+                  {item.code && (
+                    <span className="font-mono text-xs font-bold text-[var(--c-fault-fg)]">
+                      {item.code}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={copiedId === item.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  onClick={() => handleCopy(item)}
+                >
+                  {copiedId === item.id ? pick('Đã sao chép', 'Copied') : pick('Sao chép log', 'Copy log')}
+                </Button>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-[var(--c-text)]">{item.title}</p>
+                {item.correlationId && (
+                  <p className="mt-1 font-mono text-xs text-[var(--c-text-dim)]">
+                    Correlation ID: {item.correlationId}
+                  </p>
+                )}
+              </div>
+
+              {item.args && Object.keys(item.args).length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--c-text-dim)]">
+                    {pick('Tham số ngữ cảnh', 'Context parameters')}:
+                  </span>
+                  <pre className="max-h-32 overflow-auto rounded bg-black/40 p-2 font-mono text-xs text-gray-200">
+                    {JSON.stringify(item.args, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {item.diagnostics && item.diagnostics.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--c-text-dim)]">
+                    {pick('Danh sách chẩn đoán từ compiler', 'Compiler diagnostics')}:
+                  </span>
+                  <div className="max-h-48 overflow-auto rounded border border-[var(--c-border)] bg-[var(--c-surface)] p-2">
+                    <ul className="divide-y divide-[var(--c-border)] text-xs">
+                      {item.diagnostics.map((d, idx) => (
+                        <li key={idx} className="space-y-1 py-1.5">
+                          <div className="flex items-center gap-2 font-mono">
+                            <span
+                              className={
+                                d.severity === 'ERROR'
+                                  ? 'font-bold text-[var(--c-fault-fg)]'
+                                  : 'text-[var(--c-warn-fg)]'
+                              }
+                            >
+                              [{d.severity}]
+                            </span>
+                            <span>{d.code}</span>
+                            {d.detailCode && (
+                              <span className="text-[var(--c-text-dim)]">({d.detailCode})</span>
+                            )}
+                          </div>
+                          {d.message && <p className="font-mono text-[var(--c-text)]">{d.message}</p>}
+                          {d.location && (
+                            <p className="text-[var(--c-text-dim)]">
+                              Program: {String(d.location.programId || '—')}, Line: {String(d.location.line ?? '—')}, Col: {String(d.location.column ?? '—')}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {item.raw && (
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--c-text-dim)]">
+                    {pick('Chi tiết raw', 'Raw details')}:
+                  </span>
+                  <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded bg-black/40 p-2 font-mono text-xs text-gray-200">
+                    {item.raw}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
   )
 }

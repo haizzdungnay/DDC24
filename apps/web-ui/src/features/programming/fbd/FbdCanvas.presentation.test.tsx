@@ -20,11 +20,14 @@ function mockPick(viStr: string, _enStr: string) {
   return viStr
 }
 
+import type { FbdFlowPreviewPreference } from './fbdPreferences'
+import { FBD_WIRE_HOVER_COLOR } from './FbdCanvasLayers'
 interface RenderCanvasOptions {
   network?: FbdNetwork
   document?: FbdDocument
   layout?: FbdDocument['layout']
   selection?: FbdSelection | null
+  flowPreviewMode?: FbdFlowPreviewPreference
   issueNodeIds?: ReadonlySet<string>
   staleNodeIds?: ReadonlySet<string>
   connectionFromPortId?: string | null
@@ -57,6 +60,7 @@ function renderPresentationCanvas(options: RenderCanvasOptions = {}) {
       dispatch={dispatch}
       pick={mockPick}
       registerPort={registerPort}
+      flowPreviewMode={options.flowPreviewMode}
       bindings={options.bindings}
       variables={options.variables}
       pointCatalogItems={options.pointCatalogItems}
@@ -343,7 +347,101 @@ describe('Canvas scroll bounds và viewBox (chống cắt mép trái khi zoom/pa
     const [vx, , vw] = viewBox!.split(' ').map(Number)
     // viewBoxX phải mở rộng về phía âm (<= -80) để bao trọn node ở x = -80
     expect(vx).toBeLessThanOrEqual(-80)
-    // vw phải đủ lớn để bao trọn toàn bộ canvas từ viewBoxX
-    expect(vw).toBeGreaterThan(1000)
+   // vw phải đủ lớn để bao trọn toàn bộ canvas từ viewBoxX
+   expect(vw).toBeGreaterThan(1000)
+ })
+
+  it('Mũi tên định hướng luồng dữ liệu tại đầu vào (input) của dây kết nối', () => {
+    const doc = golden()
+    const net = doc.networks[0]
+    const { surface } = renderPresentationCanvas({ document: doc, network: net })
+
+    // Mỗi dây nối phải có một biểu tượng mũi tên định hướng tại đầu vào (input port)
+    const arrows = surface.querySelectorAll('path[data-fbd-wire-arrow]')
+    expect(arrows.length).toBe(net.wires.length)
+    expect(arrows.length).toBeGreaterThan(0)
+
+   for (const wire of net.wires) {
+     const arrow = surface.querySelector(`path[data-fbd-wire-arrow="${wire.id}"]`)
+     expect(arrow).not.toBeNull()
+     expect(arrow?.getAttribute('fill')).toBe('var(--c-text-dim)')
+   }
+
+   // Khi chọn dây, mũi tên chuyển màu theo màu nhấn (accent)
+   cleanup()
+   const selectedWire = net.wires[0]
+   const { surface: selectedSurface } = renderPresentationCanvas({
+     document: doc,
+     network: net,
+     selection: { kind: 'wire', networkId: net.id, wireId: selectedWire.id },
+   })
+    const selectedArrow = selectedSurface.querySelector(`path[data-fbd-wire-arrow="${selectedWire.id}"]`)
+    expect(selectedArrow?.getAttribute('fill')).toBe('var(--c-accent)')
+  })
+
+  it('Rê chuột vào dây: chuyển sang màu xanh dương đậm (#1d4ed8)', () => {
+    const doc = golden()
+    const net = doc.networks[0]
+    const targetWire = net.wires[0]
+    cleanup()
+    const { surface } = renderPresentationCanvas({ document: doc, network: net })
+
+    const wirePath = surface.querySelector(`path[data-fbd-wire-id="${targetWire.id}"]`)
+    expect(wirePath).not.toBeNull()
+
+    // Kích hoạt hover
+    fireEvent.mouseEnter(wirePath!)
+    expect(wirePath?.getAttribute('stroke')).toBe(FBD_WIRE_HOVER_COLOR)
+
+    const arrow = surface.querySelector(`path[data-fbd-wire-arrow="${targetWire.id}"]`)
+    expect(arrow?.getAttribute('fill')).toBe('#10b981') // Khi hover ở mode HOVER (mặc định), luồng xanh kích hoạt và arrow sáng xanh
+
+    // Rời chuột
+    fireEvent.mouseLeave(wirePath!)
+    expect(wirePath?.getAttribute('stroke')).toBe('var(--c-text-dim)')
+    expect(arrow?.getAttribute('fill')).toBe('var(--c-text-dim)')
+  })
+
+  it('Chế độ xem trước luồng dữ liệu (flow preview): ALL, SELECTED_BLOCKS, OFF', () => {
+    const doc = golden()
+    const net = doc.networks[0]
+
+    // 1. Mode ALL: toàn bộ dây đều có hiệu ứng dòng chảy
+    cleanup()
+    const { surface: surfaceAll } = renderPresentationCanvas({
+      document: doc,
+      network: net,
+      flowPreviewMode: 'ALL',
+    })
+    const flowsAll = surfaceAll.querySelectorAll('path[data-fbd-wire-flow]')
+    expect(flowsAll.length).toBe(net.wires.length)
+    expect(flowsAll[0].getAttribute('stroke')).toBe('#10b981')
+    expect(flowsAll[0].getAttribute('stroke-dasharray')).toBe('8 4 2 4')
+
+    // 2. Mode SELECTED_BLOCKS: chỉ những dây nối vào khối đang chọn mới kích hoạt luồng
+    cleanup()
+    const selectedNodeId = net.nodes[0].id // Node OCCUPIED
+    const { surface: surfaceSelected } = renderPresentationCanvas({
+      document: doc,
+      network: net,
+      flowPreviewMode: 'SELECTED_BLOCKS',
+      selection: { kind: 'node', networkId: net.id, nodeId: selectedNodeId },
+    })
+    const flowsSelected = surfaceSelected.querySelectorAll('path[data-fbd-wire-flow]')
+    const expectedConnectedWires = net.wires.filter(
+      (w) => w.from.nodeId === selectedNodeId || w.to.nodeId === selectedNodeId
+    )
+    expect(flowsSelected.length).toBe(expectedConnectedWires.length)
+    expect(flowsSelected.length).toBeGreaterThan(0)
+    expect(flowsSelected.length).toBeLessThan(net.wires.length)
+
+    // 3. Mode OFF: không có dòng chảy nào
+    cleanup()
+    const { surface: surfaceOff } = renderPresentationCanvas({
+      document: doc,
+      network: net,
+      flowPreviewMode: 'OFF',
+    })
+    expect(surfaceOff.querySelectorAll('path[data-fbd-wire-flow]')).toHaveLength(0)
   })
 })

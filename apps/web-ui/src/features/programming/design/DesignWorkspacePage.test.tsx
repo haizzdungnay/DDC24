@@ -718,8 +718,9 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     const editor = await screen.findByRole('region', { name: 'Bộ dựng FBD có cấu trúc' })
     const fbdToolbar = screen.getByRole('toolbar', { name: 'Lệnh FBD' })
 
-    // 1. Toolbar FBD tuyệt đối KHÔNG có nút Save hoặc Check
-    expect(within(fbdToolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check/ })).toBeNull()
+    // 1. Toolbar FBD có nút Kiểm tra POU cục bộ, KHÔNG có nút Save
+    expect(within(fbdToolbar).getByRole('button', { name: /Kiểm tra|Check/ })).toBeInTheDocument()
+    expect(within(fbdToolbar).queryByRole('button', { name: /Lưu|Save/ })).toBeNull()
 
     // 2. Trạng thái clean ban đầu: Check được phép, Save bị khoá vì không có thay đổi
     await waitFor(() => expect(editingContextBridge.current?.actions).toBeDefined())
@@ -739,8 +740,8 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
     expect(screen.getByTestId('draft-dirty-indicator')).toHaveAttribute('data-save-status', 'dirty')
     expect(screen.getByTestId('draft-dirty-indicator')).toHaveTextContent(/Chưa lưu/)
 
-    // Toolbar FBD vẫn không có nút Save/Check lặp lại
-    expect(within(fbdToolbar).queryByRole('button', { name: /Lưu|Save|Kiểm tra|Check/ })).toBeNull()
+    // Toolbar FBD vẫn không có nút Save lặp lại
+    expect(within(fbdToolbar).queryByRole('button', { name: /Lưu|Save/ })).toBeNull()
   })
 
   it('TC-FBD-HEADER-002: Save timeout/treo không tự retry (0 lần gửi lại), trạng thái UNKNOWN, buffer nguyên vẹn', async () => {
@@ -892,7 +893,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
      * chặn cho đúng lỗi đó: hai vùng `role="status"` cùng câu chữ trên một màn
      * hình, mà Playwright mới bắt được bằng `strict mode violation`. */
     expect(screen.queryAllByTestId('draft-dirty-indicator')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: 'Kiểm tra' })).toBeDisabled()
+    expect(editingContextBridge.current?.actions?.checkDisabledReason).toContain('Lưu bản nháp trước khi Kiểm tra')
     const unload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unload)
     expect(unload.defaultPrevented).toBe(true)

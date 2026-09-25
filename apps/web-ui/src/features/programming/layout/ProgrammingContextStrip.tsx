@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, ClipboardCheck, Info, Loader2, RefreshCw, Save, ShieldAlert, WifiOff } from 'lucide-react'
+import { AlertTriangle, ClipboardCheck, Hammer, Info, Loader2, RefreshCw, Save, ShieldAlert, WifiOff } from 'lucide-react'
 import { useI18n } from '../../../shared/i18n'
 import { Button } from '../../../shared/components/Button'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
@@ -19,7 +19,7 @@ type ResourceStatus = RemoteState<unknown>['status']
 type NoticeKind = 'loading' | 'empty' | 'error' | 'permission' | 'stale' | 'offline' | 'unknown'
 type Pick = (vi: string, en: string) => string
 
-interface ContextNotice {
+export interface ContextNotice {
   kind: NoticeKind
   title: string
   detail?: string
@@ -100,8 +100,10 @@ export function ProgrammingContextStrip({
   children,
   actions,
   refreshing = false,
-  onRefresh
+  onRefresh,
+  hideNoticeBanner = false,
 }: {
+  hideNoticeBanner?: boolean
   projectStatus: ResourceStatus
   runtimeStatus: ResourceStatus
   runtime: ProgrammingRuntime | null
@@ -233,13 +235,13 @@ export function ProgrammingContextStrip({
             <Button
               size="sm"
               variant="secondary"
-              aria-label={pick('Kiểm tra gói', 'Check the package')}
-              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+              aria-label={pick('Build', 'Build')}
+              icon={<Hammer className="h-4 w-4" aria-hidden="true" />}
               disabled={actions.checkDisabledReason !== null}
-              title={actions.checkDisabledReason ?? pick('Kiểm tra gói', 'Check the package')}
+              title={actions.checkDisabledReason ?? pick('Build gói', 'Build package')}
               onClick={actions.onCheck}
             >
-              {pick('Kiểm tra', 'Check')}
+              Build
             </Button>
           </div>
         )}
@@ -310,7 +312,7 @@ export function ProgrammingContextStrip({
             onClose={closeDetails}
           />
         : null}
-      {notice ? <ContextStateNotice notice={notice} /> : null}
+      {notice && !hideNoticeBanner ? <ContextStateNotice notice={notice} /> : null}
     </section>
   )
 }
@@ -426,7 +428,7 @@ function SemanticBadge({ pick, state, label, title }: { pick: Pick; state: Seman
   return <StatusBadge {...semanticBadgeProps(pick, state, label)} className="shrink-0" title={title} />
 }
 
-function contextNotice({
+export function contextNotice({
   pick,
   projectStatus,
   runtimeStatus,
