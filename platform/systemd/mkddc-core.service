@@ -24,9 +24,10 @@ RestartSec=2
 # WatchdogSec theo ADR-028, bám base step nền tảng và LOẠI Task period khỏi
 # công thức:
 #   >= 2 x base_step_max + WCET_base_step(p99.9, target, SCHED_FIFO) + 1 s
-# Base step Rev A có trần 2000 ms, nên 6 s là candidate hiện hành. Task
-# Programming 30 s chỉ là cadence dispatch, không được nâng watchdog thành 61 s
-# hoặc làm ScanLoop ngủ 30 s.
+# Base step Rev A có trần 2000 ms, nên 6 s là candidate hiện hành. ADR-061 hạ base
+# step xuống 10 ms và giữ WatchdogSec=6 s (notify tối đa 1 lần/giây, 4.8). Chu kỳ
+# Program 50 s chỉ là cadence dispatch, không được nâng watchdog theo nó hoặc làm
+# ScanLoop ngủ theo nó.
 #
 # Giá trị này là TARGET-PENDING tới khi đo lại trên target CÓ SCHED_FIFO: board hiện
 # chạy SCHED_OTHER do drop-in nofifo.conf, nên số đo không đại diện cho cấu
@@ -37,6 +38,12 @@ RestartSec=2
 WatchdogSec=6
 CPUSchedulingPolicy=fifo
 CPUSchedulingPriority=80
+# ADR-061 4.11 (G2 tạm, chờ PREEMPT_RT): Core là tiến trình DUY NHẤT của sản phẩm
+# chạy trên CPU3. Các service khác ghim CPU0–2 và irqbalance cấm CPU3 (drop-in
+# `irqbalance-mkddc-rt.conf`). Đo trên Foxlinx 2026-09-26: dời IRQ khỏi CPU3 hạ
+# jitter tối đa của tick 10 ms từ 470 xuống 173 µs (rảnh), nhưng CHƯA đạt C4
+# (≤ 100 µs) — kernel non-RT vẫn là giới hạn.
+CPUAffinity=3
 LimitRTPRIO=85
 LimitMEMLOCK=infinity
 AmbientCapabilities=CAP_SYS_NICE CAP_IPC_LOCK

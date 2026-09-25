@@ -4,6 +4,8 @@ After=mkddc-web.service mkddc-web-pi.service mkddc-iobus.service mkddc-netcfg.se
 Wants=mkddc-netcfg.service
 
 [Service]
+# ADR-061 4.11: CPU3 dành riêng cho mkddc-core (tick 10 ms, SCHED_FIFO).
+CPUAffinity=0-2
 Type=notify
 ExecStart=/usr/sbin/mkddc-hmi
 Restart=always

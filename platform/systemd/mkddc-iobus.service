@@ -6,6 +6,8 @@ Description=MK-DDC-24 IO bus service (UART/IOP master to MCU)
 After=local-fs.target
 
 [Service]
+# ADR-061 4.11: CPU3 dành riêng cho mkddc-core (tick 10 ms, SCHED_FIFO).
+CPUAffinity=0-2
 Type=notify
 ExecStart=/usr/sbin/mkddc-iobus --config /data/config/io_config.conf
 ExecReload=/bin/kill -HUP $MAINPID
