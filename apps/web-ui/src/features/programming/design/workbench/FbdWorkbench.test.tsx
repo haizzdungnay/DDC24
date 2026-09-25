@@ -271,8 +271,8 @@ describe('FBD Task 9 — workbench, diagnostics, status và Auto Layout', () => 
         />
       </I18nProvider>,
     )
-    fireEvent.click(screen.getByRole('tab', { name: /Watch/ }))
-    expect(screen.getByRole('status')).toHaveTextContent(/Chế độ EDIT chỉ có Draft/)
+    const watchColumn = screen.getByTestId('workbench-watch-column')
+    expect(within(watchColumn).getByText(/Chưa có nguồn giá trị runtime|No runtime watch source/)).toBeInTheDocument()
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -412,10 +412,10 @@ describe('FBD Task 9 — workbench, diagnostics, status và Auto Layout', () => 
         />
       </I18nProvider>,
     )
-    fireEvent.click(screen.getByRole('tab', { name: /Watch/ }))
-    expect(screen.getByText('Mất kết nối')).toHaveAttribute('data-quality', 'OFFLINE')
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
-    expect(screen.queryByText(/^0(?:\.0+)?$/)).toBeNull()
+    const watchColumn = screen.getByTestId('workbench-watch-column')
+    expect(within(watchColumn).getByText('Mất kết nối')).toHaveAttribute('data-quality', 'OFFLINE')
+    expect(within(watchColumn).getAllByText('—').length).toBeGreaterThan(0)
+    expect(within(watchColumn).queryByText(/^0(?:\.0+)?$/)).toBeNull()
   })
 
   it('Problems đọc buffer FBD chưa lưu qua pending operation, không chờ read-back', () => {

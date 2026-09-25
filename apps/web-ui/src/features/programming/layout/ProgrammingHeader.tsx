@@ -1,4 +1,4 @@
-import { ClipboardCheck, Hammer, RefreshCw, Save } from 'lucide-react'
+import { Hammer, RefreshCw, Save } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { useI18n } from '../../../shared/i18n'
 import { Button } from '../../../shared/components/Button'

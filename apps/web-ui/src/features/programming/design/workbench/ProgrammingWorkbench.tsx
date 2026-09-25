@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Info, PanelRight, PanelRightClose, Terminal, Trash2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Info, PanelRight, PanelRightClose, Terminal } from 'lucide-react'
 import { useI18n } from '../../../../shared/i18n'
 import type { ProgrammingDiagnostic } from '../../model/types'
 import type { OpenBufferContext } from '../../shared/diagnosticFreshness'
