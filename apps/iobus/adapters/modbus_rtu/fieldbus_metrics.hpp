@@ -6,6 +6,7 @@
 #define IOBUS_FIELDBUS_METRICS_HPP
 
 #include <cstdint>
+#include <mutex>
 
 #include "modbus_rtu/frame_ring.hpp"
 #include <string>
@@ -110,6 +111,17 @@ constexpr uint64_t kUtilizationSlotUs = 2000000ull;
  * ổn định; và vẫn đủ ngắn để một bus vừa nghẽn hiện ra trong vòng nửa phút. */
 constexpr size_t kUtilizationSlots = 8;
 
+/* `MBA-FW-03` (audit Modbus 2026-09-25): đối tượng này được CHIA SẺ giữa các
+ * thread BusWorker (ghi bộ đếm slave/bus), thread publish 100 ms (chốt cửa sổ
+ * latency, đọc toàn bộ để ghi io_shm) và thread kênh điều khiển (`status`,
+ * `apply_config` gọi `init`). Bản trước KHÔNG có khoá: `record_bus_transaction`
+ * `erase`/`push_back` vào `latency_window_` trong lúc `roll_bus_window` chép
+ * chính vector đó, và `set_bus_state` gán `std::string` trong lúc publisher đọc
+ * — data race trên cấu trúc cấp phát động, đủ để làm hỏng heap của tiến trình
+ * đang chạy cả vòng IOP 2 ms.
+ *
+ * Luật: mọi hàm công khai tự lấy `mu_`; hàm đọc trả BẢN SAO, không trả tham
+ * chiếu ra ngoài khoá. Hàm private (`find_bus`) giả định đã giữ khoá. */
 class FieldbusMetrics {
 public:
     /* `T57-3.9`: vòng nhớ khung đi CÙNG đường với metrics vì `poll_once` đã
@@ -130,17 +142,28 @@ public:
      * lệch ⇒ counter đã reset, delta cũ vô nghĩa. */
     void set_producer_identity(uint64_t boot_id, uint64_t counters_since_ms)
     {
+        std::lock_guard<std::mutex> lock(mu_);
         producer_boot_id_  = boot_id;
         counters_since_ms_ = counters_since_ms;
     }
-    uint64_t producer_boot_id() const { return producer_boot_id_; }
-    uint64_t counters_since_ms() const { return counters_since_ms_; }
+    uint64_t producer_boot_id() const { std::lock_guard<std::mutex> lock(mu_); return producer_boot_id_; }
+    uint64_t counters_since_ms() const { std::lock_guard<std::mutex> lock(mu_); return counters_since_ms_; }
 
     /* Bus metrics — index theo thứ tự khai báo trong config. */
-    void init_buses(const std::vector<BusMetrics>& buses) { buses_ = buses; }
-    size_t bus_count() const { return buses_.size(); }
-    const BusMetrics& bus(size_t i) const { return buses_[i]; }
-    BusMetrics& bus_rw(size_t i) { return buses_[i]; }
+    void init_buses(const std::vector<BusMetrics>& buses)
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        buses_ = buses;
+        latency_window_.assign(buses_.size(), {});
+    }
+    size_t bus_count() const { std::lock_guard<std::mutex> lock(mu_); return buses_.size(); }
+    /* Bản SAO có khoá. `i` ngoài dải ⇒ bản rỗng thay vì chạm ngoài vector: tập
+     * bus có thể vừa bị `apply_config` thay giữa hai lần gọi của người đọc. */
+    BusMetrics bus(size_t i) const
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        return i < buses_.size() ? buses_[i] : BusMetrics{};
+    }
     /* Ghi nhận một giao dịch đã xong trên bus: thời gian chiếm dây thật. */
     void record_bus_transaction(uint8_t bus_id, uint32_t elapsed_us, bool ok);
     void set_bus_state(uint8_t bus_id, const char* state);
@@ -172,12 +195,20 @@ public:
     /* Reset alarm khi slave trở lại online. */
     void reset_alarms(uint8_t slave_idx);
 
-    const SlaveMetrics& get(uint8_t idx) const { return metrics_[idx]; }
-    size_t size() const { return metrics_.size(); }
+    /* Bản SAO có khoá — xem luật ở đầu lớp. */
+    SlaveMetrics get(uint8_t idx) const
+    {
+        std::lock_guard<std::mutex> lock(mu_);
+        return idx < metrics_.size() ? metrics_[idx] : SlaveMetrics{};
+    }
+    size_t size() const { std::lock_guard<std::mutex> lock(mu_); return metrics_.size(); }
 
 private:
     FrameRing frames_;
+    /* Giả định đã giữ `mu_`. */
     BusMetrics* find_bus(uint8_t bus_id);
+
+    mutable std::mutex mu_;
 
     std::vector<SlaveMetrics> metrics_;
     std::vector<BusMetrics>   buses_;
