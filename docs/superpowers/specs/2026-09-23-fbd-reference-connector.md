@@ -97,7 +97,7 @@ export interface FbdWireReferenceItem {
   readonly wireId: string
   /**
    * Tên định danh tín hiệu hiển thị trên nhãn connector (ví dụ: "AI1_TEMP", "SIG_PUMP_RUN").
-   * Tuân thủ quy tắc định danh IEC 61131-3 / C-identifier: [a-zA-Z_][a-zA-Z0-9_]*
+   * Quy tắc định danh C-identifier: [a-zA-Z_][a-zA-Z0-9_]* (cùng dạng định danh của tập con IEC 61131-3-aligned).
    */
   readonly signalName: string
   /** Nhãn tuỳ biến người dùng chỉ định (ghi đè signalName tự động nếu có) */
