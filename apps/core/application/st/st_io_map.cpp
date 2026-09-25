@@ -207,7 +207,8 @@ bool resolve_io_bindings(StIrModule* module, const std::vector<StIoMapEntry>& en
         if (found == vars.end()) {
             push_diag(diagnostics, st_diag_code::kIoMapUnknownVar,
                      "io_map entry references unknown variable '" + e.variable +
-                         "' (not declared in VAR_INPUT/VAR_OUTPUT)");
+                         "' (not declared in VAR_INPUT/VAR_OUTPUT; in FBD a variable is declared only by an"
+                         " INPUT/OUTPUT block that uses it on the diagram)");
             return false;
         }
         const StIrVariable& var = *found->second;
@@ -362,7 +363,8 @@ bool validate_io_map(const StProgram& prog, const std::vector<StIoMapEntry>& ent
         if (it == syms.end()) {
             push_diag(diagnostics, st_diag_code::kIoMapUnknownVar,
                      "io_map entry references unknown variable '" + e.variable +
-                         "' (not declared in VAR_INPUT/VAR_OUTPUT)");
+                         "' (not declared in VAR_INPUT/VAR_OUTPUT; in FBD a variable is declared only by an"
+                         " INPUT/OUTPUT block that uses it on the diagram)");
             continue;   /* không kiểm tra tiếp các field khác của entry sai variable */
         }
         binding_count[e.variable]++;

@@ -128,6 +128,11 @@ TEST(StResolveIoBindings, RejectsUnknownVariable)
     EXPECT_FALSE(resolve_io_bindings(&module, entries, &diags));
     ASSERT_FALSE(diags.empty());
     EXPECT_EQ(diags[0].code, st_diag_code::kIoMapUnknownVar);
+    /* F10 (EV-PROG-FBD-ST-MB-20260925): trên bo, binding của một biến FBD đã
+     * khai trong bảng biến nhưng không có khối OUTPUT nhận lỗi "not declared in
+     * VAR_INPUT/VAR_OUTPUT" và người dùng không biết phải sửa ở đâu. Thông điệp
+     * phải chỉ ra nguyên nhân phía FBD. */
+    EXPECT_NE(diags[0].message.find("INPUT/OUTPUT block"), std::string::npos) << diags[0].message;
 }
 
 TEST(StResolveIoBindings, RejectsTypeMismatch)
