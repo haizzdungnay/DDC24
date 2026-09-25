@@ -127,3 +127,32 @@ func TestPointIDModbusTrungDangTenHeThongBiChan(t *testing.T) {
 		t.Fatalf("validator KHÔNG chặn point_id Modbus \"DO3\": %+v", errs)
 	}
 }
+
+// `MBA-FW-09`: Point bool có `bit_index` trên holding register KHÔNG được khai
+// read_write — iobus sẽ ghi FC06 cả register và xoá mọi bit khác của control word.
+func TestPointBitIndexKhongDuocKhaiReadWrite(t *testing.T) {
+	bit := 3
+	cfg := webModbus.Config{
+		Devices: []webModbus.Device{{DeviceID: "VFD-1", Enabled: true, RS485Port: "/dev/rs485-1",
+			Baud: 9600, Parity: "N", StopBit: 1, SlaveID: 4, PollMS: 1000, TimeoutMS: 300, Retry: 2, OfflineAfterErrors: 2}},
+		Points: []webModbus.Point{{PointID: "VFD1-RUN", DeviceID: "VFD-1", TagName: "vfd1_run", DisplayName: "Run bit",
+			RegisterType: "holding_register", Address: 100, DataType: "bool", BitIndex: &bit, ByteOrder: "big",
+			WordOrder: "high_low", Scale: 1, ReadWrite: "read_write", Enabled: true}},
+	}
+	rejected := false
+	for _, e := range webModbus.ValidateWith(cfg, webModbus.DefaultValidateOptions()) {
+		if e.Path == "points[0].read_write" {
+			rejected = true
+		}
+	}
+	if !rejected {
+		t.Fatal("Point bit_index read_write được chấp nhận — lệnh ghi FC06 sẽ đè cả register")
+	}
+
+	cfg.Points[0].ReadWrite = "read"
+	for _, e := range webModbus.ValidateWith(cfg, webModbus.DefaultValidateOptions()) {
+		if e.Path == "points[0].read_write" || e.Path == "points[0].bit_index" {
+			t.Fatalf("Point bit_index chỉ-đọc hợp lệ bị từ chối: %+v", e)
+		}
+	}
+}

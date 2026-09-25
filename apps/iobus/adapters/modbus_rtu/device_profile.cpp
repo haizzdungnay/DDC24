@@ -236,6 +236,45 @@ static bool parse_point(const std::string& obj, ProfilePoint* pt)
     if (jget_num(obj, "readback_tolerance", &tol) && tol > 0)
         pt->readback_tolerance = tol;
 
+    /* `MBA-FW-09` — bit_index / min_value / max_value (xem ProfilePoint). */
+    double bit = -1.0;
+    if (jget_num(obj, "bit_index", &bit)) {
+        if (bit < 0 || bit > 15 || bit != static_cast<double>(static_cast<int>(bit))) {
+            std::fprintf(stderr, "ERROR profile.invalid_bit_index name=%s bit_index=%g — skip\n",
+                         pt->name.c_str(), bit);
+            return false;
+        }
+        if ((fc != 3 && fc != 4) || pt->type != PointType::Bool || pt->count != 1) {
+            std::fprintf(stderr, "ERROR profile.bit_index_needs_bool_register name=%s fc=%u"
+                         " — bit_index chỉ dùng với bool, count 1, FC03/FC04; skip\n",
+                         pt->name.c_str(), fc);
+            return false;
+        }
+        if (pt->writable) {
+            /* Ghi FC06 cho điểm bit là ghi đè CẢ register. Chưa có FC22/RMW ⇒
+             * từ chối cấu hình thay vì nhận rồi phá control word. */
+            std::fprintf(stderr, "ERROR profile.bit_point_not_writable name=%s — ghi một bit trong"
+                         " register chưa được hỗ trợ (cần FC22/read-modify-write); skip\n",
+                         pt->name.c_str());
+            return false;
+        }
+        pt->bit_index = static_cast<int8_t>(bit);
+    }
+    double limit = 0.0;
+    if (jget_num(obj, "min_value", &limit) && std::isfinite(limit)) {
+        pt->has_min   = true;
+        pt->min_value = limit;
+    }
+    if (jget_num(obj, "max_value", &limit) && std::isfinite(limit)) {
+        pt->has_max   = true;
+        pt->max_value = limit;
+    }
+    if (pt->has_min && pt->has_max && pt->min_value > pt->max_value) {
+        std::fprintf(stderr, "ERROR profile.min_gt_max name=%s min=%g max=%g — skip\n",
+                     pt->name.c_str(), pt->min_value, pt->max_value);
+        return false;
+    }
+
     /* `expose_bacnet` — ĐỌC ĐỂ CẢNH BÁO, KHÔNG THỰC THI (OD-MBRTU-014).
      *
      * Khoá này từng được parse vào ProfilePoint nhưng chưa bao giờ có consumer

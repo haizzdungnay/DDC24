@@ -61,6 +61,25 @@ struct ProfilePoint {
     /* Dung sai đối chiếu (đơn vị kỹ thuật). `0` = suy từ `scale`. */
     double      readback_tolerance = 0.0;
 
+    /* `MBA-FW-09` (audit Modbus 2026-09-25) — hai tuỳ chọn mà BE ĐÃ sinh vào
+     * profile (`BuildProfile`), FE đã hiển thị, nhưng iobus trước bản này KHÔNG
+     * đọc: cấu hình được nhận rồi bị bỏ qua lặng lẽ.
+     *
+     * `bit_index` 0..15 (−1 = không dùng): điểm bool lấy MỘT bit của register
+     * FC03/FC04. Bỏ qua nó nghĩa là publish nguyên giá trị register (ví dụ 8 cho
+     * bit 3) dưới nhãn GOOD, và ghi điểm bit bằng FC06 là ĐÈ CẢ register — xoá
+     * mọi bit khác của một control word. Ghi bit an toàn cần FC22 hoặc
+     * read-modify-write, là quyết định còn mở; tới lúc đó điểm bit KHÔNG ghi
+     * được (fail-closed, `load_device_profile` từ chối `writable`).
+     *
+     * `min_value`/`max_value`: biên KỸ THUẬT. Mẫu ngoài biên ⇒ BAD/OUT_OF_RANGE
+     * và GIỮ giá trị cũ (FW_SOM_DESIGN §6.1). */
+    int8_t      bit_index = -1;
+    bool        has_min   = false;
+    bool        has_max   = false;
+    double      min_value = 0.0;
+    double      max_value = 0.0;
+
     /* 2026-08-20 — `expose_bacnet` / `bacnet_object_type` / `bacnet_instance`
      * ĐÃ BỊ GỠ khỏi ProfilePoint (OD-MBRTU-014, quyết định sản phẩm).
      *

@@ -26,6 +26,7 @@
 #include <gtest/gtest.h>
 
 #include "bus_worker.hpp"
+#include "device_profile.hpp"
 #include "ext_cache.hpp"
 #include "fieldbus_metrics.hpp"
 #include "modbus_master.hpp"
@@ -401,6 +402,74 @@ TEST(MbaWriteBaseline, SlotLechDanhTinhThiKhongPhat)
     EXPECT_EQ(master.bus(0).pending_write_count(), 1u);
 
     master.close();
+    ::unlink(profile.c_str());
+}
+
+/* `MBA-FW-09` — `bit_index` và `min_value`/`max_value` mà BE sinh vào profile
+ * phải CÓ TÁC DỤNG. Trước bản sửa iobus không đọc hai khoá này: ba điểm bit trên
+ * register 0x0005 đều publish 5 với nhãn GOOD, và 500 °C lọt qua biên 0..100. */
+TEST(MbaProfileOptions, BitIndexVaBienKyThuatCoTacDung)
+{
+    AuditPty pty;
+    pty.open_pair();
+    const std::string profile = audit_profile("bits",
+        R"json({"points":[)json"
+        R"json({"name":"b0","fc":3,"addr":10,"count":1,"type":"bool","bit_index":0},)json"
+        R"json({"name":"b1","fc":3,"addr":10,"count":1,"type":"bool","bit_index":1},)json"
+        R"json({"name":"b2","fc":3,"addr":10,"count":1,"type":"bool","bit_index":2},)json"
+        R"json({"name":"temp","fc":3,"addr":11,"count":1,"type":"uint16","min_value":0,"max_value":100}]})json");
+    AuditSlave slave;
+    slave.start(pty.slave_dev, pty.master_fd, 16, 16, 32);
+    slave.mapping->tab_registers[10] = 0x0005;
+    slave.mapping->tab_registers[11] = 500;
+
+    FieldbusConfig cfg;
+    cfg.rs485.device = pty.slave_dev;
+    cfg.rs485.baud   = 19200;
+    cfg.slaves.push_back(audit_slave(1, profile, "vfd"));
+    ModbusMaster master;
+    ASSERT_TRUE(master.open(cfg));
+    ExtCache cache;
+    FieldbusMetrics metrics;
+
+    master.poll_once(1000, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+    EXPECT_DOUBLE_EQ(cache.sample(0).value, 1.0) << "bit 0 của 0x0005";
+    EXPECT_DOUBLE_EQ(cache.sample(1).value, 0.0) << "bit 1 của 0x0005";
+    EXPECT_DOUBLE_EQ(cache.sample(2).value, 1.0) << "bit 2 của 0x0005";
+    EXPECT_EQ(cache.sample(1).quality, KX_EXTQ_GOOD);
+    EXPECT_EQ(cache.sample(3).quality, KX_EXTQ_BAD) << "500 ngoài biên 0..100 mà vẫn GOOD";
+    EXPECT_EQ(cache.sample(3).quality_reason, KX_EXTR_OUT_OF_RANGE);
+
+    slave.mapping->tab_registers[11] = 42;
+    master.poll_once(2000, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+    EXPECT_EQ(cache.sample(3).quality, KX_EXTQ_GOOD);
+    EXPECT_DOUBLE_EQ(cache.sample(3).value, 42.0);
+    const int64_t good_ts = cache.sample(3).sample_utc_ms;
+
+    slave.mapping->tab_registers[11] = 900;
+    master.poll_once(3000, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+    const std::string frames = metrics.frames().to_json(0, 50);
+    slave.finish();
+    EXPECT_EQ(cache.sample(3).quality, KX_EXTQ_BAD);
+    EXPECT_DOUBLE_EQ(cache.sample(3).value, 42.0) << "mẫu ngoài biên không được đè giá trị tốt cuối cùng";
+    EXPECT_EQ(cache.sample(3).sample_utc_ms, good_ts) << "BAD không được làm mẫu trẻ lại";
+    /* Ba điểm bit + điểm kề bên đi CHUNG một giao dịch FC03 addr 10 count 2. */
+    EXPECT_NE(frames.find("\"addr\":10,\"count\":2"), std::string::npos) << frames;
+
+    master.close();
+    ::unlink(profile.c_str());
+}
+
+/* Điểm bit khai `writable` bị từ chối ngay ở parser: ghi FC06 là đè cả register. */
+TEST(MbaProfileOptions, DiemBitKhongDuocKhaiGhi)
+{
+    const std::string profile = audit_profile("bitw",
+        R"json({"points":[{"name":"run","fc":3,"addr":1,"count":1,"type":"bool","bit_index":3,"writable":true},)json"
+        R"json({"name":"ok","fc":3,"addr":2,"count":1,"type":"uint16"}]})json");
+    DeviceProfile prof;
+    load_device_profile(profile, &prof);
+    ASSERT_EQ(prof.points.size(), 1u) << "điểm bit writable phải bị loại";
+    EXPECT_EQ(prof.points[0].name, "ok");
     ::unlink(profile.c_str());
 }
 

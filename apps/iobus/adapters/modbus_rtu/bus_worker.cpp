@@ -229,6 +229,20 @@ void BusWorker::build_blocks(BusSlaveBinding* binding)
         const uint16_t limit = (e.point->fc == 1 || e.point->fc == 2)
                                    ? kMaxBitsPerBlock : kMaxRegistersPerBlock;
         ReadBlock* last = binding->blocks.empty() ? nullptr : &binding->blocks.back();
+        /* `MBA-FW-09`: điểm nằm TRỌN trong dải đã có của block (nhiều điểm
+         * `bit_index` trên cùng một register) đi chung giao dịch, không phát
+         * thêm lượt đọc cho chính register đó. */
+        const bool contained =
+            last != nullptr && last->fc == e.point->fc &&
+            last->poll_group == e.point->poll_group &&
+            e.point->addr >= last->addr &&
+            static_cast<uint32_t>(e.point->addr) + e.point->count <=
+                static_cast<uint32_t>(last->addr) + last->count;
+        if (contained) {
+            last->members.push_back({e.point, static_cast<uint16_t>(e.point->addr - last->addr),
+                                     e.ext_index});
+            continue;
+        }
         const bool contiguous =
             last != nullptr && last->fc == e.point->fc &&
             last->poll_group == e.point->poll_group &&
@@ -691,20 +705,37 @@ void BusWorker::read_slave(size_t i, uint64_t now_ms, ExtCache& cache, FieldbusM
                                      bus_.id, sc.name.c_str(), pt.name.c_str(), k, pt.count);
                         break;
                     }
-                    eng = static_cast<double>(
-                        decode_register(regs + member.offset + k, is32 ? 2u : 1u,
-                                        pt.type, pt.byte_order, pt.scale, pt.offset));
+                    if (pt.bit_index >= 0) {
+                        /* `MBA-FW-09`: một bit của register, không phải cả register. */
+                        eng = ((regs[member.offset + k] >> pt.bit_index) & 1u) ? 1.0 : 0.0;
+                    } else {
+                        eng = static_cast<double>(
+                            decode_register(regs + member.offset + k, is32 ? 2u : 1u,
+                                            pt.type, pt.byte_order, pt.scale, pt.offset));
+                    }
                     if (is32) k++;
                 }
 
                 if (!std::isfinite(eng)) {
                     quality = KX_EXTQ_BAD;
                     reason  = KX_EXTR_DECODE_ERROR;
+                } else if ((pt.has_min && eng < pt.min_value) || (pt.has_max && eng > pt.max_value)) {
+                    /* `MBA-FW-09`: ngoài biên kỹ thuật khai báo — số vô lý không
+                     * được publish với nhãn GOOD. */
+                    quality = KX_EXTQ_BAD;
+                    reason  = KX_EXTR_OUT_OF_RANGE;
                 }
 
-                cache.set_sample(ext_idx, point_name, eng, quality, reason,
-                                 sc.addr, bus_.id, true, pt.writable,
-                                 sample_utc, sample_mono);
+                if (quality == KX_EXTQ_GOOD) {
+                    cache.set_sample(ext_idx, point_name, eng, quality, reason,
+                                     sc.addr, bus_.id, true, pt.writable,
+                                     sample_utc, sample_mono);
+                } else {
+                    /* FW_SOM_DESIGN §6.1: BAD ⇒ KHÔNG cập nhật value và GIỮ mốc
+                     * thời gian — mốc trả lời "lần cuối thiết bị nói thật". Bản
+                     * trước ghi luôn NaN/giá trị hỏng kèm mốc mới. */
+                    cache.mark_bad_sample(ext_idx, reason);
+                }
                 ext_idx++;
                 logical++;
             }

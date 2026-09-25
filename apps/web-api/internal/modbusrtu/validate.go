@@ -350,6 +350,14 @@ func validatePoints(cfg Config, devices map[string]Device, opts ValidateOptions,
 				add(base+".bit_index", CodeUnsupported,
 					"chỉ dùng được với Holding/Input Register")
 			}
+			/* `MBA-FW-09` (audit Modbus 2026-09-25): ghi một điểm bit bằng
+			 * FC06 là ghi đè CẢ register — xoá mọi bit khác của một control
+			 * word. Chưa có FC22/read-modify-write thì điểm bit chỉ đọc; iobus
+			 * cũng từ chối profile như vậy (fail-closed ở cả hai đầu). */
+			if point.ReadWrite == "read_write" {
+				add(base+".read_write", CodeUnsupported,
+					"Point có bit_index chưa ghi được: ghi FC06 sẽ đè cả register (cần FC22/read-modify-write)")
+			}
 		}
 	}
 }
