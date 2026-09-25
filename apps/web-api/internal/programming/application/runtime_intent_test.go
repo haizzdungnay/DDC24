@@ -23,6 +23,7 @@ const intentProjectID = "77777777-7777-4777-8777-777777777771"
 type fakeIntentRuntime struct {
 	calls    []coreipc.Request
 	result   coreipc.Result
+	detail   *string
 	callErr  error
 	disabled bool
 }
@@ -39,7 +40,7 @@ func (f *fakeIntentRuntime) Call(_ context.Context, request coreipc.Request) (co
 	if result == "" {
 		result = coreipc.ResultOK
 	}
-	return coreipc.Response{Result: result}, nil
+	return coreipc.Response{Result: result, DetailCode: f.detail}, nil
 }
 
 func openIntentService(t *testing.T) (*RuntimeIntentService, *fakeIntentRuntime, string) {
@@ -495,4 +496,139 @@ func TestReconcileHealthIsSafeForConcurrentReads(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// ===================================================================
+// F04/F07 (EV-PROG-FBD-ST-MB-20260925) — đối chiếu MỨC với trạng thái sống.
+// ===================================================================
+
+func liveStates(states map[string]string) func(context.Context) (map[string]ProgramMetricsView, bool) {
+	return func(context.Context) (map[string]ProgramMetricsView, bool) {
+		live := make(map[string]ProgramMetricsView, len(states))
+		for id, state := range states {
+			live[id] = ProgramMetricsView{InstanceID: id, State: state, Enabled: state == "RUNNING"}
+		}
+		return live, true
+	}
+}
+
+func intentStateOf(t *testing.T, service *RuntimeIntentService, projectID, programID string) string {
+	t.Helper()
+	intents, err := service.ListProgramIntents(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, intent := range intents {
+		if intent.ProgramID == programID {
+			return intent.RuntimeState
+		}
+	}
+	t.Fatalf("không có intent %s", programID)
+	return ""
+}
+
+// F04: trên bo, sau Restore Program nằm DISABLED ở Core trong khi intent là
+// `true` và read-back cũ là RUNNING — bản cũ không bao giờ replay vì hàng không
+// phải UNKNOWN. Phải được đẩy lại trong đúng một vòng reconcile.
+func TestReconcileReplaysEnableWhenCoreReloadedProgramDisabled(t *testing.T) {
+	service, runtime, projectID := openIntentService(t)
+	if _, err := service.SetProgramEnabled(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		intentCommand("P_restore", true, "20000000-0000-4000-8000-000000000601")); err != nil {
+		t.Fatal(err)
+	}
+	if got := intentStateOf(t, service, projectID, "P_restore"); got != "RUNNING" {
+		t.Fatalf("read-back ban đầu=%s", got)
+	}
+	service.livePrograms = liveStates(map[string]string{"P_restore": "DISABLED"})
+	before := len(runtime.calls)
+	replayed, err := service.ReconcileOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed != 1 || len(runtime.calls) != before+1 ||
+		runtime.calls[before].Action != coreipc.ActionSetProgramEnabled {
+		t.Fatalf("replayed=%d calls=%d", replayed, len(runtime.calls)-before)
+	}
+	var payload setProgramEnabledPayload
+	if err := coreipc.DecodePayload(runtime.calls[before].Payload, &payload); err != nil || !payload.Enabled {
+		t.Fatalf("payload=%+v err=%v", payload, err)
+	}
+}
+
+// Program đang chạy đúng intent thì KHÔNG có lệnh nào: vòng 2 s không được biến
+// thành một luồng lệnh Enable lặp vô hạn xuống Core.
+func TestReconcileSendsNothingWhenCoreMatchesIntent(t *testing.T) {
+	service, runtime, _ := openIntentService(t)
+	if _, err := service.SetProgramEnabled(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		intentCommand("P_ok", true, "20000000-0000-4000-8000-000000000602")); err != nil {
+		t.Fatal(err)
+	}
+	service.livePrograms = liveStates(map[string]string{"P_ok": "RUNNING"})
+	before := len(runtime.calls)
+	if replayed, err := service.ReconcileOnce(context.Background()); err != nil || replayed != 0 {
+		t.Fatalf("replayed=%d err=%v", replayed, err)
+	}
+	if len(runtime.calls) != before {
+		t.Fatalf("gửi %d lệnh thừa", len(runtime.calls)-before)
+	}
+}
+
+// Program FAULTED không được tự khởi động lại: đó là quyết định của người vận hành.
+func TestReconcileNeverRestartsAFaultedProgram(t *testing.T) {
+	service, runtime, _ := openIntentService(t)
+	if _, err := service.SetProgramEnabled(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		intentCommand("P_fault", true, "20000000-0000-4000-8000-000000000603")); err != nil {
+		t.Fatal(err)
+	}
+	service.livePrograms = liveStates(map[string]string{"P_fault": "FAULTED"})
+	before := len(runtime.calls)
+	if replayed, _ := service.ReconcileOnce(context.Background()); replayed != 0 || len(runtime.calls) != before {
+		t.Fatalf("replayed=%d calls=%d", replayed, len(runtime.calls)-before)
+	}
+}
+
+// F07: Program không có trong gói Core đang chạy KHÔNG được đẩy lệnh, và không
+// bị ghi FAULTED. Trên bo, hai Program thử nghiệm đã Disable hiện FAULTED sau
+// khi web khởi động lại chỉ vì replay trả `IPC-UNKNOWN-INSTANCE`.
+func TestReconcileSkipsProgramsAbsentFromActivePackage(t *testing.T) {
+	service, runtime, projectID := openIntentService(t)
+	if _, err := service.SetProgramEnabled(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		intentCommand("P_gone", false, "20000000-0000-4000-8000-000000000604")); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.store.MarkAllProgramRuntimeStatesUnknown(context.Background(), service.now()); err != nil {
+		t.Fatal(err)
+	}
+	service.livePrograms = liveStates(map[string]string{"P_other": "RUNNING"})
+	before := len(runtime.calls)
+	if replayed, err := service.ReconcileOnce(context.Background()); err != nil || replayed != 0 {
+		t.Fatalf("replayed=%d err=%v", replayed, err)
+	}
+	if len(runtime.calls) != before {
+		t.Fatalf("đẩy %d lệnh tới Program không có trong gói", len(runtime.calls)-before)
+	}
+	if got := intentStateOf(t, service, projectID, "P_gone"); got == "FAULTED" {
+		t.Fatal("Program chưa triển khai bị ghi FAULTED")
+	}
+}
+
+// F07: khi không có snapshot sống (Core đời cũ), replay vẫn chạy, nhưng Core trả
+// `IPC-UNKNOWN-INSTANCE` thì hàng phải giữ UNKNOWN chứ không thành FAULTED.
+func TestUnknownInstanceRejectionKeepsIntentUnknown(t *testing.T) {
+	service, runtime, projectID := openIntentService(t)
+	if _, err := service.SetProgramEnabled(context.Background(), Actor{ID: testActorID, Role: "admin"},
+		intentCommand("P_absent", true, "20000000-0000-4000-8000-000000000605")); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.store.MarkAllProgramRuntimeStatesUnknown(context.Background(), service.now()); err != nil {
+		t.Fatal(err)
+	}
+	detail := "IPC-UNKNOWN-INSTANCE"
+	runtime.result, runtime.detail = coreipc.ResultRejected, &detail
+	if _, err := service.ReconcileOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := intentStateOf(t, service, projectID, "P_absent"); got != "UNKNOWN" {
+		t.Fatalf("state=%s, phải giữ UNKNOWN", got)
+	}
 }

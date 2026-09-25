@@ -316,6 +316,16 @@ func (s *RuntimeService) readProgramSnapshot(ctx context.Context) (programReadBa
 	return live, true
 }
 
+// LiveProgramStates trả trạng thái SỐNG của từng Program ở Core, dùng cho
+// vòng đối chiếu intent (F04). `false` = không đọc được snapshot.
+func (s *RuntimeService) LiveProgramStates(ctx context.Context) (map[string]ProgramMetricsView, bool) {
+	live, ok := s.readProgramSnapshot(ctx)
+	if !ok {
+		return nil, false
+	}
+	return live.byInstance, true
+}
+
 // programRuntimeStateFromCore là bảng ánh xạ D-07 (Plan 60 §4.1).
 //
 // `STARTING`/`STOPPING` KHÔNG có trong bảng, và đó là chủ ý: `start()`/`stop()`/
