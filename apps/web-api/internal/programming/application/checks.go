@@ -17,8 +17,8 @@ import (
 
 	"github.com/google/uuid"
 
-	canonicaljson "mkddc-web/internal/programming/canonicaljson"
 	programmingartifact "mkddc-web/internal/programming/artifact"
+	canonicaljson "mkddc-web/internal/programming/canonicaljson"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
 	"mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
