@@ -125,11 +125,13 @@ func (a *App) handleModbusDiagnostics(w http.ResponseWriter, r *http.Request) {
 	byBusSlave := newModbusDeviceIndex(cfg.Devices)
 	out := make([]ModbusRTUDiagnostics, 0, len(telemetry.Slaves))
 	for _, item := range telemetry.Slaves {
-		deviceID := byBusSlave.lookup(int(item.BusID), int(item.Addr))
-		out = append(out, ModbusRTUDiagnostics{DeviceID: deviceID, SlaveID: int(item.Addr),
-			BusID: item.BusID, Online: item.Online,
-			TotalPolls: item.TotalPolls, TotalErrors: item.TotalErrors, TimeoutErrors: item.TimeoutErrors,
-			CRCErrors: item.CRCErrors, RetryAttempts: item.RetryAttempts, ConsecutiveErrors: item.ConsecutiveErrors, LastSeenMS: item.LastSeenMS})
+		/* `MBA-BE-01` (audit Modbus 2026-09-25): đi qua `modbusDiagnosticsFrom`,
+		 * KHÔNG tự dựng struct tại chỗ. Bản dựng tại chỗ trước đây bỏ sót
+		 * `WriteFailed`, `WriteDropped`, `LastException`, nên API luôn trả 0 cho
+		 * đúng ba bộ đếm trả lời câu hỏi "lệnh ghi của tôi có tới thiết bị
+		 * không". Đo trên bo Forlinx: SHM ghi write_failed=41, write_dropped=12
+		 * cho CK508-04 trong khi `/modbus/diagnostics` báo 0/0. */
+		out = append(out, modbusDiagnosticsFrom(item, byBusSlave.lookup(int(item.BusID), int(item.Addr))))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
