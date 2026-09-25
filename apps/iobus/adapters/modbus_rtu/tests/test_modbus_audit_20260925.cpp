@@ -523,4 +523,93 @@ TEST(MbaWriteRouting, CungDiaChiHaiDayPhaiNoiRoBus)
     ::unlink(p1.c_str());
     ::unlink(p2.c_str());
 }
+
+/* F06 (EV-PROG-FBD-ST-MB-20260925) — Core NHẢ quyền ghi (`dirty=0` + `ext_cmd_seq`
+ * mới) khi Program bị Disable/Stop. Chủ sở hữu chốt 2026-09-26: thiết bị về
+ * `safe_value` của điểm; điểm không khai `safe_value` thì GIỮ giá trị cuối. Trên
+ * bo, DO kẹt ở 1 suốt 18 phút sau Disable vì trước bản này không có lệnh nào. */
+TEST(MbaExtRelease, NhaQuyenGhiThiVeSafeValueHoacGiuNguyen)
+{
+    AuditPty pty;
+    pty.open_pair();
+    const std::string profile = audit_profile("release",
+        R"json({"points":[{"name":"do_safe","fc":1,"addr":0,"count":1,"type":"bool","writable":true,"safe_value":0},{"name":"do_hold","fc":1,"addr":1,"count":1,"type":"bool","writable":true}]})json");
+    AuditSlave slave;
+    FieldbusConfig cfg;
+    cfg.rs485.device = pty.slave_dev;
+    cfg.rs485.baud   = 19200;
+    cfg.slaves.push_back(audit_slave(1, profile, "ck508"));
+    ModbusMaster master;
+    ASSERT_TRUE(master.open(cfg));
+    slave.start(pty.slave_dev, pty.master_fd, 16, 16, 16);
+
+    auto shm = audit_shm();
+    shm->ext_count = 2;
+    std::strncpy(shm->ext[0].name, "do_safe", sizeof(shm->ext[0].name) - 1);
+    std::strncpy(shm->ext[1].name, "do_hold", sizeof(shm->ext[1].name) - 1);
+    master.drain_ext_writes(shm.get(), 1000);   /* lượt mốc */
+
+    ExtCache cache;
+    FieldbusMetrics metrics;
+    /* Program bật cả hai DO. */
+    for (int i = 0; i < 2; i++) {
+        shm->ext[i].dirty    = 1;
+        shm->ext[i].setpoint = 1.0;
+        shm->ext_cmd_seq[i]  = 1;
+    }
+    master.drain_ext_writes(shm.get(), 1100);
+    ASSERT_EQ(master.bus(0).pending_write_count(), 2u);
+    master.poll_once(1200, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    /* Program bị Disable: Core nhả cả hai slot. */
+    for (int i = 0; i < 2; i++) {
+        shm->ext[i].dirty   = 0;
+        shm->ext_cmd_seq[i] = 2;
+    }
+    master.drain_ext_writes(shm.get(), 2000);
+    EXPECT_EQ(master.bus(0).pending_write_count(), 1u)
+        << "chỉ điểm có safe_value được ghi khi nhả; điểm còn lại giữ giá trị cuối";
+    master.poll_once(2100, cache, metrics, "/tmp/mkddc-no-fieldbus.sock");
+
+    /* Cùng một lần nhả đọc lại ở lượt sau KHÔNG được phát thêm. */
+    master.drain_ext_writes(shm.get(), 2200);
+    EXPECT_EQ(master.bus(0).pending_write_count(), 0u);
+    /* Đọc bảng coil của slave TRƯỚC `finish()` — finish giải phóng mapping. */
+    const int safe_coil = slave.mapping->tab_bits[0];
+    const int hold_coil = slave.mapping->tab_bits[1];
+    slave.finish();
+
+    EXPECT_EQ(safe_coil, 0) << "DO có safe_value=0 phải về 0 sau khi nhả";
+    EXPECT_EQ(hold_coil, 1) << "DO không khai safe_value phải giữ giá trị cuối";
+    master.close();
+    ::unlink(profile.c_str());
+}
+
+/* F06 — iobus khởi động lại khi slot đang ở trạng thái "đã nhả" từ trước KHÔNG
+ * được coi lần nhả cũ là lệnh mới rồi ghi safe_value lên thiết bị đang chạy. */
+TEST(MbaExtRelease, KhoiDongLaiKhongPhatLaiLanNhaCu)
+{
+    AuditPty pty;
+    pty.open_pair();
+    const std::string profile = audit_profile("release-baseline",
+        R"json({"points":[{"name":"do_safe","fc":1,"addr":0,"count":1,"type":"bool","writable":true,"safe_value":0}]})json");
+    FieldbusConfig cfg;
+    cfg.rs485.device = pty.slave_dev;
+    cfg.rs485.baud   = 19200;
+    cfg.slaves.push_back(audit_slave(1, profile, "ck508"));
+    ModbusMaster master;
+    ASSERT_TRUE(master.open(cfg));
+
+    auto shm = audit_shm();
+    shm->ext_count = 1;
+    std::strncpy(shm->ext[0].name, "do_safe", sizeof(shm->ext[0].name) - 1);
+    shm->ext[0].dirty   = 0;
+    shm->ext_cmd_seq[0] = 7;   /* lần nhả xảy ra trước khi iobus khởi động */
+    master.drain_ext_writes(shm.get(), 1000);
+    master.drain_ext_writes(shm.get(), 1100);
+    EXPECT_EQ(master.bus(0).pending_write_count(), 0u)
+        << "lần nhả cũ bị phát lại thành lệnh safe_value sau khởi động";
+    master.close();
+    ::unlink(profile.c_str());
+}
 #endif

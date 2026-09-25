@@ -53,6 +53,13 @@ public:
      * nhả quyền không phải là ra thêm một lệnh xuống thiết bị. */
     bool release(PointId id);
 
+    /* EV-PROG-FBD-ST-MB-20260925 F06 — Program ĐÃ ghi điểm EXT này vừa bị rút
+     * (Disable/Stop/hold TTL): nhả source trong point table VÀ báo iobus bằng
+     * `dirty=0` + một `ext_cmd_seq` mới. iobus ghi `safe_value` của điểm (hoặc
+     * giữ giá trị cuối nếu điểm không khai). Chỉ dành cho EXT; trả false nếu
+     * không phải EXT, thiếu SHM hoặc ngoài `ext_count`. */
+    bool release_ext_command(PointId id);
+
     bool can_write_ext() const { return shm_ != nullptr; }
 
 private:

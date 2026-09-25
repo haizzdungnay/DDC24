@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -347,6 +349,41 @@ func buildFieldbusBlocks(cfg Config, configDir string) Config {
 	return cfg
 }
 
+// commandNumber đổi giá trị lệnh đã lưu (bool/số/chuỗi) sang số mà iobus hiểu.
+// Không đổi được thì trả false: thiếu `safe_value` là "không có chính sách an
+// toàn", còn bịa 0 là ra lệnh tắt thiết bị mà không ai khai.
+func commandNumber(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case bool:
+		if typed {
+			return 1, true
+		}
+		return 0, true
+	case float64:
+		return typed, !math.IsNaN(typed) && !math.IsInf(typed, 0)
+	case float32:
+		return float64(typed), true
+	case int:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case json.Number:
+		parsed, err := typed.Float64()
+		return parsed, err == nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true", "on":
+			return 1, true
+		case "false", "off":
+			return 0, true
+		}
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		return parsed, err == nil && !math.IsNaN(parsed) && !math.IsInf(parsed, 0)
+	default:
+		return 0, false
+	}
+}
+
 func BuildProfile(device Device, points []Point) ([]byte, error) {
 	rows := make([]map[string]any, 0)
 	for _, point := range points {
@@ -403,6 +440,13 @@ func BuildProfile(device Device, points []Point) ([]byte, error) {
 		}
 		if point.MaxValue != nil {
 			row["max_value"] = *point.MaxValue
+		}
+		/* EV-PROG-FBD-ST-MB-20260925 F06 — chủ sở hữu chốt 2026-09-26: Program
+		 * đang ghi điểm này bị Disable/Stop (hoặc lệnh cũ quá hold TTL) thì
+		 * thiết bị về `safe_value`. iobus là nơi phát lệnh đó, nên giá trị phải
+		 * có trong profile; trước bản này nó chỉ nằm trong cấu hình của web. */
+		if safe, ok := commandNumber(point.SafeValue); ok && point.ReadWrite == "read_write" {
+			row["safe_value"] = safe
 		}
 		rows = append(rows, row)
 	}

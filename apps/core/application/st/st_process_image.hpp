@@ -81,7 +81,8 @@ bool st_apply_all_outputs(StScheduler* sched, PriorityResolver* resolver, PointT
  * (release_ao/release_do) của MỌI output binding AO/DO thuộc instance —
  * AV/BV/MSV/EXT không qua PriorityResolver nên không có gì để rút. Idempotent:
  * gọi lại trên instance đã rút hoặc chưa từng load không lỗi. */
-bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityResolver* resolver);
+bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityResolver* resolver,
+                                  PointWriter* writer = nullptr);
 
 /* Chính sách hold-last + rút an toàn cho MỌI instance (DDD-CTRL-PROG-001 §6,
  * ADR-051):
@@ -106,6 +107,16 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
                                    uint64_t hold_ttl_ns,
                                    programming::ProgramCandidateRegistry* registry,
                                    StIoBridgeStats* stats);
+
+/* F06 (EV-PROG-FBD-ST-MB-20260925) — cùng chính sách rút, thêm nhả lệnh EXT về
+ * `safe_value` qua `writer` cho instance ĐÃ từng publish output trong đời tiến
+ * trình này. Instance chưa từng publish (ví dụ mọi Program lúc Core khởi động ở
+ * DISABLED) KHÔNG nhả EXT: nhả ở đó sẽ giật mọi DO Modbus về safe ở mỗi lần
+ * Core khởi động lại, trước khi intent kịp bật Program trở lại. */
+uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* resolver,
+                                   uint64_t hold_ttl_ns,
+                                   programming::ProgramCandidateRegistry* registry,
+                                   PointWriter* writer, StIoBridgeStats* stats);
 
 /* Đăng ký toàn bộ output binding AO/DO của một instance vào sổ. Gọi khi Program
  * bắt đầu chạy; trả false + `*error` khi một điểm đã thuộc Program KHÁC — bất

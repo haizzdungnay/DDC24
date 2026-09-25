@@ -80,6 +80,13 @@ struct ProfilePoint {
     double      min_value = 0.0;
     double      max_value = 0.0;
 
+    /* EV-PROG-FBD-ST-MB-20260925 F06 — giá trị an toàn ghi xuống thiết bị khi
+     * Core NHẢ quyền ghi (Program Disable/Stop hoặc lệnh cũ quá hold TTL).
+     * Không khai ⇒ giữ giá trị cuối và cảnh báo: bịa 0 là ra lệnh tắt thiết bị
+     * mà không ai yêu cầu. */
+    bool        has_safe_value = false;
+    double      safe_value     = 0.0;
+
     /* 2026-08-20 — `expose_bacnet` / `bacnet_object_type` / `bacnet_instance`
      * ĐÃ BỊ GỠ khỏi ProfilePoint (OD-MBRTU-014, quyết định sản phẩm).
      *

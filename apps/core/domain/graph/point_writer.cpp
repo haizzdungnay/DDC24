@@ -46,4 +46,16 @@ bool PointWriter::release(PointId id)
     return table_.release_virtual(id);
 }
 
+bool PointWriter::release_ext_command(PointId id)
+{
+    if (id.kind != PointKind::EXT || shm_ == nullptr || id.idx >= shm_->ext_count) return false;
+    (void)table_.release_virtual(id);
+    KX_WRITE_BEGIN(shm_);
+    shm_->ext[id.idx].dirty = 0;
+    uint32_t& seq = shm_->ext_cmd_seq[id.idx];
+    if (++seq == 0) ++seq; /* 0 dành cho "chưa có lệnh" kể cả khi wrap. */
+    KX_WRITE_END(shm_);
+    return true;
+}
+
 } // namespace core

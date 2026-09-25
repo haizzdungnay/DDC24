@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Fixed — Disable/Stop Program đưa DO Modbus về `safe_value` (F06, 2026-09-26)
+
+- Phạm vi: `apps/core/domain/graph/point_writer.{hpp,cpp}`, `apps/core/application/st/st_process_image.{hpp,cpp}`, `apps/core/application/runtime/scan_loop.cpp`, `apps/iobus/adapters/modbus_rtu/{device_profile.hpp,device_profile.cpp,modbus_master.cpp}`, `apps/web-api/internal/modbusrtu/persistence.go`, test tương ứng; `docs/02_design/software/PROGRAMMING_CONTROL_SEMANTICS.md` §6.
+- Triệu chứng trên Foxlinx: Disable Program FBD để `CK50804-DO2` kẹt ở 1 suốt 18 phút. Nguyên nhân gốc: EXT không đi qua `PriorityResolver`, nên bước rút output trên EXT không làm gì; `safe_value` của điểm Modbus lại chỉ nằm ở cấu hình web, iobus không biết.
+- Cách sửa theo quyết định chủ sở hữu (2026-09-26): instance đã publish bị rút thì Core nhả slot (`dirty=0` + `ext_cmd_seq` mới), còn iobus ghi `safe_value` lấy từ device profile (BE sinh khoá này). Điểm không khai `safe_value` giữ giá trị cuối kèm WARN. Instance chưa từng publish không nhả, nên Core khởi động lại không làm giật DO. Không đổi ABI SHM (dùng `dirty` + `ext_cmd_seq` sẵn có).
+- Kiểm chứng: test Core `F06_DisabledProgramReleasesPublishedExtOutput`, `F06_NeverPublishedExtOutputIsNotReleasedOnDisable`; test iobus `MbaExtRelease.*` (slave RTU giả: DO có safe về 0, DO không khai giữ 1, iobus khởi động lại không phát lại); test web `TestBuildProfileEmitsSafeValueForWritablePointsOnly`.
+
 ### Fixed — Mẫu trace mang thời điểm Core lấy mẫu (F05c, 2026-09-26)
 
 - Phạm vi: `apps/web-api/internal/programming/application/{trace.go,runtime.go,monitor_trace_test.go}`.

@@ -1277,4 +1277,80 @@ TEST(StIntegration, TenThousandCycleSoakStaysAllocationFreeAndBounded)
     EXPECT_EQ(deps.program_hold_ttl_ns, st_hold_ttl::kSignedTtlNs);
 }
 
+/* ===================================================================
+ * F06 (EV-PROG-FBD-ST-MB-20260925) — Disable/Stop một Program ĐÃ ghi DO Modbus
+ * phải nhả lệnh EXT (`dirty=0` + `ext_cmd_seq` mới) để iobus ghi `safe_value`.
+ * Trên bo, DO2 kẹt ở 1 suốt 18 phút sau Disable vì EXT "không có gì để rút".
+ * =================================================================== */
+namespace {
+
+struct ExtOutputRig {
+    StScheduler scheduler;
+    PointTable table;
+    kx_plc_shm_t shm{};
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+};
+
+void arm_ext_output(ExtOutputRig* rig)
+{
+    const char* source = R"ST(
+PROGRAM rtu_do
+VAR_OUTPUT cmd : REAL; END_VAR
+cmd := 1.0;
+END_PROGRAM
+)ST";
+    const StIrModule module = compile_only(source);
+    StIrIoBinding output{};
+    output.slot = slot_of(module, "cmd");
+    output.is_output = true;
+    output.point_kind = StPointKind::EXT;
+    output.point_index = 2;
+    make_running(&rig->scheduler, build_with_bindings(source, {output}));
+    rig->shm.ext_count = 2;
+    rig->shm.ext[1].writable = 1;
+}
+
+} // namespace
+
+TEST(StIntegration, F06_DisabledProgramReleasesPublishedExtOutput)
+{
+    ExtOutputRig rig;
+    arm_ext_output(&rig);
+    ASSERT_EQ(rig.scheduler.tick(100 * kMs).programs_run, 1u);
+    PointWriter writer(rig.table, &rig.shm);
+    ASSERT_TRUE(st_apply_all_outputs(&rig.scheduler, &rig.resolver, &writer, &rig.stats));
+    ASSERT_EQ(rig.shm.ext[1].dirty, 1);
+    const uint32_t command_seq = rig.shm.ext_cmd_seq[1];
+    ASSERT_NE(command_seq, 0u);
+
+    std::string err;
+    ASSERT_TRUE(rig.scheduler.disable("p", &err)) << err;
+    EXPECT_EQ(st_withdraw_stale_outputs(&rig.scheduler, &rig.resolver, 0, nullptr, &writer,
+                                        &rig.stats), 1u);
+    EXPECT_EQ(rig.shm.ext[1].dirty, 0) << "EXT phải được nhả để iobus về safe_value";
+    EXPECT_EQ(rig.shm.ext_cmd_seq[1], command_seq + 1) << "nhả phải mang danh tính lệnh mới";
+    EXPECT_NE(rig.table.get({PointKind::EXT, 1}).source, PointSource::PROGRAM);
+
+    /* Idempotent: rút lần hai không tạo thêm lệnh nào. */
+    EXPECT_EQ(st_withdraw_stale_outputs(&rig.scheduler, &rig.resolver, 0, nullptr, &writer,
+                                        &rig.stats), 0u);
+    EXPECT_EQ(rig.shm.ext_cmd_seq[1], command_seq + 1);
+}
+
+/* Instance CHƯA từng publish (mọi Program lúc Core khởi động ở DISABLED) không
+ * được nhả EXT: nhả ở đó sẽ giật mọi DO Modbus về safe ở mỗi lần Core khởi động
+ * lại, trước khi intent kịp bật Program trở lại. */
+TEST(StIntegration, F06_NeverPublishedExtOutputIsNotReleasedOnDisable)
+{
+    ExtOutputRig rig;
+    arm_ext_output(&rig);
+    PointWriter writer(rig.table, &rig.shm);
+    std::string err;
+    ASSERT_TRUE(rig.scheduler.disable("p", &err)) << err;
+    (void)st_withdraw_stale_outputs(&rig.scheduler, &rig.resolver, 0, nullptr, &writer, &rig.stats);
+    EXPECT_EQ(rig.shm.ext_cmd_seq[1], 0u);
+    EXPECT_EQ(rig.shm.ext[1].dirty, 0);
+}
+
 } // namespace core
