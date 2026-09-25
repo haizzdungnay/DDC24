@@ -41,6 +41,7 @@ export function SimulateWorkspace({
   onAction,
   onSetInput,
   onStop,
+  onStopActive,
 }: {
   capability: ProgrammingSimulationCapability | undefined | null
   role: string | undefined
@@ -56,6 +57,7 @@ export function SimulateWorkspace({
   onAction: (action: SimulationAction, speed?: number) => void
   onSetInput: (descriptor: SimulationInputDescriptor, raw: string) => void
   onStop: () => void
+  onStopActive?: () => void
 }) {
   const { pick } = useI18n()
   const session = currentSession(slice)
@@ -151,7 +153,19 @@ export function SimulateWorkspace({
           </>
         )}
         {slice.status.kind === 'ERROR' && (
-          <p role="alert" className="text-xs text-[var(--c-danger-fg)]">{slice.status.message}</p>
+          <div className="space-y-2">
+            <p role="alert" className="text-xs text-[var(--c-danger-fg)]">{slice.status.message}</p>
+            {slice.status.code === 'PRG-SIM-QUOTA' && onStopActive && (
+              <button
+                type="button"
+                onClick={onStopActive}
+                disabled={slice.pending !== null}
+                className="rounded-[var(--radius)] border border-[var(--c-danger-fg)] bg-[var(--c-danger-bg)] px-3 py-1 text-xs font-semibold text-[var(--c-danger-fg)] hover:opacity-80"
+              >
+                {pick('D\u1eebng phi\u00ean m\u00f4 ph\u1ecfng \u0111ang ch\u1ea1y tr\u00ean thi\u1ebft b\u1ecb', 'Stop running session on controller')}
+              </button>
+            )}
+          </div>
         )}
       </section>
     )

@@ -589,6 +589,10 @@ func presentImpactKeys(impact RevisionImpact) []string {
 		"cutover": impact.Cutover, "outputMappingChanges": impact.OutputMappingChanges,
 		"publishedSignals": impact.PublishedSignals, "controlLibrary": impact.ControlLibrary,
 		"programSet": impact.ProgramSet, "enableIntent": impact.EnableIntent,
+		"physicalMappingChanges": impact.PhysicalMappingChanges,
+		"virtualPointChanges": impact.VirtualPointChanges,
+		"modbusMappingChanges": impact.ModbusMappingChanges,
+		"writableOutputsAffected": impact.WritableOutputsAffected,
 	}
 	keys := make([]string, 0, len(groups))
 	for key, group := range groups {

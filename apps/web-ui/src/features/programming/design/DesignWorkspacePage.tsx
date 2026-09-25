@@ -1084,6 +1084,7 @@ export function DesignWorkspacePage({
             onAction={simulation.act}
             onSetInput={simulation.setInput}
             onStop={simulation.stop}
+            onStopActive={simulation.stopActive}
           />
         ) : workspaceMode === 'LIVE' ? (
           <LiveProgramView
