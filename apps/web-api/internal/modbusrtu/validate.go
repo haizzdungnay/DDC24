@@ -246,6 +246,10 @@ func validatePoints(cfg Config, devices map[string]Device, opts ValidateOptions,
 		if !ValidStableID(point.PointID) {
 			add(base+".point_id", CodeInvalidFormat,
 				"phải dài 1..23 ký tự ASCII, bắt đầu bằng chữ và không đổi khi rename")
+		} else if ReservedCorePointName(point.PointID) {
+			add(base+".point_id", CodeInvalidFormat,
+				"trùng dạng tên điểm hệ thống (AI/BI/DI/UI/AO/BO/DO/AV/BV/MSV/EXT/MB + số); "+
+					"đặt tên khác để lệnh ghi không rơi nhầm vào điểm cục bộ")
 		}
 		idKey := strings.ToLower(point.PointID)
 		if owner, exists := pointIDs[idKey]; exists {

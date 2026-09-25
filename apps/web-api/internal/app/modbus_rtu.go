@@ -239,6 +239,49 @@ func (a *App) resolveExtSlot(pointID string) (ExtSlotRef, error) {
 		pointID)
 }
 
+// modbusCommandTarget quy đổi `point_id` Modbus RTU sang tên điểm mà Core hiểu
+// (`EXT<n>`), dùng cho đường ghi CHUNG `PUT /api/v1/points/{id}`.
+//
+// `MBA-BE-02` (audit Modbus 2026-09-25). Trước bản này chỉ `write-test` biết
+// quy đổi; đường ghi chung gửi nguyên `CK50804-DO1` xuống Core, `parse_point_name`
+// trả false và người vận hành nhận `409 point force rejected` — log bo Forlinx
+// 2026-09-25 09:45:32 ghi đúng ca đó. Tệ hơn, một `point_id` Modbus tình cờ có
+// dạng `DO3` sẽ parse THÀNH CÔNG và ghi xuống ngõ ra cục bộ DO3 — sai thiết bị
+// mà không có lỗi nào.
+//
+// `handled=false` nghĩa là `id` không phải Point Modbus đã khai; nơi gọi đi tiếp
+// đường cũ. `handled=true` kèm `err` là lỗi đã có mã HTTP để trả thẳng.
+func (a *App) modbusCommandTarget(id string) (target string, handled bool, status int, err error) {
+	cfg, readErr := readConfig(a, configGroupFieldbus, ConfigFieldbus{})
+	if readErr != nil {
+		return "", false, 0, nil
+	}
+	var found *ModbusRTUPoint
+	for i := range cfg.Points {
+		if strings.EqualFold(cfg.Points[i].PointID, id) {
+			found = &cfg.Points[i]
+			break
+		}
+	}
+	if found == nil {
+		return "", false, 0, nil
+	}
+	if found.ReadWrite != "read_write" {
+		return "", true, http.StatusConflict,
+			fmt.Errorf("`%s` là Point Modbus RTU chỉ-đọc; chỉ Point read_write mới ghi được", found.PointID)
+	}
+	slot, err := a.resolveExtSlot(found.PointID)
+	if err != nil {
+		return "", true, http.StatusServiceUnavailable, err
+	}
+	if !slot.Writable {
+		return "", true, http.StatusConflict,
+			fmt.Errorf("slot EXT%d của `%s` đang là read-only trong runtime — iobus chưa nạp cấu hình mới",
+				slot.ExtIndex, found.PointID)
+	}
+	return fmt.Sprintf("EXT%d", slot.ExtIndex), true, 0, nil
+}
+
 func (a *App) handleModbusWriteTest(w http.ResponseWriter, r *http.Request) {
 	principal := principalFromContext(r.Context())
 	if principal == nil || principal.Role != RoleAdmin {

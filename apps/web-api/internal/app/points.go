@@ -465,12 +465,28 @@ func (a *App) handleForcePoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, point)
 		return
 	}
-	if prefix, _, ok := parsePointID(id); ok && (virtualPointIDPrefix(prefix) || prefix == "BV" || prefix == "MSV") {
+	/* `MBA-BE-02`: Point Modbus RTU phải được quy đổi sang `EXT<n>` theo bố cục
+	 * runtime TRƯỚC mọi phép parse tên kiểu Core — xem `modbusCommandTarget`. */
+	coreID := id
+	target, isModbus, status, err := a.modbusCommandTarget(id)
+	if isModbus {
+		if err != nil {
+			a.audit.PointForce(principal, id, body.release, "rejected", r.RemoteAddr)
+			writeError(w, status, err.Error())
+			return
+		}
+		coreID = target
+	} else if prefix, _, ok := parsePointID(id); ok && (virtualPointIDPrefix(prefix) || prefix == "BV" || prefix == "MSV") {
 		a.audit.PointForce(principal, id, body.release, "not_found", r.RemoteAddr)
 		writeError(w, http.StatusNotFound, "point not found")
 		return
 	}
-	point, err := a.commandCorePoint(r.Context(), id, body, principal)
+	point, err := a.commandCorePoint(r.Context(), coreID, body, principal)
+	if err == nil && isModbus {
+		/* Core trả DTO mang tên slot (`EXT5`); người gọi định danh Point bằng
+		 * `point_id` bền — đúng danh tính mà `GET /api/v1/points` đang hiển thị. */
+		point.ID, point.Name, point.Kind = id, id, "modbus_rtu"
+	}
 	if err != nil {
 		if err == errPointCommandUnsupported {
 			a.audit.PointForce(principal, id, body.release, "unsupported", r.RemoteAddr)

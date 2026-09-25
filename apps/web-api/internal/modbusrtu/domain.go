@@ -223,6 +223,34 @@ func NormalizePoint(point Point) Point {
 	return point
 }
 
+// ReservedCorePointName báo `id` có trùng dạng tên điểm mà Core tự hiểu hay không
+// (`web_ipc.cpp` `parse_point_name`: chữ cái loại điểm + số thứ tự, ví dụ `DO3`,
+// `EXT5`) — cộng thêm `UI<n>` mà Web quy đổi trước khi gửi.
+//
+// `MBA-BE-02` (audit Modbus 2026-09-25): một Point Modbus tên `DO3` đi qua đường
+// ghi chung sẽ được Core hiểu thành ngõ ra cục bộ DO3. Chặn ở validator để danh
+// tính Modbus và danh tính điểm hệ thống không bao giờ chồng lên nhau.
+func ReservedCorePointName(id string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(id))
+	i := 0
+	for i < len(upper) && upper[i] >= 'A' && upper[i] <= 'Z' {
+		i++
+	}
+	if i == 0 || i == len(upper) {
+		return false
+	}
+	for _, ch := range upper[i:] {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	switch upper[:i] {
+	case "AI", "BI", "DI", "UI", "AO", "BO", "DO", "AV", "BV", "MSV", "EXT", "MB":
+		return true
+	}
+	return false
+}
+
 func ValidStableID(value string) bool {
 	if len(value) < 1 || len(value) > 23 || !isLetter(value[0]) {
 		return false
