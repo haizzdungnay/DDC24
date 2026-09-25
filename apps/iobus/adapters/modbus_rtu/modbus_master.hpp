@@ -141,6 +141,16 @@ private:
      * mọi vòng poll và chiếm trọn băng thông dây. */
     std::array<float, KX_N_EXT> last_written_{};
     std::array<bool, KX_N_EXT>  has_last_written_{};
+    /* `MBA-FW-02` (audit Modbus 2026-09-25): lượt `drain_ext_writes` ĐẦU TIÊN
+     * sau `open`/`apply_config` chỉ GHI NHẬN setpoint đang có trong plc_shm làm
+     * mốc, không phát. Cờ `dirty` là cờ MỨC — Core đặt và không ai xoá — nên
+     * không có mốc này thì mỗi lần iobus khởi động lại (deploy, crash, systemd
+     * restart) mọi lệnh ghi cũ đều bị phát lại. Log bo Forlinx 2026-09-24
+     * 08:36–08:39: 171 sự kiện ghi coil chỉ trong 3 phút đầu sau khởi động. */
+    bool write_baseline_pending_ = true;
+    /* Generation đã cảnh báo lệch danh tính slot — một dòng log cho mỗi lần
+     * áp cấu hình, không phải một dòng mỗi 100 ms. */
+    uint64_t identity_warn_generation_ = 0;
     /* ExtCache/metrics nội bộ cho overload open(cfg) một tham số (test cũ). */
     std::unique_ptr<ExtCache>       owned_cache_;
     std::unique_ptr<FieldbusMetrics> owned_metrics_;

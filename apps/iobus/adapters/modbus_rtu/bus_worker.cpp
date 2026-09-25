@@ -52,8 +52,8 @@ uint32_t port_backoff_ms(uint8_t step)
 static constexpr uint16_t kMaxRegistersPerBlock = 125;
 static constexpr uint16_t kMaxBitsPerBlock      = 2000;
 
-static void ext_point_name(char out[24], const SlaveConfig& slave,
-                           const ProfilePoint& point, uint16_t logical_index)
+void ext_point_name(char out[24], const SlaveConfig& slave,
+                    const ProfilePoint& point, uint16_t logical_index)
 {
     if (ext_slots_for_point(point) == 1) {
         std::snprintf(out, 24, "%s", point.name.c_str());
@@ -61,6 +61,22 @@ static void ext_point_name(char out[24], const SlaveConfig& slave,
         std::snprintf(out, 24, "%s.%s[%u]", slave.name.c_str(),
                       point.name.c_str(), logical_index);
     }
+}
+
+const char* frame_reason(int rc, int saved_errno)
+{
+    if (rc >= 0) return "ok";
+    if (saved_errno == ETIMEDOUT) return "timeout";
+#ifdef MKDDC_ENABLE_MODBUS
+#ifdef EMBBADCRC
+    if (saved_errno == EMBBADCRC) return "crc";
+#endif
+    /* `MBA-FW-05`: exception response là thông tin chẩn đoán quý nhất — slave
+     * TRẢ LỜI nhưng từ chối. Bản trước gộp nó vào `error`, nên Frame Monitor
+     * không phân biệt được "địa chỉ không tồn tại" với "dây nhiễu". */
+    if (saved_errno > MODBUS_ENOBASE && saved_errno <= MODBUS_ENOBASE + 11) return "exception";
+#endif
+    return "error";
 }
 
 BusWorker::~BusWorker()

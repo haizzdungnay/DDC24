@@ -23,6 +23,9 @@ void ModbusMaster::bind_workers(const FieldbusConfig& cfg, ExtCache& cache,
     normalize_buses(&cfg_);
     workers_.clear();
     ext_cursor_ = 0;
+    /* Generation mới ⇒ ánh xạ slot có thể đã đổi và dedup cũ vô nghĩa: lấy lại
+     * mốc ở lượt drain kế tiếp thay vì phát lại (`MBA-FW-02`). */
+    write_baseline_pending_ = true;
 
     init_metrics(metrics);
 
@@ -259,6 +262,12 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
     }
     if (!stable) return;
 
+    /* `MBA-FW-02`: lượt mốc — xem `write_baseline_pending_`. */
+    const bool baseline = write_baseline_pending_;
+    if (baseline) has_last_written_.fill(false);
+    size_t seeded = 0;
+    size_t identity_skipped = 0;
+
     for (auto& worker : workers_) {
         for (size_t si = 0; si < worker->slave_count(); si++) {
             const BusSlaveBinding& binding = worker->slave(si);
@@ -271,12 +280,41 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                 if (ext_slots_for_point(pt) == 0) continue;
 
                 const bool is32 = point_type_is_32bit(pt.type);
+                uint16_t logical = 0;
                 for (uint16_t k = 0; k < pt.count; k++) {
                     if (ext_idx >= KX_N_EXT) break;
                     /* Khớp read_slave: register 32-bit lẻ ở cuối bị bỏ. */
                     if (is32 && k + 1 >= pt.count) break;
 
-                    if (pt.writable && ext_idx < snapshot.ext_count && snapshot.ext[ext_idx].dirty &&
+                    bool eligible = pt.writable && ext_idx < snapshot.ext_count;
+                    if (eligible) {
+                        const kx_ext_point_t& slot = snapshot.ext[ext_idx];
+                        /* `MBA-FW-02` — DANH TÍNH TRƯỚC, GIÁ TRỊ SAU. Slot `ext_idx`
+                         * trong plc_shm phải đang mang đúng Point mà worker này
+                         * gắn vào slot đó. Sau `apply_config`, iobus đổi ánh xạ
+                         * ngay còn Core chỉ đổi tên slot khi nhận snapshot của
+                         * generation mới; trong khoảng lệch đó setpoint/dirty ở
+                         * slot là của Point CŨ, và phát nó ra là ghi giá trị của
+                         * Point này xuống register của Point khác. */
+                        char expected[24];
+                        ext_point_name(expected, sc, pt, logical);
+                        if (std::strncmp(slot.name, expected, sizeof(slot.name)) != 0) {
+                            has_last_written_[ext_idx] = false;
+                            if (slot.dirty) identity_skipped++;
+                            eligible = false;
+                        } else if (!slot.dirty) {
+                            /* Chưa có lệnh nào ⇒ dedup không mang nghĩa gì. */
+                            has_last_written_[ext_idx] = false;
+                            eligible = false;
+                        } else if (baseline) {
+                            last_written_[ext_idx]     = static_cast<float>(slot.setpoint);
+                            has_last_written_[ext_idx] = true;
+                            seeded++;
+                            eligible = false;
+                        }
+                    }
+
+                    if (eligible &&
                         (!has_last_written_[ext_idx] ||
                          last_written_[ext_idx] !=
                              static_cast<float>(snapshot.ext[ext_idx].setpoint))) {
@@ -307,9 +345,28 @@ void ModbusMaster::drain_ext_writes(const kx_plc_shm_t* shm, uint64_t now_ms)
                     }
 
                     ext_idx++;
+                    logical++;
                     if (is32) k++;   /* 32-bit tiêu 2 register cho một điểm */
                 }
             }
+        }
+    }
+
+    if (baseline) {
+        write_baseline_pending_ = false;
+        std::fprintf(stderr, "INFO  modbus_master.write_baseline generation=%llu seeded=%zu"
+                     " — setpoint đang có trong plc_shm được lấy làm mốc, KHÔNG phát lại"
+                     " (FW_SOM_DESIGN §10)\n",
+                     static_cast<unsigned long long>(prov_.generation), seeded);
+    }
+    if (identity_skipped > 0 && !baseline) {
+        /* Chỉ là khoảng lệch ngắn giữa iobus và Core sau apply_config; kéo dài
+         * nghĩa là Core không nhận snapshot của generation mới. */
+        if (identity_warn_generation_ != prov_.generation) {
+            identity_warn_generation_ = prov_.generation;
+            std::fprintf(stderr, "WARN  modbus_master.write_identity_mismatch generation=%llu"
+                         " slots=%zu — tên slot trong plc_shm khác Point đang gắn; KHÔNG phát\n",
+                         static_cast<unsigned long long>(prov_.generation), identity_skipped);
         }
     }
 }

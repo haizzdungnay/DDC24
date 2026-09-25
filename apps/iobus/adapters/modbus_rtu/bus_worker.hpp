@@ -307,6 +307,17 @@ private:
  * bão syscall và làm ngập journal, không làm cổng sống lại nhanh hơn. */
 uint32_t port_backoff_ms(uint8_t step);
 
+/* Tên Point của một ext slot — NGUỒN DUY NHẤT cho cả đường publish (BusWorker)
+ * lẫn đường ghi (`ModbusMaster::drain_ext_writes` so danh tính slot trước khi
+ * phát, `MBA-FW-02`). Điểm một slot mang đúng `point.name`; mảng nhiều slot
+ * mang `<slave>.<point>[i]`. */
+void ext_point_name(char out[24], const SlaveConfig& slave, const ProfilePoint& point,
+                    uint16_t logical_index);
+
+/* Phân loại kết quả một giao dịch cho vòng nhớ khung:
+ * `ok` · `timeout` · `crc` · `exception` · `error`. */
+const char* frame_reason(int rc, int saved_errno);
+
 } // namespace iobus::fieldbus
 
 #endif /* IOBUS_BUS_WORKER_HPP */

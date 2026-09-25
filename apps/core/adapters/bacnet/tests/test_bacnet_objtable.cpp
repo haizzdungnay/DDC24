@@ -3,6 +3,7 @@
  * @brief BAC-004 unit tests — quality_to_reliability mapping + publish behavior.
  */
 #include <cstddef>
+#include <cstring>
 #include <sys/socket.h>
 #include <gtest/gtest.h>
 #include "bacnet/bacnet_objtable.hpp"
@@ -297,4 +298,60 @@ TEST(BacnetObjTable, DegradedRtIsVisibleInShm)
     ASSERT_NE(t.shm(), nullptr);
     EXPECT_EQ(t.shm()->rt_degraded, 1u)
         << "suy giảm RT phải quan sát được liên tục, không chỉ ở một dòng log";
+}
+
+/* `MBA-FW-02` (audit Modbus 2026-09-25) — slot ĐỔI DANH TÍNH thì lệnh ghi đang
+ * treo ở slot đó phải bị xoá.
+ *
+ * `dirty` là cờ mức và không ai xoá nó. Trước bản sửa, sau một lần áp cấu hình
+ * làm slot 0 chuyển từ RELAY-A sang RELAY-C, setpoint của RELAY-A vẫn nằm ở
+ * slot 0 kèm `dirty=1`; chỉ cần iobus khởi động lại là giá trị đó được phát
+ * xuống register của RELAY-C — sai thiết bị, không một lỗi nào. Slot giữ nguyên
+ * danh tính (RELAY-B) thì lệnh của nó phải còn nguyên. */
+TEST(BacnetObjtable, SlotDoiDanhTinhThiLenhGhiCuBiXoa)
+{
+    BacnetObjTable obj;
+    if (!obj.attach()) {
+        SUCCEED();
+        return;
+    }
+    int sv[2];
+    ASSERT_EQ(::socketpair(AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+
+    auto send_snapshot = [&](uint64_t sequence, uint64_t generation, const char* slot0,
+                             const char* slot1) {
+        kx_ext_snapshot_v2_t msg{};
+        msg.magic          = KX_EXT_SNAP_V2_MAGIC;
+        msg.schema_version = KX_EXT_SNAP_SCHEMA_VER;
+        msg.count          = 2;
+        msg.sequence       = sequence;
+        msg.generation     = generation;
+        std::strncpy(msg.samples[0].point_id, slot0, sizeof(msg.samples[0].point_id) - 1);
+        std::strncpy(msg.samples[1].point_id, slot1, sizeof(msg.samples[1].point_id) - 1);
+        msg.samples[0].writable = 1;
+        msg.samples[1].writable = 1;
+        ASSERT_EQ(::send(sv[0], &msg, sizeof(msg), 0), static_cast<ssize_t>(sizeof(msg)));
+        obj.read_ext(sv[1]);
+    };
+
+    send_snapshot(1, 1, "RELAY-A", "RELAY-B");
+    ASSERT_NE(obj.shm(), nullptr);
+    /* Core (PointWriter) đã ra lệnh cho cả hai Point của generation 1. */
+    obj.shm()->ext[0].setpoint = 1.0;
+    obj.shm()->ext[0].dirty    = 1;
+    obj.shm()->ext[1].setpoint = 1.0;
+    obj.shm()->ext[1].dirty    = 1;
+
+    send_snapshot(2, 2, "RELAY-C", "RELAY-B");
+
+    EXPECT_STREQ(obj.shm()->ext[0].name, "RELAY-C");
+    EXPECT_EQ(obj.shm()->ext[0].dirty, 0u)
+        << "Point mới ở slot 0 thừa hưởng lệnh ghi của Point cũ — sẽ bị phát sai thiết bị";
+    EXPECT_DOUBLE_EQ(obj.shm()->ext[0].setpoint, 0.0);
+    EXPECT_EQ(obj.shm()->ext[1].dirty, 1u) << "slot giữ nguyên danh tính không được mất lệnh";
+    EXPECT_DOUBLE_EQ(obj.shm()->ext[1].setpoint, 1.0);
+
+    ::close(sv[0]);
+    ::close(sv[1]);
+    obj.detach();
 }
