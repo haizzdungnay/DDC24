@@ -209,6 +209,21 @@ class ProgrammingRuntimePackagingTest(unittest.TestCase):
         dropin = (ROOT / "platform/systemd/system-mkddc-rt.conf").read_text(encoding="utf-8")
         self.assertIn("CPUAffinity=0-2", _uncommented_lines(dropin))
 
+    def test_unit_core_khong_co_lenh_chay_song_song_voi_vong_quet(self) -> None:
+        """F16: mọi `Exec*` của unit nhận `CPUAffinity=3` + SCHED_FIFO 80 của core.
+
+        `ExecStartPost` chạy ngay sau READY=1, tức SONG SONG với vòng quét, trên
+        cùng CPU và cùng mức ưu tiên: một `/bin/sh -c "echo $MAINPID > …"` từng
+        làm vòng quét thức dậy trễ 4–12 ms và lỡ base step ở 3/5 lần khởi động
+        trên Foxlinx. Pidfile do core tự ghi.
+        """
+        unit_lines = _uncommented_lines(
+            (ROOT / "platform/systemd/mkddc-core.service").read_text(encoding="utf-8"))
+        self.assertFalse(
+            [l for l in unit_lines if l.strip().startswith("ExecStartPost")],
+            "unit mkddc-core không được có ExecStartPost (chạy FIFO 80 trên CPU vòng quét)",
+        )
+
     def test_programming_bat_mac_dinh_o_ca_hai_phia(self) -> None:
         """FE bật lúc build, BE bật bằng env — thiếu một nửa là 404 im lặng.
 

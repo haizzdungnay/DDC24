@@ -26,6 +26,13 @@ ExecStopPost=-+/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu3/power/pm_qos_re
 # sang CPU0–2. Cùng lý do với `system.conf.d/mkddc-rt.conf`: trên kernel non-RT,
 # việc nền trên CPU3 làm vòng quét thức dậy trễ. Xem đầu script để có số đo.
 ExecStartPre=-+/usr/libexec/mkddc/rt-housekeeping 0-2 7
+# F16: KHÔNG thêm ExecStartPost (hay lệnh Exec* nào chạy trong lúc core đang
+# chạy). Mọi Exec* nhận CPUAffinity=3 + SCHED_FIFO 80 của unit này, tức chạy trên
+# CPU của vòng quét với cùng mức ưu tiên và chặn nó cho tới khi xong: một
+# `ExecStartPost=/bin/sh -c "echo $MAINPID > …"` từng làm lỡ base step ở 3/5 lần
+# khởi động trên Foxlinx. Core tự ghi /run/mkddc/core.pid. ExecReload bên dưới
+# chịu cùng chi phí (vài ms) nhưng chỉ khi operator `systemctl reload`; web reload
+# bằng SIGHUP qua pidfile, không qua systemctl.
 ExecReload=/bin/kill -HUP $MAINPID
 User=mkddc
 Group=mkddc

@@ -14,6 +14,7 @@
 #include <string>
 
 #include "runtime/cpu_idle_check.hpp"
+#include "runtime/pid_file.hpp"
 
 namespace core {
 namespace {
@@ -211,6 +212,30 @@ TEST_F(CpuIdleSysfs, ReadsTaskFlagsAfterLastParenthesis)
 TEST_F(CpuIdleSysfs, KthreadCountUnknownWithoutProc)
 {
     EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/khong-co", 3), -1);
+}
+
+TEST_F(CpuIdleSysfs, PidFileWrittenAtomicallyAndRemovedOnlyByOwner)
+{
+    /* F16: Core tự ghi pidfile thay cho `ExecStartPost` chạy FIFO 80 trên CPU3. */
+    const std::string path = root_ + "/core.pid";
+    ASSERT_TRUE(write_pid_file(path, 4242));
+    std::FILE* file = std::fopen(path.c_str(), "r");
+    ASSERT_NE(file, nullptr);
+    char text[16] = {};
+    ASSERT_NE(std::fgets(text, sizeof(text), file), nullptr);
+    std::fclose(file);
+    EXPECT_STREQ(text, "4242\n") << "web đọc bằng strconv.Atoi(TrimSpace)";
+    EXPECT_NE(::access((path + ".tmp").c_str(), F_OK), 0) << "không để lại file tạm";
+
+    /* Core mới đã ghi đè: Core cũ tắt không được xoá file của Core mới. */
+    ASSERT_TRUE(write_pid_file(path, 5151));
+    remove_pid_file_if_owned(path, 4242);
+    EXPECT_EQ(::access(path.c_str(), F_OK), 0);
+    remove_pid_file_if_owned(path, 5151);
+    EXPECT_NE(::access(path.c_str(), F_OK), 0);
+
+    EXPECT_FALSE(write_pid_file(root_ + "/khong-co/core.pid", 1));
+    EXPECT_FALSE(write_pid_file(path, 0));
 }
 
 } // namespace
