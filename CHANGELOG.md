@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### Changed — Hồ sơ audit: F08 khỏi trên target, đo G2 tạm khi dời IRQ (2026-09-26)
+
+- Phạm vi: `docs/07_records/test-evidence/programming/2026-09-25-fbd-st-modbus-do-audit.md`.
+- Sau deploy `910b571c`: `journalctl -p warning` đã thấy WARN/ERROR. Dời IRQ khỏi CPU3 giảm jitter tối đa (470 → 173 µs rảnh, 251 → 212 µs có tải) nhưng vẫn vi phạm C4, nên xác nhận cần PREEMPT_RT; ghi nhận một actor khác seal Draft WIP lúc 17:51.
+
 ### Added — ADR-061: chu kỳ bộ điều khiển 10 ms và bộ chu kỳ Program mới (2026-09-26)
 
 - Phạm vi: `docs/adr/ADR-061-programming-chu-ky-10ms-bo-chu-ky-moi.md`, `docs/00_governance/DECISIONS.md`, `docs/adr/README.md`.
