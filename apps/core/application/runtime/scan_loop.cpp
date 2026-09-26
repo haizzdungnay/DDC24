@@ -399,6 +399,19 @@ void ScanLoop::step()
     d_.metrics->end_scan(total_ns, budget_ns_);
 }
 
+void ScanLoop::log_missed_base_step(const char* cause, uint64_t late_ns, uint64_t skipped, uint64_t now_ns)
+{
+    if (!missed_log_gate_.due(now_ns)) return;
+    /* `late_us`: wake_late = trễ so với mốc lưới lúc thức; step_overrun = thời
+     * gian từ mốc lưới của step tới lúc step (kể cả việc sau step) xong. */
+    std::fprintf(stderr,
+                 "WARN  core.base_step_missed cause=%s late_us=%llu skipped=%llu total=%llu"
+                 " (ADR-061 C3)\n",
+                 cause, static_cast<unsigned long long>(late_ns / 1000ull),
+                 static_cast<unsigned long long>(skipped),
+                 static_cast<unsigned long long>(pacer_.missed_base_step_count()));
+}
+
 void ScanLoop::log_minute_stats()
 {
     /* `core.jitter` giữ nguyên các trường cũ (tooling đọc log dựa vào chúng),
@@ -460,6 +473,19 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
     uint64_t last_stats_print = start_ns;
 
     while (!shutdown.load()) {
+        /* ADR-061 C4: lệch đánh thức đo so với mốc TUYỆT ĐỐI của lưới, NGAY khi
+         * thức dậy — trước mọi việc của vòng lặp. Reload (bên dưới) là việc của
+         * step: đo sau nó thì thời gian đọc cấu hình bị tính nhầm thành "thức dậy
+         * trễ". Trễ >= 1 base step thì các mốc đã qua bị bỏ và đếm
+         * `missedBaseStepCount`. */
+        const uint64_t actual_ns = monotonic_now();
+        const uint64_t wake_deadline_ns = pacer_.deadline_ns();
+        const uint64_t missed_before_wake = pacer_.missed_base_step_count();
+        pacer_.on_wake(actual_ns);
+        if (pacer_.missed_base_step_count() != missed_before_wake)
+            log_missed_base_step("wake_late", actual_ns - wake_deadline_ns,
+                                 pacer_.missed_base_step_count() - missed_before_wake, actual_ns);
+
         /* SIGHUP reload ở RANH GIỚI scan (COR-008) — config mới chỉ có hiệu lực
          * trọn vẹn từ scan kế, không bao giờ giữa lúc resolve */
         if (reload_flag_ && reload_flag_->exchange(false) && reload_fn_) {
@@ -469,11 +495,6 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
              * Thứ tự: reload_fn_ → sync_actual (CR-006). */
             d_.graph->sync_actual_scan_ms(actual_ms);
         }
-
-        /* ADR-061 C4: lệch đánh thức đo so với mốc TUYỆT ĐỐI của lưới. Trễ >= 1
-         * base step thì các mốc đã qua bị bỏ và đếm `missedBaseStepCount`. */
-        const uint64_t actual_ns = monotonic_now();
-        pacer_.on_wake(actual_ns);
 
         if (actual_ns - last_stats_print > 60000000000ull) {
             log_minute_stats();
@@ -486,7 +507,13 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
         /* 11. Sleep tới mốc lưới kế tiếp — TUYỆT ĐỐI, không drift. Step chạy quá
          * một base step thì mốc đã qua bị BỎ, không chạy dồn (SPEC §4): chạy
          * liên tiếp để "bù" làm vòng quét không nghỉ đúng lúc nó đang quá tải. */
-        const uint64_t deadline_ns = pacer_.advance(monotonic_now());
+        const uint64_t step_deadline_ns = pacer_.deadline_ns();
+        const uint64_t missed_before_advance = pacer_.missed_base_step_count();
+        const uint64_t after_step_ns = monotonic_now();
+        const uint64_t deadline_ns = pacer_.advance(after_step_ns);
+        if (pacer_.missed_base_step_count() != missed_before_advance)
+            log_missed_base_step("step_overrun", after_step_ns - step_deadline_ns,
+                                 pacer_.missed_base_step_count() - missed_before_advance, after_step_ns);
         if (time_.sleep_until != nullptr) {
             time_.sleep_until(time_.ctx, deadline_ns);
         } else {

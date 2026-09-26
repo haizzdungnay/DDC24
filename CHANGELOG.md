@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+### Fixed — Khởi động core không còn lỡ base step do `ExecStartPost` chạy FIFO 80 trên CPU vòng quét (F16, 2026-09-26)
+
+- Phạm vi: `apps/core/application/runtime/{pid_file.hpp,scan_loop.cpp,scan_loop.hpp,base_step_pacer.hpp,test_scan_loop.cpp,test_cpu_idle_check.cpp}`, `apps/core/bootstrap/main.cpp`, `platform/systemd/mkddc-core.service`, `tests/integration/test_release_packaging_guard.py`; ADR-061 4.11; hồ sơ `EV-PROG-FBD-ST-MB-20260925`.
+- Triệu chứng: 3/5 lần khởi động core trên Foxlinx có một lần thức dậy trễ 11,6–12,2 ms, lỡ một base step và một release (C3). Nguyên nhân: drop-in riêng của bo `pidfile.conf` chạy `ExecStartPost=/bin/sh -c "echo $MAINPID > …"` ngay sau READY=1. Mọi lệnh `Exec*` nhận `CPUAffinity=3` + SCHED_FIFO 80 của unit (đo trực tiếp: shell đó `SCHED_FIFO` 80, affinity 3), nên FIFO cùng mức chặn vòng quét tới khi shell chạy xong.
+- Sửa: Core tự ghi `CORE_PID` (mặc định `/run/mkddc/core.pid`) bằng tmp + rename trước scan đầu, và chỉ xoá khi tắt nếu file vẫn của chính nó. Gỡ drop-in trên bo. Unit ghi rõ cấm `Exec*` chạy song song; guard pytest chặn `ExecStartPost`.
+- Chẩn đoán kèm theo: mỗi base step bị lỡ log `WARN core.base_step_missed cause=wake_late|step_overrun late_us=… skipped=…` (tối đa 1 dòng/giây). Vòng quét đo mốc thức dậy trước reload SIGHUP, để thời gian reload tính vào step chứ không thành "thức dậy trễ".
+- Kiểm chứng trên Foxlinx: restart core 5 lần thì 0/5 lỡ step lúc khởi động; pidfile trùng MainPID, chủ `mkddc`; SIGHUP qua pidfile bằng user mkddc cho `core.reload`. Cửa sổ 600 s tính từ phút đầu sau khởi động, có tải giao diện và 2 lần restart web: **0/60 006 lần vượt 100 µs**, tối đa theo phút 60–85 µs, missed/overrun 0, nên C1–C4 PASS trong cửa sổ đo. Soak 24 h đang chạy tới 2026-09-27 06:47Z; cách đọc ghi trong hồ sơ. Host: 3 test ScanLoop (CaptureStderr, đồng hồ tiêm) và 1 test pidfile; ctest 1564/1564; pytest packaging guard 12/12.
+
+### Fixed — Kernel thread không gắn CPU (luồng Wi-Fi) rời CPU vòng quét (F15, 2026-09-26)
+
+- Phạm vi: `platform/packaging/rt-housekeeping.sh` (mới, cài `/usr/libexec/mkddc/rt-housekeeping`), `platform/packaging/install.sh`, `platform/systemd/mkddc-core.service`, `apps/core/application/runtime/{cpu_idle_check.hpp,test_cpu_idle_check.cpp}`, `apps/core/bootstrap/main.cpp`, `tests/integration/test_release_packaging_guard.py`; guide Core §9; ADR-061 4.11.
+- Triệu chứng: dưới tải giao diện qua Wi-Fi, 0,73 % lần thức dậy vượt 100 µs (tối đa 215 µs). `perf record -e ipi:ipi_raise` cho thấy khoảng 460 IPI/s đánh thức kernel thread không gắn CPU trên CPU3, chủ yếu `RTW_XMIT_THREAD`/`RTWHALXT` của driver Wi-Fi Realtek. Luồng phụ của core đã được đo và loại trừ.
+- Sửa: `rt-housekeeping` (unit core `ExecStartPre=-+`) đặt workqueue `cpumask=7`, dời kthreadd và mọi kernel thread có affinity = mọi CPU online sang 0–2; 35 thread `PF_NO_SETAFFINITY` được đếm và bỏ qua. Core log `WARN rt.kthread_on_scan_cpu` khi còn thread dời được mà chưa dời.
+- Kiểm chứng trên Foxlinx: cùng tải, 0/6006 và 0/6006 lần vượt (tối đa 61 / 85 µs). Cửa sổ 600 s có 2 lần restart web: 1/60 007 lần vượt, tối đa theo phút 55–114 µs, missed/overrun 0. Script log `kthread_moved=26 kthread_pinned_by_kernel=35`. Host: ctest 1560/1560 (thêm 3 test), pytest packaging guard 11/11.
+
 ### Fixed — CPU3 độc quyền cho vòng quét: không còn trễ hàng ms khi restart dịch vụ (F14, 2026-09-26)
 
 - Phạm vi: `platform/systemd/system-mkddc-rt.conf` (mới, cài vào `/etc/systemd/system.conf.d/mkddc-rt.conf`), `platform/systemd/mkddc-core.service`, `platform/packaging/install.sh`, `apps/core/application/runtime/{cpu_idle_check.hpp,test_cpu_idle_check.cpp}`, `apps/core/bootstrap/main.cpp`; ADR-061 4.11; guide Core §9; hồ sơ `EV-PROG-FBD-ST-MB-20260925`.

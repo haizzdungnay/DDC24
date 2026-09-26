@@ -376,6 +376,74 @@ TEST(ScanLoop, Adr061_OverrunningStepSkipsTicksInsteadOfCatchingUp)
         EXPECT_GE(recorder.step_times[index] - recorder.step_times[index - 1], 10 * kScanMs);
 }
 
+static std::size_t count_occurrences(const std::string& text, const std::string& needle)
+{
+    std::size_t count = 0;
+    for (std::size_t at = text.find(needle); at != std::string::npos; at = text.find(needle, at + 1)) ++count;
+    return count;
+}
+
+TEST(ScanLoop, Adr061_MissedBaseStepFromLateWakeIsLoggedWithCause)
+{
+    /* ADR-061 C3: lần thức trễ 25 ms bỏ 2 mốc lưới — phải có MỘT dòng WARN nói
+     * rõ nguyên nhân là thức dậy trễ, kèm độ trễ, để đối chiếu thời điểm với
+     * sự kiện khác trong journal (log phút chỉ có tổng). */
+    Fixture f;
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 1000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 6;
+    time.wake_delay_ns = {0, 0, 0, 25 * kScanMs};
+    f.loop.set_time_source_for_test(time.source());
+    testing::internal::CaptureStderr();
+    f.loop.run(shutdown, 10 * kScanMs, nullptr, nullptr);
+    const std::string log = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(count_occurrences(log, "WARN  core.base_step_missed"), 1u) << log;
+    EXPECT_NE(log.find("cause=wake_late late_us=25000 skipped=2 total=2"), std::string::npos) << log;
+}
+
+TEST(ScanLoop, Adr061_MissedBaseStepFromSlowStepIsLoggedAsOverrun)
+{
+    Fixture f;
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 1000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 6;
+    ScanRecorder recorder;
+    recorder.time = &time;
+    recorder.slow_scan = 2;
+    recorder.extra_ns = 35 * kScanMs;
+    f.loop.set_time_source_for_test(time.source());
+    testing::internal::CaptureStderr();
+    f.loop.run(shutdown, 10 * kScanMs, &ScanRecorder::after_scan, &recorder);
+    const std::string log = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(count_occurrences(log, "WARN  core.base_step_missed"), 1u) << log;
+    /* Step của mốc 20 ms xong lúc 55 ms: trễ 35 ms so với mốc, bỏ 30/40/50. */
+    EXPECT_NE(log.find("cause=step_overrun late_us=35000 skipped=3 total=3"), std::string::npos) << log;
+    EXPECT_EQ(log.find("cause=wake_late"), std::string::npos) << "step chậm không phải thức dậy trễ";
+}
+
+TEST(ScanLoop, Adr061_MissedBaseStepLogIsRateLimitedToOnePerSecond)
+{
+    /* Hai lần thức trễ cách nhau < 1 s: bộ đếm tăng cả hai, log chỉ một dòng —
+     * log từ luồng RT không được thành nguồn trễ mới khi quá tải kéo dài. */
+    Fixture f;
+    std::atomic<bool> shutdown{false};
+    FakeScanTime time;
+    time.now_ns = 1000 * kScanMs;
+    time.shutdown = &shutdown;
+    time.max_sleeps = 8;
+    time.wake_delay_ns = {0, 15 * kScanMs, 0, 15 * kScanMs};
+    f.loop.set_time_source_for_test(time.source());
+    testing::internal::CaptureStderr();
+    f.loop.run(shutdown, 10 * kScanMs, nullptr, nullptr);
+    const std::string log = testing::internal::GetCapturedStderr();
+    EXPECT_EQ(f.loop.timing().missed_base_step_count, 2u);
+    EXPECT_EQ(count_occurrences(log, "WARN  core.base_step_missed"), 1u) << log;
+}
+
 TEST(ScanLoop, Adr061_StepWcetIsMeasuredPerPhase)
 {
     /* ADR-061 4.10 bước 1: có số đo WCET từng bước trước khi tách việc không-RT. */

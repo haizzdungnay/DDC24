@@ -14,6 +14,7 @@
 #include <string>
 
 #include "runtime/cpu_idle_check.hpp"
+#include "runtime/pid_file.hpp"
 
 namespace core {
 namespace {
@@ -169,6 +170,72 @@ TEST_F(CpuIdleSysfs, HousekeepingUnknownWhenFilesMissing)
     EXPECT_FALSE(missing.pid1_known);
     EXPECT_FALSE(missing.workqueue_known);
     EXPECT_FALSE(missing.pid1_on_cpu);
+}
+
+TEST_F(CpuIdleSysfs, CountsOnlyUnboundKernelThreadsThatMayRunOnScanCpu)
+{
+    /* Ảnh chụp thu nhỏ của Foxlinx: kthreadd và luồng Wi-Fi không gắn CPU
+     * (0-3), ksoftirqd/3 gắn CPU3, một tiến trình user-space 0-3. */
+    write(root_ + "/proc/2/status", "Name:\tkthreadd\nPPid:\t0\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/proc/1561/status", "Name:\tRTW_XMIT_THREAD\nPPid:\t2\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/proc/28/status", "Name:\tksoftirqd/3\nPPid:\t2\nCpus_allowed_list:\t3\n");
+    write(root_ + "/proc/884/status", "Name:\tweston\nPPid:\t625\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/proc/self/status", "Name:\tnot-a-pid\nPPid:\t2\nCpus_allowed_list:\t0-3\n");
+    /* Rescuer workqueue thật trên Foxlinx: flags=69238880 có PF_NO_SETAFFINITY,
+     * kernel tự quản — không đếm (rt-housekeeping cũng không dời được). */
+    write(root_ + "/proc/38/status", "Name:\tkblockd\nPPid:\t2\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/proc/38/stat", "38 (kblockd) I 2 0 0 0 -1 69238880 0 0 0 0\n");
+    /* comm có khoảng trắng và ngoặc: phải đọc sau ')' cuối. */
+    write(root_ + "/proc/1561/stat", "1561 (RTW_XMIT (x) T) S 2 0 0 0 -1 2129984 0 0\n");
+    EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/proc", 3), 2);
+
+    /* Sau rt-housekeeping: hai thread đó thành 0-2. */
+    write(root_ + "/proc/2/status", "Name:\tkthreadd\nPPid:\t0\nCpus_allowed_list:\t0-2\n");
+    write(root_ + "/proc/1561/status", "Name:\tRTW_XMIT_THREAD\nPPid:\t2\nCpus_allowed_list:\t0-2\n");
+    EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/proc", 3), 0);
+}
+
+TEST_F(CpuIdleSysfs, ReadsTaskFlagsAfterLastParenthesis)
+{
+    unsigned long flags = 0;
+    write(root_ + "/stat", "91638 (kworker/u8:4-events_unbound) I 2 0 0 0 -1 69238880 0\n");
+    ASSERT_TRUE(read_task_flags(root_ + "/stat", &flags));
+    EXPECT_EQ(flags, 69238880ul);
+    EXPECT_NE(flags & kPfNoSetAffinity, 0ul);
+    write(root_ + "/stat", "7 (a) b) c) S 2 0 0 0 -1 2129984 0\n");
+    ASSERT_TRUE(read_task_flags(root_ + "/stat", &flags));
+    EXPECT_EQ(flags, 2129984ul);
+    EXPECT_EQ(flags & kPfNoSetAffinity, 0ul);
+    EXPECT_FALSE(read_task_flags(root_ + "/khong-co", &flags));
+}
+
+TEST_F(CpuIdleSysfs, KthreadCountUnknownWithoutProc)
+{
+    EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/khong-co", 3), -1);
+}
+
+TEST_F(CpuIdleSysfs, PidFileWrittenAtomicallyAndRemovedOnlyByOwner)
+{
+    /* F16: Core tự ghi pidfile thay cho `ExecStartPost` chạy FIFO 80 trên CPU3. */
+    const std::string path = root_ + "/core.pid";
+    ASSERT_TRUE(write_pid_file(path, 4242));
+    std::FILE* file = std::fopen(path.c_str(), "r");
+    ASSERT_NE(file, nullptr);
+    char text[16] = {};
+    ASSERT_NE(std::fgets(text, sizeof(text), file), nullptr);
+    std::fclose(file);
+    EXPECT_STREQ(text, "4242\n") << "web đọc bằng strconv.Atoi(TrimSpace)";
+    EXPECT_NE(::access((path + ".tmp").c_str(), F_OK), 0) << "không để lại file tạm";
+
+    /* Core mới đã ghi đè: Core cũ tắt không được xoá file của Core mới. */
+    ASSERT_TRUE(write_pid_file(path, 5151));
+    remove_pid_file_if_owned(path, 4242);
+    EXPECT_EQ(::access(path.c_str(), F_OK), 0);
+    remove_pid_file_if_owned(path, 5151);
+    EXPECT_NE(::access(path.c_str(), F_OK), 0);
+
+    EXPECT_FALSE(write_pid_file(root_ + "/khong-co/core.pid", 1));
+    EXPECT_FALSE(write_pid_file(path, 0));
 }
 
 } // namespace

@@ -178,6 +178,52 @@ class ProgrammingRuntimePackagingTest(unittest.TestCase):
             "worker mô phỏng KHÔNG được có unit systemd riêng (ADR-053 §1)",
         )
 
+    def test_cpu_vong_quet_doc_quyen_duoc_cai_du(self) -> None:
+        """ADR-061 4.11 (F14/F15): CPU3 dành riêng cho vòng quét 10 ms.
+
+        Ba mảnh phải khớp nhau, thiếu mảnh nào cũng "hỏng im lặng" — core vẫn
+        chạy, chỉ là lệch nhịp vượt C4 mà không có lỗi build hay test nào đỏ:
+
+        1. unit core gọi `/usr/libexec/mkddc/rt-housekeeping` (workqueue +
+           kernel thread không gắn CPU sang CPU0–2) và install.sh cài đúng
+           file đó vào đúng chỗ;
+        2. drop-in `system.conf.d/mkddc-rt.conf` (`CPUAffinity=0-2`) được cài;
+        3. unit core khai `CPUAffinity=3`.
+        """
+        unit = (ROOT / "platform/systemd/mkddc-core.service").read_text(encoding="utf-8")
+        unit_lines = _uncommented_lines(unit)
+        self.assertIn("CPUAffinity=3", unit_lines)
+        self.assertIn("ExecStartPre=-+/usr/libexec/mkddc/rt-housekeeping 0-2 7", unit_lines)
+
+        install = _uncommented_lines(self.INSTALL_SCRIPT.read_text(encoding="utf-8"))
+        self.assertTrue(
+            any("rt-housekeeping.sh" in l and '"$LIBEXECDIR/rt-housekeeping"' in l for l in install),
+            "install.sh phải cài rt-housekeeping.sh vào $LIBEXECDIR/rt-housekeeping — đúng đường dẫn unit gọi",
+        )
+        self.assertTrue(
+            any("system-mkddc-rt.conf" in l and "system.conf.d/mkddc-rt.conf" in l for l in install),
+            "install.sh phải cài drop-in system.conf.d/mkddc-rt.conf (CPUAffinity=0-2)",
+        )
+        script = ROOT / "platform/packaging/rt-housekeeping.sh"
+        self.assertTrue(script.exists() and script.stat().st_mode & 0o111, "rt-housekeeping.sh phải tồn tại và executable")
+        dropin = (ROOT / "platform/systemd/system-mkddc-rt.conf").read_text(encoding="utf-8")
+        self.assertIn("CPUAffinity=0-2", _uncommented_lines(dropin))
+
+    def test_unit_core_khong_co_lenh_chay_song_song_voi_vong_quet(self) -> None:
+        """F16: mọi `Exec*` của unit nhận `CPUAffinity=3` + SCHED_FIFO 80 của core.
+
+        `ExecStartPost` chạy ngay sau READY=1, tức SONG SONG với vòng quét, trên
+        cùng CPU và cùng mức ưu tiên: một `/bin/sh -c "echo $MAINPID > …"` từng
+        làm vòng quét thức dậy trễ 4–12 ms và lỡ base step ở 3/5 lần khởi động
+        trên Foxlinx. Pidfile do core tự ghi.
+        """
+        unit_lines = _uncommented_lines(
+            (ROOT / "platform/systemd/mkddc-core.service").read_text(encoding="utf-8"))
+        self.assertFalse(
+            [l for l in unit_lines if l.strip().startswith("ExecStartPost")],
+            "unit mkddc-core không được có ExecStartPost (chạy FIFO 80 trên CPU vòng quét)",
+        )
+
     def test_programming_bat_mac_dinh_o_ca_hai_phia(self) -> None:
         """FE bật lúc build, BE bật bằng env — thiếu một nửa là 404 im lặng.
 

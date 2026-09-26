@@ -21,10 +21,18 @@ ExecStart=/usr/sbin/mkddc-core --programming-runtime --st-trusted-key /data/mkdd
 # `rt.cpu_idle_exposed` khi ràng buộc này thiếu.
 ExecStartPre=-+/bin/sh -c 'echo 20 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
 ExecStopPost=-+/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
-# ADR-061 4.11: workqueue unbound (kworker không gắn CPU) chỉ chạy trên CPU0–2
-# (mask 7), cùng lý do với `system.conf.d/mkddc-rt.conf`: việc nền của kernel
-# trên CPU3 làm vòng quét thức dậy trễ tới hàng ms trên kernel non-RT.
-ExecStartPre=-+/bin/sh -c 'echo 7 > /sys/devices/virtual/workqueue/cpumask'
+# ADR-061 4.11: việc nền của kernel khỏi CPU3 — workqueue unbound (mask 7) và
+# kthreadd cùng mọi kernel thread không gắn CPU (ví dụ luồng TX của driver Wi-Fi)
+# sang CPU0–2. Cùng lý do với `system.conf.d/mkddc-rt.conf`: trên kernel non-RT,
+# việc nền trên CPU3 làm vòng quét thức dậy trễ. Xem đầu script để có số đo.
+ExecStartPre=-+/usr/libexec/mkddc/rt-housekeeping 0-2 7
+# F16: KHÔNG thêm ExecStartPost (hay lệnh Exec* nào chạy trong lúc core đang
+# chạy). Mọi Exec* nhận CPUAffinity=3 + SCHED_FIFO 80 của unit này, tức chạy trên
+# CPU của vòng quét với cùng mức ưu tiên và chặn nó cho tới khi xong: một
+# `ExecStartPost=/bin/sh -c "echo $MAINPID > …"` từng làm lỡ base step ở 3/5 lần
+# khởi động trên Foxlinx. Core tự ghi /run/mkddc/core.pid. ExecReload bên dưới
+# chịu cùng chi phí (vài ms) nhưng chỉ khi operator `systemctl reload`; web reload
+# bằng SIGHUP qua pidfile, không qua systemctl.
 ExecReload=/bin/kill -HUP $MAINPID
 User=mkddc
 Group=mkddc

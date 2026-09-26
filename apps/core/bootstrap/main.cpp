@@ -36,6 +36,7 @@
 #include "config/safe_state_config.hpp"
 #include "schedule/schedule_runtime.hpp"
 #include "runtime/cpu_idle_check.hpp"
+#include "runtime/pid_file.hpp"
 #include "runtime/interval_gate.hpp"
 #include "runtime/scan_loop.hpp"
 #include "runtime/thread_policy.hpp"
@@ -498,6 +499,13 @@ int main(int argc, char** argv)
                                  " thong con chay tren CPU vong quet; can /etc/systemd/system.conf.d/"
                                  "mkddc-rt.conf (CPUAffinity) roi boot lai\n",
                                  cpu, housekeeping.pid1_cpus.c_str());
+                const int kthreads = unbound_kthreads_on_cpu("/proc", cpu);
+                if (kthreads > 0)
+                    std::fprintf(stderr,
+                                 "WARN  rt.kthread_on_scan_cpu cpu=%d count=%d — kernel thread khong gan"
+                                 " CPU con chay tren CPU vong quet (thieu /usr/libexec/mkddc/"
+                                 "rt-housekeeping trong unit mkddc-core)\n",
+                                 cpu, kthreads);
                 if (housekeeping.workqueue_known && housekeeping.workqueue_on_cpu)
                     std::fprintf(stderr,
                                  "WARN  rt.workqueue_on_scan_cpu cpu=%d mask=%s — kworker unbound con"
@@ -913,7 +921,21 @@ int main(int argc, char** argv)
         }
     };
 
+    /* F16: Core tự ghi pidfile cho web gửi SIGHUP reload, TRƯỚC scan đầu (tức
+     * trước READY=1). Không dùng `ExecStartPost` của unit: lệnh đó chạy
+     * SCHED_FIFO 80 trên chính CPU của vòng quét và làm lỡ base step lúc khởi
+     * động (xem runtime/pid_file.hpp). */
+    const char* pid_env = std::getenv("CORE_PID");
+    const std::string pid_path = pid_env && pid_env[0] ? pid_env : "/run/mkddc/core.pid";
+    const long self_pid = static_cast<long>(::getpid());
+    if (write_pid_file(pid_path, self_pid))
+        std::fprintf(stderr, "INFO  core.pidfile path=%s pid=%ld\n", pid_path.c_str(), self_pid);
+    else
+        std::fprintf(stderr, "WARN  core.pidfile_fail path=%s errno=%d (web reload dung /proc fallback)\n",
+                     pid_path.c_str(), errno);
+
     loop.run(g_shutdown, base_step_ns, after_scan, &nctx);
+    remove_pid_file_if_owned(pid_path, self_pid);
 
     if (programming_ipc_thread.joinable()) programming_ipc_thread.join();
     if (programming_ipc_endpoint) programming_ipc_endpoint->close();

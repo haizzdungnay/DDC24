@@ -68,6 +68,7 @@ public:
     }
 
     uint64_t base_step_ns() const { return base_step_ns_; }
+    uint64_t missed_base_step_count() const { return missed_base_step_count_; }
     uint64_t deadline_ns() const { return deadline_ns_; }
     bool started() const { return started_; }
 
