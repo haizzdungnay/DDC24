@@ -196,7 +196,24 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: JSDOM_DEFAULT_INNER_WIDTH_PX })
 })
+
+/** Bề ngang mặc định của cửa sổ jsdom — cũng là mép dưới của dải `compact dock`. */
+const JSDOM_DEFAULT_INNER_WIDTH_PX = 1024
+
+/**
+ * Đặt cửa sổ ở full shell (`nfr.viewport.fullShellMinWidthPx` = 1280).
+ *
+ * Từ #765, dải `compact dock` 1024–1279 px đưa Inspector vào KHAY NỔI (đóng sẵn,
+ * có nút mở) vì ở đó không đủ chỗ cho một track Inspector cạnh Editor tối thiểu
+ * 320 px. Ca nào đọc Inspector như một CỘT luôn hiện thì phải nói ra khổ nó
+ * đứng, thay vì dựa vào mặc định 1024 px của jsdom. Không có `matchMedia` nên
+ * `useMinWidth` đọc `innerWidth`.
+ */
+function atFullShellWidth() {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 1280 })
+}
 
 /**
  * Chọn một POU theo tên trong CÂY POU.
@@ -338,6 +355,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   })
 
   it('ghi thuộc tính Program bằng payload v2 hẹp và chặn tên POU backend sẽ từ chối', async () => {
+    atFullShellWidth()
     const project = baseProject()
     project.draft!.programs.push({
       programId: 'program-1', name: 'ValidName', kind: 'PROGRAM', language: 'ST',
@@ -383,6 +401,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   })
 
   it('không báo lỗi tên legacy chưa sửa và vẫn cho lưu mô tả độc lập', async () => {
+    atFullShellWidth()
     const project = baseProject()
     project.draft!.programs.push({
       programId: 'program-1', objectId: 'object-1', name: 'Điều khiển AHU', kind: 'PROGRAM', language: 'ST', description: '',
@@ -451,6 +470,7 @@ describe('DesignWorkspacePage — Draft workspace (TASK-PROG-501)', () => {
   })
 
   it('PPI-001: Loại là identity chỉ đọc, hiện đủ ba kind và KHÔNG còn cảnh báo "chưa được Kiểm tra hỗ trợ"', async () => {
+    atFullShellWidth()
     const project = baseProject()
     project.draft!.programs.push({ programId: 'program-1', name: 'Chương trình A', kind: 'PROGRAM', language: 'ST', document: 'X := 1;' })
     project.draft!.task.programOrder = ['program-1']
@@ -1895,6 +1915,7 @@ describe('DesignWorkspacePage — lối vào `Cấu hình chạy` (#675)', () =>
   }
 
   it('AC-675-2: bấm `Cấu hình chạy` mở `?tab=execution` và GIỮ NGUYÊN `project` lẫn `pou`', async () => {
+    atFullShellWidth()
     projectWithStProgram()
     renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=EDIT')
     await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
@@ -2018,6 +2039,7 @@ describe('LỖI #5 & #6 — userPouInterfaces memoization & objectId exclusion',
   })
 
   it('[LỖI #5] bọc useMemo cho userPouInterfacesFromDraft để không sinh mảng mới mỗi lần render', async () => {
+    atFullShellWidth()
     const project = baseProject()
     project.draft!.programs.push({
       programId: 'program-1', objectId: 'object-1', name: 'AHU_MAIN', kind: 'PROGRAM', language: 'ST',
@@ -2048,13 +2070,16 @@ describe('LỖI #5 & #6 — userPouInterfaces memoization & objectId exclusion',
   })
 })
 
-/* `#765` — hồi quy e2e mà jsdom từng không thấy, khoá lại ở tầng unit.
+/* `#765` — hai hồi quy e2e mà jsdom từng không thấy, khoá lại ở tầng unit.
  *
- * Dò phiên mô phỏng đang sống (`GET …/sessions/active`) chỉ được chạy ở
- * SIMULATE của thiết bị có công bố mô phỏng. Bản trước dò ở MỌI chế độ, nên
- * mỗi lần mở trang Chương trình trên thiết bị không có worker là một `409`
- * trong console. jsdom không ghi lỗi console của trình duyệt, nên các ca ở
- * đây đếm REQUEST thay vì đếm dòng lỗi. */
+ * 1. Dải `compact dock` 1024–1279 px (`nfr.viewport.compactDockMinWidthPx`):
+ *    bốn track cố định cộng lại 966 px trong khi lưới chỉ còn 762 px, nên cả
+ *    tài liệu tràn ngang 162 px. Inspector phải là khay nổi ở dải này.
+ * 2. Dò phiên mô phỏng đang sống (`GET …/sessions/active`) chỉ được chạy ở
+ *    SIMULATE của thiết bị có công bố mô phỏng. Bản trước dò ở MỌI chế độ, nên
+ *    mỗi lần mở trang Chương trình trên thiết bị không có worker là một `409`
+ *    trong console. jsdom không ghi lỗi console của trình duyệt, nên các ca ở
+ *    đây đếm REQUEST thay vì đếm dòng lỗi. */
 function projectWithOneStPou() {
   const project = baseProject()
   project.draft!.programs.push({
@@ -2064,6 +2089,55 @@ function projectWithOneStPou() {
   project.draft!.task.programOrder = ['program-1']
   return project
 }
+
+describe('PGM-02 — compact dock 1024–1279 px: Inspector là khay nổi (#765)', () => {
+  function mockStProject() {
+    const project = projectWithOneStPou()
+    client.request.mockImplementation((operationId: string) => {
+      if (operationId === 'getProgrammingCapabilities') return Promise.resolve(deviceCapabilities())
+      if (operationId === 'getProgrammingProject') return Promise.resolve(project)
+      if (operationId === 'getProgrammingPointCatalog') return Promise.resolve({ items: [] })
+      throw new Error(`unexpected operation ${operationId}`)
+    })
+  }
+
+  it('ở 1024 px Inspector của POU ST không chiếm track rộng, mở bằng nút và Escape trả focus về nút', async () => {
+    mockStProject()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=EDIT')
+    await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+
+    /* Track Inspector chỉ còn thanh ray 44 px — đó là 212 px mà bản trước lấy
+       mất của Editor và đẩy ra ngoài màn hình. */
+    expect(screen.getByTestId('programs-workspace').style.getPropertyValue('--pgm-inspector-width')).toBe('44px')
+    const slot = document.getElementById('programs-slot-inspector')
+    expect(slot).toHaveAttribute('hidden')
+
+    /* Nút mở nằm NGOÀI khay, trên đầu cột soạn thảo: khay đóng thì không có
+       gì trong nó để bấm. */
+    const opener = within(screen.getByTestId('programming-editor-column')).getByRole('button', { name: 'Mở Thuộc tính' })
+    expect(opener).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(opener)
+    expect(slot).not.toHaveAttribute('hidden')
+    expect(opener).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('inspector-column').className).toContain('md:fixed')
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(slot).toHaveAttribute('hidden'))
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+
+  it('từ 1280 px (full shell) Inspector của POU ST là CỘT mở sẵn, không có nút mở khay', async () => {
+    atFullShellWidth()
+    mockStProject()
+    renderWorkspace('/eng/programming/projects/project-1/design?pou=object-1&mode=EDIT')
+    await screen.findByLabelText<HTMLTextAreaElement>(/Mã nguồn ST/)
+
+    expect(screen.getByTestId('programs-workspace').style.getPropertyValue('--pgm-inspector-width')).not.toBe('44px')
+    expect(document.getElementById('programs-slot-inspector')).not.toHaveAttribute('hidden')
+    expect(screen.getByTestId('inspector-column').className).not.toContain('md:fixed')
+    expect(within(screen.getByTestId('programming-editor-column')).queryByRole('button', { name: 'Mở Thuộc tính' })).toBeNull()
+  })
+})
 
 describe('PGM-02 — dò phiên mô phỏng đang sống chỉ ở SIMULATE có capability (#765)', () => {
   function simulationCapability() {
