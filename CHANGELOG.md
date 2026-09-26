@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### Fixed — Cổng layout xanh lại sau PR #757 (gofmt, 2026-09-26)
+
+- Phạm vi: `apps/web-api/internal/app/shm_reader.go`, `apps/web-api/internal/programming/application/{operations.go,operations_test.go}`.
+- Ba file vào main khi chưa chạy gofmt làm `verify-project.sh --component layout` exit 1 và 3 test `test_programming_production_tool_gate` FAIL. Đã `gofmt -w`, không đổi logic. Kiểm chứng: layout exit 0, pytest `tests/integration` 40 PASS / 14 skip.
+
 ### Fixed — Check không còn treo 30 s rồi báo `ST-WORKER-CRASH` khi tool ST lệch profile với web (F12, Issue #758, 2026-09-26)
 
 - Phạm vi: `apps/web-api/internal/programming/compiler/{toolchain.go,toolchain_test.go,runner.go}`, `apps/web-api/internal/programming/application/{checks.go,checks_toolchain_test.go}`, `apps/web-api/internal/app/main.go`; `contracts/programming/error_catalog_v1.json` 1.12.0→1.13.0 (+`ST-WORKER-TOOLCHAIN`) và các file sinh (Go/TS/C++), manifest, `g1_contract_join_v1.json`; `tests/integration/test_programming_error_catalog.py`; `docs/03_implementation/DEPLOY_FOXLINX.md`, `.claude/skills/foxlinx-deploy/SKILL.md`.
