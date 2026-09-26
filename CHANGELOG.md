@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### Fixed — Cổng FE trên main xanh lại: build/lint (#762) và 35 ca e2e Programming mock (#765) (2026-09-26)
+
+- Phạm vi: `apps/web-ui/src/features/programming/{simulation/{SimulateWorkspace.tsx,useSimulation.ts},design/{DesignWorkspacePage.tsx,DesignWorkspacePage.test.tsx,editor/EditorPane.tsx},layout/useProgrammingViewport.ts,fbd/{layout.ts,layout.test.ts,StructuredFbdEditor.tsx,StructuredFbdEditor.test.tsx}}`, `apps/web-ui/e2e/programming.spec.ts`. Không đổi `contracts/**`, không đổi backend.
+- **#762 — `npm run build` exit 2, `npm run lint` exit 1 trên `baf6a86c`.** Vẫn đỏ sau #761/#764 (vitest đã xanh 3455/3455). Ba lỗi `tsc` ở `SimulateWorkspace.tsx`: import kiểu không tồn tại `ProgrammingDocumentProgram` (đúng là `ProgrammingProgram`) và module `../fbd/types` (đúng là `../fbd/model`), cùng `draftRevisionId` có thể `null` trong băng "phiên cũ". Hai lỗi lint: `currentSession` thừa ở `DesignWorkspacePage.tsx` và `OBSERVATION_POLL_MS` thừa ở `useSimulation.ts`. `currentSession` thừa vì `a33769b7` gỡ biến `simulationSourceRevisionId` làm workbench đọc bản Check mới nhất thay cho bản mà phiên đang chạy; sửa bằng cách đọc lại bản của phiên khi nó khác bản Check mới nhất, và giữ `contentHash` để mở phiên theo bản Check mới nhất. `OBSERVATION_POLL_MS` trở lại làm nhịp cơ sở của `getPollInterval`.
+- **#765 — e2e: 35 FAIL / 104 PASS / 34 skip trên `baf6a86c`.** Issue ghi 15 FAIL trên `8b355393`; từ đó main đỏ thêm 20 ca. Chia theo nguyên nhân:
+  - *Lỗi sản phẩm, sửa sản phẩm:*
+    - (a) 22 ca đỏ vì console có `409 …/simulation/sessions/active`. `4b30299a` cho `useSimulation` dò phiên đang sống ở MỌI chế độ, kể cả trên thiết bị không công bố mô phỏng. Nay chỉ dò ở SIMULATE, khi thiết bị có capability và client chưa giữ phiên nào.
+    - (b) Tràn ngang 162 px ở `compact dock` 1024 px (document 1186 px), 2 ca. Nguyên nhân: rail 220 px chừa cho lưới 762 px, nhưng bốn track cố định cộng lại 966 px. Theo DDD PGM-02 §7.5 và `nfr.viewport.fullShellMinWidthPx = 1280`, Inspector của mọi POU nay là khay nổi dưới 1280 px, giống FBD dưới 1440 px. Ngưỡng do `useMinWidth(PROGRAMMING_FULL_SHELL_MIN_WIDTH_PX)` quyết, không dùng biến thể Tailwind.
+    - (c) `TC-FBD-USABLE-001`: dây giữ `0/512`. `99f4ae8f` đặt khối mới ở tâm khung nhìn nhưng không tránh khối đã có, nên bốn khối chồng khít một chỗ và cổng bị khối khác che. Hàm mới `findFreeNodePosition` tìm chỗ trống gần tâm (ưu tiên sang phải rồi xuống dưới, bám lưới 16 px).
+  - *Test lạc hậu so với thay đổi UI có chủ đích, sửa test (căn cứ ghi trong commit):*
+    - Watch là cột thường trực chứ không còn là tab (`e0c80723`, unit `TC-WBENCH-TABS-3`). Khay có năm tab (`c77e0064`). Lệnh gói ở header đổi tên thành `Build`, và `Kiểm tra` ở toolbar là lệnh kiểm tra POU cục bộ (`c77e0064`). Tạo POU có hộp thoại đặt tên (`af6becd3` sửa `createPou` nhưng bỏ sót nhánh bàn phím của UJ-PROG). Luồng quan sát mô phỏng qua `…/ws/simulation` (`73674477`) nay được mock bằng regex vì URL có `?sessionId`.
+    - `TC-FBD-NAV-001` dựng sẵn một sơ đồ rộng 25 khối, không soạn bằng Insert nữa. Từ `99f4ae8f`, khối mới không còn trải thành một hàng dài.
+  - Không xoá ca nào, không `skip`, không nới assertion. `DEV-PROG-001` nay khoá cả tên năm tab. Ca T59-816 khoá "dò phiên đúng một lần"; phép bỏ qua console chỉ áp cho đúng path `…/sessions/active`.
+- **Unit mới:** 5 ca ở `DesignWorkspacePage.test.tsx` (compact dock và cổng dò phiên), 5 ca `findFreeNodePosition`, 1 ca "ba khối không chồng nhau". Phép thử ngược: tiêm lại hành vi cũ thì 3 ca và 4 ca đỏ; đã khôi phục.
+- **Số đo thật (2026-09-26, nền `origin/main@baf6a86c`):**
+  - `npx vitest --run --environment jsdom src` → **266 file / 3466 test PASS**, exit 0 (nền 3455 + 11 ca mới).
+  - `npm run lint` → exit 0.
+  - `npm run build` → exit 0. `npm run build:release` → exit 0. Chunk `programming` 76,53 KiB gzip ≤ 165,00 KiB (R3).
+  - Bốn spec e2e Programming (`programming`, `programming-workspace-height`, `st-editor-alignment`, `programming-target-fault`) → **139 PASS / 0 FAIL / 34 skip**, exit 0 (trước: 104 / 35 / 34).
+  - `--repeat-each=3` cho `drawer (768px)`, `compact dock (1024px)` (EDIT và LIVE), T59-816 và `TC-FBD-NAV-001` → 39 PASS / 0 FAIL.
+  - `e2e/network-qa.spec.ts` → 1 PASS, exit 0. `scripts/verify-project.sh --component layout` → exit 0.
+- **Nợ có sẵn, ngoài phạm vi:** `npx tsc --noEmit -p tsconfig.e2e.json` báo 6 lỗi ở các dòng không sửa (Issue #712). `eslint e2e` báo 1 lỗi `no-empty-pattern` ở dòng từ `c10a30af`.
+
 ### Fixed — Khởi động core không còn lỡ base step do `ExecStartPost` chạy FIFO 80 trên CPU vòng quét (F16, 2026-09-26)
 
 - Phạm vi: `apps/core/application/runtime/{pid_file.hpp,scan_loop.cpp,scan_loop.hpp,base_step_pacer.hpp,test_scan_loop.cpp,test_cpu_idle_check.cpp}`, `apps/core/bootstrap/main.cpp`, `platform/systemd/mkddc-core.service`, `tests/integration/test_release_packaging_guard.py`; ADR-061 4.11; hồ sơ `EV-PROG-FBD-ST-MB-20260925`.
