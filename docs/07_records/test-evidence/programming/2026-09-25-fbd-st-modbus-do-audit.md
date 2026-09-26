@@ -65,7 +65,7 @@ Trong đó t3.5 bằng 3,5 ký tự khi baud ≤ 19 200 và cố định 1,75 ms
 
 Hệ quả: dù ở 115 200 baud, một DO Modbus cũng **không thể theo kịp chu kỳ 10 ms**. Đây là giới hạn vật lý của chuẩn truyền, không phải lỗi của bộ điều khiển, và vì vậy spec phải tách hai lớp. Ví dụ ở 9 600 baud: một DO đổi mỗi 100 ms tốn khoảng 29% bus; một module 8 DO ghi gộp bằng FC15 mỗi 100 ms tốn khoảng 30%.
 
-### G7 — đánh thức theo sự kiện (2026-09-26, chờ deploy + đo target)
+### G7 — đánh thức theo sự kiện (2026-09-26, đã deploy + đo target)
 
 Nhánh `feat/iobus-ext-event-wake-20260926`, tạo từ `main@baf6a86c`. Chỉ đổi `mkddc-iobus`: không đổi Core, không đổi ABI `plc_shm` v7.
 
@@ -116,6 +116,27 @@ Nhánh `feat/iobus-ext-event-wake-20260926`, tạo từ `main@baf6a86c`. Chỉ �
 2. CPU `mb-extcmd` trên A53: tìm tid theo `/proc/<pid>/task/*/comm`, lấy chênh lệch trường đầu của `schedstat` trong 60 s. Kỳ vọng ≤ 1 % một lõi.
 3. Không hồi quy đọc: `utilization`, p95 giao dịch và độ trễ readback coil → API giữ như trước, theo nhịp FC01.
 4. Hồi quy F06: Disable Program thì DO về `safe_value` như lần đo 17:47.
+
+**Đo trên target Foxlinx (2026-09-26 11:03–11:06 UTC).** Deploy `mkddc-iobus` `cafe5385…` (commit `b96c4469`, GLIBCXX ≤ 3.4.29, GLIBC ≤ 2.38; bo có glibc 2.41), sao lưu `/data/mkddc/deploy-backups/2026-09-26T1110Z-g7/`. `/proc/MainPID/exe` khớp, `NRestarts=0`; log `modbus_master.ext_watch_started period_ms=5` và `write_baseline generation=1 seeded=8`; `mb-extcmd` SCHED_OTHER trên CPU0–2. Core không restart. Lúc iobus restart, Core vào safe-state T3 (`stale=1`) rồi thoát trong cùng giây; `jitterViolationCount`, `missedBaseStepCount`, `missedReleaseCount`, `overrunCount` đều giữ 0.
+
+Đo thụ động trên Active `4206243c…` (#68 của actor khác, ghi FC05 vào coil 0–7 của CK-508 slave 4). Đọc Frame Monitor 30 lần, mỗi lần cách nhau 2 s, gộp theo (`at`, fc, addr); `start = at − elapsedUs`:
+
+| Chỉ số (≈ 65 s mỗi phía) | Trước G7 (`410b2f55…`) | Sau G7 (`cafe5385…`) |
+|---|---|---|
+| Khoảng lặng của bus ngay trước một FC05: trung vị / p99 / tối đa | 0,0 / 200,2 / 201,1 ms | 0,0 / **1,0** / **1,0** ms |
+| Bus bận | 61,9 % | 100 % |
+| FC05 mỗi giây | 16,00 | 29,84 |
+| Chu kỳ một loạt 8 coil (FC05 addr 0 → addr 0): trung vị | 500 ms | 268 ms |
+| Đọc FC01 / FC02 mỗi giây | 4,02 / 2,01 | 3,74 / 1,87 |
+| CPU `mb-extcmd` (`schedstat`, 64 s) | — | 370 ms, tức 0,58 % một lõi A53 |
+
+Diễn giải:
+- Trước G7, bus có những khoảng lặng tới 200 ms dù còn lệnh chờ. Đó đúng là trần ngủ của worker cũ, và FC05 bị khoá ở 8 coil × 2 Hz.
+- Sau G7, bus không còn lặng khi có lệnh chờ (tối đa 1,0 ms).
+- Program đổi coil nhanh hơn băng thông 9 600 baud chở được: 8 × 29 ms + đọc ≈ 268 ms mỗi loạt. Bus vì vậy bận 100 %, và nguyên tắc "giá trị mới nhất" gộp các giá trị trung gian, đúng spec I/O mở rộng.
+- Đọc không bị bỏ đói, chỉ giảm 7 % so với trước do trần `kMaxWritesBeforeRead = 4`.
+
+Phép đo trực tiếp Core → FC05 (mục 1 ở trên) và hồi quy F06 (mục 4) **NOT RUN**. Cả hai cần Commission hoặc Disable một Program của phiên này, tức là thay Active #68 của actor khác. F06 vẫn được khoá bằng `MbaExtRelease.*` trên host.
 
 **Chưa làm trong G7, và lý do:** gộp FC15 theo module thay đổi khung trên dây và cần xác nhận CK-508 hỗ trợ FC15. Nhóm poll readback nhanh cho actuator là thay đổi cấu hình/profile do BE sinh. Nâng baud cần datasheet CK-508 và cấu hình cả hai phía dây.
 
