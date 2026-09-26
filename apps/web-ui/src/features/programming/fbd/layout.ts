@@ -61,6 +61,80 @@ function getNodeHeight(
   return fbdNodeHeight(node, nodeSizes?.[node.id]?.height)
 }
 
+/** Hình chữ nhật của một khối trên mặt vẽ, theo toạ độ đồ thị. */
+export interface FbdNodeRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface FreeNodePositionOptions {
+  /** Khoảng hở tối thiểu giữa hai khối, px. */
+  gap?: number
+  /** Số vòng tìm quanh vị trí ưu tiên trước khi chịu đặt đè. */
+  maxRings?: number
+  /** Toạ độ nhỏ nhất được phép — mép trong của mặt vẽ. */
+  minCoordinate?: number
+  /** Bước lưới; bước dịch là bội số của nó để khối vẫn nằm trên lưới. */
+  snap?: number
+}
+
+function rectsOverlap(a: FbdNodeRect, b: FbdNodeRect, gap: number): boolean {
+  return a.x < b.x + b.width + gap
+    && a.x + a.width + gap > b.x
+    && a.y < b.y + b.height + gap
+    && a.y + a.height + gap > b.y
+}
+
+/**
+ * Chỗ đặt một khối MỚI: gần vị trí ưu tiên nhất mà KHÔNG đè lên khối nào.
+ *
+ * `99f4ae8f` đặt khối mới ở tâm khung nhìn — đúng ý người dùng (khối hiện ra
+ * ở chỗ họ đang nhìn) — nhưng không nhìn xem chỗ đó đã có gì. Thêm bốn khối
+ * liền nhau là bốn khối chồng khít một chỗ: cổng của khối dưới bị khối trên
+ * che, kéo dây vào đâu cũng trúng khối khác, và 25 khối chồng một điểm thì mặt
+ * vẽ không có gì để cuộn.
+ *
+ * Tìm theo vòng quanh vị trí ưu tiên, bước bằng kích thước khối cộng khoảng hở
+ * (làm tròn lên bội số lưới). Trong mỗi vòng ưu tiên sang PHẢI rồi XUỐNG dưới
+ * — chiều luồng tín hiệu FBD đọc từ trái sang phải — rồi mới tới trái/trên. Hết
+ * `maxRings` vòng mà vẫn kín thì trả vị trí ưu tiên: đặt đè vẫn hơn từ chối.
+ */
+export function findFreeNodePosition(
+  preferred: FbdPoint,
+  size: { width: number; height: number },
+  occupied: readonly FbdNodeRect[],
+  { gap = 16, maxRings = 12, minCoordinate = FBD_CANVAS_MARGIN, snap = 16 }: FreeNodePositionOptions = {},
+): FbdPoint {
+  const grid = snap > 0 ? snap : 1
+  const stepX = Math.ceil((size.width + gap) / grid) * grid
+  const stepY = Math.ceil((size.height + gap) / grid) * grid
+  const isFree = (point: FbdPoint) =>
+    point.x >= minCoordinate
+    && point.y >= minCoordinate
+    && !occupied.some((rect) => rectsOverlap({ ...point, ...size }, rect, gap))
+
+  for (let ring = 0; ring <= maxRings; ring += 1) {
+    const offsets: Array<[number, number]> = []
+    for (let dy = -ring; dy <= ring; dy += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) === ring) offsets.push([dx, dy])
+      }
+    }
+    offsets.sort(([ax, ay], [bx, by]) =>
+      Number(ax < 0) - Number(bx < 0)
+      || Number(ay < 0) - Number(by < 0)
+      || Math.abs(ay) - Math.abs(by)
+      || Math.abs(ax) - Math.abs(bx))
+    for (const [dx, dy] of offsets) {
+      const candidate = { x: preferred.x + dx * stepX, y: preferred.y + dy * stepY }
+      if (isFree(candidate)) return candidate
+    }
+  }
+  return preferred
+}
+
 export function computeAutoLayout(
   network: FbdNetwork,
   currentPositions: Record<string, FbdPoint> = {},

@@ -4,6 +4,8 @@ import {
   alignNodes,
   computeAutoLayout,
   distributeNodes,
+  findFreeNodePosition,
+  type FbdNodeRect,
 } from './layout'
 import { FBD_CANVAS_MARGIN, FBD_COLUMN_GAP, FBD_ROW_GAP, fbdNodeHeight } from './geometry'
 
@@ -297,5 +299,59 @@ describe('distributeNodes', () => {
     }
     const distributed = distributeNodes(twoNodes, positions, 'HORIZONTAL')
     expect(distributed).toEqual(positions)
+  })
+})
+
+/* `#765` — khối mới đặt ở tâm khung nhìn (`99f4ae8f`) nhưng không được chồng
+ * khít lên khối đã có: bốn khối liền nhau từng rơi đúng một chỗ, cổng khối dưới
+ * bị khối trên che và e2e `TC-FBD-USABLE-001` không kéo được dây nào. */
+describe('findFreeNodePosition', () => {
+  const size = { width: 168, height: 92 }
+  const overlaps = (a: FbdNodeRect, b: FbdNodeRect) =>
+    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+
+  it('mặt vẽ trống thì giữ đúng vị trí ưu tiên', () => {
+    expect(findFreeNodePosition({ x: 320, y: 256 }, size, [])).toEqual({ x: 320, y: 256 })
+  })
+
+  it('vị trí ưu tiên đã có khối thì dời sang PHẢI trước, giữ trên lưới 16 px', () => {
+    const occupied = [{ x: 320, y: 256, ...size }]
+    const point = findFreeNodePosition({ x: 320, y: 256 }, size, occupied)
+    expect(point.y).toBe(256)
+    expect(point.x).toBeGreaterThan(320 + size.width)
+    expect(point.x % 16).toBe(0)
+    expect(overlaps({ ...point, ...size }, occupied[0])).toBe(false)
+  })
+
+  it('25 lần thêm liền nhau ở cùng một tâm cho 25 khối không chồng nhau', () => {
+    const placed: FbdNodeRect[] = []
+    for (let index = 0; index < 25; index += 1) {
+      const point = findFreeNodePosition({ x: 320, y: 256 }, size, placed)
+      placed.push({ ...point, ...size })
+    }
+    for (let a = 0; a < placed.length; a += 1) {
+      for (let b = a + 1; b < placed.length; b += 1) {
+        expect(overlaps(placed[a], placed[b]), `khối ${a} chồng khối ${b}`).toBe(false)
+      }
+    }
+    expect(placed.every((rect) => rect.x >= FBD_CANVAS_MARGIN && rect.y >= FBD_CANVAS_MARGIN)).toBe(true)
+  })
+
+  it('không đặt ra ngoài mép trong của mặt vẽ khi vòng tìm đi sang trái/lên trên', () => {
+    const occupied = [
+      { x: 24, y: 24, ...size },
+      { x: 24 + 192, y: 24, ...size },
+      { x: 24, y: 24 + 112, ...size },
+      { x: 24 + 192, y: 24 + 112, ...size },
+    ]
+    const point = findFreeNodePosition({ x: 24, y: 24 }, size, occupied, { snap: 8 })
+    expect(point.x).toBeGreaterThanOrEqual(FBD_CANVAS_MARGIN)
+    expect(point.y).toBeGreaterThanOrEqual(FBD_CANVAS_MARGIN)
+    expect(occupied.some((rect) => overlaps({ ...point, ...size }, rect))).toBe(false)
+  })
+
+  it('hết vòng tìm mà vẫn kín thì trả vị trí ưu tiên thay vì từ chối', () => {
+    const occupied = [{ x: -10_000, y: -10_000, width: 20_000, height: 20_000 }]
+    expect(findFreeNodePosition({ x: 320, y: 256 }, size, occupied, { maxRings: 2 })).toEqual({ x: 320, y: 256 })
   })
 })

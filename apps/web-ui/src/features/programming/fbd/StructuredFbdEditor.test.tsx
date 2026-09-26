@@ -7,7 +7,7 @@ import goldenJson from '../../../../../../contracts/programming/fbd/golden/ahu_f
 import { I18nProvider, useI18n } from '../../../shared/i18n'
 import { StructuredFbdEditor } from './StructuredFbdEditor'
 import { FbdNodeInspector } from './FbdNodeInspector'
-import { buildFbdNetworkGeometry } from './geometry'
+import { buildFbdNetworkGeometry, fbdNodeAutoWidth, fbdNodeHeight } from './geometry'
 import type { FbdNodeEditorTarget } from './nodeEditor'
 import type { FbdDocument } from './model'
 import type { UserPouInterface } from './userPou'
@@ -242,6 +242,30 @@ describe('StructuredFbdEditor — Palette (WP-05)', () => {
     expect(pos!.y % 16).toBe(0)
     expect(pos!.x).toBeGreaterThanOrEqual(24)
     expect(pos!.y).toBeGreaterThanOrEqual(24)
+  })
+
+  it('thêm ba khối liền nhau KHÔNG chồng khít lên nhau ở tâm khung nhìn (#765)', async () => {
+    const { onChange } = renderEditor(golden())
+    fireEvent.change(screen.getByLabelText(/^Block$|^Khối$/), { target: { value: 'OR' } })
+    for (let index = 0; index < 3; index += 1) {
+      fireEvent.click(screen.getByRole('button', { name: /Add block|Thêm khối/ }))
+      await waitFor(() => expect(onChange.mock.calls.length).toBeGreaterThanOrEqual(index + 1))
+    }
+    const changed = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as FbdDocument
+    const added = changed.networks[0].nodes.filter((node) => node.typeRef === 'OR')
+    expect(added).toHaveLength(3)
+    const rects = added.map((node) => ({
+      ...changed.layout!.nodes[node.id],
+      width: fbdNodeAutoWidth(node),
+      height: fbdNodeHeight(node),
+    }))
+    for (let a = 0; a < rects.length; a += 1) {
+      for (let b = a + 1; b < rects.length; b += 1) {
+        const overlap = rects[a].x < rects[b].x + rects[b].width && rects[a].x + rects[a].width > rects[b].x
+          && rects[a].y < rects[b].y + rects[b].height && rects[a].y + rects[a].height > rects[b].y
+        expect(overlap, `khối ${a} chồng khối ${b}: ${JSON.stringify(rects)}`).toBe(false)
+      }
+    }
   })
 
   it('Inspector FUNCTION_BLOCK cho sửa instance + RETAIN', async () => {
