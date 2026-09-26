@@ -391,12 +391,28 @@ export function DesignWorkspacePage({
    * khai cổng nào): chỉ cái sau mới là một câu trả lời. */
   const checkSymbols = latestCheckResult.data?.symbols
   const checkState = latestCheckResult.data?.state ?? latestCheck?.state ?? null
-  /* Revision mà PHIÊN đang mở đã niêm phong — khác `simulateRevisionId` (bản
-   * Check đạt gần nhất): một phiên đang chạy có thể neo vào bản cũ hơn nếu
-   * người dùng vừa lưu và Check thêm một lần nữa. Workbench phải nói theo
-   * phiên, không theo bản mới nhất. */
+  /* Hai Revision trả lời hai câu hỏi khác nhau ở SIMULATE, nên KHÔNG gộp:
+   *
+   * - `simulateRevisionId` (bản Check đạt gần nhất) là bản mà nút mở phiên sẽ
+   *   niêm phong. `startSimulation` cần `contentHash` của CHÍNH bản đó — gửi
+   *   hash của bản khác kèm id này là tự vấp `PRG-SIM-SAVE-REQUIRED`, đúng lúc
+   *   người dùng bấm `Mô phỏng bản nháp mới` khi phiên cũ còn chạy.
+   * - Revision mà PHIÊN đang mở đã niêm phong có thể khác bản trên nếu người
+   *   dùng vừa lưu và Check thêm một lần nữa. Workbench (Tìm kiếm, Tham chiếu,
+   *   nhãn `Bản đã niêm phong`) phải nói theo phiên, không theo bản mới nhất —
+   *   cùng quy tắc `SimulateWorkspace` áp cho sơ đồ của nó.
+   *
+   * Bản của phiên chỉ được đọc riêng khi nó KHÁC bản Check mới nhất; trùng thì
+   * dùng lại đúng một lần đọc, để một endpoint không bị đọc hai lần cho hai câu
+   * trả lời có thể lệch nhau. */
   const simulateRevision = useProgrammingRevision(
     workspaceMode === 'SIMULATE' ? simulateRevisionId : null)
+  const sessionRevisionId = currentSession(simulation.slice)?.sourceDraftRevisionId ?? null
+  const sessionPinsOtherRevision = sessionRevisionId !== null && sessionRevisionId !== simulateRevisionId
+  const otherSessionRevision = useProgrammingRevision(
+    workspaceMode === 'SIMULATE' && sessionPinsOtherRevision ? sessionRevisionId : null)
+  const simulationSourceRevisionId = sessionPinsOtherRevision ? sessionRevisionId : simulateRevisionId
+  const simulationSourceRevision = sessionPinsOtherRevision ? otherSessionRevision : simulateRevision
   /* LIVE đọc bản đang chạy ở TRANG CHA rồi truyền xuống, cùng lý do như
    * `monitor`: hai lần đọc cùng một endpoint cho hai câu trả lời có thể lệch. */
   const liveRevision = useProgrammingRevision(
@@ -791,9 +807,9 @@ export function DesignWorkspacePage({
    * được đọc hai lần cho hai câu trả lời có thể lệch nhau. */
   const sealedSource = workspaceMode === 'SIMULATE'
     ? activeProgramSource({
-        activeRevisionId: simulateRevisionId,
-        status: simulateRevision.status,
-        revision: simulateRevision.data,
+        activeRevisionId: simulationSourceRevisionId,
+        status: simulationSourceRevision.status,
+        revision: simulationSourceRevision.data,
         objectId: selectedObjectId ?? null,
       })
     : workspaceMode === 'LIVE'

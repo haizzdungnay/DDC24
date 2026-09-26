@@ -55,6 +55,8 @@ function simWsProtocols(token?: string): string[] {
   return token ? [WS_SUBPROTOCOL, WS_TOKEN_SUBPROTOCOL_PREFIX + token] : [WS_SUBPROTOCOL];
 }
 
+/** Nhịp đọc quan sát ở tốc độ thường khi không có WebSocket. Tốc độ cao hơn
+ *  rút ngắn nhịp (xem `getPollInterval`), nhưng không bao giờ giãn quá mốc này. */
 const OBSERVATION_POLL_MS = 150
 
 export interface SimulationController {
@@ -358,7 +360,7 @@ export function useSimulation(): SimulationController {
       const currentSpeed = session?.speed ?? 1
       if (currentSpeed >= 60) return 40
       if (currentSpeed >= 10) return 80
-      return 150
+      return OBSERVATION_POLL_MS
     }
 
     async function poll() {

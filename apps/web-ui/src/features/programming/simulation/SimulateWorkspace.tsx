@@ -16,8 +16,8 @@ import {
   type SimulationInputDescriptor,
   type SimulationSlice,
 } from './simulationSession'
-import type { ProgrammingDocumentProgram, ProgrammingSimulationCapability } from '../model/types'
-import type { FbdDocument } from '../fbd/types'
+import type { ProgrammingProgram, ProgrammingSimulationCapability } from '../model/types'
+import type { FbdDocument } from '../fbd/model'
 
 /**
  * `T59-815` / `PGM02-V22-WP-08` — bề mặt SIMULATE.
@@ -58,7 +58,7 @@ export function SimulateWorkspace({
   draftRevisionId: string | null
   /** Phán quyết capability của phiên, đã gồm thu hồi HTTP 403. */
   allowMutation?: boolean
-  program?: ProgrammingDocumentProgram
+  program?: ProgrammingProgram
   onStart: () => void
   onAction: (action: SimulationAction, speed?: number, baseTickMs?: number) => void
   onSetInput: (descriptor: SimulationInputDescriptor, raw: string) => void
@@ -254,7 +254,10 @@ export function SimulateWorkspace({
         isStaleSession={isStaleSession}
       />
 
-      {isStaleSession && (
+      {/* `isStaleSession` đã hàm ý `draftRevisionId !== null`, nhưng TypeScript
+        * không thu hẹp kiểu qua `Boolean(...)`; nói lại điều kiện ở đây thay vì
+        * ép `!` để một lần sửa `isStaleSession` sau này không thành lỗi runtime. */}
+      {isStaleSession && draftRevisionId !== null && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
           <div>
             <span className="font-semibold">{pick('Đang chạy phiên mô phỏng của bản cũ:', 'Running simulation of previous revision:')}</span>{' '}
