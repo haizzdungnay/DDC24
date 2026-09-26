@@ -46,7 +46,7 @@ Chủ sở hữu chốt ngày 2026-09-25. **Vi phạm bất kỳ tiêu chí nào
 | Logic Core | Chu kỳ 1000 ms, thời gian chạy | FBD 5,8–7,0 µs; ST 2,0–6,1 µs; lỡ 16,7–22,2% release | Chạy nhanh nhưng lỡ nhịp (F01) |
 | Lệnh FC05 trên RS-485 | Thời gian một giao dịch | Trung vị 29,0 ms, tối đa 34,8 ms; 234/234 ACK; 0 timeout/CRC | PASS lớp truyền |
 | Bus 9600 8N1 | Mức bận | 20,7% khi 2 DO đổi mỗi giây (nền poll 15,9%) | PASS |
-| Core → FC05 | Độ trễ từ lúc Program chạy tới lúc phát lệnh | Điển hình ~377 ms (luồng `fb-publish` quét lệnh mỗi 100 ms, luồng bus tỉnh tối đa mỗi 200 ms) | Ghi nhận; tối ưu ở G7 |
+| Core → FC05 | Độ trễ từ lúc Program chạy tới lúc phát lệnh | Điển hình ~377 ms (luồng `fb-publish` quét lệnh mỗi 100 ms, luồng bus tỉnh tối đa mỗi 200 ms) | Ghi nhận trên mã cũ. G7 đã sửa trong mã (mục "G7 — đánh thức theo sự kiện" ngay dưới): lý thuyết ≤ 5 ms phát hiện + t_tx + thời gian bus bận. **Chờ deploy + đo target** |
 | Readback coil → API | Từ lúc có FC05 tới lúc API thấy giá trị mới | Trung vị 712 ms, p95 ~1,8 s, tối đa ~2 s (FC01 poll mỗi 1000 ms) | PASS chức năng |
 | Đầu ra vật lý | Mức điện tại tiếp điểm relay | Không có dụng cụ đo | **NOT RUN**, không phải HIL |
 
@@ -64,6 +64,60 @@ Trong đó t3.5 bằng 3,5 ký tự khi baud ≤ 19 200 và cố định 1,75 ms
 | 115 200 | ~10 ms | ~100 giao dịch/s | Ước lượng; cần datasheet CK-508 |
 
 Hệ quả: dù ở 115 200 baud, một DO Modbus cũng **không thể theo kịp chu kỳ 10 ms**. Đây là giới hạn vật lý của chuẩn truyền, không phải lỗi của bộ điều khiển, và vì vậy spec phải tách hai lớp. Ví dụ ở 9 600 baud: một DO đổi mỗi 100 ms tốn khoảng 29% bus; một module 8 DO ghi gộp bằng FC15 mỗi 100 ms tốn khoảng 30%.
+
+### G7 — đánh thức theo sự kiện (2026-09-26, chờ deploy + đo target)
+
+Nhánh `feat/iobus-ext-event-wake-20260926`, tạo từ `main@baf6a86c`. Chỉ đổi `mkddc-iobus`: không đổi Core, không đổi ABI `plc_shm` v7.
+
+**Đường trễ đọc từ mã cũ (`baf6a86c`):**
+
+| Chặng | Mã cũ | Chỗ trong mã |
+|---|---|---|
+| Core đổi `ext_cmd_seq` → iobus phát hiện | Vòng `fb-publish` chạy `drain_ext_writes`, `modbus_tcp.poll_once`, publish rồi `sleep_for(100 ms)`; mỗi vòng `shm_open` + `mmap` + `munmap`. Trễ 0…100 ms cộng thời gian vòng; TCP poll không có trần nếu slave TCP treo kết nối | `apps/iobus/bootstrap/main.cpp`, luồng `fb-publish` |
+| Hàng đợi → worker thức | `run_loop` ngủ `sleep_for(min(hạn đọc kế, 200 ms))`; lệnh mới không đánh thức ai: 0…200 ms | `bus_worker.cpp`, `run_loop` |
+| Worker thức → FC05 | Lệnh ghi đi SAU mọi lượt đọc tới hạn của lượt đó (`ISS-MBW-02` chỉ phát nốt sau vòng đọc): cộng Σ t_đọc của các slave tới hạn | `bus_worker.cpp`, `poll_once` |
+| Tổng, bus rảnh, 9 600 baud | Xấu nhất ≈ 100 + 200 + 29 ≈ 330 ms; đo trên bo điển hình ~377 ms | Bảng "Tách lớp" |
+
+**Đã sửa:**
+
+1. **(a) Phát hiện ≤ 10 ms.** Luồng mới `mb-extcmd` (SCHED_OTHER, không busy-spin) soi `ext_cmd_seq` mỗi `kExtCommandPollMs = 5 ms` với mốc tỉnh tuyệt đối. `PlcShmView` giữ ánh xạ `plc_shm` lâu dài, chỉ kiểm lại dev/inode mỗi 1 s và từ chối object nhỏ hơn `sizeof(kx_plc_shm_t)` (tránh SIGBUS). `drain_ext_writes` có đường nhanh: khi không có mốc chờ lấy, không có lệnh chờ thử lại, `ext_count` và mọi `ext_cmd_seq` của dải RTU trùng lần chụp trước thì trả về ngay, không chụp snapshot 24 KB. Magic sai thì bỏ trước khi chụp. Lệnh bị hàng đợi đầy từ chối được thử lại mỗi 100 ms, không mỗi 5 ms, để journal không ngập dòng ERROR. Chưa có bus nào thì luồng soi thưa 100 ms. Cầu nối ghi rời khỏi `fb-publish`, nên slave TCP treo không còn giữ lệnh RTU.
+   - *Vì sao vẫn phải poll:* `plc_shm` v7 không có kênh báo thức. Core ghi bằng seqlock; `seq` tăng mỗi scan 10 ms vì object table được ghi mỗi scan, nên nó không báo được "có lệnh EXT mới". Core cũng không gọi FUTEX_WAKE và không có eventfd. Thêm một kênh như vậy là đổi hợp đồng Core ↔ iobus và chèn syscall vào đường quét SCHED_FIFO của Core, tức đụng ngân sách C4.
+   - *Vì sao 5 ms:* trễ phát hiện xấu nhất bằng chu kỳ soi P cộng trễ đánh thức. P = 10 ms vượt spec ngay khi luồng lỡ nhịp dù chỉ 1 µs; P = 5 ms chừa 5 ms cho trễ đánh thức trên kernel non-RT.
+2. **(b) Worker thức theo sự kiện.** `BusWorker::run_loop` ngủ trên `condition_variable`. `enqueue_write`, `probe_read` và `stop_workers` (qua `wake()`) đánh thức worker ngay. Trần 200 ms (`kWorkerMaxSleepMs`) giữ lại làm lưới an toàn cho lịch đọc.
+3. **(c) Ghi trước đọc, có trần.** Trước mỗi lượt đọc một slave, worker phát tối đa `kMaxWritesBeforeRead = 4` lệnh ghi đang chờ, lệnh cũ nhất trước. Nhờ trần này, lượt đọc tới hạn chỉ bị lùi tối đa 4 × t_tx (~116 ms ở 9 600 baud). Lệnh ghi tới thiết bị đã chết tốn t_tx = `timeout_ms` cho mỗi lần phát, nên độ lùi xấu nhất là 4 × `timeout_ms`.
+4. **(d) Giá trị mới nhất.** Giữ nguyên coalesce theo (slave, fc, register) của `enqueue_write`. Lệnh đang bay không bị ghi đè (`MBA-FW-04`).
+5. **Không đổi:** nhánh nhả F06 (`ext_release_safe`, `ext_release_hold`), mốc khởi động `MBA-FW-02`, kiểm danh tính slot, `MBA-FW-08`. Các test `MbaExtRelease.*`, `MbaWriteBaseline.*`, `MbaWriteQueue.*` và hai test `ISS-MBW-02` vẫn xanh.
+
+**Độ trễ lý thuyết trước/sau:**
+
+| Chặng | Trước | Sau |
+|---|---|---|
+| Phát hiện `ext_cmd_seq` | 0…100 ms + thời gian vòng `fb-publish` (gồm TCP poll) | 0…5 ms + trễ đánh thức SCHED_OTHER; spec ≤ 10 ms |
+| Hàng đợi → worker thức | 0…200 ms | Tức thời nếu worker rảnh; nếu đang giao dịch thì chờ hết lượt đọc của MỘT slave |
+| Chờ lượt đọc trong cùng lượt phục vụ | Σ t_đọc của mọi slave tới hạn | 0: ghi đi trước; có thể có tối đa 4 lệnh ghi cũ hơn xếp trước |
+| Tổng xấu nhất, bus rảnh, 9 600 baud | ≈ 330 ms | ≈ 5 + 29 ≈ 34 ms |
+| Tổng khi bus bận | + Σ t_đọc | + phần còn lại của một lượt đọc slave (số block × t_tx; slave lỗi thì × (1 + retry) × `timeout_ms`) |
+
+**Số đo trên host** (bản Release `build/fw`, 4 lượt chạy; slave libmodbus thật trên PTY 19 200; PTY không có thời gian truyền nên t_tx ≈ 0):
+
+| Phép đo | Mã cũ `baf6a86c` | Mã mới |
+|---|---|---|
+| Lệnh vào hàng đợi → slave nhận FC05, worker vừa ngủ 30 ms | 170,1–170,2 ms, 5/5 mẫu FAIL | 0,12–0,33 ms |
+| `stop_workers` | 170,4 ms, FAIL | 0,09–0,16 ms |
+| `probe_read` | 170,3 ms, FAIL | 0,18–0,34 ms |
+| Lệnh ghi chờ và lượt đọc tới hạn cùng lượt | Đọc trước, FAIL | Ghi trước |
+| `ext_cmd_seq` đổi → slave nhận FC05, đường đầy đủ, 12 mẫu lệch pha | Không đo được trên mã cũ: drain nằm trong `main` | Trung vị 2,84–2,95 ms, tối đa 4,83–5,08 ms |
+| CPU luồng `mb-extcmd` trong 500 ms | — | 100–101 lần tỉnh, 1 lần chụp snapshot, 29–40 µs mỗi lần tỉnh (0,59–0,82 % một lõi x86). Riêng chi phí nền của vòng `cv.wait_until` 5 ms không làm gì trên cùng máy là 32–36 µs mỗi lần |
+| Dòng lệnh ghi liên tục 600 ms, poll 40 ms | — | 9 984–14 416 lệnh ghi, 16 lượt đọc, khoảng cách đọc lớn nhất 40,1 ms |
+
+**Chờ deploy + đo target.** Phiên này không deploy vì soak 24 h của ADR-061 chạy tới 2026-09-27 06:47Z. Cách đo đề xuất:
+
+1. Chạy lại Program FBD/ST DO của audit ở 1000 ms và 100 ms. Lấy mốc Core đổi lệnh (mốc release của Program trong trace, hoặc `setpoint` của slot `ext`) và mốc FC05 từ Frame Monitor. `at_ms` của Frame Monitor là đồng hồ tường lúc giao dịch XONG, nên trừ `elapsed_us` để ra lúc bắt đầu. Cổng: p99 của Core → bắt đầu FC05 ≤ 10 ms + thời gian bus bận, và không lệnh nào vượt 10 ms + t_tx + một lượt đọc slave.
+2. CPU `mb-extcmd` trên A53: tìm tid theo `/proc/<pid>/task/*/comm`, lấy chênh lệch trường đầu của `schedstat` trong 60 s. Kỳ vọng ≤ 1 % một lõi.
+3. Không hồi quy đọc: `utilization`, p95 giao dịch và độ trễ readback coil → API giữ như trước, theo nhịp FC01.
+4. Hồi quy F06: Disable Program thì DO về `safe_value` như lần đo 17:47.
+
+**Chưa làm trong G7, và lý do:** gộp FC15 theo module thay đổi khung trên dây và cần xác nhận CK-508 hỗ trợ FC15. Nhóm poll readback nhanh cho actuator là thay đổi cấu hình/profile do BE sinh. Nâng baud cần datasheet CK-508 và cấu hình cả hai phía dây.
 
 ## Nhật ký theo thời gian (UTC)
 
@@ -246,7 +300,7 @@ Nguyên tắc: làm như Siemens, **tách chu kỳ CPU khỏi thời gian cập 
 | G4 | Profile Rev B (ADR mới): `taskPeriodsMs=[10,50,100,500,1000,5000,10000,50000]`. Tập này tạo một chuỗi bội (mỗi chu kỳ chia hết chu kỳ kế, siêu chu kỳ 50 s). Ngân sách mỗi Task riêng (ví dụ Task 10 ms ≤ 2 ms); API/Check từ chối chu kỳ ngoài tập; profile id compiler mới; FE; đường chuyển Rev A → Rev B (30000 ms không còn trong tập) | G3 | C1: capabilities đúng; khai 5 ms và 30000 ms nhận 400 |
 | G5 | Đo và cảnh báo: bộ đếm jitter > 100 µs, overrun, missed release lộ ra API/health/alarm; cổng audit đọc thẳng các bộ đếm này | G1 | Số đếm khớp với phép đo `cyclictest`/dấu thời gian |
 | G6 | I/O cục bộ qua IOP/MCU trao đổi ở 10 ms. Hiện bo dùng Fake MCU nên **NOT RUN** | FW MCU thật | Đo điện (HIL) DO cục bộ đảo mỗi 10 ms: chu kỳ 10 ms ± 0,1 ms |
-| G7 | Spec I/O mở rộng riêng: công thức và bảng ở mục "Tách lớp"; đánh thức luồng bus theo sự kiện khi `ext_cmd_seq` đổi (thay cho quét 100 ms + trần ngủ 200 ms); gộp FC15 theo module; ưu tiên ghi hơn đọc; nhóm poll readback nhanh cho actuator; nâng baud nếu thiết bị hỗ trợ; ghi rõ nguyên tắc "giá trị mới nhất" | Độc lập với G2–G4 | Core → FC05 ≤ t_tx + thời gian bus bận; readback theo nhịp nhóm poll |
+| G7 | Spec I/O mở rộng riêng: công thức và bảng ở mục "Tách lớp"; đánh thức luồng bus theo sự kiện khi `ext_cmd_seq` đổi (thay cho quét 100 ms + trần ngủ 200 ms); gộp FC15 theo module; ưu tiên ghi hơn đọc; nhóm poll readback nhanh cho actuator; nâng baud nếu thiết bị hỗ trợ; ghi rõ nguyên tắc "giá trị mới nhất". **2026-09-26: đã làm trong mã** phần đánh thức theo sự kiện, ưu tiên ghi có trần và giữ "giá trị mới nhất" (mục "G7 — đánh thức theo sự kiện"); chờ deploy + đo target. Chưa làm: gộp FC15, nhóm poll readback nhanh, nâng baud | Độc lập với G2–G4 | Core → FC05 ≤ t_tx + thời gian bus bận; readback theo nhịp nhóm poll |
 
 Phương án dự phòng (không khuyến nghị): nếu không có kernel RT, chỉ ghi được "10 ms, jitter điển hình ≤ 25 µs, 99,7% ≤ 100 µs, tối đa đo được 470 µs". Cách ghi này **không đạt** C4 mà chủ sở hữu đã chốt.
 
