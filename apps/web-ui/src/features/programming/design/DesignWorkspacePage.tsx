@@ -395,10 +395,8 @@ export function DesignWorkspacePage({
    * Check đạt gần nhất): một phiên đang chạy có thể neo vào bản cũ hơn nếu
    * người dùng vừa lưu và Check thêm một lần nữa. Workbench phải nói theo
    * phiên, không theo bản mới nhất. */
-  const simulationSourceRevisionId = currentSession(simulation.slice)?.sourceDraftRevisionId
-    ?? simulateRevisionId
   const simulateRevision = useProgrammingRevision(
-    workspaceMode === 'SIMULATE' ? simulationSourceRevisionId : null)
+    workspaceMode === 'SIMULATE' ? simulateRevisionId : null)
   /* LIVE đọc bản đang chạy ở TRANG CHA rồi truyền xuống, cùng lý do như
    * `monitor`: hai lần đọc cùng một endpoint cho hai câu trả lời có thể lệch. */
   const liveRevision = useProgrammingRevision(
@@ -1077,6 +1075,7 @@ export function DesignWorkspacePage({
             slice={simulation.slice}
             inputs={simulation.inputs}
             objectId={selectedObjectId}
+            program={selectedProgram}
             draftDirty={draftDirty}
             draftRevisionId={simulateRevisionId}
             allowMutation={canSimulate}

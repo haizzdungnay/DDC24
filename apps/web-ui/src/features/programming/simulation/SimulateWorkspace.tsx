@@ -16,7 +16,8 @@ import {
   type SimulationInputDescriptor,
   type SimulationSlice,
 } from './simulationSession'
-import type { ProgrammingSimulationCapability } from '../model/types'
+import type { ProgrammingDocumentProgram, ProgrammingSimulationCapability } from '../model/types'
+import type { FbdDocument } from '../fbd/types'
 
 /**
  * `T59-815` / `PGM02-V22-WP-08` — bề mặt SIMULATE.
@@ -40,6 +41,7 @@ export function SimulateWorkspace({
   draftDirty,
   draftRevisionId,
   allowMutation = true,
+  program,
   onStart,
   onAction,
   onSetInput,
@@ -56,6 +58,7 @@ export function SimulateWorkspace({
   draftRevisionId: string | null
   /** Phán quyết capability của phiên, đã gồm thu hồi HTTP 403. */
   allowMutation?: boolean
+  program?: ProgrammingDocumentProgram
   onStart: () => void
   onAction: (action: SimulationAction, speed?: number) => void
   onSetInput: (descriptor: SimulationInputDescriptor, raw: string) => void
@@ -67,20 +70,53 @@ export function SimulateWorkspace({
   const supported = isSimulationSupported(capability)
   const canControl = allowMutation && canControlSimulation(capability, role)
 
-  const revision = useProgrammingRevision(session?.sourceDraftRevisionId ?? null)
+  const isStaleSession = Boolean(
+    session && draftRevisionId && session.sourceDraftRevisionId !== draftRevisionId,
+  )
+
+  const activeSimRevisionId = session?.sourceDraftRevisionId ?? draftRevisionId ?? null
+  const revision = useProgrammingRevision(activeSimRevisionId)
   const sealed = activeProgramSource({
-    activeRevisionId: session?.sourceDraftRevisionId ?? null,
+    activeRevisionId: activeSimRevisionId,
     status: revision.status,
     revision: revision.data,
     objectId: objectId ?? null,
   })
+
+  const draftFbdDocument = useMemo(() => {
+    if (!program) return null
+    if (program.language === 'FBD') {
+      if (typeof program.document === 'object' && program.document !== null) {
+        return program.document as FbdDocument
+      }
+      if (typeof program.document === 'string') {
+        return parseLiveFbd(program.document)
+      }
+    }
+    return null
+  }, [program])
 
   const simulatedFbdDocument = useMemo(
     () => (sealed.source !== null && sealed.language === 'FBD' ? parseLiveFbd(sealed.source) : null),
     [sealed.language, sealed.source],
   )
 
+  const activeFbdDocument = useMemo(() => {
+    if (isStaleSession && draftFbdDocument) return draftFbdDocument
+    if (simulatedFbdDocument) return simulatedFbdDocument
+    return draftFbdDocument
+  }, [isStaleSession, draftFbdDocument, simulatedFbdDocument])
+
   const simulationOverlayState: StRuntimeOverlayState = useMemo(() => {
+    if (session === null) {
+      return {
+        status: 'unavailable',
+        reason: pick(
+          'Chưa mở phiên mô phỏng — nhấn [Mở phiên mô phỏng] để bắt đầu.',
+          'No simulation session open — click [Start simulation session] to begin.',
+        ),
+      }
+    }
     if (slice.frame === null) {
       return {
         status: 'unavailable',
@@ -109,7 +145,7 @@ export function SimulateWorkspace({
       status: 'ready',
       items,
     }
-  }, [slice.frame, objectId, pick])
+  }, [session, slice.frame, objectId, pick])
 
   if (!supported) {
     /* Thiết bị không công bố khả năng mô phỏng. Nói ra và DỪNG — không dựng
@@ -130,7 +166,16 @@ export function SimulateWorkspace({
   if (session === null) {
     return (
       <section aria-label={pick('Mô phỏng', 'Simulation')} className="space-y-2">
-        <SimulationControls slice={slice} canControl={canControl} onAction={onAction} onStop={onStop} onStopActive={onStopActive} />
+        <SimulationControls
+        slice={slice}
+        canControl={canControl}
+        onAction={onAction}
+        onStop={onStop}
+        onStopActive={onStopActive}
+        onStart={onStart}
+        canStart={draftRevisionId !== null && !draftDirty}
+        isStaleSession={isStaleSession}
+      />
         {draftDirty ? (
           /* Chặn ngay ở client cho người dùng biết sớm; server vẫn kiểm lại và
            * vẫn trả `PRG-SIM-SAVE-REQUIRED` nếu hash không khớp. Điểm quan
@@ -182,13 +227,57 @@ export function SimulateWorkspace({
             )}
           </div>
         )}
+
+        {activeFbdDocument !== null && (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <LiveFbdView
+              document={activeFbdDocument}
+              runtime={simulationOverlayState}
+            />
+          </div>
+        )}
       </section>
     )
   }
 
   return (
     <section aria-label={pick('Mô phỏng', 'Simulation')} className="flex min-h-0 flex-1 flex-col gap-3">
-      <SimulationControls slice={slice} canControl={canControl} onAction={onAction} onStop={onStop} onStopActive={onStopActive} />
+      <SimulationControls
+        slice={slice}
+        canControl={canControl}
+        onAction={onAction}
+        onStop={onStop}
+        onStopActive={onStopActive}
+        onStart={onStart}
+        canStart={draftRevisionId !== null && !draftDirty}
+        isStaleSession={isStaleSession}
+      />
+
+      {isStaleSession && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
+          <div>
+            <span className="font-semibold">{pick('Đang chạy phiên mô phỏng của bản cũ:', 'Running simulation of previous revision:')}</span>{' '}
+            <span className="font-mono">{session.sourceDraftRevisionId.slice(0, 8)}…</span>.{' '}
+            <span>{pick('Bản nháp mới nhất đã sẵn sàng:', 'Latest draft revision is ready:')}</span>{' '}
+            <span className="font-mono">{draftRevisionId.slice(0, 8)}…</span>.
+          </div>
+          <button
+            type="button"
+            onClick={onStart}
+            disabled={!canControl || slice.pending !== null}
+            className="rounded border border-[var(--c-warn-fg)] bg-[var(--c-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--c-warn-fg)] hover:opacity-80"
+          >
+            {pick('Mô phỏng bản nháp mới', 'Simulate latest draft')}
+          </button>
+        </div>
+      )}
+
+      {draftDirty && (
+        <p role="alert" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
+          {pick('Bản nháp còn thay đổi chưa lưu. Hãy Lưu (và chạy Kiểm tra) trước khi mô phỏng — mô phỏng luôn chạy trên bản đã lưu.',
+                'The draft has unsaved changes. Save it (and run Check) before simulating — simulation always runs the saved version.')}
+        </p>
+      )}
 
       {isTerminalState(session.state) && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface-2)] p-2 text-xs">
@@ -209,29 +298,19 @@ export function SimulateWorkspace({
         </div>
       )}
 
-      {sealed.source === null ? (
-        <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
-          {sealedSourceReason(pick, sealed.reason)}
-        </p>
-      ) : sealed.language === 'FBD' ? (
-        simulatedFbdDocument === null ? (
-          <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
-            {pick('Sơ đồ FBD của gói mô phỏng không đọc được.', 'The simulated package’s FBD diagram cannot be read.')}
-          </p>
-        ) : (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-              <LiveFbdView
-                document={simulatedFbdDocument}
-                runtime={simulationOverlayState}
-              />
-            </div>
-            <aside className="w-full shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:w-72 overflow-y-auto">
-              <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
-            </aside>
+      {activeFbdDocument !== null ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <LiveFbdView
+              document={activeFbdDocument}
+              runtime={simulationOverlayState}
+            />
           </div>
-        )
-      ) : (
+          <aside className="w-full shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] p-2 lg:w-72 overflow-y-auto">
+            <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
+          </aside>
+        </div>
+      ) : sealed.source !== null && sealed.language !== 'FBD' ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="space-y-2">
             <label className="block space-y-1">
@@ -252,6 +331,10 @@ export function SimulateWorkspace({
             <VirtualInputs inputs={inputs} slice={slice} canControl={canControl} onCommit={onSetInput} />
           </aside>
         </div>
+      ) : (
+        <p role="status" className="rounded-[var(--radius)] border border-[var(--c-warn-fg)] bg-[var(--c-warn-bg)] p-2 text-xs text-[var(--c-warn-fg)]">
+          {sealedSourceReason(pick, sealed.reason)}
+        </p>
       )}
 
       <StRuntimeValueOverlay
