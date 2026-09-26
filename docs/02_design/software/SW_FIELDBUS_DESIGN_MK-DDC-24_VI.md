@@ -12,6 +12,7 @@
 > | Một bus RS-485 / một master | [DDD-FW-MBRTU-001 §2–3](MODBUS_RTU_FW_SOM_DESIGN.md) — hai BusWorker độc lập (chờ `OD-MBRTU-001`) |
 > | Quality theo mô hình cũ, alarm E302/E303 là contract chất lượng | [DDD-DM-MBRTU-001 §6](MODBUS_RTU_DATA_MODEL.md) — GOOD/STALE/OFFLINE/BAD/CONFIG_ERROR + reason code |
 > | Ghi xuống slave từ "PLC/BMS đặt giá trị" | [DDD-FW-MBRTU-001 §8](MODBUS_RTU_FW_SOM_DESIGN.md) — write request/result qua core arbitration, không blind replay |
+> | Lệnh ghi xuống slave ở "vòng poll kế" (§5, §10.1, §10.5); iobus đọc `setpoint/dirty` không giữ seqlock và tự xoá `dirty` | [DDD-FW-MBRTU-001 §4.1, §8](MODBUS_RTU_FW_SOM_DESIGN.md) ghi chú As-Built G7 (2026-09-26) — iobus đọc bằng seqlock, KHÔNG ghi `plc_shm`; danh tính lệnh là `ext_cmd_seq` (`MBA-FW-08`); luồng `mb-extcmd` soi 5 ms, BusWorker thức theo sự kiện, ghi trước đọc có trần |
 > | `profile` là mô hình cấu hình do người dùng viết | [DDD-DM-MBRTU-001 §7.1](MODBUS_RTU_DATA_MODEL.md) — profile là artifact **dẫn xuất** do BE sinh |
 >
 > Bộ tài liệu thay thế đang `In Review`. Cho tới khi ADR-024 Accepted, cả hai bên

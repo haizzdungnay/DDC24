@@ -41,12 +41,21 @@ mkddc-iobus (một process)
 ├── thread: iop_main         SCHED_FIFO   chu kỳ 2 ms   — KHÔNG bị Modbus chạm vào
 ├── thread: fieldbus_rs485_1 SCHED_OTHER  event-driven  — BusWorker 1 (/dev/rs485-1 -> /dev/ttyS5)
 ├── thread: fieldbus_rs485_2 SCHED_OTHER  event-driven  — BusWorker 2 (/dev/rs485-2 -> /dev/ttyS1)
+├── thread: mb-extcmd        SCHED_OTHER  soi 5 ms      — cầu nối lệnh EXT Core → BusWorker (G7)
+├── thread: fb-publish       SCHED_OTHER  100 ms        — publish snapshot + Modbus TCP
 ├── thread: bacnet           SCHED_OTHER                — ngoài phạm vi
 └── thread: control          SCHED_OTHER                — nhận config/write qua UDS
 
 mkddc-core (một process)
 └── thread: scan_loop        SCHED_FIFO   chu kỳ cấu hình — nạp ext snapshot ở đầu scan
 ```
+
+> **As-Built G7 (2026-09-26, `EV-PROG-FBD-ST-MB-20260925`):** tên thread thật là
+> `mb-bus<N>` cho BusWorker. Cầu nối lệnh EXT (`drain_ext_writes`) chạy trên
+> `mb-extcmd`, soi `plc_shm.ext_cmd_seq` mỗi 5 ms. Trước G7 nó nằm trong vòng
+> `fb-publish` ngủ 100 ms, sau cả Modbus TCP poll. `plc_shm` v7 không có kênh báo
+> thức nên phải poll; lý do chọn 5 ms ghi ở `modbus_master.hpp`
+> (`kExtCommandPollMs`).
 
 **Cấu hình 2 Bus RS485 phần cứng trên Foxlinx SOM-DDC-24:**
 - **Bus 1 (`bus_id = 1`):** Đường link cứng `/dev/rs485-1` → `/dev/ttyS5` (Main RS485 Port).
@@ -104,6 +113,15 @@ loop:
   d.deadline = now + d.poll_interval_ms  # KHÔNG cộng dồn từ deadline cũ
 ```
 
+> **As-Built G7 (2026-09-26):** thứ tự đổi thành **ghi trước đọc, có trần**.
+> Trước mỗi lượt đọc một slave tới hạn, worker phát tối đa
+> `kMaxWritesBeforeRead = 4` lệnh ghi đang chờ, lệnh cũ nhất trước, của bất kỳ
+> slave nào. Hàng đợi rỗng thì không phát byte nào, và lượt ghi không chạm lịch
+> đọc (`ISS-MBW-02`). `control_wakeup` trong giả mã nay có thật: worker ngủ trên
+> condition variable và được đánh thức bởi lệnh ghi mới, probe và `stop`. Trần ngủ
+> 200 ms (`kWorkerMaxSleepMs`) chỉ còn là lưới an toàn. Trước G7 chính trần này
+> quyết định độ trễ ghi (0…200 ms), và lệnh ghi đi sau mọi lượt đọc tới hạn.
+
 Quy tắc bắt buộc:
 
 - **Earliest-deadline-first**, round-robin khi trùng deadline ⇒ không đói device.
@@ -159,6 +177,13 @@ Gộp các Point cùng `(device, function code)` có dải register **liền k�
 - Hàng đợi ghi **bounded** (mặc định 64 toàn hệ). Đầy ⇒ trả `QUEUE_FULL`, không drop im lặng.
   ⚠️ **chưa có** — `pending_writes_` là `std::vector` không giới hạn (gap F-FW-18).
 - Ghi cùng `(device, register)` chưa gửi được **coalesce** (giữ giá trị mới nhất, giữ `request_id` mới nhất, trả `SUPERSEDED` cho request cũ).
+  **As-Built ✅** — `BusWorker::enqueue_write`; mục đang bay không bị ghi đè
+  (`MBA-FW-04`). Đây là nguyên tắc "giá trị mới nhất tại lúc phát trên bus" của
+  spec I/O mở rộng (G7).
+- **Lệnh ghi mới là một sự kiện** (G7, 2026-09-26): `enqueue_write` đánh thức
+  worker ngay; lệnh không chờ trần ngủ. Ghi được ưu tiên hơn lượt đọc tới hạn
+  nhưng có trần `kMaxWritesBeforeRead` (§4.1), nên đọc không bị bỏ đói khi
+  Program đảo output nhanh hơn nhịp bus.
 - **Một lệnh ghi phải có vòng đời hữu hạn.** Bỏ hẳn khi vượt `kMaxWriteAttempts`
   (3 lần phát) **hoặc** quá `kWriteTtlMs` (30 s kể từ lúc enqueue), kèm log ERROR
   có `slave/fc/reg/value/attempts` và tăng counter `write_dropped`. **As-Built ✅**
@@ -263,6 +288,14 @@ nguồn có thẩm quyền (Web commissioning / core logic / schedule)
   → WriteResult{request_id, accepted|applied|rejected|timeout, exception, readback}
   → core → web → audit + UI
 ```
+
+> **As-Built (G7, 2026-09-26):** đường lệnh của Program đi qua `plc_shm` chứ chưa
+> qua UDS request/result (F-FW-06 còn mở): Core ghi `ext[i].setpoint/dirty` và
+> tăng `ext_cmd_seq[i]` → luồng `mb-extcmd` của iobus phát hiện trong ≤ 5 ms
+> (+ trễ đánh thức) → `BusWorker::enqueue_write` đánh thức worker → FC05/FC06/FC16
+> đi trước lượt đọc kế. Độ trễ lý thuyết Core → bắt đầu FC05 ≤ 5 ms + t_tx +
+> thời gian bus bận (trước G7: tới ~330 ms khi bus rảnh ở 9600 baud). Số đo và cách
+> đo target: `EV-PROG-FBD-ST-MB-20260925` mục "G7 — đánh thức theo sự kiện".
 
 ### 8.1 Chống nhiều nguồn cùng ghi
 
@@ -422,6 +455,7 @@ duy nhất cho việc đếm slot; fieldbus chạy priority thường và không
 | F-FW-06 / F-FW-15 request/result, readback | có mã, không nối | **MỞ** (`MBA-GAP-01`) |
 | F-FW-17 `deadline_miss`/`poll_duration` | chưa có | **MỞ** (`MBA-GAP-04`) |
 | Đồng thời `FieldbusMetrics` | không khoá — test abort 3/3 | ĐÓNG (`MBA-FW-03`) |
+| §4.1 `control_wakeup`, §8 độ trễ lệnh ghi (G7, audit `EV-PROG-FBD-ST-MB-20260925`) | cầu nối lệnh EXT quét 100 ms trong `fb-publish`; worker `sleep_for` trần 200 ms; ghi đi sau đọc — Core → FC05 ~377 ms trên bo | ĐÓNG trong mã, chờ đo target: `mb-extcmd` soi 5 ms, worker thức theo sự kiện, ghi trước đọc có trần 4 |
 
 ## 13. Test FW-SOM bắt buộc
 
@@ -448,6 +482,7 @@ Cột **Hiện trạng** đối chiếu với test thật trong repo tại `eade
 | TW-MBRTU-17 | target | 16 device/bus theo capacity, đo deadline miss và poll duration | ❌ chưa có — chặn bởi F-FW-17 (thiếu counter) và cửa sổ bảo trì board |
 | **TW-MBRTU-18** | unit | retry thật: `retry_attempts` khác `total_errors`; `offline_after_errors` độc lập | ✅ **mới** — `FieldbusConfig.RetryAndOfflineThresholdAreSeparateFields`, `PerDeviceRetryThreshold` |
 | **TW-MBRTU-19** | unit | E303 dùng cửa sổ trượt và re-arm được, không latch vĩnh viễn | ✅ **mới** — `FieldbusMetrics.E303ReArmsAfterCleanWindowWithoutOfflineReset` |
+| **TW-MBRTU-20** | integration (PTY) | G7: lệnh ghi, probe, `stop` đánh thức worker ngay; ghi trước đọc có trần 4; dòng ghi liên tục không bỏ đói đọc; `ext_cmd_seq` → FC05 ≤ 10 ms; luồng soi có trần CPU; bus bận thì chỉ phát giá trị mới nhất; `PlcShmView` ánh xạ lại khi object bị tạo lại | ✅ **mới 2026-09-26** — `test_bus_worker_wake.cpp` (5 test, đỏ trên `baf6a86c`), `test_ext_command_watch.cpp` (11 test). Đo target: chờ deploy |
 
 Host/simulator pass **không** đóng gate phần cứng thật (`VR-MBRTU-011`).
 
@@ -458,3 +493,4 @@ Host/simulator pass **không** đóng gate phần cứng thật (`VR-MBRTU-011`)
 | 0.1 | 2026-08-04 | In Review | Tạo FW-SOM runtime design: ownership, thread model, scheduler, codec, quality, write path, reload, capacity và 16 gap As-Built |
 | 0.2 | 2026-08-05 | In Review | Đối chiếu lại với `eade4e5` sau Track A. **Thay thế:** (a) §2 hai BusWorker → Rev A một worker, giữ kiến trúc *n* worker (Đ-01); (b) §4.1 thêm nhãn As-Built cho EDF/probe/retry và §4.1a tách `retry_count` khỏi `offline_after_errors` (Đ-05); (c) §4.3 thêm luật vòng đời write hữu hạn 3 lần/30 s và hai counter `write_failed`/`write_dropped`; (d) §11 capacity: 1 bus, mục tiêu ≥256 Point kèm bảng tác động ABI (Đ-07), bỏ tham chiếu sai board RK3566; (e) §12 tách thành 12.1 gap còn lại và 12.2 bảy nhóm đã đóng — hạ F-FW-01 xuống P2, hạ F-FW-07 xuống P1 (đóng một phần), thêm F-FW-17..F-FW-20; (f) §13 gắn từng TW-MBRTU với test thật trong repo, thêm TW-MBRTU-18/19 |
 | 0.2 (+§12.3) | 2026-09-25 | Active | Thêm §12.3 đối chiếu As-Built theo audit Modbus 2026-09-25; không đổi nội dung thiết kế đã duyệt |
+| 0.2 (+G7) | 2026-09-26 | Active | Thêm ghi chú As-Built G7 ở §2 (thread `mb-extcmd`, `fb-publish`), §4.1 (ghi trước đọc có trần 4, worker thức theo sự kiện, trần 200 ms thành lưới an toàn), §4.3, §8 và một dòng §12.3. Không đổi nội dung thiết kế đã duyệt |
