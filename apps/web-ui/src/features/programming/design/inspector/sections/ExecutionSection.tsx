@@ -1,5 +1,6 @@
 import { useI18n } from '../../../../../shared/i18n'
 import type { InspectorField } from '../inspectorContext'
+import { formatProgrammingPeriod, programmingPeriodValidity } from '../../../model/cyclePeriods'
 
 export interface ExecutionSectionProps {
   cycleMs: InspectorField<number>
@@ -18,8 +19,21 @@ export interface ExecutionSectionProps {
   onOpenExecutionTab?: () => void
 }
 
-function formatInterval(periodMs: number): string {
-  return periodMs >= 1000 && periodMs % 1000 === 0 ? `${periodMs / 1000} s` : `${periodMs} ms`
+/** Hiển thị chu kỳ theo ADR-061 mục 4.13; chu kỳ không còn trong tập (30 s cũ)
+ *  được đánh dấu thay vì im lặng như một giá trị hợp lệ. */
+function IntervalValue({ periodMs }: { periodMs: number }) {
+  const { pick } = useI18n()
+  const validity = programmingPeriodValidity(periodMs)
+  return (
+    <>
+      {formatProgrammingPeriod(periodMs)}
+      {validity !== 'VALID' && (
+        <span className="ml-1 font-sans text-[var(--c-warn-fg)]" data-testid="execution-interval-invalid">
+          {pick('(không còn hợp lệ)', '(no longer valid)')}
+        </span>
+      )}
+    </>
+  )
 }
 
 function UnknownField({ label }: { label: string }) {
@@ -54,7 +68,7 @@ export function ExecutionSection({ cycleMs, taskName, scheduled, pouKind, onOpen
           <>
             <dt className="text-[var(--c-text-dim)]">{pick('Chu kỳ', 'Interval')}</dt>
             <dd className={cycleMs.known ? 'font-mono text-[var(--c-text)]' : 'italic text-[var(--c-text-dim)]'} data-testid="execution-interval">
-              {cycleMs.known ? formatInterval(cycleMs.value) : pick('không xác định được', 'not determinable')}
+              {cycleMs.known ? <IntervalValue periodMs={cycleMs.value} /> : pick('không xác định được', 'not determinable')}
             </dd>
           </>
         )}

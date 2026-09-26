@@ -11,4 +11,4 @@ const STLanguageProfileVersion = "1.0.0"
 // STLanguageProfileSHA256 nhận diện chính xác nội dung hồ sơ. Phiên bản có thể
 // giữ nguyên qua một lần sinh lại (ví dụ compiler đổi mà profileVersion chưa
 // nâng); hash thì không.
-const STLanguageProfileSHA256 = "e06a207e67318c8e81466880cfda057ff460b48e532f980ac043ad2985b9c661"
+const STLanguageProfileSHA256 = "31bf5f0b5776956270a3145586bb867dbc1af89865e618fda67a2c17f19ae36d"

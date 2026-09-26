@@ -256,6 +256,38 @@ describe('WatchTab — T59-504', () => {
     expect(options.body.variableIds).toEqual(['11111111-1111-4111-8111-111111111111'])
   })
 
+  /* ADR-061 mục 4.6 — chọn được mẫu 10 ms/100 ms, và khi Core không lấy mẫu
+   * nhanh được thế (base step lớn hơn) thì phiên nói ra chu kỳ THẬT. */
+  it('trace chọn được mẫu 10 ms và hiện chu kỳ lấy mẫu hiệu lực khi khác yêu cầu', async () => {
+    state.monitor = ready(monitorPage([sample()]))
+    const trace: ProgrammingTrace = {
+      traceId: '99999999-9999-4999-8999-999999999997', state: 'RUNNING',
+      variableIds: ['11111111-1111-4111-8111-111111111111'], durationMs: 60_000,
+      samplePeriodMs: 10, effectiveSamplePeriodMs: 1_000,
+      startedAt: '2026-09-26T01:02:03Z', updatedAt: '2026-09-26T01:02:04Z',
+      stopReason: null, droppedSamples: 0, samples: []
+    }
+    state.request.mockImplementation((operationId: string) => {
+      if (operationId === 'createProgrammingTrace') {
+        return Promise.resolve({ traceId: trace.traceId, statusUrl: `/api/v1/programming/runtime/traces/${trace.traceId}`, state: 'RUNNING', requestHash: 'a'.repeat(64), acceptedAt: trace.startedAt, correlationId: 'correlation-id-0003' })
+      }
+      if (operationId === 'getProgrammingTrace') return Promise.resolve(trace)
+      return Promise.reject(new Error(`unexpected ${operationId}`))
+    })
+
+    renderWatch()
+    const samplePeriod = screen.getByLabelText('Chu kỳ lấy mẫu')
+    expect(within(samplePeriod).getAllByRole('option').map((option) => option.textContent?.trim()))
+      .toEqual(['10 ms', '100 ms', '1 s', '5 s'])
+    fireEvent.change(samplePeriod, { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trace SupplySetpoint' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu trace' }))
+
+    expect(await screen.findByTestId('trace-effective-sample-period')).toHaveTextContent('lấy mẫu thật 1 s (yêu cầu 10 ms)')
+    const [, options] = state.request.mock.calls.find(([operationId]) => operationId === 'createProgrammingTrace')!
+    expect(options.body.samplePeriodMs).toBe(10)
+  })
+
   /* `T59-810` — `SOURCE_UNAVAILABLE` gộp hai chuyện rất khác nhau: mất nguồn,
    * và nguồn ĐỔI THÀNH chương trình khác. Với phiên có pin, người đọc phải biết
    * vế thứ hai — nếu không họ sẽ đi tìm một sự cố kết nối không hề tồn tại. */

@@ -88,8 +88,10 @@ type MonitorPointTruth struct {
 }
 
 type TaskMetricsView struct {
-	TaskID              string `json:"taskId"`
-	PeriodMS            int    `json:"periodMs"`
+	TaskID   string `json:"taskId"`
+	PeriodMS int    `json:"periodMs"`
+	// BudgetMS giữ CHỈ để tương thích đọc (ADR-061 mục 4.3): ngân sách một base
+	// step 10 ms là 2 ms, ms không biểu diễn được "< 20%". Dùng `BudgetUS`.
 	BudgetMS            int    `json:"budgetMs"`
 	State               string `json:"state"`
 	RunCount            uint32 `json:"runCount"`
@@ -98,6 +100,18 @@ type TaskMetricsView struct {
 	MaxExecNS           uint64 `json:"maxExecNs"`
 	OverrunCount        uint32 `json:"overrunCount"`
 	ConsecutiveOverruns uint32 `json:"consecutiveOverruns"`
+	// Metric C2–C4 (ADR-061 mục 4.9), chuyển NGUYÊN từ `task` của
+	// `point_snapshot`. Con trỏ vì khoá VẮNG MẶT (Core đời cũ) phải ra `null`,
+	// KHÁC `0` là "đã đếm, chưa vi phạm" — gộp hai câu đó sẽ báo khoẻ cho đúng
+	// một Core không đo gì cả.
+	BudgetUS             *uint64 `json:"budgetUs"`
+	BaseStepUS           *uint64 `json:"baseStepUs"`
+	JitterMaxUS          *uint64 `json:"jitterMaxUs"`
+	JitterViolationCount *uint64 `json:"jitterViolationCount"`
+	MissedBaseStepCount  *uint64 `json:"missedBaseStepCount"`
+	// Health/HealthReasons do server tính (`taskHealthTracker`), không do Core.
+	Health        string   `json:"health,omitempty"`
+	HealthReasons []string `json:"healthReasons,omitempty"`
 }
 
 type MonitorPointRef struct {
@@ -266,7 +280,7 @@ func (s *RuntimeService) GetMonitor(ctx context.Context) (MonitorPageView, error
 		// Dấu producer đi CÙNG payload, không phải header: nó là thuộc tính của
 		// dữ liệu, nên nó phải sống sót qua mọi lần chuyển tiếp/cache.
 		Producer:  ProducerStampView{CapturedMonotonicNs: strconv.FormatUint(truth.CapturedMonotonicNs, 10)},
-		SafeState: truth.SafeState, Task: truth.Task,
+		SafeState: truth.SafeState, Task: s.taskWithHealth(truth.Task),
 		Items: make([]MonitorSampleView, 0, len(bindings)),
 	}
 	for _, binding := range bindings {

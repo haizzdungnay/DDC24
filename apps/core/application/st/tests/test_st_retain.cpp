@@ -541,7 +541,7 @@ TEST(StRetain, SchedulerRestoresOnlySnapshotPublishedAfterOutputCommit)
         StTaskConfig config;
         config.id = "T";
         config.period_ms = 100;
-        config.budget_ms = 100;
+        config.budget_us = 100000;
         std::string error;
         ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
         ASSERT_TRUE(scheduler.add_program("T", "instance-1", 0, &error)) << error;
@@ -571,7 +571,7 @@ TEST(StRetain, SchedulerRestoresOnlySnapshotPublishedAfterOutputCommit)
         StTaskConfig config;
         config.id = "T";
         config.period_ms = 100;
-        config.budget_ms = 100;
+        config.budget_us = 100000;
         std::string error;
         ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
         ASSERT_TRUE(scheduler.add_program("T", "instance-1", 0, &error)) << error;
@@ -730,7 +730,7 @@ TEST(StRetain, T59_407_ResetOnStoppedProgramIsPersistedNotHalfDone)
         StTaskConfig config;
         config.id = "T";
         config.period_ms = 100;
-        config.budget_ms = 100;
+        config.budget_us = 100000;
         std::string error;
         ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
         ASSERT_TRUE(scheduler.add_program("T", "instance-1", 0, &error)) << error;
@@ -787,7 +787,7 @@ TEST(StRetain, T59_407_ResetIsIsolatedBetweenPrograms)
     StTaskConfig config;
     config.id = "T";
     config.period_ms = 100;
-    config.budget_ms = 100;
+    config.budget_us = 100000;
     std::string error;
     ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
     for (const char* id : {"instance-1", "instance-2"}) {
@@ -831,7 +831,7 @@ TEST(StRetain, T59_407_CorruptRecordIsIsolatedToOneProgram)
         StTaskConfig config;
         config.id = "T";
         config.period_ms = 100;
-        config.budget_ms = 100;
+        config.budget_us = 100000;
         std::string error;
         ASSERT_TRUE(scheduler.add_task(config, &error)) << error;
         uint16_t order = 0;

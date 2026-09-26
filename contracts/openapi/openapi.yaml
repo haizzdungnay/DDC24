@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MK-DDC-24 REST API
-  version: "1.41.0"
+  version: "1.42.0"
   description: >
     REST API HTTPS (TLS 1.3) cho MK-DDC-24. Cá»•ng 8443. Auth Bearer JWT (exp 1h).
     Nguá»“n-chuáº©n cho endpoint (D-4). Trace: SW-API-001..010, SRS Â§6.4.
@@ -18,8 +18,8 @@ info:
     2026-07-28: khóa strict netcfg v1 với DNS transaction, capability discovery, management
     hostname read-only và tách GET status viewer+ khỏi POST Admin-only.
 x-revision:
-  date: "2026-09-07"
-  note: "v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
+  date: "2026-09-26"
+  note: "v1.42.0 (ADR-061) tập chu kỳ Task/Program {10…50000} ms, metric C2–C4 của Task (budgetUs, baseStepUs, jitterMaxUs, jitterViolationCount, missedBaseStepCount, health), Trace 10…50000 ms kèm effectiveSamplePeriodMs, freshness Published Signal 10…150000 ms. Trước đó v1.40.0 (ISS-PGM03-04) bổ sung dependency Published Signal authoritative và công bố quyền cho toàn bộ 45 operation Programming."
 servers:
   - url: https://{device_ip}:8443/api/v1
     variables:
@@ -3488,9 +3488,12 @@ components:
           type: array
           items: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
           uniqueItems: true
+        # ADR-061 C1: ĐÚNG tập chu kỳ Task/Program của product profile 2.2, sinh
+        # từ `contracts/programming/product_profile_v2.json`. Client lấy danh
+        # sách chọn chu kỳ từ đây, không chép tay.
         taskPeriodsMs:
           type: array
-          items: { type: integer, enum: [1000, 5000, 30000] }
+          items: { type: integer, enum: [10, 50, 100, 500, 1000, 5000, 10000, 50000] }
           uniqueItems: true
         workspaceModes:
           type: object
@@ -3681,7 +3684,7 @@ components:
         type: { type: string, enum: [BOOL, INT, DINT, UINT, REAL, TIME] }
         unit: { type: [string, "null"], minLength: 1, maxLength: 32 }
         publisherProgramId: { type: string, format: uuid }
-        freshnessMs: { type: integer, minimum: 1000, maximum: 90000 }
+        freshnessMs: { type: integer, minimum: 10, maximum: 150000 }
         stalePolicy: { type: string, enum: [HOLD_LAST, USE_FALLBACK, WAIT] }
         fallbackValue: { type: [number, "null"] }
         publisher: { $ref: "#/components/schemas/ProgrammingSignalDependencyReference" }
@@ -4061,7 +4064,7 @@ components:
           uniqueItems: true
           items: { type: string, format: uuid }
         durationMs: { type: integer, minimum: 1000, maximum: 600000 }
-        samplePeriodMs: { type: integer, minimum: 100, maximum: 30000 }
+        samplePeriodMs: { type: integer, minimum: 10, maximum: 50000 }
     ProgrammingTaskMetrics:
       type: object
       additionalProperties: false
@@ -4069,7 +4072,9 @@ components:
       properties:
         taskId: { type: string, minLength: 1, maxLength: 32 }
         periodMs: { type: integer, minimum: 1 }
-        budgetMs: { type: integer, minimum: 1 }
+        # Giữ CHỈ để tương thích đọc (ADR-061 mục 4.3): ngân sách một base step
+        # 10 ms là 2 ms, đơn vị ms không biểu diễn được "< 20%". Dùng `budgetUs`.
+        budgetMs: { type: integer, minimum: 0 }
         state: { type: string, enum: [STOPPED, RUNNING, FAULT] }
         runCount: { type: integer, minimum: 0 }
         missedReleaseCount: { type: integer, minimum: 0 }
@@ -4077,6 +4082,26 @@ components:
         maxExecNs: { type: integer, minimum: 0 }
         overrunCount: { type: integer, minimum: 0 }
         consecutiveOverruns: { type: integer, minimum: 0 }
+        # --- Metric C2–C4 (ADR-061 mục 4.9), chuyển NGUYÊN từ `task` của
+        # `point_snapshot`. KHÔNG bắt buộc và nullable: Core đời cũ không gửi các
+        # khoá này, và `null` nghĩa là "Core không cấp", KHÁC `0` là "đã đếm, chưa
+        # vi phạm". Client không được suy `null` thành `0`.
+        budgetUs: { type: [integer, "null"], minimum: 0 }
+        baseStepUs: { type: [integer, "null"], minimum: 1 }
+        # Lệch nhịp đánh thức lớn nhất trong cửa sổ 60 s gần nhất (C4: ≤ 100 µs).
+        jitterMaxUs: { type: [integer, "null"], minimum: 0 }
+        # Bộ đếm TÍCH LUỸ số base step lệch nhịp > 100 µs.
+        jitterViolationCount: { type: [integer, "null"], minimum: 0 }
+        # Bộ đếm TÍCH LUỸ số base step bị trễ ≥ một base step.
+        missedBaseStepCount: { type: [integer, "null"], minimum: 0 }
+        # Sức khoẻ Task do server tính: bộ đếm vi phạm TĂNG trong cửa sổ 60 s
+        # gần nhất, hoặc `jitterMaxUs > 100` ⇒ DEGRADED; `state = FAULT` ⇒ FAULT.
+        health: { $ref: "#/components/schemas/ProgrammingProgramHealth" }
+        healthReasons:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items: { type: string, enum: [OVERRUN, MISSED_RELEASE, JITTER_VIOLATION, MISSED_BASE_STEP, JITTER_MAX_EXCEEDED] }
     ProgrammingMonitorPointRef:
       type: object
       additionalProperties: false
@@ -4329,7 +4354,11 @@ components:
           uniqueItems: true
           items: { type: string, format: uuid }
         durationMs: { type: integer, minimum: 1000, maximum: 600000 }
-        samplePeriodMs: { type: integer, minimum: 100, maximum: 30000 }
+        samplePeriodMs: { type: integer, minimum: 10, maximum: 50000 }
+        # ADR-061 mục 4.6: chu kỳ lấy mẫu THẬT = max(yêu cầu, base step Core).
+        # Không bắt buộc để client mới vẫn đọc được server đời cũ; vắng mặt thì
+        # coi bằng `samplePeriodMs`.
+        effectiveSamplePeriodMs: { type: integer, minimum: 10, maximum: 50000 }
         startedAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         stopReason: { type: [string, "null"], enum: [DURATION_REACHED, QUOTA_REACHED, USER_STOPPED, SOURCE_UNAVAILABLE, null] }
@@ -4539,7 +4568,7 @@ components:
         quality: { type: string, enum: [GOOD, UNCERTAIN, BAD] }
         freshness: { type: string, enum: [FRESH, STALE_HELD, STALE_FALLBACK, UNAVAILABLE, NOT_DECLARED] }
         stalePolicy: { type: string, enum: [WAIT, HOLD_LAST, USE_FALLBACK, SAFE_STATE] }
-        freshnessMs: { type: integer, minimum: 1000, maximum: 90000 }
+        freshnessMs: { type: integer, minimum: 10, maximum: 150000 }
         # uint64 đi qua JSON dưới dạng chuỗi để không mất bit trong JavaScript.
         publishedAtMonoNs: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$" }
         generation: { type: string, pattern: "^(0|[1-9][0-9]{0,19})$" }

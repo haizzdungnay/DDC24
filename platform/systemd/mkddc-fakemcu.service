@@ -42,6 +42,8 @@ PartOf=mkddc-iobus.service
 Conflicts=mkddc-pty.service
 
 [Service]
+# ADR-061 4.11: CPU3 dành riêng cho mkddc-core (tick 10 ms, SCHED_FIFO).
+CPUAffinity=0-2
 Type=simple
 User=mkddc
 Group=mkddc

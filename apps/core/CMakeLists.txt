@@ -409,7 +409,8 @@ if(CORE_BUILD_TESTS)
       application/st/tests/test_st_scheduler.cpp application/st/tests/test_st_integration.cpp
       application/st/tests/test_st_retain.cpp application/st/tests/test_st_control_api.cpp
       application/st/tests/test_st_journal.cpp
-      tests/allocation_probe.cpp)
+      tests/allocation_probe.cpp
+      tests/plc_shm_isolation.cpp)
   target_link_libraries(core_tests PRIVATE st_compiler_lib core_sim_engine)
   target_compile_options(core_tests PRIVATE -Wno-error=stringop-overflow)
   # test_st_validate_cli.cpp fork+execv nhị phân thật — cần path tuyệt đối,
@@ -440,6 +441,11 @@ if(CORE_BUILD_TESTS)
   # sạch SHM đang sống — và trên board lab thì test đỏ hàng loạt vì EACCES do
   # segment thuộc user `mkddc`. Đặt tên riêng cho test để hai bên không đụng nhau;
   # điều kiện tiên quyết để chạy CI runner ngay trên board theo ADR-022.
+  #
+  # Tên này chỉ là TIỀN TỐ: `tests/plc_shm_isolation.cpp` nối PID của từng tiến
+  # trình test vào, vì `ctest -j` chạy song song mỗi test một tiến trình và
+  # `attach()` memset toàn segment — dùng chung một tên là các test xoá dữ liệu
+  # của nhau.
   gtest_discover_tests(core_tests
       PROPERTIES ENVIRONMENT "MKDDC_SHM_PLC_NAME=/mkddc_plc_shm_coretest")
 

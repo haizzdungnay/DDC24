@@ -29,6 +29,14 @@ func (f *fakeCheckRunner) Compile(_ context.Context, input programmingcompiler.I
 
 func createCheckRevisionFixture(t *testing.T, service *ProjectService) string {
 	t.Helper()
+	return createCheckRevisionFixtureWithPeriod(t, service, 1000)
+}
+
+// createCheckRevisionFixtureWithPeriod dựng cùng Revision một Program nhưng với
+// chu kỳ cho trước — cần cho kịch bản nâng cấp ADR-061 mục 4.14 (Revision cũ
+// 30000 ms).
+func createCheckRevisionFixtureWithPeriod(t *testing.T, service *ProjectService, periodMs int) string {
+	t.Helper()
 	actor := Actor{ID: testActorID, Role: "admin"}
 	created, err := service.CreateProject(context.Background(), actor, CreateProjectCommand{SchemaVersion: "1.0", Name: "Check fixture", IdempotencyKey: "30000000-0000-4000-8000-000000000001", CorrelationID: testCorrelationID})
 	if err != nil {
@@ -39,7 +47,7 @@ func createCheckRevisionFixture(t *testing.T, service *ProjectService) string {
 	programID := "55555555-5555-4555-8555-555555555555"
 	taskID := "66666666-6666-4666-8666-666666666666"
 	program, _ := json.Marshal(map[string]any{"op": "upsertProgram", "program": map[string]any{"programId": programID, "name": "P", "kind": "PROGRAM", "language": "ST", "document": "PROGRAM P\nVAR_OUTPUT X : BOOL; END_VAR\nX := TRUE;\nEND_PROGRAM\n"}})
-	task, _ := json.Marshal(map[string]any{"op": "setTask", "task": map[string]any{"taskId": taskID, "periodMs": 1000, "programOrder": []string{programID}}})
+	task, _ := json.Marshal(map[string]any{"op": "setTask", "task": map[string]any{"taskId": taskID, "periodMs": periodMs, "programOrder": []string{programID}}})
 	saved, err := service.SaveDraft(context.Background(), actor, SaveDraftCommand{ProjectID: projectID, SchemaVersion: "1.0", BaseRevisionID: draftID,
 		Operations: []json.RawMessage{program, task}, IfMatch: created.ETag, IdempotencyKey: "30000000-0000-4000-8000-000000000002", CorrelationID: testCorrelationID})
 	if err != nil {

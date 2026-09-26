@@ -94,7 +94,7 @@ func TestSingleProgramWithDistinctObjectAndRuntimeIdentityForcesV2(t *testing.T)
 		[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest}},
 		[]packageProgramArtifact{{ProgramID: programID}},
 		[]packageProgramTopology{{ObjectID: objectID, ProgramID: programID, PeriodMs: 5000,
-			BudgetUs: programBudgetUs(5000)}}, nil)
+			BudgetUs: programBudgetUs(1)}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestSingleProgramWithDistinctObjectAndRuntimeIdentityForcesV2(t *testing.T)
 }
 
 func TestSchemaV2SingleProgramAlwaysPackagesSealedPeriod(t *testing.T) {
-	for _, periodMs := range []int64{5000, 30000} {
+	for _, periodMs := range []int64{10, 5000, 50000} {
 		t.Run(fmt.Sprintf("period_%d_ms", periodMs), func(t *testing.T) {
 			artifacts, err := programmingartifact.NewStore(filepath.Join(t.TempDir(), "artifacts"))
 			if err != nil {
@@ -126,7 +126,7 @@ func TestSchemaV2SingleProgramAlwaysPackagesSealedPeriod(t *testing.T) {
 					ArtifactSchemaVersion: 1}},
 				[]packageProgramArtifact{{ProgramID: programID}},
 				[]packageProgramTopology{{ObjectID: programID, ProgramID: programID, PeriodMs: periodMs,
-					BudgetUs: programBudgetUs(periodMs)}}, nil)
+					BudgetUs: programBudgetUs(1)}}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,7 +154,7 @@ func TestSchemaV1SingleProgramPreservesHistoricalArtifactV1(t *testing.T) {
 			ArtifactSchemaVersion: 1}},
 		[]packageProgramArtifact{{ProgramID: programID, RelativePath: "legacy/artifact.mkir"}},
 		[]packageProgramTopology{{ObjectID: programID, ProgramID: programID, PeriodMs: 5000,
-			BudgetUs: programBudgetUs(5000)}}, nil)
+			BudgetUs: programBudgetUs(1)}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestSingleProgramPublishedSignalForcesV2AndKeepsProgramIdentity(t *testing.
 		[]programmingcompiler.Result{{Artifact: artifactBytes, ArtifactSHA256: digest}},
 		[]packageProgramArtifact{{ProgramID: programID}},
 		[]packageProgramTopology{{ObjectID: programID, ProgramID: programID, PeriodMs: 1000,
-			BudgetUs: programBudgetUs(1000)}},
+			BudgetUs: programBudgetUs(1)}},
 		[]programmingcompiler.PackageSignal{{Name: "SUPPLY_TEMP", Publisher: programID,
 			Type: 3, FreshnessMs: 5000, StalePolicy: 0}})
 	if err != nil {

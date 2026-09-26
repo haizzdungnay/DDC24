@@ -238,7 +238,7 @@ public:
 |-----|---------------|-----------------|---------------|----------|
 | **MCU FW** | mất `GET_IO` > `IOP_SAFE_TIMEOUT_MS` (200ms) | MCU tự vào safe-state | AO→raw safe, DO→open trực tiếp trên phần cứng; NACK `ERR_SAFE_STATE` cho mọi `SET_*` | ≤200ms |
 | **iobus** | >`IOP_FAULT_TIMEOUT_MS` (100ms) không `IO_RESP` hợp lệ (timeout/CRC/SEQ) | state machine `FAULT → RESET_IO(0x05) → SAFE_STATE` (05 §13) | ghi `iop_status=FAULT/SAFE` vào shm; `output_command` ngừng gửi `SET_*` khi bị NACK safe | ≤100ms + retry |
-| **core** (`safe_state`) | `iop_status=FAULT/SAFE` hoặc shm stale (ts_ns không tăng >3 scan) | ghi đè `OutputCmd` SAU `priority_resolver` | AO→safe (0V/4mA theo `ao_mode`), DO→0 vào `ao_setpoint[]/do_cmd[]` | ≤1 scan (1s) |
+| **core** (`safe_state`) | `iop_status=FAULT/SAFE` hoặc shm stale (ts_ns không tăng quá max(5 base step, 500 ms), ADR-061 4.7) | ghi đè `OutputCmd` SAU `priority_resolver` | AO→safe (0V/4mA theo `ao_mode`), DO→0 vào `ao_setpoint[]/do_cmd[]` | ≤1 base step (10 ms) sau khi vượt ngưỡng |
 
 **Thứ tự ưu tiên khi nhiều lớp cùng can thiệp: MCU thắng** (lớp cuối chạm phần cứng).
 Khi MCU đang safe, mọi `SET_*` từ SOM bị NACK `ERR_SAFE_STATE` — iobus giữ lệnh chờ hết
@@ -251,7 +251,7 @@ hội tụ cùng một trạng thái output, không xung đột giá trị.
 |---|---------|-----|------------|-------------|
 | T1 | `iop_status=FAULT` | core | ✅ **implemented** | `safe_state.cpp` · `IopFaultForcesSafeOutputs` |
 | T2 | `iop_status=SAFE` | core | ✅ **implemented** | `safe_state.cpp` · `SafeStatusAlsoTriggers` |
-| T3 | shm stale: ts_ns không tăng >3 scan (`PointQuality::is_stale()`) | core | ✅ **implemented** | `safe_state.cpp` · `StaleShm4ScansForcesSafe` |
+| T3 | shm stale theo thời gian (ADR-061 4.7): `ts_ns` không tăng quá max(5 base step, 500 ms) → BAD (`PointQuality::is_stale_bad()`); quá max(3 base step, 250 ms) chỉ UNCERTAIN | core | ✅ **implemented** | `safe_state.cpp` · `StaleShmForcesSafeAfterHalfSecondOnTenMsBaseStep`, `StaleThresholdScalesWithLongBaseStep` |
 | T4 | MCU mất `GET_IO` 200ms | MCU FW | ✅ spec chốt (04 §FW — ngoài scope core) | FW + `fake_mcu` |
 | T5 | UART >100ms không `IO_RESP` hợp lệ | iobus | ✅ **implemented** | `iobus/main.cpp` · integration `fake_mcu --timeout` |
 | T6 | `ui_quality=BAD` trên kênh graph đang dùng | core | ✅ **implemented** | `safe_state.cpp` · `T6GraphInputBadForcesSafe` |

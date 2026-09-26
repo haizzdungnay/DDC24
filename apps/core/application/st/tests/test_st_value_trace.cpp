@@ -43,7 +43,7 @@ void build_scheduler(StScheduler* scheduler)
     StTaskConfig task;
     task.id = "T";
     task.period_ms = 100;
-    task.budget_ms = 100;
+    task.budget_us = 100000;
     ASSERT_TRUE(scheduler->add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler->add_program("T", "instance-1", 0, &error)) << error;
     ASSERT_TRUE(scheduler->request_activation("instance-1", counter_program(), &error)) << error;
@@ -71,8 +71,9 @@ TEST(StValueTrace, RejectsOutOfRangeParameters)
     std::string error;
     EXPECT_FALSE(trace.start("", scheduler, &variable, 1, 1000, 10000, 0, &error));
     EXPECT_FALSE(trace.start("s1", scheduler, nullptr, 0, 1000, 10000, 0, &error));
-    EXPECT_FALSE(trace.start("s1", scheduler, &variable, 1, 99, 10000, 0, &error));
-    EXPECT_FALSE(trace.start("s1", scheduler, &variable, 1, 30001, 10000, 0, &error));
+    /* ADR-061 4.6: dải yêu cầu 10..50000 ms. */
+    EXPECT_FALSE(trace.start("s1", scheduler, &variable, 1, 9, 10000, 0, &error));
+    EXPECT_FALSE(trace.start("s1", scheduler, &variable, 1, 50001, 10000, 0, &error));
     EXPECT_FALSE(trace.start("s1", scheduler, &variable, 1, 1000, 0, 0, &error));
     EXPECT_FALSE(trace.start("s1", scheduler, &variable, 1, 1000, kMaxTraceDurationMs + 1, 0, &error));
     EXPECT_EQ(trace.status().state, StTraceState::IDLE);
@@ -84,6 +85,40 @@ TEST(StValueTrace, RejectsOutOfRangeParameters)
     /* Dừng nhầm phiên của người khác cũng bị từ chối. */
     EXPECT_FALSE(trace.stop("s2", &error));
     EXPECT_TRUE(trace.stop("s1", &error)) << error;
+}
+
+/* ADR-061 4.6 — chu kỳ lấy mẫu HIỆU LỰC = max(yêu cầu, base step). Mẫu chỉ lấy
+ * được ở ranh giới quét: hứa 10 ms trên base step 1 s là hứa suông. */
+TEST(StValueTrace, EffectiveSamplePeriodIsNeverFasterThanBaseStep)
+{
+    EXPECT_EQ(st_trace_effective_sample_period_ms(10, 10 * kMs), 10u);
+    EXPECT_EQ(st_trace_effective_sample_period_ms(10, 1000 * kMs), 1000u);
+    EXPECT_EQ(st_trace_effective_sample_period_ms(5000, 10 * kMs), 5000u);
+    /* Base step lẻ làm tròn LÊN: 10,5 ms không lấy mẫu được mỗi 10 ms. */
+    EXPECT_EQ(st_trace_effective_sample_period_ms(10, 10500000ull), 11u);
+    EXPECT_EQ(st_trace_effective_sample_period_ms(10, 0), 10u);
+
+    StScheduler scheduler;
+    build_scheduler(&scheduler);
+    scheduler.set_base_step_ns(1000 * kMs);
+    StValueTrace trace;
+    const StTraceVariable variable = variable_of("n");
+    std::string error;
+    ASSERT_TRUE(trace.start("s1", scheduler, &variable, 1, 10, 10000, 0, &error)) << error;
+    EXPECT_EQ(trace.status().requested_sample_period_ms, 10u);
+    EXPECT_EQ(trace.status().effective_sample_period_ms, 1000u);
+    for (uint64_t now = 0; now < 3000 * kMs; now += 10 * kMs) trace.on_boundary(scheduler, now);
+    EXPECT_EQ(trace.sample_count(), 3u) << "3 s ở nhịp hiệu lực 1 s = 3 mẫu, không phải 300";
+    EXPECT_TRUE(trace.stop("s1", &error)) << error;
+
+    StScheduler fast;
+    build_scheduler(&fast);
+    fast.set_base_step_ns(10 * kMs);
+    StValueTrace fast_trace;
+    ASSERT_TRUE(fast_trace.start("s2", fast, &variable, 1, 10, 10000, 0, &error)) << error;
+    EXPECT_EQ(fast_trace.status().effective_sample_period_ms, 10u);
+    for (uint64_t now = 0; now < 100 * kMs; now += 10 * kMs) fast_trace.on_boundary(fast, now);
+    EXPECT_EQ(fast_trace.sample_count(), 10u);
 }
 
 /* Lấy mẫu tại boundary, đúng chu kỳ, và mẫu đầu tiên lấy NGAY — người chẩn đoán

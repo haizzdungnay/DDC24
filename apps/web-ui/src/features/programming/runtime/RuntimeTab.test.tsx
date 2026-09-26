@@ -50,7 +50,34 @@ describe('RuntimeTab', () => {
     expect(screen.getByText('RUNNING')).toBeInTheDocument()
     expect(screen.getByText('1.50 ms')).toBeInTheDocument()
     expect(screen.getByText('2.00 ms')).toBeInTheDocument()
-    expect(screen.getByText(/Chu kỳ: 1000 ms · Ngân sách: 200 ms · Lỡ nhịp: 0/)).toBeInTheDocument()
+    expect(screen.getByText(/Chu kỳ: 1 s · Ngân sách: 200 ms · Lỡ nhịp: 0/)).toBeInTheDocument()
+    // Core đời cũ không công bố metric C4: không dựng khối số 0 giả.
+    expect(screen.queryByTestId('runtime-task-cycle-metrics')).not.toBeInTheDocument()
+  })
+
+  // ADR-061 mục 4.9 — metric C2–C4 của Task hiện nguyên số Core công bố, ngân
+  // sách bằng µs, và `null` hiện `—` chứ không phải 0.
+  it('hiển thị metric C4 và sức khoẻ Task khi Core công bố', () => {
+    renderTab({
+      ...runtime,
+      taskState: 'RUNNING',
+      task: {
+        taskId: 'main', periodMs: 10, budgetMs: 1, state: 'RUNNING', runCount: 6000,
+        missedReleaseCount: 0, lastExecNs: 350_000, maxExecNs: 910_000,
+        overrunCount: 0, consecutiveOverruns: 0,
+        budgetUs: 1999, baseStepUs: 10_000, jitterMaxUs: 142, jitterViolationCount: 3, missedBaseStepCount: null,
+        health: 'DEGRADED', healthReasons: ['JITTER_VIOLATION', 'JITTER_MAX_EXCEEDED']
+      }
+    })
+    expect(screen.getByTestId('runtime-task-summary')).toHaveTextContent('Chu kỳ: 10 ms · Ngân sách: 1999 µs · Lỡ nhịp: 0')
+    const metrics = screen.getByTestId('runtime-task-cycle-metrics')
+    expect(metrics).toHaveTextContent('DEGRADED')
+    expect(metrics).toHaveTextContent('Lệch nhịp > 100 µs')
+    expect(metrics).toHaveTextContent('Lệch nhịp lớn nhất > 100 µs')
+    expect(metrics).toHaveTextContent('142 µs')
+    expect(metrics).toHaveTextContent('10 ms')
+    expect(metrics).toHaveTextContent('3')
+    expect(metrics).toHaveTextContent('—')
   })
 
   it('hiển thị Core suy giảm khi producerState là DEGRADED', () => {

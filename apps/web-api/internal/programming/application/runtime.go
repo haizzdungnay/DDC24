@@ -61,6 +61,10 @@ type RuntimeService struct {
 	monotonicNow func() (uint64, error)
 
 	workspaceModesFn func() WorkspaceModesView
+	// taskHealth nhớ lần đọc trước của các bộ đếm vi phạm C2–C4 để kết luận
+	// DEGRADED theo mức TĂNG, không theo tổng tích luỹ (ADR-061 mục 4.9). Đây
+	// là state duy nhất của service, và nó chỉ ảnh hưởng tới trường `health`.
+	taskHealth *taskHealthTracker
 }
 
 func NewRuntimeService(options RuntimeServiceOptions) (*RuntimeService, error) {
@@ -81,7 +85,7 @@ func NewRuntimeService(options RuntimeServiceOptions) (*RuntimeService, error) {
 	return &RuntimeService{
 		runtime: options.Runtime, store: options.Store, catalog: options.Catalog, monitor: options.Monitor, overrides: options.Overrides,
 		controllerID: options.ControllerID, cursorSecret: options.CursorSecret, now: now, newID: newID,
-		traces: newRuntimeTraceStore(), workspaceModesFn: options.WorkspaceModes,
+		traces: newRuntimeTraceStore(), workspaceModesFn: options.WorkspaceModes, taskHealth: newTaskHealthTracker(),
 	}, nil
 }
 
@@ -198,7 +202,10 @@ func (s *RuntimeService) GetCapabilities(ctx context.Context) (CapabilitiesView,
 		TargetState:   target,
 		Languages:     []string{"ST", "FBD"},
 		Types:         []string{"BOOL", "INT", "DINT", "UINT", "REAL", "TIME"},
-		TaskPeriodsMs: []int{1000, 5000, 30000},
+		TaskPeriodsMs: capabilityTaskPeriodsMs(),
+		// `Tasks` là số Task RUNTIME, không phải `domain.MaxTasks`: Core chạy
+		// đúng một Task `main` ở base step 10 ms, mỗi Program release theo chu
+		// kỳ riêng (ADR-061 mục 4.2). `MaxTasks = 8` là số LỚP chu kỳ.
 		Limits: CapabilitiesLimits{
 			ProjectsPerController: 1, Tasks: 1, StSourceBytes: 65536, Variables: 512,
 			Statements: 4096, FbdBlocks: 256, FbdConnections: 512, ArtifactBytes: 1048576, Bindings: 256,
@@ -206,6 +213,18 @@ func (s *RuntimeService) GetCapabilities(ctx context.Context) (CapabilitiesView,
 		WorkspaceModes: s.workspaceModes(),
 		Compatibility:  currentCompatibility(),
 	}, nil
+}
+
+// capabilityTaskPeriodsMs đọc tập chu kỳ từ CHÍNH hằng sinh từ product profile
+// (ADR-061 C1). Trước đây nó là bản chép tay `[1000, 5000, 30000]` (X11): đổi
+// profile mà quên chỗ này thì FE chào người dùng một tập chu kỳ mà Check từ chối.
+// Trả bản sao mới mỗi lần để caller không sửa được mảng sinh mã.
+func capabilityTaskPeriodsMs() []int {
+	periods := make([]int, 0, len(domain.AllowedPeriodMs))
+	for _, period := range domain.AllowedPeriodMs {
+		periods = append(periods, int(period))
+	}
+	return periods
 }
 
 // workspaceModes trả nil khi chưa được tiêm, để phản hồi giữ nguyên hình dạng
@@ -248,7 +267,7 @@ func (s *RuntimeService) GetRuntime(ctx context.Context) (RuntimeView, error) {
 		} else {
 			safeState = truth.SafeState
 			safeStateNoControllerOnly = truth.SafeStateNoControllerOnly
-			task = truth.Task
+			task = s.taskWithHealth(truth.Task)
 			if task != nil {
 				taskState = task.State
 			}

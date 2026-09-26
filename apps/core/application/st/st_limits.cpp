@@ -1,6 +1,7 @@
 #include "st/st_limits.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <string>
 
 namespace core::st_limits {
@@ -55,6 +56,18 @@ bool RevAAllowsPeriod(uint32_t period_ms)
 {
     const auto& periods = st_profile_generated::kAllowedPeriodMs;
     return std::find(periods.begin(), periods.end(), period_ms) != periods.end();
+}
+
+bool RevAIsLegacyPeriod(uint32_t period_ms)
+{
+    if (RevAAllowsPeriod(period_ms)) return false;
+    return std::find(std::begin(kRevAV21PeriodsMs), std::end(kRevAV21PeriodsMs), period_ms) !=
+           std::end(kRevAV21PeriodsMs);
+}
+
+bool RevALoaderAllowsPeriod(uint32_t period_ms)
+{
+    return RevAAllowsPeriod(period_ms) || RevAIsLegacyPeriod(period_ms);
 }
 
 bool ValidateRevAProfile(const RevAProfileUsage& u, RevAProfileError* error)

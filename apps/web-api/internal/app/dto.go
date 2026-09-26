@@ -346,6 +346,14 @@ type RuntimeTaskSnapshot struct {
 	MaxExecNS           uint64 `json:"maxExecNs"`
 	OverrunCount        uint32 `json:"overrunCount"`
 	ConsecutiveOverruns uint32 `json:"consecutiveOverruns"`
+	// Metric C2–C4 (ADR-061 mục 4.9) — tên khoá khớp NGUYÊN VĂN JSON mà Core
+	// ghi vào `task` của `point_snapshot`. Con trỏ: khoá vắng (Core đời cũ) phải
+	// đi tiếp thành `null`, không thành `0` nghĩa là "đã đếm, không vi phạm".
+	BudgetUS             *uint64 `json:"budgetUs"`
+	BaseStepUS           *uint64 `json:"baseStepUs"`
+	JitterMaxUS          *uint64 `json:"jitterMaxUs"`
+	JitterViolationCount *uint64 `json:"jitterViolationCount"`
+	MissedBaseStepCount  *uint64 `json:"missedBaseStepCount"`
 }
 
 // RuntimeProgramSnapshot là một dòng của mảng `programs[]` mà Core serialize

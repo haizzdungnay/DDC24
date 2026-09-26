@@ -20,9 +20,13 @@ import type {
  * sai — nó KHÔNG thay thế validator server, và không được nới lỏng hơn server.
  */
 
-/** `freshness_ms BETWEEN 1000 AND 90000` — cùng dải mà schema store ép. */
-export const SIGNAL_FRESHNESS_MIN_MS = 1000
-export const SIGNAL_FRESHNESS_MAX_MS = 90_000
+/** `freshness_ms BETWEEN 10 AND 150000` — cùng dải mà schema store ép sau
+ *  migration `0016` (ADR-061 mục 4.5): một base step 10 ms tới 3 × 50 s. */
+export const SIGNAL_FRESHNESS_MIN_MS = 10
+export const SIGNAL_FRESHNESS_MAX_MS = 150_000
+/** Hạn tươi gợi ý cho signal mới: 1 s, KHÔNG phải cận dưới 10 ms — 10 ms chỉ
+ *  đúng khi publisher chạy 10 ms, và Check từ chối freshness < chu kỳ publisher. */
+export const SIGNAL_FRESHNESS_DEFAULT_MS = 1000
 export const SIGNAL_NAME_MAX_LENGTH = 64
 export const SIGNAL_UNIT_MAX_LENGTH = 32
 
@@ -240,6 +244,7 @@ export type SignalErrorCode =
   | 'PUBLISHER_REQUIRED'
   | 'PUBLISHER_UNKNOWN'
   | 'FRESHNESS_RANGE'
+  | 'FRESHNESS_BELOW_PUBLISHER_PERIOD'
   | 'POLICY_INVALID'
   | 'FALLBACK_REQUIRED'
   | 'FALLBACK_INVALID'
@@ -264,6 +269,12 @@ export interface SignalValidationContext {
   signals: ProgrammingPublishedSignal[]
   /** `programId` hợp lệ (Program có cấu hình chạy và trỏ tới POU kind PROGRAM). */
   producerProgramIds: string[]
+  /**
+   * Chu kỳ (ms) của từng publisher. Có thì kiểm luật ADR-061 mục 4.5 "freshness
+   * ≥ chu kỳ publisher" ngay tại ô nhập — cùng luật Check áp (`ST-SIG-003`), để
+   * người dùng không lưu một signal chắc chắn trượt Check.
+   */
+  producerPeriodsMs?: Readonly<Record<string, number>>
 }
 
 const INTEGER_TYPES = new Set<ProgrammingSignalType>(['INT', 'DINT', 'UINT', 'TIME'])
@@ -341,6 +352,11 @@ export function validateSignalForm(
     freshness > SIGNAL_FRESHNESS_MAX_MS
   ) {
     errors.freshness = 'FRESHNESS_RANGE'
+  } else {
+    const publisherPeriod = context.producerPeriodsMs?.[value.publisherProgramId]
+    if (typeof publisherPeriod === 'number' && publisherPeriod > 0 && freshness < publisherPeriod) {
+      errors.freshness = 'FRESHNESS_BELOW_PUBLISHER_PERIOD'
+    }
   }
 
   if (!isSignalStalePolicy(value.stalePolicy)) errors.policy = 'POLICY_INVALID'
@@ -393,7 +409,7 @@ export function emptySignalForm(signalId: string, defaultProducerProgramId: stri
     type: 'REAL',
     unit: '',
     publisherProgramId: defaultProducerProgramId,
-    freshnessMs: String(SIGNAL_FRESHNESS_MIN_MS),
+    freshnessMs: String(SIGNAL_FRESHNESS_DEFAULT_MS),
     stalePolicy: 'HOLD_PRIVATE',
     fallbackValue: ''
   }

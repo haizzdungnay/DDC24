@@ -1,10 +1,10 @@
 {
   "contractId": "PROGRAMMING-STORE-V1",
-  "schemaVersion": 15,
+  "schemaVersion": 16,
   "databasePath": "${CONFIG_DIR}/programming/programming-v1.sqlite",
   "backupPath": "${CONFIG_DIR}/programming/programming-backups/",
-  "migrationFile": "0015_library_tags.sql",
-  "migrationSha256": "b5d28e3cd74363a7ea77f1e2eec5ce1e4285e00bba7a82e35db56af119a085a6",
+  "migrationFile": "0016_signal_freshness_10ms.sql",
+  "migrationSha256": "f32ef70dd6c16939d5a4e1da4a171adb38da38bdaa9892e99915c390930d27b4",
   "migrations": [
     {
       "version": 1,
@@ -80,6 +80,11 @@
       "version": 15,
       "file": "0015_library_tags.sql",
       "sha256": "b5d28e3cd74363a7ea77f1e2eec5ce1e4285e00bba7a82e35db56af119a085a6"
+    },
+    {
+      "version": 16,
+      "file": "0016_signal_freshness_10ms.sql",
+      "sha256": "f32ef70dd6c16939d5a4e1da4a171adb38da38bdaa9892e99915c390930d27b4"
     }
   ],
   "foreignKeys": true,
@@ -110,5 +115,5 @@
   ],
   "featureDefaultOff": true,
   "owner": "BE/Core",
-  "generatedBy": "TASK-PROG-104; migration v2 by TASK-PROG-204; Check lease/idempotency v3 by TASK-PROG-205; bundle receipt v4 by TASK-PROG-206; operation coordinator v5 by TASK-PROG-403; Product model v2 by T59-005; Control Library domain v7 by T59-201; library mutation receipt v8 by T59-202; package artifact v2 v9 by T59-302; runtime intent receipt v10 by T59-405; revision SIGNAL object v11 by T59-502; library revision deprecate receipt v12 by F-P59-UI-001"
+  "generatedBy": "TASK-PROG-104; migration v2 by TASK-PROG-204; Check lease/idempotency v3 by TASK-PROG-205; bundle receipt v4 by TASK-PROG-206; operation coordinator v5 by TASK-PROG-403; Product model v2 by T59-005; Control Library domain v7 by T59-201; library mutation receipt v8 by T59-202; package artifact v2 v9 by T59-302; runtime intent receipt v10 by T59-405; revision SIGNAL object v11 by T59-502; library revision deprecate receipt v12 by F-P59-UI-001; signal freshness 10..150000 ms v16 by ADR-061"
 }

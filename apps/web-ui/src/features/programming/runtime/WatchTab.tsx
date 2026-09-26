@@ -21,11 +21,16 @@ import type {
   ProgrammingTraceRequest,
   ProgrammingTraceValue
 } from '../model/types'
+import { formatProgrammingPeriod } from '../model/cyclePeriods'
 
 type PickCopy = (vi: string, en: string) => string
 type CategoryFilter = 'ALL' | ProgrammingPointCategory
 
 const CATEGORIES: ProgrammingPointCategory[] = ['LOCAL', 'VP', 'MB_RTU']
+
+/** Chu kỳ lấy mẫu Trace chọn được (ADR-061 mục 4.6: dải 10…50000 ms). 10 ms là
+ *  base step; server trả chu kỳ hiệu lực nếu Core không lấy mẫu nhanh được thế. */
+const TRACE_SAMPLE_PERIODS_MS = [10, 100, 1_000, 5_000] as const
 
 /** PGM-06/UJ-PROG-07, T59-504 — monitor 1 Hz chỉ đọc và trace bounded. Mọi
  * candidate, actual, quality, freshness, priority và TTL đều đến từ snapshot
@@ -207,7 +212,9 @@ export function WatchTab() {
           </label>
           <label className="text-xs text-[var(--c-text-dim)]">{pick('Chu kỳ lấy mẫu', 'Sample period')}
             <select className="mt-1 block rounded border border-[var(--c-border)] bg-[var(--c-bg)] px-2 py-1.5 text-sm text-[var(--c-text)]" value={samplePeriodMs} disabled={!canTrace || traceRunning} onChange={(event) => setSamplePeriodMs(Number(event.target.value))}>
-              <option value={100}>100 ms</option><option value={1_000}>1 s</option><option value={5_000}>5 s</option>
+              {TRACE_SAMPLE_PERIODS_MS.map((value) => (
+                <option key={value} value={value}>{formatProgrammingPeriod(value)}</option>
+              ))}
             </select>
           </label>
           <span className="pb-2 text-xs text-[var(--c-text-dim)]">{selectedAvailable.length}/32 {pick('biến', 'variables')}</span>
@@ -226,6 +233,19 @@ export function WatchTab() {
               <StatusBadge state={trace.state === 'RUNNING' ? 'online' : trace.state === 'FAILED' ? 'fault' : 'unknown'} label={trace.state} />
               <span className="font-mono">{trace.traceId}</span>
               <span>{trace.samples.length} {pick('mẫu', 'samples')}</span>
+              {/* ADR-061 mục 4.6: chu kỳ lấy mẫu THẬT có thể chậm hơn số đã yêu
+                  cầu (Core chỉ lấy mẫu ở ranh giới base step). Nói ra khi hai số
+                  khác nhau, để đồ thị không bị đọc theo nhịp không tồn tại. */}
+              {typeof trace.effectiveSamplePeriodMs === 'number' && trace.effectiveSamplePeriodMs !== trace.samplePeriodMs ? (
+                <span className="text-[var(--c-warn-fg)]" data-testid="trace-effective-sample-period">
+                  · {pick('lấy mẫu thật', 'effective sampling')} {formatProgrammingPeriod(trace.effectiveSamplePeriodMs)}{' '}
+                  ({pick('yêu cầu', 'requested')} {formatProgrammingPeriod(trace.samplePeriodMs)})
+                </span>
+              ) : (
+                <span data-testid="trace-effective-sample-period">
+                  · {pick('mỗi', 'every')} {formatProgrammingPeriod(trace.effectiveSamplePeriodMs ?? trace.samplePeriodMs)}
+                </span>
+              )}
               <span className={trace.droppedSamples > 0 ? 'font-semibold text-[var(--c-warn-fg)]' : undefined}>
                 · {trace.droppedSamples} {pick('mẫu rơi', 'dropped samples')}
               </span>

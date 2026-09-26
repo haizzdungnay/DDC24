@@ -117,9 +117,15 @@ class ProgrammingErrorCatalogGeneratorTest(unittest.TestCase):
         # lần này nó lại bị che: `verify_repository.py` fail trước trong
         # `run_layout` (`cmd/mkddc-programming-e2e-seed` vs rule chỉ cho
         # `cmd/mkddc-web`) và `set -e` cắt phần còn lại của gate.
-        self.assertEqual(catalog["catalogVersion"], "1.11.0")
+        #
+        # Cập nhật ADR-061 (2026-09-26): 158→159 detail, catalog 1.11.0→1.12.0.
+        # `ST-SCHED-001` (mục 4.12) là mã chẩn đoán riêng cho chu kỳ Task/Program
+        # ngoài tập {10…50000} ms; trước đó Check dùng lại `ST-LIM-009` ("quá
+        # nhiều Program") và người đọc đi sửa sai chỗ. Ánh xạ vào
+        # `PRG-ERR-SCOPE-001` (ngoài phạm vi profile) nên số public giữ 38.
+        self.assertEqual(catalog["catalogVersion"], "1.12.0")
         self.assertEqual(len(catalog["publicErrors"]), 38)
-        self.assertEqual(len(catalog["componentDetails"]), 158)
+        self.assertEqual(len(catalog["componentDetails"]), 159)
         self.assertEqual(len(GENERATOR.sha256(raw)), 64)
         self.assertEqual(len(GENERATOR.sha256(schema_raw)), 64)
 

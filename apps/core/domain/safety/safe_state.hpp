@@ -3,7 +3,7 @@
  * @brief Ghi đè output an toàn khi IO không tin cậy (07 §5 SAFETY SPEC).
  *        Trigger matrix §5.2 (phía core):
  *          T1/T2: iop_status FAULT/SAFE          — implemented
- *          T3:    shm stale >3 scan               — implemented
+ *          T3:    shm stale > max(5 base step, 500 ms) (ADR-061 4.7) — implemented
  *          T6:    ui_quality=BAD trên kênh graph đang dùng — implemented
  *          T7:    chưa có graph hợp lệ VÀ không có manual/BMS active — implemented
  *        Action §5.3 CỐ ĐỊNH: AO → 0V/4mA theo ao_mode, DO → open — KHÔNG theo

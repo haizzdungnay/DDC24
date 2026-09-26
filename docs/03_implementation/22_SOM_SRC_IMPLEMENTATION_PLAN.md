@@ -637,7 +637,7 @@ Output:
 
 Microtask:
 1. trigger on FAULT/SAFE. — ĐÃ làm 2026-06-11 (T1/T2 theo 07 §5.2)
-2. trigger on stale > threshold. — ĐÃ làm 2026-06-11 (T3, >3 scan)
+2. trigger on stale > threshold. — ĐÃ làm 2026-06-11 (T3, >3 scan); 2026-09-26 đổi sang ngưỡng theo thời gian max(5 base step, 500 ms) theo ADR-061 4.7
 3. write safe AO/DO vào `OutputCmd`. — ĐÃ làm 2026-06-11 (AO 0V/4mA theo ao_mode, DO open)
 4. clear override khi recover. — ĐÃ làm 2026-06-11 (trả quyền resolver ≤1 scan, không hysteresis)
 5. trigger T6/T7 graph-based theo 07 §5.2 — ĐÃ làm 2026-06-12 (graph_runtime

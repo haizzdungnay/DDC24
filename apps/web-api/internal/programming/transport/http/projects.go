@@ -352,6 +352,13 @@ func writeMappedError(w http.ResponseWriter, err error, correlationID string) {
 	if errors.As(err, &draftOperation) && public.Field == "" {
 		public.Field = draftOperation.Field()
 	}
+	// ADR-061 C1: chu kỳ ngoài tập vẫn là 400 `PRG-ERR-REQ-001`, nhưng mang
+	// `detailCode=ST-SCHED-001` và giá trị bị từ chối để FE nói được VÌ SAO —
+	// "request sai" không cho người dùng biết phải chọn chu kỳ khác.
+	var periodError *programmingapplication.PeriodNotAllowedError
+	if errors.As(err, &periodError) && public.Code == domain.ErrRequest {
+		public.Args = map[string]any{"detailCode": periodError.DetailCode(), "actual": periodError.PeriodMs}
+	}
 	WriteProgrammingError(w, status, public, correlationID)
 }
 

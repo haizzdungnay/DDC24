@@ -3,9 +3,11 @@ package application
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -260,6 +262,33 @@ func TestTraceIsBoundedIdempotentAndCanStop(t *testing.T) {
 	if view.State != "STOPPED" || view.StopReason == nil || *view.StopReason != "USER_STOPPED" || len(view.Samples) > maxTraceValueCells {
 		t.Fatalf("trace terminal/bounded sai: %+v", view)
 	}
+}
+
+// ADR-061 mục 4.6 — phiên Trace công bố chu kỳ lấy mẫu HIỆU LỰC. Yêu cầu 10 ms
+// trên một Core còn base step 1000 ms thì mẫu 10 ms không tồn tại: view phải nói
+// `effectiveSamplePeriodMs = 1000`, còn `samplePeriodMs` giữ nguyên số yêu cầu.
+func TestTraceViewReportsEffectiveSamplePeriod(t *testing.T) {
+	service, monitor := newMonitorTraceService(t)
+	snapshot := monitor.snapshot
+	legacyTask := *snapshot.Task
+	legacyTask.BaseStepUS = uint64Ptr(1_000_000)
+	snapshot.Task = &legacyTask
+	monitor.set(snapshot)
+	request := TraceRequest{SchemaVersion: "1.0", VariableIDs: []string{monitorVariableID}, DurationMS: 1000, SamplePeriodMS: 10}
+	actor := Actor{ID: "admin", Role: "admin"}
+	accepted, err := service.CreateTrace(context.Background(), request, actor, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1", "trace-test-000101")
+	if err != nil {
+		t.Fatalf("CreateTrace: %v", err)
+	}
+	view, err := service.GetTrace(accepted.TraceID)
+	if err != nil || view.SamplePeriodMS != 10 || view.EffectiveSamplePeriodMS != 1000 {
+		t.Fatalf("trace view sample=%d effective=%d err=%v", view.SamplePeriodMS, view.EffectiveSamplePeriodMS, err)
+	}
+	raw, _ := json.Marshal(view)
+	if !strings.Contains(string(raw), `"effectiveSamplePeriodMs":1000`) {
+		t.Fatalf("JSON thiếu effectiveSamplePeriodMs: %s", raw)
+	}
+	_ = service.StopTrace(context.Background(), accepted.TraceID, actor, "trace-test-000102")
 }
 
 func TestTraceStoreEvictsOldestTerminalSessionAtRetentionLimit(t *testing.T) {

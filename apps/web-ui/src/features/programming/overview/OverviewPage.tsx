@@ -38,6 +38,7 @@ import {
 } from './QuickActions'
 import type { ProgrammingProgramHealth, ProgrammingProgramRuntimeState, RemoteState } from '../model/types'
 import { programsWorkspacePath } from '../shared/programsRoute'
+import { formatProgrammingPeriod } from '../model/cyclePeriods'
 import { useProgrammingActionAllowed } from '../api/authorization'
 
 /**
@@ -552,7 +553,7 @@ function ProgramsCompactList({ model, projectId }: { model: ProgramsSummaryModel
                 {row.cycle === null ? (
                   <MissingValue reason={pick('Chưa đọc được từ Core', 'Not read from Core')} />
                 ) : (
-                  `${row.cycle.periodMs} ms · ${row.cycle.source === 'CORE_LIVE' ? pick('Core đang chạy', 'Live from Core') : pick('Khai báo trong gói', 'Declared in the package')}`
+                  `${formatProgrammingPeriod(row.cycle.periodMs)} · ${row.cycle.source === 'CORE_LIVE' ? pick('Core đang chạy', 'Live from Core') : pick('Khai báo trong gói', 'Declared in the package')}`
                 )}
               </dd>
               <dt className="text-[var(--c-text-dim)]">{pick('Chạy gần nhất', 'Last Exec')}</dt>

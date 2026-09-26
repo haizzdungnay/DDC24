@@ -16,6 +16,7 @@ import {
 } from './overviewViewModel'
 import type { ProgrammingProgramHealth, ProgrammingProgramRuntimeState } from '../model/types'
 import { programsWorkspacePath } from '../shared/programsRoute'
+import { formatProgrammingPeriod } from '../model/cyclePeriods'
 
 /**
  * `T60-205` — bảng Programs của PGM-01.
@@ -262,12 +263,13 @@ function LanguageCell({ row }: { row: OverviewProgramRow }) {
 function CycleCell({ row }: { row: OverviewProgramRow }) {
   const { pick } = useI18n()
   if (row.cycle === null) return <MissingCell reason={notReadFromCore(pick)} />
-  // D-03: con số ở đây LUÔN đến từ dữ liệu thật. Không có hằng số `10 ms`/
-  // `100 ms` nào của ảnh mockup trong mã — profile Rev A chỉ cho
-  // `[1000, 5000, 30000]`.
+  // D-03: con số ở đây LUÔN đến từ dữ liệu thật (Core hoặc gói khai báo),
+  // không từ hằng số của ảnh mockup. Hiển thị theo ADR-061 mục 4.13: dưới 1 s
+  // bằng ms, từ 1 s bằng giây; chu kỳ cũ 30000 ms của Program đang chạy vẫn
+  // hiện nguyên "30 s", không bị coi là lỗi dữ liệu (mục 4.14).
   return (
     <span className="flex flex-col gap-0.5">
-      <span className="text-[var(--c-text)]">{`${row.cycle.periodMs} ms`}</span>
+      <span className="text-[var(--c-text)]">{formatProgrammingPeriod(row.cycle.periodMs)}</span>
       <span className="text-[10px] leading-tight text-[var(--c-text-dim)]">
         {row.cycle.source === 'CORE_LIVE'
           ? pick('Core đang chạy', 'Live from Core')

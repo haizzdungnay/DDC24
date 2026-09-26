@@ -88,10 +88,13 @@ bool st_withdraw_instance_outputs(const StProgramInstance& instance, PriorityRes
  * ADR-051):
  *  - STOPPED/DISABLED: rút NGAY tại safe boundary, không chờ TTL — lệnh dừng
  *    có chủ ý của operator phải nhả quyền ngay, không giữ mãi.
- *  - Mọi instance ĐÃ từng publish mà lệnh cuối đã già hơn `hold_ttl_ns` theo
+ *  - Mọi instance ĐÃ từng publish mà lệnh cuối đã già hơn TTL CỦA INSTANCE theo
  *    ĐỒNG HỒ của tick: rút, bất kể trạng thái là FAULTED, ROLLED_BACK hay
  *    RUNNING-trong-Task-bị-disable. TTL đo tuổi của lệnh, không đo trạng thái,
  *    nên trần "không lệnh mức 5 nào sống quá TTL" là tuyệt đối.
+ *  - ADR-061 4.4: TTL của instance = max(`hold_ttl_ns`, 2 × chu kỳ Program) —
+ *    `hold_ttl_ns` là SÀN (60 s đã ký hoặc `--program-hold-ttl-ms`), Program
+ *    50 000 ms được 100 s. Xem `st_hold_ttl::instance_ttl_ns`.
  *  - `hold_ttl_ns == 0` TẮT TTL (giữ vô hạn). Sau ADR-051 đây chỉ còn là
  *    affordance cho test/chẩn đoán: bootstrap sản phẩm LUÔN truyền giá trị đã
  *    ký `st_hold_ttl::kSignedTtlNs` (60 s).

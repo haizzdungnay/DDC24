@@ -1,5 +1,7 @@
 #include "st/st_signal_bus.hpp"
 
+#include "st/st_limits.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -101,7 +103,8 @@ bool StSignalBus::declare(Bank* bank, const StSignalDefinition& definition, std:
     }
     if (static_cast<uint8_t>(definition.type) < static_cast<uint8_t>(StType::BOOL) ||
         static_cast<uint8_t>(definition.type) > static_cast<uint8_t>(StType::UINT) ||
-        definition.freshness_ms < 1000u || definition.freshness_ms > 90000u ||
+        definition.freshness_ms < st_limits::kMinSignalFreshnessMs ||
+        definition.freshness_ms > st_limits::kMaxSignalFreshnessMs ||
         static_cast<uint8_t>(definition.stale_policy) >
             static_cast<uint8_t>(StStalePolicy::WAIT) ||
         !fallback_value_valid(definition)) {

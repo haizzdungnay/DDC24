@@ -2,9 +2,11 @@
  * @file  test_st_program_release.cpp
  * @brief T59-402 — mỗi Program release theo deadline RIÊNG của nó.
  *
- *        DDD §7.1: Task không còn là đơn vị chạy chung. Một package có ba lớp
- *        chu kỳ (1 s / 5 s / 30 s) chạy trong cùng một Task, nên "Task đến hạn"
- *        KHÔNG có nghĩa "mọi Program đến hạn".
+ *        DDD §7.1: Task không còn là đơn vị chạy chung. Một package có nhiều lớp
+ *        chu kỳ (ADR-061: 10 ms … 50 s) chạy trong cùng một Task, nên "Task đến
+ *        hạn" KHÔNG có nghĩa "mọi Program đến hạn". Các test thuần hàm dưới đây
+ *        dùng chu kỳ bất kỳ (kể cả 30 s legacy) vì luật release không phụ thuộc
+ *        tập chu kỳ của profile.
  *
  *        Bộ test này khoá luật release ở mức thuần hàm (`st_program_due` /
  *        `st_program_mark_released`) để kiểm được tính tất định của deadline mà
@@ -116,7 +118,7 @@ TEST(StProgramRelease, ExecutionOrderIsIndependentOfCreationOrder)
         StTaskConfig task;
         task.id = "main";
         task.period_ms = 1000;
-        task.budget_ms = 199;
+        task.budget_us = 199000;
         std::string error;
         EXPECT_TRUE(scheduler.add_task(task, &error)) << error;
         for (const auto& entry : entries)
@@ -141,7 +143,7 @@ TEST(StProgramRelease, RunningProgramCeilingIsSixteen)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     std::string error;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
 
@@ -370,7 +372,7 @@ TEST(StProgramReleaseJitter, TaskReanchoredOnJitteredTickKeepsEveryTick)
     StTaskConfig cfg;
     cfg.id = "main";
     cfg.period_ms = 1000;
-    cfg.budget_ms = 199;
+    cfg.budget_us = 199000;
     StTask task(cfg);
     task.set_base_step_ns(1000 * kMs);
     uint32_t runs = 0;
@@ -391,7 +393,7 @@ TEST(StProgramReleaseJitter, TaskToleranceIsBoundedByBaseStep)
     StTaskConfig cfg;
     cfg.id = "fast";
     cfg.period_ms = 100;
-    cfg.budget_ms = 19;
+    cfg.budget_us = 19000;
     StTask task(cfg);
     task.set_base_step_ns(10 * kMs);
     EXPECT_EQ(task.release_tolerance_ns(), 5 * kMs);

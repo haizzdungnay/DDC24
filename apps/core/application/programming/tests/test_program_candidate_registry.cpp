@@ -197,7 +197,7 @@ TEST(ProgramCandidateRegistry, DisableWithdrawsCandidateAndOutputFallsToDefault)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
     ASSERT_TRUE(scheduler.request_activation("P_ahu", program_with_output("Ahu", 2), &error)) << error;
@@ -240,7 +240,7 @@ TEST(ProgramCandidateRegistry, SignalBlockedWithdrawsCandidateImmediately)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_ahu", 0, &error)) << error;
     ASSERT_TRUE(scheduler.request_activation("P_ahu", program_with_output("Ahu", 2), &error))

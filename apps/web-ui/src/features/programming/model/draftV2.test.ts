@@ -90,9 +90,20 @@ describe('adapter document v2 -> view model Design', () => {
     expect(view.task.programOrder).toEqual([])
   })
 
-  it('chu kỳ lạ rơi về 1000 thay vì hiển thị giá trị profile không cho phép', () => {
-    const odd = { ...(V2 as unknown as Record<string, unknown>), programs: [{ programId: 'x', objectId: 'y', periodMs: 777 }] }
-    expect(toWorkspaceDocument(odd as unknown as ProgrammingDraftDocument).task.periodMs).toBe(1000)
+  // ADR-061 mục 4.13/4.14 (X12): chu kỳ đã lưu KHÔNG bị ép về 1000 ms. Bản cũ
+  // làm vậy, nên một Program 10 ms hay 30 s cũ bị đổi âm thầm thành 1 s và bị
+  // gửi ngược lên ở lần Lưu kế tiếp. Giá trị được giữ nguyên để giao diện hiện
+  // rõ là không hợp lệ.
+  it('giữ nguyên chu kỳ đã lưu kể cả khi nó không thuộc tập (legacy 30000, lạ 777, mới 10)', () => {
+    for (const periodMs of [30000, 777, 10, 50000]) {
+      const draft = { ...(V2 as unknown as Record<string, unknown>), programs: [{ programId: 'x', objectId: 'y', periodMs }] }
+      expect(toWorkspaceDocument(draft as unknown as ProgrammingDraftDocument).task.periodMs).toBe(periodMs)
+    }
+  })
+
+  it('Draft chưa có Program nào dùng chu kỳ mặc định 1000 ms, không phải 10 ms đầu tập', () => {
+    const empty = { ...(V2 as unknown as Record<string, unknown>), programs: [] }
+    expect(toWorkspaceDocument(empty as unknown as ProgrammingDraftDocument).task.periodMs).toBe(1000)
   })
 
   it('document v1 đi qua nguyên trạng', () => {

@@ -322,7 +322,7 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	}
 	topology, budget := packageTopology(revision.Revision.DocumentSchemaVersion, objectViews)
 	scopeDiagnostics = append(scopeDiagnostics, packageTopologyDiagnostics(topology)...)
-	scopeDiagnostics = append(scopeDiagnostics, packageInvariantDiagnostics(objectViews)...)
+	scopeDiagnostics = append(scopeDiagnostics, packageInvariantDiagnostics(objectViews, topology)...)
 	if len(scopeDiagnostics) > 0 {
 		return true, s.complete(ctx, check, "FAILED", scopeDiagnostics, nil)
 	}

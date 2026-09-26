@@ -5,7 +5,7 @@
   "targetAbi": 3841,
   "version": {
     "major": 2,
-    "minor": 1
+    "minor": 2
   },
   "capacity": {
     "maxObjects": 1312,
@@ -17,13 +17,18 @@
     "maxBindings": 512
   },
   "scheduler": {
-    "maxTasks": 3,
+    "maxTasks": 8,
     "maxProgramsPerTask": 32,
     "maxProgramsTotal": 32,
     "allowedPeriodMs": [
+      10,
+      50,
+      100,
+      500,
       1000,
       5000,
-      30000
+      10000,
+      50000
     ],
     "maxTaskBudgetPercent": 20
   },

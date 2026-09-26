@@ -306,6 +306,9 @@ inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-iobus.service" "$UNITDIR/"
 inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-core.service"  "$UNITDIR/"
 inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-netcfg.service" "$UNITDIR/"
 inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-web-pi.service" "$UNITDIR/"
+# ADR-061 4.11: irqbalance không đặt IRQ lên CPU3 (CPU riêng của mkddc-core).
+inst -d -m 0755 "$UNITDIR/irqbalance.service.d"
+inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/irqbalance-mkddc-rt.conf" "$UNITDIR/irqbalance.service.d/mkddc-rt.conf"
 # Hai helper đặc quyền — BỎ SÓT cho tới 2026-09-13.
 #
 # `mkddc-web` chạy `User=mkddc` với `NoNewPrivileges=true`, nên nó KHÔNG tự

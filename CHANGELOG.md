@@ -8,6 +8,33 @@
 
 ## [Unreleased]
 
+### Changed — ADR-061 nền: profile v2.2, tương thích chu kỳ cũ 30000 ms, CPU3 dành cho Core (2026-09-26)
+
+- Phạm vi: `contracts/programming/product_profile_v2.json` và các file sinh (`st_profile_generated.hpp`, `profile_generated.go`, `profile.ts`); `docs/adr/ADR-061-…` mục 4.14; `platform/systemd/*.service`, `platform/systemd/irqbalance-mkddc-rt.conf`, `platform/systemd/install.sh`; `docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md` §5 (T3), `docs/03_implementation/22_SOM_SRC_IMPLEMENTATION_PLAN.md`.
+- Profile v2.2 giữ `profileId` `revA-1t-1-5-30` làm định danh ổn định (ADR-061 4.1): `allowedPeriodMs` = {10, 50, 100, 500, 1000, 5000, 10000, 50000}, `maxTasks` = 8.
+- ADR-061 4.14: gói đã Commission với chu kỳ cũ 30000 ms vẫn được nạp và chạy khi nâng cấp (Active #52 trên Foxlinx dùng 30000 ms); revision mới vẫn bị từ chối.
+- Nền RT tạm trong lúc chờ PREEMPT_RT (4.11): `mkddc-core` `CPUAffinity=3`, các service khác ghim `0-2`, drop-in `irqbalance.service.d/mkddc-rt.conf` đặt `IRQBALANCE_BANNED_CPULIST=3`.
+- Guide Core §5: T3 nay tính theo thời gian, max(5 base step, 500 ms), thay cho "> 3 scan".
+- Kiểm chứng: pytest packaging guard 24/24 PASS; số đo cổng đầy đủ ở entry tích hợp ADR-061.
+
+### Changed — ADR-061 tích hợp Track A + Track B (2026-09-26)
+
+- Phạm vi: gộp `feat/cycle-10ms-track-a-20260926` và `feat/cycle-10ms-core-trackb-20260926`; sinh lại hồ sơ ngôn ngữ ST từ `mkddc-st-profile-dump` cho mã `ST-SCHED-001` (sha `e06a207e…` → `31bf5f0b…`, không còn nơi ghim sha cũ).
+- Kiểm chứng trên cây gộp (host): `cmake --fresh … MODBUS/BACNET/HMI=ON` exit 0; `cmake --build build/fw --parallel` exit 0, 0 warning; `ctest --test-dir build/fw --output-on-failure -j8` 1547/1547 PASS (9 skipped, cùng tập môi trường: IoCache ×7, RealtimeMemlock ×1, MbaThreadPolicy ×1); 5 generator `--check` PASS; `gofmt -l` rỗng, `go vet ./...` exit 0, `MKDDC_REQUIRE_PRODUCTION_TOOLS=1 go test ./... -count=1` exit 0 (21 package, test tool C++ chạy binary thật); FE `npx vitest --run --environment jsdom src` 3455/3455 (266 file), `npm run lint` exit 0, `npm run build` exit 0; `verify-project.sh --component layout` exit 0; pytest `tests/integration` 40 PASS, 14 skipped (`test_release_dryrun`, chưa dựng `build/release`).
+- E2E Programming mock (`programming`, `programming-workspace-height`, `st-editor-alignment`, `programming-target-fault`): 125 PASS / 14 FAIL / 34 skipped. Trên `origin/main` 8b355393 cùng bộ spec cho 124 PASS / 15 FAIL, trùng tập ca đỏ; ca lệch `drawer (768px)` PASS 3/3 khi chạy lặp. Nhánh không thêm hồi quy e2e; nhóm ca đỏ có sẵn trên main được xử lý ở entry riêng.
+
+### Changed — ADR-061 Track B: Core chạy base step 10 ms với bộ chu kỳ {10…50000} ms (2026-09-26)
+
+- Phạm vi: `apps/core/**` (scheduler, ScanLoop, PointQuality/SafeState, process image, trace, signal bus, package v2, IPC Programming, bootstrap) và test Core; không đổi `contracts/**`, `apps/web-api/**`, `apps/web-ui/**` hay file sinh.
+- Base step mặc định 10 ms; khi Programming runtime bật, `graph.json scan_ms` không còn kéo base step (graph chạy với dt = base step thật). Task `main` = 10 ms, ngân sách tính bằng µs (`budget_us`, luật `< 20%` giữ nguyên: trần 2000 µs loại trừ, khai 1999 µs); `point_snapshot.task` có `budgetUs` bên cạnh `budgetMs`.
+- Hold TTL theo instance = max(60 s, 2 × chu kỳ Program) thay cho `static_assert` toàn cục: Program 50 000 ms giữ lệnh 100 s, còn lại 60 s; `--program-hold-ttl-ms` là sàn.
+- Stale I/O theo thời gian: UNCERTAIN sau max(3 base step, 250 ms), BAD/T3 sau max(5 base step, 500 ms). Watchdog `WATCHDOG=1` tối đa 1 lần/giây; snapshot persist graph mỗi 60 s và notify worker RETAIN tối đa 1 lần/giây (trước tính theo số scan).
+- Metric C4 trong ScanLoop, công bố ở `point_snapshot.task`: `baseStepUs`, `jitterMaxUs` (cửa sổ 60 s), `jitterViolationCount` (> 100 µs), `missedBaseStepCount`. Trễ ≥ 1 base step thì bỏ tick và nhảy tới mốc lưới kế tiếp, không chạy dồn. WCET 8 bước của `step()` log mỗi phút `core.step_wcet`; `core.jitter` giữ trường cũ và thêm metric C4.
+- Chu kỳ ngoài tập có mã chẩn đoán riêng `ST-SCHED-001` (add_task, prepare_program_set, writer package, `mkddc-st-package`). Gói đã Commission với chu kỳ legacy 30000 ms vẫn nạp và chạy (loader nhận tập mới ∪ {30000}); mỗi lần activate log `WARN programming.legacy_period`, hàng `programs[]` có `legacyPeriod`. Tạo mới 30000 ms vẫn bị từ chối.
+- Trace `samplePeriodMs` 10..50000 ms, chu kỳ lấy mẫu hiệu lực = max(yêu cầu, base step), trả ở `TRACE_START` ACCEPTED `[effectiveSamplePeriodMs]`. Freshness Published Signal 10..150000 ms. CAPABILITIES đọc tập chu kỳ từ `st_profile_generated::kAllowedPeriodMs`.
+- Hạ tầng test: PLC SHM của `core_tests` cô lập theo PID (`ctest -j` từng xoá segment của nhau, làm `WebIpc.ExtPointWriteCommandAccepted` đỏ ngắt quãng).
+- Kiểm chứng: `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` exit 0; `cmake --build build/fw --parallel` exit 0; `ctest --test-dir build/fw --output-on-failure -j8` 1546/1547 PASS ở cả 3 lượt (9 skipped) trên nhánh Track B; ca `st_language_profile_contract` chờ sinh lại hồ sơ ngôn ngữ cho mã mới `ST-SCHED-001`, đã xử lý ở bước tích hợp. `scripts/generate_programming_errors.py --check` PASS.
+
 ### Changed — Hồ sơ audit: F08 khỏi trên target, đo G2 tạm khi dời IRQ (2026-09-26)
 
 - Phạm vi: `docs/07_records/test-evidence/programming/2026-09-25-fbd-st-modbus-do-audit.md`.
@@ -17,6 +44,13 @@
 
 - Phạm vi: `docs/adr/ADR-061-programming-chu-ky-10ms-bo-chu-ky-moi.md`, `docs/00_governance/DECISIONS.md`, `docs/adr/README.md`.
 - Chủ sở hữu chốt: base step 10 ms, tập chu kỳ {10, 50, 100, 500, 1000, 5000, 10000, 50000} ms, tiêu chí C1–C4 (vi phạm = lỗi), I/O mở rộng có spec riêng. Có 13 quyết định kỹ thuật triển khai; nền RT (PREEMPT_RT) bị chặn chờ BSP Forlinx.
+
+### Changed — ADR-061 Track A: hợp đồng, re-pin, Go và FE cho tập chu kỳ {10…50000} ms (2026-09-26)
+
+- Phạm vi hợp đồng: `contracts/openapi/openapi.yaml` 1.41.0→1.42.0 (`taskPeriodsMs` 8 giá trị; `ProgrammingTaskMetrics` thêm `budgetUs`/`baseStepUs`/`jitterMaxUs`/`jitterViolationCount`/`missedBaseStepCount` nullable không bắt buộc, `health`/`healthReasons`; Trace `samplePeriodMs` 10…50000 kèm `effectiveSamplePeriodMs`; freshness 10…150000), `contracts/ipc/programming_v1/schema.json` (freshness), `contracts/config/st_program_control_v1.schema.json` (base step 10 ms, metric C4), error catalog 1.11.0→1.12.0 thêm `ST-SCHED-001` → `PRG-ERR-SCOPE-001` (158→159 detail), store migration mới `0016_signal_freshness_10ms.sql` (rebuild `published_signal_defs`, CHECK 10..150000; schema v15→v16). Re-pin trong cùng change-set: `g1_contract_join_v1.json`, `programming_store_v1.manifest.json`, `fbd/manifest.json`, `golden/build_manifest_{st,fbd}_v1.json` (profile sha + build key), `ipc/programming_v1/golden/manifest.json`, `pgm02_workspace_v1.json`, `error_catalog_v1.manifest.json`; client TS sinh lại.
+- Go (`apps/web-api`): capabilities đọc tập chu kỳ từ `domain.AllowedPeriodMs` (bỏ bản chép tay, X11; `limits.tasks` vẫn 1); Draft chỉ cho ĐẶT chu kỳ thuộc tập, lỗi 400 mang `detailCode=ST-SCHED-001`; Draft/Revision cũ mang 30000 ms vẫn đọc/sửa được (ADR-061 4.14), chu kỳ mặc định giữ 1000 ms. Check: chu kỳ ngoài tập ⇒ `ST-SCHED-001` (thay `ST-LIM-009`, X17); ngân sách chuyển sang µs theo base step (phần chia của 1999 µs cho mọi Program, tổng xấu nhất `<` 2000 µs cùng dấu với Core; manifest package v4→v5 ghi `baseStepMs`/`stepBudgetUs`/`worstCaseStepUs`, X3/X4/X5); freshness 10…150000 và ≥ chu kỳ publisher (X9). Trace dải 10…50000, `effectiveSamplePeriodMs = max(yêu cầu, base step Core)`, ticker và Core dùng chu kỳ hiệu lực (X10). Runtime/Monitor chuyển nguyên metric C4 từ `task` của `point_snapshot`; task health DEGRADED khi bộ đếm vi phạm TĂNG trong cửa sổ 60 s hoặc `jitterMaxUs > 100` (X7/X8). Restore Revision cũ đã PASSED không bị chặn bởi tập mới.
+- FE (`apps/web-ui`): module `model/cyclePeriods.ts` — danh sách chu kỳ từ capabilities/profile sinh mã, hiển thị "10 ms"/"500 ms"/"1 s"/"50 s"; `periodMs` là `number`, không ép giá trị lạ về 1000 (X12), chu kỳ legacy hiện "30 s — không còn hợp lệ, chọn 10 s hoặc 50 s" và không cho Lưu; WatchTab thêm mẫu 10/100 ms và hiện chu kỳ lấy mẫu thật; dải freshness mới + luật ≥ chu kỳ publisher tại ô nhập; RuntimeTab hiện metric C4 và sức khoẻ Task.
+- Kiểm chứng (host, 2026-09-26): xem mục "Kiểm chứng Track A" trong báo cáo nhánh `feat/cycle-10ms-track-a-20260926`; `verify-project.sh --component layout` exit 0; `gofmt -l` rỗng, `go vet ./...` exit 0, `go test ./... -count=1` exit 0; vitest/lint/build exit 0. Test Go gọi production tool C++ (`mkddc-st-compile`/`mkddc-st-package`) chỉ chạy được sau khi gộp Track B (TTL theo instance, ADR-061 4.4); số đo trên cây gộp ở entry tích hợp.
 
 ### Fixed — Mức log tới được journald; chẩn đoán FBD `ST-IOMAP-001` nói rõ nguyên nhân (F08, F10, 2026-09-26)
 

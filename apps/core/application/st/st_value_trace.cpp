@@ -17,6 +17,13 @@ const char* st_trace_state_name(StTraceState state)
     return "?";
 }
 
+uint32_t st_trace_effective_sample_period_ms(uint32_t requested_ms, uint64_t base_step_ns)
+{
+    const uint64_t step_ms = (base_step_ns + 999999ull) / 1000000ull;
+    if (step_ms > requested_ms) return step_ms > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(step_ms);
+    return requested_ms;
+}
+
 std::size_t StValueTrace::capacity() const
 {
     if (variable_count_ == 0) return 0;
@@ -68,7 +75,9 @@ bool StValueTrace::start(const std::string& session_id, const StScheduler& sched
         variables_[index] = std::move(resolved);
     }
     variable_count_ = variable_count;
-    sample_period_ms_ = sample_period_ms;
+    requested_sample_period_ms_ = sample_period_ms;
+    sample_period_ms_ =
+        st_trace_effective_sample_period_ms(sample_period_ms, scheduler.base_step_ns());
     started_at_ns_ = now_ns;
     ends_at_ns_ = now_ns + static_cast<uint64_t>(duration_ms) * 1000000ull;
     /* Mẫu ĐẦU TIÊN lấy ngay tại boundary kế tiếp, không chờ hết một chu kỳ:
@@ -167,6 +176,8 @@ StTraceStatus StValueTrace::status() const
     out.sample_count = static_cast<uint32_t>(sample_count_);
     out.dropped_count = dropped_;
     out.started_at_ns = started_at_ns_;
+    out.requested_sample_period_ms = requested_sample_period_ms_;
+    out.effective_sample_period_ms = sample_period_ms_;
     return out;
 }
 
@@ -179,6 +190,7 @@ void StValueTrace::reset()
     sample_count_ = 0;
     dropped_ = 0;
     sample_period_ms_ = 0;
+    requested_sample_period_ms_ = 0;
     started_at_ns_ = 0;
     ends_at_ns_ = 0;
     next_sample_ns_ = 0;

@@ -3,8 +3,8 @@ export const PROGRAMMING_PROFILE_ID = "revA-1t-1-5-30" as const;
 export const PROGRAMMING_PROFILE_CODE = 1 as const;
 export const PROGRAMMING_TARGET_ABI = 3841 as const;
 export const PROGRAMMING_PROFILE_MAJOR = 2 as const;
-export const PROGRAMMING_PROFILE_MINOR = 1 as const;
-export const PROGRAMMING_PROFILE_SHA256 = "d2866c41065e2a51fba88460068df453d63b6e95b30879eba292f4b667b49ede" as const;
+export const PROGRAMMING_PROFILE_MINOR = 2 as const;
+export const PROGRAMMING_PROFILE_SHA256 = "1cb61fec07c1ecd6b61528729d62ad83aa0d1ab7d6dd4baddc948686dcdacbc9" as const;
 export const PROGRAMMING_LIBRARY_VERSION = "rev-a.4" as const;
 
 /** Trần cấp package/Revision. */
@@ -38,13 +38,13 @@ export const PROGRAMMING_RESOURCES = {
 } as const;
 
 export const PROGRAMMING_SCHEDULER = {
-  maxTasks: 3,
+  maxTasks: 8,
   maxProgramsPerTask: 32,
   maxProgramsTotal: 32,
   maxTaskBudgetPercent: 20,
 } as const;
 
-export const PROGRAMMING_ALLOWED_PERIOD_MS = [1000, 5000, 30000] as const;
+export const PROGRAMMING_ALLOWED_PERIOD_MS = [10, 50, 100, 500, 1000, 5000, 10000, 50000] as const;
 export const PROGRAMMING_LANGUAGES = ["ST", "FBD"] as const;
 export const PROGRAMMING_POINT_KINDS = ["LOCAL", "VP", "MB_RTU"] as const;
 

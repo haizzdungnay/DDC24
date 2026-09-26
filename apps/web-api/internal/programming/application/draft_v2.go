@@ -581,8 +581,14 @@ func upsertProgramConfig(document map[string]any, raw []byte) error {
 		return ErrInvalidRequest
 	}
 	value := payload.Program
-	if !isUUID(value.ProgramID) || !isUUID(value.ObjectID) || !allowedPeriodMs(value.PeriodMs) {
+	if !isUUID(value.ProgramID) || !isUUID(value.ObjectID) {
 		return ErrInvalidRequest
+	}
+	// C1 (ADR-061): ĐẶT một chu kỳ mới chỉ được chọn trong tập của profile —
+	// kể cả 30000 ms của profile cũ. Lỗi mang `ST-SCHED-001` để client nói được
+	// VÌ SAO, không chỉ "request sai".
+	if !allowedPeriodMs(value.PeriodMs) {
+		return &PeriodNotAllowedError{PeriodMs: value.PeriodMs}
 	}
 	// Program phải trỏ tới một object kind PROGRAM. Cho phép trỏ FUNCTION nghĩa
 	// là lập lịch một thứ không có điểm vào.
@@ -623,9 +629,13 @@ func upsertSignalDefinition(document map[string]any, raw []byte) error {
 	if !validSignalType(value.Type) || !validText(value.Unit, 0, 32) {
 		return ErrInvalidRequest
 	}
-	// Cùng dải mà schema store ép (`freshness_ms BETWEEN 1000 AND 90000`): hai
-	// lớp phải nói cùng một con số, nếu không lớp trên nhận rồi lớp dưới chối.
-	if value.FreshnessMs < 1000 || value.FreshnessMs > 90000 {
+	// Cùng dải mà schema store ép (`freshness_ms BETWEEN 10 AND 150000`,
+	// migration `0016`, ADR-061 mục 4.5): hai lớp phải nói cùng một con số, nếu
+	// không lớp trên nhận rồi lớp dưới chối. Luật "≥ chu kỳ publisher" thuộc
+	// Check: ở Draft người dùng có thể đặt freshness trước rồi mới đổi chu kỳ,
+	// và bắt buộc đúng thứ tự thao tác là bắt người dùng đoán thứ tự đó.
+	if value.FreshnessMs < signalFreshnessMinMs || value.FreshnessMs > signalFreshnessMaxMs ||
+		value.FreshnessMs != float64(int64(value.FreshnessMs)) {
 		return ErrInvalidRequest
 	}
 	if _, ok := signalPolicies[value.StalePolicy]; !ok {
@@ -734,7 +744,12 @@ func validateDraftDocumentV2(document map[string]any) error {
 		id, ok := program["programId"].(string)
 		objectID, objectOK := program["objectId"].(string)
 		period, periodOK := program["periodMs"].(float64)
-		if !ok || !isUUID(id) || !objectOK || !periodOK || !allowedPeriodMs(period) {
+		// `storedPeriodMs`, KHÔNG phải `allowedPeriodMs`: Draft đã lưu trước
+		// ADR-061 có thể mang 30000 ms. Từ chối nó ở đây làm MỌI mutation của
+		// Draft đó hỏng (kể cả sửa một dòng ST ở POU khác) và người dùng không
+		// còn đường tự sửa. Draft vẫn đọc/sửa được; Check từ chối bằng
+		// `ST-SCHED-001`, còn thao tác ĐẶT chu kỳ chỉ nhận tập mới.
+		if !ok || !isUUID(id) || !objectOK || !periodOK || !storedPeriodMs(period) {
 			return ErrInvalidRequest
 		}
 		if kind, exists := objectIDs[objectID]; !exists || kind != "PROGRAM" {
@@ -938,14 +953,53 @@ func validSignalType(value string) bool {
 	return false
 }
 
+// allowedPeriodMs: chu kỳ thuộc ĐÚNG tập của profile hiện hành (ADR-061 C1).
+// Mọi thao tác ĐẶT chu kỳ và mọi Check dùng hàm này.
 func allowedPeriodMs(value float64) bool {
-	for _, period := range domain.AllowedPeriodMs {
-		if int64(value) == period && value == float64(int64(value)) {
+	return value == float64(int64(value)) && allowedPeriodClass(int64(value))
+}
+
+// legacyRevAPeriodMs là chu kỳ của profile 2.1 KHÔNG còn trong tập 2.2
+// (ADR-061). Active Revision trên bo đang chạy Program 30000 ms; Draft và
+// Revision cũ mang giá trị này phải còn đọc được để người dùng thấy và sửa.
+var legacyRevAPeriodMs = [...]int64{30000}
+
+// storedPeriodMs: chu kỳ được phép NẰM trong một tài liệu đã lưu — tập hiện
+// hành cộng tập legacy. Chỉ dùng cho phép kiểm cấu trúc của Draft; không bao giờ
+// dùng để cho phép ĐẶT chu kỳ hay cho Check qua.
+func storedPeriodMs(value float64) bool {
+	if allowedPeriodMs(value) {
+		return true
+	}
+	for _, period := range legacyRevAPeriodMs {
+		if value == float64(period) {
 			return true
 		}
 	}
 	return false
 }
+
+// defaultProgramPeriodMs là chu kỳ gán cho Program mới khi Draft chưa có chu
+// kỳ hợp lệ nào để kế thừa. Cố ý KHÔNG lấy `AllowedPeriodMs[0]`: phần tử đầu
+// của tập mới là 10 ms, và một Program mới tự chạy ở nhịp nhanh nhất là một
+// quyết định tải CPU mà người dùng không hề đưa ra.
+const defaultProgramPeriodMs = 1000
+
+// PeriodNotAllowedError: thao tác Draft đặt chu kỳ ngoài tập (C1). Nó vẫn LÀ
+// `ErrInvalidRequest` (400) để mọi caller cũ giữ nguyên hành vi, nhưng lớp HTTP
+// gắn thêm `detailCode=ST-SCHED-001` và giá trị bị từ chối.
+type PeriodNotAllowedError struct {
+	PeriodMs float64
+}
+
+func (e *PeriodNotAllowedError) Error() string {
+	return fmt.Sprintf("%s: periodMs=%v ngoài tập %v", detailCodeScheduleOutOfSet, e.PeriodMs, domain.AllowedPeriodMs)
+}
+
+func (e *PeriodNotAllowedError) Unwrap() error { return ErrInvalidRequest }
+
+// DetailCode trả mã chẩn đoán C1 cho lớp HTTP.
+func (e *PeriodNotAllowedError) DetailCode() string { return detailCodeScheduleOutOfSet }
 
 // --- Lớp tương thích op v1 -------------------------------------------------
 //
@@ -1209,11 +1263,11 @@ func setTaskCompat(document map[string]any, raw []byte) error {
 		return ErrInvalidRequest
 	}
 	if !allowedPeriodMs(payload.Task.PeriodMs) {
-		return ErrInvalidRequest
+		return &PeriodNotAllowedError{PeriodMs: payload.Task.PeriodMs}
 	}
 	// T59-702 — `programOrder` phải THẬT SỰ chọn Program, không phải trang trí.
 	//
-	// Profile cho `maxTasks: 3` và ba chu kỳ `1000/5000/30000`, packager đã nhận
+	// Profile cho nhiều lớp chu kỳ (ADR-061: 10…50000 ms), packager đã nhận
 	// `--period <program>=<ms>` theo từng Program, và `packageTopology` đã đếm
 	// Program theo từng chu kỳ. Nhưng tầng draft lại áp một `periodMs` cho MỌI
 	// Program, nên không có đường nào dựng một package nhiều chu kỳ — tức
@@ -1255,11 +1309,15 @@ func setTaskCompat(document map[string]any, raw []byte) error {
 	return nil
 }
 
+// currentTaskPeriod chọn chu kỳ cho Program mới tạo qua op v1: kế thừa chu kỳ
+// HỢP LỆ đầu tiên của Draft, nếu không có thì 1000 ms. Không kế thừa chu kỳ
+// legacy (30000 ms) — làm vậy là tự tạo thêm một Program mà Check chắc chắn từ
+// chối.
 func currentTaskPeriod(document map[string]any) float64 {
 	for _, program := range collectionOf(document, "programs") {
-		if period, ok := program["periodMs"].(float64); ok {
+		if period, ok := program["periodMs"].(float64); ok && allowedPeriodMs(period) {
 			return period
 		}
 	}
-	return float64(domain.AllowedPeriodMs[0])
+	return defaultProgramPeriodMs
 }

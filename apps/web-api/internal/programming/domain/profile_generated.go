@@ -8,8 +8,8 @@ const (
 	ProfileCode           = 1
 	ProfileTargetABI      = 3841
 	ProfileMajor          = 2
-	ProfileMinor          = 1
-	ProfileSHA256         = "d2866c41065e2a51fba88460068df453d63b6e95b30879eba292f4b667b49ede"
+	ProfileMinor          = 2
+	ProfileSHA256         = "1cb61fec07c1ecd6b61528729d62ad83aa0d1ab7d6dd4baddc948686dcdacbc9"
 	ProfileLibraryVersion = "rev-a.4"
 	ProfileIntegrityMode  = "SIGNATURE_REQUIRED"
 )
@@ -46,13 +46,13 @@ const (
 
 // Trần scheduler.
 const (
-	MaxTasks             = 3
+	MaxTasks             = 8
 	MaxProgramsPerTask   = 32
 	MaxTaskBudgetPercent = 20
 )
 
 // AllowedPeriodMs giữ đúng thứ tự tăng dần trong profile.
-var AllowedPeriodMs = [3]int64{1000, 5000, 30000}
+var AllowedPeriodMs = [8]int64{10, 50, 100, 500, 1000, 5000, 10000, 50000}
 
 // ProfileLanguages và ProfilePointKinds giữ đúng thứ tự canonical.
 var (

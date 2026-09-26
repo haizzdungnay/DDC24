@@ -27,7 +27,13 @@ import (
 // topology (Program/chu kỳ/thứ tự), resource budget, đồ thị POU, khai báo signal,
 // dependency signal do compiler xác nhận, binding manifest, và bộ version pin
 // (profile/compiler/library lock).
-const packageManifestSchemaVersion = 4
+//
+// Manifest v5 (ADR-061 mục 4.3): ngân sách chuyển từ "20% chu kỳ của từng
+// Program" sang "phần chia của ngân sách một base step 10 ms", và `budget` ghi
+// thêm `baseStepMs`/`stepBudgetUs`/`worstCaseStepUs` để phép ước lượng kịch bản
+// xấu nhất kiểm lại được từ chính tài liệu. Manifest v4 lưu trước đó nói về một
+// profile khác (sha profile đã đổi), nên đọc nó theo luật v5 là đọc sai.
+const packageManifestSchemaVersion = 5
 
 // maxCheckManifestBytes — trần cho chính tài liệu manifest. 32 Program × (POU +
 // binding + signal) vẫn nằm xa dưới mức này; trần tồn tại để một Revision hỏng
@@ -697,9 +703,12 @@ func validateManifestTopology(root map[string]any) (map[string]struct{}, map[str
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
-		if budget <= 0 || budget > programBudgetUs(period) {
-			return nil, nil, nil, nil, fmt.Errorf("%sbudgetUs=%d ngoài dải 1..%d (%d%% của %d ms, DDD §4.3)",
-				prefix, budget, programBudgetUs(period), domain.MaxTaskBudgetPercent, period)
+		// ADR-061 mục 4.3: mỗi Program nhận ĐÚNG phần chia của ngân sách một
+		// base step cho toàn bộ Program của package (kịch bản xấu nhất: mọi
+		// Program release cùng một step).
+		if share := programBudgetUs(len(items)); budget != share {
+			return nil, nil, nil, nil, fmt.Errorf("%sbudgetUs=%d; cần %d (phần chia %d µs cho %d Program, ADR-061 4.3)",
+				prefix, budget, share, stepBudgetUs-1, len(items))
 		}
 		enabled, err := boolField(fields, "desiredEnabled")
 		if err != nil {
@@ -719,13 +728,16 @@ func validateManifestBudget(root map[string]any, periods []int64) error {
 		return err
 	}
 	fields, err := exactFields("budget.", object, "maxProgramsTotal", "maxProgramsEnabled",
-		"maxTaskBudgetPercent", "source", "periods")
+		"maxTaskBudgetPercent", "source", "baseStepMs", "stepBudgetUs", "worstCaseStepUs", "periods")
 	if err != nil {
 		return err
 	}
+	share := programBudgetUs(len(periods))
 	for key, want := range map[string]int64{
 		"maxProgramsTotal": int64(domain.MaxProgramsTotal), "maxProgramsEnabled": int64(domain.MaxProgramsEnabled),
 		"maxTaskBudgetPercent": int64(domain.MaxTaskBudgetPercent),
+		"baseStepMs":           baseStepMs, "stepBudgetUs": stepBudgetUs,
+		"worstCaseStepUs": share * int64(len(periods)),
 	} {
 		value, err := intField(fields, key)
 		if err != nil {
@@ -782,9 +794,15 @@ func validateManifestBudget(root map[string]any, periods []int64) error {
 		if err != nil {
 			return err
 		}
-		if budget != programBudgetUs(period) {
-			return fmt.Errorf("%sbudgetUs=%d; cần %d", prefix, budget, programBudgetUs(period))
+		if budget != share {
+			return fmt.Errorf("%sbudgetUs=%d; cần %d", prefix, budget, share)
 		}
+	}
+	// Cùng dấu `<` với Core: tổng xấu nhất bằng đúng ngân sách step là KHÔNG
+	// hợp lệ, vì Core từ chối `budget·100 >= period·20`.
+	if share*int64(len(periods)) >= stepBudgetUs {
+		return fmt.Errorf("budget.worstCaseStepUs=%d không nhỏ hơn stepBudgetUs=%d",
+			share*int64(len(periods)), stepBudgetUs)
 	}
 	return nil
 }
@@ -966,8 +984,15 @@ func validateManifestSignals(root map[string]any, programIDs map[string]struct{}
 		if err != nil {
 			return err
 		}
-		if freshness < 1000 || freshness > 90000 {
-			return fmt.Errorf("%sfreshnessMs=%d ngoài 1000..90000", prefix, freshness)
+		if freshness < signalFreshnessMinMs || freshness > signalFreshnessMaxMs {
+			return fmt.Errorf("%sfreshnessMs=%d ngoài %d..%d", prefix, freshness,
+				signalFreshnessMinMs, signalFreshnessMaxMs)
+		}
+		// ADR-061 mục 4.5: hạn tươi ngắn hơn chu kỳ publisher nghĩa là signal
+		// stale giữa hai lần publish HỢP LỆ — consumer rơi vào chính sách stale
+		// ở trạng thái vận hành bình thường.
+		if period := topologyByProgramID[publisher].PeriodMs; period > 0 && freshness < period {
+			return fmt.Errorf("%sfreshnessMs=%d nhỏ hơn chu kỳ publisher %d ms", prefix, freshness, period)
 		}
 		policy, err := stringField(fields, "stalePolicy")
 		if err != nil {

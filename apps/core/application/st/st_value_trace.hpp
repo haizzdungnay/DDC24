@@ -34,8 +34,11 @@ namespace core {
 constexpr std::size_t kMaxTraceCells = 10000;
 constexpr std::size_t kMaxTraceVariables = 32;
 constexpr uint32_t kMaxTraceDurationMs = 600000;  /* 10 phút */
-constexpr uint32_t kMinTraceSamplePeriodMs = 100;
-constexpr uint32_t kMaxTraceSamplePeriodMs = 30000;
+/* ADR-061 4.6: dải yêu cầu 10..50000 ms, khớp tập chu kỳ của profile. Chu kỳ
+ * lấy mẫu HIỆU LỰC = max(yêu cầu, base step): mẫu chỉ lấy được ở ranh giới
+ * quét, nên hứa nhanh hơn một base step là hứa suông. */
+constexpr uint32_t kMinTraceSamplePeriodMs = 10;
+constexpr uint32_t kMaxTraceSamplePeriodMs = 50000;
 
 /* Một biến được theo dõi.
  *
@@ -85,7 +88,14 @@ struct StTraceStatus {
     uint32_t     sample_count = 0;
     uint32_t     dropped_count = 0;
     uint64_t     started_at_ns = 0;
+    /* Chu kỳ người gọi YÊU CẦU và chu kỳ Core THỰC SỰ lấy mẫu (ADR-061 4.6). */
+    uint32_t     requested_sample_period_ms = 0;
+    uint32_t     effective_sample_period_ms = 0;
 };
+
+/* max(yêu cầu, base step làm tròn LÊN tới ms). Base step 0 (chưa biết) = không
+ * kẹp. Hàm thuần để IPC và test dùng đúng một công thức. */
+uint32_t st_trace_effective_sample_period_ms(uint32_t requested_ms, uint64_t base_step_ns);
 
 class StScheduler;
 
@@ -145,6 +155,7 @@ private:
     std::size_t sample_count_ = 0;
     uint32_t dropped_ = 0;
     uint32_t sample_period_ms_ = 0;
+    uint32_t requested_sample_period_ms_ = 0;
     uint64_t started_at_ns_ = 0;
     uint64_t ends_at_ns_ = 0;
     uint64_t next_sample_ns_ = 0;

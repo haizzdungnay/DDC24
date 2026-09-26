@@ -106,7 +106,11 @@ export function PublishedSignalsPanel({
     )
   }
 
-  const context = { signals, producerProgramIds: producers.map((item) => item.programId) }
+  const context = {
+    signals,
+    producerProgramIds: producers.map((item) => item.programId),
+    producerPeriodsMs: Object.fromEntries(producers.map((item) => [item.programId, item.periodMs]))
+  }
   const errors = form ? validateSignalForm(form, context) : {}
 
   async function submit(value: SignalFormValue) {
@@ -501,8 +505,13 @@ function errorText(pick: (vi: string, en: string) => string, code: SignalErrorCo
       return pick('Program publish không còn tồn tại trong bản nháp.', 'The publishing program no longer exists in the draft.')
     case 'FRESHNESS_RANGE':
       return pick(
-        'Hạn tươi phải là số nguyên trong khoảng 1000..90000 ms.',
-        'Freshness must be a whole number between 1000 and 90000 ms.'
+        `Hạn tươi phải là số nguyên trong khoảng ${SIGNAL_FRESHNESS_MIN_MS}..${SIGNAL_FRESHNESS_MAX_MS} ms.`,
+        `Freshness must be a whole number between ${SIGNAL_FRESHNESS_MIN_MS} and ${SIGNAL_FRESHNESS_MAX_MS} ms.`
+      )
+    case 'FRESHNESS_BELOW_PUBLISHER_PERIOD':
+      return pick(
+        'Hạn tươi phải lớn hơn hoặc bằng chu kỳ của Program publish, nếu không signal sẽ quá hạn giữa hai lần publish.',
+        'Freshness must be at least the publishing program period, otherwise the signal goes stale between two publishes.'
       )
     case 'POLICY_INVALID':
       return pick('Chính sách quá hạn không hợp lệ.', 'The stale policy is invalid.')
