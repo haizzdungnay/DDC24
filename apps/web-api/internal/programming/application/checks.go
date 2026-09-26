@@ -135,6 +135,16 @@ type CheckServiceOptions struct {
 	// Revision có binding mà nguồn này vắng/lỗi, Check kết thúc FAILED thay vì
 	// biên dịch trên metadata do client gửi.
 	Catalog PointCatalogProvider
+	// Toolchain dò compiler/packager trên máy có cùng bản với web không
+	// (`programmingcompiler.ToolchainProbe`). Nil ⇒ không dò trước; lệch bản
+	// vẫn được bắt khi compiler trả metadata (ErrToolchainMismatch).
+	Toolchain ToolchainVerifier
+}
+
+// ToolchainVerifier — trả lỗi bọc `programmingcompiler.ErrToolchainMismatch`
+// khi tool ST trên máy không cùng bản với web.
+type ToolchainVerifier interface {
+	Verify(context.Context) error
 }
 
 type CheckService struct {
@@ -150,6 +160,7 @@ type CheckService struct {
 	modbusSlots   ModbusSlotProvider
 	pointFacts    PointBindingFactsProvider
 	catalog       PointCatalogProvider
+	toolchain     ToolchainVerifier
 	wake          chan struct{}
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
@@ -177,6 +188,7 @@ func NewCheckService(options CheckServiceOptions) (*CheckService, error) {
 		modbusSlots: options.ModbusSlots,
 		pointFacts:  options.PointFacts,
 		catalog:     options.Catalog,
+		toolchain:   options.Toolchain,
 		workerID:    "check-worker-" + options.NewID(), wake: make(chan struct{}, 1)}, nil
 }
 
@@ -273,6 +285,15 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	if err != nil || !claimed {
 		return claimed, err
 	}
+	// Tool ST lệch bản với web là lỗi triển khai TẤT ĐỊNH: thử lại sau lease
+	// chỉ bắt người dùng chờ 30 s để nhận cùng kết quả, rồi đóng bằng
+	// `ST-WORKER-CRASH` — mã chỉ sai chỗ sửa. Dò TRƯỚC khi biên dịch và dừng
+	// ngay với mã riêng.
+	if s.toolchain != nil {
+		if verifyErr := s.toolchain.Verify(ctx); errors.Is(verifyErr, programmingcompiler.ErrToolchainMismatch) {
+			return true, s.failToolchain(ctx, check, verifyErr)
+		}
+	}
 	revision, err := s.store.GetRevision(ctx, check.RevisionID)
 	if err != nil {
 		return true, err
@@ -350,6 +371,9 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 		result, err := s.runner.Compile(ctx, input)
 		if errors.Is(err, programmingcompiler.ErrTimeout) {
 			return true, s.complete(ctx, check, "TIMED_OUT", []DiagnosticView{workerDiagnostic("ST-WORKER-TIMEOUT")}, nil)
+		}
+		if errors.Is(err, programmingcompiler.ErrToolchainMismatch) {
+			return true, s.failToolchain(ctx, check, err)
 		}
 		if err != nil {
 			// Crash/output lỗi giữ RUNNING cho tới lease expiry để cùng input được
@@ -460,6 +484,9 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 	storeArtifact, packageInfo, err := s.packageArtifact(ctx, check, revision.Revision.DocumentSchemaVersion,
 		inputs, results, artifacts, topology,
 		packageSignals(objectViews))
+	if errors.Is(err, programmingcompiler.ErrToolchainMismatch) {
+		return true, s.failToolchain(ctx, check, err)
+	}
 	if err != nil {
 		return true, err
 	}
@@ -481,6 +508,13 @@ func (s *CheckService) ProcessNext(ctx context.Context) (bool, error) {
 type completion struct {
 	artifact *programmingstore.Artifact
 	manifest json.RawMessage
+}
+
+// failToolchain đóng Check FAILED ngay với `ST-WORKER-TOOLCHAIN` và nói rõ tool
+// nào lệch ở log (FE chỉ thấy mã; đường dẫn và sha nằm ở journal của bo).
+func (s *CheckService) failToolchain(ctx context.Context, check programmingstore.Check, cause error) error {
+	log.Printf("ERROR programming_check toolchain_mismatch check=%s err=%v", check.CheckID, cause)
+	return s.complete(ctx, check, "FAILED", []DiagnosticView{workerDiagnostic("ST-WORKER-TOOLCHAIN")}, nil)
 }
 
 func (s *CheckService) complete(ctx context.Context, check programmingstore.Check, state string, diagnostics []DiagnosticView, success *completion) error {

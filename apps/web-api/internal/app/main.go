@@ -11,6 +11,7 @@ import (
 	programmingartifact "mkddc-web/internal/programming/artifact"
 	programmingcompiler "mkddc-web/internal/programming/compiler"
 	programmingcoreipc "mkddc-web/internal/programming/coreipc"
+	programmingdomain "mkddc-web/internal/programming/domain"
 	programmingstore "mkddc-web/internal/programming/store"
 	"net"
 	"net/http"
@@ -120,6 +121,17 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			_ = store.Close()
 			return nil, fmt.Errorf("khởi tạo Programming artifact store: %w", artifactErr)
 		}
+		// Tool ST (`mkddc-st-compile`, `mkddc-st-package`) phải cùng bản với web.
+		// Lệch bản (deploy web mà quên tool) từng làm Check treo 30 s rồi báo
+		// `ST-WORKER-CRASH` (Foxlinx 2026-09-26, P5-507-F05): nói ra ngay lúc
+		// khởi động, và Check dừng tức thì với `ST-WORKER-TOOLCHAIN`.
+		toolchain := &programmingcompiler.ToolchainProbe{CompilerPath: cfg.ProgrammingCompilerPath, PackagerPath: cfg.ProgrammingPackagerPath}
+		if probeErr := toolchain.Verify(context.Background()); probeErr != nil {
+			logger.Printf("ERROR programming.toolchain err=%v", probeErr)
+		} else {
+			logger.Printf("INFO programming.toolchain ok compiler=%s packager=%s profile_sha256=%s",
+				cfg.ProgrammingCompilerPath, cfg.ProgrammingPackagerPath, programmingdomain.ProfileSHA256)
+		}
 		checks, checkErr := programmingapplication.NewCheckService(programmingapplication.CheckServiceOptions{
 			Store: store, Artifacts: artifacts, TargetID: cfg.ProgrammingTargetID, LeaseDuration: 30 * time.Second,
 			Runner: programmingcompiler.ProcessRunner{BinaryPath: cfg.ProgrammingCompilerPath, ScratchRoot: cfg.ProgrammingScratchDir, Timeout: cfg.ProgrammingCompilerTimeout, SigningKeyPath: cfg.ProgrammingSigningKeyPath},
@@ -135,6 +147,7 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 			// khẳng định nó luôn được nối.
 			PointFacts: app.programmingPointFacts(),
 			Catalog:    pointCatalog,
+			Toolchain:  toolchain,
 		})
 		if checkErr != nil {
 			_ = store.Close()

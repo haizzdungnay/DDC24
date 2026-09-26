@@ -574,7 +574,8 @@ func decodeCLIResponse(raw []byte) (cliResponse, error) {
 	}
 	if response.CompilerVersion != "fwsom-st-1.2.0" || response.ArtifactSchemaVersion != 1 ||
 		response.TargetABI != domain.ProfileTargetABI {
-		return cliResponse{}, fmt.Errorf("%w: version/ABI", ErrInvalidOutput)
+		return cliResponse{}, fmt.Errorf("%w: %w: version/ABI compilerVersion=%q artifactSchema=%d targetAbi=%d",
+			ErrInvalidOutput, ErrToolchainMismatch, response.CompilerVersion, response.ArtifactSchemaVersion, response.TargetABI)
 	}
 	return response, nil
 }
@@ -595,6 +596,17 @@ func expectedArtifactIntegrityMode() string {
 }
 
 func validateSuccess(response cliResponse, artifactPath, manifestPath string, input Input) (Result, error) {
+	// Token profile đủ mặt nhưng KHÁC hằng sinh từ contract nghĩa là compiler
+	// trên máy được build cho profile khác (triển khai lệch bản), không phải
+	// output hỏng ngẫu nhiên: tách riêng để Check dừng ngay với mã đúng.
+	if response.CompilerProfile != nil && response.ProfileID != nil && response.ProfileSHA256 != nil &&
+		response.LibraryVersion != nil &&
+		(*response.CompilerProfile != domain.ProfileCode || *response.ProfileID != domain.ProfileID ||
+			*response.ProfileSHA256 != domain.ProfileSHA256 || *response.LibraryVersion != domain.ProfileLibraryVersion) {
+		return Result{}, fmt.Errorf("%w: %w: compiler profile %s sha256=%s library=%s, web cần %s sha256=%s library=%s",
+			ErrInvalidOutput, ErrToolchainMismatch, *response.ProfileID, *response.ProfileSHA256, *response.LibraryVersion,
+			domain.ProfileID, domain.ProfileSHA256, domain.ProfileLibraryVersion)
+	}
 	if response.Artifact == nil || response.ArtifactBytes == nil || response.ArtifactSHA256 == nil ||
 		response.ArtifactFileSHA256 == nil || response.ArtifactIntegritySHA256 == nil || response.Manifest == nil || response.CompilerProfile == nil ||
 		response.ProfileID == nil || response.ProfileSHA256 == nil || response.LibraryVersion == nil ||
