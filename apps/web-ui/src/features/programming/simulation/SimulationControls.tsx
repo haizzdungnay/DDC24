@@ -81,7 +81,7 @@ export function SimulationControls({
           <>
             <span className="text-[var(--c-text-dim)]">
               {pick('Thời gian ảo', 'Virtual time')}{' '}
-              <span className="font-mono">{formatVirtualTime(session.virtualTimeMs)}</span>
+              <span className="font-mono">{formatVirtualTime(slice.frame !== null ? slice.frame.virtualTimeMs : session.virtualTimeMs)}</span>
             </span>
             <span className="text-[var(--c-text-dim)]">
               {pick('Nhịp cơ sở', 'Base tick')}{' '}
@@ -246,8 +246,8 @@ function stateLabel(pick: (vi: string, en: string) => string, state: string): st
 }
 
 /** `virtualTimeMs` là uint64 dạng chuỗi — không đổi sang Number để định dạng. */
-function formatVirtualTime(value: string): string {
-  const digits = value.replace(/^0+(?=\d)/, '')
+function formatVirtualTime(value: string | number): string {
+  const digits = String(value).replace(/^0+(?=\d)/, '')
   if (digits.length <= 3) return `0,${digits.padStart(3, '0')} s`
   const seconds = digits.slice(0, digits.length - 3)
   const milliseconds = digits.slice(digits.length - 3)

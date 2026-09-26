@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '../../auth'
+import { API_ORIGIN, WS_ORIGIN } from '../../../shared/config'
+import { WS_SUBPROTOCOL, WS_TOKEN_SUBPROTOCOL_PREFIX } from '../../../shared/hooks/useWebSocket'
 import { useProgrammingApiClient } from '../api/authClient'
 import { ProgrammingApiError } from '../api/generated/client'
 import { programmingErrorCopy } from '../api/errorCopy'
@@ -36,7 +39,23 @@ import {
  *    hình dạng dữ liệu.
  */
 
-const OBSERVATION_POLL_MS = 1000
+function toWsOrigin(origin: string): string {
+  return origin.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
+}
+
+function simWsEndpoint(sessionId?: string): string {
+  const sameOrigin = "" + (window.location.protocol === 'https:' ? 'wss' : 'ws') + "://" + window.location.host;
+  const configuredOrigin = WS_ORIGIN || API_ORIGIN;
+  const origin = configuredOrigin ? toWsOrigin(configuredOrigin) : sameOrigin;
+  const query = sessionId ? '?sessionId=' + encodeURIComponent(sessionId) : '';
+  return origin.replace(/\/$/, '') + '/api/v1/ws/simulation' + query;
+}
+
+function simWsProtocols(token?: string): string[] {
+  return token ? [WS_SUBPROTOCOL, WS_TOKEN_SUBPROTOCOL_PREFIX + token] : [WS_SUBPROTOCOL];
+}
+
+const OBSERVATION_POLL_MS = 150
 
 export interface SimulationController {
   slice: SimulationSlice
@@ -58,6 +77,7 @@ export interface SimulationController {
 }
 
 export function useSimulation(): SimulationController {
+  const { session: authSession } = useAuth()
   const client = useProgrammingApiClient()
   const { pick } = useI18n()
   const [slice, setSlice] = useState<SimulationSlice>(initialSimulationSlice)
@@ -271,8 +291,7 @@ export function useSimulation(): SimulationController {
     }
   }, [client])
 
-  /* Vòng đọc quan sát. Chỉ chạy khi phiên còn nhận lệnh; phiên terminal không
-   * sinh thêm mẫu nào và poll tiếp chỉ tạo tải cùng một câu trả lời. */
+  /* Vòng đọc quan sát qua WebSocket thời gian thực (fallback polling thích ứng). */
   const session = currentSession(slice)
   const sessionId = session?.sessionId ?? null
   const live = session !== null && !isTerminalState(session.state)
@@ -280,35 +299,113 @@ export function useSimulation(): SimulationController {
   useEffect(() => {
     if (!live || sessionId === null) return
     let cancelled = false
+    let wsActive = false
     const controller = new AbortController()
+    let ws: WebSocket | null = null
+
+    try {
+      const wsUrl = simWsEndpoint(sessionId as string)
+      const protocols = simWsProtocols(authSession?.token)
+      ws = new WebSocket(wsUrl, protocols)
+
+      ws.onopen = () => {
+        if (cancelled) {
+          ws?.close()
+          return
+        }
+        wsActive = true
+      }
+
+      ws.onmessage = (event) => {
+        if (cancelled) return
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.op === 'frame') {
+            setSlice((current) => {
+              let next = acceptFrame(current, {
+                virtualTimeMs: Number(msg.virtualTimeMs),
+                snapshotSequence: Number(msg.snapshotSequence),
+                resetEpoch: Number(msg.resetEpoch),
+                observations: msg.observations,
+              })
+              if (msg.session) {
+                next = acceptSession(next, msg.session)
+              }
+              return next
+            })
+          } else if (msg.op === 'session' && msg.session) {
+            setSlice((current) => acceptSession(current, msg.session))
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      ws.onerror = () => {
+        wsActive = false
+      }
+
+      ws.onclose = () => {
+        wsActive = false
+      }
+    } catch {
+      wsActive = false
+    }
+
+    let reconcileCounter = 0
+    function getPollInterval(): number {
+      const currentSpeed = session?.speed ?? 1
+      if (currentSpeed >= 60) return 40
+      if (currentSpeed >= 10) return 80
+      return 150
+    }
 
     async function poll() {
-      try {
-        const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
-          path: { sessionId: sessionId as string },
-          correlationId: createUuid(),
-          signal: controller.signal,
-        })
-        if (cancelled || !mountedRef.current) return
-        setSlice((current) => acceptFrame(current, frame))
-      } catch {
-        /* Một nhịp đọc hỏng không đổi trạng thái phiên và không xoá mẫu đang
-         * có: mẫu cũ vẫn mang đúng `snapshotSequence` của nó, còn xoá đi sẽ
-         * làm màn hình nhấp nháy giữa "có số" và "chưa có mẫu". */
+      if (cancelled) return
+      if (!wsActive) {
+        try {
+          const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
+            path: { sessionId: sessionId as string },
+            correlationId: createUuid(),
+            signal: controller.signal,
+          })
+          if (cancelled || !mountedRef.current) return
+          setSlice((current) => acceptFrame(current, frame))
+        } catch {
+          // ignore
+        }
       }
-      /* Đọc lại phiên cùng nhịp để bắt tiến độ của vòng chạy tự động và các
-       * chuyển trạng thái không do người dùng gây ra (hết hạn, worker chết). */
-      if (!cancelled) await reconcile()
+      reconcileCounter++
+      const reconcileMod = Math.max(1, Math.round(2000 / getPollInterval()))
+      if (!cancelled && reconcileCounter % reconcileMod === 0) {
+        await reconcile()
+      }
     }
 
-    void poll()
-    const timer = window.setInterval(() => { void poll() }, OBSERVATION_POLL_MS)
+    let timer: number | null = null
+    function scheduleNext() {
+      if (cancelled) return
+      timer = window.setTimeout(async () => {
+        await poll()
+        if (!cancelled) scheduleNext()
+      }, getPollInterval())
+    }
+
+    scheduleNext()
+
     return () => {
       cancelled = true
+      if (timer !== null) window.clearTimeout(timer)
       controller.abort()
-      window.clearInterval(timer)
+      if (ws) {
+        ws.onopen = null
+        ws.onmessage = null
+        ws.onerror = null
+        ws.onclose = null
+        ws.close()
+      }
     }
-  }, [client, live, reconcile, sessionId])
+  }, [client, live, reconcile, sessionId, authSession?.token, session?.speed])
 
   return {
     slice,
