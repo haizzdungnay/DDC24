@@ -30,7 +30,7 @@
 
 | Hạng mục | Quyết định |
 |---|---|
-| SSH auth | Password auth tạm (`admin123`); **ưu tiên chuyển key-based** khi chuẩn hóa |
+| SSH auth | **Chỉ khoá SSH** (`~/.ssh/mkddc24_som`). Từ 2026-09-26 bo Foxlinx tắt xác thực mật khẩu sau sự cố `SEC-INC-20260926-FOXLINX` (`docs/07_records/security/2026-09-26-foxlinx-ssh-intrusion.md`) |
 | MCU | MCU STM32 thật — không cần fake MCU stack |
 | Install | `packaging/install.sh` (production, không `--no-enable`) hoặc `--no-enable` cho lần đầu |
 | UART | `/dev/ttyS2` @ 921600 baud, qua ADUM1201 isolation |
@@ -80,11 +80,14 @@ Host SOM-DDC-24-foxlinx
   UserKnownHostsFile=/dev/null
 ```
 
-> **Password:** `admin123` — nhập khi SSH hỏi. **Không** gõ password vào command line.
+> **Xác thực:** chỉ khoá SSH (`IdentityFile ~/.ssh/mkddc24_som`). Bo Foxlinx đã tắt xác thực mật khẩu
+> (`PasswordAuthentication no`, `PermitRootLogin prohibit-password`) sau sự cố `SEC-INC-20260926-FOXLINX`:
+> mật khẩu root yếu trên cổng SSH mở ra Internet đã bị dò ra. Người mới gửi khoá công khai cho người
+> đang có quyền để thêm vào `/root/.ssh/authorized_keys`; **không** bật lại xác thực mật khẩu.
 >
 > **Khuyến nghị hardening cho production:**
 > 1. Tạo user deploy riêng (không dùng root trực tiếp cho deploy hàng ngày)
-> 2. Chuyển sang key-based auth sau khi ổn định
+> 2. Không mở cổng SSH ra Internet, hoặc giới hạn IP nguồn tại router
 > 3. Bật `StrictHostKeyChecking accept-new` sau lần kết nối đầu
 
 **Verify:**
@@ -117,8 +120,8 @@ ssh SOM-DDC-24-foxlinx "test -d /data/config && tar -czf /tmp/config-backup-$(da
 
 ```powershell
 # Verify kết nối
-ssh -p 2223 root@mekong-fac.ddns.net "echo OK && uname -a"
-# Nhập password: admin123
+ssh -p 2223 -i $HOME\.ssh\mkddc24_som root@mekong-fac.ddns.net "echo OK && uname -a"
+# Xác thực bằng khoá ~/.ssh/mkddc24_som (mật khẩu SSH đã tắt, SEC-INC-20260926-FOXLINX)
 ```
 
 > ⚠️ **Board chính có MCU thật.** Khi deploy, các service sẽ tương tác với MCU STM32
