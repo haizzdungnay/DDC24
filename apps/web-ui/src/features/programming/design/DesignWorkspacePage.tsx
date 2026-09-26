@@ -791,7 +791,7 @@ export function DesignWorkspacePage({
    * được đọc hai lần cho hai câu trả lời có thể lệch nhau. */
   const sealedSource = workspaceMode === 'SIMULATE'
     ? activeProgramSource({
-        activeRevisionId: simulationSourceRevisionId,
+        activeRevisionId: simulateRevisionId,
         status: simulateRevision.status,
         revision: simulateRevision.data,
         objectId: selectedObjectId ?? null,
