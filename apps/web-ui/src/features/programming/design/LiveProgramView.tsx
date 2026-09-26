@@ -178,7 +178,7 @@ export function LiveProgramView({
  * Tài liệu FBD của gói đang chạy. `null` = không đọc được — KHÁC HẲN một sơ đồ
  * rỗng, và hai thứ đó phải hiện ra khác nhau.
  */
-function parseLiveFbd(source: string): FbdDocument | null {
+export function parseLiveFbd(source: string): FbdDocument | null {
   try {
     const parsed = JSON.parse(source) as FbdDocument
     return Array.isArray(parsed?.networks) ? parsed : null

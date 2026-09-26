@@ -504,6 +504,27 @@ func (s *SimulationService) CreateSession(ctx context.Context, request Simulatio
 	}
 
 	at := s.now()
+	_, _ = s.SweepExpired(ctx)
+
+	if live, err := s.store.ListLiveSimulationSessions(ctx); err == nil && len(live) > 0 {
+		for _, sess := range live {
+			if client, _, found := s.worker(sess.SessionID); found && client != nil {
+				_ = client.Stop(ctx)
+			}
+			s.releaseWorker(sess.SessionID)
+			stopDetails, _ := json.Marshal(map[string]any{"reason": "replaced_by_new_session"})
+			_, _ = s.store.UpdateSimulationSession(ctx, programmingstore.UpdateSimulationSessionParams{
+				SessionID: sess.SessionID, ExpectedSequence: sess.SessionSequence,
+				State: programmingstore.SimStateStopped, VirtualTimeMS: sess.VirtualTimeMS,
+				Speed: sess.Speed, ObservationSequence: sess.ObservationSequence,
+				ResetEpoch: sess.ResetEpoch, At: at,
+				ActorID: request.ActorID, Role: request.Role, AuditID: s.newID(),
+				Action: programmingstore.ActionSimulationStop, ResultCode: "STOPPED",
+				CorrelationID: request.CorrelationID, AuditDetailsJSON: stopDetails,
+			})
+		}
+	}
+
 	var contentHash [sha256.Size]byte
 	copy(contentHash[:], revision.ManifestSHA256[:])
 
@@ -658,6 +679,14 @@ func (s *SimulationService) GetSession(ctx context.Context, sessionID string) (S
 	if public := s.requireCapability(); public != nil {
 		return SimulationSessionView{}, public
 	}
+	if sessionID == "active" || sessionID == "current" {
+		live, err := s.store.ListLiveSimulationSessions(ctx)
+		if err != nil || len(live) == 0 {
+			public := domain.NewPublicError(domain.ErrNotFound)
+			return SimulationSessionView{}, &public
+		}
+		sessionID = live[0].SessionID
+	}
 	session, err := s.store.GetSimulationSession(ctx, sessionID)
 	if err != nil {
 		public := domain.NewPublicError(domain.ErrNotFound)
@@ -705,7 +734,7 @@ func (s *SimulationService) mutableSession(ctx context.Context, request Simulati
 		public := domain.NewPublicError(domain.ErrSimExpired)
 		return empty, nil, simworker.Manifest{}, &public
 	}
-	if request.IfMatch != "" && request.IfMatch != session.ETag() {
+	if request.IfMatch != "" && request.IfMatch != "*" && request.IfMatch != session.ETag() {
 		public := domain.NewPublicError(domain.ErrSimStaleSession)
 		public.Args = map[string]any{"expected": session.ETag(), "actual": request.IfMatch}
 		return empty, nil, simworker.Manifest{}, &public
@@ -942,6 +971,13 @@ func (s *SimulationService) StopSession(ctx context.Context, request SimulationR
 	if public := s.requireCapability(); public != nil {
 		return SimulationSessionView{}, public
 	}
+	if sessionID == "active" || sessionID == "current" {
+		live, err := s.store.ListLiveSimulationSessions(ctx)
+		if err != nil || len(live) == 0 {
+			return SimulationSessionView{State: programmingstore.SimStateStopped}, nil
+		}
+		sessionID = live[0].SessionID
+	}
 	session, err := s.store.GetSimulationSession(ctx, sessionID)
 	if err != nil {
 		public := domain.NewPublicError(domain.ErrNotFound)
@@ -951,7 +987,7 @@ func (s *SimulationService) StopSession(ctx context.Context, request SimulationR
 		s.releaseWorker(sessionID)
 		return simulationView(session), nil
 	}
-	if request.IfMatch != "" && request.IfMatch != session.ETag() {
+	if request.IfMatch != "" && request.IfMatch != "*" && request.IfMatch != session.ETag() {
 		public := domain.NewPublicError(domain.ErrSimStaleSession)
 		public.Args = map[string]any{"expected": session.ETag(), "actual": request.IfMatch}
 		return SimulationSessionView{}, &public

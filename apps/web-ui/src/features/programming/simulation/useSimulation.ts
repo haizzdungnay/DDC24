@@ -51,6 +51,8 @@ export interface SimulationController {
   act: (action: SimulationAction, speed?: number) => Promise<void>
   setInput: (descriptor: SimulationInputDescriptor, raw: string) => Promise<void>
   stop: () => Promise<void>
+  stopActive: () => Promise<void>
+  loadActive: () => Promise<void>
   /** Đọc lại phiên bằng `GET` — lối ra khỏi trạng thái không xác định. */
   reconcile: () => Promise<void>
 }
@@ -156,6 +158,19 @@ export function useSimulation(): SimulationController {
         })
         if (!mountedRef.current) return
         setSlice((current) => acceptSession(current, readBack))
+        if (action === 'STEP_CYCLE' || action === 'RESET') {
+          try {
+            const frame = await client.request<SimulationFrame>('listProgrammingSimulationObservations', {
+              path: { sessionId: session.sessionId },
+              correlationId: createUuid(),
+            })
+            if (mountedRef.current) {
+              setSlice((current) => acceptFrame(current, frame))
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       } catch (reason) {
         if (!mountedRef.current) return
         const described = describe(reason, 'Lệnh mô phỏng không thực hiện được.', 'The simulation command failed.')
@@ -197,29 +212,64 @@ export function useSimulation(): SimulationController {
     [client, describe],
   )
 
-  const stop = useCallback<SimulationController['stop']>(async () => {
-    const session = currentSession(sliceRef.current)
-    if (!session) return
+  const loadActive = useCallback<SimulationController['loadActive']>(async () => {
+    try {
+      const active = await client.request<SimulationSessionView>('getProgrammingSimulationSession', {
+        path: { sessionId: 'active' },
+        correlationId: createUuid(),
+      })
+      if (!mountedRef.current) return
+      if (active && !isTerminalState(active.state)) {
+        setSlice((current) => acceptSession({ ...current, status: { kind: 'IDLE' }, frame: null }, active))
+      }
+    } catch {
+      /* no live session */
+    }
+  }, [client])
+
+  useEffect(() => {
+    void loadActive()
+  }, [loadActive])
+
+  const stopActive = useCallback<SimulationController['stopActive']>(async () => {
     setSlice((current) => ({ ...current, pending: 'STOP', lastDenial: null }))
     try {
-      const readBack = await client.request<SimulationSessionView>('stopProgrammingSimulationSession', {
-        path: { sessionId: session.sessionId },
-        ifMatch: session.etag,
+      await client.request<SimulationSessionView>('stopProgrammingSimulationSession', {
+        path: { sessionId: 'active' },
+        ifMatch: '*',
         idempotencyKey: createUuid(),
         correlationId: createUuid(),
       })
       if (!mountedRef.current) return
-      /* Dừng xong thì lớp giá trị phải biến mất NGAY trong cùng lần render.
-       * Giữ lại frame cuối sẽ để những con số của một phiên đã chết nằm trên
-       * màn hình, trông y hệt số đang sống. */
-      setSlice((current) => acceptSession({ ...current, frame: null }, readBack))
+      setSlice(initialSimulationSlice)
     } catch (reason) {
       if (!mountedRef.current) return
-      const described = describe(reason, 'Không dừng được phiên mô phỏng.', 'Could not stop the simulation session.')
+      const described = describe(reason, 'Kh\u00f4ng d\u1eebng \u0111\u01b0\u1ee3c phi\u00ean m\u00f4 ph\u1ecfng.', 'Could not stop the simulation session.')
       setSlice((current) => acceptDenial(current, described))
-      await reconcile()
     }
-  }, [client, describe, reconcile])
+  }, [client, describe])
+
+  const stop = useCallback<SimulationController['stop']>(async () => {
+    const session = currentSession(sliceRef.current)
+    if (!session) {
+      setSlice(initialSimulationSlice)
+      return
+    }
+    setSlice((current) => ({ ...current, pending: 'STOP', lastDenial: null }))
+    try {
+      await client.request<SimulationSessionView>('stopProgrammingSimulationSession', {
+        path: { sessionId: session.sessionId },
+        ifMatch: '*',
+        idempotencyKey: createUuid(),
+        correlationId: createUuid(),
+      })
+      if (!mountedRef.current) return
+      setSlice(initialSimulationSlice)
+    } catch {
+      if (!mountedRef.current) return
+      setSlice(initialSimulationSlice)
+    }
+  }, [client])
 
   /* Vòng đọc quan sát. Chỉ chạy khi phiên còn nhận lệnh; phiên terminal không
    * sinh thêm mẫu nào và poll tiếp chỉ tạo tải cùng một câu trả lời. */
@@ -269,5 +319,7 @@ export function useSimulation(): SimulationController {
     setInput,
     stop,
     reconcile,
+    stopActive,
+    loadActive,
   }
 }
