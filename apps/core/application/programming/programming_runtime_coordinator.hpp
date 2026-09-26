@@ -2,6 +2,7 @@
 #define CORE_APPLICATION_PROGRAMMING_PROGRAMMING_RUNTIME_COORDINATOR_HPP
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -46,12 +47,40 @@ struct StageCommand {
     std::string plan_hash;
 };
 
+/* ADR-062 — intent Enable/Disable ĐÃ LƯU của một Program, web chụp từ
+ * `program_runtime_intents` đúng lúc kích hoạt. Đây KHÔNG phải một lệnh vận
+ * hành mới: lệnh vận hành vẫn là `SET_PROGRAM_ENABLED` (T59-405), có audit riêng.
+ * Nó chỉ đưa quyết định đã có tới đúng safe boundary kích hoạt gói, để Program
+ * được bật không phải chờ một vòng IPC sau boundary (F13). */
+struct ActivateProgramIntent {
+    std::string instance_id;
+    bool        enabled = false;
+};
+
+/* Trần số phần tử `programIntents`: bằng trần Program của một tài nguyên. Một
+ * danh sách dài hơn không thể mô tả một gói hợp lệ nào. */
+constexpr std::size_t kMaxActivateProgramIntents = st_sched_limits::kMaxProgramsTotal;
+
 struct ActivateCommand {
     std::string operation_id;
     std::string expected_active_revision_id;
     std::string staged_token;
     CutoverMode cutover = CutoverMode::PROGRAM_ONLY;
     std::string plan_hash;
+    /* ADR-062 — `false` là payload 4 phần tử (web cũ, hoặc web mới gặp Core chưa
+     * công bố tính năng): Core dùng nguyên luật T59-305/405. `true` với danh sách
+     * rỗng cho cùng kết quả; cờ riêng tồn tại để log nói được web có gửi hay không. */
+    bool has_program_intents = false;
+    std::vector<ActivateProgramIntent> program_intents;
+};
+
+/* Kết quả áp `programIntents` lên shadow của gói. Chỉ để log và test đọc lại;
+ * không đi vào journal, vì intent không phải danh tính của gói. */
+struct ActivateIntentSummary {
+    std::size_t enabled = 0;        /* Program chuyển sang Enabled nhờ intent */
+    std::size_t disabled = 0;       /* Program chuyển sang Disabled nhờ intent */
+    std::size_t dropped_limit = 0;  /* Intent Enable bị bỏ vì chạm trần Enabled */
+    std::size_t ignored = 0;        /* Intent cho instance không có trong gói */
 };
 
 /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001). `instance_id` có mặt từ
@@ -143,6 +172,9 @@ public:
     bool stage(const StageCommand& command, std::string* detail_code, std::string* error);
     bool activate(const ActivateCommand& command, std::string* detail_code,
                   std::string* error);
+    /* ADR-062 — kết quả áp `programIntents` ở lần ACTIVATE được chấp nhận gần
+     * nhất. Chỉ IPC worker ghi; đọc từ cùng luồng hoặc từ test. */
+    ActivateIntentSummary last_activate_intents() const { return last_activate_intents_; }
     bool restore(const StageCommand& command, std::string* detail_code, std::string* error);
 
     /* WP-12 (RETAIN Reset, DDD-RETAIN-RESET-PROG-001 §3). Gọi non-RT
@@ -194,6 +226,12 @@ private:
 
     bool stage_impl(const StageCommand& command, bool restore,
                     std::string* detail_code, std::string* error);
+    /* ADR-062 — áp intent đã lưu lên shadow `prepared_program_set_`. Chỉ gọi
+     * sau `COMMIT_INTENT` bền vững và TRƯỚC `arm_prepared_program_set`: trước
+     * arm, luồng RT chưa chạm shadow nên ghi `enabled` ở đây không có race.
+     * Không bao giờ thất bại: vượt trần thì giữ Disabled chứ không chặn kích hoạt. */
+    ActivateIntentSummary apply_activation_intents(
+        const std::vector<ActivateProgramIntent>& intents);
     bool ensure_instance(std::string* error);
     /* Chuẩn bị topology cho đúng tập Program của package: thêm instance còn
      * thiếu vào scheduler và áp chu kỳ release của từng Program. Bootstrap không
@@ -319,6 +357,7 @@ private:
     std::string detail_code_;
     uint64_t artifact_byte_size_ = 0;
     bool staged_restore_ = false;
+    ActivateIntentSummary last_activate_intents_{};
 };
 
 } // namespace core::programming

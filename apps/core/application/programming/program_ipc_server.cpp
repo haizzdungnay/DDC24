@@ -433,8 +433,13 @@ std::vector<uint8_t> capabilities_payload()
      * cứng — bản chép `[1000,5000,30000]` cũ nói sai ngay khi profile đổi. */
     json periods = json::array();
     for (const uint32_t period_ms : st_profile_generated::kAllowedPeriodMs) periods.push_back(period_ms);
+    /* ADR-062 — phần tử thứ năm là danh sách tính năng. Đây là cách báo cho web
+     * mới biết Core này nhận `programIntents` trong ACTIVATE mà KHÔNG nâng
+     * `protocolMinor`: web cũ từ chối response có minor cao hơn của nó, nên nâng
+     * minor sẽ cắt đứt web cũ khỏi mọi action chứ không chỉ khỏi tính năng này. */
+    json features = json::array({PROGRAM_IPC_FEATURE_ACTIVATE_PROGRAM_INTENTS});
     json payload = json::array({"MK-DDC-24-REV-A", PROGRAM_IPC_MAX_FRAME,
-                                PROGRAM_IPC_MAX_QUEUE, periods});
+                                PROGRAM_IPC_MAX_QUEUE, periods, features});
     return json::to_cbor(payload);
 }
 
@@ -476,11 +481,15 @@ bool parse_stage_payload(const ProgramRequest& request, StageCommand* output)
     }
 }
 
+/* Payload ACTIVATE: `[expectedActive, stagedToken, cutover, planHash,
+ * programIntents?]`. Phần tử thứ năm là tuỳ chọn (ADR-062): web cũ gửi 4 phần
+ * tử và phải được nhận y như trước. Ở đây chỉ kiểm KIỂU; id hợp lệ, trùng lặp và
+ * trần số phần tử do coordinator kiểm, cùng chỗ với các identity khác của lệnh. */
 bool parse_activate_payload(const ProgramRequest& request, ActivateCommand* output)
 {
     try {
         const json value = json::from_cbor(request.payload, true, true);
-        if (!value.is_array() || value.size() != 4 ||
+        if (!value.is_array() || (value.size() != 4 && value.size() != 5) ||
             (!value[0].is_null() && !value[0].is_string()) ||
             !value[1].is_string() || !value[2].is_string() || !value[3].is_string())
             return false;
@@ -492,6 +501,26 @@ bool parse_activate_payload(const ProgramRequest& request, ActivateCommand* outp
         if (cutover != "PROGRAM_ONLY") return false;
         output->cutover = CutoverMode::PROGRAM_ONLY;
         output->plan_hash = value[3].get<std::string>();
+        output->has_program_intents = false;
+        output->program_intents.clear();
+        if (value.size() == 5) {
+            const json& intents = value[4];
+            /* `null` KHÔNG được hiểu là "không có intent": web mới luôn gửi mảng.
+             * Nhận `null` sẽ để một encoder lỡ tay biến "có danh sách" thành
+             * "không có gì" mà không ai thấy. */
+            if (!intents.is_array() || intents.size() > kMaxActivateProgramIntents) return false;
+            output->program_intents.reserve(intents.size());
+            for (const json& item : intents) {
+                if (!item.is_array() || item.size() != 2 || !item[0].is_string() ||
+                    !item[1].is_boolean())
+                    return false;
+                ActivateProgramIntent intent;
+                intent.instance_id = item[0].get<std::string>();
+                intent.enabled = item[1].get<bool>();
+                output->program_intents.push_back(std::move(intent));
+            }
+            output->has_program_intents = true;
+        }
         return true;
     } catch (const json::exception&) {
         return false;

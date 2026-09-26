@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cerrno>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <thread>
 #include <vector>
@@ -921,10 +922,15 @@ bool ProgrammingRuntimeCoordinator::stage_impl(const StageCommand& command, bool
         entry.order = static_cast<uint16_t>(index);
         entry.period_ms = program.period_ms;
         /* Giữ enable intent của Program cùng identity qua Revision. Program
-         * mới luôn fail-closed ở Disabled: package v2 hiện chưa mang
-         * `desiredEnabled`, nên tự bật nó vừa trái T59-305/405 vừa làm một gói
-         * 32 Program mới tự đụng trần 16 Enabled trước khi operator ra lệnh
-         * PROGRAM_ENABLE. */
+         * mới luôn fail-closed ở Disabled: package v2 KHÔNG mang
+         * `desiredEnabled` (T59-305 — gói không được tự bật chính nó), nên tự bật
+         * nó vừa trái T59-305/405 vừa làm một gói 32 Program mới tự đụng trần 16
+         * Enabled trước khi operator ra lệnh PROGRAM_ENABLE.
+         *
+         * Đây chỉ là giá trị NỀN. ADR-062: nếu ACTIVATE mang intent ĐÃ LƯU của
+         * người vận hành thì `apply_activation_intents()` sửa lại cờ này trên
+         * shadow trước arm, để Program có intent Enable chạy ngay tại boundary
+         * kích hoạt thay vì chờ `SET_PROGRAM_ENABLED` sau boundary (F13). */
         const StProgramInstance* live = scheduler_->find_program(program.instance_id);
         entry.enabled = live != nullptr && live->enabled;
         entries.push_back(std::move(entry));
@@ -1028,9 +1034,41 @@ bool ProgrammingRuntimeCoordinator::activate(const ActivateCommand& command,
         if (error) *error = "expected active revision mismatch";
         return false;
     }
+    /* ADR-062 — kiểm `programIntents` TRƯỚC mọi thay đổi trạng thái, cùng lớp lỗi
+     * với identity sai ở trên. Id trùng là mâu thuẫn không có cách hiểu đúng (hai
+     * giá trị khác nhau thì chọn cái nào?), nên từ chối chứ không tự chọn. */
+    if (command.has_program_intents) {
+        bool intents_valid = command.program_intents.size() <= kMaxActivateProgramIntents;
+        for (std::size_t index = 0; intents_valid && index < command.program_intents.size();
+             ++index) {
+            const std::string& id = command.program_intents[index].instance_id;
+            if (!valid_instance_id(id)) intents_valid = false;
+            for (std::size_t prior = 0; intents_valid && prior < index; ++prior)
+                if (command.program_intents[prior].instance_id == id) intents_valid = false;
+        }
+        if (!intents_valid) {
+            if (detail_code) *detail_code = "IPC-PAYLOAD";
+            if (error) *error = "activate programIntents invalid (count/id/duplicate)";
+            return false;
+        }
+    }
     if (!append_phase(StJournalPhase::COMMIT_INTENT, transaction_identity_, error)) {
         if (detail_code) *detail_code = "IPC-JOURNAL-FSYNC";
         return false;
+    }
+    /* ADR-062 — áp intent SAU khi COMMIT_INTENT đã bền vững: nếu fsync hỏng,
+     * ACTIVATE được gọi lại và shadow chưa bị đụng. Và TRƯỚC arm: sau arm, RT có
+     * thể swap shadow ở bất kỳ boundary nào. `arm_prepared_program_set` vẫn đếm
+     * lại trần Enabled như một lớp chặn thứ hai. */
+    last_activate_intents_ = ActivateIntentSummary{};
+    if (command.has_program_intents) {
+        last_activate_intents_ = apply_activation_intents(command.program_intents);
+        std::fprintf(stderr,
+                     "INFO  programming.activate_intents operation=%s received=%zu enabled=%zu"
+                     " disabled=%zu dropped_limit=%zu ignored=%zu\n",
+                     command.operation_id.c_str(), command.program_intents.size(),
+                     last_activate_intents_.enabled, last_activate_intents_.disabled,
+                     last_activate_intents_.dropped_limit, last_activate_intents_.ignored);
     }
     /* Arm là thao tác cấp GÓI và chỉ xảy ra SAU COMMIT_INTENT bền
      * vững. API preflight toàn bộ shadow trước khi đặt bất kỳ cờ nào,
@@ -1048,6 +1086,62 @@ bool ProgrammingRuntimeCoordinator::activate(const ActivateCommand& command,
     cutover_->request(command.cutover);
     state_.store(LifecycleState::COMMIT_INTENT, std::memory_order_release);
     return true;
+}
+
+ActivateIntentSummary ProgrammingRuntimeCoordinator::apply_activation_intents(
+    const std::vector<ActivateProgramIntent>& intents)
+{
+    ActivateIntentSummary summary;
+    auto find_intent = [&](const std::string& instance_id) -> const ActivateProgramIntent* {
+        for (const ActivateProgramIntent& intent : intents)
+            if (intent.instance_id == instance_id) return &intent;
+        return nullptr;
+    };
+
+    /* Bước 1 — intent Disable trước. Đây là hướng fail-closed: nó không bao giờ
+     * cần trần, và làm trước thì chỗ nó nhả ra được tính cho intent Enable ở
+     * bước 2 thay vì bị một Program sắp tắt chiếm mất. */
+    for (const auto& program : prepared_program_set_) {
+        const ActivateProgramIntent* intent = find_intent(program->instance_id);
+        if (intent == nullptr || intent->enabled || !program->enabled) continue;
+        program->enabled = false;
+        ++summary.disabled;
+    }
+
+    /* Bước 2 — intent Enable theo THỨ TỰ GÓI, trong trần của profile. Thứ tự gói
+     * (sắp theo `objectId` ở Check) là tất định; thứ tự danh sách web gửi thì
+     * không phải thứ Core nên tin. Vượt trần thì giữ Disabled và nói ra, KHÔNG
+     * từ chối kích hoạt: từ chối ở đây là chặn cả một Restore vì một con số mà
+     * vòng reconcile vẫn báo được về sau (`REJECTED_LIMIT`). */
+    std::size_t enabled_count = 0;
+    for (const auto& program : prepared_program_set_)
+        if (program->enabled) ++enabled_count;
+    const std::size_t max_enabled = scheduler_->max_enabled_programs();
+    for (const auto& program : prepared_program_set_) {
+        const ActivateProgramIntent* intent = find_intent(program->instance_id);
+        if (intent == nullptr || !intent->enabled || program->enabled) continue;
+        if (enabled_count >= max_enabled) {
+            ++summary.dropped_limit;
+            std::fprintf(stderr,
+                         "WARN  programming.activate_intent_limit instance=%s limit=%zu"
+                         " (giữ Disabled, không chặn kích hoạt)\n",
+                         program->instance_id.c_str(), max_enabled);
+            continue;
+        }
+        program->enabled = true;
+        ++enabled_count;
+        ++summary.enabled;
+    }
+
+    /* Intent cho instance không có trong gói: Program đã rời gói (F07). Bỏ qua,
+     * vì intent vẫn còn nguyên ở store web và sẽ dùng lại khi Program quay về. */
+    for (const ActivateProgramIntent& intent : intents) {
+        bool in_package = false;
+        for (const auto& program : prepared_program_set_)
+            if (program->instance_id == intent.instance_id) in_package = true;
+        if (!in_package) ++summary.ignored;
+    }
+    return summary;
 }
 
 ProgramEnableOutcome ProgrammingRuntimeCoordinator::set_program_enabled(
