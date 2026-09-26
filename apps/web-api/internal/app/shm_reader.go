@@ -163,7 +163,7 @@ func seqlockCopy(mm []byte, dst []byte) bool {
 		}
 		// Chỉ kiểm magic SAU khi seq đã xác nhận nhất quán: magic không bị writer
 		// chạm nên tự nó không nói được gì về tính nhất quán (đó là lỗi F-02).
-		m := binary.LittleEndian.Uint32(dst[shmOffMagic:shmOffMagic+4])
+		m := binary.LittleEndian.Uint32(dst[shmOffMagic : shmOffMagic+4])
 		return m == kxShmMagic || m == 0x4B584407
 	}
 	return false
