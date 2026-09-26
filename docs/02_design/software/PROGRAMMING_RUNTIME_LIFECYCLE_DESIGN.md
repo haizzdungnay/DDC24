@@ -3,9 +3,9 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | ID | `DDD-LIFE-PROG-001` |
-| Phiên bản | 0.6 |
+| Phiên bản | 0.7 |
 | Trạng thái | **M3 — APPROVED FOR IMPLEMENTATION; `TASK-PROG-400..405` DONE về source/host; target/HIL/power-cut còn mở** |
-| Ngày | 2026-08-13 |
+| Ngày | 2026-09-26 |
 | Chủ quản | Core Lead + Backend Lead + Operations Lead |
 | Người review | System Architect, Controls Lead, Verification Lead |
 | Người phê duyệt | System Architect + Product Owner |
@@ -110,6 +110,22 @@ cùng lúc. Orphan file không có committed row bị quarantine/GC.
 Cancel chỉ hợp lệ `QUEUED/PREFLIGHT` trước staging token. Commission và Restore dùng
 cùng loader/safe swap; Restore không bypass integrity/compatibility. Restore target
 có thể là selected Revision hoặc LKG, nhưng expected active bắt buộc.
+
+**Intent Enable tại boundary kích hoạt (`ADR-062`, 2026-09-26).** Gói vẫn không mang
+`desiredEnabled` (T59-305). Nhưng ACTIVATE được phép mang ảnh chụp intent **đã lưu**
+của từng Program trong `programIntents`. Core áp nó lên shadow sau `COMMIT_INTENT` và
+trước arm, nên Program có intent Enable là `RUNNING` ngay tại boundary kích hoạt, không
+scan nào rơi vào `no_ctrl` (F13).
+
+Các luật áp:
+- `false` đưa Program về Disabled.
+- `true` bật Program theo thứ tự gói, trong trần 16. Phần vượt trần giữ Disabled và không chặn kích hoạt.
+- Program không có phần tử nào giữ luật cũ.
+
+Web chỉ gửi phần tử này khi CAPABILITIES công bố `ACTIVATE_PROGRAM_INTENTS`. Boot,
+rollback, barrier chu kỳ đầu và vòng reconcile theo mức không đổi. Khác biệt duy nhất ở
+barrier: Program bật bằng intent nay tham gia barrier, nên nếu nó hỏng ở chu kỳ đầu thì
+cả gói quay về LKG.
 
 ## 6. Preflight contract
 
@@ -335,6 +351,7 @@ thì giữ graph hoặc checkpoint LKG và báo `RECOVERY_REQUIRED`, không đo�
 | 0.4 | 2026-08-13 | Đồng bộ `TASK-PROG-306` (bootstrap dựng StScheduler thật) và `TASK-PROG-400` (`StJournal` 5 phase Core-side, append/checksum, boot-recovery); ghi rõ phạm vi hẹp hơn bảng field §15 (thiếu type/candidateRevision/expectedActive-generation/activeBefore/lkgBefore/retainPlan/cutoverPlan/recordSeq — cần TASK-PROG-403 BE coordinator); giữ target/HIL NOT TESTED | Core + BE |
 | 0.5 | 2026-08-13 | Đồng bộ `TASK-PROG-402`: RETAIN record v2/layout v1, stable controller+instance identity, full-record CRC, exact typed/FB restore, async mailbox/worker, output-commit checkpoint, atomic write/cold-init diagnostics và status health; giữ `VS-PROG-029/030` Forlinx/HIL NOT RUN | Core |
 | 0.6 | 2026-08-13 | Đồng bộ `TASK-PROG-403..405` tại `c2f3189` + `10d9ad6`: durable operation/lease/reconcile, bounded UDS peer credential, journal/cutover tại safe boundary, first-output mới nâng LKG, rollback và active checkpoint CRC atomic/restart recovery. Giữ flag OFF và target/HIL/power-cut/IOP Test Result NOT RUN. | Core + BE + QA |
+| 0.7 | 2026-09-26 | `ADR-062`: ACTIVATE mang `programIntents` (intent đã lưu). Core áp tại chính safe boundary kích hoạt gói, để Program có intent Enable chạy ngay, không scan nào ở `no_ctrl` (F13). Đàm phán qua capability, không nâng `protocolMinor`. Boot, rollback và reconcile không đổi. Target chưa đo. | Core + BE |
 
 | Vai trò | Trạng thái | Bằng chứng |
 |---|---|---|
