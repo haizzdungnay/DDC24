@@ -53,12 +53,15 @@ type OperationService struct {
 	now          func() time.Time
 	newID        func() string
 	modbusSlots  ModbusSlotProvider
-	workerID     string
-	wake         chan struct{}
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
-	mu           sync.Mutex
-	beginMu      sync.Mutex
+	// onActivated — gọi (không chặn) mỗi khi một Commission/Restore chuyển
+	// SUCCEEDED, tức Active vừa đổi. Nối bằng SetActivatedHook trước Start.
+	onActivated func()
+	workerID    string
+	wake        chan struct{}
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	mu          sync.Mutex
+	beginMu     sync.Mutex
 }
 
 type OperationCommand struct {
@@ -803,7 +806,7 @@ func (s *OperationService) transition(operation programmingstore.Operation, stat
 			}
 		}
 	}
-	return s.store.UpdateOperation(context.Background(), programmingstore.UpdateOperationParams{
+	updated, err := s.store.UpdateOperation(context.Background(), programmingstore.UpdateOperationParams{
 		OperationID: operation.OperationID, LeaseOwner: operation.LeaseOwner,
 		LeaseGeneration: operation.LeaseGeneration, State: state, Step: step,
 		ResultCode: result, DetailCode: detail, KeepsRunningRevision: keeps,
@@ -811,6 +814,19 @@ func (s *OperationService) transition(operation programmingstore.Operation, stat
 		At: s.now(), ReleaseLease: release || terminal, AuditID: auditID,
 		AuditAction: action, AuditRole: role, CommissionRecord: commissionRecord,
 	})
+	if err == nil && state == "SUCCEEDED" && (operation.Kind == "COMMISSION" || operation.Kind == "RESTORE") &&
+		s.onActivated != nil {
+		s.onActivated()
+	}
+	return updated, err
+}
+
+// SetActivatedHook nối hook gọi sau mỗi Commission/Restore SUCCEEDED (F13:
+// đánh thức reconcile intent ngay). Phải gọi TRƯỚC Start; hook không được chặn.
+func (s *OperationService) SetActivatedHook(hook func()) {
+	if s != nil {
+		s.onActivated = hook
+	}
 }
 
 func decodeSHA256(value string) ([32]byte, error) {

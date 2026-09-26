@@ -230,6 +230,9 @@ func NewApp(cfg Config, logger *log.Logger, core CoreStatusClient, osReader OSRe
 		app.programmingOperations = operations
 		app.programmingRuntime = runtimeService
 		checks.Start(context.Background())
+		// F13: Commission/Restore đổi Active thì reconcile intent chạy NGAY, để
+		// Program vừa dựng ở Disabled không để đầu ra nằm safe-state tới 2 s.
+		operations.SetActivatedHook(intents.Nudge)
 		operations.Start(context.Background())
 		if reconcileErr := intents.Start(context.Background()); reconcileErr != nil {
 			operations.Close()
