@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+### Changed — ADR-061 Track B: Core chạy base step 10 ms với bộ chu kỳ {10…50000} ms (2026-09-26)
+
+- Phạm vi: `apps/core/**` (scheduler, ScanLoop, PointQuality/SafeState, process image, trace, signal bus, package v2, IPC Programming, bootstrap) và test Core; không đổi `contracts/**`, `apps/web-api/**`, `apps/web-ui/**` hay file sinh.
+- Base step mặc định 10 ms; khi Programming runtime bật, `graph.json scan_ms` không còn kéo base step (graph chạy với dt = base step thật). Task `main` = 10 ms, ngân sách tính bằng µs (`budget_us`, luật `< 20%` giữ nguyên: trần 2000 µs loại trừ, khai 1999 µs); `point_snapshot.task` có `budgetUs` bên cạnh `budgetMs`.
+- Hold TTL theo instance = max(60 s, 2 × chu kỳ Program) thay cho `static_assert` toàn cục: Program 50 000 ms giữ lệnh 100 s, còn lại 60 s; `--program-hold-ttl-ms` là sàn.
+- Stale I/O theo thời gian: UNCERTAIN sau max(3 base step, 250 ms), BAD/T3 sau max(5 base step, 500 ms). Watchdog `WATCHDOG=1` tối đa 1 lần/giây; snapshot persist graph mỗi 60 s và notify worker RETAIN tối đa 1 lần/giây (trước tính theo số scan).
+- Metric C4 trong ScanLoop, công bố ở `point_snapshot.task`: `baseStepUs`, `jitterMaxUs` (cửa sổ 60 s), `jitterViolationCount` (> 100 µs), `missedBaseStepCount`. Trễ ≥ 1 base step thì bỏ tick và nhảy tới mốc lưới kế tiếp, không chạy dồn. WCET 8 bước của `step()` log mỗi phút `core.step_wcet`; `core.jitter` giữ trường cũ và thêm metric C4.
+- Chu kỳ ngoài tập có mã chẩn đoán riêng `ST-SCHED-001` (add_task, prepare_program_set, writer package, `mkddc-st-package`). Gói đã Commission với chu kỳ legacy 30000 ms vẫn nạp và chạy (loader nhận tập mới ∪ {30000}); mỗi lần activate log `WARN programming.legacy_period`, hàng `programs[]` có `legacyPeriod`. Tạo mới 30000 ms vẫn bị từ chối.
+- Trace `samplePeriodMs` 10..50000 ms, chu kỳ lấy mẫu hiệu lực = max(yêu cầu, base step), trả ở `TRACE_START` ACCEPTED `[effectiveSamplePeriodMs]`. Freshness Published Signal 10..150000 ms. CAPABILITIES đọc tập chu kỳ từ `st_profile_generated::kAllowedPeriodMs`.
+- Hạ tầng test: PLC SHM của `core_tests` cô lập theo PID (`ctest -j` từng xoá segment của nhau, làm `WebIpc.ExtPointWriteCommandAccepted` đỏ ngắt quãng).
+- Kiểm chứng: `cmake --fresh … -DMKDDC_ENABLE_MODBUS=ON -DMKDDC_ENABLE_BACNET=ON -DMKDDC_ENABLE_HMI=ON` exit 0; `cmake --build build/fw --parallel` exit 0; `ctest --test-dir build/fw --output-on-failure -j8` 1546/1547 PASS ở cả 3 lượt (9 skipped). Ca đỏ duy nhất `st_language_profile_contract` chờ Track A sinh lại hồ sơ ngôn ngữ cho mã mới `ST-SCHED-001`. `scripts/generate_programming_errors.py --check` PASS.
+
 ### Added — ADR-061: chu kỳ bộ điều khiển 10 ms và bộ chu kỳ Program mới (2026-09-26)
 
 - Phạm vi: `docs/adr/ADR-061-programming-chu-ky-10ms-bo-chu-ky-moi.md`, `docs/00_governance/DECISIONS.md`, `docs/adr/README.md`.
