@@ -8,7 +8,7 @@ import {
 } from "./errors";
 export type { ProgrammingErrorCode } from "./errors";
 
-export const PROGRAMMING_OPENAPI_VERSION = "1.41.0" as const;
+export const PROGRAMMING_OPENAPI_VERSION = "1.42.0" as const;
 export const PROGRAMMING_SCHEMA_VERSION = "1.0" as const;
 export type ProgrammingRole = "viewer" | "operator" | "engineer" | "admin";
 export type ProgrammingPermission = "read" | "program.edit" | "program.activate" | "simulation.run";

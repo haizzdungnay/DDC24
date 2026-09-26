@@ -7,8 +7,8 @@
 #include <string_view>
 
 namespace core::programming {
-inline constexpr std::string_view kProgramErrorCatalogSha256 = "555c28877e22f82997d044db6670222f1e03058dd3a92a4b11d8f3f8b2896bdd";
-inline constexpr std::string_view kProgramErrorCatalogVersion = "1.11.0";
+inline constexpr std::string_view kProgramErrorCatalogSha256 = "dbdb82acd736aff82799acf521c0f9bd8ed2ae9b1b851764dc5fee04502f7781";
+inline constexpr std::string_view kProgramErrorCatalogVersion = "1.12.0";
 
 enum class ProgramPublicError : uint8_t {
     Request,
@@ -109,7 +109,7 @@ struct ComponentErrorMapping {
     ProgramPublicError public_code;
 };
 
-inline constexpr std::array<ComponentErrorMapping, 158> kComponentErrorMappings = {{
+inline constexpr std::array<ComponentErrorMapping, 159> kComponentErrorMappings = {{
     {"artifact-loader", "IR-E-001", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-002", ProgramPublicError::Artifact },
     {"artifact-loader", "IR-E-003", ProgramPublicError::Artifact },
@@ -167,6 +167,7 @@ inline constexpr std::array<ComponentErrorMapping, 158> kComponentErrorMappings 
     {"compiler", "ST-POU-003", ProgramPublicError::PouRecursion },
     {"compiler", "ST-POU-004", ProgramPublicError::ProgramLimit },
     {"compiler", "ST-POU-005", ProgramPublicError::Check },
+    {"compiler", "ST-SCHED-001", ProgramPublicError::Scope },
     {"compiler", "ST-SEM-001", ProgramPublicError::Check },
     {"compiler", "ST-SEM-002", ProgramPublicError::Check },
     {"compiler", "ST-SEM-003", ProgramPublicError::Check },

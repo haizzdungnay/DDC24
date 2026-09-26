@@ -7,17 +7,17 @@
     {
       "name": "openapi",
       "path": "contracts/openapi/openapi.yaml",
-      "sha256": "c1f0e1d858cac3db6bd90c3dda2fb4ee4798d9f8d36bc47a510c297cd3724936",
+      "sha256": "be8082b133ad004e82cba128ba548a13a50700a49df04296538fc2640bffc74f",
       "major": 1,
-      "version": "1.41.0",
+      "version": "1.42.0",
       "operationCount": 45
     },
     {
       "name": "ipc",
       "path": "contracts/ipc/programming_v1/schema.json",
-      "sha256": "2284771450c531485b1acd5fedbaf85c9640b2795dbe9b7fc106302f17f48917",
+      "sha256": "297be2e13b2df01d9d0290cec89d9c3ecec845b198a0cbd7317f1adc38b17496",
       "goldenManifestPath": "contracts/ipc/programming_v1/golden/manifest.json",
-      "goldenManifestSha256": "7cc43bf518c224fb5b42e72825fb94e99463f4a695289d819141601b0b5fd2cb",
+      "goldenManifestSha256": "d208bb8e4b87498423e3cfc2f9bbbc9336932a7b55208ebd2c38d8dbc3ae5fcb",
       "major": 1,
       "minor": 4,
       "version": "1.0"
@@ -25,16 +25,16 @@
     {
       "name": "profile",
       "path": "contracts/programming/product_profile_v2.json",
-      "sha256": "d2866c41065e2a51fba88460068df453d63b6e95b30879eba292f4b667b49ede",
+      "sha256": "1cb61fec07c1ecd6b61528729d62ad83aa0d1ab7d6dd4baddc948686dcdacbc9",
       "major": 1,
       "minor": 0,
       "profileCode": 1,
       "schemaPath": "contracts/programming/product_profile_v2.schema.json",
-      "schemaSha256": "5d8e88afa48d1f0e9bee2ee45a5462840a92411153955da5b8cbf2ca801eb7c8",
+      "schemaSha256": "937bea9ad8564f02bf64c5f8011b29ed20c5809634622b92e4b2ba5b947dfd58",
       "targetAbi": 3841,
       "integrityMode": "SIGNATURE_REQUIRED",
       "documentMajor": 2,
-      "documentMinor": 1,
+      "documentMinor": 2,
       "maxProgramsTotal": 32,
       "maxProgramsEnabled": 16,
       "reviewGatedFeatures": [
@@ -55,22 +55,22 @@
     {
       "name": "errors",
       "path": "contracts/programming/error_catalog_v1.json",
-      "sha256": "555c28877e22f82997d044db6670222f1e03058dd3a92a4b11d8f3f8b2896bdd",
+      "sha256": "dbdb82acd736aff82799acf521c0f9bd8ed2ae9b1b851764dc5fee04502f7781",
       "manifestPath": "contracts/programming/error_catalog_v1.manifest.json",
-      "manifestSha256": "6266d456afa84a09698a00e8653e63438b2322185c5096f7498151b2782692b8",
+      "manifestSha256": "571e69a5c8f274c14f2f182b2876a368d4efd9e9556eaae0363054176b3ad7f6",
       "major": 1,
-      "version": "1.11.0",
+      "version": "1.12.0",
       "publicErrorCount": 38,
-      "componentDetailCount": 158
+      "componentDetailCount": 159
     },
     {
       "name": "store",
       "path": "contracts/programming/programming_store_v1.manifest.json",
-      "sha256": "9329f6109966763065ee4359cde7e4347e4207da5b1d0b15b3639d94556a1604",
-      "migrationPath": "apps/web-api/internal/programming/store/migrations/0015_library_tags.sql",
-      "migrationSha256": "b5d28e3cd74363a7ea77f1e2eec5ce1e4285e00bba7a82e35db56af119a085a6",
+      "sha256": "298d2763d479238732b4c13e18da5e3781050b499d130656f7e0c08a841a2c1a",
+      "migrationPath": "apps/web-api/internal/programming/store/migrations/0016_signal_freshness_10ms.sql",
+      "migrationSha256": "f32ef70dd6c16939d5a4e1da4a171adb38da38bdaa9892e99915c390930d27b4",
       "major": 1,
-      "schemaVersion": 15,
+      "schemaVersion": 16,
       "migrationDir": "apps/web-api/internal/programming/store/migrations"
     },
     {
@@ -186,5 +186,5 @@
     ]
   },
   "owner": "Architect + Dev Lead",
-  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh"
+  "generatedBy": "TASK-PROG-105; artifact golden refreshed by TASK-PROG-203; OpenAPI/error/store/source-bundle assurance refreshed through TASK-PROG-207; re-pinned by T59-001; product profile v2 pinned by T59-002; POU/library registry pinned by T59-003 (Plan 59 W0); error catalog v1.6.0 pinned by T59-004; store schema v6 pinned by T59-005; artifact v2 + dual-reader + IPC action status pinned by T59-006; artifact v2 golden pinned by T59-106; re-pinned after openapi 1.37.0->1.40.0 (+getProgrammingSignalDependencies, +previewProgrammingBinding; 43->45 operations) and error catalog 1.10.0->1.11.0 (detailCode allowedArgs) landed in 496559a/f2524bb/acff5be without a pin refresh; re-pinned by ADR-061 (profile 2.2 cycle set 10..50000 ms, openapi 1.42.0, error catalog 1.12.0 ST-SCHED-001, store v16 freshness 10..150000 ms)"
 }

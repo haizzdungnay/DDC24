@@ -115,8 +115,8 @@
         },
         {
           "type": "integer",
-          "minimum": 1000,
-          "maximum": 90000,
+          "minimum": 10,
+          "maximum": 150000,
           "title": "freshnessMs"
         },
         {

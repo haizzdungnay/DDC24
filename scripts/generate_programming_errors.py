@@ -141,8 +141,11 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
         )),
     }
     diagnostic_source = (ROOT / "apps/core/application/st/st_diagnostic.hpp").read_text()
+    # `SCHED` (ADR-061 mục 4.12): chu kỳ Task/Program ngoài tập cho phép có mã
+    # chẩn đoán riêng, không dùng lại `ST-LIM-009` (quá nhiều Program). Core có
+    # thể khai mã này trong `st_diagnostic.hpp`; Check phía Go chắc chắn phát nó.
     expected_details["compiler"] = set(re.findall(
-        r"ST-(?:LEX|SYN|SEM|LIM|IOMAP|POU|LIB|SIG|OWN|PID|WARN)-[0-9]{3}", diagnostic_source))
+        r"ST-(?:LEX|SYN|SEM|LIM|IOMAP|POU|LIB|SIG|OWN|PID|WARN|SCHED)-[0-9]{3}", diagnostic_source))
     for source in ("st_compile_main.cpp", "st_validate_main.cpp"):
         expected_details["compiler"].update(re.findall(r"ST-CLI-[A-Z0-9-]+", (ROOT / "apps/core/application/st" / source).read_text()))
     # Một phần detail code do BE Go phát (`ST-CLI-LIMIT`, `ST-WORKER-*`). Trước
@@ -150,6 +153,10 @@ def load_and_validate() -> tuple[dict[str, Any], bytes, bytes]:
     # quên map sẽ không làm build đỏ.
     go_source = (ROOT / "apps/web-api/internal/programming/application/checks.go").read_text()
     expected_details["compiler"].update(re.findall(r"ST-(?:CLI|WORKER)-[A-Z0-9-]+", go_source))
+    # Check topology phát `ST-SCHED-*` cho chu kỳ ngoài tập (ADR-061 C1). Quét
+    # đúng file phát nó để mã Go thêm mới mà quên map làm gate đỏ.
+    topology_source = (ROOT / "apps/web-api/internal/programming/application/checks_topology.go").read_text()
+    expected_details["compiler"].update(re.findall(r"ST-SCHED-[0-9]{3}", topology_source))
     expected_details["runtime"] = set(re.findall(r"ST-RT-[0-9]{3}", diagnostic_source))
     expected_details["sim-worker"] = set(re.findall(
         r"SIM-E-[0-9]{3}",
