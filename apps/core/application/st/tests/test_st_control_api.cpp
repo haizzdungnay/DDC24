@@ -60,7 +60,7 @@ void setup(StScheduler* s)
     c.id = "T";
     c.priority = 0;
     c.period_ms = 100;
-    c.budget_ms = 100;
+    c.budget_us = 100000;
     ASSERT_TRUE(s->add_task(c, &err)) << err;
     ASSERT_TRUE(s->add_program("T", "p", 0, &err)) << err;
 }
@@ -171,10 +171,11 @@ TEST(StControlApi, CapabilitiesPublishesEverythingBeNeedsToCompile)
     EXPECT_EQ(r["maxProgramsPerTask"], st_profile_generated::kMaxProgramsPerTask);
     EXPECT_EQ(r["maxProgramsTotal"], st_profile_generated::kMaxProgramsTotal);
     EXPECT_EQ(r["maxProgramsTotal"], 32);
-    EXPECT_EQ(r["allowedPeriodMs"], json({1000, 5000, 30000}));
-    EXPECT_EQ(r["baseStepMs"], 1000);
-    EXPECT_EQ(r["baseStepMinMs"], 500);
-    EXPECT_EQ(r["baseStepMaxMs"], 2000);
+    EXPECT_EQ(r["allowedPeriodMs"], json({10, 50, 100, 500, 1000, 5000, 10000, 50000}));
+    /* ADR-061 C1: base step sản phẩm đúng 10 ms. */
+    EXPECT_EQ(r["baseStepMs"], 10);
+    EXPECT_EQ(r["baseStepMinMs"], 10);
+    EXPECT_EQ(r["baseStepMaxMs"], 10);
     EXPECT_EQ(r["maxTaskBudgetPercentExclusive"],
               st_profile_generated::kMaxTaskBudgetPercent);
     /* TASK-PROG-305: capability monitor/trace theo OD-PROG-011 — 1 Hz, stale

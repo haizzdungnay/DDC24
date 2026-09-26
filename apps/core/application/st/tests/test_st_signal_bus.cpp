@@ -241,8 +241,16 @@ TEST(StSignalBus, RejectsContradictoryDeclarations)
     invalid = make_signal("NO_PUBLISHER", StStalePolicy::HOLD_LAST);
     invalid.publisher_program.clear();
     EXPECT_FALSE(bus.declare(invalid, &error));
-    invalid = make_signal("TOO_FAST", StStalePolicy::HOLD_LAST, 999);
+    /* ADR-061 4.5: dải freshness 10..150000 ms. 999 ms nay HỢP LỆ (publisher
+     * 10..500 ms cần freshness dưới 1 s); biên dưới là 10, biên trên 150000. */
+    invalid = make_signal("TOO_FAST", StStalePolicy::HOLD_LAST, 9);
     EXPECT_FALSE(bus.declare(invalid, &error));
+    invalid = make_signal("TOO_SLOW", StStalePolicy::HOLD_LAST, 150001);
+    EXPECT_FALSE(bus.declare(invalid, &error));
+    EXPECT_TRUE(bus.declare(make_signal("EDGE_FAST", StStalePolicy::HOLD_LAST, 10), &error))
+        << error;
+    EXPECT_TRUE(bus.declare(make_signal("EDGE_SLOW", StStalePolicy::HOLD_LAST, 150000), &error))
+        << error;
     invalid = make_signal("NOT_FINITE", StStalePolicy::USE_FALLBACK);
     invalid.fallback.r = std::numeric_limits<float>::infinity();
     EXPECT_FALSE(bus.declare(invalid, &error));

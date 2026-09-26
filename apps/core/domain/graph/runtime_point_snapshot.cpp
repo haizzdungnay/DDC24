@@ -218,6 +218,7 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append_escaped(snapshot.task.id.data(), fixed_length(snapshot.task.id));
         writer.append("\",\"periodMs\":"); writer.append_uint(snapshot.task.period_ms);
         writer.append(",\"budgetMs\":"); writer.append_uint(snapshot.task.budget_ms);
+        writer.append(",\"budgetUs\":"); writer.append_uint(snapshot.task.budget_us);
         writer.append(",\"state\":\"");
         writer.append_escaped(snapshot.task.state.data(), fixed_length(snapshot.task.state));
         writer.append("\",\"runCount\":"); writer.append_uint(snapshot.task.run_count);
@@ -226,6 +227,13 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append(",\"maxExecNs\":"); writer.append_uint(snapshot.task.max_exec_ns);
         writer.append(",\"overrunCount\":"); writer.append_uint(snapshot.task.overrun_count);
         writer.append(",\"consecutiveOverruns\":"); writer.append_uint(snapshot.task.consecutive_overruns);
+        /* ADR-061 4.9 — metric C4, tên khoá khớp nguyên văn `/programming/runtime`. */
+        writer.append(",\"baseStepUs\":"); writer.append_uint(snapshot.task.base_step_us);
+        writer.append(",\"jitterMaxUs\":"); writer.append_uint(snapshot.task.jitter_max_us);
+        writer.append(",\"jitterViolationCount\":");
+        writer.append_uint(snapshot.task.jitter_violation_count);
+        writer.append(",\"missedBaseStepCount\":");
+        writer.append_uint(snapshot.task.missed_base_step_count);
         writer.append("}");
     }
     /* T60-003 — `programs` LUÔN có mặt, kể cả khi rỗng.
@@ -269,6 +277,8 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append_uint(program.consecutive_missed_release);
         writer.append(",\"lastRunMonoNs\":"); writer.append_uint(program.last_run_mono_ns);
         writer.append(",\"lane\":"); writer.append_uint(program.lane);
+        writer.append(",\"legacyPeriod\":");
+        writer.append(program.legacy_period ? "true" : "false");
         writer.append("}");
     }
     writer.append("],\"programsTruncated\":");

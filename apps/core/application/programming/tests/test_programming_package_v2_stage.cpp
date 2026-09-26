@@ -28,6 +28,7 @@
 #include "st/st_io_map.hpp"
 #include "st/st_process_image.hpp"
 #include "st/st_ir.hpp"
+#include "st/st_runtime_snapshot.hpp"
 #include "st/st_package_v2.hpp"
 #include "st/st_profile_generated.hpp"
 #include "st/st_scheduler.hpp"
@@ -148,7 +149,7 @@ void configure_task(StScheduler* scheduler)
     task.id = "main";
     task.priority = 0;
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     task.overrun_threshold = 3;
     std::string error;
     ASSERT_TRUE(scheduler->add_task(task, &error)) << error;
@@ -322,7 +323,8 @@ TEST(ProgrammingPackageV2Stage, PerProgramPeriodComesFromPackage)
     ASSERT_TRUE(coordinator.recover(&error)) << error;
 
     const std::vector<std::string> names = {"P_fast", "P_medium", "P_slow"};
-    const std::vector<uint32_t> periods = {1000u, 5000u, 30000u};
+    /* ADR-061: biên dưới, giữa và biên trên của tập chu kỳ mới. */
+    const std::vector<uint32_t> periods = {10u, 5000u, 50000u};
     const StageCommand command =
         write_candidate(tree, kOperation, kRevision, package_of(names, periods), "P_fast");
     std::string detail;
@@ -345,9 +347,9 @@ TEST(ProgrammingPackageV2Stage, PerProgramPeriodComesFromPackage)
     }
 }
 
-/* Chu kỳ ngoài ba lớp profile bị chặn ở CHÍNH writer: một lớp lập lịch không tồn
+/* Chu kỳ ngoài tập của profile bị chặn ở CHÍNH writer: một lớp lập lịch không tồn
  * tại chấp nhận ở đây chỉ đẩy lỗi xuống runtime, nơi nó biểu hiện thành deadline
- * miss chứ không thành một câu trả lời hiểu được. */
+ * miss chứ không thành một câu trả lời hiểu được. ADR-061 4.12: mã `ST-SCHED-001`. */
 TEST(ProgrammingPackageV2Stage, WriterRejectsPeriodOutsideProfileClasses)
 {
     StPackageInput input;
@@ -362,7 +364,157 @@ TEST(ProgrammingPackageV2Stage, WriterRejectsPeriodOutsideProfileClasses)
     std::vector<uint8_t> bytes;
     std::string error;
     EXPECT_FALSE(WritePackageV2(input, &bytes, &error));
-    EXPECT_NE(error.find("ngoài ba lớp"), std::string::npos) << error;
+    EXPECT_EQ(error.rfind("ST-SCHED-001", 0), 0u) << error;
+}
+
+namespace {
+
+/* Sửa periodMs của record thứ `record` trong PROGRAM_TABLE rồi băm lại. Writer
+ * hiện hành không còn được sinh chu kỳ legacy, nên đây là cách dựng một gói
+ * "đã Commission trước ADR-061" để kiểm đường nâng cấp. */
+void patch_program_period(std::vector<uint8_t>* bytes, std::size_t record, uint32_t period_ms)
+{
+    auto u16 = [&](std::size_t at) {
+        return static_cast<uint32_t>((*bytes)[at]) | (static_cast<uint32_t>((*bytes)[at + 1]) << 8);
+    };
+    auto u32 = [&](std::size_t at) { return u16(at) | (u16(at + 2) << 16); };
+    /* Bảng section bắt đầu ngay sau header và sắp tăng dần theo type, nên entry
+     * PROGRAM_TABLE đầu tiên gặp được là entry thật. */
+    std::size_t payload = 0;
+    for (std::size_t entry = st_pkg::kHeaderSize;
+         entry + st_pkg::kSectionEntrySize <= bytes->size(); entry += st_pkg::kSectionEntrySize) {
+        if (u16(entry) == st_pkg::SEC_PROGRAM_TABLE) {
+            payload = u32(entry + 4);
+            break;
+        }
+    }
+    ASSERT_NE(payload, 0u);
+    std::size_t cursor = payload;
+    for (std::size_t index = 0; index < record; ++index) cursor += 2u + u16(cursor) + 8u;
+    const std::size_t period = cursor + 2u + u16(cursor);
+    ASSERT_LE(period + 4u, bytes->size());
+    for (std::size_t index = 0; index < 4; ++index)
+        (*bytes)[period + index] = static_cast<uint8_t>((period_ms >> (8 * index)) & 0xFFu);
+    std::fill(bytes->begin() + 32, bytes->begin() + 64, 0u);
+    std::array<uint8_t, crypto_hash_sha256_BYTES> digest{};
+    crypto_hash_sha256(digest.data(), bytes->data(), bytes->size());
+    std::copy(digest.begin(), digest.end(), bytes->begin() + 32);
+}
+
+} // namespace
+
+/* ADR-061 — gói Active/LKG commission trước khi đổi tập chu kỳ có Program
+ * 30000 ms (Active #52 trên bo Foxlinx). Core mới phải NẠP và CHẠY được nó trên
+ * base step 10 ms: từ chối nạp là bộ điều khiển mất chương trình ngay khi deploy.
+ * Chu kỳ legacy phải lộ ra (WARN mỗi lần activate + cờ `legacyPeriod`), release
+ * đúng mỗi 30 s, và TTL giữ lệnh = max(60 s, 2 x 30 s) = 60 s. */
+TEST(ProgrammingPackageV2Stage, Adr061_LegacyThirtySecondPackageStillLoadsAndRuns)
+{
+    constexpr uint64_t kMs = 1000000ull;
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    scheduler.set_base_step_ns(10 * kMs);
+    StTaskConfig task;
+    task.id = "main";
+    task.period_ms = 10;
+    task.budget_us = st_base_step::kDefaultBudgetUs;
+    std::string error;
+    ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                               tree.path + "/staging");
+    ASSERT_TRUE(coordinator.recover(&error)) << error;
+
+    std::vector<uint8_t> bytes = package_of({"P_legacy", "P_fast"}, {1000u, 10u});
+    patch_program_period(&bytes, 0, 30000u);
+    const StageCommand command = write_candidate(tree, kOperation, kRevision, bytes, "P_legacy");
+    std::string detail;
+    ASSERT_TRUE(coordinator.stage(command, &detail, &error)) << detail << ": " << error;
+    ActivateCommand activate;
+    activate.operation_id = kOperation;
+    activate.staged_token = kOperation;
+    activate.cutover = CutoverMode::PROGRAM_ONLY;
+    activate.plan_hash = command.plan_hash;
+    ASSERT_TRUE(coordinator.activate(activate, &detail, &error)) << detail << ": " << error;
+    testing::internal::CaptureStderr();
+    coordinator.on_safe_boundary();
+    const std::string log = testing::internal::GetCapturedStderr();
+    EXPECT_NE(log.find("WARN  programming.legacy_period instance=P_legacy period_ms=30000"),
+              std::string::npos)
+        << log;
+    EXPECT_EQ(log.find("legacy_period instance=P_fast"), std::string::npos) << log;
+
+    StProgramInstance* legacy = scheduler.find_program("P_legacy");
+    ASSERT_NE(legacy, nullptr);
+    EXPECT_EQ(legacy->period_ms, 30000u);
+    for (const char* name : {"P_legacy", "P_fast"}) {
+        StProgramInstance* instance = nullptr;
+        uint64_t baseline = 0;
+        ASSERT_EQ(scheduler.request_program_enabled(name, true, &instance, &baseline, &error),
+                  StScheduler::StEnableRequestOutcome::ARMED)
+            << error;
+    }
+    scheduler.apply_pending_enable_requests_at_boundary();
+    ASSERT_EQ(legacy->state, StProgramState::RUNNING);
+
+    /* 90 s mô phỏng ở base step 10 ms: release tại 10 ms, 30,01 s, 60,01 s. */
+    for (uint64_t step = 1; step <= 9000; ++step) (void)scheduler.on_base_step(step * 10 * kMs);
+    EXPECT_EQ(legacy->run_count, 3u);
+    EXPECT_EQ(legacy->missed_release_count, 0u);
+    EXPECT_EQ(scheduler.find_program("P_fast")->run_count, 9000u);
+    EXPECT_EQ(st_hold_ttl::instance_ttl_ns(st_hold_ttl::kSignedTtlNs, legacy->period_ms),
+              60000 * kMs);
+
+    RuntimePointSnapshot snapshot;
+    st_populate_runtime_snapshot(&scheduler, true, &snapshot);
+    ASSERT_EQ(snapshot.program_count, 2u);
+    for (std::size_t index = 0; index < snapshot.program_count; ++index) {
+        const RuntimeProgramSnapshot& row = snapshot.programs[index];
+        const bool is_legacy = std::string(row.instance_id.data()) == "P_legacy";
+        EXPECT_EQ(row.legacy_period, is_legacy) << row.instance_id.data();
+    }
+}
+
+/* ADR-061 C1: đường nạp chỉ nới cho ĐÚNG chu kỳ legacy của tập cũ. 5 ms không
+ * thuộc tập nào nên vẫn bị loader từ chối trước khi chạm topology. */
+TEST(ProgrammingPackageV2Stage, Adr061_LoaderStillRejectsPeriodOutsideOldAndNewSets)
+{
+    TempTree tree;
+    ASSERT_FALSE(tree.path.empty());
+    std::filesystem::create_directories(std::filesystem::path(tree.path) / "staging");
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_task(&scheduler);
+    ProgrammingCutover cutover(CutoverMode::GRAPH_ONLY);
+    ProgrammingRuntimeCoordinator coordinator(&scheduler, &cutover, tree.path + "/journal.bin",
+                                               tree.path + "/staging");
+    std::string error;
+    ASSERT_TRUE(coordinator.recover(&error)) << error;
+    std::vector<uint8_t> bytes = package_of({"P_odd"}, {1000u});
+    patch_program_period(&bytes, 0, 5u);
+    const StageCommand command = write_candidate(tree, kOperation, kRevision, bytes, "P_odd");
+    std::string detail;
+    EXPECT_FALSE(coordinator.stage(command, &detail, &error));
+    EXPECT_EQ(scheduler.find_program("P_odd"), nullptr);
+}
+
+TEST(ProgrammingPackageV2Stage, Adr061_PrepareProgramSetRejectsFiveMsWithScheduleCode)
+{
+    StScheduler scheduler(StSchedulerProfile::REV_A);
+    configure_task(&scheduler);
+    StProgramSetEntry entry;
+    entry.instance_id = "P_odd";
+    entry.artifact = program_ir("P_odd", 1);
+    entry.period_ms = 5u;
+    StPreparedProgramSet prepared;
+    std::string error;
+    EXPECT_FALSE(scheduler.prepare_program_set("main", {entry}, &prepared, &error));
+    EXPECT_EQ(error.rfind("ST-SCHED-001", 0), 0u) << error;
+
+    entry.period_ms = 30000u;
+    EXPECT_TRUE(scheduler.prepare_program_set("main", {entry}, &prepared, &error))
+        << "legacy 30000 ms phải nạp được qua đường nạp: " << error;
 }
 
 /* Gói v2 phải sống sót qua reboot nhưng checkpoint không mang desiredEnabled.

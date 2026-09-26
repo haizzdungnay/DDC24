@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "alarm/alarm_runtime.hpp"
+#include "runtime/base_step_pacer.hpp"
 #include "bacnet/bacnet_objtable.hpp"
 #include "diagnostics/core_metrics.hpp"
 #include "graph/graph_runtime.hpp"
@@ -87,6 +88,41 @@ struct ScanDeps {
     StValueTrace* value_trace = nullptr;
 };
 
+/* ADR-061 4.10 — các bước của ScanLoop::step() được đo WCET riêng. Thứ tự
+ * enum = thứ tự chạy trong step(); log `core.step_wcet` in đúng thứ tự này. */
+enum class ScanPhase : uint8_t {
+    IO_READ = 0,   /* re-attach, đọc io_shm, quality, đọc ext fieldbus */
+    IPC_DRAIN,     /* hết hạn override, drain + áp lệnh web/BACnet */
+    SCHEDULES,     /* ScheduleRuntime */
+    LOGIC,         /* safe boundary + graph + Program Runtime (ST) */
+    ALARMS,        /* AlarmRuntime */
+    EXT_WRITES,    /* graph -> plc_shm.ext[].dirty */
+    OUTPUT,        /* resolve priority + safe-state + ghi output */
+    PUBLISH,       /* point_snapshot, trả lời lệnh, BACnet objtable */
+    COUNT
+};
+constexpr std::size_t kScanPhaseCount = static_cast<std::size_t>(ScanPhase::COUNT);
+const char* scan_phase_name(ScanPhase phase);
+
+/* WCET mỗi bước: lần gần nhất và lớn nhất trong phút log hiện tại (ns). */
+struct ScanStepWcet {
+    std::array<uint64_t, kScanPhaseCount> last_ns{};
+    std::array<uint64_t, kScanPhaseCount> minute_max_ns{};
+    uint64_t total_last_ns = 0;
+    uint64_t total_minute_max_ns = 0;
+    uint64_t minute_scans = 0;
+};
+
+/* Nguồn thời gian của vòng quét. Mặc định (hai con trỏ nullptr) là
+ * CLOCK_MONOTONIC + clock_nanosleep(TIMER_ABSTIME). Test tiêm đồng hồ giả để
+ * kiểm chính sách nhịp/trễ/metric mà không phải ngủ thật. Con trỏ hàm, không
+ * std::function: không cấp phát, không vtable trên đường RT. */
+struct ScanTimeSource {
+    uint64_t (*monotonic_ns)(void* ctx) = nullptr;
+    void (*sleep_until)(void* ctx, uint64_t deadline_ns) = nullptr;
+    void* ctx = nullptr;
+};
+
 class ScanLoop {
 public:
     explicit ScanLoop(ScanDeps deps) : d_(deps) {}
@@ -105,6 +141,14 @@ public:
      * dt của graph được re-sync về chu kỳ scan thật (reload reset về declared). */
     void set_reload_hook(std::atomic<bool>* flag, void (*fn)(void*), void* ctx);
 
+    /* Chỉ cho test: thay đồng hồ monotonic (dùng cho nhịp, metric C4 và
+     * `ClockSnapshot::monotonic_ns` của step) và hàm ngủ. Gọi trước run(). */
+    void set_time_source_for_test(const ScanTimeSource& source) { time_ = source; }
+
+    /* Metric C4 hiện hành (ADR-061 4.9) — cùng nguồn với `task` của snapshot. */
+    BaseStepTimingSnapshot timing() const { return pacer_.snapshot(); }
+    const ScanStepWcet& step_wcet() const { return wcet_; }
+
 #ifdef CORE_BUILD_TESTS
     /* CR-007: pending_/pending_alarm_ là member pre-allocated, .clear() mỗi scan
      * (KHÔNG giải phóng capacity) để tránh heap alloc lặp lại trong scan hot path.
@@ -118,11 +162,18 @@ public:
 private:
     struct PendingResp { WebCommand cmd; bool ok; };
 
+    uint64_t monotonic_now() const;
+    void record_phase(ScanPhase phase, uint64_t* mark);
+    void log_minute_stats();
+
     ScanDeps d_;
     IoSnapshot last_io_;   /* giữ snapshot cũ khi seqlock fail */
     RuntimePointSnapshotPublisher snapshot_publisher_;
     uint64_t next_snapshot_id_ = 1;
-    uint64_t budget_ns_ = 1000000000ull;   /* = period; overrun khi exec vượt */
+    uint64_t budget_ns_ = 10000000ull;   /* = base step; overrun khi exec vượt */
+    ScanTimeSource time_{};
+    BaseStepPacer pacer_{};
+    ScanStepWcet wcet_{};
     std::atomic<bool>* reload_flag_ = nullptr;
     void (*reload_fn_)(void*) = nullptr;
     void* reload_ctx_ = nullptr;

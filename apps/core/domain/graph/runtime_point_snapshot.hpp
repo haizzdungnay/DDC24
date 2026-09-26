@@ -36,7 +36,10 @@ struct RuntimeTaskSnapshot {
     bool present = false;
     std::array<char, 33> id{};
     uint32_t period_ms = 0;
+    /* ADR-061 4.3 — `budget_ms` = `budget_us / 1000` làm tròn XUỐNG, chỉ để
+     * người đọc cũ còn đọc được. Nguồn sự thật là `budget_us`. */
     uint32_t budget_ms = 0;
+    uint32_t budget_us = 0;
     std::array<char, 12> state{};
     uint32_t run_count = 0;
     uint32_t missed_release_count = 0;
@@ -44,6 +47,13 @@ struct RuntimeTaskSnapshot {
     uint64_t max_exec_ns = 0;
     uint32_t overrun_count = 0;
     uint32_t consecutive_overruns = 0;
+    /* ADR-061 4.9 — metric C4 của vòng quét (ScanLoop), không phải của Task:
+     * base step, lệch đánh thức lớn nhất trong 60 s gần nhất, số lần lệch
+     * > 100 µs (tích luỹ), số base step bị lỡ vì trễ >= 1 base step (tích luỹ). */
+    uint64_t base_step_us = 0;
+    uint32_t jitter_max_us = 0;
+    uint64_t jitter_violation_count = 0;
+    uint64_t missed_base_step_count = 0;
 };
 
 /* T60-001 — trần của mảng `programs[]` trong snapshot.
@@ -108,6 +118,10 @@ struct RuntimeProgramSnapshot {
      * từ lần activate gần nhất. */
     uint64_t last_run_mono_ns = 0;
     uint8_t  lane = 0;
+    /* ADR-061 — true khi chu kỳ của Program thuộc tập profile CŨ nhưng ngoài tập
+     * hiện hành (30 000 ms). Gói vẫn chạy để không mất điều khiển lúc nâng cấp,
+     * nhưng phải lộ ra để người vận hành biết cần Commission lại. */
+    bool     legacy_period = false;
 };
 
 struct RuntimePointSnapshot {

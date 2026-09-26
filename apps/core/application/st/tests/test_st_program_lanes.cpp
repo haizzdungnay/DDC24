@@ -86,10 +86,11 @@ FixtureResult run_fixture(StLaneMode mode, std::size_t ticks)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     EXPECT_TRUE(scheduler.add_task(task, &error)) << error;
 
-    const std::array<uint32_t, 3> periods = {1000u, 5000u, 30000u};
+    /* Ba lớp chu kỳ của tập ADR-061 (30000 ms không còn được tạo mới). */
+    const std::array<uint32_t, 3> periods = {1000u, 5000u, 10000u};
     std::vector<std::string> names;
     for (int index = 0; index < 10; ++index) {
         const std::string id = "P_" + std::to_string(index);
@@ -130,7 +131,7 @@ TEST(StProgramLanes, SequentialAndParallelProduceIdenticalResults)
     EXPECT_EQ(sequential.faults, parallel.faults);
     /* Số đếm phải khớp lý thuyết chứ không chỉ khớp NHAU: hai chế độ cùng sai
      * một kiểu vẫn cho hai kết quả bằng nhau. */
-    const std::vector<int32_t> expected = {30, 6, 1, 30, 6, 1, 30, 6, 1, 30};
+    const std::vector<int32_t> expected = {30, 6, 3, 30, 6, 3, 30, 6, 3, 30};
     EXPECT_EQ(sequential.counters, expected);
 }
 
@@ -155,7 +156,7 @@ TEST(StProgramLanes, FaultInOneLaneDoesNotStopAnother)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_bad", 0, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_good", 1, &error)) << error;
@@ -183,7 +184,7 @@ TEST(StProgramLanes, FaultIsIsolatedWithinTheSameLane)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_bad", 0, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_good", 1, &error)) << error;
@@ -215,7 +216,7 @@ TEST(StProgramLanes, ScanPathDoesNotAllocate)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     for (int index = 0; index < 8; ++index) {
         const std::string id = "P_" + std::to_string(index);
@@ -257,7 +258,7 @@ TEST(StProgramLanes, LanesBeyondWorkerCountStillRun)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     const std::size_t lanes = kMaxLanes;
     for (std::size_t index = 0; index < lanes; ++index) {
@@ -286,7 +287,7 @@ TEST(StProgramLanes, RejectsLaneAboveLimit)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     ASSERT_TRUE(scheduler.add_task(task, &error)) << error;
     ASSERT_TRUE(scheduler.add_program("main", "P_0", 0, &error)) << error;
     EXPECT_FALSE(scheduler.set_program_lane("P_0", static_cast<uint8_t>(kMaxLanes), &error));

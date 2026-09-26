@@ -93,15 +93,38 @@ constexpr uint32_t    kMinPeriodMs = 50;
 constexpr uint32_t    kMaxPeriodMs = 60000;
 } // namespace st_sched_limits
 
-/* Base step thuộc nền tảng, KHÔNG thuộc Task. Các giá trị này là quyết định
- * ADR-027/028; Task period vẫn chỉ do profile machine-readable quy định. */
+/* Base step thuộc nền tảng, KHÔNG thuộc Task. ADR-061 C1 supersede dải
+ * 500..2000 ms của ADR-027/028: base step sản phẩm là ĐÚNG 10 ms, bằng chu kỳ
+ * nhỏ nhất của profile, nên mọi chu kỳ trong tập (chuỗi bội 10..50000 ms) là bội
+ * nguyên của nó. `--scan-ms` vẫn là override dev và được log WARN khi ra ngoài
+ * dải này; Task period vẫn chỉ do profile machine-readable quy định. */
 namespace st_base_step {
-constexpr uint32_t kDefaultMs = 1000;
-constexpr uint32_t kMinMs = 500;
-constexpr uint32_t kMaxMs = 2000;
+constexpr uint32_t kDefaultMs = 10;
+constexpr uint32_t kMinMs = 10;
+constexpr uint32_t kMaxMs = 10;
+constexpr uint64_t kDefaultNs = static_cast<uint64_t>(kDefaultMs) * 1000000ull;
 /* Trần budget là quyết định profile, không phải hằng riêng của base step:
  * giữ hai bản sao thì mỗi lần profile đổi lại có một phía nói số cũ. */
 constexpr uint32_t kMaxTaskBudgetPercent = st_profile_generated::kMaxTaskBudgetPercent;
+/* ADR-061 4.3: trần ngân sách mỗi base step = 20% base step = 2000 µs, tính bằng
+ * µs vì đơn vị ms không biểu diễn được. Luật `< 20%` (OD-PROG-012) giữ nguyên nên
+ * trần là LOẠI TRỪ; Task `main` khai `kDefaultBudgetUs` = trần - 1 µs, cùng khuôn
+ * 199/200 ms của Task 1000 ms trước ADR-061. */
+constexpr uint32_t kBudgetCeilingUs = kDefaultMs * 1000u * kMaxTaskBudgetPercent / 100u;
+static_assert(kBudgetCeilingUs == 2000u, "ADR-061 4.3: trần budget base step 10 ms = 2000 us");
+constexpr uint32_t kDefaultBudgetUs = kBudgetCeilingUs - 1u;
+
+static_assert(kMinMs <= kDefaultMs && kDefaultMs <= kMaxMs, "base step mặc định nằm trong dải");
+/* Base step phải CHIA HẾT mọi chu kỳ của profile: nếu không, một Program sẽ bị
+ * xét ở các tick lệch pha với deadline và lỡ nhịp có hệ thống (C3). */
+constexpr bool divides_every_allowed_period(uint32_t step_ms)
+{
+    for (const uint32_t period : st_profile_generated::kAllowedPeriodMs)
+        if (step_ms == 0 || period % step_ms != 0) return false;
+    return true;
+}
+static_assert(divides_every_allowed_period(kDefaultMs),
+              "ADR-061 C1: base step phải chia hết mọi chu kỳ của profile");
 } // namespace st_base_step
 
 /* Hold-last TTL — ADR-051, DDD-CTRL-PROG-001 §6/§15.
@@ -112,22 +135,28 @@ constexpr uint32_t kMaxTaskBudgetPercent = st_profile_generated::kMaxTaskBudgetP
  * van có thể đứng ở 73% mãi mãi vì chương trình chết chứ không vì ai ra lệnh.
  *
  * 60 s được chọn theo ba ràng buộc, không phải theo cảm tính:
- *  1. `>= 2x` chu kỳ Task chậm nhất của profile (30 s). Tuổi của lệnh cuối tại
- *     lúc Program chết đã có thể bằng trọn một chu kỳ, nên TTL nhỏ hơn 2x chu
- *     kỳ làm thời gian giữ thực tế dao động tới tận 0 — không hứa được gì.
- *     Ràng buộc này được `static_assert` bên dưới canh, không phải ghi chú.
+ *  1. `>= 2x` chu kỳ của Program. Tuổi của lệnh cuối tại lúc Program chết đã có
+ *     thể bằng trọn một chu kỳ, nên TTL nhỏ hơn 2x chu kỳ làm thời gian giữ
+ *     thực tế dao động tới tận 0 — không hứa được gì.
  *  2. Nằm trong dải fail-safe/watchdog quen thuộc của thiết bị BAS (10..60 s),
  *     nên hành vi không gây bất ngờ cho người vận hành đã quen gear khác.
  *  3. Ngắn hơn hằng số thời gian nhiệt của tải (phút tới hàng chục phút), nên
  *     cụm thiết bị không chạy mù đủ lâu để lệch trạng thái.
  *
+ * ADR-061 4.4 (supersede "Cơ sở của con số" của ADR-051): profile có chu kỳ
+ * 50 000 ms, nên một hằng toàn cục 60 s không còn thoả ràng buộc 1 cho MỌI
+ * Program. Thay `static_assert` toàn cục bằng TTL THEO INSTANCE:
+ *   TTL = max(sàn, 2 × chu kỳ của chính Program đó)
+ * với sàn = 60 s đã ký (hoặc `--program-hold-ttl-ms`). Program 50 000 ms được
+ * 100 s, mọi Program khác giữ đúng 60 s như ADR-051 — không kéo dài thời gian giữ
+ * của Program nhanh chỉ vì profile có một lớp chậm.
+ *
  * TTL KHÔNG chờ người vận hành reset: FAULTED là trạng thái chốt, hồi phục cần
  * thao tác người. Giữ vô hạn để "đợi người" chính là lỗi mà ADR-051 đóng.
  */
 namespace st_hold_ttl {
-/* Giá trị đã ký. Wall-clock, KHÔNG phải số base step: base step cấu hình được
- * 500..2000 ms, ghim theo base step thì cùng một quyết định lại cho ra ba thời
- * gian giữ khác nhau tuỳ site. */
+/* Sàn đã ký. Wall-clock, KHÔNG phải số base step: ghim theo base step thì cùng
+ * một quyết định lại cho ra thời gian giữ khác nhau tuỳ nhịp quét. */
 constexpr uint32_t kSignedTtlMs = 60000;
 
 /* Trần cho override tại field. Vượt trần này thì "giữ tạm" đã thành "giữ vô
@@ -142,13 +171,30 @@ constexpr uint32_t max_allowed_period_ms()
     return worst;
 }
 
-/* Profile mọc thêm một lớp chu kỳ chậm hơn thì tiền đề của ADR-051 gãy — bắt
- * gãy ở lúc build, không phải lúc một van đứng im ngoài hiện trường. */
-static_assert(kSignedTtlMs >= 2u * max_allowed_period_ms(),
-              "hold TTL phải >= 2x chu kỳ Task chậm nhất của profile (ADR-051)");
 static_assert(kSignedTtlMs <= kMaxConfigurableMs, "TTL đã ký không được vượt trần field");
 
 constexpr uint64_t ns_from_ms(uint32_t ms) { return static_cast<uint64_t>(ms) * 1000000ull; }
+
+/* ADR-061 4.4 — TTL hiệu lực của MỘT instance. `floor_ns == 0` giữ nghĩa cũ
+ * "tắt TTL" (chỉ test/chẩn đoán dùng); `period_ms == 0` (Program theo chu kỳ
+ * Task) được caller thay bằng chu kỳ Task trước khi gọi. */
+constexpr uint64_t instance_ttl_ns(uint64_t floor_ns, uint32_t period_ms)
+{
+    if (floor_ns == 0) return 0;
+    const uint64_t twice_period_ns = 2u * ns_from_ms(period_ms);
+    return floor_ns > twice_period_ns ? floor_ns : twice_period_ns;
+}
+
+/* Ràng buộc 1 phải đúng cho chu kỳ chậm nhất của profile, và phải đúng ở CÁCH
+ * TÍNH chứ không phải ở một con số: profile mọc thêm lớp chu kỳ chậm hơn thì
+ * TTL của lớp đó tự dãn theo, không cần ai nhớ sửa hằng. */
+static_assert(instance_ttl_ns(ns_from_ms(kSignedTtlMs), max_allowed_period_ms()) >=
+                  2u * ns_from_ms(max_allowed_period_ms()),
+              "TTL theo instance phải >= 2x chu kỳ chậm nhất của profile (ADR-061 4.4)");
+static_assert(instance_ttl_ns(ns_from_ms(kSignedTtlMs), 50000u) == ns_from_ms(100000u),
+              "ADR-061 4.4: Program 50 000 ms có TTL 100 s");
+static_assert(instance_ttl_ns(ns_from_ms(kSignedTtlMs), 30000u) == ns_from_ms(kSignedTtlMs),
+              "Program 30 000 ms (legacy) giữ TTL 60 s");
 
 /* TTL đo bằng ĐỒNG HỒ, không bằng số vòng quét. Đếm vòng quét chỉ xấp xỉ thời
  * gian khi vòng quét được nhịp đúng base step; mọi đường chạy nhanh hơn nhịp
@@ -351,7 +397,13 @@ struct StTaskConfig {
     std::string id;
     uint8_t     priority = 0;       /* 0 = cao nhất */
     uint32_t    period_ms = 1000;
-    uint32_t    budget_ms = 200;
+    /* ADR-061 4.3 — ngân sách tính bằng MICRO GIÂY. Trần của Task `main` 10 ms
+     * là 2000 µs (20%, loại trừ), con số mà đơn vị ms cũ không biểu diễn được:
+     * `budget_ms` chỉ cho 1 ms, vì 2 ms = đúng 20% bị luật `< 20%` từ chối. Không
+     * giữ song song `budget_ms` trong cấu hình: hai trường cho cùng một con số là
+     * hai nguồn sự thật. Snapshot vẫn công bố `budgetMs` (làm tròn xuống) cho
+     * người đọc cũ. */
+    uint32_t    budget_us = 200000;
     bool        enabled = true;
     uint32_t    overrun_threshold = 3;
 };
@@ -471,6 +523,10 @@ public:
 
     StSchedulerProfile profile() const { return profile_; }
     uint64_t base_step_count() const { return base_step_count_; }
+    /* Base step thật mà scheduler đang được nhịp (ns). Trace giá trị dùng số này
+     * để công bố chu kỳ lấy mẫu HIỆU LỰC: không thể lấy mẫu nhanh hơn một base
+     * step, nên hứa nhanh hơn là hứa suông (ADR-061 4.6). */
+    uint64_t base_step_ns() const { return base_step_ns_; }
     /* Base step thật của ScanLoop; truyền xuống mọi Task (kể cả Task thêm sau)
      * để dung sai so hạn không vượt nửa base step. Gọi ngoài RT. */
     void set_base_step_ns(uint64_t ns);

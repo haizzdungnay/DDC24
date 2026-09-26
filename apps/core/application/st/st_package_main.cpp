@@ -23,6 +23,7 @@
 
 #include "st/st_artifact.hpp"
 #include "st/st_diagnostic.hpp"
+#include "st/st_limits.hpp"
 #include "st/st_package_v2.hpp"
 #include "st/st_profile_generated.hpp"
 
@@ -317,6 +318,14 @@ int main(int argc, char** argv)
         if (program.period_ms == 0)
             return fail(core::st_diag_code::kPouScheduleMissing,
                         "Program chua co chu ky chay: " + program.program_name);
+        /* ADR-061 C1/4.12 — CLI là đường TẠO gói mới: chu kỳ ngoài tập của profile
+         * có mã riêng `ST-SCHED-001`, không rơi vào `ST-CLI-LIMIT` chung chung
+         * của writer (người đọc cần biết thứ phải sửa là một con số chu kỳ). */
+        if (!core::st_limits::RevAAllowsPeriod(program.period_ms))
+            return fail(core::st_diag_code::kSchedulePeriodNotAllowed,
+                        "Program " + program.program_name + " co chu ky " +
+                            std::to_string(program.period_ms) +
+                            " ms ngoai tap chu ky cua profile");
     }
 
     core::StPackageInput input;

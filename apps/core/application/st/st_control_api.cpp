@@ -118,7 +118,10 @@ json task_state_json(const StTask& t)
     j["taskId"] = t.config().id;
     j["priority"] = t.config().priority;
     j["periodMs"] = t.config().period_ms;
-    j["budgetMs"] = t.config().budget_ms;
+    /* ADR-061 4.3: nguồn là µs; API supporting này giữ đúng schema
+     * `st_program_control_v1` (không có `budgetUs`), nên chỉ công bố ms làm
+     * tròn xuống. `budgetUs` đi qua `point_snapshot`. */
+    j["budgetMs"] = t.config().budget_us / 1000u;
     j["enabled"] = t.enabled();
     j["runCount"] = t.stats().run_count;
     j["missedReleaseCount"] = t.stats().missed_release_count;

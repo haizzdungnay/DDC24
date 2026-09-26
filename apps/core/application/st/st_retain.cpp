@@ -751,7 +751,14 @@ bool StRetainMailbox::publish(const StLoadedProgram& program, uint64_t now_ns) n
         return false;
     }
     slots_[selected].state.store(READY, std::memory_order_release);
-    if (owner_) owner_->notify_worker();
+    /* Đánh thức worker tối đa 1 lần/giây (ADR-061 X14). Lần publish đầu tiên
+     * luôn đánh thức để snapshot đầu sau activate không phải chờ nhịp 1 s. */
+    if (owner_ && (!notified_once_ || now_ns < last_notify_ns_ ||
+                   now_ns - last_notify_ns_ >= 1000000000ull)) {
+        owner_->notify_worker();
+        last_notify_ns_ = now_ns;
+        notified_once_ = true;
+    }
     return true;
 }
 

@@ -1,7 +1,8 @@
 /**
  * @file  main.cpp (mkddc-core)
- * @brief Entry: init → SCHED_FIFO 80 → attach shm (retry) → scan loop 1s →
- *        sd_notify → signal. Core KHÔNG mở UART, KHÔNG tạo io_shm (07 §0).
+ * @brief Entry: init → SCHED_FIFO 80 → attach shm (retry) → scan loop base step
+ *        10 ms (ADR-061 C1) → sd_notify → signal. Core KHÔNG mở UART, KHÔNG tạo
+ *        io_shm (07 §0).
  */
 #include <sys/uio.h>
 #include <algorithm>
@@ -34,6 +35,7 @@
 #include "ipc/output_writer.hpp"
 #include "config/safe_state_config.hpp"
 #include "schedule/schedule_runtime.hpp"
+#include "runtime/interval_gate.hpp"
 #include "runtime/scan_loop.hpp"
 #include "runtime/thread_policy.hpp"
 #include "persistence/state_snapshot.hpp"
@@ -47,6 +49,11 @@ namespace {
 
 std::atomic<bool> g_shutdown{false};
 std::atomic<bool> g_reload{false};
+
+/* ADR-061 4.8 — watchdog systemd kick tối đa 1 lần/giây (`WatchdogSec=6`). */
+constexpr uint64_t kWatchdogKickMinIntervalNs = 1000000000ull;
+/* GAP-08/COR-010 — chu kỳ ghi snapshot persist của graph khi dirty. */
+constexpr uint64_t kGraphSnapshotIntervalNs = 60ull * 1000000000ull;
 
 void on_signal(int)
 {
@@ -239,7 +246,8 @@ int main(int argc, char** argv)
     bool safe_cfg_from_cli = false;
     bool io_cfg_from_cli = false;
     bool scan_ms_from_cli = false;
-    uint64_t base_step_ns = 1000000000ull; /* base step 1s Rev A */
+    /* ADR-061 C1: base step sản phẩm 10 ms. `--scan-ms` là override dev. */
+    uint64_t base_step_ns = st_base_step::kDefaultNs;
     int rt_prio = 80;
     /* Mặc định GRAPH_ONLY — runtime IPC có thể bật độc lập để Commission đổi
      * owner tại safe boundary; không có operation thì graph giữ nguyên. */
@@ -496,14 +504,23 @@ int main(int argc, char** argv)
     /* COR-010: restore persist state ngay sau load boot */
     graph.restore_persist_state(snap.load());
 
-    /* Đường GRAPH_ONLY chuyển tiếp vẫn ánh xạ scan_ms cũ vào base step để
-     * không đổi hành vi trước TASK-PROG-306. Task period Programming không đi
-     * qua biến này và không bao giờ được dùng làm sleep của ScanLoop. */
     /* Đồng bộ base step — 1 nguồn sự thật:
-     * - có graph + KHÔNG --scan-ms → chu kỳ scan core LẤY TỪ graph.json (ý đồ engineer)
-     * - có graph + --scan-ms khác  → WARN rõ + dùng --scan-ms (dev override);
-     *   ScanLoop sync dt của graph về đúng chu kỳ thật nên không bao giờ lệch */
-    if (graph.loaded()) {
+     * - Programming runtime BẬT (đường sản phẩm): base step là của NỀN TẢNG,
+     *   10 ms (ADR-061 C1, ADR-027 §2). `graph.json scan_ms` (dải 500..2000 ms
+     *   của graph) KHÔNG được kéo base step về 1 s — nếu kéo, mọi Program
+     *   10..500 ms chỉ được xét mỗi giây và C1/C3 gãy ngay khi bo có một
+     *   graph.json cũ (X2). Graph vẫn chạy mỗi base step với dt = base step
+     *   THẬT: ScanLoop sync dt của graph về chu kỳ thật (`sync_actual_scan_ms`).
+     * - Programming runtime TẮT (graph-only thuần): giữ hành vi cũ, chu kỳ scan
+     *   lấy từ graph.json (ý đồ engineer).
+     * - có graph + --scan-ms khác  → WARN rõ + dùng --scan-ms (dev override). */
+    if (graph.loaded() && programming_runtime_enabled && !scan_ms_from_cli) {
+        std::fprintf(stderr,
+                     "INFO  core.scan_ms=%llu (base step nen tang ADR-061; bo qua graph.json"
+                     " scan_ms=%u, graph dt theo base step that)\n",
+                     static_cast<unsigned long long>(base_step_ns / 1000000ull),
+                     graph.declared_scan_ms());
+    } else if (graph.loaded()) {
         const uint64_t graph_ns = static_cast<uint64_t>(graph.declared_scan_ms()) * 1000000ull;
         if (!scan_ms_from_cli) {
             base_step_ns = graph_ns;
@@ -520,8 +537,18 @@ int main(int argc, char** argv)
     std::fprintf(stderr, "INFO  core.base_step_ms=%llu programming_mode=%s\n",
                  static_cast<unsigned long long>(base_step_ns / 1000000ull),
                  programming_mode == CutoverMode::PROGRAM_ONLY ? "program_only" : "graph_only");
+    if (programming_runtime_enabled &&
+        (base_step_ns < static_cast<uint64_t>(st_base_step::kMinMs) * 1000000ull ||
+         base_step_ns > static_cast<uint64_t>(st_base_step::kMaxMs) * 1000000ull))
+        std::fprintf(stderr,
+                     "WARN  core.base_step_override base_step_ms=%llu ngoai dai san pham %u..%u ms"
+                     " (ADR-061 C1) — chi dung cho dev/chan doan, C1..C4 khong duoc bao dam\n",
+                     static_cast<unsigned long long>(base_step_ns / 1000000ull),
+                     st_base_step::kMinMs, st_base_step::kMaxMs);
 
     /* ADR-051 — TTL hold-last đo bằng đồng hồ, nên nó độc lập với base step.
+     * ADR-061 4.4: số này là SÀN; TTL thật của mỗi instance là
+     * max(sàn, 2 × chu kỳ Program), tính ở `st_withdraw_stale_outputs`.
      * Chốt SAU khi base step đã thống nhất với graph.json chỉ để một lần log nói
      * đủ hai con số cạnh nhau: TTL ngắn hơn một base step thì không lần publish
      * nào kịp gia hạn, hold-last biến thành rút-ngay. */
@@ -533,7 +560,9 @@ int main(int argc, char** argv)
         program_hold_ttl_ms = base_step_ms;
     }
     const uint64_t program_hold_ttl_ns = st_hold_ttl::ns_from_ms(program_hold_ttl_ms);
-    std::fprintf(stderr, "INFO  core.program_hold_ttl_ms=%u signed_ms=%u base_step_ms=%u\n",
+    std::fprintf(stderr,
+                 "INFO  core.program_hold_ttl_ms=%u signed_ms=%u base_step_ms=%u"
+                 " (san; TTL instance = max(san, 2 x chu ky Program))\n",
                  program_hold_ttl_ms, st_hold_ttl::kSignedTtlMs, base_step_ms);
 
     PriorityResolver resolver;
@@ -575,12 +604,28 @@ int main(int argc, char** argv)
     std::unique_ptr<programming::ProgramIpcUnixEndpoint> programming_ipc_endpoint;
     std::thread programming_ipc_thread;
     if (programming_runtime_enabled) {
+        /* ADR-061 4.2/4.3: MỘT Task `main` chạy ở base step (10 ms); mỗi Program
+         * release theo chu kỳ riêng (T59-402). Trần ngân sách mỗi base step =
+         * 20% chu kỳ Task, tính bằng µs (2000 µs ở 10 ms). Base step override dev
+         * không thuộc tập chu kỳ thì Task giữ 10 ms và bị đếm lỡ nhịp — thà
+         * nói thật còn hơn dựng một Task có chu kỳ ngoài profile. */
         StTaskConfig runtime_task;
         runtime_task.id = "main";
         runtime_task.priority = 0;
-        runtime_task.period_ms = 1000;
-        runtime_task.budget_ms = 199;
+        const uint64_t base_step_ms_exact = base_step_ns / 1000000ull;
+        runtime_task.period_ms =
+            base_step_ns % 1000000ull == 0 && base_step_ms_exact <= UINT32_MAX &&
+                    st_limits::RevAAllowsPeriod(static_cast<uint32_t>(base_step_ms_exact))
+                ? static_cast<uint32_t>(base_step_ms_exact)
+                : st_base_step::kDefaultMs;
+        /* Trần 20% là LOẠI TRỪ (OD-PROG-012) nên khai trần - 1 µs: 1999 µs ở
+         * 10 ms, cùng khuôn 199 ms ở 1000 ms trước đây. */
+        runtime_task.budget_us = static_cast<uint32_t>(
+            static_cast<uint64_t>(runtime_task.period_ms) * 1000ull *
+                st_base_step::kMaxTaskBudgetPercent / 100ull - 1ull);
         runtime_task.overrun_threshold = 3;
+        std::fprintf(stderr, "INFO  programming.task_main period_ms=%u budget_us=%u\n",
+                     runtime_task.period_ms, runtime_task.budget_us);
         std::string topology_error;
         if (!programming_scheduler.add_task(runtime_task, &topology_error) ||
             !programming_scheduler.add_program("main", "program-main", 0, &topology_error)) {
@@ -766,8 +811,13 @@ int main(int argc, char** argv)
      * phải chứng minh process còn sống. Kick giữa chu kỳ biến nó thành
      * liveness check vô nghĩa — một step() treo vĩnh viễn ở giữa vẫn kick đều
      * và systemd sẽ không bao giờ khởi động lại, đúng loại lỗi mà watchdog
-     * sinh ra để bắt. Task period 30 s chỉ là cadence dispatch, không đi vào
+     * sinh ra để bắt. Task/Program period chỉ là cadence dispatch, không đi vào
      * công thức watchdog và không được làm chậm callback này.
+     *
+     * ADR-061 4.8: ở base step 10 ms, kick sau MỌI step là 100 datagram/s tới
+     * systemd — chi phí syscall trên luồng RT mà không thêm bảo vệ nào, vì
+     * `WatchdogSec=6` chỉ cần một kick trong 6 s. Kick TỐI ĐA 1 lần/giây, vẫn
+     * chỉ ngay sau một step() trọn vẹn: step treo thì không có kick nào.
      *
      * Trong khoảng core chưa chạy (đang restart), MCU tự ép AO/DO về an toàn
      * sau IOP_SAFE_TIMEOUT_MS = 200 ms — lớp bảo vệ ĐỘC LẬP với SOM, và là lý
@@ -776,21 +826,29 @@ int main(int argc, char** argv)
      * sd_notify READY=1 sau scan đầu; snapshot 60s dirty (COR-010). */
     struct NotifyCtx {
         bool ready_sent = false;
-        int snap_ticks  = 0;
+        IntervalGate watchdog{kWatchdogKickMinIntervalNs};
+        IntervalGate snapshot{kGraphSnapshotIntervalNs};
         GraphRuntime*  graph;
         StateSnapshot* snap;
-    } nctx{false, 0, &graph, &snap};
+    } nctx{false, IntervalGate{kWatchdogKickMinIntervalNs},
+           IntervalGate{kGraphSnapshotIntervalNs}, &graph, &snap};
     auto after_scan = [](void* p) {
         NotifyCtx* c = static_cast<NotifyCtx*>(p);
+        struct timespec ts {};
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        const uint64_t now = static_cast<uint64_t>(ts.tv_sec) * 1000000000ull +
+                             static_cast<uint64_t>(ts.tv_nsec);
         if (!c->ready_sent) {
             notify_systemd("READY=1");
             c->ready_sent = true;
+            c->snapshot.arm(now);
             std::fprintf(stderr, "INFO  core.ready first scan done\n");
         }
-        notify_systemd("WATCHDOG=1");
-        /* GAP-08: ghi snapshot mỗi 60 scan NẾU dirty */
-        if (++c->snap_ticks >= 60) {
-            c->snap_ticks = 0;
+        if (c->watchdog.due(now)) notify_systemd("WATCHDOG=1");
+        /* GAP-08: ghi snapshot mỗi 60 s NẾU dirty. Trước ADR-061 là "mỗi 60 scan"
+         * và chỉ đúng 60 s vì base step là 1 s; ở 10 ms nó thành ghi flash mỗi
+         * 0,6 s. Đo bằng đồng hồ, không bằng số vòng quét. */
+        if (c->snapshot.due(now)) {
             if (c->graph->dirty()) {
                 c->snap->save(c->graph->get_persist_state());
                 c->graph->clear_dirty();

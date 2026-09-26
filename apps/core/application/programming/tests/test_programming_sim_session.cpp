@@ -151,9 +151,13 @@ bool step(SimSession* session)
 
 TEST(SimBaseTick, GcdOfAllowedPeriods)
 {
+    /* Tập ADR-061 là chuỗi bội: gcd luôn là chu kỳ nhỏ nhất có mặt. */
+    EXPECT_EQ(sim_base_tick_ms({10u, 50u, 100u, 500u, 1000u, 5000u, 10000u, 50000u}), 10u);
+    EXPECT_EQ(sim_base_tick_ms({1000u, 5000u, 50000u}), 1000u);
+    EXPECT_EQ(sim_base_tick_ms({5000u, 50000u}), 5000u);
+    EXPECT_EQ(sim_base_tick_ms({50000u}), 50000u);
+    /* Gói legacy commission trước ADR-061 (30000 ms) vẫn cho tick đúng. */
     EXPECT_EQ(sim_base_tick_ms({1000u, 5000u, 30000u}), 1000u);
-    EXPECT_EQ(sim_base_tick_ms({5000u, 30000u}), 5000u);
-    EXPECT_EQ(sim_base_tick_ms({30000u}), 30000u);
     /* Chu kỳ 0 KHÔNG được thay bằng một base tick đoán: package v2 legacy có
      * thể mang 0, và đoán ở đây là bịa ra một lịch chạy khác với lịch trên tủ. */
     EXPECT_EQ(sim_base_tick_ms({1000u, 0u}), 0u);
