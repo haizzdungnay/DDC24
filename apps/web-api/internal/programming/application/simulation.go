@@ -365,14 +365,36 @@ func (s *SimulationService) startRunLoop(sessionID string, baseTickMS, speed int
 	s.runLoops[sessionID] = stop
 	s.mu.Unlock()
 
-	interval := time.Duration(baseTickMS/speed) * time.Millisecond
-	if interval < 5*time.Millisecond {
-		interval = 5 * time.Millisecond
+	rawInterval := time.Duration(baseTickMS/speed) * time.Millisecond
+	var interval time.Duration
+	var stepsPerTick int
+
+	if rawInterval >= 20*time.Millisecond {
+		interval = rawInterval
+		stepsPerTick = 1
+	} else {
+		interval = 20 * time.Millisecond
+		stepsPerTick = int((int64(20) * speed) / baseTickMS)
+		if stepsPerTick < 1 {
+			stepsPerTick = 1
+		}
+		if stepsPerTick > 200 {
+			stepsPerTick = 200
+		}
 	}
 
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+		lastDbSync := time.Now()
+		var latestFrame simworker.Frame
+		defer func() {
+			if latestFrame.VirtualTimeMS > 0 {
+				_, _ = s.store.AdvanceSimulationRuntime(context.Background(), sessionID,
+					latestFrame.VirtualTimeMS, latestFrame.SnapshotSequence, s.now())
+			}
+		}()
+
 		for {
 			select {
 			case <-stop:
@@ -382,19 +404,28 @@ func (s *SimulationService) startRunLoop(sessionID string, baseTickMS, speed int
 				if !found || client == nil {
 					return
 				}
+				var stepErr error
 				ctx, cancel := context.WithTimeout(context.Background(), SimulationWorkerCommandTimeout)
-				frame, err := client.Step(ctx)
+				for i := 0; i < stepsPerTick; i++ {
+					latestFrame, stepErr = client.Step(ctx)
+					if stepErr != nil {
+						break
+					}
+				}
 				cancel()
-				if err != nil {
+				if stepErr != nil {
 					// Tick hỏng là hỏng CỦA PHIÊN. Đưa phiên về FAILED rồi thoát;
 					// chạy tiếp sau một tick lỗi là tích luỹ trạng thái không ai
 					// giải thích được.
-					s.failRunningSession(sessionID, simulationDetailOf(err, client))
+					s.failRunningSession(sessionID, simulationDetailOf(stepErr, client))
 					return
 				}
-				if _, err := s.store.AdvanceSimulationRuntime(context.Background(), sessionID,
-					frame.VirtualTimeMS, frame.SnapshotSequence, s.now()); err != nil {
-					return
+				if time.Since(lastDbSync) >= time.Second {
+					lastDbSync = time.Now()
+					if _, err := s.store.AdvanceSimulationRuntime(context.Background(), sessionID,
+						latestFrame.VirtualTimeMS, latestFrame.SnapshotSequence, s.now()); err != nil {
+						return
+					}
 				}
 			}
 		}
