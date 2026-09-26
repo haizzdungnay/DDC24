@@ -180,12 +180,32 @@ TEST_F(CpuIdleSysfs, CountsOnlyUnboundKernelThreadsThatMayRunOnScanCpu)
     write(root_ + "/proc/28/status", "Name:\tksoftirqd/3\nPPid:\t2\nCpus_allowed_list:\t3\n");
     write(root_ + "/proc/884/status", "Name:\tweston\nPPid:\t625\nCpus_allowed_list:\t0-3\n");
     write(root_ + "/proc/self/status", "Name:\tnot-a-pid\nPPid:\t2\nCpus_allowed_list:\t0-3\n");
+    /* Rescuer workqueue thật trên Foxlinx: flags=69238880 có PF_NO_SETAFFINITY,
+     * kernel tự quản — không đếm (rt-housekeeping cũng không dời được). */
+    write(root_ + "/proc/38/status", "Name:\tkblockd\nPPid:\t2\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/proc/38/stat", "38 (kblockd) I 2 0 0 0 -1 69238880 0 0 0 0\n");
+    /* comm có khoảng trắng và ngoặc: phải đọc sau ')' cuối. */
+    write(root_ + "/proc/1561/stat", "1561 (RTW_XMIT (x) T) S 2 0 0 0 -1 2129984 0 0\n");
     EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/proc", 3), 2);
 
     /* Sau rt-housekeeping: hai thread đó thành 0-2. */
     write(root_ + "/proc/2/status", "Name:\tkthreadd\nPPid:\t0\nCpus_allowed_list:\t0-2\n");
     write(root_ + "/proc/1561/status", "Name:\tRTW_XMIT_THREAD\nPPid:\t2\nCpus_allowed_list:\t0-2\n");
     EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/proc", 3), 0);
+}
+
+TEST_F(CpuIdleSysfs, ReadsTaskFlagsAfterLastParenthesis)
+{
+    unsigned long flags = 0;
+    write(root_ + "/stat", "91638 (kworker/u8:4-events_unbound) I 2 0 0 0 -1 69238880 0\n");
+    ASSERT_TRUE(read_task_flags(root_ + "/stat", &flags));
+    EXPECT_EQ(flags, 69238880ul);
+    EXPECT_NE(flags & kPfNoSetAffinity, 0ul);
+    write(root_ + "/stat", "7 (a) b) c) S 2 0 0 0 -1 2129984 0\n");
+    ASSERT_TRUE(read_task_flags(root_ + "/stat", &flags));
+    EXPECT_EQ(flags, 2129984ul);
+    EXPECT_EQ(flags & kPfNoSetAffinity, 0ul);
+    EXPECT_FALSE(read_task_flags(root_ + "/khong-co", &flags));
 }
 
 TEST_F(CpuIdleSysfs, KthreadCountUnknownWithoutProc)

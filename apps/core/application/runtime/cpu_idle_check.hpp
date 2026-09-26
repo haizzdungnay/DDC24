@@ -202,9 +202,41 @@ inline HousekeepingExposure housekeeping_exposure(const std::string& proc_root,
     return result;
 }
 
+/* Cờ `PF_NO_SETAFFINITY` (include/linux/sched.h): kernel tự quản affinity của
+ * thread (rescuer workqueue, kworker unbound, sugov) và từ chối mọi
+ * `sched_setaffinity` từ user-space. */
+constexpr unsigned long kPfNoSetAffinity = 0x04000000ul;
+
+/* Trường `flags` (trường 9) của `/proc/<pid>/stat`; comm có thể chứa khoảng
+ * trắng và ngoặc nên đọc từ sau dấu ')' CUỐI. Trả false khi không đọc được. */
+inline bool read_task_flags(const std::string& stat_path, unsigned long* flags)
+{
+    std::FILE* file = std::fopen(stat_path.c_str(), "r");
+    if (file == nullptr) return false;
+    char buffer[1024] = {};
+    const std::size_t length = std::fread(buffer, 1, sizeof(buffer) - 1, file);
+    std::fclose(file);
+    buffer[length] = '\0';
+    const char* cursor = std::strrchr(buffer, ')');
+    if (cursor == nullptr) return false;
+    ++cursor;
+    /* Sau ')': state ppid pgrp session tty_nr tpgid flags → flags là token thứ 7. */
+    for (int token = 0; token < 6; ++token) {
+        while (*cursor == ' ') ++cursor;
+        while (*cursor != ' ' && *cursor != '\0') ++cursor;
+    }
+    char* end = nullptr;
+    const unsigned long value = std::strtoul(cursor, &end, 10);
+    if (end == cursor) return false;
+    *flags = value;
+    return true;
+}
+
 /* ADR-061 4.11 / F15 — số kernel thread KHÔNG gắn CPU (con của kthreadd, được
- * phép chạy trên nhiều CPU) còn được chạy trên `cpu`. Thread gắn một CPU
- * (ksoftirqd/N, kworker/N:*) không tính: chúng không dời được.
+ * phép chạy trên nhiều CPU) còn được chạy trên `cpu` mà user-space DỜI ĐƯỢC.
+ * Không tính: thread gắn một CPU (ksoftirqd/N, kworker/N:*) và thread có
+ * `PF_NO_SETAFFINITY` (kernel tự quản, `rt-housekeeping` cũng không dời được —
+ * trên Foxlinx có 35 thread loại này, đều là rescuer/kworker unbound).
  *
  *        Đo trên Foxlinx 2026-09-26: luồng TX của driver Wi-Fi (`RTW_*`) được
  *        đánh thức trên CPU3 mỗi lần web gửi gói, làm 0,73 % lần thức dậy của
@@ -239,7 +271,11 @@ inline int unbound_kthreads_on_cpu(const std::string& proc_root, int cpu)
         const bool kernel_thread = std::strcmp(name, "2") == 0 || ppid == 2;
         /* Gắn một CPU ⇒ danh sách không có '-' hay ',' (ví dụ "3"). */
         const bool bound = allowed.find_first_of("-,") == std::string::npos;
-        if (kernel_thread && !bound && cpu_list_contains(allowed, cpu)) ++count;
+        if (!kernel_thread || bound || !cpu_list_contains(allowed, cpu)) continue;
+        unsigned long flags = 0;
+        if (read_task_flags(proc_root + "/" + name + "/stat", &flags) && (flags & kPfNoSetAffinity) != 0)
+            continue;
+        ++count;
     }
     ::closedir(dir);
     return count;
