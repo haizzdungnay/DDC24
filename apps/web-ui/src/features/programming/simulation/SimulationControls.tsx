@@ -25,12 +25,14 @@ export function SimulationControls({
   canControl,
   onAction,
   onStop,
+  onStopActive,
   onFocusWatch,
 }: {
   slice: SimulationSlice
   canControl: boolean
   onAction: (action: SimulationAction, speed?: number) => void
   onStop: () => void
+  onStopActive?: () => void
   /** Đưa tiêu điểm xuống bảng giá trị đã hiển thị sẵn, không dựng bảng thứ hai. */
   onFocusWatch?: () => void
 }) {
@@ -134,6 +136,18 @@ export function SimulationControls({
           label={pick('Dừng phiên', 'Stop session')}
           enabled={canControl && !busy && session !== null && !isTerminalState(session.state)}
           onClick={onStop}
+        />
+        <ControlButton
+          label={pick('Ngắt phiên', 'Abort session')}
+          enabled={canControl && !busy && (session !== null || typeof onStopActive === 'function')}
+          onClick={() => {
+            if (session) {
+              onStop()
+            } else if (onStopActive) {
+              onStopActive()
+            }
+          }}
+          disabledReason={pick('Chưa có phiên mô phỏng nào để ngắt.', 'No simulation session to abort.')}
         />
         {/* `T59-821` / `PGM-02A §3` — thanh SIMULATE có `Watch` và `Trace`.
           *

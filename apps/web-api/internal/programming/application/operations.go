@@ -935,6 +935,8 @@ func decodeOperationContext(raw []byte) (operationContext, error) {
 var impactAckKeys = map[string]bool{
 	"retain": true, "activeOverrides": true, "cutover": true, "outputMappingChanges": true,
 	"publishedSignals": true, "controlLibrary": true, "programSet": true, "enableIntent": true,
+	"physicalMappingChanges": true, "virtualPointChanges": true, "modbusMappingChanges": true,
+	"writableOutputsAffected": true,
 }
 
 // ackModbusSlotMismatchOverride — token xác nhận đường thoát của RESTORE khi bố
@@ -1032,7 +1034,11 @@ func validateApplicationImpact(current RevisionImpact, ref string, acknowledgeme
 	groups := map[string]RevisionImpactGroup{"retain": current.Retain, "activeOverrides": current.ActiveOverrides,
 		"cutover": current.Cutover, "outputMappingChanges": current.OutputMappingChanges,
 		"publishedSignals": current.PublishedSignals, "controlLibrary": current.ControlLibrary,
-		"programSet": current.ProgramSet, "enableIntent": current.EnableIntent}
+		"programSet": current.ProgramSet, "enableIntent": current.EnableIntent,
+		"physicalMappingChanges": current.PhysicalMappingChanges,
+		"virtualPointChanges": current.VirtualPointChanges,
+		"modbusMappingChanges": current.ModbusMappingChanges,
+		"writableOutputsAffected": current.WritableOutputsAffected}
 	missing, unexpected := make([]string, 0), make([]string, 0)
 	for key, group := range groups {
 		switch group.Status {
