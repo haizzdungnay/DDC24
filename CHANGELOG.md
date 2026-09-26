@@ -8,6 +8,15 @@
 
 ## [Unreleased]
 
+### Changed — ADR-061 nền: profile v2.2, tương thích chu kỳ cũ 30000 ms, CPU3 dành cho Core (2026-09-26)
+
+- Phạm vi: `contracts/programming/product_profile_v2.json` và các file sinh (`st_profile_generated.hpp`, `profile_generated.go`, `profile.ts`); `docs/adr/ADR-061-…` mục 4.14; `platform/systemd/*.service`, `platform/systemd/irqbalance-mkddc-rt.conf`, `platform/systemd/install.sh`; `docs/03_implementation/07_MKDDC_CORE_IMPLEMENTATION_GUIDE.md` §5 (T3), `docs/03_implementation/22_SOM_SRC_IMPLEMENTATION_PLAN.md`.
+- Profile v2.2 giữ `profileId` `revA-1t-1-5-30` làm định danh ổn định (ADR-061 4.1): `allowedPeriodMs` = {10, 50, 100, 500, 1000, 5000, 10000, 50000}, `maxTasks` = 8.
+- ADR-061 4.14: gói đã Commission với chu kỳ cũ 30000 ms vẫn được nạp và chạy khi nâng cấp (Active #52 trên Foxlinx dùng 30000 ms); revision mới vẫn bị từ chối.
+- Nền RT tạm trong lúc chờ PREEMPT_RT (4.11): `mkddc-core` `CPUAffinity=3`, các service khác ghim `0-2`, drop-in `irqbalance.service.d/mkddc-rt.conf` đặt `IRQBALANCE_BANNED_CPULIST=3`.
+- Guide Core §5: T3 nay tính theo thời gian, max(5 base step, 500 ms), thay cho "> 3 scan".
+- Kiểm chứng: pytest packaging guard 24/24 PASS; số đo cổng đầy đủ ở entry tích hợp ADR-061.
+
 ### Changed — ADR-061 Track B: Core chạy base step 10 ms với bộ chu kỳ {10…50000} ms (2026-09-26)
 
 - Phạm vi: `apps/core/**` (scheduler, ScanLoop, PointQuality/SafeState, process image, trace, signal bus, package v2, IPC Programming, bootstrap) và test Core; không đổi `contracts/**`, `apps/web-api/**`, `apps/web-ui/**` hay file sinh.
