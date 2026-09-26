@@ -546,11 +546,113 @@ TEST(StIntegration, T59_406_SignedHoldTtlIsSixtySecondsOfWallClock)
     EXPECT_EQ(st_hold_ttl::kSignedTtlNs, 60000000000ull);
     EXPECT_LE(st_hold_ttl::kSignedTtlMs, st_hold_ttl::kMaxConfigurableMs);
 
-    /* Tiền đề của con số: TTL >= 2x chu kỳ Task chậm nhất. Tuổi lệnh cuối lúc
+    /* Tiền đề của con số: TTL >= 2x chu kỳ của Program. Tuổi lệnh cuối lúc
      * Program chết đã có thể bằng trọn một chu kỳ, nên TTL nhỏ hơn 2x làm thời
-     * gian giữ THỰC TẾ trôi xuống tận 0 — không hứa được gì với người vận hành. */
-    EXPECT_EQ(st_hold_ttl::max_allowed_period_ms(), 30000u);
-    EXPECT_GE(st_hold_ttl::kSignedTtlMs, 2u * st_hold_ttl::max_allowed_period_ms());
+     * gian giữ THỰC TẾ trôi xuống tận 0 — không hứa được gì với người vận hành.
+     *
+     * ADR-061 4.4: profile có lớp 50 000 ms nên 60 s toàn cục không còn đủ; tiền
+     * đề được giữ bằng TTL THEO INSTANCE = max(60 s, 2 x chu kỳ Program). */
+    EXPECT_EQ(st_hold_ttl::max_allowed_period_ms(), 50000u);
+    for (const uint32_t period_ms : st_profile_generated::kAllowedPeriodMs) {
+        const uint64_t ttl_ns = st_hold_ttl::instance_ttl_ns(st_hold_ttl::kSignedTtlNs, period_ms);
+        EXPECT_GE(ttl_ns, 2u * st_hold_ttl::ns_from_ms(period_ms)) << period_ms;
+        EXPECT_GE(ttl_ns, st_hold_ttl::kSignedTtlNs) << period_ms << " ms: sàn 60 s không được hạ";
+        if (period_ms <= 30000u) {
+            EXPECT_EQ(ttl_ns, st_hold_ttl::kSignedTtlNs)
+                << period_ms << " ms: mọi Program <= 30 s giữ đúng 60 s như ADR-051";
+        }
+    }
+    EXPECT_EQ(st_hold_ttl::instance_ttl_ns(st_hold_ttl::kSignedTtlNs, 50000u), 100000 * kMs)
+        << "ADR-061 4.4: Program 50 000 ms có TTL 100 s";
+    /* Legacy 30 000 ms (gói commission trước ADR-061) giữ TTL 60 s. */
+    EXPECT_EQ(st_hold_ttl::instance_ttl_ns(st_hold_ttl::kSignedTtlNs, 30000u), 60000 * kMs);
+    /* Sàn tắt (0) vẫn là tắt: TTL theo instance không được "bật lại" hold vô hạn
+     * thành giữ 2x chu kỳ trong đường chẩn đoán. */
+    EXPECT_EQ(st_hold_ttl::instance_ttl_ns(0, 50000u), 0u);
+    /* Sàn field lớn hơn 2x chu kỳ thì sàn thắng. */
+    EXPECT_EQ(st_hold_ttl::instance_ttl_ns(300000 * kMs, 50000u), 300000 * kMs);
+}
+
+/* ADR-061 4.4 — dựng một Program có chu kỳ RIÊNG `period_ms` (T59-402), publish
+ * đúng một lần tại t = 1 s rồi ngừng publish (Task bị disable: Program vẫn
+ * RUNNING, không bao giờ được release lại — đường im lặng khó thấy nhất). Trả về
+ * mốc commit để caller đo TTL tính từ đó. */
+uint64_t publish_once_then_go_silent(StScheduler* sched, PointTable* table,
+                                     PriorityResolver* resolver, uint32_t period_ms)
+{
+    std::string err;
+    EXPECT_TRUE(sched->add_task(task_cfg("T"), &err)) << err;
+    EXPECT_TRUE(sched->add_program("T", "p", 0, &err)) << err;
+    EXPECT_TRUE(sched->request_activation("p", doubler_artifact(), &err)) << err;
+    sched->tick(0);
+    EXPECT_TRUE(sched->start("p", &err)) << err;
+    sched->find_program("p")->period_ms = period_ms;
+
+    StIoBridgeStats stats;
+    set_ai(table, 0, 5.0f);
+    st_load_all_inputs(sched, *table, &stats);
+    sched->tick(1000 * kMs);
+    EXPECT_TRUE(st_apply_all_outputs(sched, resolver, table, &stats));
+    EXPECT_EQ(resolver->winning_ao_level(0), PRIO_LOCAL_LOGIC);
+    sched->tasks()[0]->set_enabled(false);
+    return sched->find_program("p")->output_commit_now_ns;
+}
+
+TEST(StIntegration, Adr061_Program50sHoldsLastCommandForHundredSeconds)
+{
+    StScheduler sched;
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+    const uint64_t committed = publish_once_then_go_silent(&sched, &table, &resolver, 50000u);
+    ASSERT_EQ(committed, 1000 * kMs);
+
+    /* Sàn 60 s đã ký là thứ caller truyền (đúng nối dây production). Với TTL
+     * toàn cục cũ, lệnh bị rút ở đây — sớm hơn 2 x 50 s. */
+    sched.tick(committed + 60000 * kMs);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, st_hold_ttl::kSignedTtlNs, &stats), 0u)
+        << "Program 50 s không được rút ở 60 s: TTL theo instance là 100 s";
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC);
+
+    sched.tick(committed + 100000 * kMs - 1);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, st_hold_ttl::kSignedTtlNs, &stats), 0u);
+
+    sched.tick(committed + 100000 * kMs);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, st_hold_ttl::kSignedTtlNs, &stats), 1u)
+        << "hết đúng 100 s phải rút";
+    EXPECT_EQ(resolver.winning_ao_level(0), PRIO_DEFAULT);
+}
+
+TEST(StIntegration, Adr061_LegacyProgram30sKeepsSixtySecondTtl)
+{
+    StScheduler sched;
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+    const uint64_t committed = publish_once_then_go_silent(&sched, &table, &resolver, 30000u);
+
+    sched.tick(committed + 60000 * kMs - 1);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, st_hold_ttl::kSignedTtlNs, &stats), 0u);
+    sched.tick(committed + 60000 * kMs);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, st_hold_ttl::kSignedTtlNs, &stats), 1u)
+        << "Program 30 s: TTL = max(60 s, 2 x 30 s) = 60 s";
+}
+
+TEST(StIntegration, Adr061_FieldHoldTtlOverrideIsAFloorForFastPrograms)
+{
+    /* `--program-hold-ttl-ms` là SÀN: Program 10 ms với sàn 5 s rút ở đúng 5 s,
+     * không bị kéo lên 60 s, cũng không bị hạ xuống 2 x 10 ms. */
+    StScheduler sched;
+    PointTable table;
+    PriorityResolver resolver;
+    StIoBridgeStats stats;
+    const uint64_t committed = publish_once_then_go_silent(&sched, &table, &resolver, 10u);
+    const uint64_t floor_ns = 5000 * kMs;
+
+    sched.tick(committed + floor_ns - 1);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, floor_ns, &stats), 0u);
+    sched.tick(committed + floor_ns);
+    EXPECT_EQ(st_withdraw_stale_outputs(&sched, &resolver, floor_ns, &stats), 1u);
 }
 
 TEST(StIntegration, T59_406_ScanDepsDefaultIsSignedTtlNotUnlimitedHold)

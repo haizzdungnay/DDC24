@@ -112,22 +112,28 @@ constexpr uint32_t kMaxTaskBudgetPercent = st_profile_generated::kMaxTaskBudgetP
  * van có thể đứng ở 73% mãi mãi vì chương trình chết chứ không vì ai ra lệnh.
  *
  * 60 s được chọn theo ba ràng buộc, không phải theo cảm tính:
- *  1. `>= 2x` chu kỳ Task chậm nhất của profile (30 s). Tuổi của lệnh cuối tại
- *     lúc Program chết đã có thể bằng trọn một chu kỳ, nên TTL nhỏ hơn 2x chu
- *     kỳ làm thời gian giữ thực tế dao động tới tận 0 — không hứa được gì.
- *     Ràng buộc này được `static_assert` bên dưới canh, không phải ghi chú.
+ *  1. `>= 2x` chu kỳ của Program. Tuổi của lệnh cuối tại lúc Program chết đã có
+ *     thể bằng trọn một chu kỳ, nên TTL nhỏ hơn 2x chu kỳ làm thời gian giữ
+ *     thực tế dao động tới tận 0 — không hứa được gì.
  *  2. Nằm trong dải fail-safe/watchdog quen thuộc của thiết bị BAS (10..60 s),
  *     nên hành vi không gây bất ngờ cho người vận hành đã quen gear khác.
  *  3. Ngắn hơn hằng số thời gian nhiệt của tải (phút tới hàng chục phút), nên
  *     cụm thiết bị không chạy mù đủ lâu để lệch trạng thái.
  *
+ * ADR-061 4.4 (supersede "Cơ sở của con số" của ADR-051): profile có chu kỳ
+ * 50 000 ms, nên một hằng toàn cục 60 s không còn thoả ràng buộc 1 cho MỌI
+ * Program. Thay `static_assert` toàn cục bằng TTL THEO INSTANCE:
+ *   TTL = max(sàn, 2 × chu kỳ của chính Program đó)
+ * với sàn = 60 s đã ký (hoặc `--program-hold-ttl-ms`). Program 50 000 ms được
+ * 100 s, mọi Program khác giữ đúng 60 s như ADR-051 — không kéo dài thời gian giữ
+ * của Program nhanh chỉ vì profile có một lớp chậm.
+ *
  * TTL KHÔNG chờ người vận hành reset: FAULTED là trạng thái chốt, hồi phục cần
  * thao tác người. Giữ vô hạn để "đợi người" chính là lỗi mà ADR-051 đóng.
  */
 namespace st_hold_ttl {
-/* Giá trị đã ký. Wall-clock, KHÔNG phải số base step: base step cấu hình được
- * 500..2000 ms, ghim theo base step thì cùng một quyết định lại cho ra ba thời
- * gian giữ khác nhau tuỳ site. */
+/* Sàn đã ký. Wall-clock, KHÔNG phải số base step: ghim theo base step thì cùng
+ * một quyết định lại cho ra thời gian giữ khác nhau tuỳ nhịp quét. */
 constexpr uint32_t kSignedTtlMs = 60000;
 
 /* Trần cho override tại field. Vượt trần này thì "giữ tạm" đã thành "giữ vô
@@ -142,13 +148,30 @@ constexpr uint32_t max_allowed_period_ms()
     return worst;
 }
 
-/* Profile mọc thêm một lớp chu kỳ chậm hơn thì tiền đề của ADR-051 gãy — bắt
- * gãy ở lúc build, không phải lúc một van đứng im ngoài hiện trường. */
-static_assert(kSignedTtlMs >= 2u * max_allowed_period_ms(),
-              "hold TTL phải >= 2x chu kỳ Task chậm nhất của profile (ADR-051)");
 static_assert(kSignedTtlMs <= kMaxConfigurableMs, "TTL đã ký không được vượt trần field");
 
 constexpr uint64_t ns_from_ms(uint32_t ms) { return static_cast<uint64_t>(ms) * 1000000ull; }
+
+/* ADR-061 4.4 — TTL hiệu lực của MỘT instance. `floor_ns == 0` giữ nghĩa cũ
+ * "tắt TTL" (chỉ test/chẩn đoán dùng); `period_ms == 0` (Program theo chu kỳ
+ * Task) được caller thay bằng chu kỳ Task trước khi gọi. */
+constexpr uint64_t instance_ttl_ns(uint64_t floor_ns, uint32_t period_ms)
+{
+    if (floor_ns == 0) return 0;
+    const uint64_t twice_period_ns = 2u * ns_from_ms(period_ms);
+    return floor_ns > twice_period_ns ? floor_ns : twice_period_ns;
+}
+
+/* Ràng buộc 1 phải đúng cho chu kỳ chậm nhất của profile, và phải đúng ở CÁCH
+ * TÍNH chứ không phải ở một con số: profile mọc thêm lớp chu kỳ chậm hơn thì
+ * TTL của lớp đó tự dãn theo, không cần ai nhớ sửa hằng. */
+static_assert(instance_ttl_ns(ns_from_ms(kSignedTtlMs), max_allowed_period_ms()) >=
+                  2u * ns_from_ms(max_allowed_period_ms()),
+              "TTL theo instance phải >= 2x chu kỳ chậm nhất của profile (ADR-061 4.4)");
+static_assert(instance_ttl_ns(ns_from_ms(kSignedTtlMs), 50000u) == ns_from_ms(100000u),
+              "ADR-061 4.4: Program 50 000 ms có TTL 100 s");
+static_assert(instance_ttl_ns(ns_from_ms(kSignedTtlMs), 30000u) == ns_from_ms(kSignedTtlMs),
+              "Program 30 000 ms (legacy) giữ TTL 60 s");
 
 /* TTL đo bằng ĐỒNG HỒ, không bằng số vòng quét. Đếm vòng quét chỉ xấp xỉ thời
  * gian khi vòng quét được nhịp đúng base step; mọi đường chạy nhanh hơn nhịp

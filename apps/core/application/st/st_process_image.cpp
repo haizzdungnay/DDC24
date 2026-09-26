@@ -488,6 +488,16 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
             StProgramInstance& p = *program;
             if (p.outputs_withdrawn) continue;
 
+            /* ADR-061 4.4 — TTL THEO INSTANCE: max(sàn, 2 × chu kỳ của chính
+             * Program). `hold_ttl_ns` của caller (60 s đã ký hoặc
+             * `--program-hold-ttl-ms`) chỉ còn là SÀN. Program 50 000 ms publish
+             * mỗi 50 s, nên với TTL 60 s cố định, lệnh cuối của nó đã có thể 50 s
+             * tuổi lúc Program chết và chỉ còn được giữ 10 s — ràng buộc "≥ 2×
+             * chu kỳ" của ADR-051 gãy đúng ở lớp chậm nhất. Program theo chu kỳ
+             * Task (`period_ms == 0`) dùng chu kỳ Task. Không cấp phát. */
+            const uint32_t period_ms = p.period_ms != 0 ? p.period_ms : task->config().period_ms;
+            const uint64_t instance_ttl_ns = st_hold_ttl::instance_ttl_ns(hold_ttl_ns, period_ms);
+
             bool should_withdraw = false;
             auto reason = programming::CandidateWithdrawReason::NONE;
             if (p.state == StProgramState::STOPPED || p.state == StProgramState::DISABLED) {
@@ -499,8 +509,8 @@ uint32_t st_withdraw_stale_outputs(StScheduler* scheduler, PriorityResolver* res
                  * đã chọn rút candidate thay vì chạy bằng dữ liệu không hợp lệ. */
                 should_withdraw = true;
                 reason = programming::CandidateWithdrawReason::SIGNAL_BLOCKED;
-            } else if (hold_ttl_ns > 0 && p.output_commit_now_ns > 0 &&
-                      now_ns >= p.output_commit_now_ns + hold_ttl_ns) {
+            } else if (instance_ttl_ns > 0 && p.output_commit_now_ns > 0 &&
+                      now_ns >= p.output_commit_now_ns + instance_ttl_ns) {
                 /* ADR-051: TTL đo TUỔI CỦA LỆNH CUỐI, không đo trạng thái. Ràng
                  * điều kiện vào riêng FAULTED sẽ để lọt đúng những đường im lặng
                  * khó thấy nhất — Task bị disable trong khi Program vẫn RUNNING,
