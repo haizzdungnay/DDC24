@@ -16,6 +16,7 @@
 
 #include "alarm/alarm_runtime.hpp"
 #include "runtime/base_step_pacer.hpp"
+#include "runtime/interval_gate.hpp"
 #include "bacnet/bacnet_objtable.hpp"
 #include "diagnostics/core_metrics.hpp"
 #include "graph/graph_runtime.hpp"
@@ -165,6 +166,7 @@ private:
     uint64_t monotonic_now() const;
     void record_phase(ScanPhase phase, uint64_t* mark);
     void log_minute_stats();
+    void log_missed_base_step(const char* cause, uint64_t late_ns, uint64_t skipped, uint64_t now_ns);
 
     ScanDeps d_;
     IoSnapshot last_io_;   /* giữ snapshot cũ khi seqlock fail */
@@ -174,6 +176,10 @@ private:
     ScanTimeSource time_{};
     BaseStepPacer pacer_{};
     ScanStepWcet wcet_{};
+    /* ADR-061 C3: mỗi base step bị lỡ là một vi phạm và phải để lại dấu vết CÓ
+     * THỜI ĐIỂM (log phút chỉ có tổng). Tối đa 1 dòng/giây để một chuỗi quá tải
+     * không biến log thành nguồn trễ mới. */
+    IntervalGate missed_log_gate_{1000000000ull};
     std::atomic<bool>* reload_flag_ = nullptr;
     void (*reload_fn_)(void*) = nullptr;
     void* reload_ctx_ = nullptr;
