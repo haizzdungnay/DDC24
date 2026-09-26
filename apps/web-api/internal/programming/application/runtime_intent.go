@@ -97,6 +97,12 @@ type RuntimeIntentService struct {
 	// test là đóng store — thao tác KHÔNG đảo ngược được, nên không kiểm được
 	// nhánh "thành công sau chuỗi lỗi". Mặc định trỏ thẳng vào `ReconcileOnce`.
 	reconcileOnce func(context.Context) (int, error)
+	// nudge đánh thức vòng reconcile NGAY, không chờ tick 2 s (F13): sau một
+	// Commission/Restore, Program chưa từng chạy trong gói cũ được Core dựng ở
+	// Disabled (fail-closed), và mọi khoảng chờ tới tick kế là khoảng đầu ra bị
+	// safe-state `no_ctrl` ép về giá trị an toàn. Buffer 1: nhiều lần đánh thức
+	// dồn lại thành một vòng.
+	nudge chan struct{}
 }
 
 func NewRuntimeIntentService(options RuntimeIntentServiceOptions) (*RuntimeIntentService, error) {
@@ -114,7 +120,7 @@ func NewRuntimeIntentService(options RuntimeIntentServiceOptions) (*RuntimeInten
 	}
 	service := &RuntimeIntentService{store: options.Store, runtime: options.Runtime,
 		controllerID: options.ControllerID, now: options.Now, newID: options.NewID,
-		livePrograms: options.LivePrograms, logf: log.Printf}
+		livePrograms: options.LivePrograms, logf: log.Printf, nudge: make(chan struct{}, 1)}
 	service.reconcileOnce = service.ReconcileOnce
 	return service, nil
 }
@@ -230,10 +236,24 @@ func (s *RuntimeIntentService) Start(parent context.Context) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+			case <-s.nudge:
 			}
 		}
 	}()
 	return nil
+}
+
+// Nudge yêu cầu một vòng reconcile ngay (không chặn). OperationService gọi nó
+// khi Commission/Restore vừa đổi Active, để Program vừa được dựng ở Disabled
+// nhận lại intent Enable trong một vòng IPC chứ không phải tới 2 s sau.
+func (s *RuntimeIntentService) Nudge() {
+	if s == nil || s.nudge == nil {
+		return
+	}
+	select {
+	case s.nudge <- struct{}{}:
+	default:
+	}
 }
 
 func (s *RuntimeIntentService) Close() {

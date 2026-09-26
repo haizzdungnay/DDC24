@@ -8,6 +8,20 @@
 
 ## [Unreleased]
 
+### Fixed — CPU3 độc quyền cho vòng quét: không còn trễ hàng ms khi restart dịch vụ (F14, 2026-09-26)
+
+- Phạm vi: `platform/systemd/system-mkddc-rt.conf` (mới, cài vào `/etc/systemd/system.conf.d/mkddc-rt.conf`), `platform/systemd/mkddc-core.service`, `platform/packaging/install.sh`, `apps/core/application/runtime/{cpu_idle_check.hpp,test_cpu_idle_check.cpp}`, `apps/core/bootstrap/main.cpp`; ADR-061 4.11; guide Core §9; hồ sơ `EV-PROG-FBD-ST-MB-20260925`.
+- Triệu chứng: sau F11, mỗi lần restart một dịch vụ vẫn làm vòng quét 10 ms thức dậy trễ 2,3–3,8 ms. Lần khởi động core có web khởi động kèm từng trễ 12,2 ms, lỡ một base step và một release (C3). Nguyên nhân: PID 1, journald, sshd và kworker unbound vẫn chạy được trên CPU3; trên kernel `PREEMPT_VOLUNTARY`, syscall dài của chúng giữ CPU3. Việc dời luồng phụ của chính core đã được đo và loại trừ.
+- Sửa: drop-in `[Manager] CPUAffinity=0-2`, áp khi boot và khi `daemon-reload`, không áp khi `daemon-reexec`. Unit core ghi `workqueue/cpumask=7`. Core log `WARN rt.housekeeping_on_scan_cpu` / `rt.workqueue_on_scan_cpu`; các phép kiểm theo CPU chỉ chạy khi core được ghim (không ghim thì một dòng `WARN rt.scan_cpu_not_pinned`).
+- Kiểm chứng trên Foxlinx: restart web 2 lần, đỉnh 117 / 119 µs (trước 2300–3838 µs); cửa sổ 300 s: 0,04 % lần vượt 100 µs, tối đa theo phút 104–131 µs, missed step/release 0. C4 vẫn FAIL (cần PREEMPT_RT). Host: ctest 1557/1557 (4 test mới), pytest packaging guard 10/10.
+
+### Fixed — Commission/Restore không còn để đầu ra nằm safe-state tới 2 s (F13, 2026-09-26)
+
+- Phạm vi: `apps/web-api/internal/programming/application/{runtime_intent.go,operations.go,operations_activated_hook_test.go}`, `apps/web-api/internal/app/main.go`.
+- Triệu chứng trên Foxlinx: Restore #52 → #63 làm Core vào safe-state `no_ctrl` 1,38 s. Nguyên nhân: Program chưa chạy trong gói cũ được Core dựng ở Disabled (fail-closed), còn intent Enable chỉ được replay ở tick reconcile 2 s kế tiếp.
+- Sửa: `OperationService.SetActivatedHook` → `RuntimeIntentService.Nudge()` đánh thức reconcile ngay khi Commission/Restore SUCCEEDED (không bắn lúc VERIFYING hay UNKNOWN/FAILED).
+- Kiểm chứng: trên Foxlinx cùng thao tác còn **70 ms**. Host: 4 test mới dưới `-race`; `go vet` exit 0; `MKDDC_REQUIRE_PRODUCTION_TOOLS=1 go test ./... -count=1` exit 0 (21 package). Còn 70 ms (một vòng IPC): muốn về 0 thì Core phải nhận intent Enable ngay trong gói/ACTIVATE, tức đổi hợp đồng IPC, cần quyết định thiết kế.
+
 ### Fixed — Cổng layout xanh lại sau PR #757 (gofmt, 2026-09-26)
 
 - Phạm vi: `apps/web-api/internal/app/shm_reader.go`, `apps/web-api/internal/programming/application/{operations.go,operations_test.go}`.

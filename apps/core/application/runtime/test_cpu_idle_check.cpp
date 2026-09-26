@@ -123,5 +123,53 @@ TEST_F(CpuIdleSysfs, MissingCpuidleIsUnknownNotSafe)
     EXPECT_EQ(exposure.worst_allowed_exit_latency_us, 0);
 }
 
+TEST(CpuHousekeepingParse, CpuListRangesAndSingles)
+{
+    EXPECT_TRUE(cpu_list_contains("0-3", 3));
+    EXPECT_FALSE(cpu_list_contains("0-2", 3));
+    EXPECT_TRUE(cpu_list_contains("0-1,3", 3));
+    EXPECT_FALSE(cpu_list_contains("0-1,4-7", 3));
+    EXPECT_TRUE(cpu_list_contains("3", 3));
+    EXPECT_FALSE(cpu_list_contains("", 3));
+}
+
+TEST(CpuHousekeepingParse, HexMaskWithGroupsAndCase)
+{
+    /* Giá trị thật của `/sys/devices/virtual/workqueue/cpumask` trên Foxlinx:
+     * "f" trước khi sửa, "7" sau khi sửa. */
+    EXPECT_TRUE(cpu_hex_mask_contains("f", 3));
+    EXPECT_FALSE(cpu_hex_mask_contains("7", 3));
+    EXPECT_TRUE(cpu_hex_mask_contains("00000000,00000008", 3));
+    EXPECT_FALSE(cpu_hex_mask_contains("00000000,00000007\n", 3));
+    EXPECT_TRUE(cpu_hex_mask_contains("F", 0));
+    EXPECT_TRUE(cpu_hex_mask_contains("10", 4));
+    EXPECT_FALSE(cpu_hex_mask_contains("zz", 0));
+}
+
+TEST_F(CpuIdleSysfs, HousekeepingExposedWhenPid1AndWorkqueueMayRunOnScanCpu)
+{
+    write(root_ + "/proc/1/status", "Name:\tsystemd\nCpus_allowed:\tf\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/wq/cpumask", "f\n");
+    const HousekeepingExposure before = housekeeping_exposure(root_ + "/proc", root_ + "/wq/cpumask", 3);
+    EXPECT_TRUE(before.pid1_known);
+    EXPECT_TRUE(before.pid1_on_cpu);
+    EXPECT_EQ(before.pid1_cpus, "0-3");
+    EXPECT_TRUE(before.workqueue_on_cpu);
+
+    write(root_ + "/proc/1/status", "Name:\tsystemd\nCpus_allowed_list:\t0-2\n");
+    write(root_ + "/wq/cpumask", "7\n");
+    const HousekeepingExposure after = housekeeping_exposure(root_ + "/proc", root_ + "/wq/cpumask", 3);
+    EXPECT_FALSE(after.pid1_on_cpu);
+    EXPECT_FALSE(after.workqueue_on_cpu);
+}
+
+TEST_F(CpuIdleSysfs, HousekeepingUnknownWhenFilesMissing)
+{
+    const HousekeepingExposure missing = housekeeping_exposure(root_ + "/proc", root_ + "/wq/cpumask", 3);
+    EXPECT_FALSE(missing.pid1_known);
+    EXPECT_FALSE(missing.workqueue_known);
+    EXPECT_FALSE(missing.pid1_on_cpu);
+}
+
 } // namespace
 } // namespace core

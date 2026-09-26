@@ -547,6 +547,9 @@ ExecStart=/usr/sbin/mkddc-core --programming-runtime --st-trusted-key /data/mkdd
 # ADR-061 C4: CPU3 chỉ được vào WFI (root, "-" = bo không có cpuidle vẫn khởi động)
 ExecStartPre=-+/bin/sh -c 'echo 20 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
 ExecStopPost=-+/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu3/power/pm_qos_resume_latency_us'
+# ADR-061 4.11: kworker unbound chỉ chạy CPU0–2; PID 1 + mọi tiến trình khác do
+# /etc/systemd/system.conf.d/mkddc-rt.conf (CPUAffinity=0-2) đưa khỏi CPU3
+ExecStartPre=-+/bin/sh -c 'echo 7 > /sys/devices/virtual/workqueue/cpumask'
 ExecReload=/bin/kill -HUP $MAINPID   # reload config ở ranh giới scan (§8, COR-008)
 User=mkddc
 Group=mkddc

@@ -473,10 +473,36 @@ int main(int argc, char** argv)
          * đặt bằng root; ở đây chỉ đọc và nói ra khi thiếu. */
         cpu_set_t affinity;
         CPU_ZERO(&affinity);
-        if (sched_getaffinity(0, sizeof(affinity), &affinity) == 0) {
+        /* Chỉ kiểm khi Core ĐƯỢC ghim vào một tập CPU con (unit `CPUAffinity=`,
+         * ADR-061 4.11): không ghim thì không có "CPU của vòng quét" để kiểm,
+         * và kiểm mọi CPU của máy dev chỉ sinh nhiễu. */
+        const long online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+        if (sched_getaffinity(0, sizeof(affinity), &affinity) == 0 && online_cpus > 0 &&
+            CPU_COUNT(&affinity) >= online_cpus) {
+            std::fprintf(stderr,
+                         "WARN  rt.scan_cpu_not_pinned cpus=%d — Core khong duoc ghim CPU rieng"
+                         " (CPUAffinity), C4 khong duoc bao dam\n",
+                         CPU_COUNT(&affinity));
+        } else if (CPU_COUNT(&affinity) > 0) {
             const int c4_limit_us = static_cast<int>(BaseStepPacer::kJitterLimitNs / 1000ull);
             for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
                 if (!CPU_ISSET(cpu, &affinity)) continue;
+                /* F14: việc nền của hệ thống (PID 1 và mọi thứ nó sinh, kworker
+                 * unbound) còn được chạy trên CPU này thì một lần restart dịch vụ
+                 * cũng đủ làm vòng quét thức dậy trễ hàng ms trên kernel non-RT. */
+                const HousekeepingExposure housekeeping =
+                    housekeeping_exposure("/proc", "/sys/devices/virtual/workqueue/cpumask", cpu);
+                if (housekeeping.pid1_known && housekeeping.pid1_on_cpu)
+                    std::fprintf(stderr,
+                                 "WARN  rt.housekeeping_on_scan_cpu cpu=%d pid1_cpus=%s — tien trinh he"
+                                 " thong con chay tren CPU vong quet; can /etc/systemd/system.conf.d/"
+                                 "mkddc-rt.conf (CPUAffinity) roi boot lai\n",
+                                 cpu, housekeeping.pid1_cpus.c_str());
+                if (housekeeping.workqueue_known && housekeeping.workqueue_on_cpu)
+                    std::fprintf(stderr,
+                                 "WARN  rt.workqueue_on_scan_cpu cpu=%d mask=%s — kworker unbound con"
+                                 " chay tren CPU vong quet (unit mkddc-core ExecStartPre)\n",
+                                 cpu, housekeeping.workqueue_mask.c_str());
                 const CpuIdleExposure idle = cpu_idle_exposure("/sys/devices/system/cpu", cpu);
                 if (!idle.known) continue;
                 if (idle.worst_allowed_exit_latency_us > c4_limit_us)

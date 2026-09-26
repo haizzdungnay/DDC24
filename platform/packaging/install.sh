@@ -309,6 +309,11 @@ inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/mkddc-web-pi.service" "$UNITDIR/"
 # ADR-061 4.11: irqbalance không đặt IRQ lên CPU3 (CPU riêng của mkddc-core).
 inst -d -m 0755 "$UNITDIR/irqbalance.service.d"
 inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/irqbalance-mkddc-rt.conf" "$UNITDIR/irqbalance.service.d/mkddc-rt.conf"
+# ADR-061 4.11: PID 1 và mọi tiến trình khác mặc định chạy CPU0–2; CPU3 chỉ
+# dành cho mkddc-core (unit tự khai CPUAffinity=3). Áp ngay ở `daemon-reload`
+# phía dưới và mỗi lần boot (`daemon-reexec` không áp).
+inst -d -m 0755 "$DESTDIR/etc/systemd/system.conf.d"
+inst -m 0644 "$MKDDC_SYSTEMD_SOURCE_REL/system-mkddc-rt.conf" "$DESTDIR/etc/systemd/system.conf.d/mkddc-rt.conf"
 # Hai helper đặc quyền — BỎ SÓT cho tới 2026-09-13.
 #
 # `mkddc-web` chạy `User=mkddc` với `NoNewPrivileges=true`, nên nó KHÔNG tự
