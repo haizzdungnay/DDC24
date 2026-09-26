@@ -498,6 +498,13 @@ int main(int argc, char** argv)
                                  " thong con chay tren CPU vong quet; can /etc/systemd/system.conf.d/"
                                  "mkddc-rt.conf (CPUAffinity) roi boot lai\n",
                                  cpu, housekeeping.pid1_cpus.c_str());
+                const int kthreads = unbound_kthreads_on_cpu("/proc", cpu);
+                if (kthreads > 0)
+                    std::fprintf(stderr,
+                                 "WARN  rt.kthread_on_scan_cpu cpu=%d count=%d — kernel thread khong gan"
+                                 " CPU con chay tren CPU vong quet (thieu /usr/libexec/mkddc/"
+                                 "rt-housekeeping trong unit mkddc-core)\n",
+                                 cpu, kthreads);
                 if (housekeeping.workqueue_known && housekeeping.workqueue_on_cpu)
                     std::fprintf(stderr,
                                  "WARN  rt.workqueue_on_scan_cpu cpu=%d mask=%s — kworker unbound con"

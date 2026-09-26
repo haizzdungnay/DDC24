@@ -32,6 +32,8 @@
 #ifndef CORE_CPU_IDLE_CHECK_HPP
 #define CORE_CPU_IDLE_CHECK_HPP
 
+#include <dirent.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -198,6 +200,49 @@ inline HousekeepingExposure housekeeping_exposure(const std::string& proc_root,
         result.workqueue_on_cpu = cpu_hex_mask_contains(mask, cpu);
     }
     return result;
+}
+
+/* ADR-061 4.11 / F15 — số kernel thread KHÔNG gắn CPU (con của kthreadd, được
+ * phép chạy trên nhiều CPU) còn được chạy trên `cpu`. Thread gắn một CPU
+ * (ksoftirqd/N, kworker/N:*) không tính: chúng không dời được.
+ *
+ *        Đo trên Foxlinx 2026-09-26: luồng TX của driver Wi-Fi (`RTW_*`) được
+ *        đánh thức trên CPU3 mỗi lần web gửi gói, làm 0,73 % lần thức dậy của
+ *        vòng quét vượt 100 µs; dời hết thread loại này sang CPU0–2 thì 0 lần
+ *        vượt trong hai cửa sổ 60 s. `/usr/libexec/mkddc/rt-housekeeping` (unit
+ *        mkddc-core) làm việc dời; hàm này chỉ ĐẾM để Core nói ra khi thiếu. */
+inline int unbound_kthreads_on_cpu(const std::string& proc_root, int cpu)
+{
+    DIR* dir = ::opendir(proc_root.c_str());
+    if (dir == nullptr) return -1;
+    int count = 0;
+    while (const struct dirent* entry = ::readdir(dir)) {
+        const char* name = entry->d_name;
+        if (name[0] < '0' || name[0] > '9') continue;
+        std::FILE* status = std::fopen((proc_root + "/" + name + "/status").c_str(), "r");
+        if (status == nullptr) continue;
+        long ppid = -1;
+        std::string allowed;
+        char line[256];
+        while (std::fgets(line, sizeof(line), status) != nullptr) {
+            if (std::strncmp(line, "PPid:", 5) == 0) {
+                ppid = std::strtol(line + 5, nullptr, 10);
+            } else if (std::strncmp(line, "Cpus_allowed_list:", 18) == 0) {
+                allowed.assign(line + 18);
+                while (!allowed.empty() && (allowed.front() == ' ' || allowed.front() == '\t'))
+                    allowed.erase(0, 1);
+                while (!allowed.empty() && (allowed.back() == '\n' || allowed.back() == ' '))
+                    allowed.pop_back();
+            }
+        }
+        std::fclose(status);
+        const bool kernel_thread = std::strcmp(name, "2") == 0 || ppid == 2;
+        /* Gắn một CPU ⇒ danh sách không có '-' hay ',' (ví dụ "3"). */
+        const bool bound = allowed.find_first_of("-,") == std::string::npos;
+        if (kernel_thread && !bound && cpu_list_contains(allowed, cpu)) ++count;
+    }
+    ::closedir(dir);
+    return count;
 }
 
 } // namespace core

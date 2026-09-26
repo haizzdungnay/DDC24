@@ -171,5 +171,27 @@ TEST_F(CpuIdleSysfs, HousekeepingUnknownWhenFilesMissing)
     EXPECT_FALSE(missing.pid1_on_cpu);
 }
 
+TEST_F(CpuIdleSysfs, CountsOnlyUnboundKernelThreadsThatMayRunOnScanCpu)
+{
+    /* Ảnh chụp thu nhỏ của Foxlinx: kthreadd và luồng Wi-Fi không gắn CPU
+     * (0-3), ksoftirqd/3 gắn CPU3, một tiến trình user-space 0-3. */
+    write(root_ + "/proc/2/status", "Name:\tkthreadd\nPPid:\t0\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/proc/1561/status", "Name:\tRTW_XMIT_THREAD\nPPid:\t2\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/proc/28/status", "Name:\tksoftirqd/3\nPPid:\t2\nCpus_allowed_list:\t3\n");
+    write(root_ + "/proc/884/status", "Name:\tweston\nPPid:\t625\nCpus_allowed_list:\t0-3\n");
+    write(root_ + "/proc/self/status", "Name:\tnot-a-pid\nPPid:\t2\nCpus_allowed_list:\t0-3\n");
+    EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/proc", 3), 2);
+
+    /* Sau rt-housekeeping: hai thread đó thành 0-2. */
+    write(root_ + "/proc/2/status", "Name:\tkthreadd\nPPid:\t0\nCpus_allowed_list:\t0-2\n");
+    write(root_ + "/proc/1561/status", "Name:\tRTW_XMIT_THREAD\nPPid:\t2\nCpus_allowed_list:\t0-2\n");
+    EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/proc", 3), 0);
+}
+
+TEST_F(CpuIdleSysfs, KthreadCountUnknownWithoutProc)
+{
+    EXPECT_EQ(unbound_kthreads_on_cpu(root_ + "/khong-co", 3), -1);
+}
+
 } // namespace
 } // namespace core
