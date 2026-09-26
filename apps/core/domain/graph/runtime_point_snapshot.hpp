@@ -47,6 +47,13 @@ struct RuntimeTaskSnapshot {
     uint64_t max_exec_ns = 0;
     uint32_t overrun_count = 0;
     uint32_t consecutive_overruns = 0;
+    /* ADR-061 4.9 — metric C4 của vòng quét (ScanLoop), không phải của Task:
+     * base step, lệch đánh thức lớn nhất trong 60 s gần nhất, số lần lệch
+     * > 100 µs (tích luỹ), số base step bị lỡ vì trễ >= 1 base step (tích luỹ). */
+    uint64_t base_step_us = 0;
+    uint32_t jitter_max_us = 0;
+    uint64_t jitter_violation_count = 0;
+    uint64_t missed_base_step_count = 0;
 };
 
 /* T60-001 — trần của mảng `programs[]` trong snapshot.

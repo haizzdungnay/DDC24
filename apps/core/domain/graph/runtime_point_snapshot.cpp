@@ -227,6 +227,13 @@ bool serialize_runtime_point_snapshot(const RuntimePointSnapshot& snapshot, char
         writer.append(",\"maxExecNs\":"); writer.append_uint(snapshot.task.max_exec_ns);
         writer.append(",\"overrunCount\":"); writer.append_uint(snapshot.task.overrun_count);
         writer.append(",\"consecutiveOverruns\":"); writer.append_uint(snapshot.task.consecutive_overruns);
+        /* ADR-061 4.9 — metric C4, tên khoá khớp nguyên văn `/programming/runtime`. */
+        writer.append(",\"baseStepUs\":"); writer.append_uint(snapshot.task.base_step_us);
+        writer.append(",\"jitterMaxUs\":"); writer.append_uint(snapshot.task.jitter_max_us);
+        writer.append(",\"jitterViolationCount\":");
+        writer.append_uint(snapshot.task.jitter_violation_count);
+        writer.append(",\"missedBaseStepCount\":");
+        writer.append_uint(snapshot.task.missed_base_step_count);
         writer.append("}");
     }
     /* T60-003 — `programs` LUÔN có mặt, kể cả khi rỗng.

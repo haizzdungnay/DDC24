@@ -3,6 +3,7 @@
 #include "graph/point_writer.hpp"
 #include "st/st_runtime_snapshot.hpp"
 
+#include <cerrno>
 #include <cstdio>
 #include <ctime>
 
@@ -13,6 +14,40 @@ static uint64_t now_ns()
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
+}
+
+const char* scan_phase_name(ScanPhase phase)
+{
+    switch (phase) {
+    case ScanPhase::IO_READ: return "io";
+    case ScanPhase::IPC_DRAIN: return "ipc";
+    case ScanPhase::SCHEDULES: return "sched";
+    case ScanPhase::LOGIC: return "logic";
+    case ScanPhase::ALARMS: return "alarm";
+    case ScanPhase::EXT_WRITES: return "ext";
+    case ScanPhase::OUTPUT: return "out";
+    case ScanPhase::PUBLISH: return "publish";
+    case ScanPhase::COUNT: break;
+    }
+    return "?";
+}
+
+uint64_t ScanLoop::monotonic_now() const
+{
+    return time_.monotonic_ns != nullptr ? time_.monotonic_ns(time_.ctx) : now_ns();
+}
+
+/* ADR-061 4.10 — đo WCET của một bước bằng đồng hồ THẬT (không phải đồng hồ
+ * tiêm của test): đây là số đo thời gian thực thi, không phải logic. `*mark` là
+ * mốc cuối bước trước; hàm ghi thời lượng bước này rồi dời mốc. Không cấp phát. */
+void ScanLoop::record_phase(ScanPhase phase, uint64_t* mark)
+{
+    const uint64_t now = now_ns();
+    const uint64_t elapsed = now - *mark;
+    *mark = now;
+    const std::size_t index = static_cast<std::size_t>(phase);
+    wcet_.last_ns[index] = elapsed;
+    if (elapsed > wcet_.minute_max_ns[index]) wcet_.minute_max_ns[index] = elapsed;
 }
 
 static const char* point_source_name(PointSource source)
@@ -33,7 +68,9 @@ static const char* point_source_name(PointSource source)
 void ScanLoop::step()
 {
     const uint64_t t0 = now_ns();
-    const ClockSnapshot clock = capture_clock_snapshot();
+    uint64_t phase_mark = t0;
+    ClockSnapshot clock = capture_clock_snapshot();
+    if (time_.monotonic_ns != nullptr) clock.monotonic_ns = time_.monotonic_ns(time_.ctx);
 
     /* 0. Re-attach: core lên trước iobus quá 30s → main đã thoát vòng retry,
      * scan loop tự thử lại mỗi scan tới khi iobus tạo shm (gap #3 analysis report) */
@@ -84,6 +121,7 @@ void ScanLoop::step()
                 d_.graph->feed_ext_snapshot(shm->ext, shm->ext_count);
         }
     }
+    record_phase(ScanPhase::IO_READ, &phase_mark);
 
     /* 4. Read web/BACnet command queue.
      * source=manual → PRIO_LOCAL_MANUAL (mức 2); source=bacnet → PRIO_BACNET (mức 3).
@@ -152,11 +190,13 @@ void ScanLoop::step()
         }
         pending_.push_back({cmd, ok});
     }
+    record_phase(ScanPhase::IPC_DRAIN, &phase_mark);
 
     if (d_.schedules) {
         PointWriter schedule_writer(*d_.table, d_.bacnet ? d_.bacnet->shm() : nullptr);
         d_.schedules->evaluate(clock, last_io_, schedule_writer, *d_.resolver);
     }
+    record_phase(ScanPhase::SCHEDULES, &phase_mark);
 
     if (d_.programming_coordinator)
         d_.programming_coordinator->capture_priority_overrides(*d_.resolver);
@@ -230,13 +270,16 @@ void ScanLoop::step()
         if (d_.value_trace != nullptr)
             d_.value_trace->on_boundary(*d_.st_sched, clock.monotonic_ns);
     }
+    record_phase(ScanPhase::LOGIC, &phase_mark);
 
     if (d_.alarms)
         d_.alarms->evaluate(*d_.table, clock);
+    record_phase(ScanPhase::ALARMS, &phase_mark);
 
     /* 5a. COR-011: apply Modbus write node setpoints → plc_shm.ext[].dirty.
      * iobus fieldbus thread đọc dirty flag ở chu kỳ poll kế. */
     d_.graph->apply_ext_writes(d_.bacnet->shm());
+    record_phase(ScanPhase::EXT_WRITES, &phase_mark);
 
     /* 6. Resolve priority */
     OutputCmd out = d_.resolver->resolve();
@@ -246,6 +289,7 @@ void ScanLoop::step()
 
     /* Physical output is realtime-critical. Publish/serialization is nonessential. */
     d_.writer->write(out);
+    record_phase(ScanPhase::OUTPUT, &phase_mark);
 
     /* Phân biệt safe-state "chưa ai điều khiển" (T7 đơn độc — Commission một
      * Program có output tự giải quyết) khỏi safe-state do lỗi thật (T1/T2/T3/
@@ -261,6 +305,16 @@ void ScanLoop::step()
     /* Task/Program read-back dùng cùng một helper với simulator E2E để đường
      * debug browser không thể trôi khỏi contract chạy thật trên board. */
     st_populate_runtime_snapshot(d_.st_sched, program_owner, &runtime_snapshot);
+    /* ADR-061 4.9 — metric C4 của vòng quét đi cùng `task`: đó là nơi API đọc
+     * sức khoẻ lập lịch, và một bộ đếm lệch nhịp nằm ở chỗ khác sẽ bị đọc lệch
+     * snapshot với `runCount`/`missedReleaseCount` của cùng Task. */
+    if (runtime_snapshot.task.present) {
+        const BaseStepTimingSnapshot timing = pacer_.snapshot();
+        runtime_snapshot.task.base_step_us = timing.base_step_ns / 1000ull;
+        runtime_snapshot.task.jitter_max_us = timing.jitter_max_us;
+        runtime_snapshot.task.jitter_violation_count = timing.jitter_violation_count;
+        runtime_snapshot.task.missed_base_step_count = timing.missed_base_step_count;
+    }
     d_.web->publish_point_snapshot(runtime_snapshot);
 
     for (const WebCommand& cmd : pending_alarm_) {
@@ -334,8 +388,57 @@ void ScanLoop::step()
     d_.bacnet->publish(*d_.table, d_.metrics->scan_count(), d_.metrics->scan_overrun(),
                        last_io_.fault_flags, last_io_.iop_status, last_io_.ui_reliability);
 
+    record_phase(ScanPhase::PUBLISH, &phase_mark);
+
     /* 10. Metrics */
-    d_.metrics->end_scan(now_ns() - t0, budget_ns_);
+    const uint64_t total_ns = phase_mark - t0;
+    wcet_.total_last_ns = total_ns;
+    if (total_ns > wcet_.total_minute_max_ns) wcet_.total_minute_max_ns = total_ns;
+    ++wcet_.minute_scans;
+    d_.metrics->end_scan(total_ns, budget_ns_);
+}
+
+void ScanLoop::log_minute_stats()
+{
+    /* `core.jitter` giữ nguyên các trường cũ (tooling đọc log dựa vào chúng),
+     * nối thêm metric C4 tích luỹ để log và snapshot nói cùng một con số. */
+    const BaseStepJitterMinute& minute = pacer_.minute();
+    const BaseStepTimingSnapshot timing = pacer_.snapshot();
+    const double avg_us =
+        minute.count == 0 ? 0.0 : (static_cast<double>(minute.sum_ns) / minute.count) / 1000.0;
+    std::fprintf(stderr,
+                 "INFO  core.jitter min_us=%.2f max_us=%.2f avg_us=%.2f overruns=%u count=%llu"
+                 " window_max_us=%u violations=%llu missed_steps=%llu base_step_us=%llu\n",
+                 minute.min_ns / 1000.0, minute.max_ns / 1000.0, avg_us,
+                 d_.metrics->scan_overrun(), static_cast<unsigned long long>(minute.count),
+                 timing.jitter_max_us,
+                 static_cast<unsigned long long>(timing.jitter_violation_count),
+                 static_cast<unsigned long long>(timing.missed_base_step_count),
+                 static_cast<unsigned long long>(timing.base_step_ns / 1000ull));
+    pacer_.reset_minute();
+
+    /* ADR-061 4.10 bước 1 — WCET từng bước trong phút vừa qua, để quyết định
+     * tách việc không-RT ra khỏi luồng quét DỰA TRÊN SỐ ĐO (bước 2). */
+    auto us = [](uint64_t ns) { return static_cast<unsigned long long>((ns + 999ull) / 1000ull); };
+    const auto& max_ns = wcet_.minute_max_ns;
+    std::fprintf(stderr,
+                 "INFO  core.step_wcet io_us=%llu ipc_us=%llu sched_us=%llu logic_us=%llu"
+                 " alarm_us=%llu ext_us=%llu out_us=%llu publish_us=%llu total_us=%llu"
+                 " base_step_us=%llu scans=%llu\n",
+                 us(max_ns[static_cast<std::size_t>(ScanPhase::IO_READ)]),
+                 us(max_ns[static_cast<std::size_t>(ScanPhase::IPC_DRAIN)]),
+                 us(max_ns[static_cast<std::size_t>(ScanPhase::SCHEDULES)]),
+                 us(max_ns[static_cast<std::size_t>(ScanPhase::LOGIC)]),
+                 us(max_ns[static_cast<std::size_t>(ScanPhase::ALARMS)]),
+                 us(max_ns[static_cast<std::size_t>(ScanPhase::EXT_WRITES)]),
+                 us(max_ns[static_cast<std::size_t>(ScanPhase::OUTPUT)]),
+                 us(max_ns[static_cast<std::size_t>(ScanPhase::PUBLISH)]),
+                 us(wcet_.total_minute_max_ns),
+                 static_cast<unsigned long long>(timing.base_step_ns / 1000ull),
+                 static_cast<unsigned long long>(wcet_.minute_scans));
+    wcet_.minute_max_ns.fill(0);
+    wcet_.total_minute_max_ns = 0;
+    wcet_.minute_scans = 0;
 }
 
 void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
@@ -348,15 +451,10 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
     uint32_t actual_ms = static_cast<uint32_t>((base_step_ns + 500000ull) / 1000000ull);
     if (actual_ms == 0) actual_ms = 1;
     d_.graph->sync_actual_scan_ms(actual_ms);
-    struct timespec next;
-    clock_gettime(CLOCK_MONOTONIC, &next);
 
-    uint64_t expected_ns = static_cast<uint64_t>(next.tv_sec) * 1000000000ull + next.tv_nsec;
-    uint64_t jitter_count = 0;
-    int64_t max_jitter_ns = 0;
-    int64_t min_jitter_ns = -1;
-    int64_t sum_jitter_ns = 0;
-    uint64_t last_stats_print = expected_ns;
+    uint64_t start_ns = monotonic_now();
+    pacer_.start(base_step_ns, start_ns);
+    uint64_t last_stats_print = start_ns;
 
     while (!shutdown.load()) {
         /* SIGHUP reload ở RANH GIỚI scan (COR-008) — config mới chỉ có hiệu lực
@@ -369,39 +467,37 @@ void ScanLoop::run(const std::atomic<bool>& shutdown, uint64_t base_step_ns,
             d_.graph->sync_actual_scan_ms(actual_ms);
         }
 
-        uint64_t actual_ns = now_ns();
-        int64_t jitter_ns = static_cast<int64_t>(actual_ns) - static_cast<int64_t>(expected_ns);
-        int64_t abs_jitter_ns = jitter_ns < 0 ? -jitter_ns : jitter_ns;
-
-        if (abs_jitter_ns > max_jitter_ns) max_jitter_ns = abs_jitter_ns;
-        if (min_jitter_ns < 0 || abs_jitter_ns < min_jitter_ns) min_jitter_ns = abs_jitter_ns;
-        sum_jitter_ns += abs_jitter_ns;
-        jitter_count++;
+        /* ADR-061 C4: lệch đánh thức đo so với mốc TUYỆT ĐỐI của lưới. Trễ >= 1
+         * base step thì các mốc đã qua bị bỏ và đếm `missedBaseStepCount`. */
+        const uint64_t actual_ns = monotonic_now();
+        pacer_.on_wake(actual_ns);
 
         if (actual_ns - last_stats_print > 60000000000ull) {
-            std::fprintf(stderr, "INFO  core.jitter min_us=%.2f max_us=%.2f avg_us=%.2f overruns=%u count=%lu\n",
-                         min_jitter_ns / 1000.0, max_jitter_ns / 1000.0,
-                         (sum_jitter_ns / (double)jitter_count) / 1000.0,
-                         d_.metrics->scan_overrun(), jitter_count);
+            log_minute_stats();
             last_stats_print = actual_ns;
-            max_jitter_ns = 0;
-            min_jitter_ns = -1;
-            sum_jitter_ns = 0;
-            jitter_count = 0;
         }
 
         step();
         if (after_scan) after_scan(ctx);
 
-        /* 11. Sleep tới scan kế — mốc TUYỆT ĐỐI, không drift */
-        next.tv_nsec += static_cast<long>(base_step_ns % 1000000000ull);
-        next.tv_sec += static_cast<time_t>(base_step_ns / 1000000000ull);
-        if (next.tv_nsec >= 1000000000L) {
-            next.tv_nsec -= 1000000000L;
-            next.tv_sec += 1;
+        /* 11. Sleep tới mốc lưới kế tiếp — TUYỆT ĐỐI, không drift. Step chạy quá
+         * một base step thì mốc đã qua bị BỎ, không chạy dồn (SPEC §4): chạy
+         * liên tiếp để "bù" làm vòng quét không nghỉ đúng lúc nó đang quá tải. */
+        const uint64_t deadline_ns = pacer_.advance(monotonic_now());
+        if (time_.sleep_until != nullptr) {
+            time_.sleep_until(time_.ctx, deadline_ns);
+        } else {
+            struct timespec next;
+            next.tv_sec = static_cast<time_t>(deadline_ns / 1000000000ull);
+            next.tv_nsec = static_cast<long>(deadline_ns % 1000000000ull);
+            /* Tín hiệu (SIGHUP reload, SIGTERM) làm clock_nanosleep trả EINTR
+             * SỚM. Chạy step ngay lúc đó là một tick lệch lưới do tín hiệu chứ
+             * không do đồng hồ; chỉ thoát vòng ngủ khi tới mốc hoặc khi được
+             * yêu cầu dừng. */
+            while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr) == EINTR &&
+                   !shutdown.load()) {
+            }
         }
-        expected_ns = static_cast<uint64_t>(next.tv_sec) * 1000000000ull + next.tv_nsec;
-        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr);
     }
 }
 
