@@ -119,6 +119,87 @@ inline CpuIdleExposure cpu_idle_exposure(const std::string& sysfs_cpu_root, int 
     return result;
 }
 
+/* "0-2,5" (dạng `Cpus_allowed_list`) có chứa `cpu` không. */
+inline bool cpu_list_contains(const std::string& list, int cpu)
+{
+    std::size_t start = 0;
+    while (start < list.size()) {
+        std::size_t end = list.find(',', start);
+        if (end == std::string::npos) end = list.size();
+        const std::string item = list.substr(start, end - start);
+        const std::size_t dash = item.find('-');
+        char* tail = nullptr;
+        const long first = std::strtol(item.c_str(), &tail, 10);
+        const long last = dash == std::string::npos ? first
+                                                    : std::strtol(item.c_str() + dash + 1, nullptr, 10);
+        if (tail != item.c_str() && cpu >= first && cpu <= last) return true;
+        start = end + 1;
+    }
+    return false;
+}
+
+/* Mask hex dạng "f" hoặc "00000000,00000007" (sysfs cpumask) có bit `cpu` không. */
+inline bool cpu_hex_mask_contains(const std::string& mask, int cpu)
+{
+    int bit = 0;
+    for (auto it = mask.rbegin(); it != mask.rend(); ++it) {
+        const char c = *it;
+        if (c == ',' || c == '\n' || c == ' ') continue;
+        int nibble = -1;
+        if (c >= '0' && c <= '9') nibble = c - '0';
+        else if (c >= 'a' && c <= 'f') nibble = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') nibble = c - 'A' + 10;
+        if (nibble < 0) return false;
+        if (cpu >= bit && cpu < bit + 4) return ((nibble >> (cpu - bit)) & 1) != 0;
+        bit += 4;
+    }
+    return false;
+}
+
+/* ADR-061 4.11 / F14 — CPU của vòng quét có còn phải chia cho việc nền không.
+ *
+ *        Đo trên Foxlinx 2026-09-26: chỉ ghim các service mkddc thì PID 1,
+ *        journald, sshd và kworker unbound vẫn chạy trên CPU3; một lần
+ *        `systemctl restart` làm vòng quét thức dậy trễ 2,3–3,8 ms (có lần 12 ms,
+ *        lỡ một base step). Ghim chúng sang CPU0–2 thì còn 117–119 µs. */
+struct HousekeepingExposure {
+    bool pid1_known = false;
+    bool pid1_on_cpu = false;
+    std::string pid1_cpus;
+    bool workqueue_known = false;
+    bool workqueue_on_cpu = false;
+    std::string workqueue_mask;
+};
+
+inline HousekeepingExposure housekeeping_exposure(const std::string& proc_root,
+                                                  const std::string& sysfs_workqueue_mask, int cpu)
+{
+    HousekeepingExposure result;
+    std::FILE* status = std::fopen((proc_root + "/1/status").c_str(), "r");
+    if (status != nullptr) {
+        char line[256];
+        while (std::fgets(line, sizeof(line), status) != nullptr) {
+            static constexpr char kKey[] = "Cpus_allowed_list:";
+            if (std::strncmp(line, kKey, sizeof(kKey) - 1) != 0) continue;
+            std::string value(line + sizeof(kKey) - 1);
+            while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) value.erase(0, 1);
+            while (!value.empty() && (value.back() == '\n' || value.back() == ' ')) value.pop_back();
+            result.pid1_known = !value.empty();
+            result.pid1_cpus = value;
+            result.pid1_on_cpu = cpu_list_contains(value, cpu);
+            break;
+        }
+        std::fclose(status);
+    }
+    std::string mask;
+    if (cpu_idle_detail::read_first_line(sysfs_workqueue_mask, &mask) && !mask.empty()) {
+        result.workqueue_known = true;
+        result.workqueue_mask = mask;
+        result.workqueue_on_cpu = cpu_hex_mask_contains(mask, cpu);
+    }
+    return result;
+}
+
 } // namespace core
 
 #endif /* CORE_CPU_IDLE_CHECK_HPP */
