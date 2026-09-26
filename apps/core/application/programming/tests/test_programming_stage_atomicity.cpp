@@ -264,7 +264,7 @@ void configure_task(StScheduler* scheduler)
     task.id = "main";
     task.priority = 0;
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     task.overrun_threshold = 3;
     std::string error;
     ASSERT_TRUE(scheduler->add_task(task, &error)) << error;
@@ -674,7 +674,7 @@ TEST(ProgrammingStageAtomicity, RejectedNewProgramIsNotLeftBehindInScheduler)
     const LiveSnapshot before = system.snapshot();
 
     const std::vector<uint8_t> poisoned =
-        package_of({"P_ahu", "P_boiler", "P_chiller"}, {1000u, 5000u, 30000u}, {},
+        package_of({"P_ahu", "P_boiler", "P_chiller"}, {1000u, 5000u, 50000u}, {},
                    /*corrupt_program_index=*/2);
     const StageCommand command =
         write_candidate(system.tree, kOperation2, kRevision2, poisoned, "P_ahu");
@@ -702,8 +702,8 @@ TEST(ProgrammingStageAtomicity, JournalFsyncFailureLeavesLiveStateIntact)
 
     /* Gói HỢP LỆ: lỗi duy nhất được tiêm là ở journal. */
     const std::vector<uint8_t> healthy =
-        package_of({"P_ahu", "P_boiler"}, {30000u, 30000u},
-                   {signal_of("NEW_SIGNAL", "P_ahu", 30000u, 0)});
+        package_of({"P_ahu", "P_boiler"}, {50000u, 50000u},
+                   {signal_of("NEW_SIGNAL", "P_ahu", 100000u, 0)});
     const StageCommand command =
         write_candidate(system.tree, kOperation2, kRevision2, healthy, "P_ahu");
 
@@ -741,7 +741,7 @@ TEST(ProgrammingStageAtomicity, HealthyPackageStillStagesAfterFailedAttempt)
     ASSERT_FALSE(system.coordinator->stage(bad, &detail, &error));
 
     const std::vector<uint8_t> healthy =
-        package_of({"P_ahu", "P_boiler"}, {1000u, 30000u},
+        package_of({"P_ahu", "P_boiler"}, {1000u, 50000u},
                    {signal_of("SUPPLY", "P_ahu", 5000u, 0)});
     const StageCommand good =
         write_candidate(system.tree, "55555555-5555-4555-8555-555555555555", kRevision2,
@@ -767,7 +767,7 @@ TEST(ProgrammingStageAtomicity, HealthyPackageStillStagesAfterFailedAttempt)
     system.coordinator->on_safe_boundary();
     const StProgramInstance* boiler = system.scheduler.find_program("P_boiler");
     ASSERT_NE(boiler, nullptr);
-    EXPECT_EQ(boiler->period_ms, 30000u) << "handoff không áp chu kỳ của gói mới";
+    EXPECT_EQ(boiler->period_ms, 50000u) << "handoff không áp chu kỳ của gói mới";
     ASSERT_EQ(system.bus.size(), 1u) << "handoff không áp hợp đồng signal của gói mới";
     EXPECT_GE(system.bus.index_of("SUPPLY"), 0);
     EXPECT_EQ(system.candidates.size(), 0u) << "candidate cũ chưa được rút tại handoff";
@@ -783,8 +783,8 @@ TEST(ProgrammingStageAtomicity, WholePackageShrinkAddReorderAndRollbackAreAtomic
     const LiveSnapshot old_live = system.snapshot();
 
     const std::vector<uint8_t> replacement =
-        package_of({"P_chiller", "P_ahu"}, {30000u, 1000u},
-                   {signal_of("CHILLED_WATER", "P_chiller", 30000u, 0)});
+        package_of({"P_chiller", "P_ahu"}, {50000u, 1000u},
+                   {signal_of("CHILLED_WATER", "P_chiller", 100000u, 0)});
     const StageCommand command =
         write_candidate(system.tree, kOperation2, kRevision2, replacement, "P_chiller");
     std::string detail;
@@ -807,7 +807,7 @@ TEST(ProgrammingStageAtomicity, WholePackageShrinkAddReorderAndRollbackAreAtomic
     ASSERT_EQ(task->programs().size(), 2u);
     EXPECT_EQ(task->programs()[0]->instance_id, "P_chiller");
     EXPECT_EQ(task->programs()[0]->order, 0u);
-    EXPECT_EQ(task->programs()[0]->period_ms, 30000u);
+    EXPECT_EQ(task->programs()[0]->period_ms, 50000u);
     EXPECT_EQ(task->programs()[1]->instance_id, "P_ahu");
     EXPECT_EQ(task->programs()[1]->order, 1u);
     EXPECT_EQ(system.scheduler.find_program("P_boiler"), nullptr);

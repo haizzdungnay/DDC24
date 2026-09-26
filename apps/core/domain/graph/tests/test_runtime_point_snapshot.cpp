@@ -162,7 +162,13 @@ TEST(RuntimePointSnapshot, KeepsProgramProposalSeparateFromWinningOverride)
     std::memcpy(snapshot.task.state.data(), "RUNNING", 8);
     snapshot.task.period_ms = 1000;
     snapshot.task.budget_ms = 200;
+    snapshot.task.budget_us = 200000;
     snapshot.task.overrun_count = 3;
+    /* ADR-061 4.9 — metric C4 của vòng quét. */
+    snapshot.task.base_step_us = 10000;
+    snapshot.task.jitter_max_us = 470;
+    snapshot.task.jitter_violation_count = 12;
+    snapshot.task.missed_base_step_count = 4294967296ull;
 
     const auto& ao = snapshot.rows[KX_N_UI];
     EXPECT_FLOAT_EQ(ao.value, 7.0f);
@@ -176,6 +182,13 @@ TEST(RuntimePointSnapshot, KeepsProgramProposalSeparateFromWinningOverride)
     EXPECT_EQ(json.at("task").at("taskId"), "main");
     EXPECT_EQ(json.at("task").at("state"), "RUNNING");
     EXPECT_EQ(json.at("task").at("overrunCount"), 3);
+    EXPECT_EQ(json.at("task").at("budgetMs"), 200);
+    EXPECT_EQ(json.at("task").at("budgetUs"), 200000);
+    EXPECT_EQ(json.at("task").at("baseStepUs"), 10000);
+    EXPECT_EQ(json.at("task").at("jitterMaxUs"), 470);
+    EXPECT_EQ(json.at("task").at("jitterViolationCount"), 12);
+    EXPECT_EQ(json.at("task").at("missedBaseStepCount").get<uint64_t>(), 4294967296ull)
+        << "bộ đếm tích luỹ là uint64, không được cắt về 32 bit";
     EXPECT_EQ(json.at("points").at(KX_N_UI).at("value"), 7.0);
     EXPECT_EQ(json.at("points").at(KX_N_UI).at("programValue"), 4.0);
     EXPECT_EQ(json.at("points").at(KX_N_UI).at("effectivePriority"), 2);
@@ -702,6 +715,8 @@ TEST(RuntimePointSnapshot, SerializesProgramRowsAndSurvivesJsonRoundTrip)
     snapshot.programs[1] = make_program_row("P_boiler_stage", "FAULTED", false, 30000,
                                             0u, 42u, 4294967295u, 7u,
                                             std::numeric_limits<uint64_t>::max(), 3u);
+    /* ADR-061: 30000 ms là chu kỳ legacy — gói cũ vẫn chạy nhưng phải lộ ra. */
+    snapshot.programs[1].legacy_period = true;
     snapshot.program_count = 2;
 
     const std::string wire = serialize_runtime_point_snapshot(snapshot);
@@ -721,6 +736,7 @@ TEST(RuntimePointSnapshot, SerializesProgramRowsAndSurvivesJsonRoundTrip)
     EXPECT_EQ(first.at("consecutiveMissedRelease").get<uint32_t>(), 0u);
     EXPECT_EQ(first.at("lastRunMonoNs").get<uint64_t>(), 123456789012345678ull);
     EXPECT_EQ(first.at("lane").get<uint32_t>(), 0u);
+    EXPECT_FALSE(first.at("legacyPeriod").get<bool>());
 
     const auto& second = json.at("programs").at(1);
     EXPECT_EQ(second.at("instanceId"), "P_boiler_stage");
@@ -733,6 +749,7 @@ TEST(RuntimePointSnapshot, SerializesProgramRowsAndSurvivesJsonRoundTrip)
               std::numeric_limits<uint64_t>::max())
         << "uint64 lớn không được mất chính xác khi qua JSON";
     EXPECT_EQ(second.at("lane").get<uint32_t>(), 3u);
+    EXPECT_TRUE(second.at("legacyPeriod").get<bool>());
 
     /* Dựng lại từ JSON rồi serialize lần hai — chuỗi phải trùng khít. */
     RuntimePointSnapshot rebuilt = make_base_snapshot(11);
@@ -747,6 +764,7 @@ TEST(RuntimePointSnapshot, SerializesProgramRowsAndSurvivesJsonRoundTrip)
             row.at("consecutiveMissedRelease").get<uint32_t>(),
             row.at("lastRunMonoNs").get<uint64_t>(),
             static_cast<uint8_t>(row.at("lane").get<uint32_t>()));
+        rebuilt.programs[index].legacy_period = row.at("legacyPeriod").get<bool>();
     }
     rebuilt.program_count = json.at("programs").size();
     rebuilt.programs_truncated = json.at("programsTruncated").get<bool>();

@@ -132,7 +132,7 @@ void configure_task(StScheduler* scheduler)
     StTaskConfig task;
     task.id = "main";
     task.period_ms = 1000;
-    task.budget_ms = 199;
+    task.budget_us = 199000;
     std::string error;
     ASSERT_TRUE(scheduler->add_task(task, &error)) << error;
 }

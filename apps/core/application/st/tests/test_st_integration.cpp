@@ -79,7 +79,7 @@ StTaskConfig task_cfg(const char* id, uint32_t period = 100)
     c.id = id;
     c.priority = 0;
     c.period_ms = period;
-    c.budget_ms = period;
+    c.budget_us = period * 1000u;
     return c;
 }
 
@@ -744,13 +744,14 @@ TEST(StIntegration, T59_406_NeverPublishedInstanceIsNotWithdrawnByTtl)
 
 TEST(StIntegration, T59_406_SlowestHealthyTaskNeverReachesSignedHoldTtl)
 {
-    /* Task 30 s trên base step 1 s là trường hợp xấu nhất của profile: lệnh
-     * cuối luôn già tới 30 base step ngay cả khi mọi thứ khoẻ mạnh. Test này
-     * canh chính tiền đề của ADR-051 — nếu ai đó hạ TTL xuống dưới 2x chu kỳ
-     * chậm nhất, một hệ HOÀN TOÀN BÌNH THƯỜNG sẽ bị rút đầu ra định kỳ. */
+    /* Lớp chậm nhất của profile sau ADR-061 là 50 000 ms: lệnh cuối luôn già tới
+     * 50 s ngay cả khi mọi thứ khoẻ mạnh. Test này canh tiền đề "TTL >= 2x chu kỳ"
+     * — nếu ai đó hạ TTL của lớp này xuống dưới 2x chu kỳ, một hệ HOÀN TOÀN BÌNH
+     * THƯỜNG sẽ bị rút đầu ra định kỳ. Sàn truyền vào là 60 s đã ký, đúng nối dây
+     * production; TTL theo instance (ADR-061 4.4) cho lớp này 100 s. */
     StScheduler sched;
     std::string err;
-    ASSERT_TRUE(sched.add_task(task_cfg("T", 30000), &err)) << err;
+    ASSERT_TRUE(sched.add_task(task_cfg("T", 50000), &err)) << err;
     ASSERT_TRUE(sched.add_program("T", "p", 0, &err)) << err;
     ASSERT_TRUE(sched.request_activation("p", doubler_artifact(), &err)) << err;
     sched.tick(0);
@@ -762,22 +763,21 @@ TEST(StIntegration, T59_406_SlowestHealthyTaskNeverReachesSignedHoldTtl)
 
     StIoBridgeStats stats;
     const uint64_t ttl_ns = st_hold_ttl::kSignedTtlNs;
-    for (uint64_t step = 1; step <= 300; ++step) {
+    for (uint64_t step = 1; step <= 500; ++step) {
         set_ai(&table, 0, 5.0f);
         st_load_all_inputs(&sched, table, &stats);
-        sched.tick(step * 1000 * kMs);           /* base step 1 s */
+        sched.tick(step * 1000 * kMs);           /* nhịp 1 s đủ để chạm mọi mốc 50 s */
         st_apply_all_outputs(&sched, &resolver, &table, &stats);
         ASSERT_EQ(st_withdraw_stale_outputs(&sched, &resolver, ttl_ns, &stats), 0u)
-            << "hệ khoẻ mạnh bị rút đầu ra tại base_step=" << step;
-        /* Trước lần tới hạn ĐẦU TIÊN của Task 30 s thì chưa có lệnh nào để giữ;
+            << "hệ khoẻ mạnh bị rút đầu ra tại step=" << step;
+        /* Trước lần tới hạn ĐẦU TIÊN của Task 50 s thì chưa có lệnh nào để giữ;
          * khẳng định mức 5 ở đó là khẳng định sai chỗ. */
         if (sched.find_program("p")->output_commit_generation > 0) {
-            ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC)
-                << "base_step=" << step;
+            ASSERT_EQ(resolver.winning_ao_level(0), PRIO_LOCAL_LOGIC) << "step=" << step;
         }
     }
     EXPECT_EQ(sched.find_program("p")->state, StProgramState::RUNNING);
-    /* 300 s / 30 s: phải có ít nhất 9 lần publish thật, nếu không thì test đã
+    /* 500 s / 50 s: phải có ít nhất 9 lần publish thật, nếu không thì test đã
      * "pass" chỉ vì Task chưa bao giờ chạy. */
     EXPECT_GE(stats.output_batches_committed, 9u);
 }
@@ -1337,7 +1337,7 @@ TEST(StIntegration, TenThousandCycleSoakStaysAllocationFreeAndBounded)
     StTaskConfig rev_a_cfg;
     rev_a_cfg.id = "T";
     rev_a_cfg.period_ms = 1000;
-    rev_a_cfg.budget_ms = 100;  /* 10% < 20% (OD-PROG-012) */
+    rev_a_cfg.budget_us = 100000;  /* 10% < 20% (OD-PROG-012) */
     ASSERT_TRUE(sched.add_task(rev_a_cfg, &err)) << err;
     ASSERT_TRUE(sched.add_program("T", "p", 0, &err)) << err;
     ASSERT_TRUE(sched.request_activation("p", doubler_artifact(), &err)) << err;
