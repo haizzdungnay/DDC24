@@ -95,8 +95,9 @@ type SimulationService struct {
 	actionWindow map[string][]time.Time
 	// Vòng chạy tự động của phiên đang RUNNING. Đóng kênh = yêu cầu dừng ở
 	// RANH GIỚI giữa hai tick, không phải cắt ngang một tick đang chạy.
-	runLoops    map[string]chan struct{}
-	activeSpeed map[string]int64
+	runLoops     map[string]chan struct{}
+	activeSpeed  map[string]int64
+	latestFrames map[string]simworker.Frame
 }
 
 func NewSimulationService(options SimulationOptions) *SimulationService {
@@ -122,6 +123,7 @@ func NewSimulationService(options SimulationOptions) *SimulationService {
 		actionWindow: make(map[string][]time.Time),
 		runLoops:     make(map[string]chan struct{}),
 		activeSpeed:  make(map[string]int64),
+		latestFrames: make(map[string]simworker.Frame),
 	}
 }
 
@@ -360,6 +362,7 @@ func (s *SimulationService) stopRunLoop(sessionID string) {
 	if found {
 		delete(s.runLoops, sessionID)
 		delete(s.activeSpeed, sessionID)
+		delete(s.latestFrames, sessionID)
 	}
 	s.mu.Unlock()
 	if found {
@@ -438,6 +441,11 @@ func (s *SimulationService) startRunLoop(sessionID string, baseTickMS, speed int
 					}
 				}
 				cancel()
+				if stepErr == nil {
+					s.mu.Lock()
+					s.latestFrames[sessionID] = latestFrame
+					s.mu.Unlock()
+				}
 				if stepErr != nil {
 					// Tick hỏng là hỏng CỦA PHIÊN. Đưa phiên về FAILED rồi thoát;
 					// chạy tiếp sau một tick lỗi là tích luỹ trạng thái không ai
@@ -986,6 +994,13 @@ func (s *SimulationService) Observations(ctx context.Context, sessionID string) 
 	if public := s.requireCapability(); public != nil {
 		return simworker.Frame{}, public
 	}
+	s.mu.Lock()
+	if frame, ok := s.latestFrames[sessionID]; ok && frame.SnapshotSequence > 0 {
+		s.mu.Unlock()
+		return frame, nil
+	}
+	s.mu.Unlock()
+
 	client, _, found := s.worker(sessionID)
 	if !found || client == nil {
 		public := domain.NewPublicError(domain.ErrSimWorkerFailed)
@@ -996,6 +1011,9 @@ func (s *SimulationService) Observations(ctx context.Context, sessionID string) 
 		public := simulationPublicForDetail(simulationDetailOf(err, client))
 		return simworker.Frame{}, &public
 	}
+	s.mu.Lock()
+	s.latestFrames[sessionID] = frame
+	s.mu.Unlock()
 	return frame, nil
 }
 

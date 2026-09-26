@@ -124,6 +124,7 @@ type Client struct {
 	stdin   io.WriteCloser
 	lines   chan lineResult
 
+	callMu        sync.Mutex
 	mu            sync.Mutex
 	broken        bool
 	brokenDetail  string
@@ -235,6 +236,9 @@ func (c *Client) WorkerVersion() string { return c.workerVersion }
 // chỉ trả lời chậm. Client vì vậy tự đánh dấu hỏng và buộc lớp trên đi đường
 // reconcile, thay vì đoán kết quả.
 func (c *Client) call(ctx context.Context, payload map[string]any, blob []byte) (map[string]any, error) {
+	c.callMu.Lock()
+	defer c.callMu.Unlock()
+
 	c.mu.Lock()
 	if c.broken {
 		c.mu.Unlock()
